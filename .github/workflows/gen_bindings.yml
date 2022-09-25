@@ -31,7 +31,7 @@ jobs:
       - name: prepare
         run: |
           sudo apt-get update
-          sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+          sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev
       - name: test_linux
         run: |
           cd tests
@@ -99,7 +99,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
             sudo apt-get update
-            sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+            sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev
       - name: build
         run: zig build
 
@@ -122,7 +122,7 @@ jobs:
         name: prepare
         run: |
             sudo apt-get update
-            sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+            sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev
       - name: build
         run: |
           nimble install -Y
@@ -148,7 +148,7 @@ jobs:
         name: prepare-linux
         run: |
           sudo apt-get update
-          sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+          sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev
           curl -L https://github.com/odin-lang/Odin/releases/download/dev-2022-08/odin-ubuntu-amd64-dev-2022-08.zip --output odin.zip
           unzip odin.zip
           chmod a+x odin

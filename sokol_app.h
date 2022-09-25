@@ -50,6 +50,9 @@
     On Windows, SOKOL_DLL will define SOKOL_APP_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
+    On Linux, SOKOL_GLCORE33 can use either GLX or EGL.
+    GLX is default, set SOKOL_FORCE_EGL to override.
+
     For example code, see https://github.com/floooh/sokol-samples/tree/master/sapp
 
     Portions of the Windows and Linux GL initialization, event-, icon- etc... code
@@ -63,7 +66,8 @@
     - on macOS with GL: Cocoa, QuartzCore, OpenGL
     - on iOS with Metal: Foundation, UIKit, Metal, MetalKit
     - on iOS with GL: Foundation, UIKit, OpenGLES, GLKit
-    - on Linux: X11, Xi, Xcursor, GL, dl, pthread, m(?)
+    - on Linux with EGL: X11, Xi, Xcursor, EGL, GL (or GLESv2), dl, pthread, m(?)
+    - on Linux with GLX: X11, Xi, Xcursor, GL, dl, pthread, m(?)
     - on Android: GLESv3, EGL, log, android
     - on Windows with the MSVC or Clang toolchains: no action needed, libs are defined in-source via pragma-comment-lib
     - on Windows with MINGW/MSYS2 gcc: compile with '-mwin32' so that _WIN32 is defined
@@ -89,55 +93,56 @@
     - creates a window and 3D-API context/device with a 'default framebuffer'
     - makes the rendered frame visible
     - provides keyboard-, mouse- and low-level touch-events
-    - platforms: MacOS, iOS, HTML5, Win32, Linux, Android (TODO: RaspberryPi)
+    - platforms: MacOS, iOS, HTML5, Win32, Linux/RaspberryPi, Android
     - 3D-APIs: Metal, D3D11, GL3.2, GLES2, GLES3, WebGL, WebGL2
 
     FEATURE/PLATFORM MATRIX
     =======================
-                        | Windows | macOS | Linux |  iOS  | Android | UWP  | Raspi | HTML5
-    --------------------+---------+-------+-------+-------+---------+------+-------+-------
-    gl 3.x              | YES     | YES   | YES   | ---   | ---     | ---  | ---   | ---
-    gles2/webgl         | ---     | ---   | ---   | YES   | YES     | ---  | TODO  | YES
-    gles3/webgl2        | ---     | ---   | ---   | YES   | YES     | ---  | ---   | YES
-    metal               | ---     | YES   | ---   | YES   | ---     | ---  | ---   | ---
-    d3d11               | YES     | ---   | ---   | ---   | ---     | YES  | ---   | ---
-    KEY_DOWN            | YES     | YES   | YES   | SOME  | TODO    | YES  | TODO  | YES
-    KEY_UP              | YES     | YES   | YES   | SOME  | TODO    | YES  | TODO  | YES
-    CHAR                | YES     | YES   | YES   | YES   | TODO    | YES  | TODO  | YES
-    MOUSE_DOWN          | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
-    MOUSE_UP            | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
-    MOUSE_SCROLL        | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
-    MOUSE_MOVE          | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
-    MOUSE_ENTER         | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
-    MOUSE_LEAVE         | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
-    TOUCHES_BEGAN       | ---     | ---   | ---   | YES   | YES     | TODO | ---   | YES
-    TOUCHES_MOVED       | ---     | ---   | ---   | YES   | YES     | TODO | ---   | YES
-    TOUCHES_ENDED       | ---     | ---   | ---   | YES   | YES     | TODO | ---   | YES
-    TOUCHES_CANCELLED   | ---     | ---   | ---   | YES   | YES     | TODO | ---   | YES
-    RESIZED             | YES     | YES   | YES   | YES   | YES     | YES  | ---   | YES
-    ICONIFIED           | YES     | YES   | YES   | ---   | ---     | YES  | ---   | ---
-    RESTORED            | YES     | YES   | YES   | ---   | ---     | YES  | ---   | ---
-    FOCUSED             | YES     | YES   | YES   | ---   | ---     | ---  | ---   | YES
-    UNFOCUSED           | YES     | YES   | YES   | ---   | ---     | ---  | ---   | YES
-    SUSPENDED           | ---     | ---   | ---   | YES   | YES     | YES  | ---   | TODO
-    RESUMED             | ---     | ---   | ---   | YES   | YES     | YES  | ---   | TODO
-    QUIT_REQUESTED      | YES     | YES   | YES   | ---   | ---     | ---  | TODO  | YES
-    IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ---  | ???   | ???
-    key repeat flag     | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
-    windowed            | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
-    fullscreen          | YES     | YES   | YES   | YES   | YES     | YES  | TODO  | ---
-    mouse hide          | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
-    mouse lock          | YES     | YES   | YES   | ---   | ---     | TODO | TODO  | YES
-    set cursor type     | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
-    screen keyboard     | ---     | ---   | ---   | YES   | TODO    | TODO | ---   | YES
-    swap interval       | YES     | YES   | YES   | YES   | TODO    | ---  | TODO  | YES
-    high-dpi            | YES     | YES   | TODO  | YES   | YES     | YES  | TODO  | YES
-    clipboard           | YES     | YES   | TODO  | ---   | ---     | TODO | ---   | YES
-    MSAA                | YES     | YES   | YES   | YES   | YES     | TODO | TODO  | YES
-    drag'n'drop         | YES     | YES   | YES   | ---   | ---     | TODO | TODO  | YES
-    window icon         | YES     | YES(1)| YES   | ---   | ---     | TODO | TODO  | YES
+                        | Windows | macOS | Linux |  iOS  | Android | UWP  | HTML5
+    --------------------+---------+-------+-------+-------+---------+------+-------
+    gl 3.x              | YES     | YES   | YES   | ---   | ---     | ---  | ---
+    gles2/webgl         | ---     | ---   | YES(2)| YES   | YES     | ---  | YES
+    gles3/webgl2        | ---     | ---   | YES(2)| YES   | YES     | ---  | YES
+    metal               | ---     | YES   | ---   | YES   | ---     | ---  | ---
+    d3d11               | YES     | ---   | ---   | ---   | ---     | YES  | ---
+    KEY_DOWN            | YES     | YES   | YES   | SOME  | TODO    | YES  | YES
+    KEY_UP              | YES     | YES   | YES   | SOME  | TODO    | YES  | YES
+    CHAR                | YES     | YES   | YES   | YES   | TODO    | YES  | YES
+    MOUSE_DOWN          | YES     | YES   | YES   | ---   | ---     | YES  | YES
+    MOUSE_UP            | YES     | YES   | YES   | ---   | ---     | YES  | YES
+    MOUSE_SCROLL        | YES     | YES   | YES   | ---   | ---     | YES  | YES
+    MOUSE_MOVE          | YES     | YES   | YES   | ---   | ---     | YES  | YES
+    MOUSE_ENTER         | YES     | YES   | YES   | ---   | ---     | YES  | YES
+    MOUSE_LEAVE         | YES     | YES   | YES   | ---   | ---     | YES  | YES
+    TOUCHES_BEGAN       | ---     | ---   | ---   | YES   | YES     | TODO | YES
+    TOUCHES_MOVED       | ---     | ---   | ---   | YES   | YES     | TODO | YES
+    TOUCHES_ENDED       | ---     | ---   | ---   | YES   | YES     | TODO | YES
+    TOUCHES_CANCELLED   | ---     | ---   | ---   | YES   | YES     | TODO | YES
+    RESIZED             | YES     | YES   | YES   | YES   | YES     | YES  | YES
+    ICONIFIED           | YES     | YES   | YES   | ---   | ---     | YES  | ---
+    RESTORED            | YES     | YES   | YES   | ---   | ---     | YES  | ---
+    FOCUSED             | YES     | YES   | YES   | ---   | ---     | ---  | YES
+    UNFOCUSED           | YES     | YES   | YES   | ---   | ---     | ---  | YES
+    SUSPENDED           | ---     | ---   | ---   | YES   | YES     | YES  | TODO
+    RESUMED             | ---     | ---   | ---   | YES   | YES     | YES  | TODO
+    QUIT_REQUESTED      | YES     | YES   | YES   | ---   | ---     | ---  | YES
+    IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ---  | ???
+    key repeat flag     | YES     | YES   | YES   | ---   | ---     | YES  | YES
+    windowed            | YES     | YES   | YES   | ---   | ---     | YES  | YES
+    fullscreen          | YES     | YES   | YES   | YES   | YES     | YES  | ---
+    mouse hide          | YES     | YES   | YES   | ---   | ---     | YES  | YES
+    mouse lock          | YES     | YES   | YES   | ---   | ---     | TODO | YES
+    set cursor type     | YES     | YES   | YES   | ---   | ---     | YES  | YES
+    screen keyboard     | ---     | ---   | ---   | YES   | TODO    | TODO | YES
+    swap interval       | YES     | YES   | YES   | YES   | TODO    | ---  | YES
+    high-dpi            | YES     | YES   | TODO  | YES   | YES     | YES  | YES
+    clipboard           | YES     | YES   | TODO  | ---   | ---     | TODO | YES
+    MSAA                | YES     | YES   | YES   | YES   | YES     | TODO | YES
+    drag'n'drop         | YES     | YES   | YES   | ---   | ---     | TODO | YES
+    window icon         | YES     | YES(1)| YES   | ---   | ---     | TODO | YES
 
     (1) macOS has no regular window icons, instead the dock icon is changed
+    (2) supported with EGL only (not GLX)
 
     STEP BY STEP
     ============
@@ -1586,6 +1591,11 @@ SOKOL_APP_API_DECL const char* sapp_get_dropped_file_path(int index);
 /* special run-function for SOKOL_NO_ENTRY (in standard mode this is an empty stub) */
 SOKOL_APP_API_DECL void sapp_run(const sapp_desc* desc);
 
+/* EGL: get EGLDisplay object */
+SOKOL_APP_API_DECL const void* sapp_egl_get_display(void);
+/* EGL: get EGLContext object */
+SOKOL_APP_API_DECL const void* sapp_egl_get_context(void);
+
 /* GL: return true when GLES2 fallback is active (to detect fallback from GLES3) */
 SOKOL_APP_API_DECL bool sapp_gles2(void);
 
@@ -1721,8 +1731,12 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(__linux__) || defined(__unix__)
     /* Linux */
     #define _SAPP_LINUX (1)
-    #if !defined(SOKOL_GLCORE33)
-    #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE33")
+    #if defined(SOKOL_GLCORE33)
+        #if !defined(SOKOL_FORCE_EGL)
+            #define _SAPP_GLX (1)
+        #endif
+    #elif !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2)
+        #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE33, SOKOL_GLES3 or SOKOL_GLES2")
     #endif
 #else
 #error "sokol_app.h: Unknown platform"
@@ -1899,6 +1913,9 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <X11/Xcursor/Xcursor.h>
     #include <X11/cursorfont.h> /* XC_* font cursors */
     #include <X11/Xmd.h> /* CARD32 */
+    #if !defined(_SAPP_GLX)
+        #include <EGL/egl.h>
+    #endif
     #include <dlfcn.h> /* dlopen, dlsym, dlclose */
     #include <limits.h> /* LONG_MAX */
     #include <pthread.h>    /* only used a linker-guard, search for _sapp_linux_run() and see first comment */
@@ -2503,6 +2520,8 @@ typedef struct {
     _sapp_xdnd_t xdnd;
 } _sapp_x11_t;
 
+#if defined(_SAPP_GLX)
+
 typedef struct {
     void* libgl;
     int major;
@@ -2540,6 +2559,16 @@ typedef struct {
     bool ARB_create_context;
     bool ARB_create_context_profile;
 } _sapp_glx_t;
+
+#else
+
+typedef struct {
+    EGLDisplay display;
+    EGLContext context;
+    EGLSurface surface;
+} _sapp_egl_t;
+
+#endif // _SAPP_GLX
 
 #endif // _SAPP_LINUX
 
@@ -2643,7 +2672,11 @@ typedef struct {
         _sapp_android_t android;
     #elif defined(_SAPP_LINUX)
         _sapp_x11_t x11;
-        _sapp_glx_t glx;
+        #if defined(_SAPP_GLX)
+            _sapp_glx_t glx;
+        #else
+            _sapp_egl_t egl;
+        #endif
     #endif
     char html5_canvas_selector[_SAPP_MAX_TITLE_LENGTH];
     char window_title[_SAPP_MAX_TITLE_LENGTH];      /* UTF-8 */
@@ -10183,6 +10216,8 @@ _SOKOL_PRIVATE void _sapp_x11_query_system_dpi(void) {
     }
 }
 
+#if defined(_SAPP_GLX)
+
 _SOKOL_PRIVATE bool _sapp_glx_has_ext(const char* ext, const char* extensions) {
     SOKOL_ASSERT(ext);
     const char* start = extensions;
@@ -10441,6 +10476,8 @@ _SOKOL_PRIVATE void _sapp_glx_swapinterval(int interval) {
         _sapp.glx.SwapIntervalMESA(interval);
     }
 }
+
+#endif /* _SAPP_GLX */
 
 _SOKOL_PRIVATE void _sapp_x11_send_event(Atom type, int a, int b, int c, int d, int e) {
     XEvent event;
@@ -11463,6 +11500,147 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
     }
 }
 
+#if !defined(_SAPP_GLX)
+
+_SOKOL_PRIVATE void _sapp_egl_init(void) {
+#if defined(SOKOL_GLCORE33)
+    if (!eglBindAPI(EGL_OPENGL_API)) {
+        _sapp_fail("EGL: failed to bind API");
+    }
+#else
+    if (!eglBindAPI(EGL_OPENGL_ES_API)) {
+        _sapp_fail("EGL: failed to bind API");
+    }
+#endif
+
+    _sapp.egl.display = eglGetDisplay((EGLNativeDisplayType)_sapp.x11.display);
+    if (EGL_NO_DISPLAY == _sapp.egl.display) {
+        _sapp_fail("EGL: failed to get display");
+    }
+
+    EGLint major, minor;
+    if (!eglInitialize(_sapp.egl.display, &major, &minor)) {
+        _sapp_fail("EGL: failed to initialize");
+    }
+
+    EGLint sample_count = _sapp.desc.sample_count > 1 ? _sapp.desc.sample_count : 0;
+    EGLint alpha_size = _sapp.desc.alpha ? 8 : 0;
+    const EGLint config_attrs[] = {
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        #if defined(SOKOL_GLCORE33)
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+        #elif defined(SOKOL_GLES3)
+            EGL_RENDERABLE_TYPE, _sapp.desc.gl_force_gles2 ? EGL_OPENGL_ES2_BIT : EGL_OPENGL_ES3_BIT,
+        #else
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+        #endif
+        EGL_RED_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE, 8,
+        EGL_ALPHA_SIZE, alpha_size,
+        EGL_DEPTH_SIZE, 24,
+        EGL_STENCIL_SIZE, 8,
+        EGL_SAMPLE_BUFFERS, _sapp.desc.sample_count > 1 ? 1 : 0,
+        EGL_SAMPLES, sample_count,
+        EGL_NONE,
+    };
+
+    EGLConfig egl_configs[32];
+    EGLint config_count;
+    if (!eglChooseConfig(_sapp.egl.display, config_attrs, egl_configs, 32, &config_count) || config_count == 0) {
+        _sapp_fail("EGL: no available configs");
+    }
+
+    EGLConfig config = egl_configs[0];
+    for (int i = 0; i < config_count; ++i) {
+        EGLConfig c = egl_configs[i];
+        EGLint r, g, b, a, d, s, n;
+        if (eglGetConfigAttrib(_sapp.egl.display, c, EGL_RED_SIZE, &r) &&
+            eglGetConfigAttrib(_sapp.egl.display, c, EGL_GREEN_SIZE, &g) &&
+            eglGetConfigAttrib(_sapp.egl.display, c, EGL_BLUE_SIZE, &b) &&
+            eglGetConfigAttrib(_sapp.egl.display, c, EGL_ALPHA_SIZE, &a) &&
+            eglGetConfigAttrib(_sapp.egl.display, c, EGL_DEPTH_SIZE, &d) &&
+            eglGetConfigAttrib(_sapp.egl.display, c, EGL_STENCIL_SIZE, &s) &&
+            eglGetConfigAttrib(_sapp.egl.display, c, EGL_SAMPLES, &n) &&
+            (r == 8) && (g == 8) && (b == 8) && (a == alpha_size) && (d == 24) && (s == 8) && (n == sample_count)) {
+            config = c;
+            break;
+        }
+    }
+
+    EGLint visual_id;
+    if (!eglGetConfigAttrib(_sapp.egl.display, config, EGL_NATIVE_VISUAL_ID, &visual_id)) {
+        _sapp_fail("EGL: failed to get native visual");
+    }
+
+    XVisualInfo visual_info_template;
+    _sapp_clear(&visual_info_template, sizeof(visual_info_template));
+    visual_info_template.visualid = (VisualID)visual_id;
+
+    int num_visuals;
+    XVisualInfo* visual_info = XGetVisualInfo(_sapp.x11.display, VisualIDMask, &visual_info_template, &num_visuals);
+    if (!visual_info) {
+        _sapp_fail("EGL: failed to get x11 visual");
+    }
+
+    _sapp_x11_create_window(visual_info->visual, visual_info->depth);
+    XFree(visual_info);
+
+    _sapp.egl.surface = eglCreateWindowSurface(_sapp.egl.display, config, (EGLNativeWindowType)_sapp.x11.window, NULL);
+    if (EGL_NO_SURFACE == _sapp.egl.surface) {
+        _sapp_fail("EGL: failed to create EGL surface");
+    }
+
+    EGLint ctx_attrs[] = {
+        #if defined(SOKOL_GLCORE33)
+            EGL_CONTEXT_MAJOR_VERSION, _sapp.desc.gl_major_version,
+            EGL_CONTEXT_MINOR_VERSION, _sapp.desc.gl_minor_version,
+            EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
+        #elif defined(SOKOL_GLES3)
+            EGL_CONTEXT_CLIENT_VERSION, _sapp.desc.gl_force_gles2 ? 2 : 3,
+        #else
+            EGL_CONTEXT_CLIENT_VERSION, 2,
+        #endif
+        EGL_NONE,
+    };
+
+    _sapp.egl.context = eglCreateContext(_sapp.egl.display, config, EGL_NO_CONTEXT, ctx_attrs);
+    if (EGL_NO_CONTEXT == _sapp.egl.context) {
+        _sapp_fail("EGL: failed to create GL context");
+    }
+
+    if (!eglMakeCurrent(_sapp.egl.display, _sapp.egl.surface, _sapp.egl.surface, _sapp.egl.context)) {
+        _sapp_fail("EGL: failed to set current context");
+    }
+
+    eglSwapInterval(_sapp.egl.display, _sapp.swap_interval);
+
+#if defined(SOKOL_GLES3)
+    _sapp.gles2_fallback = _sapp.desc.gl_force_gles2;
+#endif
+}
+
+_SOKOL_PRIVATE void _sapp_egl_destroy(void) {
+    if (_sapp.egl.display != EGL_NO_DISPLAY) {
+        eglMakeCurrent(_sapp.egl.display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+
+        if (_sapp.egl.context != EGL_NO_CONTEXT) {
+            eglDestroyContext(_sapp.egl.display, _sapp.egl.context);
+            _sapp.egl.context = EGL_NO_CONTEXT;
+        }
+
+        if (_sapp.egl.surface != EGL_NO_SURFACE) {
+            eglDestroySurface(_sapp.egl.display, _sapp.egl.surface);
+            _sapp.egl.surface = EGL_NO_SURFACE;
+        }
+
+        eglTerminate(_sapp.egl.display);
+        _sapp.egl.display = EGL_NO_DISPLAY;
+    }
+}
+
+#endif /* _SAPP_GLX */
+
 _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     /* The following lines are here to trigger a linker error instead of an
         obscure runtime error if the user has forgotten to add -pthread to
@@ -11488,24 +11666,27 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     _sapp.dpi_scale = _sapp.x11.dpi / 96.0f;
     _sapp_x11_init_extensions();
     _sapp_x11_create_cursors();
+#if defined(_SAPP_GLX)
     _sapp_glx_init();
     Visual* visual = 0;
     int depth = 0;
     _sapp_glx_choose_visual(&visual, &depth);
     _sapp_x11_create_window(visual, depth);
     _sapp_glx_create_context();
+    _sapp_glx_swapinterval(_sapp.swap_interval);
+#else
+    _sapp_egl_init();
+#endif
     sapp_set_icon(&desc->icon);
     _sapp.valid = true;
     _sapp_x11_show_window();
     if (_sapp.fullscreen) {
         _sapp_x11_set_fullscreen(true);
     }
-    _sapp_glx_swapinterval(_sapp.swap_interval);
 
     XFlush(_sapp.x11.display);
     while (!_sapp.quit_ordered) {
         _sapp_timing_measure(&_sapp.timing);
-        _sapp_glx_make_current();
         int count = XPending(_sapp.x11.display);
         while (count--) {
             XEvent event;
@@ -11513,7 +11694,11 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
             _sapp_x11_process_event(&event);
         }
         _sapp_frame();
+#if defined(_SAPP_GLX)
         _sapp_glx_swap_buffers();
+#else
+        eglSwapBuffers(_sapp.egl.display, _sapp.egl.surface);
+#endif
         XFlush(_sapp.x11.display);
         /* handle quit-requested, either from window or from sapp_request_quit() */
         if (_sapp.quit_requested && !_sapp.quit_ordered) {
@@ -11526,7 +11711,11 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
         }
     }
     _sapp_call_cleanup();
+#if defined(_SAPP_GLX)
     _sapp_glx_destroy_context();
+#else
+    _sapp_egl_destroy();
+#endif
     _sapp_x11_destroy_window();
     _sapp_x11_destroy_cursors();
     XCloseDisplay(_sapp.x11.display);
@@ -11647,6 +11836,28 @@ SOKOL_API_IMPL bool sapp_high_dpi(void) {
 
 SOKOL_API_IMPL float sapp_dpi_scale(void) {
     return _sapp.dpi_scale;
+}
+
+SOKOL_APP_IMPL const void* sapp_egl_get_display(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(_SAPP_ANDROID)
+        return _sapp.android.display;
+    #elif defined(_SAPP_LINUX) && !defined(_SAPP_GLX)
+        return _sapp.egl.display;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_APP_IMPL const void* sapp_egl_get_context(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(_SAPP_ANDROID)
+        return _sapp.android.context;
+    #elif defined(_SAPP_LINUX) && !defined(_SAPP_GLX)
+        return _sapp.egl.context;
+    #else
+        return 0;
+    #endif
 }
 
 SOKOL_API_IMPL bool sapp_gles2(void) {
