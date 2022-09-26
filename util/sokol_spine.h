@@ -106,12 +106,14 @@ extern "C" {
 
 enum {
     SSPINE_INVALID_ID = 0,
+    SSPINE_MAX_SKINSET_SKINS = 32,
 };
 
 typedef struct sspine_context { uint32_t id; } sspine_context;
 typedef struct sspine_atlas { uint32_t id; } sspine_atlas;
 typedef struct sspine_skeleton { uint32_t id; } sspine_skeleton;
 typedef struct sspine_instance { uint32_t id; } sspine_instance;
+typedef struct sspine_skinset { uint32_t id; } sspine_skinset;
 
 typedef struct sspine_range { const void* ptr; size_t size; } sspine_range;
 typedef struct sspine_vec2 { float x, y; } sspine_vec2;
@@ -198,6 +200,12 @@ typedef struct sspine_skeleton_desc {
     sspine_range binary_data;
 } sspine_skeleton_desc;
 
+typedef struct sspine_skinset_desc {
+    sspine_skeleton skeleton;
+    const char* name;
+    const char* skins[SSPINE_MAX_SKINSET_SKINS];
+} sspine_skinset_desc;
+
 typedef struct sspine_anim_info {
     bool valid;
     const char* name;
@@ -276,6 +284,7 @@ typedef struct sspine_desc {
     int context_pool_size;
     int atlas_pool_size;
     int skeleton_pool_size;
+    int skinset_pool_size;
     int instance_pool_size;
     sg_pixel_format color_format;
     sg_pixel_format depth_format;
@@ -298,13 +307,19 @@ SOKOL_SPINE_API_DECL sspine_context sspine_default_context(void);
 // create and destroy spine objects
 SOKOL_SPINE_API_DECL sspine_atlas sspine_make_atlas(const sspine_atlas_desc* desc);
 SOKOL_SPINE_API_DECL sspine_skeleton sspine_make_skeleton(const sspine_skeleton_desc* desc);
+SOKOL_SPINE_API_DECL sspine_skinset sspine_make_skinset(const sspine_skinset_desc* desc);
 SOKOL_SPINE_API_DECL sspine_instance sspine_make_instance(const sspine_instance_desc* desc);
 SOKOL_SPINE_API_DECL void sspine_destroy_atlas(sspine_atlas atlas);
 SOKOL_SPINE_API_DECL void sspine_destroy_skeleton(sspine_skeleton skeleton);
+SOKOL_SPINE_API_DECL void sspine_destroy_skinset(sspine_skinset skinset);
 SOKOL_SPINE_API_DECL void sspine_destroy_instance(sspine_instance instance);
 
 // mark a new frame (call at start of a frame before any sspine_draw_instance())
 SOKOL_SPINE_API_DECL void sspine_new_frame(void);
+
+// configure instance appearance via skinsets
+SOKOL_SPINE_API_DECL void sspine_set_default_skinset(sspine_instance instance);
+SOKOL_SPINE_API_DECL void sspine_set_skinset(sspine_instance instance, sspine_skinset skinset);
 
 // update instance animations before drawing
 SOKOL_SPINE_API_DECL void sspine_update_instance(sspine_instance instance, float delta_time);
@@ -1504,6 +1519,7 @@ static const char* _sspine_fs_source_dummy = "";
 #define _SSPINE_DEFAULT_CONTEXT_POOL_SIZE (4)
 #define _SSPINE_DEFAULT_ATLAS_POOL_SIZE (64)
 #define _SSPINE_DEFAULT_SKELETON_POOL_SIZE (64)
+#define _SSPINE_DEFAULT_SKINSET_POOL_SIZE (64)
 #define _SSPINE_DEFAULT_INSTANCE_POOL_SIZE (1024)
 #define _SSPINE_DEFAULT_MAX_VERTICES (1<<16)
 #define _SSPINE_DEFAULT_MAX_COMMANDS (1<<14)
@@ -1573,8 +1589,25 @@ typedef struct {
 
 typedef struct {
     _sspine_slot_t slot;
+    _sspine_skeleton_ref_t skel;
+    spSkin* sp_skin;
+} _sspine_skinset_t;
+
+typedef struct {
+    _sspine_pool_t pool;
+    _sspine_skinset_t* items;
+} _sspine_skinset_pool_t;
+
+typedef struct {
+    uint32_t id;
+    _sspine_skinset_t* ptr;
+} _sspine_skinset_ref_t;
+
+typedef struct {
+    _sspine_slot_t slot;
     _sspine_atlas_ref_t atlas;
     _sspine_skeleton_ref_t skel;
+    _sspine_skinset_ref_t skin;
     spSkeleton* sp_skel;
     spAnimationState* sp_anim_state;
     spSkeletonClipping* sp_clip;
@@ -1659,6 +1692,7 @@ typedef struct {
     _sspine_context_pool_t context_pool;
     _sspine_atlas_pool_t atlas_pool;
     _sspine_skeleton_pool_t skeleton_pool;
+    _sspine_skinset_pool_t skinset_pool;
     _sspine_instance_pool_t instance_pool;
 } _sspine_t;
 static _sspine_t _sspine;
@@ -1714,6 +1748,10 @@ static bool _sspine_atlas_ref_valid(const _sspine_atlas_ref_t* ref) {
 }
 
 static bool _sspine_skeleton_ref_valid(const _sspine_skeleton_ref_t* ref) {
+    return ref->ptr && (ref->ptr->slot.id == ref->id);
+}
+
+static bool _sspine_skinset_ref_valid(const _sspine_skinset_ref_t* ref) {
     return ref->ptr && (ref->ptr->slot.id == ref->id);
 }
 
@@ -1865,17 +1903,15 @@ static _sspine_context_t* _sspine_lookup_context(uint32_t id) {
 
 static sspine_context _sspine_alloc_context(void) {
     _sspine_context_pool_t* p = &_sspine.context_pool;
-    sspine_context res;
     int slot_index = _sspine_pool_alloc_index(&p->pool);
     if (_SSPINE_INVALID_SLOT_INDEX != slot_index) {
         uint32_t id = _sspine_slot_init(&p->pool, &p->items[slot_index].slot, slot_index);
-        res = _sspine_make_context_handle(id);
+        return _sspine_make_context_handle(id);
     }
     else {
         // pool exhausted
-        res = _sspine_make_context_handle(SSPINE_INVALID_ID);
+        return _sspine_make_context_handle(SSPINE_INVALID_ID);
     }
-    return res;
 }
 
 static sspine_resource_state _sspine_init_context(_sspine_context_t* ctx, const sspine_context_desc* desc) {
@@ -2033,17 +2069,15 @@ static _sspine_atlas_t* _sspine_lookup_atlas(uint32_t id) {
 
 static sspine_atlas _sspine_alloc_atlas(void) {
     _sspine_atlas_pool_t* p = &_sspine.atlas_pool;
-    sspine_atlas res;
     int slot_index = _sspine_pool_alloc_index(&p->pool);
     if (_SSPINE_INVALID_SLOT_INDEX != slot_index) {
         uint32_t id = _sspine_slot_init(&p->pool, &p->items[slot_index].slot, slot_index);
-        res = _sspine_make_atlas_handle(id);
+        return _sspine_make_atlas_handle(id);
     }
     else {
         // pool exhausted
-        res = _sspine_make_atlas_handle(SSPINE_INVALID_ID);
+        return _sspine_make_atlas_handle(SSPINE_INVALID_ID);
     }
-    return res;
 }
 
 void _spAtlasPage_disposeTexture(spAtlasPage* self) {
@@ -2171,17 +2205,15 @@ static _sspine_skeleton_t* _sspine_lookup_skeleton(uint32_t id) {
 
 static sspine_skeleton _sspine_alloc_skeleton(void) {
     _sspine_skeleton_pool_t* p = &_sspine.skeleton_pool;
-    sspine_skeleton res;
     int slot_index = _sspine_pool_alloc_index(&p->pool);
     if (_SSPINE_INVALID_SLOT_INDEX != slot_index) {
         uint32_t id = _sspine_slot_init(&p->pool, &p->items[slot_index].slot, slot_index);
-        res = _sspine_make_skeleton_handle(id);
+        return _sspine_make_skeleton_handle(id);
     }
     else {
         // pool exhausted
-        res = _sspine_make_skeleton_handle(SSPINE_INVALID_ID);
+        return _sspine_make_skeleton_handle(SSPINE_INVALID_ID);
     }
-    return res;
 }
 
 static sspine_resource_state _sspine_init_skeleton(_sspine_skeleton_t* skeleton, const sspine_skeleton_desc* desc) {
@@ -2294,6 +2326,114 @@ static sspine_skeleton_desc _sspine_skeleton_desc_defaults(const sspine_skeleton
     sspine_skeleton_desc res = *desc;
     res.prescale = _sspine_def(desc->prescale, 1.0f);
     res.anim_default_mix = _sspine_def(desc->anim_default_mix, 0.2f);
+    return res;
+}
+
+//=== SKINSET POOL FUNCTIONS ===================================================
+static void _sspine_setup_skinset_pool(int pool_size) {
+    _sspine_skinset_pool_t* p = &_sspine.skinset_pool;
+    _sspine_init_item_pool(&p->pool, pool_size, (void**)&p->items, sizeof(_sspine_skinset_t));
+}
+
+static void _sspine_discard_skinset_pool(void) {
+    _sspine_skinset_pool_t* p = &_sspine.skinset_pool;
+    _sspine_discard_item_pool(&p->pool, (void**)&p->items);
+}
+
+static sspine_skinset _sspine_make_skinset_handle(uint32_t id) {
+    sspine_skinset handle = { id };
+    return handle;
+}
+
+static _sspine_skinset_t* _sspine_skinset_at(uint32_t id) {
+    SOKOL_ASSERT(SSPINE_INVALID_ID != id);
+    const _sspine_skinset_pool_t* p = &_sspine.skinset_pool;
+    int slot_index = _sspine_slot_index(id);
+    SOKOL_ASSERT((slot_index > _SSPINE_INVALID_SLOT_INDEX) && (slot_index < p->pool.size));
+    return &p->items[slot_index];
+}
+
+static _sspine_skinset_t* _sspine_lookup_skinset(uint32_t id) {
+    if (SSPINE_INVALID_ID != id) {
+        _sspine_skinset_t* skinset = _sspine_skinset_at(id);
+        if (skinset->slot.id == id) {
+            return skinset;
+        }
+    }
+    return 0;
+}
+
+static sspine_skinset _sspine_alloc_skinset(void) {
+    _sspine_skinset_pool_t* p = &_sspine.skinset_pool;
+    int slot_index = _sspine_pool_alloc_index(&p->pool);
+    if (_SSPINE_INVALID_SLOT_INDEX != slot_index) {
+        uint32_t id = _sspine_slot_init(&p->pool, &p->items[slot_index].slot, slot_index);
+        return _sspine_make_skinset_handle(id);
+    }
+    else {
+        // pool exhausted
+        return _sspine_make_skinset_handle(SSPINE_INVALID_ID);
+    }
+}
+
+static sspine_resource_state _sspine_init_skinset(_sspine_skinset_t* skinset, const sspine_skinset_desc* desc) {
+    SOKOL_ASSERT(skinset && (skinset->slot.state == SSPINE_RESOURCESTATE_ALLOC));
+    SOKOL_ASSERT(desc && desc->name);
+    skinset->skel.id = desc->skeleton.id;
+    skinset->skel.ptr = _sspine_lookup_skeleton(desc->skeleton.id);
+    if (!_sspine_skeleton_ref_valid(&skinset->skel)) {
+        return SSPINE_RESOURCESTATE_FAILED;
+    }
+    _sspine_skeleton_t* skel = skinset->skel.ptr;
+    if (SSPINE_RESOURCESTATE_VALID != skel->slot.state) {
+        return SSPINE_RESOURCESTATE_FAILED;
+    }
+    SOKOL_ASSERT(skel->sp_skel_data);
+    skinset->sp_skin = spSkin_create(desc->name);
+    for (int i = 0; i < SSPINE_MAX_SKINSET_SKINS; i++) {
+        if (desc->skins[i]) {
+            spSkin* skin = spSkeletonData_findSkin(skel->sp_skel_data, desc->skins[i]);
+            if (0 == skin) {
+                return SSPINE_RESOURCESTATE_FAILED;
+            }
+            spSkin_addSkin(skinset->sp_skin, skin);
+        }
+        else {
+            break;
+        }
+    }
+    return SSPINE_RESOURCESTATE_VALID;
+}
+
+static void _sspine_deinit_skinset(_sspine_skinset_t* skinset) {
+    if (skinset->sp_skin) {
+        spSkin_clear(skinset->sp_skin);
+        spSkin_dispose(skinset->sp_skin);
+        skinset->sp_skin = 0;
+    }
+}
+
+static void _sspine_destroy_skinset(sspine_skinset skinset_id) {
+    _sspine_skinset_t* skinset = _sspine_lookup_skinset(skinset_id.id);
+    if (skinset) {
+        _sspine_deinit_skinset(skinset);
+        _sspine_skinset_pool_t* p = &_sspine.skinset_pool;
+        _sspine_clear(skinset, sizeof(_sspine_skinset_t));
+        _sspine_pool_free_index(&p->pool, _sspine_slot_index(skinset_id.id));
+    }
+}
+
+static void _sspine_destroy_all_skinsets(void) {
+    _sspine_skinset_pool_t* p = &_sspine.skinset_pool;
+    for (int i = 0; i < p->pool.size; i++) {
+        _sspine_skinset_t* skinset = &p->items[i];
+        _sspine_destroy_skinset(_sspine_make_skinset_handle(skinset->slot.id));
+    }
+}
+
+static sspine_skinset_desc _sspine_skinset_desc_defaults(const sspine_skinset_desc* desc) {
+    sspine_skinset_desc res = *desc;
+    res.name = _sspine_def(desc->name, "skinset");
     return res;
 }
 
@@ -2592,6 +2732,7 @@ static sspine_desc _sspine_desc_defaults(const sspine_desc* desc) {
     res.context_pool_size = _sspine_def(desc->context_pool_size, _SSPINE_DEFAULT_CONTEXT_POOL_SIZE);
     res.atlas_pool_size = _sspine_def(desc->atlas_pool_size, _SSPINE_DEFAULT_ATLAS_POOL_SIZE);
     res.skeleton_pool_size = _sspine_def(desc->skeleton_pool_size, _SSPINE_DEFAULT_SKELETON_POOL_SIZE);
+    res.skinset_pool_size = _sspine_def(desc->skinset_pool_size, _SSPINE_DEFAULT_SKINSET_POOL_SIZE);
     res.instance_pool_size = _sspine_def(desc->instance_pool_size, _SSPINE_DEFAULT_INSTANCE_POOL_SIZE);
     return res;
 }
@@ -3062,6 +3203,7 @@ SOKOL_API_IMPL void sspine_setup(const sspine_desc* desc) {
     _sspine_setup_context_pool(_sspine.desc.context_pool_size);
     _sspine_setup_atlas_pool(_sspine.desc.atlas_pool_size);
     _sspine_setup_skeleton_pool(_sspine.desc.skeleton_pool_size);
+    _sspine_setup_skinset_pool(_sspine.desc.skinset_pool_size);
     _sspine_setup_instance_pool(_sspine.desc.instance_pool_size);
     const sspine_context_desc ctx_desc = _sspine_as_context_desc(&_sspine.desc);
     _sspine.def_ctx_id = sspine_make_context(&ctx_desc);
@@ -3072,6 +3214,7 @@ SOKOL_API_IMPL void sspine_setup(const sspine_desc* desc) {
 SOKOL_API_IMPL void sspine_shutdown(void) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine_destroy_all_instances();
+    _sspine_destroy_all_skinsets();
     _sspine_destroy_all_skeletons();
     _sspine_destroy_all_atlases();
     _sspine_destroy_all_contexts();
