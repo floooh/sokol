@@ -92,7 +92,7 @@ overrides = {
 }
 
 prim_types = {
-    'int':          'i32',
+    'int':          'c.int',
     'bool':         'bool',
     'char':         'u8',
     'int8_t':       'i8',
@@ -390,6 +390,7 @@ def gen_c_imports(inp, c_prefix, prefix):
     macos_metal_libs = get_system_libs(prefix, 'macos', 'metal')
     macos_gl_libs = get_system_libs(prefix, 'macos', 'gl')
     linux_gl_libs = get_system_libs(prefix, 'linux', 'gl')
+    l( 'import "core:c"')
     l( 'when ODIN_OS == .Windows {')
     l( '    when #config(SOKOL_USE_GL,false) {')
     l(f'        when ODIN_DEBUG == true {{ foreign import {clib_import} {{ "{clib_prefix}_windows_x64_gl_debug.lib"{windows_gl_libs} }} }}')
