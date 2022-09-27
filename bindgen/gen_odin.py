@@ -330,17 +330,6 @@ def funcdecl_args_c(decl, prefix):
             s += f"{param_name}: {map_type(param_type, prefix, 'c_arg')}"
     return s
 
-def funcdecl_args_odin(decl, prefix):
-    s = ''
-    func_name = decl['name']
-    for param_decl in decl['params']:
-        if s != '':
-            s += ', '
-        param_name = param_decl['name']
-        param_type = check_override(f'{func_name}.{param_name}', default=param_decl['type'])
-        s += f"{param_name}: {map_type(param_type, prefix, 'odin_arg')}"
-    return s
-
 def funcptr_args_c(field_type, prefix):
     tokens = field_type[field_type.index('(*)')+4:-1].split(',')
     s = ''
@@ -366,12 +355,6 @@ def funcdecl_result_c(decl, prefix):
     decl_type = decl['type']
     res_c_type = decl_type[:decl_type.index('(')].strip()
     return map_type(check_override(f'{func_name}.RESULT', default=res_c_type), prefix, 'c_arg')
-
-def funcdecl_result_odin(decl, prefix):
-    func_name = decl['name']
-    decl_type = decl['type']
-    res_c_type = decl_type[:decl_type.index('(')].strip()
-    return map_type(check_override(f'{func_name}.RESULT', default=res_c_type), prefix, 'odin_arg')
 
 def get_system_libs(module, platform, backend):
     if module in system_libs:
@@ -472,49 +455,6 @@ def gen_enum(decl, prefix):
                 l(f"    {item_name} = {item['value']},")
             else:
                 l(f"    {item_name},")
-    l('}')
-
-def gen_func(decl, prefix):
-    c_func_name = decl['name']
-    args = funcdecl_args_odin(decl, prefix)
-    res_type = funcdecl_result_odin(decl, prefix)
-    res_str = '' if res_type == '' else f'-> {res_type}'
-    if res_type != funcdecl_result_c(decl, prefix):
-        # cast needed for return type
-        res_cast = f'cast({res_type})'
-    else:
-        res_cast = ''
-    l(f"{as_snake_case(check_override(decl['name']), prefix)} :: proc({args}) {res_str} {{")
-
-    # workaround for 'cannot take the pointer address of 'x' which is a procedure parameter
-    for param_decl in decl['params']:
-        arg_name = param_decl['name']
-        arg_type = check_override(f'{c_func_name}.{arg_name}', default=param_decl['type'])
-        if is_const_struct_ptr(arg_type):
-            l(f'    _{arg_name} := {arg_name}')
-    s = '    '
-    if res_type == '':
-        # void result
-        s += f"{c_func_name}("
-    else:
-        s += f"return {res_cast}{c_func_name}("
-    for i, param_decl in enumerate(decl['params']):
-        if i > 0:
-            s += ', '
-        arg_name = param_decl['name']
-        arg_type = check_override(f'{c_func_name}.{arg_name}', default=param_decl['type'])
-        if is_const_struct_ptr(arg_type):
-            s += f"&_{arg_name}"
-        else:
-            odin_arg_type = map_type(arg_type, prefix, 'odin_arg')
-            c_arg_type = map_type(arg_type, prefix, 'c_arg')
-            if odin_arg_type != c_arg_type:
-                cast = f'cast({c_arg_type})'
-            else:
-                cast = ''
-            s += f'{cast}{arg_name}'
-    s += ')'
-    l(s)
     l('}')
 
 def gen_imports(dep_prefixes):
