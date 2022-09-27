@@ -432,6 +432,7 @@ SOKOL_SPINE_API_DECL int sspine_find_skin_index(sspine_skeleton skeleton, const 
 SOKOL_SPINE_API_DECL bool sspine_skin_index_valid(sspine_skeleton skeleton, int skin_index);
 SOKOL_SPINE_API_DECL int sspine_num_skins(sspine_skeleton skeleton);
 SOKOL_SPINE_API_DECL sspine_skin_info sspine_get_skin_info(sspine_skeleton skeleton, int skin_index);
+SOKOL_SPINE_API_DECL void sspine_set_skin(sspine_instance instance, int skin_index);
 
 #ifdef __cplusplus
 } // extern "C"
@@ -1607,7 +1608,7 @@ typedef struct {
     _sspine_slot_t slot;
     _sspine_atlas_ref_t atlas;
     _sspine_skeleton_ref_t skel;
-    _sspine_skinset_ref_t skin;
+    _sspine_skinset_ref_t skinset;
     spSkeleton* sp_skel;
     spAnimationState* sp_anim_state;
     spSkeletonClipping* sp_clip;
@@ -4267,6 +4268,25 @@ SOKOL_API_IMPL sspine_skin_info sspine_get_skin_info(sspine_skeleton skeleton_id
         res.name = skin->name;
     }
     return res;
+}
+
+SOKOL_SPINE_API_DECL void sspine_set_skin(sspine_instance instance_id, int skin_index) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
+    if (_sspine_instance_and_deps_valid(instance)) {
+        SOKOL_ASSERT(instance->sp_skel);
+        SOKOL_ASSERT(instance->sp_anim_state);
+        // clear any currently set skinset
+        instance->skinset.id = SSPINE_INVALID_ID;
+        instance->skinset.ptr = 0;
+        spSkin* sp_skin = _sspine_lookup_skin(instance->skel.id, skin_index);
+        if (sp_skin) {
+            spSkeleton_setSkin(instance->sp_skel, 0);
+            spSkeleton_setSkin(instance->sp_skel, sp_skin);
+            spSkeleton_setSlotsToSetupPose(instance->sp_skel);
+            spAnimationState_apply(instance->sp_anim_state, instance->sp_skel);
+        }
+    }
 }
 
 #endif // SOKOL_SPINE_IMPL
