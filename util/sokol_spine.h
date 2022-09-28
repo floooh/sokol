@@ -3194,6 +3194,7 @@ static void _sspine_destroy_shared(void) {
 }
 
 //== PUBLIC FUNCTIONS ==========================================================
+
 SOKOL_API_IMPL void sspine_setup(const sspine_desc* desc) {
     SOKOL_ASSERT(desc);
     spBone_setYDown(1);
