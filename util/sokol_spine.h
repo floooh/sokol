@@ -343,6 +343,7 @@ SOKOL_SPINE_API_DECL void sspine_context_draw_layer(sspine_context ctx, int laye
 SOKOL_SPINE_API_DECL sspine_resource_state sspine_get_context_resource_state(sspine_context context);
 SOKOL_SPINE_API_DECL sspine_resource_state sspine_get_atlas_resource_state(sspine_atlas atlas);
 SOKOL_SPINE_API_DECL sspine_resource_state sspine_get_skeleton_resource_state(sspine_skeleton skeleton);
+SOKOL_SPINE_API_DECL sspine_resource_state sspine_get_skinset_resource_state(sspine_skinset skinset);
 SOKOL_SPINE_API_DECL sspine_resource_state sspine_get_instance_resource_state(sspine_instance instance);
 
 // shortcut for sspine_get_*_state() == SSPINE_RESOURCESTATE_VALID
@@ -350,6 +351,7 @@ SOKOL_SPINE_API_DECL bool sspine_context_valid(sspine_context context);
 SOKOL_SPINE_API_DECL bool sspine_atlas_valid(sspine_atlas atlas);
 SOKOL_SPINE_API_DECL bool sspine_skeleton_valid(sspine_skeleton skeleton);
 SOKOL_SPINE_API_DECL bool sspine_instance_valid(sspine_instance instance);
+SOKOL_SPINE_API_DECL bool sspine_skinset_valid(sspine_skinset skinset);
 
 // get dependency objects
 SOKOL_SPINE_API_DECL sspine_atlas sspine_get_skeleton_atlas(sspine_skeleton skeleton);
@@ -1760,8 +1762,15 @@ static bool _sspine_skeleton_and_deps_valid(_sspine_skeleton_t* skeleton) {
     return skeleton && _sspine_atlas_ref_valid(&skeleton->atlas);
 }
 
+static bool _sspine_skinset_and_deps_valid(_sspine_skinset_t* skinset) {
+    return skinset && _sspine_skeleton_ref_valid(&skinset->skel);
+}
+
 static bool _sspine_instance_and_deps_valid(_sspine_instance_t* instance) {
-    return instance && _sspine_atlas_ref_valid(&instance->atlas) && _sspine_skeleton_ref_valid(&instance->skel);
+    return instance && 
+        _sspine_atlas_ref_valid(&instance->atlas) && 
+        _sspine_skeleton_ref_valid(&instance->skel) &&
+        ((instance->skinset.id == SSPINE_INVALID_ID) || _sspine_skinset_ref_valid(&instance->skinset));
 }
 
 //=== HANDLE POOL FUNCTIONS ====================================================
@@ -2395,6 +2404,8 @@ static sspine_resource_state _sspine_init_skinset(_sspine_skinset_t* skinset, co
         if (desc->skins[i]) {
             spSkin* skin = spSkeletonData_findSkin(skel->sp_skel_data, desc->skins[i]);
             if (0 == skin) {
+                SOKOL_LOG("sokol_spine.h: skin not found!");
+                SOKOL_LOG(desc->skins[i]);
                 return SSPINE_RESOURCESTATE_FAILED;
             }
             spSkin_addSkin(skinset->sp_skin, skin);
@@ -3221,6 +3232,7 @@ SOKOL_API_IMPL void sspine_shutdown(void) {
     _sspine_destroy_all_atlases();
     _sspine_destroy_all_contexts();
     _sspine_discard_instance_pool();
+    _sspine_discard_skinset_pool();
     _sspine_discard_skeleton_pool();
     _sspine_discard_atlas_pool();
     _sspine_discard_context_pool();
@@ -3285,6 +3297,27 @@ SOKOL_API_IMPL sspine_context sspine_default_context(void) {
 SOKOL_API_IMPL void sspine_new_frame(void) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine.frame_count++;
+}
+
+SOKOL_API_IMPL void sspine_set_default_skinset(sspine_instance instance_id) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    // we just assume that the first skin is the default skin
+    sspine_set_skin(instance_id, 0);
+}
+
+SOKOL_API_IMPL void sspine_set_skinset(sspine_instance instance_id, sspine_skinset skinset_id) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
+    _sspine_skinset_t* skinset = _sspine_lookup_skinset(skinset_id.id);
+    if (_sspine_instance_and_deps_valid(instance) && _sspine_skinset_and_deps_valid(skinset) && (instance->skel.id == skinset->skel.id)) {
+        SOKOL_ASSERT(instance->sp_skel);
+        SOKOL_ASSERT(instance->sp_anim_state);
+        SOKOL_ASSERT(skinset->sp_skin);
+        spSkeleton_setSkin(instance->sp_skel, 0);
+        spSkeleton_setSkin(instance->sp_skel, skinset->sp_skin);
+        spSkeleton_setSlotsToSetupPose(instance->sp_skel);
+        spAnimationState_apply(instance->sp_anim_state, instance->sp_skel);
+    }
 }
 
 SOKOL_API_IMPL void sspine_update_instance(sspine_instance instance_id, float delta_time) {
@@ -3415,6 +3448,30 @@ SOKOL_API_IMPL void sspine_destroy_skeleton(sspine_skeleton skeleton_id) {
     _sspine_destroy_skeleton(skeleton_id);
 }
 
+SOKOL_API_IMPL sspine_skinset sspine_make_skinset(const sspine_skinset_desc* desc) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    SOKOL_ASSERT(desc);
+    const sspine_skinset_desc desc_def = _sspine_skinset_desc_defaults(desc);
+    sspine_skinset skinset_id = _sspine_alloc_skinset();
+    _sspine_skinset_t* skinset = _sspine_lookup_skinset(skinset_id.id);
+    if (skinset) {
+        skinset->slot.state = _sspine_init_skinset(skinset, &desc_def);
+        SOKOL_ASSERT((skinset->slot.state == SSPINE_RESOURCESTATE_VALID) || (skinset->slot.state == SSPINE_RESOURCESTATE_FAILED));
+        if (skinset->slot.state == SSPINE_RESOURCESTATE_FAILED) {
+            _sspine_deinit_skinset(skinset);
+        }
+    }
+    else {
+        SOKOL_LOG("sokol_spine.h: skinset pool exhausted");
+    }
+    return skinset_id;
+}
+
+SOKOL_API_IMPL void sspine_destroy_skinset(sspine_skinset skinset_id) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_destroy_skinset(skinset_id);
+}
+
 SOKOL_API_IMPL sspine_instance sspine_make_instance(const sspine_instance_desc* desc) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     SOKOL_ASSERT(desc);
@@ -3472,6 +3529,17 @@ SOKOL_API_IMPL sspine_resource_state sspine_get_skeleton_resource_state(sspine_s
     }
 }
 
+SOKOL_API_IMPL sspine_resource_state sspine_get_skinset_resource_state(sspine_skinset skinset_id) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    const _sspine_skinset_t* skinset = _sspine_lookup_skinset(skinset_id.id);
+    if (skinset) {
+        return skinset->slot.state;
+    }
+    else {
+        return SSPINE_RESOURCESTATE_INVALID;
+    }
+}
+
 SOKOL_API_IMPL sspine_resource_state sspine_get_instance_resource_state(sspine_instance instance_id) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     const _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
@@ -3496,6 +3564,11 @@ SOKOL_API_IMPL bool sspine_atlas_valid(sspine_atlas atlas_id) {
 SOKOL_API_IMPL bool sspine_skeleton_valid(sspine_skeleton skeleton_id) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     return sspine_get_skeleton_resource_state(skeleton_id) == SSPINE_RESOURCESTATE_VALID;
+}
+
+SOKOL_API_IMPL bool sspine_skinset_valid(sspine_skinset skinset_id) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    return sspine_get_skinset_resource_state(skinset_id) == SSPINE_RESOURCESTATE_VALID;
 }
 
 SOKOL_API_IMPL bool sspine_instance_valid(sspine_instance instance_id) {
