@@ -150,6 +150,12 @@ typedef struct sspine_context_desc {
     sg_color_mask color_write_mask;
 } sspine_context_desc;
 
+typedef struct sspine_context_info {
+    int num_vertices;   // current number of vertices
+    int num_indices;    // current number of indices
+    int num_commands;   // current number of commands
+} sspine_context_info;
+
 typedef struct sspine_image_info {
     bool valid;
     sg_image image;
@@ -303,6 +309,7 @@ SOKOL_SPINE_API_DECL void sspine_destroy_context(sspine_context ctx);
 SOKOL_SPINE_API_DECL void sspine_set_context(sspine_context ctx);
 SOKOL_SPINE_API_DECL sspine_context sspine_get_context(void);
 SOKOL_SPINE_API_DECL sspine_context sspine_default_context(void);
+SOKOL_SPINE_API_DECL sspine_context_info sspine_get_context_info(sspine_context ctx);
 
 // create and destroy spine objects
 SOKOL_SPINE_API_DECL sspine_atlas sspine_make_atlas(const sspine_atlas_desc* desc);
@@ -2516,7 +2523,7 @@ static sspine_triggered_event_info* _sspine_next_triggered_event_info(_sspine_in
 
 static void _sspine_event_listener(spAnimationState* sp_anim_state, spEventType sp_event_type, spTrackEntry* sp_track_entry, spEvent* sp_event) {
     if (sp_event_type == SP_ANIMATION_EVENT) {
-        SOKOL_ASSERT(sp_anim_state && sp_track_entry && sp_event);
+        SOKOL_ASSERT(sp_anim_state && sp_track_entry && sp_event); (void)sp_track_entry;
         SOKOL_ASSERT(sp_event->data && sp_event->data->name);
         _sspine_instance_t* instance = _sspine_lookup_instance((uint32_t)(uintptr_t)sp_anim_state->userData);
         if (_sspine_instance_and_deps_valid(instance)) {
@@ -3292,6 +3299,19 @@ SOKOL_API_IMPL sspine_context sspine_get_context(void) {
 SOKOL_API_IMPL sspine_context sspine_default_context(void) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     return _sspine_make_context_handle(0x00010001);
+}
+
+SOKOL_API_IMPL sspine_context_info sspine_get_context_info(sspine_context ctx_id) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    sspine_context_info res;
+    _sspine_clear(&res, sizeof(res));
+    const _sspine_context_t* ctx = _sspine_lookup_context(ctx_id.id);
+    if (ctx) {
+        res.num_vertices = ctx->vertices.cur;
+        res.num_indices  = ctx->indices.cur;
+        res.num_commands = ctx->commands.cur;
+    }
+    return res;
 }
 
 SOKOL_API_IMPL void sspine_new_frame(void) {
