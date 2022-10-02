@@ -3011,7 +3011,7 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
         const uint8_t g = (uint8_t)(sp_skel->color.g * sp_slot->color.g * att_color->g * 255.0f);
         const uint8_t b = (uint8_t)(sp_skel->color.b * sp_slot->color.b * att_color->b * 255.0f);
         const uint8_t a = (uint8_t)(sp_skel->color.a * sp_slot->color.a * att_color->a * 255.0f);
-        const uint32_t color = (uint32_t)((a<<24) | (b<<16) | (g<<8) | r);
+        const uint32_t color = (((uint32_t)a<<24) | ((uint32_t)b<<16) | ((uint32_t)g<<8) | (uint32_t)r);
         for (int i = 0; i < num_vertices; i++) {
             dst_vertices.ptr[i].pos.x = vertices[i*2];
             dst_vertices.ptr[i].pos.y = vertices[i*2 + 1];
