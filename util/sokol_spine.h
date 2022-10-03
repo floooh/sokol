@@ -117,6 +117,7 @@ typedef struct sspine_skinset { uint32_t id; } sspine_skinset;
 typedef struct sspine_anim { uint32_t skeleton_id; int index; } sspine_anim;
 typedef struct sspine_bone { uint32_t skeleton_id; int index; } sspine_bone;
 typedef struct sspine_slot { uint32_t skeleton_id; int index; } sspine_slot;
+typedef struct sspine_event { uint32_t skeleton_id; int index; } sspine_event;
 
 typedef struct sspine_range { const void* ptr; size_t size; } sspine_range;
 typedef struct sspine_vec2 { float x, y; } sspine_vec2;
@@ -268,7 +269,7 @@ typedef struct sspine_event_info {
 
 typedef struct sspine_triggered_event_info {
     bool valid;
-    int event_index;
+    sspine_event event;
     float time;
     int int_value;
     float float_value;
@@ -428,10 +429,11 @@ SOKOL_SPINE_API_DECL void sspine_set_slot_color(sspine_instance instance, sspine
 SOKOL_SPINE_API_DECL sspine_color sspine_get_slot_color(sspine_instance instance, sspine_slot slot);
 
 // event functions
-SOKOL_SPINE_API_DECL int sspine_find_event_index(sspine_skeleton skeleton, const char* name);
-SOKOL_SPINE_API_DECL bool sspine_event_index_valid(sspine_skeleton skeleton, int event_index);
 SOKOL_SPINE_API_DECL int sspine_num_events(sspine_skeleton skeleton);
-SOKOL_SPINE_API_DECL sspine_event_info sspine_get_event_info(sspine_skeleton skeleton, int event_index);
+SOKOL_SPINE_API_DECL sspine_event sspine_event_by_name(sspine_skeleton skeleton, const char* name);
+SOKOL_SPINE_API_DECL sspine_event sspine_event_by_index(sspine_skeleton skeleton, int index);
+SOKOL_SPINE_API_DECL bool sspine_event_valid(sspine_event event);
+SOKOL_SPINE_API_DECL sspine_event_info sspine_get_event_info(sspine_event event);
 
 // ik target functions
 SOKOL_SPINE_API_DECL int sspine_find_iktarget_index(sspine_skeleton skeleton, const char* name);
@@ -1915,10 +1917,17 @@ static sspine_bone _sspine_bone(uint32_t skeleton_id, int index) {
 static sspine_slot _sspine_slot(uint32_t skeleton_id, int index) {
     sspine_slot slot;
     _sspine_clear(&slot, sizeof(slot));
-    _sspine_clear(&slot, sizeof(slot));
     slot.skeleton_id = skeleton_id;
     slot.index = index;
     return slot;
+}
+
+static sspine_event _sspine_event(uint32_t skeleton_id, int index) {
+    sspine_event event;
+    _sspine_clear(&event, sizeof(event));
+    event.skeleton_id = skeleton_id;
+    event.index = index;
+    return event;
 }
 
 //=== HANDLE POOL FUNCTIONS ====================================================
@@ -2648,9 +2657,7 @@ static sspine_instance _sspine_alloc_instance(void) {
 
 static void _sspine_rewind_triggered_events(_sspine_instance_t* instance) {
     instance->cur_triggered_event_index = 0;
-    for (int i = 0; i < _SSPINE_MAX_TRIGGERED_EVENTS; i++) {
-        instance->triggered_events[i].valid = false;
-    }
+    _sspine_clear(instance->triggered_events, sizeof(instance->triggered_events));
 }
 
 static sspine_triggered_event_info* _sspine_next_triggered_event_info(_sspine_instance_t* instance) {
@@ -2670,18 +2677,17 @@ static void _sspine_event_listener(spAnimationState* sp_anim_state, spEventType 
         if (_sspine_instance_and_deps_valid(instance)) {
             sspine_triggered_event_info* info = _sspine_next_triggered_event_info(instance);
             if (info) {
-                info->event_index = -1;
                 // FIXME: this sucks, but we really need the event index
                 _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(instance->skel.id);
                 SOKOL_ASSERT(skeleton && skeleton->sp_skel_data->events);
                 const spEventData* sp_event_data = sp_event->data;
                 for (int i = 0; i < skeleton->sp_skel_data->eventsCount; i++) {
                     if (sp_event_data == skeleton->sp_skel_data->events[i]) {
-                        info->event_index = i;
+                        info->event = _sspine_event(skeleton->slot.id, i);
                         break;
                     }
                 }
-                SOKOL_ASSERT(info->event_index != -1);
+                SOKOL_ASSERT(info->event.skeleton_id != SSPINE_INVALID_ID);
                 info->valid = true;
                 info->time = sp_event->time;
                 info->int_value = sp_event->intValue;
@@ -3511,7 +3517,6 @@ SOKOL_API_IMPL sspine_triggered_event_info sspine_get_triggered_event_info(sspin
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
     sspine_triggered_event_info res;
     _sspine_clear(&res, sizeof(res));
-    res.event_index = -1;
     if (_sspine_instance_and_deps_valid(instance)) {
         if ((triggered_event_index >= 0) && (triggered_event_index < instance->cur_triggered_event_index)) {
             res = instance->triggered_events[triggered_event_index];
@@ -4243,7 +4248,7 @@ SOKOL_API_IMPL int sspine_num_slots(sspine_skeleton skeleton_id) {
         SOKOL_ASSERT(skeleton->sp_skel_data);
         return skeleton->sp_skel_data->slotsCount;
     }
-    return -1;
+    return 0;
 }
 
 SOKOL_API_IMPL sspine_slot sspine_slot_by_name(sspine_skeleton skeleton_id, const char* name) {
@@ -4321,7 +4326,17 @@ SOKOL_API_IMPL sspine_color sspine_get_slot_color(sspine_instance instance_id, s
     return color;
 }
 
-SOKOL_API_IMPL int sspine_find_event_index(sspine_skeleton skeleton_id, const char* name) {
+SOKOL_API_IMPL int sspine_num_events(sspine_skeleton skeleton_id) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id.id);
+    if (_sspine_skeleton_and_deps_valid(skeleton)) {
+        SOKOL_ASSERT(skeleton->sp_skel_data);
+        return skeleton->sp_skel_data->eventsCount;
+    }
+    return 0;
+}
+
+SOKOL_API_IMPL sspine_event sspine_event_by_name(sspine_skeleton skeleton_id, const char* name) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     SOKOL_ASSERT(name);
     _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id.id);
@@ -4333,42 +4348,36 @@ SOKOL_API_IMPL int sspine_find_event_index(sspine_skeleton skeleton_id, const ch
             SOKOL_ASSERT(skeleton->sp_skel_data->events[i]);
             SOKOL_ASSERT(skeleton->sp_skel_data->events[i]->name);
             if (0 == strcmp(skeleton->sp_skel_data->events[i]->name, name)) {
-                return i;
+                return _sspine_event(skeleton_id.id, i);
             }
         }
     }
-    return -1;
+    return _sspine_event(0, 0);
 }
 
-SOKOL_API_IMPL bool sspine_event_index_valid(sspine_skeleton skeleton_id, int event_index) {
+SOKOL_API_IMPL sspine_event sspine_event_by_index(sspine_skeleton skeleton_id, int index) {
+    return _sspine_event(skeleton_id.id, index);
+}
+
+SOKOL_API_IMPL bool sspine_event_valid(sspine_event event) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id.id);
+    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(event.skeleton_id);
     if (_sspine_skeleton_and_deps_valid(skeleton)) {
         SOKOL_ASSERT(skeleton->sp_skel_data);
-        return (event_index >= 0) && (event_index < skeleton->sp_skel_data->eventsCount);
+        return (event.index >= 0) && (event.index < skeleton->sp_skel_data->eventsCount);
     }
     return false;
 }
 
-SOKOL_API_IMPL int sspine_num_events(sspine_skeleton skeleton_id) {
-    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id.id);
-    if (_sspine_skeleton_and_deps_valid(skeleton)) {
-        SOKOL_ASSERT(skeleton->sp_skel_data);
-        return skeleton->sp_skel_data->eventsCount;
-    }
-    return 0;
-}
-
-SOKOL_API_IMPL sspine_event_info sspine_get_event_info(sspine_skeleton skeleton_id, int event_index) {
+SOKOL_API_IMPL sspine_event_info sspine_get_event_info(sspine_event event) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     sspine_event_info res;
     _sspine_clear(&res, sizeof(res));
-    const spEventData* sp_event_data = _sspine_lookup_event_data(skeleton_id.id, event_index);
+    const spEventData* sp_event_data = _sspine_lookup_event_data(event.skeleton_id, event.index);
     if (sp_event_data) {
         res.valid = true;
         res.name = sp_event_data->name;
-        res.index = event_index;
+        res.index = event.index;
         res.int_value = sp_event_data->intValue;
         res.float_value = sp_event_data->floatValue;
         res.string_value = sp_event_data->stringValue;

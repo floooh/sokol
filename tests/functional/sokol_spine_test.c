@@ -847,7 +847,7 @@ UTEST(sokol_spine, num_slots) {
     sspine_skeleton skeleton = create_skeleton();
     T(sspine_num_slots(skeleton) == 52);
     sspine_destroy_skeleton(skeleton);
-    T(sspine_num_slots(skeleton) == -1);
+    T(sspine_num_slots(skeleton) == 0);
     shutdown();
 }
 
@@ -921,33 +921,33 @@ UTEST(sokol_spine, set_get_slot_color) {
     shutdown();
 }
 
-UTEST(sokol_spine, find_event_index) {
+UTEST(sokol_spine, event_by_name) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    int e0 = sspine_find_event_index(skeleton, "footstep");
-    T(e0 == 0);
-    int e1 = sspine_find_event_index(skeleton, "bla");
-    T(e1 == -1);
+    sspine_event e0 = sspine_event_by_name(skeleton, "footstep");
+    T((e0.skeleton_id == skeleton.id) && (e0.index == 0));
+    sspine_event e1 = sspine_event_by_name(skeleton, "bla");
+    T((e1.skeleton_id == 0) && (e1.index == 0));
     shutdown();
 }
 
-UTEST(sokol_spine, find_event_index_destroyed_skeleton) {
+UTEST(sokol_spine, event_by_name_destroyed_skeleton) {
     init();
     sspine_skeleton skeleton = create_skeleton();
     sspine_destroy_skeleton(skeleton);
-    int e0 = sspine_find_event_index(skeleton, "footstep");
-    T(e0 == -1);
+    sspine_event e0 = sspine_event_by_name(skeleton, "footstep");
+    T((e0.skeleton_id == 0) && (e0.index == 0));
     shutdown();
 }
 
-UTEST(sokol_spine, event_index_valid) {
+UTEST(sokol_spine, event_valid) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    T(sspine_event_index_valid(skeleton, 0));
-    T(!sspine_event_index_valid(skeleton, 1));
-    T(!sspine_event_index_valid(skeleton, -1));
+    T(sspine_event_valid(sspine_event_by_index(skeleton, 0)));
+    T(!sspine_event_valid(sspine_event_by_index(skeleton, 1)));
+    T(!sspine_event_valid(sspine_event_by_index(skeleton, -1)));
     sspine_destroy_skeleton(skeleton);
-    T(!sspine_event_index_valid(skeleton, 0));
+    T(!sspine_event_valid(sspine_event_by_index(skeleton, 0)));
     shutdown();
 }
 
@@ -963,7 +963,7 @@ UTEST(sokol_spine, num_events) {
 UTEST(sokol_spine, get_event_info) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    const sspine_event_info info = sspine_get_event_info(skeleton, 0);
+    const sspine_event_info info = sspine_get_event_info(sspine_event_by_index(skeleton, 0));
     T(info.valid);
     T(0 == strcmp(info.name, "footstep"));
     T(0 == info.index);
@@ -980,7 +980,7 @@ UTEST(sokol_spine, get_event_info_destroyed_skeleton) {
     init();
     sspine_skeleton skeleton = create_skeleton();
     sspine_destroy_skeleton(skeleton);
-    const sspine_event_info info = sspine_get_event_info(skeleton, 0);
+    const sspine_event_info info = sspine_get_event_info(sspine_event_by_index(skeleton, 0));
     T(!info.valid);
     T(0 == info.name);
     shutdown();
@@ -1020,9 +1020,9 @@ UTEST(sokol_spine, target_index_valid) {
 UTEST(sokol_spine, num_iktargets) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    T(7 == sspine_num_iktargets(skeleton));
+    T(sspine_num_iktargets(skeleton) == 7);
     sspine_destroy_skeleton(skeleton);
-    T(0 == sspine_num_iktargets(skeleton));
+    T(sspine_num_iktargets(skeleton) == 0);
     shutdown();
 }
 
