@@ -626,34 +626,34 @@ UTEST(sokol_spine, atlas_get_atlas_page_info_with_overrides) {
     shutdown();
 }
 
-UTEST(sokol_spine, find_bone_index) {
+UTEST(sokol_spine, bone_by_name) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    int b0 = sspine_find_bone_index(skeleton, "crosshair");
-    T(b0 == 2);
-    int b1 = sspine_find_bone_index(skeleton, "blablub");
-    T(b1 == -1);
+    sspine_bone b0 = sspine_bone_by_name(skeleton, "crosshair");
+    T((b0.skeleton_id == skeleton.id) && (b0.index == 2));
+    sspine_bone b1 = sspine_bone_by_name(skeleton, "blablub");
+    T((b1.skeleton_id == 0) && (b1.index == 0));
     shutdown();
 }
 
-UTEST(sokol_spine, find_bone_index_destroyed_skeleton) {
+UTEST(sokol_spine, bone_by_name_destroyed_skeleton) {
     init();
     sspine_skeleton skeleton = create_skeleton();
     sspine_destroy_skeleton(skeleton);
-    int b0 = sspine_find_bone_index(skeleton, "crosshair");
-    T(b0 == -1);
+    sspine_bone b0 = sspine_bone_by_name(skeleton, "crosshair");
+    T((b0.skeleton_id == 0) && (b0.index == 0));
     shutdown();
 }
 
-UTEST(sokol_spine, bone_index_valid) {
+UTEST(sokol_spine, bone_valid) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    T(sspine_bone_index_valid(skeleton, 0));
-    T(sspine_bone_index_valid(skeleton, 66));
-    T(!sspine_bone_index_valid(skeleton, -1));
-    T(!sspine_bone_index_valid(skeleton, 67));
+    T(sspine_bone_valid(sspine_bone_by_index(skeleton, 0)));
+    T(sspine_bone_valid(sspine_bone_by_index(skeleton, 66)));
+    T(!sspine_bone_valid(sspine_bone_by_index(skeleton, -1)));
+    T(!sspine_bone_valid(sspine_bone_by_index(skeleton, 67)));
     sspine_destroy_skeleton(skeleton);
-    T(!sspine_bone_index_valid(skeleton, 0));
+    T(!sspine_bone_valid(sspine_bone_by_index(skeleton, 0)));
     shutdown();
 }
 
@@ -669,11 +669,10 @@ UTEST(sokol_spine, num_bones) {
 UTEST(sokol_spine, get_bone_info_root) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    int bone_index = sspine_find_bone_index(skeleton, "root");
-    const sspine_bone_info info = sspine_get_bone_info(skeleton, bone_index);
+    const sspine_bone_info info = sspine_get_bone_info(sspine_bone_by_name(skeleton, "root"));
     T(info.valid);
     T(info.index == 0);
-    T(info.parent_index == -1);
+    T((info.parent_bone.skeleton_id == 0) && (info.parent_bone.index == 0));
     T(strcmp(info.name, "root") == 0);
     T(info.length == 0.0f);
     T(info.pose.position.x == 0.0f);
@@ -686,23 +685,22 @@ UTEST(sokol_spine, get_bone_info_root) {
     shutdown();
 }
 
-UTEST(sokol_spine, get_bone_info_parent_index) {
+UTEST(sokol_spine, get_bone_info_parent_bone) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    int bone_index = sspine_find_bone_index(skeleton, "rear-shin");
-    const sspine_bone_info info = sspine_get_bone_info(skeleton, bone_index);
+    const sspine_bone_info info = sspine_get_bone_info(sspine_bone_by_name(skeleton, "rear-shin"));
     T(info.valid);
     T(info.index == 7);
-    T(info.parent_index == 6);
+    T((info.parent_bone.skeleton_id == skeleton.id) && (info.parent_bone.index == 6));
     shutdown();
 }
 
 UTEST(sokol_spine, get_bone_info_destroyed_skeleton) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    int bone_index = sspine_find_bone_index(skeleton, "root");
+    sspine_bone bone = sspine_bone_by_name(skeleton, "root");
     sspine_destroy_skeleton(skeleton);
-    const sspine_bone_info info = sspine_get_bone_info(skeleton, bone_index);
+    const sspine_bone_info info = sspine_get_bone_info(bone);
     T(!info.valid);
     T(info.name == 0);
     shutdown();
@@ -711,10 +709,10 @@ UTEST(sokol_spine, get_bone_info_destroyed_skeleton) {
 UTEST(sokol_spine, get_bone_info_invalid_index) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    const sspine_bone_info i0 = sspine_get_bone_info(skeleton, -1);
+    const sspine_bone_info i0 = sspine_get_bone_info(sspine_bone_by_index(skeleton, -1));
     T(!i0.valid);
     T(i0.name == 0);
-    const sspine_bone_info i1 = sspine_get_bone_info(skeleton, 1234);
+    const sspine_bone_info i1 = sspine_get_bone_info(sspine_bone_by_index(skeleton, 1234));
     T(!i1.valid);
     T(i1.name == 0);
     shutdown();
@@ -724,14 +722,14 @@ UTEST(sokol_spine, set_get_bone_transform) {
     init();
     sspine_instance instance = create_instance();
     sspine_skeleton skeleton = sspine_get_instance_skeleton(instance);
-    int bone_index = sspine_find_bone_index(skeleton, "root");
-    sspine_set_bone_transform(instance, bone_index, &(sspine_bone_transform){
+    sspine_bone bone = sspine_bone_by_name(skeleton, "root");
+    sspine_set_bone_transform(instance, bone, &(sspine_bone_transform){
         .position = { 1.0f, 2.0f },
         .rotation = 3.0f,
         .scale = { 4.0f, 5.0f },
         .shear = { 6.0f, 7.0f }
     });
-    const sspine_bone_transform tform = sspine_get_bone_transform(instance, bone_index);
+    const sspine_bone_transform tform = sspine_get_bone_transform(instance, bone);
     T(tform.position.x == 1.0f);
     T(tform.position.y == 2.0f);
     T(tform.rotation == 3.0f);
@@ -746,15 +744,15 @@ UTEST(sokol_spine, set_get_bone_transform_destroyed_instance) {
     init();
     sspine_instance instance = create_instance();
     sspine_skeleton skeleton = sspine_get_instance_skeleton(instance);
-    int bone_index = sspine_find_bone_index(skeleton, "root");
+    sspine_bone bone = sspine_bone_by_name(skeleton, "root");
     sspine_destroy_instance(instance);
-    sspine_set_bone_transform(instance, bone_index, &(sspine_bone_transform){
+    sspine_set_bone_transform(instance, bone, &(sspine_bone_transform){
         .position = { 1.0f, 2.0f },
         .rotation = 3.0f,
         .scale = { 4.0f, 5.0f },
         .shear = { 6.0f, 7.0f }
     });
-    const sspine_bone_transform tform = sspine_get_bone_transform(instance, bone_index);
+    const sspine_bone_transform tform = sspine_get_bone_transform(instance, bone);
     T(tform.position.x == 0.0f);
     T(tform.position.y == 0.0f);
     T(tform.rotation == 0.0f);
@@ -769,13 +767,13 @@ UTEST(sokol_spine, set_get_bone_position) {
     init();
     sspine_instance instance = create_instance();
     sspine_skeleton skeleton = sspine_get_instance_skeleton(instance);
-    int bone_index = sspine_find_bone_index(skeleton, "root");
-    sspine_set_bone_position(instance, bone_index, (sspine_vec2){ 1.0f, 2.0f });
-    const sspine_vec2 p0 = sspine_get_bone_position(instance, bone_index);
+    sspine_bone bone = sspine_bone_by_name(skeleton, "root");
+    sspine_set_bone_position(instance, bone, (sspine_vec2){ 1.0f, 2.0f });
+    const sspine_vec2 p0 = sspine_get_bone_position(instance, bone);
     T(p0.x == 1.0f);
     T(p0.y == 2.0f);
     sspine_destroy_instance(instance);
-    const sspine_vec2 p1 = sspine_get_bone_position(instance, bone_index);
+    const sspine_vec2 p1 = sspine_get_bone_position(instance, bone);
     T(p1.x == 0.0f);
     T(p1.y == 0.0f);
     shutdown();
@@ -785,11 +783,11 @@ UTEST(sokol_spine, set_get_bone_rotation) {
     init();
     sspine_instance instance = create_instance();
     sspine_skeleton skeleton = sspine_get_instance_skeleton(instance);
-    int bone_index = sspine_find_bone_index(skeleton, "root");
-    sspine_set_bone_rotation(instance, bone_index, 5.0f);
-    T(sspine_get_bone_rotation(instance, bone_index) == 5.0f);
+    sspine_bone bone = sspine_bone_by_name(skeleton, "root");
+    sspine_set_bone_rotation(instance, bone, 5.0f);
+    T(sspine_get_bone_rotation(instance, bone) == 5.0f);
     sspine_destroy_instance(instance);
-    T(sspine_get_bone_rotation(instance, bone_index) == 0.0f);
+    T(sspine_get_bone_rotation(instance, bone) == 0.0f);
     shutdown();
 }
 
@@ -797,13 +795,13 @@ UTEST(sokol_spine, set_get_bone_scale) {
     init();
     sspine_instance instance = create_instance();
     sspine_skeleton skeleton = sspine_get_instance_skeleton(instance);
-    int bone_index = sspine_find_bone_index(skeleton, "root");
-    sspine_set_bone_scale(instance, bone_index, (sspine_vec2){ 1.0f, 2.0f });
-    const sspine_vec2 s0 = sspine_get_bone_scale(instance, bone_index);
+    sspine_bone bone = sspine_bone_by_name(skeleton, "root");
+    sspine_set_bone_scale(instance, bone, (sspine_vec2){ 1.0f, 2.0f });
+    const sspine_vec2 s0 = sspine_get_bone_scale(instance, bone);
     T(s0.x == 1.0f);
     T(s0.y == 2.0f);
     sspine_destroy_instance(instance);
-    const sspine_vec2 s1 = sspine_get_bone_scale(instance, bone_index);
+    const sspine_vec2 s1 = sspine_get_bone_scale(instance, bone);
     T(s1.x == 0.0f);
     T(s1.y == 0.0f);
     shutdown();
@@ -813,13 +811,13 @@ UTEST(sokol_spine, set_get_bone_shear) {
     init();
     sspine_instance instance = create_instance();
     sspine_skeleton skeleton = sspine_get_instance_skeleton(instance);
-    int bone_index = sspine_find_bone_index(skeleton, "root");
-    sspine_set_bone_shear(instance, bone_index, (sspine_vec2){ 1.0f, 2.0f });
-    const sspine_vec2 s0 = sspine_get_bone_shear(instance, bone_index);
+    sspine_bone bone = sspine_bone_by_name(skeleton, "root");
+    sspine_set_bone_shear(instance, bone, (sspine_vec2){ 1.0f, 2.0f });
+    const sspine_vec2 s0 = sspine_get_bone_shear(instance, bone);
     T(s0.x == 1.0f);
     T(s0.y == 2.0f);
     sspine_destroy_instance(instance);
-    const sspine_vec2 s1 = sspine_get_bone_shear(instance, bone_index);
+    const sspine_vec2 s1 = sspine_get_bone_shear(instance, bone);
     T(s1.x == 0.0f);
     T(s1.y == 0.0f);
     shutdown();
@@ -874,7 +872,7 @@ UTEST(sokol_spine, get_slot_info) {
     T(info.index == 3);
     T(strcmp(info.name, "portal-streaks1") == 0);
     T(info.attachment_name == 0);
-    T(info.bone_index == 62);
+    T((info.bone.skeleton_id == skeleton.id) && (info.bone.index == 62));
     T(info.color.r == 1.0f);
     T(info.color.g == 1.0f);
     T(info.color.b == 1.0f);
@@ -1036,7 +1034,7 @@ UTEST(sokol_spine, get_iktarget_info) {
     T(info.valid);
     T(1 == info.index);
     T(0 == strcmp(info.name, "aim-torso-ik"));
-    T(2 == info.target_bone_index);
+    T((info.target_bone.skeleton_id == skeleton.id) && (info.target_bone.index == 2));
     shutdown();
 }
 
