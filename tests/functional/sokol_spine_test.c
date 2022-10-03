@@ -1058,27 +1058,27 @@ UTEST(sokol_spine, get_iktarget_info_out_of_bounds) {
     shutdown();
 }
 
-UTEST(sokol_spine, find_skin_index) {
+UTEST(sokol_spine, skin_by_name) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    int i0 = sspine_find_skin_index(skeleton, "default");
-    T(i0 == 0);
-    int i1 = sspine_find_skin_index(skeleton, "bla");
-    T(i1 == -1);
+    sspine_skin s0 = sspine_skin_by_name(skeleton, "default");
+    T((s0.skeleton_id == skeleton.id) && (s0.index == 0));
+    sspine_skin s1 = sspine_skin_by_name(skeleton, "bla");
+    T((s1.skeleton_id == 0) && (s1.index == 0));
     sspine_destroy_skeleton(skeleton);
-    int i2 = sspine_find_skin_index(skeleton, "default");
-    T(i2 == -1);
+    sspine_skin s2 = sspine_skin_by_name(skeleton, "default");
+    T((s2.skeleton_id == 0) && (s2.index == 0));
     shutdown();
 }
 
-UTEST(sokol_spine, skin_index_valid) {
+UTEST(sokol_spine, skin_valid) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    T(sspine_skin_index_valid(skeleton, 0));
-    T(!sspine_skin_index_valid(skeleton, -1));
-    T(!sspine_skin_index_valid(skeleton, 1));
+    T(sspine_skin_valid(sspine_skin_by_index(skeleton, 0)));
+    T(!sspine_skin_valid(sspine_skin_by_index(skeleton, -1)));
+    T(!sspine_skin_valid(sspine_skin_by_index(skeleton, 1)));
     sspine_destroy_skeleton(skeleton);
-    T(!sspine_skin_index_valid(skeleton, 0));
+    T(!sspine_skin_valid(sspine_skin_by_index(skeleton, 0)));
     shutdown();
 }
 
@@ -1094,7 +1094,7 @@ UTEST(sokol_spine, num_skins) {
 UTEST(sokol_spine, get_skin_info) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    const sspine_skin_info info = sspine_get_skin_info(skeleton, 0);
+    const sspine_skin_info info = sspine_get_skin_info(sspine_skin_by_index(skeleton, 0));
     T(info.valid);
     T(0 == info.index);
     T(0 == strcmp(info.name, "default"));
@@ -1105,7 +1105,7 @@ UTEST(sokol_spine, get_skin_info_destroyed_skeleton) {
     init();
     sspine_skeleton skeleton = create_skeleton();
     sspine_destroy_skeleton(skeleton);
-    const sspine_skin_info info = sspine_get_skin_info(skeleton, 0);
+    const sspine_skin_info info = sspine_get_skin_info(sspine_skin_by_index(skeleton, 0));
     T(!info.valid);
     T(0 == info.name);
     shutdown();

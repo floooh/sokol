@@ -119,6 +119,7 @@ typedef struct sspine_bone { uint32_t skeleton_id; int index; } sspine_bone;
 typedef struct sspine_slot { uint32_t skeleton_id; int index; } sspine_slot;
 typedef struct sspine_event { uint32_t skeleton_id; int index; } sspine_event;
 typedef struct sspine_iktarget { uint32_t skeleton_id; int index; } sspine_iktarget;
+typedef struct sspine_skin { uint32_t skeleton_id; int index; } sspine_skin;
 
 typedef struct sspine_range { const void* ptr; size_t size; } sspine_range;
 typedef struct sspine_vec2 { float x, y; } sspine_vec2;
@@ -214,7 +215,7 @@ typedef struct sspine_skeleton_desc {
 typedef struct sspine_skinset_desc {
     sspine_skeleton skeleton;
     const char* name;
-    const char* skins[SSPINE_MAX_SKINSET_SKINS];
+    sspine_skin skins[SSPINE_MAX_SKINSET_SKINS];
 } sspine_skinset_desc;
 
 typedef struct sspine_anim_info {
@@ -330,7 +331,6 @@ SOKOL_SPINE_API_DECL void sspine_destroy_instance(sspine_instance instance);
 SOKOL_SPINE_API_DECL void sspine_new_frame(void);
 
 // configure instance appearance via skinsets
-SOKOL_SPINE_API_DECL void sspine_set_default_skinset(sspine_instance instance);
 SOKOL_SPINE_API_DECL void sspine_set_skinset(sspine_instance instance, sspine_skinset skinset);
 
 // update instance animations before drawing
@@ -445,11 +445,12 @@ SOKOL_SPINE_API_DECL sspine_iktarget_info sspine_get_iktarget_info(sspine_iktarg
 SOKOL_SPINE_API_DECL void sspine_set_iktarget_world_pos(sspine_instance instance, sspine_iktarget iktarget, sspine_vec2 world_pos);
 
 // skin functions
-SOKOL_SPINE_API_DECL int sspine_find_skin_index(sspine_skeleton skeleton, const char* name);
-SOKOL_SPINE_API_DECL bool sspine_skin_index_valid(sspine_skeleton skeleton, int skin_index);
 SOKOL_SPINE_API_DECL int sspine_num_skins(sspine_skeleton skeleton);
-SOKOL_SPINE_API_DECL sspine_skin_info sspine_get_skin_info(sspine_skeleton skeleton, int skin_index);
-SOKOL_SPINE_API_DECL void sspine_set_skin(sspine_instance instance, int skin_index);
+SOKOL_SPINE_API_DECL sspine_skin sspine_skin_by_name(sspine_skeleton skeleton, const char* name);
+SOKOL_SPINE_API_DECL sspine_skin sspine_skin_by_index(sspine_skeleton skeleton, int index);
+SOKOL_SPINE_API_DECL bool sspine_skin_valid(sspine_skin skin);
+SOKOL_SPINE_API_DECL sspine_skin_info sspine_get_skin_info(sspine_skin skin);
+SOKOL_SPINE_API_DECL void sspine_set_skin(sspine_instance instance, sspine_skin skin);
 
 #ifdef __cplusplus
 } // extern "C"
@@ -1901,43 +1902,33 @@ static bool _sspine_instance_and_deps_valid(_sspine_instance_t* instance) {
 }
 
 static sspine_anim _sspine_anim(uint32_t skeleton_id, int index) {
-    sspine_anim anim;
-    _sspine_clear(&anim, sizeof(anim));
-    anim.skeleton_id = skeleton_id;
-    anim.index = index;
+    sspine_anim anim = { skeleton_id, index };
     return anim;
 }
 
 static sspine_bone _sspine_bone(uint32_t skeleton_id, int index) {
-    sspine_bone bone;
-    _sspine_clear(&bone, sizeof(bone));
-    bone.skeleton_id = skeleton_id;
-    bone.index = index;
+    sspine_bone bone = { skeleton_id, index };
     return bone;
 }
 
 static sspine_slot _sspine_slot(uint32_t skeleton_id, int index) {
-    sspine_slot slot;
-    _sspine_clear(&slot, sizeof(slot));
-    slot.skeleton_id = skeleton_id;
-    slot.index = index;
+    sspine_slot slot = { skeleton_id, index };
     return slot;
 }
 
 static sspine_event _sspine_event(uint32_t skeleton_id, int index) {
-    sspine_event event;
-    _sspine_clear(&event, sizeof(event));
-    event.skeleton_id = skeleton_id;
-    event.index = index;
+    sspine_event event = { skeleton_id, index };
     return event;
 }
 
 static sspine_iktarget _sspine_iktarget(uint32_t skeleton_id, int index) {
-    sspine_iktarget iktarget;
-    _sspine_clear(&iktarget, sizeof(iktarget));
-    iktarget.skeleton_id = skeleton_id;
-    iktarget.index = index;
+    sspine_iktarget iktarget = { skeleton_id, index };
     return iktarget;
+}
+
+static sspine_skin _sspine_skin(uint32_t skeleton_id, int index) {
+    sspine_skin skin = { skeleton_id, index };
+    return skin;
 }
 
 //=== HANDLE POOL FUNCTIONS ====================================================
@@ -2506,6 +2497,61 @@ static sspine_skeleton_desc _sspine_skeleton_desc_defaults(const sspine_skeleton
     return res;
 }
 
+static spBoneData* _sspine_lookup_bone_data(uint32_t skeleton_id, int bone_index) {
+    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id);
+    if (_sspine_skeleton_and_deps_valid(skeleton)) {
+        SOKOL_ASSERT(skeleton->sp_skel_data && skeleton->sp_skel_data->bones);
+        if ((bone_index >= 0) && (bone_index <= skeleton->sp_skel_data->bonesCount)) {
+            return skeleton->sp_skel_data->bones[bone_index];
+        }
+    }
+    return 0;
+}
+
+static spSlotData* _sspine_lookup_slot_data(uint32_t skeleton_id, int slot_index) {
+    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id);
+    if (_sspine_skeleton_and_deps_valid(skeleton)) {
+        SOKOL_ASSERT(skeleton->sp_skel_data && skeleton->sp_skel_data->slots);
+        if ((slot_index >= 0) && (slot_index <= skeleton->sp_skel_data->slotsCount)) {
+            return skeleton->sp_skel_data->slots[slot_index];
+        }
+    }
+    return 0;
+}
+
+static spEventData* _sspine_lookup_event_data(uint32_t skeleton_id, int event_index) {
+    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id);
+    if (_sspine_skeleton_and_deps_valid(skeleton)) {
+        SOKOL_ASSERT(skeleton->sp_skel_data && skeleton->sp_skel_data->events);
+        if ((event_index >= 0) && (event_index < skeleton->sp_skel_data->eventsCount)) {
+            return skeleton->sp_skel_data->events[event_index];
+        }
+    }
+    return 0;
+}
+
+static spIkConstraintData* _sspine_lookup_ikconstraint_data(uint32_t skeleton_id, int iktarget_index) {
+    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id);
+    if (_sspine_skeleton_and_deps_valid(skeleton)) {
+        SOKOL_ASSERT(skeleton->sp_skel_data && skeleton->sp_skel_data->ikConstraints);
+        if ((iktarget_index >= 0) && (iktarget_index < skeleton->sp_skel_data->ikConstraintsCount)) {
+            return skeleton->sp_skel_data->ikConstraints[iktarget_index];
+        }
+    }
+    return 0;
+}
+
+static spSkin* _sspine_lookup_skin(uint32_t skeleton_id, int skin_index) {
+    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id);
+    if (_sspine_skeleton_and_deps_valid(skeleton)) {
+        SOKOL_ASSERT(skeleton->sp_skel_data && skeleton->sp_skel_data->skins);
+        if ((skin_index >= 0) && (skin_index < skeleton->sp_skel_data->skinsCount)) {
+            return skeleton->sp_skel_data->skins[skin_index];
+        }
+    }
+    return 0;
+}
+
 //=== SKINSET POOL FUNCTIONS ===================================================
 static void _sspine_setup_skinset_pool(int pool_size) {
     _sspine_skinset_pool_t* p = &_sspine.skinset_pool;
@@ -2568,17 +2614,12 @@ static sspine_resource_state _sspine_init_skinset(_sspine_skinset_t* skinset, co
     SOKOL_ASSERT(skel->sp_skel_data);
     skinset->sp_skin = spSkin_create(desc->name);
     for (int i = 0; i < SSPINE_MAX_SKINSET_SKINS; i++) {
-        if (desc->skins[i]) {
-            spSkin* skin = spSkeletonData_findSkin(skel->sp_skel_data, desc->skins[i]);
+        if (desc->skins[i].skeleton_id != SSPINE_INVALID_ID) {
+            spSkin* skin = _sspine_lookup_skin(desc->skins[i].skeleton_id, desc->skins[i].index);
             if (0 == skin) {
-                SOKOL_LOG("sokol_spine.h: skin not found!");
-                SOKOL_LOG(desc->skins[i]);
                 return SSPINE_RESOURCESTATE_FAILED;
             }
             spSkin_addSkin(skinset->sp_skin, skin);
-        }
-        else {
-            break;
         }
     }
     return SSPINE_RESOURCESTATE_VALID;
@@ -2806,34 +2847,12 @@ static spAnimation* _sspine_lookup_instance_anim(uint32_t instance_id, uint32_t 
     return 0;
 }
 
-static spBoneData* _sspine_lookup_bone_data(uint32_t skeleton_id, int bone_index) {
-    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id);
-    if (_sspine_skeleton_and_deps_valid(skeleton)) {
-        SOKOL_ASSERT(skeleton->sp_skel_data && skeleton->sp_skel_data->bones);
-        if ((bone_index >= 0) && (bone_index <= skeleton->sp_skel_data->bonesCount)) {
-            return skeleton->sp_skel_data->bones[bone_index];
-        }
-    }
-    return 0;
-}
-
 static spBone* _sspine_lookup_bone(uint32_t instance_id, uint32_t skeleton_id, int bone_index) {
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id);
     if (_sspine_instance_and_deps_valid(instance) && (instance->skel.id == skeleton_id)) {
         SOKOL_ASSERT(instance->sp_skel && instance->sp_skel->bones);
         if ((bone_index >= 0) && (bone_index <= instance->sp_skel->bonesCount)) {
             return instance->sp_skel->bones[bone_index];
-        }
-    }
-    return 0;
-}
-
-static spSlotData* _sspine_lookup_slot_data(uint32_t skeleton_id, int slot_index) {
-    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id);
-    if (_sspine_skeleton_and_deps_valid(skeleton)) {
-        SOKOL_ASSERT(skeleton->sp_skel_data && skeleton->sp_skel_data->slots);
-        if ((slot_index >= 0) && (slot_index <= skeleton->sp_skel_data->slotsCount)) {
-            return skeleton->sp_skel_data->slots[slot_index];
         }
     }
     return 0;
@@ -2850,45 +2869,12 @@ static spSlot* _sspine_lookup_slot(uint32_t instance_id, uint32_t skeleton_id, i
     return 0;
 }
 
-static spEventData* _sspine_lookup_event_data(uint32_t skeleton_id, int event_index) {
-    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id);
-    if (_sspine_skeleton_and_deps_valid(skeleton)) {
-        SOKOL_ASSERT(skeleton->sp_skel_data && skeleton->sp_skel_data->events);
-        if ((event_index >= 0) && (event_index < skeleton->sp_skel_data->eventsCount)) {
-            return skeleton->sp_skel_data->events[event_index];
-        }
-    }
-    return 0;
-}
-
-static spIkConstraintData* _sspine_lookup_ikconstraint_data(uint32_t skeleton_id, int iktarget_index) {
-    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id);
-    if (_sspine_skeleton_and_deps_valid(skeleton)) {
-        SOKOL_ASSERT(skeleton->sp_skel_data && skeleton->sp_skel_data->ikConstraints);
-        if ((iktarget_index >= 0) && (iktarget_index < skeleton->sp_skel_data->ikConstraintsCount)) {
-            return skeleton->sp_skel_data->ikConstraints[iktarget_index];
-        }
-    }
-    return 0;
-}
-
 static spIkConstraint* _sspine_lookup_ikconstraint(uint32_t instance_id, uint32_t skeleton_id, int iktarget_index) {
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id);
     if (_sspine_instance_and_deps_valid(instance) && (instance->skel.id == skeleton_id)) {
         SOKOL_ASSERT(instance->sp_skel && instance->sp_skel->ikConstraints);
         if ((iktarget_index >= 0) && (iktarget_index < instance->sp_skel->ikConstraintsCount)) {
             return instance->sp_skel->ikConstraints[iktarget_index];
-        }
-    }
-    return 0;
-}
-
-static spSkin* _sspine_lookup_skin(uint32_t skeleton_id, int skin_index) {
-    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id);
-    if (_sspine_skeleton_and_deps_valid(skeleton)) {
-        SOKOL_ASSERT(skeleton->sp_skel_data && skeleton->sp_skel_data->skins);
-        if ((skin_index >= 0) && (skin_index < skeleton->sp_skel_data->skinsCount)) {
-            return skeleton->sp_skel_data->skins[skin_index];
         }
     }
     return 0;
@@ -3476,12 +3462,6 @@ SOKOL_API_IMPL sspine_context_info sspine_get_context_info(sspine_context ctx_id
 SOKOL_API_IMPL void sspine_new_frame(void) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine.frame_count++;
-}
-
-SOKOL_API_IMPL void sspine_set_default_skinset(sspine_instance instance_id) {
-    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    // we just assume that the first skin is the default skin
-    sspine_set_skin(instance_id, 0);
 }
 
 SOKOL_API_IMPL void sspine_set_skinset(sspine_instance instance_id, sspine_skinset skinset_id) {
@@ -4467,7 +4447,17 @@ SOKOL_API_IMPL void sspine_set_iktarget_world_pos(sspine_instance instance_id, s
     }
 }
 
-SOKOL_API_IMPL int sspine_find_skin_index(sspine_skeleton skeleton_id, const char* name) {
+SOKOL_API_IMPL int sspine_num_skins(sspine_skeleton skeleton_id) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id.id);
+    if (_sspine_skeleton_and_deps_valid(skeleton)) {
+        SOKOL_ASSERT(skeleton->sp_skel_data);
+        return skeleton->sp_skel_data->skinsCount;
+    }
+    return 0;
+}
+
+SOKOL_API_IMPL sspine_skin sspine_skin_by_name(sspine_skeleton skeleton_id, const char* name) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     SOKOL_ASSERT(name);
     _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id.id);
@@ -4479,56 +4469,50 @@ SOKOL_API_IMPL int sspine_find_skin_index(sspine_skeleton skeleton_id, const cha
             SOKOL_ASSERT(skeleton->sp_skel_data->skins[i]);
             SOKOL_ASSERT(skeleton->sp_skel_data->skins[i]->name);
             if (0 == strcmp(skeleton->sp_skel_data->skins[i]->name, name)) {
-                return i;
+                return _sspine_skin(skeleton_id.id, i);
             }
         }
     }
-    return -1;
+    return _sspine_skin(0, 0);
 }
 
-SOKOL_API_IMPL bool sspine_skin_index_valid(sspine_skeleton skeleton_id, int skin_index) {
+SOKOL_API_IMPL sspine_skin sspine_skin_by_index(sspine_skeleton skeleton_id, int index) {
+    return _sspine_skin(skeleton_id.id, index);
+}
+
+SOKOL_API_IMPL bool sspine_skin_valid(sspine_skin skin) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id.id);
+    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skin.skeleton_id);
     if (_sspine_skeleton_and_deps_valid(skeleton)) {
         SOKOL_ASSERT(skeleton->sp_skel_data);
-        return (skin_index >= 0) && (skin_index < skeleton->sp_skel_data->skinsCount);
+        return (skin.index >= 0) && (skin.index < skeleton->sp_skel_data->skinsCount);
     }
     return false;
 }
 
-SOKOL_API_IMPL int sspine_num_skins(sspine_skeleton skeleton_id) {
-    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id.id);
-    if (_sspine_skeleton_and_deps_valid(skeleton)) {
-        SOKOL_ASSERT(skeleton->sp_skel_data);
-        return skeleton->sp_skel_data->skinsCount;
-    }
-    return 0;
-}
-
-SOKOL_API_IMPL sspine_skin_info sspine_get_skin_info(sspine_skeleton skeleton_id, int skin_index) {
+SOKOL_API_IMPL sspine_skin_info sspine_get_skin_info(sspine_skin skin) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     sspine_skin_info res;
     _sspine_clear(&res, sizeof(res));
-    const spSkin* skin = _sspine_lookup_skin(skeleton_id.id, skin_index);
-    if (skin) {
+    const spSkin* sp_skin = _sspine_lookup_skin(skin.skeleton_id, skin.index);
+    if (sp_skin) {
         res.valid = true;
-        res.index = skin_index;
-        res.name = skin->name;
+        res.index = skin.index;
+        res.name = sp_skin->name;
     }
     return res;
 }
 
-SOKOL_SPINE_API_DECL void sspine_set_skin(sspine_instance instance_id, int skin_index) {
+SOKOL_SPINE_API_DECL void sspine_set_skin(sspine_instance instance_id, sspine_skin skin) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
-    if (_sspine_instance_and_deps_valid(instance)) {
+    if (_sspine_instance_and_deps_valid(instance) && (instance->skel.id == skin.skeleton_id)) {
         SOKOL_ASSERT(instance->sp_skel);
         SOKOL_ASSERT(instance->sp_anim_state);
         // clear any currently set skinset
         instance->skinset.id = SSPINE_INVALID_ID;
         instance->skinset.ptr = 0;
-        spSkin* sp_skin = _sspine_lookup_skin(instance->skel.id, skin_index);
+        spSkin* sp_skin = _sspine_lookup_skin(skin.skeleton_id, skin.index);
         if (sp_skin) {
             spSkeleton_setSkin(instance->sp_skel, 0);
             spSkeleton_setSkin(instance->sp_skel, sp_skin);
