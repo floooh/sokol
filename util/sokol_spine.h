@@ -387,6 +387,7 @@ SOKOL_SPINE_API_DECL int sspine_num_anims(sspine_skeleton skeleton);
 SOKOL_SPINE_API_DECL sspine_anim sspine_anim_by_name(sspine_skeleton skeleton, const char* name);
 SOKOL_SPINE_API_DECL sspine_anim sspine_anim_by_index(sspine_skeleton skeleton, int index);
 SOKOL_SPINE_API_DECL bool sspine_anim_valid(sspine_anim anim);
+SOKOL_SPINE_API_DECL bool sspine_anim_equal(sspine_anim first, sspine_anim second);
 SOKOL_SPINE_API_DECL sspine_anim_info sspine_get_anim_info(sspine_anim anim);
 SOKOL_SPINE_API_DECL void sspine_clear_animation_tracks(sspine_instance instance);
 SOKOL_SPINE_API_DECL void sspine_clear_animation_track(sspine_instance instance, int track_index);
@@ -405,6 +406,7 @@ SOKOL_SPINE_API_DECL int sspine_num_bones(sspine_skeleton skeleton);
 SOKOL_SPINE_API_DECL sspine_bone sspine_bone_by_name(sspine_skeleton skeleton, const char* name);
 SOKOL_SPINE_API_DECL sspine_bone sspine_bone_by_index(sspine_skeleton skeleton, int index);
 SOKOL_SPINE_API_DECL bool sspine_bone_valid(sspine_bone bone);
+SOKOL_SPINE_API_DECL bool sspine_bone_equal(sspine_bone first, sspine_bone second);
 SOKOL_SPINE_API_DECL sspine_bone_info sspine_get_bone_info(sspine_bone bone);
 SOKOL_SPINE_API_DECL void sspine_set_bone_transform(sspine_instance instance, sspine_bone bone, const sspine_bone_transform* transform);
 SOKOL_SPINE_API_DECL void sspine_set_bone_position(sspine_instance instance, sspine_bone bone, sspine_vec2 position);
@@ -425,6 +427,7 @@ SOKOL_SPINE_API_DECL int sspine_num_slots(sspine_skeleton skeleton);
 SOKOL_SPINE_API_DECL sspine_slot sspine_slot_by_name(sspine_skeleton skeleton, const char* name);
 SOKOL_SPINE_API_DECL sspine_slot sspine_slot_by_index(sspine_skeleton skeleton, int index);
 SOKOL_SPINE_API_DECL bool sspine_slot_valid(sspine_slot slot);
+SOKOL_SPINE_API_DECL bool sspine_slot_equal(sspine_slot first, sspine_slot second);
 SOKOL_SPINE_API_DECL sspine_slot_info sspine_get_slot_info(sspine_slot slot);
 SOKOL_SPINE_API_DECL void sspine_set_slot_color(sspine_instance instance, sspine_slot slot, sspine_color color);
 SOKOL_SPINE_API_DECL sspine_color sspine_get_slot_color(sspine_instance instance, sspine_slot slot);
@@ -434,6 +437,7 @@ SOKOL_SPINE_API_DECL int sspine_num_events(sspine_skeleton skeleton);
 SOKOL_SPINE_API_DECL sspine_event sspine_event_by_name(sspine_skeleton skeleton, const char* name);
 SOKOL_SPINE_API_DECL sspine_event sspine_event_by_index(sspine_skeleton skeleton, int index);
 SOKOL_SPINE_API_DECL bool sspine_event_valid(sspine_event event);
+SOKOL_SPINE_API_DECL bool sspine_event_equal(sspine_event first, sspine_event second);
 SOKOL_SPINE_API_DECL sspine_event_info sspine_get_event_info(sspine_event event);
 
 // ik target functions
@@ -441,6 +445,7 @@ SOKOL_SPINE_API_DECL int sspine_num_iktargets(sspine_skeleton skeleton);
 SOKOL_SPINE_API_DECL sspine_iktarget sspine_iktarget_by_name(sspine_skeleton skeleton, const char* name);
 SOKOL_SPINE_API_DECL sspine_iktarget sspine_iktarget_by_index(sspine_skeleton skeleton, int index);
 SOKOL_SPINE_API_DECL bool sspine_iktarget_valid(sspine_iktarget iktarget);
+SOKOL_SPINE_API_DECL bool sspine_iktarget_equal(sspine_iktarget first, sspine_iktarget second);
 SOKOL_SPINE_API_DECL sspine_iktarget_info sspine_get_iktarget_info(sspine_iktarget iktarget);
 SOKOL_SPINE_API_DECL void sspine_set_iktarget_world_pos(sspine_instance instance, sspine_iktarget iktarget, sspine_vec2 world_pos);
 
@@ -449,6 +454,7 @@ SOKOL_SPINE_API_DECL int sspine_num_skins(sspine_skeleton skeleton);
 SOKOL_SPINE_API_DECL sspine_skin sspine_skin_by_name(sspine_skeleton skeleton, const char* name);
 SOKOL_SPINE_API_DECL sspine_skin sspine_skin_by_index(sspine_skeleton skeleton, int index);
 SOKOL_SPINE_API_DECL bool sspine_skin_valid(sspine_skin skin);
+SOKOL_SPINE_API_DECL bool sspine_skin_equal(sspine_skin first, sspine_skin second);
 SOKOL_SPINE_API_DECL sspine_skin_info sspine_get_skin_info(sspine_skin skin);
 SOKOL_SPINE_API_DECL void sspine_set_skin(sspine_instance instance, sspine_skin skin);
 
@@ -3898,6 +3904,10 @@ SOKOL_API_IMPL bool sspine_anim_valid(sspine_anim anim) {
     return false;
 }
 
+SOKOL_API_IMPL bool sspine_anim_equal(sspine_anim first, sspine_anim second) {
+    return (first.skeleton_id == second.skeleton_id) && (first.index == second.index);
+}
+
 SOKOL_API_IMPL sspine_anim_info sspine_get_anim_info(sspine_anim anim) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     sspine_anim_info res;
@@ -4051,6 +4061,10 @@ SOKOL_API_IMPL bool sspine_bone_valid(sspine_bone bone) {
         return (bone.index >= 0) && (bone.index < skeleton->sp_skel_data->bonesCount);
     }
     return false;
+}
+
+SOKOL_API_IMPL bool sspine_bone_equal(sspine_bone first, sspine_bone second) {
+    return (first.skeleton_id == second.skeleton_id) && (first.index == second.index);
 }
 
 SOKOL_API_IMPL sspine_bone_info sspine_get_bone_info(sspine_bone bone) {
@@ -4269,6 +4283,10 @@ SOKOL_API_IMPL bool sspine_slot_valid(sspine_slot slot) {
     return false;
 }
 
+SOKOL_API_IMPL bool sspine_slot_equal(sspine_slot first, sspine_slot second) {
+    return (first.skeleton_id == second.skeleton_id) && (first.index == second.index);
+}
+
 SOKOL_API_IMPL sspine_slot_info sspine_get_slot_info(sspine_slot slot) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     sspine_slot_info res;
@@ -4359,6 +4377,10 @@ SOKOL_API_IMPL bool sspine_event_valid(sspine_event event) {
     return false;
 }
 
+SOKOL_API_IMPL bool sspine_event_equal(sspine_event first, sspine_event second) {
+    return (first.skeleton_id == second.skeleton_id) && (first.index == second.index);
+}
+
 SOKOL_API_IMPL sspine_event_info sspine_get_event_info(sspine_event event) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     sspine_event_info res;
@@ -4419,6 +4441,10 @@ SOKOL_API_IMPL bool sspine_iktarget_valid(sspine_iktarget iktarget) {
         return (iktarget.index >= 0) && (iktarget.index < skeleton->sp_skel_data->ikConstraintsCount);
     }
     return false;
+}
+
+SOKOL_API_IMPL bool sspine_iktarget_equal(sspine_iktarget first, sspine_iktarget second) {
+    return (first.skeleton_id == second.skeleton_id) && (first.index == second.index);
 }
 
 SOKOL_API_IMPL sspine_iktarget_info sspine_get_iktarget_info(sspine_iktarget iktarget) {
@@ -4488,6 +4514,10 @@ SOKOL_API_IMPL bool sspine_skin_valid(sspine_skin skin) {
         return (skin.index >= 0) && (skin.index < skeleton->sp_skel_data->skinsCount);
     }
     return false;
+}
+
+SOKOL_API_IMPL bool sspine_skin_equal(sspine_skin first, sspine_skin second) {
+    return (first.skeleton_id == second.skeleton_id) && (first.index == second.index);
 }
 
 SOKOL_API_IMPL sspine_skin_info sspine_get_skin_info(sspine_skin skin) {

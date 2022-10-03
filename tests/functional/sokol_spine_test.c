@@ -479,6 +479,13 @@ UTEST(sokol_spine, anim_valid) {
     shutdown();
 }
 
+UTEST(sokol_spine, anim_equal) {
+    init();
+    T(sspine_anim_equal((sspine_anim){ 1, 2 }, (sspine_anim){ 1, 2 }));
+    T(!sspine_anim_equal((sspine_anim){ 2, 2 }, (sspine_anim){ 1, 2 }));
+    T(!sspine_anim_equal((sspine_anim){ 1, 3 }, (sspine_anim){ 1, 2 }));
+    shutdown();
+}
 
 UTEST(sokol_spine, num_anims) {
     init();
@@ -654,6 +661,14 @@ UTEST(sokol_spine, bone_valid) {
     T(!sspine_bone_valid(sspine_bone_by_index(skeleton, 67)));
     sspine_destroy_skeleton(skeleton);
     T(!sspine_bone_valid(sspine_bone_by_index(skeleton, 0)));
+    shutdown();
+}
+
+UTEST(sokol_spine, bone_equal) {
+    init();
+    T(sspine_bone_equal((sspine_bone){ 1, 2 }, (sspine_bone){ 1, 2 }));
+    T(!sspine_bone_equal((sspine_bone){ 2, 2 }, (sspine_bone){ 1, 2 }));
+    T(!sspine_bone_equal((sspine_bone){ 1, 3 }, (sspine_bone){ 1, 2 }));
     shutdown();
 }
 
@@ -863,6 +878,14 @@ UTEST(sokol_spine, slot_valid) {
     shutdown();
 }
 
+UTEST(sokol_spine, slot_equal) {
+    init();
+    T(sspine_slot_equal((sspine_slot){ 1, 2 }, (sspine_slot){ 1, 2 }));
+    T(!sspine_slot_equal((sspine_slot){ 2, 2 }, (sspine_slot){ 1, 2 }));
+    T(!sspine_slot_equal((sspine_slot){ 1, 3 }, (sspine_slot){ 1, 2 }));
+    shutdown();
+}
+
 UTEST(sokol_spine, get_slot_info) {
     init();
     sspine_skeleton skeleton = create_skeleton();
@@ -951,6 +974,14 @@ UTEST(sokol_spine, event_valid) {
     shutdown();
 }
 
+UTEST(sokol_spine, event_equal) {
+    init();
+    T(sspine_event_equal((sspine_event){ 1, 2 }, (sspine_event){ 1, 2 }));
+    T(!sspine_event_equal((sspine_event){ 2, 2 }, (sspine_event){ 1, 2 }));
+    T(!sspine_event_equal((sspine_event){ 1, 3 }, (sspine_event){ 1, 2 }));
+    shutdown();
+}
+
 UTEST(sokol_spine, num_events) {
     init();
     sspine_skeleton skeleton = create_skeleton();
@@ -1017,6 +1048,14 @@ UTEST(sokol_spine, iktarget_valid) {
     shutdown();
 }
 
+UTEST(sokol_spine, iktarget_equal) {
+    init();
+    T(sspine_iktarget_equal((sspine_iktarget){ 1, 2 }, (sspine_iktarget){ 1, 2 }));
+    T(!sspine_iktarget_equal((sspine_iktarget){ 2, 2 }, (sspine_iktarget){ 1, 2 }));
+    T(!sspine_iktarget_equal((sspine_iktarget){ 1, 3 }, (sspine_iktarget){ 1, 2 }));
+    shutdown();
+}
+
 UTEST(sokol_spine, num_iktargets) {
     init();
     sspine_skeleton skeleton = create_skeleton();
@@ -1079,6 +1118,14 @@ UTEST(sokol_spine, skin_valid) {
     T(!sspine_skin_valid(sspine_skin_by_index(skeleton, 1)));
     sspine_destroy_skeleton(skeleton);
     T(!sspine_skin_valid(sspine_skin_by_index(skeleton, 0)));
+    shutdown();
+}
+
+UTEST(sokol_spine, skin_equal) {
+    init();
+    T(sspine_skin_equal((sspine_skin){ 1, 2 }, (sspine_skin){ 1, 2 }));
+    T(!sspine_skin_equal((sspine_skin){ 2, 2 }, (sspine_skin){ 1, 2 }));
+    T(!sspine_skin_equal((sspine_skin){ 1, 3 }, (sspine_skin){ 1, 2 }));
     shutdown();
 }
 
