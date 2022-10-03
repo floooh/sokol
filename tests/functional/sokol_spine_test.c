@@ -823,22 +823,22 @@ UTEST(sokol_spine, set_get_bone_shear) {
     shutdown();
 }
 
-UTEST(sokol_spine, find_slot_index) {
+UTEST(sokol_spine, slot_by_name) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    int s0 = sspine_find_slot_index(skeleton, "portal-streaks1");
-    T(s0 == 3);
-    int s1 = sspine_find_slot_index(skeleton, "blablub");
-    T(s1 == -1);
+    sspine_slot s0 = sspine_slot_by_name(skeleton, "portal-streaks1");
+    T((s0.skeleton_id == skeleton.id) && (s0.index == 3));
+    sspine_slot s1 = sspine_slot_by_name(skeleton, "blablub");
+    T((s1.skeleton_id == 0) && (s1.index == 0));
     shutdown();
 }
 
-UTEST(sokol_spine, find_slot_index_destroyed_skeleton) {
+UTEST(sokol_spine, slot_by_name_destroyed_skeleton) {
     init();
     sspine_skeleton skeleton = create_skeleton();
     sspine_destroy_skeleton(skeleton);
-    int s0 = sspine_find_slot_index(skeleton, "portal-streaks1");
-    T(s0 == -1);
+    sspine_slot s0 = sspine_slot_by_name(skeleton, "portal-streaks1");
+    T((s0.skeleton_id == 0) && (s0.index == 0));
     shutdown();
 }
 
@@ -851,23 +851,22 @@ UTEST(sokol_spine, num_slots) {
     shutdown();
 }
 
-UTEST(sokol_spine, slot_index_valid) {
+UTEST(sokol_spine, slot_valid) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    T(sspine_slot_index_valid(skeleton, 0));
-    T(sspine_slot_index_valid(skeleton, 51));
-    T(!sspine_slot_index_valid(skeleton, -1));
-    T(!sspine_slot_index_valid(skeleton, 52));
+    T(sspine_slot_valid(sspine_slot_by_index(skeleton, 0)));
+    T(sspine_slot_valid(sspine_slot_by_index(skeleton, 51)));
+    T(!sspine_slot_valid(sspine_slot_by_index(skeleton, -1)));
+    T(!sspine_slot_valid(sspine_slot_by_index(skeleton, 52)));
     sspine_destroy_skeleton(skeleton);
-    T(!sspine_slot_index_valid(skeleton, 0));
+    T(!sspine_slot_valid(sspine_slot_by_index(skeleton, 0)));
     shutdown();
 }
 
 UTEST(sokol_spine, get_slot_info) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    int slot_index = sspine_find_slot_index(skeleton, "portal-streaks1");
-    const sspine_slot_info info = sspine_get_slot_info(skeleton, slot_index);
+    const sspine_slot_info info = sspine_get_slot_info(sspine_slot_by_name(skeleton, "portal-streaks1"));
     T(info.valid);
     T(info.index == 3);
     T(strcmp(info.name, "portal-streaks1") == 0);
@@ -883,9 +882,9 @@ UTEST(sokol_spine, get_slot_info) {
 UTEST(sokol_spine, get_slot_info_destroyed_skeleton) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    int slot_index = sspine_find_slot_index(skeleton, "portal-streaks1");
+    sspine_slot slot = sspine_slot_by_name(skeleton, "portal-streaks1");
     sspine_destroy_skeleton(skeleton);
-    const sspine_slot_info info = sspine_get_slot_info(skeleton, slot_index);
+    const sspine_slot_info info = sspine_get_slot_info(slot);
     T(!info.valid);
     T(info.name == 0);
     shutdown();
@@ -894,10 +893,10 @@ UTEST(sokol_spine, get_slot_info_destroyed_skeleton) {
 UTEST(sokol_spine, get_slot_info_invalid_index) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    const sspine_slot_info i0 = sspine_get_slot_info(skeleton, -1);
+    const sspine_slot_info i0 = sspine_get_slot_info(sspine_slot_by_index(skeleton, -1));
     T(!i0.valid);
     T(i0.name == 0);
-    const sspine_slot_info i1 = sspine_get_slot_info(skeleton, 1234);
+    const sspine_slot_info i1 = sspine_get_slot_info(sspine_slot_by_index(skeleton, 1234));
     T(!i1.valid);
     T(i1.name == 0);
     shutdown();
@@ -907,14 +906,14 @@ UTEST(sokol_spine, set_get_slot_color) {
     init();
     sspine_instance instance = create_instance();
     sspine_skeleton skeleton = sspine_get_instance_skeleton(instance);
-    int slot_index = sspine_find_slot_index(skeleton, "portal-streaks1");
-    sspine_set_slot_color(instance, slot_index, (sspine_color){ 1.0f, 2.0f, 3.0f, 4.0f });
-    const sspine_color color = sspine_get_slot_color(instance, slot_index);
+    sspine_slot slot = sspine_slot_by_name(skeleton, "portal-streaks1");
+    sspine_set_slot_color(instance, slot, (sspine_color){ 1.0f, 2.0f, 3.0f, 4.0f });
+    const sspine_color color = sspine_get_slot_color(instance, slot);
     T(color.r == 1.0f);
     T(color.g == 2.0f);
     T(color.b == 3.0f);
     T(color.a == 4.0f);
-    const sspine_slot_info info = sspine_get_slot_info(skeleton, slot_index);
+    const sspine_slot_info info = sspine_get_slot_info(slot);
     T(info.color.r == 1.0f);
     T(info.color.g == 1.0f);
     T(info.color.b == 1.0f);
