@@ -448,34 +448,34 @@ UTEST(sokol_spine, set_get_color_destroyed_instance) {
     shutdown();
 }
 
-UTEST(sokol_spine, find_anim_index) {
+UTEST(sokol_spine, anim_by_name) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    int a0 = sspine_find_anim_index(skeleton, "hoverboard");
-    T(a0 == 2);
-    int a1 = sspine_find_anim_index(skeleton, "bla");
-    T(a1 == -1);
+    sspine_anim a0 = sspine_anim_by_name(skeleton, "hoverboard");
+    T((a0.skeleton_id == skeleton.id) && (a0.index == 2));
+    sspine_anim a1 = sspine_anim_by_name(skeleton, "bla");
+    T((a1.skeleton_id == 0) && (a1.index == 0));
     shutdown();
 }
 
-UTEST(sokol_spine, find_anim_index_destroyed_instance) {
+UTEST(sokol_spine, anim_by_name_destroyed_instance) {
     init();
     sspine_skeleton skeleton = create_skeleton();
     sspine_destroy_skeleton(skeleton);
-    int a0 = sspine_find_anim_index(skeleton, "hoverboard");
-    T(a0 == -1);
+    sspine_anim a0 = sspine_anim_by_name(skeleton, "hoverboard");
+    T((a0.skeleton_id == 0) && (a0.index == 0));
     shutdown();
 }
 
-UTEST(sokol_spine, anim_index_valid) {
+UTEST(sokol_spine, anim_valid) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    T(sspine_anim_index_valid(skeleton, 0));
-    T(sspine_anim_index_valid(skeleton, 10));
-    T(!sspine_anim_index_valid(skeleton, -1));
-    T(!sspine_anim_index_valid(skeleton, 11));
+    T(sspine_anim_valid(sspine_anim_by_index(skeleton, 0)));
+    T(sspine_anim_valid(sspine_anim_by_index(skeleton, 10)));
+    T(!sspine_anim_valid(sspine_anim_by_index(skeleton, -1)));
+    T(!sspine_anim_valid(sspine_anim_by_index(skeleton, 11)));
     sspine_destroy_skeleton(skeleton);
-    T(!sspine_anim_index_valid(skeleton, 0));
+    T(!sspine_anim_valid(sspine_anim_by_index(skeleton, 0)));
     shutdown();
 }
 
@@ -492,8 +492,8 @@ UTEST(sokol_spine, num_anims) {
 UTEST(sokol_spine, get_anim_info) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    int anim_index = sspine_find_anim_index(skeleton, "hoverboard");
-    const sspine_anim_info info = sspine_get_anim_info(skeleton, anim_index);
+    sspine_anim anim = sspine_anim_by_name(skeleton, "hoverboard");
+    const sspine_anim_info info = sspine_get_anim_info(anim);
     T(info.valid);
     T(info.index == 2);
     T(strcmp(info.name, "hoverboard") == 0);
@@ -504,9 +504,9 @@ UTEST(sokol_spine, get_anim_info) {
 UTEST(sokol_spine, get_anim_info_destroyed_skeleton) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    int anim_index = sspine_find_anim_index(skeleton, "hoverboard");
+    sspine_anim anim = sspine_anim_by_name(skeleton, "hoverboard");
     sspine_destroy_skeleton(skeleton);
-    const sspine_anim_info info = sspine_get_anim_info(skeleton, anim_index);
+    const sspine_anim_info info = sspine_get_anim_info(anim);
     T(!info.valid);
     shutdown();
 }
@@ -514,10 +514,10 @@ UTEST(sokol_spine, get_anim_info_destroyed_skeleton) {
 UTEST(sokol_spine, get_anim_info_invalid_index) {
     init();
     sspine_skeleton skeleton = create_skeleton();
-    const sspine_anim_info i0 = sspine_get_anim_info(skeleton, -1);
+    const sspine_anim_info i0 = sspine_get_anim_info(sspine_anim_by_index(skeleton, -1));
     T(!i0.valid);
     T(i0.name == 0);
-    const sspine_anim_info i1 = sspine_get_anim_info(skeleton, 1234);
+    const sspine_anim_info i1 = sspine_get_anim_info(sspine_anim_by_index(skeleton, 1234));
     T(!i1.valid);
     T(i1.name == 0);
     shutdown();
