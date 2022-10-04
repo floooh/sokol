@@ -135,6 +135,15 @@ typedef enum SSPINE_resource_state {
     _SSPINE_RESOURCESTATE_FORCE_U32 = 0x7FFFFFFF
 } sspine_resource_state;
 
+#define _SSPINE_ERRORS \
+    _SSPINE_XMACRO(OK, "no error")\
+    // FIXME
+
+#define _SSPINE_XMACRO(code,msg) SSPINE_ERROR_##code
+typedef enum sspine_error {
+    _SSPINE_ERRORS,
+} sspine_error;
+
 typedef struct sspine_layer_transform {
     sspine_vec2 size;
     sspine_vec2 origin;
@@ -290,6 +299,11 @@ typedef struct sspine_allocator {
     void* user_data;
 } sspine_allocator;
 
+typedef struct sspine_logger {
+    void (*log)(const char* tag, int level, int error_code, int line_nr, const char* msg_or_null, const char* filename_or_null);
+    void* user_data;
+} sspine_logger;
+
 typedef struct sspine_desc {
     int max_vertices;
     int max_commands;
@@ -303,6 +317,7 @@ typedef struct sspine_desc {
     int sample_count;
     sg_color_mask color_write_mask;
     sspine_allocator allocator;
+    sspine_logger logger;
 } sspine_desc;
 
 // setup/shutdown
