@@ -135,14 +135,28 @@ typedef enum SSPINE_resource_state {
     _SSPINE_RESOURCESTATE_FORCE_U32 = 0x7FFFFFFF
 } sspine_resource_state;
 
+// error codes via x-macro magic
 #define _SSPINE_ERRORS \
-    _SSPINE_XMACRO(OK, "no error")\
-    // FIXME
+    _SSPINE_XMACRO(OK)\
+    _SSPINE_XMACRO(CONTEXT_POOL_EXHAUSTED)\
+    _SSPINE_XMACRO(ATLAS_POOL_EXHAUSTED)\
+    _SSPINE_XMACRO(SKELETON_POOL_EXHAUSTED)\
+    _SSPINE_XMACRO(SKINSET_POOL_EXHAUSTED)\
+    _SSPINE_XMACRO(INSTANCE_POOL_EXHAUSTED)\
+    _SSPINE_XMACRO(CANNOT_DESTROY_DEFAULT_CONTEXT)\
 
-#define _SSPINE_XMACRO(code,msg) SSPINE_ERROR_##code
+#define _SSPINE_XMACRO(code) SSPINE_ERROR_##code,
 typedef enum sspine_error {
-    _SSPINE_ERRORS,
+    _SSPINE_ERRORS
 } sspine_error;
+#undef _SSPINE_XMACRO
+
+typedef enum sspine_loglevel {
+    SSPINE_LOGLEVEL_PANIC = 0,
+    SSPINE_LOGLEVEL_ERROR = 1,
+    SSPINE_LOGLEVEL_WARN = 2,
+    SSPINE_LOGLEVEL_INFO = 3,
+} sspine_loglevel;
 
 typedef struct sspine_layer_transform {
     sspine_vec2 size;
@@ -300,7 +314,13 @@ typedef struct sspine_allocator {
 } sspine_allocator;
 
 typedef struct sspine_logger {
-    void (*log)(const char* tag, int level, int error_code, int line_nr, const char* msg_or_null, const char* filename_or_null);
+    void (*log)(const char* tag,      // always "sspine"
+                uint32_t log_level,   // 0=panic, 1=error, 2=warning, 3=info
+                uint32_t error_code,  // SSPINE_ERROR_*
+                const char* error_id, // error as string, debug only, otherwise empty string
+                int line_nr,          // line number in sokol_spine.h
+                const char* filename, // debug mode only, otherwise empty string
+                void* user_data);
     void* user_data;
 } sspine_logger;
 
@@ -1680,6 +1700,12 @@ static const char* _sspine_fs_source_dummy = "";
 #define _SSPINE_MAX_POOL_SIZE (1<<_SSPINE_SLOT_SHIFT)
 #define _SSPINE_SLOT_MASK (_SSPINE_MAX_POOL_SIZE-1)
 
+#define _SSPINE_XMACRO(code) #code,
+static const char* _sspine_error_ids[] = {
+    _SSPINE_ERRORS
+};
+#undef _SSPINE_XMACRO
+
 typedef struct {
     float mvp[16];
 } _sspine_vsparams_t;
@@ -1861,7 +1887,7 @@ char* _spUtil_readFile(const char* path, int* length) {
     return 0;
 }
 
-//=== MEMORY MANAGEMENT FUNCTIONS ==============================================
+//=== HELPER FUNCTION ==========================================================
 static void _sspine_clear(void* ptr, size_t size) {
     SOKOL_ASSERT(ptr && (size > 0));
     memset(ptr, 0, size);
@@ -1892,6 +1918,51 @@ static void _sspine_free(void* ptr) {
     }
     else {
         free(ptr);
+    }
+}
+
+#define _SSPINE_PANIC(code) _sspine_log(SSPINE_ERROR_ ##code, SSPINE_LOGLEVEL_PANIC, __LINE__)
+#define _SSPINE_ERROR(code) _sspine_log(SSPINE_ERROR_ ##code, SSPINE_LOGLEVEL_ERROR, __LINE__)
+#define _SSPINE_WARN(code) _sspine_log(SSPINE_ERROR_ ##code, SSPINE_LOGLEVEL_WARN, __LINE__)
+#define _SSPINE_INFO(code) _sspine_log(SSPINE_ERROR_ ##code, SSPINE_LOGLEVEL_INFO, __LINE__)
+
+static void _sspine_log(sspine_error error_code, sspine_loglevel log_level, int line_nr) {
+    if (_sspine.desc.logger.log) {
+        #if defined(SOKOL_DEBUG)
+            const char* filename = __FILE__;
+            const char* error_id = _sspine_error_ids[error_code];
+        #else
+            const char* filename = "";
+            const char* error_id = "";
+        #endif
+        _sspine.desc.logger.log("sspine", log_level, error_code, error_id, line_nr, filename, _sspine.desc.logger.user_data);
+    }
+    else {
+        // default logging function, uses printf only if debugging is enabled to save executable size
+        #if defined(SOKOL_DEBUG)
+        const char* error_id = _sspine_error_ids[error_code];
+        const char* loglevel_str;
+        switch (log_level) {
+            case SSPINE_LOGLEVEL_PANIC: loglevel_str = "panic"; break;
+            case SSPINE_LOGLEVEL_ERROR: loglevel_str = "error"; break;
+            case SSPINE_LOGLEVEL_WARN:  loglevel_str = "warning"; break;
+            case SSPINE_LOGLEVEL_INFO:  loglevel_str = "info"; break;
+        }
+        #if defined(_MSC_VER)
+            // Visual Studio compiler error format
+            printf("%s(%d): %s: [sspine] %s\n", __FILE__, line_nr, loglevel_str, error_id);
+        #else
+            // GCC error format
+            printf("%s:%d:0: %s: [sspine] %s\n", __FILE__, line_nr, loglevel_str, error_id);
+        #endif
+        #else
+            // FIXME: at least output *something* in release mode?
+        #endif // SOKOL_DEBUG
+        
+        // for log level PANIC it would be 'undefined behaviour' to continue
+        if (log_level == SSPINE_LOGLEVEL_PANIC) {
+            abort();
+        }
     }
 }
 
@@ -3428,7 +3499,7 @@ SOKOL_API_IMPL sspine_context sspine_make_context(const sspine_context_desc* des
     }
     else {
         ctx->slot.state = SSPINE_RESOURCESTATE_FAILED;
-        SOKOL_LOG("sokol_spine.h: context pool exhausted");
+        _SSPINE_ERROR(CONTEXT_POOL_EXHAUSTED);
     }
     return ctx_id;
 }
@@ -3436,7 +3507,7 @@ SOKOL_API_IMPL sspine_context sspine_make_context(const sspine_context_desc* des
 SOKOL_API_IMPL void sspine_destroy_context(sspine_context ctx_id) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     if (_sspine_is_default_context(ctx_id)) {
-        SOKOL_LOG("sokol_spine.h: cannot destroy default context");
+        _SSPINE_WARN(CANNOT_DESTROY_DEFAULT_CONTEXT);
         return;
     }
     _sspine_destroy_context(ctx_id);
@@ -3593,7 +3664,7 @@ SOKOL_API_IMPL sspine_atlas sspine_make_atlas(const sspine_atlas_desc* desc) {
         }
     }
     else {
-        SOKOL_LOG("sokol_spine.h: atlas pool exhausted");
+        _SSPINE_ERROR(ATLAS_POOL_EXHAUSTED);
     }
     return atlas_id;
 }
@@ -3617,7 +3688,7 @@ SOKOL_API_IMPL sspine_skeleton sspine_make_skeleton(const sspine_skeleton_desc* 
         }
     }
     else {
-        SOKOL_LOG("sokol_spine.h: skeleton pool exhausted");
+        _SSPINE_ERROR(SKELETON_POOL_EXHAUSTED);
     }
     return skeleton_id;
 }
@@ -3641,7 +3712,7 @@ SOKOL_API_IMPL sspine_skinset sspine_make_skinset(const sspine_skinset_desc* des
         }
     }
     else {
-        SOKOL_LOG("sokol_spine.h: skinset pool exhausted");
+        _SSPINE_ERROR(SKINSET_POOL_EXHAUSTED);
     }
     return skinset_id;
 }
@@ -3665,7 +3736,7 @@ SOKOL_API_IMPL sspine_instance sspine_make_instance(const sspine_instance_desc* 
         }
     }
     else {
-        SOKOL_LOG("sokol_spine.h: instance pool exhausted");
+        _SSPINE_ERROR(INSTANCE_POOL_EXHAUSTED);
     }
     return instance_id;
 }
