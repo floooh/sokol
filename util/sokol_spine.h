@@ -31,7 +31,6 @@
     SOKOL_SPINE_API_DECL    - public function declaration prefix (default: extern)
     SOKOL_API_DECL      - same as SOKOL_SPINE_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
-    SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
 
     If sokol_spine.h is compiled as a DLL, define the following before
@@ -144,6 +143,25 @@ typedef enum SSPINE_resource_state {
     _SSPINE_XMACRO(SKINSET_POOL_EXHAUSTED)\
     _SSPINE_XMACRO(INSTANCE_POOL_EXHAUSTED)\
     _SSPINE_XMACRO(CANNOT_DESTROY_DEFAULT_CONTEXT)\
+    _SSPINE_XMACRO(ATLAS_DESC_NO_DATA)\
+    _SSPINE_XMACRO(SPINE_ATLAS_CREATION_FAILED)\
+    _SSPINE_XMACRO(SG_ALLOC_IMAGE_FAILED)\
+    _SSPINE_XMACRO(SKELETON_DESC_NO_DATA)\
+    _SSPINE_XMACRO(SKELETON_DESC_NO_ATLAS)\
+    _SSPINE_XMACRO(SKELETON_ATLAS_NOT_VALID)\
+    _SSPINE_XMACRO(SPINE_SKELETON_DATA_CREATION_FAILED)\
+    _SSPINE_XMACRO(SKINSET_DESC_NO_SKELETON)\
+    _SSPINE_XMACRO(SKINSET_SKELETON_NOT_VALID)\
+    _SSPINE_XMACRO(SKINSET_INVALID_SKIN_HANDLE)\
+    _SSPINE_XMACRO(INSTANCE_DESC_NO_SKELETON)\
+    _SSPINE_XMACRO(INSTANCE_SKELETON_NOT_VALID)\
+    _SSPINE_XMACRO(INSTANCE_ATLAS_NOT_VALID)\
+    _SSPINE_XMACRO(SPINE_SKELETON_CREATION_FAILED)\
+    _SSPINE_XMACRO(SPINE_ANIMATIONSTATE_CREATION_FAILED)\
+    _SSPINE_XMACRO(SPINE_SKELETONCLIPPING_CREATION_FAILED)\
+    _SSPINE_XMACRO(COMMAND_BUFFER_OVERFLOW)\
+    _SSPINE_XMACRO(VERTEX_BUFFER_OVERFLOW)\
+    _SSPINE_XMACRO(INDEX_BUFFER_OVERFLOW)\
 
 #define _SSPINE_XMACRO(code) SSPINE_ERROR_##code,
 typedef enum sspine_error {
@@ -505,9 +523,6 @@ SOKOL_SPINE_API_DECL void sspine_set_skin(sspine_instance instance, sspine_skin 
 #error "Please include spine/spine.h before the sokol_spine.h implementation"
 #endif
 
-#include <stdlib.h> // malloc/free
-#include <string.h> // memset, strcmp
-
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL
 #endif
@@ -520,19 +535,17 @@ SOKOL_SPINE_API_DECL void sspine_set_skin(sspine_instance instance, sspine_skin 
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
 #endif
-#ifndef SOKOL_LOG
-    #ifdef SOKOL_DEBUG
-        #include <stdio.h>
-        #define SOKOL_LOG(s) { SOKOL_ASSERT(s); puts(s); }
-    #else
-        #define SOKOL_LOG(s)
-    #endif
-#endif
 #ifndef SOKOL_UNREACHABLE
     #define SOKOL_UNREACHABLE SOKOL_ASSERT(false)
 #endif
 #ifndef SOKOL_UNUSED
     #define SOKOL_UNUSED(x) (void)(x)
+#endif
+
+#include <stdlib.h> // malloc/free
+#include <string.h> // memset, strcmp
+#if defined SOKOL_DEBUG
+#include <stdio.h>  // stderr, fprintf
 #endif
 
 /*
@@ -1888,6 +1901,51 @@ char* _spUtil_readFile(const char* path, int* length) {
 }
 
 //=== HELPER FUNCTION ==========================================================
+#define _SSPINE_PANIC(code) _sspine_log(SSPINE_ERROR_ ##code, SSPINE_LOGLEVEL_PANIC, __LINE__)
+#define _SSPINE_ERROR(code) _sspine_log(SSPINE_ERROR_ ##code, SSPINE_LOGLEVEL_ERROR, __LINE__)
+#define _SSPINE_WARN(code) _sspine_log(SSPINE_ERROR_ ##code, SSPINE_LOGLEVEL_WARN, __LINE__)
+#define _SSPINE_INFO(code) _sspine_log(SSPINE_ERROR_ ##code, SSPINE_LOGLEVEL_INFO, __LINE__)
+
+static void _sspine_log(sspine_error error_code, sspine_loglevel log_level, int line_nr) {
+    if (_sspine.desc.logger.log) {
+        #if defined(SOKOL_DEBUG)
+            const char* filename = __FILE__;
+            const char* error_id = _sspine_error_ids[error_code];
+        #else
+            const char* filename = "";
+            const char* error_id = "";
+        #endif
+        _sspine.desc.logger.log("sspine", log_level, error_code, error_id, line_nr, filename, _sspine.desc.logger.user_data);
+    }
+    else {
+        // default logging function, uses printf only if debugging is enabled to save executable size
+        #if defined(SOKOL_DEBUG)
+        const char* error_id = _sspine_error_ids[error_code];
+        const char* loglevel_str;
+        switch (log_level) {
+            case SSPINE_LOGLEVEL_PANIC: loglevel_str = "panic"; break;
+            case SSPINE_LOGLEVEL_ERROR: loglevel_str = "error"; break;
+            case SSPINE_LOGLEVEL_WARN:  loglevel_str = "warning"; break;
+            case SSPINE_LOGLEVEL_INFO:  loglevel_str = "info"; break;
+        }
+        #if defined(_MSC_VER)
+            // Visual Studio compiler error format
+            fprintf(stderr, "[sspine] %s(%d): %s: %s\n", __FILE__, line_nr, loglevel_str, error_id);
+        #else
+            // GCC error format
+            fprintf(stderr, "[sspine] %s:%d:0: %s: %s\n", __FILE__, line_nr, loglevel_str, error_id);
+        #endif
+        #else
+            // FIXME: at least output *something* in release mode?
+        #endif // SOKOL_DEBUG
+
+        // for log level PANIC it would be 'undefined behaviour' to continue
+        if (log_level == SSPINE_LOGLEVEL_PANIC) {
+            abort();
+        }
+    }
+}
+
 static void _sspine_clear(void* ptr, size_t size) {
     SOKOL_ASSERT(ptr && (size > 0));
     memset(ptr, 0, size);
@@ -1918,51 +1976,6 @@ static void _sspine_free(void* ptr) {
     }
     else {
         free(ptr);
-    }
-}
-
-#define _SSPINE_PANIC(code) _sspine_log(SSPINE_ERROR_ ##code, SSPINE_LOGLEVEL_PANIC, __LINE__)
-#define _SSPINE_ERROR(code) _sspine_log(SSPINE_ERROR_ ##code, SSPINE_LOGLEVEL_ERROR, __LINE__)
-#define _SSPINE_WARN(code) _sspine_log(SSPINE_ERROR_ ##code, SSPINE_LOGLEVEL_WARN, __LINE__)
-#define _SSPINE_INFO(code) _sspine_log(SSPINE_ERROR_ ##code, SSPINE_LOGLEVEL_INFO, __LINE__)
-
-static void _sspine_log(sspine_error error_code, sspine_loglevel log_level, int line_nr) {
-    if (_sspine.desc.logger.log) {
-        #if defined(SOKOL_DEBUG)
-            const char* filename = __FILE__;
-            const char* error_id = _sspine_error_ids[error_code];
-        #else
-            const char* filename = "";
-            const char* error_id = "";
-        #endif
-        _sspine.desc.logger.log("sspine", log_level, error_code, error_id, line_nr, filename, _sspine.desc.logger.user_data);
-    }
-    else {
-        // default logging function, uses printf only if debugging is enabled to save executable size
-        #if defined(SOKOL_DEBUG)
-        const char* error_id = _sspine_error_ids[error_code];
-        const char* loglevel_str;
-        switch (log_level) {
-            case SSPINE_LOGLEVEL_PANIC: loglevel_str = "panic"; break;
-            case SSPINE_LOGLEVEL_ERROR: loglevel_str = "error"; break;
-            case SSPINE_LOGLEVEL_WARN:  loglevel_str = "warning"; break;
-            case SSPINE_LOGLEVEL_INFO:  loglevel_str = "info"; break;
-        }
-        #if defined(_MSC_VER)
-            // Visual Studio compiler error format
-            printf("%s(%d): %s: [sspine] %s\n", __FILE__, line_nr, loglevel_str, error_id);
-        #else
-            // GCC error format
-            printf("%s:%d:0: %s: [sspine] %s\n", __FILE__, line_nr, loglevel_str, error_id);
-        #endif
-        #else
-            // FIXME: at least output *something* in release mode?
-        #endif // SOKOL_DEBUG
-        
-        // for log level PANIC it would be 'undefined behaviour' to continue
-        if (log_level == SSPINE_LOGLEVEL_PANIC) {
-            abort();
-        }
     }
 }
 
@@ -2352,7 +2365,8 @@ static sspine_resource_state _sspine_init_atlas(_sspine_atlas_t* atlas, const ss
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(atlas->sp_atlas == 0);
 
-    if ((desc->data.ptr == 0) || (desc->data.size == 0)) {
+    if ((0 == desc->data.ptr) || (0 == desc->data.size)) {
+        _SSPINE_ERROR(ATLAS_DESC_NO_DATA);
         return SSPINE_RESOURCESTATE_FAILED;
     }
     atlas->overrides = desc->override;
@@ -2361,6 +2375,7 @@ static sspine_resource_state _sspine_init_atlas(_sspine_atlas_t* atlas, const ss
     // not much we can do about this...
     atlas->sp_atlas = spAtlas_create((const char*)desc->data.ptr, (int)desc->data.size, "", 0);
     if (0 == atlas->sp_atlas) {
+        _SSPINE_ERROR(SPINE_ATLAS_CREATION_FAILED);
         return SSPINE_RESOURCESTATE_FAILED;
     }
 
@@ -2370,6 +2385,7 @@ static sspine_resource_state _sspine_init_atlas(_sspine_atlas_t* atlas, const ss
         atlas->num_pages++;
         const sg_image img = sg_alloc_image();
         if (sg_query_image_state(img) != SG_RESOURCESTATE_ALLOC) {
+            _SSPINE_ERROR(SG_ALLOC_IMAGE_FAILED);
             return SSPINE_RESOURCESTATE_FAILED;
         }
         page->rendererObject = (void*)(uintptr_t)img.id;
@@ -2481,16 +2497,23 @@ static sspine_resource_state _sspine_init_skeleton(_sspine_skeleton_t* skeleton,
     SOKOL_ASSERT(desc);
 
     if ((0 == desc->json_data) && ((0 == desc->binary_data.ptr) || (0 == desc->binary_data.size))) {
+        _SSPINE_ERROR(SKELETON_DESC_NO_DATA);
+        return SSPINE_RESOURCESTATE_FAILED;
+    }
+    if (desc->atlas.id == SSPINE_INVALID_ID) {
+        _SSPINE_ERROR(SKELETON_DESC_NO_ATLAS);
         return SSPINE_RESOURCESTATE_FAILED;
     }
 
     skeleton->atlas.id = desc->atlas.id;
     skeleton->atlas.ptr = _sspine_lookup_atlas(skeleton->atlas.id);
     if (!_sspine_atlas_ref_valid(&skeleton->atlas)) {
+        _SSPINE_ERROR(SKELETON_ATLAS_NOT_VALID);
         return SSPINE_RESOURCESTATE_FAILED;
     }
     _sspine_atlas_t* atlas = skeleton->atlas.ptr;
     if (SSPINE_RESOURCESTATE_VALID != atlas->slot.state) {
+        _SSPINE_ERROR(SKELETON_ATLAS_NOT_VALID);
         return SSPINE_RESOURCESTATE_FAILED;
     }
     SOKOL_ASSERT(atlas->sp_atlas);
@@ -2502,6 +2525,7 @@ static sspine_resource_state _sspine_init_skeleton(_sspine_skeleton_t* skeleton,
         skeleton->sp_skel_data = spSkeletonJson_readSkeletonData(skel_json, desc->json_data);
         spSkeletonJson_dispose(skel_json); skel_json = 0;
         if (0 == skeleton->sp_skel_data) {
+            _SSPINE_ERROR(SPINE_SKELETON_DATA_CREATION_FAILED);
             return SSPINE_RESOURCESTATE_FAILED;
         }
     }
@@ -2512,6 +2536,7 @@ static sspine_resource_state _sspine_init_skeleton(_sspine_skeleton_t* skeleton,
         skeleton->sp_skel_data = spSkeletonBinary_readSkeletonData(skel_bin, desc->binary_data.ptr, (int)desc->binary_data.size);
         spSkeletonBinary_dispose(skel_bin); skel_bin = 0;
         if (0 == skeleton->sp_skel_data) {
+            _SSPINE_ERROR(SPINE_SKELETON_DATA_CREATION_FAILED);
             return SSPINE_RESOURCESTATE_FAILED;
         }
     }
@@ -2694,13 +2719,20 @@ static sspine_skinset _sspine_alloc_skinset(void) {
 static sspine_resource_state _sspine_init_skinset(_sspine_skinset_t* skinset, const sspine_skinset_desc* desc) {
     SOKOL_ASSERT(skinset && (skinset->slot.state == SSPINE_RESOURCESTATE_ALLOC));
     SOKOL_ASSERT(desc && desc->name);
+
+    if (desc->skeleton.id == SSPINE_INVALID_ID) {
+        _SSPINE_ERROR(SKINSET_DESC_NO_SKELETON);
+        return SSPINE_RESOURCESTATE_FAILED;
+    }
     skinset->skel.id = desc->skeleton.id;
     skinset->skel.ptr = _sspine_lookup_skeleton(desc->skeleton.id);
     if (!_sspine_skeleton_ref_valid(&skinset->skel)) {
+        _SSPINE_ERROR(SKINSET_SKELETON_NOT_VALID);
         return SSPINE_RESOURCESTATE_FAILED;
     }
     _sspine_skeleton_t* skel = skinset->skel.ptr;
     if (SSPINE_RESOURCESTATE_VALID != skel->slot.state) {
+        _SSPINE_ERROR(SKINSET_SKELETON_NOT_VALID);
         return SSPINE_RESOURCESTATE_FAILED;
     }
     SOKOL_ASSERT(skel->sp_skel_data);
@@ -2709,6 +2741,7 @@ static sspine_resource_state _sspine_init_skinset(_sspine_skinset_t* skinset, co
         if (desc->skins[i].skeleton_id != SSPINE_INVALID_ID) {
             spSkin* skin = _sspine_lookup_skin(desc->skins[i].skeleton_id, desc->skins[i].index);
             if (0 == skin) {
+                _SSPINE_ERROR(SKINSET_INVALID_SKIN_HANDLE);
                 return SSPINE_RESOURCESTATE_FAILED;
             }
             spSkin_addSkin(skinset->sp_skin, skin);
@@ -2847,31 +2880,48 @@ static sspine_resource_state _sspine_init_instance(_sspine_instance_t* instance,
     SOKOL_ASSERT(instance && (instance->slot.state == SSPINE_RESOURCESTATE_ALLOC));
     SOKOL_ASSERT(desc);
 
+    if (desc->skeleton.id == SSPINE_INVALID_ID) {
+        _SSPINE_ERROR(INSTANCE_DESC_NO_SKELETON);
+        return SSPINE_RESOURCESTATE_FAILED;
+    }
     instance->skel.id = desc->skeleton.id;
     instance->skel.ptr = _sspine_lookup_skeleton(instance->skel.id);
     if (!_sspine_skeleton_ref_valid(&instance->skel)) {
+        _SSPINE_ERROR(INSTANCE_SKELETON_NOT_VALID);
         return SSPINE_RESOURCESTATE_FAILED;
     }
     _sspine_skeleton_t* skel = instance->skel.ptr;
     if (SSPINE_RESOURCESTATE_VALID != skel->slot.state) {
+        _SSPINE_ERROR(INSTANCE_SKELETON_NOT_VALID);
         return SSPINE_RESOURCESTATE_FAILED;
     }
     instance->atlas = skel->atlas;
     if (!_sspine_atlas_ref_valid(&instance->atlas)) {
+        _SSPINE_ERROR(INSTANCE_ATLAS_NOT_VALID);
         return SSPINE_RESOURCESTATE_FAILED;
     }
     if (SSPINE_RESOURCESTATE_VALID != instance->atlas.ptr->slot.state) {
+        _SSPINE_ERROR(INSTANCE_ATLAS_NOT_VALID);
         return SSPINE_RESOURCESTATE_FAILED;
     }
     SOKOL_ASSERT(skel->sp_skel_data);
     SOKOL_ASSERT(skel->sp_anim_data);
 
     instance->sp_skel = spSkeleton_create(skel->sp_skel_data);
-    SOKOL_ASSERT(instance->sp_skel);
+    if (0 == instance->sp_skel) {
+        _SSPINE_ERROR(SPINE_SKELETON_CREATION_FAILED);
+        return SSPINE_RESOURCESTATE_FAILED;
+    }
     instance->sp_anim_state = spAnimationState_create(skel->sp_anim_data);
-    SOKOL_ASSERT(instance->sp_anim_state);
+    if (0 == instance->sp_anim_state) {
+        _SSPINE_ERROR(SPINE_ANIMATIONSTATE_CREATION_FAILED);
+        return SSPINE_RESOURCESTATE_FAILED;
+    }
     instance->sp_clip = spSkeletonClipping_create();
-    SOKOL_ASSERT(instance->sp_clip);
+    if (0 == instance->sp_clip) {
+        _SSPINE_ERROR(SPINE_SKELETONCLIPPING_CREATION_FAILED);
+        return SSPINE_RESOURCESTATE_FAILED;
+    }
 
     instance->sp_anim_state->userData = (void*)(uintptr_t)instance->slot.id;
     instance->sp_anim_state->listener = _sspine_event_listener;
@@ -3076,6 +3126,7 @@ static _sspine_command_t* _sspine_next_command(_sspine_context_t* ctx) {
         return &(ctx->commands.ptr[ctx->commands.cur++]);
     }
     else {
+        _SSPINE_ERROR(COMMAND_BUFFER_OVERFLOW);
         return 0;
     }
 }
@@ -3106,6 +3157,9 @@ static _sspine_alloc_vertices_result_t _sspine_alloc_vertices(_sspine_context_t*
         res.index = ctx->vertices.cur;
         ctx->vertices.cur += num;
     }
+    else {
+        _SSPINE_ERROR(VERTEX_BUFFER_OVERFLOW);
+    }
     return res;
 }
 
@@ -3124,6 +3178,9 @@ static _sspine_alloc_indices_result_t _sspine_alloc_indices(_sspine_context_t* c
         res.ptr = &(ctx->indices.ptr[ctx->indices.cur]);
         res.index = ctx->indices.cur;
         ctx->indices.cur += num;
+    }
+    else {
+        _SSPINE_ERROR(INDEX_BUFFER_OVERFLOW);
     }
     return res;
 }
@@ -3286,12 +3343,14 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
         else {
             // record a new command
             _sspine_command_t* cmd_ptr = _sspine_next_command(ctx);
-            cmd_ptr->layer = layer;
-            cmd_ptr->pip = pip;
-            cmd_ptr->img = img;
-            cmd_ptr->pma = pma;
-            cmd_ptr->base_element = dst_indices.index;
-            cmd_ptr->num_elements = num_indices;
+            if (cmd_ptr) {
+                cmd_ptr->layer = layer;
+                cmd_ptr->pip = pip;
+                cmd_ptr->img = img;
+                cmd_ptr->pma = pma;
+                cmd_ptr->base_element = dst_indices.index;
+                cmd_ptr->num_elements = num_indices;
+            }
         }
         spSkeletonClipping_clipEnd(sp_clip, sp_slot);
     }
@@ -3507,7 +3566,7 @@ SOKOL_API_IMPL sspine_context sspine_make_context(const sspine_context_desc* des
 SOKOL_API_IMPL void sspine_destroy_context(sspine_context ctx_id) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     if (_sspine_is_default_context(ctx_id)) {
-        _SSPINE_WARN(CANNOT_DESTROY_DEFAULT_CONTEXT);
+        _SSPINE_ERROR(CANNOT_DESTROY_DEFAULT_CONTEXT);
         return;
     }
     _sspine_destroy_context(ctx_id);
