@@ -1276,6 +1276,23 @@ typedef enum sapp_keycode {
 } sapp_keycode;
 
 /*
+    Android specific 'tool type' enum for touch events. This lets the
+    application check what what type of input device was used for
+    touch events.
+
+    NOTE: the values must remain in sync with the corresponding
+    Android SDK type, so don't change those.
+
+    See https://developer.android.com/reference/android/view/MotionEvent#TOOL_TYPE_UNKNOWN
+*/
+typedef enum sapp_android_tooltype {
+    SAPP_ANDROIDTOOLTYPE_UNKNOWN = 0,   // TOOL_TYPE_UNKNOWN
+    SAPP_ANDROIDTOOLTYPE_FINGER = 1,    // TOOL_TYPE_FINGER
+    SAPP_ANDROIDTOOLTYPE_STYLUS = 2,    // TOOL_TYPE_STYLUS
+    SAPP_ANDROIDTOOLTYPE_MOUSE = 3,     // TOOL_TYPE_MOUSE
+} sapp_android_tooltype;
+
+/*
     sapp_touchpoint
 
     Describes a single touchpoint in a multitouch event (TOUCHES_BEGAN,
@@ -1288,6 +1305,7 @@ typedef struct sapp_touchpoint {
     uintptr_t identifier;
     float pos_x;
     float pos_y;
+    sapp_android_tooltype android_tooltype; // only valid on Android
     bool changed;
 } sapp_touchpoint;
 
@@ -8879,13 +8897,14 @@ _SOKOL_PRIVATE bool _sapp_android_touch_event(const AInputEvent* e) {
         dst->identifier = (uintptr_t)AMotionEvent_getPointerId(e, (size_t)i);
         dst->pos_x = (AMotionEvent_getRawX(e, (size_t)i) / _sapp.window_width) * _sapp.framebuffer_width;
         dst->pos_y = (AMotionEvent_getRawY(e, (size_t)i) / _sapp.window_height) * _sapp.framebuffer_height;
-
+        dst->android_tooltype = (sapp_android_tooltype) AMotionEvent_getToolType(e, (size_t)i);
         if (action == AMOTION_EVENT_ACTION_POINTER_DOWN ||
             action == AMOTION_EVENT_ACTION_POINTER_UP) {
             dst->changed = (i == idx);
         } else {
             dst->changed = true;
         }
+
     }
     _sapp_call_event(&_sapp.event);
     return true;

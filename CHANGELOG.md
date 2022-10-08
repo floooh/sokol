@@ -1,5 +1,10 @@
 ## Updates
 
+- **08-Oct-2022** sokol_app.h Android backend: the ```sapp_touchpoint``` struct
+  now has a new item ```sapp_android_tooltype android_tooltype;```. This exposes the
+  result of the Android NDK function ```AMotionEvent_getToolType()```.
+  Many thanks to @Wertzui123 for the initial PR (https://github.com/floooh/sokol/pull/717).
+
 - **25-Sep-2022**: sokol_app.h on Linux now optionally supports EGL instead of
   GLX for the window system glue code and can create a GLES2 or GLES3 context
   instead of a 'desktop GL' context.
