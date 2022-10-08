@@ -1277,7 +1277,7 @@ typedef enum sapp_keycode {
 
 /*
     Android specific 'tool type' enum for touch events. This lets the
-    application check what what type of input device was used for
+    application check what type of input device was used for
     touch events.
 
     NOTE: the values must remain in sync with the corresponding
@@ -8904,7 +8904,6 @@ _SOKOL_PRIVATE bool _sapp_android_touch_event(const AInputEvent* e) {
         } else {
             dst->changed = true;
         }
-
     }
     _sapp_call_event(&_sapp.event);
     return true;
