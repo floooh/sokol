@@ -209,6 +209,9 @@ def enum_default_item(enum_name):
 def is_prim_type(s):
     return s in prim_types
 
+def is_int_type(s):
+    return s == "int"
+
 def is_struct_type(s):
     return s in struct_types
 
@@ -326,6 +329,8 @@ def funcdecl_args_c(decl, prefix):
         param_type = check_override(f'{func_name}.{param_name}', default=param_decl['type'])
         if is_const_struct_ptr(param_type):
             s += f"#by_ptr {param_name}: {map_type(param_type, prefix, 'odin_arg')}"
+        elif is_int_type(param_type):
+            s += f"#any_int {param_name}: {map_type(param_type, prefix, 'c_arg')}"
         else:
             s += f"{param_name}: {map_type(param_type, prefix, 'c_arg')}"
     return s
