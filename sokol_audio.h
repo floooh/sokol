@@ -1811,12 +1811,6 @@ EM_JS(int, saudio_js_init, (int sample_rate, int num_channels, int buffer_size),
             latencyHint: 'interactive',
         });
     }
-    else if (typeof webkitAudioContext !== 'undefined') {
-        Module._saudio_context = new webkitAudioContext({
-            sampleRate: sample_rate,
-            latencyHint: 'interactive',
-        });
-    }
     else {
         Module._saudio_context = null;
         console.log('sokol_audio.h: no WebAudio support');
