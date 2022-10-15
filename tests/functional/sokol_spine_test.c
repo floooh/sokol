@@ -151,14 +151,14 @@ UTEST(sokol_spine, failed_atlas_no_images) {
 
 // NOTE: spine-c doesn't detect wrong/corrupt atlas file data, so we can't test for that
 
-UTEST(sokol_spine, image_index_valid) {
+UTEST(sokol_spine, image_valid) {
     init();
     sspine_atlas atlas = create_atlas();
-    T(sspine_image_index_valid(atlas, 0));
-    T(!sspine_image_index_valid(atlas, 1));
-    T(!sspine_image_index_valid(atlas, -1));
+    T(sspine_image_valid(sspine_image_by_index(atlas, 0)));
+    T(!sspine_image_valid(sspine_image_by_index(atlas, 1)));
+    T(!sspine_image_valid(sspine_image_by_index(atlas, -1)));
     sspine_destroy_atlas(atlas);
-    T(!sspine_image_index_valid(atlas, 0));
+    T(!sspine_image_valid(sspine_image_by_index(atlas, 0)));
     shutdown();
 }
 
@@ -167,7 +167,7 @@ UTEST(sokol_spine, atlas_image_info) {
     sspine_atlas atlas = create_atlas();
     T(sspine_atlas_valid(atlas));
     T(sspine_num_images(atlas) == 1);
-    const sspine_image_info img_info = sspine_get_image_info(atlas, 0);
+    const sspine_image_info img_info = sspine_get_image_info(sspine_image_by_index(atlas, 0));
     T(img_info.valid);
     T(img_info.sgimage.id != SG_INVALID_ID);
     T(sg_query_image_state(img_info.sgimage) == SG_RESOURCESTATE_ALLOC);
@@ -197,7 +197,7 @@ UTEST(sokol_spine, atlas_with_overrides) {
     });
     T(sspine_atlas_valid(atlas));
     T(sspine_num_images(atlas) == 1);
-    const sspine_image_info img_info = sspine_get_image_info(atlas, 0);
+    const sspine_image_info img_info = sspine_get_image_info(sspine_image_by_index(atlas, 0));
     T(img_info.valid);
     T(img_info.sgimage.id != SG_INVALID_ID);
     T(sg_query_image_state(img_info.sgimage) == SG_RESOURCESTATE_ALLOC);
@@ -559,14 +559,14 @@ UTEST(sokol_spine, get_anim_info_invalid_index) {
     shutdown();
 }
 
-UTEST(sokol_spine, atlas_page_index_valid) {
+UTEST(sokol_spine, atlas_page_valid) {
     init();
     sspine_atlas atlas = create_atlas();
-    T(sspine_atlas_page_index_valid(atlas, 0));
-    T(!sspine_atlas_page_index_valid(atlas, -1));
-    T(!sspine_atlas_page_index_valid(atlas, 1));
+    T(sspine_atlas_page_valid(sspine_atlas_page_by_index(atlas, 0)));
+    T(!sspine_atlas_page_valid(sspine_atlas_page_by_index(atlas, -1)));
+    T(!sspine_atlas_page_valid(sspine_atlas_page_by_index(atlas, 1)));
     sspine_destroy_atlas(atlas);
-    T(!sspine_atlas_page_index_valid(atlas, 0));
+    T(!sspine_atlas_page_valid(sspine_atlas_page_by_index(atlas, 0)));
     shutdown();
 }
 
@@ -582,7 +582,7 @@ UTEST(sokol_spine, num_atlas_pages) {
 UTEST(sokol_spine, get_atlas_page_info) {
     init();
     sspine_atlas atlas = create_atlas();
-    const sspine_atlas_page_info info = sspine_get_atlas_page_info(atlas, 0);
+    const sspine_atlas_page_info info = sspine_get_atlas_page_info(sspine_atlas_page_by_index(atlas, 0));
     T(info.valid);
     T(info.atlas.id == atlas.id);
     T(info.image.valid);
@@ -609,7 +609,7 @@ UTEST(sokol_spine, get_atlas_page_info_destroyed_atlas) {
     init();
     sspine_atlas atlas = create_atlas();
     sspine_destroy_atlas(atlas);
-    const sspine_atlas_page_info info = sspine_get_atlas_page_info(atlas, 0);
+    const sspine_atlas_page_info info = sspine_get_atlas_page_info(sspine_atlas_page_by_index(atlas, 0));
     T(!info.valid);
     T(info.atlas.id == SSPINE_INVALID_ID);
     shutdown();
@@ -619,10 +619,10 @@ UTEST(sokol_spine, get_atlas_page_info_invalid_index) {
     init();
     sspine_atlas atlas = create_atlas();
     sspine_destroy_atlas(atlas);
-    const sspine_atlas_page_info i0 = sspine_get_atlas_page_info(atlas, -1);
+    const sspine_atlas_page_info i0 = sspine_get_atlas_page_info(sspine_atlas_page_by_index(atlas, -1));
     T(!i0.valid);
     T(i0.atlas.id == SSPINE_INVALID_ID);
-    const sspine_atlas_page_info i1 = sspine_get_atlas_page_info(atlas, 1234);
+    const sspine_atlas_page_info i1 = sspine_get_atlas_page_info(sspine_atlas_page_by_index(atlas, 1234));
     T(!i0.valid);
     T(i1.atlas.id == SSPINE_INVALID_ID);
     shutdown();
@@ -641,7 +641,7 @@ UTEST(sokol_spine, atlas_get_atlas_page_info_with_overrides) {
             .premul_alpha_enabled = true,
         }
     });
-    const sspine_atlas_page_info info = sspine_get_atlas_page_info(atlas, 0);
+    const sspine_atlas_page_info info = sspine_get_atlas_page_info(sspine_atlas_page_by_index(atlas, 0));
     T(info.valid);
     T(info.atlas.id == atlas.id);
     T(info.image.valid);
