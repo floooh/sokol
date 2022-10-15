@@ -119,7 +119,7 @@
     (4) pump the sokol-fetch message queues, and invoke response callbacks
         by calling:
 
-        sfetch_dowork(); 
+        sfetch_dowork();
 
         In an event-driven app this should be called in the event loop. If you
         use sokol-app this would be in your frame_cb function.
@@ -2006,13 +2006,13 @@ EM_JS(void, sfetch_js_send_head_request, (uint32_t slot_id, const char* path_cst
     var req = new XMLHttpRequest();
     req.open('HEAD', path_str);
     req.onreadystatechange = function() {
-        if (this.readyState == this.DONE) {
-            if (this.status == 200) {
-                var content_length = this.getResponseHeader('Content-Length');
+        if (req.readyState == XMLHttpRequest.DONE) {
+            if (req.status == 200) {
+                var content_length = req.getResponseHeader('Content-Length');
                 __sfetch_emsc_head_response(slot_id, content_length);
             }
             else {
-                __sfetch_emsc_failed_http_status(slot_id, this.status);
+                __sfetch_emsc_failed_http_status(slot_id, req.status);
             }
         }
     };
@@ -2030,8 +2030,8 @@ EM_JS(void, sfetch_js_send_get_request, (uint32_t slot_id, const char* path_cstr
         req.setRequestHeader('Range', 'bytes='+offset+'-'+(offset+bytes_to_read-1));
     }
     req.onreadystatechange = function() {
-        if (this.readyState == this.DONE) {
-            if ((this.status == 206) || ((this.status == 200) && !need_range_request)) {
+        if (req.readyState == XMLHttpRequest.DONE) {
+            if ((req.status == 206) || ((req.status == 200) && !need_range_request)) {
                 var u8_array = new Uint8Array(req.response);
                 var content_fetched_size = u8_array.length;
                 if (content_fetched_size <= buf_size) {
@@ -2043,7 +2043,7 @@ EM_JS(void, sfetch_js_send_get_request, (uint32_t slot_id, const char* path_cstr
                 }
             }
             else {
-                __sfetch_emsc_failed_http_status(slot_id, this.status);
+                __sfetch_emsc_failed_http_status(slot_id, req.status);
             }
         }
     };
@@ -2605,4 +2605,3 @@ SOKOL_API_IMPL void sfetch_cancel(sfetch_handle_t h) {
 }
 
 #endif /* SOKOL_FETCH_IMPL */
-
