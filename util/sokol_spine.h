@@ -205,7 +205,7 @@ typedef struct sspine_context_info {
 
 typedef struct sspine_image_info {
     bool valid;
-    sg_image image;
+    sg_image sgimage;
     const char* filename;
     sg_filter min_filter;
     sg_filter mag_filter;
@@ -233,15 +233,7 @@ typedef struct sspine_atlas_desc {
 typedef struct sspine_atlas_page_info {
     bool valid;
     sspine_atlas atlas;
-    sg_image image;
-    const char* name;
-    sg_filter min_filter;
-    sg_filter mag_filter;
-    sg_wrap wrap_u;
-    sg_wrap wrap_v;
-    int width;
-    int height;
-    bool premul_alpha;
+    sspine_image_info image;
     sspine_atlas_overrides overrides;
 } sspine_atlas_page_info;
 
@@ -3076,32 +3068,32 @@ static sg_wrap _sspine_as_image_wrap(spAtlasWrap wrap) {
     }
 }
 
-static void _sspine_init_image_info(_sspine_atlas_t* atlas, int index, sspine_image_info* info) {
+static void _sspine_init_image_info(const _sspine_atlas_t* atlas, int index, sspine_image_info* info, bool with_overrides) {
     spAtlasPage* page = _sspine_lookup_atlas_page(atlas->slot.id, index);
     SOKOL_ASSERT(page);
     SOKOL_ASSERT(page->name);
     info->valid = true;
-    info->image.id = (uint32_t)(uintptr_t)page->rendererObject;
-    info->filename = page->name;
-    if (atlas->overrides.min_filter != _SG_FILTER_DEFAULT) {
+    info->sgimage.id = (uint32_t)(uintptr_t)page->rendererObject;
+    info->filename = page->name ? page->name : "null";
+    if (with_overrides && (atlas->overrides.min_filter != _SG_FILTER_DEFAULT)) {
         info->min_filter = atlas->overrides.min_filter;
     }
     else {
         info->min_filter = _sspine_as_image_filter(page->minFilter);
     }
-    if (atlas->overrides.mag_filter != _SG_FILTER_DEFAULT) {
+    if (with_overrides && (atlas->overrides.mag_filter != _SG_FILTER_DEFAULT)) {
         info->mag_filter = atlas->overrides.mag_filter;
     }
     else {
         info->mag_filter = _sspine_as_image_filter(page->magFilter);
     }
-    if (atlas->overrides.wrap_u != _SG_WRAP_DEFAULT) {
+    if (with_overrides && (atlas->overrides.wrap_u != _SG_WRAP_DEFAULT)) {
         info->wrap_u = atlas->overrides.wrap_u;
     }
     else {
         info->wrap_u = _sspine_as_image_wrap(page->uWrap);
     }
-    if (atlas->overrides.wrap_v != _SG_WRAP_DEFAULT) {
+    if (with_overrides && (atlas->overrides.wrap_v != _SG_WRAP_DEFAULT)) {
         info->wrap_v = atlas->overrides.wrap_v;
     }
     else {
@@ -3928,7 +3920,7 @@ SOKOL_API_IMPL sspine_image_info sspine_get_image_info(sspine_atlas atlas_id, in
     sspine_image_info img_info;
     _sspine_clear(&img_info, sizeof(img_info));
     if (atlas && (image_index >= 0) && (image_index < atlas->num_pages)) {
-        _sspine_init_image_info(atlas, image_index, &img_info);
+        _sspine_init_image_info(atlas, image_index, &img_info, true);
     }
     return img_info;
 }
@@ -4156,15 +4148,9 @@ SOKOL_API_IMPL sspine_atlas_page_info sspine_get_atlas_page_info(sspine_atlas at
         const _sspine_atlas_t* atlas = _sspine_lookup_atlas(atlas_id.id);
         res.valid = true;
         res.atlas = atlas_id;
-        res.image.id = (uint32_t)(uintptr_t)sp_page->rendererObject;
-        res.name = sp_page->name ? sp_page->name : "";
-        res.min_filter = _sspine_as_image_filter(sp_page->minFilter);
-        res.mag_filter = _sspine_as_image_filter(sp_page->magFilter);
-        res.wrap_u = _sspine_as_image_wrap(sp_page->uWrap);
-        res.wrap_v = _sspine_as_image_wrap(sp_page->vWrap);
-        res.width = sp_page->width;
-        res.height = sp_page->height;
-        res.premul_alpha = sp_page->pma != 0;
+        // write image info without overrides
+        _sspine_init_image_info(atlas, page_index, &res.image, false);
+        // ...and provide the overrides separately
         res.overrides = atlas->overrides;
     }
     return res;
