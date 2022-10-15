@@ -1,18 +1,22 @@
 ## Updates
 
-- **15-Oct-2022** fixes for Emscripten 3.1.24: the sokol headers now use the new
-  **EM_JS_DEPS()** macro to declare 'indirect dependencies on JS library functions'.
-  This is a (much more robust) follow-up fix to the Emscripten related fixes from 10-Sep-2022.
-  The new Emscripten SDK also displays a couple of Javascript "static analyzer" warnings
-  by the Closure compiler (used in release mode to optimize and minify the generated
-  JS code). I fixed a couple of those warnings, but some warnings persist (all of them
-  false positives). Not sure yet if these can be fixed or need to be supressed, but
-  that's for another time.
-  I also had to undo an older workaround in sokol_app.h on iOS (https://github.com/floooh/sokol/issues/645)
-  because this is now triggering a Metal validation layer error (https://github.com/floooh/sokol/issues/726).
-  The original case is no longer reproducible, so undoing the old workaround seems to
-  be a quick fix. Eventually I want to get rid of MTKView though, and go down to
-  CAMetalLayer.
+- **15-Oct-2022**
+    - fixes for Emscripten 3.1.24: the sokol headers now use the new
+    **EM_JS_DEPS()** macro to declare 'indirect dependencies on JS library functions'.
+    This is a (much more robust) follow-up fix to the Emscripten related fixes from 10-Sep-2022.
+    The new Emscripten SDK also displays a couple of Javascript "static analyzer" warnings
+    by the Closure compiler (used in release mode to optimize and minify the generated
+    JS code). I fixed a couple of those warnings, but some warnings persist (all of them
+    false positives). Not sure yet if these can be fixed or need to be supressed, but
+    that's for another time.
+    - the webkitAudioContext() fallback in sokol_audio.h's Emscripten backend
+    has been removed (only AudioContext is supported now), the fallback also
+    triggered a Closure warning, so it probably never worked as intended anyway.
+    - I also had to undo an older workaround in sokol_app.h on iOS (https://github.com/floooh/sokol/issues/645)
+    because this is now triggering a Metal validation layer error (https://github.com/floooh/sokol/issues/726).
+    The original case is no longer reproducible, so undoing the old workaround seems to
+    be a quick fix. Eventually I want to get rid of MTKView though, and go down to
+    CAMetalLayer.
 
 - **08-Oct-2022** sokol_app.h Android backend: the ```sapp_touchpoint``` struct
   now has a new item ```sapp_android_tooltype android_tooltype;```. This exposes the
