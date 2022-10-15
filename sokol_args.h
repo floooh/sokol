@@ -692,6 +692,11 @@ _SOKOL_PRIVATE bool _sargs_parse_cargs(int argc, const char** argv) {
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#if defined(EM_JS_DEPS)
+EM_JS_DEPS(sokol_audio, "$withStackSave,$allocateUTF8OnStack");
+#endif
+
 EMSCRIPTEN_KEEPALIVE void _sargs_add_kvp(const char* key, const char* val) {
     SOKOL_ASSERT(_sargs.valid && key && val);
     if (_sargs.num_args >= _sargs.max_args) {
