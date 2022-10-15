@@ -4180,11 +4180,6 @@ _SOKOL_PRIVATE void _sapp_ios_update_dimensions(void) {
                              (_sapp.framebuffer_height != cur_fb_height);
     if (dim_changed) {
         #if defined(SOKOL_METAL)
-            // NOTE: explicitely resize the drawable here again, despite MTKView using
-            // autoResizeDrawable, this seems to be the only way so that the MTKView's
-            // contentScaleFactor is honored, but also the correct screen size being
-            // reported when device rotations happen
-            // (see: https://github.com/floooh/sokol-samples/issues/101)
             const CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
             _sapp.ios.view.drawableSize = drawable_size;
         #else
@@ -4258,6 +4253,11 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         _sapp.ios.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
         _sapp.ios.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
         _sapp.ios.view.sampleCount = (NSUInteger)_sapp.sample_count;
+        /* NOTE: iOS MTKView seems to ignore thew view's contentScaleFactor
+            and automatically renders at Retina resolution. We'll disable
+            autoResize and instead do the resizing in _sapp_ios_update_dimensions()
+        */
+        _sapp.ios.view.autoResizeDrawable = false;
         _sapp.ios.view.userInteractionEnabled = YES;
         _sapp.ios.view.multipleTouchEnabled = YES;
         _sapp.ios.view_ctrl = [[UIViewController alloc] init];
