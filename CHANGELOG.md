@@ -1,5 +1,15 @@
 ## Updates
 
+- **16-Oct-2022** The Odin bindings generator and the generated bindings have
+  been simplified (the Odin binding now don't have separate wrapper functions).
+  Requires the latest Odin release. Also note: On M1 Macs I'm currently seeing
+  what looks like an ABI problem (in functions which pass color values to the C
+  side as uint8_t, the colors come out wrong). This also happened with the
+  previous binding version, so it looks like a regression in Odin. Might be
+  related to this recent bugfix (which I haven't tested yet):
+  https://github.com/odin-lang/Odin/issues/2121 Many think to @thePHTest for the
+  PR! (https://github.com/floooh/sokol/pull/719)
+
 - **15-Oct-2022**
     - fixes for Emscripten 3.1.24: the sokol headers now use the new
     **EM_JS_DEPS()** macro to declare 'indirect dependencies on JS library functions'.
