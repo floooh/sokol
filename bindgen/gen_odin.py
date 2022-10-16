@@ -85,13 +85,14 @@ ignores = [
 overrides = {
     'context':                              'ctx',  # reserved keyword
     'sapp_sgcontext':                       'sapp_sgctx',
+    'sapp_sgcontext':                       'sapp_sgctx',
     'sg_context_desc.color_format':         'int',
     'sg_context_desc.depth_format':         'int',
     'SGL_NO_ERROR':                         'SGL_ERROR_NO_ERROR',
 }
 
 prim_types = {
-    'int':          'i32',
+    'int':          'c.int',
     'bool':         'bool',
     'char':         'u8',
     'int8_t':       'i8',
@@ -208,6 +209,9 @@ def enum_default_item(enum_name):
 def is_prim_type(s):
     return s in prim_types
 
+def is_int_type(s):
+    return s == "int"
+
 def is_struct_type(s):
     return s in struct_types
 
@@ -323,18 +327,12 @@ def funcdecl_args_c(decl, prefix):
             s += ', '
         param_name = param_decl['name']
         param_type = check_override(f'{func_name}.{param_name}', default=param_decl['type'])
-        s += f"{param_name}: {map_type(param_type, prefix, 'c_arg')}"
-    return s
-
-def funcdecl_args_odin(decl, prefix):
-    s = ''
-    func_name = decl['name']
-    for param_decl in decl['params']:
-        if s != '':
-            s += ', '
-        param_name = param_decl['name']
-        param_type = check_override(f'{func_name}.{param_name}', default=param_decl['type'])
-        s += f"{param_name}: {map_type(param_type, prefix, 'odin_arg')}"
+        if is_const_struct_ptr(param_type):
+            s += f"#by_ptr {param_name}: {map_type(param_type, prefix, 'odin_arg')}"
+        elif is_int_type(param_type):
+            s += f"#any_int {param_name}: {map_type(param_type, prefix, 'c_arg')}"
+        else:
+            s += f"{param_name}: {map_type(param_type, prefix, 'c_arg')}"
     return s
 
 def funcptr_args_c(field_type, prefix):
@@ -363,12 +361,6 @@ def funcdecl_result_c(decl, prefix):
     res_c_type = decl_type[:decl_type.index('(')].strip()
     return map_type(check_override(f'{func_name}.RESULT', default=res_c_type), prefix, 'c_arg')
 
-def funcdecl_result_odin(decl, prefix):
-    func_name = decl['name']
-    decl_type = decl['type']
-    res_c_type = decl_type[:decl_type.index('(')].strip()
-    return map_type(check_override(f'{func_name}.RESULT', default=res_c_type), prefix, 'odin_arg')
-
 def get_system_libs(module, platform, backend):
     if module in system_libs:
         if platform in system_libs[module]:
@@ -378,7 +370,7 @@ def get_system_libs(module, platform, backend):
                     return f", {libs}"
     return ''
 
-def gen_c_imports(inp, prefix):
+def gen_c_imports(inp, c_prefix, prefix):
     clib_prefix = f'sokol_{inp["module"]}'
     clib_import = f'{clib_prefix}_clib'
     windows_d3d11_libs = get_system_libs(prefix, 'windows', 'd3d11')
@@ -386,6 +378,7 @@ def gen_c_imports(inp, prefix):
     macos_metal_libs = get_system_libs(prefix, 'macos', 'metal')
     macos_gl_libs = get_system_libs(prefix, 'macos', 'gl')
     linux_gl_libs = get_system_libs(prefix, 'linux', 'gl')
+    l( 'import "core:c"')
     l( 'when ODIN_OS == .Windows {')
     l( '    when #config(SOKOL_USE_GL,false) {')
     l(f'        when ODIN_DEBUG == true {{ foreign import {clib_import} {{ "{clib_prefix}_windows_x64_gl_debug.lib"{windows_gl_libs} }} }}')
@@ -417,7 +410,12 @@ def gen_c_imports(inp, prefix):
     l(f'    when ODIN_DEBUG == true {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_debug.a"{linux_gl_libs} }} }}')
     l(f'    else                    {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_release.a"{linux_gl_libs} }} }}')
     l( '}')
-    l( '@(default_calling_convention="c")')
+
+    # Need to special case sapp_sg to avoid Odin's context keyword
+    if c_prefix == "sapp_sg":
+        l(f'@(default_calling_convention="c")')
+    else:
+        l(f'@(default_calling_convention="c", link_prefix="{c_prefix}")')
     l(f"foreign {clib_import} {{")
     prefix = inp['prefix']
     for decl in inp['decls']:
@@ -425,7 +423,12 @@ def gen_c_imports(inp, prefix):
             args = funcdecl_args_c(decl, prefix)
             res_type = funcdecl_result_c(decl, prefix)
             res_str = '' if res_type == '' else f'-> {res_type}'
-            l(f"    {decl['name']} :: proc({args}) {res_str} ---")
+            # Need to special case sapp_sg to avoid Odin's context keyword
+            if c_prefix == "sapp_sg":
+                l(f'    @(link_name="{decl["name"]}")')
+                l(f"    {check_override(as_snake_case(decl['name'], c_prefix))} :: proc({args}) {res_str} ---")
+            else:
+                l(f"    {as_snake_case(decl['name'], c_prefix)} :: proc({args}) {res_str} ---")
     l('}')
 
 def gen_consts(decl, prefix):
@@ -459,49 +462,6 @@ def gen_enum(decl, prefix):
                 l(f"    {item_name},")
     l('}')
 
-def gen_func(decl, prefix):
-    c_func_name = decl['name']
-    args = funcdecl_args_odin(decl, prefix)
-    res_type = funcdecl_result_odin(decl, prefix)
-    res_str = '' if res_type == '' else f'-> {res_type}'
-    if res_type != funcdecl_result_c(decl, prefix):
-        # cast needed for return type
-        res_cast = f'cast({res_type})'
-    else:
-        res_cast = ''
-    l(f"{as_snake_case(check_override(decl['name']), prefix)} :: proc({args}) {res_str} {{")
-
-    # workaround for 'cannot take the pointer address of 'x' which is a procedure parameter
-    for param_decl in decl['params']:
-        arg_name = param_decl['name']
-        arg_type = check_override(f'{c_func_name}.{arg_name}', default=param_decl['type'])
-        if is_const_struct_ptr(arg_type):
-            l(f'    _{arg_name} := {arg_name}')
-    s = '    '
-    if res_type == '':
-        # void result
-        s += f"{c_func_name}("
-    else:
-        s += f"return {res_cast}{c_func_name}("
-    for i, param_decl in enumerate(decl['params']):
-        if i > 0:
-            s += ', '
-        arg_name = param_decl['name']
-        arg_type = check_override(f'{c_func_name}.{arg_name}', default=param_decl['type'])
-        if is_const_struct_ptr(arg_type):
-            s += f"&_{arg_name}"
-        else:
-            odin_arg_type = map_type(arg_type, prefix, 'odin_arg')
-            c_arg_type = map_type(arg_type, prefix, 'c_arg')
-            if odin_arg_type != c_arg_type:
-                cast = f'cast({c_arg_type})'
-            else:
-                cast = ''
-            s += f'{cast}{arg_name}'
-    s += ')'
-    l(s)
-    l('}')
-
 def gen_imports(dep_prefixes):
     for dep_prefix in dep_prefixes:
         dep_module_name = module_names[dep_prefix]
@@ -517,7 +477,7 @@ def gen_helpers(inp):
         l('    putr(strings.unsafe_string_to_cstring(fstr), len(fstr))')
         l('}')
 
-def gen_module(inp, dep_prefixes):
+def gen_module(inp, c_prefix, dep_prefixes):
     pre_parse(inp)
     l('// machine generated, do not edit')
     l('')
@@ -525,7 +485,7 @@ def gen_module(inp, dep_prefixes):
     gen_imports(dep_prefixes)
     gen_helpers(inp)
     prefix = inp['prefix']
-    gen_c_imports(inp, prefix)
+    gen_c_imports(inp, c_prefix, prefix)
     for decl in inp['decls']:
         if not decl['is_dep']:
             kind = decl['kind']
@@ -536,8 +496,6 @@ def gen_module(inp, dep_prefixes):
                     gen_struct(decl, prefix)
                 elif kind == 'enum':
                     gen_enum(decl, prefix)
-                elif kind == 'func':
-                    gen_func(decl, prefix)
 
 def pre_parse(inp):
     global struct_types
@@ -571,7 +529,7 @@ def gen(c_header_path, c_prefix, dep_c_prefixes):
     csource_path = get_csource_path(c_prefix)
     module_name = module_names[c_prefix]
     ir = gen_ir.gen(c_header_path, csource_path, module_name, c_prefix, dep_c_prefixes)
-    gen_module(ir, dep_c_prefixes)
+    gen_module(ir, c_prefix, dep_c_prefixes)
     with open(f"{module_root}/{ir['module']}/{ir['module']}.odin", 'w', newline='\n') as f_outp:
         f_outp.write(out_lines)
 
