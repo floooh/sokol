@@ -106,6 +106,7 @@ extern "C" {
 enum {
     SSPINE_INVALID_ID = 0,
     SSPINE_MAX_SKINSET_SKINS = 32,
+    SSPINE_MAX_STRING_SIZE = 61,    // see sspine_string struct
 };
 
 typedef struct sspine_context { uint32_t id; } sspine_context;
@@ -127,6 +128,13 @@ typedef struct sspine_range { const void* ptr; size_t size; } sspine_range;
 typedef struct sspine_vec2 { float x, y; } sspine_vec2;
 typedef struct sspine_mat4 { float m[16]; } sspine_mat4;
 typedef sg_color sspine_color;
+
+typedef struct sspine_string {
+    bool valid;
+    bool truncated;
+    uint8_t len;
+    char cstr[SSPINE_MAX_STRING_SIZE];
+} sspine_string;
 
 typedef enum SSPINE_resource_state {
     SSPINE_RESOURCESTATE_INITIAL,
@@ -165,6 +173,7 @@ typedef enum SSPINE_resource_state {
     _SSPINE_XMACRO(COMMAND_BUFFER_OVERFLOW)\
     _SSPINE_XMACRO(VERTEX_BUFFER_OVERFLOW)\
     _SSPINE_XMACRO(INDEX_BUFFER_OVERFLOW)\
+    _SSPINE_XMACRO(STRING_TRUNCATED)\
 
 #define _SSPINE_XMACRO(code) SSPINE_ERROR_##code,
 typedef enum sspine_error {
@@ -209,7 +218,6 @@ typedef struct sspine_context_info {
 typedef struct sspine_image_info {
     bool valid;
     sg_image sgimage;
-    const char* filename;
     sg_filter min_filter;
     sg_filter mag_filter;
     sg_wrap wrap_u;
@@ -217,6 +225,7 @@ typedef struct sspine_image_info {
     int width;
     int height;
     bool premul_alpha;
+    sspine_string filename;
 } sspine_image_info;
 
 typedef struct sspine_atlas_overrides {
@@ -256,53 +265,53 @@ typedef struct sspine_skinset_desc {
 
 typedef struct sspine_anim_info {
     bool valid;
-    const char* name;
     int index;
     float duration;
+    sspine_string name;
 } sspine_anim_info;
 
 typedef struct sspine_bone_info {
     bool valid;
-    const char* name;
     int index;
     sspine_bone parent_bone;
     float length;
     sspine_bone_transform pose;
     sspine_color color;
+    sspine_string name;
 } sspine_bone_info;
 
 typedef struct sspine_slot_info {
     bool valid;
-    const char* name;
     int index;
-    const char* attachment_name;
     sspine_bone bone;
     sspine_color color;
+    sspine_string attachment_name;
+    sspine_string name;
 } sspine_slot_info;
 
 typedef struct sspine_iktarget_info {
     bool valid;
-    const char* name;
     int index;
     sspine_bone target_bone;
+    sspine_string name;
 } sspine_iktarget_info;
 
 typedef struct sspine_skin_info {
     bool valid;
-    const char* name;
     int index;
+    sspine_string name;
 } sspine_skin_info;
 
 typedef struct sspine_event_info {
     bool valid;
-    const char* name;
     int index;
     int int_value;
     float float_value;
-    const char* string_value;
-    const char* audio_path;
     float volume;
     float balance;
+    sspine_string name;
+    sspine_string string_value;
+    sspine_string audio_path;
 } sspine_event_info;
 
 typedef struct sspine_triggered_event_info {
@@ -311,9 +320,9 @@ typedef struct sspine_triggered_event_info {
     float time;
     int int_value;
     float float_value;
-    const char* string_value;
     float volume;
     float balance;
+    sspine_string string_value;
 } sspine_triggered_event_info;
 
 typedef struct sspine_instance_desc {
@@ -1950,6 +1959,22 @@ static void _sspine_clear(void* ptr, size_t size) {
     memset(ptr, 0, size);
 }
 
+static sspine_string _sspine_string(const char* cstr) {
+    sspine_string res;
+    _sspine_clear(&res, sizeof(res));
+    if (cstr) {
+        res.valid = true;
+        strncpy(res.cstr, cstr, sizeof(res.cstr));
+        char* end = &res.cstr[SSPINE_MAX_STRING_SIZE-1];
+        if (0 != *end) {
+            res.truncated = true;
+            *end = 0;
+        }
+        res.len = (uint8_t)strlen(res.cstr);
+    }
+    return res;
+}
+
 static void* _sspine_malloc(size_t size) {
     SOKOL_ASSERT(size > 0);
     void* ptr;
@@ -2877,9 +2902,12 @@ static void _sspine_event_listener(spAnimationState* sp_anim_state, spEventType 
                 info->time = sp_event->time;
                 info->int_value = sp_event->intValue;
                 info->float_value = sp_event->floatValue;
-                info->string_value = sp_event->stringValue;
                 info->volume = sp_event->volume;
                 info->balance = sp_event->balance;
+                info->string_value = _sspine_string(sp_event->stringValue);
+                if (info->string_value.truncated) {
+                    _SSPINE_WARN(STRING_TRUNCATED);
+                }
             }
         }
     }
@@ -3091,7 +3119,6 @@ static void _sspine_init_image_info(const _sspine_atlas_t* atlas, int index, ssp
     SOKOL_ASSERT(page->name);
     info->valid = true;
     info->sgimage.id = (uint32_t)(uintptr_t)page->rendererObject;
-    info->filename = page->name ? page->name : "null";
     if (with_overrides && (atlas->overrides.min_filter != _SG_FILTER_DEFAULT)) {
         info->min_filter = atlas->overrides.min_filter;
     }
@@ -3120,6 +3147,10 @@ static void _sspine_init_image_info(const _sspine_atlas_t* atlas, int index, ssp
     info->height = page->height;
     // NOTE: override already happened in atlas init
     info->premul_alpha = page->pma != 0;
+    info->filename = _sspine_string(page->name);
+    if (info->filename.truncated) {
+        _SSPINE_WARN(STRING_TRUNCATED);
+    }
 }
 
 static void _sspine_check_rewind_commands(_sspine_context_t* ctx) {
@@ -4123,9 +4154,12 @@ SOKOL_API_IMPL sspine_anim_info sspine_get_anim_info(sspine_anim anim) {
     const spAnimation* sp_anim = _sspine_lookup_skeleton_anim(anim.skeleton_id, anim.index);
     if (sp_anim) {
         res.valid = true;
-        res.name = sp_anim->name;
         res.index = anim.index;
         res.duration = sp_anim->duration;
+        res.name = _sspine_string(sp_anim->name);
+        if (res.name.truncated) {
+            _SSPINE_WARN(STRING_TRUNCATED);
+        }
     }
     return res;
 }
@@ -4240,7 +4274,6 @@ SOKOL_API_IMPL sspine_bone_info sspine_get_bone_info(sspine_bone bone) {
         SOKOL_ASSERT(sp_bone_data->index == bone.index);
         SOKOL_ASSERT(sp_bone_data->name);
         res.valid = true;
-        res.name = sp_bone_data->name;
         res.index = sp_bone_data->index;
         if (sp_bone_data->parent) {
             res.parent_bone = _sspine_bone(bone.skeleton_id, sp_bone_data->parent->index);
@@ -4257,6 +4290,10 @@ SOKOL_API_IMPL sspine_bone_info sspine_get_bone_info(sspine_bone bone) {
         res.color.g = sp_bone_data->color.g;
         res.color.b = sp_bone_data->color.b;
         res.color.a = sp_bone_data->color.a;
+        res.name = _sspine_string(sp_bone_data->name);
+        if (res.name.truncated) {
+            _SSPINE_WARN(STRING_TRUNCATED);
+        }
     }
     return res;
 }
@@ -4461,14 +4498,20 @@ SOKOL_API_IMPL sspine_slot_info sspine_get_slot_info(sspine_slot slot) {
         SOKOL_ASSERT(sp_slot_data->name);
         SOKOL_ASSERT(sp_slot_data->boneData);
         res.valid = true;
-        res.name = sp_slot_data->name;
         res.index = sp_slot_data->index;
-        res.attachment_name = sp_slot_data->attachmentName;
         res.bone = _sspine_bone(slot.skeleton_id, sp_slot_data->boneData->index);
         res.color.r = sp_slot_data->color.r;
         res.color.g = sp_slot_data->color.g;
         res.color.b = sp_slot_data->color.b;
         res.color.a = sp_slot_data->color.a;
+        res.attachment_name = _sspine_string(sp_slot_data->attachmentName);
+        if (res.attachment_name.truncated) {
+            _SSPINE_WARN(STRING_TRUNCATED);
+        }
+        res.name = _sspine_string(sp_slot_data->name);
+        if (res.name.truncated) {
+            _SSPINE_WARN(STRING_TRUNCATED);
+        }
     }
     return res;
 }
@@ -4552,14 +4595,23 @@ SOKOL_API_IMPL sspine_event_info sspine_get_event_info(sspine_event event) {
     const spEventData* sp_event_data = _sspine_lookup_event_data(event.skeleton_id, event.index);
     if (sp_event_data) {
         res.valid = true;
-        res.name = sp_event_data->name;
         res.index = event.index;
         res.int_value = sp_event_data->intValue;
         res.float_value = sp_event_data->floatValue;
-        res.string_value = sp_event_data->stringValue;
-        res.audio_path = sp_event_data->audioPath;
         res.volume = sp_event_data->volume;
         res.balance = sp_event_data->balance;
+        res.name = _sspine_string(sp_event_data->name);
+        if (res.name.truncated) {
+            _SSPINE_WARN(STRING_TRUNCATED);
+        }
+        res.string_value = _sspine_string(sp_event_data->stringValue);
+        if (res.string_value.truncated) {
+            _SSPINE_WARN(STRING_TRUNCATED);
+        }
+        res.audio_path = _sspine_string(sp_event_data->audioPath);
+        if (res.audio_path.truncated) {
+            _SSPINE_WARN(STRING_TRUNCATED);
+        }
     }
     return res;
 }
@@ -4618,9 +4670,12 @@ SOKOL_API_IMPL sspine_iktarget_info sspine_get_iktarget_info(sspine_iktarget ikt
     const spIkConstraintData* ik_data = _sspine_lookup_ikconstraint_data(iktarget.skeleton_id, iktarget.index);
     if (ik_data) {
         res.valid = true;
-        res.name = ik_data->name;
         res.index = iktarget.index;
         res.target_bone = _sspine_bone(iktarget.skeleton_id, ik_data->target->index);
+        res.name = _sspine_string(ik_data->name);
+        if (res.name.truncated) {
+            _SSPINE_WARN(STRING_TRUNCATED);
+        }
     }
     return res;
 }
@@ -4692,7 +4747,10 @@ SOKOL_API_IMPL sspine_skin_info sspine_get_skin_info(sspine_skin skin) {
     if (sp_skin) {
         res.valid = true;
         res.index = skin.index;
-        res.name = sp_skin->name;
+        res.name = _sspine_string(sp_skin->name);
+        if (res.name.truncated) {
+            _SSPINE_WARN(STRING_TRUNCATED);
+        }
     }
     return res;
 }
