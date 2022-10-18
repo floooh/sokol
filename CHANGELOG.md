@@ -7,7 +7,7 @@
   side as uint8_t, the colors come out wrong). This also happened with the
   previous binding version, so it looks like a regression in Odin. Might be
   related to this recent bugfix (which I haven't tested yet):
-  https://github.com/odin-lang/Odin/issues/2121 Many think to @thePHTest for the
+  https://github.com/odin-lang/Odin/issues/2121 Many thanks to @thePHTest for the
   PR! (https://github.com/floooh/sokol/pull/719)
 
 - **15-Oct-2022**
