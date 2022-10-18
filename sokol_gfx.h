@@ -10912,7 +10912,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
     rp_desc.vertexFunction = _sg_mtl_id(shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_func);
     SOKOL_ASSERT(shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_func != _SG_MTL_INVALID_SLOT_INDEX);
     rp_desc.fragmentFunction = _sg_mtl_id(shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_func);
-    rp_desc.sampleCount = (NSUInteger)desc->sample_count;
+    rp_desc.rasterSampleCount = (NSUInteger)desc->sample_count;
     rp_desc.alphaToCoverageEnabled = desc->alpha_to_coverage_enabled;
     rp_desc.alphaToOneEnabled = NO;
     rp_desc.rasterizationEnabled = YES;
