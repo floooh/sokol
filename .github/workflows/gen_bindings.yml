@@ -103,31 +103,32 @@ jobs:
       - name: build
         run: zig build
 
-#  test-nim:
-#    needs: gen-bindings
-#    strategy:
-#      matrix:
-#        os: [ubuntu-latest, macos-latest, windows-latest]
-#    runs-on: ${{matrix.os}}
-#    steps:
-#      - uses: jiro4989/setup-nim-action@v1
-#      - uses: actions/checkout@v2
-#        with:
-#          repository: floooh/sokol-nim
-#      - uses: actions/download-artifact@v2
-#        with:
-#          name: ignore-me-nim
-#          path: src/sokol
-#      - if: runner.os == 'Linux'
-#        name: prepare
-#        run: |
-#            sudo apt-get update
-#            sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev
-#      - name: build
-#        run: |
-#          nimble install -Y
-#          nimble install glm -Y
-#          nimble build_all
+  test-nim:
+    needs: gen-bindings
+    strategy:
+      matrix:
+        #os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest ]
+    runs-on: ${{matrix.os}}
+    steps:
+      - uses: jiro4989/setup-nim-action@v1
+      - uses: actions/checkout@v2
+        with:
+          repository: floooh/sokol-nim
+      - uses: actions/download-artifact@v2
+        with:
+          name: ignore-me-nim
+          path: src/sokol
+      - if: runner.os == 'Linux'
+        name: prepare
+        run: |
+            sudo apt-get update
+            sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+      - name: build
+        run: |
+          nimble install -Y
+          nimble install glm -Y
+          nimble build_all
 
   test-odin:
     needs: gen-bindings
@@ -212,26 +213,26 @@ jobs:
           git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
           git push
 
-#  deploy-nim:
-#    needs: test-nim
-#    if: github.ref == 'refs/heads/master'
-#    runs-on: ubuntu-latest
-#    steps:
-#      - uses: actions/checkout@v2
-#        with:
-#          repository: floooh/sokol-nim
-#          ssh-key: ${{ secrets.GHACTIONS_NIM_PUSH }}
-#      - uses: actions/download-artifact@v2
-#        with:
-#          name: ignore-me-nim
-#          path: src/sokol
-#      - name: "commit and push"
-#        run: |
-#          git config user.email "none"
-#          git config user.name "GH Action"
-#          git add -A
-#          git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
-#          git push
+  deploy-nim:
+    needs: test-nim
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          repository: floooh/sokol-nim
+          ssh-key: ${{ secrets.GHACTIONS_NIM_PUSH }}
+      - uses: actions/download-artifact@v2
+        with:
+          name: ignore-me-nim
+          path: src/sokol
+      - name: "commit and push"
+        run: |
+          git config user.email "none"
+          git config user.name "GH Action"
+          git add -A
+          git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
+          git push
 
   deploy-odin:
     needs: test-odin
