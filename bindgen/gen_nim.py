@@ -423,7 +423,7 @@ def funcdecl_args_c(decl, prefix):
             s += ", "
         arg_name = param_decl['name']
         arg_type = check_override(f'{func_name}.{arg_name}', default=param_decl['type'])
-        s += f"{arg_name}:{as_nim_type(arg_type, prefix)}"
+        s += f"{as_camel_case(arg_name, prefix)}:{as_nim_type(arg_type, prefix)}"
     return s
 
 # returns Nim function args (pass structs by value)
@@ -435,7 +435,7 @@ def funcdecl_args_nim(decl, prefix):
             s += ", "
         arg_name = param_decl['name']
         arg_type = check_override(f'{func_name}.{arg_name}', default=param_decl['type'])
-        s += f"{arg_name}:{as_nim_type(arg_type, prefix, struct_ptr_as_value=True)}"
+        s += f"{as_camel_case(arg_name, prefix)}:{as_nim_type(arg_type, prefix, struct_ptr_as_value=True)}"
     return s
 
 def funcdecl_result(decl, prefix):
@@ -476,14 +476,14 @@ def gen_array_converters(decl, prefix):
             array_base_type = as_nim_type(array_type, prefix)
             if is_1d_array_type(field['type']):
                 n = array_sizes[0]
-                l(f'converter to_{struct_name}_{field_name}*[N:static[int]](items: array[N, {array_base_type}]): array[{n}, {array_base_type}] =')
+                l(f'converter to{struct_name}{field_name}*[N:static[int]](items: array[N, {array_base_type}]): array[{n}, {array_base_type}] =')
                 l(f'  static: assert(N < {n})')
                 l(f'  for index,item in items.pairs: result[index]=item')
                 l('')
             elif is_2d_array_type(field['type']):
                 x = array_sizes[1]
                 y = array_sizes[0]
-                l(f'converter to_{struct_name}_{field_name}*[Y:static[int], X:static[int]](items: array[Y, array[X, {array_base_type}]]): array[{y}, array[{x}, {array_base_type}]] =')
+                l(f'converter to{struct_name}{field_name}*[Y:static[int], X:static[int]](items: array[Y, array[X, {array_base_type}]]): array[{y}, array[{x}, {array_base_type}]] =')
                 l(f'  static: assert(X < {x})')
                 l(f'  static: assert(Y < {y})')
                 l(f'  for indexY,itemY in items.pairs:')
