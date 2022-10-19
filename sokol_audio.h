@@ -1818,14 +1818,14 @@ EM_JS(int, saudio_js_init, (int sample_rate, int num_channels, int buffer_size),
     if (Module._saudio_context) {
         console.log('sokol_audio.h: sample rate ', Module._saudio_context.sampleRate);
         Module._saudio_node = Module._saudio_context.createScriptProcessor(buffer_size, 0, num_channels);
-        Module._saudio_node.onaudioprocess = function pump_audio(event) {
-            var num_frames = event.outputBuffer.length;
-            var ptr = __saudio_emsc_pull(num_frames);
+        Module._saudio_node.onaudioprocess = (event) => {
+            const num_frames = event.outputBuffer.length;
+            const ptr = __saudio_emsc_pull(num_frames);
             if (ptr) {
-                var num_channels = event.outputBuffer.numberOfChannels;
-                for (var chn = 0; chn < num_channels; chn++) {
-                    var chan = event.outputBuffer.getChannelData(chn);
-                    for (var i = 0; i < num_frames; i++) {
+                const num_channels = event.outputBuffer.numberOfChannels;
+                for (let chn = 0; chn < num_channels; chn++) {
+                    const chan = event.outputBuffer.getChannelData(chn);
+                    for (let i = 0; i < num_frames; i++) {
                         chan[i] = HEAPF32[(ptr>>2) + ((num_channels*i)+chn)]
                     }
                 }
@@ -1834,7 +1834,7 @@ EM_JS(int, saudio_js_init, (int sample_rate, int num_channels, int buffer_size),
         Module._saudio_node.connect(Module._saudio_context.destination);
 
         // in some browsers, WebAudio needs to be activated on a user action
-        var resume_webaudio = function() {
+        const resume_webaudio = () => {
             if (Module._saudio_context) {
                 if (Module._saudio_context.state === 'suspended') {
                     Module._saudio_context.resume();
@@ -1853,11 +1853,13 @@ EM_JS(int, saudio_js_init, (int sample_rate, int num_channels, int buffer_size),
 
 /* shutdown the WebAudioContext and ScriptProcessorNode */
 EM_JS(void, saudio_js_shutdown, (void), {
-    if (Module._saudio_context !== null) {
+    \x2F\x2A\x2A @suppress {missingProperties} \x2A\x2F
+    const ctx = Module._saudio_context;
+    if (ctx !== null) {
         if (Module._saudio_node) {
             Module._saudio_node.disconnect();
         }
-        Module._saudio_context.close();
+        ctx.close();
         Module._saudio_context = null;
         Module._saudio_node = null;
     }

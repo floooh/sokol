@@ -1,5 +1,12 @@
 ## Updates
 
+- **19-Oct-2022** Some fixes in the embedded Javascript code blocks (via EM_JS)
+  in sokol_app.h, sokol_args.h, sokol_audio.h and sokol_fetch.h:
+  - the JS code has been 'modernized' (e.g. const and let instead of var,
+    ```() => { ... }``` instead of ```function () { ... }``` for callbacks)
+  - false positives in the Closure static analysis have been supressed
+    via inline hints
+
 - **16-Oct-2022** The Odin bindings generator and the generated bindings have
   been simplified (the Odin binding now don't have separate wrapper functions).
   Requires the latest Odin release. Also note: On M1 Macs I'm currently seeing

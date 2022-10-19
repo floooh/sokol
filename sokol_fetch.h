@@ -2002,13 +2002,13 @@ _SOKOL_PRIVATE void* _sfetch_channel_thread_func(void* arg) {
 #if _SFETCH_PLATFORM_EMSCRIPTEN
 /*=== embedded Javascript helper functions ===================================*/
 EM_JS(void, sfetch_js_send_head_request, (uint32_t slot_id, const char* path_cstr), {
-    var path_str = UTF8ToString(path_cstr);
-    var req = new XMLHttpRequest();
+    const path_str = UTF8ToString(path_cstr);
+    const req = new XMLHttpRequest();
     req.open('HEAD', path_str);
     req.onreadystatechange = function() {
         if (req.readyState == XMLHttpRequest.DONE) {
             if (req.status == 200) {
-                var content_length = req.getResponseHeader('Content-Length');
+                const content_length = req.getResponseHeader('Content-Length');
                 __sfetch_emsc_head_response(slot_id, content_length);
             }
             else {
@@ -2021,19 +2021,19 @@ EM_JS(void, sfetch_js_send_head_request, (uint32_t slot_id, const char* path_cst
 
 /* if bytes_to_read != 0, a range-request will be sent, otherwise a normal request */
 EM_JS(void, sfetch_js_send_get_request, (uint32_t slot_id, const char* path_cstr, uint32_t offset, uint32_t bytes_to_read, void* buf_ptr, uint32_t buf_size), {
-    var path_str = UTF8ToString(path_cstr);
-    var req = new XMLHttpRequest();
+    const path_str = UTF8ToString(path_cstr);
+    const req = new XMLHttpRequest();
     req.open('GET', path_str);
     req.responseType = 'arraybuffer';
-    var need_range_request = (bytes_to_read > 0);
+    const need_range_request = (bytes_to_read > 0);
     if (need_range_request) {
         req.setRequestHeader('Range', 'bytes='+offset+'-'+(offset+bytes_to_read-1));
     }
     req.onreadystatechange = function() {
         if (req.readyState == XMLHttpRequest.DONE) {
             if ((req.status == 206) || ((req.status == 200) && !need_range_request)) {
-                var u8_array = new Uint8Array(req.response);
-                var content_fetched_size = u8_array.length;
+                const u8_array = new Uint8Array(\x2F\x2A\x2A @type {!ArrayBuffer} \x2A\x2F (req.response));
+                const content_fetched_size = u8_array.length;
                 if (content_fetched_size <= buf_size) {
                     HEAPU8.set(u8_array, buf_ptr);
                     __sfetch_emsc_get_response(slot_id, bytes_to_read, content_fetched_size);

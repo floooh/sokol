@@ -4538,7 +4538,7 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_invoke_fetch_cb(int index, int success, int
 
 /* Javascript helper functions for mobile virtual keyboard input */
 EM_JS(void, sapp_js_create_textfield, (void), {
-    var _sapp_inp = document.createElement("input");
+    const _sapp_inp = document.createElement("input");
     _sapp_inp.type = "text";
     _sapp_inp.id = "_sokol_app_input_element";
     _sapp_inp.autocapitalize = "none";
@@ -4558,7 +4558,7 @@ EM_JS(void, sapp_js_unfocus_textfield, (void), {
 });
 
 EM_JS(void, sapp_js_add_beforeunload_listener, (void), {
-    Module.sokol_beforeunload = function(event) {
+    Module.sokol_beforeunload = (event) => {
         if (__sapp_html5_get_ask_leave_site() != 0) {
             event.preventDefault();
             event.returnValue = ' ';
@@ -4572,10 +4572,10 @@ EM_JS(void, sapp_js_remove_beforeunload_listener, (void), {
 });
 
 EM_JS(void, sapp_js_add_clipboard_listener, (void), {
-    Module.sokol_paste = function(event) {
-        var pasted_str = event.clipboardData.getData('text');
+    Module.sokol_paste = (event) => {
+        const pasted_str = event.clipboardData.getData('text');
         withStackSave(() => {
-            var cstr = allocateUTF8OnStack(pasted_str);
+            const cstr = allocateUTF8OnStack(pasted_str);
             __sapp_emsc_onpaste(cstr);
         });
     };
@@ -4587,8 +4587,8 @@ EM_JS(void, sapp_js_remove_clipboard_listener, (void), {
 });
 
 EM_JS(void, sapp_js_write_clipboard, (const char* c_str), {
-    var str = UTF8ToString(c_str);
-    var ta = document.createElement('textarea');
+    const str = UTF8ToString(c_str);
+    const ta = document.createElement('textarea');
     ta.setAttribute('autocomplete', 'off');
     ta.setAttribute('autocorrect', 'off');
     ta.setAttribute('autocapitalize', 'off');
@@ -4610,30 +4610,29 @@ _SOKOL_PRIVATE void _sapp_emsc_set_clipboard_string(const char* str) {
 
 EM_JS(void, sapp_js_add_dragndrop_listeners, (const char* canvas_name_cstr), {
     Module.sokol_drop_files = [];
-    var canvas_name = UTF8ToString(canvas_name_cstr);
-    var canvas = document.getElementById(canvas_name);
-    Module.sokol_dragenter = function(event) {
+    const canvas_name = UTF8ToString(canvas_name_cstr);
+    const canvas = document.getElementById(canvas_name);
+    Module.sokol_dragenter = (event) => {
         event.stopPropagation();
         event.preventDefault();
     };
-    Module.sokol_dragleave = function(event) {
+    Module.sokol_dragleave = (event) => {
         event.stopPropagation();
         event.preventDefault();
     };
-    Module.sokol_dragover = function(event) {
+    Module.sokol_dragover = (event) => {
         event.stopPropagation();
         event.preventDefault();
     };
-    Module.sokol_drop = function(event) {
+    Module.sokol_drop = (event) => {
         event.stopPropagation();
         event.preventDefault();
-        var files = event.dataTransfer.files;
+        const files = event.dataTransfer.files;
         Module.sokol_dropped_files = files;
         __sapp_emsc_begin_drop(files.length);
-        var i;
-        for (i = 0; i < files.length; i++) {
+        for (let i = 0; i < files.length; i++) {
             withStackSave(() => {
-                var cstr = allocateUTF8OnStack(files[i].name);
+                const cstr = allocateUTF8OnStack(files[i].name);
                 __sapp_emsc_drop(i, cstr);
             });
         }
@@ -4647,18 +4646,20 @@ EM_JS(void, sapp_js_add_dragndrop_listeners, (const char* canvas_name_cstr), {
 });
 
 EM_JS(uint32_t, sapp_js_dropped_file_size, (int index), {
-    if ((index < 0) || (index >= Module.sokol_dropped_files.length)) {
+    \x2F\x2A\x2A @suppress {missingProperties} \x2A\x2F
+    const files = Module.sokol_dropped_files;
+    if ((index < 0) || (index >= files.length)) {
         return 0;
     }
     else {
-        return Module.sokol_dropped_files[index].size;
+        return files[index].size;
     }
 });
 
 EM_JS(void, sapp_js_fetch_dropped_file, (int index, _sapp_html5_fetch_callback callback, void* buf_ptr, uint32_t buf_size, void* user_data), {
-    var reader = new FileReader();
-    reader.onload = function(loadEvent) {
-        var content = loadEvent.target.result;
+    const reader = new FileReader();
+    reader.onload = (loadEvent) => {
+        const content = loadEvent.target.result;
         if (content.byteLength > buf_size) {
             // SAPP_HTML5_FETCH_ERROR_BUFFER_TOO_SMALL
             __sapp_emsc_invoke_fetch_cb(index, 0, 1, callback, 0, buf_ptr, buf_size, user_data);
@@ -4668,16 +4669,18 @@ EM_JS(void, sapp_js_fetch_dropped_file, (int index, _sapp_html5_fetch_callback c
             __sapp_emsc_invoke_fetch_cb(index, 1, 0, callback, content.byteLength, buf_ptr, buf_size, user_data);
         }
     };
-    reader.onerror = function() {
+    reader.onerror = () => {
         // SAPP_HTML5_FETCH_ERROR_OTHER
         __sapp_emsc_invoke_fetch_cb(index, 0, 2, callback, 0, buf_ptr, buf_size, user_data);
     };
-    reader.readAsArrayBuffer(Module.sokol_dropped_files[index]);
+    \x2F\x2A\x2A @suppress {missingProperties} \x2A\x2F
+    const files = Module.sokol_dropped_files;
+    reader.readAsArrayBuffer(files[index]);
 });
 
 EM_JS(void, sapp_js_remove_dragndrop_listeners, (const char* canvas_name_cstr), {
-    var canvas_name = UTF8ToString(canvas_name_cstr);
-    var canvas = document.getElementById(canvas_name);
+    const canvas_name = UTF8ToString(canvas_name_cstr);
+    const canvas = document.getElementById(canvas_name);
     canvas.removeEventListener('dragenter', Module.sokol_dragenter);
     canvas.removeEventListener('dragleave', Module.sokol_dragleave);
     canvas.removeEventListener('dragover',  Module.sokol_dragover);
@@ -4725,7 +4728,7 @@ _SOKOL_PRIVATE void _sapp_emsc_show_keyboard(bool show) {
 
 EM_JS(void, sapp_js_init, (const char* c_str_target), {
     // lookup and store canvas object by name
-    var target_str = UTF8ToString(c_str_target);
+    const target_str = UTF8ToString(c_str_target);
     Module.sapp_emsc_target = document.getElementById(target_str);
     if (!Module.sapp_emsc_target) {
         console.log("sokol_app.h: invalid target:" + target_str);
@@ -4790,7 +4793,7 @@ _SOKOL_PRIVATE void _sapp_emsc_update_mouse_lock_state(void) {
 // set mouse cursor type
 EM_JS(void, sapp_js_set_cursor, (int cursor_type, int shown), {
     if (Module.sapp_emsc_target) {
-        var cursor;
+        let cursor;
         if (shown === 0) {
             cursor = "none";
         }
@@ -4819,21 +4822,21 @@ _SOKOL_PRIVATE void _sapp_emsc_update_cursor(sapp_mouse_cursor cursor, bool show
 
 /* JS helper functions to update browser tab favicon */
 EM_JS(void, sapp_js_clear_favicon, (void), {
-    var link = document.getElementById('sokol-app-favicon');
+    const link = document.getElementById('sokol-app-favicon');
     if (link) {
         document.head.removeChild(link);
     }
 });
 
 EM_JS(void, sapp_js_set_favicon, (int w, int h, const uint8_t* pixels), {
-    var canvas = document.createElement('canvas');
+    const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
-    var ctx = canvas.getContext('2d');
-    var img_data = ctx.createImageData(w, h);
+    const ctx = canvas.getContext('2d');
+    const img_data = ctx.createImageData(w, h);
     img_data.data.set(HEAPU8.subarray(pixels, pixels + w*h*4));
     ctx.putImageData(img_data, 0, 0);
-    var new_link = document.createElement('link');
+    const new_link = document.createElement('link');
     new_link.id = 'sokol-app-favicon';
     new_link.rel = 'shortcut icon';
     new_link.href = canvas.toDataURL();
@@ -5428,17 +5431,17 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_wgpu_ready(int device_id, int swapchain_id,
 EM_JS(void, sapp_js_wgpu_init, (), {
     WebGPU.initManagers();
     // FIXME: the extension activation must be more clever here
-    navigator.gpu.requestAdapter().then(function(adapter) {
+    navigator.gpu.requestAdapter().then((adapter) => {
         console.log("wgpu adapter extensions: " + adapter.extensions);
-        adapter.requestDevice({ extensions: ["textureCompressionBC"]}).then(function(device) {
+        adapter.requestDevice({ extensions: ["textureCompressionBC"]}).then((device) => {
             var gpuContext = document.getElementById("canvas").getContext("gpupresent");
             console.log("wgpu device extensions: " + adapter.extensions);
-            gpuContext.getSwapChainPreferredFormat(device).then(function(fmt) {
-                var swapChainDescriptor = { device: device, format: fmt };
-                var swapChain = gpuContext.configureSwapChain(swapChainDescriptor);
-                var deviceId = WebGPU.mgrDevice.create(device);
-                var swapChainId = WebGPU.mgrSwapChain.create(swapChain);
-                var fmtId = WebGPU.TextureFormat.findIndex(function(elm) { return elm==fmt; });
+            gpuContext.getSwapChainPreferredFormat(device).then((fmt) => {
+                const swapChainDescriptor = { device: device, format: fmt };
+                const swapChain = gpuContext.configureSwapChain(swapChainDescriptor);
+                const deviceId = WebGPU.mgrDevice.create(device);
+                const swapChainId = WebGPU.mgrSwapChain.create(swapChain);
+                const fmtId = WebGPU.TextureFormat.findIndex(function(elm) { return elm==fmt; });
                 console.log("wgpu device: " + device);
                 console.log("wgpu swap chain: " + swapChain);
                 console.log("wgpu preferred format: " + fmt + " (" + fmtId + ")");

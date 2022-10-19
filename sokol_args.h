@@ -728,13 +728,13 @@ EMSCRIPTEN_KEEPALIVE void _sargs_add_kvp(const char* key, const char* val) {
 
 /* JS function to extract arguments from the page URL */
 EM_JS(void, sargs_js_parse_url, (void), {
-    var params = new URLSearchParams(window.location.search).entries();
-    for (var p = params.next(); !p.done; p = params.next()) {
-        var key = p.value[0];
-        var val = p.value[1];
+    const params = new URLSearchParams(window.location.search).entries();
+    for (let p = params.next(); !p.done; p = params.next()) {
+        const key = p.value[0];
+        const val = p.value[1];
         withStackSave(() => {
-            var key_cstr = allocateUTF8OnStack(key);
-            var val_cstr = allocateUTF8OnStack(val);
+            const key_cstr = allocateUTF8OnStack(key);
+            const val_cstr = allocateUTF8OnStack(val);
             __sargs_add_kvp(key_cstr, val_cstr)
         });
     }
