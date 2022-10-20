@@ -1153,6 +1153,7 @@ _SOKOL_PRIVATE const char* _sg_imgui_pixelformat_string(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_ETC2_RGBA8: return "SG_PIXELFORMAT_ETC2_RGBA8";
         case SG_PIXELFORMAT_ETC2_RG11: return "SG_PIXELFORMAT_ETC2_RG11";
         case SG_PIXELFORMAT_ETC2_RG11SN: return "SG_PIXELFORMAT_ETC2_RG11SN";
+        case SG_PIXELFORMAT_RGB9E5: return "SG_PIXELFORMAT_RGB9E5";
         default: return "???";
     }
 }
