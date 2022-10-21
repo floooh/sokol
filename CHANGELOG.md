@@ -1,5 +1,17 @@
 ## Updates
 
+- **21-Oct-2022** RGB9E5 pixel format support in sokol_gfx.h and a GLES2 related
+  bugfix in the sokol_app.h Android backend:
+  - sokol_gfx.h now supports RGB9E5 textures (3*9 bit RGB + 5 bit shared exponent),
+    this works in all backends except GLES2 and WebGL1 (use ```sg_query_pixelformat()```
+    to check for runtime support). Many thanks to github user @allcreater for the PR!
+  - a bugfix in the sokol_app.h Android backend: when forcing a GLES2 context via
+    sapp_desc.gl_force_gles2, the Android backend correctly created a GLES2 context,
+    but then didn't communicate this through the function ```sapp_gles2()``` (which
+    still returned false in this case). This caused the sokol_gfx.h GL backend to
+    use the GLES3 code path instead GLES2 (which surprisingly seemed to have worked
+    fine, at least for the sokol samples which force GLES2).
+
 - **19-Oct-2022** Some fixes in the embedded Javascript code blocks (via EM_JS)
   in sokol_app.h, sokol_args.h, sokol_audio.h and sokol_fetch.h:
   - the JS code has been 'modernized' (e.g. const and let instead of var,
