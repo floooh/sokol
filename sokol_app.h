@@ -8658,6 +8658,7 @@ _SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
     if (eglInitialize(display, NULL, NULL) == EGL_FALSE) {
         return false;
     }
+    _sapp.gles2_fallback = _sapp.desc.gl_force_gles2;
 
     EGLint alpha_size = _sapp.desc.alpha ? 8 : 0;
     const EGLint cfg_attributes[] = {

@@ -959,6 +959,8 @@ typedef enum sg_pixel_format {
     SG_PIXELFORMAT_ETC2_RG11,
     SG_PIXELFORMAT_ETC2_RG11SN,
 
+    SG_PIXELFORMAT_RGB9E5,
+
     _SG_PIXELFORMAT_NUM,
     _SG_PIXELFORMAT_FORCE_U32 = 0x7FFFFFFF
 } sg_pixel_format;
@@ -2982,6 +2984,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS 0x8B4D
         #define GL_R11F_G11F_B10F 0x8C3A
         #define GL_UNSIGNED_INT_10F_11F_11F_REV 0x8C3B
+        #define GL_RGB9_E5 0x8C3D
+        #define GL_UNSIGNED_INT_5_9_9_9_REV 0x8C3E
         #define GL_RGBA32UI 0x8D70
         #define GL_RGB32UI 0x8D71
         #define GL_RGBA16UI 0x8D76
@@ -4552,6 +4556,7 @@ _SOKOL_PRIVATE int _sg_pixelformat_bytesize(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_BGRA8:
         case SG_PIXELFORMAT_RGB10A2:
         case SG_PIXELFORMAT_RG11B10F:
+        case SG_PIXELFORMAT_RGB9E5:
             return 4;
 
         case SG_PIXELFORMAT_RG32UI:
@@ -5414,6 +5419,8 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_type(sg_pixel_format fmt) {
             return GL_UNSIGNED_INT_2_10_10_10_REV;
         case SG_PIXELFORMAT_RG11B10F:
             return GL_UNSIGNED_INT_10F_11F_11F_REV;
+        case SG_PIXELFORMAT_RGB9E5:
+            return GL_UNSIGNED_INT_5_9_9_9_REV;
         #endif
         case SG_PIXELFORMAT_DEPTH:
             return GL_UNSIGNED_SHORT;
@@ -5483,6 +5490,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
                 return GL_RGBA_INTEGER;
         #endif
         case SG_PIXELFORMAT_RG11B10F:
+        case SG_PIXELFORMAT_RGB9E5:
             return GL_RGB;
         case SG_PIXELFORMAT_DEPTH:
             return GL_DEPTH_COMPONENT;
@@ -5571,6 +5579,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
             case SG_PIXELFORMAT_RGBA8SI:    return GL_RGBA8I;
             case SG_PIXELFORMAT_RGB10A2:    return GL_RGB10_A2;
             case SG_PIXELFORMAT_RG11B10F:   return GL_R11F_G11F_B10F;
+            case SG_PIXELFORMAT_RGB9E5:     return GL_RGB9_E5;
             case SG_PIXELFORMAT_RG32UI:     return GL_RG32UI;
             case SG_PIXELFORMAT_RG32SI:     return GL_RG32I;
             case SG_PIXELFORMAT_RG32F:      return GL_RG32F;
@@ -5683,6 +5692,7 @@ _SOKOL_PRIVATE void _sg_gl_init_pixelformats(bool has_bgra) {
     if (!_sg.gl.gles2) {
         _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGB10A2]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RG11B10F]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGB9E5]);
         _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG32UI]);
         _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG32SI]);
         #if !defined(SOKOL_GLES3)
@@ -8294,6 +8304,7 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_pixel_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_BGRA8:          return DXGI_FORMAT_B8G8R8A8_UNORM;
         case SG_PIXELFORMAT_RGB10A2:        return DXGI_FORMAT_R10G10B10A2_UNORM;
         case SG_PIXELFORMAT_RG11B10F:       return DXGI_FORMAT_R11G11B10_FLOAT;
+        case SG_PIXELFORMAT_RGB9E5:         return DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
         case SG_PIXELFORMAT_RG32UI:         return DXGI_FORMAT_R32G32_UINT;
         case SG_PIXELFORMAT_RG32SI:         return DXGI_FORMAT_R32G32_SINT;
         case SG_PIXELFORMAT_RG32F:          return DXGI_FORMAT_R32G32_FLOAT;
@@ -9850,6 +9861,7 @@ _SOKOL_PRIVATE MTLPixelFormat _sg_mtl_pixel_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_BGRA8:                  return MTLPixelFormatBGRA8Unorm;
         case SG_PIXELFORMAT_RGB10A2:                return MTLPixelFormatRGB10A2Unorm;
         case SG_PIXELFORMAT_RG11B10F:               return MTLPixelFormatRG11B10Float;
+        case SG_PIXELFORMAT_RGB9E5:                 return MTLPixelFormatRGB9E5Float;
         case SG_PIXELFORMAT_RG32UI:                 return MTLPixelFormatRG32Uint;
         case SG_PIXELFORMAT_RG32SI:                 return MTLPixelFormatRG32Sint;
         case SG_PIXELFORMAT_RG32F:                  return MTLPixelFormatRG32Float;
@@ -10345,9 +10357,11 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGB10A2]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG11B10F]);
     #if defined(_SG_TARGET_MACOS)
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGB9E5]);
         _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG32UI]);
         _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG32SI]);
     #else
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGB9E5]);
         _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RG32UI]);
         _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RG32SI]);
     #endif
@@ -11668,6 +11682,7 @@ _SOKOL_PRIVATE WGPUTextureFormat _sg_wgpu_textureformat(sg_pixel_format p) {
         case SG_PIXELFORMAT_RG16SN:
         case SG_PIXELFORMAT_RGBA16:
         case SG_PIXELFORMAT_RGBA16SN:
+        case SG_PIXELFORMAT_RGB9E5:
         case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
         case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
         case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:
@@ -11815,6 +11830,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA8SI]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_BGRA8]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGB10A2]);
+    /* FIXME: missing SG_PIXELFORMAT_RG11B10F */
     _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RG32UI]);
     _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RG32SI]);
     _sg_pixelformat_sbr(&_sg.formats[SG_PIXELFORMAT_RG32F]);
