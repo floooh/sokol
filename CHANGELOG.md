@@ -1,5 +1,11 @@
 ## Updates
 
+- **22-Oct-2022** All sokol headers now allow to override logging with a
+  callback function (installed in the setup call) instead of defining a SOKOL_LOG
+  macro. Overriding SOKOL_LOG still works as default fallback, but this is no
+  longer documented, consider this deprecated. Many thanks to github user
+  @Manuzor for the PR (see https://github.com/floooh/sokol/pull/721 for details)
+
 - **21-Oct-2022** RGB9E5 pixel format support in sokol_gfx.h and a GLES2 related
   bugfix in the sokol_app.h Android backend:
   - sokol_gfx.h now supports RGB9E5 textures (3*9 bit RGB + 5 bit shared exponent),
