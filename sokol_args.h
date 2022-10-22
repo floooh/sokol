@@ -16,7 +16,6 @@
     Optionally provide the following defines with your own implementations:
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
-    SOKOL_LOG(msg)      - your own logging functions (default: puts(msg))
     SOKOL_ARGS_API_DECL - public function declaration prefix (default: extern)
     SOKOL_API_DECL      - same as SOKOL_ARGS_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
@@ -236,7 +235,7 @@
                 .allocator = {
                     .alloc = my_alloc,
                     .free = my_free,
-                    .user_data = ...;
+                    .user_data = ...,
                 }
             });
         ...
@@ -245,7 +244,6 @@
 
     This only affects memory allocation calls done by sokol_args.h
     itself though, not any allocations in OS libraries.
-
 
     TODO
     ====
@@ -381,14 +379,6 @@ inline void sargs_setup(const sargs_desc& desc) { return sargs_setup(&desc); }
 #ifndef SOKOL_ASSERT
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
-#endif
-#ifndef SOKOL_LOG
-    #ifdef SOKOL_DEBUG
-        #include <stdio.h>
-        #define SOKOL_LOG(s) { SOKOL_ASSERT(s); puts(s); }
-    #else
-        #define SOKOL_LOG(s)
-    #endif
 #endif
 
 #ifndef _SOKOL_PRIVATE
