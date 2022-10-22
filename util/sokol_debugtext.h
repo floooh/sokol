@@ -567,7 +567,7 @@ typedef struct sdtx_allocator_t {
     sdtx_logger_t
 
     Used in sdtx_desc_t to provide custom log callbacks to sokol_debugtext.h.
-    Default behavior is SDTX_LOG_DEFAULT(message).
+    Default behavior is SOKOL_LOG(message).
 */
 typedef struct sdtx_logger_t {
     void (*log_cb)(const char* message, void* user_data);
@@ -596,7 +596,7 @@ typedef struct sdtx_desc_t {
     sdtx_font_desc_t fonts[SDTX_MAX_FONTS]; // up to 8 fonts descriptions
     sdtx_context_desc_t context;            // the default context creation parameters
     sdtx_allocator_t allocator;             // optional memory allocation overrides (default: malloc/free)
-    sdtx_logger_t logger;                   // optional log override functions (default: SDTX_LOG_DEFAULT(message))
+    sdtx_logger_t logger;                   // optional log override functions (default: SOKOL_LOG(message))
 } sdtx_desc_t;
 
 /* initialization/shutdown */
@@ -680,7 +680,7 @@ inline sdtx_context sdtx_make_context(const sdtx_context_desc_t& desc) { return 
 #endif
 #ifndef SOKOL_DEBUG
     #ifndef NDEBUG
-        #define SOKOL_DEBUG (1)
+        #define SOKOL_DEBUG
     #endif
 #endif
 #ifndef SOKOL_ASSERT
@@ -688,32 +688,19 @@ inline sdtx_context sdtx_make_context(const sdtx_context_desc_t& desc) { return 
     #define SOKOL_ASSERT(c) assert(c)
 #endif
 
-#if defined(SOKOL_LOG)
-#error "SOKOL_LOG macro is no longer supported, please use sg_desc.logger to override log functions"
-#endif
-#ifndef SOKOL_NO_LOG
-    #ifdef SOKOL_DEBUG
-        #define SOKOL_NO_LOG 0
-    #else
-        #define SOKOL_NO_LOG 1
-    #endif
-#endif
-#if !SOKOL_NO_LOG
-    #define SDTX_LOG(s) { SOKOL_ASSERT(s); _sdtx_log(s); }
-    #ifndef SDTX_LOG_DEFAULT
+#if !defined(SOKOL_DEBUG)
+    #define SDTX_LOG(s)
+#else
+    #define SDTX_LOG(s) _sdtx_log(s)
+    #ifndef SOKOL_LOG
         #if defined(__ANDROID__)
             #include <android/log.h>
-            #define SDTX_LOG_DEFAULT(s) __android_log_write(ANDROID_LOG_INFO, "SOKOL_DEBUGTEXT", s)
+            #define SOKOL_LOG(s) __android_log_write(ANDROID_LOG_INFO, "SOKOL_DEBUGTEXT", s)
         #else
             #include <stdio.h>
-            #define SDTX_LOG_DEFAULT(s) puts(s)
+            #define SOKOL_LOG(s) puts(s)
         #endif
     #endif
-#else
-    #define SDTX_LOG(s)
-#endif
-#ifndef SDTX_LOG_DEFAULT
-    #define SDTX_LOG_DEFAULT(s)
 #endif
 
 #ifndef SOKOL_UNREACHABLE
@@ -3563,13 +3550,13 @@ static void _sdtx_free(void* ptr) {
     }
 }
 
-#if !SOKOL_NO_LOG
+#if defined(SOKOL_DEBUG)
 static void _sdtx_log(const char* msg) {
     SOKOL_ASSERT(msg);
     if (_sdtx.desc.logger.log_cb) {
         _sdtx.desc.logger.log_cb(msg, _sdtx.desc.logger.user_data);
     } else {
-        SDTX_LOG_DEFAULT(msg);
+        SOKOL_LOG(msg);
     }
 }
 #endif

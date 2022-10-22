@@ -2478,7 +2478,7 @@ typedef struct sg_allocator {
     sg_logger
 
     Used in sg_desc to provide custom log callbacks to sokol_gfx.h.
-    Default behavior is SG_LOG_DEFAULT(message).
+    Default behavior is SOKOL_LOG(message).
 */
 typedef struct sg_logger {
     void (*log_cb)(const char* message, void* user_data);
@@ -2671,7 +2671,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
 #endif
 #ifndef SOKOL_DEBUG
     #ifndef NDEBUG
-        #define SOKOL_DEBUG (1)
+        #define SOKOL_DEBUG
     #endif
 #endif
 #ifndef SOKOL_ASSERT
@@ -2691,37 +2691,19 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #define SOKOL_UNREACHABLE SOKOL_ASSERT(false)
 #endif
 
-#if defined(SOKOL_LOG)
-#error "SOKOL_LOG macro is no longer supported, please use sg_desc.logger to override log functions"
-#endif
-#ifndef SOKOL_NO_LOG
-    #ifdef SOKOL_DEBUG
-        #define SOKOL_NO_LOG 0
-    #else
-        #define SOKOL_NO_LOG 1
-    #endif
-#endif
-#if !SOKOL_NO_LOG
-    #if defined(__ANDROID__)
-        #include <android/log.h> // __android_log_write
-    #else
-        #include <stdio.h> // puts
-    #endif
-    #define SG_LOG(s) { SOKOL_ASSERT(s); _sg_log(s); }
-    #ifndef SG_LOG_DEFAULT
+#if !defined(SOKOL_DEBUG)
+    #define SG_LOG(s)
+#else
+    #define SG_LOG(s) _sg_log(s)
+    #ifndef SOKOL_LOG
         #if defined(__ANDROID__)
             #include <android/log.h>
-            #define SG_LOG_DEFAULT(s) __android_log_write(ANDROID_LOG_INFO, "SOKOL_GFX", s)
+            #define SOKOL_LOG(s) __android_log_write(ANDROID_LOG_INFO, "SOKOL_GFX", s)
         #else
             #include <stdio.h>
-            #define SG_LOG_DEFAULT(s) puts(s)
+            #define SOKOL_LOG(s) puts(s)
         #endif
     #endif
-#else
-    #define SG_LOG(s)
-#endif
-#ifndef SG_LOG_DEFAULT
-    #define SG_LOG_DEFAULT(s)
 #endif
 
 #ifndef _SOKOL_PRIVATE
@@ -4380,13 +4362,13 @@ _SOKOL_PRIVATE void _sg_free(void* ptr) {
     }
 }
 
-#if !SOKOL_NO_LOG
+#if defined(SOKOL_DEBUG)
 _SOKOL_PRIVATE void _sg_log(const char* msg) {
     SOKOL_ASSERT(msg);
     if (_sg.desc.logger.log_cb) {
         _sg.desc.logger.log_cb(msg, _sg.desc.logger.user_data);
     } else {
-        SG_LOG_DEFAULT(msg);
+        SOKOL_LOG(msg);
     }
 }
 #endif

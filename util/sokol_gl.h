@@ -700,7 +700,7 @@ typedef struct sgl_allocator_t {
     sgl_logger_t
 
     Used in sgl_desc_t to provide custom log callbacks to sokol_gl.h.
-    Default behavior is SGL_LOG_DEFAULT(message).
+    Default behavior is SOKOL_LOG(message).
 */
 typedef struct sgl_logger_t {
     void (*log_cb)(const char* message, void* user_data);
@@ -717,7 +717,7 @@ typedef struct sgl_desc_t {
     int sample_count;
     sg_face_winding face_winding;   // default: SG_FACEWINDING_CCW
     sgl_allocator_t allocator;      // optional memory allocation overrides (default: malloc/free)
-    sgl_logger_t logger;            // optional memory allocation overrides (default: SGL_LOG_DEFAULT(message))
+    sgl_logger_t logger;            // optional memory allocation overrides (default: SOKOL_LOG(message))
 } sgl_desc_t;
 
 /* the default context handle */
@@ -856,7 +856,7 @@ inline sgl_pipeline sgl_context_make_pipeline(sgl_context ctx, const sg_pipeline
 #endif
 #ifndef SOKOL_DEBUG
     #ifndef NDEBUG
-        #define SOKOL_DEBUG (1)
+        #define SOKOL_DEBUG
     #endif
 #endif
 #ifndef SOKOL_ASSERT
@@ -864,32 +864,19 @@ inline sgl_pipeline sgl_context_make_pipeline(sgl_context ctx, const sg_pipeline
     #define SOKOL_ASSERT(c) assert(c)
 #endif
 
-#if defined(SOKOL_LOG)
-#error "SOKOL_LOG macro is no longer supported, please use sgl_desc_t.logger to override log functions"
-#endif
-#ifndef SOKOL_NO_LOG
-    #ifdef SOKOL_DEBUG
-        #define SOKOL_NO_LOG 0
-    #else
-        #define SOKOL_NO_LOG 1
-    #endif
-#endif
-#if !SOKOL_NO_LOG
-    #define SGL_LOG(s) { SOKOL_ASSERT(s); _sgl_log(s); }
-    #ifndef SGL_LOG_DEFAULT
+#if !defined(SOKOL_DEBUG)
+    #define SGL_LOG(s)
+#else
+    #define SGL_LOG(s) _sgl_log(s)
+    #ifndef SOKOL_LOG
         #if defined(__ANDROID__)
             #include <android/log.h>
-            #define SGL_LOG_DEFAULT(s) __android_log_write(ANDROID_LOG_INFO, "SOKOL_GL", s)
+            #define SOKOL_LOG(s) __android_log_write(ANDROID_LOG_INFO, "SOKOL_GL", s)
         #else
             #include <stdio.h>
-            #define SGL_LOG_DEFAULT(s) puts(s)
+            #define SOKOL_LOG(s) puts(s)
         #endif
     #endif
-#else
-    #define SGL_LOG(s)
-#endif
-#ifndef SGL_LOG_DEFAULT
-    #define SGL_LOG_DEFAULT(s)
 #endif
 
 #define _sgl_def(val, def) (((val) == 0) ? (def) : (val))
@@ -2390,13 +2377,13 @@ static void _sgl_free(void* ptr) {
     }
 }
 
-#if !SOKOL_NO_LOG
+#if defined(SOKOL_DEBUG)
 static void _sgl_log(const char* msg) {
     SOKOL_ASSERT(msg);
     if (_sgl.desc.logger.log_cb) {
         _sgl.desc.logger.log_cb(msg, _sgl.desc.logger.user_data);
     } else {
-        SGL_LOG_DEFAULT(msg);
+        SOKOL_LOG(msg);
     }
 }
 #endif

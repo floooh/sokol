@@ -373,7 +373,7 @@ inline void sargs_setup(const sargs_desc& desc) { return sargs_setup(&desc); }
 #endif
 #ifndef SOKOL_DEBUG
     #ifndef NDEBUG
-        #define SOKOL_DEBUG (1)
+        #define SOKOL_DEBUG
     #endif
 #endif
 #ifndef SOKOL_ASSERT

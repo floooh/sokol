@@ -928,7 +928,7 @@ typedef struct sfetch_allocator_t {
     sfetch_logger_t
 
     Used in sfetch_desc_t to provide custom log callbacks to sokol_fetch.h.
-    Default behavior is SFETCH_LOG_DEFAULT(message).
+    Default behavior is SOKOL_LOG(message).
 */
 typedef struct sfetch_logger_t {
     void (*log_cb)(const char* message, void* user_data);
@@ -941,7 +941,7 @@ typedef struct sfetch_desc_t {
     uint32_t num_channels;          /* number of channels to fetch requests in parallel (default: 1) */
     uint32_t num_lanes;             /* max number of requests active on the same channel (default: 1) */
     sfetch_allocator_t allocator;   /* optional memory allocation overrides (default: malloc/free) */
-    sfetch_logger_t logger;         /* optional log function overrides (default: SFETCH_LOG_DEFAULT(message)) */
+    sfetch_logger_t logger;         /* optional log function overrides (default: SOKOL_LOG(message)) */
 } sfetch_desc_t;
 
 /* a request handle to identify an active fetch request, returned by sfetch_send() */
@@ -1060,7 +1060,7 @@ inline sfetch_handle_t sfetch_send(const sfetch_request_t& request) { return sfe
 #endif
 #ifndef SOKOL_DEBUG
     #ifndef NDEBUG
-        #define SOKOL_DEBUG (1)
+        #define SOKOL_DEBUG
     #endif
 #endif
 #ifndef SOKOL_ASSERT
@@ -1068,32 +1068,19 @@ inline sfetch_handle_t sfetch_send(const sfetch_request_t& request) { return sfe
     #define SOKOL_ASSERT(c) assert(c)
 #endif
 
-#if defined(SOKOL_LOG)
-#error "SOKOL_LOG macro is no longer supported, please use sfetch_desc.logger to override log functions"
-#endif
-#ifndef SOKOL_NO_LOG
-    #ifdef SOKOL_DEBUG
-        #define SOKOL_NO_LOG 0
-    #else
-        #define SOKOL_NO_LOG 1
-    #endif
-#endif
-#if !SOKOL_NO_LOG
-    #define SFETCH_LOG(s) { SOKOL_ASSERT(s); _sfetch_log(s); }
-    #ifndef SFETCH_LOG_DEFAULT
+#if !defined(SOKOL_DEBUG)
+    #define SFETCH_LOG(s)
+#else
+    #define SFETCH_LOG(s) _sfetch_log(s)
+    #ifndef SOKOL_LOG
         #if defined(__ANDROID__)
             #include <android/log.h>
-            #define SFETCH_LOG_DEFAULT(s) __android_log_write(ANDROID_LOG_INFO, "SOKOL_FETCH", s)
+            #define SOKOL_LOG(s) __android_log_write(ANDROID_LOG_INFO, "SOKOL_FETCH", s)
         #else
             #include <stdio.h>
-            #define SFETCH_LOG_DEFAULT(s) puts(s)
+            #define SOKOL_LOG(s) puts(s)
         #endif
     #endif
-#else
-    #define SFETCH_LOG(s)
-#endif
-#ifndef SFETCH_LOG_DEFAULT
-    #define SFETCH_LOG_DEFAULT(s)
 #endif
 
 #ifndef _SOKOL_PRIVATE
@@ -1340,13 +1327,13 @@ _SOKOL_PRIVATE void _sfetch_free(void* ptr) {
     }
 }
 
-#if !SOKOL_NO_LOG
+#if defined(SOKOL_DEBUG)
 _SOKOL_PRIVATE void _sfetch_log(const char* msg) {
     if (_sfetch->desc.logger.log_cb) {
         _sfetch->desc.logger.log_cb(msg, _sfetch->desc.logger.user_data);
     }
     else {
-        SFETCH_LOG_DEFAULT(msg);
+        SOKOL_LOG(msg);
     }
 }
 #endif

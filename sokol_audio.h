@@ -484,7 +484,7 @@ typedef struct saudio_allocator {
     saudio_logger
 
     Used in saudio_desc to provide custom log callbacks to sokol_audio.h.
-    Default behavior is SAUDIO_LOG_DEFAULT(message).
+    Default behavior is SOKOL_LOG(message).
 */
 typedef struct saudio_logger {
     void (*log_cb)(const char* message, void* user_data);
@@ -553,7 +553,7 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 #endif
 #ifndef SOKOL_DEBUG
     #ifndef NDEBUG
-        #define SOKOL_DEBUG (1)
+        #define SOKOL_DEBUG
     #endif
 #endif
 #ifndef SOKOL_ASSERT
@@ -561,32 +561,19 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
     #define SOKOL_ASSERT(c) assert(c)
 #endif
 
-#if defined(SOKOL_LOG)
-#error "SOKOL_LOG macro is no longer supported, please use saudio_desc.logger to override log functions"
-#endif
-#ifndef SOKOL_NO_LOG
-    #ifdef SOKOL_DEBUG
-        #define SOKOL_NO_LOG 0
-    #else
-        #define SOKOL_NO_LOG 1
-    #endif
-#endif
-#if !SOKOL_NO_LOG
-    #define SAUDIO_LOG(s) { SOKOL_ASSERT(s); _saudio_log(s); }
-    #ifndef SAUDIO_LOG_DEFAULT
+#if !defined(SOKOL_DEBUG)
+    #define SAUDIO_LOG(s)
+#else
+    #define SAUDIO_LOG(s) _saudio_log(s)
+    #ifndef SOKOL_LOG
         #if defined(__ANDROID__)
             #include <android/log.h>
-            #define SAUDIO_LOG_DEFAULT(s) __android_log_write(ANDROID_LOG_INFO, "SOKOL_AUDIO", s)
+            #define SOKOL_LOG(s) __android_log_write(ANDROID_LOG_INFO, "SOKOL_AUDIO", s)
         #else
             #include <stdio.h>
-            #define SAUDIO_LOG_DEFAULT(s) puts(s)
+            #define SOKOL_LOG(s) puts(s)
         #endif
     #endif
-#else
-    #define SAUDIO_LOG(s)
-#endif
-#ifndef SAUDIO_LOG_DEFAULT
-    #define SAUDIO_LOG_DEFAULT(s)
 #endif
 
 #ifndef _SOKOL_PRIVATE
@@ -1037,13 +1024,13 @@ _SOKOL_PRIVATE void _saudio_free(void* ptr) {
     }
 }
 
-#if !SOKOL_NO_LOG
+#if defined(SOKOL_DEBUG)
 _SOKOL_PRIVATE void _saudio_log(const char* msg) {
     SOKOL_ASSERT(msg);
     if (_saudio.desc.logger.log_cb) {
         _saudio.desc.logger.log_cb(msg, _saudio.desc.logger.user_data);
     } else {
-        SAUDIO_LOG_DEFAULT(msg);
+        SOKOL_LOG(msg);
     }
 }
 #endif
