@@ -31,7 +31,6 @@
     SOKOL_FONTSTASH_API_DECL    - public function declaration prefix (default: extern)
     SOKOL_API_DECL      - same as SOKOL_FONTSTASH_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
-    SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
 
     Include the following headers before including sokol_fontstash.h:
@@ -266,20 +265,12 @@ SOKOL_FONTSTASH_API_DECL uint32_t sfons_rgba(uint8_t r, uint8_t g, uint8_t b, ui
 #endif
 #ifndef SOKOL_DEBUG
     #ifndef NDEBUG
-        #define SOKOL_DEBUG (1)
+        #define SOKOL_DEBUG
     #endif
 #endif
 #ifndef SOKOL_ASSERT
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
-#endif
-#ifndef SOKOL_LOG
-    #ifdef SOKOL_DEBUG
-        #include <stdio.h>
-        #define SOKOL_LOG(s) { SOKOL_ASSERT(s); puts(s); }
-    #else
-        #define SOKOL_LOG(s)
-    #endif
 #endif
 #ifndef SOKOL_UNREACHABLE
     #define SOKOL_UNREACHABLE SOKOL_ASSERT(false)

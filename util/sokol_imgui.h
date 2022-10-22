@@ -379,7 +379,7 @@ inline void simgui_new_frame(const simgui_frame_desc_t& desc) { return simgui_ne
 #endif
 #ifndef SOKOL_DEBUG
     #ifndef NDEBUG
-        #define SOKOL_DEBUG (1)
+        #define SOKOL_DEBUG
     #endif
 #endif
 #ifndef SOKOL_ASSERT
