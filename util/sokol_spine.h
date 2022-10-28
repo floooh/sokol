@@ -49,8 +49,81 @@
 
         spine/spine.h
 
-    FIXME FIXME FIXME
-    =================
+    You'll also need to compile and link with the spine-c runtime:
+
+        https://github.com/EsotericSoftware/spine-runtimes/tree/4.1/spine-c/spine-c
+
+    OVERVIEW
+    ========
+    [TODO]
+    - motivation: renderer and handle wrapper
+    - atlas, skeleton, instance
+    - object lifetimes, dependencies and valid checks
+
+    STEP BY STEP
+    ============
+    [TODO]
+
+    RENDER LAYERS
+    =============
+    [TODO]
+
+    RENDER CONTEXTS
+    ===============
+    [TODO]
+
+    ANIMATIONS
+    ==========
+    [TODO]
+
+    BONES
+    =====
+    [TODO]
+
+    EVENTS
+    ======
+    [TODO]
+
+    IK TARGETS
+    ==========
+    [TODO]
+
+    SKINS
+    =====
+    [TODO]
+
+    ERROR REPORTING AND LOGGING
+    ===========================
+    [TODO]
+
+    MEMORY ALLOCATION OVERRIDE
+    ==========================
+    You can override the memory allocation functions at initialization time
+    like this:
+
+        void* my_alloc(size_t size, void* user_data) {
+            return malloc(size);
+        }
+
+        void my_free(void* ptr, void* user_data) {
+            free(ptr);
+        }
+
+        ...
+            sspine_setup(&(sspine_desc){
+                // ...
+                .allocator = {
+                    .alloc = my_alloc,
+                    .free = my_free,
+                    .user_data = ...;
+                }
+            });
+        ...
+
+    If no overrides are provided, malloc and free will be used.
+
+    This only affects memory allocation calls done by sokol_gfx.h
+    itself though, not any allocations in OS libraries.
 
     LICENSE
     =======
