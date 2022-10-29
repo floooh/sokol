@@ -293,8 +293,7 @@
 
       After creation, the sspine_instance will have a 'default skin' set as its appearance.
 
-    - Before rendering, you'd most likely set at least the initial position of the instance,
-      and queue some animation. To set the position:
+    - To set the position of an instance:
 
         sspine_set_position(inst, (sspine_vec2){ .x=..., .y=... });
 
@@ -311,6 +310,17 @@
         sspine_set_animation(instance, anim, 0, true);
 
       Scheduling and mixing animations will be explained in more detail further down.
+
+    - IMPORTANT: at the start of a frame, before calling any other per-frame sokol-spine
+      functions, you *must* call:
+
+        sspine_new_frame()
+
+      This advances an internal frame counter which is important for updating
+      recorded vertex- and index-data exactly once per frame, and to rewind
+      internal vertex-, index- and command buffers. Failing to do so may result
+      in the internal buffers running full, resulting in faulty or missing
+      rendering operations.
 
     - To advance and mix instance animations:
 
