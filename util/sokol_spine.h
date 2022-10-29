@@ -126,8 +126,8 @@
     - sspine_skin: Allows to iterate through the skins of a sspine_skeleton
       object, basic building block for sspine_skinsets.
 
-    QUICKSTART
-    ==========
+    QUICKSTART STEP BY STEP
+    =======================
     For a simple demo program using sokol_app.h, sokol_gfx.h and sokol_fetch.h,
     see here: [TODO: add link to spine-simple-sapp wasm demo].
 
@@ -142,11 +142,11 @@
         sg_setup(&(sg_desc){ ... });
         sspine_setup(&(sspine_desc){0});
 
-    - You can tweak the memory usage of sokol-spine by limiting the
+    - You can tweak the memory usage of sokol-spine by limiting or expanding the
       maximum number of vertices, draw commands and pool sizes:
 
         sspine_setup(&(sspine_desc){
-            .max_vertices = 1024,       // default: (1<<16) = 65535
+            .max_vertices = 1024,       // default: (1<<16) = 65536
             .max_commands = 128,        // default: (1<<14) = 16384
             .context_pool_size = 1,     // default: 4
             .atlas_pool_size = 1,       // default: 64
@@ -155,20 +155,12 @@
             .instance_pool_size = 16,   // default: 1024
         });
 
-    - If you only want to render into a different sokol-gfx pass than
-      the default pass, you may need to provide the pixel formats
-      and sample count of that pass. Additionally you can provide
-      a non-default color write mask:
+      Sokol-spine uses 32-bit vertex indices for rendering
+      (SG_INDEXTYPE_UINT32), so that the maximum number of vertices isn't
+      limited to (1<<16).
 
-        sspine_setup(&(sspine_desc){
-            .color_format = SG_PIXELFORMAT_RGBA32F,
-            .depth_format = SG_DEPTH,
-            .sample_count = 4,
-            .color_write_mask = SG_COLORMASK_RG,
-        });
-
-    - You can also provide override the default memory allocation and
-      error logging functions, but this is explained in detail further below:
+    - You can override the default memory allocation and
+      error logging functions, this is explained in detail further down:
 
         sspine_setup(&(sspine_desc){
             .allocator = { ... },
