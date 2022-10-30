@@ -505,6 +505,8 @@
     render operations. In the not too distant future, the same render layer idea
     will also be implemented at least for sokol-gl and sokol-debugtext.
 
+    FIXME: does this section need more details about layer transforms?
+
     RENDERING WITH CONTEXTS
     =======================
     At first glance, render contexts may look like more heavy-weight
@@ -590,6 +592,27 @@
           invalid, it either no longer exists, or the the handle hasn't been
           initialized with a call to one of the object creation functions
 
+    MISC HELPER FUNCTIONS:
+    ======================
+    There's a couple of helper functions which don't fit into a big enough category
+    of their own:
+
+    You can ask a skeleton for the atlas it has been created from:
+
+        sspine_atlas atlas = sspine_get_skeleton_atlas(skeleton);
+
+    ...and likewise, ask an instance for the skeleton it has been created from:
+
+        sspine_skeleton skeleton = sspine_get_instance_skeleton(instance);
+
+    ...and finally you can convert a layer transform struct into a 4x4 projection
+    matrix that's memory-layout compatible with sokol-gl:
+
+        const sspine_layer_transform tform = { ... };
+        const sspine_mat4 proj = sspine_layer_transform_to_mat4(&tform);
+        sgl_matrix_mode_projection();
+        sgl_load_matrix(proj.m);
+
     ANIMATIONS
     ==========
     Animations have their own handle type sspine_anim. A valid sspine_anim
@@ -648,14 +671,54 @@
 
     EVENTS
     ======
-    [TODO]
+    For a general idea of Spine events, see here: http://esotericsoftware.com/spine-events
 
-    BONES
-    =====
-    [TODO]
+    After calling sspine_update_instance() to advance the currently configured animations,
+    you can poll for triggered events like this:
+
+        const int num_triggered_events = sspine_num_triggered_events(instance);
+        for (int i = 0; i < num_triggered_events; i++) {
+            const sspine_triggered_event_info info = sspine_get_triggered_event_info(instance, i);
+            if (info.valid) {
+                ...
+            }
+        }
+
+    The returned sspine_triggered_event_info struct gives you the current runtime properties
+    of the event (in case the event has keyed properties). For the actual list of event
+    properties please see the actual sspine_triggered_event_info struct declaration.
+
+    It's also possible to inspect the static event definition on a skeleton, this works
+    the same as iterating through animations. You can lookup an event by name,
+    get the number of events, lookup an event by its index, and get detailed
+    information about an event:
+
+        int sspine_num_events(sspine_skeleton skeleton);
+        sspine_event sspine_event_by_name(sspine_skeleton skeleton, const char* name);
+        sspine_event sspine_event_by_index(sspine_skeleton skeleton, int index);
+        bool sspine_event_valid(sspine_event event);
+        bool sspine_event_equal(sspine_event first, sspine_event second);
+        sspine_event_info sspine_get_event_info(sspine_event event);
+
+    (FIXME: shouldn't the event info struct contains an sspine_anim handle?)
 
     IK TARGETS
     ==========
+    The IK target function group allows to iterate over the IK targets that have been
+    defined on a skeleton, find an IK target by name, get detailed information about
+    an IK target, and most importantly, set the world space position of an IK target
+    which updates the position of all bones influenced by the IK target:
+
+        int sspine_num_iktargets(sspine_skeleton skeleton);
+        sspine_iktarget sspine_iktarget_by_name(sspine_skeleton skeleton, const char* name);
+        sspine_iktarget sspine_iktarget_by_index(sspine_skeleton skeleton, int index);
+        bool sspine_iktarget_valid(sspine_iktarget iktarget);
+        bool sspine_iktarget_equal(sspine_iktarget first, sspine_iktarget second);
+        sspine_iktarget_info sspine_get_iktarget_info(sspine_iktarget iktarget);
+        void sspine_set_iktarget_world_pos(sspine_instance instance, sspine_iktarget iktarget, sspine_vec2 world_pos);
+
+    BONES
+    =====
     [TODO]
 
     SKINS AND SKINSETS
