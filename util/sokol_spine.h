@@ -61,18 +61,17 @@
     spine-c runtime: http://en.esotericsoftware.com/spine-c (source code:
     https://github.com/EsotericSoftware/spine-runtimes/tree/4.1/spine-c/spine-c).
 
-    In order to use sokol_spine.h, you also need to compile the spine-c
-    runtime into your project.
+    The sokol-gfx renderer allows to manage multiple contexts for rendering
+    Spine scenes into different sokol-gfx render passes (similar to sokol-gl and
+    sokol-debugtext), allows to split rendering into layers to mix Spine
+    rendering with other rendering operations, and it automatically batches
+    adjacent draw calls for Spine objects that use the same texture and in the
+    same layer.
 
-    The renderer performs automatic batching, adjacent drawing operations that
-    use the same texture and 'render layer' will be merged into a single draw
-    call.
-
-    Unlike the original spine-c API, sokol_spine.h uses tagged index handles
-    instead of raw pointers to reference Spine objects. This means that the risk
-    of memory corruption through dangling pointers via 'API abuse' should be
-    completely eliminated, any calls that involve invalid objects either
-    result in a no-op, or in a proper error.
+    Sokol-spine wraps 'raw' spine-c objects with tagged index handles. This
+    eliminates the risk of memory corruption via dangling pointers. Any
+    API calls involving invalid objects either result in a no-op, or
+    in a proper error.
 
     The sokol-spine API exposes four 'base object types', and a number of
     'subobject types' which are owned by base objects.
@@ -80,25 +79,26 @@
     Base object types are:
 
     - sspine_atlas: A wrapper around a spine-c spAtlas object, each spAtlas
-      object owns at least one spAtlasPage object, each owning one sokol-gfx
-      image object
+      object owns at least one spAtlasPage object, and each spAtlasPage object
+      owns exactly one sokol-gfx image object.
 
     - sspine_skeleton: A skeleton object requires an atlas object for creation,
-      and is a wrapper around one spSkeletonData and one spAnimationStateData,
-      both contain the shared static data for individual spine instances
+      and is a wrapper around one spine-c spSkeletonData and one
+      spAnimationStateData object.  both contain the shared static data for
+      individual spine instances
 
-    - sspine_instance: Instance objects are created from skeleton objects and
-      are what's actually getting rendered. Each instance tracks its own
-      transformation and animation state, but otherwise just references shared
-      data of the skeleton object it was created from. An sspine_instance object
-      is a wrapper around one spine-c spSkeleton, spAnimationState and
-      spSkeletonClipping object each.
+    - sspine_instance: Instance objects are created from skeleton objects.
+      Instances are the objects that are actually getting rendered. Each instance
+      tracks its own transformation and animation state, but otherwise just
+      references shared data of the skeleton object it was created from. An
+      sspine_instance object is a wrapper around one spine-c spSkeleton,
+      spAnimationState and spSkeletonClipping object each.
 
-    - sspine_skinset: Skin set objects represent a group of skins which define
-      what an instance looks like. Some spine scenes consist of combinable skins
+    - sspine_skinset: Skin-set objects are collections of skins which define
+      the look of an instance. Some Spine scenes consist of combinable skins
       (for instance a human character could offer different skins for different
       types of clothing, hats, scarfs, shirts, pants, and so on..., and a skin
-      set would represent a specific combination of cloths).
+      set would represent a specific outfit).
 
     Subobject types allow to inspect and manipulate Spine objects in more detail:
 
@@ -111,10 +111,6 @@
       inspecting and manipulating the per-instance bone attributes
       on an sspine_instance object.
 
-    - sspine_slot: Slot objects are 'containers for attachments'. In sokol-spine,
-      slots are currently only useful for overriding a per-slot and per-instance
-      slot color attribute.
-
     - sspine_event: A running Spine animation may fire 'events' at certain
       positions in time (for instance a 'footstep' event whenever a foot
       hits the ground). Events can be used to play sound effects (or visual
@@ -123,8 +119,37 @@
     - sspine_iktarget: Allows to set the target position for a group of
       bones controlled by inverse kinematics.
 
-    - sspine_skin: Allows to iterate through the skins of a sspine_skeleton
-      object, basic building block for sspine_skinsets.
+    There's a couple of other subobject types which are mostly useful to
+    inspect the interior structure of skeletons. Those will be explained
+    in detail further down.
+
+    MINIMAL API USAGE OVERVIEW
+    ==========================
+    During initialization:
+
+        - call sspine_setup() after initializating sokol-gfx
+        - create an atlas object from a Spine atlas file with sspine_make_atlas()
+        - load and initialize the sokol-gfx image objects referenced by the atlas
+        - create a skeleton object from a Spine skeleton file with sspine_make_skeleton()
+        - create at least one instance object with sspine_make_instance()
+
+    In the frame loop, outside of sokol-gfx render passes:
+
+        - call sspine_new_frame() before any other sokol-spine function
+        - if needed, move instances around with sspine_set_position()
+        - if needed, schedule new animations with sspine_set_animation() and sspine_add_animation()
+        - each frame, advance the current instance animation state with sspine_update_instance()
+        - each frame, render instances with sspine_draw_instance_in_layer(), this just records
+          vertices, indices and draw commands into internal buffers, but does no actual
+          sokol-gfx rendering
+
+    In the frame loop, inside a sokol-gfx render pass:
+
+        - call sspine_draw_layer() to draw all previously recorded instances in a specific layer
+
+    On shutdown:
+
+        - call sspine_shutdown(), ideally before shutting down sokol-gfx
 
     QUICKSTART STEP BY STEP
     =======================
@@ -140,7 +165,7 @@
     - ...and sokol_gfx.h must be initialized before sokol_spine.h:
 
         sg_setup(&(sg_desc){ ... });
-        sspine_setup(&(sspine_desc){0});
+        sspine_setup(&(sspine_desc){ ... });
 
     - You can tweak the memory usage of sokol-spine by limiting or expanding the
       maximum number of vertices, draw commands and pool sizes:
@@ -155,9 +180,9 @@
             .instance_pool_size = 16,   // default: 1024
         });
 
-      Sokol-spine uses 32-bit vertex indices for rendering
-      (SG_INDEXTYPE_UINT32), so that the maximum number of vertices isn't
-      limited to (1<<16).
+      Sokol-spine uses 32-bit vertex-indices for rendering
+      (SG_INDEXTYPE_UINT32), so that the maximum number of Spine vertices
+      in a frame isn't limited to (1<<16).
 
     - You can override the default memory allocation and
       error logging functions, this is explained in detail further down:
@@ -167,9 +192,9 @@
             .logger = { ... }
         });
 
-    - After initialization, the first thing you need is an sspine_atlas
-      object. Sokol-spine doesn't concern itself with file IO, it expects
-      all external data to be provided as pointer/size pairs:
+    - After initialization, the first thing you need is an sspine_atlas object.
+      Sokol-spine doesn't concern itself with file IO, it expects all external
+      data to be provided as pointer/size pairs:
 
         sspine_atlas atlas = sspine_make_atlas(&(sspine_atlas_desc){
             .data = {
@@ -181,8 +206,8 @@
 
       If you load the atlas data asynchronously, you can still run your
       per-frame rendering code without waiting for the atlas data to be loaded
-      and the atlas to be created. This works because calling sokol-spine functions
-      with 'invalid' object handles is a valid no-op.
+      and the atlas to be created. This works because calling sokol-spine
+      functions with 'invalid' object handles is a valid no-op.
 
     - Optionally you can override some or all of the atlas texture creation parameters:
 
@@ -251,11 +276,6 @@
         });
         assert(sspine_skeleton_valid(skeleton));
 
-      Like with all sokol-spine objects, if you load the skeleton data asynchronously
-      and only then create a skeleton object, you can already start rendering before
-      the data is loaded and the Spine objects have been created. Any operations
-      involving 'incomplete' handles will be dropped.
-
       For JSON skeleton file data, the data must be provided as a zero-terminated C string:
 
         sspine_skeleton skeleton = sspine_make_skeleton(&(sspine_skeleton_desc){
@@ -263,8 +283,13 @@
             .json_data = ...,   // JSON skeleton data as zero-terminated(!) C-string
         });
 
-    - You can pre-scale the Spine scene size, and you can provide a default animation
-      mixing cross-fade duration:
+      Like with all sokol-spine objects, if you load the skeleton data asynchronously
+      and only then create a skeleton object, you can already start rendering before
+      the data is loaded and the Spine objects have been created. Any operations
+      involving 'incomplete' handles will be dropped.
+
+    - You can pre-scale the Spine scene size, and you can provide a default cross-fade
+      duration for animation mixing:
 
         sspine_skeleton skeleton = sspine_make_skeleton(&(sspine_skeleton_desc){
             .atlas = atlas,
@@ -430,20 +455,203 @@
 
     RENDERER DETAILS
     ================
-    - geometry, command recording and batching
-    - render layers
-    - contexts
+    Any rendering related work happens in the functions sspine_draw_instance_in_layer() and
+    sspine_draw_layer().
+
+    sspine_draw_instance_in_layer() will result in vertices, indices and internal
+    draw commands which will be recorded into internal memory buffers (e.g.
+    no sokol-gfx functions will be called here).
+
+    If possible, batching will be performed by merging a new draw command with
+    the previously recorded draw command. For two draw commands to be merged,
+    the following conditions must be tru:
+
+        - rendering needs to go into the same layer
+        - the same atlas texture must be used
+        - the blend mode must be compatible (the Spine blending modes
+          'normal' and 'additive' can be merged, but not 'multiply')
+        - the same premultiplied alpha mode must be used
+
+    To make the most out of batching:
+
+        - use Spine objects which only have a single atlas texture
+          and blend mode across all slots
+        - group sspine_draw_instance_in_layer() calls by layer
+
+    After all instances have been 'rendered' (or rather: recorded) into layers,
+    the actually rendering happens inside a sokol-gfx pass by calling the
+    function sspine_draw_layer() for each layer in 'z order' (e.g. the layer
+    index doesn't matter for z-ordering, only the order how sspine_draw_layer() is
+    called).
+
+    Only the first call to sspine_draw_layer() in a frame will copy the recorded
+    vertices and indices into sokol-gfx buffers.
+
+    Each call to sspine_draw_layer() will iterate over all recorded (and
+    hopefully well-batched) draw commands, skip any draw commands with a
+    non-matching layer index, and draw only those with a matching layer by
+    calling:
+
+        - if the pipeline object has changed:
+            - sg_apply_pipeline()
+            - sg_apply_uniforms() for the vertex stage
+        - if the atlas texture has changed:
+            - sg_apply_bindings()
+        - if the premultiplied-alpha mode has changed:
+            - sg_apply_uniforms() for the fragment stage
+        - and finally sg_draw()
+
+    The main purpose of render layers is to mix Spine rendering with other
+    render operations. In the not too distant future, the same render layer idea
+    will also be implemented at least for sokol-gl and sokol-debugtext.
+
+    RENDERING WITH CONTEXTS
+    =======================
+    At first glance, render contexts may look like more heavy-weight
+    render layers, but they serve a different purpose: they are useful
+    if Spine rendering needs to happen in different sokol-gfx render passes
+    with different pixel formats and MSAA sample counts.
+
+    All Spine rendering happens within a context, even you don't call any
+    of the context API functions, in this case, an internal 'default context'
+    will be used.
+
+    Each context has its own internal vertex-, index- and command buffer and
+    all context state is completely independent from any other contexts.
+
+    To create a new context object, call:
+
+        sspine_context ctx = sspine_make_context(&(sspine_context_desc){
+            .max_vertices = ...,
+            .max_commands = ...,
+            .color_format = SG_PIXELFORMAT_...,
+            .depth_format = SG_PIXELFORMAT_...,
+            .sample_count = ...,
+            .color_write_mask = SG_COLORMASK_...,
+        });
+
+    The color_format, depth_format and sample_count items must be compatible
+    with the sokol-gfx render pass you're going to render into.
+
+    If you omit the color_format, depth_format and sample_count designators,
+    the new context will be compatible with the sokol-gfx default pass
+    (which is most likely not what you want, unless your offscreen render passes
+    exactly match the default pass attributes).
+
+    Once a context has been created, it can be made active with:
+
+        sspine_set_context(ctx);
+
+    To set the default context again:
+
+        sspine_set_contxt(sspine_default_context());
+
+    ...and to get the currently active context:
+
+        sspine_context cur_ctx = sspine_get_context();
+
+    The currently active context only matter for two functions:
+
+        - sspine_draw_instance_in_layer()
+        - sspine_draw_layer()
+
+    Alternatively you can bypass the currently set context with these
+    alternative functions:
+
+        - sspine_context_draw_layer_in_instance(ctx, ...)
+        - sspine_context_draw_layer(ctx, ...)
+
+    These explicitely take a context argument, completely ignore
+    and don't change the active context.
+
+    You can query some information about the a context with the function:
+
+        sspine_context_info info = ssgpine_get_context_info(ctx);
+
+    This returns the current number of recorded vertices, indices
+    and draw commands.
+
+    RESOURCE STATES:
+    ================
+    Similar to sokol-gfx, you can query the current 'resource state' of Spine
+    objects:
+
+        sspine_resource_state sspine_get_atlas_resource_state(sspine_atlas atlas);
+        sspine_resource_state sspine_get_skeleton_resource_state(sspine_atlas atlas);
+        sspine_resource_state sspine_get_instance_resource_state(sspine_atlas atlas);
+        sspine_resource_state sspine_get_skinset_resource_state(sspine_atlas atlas);
+        sspine_resource_state sspine_get_context_resource_state(sspine_atlas atlas);
+
+    This returns one of
+
+        - SSPINE_RESOURCE_VALID: the object is valid and ready to use
+        - SSPINE_RESOURCE_FAILED: the object creation has failed
+        - SSPINE_RESOURCE_INVALID: the object or one of its dependencies is
+          invalid, it either no longer exists, or the the handle hasn't been
+          initialized with a call to one of the object creation functions
 
     ANIMATIONS
     ==========
+    Animations have their own handle type sspine_anim. A valid sspine_anim
+    handle is either obtained by looking up an animation by name from a skeleton:
+
+        sspine_anim anim = sspine_anim_by_name(skeleton, "walk");
+
+    ...or by index:
+
+        sspine_anim anim = sspine_anim_by_index(skeleton, 0);
+
+    The returned anim handle will be invalid if an animation of that name doesn't
+    exist, or the provided index is out-of-range:
+
+        if (!sspine_anim_is_valid(anim)) {
+            // animation handle is not valid
+         }
+
+    An animation handle will also become invalid when the skeleton object it was
+    created is destroyed, or otherwise becomes invalid.
+
+    You can iterate over all animations in a skeleton:
+
+        const int num_anims = sspine_num_anims(skeleton);
+        for (int anim_index = 0; anim_index < num_anims; anim_index++) {
+            sspine_anim anim = sspine_anim_by_index(skeleton, anim_index);
+            ...
+        }
+
+    Since sspine_anim is a 'fat handle' (it houses a skeleton handle and an index),
+    there's a helper function which checks if two anim handles are equal:
+
+        if (sspine_anim_equal(anim0, anim1)) {
+            ...
+        }
+
+    To query information about an animation:
+
+        const sspine_anim_info info = sspine_get_anim_info(anim);
+        if (info.valid) {
+            printf("index: %d, duration: %f, name: %s", info.index, info.duration, info.name.cstr);
+        }
+
+    Scheduling and mixing animations is controlled through the following functions:
+
+        void sspine_clear_animation_tracks(sspine_instance instance);
+        void sspine_clear_animation_track(sspine_instance instance, int track_index);
+        void sspine_set_animation(sspine_instance instance, sspine_anim anim, int track_index, bool loop);
+        void sspine_add_animation(sspine_instance instance, sspine_anim anim, int track_index, bool loop, float delay);
+        void sspine_set_empty_animation(sspine_instance instance, int track_index, float mix_duration);
+        void sspine_add_empty_animation(sspine_instance instance, int track_index, float mix_duration, float delay);
+
+    Please refer to the spine-c documentation to get an idea what these functions do:
+
+        http://en.esotericsoftware.com/spine-c#Applying-animations
+
+    EVENTS
+    ======
     [TODO]
 
     BONES
     =====
-    [TODO]
-
-    EVENTS
-    ======
     [TODO]
 
     IK TARGETS
@@ -571,7 +779,7 @@ typedef struct sspine_string {
     char cstr[SSPINE_MAX_STRING_SIZE];
 } sspine_string;
 
-typedef enum SSPINE_resource_state {
+typedef enum sspine_resource_state {
     SSPINE_RESOURCESTATE_INITIAL,
     SSPINE_RESOURCESTATE_ALLOC,
     SSPINE_RESOURCESTATE_VALID,
