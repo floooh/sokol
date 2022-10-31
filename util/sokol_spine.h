@@ -719,11 +719,122 @@
 
     BONES
     =====
-    [TODO]
+    Skeleton bones are wrapped with an sspine_bone handle which can be created from
+    a skeleton handle, and either a bone name:
+
+        sspine_bone bone = sspine_bone_by_name(skeleton, "root");
+        assert(sspine_bone_valid(bone));
+
+    ...or a bone index:
+
+        sspine_bone bone = sspine_bone_by_index(skeleton, 0);
+        assert(sspine_bone_valid(bone));
+
+    ...to iterate over all bones of a skeleton and query information about each
+    bone:
+
+        const int num_bones = sspine_num_bones(skeleton);
+        for (int bone_index = 0; bone_index < num_bones; bone_index++) {
+            sspine_bone bone = sspine_bone_by_index(skeleton, bone_index);
+            const sspine_bone_info info = sspine_get_bone_info(skeleton, bone);
+            if (info.valid) {
+                ...
+            }
+        }
+
+    The sspine_bone_info struct provides the shared, static bone state in the skeleton (like
+    the name, a parent bone handle, bone length, pose transform and a color attribute),
+    but doesn't contain any dynamic information of per-instance bones.
+
+    To manipulate the per-instance bone attributes use the following setter functions:
+
+        void sspine_set_bone_transform(sspine_instance instance, sspine_bone bone, const sspine_bone_transform* transform);
+        void sspine_set_bone_position(sspine_instance instance, sspine_bone bone, sspine_vec2 position);
+        void sspine_set_bone_rotation(sspine_instance instance, sspine_bone bone, float rotation);
+        void sspine_set_bone_scale(sspine_instance instance, sspine_bone bone, sspine_vec2 scale);
+        void sspine_set_bone_shear(sspine_instance instance, sspine_bone bone, sspine_vec2 shear);
+
+    ...and to query the per-instance bone attributes, the following getters:
+
+        sspine_bone_transform sspine_get_bone_transform(sspine_instance instance, sspine_bone bone);
+        sspine_vec2 sspine_get_bone_position(sspine_instance instance, sspine_bone bone);
+        float sspine_get_bone_rotation(sspine_instance instance, sspine_bone bone);
+        sspine_vec2 sspine_get_bone_scale(sspine_instance instance, sspine_bone bone);
+        sspine_vec2 sspine_get_bone_shear(sspine_instance instance, sspine_bone bone);
+
+    These functions all work in the local bone coordinate system (relative to a bone's parent bone).
+
+    To transform positions between bone-local and global space use the following helper functions:
+
+        sspine_vec2 sspine_bone_local_to_world(sspine_instance instance, sspine_bone bone, sspine_vec2 local_pos);
+        sspine_vec2 sspine_bone_world_to_local(sspine_instance instance, sspine_bone bone, sspine_vec2 world_pos);
+
+    ...and as a convenience, there's a helper function which obtains the bone position in global space
+    directly:
+
+        sspine_vec2 sspine_get_bone_world_position(sspine_instance instance, sspine_bone bone);
 
     SKINS AND SKINSETS
     ==================
-    [TODO]
+    Skins are named pieces of geometry which can be turned on and off, what makes Spine skins a bit
+    confusing is that they are hierarchical. A skin can itself be a collection of other skins. Setting
+    the 'root skin' will also make all 'child skins' visible. In sokol-spine collections of skins are
+    managed through dedicated 'skin set' objects. Under the hood they create a 'root skin' where the
+    skins of the skin set are attached to, but from the outside it just looks like a 'flat' collection
+    of skins without the tricky hierarchical management.
+
+    Like other 'subobjects', skin handles can be obtained by the skin name from a skeleton handle:
+
+        sspine_skin skin = sspine_skin_by_name(skeleton, "jacket");
+        assert(sspine_skin_valid(skin));
+
+    ...or by a skin index:
+
+        sspine_skin skin = sspine_skin_by_index(skeleton, 0);
+        assert(sspine_skin_valid(skin));
+
+    ...you can iterate over all skins of a skeleton and query some information about the skin:
+
+        const int num_skins = sspine_num_skins(skeleton);
+        for (int skin_index = 0; skin_index < num_skins; skin_index++) {
+            sspine_skin skin = sspine_skin_by_index(skin_index);
+            sspine_skin_info info = sspine_get_skin_info(skin);
+            if (info.valid) {
+                ...
+            }
+        }
+
+    Currently, the only useful query item is the skin name though.
+
+    To make a skin visible on an instance, just call:
+
+        sspine_set_skin(instance, skin);
+
+    ...this will first deactivate the previous skin before setting a new skin.
+
+    A more powerful way to configure the skin visibility is through 'skin sets'. Skin
+    sets are simply flat collections of skins which should be made visible at once.
+    A new skin set is created like this:
+
+        sspine_skinset skinset = sspine_make_skinset(&(sspine_skinset_desc){
+            .skeleton = skeleton,
+            .skins = {
+                sspine_skin_by_name(skeleton, "blue-jacket"),
+                sspine_skin_by_name(skeleton, "green-pants"),
+                sspine_skin_by_name(skeleton, "blonde-hair"),
+                ...
+            }
+        });
+        assert(sspine_skinset_valid(skinset))
+
+    ...then simply set the skinset on an instance to reconfigure the appearance
+    of the instance:
+
+        sspine_set_skinset(instance, skinset);
+
+    The functions sspine_set_skinset() and sspine_set_skin() will cancel each other.
+    Calling sspine_set_skinset() deactivates the effect of sspine_set_skin() and
+    vice versa.
 
     ERROR REPORTING AND LOGGING
     ===========================
