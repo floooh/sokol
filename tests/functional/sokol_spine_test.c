@@ -171,7 +171,7 @@ UTEST(sokol_spine, atlas_image_info) {
     T(img_info.valid);
     T(img_info.sgimage.id != SG_INVALID_ID);
     T(sg_query_image_state(img_info.sgimage) == SG_RESOURCESTATE_ALLOC);
-    T(strcmp(img_info.filename, "spineboy.png") == 0);
+    T(strcmp(img_info.filename.cstr, "spineboy.png") == 0);
     T(img_info.min_filter == SG_FILTER_LINEAR);
     T(img_info.mag_filter == SG_FILTER_LINEAR);
     T(img_info.wrap_u == SG_WRAP_MIRRORED_REPEAT);
@@ -201,7 +201,7 @@ UTEST(sokol_spine, atlas_with_overrides) {
     T(img_info.valid);
     T(img_info.sgimage.id != SG_INVALID_ID);
     T(sg_query_image_state(img_info.sgimage) == SG_RESOURCESTATE_ALLOC);
-    T(strcmp(img_info.filename, "spineboy.png") == 0);
+    T(strcmp(img_info.filename.cstr, "spineboy.png") == 0);
     T(img_info.min_filter == SG_FILTER_NEAREST_MIPMAP_NEAREST);
     T(img_info.mag_filter == SG_FILTER_NEAREST);
     T(img_info.wrap_u == SG_WRAP_REPEAT);
@@ -532,7 +532,7 @@ UTEST(sokol_spine, get_anim_info) {
     const sspine_anim_info info = sspine_get_anim_info(anim);
     T(info.valid);
     T(info.index == 2);
-    T(strcmp(info.name, "hoverboard") == 0);
+    T(strcmp(info.name.cstr, "hoverboard") == 0);
     T(info.duration == 1.0f);
     shutdown();
 }
@@ -552,10 +552,10 @@ UTEST(sokol_spine, get_anim_info_invalid_index) {
     sspine_skeleton skeleton = create_skeleton();
     const sspine_anim_info i0 = sspine_get_anim_info(sspine_anim_by_index(skeleton, -1));
     T(!i0.valid);
-    T(i0.name == 0);
+    T(!i0.name.valid);
     const sspine_anim_info i1 = sspine_get_anim_info(sspine_anim_by_index(skeleton, 1234));
     T(!i1.valid);
-    T(i1.name == 0);
+    T(!i1.name.valid);
     shutdown();
 }
 
@@ -588,7 +588,7 @@ UTEST(sokol_spine, get_atlas_page_info) {
     T(info.image.valid);
     T(info.image.sgimage.id != SG_INVALID_ID);
     T(sg_query_image_state(info.image.sgimage) == SG_RESOURCESTATE_ALLOC);
-    T(strcmp(info.image.filename, "spineboy.png") == 0);
+    T(strcmp(info.image.filename.cstr, "spineboy.png") == 0);
     T(info.image.min_filter == SG_FILTER_LINEAR);
     T(info.image.mag_filter == SG_FILTER_LINEAR);
     T(info.image.wrap_u == SG_WRAP_MIRRORED_REPEAT);
@@ -647,7 +647,7 @@ UTEST(sokol_spine, atlas_get_atlas_page_info_with_overrides) {
     T(info.image.valid);
     T(info.image.sgimage.id != SG_INVALID_ID);
     T(sg_query_image_state(info.image.sgimage) == SG_RESOURCESTATE_ALLOC);
-    T(strcmp(info.image.filename, "spineboy.png") == 0);
+    T(strcmp(info.image.filename.cstr, "spineboy.png") == 0);
     T(info.image.min_filter == SG_FILTER_LINEAR);
     T(info.image.mag_filter == SG_FILTER_LINEAR);
     T(info.image.wrap_u == SG_WRAP_MIRRORED_REPEAT);
@@ -719,7 +719,7 @@ UTEST(sokol_spine, get_bone_info_root) {
     T(info.valid);
     T(info.index == 0);
     T((info.parent_bone.skeleton_id == 0) && (info.parent_bone.index == 0));
-    T(strcmp(info.name, "root") == 0);
+    T(strcmp(info.name.cstr, "root") == 0);
     T(info.length == 0.0f);
     T(info.pose.position.x == 0.0f);
     T(info.pose.position.y == 0.0f);
@@ -748,7 +748,7 @@ UTEST(sokol_spine, get_bone_info_destroyed_skeleton) {
     sspine_destroy_skeleton(skeleton);
     const sspine_bone_info info = sspine_get_bone_info(bone);
     T(!info.valid);
-    T(info.name == 0);
+    T(!info.name.valid);
     shutdown();
 }
 
@@ -757,10 +757,10 @@ UTEST(sokol_spine, get_bone_info_invalid_index) {
     sspine_skeleton skeleton = create_skeleton();
     const sspine_bone_info i0 = sspine_get_bone_info(sspine_bone_by_index(skeleton, -1));
     T(!i0.valid);
-    T(i0.name == 0);
+    T(!i0.name.valid);
     const sspine_bone_info i1 = sspine_get_bone_info(sspine_bone_by_index(skeleton, 1234));
     T(!i1.valid);
-    T(i1.name == 0);
+    T(!i1.name.valid);
     shutdown();
 }
 
@@ -923,8 +923,8 @@ UTEST(sokol_spine, get_slot_info) {
     const sspine_slot_info info = sspine_get_slot_info(sspine_slot_by_name(skeleton, "portal-streaks1"));
     T(info.valid);
     T(info.index == 3);
-    T(strcmp(info.name, "portal-streaks1") == 0);
-    T(info.attachment_name == 0);
+    T(strcmp(info.name.cstr, "portal-streaks1") == 0);
+    T(!info.attachment_name.valid);
     T((info.bone.skeleton_id == skeleton.id) && (info.bone.index == 62));
     T(info.color.r == 1.0f);
     T(info.color.g == 1.0f);
@@ -940,7 +940,7 @@ UTEST(sokol_spine, get_slot_info_destroyed_skeleton) {
     sspine_destroy_skeleton(skeleton);
     const sspine_slot_info info = sspine_get_slot_info(slot);
     T(!info.valid);
-    T(info.name == 0);
+    T(!info.name.valid);
     shutdown();
 }
 
@@ -949,10 +949,10 @@ UTEST(sokol_spine, get_slot_info_invalid_index) {
     sspine_skeleton skeleton = create_skeleton();
     const sspine_slot_info i0 = sspine_get_slot_info(sspine_slot_by_index(skeleton, -1));
     T(!i0.valid);
-    T(i0.name == 0);
+    T(!i0.name.valid);
     const sspine_slot_info i1 = sspine_get_slot_info(sspine_slot_by_index(skeleton, 1234));
     T(!i1.valid);
-    T(i1.name == 0);
+    T(!i1.name.valid);
     shutdown();
 }
 
@@ -1027,12 +1027,12 @@ UTEST(sokol_spine, get_event_info) {
     sspine_skeleton skeleton = create_skeleton();
     const sspine_event_info info = sspine_get_event_info(sspine_event_by_index(skeleton, 0));
     T(info.valid);
-    T(0 == strcmp(info.name, "footstep"));
+    T(0 == strcmp(info.name.cstr, "footstep"));
     T(0 == info.index);
     T(0 == info.int_value);
     T(0.0f == info.float_value);
-    T(0 == info.string_value);
-    T(0 == info.audio_path);
+    T(!info.string_value.valid);
+    T(!info.audio_path.valid);
     T(0.0f == info.volume);
     T(0.0f == info.balance);
     shutdown();
@@ -1044,7 +1044,7 @@ UTEST(sokol_spine, get_event_info_destroyed_skeleton) {
     sspine_destroy_skeleton(skeleton);
     const sspine_event_info info = sspine_get_event_info(sspine_event_by_index(skeleton, 0));
     T(!info.valid);
-    T(0 == info.name);
+    T(!info.name.valid);
     shutdown();
 }
 
@@ -1102,7 +1102,7 @@ UTEST(sokol_spine, get_iktarget_info) {
     const sspine_iktarget_info info = sspine_get_iktarget_info(sspine_iktarget_by_index(skeleton, 1));
     T(info.valid);
     T(1 == info.index);
-    T(0 == strcmp(info.name, "aim-torso-ik"));
+    T(0 == strcmp(info.name.cstr, "aim-torso-ik"));
     T((info.target_bone.skeleton_id == skeleton.id) && (info.target_bone.index == 2));
     shutdown();
 }
@@ -1113,7 +1113,7 @@ UTEST(sokol_spine, get_iktarget_info_destroyed_skeleton) {
     sspine_destroy_skeleton(skeleton);
     const sspine_iktarget_info info = sspine_get_iktarget_info(sspine_iktarget_by_index(skeleton, 1));
     T(!info.valid);
-    T(0 == info.name);
+    T(!info.name.valid);
     shutdown();
 }
 
@@ -1122,9 +1122,9 @@ UTEST(sokol_spine, get_iktarget_info_out_of_bounds) {
     sspine_skeleton skeleton = create_skeleton();
     sspine_destroy_skeleton(skeleton);
     const sspine_iktarget_info info0 = sspine_get_iktarget_info(sspine_iktarget_by_index(skeleton, -1));
-    T(0 == info0.name);
+    T(!info0.name.valid);
     const sspine_iktarget_info info1 = sspine_get_iktarget_info(sspine_iktarget_by_index(skeleton, 7));
-    T(0 == info1.name);
+    T(!info1.name.valid);
     shutdown();
 }
 
@@ -1175,7 +1175,7 @@ UTEST(sokol_spine, get_skin_info) {
     const sspine_skin_info info = sspine_get_skin_info(sspine_skin_by_index(skeleton, 0));
     T(info.valid);
     T(0 == info.index);
-    T(0 == strcmp(info.name, "default"));
+    T(0 == strcmp(info.name.cstr, "default"));
     shutdown();
 }
 
@@ -1185,6 +1185,6 @@ UTEST(sokol_spine, get_skin_info_destroyed_skeleton) {
     sspine_destroy_skeleton(skeleton);
     const sspine_skin_info info = sspine_get_skin_info(sspine_skin_by_index(skeleton, 0));
     T(!info.valid);
-    T(0 == info.name);
+    T(!info.name.valid);
     shutdown();
 }
