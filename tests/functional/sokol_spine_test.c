@@ -10,7 +10,7 @@
 #define T(b) EXPECT_TRUE(b)
 
 static sspine_error last_error = SSPINE_ERROR_OK;
-static void log(const char* tag, uint32_t log_level, uint32_t error_code, const char* error_id, int line_nr, const char* filename, void* user_data) {
+static void log_func(const char* tag, uint32_t log_level, uint32_t error_code, const char* error_id, int line_nr, const char* filename, void* user_data) {
     (void)tag; (void)log_level; (void)error_id; (void)line_nr; (void)filename; (void)user_data;
     last_error = error_code;
 }
@@ -18,13 +18,13 @@ static void log(const char* tag, uint32_t log_level, uint32_t error_code, const 
 static void init() {
     last_error = SSPINE_ERROR_OK;
     sg_setup(&(sg_desc){0});
-    sspine_setup(&(sspine_desc){ .logger = { .log = log } });
+    sspine_setup(&(sspine_desc){ .logger = { .log = log_func } });
 }
 
 static void init_with_desc(const sspine_desc* desc) {
     last_error = SSPINE_ERROR_OK;
     sspine_desc desc1 = *desc;
-    desc1.logger.log = log;
+    desc1.logger.log = log_func;
     sg_setup(&(sg_desc){0});
     sspine_setup(&desc1);
 }
