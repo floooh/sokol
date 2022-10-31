@@ -1076,7 +1076,6 @@ typedef struct sspine_skeleton_desc {
 
 typedef struct sspine_skinset_desc {
     sspine_skeleton skeleton;
-    const char* name;
     sspine_skin skins[SSPINE_MAX_SKINSET_SKINS];
 } sspine_skinset_desc;
 
@@ -3569,7 +3568,7 @@ static sspine_skinset _sspine_alloc_skinset(void) {
 
 static sspine_resource_state _sspine_init_skinset(_sspine_skinset_t* skinset, const sspine_skinset_desc* desc) {
     SOKOL_ASSERT(skinset && (skinset->slot.state == SSPINE_RESOURCESTATE_ALLOC));
-    SOKOL_ASSERT(desc && desc->name);
+    SOKOL_ASSERT(desc);
 
     if (desc->skeleton.id == SSPINE_INVALID_ID) {
         _SSPINE_ERROR(SKINSET_DESC_NO_SKELETON);
@@ -3587,7 +3586,7 @@ static sspine_resource_state _sspine_init_skinset(_sspine_skinset_t* skinset, co
         return SSPINE_RESOURCESTATE_FAILED;
     }
     SOKOL_ASSERT(skel->sp_skel_data);
-    skinset->sp_skin = spSkin_create(desc->name);
+    skinset->sp_skin = spSkin_create("skinset");
     for (int i = 0; i < SSPINE_MAX_SKINSET_SKINS; i++) {
         if (desc->skins[i].skeleton_id != SSPINE_INVALID_ID) {
             spSkin* skin = _sspine_lookup_skin(desc->skins[i].skeleton_id, desc->skins[i].index);
@@ -3629,7 +3628,6 @@ static void _sspine_destroy_all_skinsets(void) {
 
 static sspine_skinset_desc _sspine_skinset_desc_defaults(const sspine_skinset_desc* desc) {
     sspine_skinset_desc res = *desc;
-    res.name = _sspine_def(desc->name, "skinset");
     return res;
 }
 
