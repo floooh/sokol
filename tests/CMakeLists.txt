@@ -45,8 +45,8 @@ set(link_flags)
 set(system_libs)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
-    set(c_flags ${c_flags} /W4 /WX)
-    set(cxx_flags ${cxx_flags} /W4 /WX /EHsc)
+    set(c_flags ${c_flags} /W4 /WX /D_CRT_SECURE_NO_WARNINGS)
+    set(cxx_flags ${cxx_flags} /W4 /WX /EHsc /D_CRT_SECURE_NO_WARNINGS)
 else()
     set(c_flags ${c_flags} -Wall -Wextra -Werror -Wsign-conversion)
     set(cxx_flags ${cxx_flags} -Wall -Wextra -Werror -Wsign-conversion -fno-rtti -fno-exceptions)
@@ -201,6 +201,10 @@ add_library(spine
     ext/spine-runtimes/spine-c/spine-c/src/spine/VertexAttachment.c
     ext/spine-runtimes/spine-c/spine-c/src/spine/extension.c)
 target_include_directories(spine SYSTEM PUBLIC ext/spine-runtimes/spine-c/spine-c/include)
+if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    target_compile_options(spine PRIVATE /wd4267 /wd4244)   # conversion from 'x' to 'y' possible loss of data
+endif()
+
 
 add_library(nuklear ext/nuklear.c)
 
