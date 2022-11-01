@@ -2775,17 +2775,42 @@ static void _sspine_clear(void* ptr, size_t size) {
     memset(ptr, 0, size);
 }
 
+/* Copy a string into a fixed size buffer with guaranteed zero-
+   termination.
+
+   Return false if the string didn't fit into the buffer and had to be clamped.
+
+   FIXME: Currently UTF-8 strings might become invalid if the string
+   is clamped, because the last zero-byte might be written into
+   the middle of a multi-byte sequence.
+*/
+static bool _sspine_strcpy(const char* src, char* dst, int max_len) {
+    SOKOL_ASSERT(src && dst && (max_len > 0));
+    char* const end = &(dst[max_len-1]);
+    char c = 0;
+    for (int i = 0; i < max_len; i++) {
+        c = *src;
+        if (c != 0) {
+            src++;
+        }
+        *dst++ = c;
+    }
+    // truncated?
+    if (c != 0) {
+        *end = 0;
+        return false;
+    }
+    else {
+        return true;
+    }
+}
+
 static sspine_string _sspine_string(const char* cstr) {
     sspine_string res;
     _sspine_clear(&res, sizeof(res));
     if (cstr) {
         res.valid = true;
-        strncpy(res.cstr, cstr, sizeof(res.cstr));
-        char* end = &res.cstr[SSPINE_MAX_STRING_SIZE-1];
-        if (0 != *end) {
-            res.truncated = true;
-            *end = 0;
-        }
+        res.truncated = !_sspine_strcpy(cstr, res.cstr, sizeof(res.cstr));
         res.len = (uint8_t)strlen(res.cstr);
     }
     return res;
