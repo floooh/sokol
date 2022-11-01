@@ -2750,7 +2750,7 @@ static void _sspine_log(sspine_error error_code, sspine_loglevel log_level, int 
             case SSPINE_LOGLEVEL_PANIC: loglevel_str = "panic"; break;
             case SSPINE_LOGLEVEL_ERROR: loglevel_str = "error"; break;
             case SSPINE_LOGLEVEL_WARN:  loglevel_str = "warning"; break;
-            case SSPINE_LOGLEVEL_INFO:  loglevel_str = "info"; break;
+            default: loglevel_str = "info"; break;
         }
         #if defined(_MSC_VER)
             // Visual Studio compiler error format
@@ -4078,8 +4078,8 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
     SOKOL_UNUSED(max_tform_buf_verts); // only used in asserts
     const int tform_buf_stride = 2; // each element is 2 floats
     spSkeletonClipping* sp_clip = instance->sp_clip;
-    for (int i = 0; i < sp_skel->slotsCount; i++) {
-        spSlot* sp_slot = sp_skel->drawOrder[i];
+    for (int slot_index = 0; slot_index < sp_skel->slotsCount; slot_index++) {
+        spSlot* sp_slot = sp_skel->drawOrder[slot_index];
         if (!sp_slot->attachment) {
             spSkeletonClipping_clipEnd(sp_clip, sp_slot);
             continue;
@@ -4186,15 +4186,15 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
         const uint8_t b = (uint8_t)(sp_skel->color.b * sp_slot->color.b * att_color->b * 255.0f);
         const uint8_t a = (uint8_t)(sp_skel->color.a * sp_slot->color.a * att_color->a * 255.0f);
         const uint32_t color = (((uint32_t)a<<24) | ((uint32_t)b<<16) | ((uint32_t)g<<8) | (uint32_t)r);
-        for (int i = 0; i < num_vertices; i++) {
-            dst_vertices.ptr[i].pos.x = vertices[i*2];
-            dst_vertices.ptr[i].pos.y = vertices[i*2 + 1];
-            dst_vertices.ptr[i].color = color;
-            dst_vertices.ptr[i].uv.x  = uvs[i*2];
-            dst_vertices.ptr[i].uv.y  = uvs[i*2 + 1];
+        for (int vi = 0; vi < num_vertices; vi++) {
+            dst_vertices.ptr[vi].pos.x = vertices[vi*2];
+            dst_vertices.ptr[vi].pos.y = vertices[vi*2 + 1];
+            dst_vertices.ptr[vi].color = color;
+            dst_vertices.ptr[vi].uv.x  = uvs[vi*2];
+            dst_vertices.ptr[vi].uv.y  = uvs[vi*2 + 1];
         }
-        for (int i = 0; i < num_indices; i++) {
-            dst_indices.ptr[i] = (uint32_t)indices[i] + (uint32_t)dst_vertices.index;
+        for (int ii = 0; ii < num_indices; ii++) {
+            dst_indices.ptr[ii] = (uint32_t)indices[ii] + (uint32_t)dst_vertices.index;
         }
 
         sg_pipeline pip = { SG_INVALID_ID };
@@ -4209,7 +4209,7 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
                 pma = premul_alpha ? 0.0f : 1.0f;   // NOT A BUG
                 break;
             case SP_BLEND_MODE_MULTIPLY:
-                pip = ctx->pip.multiply; break;
+                pip = ctx->pip.multiply;
                 pma = 0.0f;     // always use texture color as is
                 break;
         }
