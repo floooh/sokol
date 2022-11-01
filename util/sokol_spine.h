@@ -2537,11 +2537,13 @@ static const char* _sspine_fs_source_dummy = "";
 #define _SSPINE_MAX_POOL_SIZE (1<<_SSPINE_SLOT_SHIFT)
 #define _SSPINE_SLOT_MASK (_SSPINE_MAX_POOL_SIZE-1)
 
+#if defined(SOKOL_DEBUG)
 #define _SSPINE_XMACRO(code) #code,
 static const char* _sspine_error_ids[] = {
     _SSPINE_ERRORS
 };
 #undef _SSPINE_XMACRO
+#endif // SOKOL_DEBUG
 
 typedef struct {
     float mvp[16];

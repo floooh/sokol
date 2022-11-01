@@ -47,7 +47,9 @@ static sspine_range load_data(const char* path) {
     const size_t alloc_size = size + 1;
     uint8_t* ptr = (uint8_t*)malloc(alloc_size);
     memset(ptr, 0, alloc_size);
-    fread(ptr, size, 1, fp);
+    // NOTE: GCC warns if result of fread() is ignored
+    size_t num_bytes = fread(ptr, size, 1, fp);
+    (void)num_bytes;
     fclose(fp);
     return (sspine_range) { .ptr = ptr, .size = size };
 }
