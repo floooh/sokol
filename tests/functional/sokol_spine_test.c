@@ -18,13 +18,13 @@ static void log_func(const char* tag, uint32_t log_level, uint32_t error_code, c
 static void init() {
     last_error = SSPINE_ERROR_OK;
     sg_setup(&(sg_desc){0});
-    sspine_setup(&(sspine_desc){ .logger = { .log = log_func } });
+    sspine_setup(&(sspine_desc){ .logger = { .func = log_func } });
 }
 
 static void init_with_desc(const sspine_desc* desc) {
     last_error = SSPINE_ERROR_OK;
     sspine_desc desc1 = *desc;
-    desc1.logger.log = log_func;
+    desc1.logger.func = log_func;
     sg_setup(&(sg_desc){0});
     sspine_setup(&desc1);
 }
