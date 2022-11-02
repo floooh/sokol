@@ -2,7 +2,9 @@
 //  sokol_audio_test.c
 //------------------------------------------------------------------------------
 #define SOKOL_IMPL
+#ifndef SOKOL_DUMMY_BACKEND
 #define SOKOL_DUMMY_BACKEND
+#endif
 #include "sokol_audio.h"
 #include "utest.h"
 
