@@ -1,5 +1,13 @@
 ## Updates
 
+- **02-Nov-2022** A new header sokol_spine.h (in the util dir), this is a
+  renderer and 'handle wrapper' around the spine-c runtime (Spine is a popular 2D
+  character anim system: http://esotericsoftware.com/). This turned out a much bigger
+  rabbit-hole than I initially expected, but the effort is justified by being a
+  experimentation testbed for a couple of things I want to add to other sokol
+  headers (for instance cleaned up handle pool code, a new logging- and error-reporting
+  system, render layers which will be useful for sokol_gl.h and sokol_debugtext.h).
+
 - **22-Oct-2022** All sokol headers now allow to override logging with a
   callback function (installed in the setup call) instead of defining a SOKOL_LOG
   macro. Overriding SOKOL_LOG still works as default fallback, but this is no
