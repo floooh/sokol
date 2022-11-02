@@ -16,7 +16,6 @@
     Optionally provide the following defines with your own implementations:
 
     SOKOL_ASSERT(c)             - your own assert macro (default: assert(c))
-    SOKOL_LOG(msg)              - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE()         - a guard macro for unreachable code (default: assert(false))
     SOKOL_FETCH_API_DECL        - public function declaration prefix (default: extern)
     SOKOL_API_DECL              - same as SOKOL_FETCH_API_DECL
@@ -119,7 +118,7 @@
     (4) pump the sokol-fetch message queues, and invoke response callbacks
         by calling:
 
-        sfetch_dowork(); 
+        sfetch_dowork();
 
         In an event-driven app this should be called in the event loop. If you
         use sokol-app this would be in your frame_cb function.
@@ -810,7 +809,7 @@
                 .allocator = {
                     .alloc = my_alloc,
                     .free = my_free,
-                    .user_data = ...;
+                    .user_data = ...,
                 }
             });
         ...
@@ -822,6 +821,28 @@
 
     Memory allocation will only happen on the same thread where sfetch_setup()
     was called, so you don't need to worry about thread-safety.
+
+
+    LOG FUNCTION OVERRIDE
+    =====================
+    You can override the log function at initialization time like this:
+
+        void my_log(const char* message, void* user_data) {
+            printf("sfetch says: \s\n", message);
+        }
+
+        ...
+            sfetch_setup(&(sfetch_desc_t){
+                // ...
+                .logger = {
+                    .log_cb = my_log,
+                    .user_data = ...,
+                }
+            });
+        ...
+
+    If no overrides are provided, puts will be used on most platforms.
+    On Android, __android_log_write will be used instead.
 
 
     FUTURE PLANS / V2.0 IDEA DUMP
@@ -903,6 +924,16 @@ typedef struct sfetch_allocator_t {
     void* user_data;
 } sfetch_allocator_t;
 
+/*
+    sfetch_logger_t
+
+    Used in sfetch_desc_t to provide custom log callbacks to sokol_fetch.h.
+    Default behavior is SOKOL_LOG(message).
+*/
+typedef struct sfetch_logger_t {
+    void (*log_cb)(const char* message, void* user_data);
+    void* user_data;
+} sfetch_logger_t;
 
 /* configuration values for sfetch_setup() */
 typedef struct sfetch_desc_t {
@@ -910,6 +941,7 @@ typedef struct sfetch_desc_t {
     uint32_t num_channels;          /* number of channels to fetch requests in parallel (default: 1) */
     uint32_t num_lanes;             /* max number of requests active on the same channel (default: 1) */
     sfetch_allocator_t allocator;   /* optional memory allocation overrides (default: malloc/free) */
+    sfetch_logger_t logger;         /* optional log function overrides (default: SOKOL_LOG(message)) */
 } sfetch_desc_t;
 
 /* a request handle to identify an active fetch request, returned by sfetch_send() */
@@ -1028,19 +1060,26 @@ inline sfetch_handle_t sfetch_send(const sfetch_request_t& request) { return sfe
 #endif
 #ifndef SOKOL_DEBUG
     #ifndef NDEBUG
-        #define SOKOL_DEBUG (1)
+        #define SOKOL_DEBUG
     #endif
 #endif
 #ifndef SOKOL_ASSERT
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
 #endif
-#ifndef SOKOL_LOG
-    #ifdef SOKOL_DEBUG
-        #include <stdio.h>
-        #define SOKOL_LOG(s) { SOKOL_ASSERT(s); puts(s); }
-    #else
-        #define SOKOL_LOG(s)
+
+#if !defined(SOKOL_DEBUG)
+    #define SFETCH_LOG(s)
+#else
+    #define SFETCH_LOG(s) _sfetch_log(s)
+    #ifndef SOKOL_LOG
+        #if defined(__ANDROID__)
+            #include <android/log.h>
+            #define SOKOL_LOG(s) __android_log_write(ANDROID_LOG_INFO, "SOKOL_FETCH", s)
+        #else
+            #include <stdio.h>
+            #define SOKOL_LOG(s) puts(s)
+        #endif
     #endif
 #endif
 
@@ -1287,6 +1326,17 @@ _SOKOL_PRIVATE void _sfetch_free(void* ptr) {
         free(ptr);
     }
 }
+
+#if defined(SOKOL_DEBUG)
+_SOKOL_PRIVATE void _sfetch_log(const char* msg) {
+    if (_sfetch->desc.logger.log_cb) {
+        _sfetch->desc.logger.log_cb(msg, _sfetch->desc.logger.user_data);
+    }
+    else {
+        SOKOL_LOG(msg);
+    }
+}
+#endif
 
 _SOKOL_PRIVATE _sfetch_t* _sfetch_ctx(void) {
     return _sfetch;
@@ -1716,7 +1766,7 @@ _SOKOL_PRIVATE bool _sfetch_win32_utf8_to_wide(const char* src, wchar_t* dst, in
 _SOKOL_PRIVATE _sfetch_file_handle_t _sfetch_file_open(const _sfetch_path_t* path) {
     wchar_t w_path[SFETCH_MAX_PATH];
     if (!_sfetch_win32_utf8_to_wide(path->buf, w_path, sizeof(w_path))) {
-        SOKOL_LOG("_sfetch_file_open: error converting UTF-8 path to wide string");
+        SFETCH_LOG("_sfetch_file_open: error converting UTF-8 path to wide string");
         return 0;
     }
     _sfetch_file_handle_t h = CreateFileW(
@@ -2002,17 +2052,17 @@ _SOKOL_PRIVATE void* _sfetch_channel_thread_func(void* arg) {
 #if _SFETCH_PLATFORM_EMSCRIPTEN
 /*=== embedded Javascript helper functions ===================================*/
 EM_JS(void, sfetch_js_send_head_request, (uint32_t slot_id, const char* path_cstr), {
-    var path_str = UTF8ToString(path_cstr);
-    var req = new XMLHttpRequest();
+    const path_str = UTF8ToString(path_cstr);
+    const req = new XMLHttpRequest();
     req.open('HEAD', path_str);
     req.onreadystatechange = function() {
-        if (this.readyState == this.DONE) {
-            if (this.status == 200) {
-                var content_length = this.getResponseHeader('Content-Length');
+        if (req.readyState == XMLHttpRequest.DONE) {
+            if (req.status == 200) {
+                const content_length = req.getResponseHeader('Content-Length');
                 __sfetch_emsc_head_response(slot_id, content_length);
             }
             else {
-                __sfetch_emsc_failed_http_status(slot_id, this.status);
+                __sfetch_emsc_failed_http_status(slot_id, req.status);
             }
         }
     };
@@ -2021,19 +2071,19 @@ EM_JS(void, sfetch_js_send_head_request, (uint32_t slot_id, const char* path_cst
 
 /* if bytes_to_read != 0, a range-request will be sent, otherwise a normal request */
 EM_JS(void, sfetch_js_send_get_request, (uint32_t slot_id, const char* path_cstr, uint32_t offset, uint32_t bytes_to_read, void* buf_ptr, uint32_t buf_size), {
-    var path_str = UTF8ToString(path_cstr);
-    var req = new XMLHttpRequest();
+    const path_str = UTF8ToString(path_cstr);
+    const req = new XMLHttpRequest();
     req.open('GET', path_str);
     req.responseType = 'arraybuffer';
-    var need_range_request = (bytes_to_read > 0);
+    const need_range_request = (bytes_to_read > 0);
     if (need_range_request) {
         req.setRequestHeader('Range', 'bytes='+offset+'-'+(offset+bytes_to_read-1));
     }
     req.onreadystatechange = function() {
-        if (this.readyState == this.DONE) {
-            if ((this.status == 206) || ((this.status == 200) && !need_range_request)) {
-                var u8_array = new Uint8Array(req.response);
-                var content_fetched_size = u8_array.length;
+        if (req.readyState == XMLHttpRequest.DONE) {
+            if ((req.status == 206) || ((req.status == 200) && !need_range_request)) {
+                const u8_array = new Uint8Array(\x2F\x2A\x2A @type {!ArrayBuffer} \x2A\x2F (req.response));
+                const content_fetched_size = u8_array.length;
                 if (content_fetched_size <= buf_size) {
                     HEAPU8.set(u8_array, buf_ptr);
                     __sfetch_emsc_get_response(slot_id, bytes_to_read, content_fetched_size);
@@ -2043,7 +2093,7 @@ EM_JS(void, sfetch_js_send_get_request, (uint32_t slot_id, const char* path_cstr
                 }
             }
             else {
-                __sfetch_emsc_failed_http_status(slot_id, this.status);
+                __sfetch_emsc_failed_http_status(slot_id, req.status);
             }
         }
     };
@@ -2234,7 +2284,7 @@ _SOKOL_PRIVATE bool _sfetch_channel_send(_sfetch_channel_t* chn, uint32_t slot_i
         return true;
     }
     else {
-        SOKOL_LOG("sfetch_send: user_sent queue is full)");
+        SFETCH_LOG("sfetch_send: user_sent queue is full)");
         return false;
     }
 }
@@ -2379,35 +2429,35 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
 _SOKOL_PRIVATE bool _sfetch_validate_request(_sfetch_t* ctx, const sfetch_request_t* req) {
     #if defined(SOKOL_DEBUG)
         if (req->channel >= ctx->desc.num_channels) {
-            SOKOL_LOG("_sfetch_validate_request: request.channel too big!");
+            SFETCH_LOG("_sfetch_validate_request: request.channel too big!");
             return false;
         }
         if (!req->path) {
-            SOKOL_LOG("_sfetch_validate_request: request.path is null!");
+            SFETCH_LOG("_sfetch_validate_request: request.path is null!");
             return false;
         }
         if (strlen(req->path) >= (SFETCH_MAX_PATH-1)) {
-            SOKOL_LOG("_sfetch_validate_request: request.path is too long (must be < SFETCH_MAX_PATH-1)");
+            SFETCH_LOG("_sfetch_validate_request: request.path is too long (must be < SFETCH_MAX_PATH-1)");
             return false;
         }
         if (!req->callback) {
-            SOKOL_LOG("_sfetch_validate_request: request.callback missing");
+            SFETCH_LOG("_sfetch_validate_request: request.callback missing");
             return false;
         }
         if (req->chunk_size > req->buffer_size) {
-            SOKOL_LOG("_sfetch_validate_request: request.chunk_size is greater request.buffer_size)");
+            SFETCH_LOG("_sfetch_validate_request: request.chunk_size is greater request.buffer_size)");
             return false;
         }
         if (req->user_data_ptr && (req->user_data_size == 0)) {
-            SOKOL_LOG("_sfetch_validate_request: request.user_data_ptr is set, but request.user_data_size is null");
+            SFETCH_LOG("_sfetch_validate_request: request.user_data_ptr is set, but request.user_data_size is null");
             return false;
         }
         if (!req->user_data_ptr && (req->user_data_size > 0)) {
-            SOKOL_LOG("_sfetch_validate_request: request.user_data_ptr is null, but request.user_data_size is not");
+            SFETCH_LOG("_sfetch_validate_request: request.user_data_ptr is null, but request.user_data_size is not");
             return false;
         }
         if (req->user_data_size > SFETCH_MAX_USERDATA_UINT64 * sizeof(uint64_t)) {
-            SOKOL_LOG("_sfetch_validate_request: request.user_data_size is too big (see SFETCH_MAX_USERDATA_UINT64");
+            SFETCH_LOG("_sfetch_validate_request: request.user_data_size is too big (see SFETCH_MAX_USERDATA_UINT64");
             return false;
         }
     #else
@@ -2443,7 +2493,7 @@ SOKOL_API_IMPL void sfetch_setup(const sfetch_desc_t* desc_) {
     /* replace zero-init items with default values */
     if (ctx->desc.num_channels > SFETCH_MAX_CHANNELS) {
         ctx->desc.num_channels = SFETCH_MAX_CHANNELS;
-        SOKOL_LOG("sfetch_setup: clamping num_channels to SFETCH_MAX_CHANNELS");
+        SFETCH_LOG("sfetch_setup: clamping num_channels to SFETCH_MAX_CHANNELS");
     }
 
     /* setup the global request item pool */
@@ -2515,7 +2565,7 @@ SOKOL_API_IMPL sfetch_handle_t sfetch_send(const sfetch_request_t* request) {
 
     uint32_t slot_id = _sfetch_pool_item_alloc(&ctx->pool, request);
     if (0 == slot_id) {
-        SOKOL_LOG("sfetch_send: request pool exhausted (too many active requests)");
+        SFETCH_LOG("sfetch_send: request pool exhausted (too many active requests)");
         return invalid_handle;
     }
     if (!_sfetch_channel_send(&ctx->chn[request->channel], slot_id)) {
@@ -2605,4 +2655,3 @@ SOKOL_API_IMPL void sfetch_cancel(sfetch_handle_t h) {
 }
 
 #endif /* SOKOL_FETCH_IMPL */
-

@@ -44,6 +44,16 @@ build() {
     cd ../..
 }
 
+build_force_egl() {
+    cfg=$1
+    backend=$2
+    mode=$3
+    mkdir -p build/$cfg && cd build/$cfg
+    cmake -GNinja -DSOKOL_BACKEND=$backend -DSOKOL_FORCE_EGL=ON -DCMAKE_BUILD_TYPE=$mode ../..
+    cmake --build .
+    cd ../..
+}
+
 analyze() {
     cfg=$1
     backend=$2

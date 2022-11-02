@@ -16,7 +16,6 @@
     Optionally provide the following defines with your own implementations:
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
-    SOKOL_LOG(msg)      - your own logging functions (default: puts(msg))
     SOKOL_ARGS_API_DECL - public function declaration prefix (default: extern)
     SOKOL_API_DECL      - same as SOKOL_ARGS_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
@@ -236,7 +235,7 @@
                 .allocator = {
                     .alloc = my_alloc,
                     .free = my_free,
-                    .user_data = ...;
+                    .user_data = ...,
                 }
             });
         ...
@@ -245,7 +244,6 @@
 
     This only affects memory allocation calls done by sokol_args.h
     itself though, not any allocations in OS libraries.
-
 
     TODO
     ====
@@ -375,20 +373,12 @@ inline void sargs_setup(const sargs_desc& desc) { return sargs_setup(&desc); }
 #endif
 #ifndef SOKOL_DEBUG
     #ifndef NDEBUG
-        #define SOKOL_DEBUG (1)
+        #define SOKOL_DEBUG
     #endif
 #endif
 #ifndef SOKOL_ASSERT
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
-#endif
-#ifndef SOKOL_LOG
-    #ifdef SOKOL_DEBUG
-        #include <stdio.h>
-        #define SOKOL_LOG(s) { SOKOL_ASSERT(s); puts(s); }
-    #else
-        #define SOKOL_LOG(s)
-    #endif
 #endif
 
 #ifndef _SOKOL_PRIVATE
@@ -692,6 +682,11 @@ _SOKOL_PRIVATE bool _sargs_parse_cargs(int argc, const char** argv) {
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#if defined(EM_JS_DEPS)
+EM_JS_DEPS(sokol_audio, "$withStackSave,$allocateUTF8OnStack");
+#endif
+
 EMSCRIPTEN_KEEPALIVE void _sargs_add_kvp(const char* key, const char* val) {
     SOKOL_ASSERT(_sargs.valid && key && val);
     if (_sargs.num_args >= _sargs.max_args) {
@@ -723,13 +718,13 @@ EMSCRIPTEN_KEEPALIVE void _sargs_add_kvp(const char* key, const char* val) {
 
 /* JS function to extract arguments from the page URL */
 EM_JS(void, sargs_js_parse_url, (void), {
-    var params = new URLSearchParams(window.location.search).entries();
-    for (var p = params.next(); !p.done; p = params.next()) {
-        var key = p.value[0];
-        var val = p.value[1];
+    const params = new URLSearchParams(window.location.search).entries();
+    for (let p = params.next(); !p.done; p = params.next()) {
+        const key = p.value[0];
+        const val = p.value[1];
         withStackSave(() => {
-            var key_cstr = allocateUTF8OnStack(key);
-            var val_cstr = allocateUTF8OnStack(val);
+            const key_cstr = allocateUTF8OnStack(key);
+            const val_cstr = allocateUTF8OnStack(val);
             __sargs_add_kvp(key_cstr, val_cstr)
         });
     }

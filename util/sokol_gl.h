@@ -30,7 +30,6 @@
     SOKOL_GL_API_DECL   - public function declaration prefix (default: extern)
     SOKOL_API_DECL      - same as SOKOL_GL_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
-    SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
 
     If sokol_gl.h is compiled as a DLL, define the following before
@@ -573,6 +572,28 @@
     If no overrides are provided, malloc and free will be used.
 
 
+    LOG FUNCTION OVERRIDE
+    =====================
+    You can override the log function at initialization time like this:
+
+        void my_log(const char* message, void* user_data) {
+            printf("sgl says: \s\n", message);
+        }
+
+        ...
+            sgl_setup(&(sgl_desc_t){
+                // ...
+                .logger = {
+                    .log_cb = my_log,
+                    .user_data = ...,
+                }
+            });
+        ...
+
+    If no overrides are provided, puts will be used on most platforms.
+    On Android, __android_log_write will be used instead.
+
+
     LICENSE
     =======
     zlib/libpng license
@@ -675,6 +696,17 @@ typedef struct sgl_allocator_t {
     void* user_data;
 } sgl_allocator_t;
 
+/*
+    sgl_logger_t
+
+    Used in sgl_desc_t to provide custom log callbacks to sokol_gl.h.
+    Default behavior is SOKOL_LOG(message).
+*/
+typedef struct sgl_logger_t {
+    void (*log_cb)(const char* message, void* user_data);
+    void* user_data;
+} sgl_logger_t;
+
 typedef struct sgl_desc_t {
     int max_vertices;               // default: 64k
     int max_commands;               // default: 16k
@@ -685,6 +717,7 @@ typedef struct sgl_desc_t {
     int sample_count;
     sg_face_winding face_winding;   // default: SG_FACEWINDING_CCW
     sgl_allocator_t allocator;      // optional memory allocation overrides (default: malloc/free)
+    sgl_logger_t logger;            // optional memory allocation overrides (default: SOKOL_LOG(message))
 } sgl_desc_t;
 
 /* the default context handle */
@@ -823,23 +856,27 @@ inline sgl_pipeline sgl_context_make_pipeline(sgl_context ctx, const sg_pipeline
 #endif
 #ifndef SOKOL_DEBUG
     #ifndef NDEBUG
-        #define SOKOL_DEBUG (1)
+        #define SOKOL_DEBUG
     #endif
 #endif
 #ifndef SOKOL_ASSERT
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
 #endif
-#ifndef SOKOL_LOG
-    #ifdef SOKOL_DEBUG
-        #include <stdio.h>
-        #define SOKOL_LOG(s) { SOKOL_ASSERT(s); puts(s); }
-    #else
-        #define SOKOL_LOG(s)
+
+#if !defined(SOKOL_DEBUG)
+    #define SGL_LOG(s)
+#else
+    #define SGL_LOG(s) _sgl_log(s)
+    #ifndef SOKOL_LOG
+        #if defined(__ANDROID__)
+            #include <android/log.h>
+            #define SOKOL_LOG(s) __android_log_write(ANDROID_LOG_INFO, "SOKOL_GL", s)
+        #else
+            #include <stdio.h>
+            #define SOKOL_LOG(s) puts(s)
+        #endif
     #endif
-#endif
-#ifndef SOKOL_UNREACHABLE
-    #define SOKOL_UNREACHABLE SOKOL_ASSERT(false)
 #endif
 
 #define _sgl_def(val, def) (((val) == 0) ? (def) : (val))
@@ -2340,6 +2377,17 @@ static void _sgl_free(void* ptr) {
     }
 }
 
+#if defined(SOKOL_DEBUG)
+static void _sgl_log(const char* msg) {
+    SOKOL_ASSERT(msg);
+    if (_sgl.desc.logger.log_cb) {
+        _sgl.desc.logger.log_cb(msg, _sgl.desc.logger.user_data);
+    } else {
+        SOKOL_LOG(msg);
+    }
+}
+#endif
+
 static void _sgl_init_pool(_sgl_pool_t* pool, int num) {
     SOKOL_ASSERT(pool && (num >= 1));
     /* slot 0 is reserved for the 'invalid id', so bump the pool size by 1 */
@@ -2576,7 +2624,7 @@ static void _sgl_init_pipeline(sgl_pipeline pip_id, const sg_pipeline_desc* in_d
         else {
             pip->pip[i] = sg_make_pipeline(&desc);
             if (pip->pip[i].id == SG_INVALID_ID) {
-                SOKOL_LOG("sokol_gl.h: failed to create pipeline object");
+                SGL_LOG("sokol_gl.h: failed to create pipeline object");
                 pip->slot.state = SG_RESOURCESTATE_FAILED;
             }
         }
@@ -2590,7 +2638,7 @@ static sgl_pipeline _sgl_make_pipeline(const sg_pipeline_desc* desc, const sgl_c
         _sgl_init_pipeline(pip_id, desc, ctx_desc);
     }
     else {
-        SOKOL_LOG("sokol_gl.h: pipeline pool exhausted!");
+        SGL_LOG("sokol_gl.h: pipeline pool exhausted!");
     }
     return pip_id;
 }
@@ -2717,7 +2765,7 @@ static sgl_context _sgl_make_context(const sgl_context_desc_t* desc) {
         _sgl_init_context(ctx_id, desc);
     }
     else {
-        SOKOL_LOG("sokol_gl.h: context pool exhausted!");
+        SGL_LOG("sokol_gl.h: context pool exhausted!");
     }
     return ctx_id;
 }
@@ -3298,7 +3346,7 @@ SOKOL_API_IMPL sgl_context sgl_make_context(const sgl_context_desc_t* desc) {
 SOKOL_API_IMPL void sgl_destroy_context(sgl_context ctx_id) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     if (_sgl_is_default_context(ctx_id)) {
-        SOKOL_LOG("sokol_gl.h: cannot destroy default context");
+        SGL_LOG("sokol_gl.h: cannot destroy default context");
         return;
     }
     _sgl_destroy_context(ctx_id);

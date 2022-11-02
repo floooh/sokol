@@ -1,5 +1,71 @@
 ## Updates
 
+- **22-Oct-2022** All sokol headers now allow to override logging with a
+  callback function (installed in the setup call) instead of defining a SOKOL_LOG
+  macro. Overriding SOKOL_LOG still works as default fallback, but this is no
+  longer documented, consider this deprecated. Many thanks to github user
+  @Manuzor for the PR (see https://github.com/floooh/sokol/pull/721 for details)
+
+- **21-Oct-2022** RGB9E5 pixel format support in sokol_gfx.h and a GLES2 related
+  bugfix in the sokol_app.h Android backend:
+  - sokol_gfx.h now supports RGB9E5 textures (3*9 bit RGB + 5 bit shared exponent),
+    this works in all backends except GLES2 and WebGL1 (use ```sg_query_pixelformat()```
+    to check for runtime support). Many thanks to github user @allcreater for the PR!
+  - a bugfix in the sokol_app.h Android backend: when forcing a GLES2 context via
+    sapp_desc.gl_force_gles2, the Android backend correctly created a GLES2 context,
+    but then didn't communicate this through the function ```sapp_gles2()``` (which
+    still returned false in this case). This caused the sokol_gfx.h GL backend to
+    use the GLES3 code path instead GLES2 (which surprisingly seemed to have worked
+    fine, at least for the sokol samples which force GLES2).
+
+- **19-Oct-2022** Some fixes in the embedded Javascript code blocks (via EM_JS)
+  in sokol_app.h, sokol_args.h, sokol_audio.h and sokol_fetch.h:
+  - the JS code has been 'modernized' (e.g. const and let instead of var,
+    ```() => { ... }``` instead of ```function () { ... }``` for callbacks)
+  - false positives in the Closure static analysis have been supressed
+    via inline hints
+
+- **16-Oct-2022** The Odin bindings generator and the generated bindings have
+  been simplified (the Odin binding now don't have separate wrapper functions).
+  Requires the latest Odin release. Also note: On M1 Macs I'm currently seeing
+  what looks like an ABI problem (in functions which pass color values to the C
+  side as uint8_t, the colors come out wrong). This also happened with the
+  previous binding version, so it looks like a regression in Odin. Might be
+  related to this recent bugfix (which I haven't tested yet):
+  https://github.com/odin-lang/Odin/issues/2121 Many thanks to @thePHTest for the
+  PR! (https://github.com/floooh/sokol/pull/719)
+
+- **15-Oct-2022**
+    - fixes for Emscripten 3.1.24: the sokol headers now use the new
+    **EM_JS_DEPS()** macro to declare 'indirect dependencies on JS library functions'.
+    This is a (much more robust) follow-up fix to the Emscripten related fixes from 10-Sep-2022.
+    The new Emscripten SDK also displays a couple of Javascript "static analyzer" warnings
+    by the Closure compiler (used in release mode to optimize and minify the generated
+    JS code). I fixed a couple of those warnings, but some warnings persist (all of them
+    false positives). Not sure yet if these can be fixed or need to be supressed, but
+    that's for another time.
+    - the webkitAudioContext() fallback in sokol_audio.h's Emscripten backend
+    has been removed (only AudioContext is supported now), the fallback also
+    triggered a Closure warning, so it probably never worked as intended anyway.
+    - I also had to undo an older workaround in sokol_app.h on iOS (https://github.com/floooh/sokol/issues/645)
+    because this is now triggering a Metal validation layer error (https://github.com/floooh/sokol/issues/726).
+    The original case is no longer reproducible, so undoing the old workaround seems to
+    be a quick fix. Eventually I want to get rid of MTKView though, and go down to
+    CAMetalLayer.
+
+- **08-Oct-2022** sokol_app.h Android backend: the ```sapp_touchpoint``` struct
+  now has a new item ```sapp_android_tooltype android_tooltype;```. This exposes the
+  result of the Android NDK function ```AMotionEvent_getToolType()```.
+  Many thanks to @Wertzui123 for the initial PR (https://github.com/floooh/sokol/pull/717).
+
+- **25-Sep-2022**: sokol_app.h on Linux now optionally supports EGL instead of
+  GLX for the window system glue code and can create a GLES2 or GLES3 context
+  instead of a 'desktop GL' context.
+  To get EGL+GLES2/GLES3, just define SOKOL_GLES2 or SOKOL_GLES3 to compile the
+  implementation. To get EGL+GL, define SOKOL_GLCORE33 *and* SOKOL_FORCE_EGL.
+  By default, defining just SOKOL_GLCORE33 uses GLX for the window system glue
+  (just as before). Many thanks to GH user @billzez for the PR!
+
 - **10-Sep-2022**: sokol_app.h and sokol_args.h has been fixed for Emscripten 3.21, those headers
   used the Emscripten Javascript helper function ```ccall()``` which is now part of the
   'legacy runtime' and causes linker errors. Instead of ```ccall()``` sokol_app.h and sokol_args.h
