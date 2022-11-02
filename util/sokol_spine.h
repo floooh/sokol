@@ -2759,9 +2759,19 @@ typedef struct {
 static _sspine_t _sspine;
 
 // dummy spine-c platform implementation functions
+#if defined(__cplusplus)
+extern "C" {
+#endif
 void _spAtlasPage_createTexture(spAtlasPage* self, const char* path) {
     // nothing to do here
     (void)self; (void)path;
+}
+
+void _spAtlasPage_disposeTexture(spAtlasPage* self) {
+    if (self->rendererObject != 0) {
+        const sg_image img = { (uint32_t)(uintptr_t)self->rendererObject };
+        sg_destroy_image(img);
+    }
 }
 
 char* _spUtil_readFile(const char* path, int* length) {
@@ -2769,6 +2779,9 @@ char* _spUtil_readFile(const char* path, int* length) {
     *length = 0;
     return 0;
 }
+#if defined(__cplusplus)
+} // extern "C"
+#endif
 
 //=== HELPER FUNCTION ==========================================================
 #define _SSPINE_PANIC(code) _sspine_log(SSPINE_ERROR_ ##code, SSPINE_LOGLEVEL_PANIC, __LINE__)
@@ -3276,13 +3289,6 @@ static sspine_atlas _sspine_alloc_atlas(void) {
     }
 }
 
-void _spAtlasPage_disposeTexture(spAtlasPage* self) {
-    if (self->rendererObject != 0) {
-        const sg_image img = { (uint32_t)(uintptr_t)self->rendererObject };
-        sg_destroy_image(img);
-    }
-}
-
 static sspine_resource_state _sspine_init_atlas(_sspine_atlas_t* atlas, const sspine_atlas_desc* desc) {
     SOKOL_ASSERT(atlas && (atlas->slot.state == SSPINE_RESOURCESTATE_ALLOC));
     SOKOL_ASSERT(desc);
@@ -3456,7 +3462,7 @@ static sspine_resource_state _sspine_init_skeleton(_sspine_skeleton_t* skeleton,
         spSkeletonBinary* skel_bin = spSkeletonBinary_create(atlas->sp_atlas);
         SOKOL_ASSERT(skel_bin);
         skel_bin->scale = desc->prescale;
-        skeleton->sp_skel_data = spSkeletonBinary_readSkeletonData(skel_bin, desc->binary_data.ptr, (int)desc->binary_data.size);
+        skeleton->sp_skel_data = spSkeletonBinary_readSkeletonData(skel_bin, (const unsigned char*)desc->binary_data.ptr, (int)desc->binary_data.size);
         spSkeletonBinary_dispose(skel_bin); skel_bin = 0;
         if (0 == skeleton->sp_skel_data) {
             _SSPINE_ERROR(SPINE_SKELETON_DATA_CREATION_FAILED);
