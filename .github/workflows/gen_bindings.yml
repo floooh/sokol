@@ -90,7 +90,7 @@ jobs:
           repository: floooh/sokol-zig
       - uses: goto-bus-stop/setup-zig@v1
         with:
-          version: 0.9.0
+          version: 0.10.0
       - uses: actions/download-artifact@v2
         with:
           name: ignore-me-zig
