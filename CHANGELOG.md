@@ -1,5 +1,9 @@
 ## Updates
 
+- **03-Nov-2022** The language bindings generation has been updated for Zig 0.10.0,
+  and clang-14 (there was a minor change in the JSON ast-dump format).
+  Many thanks to github user @kcbanner for the Zig PR!
+
 - **02-Nov-2022** A new header sokol_spine.h (in the util dir), this is a
   renderer and 'handle wrapper' around the spine-c runtime (Spine is a popular 2D
   character anim system: http://esotericsoftware.com/). This turned out a much bigger
