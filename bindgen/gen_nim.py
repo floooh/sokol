@@ -6,7 +6,8 @@
 #   - reference: https://nim-lang.org/docs/nep1.html
 #-------------------------------------------------------------------------------
 import gen_ir
-import re, os, shutil, sys
+import gen_util as util
+import os, shutil, sys
 
 module_names = {
     'sg_':      'gfx',
@@ -151,9 +152,6 @@ xor
 yield
 """.split() + common_prim_types
 
-re_1d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]$")
-re_2d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]\[\d*\]$")
-
 struct_types = []
 enum_types = []
 out_lines = ''
@@ -243,15 +241,6 @@ def is_struct_type(s):
 def is_enum_type(s):
     return s in enum_types
 
-def is_string_ptr(s):
-    return s == "const char *"
-
-def is_const_void_ptr(s):
-    return s == "const void *"
-
-def is_void_ptr(s):
-    return s == "void *"
-
 def is_const_prim_ptr(s):
     for prim_type in prim_types:
         if s == f"const {prim_type} *":
@@ -270,33 +259,8 @@ def is_const_struct_ptr(s):
             return True
     return False
 
-def is_func_ptr(s):
-    return '(*)' in s
-
-def is_1d_array_type(s):
-    return re_1d_array.match(s) is not None
-
-def is_2d_array_type(s):
-    return re_2d_array.match(s) is not None
-
-def is_array_type(s):
-    return is_1d_array_type(s) or is_2d_array_type(s)
-
 def type_default_value(s):
     return prim_defaults[s]
-
-def extract_array_type(s):
-    return s[:s.index('[')].strip()
-
-def extract_array_sizes(s):
-    return s[s.index('['):].replace('[', ' ').replace(']', ' ').split()
-
-def extract_ptr_type(s):
-    tokens = s.split()
-    if tokens[0] == 'const':
-        return tokens[1]
-    else:
-        return tokens[0]
 
 def funcptr_args(field_type, prefix):
     tokens = field_type[field_type.index('(*)')+4:-1].split(',')
@@ -328,31 +292,31 @@ def as_nim_type(ctype, prefix, struct_ptr_as_value=False):
         return as_nim_type_name(ctype, prefix)
     elif is_enum_type(ctype):
         return as_nim_type_name(ctype, prefix)
-    elif is_string_ptr(ctype):
+    elif util.is_string_ptr(ctype):
         return "cstring"
-    elif is_void_ptr(ctype) or is_const_void_ptr(ctype):
+    elif util.is_void_ptr(ctype) or util.is_const_void_ptr(ctype):
         return "pointer"
     elif is_const_struct_ptr(ctype):
-        nim_type = as_nim_type(extract_ptr_type(ctype), prefix)
+        nim_type = as_nim_type(util.extract_ptr_type(ctype), prefix)
         if struct_ptr_as_value:
             return f"{nim_type}"
         else:
             return f"ptr {nim_type}"
     elif is_prim_ptr(ctype) or is_const_prim_ptr(ctype):
-        return f"ptr {as_nim_type(extract_ptr_type(ctype), prefix)}"
-    elif is_func_ptr(ctype):
+        return f"ptr {as_nim_type(util.extract_ptr_type(ctype), prefix)}"
+    elif util.is_func_ptr(ctype):
         args = funcptr_args(ctype, prefix)
         res = funcptr_result(ctype, prefix)
         if res != "":
             res = ":" + res
         return f"proc({args}){res} {{.cdecl.}}"
-    elif is_1d_array_type(ctype):
-        array_ctype = extract_array_type(ctype)
-        array_sizes = extract_array_sizes(ctype)
+    elif util.is_1d_array_type(ctype):
+        array_ctype = util.extract_array_type(ctype)
+        array_sizes = util.extract_array_sizes(ctype)
         return f'array[{array_sizes[0]}, {as_nim_type(array_ctype, prefix)}]'
-    elif is_2d_array_type(ctype):
-        array_ctype = extract_array_type(ctype)
-        array_sizes = extract_array_sizes(ctype)
+    elif util.is_2d_array_type(ctype):
+        array_ctype = util.extract_array_type(ctype)
+        array_sizes = util.extract_array_sizes(ctype)
         return f'array[{array_sizes[0]}, array[{array_sizes[1]}, {as_nim_type(array_ctype, prefix)}]]'
     else:
         sys.exit(f"ERROR as_nim_type: {ctype}")
@@ -468,19 +432,19 @@ def gen_func_nim(decl, prefix):
 
 def gen_array_converters(decl, prefix):
     for field in decl['fields']:
-        if is_array_type(field['type']):
-            array_type = extract_array_type(field['type'])
-            array_sizes = extract_array_sizes(field['type'])
+        if util.is_array_type(field['type']):
+            array_type = util.extract_array_type(field['type'])
+            array_sizes = util.extract_array_sizes(field['type'])
             struct_name = as_nim_struct_name(decl, prefix)
             field_name = as_nim_field_name(field, prefix, check_private=False)
             array_base_type = as_nim_type(array_type, prefix)
-            if is_1d_array_type(field['type']):
+            if util.is_1d_array_type(field['type']):
                 n = array_sizes[0]
                 l(f'converter to{struct_name}{field_name}*[N:static[int]](items: array[N, {array_base_type}]): array[{n}, {array_base_type}] =')
                 l(f'  static: assert(N < {n})')
                 l(f'  for index,item in items.pairs: result[index]=item')
                 l('')
-            elif is_2d_array_type(field['type']):
+            elif util.is_2d_array_type(field['type']):
                 x = array_sizes[1]
                 y = array_sizes[0]
                 l(f'converter to{struct_name}{field_name}*[Y:static[int], X:static[int]](items: array[Y, array[X, {array_base_type}]]): array[{y}, array[{x}, {array_base_type}]] =')

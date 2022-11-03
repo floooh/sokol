@@ -4,7 +4,8 @@
 #   Generate Odin bindings.
 #-------------------------------------------------------------------------------
 import gen_ir
-import re, os, shutil, sys
+import gen_util as util
+import os, shutil, sys
 
 bindings_root = 'sokol-odin'
 c_root = f'{bindings_root}/c'
@@ -128,9 +129,6 @@ prim_defaults = {
     'size_t':       '0'
 }
 
-re_1d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]$")
-re_2d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]\[\d*\]$")
-
 struct_types = []
 enum_types = []
 enum_items = {}
@@ -218,15 +216,6 @@ def is_struct_type(s):
 def is_enum_type(s):
     return s in enum_types
 
-def is_string_ptr(s):
-    return s == "const char *"
-
-def is_const_void_ptr(s):
-    return s == "const void *"
-
-def is_void_ptr(s):
-    return s == "void *"
-
 def is_const_prim_ptr(s):
     for prim_type in prim_types:
         if s == f"const {prim_type} *":
@@ -245,30 +234,8 @@ def is_const_struct_ptr(s):
             return True
     return False
 
-def is_func_ptr(s):
-    return '(*)' in s
-
-def is_1d_array_type(s):
-    return re_1d_array.match(s) is not None
-
-def is_2d_array_type(s):
-    return re_2d_array.match(s) is not None
-
 def type_default_value(s):
     return prim_defaults[s]
-
-def extract_array_type(s):
-    return s[:s.index('[')].strip()
-
-def extract_array_sizes(s):
-    return s[s.index('['):].replace('[', ' ').replace(']', ' ').split()
-
-def extract_ptr_type(s):
-    tokens = s.split()
-    if tokens[0] == 'const':
-        return tokens[1]
-    else:
-        return tokens[0]
 
 def map_type(type, prefix, sub_type):
     if sub_type not in ['c_arg', 'odin_arg', 'struct_field']:
@@ -288,31 +255,31 @@ def map_type(type, prefix, sub_type):
         return as_struct_or_enum_type(type, prefix)
     elif is_enum_type(type):
         return as_struct_or_enum_type(type, prefix)
-    elif is_void_ptr(type):
+    elif util.is_void_ptr(type):
         return "rawptr"
-    elif is_const_void_ptr(type):
+    elif util.is_const_void_ptr(type):
         return "rawptr"
-    elif is_string_ptr(type):
+    elif util.is_string_ptr(type):
         return "cstring"
     elif is_const_struct_ptr(type):
         # pass Odin struct args by value, not by pointer
         if sub_type == 'odin_arg':
-            return f"{as_struct_or_enum_type(extract_ptr_type(type), prefix)}"
+            return f"{as_struct_or_enum_type(util.extract_ptr_type(type), prefix)}"
         else:
-            return f"^{as_struct_or_enum_type(extract_ptr_type(type), prefix)}"
+            return f"^{as_struct_or_enum_type(util.extract_ptr_type(type), prefix)}"
     elif is_prim_ptr(type):
-        return f"^{as_prim_type(extract_ptr_type(type))}"
+        return f"^{as_prim_type(util.extract_ptr_type(type))}"
     elif is_const_prim_ptr(type):
-        return f"^{as_prim_type(extract_ptr_type(type))}"
-    elif is_1d_array_type(type):
-        array_type = extract_array_type(type)
-        array_sizes = extract_array_sizes(type)
+        return f"^{as_prim_type(util.extract_ptr_type(type))}"
+    elif util.is_1d_array_type(type):
+        array_type = util.extract_array_type(type)
+        array_sizes = util.extract_array_sizes(type)
         return f"[{array_sizes[0]}]{map_type(array_type, prefix, sub_type)}"
-    elif is_2d_array_type(type):
-        array_type = extract_array_type(type)
-        array_sizes = extract_array_sizes(type)
+    elif util.is_2d_array_type(type):
+        array_type = util.extract_array_type(type)
+        array_sizes = util.extract_array_sizes(type)
         return f"[{array_sizes[0]}][{array_sizes[1]}]{map_type(array_type, prefix, sub_type)}"
-    elif is_func_ptr(type):
+    elif util.is_func_ptr(type):
         res_type = funcptr_result_c(type, prefix)
         res_str = '' if res_type == '' else f' -> {res_type}'
         return f'proc "c" ({funcptr_args_c(type, prefix)}){res_str}'
@@ -532,6 +499,3 @@ def gen(c_header_path, c_prefix, dep_c_prefixes):
     gen_module(ir, c_prefix, dep_c_prefixes)
     with open(f"{module_root}/{ir['module']}/{ir['module']}.odin", 'w', newline='\n') as f_outp:
         f_outp.write(out_lines)
-
-
-
