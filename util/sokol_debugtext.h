@@ -31,7 +31,6 @@
     SOKOL_DEBUGTEXT_API_DECL    - public function declaration prefix (default: extern)
     SOKOL_API_DECL      - same as SOKOL_DEBUGTEXT_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
-    SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
 
     If sokol_debugtext.h is compiled as a DLL, define the following before
@@ -396,6 +395,27 @@
     If no overrides are provided, malloc and free will be used.
 
 
+    LOG FUNCTION OVERRIDE
+    =====================
+    You can override the log function at initialization time like this:
+
+        void my_log(const char* message, void* user_data) {
+            printf("sdtx says: \s\n", message);
+        }
+
+        ...
+            sdtx_setup(&(sdtx_desc_t){
+                // ...
+                .logger = {
+                    .log_cb = my_log,
+                    .user_data = ...,
+                }
+            });
+        ...
+
+    If no overrides are provided, puts will be used on most platforms.
+    On Android, __android_log_write will be used instead.
+
     LICENSE
     =======
     zlib/libpng license
@@ -544,6 +564,17 @@ typedef struct sdtx_allocator_t {
 } sdtx_allocator_t;
 
 /*
+    sdtx_logger_t
+
+    Used in sdtx_desc_t to provide custom log callbacks to sokol_debugtext.h.
+    Default behavior is SOKOL_LOG(message).
+*/
+typedef struct sdtx_logger_t {
+    void (*log_cb)(const char* message, void* user_data);
+    void* user_data;
+} sdtx_logger_t;
+
+/*
     sdtx_desc_t
 
     Describes the sokol-debugtext API initialization parameters. Passed
@@ -565,6 +596,7 @@ typedef struct sdtx_desc_t {
     sdtx_font_desc_t fonts[SDTX_MAX_FONTS]; // up to 8 fonts descriptions
     sdtx_context_desc_t context;            // the default context creation parameters
     sdtx_allocator_t allocator;             // optional memory allocation overrides (default: malloc/free)
+    sdtx_logger_t logger;                   // optional log override functions (default: SOKOL_LOG(message))
 } sdtx_desc_t;
 
 /* initialization/shutdown */
@@ -648,21 +680,29 @@ inline sdtx_context sdtx_make_context(const sdtx_context_desc_t& desc) { return 
 #endif
 #ifndef SOKOL_DEBUG
     #ifndef NDEBUG
-        #define SOKOL_DEBUG (1)
+        #define SOKOL_DEBUG
     #endif
 #endif
 #ifndef SOKOL_ASSERT
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
 #endif
-#ifndef SOKOL_LOG
-    #ifdef SOKOL_DEBUG
-        #include <stdio.h>
-        #define SOKOL_LOG(s) { SOKOL_ASSERT(s); puts(s); }
-    #else
-        #define SOKOL_LOG(s)
+
+#if !defined(SOKOL_DEBUG)
+    #define SDTX_LOG(s)
+#else
+    #define SDTX_LOG(s) _sdtx_log(s)
+    #ifndef SOKOL_LOG
+        #if defined(__ANDROID__)
+            #include <android/log.h>
+            #define SOKOL_LOG(s) __android_log_write(ANDROID_LOG_INFO, "SOKOL_DEBUGTEXT", s)
+        #else
+            #include <stdio.h>
+            #define SOKOL_LOG(s) puts(s)
+        #endif
     #endif
 #endif
+
 #ifndef SOKOL_UNREACHABLE
     #define SOKOL_UNREACHABLE SOKOL_ASSERT(false)
 #endif
@@ -3510,6 +3550,17 @@ static void _sdtx_free(void* ptr) {
     }
 }
 
+#if defined(SOKOL_DEBUG)
+static void _sdtx_log(const char* msg) {
+    SOKOL_ASSERT(msg);
+    if (_sdtx.desc.logger.log_cb) {
+        _sdtx.desc.logger.log_cb(msg, _sdtx.desc.logger.user_data);
+    } else {
+        SOKOL_LOG(msg);
+    }
+}
+#endif
+
 /*=== CONTEXT POOL ===========================================================*/
 static void _sdtx_init_pool(_sdtx_pool_t* pool, int num) {
     SOKOL_ASSERT(pool && (num >= 1));
@@ -4017,7 +4068,7 @@ SOKOL_API_IMPL sdtx_context sdtx_make_context(const sdtx_context_desc_t* desc) {
         _sdtx_init_context(ctx_id, desc);
     }
     else {
-        SOKOL_LOG("sokol_debugtext.h: context pool exhausted!");
+        SDTX_LOG("sokol_debugtext.h: context pool exhausted!");
     }
     return ctx_id;
 }
@@ -4025,7 +4076,7 @@ SOKOL_API_IMPL sdtx_context sdtx_make_context(const sdtx_context_desc_t* desc) {
 SOKOL_API_IMPL void sdtx_destroy_context(sdtx_context ctx_id) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
     if (_sdtx_is_default_context(ctx_id)) {
-        SOKOL_LOG("sokol_debugtext.h: cannot destroy default context");
+        SDTX_LOG("sokol_debugtext.h: cannot destroy default context");
         return;
     }
     _sdtx_destroy_context(ctx_id);

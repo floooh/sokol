@@ -119,4 +119,6 @@ def gen(header_path, source_path, module, main_prefix, dep_prefixes):
                 outp_decl['is_dep'] = is_dep
                 outp_decl['dep_prefix'] = dep_prefix(decl, dep_prefixes)
                 outp['decls'].append(outp_decl)
+    with open(f'{module}.json', 'w') as f:
+        f.write(json.dumps(outp, indent=2));
     return outp

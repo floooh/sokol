@@ -13,6 +13,7 @@ set(c_sources
     sokol_shape.c
     sokol_nuklear.c
     sokol_color.c
+    sokol_spine.c
     sokol_main.c)
 if (NOT ANDROID AND NOT UWP)
     set(c_sources ${c_sources} sokol_fetch.c)
@@ -32,6 +33,7 @@ set(cxx_sources
     sokol_gfx_imgui.cc
     sokol_shape.cc
     sokol_color.cc
+    sokol_spine.cc
     sokol_main.cc)
 if (NOT ANDROID AND NOT UWP)
     set(cxx_sources ${cxx_sources} sokol_fetch.cc)
@@ -43,7 +45,7 @@ if (NOT UWP)
     else()
         add_executable(sokol-compiletest-c ${exe_type} sokol_app.c sokol_glue.c ${c_sources})
     endif()
-    target_link_libraries(sokol-compiletest-c PUBLIC cimgui nuklear)
+    target_link_libraries(sokol-compiletest-c PUBLIC cimgui nuklear spine)
     configure_c(sokol-compiletest-c)
 endif()
 
@@ -52,5 +54,5 @@ if (ANDROID)
 else()
     add_executable(sokol-compiletest-cxx ${exe_type} ${cxx_sources})
 endif()
-target_link_libraries(sokol-compiletest-cxx PUBLIC imgui nuklear)
+target_link_libraries(sokol-compiletest-cxx PUBLIC imgui nuklear spine)
 configure_cxx(sokol-compiletest-cxx)

@@ -22,6 +22,7 @@ To update the Zig bindings:
 > cd sokol/bindgen
 > git clone https://github.com/floooh/sokol-zig
 > git clone https://github.com/floooh/sokol-nim
+> git clone https://github.com/floooh/sokol-odin
 > python3 gen_all.py
 ```
 

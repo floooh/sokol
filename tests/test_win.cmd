@@ -1,6 +1,9 @@
 if not exist ext/fips-cimgui/ (
     git clone --depth 1 --recursive https://github.com/fips-libs/fips-cimgui ext/fips-cimgui
 )
+if not exist ext/spine-runtimes/ (
+    git clone --depth 1 --recursive https://github.com/EsotericSoftware/spine-runtimes/ ext/spine-runtimes
+)
 
 md build\win_gl_debug
 cd build\win_gl_debug
