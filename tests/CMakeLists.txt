@@ -29,6 +29,7 @@ else()
     message(FATAL_ERROR "Unrecognized CMAKE_SYSTEM_NAME")
 endif()
 
+message(">> CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
 message(">> SOKOL_BACKEND: ${SOKOL_BACKEND}")
 message(">> SOKOL_FORCE_EGL: ${SOKOL_FORCE_EGL}")
 if (OSX_IOS OR OSX_MACOS)
@@ -212,6 +213,9 @@ add_library(spine
 target_include_directories(spine SYSTEM PUBLIC ext/spine-runtimes/spine-c/spine-c/include)
 if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
     target_compile_options(spine PRIVATE /wd4267 /wd4244)   # conversion from 'x' to 'y' possible loss of data
+endif()
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(spine PRIVATE -Wno-shorten-64-to-32)
 endif()
 
 
