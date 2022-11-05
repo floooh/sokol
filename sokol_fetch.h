@@ -1205,7 +1205,7 @@ typedef struct {
     sfetch_error_t error_code;
     bool finished;
     /* user thread only */
-    uint32_t user_data_size;
+    size_t user_data_size;
     uint64_t user_data[SFETCH_MAX_USERDATA_UINT64];
 } _sfetch_item_user_t;
 
