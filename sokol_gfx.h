@@ -2461,6 +2461,20 @@ typedef struct sg_context_desc {
 } sg_context_desc;
 
 /*
+    sg_commit_listener
+
+    Used with function sg_add_commit_listener() to add a callback
+    which will be called in sg_commit(). This is useful for libraries
+    building on top of sokol-gfx to be notified about when a frame
+    ends (instead of having to guess, or add a manual 'new-frame'
+    function.
+*/
+typedef struct sg_commit_listener {
+    void (*func)(void* user_data);
+    void* user_data;
+} sg_commit_listener;
+
+/*
     sg_allocator
 
     Used in sg_desc to provide custom memory-alloc and -free functions
@@ -2496,6 +2510,7 @@ typedef struct sg_desc {
     int uniform_buffer_size;
     int staging_buffer_size;
     int sampler_cache_size;
+    int max_commit_listeners;
     sg_allocator allocator;
     sg_logger logger; // optional log function override
     sg_context_desc context;
@@ -2510,6 +2525,8 @@ SOKOL_GFX_API_DECL void sg_reset_state_cache(void);
 SOKOL_GFX_API_DECL sg_trace_hooks sg_install_trace_hooks(const sg_trace_hooks* trace_hooks);
 SOKOL_GFX_API_DECL void sg_push_debug_group(const char* name);
 SOKOL_GFX_API_DECL void sg_pop_debug_group(void);
+SOKOL_GFX_API_DECL bool sg_add_commit_listener(sg_commit_listener listener);
+SOKOL_GFX_API_DECL bool sg_remove_commit_listener(sg_commit_listener listener);
 
 /* resource creation, destruction and updating */
 SOKOL_GFX_API_DECL sg_buffer sg_make_buffer(const sg_buffer_desc* desc);
@@ -3213,6 +3230,7 @@ enum {
     _SG_DEFAULT_SAMPLER_CACHE_CAPACITY = 64,
     _SG_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
     _SG_DEFAULT_STAGING_SIZE = 8 * 1024 * 1024,
+    _SG_DEFAULT_MAX_COMMIT_LISTENERS = 1024,
 };
 
 /* fixed-size string */
@@ -4284,6 +4302,12 @@ typedef enum {
 /*=== GENERIC BACKEND STATE ==================================================*/
 
 typedef struct {
+    int num;        // number of allocated commit listener items
+    int upper;      // the current upper index (no valid items past this point)
+    sg_commit_listener* items;
+} _sg_commit_listeners_t;
+
+typedef struct {
     bool valid;
     sg_desc desc;       /* original desc with default values patched in */
     uint32_t frame_index;
@@ -4313,6 +4337,7 @@ typedef struct {
     #if defined(SOKOL_TRACE_HOOKS)
     sg_trace_hooks hooks;
     #endif
+    _sg_commit_listeners_t commit_listeners;
 } _sg_state_t;
 static _sg_state_t _sg;
 
@@ -15272,6 +15297,73 @@ _SOKOL_PRIVATE bool _sg_uninit_pass(sg_pass pass_id) {
     return false;
 }
 
+_SOKOL_PRIVATE void _sg_setup_commit_listeners(const sg_desc* desc) {
+    SOKOL_ASSERT(desc->max_commit_listeners > 0);
+    SOKOL_ASSERT(0 == _sg.commit_listeners.items);
+    SOKOL_ASSERT(0 == _sg.commit_listeners.num);
+    SOKOL_ASSERT(0 == _sg.commit_listeners.upper);
+    _sg.commit_listeners.num = desc->max_commit_listeners;
+    const size_t size = (size_t)_sg.commit_listeners.num * sizeof(sg_commit_listener);
+    _sg.commit_listeners.items = (sg_commit_listener*)_sg_malloc_clear(size);
+}
+
+_SOKOL_PRIVATE void _sg_discard_commit_listeners(void) {
+    SOKOL_ASSERT(0 != _sg.commit_listeners.items);
+    _sg_free(_sg.commit_listeners.items);
+    _sg.commit_listeners.items = 0;
+}
+
+_SOKOL_PRIVATE void _sg_notify_commit_listeners(void) {
+    SOKOL_ASSERT(_sg.commit_listeners.items);
+    for (int i = 0; i < _sg.commit_listeners.upper; i++) {
+        const sg_commit_listener* listener = &_sg.commit_listeners.items[i];
+        if (listener->func) {
+            listener->func(listener->user_data);
+        }
+    }
+}
+
+_SOKOL_PRIVATE bool _sg_add_commit_listener(const sg_commit_listener* new_listener) {
+    SOKOL_ASSERT(new_listener && new_listener->func);
+    SOKOL_ASSERT(_sg.commit_listeners.items);
+    // first try to plug a hole
+    sg_commit_listener* slot = 0;
+    for (int i = 0; i < _sg.commit_listeners.upper; i++) {
+        slot = &_sg.commit_listeners.items[i];
+        if (slot->func == 0) {
+            break;
+        }
+    }
+    if (!slot) {
+        // append to end
+        if (_sg.commit_listeners.upper < _sg.commit_listeners.num) {
+            slot = &_sg.commit_listeners.items[_sg.commit_listeners.upper++];
+        }
+    }
+    if (!slot) {
+        SG_LOG("commit listener array full\n");
+        return false;
+    }
+    *slot = *new_listener;
+    return true;
+}
+
+_SOKOL_PRIVATE bool _sg_remove_commit_listener(const sg_commit_listener* listener) {
+    SOKOL_ASSERT(listener && listener->func);
+    SOKOL_ASSERT(_sg.commit_listeners.items);
+    for (int i = 0; i < _sg.commit_listeners.upper; i++) {
+        sg_commit_listener* slot = &_sg.commit_listeners.items[i];
+        // both the function pointer and user data must match!
+        if ((slot->func == listener->func) && (slot->user_data == listener->user_data)) {
+            slot->func = 0;
+            slot->user_data = 0;
+            return true;
+        }
+    }
+    // not found
+    return false;
+}
+
 _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
     /*
         NOTE: on WebGPU, the default color pixel format MUST be provided,
@@ -15296,6 +15388,7 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
     res.uniform_buffer_size = _sg_def(res.uniform_buffer_size, _SG_DEFAULT_UB_SIZE);
     res.staging_buffer_size = _sg_def(res.staging_buffer_size, _SG_DEFAULT_STAGING_SIZE);
     res.sampler_cache_size = _sg_def(res.sampler_cache_size, _SG_DEFAULT_SAMPLER_CACHE_CAPACITY);
+    res.max_commit_listeners = _sg_def(res.max_commit_listeners, _SG_DEFAULT_MAX_COMMIT_LISTENERS);
     return res;
 }
 
@@ -15308,6 +15401,7 @@ SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
     _SG_CLEAR_ARC_STRUCT(_sg_state_t, _sg);
     _sg.desc = _sg_desc_defaults(desc);
     _sg_setup_pools(&_sg.pools, &_sg.desc);
+    _sg_setup_commit_listeners(&_sg.desc);
     _sg.frame_index = 1;
     _sg_setup_backend(&_sg.desc);
     _sg.valid = true;
@@ -15327,6 +15421,7 @@ SOKOL_API_IMPL void sg_shutdown(void) {
         }
     }
     _sg_discard_backend();
+    _sg_discard_commit_listeners();
     _sg_discard_pools(&_sg.pools);
     _SG_CLEAR_ARC_STRUCT(_sg_state_t, _sg);
 }
@@ -15992,6 +16087,7 @@ SOKOL_API_IMPL void sg_end_pass(void) {
 SOKOL_API_IMPL void sg_commit(void) {
     SOKOL_ASSERT(_sg.valid);
     _sg_commit();
+    _sg_notify_commit_listeners();
     _SG_TRACE_NOARGS(commit);
     _sg.frame_index++;
 }
@@ -16103,6 +16199,16 @@ SOKOL_API_IMPL void sg_push_debug_group(const char* name) {
 SOKOL_API_IMPL void sg_pop_debug_group(void) {
     SOKOL_ASSERT(_sg.valid);
     _SG_TRACE_NOARGS(pop_debug_group);
+}
+
+SOKOL_API_IMPL bool sg_add_commit_listener(sg_commit_listener listener) {
+    SOKOL_ASSERT(_sg.valid);
+    return _sg_add_commit_listener(&listener);
+}
+
+SOKOL_API_IMPL bool sg_remove_commit_listener(sg_commit_listener listener) {
+    SOKOL_ASSERT(_sg.valid);
+    return _sg_remove_commit_listener(&listener);
 }
 
 SOKOL_API_IMPL sg_buffer_info sg_query_buffer_info(sg_buffer buf_id) {
