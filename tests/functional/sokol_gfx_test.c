@@ -836,3 +836,190 @@ UTEST(sokol_gfx, query_buffer_will_overflow) {
     T(sg_query_buffer_will_overflow(buf, 33));
     sg_shutdown();
 }
+
+static struct {
+    uintptr_t userdata;
+    int num_called;
+} commit_listener;
+static void reset_commit_listener(void) {
+    commit_listener.userdata = 0;
+    commit_listener.num_called = 0;
+}
+static void commit_listener_func(void* ud) {
+    commit_listener.userdata = (uintptr_t)ud;
+    commit_listener.num_called++;
+}
+
+UTEST(sokol_gfx, commit_listener_called) {
+    reset_commit_listener();
+    sg_setup(&(sg_desc){0});
+    const bool added = sg_add_commit_listener((sg_commit_listener){
+        .func = commit_listener_func,
+        .user_data = (void*)23,
+    });
+    T(added);
+    T(_sg.commit_listeners.upper == 1);
+    sg_commit();
+    T(23 == commit_listener.userdata);
+    T(1 == commit_listener.num_called);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, commit_listener_add_twice) {
+    reset_commit_listener();
+    sg_setup(&(sg_desc){0});
+    const sg_commit_listener listener = {
+        .func = commit_listener_func,
+        .user_data = (void*)23,
+    };
+    T(sg_add_commit_listener(listener));
+    T(_sg.commit_listeners.upper == 1);
+    T(!sg_add_commit_listener(listener));
+    T(_sg.commit_listeners.upper == 1);
+    sg_commit();
+    T(23 == commit_listener.userdata);
+    T(1 == commit_listener.num_called);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, commit_listener_same_func_diff_ud) {
+    reset_commit_listener();
+    sg_setup(&(sg_desc){0});
+    T(sg_add_commit_listener((sg_commit_listener){
+        .func = commit_listener_func,
+        .user_data = (void*)23,
+    }));
+    T(_sg.commit_listeners.upper == 1);
+    T(sg_add_commit_listener((sg_commit_listener){
+        .func = commit_listener_func,
+        .user_data = (void*)25,
+    }));
+    T(_sg.commit_listeners.upper == 2);
+    sg_commit();
+    T(2 == commit_listener.num_called);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, commit_listener_add_remove_add) {
+    reset_commit_listener();
+    sg_setup(&(sg_desc){0});
+    const sg_commit_listener listener = {
+        .func = commit_listener_func,
+        .user_data = (void*)23,
+    };
+    T(sg_add_commit_listener(listener));
+    T(_sg.commit_listeners.upper == 1);
+    T(sg_remove_commit_listener(listener));
+    T(_sg.commit_listeners.upper == 0);
+    sg_commit();
+    T(0 == commit_listener.num_called);
+    T(sg_add_commit_listener(listener));
+    T(_sg.commit_listeners.upper == 1);
+    sg_commit();
+    T(1 == commit_listener.num_called);
+    T(23 == commit_listener.userdata);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, commit_listener_remove_non_existant) {
+    reset_commit_listener();
+    sg_setup(&(sg_desc){0});
+    const sg_commit_listener l0 = {
+        .func = commit_listener_func,
+        .user_data = (void*)23,
+    };
+    const sg_commit_listener l1 = {
+        .func = commit_listener_func,
+        .user_data = (void*)46,
+    };
+    const sg_commit_listener l2 = {
+        .func = commit_listener_func,
+        .user_data = (void*)256,
+    };
+    T(sg_add_commit_listener(l0));
+    T(sg_add_commit_listener(l1));
+    T(_sg.commit_listeners.upper == 2);
+    T(!sg_remove_commit_listener(l2));
+    T(_sg.commit_listeners.upper == 2);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, commit_listener_multi_add_remove) {
+    reset_commit_listener();
+    sg_setup(&(sg_desc){0});
+    const sg_commit_listener l0 = {
+        .func = commit_listener_func,
+        .user_data = (void*)23,
+    };
+    const sg_commit_listener l1 = {
+        .func = commit_listener_func,
+        .user_data = (void*)46,
+    };
+    T(sg_add_commit_listener(l0));
+    T(sg_add_commit_listener(l1));
+    T(_sg.commit_listeners.upper == 2);
+    // removing the first listener will just clear its slot
+    T(sg_remove_commit_listener(l0));
+    T(_sg.commit_listeners.upper == 2);
+    sg_commit();
+    T(commit_listener.num_called == 1);
+    T(commit_listener.userdata == 46);
+    commit_listener.num_called = 0;
+    // adding the first listener back will fill that same slot again
+    T(sg_add_commit_listener(l0));
+    T(_sg.commit_listeners.upper == 2);
+    sg_commit();
+    T(commit_listener.num_called == 2);
+    T(commit_listener.userdata == 46);
+    commit_listener.num_called = 0;
+    // removing the second listener will decrement the upper bound
+    T(sg_remove_commit_listener(l1));
+    T(_sg.commit_listeners.upper == 1);
+    sg_commit();
+    T(commit_listener.num_called == 1);
+    T(commit_listener.userdata == 23);
+    commit_listener.num_called = 0;
+    // and finally remove the first listener too
+    T(sg_remove_commit_listener(l0));
+    T(_sg.commit_listeners.upper == 0);
+    sg_commit();
+    T(commit_listener.num_called == 0);
+    // removing the same listener twice just returns false
+    T(!sg_remove_commit_listener(l0));
+    T(!sg_remove_commit_listener(l1));
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, commit_listener_array_full) {
+    reset_commit_listener();
+    sg_setup(&(sg_desc){
+        .max_commit_listeners = 3,
+    });
+    const sg_commit_listener l0 = {
+        .func = commit_listener_func,
+        .user_data = (void*)23,
+    };
+    const sg_commit_listener l1 = {
+        .func = commit_listener_func,
+        .user_data = (void*)46,
+    };
+    const sg_commit_listener l2 = {
+        .func = commit_listener_func,
+        .user_data = (void*)128,
+    };
+    const sg_commit_listener l3 = {
+        .func = commit_listener_func,
+        .user_data = (void*)256,
+    };
+    T(sg_add_commit_listener(l0));
+    T(sg_add_commit_listener(l1));
+    T(sg_add_commit_listener(l2));
+    T(_sg.commit_listeners.upper == 3);
+    // overflow!
+    T(!sg_add_commit_listener(l3));
+    T(_sg.commit_listeners.upper == 3);
+    sg_commit();
+    T(commit_listener.num_called == 3);
+    T(commit_listener.userdata == 128);
+    sg_shutdown();
+}
