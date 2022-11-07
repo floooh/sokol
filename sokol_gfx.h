@@ -15326,11 +15326,19 @@ _SOKOL_PRIVATE void _sg_notify_commit_listeners(void) {
 _SOKOL_PRIVATE bool _sg_add_commit_listener(const sg_commit_listener* new_listener) {
     SOKOL_ASSERT(new_listener && new_listener->func);
     SOKOL_ASSERT(_sg.commit_listeners.items);
+    // first check if the listener hadn't been added already
+    for (int i = 0; i < _sg.commit_listeners.upper; i++) {
+        const sg_commit_listener* slot = &_sg.commit_listeners.items[i];
+        if ((slot->func == new_listener->func) && (slot->user_data == new_listener->user_data)) {
+            SG_LOG("attempting to add identical commit listener\n");
+            return false;
+        }
+    }
     // first try to plug a hole
     sg_commit_listener* slot = 0;
     for (int i = 0; i < _sg.commit_listeners.upper; i++) {
-        slot = &_sg.commit_listeners.items[i];
-        if (slot->func == 0) {
+        if (_sg.commit_listeners.items[i].func == 0) {
+            slot = &_sg.commit_listeners.items[i];
             break;
         }
     }
@@ -15357,10 +15365,15 @@ _SOKOL_PRIVATE bool _sg_remove_commit_listener(const sg_commit_listener* listene
         if ((slot->func == listener->func) && (slot->user_data == listener->user_data)) {
             slot->func = 0;
             slot->user_data = 0;
+            if (i == (_sg.commit_listeners.upper - 1)) {
+                SOKOL_ASSERT(_sg.commit_listeners.upper > 0);
+                _sg.commit_listeners.upper -= 1;
+            }
+            // NOTE: since _sg_add_commit_listener() already catches duplicates,
+            // we don't need to worry about them here
             return true;
         }
     }
-    // not found
     return false;
 }
 
