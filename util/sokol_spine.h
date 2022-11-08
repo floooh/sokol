@@ -135,7 +135,6 @@
 
     In the frame loop, outside of sokol-gfx render passes:
 
-        - call sspine_new_frame() before any other sokol-spine function
         - if needed, move instances around with sspine_set_position()
         - if needed, schedule new animations with sspine_set_animation() and sspine_add_animation()
         - each frame, advance the current instance animation state with sspine_update_instance()
@@ -327,17 +326,6 @@
         sspine_set_animation(instance, anim, 0, true);
 
       Scheduling and mixing animations will be explained in more detail further down.
-
-    - IMPORTANT: at the start of a frame, before calling any other per-frame sokol-spine
-      functions, you *must* call:
-
-        sspine_new_frame()
-
-      This advances an internal frame counter which is important for updating
-      recorded vertex- and index-data exactly once per frame, and to rewind
-      internal vertex-, index- and command buffers. Failing to do so may result
-      in the internal buffers running full, resulting in faulty or missing
-      rendering operations.
 
     - To advance and mix instance animations:
 
@@ -1245,9 +1233,6 @@ SOKOL_SPINE_API_DECL void sspine_destroy_atlas(sspine_atlas atlas);
 SOKOL_SPINE_API_DECL void sspine_destroy_skeleton(sspine_skeleton skeleton);
 SOKOL_SPINE_API_DECL void sspine_destroy_skinset(sspine_skinset skinset);
 SOKOL_SPINE_API_DECL void sspine_destroy_instance(sspine_instance instance);
-
-// mark a new frame (call at start of a frame before any sspine_draw_instance())
-SOKOL_SPINE_API_DECL void sspine_new_frame(void);
 
 // configure instance appearance via skinsets
 SOKOL_SPINE_API_DECL void sspine_set_skinset(sspine_instance instance, sspine_skinset skinset);
@@ -4441,6 +4426,17 @@ static void _sspine_destroy_shared(void) {
     sg_destroy_shader(_sspine.shd);
 }
 
+static void _sspine_commit_listener_func(void* userdata) {
+    (void)userdata;
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine.frame_count++;
+}
+
+static sg_commit_listener _sspine_make_commit_listener(void) {
+    sg_commit_listener commit_listener = { _sspine_commit_listener_func, 0 };
+    return commit_listener;
+}
+
 //== PUBLIC FUNCTIONS ==========================================================
 
 SOKOL_API_IMPL void sspine_setup(const sspine_desc* desc) {
@@ -4459,10 +4455,12 @@ SOKOL_API_IMPL void sspine_setup(const sspine_desc* desc) {
     _sspine.def_ctx_id = sspine_make_context(&ctx_desc);
     SOKOL_ASSERT(_sspine_is_default_context(_sspine.def_ctx_id));
     sspine_set_context(_sspine.def_ctx_id);
+    sg_add_commit_listener(_sspine_make_commit_listener());
 }
 
 SOKOL_API_IMPL void sspine_shutdown(void) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    sg_remove_commit_listener(_sspine_make_commit_listener());
     _sspine_destroy_all_instances();
     _sspine_destroy_all_skinsets();
     _sspine_destroy_all_skeletons();
@@ -4542,11 +4540,6 @@ SOKOL_API_IMPL sspine_context_info sspine_get_context_info(sspine_context ctx_id
         res.num_commands = ctx->commands.cur;
     }
     return res;
-}
-
-SOKOL_API_IMPL void sspine_new_frame(void) {
-    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    _sspine.frame_count++;
 }
 
 SOKOL_API_IMPL void sspine_set_skinset(sspine_instance instance_id, sspine_skinset skinset_id) {
