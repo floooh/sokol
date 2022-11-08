@@ -2716,6 +2716,7 @@ static sgl_context_desc_t _sgl_context_desc_defaults(const sgl_context_desc_t* d
 }
 
 static void _sgl_identity(_sgl_matrix_t*);
+static sg_commit_listener _sgl_make_commit_listener(_sgl_context_t* ctx);
 static void _sgl_init_context(sgl_context ctx_id, const sgl_context_desc_t* in_desc) {
     SOKOL_ASSERT((ctx_id.id != SG_INVALID_ID) && in_desc);
     _sgl_context_t* ctx = _sgl_lookup_context(ctx_id.id);
@@ -2746,6 +2747,11 @@ static void _sgl_init_context(sgl_context ctx_id, const sgl_context_desc_t* in_d
     _sgl_clear(&def_pip_desc, sizeof(def_pip_desc));
     def_pip_desc.depth.write_enabled = true;
     ctx->def_pip = _sgl_make_pipeline(&def_pip_desc, &ctx->desc);
+    if (!sg_add_commit_listener(_sgl_make_commit_listener(ctx))) {
+        // FIXME: this should actually result in an invalid context,
+        // fix this when proper error logging/reporting is added
+        SGL_LOG("sokol_gl.h: failed to add sokol-gfx commit listener!");
+    }
     sg_pop_debug_group();
 
     // default state
@@ -2788,6 +2794,7 @@ static void _sgl_destroy_context(sgl_context ctx_id) {
         sg_push_debug_group("sokol-gl");
         sg_destroy_buffer(ctx->vbuf);
         _sgl_destroy_pipeline(ctx->def_pip);
+        sg_remove_commit_listener(_sgl_make_commit_listener(ctx));
         sg_pop_debug_group();
 
         _sgl_reset_context(ctx);
@@ -2809,6 +2816,19 @@ static void _sgl_rewind(_sgl_context_t* ctx) {
     ctx->cur_command = 0;
     ctx->error = SGL_NO_ERROR;
     ctx->matrix_dirty = true;
+}
+
+// called from inside sokol-gfx sg_commit()
+static void _sgl_commit_listener(void* userdata) {
+    _sgl_context_t* ctx = _sgl_lookup_context((uint32_t)(uintptr_t)userdata);
+    if (ctx) {
+        _sgl_rewind(ctx);
+    }
+}
+
+static sg_commit_listener _sgl_make_commit_listener(_sgl_context_t* ctx) {
+    sg_commit_listener listener = { _sgl_commit_listener, (void*)(uintptr_t)(ctx->slot.id) };
+    return listener;
 }
 
 static inline _sgl_vertex_t* _sgl_next_vertex(_sgl_context_t* ctx) {
@@ -3264,7 +3284,6 @@ static void _sgl_draw(_sgl_context_t* ctx) {
         }
         sg_pop_debug_group();
     }
-    _sgl_rewind(ctx);
 }
 
 static sgl_context_desc_t _sgl_as_context_desc(const sgl_desc_t* desc) {
