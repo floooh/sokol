@@ -1024,6 +1024,7 @@ typedef enum sspine_resource_state {
     _SSPINE_XMACRO(VERTEX_BUFFER_OVERFLOW)\
     _SSPINE_XMACRO(INDEX_BUFFER_OVERFLOW)\
     _SSPINE_XMACRO(STRING_TRUNCATED)\
+    _SSPINE_XMACRO(SG_ADD_COMMIT_LISTENER_FAILED)\
 
 #define _SSPINE_XMACRO(code) SSPINE_ERROR_##code,
 typedef enum sspine_error {
@@ -4426,6 +4427,7 @@ static void _sspine_destroy_shared(void) {
     sg_destroy_shader(_sspine.shd);
 }
 
+// called from inside sokol-gfx sg_commit()
 static void _sspine_commit_listener_func(void* userdata) {
     (void)userdata;
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
@@ -4455,7 +4457,9 @@ SOKOL_API_IMPL void sspine_setup(const sspine_desc* desc) {
     _sspine.def_ctx_id = sspine_make_context(&ctx_desc);
     SOKOL_ASSERT(_sspine_is_default_context(_sspine.def_ctx_id));
     sspine_set_context(_sspine.def_ctx_id);
-    sg_add_commit_listener(_sspine_make_commit_listener());
+    if (!sg_add_commit_listener(_sspine_make_commit_listener())) {
+        _SSPINE_ERROR(SG_ADD_COMMIT_LISTENER_FAILED);
+    }
 }
 
 SOKOL_API_IMPL void sspine_shutdown(void) {
