@@ -93,8 +93,8 @@
             }
         });
 
-        When initialization from a 'value type', the buffer item can be initialized with
-        the SFETCH_RANGE() helper macro:
+        If 'buf' is a value (e.g. an array or struct item), the .buffer item can
+        be initialized with the SFETCH_RANGE() helper macro:
 
         sfetch_send(&(sfetch_request_t){
             .path = "my_file.txt",
