@@ -910,7 +910,7 @@ UTEST(sokol_gfx, commit_listener_add_remove_add) {
     T(sg_add_commit_listener(listener));
     T(_sg.commit_listeners.upper == 1);
     T(sg_remove_commit_listener(listener));
-    T(_sg.commit_listeners.upper == 0);
+    T(_sg.commit_listeners.upper == 1);
     sg_commit();
     T(0 == commit_listener.num_called);
     T(sg_add_commit_listener(listener));
@@ -974,14 +974,14 @@ UTEST(sokol_gfx, commit_listener_multi_add_remove) {
     commit_listener.num_called = 0;
     // removing the second listener will decrement the upper bound
     T(sg_remove_commit_listener(l1));
-    T(_sg.commit_listeners.upper == 1);
+    T(_sg.commit_listeners.upper == 2);
     sg_commit();
     T(commit_listener.num_called == 1);
     T(commit_listener.userdata == 23);
     commit_listener.num_called = 0;
     // and finally remove the first listener too
     T(sg_remove_commit_listener(l0));
-    T(_sg.commit_listeners.upper == 0);
+    T(_sg.commit_listeners.upper == 2);
     sg_commit();
     T(commit_listener.num_called == 0);
     // removing the same listener twice just returns false

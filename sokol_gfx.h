@@ -15365,10 +15365,6 @@ _SOKOL_PRIVATE bool _sg_remove_commit_listener(const sg_commit_listener* listene
         if ((slot->func == listener->func) && (slot->user_data == listener->user_data)) {
             slot->func = 0;
             slot->user_data = 0;
-            if (i == (_sg.commit_listeners.upper - 1)) {
-                SOKOL_ASSERT(_sg.commit_listeners.upper > 0);
-                _sg.commit_listeners.upper -= 1;
-            }
             // NOTE: since _sg_add_commit_listener() already catches duplicates,
             // we don't need to worry about them here
             return true;
