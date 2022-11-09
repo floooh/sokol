@@ -710,6 +710,50 @@
     If no overrides are provided, puts will be used on most platforms.
     On Android, __android_log_write will be used instead.
 
+    COMMIT LISTENERS
+    ================
+    It's possible to hook callback functions into sokol-gfx which are called from
+    inside sg_commit() in unspecified order. This is mainly useful for libraries
+    that build on top of sokol_gfx.h to be notified about the end/start of a frame.
+
+    To add a commit listener, call:
+
+        static void my_commit_listener(void* user_data) {
+            ...
+        }
+
+        bool success = sg_add_commit_listener((sg_commit_listener){
+            .func = my_commit_listener,
+            .user_data = ...,
+        });
+
+    The function returns false if the internal array of commit listeners is full,
+    or the same commit listener had already been added.
+
+    If the function returns true, my_commit_listener() will be called each frame
+    from inside sg_commit().
+
+    By default, 1024 distinct commit listeners can be added, but this number
+    can be tweaked in the sg_setup() call:
+
+        sg_setup(&(sg_desc){
+            .max_commit_listeners = 2048,
+        });
+
+    An sg_commit_listener item is equal to another if both the function
+    pointer and user_data field are equal.
+
+    To remove a commit listener:
+
+        bool success = sg_remove_commit_listener((sg_commit_listener){
+            .func = my_commit_listener,
+            .user_data = ...,
+        });
+
+    ...where the .func and .user_data field are equal to a previous
+    sg_add_commit_listener() call. The function returns true if the commit
+    listener item was found and removed, and false otherwise.
+
     TODO:
     ====
     - talk about asynchronous resource creation
