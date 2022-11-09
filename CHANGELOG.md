@@ -1,5 +1,23 @@
 ## Updates
 
+- **09-Nov-2022**: sokol_gfx.h now allows to add 'commit listeners', these
+  are callback functions which are called from inside sg_commit(). This is
+  mainly useful for libraries which build on top of sokol-gfx to be notified
+  about the start/end point of a frame, which in turn may simplify the public
+  API, or the internal implementation, because the library no longer needs to
+  'guess' when a new frame starts.
+
+  For more details, search for 'COMMIT LISTENERS' in the sokol_gfx.h header.
+
+  This also results in a minor breaking change in sokol_spine.h: The function
+  ```sspine_new_frame()``` has been removed and replaced with an internal commit
+  listener.
+
+  Likewise, sokol_gl.h now uses a commit listener in the implementation, but
+  without changing the public API (the feature will be important for an upcoming
+  sokol-gl feature to support rendering layers, and for this a 'new-frame-function'
+  would have been needed).
+
 - **05-Nov-2022** A breaking change in sokol_fetch.h, and a minor change in
   sokol_app.h which should only break for very users:
   - An ```sfetch_range_t``` ptr/size pair struct has been added to sokol_fetch.h,
