@@ -3707,7 +3707,7 @@ SOKOL_API_IMPL void sgl_end(void) {
         if (cmd) {
             SOKOL_ASSERT(ctx->cur_uniform > 0);
             cmd->cmd = SGL_COMMAND_DRAW;
-            ctx->layer = ctx->layer;
+            cmd->layer = ctx->layer;
             cmd->args.draw.img = img;
             cmd->args.draw.pip = _sgl_get_pipeline(ctx->pip_stack[ctx->pip_tos], ctx->cur_prim_type);
             cmd->args.draw.base_vertex = ctx->base_vertex;
