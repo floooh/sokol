@@ -387,8 +387,8 @@
 
     Layered rendering is controlled through two functions:
 
-        sgl_layer(int layer)
-        sgl_draw_layer(int layer)
+        sgl_layer(int layer_id)
+        sgl_draw_layer(int layer_id)
 
     (and the context-variant sgl_draw_layer(): sgl_context_draw_layer()
 
@@ -770,8 +770,8 @@ SOKOL_GL_API_DECL sgl_context sgl_default_context(void);
 /* draw recorded commands (call inside a sokol-gfx render pass) */
 SOKOL_GL_API_DECL void sgl_draw();
 SOKOL_GL_API_DECL void sgl_context_draw(sgl_context ctx);
-SOKOL_GL_API_DECL void sgl_draw_layer(int layer);
-SOKOL_GL_API_DECL void sgl_context_draw_layer(sgl_context ctx, int layer);
+SOKOL_GL_API_DECL void sgl_draw_layer(int layer_id);
+SOKOL_GL_API_DECL void sgl_context_draw_layer(sgl_context ctx, int layer_id);
 
 /* create and destroy pipeline objects */
 SOKOL_GL_API_DECL sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc* desc);
@@ -787,7 +787,7 @@ SOKOL_GL_API_DECL void sgl_scissor_rectf(float x, float y, float w, float h, boo
 SOKOL_GL_API_DECL void sgl_enable_texture(void);
 SOKOL_GL_API_DECL void sgl_disable_texture(void);
 SOKOL_GL_API_DECL void sgl_texture(sg_image img);
-SOKOL_GL_API_DECL void sgl_layer(int layer);
+SOKOL_GL_API_DECL void sgl_layer(int layer_id);
 
 /* pipeline stack functions */
 SOKOL_GL_API_DECL void sgl_load_default_pipeline(void);
@@ -2302,7 +2302,7 @@ typedef union {
 
 typedef struct {
     _sgl_command_type_t cmd;
-    int layer;
+    int layer_id;
     _sgl_args_t args;
 } _sgl_command_t;
 
@@ -2337,7 +2337,7 @@ typedef struct {
     int vtx_count;          /* number of times vtx function has been called, used for non-triangle primitives */
     sgl_error_t error;
     bool in_begin;
-    int layer;
+    int layer_id;
     float u, v;
     uint32_t rgba;
     float point_size;
@@ -2855,7 +2855,7 @@ static void _sgl_rewind(_sgl_context_t* ctx) {
     ctx->cur_command = 0;
     ctx->base_vertex = 0;
     ctx->error = SGL_NO_ERROR;
-    ctx->layer = 0;
+    ctx->layer_id = 0;
     ctx->matrix_dirty = true;
 }
 
@@ -3270,7 +3270,7 @@ static bool _sgl_is_default_context(sgl_context ctx_id) {
     return ctx_id.id == SGL_DEFAULT_CONTEXT.id;
 }
 
-static void _sgl_draw(_sgl_context_t* ctx, int layer) {
+static void _sgl_draw(_sgl_context_t* ctx, int layer_id) {
     SOKOL_ASSERT(ctx);
     if ((ctx->error == SGL_NO_ERROR) && (ctx->cur_vertex > 0) && (ctx->cur_command > 0)) {
         sg_push_debug_group("sokol-gl");
@@ -3287,7 +3287,7 @@ static void _sgl_draw(_sgl_context_t* ctx, int layer) {
 
         for (int i = 0; i < ctx->cur_command; i++) {
             const _sgl_command_t* cmd = &ctx->commands[i];
-            if (cmd->layer != layer) {
+            if (cmd->layer_id != layer_id) {
                 continue;
             }
             switch (cmd->cmd) {
@@ -3540,14 +3540,14 @@ SOKOL_API_IMPL void sgl_defaults(void) {
     ctx->matrix_dirty = true;
 }
 
-SOKOL_API_IMPL void sgl_layer(int layer) {
+SOKOL_API_IMPL void sgl_layer(int layer_id) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl_context_t* ctx = _sgl.cur_ctx;
     if (!ctx) {
         return;
     }
     SOKOL_ASSERT(!ctx->in_begin);
-    ctx->layer = layer;
+    ctx->layer_id = layer_id;
 }
 
 SOKOL_API_IMPL void sgl_viewport(int x, int y, int w, int h, bool origin_top_left) {
@@ -3560,7 +3560,7 @@ SOKOL_API_IMPL void sgl_viewport(int x, int y, int w, int h, bool origin_top_lef
     _sgl_command_t* cmd = _sgl_next_command(ctx);
     if (cmd) {
         cmd->cmd = SGL_COMMAND_VIEWPORT;
-        cmd->layer = ctx->layer;
+        cmd->layer_id = ctx->layer_id;
         cmd->args.viewport.x = x;
         cmd->args.viewport.y = y;
         cmd->args.viewport.w = w;
@@ -3583,7 +3583,7 @@ SOKOL_API_IMPL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top
     _sgl_command_t* cmd = _sgl_next_command(ctx);
     if (cmd) {
         cmd->cmd = SGL_COMMAND_SCISSOR_RECT;
-        cmd->layer = ctx->layer;
+        cmd->layer_id = ctx->layer_id;
         cmd->args.scissor_rect.x = x;
         cmd->args.scissor_rect.y = y;
         cmd->args.scissor_rect.w = w;
@@ -3716,7 +3716,7 @@ SOKOL_API_IMPL void sgl_end(void) {
     bool merge_cmd = false;
     if (prev_cmd) {
         if ((prev_cmd->cmd == SGL_COMMAND_DRAW) &&
-            (prev_cmd->layer == ctx->layer) &&
+            (prev_cmd->layer_id == ctx->layer_id) &&
             (ctx->cur_prim_type != SGL_PRIMITIVETYPE_LINE_STRIP) &&
             (ctx->cur_prim_type != SGL_PRIMITIVETYPE_TRIANGLE_STRIP) &&
             !matrix_dirty &&
@@ -3736,7 +3736,7 @@ SOKOL_API_IMPL void sgl_end(void) {
         if (cmd) {
             SOKOL_ASSERT(ctx->cur_uniform > 0);
             cmd->cmd = SGL_COMMAND_DRAW;
-            cmd->layer = ctx->layer;
+            cmd->layer_id = ctx->layer_id;
             cmd->args.draw.img = img;
             cmd->args.draw.pip = _sgl_get_pipeline(ctx->pip_stack[ctx->pip_tos], ctx->cur_prim_type);
             cmd->args.draw.base_vertex = ctx->base_vertex;
@@ -4154,11 +4154,11 @@ SOKOL_API_IMPL void sgl_draw(void) {
     }
 }
 
-SOKOL_API_IMPL void sgl_draw_layer(int layer) {
+SOKOL_API_IMPL void sgl_draw_layer(int layer_id) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl_context_t* ctx = _sgl.cur_ctx;
     if (ctx) {
-        _sgl_draw(ctx, layer);
+        _sgl_draw(ctx, layer_id);
     }
 }
 
@@ -4170,11 +4170,11 @@ SOKOL_API_IMPL void sgl_context_draw(sgl_context ctx_id) {
     }
 }
 
-SOKOL_API_IMPL void sgl_context_draw_layer(sgl_context ctx_id, int layer) {
+SOKOL_API_IMPL void sgl_context_draw_layer(sgl_context ctx_id, int layer_id) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl_context_t* ctx = _sgl_lookup_context(ctx_id.id);
     if (ctx) {
-        _sgl_draw(ctx, layer);
+        _sgl_draw(ctx, layer_id);
     }
 }
 
