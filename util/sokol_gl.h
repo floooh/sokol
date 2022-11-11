@@ -381,7 +381,7 @@
 
     RENDER LAYERS
     =============
-    Render layers allow to split sokol-gl rendering into seperate draw-command
+    Render layers allow to split sokol-gl rendering into separate draw-command
     groups which can then be rendered separately in a sokol-gfx draw pass. This
     allows to mix/interleave sokol-gl rendering with other render operations.
 
