@@ -379,6 +379,32 @@
         ...if sokol-gl is in an error-state, sgl_draw() will skip any rendering,
         and reset the error code to SGL_NO_ERROR.
 
+    RENDER LAYERS
+    =============
+    Render layers allow to split sokol-gl rendering into seperate draw-command
+    groups which can then be rendered separately in a sokol-gfx draw pass. This
+    allows to mix/interleave sokol-gl rendering with other render operations.
+
+    Layered rendering is controlled through two functions:
+
+        sgl_layer(int layer)
+        sgl_draw_layer(int layer)
+
+    (and the context-variant sgl_draw_layer(): sgl_context_draw_layer()
+
+    The sgl_layer() function sets the 'current layer', any sokol-gl calls
+    which internally record draw commands will also store the current layer
+    in the draw command, and later in a sokol-gfx render pass, a call
+    to sgl_draw_layer() will only render the draw commands that have
+    a matching layer.
+
+    The default layer is '0', this is active after sokol-gl setup, and
+    is also restored at the start of a new frame (but *not* by calling
+    sgl_defaults()).
+
+    NOTE that calling sgl_draw() is equivalent with sgl_draw_layer(0)
+    (in general you should either use either use sgl_draw() or
+    sgl_draw_layer() in an application, but not both).
 
     WORKING WITH CONTEXTS:
     ======================
@@ -463,7 +489,7 @@
     The only functions which call into sokol_gfx.h are:
         - sgl_setup()
         - sgl_shutdown()
-        - sgl_draw()
+        - sgl_draw() (and variants)
 
     sgl_setup() must be called after initializing sokol-gfx.
     sgl_shutdown() must be called before shutting down sokol-gfx.
@@ -508,10 +534,13 @@
               all pipeline objects) are destroyed
             - the 3 memory buffers are freed
 
-        sgl_draw():
+        sgl_draw() (and variants)
             - copy all recorded vertex data into the dynamic sokol-gfx buffer
               via a call to sg_update_buffer()
             - for each recorded command:
+                - if the layer number stored in the command doesn't match
+                  the layer that's to be rendered, skip to the next
+                  command
                 - if it's a viewport command, call sg_apply_viewport()
                 - if it's a scissor-rect command, call sg_apply_scissor_rect()
                 - if it's a draw command:
@@ -533,17 +562,17 @@
     A draw command will be merged with the previous command if "no relevant
     state has changed" since the last sgl_end(), meaning:
 
-    - no calls to sgl_apply_viewport() and sgl_apply_scissor_rect()
+    - no calls to sgl_viewport() and sgl_scissor_rect()
     - the primitive type hasn't changed
     - the primitive type isn't a 'strip type' (no line or triangle strip)
     - the pipeline state object hasn't changed
+    - the current layer hasn't changed
     - none of the matrices has changed
     - none of the texture state has changed
 
     Merging a draw command simply means that the number of vertices
     to render in the previous draw command will be incremented by the
     number of vertices in the new draw command.
-
 
     MEMORY ALLOCATION OVERRIDE
     ==========================
@@ -738,6 +767,12 @@ SOKOL_GL_API_DECL void sgl_set_context(sgl_context ctx);
 SOKOL_GL_API_DECL sgl_context sgl_get_context(void);
 SOKOL_GL_API_DECL sgl_context sgl_default_context(void);
 
+/* draw recorded commands (call inside a sokol-gfx render pass) */
+SOKOL_GL_API_DECL void sgl_draw();
+SOKOL_GL_API_DECL void sgl_context_draw(sgl_context ctx);
+SOKOL_GL_API_DECL void sgl_draw_layer(int layer);
+SOKOL_GL_API_DECL void sgl_context_draw_layer(sgl_context ctx, int layer);
+
 /* create and destroy pipeline objects */
 SOKOL_GL_API_DECL sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc* desc);
 SOKOL_GL_API_DECL sgl_pipeline sgl_context_make_pipeline(sgl_context ctx, const sg_pipeline_desc* desc);
@@ -745,7 +780,6 @@ SOKOL_GL_API_DECL void sgl_destroy_pipeline(sgl_pipeline pip);
 
 /* render state functions */
 SOKOL_GL_API_DECL void sgl_defaults(void);
-SOKOL_GL_API_DECL void sgl_layer(int layer);
 SOKOL_GL_API_DECL void sgl_viewport(int x, int y, int w, int h, bool origin_top_left);
 SOKOL_GL_API_DECL void sgl_viewportf(float x, float y, float w, float h, bool origin_top_left);
 SOKOL_GL_API_DECL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top_left);
@@ -753,6 +787,7 @@ SOKOL_GL_API_DECL void sgl_scissor_rectf(float x, float y, float w, float h, boo
 SOKOL_GL_API_DECL void sgl_enable_texture(void);
 SOKOL_GL_API_DECL void sgl_disable_texture(void);
 SOKOL_GL_API_DECL void sgl_texture(sg_image img);
+SOKOL_GL_API_DECL void sgl_layer(int layer);
 
 /* pipeline stack functions */
 SOKOL_GL_API_DECL void sgl_load_default_pipeline(void);
@@ -820,12 +855,6 @@ SOKOL_GL_API_DECL void sgl_v3f_t2f_c4f(float x, float y, float z, float u, float
 SOKOL_GL_API_DECL void sgl_v3f_t2f_c4b(float x, float y, float z, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 SOKOL_GL_API_DECL void sgl_v3f_t2f_c1i(float x, float y, float z, float u, float v, uint32_t rgba);
 SOKOL_GL_API_DECL void sgl_end(void);
-
-/* render recorded commands */
-SOKOL_GL_API_DECL void sgl_draw();
-SOKOL_GL_API_DECL void sgl_draw_layer(int layer);
-SOKOL_GL_API_DECL void sgl_context_draw(sgl_context ctx);
-SOKOL_GL_API_DECL void sgl_context_draw_layer(sgl_context ctx, int layer);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -3241,7 +3270,7 @@ static bool _sgl_is_default_context(sgl_context ctx_id) {
     return ctx_id.id == SGL_DEFAULT_CONTEXT.id;
 }
 
-static void _sgl_draw(_sgl_context_t* ctx, bool check_layer, int layer) {
+static void _sgl_draw(_sgl_context_t* ctx, int layer) {
     SOKOL_ASSERT(ctx);
     if ((ctx->error == SGL_NO_ERROR) && (ctx->cur_vertex > 0) && (ctx->cur_command > 0)) {
         sg_push_debug_group("sokol-gl");
@@ -3258,7 +3287,7 @@ static void _sgl_draw(_sgl_context_t* ctx, bool check_layer, int layer) {
 
         for (int i = 0; i < ctx->cur_command; i++) {
             const _sgl_command_t* cmd = &ctx->commands[i];
-            if (check_layer && (cmd->layer != layer)) {
+            if (cmd->layer != layer) {
                 continue;
             }
             switch (cmd->cmd) {
@@ -4121,7 +4150,7 @@ SOKOL_API_IMPL void sgl_draw(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl_context_t* ctx = _sgl.cur_ctx;
     if (ctx) {
-        _sgl_draw(ctx, false, 0);
+        _sgl_draw(ctx, 0);
     }
 }
 
@@ -4129,7 +4158,7 @@ SOKOL_API_IMPL void sgl_draw_layer(int layer) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl_context_t* ctx = _sgl.cur_ctx;
     if (ctx) {
-        _sgl_draw(ctx, true, layer);
+        _sgl_draw(ctx, layer);
     }
 }
 
@@ -4137,7 +4166,7 @@ SOKOL_API_IMPL void sgl_context_draw(sgl_context ctx_id) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl_context_t* ctx = _sgl_lookup_context(ctx_id.id);
     if (ctx) {
-        _sgl_draw(ctx, false, 0);
+        _sgl_draw(ctx, 0);
     }
 }
 
@@ -4145,7 +4174,7 @@ SOKOL_API_IMPL void sgl_context_draw_layer(sgl_context ctx_id, int layer) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl_context_t* ctx = _sgl_lookup_context(ctx_id.id);
     if (ctx) {
-        _sgl_draw(ctx, true, layer);
+        _sgl_draw(ctx, layer);
     }
 }
 
