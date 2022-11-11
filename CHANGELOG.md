@@ -1,5 +1,12 @@
 ## Updates
 
+- **11-Nov-2022**: sokol_gl.h has 2 new public API functions which enable
+  layered rendering: sgl_layer(), sgl_draw_layer() (technically it's three
+  functions: there's also sgl_context_draw_layer(), but that's just a variant of
+  sgl_draw_layer()). This allows to 'interleave' sokol-gl rendering
+  with other render operations. The [spine-layers-sapp](https://floooh.github.io/sokol-html5/spine-layers-sapp.html)
+  sample has been updated to use multiple sokol-gl layers.
+
 - **09-Nov-2022**: sokol_gfx.h now allows to add 'commit listeners', these
   are callback functions which are called from inside sg_commit(). This is
   mainly useful for libraries which build on top of sokol-gfx to be notified

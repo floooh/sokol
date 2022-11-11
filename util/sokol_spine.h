@@ -2698,22 +2698,22 @@ typedef struct {
     struct {
         int num;
         int cur;
-        uint32_t rewind_frame_count;
+        uint32_t rewind_frame_id;
         _sspine_vertex_t* ptr;
     } vertices;
     struct {
         int num;
         int cur;
-        uint32_t rewind_frame_count;
+        uint32_t rewind_frame_id;
         uint32_t* ptr;
     } indices;
     struct {
         int num;
         int cur;
-        uint32_t rewind_frame_count;
+        uint32_t rewind_frame_id;
         _sspine_command_t* ptr;
     } commands;
-    uint32_t update_frame_count;
+    uint32_t update_frame_id;
     sg_buffer vbuf;
     sg_buffer ibuf;
     struct {
@@ -2730,7 +2730,7 @@ typedef struct {
 
 typedef struct {
     uint32_t init_cookie;
-    uint32_t frame_count;
+    uint32_t frame_id;
     sspine_desc desc;
     sspine_context def_ctx_id;
     sspine_context cur_ctx_id;
@@ -4034,9 +4034,9 @@ static void _sspine_init_image_info(const _sspine_atlas_t* atlas, int index, ssp
 }
 
 static void _sspine_check_rewind_commands(_sspine_context_t* ctx) {
-    if (_sspine.frame_count != ctx->commands.rewind_frame_count) {
+    if (_sspine.frame_id != ctx->commands.rewind_frame_id) {
         ctx->commands.cur = 0;
-        ctx->commands.rewind_frame_count = _sspine.frame_count;
+        ctx->commands.rewind_frame_id = _sspine.frame_id;
     }
 }
 
@@ -4062,9 +4062,9 @@ static _sspine_command_t* _sspine_prev_command(_sspine_context_t* ctx) {
 }
 
 static void _sspine_check_rewind_vertices(_sspine_context_t* ctx) {
-    if (_sspine.frame_count != ctx->vertices.rewind_frame_count) {
+    if (_sspine.frame_id != ctx->vertices.rewind_frame_id) {
         ctx->vertices.cur = 0;
-        ctx->vertices.rewind_frame_count = _sspine.frame_count;
+        ctx->vertices.rewind_frame_id = _sspine.frame_id;
     }
 }
 
@@ -4084,9 +4084,9 @@ static _sspine_alloc_vertices_result_t _sspine_alloc_vertices(_sspine_context_t*
 }
 
 static void _sspine_check_rewind_indices(_sspine_context_t* ctx) {
-    if (_sspine.frame_count != ctx->indices.rewind_frame_count) {
+    if (_sspine.frame_id != ctx->indices.rewind_frame_id) {
         ctx->indices.cur = 0;
-        ctx->indices.rewind_frame_count = _sspine.frame_count;
+        ctx->indices.rewind_frame_id = _sspine.frame_id;
     }
 }
 
@@ -4314,8 +4314,8 @@ static void _sspine_draw_layer(_sspine_context_t* ctx, int layer, const sspine_l
     if ((ctx->vertices.cur > 0) && (ctx->commands.cur > 0)) {
         sg_push_debug_group("sokol-spine");
 
-        if (ctx->update_frame_count != _sspine.frame_count) {
-            ctx->update_frame_count = _sspine.frame_count;
+        if (ctx->update_frame_id != _sspine.frame_id) {
+            ctx->update_frame_id = _sspine.frame_id;
             const sg_range vtx_range = { ctx->vertices.ptr, (size_t)ctx->vertices.cur * sizeof(_sspine_vertex_t) };
             sg_update_buffer(ctx->vbuf, &vtx_range);
             const sg_range idx_range = { ctx->indices.ptr, (size_t)ctx->indices.cur * sizeof(uint32_t) };
@@ -4431,7 +4431,7 @@ static void _sspine_destroy_shared(void) {
 static void _sspine_commit_listener_func(void* userdata) {
     (void)userdata;
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    _sspine.frame_count++;
+    _sspine.frame_id++;
 }
 
 static sg_commit_listener _sspine_make_commit_listener(void) {
@@ -4448,6 +4448,9 @@ SOKOL_API_IMPL void sspine_setup(const sspine_desc* desc) {
     _sspine.init_cookie = _SSPINE_INIT_COOKIE;
     _sspine.desc = _sspine_desc_defaults(desc);
     _sspine_init_shared();
+    // important, need to setup the frame id with a non-zero value,
+    // otherwise updates won't trigger in the first frame
+    _sspine.frame_id = 1;
     _sspine_setup_context_pool(_sspine.desc.context_pool_size);
     _sspine_setup_atlas_pool(_sspine.desc.atlas_pool_size);
     _sspine_setup_skeleton_pool(_sspine.desc.skeleton_pool_size);
