@@ -2841,7 +2841,7 @@ static void _sgl_destroy_context(sgl_context ctx_id) {
     }
 }
 
-static inline void _sgl_begin(_sgl_context_t* ctx, _sgl_primitive_type_t mode) {
+static void _sgl_begin(_sgl_context_t* ctx, _sgl_primitive_type_t mode) {
     ctx->in_begin = true;
     ctx->base_vertex = ctx->cur_vertex;
     ctx->vtx_count = 0;
@@ -2872,7 +2872,7 @@ static sg_commit_listener _sgl_make_commit_listener(_sgl_context_t* ctx) {
     return listener;
 }
 
-static inline _sgl_vertex_t* _sgl_next_vertex(_sgl_context_t* ctx) {
+static _sgl_vertex_t* _sgl_next_vertex(_sgl_context_t* ctx) {
     if (ctx->cur_vertex < ctx->num_vertices) {
         return &ctx->vertices[ctx->cur_vertex++];
     }
@@ -2882,7 +2882,7 @@ static inline _sgl_vertex_t* _sgl_next_vertex(_sgl_context_t* ctx) {
     }
 }
 
-static inline _sgl_uniform_t* _sgl_next_uniform(_sgl_context_t* ctx) {
+static _sgl_uniform_t* _sgl_next_uniform(_sgl_context_t* ctx) {
     if (ctx->cur_uniform < ctx->num_uniforms) {
         return &ctx->uniforms[ctx->cur_uniform++];
     }
@@ -2892,7 +2892,7 @@ static inline _sgl_uniform_t* _sgl_next_uniform(_sgl_context_t* ctx) {
     }
 }
 
-static inline _sgl_command_t* _sgl_prev_command(_sgl_context_t* ctx) {
+static _sgl_command_t* _sgl_prev_command(_sgl_context_t* ctx) {
     if (ctx->cur_command > 0) {
         return &ctx->commands[ctx->cur_command - 1];
     }
@@ -2901,7 +2901,7 @@ static inline _sgl_command_t* _sgl_prev_command(_sgl_context_t* ctx) {
     }
 }
 
-static inline _sgl_command_t* _sgl_next_command(_sgl_context_t* ctx) {
+static _sgl_command_t* _sgl_next_command(_sgl_context_t* ctx) {
     if (ctx->cur_command < ctx->num_commands) {
         return &ctx->commands[ctx->cur_command++];
     }
@@ -2911,17 +2911,17 @@ static inline _sgl_command_t* _sgl_next_command(_sgl_context_t* ctx) {
     }
 }
 
-static inline uint32_t _sgl_pack_rgbab(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+static uint32_t _sgl_pack_rgbab(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     return (uint32_t)(((uint32_t)a<<24)|((uint32_t)b<<16)|((uint32_t)g<<8)|r);
 }
 
-static inline float _sgl_clamp(float v, float lo, float hi) {
+static float _sgl_clamp(float v, float lo, float hi) {
     if (v < lo) return lo;
     else if (v > hi) return hi;
     else return v;
 }
 
-static inline uint32_t _sgl_pack_rgbaf(float r, float g, float b, float a) {
+static uint32_t _sgl_pack_rgbaf(float r, float g, float b, float a) {
     uint8_t r_u8 = (uint8_t) (_sgl_clamp(r, 0.0f, 1.0f) * 255.0f);
     uint8_t g_u8 = (uint8_t) (_sgl_clamp(g, 0.0f, 1.0f) * 255.0f);
     uint8_t b_u8 = (uint8_t) (_sgl_clamp(b, 0.0f, 1.0f) * 255.0f);
@@ -2929,7 +2929,7 @@ static inline uint32_t _sgl_pack_rgbaf(float r, float g, float b, float a) {
     return _sgl_pack_rgbab(r_u8, g_u8, b_u8, a_u8);
 }
 
-static inline void _sgl_vtx(_sgl_context_t* ctx, float x, float y, float z, float u, float v, uint32_t rgba) {
+static void _sgl_vtx(_sgl_context_t* ctx, float x, float y, float z, float u, float v, uint32_t rgba) {
     SOKOL_ASSERT(ctx->in_begin);
     _sgl_vertex_t* vtx;
     /* handle non-native primitive types */
@@ -3143,22 +3143,22 @@ static void _sgl_lookat(_sgl_matrix_t* dst,
 }
 
 /* current top-of-stack projection matrix */
-static inline _sgl_matrix_t* _sgl_matrix_projection(_sgl_context_t* ctx) {
+static _sgl_matrix_t* _sgl_matrix_projection(_sgl_context_t* ctx) {
     return &ctx->matrix_stack[SGL_MATRIXMODE_PROJECTION][ctx->matrix_tos[SGL_MATRIXMODE_PROJECTION]];
 }
 
 /* get top-of-stack modelview matrix */
-static inline _sgl_matrix_t* _sgl_matrix_modelview(_sgl_context_t* ctx) {
+static _sgl_matrix_t* _sgl_matrix_modelview(_sgl_context_t* ctx) {
     return &ctx->matrix_stack[SGL_MATRIXMODE_MODELVIEW][ctx->matrix_tos[SGL_MATRIXMODE_MODELVIEW]];
 }
 
 /* get top-of-stack texture matrix */
-static inline _sgl_matrix_t* _sgl_matrix_texture(_sgl_context_t* ctx) {
+static _sgl_matrix_t* _sgl_matrix_texture(_sgl_context_t* ctx) {
     return &ctx->matrix_stack[SGL_MATRIXMODE_TEXTURE][ctx->matrix_tos[SGL_MATRIXMODE_TEXTURE]];
 }
 
 /* get pointer to current top-of-stack of current matrix mode */
-static inline _sgl_matrix_t* _sgl_matrix(_sgl_context_t* ctx) {
+static _sgl_matrix_t* _sgl_matrix(_sgl_context_t* ctx) {
     return &ctx->matrix_stack[ctx->cur_matrix_mode][ctx->matrix_tos[ctx->cur_matrix_mode]];
 }
 
