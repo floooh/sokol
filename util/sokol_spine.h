@@ -4042,7 +4042,7 @@ static void _sspine_check_rewind_commands(_sspine_context_t* ctx) {
 
 static _sspine_command_t* _sspine_next_command(_sspine_context_t* ctx) {
     _sspine_check_rewind_commands(ctx);
-    if ((ctx->commands.cur + 1) <= ctx->commands.num) {
+    if (ctx->commands.cur < ctx->commands.num) {
         return &(ctx->commands.ptr[ctx->commands.cur++]);
     }
     else {
@@ -4053,7 +4053,7 @@ static _sspine_command_t* _sspine_next_command(_sspine_context_t* ctx) {
 
 static _sspine_command_t* _sspine_prev_command(_sspine_context_t* ctx) {
     _sspine_check_rewind_commands(ctx);
-    if ((ctx->commands.cur > 0) && (ctx->commands.cur <= ctx->commands.num)) {
+    if (ctx->commands.cur > 0) {
         return &ctx->commands.ptr[ctx->commands.cur - 1];
     }
     else {
