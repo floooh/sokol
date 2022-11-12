@@ -540,6 +540,7 @@ typedef struct sdtx_font_desc_t {
     of text.
 */
 typedef struct sdtx_context_desc_t {
+    int max_commands;                       // max number of draw commands, each layer transition counts as a command, default: 4096
     int char_buf_size;                      // max number of characters rendered in one frame, default: 4096
     float canvas_width;                     // the initial virtual canvas width, default: 640
     float canvas_height;                    // the initial virtual canvas height, default: 400
@@ -618,8 +619,14 @@ SOKOL_DEBUGTEXT_API_DECL void sdtx_set_context(sdtx_context ctx);
 SOKOL_DEBUGTEXT_API_DECL sdtx_context sdtx_get_context(void);
 SOKOL_DEBUGTEXT_API_DECL sdtx_context sdtx_default_context(void);
 
-/* draw and rewind the current context */
+/* drawing functions (call inside sokol-gfx render pass) */
 SOKOL_DEBUGTEXT_API_DECL void sdtx_draw(void);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_context_draw(sdtx_context ctx);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_draw_layer(int layer_id);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_context_draw_layer(sdtx_context ctx, int layer_id);
+
+/* switch render layer */
+SOKOL_DEBUGTEXT_API_DECL void sdtx_layer(int layer_id);
 
 /* switch to a different font */
 SOKOL_DEBUGTEXT_API_DECL void sdtx_font(int font_index);
@@ -3479,14 +3486,22 @@ typedef struct {
 } _sdtx_vertex_t;
 
 typedef struct {
+    int layer;
+    int first_vertex;
+    int num_vertices;
+} _sdtx_command_t;
+
+typedef struct {
     _sdtx_slot_t slot;
     sdtx_context_desc_t desc;
     _sdtx_vertex_t* cur_vertex_ptr;
     const _sdtx_vertex_t* max_vertex_ptr;
     _sdtx_vertex_t* vertices;
+    _sdtx_command_t* commands;
     sg_buffer vbuf;
     sg_pipeline pip;
     int cur_font;
+    int cur_layer_id;
     _sdtx_float2_t canvas_size;
     _sdtx_float2_t glyph_size;
     _sdtx_float2_t origin;
