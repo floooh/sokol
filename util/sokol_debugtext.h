@@ -224,10 +224,14 @@
 
             sdtx_draw()
 
-        ...to actually render the text. Calling sdtx_draw() will also rewind
-        the text context:
+        ...to actually render the text.
 
-            - the internal vertex buffer pointer is reset to the beginning
+    --- at the end of a frame (defined by the call to sg_commit()), sokol-debugtext
+        will rewind all contexts:
+
+            - the internal vertex index is set to 0
+            - the internal command index is set to 0
+            - the current layer id is set to 0
             - the current font is set to 0
             - the cursor position is reset
 
@@ -4476,4 +4480,27 @@ SOKOL_API_IMPL void sdtx_draw(void) {
     }
 }
 
+SOKOL_API_IMPL void sdtx_context_draw(sdtx_context ctx_id) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    _sdtx_context_t* ctx = _sdtx_lookup_context(ctx_id.id);
+    if (ctx) {
+        _sdtx_draw_layer(ctx, 0);
+    }
+}
+
+SOKOL_API_IMPL void sdtx_draw_layer(int layer_id) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    _sdtx_context_t* ctx = _sdtx.cur_ctx;
+    if (ctx) {
+        _sdtx_draw_layer(ctx, layer_id);
+    }
+}
+
+SOKOL_API_IMPL void sdtx_context_draw_layer(sdtx_context ctx_id, int layer_id) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    _sdtx_context_t* ctx = _sdtx_lookup_context(ctx_id.id);
+    if (ctx) {
+        _sdtx_draw_layer(ctx, layer_id);
+    }
+}
 #endif /* SOKOL_DEBUGTEXT_IMPL */
