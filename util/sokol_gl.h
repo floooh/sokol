@@ -2322,18 +2322,18 @@ typedef struct {
     uint32_t frame_id;
     uint32_t update_frame_id;
     struct {
-        int num;
-        int cur;
+        int cap;
+        int next;
         _sgl_vertex_t* ptr;
     } vertices;
     struct {
-        int num;
-        int cur;
+        int cap;
+        int next;
         _sgl_uniform_t* ptr;
     } uniforms;
     struct {
-        int num;
-        int cur;
+        int cap;
+        int next;
         _sgl_command_t* ptr;
     } commands;
 
@@ -2768,18 +2768,18 @@ static void _sgl_init_context(sgl_context ctx_id, const sgl_context_desc_t* in_d
     ctx->cur_img = _sgl.def_img;
 
     // allocate buffers and pools
-    ctx->vertices.num = ctx->desc.max_vertices;
-    ctx->commands.num = ctx->uniforms.num = ctx->desc.max_commands;
-    ctx->vertices.ptr = (_sgl_vertex_t*) _sgl_malloc((size_t)ctx->vertices.num * sizeof(_sgl_vertex_t));
-    ctx->uniforms.ptr = (_sgl_uniform_t*) _sgl_malloc((size_t)ctx->uniforms.num * sizeof(_sgl_uniform_t));
-    ctx->commands.ptr = (_sgl_command_t*) _sgl_malloc((size_t)ctx->commands.num * sizeof(_sgl_command_t));
+    ctx->vertices.cap = ctx->desc.max_vertices;
+    ctx->commands.cap = ctx->uniforms.cap = ctx->desc.max_commands;
+    ctx->vertices.ptr = (_sgl_vertex_t*) _sgl_malloc((size_t)ctx->vertices.cap * sizeof(_sgl_vertex_t));
+    ctx->uniforms.ptr = (_sgl_uniform_t*) _sgl_malloc((size_t)ctx->uniforms.cap * sizeof(_sgl_uniform_t));
+    ctx->commands.ptr = (_sgl_command_t*) _sgl_malloc((size_t)ctx->commands.cap * sizeof(_sgl_command_t));
 
     // create sokol-gfx resource objects
     sg_push_debug_group("sokol-gl");
 
     sg_buffer_desc vbuf_desc;
     _sgl_clear(&vbuf_desc, sizeof(vbuf_desc));
-    vbuf_desc.size = (size_t)ctx->vertices.num * sizeof(_sgl_vertex_t);
+    vbuf_desc.size = (size_t)ctx->vertices.cap * sizeof(_sgl_vertex_t);
     vbuf_desc.type = SG_BUFFERTYPE_VERTEXBUFFER;
     vbuf_desc.usage = SG_USAGE_STREAM;
     vbuf_desc.label = "sgl-vertex-buffer";
@@ -2847,16 +2847,16 @@ static void _sgl_destroy_context(sgl_context ctx_id) {
 
 static void _sgl_begin(_sgl_context_t* ctx, _sgl_primitive_type_t mode) {
     ctx->in_begin = true;
-    ctx->base_vertex = ctx->vertices.cur;
+    ctx->base_vertex = ctx->vertices.next;
     ctx->vtx_count = 0;
     ctx->cur_prim_type = mode;
 }
 
 static void _sgl_rewind(_sgl_context_t* ctx) {
     ctx->frame_id++;
-    ctx->vertices.cur = 0;
-    ctx->uniforms.cur = 0;
-    ctx->commands.cur = 0;
+    ctx->vertices.next = 0;
+    ctx->uniforms.next = 0;
+    ctx->commands.next = 0;
     ctx->base_vertex = 0;
     ctx->error = SGL_NO_ERROR;
     ctx->layer_id = 0;
@@ -2877,8 +2877,8 @@ static sg_commit_listener _sgl_make_commit_listener(_sgl_context_t* ctx) {
 }
 
 static _sgl_vertex_t* _sgl_next_vertex(_sgl_context_t* ctx) {
-    if (ctx->vertices.cur < ctx->vertices.num) {
-        return &ctx->vertices.ptr[ctx->vertices.cur++];
+    if (ctx->vertices.next < ctx->vertices.cap) {
+        return &ctx->vertices.ptr[ctx->vertices.next++];
     }
     else {
         ctx->error = SGL_ERROR_VERTICES_FULL;
@@ -2887,8 +2887,8 @@ static _sgl_vertex_t* _sgl_next_vertex(_sgl_context_t* ctx) {
 }
 
 static _sgl_uniform_t* _sgl_next_uniform(_sgl_context_t* ctx) {
-    if (ctx->uniforms.cur < ctx->uniforms.num) {
-        return &ctx->uniforms.ptr[ctx->uniforms.cur++];
+    if (ctx->uniforms.next < ctx->uniforms.cap) {
+        return &ctx->uniforms.ptr[ctx->uniforms.next++];
     }
     else {
         ctx->error = SGL_ERROR_UNIFORMS_FULL;
@@ -2897,8 +2897,8 @@ static _sgl_uniform_t* _sgl_next_uniform(_sgl_context_t* ctx) {
 }
 
 static _sgl_command_t* _sgl_prev_command(_sgl_context_t* ctx) {
-    if (ctx->commands.cur > 0) {
-        return &ctx->commands.ptr[ctx->commands.cur - 1];
+    if (ctx->commands.next > 0) {
+        return &ctx->commands.ptr[ctx->commands.next - 1];
     }
     else {
         return 0;
@@ -2906,8 +2906,8 @@ static _sgl_command_t* _sgl_prev_command(_sgl_context_t* ctx) {
 }
 
 static _sgl_command_t* _sgl_next_command(_sgl_context_t* ctx) {
-    if (ctx->commands.cur < ctx->commands.num) {
-        return &ctx->commands.ptr[ctx->commands.cur++];
+    if (ctx->commands.next < ctx->commands.cap) {
+        return &ctx->commands.ptr[ctx->commands.next++];
     }
     else {
         ctx->error = SGL_ERROR_COMMANDS_FULL;
@@ -3276,7 +3276,7 @@ static bool _sgl_is_default_context(sgl_context ctx_id) {
 
 static void _sgl_draw(_sgl_context_t* ctx, int layer_id) {
     SOKOL_ASSERT(ctx);
-    if ((ctx->error == SGL_NO_ERROR) && (ctx->vertices.cur > 0) && (ctx->commands.cur > 0)) {
+    if ((ctx->error == SGL_NO_ERROR) && (ctx->vertices.next > 0) && (ctx->commands.next > 0)) {
         sg_push_debug_group("sokol-gl");
 
         uint32_t cur_pip_id = SG_INVALID_ID;
@@ -3285,11 +3285,11 @@ static void _sgl_draw(_sgl_context_t* ctx, int layer_id) {
 
         if (ctx->update_frame_id != ctx->frame_id) {
             ctx->update_frame_id = ctx->frame_id;
-            const sg_range range = { ctx->vertices.ptr, (size_t)ctx->vertices.cur * sizeof(_sgl_vertex_t) };
+            const sg_range range = { ctx->vertices.ptr, (size_t)ctx->vertices.next * sizeof(_sgl_vertex_t) };
             sg_update_buffer(ctx->vbuf, &range);
         }
 
-        for (int i = 0; i < ctx->commands.cur; i++) {
+        for (int i = 0; i < ctx->commands.next; i++) {
             const _sgl_command_t* cmd = &ctx->commands.ptr[i];
             if (cmd->layer_id != layer_id) {
                 continue;
@@ -3702,7 +3702,7 @@ SOKOL_API_IMPL void sgl_end(void) {
         return;
     }
     SOKOL_ASSERT(ctx->in_begin);
-    SOKOL_ASSERT(ctx->vertices.cur >= ctx->base_vertex);
+    SOKOL_ASSERT(ctx->vertices.next >= ctx->base_vertex);
     ctx->in_begin = false;
     bool matrix_dirty = ctx->matrix_dirty;
     if (matrix_dirty) {
@@ -3732,20 +3732,20 @@ SOKOL_API_IMPL void sgl_end(void) {
     }
     if (merge_cmd) {
         /* draw command can be merged with the previous command */
-        prev_cmd->args.draw.num_vertices += ctx->vertices.cur - ctx->base_vertex;
+        prev_cmd->args.draw.num_vertices += ctx->vertices.next - ctx->base_vertex;
     }
     else {
         /* append a new draw command */
         _sgl_command_t* cmd = _sgl_next_command(ctx);
         if (cmd) {
-            SOKOL_ASSERT(ctx->uniforms.cur > 0);
+            SOKOL_ASSERT(ctx->uniforms.next > 0);
             cmd->cmd = SGL_COMMAND_DRAW;
             cmd->layer_id = ctx->layer_id;
             cmd->args.draw.img = img;
             cmd->args.draw.pip = _sgl_get_pipeline(ctx->pip_stack[ctx->pip_tos], ctx->cur_prim_type);
             cmd->args.draw.base_vertex = ctx->base_vertex;
-            cmd->args.draw.num_vertices = ctx->vertices.cur - ctx->base_vertex;
-            cmd->args.draw.uniform_index = ctx->uniforms.cur - 1;
+            cmd->args.draw.num_vertices = ctx->vertices.next - ctx->base_vertex;
+            cmd->args.draw.uniform_index = ctx->uniforms.next - 1;
         }
     }
 }
