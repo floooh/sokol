@@ -4051,7 +4051,7 @@ static _sspine_command_t* _sspine_next_command(_sspine_context_t* ctx) {
     }
 }
 
-static _sspine_command_t* _sspine_prev_command(_sspine_context_t* ctx) {
+static _sspine_command_t* _sspine_cur_command(_sspine_context_t* ctx) {
     _sspine_check_rewind_commands(ctx);
     if (ctx->commands.next > 0) {
         return &ctx->commands.ptr[ctx->commands.next - 1];
@@ -4254,11 +4254,11 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
                 break;
         }
 
-        // write new draw command, or merge with previous draw command
-        _sspine_command_t* prev_cmd = _sspine_prev_command(ctx);
-        if (prev_cmd && (prev_cmd->layer == layer) && (prev_cmd->pip.id == pip.id) && (prev_cmd->img.id == img.id) && (prev_cmd->pma == pma)) {
-            // merge with previous command
-            prev_cmd->num_elements += num_indices;
+        // write new draw command, or merge with current draw command
+        _sspine_command_t* cur_cmd = _sspine_cur_command(ctx);
+        if (cur_cmd && (cur_cmd->layer == layer) && (cur_cmd->pip.id == pip.id) && (cur_cmd->img.id == img.id) && (cur_cmd->pma == pma)) {
+            // merge with current command
+            cur_cmd->num_elements += num_indices;
         }
         else {
             // record a new command
