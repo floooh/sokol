@@ -2896,7 +2896,7 @@ static _sgl_uniform_t* _sgl_next_uniform(_sgl_context_t* ctx) {
     }
 }
 
-static _sgl_command_t* _sgl_prev_command(_sgl_context_t* ctx) {
+static _sgl_command_t* _sgl_cur_command(_sgl_context_t* ctx) {
     if (ctx->commands.next > 0) {
         return &ctx->commands.ptr[ctx->commands.next - 1];
     }
@@ -3713,26 +3713,26 @@ SOKOL_API_IMPL void sgl_end(void) {
             uni->tm = *_sgl_matrix_texture(ctx);
         }
     }
-    /* check if command can be merged with previous command */
+    /* check if command can be merged with current command */
     sg_pipeline pip = _sgl_get_pipeline(ctx->pip_stack[ctx->pip_tos], ctx->cur_prim_type);
     sg_image img = ctx->texturing_enabled ? ctx->cur_img : _sgl.def_img;
-    _sgl_command_t* prev_cmd = _sgl_prev_command(ctx);
+    _sgl_command_t* cur_cmd = _sgl_cur_command(ctx);
     bool merge_cmd = false;
-    if (prev_cmd) {
-        if ((prev_cmd->cmd == SGL_COMMAND_DRAW) &&
-            (prev_cmd->layer_id == ctx->layer_id) &&
+    if (cur_cmd) {
+        if ((cur_cmd->cmd == SGL_COMMAND_DRAW) &&
+            (cur_cmd->layer_id == ctx->layer_id) &&
             (ctx->cur_prim_type != SGL_PRIMITIVETYPE_LINE_STRIP) &&
             (ctx->cur_prim_type != SGL_PRIMITIVETYPE_TRIANGLE_STRIP) &&
             !matrix_dirty &&
-            (prev_cmd->args.draw.img.id == img.id) &&
-            (prev_cmd->args.draw.pip.id == pip.id))
+            (cur_cmd->args.draw.img.id == img.id) &&
+            (cur_cmd->args.draw.pip.id == pip.id))
         {
             merge_cmd = true;
         }
     }
     if (merge_cmd) {
         /* draw command can be merged with the previous command */
-        prev_cmd->args.draw.num_vertices += ctx->vertices.next - ctx->base_vertex;
+        cur_cmd->args.draw.num_vertices += ctx->vertices.next - ctx->base_vertex;
     }
     else {
         /* append a new draw command */
