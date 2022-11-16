@@ -3539,8 +3539,7 @@ typedef struct {
     sdtx_context cur_ctx_id;
     _sdtx_context_t* cur_ctx;   // may be 0!
     _sdtx_context_pool_t context_pool;
-    // NOTE: each char cell is an 8x8 grid at the top left of a 16x16 grid
-    uint8_t font_pixels[SDTX_MAX_FONTS * 256 * 16 * 16];
+    uint8_t font_pixels[SDTX_MAX_FONTS * 256 * 8 * 8];
 } _sdtx_t;
 static _sdtx_t _sdtx;
 
@@ -3871,8 +3870,7 @@ static void _sdtx_unpack_font(const sdtx_font_desc_t* font_desc, uint8_t* out_pi
         for (int line = 0; line < 8; line++) {
             uint8_t bits = *ptr++;
             for (int x = 0; x < 8; x++) {
-                // NOTE: each character cell is an 8x8 grid at the top left of a 16x16 grid
-                out_pixels[line*256*16 + chr*16 + x] = ((bits>>(7-x)) & 1) ? 0xFF : 0x00;
+                out_pixels[line*256*8 + chr*8 + x] = ((bits>>(7-x)) & 1) ? 0xFF : 0x00;
             }
         }
     }
@@ -3939,7 +3937,7 @@ static void _sdtx_setup_common(void) {
     SOKOL_ASSERT(SG_INVALID_ID != _sdtx.shader.id);
 
     /* unpack font data */
-    memset(_sdtx.font_pixels, 0, sizeof(_sdtx.font_pixels));
+    memset(_sdtx.font_pixels, 0xFF, sizeof(_sdtx.font_pixels));
     const int unpacked_font_size = (int) (sizeof(_sdtx.font_pixels) / SDTX_MAX_FONTS);
     for (int i = 0; i < SDTX_MAX_FONTS; i++) {
         if (_sdtx.desc.fonts[i].data.ptr) {
@@ -3950,14 +3948,15 @@ static void _sdtx_setup_common(void) {
     /* create font texture */
     sg_image_desc img_desc;
     _sdtx_clear(&img_desc, sizeof(img_desc));
-    img_desc.width = 256 * 16;
-    img_desc.height = SDTX_MAX_FONTS * 16;
+    img_desc.width = 256 * 8;
+    img_desc.height = SDTX_MAX_FONTS * 8;
     img_desc.pixel_format = SG_PIXELFORMAT_R8;
     img_desc.min_filter = SG_FILTER_NEAREST;
     img_desc.mag_filter = SG_FILTER_NEAREST;
     img_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
     img_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
     img_desc.data.subimage[0][0] = SG_RANGE(_sdtx.font_pixels);
+    img_desc.label = "sdtx-font-texture";
     _sdtx.font_img = sg_make_image(&img_desc);
     SOKOL_ASSERT(SG_INVALID_ID != _sdtx.font_img.id);
 
@@ -4083,12 +4082,13 @@ static void _sdtx_render_char(_sdtx_context_t* ctx, uint8_t c) {
         const float y1 = y0 + ctx->glyph_size.y;
 
         // glyph width and heigth in font texture space
-        const uint16_t uvw = 0x10000 / (0x100 * 2);
-        const uint16_t uvh = 0x10000 / (SDTX_MAX_FONTS * 2);
-        const uint16_t u0 = ((uint16_t)c) * uvw * 2;
-        const uint16_t v0 = ((uint16_t)ctx->cur_font) * uvh * 2;
-        uint16_t u1 = u0 + uvw;
-        uint16_t v1 = v0 + uvh;
+        // NOTE: the '+1' and '-2' fixes texture bleeding into the neighboring font texture cell
+        const uint16_t uvw = 0x10000 / 0x100;
+        const uint16_t uvh = 0x10000 / SDTX_MAX_FONTS;
+        const uint16_t u0 = (((uint16_t)c) * uvw) + 1;
+        const uint16_t v0 = (((uint16_t)ctx->cur_font) * uvh) + 1;
+        uint16_t u1 = (u0 + uvw) - 2;
+        uint16_t v1 = (v0 + uvh) - 2;
         const uint32_t color = ctx->color;
 
         // write 6 vertices
