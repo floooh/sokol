@@ -93,6 +93,11 @@
             be active right after sdtx_setup(), or when calling
             sdtx_set_context(SDTX_DEFAULT_CONTEXT):
 
+            .max_commands (default: 4096)
+                The max number of render commands that can be recorded
+                into the internal command buffer. This directly translates
+                to the number of render layer changes in a single frame.
+
             .char_buf_size (default: 4096)
                 The number of characters that can be rendered per frame in this
                 context, defines the size of an internal fixed-size vertex
@@ -220,11 +225,29 @@
             \n  - carriage return + line feed (same as stdx_crlf())
             \t  - a tab character
 
+    --- You can 'record' text into render layers, this allows to mix/interleave
+        sokol-debugtext rendering with other rendering operations inside
+        sokol-gfx render passes. To start recording text into a different render
+        layer, call:
+
+            sdtx_layer(int layer_id)
+
+        ...outside a sokol-gfx render pass.
+
     --- finally, from within a sokol-gfx render pass, call:
 
             sdtx_draw()
 
-        ...to actually render the text.
+        ...for non-layered rendering, or to draw a specific layer:
+
+            sdtx_draw_layer(int layer_id)
+
+        NOTE that sdtx_draw() is equivalent to:
+
+            sdtx_draw_layer(0)
+
+        ...so sdtx_draw() will *NOT* render all text layers, instead it will
+        only render the 'default layer' 0.
 
     --- at the end of a frame (defined by the call to sg_commit()), sokol-debugtext
         will rewind all contexts:
@@ -272,7 +295,8 @@
         - the origin position
         - the current cursor position
         - the current tab width
-        - and the current color
+        - the current color
+        - and the current layer-id
 
     You can get the currently active context with:
 
@@ -294,6 +318,12 @@
 
     If a context is set as active that no longer exists, all sokol-debugtext
     functions that require an active context will silently fail.
+
+    You can directly draw the recorded text in a specific context without
+    setting the active context:
+
+        sdtx_context_draw(ctx)
+        sdtx_context_draw_layer(ctx, layer_id)
 
     USING YOUR OWN FONT DATA
     ========================
