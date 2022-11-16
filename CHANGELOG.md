@@ -1,5 +1,13 @@
 ## Updates
 
+- **16-Nov-2022**: Render layer support has been added to sokol_debugtext.h,
+  same general changes as in sokol_gl.h with two new functions:
+  sdtx_layer(layer_id) to select the layer to record text into, and
+  sdtx_draw_layer(layer_id) to draw the recorded text in that layer inside a
+  sokol-gfx render pass. The new sample [debugtext-layers-sapp](https://floooh.github.io/sokol-html5/debugtext-layers-sapp) demonstrates the feature together with
+  sokol-gl.
+
+
 - **11-Nov-2022**: sokol_gl.h has 2 new public API functions which enable
   layered rendering: sgl_layer(), sgl_draw_layer() (technically it's three
   functions: there's also sgl_context_draw_layer(), but that's just a variant of

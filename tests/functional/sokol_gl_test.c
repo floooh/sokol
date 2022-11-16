@@ -26,15 +26,15 @@ UTEST(sokol_gl, default_init_shutdown) {
     T(_sgl.def_ctx_id.id == SGL_DEFAULT_CONTEXT.id);
     T(_sgl.cur_ctx_id.id == _sgl.def_ctx_id.id);
     T(_sgl.cur_ctx);
-    T(_sgl.cur_ctx->num_vertices == 65536);
-    T(_sgl.cur_ctx->num_commands == 16384);
-    T(_sgl.cur_ctx->num_uniforms == 16384);
-    T(_sgl.cur_ctx->cur_vertex == 0);
-    T(_sgl.cur_ctx->cur_command == 0);
-    T(_sgl.cur_ctx->cur_uniform == 0);
-    T(_sgl.cur_ctx->vertices != 0);
-    T(_sgl.cur_ctx->uniforms != 0);
-    T(_sgl.cur_ctx->commands != 0);
+    T(_sgl.cur_ctx->vertices.cap == 65536);
+    T(_sgl.cur_ctx->commands.cap == 16384);
+    T(_sgl.cur_ctx->uniforms.cap == 16384);
+    T(_sgl.cur_ctx->vertices.next == 0);
+    T(_sgl.cur_ctx->commands.next == 0);
+    T(_sgl.cur_ctx->uniforms.next == 0);
+    T(_sgl.cur_ctx->vertices.ptr != 0);
+    T(_sgl.cur_ctx->uniforms.ptr != 0);
+    T(_sgl.cur_ctx->commands.ptr != 0);
     T(_sgl.cur_ctx->error == SGL_NO_ERROR);
     T(!_sgl.cur_ctx->in_begin);
     T(_sgl.cur_ctx->def_pip.id != SG_INVALID_ID);
@@ -49,42 +49,42 @@ UTEST(sokol_gl, default_init_shutdown) {
 UTEST(sokol_gl, viewport) {
     init();
     sgl_viewport(1, 2, 3, 4, true);
-    T(_sgl.cur_ctx->cur_command == 1);
-    T(_sgl.cur_ctx->commands[0].cmd == SGL_COMMAND_VIEWPORT);
-    T(_sgl.cur_ctx->commands[0].args.viewport.x == 1);
-    T(_sgl.cur_ctx->commands[0].args.viewport.y == 2);
-    T(_sgl.cur_ctx->commands[0].args.viewport.w == 3);
-    T(_sgl.cur_ctx->commands[0].args.viewport.h == 4);
-    T(_sgl.cur_ctx->commands[0].args.viewport.origin_top_left);
+    T(_sgl.cur_ctx->commands.next == 1);
+    T(_sgl.cur_ctx->commands.ptr[0].cmd == SGL_COMMAND_VIEWPORT);
+    T(_sgl.cur_ctx->commands.ptr[0].args.viewport.x == 1);
+    T(_sgl.cur_ctx->commands.ptr[0].args.viewport.y == 2);
+    T(_sgl.cur_ctx->commands.ptr[0].args.viewport.w == 3);
+    T(_sgl.cur_ctx->commands.ptr[0].args.viewport.h == 4);
+    T(_sgl.cur_ctx->commands.ptr[0].args.viewport.origin_top_left);
     sgl_viewport(5, 6, 7, 8, false);
-    T(_sgl.cur_ctx->cur_command == 2);
-    T(_sgl.cur_ctx->commands[1].cmd == SGL_COMMAND_VIEWPORT);
-    T(_sgl.cur_ctx->commands[1].args.viewport.x == 5);
-    T(_sgl.cur_ctx->commands[1].args.viewport.y == 6);
-    T(_sgl.cur_ctx->commands[1].args.viewport.w == 7);
-    T(_sgl.cur_ctx->commands[1].args.viewport.h == 8);
-    T(!_sgl.cur_ctx->commands[1].args.viewport.origin_top_left);
+    T(_sgl.cur_ctx->commands.next == 2);
+    T(_sgl.cur_ctx->commands.ptr[1].cmd == SGL_COMMAND_VIEWPORT);
+    T(_sgl.cur_ctx->commands.ptr[1].args.viewport.x == 5);
+    T(_sgl.cur_ctx->commands.ptr[1].args.viewport.y == 6);
+    T(_sgl.cur_ctx->commands.ptr[1].args.viewport.w == 7);
+    T(_sgl.cur_ctx->commands.ptr[1].args.viewport.h == 8);
+    T(!_sgl.cur_ctx->commands.ptr[1].args.viewport.origin_top_left);
     shutdown();
 }
 
 UTEST(sokol_gl, scissor_rect) {
     init();
     sgl_scissor_rect(10, 20, 30, 40, true);
-    T(_sgl.cur_ctx->cur_command == 1);
-    T(_sgl.cur_ctx->commands[0].cmd == SGL_COMMAND_SCISSOR_RECT);
-    T(_sgl.cur_ctx->commands[0].args.scissor_rect.x == 10);
-    T(_sgl.cur_ctx->commands[0].args.scissor_rect.y == 20);
-    T(_sgl.cur_ctx->commands[0].args.scissor_rect.w == 30);
-    T(_sgl.cur_ctx->commands[0].args.scissor_rect.h == 40);
-    T(_sgl.cur_ctx->commands[0].args.scissor_rect.origin_top_left);
+    T(_sgl.cur_ctx->commands.next == 1);
+    T(_sgl.cur_ctx->commands.ptr[0].cmd == SGL_COMMAND_SCISSOR_RECT);
+    T(_sgl.cur_ctx->commands.ptr[0].args.scissor_rect.x == 10);
+    T(_sgl.cur_ctx->commands.ptr[0].args.scissor_rect.y == 20);
+    T(_sgl.cur_ctx->commands.ptr[0].args.scissor_rect.w == 30);
+    T(_sgl.cur_ctx->commands.ptr[0].args.scissor_rect.h == 40);
+    T(_sgl.cur_ctx->commands.ptr[0].args.scissor_rect.origin_top_left);
     sgl_scissor_rect(50, 60, 70, 80, false);
-    T(_sgl.cur_ctx->cur_command == 2);
-    T(_sgl.cur_ctx->commands[1].cmd == SGL_COMMAND_SCISSOR_RECT);
-    T(_sgl.cur_ctx->commands[1].args.scissor_rect.x == 50);
-    T(_sgl.cur_ctx->commands[1].args.scissor_rect.y == 60);
-    T(_sgl.cur_ctx->commands[1].args.scissor_rect.w == 70);
-    T(_sgl.cur_ctx->commands[1].args.scissor_rect.h == 80);
-    T(!_sgl.cur_ctx->commands[1].args.scissor_rect.origin_top_left);
+    T(_sgl.cur_ctx->commands.next == 2);
+    T(_sgl.cur_ctx->commands.ptr[1].cmd == SGL_COMMAND_SCISSOR_RECT);
+    T(_sgl.cur_ctx->commands.ptr[1].args.scissor_rect.x == 50);
+    T(_sgl.cur_ctx->commands.ptr[1].args.scissor_rect.y == 60);
+    T(_sgl.cur_ctx->commands.ptr[1].args.scissor_rect.w == 70);
+    T(_sgl.cur_ctx->commands.ptr[1].args.scissor_rect.h == 80);
+    T(!_sgl.cur_ctx->commands.ptr[1].args.scissor_rect.origin_top_left);
     shutdown();
 }
 
@@ -111,14 +111,14 @@ UTEST(sokol_gl, begin_end) {
     sgl_v3f(7.0f, 8.0f, 9.0f);
     sgl_end();
     T(_sgl.cur_ctx->base_vertex == 0);
-    T(_sgl.cur_ctx->cur_vertex == 3);
-    T(_sgl.cur_ctx->cur_command == 1);
-    T(_sgl.cur_ctx->cur_uniform == 1);
-    T(_sgl.cur_ctx->commands[0].cmd == SGL_COMMAND_DRAW);
-    T(_sgl.cur_ctx->commands[0].args.draw.pip.id == _sgl_pipeline_at(_sgl.cur_ctx->def_pip.id)->pip[SGL_PRIMITIVETYPE_TRIANGLES].id);
-    T(_sgl.cur_ctx->commands[0].args.draw.base_vertex == 0);
-    T(_sgl.cur_ctx->commands[0].args.draw.num_vertices == 3);
-    T(_sgl.cur_ctx->commands[0].args.draw.uniform_index == 0);
+    T(_sgl.cur_ctx->vertices.next == 3);
+    T(_sgl.cur_ctx->commands.next == 1);
+    T(_sgl.cur_ctx->uniforms.next == 1);
+    T(_sgl.cur_ctx->commands.ptr[0].cmd == SGL_COMMAND_DRAW);
+    T(_sgl.cur_ctx->commands.ptr[0].args.draw.pip.id == _sgl_pipeline_at(_sgl.cur_ctx->def_pip.id)->pip[SGL_PRIMITIVETYPE_TRIANGLES].id);
+    T(_sgl.cur_ctx->commands.ptr[0].args.draw.base_vertex == 0);
+    T(_sgl.cur_ctx->commands.ptr[0].args.draw.num_vertices == 3);
+    T(_sgl.cur_ctx->commands.ptr[0].args.draw.uniform_index == 0);
     shutdown();
 }
 
@@ -223,9 +223,9 @@ UTEST(sokol_gl, make_destroy_contexts) {
     // creating a context should not change the current context
     T(ctx.id != _sgl.cur_ctx_id.id);
     sgl_set_context(ctx);
-    T(_sgl.cur_ctx->num_vertices == 1024);
-    T(_sgl.cur_ctx->num_commands == 256);
-    T(_sgl.cur_ctx->num_uniforms == 256);
+    T(_sgl.cur_ctx->vertices.cap == 1024);
+    T(_sgl.cur_ctx->commands.cap == 256);
+    T(_sgl.cur_ctx->uniforms.cap == 256);
     T(ctx.id == _sgl.cur_ctx_id.id);
     T(sgl_get_context().id == ctx.id);
     sgl_set_context(SGL_DEFAULT_CONTEXT);

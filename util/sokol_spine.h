@@ -2619,7 +2619,7 @@ typedef struct {
     spSkeletonData* sp_skel_data;
     spAnimationStateData* sp_anim_data;
     struct {
-        int num;
+        int cap;
         sspine_vec2* ptr;
     } tform_buf;
 } _sspine_skeleton_t;
@@ -2696,20 +2696,20 @@ typedef struct {
     _sspine_slot_t slot;
     float transform[16];
     struct {
-        int num;
-        int cur;
+        int cap;
+        int next;
         uint32_t rewind_frame_id;
         _sspine_vertex_t* ptr;
     } vertices;
     struct {
-        int num;
-        int cur;
+        int cap;
+        int next;
         uint32_t rewind_frame_id;
         uint32_t* ptr;
     } indices;
     struct {
-        int num;
-        int cur;
+        int cap;
+        int next;
         uint32_t rewind_frame_id;
         _sspine_command_t* ptr;
     } commands;
@@ -3114,13 +3114,13 @@ static sspine_resource_state _sspine_init_context(_sspine_context_t* ctx, const 
     SOKOL_ASSERT(desc);
 
     // setup vertex, index and command storage
-    ctx->vertices.num = desc->max_vertices;
-    ctx->indices.num = ctx->vertices.num * 3;
-    ctx->commands.num = desc->max_commands;
+    ctx->vertices.cap = desc->max_vertices;
+    ctx->indices.cap = ctx->vertices.cap * 3;
+    ctx->commands.cap = desc->max_commands;
 
-    const size_t vbuf_size = (size_t)ctx->vertices.num * sizeof(_sspine_vertex_t);
-    const size_t ibuf_size = (size_t)ctx->indices.num * sizeof(uint32_t);
-    const size_t cbuf_size = (size_t)ctx->commands.num * sizeof(_sspine_command_t);
+    const size_t vbuf_size = (size_t)ctx->vertices.cap * sizeof(_sspine_vertex_t);
+    const size_t ibuf_size = (size_t)ctx->indices.cap * sizeof(uint32_t);
+    const size_t cbuf_size = (size_t)ctx->commands.cap * sizeof(_sspine_command_t);
 
     ctx->vertices.ptr = (_sspine_vertex_t*) _sspine_malloc(vbuf_size);
     ctx->indices.ptr = (uint32_t*) _sspine_malloc(ibuf_size);
@@ -3483,8 +3483,8 @@ static sspine_resource_state _sspine_init_skeleton(_sspine_skeleton_t* skeleton,
     }
 
     // allocate a shared vertex transform buffer (big enough to hold vertices for biggest mesh attachment)
-    skeleton->tform_buf.num = max_vertex_count;
-    skeleton->tform_buf.ptr = (sspine_vec2*) _sspine_malloc((size_t)skeleton->tform_buf.num * sizeof(sspine_vec2));
+    skeleton->tform_buf.cap = max_vertex_count;
+    skeleton->tform_buf.ptr = (sspine_vec2*) _sspine_malloc((size_t)skeleton->tform_buf.cap * sizeof(sspine_vec2));
 
     return SSPINE_RESOURCESTATE_VALID;
 }
@@ -4035,15 +4035,15 @@ static void _sspine_init_image_info(const _sspine_atlas_t* atlas, int index, ssp
 
 static void _sspine_check_rewind_commands(_sspine_context_t* ctx) {
     if (_sspine.frame_id != ctx->commands.rewind_frame_id) {
-        ctx->commands.cur = 0;
+        ctx->commands.next = 0;
         ctx->commands.rewind_frame_id = _sspine.frame_id;
     }
 }
 
 static _sspine_command_t* _sspine_next_command(_sspine_context_t* ctx) {
     _sspine_check_rewind_commands(ctx);
-    if ((ctx->commands.cur + 1) <= ctx->commands.num) {
-        return &(ctx->commands.ptr[ctx->commands.cur++]);
+    if (ctx->commands.next < ctx->commands.cap) {
+        return &(ctx->commands.ptr[ctx->commands.next++]);
     }
     else {
         _SSPINE_ERROR(COMMAND_BUFFER_OVERFLOW);
@@ -4051,10 +4051,10 @@ static _sspine_command_t* _sspine_next_command(_sspine_context_t* ctx) {
     }
 }
 
-static _sspine_command_t* _sspine_prev_command(_sspine_context_t* ctx) {
+static _sspine_command_t* _sspine_cur_command(_sspine_context_t* ctx) {
     _sspine_check_rewind_commands(ctx);
-    if ((ctx->commands.cur > 0) && (ctx->commands.cur <= ctx->commands.num)) {
-        return &ctx->commands.ptr[ctx->commands.cur - 1];
+    if (ctx->commands.next > 0) {
+        return &ctx->commands.ptr[ctx->commands.next - 1];
     }
     else {
         return 0;
@@ -4063,7 +4063,7 @@ static _sspine_command_t* _sspine_prev_command(_sspine_context_t* ctx) {
 
 static void _sspine_check_rewind_vertices(_sspine_context_t* ctx) {
     if (_sspine.frame_id != ctx->vertices.rewind_frame_id) {
-        ctx->vertices.cur = 0;
+        ctx->vertices.next = 0;
         ctx->vertices.rewind_frame_id = _sspine.frame_id;
     }
 }
@@ -4072,10 +4072,10 @@ static _sspine_alloc_vertices_result_t _sspine_alloc_vertices(_sspine_context_t*
     _sspine_check_rewind_vertices(ctx);
     _sspine_alloc_vertices_result_t res;
     _sspine_clear(&res, sizeof(res));
-    if ((ctx->vertices.cur + num) <= ctx->vertices.num) {
-        res.ptr = &(ctx->vertices.ptr[ctx->vertices.cur]);
-        res.index = ctx->vertices.cur;
-        ctx->vertices.cur += num;
+    if ((ctx->vertices.next + num) <= ctx->vertices.cap) {
+        res.ptr = &(ctx->vertices.ptr[ctx->vertices.next]);
+        res.index = ctx->vertices.next;
+        ctx->vertices.next += num;
     }
     else {
         _SSPINE_ERROR(VERTEX_BUFFER_OVERFLOW);
@@ -4085,7 +4085,7 @@ static _sspine_alloc_vertices_result_t _sspine_alloc_vertices(_sspine_context_t*
 
 static void _sspine_check_rewind_indices(_sspine_context_t* ctx) {
     if (_sspine.frame_id != ctx->indices.rewind_frame_id) {
-        ctx->indices.cur = 0;
+        ctx->indices.next = 0;
         ctx->indices.rewind_frame_id = _sspine.frame_id;
     }
 }
@@ -4094,10 +4094,10 @@ static _sspine_alloc_indices_result_t _sspine_alloc_indices(_sspine_context_t* c
     _sspine_check_rewind_indices(ctx);
     _sspine_alloc_indices_result_t res;
     _sspine_clear(&res, sizeof(res));
-    if ((ctx->indices.cur + num) <= ctx->indices.num) {
-        res.ptr = &(ctx->indices.ptr[ctx->indices.cur]);
-        res.index = ctx->indices.cur;
-        ctx->indices.cur += num;
+    if ((ctx->indices.next + num) <= ctx->indices.cap) {
+        res.ptr = &(ctx->indices.ptr[ctx->indices.next]);
+        res.index = ctx->indices.next;
+        ctx->indices.next += num;
     }
     else {
         _SSPINE_ERROR(INDEX_BUFFER_OVERFLOW);
@@ -4114,7 +4114,7 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
     // see: https://github.com/EsotericSoftware/spine-runtimes/blob/4.1/spine-sdl/src/spine-sdl-c.c
     const spSkeleton* sp_skel = instance->sp_skel;
     float* tform_buf = (float*)instance->skel.ptr->tform_buf.ptr;
-    const int max_tform_buf_verts = instance->skel.ptr->tform_buf.num;
+    const int max_tform_buf_verts = instance->skel.ptr->tform_buf.cap;
     SOKOL_UNUSED(max_tform_buf_verts); // only used in asserts
     const int tform_buf_stride = 2; // each element is 2 floats
     spSkeletonClipping* sp_clip = instance->sp_clip;
@@ -4254,11 +4254,11 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
                 break;
         }
 
-        // write new draw command, or merge with previous draw command
-        _sspine_command_t* prev_cmd = _sspine_prev_command(ctx);
-        if (prev_cmd && (prev_cmd->layer == layer) && (prev_cmd->pip.id == pip.id) && (prev_cmd->img.id == img.id) && (prev_cmd->pma == pma)) {
-            // merge with previous command
-            prev_cmd->num_elements += num_indices;
+        // write new draw command, or merge with current draw command
+        _sspine_command_t* cur_cmd = _sspine_cur_command(ctx);
+        if (cur_cmd && (cur_cmd->layer == layer) && (cur_cmd->pip.id == pip.id) && (cur_cmd->img.id == img.id) && (cur_cmd->pma == pma)) {
+            // merge with current command
+            cur_cmd->num_elements += num_indices;
         }
         else {
             // record a new command
@@ -4311,14 +4311,14 @@ static _sspine_vsparams_t _sspine_compute_vsparams(const sspine_layer_transform*
 }
 
 static void _sspine_draw_layer(_sspine_context_t* ctx, int layer, const sspine_layer_transform* tform) {
-    if ((ctx->vertices.cur > 0) && (ctx->commands.cur > 0)) {
+    if ((ctx->vertices.next > 0) && (ctx->commands.next > 0)) {
         sg_push_debug_group("sokol-spine");
 
         if (ctx->update_frame_id != _sspine.frame_id) {
             ctx->update_frame_id = _sspine.frame_id;
-            const sg_range vtx_range = { ctx->vertices.ptr, (size_t)ctx->vertices.cur * sizeof(_sspine_vertex_t) };
+            const sg_range vtx_range = { ctx->vertices.ptr, (size_t)ctx->vertices.next * sizeof(_sspine_vertex_t) };
             sg_update_buffer(ctx->vbuf, &vtx_range);
-            const sg_range idx_range = { ctx->indices.ptr, (size_t)ctx->indices.cur * sizeof(uint32_t) };
+            const sg_range idx_range = { ctx->indices.ptr, (size_t)ctx->indices.next * sizeof(uint32_t) };
             sg_update_buffer(ctx->ibuf, &idx_range);
         }
 
@@ -4331,7 +4331,7 @@ static void _sspine_draw_layer(_sspine_context_t* ctx, int layer, const sspine_l
         uint32_t cur_pip_id = SG_INVALID_ID;
         uint32_t cur_img_id = SG_INVALID_ID;
         float cur_pma = -1.0f;
-        for (int i = 0; i < ctx->commands.cur; i++) {
+        for (int i = 0; i < ctx->commands.next; i++) {
             const _sspine_command_t* cmd = &ctx->commands.ptr[i];
             if ((layer == cmd->layer) && (sg_query_image_state(cmd->img) == SG_RESOURCESTATE_VALID)) {
                 if (cur_pip_id != cmd->pip.id) {
@@ -4542,9 +4542,9 @@ SOKOL_API_IMPL sspine_context_info sspine_get_context_info(sspine_context ctx_id
     _sspine_clear(&res, sizeof(res));
     const _sspine_context_t* ctx = _sspine_lookup_context(ctx_id.id);
     if (ctx) {
-        res.num_vertices = ctx->vertices.cur;
-        res.num_indices  = ctx->indices.cur;
-        res.num_commands = ctx->commands.cur;
+        res.num_vertices = ctx->vertices.next;
+        res.num_indices  = ctx->indices.next;
+        res.num_commands = ctx->commands.next;
     }
     return res;
 }
