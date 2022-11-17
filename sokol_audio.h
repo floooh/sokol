@@ -313,6 +313,8 @@
 
     "Blob URLs": https://www.html5rocks.com/en/tutorials/workers/basics/
 
+    Also see: https://blog.paul.cx/post/a-wait-free-spsc-ringbuffer-for-the-web/
+
     THE COREAUDIO BACKEND
     =====================
     The CoreAudio backend is selected on macOS and iOS (__APPLE__ is defined).
