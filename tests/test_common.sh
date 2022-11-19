@@ -1,13 +1,13 @@
 setup_emsdk() {
-    if [ ! -d "build/emsdk" ] ; then
-        mkdir -p build && cd build
+    if [ ! -d "tests/build/emsdk" ] ; then
+        mkdir -p tests/build && cd tests/build
         git clone https://github.com/emscripten-core/emsdk.git
         cd emsdk
         ./emsdk install latest
         ./emsdk activate latest
-        cd ../..
+        cd ../../..
     fi
-    source build/emsdk/emsdk_env.sh
+    source tests/build/emsdk/emsdk_env.sh
 }
 
 setup_android() {
@@ -60,36 +60,6 @@ analyze_ios() {
     mode=$3
     mkdir -p build/$cfg && cd build/$cfg
     cmake -GNinja -DSOKOL_BACKEND=$backend -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_BUILD_TYPE=$mode -DUSE_ANALYZER=ON ../..
-    cmake --build .
-    cd ../..
-}
-
-build_arc_ios() {
-    cfg=$1
-    backend=$2
-    mode=$3
-    mkdir -p build/$cfg && cd build/$cfg
-    cmake -GXcode -DSOKOL_BACKEND=$backend -DUSE_ARC:BOOL=ON -DCMAKE_SYSTEM_NAME=iOS ../..
-    cmake --build . --config $mode -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
-    cd ../..
-}
-
-analyze_arc_ios() {
-    cfg=$1
-    backend=$2
-    mode=$3
-    mkdir -p build/$cfg && cd build/$cfg
-    cmake -GNinja -DSOKOL_BACKEND=$backend -DUSE_ARC:BOOL=ON -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_BUILD_TYPE=$mode -DUSE_ANALYZER=ON ../..
-    cmake --build .
-    cd ../..
-}
-
-build_emsc() {
-    cfg=$1
-    backend=$2
-    mode=$3
-    mkdir -p build/$cfg && cd build/$cfg
-    emcmake cmake -GNinja -DSOKOL_BACKEND=$backend -DCMAKE_BUILD_TYPE=$mode ../..
     cmake --build .
     cd ../..
 }

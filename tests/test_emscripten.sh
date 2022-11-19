@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -e
-source test_common.sh
-prepare
+source tests/test_common.sh
 setup_emsdk
-build_emsc emsc_webgl2_debug SOKOL_GLES3 Debug
-build_emsc emsc_webgl2_release SOKOL_GLES3 Release
-build_emsc emsc_webgl1_debug SOKOL_GLES2 Debug
-build_emsc emsc_webgl1_release SOKOL_GLES2 Release
+build emsc_webgl2_debug emsc_webgl2_debug
+build emsc_webgl2_release emsc_webgl2_release
+build emsc_webgl1_debug emsc_webgl1_debug
+build emsc_webgl1_release emsc_webgl1_release

@@ -39,15 +39,14 @@ jobs:
         - name: test_linux
           run: |
             ./tests/test_linux.sh
-    #emscripten:
-    #    runs-on: ubuntu-latest
-    #    steps:
-    #    - uses: actions/checkout@v2
-    #    - uses: seanmiddleditch/gha-setup-ninja@master
-    #    - name: test_emscripten
-    #      run: |
-    #        cd tests
-    #        ./test_emscripten.sh
+    emscripten:
+        runs-on: ubuntu-latest
+        steps:
+        - uses: actions/checkout@v2
+        - uses: seanmiddleditch/gha-setup-ninja@master
+        - name: test_emscripten
+          run: |
+            ./tests/test_emscripten.sh
     #android:
     #    runs-on: ubuntu-latest
     #    steps:
