@@ -8,7 +8,6 @@
     "configurePresets": [
         {
             "name": "macos_gl_debug",
-            "displayName": "macOS OpenGL Debug",
             "generator": "Ninja",
             "binaryDir": "tests/build/macos_gl_debug",
             "cacheVariables": {
@@ -18,7 +17,6 @@
         },
         {
             "name": "macos_gl_release",
-            "displayName": "macOS OpenGL Release",
             "generator": "Ninja",
             "binaryDir": "tests/build/macos_gl_release",
             "cacheVariables": {
@@ -28,7 +26,6 @@
         },
         {
             "name": "macos_metal_debug",
-            "displayName": "macOS Metal Debug",
             "generator": "Ninja",
             "binaryDir": "tests/build/macos_metal_debug",
             "cacheVariables": {
@@ -38,7 +35,6 @@
         },
         {
             "name": "macos_metal_release",
-            "displayName": "macOS Metal Release",
             "generator": "Ninja",
             "binaryDir": "tests/build/macos_metal_release",
             "cacheVariables": {
@@ -48,7 +44,6 @@
         },
         {
             "name": "macos_arc_gl_debug",
-            "displayName": "macOS ARC OpenGL Debug",
             "generator": "Ninja",
             "binaryDir": "tests/build/macos_arc_gl_debug",
             "cacheVariables": {
@@ -62,7 +57,6 @@
         },
         {
             "name": "macos_arc_gl_release",
-            "displayName": "macOS ARC OpenGL Debug",
             "generator": "Ninja",
             "binaryDir": "tests/build/macos_arc_gl_release",
             "cacheVariables": {
@@ -76,7 +70,6 @@
         },
         {
             "name": "macos_arc_metal_debug",
-            "displayName": "macOS ARC Metal Debug",
             "generator": "Ninja",
             "binaryDir": "tests/build/macos_arc_metal_debug",
             "cacheVariables": {
@@ -90,7 +83,6 @@
         },
         {
             "name": "macos_arc_metal_release",
-            "displayName": "macOS ARC Metal Release",
             "generator": "Ninja",
             "binaryDir": "tests/build/macos_arc_metal_release",
             "cacheVariables": {
@@ -101,6 +93,132 @@
                 },
                 "CMAKE_BUILD_TYPE": "Release"
             }
+        },
+        {
+            "name": "ios_gl",
+            "generator": "Xcode",
+            "binaryDir": "tests/build/ios_gl",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "CMAKE_SYSTEM_NAME": "iOS"
+            }
+        },
+        {
+            "name": "ios_metal",
+            "generator": "Xcode",
+            "binaryDir": "tests/build/ios_metal",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_METAL",
+                "CMAKE_SYSTEM_NAME": "iOS"
+            }
+        },
+        {
+            "name": "ios_arc_gl",
+            "generator": "Xcode",
+            "binaryDir": "tests/build/ios_arc_gl",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "USE_ARC": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_SYSTEM_NAME": "iOS"
+            }
+        },
+        {
+            "name": "ios_arc_metal",
+            "generator": "Xcode",
+            "binaryDir": "tests/build/ios_arc_metal",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_METAL",
+                "USE_ARC": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_SYSTEM_NAME": "iOS"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "macos_gl_debug",
+            "configurePreset": "macos_gl_debug"
+        },
+        {
+            "name": "macos_gl_release",
+            "configurePreset": "macos_gl_release"
+        },
+        {
+            "name": "macos_metal_debug",
+            "configurePreset": "macos_metal_debug"
+        },
+        {
+            "name": "macos_metal_release",
+            "configurePreset": "macos_metal_release"
+        },
+        {
+            "name": "macos_arc_gl_debug",
+            "configurePreset": "macos_arc_gl_debug"
+        },
+        {
+            "name": "macos_arc_gl_release",
+            "configurePreset": "macos_arc_gl_release"
+        },
+        {
+            "name": "macos_arc_metal_debug",
+            "configurePreset": "macos_arc_metal_debug"
+        },
+        {
+            "name": "macos_arc_metal_release",
+            "configurePreset": "macos_arc_metal_release"
+        },
+        {
+            "name": "ios_gl_debug",
+            "configurePreset": "ios_gl",
+            "configuration": "Debug",
+            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+        },
+        {
+            "name": "ios_gl_release",
+            "configurePreset": "ios_gl",
+            "configuration": "Release",
+            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+        },
+        {
+            "name": "ios_metal_debug",
+            "configurePreset": "ios_metal",
+            "configuration": "Debug",
+            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+        },
+        {
+            "name": "ios_metal_release",
+            "configurePreset": "ios_metal",
+            "configuration": "Release",
+            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+        },
+        {
+            "name": "ios_arc_gl_debug",
+            "configurePreset": "ios_arc_gl",
+            "configuration": "Debug",
+            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+        },
+        {
+            "name": "ios_arc_gl_release",
+            "configurePreset": "ios_arc_gl",
+            "configuration": "Release",
+            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+        },
+        {
+            "name": "ios_arc_metal_debug",
+            "configurePreset": "ios_arc_metal",
+            "configuration": "Debug",
+            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+        },
+        {
+            "name": "ios_arc_metal_release",
+            "configurePreset": "ios_arc_metal",
+            "configuration": "Release",
+            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
         }
     ]
 }

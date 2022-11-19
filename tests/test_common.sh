@@ -26,10 +26,12 @@ setup_android() {
 }
 
 build() {
-    preset=$1
-    cmake --preset $preset ../..
-    cmake --build .
-    cd ../..
+    gen_preset=$1
+    build_preset=$2
+#    cd ..
+    cmake --preset $gen_preset
+    cmake --build --preset $build_preset
+#    cd tests
 }
 
 build_force_egl() {
@@ -52,16 +54,6 @@ analyze() {
     cd ../..
 }
 
-build_arc() {
-    cfg=$1
-    backend=$2
-    mode=$3
-    mkdir -p build/$cfg && cd build/$cfg
-    cmake -GNinja -DSOKOL_BACKEND=$backend -DUSE_ARC:BOOL=ON -DCMAKE_BUILD_TYPE=$mode ../..
-    cmake --build .
-    cd ../..
-}
-
 analyze_arc() {
     cfg=$1
     backend=$2
@@ -69,16 +61,6 @@ analyze_arc() {
     mkdir -p build/$cfg && cd build/$cfg
     cmake -GNinja -DSOKOL_BACKEND=$backend -DUSE_ARC:BOOL=ON -DCMAKE_BUILD_TYPE=$mode -DUSE_ANALYZER=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ ../..
     cmake --build .
-    cd ../..
-}
-
-build_ios() {
-    cfg=$1
-    backend=$2
-    mode=$3
-    mkdir -p build/$cfg && cd build/$cfg
-    cmake -GXcode -DSOKOL_BACKEND=$backend -DCMAKE_SYSTEM_NAME=iOS ../..
-    cmake --build . --config $mode -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
     cd ../..
 }
 
@@ -134,7 +116,7 @@ build_android() {
 
 runtest() {
     cfg=$1
-    cd build/$cfg
+    cd tests/build/$cfg
     ./sokol-test
     cd ../../..
 }
