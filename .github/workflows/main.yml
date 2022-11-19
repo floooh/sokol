@@ -27,19 +27,18 @@ jobs:
         - name: test_ios
           run: |
             ./tests/test_ios.sh
-    #linux:
-    #    runs-on: ubuntu-latest
-    #    steps:
-    #    - uses: actions/checkout@v2
-    #    - uses: seanmiddleditch/gha-setup-ninja@master
-    #    - name: prepare
-    #      run: |
-    #        sudo apt-get update
-    #        sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev
-    #    - name: test_linux
-    #      run: |
-    #        cd tests
-    #        ./test_linux.sh
+    linux:
+        runs-on: ubuntu-latest
+        steps:
+        - uses: actions/checkout@v2
+        - uses: seanmiddleditch/gha-setup-ninja@master
+        - name: prepare
+          run: |
+            sudo apt-get update
+            sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+        - name: test_linux
+          run: |
+            ./tests/test_linux.sh
     #emscripten:
     #    runs-on: ubuntu-latest
     #    steps:

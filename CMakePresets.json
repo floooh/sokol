@@ -137,6 +137,68 @@
                 },
                 "CMAKE_SYSTEM_NAME": "iOS"
             }
+        },
+        {
+            "name": "linux_gl_debug",
+            "generator": "Ninja",
+            "binaryDir": "tests/build/linux_gl_debug",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "linux_gl_release",
+            "generator": "Ninja",
+            "binaryDir": "tests/build/linux_gl_release",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "linux_gles3_debug",
+            "generator": "Ninja",
+            "binaryDir": "tests/build/linux_gles3_debug",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "linux_gles3_release",
+            "generator": "Ninja",
+            "binaryDir": "tests/build/linux_gles3_release",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "linux_gl_egl_debug",
+            "generator": "Ninja",
+            "binaryDir": "tests/build/linux_gl_egl_debug",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "SOKOL_FORCE_EGL": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "linux_gl_egl_release",
+            "generator": "Ninja",
+            "binaryDir": "tests/build/linux_gl_egl_release",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "SOKOL_FORCE_EGL": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_BUILD_TYPE": "Release"
+            }
         }
     ],
     "buildPresets": [
@@ -219,6 +281,30 @@
             "configurePreset": "ios_arc_metal",
             "configuration": "Release",
             "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+        },
+        {
+            "name": "linux_gl_debug",
+            "configurePreset": "linux_gl_debug"
+        },
+        {
+            "name": "linux_gl_release",
+            "configurePreset": "linux_gl_release"
+        },
+        {
+            "name": "linux_gles3_debug",
+            "configurePreset": "linux_gles3_debug"
+        },
+        {
+            "name": "linux_gles3_release",
+            "configurePreset": "linux_gles3_release"
+        },
+        {
+            "name": "linux_gl_egl_debug",
+            "configurePreset": "linux_gl_egl_debug"
+        },
+        {
+            "name": "linux_gl_egl_release",
+            "configurePreset": "linux_gl_egl_release"
         }
     ]
 }
