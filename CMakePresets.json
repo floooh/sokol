@@ -244,7 +244,7 @@
             "name": "android_debug",
             "generator": "Ninja",
             "binaryDir": "tests/build/android_debug",
-            "toolchainFile": "tests/build/android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake ",
+            "toolchainFile": "tests/build/android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLES3",
                 "ANDROID_ABI": "armeabi-v7a",
@@ -256,7 +256,7 @@
             "name": "android_release",
             "generator": "Ninja",
             "binaryDir": "tests/build/android_release",
-            "toolchainFile": "tests/build/android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake ",
+            "toolchainFile": "tests/build/android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLES3",
                 "ANDROID_ABI": "armeabi-v7a",
