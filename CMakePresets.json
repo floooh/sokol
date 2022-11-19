@@ -239,6 +239,30 @@
                 "SOKOL_BACKEND": "SOKOL_GLES2",
                 "CMAKE_BUILD_TYPE": "Release"
             }
+        },
+        {
+            "name": "android_debug",
+            "generator": "Ninja",
+            "binaryDir": "tests/build/android_debug",
+            "toolchainFile": "tests/build/android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake ",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "ANDROID_ABI": "armeabi-v7a",
+                "ANDROID_PLATFORM": "android-28",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "android_release",
+            "generator": "Ninja",
+            "binaryDir": "tests/build/android_release",
+            "toolchainFile": "tests/build/android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake ",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "ANDROID_ABI": "armeabi-v7a",
+                "ANDROID_PLATFORM": "android-28",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
         }
     ],
     "buildPresets": [
@@ -361,6 +385,14 @@
         {
             "name": "emsc_webgl1_release",
             "configurePreset": "emsc_webgl1_release"
+        },
+        {
+            "name": "android_debug",
+            "configurePreset": "android_debug"
+        },
+        {
+            "name": "android_release",
+            "configurePreset": "android_release"
         }
     ]
 }

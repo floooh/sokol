@@ -47,18 +47,17 @@ jobs:
         - name: test_emscripten
           run: |
             ./tests/test_emscripten.sh
-    #android:
-    #    runs-on: ubuntu-latest
-    #    steps:
-    #    - uses: actions/checkout@v2
-    #    - uses: seanmiddleditch/gha-setup-ninja@master
-    #    - uses: actions/setup-java@v1
-    #      with:
-    #        java-version: '8'
-    #    - name: test_android
-    #      run: |
-    #        cd tests
-    #        ./test_android.sh
+    android:
+        runs-on: ubuntu-latest
+        steps:
+        - uses: actions/checkout@v2
+        - uses: seanmiddleditch/gha-setup-ninja@master
+        - uses: actions/setup-java@v1
+          with:
+            java-version: '8'
+        - name: test_android
+          run: |
+            ./tests/test_android.sh
     #uwp:
     #    runs-on: windows-latest
     #    steps:
