@@ -1,5 +1,5 @@
 set -e
-source tests/test_common.sh
+source test_common.sh
 build ios_gl ios_gl_debug
 build ios_gl ios_gl_release
 build ios_metal ios_metal_debug

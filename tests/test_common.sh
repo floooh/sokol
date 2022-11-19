@@ -1,18 +1,18 @@
 setup_emsdk() {
-    if [ ! -d "tests/build/emsdk" ] ; then
-        mkdir -p tests/build && cd tests/build
+    if [ ! -d "build/emsdk" ] ; then
+        mkdir -p build && cd build
         git clone https://github.com/emscripten-core/emsdk.git
         cd emsdk
         ./emsdk install latest
         ./emsdk activate latest
         cd ../../..
     fi
-    source tests/build/emsdk/emsdk_env.sh
+    source build/emsdk/emsdk_env.sh
 }
 
 setup_android() {
-    if [ ! -d "tests/build/android_sdk" ] ; then
-        mkdir -p tests/build/android_sdk && cd tests/build/android_sdk
+    if [ ! -d "build/android_sdk" ] ; then
+        mkdir -p build/android_sdk && cd build/android_sdk
         sdk_file="sdk-tools-linux-3859397.zip"
         wget --no-verbose https://dl.google.com/android/repository/$sdk_file
         unzip -q $sdk_file
@@ -64,7 +64,7 @@ analyze_ios() {
 
 runtest() {
     cfg=$1
-    cd tests/build/$cfg
+    cd build/$cfg
     ./sokol-test
     cd ../../..
 }

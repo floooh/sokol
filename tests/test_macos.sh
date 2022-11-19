@@ -1,5 +1,5 @@
 set -e
-source tests/test_common.sh
+source test_common.sh
 build macos_gl_debug macos_gl_debug
 build macos_gl_release macos_gl_release
 build macos_metal_debug macos_metal_debug

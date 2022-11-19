@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -e
-source tests/test_common.sh
+source test_common.sh
 build linux_gl_debug linux_gl_debug
 build linux_gl_release linux_gl_release
 build linux_gles3_debug linux_gles3_debug

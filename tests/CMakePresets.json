@@ -9,7 +9,7 @@
         {
             "name": "macos_gl_debug",
             "generator": "Ninja",
-            "binaryDir": "tests/build/macos_gl_debug",
+            "binaryDir": "build/macos_gl_debug",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLCORE33",
                 "CMAKE_BUILD_TYPE": "Debug"
@@ -18,7 +18,7 @@
         {
             "name": "macos_gl_release",
             "generator": "Ninja",
-            "binaryDir": "tests/build/macos_gl_release",
+            "binaryDir": "build/macos_gl_release",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLCORE33",
                 "CMAKE_BUILD_TYPE": "Release"
@@ -27,7 +27,7 @@
         {
             "name": "macos_metal_debug",
             "generator": "Ninja",
-            "binaryDir": "tests/build/macos_metal_debug",
+            "binaryDir": "build/macos_metal_debug",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_METAL",
                 "CMAKE_BUILD_TYPE": "Debug"
@@ -36,7 +36,7 @@
         {
             "name": "macos_metal_release",
             "generator": "Ninja",
-            "binaryDir": "tests/build/macos_metal_release",
+            "binaryDir": "build/macos_metal_release",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_METAL",
                 "CMAKE_BUILD_TYPE": "Release"
@@ -45,7 +45,7 @@
         {
             "name": "macos_arc_gl_debug",
             "generator": "Ninja",
-            "binaryDir": "tests/build/macos_arc_gl_debug",
+            "binaryDir": "build/macos_arc_gl_debug",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLCORE33",
                 "USE_ARC": {
@@ -58,7 +58,7 @@
         {
             "name": "macos_arc_gl_release",
             "generator": "Ninja",
-            "binaryDir": "tests/build/macos_arc_gl_release",
+            "binaryDir": "build/macos_arc_gl_release",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLCORE33",
                 "USE_ARC": {
@@ -71,7 +71,7 @@
         {
             "name": "macos_arc_metal_debug",
             "generator": "Ninja",
-            "binaryDir": "tests/build/macos_arc_metal_debug",
+            "binaryDir": "build/macos_arc_metal_debug",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_METAL",
                 "USE_ARC": {
@@ -84,7 +84,7 @@
         {
             "name": "macos_arc_metal_release",
             "generator": "Ninja",
-            "binaryDir": "tests/build/macos_arc_metal_release",
+            "binaryDir": "build/macos_arc_metal_release",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_METAL",
                 "USE_ARC": {
@@ -97,7 +97,7 @@
         {
             "name": "ios_gl",
             "generator": "Xcode",
-            "binaryDir": "tests/build/ios_gl",
+            "binaryDir": "build/ios_gl",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLES3",
                 "CMAKE_SYSTEM_NAME": "iOS"
@@ -106,7 +106,7 @@
         {
             "name": "ios_metal",
             "generator": "Xcode",
-            "binaryDir": "tests/build/ios_metal",
+            "binaryDir": "build/ios_metal",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_METAL",
                 "CMAKE_SYSTEM_NAME": "iOS"
@@ -115,7 +115,7 @@
         {
             "name": "ios_arc_gl",
             "generator": "Xcode",
-            "binaryDir": "tests/build/ios_arc_gl",
+            "binaryDir": "build/ios_arc_gl",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLES3",
                 "USE_ARC": {
@@ -128,7 +128,7 @@
         {
             "name": "ios_arc_metal",
             "generator": "Xcode",
-            "binaryDir": "tests/build/ios_arc_metal",
+            "binaryDir": "build/ios_arc_metal",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_METAL",
                 "USE_ARC": {
@@ -141,7 +141,7 @@
         {
             "name": "linux_gl_debug",
             "generator": "Ninja",
-            "binaryDir": "tests/build/linux_gl_debug",
+            "binaryDir": "build/linux_gl_debug",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLCORE33",
                 "CMAKE_BUILD_TYPE": "Debug"
@@ -150,7 +150,7 @@
         {
             "name": "linux_gl_release",
             "generator": "Ninja",
-            "binaryDir": "tests/build/linux_gl_release",
+            "binaryDir": "build/linux_gl_release",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLCORE33",
                 "CMAKE_BUILD_TYPE": "Release"
@@ -159,7 +159,7 @@
         {
             "name": "linux_gles3_debug",
             "generator": "Ninja",
-            "binaryDir": "tests/build/linux_gles3_debug",
+            "binaryDir": "build/linux_gles3_debug",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLES3",
                 "CMAKE_BUILD_TYPE": "Debug"
@@ -168,7 +168,7 @@
         {
             "name": "linux_gles3_release",
             "generator": "Ninja",
-            "binaryDir": "tests/build/linux_gles3_release",
+            "binaryDir": "build/linux_gles3_release",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLES3",
                 "CMAKE_BUILD_TYPE": "Release"
@@ -177,7 +177,7 @@
         {
             "name": "linux_gl_egl_debug",
             "generator": "Ninja",
-            "binaryDir": "tests/build/linux_gl_egl_debug",
+            "binaryDir": "build/linux_gl_egl_debug",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLCORE33",
                 "SOKOL_FORCE_EGL": {
@@ -190,7 +190,7 @@
         {
             "name": "linux_gl_egl_release",
             "generator": "Ninja",
-            "binaryDir": "tests/build/linux_gl_egl_release",
+            "binaryDir": "build/linux_gl_egl_release",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLCORE33",
                 "SOKOL_FORCE_EGL": {
@@ -203,8 +203,8 @@
         {
             "name": "emsc_webgl2_debug",
             "generator": "Ninja",
-            "binaryDir": "tests/build/emsc_webgl2_debug",
-            "toolchainFile": "tests/build/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+            "binaryDir": "build/emsc_webgl2_debug",
+            "toolchainFile": "build/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLES3",
                 "CMAKE_BUILD_TYPE": "Debug"
@@ -213,8 +213,8 @@
         {
             "name": "emsc_webgl2_release",
             "generator": "Ninja",
-            "binaryDir": "tests/build/emsc_webgl2_release",
-            "toolchainFile": "tests/build/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+            "binaryDir": "build/emsc_webgl2_release",
+            "toolchainFile": "build/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLES3",
                 "CMAKE_BUILD_TYPE": "Release"
@@ -223,8 +223,8 @@
         {
             "name": "emsc_webgl1_debug",
             "generator": "Ninja",
-            "binaryDir": "tests/build/emsc_webgl1_debug",
-            "toolchainFile": "tests/build/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+            "binaryDir": "build/emsc_webgl1_debug",
+            "toolchainFile": "build/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLES2",
                 "CMAKE_BUILD_TYPE": "Debug"
@@ -233,8 +233,8 @@
         {
             "name": "emsc_webgl1_release",
             "generator": "Ninja",
-            "binaryDir": "tests/build/emsc_webgl1_release",
-            "toolchainFile": "tests/build/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+            "binaryDir": "build/emsc_webgl1_release",
+            "toolchainFile": "build/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLES2",
                 "CMAKE_BUILD_TYPE": "Release"
@@ -243,8 +243,8 @@
         {
             "name": "android_debug",
             "generator": "Ninja",
-            "binaryDir": "tests/build/android_debug",
-            "toolchainFile": "tests/build/android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake",
+            "binaryDir": "build/android_debug",
+            "toolchainFile": "build/android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLES3",
                 "ANDROID_ABI": "armeabi-v7a",
@@ -255,8 +255,8 @@
         {
             "name": "android_release",
             "generator": "Ninja",
-            "binaryDir": "tests/build/android_release",
-            "toolchainFile": "tests/build/android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake",
+            "binaryDir": "build/android_release",
+            "toolchainFile": "build/android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLES3",
                 "ANDROID_ABI": "armeabi-v7a",
