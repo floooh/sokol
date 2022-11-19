@@ -20,7 +20,7 @@ jobs:
         - name: test_macos
           run: |
             cd tests
-            ./tests/test_macos.sh
+            ./test_macos.sh
     ios:
         runs-on: macos-latest
         steps:
@@ -28,7 +28,7 @@ jobs:
         - name: test_ios
           run: |
             cd tests
-            ./tests/test_ios.sh
+            ./test_ios.sh
     linux:
         runs-on: ubuntu-latest
         steps:
@@ -41,7 +41,7 @@ jobs:
         - name: test_linux
           run: |
             cd tests
-            ./tests/test_linux.sh
+            ./test_linux.sh
     emscripten:
         runs-on: ubuntu-latest
         steps:
@@ -50,7 +50,7 @@ jobs:
         - name: test_emscripten
           run: |
             cd tests
-            ./tests/test_emscripten.sh
+            ./test_emscripten.sh
     android:
         runs-on: ubuntu-latest
         steps:
@@ -62,7 +62,7 @@ jobs:
         - name: test_android
           run: |
             cd tests
-            ./tests/test_android.sh
+            ./test_android.sh
     #uwp:
     #    runs-on: windows-latest
     #    steps:
