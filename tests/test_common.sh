@@ -5,7 +5,7 @@ setup_emsdk() {
         cd emsdk
         ./emsdk install latest
         ./emsdk activate latest
-        cd ../../..
+        cd ../..
     fi
     source build/emsdk/emsdk_env.sh
 }
@@ -21,7 +21,7 @@ setup_android() {
         yes | ./sdkmanager "build-tools;29.0.3" >/dev/null
         yes | ./sdkmanager "platform-tools" >/dev/null
         yes | ./sdkmanager "ndk-bundle" >/dev/null
-        cd ../../../../..
+        cd ../../../..
     fi
 }
 
