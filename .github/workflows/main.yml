@@ -19,14 +19,14 @@ jobs:
         - uses: seanmiddleditch/gha-setup-ninja@master
         - name: test_macos
           run: |
-            ./test_macos.sh
+            ./tests/test_macos.sh
     ios:
         runs-on: macos-latest
         steps:
         - uses: actions/checkout@v2
         - name: test_ios
           run: |
-            ./test_ios.sh
+            ./tests/test_ios.sh
     #linux:
     #    runs-on: ubuntu-latest
     #    steps:
