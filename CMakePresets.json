@@ -1,0 +1,106 @@
+{
+    "version": 2,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 20,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "macos_gl_debug",
+            "displayName": "macOS OpenGL Debug",
+            "generator": "Ninja",
+            "binaryDir": "tests/build/macos_gl_debug",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "macos_gl_release",
+            "displayName": "macOS OpenGL Release",
+            "generator": "Ninja",
+            "binaryDir": "tests/build/macos_gl_release",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "macos_metal_debug",
+            "displayName": "macOS Metal Debug",
+            "generator": "Ninja",
+            "binaryDir": "tests/build/macos_metal_debug",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_METAL",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "macos_metal_release",
+            "displayName": "macOS Metal Release",
+            "generator": "Ninja",
+            "binaryDir": "tests/build/macos_metal_release",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_METAL",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "macos_arc_gl_debug",
+            "displayName": "macOS ARC OpenGL Debug",
+            "generator": "Ninja",
+            "binaryDir": "tests/build/macos_arc_gl_debug",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "USE_ARC": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "macos_arc_gl_release",
+            "displayName": "macOS ARC OpenGL Debug",
+            "generator": "Ninja",
+            "binaryDir": "tests/build/macos_arc_gl_release",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "USE_ARC": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "macos_arc_metal_debug",
+            "displayName": "macOS ARC Metal Debug",
+            "generator": "Ninja",
+            "binaryDir": "tests/build/macos_arc_metal_debug",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_METAL",
+                "USE_ARC": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "macos_arc_metal_release",
+            "displayName": "macOS ARC Metal Release",
+            "generator": "Ninja",
+            "binaryDir": "tests/build/macos_arc_metal_release",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_METAL",
+                "USE_ARC": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        }
+    ]
+}

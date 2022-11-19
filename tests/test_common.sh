@@ -1,12 +1,3 @@
-prepare() {
-    if [ ! -d "ext/fips-cimgui" ] ; then
-        git clone --depth 1 --recursive https://github.com/fips-libs/fips-cimgui ext/fips-cimgui
-    fi
-    if [ ! -d "ext/spine-runtimes" ] ; then
-        git clone --depth 1 --recursive https://github.com/EsotericSoftware/spine-runtimes/ ext/spine-runtimes
-    fi
-}
-
 setup_emsdk() {
     if [ ! -d "build/emsdk" ] ; then
         mkdir -p build && cd build
@@ -35,11 +26,8 @@ setup_android() {
 }
 
 build() {
-    cfg=$1
-    backend=$2
-    mode=$3
-    mkdir -p build/$cfg && cd build/$cfg
-    cmake -GNinja -DSOKOL_BACKEND=$backend -DCMAKE_BUILD_TYPE=$mode ../..
+    preset=$1
+    cmake --preset $preset ../..
     cmake --build .
     cd ../..
 }
