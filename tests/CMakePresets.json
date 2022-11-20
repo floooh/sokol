@@ -263,6 +263,20 @@
                 "ANDROID_PLATFORM": "android-28",
                 "CMAKE_BUILD_TYPE": "Release"
             }
+        },
+        {
+            "name": "win_gl",
+            "binaryDir": "build/win_gl",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33"
+            }
+        },
+        {
+            "name": "win_d3d11",
+            "binaryDir": "build/win_d3d11",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_D3D11"
+            }
         }
     ],
     "buildPresets": [
@@ -393,6 +407,26 @@
         {
             "name": "android_release",
             "configurePreset": "android_release"
+        },
+        {
+            "name": "win_gl_debug",
+            "configurePreset": "win_gl",
+            "configuration": "Debug"
+        },
+        {
+            "name": "win_gl_release",
+            "configurePreset": "win_gl",
+            "configuration": "Release"
+        },
+        {
+            "name": "win_d3d11_debug",
+            "configurePreset": "win_d3d11",
+            "configuration": "Debug"
+        },
+        {
+            "name": "win_d3d11_release",
+            "configurePreset": "win_d3d11",
+            "configuration": "Release"
         }
     ]
 }
