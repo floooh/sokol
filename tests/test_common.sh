@@ -42,26 +42,6 @@ analyze() {
     cd ../..
 }
 
-analyze_arc() {
-    cfg=$1
-    backend=$2
-    mode=$3
-    mkdir -p build/$cfg && cd build/$cfg
-    cmake -GNinja -DSOKOL_BACKEND=$backend -DUSE_ARC:BOOL=ON -DCMAKE_BUILD_TYPE=$mode -DUSE_ANALYZER=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ ../..
-    cmake --build .
-    cd ../..
-}
-
-analyze_ios() {
-    cfg=$1
-    backend=$2
-    mode=$3
-    mkdir -p build/$cfg && cd build/$cfg
-    cmake -GNinja -DSOKOL_BACKEND=$backend -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_BUILD_TYPE=$mode -DUSE_ANALYZER=ON ../..
-    cmake --build .
-    cd ../..
-}
-
 runtest() {
     cfg=$1
     cd build/$cfg
