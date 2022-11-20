@@ -442,10 +442,40 @@
             }
         },
         {
+            "name": "win_gl_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/win_gl_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+        {
             "name": "win_d3d11",
             "binaryDir": "build/win_d3d11",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_D3D11"
+            }
+        },
+        {
+            "name": "win_d3d11_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/win_d3d11_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_D3D11",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
             }
         },
         {
@@ -638,6 +668,10 @@
             "configuration": "Release"
         },
         {
+            "name": "win_gl_analyze",
+            "configurePreset": "win_gl_analyze"
+        },
+        {
             "name": "win_d3d11_debug",
             "configurePreset": "win_d3d11",
             "configuration": "Debug"
@@ -646,6 +680,10 @@
             "name": "win_d3d11_release",
             "configurePreset": "win_d3d11",
             "configuration": "Release"
+        },
+        {
+            "name": "win_d3d11_analyze",
+            "configurePreset": "win_d3d11_analyze"
         },
         {
             "name": "win_uwp_debug",
