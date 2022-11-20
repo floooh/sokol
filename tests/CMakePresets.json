@@ -277,6 +277,15 @@
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_D3D11"
             }
+        },
+        {
+            "name": "win_uwp",
+            "binaryDir": "build/win_uwp",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_D3D11",
+                "CMAKE_SYSTEM_NAME": "WindowsStore",
+                "CMAKE_SYSTEM_VERSION": "10.0.19041.0 "
+            }
         }
     ],
     "buildPresets": [
@@ -426,6 +435,16 @@
         {
             "name": "win_d3d11_release",
             "configurePreset": "win_d3d11",
+            "configuration": "Release"
+        },
+        {
+            "name": "win_uwp_debug",
+            "configurePreset": "win_uwp",
+            "configuration": "Debug"
+        },
+        {
+            "name": "win_uwp_release",
+            "configurePreset": "win_uwp",
             "configuration": "Release"
         }
     ]
