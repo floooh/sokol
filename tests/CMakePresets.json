@@ -25,6 +25,21 @@
             }
         },
         {
+            "name": "macos_gl_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/macos_gl_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+        {
             "name": "macos_metal_debug",
             "generator": "Ninja",
             "binaryDir": "build/macos_metal_debug",
@@ -40,6 +55,21 @@
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_METAL",
                 "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "macos_metal_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/macos_metal_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_METAL",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
             }
         },
         {
@@ -69,6 +99,25 @@
             }
         },
         {
+            "name": "macos_arc_gl_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/macos_arc_gl_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "USE_ARC": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_BUILD_TYPE": "Debug",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+        {
             "name": "macos_arc_metal_debug",
             "generator": "Ninja",
             "binaryDir": "build/macos_arc_metal_debug",
@@ -92,6 +141,25 @@
                     "value": "ON"
                 },
                 "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "macos_arc_metal_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/macos_arc_metal_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_METAL",
+                "USE_ARC": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_BUILD_TYPE": "Debug",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
             }
         },
         {
@@ -298,12 +366,20 @@
             "configurePreset": "macos_gl_release"
         },
         {
+            "name": "macos_gl_analyze",
+            "configurePreset": "macos_gl_analyze"
+        },
+        {
             "name": "macos_metal_debug",
             "configurePreset": "macos_metal_debug"
         },
         {
             "name": "macos_metal_release",
             "configurePreset": "macos_metal_release"
+        },
+        {
+            "name": "macos_metal_analyze",
+            "configurePreset": "macos_metal_analyze"
         },
         {
             "name": "macos_arc_gl_debug",
@@ -314,12 +390,20 @@
             "configurePreset": "macos_arc_gl_release"
         },
         {
+            "name": "macos_arc_gl_analyze",
+            "configurePreset": "macos_arc_gl_analyze"
+        },
+        {
             "name": "macos_arc_metal_debug",
             "configurePreset": "macos_arc_metal_debug"
         },
         {
             "name": "macos_arc_metal_release",
             "configurePreset": "macos_arc_metal_release"
+        },
+        {
+            "name": "macos_arc_metal_analyze",
+            "configurePreset": "macos_arc_metal_analyze"
         },
         {
             "name": "ios_gl_debug",
