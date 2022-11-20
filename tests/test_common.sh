@@ -1,12 +1,3 @@
-prepare() {
-    if [ ! -d "ext/fips-cimgui" ] ; then
-        git clone --depth 1 --recursive https://github.com/fips-libs/fips-cimgui ext/fips-cimgui
-    fi
-    if [ ! -d "ext/spine-runtimes" ] ; then
-        git clone --depth 1 --recursive https://github.com/EsotericSoftware/spine-runtimes/ ext/spine-runtimes
-    fi
-}
-
 setup_emsdk() {
     if [ ! -d "build/emsdk" ] ; then
         mkdir -p build && cd build
@@ -35,23 +26,10 @@ setup_android() {
 }
 
 build() {
-    cfg=$1
-    backend=$2
-    mode=$3
-    mkdir -p build/$cfg && cd build/$cfg
-    cmake -GNinja -DSOKOL_BACKEND=$backend -DCMAKE_BUILD_TYPE=$mode ../..
-    cmake --build .
-    cd ../..
-}
-
-build_force_egl() {
-    cfg=$1
-    backend=$2
-    mode=$3
-    mkdir -p build/$cfg && cd build/$cfg
-    cmake -GNinja -DSOKOL_BACKEND=$backend -DSOKOL_FORCE_EGL=ON -DCMAKE_BUILD_TYPE=$mode ../..
-    cmake --build .
-    cd ../..
+    gen_preset=$1
+    build_preset=$2
+    cmake --preset $gen_preset
+    cmake --build --preset $build_preset
 }
 
 analyze() {
@@ -60,86 +38,6 @@ analyze() {
     mode=$3
     mkdir -p build/$cfg && cd build/$cfg
     cmake -GNinja -DSOKOL_BACKEND=$backend -DCMAKE_BUILD_TYPE=$mode -DUSE_ANALYZER=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ ../..
-    cmake --build .
-    cd ../..
-}
-
-build_arc() {
-    cfg=$1
-    backend=$2
-    mode=$3
-    mkdir -p build/$cfg && cd build/$cfg
-    cmake -GNinja -DSOKOL_BACKEND=$backend -DUSE_ARC:BOOL=ON -DCMAKE_BUILD_TYPE=$mode ../..
-    cmake --build .
-    cd ../..
-}
-
-analyze_arc() {
-    cfg=$1
-    backend=$2
-    mode=$3
-    mkdir -p build/$cfg && cd build/$cfg
-    cmake -GNinja -DSOKOL_BACKEND=$backend -DUSE_ARC:BOOL=ON -DCMAKE_BUILD_TYPE=$mode -DUSE_ANALYZER=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ ../..
-    cmake --build .
-    cd ../..
-}
-
-build_ios() {
-    cfg=$1
-    backend=$2
-    mode=$3
-    mkdir -p build/$cfg && cd build/$cfg
-    cmake -GXcode -DSOKOL_BACKEND=$backend -DCMAKE_SYSTEM_NAME=iOS ../..
-    cmake --build . --config $mode -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
-    cd ../..
-}
-
-analyze_ios() {
-    cfg=$1
-    backend=$2
-    mode=$3
-    mkdir -p build/$cfg && cd build/$cfg
-    cmake -GNinja -DSOKOL_BACKEND=$backend -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_BUILD_TYPE=$mode -DUSE_ANALYZER=ON ../..
-    cmake --build .
-    cd ../..
-}
-
-build_arc_ios() {
-    cfg=$1
-    backend=$2
-    mode=$3
-    mkdir -p build/$cfg && cd build/$cfg
-    cmake -GXcode -DSOKOL_BACKEND=$backend -DUSE_ARC:BOOL=ON -DCMAKE_SYSTEM_NAME=iOS ../..
-    cmake --build . --config $mode -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
-    cd ../..
-}
-
-analyze_arc_ios() {
-    cfg=$1
-    backend=$2
-    mode=$3
-    mkdir -p build/$cfg && cd build/$cfg
-    cmake -GNinja -DSOKOL_BACKEND=$backend -DUSE_ARC:BOOL=ON -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_BUILD_TYPE=$mode -DUSE_ANALYZER=ON ../..
-    cmake --build .
-    cd ../..
-}
-
-build_emsc() {
-    cfg=$1
-    backend=$2
-    mode=$3
-    mkdir -p build/$cfg && cd build/$cfg
-    emcmake cmake -GNinja -DSOKOL_BACKEND=$backend -DCMAKE_BUILD_TYPE=$mode ../..
-    cmake --build .
-    cd ../..
-}
-
-build_android() {
-    cfg=$1
-    backend=$2
-    mode=$3
-    mkdir -p build/$cfg && cd build/$cfg
-    cmake -GNinja -DSOKOL_BACKEND=$backend -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-28 -DCMAKE_TOOLCHAIN_FILE=../android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake -DCMAKE_BUILD_TYPE=$mode ../..
     cmake --build .
     cd ../..
 }

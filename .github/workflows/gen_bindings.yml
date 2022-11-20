@@ -6,7 +6,7 @@ jobs:
   test-windows:
       runs-on: windows-latest
       steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: test_win
         run: |
           cd tests
@@ -16,7 +16,7 @@ jobs:
   test-mac:
       runs-on: macos-latest
       steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: seanmiddleditch/gha-setup-ninja@master
       - name: test_macos
         run: |
@@ -26,7 +26,7 @@ jobs:
   test-linux:
       runs-on: ubuntu-latest
       steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: seanmiddleditch/gha-setup-ninja@master
       - name: prepare
         run: |
@@ -41,16 +41,16 @@ jobs:
     needs: [ test-windows, test-mac, test-linux ]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
         with:
           repository: floooh/sokol-zig
           path: bindgen/sokol-zig
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           repository: floooh/sokol-nim
           path: bindgen/sokol-nim
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           repository: floooh/sokol-odin
           path: bindgen/sokol-odin
@@ -59,19 +59,19 @@ jobs:
           cd bindgen
           python3 gen_all.py
       - name: upload-zig-artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: ignore-me-zig
           path: bindgen/sokol-zig/src/sokol
           retention-days: 1
       - name: upload-nim-artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: ignore-me-nim
           path: bindgen/sokol-nim/src/sokol
           retention-days: 1
       - name: upload-odin-artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: ignore-me-odin
           path: |
@@ -85,13 +85,13 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{matrix.os}}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           repository: floooh/sokol-zig
       - uses: goto-bus-stop/setup-zig@v1
         with:
           version: 0.10.0
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v3
         with:
           name: ignore-me-zig
           path: src/sokol
@@ -112,10 +112,10 @@ jobs:
     runs-on: ${{matrix.os}}
     steps:
       - uses: jiro4989/setup-nim-action@v1
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           repository: floooh/sokol-nim
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v3
         with:
           name: ignore-me-nim
           path: src/sokol
@@ -137,10 +137,10 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{matrix.os}}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           repository: floooh/sokol-odin
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v3
         with:
           name: ignore-me-odin
       # NOTE: see https://github.com/floooh/sokol-odin/blob/main/.github/workflows/main.yml
@@ -149,7 +149,7 @@ jobs:
         name: prepare-linux
         run: |
           sudo apt-get update
-          sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+          sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev llvm-11
           curl -L https://github.com/odin-lang/Odin/releases/download/dev-2022-08/odin-ubuntu-amd64-dev-2022-08.zip --output odin.zip
           unzip odin.zip
           chmod a+x odin
@@ -197,11 +197,11 @@ jobs:
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           repository: floooh/sokol-zig
           ssh-key: ${{ secrets.GHACTIONS_ZIG_PUSH }}
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v3
         with:
           name: ignore-me-zig
           path: src/sokol
@@ -218,11 +218,11 @@ jobs:
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           repository: floooh/sokol-nim
           ssh-key: ${{ secrets.GHACTIONS_NIM_PUSH }}
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v3
         with:
           name: ignore-me-nim
           path: src/sokol
@@ -239,11 +239,11 @@ jobs:
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           repository: floooh/sokol-odin
           ssh-key: ${{ secrets.GHACTIONS_ODIN_PUSH }}
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v3
         with:
           name: ignore-me-odin
       - name: "commit and push"

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -e
 source test_common.sh
-prepare
 setup_android
-build_android android_debug SOKOL_GLES3 Debug
-build_android android_release SOKOL_GLES3 Release
+build android_debug android_debug
+build android_release android_release
