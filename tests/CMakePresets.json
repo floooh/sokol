@@ -297,6 +297,21 @@
             }
         },
         {
+            "name": "linux_gl_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/linux_gl_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+        {
             "name": "linux_gles3_debug",
             "generator": "Ninja",
             "binaryDir": "build/linux_gles3_debug",
@@ -312,6 +327,21 @@
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLES3",
                 "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "linux_gles3_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/linux_gles3_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
             }
         },
         {
@@ -550,12 +580,20 @@
             "configurePreset": "linux_gl_release"
         },
         {
+            "name": "linux_gl_analyze",
+            "configurePreset": "linux_gl_analyze"
+        },
+        {
             "name": "linux_gles3_debug",
             "configurePreset": "linux_gles3_debug"
         },
         {
             "name": "linux_gles3_release",
             "configurePreset": "linux_gles3_release"
+        },
+        {
+            "name": "linux_gles3_analyze",
+            "configurePreset": "linux_gles3_analyze"
         },
         {
             "name": "linux_gl_egl_debug",
