@@ -11,6 +11,12 @@
 
 #define T(b) EXPECT_TRUE(b)
 
+static int num_log_called = 0;
+static void test_logger(const char* msg, void* userdata) {
+    (void)msg; (void)userdata;
+    num_log_called++;
+}
+
 UTEST(sokol_gfx, init_shutdown) {
     sg_setup(&(sg_desc){0});
     T(sg_isvalid());
@@ -1021,5 +1027,16 @@ UTEST(sokol_gfx, commit_listener_array_full) {
     sg_commit();
     T(commit_listener.num_called == 3);
     T(commit_listener.userdata == 128);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, alloc_destroy) {
+    num_log_called = 0;
+    sg_setup(&(sg_desc){
+        .logger = { .log_cb = test_logger }
+    });
+    sg_buffer vbuf = sg_alloc_buffer();
+    sg_destroy_buffer(vbuf);
+    T(0 == num_log_called);
     sg_shutdown();
 }
