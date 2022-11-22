@@ -13,8 +13,57 @@
 
 static int num_log_called = 0;
 static void test_logger(const char* msg, void* userdata) {
-    (void)msg; (void)userdata;
+    (void)userdata;
     num_log_called++;
+    puts(msg);
+}
+
+static void setup_with_logger(void) {
+    num_log_called = 0;
+    sg_setup(&(sg_desc){
+        .logger = { .log_cb = test_logger }
+    });
+}
+
+static sg_buffer create_buffer(void) {
+    static const float data[] = { 1, 2, 3, 4 };
+    return sg_make_buffer(&(sg_buffer_desc){ .data = SG_RANGE(data) });
+}
+
+static sg_image create_image(void) {
+    return sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 256,
+        .height = 128
+    });
+}
+
+static sg_shader create_shader(void) {
+    return sg_make_shader(&(sg_shader_desc){0});
+}
+
+static sg_pipeline create_pipeline(void) {
+    return sg_make_pipeline(&(sg_pipeline_desc){
+        .layout = {
+            .attrs[0].format = SG_VERTEXFORMAT_FLOAT3
+        },
+        .shader = sg_make_shader(&(sg_shader_desc){0})
+    });
+}
+
+static sg_pass create_pass(void) {
+    sg_image_desc img_desc = {
+        .render_target = true,
+        .width = 128,
+        .height = 128,
+    };
+    return sg_make_pass(&(sg_pass_desc){
+        .color_attachments = {
+            [0].image = sg_make_image(&img_desc),
+            [1].image = sg_make_image(&img_desc),
+            [2].image = sg_make_image(&img_desc)
+        },
+    });
 }
 
 UTEST(sokol_gfx, init_shutdown) {
@@ -1030,13 +1079,217 @@ UTEST(sokol_gfx, commit_listener_array_full) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, alloc_destroy) {
-    num_log_called = 0;
-    sg_setup(&(sg_desc){
-        .logger = { .log_cb = test_logger }
-    });
-    sg_buffer vbuf = sg_alloc_buffer();
-    sg_destroy_buffer(vbuf);
-    T(0 == num_log_called);
+UTEST(sokol_gfx, buffer_double_destroy_is_ok) {
+    sg_setup(&(sg_desc){0});
+    sg_buffer buf = create_buffer();
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    sg_destroy_buffer(buf);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_INVALID);
+    sg_destroy_buffer(buf);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, image_double_destroy_is_ok) {
+    sg_setup(&(sg_desc){0});
+    sg_image img = create_image();
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    sg_destroy_image(img);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_INVALID);
+    sg_destroy_image(img);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, shader_double_destroy_is_ok) {
+    sg_setup(&(sg_desc){0});
+    sg_shader shd = create_shader();
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_VALID);
+    sg_destroy_shader(shd);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_INVALID);
+    sg_destroy_shader(shd);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, pipeline_double_destroy_is_ok) {
+    sg_setup(&(sg_desc){0});
+    sg_pipeline pip = create_pipeline();
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
+    sg_destroy_pipeline(pip);
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_INVALID);
+    sg_destroy_pipeline(pip);
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokoL_gfx, pass_double_destroy_is_ok) {
+    sg_setup(&(sg_desc){0});
+    sg_pass pass = create_pass();
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_VALID);
+    sg_destroy_pass(pass);
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_INVALID);
+    sg_destroy_pass(pass);
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_dealloc_buffer_warns) {
+    setup_with_logger();
+    sg_buffer buf = create_buffer();
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    sg_dealloc_buffer(buf);
+    T(num_log_called == 1);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    sg_destroy_buffer(buf);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_dealloc_image_warns) {
+    setup_with_logger();
+    sg_image img = create_image();
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    sg_dealloc_image(img);
+    T(num_log_called == 1);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    sg_destroy_image(img);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_dealloc_shader_warns) {
+    setup_with_logger();
+    sg_shader shd = create_shader();
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_VALID);
+    sg_dealloc_shader(shd);
+    T(num_log_called == 1);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_VALID);
+    sg_destroy_shader(shd);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_dealloc_pipeline_warns) {
+    setup_with_logger();
+    sg_pipeline pip = create_pipeline();
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
+    sg_dealloc_pipeline(pip);
+    T(num_log_called == 1);
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
+    sg_destroy_pipeline(pip);
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_dealloc_pass_warns) {
+    setup_with_logger();
+    sg_pass pass = create_pass();
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_VALID);
+    sg_dealloc_pass(pass);
+    T(num_log_called == 1);
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_VALID);
+    sg_destroy_pass(pass);
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, alloc_uninit_buffer_warns) {
+    setup_with_logger();
+    sg_buffer buf = sg_alloc_buffer();
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_ALLOC);
+    sg_uninit_buffer(buf);
+    T(num_log_called == 1);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_ALLOC);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, alloc_uninit_image_warns) {
+    setup_with_logger();
+    sg_image img = sg_alloc_image();
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_ALLOC);
+    sg_uninit_image(img);
+    T(num_log_called == 1);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_ALLOC);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, alloc_uninit_shader_warns) {
+    setup_with_logger();
+    sg_shader shd = sg_alloc_shader();
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_ALLOC);
+    sg_uninit_shader(shd);
+    T(num_log_called == 1);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_ALLOC);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, alloc_uninit_pipeline_warns) {
+    setup_with_logger();
+    sg_pipeline pip = sg_alloc_pipeline();
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_ALLOC);
+    sg_uninit_pipeline(pip);
+    T(num_log_called == 1);
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_ALLOC);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, alloc_uninit_pass_warns) {
+    setup_with_logger();
+    sg_pass pass = sg_alloc_pass();
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_ALLOC);
+    sg_uninit_pass(pass);
+    T(num_log_called == 1);
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_ALLOC);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, alloc_destroy_buffer_is_ok) {
+    setup_with_logger();
+    sg_buffer buf = sg_alloc_buffer();
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_ALLOC);
+    sg_destroy_buffer(buf);
+    T(num_log_called == 0);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, alloc_destroy_image_is_ok) {
+    setup_with_logger();
+    sg_image img = sg_alloc_image();
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_ALLOC);
+    sg_destroy_image(img);
+    T(num_log_called == 0);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, alloc_destroy_shader_is_ok) {
+    setup_with_logger();
+    sg_shader shd = sg_alloc_shader();
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_ALLOC);
+    sg_destroy_shader(shd);
+    T(num_log_called == 0);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, alloc_destroy_pipeline_is_ok) {
+    setup_with_logger();
+    sg_pipeline pip = sg_alloc_pipeline();
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_ALLOC);
+    sg_destroy_pipeline(pip);
+    T(num_log_called == 0);
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, alloc_destroy_pass_is_ok) {
+    setup_with_logger();
+    sg_pass pass = sg_alloc_pass();
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_ALLOC);
+    sg_destroy_pass(pass);
+    T(num_log_called == 0);
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_INVALID);
     sg_shutdown();
 }
