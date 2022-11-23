@@ -1293,3 +1293,42 @@ UTEST(sokol_gfx, alloc_destroy_pass_is_ok) {
     T(sg_query_pass_state(pass) == SG_RESOURCESTATE_INVALID);
     sg_shutdown();
 }
+
+UTEST(sokol_gfx, make_pipeline_with_nonvalid_shader) {
+    sg_setup(&(sg_desc){
+        .disable_validation = true,
+    });
+    sg_shader shd = sg_alloc_shader();
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_ALLOC);
+    sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
+        .layout = {
+            .attrs[0].format = SG_VERTEXFORMAT_FLOAT3
+        },
+    });
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_with_nonvalid_color_images) {
+    sg_setup(&(sg_desc){
+        .disable_validation = true,
+    });
+    sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments = {
+            [0].image = sg_alloc_image(),
+            [1].image = sg_alloc_image(),
+        },
+        .depth_stencil_attachment = {
+            .image = sg_make_image(&(sg_image_desc){
+                .render_target = true,
+                .width = 128,
+                .height = 128
+            })
+        }
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    sg_destroy_pass(pass);
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
