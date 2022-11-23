@@ -81,6 +81,7 @@
       offline shader cross-compiler, see here:
       https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md)
 
+
     STEP BY STEP
     ============
     --- to initialize sokol_gfx, after creating a window and a 3D-API
@@ -305,6 +306,7 @@
         zero-initialized items for default values. These zero-init values
         will be replaced with their concrete values in the returned desc
         struct.
+
 
     ON INITIALIZATION:
     ==================
@@ -538,6 +540,7 @@
                 }
             };
 
+
     WORKING WITH CONTEXTS
     =====================
     sokol-gfx allows to switch between different rendering contexts and
@@ -581,6 +584,7 @@
 
     https://github.com/floooh/sokol-samples/blob/master/glfw/multiwindow-glfw.c
 
+
     TRACE HOOKS:
     ============
     sokol_gfx.h optionally allows to install "trace hook" callbacks for
@@ -609,6 +613,7 @@
     As an example of how trace hooks are used, have a look at the
     imgui/sokol_gfx_imgui.h header which implements a realtime
     debugging UI for sokol_gfx.h on top of Dear ImGui.
+
 
     A NOTE ON PORTABLE PACKED VERTEX FORMATS:
     =========================================
@@ -710,6 +715,7 @@
     If no overrides are provided, puts will be used on most platforms.
     On Android, __android_log_write will be used instead.
 
+
     COMMIT LISTENERS
     ================
     It's possible to hook callback functions into sokol-gfx which are called from
@@ -754,10 +760,164 @@
     sg_add_commit_listener() call. The function returns true if the commit
     listener item was found and removed, and false otherwise.
 
-    TODO:
-    ====
-    - talk about asynchronous resource creation
 
+    RESOURCE CREATION AND DESTRUCTION IN DETAIL
+    ===========================================
+    The 'vanilla' way to create resource objects is with the 'make functions':
+
+        sg_buffer sg_make_buffer(const sg_buffer_desc* desc)
+        sg_image sg_make_image(const sg_image_desc* desc)
+        sg_shader sg_make_shader(const sg_shader_desc* desc)
+        sg_pipeline sg_make_pipeline(const sg_pipeline_desc* desc)
+        sg_pass sg_make_pass(const sg_pass_desc* desc)
+
+    The result will be either of three cases:
+
+        1. The returned handle is invalid. This happens when there are no more
+           free slots in the resource pool for this resource type. An invalid
+           handle is associated with the INVALID resource state, for instance:
+
+                sg_buffer buf = sg_make_buffer(...)
+                if (sg_query_buffer_state(buf) == SG_RESOURCESTATE_INVALID) {
+                    // buffer pool is exhausted
+                }
+
+        2. The returned handle is valid, but creating the underlying resource
+           has failed for some reason. This results in a resource object in the
+           FAILED state. The reason *why* resource creation has failed differ
+           by resource type. Look for log messages with more details. A failed
+           resource state can be checked with:
+
+                sg_buffer buf = sg_make_buffer(...)
+                if (sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED) {
+                    // creating the resource has failed
+                }
+
+        3. And finally, if everything goes right, the returned resource is
+           in resource state VALID and ready to use. This can be checked
+           with:
+
+                sg_buffer buf = sg_make_buffer(...)
+                if (sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID) {
+                    // creating the resource has failed
+                }
+
+    When calling the 'make functions', the created resource goes through a number
+    of states:
+
+        - INITIAL: the resource slot associated with the new resource is currently
+          free (technically, there is no resource yet, just a pool slot)
+        - ALLOC: a handle for the new resource has been allocated, this just means
+          a pool slot has been reserved.
+        - VALID or FAILED: in VALID state any 3D API backend resource objects have
+          been successfully created, otherwise if anything went wrong, the resource
+          will be in FAILED state.
+
+    Sometimes it makes sense to first grab a handle, but initialize the underlying
+    resource at a later time. For instance when loading data asynchronously from
+    a slow data source, you may know that you what buffers and textures
+    are needed at an early stage of the loading process, but actually loading
+    the buffer or texture content can only be completed at a later time.
+
+    For such situations, sokol-gfx resource objects can be created in two steps.
+    You can allocate a handle upfront with one of the 'alloc functions':
+
+        sg_buffer sg_alloc_buffer(void)
+        sg_image sg_alloc_image(void)
+        sg_shader sg_alloc_shader(void)
+        sg_pipeline sg_alloc_pipeline(void)
+        sg_pass sg_alloc_pass(void)
+
+    This will return a handle with the underlying resource object in an incomplete
+    ALLOC state:
+
+        sg_image img = sg_alloc_image();
+        if (sg_query_image_state(img) == SG_RESOURCESTATE_ALLOC) {
+            // allocating an image handle has succeeded, otherwise
+            // the image pool is full
+        }
+
+    Such an 'incomplete' handle can be used in most sokol-gfx rendering functions
+    without doing any harm, sokol-gfx will simply skip any rendering operation
+    that involve resources which are not in VALID state.
+
+    At a later time (for instance once the texture has completed loading
+    asynchronously), the resource creation can be completed by calling
+    one of the 'init functions', those functions take a resource handle
+    and 'desc struct':
+
+        void sg_init_buffer(sg_buffer buf, const sg_buffer_desc* desc)
+        void sg_init_image(sg_image img, const sg_image_desc* desc)
+        void sg_init_shader(sg_shader shd, const sg_shader_desc* desc)
+        void sg_init_pipeline(sg_pipeline pip, const sg_pipeline_desc* desc)
+        void sg_init_pass(sg_pass pass, const sg_pass_desc* desc)
+
+    The init functions expect a resource in ALLOC state, and after the function
+    returns, the resource will be either in VALID or FAILED state. Calling
+    an 'alloc function' followed by the matching 'init function' is fully
+    equivalent with calling the 'make function' alone.
+
+    Destruction can also happen as a two-step process. The 'uninit functions'
+    will put a resource object from the VALID or FAILED state back into the
+    ALLOC state:
+
+        void sg_uninit_buffer(sg_buffer buf)
+        void sg_uninit_image(sg_image img)
+        void sg_uninit_shader(sg_shader shd)
+        void sg_uninit_pipeline(sg_pipeline pip)
+        void sg_uninit_pass(sg_pass pass)
+
+    Calling the 'uninit functions' with a resource that is not in the VALID or
+    FAILED state is a no-op.
+
+    To finally free the pool slot for recycling that has been reserved for a
+    resource in ALLOC state, call the 'dealloc functions':
+
+        void sg_dealloc_buffer(sg_buffer buf)
+        void sg_dealloc_image(sg_image img)
+        void sg_dealloc_shader(sg_shader shd)
+        void sg_dealloc_pipeline(sg_pipeline pip)
+        void sg_dealloc_pass(sg_pass pass)
+
+    Calling the 'dealloc functions' on a resource that's not in ALLOC state is
+    a no-op, but will generate a warning log message.
+
+    Calling an 'uninit function' and 'dealloc function' in sequence is equivalent
+    with calling the associated 'destroy function':
+
+        void sg_destroy_buffer(sg_buffer buf)
+        void sg_destroy_image(sg_image img)
+        void sg_destroy_shader(sg_shader shd)
+        void sg_destroy_pipeline(sg_pipeline pip)
+        void sg_destroy_pass(sg_pass pass)
+
+    The 'destroy functions' can be called on resources in any state and generally
+    do the right thing (for instance if the resource is in ALLOC state, the destroy
+    function will be equivalent to the 'dealloc function' and skip the 'uninit part').
+
+    And finally, to close the circle, the 'fail functions' can be called to manually
+    put a resource in ALLOC state into the FAILED state:
+
+        sg_fail_buffer(sg_buffer buf)
+        sg_fail_image(sg_image img)
+        sg_fail_shader(sg_shader shd)
+        sg_fail_pipeline(sg_pipeline pip)
+        sg_fail_pass(sg_pass pass)
+
+    This is recommended if anything went wrong outside of sokol-gfx during asynchronous
+    resource creation (for instance the file loading operation failed). In this case,
+    the 'fail function' should be called instead of the 'init function'.
+
+    Calling a 'fail function' on a resource that's not in ALLOC state is a no-op,
+    but will generate a warning log message.
+
+    NOTE: that two-step resource creation usually only makes sense for buffers
+    and images, but not for shaders, pipelines or passes. Most notably, pipeline
+    creation will fail if the input shader is not in VALID state, and likewise,
+    pass creation will fail if the input images are not in VALID state.
+
+    LICENSE
+    =======
     zlib/libpng license
 
     Copyright (c) 2018 Andre Weissflog
@@ -2635,26 +2795,26 @@ SOKOL_GFX_API_DECL sg_image sg_alloc_image(void);
 SOKOL_GFX_API_DECL sg_shader sg_alloc_shader(void);
 SOKOL_GFX_API_DECL sg_pipeline sg_alloc_pipeline(void);
 SOKOL_GFX_API_DECL sg_pass sg_alloc_pass(void);
-SOKOL_GFX_API_DECL void sg_dealloc_buffer(sg_buffer buf_id);
-SOKOL_GFX_API_DECL void sg_dealloc_image(sg_image img_id);
-SOKOL_GFX_API_DECL void sg_dealloc_shader(sg_shader shd_id);
-SOKOL_GFX_API_DECL void sg_dealloc_pipeline(sg_pipeline pip_id);
-SOKOL_GFX_API_DECL void sg_dealloc_pass(sg_pass pass_id);
-SOKOL_GFX_API_DECL void sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc);
-SOKOL_GFX_API_DECL void sg_init_image(sg_image img_id, const sg_image_desc* desc);
-SOKOL_GFX_API_DECL void sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc);
-SOKOL_GFX_API_DECL void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc* desc);
-SOKOL_GFX_API_DECL void sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc);
-SOKOL_GFX_API_DECL void sg_uninit_buffer(sg_buffer buf_id);
-SOKOL_GFX_API_DECL void sg_uninit_image(sg_image img_id);
-SOKOL_GFX_API_DECL void sg_uninit_shader(sg_shader shd_id);
-SOKOL_GFX_API_DECL void sg_uninit_pipeline(sg_pipeline pip_id);
-SOKOL_GFX_API_DECL void sg_uninit_pass(sg_pass pass_id);
-SOKOL_GFX_API_DECL void sg_fail_buffer(sg_buffer buf_id);
-SOKOL_GFX_API_DECL void sg_fail_image(sg_image img_id);
-SOKOL_GFX_API_DECL void sg_fail_shader(sg_shader shd_id);
-SOKOL_GFX_API_DECL void sg_fail_pipeline(sg_pipeline pip_id);
-SOKOL_GFX_API_DECL void sg_fail_pass(sg_pass pass_id);
+SOKOL_GFX_API_DECL void sg_dealloc_buffer(sg_buffer buf);
+SOKOL_GFX_API_DECL void sg_dealloc_image(sg_image img);
+SOKOL_GFX_API_DECL void sg_dealloc_shader(sg_shader shd);
+SOKOL_GFX_API_DECL void sg_dealloc_pipeline(sg_pipeline pip);
+SOKOL_GFX_API_DECL void sg_dealloc_pass(sg_pass pass);
+SOKOL_GFX_API_DECL void sg_init_buffer(sg_buffer buf, const sg_buffer_desc* desc);
+SOKOL_GFX_API_DECL void sg_init_image(sg_image img, const sg_image_desc* desc);
+SOKOL_GFX_API_DECL void sg_init_shader(sg_shader shd, const sg_shader_desc* desc);
+SOKOL_GFX_API_DECL void sg_init_pipeline(sg_pipeline pip, const sg_pipeline_desc* desc);
+SOKOL_GFX_API_DECL void sg_init_pass(sg_pass pass, const sg_pass_desc* desc);
+SOKOL_GFX_API_DECL void sg_uninit_buffer(sg_buffer buf);
+SOKOL_GFX_API_DECL void sg_uninit_image(sg_image img);
+SOKOL_GFX_API_DECL void sg_uninit_shader(sg_shader shd);
+SOKOL_GFX_API_DECL void sg_uninit_pipeline(sg_pipeline pip);
+SOKOL_GFX_API_DECL void sg_uninit_pass(sg_pass pass);
+SOKOL_GFX_API_DECL void sg_fail_buffer(sg_buffer buf);
+SOKOL_GFX_API_DECL void sg_fail_image(sg_image img);
+SOKOL_GFX_API_DECL void sg_fail_shader(sg_shader shd);
+SOKOL_GFX_API_DECL void sg_fail_pipeline(sg_pipeline pip);
+SOKOL_GFX_API_DECL void sg_fail_pass(sg_pass pass);
 
 /* rendering contexts (optional) */
 SOKOL_GFX_API_DECL sg_context sg_setup_context(void);
