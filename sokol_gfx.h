@@ -912,9 +912,11 @@
     but will generate a warning log message.
 
     NOTE: that two-step resource creation usually only makes sense for buffers
-    and images, but not for shaders, pipelines or passes. Most notably, pipeline
-    creation will fail if the input shader is not in VALID state, and likewise,
-    pass creation will fail if the input images are not in VALID state.
+    and images, but not for shaders, pipelines or passes. Most notably, trying
+    to create a pipeline object with a shader that's not in VALID state will
+    trigger a validation layer error, or if the validation layer is disabled,
+    result in a pipeline object in FAILED state. Same when trying to create
+    a pass object with image invalid image objects.
 
     LICENSE
     =======
