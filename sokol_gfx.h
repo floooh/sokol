@@ -2528,9 +2528,11 @@ typedef struct sg_pass_info {
     .pipeline_pool_size     64
     .pass_pool_size         16
     .context_pool_size      16
-    .sampler_cache_size     64
     .uniform_buffer_size    4 MB (4*1024*1024)
     .staging_buffer_size    8 MB (8*1024*1024)
+    .sampler_cache_size     64
+    .max_commit_listeners   1024
+    .disable_validation     false
 
     .allocator.alloc        0 (in this case, malloc() will be called)
     .allocator.free         0 (in this case, free() will be called)
@@ -2717,6 +2719,7 @@ typedef struct sg_desc {
     int staging_buffer_size;
     int sampler_cache_size;
     int max_commit_listeners;
+    bool disable_validation;    // disable validation layer even in debug mode, useful for tests
     sg_allocator allocator;
     sg_logger logger; // optional log function override
     sg_context_desc context;
@@ -14471,6 +14474,9 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
         _SOKOL_UNUSED(desc);
         return true;
     #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
         SOKOL_ASSERT(desc);
         SOKOL_VALIDATE_BEGIN();
         SOKOL_VALIDATE(desc->_start_canary == 0, _SG_VALIDATE_BUFFERDESC_CANARY);
@@ -14521,6 +14527,9 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         _SOKOL_UNUSED(desc);
         return true;
     #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
         SOKOL_ASSERT(desc);
         SOKOL_VALIDATE_BEGIN();
         SOKOL_VALIDATE(desc->_start_canary == 0, _SG_VALIDATE_IMAGEDESC_CANARY);
@@ -14593,6 +14602,9 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
         _SOKOL_UNUSED(desc);
         return true;
     #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
         SOKOL_ASSERT(desc);
         SOKOL_VALIDATE_BEGIN();
         SOKOL_VALIDATE(desc->_start_canary == 0, _SG_VALIDATE_SHADERDESC_CANARY);
@@ -14702,6 +14714,9 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
         _SOKOL_UNUSED(desc);
         return true;
     #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
         SOKOL_ASSERT(desc);
         SOKOL_VALIDATE_BEGIN();
         SOKOL_VALIDATE(desc->_start_canary == 0, _SG_VALIDATE_PIPELINEDESC_CANARY);
@@ -14746,6 +14761,9 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
         _SOKOL_UNUSED(desc);
         return true;
     #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
         SOKOL_ASSERT(desc);
         SOKOL_VALIDATE_BEGIN();
         SOKOL_VALIDATE(desc->_start_canary == 0, _SG_VALIDATE_PASSDESC_CANARY);
@@ -14816,6 +14834,9 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(_sg_pass_t* pass) {
         _SOKOL_UNUSED(pass);
         return true;
     #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
         SOKOL_VALIDATE_BEGIN();
         SOKOL_VALIDATE(pass->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_BEGINPASS_PASS);
 
@@ -14842,6 +14863,9 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
         _SOKOL_UNUSED(pip_id);
         return true;
     #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
         SOKOL_VALIDATE_BEGIN();
         /* the pipeline object must be alive and valid */
         SOKOL_VALIDATE(pip_id.id != SG_INVALID_ID, _SG_VALIDATE_APIP_PIPELINE_VALID_ID);
@@ -14889,6 +14913,9 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         _SOKOL_UNUSED(bindings);
         return true;
     #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
         SOKOL_VALIDATE_BEGIN();
 
         /* a pipeline object must have been applied */
@@ -14980,6 +15007,9 @@ _SOKOL_PRIVATE bool _sg_validate_apply_uniforms(sg_shader_stage stage_index, int
         _SOKOL_UNUSED(data);
         return true;
     #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
         SOKOL_ASSERT((stage_index == SG_SHADERSTAGE_VS) || (stage_index == SG_SHADERSTAGE_FS));
         SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_SHADERSTAGE_UBS));
         SOKOL_VALIDATE_BEGIN();
@@ -15005,6 +15035,9 @@ _SOKOL_PRIVATE bool _sg_validate_update_buffer(const _sg_buffer_t* buf, const sg
         _SOKOL_UNUSED(data);
         return true;
     #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
         SOKOL_ASSERT(buf && data && data->ptr);
         SOKOL_VALIDATE_BEGIN();
         SOKOL_VALIDATE(buf->cmn.usage != SG_USAGE_IMMUTABLE, _SG_VALIDATE_UPDATEBUF_USAGE);
@@ -15021,6 +15054,9 @@ _SOKOL_PRIVATE bool _sg_validate_append_buffer(const _sg_buffer_t* buf, const sg
         _SOKOL_UNUSED(data);
         return true;
     #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
         SOKOL_ASSERT(buf && data && data->ptr);
         SOKOL_VALIDATE_BEGIN();
         SOKOL_VALIDATE(buf->cmn.usage != SG_USAGE_IMMUTABLE, _SG_VALIDATE_APPENDBUF_USAGE);
@@ -15036,6 +15072,9 @@ _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image_t* img, const sg_i
         _SOKOL_UNUSED(data);
         return true;
     #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
         SOKOL_ASSERT(img && data);
         SOKOL_VALIDATE_BEGIN();
         SOKOL_VALIDATE(img->cmn.usage != SG_USAGE_IMMUTABLE, _SG_VALIDATE_UPDIMG_USAGE);
