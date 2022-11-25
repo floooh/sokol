@@ -771,7 +771,7 @@
         sg_pipeline sg_make_pipeline(const sg_pipeline_desc* desc)
         sg_pass sg_make_pass(const sg_pass_desc* desc)
 
-    The result will be either of three cases:
+    The result will be one of three cases:
 
         1. The returned handle is invalid. This happens when there are no more
            free slots in the resource pool for this resource type. An invalid
@@ -806,18 +806,18 @@
     of states:
 
         - INITIAL: the resource slot associated with the new resource is currently
-          free (technically, there is no resource yet, just a pool slot)
+          free (technically, there is no resource yet, just an empty pool slot)
         - ALLOC: a handle for the new resource has been allocated, this just means
           a pool slot has been reserved.
         - VALID or FAILED: in VALID state any 3D API backend resource objects have
           been successfully created, otherwise if anything went wrong, the resource
           will be in FAILED state.
 
-    Sometimes it makes sense to first grab a handle, but initialize the underlying
-    resource at a later time. For instance when loading data asynchronously from
-    a slow data source, you may know that you what buffers and textures
-    are needed at an early stage of the loading process, but actually loading
-    the buffer or texture content can only be completed at a later time.
+    Sometimes it makes sense to first grab a handle, but initialize the
+    underlying resource at a later time. For instance when loading data
+    asynchronously from a slow data source, you may know what buffers and
+    textures are needed at an early stage of the loading process, but actually
+    loading the buffer or texture content can only be completed at a later time.
 
     For such situations, sokol-gfx resource objects can be created in two steps.
     You can allocate a handle upfront with one of the 'alloc functions':
@@ -828,7 +828,7 @@
         sg_pipeline sg_alloc_pipeline(void)
         sg_pass sg_alloc_pass(void)
 
-    This will return a handle with the underlying resource object in an incomplete
+    This will return a handle with the underlying resource object in the
     ALLOC state:
 
         sg_image img = sg_alloc_image();
@@ -842,9 +842,9 @@
     that involve resources which are not in VALID state.
 
     At a later time (for instance once the texture has completed loading
-    asynchronously), the resource creation can be completed by calling
-    one of the 'init functions', those functions take a resource handle
-    and 'desc struct':
+    asynchronously), the resource creation can be completed by calling one of
+    the 'init functions', those functions take an existing resource handle and
+    'desc struct':
 
         void sg_init_buffer(sg_buffer buf, const sg_buffer_desc* desc)
         void sg_init_image(sg_image img, const sg_image_desc* desc)
@@ -870,8 +870,7 @@
     Calling the 'uninit functions' with a resource that is not in the VALID or
     FAILED state is a no-op.
 
-    To finally free the pool slot for recycling that has been reserved for a
-    resource in ALLOC state, call the 'dealloc functions':
+    To finally free the pool slot for recycling call the 'dealloc functions':
 
         void sg_dealloc_buffer(sg_buffer buf)
         void sg_dealloc_image(sg_image img)
@@ -895,7 +894,7 @@
     do the right thing (for instance if the resource is in ALLOC state, the destroy
     function will be equivalent to the 'dealloc function' and skip the 'uninit part').
 
-    And finally, to close the circle, the 'fail functions' can be called to manually
+    And finally to close the circle, the 'fail functions' can be called to manually
     put a resource in ALLOC state into the FAILED state:
 
         sg_fail_buffer(sg_buffer buf)
