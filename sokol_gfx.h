@@ -771,7 +771,7 @@
         sg_pipeline sg_make_pipeline(const sg_pipeline_desc* desc)
         sg_pass sg_make_pass(const sg_pass_desc* desc)
 
-    The result will be one of three cases:
+    This will result in one of three cases:
 
         1. The returned handle is invalid. This happens when there are no more
            free slots in the resource pool for this resource type. An invalid
