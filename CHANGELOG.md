@@ -1,5 +1,28 @@
 ## Updates
 
+- **25-Nov-2022**: Some code cleanup around resource creation and destruction in sokol_gfx.h:
+    - It's now safe to call the destroy, uninit and dealloc functions in any
+      resource state, in general, the functions will do the right thing without
+      assertions getting in the way (there are however new log warnings in some
+      cases though, such as attempting to call an ```sg_dealloc_*()``` function on
+      a resource object that's not in ALLOC state)
+    - A related **minor breaking change**: the ```sg_uninit_*()``` functions now return
+      void instead of bool, this is because ```sg_dealloc_*()``` no longer asserts
+      when called in the wrong resource state
+    - Related internal code cleanup in the backend-agnostic resource creation
+      and cleanup code, better or more consistent functions, etc...
+    - The validation layer can now be disabled in debug mode with a runtime
+      flag during setup: ```sg_desc.disable_validation```. This is mainly useful
+      for test code.
+    - Creating a pass object with invalid image objects now no longer asserts,
+      but instead results in a pass object in FAILED state. In debug mode,
+      the validation layer will still stop at this problem though (it's mostly
+      an 'undefined API behaviour' fix in release mode).
+    - Calling ```sg_shutdown()``` with existing resources in ALLOC state will
+      no longer print a log message about an 'active context mismatch'.
+    - A new header documentation blurb about the two-step resource creation
+      and destruction functions (search for RESOURCE CREATION AND DESTRUCTION IN DETAIL)
+
 - **16-Nov-2022**: Render layer support has been added to sokol_debugtext.h,
   same general changes as in sokol_gl.h with two new functions:
   sdtx_layer(layer_id) to select the layer to record text into, and
