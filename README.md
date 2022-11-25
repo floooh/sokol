@@ -4,7 +4,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**16-Nov-2022** sokol_debugtext.h learned layered rendering)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**25-Nov-2022** sokol_gfx.h: minor breaking change in the ```sg_uninit_*()``` functions)
 
 [![Build](/../../actions/workflows/main.yml/badge.svg)](/../../actions/workflows/main.yml) [![Bindings](/../../actions/workflows/gen_bindings.yml/badge.svg)](/../../actions/workflows/gen_bindings.yml) [![build](https://github.com/floooh/sokol-zig/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-zig/actions/workflows/main.yml) [![build](https://github.com/floooh/sokol-nim/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-nim/actions/workflows/main.yml) [![Odin](https://github.com/floooh/sokol-odin/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-odin/actions/workflows/main.yml)
 
