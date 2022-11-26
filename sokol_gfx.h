@@ -2226,9 +2226,9 @@ typedef struct sg_shader_desc {
         .enabled:           false
         .front/back:
             .compare:       SG_COMPAREFUNC_ALWAYS
+            .fail_op:       SG_STENCILOP_KEEP
             .depth_fail_op: SG_STENCILOP_KEEP
             .pass_op:       SG_STENCILOP_KEEP
-            .compare:       SG_COMPAREFUNC_ALWAYS
         .read_mask:         0
         .write_mask:        0
         .ref:               0
