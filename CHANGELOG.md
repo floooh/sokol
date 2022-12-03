@@ -57,7 +57,7 @@
   would have been needed).
 
 - **05-Nov-2022** A breaking change in sokol_fetch.h, and a minor change in
-  sokol_app.h which should only break for very users:
+  sokol_app.h which should only break for very few users:
   - An ```sfetch_range_t``` ptr/size pair struct has been added to sokol_fetch.h,
     and discrete ptr/size pairs have been replaced with sfetch_range_t
     items. This affects the structs ```sfetch_request_t``` and ```sfetch_response_t```,
