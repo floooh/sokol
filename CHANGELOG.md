@@ -10,7 +10,7 @@
       void instead of bool, this is because ```sg_dealloc_*()``` no longer asserts
       when called in the wrong resource state
     - Related internal code cleanup in the backend-agnostic resource creation
-      and cleanup code, better or more consistent functions, etc...
+      and cleanup code, better or more consistent function names, etc...
     - The validation layer can now be disabled in debug mode with a runtime
       flag during setup: ```sg_desc.disable_validation```. This is mainly useful
       for test code.
