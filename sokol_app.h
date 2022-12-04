@@ -10276,6 +10276,7 @@ _SOKOL_PRIVATE void _sapp_x11_query_system_dpi(void) {
              consistent user experience (matches Qt, Gtk, etc), although not
              always the most accurate one
     */
+    bool dpi_ok = false;
     char* rms = XResourceManagerString(_sapp.x11.display);
     if (rms) {
         XrmDatabase db = XrmGetStringDatabase(rms);
@@ -10285,10 +10286,16 @@ _SOKOL_PRIVATE void _sapp_x11_query_system_dpi(void) {
             if (XrmGetResource(db, "Xft.dpi", "Xft.Dpi", &type, &value)) {
                 if (type && strcmp(type, "String") == 0) {
                     _sapp.x11.dpi = atof(value.addr);
+                    dpi_ok = true;
                 }
             }
             XrmDestroyDatabase(db);
         }
+    }
+    // fallback if querying DPI had failed: assume the standard DPI 96.0f
+    if (!dpi_ok) {
+        _sapp.x11.dpi = 96.0f;
+        SAPP_LOG("sokol_app.h: failed to system dpi value, assuming default 96.0");
     }
 }
 
