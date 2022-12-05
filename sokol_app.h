@@ -10295,7 +10295,7 @@ _SOKOL_PRIVATE void _sapp_x11_query_system_dpi(void) {
     // fallback if querying DPI had failed: assume the standard DPI 96.0f
     if (!dpi_ok) {
         _sapp.x11.dpi = 96.0f;
-        SAPP_LOG("sokol_app.h: failed to system dpi value, assuming default 96.0");
+        SAPP_LOG("sokol_app.h: failed to query system dpi value, assuming default 96.0");
     }
 }
 
