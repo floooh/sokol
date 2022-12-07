@@ -7561,7 +7561,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
             }
             else {
                 TranslateMessage(&msg);
-                DispatchMessage(&msg);
+                DispatchMessageW(&msg);
             }
         }
         _sapp_frame();
