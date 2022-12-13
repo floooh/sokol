@@ -262,9 +262,9 @@
             where sg_pixel_format is expected). Possible values are:
 
                 23 == SG_PIXELFORMAT_RGBA8
-                27 == SG_PIXELFORMAT_BGRA8
-                41 == SG_PIXELFORMAT_DEPTH
-                42 == SG_PIXELFORMAT_DEPTH_STENCIL
+                28 == SG_PIXELFORMAT_BGRA8
+                42 == SG_PIXELFORMAT_DEPTH
+                43 == SG_PIXELFORMAT_DEPTH_STENCIL
 
         int sapp_sample_count(void)
             Return the MSAA sample count of the default framebuffer.
@@ -2638,9 +2638,9 @@ typedef struct {
 #define _SAPP_FALLBACK_DEFAULT_WINDOW_HEIGHT (480)
 /* NOTE: the pixel format values *must* be compatible with sg_pixel_format */
 #define _SAPP_PIXELFORMAT_RGBA8 (23)
-#define _SAPP_PIXELFORMAT_BGRA8 (27)
-#define _SAPP_PIXELFORMAT_DEPTH (41)
-#define _SAPP_PIXELFORMAT_DEPTH_STENCIL (42)
+#define _SAPP_PIXELFORMAT_BGRA8 (28)
+#define _SAPP_PIXELFORMAT_DEPTH (42)
+#define _SAPP_PIXELFORMAT_DEPTH_STENCIL (43)
 
 #if defined(_SAPP_MACOS) || defined(_SAPP_IOS)
     // this is ARC compatible
