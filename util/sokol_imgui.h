@@ -2314,15 +2314,15 @@ _SOKOL_PRIVATE void _simgui_add_input_character(ImGuiIO* io, uint32_t c) {
 }
 
 _SOKOL_PRIVATE void _simgui_update_modifiers(ImGuiIO* io, uint32_t mods) {
-    _simgui_add_imgui_key_event(io, ImGuiKey_ModCtrl, (mods & SAPP_MODIFIER_CTRL) != 0);
-    _simgui_add_imgui_key_event(io, ImGuiKey_ModShift, (mods & SAPP_MODIFIER_SHIFT) != 0);
-    _simgui_add_imgui_key_event(io, ImGuiKey_ModAlt, (mods & SAPP_MODIFIER_ALT) != 0);
-    _simgui_add_imgui_key_event(io, ImGuiKey_ModSuper, (mods & SAPP_MODIFIER_SUPER) != 0);
+    _simgui_add_imgui_key_event(io, ImGuiMod_Ctrl, (mods & SAPP_MODIFIER_CTRL) != 0);
+    _simgui_add_imgui_key_event(io, ImGuiMod_Shift, (mods & SAPP_MODIFIER_SHIFT) != 0);
+    _simgui_add_imgui_key_event(io, ImGuiMod_Alt, (mods & SAPP_MODIFIER_ALT) != 0);
+    _simgui_add_imgui_key_event(io, ImGuiMod_Super, (mods & SAPP_MODIFIER_SUPER) != 0);
 }
 
 // returns Ctrl or Super, depending on platform
 _SOKOL_PRIVATE ImGuiKey _simgui_copypaste_modifier(void) {
-    return _simgui.is_osx ? ImGuiKey_ModSuper : ImGuiKey_ModCtrl;
+    return _simgui.is_osx ? ImGuiMod_Super : ImGuiMod_Ctrl;
 }
 
 SOKOL_API_IMPL int simgui_map_keycode(sapp_keycode keycode) {
