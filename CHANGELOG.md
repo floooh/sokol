@@ -1,5 +1,9 @@
 ## Updates
 
+- **15-Dec-2022**: A small but important update in sokol_imgui.h which fixes
+  touch input handling on mobile devices. Many thanks to github user @Xadiant
+  for the bug investigation and [PR](https://github.com/floooh/sokol/pull/760).
+
 - **25-Nov-2022**: Some code cleanup around resource creation and destruction in sokol_gfx.h:
     - It's now safe to call the destroy, uninit and dealloc functions in any
       resource state, in general, the functions will do the right thing without
