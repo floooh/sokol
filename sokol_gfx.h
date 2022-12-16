@@ -4215,6 +4215,7 @@ typedef struct {
     id<MTLDevice> device;
     id<MTLCommandQueue> cmd_queue;
     id<MTLCommandBuffer> cmd_buffer;
+    id<MTLCommandBuffer> present_cmd_buffer;
     id<MTLRenderCommandEncoder> cmd_encoder;
     id<MTLBuffer> uniform_buffers[SG_NUM_INFLIGHT_FRAMES];
 } _sg_mtl_backend_t;
@@ -10752,6 +10753,7 @@ _SOKOL_PRIVATE void _sg_mtl_discard_backend(void) {
     }
     /* NOTE: MTLCommandBuffer and MTLRenderCommandEncoder are auto-released */
     _sg.mtl.cmd_buffer = nil;
+    _sg.mtl.present_cmd_buffer = nil;
     _sg.mtl.cmd_encoder = nil;
 }
 
@@ -11342,14 +11344,28 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
     _sg.mtl.cur_height = h;
     _sg_mtl_clear_state_cache();
 
-    /* if this is the first pass in the frame, create a command buffer */
+    /*
+        if this is the first pass in the frame, create command buffers
+
+        NOTE: we're creating two command buffers here, one with unretained references
+        for storing the regular commands, and one with retained references for
+        storing the presentDrawable call (this needs to hold on the drawable until
+        presentation has happened - and the easiest way to do this is to let the
+        command buffer manage the lifetime of the drawable).
+
+        Also see: https://github.com/floooh/sokol/issues/762
+    */
     if (nil == _sg.mtl.cmd_buffer) {
+        SOKOL_ASSERT(nil == _sg.mtl.present_cmd_buffer);
         /* block until the oldest frame in flight has finished */
         dispatch_semaphore_wait(_sg.mtl.sem, DISPATCH_TIME_FOREVER);
         _sg.mtl.cmd_buffer = [_sg.mtl.cmd_queue commandBufferWithUnretainedReferences];
-        [_sg.mtl.cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buffer) {
+        _sg.mtl.present_cmd_buffer =  [_sg.mtl.cmd_queue commandBuffer];
+        [_sg.mtl.cmd_buffer enqueue];
+        [_sg.mtl.present_cmd_buffer enqueue];
+        [_sg.mtl.present_cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buf) {
             // NOTE: this code is called on a different thread!
-            _SOKOL_UNUSED(cmd_buffer);
+            _SOKOL_UNUSED(cmd_buf);
             dispatch_semaphore_signal(_sg.mtl.sem);
         }];
     }
@@ -11485,6 +11501,7 @@ _SOKOL_PRIVATE void _sg_mtl_commit(void) {
     SOKOL_ASSERT(_sg.mtl.drawable_cb || _sg.mtl.drawable_userdata_cb);
     SOKOL_ASSERT(nil == _sg.mtl.cmd_encoder);
     SOKOL_ASSERT(nil != _sg.mtl.cmd_buffer);
+    SOKOL_ASSERT(nil != _sg.mtl.present_cmd_buffer);
 
     /* present, commit and signal semaphore when done */
     id<MTLDrawable> cur_drawable = nil;
@@ -11495,9 +11512,10 @@ _SOKOL_PRIVATE void _sg_mtl_commit(void) {
         cur_drawable = (__bridge id<MTLDrawable>) _sg.mtl.drawable_userdata_cb(_sg.mtl.user_data);
     }
     if (nil != cur_drawable) {
-        [_sg.mtl.cmd_buffer presentDrawable:cur_drawable];
+        [_sg.mtl.present_cmd_buffer presentDrawable:cur_drawable];
     }
     [_sg.mtl.cmd_buffer commit];
+    [_sg.mtl.present_cmd_buffer commit];
 
     /* garbage-collect resources pending for release */
     _sg_mtl_garbage_collect(_sg.mtl.frame_index);
@@ -11511,6 +11529,7 @@ _SOKOL_PRIVATE void _sg_mtl_commit(void) {
     _sg.mtl.cur_ub_base_ptr = 0;
     /* NOTE: MTLCommandBuffer is autoreleased */
     _sg.mtl.cmd_buffer = nil;
+    _sg.mtl.present_cmd_buffer = nil;
 }
 
 _SOKOL_PRIVATE void _sg_mtl_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
