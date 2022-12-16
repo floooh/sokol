@@ -57,11 +57,12 @@ UTEST(sokol_debugtext, default_init_shutdown) {
     T(_sdtx.cur_ctx->desc.color_format == 0);
     T(_sdtx.cur_ctx->desc.depth_format == 0);
     T(_sdtx.cur_ctx->desc.sample_count == 0);
-    T(_sdtx.cur_ctx->cur_vertex_ptr);
-    T(_sdtx.cur_ctx->max_vertex_ptr);
-    T(_sdtx.cur_ctx->vertices);
-    T(_sdtx.cur_ctx->vertices == _sdtx.cur_ctx->cur_vertex_ptr);
-    T(_sdtx.cur_ctx->max_vertex_ptr == (_sdtx.cur_ctx->vertices + _SDTX_DEFAULT_CHAR_BUF_SIZE * 6));
+    T(_sdtx.cur_ctx->vertices.cap == _SDTX_DEFAULT_CHAR_BUF_SIZE * 6);
+    T(_sdtx.cur_ctx->vertices.next == 0);
+    T(_sdtx.cur_ctx->vertices.ptr);
+    T(_sdtx.cur_ctx->commands.cap == _SDTX_DEFAULT_MAX_COMMANDS);
+    T(_sdtx.cur_ctx->commands.next == 1);
+    T(_sdtx.cur_ctx->commands.ptr);
     T(_sdtx.cur_ctx->vbuf.id != 0);
     T(_sdtx.cur_ctx->pip.id != 0);
     TFLT(_sdtx.cur_ctx->canvas_size.x, 640.0f);
@@ -112,7 +113,7 @@ UTEST(sokol_debugtext, init_with_params) {
     T(_sdtx.cur_ctx->desc.color_format == SG_PIXELFORMAT_RGBA8);
     T(_sdtx.cur_ctx->desc.depth_format == SG_PIXELFORMAT_DEPTH_STENCIL);
     T(_sdtx.cur_ctx->desc.sample_count == 4);
-    T(_sdtx.cur_ctx->max_vertex_ptr == (_sdtx.cur_ctx->vertices + 256 * 6));
+    T(_sdtx.cur_ctx->vertices.cap == (256 * 6));
     TFLT(_sdtx.cur_ctx->canvas_size.x, 320.0f);
     TFLT(_sdtx.cur_ctx->canvas_size.y, 200.0f);
     TFLT(_sdtx.cur_ctx->glyph_size.x, 8.0f / 320.0f);
@@ -144,9 +145,9 @@ UTEST(sokol_debugtext, make_destroy_context) {
     T(ctx->desc.color_format == SG_PIXELFORMAT_RGBA32F);
     T(ctx->desc.depth_format == 0);
     T(ctx->desc.sample_count == 2);
-    T(ctx->vertices);
-    T(ctx->cur_vertex_ptr == ctx->vertices);
-    T(ctx->max_vertex_ptr == ctx->vertices + 64 * 6);
+    T(ctx->vertices.ptr);
+    T(ctx->vertices.next == 0);
+    T(ctx->vertices.cap == (64 * 6));
     TFLT(ctx->canvas_size.x, 1024.0f);
     TFLT(ctx->canvas_size.y, 768.0f);
     TFLT(ctx->glyph_size.x, 8.0f / 1024.0f);
@@ -155,7 +156,7 @@ UTEST(sokol_debugtext, make_destroy_context) {
     sdtx_destroy_context(ctx_id);
     T(0 == _sdtx_lookup_context(ctx_id.id));
     T(ctx->desc.char_buf_size == 0);
-    T(ctx->vertices == 0);
+    T(ctx->vertices.ptr == 0);
     shutdown();
 }
 
@@ -336,7 +337,7 @@ UTEST(sokol_debugtext, vertex_overflow) {
     sdtx_puts("1234567890");
     sdtx_putr("1234567890", 5);
     sdtx_printf("Hello World %d!\n", 12);
-    T(_sdtx.cur_ctx->cur_vertex_ptr == _sdtx.cur_ctx->max_vertex_ptr);
+    T(_sdtx.cur_ctx->vertices.next == _sdtx.cur_ctx->vertices.cap);
     shutdown();
 }
 
@@ -399,7 +400,7 @@ UTEST(sokol_debugtext, rewind_after_draw) {
     sdtx_font(3);
     T(_sdtx.cur_ctx->cur_font == 3);
     sdtx_printf("Hello World!\n");
-    T(_sdtx.cur_ctx->cur_vertex_ptr != _sdtx.cur_ctx->vertices);
+    T(_sdtx.cur_ctx->vertices.next != 0);
     sg_begin_default_pass(&(sg_pass_action){ 0 }, 256, 256);
     sdtx_draw();
     sg_end_pass();
@@ -411,21 +412,21 @@ UTEST(sokol_debugtext, rewind_after_draw) {
     TFLT(_sdtx.cur_ctx->pos.x, 0);
     TFLT(_sdtx.cur_ctx->pos.x, 0);
     T(_sdtx.cur_ctx->cur_font == 0);
-    T(_sdtx.cur_ctx->cur_vertex_ptr == _sdtx.cur_ctx->vertices);
+    T(_sdtx.cur_ctx->vertices.next == 0);
     shutdown();
 }
 
 UTEST(sokol_debugtext, putr) {
     // test if sdtx_putr() draws the right amount of characters
     init();
-    _sdtx_vertex_t* start_ptr = _sdtx.cur_ctx->cur_vertex_ptr;
+    int start_index = _sdtx.cur_ctx->vertices.next;
     sdtx_putr("Hello World!", 5);
-    T((5 * 6) == (_sdtx.cur_ctx->cur_vertex_ptr - start_ptr));
+    T((5 * 6) == (_sdtx.cur_ctx->vertices.next - start_index));
 
-    start_ptr = _sdtx.cur_ctx->cur_vertex_ptr;
+    start_index = _sdtx.cur_ctx->vertices.next;
     sdtx_putr("Hello!\n\n\n\n\n\n\n\n\n\n\n", 10);
     // NOTE: the \n's don't result in rendered vertices
-    T((6 * 6) == (_sdtx.cur_ctx->cur_vertex_ptr - start_ptr));
+    T((6 * 6) == (_sdtx.cur_ctx->vertices.next - start_index));
     shutdown();
 }
 
@@ -433,4 +434,78 @@ UTEST(sokol_debugtext, default_context) {
     init();
     T(sdtx_default_context().id == SDTX_DEFAULT_CONTEXT.id);
     shutdown();
+}
+
+// switching layers without any text inbetween should not advance the current draw command
+UTEST(sokol_debug_text, empty_layers) {
+    init();
+    T(_sdtx.cur_ctx->commands.next == 1);
+    T(_sdtx.cur_ctx->commands.ptr[0].layer_id == 0);
+    sdtx_layer(1);
+    T(_sdtx.cur_ctx->commands.next == 1);
+    T(_sdtx.cur_ctx->commands.ptr[0].layer_id == 1);
+    sdtx_layer(2);
+    T(_sdtx.cur_ctx->commands.next == 1);
+    T(_sdtx.cur_ctx->commands.ptr[0].layer_id == 2);
+    sdtx_layer(0);
+    T(_sdtx.cur_ctx->commands.next == 1);
+    T(_sdtx.cur_ctx->commands.ptr[0].layer_id == 0);
+    shutdown();
+}
+
+// switching layers with text inbetween should advance the current draw command
+UTEST(sokol_debug_text, non_empty_layers) {
+    init();
+    T(_sdtx.cur_ctx->commands.next == 1);
+    T(_sdtx.cur_ctx->commands.ptr[0].layer_id == 0);
+    T(_sdtx.cur_ctx->commands.ptr[0].first_vertex == 0);
+    T(_sdtx.cur_ctx->commands.ptr[0].num_vertices == 0);
+    sdtx_puts("123");
+    T(_sdtx.cur_ctx->commands.next == 1);
+    T(_sdtx.cur_ctx->commands.ptr[0].layer_id == 0);
+    T(_sdtx.cur_ctx->commands.ptr[0].first_vertex == 0);
+    T(_sdtx.cur_ctx->commands.ptr[0].num_vertices == (3 * 6));
+    sdtx_layer(1);
+    sdtx_puts("1234");
+    T(_sdtx.cur_ctx->commands.next == 2);
+    T(_sdtx.cur_ctx->commands.ptr[1].layer_id == 1);
+    T(_sdtx.cur_ctx->commands.ptr[1].first_vertex == (3 * 6));
+    T(_sdtx.cur_ctx->commands.ptr[1].num_vertices == (4 * 6));
+    // switching to same layer should not start a new draw commands
+    sdtx_layer(1);
+    sdtx_puts("12345");
+    T(_sdtx.cur_ctx->commands.next == 2);
+    T(_sdtx.cur_ctx->commands.ptr[1].layer_id == 1);
+    T(_sdtx.cur_ctx->commands.ptr[1].first_vertex == (3 * 6));
+    T(_sdtx.cur_ctx->commands.ptr[1].num_vertices == (9 * 6));
+    sdtx_layer(0);
+    sdtx_puts("123456");
+    T(_sdtx.cur_ctx->commands.next == 3);
+    T(_sdtx.cur_ctx->commands.ptr[2].layer_id == 0);
+    T(_sdtx.cur_ctx->commands.ptr[2].first_vertex == (12 * 6));
+    T(_sdtx.cur_ctx->commands.ptr[2].num_vertices == (6 * 6));
+    shutdown();
+}
+
+UTEST(sokol_debug_text, command_buffer_overflow) {
+    init_with(&(sdtx_desc_t){
+        .context = {
+            .max_commands = 4
+        }
+    });
+    sdtx_puts("0");
+    T(_sdtx.cur_ctx->commands.next == 1);
+    sdtx_layer(1);
+    sdtx_puts("1");
+    T(_sdtx.cur_ctx->commands.next == 2);
+    sdtx_layer(2);
+    sdtx_puts("2");
+    T(_sdtx.cur_ctx->commands.next == 3);
+    sdtx_layer(3);
+    sdtx_puts("3");
+    T(_sdtx.cur_ctx->commands.next == 4);
+    // from here on should fail
+    sdtx_layer(4);
+    sdtx_puts("4");
+    T(_sdtx.cur_ctx->commands.next == 4);
 }

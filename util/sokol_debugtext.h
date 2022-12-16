@@ -93,6 +93,11 @@
             be active right after sdtx_setup(), or when calling
             sdtx_set_context(SDTX_DEFAULT_CONTEXT):
 
+            .max_commands (default: 4096)
+                The max number of render commands that can be recorded
+                into the internal command buffer. This directly translates
+                to the number of render layer changes in a single frame.
+
             .char_buf_size (default: 4096)
                 The number of characters that can be rendered per frame in this
                 context, defines the size of an internal fixed-size vertex
@@ -220,14 +225,36 @@
             \n  - carriage return + line feed (same as stdx_crlf())
             \t  - a tab character
 
+    --- You can 'record' text into render layers, this allows to mix/interleave
+        sokol-debugtext rendering with other rendering operations inside
+        sokol-gfx render passes. To start recording text into a different render
+        layer, call:
+
+            sdtx_layer(int layer_id)
+
+        ...outside a sokol-gfx render pass.
+
     --- finally, from within a sokol-gfx render pass, call:
 
             sdtx_draw()
 
-        ...to actually render the text. Calling sdtx_draw() will also rewind
-        the text context:
+        ...for non-layered rendering, or to draw a specific layer:
 
-            - the internal vertex buffer pointer is reset to the beginning
+            sdtx_draw_layer(int layer_id)
+
+        NOTE that sdtx_draw() is equivalent to:
+
+            sdtx_draw_layer(0)
+
+        ...so sdtx_draw() will *NOT* render all text layers, instead it will
+        only render the 'default layer' 0.
+
+    --- at the end of a frame (defined by the call to sg_commit()), sokol-debugtext
+        will rewind all contexts:
+
+            - the internal vertex index is set to 0
+            - the internal command index is set to 0
+            - the current layer id is set to 0
             - the current font is set to 0
             - the cursor position is reset
 
@@ -268,7 +295,8 @@
         - the origin position
         - the current cursor position
         - the current tab width
-        - and the current color
+        - the current color
+        - and the current layer-id
 
     You can get the currently active context with:
 
@@ -290,6 +318,12 @@
 
     If a context is set as active that no longer exists, all sokol-debugtext
     functions that require an active context will silently fail.
+
+    You can directly draw the recorded text in a specific context without
+    setting the active context:
+
+        sdtx_context_draw(ctx)
+        sdtx_context_draw_layer(ctx, layer_id)
 
     USING YOUR OWN FONT DATA
     ========================
@@ -540,6 +574,7 @@ typedef struct sdtx_font_desc_t {
     of text.
 */
 typedef struct sdtx_context_desc_t {
+    int max_commands;                       // max number of draw commands, each layer transition counts as a command, default: 4096
     int char_buf_size;                      // max number of characters rendered in one frame, default: 4096
     float canvas_width;                     // the initial virtual canvas width, default: 640
     float canvas_height;                    // the initial virtual canvas height, default: 400
@@ -618,8 +653,14 @@ SOKOL_DEBUGTEXT_API_DECL void sdtx_set_context(sdtx_context ctx);
 SOKOL_DEBUGTEXT_API_DECL sdtx_context sdtx_get_context(void);
 SOKOL_DEBUGTEXT_API_DECL sdtx_context sdtx_default_context(void);
 
-/* draw and rewind the current context */
+/* drawing functions (call inside sokol-gfx render pass) */
 SOKOL_DEBUGTEXT_API_DECL void sdtx_draw(void);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_context_draw(sdtx_context ctx);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_draw_layer(int layer_id);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_context_draw_layer(sdtx_context ctx, int layer_id);
+
+/* switch render layer */
+SOKOL_DEBUGTEXT_API_DECL void sdtx_layer(int layer_id);
 
 /* switch to a different font */
 SOKOL_DEBUGTEXT_API_DECL void sdtx_font(int font_index);
@@ -718,9 +759,10 @@ inline sdtx_context sdtx_make_context(const sdtx_context_desc_t& desc) { return 
 #define _sdtx_def(val, def) (((val) == 0) ? (def) : (val))
 #define _SDTX_INIT_COOKIE (0xACBAABCA)
 
+#define _SDTX_DEFAULT_MAX_COMMANDS (4096)
 #define _SDTX_DEFAULT_CONTEXT_POOL_SIZE (8)
-#define _SDTX_DEFAULT_CHAR_BUF_SIZE (1<<12)
-#define _SDTX_DEFAULT_PRINTF_BUF_SIZE (1<<12)
+#define _SDTX_DEFAULT_CHAR_BUF_SIZE (4096)
+#define _SDTX_DEFAULT_PRINTF_BUF_SIZE (4096)
 #define _SDTX_DEFAULT_CANVAS_WIDTH (640)
 #define _SDTX_DEFAULT_CANVAS_HEIGHT (480)
 #define _SDTX_DEFAULT_TAB_WIDTH (4)
@@ -3479,14 +3521,30 @@ typedef struct {
 } _sdtx_vertex_t;
 
 typedef struct {
+    int layer_id;
+    int first_vertex;
+    int num_vertices;
+} _sdtx_command_t;
+
+typedef struct {
     _sdtx_slot_t slot;
     sdtx_context_desc_t desc;
-    _sdtx_vertex_t* cur_vertex_ptr;
-    const _sdtx_vertex_t* max_vertex_ptr;
-    _sdtx_vertex_t* vertices;
+    uint32_t frame_id;
+    uint32_t update_frame_id;
+    struct {
+        int cap;
+        int next;
+        _sdtx_vertex_t* ptr;
+    } vertices;
+    struct {
+        int cap;
+        int next;
+        _sdtx_command_t* ptr;
+    } commands;
     sg_buffer vbuf;
     sg_pipeline pip;
     int cur_font;
+    int cur_layer_id;
     _sdtx_float2_t canvas_size;
     _sdtx_float2_t glyph_size;
     _sdtx_float2_t origin;
@@ -3704,6 +3762,7 @@ static sdtx_context _sdtx_alloc_context(void) {
 
 static sdtx_context_desc_t _sdtx_context_desc_defaults(const sdtx_context_desc_t* desc) {
     sdtx_context_desc_t res = *desc;
+    res.max_commands = _sdtx_def(res.max_commands, _SDTX_DEFAULT_MAX_COMMANDS);
     res.char_buf_size = _sdtx_def(res.char_buf_size, _SDTX_DEFAULT_CHAR_BUF_SIZE);
     res.canvas_width = _sdtx_def(res.canvas_width, _SDTX_DEFAULT_CANVAS_WIDTH);
     res.canvas_height = _sdtx_def(res.canvas_height, _SDTX_DEFAULT_CANVAS_HEIGHT);
@@ -3715,6 +3774,30 @@ static sdtx_context_desc_t _sdtx_context_desc_defaults(const sdtx_context_desc_t
     return res;
 }
 
+static void _sdtx_set_layer(_sdtx_context_t* ctx, int layer_id);
+static void _sdtx_rewind(_sdtx_context_t* ctx) {
+    SOKOL_ASSERT(ctx);
+    ctx->frame_id++;
+    ctx->vertices.next = 0;
+    ctx->commands.next = 0;
+    _sdtx_set_layer(ctx, 0);
+    ctx->cur_font = 0;
+    ctx->pos.x = 0.0f;
+    ctx->pos.y = 0.0f;
+}
+
+static void _sdtx_commit_listener(void* userdata) {
+    _sdtx_context_t* ctx = _sdtx_lookup_context((uint32_t)(uintptr_t)userdata);
+    if (ctx) {
+        _sdtx_rewind(ctx);
+    }
+}
+
+static sg_commit_listener _sdtx_make_commit_listener(_sdtx_context_t* ctx) {
+    sg_commit_listener listener = { _sdtx_commit_listener, (void*)(uintptr_t)(ctx->slot.id) };
+    return listener;
+}
+
 static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* in_desc) {
     sg_push_debug_group("sokol-debugtext");
 
@@ -3722,12 +3805,16 @@ static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* i
     _sdtx_context_t* ctx = _sdtx_lookup_context(ctx_id.id);
     SOKOL_ASSERT(ctx);
     ctx->desc = _sdtx_context_desc_defaults(in_desc);
+    // NOTE: frame_id must be non-zero, so that updates trigger in first frame
+    ctx->frame_id = 1;
 
-    const int max_vertices = 6 * ctx->desc.char_buf_size;
-    const size_t vbuf_size = (size_t)max_vertices * sizeof(_sdtx_vertex_t);
-    ctx->vertices = (_sdtx_vertex_t*) _sdtx_malloc(vbuf_size);
-    ctx->cur_vertex_ptr = ctx->vertices;
-    ctx->max_vertex_ptr = ctx->vertices + max_vertices;
+    ctx->vertices.cap = 6 * ctx->desc.char_buf_size;
+    const size_t vbuf_size = (size_t)ctx->vertices.cap * sizeof(_sdtx_vertex_t);
+    ctx->vertices.ptr = (_sdtx_vertex_t*) _sdtx_malloc(vbuf_size);
+
+    ctx->commands.cap = ctx->desc.max_commands;
+    ctx->commands.ptr = (_sdtx_command_t*) _sdtx_malloc((size_t)ctx->commands.cap * sizeof(_sdtx_command_t));
+    _sdtx_set_layer(ctx, 0);
 
     sg_buffer_desc vbuf_desc;
     _sdtx_clear(&vbuf_desc, sizeof(vbuf_desc));
@@ -3765,21 +3852,33 @@ static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* i
     ctx->tab_width = (float) ctx->desc.tab_width;
     ctx->color = _SDTX_DEFAULT_COLOR;
 
+    if (!sg_add_commit_listener(_sdtx_make_commit_listener(ctx))) {
+        // FIXME: this should actually result in an invalid context,
+        // fix this when proper error logging/reporting is added
+        SDTX_LOG("sokol_debugtext.h: failed to add sokol-gfx commit listener");
+    }
     sg_pop_debug_group();
 }
 
 static void _sdtx_destroy_context(sdtx_context ctx_id) {
     _sdtx_context_t* ctx = _sdtx_lookup_context(ctx_id.id);
     if (ctx) {
-        if (ctx->vertices) {
-            _sdtx_free(ctx->vertices);
-            ctx->vertices = 0;
-            ctx->cur_vertex_ptr = 0;
-            ctx->max_vertex_ptr = 0;
+        if (ctx->vertices.ptr) {
+            _sdtx_free(ctx->vertices.ptr);
+            ctx->vertices.ptr = 0;
+            ctx->vertices.cap = 0;
+            ctx->vertices.next = 0;
+        }
+        if (ctx->commands.ptr) {
+            _sdtx_free(ctx->commands.ptr);
+            ctx->commands.ptr = 0;
+            ctx->commands.cap = 0;
+            ctx->commands.next = 0;
         }
         sg_push_debug_group("sokol_debugtext");
         sg_destroy_buffer(ctx->vbuf);
         sg_destroy_pipeline(ctx->pip);
+        sg_remove_commit_listener(_sdtx_make_commit_listener(ctx));
         sg_pop_debug_group();
         _sdtx_clear(ctx, sizeof(*ctx));
         _sdtx_pool_free_index(&_sdtx.context_pool.pool, _sdtx_slot_index(ctx_id.id));
@@ -3869,7 +3968,7 @@ static void _sdtx_setup_common(void) {
 
     /* unpack font data */
     memset(_sdtx.font_pixels, 0xFF, sizeof(_sdtx.font_pixels));
-    const int unpacked_font_size = 256 * 8 * 8;
+    const int unpacked_font_size = (int) (sizeof(_sdtx.font_pixels) / SDTX_MAX_FONTS);
     for (int i = 0; i < SDTX_MAX_FONTS; i++) {
         if (_sdtx.desc.fonts[i].data.ptr) {
             _sdtx_unpack_font(&_sdtx.desc.fonts[i], &_sdtx.font_pixels[i * unpacked_font_size]);
@@ -3887,6 +3986,7 @@ static void _sdtx_setup_common(void) {
     img_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
     img_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
     img_desc.data.subimage[0][0] = SG_RANGE(_sdtx.font_pixels);
+    img_desc.label = "sdtx-font-texture";
     _sdtx.font_img = sg_make_image(&img_desc);
     SOKOL_ASSERT(SG_INVALID_ID != _sdtx.font_img.id);
 
@@ -3904,17 +4004,17 @@ static void _sdtx_discard_common(void) {
     sg_pop_debug_group();
 }
 
-static inline uint32_t _sdtx_pack_rgbab(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+static uint32_t _sdtx_pack_rgbab(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     return (uint32_t)(((uint32_t)a<<24)|((uint32_t)b<<16)|((uint32_t)g<<8)|r);
 }
 
-static inline float _sdtx_clamp(float v, float lo, float hi) {
+static float _sdtx_clamp(float v, float lo, float hi) {
     if (v < lo) return lo;
     else if (v > hi) return hi;
     else return v;
 }
 
-static inline uint32_t _sdtx_pack_rgbaf(float r, float g, float b, float a) {
+static uint32_t _sdtx_pack_rgbaf(float r, float g, float b, float a) {
     uint8_t r_u8 = (uint8_t) (_sdtx_clamp(r, 0.0f, 1.0f) * 255.0f);
     uint8_t g_u8 = (uint8_t) (_sdtx_clamp(g, 0.0f, 1.0f) * 255.0f);
     uint8_t b_u8 = (uint8_t) (_sdtx_clamp(b, 0.0f, 1.0f) * 255.0f);
@@ -3922,7 +4022,7 @@ static inline uint32_t _sdtx_pack_rgbaf(float r, float g, float b, float a) {
     return _sdtx_pack_rgbab(r_u8, g_u8, b_u8, a_u8);
 }
 
-static inline void _sdtx_ctrl_char(_sdtx_context_t* ctx, uint8_t c) {
+static void _sdtx_ctrl_char(_sdtx_context_t* ctx, uint8_t c) {
     switch (c) {
         case '\r':
             ctx->pos.x = 0.0f;
@@ -3940,31 +4040,88 @@ static inline void _sdtx_ctrl_char(_sdtx_context_t* ctx, uint8_t c) {
     }
 }
 
-static inline void _sdtx_draw_char(_sdtx_context_t* ctx, uint8_t c) {
-    if ((ctx->cur_vertex_ptr + 6) <= ctx->max_vertex_ptr) {
+static _sdtx_vertex_t* _sdtx_next_vertex(_sdtx_context_t* ctx) {
+    if ((ctx->vertices.next + 6) <= ctx->vertices.cap) {
+        _sdtx_vertex_t* vx = &ctx->vertices.ptr[ctx->vertices.next];
+        ctx->vertices.next += 6;
+        return vx;
+    }
+    else {
+        return 0;
+    }
+}
+
+static _sdtx_command_t* _sdtx_cur_command(_sdtx_context_t* ctx) {
+    if (ctx->commands.next > 0) {
+        return &ctx->commands.ptr[ctx->commands.next - 1];
+    }
+    else {
+        return 0;
+    }
+}
+
+static _sdtx_command_t* _sdtx_next_command(_sdtx_context_t* ctx) {
+    if (ctx->commands.next < ctx->commands.cap) {
+        return &ctx->commands.ptr[ctx->commands.next++];
+    }
+    else {
+        SDTX_LOG("sokol_debugtext.h: command buffer full");
+        return 0;
+    }
+}
+
+static void _sdtx_set_layer(_sdtx_context_t* ctx, int layer_id) {
+    ctx->cur_layer_id = layer_id;
+    _sdtx_command_t* cur_cmd = _sdtx_cur_command(ctx);
+    if (cur_cmd) {
+        if ((cur_cmd->num_vertices == 0) || (cur_cmd->layer_id == layer_id)) {
+            // no vertices recorded in current draw command, or layer hasn't changed, can just reuse this
+            cur_cmd->layer_id = layer_id;
+        }
+        else {
+            // layer has changed, need to start a new draw command
+            _sdtx_command_t* next_cmd = _sdtx_next_command(ctx);
+            if (next_cmd) {
+                next_cmd->layer_id = layer_id;
+                next_cmd->first_vertex = cur_cmd->first_vertex + cur_cmd->num_vertices;
+                next_cmd->num_vertices = 0;
+            }
+        }
+    }
+    else {
+        // first draw command in frame
+        _sdtx_command_t* next_cmd = _sdtx_next_command(ctx);
+        if (next_cmd) {
+            next_cmd->layer_id = layer_id;
+            next_cmd->first_vertex = 0;
+            next_cmd->num_vertices = 0;
+        }
+    }
+}
+
+static void _sdtx_render_char(_sdtx_context_t* ctx, uint8_t c) {
+    _sdtx_vertex_t* vx = _sdtx_next_vertex(ctx);
+    _sdtx_command_t* cmd = _sdtx_cur_command(ctx);
+    if (vx && cmd) {
+        // update vertex count in current draw command
+        cmd->num_vertices += 6;
+
         const float x0 = (ctx->origin.x + ctx->pos.x) * ctx->glyph_size.x;
         const float y0 = (ctx->origin.y + ctx->pos.y) * ctx->glyph_size.y;
         const float x1 = x0 + ctx->glyph_size.x;
         const float y1 = y0 + ctx->glyph_size.y;
 
         // glyph width and heigth in font texture space
+        // NOTE: the '+1' and '-2' fixes texture bleeding into the neighboring font texture cell
         const uint16_t uvw = 0x10000 / 0x100;
         const uint16_t uvh = 0x10000 / SDTX_MAX_FONTS;
-        const uint16_t u0 = ((uint16_t)c) * uvw;
-        const uint16_t v0 = ((uint16_t)ctx->cur_font) * uvh;
-        uint16_t u1 = u0 + uvw;
-        uint16_t v1 = v0 + uvh;
-        if (u1 == 0x0000) {
-            u1 = 0xFFFF;
-        }
-        if (v1 == 0x0000) {
-            v1 = 0xFFFF;
-        }
+        const uint16_t u0 = (((uint16_t)c) * uvw) + 1;
+        const uint16_t v0 = (((uint16_t)ctx->cur_font) * uvh) + 1;
+        uint16_t u1 = (u0 + uvw) - 2;
+        uint16_t v1 = (v0 + uvh) - 2;
         const uint32_t color = ctx->color;
 
         // write 6 vertices
-        _sdtx_vertex_t* vx = ctx->cur_vertex_ptr;
-
         vx->x=x0; vx->y=y0; vx->u = u0; vx->v = v0; vx->color = color; vx++;
         vx->x=x1; vx->y=y0; vx->u = u1; vx->v = v0; vx->color = color; vx++;
         vx->x=x1; vx->y=y1; vx->u = u1; vx->v = v1; vx->color = color; vx++;
@@ -3972,21 +4129,50 @@ static inline void _sdtx_draw_char(_sdtx_context_t* ctx, uint8_t c) {
         vx->x=x0; vx->y=y0; vx->u = u0; vx->v = v0; vx->color = color; vx++;
         vx->x=x1; vx->y=y1; vx->u = u1; vx->v = v1; vx->color = color; vx++;
         vx->x=x0; vx->y=y1; vx->u = u0; vx->v = v1; vx->color = color; vx++;
-
-        ctx->cur_vertex_ptr = vx;
     }
     ctx->pos.x += 1.0f;
 }
 
-static inline void _sdtx_put_char(_sdtx_context_t* ctx, char c) {
+static void _sdtx_put_char(_sdtx_context_t* ctx, char c) {
     uint8_t c_u8 = (uint8_t)c;
     if (c_u8 <= 32) {
         _sdtx_ctrl_char(ctx, c_u8);
     }
     else {
-        _sdtx_draw_char(ctx, c_u8);
+        _sdtx_render_char(ctx, c_u8);
     }
 }
+
+SOKOL_API_IMPL void _sdtx_draw_layer(_sdtx_context_t* ctx, int layer_id) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    SOKOL_ASSERT(ctx);
+    if ((ctx->vertices.next > 0) && (ctx->commands.next > 0)) {
+        sg_push_debug_group("sokol-debugtext");
+
+        if (ctx->update_frame_id != ctx->frame_id) {
+            ctx->update_frame_id = ctx->frame_id;
+            const sg_range range = { ctx->vertices.ptr, (size_t)ctx->vertices.next * sizeof(_sdtx_vertex_t) };
+            sg_update_buffer(ctx->vbuf, &range);
+        }
+
+        sg_apply_pipeline(ctx->pip);
+        sg_bindings bindings;
+        _sdtx_clear(&bindings, sizeof(bindings));
+        bindings.vertex_buffers[0] = ctx->vbuf;
+        bindings.fs_images[0] = _sdtx.font_img;
+        sg_apply_bindings(&bindings);
+        for (int cmd_index = 0; cmd_index < ctx->commands.next; cmd_index++) {
+            const _sdtx_command_t* cmd = &ctx->commands.ptr[cmd_index];
+            if (cmd->layer_id != layer_id) {
+                continue;
+            }
+            SOKOL_ASSERT((cmd->num_vertices % 6) == 0);
+            sg_draw(cmd->first_vertex, cmd->num_vertices, 1);
+        }
+        sg_pop_debug_group();
+    }
+}
+
 
 static sdtx_desc_t _sdtx_desc_defaults(const sdtx_desc_t* desc) {
     SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
@@ -4104,6 +4290,14 @@ SOKOL_API_IMPL sdtx_context sdtx_get_context(void) {
 
 SOKOL_API_IMPL sdtx_context sdtx_default_context(void) {
     return SDTX_DEFAULT_CONTEXT;
+}
+
+SOKOL_API_IMPL void sdtx_layer(int layer_id) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    _sdtx_context_t* ctx = _sdtx.cur_ctx;
+    if (ctx) {
+        _sdtx_set_layer(ctx, layer_id);
+    }
 }
 
 SOKOL_API_IMPL void sdtx_font(int font_index) {
@@ -4308,27 +4502,31 @@ SOKOL_API_IMPL void sdtx_draw(void) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
     _sdtx_context_t* ctx = _sdtx.cur_ctx;
     if (ctx) {
-        const int num_verts = (int) (ctx->cur_vertex_ptr - ctx->vertices);
-        if (num_verts > 0) {
-            SOKOL_ASSERT((num_verts % 6) == 0);
-            sg_push_debug_group("sokol-debugtext");
-            const sg_range range = { ctx->vertices, (size_t)num_verts * sizeof(_sdtx_vertex_t) };
-            int vbuf_offset = sg_append_buffer(ctx->vbuf, &range);
-            sg_apply_pipeline(ctx->pip);
-            sg_bindings bindings;
-            _sdtx_clear(&bindings, sizeof(bindings));
-            bindings.vertex_buffers[0] = ctx->vbuf;
-            bindings.vertex_buffer_offsets[0] = vbuf_offset;
-            bindings.fs_images[0] = _sdtx.font_img;
-            sg_apply_bindings(&bindings);
-            sg_draw(0, num_verts, 1);
-            sg_pop_debug_group();
-        }
-        ctx->cur_vertex_ptr = ctx->vertices;
-        ctx->cur_font = 0;
-        ctx->pos.x = 0.0f;
-        ctx->pos.y = 0.0f;
+        _sdtx_draw_layer(ctx, 0);
     }
 }
 
+SOKOL_API_IMPL void sdtx_context_draw(sdtx_context ctx_id) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    _sdtx_context_t* ctx = _sdtx_lookup_context(ctx_id.id);
+    if (ctx) {
+        _sdtx_draw_layer(ctx, 0);
+    }
+}
+
+SOKOL_API_IMPL void sdtx_draw_layer(int layer_id) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    _sdtx_context_t* ctx = _sdtx.cur_ctx;
+    if (ctx) {
+        _sdtx_draw_layer(ctx, layer_id);
+    }
+}
+
+SOKOL_API_IMPL void sdtx_context_draw_layer(sdtx_context ctx_id, int layer_id) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    _sdtx_context_t* ctx = _sdtx_lookup_context(ctx_id.id);
+    if (ctx) {
+        _sdtx_draw_layer(ctx, layer_id);
+    }
+}
 #endif /* SOKOL_DEBUGTEXT_IMPL */

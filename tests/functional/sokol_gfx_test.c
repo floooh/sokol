@@ -11,6 +11,61 @@
 
 #define T(b) EXPECT_TRUE(b)
 
+static int num_log_called = 0;
+static void test_logger(const char* msg, void* userdata) {
+    (void)userdata;
+    num_log_called++;
+    puts(msg);
+}
+
+static void setup_with_logger(void) {
+    num_log_called = 0;
+    sg_setup(&(sg_desc){
+        .logger = { .log_cb = test_logger }
+    });
+}
+
+static sg_buffer create_buffer(void) {
+    static const float data[] = { 1, 2, 3, 4 };
+    return sg_make_buffer(&(sg_buffer_desc){ .data = SG_RANGE(data) });
+}
+
+static sg_image create_image(void) {
+    return sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 256,
+        .height = 128
+    });
+}
+
+static sg_shader create_shader(void) {
+    return sg_make_shader(&(sg_shader_desc){0});
+}
+
+static sg_pipeline create_pipeline(void) {
+    return sg_make_pipeline(&(sg_pipeline_desc){
+        .layout = {
+            .attrs[0].format = SG_VERTEXFORMAT_FLOAT3
+        },
+        .shader = sg_make_shader(&(sg_shader_desc){0})
+    });
+}
+
+static sg_pass create_pass(void) {
+    sg_image_desc img_desc = {
+        .render_target = true,
+        .width = 128,
+        .height = 128,
+    };
+    return sg_make_pass(&(sg_pass_desc){
+        .color_attachments = {
+            [0].image = sg_make_image(&img_desc),
+            [1].image = sg_make_image(&img_desc),
+            [2].image = sg_make_image(&img_desc)
+        },
+    });
+}
+
 UTEST(sokol_gfx, init_shutdown) {
     sg_setup(&(sg_desc){0});
     T(sg_isvalid());
@@ -834,5 +889,446 @@ UTEST(sokol_gfx, query_buffer_will_overflow) {
     sg_append_buffer(buf, &SG_RANGE(data));
     T(!sg_query_buffer_will_overflow(buf, 32));
     T(sg_query_buffer_will_overflow(buf, 33));
+    sg_shutdown();
+}
+
+static struct {
+    uintptr_t userdata;
+    int num_called;
+} commit_listener;
+static void reset_commit_listener(void) {
+    commit_listener.userdata = 0;
+    commit_listener.num_called = 0;
+}
+static void commit_listener_func(void* ud) {
+    commit_listener.userdata = (uintptr_t)ud;
+    commit_listener.num_called++;
+}
+
+UTEST(sokol_gfx, commit_listener_called) {
+    reset_commit_listener();
+    sg_setup(&(sg_desc){0});
+    const bool added = sg_add_commit_listener((sg_commit_listener){
+        .func = commit_listener_func,
+        .user_data = (void*)23,
+    });
+    T(added);
+    T(_sg.commit_listeners.upper == 1);
+    sg_commit();
+    T(23 == commit_listener.userdata);
+    T(1 == commit_listener.num_called);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, commit_listener_add_twice) {
+    reset_commit_listener();
+    sg_setup(&(sg_desc){0});
+    const sg_commit_listener listener = {
+        .func = commit_listener_func,
+        .user_data = (void*)23,
+    };
+    T(sg_add_commit_listener(listener));
+    T(_sg.commit_listeners.upper == 1);
+    T(!sg_add_commit_listener(listener));
+    T(_sg.commit_listeners.upper == 1);
+    sg_commit();
+    T(23 == commit_listener.userdata);
+    T(1 == commit_listener.num_called);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, commit_listener_same_func_diff_ud) {
+    reset_commit_listener();
+    sg_setup(&(sg_desc){0});
+    T(sg_add_commit_listener((sg_commit_listener){
+        .func = commit_listener_func,
+        .user_data = (void*)23,
+    }));
+    T(_sg.commit_listeners.upper == 1);
+    T(sg_add_commit_listener((sg_commit_listener){
+        .func = commit_listener_func,
+        .user_data = (void*)25,
+    }));
+    T(_sg.commit_listeners.upper == 2);
+    sg_commit();
+    T(2 == commit_listener.num_called);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, commit_listener_add_remove_add) {
+    reset_commit_listener();
+    sg_setup(&(sg_desc){0});
+    const sg_commit_listener listener = {
+        .func = commit_listener_func,
+        .user_data = (void*)23,
+    };
+    T(sg_add_commit_listener(listener));
+    T(_sg.commit_listeners.upper == 1);
+    T(sg_remove_commit_listener(listener));
+    T(_sg.commit_listeners.upper == 1);
+    sg_commit();
+    T(0 == commit_listener.num_called);
+    T(sg_add_commit_listener(listener));
+    T(_sg.commit_listeners.upper == 1);
+    sg_commit();
+    T(1 == commit_listener.num_called);
+    T(23 == commit_listener.userdata);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, commit_listener_remove_non_existant) {
+    reset_commit_listener();
+    sg_setup(&(sg_desc){0});
+    const sg_commit_listener l0 = {
+        .func = commit_listener_func,
+        .user_data = (void*)23,
+    };
+    const sg_commit_listener l1 = {
+        .func = commit_listener_func,
+        .user_data = (void*)46,
+    };
+    const sg_commit_listener l2 = {
+        .func = commit_listener_func,
+        .user_data = (void*)256,
+    };
+    T(sg_add_commit_listener(l0));
+    T(sg_add_commit_listener(l1));
+    T(_sg.commit_listeners.upper == 2);
+    T(!sg_remove_commit_listener(l2));
+    T(_sg.commit_listeners.upper == 2);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, commit_listener_multi_add_remove) {
+    reset_commit_listener();
+    sg_setup(&(sg_desc){0});
+    const sg_commit_listener l0 = {
+        .func = commit_listener_func,
+        .user_data = (void*)23,
+    };
+    const sg_commit_listener l1 = {
+        .func = commit_listener_func,
+        .user_data = (void*)46,
+    };
+    T(sg_add_commit_listener(l0));
+    T(sg_add_commit_listener(l1));
+    T(_sg.commit_listeners.upper == 2);
+    // removing the first listener will just clear its slot
+    T(sg_remove_commit_listener(l0));
+    T(_sg.commit_listeners.upper == 2);
+    sg_commit();
+    T(commit_listener.num_called == 1);
+    T(commit_listener.userdata == 46);
+    commit_listener.num_called = 0;
+    // adding the first listener back will fill that same slot again
+    T(sg_add_commit_listener(l0));
+    T(_sg.commit_listeners.upper == 2);
+    sg_commit();
+    T(commit_listener.num_called == 2);
+    T(commit_listener.userdata == 46);
+    commit_listener.num_called = 0;
+    // removing the second listener will decrement the upper bound
+    T(sg_remove_commit_listener(l1));
+    T(_sg.commit_listeners.upper == 2);
+    sg_commit();
+    T(commit_listener.num_called == 1);
+    T(commit_listener.userdata == 23);
+    commit_listener.num_called = 0;
+    // and finally remove the first listener too
+    T(sg_remove_commit_listener(l0));
+    T(_sg.commit_listeners.upper == 2);
+    sg_commit();
+    T(commit_listener.num_called == 0);
+    // removing the same listener twice just returns false
+    T(!sg_remove_commit_listener(l0));
+    T(!sg_remove_commit_listener(l1));
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, commit_listener_array_full) {
+    reset_commit_listener();
+    sg_setup(&(sg_desc){
+        .max_commit_listeners = 3,
+    });
+    const sg_commit_listener l0 = {
+        .func = commit_listener_func,
+        .user_data = (void*)23,
+    };
+    const sg_commit_listener l1 = {
+        .func = commit_listener_func,
+        .user_data = (void*)46,
+    };
+    const sg_commit_listener l2 = {
+        .func = commit_listener_func,
+        .user_data = (void*)128,
+    };
+    const sg_commit_listener l3 = {
+        .func = commit_listener_func,
+        .user_data = (void*)256,
+    };
+    T(sg_add_commit_listener(l0));
+    T(sg_add_commit_listener(l1));
+    T(sg_add_commit_listener(l2));
+    T(_sg.commit_listeners.upper == 3);
+    // overflow!
+    T(!sg_add_commit_listener(l3));
+    T(_sg.commit_listeners.upper == 3);
+    sg_commit();
+    T(commit_listener.num_called == 3);
+    T(commit_listener.userdata == 128);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, buffer_double_destroy_is_ok) {
+    sg_setup(&(sg_desc){0});
+    sg_buffer buf = create_buffer();
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    sg_destroy_buffer(buf);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_INVALID);
+    sg_destroy_buffer(buf);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, image_double_destroy_is_ok) {
+    sg_setup(&(sg_desc){0});
+    sg_image img = create_image();
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    sg_destroy_image(img);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_INVALID);
+    sg_destroy_image(img);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, shader_double_destroy_is_ok) {
+    sg_setup(&(sg_desc){0});
+    sg_shader shd = create_shader();
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_VALID);
+    sg_destroy_shader(shd);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_INVALID);
+    sg_destroy_shader(shd);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, pipeline_double_destroy_is_ok) {
+    sg_setup(&(sg_desc){0});
+    sg_pipeline pip = create_pipeline();
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
+    sg_destroy_pipeline(pip);
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_INVALID);
+    sg_destroy_pipeline(pip);
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokoL_gfx, pass_double_destroy_is_ok) {
+    sg_setup(&(sg_desc){0});
+    sg_pass pass = create_pass();
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_VALID);
+    sg_destroy_pass(pass);
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_INVALID);
+    sg_destroy_pass(pass);
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_dealloc_buffer_warns) {
+    setup_with_logger();
+    sg_buffer buf = create_buffer();
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    sg_dealloc_buffer(buf);
+    T(num_log_called == 1);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    sg_destroy_buffer(buf);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_dealloc_image_warns) {
+    setup_with_logger();
+    sg_image img = create_image();
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    sg_dealloc_image(img);
+    T(num_log_called == 1);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    sg_destroy_image(img);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_dealloc_shader_warns) {
+    setup_with_logger();
+    sg_shader shd = create_shader();
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_VALID);
+    sg_dealloc_shader(shd);
+    T(num_log_called == 1);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_VALID);
+    sg_destroy_shader(shd);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_dealloc_pipeline_warns) {
+    setup_with_logger();
+    sg_pipeline pip = create_pipeline();
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
+    sg_dealloc_pipeline(pip);
+    T(num_log_called == 1);
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
+    sg_destroy_pipeline(pip);
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_dealloc_pass_warns) {
+    setup_with_logger();
+    sg_pass pass = create_pass();
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_VALID);
+    sg_dealloc_pass(pass);
+    T(num_log_called == 1);
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_VALID);
+    sg_destroy_pass(pass);
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, alloc_uninit_buffer_warns) {
+    setup_with_logger();
+    sg_buffer buf = sg_alloc_buffer();
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_ALLOC);
+    sg_uninit_buffer(buf);
+    T(num_log_called == 1);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_ALLOC);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, alloc_uninit_image_warns) {
+    setup_with_logger();
+    sg_image img = sg_alloc_image();
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_ALLOC);
+    sg_uninit_image(img);
+    T(num_log_called == 1);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_ALLOC);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, alloc_uninit_shader_warns) {
+    setup_with_logger();
+    sg_shader shd = sg_alloc_shader();
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_ALLOC);
+    sg_uninit_shader(shd);
+    T(num_log_called == 1);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_ALLOC);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, alloc_uninit_pipeline_warns) {
+    setup_with_logger();
+    sg_pipeline pip = sg_alloc_pipeline();
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_ALLOC);
+    sg_uninit_pipeline(pip);
+    T(num_log_called == 1);
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_ALLOC);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, alloc_uninit_pass_warns) {
+    setup_with_logger();
+    sg_pass pass = sg_alloc_pass();
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_ALLOC);
+    sg_uninit_pass(pass);
+    T(num_log_called == 1);
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_ALLOC);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, alloc_destroy_buffer_is_ok) {
+    setup_with_logger();
+    sg_buffer buf = sg_alloc_buffer();
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_ALLOC);
+    sg_destroy_buffer(buf);
+    T(num_log_called == 0);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, alloc_destroy_image_is_ok) {
+    setup_with_logger();
+    sg_image img = sg_alloc_image();
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_ALLOC);
+    sg_destroy_image(img);
+    T(num_log_called == 0);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, alloc_destroy_shader_is_ok) {
+    setup_with_logger();
+    sg_shader shd = sg_alloc_shader();
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_ALLOC);
+    sg_destroy_shader(shd);
+    T(num_log_called == 0);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, alloc_destroy_pipeline_is_ok) {
+    setup_with_logger();
+    sg_pipeline pip = sg_alloc_pipeline();
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_ALLOC);
+    sg_destroy_pipeline(pip);
+    T(num_log_called == 0);
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, alloc_destroy_pass_is_ok) {
+    setup_with_logger();
+    sg_pass pass = sg_alloc_pass();
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_ALLOC);
+    sg_destroy_pass(pass);
+    T(num_log_called == 0);
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pipeline_with_nonvalid_shader) {
+    sg_setup(&(sg_desc){
+        .disable_validation = true,
+    });
+    sg_shader shd = sg_alloc_shader();
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_ALLOC);
+    sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
+        .layout = {
+            .attrs[0].format = SG_VERTEXFORMAT_FLOAT3
+        },
+    });
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_with_nonvalid_color_images) {
+    sg_setup(&(sg_desc){
+        .disable_validation = true,
+    });
+    sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments = {
+            [0].image = sg_alloc_image(),
+            [1].image = sg_alloc_image(),
+        },
+        .depth_stencil_attachment = {
+            .image = sg_make_image(&(sg_image_desc){
+                .render_target = true,
+                .width = 128,
+                .height = 128
+            })
+        }
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    sg_destroy_pass(pass);
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_INVALID);
     sg_shutdown();
 }

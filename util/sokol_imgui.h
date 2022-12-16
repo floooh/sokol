@@ -2344,13 +2344,13 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
             _simgui_add_focus_event(io, false);
             break;
         case SAPP_EVENTTYPE_MOUSE_DOWN:
-            _simgui_add_mouse_button_event(io, (int)ev->mouse_button, true);
             _simgui_add_mouse_pos_event(io, ev->mouse_x / dpi_scale, ev->mouse_y / dpi_scale);
+            _simgui_add_mouse_button_event(io, (int)ev->mouse_button, true);
             _simgui_update_modifiers(io, ev->modifiers);
             break;
         case SAPP_EVENTTYPE_MOUSE_UP:
-            _simgui_add_mouse_button_event(io, (int)ev->mouse_button, false);
             _simgui_add_mouse_pos_event(io, ev->mouse_x / dpi_scale, ev->mouse_y / dpi_scale);
+            _simgui_add_mouse_button_event(io, (int)ev->mouse_button, false);
             _simgui_update_modifiers(io, ev->modifiers);
             break;
         case SAPP_EVENTTYPE_MOUSE_MOVE:
@@ -2373,15 +2373,15 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
             _simgui_add_mouse_wheel_event(io, ev->scroll_x, ev->scroll_y);
             break;
         case SAPP_EVENTTYPE_TOUCHES_BEGAN:
-            _simgui_add_mouse_button_event(io, 0, true);
             _simgui_add_mouse_pos_event(io, ev->touches[0].pos_x / dpi_scale, ev->touches[0].pos_y / dpi_scale);
+            _simgui_add_mouse_button_event(io, 0, true);
             break;
         case SAPP_EVENTTYPE_TOUCHES_MOVED:
             _simgui_add_mouse_pos_event(io, ev->touches[0].pos_x / dpi_scale, ev->touches[0].pos_y / dpi_scale);
             break;
         case SAPP_EVENTTYPE_TOUCHES_ENDED:
-            _simgui_add_mouse_button_event(io, 0, false);
             _simgui_add_mouse_pos_event(io, ev->touches[0].pos_x / dpi_scale, ev->touches[0].pos_y / dpi_scale);
+            _simgui_add_mouse_button_event(io, 0, false);
             break;
         case SAPP_EVENTTYPE_TOUCHES_CANCELLED:
             _simgui_add_mouse_button_event(io, 0, false);

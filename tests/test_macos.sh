@@ -1,12 +1,11 @@
 set -e
 source test_common.sh
-prepare
-build macos_gl_debug SOKOL_GLCORE33 Debug
-build macos_gl_release SOKOL_GLCORE33 Release
-build macos_metal_debug SOKOL_METAL Debug
-build macos_metal_release SOKOL_METAL Release
-build_arc macos_arc_gl_debug SOKOL_GLCORE33 Debug
-build_arc macos_arc_gl_release SOKOL_GLCORE33 Release
-build_arc macos_arc_metal_debug SOKOL_METAL Debug
-build_arc macos_arc_metal_release SOKOL_METAL Release
+build macos_gl_debug macos_gl_debug
+build macos_gl_release macos_gl_release
+build macos_metal_debug macos_metal_debug
+build macos_metal_release macos_metal_release
+build macos_arc_gl_debug macos_arc_gl_debug
+build macos_arc_gl_release macos_arc_gl_release
+build macos_arc_metal_debug macos_arc_metal_debug
+build macos_arc_metal_release macos_arc_metal_release
 runtest macos_gl_debug

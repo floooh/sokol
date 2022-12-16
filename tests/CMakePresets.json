@@ -1,0 +1,699 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 21,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "macos_gl_debug",
+            "generator": "Ninja",
+            "binaryDir": "build/macos_gl_debug",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "macos_gl_release",
+            "generator": "Ninja",
+            "binaryDir": "build/macos_gl_release",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "macos_gl_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/macos_gl_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+        {
+            "name": "macos_metal_debug",
+            "generator": "Ninja",
+            "binaryDir": "build/macos_metal_debug",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_METAL",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "macos_metal_release",
+            "generator": "Ninja",
+            "binaryDir": "build/macos_metal_release",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_METAL",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "macos_metal_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/macos_metal_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_METAL",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+        {
+            "name": "macos_arc_gl_debug",
+            "generator": "Ninja",
+            "binaryDir": "build/macos_arc_gl_debug",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "USE_ARC": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "macos_arc_gl_release",
+            "generator": "Ninja",
+            "binaryDir": "build/macos_arc_gl_release",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "USE_ARC": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "macos_arc_gl_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/macos_arc_gl_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "USE_ARC": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_BUILD_TYPE": "Debug",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+        {
+            "name": "macos_arc_metal_debug",
+            "generator": "Ninja",
+            "binaryDir": "build/macos_arc_metal_debug",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_METAL",
+                "USE_ARC": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "macos_arc_metal_release",
+            "generator": "Ninja",
+            "binaryDir": "build/macos_arc_metal_release",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_METAL",
+                "USE_ARC": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "macos_arc_metal_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/macos_arc_metal_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_METAL",
+                "USE_ARC": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_BUILD_TYPE": "Debug",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+        {
+            "name": "ios_gl",
+            "generator": "Xcode",
+            "binaryDir": "build/ios_gl",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "CMAKE_SYSTEM_NAME": "iOS"
+            }
+        },
+        {
+            "name": "ios_gl_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/ios_gl_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_SYSTEM_NAME": "iOS",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+        {
+            "name": "ios_metal",
+            "generator": "Xcode",
+            "binaryDir": "build/ios_metal",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_METAL",
+                "CMAKE_SYSTEM_NAME": "iOS"
+            }
+        },
+        {
+            "name": "ios_metal_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/ios_metal_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_METAL",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_SYSTEM_NAME": "iOS",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+        {
+            "name": "ios_arc_gl",
+            "generator": "Xcode",
+            "binaryDir": "build/ios_arc_gl",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "USE_ARC": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_SYSTEM_NAME": "iOS"
+            }
+        },
+        {
+            "name": "ios_arc_gl_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/ios_arc_gl_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "USE_ARC": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_SYSTEM_NAME": "iOS",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+        {
+            "name": "ios_arc_metal",
+            "generator": "Xcode",
+            "binaryDir": "build/ios_arc_metal",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_METAL",
+                "USE_ARC": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_SYSTEM_NAME": "iOS"
+            }
+        },
+        {
+            "name": "ios_arc_metal_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/ios_arc_metal_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_METAL",
+                "USE_ARC": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_SYSTEM_NAME": "iOS",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+        {
+            "name": "linux_gl_debug",
+            "generator": "Ninja",
+            "binaryDir": "build/linux_gl_debug",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "linux_gl_release",
+            "generator": "Ninja",
+            "binaryDir": "build/linux_gl_release",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "linux_gl_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/linux_gl_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+        {
+            "name": "linux_gles3_debug",
+            "generator": "Ninja",
+            "binaryDir": "build/linux_gles3_debug",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "linux_gles3_release",
+            "generator": "Ninja",
+            "binaryDir": "build/linux_gles3_release",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "linux_gles3_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/linux_gles3_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+        {
+            "name": "linux_gl_egl_debug",
+            "generator": "Ninja",
+            "binaryDir": "build/linux_gl_egl_debug",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "SOKOL_FORCE_EGL": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "linux_gl_egl_release",
+            "generator": "Ninja",
+            "binaryDir": "build/linux_gl_egl_release",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "SOKOL_FORCE_EGL": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "emsc_webgl2_debug",
+            "generator": "Ninja",
+            "binaryDir": "build/emsc_webgl2_debug",
+            "toolchainFile": "build/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "emsc_webgl2_release",
+            "generator": "Ninja",
+            "binaryDir": "build/emsc_webgl2_release",
+            "toolchainFile": "build/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "emsc_webgl1_debug",
+            "generator": "Ninja",
+            "binaryDir": "build/emsc_webgl1_debug",
+            "toolchainFile": "build/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES2",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "emsc_webgl1_release",
+            "generator": "Ninja",
+            "binaryDir": "build/emsc_webgl1_release",
+            "toolchainFile": "build/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES2",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "android_debug",
+            "generator": "Ninja",
+            "binaryDir": "build/android_debug",
+            "toolchainFile": "build/android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "ANDROID_ABI": "armeabi-v7a",
+                "ANDROID_PLATFORM": "android-28",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "android_release",
+            "generator": "Ninja",
+            "binaryDir": "build/android_release",
+            "toolchainFile": "build/android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "ANDROID_ABI": "armeabi-v7a",
+                "ANDROID_PLATFORM": "android-28",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "win_gl",
+            "binaryDir": "build/win_gl",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33"
+            }
+        },
+        {
+            "name": "win_gl_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/win_gl_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+        {
+            "name": "win_d3d11",
+            "binaryDir": "build/win_d3d11",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_D3D11"
+            }
+        },
+        {
+            "name": "win_d3d11_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/win_d3d11_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_D3D11",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+        {
+            "name": "win_uwp",
+            "binaryDir": "build/win_uwp",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_D3D11",
+                "CMAKE_SYSTEM_NAME": "WindowsStore",
+                "CMAKE_SYSTEM_VERSION": "10.0.19041.0 "
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "macos_gl_debug",
+            "configurePreset": "macos_gl_debug"
+        },
+        {
+            "name": "macos_gl_release",
+            "configurePreset": "macos_gl_release"
+        },
+        {
+            "name": "macos_gl_analyze",
+            "configurePreset": "macos_gl_analyze"
+        },
+        {
+            "name": "macos_metal_debug",
+            "configurePreset": "macos_metal_debug"
+        },
+        {
+            "name": "macos_metal_release",
+            "configurePreset": "macos_metal_release"
+        },
+        {
+            "name": "macos_metal_analyze",
+            "configurePreset": "macos_metal_analyze"
+        },
+        {
+            "name": "macos_arc_gl_debug",
+            "configurePreset": "macos_arc_gl_debug"
+        },
+        {
+            "name": "macos_arc_gl_release",
+            "configurePreset": "macos_arc_gl_release"
+        },
+        {
+            "name": "macos_arc_gl_analyze",
+            "configurePreset": "macos_arc_gl_analyze"
+        },
+        {
+            "name": "macos_arc_metal_debug",
+            "configurePreset": "macos_arc_metal_debug"
+        },
+        {
+            "name": "macos_arc_metal_release",
+            "configurePreset": "macos_arc_metal_release"
+        },
+        {
+            "name": "macos_arc_metal_analyze",
+            "configurePreset": "macos_arc_metal_analyze"
+        },
+        {
+            "name": "ios_gl_debug",
+            "configurePreset": "ios_gl",
+            "configuration": "Debug",
+            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+        },
+        {
+            "name": "ios_gl_release",
+            "configurePreset": "ios_gl",
+            "configuration": "Release",
+            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+        },
+        {
+            "name": "ios_gl_analyze",
+            "configurePreset": "ios_gl_analyze"
+        },
+        {
+            "name": "ios_metal_debug",
+            "configurePreset": "ios_metal",
+            "configuration": "Debug",
+            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+        },
+        {
+            "name": "ios_metal_release",
+            "configurePreset": "ios_metal",
+            "configuration": "Release",
+            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+        },
+        {
+            "name": "ios_metal_analyze",
+            "configurePreset": "ios_metal_analyze"
+        },
+        {
+            "name": "ios_arc_gl_debug",
+            "configurePreset": "ios_arc_gl",
+            "configuration": "Debug",
+            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+        },
+        {
+            "name": "ios_arc_gl_release",
+            "configurePreset": "ios_arc_gl",
+            "configuration": "Release",
+            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+        },
+        {
+            "name": "ios_arc_gl_analyze",
+            "configurePreset": "ios_arc_gl_analyze"
+        },
+        {
+            "name": "ios_arc_metal_debug",
+            "configurePreset": "ios_arc_metal",
+            "configuration": "Debug",
+            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+        },
+        {
+            "name": "ios_arc_metal_release",
+            "configurePreset": "ios_arc_metal",
+            "configuration": "Release",
+            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+        },
+        {
+            "name": "ios_arc_metal_analyze",
+            "configurePreset": "ios_arc_metal_analyze"
+        },
+        {
+            "name": "linux_gl_debug",
+            "configurePreset": "linux_gl_debug"
+        },
+        {
+            "name": "linux_gl_release",
+            "configurePreset": "linux_gl_release"
+        },
+        {
+            "name": "linux_gl_analyze",
+            "configurePreset": "linux_gl_analyze"
+        },
+        {
+            "name": "linux_gles3_debug",
+            "configurePreset": "linux_gles3_debug"
+        },
+        {
+            "name": "linux_gles3_release",
+            "configurePreset": "linux_gles3_release"
+        },
+        {
+            "name": "linux_gles3_analyze",
+            "configurePreset": "linux_gles3_analyze"
+        },
+        {
+            "name": "linux_gl_egl_debug",
+            "configurePreset": "linux_gl_egl_debug"
+        },
+        {
+            "name": "linux_gl_egl_release",
+            "configurePreset": "linux_gl_egl_release"
+        },
+        {
+            "name": "emsc_webgl2_debug",
+            "configurePreset": "emsc_webgl2_debug"
+        },
+        {
+            "name": "emsc_webgl2_release",
+            "configurePreset": "emsc_webgl2_release"
+        },
+        {
+            "name": "emsc_webgl1_debug",
+            "configurePreset": "emsc_webgl1_debug"
+        },
+        {
+            "name": "emsc_webgl1_release",
+            "configurePreset": "emsc_webgl1_release"
+        },
+        {
+            "name": "android_debug",
+            "configurePreset": "android_debug"
+        },
+        {
+            "name": "android_release",
+            "configurePreset": "android_release"
+        },
+        {
+            "name": "win_gl_debug",
+            "configurePreset": "win_gl",
+            "configuration": "Debug"
+        },
+        {
+            "name": "win_gl_release",
+            "configurePreset": "win_gl",
+            "configuration": "Release"
+        },
+        {
+            "name": "win_gl_analyze",
+            "configurePreset": "win_gl_analyze"
+        },
+        {
+            "name": "win_d3d11_debug",
+            "configurePreset": "win_d3d11",
+            "configuration": "Debug"
+        },
+        {
+            "name": "win_d3d11_release",
+            "configurePreset": "win_d3d11",
+            "configuration": "Release"
+        },
+        {
+            "name": "win_d3d11_analyze",
+            "configurePreset": "win_d3d11_analyze"
+        },
+        {
+            "name": "win_uwp_debug",
+            "configurePreset": "win_uwp",
+            "configuration": "Debug"
+        },
+        {
+            "name": "win_uwp_release",
+            "configurePreset": "win_uwp",
+            "configuration": "Release"
+        }
+    ]
+}

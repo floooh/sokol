@@ -1,6 +1,6 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.20)
 project(sokol-test)
-set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)  # needed for UWP
 
@@ -29,6 +29,7 @@ else()
     message(FATAL_ERROR "Unrecognized CMAKE_SYSTEM_NAME")
 endif()
 
+message(">> CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
 message(">> SOKOL_BACKEND: ${SOKOL_BACKEND}")
 message(">> SOKOL_FORCE_EGL: ${SOKOL_FORCE_EGL}")
 if (OSX_IOS OR OSX_MACOS)
@@ -149,73 +150,6 @@ macro(configure_cxx target)
     endif()
 endmacro()
 
-#--- cimgui
-add_library(cimgui
-    ext/fips-cimgui/cimgui/cimgui.cpp
-    ext/fips-cimgui/cimgui/imgui/imgui.cpp
-    ext/fips-cimgui/cimgui/imgui/imgui_demo.cpp
-    ext/fips-cimgui/cimgui/imgui/imgui_draw.cpp
-    ext/fips-cimgui/cimgui/imgui/imgui_tables.cpp
-    ext/fips-cimgui/cimgui/imgui/imgui_widgets.cpp)
-target_include_directories(cimgui SYSTEM PUBLIC ext/fips-cimgui)
-
-add_library(imgui
-    ext/fips-cimgui/cimgui/imgui/imgui.cpp
-    ext/fips-cimgui/cimgui/imgui/imgui_demo.cpp
-    ext/fips-cimgui/cimgui/imgui/imgui_draw.cpp
-    ext/fips-cimgui/cimgui/imgui/imgui_tables.cpp
-    ext/fips-cimgui/cimgui/imgui/imgui_widgets.cpp)
-target_include_directories(imgui SYSTEM PUBLIC ext/fips-cimgui/cimgui/imgui)
-
-add_library(spine
-    ext/spine-runtimes/spine-c/spine-c/src/spine/Animation.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/AnimationState.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/AnimationStateData.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/Array.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/Atlas.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/AtlasAttachmentLoader.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/Attachment.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/AttachmentLoader.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/Bone.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/BoneData.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/BoundingBoxAttachment.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/ClippingAttachment.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/Color.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/Debug.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/Event.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/EventData.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/IkConstraint.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/IkConstraintData.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/Json.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/Json.h
-    ext/spine-runtimes/spine-c/spine-c/src/spine/MeshAttachment.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/PathAttachment.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/PathConstraint.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/PathConstraintData.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/PointAttachment.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/RegionAttachment.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/Sequence.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/Skeleton.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/SkeletonBinary.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/SkeletonBounds.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/SkeletonClipping.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/SkeletonData.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/SkeletonJson.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/Skin.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/Slot.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/SlotData.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/TransformConstraint.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/TransformConstraintData.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/Triangulator.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/VertexAttachment.c
-    ext/spine-runtimes/spine-c/spine-c/src/spine/extension.c)
-target_include_directories(spine SYSTEM PUBLIC ext/spine-runtimes/spine-c/spine-c/include)
-if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
-    target_compile_options(spine PRIVATE /wd4267 /wd4244)   # conversion from 'x' to 'y' possible loss of data
-endif()
-
-
-add_library(nuklear ext/nuklear.c)
-
+add_subdirectory(ext)
 add_subdirectory(compile)
 add_subdirectory(functional)

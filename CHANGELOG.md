@@ -1,5 +1,96 @@
 ## Updates
 
+- **16-Dec-2022**: In the sokol_gfx.h Metal backend: A fix for a Metal
+  validation layer error which I just discovered yesterday (seems to be new in
+  macOS 13). When the validation layer is active, and the application window
+  becomes fully obscured, the validation layer throws an error after a short
+  time (for details see: https://github.com/floooh/sokol/issues/762).
+  The reason appears to be that sokol_gfx.h creates a command buffer with
+  'unretained references' (e.g. the command buffer doesn't manage the
+  lifetime of resources used by the commands stored in the buffer). This
+  seems to clash with MTKView's and/or CAMetalLayer's expectations. I fixed
+  this now by creating a second command buffer with 'retained references',
+  which only holds the ```presentDrawable``` command. That way, regular
+  draw commands don't have the refcounting overhead (because they're stored
+  in an unretained-references cmdbuffer), while the drawable surface is
+  still properly lifetime managed (because it's used in a separate command
+  buffer with retained references).
+
+- **15-Dec-2022**: A small but important update in sokol_imgui.h which fixes
+  touch input handling on mobile devices. Many thanks to github user @Xadiant
+  for the bug investigation and [PR](https://github.com/floooh/sokol/pull/760).
+
+- **25-Nov-2022**: Some code cleanup around resource creation and destruction in sokol_gfx.h:
+    - It's now safe to call the destroy, uninit and dealloc functions in any
+      resource state, in general, the functions will do the right thing without
+      assertions getting in the way (there are however new log warnings in some
+      cases though, such as attempting to call an ```sg_dealloc_*()``` function on
+      a resource object that's not in ALLOC state)
+    - A related **minor breaking change**: the ```sg_uninit_*()``` functions now return
+      void instead of bool, this is because ```sg_dealloc_*()``` no longer asserts
+      when called in the wrong resource state
+    - Related internal code cleanup in the backend-agnostic resource creation
+      and cleanup code, better or more consistent function names, etc...
+    - The validation layer can now be disabled in debug mode with a runtime
+      flag during setup: ```sg_desc.disable_validation```. This is mainly useful
+      for test code.
+    - Creating a pass object with invalid image objects now no longer asserts,
+      but instead results in a pass object in FAILED state. In debug mode,
+      the validation layer will still stop at this problem though (it's mostly
+      an 'undefined API behaviour' fix in release mode).
+    - Calling ```sg_shutdown()``` with existing resources in ALLOC state will
+      no longer print a log message about an 'active context mismatch'.
+    - A new header documentation blurb about the two-step resource creation
+      and destruction functions (search for RESOURCE CREATION AND DESTRUCTION IN DETAIL)
+
+- **16-Nov-2022**: Render layer support has been added to sokol_debugtext.h,
+  same general changes as in sokol_gl.h with two new functions:
+  sdtx_layer(layer_id) to select the layer to record text into, and
+  sdtx_draw_layer(layer_id) to draw the recorded text in that layer inside a
+  sokol-gfx render pass. The new sample [debugtext-layers-sapp](https://floooh.github.io/sokol-html5/debugtext-layers-sapp) demonstrates the feature together with
+  sokol-gl.
+
+
+- **11-Nov-2022**: sokol_gl.h has 2 new public API functions which enable
+  layered rendering: sgl_layer(), sgl_draw_layer() (technically it's three
+  functions: there's also sgl_context_draw_layer(), but that's just a variant of
+  sgl_draw_layer()). This allows to 'interleave' sokol-gl rendering
+  with other render operations. The [spine-layers-sapp](https://floooh.github.io/sokol-html5/spine-layers-sapp.html)
+  sample has been updated to use multiple sokol-gl layers.
+
+- **09-Nov-2022**: sokol_gfx.h now allows to add 'commit listeners', these
+  are callback functions which are called from inside sg_commit(). This is
+  mainly useful for libraries which build on top of sokol-gfx to be notified
+  about the start/end point of a frame, which in turn may simplify the public
+  API, or the internal implementation, because the library no longer needs to
+  'guess' when a new frame starts.
+
+  For more details, search for 'COMMIT LISTENERS' in the sokol_gfx.h header.
+
+  This also results in a minor breaking change in sokol_spine.h: The function
+  ```sspine_new_frame()``` has been removed and replaced with an internal commit
+  listener.
+
+  Likewise, sokol_gl.h now uses a commit listener in the implementation, but
+  without changing the public API (the feature will be important for an upcoming
+  sokol-gl feature to support rendering layers, and for this a 'new-frame-function'
+  would have been needed).
+
+- **05-Nov-2022** A breaking change in sokol_fetch.h, and a minor change in
+  sokol_app.h which should only break for very few users:
+  - An ```sfetch_range_t``` ptr/size pair struct has been added to sokol_fetch.h,
+    and discrete ptr/size pairs have been replaced with sfetch_range_t
+    items. This affects the structs ```sfetch_request_t``` and ```sfetch_response_t```,
+    and the function ```sfetch_bind_buffer()```.
+  - The required changes in ```sfetch_response_t``` might be a bit non-obviois: To
+    access the fetched data, previous ```.buffer_ptr``` and ```.fetched_size```
+    was used. The fetched data is now accessible through an ```sfetch_range_t data```
+    item (```data.ptr``` and ```data.size```). The old ```.fetched_offset``` item
+    has been renamed to ```.data_offset``` to better conform with the new naming.
+  - The last two occurances of discrete ptr/size pairs in sokol_app.h now have also
+    been replaced with ```sapp_range_t``` items, this only affects the structs
+    ```sapp_html5_fetch_request``` and ```sapp_html5_fetch_response```.
+
 - **03-Nov-2022** The language bindings generation has been updated for Zig 0.10.0,
   and clang-14 (there was a minor change in the JSON ast-dump format).
   Many thanks to github user @kcbanner for the Zig PR!
