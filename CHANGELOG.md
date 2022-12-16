@@ -1,5 +1,21 @@
 ## Updates
 
+- **16-Dec-2022**: In the sokol_gfx.h Metal backend: A fix for a Metal
+  validation layer error which I just discovered yesterday (seems to be new in
+  macOS 13). When the validation layer is active, and the application window
+  becomes fully obscured, the validation layer throws an error after a short
+  time (for details see: https://github.com/floooh/sokol/issues/762).
+  The reason appears to be that sokol_gfx.h creates a command buffer with
+  'unretained references' (e.g. the command buffer doesn't manage the
+  lifetime of resources used by the commands stored in the buffer). This
+  seems to clash with MTKView's and/or CAMetalLayer's expectations. I fixed
+  this now by creating a second command buffer with 'retained references',
+  which only holds the ```presentDrawable``` command. That way, regular
+  draw commands don't have the refcounting overhead (because they're stored
+  in an unretained-references cmdbuffer), while the drawable surface is
+  still properly lifetime managed (because it's used in a separate command
+  buffer with retained references).
+
 - **15-Dec-2022**: A small but important update in sokol_imgui.h which fixes
   touch input handling on mobile devices. Many thanks to github user @Xadiant
   for the bug investigation and [PR](https://github.com/floooh/sokol/pull/760).
