@@ -3907,6 +3907,9 @@ _SOKOL_PRIVATE void _sg_imgui_draw_caps_panel(void) {
     igText("    max_image_size_array: %d", l.max_image_size_array);
     igText("    max_image_array_layers: %d", l.max_image_array_layers);
     igText("    max_vertex_attrs: %d", l.max_vertex_attrs);
+    igText("    max_color_attachments: %d", l.max_color_attachments);
+    igText("    max_shaderstage_buffers: %d", l.max_shaderstage_buffers);
+    igText("    max_shaderstage_images: %d", l.max_shaderstage_images);
     igText("    gl_max_vertex_uniform_vectors: %d", l.gl_max_vertex_uniform_vectors);
     igText("    gl_max_combined_texture_image_units: %d", l.gl_max_combined_texture_image_units);
     igText("\nUsable Pixelformats:");

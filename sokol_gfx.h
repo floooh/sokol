@@ -1089,12 +1089,17 @@ enum {
     SG_MAX_TEXTUREARRAY_LAYERS = 128
 };
 
-// hardware-specific constants
+//  overridable compile-time constants
+/*
+    Before incrementing the constants, make sure the target platform supports the given values.
+    The exact values of certain limits can be queried in runtime by sg_query_limits.
+    The value in sg_limits is the minimum of the compile-time constant and the exact value.
+*/
 enum {
 #ifdef SOKOL_GFX_MAX_COLOR_ATTACHMENTS
     SG_MAX_COLOR_ATTACHMENTS = SOKOL_GFX_MAX_COLOR_ATTACHMENTS,
 #else
-    SG_MAX_COLOR_ATTACHMENTS = 4,
+    SG_MAX_COLOR_ATTACHMENTS = 4,       /* NOTE: actual max vertex attrs can be less on GLES2, see sg_limits! */
 #endif
 
 #ifdef SOKOL_GFX_MAX_SHADERSTAGE_BUFFERS
@@ -1330,7 +1335,10 @@ typedef struct sg_limits {
     int max_image_size_3d;          // max width/height/depth of SG_IMAGETYPE_3D images
     int max_image_size_array;       // max width/height of SG_IMAGETYPE_ARRAY images
     int max_image_array_layers;     // max number of layers in SG_IMAGETYPE_ARRAY images
-    int max_vertex_attrs;           // <= SG_MAX_VERTEX_ATTRIBUTES or less (on some GLES2 impls)
+    int max_vertex_attrs;           // <= SG_MAX_VERTEX_ATTRIBUTES or less
+    int max_color_attachments;      // <= SG_MAX_COLOR_ATTACHMENTS or less
+    int max_shaderstage_buffers;    // <= SG_MAX_SHADERSTAGE_BUFFERS or less
+    int max_shaderstage_images;     // <= SG_MAX_SHADERSTAGE_IMAGES or less
     int gl_max_vertex_uniform_vectors;  // <= GL_MAX_VERTEX_UNIFORM_VECTORS (only on GL backends)
     int gl_max_combined_texture_image_units; // <= GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS (only on GL backends)
 } sg_limits;
@@ -3397,10 +3405,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_PROGRAM_POINT_SIZE 0x8642
         #define GL_STENCIL_ATTACHMENT 0x8D20
         #define GL_DEPTH_ATTACHMENT 0x8D00
-        #define GL_COLOR_ATTACHMENT2 0x8CE2
-        #define GL_COLOR_ATTACHMENT0 0x8CE0
+        #define GL_COLOR_ATTACHMENT0 0x8CE0 /* NOTE: the number of color attachments may range from 1 to the value of GL_MAX_COLOR_ATTACHMENTS */
         #define GL_R16F 0x822D
-        #define GL_COLOR_ATTACHMENT22 0x8CF6
         #define GL_DRAW_FRAMEBUFFER 0x8CA9
         #define GL_FRAMEBUFFER_COMPLETE 0x8CD5
         #define GL_NUM_EXTENSIONS 0x821D
@@ -3442,7 +3448,6 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_RGB10_A2 0x8059
         #define GL_RGBA8 0x8058
         #define GL_SRGB8_ALPHA8 0x8C43
-        #define GL_COLOR_ATTACHMENT1 0x8CE1
         #define GL_RGBA4 0x8056
         #define GL_RGB8 0x8051
         #define GL_ARRAY_BUFFER 0x8892
@@ -3595,6 +3600,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_MAX_VERTEX_UNIFORM_VECTORS 0x8DFB
         #define GL_UNPACK_ALIGNMENT 0x0CF5
         #define GL_FRAMEBUFFER_SRGB 0x8DB9
+        #define GL_MAX_TEXTURE_IMAGE_UNITS 0x8872
+        #define GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS 0x8B4C
     #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
@@ -3680,6 +3687,9 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #endif
     #ifndef GL_LUMINANCE
     #define GL_LUMINANCE 0x1909
+    #endif
+    #ifndef GL_MAX_DRAW_BUFFERS
+    #define GL_MAX_DRAW_BUFFERS 0x8824
     #endif
 
     #ifdef SOKOL_GLES2
@@ -6396,46 +6406,44 @@ _SOKOL_PRIVATE void _sg_gl_init_pixelformats_etc2(void) {
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RG11SN]);
 }
 
+_SOKOL_PRIVATE GLint _sg_gl_get_integer(GLenum pname) {
+    GLint gl_int;
+    glGetIntegerv(pname, &gl_int);
+    _SG_GL_CHECK_ERROR();
+
+    return gl_int;
+}
+
 _SOKOL_PRIVATE void _sg_gl_init_limits(void) {
     _SG_GL_CHECK_ERROR();
-    GLint gl_int;
-    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &gl_int);
-    _SG_GL_CHECK_ERROR();
-    _sg.limits.max_image_size_2d = gl_int;
-    _sg.limits.max_image_size_array = gl_int;
-    glGetIntegerv(GL_MAX_CUBE_MAP_TEXTURE_SIZE, &gl_int);
-    _SG_GL_CHECK_ERROR();
-    _sg.limits.max_image_size_cube = gl_int;
-    glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &gl_int);
-    _SG_GL_CHECK_ERROR();
-    if (gl_int > SG_MAX_VERTEX_ATTRIBUTES) {
-        gl_int = SG_MAX_VERTEX_ATTRIBUTES;
-    }
-    _sg.limits.max_vertex_attrs = gl_int;
-    glGetIntegerv(GL_MAX_VERTEX_UNIFORM_VECTORS, &gl_int);
-    _SG_GL_CHECK_ERROR();
-    _sg.limits.gl_max_vertex_uniform_vectors = gl_int;
+
+    _sg.limits.max_image_size_2d = _sg_gl_get_integer(GL_MAX_TEXTURE_SIZE);
+    _sg.limits.max_image_size_array = _sg.limits.max_image_size_2d;
+    _sg.limits.max_image_size_cube = _sg_gl_get_integer(GL_MAX_CUBE_MAP_TEXTURE_SIZE);
+
+    _sg.limits.max_vertex_attrs = _sg_min(_sg_gl_get_integer(GL_MAX_VERTEX_ATTRIBS), SG_MAX_VERTEX_ATTRIBUTES);
+    _sg.limits.max_shaderstage_buffers = _sg_min(_sg.limits.max_vertex_attrs, SG_MAX_SHADERSTAGE_BUFFERS);
+    /* max_shaderstage_images is the lowest from GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS(vertex shader), GL_MAX_TEXTURE_IMAGE_UNITS(fragment shader) and the constant itself */
+    _sg.limits.max_shaderstage_images = _sg_min(_sg_gl_get_integer(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS), SG_MAX_SHADERSTAGE_IMAGES);
+    _sg.limits.max_shaderstage_images = _sg_min(_sg_gl_get_integer(GL_MAX_TEXTURE_IMAGE_UNITS), _sg.limits.max_shaderstage_images);
+
+    _sg.limits.gl_max_vertex_uniform_vectors = _sg_gl_get_integer(GL_MAX_VERTEX_UNIFORM_VECTORS);
+
     #if !defined(SOKOL_GLES2)
     if (!_sg.gl.gles2) {
-        glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &gl_int);
-        _SG_GL_CHECK_ERROR();
-        _sg.limits.max_image_size_3d = gl_int;
-        glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &gl_int);
-        _SG_GL_CHECK_ERROR();
-        _sg.limits.max_image_array_layers = gl_int;
+        _sg.limits.max_color_attachments = _sg_min(_sg_gl_get_integer(GL_MAX_DRAW_BUFFERS), SG_MAX_COLOR_ATTACHMENTS);
+        _sg.limits.max_image_size_3d = _sg_gl_get_integer(GL_MAX_3D_TEXTURE_SIZE);
+        _sg.limits.max_image_array_layers = _sg_gl_get_integer(GL_MAX_ARRAY_TEXTURE_LAYERS);
     }
     #endif
     if (_sg.gl.ext_anisotropic) {
-        glGetIntegerv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &gl_int);
-        _SG_GL_CHECK_ERROR();
-        _sg.gl.max_anisotropy = gl_int;
+        _sg.gl.max_anisotropy = _sg_gl_get_integer(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT);
     }
     else {
         _sg.gl.max_anisotropy = 1;
     }
-    glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &gl_int);
-    _SG_GL_CHECK_ERROR();
-    _sg.limits.gl_max_combined_texture_image_units = gl_int;
+
+    _sg.limits.gl_max_combined_texture_image_units = _sg_gl_get_integer(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS);
 }
 
 #if defined(SOKOL_GLCORE33)
@@ -6634,6 +6642,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
     bool has_colorbuffer_float = false;
     bool has_float_blend = false;
     bool has_instancing = false;
+    bool has_mrt = false;
     const char* ext = (const char*) glGetString(GL_EXTENSIONS);
     if (ext) {
         has_s3tc = strstr(ext, "_texture_compression_s3tc") || strstr(ext, "_compressed_texture_s3tc");
@@ -6652,6 +6661,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
         */
         has_instancing = strstr(ext, "_instanced_arrays");
         _sg.gl.ext_anisotropic = strstr(ext, "ext_anisotropic");
+        has_mrt = strstr(ext, "_draw_buffers");
     }
 
     _sg.features.origin_top_left = false;
@@ -6668,6 +6678,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
 
     /* limits */
     _sg_gl_init_limits();
+    _sg.limits.max_color_attachments = has_mrt ? _sg_min(_sg_gl_get_integer(GL_MAX_DRAW_BUFFERS), SG_MAX_COLOR_ATTACHMENTS) : 1;
 
     /* pixel formats */
     const bool has_bgra = false;    /* not a bug */
@@ -7622,12 +7633,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
     /* setup color attachments for the framebuffer */
     #if !defined(SOKOL_GLES2)
     if (!_sg.gl.gles2) {
-        GLenum att[SG_MAX_COLOR_ATTACHMENTS] = {
-            GL_COLOR_ATTACHMENT0,
-            GL_COLOR_ATTACHMENT1,
-            GL_COLOR_ATTACHMENT2,
-            GL_COLOR_ATTACHMENT3
-        };
+        GLenum att[SG_MAX_COLOR_ATTACHMENTS];
+        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+            att[i] = (GLenum)(GL_COLOR_ATTACHMENT0 + i);
+        }
         glDrawBuffers(pass->cmn.num_color_atts, att);
     }
     #endif
@@ -9093,7 +9102,11 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.limits.max_image_size_3d = 2 * 1024;
     _sg.limits.max_image_size_array = 16 * 1024;
     _sg.limits.max_image_array_layers = 2 * 1024;
-    _sg.limits.max_vertex_attrs = SG_MAX_VERTEX_ATTRIBUTES;
+
+    _sg.limits.max_vertex_attrs = _sg_min(32, SG_MAX_VERTEX_ATTRIBUTES);
+    _sg.limits.max_color_attachments = _sg_min(8, SG_MAX_COLOR_ATTACHMENTS);
+    _sg.limits.max_shaderstage_buffers = _sg_min(32, SG_MAX_SHADERSTAGE_BUFFERS);
+    _sg.limits.max_shaderstage_images = _sg_min(32, SG_MAX_SHADERSTAGE_IMAGES);
 
     /* see: https://docs.microsoft.com/en-us/windows/win32/api/d3d11/ne-d3d11-d3d11_format_support */
     for (int fmt = (SG_PIXELFORMAT_NONE+1); fmt < _SG_PIXELFORMAT_NUM; fmt++) {
@@ -10883,7 +10896,11 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
         _sg.limits.max_image_size_array = 8 * 1024;
         _sg.limits.max_image_array_layers = 2 * 1024;
     #endif
-    _sg.limits.max_vertex_attrs = SG_MAX_VERTEX_ATTRIBUTES;
+
+    _sg.limits.max_vertex_attrs = _sg_min(31, SG_MAX_VERTEX_ATTRIBUTES);
+    _sg.limits.max_color_attachments = _sg_min(8, SG_MAX_COLOR_ATTACHMENTS);
+    _sg.limits.max_shaderstage_buffers = _sg_min(31, SG_MAX_SHADERSTAGE_BUFFERS);
+    _sg.limits.max_shaderstage_images = _sg_min(31, SG_MAX_SHADERSTAGE_IMAGES);
 
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8SN]);
@@ -12408,7 +12425,12 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.limits.max_image_size_3d = 2 * 1024;
     _sg.limits.max_image_size_array = 8 * 1024;
     _sg.limits.max_image_array_layers = 2 * 1024;
+
+    /* FIXME: get real values */
     _sg.limits.max_vertex_attrs = SG_MAX_VERTEX_ATTRIBUTES;
+    _sg.limits.max_color_attachments = SG_MAX_COLOR_ATTACHMENTS;
+    _sg.limits.max_shaderstage_buffers = SG_MAX_SHADERSTAGE_BUFFERS;
+    _sg.limits.max_shaderstage_images = SG_MAX_SHADERSTAGE_IMAGES;
 
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_R8SN]);
