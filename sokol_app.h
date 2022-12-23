@@ -11507,6 +11507,18 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                                       _sapp.x11.xdnd.XdndSelection,
                                       _sapp.x11.window,
                                       time);
+
+                    // notify originator source that the dnd operation has finished.
+                    Window source = XGetSelectionOwner(_sapp.x11.display, _sapp.x11.xdnd.XdndSelection);
+                    XEvent reply;
+                    _sapp_clear(&reply, sizeof(reply));
+                    reply.type = ClientMessage;
+                    reply.xclient.window = source;
+                    reply.xclient.message_type = _sapp.x11.xdnd.XdndFinished;
+                    reply.xclient.format = 32;
+                    reply.xclient.data.l[0] = (long)_sapp.x11.window;
+                    XSendEvent(_sapp.x11.display, event->xclient.data.l[0], 0, 0, &reply);
+                    XFlush(_sapp.x11.display);
                 }
                 else if (_sapp.x11.xdnd.version >= 2) {
                     XEvent reply;
