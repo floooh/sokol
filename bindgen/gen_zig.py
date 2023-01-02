@@ -328,7 +328,7 @@ def gen_struct(decl, prefix):
         elif is_const_prim_ptr(field_type):
             l(f"    {field_name}: ?[*]const {as_zig_prim_type(util.extract_ptr_type(field_type))} = null,")
         elif util.is_func_ptr(field_type):
-            l(f"    {field_name}: ?meta.FnPtr(fn({funcptr_args_c(field_type, prefix)}) callconv(.C) {funcptr_result_c(field_type)}) = null,")
+            l(f"    {field_name}: ?*const fn({funcptr_args_c(field_type, prefix)}) callconv(.C) {funcptr_result_c(field_type)} = null,")
         elif util.is_1d_array_type(field_type):
             array_type = util.extract_array_type(field_type)
             array_sizes = util.extract_array_sizes(field_type)
