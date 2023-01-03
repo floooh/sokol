@@ -433,7 +433,6 @@ def pre_parse(inp):
 
 def gen_imports(inp, dep_prefixes):
     l('const builtin = @import("builtin");')
-    l('const meta = @import("std").meta;')
     for dep_prefix in dep_prefixes:
         dep_module_name = module_names[dep_prefix]
         l(f'const {dep_prefix[:-1]} = @import("{dep_module_name}.zig");')
