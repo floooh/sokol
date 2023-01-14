@@ -1,5 +1,10 @@
 ## Updates
 
+- **14-Jan-2022**: sokol_app.h x11: a drag'n'drop related bugfix, the
+  XdndFinished reply event was sent with the wrong window handle which
+  confused some apps where the drag operation originated
+  (see https://github.com/floooh/sokol/pull/765#issuecomment-1382750611) 
+
 - **16-Dec-2022**: In the sokol_gfx.h Metal backend: A fix for a Metal
   validation layer error which I just discovered yesterday (seems to be new in
   macOS 13). When the validation layer is active, and the application window

@@ -11512,7 +11512,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                     XEvent reply;
                     _sapp_clear(&reply, sizeof(reply));
                     reply.type = ClientMessage;
-                    reply.xclient.window = _sapp.x11.window;
+                    reply.xclient.window = _sapp.x11.xdnd.source;
                     reply.xclient.message_type = _sapp.x11.xdnd.XdndFinished;
                     reply.xclient.format = 32;
                     reply.xclient.data.l[0] = (long)_sapp.x11.window;
@@ -11567,7 +11567,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                     XEvent reply;
                     _sapp_clear(&reply, sizeof(reply));
                     reply.type = ClientMessage;
-                    reply.xclient.window = _sapp.x11.window;
+                    reply.xclient.window = _sapp.x11.xdnd.source;
                     reply.xclient.message_type = _sapp.x11.xdnd.XdndFinished;
                     reply.xclient.format = 32;
                     reply.xclient.data.l[0] = (long)_sapp.x11.window;
