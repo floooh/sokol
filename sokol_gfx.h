@@ -3304,6 +3304,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_TEXTURE_BORDER_COLOR 0x1004
         #define GL_CURRENT_PROGRAM 0x8B8D
         #define GL_MAX_VERTEX_UNIFORM_VECTORS 0x8DFB
+        #define GL_UNPACK_ALIGNMENT 0x0CF5
     #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
@@ -5403,7 +5404,8 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     _SG_XMACRO(glTexImage2D,                      void, (GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void * pixels)) \
     _SG_XMACRO(glGenVertexArrays,                 void, (GLsizei n, GLuint * arrays)) \
     _SG_XMACRO(glFrontFace,                       void, (GLenum mode)) \
-    _SG_XMACRO(glCullFace,                        void, (GLenum mode))
+    _SG_XMACRO(glCullFace,                        void, (GLenum mode)) \
+    _SG_XMACRO(glPixelStorei                      void, (GLenum pname, GLint param))
 
 // generate GL function pointer typedefs
 #define _SG_XMACRO(name, ret, args) typedef ret (GL_APIENTRY* PFN_ ## name) args;
@@ -6778,6 +6780,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_context(_sg_context_t* ctx) {
         _SG_GL_CHECK_ERROR();
     }
     #endif
+    // incoming texture data is generally expected to be packed tightly
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     return SG_RESOURCESTATE_VALID;
 }
 
