@@ -11009,15 +11009,11 @@ _SOKOL_PRIVATE sapp_mousebutton _sapp_x11_translate_button(const XEvent* event) 
     }
 }
 
-_SOKOL_PRIVATE void _sapp_x11_update_mouse(int x, int y, bool no_delta) {
+_SOKOL_PRIVATE void _sapp_x11_mouse_update(int x, int y) {
     if (!_sapp.mouse.locked) {
         const float new_x = (float) x;
         const float new_y = (float) y;
-        if (no_delta) {
-            _sapp.mouse.dx = 0.0f;
-            _sapp.mouse.dy = 0.0f;
-        }
-        else if (_sapp.mouse.pos_valid) {
+        if (_sapp.mouse.pos_valid) {
             _sapp.mouse.dx = new_x - _sapp.mouse.x;
             _sapp.mouse.dy = new_y - _sapp.mouse.y;
         }
@@ -11373,7 +11369,6 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
             break;
         case KeyPress:
             {
-                _sapp_x11_update_mouse(event->xkey.x, event->xkey.y, false);
                 int keycode = (int)event->xkey.keycode;
                 const sapp_keycode key = _sapp_x11_translate_key(keycode);
                 bool repeat = _sapp_x11_keycodes[keycode & 0xFF];
@@ -11394,7 +11389,6 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
             break;
         case KeyRelease:
             {
-                _sapp_x11_update_mouse(event->xkey.x, event->xkey.y, false);
                 int keycode = (int)event->xkey.keycode;
                 const sapp_keycode key = _sapp_x11_translate_key(keycode);
                 _sapp_x11_keycodes[keycode & 0xFF] = false;
@@ -11408,7 +11402,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
             break;
         case ButtonPress:
             {
-                _sapp_x11_update_mouse(event->xbutton.x, event->xbutton.y, false);
+                _sapp_x11_mouse_update(event->xbutton.x, event->xbutton.y);
                 const sapp_mousebutton btn = _sapp_x11_translate_button(event);
                 uint32_t mods = _sapp_x11_mods(event->xbutton.state);
                 // X11 doesn't set modifier bit on button down, so emulate that
@@ -11430,7 +11424,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
             break;
         case ButtonRelease:
             {
-                _sapp_x11_update_mouse(event->xbutton.x, event->xbutton.y, false);
+                _sapp_x11_mouse_update(event->xbutton.x, event->xbutton.y);
                 const sapp_mousebutton btn = _sapp_x11_translate_button(event);
                 if (btn != SAPP_MOUSEBUTTON_INVALID) {
                     uint32_t mods = _sapp_x11_mods(event->xbutton.state);
@@ -11444,19 +11438,19 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
         case EnterNotify:
             /* don't send enter/leave events while mouse button held down */
             if (0 == _sapp.x11.mouse_buttons) {
-                _sapp_x11_update_mouse(event->xcrossing.x, event->xcrossing.y, true);
+                _sapp_x11_mouse_update(event->xcrossing.x, event->xcrossing.y);
                 _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mods(event->xcrossing.state));
             }
             break;
         case LeaveNotify:
             if (0 == _sapp.x11.mouse_buttons) {
-                _sapp_x11_update_mouse(event->xcrossing.x, event->xcrossing.y, true);
+                _sapp_x11_mouse_update(event->xcrossing.x, event->xcrossing.y);
                 _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mods(event->xcrossing.state));
             }
             break;
         case MotionNotify:
             if (!_sapp.mouse.locked) {
-                _sapp_x11_update_mouse(event->xmotion.x, event->xmotion.y, false);
+                _sapp_x11_mouse_update(event->xmotion.x, event->xmotion.y);
                 _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mods(event->xmotion.state));
             }
             break;
