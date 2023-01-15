@@ -1,13 +1,13 @@
 ## Updates
 
-- **15-Jan-2022**:
+- **15-Jan-2022**: two bugfixes in sokol_app.h and sokol_gfx.h:
   - sokol_app.h x11: Mouse button events now always return valid mouse
     coordinates, also when no mouse movement happened yet
     (fixes https://github.com/floooh/sokol/issues/770)
-  - sokol_gfx.h gl: The GL context is now configured for with
+  - sokol_gfx.h gl: The GL context is now configured with
     GL_UNPACK_ALIGNMENT = 1, this should bring texture creation and updating
     behaviour in line with the other backends for tightly packed texture
-    data that doesn't have a row-pitch that's a multiple of 4.
+    data that doesn't have a row-pitch with a multiple of 4
     (fixes https://github.com/floooh/sokol/issues/767)
 
 - **14-Jan-2022**: sokol_app.h x11: a drag'n'drop related bugfix, the
