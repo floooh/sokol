@@ -1,9 +1,19 @@
 ## Updates
 
+- **15-Jan-2022**:
+  - sokol_app.h x11: Mouse button events now always return valid mouse
+    coordinates, also when no mouse movement happened yet
+    (fixes https://github.com/floooh/sokol/issues/770)
+  - sokol_gfx.h gl: The GL context is now configured for with
+    GL_UNPACK_ALIGNMENT = 1, this should bring texture creation and updating
+    behaviour in line with the other backends for tightly packed texture
+    data that doesn't have a row-pitch that's a multiple of 4.
+    (fixes https://github.com/floooh/sokol/issues/767)
+
 - **14-Jan-2022**: sokol_app.h x11: a drag'n'drop related bugfix, the
   XdndFinished reply event was sent with the wrong window handle which
   confused some apps where the drag operation originated
-  (see https://github.com/floooh/sokol/pull/765#issuecomment-1382750611) 
+  (see https://github.com/floooh/sokol/pull/765#issuecomment-1382750611)
 
 - **16-Dec-2022**: In the sokol_gfx.h Metal backend: A fix for a Metal
   validation layer error which I just discovered yesterday (seems to be new in
