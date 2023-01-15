@@ -6811,6 +6811,21 @@ _SOKOL_PRIVATE uint32_t _sapp_win32_mods(void) {
     return mods;
 }
 
+_SOKOL_PRIVATE void _sapp_win32_mouse_update(LPARAM lParam) {
+    if (!_sapp.mouse.locked) {
+        const float new_x  = (float)GET_X_LPARAM(lParam) * _sapp.win32.dpi.mouse_scale;
+        const float new_y = (float)GET_Y_LPARAM(lParam) * _sapp.win32.dpi.mouse_scale;
+        if (_sapp.mouse.pos_valid) {
+            // don't update dx/dy in the very first event
+            _sapp.mouse.dx = new_x - _sapp.mouse.x;
+            _sapp.mouse.dy = new_y - _sapp.mouse.y;
+        }
+        _sapp.mouse.x = new_x;
+        _sapp.mouse.y = new_y;
+        _sapp.mouse.pos_valid = true;
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_win32_mouse_event(sapp_event_type type, sapp_mousebutton btn) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
@@ -7021,41 +7036,38 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 break;
             }
             case WM_LBUTTONDOWN:
+                _sapp_win32_mouse_update(lParam);
                 _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_LEFT);
                 _sapp_win32_capture_mouse(1<<SAPP_MOUSEBUTTON_LEFT);
                 break;
             case WM_RBUTTONDOWN:
+                _sapp_win32_mouse_update(lParam);
                 _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_RIGHT);
                 _sapp_win32_capture_mouse(1<<SAPP_MOUSEBUTTON_RIGHT);
                 break;
             case WM_MBUTTONDOWN:
+                _sapp_win32_mouse_update(lParam);
                 _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_MIDDLE);
                 _sapp_win32_capture_mouse(1<<SAPP_MOUSEBUTTON_MIDDLE);
                 break;
             case WM_LBUTTONUP:
+                _sapp_win32_mouse_update(lParam);
                 _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_LEFT);
                 _sapp_win32_release_mouse(1<<SAPP_MOUSEBUTTON_LEFT);
                 break;
             case WM_RBUTTONUP:
+                _sapp_win32_mouse_update(lParam);
                 _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_RIGHT);
                 _sapp_win32_release_mouse(1<<SAPP_MOUSEBUTTON_RIGHT);
                 break;
             case WM_MBUTTONUP:
+                _sapp_win32_mouse_update(lParam);
                 _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE);
                 _sapp_win32_release_mouse(1<<SAPP_MOUSEBUTTON_MIDDLE);
                 break;
             case WM_MOUSEMOVE:
                 if (!_sapp.mouse.locked) {
-                    const float new_x  = (float)GET_X_LPARAM(lParam) * _sapp.win32.dpi.mouse_scale;
-                    const float new_y = (float)GET_Y_LPARAM(lParam) * _sapp.win32.dpi.mouse_scale;
-                    /* don't update dx/dy in the very first event */
-                    if (_sapp.mouse.pos_valid) {
-                        _sapp.mouse.dx = new_x - _sapp.mouse.x;
-                        _sapp.mouse.dy = new_y - _sapp.mouse.y;
-                    }
-                    _sapp.mouse.x = new_x;
-                    _sapp.mouse.y = new_y;
-                    _sapp.mouse.pos_valid = true;
+                    _sapp_win32_mouse_update(lParam);
                     if (!_sapp.win32.mouse_tracked) {
                         _sapp.win32.mouse_tracked = true;
                         TRACKMOUSEEVENT tme;
@@ -7112,9 +7124,11 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 }
                 break;
             case WM_MOUSEWHEEL:
+                _sapp_win32_mouse_update(lParam);
                 _sapp_win32_scroll_event(0.0f, (float)((SHORT)HIWORD(wParam)));
                 break;
             case WM_MOUSEHWHEEL:
+                _sapp_win32_mouse_update(lParam);
                 _sapp_win32_scroll_event((float)((SHORT)HIWORD(wParam)), 0.0f);
                 break;
             case WM_CHAR:
