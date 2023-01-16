@@ -2185,22 +2185,22 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
 
         if( (*_saudio.backend.engine)->CreateAudioPlayer(_saudio.backend.engine, &_saudio.backend.player_obj, &src, &_saudio.backend.dst_data_sink, sizeof(ids) / sizeof(ids[0]), ids, req) != SL_RESULT_SUCCESS)
         {
-            SOKOL_LOG("sokol_audio opensles: CreateAudioPlayer failed");
+            SAUDIO_LOG("sokol_audio opensles: CreateAudioPlayer failed");
             _saudio_backend_shutdown();
             return false;
         }
         (*_saudio.backend.player_obj)->Realize(_saudio.backend.player_obj, SL_BOOLEAN_FALSE);
 
         if((*_saudio.backend.player_obj)->GetInterface(_saudio.backend.player_obj, SL_IID_PLAY, &_saudio.backend.player) != SL_RESULT_SUCCESS) {
-            SOKOL_LOG("sokol_audio opensles: GetInterface->Play failed");
+            SAUDIO_LOG("sokol_audio opensles: GetInterface->Play failed");
             _saudio_backend_shutdown();
             return false;
         }
         if((*_saudio.backend.player_obj)->GetInterface(_saudio.backend.player_obj, SL_IID_VOLUME, &_saudio.backend.player_vol) != SL_RESULT_SUCCESS) {
-            SOKOL_LOG("sokol_audio opensles: GetInterface->PlayerVol failed");
+            SAUDIO_LOG("sokol_audio opensles: GetInterface->PlayerVol failed");
         }
         if((*_saudio.backend.player_obj)->GetInterface(_saudio.backend.player_obj, SL_IID_ANDROIDSIMPLEBUFFERQUEUE, &_saudio.backend.player_buffer_queue) != SL_RESULT_SUCCESS) {
-            SOKOL_LOG("sokol_audio opensles: GetInterface->BufferQ failed");
+            SAUDIO_LOG("sokol_audio opensles: GetInterface->BufferQ failed");
             _saudio_backend_shutdown();
             return false;
         }
