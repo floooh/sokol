@@ -1,5 +1,9 @@
 ## Updates
 
+- **16-Jan-2022**:
+  - sokol_audio.h android: https://github.com/floooh/sokol/pull/747 has been merged
+    which adds a couple more error checks at OpenSLES startup.
+
 - **15-Jan-2022**: two bugfixes in sokol_app.h and sokol_gfx.h:
   - sokol_app.h x11: Mouse button events now always return valid mouse
     coordinates, also when no mouse movement happened yet
