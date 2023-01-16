@@ -2183,14 +2183,27 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         const SLInterfaceID ids[] = { SL_IID_VOLUME, SL_IID_ANDROIDSIMPLEBUFFERQUEUE };
         const SLboolean req[] = { SL_BOOLEAN_FALSE, SL_BOOLEAN_TRUE };
 
-        (*_saudio.backend.engine)->CreateAudioPlayer(_saudio.backend.engine, &_saudio.backend.player_obj, &src, &_saudio.backend.dst_data_sink, sizeof(ids) / sizeof(ids[0]), ids, req);
-
+        if( (*_saudio.backend.engine)->CreateAudioPlayer(_saudio.backend.engine, &_saudio.backend.player_obj, &src, &_saudio.backend.dst_data_sink, sizeof(ids) / sizeof(ids[0]), ids, req) != SL_RESULT_SUCCESS)
+        {
+            SAUDIO_LOG("sokol_audio opensles: CreateAudioPlayer failed");
+            _saudio_backend_shutdown();
+            return false;
+        }
         (*_saudio.backend.player_obj)->Realize(_saudio.backend.player_obj, SL_BOOLEAN_FALSE);
 
-        (*_saudio.backend.player_obj)->GetInterface(_saudio.backend.player_obj, SL_IID_PLAY, &_saudio.backend.player);
-        (*_saudio.backend.player_obj)->GetInterface(_saudio.backend.player_obj, SL_IID_VOLUME, &_saudio.backend.player_vol);
-
-        (*_saudio.backend.player_obj)->GetInterface(_saudio.backend.player_obj, SL_IID_ANDROIDSIMPLEBUFFERQUEUE, &_saudio.backend.player_buffer_queue);
+        if((*_saudio.backend.player_obj)->GetInterface(_saudio.backend.player_obj, SL_IID_PLAY, &_saudio.backend.player) != SL_RESULT_SUCCESS) {
+            SAUDIO_LOG("sokol_audio opensles: GetInterface->Play failed");
+            _saudio_backend_shutdown();
+            return false;
+        }
+        if((*_saudio.backend.player_obj)->GetInterface(_saudio.backend.player_obj, SL_IID_VOLUME, &_saudio.backend.player_vol) != SL_RESULT_SUCCESS) {
+            SAUDIO_LOG("sokol_audio opensles: GetInterface->PlayerVol failed");
+        }
+        if((*_saudio.backend.player_obj)->GetInterface(_saudio.backend.player_obj, SL_IID_ANDROIDSIMPLEBUFFERQUEUE, &_saudio.backend.player_buffer_queue) != SL_RESULT_SUCCESS) {
+            SAUDIO_LOG("sokol_audio opensles: GetInterface->BufferQ failed");
+            _saudio_backend_shutdown();
+            return false;
+        }
     }
 
     /* begin */
