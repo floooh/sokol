@@ -5,6 +5,7 @@
     which adds a couple more error checks at OpenSLES startup.
   - sokol_gfx.h: support for half-float vertex formats has been added via
     PR https://github.com/floooh/sokol/pull/745
+  - sokol_imgui.h: fixes for Dear ImGui 1.89 deprecations (via PR https://github.com/floooh/sokol/pull/761)
 
 - **15-Jan-2022**: two bugfixes in sokol_app.h and sokol_gfx.h:
   - sokol_app.h x11: Mouse button events now always return valid mouse
