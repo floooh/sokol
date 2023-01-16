@@ -643,9 +643,11 @@
         - SG_VERTEXFORMAT_SHORT2
         - SG_VERTEXFORMAT_SHORT4
 
-    - WebGL/GLES2 cannot use integer vertex shader inputs (int or ivecn)
+    - WebGL/GLES2 cannot use integer vertex shader inputs (int or ivecn) or the following:
 
-    - SG_VERTEXFORMAT_UINT10_N2 is not supported on WebGL/GLES2
+        - SG_VERTEXFORMAT_UINT10_N2
+        - SG_VERTEXFORMAT_HALF2, SG_VERTEXFORMAT_HALF4
+          (commonly supported extension: OES_vertex_half_float)
 
     So for a vertex input layout which works on all platforms, only use the following
     vertex formats, and if needed "expand" the normalized vertex shader
@@ -1535,6 +1537,8 @@ typedef enum sg_vertex_format {
     SG_VERTEXFORMAT_SHORT4N,
     SG_VERTEXFORMAT_USHORT4N,
     SG_VERTEXFORMAT_UINT10_N2,
+    SG_VERTEXFORMAT_HALF2,
+    SG_VERTEXFORMAT_HALF4,
     _SG_VERTEXFORMAT_NUM,
     _SG_VERTEXFORMAT_FORCE_U32 = 0x7FFFFFFF
 } sg_vertex_format;
@@ -4654,6 +4658,8 @@ _SOKOL_PRIVATE int _sg_vertexformat_bytesize(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_SHORT4N:   return 8;
         case SG_VERTEXFORMAT_USHORT4N:  return 8;
         case SG_VERTEXFORMAT_UINT10_N2: return 4;
+        case SG_VERTEXFORMAT_HALF2:     return 4;
+        case SG_VERTEXFORMAT_HALF4:     return 8;
         case SG_VERTEXFORMAT_INVALID:   return 0;
         default:
             SOKOL_UNREACHABLE;
@@ -5502,6 +5508,8 @@ _SOKOL_PRIVATE GLint _sg_gl_vertexformat_size(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_SHORT4N:   return 4;
         case SG_VERTEXFORMAT_USHORT4N:  return 4;
         case SG_VERTEXFORMAT_UINT10_N2: return 4;
+        case SG_VERTEXFORMAT_HALF2:     return 2;
+        case SG_VERTEXFORMAT_HALF4:     return 4;
         default: SOKOL_UNREACHABLE; return 0;
     }
 }
@@ -5529,6 +5537,9 @@ _SOKOL_PRIVATE GLenum _sg_gl_vertexformat_type(sg_vertex_format fmt) {
             return GL_UNSIGNED_SHORT;
         case SG_VERTEXFORMAT_UINT10_N2:
             return GL_UNSIGNED_INT_2_10_10_10_REV;
+        case SG_VERTEXFORMAT_HALF2:
+        case SG_VERTEXFORMAT_HALF4:
+            return GL_HALF_FLOAT;
         default:
             SOKOL_UNREACHABLE; return 0;
     }
@@ -8708,6 +8719,8 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_vertex_format(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_SHORT4N:   return DXGI_FORMAT_R16G16B16A16_SNORM;
         case SG_VERTEXFORMAT_USHORT4N:  return DXGI_FORMAT_R16G16B16A16_UNORM;
         case SG_VERTEXFORMAT_UINT10_N2: return DXGI_FORMAT_R10G10B10A2_UNORM;
+        case SG_VERTEXFORMAT_HALF2:     return DXGI_FORMAT_R16G16_FLOAT;
+        case SG_VERTEXFORMAT_HALF4:     return DXGI_FORMAT_R16G16B16A16_FLOAT;
         default: SOKOL_UNREACHABLE; return (DXGI_FORMAT) 0;
     }
 }
@@ -10104,6 +10117,8 @@ _SOKOL_PRIVATE MTLVertexFormat _sg_mtl_vertex_format(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_SHORT4N:   return MTLVertexFormatShort4Normalized;
         case SG_VERTEXFORMAT_USHORT4N:  return MTLVertexFormatUShort4Normalized;
         case SG_VERTEXFORMAT_UINT10_N2: return MTLVertexFormatUInt1010102Normalized;
+        case SG_VERTEXFORMAT_HALF2:     return MTLVertexFormatHalf2;
+        case SG_VERTEXFORMAT_HALF4:     return MTLVertexFormatHalf4;
         default: SOKOL_UNREACHABLE; return (MTLVertexFormat)0;
     }
 }
@@ -11900,6 +11915,8 @@ _SOKOL_PRIVATE WGPUVertexFormat _sg_wgpu_vertexformat(sg_vertex_format f) {
         case SG_VERTEXFORMAT_SHORT4:        return WGPUVertexFormat_Short4;
         case SG_VERTEXFORMAT_SHORT4N:       return WGPUVertexFormat_Short4Norm;
         case SG_VERTEXFORMAT_USHORT4N:      return WGPUVertexFormat_UShort4Norm;
+        case SG_VERTEXFORMAT_HALF2:         return WGPUVertexFormat_Half2;
+        case SG_VERTEXFORMAT_HALF3:         return WGPUVertexFormat_Half4;
         /* FIXME! UINT10_N2 */
         case SG_VERTEXFORMAT_UINT10_N2:
         default:
