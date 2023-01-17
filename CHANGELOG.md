@@ -1,5 +1,27 @@
 ## Updates
 
+- **16-Jan-2022**:
+  - sokol_audio.h android: https://github.com/floooh/sokol/pull/747 has been merged
+    which adds a couple more error checks at OpenSLES startup.
+  - sokol_gfx.h: support for half-float vertex formats has been added via
+    PR https://github.com/floooh/sokol/pull/745
+  - sokol_imgui.h: fixes for Dear ImGui 1.89 deprecations (via PR https://github.com/floooh/sokol/pull/761)
+
+- **15-Jan-2022**: two bugfixes in sokol_app.h and sokol_gfx.h:
+  - sokol_app.h x11: Mouse button events now always return valid mouse
+    coordinates, also when no mouse movement happened yet
+    (fixes https://github.com/floooh/sokol/issues/770)
+  - sokol_gfx.h gl: The GL context is now configured with
+    GL_UNPACK_ALIGNMENT = 1, this should bring texture creation and updating
+    behaviour in line with the other backends for tightly packed texture
+    data that doesn't have a row-pitch with a multiple of 4
+    (fixes https://github.com/floooh/sokol/issues/767)
+
+- **14-Jan-2022**: sokol_app.h x11: a drag'n'drop related bugfix, the
+  XdndFinished reply event was sent with the wrong window handle which
+  confused some apps where the drag operation originated
+  (see https://github.com/floooh/sokol/pull/765#issuecomment-1382750611)
+
 - **16-Dec-2022**: In the sokol_gfx.h Metal backend: A fix for a Metal
   validation layer error which I just discovered yesterday (seems to be new in
   macOS 13). When the validation layer is active, and the application window
