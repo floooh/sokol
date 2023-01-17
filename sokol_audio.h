@@ -538,7 +538,17 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 #endif
 #endif // SOKOL_AUDIO_INCLUDED
 
-/*=== IMPLEMENTATION =========================================================*/
+//  █████ ██████   ██████ ███████████  █████
+// ░░███ ░░██████ ██████ ░░███░░░░░███░░███
+//  ░███  ░███░█████░███  ░███    ░███ ░███
+//  ░███  ░███░░███ ░███  ░██████████  ░███
+//  ░███  ░███ ░░░  ░███  ░███░░░░░░   ░███
+//  ░███  ░███      ░███  ░███         ░███      █
+//  █████ █████     █████ █████        ███████████
+// ░░░░░ ░░░░░     ░░░░░ ░░░░░        ░░░░░░░░░░░
+//
+//
+//
 #ifdef SOKOL_AUDIO_IMPL
 #define SOKOL_AUDIO_IMPL_INCLUDED (1)
 
@@ -718,7 +728,17 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 #define SAUDIO_RING_MAX_SLOTS (1024)
 #endif
 
-/*=== MUTEX WRAPPER DECLARATIONS =============================================*/
+//   █████████  ███████████ ███████████   █████  █████   █████████  ███████████  █████████
+//  ███░░░░░███░█░░░███░░░█░░███░░░░░███ ░░███  ░░███   ███░░░░░███░█░░░███░░░█ ███░░░░░███
+// ░███    ░░░ ░   ░███  ░  ░███    ░███  ░███   ░███  ███     ░░░ ░   ░███  ░ ░███    ░░░
+// ░░█████████     ░███     ░██████████   ░███   ░███ ░███             ░███    ░░█████████
+//  ░░░░░░░░███    ░███     ░███░░░░░███  ░███   ░███ ░███             ░███     ░░░░░░░░███
+//  ███    ░███    ░███     ░███    ░███  ░███   ░███ ░░███     ███    ░███     ███    ░███
+// ░░█████████     █████    █████   █████ ░░████████   ░░█████████     █████   ░░█████████
+//  ░░░░░░░░░     ░░░░░    ░░░░░   ░░░░░   ░░░░░░░░     ░░░░░░░░░     ░░░░░     ░░░░░░░░░
+//
+//
+//
 #if defined(_SAUDIO_PTHREADS)
 
 typedef struct {
@@ -739,14 +759,12 @@ typedef struct {
 
 #endif
 
-/*=== DUMMY BACKEND DECLARATIONS =============================================*/
 #if defined(SOKOL_DUMMY_BACKEND)
 
 typedef struct {
-    int dummy_backend;
-} _saudio_backend_t;
+    int dummy;
+} _saudio_dummy_backend_t;
 
-/*=== COREAUDIO BACKEND DECLARATIONS =========================================*/
 #elif defined(_SAUDIO_APPLE)
 
 #if defined(SAUDIO_OSX_USE_SYSTEM_HEADERS)
@@ -851,9 +869,8 @@ typedef struct {
     #if defined(_SAUDIO_IOS)
     id ca_interruption_handler;
     #endif
-} _saudio_backend_t;
+} _saudio_apple_backend_t;
 
-/*=== ALSA BACKEND DECLARATIONS ==============================================*/
 #elif defined(_SAUDIO_LINUX)
 
 typedef struct {
@@ -863,12 +880,11 @@ typedef struct {
     int buffer_frames;
     pthread_t thread;
     bool thread_stop;
-} _saudio_backend_t;
+} _saudio_alsa_backend_t;
 
-/*=== OpenSLES BACKEND DECLARATIONS ==============================================*/
 #elif defined(_SAUDIO_ANDROID)
 
-#define SAUDIO_NUM_BUFFERS 2
+#define SAUDIO_SLES_NUM_BUFFERS (2)
 
 typedef struct {
     pthread_mutex_t mutex;
@@ -888,16 +904,15 @@ typedef struct {
     SLVolumeItf player_vol;
     SLAndroidSimpleBufferQueueItf player_buffer_queue;
 
-    int16_t* output_buffers[SAUDIO_NUM_BUFFERS];
+    int16_t* output_buffers[SAUDIO_SLES_NUM_BUFFERS];
     float* src_buffer;
     int active_buffer;
     _saudio_semaphore_t buffer_sem;
     pthread_t thread;
     volatile int thread_stop;
     SLDataLocator_AndroidSimpleBufferQueue in_locator;
-} _saudio_backend_t;
+} _saudio_sles_backend_t;
 
-/*=== WASAPI BACKEND DECLARATIONS ============================================*/
 #elif defined(_SAUDIO_WINDOWS)
 
 typedef struct {
@@ -924,20 +939,31 @@ typedef struct {
     IAudioClient* audio_client;
     IAudioRenderClient* render_client;
     _saudio_wasapi_thread_data_t thread;
-} _saudio_backend_t;
+} _saudio_wasapi_backend_t;
 
-/*=== WEBAUDIO BACKEND DECLARATIONS ==========================================*/
 #elif defined(_SAUDIO_EMSCRIPTEN)
 
 typedef struct {
     uint8_t* buffer;
-} _saudio_backend_t;
+} _saudio_web_backend_t;
 
 #else
 #error "unknown platform"
 #endif
 
-/*=== GENERAL DECLARATIONS ===================================================*/
+#if defined(SOKOL_DUMMY_BACKEND)
+typedef _saudio_dummy_backend_t _saudio_backend_t;
+#elif defined(_SAUDIO_APPLE)
+typedef _saudio_apple_backend_t _saudio_backend_t;
+#elif defined(_SAUDIO_EMSCRIPTEN)
+typedef _saudio_web_backend_t _saudio_backend_t;
+#elif defined(_SAUDIO_WINDOWS)
+typedef _saudio_wasapi_backend_t _saudio_backend_t;
+#elif defined(_SAUDIO_ANDROID)
+typedef _saudio_sles_backend_t _saudio_backend_t;
+#elif defined(_SAUDIO_LINUX)
+typedef _saudio_alsa_backend_t _saudio_backend_t;
+#endif
 
 /* a ringbuffer structure */
 typedef struct {
@@ -977,7 +1003,7 @@ typedef struct {
     _saudio_backend_t backend;
 } _saudio_state_t;
 
-static _saudio_state_t _saudio;
+_SOKOL_PRIVATE _saudio_state_t _saudio;
 
 _SOKOL_PRIVATE bool _saudio_has_callback(void) {
     return (_saudio.stream_cb || _saudio.stream_userdata_cb);
@@ -992,7 +1018,15 @@ _SOKOL_PRIVATE void _saudio_stream_callback(float* buffer, int num_frames, int n
     }
 }
 
-/*=== MEMORY HELPERS ========================================================*/
+//  ██████   ██████ ██████████ ██████   ██████    ███████    ███████████   █████ █████
+// ░░██████ ██████ ░░███░░░░░█░░██████ ██████   ███░░░░░███ ░░███░░░░░███ ░░███ ░░███
+//  ░███░█████░███  ░███  █ ░  ░███░█████░███  ███     ░░███ ░███    ░███  ░░███ ███
+//  ░███░░███ ░███  ░██████    ░███░░███ ░███ ░███      ░███ ░██████████    ░░█████
+//  ░███ ░░░  ░███  ░███░░█    ░███ ░░░  ░███ ░███      ░███ ░███░░░░░███    ░░███
+//  ░███      ░███  ░███ ░   █ ░███      ░███ ░░███     ███  ░███    ░███     ░███
+//  █████     █████ ██████████ █████     █████ ░░░███████░   █████   █████    █████
+// ░░░░░     ░░░░░ ░░░░░░░░░░ ░░░░░     ░░░░░    ░░░░░░░    ░░░░░   ░░░░░    ░░░░░
+//
 _SOKOL_PRIVATE void _saudio_clear(void* ptr, size_t size) {
     SOKOL_ASSERT(ptr && (size > 0));
     memset(ptr, 0, size);
@@ -1037,7 +1071,17 @@ _SOKOL_PRIVATE void _saudio_log(const char* msg) {
 }
 #endif
 
-/*=== MUTEX IMPLEMENTATION ===================================================*/
+//  ██████   ██████ █████  █████ ███████████ ██████████ █████ █████
+// ░░██████ ██████ ░░███  ░░███ ░█░░░███░░░█░░███░░░░░█░░███ ░░███
+//  ░███░█████░███  ░███   ░███ ░   ░███  ░  ░███  █ ░  ░░███ ███
+//  ░███░░███ ░███  ░███   ░███     ░███     ░██████     ░░█████
+//  ░███ ░░░  ░███  ░███   ░███     ░███     ░███░░█      ███░███
+//  ░███      ░███  ░███   ░███     ░███     ░███ ░   █  ███ ░░███
+//  █████     █████ ░░████████      █████    ██████████ █████ █████
+// ░░░░░     ░░░░░   ░░░░░░░░      ░░░░░    ░░░░░░░░░░ ░░░░░ ░░░░░
+//
+//
+//
 #if defined(_SAUDIO_NOTHREADS)
 
 _SOKOL_PRIVATE void _saudio_mutex_init(_saudio_mutex_t* m) { (void)m; }
@@ -1083,10 +1127,20 @@ _SOKOL_PRIVATE void _saudio_mutex_unlock(_saudio_mutex_t* m) {
     LeaveCriticalSection(&m->critsec);
 }
 #else
-#error "unknown platform!"
+#error "sokol_audio.h: unknown platform!"
 #endif
 
-/*=== RING-BUFFER QUEUE IMPLEMENTATION =======================================*/
+//  ███████████   █████ ██████   █████   █████████     ███████████  █████  █████ ███████████ ███████████ ██████████ ███████████
+// ░░███░░░░░███ ░░███ ░░██████ ░░███   ███░░░░░███   ░░███░░░░░███░░███  ░░███ ░░███░░░░░░█░░███░░░░░░█░░███░░░░░█░░███░░░░░███
+//  ░███    ░███  ░███  ░███░███ ░███  ███     ░░░     ░███    ░███ ░███   ░███  ░███   █ ░  ░███   █ ░  ░███  █ ░  ░███    ░███
+//  ░██████████   ░███  ░███░░███░███ ░███             ░██████████  ░███   ░███  ░███████    ░███████    ░██████    ░██████████
+//  ░███░░░░░███  ░███  ░███ ░░██████ ░███    █████    ░███░░░░░███ ░███   ░███  ░███░░░█    ░███░░░█    ░███░░█    ░███░░░░░███
+//  ░███    ░███  ░███  ░███  ░░█████ ░░███  ░░███     ░███    ░███ ░███   ░███  ░███  ░     ░███  ░     ░███ ░   █ ░███    ░███
+//  █████   █████ █████ █████  ░░█████ ░░█████████     ███████████  ░░████████   █████       █████       ██████████ █████   █████
+// ░░░░░   ░░░░░ ░░░░░ ░░░░░    ░░░░░   ░░░░░░░░░     ░░░░░░░░░░░    ░░░░░░░░   ░░░░░       ░░░░░       ░░░░░░░░░░ ░░░░░   ░░░░░
+//
+//
+//
 _SOKOL_PRIVATE int _saudio_ring_idx(_saudio_ring_t* ring, int i) {
     return (i % ring->num);
 }
@@ -1132,7 +1186,17 @@ _SOKOL_PRIVATE int _saudio_ring_dequeue(_saudio_ring_t* ring) {
     return val;
 }
 
-/*---  a packet fifo for queueing audio data from main thread ----------------*/
+//  ███████████ █████ ███████████    ███████
+// ░░███░░░░░░█░░███ ░░███░░░░░░█  ███░░░░░███
+//  ░███   █ ░  ░███  ░███   █ ░  ███     ░░███
+//  ░███████    ░███  ░███████   ░███      ░███
+//  ░███░░░█    ░███  ░███░░░█   ░███      ░███
+//  ░███  ░     ░███  ░███  ░    ░░███     ███
+//  █████       █████ █████       ░░░███████░
+// ░░░░░       ░░░░░ ░░░░░          ░░░░░░░
+//
+//
+//
 _SOKOL_PRIVATE void _saudio_fifo_init_mutex(_saudio_fifo_t* fifo) {
     /* this must be called before initializing both the backend and the fifo itself! */
     _saudio_mutex_init(&fifo->mutex);
@@ -1259,7 +1323,17 @@ _SOKOL_PRIVATE int _saudio_fifo_read(_saudio_fifo_t* fifo, uint8_t* ptr, int num
     return num_bytes_copied;
 }
 
-/*=== DUMMY BACKEND IMPLEMENTATION ===========================================*/
+//  ██████████   █████  █████ ██████   ██████ ██████   ██████ █████ █████
+// ░░███░░░░███ ░░███  ░░███ ░░██████ ██████ ░░██████ ██████ ░░███ ░░███
+//  ░███   ░░███ ░███   ░███  ░███░█████░███  ░███░█████░███  ░░███ ███
+//  ░███    ░███ ░███   ░███  ░███░░███ ░███  ░███░░███ ░███   ░░█████
+//  ░███    ░███ ░███   ░███  ░███ ░░░  ░███  ░███ ░░░  ░███    ░░███
+//  ░███    ███  ░███   ░███  ░███      ░███  ░███      ░███     ░███
+//  ██████████   ░░████████   █████     █████ █████     █████    █████
+// ░░░░░░░░░░     ░░░░░░░░   ░░░░░     ░░░░░ ░░░░░     ░░░░░    ░░░░░
+//
+//
+//
 #if defined(SOKOL_DUMMY_BACKEND)
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     _saudio.bytes_per_frame = _saudio.num_channels * (int)sizeof(float);
@@ -1267,146 +1341,18 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
 };
 _SOKOL_PRIVATE void _saudio_backend_shutdown(void) { };
 
-/*=== COREAUDIO BACKEND IMPLEMENTATION =======================================*/
-#elif defined(_SAUDIO_APPLE)
 
-#if defined(_SAUDIO_IOS)
-#if __has_feature(objc_arc)
-#define _SAUDIO_OBJC_RELEASE(obj) { obj = nil; }
-#else
-#define _SAUDIO_OBJC_RELEASE(obj) { [obj release]; obj = nil; }
-#endif
-
-@interface _saudio_interruption_handler : NSObject { }
-@end
-
-@implementation _saudio_interruption_handler
--(id)init {
-    self = [super init];
-    AVAudioSession* session = [AVAudioSession sharedInstance];
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handle_interruption:) name:AVAudioSessionInterruptionNotification object:session];
-    return self;
-}
-
--(void)dealloc {
-    [self remove_handler];
-    #if !__has_feature(objc_arc)
-    [super dealloc];
-    #endif
-}
-
--(void)remove_handler {
-    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"AVAudioSessionInterruptionNotification" object:nil];
-}
-
--(void)handle_interruption:(NSNotification*)notification {
-    AVAudioSession* session = [AVAudioSession sharedInstance];
-    SOKOL_ASSERT(session);
-    NSDictionary* dict = notification.userInfo;
-    SOKOL_ASSERT(dict);
-    NSInteger type = [[dict valueForKey:AVAudioSessionInterruptionTypeKey] integerValue];
-    switch (type) {
-        case AVAudioSessionInterruptionTypeBegan:
-            AudioQueuePause(_saudio.backend.ca_audio_queue);
-            [session setActive:false error:nil];
-            break;
-        case AVAudioSessionInterruptionTypeEnded:
-            [session setActive:true error:nil];
-            AudioQueueStart(_saudio.backend.ca_audio_queue, NULL);
-            break;
-        default:
-            break;
-    }
-}
-@end
-#endif // _SAUDIO_IOS
-
-/* NOTE: the buffer data callback is called on a separate thread! */
-_SOKOL_PRIVATE void _saudio_coreaudio_callback(void* user_data, _saudio_AudioQueueRef queue, _saudio_AudioQueueBufferRef buffer) {
-    _SOKOL_UNUSED(user_data);
-    if (_saudio_has_callback()) {
-        const int num_frames = (int)buffer->mAudioDataByteSize / _saudio.bytes_per_frame;
-        const int num_channels = _saudio.num_channels;
-        _saudio_stream_callback((float*)buffer->mAudioData, num_frames, num_channels);
-    }
-    else {
-        uint8_t* ptr = (uint8_t*)buffer->mAudioData;
-        int num_bytes = (int) buffer->mAudioDataByteSize;
-        if (0 == _saudio_fifo_read(&_saudio.fifo, ptr, num_bytes)) {
-            /* not enough read data available, fill the entire buffer with silence */
-            _saudio_clear(ptr, (size_t)num_bytes);
-        }
-    }
-    AudioQueueEnqueueBuffer(queue, buffer, 0, NULL);
-}
-
-_SOKOL_PRIVATE bool _saudio_backend_init(void) {
-    SOKOL_ASSERT(0 == _saudio.backend.ca_audio_queue);
-
-    #if defined(_SAUDIO_IOS)
-        /* activate audio session */
-        AVAudioSession* session = [AVAudioSession sharedInstance];
-        SOKOL_ASSERT(session != nil);
-        [session setCategory: AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker error:nil];
-        [session setActive:true error:nil];
-
-        /* create interruption handler */
-        _saudio.backend.ca_interruption_handler = [[_saudio_interruption_handler alloc] init];
-    #endif // _SAUDIO_IOS
-
-    /* create an audio queue with fp32 samples */
-    _saudio_AudioStreamBasicDescription fmt;
-    _saudio_clear(&fmt, sizeof(fmt));
-    fmt.mSampleRate = (double) _saudio.sample_rate;
-    fmt.mFormatID = _saudio_kAudioFormatLinearPCM;
-    fmt.mFormatFlags = _saudio_kLinearPCMFormatFlagIsFloat | _saudio_kAudioFormatFlagIsPacked;
-    fmt.mFramesPerPacket = 1;
-    fmt.mChannelsPerFrame = (uint32_t) _saudio.num_channels;
-    fmt.mBytesPerFrame = (uint32_t)sizeof(float) * (uint32_t)_saudio.num_channels;
-    fmt.mBytesPerPacket = fmt.mBytesPerFrame;
-    fmt.mBitsPerChannel = 32;
-    _saudio_OSStatus res = AudioQueueNewOutput(&fmt, _saudio_coreaudio_callback, 0, NULL, NULL, 0, &_saudio.backend.ca_audio_queue);
-    SOKOL_ASSERT((res == 0) && _saudio.backend.ca_audio_queue); (void)res;
-
-    /* create 2 audio buffers */
-    for (int i = 0; i < 2; i++) {
-        _saudio_AudioQueueBufferRef buf = NULL;
-        const uint32_t buf_byte_size = (uint32_t)_saudio.buffer_frames * fmt.mBytesPerFrame;
-        res = AudioQueueAllocateBuffer(_saudio.backend.ca_audio_queue, buf_byte_size, &buf);
-        SOKOL_ASSERT((res == 0) && buf); (void)res;
-        buf->mAudioDataByteSize = buf_byte_size;
-        _saudio_clear(buf->mAudioData, buf->mAudioDataByteSize);
-        AudioQueueEnqueueBuffer(_saudio.backend.ca_audio_queue, buf, 0, NULL);
-    }
-
-    /* init or modify actual playback parameters */
-    _saudio.bytes_per_frame = (int)fmt.mBytesPerFrame;
-
-    /* ...and start playback */
-    res = AudioQueueStart(_saudio.backend.ca_audio_queue, NULL);
-    SOKOL_ASSERT(0 == res); (void)res;
-
-    return true;
-}
-
-_SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
-    AudioQueueStop(_saudio.backend.ca_audio_queue, true);
-    AudioQueueDispose(_saudio.backend.ca_audio_queue, false);
-    _saudio.backend.ca_audio_queue = NULL;
-    #if defined(_SAUDIO_IOS)
-        /* remove interruption handler */
-        if (_saudio.backend.ca_interruption_handler != nil) {
-            [_saudio.backend.ca_interruption_handler remove_handler];
-            _SAUDIO_OBJC_RELEASE(_saudio.backend.ca_interruption_handler);
-        }
-        /* deactivate audio session */
-        AVAudioSession* session = [AVAudioSession sharedInstance];
-        SOKOL_ASSERT(session);
-        [session setActive:false error:nil];;
-    #endif // _SAUDIO_IOS
-}
-
-/*=== ALSA BACKEND IMPLEMENTATION ============================================*/
+//    █████████   █████        █████████    █████████
+//   ███░░░░░███ ░░███        ███░░░░░███  ███░░░░░███
+//  ░███    ░███  ░███       ░███    ░░░  ░███    ░███
+//  ░███████████  ░███       ░░█████████  ░███████████
+//  ░███░░░░░███  ░███        ░░░░░░░░███ ░███░░░░░███
+//  ░███    ░███  ░███      █ ███    ░███ ░███    ░███
+//  █████   █████ ███████████░░█████████  █████   █████
+// ░░░░░   ░░░░░ ░░░░░░░░░░░  ░░░░░░░░░  ░░░░░   ░░░░░
+//
+//
+//
 #elif defined(_SAUDIO_LINUX)
 
 /* the streaming callback runs in a separate thread */
@@ -1508,7 +1454,17 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     _saudio_free(_saudio.backend.buffer);
 };
 
-/*=== WASAPI BACKEND IMPLEMENTATION ==========================================*/
+//  █████   ███   █████   █████████    █████████    █████████   ███████████  █████
+// ░░███   ░███  ░░███   ███░░░░░███  ███░░░░░███  ███░░░░░███ ░░███░░░░░███░░███
+//  ░███   ░███   ░███  ░███    ░███ ░███    ░░░  ░███    ░███  ░███    ░███ ░███
+//  ░███   ░███   ░███  ░███████████ ░░█████████  ░███████████  ░██████████  ░███
+//  ░░███  █████  ███   ░███░░░░░███  ░░░░░░░░███ ░███░░░░░███  ░███░░░░░░   ░███
+//   ░░░█████░█████░    ░███    ░███  ███    ░███ ░███    ░███  ░███         ░███
+//     ░░███ ░░███      █████   █████░░█████████  █████   █████ █████        █████
+//      ░░░   ░░░      ░░░░░   ░░░░░  ░░░░░░░░░  ░░░░░   ░░░░░ ░░░░░        ░░░░░
+//
+//
+//
 #elif defined(_SAUDIO_WINDOWS)
 
 #if defined(_SAUDIO_UWP)
@@ -1822,7 +1778,17 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     #endif
 }
 
-/*=== EMSCRIPTEN BACKEND IMPLEMENTATION ======================================*/
+//  ██████████ ██████   ██████  █████████    █████████  ███████████   █████ ███████████  ███████████ ██████████ ██████   █████
+// ░░███░░░░░█░░██████ ██████  ███░░░░░███  ███░░░░░███░░███░░░░░███ ░░███ ░░███░░░░░███░█░░░███░░░█░░███░░░░░█░░██████ ░░███
+//  ░███  █ ░  ░███░█████░███ ░███    ░░░  ███     ░░░  ░███    ░███  ░███  ░███    ░███░   ░███  ░  ░███  █ ░  ░███░███ ░███
+//  ░██████    ░███░░███ ░███ ░░█████████ ░███          ░██████████   ░███  ░██████████     ░███     ░██████    ░███░░███░███
+//  ░███░░█    ░███ ░░░  ░███  ░░░░░░░░███░███          ░███░░░░░███  ░███  ░███░░░░░░      ░███     ░███░░█    ░███ ░░██████
+//  ░███ ░   █ ░███      ░███  ███    ░███░░███     ███ ░███    ░███  ░███  ░███            ░███     ░███ ░   █ ░███  ░░█████
+//  ██████████ █████     █████░░█████████  ░░█████████  █████   █████ █████ █████           █████    ██████████ █████  ░░█████
+// ░░░░░░░░░░ ░░░░░     ░░░░░  ░░░░░░░░░    ░░░░░░░░░  ░░░░░   ░░░░░ ░░░░░ ░░░░░           ░░░░░    ░░░░░░░░░░ ░░░░░    ░░░░░
+//
+//
+//
 #elif defined(_SAUDIO_EMSCRIPTEN)
 
 #ifdef __cplusplus
@@ -1972,7 +1938,17 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     }
 }
 
-/*=== ANDROID BACKEND IMPLEMENTATION ======================================*/
+//    █████████   ██████   █████ ██████████   ███████████      ███████    █████ ██████████
+//   ███░░░░░███ ░░██████ ░░███ ░░███░░░░███ ░░███░░░░░███   ███░░░░░███ ░░███ ░░███░░░░███
+//  ░███    ░███  ░███░███ ░███  ░███   ░░███ ░███    ░███  ███     ░░███ ░███  ░███   ░░███
+//  ░███████████  ░███░░███░███  ░███    ░███ ░██████████  ░███      ░███ ░███  ░███    ░███
+//  ░███░░░░░███  ░███ ░░██████  ░███    ░███ ░███░░░░░███ ░███      ░███ ░███  ░███    ░███
+//  ░███    ░███  ░███  ░░█████  ░███    ███  ░███    ░███ ░░███     ███  ░███  ░███    ███
+//  █████   █████ █████  ░░█████ ██████████   █████   █████ ░░░███████░   █████ ██████████
+// ░░░░░   ░░░░░ ░░░░░    ░░░░░ ░░░░░░░░░░   ░░░░░   ░░░░░    ░░░░░░░    ░░░░░ ░░░░░░░░░░
+//
+//
+//
 #elif defined(_SAUDIO_ANDROID)
 
 #ifdef __cplusplus
@@ -2230,11 +2206,170 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
 } /* extern "C" */
 #endif
 
+//    █████████   ███████████  ███████████  █████       ██████████
+//   ███░░░░░███ ░░███░░░░░███░░███░░░░░███░░███       ░░███░░░░░█
+//  ░███    ░███  ░███    ░███ ░███    ░███ ░███        ░███  █ ░
+//  ░███████████  ░██████████  ░██████████  ░███        ░██████
+//  ░███░░░░░███  ░███░░░░░░   ░███░░░░░░   ░███        ░███░░█
+//  ░███    ░███  ░███         ░███         ░███      █ ░███ ░   █
+//  █████   █████ █████        █████        ███████████ ██████████
+// ░░░░░   ░░░░░ ░░░░░        ░░░░░        ░░░░░░░░░░░ ░░░░░░░░░░
+//
+//
+//
+#elif defined(_SAUDIO_APPLE)
+
+#if defined(_SAUDIO_IOS)
+#if __has_feature(objc_arc)
+#define _SAUDIO_OBJC_RELEASE(obj) { obj = nil; }
+#else
+#define _SAUDIO_OBJC_RELEASE(obj) { [obj release]; obj = nil; }
+#endif
+
+@interface _saudio_interruption_handler : NSObject { }
+@end
+
+@implementation _saudio_interruption_handler
+-(id)init {
+    self = [super init];
+    AVAudioSession* session = [AVAudioSession sharedInstance];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handle_interruption:) name:AVAudioSessionInterruptionNotification object:session];
+    return self;
+}
+
+-(void)dealloc {
+    [self remove_handler];
+    #if !__has_feature(objc_arc)
+    [super dealloc];
+    #endif
+}
+
+-(void)remove_handler {
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"AVAudioSessionInterruptionNotification" object:nil];
+}
+
+-(void)handle_interruption:(NSNotification*)notification {
+    AVAudioSession* session = [AVAudioSession sharedInstance];
+    SOKOL_ASSERT(session);
+    NSDictionary* dict = notification.userInfo;
+    SOKOL_ASSERT(dict);
+    NSInteger type = [[dict valueForKey:AVAudioSessionInterruptionTypeKey] integerValue];
+    switch (type) {
+        case AVAudioSessionInterruptionTypeBegan:
+            AudioQueuePause(_saudio.backend.ca_audio_queue);
+            [session setActive:false error:nil];
+            break;
+        case AVAudioSessionInterruptionTypeEnded:
+            [session setActive:true error:nil];
+            AudioQueueStart(_saudio.backend.ca_audio_queue, NULL);
+            break;
+        default:
+            break;
+    }
+}
+@end
+#endif // _SAUDIO_IOS
+
+/* NOTE: the buffer data callback is called on a separate thread! */
+_SOKOL_PRIVATE void _saudio_coreaudio_callback(void* user_data, _saudio_AudioQueueRef queue, _saudio_AudioQueueBufferRef buffer) {
+    _SOKOL_UNUSED(user_data);
+    if (_saudio_has_callback()) {
+        const int num_frames = (int)buffer->mAudioDataByteSize / _saudio.bytes_per_frame;
+        const int num_channels = _saudio.num_channels;
+        _saudio_stream_callback((float*)buffer->mAudioData, num_frames, num_channels);
+    }
+    else {
+        uint8_t* ptr = (uint8_t*)buffer->mAudioData;
+        int num_bytes = (int) buffer->mAudioDataByteSize;
+        if (0 == _saudio_fifo_read(&_saudio.fifo, ptr, num_bytes)) {
+            /* not enough read data available, fill the entire buffer with silence */
+            _saudio_clear(ptr, (size_t)num_bytes);
+        }
+    }
+    AudioQueueEnqueueBuffer(queue, buffer, 0, NULL);
+}
+
+_SOKOL_PRIVATE bool _saudio_backend_init(void) {
+    SOKOL_ASSERT(0 == _saudio.backend.ca_audio_queue);
+
+    #if defined(_SAUDIO_IOS)
+        /* activate audio session */
+        AVAudioSession* session = [AVAudioSession sharedInstance];
+        SOKOL_ASSERT(session != nil);
+        [session setCategory: AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker error:nil];
+        [session setActive:true error:nil];
+
+        /* create interruption handler */
+        _saudio.backend.ca_interruption_handler = [[_saudio_interruption_handler alloc] init];
+    #endif // _SAUDIO_IOS
+
+    /* create an audio queue with fp32 samples */
+    _saudio_AudioStreamBasicDescription fmt;
+    _saudio_clear(&fmt, sizeof(fmt));
+    fmt.mSampleRate = (double) _saudio.sample_rate;
+    fmt.mFormatID = _saudio_kAudioFormatLinearPCM;
+    fmt.mFormatFlags = _saudio_kLinearPCMFormatFlagIsFloat | _saudio_kAudioFormatFlagIsPacked;
+    fmt.mFramesPerPacket = 1;
+    fmt.mChannelsPerFrame = (uint32_t) _saudio.num_channels;
+    fmt.mBytesPerFrame = (uint32_t)sizeof(float) * (uint32_t)_saudio.num_channels;
+    fmt.mBytesPerPacket = fmt.mBytesPerFrame;
+    fmt.mBitsPerChannel = 32;
+    _saudio_OSStatus res = AudioQueueNewOutput(&fmt, _saudio_coreaudio_callback, 0, NULL, NULL, 0, &_saudio.backend.ca_audio_queue);
+    SOKOL_ASSERT((res == 0) && _saudio.backend.ca_audio_queue); (void)res;
+
+    /* create 2 audio buffers */
+    for (int i = 0; i < 2; i++) {
+        _saudio_AudioQueueBufferRef buf = NULL;
+        const uint32_t buf_byte_size = (uint32_t)_saudio.buffer_frames * fmt.mBytesPerFrame;
+        res = AudioQueueAllocateBuffer(_saudio.backend.ca_audio_queue, buf_byte_size, &buf);
+        SOKOL_ASSERT((res == 0) && buf); (void)res;
+        buf->mAudioDataByteSize = buf_byte_size;
+        _saudio_clear(buf->mAudioData, buf->mAudioDataByteSize);
+        AudioQueueEnqueueBuffer(_saudio.backend.ca_audio_queue, buf, 0, NULL);
+    }
+
+    /* init or modify actual playback parameters */
+    _saudio.bytes_per_frame = (int)fmt.mBytesPerFrame;
+
+    /* ...and start playback */
+    res = AudioQueueStart(_saudio.backend.ca_audio_queue, NULL);
+    SOKOL_ASSERT(0 == res); (void)res;
+
+    return true;
+}
+
+_SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
+    AudioQueueStop(_saudio.backend.ca_audio_queue, true);
+    AudioQueueDispose(_saudio.backend.ca_audio_queue, false);
+    _saudio.backend.ca_audio_queue = NULL;
+    #if defined(_SAUDIO_IOS)
+        /* remove interruption handler */
+        if (_saudio.backend.ca_interruption_handler != nil) {
+            [_saudio.backend.ca_interruption_handler remove_handler];
+            _SAUDIO_OBJC_RELEASE(_saudio.backend.ca_interruption_handler);
+        }
+        /* deactivate audio session */
+        AVAudioSession* session = [AVAudioSession sharedInstance];
+        SOKOL_ASSERT(session);
+        [session setActive:false error:nil];;
+    #endif // _SAUDIO_IOS
+}
+
 #else
 #error "unsupported platform"
 #endif
 
-/*=== PUBLIC API FUNCTIONS ===================================================*/
+//  ███████████  █████  █████ ███████████  █████       █████   █████████
+// ░░███░░░░░███░░███  ░░███ ░░███░░░░░███░░███       ░░███   ███░░░░░███
+//  ░███    ░███ ░███   ░███  ░███    ░███ ░███        ░███  ███     ░░░
+//  ░██████████  ░███   ░███  ░██████████  ░███        ░███ ░███
+//  ░███░░░░░░   ░███   ░███  ░███░░░░░███ ░███        ░███ ░███
+//  ░███         ░███   ░███  ░███    ░███ ░███      █ ░███ ░░███     ███
+//  █████        ░░████████   ███████████  ███████████ █████ ░░█████████
+// ░░░░░          ░░░░░░░░   ░░░░░░░░░░░  ░░░░░░░░░░░ ░░░░░   ░░░░░░░░░
+//
+//
+//
 SOKOL_API_IMPL void saudio_setup(const saudio_desc* desc) {
     SOKOL_ASSERT(!_saudio.valid);
     SOKOL_ASSERT(desc);
