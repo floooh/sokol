@@ -1361,7 +1361,7 @@ _SOKOL_PRIVATE void* _saudio_alsa_cb(void* param) {
     return 0;
 }
 
-_SOKOL_PRIVATE bool _saudio_backend_init(void) {
+_SOKOL_PRIVATE bool _saudio_alsa_backend_init(void) {
     int dir; uint32_t rate;
     int rc = snd_pcm_open(&_saudio.backend.device, "default", SND_PCM_STREAM_PLAYBACK, 0);
     if (rc < 0) {
@@ -1425,7 +1425,7 @@ error:
     return false;
 };
 
-_SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
+_SOKOL_PRIVATE void _saudio_alsa_backend_shutdown(void) {
     SOKOL_ASSERT(_saudio.backend.device);
     _saudio.backend.thread_stop = true;
     pthread_join(_saudio.backend.thread, 0);
@@ -1737,7 +1737,7 @@ error:
     return false;
 }
 
-_SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
+_SOKOL_PRIVATE void _saudio_wasapi_backend_shutdown(void) {
     if (_saudio.backend.thread.thread_handle) {
         _saudio.backend.thread.stop = true;
         SetEvent(_saudio.backend.thread.buffer_end_event);
@@ -2166,7 +2166,7 @@ _SOKOL_PRIVATE bool _saudio_sles_backend_init(void) {
 
     /* create the buffer-streaming start thread */
     if (0 != pthread_create(&_saudio.backend.thread, 0, _saudio_sles_thread_fn, 0)) {
-        _saudio_backend_shutdown();
+        _saudio_sles_backend_shutdown();
         return false;
     }
 
