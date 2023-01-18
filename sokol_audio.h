@@ -1186,6 +1186,10 @@ _SOKOL_PRIVATE void _saudio_fifo_init_mutex(_saudio_fifo_t* fifo) {
     _saudio_mutex_init(&fifo->mutex);
 }
 
+_SOKOL_PRIVATE void _saudio_fifo_destroy_mutex(_saudio_fifo_t* fifo) {
+    _saudio_mutex_destroy(&fifo->mutex);
+}
+
 _SOKOL_PRIVATE void _saudio_fifo_init(_saudio_fifo_t* fifo, int packet_size, int num_packets) {
     /* NOTE: there's a chicken-egg situation during the init phase where the
         streaming thread must be started before the fifo is actually initialized,
@@ -1216,7 +1220,6 @@ _SOKOL_PRIVATE void _saudio_fifo_shutdown(_saudio_fifo_t* fifo) {
     _saudio_free(fifo->base_ptr);
     fifo->base_ptr = 0;
     fifo->valid = false;
-    _saudio_mutex_destroy(&fifo->mutex);
 }
 
 _SOKOL_PRIVATE int _saudio_fifo_writable_bytes(_saudio_fifo_t* fifo) {
@@ -2221,12 +2224,16 @@ _SOKOL_PRIVATE bool _saudio_sles_backend_init(void) {
     NSInteger type = [[dict valueForKey:AVAudioSessionInterruptionTypeKey] integerValue];
     switch (type) {
         case AVAudioSessionInterruptionTypeBegan:
-            AudioQueuePause(_saudio.backend.ca_audio_queue);
+            if (_saudio.backend.ca_audio_queue) {
+                AudioQueuePause(_saudio.backend.ca_audio_queue);
+            }
             [session setActive:false error:nil];
             break;
         case AVAudioSessionInterruptionTypeEnded:
             [session setActive:true error:nil];
-            AudioQueueStart(_saudio.backend.ca_audio_queue, NULL);
+            if (_saudio.backend.ca_audio_queue) {
+                AudioQueueStart(_saudio.backend.ca_audio_queue, NULL);
+            }
             break;
         default:
             break;
@@ -2254,6 +2261,25 @@ _SOKOL_PRIVATE void _saudio_coreaudio_callback(void* user_data, _saudio_AudioQue
     AudioQueueEnqueueBuffer(queue, buffer, 0, NULL);
 }
 
+_SOKOL_PRIVATE void _saudio_coreaudio_backend_shutdown(void) {
+    if (_saudio.backend.ca_audio_queue) {
+        AudioQueueStop(_saudio.backend.ca_audio_queue, true);
+        AudioQueueDispose(_saudio.backend.ca_audio_queue, false);
+        _saudio.backend.ca_audio_queue = 0;
+    }
+    #if defined(_SAUDIO_IOS)
+        /* remove interruption handler */
+        if (_saudio.backend.ca_interruption_handler != nil) {
+            [_saudio.backend.ca_interruption_handler remove_handler];
+            _SAUDIO_OBJC_RELEASE(_saudio.backend.ca_interruption_handler);
+        }
+        /* deactivate audio session */
+        AVAudioSession* session = [AVAudioSession sharedInstance];
+        SOKOL_ASSERT(session);
+        [session setActive:false error:nil];;
+    #endif // _SAUDIO_IOS
+}
+
 _SOKOL_PRIVATE bool _saudio_coreaudio_backend_init(void) {
     SOKOL_ASSERT(0 == _saudio.backend.ca_audio_queue);
 
@@ -2266,7 +2292,7 @@ _SOKOL_PRIVATE bool _saudio_coreaudio_backend_init(void) {
 
         /* create interruption handler */
         _saudio.backend.ca_interruption_handler = [[_saudio_interruption_handler alloc] init];
-    #endif // _SAUDIO_IOS
+    #endif
 
     /* create an audio queue with fp32 samples */
     _saudio_AudioStreamBasicDescription fmt;
@@ -2280,14 +2306,22 @@ _SOKOL_PRIVATE bool _saudio_coreaudio_backend_init(void) {
     fmt.mBytesPerPacket = fmt.mBytesPerFrame;
     fmt.mBitsPerChannel = 32;
     _saudio_OSStatus res = AudioQueueNewOutput(&fmt, _saudio_coreaudio_callback, 0, NULL, NULL, 0, &_saudio.backend.ca_audio_queue);
-    SOKOL_ASSERT((res == 0) && _saudio.backend.ca_audio_queue); (void)res;
+    if (0 != res) {
+        SAUDIO_LOG("sokol_audio.h: AudioQueueNewOutput() failed!\n");
+        return false;
+    }
+    SOKOL_ASSERT(_saudio.backend.ca_audio_queue);
 
     /* create 2 audio buffers */
     for (int i = 0; i < 2; i++) {
         _saudio_AudioQueueBufferRef buf = NULL;
         const uint32_t buf_byte_size = (uint32_t)_saudio.buffer_frames * fmt.mBytesPerFrame;
         res = AudioQueueAllocateBuffer(_saudio.backend.ca_audio_queue, buf_byte_size, &buf);
-        SOKOL_ASSERT((res == 0) && buf); (void)res;
+        if (0 != res) {
+            SAUDIO_LOG("sokol_audio.h: AudioQueueAllocateBuffer() failed!\n");
+            _saudio_coreaudio_backend_shutdown();
+            return false;
+        }
         buf->mAudioDataByteSize = buf_byte_size;
         _saudio_clear(buf->mAudioData, buf->mAudioDataByteSize);
         AudioQueueEnqueueBuffer(_saudio.backend.ca_audio_queue, buf, 0, NULL);
@@ -2298,26 +2332,12 @@ _SOKOL_PRIVATE bool _saudio_coreaudio_backend_init(void) {
 
     /* ...and start playback */
     res = AudioQueueStart(_saudio.backend.ca_audio_queue, NULL);
-    SOKOL_ASSERT(0 == res); (void)res;
-
+    if (0 != res) {
+        SAUDIO_LOG("sokol_audio.h: AudioQueueStart() failed!\n");
+        _saudio_coreaudio_backend_shutdown();
+        return false;
+    }
     return true;
-}
-
-_SOKOL_PRIVATE void _saudio_coreaudio_backend_shutdown(void) {
-    AudioQueueStop(_saudio.backend.ca_audio_queue, true);
-    AudioQueueDispose(_saudio.backend.ca_audio_queue, false);
-    _saudio.backend.ca_audio_queue = NULL;
-    #if defined(_SAUDIO_IOS)
-        /* remove interruption handler */
-        if (_saudio.backend.ca_interruption_handler != nil) {
-            [_saudio.backend.ca_interruption_handler remove_handler];
-            _SAUDIO_OBJC_RELEASE(_saudio.backend.ca_interruption_handler);
-        }
-        /* deactivate audio session */
-        AVAudioSession* session = [AVAudioSession sharedInstance];
-        SOKOL_ASSERT(session);
-        [session setActive:false error:nil];;
-    #endif // _SAUDIO_IOS
 }
 
 #else
@@ -2397,12 +2417,16 @@ SOKOL_API_IMPL void saudio_setup(const saudio_desc* desc) {
         _saudio_fifo_init(&_saudio.fifo, _saudio.packet_frames * _saudio.bytes_per_frame, _saudio.num_packets);
         _saudio.valid = true;
     }
+    else {
+        _saudio_fifo_destroy_mutex(&_saudio.fifo);
+    }
 }
 
 SOKOL_API_IMPL void saudio_shutdown(void) {
     if (_saudio.valid) {
         _saudio_backend_shutdown();
         _saudio_fifo_shutdown(&_saudio.fifo);
+        _saudio_fifo_destroy_mutex(&_saudio.fifo);
         _saudio.valid = false;
     }
 }
