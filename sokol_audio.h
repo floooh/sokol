@@ -538,17 +538,14 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 #endif
 #endif // SOKOL_AUDIO_INCLUDED
 
-//  █████ ██████   ██████ ███████████  █████
-// ░░███ ░░██████ ██████ ░░███░░░░░███░░███
-//  ░███  ░███░█████░███  ░███    ░███ ░███
-//  ░███  ░███░░███ ░███  ░██████████  ░███
-//  ░███  ░███ ░░░  ░███  ░███░░░░░░   ░███
-//  ░███  ░███      ░███  ░███         ░███      █
-//  █████ █████     █████ █████        ███████████
-// ░░░░░ ░░░░░     ░░░░░ ░░░░░        ░░░░░░░░░░░
+// ██╗███╗   ███╗██████╗ ██╗     ███████╗███╗   ███╗███████╗███╗   ██╗████████╗ █████╗ ████████╗██╗ ██████╗ ███╗   ██╗
+// ██║████╗ ████║██╔══██╗██║     ██╔════╝████╗ ████║██╔════╝████╗  ██║╚══██╔══╝██╔══██╗╚══██╔══╝██║██╔═══██╗████╗  ██║
+// ██║██╔████╔██║██████╔╝██║     █████╗  ██╔████╔██║█████╗  ██╔██╗ ██║   ██║   ███████║   ██║   ██║██║   ██║██╔██╗ ██║
+// ██║██║╚██╔╝██║██╔═══╝ ██║     ██╔══╝  ██║╚██╔╝██║██╔══╝  ██║╚██╗██║   ██║   ██╔══██║   ██║   ██║██║   ██║██║╚██╗██║
+// ██║██║ ╚═╝ ██║██║     ███████╗███████╗██║ ╚═╝ ██║███████╗██║ ╚████║   ██║   ██║  ██║   ██║   ██║╚██████╔╝██║ ╚████║
+// ╚═╝╚═╝     ╚═╝╚═╝     ╚══════╝╚══════╝╚═╝     ╚═╝╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
 //
-//
-//
+// >>implementation
 #ifdef SOKOL_AUDIO_IMPL
 #define SOKOL_AUDIO_IMPL_INCLUDED (1)
 
@@ -728,17 +725,14 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 #define SAUDIO_RING_MAX_SLOTS (1024)
 #endif
 
-//   █████████  ███████████ ███████████   █████  █████   █████████  ███████████  █████████
-//  ███░░░░░███░█░░░███░░░█░░███░░░░░███ ░░███  ░░███   ███░░░░░███░█░░░███░░░█ ███░░░░░███
-// ░███    ░░░ ░   ░███  ░  ░███    ░███  ░███   ░███  ███     ░░░ ░   ░███  ░ ░███    ░░░
-// ░░█████████     ░███     ░██████████   ░███   ░███ ░███             ░███    ░░█████████
-//  ░░░░░░░░███    ░███     ░███░░░░░███  ░███   ░███ ░███             ░███     ░░░░░░░░███
-//  ███    ░███    ░███     ░███    ░███  ░███   ░███ ░░███     ███    ░███     ███    ░███
-// ░░█████████     █████    █████   █████ ░░████████   ░░█████████     █████   ░░█████████
-//  ░░░░░░░░░     ░░░░░    ░░░░░   ░░░░░   ░░░░░░░░     ░░░░░░░░░     ░░░░░     ░░░░░░░░░
+// ███████╗████████╗██████╗ ██╗   ██╗ ██████╗████████╗███████╗
+// ██╔════╝╚══██╔══╝██╔══██╗██║   ██║██╔════╝╚══██╔══╝██╔════╝
+// ███████╗   ██║   ██████╔╝██║   ██║██║        ██║   ███████╗
+// ╚════██║   ██║   ██╔══██╗██║   ██║██║        ██║   ╚════██║
+// ███████║   ██║   ██║  ██║╚██████╔╝╚██████╗   ██║   ███████║
+// ╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝  ╚═════╝   ╚═╝   ╚══════╝
 //
-//
-//
+// >>structs
 #if defined(_SAUDIO_PTHREADS)
 
 typedef struct {
@@ -1018,15 +1012,14 @@ _SOKOL_PRIVATE void _saudio_stream_callback(float* buffer, int num_frames, int n
     }
 }
 
-//  ██████   ██████ ██████████ ██████   ██████    ███████    ███████████   █████ █████
-// ░░██████ ██████ ░░███░░░░░█░░██████ ██████   ███░░░░░███ ░░███░░░░░███ ░░███ ░░███
-//  ░███░█████░███  ░███  █ ░  ░███░█████░███  ███     ░░███ ░███    ░███  ░░███ ███
-//  ░███░░███ ░███  ░██████    ░███░░███ ░███ ░███      ░███ ░██████████    ░░█████
-//  ░███ ░░░  ░███  ░███░░█    ░███ ░░░  ░███ ░███      ░███ ░███░░░░░███    ░░███
-//  ░███      ░███  ░███ ░   █ ░███      ░███ ░░███     ███  ░███    ░███     ░███
-//  █████     █████ ██████████ █████     █████ ░░░███████░   █████   █████    █████
-// ░░░░░     ░░░░░ ░░░░░░░░░░ ░░░░░     ░░░░░    ░░░░░░░    ░░░░░   ░░░░░    ░░░░░
+// ███╗   ███╗███████╗███╗   ███╗ ██████╗ ██████╗ ██╗   ██╗
+// ████╗ ████║██╔════╝████╗ ████║██╔═══██╗██╔══██╗╚██╗ ██╔╝
+// ██╔████╔██║█████╗  ██╔████╔██║██║   ██║██████╔╝ ╚████╔╝
+// ██║╚██╔╝██║██╔══╝  ██║╚██╔╝██║██║   ██║██╔══██╗  ╚██╔╝
+// ██║ ╚═╝ ██║███████╗██║ ╚═╝ ██║╚██████╔╝██║  ██║   ██║
+// ╚═╝     ╚═╝╚══════╝╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝
 //
+// >>memory
 _SOKOL_PRIVATE void _saudio_clear(void* ptr, size_t size) {
     SOKOL_ASSERT(ptr && (size > 0));
     memset(ptr, 0, size);
@@ -1071,17 +1064,14 @@ _SOKOL_PRIVATE void _saudio_log(const char* msg) {
 }
 #endif
 
-//  ██████   ██████ █████  █████ ███████████ ██████████ █████ █████
-// ░░██████ ██████ ░░███  ░░███ ░█░░░███░░░█░░███░░░░░█░░███ ░░███
-//  ░███░█████░███  ░███   ░███ ░   ░███  ░  ░███  █ ░  ░░███ ███
-//  ░███░░███ ░███  ░███   ░███     ░███     ░██████     ░░█████
-//  ░███ ░░░  ░███  ░███   ░███     ░███     ░███░░█      ███░███
-//  ░███      ░███  ░███   ░███     ░███     ░███ ░   █  ███ ░░███
-//  █████     █████ ░░████████      █████    ██████████ █████ █████
-// ░░░░░     ░░░░░   ░░░░░░░░      ░░░░░    ░░░░░░░░░░ ░░░░░ ░░░░░
+// ███╗   ███╗██╗   ██╗████████╗███████╗██╗  ██╗
+// ████╗ ████║██║   ██║╚══██╔══╝██╔════╝╚██╗██╔╝
+// ██╔████╔██║██║   ██║   ██║   █████╗   ╚███╔╝
+// ██║╚██╔╝██║██║   ██║   ██║   ██╔══╝   ██╔██╗
+// ██║ ╚═╝ ██║╚██████╔╝   ██║   ███████╗██╔╝ ██╗
+// ╚═╝     ╚═╝ ╚═════╝    ╚═╝   ╚══════╝╚═╝  ╚═╝
 //
-//
-//
+// >>mutex
 #if defined(_SAUDIO_NOTHREADS)
 
 _SOKOL_PRIVATE void _saudio_mutex_init(_saudio_mutex_t* m) { (void)m; }
@@ -1130,17 +1120,14 @@ _SOKOL_PRIVATE void _saudio_mutex_unlock(_saudio_mutex_t* m) {
 #error "sokol_audio.h: unknown platform!"
 #endif
 
-//  ███████████   █████ ██████   █████   █████████     ███████████  █████  █████ ███████████ ███████████ ██████████ ███████████
-// ░░███░░░░░███ ░░███ ░░██████ ░░███   ███░░░░░███   ░░███░░░░░███░░███  ░░███ ░░███░░░░░░█░░███░░░░░░█░░███░░░░░█░░███░░░░░███
-//  ░███    ░███  ░███  ░███░███ ░███  ███     ░░░     ░███    ░███ ░███   ░███  ░███   █ ░  ░███   █ ░  ░███  █ ░  ░███    ░███
-//  ░██████████   ░███  ░███░░███░███ ░███             ░██████████  ░███   ░███  ░███████    ░███████    ░██████    ░██████████
-//  ░███░░░░░███  ░███  ░███ ░░██████ ░███    █████    ░███░░░░░███ ░███   ░███  ░███░░░█    ░███░░░█    ░███░░█    ░███░░░░░███
-//  ░███    ░███  ░███  ░███  ░░█████ ░░███  ░░███     ░███    ░███ ░███   ░███  ░███  ░     ░███  ░     ░███ ░   █ ░███    ░███
-//  █████   █████ █████ █████  ░░█████ ░░█████████     ███████████  ░░████████   █████       █████       ██████████ █████   █████
-// ░░░░░   ░░░░░ ░░░░░ ░░░░░    ░░░░░   ░░░░░░░░░     ░░░░░░░░░░░    ░░░░░░░░   ░░░░░       ░░░░░       ░░░░░░░░░░ ░░░░░   ░░░░░
+// ██████╗ ██╗███╗   ██╗ ██████╗ ██████╗ ██╗   ██╗███████╗███████╗███████╗██████╗
+// ██╔══██╗██║████╗  ██║██╔════╝ ██╔══██╗██║   ██║██╔════╝██╔════╝██╔════╝██╔══██╗
+// ██████╔╝██║██╔██╗ ██║██║  ███╗██████╔╝██║   ██║█████╗  █████╗  █████╗  ██████╔╝
+// ██╔══██╗██║██║╚██╗██║██║   ██║██╔══██╗██║   ██║██╔══╝  ██╔══╝  ██╔══╝  ██╔══██╗
+// ██║  ██║██║██║ ╚████║╚██████╔╝██████╔╝╚██████╔╝██║     ██║     ███████╗██║  ██║
+// ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚═════╝  ╚═════╝ ╚═╝     ╚═╝     ╚══════╝╚═╝  ╚═╝
 //
-//
-//
+// >>ringbuffer
 _SOKOL_PRIVATE int _saudio_ring_idx(_saudio_ring_t* ring, int i) {
     return (i % ring->num);
 }
@@ -1186,17 +1173,14 @@ _SOKOL_PRIVATE int _saudio_ring_dequeue(_saudio_ring_t* ring) {
     return val;
 }
 
-//  ███████████ █████ ███████████    ███████
-// ░░███░░░░░░█░░███ ░░███░░░░░░█  ███░░░░░███
-//  ░███   █ ░  ░███  ░███   █ ░  ███     ░░███
-//  ░███████    ░███  ░███████   ░███      ░███
-//  ░███░░░█    ░███  ░███░░░█   ░███      ░███
-//  ░███  ░     ░███  ░███  ░    ░░███     ███
-//  █████       █████ █████       ░░░███████░
-// ░░░░░       ░░░░░ ░░░░░          ░░░░░░░
+// ███████╗██╗███████╗ ██████╗
+// ██╔════╝██║██╔════╝██╔═══██╗
+// █████╗  ██║█████╗  ██║   ██║
+// ██╔══╝  ██║██╔══╝  ██║   ██║
+// ██║     ██║██║     ╚██████╔╝
+// ╚═╝     ╚═╝╚═╝      ╚═════╝
 //
-//
-//
+// >>fifo
 _SOKOL_PRIVATE void _saudio_fifo_init_mutex(_saudio_fifo_t* fifo) {
     /* this must be called before initializing both the backend and the fifo itself! */
     _saudio_mutex_init(&fifo->mutex);
@@ -1323,36 +1307,29 @@ _SOKOL_PRIVATE int _saudio_fifo_read(_saudio_fifo_t* fifo, uint8_t* ptr, int num
     return num_bytes_copied;
 }
 
-//  ██████████   █████  █████ ██████   ██████ ██████   ██████ █████ █████
-// ░░███░░░░███ ░░███  ░░███ ░░██████ ██████ ░░██████ ██████ ░░███ ░░███
-//  ░███   ░░███ ░███   ░███  ░███░█████░███  ░███░█████░███  ░░███ ███
-//  ░███    ░███ ░███   ░███  ░███░░███ ░███  ░███░░███ ░███   ░░█████
-//  ░███    ░███ ░███   ░███  ░███ ░░░  ░███  ░███ ░░░  ░███    ░░███
-//  ░███    ███  ░███   ░███  ░███      ░███  ░███      ░███     ░███
-//  ██████████   ░░████████   █████     █████ █████     █████    █████
-// ░░░░░░░░░░     ░░░░░░░░   ░░░░░     ░░░░░ ░░░░░     ░░░░░    ░░░░░
+// ██████╗ ██╗   ██╗███╗   ███╗███╗   ███╗██╗   ██╗
+// ██╔══██╗██║   ██║████╗ ████║████╗ ████║╚██╗ ██╔╝
+// ██║  ██║██║   ██║██╔████╔██║██╔████╔██║ ╚████╔╝
+// ██║  ██║██║   ██║██║╚██╔╝██║██║╚██╔╝██║  ╚██╔╝
+// ██████╔╝╚██████╔╝██║ ╚═╝ ██║██║ ╚═╝ ██║   ██║
+// ╚═════╝  ╚═════╝ ╚═╝     ╚═╝╚═╝     ╚═╝   ╚═╝
 //
-//
-//
+// >>dummy
 #if defined(SOKOL_DUMMY_BACKEND)
-_SOKOL_PRIVATE bool _saudio_backend_init(void) {
+_SOKOL_PRIVATE bool _saudio_dummy_backend_init(void) {
     _saudio.bytes_per_frame = _saudio.num_channels * (int)sizeof(float);
     return true;
 };
-_SOKOL_PRIVATE void _saudio_backend_shutdown(void) { };
+_SOKOL_PRIVATE void _saudio_dummy_backend_shutdown(void) { };
 
-
-//    █████████   █████        █████████    █████████
-//   ███░░░░░███ ░░███        ███░░░░░███  ███░░░░░███
-//  ░███    ░███  ░███       ░███    ░░░  ░███    ░███
-//  ░███████████  ░███       ░░█████████  ░███████████
-//  ░███░░░░░███  ░███        ░░░░░░░░███ ░███░░░░░███
-//  ░███    ░███  ░███      █ ███    ░███ ░███    ░███
-//  █████   █████ ███████████░░█████████  █████   █████
-// ░░░░░   ░░░░░ ░░░░░░░░░░░  ░░░░░░░░░  ░░░░░   ░░░░░
+//  █████╗ ██╗     ███████╗ █████╗
+// ██╔══██╗██║     ██╔════╝██╔══██╗
+// ███████║██║     ███████╗███████║
+// ██╔══██║██║     ╚════██║██╔══██║
+// ██║  ██║███████╗███████║██║  ██║
+// ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝
 //
-//
-//
+// >>alsa
 #elif defined(_SAUDIO_LINUX)
 
 /* the streaming callback runs in a separate thread */
@@ -1454,17 +1431,14 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     _saudio_free(_saudio.backend.buffer);
 };
 
-//  █████   ███   █████   █████████    █████████    █████████   ███████████  █████
-// ░░███   ░███  ░░███   ███░░░░░███  ███░░░░░███  ███░░░░░███ ░░███░░░░░███░░███
-//  ░███   ░███   ░███  ░███    ░███ ░███    ░░░  ░███    ░███  ░███    ░███ ░███
-//  ░███   ░███   ░███  ░███████████ ░░█████████  ░███████████  ░██████████  ░███
-//  ░░███  █████  ███   ░███░░░░░███  ░░░░░░░░███ ░███░░░░░███  ░███░░░░░░   ░███
-//   ░░░█████░█████░    ░███    ░███  ███    ░███ ░███    ░███  ░███         ░███
-//     ░░███ ░░███      █████   █████░░█████████  █████   █████ █████        █████
-//      ░░░   ░░░      ░░░░░   ░░░░░  ░░░░░░░░░  ░░░░░   ░░░░░ ░░░░░        ░░░░░
+// ██╗    ██╗ █████╗ ███████╗ █████╗ ██████╗ ██╗
+// ██║    ██║██╔══██╗██╔════╝██╔══██╗██╔══██╗██║
+// ██║ █╗ ██║███████║███████╗███████║██████╔╝██║
+// ██║███╗██║██╔══██║╚════██║██╔══██║██╔═══╝ ██║
+// ╚███╔███╔╝██║  ██║███████║██║  ██║██║     ██║
+//  ╚══╝╚══╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝
 //
-//
-//
+// >>wasapi
 #elif defined(_SAUDIO_WINDOWS)
 
 #if defined(_SAUDIO_UWP)
@@ -1621,7 +1595,7 @@ _SOKOL_PRIVATE void _saudio_wasapi_release(void) {
     }
 }
 
-_SOKOL_PRIVATE bool _saudio_backend_init(void) {
+_SOKOL_PRIVATE bool _saudio_wasapi_backend_init(void) {
     REFERENCE_TIME dur;
     /* UWP Threads are CoInitialized by default with a different threading model, and this call fails
     See https://github.com/Microsoft/cppwinrt/issues/6#issuecomment-253930637 */
@@ -1778,17 +1752,14 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     #endif
 }
 
-//  ██████████ ██████   ██████  █████████    █████████  ███████████   █████ ███████████  ███████████ ██████████ ██████   █████
-// ░░███░░░░░█░░██████ ██████  ███░░░░░███  ███░░░░░███░░███░░░░░███ ░░███ ░░███░░░░░███░█░░░███░░░█░░███░░░░░█░░██████ ░░███
-//  ░███  █ ░  ░███░█████░███ ░███    ░░░  ███     ░░░  ░███    ░███  ░███  ░███    ░███░   ░███  ░  ░███  █ ░  ░███░███ ░███
-//  ░██████    ░███░░███ ░███ ░░█████████ ░███          ░██████████   ░███  ░██████████     ░███     ░██████    ░███░░███░███
-//  ░███░░█    ░███ ░░░  ░███  ░░░░░░░░███░███          ░███░░░░░███  ░███  ░███░░░░░░      ░███     ░███░░█    ░███ ░░██████
-//  ░███ ░   █ ░███      ░███  ███    ░███░░███     ███ ░███    ░███  ░███  ░███            ░███     ░███ ░   █ ░███  ░░█████
-//  ██████████ █████     █████░░█████████  ░░█████████  █████   █████ █████ █████           █████    ██████████ █████  ░░█████
-// ░░░░░░░░░░ ░░░░░     ░░░░░  ░░░░░░░░░    ░░░░░░░░░  ░░░░░   ░░░░░ ░░░░░ ░░░░░           ░░░░░    ░░░░░░░░░░ ░░░░░    ░░░░░
+// ██╗    ██╗███████╗██████╗  █████╗ ██╗   ██╗██████╗ ██╗ ██████╗
+// ██║    ██║██╔════╝██╔══██╗██╔══██╗██║   ██║██╔══██╗██║██╔═══██╗
+// ██║ █╗ ██║█████╗  ██████╔╝███████║██║   ██║██║  ██║██║██║   ██║
+// ██║███╗██║██╔══╝  ██╔══██╗██╔══██║██║   ██║██║  ██║██║██║   ██║
+// ╚███╔███╔╝███████╗██████╔╝██║  ██║╚██████╔╝██████╔╝██║╚██████╔╝
+//  ╚══╝╚══╝ ╚══════╝╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝ ╚═════╝
 //
-//
-//
+// >>webaudio
 #elif defined(_SAUDIO_EMSCRIPTEN)
 
 #ifdef __cplusplus
@@ -1916,7 +1887,7 @@ EM_JS(int, saudio_js_suspended, (void), {
     }
 });
 
-_SOKOL_PRIVATE bool _saudio_backend_init(void) {
+_SOKOL_PRIVATE bool _saudio_webaudio_backend_init(void) {
     if (saudio_js_init(_saudio.sample_rate, _saudio.num_channels, _saudio.buffer_frames)) {
         _saudio.bytes_per_frame = (int)sizeof(float) * _saudio.num_channels;
         _saudio.sample_rate = saudio_js_sample_rate();
@@ -1930,7 +1901,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     }
 }
 
-_SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
+_SOKOL_PRIVATE void _saudio_webaudio_backend_shutdown(void) {
     saudio_js_shutdown();
     if (_saudio.backend.buffer) {
         _saudio_free(_saudio.backend.buffer);
@@ -1938,17 +1909,14 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     }
 }
 
-//    █████████   ██████   █████ ██████████   ███████████      ███████    █████ ██████████
-//   ███░░░░░███ ░░██████ ░░███ ░░███░░░░███ ░░███░░░░░███   ███░░░░░███ ░░███ ░░███░░░░███
-//  ░███    ░███  ░███░███ ░███  ░███   ░░███ ░███    ░███  ███     ░░███ ░███  ░███   ░░███
-//  ░███████████  ░███░░███░███  ░███    ░███ ░██████████  ░███      ░███ ░███  ░███    ░███
-//  ░███░░░░░███  ░███ ░░██████  ░███    ░███ ░███░░░░░███ ░███      ░███ ░███  ░███    ░███
-//  ░███    ░███  ░███  ░░█████  ░███    ███  ░███    ░███ ░░███     ███  ░███  ░███    ███
-//  █████   █████ █████  ░░█████ ██████████   █████   █████ ░░░███████░   █████ ██████████
-// ░░░░░   ░░░░░ ░░░░░    ░░░░░ ░░░░░░░░░░   ░░░░░   ░░░░░    ░░░░░░░    ░░░░░ ░░░░░░░░░░
+//  █████╗ ███╗   ██╗██████╗ ██████╗  ██████╗ ██╗██████╗
+// ██╔══██╗████╗  ██║██╔══██╗██╔══██╗██╔═══██╗██║██╔══██╗
+// ███████║██╔██╗ ██║██║  ██║██████╔╝██║   ██║██║██║  ██║
+// ██╔══██║██║╚██╗██║██║  ██║██╔══██╗██║   ██║██║██║  ██║
+// ██║  ██║██║ ╚████║██████╔╝██║  ██║╚██████╔╝██║██████╔╝
+// ╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═╝╚═════╝
 //
-//
-//
+// >>android
 #elif defined(_SAUDIO_ANDROID)
 
 #ifdef __cplusplus
@@ -2008,7 +1976,7 @@ _SOKOL_PRIVATE bool _saudio_semaphore_wait(_saudio_semaphore_t* sem)
 }
 
 /* fill intermediate buffer with new data and reset buffer_pos */
-_SOKOL_PRIVATE void _saudio_opensles_fill_buffer(void) {
+_SOKOL_PRIVATE void _saudio_sles_fill_buffer(void) {
     int src_buffer_frames = _saudio.buffer_frames;
     if (_saudio_has_callback()) {
         _saudio_stream_callback(_saudio.backend.src_buffer, src_buffer_frames, _saudio.num_channels);
@@ -2022,7 +1990,7 @@ _SOKOL_PRIVATE void _saudio_opensles_fill_buffer(void) {
     }
 }
 
-_SOKOL_PRIVATE void SLAPIENTRY _saudio_opensles_play_cb(SLPlayItf player, void *context, SLuint32 event) {
+_SOKOL_PRIVATE void SLAPIENTRY _saudio_sles_play_cb(SLPlayItf player, void *context, SLuint32 event) {
     (void)(context);
     (void)(player);
 
@@ -2031,7 +1999,7 @@ _SOKOL_PRIVATE void SLAPIENTRY _saudio_opensles_play_cb(SLPlayItf player, void *
     }
 }
 
-_SOKOL_PRIVATE void* _saudio_opensles_thread_fn(void* param) {
+_SOKOL_PRIVATE void* _saudio_sles_thread_fn(void* param) {
     _SOKOL_UNUSED(param);
     while (!_saudio.backend.thread_stop)  {
         /* get next output buffer, advance, next buffer. */
@@ -2044,7 +2012,7 @@ _SOKOL_PRIVATE void* _saudio_opensles_thread_fn(void* param) {
         (*_saudio.backend.player_buffer_queue)->Enqueue(_saudio.backend.player_buffer_queue, out_buffer, (SLuint32)buffer_size_bytes);
 
         /* fill the next buffer */
-        _saudio_opensles_fill_buffer();
+        _saudio_sles_fill_buffer();
         const int num_samples = _saudio.num_channels * _saudio.buffer_frames;
         for (int i = 0; i < num_samples; ++i) {
             next_buffer[i] = (int16_t) (_saudio.backend.src_buffer[i] * 0x7FFF);
@@ -2056,7 +2024,7 @@ _SOKOL_PRIVATE void* _saudio_opensles_thread_fn(void* param) {
     return 0;
 }
 
-_SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
+_SOKOL_PRIVATE void _saudio_sles_backend_shutdown(void) {
     _saudio.backend.thread_stop = 1;
     pthread_join(_saudio.backend.thread, 0);
 
@@ -2078,7 +2046,7 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     _saudio_free(_saudio.backend.src_buffer);
 }
 
-_SOKOL_PRIVATE bool _saudio_backend_init(void) {
+_SOKOL_PRIVATE bool _saudio_sles_backend_init(void) {
     _saudio.bytes_per_frame = (int)sizeof(float) * _saudio.num_channels;
 
     for (int i = 0; i < SAUDIO_NUM_BUFFERS; ++i) {
@@ -2095,14 +2063,14 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     const SLEngineOption opts[] = { { SL_ENGINEOPTION_THREADSAFE, SL_BOOLEAN_TRUE } };
     if (slCreateEngine(&_saudio.backend.engine_obj, 1, opts, 0, NULL, NULL ) != SL_RESULT_SUCCESS) {
         SAUDIO_LOG("sokol_audio opensles: slCreateEngine failed");
-        _saudio_backend_shutdown();
+        _saudio_sles_backend_shutdown();
         return false;
     }
 
     (*_saudio.backend.engine_obj)->Realize(_saudio.backend.engine_obj, SL_BOOLEAN_FALSE);
     if ((*_saudio.backend.engine_obj)->GetInterface(_saudio.backend.engine_obj, SL_IID_ENGINE, &_saudio.backend.engine) != SL_RESULT_SUCCESS) {
         SAUDIO_LOG("sokol_audio opensles: GetInterface->Engine failed");
-        _saudio_backend_shutdown();
+        _saudio_sles_backend_shutdown();
         return false;
     }
 
@@ -2114,7 +2082,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         if( (*_saudio.backend.engine)->CreateOutputMix(_saudio.backend.engine, &_saudio.backend.output_mix_obj, 1, ids, req) != SL_RESULT_SUCCESS)
         {
             SAUDIO_LOG("sokol_audio opensles: CreateOutputMix failed");
-            _saudio_backend_shutdown();
+            _saudio_sles_backend_shutdown();
             return false;
         }
         (*_saudio.backend.output_mix_obj)->Realize(_saudio.backend.output_mix_obj, SL_BOOLEAN_FALSE);
@@ -2162,14 +2130,14 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         if( (*_saudio.backend.engine)->CreateAudioPlayer(_saudio.backend.engine, &_saudio.backend.player_obj, &src, &_saudio.backend.dst_data_sink, sizeof(ids) / sizeof(ids[0]), ids, req) != SL_RESULT_SUCCESS)
         {
             SAUDIO_LOG("sokol_audio opensles: CreateAudioPlayer failed");
-            _saudio_backend_shutdown();
+            _saudio_sles_backend_shutdown();
             return false;
         }
         (*_saudio.backend.player_obj)->Realize(_saudio.backend.player_obj, SL_BOOLEAN_FALSE);
 
         if((*_saudio.backend.player_obj)->GetInterface(_saudio.backend.player_obj, SL_IID_PLAY, &_saudio.backend.player) != SL_RESULT_SUCCESS) {
             SAUDIO_LOG("sokol_audio opensles: GetInterface->Play failed");
-            _saudio_backend_shutdown();
+            _saudio_sles_backend_shutdown();
             return false;
         }
         if((*_saudio.backend.player_obj)->GetInterface(_saudio.backend.player_obj, SL_IID_VOLUME, &_saudio.backend.player_vol) != SL_RESULT_SUCCESS) {
@@ -2177,7 +2145,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         }
         if((*_saudio.backend.player_obj)->GetInterface(_saudio.backend.player_obj, SL_IID_ANDROIDSIMPLEBUFFERQUEUE, &_saudio.backend.player_buffer_queue) != SL_RESULT_SUCCESS) {
             SAUDIO_LOG("sokol_audio opensles: GetInterface->BufferQ failed");
-            _saudio_backend_shutdown();
+            _saudio_sles_backend_shutdown();
             return false;
         }
     }
@@ -2188,13 +2156,13 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         (*_saudio.backend.player_buffer_queue)->Enqueue(_saudio.backend.player_buffer_queue, _saudio.backend.output_buffers[0], (SLuint32)buffer_size_bytes);
         _saudio.backend.active_buffer = (_saudio.backend.active_buffer + 1) % SAUDIO_NUM_BUFFERS;
 
-        (*_saudio.backend.player)->RegisterCallback(_saudio.backend.player, _saudio_opensles_play_cb, NULL);
+        (*_saudio.backend.player)->RegisterCallback(_saudio.backend.player, _saudio_sles_play_cb, NULL);
         (*_saudio.backend.player)->SetCallbackEventsMask(_saudio.backend.player, SL_PLAYEVENT_HEADATEND);
         (*_saudio.backend.player)->SetPlayState(_saudio.backend.player, SL_PLAYSTATE_PLAYING);
     }
 
     /* create the buffer-streaming start thread */
-    if (0 != pthread_create(&_saudio.backend.thread, 0, _saudio_opensles_thread_fn, 0)) {
+    if (0 != pthread_create(&_saudio.backend.thread, 0, _saudio_sles_thread_fn, 0)) {
         _saudio_backend_shutdown();
         return false;
     }
@@ -2206,17 +2174,14 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
 } /* extern "C" */
 #endif
 
-//    █████████   ███████████  ███████████  █████       ██████████
-//   ███░░░░░███ ░░███░░░░░███░░███░░░░░███░░███       ░░███░░░░░█
-//  ░███    ░███  ░███    ░███ ░███    ░███ ░███        ░███  █ ░
-//  ░███████████  ░██████████  ░██████████  ░███        ░██████
-//  ░███░░░░░███  ░███░░░░░░   ░███░░░░░░   ░███        ░███░░█
-//  ░███    ░███  ░███         ░███         ░███      █ ░███ ░   █
-//  █████   █████ █████        █████        ███████████ ██████████
-// ░░░░░   ░░░░░ ░░░░░        ░░░░░        ░░░░░░░░░░░ ░░░░░░░░░░
+//  ██████╗ ██████╗ ██████╗ ███████╗ █████╗ ██╗   ██╗██████╗ ██╗ ██████╗
+// ██╔════╝██╔═══██╗██╔══██╗██╔════╝██╔══██╗██║   ██║██╔══██╗██║██╔═══██╗
+// ██║     ██║   ██║██████╔╝█████╗  ███████║██║   ██║██║  ██║██║██║   ██║
+// ██║     ██║   ██║██╔══██╗██╔══╝  ██╔══██║██║   ██║██║  ██║██║██║   ██║
+// ╚██████╗╚██████╔╝██║  ██║███████╗██║  ██║╚██████╔╝██████╔╝██║╚██████╔╝
+//  ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝ ╚═════╝
 //
-//
-//
+// >>coreaudio
 #elif defined(_SAUDIO_APPLE)
 
 #if defined(_SAUDIO_IOS)
@@ -2289,7 +2254,7 @@ _SOKOL_PRIVATE void _saudio_coreaudio_callback(void* user_data, _saudio_AudioQue
     AudioQueueEnqueueBuffer(queue, buffer, 0, NULL);
 }
 
-_SOKOL_PRIVATE bool _saudio_backend_init(void) {
+_SOKOL_PRIVATE bool _saudio_coreaudio_backend_init(void) {
     SOKOL_ASSERT(0 == _saudio.backend.ca_audio_queue);
 
     #if defined(_SAUDIO_IOS)
@@ -2338,7 +2303,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     return true;
 }
 
-_SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
+_SOKOL_PRIVATE void _saudio_coreaudio_backend_shutdown(void) {
     AudioQueueStop(_saudio.backend.ca_audio_queue, true);
     AudioQueueDispose(_saudio.backend.ca_audio_queue, false);
     _saudio.backend.ca_audio_queue = NULL;
@@ -2359,17 +2324,50 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
 #error "unsupported platform"
 #endif
 
-//  ███████████  █████  █████ ███████████  █████       █████   █████████
-// ░░███░░░░░███░░███  ░░███ ░░███░░░░░███░░███       ░░███   ███░░░░░███
-//  ░███    ░███ ░███   ░███  ░███    ░███ ░███        ░███  ███     ░░░
-//  ░██████████  ░███   ░███  ░██████████  ░███        ░███ ░███
-//  ░███░░░░░░   ░███   ░███  ░███░░░░░███ ░███        ░███ ░███
-//  ░███         ░███   ░███  ░███    ░███ ░███      █ ░███ ░░███     ███
-//  █████        ░░████████   ███████████  ███████████ █████ ░░█████████
-// ░░░░░          ░░░░░░░░   ░░░░░░░░░░░  ░░░░░░░░░░░ ░░░░░   ░░░░░░░░░
+bool _saudio_backend_init(void) {
+    #if defined(SOKOL_DUMMY_BACKEND)
+        return _saudio_dummy_backend_init();
+    #elif defined(_SAUDIO_LINUX)
+        return _saudio_alsa_backend_init()
+    #elif defined(_SAUDIO_WINDOWS)
+        return _saudio_wasapi_backend_init();
+    #elif defined(_SAUDIO_EMSCRIPTEN)
+        return _saudio_webaudio_backend_init();
+    #elif defined(_SAUDIO_ANDROID)
+        return _saudio_sles_backend_init();
+    #elif defined(_SAUDIO_APPLE)
+        return _saudio_coreaudio_backend_init();
+    #else
+    #error "unknown platform"
+    #endif
+}
+
+void _saudio_backend_shutdown(void) {
+    #if defined(SOKOL_DUMMY_BACKEND)
+        _saudio_dummy_backend_shutdown();
+    #elif defined(_SAUDIO_LINUX)
+        _saudio_alsa_backend_shutdown();
+    #elif defined(_SAUDIO_WINDOWS)
+        _saudio_wasapi_backend_shutdown();
+    #elif defined(_SAUDIO_EMSCRIPTEN)
+        _saudio_webaudio_backend_shutdown();
+    #elif defined(_SAUDIO_ANDROID)
+        _saudio_sles_backend_shutdown();
+    #elif defined(_SAUDIO_APPLE)
+        return _saudio_coreaudio_backend_shutdown();
+    #else
+    #error "unknown platform"
+    #endif
+}
+
+// ██████╗ ██╗   ██╗██████╗ ██╗     ██╗ ██████╗
+// ██╔══██╗██║   ██║██╔══██╗██║     ██║██╔════╝
+// ██████╔╝██║   ██║██████╔╝██║     ██║██║
+// ██╔═══╝ ██║   ██║██╔══██╗██║     ██║██║
+// ██║     ╚██████╔╝██████╔╝███████╗██║╚██████╗
+// ╚═╝      ╚═════╝ ╚═════╝ ╚══════╝╚═╝ ╚═════╝
 //
-//
-//
+// >>public
 SOKOL_API_IMPL void saudio_setup(const saudio_desc* desc) {
     SOKOL_ASSERT(!_saudio.valid);
     SOKOL_ASSERT(desc);
