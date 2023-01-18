@@ -2348,7 +2348,7 @@ bool _saudio_backend_init(void) {
     #if defined(SOKOL_DUMMY_BACKEND)
         return _saudio_dummy_backend_init();
     #elif defined(_SAUDIO_LINUX)
-        return _saudio_alsa_backend_init()
+        return _saudio_alsa_backend_init();
     #elif defined(_SAUDIO_WINDOWS)
         return _saudio_wasapi_backend_init();
     #elif defined(_SAUDIO_EMSCRIPTEN)
