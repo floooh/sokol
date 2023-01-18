@@ -2287,7 +2287,7 @@ _SOKOL_PRIVATE bool _saudio_coreaudio_backend_init(void) {
         /* activate audio session */
         AVAudioSession* session = [AVAudioSession sharedInstance];
         SOKOL_ASSERT(session != nil);
-        [session setCategory: AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker error:nil];
+        [session setCategory: AVAudioSessionCategoryPlayback error:nil];
         [session setActive:true error:nil];
 
         /* create interruption handler */
