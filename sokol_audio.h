@@ -2007,7 +2007,7 @@ _SOKOL_PRIVATE void* _saudio_sles_thread_fn(void* param) {
     while (!_saudio.backend.thread_stop)  {
         /* get next output buffer, advance, next buffer. */
         int16_t* out_buffer = _saudio.backend.output_buffers[_saudio.backend.active_buffer];
-        _saudio.backend.active_buffer = (_saudio.backend.active_buffer + 1) % SAUDIO_NUM_BUFFERS;
+        _saudio.backend.active_buffer = (_saudio.backend.active_buffer + 1) % SAUDIO_SLES_NUM_BUFFERS;
         int16_t* next_buffer = _saudio.backend.output_buffers[_saudio.backend.active_buffer];
 
         /* queue this buffer */
@@ -2043,7 +2043,7 @@ _SOKOL_PRIVATE void _saudio_sles_backend_shutdown(void) {
         (*_saudio.backend.engine_obj)->Destroy(_saudio.backend.engine_obj);
     }
 
-    for (int i = 0; i < SAUDIO_NUM_BUFFERS; i++) {
+    for (int i = 0; i < SAUDIO_SLES_NUM_BUFFERS; i++) {
         _saudio_free(_saudio.backend.output_buffers[i]);
     }
     _saudio_free(_saudio.backend.src_buffer);
@@ -2052,7 +2052,7 @@ _SOKOL_PRIVATE void _saudio_sles_backend_shutdown(void) {
 _SOKOL_PRIVATE bool _saudio_sles_backend_init(void) {
     _saudio.bytes_per_frame = (int)sizeof(float) * _saudio.num_channels;
 
-    for (int i = 0; i < SAUDIO_NUM_BUFFERS; ++i) {
+    for (int i = 0; i < SAUDIO_SLES_NUM_BUFFERS; ++i) {
         const int buffer_size_bytes = (int)sizeof(int16_t) * _saudio.num_channels * _saudio.buffer_frames;
         _saudio.backend.output_buffers[i] = (int16_t*) _saudio_malloc_clear((size_t)buffer_size_bytes);
     }
@@ -2097,7 +2097,7 @@ _SOKOL_PRIVATE bool _saudio_sles_backend_init(void) {
 
     /* android buffer queue */
     _saudio.backend.in_locator.locatorType = SL_DATALOCATOR_ANDROIDSIMPLEBUFFERQUEUE;
-    _saudio.backend.in_locator.numBuffers = SAUDIO_NUM_BUFFERS;
+    _saudio.backend.in_locator.numBuffers = SAUDIO_SLES_NUM_BUFFERS;
 
     /* data format */
     SLDataFormat_PCM format;
@@ -2157,7 +2157,7 @@ _SOKOL_PRIVATE bool _saudio_sles_backend_init(void) {
     {
         const int buffer_size_bytes = (int)sizeof(int16_t) * _saudio.num_channels * _saudio.buffer_frames;
         (*_saudio.backend.player_buffer_queue)->Enqueue(_saudio.backend.player_buffer_queue, _saudio.backend.output_buffers[0], (SLuint32)buffer_size_bytes);
-        _saudio.backend.active_buffer = (_saudio.backend.active_buffer + 1) % SAUDIO_NUM_BUFFERS;
+        _saudio.backend.active_buffer = (_saudio.backend.active_buffer + 1) % SAUDIO_SLES_NUM_BUFFERS;
 
         (*_saudio.backend.player)->RegisterCallback(_saudio.backend.player, _saudio_sles_play_cb, NULL);
         (*_saudio.backend.player)->SetCallbackEventsMask(_saudio.backend.player, SL_PLAYEVENT_HEADATEND);
