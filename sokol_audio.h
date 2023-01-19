@@ -1835,7 +1835,7 @@ EM_JS(int, saudio_js_init, (int sample_rate, int num_channels, int buffer_size),
             }
         };
         document.addEventListener('click', resume_webaudio, {once:true});
-        document.addEventListener('touchstart', resume_webaudio, {once:true});
+        document.addEventListener('touchend', resume_webaudio, {once:true});
         document.addEventListener('keydown', resume_webaudio, {once:true});
         return 1;
     }
