@@ -868,7 +868,7 @@
 
     If no custom logger is provided, verbose default logging goes to stderr
     (this means you won't see any logging messages on Android, or on Windows
-    unless the problem is attached to a terminal!).
+    unless the process is attached to a terminal!).
 
     Eventually there will be a more luxurious sokol_log.h header, which will
     provide more control over logging, also on Windows or Android.
