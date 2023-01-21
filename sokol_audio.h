@@ -24,6 +24,8 @@
     SAUDIO_RING_MAX_SLOTS           - max number of slots in the push-audio ring buffer (default 1024)
     SAUDIO_OSX_USE_SYSTEM_HEADERS   - define this to force inclusion of system headers on
                                       macOS instead of using embedded CoreAudio declarations
+    SAUDIO_ANDROID_AAUDIO           - on Android, select the AAudio backend (default)
+    SAUDIO_ANDROID_SLES             - on Android, select the OpenSLES backend
 
     If sokol_audio.h is compiled as a DLL, define the following before
     including the declaration or implementation:
@@ -38,7 +40,7 @@
     - on macOS: AudioToolbox
     - on iOS: AudioToolbox, AVFoundation
     - on Linux: asound
-    - on Android: link with OpenSLES
+    - on Android: link with OpenSLES or aaudio
     - on Windows with MSVC or Clang toolchain: no action needed, libs are defined in-source via pragma-comment-lib
     - on Windows with MINGW/MSYS2 gcc: compile with '-mwin32' and link with -lole32
 
@@ -52,7 +54,7 @@
     - macOS: CoreAudio
     - iOS: CoreAudio+AVAudioSession
     - emscripten: WebAudio with ScriptProcessorNode
-    - Android: OpenSLES
+    - Android: AAudio (default) or OpenSLES, select at build time
 
     Sokol Audio will not do any buffer mixing or volume control, if you have
     multiple independent input streams of sample data you need to perform the
@@ -620,6 +622,9 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
     #endif
 #elif defined(__ANDROID__)
     #define _SAUDIO_ANDROID (1)
+    #if !defined(SAUDIO_ANDROID_SLES) && !defined(SAUDIO_ANDROID_AAUDIO)
+        #define SAUDIO_ANDROID_AAUDIO (1)
+    #endif
 #elif defined(__linux__) || defined(__unix__)
     #define _SAUDIO_LINUX (1)
 #else
@@ -702,7 +707,11 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 #elif defined(_SAUDIO_ANDROID)
     #define _SAUDIO_PTHREADS (1)
     #include <pthread.h>
-    #include "SLES/OpenSLES_Android.h"
+    #if defined(SAUDIO_ANDROID_SLES)
+        #include "SLES/OpenSLES_Android.h"
+    #elif defined(SAUDIO_ANDROID_AAUDIO)
+        #include "aaudio/AAudio.h"
+    #endif
 #elif defined(_SAUDIO_LINUX)
     #define _SAUDIO_PTHREADS (1)
     #include <pthread.h>
@@ -876,7 +885,7 @@ typedef struct {
     bool thread_stop;
 } _saudio_alsa_backend_t;
 
-#elif defined(_SAUDIO_ANDROID)
+#elif defined(SAUDIO_ANDROID_SLES)
 
 #define SAUDIO_SLES_NUM_BUFFERS (2)
 
@@ -884,7 +893,7 @@ typedef struct {
     pthread_mutex_t mutex;
     pthread_cond_t cond;
     int count;
-} _saudio_semaphore_t;
+} _saudio_sles_semaphore_t;
 
 typedef struct {
     SLObjectItf engine_obj;
@@ -901,11 +910,20 @@ typedef struct {
     int16_t* output_buffers[SAUDIO_SLES_NUM_BUFFERS];
     float* src_buffer;
     int active_buffer;
-    _saudio_semaphore_t buffer_sem;
+    _saudio_sles_semaphore_t buffer_sem;
     pthread_t thread;
     volatile int thread_stop;
     SLDataLocator_AndroidSimpleBufferQueue in_locator;
 } _saudio_sles_backend_t;
+
+#elif defined(SAUDIO_ANDROID_AAUDIO)
+
+typedef struct {
+    AAudioStreamBuilder* builder;
+    AAudioStream* stream;
+    pthread_t thread;
+    pthread_mutex_t mutex;
+} _saudio_aaudio_backend_t;
 
 #elif defined(_SAUDIO_WINDOWS)
 
@@ -953,8 +971,10 @@ typedef _saudio_apple_backend_t _saudio_backend_t;
 typedef _saudio_web_backend_t _saudio_backend_t;
 #elif defined(_SAUDIO_WINDOWS)
 typedef _saudio_wasapi_backend_t _saudio_backend_t;
-#elif defined(_SAUDIO_ANDROID)
+#elif defined(SAUDIO_ANDROID_SLES)
 typedef _saudio_sles_backend_t _saudio_backend_t;
+#elif defined(SAUDIO_ANDROID_AAUDIO)
+typedef _saudio_aaudio_backend_t _saudio_backend_t;
 #elif defined(_SAUDIO_LINUX)
 typedef _saudio_alsa_backend_t _saudio_backend_t;
 #endif
@@ -1912,63 +1932,154 @@ _SOKOL_PRIVATE void _saudio_webaudio_backend_shutdown(void) {
     }
 }
 
-//  █████╗ ███╗   ██╗██████╗ ██████╗  ██████╗ ██╗██████╗
-// ██╔══██╗████╗  ██║██╔══██╗██╔══██╗██╔═══██╗██║██╔══██╗
-// ███████║██╔██╗ ██║██║  ██║██████╔╝██║   ██║██║██║  ██║
-// ██╔══██║██║╚██╗██║██║  ██║██╔══██╗██║   ██║██║██║  ██║
-// ██║  ██║██║ ╚████║██████╔╝██║  ██║╚██████╔╝██║██████╔╝
-// ╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═╝╚═════╝
+//  █████╗  █████╗ ██╗   ██╗██████╗ ██╗ ██████╗
+// ██╔══██╗██╔══██╗██║   ██║██╔══██╗██║██╔═══██╗
+// ███████║███████║██║   ██║██║  ██║██║██║   ██║
+// ██╔══██║██╔══██║██║   ██║██║  ██║██║██║   ██║
+// ██║  ██║██║  ██║╚██████╔╝██████╔╝██║╚██████╔╝
+// ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝ ╚═════╝
 //
-// >>android
-#elif defined(_SAUDIO_ANDROID)
+// >>aaudio
+#elif defined(SAUDIO_ANDROID_AAUDIO)
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+_SOKOL_PRIVATE aaudio_data_callback_result_t _saudio_aaudio_data_callback(AAudioStream* stream, void* user_data, void* audio_data, int32_t num_frames) {
+    _SOKOL_UNUSED(user_data);
+    if (_saudio_has_callback()) {
+        _saudio_stream_callback((float*)audio_data, (int)num_frames, _saudio.num_channels);
+    }
+    else {
+        uint8_t* ptr = (uint8_t*)audio_data;
+        int num_bytes = _saudio.bytes_per_frame * num_frames;
+        if (0 == _saudio_fifo_read(&_saudio.fifo, ptr, num_bytes)) {
+            // not enough read data available, fill the entire buffer with silence
+            memset(ptr, 0, (size_t)num_bytes);
+        }
+    }
+    return AAUDIO_CALLBACK_RESULT_CONTINUE;
+}
 
-_SOKOL_PRIVATE void _saudio_semaphore_init(_saudio_semaphore_t* sem) {
+_SOKOL_PRIVATE bool _saudio_aaudio_start_stream(void) {
+    if (AAudioStreamBuilder_openStream(_saudio.backend.builder, &_saudio.backend.stream) != AAUDIO_OK) {
+        SAUDIO_LOG("sokol_audio.h aaudio: AAudioStreamBuilder_openStream failed");
+        return false;
+    }
+    AAudioStream_requestStart(_saudio.backend.stream);
+    return true;
+}
+
+_SOKOL_PRIVATE void _saudio_aaudio_stop_stream(void) {
+    if (_saudio.backend.stream) {
+        AAudioStream_requestStop(_saudio.backend.stream);
+        AAudioStream_close(_saudio.backend.stream);
+        _saudio.backend.stream = 0;
+    }
+}
+
+_SOKOL_PRIVATE void* _saudio_aaudio_restart_stream_thread_fn(void* param) {
+    _SOKOL_UNUSED(param);
+    SAUDIO_LOG("sokol_audio.h aaudio: restarting stream after error");
+    pthread_mutex_lock(&_saudio.backend.mutex);
+    _saudio_aaudio_stop_stream();
+    _saudio_aaudio_start_stream();
+    pthread_mutex_unlock(&_saudio.backend.mutex);
+    return 0;
+}
+
+_SOKOL_PRIVATE void _saudio_aaudio_error_callback(AAudioStream* stream, void* user_data, aaudio_result_t error) {
+    if (error == AAUDIO_ERROR_DISCONNECTED) {
+        if (0 != pthread_create(&_saudio.backend.thread, 0, _saudio_aaudio_restart_stream_thread_fn, 0)) {
+            SAUDIO_LOG("sokol_audio.h aaudio: pthread_create failed in _saudio_audio_error_callback");
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _saudio_aaudio_backend_shutdown(void) {
+    pthread_mutex_lock(&_saudio.backend.mutex);
+    _saudio_aaudio_stop_stream();
+    pthread_mutex_unlock(&_saudio.backend.mutex);
+    if (_saudio.backend.builder) {
+        AAudioStreamBuilder_delete(_saudio.backend.builder);
+        _saudio.backend.builder = 0;
+    }
+    pthread_mutex_destroy(&_saudio.backend.mutex);
+}
+
+_SOKOL_PRIVATE bool _saudio_aaudio_backend_init(void) {
+    SAUDIO_LOG("sokol_audio.h: using AAudio backend");
+
+    _saudio.bytes_per_frame = _saudio.num_channels * (int)sizeof(float);
+
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutex_init(&_saudio.backend.mutex, &attr);
+
+    if (AAudio_createStreamBuilder(&_saudio.backend.builder) != AAUDIO_OK) {
+        SAUDIO_LOG("sokol_audio.h aaudio: AAudio_createStreamBuilder() failed!");
+        _saudio_aaudio_backend_shutdown();
+        return false;
+    }
+
+    AAudioStreamBuilder_setFormat(_saudio.backend.builder, AAUDIO_FORMAT_PCM_FLOAT);
+    AAudioStreamBuilder_setSampleRate(_saudio.backend.builder, _saudio.sample_rate);
+    AAudioStreamBuilder_setChannelCount(_saudio.backend.builder, _saudio.num_channels);
+    AAudioStreamBuilder_setBufferCapacityInFrames(_saudio.backend.builder, _saudio.buffer_frames * 2);
+    AAudioStreamBuilder_setFramesPerDataCallback(_saudio.backend.builder, _saudio.buffer_frames);
+    AAudioStreamBuilder_setDataCallback(_saudio.backend.builder, _saudio_aaudio_data_callback, 0);
+    AAudioStreamBuilder_setErrorCallback(_saudio.backend.builder, _saudio_aaudio_error_callback, 0);
+
+    if (!_saudio_aaudio_start_stream()) {
+        _saudio_aaudio_backend_shutdown();
+        return false;
+    }
+
+    return true;
+}
+
+
+//  ██████╗ ██████╗ ███████╗███╗   ██╗███████╗██╗     ███████╗███████╗
+// ██╔═══██╗██╔══██╗██╔════╝████╗  ██║██╔════╝██║     ██╔════╝██╔════╝
+// ██║   ██║██████╔╝█████╗  ██╔██╗ ██║███████╗██║     █████╗  ███████╗
+// ██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║╚════██║██║     ██╔══╝  ╚════██║
+// ╚██████╔╝██║     ███████╗██║ ╚████║███████║███████╗███████╗███████║
+//  ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝╚══════╝╚══════╝╚══════╝╚══════╝
+//
+//  >>opensles
+//  >>sles
+#elif defined(SAUDIO_ANDROID_SLES)
+
+_SOKOL_PRIVATE void _saudio_sles_semaphore_init(_saudio_sles_semaphore_t* sem) {
     sem->count = 0;
     int r = pthread_mutex_init(&sem->mutex, NULL);
     SOKOL_ASSERT(r == 0);
-
     r = pthread_cond_init(&sem->cond, NULL);
     SOKOL_ASSERT(r == 0);
-
     (void)(r);
 }
 
-_SOKOL_PRIVATE void _saudio_semaphore_destroy(_saudio_semaphore_t* sem)
-{
+_SOKOL_PRIVATE void _saudio_sles_semaphore_destroy(_saudio_sles_semaphore_t* sem) {
     pthread_cond_destroy(&sem->cond);
     pthread_mutex_destroy(&sem->mutex);
 }
 
-_SOKOL_PRIVATE void _saudio_semaphore_post(_saudio_semaphore_t* sem, int count)
-{
+_SOKOL_PRIVATE void _saudio_sles_semaphore_post(_saudio_sles_semaphore_t* sem, int count) {
     int r = pthread_mutex_lock(&sem->mutex);
     SOKOL_ASSERT(r == 0);
-
     for (int ii = 0; ii < count; ii++) {
         r = pthread_cond_signal(&sem->cond);
         SOKOL_ASSERT(r == 0);
     }
-
     sem->count += count;
     r = pthread_mutex_unlock(&sem->mutex);
     SOKOL_ASSERT(r == 0);
-
     (void)(r);
 }
 
-_SOKOL_PRIVATE bool _saudio_semaphore_wait(_saudio_semaphore_t* sem)
-{
+_SOKOL_PRIVATE bool _saudio_sles_semaphore_wait(_saudio_sles_semaphore_t* sem) {
     int r = pthread_mutex_lock(&sem->mutex);
     SOKOL_ASSERT(r == 0);
-
     while (r == 0 && sem->count <= 0) {
         r = pthread_cond_wait(&sem->cond, &sem->mutex);
     }
-
     bool ok = (r == 0);
     if (ok) {
         --sem->count;
@@ -1998,7 +2109,7 @@ _SOKOL_PRIVATE void SLAPIENTRY _saudio_sles_play_cb(SLPlayItf player, void *cont
     (void)(player);
 
     if (event & SL_PLAYEVENT_HEADATEND) {
-        _saudio_semaphore_post(&_saudio.backend.buffer_sem, 1);
+        _saudio_sles_semaphore_post(&_saudio.backend.buffer_sem, 1);
     }
 }
 
@@ -2021,7 +2132,7 @@ _SOKOL_PRIVATE void* _saudio_sles_thread_fn(void* param) {
             next_buffer[i] = (int16_t) (_saudio.backend.src_buffer[i] * 0x7FFF);
         }
 
-        _saudio_semaphore_wait(&_saudio.backend.buffer_sem);
+        _saudio_sles_semaphore_wait(&_saudio.backend.buffer_sem);
     }
 
     return 0;
@@ -2050,6 +2161,8 @@ _SOKOL_PRIVATE void _saudio_sles_backend_shutdown(void) {
 }
 
 _SOKOL_PRIVATE bool _saudio_sles_backend_init(void) {
+    SAUDIO_LOG("sokol_audio.h: using OpenSLES backend");
+
     _saudio.bytes_per_frame = (int)sizeof(float) * _saudio.num_channels;
 
     for (int i = 0; i < SAUDIO_SLES_NUM_BUFFERS; ++i) {
@@ -2172,10 +2285,6 @@ _SOKOL_PRIVATE bool _saudio_sles_backend_init(void) {
 
     return true;
 }
-
-#ifdef __cplusplus
-} /* extern "C" */
-#endif
 
 //  ██████╗ ██████╗ ██████╗ ███████╗ █████╗ ██╗   ██╗██████╗ ██╗ ██████╗
 // ██╔════╝██╔═══██╗██╔══██╗██╔════╝██╔══██╗██║   ██║██╔══██╗██║██╔═══██╗
@@ -2353,7 +2462,9 @@ bool _saudio_backend_init(void) {
         return _saudio_wasapi_backend_init();
     #elif defined(_SAUDIO_EMSCRIPTEN)
         return _saudio_webaudio_backend_init();
-    #elif defined(_SAUDIO_ANDROID)
+    #elif defined(SAUDIO_ANDROID_AAUDIO)
+        return _saudio_aaudio_backend_init();
+    #elif defined(SAUDIO_ANDROID_SLES)
         return _saudio_sles_backend_init();
     #elif defined(_SAUDIO_APPLE)
         return _saudio_coreaudio_backend_init();
@@ -2371,7 +2482,9 @@ void _saudio_backend_shutdown(void) {
         _saudio_wasapi_backend_shutdown();
     #elif defined(_SAUDIO_EMSCRIPTEN)
         _saudio_webaudio_backend_shutdown();
-    #elif defined(_SAUDIO_ANDROID)
+    #elif defined(SAUDIO_ANDROID_AAUDIO)
+        _saudio_aaudio_backend_shutdown();
+    #elif defined(SAUDIO_ANDROID_SLES)
         _saudio_sles_backend_shutdown();
     #elif defined(_SAUDIO_APPLE)
         return _saudio_coreaudio_backend_shutdown();
