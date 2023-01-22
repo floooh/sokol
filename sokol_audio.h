@@ -1944,6 +1944,7 @@ _SOKOL_PRIVATE void _saudio_webaudio_backend_shutdown(void) {
 
 _SOKOL_PRIVATE aaudio_data_callback_result_t _saudio_aaudio_data_callback(AAudioStream* stream, void* user_data, void* audio_data, int32_t num_frames) {
     _SOKOL_UNUSED(user_data);
+    _SOKOL_UNUSED(stream);
     if (_saudio_has_callback()) {
         _saudio_stream_callback((float*)audio_data, (int)num_frames, _saudio.num_channels);
     }
@@ -1986,6 +1987,8 @@ _SOKOL_PRIVATE void* _saudio_aaudio_restart_stream_thread_fn(void* param) {
 }
 
 _SOKOL_PRIVATE void _saudio_aaudio_error_callback(AAudioStream* stream, void* user_data, aaudio_result_t error) {
+    _SOKOL_UNUSED(stream);
+    _SOKOL_UNUSED(user_data);
     if (error == AAUDIO_ERROR_DISCONNECTED) {
         if (0 != pthread_create(&_saudio.backend.thread, 0, _saudio_aaudio_restart_stream_thread_fn, 0)) {
             SAUDIO_LOG("sokol_audio.h aaudio: pthread_create failed in _saudio_audio_error_callback");
