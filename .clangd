@@ -1,2 +1,0 @@
-CompileFlags:
-    Add: [-DSOKOL_IMPL]
