@@ -1,13 +1,30 @@
 ## Updates
 
-- **16-Jan-2022**:
+- **23-Jan-2023**: A couple more sokol_audio.h updates:
+  - An AAudio backend has been added for Android, and made the default. This
+    means you now need to link with ```aaudio``` instead of ```OpenSLES``` when
+    using sokol_audio.h on Android. The OpenSLES backend code still exists (for
+    now), but must be explicitly selected by compiling the sokol_audio.h
+    implementation with the define ```SAUDIO_ANDROID_SLES``` (e.g. there is
+    no runtime fallback from AAudio to OpenSLES). AAudio is fully supported
+    since Android 8.1. Many thanks to @oviano for the initial AAudio PR
+    (https://github.com/floooh/sokol/pull/484).
+  - In the WebAudio backend, WebAudio is now properly activated on the first
+    input action again on Chrome for Android (at some point activating WebAudio
+    via a ```touchstart``` event stopped working and had to be moved to the
+    ```touchend``` event, see https://github.com/floooh/sokol/issues/701)
+  - ...and some minor general code cleanup things in sokol_audio.h: backend-specific
+    functions now generally have a matching prefix (like ```_saudio_alsa_...()```)
+    for better searchability.
+
+- **16-Jan-2023**:
   - sokol_audio.h android: https://github.com/floooh/sokol/pull/747 has been merged
     which adds a couple more error checks at OpenSLES startup.
   - sokol_gfx.h: support for half-float vertex formats has been added via
     PR https://github.com/floooh/sokol/pull/745
   - sokol_imgui.h: fixes for Dear ImGui 1.89 deprecations (via PR https://github.com/floooh/sokol/pull/761)
 
-- **15-Jan-2022**: two bugfixes in sokol_app.h and sokol_gfx.h:
+- **15-Jan-2023**: two bugfixes in sokol_app.h and sokol_gfx.h:
   - sokol_app.h x11: Mouse button events now always return valid mouse
     coordinates, also when no mouse movement happened yet
     (fixes https://github.com/floooh/sokol/issues/770)
@@ -17,7 +34,7 @@
     data that doesn't have a row-pitch with a multiple of 4
     (fixes https://github.com/floooh/sokol/issues/767)
 
-- **14-Jan-2022**: sokol_app.h x11: a drag'n'drop related bugfix, the
+- **14-Jan-2023**: sokol_app.h x11: a drag'n'drop related bugfix, the
   XdndFinished reply event was sent with the wrong window handle which
   confused some apps where the drag operation originated
   (see https://github.com/floooh/sokol/pull/765#issuecomment-1382750611)
