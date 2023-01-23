@@ -2596,7 +2596,7 @@ typedef struct sg_pass_info {
             ID3D11DepthStencilView object of the default framebuffer,
             this function will be called in sg_begin_pass() when rendering
             to the default framebuffer
-        .context.metal.user_data
+        .context.d3d11.user_data
             optional user data pointer passed to the userdata versions of
             callback functions
 
@@ -2617,7 +2617,7 @@ typedef struct sg_pass_info {
         .context.wgpu.depth_stencil_view_userdata_cb
             callback to get current default-pass depth-stencil-surface WGPUTextureView
             the pixel format of the default WGPUTextureView must be WGPUTextureFormat_Depth24Plus8
-        .context.metal.user_data
+        .context.wgpu.user_data
             optional user data pointer passed to the userdata versions of
             callback functions
 
