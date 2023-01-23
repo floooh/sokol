@@ -1,21 +1,24 @@
 ## Updates
 
 - **23-Jan-2023**: A couple more sokol_audio.h updates:
-  - An AAudio backend has been added for Android, and made the default. This
+  - an AAudio backend has been added for Android, and made the default. This
     means you now need to link with ```aaudio``` instead of ```OpenSLES``` when
     using sokol_audio.h on Android. The OpenSLES backend code still exists (for
     now), but must be explicitly selected by compiling the sokol_audio.h
     implementation with the define ```SAUDIO_ANDROID_SLES``` (e.g. there is
     no runtime fallback from AAudio to OpenSLES). AAudio is fully supported
     since Android 8.1. Many thanks to @oviano for the initial AAudio PR
-    (https://github.com/floooh/sokol/pull/484).
-  - In the WebAudio backend, WebAudio is now properly activated on the first
+    (https://github.com/floooh/sokol/pull/484)
+  - in the WebAudio backend, WebAudio is now properly activated on the first
     input action again on Chrome for Android (at some point activating WebAudio
     via a ```touchstart``` event stopped working and had to be moved to the
     ```touchend``` event, see https://github.com/floooh/sokol/issues/701)
+  - audio backend initialization on iOS and macOS is now a bit more fault-tolerant,
+    errors during initialization now properly set sokol_audio.h to 'silent mode'
+    instead of asserting (or in release mode ignoring the error)
   - ...and some minor general code cleanup things in sokol_audio.h: backend-specific
     functions now generally have a matching prefix (like ```_saudio_alsa_...()```)
-    for better searchability.
+    for better searchability
 
 - **16-Jan-2023**:
   - sokol_audio.h android: https://github.com/floooh/sokol/pull/747 has been merged
