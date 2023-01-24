@@ -1,5 +1,13 @@
 ## Updates
 
+- **24-Jan-2023**: sokol_gfx.h Metal: A minor inconsistency has been fixed in
+  the validation layer and an assert for the function ```sg_apply_uniform()```
+  which checks the size of the incoming data against the uniform block size.
+  The validation layer and Metal backend did a ```<=``` test while the D3D11
+  and GL backends checked for an exact size match. Both the validation layer
+  and the Metal backend now also check for an exact match. Thanks to @nmr8acme
+  for noticing the issue and providing a PR! (https://github.com/floooh/sokol/pull/776)
+
 - **23-Jan-2023**: A couple more sokol_audio.h updates:
   - an AAudio backend has been added for Android, and made the default. This
     means you now need to link with ```aaudio``` instead of ```OpenSLES``` when
