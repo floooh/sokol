@@ -5876,7 +5876,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
             case SG_PIXELFORMAT_RG16SI:     return GL_RG16I;
             case SG_PIXELFORMAT_RG16F:      return GL_RG16F;
             case SG_PIXELFORMAT_RGBA8:      return GL_RGBA8;
-            case SG_PIXELFORMAT_SRGB8A8:     return GL_SRGB8_ALPHA8;
+            case SG_PIXELFORMAT_SRGB8A8:    return GL_SRGB8_ALPHA8;
             case SG_PIXELFORMAT_RGBA8SN:    return GL_RGBA8_SNORM;
             case SG_PIXELFORMAT_RGBA8UI:    return GL_RGBA8UI;
             case SG_PIXELFORMAT_RGBA8SI:    return GL_RGBA8I;
@@ -8604,7 +8604,7 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_pixel_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RG16SI:         return DXGI_FORMAT_R16G16_SINT;
         case SG_PIXELFORMAT_RG16F:          return DXGI_FORMAT_R16G16_FLOAT;
         case SG_PIXELFORMAT_RGBA8:          return DXGI_FORMAT_R8G8B8A8_UNORM;
-        case SG_PIXELFORMAT_SRGB8A8:         return DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+        case SG_PIXELFORMAT_SRGB8A8:        return DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
         case SG_PIXELFORMAT_RGBA8SN:        return DXGI_FORMAT_R8G8B8A8_SNORM;
         case SG_PIXELFORMAT_RGBA8UI:        return DXGI_FORMAT_R8G8B8A8_UINT;
         case SG_PIXELFORMAT_RGBA8SI:        return DXGI_FORMAT_R8G8B8A8_SINT;
@@ -10166,7 +10166,7 @@ _SOKOL_PRIVATE MTLPixelFormat _sg_mtl_pixel_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RG16SI:                 return MTLPixelFormatRG16Sint;
         case SG_PIXELFORMAT_RG16F:                  return MTLPixelFormatRG16Float;
         case SG_PIXELFORMAT_RGBA8:                  return MTLPixelFormatRGBA8Unorm;
-        case SG_PIXELFORMAT_SRGB8A8:                 return MTLPixelFormatRGBA8Unorm_sRGB;
+        case SG_PIXELFORMAT_SRGB8A8:                return MTLPixelFormatRGBA8Unorm_sRGB;
         case SG_PIXELFORMAT_RGBA8SN:                return MTLPixelFormatRGBA8Snorm;
         case SG_PIXELFORMAT_RGBA8UI:                return MTLPixelFormatRGBA8Uint;
         case SG_PIXELFORMAT_RGBA8SI:                return MTLPixelFormatRGBA8Sint;
