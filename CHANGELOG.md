@@ -1,7 +1,7 @@
 ## Updates
 
 - **24-Jan-2023**: sokol_gfx.h Metal: A minor inconsistency has been fixed in
-  the validation layer and an assert for the function ```sg_apply_uniform()```
+  the validation layer and an assert for the function ```sg_apply_uniforms()```
   which checks the size of the incoming data against the uniform block size.
   The validation layer and Metal backend did a ```<=``` test while the D3D11
   and GL backends checked for an exact size match. Both the validation layer
