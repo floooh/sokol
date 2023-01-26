@@ -1143,6 +1143,7 @@ typedef enum sg_pixel_format {
     SG_PIXELFORMAT_RG16SI,
     SG_PIXELFORMAT_RG16F,
     SG_PIXELFORMAT_RGBA8,
+    SG_PIXELFORMAT_SRGB8A8,
     SG_PIXELFORMAT_RGBA8SN,
     SG_PIXELFORMAT_RGBA8UI,
     SG_PIXELFORMAT_RGBA8SI,
@@ -3157,6 +3158,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_NEAREST_MIPMAP_LINEAR 0x2702
         #define GL_RGB10_A2 0x8059
         #define GL_RGBA8 0x8058
+        #define GL_SRGB8_ALPHA8 0x8C43
         #define GL_COLOR_ATTACHMENT1 0x8CE1
         #define GL_RGBA4 0x8056
         #define GL_RGB8 0x8051
@@ -3309,6 +3311,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_CURRENT_PROGRAM 0x8B8D
         #define GL_MAX_VERTEX_UNIFORM_VECTORS 0x8DFB
         #define GL_UNPACK_ALIGNMENT 0x0CF5
+        #define GL_FRAMEBUFFER_SRGB 0x8DB9
     #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
@@ -4841,6 +4844,7 @@ _SOKOL_PRIVATE int _sg_pixelformat_bytesize(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RG16SI:
         case SG_PIXELFORMAT_RG16F:
         case SG_PIXELFORMAT_RGBA8:
+        case SG_PIXELFORMAT_SRGB8A8:
         case SG_PIXELFORMAT_RGBA8SN:
         case SG_PIXELFORMAT_RGBA8UI:
         case SG_PIXELFORMAT_RGBA8SI:
@@ -5671,6 +5675,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_type(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RG8:
         case SG_PIXELFORMAT_RG8UI:
         case SG_PIXELFORMAT_RGBA8:
+        case SG_PIXELFORMAT_SRGB8A8:
         case SG_PIXELFORMAT_RGBA8UI:
         case SG_PIXELFORMAT_BGRA8:
             return GL_UNSIGNED_BYTE;
@@ -5770,6 +5775,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
                 return GL_RG_INTEGER;
         #endif
         case SG_PIXELFORMAT_RGBA8:
+        case SG_PIXELFORMAT_SRGB8A8:
         case SG_PIXELFORMAT_RGBA8SN:
         case SG_PIXELFORMAT_RGBA16:
         case SG_PIXELFORMAT_RGBA16SN:
@@ -5871,6 +5877,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
             case SG_PIXELFORMAT_RG16SI:     return GL_RG16I;
             case SG_PIXELFORMAT_RG16F:      return GL_RG16F;
             case SG_PIXELFORMAT_RGBA8:      return GL_RGBA8;
+            case SG_PIXELFORMAT_SRGB8A8:    return GL_SRGB8_ALPHA8;
             case SG_PIXELFORMAT_RGBA8SN:    return GL_RGBA8_SNORM;
             case SG_PIXELFORMAT_RGBA8UI:    return GL_RGBA8UI;
             case SG_PIXELFORMAT_RGBA8SI:    return GL_RGBA8I;
@@ -5977,6 +5984,7 @@ _SOKOL_PRIVATE void _sg_gl_init_pixelformats(bool has_bgra) {
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA8]);
     #if !defined(SOKOL_GLES2)
     if (!_sg.gl.gles2) {
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_SRGB8A8]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGBA8SN]);
         _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA8UI]);
         _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA8SI]);
@@ -7496,15 +7504,29 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
     /* number of color attachments */
     const int num_color_atts = pass ? pass->cmn.num_color_atts : 1;
 
-    /* bind the render pass framebuffer */
+    // bind the render pass framebuffer
+    //
+    // FIXME: Disabling SRGB conversion for the default framebuffer is
+    // a crude hack to make behaviour for sRGB render target textures
+    // identical with the Metal and D3D11 swapchains created by sokol-app.
+    //
+    // This will need a cleaner solution (e.g. allowing to configure
+    // sokol_app.h with an sRGB or RGB framebuffer.
     if (pass) {
-        /* offscreen pass */
+        // offscreen pass
         SOKOL_ASSERT(pass->gl.fb);
+        #if defined(SOKOL_GLCORE33)
+        glEnable(GL_FRAMEBUFFER_SRGB);
+        #endif
         glBindFramebuffer(GL_FRAMEBUFFER, pass->gl.fb);
+
     }
     else {
-        /* default pass */
+        // default pass
         SOKOL_ASSERT(_sg.gl.cur_context);
+        #if defined(SOKOL_GLCORE33)
+        glDisable(GL_FRAMEBUFFER_SRGB);
+        #endif
         glBindFramebuffer(GL_FRAMEBUFFER, _sg.gl.cur_context->default_framebuffer);
     }
     glViewport(0, 0, w, h);
@@ -8597,6 +8619,7 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_pixel_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RG16SI:         return DXGI_FORMAT_R16G16_SINT;
         case SG_PIXELFORMAT_RG16F:          return DXGI_FORMAT_R16G16_FLOAT;
         case SG_PIXELFORMAT_RGBA8:          return DXGI_FORMAT_R8G8B8A8_UNORM;
+        case SG_PIXELFORMAT_SRGB8A8:        return DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
         case SG_PIXELFORMAT_RGBA8SN:        return DXGI_FORMAT_R8G8B8A8_SNORM;
         case SG_PIXELFORMAT_RGBA8UI:        return DXGI_FORMAT_R8G8B8A8_UINT;
         case SG_PIXELFORMAT_RGBA8SI:        return DXGI_FORMAT_R8G8B8A8_SINT;
@@ -10158,6 +10181,7 @@ _SOKOL_PRIVATE MTLPixelFormat _sg_mtl_pixel_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RG16SI:                 return MTLPixelFormatRG16Sint;
         case SG_PIXELFORMAT_RG16F:                  return MTLPixelFormatRG16Float;
         case SG_PIXELFORMAT_RGBA8:                  return MTLPixelFormatRGBA8Unorm;
+        case SG_PIXELFORMAT_SRGB8A8:                return MTLPixelFormatRGBA8Unorm_sRGB;
         case SG_PIXELFORMAT_RGBA8SN:                return MTLPixelFormatRGBA8Snorm;
         case SG_PIXELFORMAT_RGBA8UI:                return MTLPixelFormatRGBA8Uint;
         case SG_PIXELFORMAT_RGBA8SI:                return MTLPixelFormatRGBA8Sint;
@@ -10653,6 +10677,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG16SI]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16F]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA8]);
+    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_SRGB8A8]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA8SN]);
     _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA8UI]);
     _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA8SI]);
@@ -12005,6 +12030,7 @@ _SOKOL_PRIVATE WGPUTextureFormat _sg_wgpu_textureformat(sg_pixel_format p) {
         case SG_PIXELFORMAT_RG16SN:
         case SG_PIXELFORMAT_RGBA16:
         case SG_PIXELFORMAT_RGBA16SN:
+        case SG_PIXELFORMAT_SRGB8A8:
         case SG_PIXELFORMAT_RGB9E5:
         case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
         case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
