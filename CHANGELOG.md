@@ -1,5 +1,15 @@
 ## Updates
 
+- **26-Jan-2023**: Work on SRGB support in sokol_gfx.h has started, but
+  this requires more effort to be really usable. For now, only a new
+  pixel format has been added: SG_PIXELFORMAT_SRGB8A8 (see https://github.com/floooh/sokol/pull/758,
+  many thanks to @allcreater). The sokol-gfx GL backend has a temporary
+  workaround to align behaviour with D3D11 and Metal: automatic SRGB conversion
+  is enabled for offscreen render passes, but disabled for the default
+  framebuffer. A proper fix will require separate work on sokol_app.h to
+  support an SRGB default framebuffer and communicate to sokol-gfx
+  whether the default framebuffer is SRGB enabled or not.
+
 - **24-Jan-2023**: sokol_gfx.h Metal: A minor inconsistency has been fixed in
   the validation layer and an assert for the function ```sg_apply_uniforms()```
   which checks the size of the incoming data against the uniform block size.
