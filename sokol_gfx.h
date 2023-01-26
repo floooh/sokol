@@ -7503,15 +7503,29 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
     /* number of color attachments */
     const int num_color_atts = pass ? pass->cmn.num_color_atts : 1;
 
-    /* bind the render pass framebuffer */
+    // bind the render pass framebuffer
+    //
+    // FIXME: Disabling SRGB conversion for the default framebuffer is
+    // a crude hack to make behaviour for sRGB render target textures
+    // identical with the Metal and D3D11 swapchains created by sokol-app.
+    //
+    // This will need a cleaner solution (e.g. allowing to configure
+    // sokol_app.h with an sRGB or RGB framebuffer.
     if (pass) {
-        /* offscreen pass */
+        // offscreen pass
         SOKOL_ASSERT(pass->gl.fb);
+        #if defined(SOKOL_GLCORE33)
+        glEnable(GL_FRAMEBUFFER_SRGB);
+        #endif
         glBindFramebuffer(GL_FRAMEBUFFER, pass->gl.fb);
+
     }
     else {
-        /* default pass */
+        // default pass
         SOKOL_ASSERT(_sg.gl.cur_context);
+        #if defined(SOKOL_GLCORE33)
+        glDisable(GL_FRAMEBUFFER_SRGB);
+        #endif
         glBindFramebuffer(GL_FRAMEBUFFER, _sg.gl.cur_context->default_framebuffer);
     }
     glViewport(0, 0, w, h);
