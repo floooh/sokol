@@ -15,7 +15,7 @@ set(c_sources
     sokol_color.c
     sokol_spine.c
     sokol_main.c)
-if (NOT ANDROID AND NOT UWP)
+if (NOT ANDROID)
     set(c_sources ${c_sources} sokol_fetch.c)
 endif()
 
@@ -35,7 +35,7 @@ set(cxx_sources
     sokol_color.cc
     sokol_spine.cc
     sokol_main.cc)
-if (NOT ANDROID AND NOT UWP)
+if (NOT ANDROID)
     set(cxx_sources ${cxx_sources} sokol_fetch.cc)
 endif()
 
