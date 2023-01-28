@@ -1700,7 +1700,7 @@ _SOKOL_PRIVATE bool _saudio_wasapi_backend_init(void) {
         eRender, eConsole,
         &_saudio.backend.device)))
     {
-        _SOKOL_ERROR(WASAPI_GET_DEFAULT_AUDIO_ENDPOINT_FAILED);
+        _SAUDIO_ERROR(WASAPI_GET_DEFAULT_AUDIO_ENDPOINT_FAILED);
         goto error;
     }
     if (FAILED(IMMDevice_Activate(_saudio.backend.device,
@@ -1708,7 +1708,7 @@ _SOKOL_PRIVATE bool _saudio_wasapi_backend_init(void) {
         CLSCTX_ALL, 0,
         (void**)&_saudio.backend.audio_client)))
     {
-        _SOKOL_ERROR(WASAPI_DEVICE_ACTIVATE_FAILED);
+        _SAUDIO_ERROR(WASAPI_DEVICE_ACTIVATE_FAILED);
         goto error;
     }
 
