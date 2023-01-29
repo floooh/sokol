@@ -407,7 +407,7 @@
         void my_log(const char* tag,            // e.g. 'saudio'
                     uint32_t log_level,         // 0=panic, 1=error, 2=warn, 3=info
                     uint32_t log_item,          // SAUDIO_LOGITEM_*
-                    const char* log_item_str,   // log item as string, only in debug mode, otherwise empty string
+                    const char* message,        // a message string, may be "" in release mode
                     int line_nr,                // line number in sokol_audio.h
                     const char* filename,       // debug mode only, otherwise empty string
                     void* user_data)
@@ -557,7 +557,7 @@ typedef struct saudio_logger {
         const char* tag,            // always "saudio"
         uint32_t log_level,         // 0=panic, 1=error, 2=warning, 3=info
         uint32_t log_item,          // SAUDIO_LOGITEM_*
-        const char* log_item_str,   // log item as string, debug only, otherwise empty string
+        const char* message,        // a message string, may be "" in release mode
         int line_nr,                // line number in sokol_audio.h
         const char* filename,       // debug mode only, otherwise empty string
         void* user_data);
@@ -1098,7 +1098,7 @@ _SOKOL_PRIVATE void _saudio_stream_callback(float* buffer, int num_frames, int n
 // >>logging
 #if defined(SOKOL_DEBUG)
 #define _SAUDIO_XMACRO(item) #item,
-static const char* _saudio_log_item_str[] = {
+static const char* _saudio_log_messages[] = {
     _SAUDIO_LOG_ITEMS
 };
 #undef _SSPINE_XMACRO
@@ -1113,12 +1113,12 @@ static void _saudio_log(saudio_log_item log_item, saudio_loglevel log_level, int
     if (_saudio.desc.logger.func) {
         #if defined(SOKOL_DEBUG)
             const char* filename = __FILE__;
-            const char* log_item_str = _saudio_log_item_str[log_item];
+            const char* message = _saudio_log_messages[log_item];
         #else
             const char* filename = "";
-            const char* log_item_str = "";
+            const char* message = "";
         #endif
-        _saudio.desc.logger.func("saudio", log_level, log_item, log_item_str, line_nr, filename, _saudio.desc.logger.user_data);
+        _saudio.desc.logger.func("saudio", log_level, log_item, message, line_nr, filename, _saudio.desc.logger.user_data);
     }
     else {
         // default logging function, uses printf only if debugging is enabled to save executable size
@@ -1130,13 +1130,13 @@ static void _saudio_log(saudio_log_item log_item, saudio_loglevel log_level, int
             default: loglevel_str = "info"; break;
         }
         #if defined(SOKOL_DEBUG)
-            const char* log_item_str = _saudio_log_item_str[log_item];
+            const char* message = _saudio_log_messages[log_item];
             #if defined(_MSC_VER)
                 // Visual Studio compiler error format
-                fprintf(stderr, "[saudio] %s(%d): %s: %s\n", __FILE__, line_nr, loglevel_str, log_item_str);
+                fprintf(stderr, "[saudio] %s(%d): %s: %s\n", __FILE__, line_nr, loglevel_str, message);
             #else
                 // GCC error format
-                fprintf(stderr, "[saudio] %s:%d:0: %s: %s\n", __FILE__, line_nr, loglevel_str, log_item_str);
+                fprintf(stderr, "[saudio] %s:%d:0: %s: %s\n", __FILE__, line_nr, loglevel_str, message);
             #endif
         #else
             fputs("[saudio] ", stderr);

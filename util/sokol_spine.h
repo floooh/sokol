@@ -834,8 +834,8 @@
 
         - a short tag string identifying the header (for instance 'sspine')
         - a numeric log level (panic, error, warning, info)
-        - a numeric error code (SSPINE_ERROR_*)
-        - in debug mode: the error code as human readable string
+        - a numeric log item (SSPINE_LOGITEM_*)
+        - in debug mode: the log item code as human readable string
         - a line number, where in the header the problem occured
         - in debug mode: the filename of the header
         - and a user data parameter
@@ -848,8 +848,8 @@
 
         void my_log(const char* tag,        // e.g. 'sspine'
                     uint32_t log_level,     // 0=panic, 1=error, 2=warn, 3=info
-                    uint32_t error_code,    // SSPINE_ERROR_*
-                    const char* error_id,   // error as string, only in debug mode, otherwise empty string
+                    uint32_t log_item,      // SSPINE_LOGITEM_*
+                    const char* message,    // a message string, may be "" in release mode
                     int line_nr,            // line number in sokol_spine.h
                     const char* filename,   // debug mode only, otherwise empty string
                     void* user_data)
@@ -995,8 +995,8 @@ typedef enum sspine_resource_state {
     _SSPINE_RESOURCESTATE_FORCE_U32 = 0x7FFFFFFF
 } sspine_resource_state;
 
-// error codes via x-macro magic
-#define _SSPINE_ERRORS \
+// log item codes via x-macro magic
+#define _SSPINE_LOG_ITEMS \
     _SSPINE_XMACRO(OK)\
     _SSPINE_XMACRO(CONTEXT_POOL_EXHAUSTED)\
     _SSPINE_XMACRO(ATLAS_POOL_EXHAUSTED)\
@@ -1026,10 +1026,10 @@ typedef enum sspine_resource_state {
     _SSPINE_XMACRO(STRING_TRUNCATED)\
     _SSPINE_XMACRO(SG_ADD_COMMIT_LISTENER_FAILED)\
 
-#define _SSPINE_XMACRO(code) SSPINE_ERROR_##code,
-typedef enum sspine_error {
-    _SSPINE_ERRORS
-} sspine_error;
+#define _SSPINE_XMACRO(code) SSPINE_LOGITEM_##code,
+typedef enum sspine_log_item {
+    _SSPINE_LOG_ITEMS
+} sspine_log_item;
 #undef _SSPINE_XMACRO
 
 typedef enum sspine_loglevel {
@@ -1189,8 +1189,8 @@ typedef struct sspine_logger {
     void (*func)(
         const char* tag,      // always "sspine"
         uint32_t log_level,   // 0=panic, 1=error, 2=warning, 3=info
-        uint32_t error_code,  // SSPINE_ERROR_*
-        const char* error_id, // error as string, debug only, otherwise empty string
+        uint32_t log_item,    // SSPINE_LOGITEM_*
+        const char* message,  // a message string, may be "" in release mode
         int line_nr,          // line number in sokol_spine.h
         const char* filename, // debug mode only, otherwise empty string
         void* user_data);
@@ -2567,14 +2567,6 @@ static const char* _sspine_fs_source_dummy = "";
 #define _SSPINE_MAX_POOL_SIZE (1<<_SSPINE_SLOT_SHIFT)
 #define _SSPINE_SLOT_MASK (_SSPINE_MAX_POOL_SIZE-1)
 
-#if defined(SOKOL_DEBUG)
-#define _SSPINE_XMACRO(code) #code,
-static const char* _sspine_error_ids[] = {
-    _SSPINE_ERRORS
-};
-#undef _SSPINE_XMACRO
-#endif // SOKOL_DEBUG
-
 typedef struct {
     float mvp[16];
 } _sspine_vsparams_t;
@@ -2770,21 +2762,29 @@ char* _spUtil_readFile(const char* path, int* length) {
 #endif
 
 //=== HELPER FUNCTION ==========================================================
-#define _SSPINE_PANIC(code) _sspine_log(SSPINE_ERROR_ ##code, SSPINE_LOGLEVEL_PANIC, __LINE__)
-#define _SSPINE_ERROR(code) _sspine_log(SSPINE_ERROR_ ##code, SSPINE_LOGLEVEL_ERROR, __LINE__)
-#define _SSPINE_WARN(code) _sspine_log(SSPINE_ERROR_ ##code, SSPINE_LOGLEVEL_WARN, __LINE__)
-#define _SSPINE_INFO(code) _sspine_log(SSPINE_ERROR_ ##code, SSPINE_LOGLEVEL_INFO, __LINE__)
+#if defined(SOKOL_DEBUG)
+#define _SSPINE_XMACRO(code) #code,
+static const char* _sspine_log_messages[] = {
+    _SSPINE_LOG_ITEMS
+};
+#undef _SSPINE_XMACRO
+#endif // SOKOL_DEBUG
 
-static void _sspine_log(sspine_error error_code, sspine_loglevel log_level, int line_nr) {
+#define _SSPINE_PANIC(code) _sspine_log(SSPINE_LOGITEM_ ##code, SSPINE_LOGLEVEL_PANIC, __LINE__)
+#define _SSPINE_ERROR(code) _sspine_log(SSPINE_LOGITEM_ ##code, SSPINE_LOGLEVEL_ERROR, __LINE__)
+#define _SSPINE_WARN(code) _sspine_log(SSPINE_LOGITEM_ ##code, SSPINE_LOGLEVEL_WARN, __LINE__)
+#define _SSPINE_INFO(code) _sspine_log(SSPINE_LOGITEM_ ##code, SSPINE_LOGLEVEL_INFO, __LINE__)
+
+static void _sspine_log(sspine_log_item log_item, sspine_loglevel log_level, int line_nr) {
     if (_sspine.desc.logger.func) {
         #if defined(SOKOL_DEBUG)
             const char* filename = __FILE__;
-            const char* error_id = _sspine_error_ids[error_code];
+            const char* message = _sspine_log_messages[log_item];
         #else
             const char* filename = "";
-            const char* error_id = "";
+            const char* message = "";
         #endif
-        _sspine.desc.logger.func("sspine", log_level, error_code, error_id, line_nr, filename, _sspine.desc.logger.user_data);
+        _sspine.desc.logger.func("sspine", log_level, log_item, message, line_nr, filename, _sspine.desc.logger.user_data);
     }
     else {
         // default logging function, uses printf only if debugging is enabled to save executable size
@@ -2796,13 +2796,13 @@ static void _sspine_log(sspine_error error_code, sspine_loglevel log_level, int 
             default: loglevel_str = "info"; break;
         }
         #if defined(SOKOL_DEBUG)
-        const char* error_id = _sspine_error_ids[error_code];
+        const char* message = _sspine_log_messages[log_item];
         #if defined(_MSC_VER)
             // Visual Studio compiler error format
-            fprintf(stderr, "[sspine] %s(%d): %s: %s\n", __FILE__, line_nr, loglevel_str, error_id);
+            fprintf(stderr, "[sspine] %s(%d): %s: %s\n", __FILE__, line_nr, loglevel_str, message);
         #else
             // GCC error format
-            fprintf(stderr, "[sspine] %s:%d:0: %s: %s\n", __FILE__, line_nr, loglevel_str, error_id);
+            fprintf(stderr, "[sspine] %s:%d:0: %s: %s\n", __FILE__, line_nr, loglevel_str, message);
         #endif
         #else
             fputs("[sspine] ", stderr);
