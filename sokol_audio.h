@@ -680,7 +680,7 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
         #define _SAUDIO_MACOS (1)
     #endif
 #elif defined(__EMSCRIPTEN__)
-    #define _SAUDIO_EMSCRIPTEN
+    #define _SAUDIO_EMSCRIPTEN (1)
 #elif defined(_WIN32)
     #define _SAUDIO_WINDOWS (1)
     #include <winapifamily.h>
