@@ -166,6 +166,18 @@
         sg_setup(&(sg_desc){ ... });
         sspine_setup(&(sspine_desc){ ... });
 
+    - You should always provide a logging callback to sokol-spine, otherwise
+      no warning or errors will be logged. The easiest way is to use sokol_log.h
+      for this:
+
+        #include "sokol_log.h"
+
+        sspine_setup(&(sspine_desc){
+            .logger = {
+                .func = slog_func
+            }
+        });
+
     - You can tweak the memory usage of sokol-spine by limiting or expanding the
       maximum number of vertices, draw commands and pool sizes:
 
@@ -177,18 +189,28 @@
             .skeleton_pool_size = 1,    // default: 64
             .skinset_pool_size = 1,     // default: 64
             .instance_pool_size = 16,   // default: 1024
+            .logger = {
+                .func = slog_func,
+            }
         });
 
       Sokol-spine uses 32-bit vertex-indices for rendering
       (SG_INDEXTYPE_UINT32), so that the maximum number of Spine vertices
       in a frame isn't limited to (1<<16).
 
-    - You can override the default memory allocation and
-      error logging functions, this is explained in detail further down:
+    - You can override memory allocation and logging with your own
+      functions, this is explained in detail further down:
 
         sspine_setup(&(sspine_desc){
-            .allocator = { ... },
-            .logger = { ... }
+            .allocator = {
+                .alloc = my_alloc,
+                .free = my_free,
+                .user_data = ...,
+            },
+            .logger = {
+                .log_func = my_log_func,
+                .user_data = ...,
+            }
         });
 
     - After initialization, the first thing you need is an sspine_atlas object.
@@ -824,34 +846,17 @@
     Calling sspine_set_skinset() deactivates the effect of sspine_set_skin() and
     vice versa.
 
-    ERROR REPORTING AND LOGGING
-    ===========================
-    sokol_spine.h introduces a new combined logging- and error-reporting
-    mechanism which replaces the old SOKOL_LOG macro, and the more recent
-    logging callback.
 
-    The new reporting uses a more elaborate logger callback which provides:
+    ERROR REPORTING AND LOGGING OVERRIDE
+    ====================================
+    To override logging with your own callback, first write a logging function like this:
 
-        - a short tag string identifying the header (for instance 'sspine')
-        - a numeric log level (panic, error, warning, info)
-        - a numeric log item (SSPINE_LOGITEM_*)
-        - in debug mode: the log item code as human readable string
-        - a line number, where in the header the problem occured
-        - in debug mode: the filename of the header
-        - and a user data parameter
-
-    The logging callback will be standardized across all sokol headers,
-    so that it will be possible to use the same logging function with
-    all headers.
-
-    To override logging, first write a logging function like this:
-
-        void my_log(const char* tag,        // e.g. 'sspine'
-                    uint32_t log_level,     // 0=panic, 1=error, 2=warn, 3=info
-                    uint32_t log_item,      // SSPINE_LOGITEM_*
-                    const char* message,    // a message string, may be "" in release mode
-                    int line_nr,            // line number in sokol_spine.h
-                    const char* filename,   // debug mode only, otherwise empty string
+        void my_log(const char* tag,                // e.g. 'sspine'
+                    uint32_t log_level,             // 0=panic, 1=error, 2=warn, 3=info
+                    uint32_t log_item_id,           // SSPINE_LOGITEM_*
+                    const char* message_or_null,    // a message string, may be nullptr in release mode
+                    uint32_t line_nr,               // line number in sokol_spine.h
+                    const char* filename_or_null,   // source filename, may be nullptr in release mode
                     void* user_data)
         {
             ...
@@ -862,16 +867,17 @@
         sspine_setup(&(sspine_desc){
             .logger = {
                 .func = my_log,
-                .user_data = ...,
+                .user_data = my_user_data,
             }
         });
 
-    If no custom logger is provided, verbose default logging goes to stderr
-    (this means you won't see any logging messages on Android, or on Windows
-    unless the process is attached to a terminal!).
+    The provided logging function must be reentrant (e.g. be callable from
+    different threads).
 
-    Eventually there will be a more luxurious sokol_log.h header, which will
-    provide more control over logging, also on Windows or Android.
+    If you don't want to provide your own custom logger it is highly recommended to use
+    the standard logger in sokol_log.h instead, otherwise you won't see any warnings or
+    errors.
+
 
     MEMORY ALLOCATION OVERRIDE
     ==========================
@@ -901,6 +907,7 @@
 
     This only affects memory allocation calls done by sokol_gfx.h
     itself though, not any allocations in OS libraries.
+
 
     LICENSE
     =======
@@ -1187,12 +1194,12 @@ typedef struct sspine_allocator {
 
 typedef struct sspine_logger {
     void (*func)(
-        const char* tag,      // always "sspine"
-        uint32_t log_level,   // 0=panic, 1=error, 2=warning, 3=info
-        uint32_t log_item,    // SSPINE_LOGITEM_*
-        const char* message,  // a message string, may be "" in release mode
-        int line_nr,          // line number in sokol_spine.h
-        const char* filename, // debug mode only, otherwise empty string
+        const char* tag,                // always "sspine"
+        uint32_t log_level,             // 0=panic, 1=error, 2=warning, 3=info
+        uint32_t log_item_id,           // SSPINE_LOGITEM_*
+        const char* message_or_null,    // a message string, may be nullptr in release mode
+        uint32_t line_nr,               // line number in sokol_spine.h
+        const char* filename_or_null,   // the source filename, may be nullptr in release mode
         void* user_data);
     void* user_data;
 } sspine_logger;
@@ -2806,41 +2813,18 @@ static const char* _sspine_log_messages[] = {
 #define _SSPINE_WARN(code) _sspine_log(SSPINE_LOGITEM_ ##code, SSPINE_LOGLEVEL_WARN, __LINE__)
 #define _SSPINE_INFO(code) _sspine_log(SSPINE_LOGITEM_ ##code, SSPINE_LOGLEVEL_INFO, __LINE__)
 
-static void _sspine_log(sspine_log_item log_item, sspine_loglevel log_level, int line_nr) {
+static void _sspine_log(sspine_log_item log_item, sspine_loglevel log_level, uint32_t line_nr) {
     if (_sspine.desc.logger.func) {
         #if defined(SOKOL_DEBUG)
             const char* filename = __FILE__;
             const char* message = _sspine_log_messages[log_item];
         #else
-            const char* filename = "";
-            const char* message = "";
+            const char* filename = 0;
+            const char* message = 0;
         #endif
         _sspine.desc.logger.func("sspine", log_level, log_item, message, line_nr, filename, _sspine.desc.logger.user_data);
     }
     else {
-        // default logging function, uses printf only if debugging is enabled to save executable size
-        const char* loglevel_str;
-        switch (log_level) {
-            case SSPINE_LOGLEVEL_PANIC: loglevel_str = "panic"; break;
-            case SSPINE_LOGLEVEL_ERROR: loglevel_str = "error"; break;
-            case SSPINE_LOGLEVEL_WARN:  loglevel_str = "warning"; break;
-            default: loglevel_str = "info"; break;
-        }
-        #if defined(SOKOL_DEBUG)
-        const char* message = _sspine_log_messages[log_item];
-        #if defined(_MSC_VER)
-            // Visual Studio compiler error format
-            fprintf(stderr, "[sspine] %s(%d): %s: %s\n", __FILE__, line_nr, loglevel_str, message);
-        #else
-            // GCC error format
-            fprintf(stderr, "[sspine] %s:%d:0: %s: %s\n", __FILE__, line_nr, loglevel_str, message);
-        #endif
-        #else
-            fputs("[sspine] ", stderr);
-            fputs(loglevel_str, stderr);
-            fputs(" (build in debug mode for more info)\n", stderr);
-        #endif // SOKOL_DEBUG
-
         // for log level PANIC it would be 'undefined behaviour' to continue
         if (log_level == SSPINE_LOGLEVEL_PANIC) {
             abort();
