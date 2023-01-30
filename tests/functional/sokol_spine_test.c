@@ -10,7 +10,7 @@
 #define T(b) EXPECT_TRUE(b)
 
 static sspine_log_item last_logitem = SSPINE_LOGITEM_OK;
-static void log_func(const char* tag, uint32_t log_level, uint32_t log_item, const char* message, int line_nr, const char* filename, void* user_data) {
+static void log_func(const char* tag, uint32_t log_level, uint32_t log_item, const char* message, uint32_t line_nr, const char* filename, void* user_data) {
     (void)tag; (void)log_level; (void)message; (void)line_nr; (void)filename; (void)user_data;
     last_logitem = log_item;
 }
