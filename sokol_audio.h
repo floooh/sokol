@@ -132,18 +132,30 @@
     a good balance between low-latency and glitch-free playback
     on all audio backends.
 
+    You should always provide a logging callback to be aware of any
+    warnings and errors. The easiest way is to use sokol_log.h for this:
+
+        #include "sokol_log.h"
+        // ...
+        saudio_setup(&(saudio_desc){
+            .logger = {
+                .func = slog_func,
+            }
+        });
+
     If you want to use the callback-model, you need to provide a stream
     callback function either in saudio_desc.stream_cb or saudio_desc.stream_userdata_cb,
     otherwise keep both function pointers zero-initialized.
 
     Use push model and default playback parameters:
 
-        saudio_setup(&(saudio_desc){0});
+        saudio_setup(&(saudio_desc){ .logger.func = slog_func });
 
     Use stream callback model and default playback parameters:
 
         saudio_setup(&(saudio_desc){
             .stream_cb = my_stream_callback
+            .logger.func = slog_func,
         });
 
     The standard stream callback doesn't have a user data argument, if you want
@@ -152,6 +164,7 @@
         saudio_setup(&(saudio_desc){
             .stream_userdata_cb = my_stream_callback,
             .user_data = &my_data
+            .logger.func = slog_func,
         });
 
     The following playback parameters can be provided through the
@@ -402,14 +415,14 @@
 
     LOGGING AND ERROR REPORTING OVERRIDE
     ====================================
-    To override logging, first write a logging function like this:
+    To override logging with your own callback, first write a logging function like this:
 
-        void my_log(const char* tag,            // e.g. 'saudio'
-                    uint32_t log_level,         // 0=panic, 1=error, 2=warn, 3=info
-                    uint32_t log_item,          // SAUDIO_LOGITEM_*
-                    const char* message,        // a message string, may be "" in release mode
-                    int line_nr,                // line number in sokol_audio.h
-                    const char* filename,       // debug mode only, otherwise empty string
+        void my_log(const char* tag,                // e.g. 'saudio'
+                    uint32_t log_level,             // 0=panic, 1=error, 2=warn, 3=info
+                    uint32_t log_item_id,           // SAUDIO_LOGITEM_*
+                    const char* message_or_null,    // a message string, may be nullptr in release mode
+                    uint32_t line_nr,               // line number in sokol_audio.h
+                    const char* filename_or_null,   // source filename, may be nullptr in release mode
                     void* user_data)
         {
             ...
@@ -420,16 +433,16 @@
         saudio_setup(&(saudio_desc){
             .logger = {
                 .func = my_log,
-                .user_data = ...,
+                .user_data = my_user_data,
             }
         });
 
-    The provided logging function should be reentrant (e.g. be callable from
+    The provided logging function must be reentrant (e.g. be callable from
     different threads).
 
-    If no custom logger is provided, verbose default logging goes to stderr
-    (this means you won't see any logging messages on Android, or on Windows
-    unless the process is attached to a terminal!).
+    If you don't want to provide your own custom logger it is highly recommended to use
+    the standard logger in sokol_log.h instead, otherwise you won't see any warnings or
+    errors.
 
     LICENSE
     =======
@@ -554,12 +567,12 @@ typedef enum saudio_loglevel {
 */
 typedef struct saudio_logger {
     void (*func)(
-        const char* tag,            // always "saudio"
-        uint32_t log_level,         // 0=panic, 1=error, 2=warning, 3=info
-        uint32_t log_item,          // SAUDIO_LOGITEM_*
-        const char* message,        // a message string, may be "" in release mode
-        int line_nr,                // line number in sokol_audio.h
-        const char* filename,       // debug mode only, otherwise empty string
+        const char* tag,                // always "saudio"
+        uint32_t log_level,             // 0=panic, 1=error, 2=warning, 3=info
+        uint32_t log_item_id,           // SAUDIO_LOGITEM_*
+        const char* message_or_null,    // a message string, may be nullptr in release mode
+        uint32_t line_nr,               // line number in sokol_audio.h
+        const char* filename_or_null,   // source filename, may be nullptr in release mode
         void* user_data);
     void* user_data;
 } saudio_logger;
@@ -1109,41 +1122,18 @@ static const char* _saudio_log_messages[] = {
 #define _SAUDIO_WARN(code) _saudio_log(SAUDIO_LOGITEM_ ##code, SAUDIO_LOGLEVEL_WARN, __LINE__)
 #define _SAUDIO_INFO(code) _saudio_log(SAUDIO_LOGITEM_ ##code, SAUDIO_LOGLEVEL_INFO, __LINE__)
 
-static void _saudio_log(saudio_log_item log_item, saudio_loglevel log_level, int line_nr) {
+static void _saudio_log(saudio_log_item log_item, saudio_loglevel log_level, uint32_t line_nr) {
     if (_saudio.desc.logger.func) {
         #if defined(SOKOL_DEBUG)
             const char* filename = __FILE__;
             const char* message = _saudio_log_messages[log_item];
         #else
-            const char* filename = "";
-            const char* message = "";
+            const char* filename = 0;
+            const char* message = 0;
         #endif
         _saudio.desc.logger.func("saudio", log_level, log_item, message, line_nr, filename, _saudio.desc.logger.user_data);
     }
     else {
-        // default logging function, uses printf only if debugging is enabled to save executable size
-        const char* loglevel_str;
-        switch (log_level) {
-            case SAUDIO_LOGLEVEL_PANIC: loglevel_str = "panic"; break;
-            case SAUDIO_LOGLEVEL_ERROR: loglevel_str = "error"; break;
-            case SAUDIO_LOGLEVEL_WARN:  loglevel_str = "warning"; break;
-            default: loglevel_str = "info"; break;
-        }
-        #if defined(SOKOL_DEBUG)
-            const char* message = _saudio_log_messages[log_item];
-            #if defined(_MSC_VER)
-                // Visual Studio compiler error format
-                fprintf(stderr, "[saudio] %s(%d): %s: %s\n", __FILE__, line_nr, loglevel_str, message);
-            #else
-                // GCC error format
-                fprintf(stderr, "[saudio] %s:%d:0: %s: %s\n", __FILE__, line_nr, loglevel_str, message);
-            #endif
-        #else
-            fputs("[saudio] ", stderr);
-            fputs(loglevel_str, stderr);
-            fputs(" (build in debug mode for more info)\n", stderr);
-        #endif // SOKOL_DEBUG
-
         // for log level PANIC it would be 'undefined behaviour' to continue
         if (log_level == SAUDIO_LOGLEVEL_PANIC) {
             abort();
