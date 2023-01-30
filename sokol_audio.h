@@ -413,7 +413,7 @@
     was called, so you don't need to worry about thread-safety.
 
 
-    LOGGING AND ERROR REPORTING OVERRIDE
+    ERROR REPORTING AND LOGGING OVERRIDE
     ====================================
     To override logging with your own callback, first write a logging function like this:
 
