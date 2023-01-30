@@ -27,7 +27,40 @@
 
     SOKOL_DEBUG         - by default this is defined if _DEBUG is defined
 
-    FIXME: documentation
+
+    OVERVIEW
+    ========
+    sokol_log.h provides a default logging callback for other sokol headers.
+
+    To use the default log callback, just include sokol_log.h and provide
+    a function pointer to the 'slog_func' function when setting up the
+    sokol library:
+
+    For instance with sokol_audio.h:
+
+        #include "sokol_log.h"
+        ...
+        saudio_setup(&(saudio_desc){ .logger.func = slog_func });
+
+    Logging output goes to stderr and/or a platform specific logging subsystem:
+
+        - Windows: stderr + OutputDebugStringA()
+        - macOS/iOS/Linux: stderr + syslog()
+        - Emscripten: browser console
+        - Android: __android_log_write()
+
+    In debug mode, a log message might look like this:
+
+        [saudio] [error] /Users/floh/projects/sokol/sokol_audio.h:2422:0: COREAUDIO_NEW_OUTPUT_FAILED (id:32)
+
+    The source path and line number is formatted in like compiler errors, in some IDEs (like VSCode)
+    such error messages are clickable.
+
+    In release mode, logging is less verbose as to not bloat the executable with string data, but you still get
+    enough information to identify an error:
+
+        [saudio] [error] line:2422 id:32
+
 
     LICENSE
     =======
@@ -84,7 +117,7 @@ extern "C" {
         }
     });
 */
-void slog_func(const char* tag, uint32_t log_level, uint32_t log_item, const char* message, int line_nr, const char* filename, void* user_data);
+SOKOL_LOG_API_DECL void slog_func(const char* tag, uint32_t log_level, uint32_t log_item, const char* message, uint32_t line_nr, const char* filename, void* user_data);
 
 #ifdef __cplusplus
 } // extern "C"
@@ -130,7 +163,7 @@ void slog_func(const char* tag, uint32_t log_level, uint32_t log_item, const cha
 // platform detection
 #if defined(__APPLE__)
     #define _SLOG_APPLE (1)
-#if defined(__EMSCRIPTEN__)
+#elif defined(__EMSCRIPTEN__)
     #define _SLOG_EMSCRIPTEN (1)
 #elif defined(_WIN32)
     #define _SLOG_WINDOWS (1)
@@ -142,11 +175,10 @@ void slog_func(const char* tag, uint32_t log_level, uint32_t log_item, const cha
 #error "sokol_log.h: unknown platform"
 #endif
 
-#include <stdio.h>
+#include <stdio.h>  // fputs
+#include <stddef.h> // size_t
 
-#if defined(_SLOG_APPLE)
-#include <os/log.h>
-#elif defined(_SLOG_WINDOWS)
+#if defined(_SLOG_WINDOWS)
 #ifndef WIN32_LEAN_AND_MEAN
     #define WIN32_LEAN_AND_MEAN
 #endif
@@ -154,7 +186,143 @@ void slog_func(const char* tag, uint32_t log_level, uint32_t log_item, const cha
     #define NOMINMAX
 #endif
 #include <windows.h>
+#elif defined(_SLOG_ANDROID)
+#include <android/log.h>
+#elif defined(_SLOG_LINUX) || defined(_SLOG_APPLE)
+#include <syslog.h>
+#endif
 
+_SOKOL_PRIVATE char* _slog_append(const char* str, char* dst, const char* end) {
+    if (str) {
+        char c;
+        while (((c = *str++) != 0) && (dst < (end - 1))) {
+            *dst++ = c;
+        }
+    }
+    *dst = 0;
+    return dst;
+}
 
+_SOKOL_PRIVATE char* _slog_itoa(uint32_t x, char* buf, size_t buf_size) {
+    const size_t max_digits_and_null = 11;
+    if (buf_size < max_digits_and_null) {
+        return 0;
+    }
+    char* p = buf + max_digits_and_null;
+    *--p = 0;
+    do {
+        *--p = '0' + (x % 10);
+        x /= 10;
+    } while (x != 0);
+    return p;
+}
 
+#if defined(_SLOG_EMSCRIPTEN)
+EM_JS(void, slog_js_log, (uint32_t level, const char* c_str), {
+    const str = UTF8ToString(c_str);
+    switch (level) {
+        case 0: console.error(str); break;
+        case 1: console.error(str); break;
+        case 2: console.warn(str); break;
+        default: console.info(str); break;
+    }
+});
+#endif
+
+SOKOL_API_IMPL void slog_func(const char* tag, uint32_t log_level, uint32_t log_item, const char* message, uint32_t line_nr, const char* filename, void* user_data) {
+    _SOKOL_UNUSED(user_data);
+
+    const char* log_level_str;
+    switch (log_level) {
+        case 0: log_level_str = "panic"; break;
+        case 1: log_level_str = "error"; break;
+        case 2: log_level_str = "warning"; break;
+        default: log_level_str = "info"; break;
+    }
+
+    // build log output line
+    char line_buf[256];
+    char* str = &line_buf[0];
+    const char* end = str + sizeof(line_buf);
+    char num_buf[32];
+    if (tag) {
+        str = _slog_append("[", str, end);
+        str = _slog_append(tag, str, end);
+        str = _slog_append("] ", str, end);
+    }
+    str = _slog_append("[", str, end);
+    str = _slog_append(log_level_str, str, end);
+    str = _slog_append("] ", str, end);
+    // if a filename is provided, build a clickable log message that's compatible with compiler error messages
+    if (filename) {
+        #if defined(_MSC_VER)
+            // MSVC compiler error format
+            str = _slog_append(filename, str, end);
+            str = _slog_append("(", str, end);
+            str = _slog_append(_slog_itoa(line_nr, num_buf, sizeof(num_buf)), str, end);
+            str = _slog_append("): ");
+        #else
+            // gcc/clang compiler error format
+            str = _slog_append(filename, str, end);
+            str = _slog_append(":", str, end);
+            str = _slog_append(_slog_itoa(line_nr, num_buf, sizeof(num_buf)), str, end);
+            str = _slog_append(":0: ", str, end);
+        #endif
+        if (message) {
+            str = _slog_append(message, str, end);
+            str = _slog_append(" ", str, end);
+        }
+        else {
+            str = _slog_append("??? ", str, end);
+        }
+        str = _slog_append("(id:", str, end);
+        str = _slog_append(_slog_itoa(log_item, num_buf, sizeof(num_buf)), str, end);
+        str = _slog_append(")", str, end);
+    }
+    else {
+        // no filename provided, print what we can
+        str = _slog_append("line:", str, end);
+        str = _slog_append(_slog_itoa(line_nr, num_buf, sizeof(num_buf)), str, end);
+        str = _slog_append(" id:", str, end);
+        str = _slog_append(_slog_itoa(log_item, num_buf, sizeof(num_buf)), str, end);
+        if (message) {
+            str = _slog_append(" msg: ", str, end);
+            str = _slog_append(message, str, end);
+        }
+    }
+    str = _slog_append("\n", str, end);
+
+    // print to stderr?
+    #if defined(_SLOG_LINUX) || defined(_SLOG_WINDOWS) || defined(_SLOG_APPLE)
+        fputs(line_buf, stderr);
+    #endif
+
+    // platform specific logging calls
+    #if defined(_SLOG_WINDOWS)
+        OutputDebugStringA(line_buf);
+    #elif defined(_SLOG_ANDROID)
+        int prio;
+        switch (log_level) {
+            case 0: prio = ANDROID_LOG_FATAL; break;
+            case 1: prio = ANDROID_LOG_ERROR; break;
+            case 2: prio = ANDROID_LOG_WARN; break;
+            default: prio = ANDROID_LOG_INFO; break;
+        }
+        __android_log_write(prio, "SOKOL", line_buf);
+    #elif defined(_SLOG_EMSCRIPTEN)
+        slog_js_log(log_level, line_buf);
+    #elif defined(_SLOG_LINUX) || defined(_SLOG_APPLE)
+        int prio;
+        switch (log_level) {
+            case 0: prio = LOG_CRIT; break;
+            case 1: prio = LOG_ERR; break;
+            case 2: prio = LOG_WARNING; break;
+            default: prio = LOG_INFO; break;
+        }
+        syslog(prio, "%s", line_buf);
+    #endif
+    if (0 == log_level) {
+        abort();
+    }
+}
 #endif // SOKOL_LOG_IMPL
