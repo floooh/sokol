@@ -1394,13 +1394,13 @@ static const char* _sfetch_log_messages[] = {
 
 static void _sfetch_log(sfetch_log_item_t log_item, uint32_t log_level, uint32_t line_nr) {
     if (_sfetch->desc.logger.func) {
-//        #if defined(SOKOL_DEBUG)
-//            const char* filename = __FILE__;
-//            const char* message = _sfetch_log_messages[log_item];
-//        #else
+        #if defined(SOKOL_DEBUG)
+            const char* filename = __FILE__;
+            const char* message = _sfetch_log_messages[log_item];
+        #else
             const char* filename = 0;
             const char* message = 0;
-//        #endif
+        #endif
         _sfetch->desc.logger.func("sfetch", log_level, log_item, message, line_nr, filename, _sfetch->desc.logger.user_data);
     }
     else {
@@ -1916,7 +1916,7 @@ _SOKOL_PRIVATE bool _sfetch_win32_utf8_to_wide(const char* src, wchar_t* dst, in
 _SOKOL_PRIVATE _sfetch_file_handle_t _sfetch_file_open(const _sfetch_path_t* path) {
     wchar_t w_path[SFETCH_MAX_PATH];
     if (!_sfetch_win32_utf8_to_wide(path->buf, w_path, sizeof(w_path))) {
-        _SFETCH_ERROR(FILE_PATH_UTF8_CONVERSION_FAILED);
+        _SFETCH_ERROR(FILE_PATH_UTF8_DECODING_FAILED);
         return 0;
     }
     _sfetch_file_handle_t h = CreateFileW(
