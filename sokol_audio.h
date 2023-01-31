@@ -413,8 +413,15 @@
     was called, so you don't need to worry about thread-safety.
 
 
-    ERROR REPORTING AND LOGGING OVERRIDE
-    ====================================
+    ERROR REPORTING AND LOGGING
+    ===========================
+    To get any logging information at all you need to provide a logging callback in the setup call
+    the easiest way is to use sokol_log.h:
+
+        #include "sokol_log.h"
+
+        saudio_setup(&(saudio_desc){ .logger.func = slog_func });
+
     To override logging with your own callback, first write a logging function like this:
 
         void my_log(const char* tag,                // e.g. 'saudio'
@@ -587,7 +594,7 @@ typedef struct saudio_desc {
     void (*stream_userdata_cb)(float* buffer, int num_frames, int num_channels, void* user_data); //... and with user data
     void* user_data;        // optional user data argument for stream_userdata_cb
     saudio_allocator allocator;     // optional allocation override functions
-    saudio_logger logger;   // optional log override functions
+    saudio_logger logger;           // optional logging function (default: NO LOGGING!)
 } saudio_desc;
 
 /* setup sokol-audio */
@@ -1099,7 +1106,7 @@ _SOKOL_PRIVATE void _saudio_stream_callback(float* buffer, int num_frames, int n
 static const char* _saudio_log_messages[] = {
     _SAUDIO_LOG_ITEMS
 };
-#undef _SSPINE_XMACRO
+#undef _SAUDIO_XMACRO
 #endif // SOKOL_DEBUG
 
 #define _SAUDIO_PANIC(code) _saudio_log(SAUDIO_LOGITEM_ ##code, 0, __LINE__)

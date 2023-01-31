@@ -847,8 +847,15 @@
     vice versa.
 
 
-    ERROR REPORTING AND LOGGING OVERRIDE
-    ====================================
+    ERROR REPORTING AND LOGGING
+    ===========================
+    To get any logging information at all you need to provide a logging callback in the setup call,
+    the easiest way is to use sokol_log.h:
+
+        #include "sokol_log.h"
+
+        sspine_setup(&(sspine_desc){ .logger.func = slog_func });
+
     To override logging with your own callback, first write a logging function like this:
 
         void my_log(const char* tag,                // e.g. 'sspine'
@@ -1209,8 +1216,8 @@ typedef struct sspine_desc {
     sg_pixel_format depth_format;
     int sample_count;
     sg_color_mask color_write_mask;
-    sspine_allocator allocator;
-    sspine_logger logger;
+    sspine_allocator allocator;     // optional allocation override functions (default: malloc/free)
+    sspine_logger logger;           // optional logging function (default: NO LOGGING!)
 } sspine_desc;
 
 // setup/shutdown
