@@ -654,7 +654,6 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 #include <stdlib.h> // alloc, free
 #include <string.h> // memset, memcpy
 #include <stddef.h> // size_t
-#include <stdio.h>  // stderr, fputs, only debug: fprintf
 
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL

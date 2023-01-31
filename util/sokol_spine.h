@@ -1414,7 +1414,6 @@ SOKOL_SPINE_API_DECL void sspine_set_skin(sspine_instance instance, sspine_skin 
 
 #include <stdlib.h> // malloc/free
 #include <string.h> // memset, strcmp
-#include <stdio.h>  // stderr, fprintf (debug mode), fputs (release mode)
 
 // ███████╗██╗  ██╗ █████╗ ██████╗ ███████╗██████╗ ███████╗
 // ██╔════╝██║  ██║██╔══██╗██╔══██╗██╔════╝██╔══██╗██╔════╝
