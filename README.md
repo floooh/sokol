@@ -327,6 +327,7 @@ Simple C99 example loading a file into a static buffer:
 
 ```c
 #include "sokol_fetch.h"
+#include "sokol_log.h"
 
 static void response_callback(const sfetch_response*);
 
@@ -337,7 +338,7 @@ static uint8_t buffer[MAX_FILE_SIZE];
 static void init(void) {
     ...
     // setup sokol-fetch with default config:
-    sfetch_setup(&(sfetch_desc_t){0});
+    sfetch_setup(&(sfetch_desc_t){ .logger.func = slog_func });
 
     // start loading a file into a statically allocated buffer:
     sfetch_send(&(sfetch_request_t){
