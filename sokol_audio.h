@@ -546,20 +546,6 @@ typedef enum saudio_log_item {
 #undef _SAUDIO_XMACRO
 
 /*
-    saudio_loglevel
-
-    Used as parameter in the logging callback. Note that
-    loglevel PANIC is expected to terminate the application
-    because execution cannot continue.
-*/
-typedef enum saudio_loglevel {
-    SAUDIO_LOGLEVEL_PANIC = 0,
-    SAUDIO_LOGLEVEL_ERROR = 1,
-    SAUDIO_LOGLEVEL_WARN = 2,
-    SAUDIO_LOGLEVEL_INFO = 3,
-} saudio_loglevel;
-
-/*
     saudio_logger
 
     Used in saudio_desc to provide a custom logging and error reporting
@@ -1116,12 +1102,12 @@ static const char* _saudio_log_messages[] = {
 #undef _SSPINE_XMACRO
 #endif // SOKOL_DEBUG
 
-#define _SAUDIO_PANIC(code) _saudio_log(SAUDIO_LOGITEM_ ##code, SAUDIO_LOGLEVEL_PANIC, __LINE__)
-#define _SAUDIO_ERROR(code) _saudio_log(SAUDIO_LOGITEM_ ##code, SAUDIO_LOGLEVEL_ERROR, __LINE__)
-#define _SAUDIO_WARN(code) _saudio_log(SAUDIO_LOGITEM_ ##code, SAUDIO_LOGLEVEL_WARN, __LINE__)
-#define _SAUDIO_INFO(code) _saudio_log(SAUDIO_LOGITEM_ ##code, SAUDIO_LOGLEVEL_INFO, __LINE__)
+#define _SAUDIO_PANIC(code) _saudio_log(SAUDIO_LOGITEM_ ##code, 0, __LINE__)
+#define _SAUDIO_ERROR(code) _saudio_log(SAUDIO_LOGITEM_ ##code, 1, __LINE__)
+#define _SAUDIO_WARN(code) _saudio_log(SAUDIO_LOGITEM_ ##code, 2, __LINE__)
+#define _SAUDIO_INFO(code) _saudio_log(SAUDIO_LOGITEM_ ##code, 3, __LINE__)
 
-static void _saudio_log(saudio_log_item log_item, saudio_loglevel log_level, uint32_t line_nr) {
+static void _saudio_log(saudio_log_item log_item, uint32_t log_level, uint32_t line_nr) {
     if (_saudio.desc.logger.func) {
         #if defined(SOKOL_DEBUG)
             const char* filename = __FILE__;
@@ -1134,7 +1120,7 @@ static void _saudio_log(saudio_log_item log_item, saudio_loglevel log_level, uin
     }
     else {
         // for log level PANIC it would be 'undefined behaviour' to continue
-        if (log_level == SAUDIO_LOGLEVEL_PANIC) {
+        if (log_level == 0) {
             abort();
         }
     }

@@ -1039,13 +1039,6 @@ typedef enum sspine_log_item {
 } sspine_log_item;
 #undef _SSPINE_XMACRO
 
-typedef enum sspine_loglevel {
-    SSPINE_LOGLEVEL_PANIC = 0,
-    SSPINE_LOGLEVEL_ERROR = 1,
-    SSPINE_LOGLEVEL_WARN = 2,
-    SSPINE_LOGLEVEL_INFO = 3,
-} sspine_loglevel;
-
 typedef struct sspine_layer_transform {
     sspine_vec2 size;
     sspine_vec2 origin;
@@ -2807,12 +2800,12 @@ static const char* _sspine_log_messages[] = {
 #undef _SSPINE_XMACRO
 #endif // SOKOL_DEBUG
 
-#define _SSPINE_PANIC(code) _sspine_log(SSPINE_LOGITEM_ ##code, SSPINE_LOGLEVEL_PANIC, __LINE__)
-#define _SSPINE_ERROR(code) _sspine_log(SSPINE_LOGITEM_ ##code, SSPINE_LOGLEVEL_ERROR, __LINE__)
-#define _SSPINE_WARN(code) _sspine_log(SSPINE_LOGITEM_ ##code, SSPINE_LOGLEVEL_WARN, __LINE__)
-#define _SSPINE_INFO(code) _sspine_log(SSPINE_LOGITEM_ ##code, SSPINE_LOGLEVEL_INFO, __LINE__)
+#define _SSPINE_PANIC(code) _sspine_log(SSPINE_LOGITEM_ ##code, 0, __LINE__)
+#define _SSPINE_ERROR(code) _sspine_log(SSPINE_LOGITEM_ ##code, 1, __LINE__)
+#define _SSPINE_WARN(code) _sspine_log(SSPINE_LOGITEM_ ##code, 2, __LINE__)
+#define _SSPINE_INFO(code) _sspine_log(SSPINE_LOGITEM_ ##code, 3, __LINE__)
 
-static void _sspine_log(sspine_log_item log_item, sspine_loglevel log_level, uint32_t line_nr) {
+static void _sspine_log(sspine_log_item log_item, uint32_t log_level, uint32_t line_nr) {
     if (_sspine.desc.logger.func) {
         #if defined(SOKOL_DEBUG)
             const char* filename = __FILE__;
@@ -2825,7 +2818,7 @@ static void _sspine_log(sspine_log_item log_item, sspine_loglevel log_level, uin
     }
     else {
         // for log level PANIC it would be 'undefined behaviour' to continue
-        if (log_level == SSPINE_LOGLEVEL_PANIC) {
+        if (log_level == 0) {
             abort();
         }
     }
