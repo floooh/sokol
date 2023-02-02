@@ -854,7 +854,7 @@
                     uint32_t log_level,             // 0=panic, 1=error, 2=warn, 3=info
                     uint32_t log_item_id,           // SFETCH_LOGITEM_*
                     const char* message_or_null,    // a message string, may be nullptr in release mode
-                    uint32_t line_nr,               // line number in sokol_audio.h
+                    uint32_t line_nr,               // line number in sokol_fetch.h
                     const char* filename_or_null,   // source filename, may be nullptr in release mode
                     void* user_data)
         {
@@ -947,7 +947,7 @@ extern "C" {
     sfetch_log_item_t
 
     Log items are defined via X-Macros, and expanded to an
-    enum 'saudio_log_item', and in debug mode only,
+    enum 'sfetch_log_item', and in debug mode only,
     corresponding strings.
 
     Used as parameter in the logging callback.
@@ -1370,6 +1370,7 @@ static __thread _sfetch_t* _sfetch;
 #else
 static _sfetch_t* _sfetch;
 #endif
+#define _sfetch_def(val, def) (((val) == 0) ? (def) : (val))
 
 // ██╗      ██████╗  ██████╗  ██████╗ ██╗███╗   ██╗ ██████╗
 // ██║     ██╔═══██╗██╔════╝ ██╔════╝ ██║████╗  ██║██╔════╝
@@ -1419,8 +1420,6 @@ static void _sfetch_log(sfetch_log_item_t log_item, uint32_t log_level, uint32_t
 // ╚═╝     ╚═╝╚══════╝╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝
 //
 // >>memory
-#define _sfetch_def(val, def) (((val) == 0) ? (def) : (val))
-
 _SOKOL_PRIVATE void _sfetch_clear(void* ptr, size_t size) {
     SOKOL_ASSERT(ptr && (size > 0));
     memset(ptr, 0, size);
