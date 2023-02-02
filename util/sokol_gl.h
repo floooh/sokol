@@ -2916,8 +2916,6 @@ static void _sgl_init_context(sgl_context ctx_id, const sgl_context_desc_t* in_d
     def_pip_desc.depth.write_enabled = true;
     ctx->def_pip = _sgl_make_pipeline(&def_pip_desc, &ctx->desc);
     if (!sg_add_commit_listener(_sgl_make_commit_listener(ctx))) {
-        // FIXME: this should actually result in an invalid context,
-        // fix this when proper error logging/reporting is added
         _SGL_ERROR(ADD_COMMIT_LISTENER_FAILED);
     }
     sg_pop_debug_group();
