@@ -2454,7 +2454,6 @@ static _sgl_t _sgl;
 // ╚══════╝ ╚═════╝  ╚═════╝  ╚═════╝ ╚═╝╚═╝  ╚═══╝ ╚═════╝
 //
 // >>logging
-// #if defined()
 #if defined(SOKOL_DEBUG)
 #define _SGL_LOGITEM_XMACRO(item) #item,
 static const char* _sgl_log_messages[] = {
