@@ -25,6 +25,16 @@
         #define SOKOL_METAL
         #define SOKOL_WGPU
 
+    If you are on Linux you have to decide what display server to use.
+    All are enabled by default, and you need at least one:
+
+        #define SOKOL_DISABLE_X11
+        #define SOKOL_DISABLE_WAYLAND
+
+    X11 is used by default if both are enabled. To explicitly use the
+    wayland display protocol define `USE_WAYLAND` prior to starting the
+    application (e.g.: `USE_WAYLAND=1 ./sokol-app`).
+
     Optionally provide the following defines with your own implementations:
 
         SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
@@ -67,6 +77,7 @@
     - on iOS with GL: Foundation, UIKit, OpenGLES, GLKit
     - on Linux with EGL: X11, Xi, Xcursor, EGL, GL (or GLESv2), dl, pthread, m(?)
     - on Linux with GLX: X11, Xi, Xcursor, GL, dl, pthread, m(?)
+    - on Linux with wayland: GL, EGL, wayland-egl, wayland-client, wayland-cursor, xkbcommon
     - on Android: GLESv3, EGL, log, android
     - on Windows with the MSVC or Clang toolchains: no action needed, libs are defined in-source via pragma-comment-lib
     - on Windows with MINGW/MSYS2 gcc: compile with '-mwin32' so that _WIN32 is defined
@@ -97,51 +108,53 @@
 
     FEATURE/PLATFORM MATRIX
     =======================
-                        | Windows | macOS | Linux |  iOS  | Android | UWP  | HTML5
-    --------------------+---------+-------+-------+-------+---------+------+-------
-    gl 3.x              | YES     | YES   | YES   | ---   | ---     | ---  | ---
-    gles2/webgl         | ---     | ---   | YES(2)| YES   | YES     | ---  | YES
-    gles3/webgl2        | ---     | ---   | YES(2)| YES   | YES     | ---  | YES
-    metal               | ---     | YES   | ---   | YES   | ---     | ---  | ---
-    d3d11               | YES     | ---   | ---   | ---   | ---     | YES  | ---
-    KEY_DOWN            | YES     | YES   | YES   | SOME  | TODO    | YES  | YES
-    KEY_UP              | YES     | YES   | YES   | SOME  | TODO    | YES  | YES
-    CHAR                | YES     | YES   | YES   | YES   | TODO    | YES  | YES
-    MOUSE_DOWN          | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    MOUSE_UP            | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    MOUSE_SCROLL        | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    MOUSE_MOVE          | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    MOUSE_ENTER         | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    MOUSE_LEAVE         | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    TOUCHES_BEGAN       | ---     | ---   | ---   | YES   | YES     | TODO | YES
-    TOUCHES_MOVED       | ---     | ---   | ---   | YES   | YES     | TODO | YES
-    TOUCHES_ENDED       | ---     | ---   | ---   | YES   | YES     | TODO | YES
-    TOUCHES_CANCELLED   | ---     | ---   | ---   | YES   | YES     | TODO | YES
-    RESIZED             | YES     | YES   | YES   | YES   | YES     | YES  | YES
-    ICONIFIED           | YES     | YES   | YES   | ---   | ---     | YES  | ---
-    RESTORED            | YES     | YES   | YES   | ---   | ---     | YES  | ---
-    FOCUSED             | YES     | YES   | YES   | ---   | ---     | ---  | YES
-    UNFOCUSED           | YES     | YES   | YES   | ---   | ---     | ---  | YES
-    SUSPENDED           | ---     | ---   | ---   | YES   | YES     | YES  | TODO
-    RESUMED             | ---     | ---   | ---   | YES   | YES     | YES  | TODO
-    QUIT_REQUESTED      | YES     | YES   | YES   | ---   | ---     | ---  | YES
-    IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ---  | ???
-    key repeat flag     | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    windowed            | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    fullscreen          | YES     | YES   | YES   | YES   | YES     | YES  | ---
-    mouse hide          | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    mouse lock          | YES     | YES   | YES   | ---   | ---     | TODO | YES
-    set cursor type     | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    screen keyboard     | ---     | ---   | ---   | YES   | TODO    | TODO | YES
-    swap interval       | YES     | YES   | YES   | YES   | TODO    | ---  | YES
-    high-dpi            | YES     | YES   | TODO  | YES   | YES     | YES  | YES
-    clipboard           | YES     | YES   | TODO  | ---   | ---     | TODO | YES
-    MSAA                | YES     | YES   | YES   | YES   | YES     | TODO | YES
-    drag'n'drop         | YES     | YES   | YES   | ---   | ---     | TODO | YES
-    window icon         | YES     | YES(1)| YES   | ---   | ---     | TODO | YES
+                        | Windows | macOS | Linux  |  iOS  | Android | UWP  | HTML5
+    --------------------+---------+-------+--------+-------+---------+------+-------
+    gl 3.x              | YES     | YES   | YES    | ---   | ---     | ---  | ---
+    gles2/webgl         | ---     | ---   | YES(2) | YES   | YES     | ---  | YES
+    gles3/webgl2        | ---     | ---   | YES(2) | YES   | YES     | ---  | YES
+    metal               | ---     | YES   | ---    | YES   | ---     | ---  | ---
+    d3d11               | YES     | ---   | ---    | ---   | ---     | YES  | ---
+    KEY_DOWN            | YES     | YES   | YES    | SOME  | TODO    | YES  | YES
+    KEY_UP              | YES     | YES   | YES    | SOME  | TODO    | YES  | YES
+    CHAR                | YES     | YES   | YES    | YES   | TODO    | YES  | YES
+    MOUSE_DOWN          | YES     | YES   | YES    | ---   | ---     | YES  | YES
+    MOUSE_UP            | YES     | YES   | YES    | ---   | ---     | YES  | YES
+    MOUSE_SCROLL        | YES     | YES   | YES    | ---   | ---     | YES  | YES
+    MOUSE_MOVE          | YES     | YES   | YES    | ---   | ---     | YES  | YES
+    MOUSE_ENTER         | YES     | YES   | YES    | ---   | ---     | YES  | YES
+    MOUSE_LEAVE         | YES     | YES   | YES    | ---   | ---     | YES  | YES
+    TOUCHES_BEGAN       | ---     | ---   | YES(3) | YES   | YES     | TODO | YES
+    TOUCHES_MOVED       | ---     | ---   | YES(3) | YES   | YES     | TODO | YES
+    TOUCHES_ENDED       | ---     | ---   | YES(3) | YES   | YES     | TODO | YES
+    TOUCHES_CANCELLED   | ---     | ---   | YES(3) | YES   | YES     | TODO | YES
+    RESIZED             | YES     | YES   | YES    | YES   | YES     | YES  | YES
+    ICONIFIED           | YES     | YES   | YES(4) | ---   | ---     | YES  | ---
+    RESTORED            | YES     | YES   | YES(4) | ---   | ---     | YES  | ---
+    FOCUSED             | YES     | YES   | YES    | ---   | ---     | ---  | YES
+    UNFOCUSED           | YES     | YES   | YES    | ---   | ---     | ---  | YES
+    SUSPENDED           | ---     | ---   | ---    | YES   | YES     | YES  | TODO
+    RESUMED             | ---     | ---   | ---    | YES   | YES     | YES  | TODO
+    QUIT_REQUESTED      | YES     | YES   | YES    | ---   | ---     | ---  | YES
+    IME                 | TODO    | TODO? | TODO   | ???   | TODO    | ---  | ???
+    key repeat flag     | YES     | YES   | YES    | ---   | ---     | YES  | YES
+    windowed            | YES     | YES   | YES(4) | ---   | ---     | YES  | YES
+    fullscreen          | YES     | YES   | YES    | YES   | YES     | YES  | ---
+    mouse hide          | YES     | YES   | YES    | ---   | ---     | YES  | YES
+    mouse lock          | YES     | YES   | YES    | ---   | ---     | TODO | YES
+    set cursor type     | YES     | YES   | YES    | ---   | ---     | YES  | YES
+    screen keyboard     | ---     | ---   | ---    | YES   | TODO    | TODO | YES
+    swap interval       | YES     | YES   | YES    | YES   | TODO    | ---  | YES
+    high-dpi            | YES     | YES   | YES(3) | YES   | YES     | YES  | YES
+    clipboard           | YES     | YES   | YES(3) | ---   | ---     | TODO | YES
+    MSAA                | YES     | YES   | YES    | YES   | YES     | TODO | YES
+    drag'n'drop         | YES     | YES   | YES    | ---   | ---     | TODO | YES
+    window icon         | YES     | YES(1)| YES(4) | ---   | ---     | TODO | YES
 
     (1) macOS has no regular window icons, instead the dock icon is changed
-    (2) supported with EGL only (not GLX)
+    (2) supported with EGL only (not GLX, nor wayland)
+    (3) supported with wayland only, not on X11
+    (4) supported with X11 only, not on wayland
 
     STEP BY STEP
     ============
@@ -1568,6 +1581,12 @@ typedef enum sapp_mouse_cursor {
     _SAPP_MOUSECURSOR_NUM,
 } sapp_mouse_cursor;
 
+typedef enum sapp_linux_display_protocol {
+    SAPP_LINUX_DISPLAY_PROTOCOL_INVALID = 0,
+    SAPP_LINUX_DISPLAY_PROTOCOL_X11 = 1,
+    SAPP_LINUX_DISPLAY_PROTOCOL_WAYLAND = 2,
+} sapp_linux_display_protocol;
+
 /* user-provided functions */
 extern sapp_desc sokol_main(int argc, char* argv[]);
 
@@ -1694,6 +1713,9 @@ SOKOL_APP_API_DECL const void* sapp_wgpu_get_depth_stencil_view(void);
 /* Android: get native activity handle */
 SOKOL_APP_API_DECL const void* sapp_android_get_native_activity(void);
 
+/* Linux: retrieve what display protocol is used */
+SOKOL_APP_API_DECL sapp_linux_display_protocol sapp_linux_get_display_protocol(void);
+
 #ifdef __cplusplus
 } /* extern "C" */
 
@@ -1783,13 +1805,18 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(__linux__) || defined(__unix__)
     /* Linux */
     #define _SAPP_LINUX (1)
-    #if defined(SOKOL_GLCORE33)
-        #if !defined(SOKOL_FORCE_EGL)
-            #define _SAPP_GLX (1)
-        #endif
-    #elif !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2)
-        #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE33, SOKOL_GLES3 or SOKOL_GLES2")
+    #if defined(SOKOL_DISABLE_X11) && defined(SOKOL_DISABLE_WAYLAND)
+    #error("sokol_app.h: You must not disable both window display protocols X11 and wayland.")
     #endif
+    #if !defined(SOKOL_DISABLE_X11)
+        #if defined(SOKOL_GLCORE33)
+            #if !defined(SOKOL_FORCE_EGL)
+                #define _SAPP_GLX (1)
+            #endif
+        #elif !defined(SOKOL_WAYLAND) && !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2)
+            #error("sokol_app.h: unknown 3D API selected for Linux (X11), must be SOKOL_GLCORE33, SOKOL_GLES3 or SOKOL_GLES2")
+        #endif
+    #endif /* !SOKOL_DISABLE_X11 */
 #else
 #error "sokol_app.h: Unknown platform"
 #endif
@@ -1958,19 +1985,34 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <EGL/egl.h>
 #elif defined(_SAPP_LINUX)
     #define GL_GLEXT_PROTOTYPES
-    #include <X11/Xlib.h>
-    #include <X11/Xutil.h>
-    #include <X11/XKBlib.h>
-    #include <X11/keysym.h>
-    #include <X11/Xresource.h>
-    #include <X11/Xatom.h>
-    #include <X11/extensions/XInput2.h>
-    #include <X11/Xcursor/Xcursor.h>
-    #include <X11/cursorfont.h> /* XC_* font cursors */
-    #include <X11/Xmd.h> /* CARD32 */
-    #if !defined(_SAPP_GLX)
+    #if !defined(SOKOL_DISABLE_X11)
+        #include <X11/Xlib.h>
+        #include <X11/Xutil.h>
+        #include <X11/XKBlib.h>
+        #include <X11/keysym.h>
+        #include <X11/Xresource.h>
+        #include <X11/Xatom.h>
+        #include <X11/extensions/XInput2.h>
+        #include <X11/Xcursor/Xcursor.h>
+        #include <X11/cursorfont.h> /* XC_* font cursors */
+        #include <X11/Xmd.h> /* CARD32 */
+        #if !defined(_SAPP_GLX)
+            #include <EGL/egl.h>
+        #endif
+    #endif /* !SOKOL_DISABLE_X11 */
+    #if !defined(SOKOL_DISABLE_WAYLAND)
         #include <EGL/egl.h>
-    #endif
+        #include <linux/input-event-codes.h>
+        #include <sys/epoll.h>
+        #include <sys/mman.h>
+        #include <time.h>
+        #include <unistd.h>
+        #include <wayland-client.h>
+        #include <wayland-cursor.h>
+        #include <wayland-egl.h>
+        #include <xkbcommon/xkbcommon.h>
+    #endif /* SOKOL_DISABLE_WAYLAND */
+    #include <GL/gl.h>
     #include <dlfcn.h> /* dlopen, dlsym, dlclose */
     #include <limits.h> /* LONG_MAX */
     #include <pthread.h>    /* only used a linker-guard, search for _sapp_linux_run() and see first comment */
@@ -2479,6 +2521,501 @@ typedef struct {
 /*== LINUX DECLARATIONS ======================================================*/
 #if defined(_SAPP_LINUX)
 
+#if !defined(SOKOL_DISABLE_WAYLAND)
+/* used for formatting eglChooseConfig() error in _sapp_wl_egl_setup() */
+#include <stdio.h>
+#include <string.h>
+
+/* manually curated wayland protocol extension section: start */
+#ifndef __has_attribute
+# define __has_attribute(x) 0  /* Compatibility with non-clang compilers. */
+#endif
+
+/* Wayland protocol extension: xdg shell */
+/**
+ *
+ * Copyright © 2008-2013 Kristian Høgsberg
+ * Copyright © 2013      Rafael Antognolli
+ * Copyright © 2013      Jasper St. Pierre
+ * Copyright © 2010-2013 Intel Corporation
+ * Copyright © 2015-2017 Samsung Electronics Co., Ltd
+ * Copyright © 2015-2017 Red Hat Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
+/* xdg shell: header */
+struct xdg_wm_base;
+
+extern const struct wl_interface xdg_surface_interface;
+extern const struct wl_interface xdg_toplevel_interface;
+
+struct xdg_wm_base_listener {
+    void (*ping)(void* data, struct xdg_wm_base* xdg_wm_base, uint32_t serial);
+};
+
+static inline int
+xdg_wm_base_add_listener(struct xdg_wm_base* xdg_wm_base, const struct xdg_wm_base_listener* listener, void* data)
+{
+    return wl_proxy_add_listener((struct wl_proxy *) xdg_wm_base, (void (**)(void)) listener, data);
+}
+
+#define XDG_WM_BASE_DESTROY 0
+#define XDG_WM_BASE_GET_XDG_SURFACE 2
+#define XDG_WM_BASE_PONG 3
+
+static inline void xdg_wm_base_destroy(struct xdg_wm_base* xdg_wm_base) {
+    wl_proxy_marshal((struct wl_proxy *) xdg_wm_base, XDG_WM_BASE_DESTROY);
+    wl_proxy_destroy((struct wl_proxy *) xdg_wm_base);
+}
+
+static inline struct xdg_surface* xdg_wm_base_get_xdg_surface(struct xdg_wm_base* xdg_wm_base, struct wl_surface* surface) {
+    struct wl_proxy* id;
+    id = wl_proxy_marshal_constructor((struct wl_proxy *) xdg_wm_base, XDG_WM_BASE_GET_XDG_SURFACE, &xdg_surface_interface, NULL, surface);
+    return (struct xdg_surface *) id;
+}
+
+static inline void xdg_wm_base_pong(struct xdg_wm_base* xdg_wm_base, uint32_t serial) {
+    wl_proxy_marshal((struct wl_proxy *) xdg_wm_base, XDG_WM_BASE_PONG, serial);
+}
+
+struct xdg_surface_listener {
+    void (*configure)(void* data, struct xdg_surface* xdg_surface, uint32_t serial);
+};
+
+static inline int xdg_surface_add_listener(struct xdg_surface* xdg_surface, const struct xdg_surface_listener* listener, void* data) {
+    return wl_proxy_add_listener((struct wl_proxy *) xdg_surface, (void (**)(void)) listener, data);
+}
+
+#define XDG_SURFACE_DESTROY 0
+#define XDG_SURFACE_GET_TOPLEVEL 1
+#define XDG_SURFACE_ACK_CONFIGURE 4
+
+static inline void xdg_surface_destroy(struct xdg_surface* xdg_surface) {
+    wl_proxy_marshal((struct wl_proxy *) xdg_surface, XDG_SURFACE_DESTROY);
+    wl_proxy_destroy((struct wl_proxy *) xdg_surface);
+}
+
+static inline struct xdg_toplevel* xdg_surface_get_toplevel(struct xdg_surface* xdg_surface) {
+    struct wl_proxy* id;
+    id = wl_proxy_marshal_constructor((struct wl_proxy *) xdg_surface, XDG_SURFACE_GET_TOPLEVEL, &xdg_toplevel_interface, NULL);
+    return (struct xdg_toplevel *) id;
+}
+
+static inline void xdg_surface_ack_configure(struct xdg_surface* xdg_surface, uint32_t serial) {
+    wl_proxy_marshal((struct wl_proxy *) xdg_surface, XDG_SURFACE_ACK_CONFIGURE, serial);
+}
+
+#ifndef XDG_TOPLEVEL_STATE_ENUM
+#define XDG_TOPLEVEL_STATE_ENUM
+enum xdg_toplevel_state {
+    XDG_TOPLEVEL_STATE_MAXIMIZED = 1,
+    XDG_TOPLEVEL_STATE_FULLSCREEN = 2,
+    XDG_TOPLEVEL_STATE_RESIZING = 3,
+    XDG_TOPLEVEL_STATE_ACTIVATED = 4,
+    XDG_TOPLEVEL_STATE_TILED_LEFT = 5,
+    XDG_TOPLEVEL_STATE_TILED_RIGHT = 6,
+    XDG_TOPLEVEL_STATE_TILED_TOP = 7,
+    XDG_TOPLEVEL_STATE_TILED_BOTTOM = 8,
+};
+#endif /* XDG_TOPLEVEL_STATE_ENUM */
+
+struct xdg_toplevel_listener {
+    void (*configure)(void* data, struct xdg_toplevel* xdg_toplevel, int32_t width, int32_t height, struct wl_array* states);
+    void (*close)(void* data, struct xdg_toplevel* xdg_toplevel);
+};
+
+static inline int xdg_toplevel_add_listener(struct xdg_toplevel* xdg_toplevel, const struct xdg_toplevel_listener* listener, void* data) {
+    return wl_proxy_add_listener((struct wl_proxy *) xdg_toplevel, (void (**)(void)) listener, data);
+}
+
+#define XDG_TOPLEVEL_DESTROY 0
+#define XDG_TOPLEVEL_SET_TITLE 2
+#define XDG_TOPLEVEL_SET_FULLSCREEN 11
+#define XDG_TOPLEVEL_UNSET_FULLSCREEN 12
+
+static inline void xdg_toplevel_destroy(struct xdg_toplevel* xdg_toplevel) {
+    wl_proxy_marshal((struct wl_proxy *) xdg_toplevel, XDG_TOPLEVEL_DESTROY);
+    wl_proxy_destroy((struct wl_proxy *) xdg_toplevel);
+}
+
+static inline void xdg_toplevel_set_title(struct xdg_toplevel* xdg_toplevel, const char* title) {
+    wl_proxy_marshal((struct wl_proxy *) xdg_toplevel, XDG_TOPLEVEL_SET_TITLE, title);
+}
+
+static inline void xdg_toplevel_set_fullscreen(struct xdg_toplevel* xdg_toplevel, struct wl_output* output) {
+    wl_proxy_marshal((struct wl_proxy *) xdg_toplevel, XDG_TOPLEVEL_SET_FULLSCREEN, output);
+}
+
+static inline void xdg_toplevel_unset_fullscreen(struct xdg_toplevel* xdg_toplevel) {
+    wl_proxy_marshal((struct wl_proxy *) xdg_toplevel, XDG_TOPLEVEL_UNSET_FULLSCREEN);
+}
+
+/* xdg shell: private code */
+static const struct wl_interface *xdg_shell_types[] = {
+    NULL, NULL, NULL, NULL, NULL, &xdg_surface_interface, &wl_surface_interface, &xdg_toplevel_interface, NULL, &xdg_surface_interface, NULL, &xdg_toplevel_interface, &wl_seat_interface, NULL, NULL, NULL, &wl_seat_interface, NULL, &wl_seat_interface, NULL, NULL, &wl_output_interface, &wl_seat_interface, NULL, NULL, NULL,
+};
+
+static const struct wl_message xdg_wm_base_requests[] = {
+    { "destroy", "", xdg_shell_types + 0 },
+    { "create_positioner", "n", xdg_shell_types + 4 },
+    { "get_xdg_surface", "no", xdg_shell_types + 5 },
+    { "pong", "u", xdg_shell_types + 0 },
+};
+
+static const struct wl_message xdg_wm_base_events[] = {
+    { "ping", "u", xdg_shell_types + 0 },
+};
+
+const struct wl_interface xdg_wm_base_interface = {
+    "xdg_wm_base", 3, 4, xdg_wm_base_requests, 1, xdg_wm_base_events,
+};
+
+static const struct wl_message xdg_surface_requests[] = {
+    { "destroy", "", xdg_shell_types + 0 },
+    { "get_toplevel", "n", xdg_shell_types + 7 },
+    { "get_popup", "n?oo", xdg_shell_types + 8 },
+    { "set_window_geometry", "iiii", xdg_shell_types + 0 },
+    { "ack_configure", "u", xdg_shell_types + 0 },
+};
+
+static const struct wl_message xdg_surface_events[] = {
+    { "configure", "u", xdg_shell_types + 0 },
+};
+
+const struct wl_interface xdg_surface_interface = {
+    "xdg_surface", 3, 5, xdg_surface_requests, 1, xdg_surface_events,
+};
+
+static const struct wl_message xdg_toplevel_requests[] = {
+    { "destroy", "", xdg_shell_types + 0 },
+    { "set_parent", "?o", xdg_shell_types + 11 },
+    { "set_title", "s", xdg_shell_types + 0 },
+    { "set_app_id", "s", xdg_shell_types + 0 },
+    { "show_window_menu", "ouii", xdg_shell_types + 12 },
+    { "move", "ou", xdg_shell_types + 16 },
+    { "resize", "ouu", xdg_shell_types + 18 },
+    { "set_max_size", "ii", xdg_shell_types + 0 },
+    { "set_min_size", "ii", xdg_shell_types + 0 },
+    { "set_maximized", "", xdg_shell_types + 0 },
+    { "unset_maximized", "", xdg_shell_types + 0 },
+    { "set_fullscreen", "?o", xdg_shell_types + 21 },
+    { "unset_fullscreen", "", xdg_shell_types + 0 },
+    { "set_minimized", "", xdg_shell_types + 0 },
+};
+
+static const struct wl_message xdg_toplevel_events[] = {
+    { "configure", "iia", xdg_shell_types + 0 },
+    { "close", "", xdg_shell_types + 0 },
+};
+
+const struct wl_interface xdg_toplevel_interface = {
+    "xdg_toplevel", 3, 14, xdg_toplevel_requests, 2, xdg_toplevel_events,
+};
+
+/* Wayland protocol extension: pointer constraints */
+/**
+ *
+ * Copyright © 2014      Jonas Ådahl
+ * Copyright © 2015      Red Hat Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
+
+/* relative-pointer: header */
+struct zwp_pointer_constraints_v1;
+
+extern const struct wl_interface zwp_locked_pointer_v1_interface;
+
+#ifndef ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ENUM
+#define ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ENUM
+enum zwp_pointer_constraints_v1_lifetime {
+    ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ONESHOT = 1,
+    ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT = 2,
+};
+#endif /* ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ENUM */
+
+#define ZWP_POINTER_CONSTRAINTS_V1_DESTROY 0
+#define ZWP_POINTER_CONSTRAINTS_V1_LOCK_POINTER 1
+
+static inline void zwp_pointer_constraints_v1_destroy(struct zwp_pointer_constraints_v1* zwp_pointer_constraints_v1) {
+    wl_proxy_marshal((struct wl_proxy *) zwp_pointer_constraints_v1, ZWP_POINTER_CONSTRAINTS_V1_DESTROY);
+    wl_proxy_destroy((struct wl_proxy *) zwp_pointer_constraints_v1);
+}
+
+static inline struct zwp_locked_pointer_v1* zwp_pointer_constraints_v1_lock_pointer(struct zwp_pointer_constraints_v1* zwp_pointer_constraints_v1, struct wl_surface* surface, struct wl_pointer* pointer, struct wl_region* region, uint32_t lifetime) {
+    struct wl_proxy* id;
+    id = wl_proxy_marshal_constructor((struct wl_proxy *) zwp_pointer_constraints_v1, ZWP_POINTER_CONSTRAINTS_V1_LOCK_POINTER, &zwp_locked_pointer_v1_interface, NULL, surface, pointer, region, lifetime);
+    return (struct zwp_locked_pointer_v1 *) id;
+}
+
+struct zwp_locked_pointer_v1_listener {
+    void (*locked)(void* data, struct zwp_locked_pointer_v1* zwp_locked_pointer_v1);
+    void (*unlocked)(void* data, struct zwp_locked_pointer_v1* zwp_locked_pointer_v1);
+};
+
+static inline int zwp_locked_pointer_v1_add_listener(struct zwp_locked_pointer_v1* zwp_locked_pointer_v1, const struct zwp_locked_pointer_v1_listener* listener, void* data) {
+    return wl_proxy_add_listener((struct wl_proxy *) zwp_locked_pointer_v1, (void (**)(void)) listener, data);
+}
+
+#define ZWP_LOCKED_POINTER_V1_DESTROY 0
+
+static inline void zwp_locked_pointer_v1_destroy(struct zwp_locked_pointer_v1* zwp_locked_pointer_v1) {
+    wl_proxy_marshal((struct wl_proxy *) zwp_locked_pointer_v1, ZWP_LOCKED_POINTER_V1_DESTROY);
+    wl_proxy_destroy((struct wl_proxy *) zwp_locked_pointer_v1);
+}
+
+/* relative-pointer: private code */
+static const struct wl_interface* pointer_constraints_unstable_v1_types[] = {
+    NULL, NULL, &zwp_locked_pointer_v1_interface, &wl_surface_interface, &wl_pointer_interface, &wl_region_interface, NULL, NULL, &wl_surface_interface, &wl_pointer_interface, &wl_region_interface, NULL, &wl_region_interface, &wl_region_interface,
+};
+
+static const struct wl_message zwp_pointer_constraints_v1_requests[] = {
+    { "destroy", "", pointer_constraints_unstable_v1_types + 0 },
+    { "lock_pointer", "noo?ou", pointer_constraints_unstable_v1_types + 2 },
+};
+
+const struct wl_interface zwp_pointer_constraints_v1_interface = {
+    "zwp_pointer_constraints_v1", 1, 3, zwp_pointer_constraints_v1_requests, 0, NULL,
+};
+
+static const struct wl_message zwp_locked_pointer_v1_requests[] = {
+    { "destroy", "", pointer_constraints_unstable_v1_types + 0 },
+};
+
+static const struct wl_message zwp_locked_pointer_v1_events[] = {
+    { "locked", "", pointer_constraints_unstable_v1_types + 0 },
+    { "unlocked", "", pointer_constraints_unstable_v1_types + 0 },
+};
+
+const struct wl_interface zwp_locked_pointer_v1_interface = {
+    "zwp_locked_pointer_v1", 1, 3, zwp_locked_pointer_v1_requests, 2, zwp_locked_pointer_v1_events,
+};
+
+/* Wayland protocol extension: relative pointer */
+/**
+ *
+ * Copyright © 2014      Jonas Ådahl
+ * Copyright © 2015      Red Hat Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
+
+/* relative-pointer: header */
+struct zwp_relative_pointer_manager_v1;
+
+extern const struct wl_interface zwp_relative_pointer_v1_interface;
+
+#define ZWP_RELATIVE_POINTER_MANAGER_V1_DESTROY 0
+#define ZWP_RELATIVE_POINTER_MANAGER_V1_GET_RELATIVE_POINTER 1
+
+static inline void zwp_relative_pointer_manager_v1_destroy(struct zwp_relative_pointer_manager_v1* zwp_relative_pointer_manager_v1) {
+    wl_proxy_marshal((struct wl_proxy *) zwp_relative_pointer_manager_v1, ZWP_RELATIVE_POINTER_MANAGER_V1_DESTROY);
+    wl_proxy_destroy((struct wl_proxy *) zwp_relative_pointer_manager_v1);
+}
+
+static inline struct zwp_relative_pointer_v1* zwp_relative_pointer_manager_v1_get_relative_pointer(struct zwp_relative_pointer_manager_v1* zwp_relative_pointer_manager_v1, struct wl_pointer* pointer)
+{
+    struct wl_proxy* id;
+    id = wl_proxy_marshal_constructor((struct wl_proxy *) zwp_relative_pointer_manager_v1, ZWP_RELATIVE_POINTER_MANAGER_V1_GET_RELATIVE_POINTER, &zwp_relative_pointer_v1_interface, NULL, pointer);
+    return (struct zwp_relative_pointer_v1 *) id;
+}
+
+struct zwp_relative_pointer_v1_listener {
+    void (*relative_motion)(void* data, struct zwp_relative_pointer_v1* zwp_relative_pointer_v1, uint32_t utime_hi, uint32_t utime_lo, wl_fixed_t dx, wl_fixed_t dy, wl_fixed_t dx_unaccel, wl_fixed_t dy_unaccel);
+};
+
+static inline int zwp_relative_pointer_v1_add_listener(struct zwp_relative_pointer_v1* zwp_relative_pointer_v1, const struct zwp_relative_pointer_v1_listener* listener, void* data) {
+    return wl_proxy_add_listener((struct wl_proxy *) zwp_relative_pointer_v1, (void (**)(void)) listener, data);
+}
+
+#define ZWP_RELATIVE_POINTER_V1_DESTROY 0
+
+static inline void zwp_relative_pointer_v1_set_user_data(struct zwp_relative_pointer_v1* zwp_relative_pointer_v1, void* user_data) {
+    wl_proxy_set_user_data((struct wl_proxy *) zwp_relative_pointer_v1, user_data);
+}
+
+static inline void*  zwp_relative_pointer_v1_get_user_data(struct zwp_relative_pointer_v1* zwp_relative_pointer_v1) {
+    return wl_proxy_get_user_data((struct wl_proxy *) zwp_relative_pointer_v1);
+}
+
+static inline uint32_t zwp_relative_pointer_v1_get_version(struct zwp_relative_pointer_v1* zwp_relative_pointer_v1) {
+    return wl_proxy_get_version((struct wl_proxy *) zwp_relative_pointer_v1);
+}
+
+static inline void zwp_relative_pointer_v1_destroy(struct zwp_relative_pointer_v1* zwp_relative_pointer_v1) {
+    wl_proxy_marshal((struct wl_proxy *) zwp_relative_pointer_v1, ZWP_RELATIVE_POINTER_V1_DESTROY);
+    wl_proxy_destroy((struct wl_proxy *) zwp_relative_pointer_v1);
+}
+
+/* relative-pointer: private code */
+static const struct wl_interface* relative_pointer_unstable_v1_types[] = {
+    NULL, NULL, NULL, NULL, NULL, NULL, &zwp_relative_pointer_v1_interface, &wl_pointer_interface,
+};
+
+static const struct wl_message zwp_relative_pointer_manager_v1_requests[] = {
+    { "destroy", "", relative_pointer_unstable_v1_types + 0 },
+    { "get_relative_pointer", "no", relative_pointer_unstable_v1_types + 6 },
+};
+
+const struct wl_interface zwp_relative_pointer_manager_v1_interface = {
+    "zwp_relative_pointer_manager_v1", 1, 2, zwp_relative_pointer_manager_v1_requests, 0, NULL,
+};
+
+static const struct wl_message zwp_relative_pointer_v1_requests[] = {
+    { "destroy", "", relative_pointer_unstable_v1_types + 0 },
+};
+
+static const struct wl_message zwp_relative_pointer_v1_events[] = {
+    { "relative_motion", "uuffff", relative_pointer_unstable_v1_types + 0 },
+};
+
+const struct wl_interface zwp_relative_pointer_v1_interface = {
+    "zwp_relative_pointer_v1", 1, 1, zwp_relative_pointer_v1_requests, 1, zwp_relative_pointer_v1_events,
+};
+/* manually curated wayland protocol extension section: end */
+
+#define _SAPP_WAYLAND_DEFAULT_DPI_SCALE 1.0f
+#define _SAPP_WAYLAND_MAX_EPOLL_EVENTS 10
+#define _SAPP_WAYLAND_MAX_OUTPUTS 8
+
+struct _sapp_wl_output {
+    struct wl_output* output;
+
+    bool active;
+    int32_t factor;
+};
+
+struct _sapp_wl_touchpoint {
+    bool changed;
+    bool valid;
+    float x;
+    float y;
+    int32_t id;
+};
+
+struct _sapp_wl_cursor {
+    struct wl_cursor *cursor;
+    struct wl_buffer *buffer;
+};
+
+typedef struct {
+    /* wayland specific objects/globals */
+    struct wl_compositor* compositor;
+    struct wl_data_device* data_device;
+    struct wl_data_device_manager* data_device_manager;
+    struct wl_display* display;
+    struct wl_egl_window* egl_window;
+    struct wl_event_queue* event_queue;
+    struct wl_keyboard* keyboard;
+    struct wl_pointer* pointer;
+    struct wl_registry* registry;
+    struct wl_seat* seat;
+    struct wl_shm* shm;
+    struct wl_surface* surface;
+    struct wl_touch* touch;
+    struct xdg_surface* shell;
+    struct xdg_toplevel* toplevel;
+    struct xdg_wm_base* wm_base;
+
+    /* EGL specific objects */
+    EGLContext* egl_context;
+    EGLDisplay* egl_display;
+    EGLSurface* egl_surface;
+
+    /* custom event loop state */
+    int epoll_fd;
+    int event_fd;
+    struct epoll_event events[_SAPP_WAYLAND_MAX_EPOLL_EVENTS];
+
+    /* xkb specific objects */
+    struct xkb_context* xkb_context;
+    struct xkb_state* xkb_state;
+    struct xkb_keymap* xkb_keymap;
+
+    /* repeat information */
+    sapp_keycode repeat_key_code;
+    uint32_t repeat_key_char;
+    struct timespec repeat_delay;
+    struct timespec repeat_rate;
+    struct timespec repeat_next;
+
+    /* pointer/cursor related data */
+    struct _sapp_wl_cursor cursors[_SAPP_MOUSECURSOR_NUM];
+    struct wl_surface *cursor_surface;
+    struct zwp_locked_pointer_v1 *locked_pointer;
+    struct zwp_pointer_constraints_v1 *pointer_constraints;
+    struct zwp_relative_pointer_manager_v1 *relative_pointer_manager;
+    struct zwp_relative_pointer_v1 *relative_pointer;
+    uint32_t serial;
+
+    /* accumulated touch state */
+    struct _sapp_wl_touchpoint touchpoints[SAPP_MAX_TOUCHPOINTS];
+
+    /* output data for scaling/rotating/etc. */
+    unsigned char max_outputs;
+    struct _sapp_wl_output outputs[_SAPP_WAYLAND_MAX_OUTPUTS];
+
+    /* dnd data */
+    struct wl_data_offer *data_offer;
+
+    /* surface reference for focus/unfocused event */
+    struct wl_surface* focus;
+} _sapp_wl_t;
+
+#endif /* !SOKOL_DISABLE_WAYLAND */
+#if !defined(SOKOL_DISABLE_X11)
+
 #define _SAPP_X11_XDND_VERSION (5)
 
 #define GLX_VENDOR 1
@@ -2625,7 +3162,8 @@ typedef struct {
 
 #endif // _SAPP_GLX
 
-#endif // _SAPP_LINUX
+#endif /* !SOKOL_DISABLE_X11 */
+#endif /* _SAPP_LINUX */
 
 /*== COMMON DECLARATIONS =====================================================*/
 
@@ -2726,12 +3264,18 @@ typedef struct {
     #elif defined(_SAPP_ANDROID)
         _sapp_android_t android;
     #elif defined(_SAPP_LINUX)
+        sapp_linux_display_protocol linux_display_protocol;
+        #if !defined(SOKOL_DISABLE_WAYLAND)
+        _sapp_wl_t wl;
+        #endif /* !SOKOL_DISABLE_WAYLAND */
+        #if !defined(SOKOL_DISABLE_X11)
         _sapp_x11_t x11;
         #if defined(_SAPP_GLX)
             _sapp_glx_t glx;
         #else
             _sapp_egl_t egl;
-        #endif
+        #endif /* _SAPP_GLX */
+        #endif /* !SOKOL_DISABLE_X11 */
     #endif
     char html5_canvas_selector[_SAPP_MAX_TITLE_LENGTH];
     char window_title[_SAPP_MAX_TITLE_LENGTH];      /* UTF-8 */
@@ -9393,6 +9937,85 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
 /*== LINUX ==================================================================*/
 #if defined(_SAPP_LINUX)
 
+_SOKOL_PRIVATE bool _sapp_linux_parse_dropped_files_list(const char* src) {
+    SOKOL_ASSERT(src);
+    SOKOL_ASSERT(_sapp.drop.buffer);
+
+    _sapp_clear_drop_buffer();
+    _sapp.drop.num_files = 0;
+
+    /*
+        src is (potentially percent-encoded) string made of one or multiple paths
+        separated by \r\n, each path starting with 'file://'
+    */
+    bool err = false;
+    int src_count = 0;
+    char src_chr = 0;
+    char* dst_ptr = _sapp.drop.buffer;
+    const char* dst_end_ptr = dst_ptr + (_sapp.drop.max_path_length - 1); // room for terminating 0
+    while (0 != (src_chr = *src++)) {
+        src_count++;
+        char dst_chr = 0;
+        /* check leading 'file://' */
+        if (src_count <= 7) {
+            if (((src_count == 1) && (src_chr != 'f')) ||
+                ((src_count == 2) && (src_chr != 'i')) ||
+                ((src_count == 3) && (src_chr != 'l')) ||
+                ((src_count == 4) && (src_chr != 'e')) ||
+                ((src_count == 5) && (src_chr != ':')) ||
+                ((src_count == 6) && (src_chr != '/')) ||
+                ((src_count == 7) && (src_chr != '/')))
+            {
+                SAPP_LOG("sokol_app.h: dropped file URI doesn't start with file://");
+                err = true;
+                break;
+            }
+        }
+        else if (src_chr == '\r') {
+            // skip
+        }
+        else if (src_chr == '\n') {
+            src_count = 0;
+            _sapp.drop.num_files++;
+            // too many files is not an error
+            if (_sapp.drop.num_files >= _sapp.drop.max_files) {
+                break;
+            }
+            dst_ptr = _sapp.drop.buffer + _sapp.drop.num_files * _sapp.drop.max_path_length;
+            dst_end_ptr = dst_ptr + (_sapp.drop.max_path_length - 1);
+        }
+        else if ((src_chr == '%') && src[0] && src[1]) {
+            // a percent-encoded byte (most likely UTF-8 multibyte sequence)
+            const char digits[3] = { src[0], src[1], 0 };
+            src += 2;
+            dst_chr = (char) strtol(digits, 0, 16);
+        }
+        else {
+            dst_chr = src_chr;
+        }
+        if (dst_chr) {
+            // dst_end_ptr already has adjustment for terminating zero
+            if (dst_ptr < dst_end_ptr) {
+                *dst_ptr++ = dst_chr;
+            }
+            else {
+                SAPP_LOG("sokol_app.h: dropped file path too long (sapp_desc.max_dropped_file_path_length)");
+                err = true;
+                break;
+            }
+        }
+    }
+    if (err) {
+        _sapp_clear_drop_buffer();
+        _sapp.drop.num_files = 0;
+        return false;
+    }
+    else {
+        return true;
+    }
+}
+
+#if !defined(SOKOL_DISABLE_X11)
 /* see GLFW's xkb_unicode.c */
 static const struct _sapp_x11_codepair {
   uint16_t keysym;
@@ -11243,84 +11866,6 @@ _SOKOL_PRIVATE int32_t _sapp_x11_keysym_to_unicode(KeySym keysym) {
     return -1;
 }
 
-_SOKOL_PRIVATE bool _sapp_x11_parse_dropped_files_list(const char* src) {
-    SOKOL_ASSERT(src);
-    SOKOL_ASSERT(_sapp.drop.buffer);
-
-    _sapp_clear_drop_buffer();
-    _sapp.drop.num_files = 0;
-
-    /*
-        src is (potentially percent-encoded) string made of one or multiple paths
-        separated by \r\n, each path starting with 'file://'
-    */
-    bool err = false;
-    int src_count = 0;
-    char src_chr = 0;
-    char* dst_ptr = _sapp.drop.buffer;
-    const char* dst_end_ptr = dst_ptr + (_sapp.drop.max_path_length - 1); // room for terminating 0
-    while (0 != (src_chr = *src++)) {
-        src_count++;
-        char dst_chr = 0;
-        /* check leading 'file://' */
-        if (src_count <= 7) {
-            if (((src_count == 1) && (src_chr != 'f')) ||
-                ((src_count == 2) && (src_chr != 'i')) ||
-                ((src_count == 3) && (src_chr != 'l')) ||
-                ((src_count == 4) && (src_chr != 'e')) ||
-                ((src_count == 5) && (src_chr != ':')) ||
-                ((src_count == 6) && (src_chr != '/')) ||
-                ((src_count == 7) && (src_chr != '/')))
-            {
-                SAPP_LOG("sokol_app.h: dropped file URI doesn't start with file://");
-                err = true;
-                break;
-            }
-        }
-        else if (src_chr == '\r') {
-            // skip
-        }
-        else if (src_chr == '\n') {
-            src_count = 0;
-            _sapp.drop.num_files++;
-            // too many files is not an error
-            if (_sapp.drop.num_files >= _sapp.drop.max_files) {
-                break;
-            }
-            dst_ptr = _sapp.drop.buffer + _sapp.drop.num_files * _sapp.drop.max_path_length;
-            dst_end_ptr = dst_ptr + (_sapp.drop.max_path_length - 1);
-        }
-        else if ((src_chr == '%') && src[0] && src[1]) {
-            // a percent-encoded byte (most likely UTF-8 multibyte sequence)
-            const char digits[3] = { src[0], src[1], 0 };
-            src += 2;
-            dst_chr = (char) strtol(digits, 0, 16);
-        }
-        else {
-            dst_chr = src_chr;
-        }
-        if (dst_chr) {
-            // dst_end_ptr already has adjustment for terminating zero
-            if (dst_ptr < dst_end_ptr) {
-                *dst_ptr++ = dst_chr;
-            }
-            else {
-                SAPP_LOG("sokol_app.h: dropped file path too long (sapp_desc.max_dropped_file_path_length)");
-                err = true;
-                break;
-            }
-        }
-    }
-    if (err) {
-        _sapp_clear_drop_buffer();
-        _sapp.drop.num_files = 0;
-        return false;
-    }
-    else {
-        return true;
-    }
-}
-
 // XLib manual says keycodes are in the range [8, 255] inclusive.
 // https://tronche.com/gui/x/xlib/input/keyboard-encoding.html
 static bool _sapp_x11_keycodes[256];
@@ -11580,7 +12125,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                                                                 event->xselection.target,
                                                                 (unsigned char**) &data);
                 if (_sapp.drop.enabled && result) {
-                    if (_sapp_x11_parse_dropped_files_list(data)) {
+                    if (_sapp_linux_parse_dropped_files_list(data)) {
                         if (_sapp_events_enabled()) {
                             _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
                             _sapp_call_event(&_sapp.event);
@@ -11748,7 +12293,7 @@ _SOKOL_PRIVATE void _sapp_egl_destroy(void) {
 
 #endif /* _SAPP_GLX */
 
-_SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
+_SOKOL_PRIVATE void _sapp_linux_x11_run(const sapp_desc* desc) {
     /* The following lines are here to trigger a linker error instead of an
         obscure runtime error if the user has forgotten to add -pthread to
         the compiler or linker options. They have no other purpose.
@@ -11758,6 +12303,8 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     pthread_attr_destroy(&pthread_attr);
 
     _sapp_init_state(desc);
+
+    _sapp.linux_display_protocol = SAPP_LINUX_DISPLAY_PROTOCOL_X11;
     _sapp.x11.window_state = NormalState;
 
     XInitThreads();
@@ -11827,6 +12374,1606 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     _sapp_x11_destroy_cursors();
     XCloseDisplay(_sapp.x11.display);
     _sapp_discard_state();
+}
+
+#endif /* !SOKOL_DISABLE_X11 */
+#if !defined(SOKOL_DISABLE_WAYLAND)
+
+/* based loosely on <sys/time.h> `timercmp` macro
+ * compare two timespec structs and return 1 if a > b, -1 if a < b, 0 if a == b
+ */
+_SOKOL_PRIVATE int _sapp_wl_timespec_cmp(struct timespec *a, struct timespec *b) {
+    if (a->tv_sec > b->tv_sec) return 1;
+    if (a->tv_sec < b->tv_sec) return -1;
+
+    if (a->tv_nsec > b->tv_nsec) return 1;
+    if (a->tv_nsec < b->tv_nsec) return -1;
+
+    return 0;
+}
+
+/* based on <sys/time.h> `timeradd` macro adapted for timespec structs
+ * calculate sum of two timespec structs
+ */
+_SOKOL_PRIVATE void _sapp_wl_timespec_add(struct timespec *a, struct timespec *b, struct timespec *result) {
+    result->tv_sec = a->tv_sec + b->tv_sec;
+    result->tv_nsec = a->tv_nsec + b->tv_nsec;
+    if (result->tv_nsec >= 1000000000L) {
+        ++result->tv_sec;
+        result->tv_nsec -= 1000000000L;
+    }
+}
+
+_SOKOL_PRIVATE sapp_keycode _sapp_wl_translate_key(xkb_keysym_t sym) {
+    switch (sym) {
+        case XKB_KEY_KP_Space:     return SAPP_KEYCODE_SPACE;
+        case XKB_KEY_apostrophe:   return SAPP_KEYCODE_APOSTROPHE;
+        case XKB_KEY_comma:        return SAPP_KEYCODE_COMMA;
+        case XKB_KEY_minus:        return SAPP_KEYCODE_MINUS;
+        case XKB_KEY_period:       return SAPP_KEYCODE_PERIOD;
+        case XKB_KEY_slash:        return SAPP_KEYCODE_SLASH;
+        case XKB_KEY_0:            return SAPP_KEYCODE_0;
+        case XKB_KEY_1:            return SAPP_KEYCODE_1;
+        case XKB_KEY_2:            return SAPP_KEYCODE_2;
+        case XKB_KEY_3:            return SAPP_KEYCODE_3;
+        case XKB_KEY_4:            return SAPP_KEYCODE_4;
+        case XKB_KEY_5:            return SAPP_KEYCODE_5;
+        case XKB_KEY_6:            return SAPP_KEYCODE_6;
+        case XKB_KEY_7:            return SAPP_KEYCODE_7;
+        case XKB_KEY_8:            return SAPP_KEYCODE_8;
+        case XKB_KEY_9:            return SAPP_KEYCODE_9;
+        case XKB_KEY_semicolon:    return SAPP_KEYCODE_SEMICOLON;
+        case XKB_KEY_equal:        return SAPP_KEYCODE_EQUAL;
+        case XKB_KEY_A:
+        case XKB_KEY_a:            return SAPP_KEYCODE_A;
+        case XKB_KEY_B:
+        case XKB_KEY_b:            return SAPP_KEYCODE_B;
+        case XKB_KEY_C:
+        case XKB_KEY_c:            return SAPP_KEYCODE_C;
+        case XKB_KEY_D:
+        case XKB_KEY_d:            return SAPP_KEYCODE_D;
+        case XKB_KEY_E:
+        case XKB_KEY_e:            return SAPP_KEYCODE_E;
+        case XKB_KEY_F:
+        case XKB_KEY_f:            return SAPP_KEYCODE_F;
+        case XKB_KEY_G:
+        case XKB_KEY_g:            return SAPP_KEYCODE_G;
+        case XKB_KEY_H:
+        case XKB_KEY_h:            return SAPP_KEYCODE_H;
+        case XKB_KEY_I:
+        case XKB_KEY_i:            return SAPP_KEYCODE_I;
+        case XKB_KEY_J:
+        case XKB_KEY_j:            return SAPP_KEYCODE_J;
+        case XKB_KEY_K:
+        case XKB_KEY_k:            return SAPP_KEYCODE_K;
+        case XKB_KEY_L:
+        case XKB_KEY_l:            return SAPP_KEYCODE_L;
+        case XKB_KEY_M:
+        case XKB_KEY_m:            return SAPP_KEYCODE_M;
+        case XKB_KEY_N:
+        case XKB_KEY_n:            return SAPP_KEYCODE_N;
+        case XKB_KEY_O:
+        case XKB_KEY_o:            return SAPP_KEYCODE_O;
+        case XKB_KEY_P:
+        case XKB_KEY_p:            return SAPP_KEYCODE_P;
+        case XKB_KEY_Q:
+        case XKB_KEY_q:            return SAPP_KEYCODE_Q;
+        case XKB_KEY_R:
+        case XKB_KEY_r:            return SAPP_KEYCODE_R;
+        case XKB_KEY_S:
+        case XKB_KEY_s:            return SAPP_KEYCODE_S;
+        case XKB_KEY_T:
+        case XKB_KEY_t:            return SAPP_KEYCODE_T;
+        case XKB_KEY_U:
+        case XKB_KEY_u:            return SAPP_KEYCODE_U;
+        case XKB_KEY_V:
+        case XKB_KEY_v:            return SAPP_KEYCODE_V;
+        case XKB_KEY_W:
+        case XKB_KEY_w:            return SAPP_KEYCODE_W;
+        case XKB_KEY_X:
+        case XKB_KEY_x:            return SAPP_KEYCODE_X;
+        case XKB_KEY_Y:
+        case XKB_KEY_y:            return SAPP_KEYCODE_Y;
+        case XKB_KEY_Z:
+        case XKB_KEY_z:            return SAPP_KEYCODE_Z;
+        case XKB_KEY_bracketleft:  return SAPP_KEYCODE_LEFT_BRACKET;
+        case XKB_KEY_backslash:    return SAPP_KEYCODE_BACKSLASH;
+        case XKB_KEY_bracketright: return SAPP_KEYCODE_RIGHT_BRACKET;
+        case XKB_KEY_grave:        return SAPP_KEYCODE_GRAVE_ACCENT;
+        case XKB_KEY_Escape:       return SAPP_KEYCODE_ESCAPE;
+        case XKB_KEY_Return:       return SAPP_KEYCODE_ENTER;
+        case XKB_KEY_Tab:          return SAPP_KEYCODE_TAB;
+        case XKB_KEY_BackSpace:    return SAPP_KEYCODE_BACKSPACE;
+        case XKB_KEY_Insert:       return SAPP_KEYCODE_INSERT;
+        case XKB_KEY_Delete:       return SAPP_KEYCODE_DELETE;
+        case XKB_KEY_Right:        return SAPP_KEYCODE_RIGHT;
+        case XKB_KEY_Left:         return SAPP_KEYCODE_LEFT;
+        case XKB_KEY_Down:         return SAPP_KEYCODE_DOWN;
+        case XKB_KEY_Up:           return SAPP_KEYCODE_UP;
+        case XKB_KEY_Page_Up:      return SAPP_KEYCODE_PAGE_UP;
+        case XKB_KEY_Page_Down:    return SAPP_KEYCODE_PAGE_DOWN;
+        case XKB_KEY_Home:         return SAPP_KEYCODE_HOME;
+        case XKB_KEY_End:          return SAPP_KEYCODE_END;
+        case XKB_KEY_Caps_Lock:    return SAPP_KEYCODE_CAPS_LOCK;
+        case XKB_KEY_Scroll_Lock:  return SAPP_KEYCODE_SCROLL_LOCK;
+        case XKB_KEY_Num_Lock:     return SAPP_KEYCODE_NUM_LOCK;
+        case XKB_KEY_Print:        return SAPP_KEYCODE_PRINT_SCREEN;
+        case XKB_KEY_Pause:        return SAPP_KEYCODE_PAUSE;
+        case XKB_KEY_F1:           return SAPP_KEYCODE_F1;
+        case XKB_KEY_F2:           return SAPP_KEYCODE_F2;
+        case XKB_KEY_F3:           return SAPP_KEYCODE_F3;
+        case XKB_KEY_F4:           return SAPP_KEYCODE_F4;
+        case XKB_KEY_F5:           return SAPP_KEYCODE_F5;
+        case XKB_KEY_F6:           return SAPP_KEYCODE_F6;
+        case XKB_KEY_F7:           return SAPP_KEYCODE_F7;
+        case XKB_KEY_F8:           return SAPP_KEYCODE_F8;
+        case XKB_KEY_F9:           return SAPP_KEYCODE_F9;
+        case XKB_KEY_F10:          return SAPP_KEYCODE_F10;
+        case XKB_KEY_F11:          return SAPP_KEYCODE_F11;
+        case XKB_KEY_F12:          return SAPP_KEYCODE_F12;
+        case XKB_KEY_F13:          return SAPP_KEYCODE_F13;
+        case XKB_KEY_F14:          return SAPP_KEYCODE_F14;
+        case XKB_KEY_F15:          return SAPP_KEYCODE_F15;
+        case XKB_KEY_F16:          return SAPP_KEYCODE_F16;
+        case XKB_KEY_F17:          return SAPP_KEYCODE_F17;
+        case XKB_KEY_F18:          return SAPP_KEYCODE_F18;
+        case XKB_KEY_F19:          return SAPP_KEYCODE_F19;
+        case XKB_KEY_F20:          return SAPP_KEYCODE_F20;
+        case XKB_KEY_F21:          return SAPP_KEYCODE_F21;
+        case XKB_KEY_F22:          return SAPP_KEYCODE_F22;
+        case XKB_KEY_F23:          return SAPP_KEYCODE_F23;
+        case XKB_KEY_F24:          return SAPP_KEYCODE_F24;
+        case XKB_KEY_F25:          return SAPP_KEYCODE_F25;
+        case XKB_KEY_KP_0:         return SAPP_KEYCODE_KP_0;
+        case XKB_KEY_KP_1:         return SAPP_KEYCODE_KP_1;
+        case XKB_KEY_KP_2:         return SAPP_KEYCODE_KP_2;
+        case XKB_KEY_KP_3:         return SAPP_KEYCODE_KP_3;
+        case XKB_KEY_KP_4:         return SAPP_KEYCODE_KP_4;
+        case XKB_KEY_KP_5:         return SAPP_KEYCODE_KP_5;
+        case XKB_KEY_KP_6:         return SAPP_KEYCODE_KP_6;
+        case XKB_KEY_KP_7:         return SAPP_KEYCODE_KP_7;
+        case XKB_KEY_KP_8:         return SAPP_KEYCODE_KP_8;
+        case XKB_KEY_KP_9:         return SAPP_KEYCODE_KP_9;
+        case XKB_KEY_KP_Decimal:   return SAPP_KEYCODE_KP_DECIMAL;
+        case XKB_KEY_KP_Divide:    return SAPP_KEYCODE_KP_DIVIDE;
+        case XKB_KEY_KP_Multiply:  return SAPP_KEYCODE_KP_MULTIPLY;
+        case XKB_KEY_KP_Subtract:  return SAPP_KEYCODE_KP_SUBTRACT;
+        case XKB_KEY_KP_Add:       return SAPP_KEYCODE_KP_ADD;
+        case XKB_KEY_KP_Enter:     return SAPP_KEYCODE_KP_ENTER;
+        case XKB_KEY_KP_Equal:     return SAPP_KEYCODE_KP_EQUAL;
+        case XKB_KEY_Shift_L:      return SAPP_KEYCODE_LEFT_SHIFT;
+        case XKB_KEY_Control_L:    return SAPP_KEYCODE_LEFT_CONTROL;
+        case XKB_KEY_Meta_L:
+        case XKB_KEY_Alt_L:        return SAPP_KEYCODE_LEFT_ALT;
+        case XKB_KEY_Super_L:      return SAPP_KEYCODE_LEFT_SUPER;
+        case XKB_KEY_Shift_R:      return SAPP_KEYCODE_RIGHT_SHIFT;
+        case XKB_KEY_Control_R:    return SAPP_KEYCODE_RIGHT_CONTROL;
+        case XKB_KEY_Meta_R:
+        case XKB_KEY_Alt_R:        return SAPP_KEYCODE_RIGHT_ALT;
+        case XKB_KEY_Super_R:      return SAPP_KEYCODE_RIGHT_SUPER;
+        case XKB_KEY_Menu:         return SAPP_KEYCODE_MENU;
+        case SAPP_KEYCODE_WORLD_1:
+        case SAPP_KEYCODE_WORLD_2:
+        default:                   return SAPP_KEYCODE_INVALID;
+    }
+}
+
+_SOKOL_PRIVATE uint32_t _sapp_wl_get_modifiers(void) {
+    uint32_t modifiers = 0;
+
+    enum xkb_state_component active_mask = (enum xkb_state_component) (XKB_STATE_MODS_DEPRESSED | XKB_STATE_MODS_LATCHED | XKB_STATE_MODS_LOCKED);
+
+    if (0 < xkb_state_mod_name_is_active(_sapp.wl.xkb_state, XKB_MOD_NAME_SHIFT, active_mask)) {
+        modifiers |= SAPP_MODIFIER_SHIFT;
+    }
+    if (0 < xkb_state_mod_name_is_active(_sapp.wl.xkb_state, XKB_MOD_NAME_CTRL, active_mask)) {
+        modifiers |= SAPP_MODIFIER_CTRL;
+    }
+    if (0 < xkb_state_mod_name_is_active(_sapp.wl.xkb_state, XKB_MOD_NAME_ALT, active_mask)) {
+        modifiers |= SAPP_MODIFIER_ALT;
+    }
+    if (0 < xkb_state_mod_name_is_active(_sapp.wl.xkb_state, XKB_MOD_NAME_LOGO, active_mask)) {
+        modifiers |= SAPP_MODIFIER_SUPER;
+    }
+
+    return modifiers;
+}
+
+_SOKOL_PRIVATE struct _sapp_wl_touchpoint* _sapp_wl_get_touchpoint(int32_t id) {
+    int point_id = -1;
+    for (int i = 0; i < SAPP_MAX_TOUCHPOINTS; i++) {
+        if (id == _sapp.wl.touchpoints[i].id) {
+            _sapp.wl.touchpoints[i].changed = true;
+            _sapp.wl.touchpoints[i].valid = true;
+            return &_sapp.wl.touchpoints[i];
+        }
+        if (-1 == point_id && !_sapp.wl.touchpoints[i].valid) {
+            point_id = i;
+        }
+    }
+    if (-1 == point_id) {
+        return NULL;
+    }
+
+    _sapp.wl.touchpoints[point_id].valid = true;
+    _sapp.wl.touchpoints[point_id].id = id;
+    return &_sapp.wl.touchpoints[point_id];
+}
+
+_SOKOL_PRIVATE void _sapp_wl_cleanup(void) {
+    if (NULL != _sapp.wl.egl_surface) eglDestroySurface(_sapp.wl.egl_display, _sapp.wl.egl_surface);
+    if (NULL != _sapp.wl.egl_window) wl_egl_window_destroy(_sapp.wl.egl_window);
+    if (NULL != _sapp.wl.egl_context) eglDestroyContext(_sapp.wl.egl_display, _sapp.wl.egl_context);
+
+    for (unsigned int i = 0; i < _sapp.wl.max_outputs; i++) {
+        if (NULL != _sapp.wl.outputs[i].output) wl_output_destroy(_sapp.wl.outputs[i].output);
+    }
+    _sapp.wl.max_outputs = 0;
+
+    if (NULL != _sapp.wl.toplevel) xdg_toplevel_destroy(_sapp.wl.toplevel);
+    if (NULL != _sapp.wl.shell) xdg_surface_destroy(_sapp.wl.shell);
+    if (NULL != _sapp.wl.wm_base) xdg_wm_base_destroy(_sapp.wl.wm_base);
+    if (NULL != _sapp.wl.surface) wl_surface_destroy(_sapp.wl.surface);
+    if (NULL != _sapp.wl.compositor) wl_compositor_destroy(_sapp.wl.compositor);
+    if (NULL != _sapp.wl.registry) wl_registry_destroy(_sapp.wl.registry);
+    if (NULL != _sapp.wl.event_queue) wl_event_queue_destroy(_sapp.wl.event_queue);
+    if (NULL != _sapp.wl.data_device) wl_data_device_release(_sapp.wl.data_device);
+    if (NULL != _sapp.wl.data_device_manager) wl_data_device_manager_destroy(_sapp.wl.data_device_manager);
+    if (NULL != _sapp.wl.touch) wl_touch_destroy(_sapp.wl.touch);
+    if (NULL != _sapp.wl.locked_pointer) zwp_locked_pointer_v1_destroy(_sapp.wl.locked_pointer);
+    if (NULL != _sapp.wl.pointer_constraints) zwp_pointer_constraints_v1_destroy(_sapp.wl.pointer_constraints);
+    if (NULL != _sapp.wl.relative_pointer) zwp_relative_pointer_v1_destroy(_sapp.wl.relative_pointer);
+    if (NULL != _sapp.wl.relative_pointer_manager) zwp_relative_pointer_manager_v1_destroy(_sapp.wl.relative_pointer_manager);
+    if (NULL != _sapp.wl.pointer) wl_pointer_destroy(_sapp.wl.pointer);
+    if (NULL != _sapp.wl.cursor_surface) wl_surface_destroy(_sapp.wl.cursor_surface);
+    if (NULL != _sapp.wl.keyboard) wl_keyboard_destroy(_sapp.wl.keyboard);
+    if (NULL != _sapp.wl.seat) wl_seat_destroy(_sapp.wl.seat);
+    if (NULL != _sapp.wl.shm) wl_shm_destroy(_sapp.wl.shm);
+
+    if (NULL != _sapp.wl.xkb_keymap) xkb_keymap_unref(_sapp.wl.xkb_keymap);
+    if (NULL != _sapp.wl.xkb_state) xkb_state_unref(_sapp.wl.xkb_state);
+    if (NULL != _sapp.wl.xkb_context) xkb_context_unref(_sapp.wl.xkb_context);
+
+    epoll_ctl(_sapp.wl.epoll_fd, EPOLL_CTL_DEL, _sapp.wl.event_fd, NULL);
+    close(_sapp.wl.event_fd);
+    close(_sapp.wl.epoll_fd);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_update_cursor(sapp_mouse_cursor cursor, uint32_t serial, bool shown) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+
+    struct wl_cursor *selected_cursor = _sapp.wl.cursors[cursor].cursor;
+    if (NULL == selected_cursor) {
+        const char* fmt = "Warning: Unable to load/display cursor with id: '%d'!";
+        const size_t len = strlen(fmt) + 4;
+        char* msg = (char *) _sapp_malloc(len * sizeof(char));
+        snprintf(msg, len, fmt, cursor);
+        SOKOL_LOG(msg);
+        _sapp_free(msg);
+        return;
+    }
+
+    if (shown) {
+        wl_surface_attach(_sapp.wl.cursor_surface, _sapp.wl.cursors[cursor].buffer, 0, 0);
+        wl_surface_damage_buffer(_sapp.wl.cursor_surface, 0, 0, INT32_MAX, INT32_MAX);
+        wl_surface_commit(_sapp.wl.cursor_surface);
+
+        if (NULL != _sapp.wl.cursor_surface) {
+            wl_pointer_set_cursor(_sapp.wl.pointer, serial, _sapp.wl.cursor_surface, (int32_t) selected_cursor->images[0]->hotspot_x, (int32_t) selected_cursor->images[0]->hotspot_y);
+        }
+    } else {
+        wl_pointer_set_cursor(_sapp.wl.pointer, serial, NULL, 0, 0);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_locked_pointer_locked(void* data, struct zwp_locked_pointer_v1* locked_pointer) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(locked_pointer);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_locked_pointer_unlocked(void* data, struct zwp_locked_pointer_v1* locked_pointer) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(locked_pointer);
+    if (NULL != _sapp.wl.locked_pointer) {
+        zwp_locked_pointer_v1_destroy(_sapp.wl.locked_pointer);
+        _sapp.wl.locked_pointer = NULL;
+    }
+}
+
+_SOKOL_PRIVATE const struct zwp_locked_pointer_v1_listener _sapp_wl_locked_pointer_listener = {
+    .locked = _sapp_wl_locked_pointer_locked,
+    .unlocked = _sapp_wl_locked_pointer_unlocked,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_lock_mouse(bool lock) {
+    if (lock == _sapp.mouse.locked) {
+        return;
+    }
+    _sapp.mouse.dx = 0.0f;
+    _sapp.mouse.dy = 0.0f;
+    _sapp.mouse.locked = lock;
+    if (NULL != _sapp.wl.pointer && NULL != _sapp.wl.pointer_constraints) {
+        if (_sapp.mouse.locked) {
+            _sapp.wl.locked_pointer = zwp_pointer_constraints_v1_lock_pointer(_sapp.wl.pointer_constraints, _sapp.wl.surface, _sapp.wl.pointer, NULL, ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ONESHOT);
+            zwp_locked_pointer_v1_add_listener(_sapp.wl.locked_pointer, &_sapp_wl_locked_pointer_listener, NULL);
+        } else {
+            _sapp_wl_locked_pointer_unlocked(NULL, NULL);
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_set_fullscreen(bool is_fullscreen) {
+    if (NULL == _sapp.wl.toplevel) {
+        return;
+    }
+
+    if (is_fullscreen) {
+        xdg_toplevel_set_fullscreen(_sapp.wl.toplevel, NULL);
+    } else {
+        xdg_toplevel_unset_fullscreen(_sapp.wl.toplevel);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_app_event(sapp_event_type type) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_resize_window(int width, int height) {
+    if (_sapp.first_frame || 0 == height || 0 == width) {
+        return;
+    }
+
+    int32_t max_dpi_scale = 1;
+    if (_sapp.desc.high_dpi) {
+        /* scale to highest dpi factor of active outputs */
+        for (unsigned int i = 0; i < _sapp.wl.max_outputs; i++) {
+            if (_sapp.wl.outputs[i].active && _sapp.wl.outputs[i].factor > max_dpi_scale) {
+                max_dpi_scale = _sapp.wl.outputs[i].factor;
+            }
+        }
+    }
+    if (height != _sapp.window_height || width != _sapp.window_width || (int32_t) _sapp.dpi_scale != max_dpi_scale) {
+        _sapp.window_height = height;
+        _sapp.window_width = width;
+        _sapp.dpi_scale = (float) max_dpi_scale;
+        _sapp.framebuffer_height = _sapp.dpi_scale * _sapp.window_height;
+        _sapp.framebuffer_width = _sapp.dpi_scale * _sapp.window_width;
+        wl_surface_set_buffer_scale(_sapp.wl.surface, max_dpi_scale);
+        if (NULL != _sapp.wl.egl_window) {
+            wl_egl_window_resize(_sapp.wl.egl_window, _sapp.window_width, _sapp.window_height, 0, 0);
+        }
+        _sapp_wl_app_event(SAPP_EVENTTYPE_RESIZED);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_key_event(sapp_event_type type, sapp_keycode key, bool is_repeat, uint32_t modifiers) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        _sapp.event.key_code = key;
+        _sapp.event.key_repeat = is_repeat;
+        _sapp.event.modifiers = modifiers;
+        _sapp_call_event(&_sapp.event);
+
+        /* check if a CLIPBOARD_PASTED event must be sent too */
+        if (_sapp.clipboard.enabled &&
+            (type == SAPP_EVENTTYPE_KEY_DOWN) &&
+            (_sapp.event.modifiers == SAPP_MODIFIER_CTRL) &&
+            (_sapp.event.key_code == SAPP_KEYCODE_V))
+        {
+            _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
+            _sapp_call_event(&_sapp.event);
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_char_event(uint32_t utf32_char, bool is_repeat, uint32_t modifiers) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(SAPP_EVENTTYPE_CHAR);
+        _sapp.event.char_code = utf32_char;
+        _sapp.event.key_repeat = is_repeat;
+        _sapp.event.modifiers = modifiers;
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_mouse_event(sapp_event_type type, sapp_mousebutton btn, uint32_t modifiers) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        if (SAPP_MOUSEBUTTON_INVALID != btn) {
+            _sapp.event.mouse_button = btn;
+        }
+        _sapp.event.modifiers = modifiers;
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_scroll_event(bool is_vertical_axis, double value, uint32_t modifiers) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
+        if (is_vertical_axis) {
+            _sapp.event.scroll_x = (float) value;
+        } else {
+            _sapp.event.scroll_y = (float) value;
+        }
+        _sapp.event.modifiers = modifiers;
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_touch_event(sapp_event_type type, int32_t id, uint32_t modifiers) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        int max_touchpoints = 0;
+        for (int i = 0; i < SAPP_MAX_TOUCHPOINTS; i++) {
+            if (_sapp.wl.touchpoints[i].valid) {
+                sapp_touchpoint* point = &_sapp.event.touches[max_touchpoints++];
+                point->identifier = (uintptr_t) _sapp.wl.touchpoints[i].id;
+                point->pos_x = _sapp.dpi_scale * _sapp.wl.touchpoints[i].x;
+                point->pos_y = _sapp.dpi_scale * _sapp.wl.touchpoints[i].y;
+                point->changed = _sapp.wl.touchpoints[i].changed;
+
+                if (id == _sapp.wl.touchpoints[i].id && SAPP_EVENTTYPE_TOUCHES_ENDED == type) {
+                    _sapp.wl.touchpoints[i].valid = false;
+                }
+            }
+            if (SAPP_EVENTTYPE_TOUCHES_CANCELLED == type) {
+                _sapp.wl.touchpoints[i].valid = false;
+            }
+        }
+        if (max_touchpoints > SAPP_MAX_TOUCHPOINTS) {
+            max_touchpoints = SAPP_MAX_TOUCHPOINTS;
+        }
+        _sapp.event.num_touches = max_touchpoints;
+        _sapp.event.modifiers = modifiers;
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_toggle_fullscreen() {
+    _sapp.fullscreen = !_sapp.fullscreen;
+    _sapp_wl_set_fullscreen(_sapp.fullscreen);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_source_handle_action(void* data, struct wl_data_source* data_source, uint32_t dnd_action) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_source);
+    _SOKOL_UNUSED(dnd_action);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_source_handle_cancelled(void* data, struct wl_data_source* data_source) {
+    _SOKOL_UNUSED(data);
+    wl_data_source_destroy(data_source);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_source_handle_dnd_drop_performed(void* data, struct wl_data_source* data_source) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_source);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_source_handle_dnd_finished(void* data, struct wl_data_source* data_source) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_source);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_source_handle_send(void* data, struct wl_data_source* data_source, const char* mime_type, int32_t fd) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_source);
+
+    if (0 == strcmp(mime_type, "text/plain")) {
+        if (write(fd, _sapp.clipboard.buffer, strlen(_sapp.clipboard.buffer)) < 0) {
+            _sapp_fail("wayland: write() failed, unable to send clipboard data");
+        }
+    } else {
+        const char* fmt = "Unable to handle clipboard mime type: '%s'!";
+        const size_t len = strlen(fmt) + 32;
+        char* msg = (char *) _sapp_malloc(len * sizeof(char));
+        snprintf(msg, len, fmt, mime_type);
+        SOKOL_LOG(msg);
+        _sapp_free(msg);
+    }
+
+    close(fd);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_source_handle_target(void* data, struct wl_data_source* data_source, const char* mime_type) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_source);
+    _SOKOL_UNUSED(mime_type);
+}
+
+_SOKOL_PRIVATE const struct wl_data_source_listener _sapp_wl_data_source_listener = {
+    .target = _sapp_wl_data_source_handle_target,
+    .send = _sapp_wl_data_source_handle_send,
+    .cancelled = _sapp_wl_data_source_handle_cancelled,
+    .dnd_drop_performed = _sapp_wl_data_source_handle_dnd_drop_performed,
+    .dnd_finished = _sapp_wl_data_source_handle_dnd_finished,
+    .action = _sapp_wl_data_source_handle_action,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_set_clipboard_string(const char* str) {
+    _SOKOL_UNUSED(str);
+
+    if (NULL == _sapp.wl.data_device_manager || NULL == _sapp.wl.data_device) {
+        return;
+    }
+
+    struct wl_data_source *source = wl_data_device_manager_create_data_source(_sapp.wl.data_device_manager);
+    wl_data_source_add_listener(source, &_sapp_wl_data_source_listener, NULL);
+    wl_data_source_offer(source, "text/plain");
+
+    wl_data_device_set_selection(_sapp.wl.data_device, source, _sapp.wl.serial);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_wm_base_ping(void* data, struct xdg_wm_base* wm_base, uint32_t serial) {
+    _SOKOL_UNUSED(data);
+    _sapp.wl.serial = serial;
+    xdg_wm_base_pong(wm_base, serial);
+}
+
+_SOKOL_PRIVATE const struct xdg_wm_base_listener _sapp_wl_wm_base_listener = {
+    .ping = _sapp_wl_wm_base_ping,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_keyboard_key(void* data, struct wl_keyboard* keyboard, uint32_t serial, uint32_t time, uint32_t key, uint32_t key_state) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(keyboard);
+    _SOKOL_UNUSED(time);
+
+    _sapp.wl.serial = serial;
+
+    if (_sapp_events_enabled()) {
+        xkb_keysym_t sym = xkb_state_key_get_one_sym(_sapp.wl.xkb_state, key + 8);
+        sapp_keycode code = _sapp_wl_translate_key(sym);
+        uint32_t modifiers = _sapp_wl_get_modifiers();
+
+        if (WL_KEYBOARD_KEY_STATE_PRESSED == key_state) {
+            _sapp_wl_key_event(SAPP_EVENTTYPE_KEY_DOWN, code, false, modifiers);
+
+            const uint32_t utf32_char = xkb_keysym_to_utf32(sym);
+            if (utf32_char) {
+                _sapp_wl_char_event(utf32_char, false, modifiers);
+            }
+
+            /* only repeat non-modifier xkb keys */
+            if (sym < XKB_KEY_Shift_L || sym > XKB_KEY_Hyper_R) {
+                clock_gettime(CLOCK_MONOTONIC, &_sapp.wl.repeat_next);
+                _sapp_wl_timespec_add(&_sapp.wl.repeat_next, &_sapp.wl.repeat_delay, &_sapp.wl.repeat_next);
+
+                _sapp.wl.repeat_key_char = utf32_char;
+                _sapp.wl.repeat_key_code = code;
+            }
+        } else if (WL_KEYBOARD_KEY_STATE_RELEASED == key_state) {
+            _sapp_wl_key_event(SAPP_EVENTTYPE_KEY_UP, code, false, modifiers);
+
+            if (_sapp.wl.repeat_key_code == code) {
+                _sapp.wl.repeat_key_char = 0;
+                _sapp.wl.repeat_key_code = SAPP_KEYCODE_INVALID;
+            }
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_keyboard_enter(void* data, struct wl_keyboard* keyboard, uint32_t serial, struct wl_surface* surface, struct wl_array* keys) {
+    _SOKOL_UNUSED(surface);
+
+    _sapp.wl.serial = serial;
+
+    /* cast to custom array-struct to silence C++-compilation errors,
+     * that complain about `void* data` being cast to `int* toplevel_state` */
+    struct states_array {
+        size_t size;
+        size_t alloc;
+        uint32_t *data;
+    } *arr = (struct states_array *) keys;
+
+    uint32_t* key;
+    wl_array_for_each(key, arr) {
+        _sapp_wl_keyboard_key(data, keyboard, serial, 0, *key, WL_KEYBOARD_KEY_STATE_PRESSED);
+    }
+
+    if (NULL == _sapp.wl.focus) {
+        _sapp_wl_app_event(SAPP_EVENTTYPE_FOCUSED);
+    }
+    _sapp.wl.focus = surface;
+}
+
+_SOKOL_PRIVATE void _sapp_wl_keyboard_keymap(void* data, struct wl_keyboard* keyboard, uint32_t format, int32_t fd, uint32_t size) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(keyboard);
+
+    char* keymap_shm = (char *) mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (MAP_FAILED == keymap_shm) {
+        _sapp_fail("wayland: unable to read keymap via mmap()");
+    }
+
+    switch (format) {
+        case WL_KEYBOARD_KEYMAP_FORMAT_NO_KEYMAP:
+            SOKOL_LOG("no keymap retrieved from compositor\n");
+            break;
+        case WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1:
+            xkb_keymap_unref(_sapp.wl.xkb_keymap);
+            xkb_state_unref(_sapp.wl.xkb_state);
+            _sapp.wl.xkb_keymap = xkb_keymap_new_from_string(_sapp.wl.xkb_context, keymap_shm, XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS);
+            _sapp.wl.xkb_state = xkb_state_new(_sapp.wl.xkb_keymap);
+            break;
+        default:
+            break;
+    }
+
+    munmap(keymap_shm, size);
+    close(fd);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_keyboard_leave(void* data, struct wl_keyboard* keyboard, uint32_t serial, struct wl_surface* surface) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(keyboard);
+    _SOKOL_UNUSED(surface);
+
+    _sapp.wl.serial = serial;
+
+    if (NULL != _sapp.wl.focus) {
+        _sapp_wl_app_event(SAPP_EVENTTYPE_UNFOCUSED);
+        _sapp.wl.repeat_key_char = 0;
+        _sapp.wl.repeat_key_code = SAPP_KEYCODE_INVALID;
+    }
+    _sapp.wl.focus = NULL;
+}
+
+_SOKOL_PRIVATE void _sapp_wl_keyboard_modifiers(void* data, struct wl_keyboard* keyboard, uint32_t serial, uint32_t mods_depressed, uint32_t mods_latched, uint32_t mods_locked, uint32_t group) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(keyboard);
+
+    _sapp.wl.serial = serial;
+
+    xkb_state_update_mask(_sapp.wl.xkb_state, mods_depressed, mods_latched, mods_locked, 0, 0, group);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_keyboard_repeat_info(void* data, struct wl_keyboard *keyboard, int32_t rate, int32_t delay) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(keyboard);
+
+    /* delay is milliseconds before repeat should start,
+     * rate is number of times per second (i.e. per 1_000_000_000L nanoseconds) */
+    _sapp.wl.repeat_delay = (struct timespec){ .tv_sec = 0, .tv_nsec = 1000000L * delay };
+    _sapp.wl.repeat_rate = (struct timespec){ .tv_sec = 0, .tv_nsec = 1000000000L / rate };
+}
+
+_SOKOL_PRIVATE const struct wl_keyboard_listener _sapp_wl_keyboard_listener = {
+    .keymap = _sapp_wl_keyboard_keymap,
+    .enter = _sapp_wl_keyboard_enter,
+    .leave = _sapp_wl_keyboard_leave,
+    .key = _sapp_wl_keyboard_key,
+    .modifiers = _sapp_wl_keyboard_modifiers,
+    .repeat_info = _sapp_wl_keyboard_repeat_info,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_pointer_axis(void* data, struct wl_pointer* pointer, uint32_t time, uint32_t axis, wl_fixed_t value) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(pointer);
+    _SOKOL_UNUSED(time);
+
+    _sapp_wl_scroll_event(WL_POINTER_AXIS_VERTICAL_SCROLL == axis, wl_fixed_to_double(value), _sapp_wl_get_modifiers());
+}
+
+_SOKOL_PRIVATE void _sapp_wl_pointer_axis_discrete(void* data, struct wl_pointer* pointer, uint32_t axis, int32_t discrete) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(pointer);
+    _SOKOL_UNUSED(axis);
+    _SOKOL_UNUSED(discrete);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_pointer_axis_source(void* data, struct wl_pointer* pointer, uint32_t axis_source) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(pointer);
+    _SOKOL_UNUSED(axis_source);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_pointer_axis_stop(void* data, struct wl_pointer* pointer, uint32_t time, uint32_t axis) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(pointer);
+    _SOKOL_UNUSED(time);
+    _SOKOL_UNUSED(axis);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_pointer_button(void* data, struct wl_pointer* pointer, uint32_t serial, uint32_t time, uint32_t button, uint32_t button_state) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(pointer);
+    _SOKOL_UNUSED(time);
+
+    _sapp.wl.serial = serial;
+
+    sapp_event_type type = SAPP_EVENTTYPE_INVALID;
+    switch (button_state) {
+        case WL_POINTER_BUTTON_STATE_PRESSED:
+            type = SAPP_EVENTTYPE_MOUSE_DOWN;
+            break;
+        case WL_POINTER_BUTTON_STATE_RELEASED:
+            type = SAPP_EVENTTYPE_MOUSE_UP;
+            break;
+        default:
+            break;
+    }
+
+    sapp_mousebutton btn = SAPP_MOUSEBUTTON_INVALID;
+    switch (button) {
+        case BTN_LEFT:
+            btn = SAPP_MOUSEBUTTON_LEFT;
+            break;
+        case BTN_RIGHT:
+            btn = SAPP_MOUSEBUTTON_RIGHT;
+            break;
+        case BTN_MIDDLE:
+            btn = SAPP_MOUSEBUTTON_MIDDLE;
+            break;
+        default:
+            break;
+    }
+
+    _sapp_wl_mouse_event(type, btn, _sapp_wl_get_modifiers());
+}
+
+_SOKOL_PRIVATE void _sapp_wl_pointer_enter(void* data, struct wl_pointer* pointer, uint32_t serial, struct wl_surface* surface, wl_fixed_t surface_x, wl_fixed_t surface_y) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(pointer);
+    _SOKOL_UNUSED(surface);
+    _SOKOL_UNUSED(surface_x);
+    _SOKOL_UNUSED(surface_y);
+
+    _sapp.wl.serial = serial;
+
+    _sapp_wl_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, _sapp_wl_get_modifiers());
+    _sapp_wl_update_cursor(_sapp.mouse.current_cursor, serial, _sapp.mouse.shown);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_pointer_frame(void* data, struct wl_pointer* pointer) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(pointer);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_pointer_leave(void* data, struct wl_pointer* pointer, uint32_t serial, struct wl_surface* surface) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(pointer);
+    _SOKOL_UNUSED(surface);
+
+    _sapp.wl.serial = serial;
+
+    /* unlock mouse on leave event */
+    if (_sapp.mouse.locked) {
+        _sapp_wl_lock_mouse(false);
+    }
+    _sapp_wl_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_wl_get_modifiers());
+}
+
+_SOKOL_PRIVATE void _sapp_wl_pointer_motion(void* data, struct wl_pointer* pointer, uint32_t time, wl_fixed_t surface_x, wl_fixed_t surface_y) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(pointer);
+    _SOKOL_UNUSED(time);
+    _SOKOL_UNUSED(surface_x);
+    _SOKOL_UNUSED(surface_y);
+
+    float new_x = (float) wl_fixed_to_double(surface_x) * _sapp.dpi_scale;
+    float new_y = (float) wl_fixed_to_double(surface_y) * _sapp.dpi_scale;
+    _sapp.mouse.x = new_x;
+    _sapp.mouse.y = new_y;
+    _sapp_wl_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_wl_get_modifiers());
+}
+
+_SOKOL_PRIVATE const struct wl_pointer_listener _sapp_wl_pointer_listener = {
+    .enter = _sapp_wl_pointer_enter,
+    .leave = _sapp_wl_pointer_leave,
+    .motion = _sapp_wl_pointer_motion,
+    .button = _sapp_wl_pointer_button,
+    .axis = _sapp_wl_pointer_axis,
+    .frame = _sapp_wl_pointer_frame,
+    .axis_source = _sapp_wl_pointer_axis_source,
+    .axis_stop = _sapp_wl_pointer_axis_stop,
+    .axis_discrete = _sapp_wl_pointer_axis_discrete,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_relative_pointer_motion(void* data, struct zwp_relative_pointer_v1* relative_pointer, uint32_t utime_hi, uint32_t utime_lo, wl_fixed_t dx, wl_fixed_t dy, wl_fixed_t dx_unaccel, wl_fixed_t dy_unaccel) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(relative_pointer);
+    _SOKOL_UNUSED(utime_hi);
+    _SOKOL_UNUSED(utime_lo);
+    _SOKOL_UNUSED(dx_unaccel);
+    _SOKOL_UNUSED(dy_unaccel);
+
+    /* don't update dx/dy in the very first update */
+    if (_sapp.mouse.pos_valid) {
+        _sapp.mouse.dx = (float) wl_fixed_to_double(dx);
+        _sapp.mouse.dy = (float) wl_fixed_to_double(dy);
+    }
+    _sapp.mouse.pos_valid = true;
+    _sapp_wl_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_wl_get_modifiers());
+}
+
+_SOKOL_PRIVATE const struct zwp_relative_pointer_v1_listener _sapp_wl_relative_pointer_listener = {
+    .relative_motion = _sapp_wl_relative_pointer_motion,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_touch_cancel(void* data, struct wl_touch* touch) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(touch);
+
+    _sapp_wl_touch_event(SAPP_EVENTTYPE_TOUCHES_CANCELLED, 0, _sapp_wl_get_modifiers());
+}
+
+_SOKOL_PRIVATE void _sapp_wl_touch_down(void* data, struct wl_touch* touch, uint32_t serial, uint32_t time, struct wl_surface* surface, int32_t id, wl_fixed_t x, wl_fixed_t y) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(touch);
+    _SOKOL_UNUSED(time);
+    _SOKOL_UNUSED(surface);
+
+    _sapp.wl.serial = serial;
+
+    struct _sapp_wl_touchpoint* point = _sapp_wl_get_touchpoint(id);
+    if (NULL != point) {
+        point->x = (float) wl_fixed_to_double(x);
+        point->y = (float) wl_fixed_to_double(y);
+    }
+    _sapp_wl_touch_event(SAPP_EVENTTYPE_TOUCHES_BEGAN, id, _sapp_wl_get_modifiers());
+}
+
+_SOKOL_PRIVATE void _sapp_wl_touch_frame(void* data, struct wl_touch* touch) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(touch);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_touch_motion(void* data, struct wl_touch* touch, uint32_t time, int32_t id, wl_fixed_t x, wl_fixed_t y) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(touch);
+    _SOKOL_UNUSED(time);
+
+    struct _sapp_wl_touchpoint* point = _sapp_wl_get_touchpoint(id);
+    if (NULL != point) {
+        point->x = (float) wl_fixed_to_double(x);
+        point->y = (float) wl_fixed_to_double(y);
+    }
+    _sapp_wl_touch_event(SAPP_EVENTTYPE_TOUCHES_MOVED, id, _sapp_wl_get_modifiers());
+}
+
+_SOKOL_PRIVATE void _sapp_wl_touch_orientation(void* data, struct wl_touch* touch, int32_t id, wl_fixed_t orientation) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(touch);
+    _SOKOL_UNUSED(id);
+    _SOKOL_UNUSED(orientation);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_touch_shape(void* data, struct wl_touch* touch, int32_t id, wl_fixed_t major, wl_fixed_t minor) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(touch);
+    _SOKOL_UNUSED(id);
+    _SOKOL_UNUSED(major);
+    _SOKOL_UNUSED(minor);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_touch_up(void* data, struct wl_touch* touch, uint32_t serial, uint32_t time, int32_t id) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(touch);
+    _SOKOL_UNUSED(time);
+
+    _sapp.wl.serial = serial;
+
+    _sapp_wl_get_touchpoint(id);
+    _sapp_wl_touch_event(SAPP_EVENTTYPE_TOUCHES_ENDED, id, _sapp_wl_get_modifiers());
+}
+
+_SOKOL_PRIVATE const struct wl_touch_listener _sapp_wl_touch_listener = {
+    .down = _sapp_wl_touch_down,
+    .up = _sapp_wl_touch_up,
+    .motion = _sapp_wl_touch_motion,
+    .frame = _sapp_wl_touch_frame,
+    .cancel = _sapp_wl_touch_cancel,
+    .shape = _sapp_wl_touch_shape,
+    .orientation = _sapp_wl_touch_orientation,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_create_cursor(sapp_mouse_cursor cursor, struct wl_cursor_theme *theme, const char *name) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+
+    struct wl_cursor *curr_cursor = wl_cursor_theme_get_cursor(theme, name);
+    _sapp.wl.cursors[cursor].cursor = curr_cursor;
+    struct wl_buffer *curr_buffer = wl_cursor_image_get_buffer(curr_cursor->images[0]);
+    _sapp.wl.cursors[cursor].buffer = curr_buffer;
+}
+
+_SOKOL_PRIVATE void _sapp_wl_seat_handle_capabilities(void* data, struct wl_seat* seat, uint32_t capabilities) {
+    _SOKOL_UNUSED(data);
+
+    bool has_keyboard = capabilities & WL_SEAT_CAPABILITY_KEYBOARD;
+    bool has_pointer = capabilities & WL_SEAT_CAPABILITY_POINTER;
+    bool has_touch = capabilities & WL_SEAT_CAPABILITY_TOUCH;
+
+    if (has_keyboard && NULL == _sapp.wl.keyboard) {
+        _sapp.wl.keyboard = wl_seat_get_keyboard(seat);
+        wl_keyboard_add_listener(_sapp.wl.keyboard, &_sapp_wl_keyboard_listener, NULL);
+    } else if (!has_keyboard && NULL != _sapp.wl.keyboard) {
+        wl_keyboard_release(_sapp.wl.keyboard);
+        _sapp.wl.keyboard = NULL;
+    }
+
+    if (has_pointer && NULL == _sapp.wl.pointer) {
+        _sapp.wl.pointer = wl_seat_get_pointer(seat);
+        wl_pointer_add_listener(_sapp.wl.pointer, &_sapp_wl_pointer_listener, NULL);
+
+        if (NULL != _sapp.wl.relative_pointer_manager) {
+            _sapp.wl.relative_pointer = zwp_relative_pointer_manager_v1_get_relative_pointer(_sapp.wl.relative_pointer_manager, _sapp.wl.pointer);
+            zwp_relative_pointer_v1_add_listener(_sapp.wl.relative_pointer, &_sapp_wl_relative_pointer_listener, NULL);
+        }
+
+        if (NULL == _sapp.wl.cursor_surface) {
+            struct wl_cursor_theme *cursor_theme = wl_cursor_theme_load(NULL, 24, _sapp.wl.shm);
+
+            /* TODO: support for rtl default arrow? */
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_DEFAULT, cursor_theme, "left_ptr");
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_ARROW, cursor_theme, "right_ptr");
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_IBEAM, cursor_theme, "xterm");
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_CROSSHAIR, cursor_theme, "crosshair");
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_POINTING_HAND, cursor_theme, "hand2");
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_RESIZE_EW, cursor_theme, "sb_h_double_arrow");
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_RESIZE_NS, cursor_theme, "sb_v_double_arrow");
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_RESIZE_NWSE, cursor_theme, "top_left_corner");
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_RESIZE_NESW, cursor_theme, "top_right_corner");
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_RESIZE_ALL, cursor_theme, "fleur");
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_NOT_ALLOWED, cursor_theme, "crossed_circle");
+
+            _sapp.wl.cursor_surface = wl_compositor_create_surface(_sapp.wl.compositor);
+        }
+    } else if (!has_pointer && NULL != _sapp.wl.pointer) {
+        wl_pointer_release(_sapp.wl.pointer);
+        _sapp.wl.pointer = NULL;
+    }
+
+    if (has_touch && NULL == _sapp.wl.touch) {
+        _sapp.wl.touch = wl_seat_get_touch(seat);
+        wl_touch_add_listener(_sapp.wl.touch, &_sapp_wl_touch_listener, NULL);
+        memset(&_sapp.wl.touchpoints, 0, sizeof(_sapp.wl.touchpoints));
+    } else if (!has_touch && NULL != _sapp.wl.touch) {
+        wl_touch_release(_sapp.wl.touch);
+        _sapp.wl.touch = NULL;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_seat_handle_name(void* data, struct wl_seat* seat, const char* name) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(seat);
+    _SOKOL_UNUSED(name);
+}
+
+_SOKOL_PRIVATE const struct wl_seat_listener _sapp_wl_seat_listener = {
+    .capabilities = _sapp_wl_seat_handle_capabilities,
+    .name = _sapp_wl_seat_handle_name,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_output_done(void* data, struct wl_output* output) {
+    struct _sapp_wl_output* out = (struct _sapp_wl_output *) data;
+    wl_output_set_user_data(output, out);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_output_geometry(void* data, struct wl_output* output, int32_t x, int32_t y, int32_t physical_width, int32_t physical_height, int32_t subpixel, const char* make, const char* model, int32_t transform) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(output);
+    _SOKOL_UNUSED(x);
+    _SOKOL_UNUSED(y);
+    _SOKOL_UNUSED(physical_width);
+    _SOKOL_UNUSED(physical_height);
+    _SOKOL_UNUSED(subpixel);
+    _SOKOL_UNUSED(make);
+    _SOKOL_UNUSED(model);
+    _SOKOL_UNUSED(transform);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_output_mode(void* data, struct wl_output* output, uint32_t flags, int32_t width, int32_t height, int32_t refresh) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(output);
+    _SOKOL_UNUSED(flags);
+    _SOKOL_UNUSED(width);
+    _SOKOL_UNUSED(height);
+    _SOKOL_UNUSED(refresh);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_output_scale(void* data, struct wl_output* output, int32_t factor) {
+    _SOKOL_UNUSED(output);
+
+    struct _sapp_wl_output* out = (struct _sapp_wl_output *) data;
+    out->factor = factor;
+}
+
+_SOKOL_PRIVATE const struct wl_output_listener _sapp_wl_output_listener = {
+    .geometry = _sapp_wl_output_geometry,
+    .mode = _sapp_wl_output_mode,
+    .done = _sapp_wl_output_done,
+    .scale = _sapp_wl_output_scale,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_registry_handle_global(void* data, struct wl_registry* registry, uint32_t name, const char* interface, uint32_t version) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(version);
+
+    if (0 == strcmp(interface, wl_compositor_interface.name)) {
+        /* bind to version 4 for: `wl_surface_damage_buffer` */
+        _sapp.wl.compositor = (struct wl_compositor *) wl_registry_bind(registry, name, &wl_compositor_interface, 4);
+    } else if (0 == strcmp(interface, xdg_wm_base_interface.name)) {
+        _sapp.wl.wm_base = (struct xdg_wm_base *) wl_registry_bind(registry, name, &xdg_wm_base_interface, 1);
+        xdg_wm_base_add_listener(_sapp.wl.wm_base, &_sapp_wl_wm_base_listener, NULL);
+    } else if (0 == strcmp(interface, wl_seat_interface.name)) {
+        /* bind to version 3 for:
+         * - `wl_keyboard_release`,
+         * - `wl_pointer_release`,
+         * - `wl_pointer_release`,
+         * - `repeat_info` event, */
+        _sapp.wl.seat = (struct wl_seat *) wl_registry_bind(registry, name, &wl_seat_interface, 4);
+        wl_seat_add_listener(_sapp.wl.seat, &_sapp_wl_seat_listener, NULL);
+    } else if (0 == strcmp(interface, wl_output_interface.name)) {
+        if (_SAPP_WAYLAND_MAX_OUTPUTS > _sapp.wl.max_outputs) {
+            struct _sapp_wl_output* output = &_sapp.wl.outputs[_sapp.wl.max_outputs];
+
+            /* bind to version 2 for: `wl_output_done` */
+            output->output = (struct wl_output *) wl_registry_bind(registry, name, &wl_output_interface, 2);
+            output->factor = _SAPP_WAYLAND_DEFAULT_DPI_SCALE;
+
+            if (NULL != output->output) {
+                wl_output_add_listener(output->output, &_sapp_wl_output_listener, output);
+                _sapp.wl.max_outputs++;
+            }
+        }
+    } else if (0 == strcmp(interface, wl_shm_interface.name)) {
+        _sapp.wl.shm = (struct wl_shm *) wl_registry_bind(registry, name, &wl_shm_interface, 1);
+    } else if (0 == strcmp(interface, zwp_relative_pointer_manager_v1_interface.name)) {
+        _sapp.wl.relative_pointer_manager = (struct zwp_relative_pointer_manager_v1 *) wl_registry_bind(registry, name, &zwp_relative_pointer_manager_v1_interface, 1);
+    } else if (0 == strcmp(interface, zwp_pointer_constraints_v1_interface.name)) {
+        _sapp.wl.pointer_constraints = (struct zwp_pointer_constraints_v1 *) wl_registry_bind(registry, name, &zwp_pointer_constraints_v1_interface, 1);
+    } else if (0 == strcmp(interface, wl_data_device_manager_interface.name)) {
+        _sapp.wl.data_device_manager = (struct wl_data_device_manager *) wl_registry_bind(registry, name, &wl_data_device_manager_interface, 3);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_registry_handle_global_remove(void* data, struct wl_registry* registry, uint32_t name) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(registry);
+    _SOKOL_UNUSED(name);
+}
+
+_SOKOL_PRIVATE const struct wl_registry_listener _sapp_wl_registry_listener = {
+    .global = _sapp_wl_registry_handle_global,
+    .global_remove = _sapp_wl_registry_handle_global_remove,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_surface_enter(void* data, struct wl_surface* surface, struct wl_output* output) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(surface);
+
+    struct _sapp_wl_output* out = (struct _sapp_wl_output *) wl_output_get_user_data(output);
+    out->active = true;
+    _sapp_wl_resize_window(_sapp.window_width, _sapp.window_height);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_surface_leave(void* data, struct wl_surface* surface, struct wl_output* output) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(surface);
+
+    struct _sapp_wl_output* out = (struct _sapp_wl_output *) wl_output_get_user_data(output);
+    out->active = false;
+    _sapp_wl_resize_window(_sapp.window_width, _sapp.window_height);
+}
+
+_SOKOL_PRIVATE const struct wl_surface_listener _sapp_wl_surface_listener = {
+    .enter = _sapp_wl_surface_enter,
+    .leave = _sapp_wl_surface_leave,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_shell_handle_configure(void* data, struct xdg_surface* shell, uint32_t serial) {
+    _SOKOL_UNUSED(data);
+
+    xdg_surface_ack_configure(shell, serial);
+    if (NULL != _sapp.wl.egl_display && NULL != _sapp.wl.egl_surface) {
+        _sapp_frame();
+        eglSwapBuffers(_sapp.wl.egl_display, _sapp.wl.egl_surface);
+    }
+    wl_surface_damage_buffer(_sapp.wl.surface, 0, 0, INT32_MAX, INT32_MAX);
+    wl_surface_commit(_sapp.wl.surface);
+}
+
+_SOKOL_PRIVATE const struct xdg_surface_listener _sapp_wl_shell_listener = {
+  .configure = _sapp_wl_shell_handle_configure,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_toplevel_handle_configure(void* data, struct xdg_toplevel* toplevel, int32_t width, int32_t height, struct wl_array* states) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(toplevel);
+    _SOKOL_UNUSED(states);
+
+    bool is_resizing = false;
+
+    /* cast to custom array-struct to silence C++-compilation errors,
+     * that complain about `void* data` being cast to `int* toplevel_state` */
+    struct states_array {
+        size_t size;
+        size_t alloc;
+        int *data;
+    } *arr = (struct states_array *) states;
+
+    int* toplevel_state;
+    wl_array_for_each(toplevel_state, arr) {
+        switch (*toplevel_state) {
+            case XDG_TOPLEVEL_STATE_ACTIVATED:
+            case XDG_TOPLEVEL_STATE_FULLSCREEN:
+            case XDG_TOPLEVEL_STATE_MAXIMIZED:
+            case XDG_TOPLEVEL_STATE_RESIZING:
+                is_resizing = true;
+                break;
+            case XDG_TOPLEVEL_STATE_TILED_BOTTOM:
+            case XDG_TOPLEVEL_STATE_TILED_LEFT:
+            case XDG_TOPLEVEL_STATE_TILED_RIGHT:
+            case XDG_TOPLEVEL_STATE_TILED_TOP:
+            default:
+                break;
+        }
+    }
+
+    if (is_resizing) {
+        _sapp_wl_resize_window((int) width, (int) height);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_offer_handle_action(void* data, struct wl_data_offer* data_offer, uint32_t dnd_action) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_offer);
+    _SOKOL_UNUSED(dnd_action);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_offer_handle_offer(void* data, struct wl_data_offer* data_offer, const char* mime_type) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_offer);
+
+    if (0 == strcmp(mime_type, "text/uri-list")) {
+        wl_data_offer_accept(_sapp.wl.data_offer, _sapp.wl.serial, mime_type);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_offer_handle_source_actions(void* data, struct wl_data_offer* data_offer, uint32_t source_actions) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_offer);
+    _SOKOL_UNUSED(source_actions);
+}
+
+_SOKOL_PRIVATE const struct wl_data_offer_listener _sapp_wl_data_offer_listener = {
+    .offer = _sapp_wl_data_offer_handle_offer,
+    .source_actions = _sapp_wl_data_offer_handle_source_actions,
+    .action = _sapp_wl_data_offer_handle_action,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_data_device_handle_data_offer(void* data, struct wl_data_device* data_device, struct wl_data_offer* offer) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_device);
+
+    if (!_sapp.drop.enabled && !_sapp.clipboard.enabled) {
+        return;
+    }
+
+    if (NULL != _sapp.wl.data_offer) {
+        wl_data_offer_destroy(_sapp.wl.data_offer);
+    }
+
+    _sapp.wl.data_offer = offer;
+    wl_data_offer_add_listener(_sapp.wl.data_offer, &_sapp_wl_data_offer_listener, NULL);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_device_handle_drop(void* data, struct wl_data_device* data_device) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_device);
+
+    if (!_sapp.drop.enabled || NULL == _sapp.wl.data_offer) {
+        return;
+    }
+
+    int fds[2];
+    if (pipe(fds) < 0) {
+        _sapp_fail("wayland: pipe() failed to create drag-and-drop communication channel");
+    }
+    wl_data_offer_receive(_sapp.wl.data_offer, "text/uri-list", fds[1]);
+    close(fds[1]);
+
+    wl_display_roundtrip_queue(_sapp.wl.display, _sapp.wl.event_queue);
+
+    size_t buf_size = (size_t) _sapp.drop.buf_size;
+    char *buf = (char *) _sapp_malloc(buf_size);
+    if (read(fds[0], buf, buf_size) < 0) {
+        _sapp_fail("wayland: read() failed to receive drag-and-drop offer");
+    }
+    close(fds[0]);
+
+    if (_sapp.drop.enabled) {
+        if (_sapp_linux_parse_dropped_files_list(buf)) {
+            if (_sapp_events_enabled()) {
+                _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
+                _sapp_call_event(&_sapp.event);
+            }
+        }
+    }
+
+    wl_data_offer_finish(_sapp.wl.data_offer);
+    wl_data_offer_destroy(_sapp.wl.data_offer);
+    _sapp.wl.data_offer = NULL;
+
+    _sapp_free(buf);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_device_handle_enter(void* data, struct wl_data_device* data_device, uint32_t serial, struct wl_surface* surface, wl_fixed_t x, wl_fixed_t y, struct wl_data_offer* offer) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_device);
+    _SOKOL_UNUSED(serial);
+    _SOKOL_UNUSED(surface);
+    _SOKOL_UNUSED(x);
+    _SOKOL_UNUSED(y);
+    _SOKOL_UNUSED(offer);
+
+    wl_data_offer_set_actions(_sapp.wl.data_offer, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY | WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_device_handle_leave(void* data, struct wl_data_device* data_device) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_device);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_device_handle_motion(void* data, struct wl_data_device* data_device, uint32_t time, wl_fixed_t x, wl_fixed_t y) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_device);
+    _SOKOL_UNUSED(time);
+    _SOKOL_UNUSED(x);
+    _SOKOL_UNUSED(y);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_device_handle_selection(void* data, struct wl_data_device* data_device, struct wl_data_offer* offer) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_device);
+    _SOKOL_UNUSED(offer);
+
+    if (!_sapp.clipboard.enabled || NULL == offer) {
+        return;
+    }
+
+    int fds[2];
+    if (pipe(fds) < 0) {
+        _sapp_fail("wayland: pipe() failed to create communication channel for clipboard selection");
+    }
+    wl_data_offer_receive(offer, "text/plain", fds[1]);
+    close(fds[1]);
+
+    wl_display_roundtrip_queue(_sapp.wl.display, _sapp.wl.event_queue);
+
+    size_t buf_size = (size_t) _sapp.clipboard.buf_size;
+    ssize_t n = read(fds[0], _sapp.clipboard.buffer, buf_size);
+    _sapp.clipboard.buffer[n] = 0;
+    close(fds[0]);
+
+    wl_data_offer_destroy(offer);
+    if (NULL != _sapp.wl.data_offer) {
+        _sapp.wl.data_offer = NULL;
+    }
+}
+
+_SOKOL_PRIVATE const struct wl_data_device_listener _sapp_wl_data_device_listener = {
+    .data_offer = _sapp_wl_data_device_handle_data_offer,
+    .enter = _sapp_wl_data_device_handle_enter,
+    .leave = _sapp_wl_data_device_handle_leave,
+    .motion = _sapp_wl_data_device_handle_motion,
+    .drop = _sapp_wl_data_device_handle_drop,
+    .selection = _sapp_wl_data_device_handle_selection,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_toplevel_handle_close(void* data, struct xdg_toplevel* toplevel) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(toplevel);
+
+    _sapp.quit_requested = true;
+}
+
+_SOKOL_PRIVATE const struct xdg_toplevel_listener _sapp_wl_toplevel_listener = {
+    .configure = _sapp_wl_toplevel_handle_configure,
+    .close = _sapp_wl_toplevel_handle_close,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_setup(const sapp_desc* desc) {
+    _sapp.wl.display = wl_display_connect(NULL);
+    if (NULL == _sapp.wl.display) {
+        _sapp_fail("wayland: wl_display_connect() failed");
+    }
+
+    _sapp.wl.event_queue = wl_display_create_queue(_sapp.wl.display);
+    wl_proxy_set_queue((struct wl_proxy *) _sapp.wl.display, _sapp.wl.event_queue);
+    if (NULL == _sapp.wl.event_queue) {
+        _sapp_fail("wayland: wl_proxy_set_queue() failed");
+    }
+
+    _sapp.wl.registry = wl_display_get_registry(_sapp.wl.display);
+
+    wl_registry_add_listener(_sapp.wl.registry, &_sapp_wl_registry_listener, NULL);
+    wl_display_roundtrip_queue(_sapp.wl.display, _sapp.wl.event_queue);
+
+    if (NULL == _sapp.wl.compositor) {
+        _sapp_fail("wayland: wl_register_add_listener() failed");
+    }
+
+    _sapp.wl.surface = wl_compositor_create_surface(_sapp.wl.compositor);
+    if (NULL == _sapp.wl.surface) {
+        _sapp_fail("wayland: wl_compositor_create_surface() failed");
+    }
+    wl_surface_add_listener(_sapp.wl.surface, &_sapp_wl_surface_listener, NULL);
+
+    _sapp.wl.shell = xdg_wm_base_get_xdg_surface(_sapp.wl.wm_base, _sapp.wl.surface);
+    if (NULL == _sapp.wl.shell) {
+       _sapp_fail("wayland: xdg_wm_base_get_xdg_surface() failed");
+    }
+    xdg_surface_add_listener(_sapp.wl.shell, &_sapp_wl_shell_listener, &_sapp.wl);
+
+    _sapp.wl.toplevel = xdg_surface_get_toplevel(_sapp.wl.shell);
+    if (NULL == _sapp.wl.toplevel) {
+        _sapp_fail("wayland: xdg_surface_get_toplevel() failed");
+    }
+    xdg_toplevel_add_listener(_sapp.wl.toplevel, &_sapp_wl_toplevel_listener, &_sapp.wl);
+    xdg_toplevel_set_title(_sapp.wl.toplevel, desc->window_title);
+    wl_surface_commit(_sapp.wl.surface);
+
+    _sapp.wl.xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+
+    if (NULL != _sapp.wl.seat && NULL != _sapp.wl.data_device_manager) {
+        _sapp.wl.data_device = wl_data_device_manager_get_data_device(_sapp.wl.data_device_manager, _sapp.wl.seat);
+        wl_data_device_add_listener(_sapp.wl.data_device, &_sapp_wl_data_device_listener, NULL);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_egl_setup(const sapp_desc* desc) {
+#if defined(SOKOL_GLCORE33)
+    if (!eglBindAPI(EGL_OPENGL_API)) {
+        _sapp_fail("wayland: eglBindAPI() failed");
+    }
+#else /* SOKOL_GLCORE33 */
+    if (!eglBindAPI(EGL_OPENGL_ES_API)) {
+        _sapp_fail("wayland: eglBindAPI() failed");
+    }
+#endif /* SOKOL_GLCORE33 */
+
+    _sapp.wl.egl_display = (EGLDisplay *) eglGetDisplay((EGLNativeDisplayType) _sapp.wl.display);
+    if (EGL_NO_DISPLAY == _sapp.wl.egl_display) {
+        _sapp_fail("wayland: eglGetDisplay() failed");
+    }
+
+    EGLint major, minor;
+    if (EGL_FALSE == eglInitialize(_sapp.wl.egl_display, &major, &minor)) {
+        _sapp_fail("wayland: eglInitialize() failed");
+    }
+
+    EGLint alpha = desc->alpha ? 8 : 0;
+    EGLint sample_buffers = desc->sample_count > 1 ? 1 : 0;
+
+    EGLint total_config_count;
+    eglGetConfigs(_sapp.wl.egl_display, NULL, 0, &total_config_count);
+    EGLConfig* egl_configs = (EGLConfig *) _sapp_malloc((size_t) total_config_count * sizeof(EGLConfig));
+    EGLint attribs[] = {
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+
+        EGL_RED_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE, 8,
+        EGL_ALPHA_SIZE, alpha,
+
+#if defined(SOKOL_GLCORE33)
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+#else /* SOKOL_GLCORE33 */
+        EGL_RENDERABLE_TYPE, desc->gl_force_gles2 ? EGL_OPENGL_ES2_BIT : EGL_OPENGL_ES3_BIT,
+#endif /* SOKOL_GLCORE33 */
+
+        EGL_DEPTH_SIZE, 24,
+        EGL_STENCIL_SIZE, 8,
+        EGL_SAMPLE_BUFFERS, sample_buffers,
+        EGL_SAMPLES, desc->sample_count,
+
+        EGL_NONE,
+    };
+
+    EGLint config_count;
+    if (!eglChooseConfig(_sapp.wl.egl_display, attribs, egl_configs, total_config_count, &config_count)) {
+        _sapp_free(egl_configs);
+
+        /* format the egl error into a printable string */
+        const char* fmt = "wayland: eglChooseConfig() failed (%x)";
+        const size_t len = strlen(fmt) + 16;
+        char* msg = (char *) _sapp_malloc(len * sizeof(char));
+        snprintf(msg, len, fmt, eglGetError());
+        _sapp_fail(msg);
+    }
+
+    int32_t egl_config_id = -1;
+    for (int32_t i = 0; i < config_count; i++) {
+        EGLConfig c = egl_configs[i];
+        EGLint r, g, b, a, d, s, m, n;
+        EGLBoolean res = eglGetConfigAttrib(_sapp.wl.egl_display, c, EGL_RED_SIZE, &r);
+        res &= eglGetConfigAttrib(_sapp.wl.egl_display, c, EGL_GREEN_SIZE, &g);
+        res &= eglGetConfigAttrib(_sapp.wl.egl_display, c, EGL_BLUE_SIZE, &b);
+        res &= eglGetConfigAttrib(_sapp.wl.egl_display, c, EGL_ALPHA_SIZE, &a);
+        res &= eglGetConfigAttrib(_sapp.wl.egl_display, c, EGL_DEPTH_SIZE, &d);
+        res &= eglGetConfigAttrib(_sapp.wl.egl_display, c, EGL_STENCIL_SIZE, &s);
+        res &= eglGetConfigAttrib(_sapp.wl.egl_display, c, EGL_SAMPLE_BUFFERS, &m);
+        res &= eglGetConfigAttrib(_sapp.wl.egl_display, c, EGL_SAMPLES, &n);
+
+        if (EGL_TRUE == res && 8 == r && 8 == g && 8 == b && 8 == alpha &&
+            24 == d && 8 == s && sample_buffers == m && desc->sample_count == n) {
+            egl_config_id = i;
+            break;
+        }
+    }
+
+    /* use config 0 if no config matches the desired one */
+    egl_config_id = 0 <= egl_config_id ? egl_config_id : 0;
+
+    EGLint context_attrib[] = {
+#if defined(SOKOL_GLCORE33)
+        EGL_CONTEXT_MAJOR_VERSION, 3,
+        EGL_CONTEXT_MINOR_VERSION, 3,
+        EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
+#else /* SOKOL_GLCORE33 */
+        EGL_CONTEXT_CLIENT_VERSION, desc->gl_force_gles2 ? 2 : 3,
+#endif /* SOKOL_GLCORE33 */
+
+        EGL_NONE,
+    };
+
+    _sapp.wl.egl_context = (EGLContext *) eglCreateContext(_sapp.wl.egl_display, egl_configs[egl_config_id], EGL_NO_CONTEXT, context_attrib);
+    if (EGL_NO_CONTEXT == _sapp.wl.egl_context) {
+        _sapp_free(egl_configs);
+        _sapp_fail("wayland: eglCreateContext() failed");
+    }
+
+    int w = _sapp_def(desc->width, _SAPP_FALLBACK_DEFAULT_WINDOW_WIDTH);
+    int h = _sapp_def(desc->height, _SAPP_FALLBACK_DEFAULT_WINDOW_HEIGHT);
+    _sapp.wl.egl_window = wl_egl_window_create(_sapp.wl.surface, w, h);
+    if (EGL_NO_CONTEXT == _sapp.wl.egl_window) {
+        _sapp_free(egl_configs);
+        _sapp_fail("wayland: wl_egl_window_create() failed");
+    }
+
+    _sapp.wl.egl_surface = (EGLSurface *) eglCreateWindowSurface(_sapp.wl.egl_display, egl_configs[egl_config_id], (EGLNativeWindowType) _sapp.wl.egl_window, NULL);
+    _sapp_free(egl_configs);
+    if (EGL_NO_SURFACE == _sapp.wl.egl_window) {
+        _sapp_fail("wayland: eglCreateWindowSurface() failed");
+    }
+
+    if (!eglMakeCurrent(_sapp.wl.egl_display, _sapp.wl.egl_surface, _sapp.wl.egl_surface, _sapp.wl.egl_context)) {
+        _sapp_fail("wayland: eglMakeCurrent() failed");
+    }
+    eglSwapInterval(_sapp.wl.egl_display, _sapp.swap_interval);
+
+    int api_type, api_version;
+    eglQueryContext(_sapp.wl.egl_display, _sapp.wl.egl_context, EGL_CONTEXT_CLIENT_TYPE, &api_type);
+    eglQueryContext(_sapp.wl.egl_display, _sapp.wl.egl_context, EGL_CONTEXT_CLIENT_VERSION, &api_version);
+    _sapp.gles2_fallback = EGL_OPENGL_ES_API == api_type && 2 == api_version;
+}
+
+_SOKOL_PRIVATE void _sapp_wl_sighandler_setup(void) {
+    _sapp.wl.epoll_fd = epoll_create1(0);
+    if (0 > _sapp.wl.epoll_fd) {
+        _sapp_fail("wayland: epoll_create1() failed");
+    }
+
+    SOKOL_ASSERT(NULL != _sapp.wl.display);
+    _sapp.wl.event_fd = wl_display_get_fd(_sapp.wl.display);
+    if (0 > _sapp.wl.event_fd) {
+        _sapp_fail("wayland: wl_display_get_fd() failed");
+    }
+
+    struct epoll_event ev = { 0 };
+    ev.events = EPOLLIN;
+    ev.data.fd = _sapp.wl.event_fd;
+    if (0 > epoll_ctl(_sapp.wl.epoll_fd, EPOLL_CTL_ADD, _sapp.wl.event_fd, &ev)) {
+        _sapp_fail("wayland: epoll_ctl() failed");
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_linux_wl_run(const sapp_desc* desc) {
+    _sapp_init_state(desc);
+
+    _sapp.linux_display_protocol = SAPP_LINUX_DISPLAY_PROTOCOL_WAYLAND;
+
+    _sapp_wl_setup(&_sapp.desc);
+    _sapp_wl_egl_setup(&_sapp.desc);
+    _sapp_wl_sighandler_setup();
+    if (_sapp.fullscreen) {
+        _sapp_wl_set_fullscreen(true);
+    }
+
+    _sapp.valid = true;
+    while (!_sapp.quit_ordered) {
+        /* exhaust event queue */
+        while (0 > wl_display_prepare_read_queue(_sapp.wl.display, _sapp.wl.event_queue)) {
+            wl_display_dispatch_queue_pending(_sapp.wl.display, _sapp.wl.event_queue);
+        }
+        wl_display_flush(_sapp.wl.display);
+
+        int event_count = epoll_wait(_sapp.wl.epoll_fd, _sapp.wl.events, _SAPP_WAYLAND_MAX_EPOLL_EVENTS, -1);
+        for (int i = 0; i < event_count; i++) {
+            if (_sapp.wl.event_fd == _sapp.wl.events[i].data.fd) {
+                /* NOTE: check _sapp_wl_setup() for wl_proxy_set_queue()
+                 * call, that sets the custom event_queue as proxy for
+                 * default display, that's why the following call is not
+                 * explicitly stating the queue to read events for/from */
+                wl_display_read_events(_sapp.wl.display);
+            }
+        }
+
+        _sapp_frame();
+        eglSwapBuffers(_sapp.wl.egl_display, _sapp.wl.egl_surface);
+        wl_surface_damage_buffer(_sapp.wl.surface, 0, 0, INT32_MAX, INT32_MAX);
+        wl_surface_commit(_sapp.wl.surface);
+
+        wl_display_dispatch_queue_pending(_sapp.wl.display, _sapp.wl.event_queue);
+
+        /* emulate key repeats */
+        if (_sapp.wl.repeat_key_code != SAPP_KEYCODE_INVALID) {
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            if (_sapp_wl_timespec_cmp(&now, &_sapp.wl.repeat_next) > 0) {
+                uint32_t modifiers = _sapp_wl_get_modifiers();
+                _sapp_wl_key_event(SAPP_EVENTTYPE_KEY_DOWN, _sapp.wl.repeat_key_code, true, modifiers);
+
+                if (_sapp.wl.repeat_key_char) {
+                    _sapp_wl_char_event(_sapp.wl.repeat_key_char, false, modifiers);
+                }
+
+                _sapp_wl_timespec_add(&now, &_sapp.wl.repeat_rate, &_sapp.wl.repeat_next);
+            }
+        }
+
+        if (_sapp.quit_requested) {
+            _sapp_wl_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
+            if (_sapp.quit_requested) {
+                _sapp.quit_ordered = true;
+            }
+        }
+    }
+
+    _sapp_call_cleanup();
+    _sapp_wl_cleanup();
+    _sapp_discard_state();
+}
+
+_SOKOL_PRIVATE void _sapp_wl_update_window_title(void) {
+    xdg_toplevel_set_title(_sapp.wl.toplevel, _sapp.window_title);
+}
+#endif /* !SOKOL_DISABLE_WAYLAND */
+
+_SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
+    /* The following lines are here to trigger a linker error instead of an
+        obscure runtime error if the user has forgotten to add -pthread to
+        the compiler or linker options. They have no other purpose.
+    */
+    pthread_attr_t pthread_attr;
+    pthread_attr_init(&pthread_attr);
+    pthread_attr_destroy(&pthread_attr);
+
+    /* if both X11 and wayland are enabled - which is the default -
+     * check the `USE_WAYLAND` environment variable whether to use the
+     * wayland display server
+     * if any specific display server is explicitly disabled use the
+     * other one
+     * if both are explicitly disabled the first check in the
+     * SOKOL_APP_IMPL path errors out
+     */
+    #if !defined(SOKOL_DISABLE_X11) && !defined(SOKOL_DISABLE_WAYLAND)
+    const char* env_wayland_display = getenv("USE_WAYLAND");
+    if (NULL != env_wayland_display) {
+        _sapp_linux_wl_run(desc);
+    } else {
+        _sapp_linux_x11_run(desc);
+    }
+    #elif !defined(SOKOL_DISABLE_X11)
+    _sapp_linux_x11_run(desc);
+    #elif !defined(SOKOL_DISABLE_WAYLAND)
+    _sapp_linux_wl_run(desc);
+    #endif /* SOKOL_DISABLE_X11 && SOKOL_DISABLE_WAYLAND */
 }
 
 #if !defined(SOKOL_NO_ENTRY)
@@ -11949,7 +14096,7 @@ SOKOL_APP_IMPL const void* sapp_egl_get_display(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_ANDROID)
         return _sapp.android.display;
-    #elif defined(_SAPP_LINUX) && !defined(_SAPP_GLX)
+    #elif defined(_SAPP_LINUX) && !defined(SOKOL_DISABLE_X11) && !defined(_SAPP_GLX)
         return _sapp.egl.display;
     #else
         return 0;
@@ -11960,7 +14107,7 @@ SOKOL_APP_IMPL const void* sapp_egl_get_context(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_ANDROID)
         return _sapp.android.context;
-    #elif defined(_SAPP_LINUX) && !defined(_SAPP_GLX)
+    #elif defined(_SAPP_LINUX) && !defined(SOKOL_DISABLE_X11) && !defined(_SAPP_GLX)
         return _sapp.egl.context;
     #else
         return 0;
@@ -11999,7 +14146,17 @@ SOKOL_API_IMPL void sapp_toggle_fullscreen(void) {
     #elif defined(_SAPP_UWP)
     _sapp_uwp_toggle_fullscreen();
     #elif defined(_SAPP_LINUX)
+    #if !defined(SOKOL_DISABLE_X11) && !defined(SOKOL_DISABLE_WAYLAND)
+    if (SAPP_LINUX_DISPLAY_PROTOCOL_WAYLAND == _sapp.linux_display_protocol) {
+        _sapp_wl_toggle_fullscreen();
+    } else {
+        _sapp_x11_toggle_fullscreen();
+    }
+    #elif !defined(SOKOL_DISABLE_X11)
     _sapp_x11_toggle_fullscreen();
+    #elif !defined(SOKOL_DISABLE_WAYLAND)
+    _sapp_wl_toggle_fullscreen();
+    #endif /* SOKOL_DISABLE_X11 && SOKOL_DISABLE_WAYLAND */
     #endif
 }
 
@@ -12011,7 +14168,17 @@ SOKOL_API_IMPL void sapp_show_mouse(bool show) {
         #elif defined(_SAPP_WIN32)
         _sapp_win32_update_cursor(_sapp.mouse.current_cursor, show, false);
         #elif defined(_SAPP_LINUX)
+        #if !defined(SOKOL_DISABLE_X11) && !defined(SOKOL_DISABLE_WAYLAND)
+        if (SAPP_LINUX_DISPLAY_PROTOCOL_WAYLAND == _sapp.linux_display_protocol) {
+            _sapp_wl_update_cursor(_sapp.mouse.current_cursor, _sapp.wl.serial, show);
+        } else {
+            _sapp_x11_update_cursor(_sapp.mouse.current_cursor, show);
+        }
+        #elif !defined(SOKOL_DISABLE_X11)
         _sapp_x11_update_cursor(_sapp.mouse.current_cursor, show);
+        #elif !defined(SOKOL_DISABLE_WAYLAND)
+        _sapp_wl_update_cursor(_sapp.mouse.current_cursor, _sapp.wl.serial, show);
+        #endif /* SOKOL_DISABLE_X11 && SOKOL_DISABLE_WAYLAND */
         #elif defined(_SAPP_UWP)
         _sapp_uwp_update_cursor(_sapp.mouse.current_cursor, show);
         #elif defined(_SAPP_EMSCRIPTEN)
@@ -12033,7 +14200,17 @@ SOKOL_API_IMPL void sapp_lock_mouse(bool lock) {
     #elif defined(_SAPP_WIN32)
     _sapp_win32_lock_mouse(lock);
     #elif defined(_SAPP_LINUX)
+    #if !defined(SOKOL_DISABLE_X11) && !defined(SOKOL_DISABLE_WAYLAND)
+    if (SAPP_LINUX_DISPLAY_PROTOCOL_WAYLAND == _sapp.linux_display_protocol) {
+        _sapp_wl_lock_mouse(lock);
+    } else {
+        _sapp_x11_lock_mouse(lock);
+    }
+    #elif !defined(SOKOL_DISABLE_X11)
     _sapp_x11_lock_mouse(lock);
+    #elif !defined(SOKOL_DISABLE_WAYLAND)
+    _sapp_wl_lock_mouse(lock);
+    #endif /* SOKOL_DISABLE_X11 && SOKOL_DISABLE_WAYLAND */
     #else
     _sapp.mouse.locked = lock;
     #endif
@@ -12050,12 +14227,22 @@ SOKOL_API_IMPL void sapp_set_mouse_cursor(sapp_mouse_cursor cursor) {
         _sapp_macos_update_cursor(cursor, _sapp.mouse.shown);
         #elif defined(_SAPP_WIN32)
         _sapp_win32_update_cursor(cursor, _sapp.mouse.shown, false);
-        #elif defined(_SAPP_LINUX)
-        _sapp_x11_update_cursor(cursor, _sapp.mouse.shown);
         #elif defined(_SAPP_UWP)
         _sapp_uwp_update_cursor(cursor, _sapp.mouse.shown);
         #elif defined(_SAPP_EMSCRIPTEN)
         _sapp_emsc_update_cursor(cursor, _sapp.mouse.shown);
+        #elif defined(_SAPP_LINUX)
+        #if !defined(SOKOL_DISABLE_X11) && !defined(SOKOL_DISABLE_WAYLAND)
+            if (SAPP_LINUX_DISPLAY_PROTOCOL_WAYLAND == _sapp.linux_display_protocol) {
+                _sapp_wl_update_cursor(cursor, _sapp.wl.serial, _sapp.mouse.shown);
+            } else {
+                _sapp_x11_update_cursor(cursor, _sapp.mouse.shown);
+            }
+        #elif !defined(SOKOL_DISABLE_X11)
+            _sapp_x11_update_cursor(cursor, _sapp.mouse.shown);
+        #elif !defined(SOKOL_DISABLE_WAYLAND)
+            _sapp_wl_update_cursor(cursor, _sapp.wl.serial, _sapp.mouse.shown);
+        #endif /* SOKOL_DISABLE_X11 && SOKOL_DISABLE_WAYLAND */
         #endif
         _sapp.mouse.current_cursor = cursor;
     }
@@ -12093,6 +14280,12 @@ SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
         _sapp_emsc_set_clipboard_string(str);
     #elif defined(_SAPP_WIN32)
         _sapp_win32_set_clipboard_string(str);
+    #elif defined(_SAPP_LINUX)
+        #if !defined(SOKOL_DISABLE_WAYLAND)
+        if (SAPP_LINUX_DISPLAY_PROTOCOL_WAYLAND == _sapp.linux_display_protocol) {
+            _sapp_wl_set_clipboard_string(str);
+        }
+        #endif /* SOKOL_DISABLE_WAYLAND */
     #else
         /* not implemented */
     #endif
@@ -12109,6 +14302,13 @@ SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
         return _sapp.clipboard.buffer;
     #elif defined(_SAPP_WIN32)
         return _sapp_win32_get_clipboard_string();
+    #elif defined(_SAPP_LINUX)
+        #if !defined(SOKOL_DISABLE_WAYLAND)
+        if (SAPP_LINUX_DISPLAY_PROTOCOL_WAYLAND == _sapp.linux_display_protocol) {
+            return _sapp.clipboard.buffer;
+        }
+        return "";
+        #endif /* SOKOL_DISABLE_WAYLAND */
     #else
         /* not implemented */
         return _sapp.clipboard.buffer;
@@ -12123,7 +14323,17 @@ SOKOL_API_IMPL void sapp_set_window_title(const char* title) {
     #elif defined(_SAPP_WIN32)
         _sapp_win32_update_window_title();
     #elif defined(_SAPP_LINUX)
+        #if !defined(SOKOL_DISABLE_X11) && !defined(SOKOL_DISABLE_WAYLAND)
+        if (SAPP_LINUX_DISPLAY_PROTOCOL_WAYLAND == _sapp.linux_display_protocol) {
+            _sapp_wl_update_window_title();
+        } else {
+            _sapp_x11_update_window_title();
+        }
+        #elif !defined(SOKOL_DISABLE_X11)
         _sapp_x11_update_window_title();
+        #elif !defined(SOKOL_DISABLE_WAYLAND)
+        _sapp_wl_update_window_title();
+        #endif /* SOKOL_DISABLE_X11 && SOKOL_DISABLE_WAYLAND */
     #endif
 }
 
@@ -12148,7 +14358,7 @@ SOKOL_API_IMPL void sapp_set_icon(const sapp_icon_desc* desc) {
         _sapp_macos_set_icon(desc, num_images);
     #elif defined(_SAPP_WIN32)
         _sapp_win32_set_icon(desc, num_images);
-    #elif defined(_SAPP_LINUX)
+    #elif defined(_SAPP_LINUX) && !defined(SOKOL_DISABLE_X11)
         _sapp_x11_set_icon(desc, num_images);
     #elif defined(_SAPP_EMSCRIPTEN)
         _sapp_emsc_set_icon(desc, num_images);
@@ -12406,6 +14616,15 @@ SOKOL_API_IMPL const void* sapp_android_get_native_activity(void) {
 
 SOKOL_API_IMPL void sapp_html5_ask_leave_site(bool ask) {
     _sapp.html5_ask_leave_site = ask;
+}
+
+SOKOL_API_IMPL sapp_linux_display_protocol sapp_linux_get_display_protocol(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(_SAPP_LINUX)
+        return _sapp.linux_display_protocol;
+    #else
+        return SAPP_LINUX_DISPLAY_PROTOCOL_INVALID;
+    #endif
 }
 
 #endif /* SOKOL_APP_IMPL */
