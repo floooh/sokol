@@ -2552,6 +2552,54 @@ typedef struct sg_pass_info {
 } sg_pass_info;
 
 /*
+    sg_log_item
+
+    An enum with a unique item for each log message, warning, errror
+    and validation layer message.
+*/
+#define _SG_LOG_ITEMS \
+    _SG_LOGITEM_XMACRO(OK) \
+    _SG_LOGITEM_XMACRO(MALLOC_FAILED) \
+    _SG_LOGITEM_XMACRO(GL_TEXTURE_FORMAT_NOT_SUPPORTED) \
+    _SG_LOGITEM_XMACRO(GL_3D_TEXTURES_NOT_SUPPORTED) \
+    _SG_LOGITEM_XMACRO(GL_ARRAY_TEXTURES_NOT_SUPPORTED) \
+    _SG_LOGITEM_XMACRO(GL_SHADER_COMPILATION_FAILED) \
+    _SG_LOGITEM_XMACRO(GL_SHADER_LINKING_FAILED) \
+    _SG_LOGITEM_XMACRO(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER) \
+    _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_INCOMPLETE) \
+    _SG_LOGITEM_XMACRO(GL_MSAA_FRAMEBUFFER_IMCOMPLETE) \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_BUFFER_FAILED) \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_DEPTH_TEXTURE_UNSUPPORTED_PIXEL_FORMAT) \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_DEPTH_TEXTURE_FAILED) \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_2D_TEXTURE_UNSUPPORTED_PIXEL_FORMAT) \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_2D_TEXTURE_FAILED) \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_2D_SRV_FAILED) \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_3D_TEXTURE_UNSUPPORTED_PIXEL_FORMAT) \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_3D_TEXTURE_FAILED) \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_3D_SRV_FAILED) \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_MSAA_TEXTURE_FAILED) \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_SAMPLER_STATE_FAILED) \
+    _SG_LOGITEM_XMACRO(D3D11_LOAD_D3DCOMPILER_47_DLL_FAILED) \
+    _SG_LOGITEM_XMACRO(D3D11_SHADER_COMPILATION_FAILED) \
+    _SG_LOGITEM_XMACRO(D3D11_SHADER_COMPILATION_OUTPUT) \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_CONSTANT_BUFFER_FAILED) \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_INPUT_LAYOUT_FAILED) \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_RASTERIZER_STATE_FAILED) \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_DEPTH_STENCIL_STATE_FAILED) \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_BLEND_STATE_FAILED) \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_RTV_FAILED) \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_DSV_FAILED) \
+    _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_UPDATE_BUFFER_FAILED) \
+    _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_APPEND_BUFFER_FAILED) \
+    _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_UPDATE_IMAGE_FAILED) \
+
+#define _SG_LOGITEM_XMACRO(item) SG_LOGITEM_##item
+typedef enum sg_log_item {
+    _SG_LOG_ITEMS
+} sg_log_item;
+#undef _SG_LOGITEM_XMACRO
+
+/*
     sg_desc
 
     The sg_desc struct contains configuration values for sokol_gfx,
@@ -2743,11 +2791,22 @@ typedef struct sg_allocator {
 /*
     sg_logger
 
-    Used in sg_desc to provide custom log callbacks to sokol_gfx.h.
-    Default behavior is SOKOL_LOG(message).
+    Used in sg_desc to provide a logging function. Please be aware
+    that without logging function, sokol-gfx will be completely
+    silent, e.g. it will not report errors, warnings and
+    validation layer messages. For maximum error verbosity,
+    compile in debug mode (e.g. NDEBUG *not* defined) and install
+    a logger (for instance the standard logging function from sokol_log.h).
 */
 typedef struct sg_logger {
-    void (*log_cb)(const char* message, void* user_data);
+    void (*func)(
+        const char* tag,                // always "sg"
+        uint32_t log_level,             // 0=panic, 1=error, 2=warning, 3=info
+        uint32_t log_item_id,           // SG_LOGITEM_*
+        const char* message_or_null,    // a message string, may be nullptr in release mode
+        uint32_t line_nr,               // line number in sokol_gfx.h
+        const char* filename_or_null,   // source filename, may be nullptr in release mode
+        void* user_data);
     void* user_data;
 } sg_logger;
 
@@ -2966,21 +3025,6 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
 #endif
 #ifndef SOKOL_UNREACHABLE
     #define SOKOL_UNREACHABLE SOKOL_ASSERT(false)
-#endif
-
-#if !defined(SOKOL_DEBUG)
-    #define SG_LOG(s)
-#else
-    #define SG_LOG(s) _sg_log(s)
-    #ifndef SOKOL_LOG
-        #if defined(__ANDROID__)
-            #include <android/log.h>
-            #define SOKOL_LOG(s) __android_log_write(ANDROID_LOG_INFO, "SOKOL_GFX", s)
-        #else
-            #include <stdio.h>
-            #define SOKOL_LOG(s) puts(s)
-        #endif
-    #endif
 #endif
 
 #ifndef _SOKOL_PRIVATE
@@ -4610,6 +4654,47 @@ _SOKOL_PRIVATE uintptr_t _sg_smpcache_sampler(_sg_sampler_cache_t* cache, int it
     return cache->items[item_index].sampler_handle;
 }
 
+// ██╗      ██████╗  ██████╗  ██████╗ ██╗███╗   ██╗ ██████╗
+// ██║     ██╔═══██╗██╔════╝ ██╔════╝ ██║████╗  ██║██╔════╝
+// ██║     ██║   ██║██║  ███╗██║  ███╗██║██╔██╗ ██║██║  ███╗
+// ██║     ██║   ██║██║   ██║██║   ██║██║██║╚██╗██║██║   ██║
+// ███████╗╚██████╔╝╚██████╔╝╚██████╔╝██║██║ ╚████║╚██████╔╝
+// ╚══════╝ ╚═════╝  ╚═════╝  ╚═════╝ ╚═╝╚═╝  ╚═══╝ ╚═════╝
+//
+// >>logging
+#if defined(SOKOL_DEBUG)
+#define _SG_LOGITEM_XMACRO(item) #item
+static const char* _sg_log_messages[] = {
+    _SG_LOG_ITEMS
+};
+#undef _SG_LOGITEM_XMACRO
+#endif // SOKOL_DEBUG
+
+#define _SG_PANIC(code) _sg_log(SG_LOGITEM_ ##code, 0, 0, __LINE__)
+#define _SG_ERROR(code) _sg_log(SG_LOGITEM_ ##code, 1, 0, __LINE__)
+#define _SG_WARN(code) _sg_log(SG_LOGITEM_ ##code, 2, 0, __LINE__)
+#define _SG_INFO(code) _sg_log(SG_LOGITEM_ ##code, 3, 0, __LINE__)
+#define _SG_LOGMSG(code,msg) _sg_log(SG_LOGITEM_ ##code, 3, msg, __LINE__)
+
+static void _sg_log(sg_log_item log_item, uint32_t log_level, const char* msg, uint32_t line_nr) {
+    if (_sg.desc.logger.func) {
+        const char* filename = 0;
+        #if defined(SOKOL_DEBUG)
+            filename = __FILE__;
+            if (0 == msg) {
+                msg = _sg_log_messages[log_item];
+            }
+        #endif
+        _sg.desc.logger.func("sg", log_level, log_item, msg, line_nr, filename, _sg.desc.logger.user_data);
+    }
+    else {
+        // for log level PANIC it would be 'undefined behaviour' to continue
+        if (log_level == 0) {
+            abort();
+        }
+    }
+}
+
 // ███╗   ███╗███████╗███╗   ███╗ ██████╗ ██████╗ ██╗   ██╗
 // ████╗ ████║██╔════╝████╗ ████║██╔═══██╗██╔══██╗╚██╗ ██╔╝
 // ██╔████╔██║█████╗  ██╔████╔██║██║   ██║██████╔╝ ╚████╔╝
@@ -4644,7 +4729,9 @@ _SOKOL_PRIVATE void* _sg_malloc(size_t size) {
     else {
         ptr = malloc(size);
     }
-    SOKOL_ASSERT(ptr);
+    if (0 == ptr) {
+        _SG_PANIC(MALLOC_FAILED);
+    }
     return ptr;
 }
 
@@ -4662,17 +4749,6 @@ _SOKOL_PRIVATE void _sg_free(void* ptr) {
         free(ptr);
     }
 }
-
-#if defined(SOKOL_DEBUG)
-_SOKOL_PRIVATE void _sg_log(const char* msg) {
-    SOKOL_ASSERT(msg);
-    if (_sg.desc.logger.log_cb) {
-        _sg.desc.logger.log_cb(msg, _sg.desc.logger.user_data);
-    } else {
-        SOKOL_LOG(msg);
-    }
-}
-#endif
 
 _SOKOL_PRIVATE bool _sg_strempty(const _sg_str_t* str) {
     return 0 == str->buf[0];
@@ -6958,16 +7034,16 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
 
     /* check if texture format is support */
     if (!_sg_gl_supported_texture_format(img->cmn.pixel_format)) {
-        SG_LOG("texture format not supported by GL context\n");
+        _SG_ERROR(GL_TEXTURE_FORMAT_NOT_SUPPORTED);
         return SG_RESOURCESTATE_FAILED;
     }
     /* check for optional texture types */
     if ((img->cmn.type == SG_IMAGETYPE_3D) && !_sg.features.imagetype_3d) {
-        SG_LOG("3D textures not supported by GL context\n");
+        _SG_ERROR(GL_3D_TEXTURES_NOT_SUPPORTED);
         return SG_RESOURCESTATE_FAILED;
     }
     if ((img->cmn.type == SG_IMAGETYPE_ARRAY) && !_sg.features.imagetype_array) {
-        SG_LOG("array textures not supported by GL context\n");
+        _SG_ERROR(GL_ARRAY_TEXTURES_NOT_SUPPORTED);
         return SG_RESOURCESTATE_FAILED;
     }
 
@@ -7171,7 +7247,8 @@ _SOKOL_PRIVATE GLuint _sg_gl_compile_shader(sg_shader_stage stage, const char* s
         if (log_len > 0) {
             GLchar* log_buf = (GLchar*) _sg_malloc((size_t)log_len);
             glGetShaderInfoLog(gl_shd, log_len, &log_len, log_buf);
-            SG_LOG(log_buf);
+            _SG_ERROR(GL_SHADER_COMPILATION_FAILED);
+            _SG_LOGMSG(GL_SHADER_COMPILATION_FAILED, log_buf);
             _sg_free(log_buf);
         }
         glDeleteShader(gl_shd);
@@ -7214,7 +7291,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
         if (log_len > 0) {
             GLchar* log_buf = (GLchar*) _sg_malloc((size_t)log_len);
             glGetProgramInfoLog(gl_prog, log_len, &log_len, log_buf);
-            SG_LOG(log_buf);
+            _SG_ERROR(GL_SHADER_LINKING_FAILED);
+            _SG_LOGMSG(GL_SHADER_LINKING_FAILED, log_buf);
             _sg_free(log_buf);
         }
         glDeleteProgram(gl_prog);
@@ -7362,8 +7440,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
             pip->cmn.vertex_layout_valid[a_desc->buffer_index] = true;
         }
         else {
-            SG_LOG("Vertex attribute not found in shader: ");
-            SG_LOG(_sg_strptr(&shd->gl.attrs[attr_index].name));
+            _SG_ERROR(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER);
+            _SG_LOGMSG(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER, _sg_strptr(&shd->gl.attrs[attr_index].name));
         }
     }
     return SG_RESOURCESTATE_VALID;
@@ -7468,7 +7546,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
 
     /* check if framebuffer is complete */
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        SG_LOG("Framebuffer completeness check failed!\n");
+        _SG_ERROR(GL_FRAMEBUFFER_INCOMPLETE);
         return SG_RESOURCESTATE_FAILED;
     }
 
@@ -7515,7 +7593,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
                 }
                 /* check if framebuffer is complete */
                 if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-                    SG_LOG("Framebuffer completeness check failed (msaa resolve buffer)!\n");
+                    _SG_ERROR(GL_MSAA_FRAMEBUFFER_INCOMPLETE);
                     return SG_RESOURCESTATE_FAILED;
                 }
                 /* setup color attachments for the framebuffer */
@@ -9049,7 +9127,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, cons
         }
         HRESULT hr = _sg_d3d11_CreateBuffer(_sg.d3d11.dev, &d3d11_desc, init_data_ptr, &buf->d3d11.buf);
         if (!(SUCCEEDED(hr) && buf->d3d11.buf)) {
-            SG_LOG("failed to create D3D11 buffer\n");
+            _SG_ERROR(D3D11_CREATE_BUFFER_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
     }
@@ -9108,7 +9186,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
         /* create only a depth-texture */
         SOKOL_ASSERT(!injected);
         if (img->d3d11.format == DXGI_FORMAT_UNKNOWN) {
-            SG_LOG("trying to create a D3D11 depth-texture with unsupported pixel format\n");
+            _SG_ERROR(D3D11_CREATE_DEPTH_TEXTURE_UNSUPPORTED_PIXEL_FORMAT);
             return SG_RESOURCESTATE_FAILED;
         }
         D3D11_TEXTURE2D_DESC d3d11_desc;
@@ -9124,7 +9202,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
         d3d11_desc.SampleDesc.Quality = (UINT) (msaa ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0);
         hr = _sg_d3d11_CreateTexture2D(_sg.d3d11.dev, &d3d11_desc, NULL, &img->d3d11.texds);
         if (!(SUCCEEDED(hr) && img->d3d11.texds)) {
-            SG_LOG("failed to create D3D11 texture 2D\n");
+            _SG_ERROR(D3D11_CREATE_DEPTH_TEXTURE_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
     }
@@ -9187,8 +9265,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                     d3d11_tex_desc.CPUAccessFlags = _sg_d3d11_cpu_access_flags(img->cmn.usage);
                 }
                 if (img->d3d11.format == DXGI_FORMAT_UNKNOWN) {
-                    /* trying to create a texture format that's not supported by D3D */
-                    SG_LOG("trying to create a D3D11 texture with unsupported pixel format\n");
+                    _SG_ERROR(D3D11_CREATE_2D_TEXTURE_UNSUPPORTED_PIXEL_FORMAT);
                     return SG_RESOURCESTATE_FAILED;
                 }
                 d3d11_tex_desc.SampleDesc.Count = 1;
@@ -9197,7 +9274,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
 
                 hr = _sg_d3d11_CreateTexture2D(_sg.d3d11.dev, &d3d11_tex_desc, init_data, &img->d3d11.tex2d);
                 if (!(SUCCEEDED(hr) && img->d3d11.tex2d)) {
-                    SG_LOG("failed to create D3D11 texture 2D\n");
+                    _SG_ERROR(D3D11_CREATE_2D_TEXTURE_FAILED);
                     return SG_RESOURCESTATE_FAILED;
                 }
             }
@@ -9226,7 +9303,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 }
                 hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)img->d3d11.tex2d, &d3d11_srv_desc, &img->d3d11.srv);
                 if (!(SUCCEEDED(hr) && img->d3d11.srv)) {
-                    SG_LOG("failed to create D3D11 resource view\n");
+                    _SG_ERROR(D3D11_CREATE_2D_SRV_FAILED);
                     return SG_RESOURCESTATE_FAILED;
                 }
             }
@@ -9270,13 +9347,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                     d3d11_tex_desc.CPUAccessFlags = _sg_d3d11_cpu_access_flags(img->cmn.usage);
                 }
                 if (img->d3d11.format == DXGI_FORMAT_UNKNOWN) {
-                    /* trying to create a texture format that's not supported by D3D */
-                    SG_LOG("trying to create a D3D11 texture with unsupported pixel format\n");
+                    _SG_ERROR(D3D11_CREATE_3D_TEXTURE_UNSUPPORTED_PIXEL_FORMAT);
                     return SG_RESOURCESTATE_FAILED;
                 }
                 hr = _sg_d3d11_CreateTexture3D(_sg.d3d11.dev, &d3d11_tex_desc, init_data, &img->d3d11.tex3d);
                 if (!(SUCCEEDED(hr) && img->d3d11.tex3d)) {
-                    SG_LOG("failed to create D3D11 texture 3D\n");
+                    _SG_ERROR(D3D11_CREATE_3D_TEXTURE_FAILED);
                     return SG_RESOURCESTATE_FAILED;
                 }
             }
@@ -9289,7 +9365,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 d3d11_srv_desc.Texture3D.MipLevels = (UINT)img->cmn.num_mipmaps;
                 hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)img->d3d11.tex3d, &d3d11_srv_desc, &img->d3d11.srv);
                 if (!(SUCCEEDED(hr) && img->d3d11.srv)) {
-                    SG_LOG("failed to create D3D11 resource view\n");
+                    _SG_ERROR(D3D11_CREATE_3D_SRV_FAILED);
                     return SG_RESOURCESTATE_FAILED;
                 }
             }
@@ -9311,7 +9387,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
             d3d11_tex_desc.SampleDesc.Quality = (UINT)D3D11_STANDARD_MULTISAMPLE_PATTERN;
             hr = _sg_d3d11_CreateTexture2D(_sg.d3d11.dev, &d3d11_tex_desc, NULL, &img->d3d11.texmsaa);
             if (!(SUCCEEDED(hr) && img->d3d11.texmsaa)) {
-                SG_LOG("failed to create D3D11 texture 2D\n");
+                _SG_ERROR(D3D11_CREATE_MSAA_TEXTURE_FAILED);
                 return SG_RESOURCESTATE_FAILED;
             }
         }
@@ -9343,7 +9419,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
         d3d11_smp_desc.MaxLOD = desc->max_lod;
         hr = _sg_d3d11_CreateSamplerState(_sg.d3d11.dev, &d3d11_smp_desc, &img->d3d11.smp);
         if (!(SUCCEEDED(hr) && img->d3d11.smp)) {
-            SG_LOG("failed to create D3D11 sampler state\n");
+            _SG_ERROR(D3D11_CREATE_SAMPLER_STATE_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
     }
@@ -9382,7 +9458,7 @@ _SOKOL_PRIVATE bool _sg_d3d11_load_d3dcompiler_dll(void) {
             _sg.d3d11.d3dcompiler_dll = LoadLibraryA("d3dcompiler_47.dll");
             if (0 == _sg.d3d11.d3dcompiler_dll) {
                 /* don't attempt to load missing DLL in the future */
-                SG_LOG("failed to load d3dcompiler_47.dll!\n");
+                _SG_ERROR(D3D11_LOAD_D3DCOMPILER_47_DLL_FAILED);
                 _sg.d3d11.d3dcompiler_dll_load_failed = true;
                 return false;
             }
@@ -9419,8 +9495,12 @@ _SOKOL_PRIVATE ID3DBlob* _sg_d3d11_compile_shader(const sg_shader_stage_desc* st
         0,          /* Flags2 */
         &output,    /* ppCode */
         &errors_or_warnings);   /* ppErrorMsgs */
+    if (FAILED(hr)) {
+        _SG_ERROR(D3D11_SHADER_COMPILATION_FAILED);
+    }
     if (errors_or_warnings) {
-        SG_LOG((LPCSTR)_sg_d3d11_GetBufferPointer(errors_or_warnings));
+        _SG_WARN(D3D11_SHADER_COMPILATION_OUTPUT);
+        _SG_LOGMSG(D3D11_SHADER_COMPILATION_OUTPUT, (LPCSTR)_sg_d3d11_GetBufferPointer(errors_or_warnings));
         _sg_d3d11_Release(errors_or_warnings); errors_or_warnings = NULL;
     }
     if (FAILED(hr)) {
@@ -9462,7 +9542,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
             cb_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
             hr = _sg_d3d11_CreateBuffer(_sg.d3d11.dev, &cb_desc, NULL, &d3d11_stage->cbufs[ub_index]);
             if (!(SUCCEEDED(hr) && d3d11_stage->cbufs[ub_index])) {
-                SG_LOG("failed to create D3D11 buffer\n");
+                _SG_ERROR(D3D11_CREATE_CONSTANT_BUFFER_FAILED);
                 return SG_RESOURCESTATE_FAILED;
             }
         }
@@ -9594,7 +9674,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
         shd->d3d11.vs_blob_length,  /* BytecodeLength */
         &pip->d3d11.il);
     if (!(SUCCEEDED(hr) && pip->d3d11.il)) {
-        SG_LOG("failed to create D3D11 input layout\n");
+        _SG_ERROR(D3D11_CREATE_INPUT_LAYOUT_FAILED);
         return SG_RESOURCESTATE_FAILED;
     }
 
@@ -9613,7 +9693,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
     rs_desc.AntialiasedLineEnable = FALSE;
     hr = _sg_d3d11_CreateRasterizerState(_sg.d3d11.dev, &rs_desc, &pip->d3d11.rs);
     if (!(SUCCEEDED(hr) && pip->d3d11.rs)) {
-        SG_LOG("failed to create D3D11 rasterizer state\n");
+        _SG_ERROR(D3D11_CREATE_RASTERIZER_STATE_FAILED);
         return SG_RESOURCESTATE_FAILED;
     }
 
@@ -9638,7 +9718,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
     dss_desc.BackFace.StencilFunc = _sg_d3d11_compare_func(sb->compare);
     hr = _sg_d3d11_CreateDepthStencilState(_sg.d3d11.dev, &dss_desc, &pip->d3d11.dss);
     if (!(SUCCEEDED(hr) && pip->d3d11.dss)) {
-        SG_LOG("failed to create D3D11 depth stencil state\n");
+        _SG_ERROR(D3D11_CREATE_DEPTH_STENCIL_STATE_FAILED);
         return SG_RESOURCESTATE_FAILED;
     }
 
@@ -9672,10 +9752,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
     }
     hr = _sg_d3d11_CreateBlendState(_sg.d3d11.dev, &bs_desc, &pip->d3d11.bs);
     if (!(SUCCEEDED(hr) && pip->d3d11.bs)) {
-        SG_LOG("failed to create D3D11 blend state\n");
+        _SG_ERROR(D3D11_CREATE_BLEND_STATE_FAILED);
         return SG_RESOURCESTATE_FAILED;
     }
-
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -9753,7 +9832,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pass(_sg_pass_t* pass, _sg_ima
         SOKOL_ASSERT(d3d11_res);
         HRESULT hr = _sg_d3d11_CreateRenderTargetView(_sg.d3d11.dev, d3d11_res, &d3d11_rtv_desc, &pass->d3d11.color_atts[i].rtv);
         if (!(SUCCEEDED(hr) && pass->d3d11.color_atts[i].rtv)) {
-            SG_LOG("failed to create D3D11 render target view\n");
+            _SG_ERROR(D3D11_CREATE_RTV_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
     }
@@ -9786,7 +9865,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pass(_sg_pass_t* pass, _sg_ima
         SOKOL_ASSERT(d3d11_res);
         HRESULT hr = _sg_d3d11_CreateDepthStencilView(_sg.d3d11.dev, d3d11_res, &d3d11_dsv_desc, &pass->d3d11.ds_att.dsv);
         if (!(SUCCEEDED(hr) && pass->d3d11.ds_att.dsv)) {
-            SG_LOG("failed to create D3D11 depth stencil view\n");
+            _SG_ERROR(D3D11_CREATE_DSV_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
     }
@@ -10085,8 +10164,9 @@ _SOKOL_PRIVATE void _sg_d3d11_update_buffer(_sg_buffer_t* buf, const sg_range* d
     if (SUCCEEDED(hr)) {
         memcpy(d3d11_msr.pData, data->ptr, data->size);
         _sg_d3d11_Unmap(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0);
-    } else {
-        SG_LOG("failed to map buffer while updating!\n");
+    }
+    else {
+        _SG_ERROR(D3D11_MAP_FOR_UPDATE_BUFFER_FAILED);
     }
 }
 
@@ -10101,8 +10181,9 @@ _SOKOL_PRIVATE int _sg_d3d11_append_buffer(_sg_buffer_t* buf, const sg_range* da
         uint8_t* dst_ptr = (uint8_t*)d3d11_msr.pData + buf->cmn.append_pos;
         memcpy(dst_ptr, data->ptr, data->size);
         _sg_d3d11_Unmap(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0);
-    } else {
-        SG_LOG("failed to map buffer while appending!\n");
+    }
+    else {
+        _SG_ERROR(D3D11_MAP_FOR_BUFFER_APPEND_FAILED);
     }
     /* NOTE: this alignment is a requirement from WebGPU, but we want identical behaviour across all backend */
     return _sg_roundup((int)data->size, 4);
@@ -10153,8 +10234,9 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
                         }
                     }
                     _sg_d3d11_Unmap(_sg.d3d11.ctx, d3d11_res, subres_index);
-                } else {
-                    SG_LOG("failed to map texture!\n");
+                }
+                else {
+                    _SG_ERROR(D3D11_MAP_FOR_UPDATE_IMAGE_FAILED);
                 }
             }
         }
