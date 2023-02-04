@@ -89,6 +89,30 @@
 
             sg_setup(const sg_desc*)
 
+        Depending on the selected 3D backend, sokol-gfx requires some
+        information, like a device pointer framebuffer pixel formats
+        and so on. If you are using sokol_app.h for the window system
+        glue, you can use a helper function provided in the sokol_glue.h
+        header:
+
+            #include "sokol_gfx.h"
+            #include "sokol_app.h"
+            #include "sokol_glue.h"
+            //...
+            sg_setup(&(sg_desc){
+                .context = sapp_sgcontext(),
+            });
+
+        To get any logging output for errors and from the validation layer, you
+        need to provide a logging callback. Easiest way is through sokol_log.h:
+
+            #include "sokol_log.h"
+            //...
+            sg_setup(&(sg_desc){
+                //...
+                .logger.func = slog_func,
+            });
+
     --- create resource objects (at least buffers, shaders and pipelines,
         and optionally images and passes):
 
@@ -695,27 +719,43 @@
     This only affects memory allocation calls done by sokol_gfx.h
     itself though, not any allocations in OS libraries.
 
+    ERROR REPORTING AND LOGGING
+    ===========================
+    To get any logging information at all you need to provide a logging callback in the setup call
+    the easiest way is to use sokol_log.h:
 
-    LOG FUNCTION OVERRIDE
-    =====================
-    You can override the log function at initialization time like this:
+        #include "sokol_log.h"
 
-        void my_log(const char* message, void* user_data) {
-            printf("sg says: \s\n", message);
+        sg_setup(&(sg_desc){ .logger.func = slog_func });
+
+    To override logging with your own callback, first write a logging function like this:
+
+        void my_log(const char* tag,                // e.g. 'sg'
+                    uint32_t log_level,             // 0=panic, 1=error, 2=warn, 3=info
+                    uint32_t log_item_id,           // SG_LOGITEM_*
+                    const char* message_or_null,    // a message string, may be nullptr in release mode
+                    uint32_t line_nr,               // line number in sokol_gfx.h
+                    const char* filename_or_null,   // source filename, may be nullptr in release mode
+                    void* user_data)
+        {
+            ...
         }
 
-        ...
-            sg_setup(&(sg_desc){
-                // ...
-                .logger = {
-                    .log_cb = my_log,
-                    .user_data = ...,
-                }
-            });
-        ...
+    ...and then setup sokol-gfx like this:
 
-    If no overrides are provided, puts will be used on most platforms.
-    On Android, __android_log_write will be used instead.
+        sg_setup(&(sg_desc){
+            .logger = {
+                .func = my_log,
+                .user_data = my_user_data,
+            }
+        });
+
+    The provided logging function must be reentrant (e.g. be callable from
+    different threads).
+
+    If you don't want to provide your own custom logger it is highly recommended to use
+    the standard logger in sokol_log.h instead, otherwise you won't see any warnings or
+    errors.
 
 
     COMMIT LISTENERS
@@ -2881,7 +2921,14 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
 #endif
 #endif // SOKOL_GFX_INCLUDED
 
-/*--- IMPLEMENTATION ---------------------------------------------------------*/
+// ██╗███╗   ███╗██████╗ ██╗     ███████╗███╗   ███╗███████╗███╗   ██╗████████╗ █████╗ ████████╗██╗ ██████╗ ███╗   ██╗
+// ██║████╗ ████║██╔══██╗██║     ██╔════╝████╗ ████║██╔════╝████╗  ██║╚══██╔══╝██╔══██╗╚══██╔══╝██║██╔═══██╗████╗  ██║
+// ██║██╔████╔██║██████╔╝██║     █████╗  ██╔████╔██║█████╗  ██╔██╗ ██║   ██║   ███████║   ██║   ██║██║   ██║██╔██╗ ██║
+// ██║██║╚██╔╝██║██╔═══╝ ██║     ██╔══╝  ██║╚██╔╝██║██╔══╝  ██║╚██╗██║   ██║   ██╔══██║   ██║   ██║██║   ██║██║╚██╗██║
+// ██║██║ ╚═╝ ██║██║     ███████╗███████╗██║ ╚═╝ ██║███████╗██║ ╚████║   ██║   ██║  ██║   ██║   ██║╚██████╔╝██║ ╚████║
+// ╚═╝╚═╝     ╚═╝╚═╝     ╚══════╝╚══════╝╚═╝     ╚═╝╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
+//
+// >>implementation
 #ifdef SOKOL_GFX_IMPL
 #define SOKOL_GFX_IMPL_INCLUDED (1)
 
@@ -3422,8 +3469,14 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #define _SG_GL_CHECK_ERROR() { SOKOL_ASSERT(glGetError() == GL_NO_ERROR); }
 #endif
 
-/*=== COMMON BACKEND STUFF ===================================================*/
-
+// ███████╗████████╗██████╗ ██╗   ██╗ ██████╗████████╗███████╗
+// ██╔════╝╚══██╔══╝██╔══██╗██║   ██║██╔════╝╚══██╔══╝██╔════╝
+// ███████╗   ██║   ██████╔╝██║   ██║██║        ██║   ███████╗
+// ╚════██║   ██║   ██╔══██╗██║   ██║██║        ██║   ╚════██║
+// ███████║   ██║   ██║  ██║╚██████╔╝╚██████╗   ██║   ███████║
+// ╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝  ╚═════╝   ╚═╝   ╚══════╝
+//
+// >>structs
 /* resource pool slots */
 typedef struct {
     uint32_t id;
@@ -3465,6 +3518,25 @@ typedef struct {
 _SOKOL_PRIVATE void* _sg_malloc_clear(size_t size);
 _SOKOL_PRIVATE void _sg_free(void* ptr);
 _SOKOL_PRIVATE void _sg_clear(void* ptr, size_t size);
+
+typedef struct {
+    sg_filter min_filter;
+    sg_filter mag_filter;
+    sg_wrap wrap_u;
+    sg_wrap wrap_v;
+    sg_wrap wrap_w;
+    sg_border_color border_color;
+    uint32_t max_anisotropy;
+    int min_lod;    /* orig min/max_lod is float, this is int(min/max_lod*1000.0) */
+    int max_lod;
+    uintptr_t sampler_handle;
+} _sg_sampler_cache_item_t;
+
+typedef struct {
+    int capacity;
+    int num_items;
+    _sg_sampler_cache_item_t* items;
+} _sg_sampler_cache_t;
 
 typedef struct {
     int size;
@@ -3649,105 +3721,6 @@ _SOKOL_PRIVATE void _sg_pass_common_init(_sg_pass_common_t* cmn, const sg_pass_d
     }
 }
 
-/*=== GENERIC SAMPLER CACHE ==================================================*/
-
-/*
-    this is used by the Metal and WGPU backends to reduce the
-    number of sampler state objects created through the backend API
-*/
-typedef struct {
-    sg_filter min_filter;
-    sg_filter mag_filter;
-    sg_wrap wrap_u;
-    sg_wrap wrap_v;
-    sg_wrap wrap_w;
-    sg_border_color border_color;
-    uint32_t max_anisotropy;
-    int min_lod;    /* orig min/max_lod is float, this is int(min/max_lod*1000.0) */
-    int max_lod;
-    uintptr_t sampler_handle;
-} _sg_sampler_cache_item_t;
-
-typedef struct {
-    int capacity;
-    int num_items;
-    _sg_sampler_cache_item_t* items;
-} _sg_sampler_cache_t;
-
-_SOKOL_PRIVATE void _sg_smpcache_init(_sg_sampler_cache_t* cache, int capacity) {
-    SOKOL_ASSERT(cache && (capacity > 0));
-    _sg_clear(cache, sizeof(_sg_sampler_cache_t));
-    cache->capacity = capacity;
-    const size_t size = (size_t)cache->capacity * sizeof(_sg_sampler_cache_item_t);
-    cache->items = (_sg_sampler_cache_item_t*) _sg_malloc_clear(size);
-}
-
-_SOKOL_PRIVATE void _sg_smpcache_discard(_sg_sampler_cache_t* cache) {
-    SOKOL_ASSERT(cache && cache->items);
-    _sg_free(cache->items);
-    cache->items = 0;
-    cache->num_items = 0;
-    cache->capacity = 0;
-}
-
-_SOKOL_PRIVATE int _sg_smpcache_minlod_int(float min_lod) {
-    return (int) (min_lod * 1000.0f);
-}
-
-_SOKOL_PRIVATE int _sg_smpcache_maxlod_int(float max_lod) {
-    return (int) (_sg_clamp(max_lod, 0.0f, 1000.0f) * 1000.0f);
-}
-
-_SOKOL_PRIVATE int _sg_smpcache_find_item(const _sg_sampler_cache_t* cache, const sg_image_desc* img_desc) {
-    /* return matching sampler cache item index or -1 */
-    SOKOL_ASSERT(cache && cache->items);
-    SOKOL_ASSERT(img_desc);
-    const int min_lod = _sg_smpcache_minlod_int(img_desc->min_lod);
-    const int max_lod = _sg_smpcache_maxlod_int(img_desc->max_lod);
-    for (int i = 0; i < cache->num_items; i++) {
-        const _sg_sampler_cache_item_t* item = &cache->items[i];
-        if ((img_desc->min_filter == item->min_filter) &&
-            (img_desc->mag_filter == item->mag_filter) &&
-            (img_desc->wrap_u == item->wrap_u) &&
-            (img_desc->wrap_v == item->wrap_v) &&
-            (img_desc->wrap_w == item->wrap_w) &&
-            (img_desc->max_anisotropy == item->max_anisotropy) &&
-            (img_desc->border_color == item->border_color) &&
-            (min_lod == item->min_lod) &&
-            (max_lod == item->max_lod))
-        {
-            return i;
-        }
-    }
-    /* fallthrough: no matching cache item found */
-    return -1;
-}
-
-_SOKOL_PRIVATE void _sg_smpcache_add_item(_sg_sampler_cache_t* cache, const sg_image_desc* img_desc, uintptr_t sampler_handle) {
-    SOKOL_ASSERT(cache && cache->items);
-    SOKOL_ASSERT(img_desc);
-    SOKOL_ASSERT(cache->num_items < cache->capacity);
-    const int item_index = cache->num_items++;
-    _sg_sampler_cache_item_t* item = &cache->items[item_index];
-    item->min_filter = img_desc->min_filter;
-    item->mag_filter = img_desc->mag_filter;
-    item->wrap_u = img_desc->wrap_u;
-    item->wrap_v = img_desc->wrap_v;
-    item->wrap_w = img_desc->wrap_w;
-    item->border_color = img_desc->border_color;
-    item->max_anisotropy = img_desc->max_anisotropy;
-    item->min_lod = _sg_smpcache_minlod_int(img_desc->min_lod);
-    item->max_lod = _sg_smpcache_maxlod_int(img_desc->max_lod);
-    item->sampler_handle = sampler_handle;
-}
-
-_SOKOL_PRIVATE uintptr_t _sg_smpcache_sampler(_sg_sampler_cache_t* cache, int item_index) {
-    SOKOL_ASSERT(cache && cache->items);
-    SOKOL_ASSERT(item_index < cache->num_items);
-    return cache->items[item_index].sampler_handle;
-}
-
-/*=== DUMMY BACKEND DECLARATIONS =============================================*/
 #if defined(SOKOL_DUMMY_BACKEND)
 typedef struct {
     _sg_slot_t slot;
@@ -3794,7 +3767,6 @@ typedef struct {
 } _sg_dummy_context_t;
 typedef _sg_dummy_context_t _sg_context_t;
 
-/*== GL BACKEND DECLARATIONS =================================================*/
 #elif defined(_SOKOL_ANY_GL)
 typedef struct {
     _sg_slot_t slot;
@@ -3965,7 +3937,6 @@ typedef struct {
     #endif
 } _sg_gl_backend_t;
 
-/*== D3D11 BACKEND DECLARATIONS ==============================================*/
 #elif defined(SOKOL_D3D11)
 
 typedef struct {
@@ -4087,7 +4058,6 @@ typedef struct {
     D3D11_SUBRESOURCE_DATA subres_data[SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS];
 } _sg_d3d11_backend_t;
 
-/*=== METAL BACKEND DECLARATIONS =============================================*/
 #elif defined(SOKOL_METAL)
 
 #if defined(_SG_TARGET_MACOS) || defined(_SG_TARGET_IOS_SIMULATOR)
@@ -4228,7 +4198,6 @@ typedef struct {
     id<MTLBuffer> uniform_buffers[SG_NUM_INFLIGHT_FRAMES];
 } _sg_mtl_backend_t;
 
-/*=== WGPU BACKEND DECLARATIONS ==============================================*/
 #elif defined(SOKOL_WGPU)
 
 #define _SG_WGPU_STAGING_ALIGN (256)
@@ -4360,7 +4329,8 @@ typedef struct {
 } _sg_wgpu_backend_t;
 #endif
 
-/*=== RESOURCE POOL DECLARATIONS =============================================*/
+// POOL STRUCTS
+
 
 /* this *MUST* remain 0 */
 #define _SG_INVALID_SLOT_INDEX (0)
@@ -4387,7 +4357,6 @@ typedef struct {
     _sg_context_t* contexts;
 } _sg_pools_t;
 
-/*=== VALIDATION LAYER DECLARATIONS ==========================================*/
 typedef enum {
     /* special case 'validation was successful' */
     _SG_VALIDATE_SUCCESS,
@@ -4516,8 +4485,6 @@ typedef enum {
     _SG_VALIDATE_UPDIMG_ONCE
 } _sg_validate_error_t;
 
-/*=== GENERIC BACKEND STATE ==================================================*/
-
 typedef struct {
     int num;        // number of allocated commit listener items
     int upper;      // the current upper index (no valid items past this point)
@@ -4558,7 +4525,99 @@ typedef struct {
 } _sg_state_t;
 static _sg_state_t _sg;
 
-/*-- helper functions --------------------------------------------------------*/
+// ███████╗ █████╗ ███╗   ███╗██████╗ ██╗     ███████╗██████╗      ██████╗ █████╗  ██████╗██╗  ██╗███████╗
+// ██╔════╝██╔══██╗████╗ ████║██╔══██╗██║     ██╔════╝██╔══██╗    ██╔════╝██╔══██╗██╔════╝██║  ██║██╔════╝
+// ███████╗███████║██╔████╔██║██████╔╝██║     █████╗  ██████╔╝    ██║     ███████║██║     ███████║█████╗
+// ╚════██║██╔══██║██║╚██╔╝██║██╔═══╝ ██║     ██╔══╝  ██╔══██╗    ██║     ██╔══██║██║     ██╔══██║██╔══╝
+// ███████║██║  ██║██║ ╚═╝ ██║██║     ███████╗███████╗██║  ██║    ╚██████╗██║  ██║╚██████╗██║  ██║███████╗
+// ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝     ╚══════╝╚══════╝╚═╝  ╚═╝     ╚═════╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝
+//
+// >>sampler cache
+/*
+    this is used by the Metal and WGPU backends to reduce the
+    number of sampler state objects created through the backend API
+*/
+_SOKOL_PRIVATE void _sg_smpcache_init(_sg_sampler_cache_t* cache, int capacity) {
+    SOKOL_ASSERT(cache && (capacity > 0));
+    _sg_clear(cache, sizeof(_sg_sampler_cache_t));
+    cache->capacity = capacity;
+    const size_t size = (size_t)cache->capacity * sizeof(_sg_sampler_cache_item_t);
+    cache->items = (_sg_sampler_cache_item_t*) _sg_malloc_clear(size);
+}
+
+_SOKOL_PRIVATE void _sg_smpcache_discard(_sg_sampler_cache_t* cache) {
+    SOKOL_ASSERT(cache && cache->items);
+    _sg_free(cache->items);
+    cache->items = 0;
+    cache->num_items = 0;
+    cache->capacity = 0;
+}
+
+_SOKOL_PRIVATE int _sg_smpcache_minlod_int(float min_lod) {
+    return (int) (min_lod * 1000.0f);
+}
+
+_SOKOL_PRIVATE int _sg_smpcache_maxlod_int(float max_lod) {
+    return (int) (_sg_clamp(max_lod, 0.0f, 1000.0f) * 1000.0f);
+}
+
+_SOKOL_PRIVATE int _sg_smpcache_find_item(const _sg_sampler_cache_t* cache, const sg_image_desc* img_desc) {
+    /* return matching sampler cache item index or -1 */
+    SOKOL_ASSERT(cache && cache->items);
+    SOKOL_ASSERT(img_desc);
+    const int min_lod = _sg_smpcache_minlod_int(img_desc->min_lod);
+    const int max_lod = _sg_smpcache_maxlod_int(img_desc->max_lod);
+    for (int i = 0; i < cache->num_items; i++) {
+        const _sg_sampler_cache_item_t* item = &cache->items[i];
+        if ((img_desc->min_filter == item->min_filter) &&
+            (img_desc->mag_filter == item->mag_filter) &&
+            (img_desc->wrap_u == item->wrap_u) &&
+            (img_desc->wrap_v == item->wrap_v) &&
+            (img_desc->wrap_w == item->wrap_w) &&
+            (img_desc->max_anisotropy == item->max_anisotropy) &&
+            (img_desc->border_color == item->border_color) &&
+            (min_lod == item->min_lod) &&
+            (max_lod == item->max_lod))
+        {
+            return i;
+        }
+    }
+    /* fallthrough: no matching cache item found */
+    return -1;
+}
+
+_SOKOL_PRIVATE void _sg_smpcache_add_item(_sg_sampler_cache_t* cache, const sg_image_desc* img_desc, uintptr_t sampler_handle) {
+    SOKOL_ASSERT(cache && cache->items);
+    SOKOL_ASSERT(img_desc);
+    SOKOL_ASSERT(cache->num_items < cache->capacity);
+    const int item_index = cache->num_items++;
+    _sg_sampler_cache_item_t* item = &cache->items[item_index];
+    item->min_filter = img_desc->min_filter;
+    item->mag_filter = img_desc->mag_filter;
+    item->wrap_u = img_desc->wrap_u;
+    item->wrap_v = img_desc->wrap_v;
+    item->wrap_w = img_desc->wrap_w;
+    item->border_color = img_desc->border_color;
+    item->max_anisotropy = img_desc->max_anisotropy;
+    item->min_lod = _sg_smpcache_minlod_int(img_desc->min_lod);
+    item->max_lod = _sg_smpcache_maxlod_int(img_desc->max_lod);
+    item->sampler_handle = sampler_handle;
+}
+
+_SOKOL_PRIVATE uintptr_t _sg_smpcache_sampler(_sg_sampler_cache_t* cache, int item_index) {
+    SOKOL_ASSERT(cache && cache->items);
+    SOKOL_ASSERT(item_index < cache->num_items);
+    return cache->items[item_index].sampler_handle;
+}
+
+// ███╗   ███╗███████╗███╗   ███╗ ██████╗ ██████╗ ██╗   ██╗
+// ████╗ ████║██╔════╝████╗ ████║██╔═══██╗██╔══██╗╚██╗ ██╔╝
+// ██╔████╔██║█████╗  ██╔████╔██║██║   ██║██████╔╝ ╚████╔╝
+// ██║╚██╔╝██║██╔══╝  ██║╚██╔╝██║██║   ██║██╔══██╗  ╚██╔╝
+// ██║ ╚═╝ ██║███████╗██║ ╚═╝ ██║╚██████╔╝██║  ██║   ██║
+// ╚═╝     ╚═╝╚══════╝╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝
+//
+// >>memory
 
 // a helper macro to clear a struct with potentially ARC'ed ObjC references
 #if defined(SOKOL_METAL)
@@ -4638,6 +4697,14 @@ _SOKOL_PRIVATE void _sg_strcpy(_sg_str_t* dst, const char* src) {
     }
 }
 
+// ██╗  ██╗███████╗██╗     ██████╗ ███████╗██████╗ ███████╗
+// ██║  ██║██╔════╝██║     ██╔══██╗██╔════╝██╔══██╗██╔════╝
+// ███████║█████╗  ██║     ██████╔╝█████╗  ██████╔╝███████╗
+// ██╔══██║██╔══╝  ██║     ██╔═══╝ ██╔══╝  ██╔══██╗╚════██║
+// ██║  ██║███████╗███████╗██║     ███████╗██║  ██║███████║
+// ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝     ╚══════╝╚═╝  ╚═╝╚══════╝
+//
+// >>helpers
 _SOKOL_PRIVATE uint32_t _sg_align_u32(uint32_t val, uint32_t align) {
     SOKOL_ASSERT((align > 0) && ((align & (align - 1)) == 0));
     return (val + (align - 1)) & ~(align - 1);
@@ -5072,7 +5139,14 @@ _SOKOL_PRIVATE void _sg_resolve_default_pass_action(const sg_pass_action* from, 
     }
 }
 
-/*== DUMMY BACKEND IMPL ======================================================*/
+// ██████╗ ██╗   ██╗███╗   ███╗███╗   ███╗██╗   ██╗    ██████╗  █████╗  ██████╗██╗  ██╗███████╗███╗   ██╗██████╗
+// ██╔══██╗██║   ██║████╗ ████║████╗ ████║╚██╗ ██╔╝    ██╔══██╗██╔══██╗██╔════╝██║ ██╔╝██╔════╝████╗  ██║██╔══██╗
+// ██║  ██║██║   ██║██╔████╔██║██╔████╔██║ ╚████╔╝     ██████╔╝███████║██║     █████╔╝ █████╗  ██╔██╗ ██║██║  ██║
+// ██║  ██║██║   ██║██║╚██╔╝██║██║╚██╔╝██║  ╚██╔╝      ██╔══██╗██╔══██║██║     ██╔═██╗ ██╔══╝  ██║╚██╗██║██║  ██║
+// ██████╔╝╚██████╔╝██║ ╚═╝ ██║██║ ╚═╝ ██║   ██║       ██████╔╝██║  ██║╚██████╗██║  ██╗███████╗██║ ╚████║██████╔╝
+// ╚═════╝  ╚═════╝ ╚═╝     ╚═╝╚═╝     ╚═╝   ╚═╝       ╚═════╝ ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝
+//
+// >>dummy backend
 #if defined(SOKOL_DUMMY_BACKEND)
 
 _SOKOL_PRIVATE void _sg_dummy_setup_backend(const sg_desc* desc) {
@@ -5306,10 +5380,17 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     }
 }
 
-/*== GL BACKEND ==============================================================*/
+//  ██████╗ ██████╗ ███████╗███╗   ██╗ ██████╗ ██╗         ██████╗  █████╗  ██████╗██╗  ██╗███████╗███╗   ██╗██████╗
+// ██╔═══██╗██╔══██╗██╔════╝████╗  ██║██╔════╝ ██║         ██╔══██╗██╔══██╗██╔════╝██║ ██╔╝██╔════╝████╗  ██║██╔══██╗
+// ██║   ██║██████╔╝█████╗  ██╔██╗ ██║██║  ███╗██║         ██████╔╝███████║██║     █████╔╝ █████╗  ██╔██╗ ██║██║  ██║
+// ██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║██║   ██║██║         ██╔══██╗██╔══██║██║     ██╔═██╗ ██╔══╝  ██║╚██╗██║██║  ██║
+// ╚██████╔╝██║     ███████╗██║ ╚████║╚██████╔╝███████╗    ██████╔╝██║  ██║╚██████╗██║  ██╗███████╗██║ ╚████║██████╔╝
+//  ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝    ╚═════╝ ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝
+//
+// >>opengl backend
 #elif defined(_SOKOL_ANY_GL)
 
-/*=== OPTIONAL GL LOADER FOR WIN32 ===========================================*/
+// optional GL loader for win32
 #if defined(_SOKOL_USE_WIN32_GL_LOADER)
 
 // X Macro list of GL function names and signatures
@@ -8184,7 +8265,14 @@ _SOKOL_PRIVATE void _sg_gl_update_image(_sg_image_t* img, const sg_image_data* d
     _sg_gl_cache_restore_texture_binding(0);
 }
 
-/*== D3D11 BACKEND IMPLEMENTATION ============================================*/
+// ██████╗ ██████╗ ██████╗  ██╗ ██╗    ██████╗  █████╗  ██████╗██╗  ██╗███████╗███╗   ██╗██████╗
+// ██╔══██╗╚════██╗██╔══██╗███║███║    ██╔══██╗██╔══██╗██╔════╝██║ ██╔╝██╔════╝████╗  ██║██╔══██╗
+// ██║  ██║ █████╔╝██║  ██║╚██║╚██║    ██████╔╝███████║██║     █████╔╝ █████╗  ██╔██╗ ██║██║  ██║
+// ██║  ██║ ╚═══██╗██║  ██║ ██║ ██║    ██╔══██╗██╔══██║██║     ██╔═██╗ ██╔══╝  ██║╚██╗██║██║  ██║
+// ██████╔╝██████╔╝██████╔╝ ██║ ██║    ██████╔╝██║  ██║╚██████╗██║  ██╗███████╗██║ ╚████║██████╔╝
+// ╚═════╝ ╚═════╝ ╚═════╝  ╚═╝ ╚═╝    ╚═════╝ ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝
+//
+// >>d3d11 backend
 #elif defined(SOKOL_D3D11)
 
 #if defined(__cplusplus)
@@ -10073,7 +10161,14 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
     }
 }
 
-/*== METAL BACKEND IMPLEMENTATION ============================================*/
+// ███╗   ███╗███████╗████████╗ █████╗ ██╗         ██████╗  █████╗  ██████╗██╗  ██╗███████╗███╗   ██╗██████╗
+// ████╗ ████║██╔════╝╚══██╔══╝██╔══██╗██║         ██╔══██╗██╔══██╗██╔════╝██║ ██╔╝██╔════╝████╗  ██║██╔══██╗
+// ██╔████╔██║█████╗     ██║   ███████║██║         ██████╔╝███████║██║     █████╔╝ █████╗  ██╔██╗ ██║██║  ██║
+// ██║╚██╔╝██║██╔══╝     ██║   ██╔══██║██║         ██╔══██╗██╔══██║██║     ██╔═██╗ ██╔══╝  ██║╚██╗██║██║  ██║
+// ██║ ╚═╝ ██║███████╗   ██║   ██║  ██║███████╗    ██████╔╝██║  ██║╚██████╗██║  ██╗███████╗██║ ╚████║██████╔╝
+// ╚═╝     ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚══════╝    ╚═════╝ ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝
+//
+// >>metal backend
 #elif defined(SOKOL_METAL)
 
 #if __has_feature(objc_arc)
@@ -11810,7 +11905,14 @@ _SOKOL_PRIVATE void _sg_mtl_update_image(_sg_image_t* img, const sg_image_data* 
     _sg_mtl_copy_image_data(img, mtl_tex, data);
 }
 
-/*== WEBGPU BACKEND IMPLEMENTATION ===========================================*/
+// ██╗    ██╗███████╗██████╗  ██████╗ ██████╗ ██╗   ██╗    ██████╗  █████╗  ██████╗██╗  ██╗███████╗███╗   ██╗██████╗
+// ██║    ██║██╔════╝██╔══██╗██╔════╝ ██╔══██╗██║   ██║    ██╔══██╗██╔══██╗██╔════╝██║ ██╔╝██╔════╝████╗  ██║██╔══██╗
+// ██║ █╗ ██║█████╗  ██████╔╝██║  ███╗██████╔╝██║   ██║    ██████╔╝███████║██║     █████╔╝ █████╗  ██╔██╗ ██║██║  ██║
+// ██║███╗██║██╔══╝  ██╔══██╗██║   ██║██╔═══╝ ██║   ██║    ██╔══██╗██╔══██║██║     ██╔═██╗ ██╔══╝  ██║╚██╗██║██║  ██║
+// ╚███╔███╔╝███████╗██████╔╝╚██████╔╝██║     ╚██████╔╝    ██████╔╝██║  ██║╚██████╗██║  ██╗███████╗██║ ╚████║██████╔╝
+//  ╚══╝╚══╝ ╚══════╝╚═════╝  ╚═════╝ ╚═╝      ╚═════╝     ╚═════╝ ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝
+//
+// >>webgpu backend
 #elif defined(SOKOL_WGPU)
 
 _SOKOL_PRIVATE WGPUBufferUsageFlags _sg_wgpu_buffer_usage(sg_buffer_type t, sg_usage u) {
@@ -13538,7 +13640,14 @@ _SOKOL_PRIVATE void _sg_wgpu_update_image(_sg_image_t* img, const sg_image_data*
 }
 #endif
 
-/*== BACKEND API WRAPPERS ====================================================*/
+//  ██████╗ ███████╗███╗   ██╗███████╗██████╗ ██╗ ██████╗    ██████╗  █████╗  ██████╗██╗  ██╗███████╗███╗   ██╗██████╗
+// ██╔════╝ ██╔════╝████╗  ██║██╔════╝██╔══██╗██║██╔════╝    ██╔══██╗██╔══██╗██╔════╝██║ ██╔╝██╔════╝████╗  ██║██╔══██╗
+// ██║  ███╗█████╗  ██╔██╗ ██║█████╗  ██████╔╝██║██║         ██████╔╝███████║██║     █████╔╝ █████╗  ██╔██╗ ██║██║  ██║
+// ██║   ██║██╔══╝  ██║╚██╗██║██╔══╝  ██╔══██╗██║██║         ██╔══██╗██╔══██║██║     ██╔═██╗ ██╔══╝  ██║╚██╗██║██║  ██║
+// ╚██████╔╝███████╗██║ ╚████║███████╗██║  ██║██║╚██████╗    ██████╔╝██║  ██║╚██████╗██║  ██╗███████╗██║ ╚████║██████╔╝
+//  ╚═════╝ ╚══════╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝╚═╝ ╚═════╝    ╚═════╝ ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝
+//
+// >>generic backend
 static inline void _sg_setup_backend(const sg_desc* desc) {
     #if defined(_SOKOL_ANY_GL)
     _sg_gl_setup_backend(desc);
@@ -14025,8 +14134,14 @@ static inline void _sg_update_image(_sg_image_t* img, const sg_image_data* data)
     #endif
 }
 
-/*== RESOURCE POOLS ==========================================================*/
-
+// ██████╗  ██████╗  ██████╗ ██╗
+// ██╔══██╗██╔═══██╗██╔═══██╗██║
+// ██████╔╝██║   ██║██║   ██║██║
+// ██╔═══╝ ██║   ██║██║   ██║██║
+// ██║     ╚██████╔╝╚██████╔╝███████╗
+// ╚═╝      ╚═════╝  ╚═════╝ ╚══════╝
+//
+// >>pool
 _SOKOL_PRIVATE void _sg_init_pool(_sg_pool_t* pool, int num) {
     SOKOL_ASSERT(pool && (num >= 1));
     /* slot 0 is reserved for the 'invalid id', so bump the pool size by 1 */
@@ -14374,7 +14489,14 @@ _SOKOL_PRIVATE void _sg_discard_all_resources(_sg_pools_t* p, uint32_t ctx_id) {
     }
 }
 
-/*== VALIDATION LAYER ========================================================*/
+// ██╗   ██╗ █████╗ ██╗     ██╗██████╗  █████╗ ████████╗██╗ ██████╗ ███╗   ██╗
+// ██║   ██║██╔══██╗██║     ██║██╔══██╗██╔══██╗╚══██╔══╝██║██╔═══██╗████╗  ██║
+// ██║   ██║███████║██║     ██║██║  ██║███████║   ██║   ██║██║   ██║██╔██╗ ██║
+// ╚██╗ ██╔╝██╔══██║██║     ██║██║  ██║██╔══██║   ██║   ██║██║   ██║██║╚██╗██║
+//  ╚████╔╝ ██║  ██║███████╗██║██████╔╝██║  ██║   ██║   ██║╚██████╔╝██║ ╚████║
+//   ╚═══╝  ╚═╝  ╚═╝╚══════╝╚═╝╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
+//
+// >>validation
 #if defined(SOKOL_DEBUG)
 /* return a human readable string for an _sg_validate_error */
 _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
@@ -15155,7 +15277,14 @@ _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image_t* img, const sg_i
     #endif
 }
 
-/*== fill in desc default values =============================================*/
+// ██████╗ ███████╗███████╗ ██████╗ ██╗   ██╗██████╗  ██████╗███████╗███████╗
+// ██╔══██╗██╔════╝██╔════╝██╔═══██╗██║   ██║██╔══██╗██╔════╝██╔════╝██╔════╝
+// ██████╔╝█████╗  ███████╗██║   ██║██║   ██║██████╔╝██║     █████╗  ███████╗
+// ██╔══██╗██╔══╝  ╚════██║██║   ██║██║   ██║██╔══██╗██║     ██╔══╝  ╚════██║
+// ██║  ██║███████╗███████║╚██████╔╝╚██████╔╝██║  ██║╚██████╗███████╗███████║
+// ╚═╝  ╚═╝╚══════╝╚══════╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝ ╚═════╝╚══════╝╚══════╝
+//
+// >>resources
 _SOKOL_PRIVATE sg_buffer_desc _sg_buffer_desc_defaults(const sg_buffer_desc* desc) {
     sg_buffer_desc def = *desc;
     def.type = _sg_def(def.type, SG_BUFFERTYPE_VERTEXBUFFER);
@@ -15324,7 +15453,6 @@ _SOKOL_PRIVATE sg_pass_desc _sg_pass_desc_defaults(const sg_pass_desc* desc) {
     return def;
 }
 
-/*== allocate/initialize resource private functions ==========================*/
 _SOKOL_PRIVATE sg_buffer _sg_alloc_buffer(void) {
     sg_buffer res;
     int slot_index = _sg_pool_alloc_index(&_sg.pools.buffer_pool);
@@ -15680,8 +15808,14 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
     return res;
 }
 
-/*== PUBLIC API FUNCTIONS ====================================================*/
-
+// ██████╗ ██╗   ██╗██████╗ ██╗     ██╗ ██████╗
+// ██╔══██╗██║   ██║██╔══██╗██║     ██║██╔════╝
+// ██████╔╝██║   ██║██████╔╝██║     ██║██║
+// ██╔═══╝ ██║   ██║██╔══██╗██║     ██║██║
+// ██║     ╚██████╔╝██████╔╝███████╗██║╚██████╗
+// ╚═╝      ╚═════╝ ╚═════╝ ╚══════╝╚═╝ ╚═════╝
+//
+// >>public
 SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
