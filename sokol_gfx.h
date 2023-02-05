@@ -2558,42 +2558,84 @@ typedef struct sg_pass_info {
     and validation layer message.
 */
 #define _SG_LOG_ITEMS \
-    _SG_LOGITEM_XMACRO(OK) \
-    _SG_LOGITEM_XMACRO(MALLOC_FAILED) \
-    _SG_LOGITEM_XMACRO(GL_TEXTURE_FORMAT_NOT_SUPPORTED) \
-    _SG_LOGITEM_XMACRO(GL_3D_TEXTURES_NOT_SUPPORTED) \
-    _SG_LOGITEM_XMACRO(GL_ARRAY_TEXTURES_NOT_SUPPORTED) \
-    _SG_LOGITEM_XMACRO(GL_SHADER_COMPILATION_FAILED) \
-    _SG_LOGITEM_XMACRO(GL_SHADER_LINKING_FAILED) \
-    _SG_LOGITEM_XMACRO(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER) \
-    _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_INCOMPLETE) \
-    _SG_LOGITEM_XMACRO(GL_MSAA_FRAMEBUFFER_IMCOMPLETE) \
-    _SG_LOGITEM_XMACRO(D3D11_CREATE_BUFFER_FAILED) \
-    _SG_LOGITEM_XMACRO(D3D11_CREATE_DEPTH_TEXTURE_UNSUPPORTED_PIXEL_FORMAT) \
-    _SG_LOGITEM_XMACRO(D3D11_CREATE_DEPTH_TEXTURE_FAILED) \
-    _SG_LOGITEM_XMACRO(D3D11_CREATE_2D_TEXTURE_UNSUPPORTED_PIXEL_FORMAT) \
-    _SG_LOGITEM_XMACRO(D3D11_CREATE_2D_TEXTURE_FAILED) \
-    _SG_LOGITEM_XMACRO(D3D11_CREATE_2D_SRV_FAILED) \
-    _SG_LOGITEM_XMACRO(D3D11_CREATE_3D_TEXTURE_UNSUPPORTED_PIXEL_FORMAT) \
-    _SG_LOGITEM_XMACRO(D3D11_CREATE_3D_TEXTURE_FAILED) \
-    _SG_LOGITEM_XMACRO(D3D11_CREATE_3D_SRV_FAILED) \
-    _SG_LOGITEM_XMACRO(D3D11_CREATE_MSAA_TEXTURE_FAILED) \
-    _SG_LOGITEM_XMACRO(D3D11_CREATE_SAMPLER_STATE_FAILED) \
-    _SG_LOGITEM_XMACRO(D3D11_LOAD_D3DCOMPILER_47_DLL_FAILED) \
-    _SG_LOGITEM_XMACRO(D3D11_SHADER_COMPILATION_FAILED) \
-    _SG_LOGITEM_XMACRO(D3D11_SHADER_COMPILATION_OUTPUT) \
-    _SG_LOGITEM_XMACRO(D3D11_CREATE_CONSTANT_BUFFER_FAILED) \
-    _SG_LOGITEM_XMACRO(D3D11_CREATE_INPUT_LAYOUT_FAILED) \
-    _SG_LOGITEM_XMACRO(D3D11_CREATE_RASTERIZER_STATE_FAILED) \
-    _SG_LOGITEM_XMACRO(D3D11_CREATE_DEPTH_STENCIL_STATE_FAILED) \
-    _SG_LOGITEM_XMACRO(D3D11_CREATE_BLEND_STATE_FAILED) \
-    _SG_LOGITEM_XMACRO(D3D11_CREATE_RTV_FAILED) \
-    _SG_LOGITEM_XMACRO(D3D11_CREATE_DSV_FAILED) \
-    _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_UPDATE_BUFFER_FAILED) \
-    _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_APPEND_BUFFER_FAILED) \
-    _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_UPDATE_IMAGE_FAILED) \
+    _SG_LOGITEM_XMACRO(OK, "Ok") \
+    _SG_LOGITEM_XMACRO(MALLOC_FAILED, "memory allocation failed") \
+    _SG_LOGITEM_XMACRO(GL_TEXTURE_FORMAT_NOT_SUPPORTED, "pixel format not supported for texture (gl)") \
+    _SG_LOGITEM_XMACRO(GL_3D_TEXTURES_NOT_SUPPORTED, "3d textures not supported (gl)") \
+    _SG_LOGITEM_XMACRO(GL_ARRAY_TEXTURES_NOT_SUPPORTED, "array textures not supported (gl)") \
+    _SG_LOGITEM_XMACRO(GL_SHADER_COMPILATION_FAILED, "shader compilation failed (gl)") \
+    _SG_LOGITEM_XMACRO(GL_SHADER_LINKING_FAILED, "shader linking failed (gl)") \
+    _SG_LOGITEM_XMACRO(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER, "vertex attribute not found in shader (gl)") \
+    _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_INCOMPLETE, "framebuffer completeness check failed (gl)") \
+    _SG_LOGITEM_XMACRO(GL_MSAA_FRAMEBUFFER_IMCOMPLETE, "completeness check failed for msaa resolve framebuffer (gl)") \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_BUFFER_FAILED, "CreateBuffer() failed (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_DEPTH_TEXTURE_UNSUPPORTED_PIXEL_FORMAT, "pixel format not supported for depth-stencil texture (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_DEPTH_TEXTURE_FAILED, "CreateTexture2D() failed for depth-stencil texture (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_2D_TEXTURE_UNSUPPORTED_PIXEL_FORMAT, "pixel format not supported for 2d-, cube- or array-texture (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_2D_TEXTURE_FAILED, "CreateTexture2D() failed for 2d-, cube- or array-texture (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_2D_SRV_FAILED, "CreateShaderResourceView() failed for 2d-, cube- or array-texture (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_3D_TEXTURE_UNSUPPORTED_PIXEL_FORMAT, "pixel format not supported for 3D texture (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_3D_TEXTURE_FAILED, "CreateTexture3D() failed (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_3D_SRV_FAILED, "CreateShaderResourceView() failed for 3d texture (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_MSAA_TEXTURE_FAILED, "CreateTexture2D() failed for MSAA render target texture (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_SAMPLER_STATE_FAILED, "CreateSamplerState() failed (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_LOAD_D3DCOMPILER_47_DLL_FAILED, "loading d3dcompiler_47.dll failed (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_SHADER_COMPILATION_FAILED, "shader compilation failed (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_SHADER_COMPILATION_OUTPUT, "") \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_CONSTANT_BUFFER_FAILED, "CreateBuffer() failed for uniform constant buffer (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_INPUT_LAYOUT_FAILED, "CreateInputLayout() failed (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_RASTERIZER_STATE_FAILED, "CreateRasterizerState() failed (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_DEPTH_STENCIL_STATE_FAILED, "CreateDepthStencilState() failed (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_BLEND_STATE_FAILED, "CreateBlendState() failed (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_RTV_FAILED, "CreateRenderTargetView() failed (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_DSV_FAILED, "CreateDepthStencilView() failed (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_UPDATE_BUFFER_FAILED, "Map() failed when updating buffer (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_APPEND_BUFFER_FAILED, "Map() failed when appending to buffer (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_UPDATE_IMAGE_FAILED, "Map() failed when updating image (d3d11)") \
+    _SG_LOGITEM_XMACRO(METAL_TEXTURE_FORMAT_NOT_SUPPORTED, "pixel format not supported for texture (metal)") \
+    _SG_LOGITEM_XMACRO(METAL_SHADER_COMPILATION_FAILED, "shader compilation failed (metal)") \
+    _SG_LOGITEM_XMACRO(METAL_SHADER_CREATION_FAILED, "shader creation failed (metal)") \
+    _SG_LOGITEM_XMACRO(METAL_SHADER_COMPILATION_OUTPUT, "") \
+    _SG_LOGITEM_XMACRO(METAL_VERTEX_SHADER_ENTRY_NOT_FOUND, "vertex shader entry function not found (metal)") \
+    _SG_LOGITEM_XMACRO(METAL_FRAGMENT_SHADER_ENTRY_NOT_FOUND, "fragment shader entry not found (metal)") \
+    _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_FAILED, "failed to create render pipeline state (metal)") \
+    _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_OUTPUT, "") \
+    _SG_LOGITEM_XMACRO(UNINIT_BUFFER_ACTIVE_CONTEXT_MISMATCH, "active context mismatch in buffer uninit (must be same as for creation)") \
+    _SG_LOGITEM_XMACRO(UNINIT_IMAGE_ACTIVE_CONTEXT_MISMATCH, "active context mismatch in image uninit (must be same as for creation)") \
+    _SG_LOGITEM_XMACRO(UNINIT_SHADER_ACTIVE_CONTEXT_MISMATCH, "active context mismatch in shader uninit (must be same as for creation)") \
+    _SG_LOGITEM_XMACRO(UNINIT_PIPELINE_ACTIVE_CONTEXT_MISMATCH, "active context mismatch in pipeline uninit (must be same as for creation)") \
+    _SG_LOGITEM_XMACRO(UNINIT_PASS_ACTIVE_CONTEXT_MISMATCH, "active context mismatch in pass uninit (must be same as for creation)") \
+    _SG_LOGITEM_XMACRO(IDENTICAL_COMMIT_LISTENER, "attempting to add identical commit listener") \
+    _SG_LOGITEM_XMACRO(COMMIT_LISTENER_ARRAY_FULL, "commit listener array full") \
+    _SG_LOGITEM_XMACRO(TRACE_HOOKS_NOT_ENABLED, "sg_install_trace_hooks() called, but SG_TRACE_HOOKS is not defined") \
+    _SG_LOGITEM_XMACRO(DEALLOC_BUFFER_INVALID_STATE, "sg_dealloc_buffer(): buffer must be in ALLOC state") \
+    _SG_LOGITEM_XMACRO(DEALLOC_IMAGE_INVALID_STATE, "sg_dealloc_image(): image must be in alloc state") \
+    _SG_LOGITEM_XMACRO(DEALLOC_SHADER_INVALID_STATE, "sg_dealloc_shader(): shader must be in ALLOC state") \
+    _SG_LOGITEM_XMACRO(DEALLOC_PIPELINE_INVALID_STATE, "sg_dealloc_pipeline(): pipeline must be in ALLOC state") \
+    _SG_LOGITEM_XMACRO(DEALLOC_PASS_INVALID_STATE, "sg_dealloc_pass(): pass must be in ALLOC state") \
+    _SG_LOGITEM_XMACRO(INIT_BUFFER_INVALID_STATE, "sg_init_buffer(): buffer must be in ALLOC state") \
+    _SG_LOGITEM_XMACRO(INIT_IMAGE_INVALID_STATE, "sg_init_image(): image must be in ALLOC state") \
+    _SG_LOGITEM_XMACRO(INIT_SHADER_INVALID_STATE, "sg_init_shader(): shader must be in ALLOC state") \
+    _SG_LOGITEM_XMACRO(INIT_PIPELINE_INVALID_STATE, "sg_init_pipeline(): pipeline must be in ALLOC state") \
+    _SG_LOGITEM_XMACRO(INIT_PASS_INVALID_STATE, "sg_init_pass(): pass must be in ALLOC state") \
+    _SG_LOGITEM_XMACRO(UNINIT_BUFFER_INVALID_STATE, "sg_uninit_buffer(): buffer must be in VALID or FAILED state") \
+    _SG_LOGITEM_XMACRO(UNINIT_IMAGE_INVALID_STATE, "sg_uninit_image(): image must be in VALID or FAILED state") \
+    _SG_LOGITEM_XMACRO(UNINIT_SHADER_INVALID_STATE, "sg_uninit_shader(): shader must be in VALID or FAILED state") \
+    _SG_LOGITEM_XMACRO(UNINIT_PIPELINE_INVALID_STATE, "sg_uninit_pipeline(): pipeline must be in VALID or FAILED state") \
+    _SG_LOGITEM_XMACRO(UNINIT_PASS_INVALID_STATE, "sg_uninit_pass(): pass must be in VALID or FAILED state") \
+    _SG_LOGITEM_XMACRO(FAIL_BUFFER_INVALID_STATE, "sg_fail_buffer(): buffer must be in ALLOC state") \
+    _SG_LOGITEM_XMACRO(FAIL_IMAGE_INVALID_STATE, "sg_fail_image(): image must be in ALLOC state") \
+    _SG_LOGITEM_XMACRO(FAIL_SHADER_INVALID_STATE, "sg_fail_shader(): shader must be in ALLOC state") \
+    _SG_LOGITEM_XMACRO(FAIL_PIPELINE_INVALID_STATE, "sg_fail_pipeline(): pipeline must be in ALLOC state") \
+    _SG_LOGITEM_XMACRO(FAIL_PASS_INVALID_STATE, "sg_fail_pass(): pass must be in ALLOC state") \
+    _SG_LOGITEM_XMACRO(BUFFER_POOL_EXHAUSTED, "buffer pool exhausted") \
+    _SG_LOGITEM_XMACRO(IMAGE_POOL_EXHAUSTED, "image pool exhausted") \
+    _SG_LOGITEM_XMACRO(SHADER_POOL_EXHAUSTED, "shader pool exhausted") \
+    _SG_LOGITEM_XMACRO(PIPELINE_POOL_EXHAUSTED, "pipeline pool exhausted") \
+    _SG_LOGITEM_XMACRO(PASS_POOL_EXHAUSTED, "pass pool exhausted") \
+    _SG_LOGITEM_XMACRO(DRAW_WITHOUT_BINDINGS, "attempting to draw without resource bindings") \
 
-#define _SG_LOGITEM_XMACRO(item) SG_LOGITEM_##item
+#define _SG_LOGITEM_XMACRO(item,msg) SG_LOGITEM_##item,
 typedef enum sg_log_item {
     _SG_LOG_ITEMS
 } sg_log_item;
@@ -4663,7 +4705,7 @@ _SOKOL_PRIVATE uintptr_t _sg_smpcache_sampler(_sg_sampler_cache_t* cache, int it
 //
 // >>logging
 #if defined(SOKOL_DEBUG)
-#define _SG_LOGITEM_XMACRO(item) #item
+#define _SG_LOGITEM_XMACRO(item,msg) #msg,
 static const char* _sg_log_messages[] = {
     _SG_LOG_ITEMS
 };
@@ -11124,7 +11166,7 @@ _SOKOL_PRIVATE bool _sg_mtl_init_texdesc_common(MTLTextureDescriptor* mtl_desc, 
     mtl_desc.textureType = _sg_mtl_texture_type(img->cmn.type);
     mtl_desc.pixelFormat = _sg_mtl_pixel_format(img->cmn.pixel_format);
     if (MTLPixelFormatInvalid == mtl_desc.pixelFormat) {
-        SG_LOG("Unsupported texture pixel format!\n");
+        _SG_ERROR(METAL_TEXTURE_FORMAT_NOT_SUPPORTED);
         return false;
     }
     mtl_desc.width = (NSUInteger)img->cmn.width;
@@ -11286,7 +11328,8 @@ _SOKOL_PRIVATE id<MTLLibrary> _sg_mtl_compile_library(const char* src) {
         error:&err
     ];
     if (err) {
-        SG_LOG([err.localizedDescription UTF8String]);
+        _SG_ERROR(METAL_SHADER_COMPILATION_FAILED);
+        _SG_LOGMSG(METAL_SHADER_COMPILATION_OUTPUT, [err.localizedDescription UTF8String]);
     }
     return lib;
 }
@@ -11296,7 +11339,8 @@ _SOKOL_PRIVATE id<MTLLibrary> _sg_mtl_library_from_bytecode(const void* ptr, siz
     dispatch_data_t lib_data = dispatch_data_create(ptr, num_bytes, NULL, DISPATCH_DATA_DESTRUCTOR_DEFAULT);
     id<MTLLibrary> lib = [_sg.mtl.device newLibraryWithData:lib_data error:&err];
     if (err) {
-        SG_LOG([err.localizedDescription UTF8String]);
+        _SG_ERROR(METAL_SHADER_CREATION_FAILED);
+        _SG_LOGMSG(METAL_SHADER_COMPILATION_OUTPUT, [err.localizedDescription UTF8String]);
     }
     _SG_OBJC_RELEASE(lib_data);
     return lib;
@@ -11338,11 +11382,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const 
         goto failed;
     }
     if (nil == vs_func) {
-        SG_LOG("vertex shader entry function not found\n");
+        _SG_ERROR(METAL_VERTEX_SHADER_ENTRY_NOT_FOUND);
         goto failed;
     }
     if (nil == fs_func) {
-        SG_LOG("fragment shader entry function not found\n");
+        _SG_ERROR(METAL_FRAGMENT_SHADER_ENTRY_NOT_FOUND);
         goto failed;
     }
     /* it is legal to call _sg_mtl_add_resource with a nil value, this will return a special 0xFFFFFFFF index */
@@ -11466,7 +11510,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
     _SG_OBJC_RELEASE(rp_desc);
     if (nil == mtl_rps) {
         SOKOL_ASSERT(err);
-        SG_LOG([err.localizedDescription UTF8String]);
+        _SG_ERROR(METAL_CREATE_RPS_FAILED);
+        _SG_LOGMSG(METAL_CREATE_RPS_OUTPUT, [err.localizedDescription UTF8String]);
         return SG_RESOURCESTATE_FAILED;
     }
 
@@ -11492,6 +11537,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
         ds_desc.frontFaceStencil.readMask = desc->stencil.read_mask;
         ds_desc.frontFaceStencil.writeMask = desc->stencil.write_mask;
     }
+    // FIXME: can this actually fail?
     id<MTLDepthStencilState> mtl_dss = [_sg.mtl.device newDepthStencilStateWithDescriptor:ds_desc];
     _SG_OBJC_RELEASE(ds_desc);
     pip->mtl.rps = _sg_mtl_add_resource(mtl_rps);
@@ -15542,8 +15588,9 @@ _SOKOL_PRIVATE sg_buffer _sg_alloc_buffer(void) {
         res.id = _sg_slot_alloc(&_sg.pools.buffer_pool, &_sg.pools.buffers[slot_index].slot, slot_index);
     }
     else {
-        /* pool is exhausted */
         res.id = SG_INVALID_ID;
+        _SG_ERROR(BUFFER_POOL_EXHAUSTED);
+        _SG_TRACE_NOARGS(err_buffer_pool_exhausted);
     }
     return res;
 }
@@ -15555,8 +15602,9 @@ _SOKOL_PRIVATE sg_image _sg_alloc_image(void) {
         res.id = _sg_slot_alloc(&_sg.pools.image_pool, &_sg.pools.images[slot_index].slot, slot_index);
     }
     else {
-        /* pool is exhausted */
         res.id = SG_INVALID_ID;
+        _SG_ERROR(IMAGE_POOL_EXHAUSTED);
+        _SG_TRACE_NOARGS(err_image_pool_exhausted);
     }
     return res;
 }
@@ -15568,8 +15616,9 @@ _SOKOL_PRIVATE sg_shader _sg_alloc_shader(void) {
         res.id = _sg_slot_alloc(&_sg.pools.shader_pool, &_sg.pools.shaders[slot_index].slot, slot_index);
     }
     else {
-        /* pool is exhausted */
         res.id = SG_INVALID_ID;
+        _SG_ERROR(SHADER_POOL_EXHAUSTED);
+        _SG_TRACE_NOARGS(err_shader_pool_exhausted);
     }
     return res;
 }
@@ -15581,8 +15630,9 @@ _SOKOL_PRIVATE sg_pipeline _sg_alloc_pipeline(void) {
         res.id =_sg_slot_alloc(&_sg.pools.pipeline_pool, &_sg.pools.pipelines[slot_index].slot, slot_index);
     }
     else {
-        /* pool is exhausted */
         res.id = SG_INVALID_ID;
+        _SG_ERROR(PIPELINE_POOL_EXHAUSTED);
+        _SG_TRACE_NOARGS(err_pipeline_pool_exhausted);
     }
     return res;
 }
@@ -15594,8 +15644,9 @@ _SOKOL_PRIVATE sg_pass _sg_alloc_pass(void) {
         res.id = _sg_slot_alloc(&_sg.pools.pass_pool, &_sg.pools.passes[slot_index].slot, slot_index);
     }
     else {
-        /* pool is exhausted */
         res.id = SG_INVALID_ID;
+        _SG_ERROR(PASS_POOL_EXHAUSTED);
+        _SG_TRACE_NOARGS(err_pass_pool_exhausted);
     }
     return res;
 }
@@ -15733,7 +15784,7 @@ _SOKOL_PRIVATE void _sg_uninit_buffer(_sg_buffer_t* buf) {
         _sg_reset_buffer_to_alloc_state(buf);
     }
     else {
-        SG_LOG("_sg_uninit_buffer: active context mismatch (must be same as for creation)");
+        _SG_WARN(UNINIT_BUFFER_ACTIVE_CONTEXT_MISMATCH);
         _SG_TRACE_NOARGS(err_context_mismatch);
     }
 }
@@ -15745,7 +15796,7 @@ _SOKOL_PRIVATE void _sg_uninit_image(_sg_image_t* img) {
         _sg_reset_image_to_alloc_state(img);
     }
     else {
-        SG_LOG("_sg_uninit_image: active context mismatch (must be same as for creation)");
+        _SG_WARN(UNINIT_IMAGE_ACTIVE_CONTEXT_MISMATCH);
         _SG_TRACE_NOARGS(err_context_mismatch);
     }
 }
@@ -15757,7 +15808,7 @@ _SOKOL_PRIVATE void _sg_uninit_shader(_sg_shader_t* shd) {
         _sg_reset_shader_to_alloc_state(shd);
     }
     else {
-        SG_LOG("_sg_uninit_shader: active context mismatch (must be same as for creation)");
+        _SG_WARN(UNINIT_SHADER_ACTIVE_CONTEXT_MISMATCH);
         _SG_TRACE_NOARGS(err_context_mismatch);
     }
 }
@@ -15769,7 +15820,7 @@ _SOKOL_PRIVATE void _sg_uninit_pipeline(_sg_pipeline_t* pip) {
         _sg_reset_pipeline_to_alloc_state(pip);
     }
     else {
-        SG_LOG("_sg_uninit_pipeline: active context mismatch (must be same as for creation)");
+        _SG_WARN(UNINIT_PIPELINE_ACTIVE_CONTEXT_MISMATCH);
         _SG_TRACE_NOARGS(err_context_mismatch);
     }
 }
@@ -15781,7 +15832,7 @@ _SOKOL_PRIVATE void _sg_uninit_pass(_sg_pass_t* pass) {
         _sg_reset_pass_to_alloc_state(pass);
     }
     else {
-        SG_LOG("_sg_uninit_pass: active context mismatch (must be same as for creation)");
+        _SG_WARN(UNINIT_PASS_ACTIVE_CONTEXT_MISMATCH);
         _SG_TRACE_NOARGS(err_context_mismatch);
     }
 }
@@ -15819,7 +15870,7 @@ _SOKOL_PRIVATE bool _sg_add_commit_listener(const sg_commit_listener* new_listen
     for (int i = 0; i < _sg.commit_listeners.upper; i++) {
         const sg_commit_listener* slot = &_sg.commit_listeners.items[i];
         if ((slot->func == new_listener->func) && (slot->user_data == new_listener->user_data)) {
-            SG_LOG("attempting to add identical commit listener\n");
+            _SG_ERROR(IDENTICAL_COMMIT_LISTENER);
             return false;
         }
     }
@@ -15838,7 +15889,7 @@ _SOKOL_PRIVATE bool _sg_add_commit_listener(const sg_commit_listener* new_listen
         }
     }
     if (!slot) {
-        SG_LOG("commit listener array full\n");
+        _SG_ERROR(COMMIT_LISTENER_ARRAY_FULL);
         return false;
     }
     *slot = *new_listener;
@@ -16011,7 +16062,7 @@ SOKOL_API_IMPL sg_trace_hooks sg_install_trace_hooks(const sg_trace_hooks* trace
         _sg.hooks = *trace_hooks;
     #else
         static sg_trace_hooks old_hooks;
-        SG_LOG("sg_install_trace_hooks() called, but SG_TRACE_HOOKS is not defined!");
+        _SG_WARN(TRACE_HOOKS_NOT_ENABLED);
     #endif
     return old_hooks;
 }
@@ -16059,7 +16110,7 @@ SOKOL_API_IMPL void sg_dealloc_buffer(sg_buffer buf_id) {
             _sg_dealloc_buffer(buf);
         }
         else {
-            SG_LOG("sg_dealloc_buffer: buffer must be in ALLOC state\n");
+            _SG_ERROR(DEALLOC_BUFFER_INVALID_STATE);
         }
     }
     _SG_TRACE_ARGS(dealloc_buffer, buf_id);
@@ -16073,7 +16124,7 @@ SOKOL_API_IMPL void sg_dealloc_image(sg_image img_id) {
             _sg_dealloc_image(img);
         }
         else {
-            SG_LOG("sg_dealloc_image: image must be in ALLOC state\n");
+            _SG_ERROR(DEALLOC_IMAGE_INVALID_STATE);
         }
     }
     _SG_TRACE_ARGS(dealloc_image, img_id);
@@ -16087,7 +16138,7 @@ SOKOL_API_IMPL void sg_dealloc_shader(sg_shader shd_id) {
             _sg_dealloc_shader(shd);
         }
         else {
-            SG_LOG("sg_dealloc_shader: shader must be in ALLOC state\n");
+            _SG_ERROR(DEALLOC_SHADER_INVALID_STATE);
         }
     }
     _SG_TRACE_ARGS(dealloc_shader, shd_id);
@@ -16101,7 +16152,7 @@ SOKOL_API_IMPL void sg_dealloc_pipeline(sg_pipeline pip_id) {
             _sg_dealloc_pipeline(pip);
         }
         else {
-            SG_LOG("sg_dealloc_pipeline: pipeline must be in ALLOC state\n");
+            _SG_ERROR(DEALLOC_PIPELINE_INVALID_STATE);
         }
     }
     _SG_TRACE_ARGS(dealloc_pipeline, pip_id);
@@ -16115,7 +16166,7 @@ SOKOL_API_IMPL void sg_dealloc_pass(sg_pass pass_id) {
             _sg_dealloc_pass(pass);
         }
         else {
-            SG_LOG("sg_dealloc_pass: pass must be in ALLOC state\n");
+            _SG_ERROR(DEALLOC_PASS_INVALID_STATE);
         }
     }
     _SG_TRACE_ARGS(dealloc_pass, pass_id);
@@ -16131,7 +16182,7 @@ SOKOL_API_IMPL void sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc)
             SOKOL_ASSERT((buf->slot.state == SG_RESOURCESTATE_VALID) || (buf->slot.state == SG_RESOURCESTATE_FAILED));
         }
         else {
-            SG_LOG("sg_init_buffer: buffer must be in alloc state\n");
+            _SG_ERROR(INIT_BUFFER_INVALID_STATE);
         }
     }
     _SG_TRACE_ARGS(init_buffer, buf_id, &desc_def);
@@ -16147,7 +16198,7 @@ SOKOL_API_IMPL void sg_init_image(sg_image img_id, const sg_image_desc* desc) {
             SOKOL_ASSERT((img->slot.state == SG_RESOURCESTATE_VALID) || (img->slot.state == SG_RESOURCESTATE_FAILED));
         }
         else {
-            SG_LOG("sg_init_image: image must be in alloc state\n");
+            _SG_ERROR(INIT_IMAGE_INVALID_STATE);
         }
     }
     _SG_TRACE_ARGS(init_image, img_id, &desc_def);
@@ -16163,7 +16214,7 @@ SOKOL_API_IMPL void sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc)
             SOKOL_ASSERT((shd->slot.state == SG_RESOURCESTATE_VALID) || (shd->slot.state == SG_RESOURCESTATE_FAILED));
         }
         else {
-            SG_LOG("sg_init_shader: shader must be in alloc state\n");
+            _SG_ERROR(INIT_SHADER_INVALID_STATE);
         }
     }
     _SG_TRACE_ARGS(init_shader, shd_id, &desc_def);
@@ -16179,7 +16230,7 @@ SOKOL_API_IMPL void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc*
             SOKOL_ASSERT((pip->slot.state == SG_RESOURCESTATE_VALID) || (pip->slot.state == SG_RESOURCESTATE_FAILED));
         }
         else {
-            SG_LOG("sg_init_pipeline: pipeline must be in alloc state\n");
+            _SG_ERROR(INIT_PIPELINE_INVALID_STATE);
         }
     }
     _SG_TRACE_ARGS(init_pipeline, pip_id, &desc_def);
@@ -16195,7 +16246,7 @@ SOKOL_API_IMPL void sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc) {
             SOKOL_ASSERT((pass->slot.state == SG_RESOURCESTATE_VALID) || (pass->slot.state == SG_RESOURCESTATE_FAILED));
         }
         else {
-            SG_LOG("sg_init_pass: pass must be in alloc state\n");
+            _SG_ERROR(INIT_PASS_INVALID_STATE);
         }
     }
     _SG_TRACE_ARGS(init_pass, pass_id, &desc_def);
@@ -16210,7 +16261,7 @@ SOKOL_API_IMPL void sg_uninit_buffer(sg_buffer buf_id) {
             SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
         }
         else {
-            SG_LOG("sg_uninit_buffer: buffer must be in VALID or FAILED state\n");
+            _SG_ERROR(UNINIT_BUFFER_INVALID_STATE);
         }
     }
     _SG_TRACE_ARGS(uninit_buffer, buf_id);
@@ -16225,7 +16276,7 @@ SOKOL_API_IMPL void sg_uninit_image(sg_image img_id) {
             SOKOL_ASSERT(img->slot.state == SG_RESOURCESTATE_ALLOC);
         }
         else {
-            SG_LOG("sg_uninit_image: image must be in VALID or FAILED state\n");
+            _SG_ERROR(UNINIT_IMAGE_INVALID_STATE);
         }
     }
     _SG_TRACE_ARGS(uninit_image, img_id);
@@ -16240,7 +16291,7 @@ SOKOL_API_IMPL void sg_uninit_shader(sg_shader shd_id) {
             SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_ALLOC);
         }
         else {
-            SG_LOG("sg_uninit_shader: shader must be in VALID or FAILED state\n");
+            _SG_ERROR(UNINIT_SHADER_INVALID_STATE);
         }
     }
     _SG_TRACE_ARGS(uninit_shader, shd_id);
@@ -16255,7 +16306,7 @@ SOKOL_API_IMPL void sg_uninit_pipeline(sg_pipeline pip_id) {
             SOKOL_ASSERT(pip->slot.state == SG_RESOURCESTATE_ALLOC);
         }
         else {
-            SG_LOG("sg_uninit_pipeline: pipeline must be in VALID or FAILED state\n");
+            _SG_ERROR(UNINIT_PIPELINE_INVALID_STATE);
         }
     }
     _SG_TRACE_ARGS(uninit_pipeline, pip_id);
@@ -16270,7 +16321,7 @@ SOKOL_API_IMPL void sg_uninit_pass(sg_pass pass_id) {
             SOKOL_ASSERT(pass->slot.state == SG_RESOURCESTATE_ALLOC);
         }
         else {
-            SG_LOG("sg_uninit_pass: pass must be in VALID or FAILED state\n");
+            _SG_ERROR(UNINIT_PASS_INVALID_STATE);
         }
     }
     _SG_TRACE_ARGS(uninit_pass, pass_id);
@@ -16286,7 +16337,7 @@ SOKOL_API_IMPL void sg_fail_buffer(sg_buffer buf_id) {
             buf->slot.state = SG_RESOURCESTATE_FAILED;
         }
         else {
-            SG_LOG("sg_fail_buffer: buffer must be in ALLOC state\n");
+            _SG_ERROR(FAIL_BUFFER_INVALID_STATE);
         }
     }
     _SG_TRACE_ARGS(fail_buffer, buf_id);
@@ -16301,7 +16352,7 @@ SOKOL_API_IMPL void sg_fail_image(sg_image img_id) {
             img->slot.state = SG_RESOURCESTATE_FAILED;
         }
         else {
-            SG_LOG("sg_fail_image: image must be in ALLOC state\n");
+            _SG_ERROR(FAIL_IMAGE_INVALID_STATE);
         }
     }
     _SG_TRACE_ARGS(fail_image, img_id);
@@ -16316,7 +16367,7 @@ SOKOL_API_IMPL void sg_fail_shader(sg_shader shd_id) {
             shd->slot.state = SG_RESOURCESTATE_FAILED;
         }
         else {
-            SG_LOG("sg_fail_shader: shader must be in ALLOC state\n");
+            _SG_ERROR(FAIL_SHADER_INVALID_STATE);
         }
     }
     _SG_TRACE_ARGS(fail_shader, shd_id);
@@ -16331,7 +16382,7 @@ SOKOL_API_IMPL void sg_fail_pipeline(sg_pipeline pip_id) {
             pip->slot.state = SG_RESOURCESTATE_FAILED;
         }
         else {
-            SG_LOG("sg_fail_pipeline: pipeline must be in ALLOC state\n");
+            _SG_ERROR(FAIL_PIPELINE_INVALID_STATE);
         }
     }
     _SG_TRACE_ARGS(fail_pipeline, pip_id);
@@ -16346,7 +16397,7 @@ SOKOL_API_IMPL void sg_fail_pass(sg_pass pass_id) {
             pass->slot.state = SG_RESOURCESTATE_FAILED;
         }
         else {
-            SG_LOG("sg_fail_pass: pass must be in ALLOC state\n");
+            _SG_ERROR(FAIL_PASS_INVALID_STATE);
         }
     }
     _SG_TRACE_ARGS(fail_pass, pass_id);
@@ -16400,10 +16451,6 @@ SOKOL_API_IMPL sg_buffer sg_make_buffer(const sg_buffer_desc* desc) {
         _sg_init_buffer(buf, &desc_def);
         SOKOL_ASSERT((buf->slot.state == SG_RESOURCESTATE_VALID) || (buf->slot.state == SG_RESOURCESTATE_FAILED));
     }
-    else {
-        SG_LOG("buffer pool exhausted!");
-        _SG_TRACE_NOARGS(err_buffer_pool_exhausted);
-    }
     _SG_TRACE_ARGS(make_buffer, &desc_def, buf_id);
     return buf_id;
 }
@@ -16418,10 +16465,6 @@ SOKOL_API_IMPL sg_image sg_make_image(const sg_image_desc* desc) {
         SOKOL_ASSERT(img && (img->slot.state == SG_RESOURCESTATE_ALLOC));
         _sg_init_image(img, &desc_def);
         SOKOL_ASSERT((img->slot.state == SG_RESOURCESTATE_VALID) || (img->slot.state == SG_RESOURCESTATE_FAILED));
-    }
-    else {
-        SG_LOG("image pool exhausted!");
-        _SG_TRACE_NOARGS(err_image_pool_exhausted);
     }
     _SG_TRACE_ARGS(make_image, &desc_def, img_id);
     return img_id;
@@ -16438,10 +16481,6 @@ SOKOL_API_IMPL sg_shader sg_make_shader(const sg_shader_desc* desc) {
         _sg_init_shader(shd, &desc_def);
         SOKOL_ASSERT((shd->slot.state == SG_RESOURCESTATE_VALID) || (shd->slot.state == SG_RESOURCESTATE_FAILED));
     }
-    else {
-        SG_LOG("shader pool exhausted!");
-        _SG_TRACE_NOARGS(err_shader_pool_exhausted);
-    }
     _SG_TRACE_ARGS(make_shader, &desc_def, shd_id);
     return shd_id;
 }
@@ -16457,10 +16496,6 @@ SOKOL_API_IMPL sg_pipeline sg_make_pipeline(const sg_pipeline_desc* desc) {
         _sg_init_pipeline(pip, &desc_def);
         SOKOL_ASSERT((pip->slot.state == SG_RESOURCESTATE_VALID) || (pip->slot.state == SG_RESOURCESTATE_FAILED));
     }
-    else {
-        SG_LOG("pipeline pool exhausted!");
-        _SG_TRACE_NOARGS(err_pipeline_pool_exhausted);
-    }
     _SG_TRACE_ARGS(make_pipeline, &desc_def, pip_id);
     return pip_id;
 }
@@ -16475,10 +16510,6 @@ SOKOL_API_IMPL sg_pass sg_make_pass(const sg_pass_desc* desc) {
         SOKOL_ASSERT(pass && (pass->slot.state == SG_RESOURCESTATE_ALLOC));
         _sg_init_pass(pass, &desc_def);
         SOKOL_ASSERT((pass->slot.state == SG_RESOURCESTATE_VALID) || (pass->slot.state == SG_RESOURCESTATE_FAILED));
-    }
-    else {
-        SG_LOG("pass pool exhausted!");
-        _SG_TRACE_NOARGS(err_pass_pool_exhausted);
     }
     _SG_TRACE_ARGS(make_pass, &desc_def, pass_id);
     return pass_id;
@@ -16754,7 +16785,7 @@ SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instance
     SOKOL_ASSERT(num_instances >= 0);
     #if defined(SOKOL_DEBUG)
         if (!_sg.bindings_valid) {
-            SG_LOG("attempting to draw without resource bindings");
+            _SG_WARN(DRAW_WITHOUT_BINDINGS);
         }
     #endif
     if (!_sg.pass_valid) {
