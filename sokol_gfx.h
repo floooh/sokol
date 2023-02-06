@@ -10190,7 +10190,7 @@ _SOKOL_PRIVATE int _sg_d3d11_append_buffer(_sg_buffer_t* buf, const sg_range* da
         _sg_d3d11_Unmap(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0);
     }
     else {
-        _SG_ERROR(D3D11_MAP_FOR_BUFFER_APPEND_FAILED);
+        _SG_ERROR(D3D11_MAP_FOR_APPEND_BUFFER_FAILED);
     }
     /* NOTE: this alignment is a requirement from WebGPU, but we want identical behaviour across all backend */
     return _sg_roundup((int)data->size, 4);
