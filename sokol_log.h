@@ -175,6 +175,7 @@ SOKOL_LOG_API_DECL void slog_func(const char* tag, uint32_t log_level, uint32_t 
 #error "sokol_log.h: unknown platform"
 #endif
 
+#include <stdlib.h> // abort
 #include <stdio.h>  // fputs
 #include <stddef.h> // size_t
 
