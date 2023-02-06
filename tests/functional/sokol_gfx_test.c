@@ -12,16 +12,23 @@
 #define T(b) EXPECT_TRUE(b)
 
 static int num_log_called = 0;
-static void test_logger(const char* msg, void* userdata) {
-    (void)userdata;
+static sg_log_item log_item;
+
+static void test_logger(const char* tag, uint32_t log_level, uint32_t log_item_id, const char* message_or_null, uint32_t line_nr, const char* filename_or_null, void* user_data) {
+    (void)tag;
+    (void)log_level;
+    (void)message_or_null;
+    (void)line_nr;
+    (void)filename_or_null;
+    (void)user_data;
     num_log_called++;
-    puts(msg);
+    log_item = log_item_id;
 }
 
 static void setup_with_logger(void) {
     num_log_called = 0;
     sg_setup(&(sg_desc){
-        .logger = { .log_cb = test_logger }
+        .logger = { .func = test_logger }
     });
 }
 
@@ -1139,6 +1146,7 @@ UTEST(sokol_gfx, make_dealloc_buffer_warns) {
     sg_buffer buf = create_buffer();
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
     sg_dealloc_buffer(buf);
+    T(log_item == SG_LOGITEM_DEALLOC_BUFFER_INVALID_STATE);
     T(num_log_called == 1);
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
     sg_destroy_buffer(buf);
@@ -1151,6 +1159,7 @@ UTEST(sokol_gfx, make_dealloc_image_warns) {
     sg_image img = create_image();
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     sg_dealloc_image(img);
+    T(log_item == SG_LOGITEM_DEALLOC_IMAGE_INVALID_STATE);
     T(num_log_called == 1);
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     sg_destroy_image(img);
@@ -1163,6 +1172,7 @@ UTEST(sokol_gfx, make_dealloc_shader_warns) {
     sg_shader shd = create_shader();
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_VALID);
     sg_dealloc_shader(shd);
+    T(log_item == SG_LOGITEM_DEALLOC_SHADER_INVALID_STATE);
     T(num_log_called == 1);
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_VALID);
     sg_destroy_shader(shd);
@@ -1175,6 +1185,7 @@ UTEST(sokol_gfx, make_dealloc_pipeline_warns) {
     sg_pipeline pip = create_pipeline();
     T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
     sg_dealloc_pipeline(pip);
+    T(log_item == SG_LOGITEM_DEALLOC_PIPELINE_INVALID_STATE);
     T(num_log_called == 1);
     T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
     sg_destroy_pipeline(pip);
@@ -1187,6 +1198,7 @@ UTEST(sokol_gfx, make_dealloc_pass_warns) {
     sg_pass pass = create_pass();
     T(sg_query_pass_state(pass) == SG_RESOURCESTATE_VALID);
     sg_dealloc_pass(pass);
+    T(log_item == SG_LOGITEM_DEALLOC_PASS_INVALID_STATE);
     T(num_log_called == 1);
     T(sg_query_pass_state(pass) == SG_RESOURCESTATE_VALID);
     sg_destroy_pass(pass);
@@ -1199,6 +1211,7 @@ UTEST(sokol_gfx, alloc_uninit_buffer_warns) {
     sg_buffer buf = sg_alloc_buffer();
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_ALLOC);
     sg_uninit_buffer(buf);
+    T(log_item == SG_LOGITEM_UNINIT_BUFFER_INVALID_STATE);
     T(num_log_called == 1);
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_ALLOC);
     sg_shutdown();
@@ -1209,6 +1222,7 @@ UTEST(sokol_gfx, alloc_uninit_image_warns) {
     sg_image img = sg_alloc_image();
     T(sg_query_image_state(img) == SG_RESOURCESTATE_ALLOC);
     sg_uninit_image(img);
+    T(log_item == SG_LOGITEM_UNINIT_IMAGE_INVALID_STATE);
     T(num_log_called == 1);
     T(sg_query_image_state(img) == SG_RESOURCESTATE_ALLOC);
     sg_shutdown();
@@ -1219,6 +1233,7 @@ UTEST(sokol_gfx, alloc_uninit_shader_warns) {
     sg_shader shd = sg_alloc_shader();
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_ALLOC);
     sg_uninit_shader(shd);
+    T(log_item == SG_LOGITEM_UNINIT_SHADER_INVALID_STATE);
     T(num_log_called == 1);
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_ALLOC);
     sg_shutdown();
@@ -1229,6 +1244,7 @@ UTEST(sokol_gfx, alloc_uninit_pipeline_warns) {
     sg_pipeline pip = sg_alloc_pipeline();
     T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_ALLOC);
     sg_uninit_pipeline(pip);
+    T(log_item == SG_LOGITEM_UNINIT_PIPELINE_INVALID_STATE);
     T(num_log_called == 1);
     T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_ALLOC);
     sg_shutdown();
@@ -1239,6 +1255,7 @@ UTEST(sokol_gfx, alloc_uninit_pass_warns) {
     sg_pass pass = sg_alloc_pass();
     T(sg_query_pass_state(pass) == SG_RESOURCESTATE_ALLOC);
     sg_uninit_pass(pass);
+    T(log_item == SG_LOGITEM_UNINIT_PASS_INVALID_STATE);
     T(num_log_called == 1);
     T(sg_query_pass_state(pass) == SG_RESOURCESTATE_ALLOC);
     sg_shutdown();
