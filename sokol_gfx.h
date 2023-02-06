@@ -14599,8 +14599,9 @@ _SOKOL_PRIVATE bool _sg_validate_end(void) {
     if (_sg.validate_error != SG_LOGITEM_OK) {
         #if !defined(SOKOL_VALIDATE_NON_FATAL)
             abort();
+        #else
+            return false;
         #endif
-        return false;
     }
     else {
         return true;
