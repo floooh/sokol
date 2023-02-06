@@ -170,7 +170,7 @@ SOKOL_LOG_API_DECL void slog_func(const char* tag, uint32_t log_level, uint32_t 
 #elif defined(__ANDROID__)
     #define _SLOG_ANDROID (1)
 #elif defined(__linux__) || defined(__unix__)
-    #define _SAUDIO_LINUX (1)
+    #define _SLOG_LINUX (1)
 #else
 #error "sokol_log.h: unknown platform"
 #endif
@@ -245,8 +245,8 @@ SOKOL_API_IMPL void slog_func(const char* tag, uint32_t log_level, uint32_t log_
 
     // build log output line
     char line_buf[256];
-    char* str = &line_buf[0];
-    const char* end = str + sizeof(line_buf);
+    char* str = line_buf;
+    const char* end = line_buf + sizeof(line_buf);
     char num_buf[32];
     if (tag) {
         str = _slog_append("[", str, end);
