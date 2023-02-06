@@ -263,7 +263,7 @@ SOKOL_API_IMPL void slog_func(const char* tag, uint32_t log_level, uint32_t log_
             str = _slog_append(filename, str, end);
             str = _slog_append("(", str, end);
             str = _slog_append(_slog_itoa(line_nr, num_buf, sizeof(num_buf)), str, end);
-            str = _slog_append("): ");
+            str = _slog_append("): ", str, end);
         #else
             // gcc/clang compiler error format
             str = _slog_append(filename, str, end);
