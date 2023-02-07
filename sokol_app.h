@@ -77,10 +77,6 @@
     On Linux, you also need to use the -pthread compiler and linker option, otherwise weird
     things will happen, see here for details: https://github.com/floooh/sokol/issues/376
 
-    Building for UWP requires a recent Visual Studio toolchain and Windows SDK
-    (at least VS2019 and Windows SDK 10.0.19041.0). When the UWP backend is
-    selected, the sokol_app.h implementation must be compiled as C++17.
-
     On macOS and iOS, the implementation must be compiled as Objective-C.
 
     FEATURE OVERVIEW
@@ -97,48 +93,48 @@
 
     FEATURE/PLATFORM MATRIX
     =======================
-                        | Windows | macOS | Linux |  iOS  | Android | UWP  | HTML5
-    --------------------+---------+-------+-------+-------+---------+------+-------
-    gl 3.x              | YES     | YES   | YES   | ---   | ---     | ---  | ---
-    gles2/webgl         | ---     | ---   | YES(2)| YES   | YES     | ---  | YES
-    gles3/webgl2        | ---     | ---   | YES(2)| YES   | YES     | ---  | YES
-    metal               | ---     | YES   | ---   | YES   | ---     | ---  | ---
-    d3d11               | YES     | ---   | ---   | ---   | ---     | YES  | ---
-    KEY_DOWN            | YES     | YES   | YES   | SOME  | TODO    | YES  | YES
-    KEY_UP              | YES     | YES   | YES   | SOME  | TODO    | YES  | YES
-    CHAR                | YES     | YES   | YES   | YES   | TODO    | YES  | YES
-    MOUSE_DOWN          | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    MOUSE_UP            | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    MOUSE_SCROLL        | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    MOUSE_MOVE          | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    MOUSE_ENTER         | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    MOUSE_LEAVE         | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    TOUCHES_BEGAN       | ---     | ---   | ---   | YES   | YES     | TODO | YES
-    TOUCHES_MOVED       | ---     | ---   | ---   | YES   | YES     | TODO | YES
-    TOUCHES_ENDED       | ---     | ---   | ---   | YES   | YES     | TODO | YES
-    TOUCHES_CANCELLED   | ---     | ---   | ---   | YES   | YES     | TODO | YES
-    RESIZED             | YES     | YES   | YES   | YES   | YES     | YES  | YES
-    ICONIFIED           | YES     | YES   | YES   | ---   | ---     | YES  | ---
-    RESTORED            | YES     | YES   | YES   | ---   | ---     | YES  | ---
-    FOCUSED             | YES     | YES   | YES   | ---   | ---     | ---  | YES
-    UNFOCUSED           | YES     | YES   | YES   | ---   | ---     | ---  | YES
-    SUSPENDED           | ---     | ---   | ---   | YES   | YES     | YES  | TODO
-    RESUMED             | ---     | ---   | ---   | YES   | YES     | YES  | TODO
-    QUIT_REQUESTED      | YES     | YES   | YES   | ---   | ---     | ---  | YES
-    IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ---  | ???
-    key repeat flag     | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    windowed            | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    fullscreen          | YES     | YES   | YES   | YES   | YES     | YES  | ---
-    mouse hide          | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    mouse lock          | YES     | YES   | YES   | ---   | ---     | TODO | YES
-    set cursor type     | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    screen keyboard     | ---     | ---   | ---   | YES   | TODO    | TODO | YES
-    swap interval       | YES     | YES   | YES   | YES   | TODO    | ---  | YES
-    high-dpi            | YES     | YES   | TODO  | YES   | YES     | YES  | YES
-    clipboard           | YES     | YES   | TODO  | ---   | ---     | TODO | YES
-    MSAA                | YES     | YES   | YES   | YES   | YES     | TODO | YES
-    drag'n'drop         | YES     | YES   | YES   | ---   | ---     | TODO | YES
-    window icon         | YES     | YES(1)| YES   | ---   | ---     | TODO | YES
+                        | Windows | macOS | Linux |  iOS  | Android |  HTML5
+    --------------------+---------+-------+-------+-------+---------+--------
+    gl 3.x              | YES     | YES   | YES   | ---   | ---     |  ---
+    gles2/webgl         | ---     | ---   | YES(2)| YES   | YES     |  YES
+    gles3/webgl2        | ---     | ---   | YES(2)| YES   | YES     |  YES
+    metal               | ---     | YES   | ---   | YES   | ---     |  ---
+    d3d11               | YES     | ---   | ---   | ---   | ---     |  ---
+    KEY_DOWN            | YES     | YES   | YES   | SOME  | TODO    |  YES
+    KEY_UP              | YES     | YES   | YES   | SOME  | TODO    |  YES
+    CHAR                | YES     | YES   | YES   | YES   | TODO    |  YES
+    MOUSE_DOWN          | YES     | YES   | YES   | ---   | ---     |  YES
+    MOUSE_UP            | YES     | YES   | YES   | ---   | ---     |  YES
+    MOUSE_SCROLL        | YES     | YES   | YES   | ---   | ---     |  YES
+    MOUSE_MOVE          | YES     | YES   | YES   | ---   | ---     |  YES
+    MOUSE_ENTER         | YES     | YES   | YES   | ---   | ---     |  YES
+    MOUSE_LEAVE         | YES     | YES   | YES   | ---   | ---     |  YES
+    TOUCHES_BEGAN       | ---     | ---   | ---   | YES   | YES     |  YES
+    TOUCHES_MOVED       | ---     | ---   | ---   | YES   | YES     |  YES
+    TOUCHES_ENDED       | ---     | ---   | ---   | YES   | YES     |  YES
+    TOUCHES_CANCELLED   | ---     | ---   | ---   | YES   | YES     |  YES
+    RESIZED             | YES     | YES   | YES   | YES   | YES     |  YES
+    ICONIFIED           | YES     | YES   | YES   | ---   | ---     |  ---
+    RESTORED            | YES     | YES   | YES   | ---   | ---     |  ---
+    FOCUSED             | YES     | YES   | YES   | ---   | ---     |  YES
+    UNFOCUSED           | YES     | YES   | YES   | ---   | ---     |  YES
+    SUSPENDED           | ---     | ---   | ---   | YES   | YES     |  TODO
+    RESUMED             | ---     | ---   | ---   | YES   | YES     |  TODO
+    QUIT_REQUESTED      | YES     | YES   | YES   | ---   | ---     |  YES
+    IME                 | TODO    | TODO? | TODO  | ???   | TODO    |  ???
+    key repeat flag     | YES     | YES   | YES   | ---   | ---     |  YES
+    windowed            | YES     | YES   | YES   | ---   | ---     |  YES
+    fullscreen          | YES     | YES   | YES   | YES   | YES     |  ---
+    mouse hide          | YES     | YES   | YES   | ---   | ---     |  YES
+    mouse lock          | YES     | YES   | YES   | ---   | ---     |  YES
+    set cursor type     | YES     | YES   | YES   | ---   | ---     |  YES
+    screen keyboard     | ---     | ---   | ---   | YES   | TODO    |  YES
+    swap interval       | YES     | YES   | YES   | YES   | TODO    |  YES
+    high-dpi            | YES     | YES   | TODO  | YES   | YES     |  YES
+    clipboard           | YES     | YES   | TODO  | ---   | ---     |  YES
+    MSAA                | YES     | YES   | YES   | YES   | YES     |  YES
+    drag'n'drop         | YES     | YES   | YES   | ---   | ---     |  YES
+    window icon         | YES     | YES(1)| YES   | ---   | ---     |  YES
 
     (1) macOS has no regular window icons, instead the dock icon is changed
     (2) supported with EGL only (not GLX)
@@ -1799,20 +1795,9 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #endif
 #elif defined(_WIN32)
     /* Windows (D3D11 or GL) */
-    #include <winapifamily.h>
-    #if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
-        #define _SAPP_UWP (1)
-        #if !defined(SOKOL_D3D11)
-        #error("sokol_app.h: unknown 3D API selected for UWP, must be SOKOL_D3D11")
-        #endif
-        #if !defined(__cplusplus)
-        #error("sokol_app.h: UWP bindings require C++/17")
-        #endif
-    #else
-        #define _SAPP_WIN32 (1)
-        #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE33)
-        #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11 or SOKOL_GLCORE33")
-        #endif
+    #define _SAPP_WIN32 (1)
+    #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE33)
+    #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11 or SOKOL_GLCORE33")
     #endif
 #elif defined(__ANDROID__)
     /* Android */
@@ -1961,36 +1946,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #ifndef WM_DPICHANGED
         #define WM_DPICHANGED (0x02E0)
     #endif
-#elif defined(_SAPP_UWP)
-    #ifndef NOMINMAX
-        #define NOMINMAX
-    #endif
-    #ifdef _MSC_VER
-        #pragma warning(push)
-        #pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union */
-        #pragma warning(disable:4054)   /* 'type cast': from function pointer */
-        #pragma warning(disable:4055)   /* 'type cast': from data pointer */
-        #pragma warning(disable:4505)   /* unreferenced local function has been removed */
-        #pragma warning(disable:4115)   /* /W4: 'ID3D11ModuleInstance': named type definition in parentheses (in d3d11.h) */
-    #endif
-    #include <windows.h>
-    #include <winrt/Windows.ApplicationModel.Core.h>
-    #include <winrt/Windows.Foundation.h>
-    #include <winrt/Windows.Foundation.Collections.h>
-    #include <winrt/Windows.Graphics.Display.h>
-    #include <winrt/Windows.UI.Core.h>
-    #include <winrt/Windows.UI.Composition.h>
-    #include <winrt/Windows.UI.Input.h>
-    #include <winrt/Windows.UI.ViewManagement.h>
-    #include <winrt/Windows.System.h>
-    #include <ppltasks.h>
-
-    #include <dxgi1_4.h>
-    #include <d3d11_3.h>
-    #include <DirectXMath.h>
-
-    #pragma comment (lib, "WindowsApp")
-    #pragma comment (lib, "dxguid")
 #elif defined(_SAPP_ANDROID)
     #include <pthread.h>
     #include <unistd.h>
@@ -2094,7 +2049,7 @@ typedef struct {
         } mach;
     #elif defined(_SAPP_EMSCRIPTEN)
         // empty
-    #elif defined(_SAPP_WIN32) || defined(_SAPP_UWP)
+    #elif defined(_SAPP_WIN32)
         struct {
             LARGE_INTEGER freq;
             LARGE_INTEGER start;
@@ -2124,7 +2079,7 @@ _SOKOL_PRIVATE void _sapp_timestamp_init(_sapp_timestamp_t* ts) {
         ts->mach.start = mach_absolute_time();
     #elif defined(_SAPP_EMSCRIPTEN)
         (void)ts;
-    #elif defined(_SAPP_WIN32) || defined(_SAPP_UWP)
+    #elif defined(_SAPP_WIN32)
         QueryPerformanceFrequency(&ts->win.freq);
         QueryPerformanceCounter(&ts->win.start);
     #else
@@ -2143,7 +2098,7 @@ _SOKOL_PRIVATE double _sapp_timestamp_now(_sapp_timestamp_t* ts) {
         (void)ts;
         SOKOL_ASSERT(false);
         return 0.0;
-    #elif defined(_SAPP_WIN32) || defined(_SAPP_UWP)
+    #elif defined(_SAPP_WIN32)
         LARGE_INTEGER qpc;
         QueryPerformanceCounter(&qpc);
         const uint64_t now = (uint64_t)_sapp_int64_muldiv(qpc.QuadPart - ts->win.start.QuadPart, 1000000000, ts->win.freq.QuadPart);
@@ -2337,7 +2292,7 @@ typedef struct {
 } _sapp_emsc_t;
 #endif // _SAPP_EMSCRIPTEN
 
-#if defined(SOKOL_D3D11) && (defined(_SAPP_WIN32) || defined(_SAPP_UWP))
+#if defined(SOKOL_D3D11) && defined(_SAPP_WIN32)
 typedef struct {
     ID3D11Device* device;
     ID3D11DeviceContext* device_context;
@@ -2461,22 +2416,6 @@ typedef struct {
 #endif // SOKOL_GLCORE33
 
 #endif // _SAPP_WIN32
-
-#if defined(_SAPP_UWP)
-
-typedef struct {
-    float content_scale;
-    float window_scale;
-    float mouse_scale;
-} _sapp_uwp_dpi_t;
-
-typedef struct {
-    bool mouse_tracked;
-    uint8_t mouse_buttons;
-    _sapp_uwp_dpi_t dpi;
-} _sapp_uwp_t;
-
-#endif // _SAPP_UWP
 
 #if defined(_SAPP_ANDROID)
 typedef enum {
@@ -2761,11 +2700,6 @@ typedef struct {
             _sapp_d3d11_t d3d11;
         #elif defined(SOKOL_GLCORE33)
             _sapp_wgl_t wgl;
-        #endif
-    #elif defined(_SAPP_UWP)
-            _sapp_uwp_t uwp;
-        #if defined(SOKOL_D3D11)
-            _sapp_d3d11_t d3d11;
         #endif
     #elif defined(_SAPP_ANDROID)
         _sapp_android_t android;
@@ -5925,8 +5859,8 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 //  ███ ███  ██ ██   ████ ██████   ██████   ███ ███  ███████
 //
 // >>windows
-#if defined(_SAPP_WIN32) || defined(_SAPP_UWP)
-_SOKOL_PRIVATE bool _sapp_win32_uwp_utf8_to_wide(const char* src, wchar_t* dst, int dst_num_bytes) {
+#if defined(_SAPP_WIN32)
+_SOKOL_PRIVATE bool _sapp_win32_utf8_to_wide(const char* src, wchar_t* dst, int dst_num_bytes) {
     SOKOL_ASSERT(src && dst && (dst_num_bytes > 1));
     _sapp_clear(dst, (size_t)dst_num_bytes);
     const int dst_chars = dst_num_bytes / (int)sizeof(wchar_t);
@@ -5941,14 +5875,14 @@ _SOKOL_PRIVATE bool _sapp_win32_uwp_utf8_to_wide(const char* src, wchar_t* dst, 
     }
 }
 
-_SOKOL_PRIVATE void _sapp_win32_uwp_app_event(sapp_event_type type) {
+_SOKOL_PRIVATE void _sapp_win32_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
         _sapp_call_event(&_sapp.event);
     }
 }
 
-_SOKOL_PRIVATE void _sapp_win32_uwp_init_keytable(void) {
+_SOKOL_PRIVATE void _sapp_win32_init_keytable(void) {
     /* same as GLFW */
     _sapp.keycodes[0x00B] = SAPP_KEYCODE_0;
     _sapp.keycodes[0x002] = SAPP_KEYCODE_1;
@@ -6069,7 +6003,7 @@ _SOKOL_PRIVATE void _sapp_win32_uwp_init_keytable(void) {
     _sapp.keycodes[0x037] = SAPP_KEYCODE_KP_MULTIPLY;
     _sapp.keycodes[0x04A] = SAPP_KEYCODE_KP_SUBTRACT;
 }
-#endif // _SAPP_WIN32 || _SAPP_UWP
+#endif // _SAPP_WIN32
 
 #if defined(_SAPP_WIN32)
 
@@ -7059,7 +6993,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                         a change to intervene via sapp_cancel_quit()
                     */
                     _sapp.quit_requested = true;
-                    _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
+                    _sapp_win32_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
                     /* if user code hasn't intervened, quit the app */
                     if (_sapp.quit_requested) {
                         _sapp.quit_ordered = true;
@@ -7091,23 +7025,23 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     if (iconified != _sapp.win32.iconified) {
                         _sapp.win32.iconified = iconified;
                         if (iconified) {
-                            _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_ICONIFIED);
+                            _sapp_win32_app_event(SAPP_EVENTTYPE_ICONIFIED);
                         }
                         else {
-                            _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESTORED);
+                            _sapp_win32_app_event(SAPP_EVENTTYPE_RESTORED);
                         }
                     }
                 }
                 break;
             case WM_SETFOCUS:
-                _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_FOCUSED);
+                _sapp_win32_app_event(SAPP_EVENTTYPE_FOCUSED);
                 break;
             case WM_KILLFOCUS:
                 /* if focus is lost for any reason, and we're in mouse locked mode, disable mouse lock */
                 if (_sapp.mouse.locked) {
                     _sapp_win32_lock_mouse(false);
                 }
-                _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_UNFOCUSED);
+                _sapp_win32_app_event(SAPP_EVENTTYPE_UNFOCUSED);
                 break;
             case WM_SETCURSOR:
                 if (LOWORD(lParam) == HTCLIENT) {
@@ -7253,7 +7187,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     #if defined(SOKOL_D3D11)
                     _sapp_d3d11_resize_default_render_target();
                     #endif
-                    _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESIZED);
+                    _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
                 }
                 */
                 break;
@@ -7486,7 +7420,7 @@ _SOKOL_PRIVATE bool _sapp_win32_set_clipboard_string(const char* str) {
     if (!wchar_buf) {
         goto error;
     }
-    if (!_sapp_win32_uwp_utf8_to_wide(str, wchar_buf, (int)wchar_buf_size)) {
+    if (!_sapp_win32_utf8_to_wide(str, wchar_buf, (int)wchar_buf_size)) {
         goto error;
     }
     GlobalUnlock(wchar_buf);
@@ -7537,7 +7471,7 @@ _SOKOL_PRIVATE const char* _sapp_win32_get_clipboard_string(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_win32_update_window_title(void) {
-    _sapp_win32_uwp_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
+    _sapp_win32_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
     SetWindowTextW(_sapp.win32.hwnd, _sapp.window_title_wide);
 }
 
@@ -7639,8 +7573,8 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp_win32_init_console();
     _sapp.win32.is_win10_or_greater = _sapp_win32_is_win10_or_greater();
-    _sapp_win32_uwp_init_keytable();
-    _sapp_win32_uwp_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
+    _sapp_win32_init_keytable();
+    _sapp_win32_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
     _sapp_win32_init_dpi();
     _sapp_win32_init_cursors();
     _sapp_win32_create_window();
@@ -7685,7 +7619,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
             #if defined(SOKOL_D3D11)
             _sapp_d3d11_resize_default_render_target();
             #endif
-            _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESIZED);
+            _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
         }
         /* check if the window monitor has changed, need to reset timing because
            the new monitor might have a different refresh rate
@@ -7770,1034 +7704,6 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 #endif
 
 #endif /* _SAPP_WIN32 */
-
-/*== UWP ================================================================*/
-#if defined(_SAPP_UWP)
-
-// Helper functions
-_SOKOL_PRIVATE void _sapp_uwp_configure_dpi(float monitor_dpi) {
-    _sapp.uwp.dpi.window_scale = monitor_dpi / 96.0f;
-    if (_sapp.desc.high_dpi) {
-        _sapp.uwp.dpi.content_scale = _sapp.uwp.dpi.window_scale;
-        _sapp.uwp.dpi.mouse_scale = 1.0f * _sapp.uwp.dpi.window_scale;
-    }
-    else {
-        _sapp.uwp.dpi.content_scale = 1.0f;
-        _sapp.uwp.dpi.mouse_scale = 1.0f;
-    }
-    _sapp.dpi_scale = _sapp.uwp.dpi.content_scale;
-}
-
-_SOKOL_PRIVATE void _sapp_uwp_update_cursor(sapp_mouse_cursor cursor, bool shown) {
-    using namespace winrt::Windows::UI::Core;
-
-    CoreCursor uwp_cursor(nullptr);
-    if (shown) {
-        switch (cursor) {
-            case SAPP_MOUSECURSOR_ARROW: uwp_cursor = CoreCursor(CoreCursorType::Arrow, 0); break;
-            case SAPP_MOUSECURSOR_IBEAM: uwp_cursor = CoreCursor(CoreCursorType::IBeam, 0); break;
-            case SAPP_MOUSECURSOR_CROSSHAIR: uwp_cursor = CoreCursor(CoreCursorType::Cross, 0); break;
-            case SAPP_MOUSECURSOR_POINTING_HAND: uwp_cursor = CoreCursor(CoreCursorType::Hand, 0); break;
-            case SAPP_MOUSECURSOR_RESIZE_EW: uwp_cursor = CoreCursor(CoreCursorType::SizeWestEast, 0); break;
-            case SAPP_MOUSECURSOR_RESIZE_NS: uwp_cursor = CoreCursor(CoreCursorType::SizeNorthSouth, 0); break;
-            case SAPP_MOUSECURSOR_RESIZE_NWSE: uwp_cursor = CoreCursor(CoreCursorType::SizeNorthwestSoutheast, 0); break;
-            case SAPP_MOUSECURSOR_RESIZE_NESW: uwp_cursor = CoreCursor(CoreCursorType::SizeNortheastSouthwest, 0); break;
-            case SAPP_MOUSECURSOR_RESIZE_ALL: uwp_cursor = CoreCursor(CoreCursorType::SizeAll, 0); break;
-            case SAPP_MOUSECURSOR_NOT_ALLOWED: uwp_cursor = CoreCursor(CoreCursorType::UniversalNo, 0); break;
-            default: uwp_cursor = CoreCursor(CoreCursorType::Arrow, 0); break;
-        }
-    }
-    CoreWindow::GetForCurrentThread().PointerCursor(uwp_cursor);
-}
-
-_SOKOL_PRIVATE uint32_t _sapp_uwp_mods(winrt::Windows::UI::Core::CoreWindow const& sender_window) {
-    using namespace winrt::Windows::System;
-    using namespace winrt::Windows::UI::Core;
-
-    uint32_t mods = 0;
-    if ((sender_window.GetKeyState(VirtualKey::Shift) & CoreVirtualKeyStates::Down) == CoreVirtualKeyStates::Down) {
-        mods |= SAPP_MODIFIER_SHIFT;
-    }
-    if ((sender_window.GetKeyState(VirtualKey::Control) & CoreVirtualKeyStates::Down) == CoreVirtualKeyStates::Down) {
-        mods |= SAPP_MODIFIER_CTRL;
-    }
-    if ((sender_window.GetKeyState(VirtualKey::Menu) & CoreVirtualKeyStates::Down) == CoreVirtualKeyStates::Down) {
-        mods |= SAPP_MODIFIER_ALT;
-    }
-    if (((sender_window.GetKeyState(VirtualKey::LeftWindows) & CoreVirtualKeyStates::Down) == CoreVirtualKeyStates::Down) ||
-        ((sender_window.GetKeyState(VirtualKey::RightWindows) & CoreVirtualKeyStates::Down) == CoreVirtualKeyStates::Down))
-    {
-        mods |= SAPP_MODIFIER_SUPER;
-    }
-    if (0 != (_sapp.uwp.mouse_buttons & (1<<SAPP_MOUSEBUTTON_LEFT))) {
-        mods |= SAPP_MODIFIER_LMB;
-    }
-    if (0 != (_sapp.uwp.mouse_buttons & (1<<SAPP_MOUSEBUTTON_MIDDLE))) {
-        mods |= SAPP_MODIFIER_MMB;
-    }
-    if (0 != (_sapp.uwp.mouse_buttons & (1<<SAPP_MOUSEBUTTON_RIGHT))) {
-        mods |= SAPP_MODIFIER_RMB;
-    }
-    return mods;
-}
-
-_SOKOL_PRIVATE void _sapp_uwp_mouse_event(sapp_event_type type, sapp_mousebutton btn, winrt::Windows::UI::Core::CoreWindow const& sender_window) {
-    if (_sapp_events_enabled()) {
-        _sapp_init_event(type);
-        _sapp.event.modifiers = _sapp_uwp_mods(sender_window);
-        _sapp.event.mouse_button = btn;
-        _sapp_call_event(&_sapp.event);
-    }
-}
-
-_SOKOL_PRIVATE void _sapp_uwp_scroll_event(float delta, bool horizontal, winrt::Windows::UI::Core::CoreWindow const& sender_window) {
-    if (_sapp_events_enabled()) {
-        _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
-        _sapp.event.modifiers = _sapp_uwp_mods(sender_window);
-        _sapp.event.scroll_x = horizontal ? (-delta / 30.0f) : 0.0f;
-        _sapp.event.scroll_y = horizontal ? 0.0f : (delta / 30.0f);
-        _sapp_call_event(&_sapp.event);
-    }
-}
-
-_SOKOL_PRIVATE void _sapp_uwp_extract_mouse_button_events(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args) {
-
-    // we need to figure out ourselves what mouse buttons have been pressed and released,
-    // because UWP doesn't properly send down/up mouse button events when multiple buttons
-    // are pressed down, so we also need to check the mouse button state in other mouse events
-    // to track what buttons have been pressed down and released
-    //
-    auto properties = args.CurrentPoint().Properties();
-    const uint8_t lmb_bit = (1 << SAPP_MOUSEBUTTON_LEFT);
-    const uint8_t rmb_bit = (1 << SAPP_MOUSEBUTTON_RIGHT);
-    const uint8_t mmb_bit = (1 << SAPP_MOUSEBUTTON_MIDDLE);
-    uint8_t new_btns = 0;
-    if (properties.IsLeftButtonPressed()) {
-        new_btns |= lmb_bit;
-    }
-    if (properties.IsRightButtonPressed()) {
-        new_btns |= rmb_bit;
-    }
-    if (properties.IsMiddleButtonPressed()) {
-        new_btns |= mmb_bit;
-    }
-    const uint8_t old_btns = _sapp.uwp.mouse_buttons;
-    const uint8_t chg_btns = new_btns ^ old_btns;
-
-    _sapp.uwp.mouse_buttons = new_btns;
-
-    sapp_event_type type = SAPP_EVENTTYPE_INVALID;
-    sapp_mousebutton btn = SAPP_MOUSEBUTTON_INVALID;
-    if (chg_btns & lmb_bit) {
-        btn = SAPP_MOUSEBUTTON_LEFT;
-        type = (new_btns & lmb_bit) ? SAPP_EVENTTYPE_MOUSE_DOWN : SAPP_EVENTTYPE_MOUSE_UP;
-    }
-    if (chg_btns & rmb_bit) {
-        btn = SAPP_MOUSEBUTTON_RIGHT;
-        type = (new_btns & rmb_bit) ? SAPP_EVENTTYPE_MOUSE_DOWN : SAPP_EVENTTYPE_MOUSE_UP;
-    }
-    if (chg_btns & mmb_bit) {
-        btn = SAPP_MOUSEBUTTON_MIDDLE;
-        type = (new_btns & mmb_bit) ? SAPP_EVENTTYPE_MOUSE_DOWN : SAPP_EVENTTYPE_MOUSE_UP;
-    }
-    if (type != SAPP_EVENTTYPE_INVALID) {
-        _sapp_uwp_mouse_event(type, btn, sender);
-    }
-}
-
-_SOKOL_PRIVATE void _sapp_uwp_key_event(sapp_event_type type, winrt::Windows::UI::Core::CoreWindow const& sender_window, winrt::Windows::UI::Core::KeyEventArgs const& args) {
-    auto key_status = args.KeyStatus();
-    uint32_t ext_scan_code = key_status.ScanCode | (key_status.IsExtendedKey ? 0x100 : 0);
-    if (_sapp_events_enabled() && (ext_scan_code < SAPP_MAX_KEYCODES)) {
-        _sapp_init_event(type);
-        _sapp.event.modifiers = _sapp_uwp_mods(sender_window);
-        _sapp.event.key_code = _sapp.keycodes[ext_scan_code];
-        _sapp.event.key_repeat = type == SAPP_EVENTTYPE_KEY_UP ? false : key_status.WasKeyDown;
-        _sapp_call_event(&_sapp.event);
-        /* check if a CLIPBOARD_PASTED event must be sent too */
-        if (_sapp.clipboard.enabled &&
-            (type == SAPP_EVENTTYPE_KEY_DOWN) &&
-            (_sapp.event.modifiers == SAPP_MODIFIER_CTRL) &&
-            (_sapp.event.key_code == SAPP_KEYCODE_V))
-        {
-            _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
-            _sapp_call_event(&_sapp.event);
-        }
-    }
-}
-
-_SOKOL_PRIVATE void _sapp_uwp_char_event(uint32_t c, bool repeat, winrt::Windows::UI::Core::CoreWindow const& sender_window) {
-    if (_sapp_events_enabled() && (c >= 32)) {
-        _sapp_init_event(SAPP_EVENTTYPE_CHAR);
-        _sapp.event.modifiers = _sapp_uwp_mods(sender_window);
-        _sapp.event.char_code = c;
-        _sapp.event.key_repeat = repeat;
-        _sapp_call_event(&_sapp.event);
-    }
-}
-
-_SOKOL_PRIVATE void _sapp_uwp_toggle_fullscreen(void) {
-    auto appView = winrt::Windows::UI::ViewManagement::ApplicationView::GetForCurrentView();
-    _sapp.fullscreen = appView.IsFullScreenMode();
-    if (!_sapp.fullscreen) {
-        appView.TryEnterFullScreenMode();
-    }
-    else {
-        appView.ExitFullScreenMode();
-    }
-    _sapp.fullscreen = appView.IsFullScreenMode();
-}
-
-namespace {/* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE) */
-
-// Controls all the DirectX device resources.
-class DeviceResources {
-public:
-    // Provides an interface for an application that owns DeviceResources to be notified of the device being lost or created.
-    interface IDeviceNotify {
-        virtual void OnDeviceLost() = 0;
-        virtual void OnDeviceRestored() = 0;
-    };
-
-    DeviceResources();
-    ~DeviceResources();
-    void SetWindow(winrt::Windows::UI::Core::CoreWindow const& window);
-    void SetLogicalSize(winrt::Windows::Foundation::Size logicalSize);
-    void SetCurrentOrientation(winrt::Windows::Graphics::Display::DisplayOrientations currentOrientation);
-    void SetDpi(float dpi);
-    void ValidateDevice();
-    void HandleDeviceLost();
-    void RegisterDeviceNotify(IDeviceNotify* deviceNotify);
-    void Trim();
-    void Present();
-
-private:
-
-    // Swapchain Rotation Matrices (Z-rotation)
-    static inline const DirectX::XMFLOAT4X4 DeviceResources::m_rotation0 = {
-        1.0f, 0.0f, 0.0f, 0.0f,
-        0.0f, 1.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 1.0f, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f
-    };
-    static inline const DirectX::XMFLOAT4X4 DeviceResources::m_rotation90 = {
-        0.0f, 1.0f, 0.0f, 0.0f,
-        -1.0f, 0.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 1.0f, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f
-    };
-    static inline const DirectX::XMFLOAT4X4 DeviceResources::m_rotation180 = {
-        -1.0f, 0.0f, 0.0f, 0.0f,
-        0.0f, -1.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 1.0f, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f
-    };
-    static inline const DirectX::XMFLOAT4X4 DeviceResources::m_rotation270 = {
-        0.0f, -1.0f, 0.0f, 0.0f,
-        1.0f, 0.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 1.0f, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f
-    };
-
-    void CreateDeviceResources();
-    void CreateWindowSizeDependentResources();
-    void UpdateRenderTargetSize();
-    DXGI_MODE_ROTATION ComputeDisplayRotation();
-    bool SdkLayersAvailable();
-
-    // Direct3D objects.
-    winrt::com_ptr<ID3D11Device3> m_d3dDevice;
-    winrt::com_ptr<ID3D11DeviceContext3> m_d3dContext;
-    winrt::com_ptr<IDXGISwapChain3> m_swapChain;
-
-    // Direct3D rendering objects. Required for 3D.
-    winrt::com_ptr<ID3D11Texture2D1> m_d3dRenderTarget;
-    winrt::com_ptr<ID3D11RenderTargetView1> m_d3dRenderTargetView;
-    winrt::com_ptr<ID3D11Texture2D1> m_d3dMSAARenderTarget;
-    winrt::com_ptr<ID3D11RenderTargetView1> m_d3dMSAARenderTargetView;
-    winrt::com_ptr<ID3D11Texture2D1> m_d3dDepthStencil;
-    winrt::com_ptr<ID3D11DepthStencilView> m_d3dDepthStencilView;
-    D3D11_VIEWPORT m_screenViewport = { };
-
-    // Cached reference to the Window.
-    winrt::agile_ref< winrt::Windows::UI::Core::CoreWindow> m_window;
-
-    // Cached device properties.
-    D3D_FEATURE_LEVEL m_d3dFeatureLevel = D3D_FEATURE_LEVEL_9_1;
-    winrt::Windows::Foundation::Size m_d3dRenderTargetSize = { };
-    winrt::Windows::Foundation::Size m_outputSize = { };
-    winrt::Windows::Foundation::Size m_logicalSize = { };
-    winrt::Windows::Graphics::Display::DisplayOrientations m_nativeOrientation = winrt::Windows::Graphics::Display::DisplayOrientations::None;
-    winrt::Windows::Graphics::Display::DisplayOrientations m_currentOrientation = winrt::Windows::Graphics::Display::DisplayOrientations::None;
-    float m_dpi = -1.0f;
-
-    // Transforms used for display orientation.
-    DirectX::XMFLOAT4X4 m_orientationTransform3D;
-
-    // The IDeviceNotify can be held directly as it owns the DeviceResources.
-    IDeviceNotify* m_deviceNotify = nullptr;
-};
-
-// Main entry point for our app. Connects the app with the Windows shell and handles application lifecycle events.
-struct App : winrt::implements<App, winrt::Windows::ApplicationModel::Core::IFrameworkViewSource, winrt::Windows::ApplicationModel::Core::IFrameworkView> {
-public:
-    // IFrameworkViewSource Methods
-    winrt::Windows::ApplicationModel::Core::IFrameworkView CreateView() { return *this; }
-
-    // IFrameworkView Methods.
-    virtual void Initialize(winrt::Windows::ApplicationModel::Core::CoreApplicationView const& applicationView);
-    virtual void SetWindow(winrt::Windows::UI::Core::CoreWindow const& window);
-    virtual void Load(winrt::hstring const& entryPoint);
-    virtual void Run();
-    virtual void Uninitialize();
-
-protected:
-    // Application lifecycle event handlers
-    void OnActivated(winrt::Windows::ApplicationModel::Core::CoreApplicationView const& applicationView, winrt::Windows::ApplicationModel::Activation::IActivatedEventArgs const& args);
-    void OnSuspending(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::ApplicationModel::SuspendingEventArgs const& args);
-    void OnResuming(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::Foundation::IInspectable const& args);
-
-    // Window event handlers
-    void OnWindowSizeChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::WindowSizeChangedEventArgs const& args);
-    void OnVisibilityChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::VisibilityChangedEventArgs const& args);
-
-    // Navigation event handlers
-    void OnBackRequested(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::UI::Core::BackRequestedEventArgs const& args);
-
-    // Input event handlers
-    void OnKeyDown(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::KeyEventArgs const& args);
-    void OnKeyUp(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::KeyEventArgs const& args);
-    void OnCharacterReceived(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::CharacterReceivedEventArgs const& args);
-
-    // Pointer event handlers
-    void OnPointerEntered(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args);
-    void OnPointerExited(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args);
-    void OnPointerPressed(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args);
-    void OnPointerReleased(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args);
-    void OnPointerMoved(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args);
-    void OnPointerWheelChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args);
-
-    // DisplayInformation event handlers.
-    void OnDpiChanged(winrt::Windows::Graphics::Display::DisplayInformation const& sender, winrt::Windows::Foundation::IInspectable const& args);
-    void OnOrientationChanged(winrt::Windows::Graphics::Display::DisplayInformation const& sender, winrt::Windows::Foundation::IInspectable const& args);
-    void OnDisplayContentsInvalidated(winrt::Windows::Graphics::Display::DisplayInformation const& sender, winrt::Windows::Foundation::IInspectable const& args);
-
-private:
-    std::unique_ptr<DeviceResources> m_deviceResources;
-    bool m_windowVisible = true;
-};
-
-DeviceResources::DeviceResources() {
-    CreateDeviceResources();
-}
-
-DeviceResources::~DeviceResources() {
-    // Cleanup Sokol Context
-    _sapp.d3d11.device = nullptr;
-    _sapp.d3d11.device_context = nullptr;
-}
-
-void DeviceResources::CreateDeviceResources() {
-    // This flag adds support for surfaces with a different color channel ordering
-    // than the API default. It is required for compatibility with Direct2D.
-    UINT creationFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
-
-    #if defined(_DEBUG)
-    if (SdkLayersAvailable()) {
-        // If the project is in a debug build, enable debugging via SDK Layers with this flag.
-        creationFlags |= D3D11_CREATE_DEVICE_DEBUG;
-    }
-    #endif
-
-    // This array defines the set of DirectX hardware feature levels this app will support.
-    // Note the ordering should be preserved.
-    // Don't forget to declare your application's minimum required feature level in its
-    // description.  All applications are assumed to support 9.1 unless otherwise stated.
-    D3D_FEATURE_LEVEL featureLevels[] = {
-        D3D_FEATURE_LEVEL_12_1,
-        D3D_FEATURE_LEVEL_12_0,
-        D3D_FEATURE_LEVEL_11_1,
-        D3D_FEATURE_LEVEL_11_0,
-        D3D_FEATURE_LEVEL_10_1,
-        D3D_FEATURE_LEVEL_10_0,
-        D3D_FEATURE_LEVEL_9_3,
-        D3D_FEATURE_LEVEL_9_2,
-        D3D_FEATURE_LEVEL_9_1
-    };
-
-    // Create the Direct3D 11 API device object and a corresponding context.
-    winrt::com_ptr<ID3D11Device> device;
-    winrt::com_ptr<ID3D11DeviceContext> context;
-
-    HRESULT hr = D3D11CreateDevice(
-        nullptr,                    // Specify nullptr to use the default adapter.
-        D3D_DRIVER_TYPE_HARDWARE,   // Create a device using the hardware graphics driver.
-        0,                          // Should be 0 unless the driver is D3D_DRIVER_TYPE_SOFTWARE.
-        creationFlags,              // Set debug and Direct2D compatibility flags.
-        featureLevels,              // List of feature levels this app can support.
-        ARRAYSIZE(featureLevels),   // Size of the list above.
-        D3D11_SDK_VERSION,          // Always set this to D3D11_SDK_VERSION for Microsoft Store apps.
-        device.put(),               // Returns the Direct3D device created.
-        &m_d3dFeatureLevel,         // Returns feature level of device created.
-        context.put()               // Returns the device immediate context.
-    );
-
-    if (FAILED(hr)) {
-        // If the initialization fails, fall back to the WARP device.
-        // For more information on WARP, see:
-        // https://go.microsoft.com/fwlink/?LinkId=286690
-        winrt::check_hresult(
-            D3D11CreateDevice(
-                nullptr,
-                D3D_DRIVER_TYPE_WARP, // Create a WARP device instead of a hardware device.
-                0,
-                creationFlags,
-                featureLevels,
-                ARRAYSIZE(featureLevels),
-                D3D11_SDK_VERSION,
-                device.put(),
-                &m_d3dFeatureLevel,
-                context.put()
-            )
-        );
-    }
-
-    // Store pointers to the Direct3D 11.3 API device and immediate context.
-    m_d3dDevice = device.as<ID3D11Device3>();
-    m_d3dContext = context.as<ID3D11DeviceContext3>();
-
-    // Setup Sokol Context
-    _sapp.d3d11.device = m_d3dDevice.get();
-    _sapp.d3d11.device_context = m_d3dContext.get();
-}
-
-void DeviceResources::CreateWindowSizeDependentResources() {
-    // Cleanup Sokol Context (these are non-owning raw pointers)
-    _sapp.d3d11.rt = nullptr;
-    _sapp.d3d11.rtv = nullptr;
-    _sapp.d3d11.msaa_rt = nullptr;
-    _sapp.d3d11.msaa_rtv = nullptr;
-    _sapp.d3d11.ds = nullptr;
-    _sapp.d3d11.dsv = nullptr;
-
-    // Clear the previous window size specific context.
-    ID3D11RenderTargetView* nullViews[] = { nullptr };
-    m_d3dContext->OMSetRenderTargets(ARRAYSIZE(nullViews), nullViews, nullptr);
-    // these are smart pointers, setting to nullptr will delete the objects
-    m_d3dRenderTarget = nullptr;
-    m_d3dRenderTargetView = nullptr;
-    m_d3dMSAARenderTarget = nullptr;
-    m_d3dMSAARenderTargetView = nullptr;
-    m_d3dDepthStencilView = nullptr;
-    m_d3dDepthStencil = nullptr;
-    m_d3dContext->Flush1(D3D11_CONTEXT_TYPE_ALL, nullptr);
-
-    UpdateRenderTargetSize();
-
-    // The width and height of the swap chain must be based on the window's
-    // natively-oriented width and height. If the window is not in the native
-    // orientation, the dimensions must be reversed.
-    DXGI_MODE_ROTATION displayRotation = ComputeDisplayRotation();
-
-    bool swapDimensions = displayRotation == DXGI_MODE_ROTATION_ROTATE90 || displayRotation == DXGI_MODE_ROTATION_ROTATE270;
-    m_d3dRenderTargetSize.Width = swapDimensions ? m_outputSize.Height : m_outputSize.Width;
-    m_d3dRenderTargetSize.Height = swapDimensions ? m_outputSize.Width : m_outputSize.Height;
-
-    if (m_swapChain != nullptr) {
-        // If the swap chain already exists, resize it.
-        HRESULT hr = m_swapChain->ResizeBuffers(
-            2, // Double-buffered swap chain.
-            lround(m_d3dRenderTargetSize.Width),
-            lround(m_d3dRenderTargetSize.Height),
-            DXGI_FORMAT_B8G8R8A8_UNORM,
-            0
-        );
-
-        if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
-            // If the device was removed for any reason, a new device and swap chain will need to be created.
-            HandleDeviceLost();
-
-            // Everything is set up now. Do not continue execution of this method. HandleDeviceLost will reenter this method
-            // and correctly set up the new device.
-            return;
-        }
-        else {
-            winrt::check_hresult(hr);
-        }
-    }
-    else {
-        // Otherwise, create a new one using the same adapter as the existing Direct3D device.
-        DXGI_SCALING scaling = (_sapp.uwp.dpi.content_scale == _sapp.uwp.dpi.window_scale) ? DXGI_SCALING_NONE : DXGI_SCALING_STRETCH;
-        DXGI_SWAP_CHAIN_DESC1 swapChainDesc = { 0 };
-
-        swapChainDesc.Width = lround(m_d3dRenderTargetSize.Width);      // Match the size of the window.
-        swapChainDesc.Height = lround(m_d3dRenderTargetSize.Height);
-        swapChainDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;              // This is the most common swap chain format.
-        swapChainDesc.Stereo = false;
-        swapChainDesc.SampleDesc.Count = 1;                             // Don't use multi-sampling.
-        swapChainDesc.SampleDesc.Quality = 0;
-        swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-        swapChainDesc.BufferCount = 2;                                  // Use double-buffering to minimize latency.
-        swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;    // All Microsoft Store apps must use this SwapEffect.
-        swapChainDesc.Flags = 0;
-        swapChainDesc.Scaling = scaling;
-        swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
-
-        // This sequence obtains the DXGI factory that was used to create the Direct3D device above.
-        winrt::com_ptr<IDXGIDevice3> dxgiDevice = m_d3dDevice.as<IDXGIDevice3>();
-        winrt::com_ptr<IDXGIAdapter> dxgiAdapter;
-        winrt::check_hresult(dxgiDevice->GetAdapter(dxgiAdapter.put()));
-        winrt::com_ptr<IDXGIFactory4> dxgiFactory;
-        winrt::check_hresult(dxgiAdapter->GetParent(__uuidof(IDXGIFactory4), dxgiFactory.put_void()));
-        winrt::com_ptr<IDXGISwapChain1> swapChain;
-        winrt::check_hresult(dxgiFactory->CreateSwapChainForCoreWindow(m_d3dDevice.get(), m_window.get().as<::IUnknown>().get(), &swapChainDesc, nullptr, swapChain.put()));
-        m_swapChain = swapChain.as<IDXGISwapChain3>();
-
-        // Ensure that DXGI does not queue more than one frame at a time. This both reduces latency and
-        // ensures that the application will only render after each VSync, minimizing power consumption.
-        winrt::check_hresult(dxgiDevice->SetMaximumFrameLatency(1));
-
-        // Setup Sokol Context
-        winrt::check_hresult(swapChain->GetDesc(&_sapp.d3d11.swap_chain_desc));
-        _sapp.d3d11.swap_chain = m_swapChain.as<IDXGISwapChain3>().detach();
-    }
-
-    // Set the proper orientation for the swap chain, and generate 2D and
-    // 3D matrix transformations for rendering to the rotated swap chain.
-    // Note the rotation angle for the 2D and 3D transforms are different.
-    // This is due to the difference in coordinate spaces.  Additionally,
-    // the 3D matrix is specified explicitly to avoid rounding errors.
-    switch (displayRotation) {
-        case DXGI_MODE_ROTATION_IDENTITY:
-            m_orientationTransform3D = m_rotation0;
-            break;
-
-        case DXGI_MODE_ROTATION_ROTATE90:
-            m_orientationTransform3D = m_rotation270;
-            break;
-
-        case DXGI_MODE_ROTATION_ROTATE180:
-            m_orientationTransform3D = m_rotation180;
-            break;
-
-        case DXGI_MODE_ROTATION_ROTATE270:
-            m_orientationTransform3D = m_rotation90;
-            break;
-    }
-    winrt::check_hresult(m_swapChain->SetRotation(displayRotation));
-
-    // Create a render target view of the swap chain back buffer.
-    winrt::check_hresult(m_swapChain->GetBuffer(0, IID_PPV_ARGS(&m_d3dRenderTarget)));
-    winrt::check_hresult(m_d3dDevice->CreateRenderTargetView1(m_d3dRenderTarget.get(), nullptr, m_d3dRenderTargetView.put()));
-
-    // Create MSAA texture and view if needed
-    if (_sapp.sample_count > 1) {
-        CD3D11_TEXTURE2D_DESC1 msaaTexDesc(
-            DXGI_FORMAT_B8G8R8A8_UNORM,
-            lround(m_d3dRenderTargetSize.Width),
-            lround(m_d3dRenderTargetSize.Height),
-            1,  // arraySize
-            1,  // mipLevels
-            D3D11_BIND_RENDER_TARGET,
-            D3D11_USAGE_DEFAULT,
-            0,  // cpuAccessFlags
-            _sapp.sample_count,
-            _sapp.sample_count > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0
-        );
-        winrt::check_hresult(m_d3dDevice->CreateTexture2D1(&msaaTexDesc, nullptr, m_d3dMSAARenderTarget.put()));
-        winrt::check_hresult(m_d3dDevice->CreateRenderTargetView1(m_d3dMSAARenderTarget.get(), nullptr, m_d3dMSAARenderTargetView.put()));
-    }
-
-    // Create a depth stencil view for use with 3D rendering if needed.
-    CD3D11_TEXTURE2D_DESC1 depthStencilDesc(
-        DXGI_FORMAT_D24_UNORM_S8_UINT,
-        lround(m_d3dRenderTargetSize.Width),
-        lround(m_d3dRenderTargetSize.Height),
-        1, // This depth stencil view has only one texture.
-        1, // Use a single mipmap level.
-        D3D11_BIND_DEPTH_STENCIL,
-        D3D11_USAGE_DEFAULT,
-        0,  // cpuAccessFlag
-        _sapp.sample_count,
-        _sapp.sample_count > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0
-    );
-    winrt::check_hresult(m_d3dDevice->CreateTexture2D1(&depthStencilDesc, nullptr, m_d3dDepthStencil.put()));
-
-    CD3D11_DEPTH_STENCIL_VIEW_DESC depthStencilViewDesc(D3D11_DSV_DIMENSION_TEXTURE2D);
-    winrt::check_hresult(m_d3dDevice->CreateDepthStencilView(m_d3dDepthStencil.get(), nullptr, m_d3dDepthStencilView.put()));
-
-    // Set sokol window and framebuffer sizes
-    _sapp.window_width = (int) m_logicalSize.Width;
-    _sapp.window_height = (int) m_logicalSize.Height;
-    _sapp.framebuffer_width = lround(m_d3dRenderTargetSize.Width);
-    _sapp.framebuffer_height = lround(m_d3dRenderTargetSize.Height);
-
-    // Setup Sokol Context
-    _sapp.d3d11.rt = m_d3dRenderTarget.as<ID3D11Texture2D>().get();
-    _sapp.d3d11.rtv = m_d3dRenderTargetView.as<ID3D11RenderTargetView>().get();
-    _sapp.d3d11.ds = m_d3dDepthStencil.as<ID3D11Texture2D>().get();
-    _sapp.d3d11.dsv = m_d3dDepthStencilView.get();
-    if (_sapp.sample_count > 1) {
-        _sapp.d3d11.msaa_rt = m_d3dMSAARenderTarget.as<ID3D11Texture2D>().get();
-        _sapp.d3d11.msaa_rtv = m_d3dMSAARenderTargetView.as<ID3D11RenderTargetView>().get();
-    }
-
-    // Sokol app is now valid
-    _sapp.valid = true;
-}
-
-// Determine the dimensions of the render target and whether it will be scaled down.
-void DeviceResources::UpdateRenderTargetSize() {
-    // Calculate the necessary render target size in pixels.
-    m_outputSize.Width = m_logicalSize.Width * _sapp.uwp.dpi.content_scale;
-    m_outputSize.Height = m_logicalSize.Height * _sapp.uwp.dpi.content_scale;
-
-    // Prevent zero size DirectX content from being created.
-    m_outputSize.Width = std::max(m_outputSize.Width, 1.0f);
-    m_outputSize.Height = std::max(m_outputSize.Height, 1.0f);
-}
-
-// This method is called when the CoreWindow is created (or re-created).
-void DeviceResources::SetWindow(winrt::Windows::UI::Core::CoreWindow const& window) {
-    auto currentDisplayInformation = winrt::Windows::Graphics::Display::DisplayInformation::GetForCurrentView();
-    m_window = window;
-    m_logicalSize = winrt::Windows::Foundation::Size(window.Bounds().Width, window.Bounds().Height);
-    m_nativeOrientation = currentDisplayInformation.NativeOrientation();
-    m_currentOrientation = currentDisplayInformation.CurrentOrientation();
-    m_dpi = currentDisplayInformation.LogicalDpi();
-    _sapp_uwp_configure_dpi(m_dpi);
-    CreateWindowSizeDependentResources();
-}
-
-// This method is called in the event handler for the SizeChanged event.
-void DeviceResources::SetLogicalSize(winrt::Windows::Foundation::Size logicalSize) {
-    if (m_logicalSize != logicalSize) {
-        m_logicalSize = logicalSize;
-        CreateWindowSizeDependentResources();
-    }
-}
-
-// This method is called in the event handler for the DpiChanged event.
-void DeviceResources::SetDpi(float dpi) {
-    if (dpi != m_dpi) {
-        m_dpi = dpi;
-        _sapp_uwp_configure_dpi(m_dpi);
-        // When the display DPI changes, the logical size of the window (measured in Dips) also changes and needs to be updated.
-        auto window = m_window.get();
-        m_logicalSize = winrt::Windows::Foundation::Size(window.Bounds().Width, window.Bounds().Height);
-        CreateWindowSizeDependentResources();
-    }
-}
-
-// This method is called in the event handler for the OrientationChanged event.
-void DeviceResources::SetCurrentOrientation(winrt::Windows::Graphics::Display::DisplayOrientations currentOrientation) {
-    if (m_currentOrientation != currentOrientation) {
-        m_currentOrientation = currentOrientation;
-        CreateWindowSizeDependentResources();
-    }
-}
-
-// This method is called in the event handler for the DisplayContentsInvalidated event.
-void DeviceResources::ValidateDevice() {
-    // The D3D Device is no longer valid if the default adapter changed since the device
-    // was created or if the device has been removed.
-
-    // First, get the information for the default adapter from when the device was created.
-    winrt::com_ptr<IDXGIDevice3> dxgiDevice = m_d3dDevice.as< IDXGIDevice3>();
-    winrt::com_ptr<IDXGIAdapter> deviceAdapter;
-    winrt::check_hresult(dxgiDevice->GetAdapter(deviceAdapter.put()));
-    winrt::com_ptr<IDXGIFactory4> deviceFactory;
-    winrt::check_hresult(deviceAdapter->GetParent(IID_PPV_ARGS(&deviceFactory)));
-    winrt::com_ptr<IDXGIAdapter1> previousDefaultAdapter;
-    winrt::check_hresult(deviceFactory->EnumAdapters1(0, previousDefaultAdapter.put()));
-    DXGI_ADAPTER_DESC1 previousDesc;
-    winrt::check_hresult(previousDefaultAdapter->GetDesc1(&previousDesc));
-
-    // Next, get the information for the current default adapter.
-    winrt::com_ptr<IDXGIFactory4> currentFactory;
-    winrt::check_hresult(CreateDXGIFactory1(IID_PPV_ARGS(&currentFactory)));
-    winrt::com_ptr<IDXGIAdapter1> currentDefaultAdapter;
-    winrt::check_hresult(currentFactory->EnumAdapters1(0, currentDefaultAdapter.put()));
-    DXGI_ADAPTER_DESC1 currentDesc;
-    winrt::check_hresult(currentDefaultAdapter->GetDesc1(&currentDesc));
-
-    // If the adapter LUIDs don't match, or if the device reports that it has been removed,
-    // a new D3D device must be created.
-    if (previousDesc.AdapterLuid.LowPart != currentDesc.AdapterLuid.LowPart ||
-        previousDesc.AdapterLuid.HighPart != currentDesc.AdapterLuid.HighPart ||
-        FAILED(m_d3dDevice->GetDeviceRemovedReason()))
-    {
-        // Release references to resources related to the old device.
-        dxgiDevice = nullptr;
-        deviceAdapter = nullptr;
-        deviceFactory = nullptr;
-        previousDefaultAdapter = nullptr;
-
-        // Create a new device and swap chain.
-        HandleDeviceLost();
-    }
-}
-
-// Recreate all device resources and set them back to the current state.
-void DeviceResources::HandleDeviceLost() {
-    m_swapChain = nullptr;
-    if (m_deviceNotify != nullptr) {
-        m_deviceNotify->OnDeviceLost();
-    }
-    CreateDeviceResources();
-    CreateWindowSizeDependentResources();
-    if (m_deviceNotify != nullptr) {
-        m_deviceNotify->OnDeviceRestored();
-    }
-}
-
-// Register our DeviceNotify to be informed on device lost and creation.
-void DeviceResources::RegisterDeviceNotify(IDeviceNotify* deviceNotify) {
-    m_deviceNotify = deviceNotify;
-}
-
-// Call this method when the app suspends. It provides a hint to the driver that the app
-// is entering an idle state and that temporary buffers can be reclaimed for use by other apps.
-void DeviceResources::Trim() {
-    m_d3dDevice.as<IDXGIDevice3>()->Trim();
-}
-
-// Present the contents of the swap chain to the screen.
-void DeviceResources::Present() {
-
-    // MSAA resolve if needed
-    if (_sapp.sample_count > 1) {
-        m_d3dContext->ResolveSubresource(m_d3dRenderTarget.get(), 0, m_d3dMSAARenderTarget.get(), 0, DXGI_FORMAT_B8G8R8A8_UNORM);
-        m_d3dContext->DiscardView1(m_d3dMSAARenderTargetView.get(), nullptr, 0);
-    }
-
-    // The first argument instructs DXGI to block until VSync, putting the application
-    // to sleep until the next VSync. This ensures we don't waste any cycles rendering
-    // frames that will never be displayed to the screen.
-    DXGI_PRESENT_PARAMETERS parameters = { 0 };
-    HRESULT hr = m_swapChain->Present1(1, 0, &parameters);
-
-    // Discard the contents of the render target.
-    // This is a valid operation only when the existing contents will be entirely
-    // overwritten. If dirty or scroll rects are used, this call should be removed.
-    m_d3dContext->DiscardView1(m_d3dRenderTargetView.get(), nullptr, 0);
-
-    // Discard the contents of the depth stencil.
-    m_d3dContext->DiscardView1(m_d3dDepthStencilView.get(), nullptr, 0);
-
-    // If the device was removed either by a disconnection or a driver upgrade, we
-    // must recreate all device resources.
-    if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
-        HandleDeviceLost();
-    }
-    else {
-        winrt::check_hresult(hr);
-    }
-}
-
-// This method determines the rotation between the display device's native orientation and the
-// current display orientation.
-DXGI_MODE_ROTATION DeviceResources::ComputeDisplayRotation() {
-    DXGI_MODE_ROTATION rotation = DXGI_MODE_ROTATION_UNSPECIFIED;
-
-    // Note: NativeOrientation can only be Landscape or Portrait even though
-    // the DisplayOrientations enum has other values.
-    switch (m_nativeOrientation) {
-        case winrt::Windows::Graphics::Display::DisplayOrientations::Landscape:
-            switch (m_currentOrientation) {
-                case winrt::Windows::Graphics::Display::DisplayOrientations::Landscape:
-                    rotation = DXGI_MODE_ROTATION_IDENTITY;
-                    break;
-
-                case winrt::Windows::Graphics::Display::DisplayOrientations::Portrait:
-                    rotation = DXGI_MODE_ROTATION_ROTATE270;
-                    break;
-
-                case winrt::Windows::Graphics::Display::DisplayOrientations::LandscapeFlipped:
-                    rotation = DXGI_MODE_ROTATION_ROTATE180;
-                    break;
-
-                case winrt::Windows::Graphics::Display::DisplayOrientations::PortraitFlipped:
-                    rotation = DXGI_MODE_ROTATION_ROTATE90;
-                    break;
-            }
-            break;
-
-        case winrt::Windows::Graphics::Display::DisplayOrientations::Portrait:
-            switch (m_currentOrientation) {
-                case winrt::Windows::Graphics::Display::DisplayOrientations::Landscape:
-                    rotation = DXGI_MODE_ROTATION_ROTATE90;
-                    break;
-
-                case winrt::Windows::Graphics::Display::DisplayOrientations::Portrait:
-                    rotation = DXGI_MODE_ROTATION_IDENTITY;
-                    break;
-
-                case winrt::Windows::Graphics::Display::DisplayOrientations::LandscapeFlipped:
-                    rotation = DXGI_MODE_ROTATION_ROTATE270;
-                    break;
-
-                case winrt::Windows::Graphics::Display::DisplayOrientations::PortraitFlipped:
-                    rotation = DXGI_MODE_ROTATION_ROTATE180;
-                    break;
-            }
-            break;
-    }
-    return rotation;
-}
-
-// Check for SDK Layer support.
-bool DeviceResources::SdkLayersAvailable() {
-    #if defined(_DEBUG)
-        HRESULT hr = D3D11CreateDevice(
-            nullptr,
-            D3D_DRIVER_TYPE_NULL,       // There is no need to create a real hardware device.
-            0,
-            D3D11_CREATE_DEVICE_DEBUG,  // Check for the SDK layers.
-            nullptr,                    // Any feature level will do.
-            0,
-            D3D11_SDK_VERSION,          // Always set this to D3D11_SDK_VERSION for Microsoft Store apps.
-            nullptr,                    // No need to keep the D3D device reference.
-            nullptr,                    // No need to know the feature level.
-            nullptr                     // No need to keep the D3D device context reference.
-        );
-        return SUCCEEDED(hr);
-    #else
-        return false;
-    #endif
-}
-
-// The first method called when the IFrameworkView is being created.
-void App::Initialize(winrt::Windows::ApplicationModel::Core::CoreApplicationView const& applicationView) {
-    // Register event handlers for app lifecycle. This example includes Activated, so that we
-    // can make the CoreWindow active and start rendering on the window.
-    applicationView.Activated({ this, &App::OnActivated });
-
-    winrt::Windows::ApplicationModel::Core::CoreApplication::Suspending({ this, &App::OnSuspending });
-    winrt::Windows::ApplicationModel::Core::CoreApplication::Resuming({ this, &App::OnResuming });
-
-    // At this point we have access to the device.
-    // We can create the device-dependent resources.
-    m_deviceResources = std::make_unique<DeviceResources>();
-}
-
-// Called when the CoreWindow object is created (or re-created).
-void App::SetWindow(winrt::Windows::UI::Core::CoreWindow const& window) {
-    window.SizeChanged({ this, &App::OnWindowSizeChanged });
-    window.VisibilityChanged({ this, &App::OnVisibilityChanged });
-
-    window.KeyDown({ this, &App::OnKeyDown });
-    window.KeyUp({ this, &App::OnKeyUp });
-    window.CharacterReceived({ this, &App::OnCharacterReceived });
-
-    window.PointerEntered({ this, &App::OnPointerEntered });
-    window.PointerExited({ this, &App::OnPointerExited });
-    window.PointerPressed({ this, &App::OnPointerPressed });
-    window.PointerReleased({ this, &App::OnPointerReleased });
-    window.PointerMoved({ this, &App::OnPointerMoved });
-    window.PointerWheelChanged({ this, &App::OnPointerWheelChanged });
-
-    auto currentDisplayInformation = winrt::Windows::Graphics::Display::DisplayInformation::GetForCurrentView();
-
-    currentDisplayInformation.DpiChanged({ this, &App::OnDpiChanged });
-    currentDisplayInformation.OrientationChanged({ this, &App::OnOrientationChanged });
-    winrt::Windows::Graphics::Display::DisplayInformation::DisplayContentsInvalidated({ this, &App::OnDisplayContentsInvalidated });
-
-    winrt::Windows::UI::Core::SystemNavigationManager::GetForCurrentView().BackRequested({ this, &App::OnBackRequested });
-
-    m_deviceResources->SetWindow(window);
-}
-
-// Initializes scene resources, or loads a previously saved app state.
-void App::Load(winrt::hstring const& entryPoint) {
-    _SOKOL_UNUSED(entryPoint);
-}
-
-// This method is called after the window becomes active.
-void App::Run() {
-    // NOTE: UWP will simply terminate an application, it's not possible to detect when an application is being closed
-    while (true) {
-        if (m_windowVisible) {
-            _sapp_timing_measure(&_sapp.timing);
-            winrt::Windows::UI::Core::CoreWindow::GetForCurrentThread().Dispatcher().ProcessEvents(winrt::Windows::UI::Core::CoreProcessEventsOption::ProcessAllIfPresent);
-            _sapp_frame();
-            m_deviceResources->Present();
-        }
-        else {
-            winrt::Windows::UI::Core::CoreWindow::GetForCurrentThread().Dispatcher().ProcessEvents(winrt::Windows::UI::Core::CoreProcessEventsOption::ProcessOneAndAllPending);
-        }
-    }
-}
-
-// Required for IFrameworkView.
-// Terminate events do not cause Uninitialize to be called. It will be called if your IFrameworkView
-// class is torn down while the app is in the foreground.
-void App::Uninitialize() {
-    // empty
-}
-
-// Application lifecycle event handlers.
-void App::OnActivated(winrt::Windows::ApplicationModel::Core::CoreApplicationView const& applicationView, winrt::Windows::ApplicationModel::Activation::IActivatedEventArgs const& args) {
-    _SOKOL_UNUSED(args);
-    _SOKOL_UNUSED(applicationView);
-    auto appView = winrt::Windows::UI::ViewManagement::ApplicationView::GetForCurrentView();
-    const float window_width = (float)_sapp_def(_sapp.desc.width, _SAPP_FALLBACK_DEFAULT_WINDOW_WIDTH);
-    const float window_height = (float)_sapp_def(_sapp.desc.height, _SAPP_FALLBACK_DEFAULT_WINDOW_HEIGHT);
-    auto targetSize = winrt::Windows::Foundation::Size(window_width, window_height);
-    winrt::Windows::UI::ViewManagement::ApplicationView::PreferredLaunchViewSize(targetSize);
-    winrt::Windows::UI::ViewManagement::ApplicationView::PreferredLaunchWindowingMode(winrt::Windows::UI::ViewManagement::ApplicationViewWindowingMode::PreferredLaunchViewSize);
-    appView.SetPreferredMinSize(targetSize);
-    appView.TryResizeView(targetSize);
-
-    // Disabling this since it can only append the title to the app name (Title - Appname).
-    // There's no way of just setting a string to be the window title.
-    //appView.Title(_sapp.window_title_wide);
-
-    // Run() won't start until the CoreWindow is activated.
-    winrt::Windows::UI::Core::CoreWindow::GetForCurrentThread().Activate();
-    if (_sapp.desc.fullscreen) {
-        appView.TryEnterFullScreenMode();
-    }
-    _sapp.fullscreen = appView.IsFullScreenMode();
-}
-
-void App::OnSuspending(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::ApplicationModel::SuspendingEventArgs const& args) {
-    _SOKOL_UNUSED(sender);
-    _SOKOL_UNUSED(args);
-    _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_SUSPENDED);
-}
-
-void App::OnResuming(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::Foundation::IInspectable const& args) {
-    _SOKOL_UNUSED(args);
-    _SOKOL_UNUSED(sender);
-    _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESUMED);
-}
-
-void App::OnWindowSizeChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::WindowSizeChangedEventArgs const& args) {
-    _SOKOL_UNUSED(args);
-    m_deviceResources->SetLogicalSize(winrt::Windows::Foundation::Size(sender.Bounds().Width, sender.Bounds().Height));
-    _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESIZED);
-}
-
-void App::OnVisibilityChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::VisibilityChangedEventArgs const& args) {
-    _SOKOL_UNUSED(sender);
-    m_windowVisible = args.Visible();
-    _sapp_win32_uwp_app_event(m_windowVisible ? SAPP_EVENTTYPE_RESTORED : SAPP_EVENTTYPE_ICONIFIED);
-}
-
-void App::OnBackRequested(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::UI::Core::BackRequestedEventArgs const& args) {
-    _SOKOL_UNUSED(sender);
-    args.Handled(true);
-}
-
-void App::OnKeyDown(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::KeyEventArgs const& args) {
-    auto status = args.KeyStatus();
-    _sapp_uwp_key_event(SAPP_EVENTTYPE_KEY_DOWN, sender, args);
-}
-
-void App::OnKeyUp(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::KeyEventArgs const& args) {
-    auto status = args.KeyStatus();
-    _sapp_uwp_key_event(SAPP_EVENTTYPE_KEY_UP, sender, args);
-}
-
-void App::OnCharacterReceived(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::CharacterReceivedEventArgs const& args) {
-    _sapp_uwp_char_event(args.KeyCode(), args.KeyStatus().WasKeyDown, sender);
-}
-
-void App::OnPointerEntered(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args) {
-    _SOKOL_UNUSED(args);
-    _sapp.uwp.mouse_tracked = true;
-    _sapp_uwp_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, sender);
-}
-
-void App::OnPointerExited(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args) {
-    _SOKOL_UNUSED(args);
-    _sapp.uwp.mouse_tracked = false;
-    _sapp_uwp_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, sender);
-}
-
-void App::OnPointerPressed(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args) {
-    _sapp_uwp_extract_mouse_button_events(sender, args);
-}
-
-// NOTE: for some reason this event handler is never called??
-void App::OnPointerReleased(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args) {
-    _sapp_uwp_extract_mouse_button_events(sender, args);
-}
-
-void App::OnPointerMoved(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args) {
-    auto position = args.CurrentPoint().Position();
-    const float new_x = (float)(int)(position.X * _sapp.uwp.dpi.mouse_scale + 0.5f);
-    const float new_y = (float)(int)(position.Y * _sapp.uwp.dpi.mouse_scale + 0.5f);
-    // don't update dx/dy in the very first event
-    if (_sapp.mouse.pos_valid) {
-        _sapp.mouse.dx = new_x - _sapp.mouse.x;
-        _sapp.mouse.dy = new_y - _sapp.mouse.y;
-    }
-    _sapp.mouse.x = new_x;
-    _sapp.mouse.y = new_y;
-    _sapp.mouse.pos_valid = true;
-    if (!_sapp.uwp.mouse_tracked) {
-        _sapp.uwp.mouse_tracked = true;
-        _sapp_uwp_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, sender);
-    }
-    _sapp_uwp_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, sender);
-
-    // HACK for detecting multiple mouse button presses
-    _sapp_uwp_extract_mouse_button_events(sender, args);
-}
-
-void App::OnPointerWheelChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args) {
-    auto properties = args.CurrentPoint().Properties();
-    _sapp_uwp_scroll_event((float)properties.MouseWheelDelta(), properties.IsHorizontalMouseWheel(), sender);
-}
-
-void App::OnDpiChanged(winrt::Windows::Graphics::Display::DisplayInformation const& sender, winrt::Windows::Foundation::IInspectable const& args) {
-    // NOTE: UNTESTED
-    _SOKOL_UNUSED(args);
-    m_deviceResources->SetDpi(sender.LogicalDpi());
-    _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESIZED);
-}
-
-void App::OnOrientationChanged(winrt::Windows::Graphics::Display::DisplayInformation const& sender, winrt::Windows::Foundation::IInspectable const& args) {
-    // NOTE: UNTESTED
-    _SOKOL_UNUSED(args);
-    m_deviceResources->SetCurrentOrientation(sender.CurrentOrientation());
-    _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESIZED);
-}
-
-void App::OnDisplayContentsInvalidated(winrt::Windows::Graphics::Display::DisplayInformation const& sender, winrt::Windows::Foundation::IInspectable const& args) {
-    // NOTE: UNTESTED
-    _SOKOL_UNUSED(args);
-    _SOKOL_UNUSED(sender);
-    m_deviceResources->ValidateDevice();
-}
-
-} /* End empty namespace */
-
-_SOKOL_PRIVATE void _sapp_uwp_run(const sapp_desc* desc) {
-    _sapp_init_state(desc);
-    _sapp_win32_uwp_init_keytable();
-    _sapp_win32_uwp_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
-    winrt::Windows::ApplicationModel::Core::CoreApplication::Run(winrt::make<App>());
-}
-
-#if !defined(SOKOL_NO_ENTRY)
-#if defined(UNICODE)
-int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPWSTR lpCmdLine, _In_ int nCmdShow) {
-#else
-int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
-#endif
-    _SOKOL_UNUSED(hInstance);
-    _SOKOL_UNUSED(hPrevInstance);
-    _SOKOL_UNUSED(lpCmdLine);
-    _SOKOL_UNUSED(nCmdShow);
-    sapp_desc desc = sokol_main(0, nullptr);
-    _sapp_uwp_run(&desc);
-    return 0;
-}
-#endif /* SOKOL_NO_ENTRY */
-#endif /* _SAPP_UWP */
 
 //  █████  ███    ██ ██████  ██████   ██████  ██ ██████
 // ██   ██ ████   ██ ██   ██ ██   ██ ██    ██ ██ ██   ██
@@ -11960,8 +10866,6 @@ SOKOL_API_IMPL void sapp_run(const sapp_desc* desc) {
         _sapp_emsc_run(desc);
     #elif defined(_SAPP_WIN32)
         _sapp_win32_run(desc);
-    #elif defined(_SAPP_UWP)
-        _sapp_uwp_run(desc);
     #elif defined(_SAPP_LINUX)
         _sapp_linux_run(desc);
     #else
@@ -12106,8 +11010,6 @@ SOKOL_API_IMPL void sapp_toggle_fullscreen(void) {
     _sapp_macos_toggle_fullscreen();
     #elif defined(_SAPP_WIN32)
     _sapp_win32_toggle_fullscreen();
-    #elif defined(_SAPP_UWP)
-    _sapp_uwp_toggle_fullscreen();
     #elif defined(_SAPP_LINUX)
     _sapp_x11_toggle_fullscreen();
     #endif
@@ -12122,8 +11024,6 @@ SOKOL_API_IMPL void sapp_show_mouse(bool show) {
         _sapp_win32_update_cursor(_sapp.mouse.current_cursor, show, false);
         #elif defined(_SAPP_LINUX)
         _sapp_x11_update_cursor(_sapp.mouse.current_cursor, show);
-        #elif defined(_SAPP_UWP)
-        _sapp_uwp_update_cursor(_sapp.mouse.current_cursor, show);
         #elif defined(_SAPP_EMSCRIPTEN)
         _sapp_emsc_update_cursor(_sapp.mouse.current_cursor, show);
         #endif
@@ -12162,8 +11062,6 @@ SOKOL_API_IMPL void sapp_set_mouse_cursor(sapp_mouse_cursor cursor) {
         _sapp_win32_update_cursor(cursor, _sapp.mouse.shown, false);
         #elif defined(_SAPP_LINUX)
         _sapp_x11_update_cursor(cursor, _sapp.mouse.shown);
-        #elif defined(_SAPP_UWP)
-        _sapp_uwp_update_cursor(cursor, _sapp.mouse.shown);
         #elif defined(_SAPP_EMSCRIPTEN)
         _sapp_emsc_update_cursor(cursor, _sapp.mouse.shown);
         #endif
