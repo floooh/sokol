@@ -1500,13 +1500,53 @@ typedef struct sapp_allocator {
 } sapp_allocator;
 
 /*
+    sapp_log_item
+
+    Log items are defined via X-Macros and expanded to an enum
+    'sapp_log_item', and in debug mode to corresponding
+    human readable error messages.
+*/
+#define _SAPP_LOG_ITEMS \
+    _SAPP_LOGITEM_XMACRO(OK, "Ok") \
+    _SAPP_LOGITEM_XMACRO(MALLOC_FAILED, "memory allocation failed") \
+    _SAPP_LOGITEM_XMACRO(MACOS_INVALID_NSOPENGL_PROFILE, "macos: invalid NSOpenGLProfile (valid choices are 1.0, 3.2 and 4.1)") \
+    _SAPP_LOGITEM_XMACRO(WIN32_LOAD_OPENGL32_DLL_FAILED, "failed loading opengl32.dll") \
+    _SAPP_LOGITEM_XMACRO(WIN32_CREATE_HELPER_WINDOW_FAILED, "failed to create helper window") \
+    _SAPP_LOGITEM_XMACRO(WIN32_HELPER_WINDOW_GETDC_FAILED, "failed to get helper window DC") \
+    _SAPP_LOGITEM_XMACRO(WIN32_DUMMY_CONTEXT_SET_PIXELFORMAT_FAILED, "failed to set pixel format for dummy GL context") \
+    _SAPP_LOGITEM_XMACRO(WIN32_CREATE_DUMMY_CONTEXT_FAILED, "failed to create dummy GL context") \
+    _SAPP_LOGITEM_XMACRO(WIN32_DUMMY_CONTEXT_MAKE_CURRENT_FAILED, "failed to make dummy GL context current") \
+    _SAPP_LOGITEM_XMACRO(WIN32_GET_PIXELFORMAT_ATTRIB_FAILED, "failed to get WGL pixel format attribute") \
+    _SAPP_LOGITEM_XMACRO(WIN32_WGL_FIND_PIXELFORMAT_FAILED, "failed to find matching WGL pixel format") \
+    _SAPP_LOGITEM_XMACRO(WIN32_WGL_DESCRIBE_PIXELFORMAT_FAILED, "failed to get pixel format descriptor") \
+    _SAPP_LOGITEM_XMACRO(WIN32_WGL_SET_PIXELFORMAT_FAILED, "failed to set selected pixel format") \
+    _SAPP_LOGITEM_XMACRO(WIN32_WGL_ARB_CREATE_CONTEXT_REQUIRED, "ARB_create_context required") \
+    _SAPP_LOGITEM_XMACRO(WIN32_WGL_ARB_CREATE_CONTEXT_PROFILE_REQUIRED, "ARB_create_context_profile required") \
+
+
+#define _SAPP_LOGITEM_XMACRO(item,msg) SAPP_LOGITEM_##item,
+typedef enum sapp_log_item {
+    _SAPP_LOG_ITEMS
+} sapp_log_items;
+
+/*
     sapp_logger
 
-    Used in sapp_desc to provide custom log callbacks to sokol_app.h.
-    Default behavior is SOKOL_LOG(message).
+    Used in sapp_desc to provide a logging function. Please be aware that
+    without logging function, sokol-app will be completely silent, e.g. it will
+    not report errors or warnings. For maximum error verbosity, compile in
+    debug mode (e.g. NDEBUG *not* defined) and install a logger (for instance
+    the standard logging function from sokol_log.h).
 */
 typedef struct sapp_logger {
-    void (*log_cb)(const char* message, void* user_data);
+    void (*func)(
+        const char* tag,                // always "sapp"
+        uint32_t log_level,             // 0=panic, 1=error, 2=warning, 3=info
+        uint32_t log_item_id,           // SAPP_LOGITEM_*
+        const char* message_or_null,    // a message string, may be nullptr in release mode
+        uint32_t line_nr,               // line number in sokol_app.h
+        const char* filename_or_null,   // source filename, may be nullptr in release mode
+        void* user_data);
     void* user_data;
 } sapp_logger;
 
@@ -1515,14 +1555,12 @@ typedef struct sapp_desc {
     void (*frame_cb)(void);
     void (*cleanup_cb)(void);
     void (*event_cb)(const sapp_event*);
-    void (*fail_cb)(const char*);
 
     void* user_data;                        // these are the user-provided callbacks with user data
     void (*init_userdata_cb)(void*);
     void (*frame_userdata_cb)(void*);
     void (*cleanup_userdata_cb)(void*);
     void (*event_userdata_cb)(const sapp_event*, void*);
-    void (*fail_userdata_cb)(const char*, void*);
 
     int width;                          // the preferred width of the window / canvas
     int height;                         // the preferred height of the window / canvas
@@ -2765,31 +2803,6 @@ _SOKOL_PRIVATE void _sapp_free(void* ptr) {
 // ██   ██ ███████ ███████ ██      ███████ ██   ██ ███████
 //
 // >>helpers
-#if defined(SOKOL_DEBUG)
-_SOKOL_PRIVATE void _sapp_log(const char* msg) {
-    SOKOL_ASSERT(msg);
-    if (_sapp.desc.logger.log_cb) {
-        _sapp.desc.logger.log_cb(msg, _sapp.desc.logger.user_data);
-    }
-    else {
-        SOKOL_LOG(msg);
-    }
-}
-#endif
-
-_SOKOL_PRIVATE void _sapp_fail(const char* msg) {
-    if (_sapp.desc.fail_cb) {
-        _sapp.desc.fail_cb(msg);
-    }
-    else if (_sapp.desc.fail_userdata_cb) {
-        _sapp.desc.fail_userdata_cb(msg, _sapp.desc.user_data);
-    }
-    else {
-        SAPP_LOG(msg);
-    }
-    SOKOL_ABORT();
-}
-
 _SOKOL_PRIVATE void _sapp_call_init(void) {
     if (_sapp.desc.init_cb) {
         _sapp.desc.init_cb();
@@ -3684,7 +3697,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
             case 32: attrs[i++] = NSOpenGLProfileVersion3_2Core; break;
             case 41: attrs[i++] = NSOpenGLProfileVersion4_1Core; break;
             default:
-                _sapp_fail("Invalid NSOpenGLProfile (valid choices are 1.0, 3.2, and 4.1)\n");
+                _SAPP_PANIC(INVALID_NSOPENGL_PROFILE);
         }
         attrs[i++] = NSOpenGLPFAColorSize; attrs[i++] = 24;
         attrs[i++] = NSOpenGLPFAAlphaSize; attrs[i++] = 8;
@@ -6320,7 +6333,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_present(bool do_not_wait) {
 _SOKOL_PRIVATE void _sapp_wgl_init(void) {
     _sapp.wgl.opengl32 = LoadLibraryA("opengl32.dll");
     if (!_sapp.wgl.opengl32) {
-        _sapp_fail("Failed to load opengl32.dll\n");
+        _SAPP_PANIC(WIN32_LOAD_OPENGL32_DLL_FAILED);
     }
     SOKOL_ASSERT(_sapp.wgl.opengl32);
     _sapp.wgl.CreateContext = (PFN_wglCreateContext)(void*) GetProcAddress(_sapp.wgl.opengl32, "wglCreateContext");
@@ -6343,7 +6356,7 @@ _SOKOL_PRIVATE void _sapp_wgl_init(void) {
         GetModuleHandleW(NULL),
         NULL);
     if (!_sapp.wgl.msg_hwnd) {
-        _sapp_fail("Win32: failed to create helper window!\n");
+        _SAPP_PANIC(WIN32_CREATE_HELPER_WINDOW_FAILED);
     }
     SOKOL_ASSERT(_sapp.wgl.msg_hwnd);
     ShowWindow(_sapp.wgl.msg_hwnd, SW_HIDE);
@@ -6354,7 +6367,7 @@ _SOKOL_PRIVATE void _sapp_wgl_init(void) {
     }
     _sapp.wgl.msg_dc = GetDC(_sapp.wgl.msg_hwnd);
     if (!_sapp.wgl.msg_dc) {
-        _sapp_fail("Win32: failed to obtain helper window DC!\n");
+        _SAPP_PANIC(WIN32_HELPER_WINDOW_GETDC_FAILED)
     }
 }
 
@@ -6414,14 +6427,14 @@ _SOKOL_PRIVATE void _sapp_wgl_load_extensions(void) {
     pfd.iPixelType = PFD_TYPE_RGBA;
     pfd.cColorBits = 24;
     if (!SetPixelFormat(_sapp.wgl.msg_dc, ChoosePixelFormat(_sapp.wgl.msg_dc, &pfd), &pfd)) {
-        _sapp_fail("WGL: failed to set pixel format for dummy context\n");
+        _SAPP_PANIC(WIN32_DUMMY_CONTEXT_SET_PIXELFORMAT_FAILED);
     }
     HGLRC rc = _sapp.wgl.CreateContext(_sapp.wgl.msg_dc);
     if (!rc) {
-        _sapp_fail("WGL: Failed to create dummy context\n");
+        _SAPP_PANIC(WIN32_CREATE_DUMMY_CONTEXT_FAILED);
     }
     if (!_sapp.wgl.MakeCurrent(_sapp.wgl.msg_dc, rc)) {
-        _sapp_fail("WGL: Failed to make context current\n");
+        _SAPP_PANIC(WIN32_DUMMY_CONTEXT_MAKE_CURRENT_FAILED);
     }
     _sapp.wgl.GetExtensionsStringEXT = (PFNWGLGETEXTENSIONSSTRINGEXTPROC)(void*) _sapp.wgl.GetProcAddress("wglGetExtensionsStringEXT");
     _sapp.wgl.GetExtensionsStringARB = (PFNWGLGETEXTENSIONSSTRINGARBPROC)(void*) _sapp.wgl.GetProcAddress("wglGetExtensionsStringARB");
@@ -6441,7 +6454,7 @@ _SOKOL_PRIVATE int _sapp_wgl_attrib(int pixel_format, int attrib) {
     SOKOL_ASSERT(_sapp.wgl.arb_pixel_format);
     int value = 0;
     if (!_sapp.wgl.GetPixelFormatAttribivARB(_sapp.win32.dc, pixel_format, 0, 1, &attrib, &value)) {
-        _sapp_fail("WGL: Failed to retrieve pixel format attribute\n");
+        _SAPP_PANIC(WIN32_GET_PIXELFORMAT_ATTRIB_FAILED);
     }
     return value;
 }
@@ -6506,20 +6519,20 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
 _SOKOL_PRIVATE void _sapp_wgl_create_context(void) {
     int pixel_format = _sapp_wgl_find_pixel_format();
     if (0 == pixel_format) {
-        _sapp_fail("WGL: Didn't find matching pixel format.\n");
+        _SAPP_PANIC(WIN32_WGL_FIND_PIXELFORMAT_FAILED);
     }
     PIXELFORMATDESCRIPTOR pfd;
     if (!DescribePixelFormat(_sapp.win32.dc, pixel_format, sizeof(pfd), &pfd)) {
-        _sapp_fail("WGL: Failed to retrieve PFD for selected pixel format!\n");
+        _SAPP_PANIC(WIN32_WGL_DESCRIBE_PIXELFORMAT_FAILED);
     }
     if (!SetPixelFormat(_sapp.win32.dc, pixel_format, &pfd)) {
-        _sapp_fail("WGL: Failed to set selected pixel format!\n");
+        _SAPP_PANIC(WIN32_WGL_SET_PIXELFORMAT_FAILED);
     }
     if (!_sapp.wgl.arb_create_context) {
-        _sapp_fail("WGL: ARB_create_context required!\n");
+        _SAPP_PANIC(WIN32_WGL_ARB_CREATE_CONTEXT_REQUIRED);
     }
     if (!_sapp.wgl.arb_create_context_profile) {
-        _sapp_fail("WGL: ARB_create_context_profile required!\n");
+        _SAPP_PANIC(WIN32_WGL_ARB_CREATE_CONTEXT_PRPFILE_REQUIRED);
     }
     const int attrs[] = {
         WGL_CONTEXT_MAJOR_VERSION_ARB, _sapp.desc.gl_major_version,
