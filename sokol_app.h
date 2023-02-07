@@ -164,6 +164,18 @@
                 };
             }
 
+        To get any logging output in case of errors you need to provide a log
+        callback. The easiest way is via sokol_log.h:
+
+            #include "sokol_log.h"
+
+            sapp_desc sokol_main(int argc, char* argv[]) {
+                return (sapp_desc) {
+                    ...
+                    .logger.func = slog_func,
+                };
+            }
+
         There are many more setup parameters, but these are the most important.
         For a complete list search for the sapp_desc structure declaration
         below.
@@ -1041,26 +1053,51 @@
     itself though, not any allocations in OS libraries.
 
 
-    LOG FUNCTION OVERRIDE
-    =====================
-    You can override the log function at initialization time like this:
+    ERROR REPORTING AND LOGGING
+    ===========================
+    To get any logging information at all you need to provide a logging callback in the setup call
+    the easiest way is to use sokol_log.h:
 
-        void my_log(const char* message, void* user_data) {
-            printf("sapp says: \s\n", message);
-        }
+        #include "sokol_log.h"
 
         sapp_desc sokol_main(int argc, char* argv[]) {
-            return (sapp_desc){
-                // ...
+            return (sapp_desc) {
+                ...
+                .logger.func = slog_func,
+            };
+        }
+
+    To override logging with your own callback, first write a logging function like this:
+
+        void my_log(const char* tag,                // e.g. 'sapp'
+                    uint32_t log_level,             // 0=panic, 1=error, 2=warn, 3=info
+                    uint32_t log_item_id,           // SAPP_LOGITEM_*
+                    const char* message_or_null,    // a message string, may be nullptr in release mode
+                    uint32_t line_nr,               // line number in sokol_app.h
+                    const char* filename_or_null,   // source filename, may be nullptr in release mode
+                    void* user_data)
+        {
+            ...
+        }
+
+    ...and then setup sokol-app like this:
+
+        sapp_desc sokol_main(int argc, char* argv[]) {
+            return (sapp_desc) {
+                ...
                 .logger = {
-                    .log_cb = my_log,
-                    .user_data = ...,
+                    .func = my_log,
+                    .user_data = my_user_data,
                 }
             };
         }
 
-    If no overrides are provided, puts will be used on most platforms.
-    On Android, __android_log_write will be used instead.
+    The provided logging function must be reentrant (e.g. be callable from
+    different threads).
+
+    If you don't want to provide your own custom logger it is highly recommended to use
+    the standard logger in sokol_log.h instead, otherwise you won't see any warnings or
+    errors.
 
 
     TEMP NOTE DUMP
@@ -1712,7 +1749,13 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 
 #endif // SOKOL_APP_INCLUDED
 
-/*-- IMPLEMENTATION ----------------------------------------------------------*/
+// ██ ███    ███ ██████  ██      ███████ ███    ███ ███████ ███    ██ ████████  █████  ████████ ██  ██████  ███    ██
+// ██ ████  ████ ██   ██ ██      ██      ████  ████ ██      ████   ██    ██    ██   ██    ██    ██ ██    ██ ████   ██
+// ██ ██ ████ ██ ██████  ██      █████   ██ ████ ██ █████   ██ ██  ██    ██    ███████    ██    ██ ██    ██ ██ ██  ██
+// ██ ██  ██  ██ ██      ██      ██      ██  ██  ██ ██      ██  ██ ██    ██    ██   ██    ██    ██ ██    ██ ██  ██ ██
+// ██ ██      ██ ██      ███████ ███████ ██      ██ ███████ ██   ████    ██    ██   ██    ██    ██  ██████  ██   ████
+//
+// >>implementation
 #ifdef SOKOL_APP_IMPL
 #define SOKOL_APP_IMPL_INCLUDED (1)
 
@@ -1723,7 +1766,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #include <stdlib.h> // malloc, free
 #include <string.h> // memset
 #include <stddef.h> // size_t
-#include <math.h>   /* roundf() */
+#include <math.h>   // roundf
 
 /* check if the config defines are alright */
 #if defined(__APPLE__)
@@ -1839,7 +1882,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #define _SOKOL_UNUSED(x) (void)(x)
 #endif
 
-/*== PLATFORM SPECIFIC INCLUDES AND DEFINES ==================================*/
 #if defined(_SAPP_APPLE)
     #if defined(SOKOL_METAL)
         #import <Metal/Metal.h>
@@ -1977,7 +2019,13 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <time.h>
 #endif
 
-/*== frame timing helpers ===================================================*/
+// ███████ ██████   █████  ███    ███ ███████     ████████ ██ ███    ███ ██ ███    ██  ██████
+// ██      ██   ██ ██   ██ ████  ████ ██             ██    ██ ████  ████ ██ ████   ██ ██
+// █████   ██████  ███████ ██ ████ ██ █████          ██    ██ ██ ████ ██ ██ ██ ██  ██ ██   ███
+// ██      ██   ██ ██   ██ ██  ██  ██ ██             ██    ██ ██  ██  ██ ██ ██  ██ ██ ██    ██
+// ██      ██   ██ ██   ██ ██      ██ ███████        ██    ██ ██      ██ ██ ██   ████  ██████
+//
+// >>frame timing
 #define _SAPP_RING_NUM_SLOTS (256)
 typedef struct {
     int head;
@@ -2188,7 +2236,13 @@ _SOKOL_PRIVATE double _sapp_timing_get_avg(_sapp_timing_t* t) {
     return t->avg;
 }
 
-/*== MACOS DECLARATIONS ======================================================*/
+// ███████ ████████ ██████  ██    ██  ██████ ████████ ███████
+// ██         ██    ██   ██ ██    ██ ██         ██    ██
+// ███████    ██    ██████  ██    ██ ██         ██    ███████
+//      ██    ██    ██   ██ ██    ██ ██         ██         ██
+// ███████    ██    ██   ██  ██████   ██████    ██    ███████
+//
+// >> structs
 #if defined(_SAPP_MACOS)
 @interface _sapp_macos_app_delegate : NSObject<NSApplicationDelegate>
 @end
@@ -2221,7 +2275,6 @@ typedef struct {
 
 #endif // _SAPP_MACOS
 
-/*== IOS DECLARATIONS ========================================================*/
 #if defined(_SAPP_IOS)
 
 @interface _sapp_app_delegate : NSObject<UIApplicationDelegate>
@@ -2256,7 +2309,6 @@ typedef struct {
 
 #endif // _SAPP_IOS
 
-/*== EMSCRIPTEN DECLARATIONS =================================================*/
 #if defined(_SAPP_EMSCRIPTEN)
 
 #if defined(SOKOL_WGPU)
@@ -2285,7 +2337,6 @@ typedef struct {
 } _sapp_emsc_t;
 #endif // _SAPP_EMSCRIPTEN
 
-/*== WIN32 DECLARATIONS ======================================================*/
 #if defined(SOKOL_D3D11) && (defined(_SAPP_WIN32) || defined(_SAPP_UWP))
 typedef struct {
     ID3D11Device* device;
@@ -2304,7 +2355,6 @@ typedef struct {
 } _sapp_d3d11_t;
 #endif
 
-/*== WIN32 DECLARATIONS ======================================================*/
 #if defined(_SAPP_WIN32)
 
 #ifndef DPI_ENUMS_DECLARED
@@ -2412,7 +2462,6 @@ typedef struct {
 
 #endif // _SAPP_WIN32
 
-/*== UWP DECLARATIONS ======================================================*/
 #if defined(_SAPP_UWP)
 
 typedef struct {
@@ -2428,8 +2477,6 @@ typedef struct {
 } _sapp_uwp_t;
 
 #endif // _SAPP_UWP
-
-/*== ANDROID DECLARATIONS ====================================================*/
 
 #if defined(_SAPP_ANDROID)
 typedef enum {
@@ -2476,7 +2523,6 @@ typedef struct {
 
 #endif // _SAPP_ANDROID
 
-/*== LINUX DECLARATIONS ======================================================*/
 #if defined(_SAPP_LINUX)
 
 #define _SAPP_X11_XDND_VERSION (5)
@@ -2627,8 +2673,6 @@ typedef struct {
 
 #endif // _SAPP_LINUX
 
-/*== COMMON DECLARATIONS =====================================================*/
-
 /* helper macros */
 #define _sapp_def(val, def) (((val) == 0) ? (def) : (val))
 #define _sapp_absf(a) (((a)<0.0f)?-(a):(a))
@@ -2740,7 +2784,13 @@ typedef struct {
 } _sapp_t;
 static _sapp_t _sapp;
 
-/*=== PRIVATE HELPER FUNCTIONS ===============================================*/
+// ███    ███ ███████ ███    ███  ██████  ██████  ██    ██
+// ████  ████ ██      ████  ████ ██    ██ ██   ██  ██  ██
+// ██ ████ ██ █████   ██ ████ ██ ██    ██ ██████    ████
+// ██  ██  ██ ██      ██  ██  ██ ██    ██ ██   ██    ██
+// ██      ██ ███████ ██      ██  ██████  ██   ██    ██
+//
+// >>memory
 _SOKOL_PRIVATE void _sapp_clear(void* ptr, size_t size) {
     SOKOL_ASSERT(ptr && (size > 0));
     memset(ptr, 0, size);
@@ -2774,6 +2824,13 @@ _SOKOL_PRIVATE void _sapp_free(void* ptr) {
     }
 }
 
+// ██   ██ ███████ ██      ██████  ███████ ██████  ███████
+// ██   ██ ██      ██      ██   ██ ██      ██   ██ ██
+// ███████ █████   ██      ██████  █████   ██████  ███████
+// ██   ██ ██      ██      ██      ██      ██   ██      ██
+// ██   ██ ███████ ███████ ██      ███████ ██   ██ ███████
+//
+// >>helpers
 #if defined(SOKOL_DEBUG)
 _SOKOL_PRIVATE void _sapp_log(const char* msg) {
     SOKOL_ASSERT(msg);
@@ -3175,7 +3232,13 @@ _SOKOL_PRIVATE void _sapp_setup_default_icon(void) {
     SOKOL_ASSERT(dst == dst_end);
 }
 
-/*== MacOS/iOS ===============================================================*/
+//  █████  ██████  ██████  ██      ███████
+// ██   ██ ██   ██ ██   ██ ██      ██
+// ███████ ██████  ██████  ██      █████
+// ██   ██ ██      ██      ██      ██
+// ██   ██ ██      ██      ███████ ███████
+//
+// >>apple
 #if defined(_SAPP_APPLE)
 
 #if __has_feature(objc_arc)
@@ -3184,7 +3247,13 @@ _SOKOL_PRIVATE void _sapp_setup_default_icon(void) {
 #define _SAPP_OBJC_RELEASE(obj) { [obj release]; obj = nil; }
 #endif
 
-/*== MacOS ===================================================================*/
+// ███    ███  █████   ██████  ██████  ███████
+// ████  ████ ██   ██ ██      ██    ██ ██
+// ██ ████ ██ ███████ ██      ██    ██ ███████
+// ██  ██  ██ ██   ██ ██      ██    ██      ██
+// ██      ██ ██   ██  ██████  ██████  ███████
+//
+// >>macos
 #if defined(_SAPP_MACOS)
 
 _SOKOL_PRIVATE void _sapp_macos_init_keytable(void) {
@@ -4146,9 +4215,15 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
 }
 @end
 
-#endif /* MacOS */
+#endif // macOS
 
-/*== iOS =====================================================================*/
+// ██  ██████  ███████
+// ██ ██    ██ ██
+// ██ ██    ██ ███████
+// ██ ██    ██      ██
+// ██  ██████  ███████
+//
+// >>ios
 #if defined(_SAPP_IOS)
 
 _SOKOL_PRIVATE void _sapp_ios_discard_state(void) {
@@ -4481,7 +4556,13 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 
 #endif /* _SAPP_APPLE */
 
-/*== EMSCRIPTEN ==============================================================*/
+// ███████ ███    ███ ███████  ██████ ██████  ██ ██████  ████████ ███████ ███    ██
+// ██      ████  ████ ██      ██      ██   ██ ██ ██   ██    ██    ██      ████   ██
+// █████   ██ ████ ██ ███████ ██      ██████  ██ ██████     ██    █████   ██ ██  ██
+// ██      ██  ██  ██      ██ ██      ██   ██ ██ ██         ██    ██      ██  ██ ██
+// ███████ ██      ██ ███████  ██████ ██   ██ ██ ██         ██    ███████ ██   ████
+//
+// >>emscripten
 #if defined(_SAPP_EMSCRIPTEN)
 
 #if defined(EM_JS_DEPS)
@@ -5722,7 +5803,13 @@ int main(int argc, char* argv[]) {
 #endif /* SOKOL_NO_ENTRY */
 #endif /* _SAPP_EMSCRIPTEN */
 
-/*== MISC GL SUPPORT FUNCTIONS ================================================*/
+//  ██████  ██          ██   ██ ███████ ██      ██████  ███████ ██████  ███████
+// ██       ██          ██   ██ ██      ██      ██   ██ ██      ██   ██ ██
+// ██   ███ ██          ███████ █████   ██      ██████  █████   ██████  ███████
+// ██    ██ ██          ██   ██ ██      ██      ██      ██      ██   ██      ██
+//  ██████  ███████     ██   ██ ███████ ███████ ██      ███████ ██   ██ ███████
+//
+// >>gl helpers
 #if defined(SOKOL_GLCORE33)
 typedef struct {
     int         red_bits;
@@ -5831,7 +5918,13 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 }
 #endif
 
-/*== WINDOWS DESKTOP and UWP====================================================*/
+// ██     ██ ██ ███    ██ ██████   ██████  ██     ██ ███████
+// ██     ██ ██ ████   ██ ██   ██ ██    ██ ██     ██ ██
+// ██  █  ██ ██ ██ ██  ██ ██   ██ ██    ██ ██  █  ██ ███████
+// ██ ███ ██ ██ ██  ██ ██ ██   ██ ██    ██ ██ ███ ██      ██
+//  ███ ███  ██ ██   ████ ██████   ██████   ███ ███  ███████
+//
+// >>windows
 #if defined(_SAPP_WIN32) || defined(_SAPP_UWP)
 _SOKOL_PRIVATE bool _sapp_win32_uwp_utf8_to_wide(const char* src, wchar_t* dst, int dst_num_bytes) {
     SOKOL_ASSERT(src && dst && (dst_num_bytes > 1));
@@ -5978,7 +6071,6 @@ _SOKOL_PRIVATE void _sapp_win32_uwp_init_keytable(void) {
 }
 #endif // _SAPP_WIN32 || _SAPP_UWP
 
-/*== WINDOWS DESKTOP===========================================================*/
 #if defined(_SAPP_WIN32)
 
 #if defined(SOKOL_D3D11)
@@ -8707,7 +8799,13 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 #endif /* SOKOL_NO_ENTRY */
 #endif /* _SAPP_UWP */
 
-/*== Android ================================================================*/
+//  █████  ███    ██ ██████  ██████   ██████  ██ ██████
+// ██   ██ ████   ██ ██   ██ ██   ██ ██    ██ ██ ██   ██
+// ███████ ██ ██  ██ ██   ██ ██████  ██    ██ ██ ██   ██
+// ██   ██ ██  ██ ██ ██   ██ ██   ██ ██    ██ ██ ██   ██
+// ██   ██ ██   ████ ██████  ██   ██  ██████  ██ ██████
+//
+// >>android
 #if defined(_SAPP_ANDROID)
 
 /* android loop thread */
@@ -9390,7 +9488,13 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
 
 #endif /* _SAPP_ANDROID */
 
-/*== LINUX ==================================================================*/
+// ██      ██ ███    ██ ██    ██ ██   ██
+// ██      ██ ████   ██ ██    ██  ██ ██
+// ██      ██ ██ ██  ██ ██    ██   ███
+// ██      ██ ██  ██ ██ ██    ██  ██ ██
+// ███████ ██ ██   ████  ██████  ██   ██
+//
+// >>linux
 #if defined(_SAPP_LINUX)
 
 /* see GLFW's xkb_unicode.c */
@@ -11838,7 +11942,13 @@ int main(int argc, char* argv[]) {
 #endif /* SOKOL_NO_ENTRY */
 #endif /* _SAPP_LINUX */
 
-/*== PUBLIC API FUNCTIONS ====================================================*/
+// ██████  ██    ██ ██████  ██      ██  ██████
+// ██   ██ ██    ██ ██   ██ ██      ██ ██
+// ██████  ██    ██ ██████  ██      ██ ██
+// ██      ██    ██ ██   ██ ██      ██ ██
+// ██       ██████  ██████  ███████ ██  ██████
+//
+// >>public
 #if defined(SOKOL_NO_ENTRY)
 SOKOL_API_IMPL void sapp_run(const sapp_desc* desc) {
     SOKOL_ASSERT(desc);
