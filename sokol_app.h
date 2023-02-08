@@ -1512,8 +1512,8 @@ typedef struct sapp_allocator {
     _SAPP_LOGITEM_XMACRO(WIN32_WGL_SET_PIXELFORMAT_FAILED, "failed to set selected pixel format") \
     _SAPP_LOGITEM_XMACRO(WIN32_WGL_ARB_CREATE_CONTEXT_REQUIRED, "ARB_create_context required") \
     _SAPP_LOGITEM_XMACRO(WIN32_WGL_ARB_CREATE_CONTEXT_PROFILE_REQUIRED, "ARB_create_context_profile required") \
-    _SAPP_LOGITEM_XMACRO(WIN32_WGL_INVALID_VERSION, "OpenGL 3.2 not supported by GL driver (ERROR_INVALID_VERSION_ARB)") \
-    _SAPP_LOGITEM_XMACRO(WIN32_WGL_INVALID_PROFILE, "requested OpenGL profile not support by GL driver (ERROR_INVALID_PROFILE_ARB)") \
+    _SAPP_LOGITEM_XMACRO(WIN32_WGL_OPENGL_3_2_NOT_SUPPORTED, "OpenGL 3.2 not supported by GL driver (ERROR_INVALID_VERSION_ARB)") \
+    _SAPP_LOGITEM_XMACRO(WIN32_WGL_OPENGL_PROFILE_NOT_SUPPORTED, "requested OpenGL profile not support by GL driver (ERROR_INVALID_PROFILE_ARB)") \
     _SAPP_LOGITEM_XMACRO(WIN32_WGL_INCOMPATIBLE_DEVICE_CONTEXT, "CreateContextAttribsARB failed with ERROR_INCOMPATIBLE_DEVICE_CONTEXTS_ARB") \
     _SAPP_LOGITEM_XMACRO(WIN32_WGL_CREATE_CONTEXT_ATTRIBS_FAILED_OTHER, "CreateContextAttribsARB failed for other reason") \
     _SAPP_LOGITEM_XMACRO(WIN32_D3D11_CREATE_DEVICE_AND_SWAPCHAIN_WITH_DEBUG_FAILED, "D3D11CreateDeviceAndSwapChain() with D3D11_CREATE_DEVICE_DEBUG failed, retrying without debug flag.") \
@@ -6275,7 +6275,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
         // ===
         //
         // ...just retry with the DEBUG flag switched off
-        _SAPP_ERROR(WIN32_D3D11_CREATE_DEVICE_AND_SWAPCHAIN_FAILED_WITH_DEBUG);
+        _SAPP_ERROR(WIN32_D3D11_CREATE_DEVICE_AND_SWAPCHAIN_WITH_DEBUG_FAILED);
         create_flags &= ~D3D11_CREATE_DEVICE_DEBUG;
         hr = D3D11CreateDeviceAndSwapChain(
             NULL,                           /* pAdapter (use default) */
@@ -6449,7 +6449,7 @@ _SOKOL_PRIVATE void _sapp_wgl_init(void) {
     }
     _sapp.wgl.msg_dc = GetDC(_sapp.wgl.msg_hwnd);
     if (!_sapp.wgl.msg_dc) {
-        _SAPP_PANIC(WIN32_HELPER_WINDOW_GETDC_FAILED)
+        _SAPP_PANIC(WIN32_HELPER_WINDOW_GETDC_FAILED);
     }
 }
 
@@ -6614,7 +6614,7 @@ _SOKOL_PRIVATE void _sapp_wgl_create_context(void) {
         _SAPP_PANIC(WIN32_WGL_ARB_CREATE_CONTEXT_REQUIRED);
     }
     if (!_sapp.wgl.arb_create_context_profile) {
-        _SAPP_PANIC(WIN32_WGL_ARB_CREATE_CONTEXT_PRPFILE_REQUIRED);
+        _SAPP_PANIC(WIN32_WGL_ARB_CREATE_CONTEXT_PROFILE_REQUIRED);
     }
     const int attrs[] = {
         WGL_CONTEXT_MAJOR_VERSION_ARB, _sapp.desc.gl_major_version,
