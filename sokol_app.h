@@ -29,7 +29,6 @@
 
         SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
         SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
-        SOKOL_ABORT()       - called after an unrecoverable error (default: abort())
         SOKOL_WIN32_FORCE_MAIN  - define this on Win32 to use a main() entry point instead of WinMain
         SOKOL_NO_ENTRY      - define this if sokol_app.h shouldn't "hijack" the main() function
         SOKOL_APP_API_DECL  - public function declaration prefix (default: extern)
@@ -207,11 +206,6 @@
             used to communicate other types of events to the application. Keep the
             event_cb struct member zero-initialized if your application doesn't require
             event handling.
-        .fail_cb (void (*)(const char* msg))
-            The fail callback is called when a fatal error is encountered
-            during start which doesn't allow the program to continue.
-            Providing a callback here gives you a chance to show an error message
-            to the user. The default behaviour is SAPP_LOG(msg)
 
         As you can see, those 'standard callbacks' don't have a user_data
         argument, so any data that needs to be preserved between callbacks
@@ -225,10 +219,6 @@
         .frame_userdata_cb (void (*)(void* user_data))
         .cleanup_userdata_cb (void (*)(void* user_data))
         .event_userdata_cb (void(*)(const sapp_event* event, void* user_data))
-        .fail_userdata_cb (void(*)(const char* msg, void* user_data))
-            These are the user-data versions of the callback functions. You
-            can mix those with the standard callbacks that don't have the
-            user_data argument.
 
         The function sapp_userdata() can be used to query the user_data
         pointer provided in the sapp_desc struct.
@@ -1522,12 +1512,83 @@ typedef struct sapp_allocator {
     _SAPP_LOGITEM_XMACRO(WIN32_WGL_SET_PIXELFORMAT_FAILED, "failed to set selected pixel format") \
     _SAPP_LOGITEM_XMACRO(WIN32_WGL_ARB_CREATE_CONTEXT_REQUIRED, "ARB_create_context required") \
     _SAPP_LOGITEM_XMACRO(WIN32_WGL_ARB_CREATE_CONTEXT_PROFILE_REQUIRED, "ARB_create_context_profile required") \
-
+    _SAPP_LOGITEM_XMACRO(WIN32_WGL_INVALID_VERSION, "OpenGL 3.2 not supported by GL driver (ERROR_INVALID_VERSION_ARB)") \
+    _SAPP_LOGITEM_XMACRO(WIN32_WGL_INVALID_PROFILE, "requested OpenGL profile not support by GL driver (ERROR_INVALID_PROFILE_ARB)") \
+    _SAPP_LOGITEM_XMACRO(WIN32_WGL_INCOMPATIBLE_DEVICE_CONTEXT, "CreateContextAttribsARB failed with ERROR_INCOMPATIBLE_DEVICE_CONTEXTS_ARB") \
+    _SAPP_LOGITEM_XMACRO(WIN32_WGL_CREATE_CONTEXT_ATTRIBS_FAILED_OTHER, "CreateContextAttribsARB failed for other reason") \
+    _SAPP_LOGITEM_XMACRO(WIN32_D3D11_CREATE_DEVICE_AND_SWAPCHAIN_WITH_DEBUG_FAILED, "D3D11CreateDeviceAndSwapChain() with D3D11_CREATE_DEVICE_DEBUG failed, retrying without debug flag.") \
+    _SAPP_LOGITEM_XMACRO(WIN32_D3D11_GET_IDXGIFACTORY_FAILED, "could not obtain IDXGIFactory object") \
+    _SAPP_LOGITEM_XMACRO(WIN32_D3D11_GET_IDXGIADAPTER_FAILED, "could not obtain IDXGIAdapter object") \
+    _SAPP_LOGITEM_XMACRO(WIN32_D3D11_QUERY_INTERFACE_IDXGIDEVICE1_FAILED, "could not obtain IDXGIDevice1 interface") \
+    _SAPP_LOGITEM_XMACRO(WIN32_REGISTER_RAW_INPUT_DEVICES_FAILED_MOUSE_LOCK, "RegisterRawInputDevices() failed (on mouse lock)") \
+    _SAPP_LOGITEM_XMACRO(WIN32_REGISTER_RAW_INPUT_DEVICES_FAILED_MOUSE_UNLOCK, "RegisterRawInputDevices() failed (on mouse unlock)") \
+    _SAPP_LOGITEM_XMACRO(WIN32_GET_RAW_INPUT_DATA_FAILED, "GetRawInputData() failed") \
+    _SAPP_LOGITEM_XMACRO(LINUX_GLX_LOAD_LIBGL_FAILED, "failed to load libGL") \
+    _SAPP_LOGITEM_XMACRO(LINUX_GLX_LOAD_ENTRY_POINTS_FAILED, "failed to load GLX entry points") \
+    _SAPP_LOGITEM_XMACRO(LINUX_GLX_EXTENSION_NOT_FOUND, "GLX extension not found") \
+    _SAPP_LOGITEM_XMACRO(LINUX_GLX_QUERY_VERSION_FAILED, "failed to query GLX version") \
+    _SAPP_LOGITEM_XMACRO(LINUX_GLX_VERSION_TOO_LOW, "GLX version too low (need at least 1.3)") \
+    _SAPP_LOGITEM_XMACRO(LINUX_GLX_NO_GLXFBCONFIGS, "glXGetFBConfigs() returned no configs") \
+    _SAPP_LOGITEM_XMACRO(LINUX_GLX_NO_SUITABLE_GLXFBCONFIG, "failed to find a suitable GLXFBConfig") \
+    _SAPP_LOGITEM_XMACRO(LINUX_GLX_GET_VISUAL_FROM_FBCONFIG_FAILED, "glXGetVisualFromFBConfig failed") \
+    _SAPP_LOGITEM_XMACRO(LINUX_GLX_REQUIRED_EXTENSIONS_MISSING, "GLX extensions ARB_create_context and ARB_create_context_profile missing") \
+    _SAPP_LOGITEM_XMACRO(LINUX_GLX_CREATE_CONTEXT_FAILED, "Failed to create GL context via glXCreateContextAttribsARB") \
+    _SAPP_LOGITEM_XMACRO(LINUX_GLX_CREATE_WINDOW_FAILED, "glXCreateWindow() failed") \
+    _SAPP_LOGITEM_XMACRO(LINUX_X11_CREATE_WINDOW_FAILED, "XCreateWindow() failed") \
+    _SAPP_LOGITEM_XMACRO(LINUX_EGL_BIND_OPENGL_API_FAILED, "eglBindAPI(EGL_OPENGL_API) failed") \
+    _SAPP_LOGITEM_XMACRO(LINUX_EGL_BIND_OPENGL_ES_API_FAILED, "eglBindAPI(EGL_OPENGL_ES_API) failed") \
+    _SAPP_LOGITEM_XMACRO(LINUX_EGL_GET_DISPLAY_FAILED, "eglGetDisplay() failed") \
+    _SAPP_LOGITEM_XMACRO(LINUX_EGL_INITIALIZE_FAILED, "eglInitialize() failed") \
+    _SAPP_LOGITEM_XMACRO(LINUX_EGL_NO_CONFIGS, "eglChooseConfig() returned no configs") \
+    _SAPP_LOGITEM_XMACRO(LINUX_EGL_NO_NATIVE_VISUAL, "eglGetConfigAttrib() for EGL_NATIVE_VISUAL_ID failed") \
+    _SAPP_LOGITEM_XMACRO(LINUX_EGL_GET_VISUAL_INFO_FAILED, "XGetVisualInfo() failed") \
+    _SAPP_LOGITEM_XMACRO(LINUX_EGL_CREATE_WINDOW_SURFACE_FAILED, "eglCreateWindowSurface() failed") \
+    _SAPP_LOGITEM_XMACRO(LINUX_EGL_CREATE_CONTEXT_FAILED, "eglCreateContext() failed") \
+    _SAPP_LOGITEM_XMACRO(LINUX_EGL_MAKE_CURRENT_FAILED, "eglMakeCurrent() failed") \
+    _SAPP_LOGITEM_XMACRO(LINUX_X11_OPEN_DISPLAY_FAILED, "XOpenDisplay() failed") \
+    _SAPP_LOGITEM_XMACRO(LINUX_X11_QUERY_SYSTEM_DPI_FAILED, "failed to query system dpi value, assuming default 96.0") \
+    _SAPP_LOGITEM_XMACRO(LINUX_X11_DROPPED_FILE_URI_WRONG_SCHEME, "dropped file URL doesn't start with 'file://'") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_UNSUPPORTED_INPUT_EVENT_INPUT_CB, "unsupported input event encountered in _sapp_android_input_cb()") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_UNSUPPORTED_INPUT_EVENT_MAIN_CB, "unsupported input event encountered in _sapp_android_main_cb()") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_READ_MSG_FAILED, "failed to read message in _sapp_android_main_cb()") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_WRITE_MSG_FAILED, "failed to write message in _sapp_android_msg") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_MSG_CREATE, "MSG_CREATE") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_MSG_RESUME, "MSG_RESUME") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_MSG_PAUSE, "MSG_PAUSE") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_MSG_FOCUS, "MSG_FOCUS") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_MSG_NO_FOCUS, "MSG_NO_FOCUS") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_MSG_SET_NATIVE_WINDOW, "MSG_SET_NATIVE_WINDOW") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_MSG_SET_INPUT_QUEUE, "MSG_SET_INPUT_QUEUE") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_MSG_DESTROY, "MSG_DESTROY") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_UNKNOWN_MSG, "unknown msg type received") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_LOOP_THREAD_STARTED, "loop thread started") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_LOOP_THREAD_DONE, "loop thread done") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_NATIVE_ACTIVITY_ONSTART, "NativeActivity onStart()") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_NATIVE_ACTIVITY_ONRESUME, "NativeActivity onResume") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_NATIVE_ACTIVITY_ONSAVEINSTANCESTATE, "NativeActivity onSaveInstanceState") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_NATIVE_ACTIVITY_ONWINDOWFOCUSCHANGED, "NativeActivity onWindowFocusChanged") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_NATIVE_ACTIVITY_ONPAUSE, "NativeActivity onPause") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_NATIVE_ACTIVITY_ONSTOP, "NativeActivity onStop()") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_NATIVE_ACTIVITY_ONNATIVEWINDOWCREATED, "NativeActivity onNativeWindowCreated") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_NATIVE_ACTIVITY_ONNATIVEWINDOWDESTROYED, "NativeActivity onNativeWindowDestroyed") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_NATIVE_ACTIVITY_ONINPUTQUEUECREATED, "NativeActivity onInputQueueCreated") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_NATIVE_ACTIVITY_ONINPUTQUEUEDESTROYED, "NativeActivity onInputQueueDestroyed") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_NATIVE_ACTIVITY_ONCONFIGURATIONCHANGED, "NativeActivity onConfigurationChanged") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_NATIVE_ACTIVITY_ONLOWMEMORY, "NativeActivity onLowMemory") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_NATIVE_ACTIVITY_ONDESTROY, "NativeActivity onDestroy") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_NATIVE_ACTIVITY_DONE, "NativeActivity done") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_NATIVE_ACTIVITY_ONCREATE, "NativeActivity onCreate") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_CREATE_THREAD_PIPE_FAILED, "failed to create thread pipe") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_NATIVE_ACTIVITY_CREATE_SUCCESS, "NativeActivity sucessfully created") \
+    _SAPP_LOGITEM_XMACRO(IMAGE_DATA_SIZE_MISMATCH, "image data size mismatch (must be width*height*4 bytes)") \
+    _SAPP_LOGITEM_XMACRO(DROPPED_FILE_PATH_TOO_LONG, "dropped file path too long (sapp_desc.max_dropped_filed_path_length)") \
+    _SAPP_LOGITEM_XMACRO(CLIPBOARD_STRING_TOO_BIG, "clipboard string didn't fit into clipboard buffer") \
 
 #define _SAPP_LOGITEM_XMACRO(item,msg) SAPP_LOGITEM_##item,
 typedef enum sapp_log_item {
     _SAPP_LOG_ITEMS
-} sapp_log_items;
+} sapp_log_item;
+#undef _SAPP_LOGITEM_XMACRO
 
 /*
     sapp_logger
@@ -1577,7 +1638,7 @@ typedef struct sapp_desc {
     int max_dropped_file_path_length;   // max length in bytes of a dropped UTF-8 file path (default: 2048)
     sapp_icon_desc icon;                // the initial window icon to set
     sapp_allocator allocator;           // optional memory allocation overrides (default: malloc/free)
-    sapp_logger logger;                 // optional log callback overrides (default: SAPP_LOG(message))
+    sapp_logger logger;                 // logging callback override (default: NO LOGGING!)
 
     /* backend-specific options */
     bool gl_force_gles2;                // if true, setup GLES2/WebGL even if GLES3/WebGL2 is available
@@ -1876,24 +1937,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #define SOKOL_UNREACHABLE SOKOL_ASSERT(false)
 #endif
 
-#if !defined(SOKOL_DEBUG)
-    #define SAPP_LOG(s)
-#else
-    #define SAPP_LOG(s) _sapp_log(s)
-    #ifndef SOKOL_LOG
-        #if defined(__ANDROID__)
-            #include <android/log.h>
-            #define SOKOL_LOG(s) __android_log_write(ANDROID_LOG_INFO, "SOKOL_APP", s)
-        #else
-            #include <stdio.h>
-            #define SOKOL_LOG(s) puts(s)
-        #endif
-    #endif
-#endif
-
-#ifndef SOKOL_ABORT
-    #define SOKOL_ABORT() abort()
-#endif
 #ifndef _SOKOL_PRIVATE
     #if defined(__GNUC__) || defined(__clang__)
         #define _SOKOL_PRIVATE __attribute__((unused)) static
@@ -2796,6 +2839,45 @@ _SOKOL_PRIVATE void _sapp_free(void* ptr) {
     }
 }
 
+// ██       ██████   ██████   ██████  ██ ███    ██  ██████
+// ██      ██    ██ ██       ██       ██ ████   ██ ██
+// ██      ██    ██ ██   ███ ██   ███ ██ ██ ██  ██ ██   ███
+// ██      ██    ██ ██    ██ ██    ██ ██ ██  ██ ██ ██    ██
+// ███████  ██████   ██████   ██████  ██ ██   ████  ██████
+//
+// >>logging
+#if defined(SOKOL_DEBUG)
+#define _SAPP_LOGITEM_XMACRO(item,msg) msg,
+static const char* _sapp_log_messages[] = {
+    _SAPP_LOG_ITEMS
+};
+#undef _SAPP_LOGITEM_XMACRO
+#endif // SOKOL_DEBUG
+
+#define _SAPP_PANIC(code) _sapp_log(SAPP_LOGITEM_ ##code, 0, 0, __LINE__)
+#define _SAPP_ERROR(code) _sapp_log(SAPP_LOGITEM_ ##code, 1, 0, __LINE__)
+#define _SAPP_WARN(code) _sapp_log(SAPP_LOGITEM_ ##code, 2, 0, __LINE__)
+#define _SAPP_INFO(code) _sapp_log(SAPP_LOGITEM_ ##code, 3, 0, __LINE__)
+
+static void _sapp_log(sapp_log_item log_item, uint32_t log_level, const char* msg, uint32_t line_nr) {
+    if (_sapp.desc.logger.func) {
+        const char* filename = 0;
+        #if defined(SOKOL_DEBUG)
+            filename = __FILE__;
+            if (0 == msg) {
+                msg = _sapp_log_messages[log_item];
+            }
+        #endif
+        _sapp.desc.logger.func("sapp", log_level, log_item, msg, line_nr, filename, _sapp.desc.logger.user_data);
+    }
+    else {
+        // for log level PANIC it would be 'undefined behaviour' to continue
+        if (log_level == 0) {
+            abort();
+        }
+    }
+}
+
 // ██   ██ ███████ ██      ██████  ███████ ██████  ███████
 // ██   ██ ██      ██      ██   ██ ██      ██   ██ ██
 // ███████ █████   ██      ██████  █████   ██████  ███████
@@ -3023,7 +3105,7 @@ _SOKOL_PRIVATE bool _sapp_image_validate(const sapp_image_desc* desc) {
     SOKOL_ASSERT(desc->pixels.size > 0);
     const size_t wh_size = (size_t)(desc->width * desc->height) * sizeof(uint32_t);
     if (wh_size != desc->pixels.size) {
-        SAPP_LOG("Image data size mismatch (must be width*height*4 bytes)\n");
+        _SAPP_ERROR(IMAGE_DATA_SIZE_MISMATCH);
         return false;
     }
     return true;
@@ -3697,7 +3779,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
             case 32: attrs[i++] = NSOpenGLProfileVersion3_2Core; break;
             case 41: attrs[i++] = NSOpenGLProfileVersion4_1Core; break;
             default:
-                _SAPP_PANIC(INVALID_NSOPENGL_PROFILE);
+                _SAPP_PANIC(MACOS_INVALID_NSOPENGL_PROFILE);
         }
         attrs[i++] = NSOpenGLPFAColorSize; attrs[i++] = 24;
         attrs[i++] = NSOpenGLPFAAlphaSize; attrs[i++] = 8;
@@ -3860,7 +3942,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         for (int i = 0; i < _sapp.drop.num_files; i++) {
             NSURL *fileUrl = [NSURL fileURLWithPath:[pboard.pasteboardItems[(NSUInteger)i] stringForType:NSPasteboardTypeFileURL]];
             if (!_sapp_strcpy(fileUrl.standardizedURL.path.UTF8String, _sapp_dropped_file_path_ptr(i), _sapp.drop.max_path_length)) {
-                SAPP_LOG("sokol_app.h: dropped file path too long (sapp_desc.max_dropped_file_path_length)\n");
+                _SAPP_ERROR(DROPPED_FILE_PATH_TOO_LONG);
                 drop_failed = true;
                 break;
             }
@@ -4571,7 +4653,7 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_drop(int i, const char* name) {
         return;
     }
     if (!_sapp_strcpy(name, _sapp_dropped_file_path_ptr(i), _sapp.drop.max_path_length)) {
-        SAPP_LOG("sokol_app.h: dropped file path too long!\n");
+        _SAPP_ERROR(DROPPED_FILE_PATH_TOO_LONG);
         _sapp.drop.num_files = 0;
     }
 }
@@ -6193,7 +6275,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
         // ===
         //
         // ...just retry with the DEBUG flag switched off
-        SAPP_LOG("sokol_app.h: D3D11CreateDeviceAndSwapChain() with D3D11_CREATE_DEVICE_DEBUG failed, retrying without debug flag.\n");
+        _SAPP_ERROR(WIN32_D3D11_CREATE_DEVICE_AND_SWAPCHAIN_FAILED_WITH_DEBUG);
         create_flags &= ~D3D11_CREATE_DEVICE_DEBUG;
         hr = D3D11CreateDeviceAndSwapChain(
             NULL,                           /* pAdapter (use default) */
@@ -6226,16 +6308,16 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
                 _SAPP_SAFE_RELEASE(dxgi_factory);
             }
             else {
-                SAPP_LOG("sokol_app.h: could not obtain IDXGIFactory object.\n");
+                _SAPP_ERROR(WIN32_D3D11_GET_IDXGIFACTORY_FAILED);
             }
             _SAPP_SAFE_RELEASE(dxgi_adapter);
         }
         else {
-            SAPP_LOG("sokol_app.h: could not obtain IDXGIAdapter object.\n");
+            _SAPP_ERROR(WIN32_D3D11_GET_IDXGIADAPTER_FAILED);
         }
     }
     else {
-        SAPP_LOG("sokol_app.h: could not obtain IDXGIDevice1 interface\n");
+        _SAPP_PANIC(WIN32_D3D11_QUERY_INTERFACE_IDXGIDEVICE1_FAILED);
     }
 }
 
@@ -6545,16 +6627,16 @@ _SOKOL_PRIVATE void _sapp_wgl_create_context(void) {
     if (!_sapp.wgl.gl_ctx) {
         const DWORD err = GetLastError();
         if (err == (0xc0070000 | ERROR_INVALID_VERSION_ARB)) {
-            _sapp_fail("WGL: Driver does not support OpenGL version 3.3\n");
+            _SAPP_PANIC(WIN32_WGL_OPENGL_3_2_NOT_SUPPORTED);
         }
         else if (err == (0xc0070000 | ERROR_INVALID_PROFILE_ARB)) {
-            _sapp_fail("WGL: Driver does not support the requested OpenGL profile");
+            _SAPP_PANIC(WIN32_WGL_OPENGL_PROFILE_NOT_SUPPORTED);
         }
         else if (err == (0xc0070000 | ERROR_INCOMPATIBLE_DEVICE_CONTEXTS_ARB)) {
-            _sapp_fail("WGL: The share context is not compatible with the requested context");
+            _SAPP_PANIC(WIN32_WGL_INCOMPATIBLE_DEVICE_CONTEXT);
         }
         else {
-            _sapp_fail("WGL: Failed to create OpenGL context");
+            _SAPP_PANIC(WIN32_WGL_CREATE_CONTEXT_ATTRIBS_FAILED_OTHER);
         }
     }
     _sapp.wgl.MakeCurrent(_sapp.win32.dc, _sapp.wgl.gl_ctx);
@@ -6784,7 +6866,7 @@ _SOKOL_PRIVATE void _sapp_win32_lock_mouse(bool lock) {
             _sapp.win32.hwnd    // hwndTarget
         };
         if (!RegisterRawInputDevices(&rid, 1, sizeof(rid))) {
-            SAPP_LOG("RegisterRawInputDevices() failed (on mouse lock).\n");
+            _SAPP_ERROR(WIN32_REGISTER_RAW_INPUT_DEVICES_FAILED_MOUSE_LOCK);
         }
         /* in case the raw mouse device only supports absolute position reporting,
            we need to skip the dx/dy compution for the first WM_INPUT event
@@ -6795,7 +6877,7 @@ _SOKOL_PRIVATE void _sapp_win32_lock_mouse(bool lock) {
         /* disable raw input for mouse */
         const RAWINPUTDEVICE rid = { 0x01, 0x02, RIDEV_REMOVE, NULL };
         if (!RegisterRawInputDevices(&rid, 1, sizeof(rid))) {
-            SAPP_LOG("RegisterRawInputDevices() failed (on mouse unlock).\n");
+            _SAPP_ERROR(WIN32_REGISTER_RAW_INPUT_DEVICES_FAILED_MOUSE_UNLOCK);
         }
 
         /* let the mouse roam freely again */
@@ -6950,7 +7032,7 @@ _SOKOL_PRIVATE void _sapp_win32_files_dropped(HDROP hdrop) {
         WCHAR* buffer = (WCHAR*) _sapp_malloc_clear(num_chars * sizeof(WCHAR));
         DragQueryFileW(hdrop, i, buffer, num_chars);
         if (!_sapp_win32_wide_to_utf8(buffer, _sapp_dropped_file_path_ptr((int)i), _sapp.drop.max_path_length)) {
-            SAPP_LOG("sokol_app.h: dropped file path too long (sapp_desc.max_dropped_file_path_length)\n");
+            _SAPP_ERROR(DROPPED_FILE_PATH_TOO_LONG);
             drop_failed = true;
         }
         _sapp_free(buffer);
@@ -7123,7 +7205,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     UINT size = sizeof(_sapp.win32.raw_input_data);
                     // see: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getrawinputdata
                     if ((UINT)-1 == GetRawInputData(ri, RID_INPUT, &_sapp.win32.raw_input_data, &size, sizeof(RAWINPUTHEADER))) {
-                        SAPP_LOG("GetRawInputData() failed\n");
+                        _SAPP_ERROR(WIN32_GET_RAW_INPUT_DATA_FAILED);
                         break;
                     }
                     const RAWINPUT* raw_mouse_data = (const RAWINPUT*) &_sapp.win32.raw_input_data;
@@ -7476,7 +7558,7 @@ _SOKOL_PRIVATE const char* _sapp_win32_get_clipboard_string(void) {
         return _sapp.clipboard.buffer;
     }
     if (!_sapp_win32_wide_to_utf8(wchar_buf, _sapp.clipboard.buffer, _sapp.clipboard.buf_size)) {
-        SAPP_LOG("sokol_app.h: clipboard string didn't fit into clipboard buffer\n");
+        _SAPP_ERROR(CLIPBOARD_STRING_TOO_BIG);
     }
     GlobalUnlock(object);
     CloseClipboard();
@@ -7666,7 +7748,7 @@ _SOKOL_PRIVATE char** _sapp_win32_command_line_to_utf8_argv(LPWSTR w_command_lin
 
     LPWSTR* w_argv = CommandLineToArgvW(w_command_line, &argc);
     if (w_argv == NULL) {
-        _sapp_fail("Win32: failed to parse command line");
+        // FIXME: chicken egg problem, can't report errors before sokol_main() is called!
     } else {
         size_t size = wcslen(w_command_line) * 4;
         argv = (char**) _sapp_malloc_clear(((size_t)argc + 1) * sizeof(char*) + size);
@@ -7676,7 +7758,7 @@ _SOKOL_PRIVATE char** _sapp_win32_command_line_to_utf8_argv(LPWSTR w_command_lin
         for (int i = 0; i < argc; ++i) {
             n = WideCharToMultiByte(CP_UTF8, 0, w_argv[i], -1, args, (int)size, NULL, NULL);
             if (n == 0) {
-                _sapp_fail("Win32: failed to convert all arguments to utf8");
+                // FIXME: chicken egg problem, can't report errors before sokol_main() is called!
                 break;
             }
             argv[i] = args;
@@ -7807,16 +7889,13 @@ _SOKOL_PRIVATE void _sapp_android_cleanup_egl(void) {
     if (_sapp.android.display != EGL_NO_DISPLAY) {
         eglMakeCurrent(_sapp.android.display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
         if (_sapp.android.surface != EGL_NO_SURFACE) {
-            SAPP_LOG("Destroying egl surface");
             eglDestroySurface(_sapp.android.display, _sapp.android.surface);
             _sapp.android.surface = EGL_NO_SURFACE;
         }
         if (_sapp.android.context != EGL_NO_CONTEXT) {
-            SAPP_LOG("Destroying egl context");
             eglDestroyContext(_sapp.android.display, _sapp.android.context);
             _sapp.android.context = EGL_NO_CONTEXT;
         }
-        SAPP_LOG("Terminating egl display");
         eglTerminate(_sapp.android.display);
         _sapp.android.display = EGL_NO_DISPLAY;
     }
@@ -7857,7 +7936,6 @@ _SOKOL_PRIVATE void _sapp_android_cleanup_egl_surface(void) {
 _SOKOL_PRIVATE void _sapp_android_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
-        SAPP_LOG("event_cb()");
         _sapp_call_event(&_sapp.event);
     }
 }
@@ -7903,18 +7981,15 @@ _SOKOL_PRIVATE void _sapp_android_update_dimensions(ANativeWindow* window, bool 
     _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float)_sapp.window_width;
     if (win_changed || fb_changed || force_update) {
         if (!_sapp.first_frame) {
-            SAPP_LOG("SAPP_EVENTTYPE_RESIZED");
             _sapp_android_app_event(SAPP_EVENTTYPE_RESIZED);
         }
     }
 }
 
 _SOKOL_PRIVATE void _sapp_android_cleanup(void) {
-    SAPP_LOG("Cleaning up");
     if (_sapp.android.surface != EGL_NO_SURFACE) {
         /* egl context is bound, cleanup gracefully */
         if (_sapp.init_called && !_sapp.cleanup_called) {
-            SAPP_LOG("cleanup_cb()");
             _sapp_call_cleanup();
         }
     }
@@ -7951,22 +8026,17 @@ _SOKOL_PRIVATE bool _sapp_android_touch_event(const AInputEvent* e) {
     sapp_event_type type = SAPP_EVENTTYPE_INVALID;
     switch (action) {
         case AMOTION_EVENT_ACTION_DOWN:
-            SAPP_LOG("Touch: down");
         case AMOTION_EVENT_ACTION_POINTER_DOWN:
-            SAPP_LOG("Touch: ptr down");
             type = SAPP_EVENTTYPE_TOUCHES_BEGAN;
             break;
         case AMOTION_EVENT_ACTION_MOVE:
             type = SAPP_EVENTTYPE_TOUCHES_MOVED;
             break;
         case AMOTION_EVENT_ACTION_UP:
-            SAPP_LOG("Touch: up");
         case AMOTION_EVENT_ACTION_POINTER_UP:
-            SAPP_LOG("Touch: ptr up");
             type = SAPP_EVENTTYPE_TOUCHES_ENDED;
             break;
         case AMOTION_EVENT_ACTION_CANCEL:
-            SAPP_LOG("Touch: cancel");
             type = SAPP_EVENTTYPE_TOUCHES_CANCELLED;
             break;
         default:
@@ -8017,7 +8087,7 @@ _SOKOL_PRIVATE int _sapp_android_input_cb(int fd, int events, void* data) {
     _SOKOL_UNUSED(fd);
     _SOKOL_UNUSED(data);
     if ((events & ALOOPER_EVENT_INPUT) == 0) {
-        SAPP_LOG("_sapp_android_input_cb() encountered unsupported event");
+        _SAPP_ERROR(ANDROID_UNSUPPORTED_INPUT_EVENT_INPUT_CB);
         return 1;
     }
     SOKOL_ASSERT(_sapp.android.current.input);
@@ -8038,13 +8108,13 @@ _SOKOL_PRIVATE int _sapp_android_input_cb(int fd, int events, void* data) {
 _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
     _SOKOL_UNUSED(data);
     if ((events & ALOOPER_EVENT_INPUT) == 0) {
-        SAPP_LOG("_sapp_android_main_cb() encountered unsupported event");
+        _SAPP_ERROR(ANDROID_UNSUPPORTED_INPUT_EVENT_MAIN_CB);
         return 1;
     }
 
     _sapp_android_msg_t msg;
     if (read(fd, &msg, sizeof(msg)) != sizeof(msg)) {
-        SAPP_LOG("Could not write to read_from_main_fd");
+        _SAPP_ERROR(ANDROID_READ_MSG_FAILED);
         return 1;
     }
 
@@ -8052,7 +8122,7 @@ _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
     switch (msg) {
         case _SOKOL_ANDROID_MSG_CREATE:
             {
-                SAPP_LOG("MSG_CREATE");
+                _SAPP_INFO(ANDROID_MSG_CREATE);
                 SOKOL_ASSERT(!_sapp.valid);
                 bool result = _sapp_android_init_egl();
                 SOKOL_ASSERT(result); _SOKOL_UNUSED(result);
@@ -8061,36 +8131,33 @@ _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
             }
             break;
         case _SOKOL_ANDROID_MSG_RESUME:
-            SAPP_LOG("MSG_RESUME");
+            _SAPP_INFO(ANDROID_MSG_RESUME);
             _sapp.android.has_resumed = true;
             _sapp_android_app_event(SAPP_EVENTTYPE_RESUMED);
             break;
         case _SOKOL_ANDROID_MSG_PAUSE:
-            SAPP_LOG("MSG_PAUSE");
+            _SAPP_INFO(ANDROID_MSG_PAUSE);
             _sapp.android.has_resumed = false;
             _sapp_android_app_event(SAPP_EVENTTYPE_SUSPENDED);
             break;
         case _SOKOL_ANDROID_MSG_FOCUS:
-            SAPP_LOG("MSG_FOCUS");
+            _SAPP_INFO(ANDROID_MSG_FOCUS);
             _sapp.android.has_focus = true;
             break;
         case _SOKOL_ANDROID_MSG_NO_FOCUS:
-            SAPP_LOG("MSG_NO_FOCUS");
+            _SAPP_INFO(ANDROID_MSG_NO_FOCUS);
             _sapp.android.has_focus = false;
             break;
         case _SOKOL_ANDROID_MSG_SET_NATIVE_WINDOW:
-            SAPP_LOG("MSG_SET_NATIVE_WINDOW");
+            _SAPP_INFO(ANDROID_MSG_SET_NATIVE_WINDOW);
             if (_sapp.android.current.window != _sapp.android.pending.window) {
                 if (_sapp.android.current.window != NULL) {
                     _sapp_android_cleanup_egl_surface();
                 }
                 if (_sapp.android.pending.window != NULL) {
-                    SAPP_LOG("Creating egl surface ...");
                     if (_sapp_android_init_egl_surface(_sapp.android.pending.window)) {
-                        SAPP_LOG("... ok!");
                         _sapp_android_update_dimensions(_sapp.android.pending.window, true);
                     } else {
-                        SAPP_LOG("... failed!");
                         _sapp_android_shutdown();
                     }
                 }
@@ -8098,7 +8165,7 @@ _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
             _sapp.android.current.window = _sapp.android.pending.window;
             break;
         case _SOKOL_ANDROID_MSG_SET_INPUT_QUEUE:
-            SAPP_LOG("MSG_SET_INPUT_QUEUE");
+            _SAPP_INFO(ANDROID_MSG_SET_INPUT_QUEUE);
             if (_sapp.android.current.input != _sapp.android.pending.input) {
                 if (_sapp.android.current.input != NULL) {
                     AInputQueue_detachLooper(_sapp.android.current.input);
@@ -8115,13 +8182,13 @@ _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
             _sapp.android.current.input = _sapp.android.pending.input;
             break;
         case _SOKOL_ANDROID_MSG_DESTROY:
-            SAPP_LOG("MSG_DESTROY");
+            _SAPP_INFO(ANDROID_MSG_DESTROY);
             _sapp_android_cleanup();
             _sapp.valid = false;
             _sapp.android.is_thread_stopping = true;
             break;
         default:
-            SAPP_LOG("Unknown msg type received");
+            _SAPP_WARN(ANDROID_UNKNOWN_MSG);
             break;
     }
     pthread_cond_broadcast(&_sapp.android.pt.cond); /* signal "received" */
@@ -8139,17 +8206,15 @@ _SOKOL_PRIVATE void _sapp_android_show_keyboard(bool shown) {
     SOKOL_ASSERT(_sapp.valid);
     /* This seems to be broken in the NDK, but there is (a very cumbersome) workaround... */
     if (shown) {
-        SAPP_LOG("Showing keyboard");
         ANativeActivity_showSoftInput(_sapp.android.activity, ANATIVEACTIVITY_SHOW_SOFT_INPUT_FORCED);
     } else {
-        SAPP_LOG("Hiding keyboard");
         ANativeActivity_hideSoftInput(_sapp.android.activity, ANATIVEACTIVITY_HIDE_SOFT_INPUT_NOT_ALWAYS);
     }
 }
 
 _SOKOL_PRIVATE void* _sapp_android_loop(void* arg) {
     _SOKOL_UNUSED(arg);
-    SAPP_LOG("Loop thread started");
+    _SAPP_INFO(ANDROID_LOOP_THREAD_STARTED);
 
     _sapp.android.looper = ALooper_prepare(0 /* or ALOOPER_PREPARE_ALLOW_NON_CALLBACKS*/);
     ALooper_addFd(_sapp.android.looper,
@@ -8194,38 +8259,39 @@ _SOKOL_PRIVATE void* _sapp_android_loop(void* arg) {
     _sapp.android.is_thread_stopped = true;
     pthread_cond_broadcast(&_sapp.android.pt.cond);
     pthread_mutex_unlock(&_sapp.android.pt.mutex);
-    SAPP_LOG("Loop thread done");
+
+    _SAPP_INFO(ANDROID_LOOP_THREAD_DONE);
     return NULL;
 }
 
 /* android main/ui thread */
 _SOKOL_PRIVATE void _sapp_android_msg(_sapp_android_msg_t msg) {
     if (write(_sapp.android.pt.write_from_main_fd, &msg, sizeof(msg)) != sizeof(msg)) {
-        SAPP_LOG("Could not write to write_from_main_fd");
+        _SAPP_ERROR(ANDROID_WRITE_MSG_FAILED);
     }
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_start(ANativeActivity* activity) {
     _SOKOL_UNUSED(activity);
-    SAPP_LOG("NativeActivity onStart()");
+    _SAPP_INFO(ANDROID_NATIVE_ACTIVITY_ONSTART);
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_resume(ANativeActivity* activity) {
     _SOKOL_UNUSED(activity);
-    SAPP_LOG("NativeActivity onResume()");
+    _SAPP_INFO(ANDROID_NATIVE_ACTIVITY_ONRESUME);
     _sapp_android_msg(_SOKOL_ANDROID_MSG_RESUME);
 }
 
 _SOKOL_PRIVATE void* _sapp_android_on_save_instance_state(ANativeActivity* activity, size_t* out_size) {
     _SOKOL_UNUSED(activity);
-    SAPP_LOG("NativeActivity onSaveInstanceState()");
+    _SAPP_INFO(ANDROID_NATIVE_ACTIVITY_ONSAVEINSTANCESTATE);
     *out_size = 0;
     return NULL;
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_window_focus_changed(ANativeActivity* activity, int has_focus) {
     _SOKOL_UNUSED(activity);
-    SAPP_LOG("NativeActivity onWindowFocusChanged()");
+    _SAPP_INFO(ANDROID_NATIVE_ACTIVITY_ONWINDOWFOCUSCHANGED);
     if (has_focus) {
         _sapp_android_msg(_SOKOL_ANDROID_MSG_FOCUS);
     } else {
@@ -8235,13 +8301,13 @@ _SOKOL_PRIVATE void _sapp_android_on_window_focus_changed(ANativeActivity* activ
 
 _SOKOL_PRIVATE void _sapp_android_on_pause(ANativeActivity* activity) {
     _SOKOL_UNUSED(activity);
-    SAPP_LOG("NativeActivity onPause()");
+    _SAPP_INFO(ANDROID_NATIVE_ACTIVITY_ONPAUSE);
     _sapp_android_msg(_SOKOL_ANDROID_MSG_PAUSE);
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_stop(ANativeActivity* activity) {
     _SOKOL_UNUSED(activity);
-    SAPP_LOG("NativeActivity onStop()");
+    _SAPP_INFO(ANDROID_NATIVE_ACTIVITY_ONSTOP);
 }
 
 _SOKOL_PRIVATE void _sapp_android_msg_set_native_window(ANativeWindow* window) {
@@ -8256,14 +8322,14 @@ _SOKOL_PRIVATE void _sapp_android_msg_set_native_window(ANativeWindow* window) {
 
 _SOKOL_PRIVATE void _sapp_android_on_native_window_created(ANativeActivity* activity, ANativeWindow* window) {
     _SOKOL_UNUSED(activity);
-    SAPP_LOG("NativeActivity onNativeWindowCreated()");
+    _SAPP_INFO(ANDROID_NATIVE_ACTIVITY_ONNATIVEWINDOWCREATED);
     _sapp_android_msg_set_native_window(window);
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_native_window_destroyed(ANativeActivity* activity, ANativeWindow* window) {
     _SOKOL_UNUSED(activity);
     _SOKOL_UNUSED(window);
-    SAPP_LOG("NativeActivity onNativeWindowDestroyed()");
+    _SAPP_INFO(ANDROID_NATIVE_ACTIVITY_ONNATIVEWINDOWDESTROYED);
     _sapp_android_msg_set_native_window(NULL);
 }
 
@@ -8279,26 +8345,26 @@ _SOKOL_PRIVATE void _sapp_android_msg_set_input_queue(AInputQueue* input) {
 
 _SOKOL_PRIVATE void _sapp_android_on_input_queue_created(ANativeActivity* activity, AInputQueue* queue) {
     _SOKOL_UNUSED(activity);
-    SAPP_LOG("NativeActivity onInputQueueCreated()");
+    _SAPP_INFO(ANDROID_NATIVE_ACTIVITY_ONINPUTQUEUECREATED);
     _sapp_android_msg_set_input_queue(queue);
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_input_queue_destroyed(ANativeActivity* activity, AInputQueue* queue) {
     _SOKOL_UNUSED(activity);
     _SOKOL_UNUSED(queue);
-    SAPP_LOG("NativeActivity onInputQueueDestroyed()");
+    _SAPP_INFO(ANDROID_NATIVE_ACTIVITY_ONINPUTQUEUEDESTROYED);
     _sapp_android_msg_set_input_queue(NULL);
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_config_changed(ANativeActivity* activity) {
     _SOKOL_UNUSED(activity);
-    SAPP_LOG("NativeActivity onConfigurationChanged()");
+    _SAPP_INFO(ANDROID_NATIVE_ACTIVITY_ONCONFIGURATIONCHANGED);
     /* see android:configChanges in manifest */
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_low_memory(ANativeActivity* activity) {
     _SOKOL_UNUSED(activity);
-    SAPP_LOG("NativeActivity onLowMemory()");
+    _SAPP_INFO(ANDROID_NATIVE_ACTIVITY_ONLOWMEMORY);
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_destroy(ANativeActivity* activity) {
@@ -8311,7 +8377,7 @@ _SOKOL_PRIVATE void _sapp_android_on_destroy(ANativeActivity* activity) {
      * _sapp_android_on_stop(), the crash disappears. Is this a bug in NativeActivity?
      */
     _SOKOL_UNUSED(activity);
-    SAPP_LOG("NativeActivity onDestroy()");
+    _SAPP_INFO(ANDROID_NATIVE_ACTIVITY_ONDESTROY);
 
     /* send destroy msg */
     pthread_mutex_lock(&_sapp.android.pt.mutex);
@@ -8328,7 +8394,7 @@ _SOKOL_PRIVATE void _sapp_android_on_destroy(ANativeActivity* activity) {
     close(_sapp.android.pt.read_from_main_fd);
     close(_sapp.android.pt.write_from_main_fd);
 
-    SAPP_LOG("NativeActivity done");
+    _SAPP_INFO(ANDROID_NATIVE_ACTIVITY_DONE);
 
     /* this is a bit naughty, but causes a clean restart of the app (static globals are reset) */
     exit(0);
@@ -8338,7 +8404,7 @@ JNIEXPORT
 void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size_t saved_state_size) {
     _SOKOL_UNUSED(saved_state);
     _SOKOL_UNUSED(saved_state_size);
-    SAPP_LOG("NativeActivity onCreate()");
+    _SAPP_INFO(ANDROID_NATIVE_ACTIVITY_ONCREATE);
 
     // the NativeActity pointer needs to be available inside sokol_main()
     // (see https://github.com/floooh/sokol/issues/708), however _sapp_init_state()
@@ -8352,7 +8418,7 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
 
     int pipe_fd[2];
     if (pipe(pipe_fd) != 0) {
-        SAPP_LOG("Could not create thread pipe");
+        _SAPP_ERROR(ANDROID_CREATE_THREAD_PIPE_FAILED);
         return;
     }
     _sapp.android.pt.read_from_main_fd = pipe_fd[0];
@@ -8400,7 +8466,7 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
     activity->callbacks->onConfigurationChanged = _sapp_android_on_config_changed;
     activity->callbacks->onLowMemory = _sapp_android_on_low_memory;
 
-    SAPP_LOG("NativeActivity successfully created");
+    _SAPP_INFO(ANDROID_NATIVE_ACTIVITY_CREATE_SUCCESS);
 
     /* NOT A BUG: do NOT call sapp_discard_state() */
 }
@@ -9332,7 +9398,7 @@ _SOKOL_PRIVATE void _sapp_x11_query_system_dpi(void) {
     // fallback if querying DPI had failed: assume the standard DPI 96.0f
     if (!dpi_ok) {
         _sapp.x11.dpi = 96.0f;
-        SAPP_LOG("sokol_app.h: failed to query system dpi value, assuming default 96.0");
+        _SAPP_WARN(LINUX_X11_QUERY_SYSTEM_DPI_FAILED);
     }
 }
 
@@ -9388,7 +9454,7 @@ _SOKOL_PRIVATE void _sapp_glx_init() {
         }
     }
     if (!_sapp.glx.libgl) {
-        _sapp_fail("GLX: failed to load libGL");
+        _SAPP_PANIC(LINUX_GLX_LOAD_LIBGL_FAILED);
     }
     _sapp.glx.GetFBConfigs          = (PFNGLXGETFBCONFIGSPROC)          dlsym(_sapp.glx.libgl, "glXGetFBConfigs");
     _sapp.glx.GetFBConfigAttrib     = (PFNGLXGETFBCONFIGATTRIBPROC)     dlsym(_sapp.glx.libgl, "glXGetFBConfigAttrib");
@@ -9419,17 +9485,17 @@ _SOKOL_PRIVATE void _sapp_glx_init() {
         !_sapp.glx.GetProcAddressARB ||
         !_sapp.glx.GetVisualFromFBConfig)
     {
-        _sapp_fail("GLX: failed to load required entry points");
+        _SAPP_PANIC(LINUX_GLX_LOAD_ENTRY_POINTS_FAILED);
     }
 
     if (!_sapp.glx.QueryExtension(_sapp.x11.display, &_sapp.glx.error_base, &_sapp.glx.event_base)) {
-        _sapp_fail("GLX: GLX extension not found");
+        _SAPP_PANIC(LINUX_GLX_EXTENSION_NOT_FOUND);
     }
     if (!_sapp.glx.QueryVersion(_sapp.x11.display, &_sapp.glx.major, &_sapp.glx.minor)) {
-        _sapp_fail("GLX: Failed to query GLX version");
+        _SAPP_PANIC(LINUX_GLX_QUERY_VERSION_FAILED);
     }
     if (_sapp.glx.major == 1 && _sapp.glx.minor < 3) {
-        _sapp_fail("GLX: GLX version 1.3 is required");
+        _SAPP_PANIC(LINUX_GLX_VERSION_TOO_LOW);
     }
     const char* exts = _sapp.glx.QueryExtensionsString(_sapp.x11.display, _sapp.x11.screen);
     if (_sapp_glx_extsupported("GLX_EXT_swap_control", exts)) {
@@ -9472,7 +9538,7 @@ _SOKOL_PRIVATE GLXFBConfig _sapp_glx_choosefbconfig() {
 
     native_configs = _sapp.glx.GetFBConfigs(_sapp.x11.display, _sapp.x11.screen, &native_count);
     if (!native_configs || !native_count) {
-        _sapp_fail("GLX: No GLXFBConfigs returned");
+        _SAPP_PANIC(LINUX_GLX_NO_GLXFBCONFIGS);
     }
 
     usable_configs = (_sapp_gl_fbconfig*) _sapp_malloc_clear((size_t)native_count * sizeof(_sapp_gl_fbconfig));
@@ -9530,11 +9596,11 @@ _SOKOL_PRIVATE GLXFBConfig _sapp_glx_choosefbconfig() {
 _SOKOL_PRIVATE void _sapp_glx_choose_visual(Visual** visual, int* depth) {
     GLXFBConfig native = _sapp_glx_choosefbconfig();
     if (0 == native) {
-        _sapp_fail("GLX: Failed to find a suitable GLXFBConfig");
+        _SAPP_PANIC(LINUX_GLX_NO_SUITABLE_GLXFBCONFIG);
     }
     XVisualInfo* result = _sapp.glx.GetVisualFromFBConfig(_sapp.x11.display, native);
     if (!result) {
-        _sapp_fail("GLX: Failed to retrieve Visual for GLXFBConfig");
+        _SAPP_PANIC(LINUX_GLX_GET_VISUAL_FROM_FBCONFIG_FAILED);
     }
     *visual = result->visual;
     *depth = result->depth;
@@ -9544,10 +9610,10 @@ _SOKOL_PRIVATE void _sapp_glx_choose_visual(Visual** visual, int* depth) {
 _SOKOL_PRIVATE void _sapp_glx_create_context(void) {
     GLXFBConfig native = _sapp_glx_choosefbconfig();
     if (0 == native){
-        _sapp_fail("GLX: Failed to find a suitable GLXFBConfig (2)");
+        _SAPP_PANIC(LINUX_GLX_NO_SUITABLE_GLXFBCONFIG);
     }
     if (!(_sapp.glx.ARB_create_context && _sapp.glx.ARB_create_context_profile)) {
-        _sapp_fail("GLX: ARB_create_context and ARB_create_context_profile required");
+        _SAPP_PANIC(LINUX_GLX_REQUIRED_EXTENSIONS_MISSING);
     }
     _sapp_x11_grab_error_handler();
     const int attribs[] = {
@@ -9559,12 +9625,12 @@ _SOKOL_PRIVATE void _sapp_glx_create_context(void) {
     };
     _sapp.glx.ctx = _sapp.glx.CreateContextAttribsARB(_sapp.x11.display, native, NULL, True, attribs);
     if (!_sapp.glx.ctx) {
-        _sapp_fail("GLX: failed to create GL context");
+        _SAPP_PANIC(LINUX_GLX_CREATE_CONTEXT_FAILED);
     }
     _sapp_x11_release_error_handler();
     _sapp.glx.window = _sapp.glx.CreateWindow(_sapp.x11.display, native, _sapp.x11.window, NULL);
     if (!_sapp.glx.window) {
-        _sapp_fail("GLX: failed to create window");
+        _SAPP_PANIC(LINUX_GLX_CREATE_WINDOW_FAILED);
     }
 }
 
@@ -9869,7 +9935,7 @@ _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
                                      &wa);
     _sapp_x11_release_error_handler();
     if (!_sapp.x11.window) {
-        _sapp_fail("X11: Failed to create window");
+        _SAPP_PANIC(LINUX_X11_CREATE_WINDOW_FAILED);
     }
     Atom protocols[] = {
         _sapp.x11.WM_DELETE_WINDOW
@@ -10295,7 +10361,7 @@ _SOKOL_PRIVATE bool _sapp_x11_parse_dropped_files_list(const char* src) {
                 ((src_count == 6) && (src_chr != '/')) ||
                 ((src_count == 7) && (src_chr != '/')))
             {
-                SAPP_LOG("sokol_app.h: dropped file URI doesn't start with file://");
+                _SAPP_ERROR(LINUX_X11_DROPPED_FILE_URI_WRONG_SCHEME);
                 err = true;
                 break;
             }
@@ -10328,7 +10394,7 @@ _SOKOL_PRIVATE bool _sapp_x11_parse_dropped_files_list(const char* src) {
                 *dst_ptr++ = dst_chr;
             }
             else {
-                SAPP_LOG("sokol_app.h: dropped file path too long (sapp_desc.max_dropped_file_path_length)");
+                _SAPP_ERROR(DROPPED_FILE_PATH_TOO_LONG);
                 err = true;
                 break;
             }
@@ -10635,22 +10701,22 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
 _SOKOL_PRIVATE void _sapp_egl_init(void) {
 #if defined(SOKOL_GLCORE33)
     if (!eglBindAPI(EGL_OPENGL_API)) {
-        _sapp_fail("EGL: failed to bind API");
+        _SAPP_PANIC(LINUX_EGL_BIND_OPENGL_API_FAILED);
     }
 #else
     if (!eglBindAPI(EGL_OPENGL_ES_API)) {
-        _sapp_fail("EGL: failed to bind API");
+        _SAPP_PANIC(LINUX_EGL_BIND_OPENGL_ES_API_FAILED);
     }
 #endif
 
     _sapp.egl.display = eglGetDisplay((EGLNativeDisplayType)_sapp.x11.display);
     if (EGL_NO_DISPLAY == _sapp.egl.display) {
-        _sapp_fail("EGL: failed to get display");
+        _SAPP_PANIC(LINUX_EGL_GET_DISPLAY_FAILED);
     }
 
     EGLint major, minor;
     if (!eglInitialize(_sapp.egl.display, &major, &minor)) {
-        _sapp_fail("EGL: failed to initialize");
+        _SAPP_PANIC(LINUX_EGL_INITIALIZE_FAILED);
     }
 
     EGLint sample_count = _sapp.desc.sample_count > 1 ? _sapp.desc.sample_count : 0;
@@ -10678,7 +10744,7 @@ _SOKOL_PRIVATE void _sapp_egl_init(void) {
     EGLConfig egl_configs[32];
     EGLint config_count;
     if (!eglChooseConfig(_sapp.egl.display, config_attrs, egl_configs, 32, &config_count) || config_count == 0) {
-        _sapp_fail("EGL: no available configs");
+        _SAPP_PANIC(LINUX_EGL_NO_CONFIGS);
     }
 
     EGLConfig config = egl_configs[0];
@@ -10700,7 +10766,7 @@ _SOKOL_PRIVATE void _sapp_egl_init(void) {
 
     EGLint visual_id;
     if (!eglGetConfigAttrib(_sapp.egl.display, config, EGL_NATIVE_VISUAL_ID, &visual_id)) {
-        _sapp_fail("EGL: failed to get native visual");
+        _SAPP_PANIC(LINUX_EGL_NO_NATIVE_VISUAL);
     }
 
     XVisualInfo visual_info_template;
@@ -10710,7 +10776,7 @@ _SOKOL_PRIVATE void _sapp_egl_init(void) {
     int num_visuals;
     XVisualInfo* visual_info = XGetVisualInfo(_sapp.x11.display, VisualIDMask, &visual_info_template, &num_visuals);
     if (!visual_info) {
-        _sapp_fail("EGL: failed to get x11 visual");
+        _SAPP_PANIC(LINUX_EGL_GET_VISUAL_INFO_FAILED);
     }
 
     _sapp_x11_create_window(visual_info->visual, visual_info->depth);
@@ -10718,7 +10784,7 @@ _SOKOL_PRIVATE void _sapp_egl_init(void) {
 
     _sapp.egl.surface = eglCreateWindowSurface(_sapp.egl.display, config, (EGLNativeWindowType)_sapp.x11.window, NULL);
     if (EGL_NO_SURFACE == _sapp.egl.surface) {
-        _sapp_fail("EGL: failed to create EGL surface");
+        _SAPP_PANIC(LINUX_EGL_CREATE_WINDOW_SURFACE_FAILED);
     }
 
     EGLint ctx_attrs[] = {
@@ -10736,11 +10802,11 @@ _SOKOL_PRIVATE void _sapp_egl_init(void) {
 
     _sapp.egl.context = eglCreateContext(_sapp.egl.display, config, EGL_NO_CONTEXT, ctx_attrs);
     if (EGL_NO_CONTEXT == _sapp.egl.context) {
-        _sapp_fail("EGL: failed to create GL context");
+        _SAPP_PANIC(LINUX_EGL_CREATE_CONTEXT_FAILED);
     }
 
     if (!eglMakeCurrent(_sapp.egl.display, _sapp.egl.surface, _sapp.egl.surface, _sapp.egl.context)) {
-        _sapp_fail("EGL: failed to set current context");
+        _SAPP_PANIC(LINUX_EGL_MAKE_CURRENT_FAILED);
     }
 
     eglSwapInterval(_sapp.egl.display, _sapp.swap_interval);
@@ -10787,7 +10853,7 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     XrmInitialize();
     _sapp.x11.display = XOpenDisplay(NULL);
     if (!_sapp.x11.display) {
-        _sapp_fail("XOpenDisplay() failed!\n");
+        _SAPP_PANIC(LINUX_X11_OPEN_DISPLAY_FAILED);
     }
     _sapp.x11.screen = DefaultScreen(_sapp.x11.display);
     _sapp.x11.root = DefaultRootWindow(_sapp.x11.display);
@@ -10882,8 +10948,7 @@ SOKOL_API_IMPL void sapp_run(const sapp_desc* desc) {
     #elif defined(_SAPP_LINUX)
         _sapp_linux_run(desc);
     #else
-        // calling sapp_run() directly is not supported on Android)
-        _sapp_fail("sapp_run() not supported on this platform!");
+    #error "sapp_run() not supported on this platform"
     #endif
 }
 
