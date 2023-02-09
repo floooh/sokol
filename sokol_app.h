@@ -2847,7 +2847,7 @@ _SOKOL_PRIVATE void _sapp_free(void* ptr) {
 //
 // >>logging
 #if defined(SOKOL_DEBUG)
-#define _SAPP_LOGITEM_XMACRO(item,msg) msg,
+#define _SAPP_LOGITEM_XMACRO(item,msg) #item ": " msg,
 static const char* _sapp_log_messages[] = {
     _SAPP_LOG_ITEMS
 };
