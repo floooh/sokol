@@ -244,56 +244,47 @@ SOKOL_API_IMPL void slog_func(const char* tag, uint32_t log_level, uint32_t log_
     }
 
     // build log output line
-    char line_buf[256];
+    char line_buf[512];
     char* str = line_buf;
     const char* end = line_buf + sizeof(line_buf);
     char num_buf[32];
     if (tag) {
         str = _slog_append("[", str, end);
         str = _slog_append(tag, str, end);
-        str = _slog_append("] ", str, end);
+        str = _slog_append("]", str, end);
     }
     str = _slog_append("[", str, end);
     str = _slog_append(log_level_str, str, end);
+    str = _slog_append("]", str, end);
+    str = _slog_append("[id:", str, end);
+    str = _slog_append(_slog_itoa(log_item, num_buf, sizeof(num_buf)), str, end);
     str = _slog_append("] ", str, end);
     // if a filename is provided, build a clickable log message that's compatible with compiler error messages
-    if (filename) {
-        #if defined(_MSC_VER)
-            // MSVC compiler error format
+    #if defined(_MSC_VER)
+        // MSVC compiler error format
+        if (filename) {
             str = _slog_append(filename, str, end);
-            str = _slog_append("(", str, end);
-            str = _slog_append(_slog_itoa(line_nr, num_buf, sizeof(num_buf)), str, end);
-            str = _slog_append("): ", str, end);
-        #else
-            // gcc/clang compiler error format
-            str = _slog_append(filename, str, end);
-            str = _slog_append(":", str, end);
-            str = _slog_append(_slog_itoa(line_nr, num_buf, sizeof(num_buf)), str, end);
-            str = _slog_append(":0: ", str, end);
-        #endif
-        if (message) {
-            str = _slog_append(message, str, end);
-            str = _slog_append(" ", str, end);
         }
-        else {
-            str = _slog_append("??? ", str, end);
-        }
-        str = _slog_append("(id:", str, end);
-        str = _slog_append(_slog_itoa(log_item, num_buf, sizeof(num_buf)), str, end);
-        str = _slog_append(")", str, end);
-    }
-    else {
-        // no filename provided, print what we can
-        str = _slog_append("line:", str, end);
+        str = _slog_append("(", str, end);
         str = _slog_append(_slog_itoa(line_nr, num_buf, sizeof(num_buf)), str, end);
-        str = _slog_append(" id:", str, end);
-        str = _slog_append(_slog_itoa(log_item, num_buf, sizeof(num_buf)), str, end);
-        if (message) {
-            str = _slog_append(" msg: ", str, end);
-            str = _slog_append(message, str, end);
+        str = _slog_append("): ", str, end);
+    #else
+        // gcc/clang compiler error format
+        if (filename) {
+            str = _slog_append(filename, str, end);
         }
+        str = _slog_append(":", str, end);
+        str = _slog_append(_slog_itoa(line_nr, num_buf, sizeof(num_buf)), str, end);
+        str = _slog_append(":0: ", str, end);
+    #endif
+    if (message) {
+        str = _slog_append("\n\t", str, end);
+        str = _slog_append(message, str, end);
     }
-    str = _slog_append("\n", str, end);
+    str = _slog_append("\n\n", str, end);
+    if (0 == log_level) {
+        str = _slog_append("ABORTING because of [panic]\n", str, end);
+    }
 
     // print to stderr?
     #if defined(_SLOG_LINUX) || defined(_SLOG_WINDOWS) || defined(_SLOG_APPLE)
