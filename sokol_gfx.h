@@ -2735,6 +2735,7 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(VALIDATE_APPENDBUF_UPDATE, "sg_append_buffer: cannot call sg_append_buffer and sg_update_buffer in same frame") \
     _SG_LOGITEM_XMACRO(VALIDATE_UPDIMG_USAGE, "sg_update_image: cannot update immutable image") \
     _SG_LOGITEM_XMACRO(VALIDATE_UPDIMG_ONCE, "sg_update_image: only one update allowed per image and frame") \
+    _SG_LOGITEM_XMACRO(VALIDATION_FAILED, "validation layer checks failed") \
 
 #define _SG_LOGITEM_XMACRO(item,msg) SG_LOGITEM_##item,
 typedef enum sg_log_item {
@@ -4665,7 +4666,7 @@ _SOKOL_PRIVATE uintptr_t _sg_smpcache_sampler(_sg_sampler_cache_t* cache, int it
 //
 // >>logging
 #if defined(SOKOL_DEBUG)
-#define _SG_LOGITEM_XMACRO(item,msg) msg,
+#define _SG_LOGITEM_XMACRO(item,msg) #item ": " msg,
 static const char* _sg_log_messages[] = {
     _SG_LOG_ITEMS
 };
@@ -14584,7 +14585,8 @@ _SOKOL_PRIVATE void _sg_validate_begin(void) {
 _SOKOL_PRIVATE bool _sg_validate_end(void) {
     if (_sg.validate_error != SG_LOGITEM_OK) {
         #if !defined(SOKOL_VALIDATE_NON_FATAL)
-            abort();
+            _SG_PANIC(VALIDATION_FAILED);
+            return false;
         #else
             return false;
         #endif
