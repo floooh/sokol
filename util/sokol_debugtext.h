@@ -547,13 +547,14 @@ extern "C" {
     Used as parameter in the logging callback.
 */
 #define _SDTX_LOG_ITEMS \
-    _SDTX_LOGITEM_XMACRO(OK) \
-    _SDTX_LOGITEM_XMACRO(ADD_COMMIT_LISTENER_FAILED) \
-    _SDTX_LOGITEM_XMACRO(COMMAND_BUFFER_FULL) \
-    _SDTX_LOGITEM_XMACRO(CONTEXT_POOL_EXHAUSTED) \
-    _SDTX_LOGITEM_XMACRO(CANNOT_DESTROY_DEFAULT_CONTEXT) \
+    _SDTX_LOGITEM_XMACRO(OK, "Ok") \
+    _SDTX_LOGITEM_XMACRO(MALLOC_FAILED, "memory allocation failed") \
+    _SDTX_LOGITEM_XMACRO(ADD_COMMIT_LISTENER_FAILED, "sg_add_commit_listener() failed") \
+    _SDTX_LOGITEM_XMACRO(COMMAND_BUFFER_FULL, "command buffer full (adjust via sdtx_context_desc_t.max_commands)") \
+    _SDTX_LOGITEM_XMACRO(CONTEXT_POOL_EXHAUSTED, "context pool exhausted (adjust via sdtx_desc_t.context_pool_size)") \
+    _SDTX_LOGITEM_XMACRO(CANNOT_DESTROY_DEFAULT_CONTEXT, "cannot destroy default context") \
 
-#define _SDTX_LOGITEM_XMACRO(item) SDTX_LOGITEM_##item,
+#define _SDTX_LOGITEM_XMACRO(item,msg) SDTX_LOGITEM_##item,
 typedef enum sdtx_log_item_t {
     _SDTX_LOG_ITEMS
 } sdtx_log_item_t;
@@ -3641,7 +3642,7 @@ static _sdtx_t _sdtx;
 //
 // >>logging
 #if defined(SOKOL_DEBUG)
-#define _SDTX_LOGITEM_XMACRO(item) #item,
+#define _SDTX_LOGITEM_XMACRO(item,msg) #item ": " msg,
 static const char* _sdtx_log_messages[] = {
     _SDTX_LOG_ITEMS
 };
@@ -3694,7 +3695,9 @@ static void* _sdtx_malloc(size_t size) {
     else {
         ptr = malloc(size);
     }
-    SOKOL_ASSERT(ptr);
+    if (0 == ptr) {
+        _SDTX_PANIC(MALLOC_FAILED);
+    }
     return ptr;
 }
 
