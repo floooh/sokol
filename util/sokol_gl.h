@@ -715,15 +715,15 @@ extern "C" {
     Used as parameter in the logging callback.
 */
 #define _SGL_LOG_ITEMS \
-    _SGL_LOGITEM_XMACRO(OK) \
-    _SGL_LOGITEM_XMACRO(MALLOC_FAILED) \
-    _SGL_LOGITEM_XMACRO(MAKE_PIPELINE_FAILED) \
-    _SGL_LOGITEM_XMACRO(PIPELINE_POOL_EXHAUSTED) \
-    _SGL_LOGITEM_XMACRO(ADD_COMMIT_LISTENER_FAILED) \
-    _SGL_LOGITEM_XMACRO(CONTEXT_POOL_EXHAUSTED) \
-    _SGL_LOGITEM_XMACRO(CANNOT_DESTROY_DEFAULT_CONTEXT) \
+    _SGL_LOGITEM_XMACRO(OK, "Ok") \
+    _SGL_LOGITEM_XMACRO(MALLOC_FAILED, "memory allocation failed") \
+    _SGL_LOGITEM_XMACRO(MAKE_PIPELINE_FAILED, "sg_make_pipeline() failed") \
+    _SGL_LOGITEM_XMACRO(PIPELINE_POOL_EXHAUSTED, "pipeline pool exhausted (use sgl_desc_t.pipeline_pool_size to adjust)") \
+    _SGL_LOGITEM_XMACRO(ADD_COMMIT_LISTENER_FAILED, "sg_add_commit_listener() failed") \
+    _SGL_LOGITEM_XMACRO(CONTEXT_POOL_EXHAUSTED, "context pool exhausted (use sgl_desc_t.context_pool_size to adjust)") \
+    _SGL_LOGITEM_XMACRO(CANNOT_DESTROY_DEFAULT_CONTEXT, "cannot destroy default context") \
 
-#define _SGL_LOGITEM_XMACRO(item) SGL_LOGITEM_##item,
+#define _SGL_LOGITEM_XMACRO(item,msg) SGL_LOGITEM_##item,
 typedef enum sgl_log_item_t {
     _SGL_LOG_ITEMS
 } sgl_log_item_t;
@@ -2455,7 +2455,7 @@ static _sgl_t _sgl;
 //
 // >>logging
 #if defined(SOKOL_DEBUG)
-#define _SGL_LOGITEM_XMACRO(item) #item,
+#define _SGL_LOGITEM_XMACRO(item,msg) #item ": " msg,
 static const char* _sgl_log_messages[] = {
     _SGL_LOG_ITEMS
 };
