@@ -132,4 +132,8 @@ bool spoll_keydown(sapp_keycode key)
     return g_key_down[BIT_INDEX(key)] & BIT_MASK(key);
 }
 
+/* Macro cleanup */
+#undef BIT_INDEX
+#undef BIT_MASK
+
 #endif
