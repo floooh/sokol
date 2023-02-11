@@ -2799,46 +2799,6 @@ typedef struct {
 } _sapp_t;
 static _sapp_t _sapp;
 
-// ███    ███ ███████ ███    ███  ██████  ██████  ██    ██
-// ████  ████ ██      ████  ████ ██    ██ ██   ██  ██  ██
-// ██ ████ ██ █████   ██ ████ ██ ██    ██ ██████    ████
-// ██  ██  ██ ██      ██  ██  ██ ██    ██ ██   ██    ██
-// ██      ██ ███████ ██      ██  ██████  ██   ██    ██
-//
-// >>memory
-_SOKOL_PRIVATE void _sapp_clear(void* ptr, size_t size) {
-    SOKOL_ASSERT(ptr && (size > 0));
-    memset(ptr, 0, size);
-}
-
-_SOKOL_PRIVATE void* _sapp_malloc(size_t size) {
-    SOKOL_ASSERT(size > 0);
-    void* ptr;
-    if (_sapp.desc.allocator.alloc) {
-        ptr = _sapp.desc.allocator.alloc(size, _sapp.desc.allocator.user_data);
-    }
-    else {
-        ptr = malloc(size);
-    }
-    SOKOL_ASSERT(ptr);
-    return ptr;
-}
-
-_SOKOL_PRIVATE void* _sapp_malloc_clear(size_t size) {
-    void* ptr = _sapp_malloc(size);
-    _sapp_clear(ptr, size);
-    return ptr;
-}
-
-_SOKOL_PRIVATE void _sapp_free(void* ptr) {
-    if (_sapp.desc.allocator.free) {
-        _sapp.desc.allocator.free(ptr, _sapp.desc.allocator.user_data);
-    }
-    else {
-        free(ptr);
-    }
-}
-
 // ██       ██████   ██████   ██████  ██ ███    ██  ██████
 // ██      ██    ██ ██       ██       ██ ████   ██ ██
 // ██      ██    ██ ██   ███ ██   ███ ██ ██ ██  ██ ██   ███
@@ -2875,6 +2835,48 @@ static void _sapp_log(sapp_log_item log_item, uint32_t log_level, const char* ms
         if (log_level == 0) {
             abort();
         }
+    }
+}
+
+// ███    ███ ███████ ███    ███  ██████  ██████  ██    ██
+// ████  ████ ██      ████  ████ ██    ██ ██   ██  ██  ██
+// ██ ████ ██ █████   ██ ████ ██ ██    ██ ██████    ████
+// ██  ██  ██ ██      ██  ██  ██ ██    ██ ██   ██    ██
+// ██      ██ ███████ ██      ██  ██████  ██   ██    ██
+//
+// >>memory
+_SOKOL_PRIVATE void _sapp_clear(void* ptr, size_t size) {
+    SOKOL_ASSERT(ptr && (size > 0));
+    memset(ptr, 0, size);
+}
+
+_SOKOL_PRIVATE void* _sapp_malloc(size_t size) {
+    SOKOL_ASSERT(size > 0);
+    void* ptr;
+    if (_sapp.desc.allocator.alloc) {
+        ptr = _sapp.desc.allocator.alloc(size, _sapp.desc.allocator.user_data);
+    }
+    else {
+        ptr = malloc(size);
+    }
+    if (0 == ptr) {
+        _SAPP_PANIC(MALLOC_FAILED);
+    }
+    return ptr;
+}
+
+_SOKOL_PRIVATE void* _sapp_malloc_clear(size_t size) {
+    void* ptr = _sapp_malloc(size);
+    _sapp_clear(ptr, size);
+    return ptr;
+}
+
+_SOKOL_PRIVATE void _sapp_free(void* ptr) {
+    if (_sapp.desc.allocator.free) {
+        _sapp.desc.allocator.free(ptr, _sapp.desc.allocator.user_data);
+    }
+    else {
+        free(ptr);
     }
 }
 
