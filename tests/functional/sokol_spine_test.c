@@ -298,7 +298,7 @@ UTEST(sokol_spine, make_skeleton_json_fail_corrupt_data) {
         .json_data = (const char*)invalid_json_data,
     });
     T(sspine_get_skeleton_resource_state(skeleton) == SSPINE_RESOURCESTATE_FAILED);
-    T(last_logitem == SSPINE_LOGITEM_SPINE_SKELETON_DATA_CREATION_FAILED);
+    T(last_logitem == SSPINE_LOGITEM_CREATE_SKELETON_DATA_FROM_JSON_FAILED);
     sspine_destroy_skeleton(skeleton);
     T(sspine_get_skeleton_resource_state(skeleton) == SSPINE_RESOURCESTATE_INVALID);
     shutdown();
