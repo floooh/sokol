@@ -1011,37 +1011,38 @@ typedef enum sspine_resource_state {
 
 // log item codes via x-macro magic
 #define _SSPINE_LOG_ITEMS \
-    _SSPINE_LOGITEM_XMACRO(OK)\
-    _SSPINE_LOGITEM_XMACRO(MALLOC_FAILED)\
-    _SSPINE_LOGITEM_XMACRO(CONTEXT_POOL_EXHAUSTED)\
-    _SSPINE_LOGITEM_XMACRO(ATLAS_POOL_EXHAUSTED)\
-    _SSPINE_LOGITEM_XMACRO(SKELETON_POOL_EXHAUSTED)\
-    _SSPINE_LOGITEM_XMACRO(SKINSET_POOL_EXHAUSTED)\
-    _SSPINE_LOGITEM_XMACRO(INSTANCE_POOL_EXHAUSTED)\
-    _SSPINE_LOGITEM_XMACRO(CANNOT_DESTROY_DEFAULT_CONTEXT)\
-    _SSPINE_LOGITEM_XMACRO(ATLAS_DESC_NO_DATA)\
-    _SSPINE_LOGITEM_XMACRO(SPINE_ATLAS_CREATION_FAILED)\
-    _SSPINE_LOGITEM_XMACRO(SG_ALLOC_IMAGE_FAILED)\
-    _SSPINE_LOGITEM_XMACRO(SKELETON_DESC_NO_DATA)\
-    _SSPINE_LOGITEM_XMACRO(SKELETON_DESC_NO_ATLAS)\
-    _SSPINE_LOGITEM_XMACRO(SKELETON_ATLAS_NOT_VALID)\
-    _SSPINE_LOGITEM_XMACRO(SPINE_SKELETON_DATA_CREATION_FAILED)\
-    _SSPINE_LOGITEM_XMACRO(SKINSET_DESC_NO_SKELETON)\
-    _SSPINE_LOGITEM_XMACRO(SKINSET_SKELETON_NOT_VALID)\
-    _SSPINE_LOGITEM_XMACRO(SKINSET_INVALID_SKIN_HANDLE)\
-    _SSPINE_LOGITEM_XMACRO(INSTANCE_DESC_NO_SKELETON)\
-    _SSPINE_LOGITEM_XMACRO(INSTANCE_SKELETON_NOT_VALID)\
-    _SSPINE_LOGITEM_XMACRO(INSTANCE_ATLAS_NOT_VALID)\
-    _SSPINE_LOGITEM_XMACRO(SPINE_SKELETON_CREATION_FAILED)\
-    _SSPINE_LOGITEM_XMACRO(SPINE_ANIMATIONSTATE_CREATION_FAILED)\
-    _SSPINE_LOGITEM_XMACRO(SPINE_SKELETONCLIPPING_CREATION_FAILED)\
-    _SSPINE_LOGITEM_XMACRO(COMMAND_BUFFER_OVERFLOW)\
-    _SSPINE_LOGITEM_XMACRO(VERTEX_BUFFER_OVERFLOW)\
-    _SSPINE_LOGITEM_XMACRO(INDEX_BUFFER_OVERFLOW)\
-    _SSPINE_LOGITEM_XMACRO(STRING_TRUNCATED)\
-    _SSPINE_LOGITEM_XMACRO(SG_ADD_COMMIT_LISTENER_FAILED)\
+    _SSPINE_LOGITEM_XMACRO(OK, "Ok")\
+    _SSPINE_LOGITEM_XMACRO(MALLOC_FAILED, "memory allocation failed")\
+    _SSPINE_LOGITEM_XMACRO(CONTEXT_POOL_EXHAUSTED, "context pool exhausted (adjust via sspine_desc.context_pool_size)")\
+    _SSPINE_LOGITEM_XMACRO(ATLAS_POOL_EXHAUSTED, "atlas pool exhausted (adjust via sspine_desc.atlas_pool_size)")\
+    _SSPINE_LOGITEM_XMACRO(SKELETON_POOL_EXHAUSTED, "skeleton pool exhausted (adjust via sspine_desc.skeleton_pool_size)")\
+    _SSPINE_LOGITEM_XMACRO(SKINSET_POOL_EXHAUSTED, "skinset pool exhausted (adjust via sspine_desc.skinset_pool_size)")\
+    _SSPINE_LOGITEM_XMACRO(INSTANCE_POOL_EXHAUSTED, "instance pool exhausted (adjust via sspine_desc.instance_pool_size)")\
+    _SSPINE_LOGITEM_XMACRO(CANNOT_DESTROY_DEFAULT_CONTEXT, "cannot destroy default context")\
+    _SSPINE_LOGITEM_XMACRO(ATLAS_DESC_NO_DATA, "no data provided in sspine_atlas_desc.data")\
+    _SSPINE_LOGITEM_XMACRO(SPINE_ATLAS_CREATION_FAILED, "spAtlas_create() failed")\
+    _SSPINE_LOGITEM_XMACRO(SG_ALLOC_IMAGE_FAILED, "sg_alloc_image() failed")\
+    _SSPINE_LOGITEM_XMACRO(SKELETON_DESC_NO_DATA, "no data provided in sspine_skeleton_desc.json_data or .binary_data")\
+    _SSPINE_LOGITEM_XMACRO(SKELETON_DESC_NO_ATLAS, "no atlas object provided in sspine_skeleton_desc.atlas")\
+    _SSPINE_LOGITEM_XMACRO(SKELETON_ATLAS_NOT_VALID, "sspine_skeleton_desc.atlas is not in valid state")\
+    _SSPINE_LOGITEM_XMACRO(CREATE_SKELETON_DATA_FROM_JSON_FAILED, "spSkeletonJson_readSkeletonData() failed")\
+    _SSPINE_LOGITEM_XMACRO(CREATE_SKELETON_DATA_FROM_BINARY_FAILED, "spSkeletonBinary_readSkeletonData() failed")\
+    _SSPINE_LOGITEM_XMACRO(SKINSET_DESC_NO_SKELETON, "no skeleton object provided in sspine_skinset_desc.skeleton")\
+    _SSPINE_LOGITEM_XMACRO(SKINSET_SKELETON_NOT_VALID, "sspine_skinset_desc.skeleton is not in valid state")\
+    _SSPINE_LOGITEM_XMACRO(SKINSET_INVALID_SKIN_HANDLE, "invalid skin handle in sspine_skinset_desc.skins[]")\
+    _SSPINE_LOGITEM_XMACRO(INSTANCE_DESC_NO_SKELETON, "no skeleton object provided in sspine_instance_desc.skeleton")\
+    _SSPINE_LOGITEM_XMACRO(INSTANCE_SKELETON_NOT_VALID, "sspine_instance_desc.skeleton is not in valid state")\
+    _SSPINE_LOGITEM_XMACRO(INSTANCE_ATLAS_NOT_VALID, "skeleton's atlas object no longer valid via sspine_instance_desc.skeleton")\
+    _SSPINE_LOGITEM_XMACRO(SPINE_SKELETON_CREATION_FAILED, "spSkeleton_create() failed")\
+    _SSPINE_LOGITEM_XMACRO(SPINE_ANIMATIONSTATE_CREATION_FAILED, "spAnimationState_create() failed")\
+    _SSPINE_LOGITEM_XMACRO(SPINE_SKELETONCLIPPING_CREATION_FAILED, "spSkeletonClipping_create() failed")\
+    _SSPINE_LOGITEM_XMACRO(COMMAND_BUFFER_FULL, "command buffer full (adjust via sspine_desc.max_commands)")\
+    _SSPINE_LOGITEM_XMACRO(VERTEX_BUFFER_FULL, "vertex buffer (adjust via sspine_desc.max_vertices)")\
+    _SSPINE_LOGITEM_XMACRO(INDEX_BUFFER_FULL, "index buffer full (adjust via sspine_desc.max_vertices)")\
+    _SSPINE_LOGITEM_XMACRO(STRING_TRUNCATED, "a string has been truncated")\
+    _SSPINE_LOGITEM_XMACRO(ADD_COMMIT_LISTENER_FAILED, "sg_add_commit_listener() failed")\
 
-#define _SSPINE_LOGITEM_XMACRO(code) SSPINE_LOGITEM_##code,
+#define _SSPINE_LOGITEM_XMACRO(item,msg) SSPINE_LOGITEM_##item,
 typedef enum sspine_log_item {
     _SSPINE_LOG_ITEMS
 } sspine_log_item;
@@ -2798,7 +2799,7 @@ char* _spUtil_readFile(const char* path, int* length) {
 //
 // >>logging
 #if defined(SOKOL_DEBUG)
-#define _SSPINE_LOGITEM_XMACRO(code) #code,
+#define _SSPINE_LOGITEM_XMACRO(item,msg) #item ": " msg,
 static const char* _sspine_log_messages[] = {
     _SSPINE_LOG_ITEMS
 };
@@ -3492,7 +3493,7 @@ static sspine_resource_state _sspine_init_skeleton(_sspine_skeleton_t* skeleton,
         skeleton->sp_skel_data = spSkeletonJson_readSkeletonData(skel_json, desc->json_data);
         spSkeletonJson_dispose(skel_json); skel_json = 0;
         if (0 == skeleton->sp_skel_data) {
-            _SSPINE_ERROR(SPINE_SKELETON_DATA_CREATION_FAILED);
+            _SSPINE_ERROR(CREATE_SKELETON_DATA_FROM_JSON_FAILED);
             return SSPINE_RESOURCESTATE_FAILED;
         }
     }
@@ -3503,7 +3504,7 @@ static sspine_resource_state _sspine_init_skeleton(_sspine_skeleton_t* skeleton,
         skeleton->sp_skel_data = spSkeletonBinary_readSkeletonData(skel_bin, (const unsigned char*)desc->binary_data.ptr, (int)desc->binary_data.size);
         spSkeletonBinary_dispose(skel_bin); skel_bin = 0;
         if (0 == skeleton->sp_skel_data) {
-            _SSPINE_ERROR(SPINE_SKELETON_DATA_CREATION_FAILED);
+            _SSPINE_ERROR(CREATE_SKELETON_DATA_FROM_BINARY_FAILED);
             return SSPINE_RESOURCESTATE_FAILED;
         }
     }
@@ -4028,7 +4029,7 @@ static _sspine_command_t* _sspine_next_command(_sspine_context_t* ctx) {
         return &(ctx->commands.ptr[ctx->commands.next++]);
     }
     else {
-        _SSPINE_ERROR(COMMAND_BUFFER_OVERFLOW);
+        _SSPINE_ERROR(COMMAND_BUFFER_FULL);
         return 0;
     }
 }
@@ -4060,7 +4061,7 @@ static _sspine_alloc_vertices_result_t _sspine_alloc_vertices(_sspine_context_t*
         ctx->vertices.next += num;
     }
     else {
-        _SSPINE_ERROR(VERTEX_BUFFER_OVERFLOW);
+        _SSPINE_ERROR(VERTEX_BUFFER_FULL);
     }
     return res;
 }
@@ -4082,7 +4083,7 @@ static _sspine_alloc_indices_result_t _sspine_alloc_indices(_sspine_context_t* c
         ctx->indices.next += num;
     }
     else {
-        _SSPINE_ERROR(INDEX_BUFFER_OVERFLOW);
+        _SSPINE_ERROR(INDEX_BUFFER_FULL);
     }
     return res;
 }
@@ -4543,7 +4544,7 @@ SOKOL_API_IMPL void sspine_setup(const sspine_desc* desc) {
     SOKOL_ASSERT(_sspine_is_default_context(_sspine.def_ctx_id));
     sspine_set_context(_sspine.def_ctx_id);
     if (!sg_add_commit_listener(_sspine_make_commit_listener())) {
-        _SSPINE_ERROR(SG_ADD_COMMIT_LISTENER_FAILED);
+        _SSPINE_ERROR(ADD_COMMIT_LISTENER_FAILED);
     }
 }
 
