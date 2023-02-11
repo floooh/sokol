@@ -953,22 +953,22 @@ extern "C" {
     Used as parameter in the logging callback.
 */
 #define _SFETCH_LOG_ITEMS \
-    _SFETCH_LOGITEM_XMACRO(OK) \
-    _SFETCH_LOGITEM_XMACRO(MALLOC_FAILED) \
-    _SFETCH_LOGITEM_XMACRO(FILE_PATH_UTF8_DECODING_FAILED) \
-    _SFETCH_LOGITEM_XMACRO(SEND_QUEUE_FULL) \
-    _SFETCH_LOGITEM_XMACRO(REQUEST_CHANNEL_TOO_BIG) \
-    _SFETCH_LOGITEM_XMACRO(REQUEST_PATH_IS_NULL) \
-    _SFETCH_LOGITEM_XMACRO(REQUEST_PATH_TOO_LONG) \
-    _SFETCH_LOGITEM_XMACRO(REQUEST_CALLBACK_MISSING) \
-    _SFETCH_LOGITEM_XMACRO(REQUEST_CHUNK_SIZE_GREATER_BUFFER_SIZE) \
-    _SFETCH_LOGITEM_XMACRO(REQUEST_USERDATA_PTR_IS_SET_BUT_USERDATA_SIZE_IS_NULL) \
-    _SFETCH_LOGITEM_XMACRO(REQUEST_USERDATA_PTR_IS_NULL_BUT_USERDATA_SIZE_IS_NOT) \
-    _SFETCH_LOGITEM_XMACRO(REQUEST_USERDATA_SIZE_TOO_BIG) \
-    _SFETCH_LOGITEM_XMACRO(CLAMPING_NUM_CHANNELS_TO_MAX_CHANNELS) \
-    _SFETCH_LOGITEM_XMACRO(REQUEST_POOL_FULL) \
+    _SFETCH_LOGITEM_XMACRO(OK, "Ok") \
+    _SFETCH_LOGITEM_XMACRO(MALLOC_FAILED, "memory allocation failed") \
+    _SFETCH_LOGITEM_XMACRO(FILE_PATH_UTF8_DECODING_FAILED, "failed converting file path from UTF8 to wide") \
+    _SFETCH_LOGITEM_XMACRO(SEND_QUEUE_FULL, "send queue full (adjust via sfetch_desc_t.max_requests)")  \
+    _SFETCH_LOGITEM_XMACRO(REQUEST_CHANNEL_INDEX_TOO_BIG, "channel index too big (adjust via sfetch_desc_t.num_channels)") \
+    _SFETCH_LOGITEM_XMACRO(REQUEST_PATH_IS_NULL, "file path is nullptr (sfetch_request_t.path)") \
+    _SFETCH_LOGITEM_XMACRO(REQUEST_PATH_TOO_LONG, "file path is too long (SFETCH_MAX_PATH)") \
+    _SFETCH_LOGITEM_XMACRO(REQUEST_CALLBACK_MISSING, "no callback provided (sfetch_request_t.callback)") \
+    _SFETCH_LOGITEM_XMACRO(REQUEST_CHUNK_SIZE_GREATER_BUFFER_SIZE, "chunk size is greater buffer size (sfetch_request_t.chunk_size vs .buffer.size)") \
+    _SFETCH_LOGITEM_XMACRO(REQUEST_USERDATA_PTR_IS_SET_BUT_USERDATA_SIZE_IS_NULL, "user data ptr is set but user data size is null (sfetch_request_t.user_data.ptr vs .size)") \
+    _SFETCH_LOGITEM_XMACRO(REQUEST_USERDATA_PTR_IS_NULL_BUT_USERDATA_SIZE_IS_NOT, "user data ptr is null but size is not (sfetch_request_t.user_data.ptr vs .size)") \
+    _SFETCH_LOGITEM_XMACRO(REQUEST_USERDATA_SIZE_TOO_BIG, "user data size too big (see SFETCH_MAX_USERDATA_UINT64)") \
+    _SFETCH_LOGITEM_XMACRO(CLAMPING_NUM_CHANNELS_TO_MAX_CHANNELS, "clamping num channels to SFETCH_MAX_CHANNELS") \
+    _SFETCH_LOGITEM_XMACRO(REQUEST_POOL_EXHAUSTED, "request pool exhausted (tweak via sfetch_desc_t.max_requests)") \
 
-#define _SFETCH_LOGITEM_XMACRO(item) SFETCH_LOGITEM_##item,
+#define _SFETCH_LOGITEM_XMACRO(item,msg) SFETCH_LOGITEM_##item,
 typedef enum sfetch_log_item_t {
     _SFETCH_LOG_ITEMS
 } sfetch_log_item_t;
@@ -1381,7 +1381,7 @@ static _sfetch_t* _sfetch;
 //
 // >>logging
 #if defined(SOKOL_DEBUG)
-#define _SFETCH_LOGITEM_XMACRO(item) #item,
+#define _SFETCH_LOGITEM_XMACRO(item,msg) #item ": " msg,
 static const char* _sfetch_log_messages[] = {
     _SFETCH_LOG_ITEMS
 };
@@ -2582,7 +2582,7 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
 
 _SOKOL_PRIVATE bool _sfetch_validate_request(_sfetch_t* ctx, const sfetch_request_t* req) {
     if (req->channel >= ctx->desc.num_channels) {
-        _SFETCH_ERROR(REQUEST_CHANNEL_TOO_BIG);
+        _SFETCH_ERROR(REQUEST_CHANNEL_INDEX_TOO_BIG);
         return false;
     }
     if (!req->path) {
@@ -2721,7 +2721,7 @@ SOKOL_API_IMPL sfetch_handle_t sfetch_send(const sfetch_request_t* request) {
 
     uint32_t slot_id = _sfetch_pool_item_alloc(&ctx->pool, request);
     if (0 == slot_id) {
-        _SFETCH_WARN(REQUEST_POOL_FULL);
+        _SFETCH_WARN(REQUEST_POOL_EXHAUSTED);
         return invalid_handle;
     }
     if (!_sfetch_channel_send(&ctx->chn[request->channel], slot_id)) {
