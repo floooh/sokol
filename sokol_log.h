@@ -42,12 +42,19 @@
         ...
         saudio_setup(&(saudio_desc){ .logger.func = slog_func });
 
-    Logging output goes to stderr and/or a platform specific logging subsystem:
+    Logging output goes to stderr and/or a platform specific logging subsystem
+    (which means that in some scenarios you might see logging messages duplicated):
 
         - Windows: stderr + OutputDebugStringA()
         - macOS/iOS/Linux: stderr + syslog()
         - Emscripten: console.info()/warn()/error()
         - Android: __android_log_write()
+
+    On Windows with sokol_app.h also note the runtime config items to make
+    stdout/stderr output visible on the console for WinMain() applications
+    via sapp_desc.win32_console_attach or sapp_desc.win32_console_create,
+    however when running in a debugger on Windows, the logging output should
+    show up on the debug output UI panel.
 
     In debug mode, a log message might look like this:
 
