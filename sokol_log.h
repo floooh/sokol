@@ -124,12 +124,11 @@ SOKOL_LOG_API_DECL void slog_func(const char* tag, uint32_t log_level, uint32_t 
 #endif
 #endif // SOKOL_LOG_INCLUDED
 
-// ██╗███╗   ███╗██████╗ ██╗     ███████╗███╗   ███╗███████╗███╗   ██╗████████╗ █████╗ ████████╗██╗ ██████╗ ███╗   ██╗
-// ██║████╗ ████║██╔══██╗██║     ██╔════╝████╗ ████║██╔════╝████╗  ██║╚══██╔══╝██╔══██╗╚══██╔══╝██║██╔═══██╗████╗  ██║
-// ██║██╔████╔██║██████╔╝██║     █████╗  ██╔████╔██║█████╗  ██╔██╗ ██║   ██║   ███████║   ██║   ██║██║   ██║██╔██╗ ██║
-// ██║██║╚██╔╝██║██╔═══╝ ██║     ██╔══╝  ██║╚██╔╝██║██╔══╝  ██║╚██╗██║   ██║   ██╔══██║   ██║   ██║██║   ██║██║╚██╗██║
-// ██║██║ ╚═╝ ██║██║     ███████╗███████╗██║ ╚═╝ ██║███████╗██║ ╚████║   ██║   ██║  ██║   ██║   ██║╚██████╔╝██║ ╚████║
-// ╚═╝╚═╝     ╚═╝╚═╝     ╚══════╝╚══════╝╚═╝     ╚═╝╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
+// ██ ███    ███ ██████  ██      ███████ ███    ███ ███████ ███    ██ ████████  █████  ████████ ██  ██████  ███    ██
+// ██ ████  ████ ██   ██ ██      ██      ████  ████ ██      ████   ██    ██    ██   ██    ██    ██ ██    ██ ████   ██
+// ██ ██ ████ ██ ██████  ██      █████   ██ ████ ██ █████   ██ ██  ██    ██    ███████    ██    ██ ██    ██ ██ ██  ██
+// ██ ██  ██  ██ ██      ██      ██      ██  ██  ██ ██      ██  ██ ██    ██    ██   ██    ██    ██ ██    ██ ██  ██ ██
+// ██ ██      ██ ██      ███████ ███████ ██      ██ ███████ ██   ████    ██    ██   ██    ██    ██  ██████  ██   ████
 //
 // >>implementation
 #ifdef SOKOL_LOG_IMPL
@@ -195,7 +194,10 @@ SOKOL_LOG_API_DECL void slog_func(const char* tag, uint32_t log_level, uint32_t 
 #include <syslog.h>
 #endif
 
-_SOKOL_PRIVATE char* _slog_append(const char* str, char* dst, const char* end) {
+// size of line buffer (on stack!) in bytes including terminating zero
+#define _SLOG_LINE_LENGTH (512)
+
+_SOKOL_PRIVATE char* _slog_append(const char* str, char* dst, char* end) {
     if (str) {
         char c;
         while (((c = *str++) != 0) && (dst < (end - 1))) {
@@ -244,9 +246,9 @@ SOKOL_API_IMPL void slog_func(const char* tag, uint32_t log_level, uint32_t log_
     }
 
     // build log output line
-    char line_buf[512];
+    char line_buf[_SLOG_LINE_LENGTH];
     char* str = line_buf;
-    const char* end = line_buf + sizeof(line_buf);
+    char* end = line_buf + sizeof(line_buf);
     char num_buf[32];
     if (tag) {
         str = _slog_append("[", str, end);
@@ -284,6 +286,7 @@ SOKOL_API_IMPL void slog_func(const char* tag, uint32_t log_level, uint32_t log_
     str = _slog_append("\n\n", str, end);
     if (0 == log_level) {
         str = _slog_append("ABORTING because of [panic]\n", str, end);
+        (void)str;
     }
 
     // print to stderr?
