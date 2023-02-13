@@ -69,6 +69,12 @@
 
         [sspine][error][id:12][line:3472]
 
+    RULES FOR WRITING YOUR OWN LOGGING FUNCTION
+    ===========================================
+    - must be re-entrant because it might be called from different threads
+    - must treat **all** provided string pointers as optional (can be null)
+    - don't store the string pointers, copy the string data instead
+    - must not return for log level panic
 
     LICENSE
     =======
