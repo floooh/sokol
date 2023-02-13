@@ -46,14 +46,14 @@
 
         - Windows: stderr + OutputDebugStringA()
         - macOS/iOS/Linux: stderr + syslog()
-        - Emscripten: browser console
+        - Emscripten: console.info()/warn()/error()
         - Android: __android_log_write()
 
     In debug mode, a log message might look like this:
 
         [saudio] [error] /Users/floh/projects/sokol/sokol_audio.h:2422:0: COREAUDIO_NEW_OUTPUT_FAILED (id:32)
 
-    The source path and line number is formatted in like compiler errors, in some IDEs (like VSCode)
+    The source path and line number is formatted like compiler errors, in some IDEs (like VSCode)
     such error messages are clickable.
 
     In release mode, logging is less verbose as to not bloat the executable with string data, but you still get
