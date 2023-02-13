@@ -41,7 +41,7 @@
   ```abort()``` when a panic log message is issued.
 
   In debug mode (NDEBUG not defined, or SOKOL_DEBUG defined), a log message
-  (form sokol_spine.h) will look like this:
+  (in this case from sokol_spine.h) will look like this:
 
   ```
   [sspine][error][id:12] /Users/floh/projects/sokol/util/sokol_spine.h:3472:0:
