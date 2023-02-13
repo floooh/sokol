@@ -1,7 +1,9 @@
 ## Updates
 
 - **13-Feb-2023**: The way logging works has been completely revamped in
-  the sokol headers.
+  the sokol headers. UWP support has been removed from sokol_audio.h
+  and sokol_app.h (this also means that the sokol headers no longer contain
+  any C++ code).
 
   **REQUIRED ACTION**: Since the sokol headers are now completely silent
   without a logging callback (explanation below), it is highly recommened
