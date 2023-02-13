@@ -10,6 +10,7 @@ import gen_util as util
 import os, shutil, sys
 
 module_names = {
+    'slog_':    'log',
     'sg_':      'gfx',
     'sapp_':    'app',
     'sapp_sg':  'glue',
@@ -21,6 +22,7 @@ module_names = {
 }
 
 c_source_paths = {
+    'slog_':    'sokol-nim/src/sokol/c/sokol_log.c',
     'sg_':      'sokol-nim/src/sokol/c/sokol_gfx.c',
     'sapp_':    'sokol-nim/src/sokol/c/sokol_app.c',
     'sapp_sg':  'sokol-nim/src/sokol/c/sokol_glue.c',
@@ -30,6 +32,10 @@ c_source_paths = {
     'sdtx_':    'sokol-nim/src/sokol/c/sokol_debugtext.c',
     'sshape_':  'sokol-nim/src/sokol/c/sokol_shape.c',
 }
+
+c_callbacks = [
+    'slog_func',
+]
 
 ignores = [
     'sdtx_printf',
@@ -47,6 +53,8 @@ overrides = {
     'SG_BUFFERTYPE_INDEXBUFFER':    'SG_BUFFERTYPE_INDEX_BUFFER',
     'SG_ACTION_DONTCARE':           'SG_ACTION_DONT_CARE',
     'ptr':                          'addr', # range ptr
+    'func':                         'fn',
+    'slog_func':                    'fn',
 }
 
 enumPrefixOverrides = {
@@ -412,22 +420,26 @@ def funcdecl_result(decl, prefix):
     return nim_res_type
 
 def gen_func_nim(decl, prefix):
-    nim_func_name = as_camel_case(check_override(decl['name']), prefix, wrap=False)
+    c_func_name = decl['name']
+    nim_func_name = as_camel_case(check_override(c_func_name), prefix, wrap=False)
     nim_res_type = funcdecl_result(decl, prefix)
-    l(f"proc c_{nim_func_name}({funcdecl_args_c(decl, prefix)}):{nim_res_type} {{.cdecl, importc:\"{decl['name']}\".}}")
-    l(f"proc {wrap_keywords(nim_func_name)}*({funcdecl_args_nim(decl, prefix)}):{nim_res_type} =")
-    s = f"    c_{nim_func_name}("
-    for i, param_decl in enumerate(decl['params']):
-        if i > 0:
-            s += ", "
-        arg_name = param_decl['name']
-        arg_type = param_decl['type']
-        if is_const_struct_ptr(arg_type):
-            s += f"unsafeAddr({arg_name})"
-        else:
-            s += arg_name
-    s += ")"
-    l(s)
+    if c_func_name in c_callbacks:
+        l(f"proc {nim_func_name}*({funcdecl_args_c(decl, prefix)}):{nim_res_type} {{.cdecl, importc:\"{c_func_name}\".}}")
+    else:
+        l(f"proc c_{nim_func_name}({funcdecl_args_c(decl, prefix)}):{nim_res_type} {{.cdecl, importc:\"{c_func_name}\".}}")
+        l(f"proc {wrap_keywords(nim_func_name)}*({funcdecl_args_nim(decl, prefix)}):{nim_res_type} =")
+        s = f"    c_{nim_func_name}("
+        for i, param_decl in enumerate(decl['params']):
+            if i > 0:
+                s += ", "
+            arg_name = param_decl['name']
+            arg_type = param_decl['type']
+            if is_const_struct_ptr(arg_type):
+                s += f"unsafeAddr({arg_name})"
+            else:
+                s += arg_name
+        s += ")"
+        l(s)
     l("")
 
 def gen_array_converters(decl, prefix):

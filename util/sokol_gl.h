@@ -101,14 +101,26 @@
         sokol-gfx resource objects.
 
         If you're intending to render to the default pass, and also don't
-        want to tweak memory usage, you can just keep sgl_desc_t zero-initialized:
+        want to tweak memory usage, and don't want any logging output you can
+        just keep sgl_desc_t zero-initialized:
 
             sgl_setup(&(sgl_desc_t*){ 0 });
 
         In this case, sokol-gl will create internal sg_pipeline objects that
-        are compatible with the sokol-app default framebuffer. If you want
-        to render into a framebuffer with different pixel-format and MSAA
-        attributes you need to provide the matching attributes in the
+        are compatible with the sokol-app default framebuffer.
+
+        I would recommend to at least install a logging callback so that
+        you'll see any warnings and errors. The easiest way is through
+        sokol_log.h:
+
+            #include "sokol_log.h"
+
+            sgl_setup(&(sgl_desc_t){
+                .logger.func = slog_func.
+            });
+
+        If you want to render into a framebuffer with different pixel-format
+        and MSAA attributes you need to provide the matching attributes in the
         sgl_setup() call:
 
             sgl_setup(&(sgl_desc_t*){
@@ -601,26 +613,46 @@
     If no overrides are provided, malloc and free will be used.
 
 
-    LOG FUNCTION OVERRIDE
-    =====================
-    You can override the log function at initialization time like this:
+    ERROR REPORTING AND LOGGING
+    ===========================
+    To get any logging information at all you need to provide a logging callback in the setup call,
+    the easiest way is to use sokol_log.h:
 
-        void my_log(const char* message, void* user_data) {
-            printf("sgl says: \s\n", message);
+        #include "sokol_log.h"
+
+        sgl_setup(&(sgl_desc_t){
+            // ...
+            .logger.func = slog_func
+        });
+
+    To override logging with your own callback, first write a logging function like this:
+
+        void my_log(const char* tag,                // e.g. 'sgl'
+                    uint32_t log_level,             // 0=panic, 1=error, 2=warn, 3=info
+                    uint32_t log_item_id,           // SGL_LOGITEM_*
+                    const char* message_or_null,    // a message string, may be nullptr in release mode
+                    uint32_t line_nr,               // line number in sokol_gl.h
+                    const char* filename_or_null,   // source filename, may be nullptr in release mode
+                    void* user_data)
+        {
+            ...
         }
 
-        ...
-            sgl_setup(&(sgl_desc_t){
-                // ...
-                .logger = {
-                    .log_cb = my_log,
-                    .user_data = ...,
-                }
-            });
-        ...
+    ...and then setup sokol-gl like this:
 
-    If no overrides are provided, puts will be used on most platforms.
-    On Android, __android_log_write will be used instead.
+        sgl_setup(&(sgl_desc_t){
+            .logger = {
+                .func = my_log,
+                .user_data = my_user_data,
+            }
+        });
+
+    The provided logging function must be reentrant (e.g. be callable from
+    different threads).
+
+    If you don't want to provide your own custom logger it is highly recommended to use
+    the standard logger in sokol_log.h instead, otherwise you won't see any warnings or
+    errors.
 
 
     LICENSE
@@ -674,6 +706,47 @@
 extern "C" {
 #endif
 
+/*
+    sgl_log_item_t
+
+    Log items are defined via X-Macros, and expanded to an
+    enum 'sgl_log_item' - and in debug mode only - corresponding strings.
+
+    Used as parameter in the logging callback.
+*/
+#define _SGL_LOG_ITEMS \
+    _SGL_LOGITEM_XMACRO(OK, "Ok") \
+    _SGL_LOGITEM_XMACRO(MALLOC_FAILED, "memory allocation failed") \
+    _SGL_LOGITEM_XMACRO(MAKE_PIPELINE_FAILED, "sg_make_pipeline() failed") \
+    _SGL_LOGITEM_XMACRO(PIPELINE_POOL_EXHAUSTED, "pipeline pool exhausted (use sgl_desc_t.pipeline_pool_size to adjust)") \
+    _SGL_LOGITEM_XMACRO(ADD_COMMIT_LISTENER_FAILED, "sg_add_commit_listener() failed") \
+    _SGL_LOGITEM_XMACRO(CONTEXT_POOL_EXHAUSTED, "context pool exhausted (use sgl_desc_t.context_pool_size to adjust)") \
+    _SGL_LOGITEM_XMACRO(CANNOT_DESTROY_DEFAULT_CONTEXT, "cannot destroy default context") \
+
+#define _SGL_LOGITEM_XMACRO(item,msg) SGL_LOGITEM_##item,
+typedef enum sgl_log_item_t {
+    _SGL_LOG_ITEMS
+} sgl_log_item_t;
+#undef _SGL_LOGITEM_XMACRO
+
+/*
+    sgl_logger_t
+
+    Used in sgl_desc_t to provide a custom logging and error reporting
+    callback to sokol-gl.
+*/
+typedef struct sgl_logger_t {
+    void (*func)(
+        const char* tag,                // always "sgl"
+        uint32_t log_level,             // 0=panic, 1=error, 2=warning, 3=info
+        uint32_t log_item_id,           // SGL_LOGITEM_*
+        const char* message_or_null,    // a message string, may be nullptr in release mode
+        uint32_t line_nr,               // line number in sokol_gl.h
+        const char* filename_or_null,   // source filename, may be nullptr in release mode
+        void* user_data);
+    void* user_data;
+} sgl_logger_t;
+
 /* sokol_gl pipeline handle (created with sgl_make_pipeline()) */
 typedef struct sgl_pipeline { uint32_t id; } sgl_pipeline;
 
@@ -725,17 +798,6 @@ typedef struct sgl_allocator_t {
     void* user_data;
 } sgl_allocator_t;
 
-/*
-    sgl_logger_t
-
-    Used in sgl_desc_t to provide custom log callbacks to sokol_gl.h.
-    Default behavior is SOKOL_LOG(message).
-*/
-typedef struct sgl_logger_t {
-    void (*log_cb)(const char* message, void* user_data);
-    void* user_data;
-} sgl_logger_t;
-
 typedef struct sgl_desc_t {
     int max_vertices;               // default: 64k
     int max_commands;               // default: 16k
@@ -746,7 +808,7 @@ typedef struct sgl_desc_t {
     int sample_count;
     sg_face_winding face_winding;   // default: SG_FACEWINDING_CCW
     sgl_allocator_t allocator;      // optional memory allocation overrides (default: malloc/free)
-    sgl_logger_t logger;            // optional memory allocation overrides (default: SOKOL_LOG(message))
+    sgl_logger_t logger;            // optional log function override (default: NO LOGGING)
 } sgl_desc_t;
 
 /* the default context handle */
@@ -867,7 +929,13 @@ inline sgl_pipeline sgl_context_make_pipeline(sgl_context ctx, const sg_pipeline
 #endif
 #endif /* SOKOL_GL_INCLUDED */
 
-/*-- IMPLEMENTATION ----------------------------------------------------------*/
+// ██ ███    ███ ██████  ██      ███████ ███    ███ ███████ ███    ██ ████████  █████  ████████ ██  ██████  ███    ██
+// ██ ████  ████ ██   ██ ██      ██      ████  ████ ██      ████   ██    ██    ██   ██    ██    ██ ██    ██ ████   ██
+// ██ ██ ████ ██ ██████  ██      █████   ██ ████ ██ █████   ██ ██  ██    ██    ███████    ██    ██ ██    ██ ██ ██  ██
+// ██ ██  ██  ██ ██      ██      ██      ██  ██  ██ ██      ██  ██ ██    ██    ██   ██    ██    ██ ██    ██ ██  ██ ██
+// ██ ██      ██ ██      ███████ ███████ ██      ██ ███████ ██   ████    ██    ██   ██    ██    ██  ██████  ██   ████
+//
+// >>implementation
 #ifdef SOKOL_GL_IMPL
 #define SOKOL_GL_IMPL_INCLUDED (1)
 
@@ -894,21 +962,6 @@ inline sgl_pipeline sgl_context_make_pipeline(sgl_context ctx, const sg_pipeline
 #ifndef SOKOL_ASSERT
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
-#endif
-
-#if !defined(SOKOL_DEBUG)
-    #define SGL_LOG(s)
-#else
-    #define SGL_LOG(s) _sgl_log(s)
-    #ifndef SOKOL_LOG
-        #if defined(__ANDROID__)
-            #include <android/log.h>
-            #define SOKOL_LOG(s) __android_log_write(ANDROID_LOG_INFO, "SOKOL_GL", s)
-        #else
-            #include <stdio.h>
-            #define SOKOL_LOG(s) puts(s)
-        #endif
-    #endif
 #endif
 
 #define _sgl_def(val, def) (((val) == 0) ? (def) : (val))
@@ -2215,6 +2268,13 @@ static const char* _sgl_fs_source_dummy = "";
 #error "Please define one of SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND!"
 #endif
 
+// ████████ ██    ██ ██████  ███████ ███████
+//    ██     ██  ██  ██   ██ ██      ██
+//    ██      ████   ██████  █████   ███████
+//    ██       ██    ██      ██           ██
+//    ██       ██    ██      ███████ ███████
+//
+// >>types
 typedef enum {
     SGL_PRIMITIVETYPE_POINTS = 0,
     SGL_PRIMITIVETYPE_LINES,
@@ -2384,7 +2444,52 @@ typedef struct {
 } _sgl_t;
 static _sgl_t _sgl;
 
-/*== PRIVATE FUNCTIONS =======================================================*/
+// ██       ██████   ██████   ██████  ██ ███    ██  ██████
+// ██      ██    ██ ██       ██       ██ ████   ██ ██
+// ██      ██    ██ ██   ███ ██   ███ ██ ██ ██  ██ ██   ███
+// ██      ██    ██ ██    ██ ██    ██ ██ ██  ██ ██ ██    ██
+// ███████  ██████   ██████   ██████  ██ ██   ████  ██████
+//
+// >>logging
+#if defined(SOKOL_DEBUG)
+#define _SGL_LOGITEM_XMACRO(item,msg) #item ": " msg,
+static const char* _sgl_log_messages[] = {
+    _SGL_LOG_ITEMS
+};
+#undef _SGL_LOGITEM_XMACRO
+#endif // SOKOL_DEBUG
+
+#define _SGL_PANIC(code) _sgl_log(SGL_LOGITEM_ ##code, 0, __LINE__)
+#define _SGL_ERROR(code) _sgl_log(SGL_LOGITEM_ ##code, 1, __LINE__)
+#define _SGL_WARN(code) _sgl_log(SGL_LOGITEM_ ##code, 2, __LINE__)
+#define _SGL_INFO(code) _sgl_log(SGL_LOGITEM_ ##code, 3, __LINE__)
+
+static void _sgl_log(sgl_log_item_t log_item, uint32_t log_level, uint32_t line_nr) {
+    if (_sgl.desc.logger.func) {
+        #if defined(SOKOL_DEBUG)
+            const char* filename = __FILE__;
+            const char* message = _sgl_log_messages[log_item];
+        #else
+            const char* filename = 0;
+            const char* message = 0;
+        #endif
+        _sgl.desc.logger.func("sgl", log_level, log_item, message, line_nr, filename, _sgl.desc.logger.user_data);
+    }
+    else {
+        // for log level PANIC it would be 'undefined behaviour' to continue
+        if (log_level == 0) {
+            abort();
+        }
+    }
+}
+
+// ███    ███ ███████ ███    ███  ██████  ██████  ██    ██
+// ████  ████ ██      ████  ████ ██    ██ ██   ██  ██  ██
+// ██ ████ ██ █████   ██ ████ ██ ██    ██ ██████    ████
+// ██  ██  ██ ██      ██  ██  ██ ██    ██ ██   ██    ██
+// ██      ██ ███████ ██      ██  ██████  ██   ██    ██
+//
+// >>memory
 static void _sgl_clear(void* ptr, size_t size) {
     SOKOL_ASSERT(ptr && (size > 0));
     memset(ptr, 0, size);
@@ -2399,7 +2504,9 @@ static void* _sgl_malloc(size_t size) {
     else {
         ptr = malloc(size);
     }
-    SOKOL_ASSERT(ptr);
+    if (0 == ptr) {
+        _SGL_PANIC(MALLOC_FAILED);
+    }
     return ptr;
 }
 
@@ -2418,17 +2525,13 @@ static void _sgl_free(void* ptr) {
     }
 }
 
-#if defined(SOKOL_DEBUG)
-static void _sgl_log(const char* msg) {
-    SOKOL_ASSERT(msg);
-    if (_sgl.desc.logger.log_cb) {
-        _sgl.desc.logger.log_cb(msg, _sgl.desc.logger.user_data);
-    } else {
-        SOKOL_LOG(msg);
-    }
-}
-#endif
-
+// ██████   ██████   ██████  ██
+// ██   ██ ██    ██ ██    ██ ██
+// ██████  ██    ██ ██    ██ ██
+// ██      ██    ██ ██    ██ ██
+// ██       ██████   ██████  ███████
+//
+// >>pool
 static void _sgl_init_pool(_sgl_pool_t* pool, int num) {
     SOKOL_ASSERT(pool && (num >= 1));
     /* slot 0 is reserved for the 'invalid id', so bump the pool size by 1 */
@@ -2486,47 +2589,6 @@ static void _sgl_pool_free_index(_sgl_pool_t* pool, int slot_index) {
     SOKOL_ASSERT(pool->queue_top <= (pool->size-1));
 }
 
-static void _sgl_reset_context(_sgl_context_t* ctx) {
-    SOKOL_ASSERT(ctx);
-    SOKOL_ASSERT(0 == ctx->vertices.ptr);
-    SOKOL_ASSERT(0 == ctx->uniforms.ptr);
-    SOKOL_ASSERT(0 == ctx->commands.ptr);
-    _sgl_clear(ctx, sizeof(_sgl_context_t));
-}
-
-static void _sgl_setup_context_pool(int pool_size) {
-    /* note: the pools here will have an additional item, since slot 0 is reserved */
-    SOKOL_ASSERT((pool_size > 0) && (pool_size < _SGL_MAX_POOL_SIZE));
-    _sgl_init_pool(&_sgl.context_pool.pool, pool_size);
-    size_t pool_byte_size = sizeof(_sgl_context_t) * (size_t)_sgl.context_pool.pool.size;
-    _sgl.context_pool.contexts = (_sgl_context_t*) _sgl_malloc_clear(pool_byte_size);
-}
-
-static void _sgl_discard_context_pool(void) {
-    SOKOL_ASSERT(0 != _sgl.context_pool.contexts);
-    _sgl_free(_sgl.context_pool.contexts); _sgl.context_pool.contexts = 0;
-    _sgl_discard_pool(&_sgl.context_pool.pool);
-}
-
-static void _sgl_reset_pipeline(_sgl_pipeline_t* pip) {
-    SOKOL_ASSERT(pip);
-    _sgl_clear(pip, sizeof(_sgl_pipeline_t));
-}
-
-static void _sgl_setup_pipeline_pool(int pool_size) {
-    /* note: the pools here will have an additional item, since slot 0 is reserved */
-    SOKOL_ASSERT((pool_size > 0) && (pool_size < _SGL_MAX_POOL_SIZE));
-    _sgl_init_pool(&_sgl.pip_pool.pool, pool_size);
-    size_t pool_byte_size = sizeof(_sgl_pipeline_t) * (size_t)_sgl.pip_pool.pool.size;
-    _sgl.pip_pool.pips = (_sgl_pipeline_t*) _sgl_malloc_clear(pool_byte_size);
-}
-
-static void _sgl_discard_pipeline_pool(void) {
-    SOKOL_ASSERT(0 != _sgl.pip_pool.pips);
-    _sgl_free(_sgl.pip_pool.pips); _sgl.pip_pool.pips = 0;
-    _sgl_discard_pool(&_sgl.pip_pool.pool);
-}
-
 /* allocate the slot at slot_index:
     - bump the slot's generation counter
     - create a resource id from the generation counter and slot index
@@ -2553,6 +2615,32 @@ static int _sgl_slot_index(uint32_t id) {
     int slot_index = (int) (id & _SGL_SLOT_MASK);
     SOKOL_ASSERT(_SGL_INVALID_SLOT_INDEX != slot_index);
     return slot_index;
+}
+
+// ██████  ██ ██████  ███████ ██      ██ ███    ██ ███████ ███████
+// ██   ██ ██ ██   ██ ██      ██      ██ ████   ██ ██      ██
+// ██████  ██ ██████  █████   ██      ██ ██ ██  ██ █████   ███████
+// ██      ██ ██      ██      ██      ██ ██  ██ ██ ██           ██
+// ██      ██ ██      ███████ ███████ ██ ██   ████ ███████ ███████
+//
+// >>pipelines
+static void _sgl_reset_pipeline(_sgl_pipeline_t* pip) {
+    SOKOL_ASSERT(pip);
+    _sgl_clear(pip, sizeof(_sgl_pipeline_t));
+}
+
+static void _sgl_setup_pipeline_pool(int pool_size) {
+    /* note: the pools here will have an additional item, since slot 0 is reserved */
+    SOKOL_ASSERT((pool_size > 0) && (pool_size < _SGL_MAX_POOL_SIZE));
+    _sgl_init_pool(&_sgl.pip_pool.pool, pool_size);
+    size_t pool_byte_size = sizeof(_sgl_pipeline_t) * (size_t)_sgl.pip_pool.pool.size;
+    _sgl.pip_pool.pips = (_sgl_pipeline_t*) _sgl_malloc_clear(pool_byte_size);
+}
+
+static void _sgl_discard_pipeline_pool(void) {
+    SOKOL_ASSERT(0 != _sgl.pip_pool.pips);
+    _sgl_free(_sgl.pip_pool.pips); _sgl.pip_pool.pips = 0;
+    _sgl_discard_pool(&_sgl.pip_pool.pool);
 }
 
 /* get pipeline pointer without id-check */
@@ -2665,7 +2753,7 @@ static void _sgl_init_pipeline(sgl_pipeline pip_id, const sg_pipeline_desc* in_d
         else {
             pip->pip[i] = sg_make_pipeline(&desc);
             if (pip->pip[i].id == SG_INVALID_ID) {
-                SGL_LOG("sokol_gl.h: failed to create pipeline object");
+                _SGL_ERROR(MAKE_PIPELINE_FAILED);
                 pip->slot.state = SG_RESOURCESTATE_FAILED;
             }
         }
@@ -2679,7 +2767,7 @@ static sgl_pipeline _sgl_make_pipeline(const sg_pipeline_desc* desc, const sgl_c
         _sgl_init_pipeline(pip_id, desc, ctx_desc);
     }
     else {
-        SGL_LOG("sokol_gl.h: pipeline pool exhausted!");
+        _SGL_ERROR(PIPELINE_POOL_EXHAUSTED);
     }
     return pip_id;
 }
@@ -2708,6 +2796,35 @@ static sg_pipeline _sgl_get_pipeline(sgl_pipeline pip_id, _sgl_primitive_type_t 
         sg_pipeline dummy_id = { SG_INVALID_ID };
         return dummy_id;
     }
+}
+
+//  ██████  ██████  ███    ██ ████████ ███████ ██   ██ ████████ ███████
+// ██      ██    ██ ████   ██    ██    ██       ██ ██     ██    ██
+// ██      ██    ██ ██ ██  ██    ██    █████     ███      ██    ███████
+// ██      ██    ██ ██  ██ ██    ██    ██       ██ ██     ██         ██
+//  ██████  ██████  ██   ████    ██    ███████ ██   ██    ██    ███████
+//
+// >>contexts
+static void _sgl_reset_context(_sgl_context_t* ctx) {
+    SOKOL_ASSERT(ctx);
+    SOKOL_ASSERT(0 == ctx->vertices.ptr);
+    SOKOL_ASSERT(0 == ctx->uniforms.ptr);
+    SOKOL_ASSERT(0 == ctx->commands.ptr);
+    _sgl_clear(ctx, sizeof(_sgl_context_t));
+}
+
+static void _sgl_setup_context_pool(int pool_size) {
+    /* note: the pools here will have an additional item, since slot 0 is reserved */
+    SOKOL_ASSERT((pool_size > 0) && (pool_size < _SGL_MAX_POOL_SIZE));
+    _sgl_init_pool(&_sgl.context_pool.pool, pool_size);
+    size_t pool_byte_size = sizeof(_sgl_context_t) * (size_t)_sgl.context_pool.pool.size;
+    _sgl.context_pool.contexts = (_sgl_context_t*) _sgl_malloc_clear(pool_byte_size);
+}
+
+static void _sgl_discard_context_pool(void) {
+    SOKOL_ASSERT(0 != _sgl.context_pool.contexts);
+    _sgl_free(_sgl.context_pool.contexts); _sgl.context_pool.contexts = 0;
+    _sgl_discard_pool(&_sgl.context_pool.pool);
 }
 
 // get context pointer without id-check
@@ -2792,9 +2909,7 @@ static void _sgl_init_context(sgl_context ctx_id, const sgl_context_desc_t* in_d
     def_pip_desc.depth.write_enabled = true;
     ctx->def_pip = _sgl_make_pipeline(&def_pip_desc, &ctx->desc);
     if (!sg_add_commit_listener(_sgl_make_commit_listener(ctx))) {
-        // FIXME: this should actually result in an invalid context,
-        // fix this when proper error logging/reporting is added
-        SGL_LOG("sokol_gl.h: failed to add sokol-gfx commit listener!");
+        _SGL_ERROR(ADD_COMMIT_LISTENER_FAILED);
     }
     sg_pop_debug_group();
 
@@ -2815,7 +2930,7 @@ static sgl_context _sgl_make_context(const sgl_context_desc_t* desc) {
         _sgl_init_context(ctx_id, desc);
     }
     else {
-        SGL_LOG("sokol_gl.h: context pool exhausted!");
+        _SGL_ERROR(CONTEXT_POOL_EXHAUSTED);
     }
     return ctx_id;
 }
@@ -2845,6 +2960,13 @@ static void _sgl_destroy_context(sgl_context ctx_id) {
     }
 }
 
+// ███    ███ ██ ███████  ██████
+// ████  ████ ██ ██      ██
+// ██ ████ ██ ██ ███████ ██
+// ██  ██  ██ ██      ██ ██
+// ██      ██ ██ ███████  ██████
+//
+// >>misc
 static void _sgl_begin(_sgl_context_t* ctx, _sgl_primitive_type_t mode) {
     ctx->in_begin = true;
     ctx->base_vertex = ctx->vertices.next;
@@ -3350,7 +3472,13 @@ static sgl_context_desc_t _sgl_as_context_desc(const sgl_desc_t* desc) {
     return ctx_desc;
 }
 
-/*== PUBLIC FUNCTIONS ========================================================*/
+// ██████  ██    ██ ██████  ██      ██  ██████
+// ██   ██ ██    ██ ██   ██ ██      ██ ██
+// ██████  ██    ██ ██████  ██      ██ ██
+// ██      ██    ██ ██   ██ ██      ██ ██
+// ██       ██████  ██████  ███████ ██  ██████
+//
+// >>public
 SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     SOKOL_ASSERT(desc);
     _sgl_clear(&_sgl, sizeof(_sgl));
@@ -3418,7 +3546,7 @@ SOKOL_API_IMPL sgl_context sgl_make_context(const sgl_context_desc_t* desc) {
 SOKOL_API_IMPL void sgl_destroy_context(sgl_context ctx_id) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     if (_sgl_is_default_context(ctx_id)) {
-        SGL_LOG("sokol_gl.h: cannot destroy default context");
+        _SGL_WARN(CANNOT_DESTROY_DEFAULT_CONTEXT);
         return;
     }
     _sgl_destroy_context(ctx_id);

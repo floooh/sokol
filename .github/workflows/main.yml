@@ -63,12 +63,3 @@ jobs:
           run: |
             cd tests
             ./test_android.sh
-    uwp:
-        runs-on: windows-latest
-        steps:
-        - uses: actions/checkout@v3
-        - name: test_uwp
-          run: |
-            cd tests
-            test_uwp.cmd
-          shell: cmd

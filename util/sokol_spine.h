@@ -166,6 +166,18 @@
         sg_setup(&(sg_desc){ ... });
         sspine_setup(&(sspine_desc){ ... });
 
+    - You should always provide a logging callback to sokol-spine, otherwise
+      no warning or errors will be logged. The easiest way is to use sokol_log.h
+      for this:
+
+        #include "sokol_log.h"
+
+        sspine_setup(&(sspine_desc){
+            .logger = {
+                .func = slog_func
+            }
+        });
+
     - You can tweak the memory usage of sokol-spine by limiting or expanding the
       maximum number of vertices, draw commands and pool sizes:
 
@@ -177,18 +189,28 @@
             .skeleton_pool_size = 1,    // default: 64
             .skinset_pool_size = 1,     // default: 64
             .instance_pool_size = 16,   // default: 1024
+            .logger = {
+                .func = slog_func,
+            }
         });
 
       Sokol-spine uses 32-bit vertex-indices for rendering
       (SG_INDEXTYPE_UINT32), so that the maximum number of Spine vertices
       in a frame isn't limited to (1<<16).
 
-    - You can override the default memory allocation and
-      error logging functions, this is explained in detail further down:
+    - You can override memory allocation and logging with your own
+      functions, this is explained in detail further down:
 
         sspine_setup(&(sspine_desc){
-            .allocator = { ... },
-            .logger = { ... }
+            .allocator = {
+                .alloc = my_alloc,
+                .free = my_free,
+                .user_data = ...,
+            },
+            .logger = {
+                .log_func = my_log_func,
+                .user_data = ...,
+            }
         });
 
     - After initialization, the first thing you need is an sspine_atlas object.
@@ -824,34 +846,24 @@
     Calling sspine_set_skinset() deactivates the effect of sspine_set_skin() and
     vice versa.
 
+
     ERROR REPORTING AND LOGGING
     ===========================
-    sokol_spine.h introduces a new combined logging- and error-reporting
-    mechanism which replaces the old SOKOL_LOG macro, and the more recent
-    logging callback.
+    To get any logging information at all you need to provide a logging callback in the setup call,
+    the easiest way is to use sokol_log.h:
 
-    The new reporting uses a more elaborate logger callback which provides:
+        #include "sokol_log.h"
 
-        - a short tag string identifying the header (for instance 'sspine')
-        - a numeric log level (panic, error, warning, info)
-        - a numeric error code (SSPINE_ERROR_*)
-        - in debug mode: the error code as human readable string
-        - a line number, where in the header the problem occured
-        - in debug mode: the filename of the header
-        - and a user data parameter
+        sspine_setup(&(sspine_desc){ .logger.func = slog_func });
 
-    The logging callback will be standardized across all sokol headers,
-    so that it will be possible to use the same logging function with
-    all headers.
+    To override logging with your own callback, first write a logging function like this:
 
-    To override logging, first write a logging function like this:
-
-        void my_log(const char* tag,        // e.g. 'sspine'
-                    uint32_t log_level,     // 0=panic, 1=error, 2=warn, 3=info
-                    uint32_t error_code,    // SSPINE_ERROR_*
-                    const char* error_id,   // error as string, only in debug mode, otherwise empty string
-                    int line_nr,            // line number in sokol_spine.h
-                    const char* filename,   // debug mode only, otherwise empty string
+        void my_log(const char* tag,                // e.g. 'sspine'
+                    uint32_t log_level,             // 0=panic, 1=error, 2=warn, 3=info
+                    uint32_t log_item_id,           // SSPINE_LOGITEM_*
+                    const char* message_or_null,    // a message string, may be nullptr in release mode
+                    uint32_t line_nr,               // line number in sokol_spine.h
+                    const char* filename_or_null,   // source filename, may be nullptr in release mode
                     void* user_data)
         {
             ...
@@ -862,16 +874,17 @@
         sspine_setup(&(sspine_desc){
             .logger = {
                 .func = my_log,
-                .user_data = ...,
+                .user_data = my_user_data,
             }
         });
 
-    If no custom logger is provided, verbose default logging goes to stderr
-    (this means you won't see any logging messages on Android, or on Windows
-    unless the process is attached to a terminal!).
+    The provided logging function must be reentrant (e.g. be callable from
+    different threads).
 
-    Eventually there will be a more luxurious sokol_log.h header, which will
-    provide more control over logging, also on Windows or Android.
+    If you don't want to provide your own custom logger it is highly recommended to use
+    the standard logger in sokol_log.h instead, otherwise you won't see any warnings or
+    errors.
+
 
     MEMORY ALLOCATION OVERRIDE
     ==========================
@@ -901,6 +914,7 @@
 
     This only affects memory allocation calls done by sokol_gfx.h
     itself though, not any allocations in OS libraries.
+
 
     LICENSE
     =======
@@ -995,49 +1009,44 @@ typedef enum sspine_resource_state {
     _SSPINE_RESOURCESTATE_FORCE_U32 = 0x7FFFFFFF
 } sspine_resource_state;
 
-// error codes via x-macro magic
-#define _SSPINE_ERRORS \
-    _SSPINE_XMACRO(OK)\
-    _SSPINE_XMACRO(CONTEXT_POOL_EXHAUSTED)\
-    _SSPINE_XMACRO(ATLAS_POOL_EXHAUSTED)\
-    _SSPINE_XMACRO(SKELETON_POOL_EXHAUSTED)\
-    _SSPINE_XMACRO(SKINSET_POOL_EXHAUSTED)\
-    _SSPINE_XMACRO(INSTANCE_POOL_EXHAUSTED)\
-    _SSPINE_XMACRO(CANNOT_DESTROY_DEFAULT_CONTEXT)\
-    _SSPINE_XMACRO(ATLAS_DESC_NO_DATA)\
-    _SSPINE_XMACRO(SPINE_ATLAS_CREATION_FAILED)\
-    _SSPINE_XMACRO(SG_ALLOC_IMAGE_FAILED)\
-    _SSPINE_XMACRO(SKELETON_DESC_NO_DATA)\
-    _SSPINE_XMACRO(SKELETON_DESC_NO_ATLAS)\
-    _SSPINE_XMACRO(SKELETON_ATLAS_NOT_VALID)\
-    _SSPINE_XMACRO(SPINE_SKELETON_DATA_CREATION_FAILED)\
-    _SSPINE_XMACRO(SKINSET_DESC_NO_SKELETON)\
-    _SSPINE_XMACRO(SKINSET_SKELETON_NOT_VALID)\
-    _SSPINE_XMACRO(SKINSET_INVALID_SKIN_HANDLE)\
-    _SSPINE_XMACRO(INSTANCE_DESC_NO_SKELETON)\
-    _SSPINE_XMACRO(INSTANCE_SKELETON_NOT_VALID)\
-    _SSPINE_XMACRO(INSTANCE_ATLAS_NOT_VALID)\
-    _SSPINE_XMACRO(SPINE_SKELETON_CREATION_FAILED)\
-    _SSPINE_XMACRO(SPINE_ANIMATIONSTATE_CREATION_FAILED)\
-    _SSPINE_XMACRO(SPINE_SKELETONCLIPPING_CREATION_FAILED)\
-    _SSPINE_XMACRO(COMMAND_BUFFER_OVERFLOW)\
-    _SSPINE_XMACRO(VERTEX_BUFFER_OVERFLOW)\
-    _SSPINE_XMACRO(INDEX_BUFFER_OVERFLOW)\
-    _SSPINE_XMACRO(STRING_TRUNCATED)\
-    _SSPINE_XMACRO(SG_ADD_COMMIT_LISTENER_FAILED)\
+// log item codes via x-macro magic
+#define _SSPINE_LOG_ITEMS \
+    _SSPINE_LOGITEM_XMACRO(OK, "Ok")\
+    _SSPINE_LOGITEM_XMACRO(MALLOC_FAILED, "memory allocation failed")\
+    _SSPINE_LOGITEM_XMACRO(CONTEXT_POOL_EXHAUSTED, "context pool exhausted (adjust via sspine_desc.context_pool_size)")\
+    _SSPINE_LOGITEM_XMACRO(ATLAS_POOL_EXHAUSTED, "atlas pool exhausted (adjust via sspine_desc.atlas_pool_size)")\
+    _SSPINE_LOGITEM_XMACRO(SKELETON_POOL_EXHAUSTED, "skeleton pool exhausted (adjust via sspine_desc.skeleton_pool_size)")\
+    _SSPINE_LOGITEM_XMACRO(SKINSET_POOL_EXHAUSTED, "skinset pool exhausted (adjust via sspine_desc.skinset_pool_size)")\
+    _SSPINE_LOGITEM_XMACRO(INSTANCE_POOL_EXHAUSTED, "instance pool exhausted (adjust via sspine_desc.instance_pool_size)")\
+    _SSPINE_LOGITEM_XMACRO(CANNOT_DESTROY_DEFAULT_CONTEXT, "cannot destroy default context")\
+    _SSPINE_LOGITEM_XMACRO(ATLAS_DESC_NO_DATA, "no data provided in sspine_atlas_desc.data")\
+    _SSPINE_LOGITEM_XMACRO(SPINE_ATLAS_CREATION_FAILED, "spAtlas_create() failed")\
+    _SSPINE_LOGITEM_XMACRO(SG_ALLOC_IMAGE_FAILED, "sg_alloc_image() failed")\
+    _SSPINE_LOGITEM_XMACRO(SKELETON_DESC_NO_DATA, "no data provided in sspine_skeleton_desc.json_data or .binary_data")\
+    _SSPINE_LOGITEM_XMACRO(SKELETON_DESC_NO_ATLAS, "no atlas object provided in sspine_skeleton_desc.atlas")\
+    _SSPINE_LOGITEM_XMACRO(SKELETON_ATLAS_NOT_VALID, "sspine_skeleton_desc.atlas is not in valid state")\
+    _SSPINE_LOGITEM_XMACRO(CREATE_SKELETON_DATA_FROM_JSON_FAILED, "spSkeletonJson_readSkeletonData() failed")\
+    _SSPINE_LOGITEM_XMACRO(CREATE_SKELETON_DATA_FROM_BINARY_FAILED, "spSkeletonBinary_readSkeletonData() failed")\
+    _SSPINE_LOGITEM_XMACRO(SKINSET_DESC_NO_SKELETON, "no skeleton object provided in sspine_skinset_desc.skeleton")\
+    _SSPINE_LOGITEM_XMACRO(SKINSET_SKELETON_NOT_VALID, "sspine_skinset_desc.skeleton is not in valid state")\
+    _SSPINE_LOGITEM_XMACRO(SKINSET_INVALID_SKIN_HANDLE, "invalid skin handle in sspine_skinset_desc.skins[]")\
+    _SSPINE_LOGITEM_XMACRO(INSTANCE_DESC_NO_SKELETON, "no skeleton object provided in sspine_instance_desc.skeleton")\
+    _SSPINE_LOGITEM_XMACRO(INSTANCE_SKELETON_NOT_VALID, "sspine_instance_desc.skeleton is not in valid state")\
+    _SSPINE_LOGITEM_XMACRO(INSTANCE_ATLAS_NOT_VALID, "skeleton's atlas object no longer valid via sspine_instance_desc.skeleton")\
+    _SSPINE_LOGITEM_XMACRO(SPINE_SKELETON_CREATION_FAILED, "spSkeleton_create() failed")\
+    _SSPINE_LOGITEM_XMACRO(SPINE_ANIMATIONSTATE_CREATION_FAILED, "spAnimationState_create() failed")\
+    _SSPINE_LOGITEM_XMACRO(SPINE_SKELETONCLIPPING_CREATION_FAILED, "spSkeletonClipping_create() failed")\
+    _SSPINE_LOGITEM_XMACRO(COMMAND_BUFFER_FULL, "command buffer full (adjust via sspine_desc.max_commands)")\
+    _SSPINE_LOGITEM_XMACRO(VERTEX_BUFFER_FULL, "vertex buffer (adjust via sspine_desc.max_vertices)")\
+    _SSPINE_LOGITEM_XMACRO(INDEX_BUFFER_FULL, "index buffer full (adjust via sspine_desc.max_vertices)")\
+    _SSPINE_LOGITEM_XMACRO(STRING_TRUNCATED, "a string has been truncated")\
+    _SSPINE_LOGITEM_XMACRO(ADD_COMMIT_LISTENER_FAILED, "sg_add_commit_listener() failed")\
 
-#define _SSPINE_XMACRO(code) SSPINE_ERROR_##code,
-typedef enum sspine_error {
-    _SSPINE_ERRORS
-} sspine_error;
-#undef _SSPINE_XMACRO
-
-typedef enum sspine_loglevel {
-    SSPINE_LOGLEVEL_PANIC = 0,
-    SSPINE_LOGLEVEL_ERROR = 1,
-    SSPINE_LOGLEVEL_WARN = 2,
-    SSPINE_LOGLEVEL_INFO = 3,
-} sspine_loglevel;
+#define _SSPINE_LOGITEM_XMACRO(item,msg) SSPINE_LOGITEM_##item,
+typedef enum sspine_log_item {
+    _SSPINE_LOG_ITEMS
+} sspine_log_item;
+#undef _SSPINE_LOGITEM_XMACRO
 
 typedef struct sspine_layer_transform {
     sspine_vec2 size;
@@ -1187,12 +1196,12 @@ typedef struct sspine_allocator {
 
 typedef struct sspine_logger {
     void (*func)(
-        const char* tag,      // always "sspine"
-        uint32_t log_level,   // 0=panic, 1=error, 2=warning, 3=info
-        uint32_t error_code,  // SSPINE_ERROR_*
-        const char* error_id, // error as string, debug only, otherwise empty string
-        int line_nr,          // line number in sokol_spine.h
-        const char* filename, // debug mode only, otherwise empty string
+        const char* tag,                // always "sspine"
+        uint32_t log_level,             // 0=panic, 1=error, 2=warning, 3=info
+        uint32_t log_item_id,           // SSPINE_LOGITEM_*
+        const char* message_or_null,    // a message string, may be nullptr in release mode
+        uint32_t line_nr,               // line number in sokol_spine.h
+        const char* filename_or_null,   // the source filename, may be nullptr in release mode
         void* user_data);
     void* user_data;
 } sspine_logger;
@@ -1209,8 +1218,8 @@ typedef struct sspine_desc {
     sg_pixel_format depth_format;
     int sample_count;
     sg_color_mask color_write_mask;
-    sspine_allocator allocator;
-    sspine_logger logger;
+    sspine_allocator allocator;     // optional allocation override functions (default: malloc/free)
+    sspine_logger logger;           // optional logging function (default: NO LOGGING!)
 } sspine_desc;
 
 // setup/shutdown
@@ -1371,7 +1380,13 @@ SOKOL_SPINE_API_DECL void sspine_set_skin(sspine_instance instance, sspine_skin 
 } // extern "C"
 #endif
 
-//-- IMPLEMENTATION ------------------------------------------------------------
+// ██ ███    ███ ██████  ██      ███████ ███    ███ ███████ ███    ██ ████████  █████  ████████ ██  ██████  ███    ██
+// ██ ████  ████ ██   ██ ██      ██      ████  ████ ██      ████   ██    ██    ██   ██    ██    ██ ██    ██ ████   ██
+// ██ ██ ████ ██ ██████  ██      █████   ██ ████ ██ █████   ██ ██  ██    ██    ███████    ██    ██ ██    ██ ██ ██  ██
+// ██ ██  ██  ██ ██      ██      ██      ██  ██  ██ ██      ██  ██ ██    ██    ██   ██    ██    ██ ██    ██ ██  ██ ██
+// ██ ██      ██ ██      ███████ ███████ ██      ██ ███████ ██   ████    ██    ██   ██    ██    ██  ██████  ██   ████
+//
+// >>implementation
 #ifdef SOKOL_SPINE_IMPL
 #define SOKOL_SPINE_IMPL_INCLUDED (1)
 
@@ -1400,8 +1415,15 @@ SOKOL_SPINE_API_DECL void sspine_set_skin(sspine_instance instance, sspine_skin 
 
 #include <stdlib.h> // malloc/free
 #include <string.h> // memset, strcmp
-#include <stdio.h>  // stderr, fprintf (debug mode), fputs (release mode)
 
+// ███████╗██╗  ██╗ █████╗ ██████╗ ███████╗██████╗ ███████╗
+// ██╔════╝██║  ██║██╔══██╗██╔══██╗██╔════╝██╔══██╗██╔════╝
+// ███████╗███████║███████║██║  ██║█████╗  ██████╔╝███████╗
+// ╚════██║██╔══██║██╔══██║██║  ██║██╔══╝  ██╔══██╗╚════██║
+// ███████║██║  ██║██║  ██║██████╔╝███████╗██║  ██║███████║
+// ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝
+//
+// >>shaders
 /*
     Embedded source compiled with:
 
@@ -2544,13 +2566,21 @@ static const char _sspine_fs_source_metal_sim[721] = {
     0x00,
 };
 #elif defined(SOKOL_WGPU)
-FIXME
+#error "FIXME: wgpu shaders"
 #elif defined(SOKOL_DUMMY_BACKEND)
 static const char* _sspine_vs_source_dummy = "";
 static const char* _sspine_fs_source_dummy = "";
 #else
 #error "Please define one of SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND!"
 #endif
+
+// ███████ ████████ ██████  ██    ██  ██████ ████████ ███████
+// ██         ██    ██   ██ ██    ██ ██         ██    ██
+// ███████    ██    ██████  ██    ██ ██         ██    ███████
+//      ██    ██    ██   ██ ██    ██ ██         ██         ██
+// ███████    ██    ██   ██  ██████   ██████    ██    ███████
+//
+// >>structs
 
 #define _sspine_def(val, def) (((val) == 0) ? (def) : (val))
 #define _SSPINE_INIT_COOKIE (0xABBAABBA)
@@ -2566,14 +2596,6 @@ static const char* _sspine_fs_source_dummy = "";
 #define _SSPINE_SLOT_SHIFT (16)
 #define _SSPINE_MAX_POOL_SIZE (1<<_SSPINE_SLOT_SHIFT)
 #define _SSPINE_SLOT_MASK (_SSPINE_MAX_POOL_SIZE-1)
-
-#if defined(SOKOL_DEBUG)
-#define _SSPINE_XMACRO(code) #code,
-static const char* _sspine_error_ids[] = {
-    _SSPINE_ERRORS
-};
-#undef _SSPINE_XMACRO
-#endif // SOKOL_DEBUG
 
 typedef struct {
     float mvp[16];
@@ -2769,54 +2791,52 @@ char* _spUtil_readFile(const char* path, int* length) {
 } // extern "C"
 #endif
 
-//=== HELPER FUNCTION ==========================================================
-#define _SSPINE_PANIC(code) _sspine_log(SSPINE_ERROR_ ##code, SSPINE_LOGLEVEL_PANIC, __LINE__)
-#define _SSPINE_ERROR(code) _sspine_log(SSPINE_ERROR_ ##code, SSPINE_LOGLEVEL_ERROR, __LINE__)
-#define _SSPINE_WARN(code) _sspine_log(SSPINE_ERROR_ ##code, SSPINE_LOGLEVEL_WARN, __LINE__)
-#define _SSPINE_INFO(code) _sspine_log(SSPINE_ERROR_ ##code, SSPINE_LOGLEVEL_INFO, __LINE__)
+// ██       ██████   ██████   ██████  ██ ███    ██  ██████
+// ██      ██    ██ ██       ██       ██ ████   ██ ██
+// ██      ██    ██ ██   ███ ██   ███ ██ ██ ██  ██ ██   ███
+// ██      ██    ██ ██    ██ ██    ██ ██ ██  ██ ██ ██    ██
+// ███████  ██████   ██████   ██████  ██ ██   ████  ██████
+//
+// >>logging
+#if defined(SOKOL_DEBUG)
+#define _SSPINE_LOGITEM_XMACRO(item,msg) #item ": " msg,
+static const char* _sspine_log_messages[] = {
+    _SSPINE_LOG_ITEMS
+};
+#undef _SSPINE_LOGITEM_XMACRO
+#endif // SOKOL_DEBUG
 
-static void _sspine_log(sspine_error error_code, sspine_loglevel log_level, int line_nr) {
+#define _SSPINE_PANIC(code) _sspine_log(SSPINE_LOGITEM_ ##code, 0, __LINE__)
+#define _SSPINE_ERROR(code) _sspine_log(SSPINE_LOGITEM_ ##code, 1, __LINE__)
+#define _SSPINE_WARN(code) _sspine_log(SSPINE_LOGITEM_ ##code, 2, __LINE__)
+#define _SSPINE_INFO(code) _sspine_log(SSPINE_LOGITEM_ ##code, 3, __LINE__)
+
+static void _sspine_log(sspine_log_item log_item, uint32_t log_level, uint32_t line_nr) {
     if (_sspine.desc.logger.func) {
         #if defined(SOKOL_DEBUG)
             const char* filename = __FILE__;
-            const char* error_id = _sspine_error_ids[error_code];
+            const char* message = _sspine_log_messages[log_item];
         #else
-            const char* filename = "";
-            const char* error_id = "";
+            const char* filename = 0;
+            const char* message = 0;
         #endif
-        _sspine.desc.logger.func("sspine", log_level, error_code, error_id, line_nr, filename, _sspine.desc.logger.user_data);
+        _sspine.desc.logger.func("sspine", log_level, log_item, message, line_nr, filename, _sspine.desc.logger.user_data);
     }
     else {
-        // default logging function, uses printf only if debugging is enabled to save executable size
-        const char* loglevel_str;
-        switch (log_level) {
-            case SSPINE_LOGLEVEL_PANIC: loglevel_str = "panic"; break;
-            case SSPINE_LOGLEVEL_ERROR: loglevel_str = "error"; break;
-            case SSPINE_LOGLEVEL_WARN:  loglevel_str = "warning"; break;
-            default: loglevel_str = "info"; break;
-        }
-        #if defined(SOKOL_DEBUG)
-        const char* error_id = _sspine_error_ids[error_code];
-        #if defined(_MSC_VER)
-            // Visual Studio compiler error format
-            fprintf(stderr, "[sspine] %s(%d): %s: %s\n", __FILE__, line_nr, loglevel_str, error_id);
-        #else
-            // GCC error format
-            fprintf(stderr, "[sspine] %s:%d:0: %s: %s\n", __FILE__, line_nr, loglevel_str, error_id);
-        #endif
-        #else
-            fputs("[sspine] ", stderr);
-            fputs(loglevel_str, stderr);
-            fputs(" (build in debug mode for more info)\n", stderr);
-        #endif // SOKOL_DEBUG
-
         // for log level PANIC it would be 'undefined behaviour' to continue
-        if (log_level == SSPINE_LOGLEVEL_PANIC) {
+        if (log_level == 0) {
             abort();
         }
     }
 }
 
+// ███    ███ ███████ ███    ███  ██████  ██████  ██    ██
+// ████  ████ ██      ████  ████ ██    ██ ██   ██  ██  ██
+// ██ ████ ██ █████   ██ ████ ██ ██    ██ ██████    ████
+// ██  ██  ██ ██      ██  ██  ██ ██    ██ ██   ██    ██
+// ██      ██ ███████ ██      ██  ██████  ██   ██    ██
+//
+// >>memory
 static void _sspine_clear(void* ptr, size_t size) {
     SOKOL_ASSERT(ptr && (size > 0));
     memset(ptr, 0, size);
@@ -2872,7 +2892,9 @@ static void* _sspine_malloc(size_t size) {
     else {
         ptr = malloc(size);
     }
-    SOKOL_ASSERT(ptr);
+    if (0 == ptr) {
+        _SSPINE_PANIC(MALLOC_FAILED);
+    }
     return ptr;
 }
 
@@ -2891,6 +2913,13 @@ static void _sspine_free(void* ptr) {
     }
 }
 
+// ██████  ███████ ███████ ███████
+// ██   ██ ██      ██      ██
+// ██████  █████   █████   ███████
+// ██   ██ ██      ██           ██
+// ██   ██ ███████ ██      ███████
+//
+// >>refs
 static bool _sspine_atlas_ref_valid(const _sspine_atlas_ref_t* ref) {
     return ref->ptr && (ref->ptr->slot.id == ref->id);
 }
@@ -2958,7 +2987,13 @@ static sspine_skin _sspine_skin(uint32_t skeleton_id, int index) {
     return skin;
 }
 
-//=== HANDLE POOL FUNCTIONS ====================================================
+// ██████   ██████   ██████  ██
+// ██   ██ ██    ██ ██    ██ ██
+// ██████  ██    ██ ██    ██ ██
+// ██      ██    ██ ██    ██ ██
+// ██       ██████   ██████  ███████
+//
+// >>pool
 static void _sspine_init_pool(_sspine_pool_t* pool, int num) {
     SOKOL_ASSERT(pool && (num >= 1));
     // slot 0 is reserved for the 'invalid id', so bump the pool size by 1
@@ -3062,7 +3097,13 @@ static void _sspine_discard_item_pool(_sspine_pool_t* pool, void** items_ptr) {
     _sspine_discard_pool(pool);
 }
 
-//== CONTEXT POOL FUNCTIONS ====================================================
+//  ██████  ██████  ███    ██ ████████ ███████ ██   ██ ████████
+// ██      ██    ██ ████   ██    ██    ██       ██ ██     ██
+// ██      ██    ██ ██ ██  ██    ██    █████     ███      ██
+// ██      ██    ██ ██  ██ ██    ██    ██       ██ ██     ██
+//  ██████  ██████  ██   ████    ██    ███████ ██   ██    ██
+//
+// >>context
 static void _sspine_setup_context_pool(int pool_size) {
     _sspine_context_pool_t* p = &_sspine.context_pool;
     _sspine_init_item_pool(&p->pool, pool_size, (void**)&p->items, sizeof(_sspine_context_t));
@@ -3228,7 +3269,13 @@ static bool _sspine_is_default_context(sspine_context ctx_id) {
     return ctx_id.id == 0x00010001;
 }
 
-//=== ATLAS POOL FUNCTIONS =====================================================
+//  █████  ████████ ██       █████  ███████
+// ██   ██    ██    ██      ██   ██ ██
+// ███████    ██    ██      ███████ ███████
+// ██   ██    ██    ██      ██   ██      ██
+// ██   ██    ██    ███████ ██   ██ ███████
+//
+// >>atlas
 static void _sspine_setup_atlas_pool(int pool_size) {
     _sspine_atlas_pool_t* p = &_sspine.atlas_pool;
     _sspine_init_item_pool(&p->pool, pool_size, (void**)&p->items, sizeof(_sspine_atlas_t));
@@ -3360,7 +3407,13 @@ static spAtlasPage* _sspine_lookup_atlas_page(uint32_t atlas_id, int page_index)
     return 0;
 }
 
-//=== SKELETON POOL FUNCTIONS ==================================================
+// ███████ ██   ██ ███████ ██      ███████ ████████  ██████  ███    ██
+// ██      ██  ██  ██      ██      ██         ██    ██    ██ ████   ██
+// ███████ █████   █████   ██      █████      ██    ██    ██ ██ ██  ██
+//      ██ ██  ██  ██      ██      ██         ██    ██    ██ ██  ██ ██
+// ███████ ██   ██ ███████ ███████ ███████    ██     ██████  ██   ████
+//
+// >>skeleton
 static void _sspine_setup_skeleton_pool(int pool_size) {
     _sspine_skeleton_pool_t* p = &_sspine.skeleton_pool;
     _sspine_init_item_pool(&p->pool, pool_size, (void**)&p->items, sizeof(_sspine_skeleton_t));
@@ -3440,7 +3493,7 @@ static sspine_resource_state _sspine_init_skeleton(_sspine_skeleton_t* skeleton,
         skeleton->sp_skel_data = spSkeletonJson_readSkeletonData(skel_json, desc->json_data);
         spSkeletonJson_dispose(skel_json); skel_json = 0;
         if (0 == skeleton->sp_skel_data) {
-            _SSPINE_ERROR(SPINE_SKELETON_DATA_CREATION_FAILED);
+            _SSPINE_ERROR(CREATE_SKELETON_DATA_FROM_JSON_FAILED);
             return SSPINE_RESOURCESTATE_FAILED;
         }
     }
@@ -3451,7 +3504,7 @@ static sspine_resource_state _sspine_init_skeleton(_sspine_skeleton_t* skeleton,
         skeleton->sp_skel_data = spSkeletonBinary_readSkeletonData(skel_bin, (const unsigned char*)desc->binary_data.ptr, (int)desc->binary_data.size);
         spSkeletonBinary_dispose(skel_bin); skel_bin = 0;
         if (0 == skeleton->sp_skel_data) {
-            _SSPINE_ERROR(SPINE_SKELETON_DATA_CREATION_FAILED);
+            _SSPINE_ERROR(CREATE_SKELETON_DATA_FROM_BINARY_FAILED);
             return SSPINE_RESOURCESTATE_FAILED;
         }
     }
@@ -3584,7 +3637,13 @@ static spSkin* _sspine_lookup_skin(uint32_t skeleton_id, int skin_index) {
     return 0;
 }
 
-//=== SKINSET POOL FUNCTIONS ===================================================
+// ███████ ██   ██ ██ ███    ██ ███████ ███████ ████████
+// ██      ██  ██  ██ ████   ██ ██      ██         ██
+// ███████ █████   ██ ██ ██  ██ ███████ █████      ██
+//      ██ ██  ██  ██ ██  ██ ██      ██ ██         ██
+// ███████ ██   ██ ██ ██   ████ ███████ ███████    ██
+//
+// >>skinset
 static void _sspine_setup_skinset_pool(int pool_size) {
     _sspine_skinset_pool_t* p = &_sspine.skinset_pool;
     _sspine_init_item_pool(&p->pool, pool_size, (void**)&p->items, sizeof(_sspine_skinset_t));
@@ -3696,7 +3755,13 @@ static sspine_skinset_desc _sspine_skinset_desc_defaults(const sspine_skinset_de
     return res;
 }
 
-//=== INSTANCE POOL FUNCTIONS ==================================================
+// ██ ███    ██ ███████ ████████  █████  ███    ██  ██████ ███████
+// ██ ████   ██ ██         ██    ██   ██ ████   ██ ██      ██
+// ██ ██ ██  ██ ███████    ██    ███████ ██ ██  ██ ██      █████
+// ██ ██  ██ ██      ██    ██    ██   ██ ██  ██ ██ ██      ██
+// ██ ██   ████ ███████    ██    ██   ██ ██   ████  ██████ ███████
+//
+// >>instance
 static void _sspine_setup_instance_pool(int pool_size) {
     _sspine_instance_pool_t* p = &_sspine.instance_pool;
     _sspine_init_item_pool(&p->pool, pool_size, (void**)&p->items, sizeof(_sspine_instance_t));
@@ -3944,95 +4009,13 @@ static sspine_instance_desc _sspine_instance_desc_defaults(const sspine_instance
     return res;
 }
 
-// return sspine_desc with patched defaults
-static sspine_desc _sspine_desc_defaults(const sspine_desc* desc) {
-    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
-    sspine_desc res = *desc;
-    res.max_vertices = _sspine_def(desc->max_vertices, _SSPINE_DEFAULT_MAX_VERTICES);
-    res.max_commands = _sspine_def(desc->max_commands, _SSPINE_DEFAULT_MAX_COMMANDS);
-    res.context_pool_size = _sspine_def(desc->context_pool_size, _SSPINE_DEFAULT_CONTEXT_POOL_SIZE);
-    res.atlas_pool_size = _sspine_def(desc->atlas_pool_size, _SSPINE_DEFAULT_ATLAS_POOL_SIZE);
-    res.skeleton_pool_size = _sspine_def(desc->skeleton_pool_size, _SSPINE_DEFAULT_SKELETON_POOL_SIZE);
-    res.skinset_pool_size = _sspine_def(desc->skinset_pool_size, _SSPINE_DEFAULT_SKINSET_POOL_SIZE);
-    res.instance_pool_size = _sspine_def(desc->instance_pool_size, _SSPINE_DEFAULT_INSTANCE_POOL_SIZE);
-    return res;
-}
-
-static sspine_context_desc _sspine_as_context_desc(const sspine_desc* desc) {
-    sspine_context_desc ctx_desc;
-    _sspine_clear(&ctx_desc, sizeof(ctx_desc));
-    ctx_desc.max_vertices = desc->max_vertices;
-    ctx_desc.max_commands = desc->max_commands;
-    ctx_desc.color_format = desc->color_format;
-    ctx_desc.depth_format = desc->depth_format;
-    ctx_desc.sample_count = desc->sample_count;
-    ctx_desc.color_write_mask = desc->color_write_mask;
-    return ctx_desc;
-}
-
-static sg_filter _sspine_as_image_filter(spAtlasFilter filter) {
-    switch (filter) {
-        case SP_ATLAS_UNKNOWN_FILTER: return _SG_FILTER_DEFAULT;
-        case SP_ATLAS_NEAREST: return SG_FILTER_NEAREST;
-        case SP_ATLAS_LINEAR: return SG_FILTER_LINEAR;
-        case SP_ATLAS_MIPMAP: return SG_FILTER_LINEAR_MIPMAP_NEAREST;
-        case SP_ATLAS_MIPMAP_NEAREST_NEAREST: return SG_FILTER_NEAREST_MIPMAP_NEAREST;
-        case SP_ATLAS_MIPMAP_LINEAR_NEAREST: return SG_FILTER_LINEAR_MIPMAP_NEAREST;
-        case SP_ATLAS_MIPMAP_NEAREST_LINEAR: return SG_FILTER_NEAREST_MIPMAP_LINEAR;
-        case SP_ATLAS_MIPMAP_LINEAR_LINEAR: return SG_FILTER_LINEAR_MIPMAP_LINEAR;
-        default: return _SG_FILTER_DEFAULT;
-    }
-}
-
-static sg_wrap _sspine_as_image_wrap(spAtlasWrap wrap) {
-    switch (wrap) {
-        case SP_ATLAS_MIRROREDREPEAT: return SG_WRAP_MIRRORED_REPEAT;
-        case SP_ATLAS_CLAMPTOEDGE: return SG_WRAP_CLAMP_TO_EDGE;
-        case SP_ATLAS_REPEAT: return SG_WRAP_REPEAT;
-        default: return _SG_WRAP_DEFAULT;
-    }
-}
-
-static void _sspine_init_image_info(const _sspine_atlas_t* atlas, int index, sspine_image_info* info, bool with_overrides) {
-    spAtlasPage* page = _sspine_lookup_atlas_page(atlas->slot.id, index);
-    SOKOL_ASSERT(page);
-    SOKOL_ASSERT(page->name);
-    info->valid = true;
-    info->sgimage.id = (uint32_t)(uintptr_t)page->rendererObject;
-    if (with_overrides && (atlas->overrides.min_filter != _SG_FILTER_DEFAULT)) {
-        info->min_filter = atlas->overrides.min_filter;
-    }
-    else {
-        info->min_filter = _sspine_as_image_filter(page->minFilter);
-    }
-    if (with_overrides && (atlas->overrides.mag_filter != _SG_FILTER_DEFAULT)) {
-        info->mag_filter = atlas->overrides.mag_filter;
-    }
-    else {
-        info->mag_filter = _sspine_as_image_filter(page->magFilter);
-    }
-    if (with_overrides && (atlas->overrides.wrap_u != _SG_WRAP_DEFAULT)) {
-        info->wrap_u = atlas->overrides.wrap_u;
-    }
-    else {
-        info->wrap_u = _sspine_as_image_wrap(page->uWrap);
-    }
-    if (with_overrides && (atlas->overrides.wrap_v != _SG_WRAP_DEFAULT)) {
-        info->wrap_v = atlas->overrides.wrap_v;
-    }
-    else {
-        info->wrap_v = _sspine_as_image_wrap(page->vWrap);
-    }
-    info->width = page->width;
-    info->height = page->height;
-    // NOTE: override already happened in atlas init
-    info->premul_alpha = page->pma != 0;
-    info->filename = _sspine_string(page->name);
-    if (info->filename.truncated) {
-        _SSPINE_WARN(STRING_TRUNCATED);
-    }
-}
-
+// ██████  ██████   █████  ██     ██
+// ██   ██ ██   ██ ██   ██ ██     ██
+// ██   ██ ██████  ███████ ██  █  ██
+// ██   ██ ██   ██ ██   ██ ██ ███ ██
+// ██████  ██   ██ ██   ██  ███ ███
+//
+// >>draw
 static void _sspine_check_rewind_commands(_sspine_context_t* ctx) {
     if (_sspine.frame_id != ctx->commands.rewind_frame_id) {
         ctx->commands.next = 0;
@@ -4046,7 +4029,7 @@ static _sspine_command_t* _sspine_next_command(_sspine_context_t* ctx) {
         return &(ctx->commands.ptr[ctx->commands.next++]);
     }
     else {
-        _SSPINE_ERROR(COMMAND_BUFFER_OVERFLOW);
+        _SSPINE_ERROR(COMMAND_BUFFER_FULL);
         return 0;
     }
 }
@@ -4078,7 +4061,7 @@ static _sspine_alloc_vertices_result_t _sspine_alloc_vertices(_sspine_context_t*
         ctx->vertices.next += num;
     }
     else {
-        _SSPINE_ERROR(VERTEX_BUFFER_OVERFLOW);
+        _SSPINE_ERROR(VERTEX_BUFFER_FULL);
     }
     return res;
 }
@@ -4100,7 +4083,7 @@ static _sspine_alloc_indices_result_t _sspine_alloc_indices(_sspine_context_t* c
         ctx->indices.next += num;
     }
     else {
-        _SSPINE_ERROR(INDEX_BUFFER_OVERFLOW);
+        _SSPINE_ERROR(INDEX_BUFFER_FULL);
     }
     return res;
 }
@@ -4359,6 +4342,103 @@ static void _sspine_draw_layer(_sspine_context_t* ctx, int layer, const sspine_l
     }
 }
 
+// ███    ███ ██ ███████  ██████
+// ████  ████ ██ ██      ██
+// ██ ████ ██ ██ ███████ ██
+// ██  ██  ██ ██      ██ ██
+// ██      ██ ██ ███████  ██████
+//
+// >>misc
+
+// return sspine_desc with patched defaults
+static sspine_desc _sspine_desc_defaults(const sspine_desc* desc) {
+    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
+    sspine_desc res = *desc;
+    res.max_vertices = _sspine_def(desc->max_vertices, _SSPINE_DEFAULT_MAX_VERTICES);
+    res.max_commands = _sspine_def(desc->max_commands, _SSPINE_DEFAULT_MAX_COMMANDS);
+    res.context_pool_size = _sspine_def(desc->context_pool_size, _SSPINE_DEFAULT_CONTEXT_POOL_SIZE);
+    res.atlas_pool_size = _sspine_def(desc->atlas_pool_size, _SSPINE_DEFAULT_ATLAS_POOL_SIZE);
+    res.skeleton_pool_size = _sspine_def(desc->skeleton_pool_size, _SSPINE_DEFAULT_SKELETON_POOL_SIZE);
+    res.skinset_pool_size = _sspine_def(desc->skinset_pool_size, _SSPINE_DEFAULT_SKINSET_POOL_SIZE);
+    res.instance_pool_size = _sspine_def(desc->instance_pool_size, _SSPINE_DEFAULT_INSTANCE_POOL_SIZE);
+    return res;
+}
+
+static sspine_context_desc _sspine_as_context_desc(const sspine_desc* desc) {
+    sspine_context_desc ctx_desc;
+    _sspine_clear(&ctx_desc, sizeof(ctx_desc));
+    ctx_desc.max_vertices = desc->max_vertices;
+    ctx_desc.max_commands = desc->max_commands;
+    ctx_desc.color_format = desc->color_format;
+    ctx_desc.depth_format = desc->depth_format;
+    ctx_desc.sample_count = desc->sample_count;
+    ctx_desc.color_write_mask = desc->color_write_mask;
+    return ctx_desc;
+}
+
+static sg_filter _sspine_as_image_filter(spAtlasFilter filter) {
+    switch (filter) {
+        case SP_ATLAS_UNKNOWN_FILTER: return _SG_FILTER_DEFAULT;
+        case SP_ATLAS_NEAREST: return SG_FILTER_NEAREST;
+        case SP_ATLAS_LINEAR: return SG_FILTER_LINEAR;
+        case SP_ATLAS_MIPMAP: return SG_FILTER_LINEAR_MIPMAP_NEAREST;
+        case SP_ATLAS_MIPMAP_NEAREST_NEAREST: return SG_FILTER_NEAREST_MIPMAP_NEAREST;
+        case SP_ATLAS_MIPMAP_LINEAR_NEAREST: return SG_FILTER_LINEAR_MIPMAP_NEAREST;
+        case SP_ATLAS_MIPMAP_NEAREST_LINEAR: return SG_FILTER_NEAREST_MIPMAP_LINEAR;
+        case SP_ATLAS_MIPMAP_LINEAR_LINEAR: return SG_FILTER_LINEAR_MIPMAP_LINEAR;
+        default: return _SG_FILTER_DEFAULT;
+    }
+}
+
+static sg_wrap _sspine_as_image_wrap(spAtlasWrap wrap) {
+    switch (wrap) {
+        case SP_ATLAS_MIRROREDREPEAT: return SG_WRAP_MIRRORED_REPEAT;
+        case SP_ATLAS_CLAMPTOEDGE: return SG_WRAP_CLAMP_TO_EDGE;
+        case SP_ATLAS_REPEAT: return SG_WRAP_REPEAT;
+        default: return _SG_WRAP_DEFAULT;
+    }
+}
+
+static void _sspine_init_image_info(const _sspine_atlas_t* atlas, int index, sspine_image_info* info, bool with_overrides) {
+    spAtlasPage* page = _sspine_lookup_atlas_page(atlas->slot.id, index);
+    SOKOL_ASSERT(page);
+    SOKOL_ASSERT(page->name);
+    info->valid = true;
+    info->sgimage.id = (uint32_t)(uintptr_t)page->rendererObject;
+    if (with_overrides && (atlas->overrides.min_filter != _SG_FILTER_DEFAULT)) {
+        info->min_filter = atlas->overrides.min_filter;
+    }
+    else {
+        info->min_filter = _sspine_as_image_filter(page->minFilter);
+    }
+    if (with_overrides && (atlas->overrides.mag_filter != _SG_FILTER_DEFAULT)) {
+        info->mag_filter = atlas->overrides.mag_filter;
+    }
+    else {
+        info->mag_filter = _sspine_as_image_filter(page->magFilter);
+    }
+    if (with_overrides && (atlas->overrides.wrap_u != _SG_WRAP_DEFAULT)) {
+        info->wrap_u = atlas->overrides.wrap_u;
+    }
+    else {
+        info->wrap_u = _sspine_as_image_wrap(page->uWrap);
+    }
+    if (with_overrides && (atlas->overrides.wrap_v != _SG_WRAP_DEFAULT)) {
+        info->wrap_v = atlas->overrides.wrap_v;
+    }
+    else {
+        info->wrap_v = _sspine_as_image_wrap(page->vWrap);
+    }
+    info->width = page->width;
+    info->height = page->height;
+    // NOTE: override already happened in atlas init
+    info->premul_alpha = page->pma != 0;
+    info->filename = _sspine_string(page->name);
+    if (info->filename.truncated) {
+        _SSPINE_WARN(STRING_TRUNCATED);
+    }
+}
+
 static void _sspine_init_shared(void) {
     sg_shader_desc shd_desc;
     _sspine_clear(&shd_desc, sizeof(shd_desc));
@@ -4437,8 +4517,13 @@ static sg_commit_listener _sspine_make_commit_listener(void) {
     return commit_listener;
 }
 
-//== PUBLIC FUNCTIONS ==========================================================
-
+// ██████  ██    ██ ██████  ██      ██  ██████
+// ██   ██ ██    ██ ██   ██ ██      ██ ██
+// ██████  ██    ██ ██████  ██      ██ ██
+// ██      ██    ██ ██   ██ ██      ██ ██
+// ██       ██████  ██████  ███████ ██  ██████
+//
+// >>public
 SOKOL_API_IMPL void sspine_setup(const sspine_desc* desc) {
     SOKOL_ASSERT(desc);
     spBone_setYDown(1);
@@ -4459,7 +4544,7 @@ SOKOL_API_IMPL void sspine_setup(const sspine_desc* desc) {
     SOKOL_ASSERT(_sspine_is_default_context(_sspine.def_ctx_id));
     sspine_set_context(_sspine.def_ctx_id);
     if (!sg_add_commit_listener(_sspine_make_commit_listener())) {
-        _SSPINE_ERROR(SG_ADD_COMMIT_LISTENER_FAILED);
+        _SSPINE_ERROR(ADD_COMMIT_LISTENER_FAILED);
     }
 }
 

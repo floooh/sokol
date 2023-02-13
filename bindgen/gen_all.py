@@ -1,6 +1,7 @@
 import os, gen_nim, gen_zig, gen_odin
 
 tasks = [
+    [ '../sokol_log.h',            'slog_',     [] ],
     [ '../sokol_gfx.h',            'sg_',       [] ],
     [ '../sokol_app.h',            'sapp_',     [] ],
     [ '../sokol_glue.h',           'sapp_sg',   ['sg_'] ],

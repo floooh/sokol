@@ -4,7 +4,8 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**23-Jan-2023** sokol_audio.h: new AAudio backend for Android, activation fix for WebAudio on Chrome for Android.
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**13-Feb-2023** logging has been replaced with a
+combined logging- and error-reporting callback, **ACTION REQUIRED** (see changelog for details))
 
 [![Build](/../../actions/workflows/main.yml/badge.svg)](/../../actions/workflows/main.yml) [![Bindings](/../../actions/workflows/gen_bindings.yml/badge.svg)](/../../actions/workflows/gen_bindings.yml) [![build](https://github.com/floooh/sokol-zig/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-zig/actions/workflows/main.yml) [![build](https://github.com/floooh/sokol-nim/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-nim/actions/workflows/main.yml) [![Odin](https://github.com/floooh/sokol-odin/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-odin/actions/workflows/main.yml)
 
@@ -95,6 +96,7 @@ A triangle in C99 with GLFW:
 #define SOKOL_IMPL
 #define SOKOL_GLCORE33
 #include "sokol_gfx.h"
+#include "sokol_log.h"
 #define GLFW_INCLUDE_NONE
 #include "GLFW/glfw3.h"
 
@@ -111,7 +113,9 @@ int main() {
     glfwSwapInterval(1);
 
     /* setup sokol_gfx */
-    sg_setup(&(sg_desc){0});
+    sg_setup(&(sg_desc){
+        .logger.func = slog_func,
+    });
 
     /* a vertex buffer */
     const float vertices[] = {
@@ -202,13 +206,15 @@ to split the Objective-C code from the C code of the sample):
 ```c
 #include "sokol_gfx.h"
 #include "sokol_app.h"
+#include "sokol_log.h"
 #include "sokol_glue.h"
 
 sg_pass_action pass_action;
 
 void init(void) {
     sg_setup(&(sg_desc){
-        .context = sapp_sgcontext()
+        .context = sapp_sgcontext(),
+        .logger.func = slog_func,
     });
     pass_action = (sg_pass_action) {
         .colors[0] = { .action=SG_ACTION_CLEAR, .value={1.0f, 0.0f, 0.0f, 1.0f} }
@@ -235,6 +241,7 @@ sapp_desc sokol_main(int argc, char* argv[]) {
         .width = 400,
         .height = 300,
         .window_title = "Clear Sample",
+        .logger.func = slog_func,
     };
 }
 ```
@@ -269,7 +276,8 @@ static void stream_cb(float* buffer, int num_frames, int num_channels) {
 int main() {
     // init sokol-audio with default params
     saudio_setup(&(saudio_desc){
-        .stream_cb = stream_cb
+        .stream_cb = stream_cb,
+        .logger.func = slog_func,
     });
 
     // run main loop
@@ -286,7 +294,9 @@ The same code using the push-model
 #define BUF_SIZE (32)
 int main() {
     // init sokol-audio with default params, no callback
-    saudio_setup(&(saudio_desc){0});
+    saudio_setup(&(saudio_desc){
+        .logger.func = slog_func,
+    });
     assert(saudio_channels() == 1);
 
     // a small intermediate buffer so we don't need to push
@@ -327,6 +337,7 @@ Simple C99 example loading a file into a static buffer:
 
 ```c
 #include "sokol_fetch.h"
+#include "sokol_log.h"
 
 static void response_callback(const sfetch_response*);
 
@@ -337,7 +348,7 @@ static uint8_t buffer[MAX_FILE_SIZE];
 static void init(void) {
     ...
     // setup sokol-fetch with default config:
-    sfetch_setup(&(sfetch_desc_t){0});
+    sfetch_setup(&(sfetch_desc_t){ .logger.func = slog_func });
 
     // start loading a file into a statically allocated buffer:
     sfetch_send(&(sfetch_request_t){

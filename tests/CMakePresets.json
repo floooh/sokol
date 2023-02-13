@@ -509,15 +509,6 @@
                 "CMAKE_C_COMPILER": "clang",
                 "CMAKE_CXX_COMPILER": "clang++"
             }
-        },
-        {
-            "name": "win_uwp",
-            "binaryDir": "build/win_uwp",
-            "cacheVariables": {
-                "SOKOL_BACKEND": "SOKOL_D3D11",
-                "CMAKE_SYSTEM_NAME": "WindowsStore",
-                "CMAKE_SYSTEM_VERSION": "10.0.19041.0 "
-            }
         }
     ],
     "buildPresets": [
@@ -724,16 +715,6 @@
         {
             "name": "win_d3d11_analyze",
             "configurePreset": "win_d3d11_analyze"
-        },
-        {
-            "name": "win_uwp_debug",
-            "configurePreset": "win_uwp",
-            "configuration": "Debug"
-        },
-        {
-            "name": "win_uwp_release",
-            "configurePreset": "win_uwp",
-            "configuration": "Release"
         }
     ]
 }

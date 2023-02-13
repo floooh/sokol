@@ -1,5 +1,88 @@
 ## Updates
 
+- **13-Feb-2023**: The way logging works has been completely revamped in
+  the sokol headers. UWP support has been removed from sokol_audio.h
+  and sokol_app.h (this also means that the sokol headers no longer contain
+  any C++ code).
+
+  **REQUIRED ACTION**: Since the sokol headers are now completely silent
+  without a logging callback (explanation below), it is highly recommened
+  to use the standard logging callback provided by the new header ```sokol_log.h```.
+  For instance for sokol_gfx.h it looks like this:
+
+    ```c
+    #include "sokol_log.h"
+    //...
+        sg_setup(&(sg_desc){
+            //...
+            .logger.func = slog_func,
+        });
+    ```
+
+  All sokol samples have been updated to use sokol_log.h for logging.
+
+  The former logging callback is now a combined
+  logging- and error-reporting callback, and more information is available
+  to the logging function:
+    - a 'tag string' which identifies the sokol headers, this string
+      is identical with the API prefix (e.g. "sg" for sokol_gfx.h,
+      "sapp" for sokol_app.h etc...)
+    - a numeric log level: 0=panic, 1=error, 2=warning, 3=info
+    - a numeric 'log item id' (think of it as error code, but since
+      not only errors are reported I called it a log item id)
+    - a human readable error message
+    - a source file line number where the log item was reported
+    - the file path of the sokol header
+
+  Log level ```panic``` is special in that it terminates execution inside
+  the log function. When a sokol header issues a panic log message, it means
+  that the problem is so big that execution can not continue. By default,
+  the sokol headers and the standard log function in sokol_log.h call
+  ```abort()``` when a panic log message is issued.
+
+  In debug mode (NDEBUG not defined, or SOKOL_DEBUG defined), a log message
+  (form sokol_spine.h) will look like this:
+
+  ```
+  [sspine][error][id:12] /Users/floh/projects/sokol/util/sokol_spine.h:3472:0:
+      SKELETON_DESC_NO_ATLAS: no atlas object provided in sspine_skeleton_desc.atlas
+  ```
+  The information can be 'parsed' like this:
+    - ```[sspine]```: it's a message from sokol_spine.h
+    - ```[error]```: it's an error
+    - ```[id:12]```: the numeric log item id (associated with ```SKELETON_DESC_NO_ATLAS``` below)
+    - source file path and line number in a compiler-specific format - in some IDEs and terminals
+      this is a clickable link
+    - the line below is the human readable log item id and message
+
+  In release mode (NDEBUG is defined and SOKOL_DEBUG is not defined), log messages
+  are drastically reduced (the reason is to not bloat the executable with all the extra string data):
+
+  ```
+  [sspine][error][id:12][line:3472]
+  ```
+  ...this reduced information still gives all the necessary information to identify the location and type of error.
+
+  A custom logging function must adhere to a few rules:
+
+    - must be re-entrant because it might be called from different threads
+    - must treat **all** provided string pointers as optional (can be null)
+    - don't store the string pointers, copy the string data instead
+    - must not return for log level panic
+
+  A new header ```sokol_log.h``` has been added to provide a standard logging callback implementation
+  which provides logging output on all platforms to stderr and/or platform specific logging
+  facilities. ```sokol_log.h``` only uses fputs() and platform specific logging function instead
+  of fprintf() to preverse some executable size.
+
+  **QUESTION**: Why are the sokol headers now silent, unless a logging callback is installed?
+  This is mainly because a standard logging function which does something meaningful on all
+  platforms (including Windows and Android) isn't trivial. E.g. printing to stderr is not
+  enough. It's better to move that stuff into a centralized place in a separate header,
+  but since the core sokol headers must not (statically) depend on other sokol headers
+  the only solution that made sense was to provide a standard logging function which must
+  be 'registered' as a callback.
+
 - **26-Jan-2023**: Work on SRGB support in sokol_gfx.h has started, but
   this requires more effort to be really usable. For now, only a new
   pixel format has been added: SG_PIXELFORMAT_SRGB8A8 (see https://github.com/floooh/sokol/pull/758,
