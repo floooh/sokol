@@ -51,15 +51,16 @@
 
     In debug mode, a log message might look like this:
 
-        [saudio] [error] /Users/floh/projects/sokol/sokol_audio.h:2422:0: COREAUDIO_NEW_OUTPUT_FAILED (id:32)
+        [sspine][error][id:12] /Users/floh/projects/sokol/util/sokol_spine.h:3472:0:
+            SKELETON_DESC_NO_ATLAS: no atlas object provided in sspine_skeleton_desc.atlas
 
     The source path and line number is formatted like compiler errors, in some IDEs (like VSCode)
     such error messages are clickable.
 
     In release mode, logging is less verbose as to not bloat the executable with string data, but you still get
-    enough information to identify an error:
+    enough information to identify the type and location of an error:
 
-        [saudio] [error] line:2422 id:32
+        [sspine][error][id:12][line:3472]
 
 
     LICENSE
@@ -260,25 +261,29 @@ SOKOL_API_IMPL void slog_func(const char* tag, uint32_t log_level, uint32_t log_
     str = _slog_append("]", str, end);
     str = _slog_append("[id:", str, end);
     str = _slog_append(_slog_itoa(log_item, num_buf, sizeof(num_buf)), str, end);
-    str = _slog_append("] ", str, end);
+    str = _slog_append("]", str, end);
     // if a filename is provided, build a clickable log message that's compatible with compiler error messages
-    #if defined(_MSC_VER)
-        // MSVC compiler error format
-        if (filename) {
+    if (filename) {
+        str = _slog_append(" ", str, end);
+        #if defined(_MSC_VER)
+            // MSVC compiler error format
             str = _slog_append(filename, str, end);
-        }
-        str = _slog_append("(", str, end);
-        str = _slog_append(_slog_itoa(line_nr, num_buf, sizeof(num_buf)), str, end);
-        str = _slog_append("): ", str, end);
-    #else
-        // gcc/clang compiler error format
-        if (filename) {
+            str = _slog_append("(", str, end);
+            str = _slog_append(_slog_itoa(line_nr, num_buf, sizeof(num_buf)), str, end);
+            str = _slog_append("): ", str, end);
+        #else
+            // gcc/clang compiler error format
             str = _slog_append(filename, str, end);
-        }
-        str = _slog_append(":", str, end);
+            str = _slog_append(":", str, end);
+            str = _slog_append(_slog_itoa(line_nr, num_buf, sizeof(num_buf)), str, end);
+            str = _slog_append(":0: ", str, end);
+        #endif
+    }
+    else {
+        str = _slog_append("[line:", str, end);
         str = _slog_append(_slog_itoa(line_nr, num_buf, sizeof(num_buf)), str, end);
-        str = _slog_append(":0: ", str, end);
-    #endif
+        str = _slog_append("] ", str, end);
+    }
     if (message) {
         str = _slog_append("\n\t", str, end);
         str = _slog_append(message, str, end);
