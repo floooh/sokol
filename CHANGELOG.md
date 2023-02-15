@@ -1,5 +1,13 @@
 ## Updates
 
+- **15-Feb-2023**: A fix in the sokol_gfx.h GL backend: due to a bug in the
+  state cache, the GL backend could only bind a total of
+  SG_MAX_SHADERSTAGE_IMAGES (= 12) when it actually should be twice that amount
+  (12 per shader stage). Note however that the total amount of texture bindings
+  is still internally limited by the GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS
+  runtime variable (currently this is not exposed in sg_limits though). Many
+  thanks to @allcreater for PR https://github.com/floooh/sokol/pull/787.
+
 - **13-Feb-2023**: The way logging works has been completely revamped in
   the sokol headers. UWP support has been removed from sokol_audio.h
   and sokol_app.h (this also means that the sokol headers no longer contain

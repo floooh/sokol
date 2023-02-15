@@ -4069,6 +4069,8 @@ typedef struct {
     GLuint texture;
 } _sg_gl_texture_bind_slot;
 
+#define _SG_GL_IMAGE_CACHE_SIZE (SG_MAX_SHADERSTAGE_IMAGES * SG_NUM_SHADER_STAGES)
+
 typedef struct {
     sg_depth_state depth;
     sg_stencil_state stencil;
@@ -4086,7 +4088,7 @@ typedef struct {
     GLuint stored_vertex_buffer;
     GLuint stored_index_buffer;
     GLuint prog;
-    _sg_gl_texture_bind_slot textures[SG_MAX_SHADERSTAGE_IMAGES];
+    _sg_gl_texture_bind_slot textures[_SG_GL_IMAGE_CACHE_SIZE];
     _sg_gl_texture_bind_slot stored_texture;
     int cur_ib_offset;
     GLenum cur_primitive_type;
@@ -6719,7 +6721,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_active_texture(GLenum texture) {
 }
 
 _SOKOL_PRIVATE void _sg_gl_cache_clear_texture_bindings(bool force) {
-    for (int i = 0; (i < SG_MAX_SHADERSTAGE_IMAGES) && (i < _sg.gl.max_combined_texture_image_units); i++) {
+    for (int i = 0; (i < _SG_GL_IMAGE_CACHE_SIZE) && (i < _sg.gl.max_combined_texture_image_units); i++) {
         if (force || (_sg.gl.cache.textures[i].texture != 0)) {
             GLenum gl_texture_slot = (GLenum) (GL_TEXTURE0 + i);
             glActiveTexture(gl_texture_slot);
@@ -6743,7 +6745,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_texture(int slot_index, GLenum target, GLu
        target=0 will unbind the previous binding, texture=0 will clear
        the new binding
     */
-    SOKOL_ASSERT(slot_index < SG_MAX_SHADERSTAGE_IMAGES);
+    SOKOL_ASSERT((slot_index >= 0) && (slot_index < _SG_GL_IMAGE_CACHE_SIZE));
     if (slot_index >= _sg.gl.max_combined_texture_image_units) {
         return;
     }
@@ -6764,12 +6766,12 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_texture(int slot_index, GLenum target, GLu
 }
 
 _SOKOL_PRIVATE void _sg_gl_cache_store_texture_binding(int slot_index) {
-    SOKOL_ASSERT(slot_index < SG_MAX_SHADERSTAGE_IMAGES);
+    SOKOL_ASSERT((slot_index >= 0) && (slot_index < _SG_GL_IMAGE_CACHE_SIZE));
     _sg.gl.cache.stored_texture = _sg.gl.cache.textures[slot_index];
 }
 
 _SOKOL_PRIVATE void _sg_gl_cache_restore_texture_binding(int slot_index) {
-    SOKOL_ASSERT(slot_index < SG_MAX_SHADERSTAGE_IMAGES);
+    SOKOL_ASSERT((slot_index >= 0) && (slot_index < _SG_GL_IMAGE_CACHE_SIZE));
     _sg_gl_texture_bind_slot* slot = &_sg.gl.cache.stored_texture;
     if (slot->texture != 0) {
         /* we only care restoring valid ids */
@@ -6782,7 +6784,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_restore_texture_binding(int slot_index) {
 
 /* called from _sg_gl_destroy_texture() */
 _SOKOL_PRIVATE void _sg_gl_cache_invalidate_texture(GLuint tex) {
-    for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
+    for (int i = 0; i < _SG_GL_IMAGE_CACHE_SIZE; i++) {
         _sg_gl_texture_bind_slot* slot = &_sg.gl.cache.textures[i];
         if (tex == slot->texture) {
             _sg_gl_cache_active_texture((GLenum)(GL_TEXTURE0 + i));
