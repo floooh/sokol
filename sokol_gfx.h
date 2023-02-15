@@ -1279,6 +1279,7 @@ typedef struct sg_limits {
     int max_image_array_layers;     // max number of layers in SG_IMAGETYPE_ARRAY images
     int max_vertex_attrs;           // <= SG_MAX_VERTEX_ATTRIBUTES or less (on some GLES2 impls)
     int gl_max_vertex_uniform_vectors;  // <= GL_MAX_VERTEX_UNIFORM_VECTORS (only on GL backends)
+    int gl_max_combined_texture_image_units; // <= GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS (only on GL backends)
 } sg_limits;
 
 /*
@@ -4110,7 +4111,6 @@ typedef struct {
     _sg_gl_state_cache_t cache;
     bool ext_anisotropic;
     GLint max_anisotropy;
-    GLint max_combined_texture_image_units;
     #if _SOKOL_USE_WIN32_GL_LOADER
     HINSTANCE opengl32_dll;
     #endif
@@ -6368,7 +6368,7 @@ _SOKOL_PRIVATE void _sg_gl_init_limits(void) {
     }
     glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &gl_int);
     _SG_GL_CHECK_ERROR();
-    _sg.gl.max_combined_texture_image_units = gl_int;
+    _sg.limits.gl_max_combined_texture_image_units = gl_int;
 }
 
 #if defined(SOKOL_GLCORE33)
@@ -6721,7 +6721,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_active_texture(GLenum texture) {
 }
 
 _SOKOL_PRIVATE void _sg_gl_cache_clear_texture_bindings(bool force) {
-    for (int i = 0; (i < _SG_GL_IMAGE_CACHE_SIZE) && (i < _sg.gl.max_combined_texture_image_units); i++) {
+    for (int i = 0; (i < _SG_GL_IMAGE_CACHE_SIZE) && (i < _sg.limits.gl_max_combined_texture_image_units); i++) {
         if (force || (_sg.gl.cache.textures[i].texture != 0)) {
             GLenum gl_texture_slot = (GLenum) (GL_TEXTURE0 + i);
             glActiveTexture(gl_texture_slot);
@@ -6746,7 +6746,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_texture(int slot_index, GLenum target, GLu
        the new binding
     */
     SOKOL_ASSERT((slot_index >= 0) && (slot_index < _SG_GL_IMAGE_CACHE_SIZE));
-    if (slot_index >= _sg.gl.max_combined_texture_image_units) {
+    if (slot_index >= _sg.limits.gl_max_combined_texture_image_units) {
         return;
     }
     _sg_gl_texture_bind_slot* slot = &_sg.gl.cache.textures[slot_index];
