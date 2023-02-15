@@ -5,8 +5,11 @@
   SG_MAX_SHADERSTAGE_IMAGES (= 12) when it actually should be twice that amount
   (12 per shader stage). Note however that the total amount of texture bindings
   is still internally limited by the GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS
-  runtime variable (currently this is not exposed in sg_limits though). Many
+  runtime variable (~~currently this is not exposed in sg_limits though~~). Many
   thanks to @allcreater for PR https://github.com/floooh/sokol/pull/787.
+  PS: sg_limits now exposes GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS as
+  ```sg_limits.gl_max_combined_texture_image_units```, and the
+  value can also be inspected via the debug UI in sokol_gfx_imgui.h.
 
 - **13-Feb-2023**: The way logging works has been completely revamped in
   the sokol headers. UWP support has been removed from sokol_audio.h
