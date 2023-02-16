@@ -193,7 +193,7 @@ SOKOL_LOG_API_DECL void slog_func(const char* tag, uint32_t log_level, uint32_t 
 #include <stddef.h> // size_t
 
 #if defined(_SLOG_EMSCRIPTEN)
-#include <emscripten/em_js.h>
+#include <emscripten/emscripten.h>
 #elif defined(_SLOG_WINDOWS)
 #ifndef WIN32_LEAN_AND_MEAN
     #define WIN32_LEAN_AND_MEAN
