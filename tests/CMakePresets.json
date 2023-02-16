@@ -435,6 +435,38 @@
             }
         },
         {
+            "name": "android_sles_debug",
+            "generator": "Ninja",
+            "binaryDir": "build/android_sles_debug",
+            "toolchainFile": "build/android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "ANDROID_ABI": "armeabi-v7a",
+                "ANDROID_PLATFORM": "android-28",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "SOKOL_FORCE_SLES": {
+                    "type": "BOOL",
+                    "value": "ON"
+                }
+            }
+        },
+        {
+            "name": "android_sles_release",
+            "generator": "Ninja",
+            "binaryDir": "build/android_sles_release",
+            "toolchainFile": "build/android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "ANDROID_ABI": "armeabi-v7a",
+                "ANDROID_PLATFORM": "android-28",
+                "CMAKE_BUILD_TYPE": "Release",
+                "SOKOL_FORCE_SLES": {
+                    "type": "BOOL",
+                    "value": "ON"
+                }
+            }
+        },
+        {
             "name": "win_gl",
             "binaryDir": "build/win_gl",
             "cacheVariables": {
@@ -476,15 +508,6 @@
                 },
                 "CMAKE_C_COMPILER": "clang",
                 "CMAKE_CXX_COMPILER": "clang++"
-            }
-        },
-        {
-            "name": "win_uwp",
-            "binaryDir": "build/win_uwp",
-            "cacheVariables": {
-                "SOKOL_BACKEND": "SOKOL_D3D11",
-                "CMAKE_SYSTEM_NAME": "WindowsStore",
-                "CMAKE_SYSTEM_VERSION": "10.0.19041.0 "
             }
         }
     ],
@@ -658,6 +681,14 @@
             "configurePreset": "android_release"
         },
         {
+            "name": "android_sles_debug",
+            "configurePreset": "android_sles_debug"
+        },
+        {
+            "name": "android_sles_release",
+            "configurePreset": "android_sles_release"
+        },
+        {
             "name": "win_gl_debug",
             "configurePreset": "win_gl",
             "configuration": "Debug"
@@ -684,16 +715,6 @@
         {
             "name": "win_d3d11_analyze",
             "configurePreset": "win_d3d11_analyze"
-        },
-        {
-            "name": "win_uwp_debug",
-            "configurePreset": "win_uwp",
-            "configuration": "Debug"
-        },
-        {
-            "name": "win_uwp_release",
-            "configurePreset": "win_uwp",
-            "configuration": "Release"
         }
     ]
 }

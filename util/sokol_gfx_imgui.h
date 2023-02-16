@@ -1115,6 +1115,7 @@ _SOKOL_PRIVATE const char* _sg_imgui_pixelformat_string(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RG16SI: return "SG_PIXELFORMAT_RG16SI";
         case SG_PIXELFORMAT_RG16F: return "SG_PIXELFORMAT_RG16F";
         case SG_PIXELFORMAT_RGBA8: return "SG_PIXELFORMAT_RGBA8";
+        case SG_PIXELFORMAT_SRGB8A8: return "SG_PIXELFORMAT_SRGB8A8";
         case SG_PIXELFORMAT_RGBA8SN: return "SG_PIXELFORMAT_RGBA8SN";
         case SG_PIXELFORMAT_RGBA8UI: return "SG_PIXELFORMAT_RGBA8UI";
         case SG_PIXELFORMAT_RGBA8SI: return "SG_PIXELFORMAT_RGBA8SI";
@@ -3907,6 +3908,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_caps_panel(void) {
     igText("    max_image_array_layers: %d", l.max_image_array_layers);
     igText("    max_vertex_attrs: %d", l.max_vertex_attrs);
     igText("    gl_max_vertex_uniform_vectors: %d", l.gl_max_vertex_uniform_vectors);
+    igText("    gl_max_combined_texture_image_units: %d", l.gl_max_combined_texture_image_units);
     igText("\nUsable Pixelformats:");
     for (int i = (int)(SG_PIXELFORMAT_NONE+1); i < (int)_SG_PIXELFORMAT_NUM; i++) {
         sg_pixel_format fmt = (sg_pixel_format)i;

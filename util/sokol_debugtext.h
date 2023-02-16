@@ -60,6 +60,15 @@
 
             sdtx_setup(&(sdtx_desc_t){ ... });
 
+        To see any warnings and errors, you should always install a logging callback.
+        The easiest way is via sokol_log.h:
+
+            #include "sokol_log.h"
+
+            sdtx_setup(&(sdtx_desc_t){
+                .logger.func = slog_func,
+            });
+
     --- configure sokol-debugtext by populating the sdtx_desc_t struct:
 
         .context_pool_size (default: 8)
@@ -429,26 +438,47 @@
     If no overrides are provided, malloc and free will be used.
 
 
-    LOG FUNCTION OVERRIDE
-    =====================
-    You can override the log function at initialization time like this:
+    ERROR REPORTING AND LOGGING
+    ===========================
+    To get any logging information at all you need to provide a logging callback in the setup call,
+    the easiest way is to use sokol_log.h:
 
-        void my_log(const char* message, void* user_data) {
-            printf("sdtx says: \s\n", message);
+        #include "sokol_log.h"
+
+        sdtx_setup(&(sdtx_desc_t){
+            // ...
+            .logger.func = slog_func
+        });
+
+    To override logging with your own callback, first write a logging function like this:
+
+        void my_log(const char* tag,                // e.g. 'sdtx'
+                    uint32_t log_level,             // 0=panic, 1=error, 2=warn, 3=info
+                    uint32_t log_item_id,           // SDTX_LOGITEM_*
+                    const char* message_or_null,    // a message string, may be nullptr in release mode
+                    uint32_t line_nr,               // line number in sokol_debugtext.h
+                    const char* filename_or_null,   // source filename, may be nullptr in release mode
+                    void* user_data)
+        {
+            ...
         }
 
-        ...
-            sdtx_setup(&(sdtx_desc_t){
-                // ...
-                .logger = {
-                    .log_cb = my_log,
-                    .user_data = ...,
-                }
-            });
-        ...
+    ...and then setup sokol-debugtext like this:
 
-    If no overrides are provided, puts will be used on most platforms.
-    On Android, __android_log_write will be used instead.
+        sdtx_setup(&(sdtx_desc_t){
+            .logger = {
+                .func = my_log,
+                .user_data = my_user_data,
+            }
+        });
+
+    The provided logging function must be reentrant (e.g. be callable from
+    different threads).
+
+    If you don't want to provide your own custom logger it is highly recommended to use
+    the standard logger in sokol_log.h instead, otherwise you won't see any warnings or
+    errors.
+
 
     LICENSE
     =======
@@ -507,6 +537,46 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/*
+    sdtx_log_item_t
+
+    Log items are defined via X-Macros, and expanded to an
+    enum 'sdtx_log_item' - and in debug mode only - corresponding strings.
+
+    Used as parameter in the logging callback.
+*/
+#define _SDTX_LOG_ITEMS \
+    _SDTX_LOGITEM_XMACRO(OK, "Ok") \
+    _SDTX_LOGITEM_XMACRO(MALLOC_FAILED, "memory allocation failed") \
+    _SDTX_LOGITEM_XMACRO(ADD_COMMIT_LISTENER_FAILED, "sg_add_commit_listener() failed") \
+    _SDTX_LOGITEM_XMACRO(COMMAND_BUFFER_FULL, "command buffer full (adjust via sdtx_context_desc_t.max_commands)") \
+    _SDTX_LOGITEM_XMACRO(CONTEXT_POOL_EXHAUSTED, "context pool exhausted (adjust via sdtx_desc_t.context_pool_size)") \
+    _SDTX_LOGITEM_XMACRO(CANNOT_DESTROY_DEFAULT_CONTEXT, "cannot destroy default context") \
+
+#define _SDTX_LOGITEM_XMACRO(item,msg) SDTX_LOGITEM_##item,
+typedef enum sdtx_log_item_t {
+    _SDTX_LOG_ITEMS
+} sdtx_log_item_t;
+#undef _SDTX_LOGITEM_XMACRO
+
+/*
+    sdtx_logger_t
+
+    Used in sdtx_desc_t to provide a custom logging and error reporting
+    callback to sokol-debugtext.
+*/
+typedef struct sdtx_logger_t {
+    void (*func)(
+        const char* tag,                // always "sdtx"
+        uint32_t log_level,             // 0=panic, 1=error, 2=warning, 3=info
+        uint32_t log_item_id,           // SDTX_LOGITEM_*
+        const char* message_or_null,    // a message string, may be nullptr in release mode
+        uint32_t line_nr,               // line number in sokol_debugtext.h
+        const char* filename_or_null,   // source filename, may be nullptr in release mode
+        void* user_data);
+    void* user_data;
+} sdtx_logger_t;
 
 /* a rendering context handle */
 typedef struct sdtx_context { uint32_t id; } sdtx_context;
@@ -599,17 +669,6 @@ typedef struct sdtx_allocator_t {
 } sdtx_allocator_t;
 
 /*
-    sdtx_logger_t
-
-    Used in sdtx_desc_t to provide custom log callbacks to sokol_debugtext.h.
-    Default behavior is SOKOL_LOG(message).
-*/
-typedef struct sdtx_logger_t {
-    void (*log_cb)(const char* message, void* user_data);
-    void* user_data;
-} sdtx_logger_t;
-
-/*
     sdtx_desc_t
 
     Describes the sokol-debugtext API initialization parameters. Passed
@@ -631,7 +690,7 @@ typedef struct sdtx_desc_t {
     sdtx_font_desc_t fonts[SDTX_MAX_FONTS]; // up to 8 fonts descriptions
     sdtx_context_desc_t context;            // the default context creation parameters
     sdtx_allocator_t allocator;             // optional memory allocation overrides (default: malloc/free)
-    sdtx_logger_t logger;                   // optional log override functions (default: SOKOL_LOG(message))
+    sdtx_logger_t logger;                   // optional log override function (default: NO LOGGING)
 } sdtx_desc_t;
 
 /* initialization/shutdown */
@@ -703,7 +762,13 @@ inline sdtx_context sdtx_make_context(const sdtx_context_desc_t& desc) { return 
 #endif
 #endif /* SOKOL_DEBUGTEXT_INCLUDED */
 
-/*-- IMPLEMENTATION ----------------------------------------------------------*/
+// ██ ███    ███ ██████  ██      ███████ ███    ███ ███████ ███    ██ ████████  █████  ████████ ██  ██████  ███    ██
+// ██ ████  ████ ██   ██ ██      ██      ████  ████ ██      ████   ██    ██    ██   ██    ██    ██ ██    ██ ████   ██
+// ██ ██ ████ ██ ██████  ██      █████   ██ ████ ██ █████   ██ ██  ██    ██    ███████    ██    ██ ██    ██ ██ ██  ██
+// ██ ██  ██  ██ ██      ██      ██      ██  ██  ██ ██      ██  ██ ██    ██    ██   ██    ██    ██ ██    ██ ██  ██ ██
+// ██ ██      ██ ██      ███████ ███████ ██      ██ ███████ ██   ████    ██    ██   ██    ██    ██  ██████  ██   ████
+//
+// >>implementation
 #ifdef SOKOL_DEBUGTEXT_IMPL
 #define SOKOL_DEBUGTEXT_IMPL_INCLUDED (1)
 
@@ -727,21 +792,6 @@ inline sdtx_context sdtx_make_context(const sdtx_context_desc_t& desc) { return 
 #ifndef SOKOL_ASSERT
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
-#endif
-
-#if !defined(SOKOL_DEBUG)
-    #define SDTX_LOG(s)
-#else
-    #define SDTX_LOG(s) _sdtx_log(s)
-    #ifndef SOKOL_LOG
-        #if defined(__ANDROID__)
-            #include <android/log.h>
-            #define SOKOL_LOG(s) __android_log_write(ANDROID_LOG_INFO, "SOKOL_DEBUGTEXT", s)
-        #else
-            #include <stdio.h>
-            #define SOKOL_LOG(s) puts(s)
-        #endif
-    #endif
 #endif
 
 #ifndef SOKOL_UNREACHABLE
@@ -3498,6 +3548,13 @@ static const char* _sdtx_fs_src_dummy = "";
 #error "Please define one of SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND!"
 #endif
 
+// ███████ ████████ ██████  ██    ██  ██████ ████████ ███████
+// ██         ██    ██   ██ ██    ██ ██         ██    ██
+// ███████    ██    ██████  ██    ██ ██         ██    ███████
+//      ██    ██    ██   ██ ██    ██ ██         ██         ██
+// ███████    ██    ██   ██  ██████   ██████    ██    ███████
+//
+// >>structs
 typedef struct {
     uint32_t id;
     sg_resource_state state;
@@ -3573,8 +3630,52 @@ typedef struct {
 } _sdtx_t;
 static _sdtx_t _sdtx;
 
-/*=== MEMORY HELPERS =========================================================*/
+// ██       ██████   ██████   ██████  ██ ███    ██  ██████
+// ██      ██    ██ ██       ██       ██ ████   ██ ██
+// ██      ██    ██ ██   ███ ██   ███ ██ ██ ██  ██ ██   ███
+// ██      ██    ██ ██    ██ ██    ██ ██ ██  ██ ██ ██    ██
+// ███████  ██████   ██████   ██████  ██ ██   ████  ██████
+//
+// >>logging
+#if defined(SOKOL_DEBUG)
+#define _SDTX_LOGITEM_XMACRO(item,msg) #item ": " msg,
+static const char* _sdtx_log_messages[] = {
+    _SDTX_LOG_ITEMS
+};
+#undef _SDTX_LOGITEM_XMACRO
+#endif // SOKOL_DEBUG
 
+#define _SDTX_PANIC(code) _sdtx_log(SDTX_LOGITEM_ ##code, 0, __LINE__)
+#define _SDTX_ERROR(code) _sdtx_log(SDTX_LOGITEM_ ##code, 1, __LINE__)
+#define _SDTX_WARN(code) _sdtx_log(SDTX_LOGITEM_ ##code, 2, __LINE__)
+#define _SDTX_INFO(code) _sdtx_log(SDTX_LOGITEM_ ##code, 3, __LINE__)
+
+static void _sdtx_log(sdtx_log_item_t log_item, uint32_t log_level, uint32_t line_nr) {
+    if (_sdtx.desc.logger.func) {
+        #if defined(SOKOL_DEBUG)
+            const char* filename = __FILE__;
+            const char* message = _sdtx_log_messages[log_item];
+        #else
+            const char* filename = 0;
+            const char* message = 0;
+        #endif
+        _sdtx.desc.logger.func("sdtx", log_level, log_item, message, line_nr, filename, _sdtx.desc.logger.user_data);
+    }
+    else {
+        // for log level PANIC it would be 'undefined behaviour' to continue
+        if (log_level == 0) {
+            abort();
+        }
+    }
+}
+
+// ███    ███ ███████ ███    ███  ██████  ██████  ██    ██
+// ████  ████ ██      ████  ████ ██    ██ ██   ██  ██  ██
+// ██ ████ ██ █████   ██ ████ ██ ██    ██ ██████    ████
+// ██  ██  ██ ██      ██  ██  ██ ██    ██ ██   ██    ██
+// ██      ██ ███████ ██      ██  ██████  ██   ██    ██
+//
+// >>memory
 static void _sdtx_clear(void* ptr, size_t size) {
     SOKOL_ASSERT(ptr && (size > 0));
     memset(ptr, 0, size);
@@ -3589,7 +3690,9 @@ static void* _sdtx_malloc(size_t size) {
     else {
         ptr = malloc(size);
     }
-    SOKOL_ASSERT(ptr);
+    if (0 == ptr) {
+        _SDTX_PANIC(MALLOC_FAILED);
+    }
     return ptr;
 }
 
@@ -3608,18 +3711,13 @@ static void _sdtx_free(void* ptr) {
     }
 }
 
-#if defined(SOKOL_DEBUG)
-static void _sdtx_log(const char* msg) {
-    SOKOL_ASSERT(msg);
-    if (_sdtx.desc.logger.log_cb) {
-        _sdtx.desc.logger.log_cb(msg, _sdtx.desc.logger.user_data);
-    } else {
-        SOKOL_LOG(msg);
-    }
-}
-#endif
-
-/*=== CONTEXT POOL ===========================================================*/
+//  ██████  ██████  ███    ██ ████████ ███████ ██   ██ ████████     ██████   ██████   ██████  ██
+// ██      ██    ██ ████   ██    ██    ██       ██ ██     ██        ██   ██ ██    ██ ██    ██ ██
+// ██      ██    ██ ██ ██  ██    ██    █████     ███      ██        ██████  ██    ██ ██    ██ ██
+// ██      ██    ██ ██  ██ ██    ██    ██       ██ ██     ██        ██      ██    ██ ██    ██ ██
+//  ██████  ██████  ██   ████    ██    ███████ ██   ██    ██        ██       ██████   ██████  ███████
+//
+// >>context pool
 static void _sdtx_init_pool(_sdtx_pool_t* pool, int num) {
     SOKOL_ASSERT(pool && (num >= 1));
     /* slot 0 is reserved for the 'invalid id', so bump the pool size by 1 */
@@ -3853,9 +3951,7 @@ static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* i
     ctx->color = _SDTX_DEFAULT_COLOR;
 
     if (!sg_add_commit_listener(_sdtx_make_commit_listener(ctx))) {
-        // FIXME: this should actually result in an invalid context,
-        // fix this when proper error logging/reporting is added
-        SDTX_LOG("sokol_debugtext.h: failed to add sokol-gfx commit listener");
+        _SDTX_ERROR(ADD_COMMIT_LISTENER_FAILED);
     }
     sg_pop_debug_group();
 }
@@ -3888,6 +3984,14 @@ static void _sdtx_destroy_context(sdtx_context ctx_id) {
 static bool _sdtx_is_default_context(sdtx_context ctx_id) {
     return ctx_id.id == SDTX_DEFAULT_CONTEXT.id;
 }
+
+// ███    ███ ██ ███████  ██████
+// ████  ████ ██ ██      ██
+// ██ ████ ██ ██ ███████ ██
+// ██  ██  ██ ██      ██ ██
+// ██      ██ ██ ███████  ██████
+//
+// >>misc
 
 /* unpack linear 8x8 bits-per-pixel font data into 2D byte-per-pixel texture data */
 static void _sdtx_unpack_font(const sdtx_font_desc_t* font_desc, uint8_t* out_pixels) {
@@ -4065,7 +4169,7 @@ static _sdtx_command_t* _sdtx_next_command(_sdtx_context_t* ctx) {
         return &ctx->commands.ptr[ctx->commands.next++];
     }
     else {
-        SDTX_LOG("sokol_debugtext.h: command buffer full");
+        _SDTX_ERROR(COMMAND_BUFFER_FULL);
         return 0;
     }
 }
@@ -4191,8 +4295,13 @@ static sdtx_desc_t _sdtx_desc_defaults(const sdtx_desc_t* desc) {
     return res;
 }
 
-/*=== PUBLIC API FUNCTIONS ===================================================*/
-
+// ██████  ██    ██ ██████  ██      ██  ██████
+// ██   ██ ██    ██ ██   ██ ██      ██ ██
+// ██████  ██    ██ ██████  ██      ██ ██
+// ██      ██    ██ ██   ██ ██      ██ ██
+// ██       ██████  ██████  ███████ ██  ██████
+//
+// >>public
 SOKOL_API_IMPL void sdtx_setup(const sdtx_desc_t* desc) {
     SOKOL_ASSERT(desc);
     _sdtx_clear(&_sdtx, sizeof(_sdtx));
@@ -4254,7 +4363,7 @@ SOKOL_API_IMPL sdtx_context sdtx_make_context(const sdtx_context_desc_t* desc) {
         _sdtx_init_context(ctx_id, desc);
     }
     else {
-        SDTX_LOG("sokol_debugtext.h: context pool exhausted!");
+        _SDTX_ERROR(CONTEXT_POOL_EXHAUSTED);
     }
     return ctx_id;
 }
@@ -4262,7 +4371,7 @@ SOKOL_API_IMPL sdtx_context sdtx_make_context(const sdtx_context_desc_t* desc) {
 SOKOL_API_IMPL void sdtx_destroy_context(sdtx_context ctx_id) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
     if (_sdtx_is_default_context(ctx_id)) {
-        SDTX_LOG("sokol_debugtext.h: cannot destroy default context");
+        _SDTX_ERROR(CANNOT_DESTROY_DEFAULT_CONTEXT);
         return;
     }
     _sdtx_destroy_context(ctx_id);

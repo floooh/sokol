@@ -14,8 +14,9 @@ set(c_sources
     sokol_nuklear.c
     sokol_color.c
     sokol_spine.c
+    sokol_log.c
     sokol_main.c)
-if (NOT ANDROID AND NOT UWP)
+if (NOT ANDROID)
     set(c_sources ${c_sources} sokol_fetch.c)
 endif()
 
@@ -34,20 +35,19 @@ set(cxx_sources
     sokol_shape.cc
     sokol_color.cc
     sokol_spine.cc
+    sokol_log.cc
     sokol_main.cc)
-if (NOT ANDROID AND NOT UWP)
+if (NOT ANDROID)
     set(cxx_sources ${cxx_sources} sokol_fetch.cc)
 endif()
 
-if (NOT UWP)
-    if (ANDROID)
-        add_library(sokol-compiletest-c SHARED ${c_sources})
-    else()
-        add_executable(sokol-compiletest-c ${exe_type} sokol_app.c sokol_glue.c ${c_sources})
-    endif()
-    target_link_libraries(sokol-compiletest-c PUBLIC cimgui nuklear spine)
-    configure_c(sokol-compiletest-c)
+if (ANDROID)
+    add_library(sokol-compiletest-c SHARED ${c_sources})
+else()
+    add_executable(sokol-compiletest-c ${exe_type} sokol_app.c sokol_glue.c ${c_sources})
 endif()
+target_link_libraries(sokol-compiletest-c PUBLIC cimgui nuklear spine)
+configure_c(sokol-compiletest-c)
 
 if (ANDROID)
     add_library(sokol-compiletest-cxx SHARED ${cxx_sources})

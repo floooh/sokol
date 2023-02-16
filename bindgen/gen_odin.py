@@ -12,6 +12,7 @@ c_root = f'{bindings_root}/c'
 module_root = f'{bindings_root}/sokol'
 
 module_names = {
+    'slog_':    'log',
     'sg_':      'gfx',
     'sapp_':    'app',
     'sapp_sg':  'glue',
@@ -65,6 +66,7 @@ system_libs = {
 }
 
 c_source_names = {
+    'slog_':    'sokol_log.c',
     'sg_':      'sokol_gfx.c',
     'sapp_':    'sokol_app.c',
     'sapp_sg':  'sokol_glue.c',
