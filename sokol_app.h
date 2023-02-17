@@ -2300,6 +2300,7 @@ typedef struct {
     uint8_t mouse_buttons;
     NSWindow* window;
     NSTrackingArea* tracking_area;
+    id keyup_monitor;
     _sapp_macos_app_delegate* app_dlg;
     _sapp_macos_window_delegate* win_dlg;
     _sapp_macos_view* view;
@@ -3403,6 +3404,11 @@ _SOKOL_PRIVATE void _sapp_macos_init_keytable(void) {
 
 _SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
     // NOTE: it's safe to call [release] on a nil object
+    if (_sapp.macos.keyup_monitor != nil) {
+        [NSEvent removeMonitor:_sapp.macos.keyup_monitor];
+        // NOTE: removeMonitor also releases the object
+        _sapp.macos.keyup_monitor = nil;
+    }
     _SAPP_OBJC_RELEASE(_sapp.macos.tracking_area);
     _SAPP_OBJC_RELEASE(_sapp.macos.app_dlg);
     _SAPP_OBJC_RELEASE(_sapp.macos.win_dlg);
@@ -3439,11 +3445,22 @@ _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp_macos_init_keytable();
     [NSApplication sharedApplication];
+
     // set the application dock icon as early as possible, otherwise
     // the dummy icon will be visible for a short time
     sapp_set_icon(&_sapp.desc.icon);
     _sapp.macos.app_dlg = [[_sapp_macos_app_delegate alloc] init];
     NSApp.delegate = _sapp.macos.app_dlg;
+
+    // workaround for "no key-up sent while Cmd is pressed" taken from GLFW:
+    NSEvent* (^keyup_monitor)(NSEvent*) = ^NSEvent* (NSEvent* event) {
+        if ([event modifierFlags] & NSEventModifierFlagCommand) {
+            [[NSApp keyWindow] sendEvent:event];
+        }
+        return event;
+    };
+    _sapp.macos.keyup_monitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyUp handler:keyup_monitor];
+
     [NSApp run];
     // NOTE: [NSApp run] never returns, instead cleanup code
     // must be put into applicationWillTerminate
@@ -4178,15 +4195,8 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
 - (void)keyDown:(NSEvent*)event {
     if (_sapp_events_enabled()) {
         const uint32_t mods = _sapp_macos_mods(event);
-        /* NOTE: macOS doesn't send keyUp events while the Cmd key is pressed,
-            as a workaround, to prevent key presses from sticking we'll send
-            a keyup event following right after the keydown if SUPER is also pressed
-        */
         const sapp_keycode key_code = _sapp_translate_key(event.keyCode);
         _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_DOWN, key_code, event.isARepeat, mods);
-        if (0 != (mods & SAPP_MODIFIER_SUPER)) {
-            _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_UP, key_code, event.isARepeat, mods);
-        }
         const NSString* chars = event.characters;
         const NSUInteger len = chars.length;
         if (len > 0) {
