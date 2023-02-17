@@ -1,5 +1,16 @@
 ## Updates
 
+- **17-Feb-2023**: sokol_app.h on macOS now has a proper fix for the problem
+  that macOS doesn't send key-up events while the Cmd key is held down.
+  Previously this was handled through a workaround of immediately sending
+  a key-down event. The proper fix is now to install an "event monitor"
+  callback (many thanks to GLFW for finding and implementing the solution).
+  Unfortunately there's no such solution for the Emscripten code path,
+  which also don't send a key-up event while Cmd is pressed on macOS
+  (the workaround there to send a key-up event right on key-down while
+  Cmd is held down to prevent a stuck key is still in place)
+  For more details, see: https://github.com/floooh/sokol/issues/794
+
 - **15-Feb-2023**: A fix in the sokol_gfx.h GL backend: due to a bug in the
   state cache, the GL backend could only bind a total of
   SG_MAX_SHADERSTAGE_IMAGES (= 12) when it actually should be twice that amount
