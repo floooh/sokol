@@ -3859,38 +3859,44 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
 }
 
 typedef struct {
-    sg_shader shader_id;
-    sg_index_type index_type;
-    bool use_instanced_draw;
     bool vertex_layout_valid[SG_MAX_SHADERSTAGE_BUFFERS];
-    int color_attachment_count;
-    sg_pixel_format color_formats[SG_MAX_COLOR_ATTACHMENTS];
-    sg_pixel_format depth_format;
+    bool use_instanced_draw;
+    sg_shader shader_id;
+    sg_layout_desc layout;
+    sg_depth_state depth;
+    sg_stencil_state stencil;
+    int color_count;
+    sg_color_state colors[SG_MAX_COLOR_ATTACHMENTS];
+    sg_primitive_type primitive_type;
+    sg_index_type index_type;
+    sg_cull_mode cull_mode;
+    sg_face_winding face_winding;
     int sample_count;
-    float depth_bias;
-    float depth_bias_slope_scale;
-    float depth_bias_clamp;
     sg_color blend_color;
+    bool alpha_to_coverage_enabled;
 } _sg_pipeline_common_t;
 
 _SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT((desc->color_count >= 1) && (desc->color_count <= SG_MAX_COLOR_ATTACHMENTS));
-    cmn->shader_id = desc->shader;
-    cmn->index_type = desc->index_type;
-    cmn->use_instanced_draw = false;
     for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
         cmn->vertex_layout_valid[i] = false;
     }
-    cmn->color_attachment_count = desc->color_count;
-    for (int i = 0; i < cmn->color_attachment_count; i++) {
-        cmn->color_formats[i] = desc->colors[i].pixel_format;
+    cmn->use_instanced_draw = false;
+    cmn->shader_id = desc->shader;
+    cmn->layout = desc->layout;
+    cmn->depth = desc->depth;
+    cmn->stencil = desc->stencil;
+    cmn->color_count = desc->color_count;
+    for (int i = 0; i < desc->color_count; i++) {
+        cmn->colors[i] = desc->colors[i];
     }
-    cmn->depth_format = desc->depth.pixel_format;
+    cmn->primitive_type = desc->primitive_type;
+    cmn->index_type = desc->index_type;
+    cmn->cull_mode = desc->cull_mode;
+    cmn->face_winding = desc->face_winding;
     cmn->sample_count = desc->sample_count;
-    cmn->depth_bias = desc->depth.bias;
-    cmn->depth_bias_slope_scale = desc->depth.bias_slope_scale;
-    cmn->depth_bias_clamp = desc->depth.bias_clamp;
     cmn->blend_color = desc->blend_color;
+    cmn->alpha_to_coverage_enabled = desc->alpha_to_coverage_enabled;
 }
 
 typedef struct {
@@ -8020,7 +8026,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
         }
 
         /* standalone state */
-        for (GLuint i = 0; i < (GLuint)pip->cmn.color_attachment_count; i++) {
+        for (GLuint i = 0; i < (GLuint)pip->cmn.color_count; i++) {
             if (pip->gl.color_write_mask[i] != _sg.gl.cache.color_write_mask[i]) {
                 const sg_color_mask cm = pip->gl.color_write_mask[i];
                 _sg.gl.cache.color_write_mask[i] = cm;
@@ -11844,7 +11850,7 @@ _SOKOL_PRIVATE void _sg_mtl_apply_pipeline(_sg_pipeline_t* pip) {
         [_sg.mtl.cmd_encoder setCullMode:pip->mtl.cull_mode];
         [_sg.mtl.cmd_encoder setFrontFacingWinding:pip->mtl.winding];
         [_sg.mtl.cmd_encoder setStencilReferenceValue:pip->mtl.stencil_ref];
-        [_sg.mtl.cmd_encoder setDepthBias:pip->cmn.depth_bias slopeScale:pip->cmn.depth_bias_slope_scale clamp:pip->cmn.depth_bias_clamp];
+        [_sg.mtl.cmd_encoder setDepthBias:pip->cmn.depth.bias slopeScale:pip->cmn.depth.bias_slope_scale clamp:pip->cmn.depth.bias_clamp];
         SOKOL_ASSERT(pip->mtl.rps != _SG_MTL_INVALID_SLOT_INDEX);
         [_sg.mtl.cmd_encoder setRenderPipelineState:_sg_mtl_id(pip->mtl.rps)];
         SOKOL_ASSERT(pip->mtl.dss != _SG_MTL_INVALID_SLOT_INDEX);
@@ -15041,25 +15047,25 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
         const _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, _sg.cur_pass.id);
         if (pass) {
             /* an offscreen pass */
-            _SG_VALIDATE(pip->cmn.color_attachment_count == pass->cmn.num_color_atts, VALIDATE_APIP_ATT_COUNT);
-            for (int i = 0; i < pip->cmn.color_attachment_count; i++) {
+            _SG_VALIDATE(pip->cmn.color_count == pass->cmn.num_color_atts, VALIDATE_APIP_ATT_COUNT);
+            for (int i = 0; i < pip->cmn.color_count; i++) {
                 const _sg_image_t* att_img = _sg_pass_color_image(pass, i);
-                _SG_VALIDATE(pip->cmn.color_formats[i] == att_img->cmn.pixel_format, VALIDATE_APIP_COLOR_FORMAT);
+                _SG_VALIDATE(pip->cmn.colors[i].pixel_format == att_img->cmn.pixel_format, VALIDATE_APIP_COLOR_FORMAT);
                 _SG_VALIDATE(pip->cmn.sample_count == att_img->cmn.sample_count, VALIDATE_APIP_SAMPLE_COUNT);
             }
             const _sg_image_t* att_dsimg = _sg_pass_ds_image(pass);
             if (att_dsimg) {
-                _SG_VALIDATE(pip->cmn.depth_format == att_dsimg->cmn.pixel_format, VALIDATE_APIP_DEPTH_FORMAT);
+                _SG_VALIDATE(pip->cmn.depth.pixel_format == att_dsimg->cmn.pixel_format, VALIDATE_APIP_DEPTH_FORMAT);
             }
             else {
-                _SG_VALIDATE(pip->cmn.depth_format == SG_PIXELFORMAT_NONE, VALIDATE_APIP_DEPTH_FORMAT);
+                _SG_VALIDATE(pip->cmn.depth.pixel_format == SG_PIXELFORMAT_NONE, VALIDATE_APIP_DEPTH_FORMAT);
             }
         }
         else {
             /* default pass */
-            _SG_VALIDATE(pip->cmn.color_attachment_count == 1, VALIDATE_APIP_ATT_COUNT);
-            _SG_VALIDATE(pip->cmn.color_formats[0] == _sg.desc.context.color_format, VALIDATE_APIP_COLOR_FORMAT);
-            _SG_VALIDATE(pip->cmn.depth_format == _sg.desc.context.depth_format, VALIDATE_APIP_DEPTH_FORMAT);
+            _SG_VALIDATE(pip->cmn.color_count == 1, VALIDATE_APIP_ATT_COUNT);
+            _SG_VALIDATE(pip->cmn.colors[0].pixel_format == _sg.desc.context.color_format, VALIDATE_APIP_COLOR_FORMAT);
+            _SG_VALIDATE(pip->cmn.depth.pixel_format == _sg.desc.context.depth_format, VALIDATE_APIP_DEPTH_FORMAT);
             _SG_VALIDATE(pip->cmn.sample_count == _sg.desc.context.sample_count, VALIDATE_APIP_SAMPLE_COUNT);
         }
         return _sg_validate_end();
@@ -16938,6 +16944,31 @@ SOKOL_API_IMPL sg_shader_desc sg_query_shader_desc(sg_shader shd_id) {
                 img_desc->sampler_type = img->sampler_type;
             }
         }
+    }
+    return desc;
+}
+
+SOKOL_API_IMPL sg_pipeline_desc sg_query_pipeline_desc(sg_pipeline pip_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_pipeline_desc desc;
+    _sg_clear(&desc, sizeof(desc));
+    const _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
+    if (pip) {
+        desc.shader = pip->cmn.shader_id;
+        desc.layout = pip->cmn.layout;
+        desc.depth = pip->cmn.depth;
+        desc.stencil = pip->cmn.stencil;
+        desc.color_count = pip->cmn.color_count;
+        for (int i = 0; i < pip->cmn.color_count; i++) {
+            desc.colors[i] = pip->cmn.colors[i];
+        }
+        desc.primitive_type = pip->cmn.primitive_type;
+        desc.index_type = pip->cmn.index_type;
+        desc.cull_mode = pip->cmn.cull_mode;
+        desc.face_winding = pip->cmn.face_winding;
+        desc.sample_count = pip->cmn.sample_count;
+        desc.blend_color = pip->cmn.blend_color;
+        desc.alpha_to_coverage_enabled = pip->cmn.alpha_to_coverage_enabled;
     }
     return desc;
 }

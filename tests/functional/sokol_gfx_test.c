@@ -451,9 +451,9 @@ UTEST(sokol_gfx, make_destroy_pipelines) {
         T(pipptr->slot.state == SG_RESOURCESTATE_VALID);
         T(pipptr->shader == _sg_lookup_shader(&_sg.pools, desc.shader.id));
         T(pipptr->cmn.shader_id.id == desc.shader.id);
-        T(pipptr->cmn.color_attachment_count == 1);
-        T(pipptr->cmn.color_formats[0] == SG_PIXELFORMAT_RGBA8);
-        T(pipptr->cmn.depth_format == SG_PIXELFORMAT_DEPTH_STENCIL);
+        T(pipptr->cmn.color_count == 1);
+        T(pipptr->cmn.colors[0].pixel_format == SG_PIXELFORMAT_RGBA8);
+        T(pipptr->cmn.depth.pixel_format == SG_PIXELFORMAT_DEPTH_STENCIL);
         T(pipptr->cmn.sample_count == 1);
         T(pipptr->cmn.index_type == SG_INDEXTYPE_NONE);
         T(pipptr->cmn.vertex_layout_valid[0]);
@@ -983,6 +983,80 @@ UTEST(sokol_gfx, query_shader_desc) {
     T(s0_desc.fs.images[0].image_type == SG_IMAGETYPE_ARRAY);
     T(s0_desc.fs.images[0].sampler_type == SG_SAMPLERTYPE_UINT);
 
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, query_pipeline_desc) {
+    setup(&(sg_desc){0});
+
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){0});
+    sg_pipeline p0 = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
+        .layout = {
+            .attrs = {
+                [0] = { .format = SG_VERTEXFORMAT_FLOAT4 },
+                [1] = { .format = SG_VERTEXFORMAT_FLOAT2 },
+            }
+        },
+        .label = "p0",
+    });
+
+    const sg_pipeline_desc p0_desc = sg_query_pipeline_desc(p0);
+    T(p0_desc.shader.id == shd.id);
+    T(p0_desc.layout.buffers[0].stride == 24);
+    T(p0_desc.layout.buffers[0].step_func == SG_VERTEXSTEP_PER_VERTEX);
+    T(p0_desc.layout.buffers[0].step_rate == 1);
+    T(p0_desc.layout.buffers[1].stride == 0);
+    T(p0_desc.layout.buffers[1].step_func == 0);
+    T(p0_desc.layout.buffers[1].step_rate == 0);
+    T(p0_desc.layout.attrs[0].format == SG_VERTEXFORMAT_FLOAT4);
+    T(p0_desc.layout.attrs[0].offset == 0);
+    T(p0_desc.layout.attrs[0].buffer_index == 0);
+    T(p0_desc.layout.attrs[1].format == SG_VERTEXFORMAT_FLOAT2);
+    T(p0_desc.layout.attrs[1].offset == 16);
+    T(p0_desc.layout.attrs[1].buffer_index == 0);
+    T(p0_desc.layout.attrs[2].format == 0);
+    T(p0_desc.layout.attrs[2].offset == 0);
+    T(p0_desc.layout.attrs[2].buffer_index == 0);
+    T(p0_desc.depth.pixel_format == SG_PIXELFORMAT_DEPTH_STENCIL);
+    T(p0_desc.depth.compare == SG_COMPAREFUNC_ALWAYS);
+    T(p0_desc.depth.write_enabled == false);
+    T(p0_desc.depth.bias == 0.0f);
+    T(p0_desc.depth.bias_slope_scale == 0.0f);
+    T(p0_desc.depth.bias_clamp == 0.0f);
+    T(p0_desc.stencil.enabled == false);
+    T(p0_desc.stencil.front.compare == SG_COMPAREFUNC_ALWAYS);
+    T(p0_desc.stencil.front.fail_op == SG_STENCILOP_KEEP);
+    T(p0_desc.stencil.front.depth_fail_op == SG_STENCILOP_KEEP);
+    T(p0_desc.stencil.front.pass_op == SG_STENCILOP_KEEP);
+    T(p0_desc.stencil.back.compare == SG_COMPAREFUNC_ALWAYS);
+    T(p0_desc.stencil.back.fail_op == SG_STENCILOP_KEEP);
+    T(p0_desc.stencil.back.depth_fail_op == SG_STENCILOP_KEEP);
+    T(p0_desc.stencil.back.pass_op == SG_STENCILOP_KEEP);
+    T(p0_desc.stencil.read_mask == 0);
+    T(p0_desc.stencil.write_mask == 0);
+    T(p0_desc.stencil.ref == 0);
+    T(p0_desc.color_count == 1);
+    T(p0_desc.colors[0].pixel_format == SG_PIXELFORMAT_RGBA8);
+    T(p0_desc.colors[0].write_mask == SG_COLORMASK_RGBA);
+    T(p0_desc.colors[0].blend.enabled == false);
+    T(p0_desc.colors[0].blend.src_factor_rgb == SG_BLENDFACTOR_ONE);
+    T(p0_desc.colors[0].blend.dst_factor_rgb == SG_BLENDFACTOR_ZERO);
+    T(p0_desc.colors[0].blend.op_rgb == SG_BLENDOP_ADD);
+    T(p0_desc.colors[0].blend.src_factor_alpha == SG_BLENDFACTOR_ONE);
+    T(p0_desc.colors[0].blend.dst_factor_alpha == SG_BLENDFACTOR_ZERO);
+    T(p0_desc.colors[0].blend.op_alpha == SG_BLENDOP_ADD);
+    T(p0_desc.primitive_type == SG_PRIMITIVETYPE_TRIANGLES);
+    T(p0_desc.index_type == SG_INDEXTYPE_NONE);
+    T(p0_desc.cull_mode == SG_CULLMODE_NONE);
+    T(p0_desc.face_winding == SG_FACEWINDING_CW);
+    T(p0_desc.sample_count == 1);
+    T(p0_desc.blend_color.r == 0.0f);
+    T(p0_desc.blend_color.g == 0.0f);
+    T(p0_desc.blend_color.b == 0.0f);
+    T(p0_desc.blend_color.a == 0.0f);
+    T(p0_desc.alpha_to_coverage_enabled == false);
+    T(p0_desc.label == 0);
     sg_shutdown();
 }
 
