@@ -929,6 +929,63 @@ UTEST(sokol_gfx, query_image_desc) {
     sg_shutdown();
 }
 
+UTEST(sokol_gfx, query_shader_desc) {
+    setup(&(sg_desc){0});
+
+    sg_shader s0 = sg_make_shader(&(sg_shader_desc){
+        .attrs = {
+            [0] = { .name = "pos", .sem_name = "POS", .sem_index = 1 },
+        },
+        .vs = {
+            .source = "vs_source",
+            .uniform_blocks = {
+                [0] = {
+                    .size = 128,
+                    .layout = SG_UNIFORMLAYOUT_STD140,
+                    .uniforms = {
+                        [0] = { .name = "blub", .type = SG_UNIFORMTYPE_FLOAT4, .array_count = 1 },
+                        [1] = { .name = "blob", .type = SG_UNIFORMTYPE_FLOAT2, .array_count = 1 },
+                    }
+                }
+            },
+            .images = {
+                [0] = { .name = "img0", .image_type = SG_IMAGETYPE_2D, .sampler_type = SG_SAMPLERTYPE_FLOAT },
+            }
+        },
+        .fs = {
+            .source = "fs_source",
+            .images = {
+                [0] = { .name = "img1", .image_type = SG_IMAGETYPE_ARRAY, .sampler_type = SG_SAMPLERTYPE_UINT },
+            }
+        },
+        .label = "label",
+    });
+    const sg_shader_desc s0_desc = sg_query_shader_desc(s0);
+    T(s0_desc.attrs[0].name == 0);
+    T(s0_desc.attrs[0].sem_name == 0);
+    T(s0_desc.attrs[0].sem_index == 0);
+    T(s0_desc.vs.source == 0);
+    T(s0_desc.vs.uniform_blocks[0].size == 128);
+    T(s0_desc.vs.uniform_blocks[0].layout == 0);
+    T(s0_desc.vs.uniform_blocks[0].uniforms[0].name == 0);
+    T(s0_desc.vs.uniform_blocks[0].uniforms[0].type == 0);
+    T(s0_desc.vs.uniform_blocks[0].uniforms[0].array_count == 0);
+    T(s0_desc.vs.images[0].name == 0);
+    T(s0_desc.vs.images[0].image_type == SG_IMAGETYPE_2D);
+    T(s0_desc.vs.images[0].sampler_type == SG_SAMPLERTYPE_FLOAT);
+    T(s0_desc.fs.source == 0);
+    T(s0_desc.fs.uniform_blocks[0].size == 0);
+    T(s0_desc.fs.uniform_blocks[0].layout == 0);
+    T(s0_desc.fs.uniform_blocks[0].uniforms[0].name == 0);
+    T(s0_desc.fs.uniform_blocks[0].uniforms[0].type == 0);
+    T(s0_desc.fs.uniform_blocks[0].uniforms[0].array_count == 0);
+    T(s0_desc.fs.images[0].name == 0);
+    T(s0_desc.fs.images[0].image_type == SG_IMAGETYPE_ARRAY);
+    T(s0_desc.fs.images[0].sampler_type == SG_SAMPLERTYPE_UINT);
+
+    sg_shutdown();
+}
+
 UTEST(sokol_gfx, buffer_resource_states) {
     setup(&(sg_desc){0});
     sg_buffer buf = sg_alloc_buffer();

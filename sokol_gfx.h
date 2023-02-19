@@ -311,9 +311,15 @@
             sg_pass_desc sg_query_pass_desc(sg_pass pass)
 
         ...but NOTE that the returned desc structs may be incomplete,
-        for instance any references to external data, or generally
-        information that is no longer available after creation will
-        be zeroed.
+        only attributes that is kept around internally after resource creation
+        will be filled in, and in some cases (like shaders) that's very little.
+        The returned desc structs might still be useful as partial blueprint
+        for creating similar resources if filled up with the missing
+        properties. Missing properties will be set to zero.
+
+        Also calling the functions on an invalid resource will return
+        completely zeroed structs (it makes sense to check with sg_query_*_state()
+        first)
 
     --- you can inspect various internal resource attributes via:
 
@@ -3808,7 +3814,7 @@ _SOKOL_PRIVATE void _sg_image_common_init(_sg_image_common_t* cmn, const sg_imag
 
 typedef struct {
     size_t size;
-} _sg_uniform_block_t;
+} _sg_shader_uniform_block_t;
 
 typedef struct {
     sg_image_type image_type;
@@ -3818,7 +3824,7 @@ typedef struct {
 typedef struct {
     int num_uniform_blocks;
     int num_images;
-    _sg_uniform_block_t uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
+    _sg_shader_uniform_block_t uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
     _sg_shader_image_t images[SG_MAX_SHADERSTAGE_IMAGES];
 } _sg_shader_stage_t;
 
@@ -9554,7 +9560,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
         _sg_shader_stage_t* cmn_stage = &shd->cmn.stage[stage_index];
         _sg_d3d11_shader_stage_t* d3d11_stage = &shd->d3d11.stage[stage_index];
         for (int ub_index = 0; ub_index < cmn_stage->num_uniform_blocks; ub_index++) {
-            const _sg_uniform_block_t* ub = &cmn_stage->uniform_blocks[ub_index];
+            const _sg_shader_uniform_block_t* ub = &cmn_stage->uniform_blocks[ub_index];
 
             /* create a D3D constant buffer for each uniform block */
             SOKOL_ASSERT(0 == d3d11_stage->cbufs[ub_index]);
@@ -16907,6 +16913,31 @@ SOKOL_API_IMPL sg_image_desc sg_query_image_desc(sg_image img_id) {
         desc.max_anisotropy = img->cmn.max_anisotropy;
         desc.min_lod = img->cmn.min_lod;
         desc.max_lod = img->cmn.max_lod;
+    }
+    return desc;
+}
+
+SOKOL_API_IMPL sg_shader_desc sg_query_shader_desc(sg_shader shd_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_shader_desc desc;
+    _sg_clear(&desc, sizeof(desc));
+    const _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
+    if (shd) {
+        for (int stage_idx = 0; stage_idx < SG_NUM_SHADER_STAGES; stage_idx++) {
+            sg_shader_stage_desc* stage_desc = (stage_idx == 0) ? &desc.vs : &desc.fs;
+            const _sg_shader_stage_t* stage = &shd->cmn.stage[stage_idx];
+            for (int ub_idx = 0; ub_idx < stage->num_uniform_blocks; ub_idx++) {
+                sg_shader_uniform_block_desc* ub_desc = &stage_desc->uniform_blocks[ub_idx];
+                const _sg_shader_uniform_block_t* ub = &stage->uniform_blocks[ub_idx];
+                ub_desc->size = ub->size;
+            }
+            for (int img_idx = 0; img_idx < stage->num_images; img_idx++) {
+                sg_shader_image_desc* img_desc = &stage_desc->images[img_idx];
+                const _sg_shader_image_t* img = &stage->images[img_idx];
+                img_desc->image_type = img->image_type;
+                img_desc->sampler_type = img->sampler_type;
+            }
+        }
     }
     return desc;
 }
