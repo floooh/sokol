@@ -16973,6 +16973,24 @@ SOKOL_API_IMPL sg_pipeline_desc sg_query_pipeline_desc(sg_pipeline pip_id) {
     return desc;
 }
 
+SOKOL_API_IMPL sg_pass_desc sg_query_pass_desc(sg_pass pass_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_pass_desc desc;
+    _sg_clear(&desc, sizeof(desc));
+    const _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
+    if (pass) {
+        for (int i = 0; i < pass->cmn.num_color_atts; i++) {
+            desc.color_attachments[i].image = pass->cmn.color_atts[i].image_id;
+            desc.color_attachments[i].mip_level = pass->cmn.color_atts[i].mip_level;
+            desc.color_attachments[i].slice = pass->cmn.color_atts[i].slice;
+        }
+        desc.depth_stencil_attachment.image = pass->cmn.ds_att.image_id;
+        desc.depth_stencil_attachment.mip_level = pass->cmn.ds_att.mip_level;
+        desc.depth_stencil_attachment.slice = pass->cmn.ds_att.slice;
+    }
+    return desc;
+}
+
 SOKOL_API_IMPL sg_buffer_desc sg_query_buffer_defaults(const sg_buffer_desc* desc) {
     SOKOL_ASSERT(_sg.valid && desc);
     return _sg_buffer_desc_defaults(desc);

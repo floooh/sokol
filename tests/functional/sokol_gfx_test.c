@@ -1060,6 +1060,50 @@ UTEST(sokol_gfx, query_pipeline_desc) {
     sg_shutdown();
 }
 
+UTEST(sokol_gfx, query_pass_desc) {
+    setup(&(sg_desc){0});
+
+    const sg_image_desc color_img_desc = {
+        .render_target = true,
+        .width = 128,
+        .height = 128,
+    };
+    const sg_image_desc depth_img_desc = {
+        .render_target = true,
+        .width = 128,
+        .height = 128,
+        .pixel_format = SG_PIXELFORMAT_DEPTH,
+    };
+    sg_image color_img_0 = sg_make_image(&color_img_desc);
+    sg_image color_img_1 = sg_make_image(&color_img_desc);
+    sg_image color_img_2 = sg_make_image(&color_img_desc);
+    sg_image depth_img = sg_make_image(&depth_img_desc);
+
+    sg_pass p0 = sg_make_pass(&(sg_pass_desc){
+        .color_attachments = {
+            [0].image = color_img_0,
+            [1].image = color_img_1,
+            [2].image = color_img_2,
+        },
+        .depth_stencil_attachment.image = depth_img,
+    });
+    const sg_pass_desc p0_desc = sg_query_pass_desc(p0);
+    T(p0_desc.color_attachments[0].image.id == color_img_0.id);
+    T(p0_desc.color_attachments[0].mip_level == 0);
+    T(p0_desc.color_attachments[0].slice == 0);
+    T(p0_desc.color_attachments[1].image.id == color_img_1.id);
+    T(p0_desc.color_attachments[1].mip_level == 0);
+    T(p0_desc.color_attachments[1].slice == 0);
+    T(p0_desc.color_attachments[2].image.id == color_img_2.id);
+    T(p0_desc.color_attachments[2].mip_level == 0);
+    T(p0_desc.color_attachments[2].slice == 0);
+    T(p0_desc.depth_stencil_attachment.image.id == depth_img.id);
+    T(p0_desc.depth_stencil_attachment.mip_level == 0);
+    T(p0_desc.depth_stencil_attachment.slice == 0);
+
+    sg_shutdown();
+}
+
 UTEST(sokol_gfx, buffer_resource_states) {
     setup(&(sg_desc){0});
     sg_buffer buf = sg_alloc_buffer();
