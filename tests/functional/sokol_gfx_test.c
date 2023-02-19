@@ -23,13 +23,16 @@ static void test_logger(const char* tag, uint32_t log_level, uint32_t log_item_i
     (void)user_data;
     num_log_called++;
     log_item = log_item_id;
+    if (message_or_null) {
+        printf("%s\n", message_or_null);
+    }
 }
 
-static void setup_with_logger(void) {
+static void setup(const sg_desc* desc) {
     num_log_called = 0;
-    sg_setup(&(sg_desc){
-        .logger = { .func = test_logger }
-    });
+    sg_desc desc_with_logger = *desc;
+    desc_with_logger.logger.func = test_logger;
+    sg_setup(&desc_with_logger);
 }
 
 static sg_buffer create_buffer(void) {
@@ -74,14 +77,14 @@ static sg_pass create_pass(void) {
 }
 
 UTEST(sokol_gfx, init_shutdown) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     T(sg_isvalid());
     sg_shutdown();
     T(!sg_isvalid());
 }
 
 UTEST(sokol_gfx, query_desc) {
-    sg_setup(&(sg_desc){
+    setup(&(sg_desc){
         .buffer_pool_size = 1024,
         .shader_pool_size = 128,
         .pass_pool_size = 64,
@@ -99,13 +102,13 @@ UTEST(sokol_gfx, query_desc) {
 }
 
 UTEST(sokol_gfx, query_backend) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     T(sg_query_backend() == SG_BACKEND_DUMMY);
     sg_shutdown();
 }
 
 UTEST(sokol_gfx, pool_size) {
-    sg_setup(&(sg_desc){
+    setup(&(sg_desc){
         .buffer_pool_size = 1024,
         .image_pool_size = 2048,
         .shader_pool_size = 128,
@@ -131,7 +134,7 @@ UTEST(sokol_gfx, pool_size) {
 }
 
 UTEST(sokol_gfx, alloc_fail_destroy_buffers) {
-    sg_setup(&(sg_desc){
+    setup(&(sg_desc){
         .buffer_pool_size = 3
     });
     T(sg_isvalid());
@@ -162,7 +165,7 @@ UTEST(sokol_gfx, alloc_fail_destroy_buffers) {
 }
 
 UTEST(sokol_gfx, alloc_fail_destroy_images) {
-    sg_setup(&(sg_desc){
+    setup(&(sg_desc){
         .image_pool_size = 3
     });
     T(sg_isvalid());
@@ -193,7 +196,7 @@ UTEST(sokol_gfx, alloc_fail_destroy_images) {
 }
 
 UTEST(sokol_gfx, alloc_fail_destroy_shaders) {
-    sg_setup(&(sg_desc){
+    setup(&(sg_desc){
         .shader_pool_size = 3
     });
     T(sg_isvalid());
@@ -224,7 +227,7 @@ UTEST(sokol_gfx, alloc_fail_destroy_shaders) {
 }
 
 UTEST(sokol_gfx, alloc_fail_destroy_pipelines) {
-    sg_setup(&(sg_desc){
+    setup(&(sg_desc){
         .pipeline_pool_size = 3
     });
     T(sg_isvalid());
@@ -256,7 +259,7 @@ UTEST(sokol_gfx, alloc_fail_destroy_pipelines) {
 }
 
 UTEST(sokol_gfx, alloc_fail_destroy_passes) {
-    sg_setup(&(sg_desc){
+    setup(&(sg_desc){
         .pass_pool_size = 3
     });
     T(sg_isvalid());
@@ -287,7 +290,7 @@ UTEST(sokol_gfx, alloc_fail_destroy_passes) {
 }
 
 UTEST(sokol_gfx, make_destroy_buffers) {
-    sg_setup(&(sg_desc){
+    setup(&(sg_desc){
         .buffer_pool_size = 3
     });
     T(sg_isvalid());
@@ -328,7 +331,7 @@ UTEST(sokol_gfx, make_destroy_buffers) {
 }
 
 UTEST(sokol_gfx, make_destroy_images) {
-    sg_setup(&(sg_desc){
+    setup(&(sg_desc){
         .image_pool_size = 3
     });
     T(sg_isvalid());
@@ -382,7 +385,7 @@ UTEST(sokol_gfx, make_destroy_images) {
 }
 
 UTEST(sokol_gfx, make_destroy_shaders) {
-    sg_setup(&(sg_desc){
+    setup(&(sg_desc){
         .shader_pool_size = 3
     });
     T(sg_isvalid());
@@ -421,7 +424,7 @@ UTEST(sokol_gfx, make_destroy_shaders) {
 }
 
 UTEST(sokol_gfx, make_destroy_pipelines) {
-    sg_setup(&(sg_desc){
+    setup(&(sg_desc){
         .pipeline_pool_size = 3
     });
     T(sg_isvalid());
@@ -468,7 +471,7 @@ UTEST(sokol_gfx, make_destroy_pipelines) {
 }
 
 UTEST(sokol_gfx, make_destroy_passes) {
-    sg_setup(&(sg_desc){
+    setup(&(sg_desc){
         .pass_pool_size = 3
     });
     T(sg_isvalid());
@@ -516,7 +519,7 @@ UTEST(sokol_gfx, make_destroy_passes) {
 }
 
 UTEST(sokol_gfx, generation_counter) {
-    sg_setup(&(sg_desc){
+    setup(&(sg_desc){
         .buffer_pool_size = 1,
     });
 
@@ -534,7 +537,7 @@ UTEST(sokol_gfx, generation_counter) {
 }
 
 UTEST(sokol_gfx, query_buffer_defaults) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     sg_buffer_desc desc;
     desc = sg_query_buffer_defaults(&(sg_buffer_desc){0});
     T(desc.type == SG_BUFFERTYPE_VERTEXBUFFER);
@@ -553,7 +556,7 @@ UTEST(sokol_gfx, query_buffer_defaults) {
 }
 
 UTEST(sokol_gfx, query_image_defaults) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     const sg_image_desc desc = sg_query_image_defaults(&(sg_image_desc){0});
     T(desc.type == SG_IMAGETYPE_2D);
     T(!desc.render_target);
@@ -572,7 +575,7 @@ UTEST(sokol_gfx, query_image_defaults) {
 }
 
 UTEST(sokol_gfx, query_shader_defaults) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     const sg_shader_desc desc = sg_query_shader_defaults(&(sg_shader_desc){0});
     T(0 == strcmp(desc.vs.entry, "main"));
     T(0 == strcmp(desc.fs.entry, "main"));
@@ -580,7 +583,7 @@ UTEST(sokol_gfx, query_shader_defaults) {
 }
 
 UTEST(sokol_gfx, query_pipeline_defaults) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     const sg_pipeline_desc desc = sg_query_pipeline_defaults(&(sg_pipeline_desc){
         .layout.attrs = {
             [0].format = SG_VERTEXFORMAT_FLOAT3,
@@ -635,7 +638,7 @@ UTEST(sokol_gfx, query_pipeline_defaults) {
 
 // test that color attachment defaults are set in all attachments
 UTEST(sokol_gfx, query_mrt_pipeline_defaults) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     const sg_pipeline_desc desc = sg_query_pipeline_defaults(&(sg_pipeline_desc){
         .color_count = 3,
     });
@@ -656,7 +659,7 @@ UTEST(sokol_gfx, query_mrt_pipeline_defaults) {
 
 // test that first color attachment values are duplicated to other attachments
 UTEST(sokol_gfx, multiple_color_state) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     const sg_pipeline_desc desc = sg_query_pipeline_defaults(&(sg_pipeline_desc){
         .color_count = 3,
         .colors = {
@@ -724,7 +727,7 @@ UTEST(sokol_gfx, multiple_color_state) {
 }
 
 UTEST(sokol_gfx, query_pass_defaults) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     /* sg_pass_desc doesn't actually have any meaningful default values */
     const sg_pass_desc desc = sg_query_pass_defaults(&(sg_pass_desc){0});
     T(desc.color_attachments[0].image.id == SG_INVALID_ID);
@@ -733,7 +736,7 @@ UTEST(sokol_gfx, query_pass_defaults) {
 }
 
 UTEST(sokol_gfx, query_buffer_info) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
         .size = 256,
         .type = SG_BUFFERTYPE_VERTEXBUFFER,
@@ -746,7 +749,7 @@ UTEST(sokol_gfx, query_buffer_info) {
 }
 
 UTEST(sokol_gfx, query_image_info) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     sg_image img = sg_make_image(&(sg_image_desc){
         .render_target = true,
         .width = 256,
@@ -756,13 +759,11 @@ UTEST(sokol_gfx, query_image_info) {
     const sg_image_info info = sg_query_image_info(img);
     T(info.slot.state == SG_RESOURCESTATE_VALID);
     T(info.num_slots == 1);
-    T(info.width == 256);
-    T(info.height == 128);
     sg_shutdown();
 }
 
 UTEST(sokol_gfx, query_shader_info) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
         .attrs = {
             [0] = { .name = "pos" }
@@ -776,7 +777,7 @@ UTEST(sokol_gfx, query_shader_info) {
 }
 
 UTEST(sokol_gfx, query_pipeline_info) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
         .layout = {
             .attrs[0].format = SG_VERTEXFORMAT_FLOAT3
@@ -795,7 +796,7 @@ UTEST(sokol_gfx, query_pipeline_info) {
 }
 
 UTEST(sokol_gfx, query_pass_info) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     sg_image_desc img_desc = {
         .render_target = true,
         .width = 128,
@@ -813,8 +814,53 @@ UTEST(sokol_gfx, query_pass_info) {
     sg_shutdown();
 }
 
+UTEST(sokol_gfx, query_buffer_desc) {
+    setup(&(sg_desc){0});
+
+    sg_buffer b0 = sg_make_buffer(&(sg_buffer_desc){
+        .size = 32,
+        .usage = SG_USAGE_STREAM,
+        .label = "bla",
+    });
+    const sg_buffer_desc b0_desc = sg_query_buffer_desc(b0);
+    T(b0_desc.size == 32);
+    T(b0_desc.type == SG_BUFFERTYPE_VERTEXBUFFER);
+    T(b0_desc.usage == SG_USAGE_STREAM);
+    T(b0_desc.data.ptr == 0);
+    T(b0_desc.data.size == 0);
+    T(b0_desc.gl_buffers[0] == 0);
+    T(b0_desc.mtl_buffers[0] == 0);
+    T(b0_desc.d3d11_buffer == 0);
+    T(b0_desc.wgpu_buffer == 0);
+
+    float vtx_data[16];
+    sg_buffer b1 = sg_make_buffer(&(sg_buffer_desc){
+        .data = SG_RANGE(vtx_data)
+    });
+    const sg_buffer_desc b1_desc = sg_query_buffer_desc(b1);
+    T(b1_desc.size == sizeof(vtx_data));
+    T(b1_desc.type == SG_BUFFERTYPE_VERTEXBUFFER);
+    T(b1_desc.usage == SG_USAGE_IMMUTABLE);
+    T(b1_desc.data.ptr == 0);
+    T(b1_desc.data.size == 0);
+
+    uint16_t idx_data[8];
+    sg_buffer b2 = sg_make_buffer(&(sg_buffer_desc){
+        .type = SG_BUFFERTYPE_INDEXBUFFER,
+        .data = SG_RANGE(idx_data),
+    });
+    const sg_buffer_desc b2_desc = sg_query_buffer_desc(b2);
+    T(b2_desc.size == sizeof(idx_data));
+    T(b2_desc.type == SG_BUFFERTYPE_INDEXBUFFER);
+    T(b2_desc.usage == SG_USAGE_IMMUTABLE);
+    T(b2_desc.data.ptr == 0);
+    T(b2_desc.data.size == 0);
+
+    sg_shutdown();
+}
+
 UTEST(sokol_gfx, buffer_resource_states) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     sg_buffer buf = sg_alloc_buffer();
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_ALLOC);
     sg_init_buffer(buf, &(sg_buffer_desc){ .usage = SG_USAGE_STREAM, .size = 128 });
@@ -827,7 +873,7 @@ UTEST(sokol_gfx, buffer_resource_states) {
 }
 
 UTEST(sokol_gfx, image_resource_states) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     sg_image img = sg_alloc_image();
     T(sg_query_image_state(img) == SG_RESOURCESTATE_ALLOC);
     sg_init_image(img, &(sg_image_desc){ .render_target = true, .width = 16, .height = 16 });
@@ -840,7 +886,7 @@ UTEST(sokol_gfx, image_resource_states) {
 }
 
 UTEST(sokol_gfx, shader_resource_states) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     sg_shader shd = sg_alloc_shader();
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_ALLOC);
     sg_init_shader(shd, &(sg_shader_desc){0});
@@ -853,7 +899,7 @@ UTEST(sokol_gfx, shader_resource_states) {
 }
 
 UTEST(sokol_gfx, pipeline_resource_states) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     sg_pipeline pip = sg_alloc_pipeline();
     T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_ALLOC);
     sg_init_pipeline(pip, &(sg_pipeline_desc){
@@ -869,7 +915,7 @@ UTEST(sokol_gfx, pipeline_resource_states) {
 }
 
 UTEST(sokol_gfx, pass_resource_states) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     sg_pass pass = sg_alloc_pass();
     T(sg_query_pass_state(pass) == SG_RESOURCESTATE_ALLOC);
     sg_init_pass(pass, &(sg_pass_desc){
@@ -884,7 +930,7 @@ UTEST(sokol_gfx, pass_resource_states) {
 }
 
 UTEST(sokol_gfx, query_buffer_will_overflow) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
         .size = 64,
         .usage = SG_USAGE_STREAM
@@ -914,7 +960,7 @@ static void commit_listener_func(void* ud) {
 
 UTEST(sokol_gfx, commit_listener_called) {
     reset_commit_listener();
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     const bool added = sg_add_commit_listener((sg_commit_listener){
         .func = commit_listener_func,
         .user_data = (void*)23,
@@ -929,7 +975,7 @@ UTEST(sokol_gfx, commit_listener_called) {
 
 UTEST(sokol_gfx, commit_listener_add_twice) {
     reset_commit_listener();
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     const sg_commit_listener listener = {
         .func = commit_listener_func,
         .user_data = (void*)23,
@@ -946,7 +992,7 @@ UTEST(sokol_gfx, commit_listener_add_twice) {
 
 UTEST(sokol_gfx, commit_listener_same_func_diff_ud) {
     reset_commit_listener();
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     T(sg_add_commit_listener((sg_commit_listener){
         .func = commit_listener_func,
         .user_data = (void*)23,
@@ -964,7 +1010,7 @@ UTEST(sokol_gfx, commit_listener_same_func_diff_ud) {
 
 UTEST(sokol_gfx, commit_listener_add_remove_add) {
     reset_commit_listener();
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     const sg_commit_listener listener = {
         .func = commit_listener_func,
         .user_data = (void*)23,
@@ -985,7 +1031,7 @@ UTEST(sokol_gfx, commit_listener_add_remove_add) {
 
 UTEST(sokol_gfx, commit_listener_remove_non_existant) {
     reset_commit_listener();
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     const sg_commit_listener l0 = {
         .func = commit_listener_func,
         .user_data = (void*)23,
@@ -1008,7 +1054,7 @@ UTEST(sokol_gfx, commit_listener_remove_non_existant) {
 
 UTEST(sokol_gfx, commit_listener_multi_add_remove) {
     reset_commit_listener();
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     const sg_commit_listener l0 = {
         .func = commit_listener_func,
         .user_data = (void*)23,
@@ -1054,7 +1100,7 @@ UTEST(sokol_gfx, commit_listener_multi_add_remove) {
 
 UTEST(sokol_gfx, commit_listener_array_full) {
     reset_commit_listener();
-    sg_setup(&(sg_desc){
+    setup(&(sg_desc){
         .max_commit_listeners = 3,
     });
     const sg_commit_listener l0 = {
@@ -1087,7 +1133,7 @@ UTEST(sokol_gfx, commit_listener_array_full) {
 }
 
 UTEST(sokol_gfx, buffer_double_destroy_is_ok) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     sg_buffer buf = create_buffer();
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
     sg_destroy_buffer(buf);
@@ -1098,7 +1144,7 @@ UTEST(sokol_gfx, buffer_double_destroy_is_ok) {
 }
 
 UTEST(sokol_gfx, image_double_destroy_is_ok) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     sg_image img = create_image();
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     sg_destroy_image(img);
@@ -1109,7 +1155,7 @@ UTEST(sokol_gfx, image_double_destroy_is_ok) {
 }
 
 UTEST(sokol_gfx, shader_double_destroy_is_ok) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     sg_shader shd = create_shader();
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_VALID);
     sg_destroy_shader(shd);
@@ -1120,7 +1166,7 @@ UTEST(sokol_gfx, shader_double_destroy_is_ok) {
 }
 
 UTEST(sokol_gfx, pipeline_double_destroy_is_ok) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     sg_pipeline pip = create_pipeline();
     T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
     sg_destroy_pipeline(pip);
@@ -1131,7 +1177,7 @@ UTEST(sokol_gfx, pipeline_double_destroy_is_ok) {
 }
 
 UTEST(sokoL_gfx, pass_double_destroy_is_ok) {
-    sg_setup(&(sg_desc){0});
+    setup(&(sg_desc){0});
     sg_pass pass = create_pass();
     T(sg_query_pass_state(pass) == SG_RESOURCESTATE_VALID);
     sg_destroy_pass(pass);
@@ -1142,7 +1188,7 @@ UTEST(sokoL_gfx, pass_double_destroy_is_ok) {
 }
 
 UTEST(sokol_gfx, make_dealloc_buffer_warns) {
-    setup_with_logger();
+    setup(&(sg_desc){0});
     sg_buffer buf = create_buffer();
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
     sg_dealloc_buffer(buf);
@@ -1155,7 +1201,7 @@ UTEST(sokol_gfx, make_dealloc_buffer_warns) {
 }
 
 UTEST(sokol_gfx, make_dealloc_image_warns) {
-    setup_with_logger();
+    setup(&(sg_desc){0});
     sg_image img = create_image();
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     sg_dealloc_image(img);
@@ -1168,7 +1214,7 @@ UTEST(sokol_gfx, make_dealloc_image_warns) {
 }
 
 UTEST(sokol_gfx, make_dealloc_shader_warns) {
-    setup_with_logger();
+    setup(&(sg_desc){0});
     sg_shader shd = create_shader();
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_VALID);
     sg_dealloc_shader(shd);
@@ -1181,7 +1227,7 @@ UTEST(sokol_gfx, make_dealloc_shader_warns) {
 }
 
 UTEST(sokol_gfx, make_dealloc_pipeline_warns) {
-    setup_with_logger();
+    setup(&(sg_desc){0});
     sg_pipeline pip = create_pipeline();
     T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
     sg_dealloc_pipeline(pip);
@@ -1194,7 +1240,7 @@ UTEST(sokol_gfx, make_dealloc_pipeline_warns) {
 }
 
 UTEST(sokol_gfx, make_dealloc_pass_warns) {
-    setup_with_logger();
+    setup(&(sg_desc){0});
     sg_pass pass = create_pass();
     T(sg_query_pass_state(pass) == SG_RESOURCESTATE_VALID);
     sg_dealloc_pass(pass);
@@ -1207,7 +1253,7 @@ UTEST(sokol_gfx, make_dealloc_pass_warns) {
 }
 
 UTEST(sokol_gfx, alloc_uninit_buffer_warns) {
-    setup_with_logger();
+    setup(&(sg_desc){0});
     sg_buffer buf = sg_alloc_buffer();
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_ALLOC);
     sg_uninit_buffer(buf);
@@ -1218,7 +1264,7 @@ UTEST(sokol_gfx, alloc_uninit_buffer_warns) {
 }
 
 UTEST(sokol_gfx, alloc_uninit_image_warns) {
-    setup_with_logger();
+    setup(&(sg_desc){0});
     sg_image img = sg_alloc_image();
     T(sg_query_image_state(img) == SG_RESOURCESTATE_ALLOC);
     sg_uninit_image(img);
@@ -1229,7 +1275,7 @@ UTEST(sokol_gfx, alloc_uninit_image_warns) {
 }
 
 UTEST(sokol_gfx, alloc_uninit_shader_warns) {
-    setup_with_logger();
+    setup(&(sg_desc){0});
     sg_shader shd = sg_alloc_shader();
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_ALLOC);
     sg_uninit_shader(shd);
@@ -1240,7 +1286,7 @@ UTEST(sokol_gfx, alloc_uninit_shader_warns) {
 }
 
 UTEST(sokol_gfx, alloc_uninit_pipeline_warns) {
-    setup_with_logger();
+    setup(&(sg_desc){0});
     sg_pipeline pip = sg_alloc_pipeline();
     T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_ALLOC);
     sg_uninit_pipeline(pip);
@@ -1251,7 +1297,7 @@ UTEST(sokol_gfx, alloc_uninit_pipeline_warns) {
 }
 
 UTEST(sokol_gfx, alloc_uninit_pass_warns) {
-    setup_with_logger();
+    setup(&(sg_desc){0});
     sg_pass pass = sg_alloc_pass();
     T(sg_query_pass_state(pass) == SG_RESOURCESTATE_ALLOC);
     sg_uninit_pass(pass);
@@ -1262,7 +1308,7 @@ UTEST(sokol_gfx, alloc_uninit_pass_warns) {
 }
 
 UTEST(sokol_gfx, alloc_destroy_buffer_is_ok) {
-    setup_with_logger();
+    setup(&(sg_desc){0});
     sg_buffer buf = sg_alloc_buffer();
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_ALLOC);
     sg_destroy_buffer(buf);
@@ -1272,7 +1318,7 @@ UTEST(sokol_gfx, alloc_destroy_buffer_is_ok) {
 }
 
 UTEST(sokol_gfx, alloc_destroy_image_is_ok) {
-    setup_with_logger();
+    setup(&(sg_desc){0});
     sg_image img = sg_alloc_image();
     T(sg_query_image_state(img) == SG_RESOURCESTATE_ALLOC);
     sg_destroy_image(img);
@@ -1282,7 +1328,7 @@ UTEST(sokol_gfx, alloc_destroy_image_is_ok) {
 }
 
 UTEST(sokol_gfx, alloc_destroy_shader_is_ok) {
-    setup_with_logger();
+    setup(&(sg_desc){0});
     sg_shader shd = sg_alloc_shader();
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_ALLOC);
     sg_destroy_shader(shd);
@@ -1292,7 +1338,7 @@ UTEST(sokol_gfx, alloc_destroy_shader_is_ok) {
 }
 
 UTEST(sokol_gfx, alloc_destroy_pipeline_is_ok) {
-    setup_with_logger();
+    setup(&(sg_desc){0});
     sg_pipeline pip = sg_alloc_pipeline();
     T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_ALLOC);
     sg_destroy_pipeline(pip);
@@ -1302,7 +1348,7 @@ UTEST(sokol_gfx, alloc_destroy_pipeline_is_ok) {
 }
 
 UTEST(sokol_gfx, alloc_destroy_pass_is_ok) {
-    setup_with_logger();
+    setup(&(sg_desc){0});
     sg_pass pass = sg_alloc_pass();
     T(sg_query_pass_state(pass) == SG_RESOURCESTATE_ALLOC);
     sg_destroy_pass(pass);
@@ -1312,7 +1358,7 @@ UTEST(sokol_gfx, alloc_destroy_pass_is_ok) {
 }
 
 UTEST(sokol_gfx, make_pipeline_with_nonvalid_shader) {
-    sg_setup(&(sg_desc){
+    setup(&(sg_desc){
         .disable_validation = true,
     });
     sg_shader shd = sg_alloc_shader();
@@ -1328,7 +1374,7 @@ UTEST(sokol_gfx, make_pipeline_with_nonvalid_shader) {
 }
 
 UTEST(sokol_gfx, make_pass_with_nonvalid_color_images) {
-    sg_setup(&(sg_desc){
+    setup(&(sg_desc){
         .disable_validation = true,
     });
     sg_pass pass = sg_make_pass(&(sg_pass_desc){

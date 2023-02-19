@@ -301,6 +301,20 @@
         by calling sg_query_desc(). This will return an sg_desc struct with
         the default values patched in instead of any zero-initialized values
 
+    --- you can get a desc struct matching the attributes of a specific
+        resource object via:
+
+            sg_buffer_desc sg_query_buffer_desc(sg_buffer buf)
+            sg_image_desc sg_query_image_desc(sg_image img)
+            sg_shader_desc sq_query_shader_desc(sg_shader shd)
+            sg_pipeline_desc sg_query_pipeline_desc(sg_pipeline pip)
+            sg_pass_desc sg_query_pass_desc(sg_pass pass)
+
+        ...but NOTE that the returned desc structs may be incomplete,
+        for instance any references to external data, or generally
+        information that is no longer available after creation will
+        be zeroed.
+
     --- you can inspect various internal resource attributes via:
 
             sg_buffer_info sg_query_buffer_info(sg_buffer buf)
@@ -2536,8 +2550,6 @@ typedef struct sg_image_info {
     uint32_t upd_frame_index;       /* frame index of last sg_update_image() */
     int num_slots;                  /* number of renaming-slots for dynamically updated images */
     int active_slot;                /* currently active write-slot for dynamically updated images */
-    int width;                      /* image width */
-    int height;                     /* image height */
 } sg_image_info;
 
 typedef struct sg_shader_info {
@@ -3035,6 +3047,12 @@ SOKOL_GFX_API_DECL sg_image_info sg_query_image_info(sg_image img);
 SOKOL_GFX_API_DECL sg_shader_info sg_query_shader_info(sg_shader shd);
 SOKOL_GFX_API_DECL sg_pipeline_info sg_query_pipeline_info(sg_pipeline pip);
 SOKOL_GFX_API_DECL sg_pass_info sg_query_pass_info(sg_pass pass);
+/* get pre-filled desc struct matching a specific resource (NOTE that references to external data will be zeroed) */
+SOKOL_GFX_API_DECL sg_buffer_desc sg_query_buffer_desc(sg_buffer buf);
+SOKOL_GFX_API_DECL sg_image_desc sg_query_image_desc(sg_image img);
+SOKOL_GFX_API_DECL sg_shader_desc sg_query_shader_desc(sg_shader shd);
+SOKOL_GFX_API_DECL sg_pipeline_desc sg_query_pipeline_desc(sg_pipeline pip);
+SOKOL_GFX_API_DECL sg_pass_desc sg_query_pass_desc(sg_pass pass);
 /* get resource creation desc struct with their default values replaced */
 SOKOL_GFX_API_DECL sg_buffer_desc sg_query_buffer_defaults(const sg_buffer_desc* desc);
 SOKOL_GFX_API_DECL sg_image_desc sg_query_image_defaults(const sg_image_desc* desc);
@@ -3720,27 +3738,30 @@ typedef struct {
     int size;
     int append_pos;
     bool append_overflow;
-    sg_buffer_type type;
-    sg_usage usage;
     uint32_t update_frame_index;
     uint32_t append_frame_index;
     int num_slots;
     int active_slot;
+    sg_buffer_type type;
+    sg_usage usage;
 } _sg_buffer_common_t;
 
 _SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_buffer_desc* desc) {
     cmn->size = (int)desc->size;
     cmn->append_pos = 0;
     cmn->append_overflow = false;
-    cmn->type = desc->type;
-    cmn->usage = desc->usage;
     cmn->update_frame_index = 0;
     cmn->append_frame_index = 0;
-    cmn->num_slots = (cmn->usage == SG_USAGE_IMMUTABLE) ? 1 : SG_NUM_INFLIGHT_FRAMES;
+    cmn->num_slots = (desc->usage == SG_USAGE_IMMUTABLE) ? 1 : SG_NUM_INFLIGHT_FRAMES;
     cmn->active_slot = 0;
+    cmn->type = desc->type;
+    cmn->usage = desc->usage;
 }
 
 typedef struct {
+    uint32_t upd_frame_index;
+    int num_slots;
+    int active_slot;
     sg_image_type type;
     bool render_target;
     int width;
@@ -3757,12 +3778,12 @@ typedef struct {
     sg_wrap wrap_w;
     sg_border_color border_color;
     uint32_t max_anisotropy;
-    uint32_t upd_frame_index;
-    int num_slots;
-    int active_slot;
 } _sg_image_common_t;
 
 _SOKOL_PRIVATE void _sg_image_common_init(_sg_image_common_t* cmn, const sg_image_desc* desc) {
+    cmn->upd_frame_index = 0;
+    cmn->num_slots = (desc->usage == SG_USAGE_IMMUTABLE) ? 1 : SG_NUM_INFLIGHT_FRAMES;
+    cmn->active_slot = 0;
     cmn->type = desc->type;
     cmn->render_target = desc->render_target;
     cmn->width = desc->width;
@@ -3779,9 +3800,6 @@ _SOKOL_PRIVATE void _sg_image_common_init(_sg_image_common_t* cmn, const sg_imag
     cmn->wrap_w = desc->wrap_w;
     cmn->border_color = desc->border_color;
     cmn->max_anisotropy = desc->max_anisotropy;
-    cmn->upd_frame_index = 0;
-    cmn->num_slots = (cmn->usage == SG_USAGE_IMMUTABLE) ? 1 : SG_NUM_INFLIGHT_FRAMES;
-    cmn->active_slot = 0;
 }
 
 typedef struct {
@@ -16805,8 +16823,6 @@ SOKOL_API_IMPL sg_image_info sg_query_image_info(sg_image img_id) {
         info.num_slots = img->cmn.num_slots;
         info.active_slot = img->cmn.active_slot;
         #endif
-        info.width = img->cmn.width;
-        info.height = img->cmn.height;
     }
     return info;
 }
@@ -16848,6 +16864,19 @@ SOKOL_API_IMPL sg_pass_info sg_query_pass_info(sg_pass pass_id) {
         info.slot.ctx_id = pass->slot.ctx_id;
     }
     return info;
+}
+
+SOKOL_API_IMPL sg_buffer_desc sg_query_buffer_desc(sg_buffer buf_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_buffer_desc desc;
+    _sg_clear(&desc, sizeof(desc));
+    const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+    if (buf) {
+        desc.size = (size_t)buf->cmn.size;
+        desc.type = buf->cmn.type;
+        desc.usage = buf->cmn.usage;
+    }
+    return desc;
 }
 
 SOKOL_API_IMPL sg_buffer_desc sg_query_buffer_defaults(const sg_buffer_desc* desc) {
