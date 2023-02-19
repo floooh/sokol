@@ -9719,9 +9719,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
     rs_desc.FillMode = D3D11_FILL_SOLID;
     rs_desc.CullMode = _sg_d3d11_cull_mode(desc->cull_mode);
     rs_desc.FrontCounterClockwise = desc->face_winding == SG_FACEWINDING_CCW;
-    rs_desc.DepthBias = (INT) pip->cmn.depth_bias;
-    rs_desc.DepthBiasClamp = pip->cmn.depth_bias_clamp;
-    rs_desc.SlopeScaledDepthBias = pip->cmn.depth_bias_slope_scale;
+    rs_desc.DepthBias = (INT) pip->cmn.depth.bias;
+    rs_desc.DepthBiasClamp = pip->cmn.depth.bias_clamp;
+    rs_desc.SlopeScaledDepthBias = pip->cmn.depth.bias_slope_scale;
     rs_desc.DepthClipEnable = TRUE;
     rs_desc.ScissorEnable = TRUE;
     rs_desc.MultisampleEnable = desc->sample_count > 1;
