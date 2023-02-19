@@ -3778,6 +3778,8 @@ typedef struct {
     sg_wrap wrap_w;
     sg_border_color border_color;
     uint32_t max_anisotropy;
+    float min_lod;
+    float max_lod;
 } _sg_image_common_t;
 
 _SOKOL_PRIVATE void _sg_image_common_init(_sg_image_common_t* cmn, const sg_image_desc* desc) {
@@ -3800,6 +3802,8 @@ _SOKOL_PRIVATE void _sg_image_common_init(_sg_image_common_t* cmn, const sg_imag
     cmn->wrap_w = desc->wrap_w;
     cmn->border_color = desc->border_color;
     cmn->max_anisotropy = desc->max_anisotropy;
+    cmn->min_lod = desc->min_lod;
+    cmn->max_lod = desc->max_lod;
 }
 
 typedef struct {
@@ -16875,6 +16879,34 @@ SOKOL_API_IMPL sg_buffer_desc sg_query_buffer_desc(sg_buffer buf_id) {
         desc.size = (size_t)buf->cmn.size;
         desc.type = buf->cmn.type;
         desc.usage = buf->cmn.usage;
+    }
+    return desc;
+}
+
+SOKOL_API_IMPL sg_image_desc sg_query_image_desc(sg_image img_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_image_desc desc;
+    _sg_clear(&desc, sizeof(desc));
+    const _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
+    if (img) {
+        desc.type = img->cmn.type;
+        desc.render_target = img->cmn.render_target;
+        desc.width = img->cmn.width;
+        desc.height = img->cmn.height;
+        desc.num_slices = img->cmn.num_slices;
+        desc.num_mipmaps = img->cmn.num_mipmaps;
+        desc.usage = img->cmn.usage;
+        desc.pixel_format = img->cmn.pixel_format;
+        desc.sample_count = img->cmn.sample_count;
+        desc.min_filter = img->cmn.min_filter;
+        desc.mag_filter = img->cmn.mag_filter;
+        desc.wrap_u = img->cmn.wrap_u;
+        desc.wrap_v = img->cmn.wrap_v;
+        desc.wrap_w = img->cmn.wrap_w;
+        desc.border_color = img->cmn.border_color;
+        desc.max_anisotropy = img->cmn.max_anisotropy;
+        desc.min_lod = img->cmn.min_lod;
+        desc.max_lod = img->cmn.max_lod;
     }
     return desc;
 }

@@ -856,6 +856,76 @@ UTEST(sokol_gfx, query_buffer_desc) {
     T(b2_desc.data.ptr == 0);
     T(b2_desc.data.size == 0);
 
+    // invalid buffer (returns zeroed desc)
+    sg_buffer b3 = sg_make_buffer(&(sg_buffer_desc){
+        .size = 32,
+        .usage = SG_USAGE_STREAM,
+        .label = "bla",
+    });
+    sg_destroy_buffer(b3);
+    const sg_buffer_desc b3_desc = sg_query_buffer_desc(b3);
+    T(b3_desc.size == 0);
+    T(b3_desc.type == 0);
+    T(b3_desc.usage == 0);
+
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, query_image_desc) {
+    setup(&(sg_desc){0});
+
+    sg_image i0 = sg_make_image(&(sg_image_desc){
+        .width = 256,
+        .height = 512,
+        .pixel_format = SG_PIXELFORMAT_R8,
+        .mag_filter = SG_FILTER_LINEAR,
+        .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
+        .usage = SG_USAGE_DYNAMIC,
+        .border_color = SG_BORDERCOLOR_OPAQUE_WHITE,
+        .max_anisotropy = 4,
+        .min_lod = 0.5f,
+        .max_lod = 0.75f,
+    });
+    const sg_image_desc i0_desc = sg_query_image_desc(i0);
+    T(i0_desc.type == SG_IMAGETYPE_2D);
+    T(i0_desc.render_target == false);
+    T(i0_desc.width == 256);
+    T(i0_desc.height == 512);
+    T(i0_desc.num_slices == 1);
+    T(i0_desc.num_mipmaps == 1);
+    T(i0_desc.usage == SG_USAGE_DYNAMIC);
+    T(i0_desc.pixel_format == SG_PIXELFORMAT_R8);
+    T(i0_desc.sample_count == 1);
+    T(i0_desc.min_filter == SG_FILTER_NEAREST);
+    T(i0_desc.mag_filter == SG_FILTER_LINEAR);
+    T(i0_desc.wrap_u == SG_WRAP_REPEAT);
+    T(i0_desc.wrap_v == SG_WRAP_CLAMP_TO_EDGE);
+    T(i0_desc.wrap_w == SG_WRAP_REPEAT);
+    T(i0_desc.border_color == SG_BORDERCOLOR_OPAQUE_WHITE);
+    T(i0_desc.max_anisotropy == 4);
+    T(i0_desc.min_lod == 0.5f);
+    T(i0_desc.max_lod == 0.75f);
+    T(i0_desc.data.subimage[0][0].ptr == 0);
+    T(i0_desc.data.subimage[0][0].size == 0);
+    T(i0_desc.gl_textures[0] == 0);
+    T(i0_desc.gl_texture_target == 0);
+    T(i0_desc.mtl_textures[0] == 0);
+    T(i0_desc.d3d11_texture == 0);
+    T(i0_desc.d3d11_shader_resource_view == 0);
+    T(i0_desc.wgpu_texture == 0);
+
+    sg_destroy_image(i0);
+    const sg_image_desc i1_desc = sg_query_image_desc(i0);
+    T(i1_desc.type == 0);
+    T(i1_desc.render_target == false);
+    T(i1_desc.width == 0);
+    T(i1_desc.height == 0);
+    T(i1_desc.num_slices == 0);
+    T(i1_desc.num_mipmaps == 0);
+    T(i1_desc.usage == 0);
+    T(i1_desc.pixel_format == 0);
+    T(i1_desc.sample_count == 0);
+
     sg_shutdown();
 }
 
