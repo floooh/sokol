@@ -1,5 +1,39 @@
 ## Updates
 
+- **20-Feb-2023**: sokol_gfx.h has a new set of functions to get a 'best-effort'
+  desc struct with the creation parameters of a specific resource object:
+
+    ```c
+    sg_buffer_desc sg_query_buffer_desc(sg_buffer buf);
+    sg_image_desc sg_query_image_desc(sg_image img);
+    sg_shader_desc sg_query_shader_desc(sg_shader shd);
+    sg_pipeline_desc sg_query_pipeline_desc(sg_pipeline pip);
+    sg_pass_desc sg_query_pass_desc(sg_pass pass);
+    ```
+
+  The returned structs will *not* be an exact copy of the desc struct that
+  was used for creation the resource object, instead:
+
+    - references to external data (like buffer and image content or
+      shader sources) will be zeroed
+    - any attributes that have not been kept around internally after
+      creation will be zeroed (the ```sg_shader_desc``` struct is most
+      affected by this, the other structs are fairly complete).
+
+  Calling the functions with an invalid or dangling resource handle
+  will return a completely zeroed struct (thus it may make sense
+  to first check the resource state via ```sg_query_*_state()```)
+
+  Nevertheless, those functions may be useful to get a partially filled out
+  'creation blueprint' for creating similar resoures without the need
+  to keep and pass around the original desc structs.
+
+  >MINOR BREAKING CHANGE: the struct members ```sg_image_info.width``` and
+  ```sg_image_info.height``` have been removed, this information is now
+  returned by ```sg_query_image_desc()```.
+
+  PR: https://github.com/floooh/sokol/pull/796, fixes: https://github.com/floooh/sokol/issues/568
+
 - **17-Feb-2023**: sokol_app.h on macOS now has a proper fix for the problem
   that macOS doesn't send key-up events while the Cmd key is held down.
   Previously this was handled through a workaround of immediately sending a
