@@ -301,8 +301,8 @@
         by calling sg_query_desc(). This will return an sg_desc struct with
         the default values patched in instead of any zero-initialized values
 
-    --- you can get a desc struct matching the attributes of a specific
-        resource object via:
+    --- you can get a desc struct matching the creation attributes of a
+        specific resource object via:
 
             sg_buffer_desc sg_query_buffer_desc(sg_buffer buf)
             sg_image_desc sg_query_image_desc(sg_image img)
@@ -310,18 +310,31 @@
             sg_pipeline_desc sg_query_pipeline_desc(sg_pipeline pip)
             sg_pass_desc sg_query_pass_desc(sg_pass pass)
 
-        ...but NOTE that the returned desc structs may be incomplete,
-        only attributes that is kept around internally after resource creation
-        will be filled in, and in some cases (like shaders) that's very little.
-        The returned desc structs might still be useful as partial blueprint
-        for creating similar resources if filled up with the missing
-        properties. Missing properties will be set to zero.
+        ...but NOTE that the returned desc structs may be incomplete, only
+        creation attributes that are kept around internally after resource
+        creation will be filled in, and in some cases (like shaders) that's
+        very little. Any missing attributes will be set to zero. The returned
+        desc structs might still be useful as partial blueprint for creating
+        similar resources if filled up with the missing attributes.
 
-        Also calling the functions on an invalid resource will return
-        completely zeroed structs (it makes sense to check with sg_query_*_state()
-        first)
+        Calling the query-desc functions on an invalid resource will return
+        completely zeroed structs (it makes sense to check  the resource state
+        with sg_query_*_state() first)
 
-    --- you can inspect various internal resource attributes via:
+    --- you can query the default resource creation parameters through the functions
+
+            sg_buffer_desc sg_query_buffer_defaults(const sg_buffer_desc* desc)
+            sg_image_desc sg_query_image_defaults(const sg_image_desc* desc)
+            sg_shader_desc sg_query_shader_defaults(const sg_shader_desc* desc)
+            sg_pipeline_desc sg_query_pipeline_defaults(const sg_pipeline_desc* desc)
+            sg_pass_desc sg_query_pass_defaults(const sg_pass_desc* desc)
+
+        These functions take a pointer to a desc structure which may contain
+        zero-initialized items for default values. These zero-init values
+        will be replaced with their concrete values in the returned desc
+        struct.
+
+    --- you can inspect various internal resource runtime values via:
 
             sg_buffer_info sg_query_buffer_info(sg_buffer buf)
             sg_image_info sg_query_image_info(sg_image img)
@@ -337,19 +350,6 @@
         for, or whether the GLES3 backend had to fall back to GLES2 with:
 
             sg_backend sg_query_backend(void)
-
-    --- you can query the default resource creation parameters through the functions
-
-            sg_buffer_desc sg_query_buffer_defaults(const sg_buffer_desc* desc)
-            sg_image_desc sg_query_image_defaults(const sg_image_desc* desc)
-            sg_shader_desc sg_query_shader_defaults(const sg_shader_desc* desc)
-            sg_pipeline_desc sg_query_pipeline_defaults(const sg_pipeline_desc* desc)
-            sg_pass_desc sg_query_pass_defaults(const sg_pass_desc* desc)
-
-        These functions take a pointer to a desc structure which may contain
-        zero-initialized items for default values. These zero-init values
-        will be replaced with their concrete values in the returned desc
-        struct.
 
 
     ON INITIALIZATION:
@@ -3053,7 +3053,7 @@ SOKOL_GFX_API_DECL sg_image_info sg_query_image_info(sg_image img);
 SOKOL_GFX_API_DECL sg_shader_info sg_query_shader_info(sg_shader shd);
 SOKOL_GFX_API_DECL sg_pipeline_info sg_query_pipeline_info(sg_pipeline pip);
 SOKOL_GFX_API_DECL sg_pass_info sg_query_pass_info(sg_pass pass);
-/* get pre-filled desc struct matching a specific resource (NOTE that references to external data will be zeroed) */
+/* get desc structs matching a specific resource (NOTE that not all creation attributes may be provided) */
 SOKOL_GFX_API_DECL sg_buffer_desc sg_query_buffer_desc(sg_buffer buf);
 SOKOL_GFX_API_DECL sg_image_desc sg_query_image_desc(sg_image img);
 SOKOL_GFX_API_DECL sg_shader_desc sg_query_shader_desc(sg_shader shd);
