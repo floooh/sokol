@@ -28,6 +28,10 @@
   'creation blueprint' for creating similar resoures without the need
   to keep and pass around the original desc structs.
 
+  >MINOR BREAKING CHANGE: the struct members ```sg_image_info.width``` and
+  ```sg_image_info.height``` have been removed, this information is now
+  returned by ```sg_query_image_desc()```.
+
   PR: https://github.com/floooh/sokol/pull/796, fixes: https://github.com/floooh/sokol/issues/568
 
 - **17-Feb-2023**: sokol_app.h on macOS now has a proper fix for the problem
