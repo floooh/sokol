@@ -3968,6 +3968,12 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         }
         if (!drop_failed) {
             if (_sapp_events_enabled()) {
+                NSPoint mouse_pos = [sender draggingLocation];
+                _sapp.mouse.x = mouse_pos.x * _sapp.dpi_scale;
+                _sapp.mouse.y = _sapp.framebuffer_height - (mouse_pos.y * _sapp.dpi_scale) - 1;
+                _sapp.mouse.dx = 0.0f;
+                _sapp.mouse.dy = 0.0f;
+
                 _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
                 _sapp_call_event(&_sapp.event);
             }
