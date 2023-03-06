@@ -4859,6 +4859,12 @@ EM_JS(void, sapp_js_remove_dragndrop_listeners, (const char* canvas_name_cstr), 
     canvas.removeEventListener('drop',      Module.sokol_drop);
 });
 
+EM_JS(void, sapp_js_add_capture_keyboard_events, (void), {
+    Module.sokol_capture_keyboard_events = function(capture) {
+        __sapp_emsc_capture_keyboard_events(capture);
+    };
+});
+
 /* called from the emscripten event handler to update the keyboard visibility
     state, this must happen from an JS input event handler, otherwise
     the request will be ignored by the browser
@@ -5689,6 +5695,24 @@ _SOKOL_PRIVATE void _sapp_emsc_wgpu_next_frame(void) {
 }
 #endif
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_capture_keyboard_events(int capture) {
+    if (capture) {
+        emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_key_cb);
+        emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_key_cb);
+        emscripten_set_keypress_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_key_cb);
+    } else {
+        emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
+        emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
+        emscripten_set_keypress_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
+    }
+}
+#if defined(__cplusplus)
+} // extern "C"
+#endif
+
 _SOKOL_PRIVATE void _sapp_emsc_register_eventhandlers(void) {
     emscripten_set_mousedown_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_mouse_cb);
     emscripten_set_mouseup_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_mouse_cb);
@@ -5696,9 +5720,7 @@ _SOKOL_PRIVATE void _sapp_emsc_register_eventhandlers(void) {
     emscripten_set_mouseenter_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_mouse_cb);
     emscripten_set_mouseleave_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_mouse_cb);
     emscripten_set_wheel_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_wheel_cb);
-    emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_key_cb);
-    emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_key_cb);
-    emscripten_set_keypress_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_key_cb);
+    _sapp_emsc_capture_keyboard_events(1);
     emscripten_set_touchstart_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_touchmove_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_touchend_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_touch_cb);
@@ -5708,6 +5730,7 @@ _SOKOL_PRIVATE void _sapp_emsc_register_eventhandlers(void) {
     emscripten_set_focus_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_focus_cb);
     emscripten_set_blur_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_blur_cb);
     sapp_js_add_beforeunload_listener();
+    sapp_js_add_capture_keyboard_events();
     if (_sapp.clipboard.enabled) {
         sapp_js_add_clipboard_listener();
     }
@@ -5727,9 +5750,7 @@ _SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers() {
     emscripten_set_mouseenter_callback(_sapp.html5_canvas_selector, 0, true, 0);
     emscripten_set_mouseleave_callback(_sapp.html5_canvas_selector, 0, true, 0);
     emscripten_set_wheel_callback(_sapp.html5_canvas_selector, 0, true, 0);
-    emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
-    emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
-    emscripten_set_keypress_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
+    _sapp_emsc_capture_keyboard_events(0);
     emscripten_set_touchstart_callback(_sapp.html5_canvas_selector, 0, true, 0);
     emscripten_set_touchmove_callback(_sapp.html5_canvas_selector, 0, true, 0);
     emscripten_set_touchend_callback(_sapp.html5_canvas_selector, 0, true, 0);
