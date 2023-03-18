@@ -7223,19 +7223,20 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     const RAWINPUT* raw_mouse_data = (const RAWINPUT*) &_sapp.win32.raw_input_data;
                     if (raw_mouse_data->data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE) {
                         /* mouse only reports absolute position
-                           NOTE: THIS IS UNTESTED, it's unclear from reading the
-                           Win32 RawInput docs under which circumstances absolute
-                           positions are sent.
+                           NOTE: This code is untested and will most likely behave wrong in Remote Desktop sessions.
+                           (such remote desktop sessions are setting the MOUSE_MOVE_ABSOLUTE flag).
+                           See: https://github.com/floooh/sokol/issues/806 and
+                           https://github.com/microsoft/DirectXTK/commit/ef56b63f3739381e451f7a5a5bd2c9779d2a7555)
                         */
+                        LONG new_x = raw_mouse_data->data.mouse.lLastX;
+                        LONG new_y = raw_mouse_data->data.mouse.lLastY;
                         if (_sapp.win32.raw_input_mousepos_valid) {
-                            LONG new_x = raw_mouse_data->data.mouse.lLastX;
-                            LONG new_y = raw_mouse_data->data.mouse.lLastY;
                             _sapp.mouse.dx = (float) (new_x - _sapp.win32.raw_input_mousepos_x);
                             _sapp.mouse.dy = (float) (new_y - _sapp.win32.raw_input_mousepos_y);
-                            _sapp.win32.raw_input_mousepos_x = new_x;
-                            _sapp.win32.raw_input_mousepos_y = new_y;
-                            _sapp.win32.raw_input_mousepos_valid = true;
                         }
+                        _sapp.win32.raw_input_mousepos_x = new_x;
+                        _sapp.win32.raw_input_mousepos_y = new_y;
+                        _sapp.win32.raw_input_mousepos_valid = true;
                     }
                     else {
                         /* mouse reports movement delta (this seems to be the common case) */
