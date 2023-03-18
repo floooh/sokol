@@ -176,8 +176,8 @@ UTEST(sokol_spine, atlas_image_info) {
     T(strcmp(img_info.filename.cstr, "spineboy.png") == 0);
     T(img_info.min_filter == SG_FILTER_LINEAR);
     T(img_info.mag_filter == SG_FILTER_LINEAR);
-    T(img_info.wrap_u == SG_WRAP_MIRRORED_REPEAT);
-    T(img_info.wrap_v == SG_WRAP_MIRRORED_REPEAT);
+    T(img_info.wrap_u == SG_WRAP_CLAMP_TO_EDGE);
+    T(img_info.wrap_v == SG_WRAP_CLAMP_TO_EDGE);
     T(img_info.width == 1024);
     T(img_info.height == 256);
     T(img_info.premul_alpha == false);
@@ -593,8 +593,8 @@ UTEST(sokol_spine, get_atlas_page_info) {
     T(strcmp(info.image.filename.cstr, "spineboy.png") == 0);
     T(info.image.min_filter == SG_FILTER_LINEAR);
     T(info.image.mag_filter == SG_FILTER_LINEAR);
-    T(info.image.wrap_u == SG_WRAP_MIRRORED_REPEAT);
-    T(info.image.wrap_v == SG_WRAP_MIRRORED_REPEAT);
+    T(info.image.wrap_u == SG_WRAP_CLAMP_TO_EDGE);
+    T(info.image.wrap_v == SG_WRAP_CLAMP_TO_EDGE);
     T(info.image.width == 1024);
     T(info.image.height == 256);
     T(info.image.premul_alpha == false);
@@ -652,8 +652,8 @@ UTEST(sokol_spine, atlas_get_atlas_page_info_with_overrides) {
     T(strcmp(info.image.filename.cstr, "spineboy.png") == 0);
     T(info.image.min_filter == SG_FILTER_LINEAR);
     T(info.image.mag_filter == SG_FILTER_LINEAR);
-    T(info.image.wrap_u == SG_WRAP_MIRRORED_REPEAT);
-    T(info.image.wrap_v == SG_WRAP_MIRRORED_REPEAT);
+    T(info.image.wrap_u == SG_WRAP_CLAMP_TO_EDGE);
+    T(info.image.wrap_v == SG_WRAP_CLAMP_TO_EDGE);
     T(info.image.width == 1024);
     T(info.image.height == 256);
     T(info.image.premul_alpha == true); // FIXME: hmm, this is actually inconsistent
