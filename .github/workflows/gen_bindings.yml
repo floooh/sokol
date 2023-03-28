@@ -54,6 +54,10 @@ jobs:
         with:
           repository: floooh/sokol-odin
           path: bindgen/sokol-odin
+      - uses: actions/checkout@v3
+        with:
+          repository: floooh/sokol-rust
+          path: bindgen/sokol-rust
       - name: generate
         run: |
           cd bindgen
@@ -62,21 +66,28 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: ignore-me-zig
-          path: bindgen/sokol-zig/src/sokol
           retention-days: 1
+          path: bindgen/sokol-zig/src/sokol
       - name: upload-nim-artifact
         uses: actions/upload-artifact@v3
         with:
           name: ignore-me-nim
-          path: bindgen/sokol-nim/src/sokol
           retention-days: 1
+          path: bindgen/sokol-nim/src/sokol
       - name: upload-odin-artifact
         uses: actions/upload-artifact@v3
         with:
           name: ignore-me-odin
+          retention-days: 1
           path: |
             bindgen/sokol-odin/sokol
             bindgen/sokol-odin/c
+      - name: upload-rust-artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ignore-me-rust
+          retention-days: 1
+          path: bindgen/sokol-rust/src
 
   test-zig:
     needs: gen-bindings
@@ -289,3 +300,5 @@ jobs:
           git add -A
           git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
           git push
+
+  # FIXME Rust: run cargo fmt in deployment step!
