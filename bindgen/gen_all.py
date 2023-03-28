@@ -1,4 +1,4 @@
-import os, gen_nim, gen_zig, gen_odin
+import os, gen_nim, gen_zig, gen_odin, gen_rust
 
 tasks = [
     [ '../sokol_log.h',            'slog_',     [] ],
@@ -15,23 +15,23 @@ tasks = [
 # Odin
 gen_odin.prepare()
 for task in tasks:
-    c_header_path = task[0]
-    main_prefix = task[1]
-    dep_prefixes = task[2]
+    [c_header_path, main_prefix, dep_prefixes] = task
     gen_odin.gen(c_header_path, main_prefix, dep_prefixes)
 
 # Nim
 gen_nim.prepare()
 for task in tasks:
-    c_header_path = task[0]
-    main_prefix = task[1]
-    dep_prefixes = task[2]
+    [c_header_path, main_prefix, dep_prefixes] = task
     gen_nim.gen(c_header_path, main_prefix, dep_prefixes)
 
 # Zig
 gen_zig.prepare()
 for task in tasks:
-    c_header_path = task[0]
-    main_prefix = task[1]
-    dep_prefixes = task[2]
+    [c_header_path, main_prefix, dep_prefixes] = task
     gen_zig.gen(c_header_path, main_prefix, dep_prefixes)
+
+# Rust
+gen_rust.prepare()
+for task in tasks:
+    [c_header_path, main_prefix, dep_prefixes] = task
+    gen_rust.gen(c_header_path, main_prefix, dep_prefixes)
