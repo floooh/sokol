@@ -352,7 +352,7 @@ jobs:
           toolchain: stable
           override: true
       - name: "cargo fmt"
-        run: cargo +nightly fmt
+        run: cargo fmt
       - name: "commit and push"
         run: |
           git config user.email "none"
