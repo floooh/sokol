@@ -4,8 +4,8 @@ on: [push, pull_request]
 
 jobs:
   test-windows:
-      runs-on: windows-latest
-      steps:
+    runs-on: windows-latest
+    steps:
       - uses: actions/checkout@v3
       - name: test_win
         run: |
@@ -14,8 +14,8 @@ jobs:
         shell: cmd
 
   test-mac:
-      runs-on: macos-latest
-      steps:
+    runs-on: macos-latest
+    steps:
       - uses: actions/checkout@v3
       - uses: seanmiddleditch/gha-setup-ninja@master
       - name: test_macos
@@ -24,8 +24,8 @@ jobs:
           ./test_macos.sh
 
   test-linux:
-      runs-on: ubuntu-latest
-      steps:
+    runs-on: ubuntu-latest
+    steps:
       - uses: actions/checkout@v3
       - uses: seanmiddleditch/gha-setup-ninja@master
       - name: prepare
@@ -54,6 +54,10 @@ jobs:
         with:
           repository: floooh/sokol-odin
           path: bindgen/sokol-odin
+      - uses: actions/checkout@v3
+        with:
+          repository: floooh/sokol-rust
+          path: bindgen/sokol-rust
       - name: generate
         run: |
           cd bindgen
@@ -62,21 +66,28 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: ignore-me-zig
-          path: bindgen/sokol-zig/src/sokol
           retention-days: 1
+          path: bindgen/sokol-zig/src/sokol
       - name: upload-nim-artifact
         uses: actions/upload-artifact@v3
         with:
           name: ignore-me-nim
-          path: bindgen/sokol-nim/src/sokol
           retention-days: 1
+          path: bindgen/sokol-nim/src/sokol
       - name: upload-odin-artifact
         uses: actions/upload-artifact@v3
         with:
           name: ignore-me-odin
+          retention-days: 1
           path: |
             bindgen/sokol-odin/sokol
             bindgen/sokol-odin/c
+      - name: upload-rust-artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ignore-me-rust
+          retention-days: 1
+          path: bindgen/sokol-rust/src
 
   test-zig:
     needs: gen-bindings
@@ -227,6 +238,36 @@ jobs:
           windows_artifacts/odin build examples/sgl-points -debug
           windows_artifacts/odin build examples/sgl-context -debug
 
+  test-rust:
+    needs: gen-bindings
+    env:
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{matrix.os}}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: floooh/sokol-rust
+          submodules: recursive
+      - uses: actions/download-artifact@v3
+        with:
+          name: ignore-me-rust
+          path: src/sokol
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: prepare-linux
+        if: runner.os == 'Linux'
+        run: |
+            sudo apt-get update
+            sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+      - name: Run cargo build --all-targets
+        run: cargo build
+
   # only deploy the bindings for commits on the main branch
   deploy-zig:
     needs: test-zig
@@ -289,3 +330,34 @@ jobs:
           git add -A
           git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
           git push
+
+  deploy-rust:
+    needs: test-rust
+    env:
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: floooh/sokol-rust
+          submodules: recursive
+          ssh-key: ${{ secrets.GHACTIONS_RUST_PUSH }}
+      - uses: actions/download-artifact@v3
+        with:
+          name: ignore-me-rust
+          path: src/sokol
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: "cargo fmt"
+        run: cargo fmt
+      - name: "commit and push"
+        run: |
+          git config user.email "none"
+          git config user.name "GH Action"
+          git add -A
+          git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
+          echo "FIXME: GIT PUSH"
