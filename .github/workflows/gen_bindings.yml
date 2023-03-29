@@ -249,9 +249,13 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-            submodules: recursive
-      - name: Install stable rust toolchain
-        uses: actions-rs/toolchain@v1
+          repository: floooh/sokol-rust
+          submodules: recursive
+      - uses: actions/download-artifact@v3
+        with:
+          name: ignore-me-rust
+          path: src/sokol
+      - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
@@ -327,4 +331,33 @@ jobs:
           git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
           git push
 
-  # FIXME Rust: run cargo fmt in deployment step!
+  deploy-rust:
+    needs: test-rust
+    env:
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: floooh/sokol-rust
+          submodules: recursive
+          ssh-key: ${{ secrets.GHACTIONS_RUST_PUSH }}
+      - uses: actions/download-artifact@v3
+        with:
+          name: ignore-me-rust
+          path: src/sokol
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: "cargo fmt"
+        run: cargo fmt
+      - name: "commit and push"
+        run: |
+          git config user.email "none"
+          git config user.name "GH Action"
+          git add -A
+          git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
+          echo "FIXME: GIT PUSH"
