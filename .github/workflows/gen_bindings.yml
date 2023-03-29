@@ -345,7 +345,7 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: ignore-me-rust
-          path: src/sokol
+          path: src
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
