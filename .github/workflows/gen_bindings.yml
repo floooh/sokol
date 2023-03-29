@@ -4,8 +4,8 @@ on: [push, pull_request]
 
 jobs:
   test-windows:
-      runs-on: windows-latest
-      steps:
+    runs-on: windows-latest
+    steps:
       - uses: actions/checkout@v3
       - name: test_win
         run: |
@@ -14,8 +14,8 @@ jobs:
         shell: cmd
 
   test-mac:
-      runs-on: macos-latest
-      steps:
+    runs-on: macos-latest
+    steps:
       - uses: actions/checkout@v3
       - uses: seanmiddleditch/gha-setup-ninja@master
       - name: test_macos
@@ -24,8 +24,8 @@ jobs:
           ./test_macos.sh
 
   test-linux:
-      runs-on: ubuntu-latest
-      steps:
+    runs-on: ubuntu-latest
+    steps:
       - uses: actions/checkout@v3
       - uses: seanmiddleditch/gha-setup-ninja@master
       - name: prepare
@@ -237,6 +237,32 @@ jobs:
           windows_artifacts/odin build examples/sgl -debug
           windows_artifacts/odin build examples/sgl-points -debug
           windows_artifacts/odin build examples/sgl-context -debug
+
+  test-rust:
+    needs: gen-bindings
+    env:
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{matrix.os}}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+            submodules: recursive
+      - name: Install stable rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: prepare-linux
+        if: runner.os == 'Linux'
+        run: |
+            sudo apt-get update
+            sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+      - name: Run cargo build --all-targets
+        run: cargo build
 
   # only deploy the bindings for commits on the main branch
   deploy-zig:
