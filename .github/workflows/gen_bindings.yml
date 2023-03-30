@@ -360,4 +360,4 @@ jobs:
           git status -vv
           git add -A
           git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
-          echo "FIXME: GIT PUSH"
+          git push
