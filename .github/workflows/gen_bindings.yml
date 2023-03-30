@@ -157,7 +157,7 @@ jobs:
       # NOTE: see https://github.com/floooh/sokol-odin/blob/main/.github/workflows/main.yml
       - uses: ilammy/msvc-dev-cmd@v1
       - if: runner.os == 'Linux'
-        name: prepare-linux
+        name: build-linux
         run: |
           sudo apt-get update
           sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev llvm-11
@@ -185,7 +185,7 @@ jobs:
           ubuntu_artifacts/odin build examples/sgl-points -debug
           ubuntu_artifacts/odin build examples/sgl-context -debug
       - if: runner.os == 'macOS'
-        name: prepare-macos
+        name: build-macos
         run: |
           brew install llvm@11
           curl -L https://github.com/odin-lang/Odin/releases/download/dev-2023-03/odin-macos-amd64-dev-2023-03.zip --output odin.zip
@@ -212,7 +212,7 @@ jobs:
           macos_artifacts/odin build examples/sgl-points -debug
           macos_artifacts/odin build examples/sgl-context -debug
       - if: runner.os == 'Windows'
-        name: prepare-windows
+        name: build-windows
         shell: cmd
         run: |
           curl -L https://github.com/odin-lang/Odin/releases/download/dev-2023-03/odin-windows-amd64-dev-2023-03.zip --output odin.zip
@@ -265,8 +265,8 @@ jobs:
         run: |
             sudo apt-get update
             sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
-      - name: Run cargo build --all-targets
-        run: cargo build
+      - name: build
+        run: cargo build --all-targets
 
   # only deploy the bindings for commits on the main branch
   deploy-zig:
