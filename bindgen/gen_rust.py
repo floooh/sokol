@@ -133,7 +133,14 @@ prim_defaults = {
 }
 
 special_constant_types = {
-    "SG_INVALID_ID": "u32"
+    "SG_INVALID_ID": "u32",
+    "SAPP_MODIFIER_SHIFT": "u32",
+    "SAPP_MODIFIER_CTRL": "u32",
+    "SAPP_MODIFIER_ALT": "u32",
+    "SAPP_MODIFIER_SUPER": "u32",
+    "SAPP_MODIFIER_LMB": "u32",
+    "SAPP_MODIFIER_RMB": "u32",
+    "SAPP_MODIFIER_MMB": "u32",
 }
 
 struct_types = []
@@ -813,7 +820,7 @@ def gen_module(inp, dep_prefixes):
     l("// machine generated, do not edit")
     l("")
 
-    
+
     l("#![allow(dead_code)]")
     l("#![allow(unused_imports)]")
     l("")
