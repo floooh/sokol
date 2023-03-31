@@ -124,6 +124,8 @@ jobs:
     runs-on: ${{matrix.os}}
     steps:
       - uses: jiro4989/setup-nim-action@v1
+        with:
+         nim-version: 1.6.12
       - uses: actions/checkout@v3
         with:
           repository: floooh/sokol-nim
