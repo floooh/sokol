@@ -117,6 +117,7 @@ jobs:
   test-nim:
     needs: gen-bindings
     strategy:
+      fail-fast: false
       matrix:
         #os: [ubuntu-latest, macos-latest, windows-latest]
         os: [ubuntu-latest, macos-latest ]
@@ -144,6 +145,7 @@ jobs:
   test-odin:
     needs: gen-bindings
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{matrix.os}}
@@ -243,6 +245,7 @@ jobs:
     env:
       CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{matrix.os}}
