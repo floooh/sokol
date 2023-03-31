@@ -67,6 +67,7 @@ These are automatically updated on changes to the C headers:
 - [sokol-zig](https://github.com/floooh/sokol-zig)
 - [sokol-odin](https://github.com/floooh/sokol-odin)
 - [sokol-nim](https://github.com/floooh/sokol-nim)
+- [sokol-rust](https://github.com/floooh/sokol-rust)
 
 ## Notes
 
