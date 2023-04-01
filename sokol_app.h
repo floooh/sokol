@@ -5361,6 +5361,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
             _sapp.event.key_repeat = emsc_event->repeat;
             _sapp.event.modifiers = _sapp_emsc_key_event_mods(emsc_event);
             if (type == SAPP_EVENTTYPE_CHAR) {
+                // FIXME: this doesn't appear to work on Android Chrome
                 _sapp.event.char_code = emsc_event->charCode;
                 /* workaround to make Cmd+V work on Safari */
                 if ((emsc_event->metaKey) && (emsc_event->charCode == 118)) {
@@ -5368,7 +5369,18 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                 }
             }
             else {
-                _sapp.event.key_code = _sapp_emsc_translate_key(emsc_event->code);
+                if (0 != emsc_event->code[0]) {
+                    // This code path is for desktop browsers which send untranslated 'physical' key code strings
+                    // (which is what we actually want for key events)
+                    _sapp.event.key_code = _sapp_emsc_translate_key(emsc_event->code);
+                } else {
+                    // This code path is for mobile browsers which only send localized key code
+                    // strings. Note that the translation will only work for a small subset
+                    // of localization-agnostic keys (like Enter, arrow keys, etc...), but
+                    // regular alpha-numeric keys will all result in an SAPP_KEYCODE_INVALID)
+                    _sapp.event.key_code = _sapp_emsc_translate_key(emsc_event->key);
+                }
+
                 /* Special hack for macOS: if the Super key is pressed, macOS doesn't
                     send keyUp events. As a workaround, to prevent keys from
                     "sticking", we'll send a keyup event following a keydown
@@ -5381,7 +5393,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                 {
                     send_keyup_followup = true;
                 }
-                /* only forward a certain key ranges to the browser */
+                // only forward keys to the browser (can further be supressed by sapp_consume_event())
                 switch (_sapp.event.key_code) {
                     case SAPP_KEYCODE_WORLD_1:
                     case SAPP_KEYCODE_WORLD_2:
@@ -5447,7 +5459,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                 }
             }
             if (_sapp_call_event(&_sapp.event)) {
-                /* consume event via sapp_consume_event() */
+                // event was consumed event via sapp_consume_event()
                 retval = true;
             }
             if (send_keyup_followup) {
