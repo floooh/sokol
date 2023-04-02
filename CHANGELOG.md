@@ -25,7 +25,7 @@
   to first check the resource state via ```sg_query_*_state()```)
 
   Nevertheless, those functions may be useful to get a partially filled out
-  'creation blueprint' for creating similar resoures without the need
+  'creation blueprint' for creating similar resources without the need
   to keep and pass around the original desc structs.
 
   >MINOR BREAKING CHANGE: the struct members ```sg_image_info.width``` and
@@ -63,7 +63,7 @@
   any C++ code).
 
   **REQUIRED ACTION**: Since the sokol headers are now completely silent
-  without a logging callback (explanation below), it is highly recommened
+  without a logging callback (explanation below), it is highly recommended
   to use the standard logging callback provided by the new header ```sokol_log.h```.
   For instance for sokol_gfx.h it looks like this:
 
@@ -287,7 +287,7 @@
     was used. The fetched data is now accessible through an ```sfetch_range_t data```
     item (```data.ptr``` and ```data.size```). The old ```.fetched_offset``` item
     has been renamed to ```.data_offset``` to better conform with the new naming.
-  - The last two occurances of discrete ptr/size pairs in sokol_app.h now have also
+  - The last two occurrences of discrete ptr/size pairs in sokol_app.h now have also
     been replaced with ```sapp_range_t``` items, this only affects the structs
     ```sapp_html5_fetch_request``` and ```sapp_html5_fetch_response```.
 
@@ -325,7 +325,7 @@
   in sokol_app.h, sokol_args.h, sokol_audio.h and sokol_fetch.h:
   - the JS code has been 'modernized' (e.g. const and let instead of var,
     ```() => { ... }``` instead of ```function () { ... }``` for callbacks)
-  - false positives in the Closure static analysis have been supressed
+  - false positives in the Closure static analysis have been suppressed
     via inline hints
 
 - **16-Oct-2022** The Odin bindings generator and the generated bindings have
@@ -345,7 +345,7 @@
     The new Emscripten SDK also displays a couple of Javascript "static analyzer" warnings
     by the Closure compiler (used in release mode to optimize and minify the generated
     JS code). I fixed a couple of those warnings, but some warnings persist (all of them
-    false positives). Not sure yet if these can be fixed or need to be supressed, but
+    false positives). Not sure yet if these can be fixed or need to be suppressed, but
     that's for another time.
     - the webkitAudioContext() fallback in sokol_audio.h's Emscripten backend
     has been removed (only AudioContext is supported now), the fallback also
@@ -391,7 +391,7 @@
     - sokol_imgui.h will now set the cursor type via ```sapp_set_mouse_cursor()```. This can be
       disabled with the new ```simgui_desc_t``` item ```disable_set_mouse_cursor```.
     - sokol_imgui.h now automatically enables resizing windows from edges (not just the bottom-right corner),
-      this behavour can be disabled with the new ```simgui_desc_t``` item ```disable_windows_resize_from_edges```.
+      this behaviour can be disabled with the new ```simgui_desc_t``` item ```disable_windows_resize_from_edges```.
     - sokol_imgui.h can now optionally write to the alpha channel (useful if you want to render the UI
       into a separate render target, which is later composed onto the default framebuffer). The feature
       is enabled with the new ```simgui_desc_t``` item ```write_alpha_channel```.
@@ -753,7 +753,7 @@ so that it's easier to publish new bindings after updates to the sokol headers).
     ago (around iOS 12.x) MTKView started to ignore the contentScaleFactor
     property, which lead to sokol_app.h always setting up a HighDPI
     framebuffer even when sapp_desc.high_dpi wasn't set. The fix is to set
-    the MTKView's drawableSize explicitely now.
+    the MTKView's drawableSize explicitly now.
     - The iOS GL backend didn't support MSAA multisampling so far, this has
     been fixed now, but only one MSAA mode (4x) is available, which will be
     selected when sapp_desc.sample_count is greater than 1.
@@ -807,7 +807,7 @@ uses the **AVAudioSession** class to activate and deactivate audio output as nee
 This fixes sokol_audio.h for iPhones (so far, sokol_audio.h accidentally only worked
 for iPads). Please see [this issue](https://github.com/floooh/sokol/issues/431) for details.
 A somewhat unfortunate side effect of this fix is that sokol_audio.h must now be compiled
-as Objective-C when targetting iOS, also note that a new framework must be linked: ```AVFoundation```.
+as Objective-C when targeting iOS, also note that a new framework must be linked: ```AVFoundation```.
 Many thanks to @oviano for providing the PR!
 
 - **14-Feb-2021**: The Dear ImGui rendering backend in [sokol_imgui.h](https://github.com/floooh/sokol/blob/master/util/sokol_imgui.h) has been rewritten to only do a single

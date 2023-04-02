@@ -194,7 +194,7 @@
 
             sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left)
 
-        ...or if you want to specifiy the viewport rectangle with float values:
+        ...or if you want to specify the viewport rectangle with float values:
 
             sg_apply_viewportf(float x, float y, float width, float height, bool origin_top_left)
 
@@ -385,7 +385,7 @@
             a convenience function to get a sg_context_desc struct filled out
             with context information provided by sokol_app.h
 
-    See the documention block of the sg_desc struct below for more information.
+    See the documentation block of the sg_desc struct below for more information.
 
 
     UNIFORM DATA LAYOUT:
@@ -465,7 +465,7 @@
     layout on the CPU side can be used for all sokol-gfx backends. To achieve this,
     a common subset of the std140 layout must be used:
 
-    - The uniform block layout hint in sg_shader_desc must be explicitely set to
+    - The uniform block layout hint in sg_shader_desc must be explicitly set to
       SG_UNIFORMLAYOUT_STD140.
     - Only the following GLSL uniform types can be used (with their associated sokol-gfx enums):
         - float => SG_UNIFORMTYPE_FLOAT
@@ -2559,7 +2559,7 @@ typedef struct sg_image_info {
 } sg_image_info;
 
 typedef struct sg_shader_info {
-    sg_slot_info slot;              /* resoure pool slot info */
+    sg_slot_info slot;              /* resource pool slot info */
 } sg_shader_info;
 
 typedef struct sg_pipeline_info {
@@ -2573,7 +2573,7 @@ typedef struct sg_pass_info {
 /*
     sg_log_item
 
-    An enum with a unique item for each log message, warning, errror
+    An enum with a unique item for each log message, warning, error
     and validation layer message.
 */
 #define _SG_LOG_ITEMS \
@@ -11343,7 +11343,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const 
 
     _sg_shader_common_init(&shd->cmn, desc);
 
-    /* create metal libray objects and lookup entry functions */
+    /* create metal library objects and lookup entry functions */
     id<MTLLibrary> vs_lib = nil;
     id<MTLLibrary> fs_lib = nil;
     id<MTLFunction> vs_func = nil;
