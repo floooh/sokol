@@ -56,7 +56,7 @@
     Portions of the Windows and Linux GL initialization, event-, icon- etc... code
     have been taken from GLFW (http://www.glfw.org/)
 
-    iOS onscreen keyboard support 'inspired' by libgdx.
+    iOS virtual keyboard support 'inspired' by libgdx.
 
     Link with the following system libraries:
 
@@ -936,11 +936,11 @@
     For an example and test of the window icon feature, check out the the
     'icon-sapp' sample on the sokol-samples git repository.
 
-    ONSCREEN KEYBOARD
-    =================
+    VIRTUAL KEYBOARD
+    ================
     On some platforms which don't provide a physical keyboard, sokol-app
-    can display the platform's integrated onscreen keyboard for text
-    input. To request that the onscreen keyboard is shown, call
+    can display the platform's integrated virtual keyboard for text
+    input. To request that the virtual keyboard is shown, call
 
         sapp_show_keyboard(true);
 
@@ -952,7 +952,7 @@
     inside an input handler. On such platforms, sapp_show_keyboard()
     will only work as expected when it is called from inside the
     sokol-app event callback function. When called from other places,
-    an internal flag will be set, and the onscreen keyboard will be
+    an internal flag will be set, and the virtual keyboard will be
     called at the next 'legal' opportunity (when the next input event
     is handled).
 
@@ -1088,7 +1088,7 @@
 
     TEMP NOTE DUMP
     ==============
-    - onscreen keyboard support on Android requires Java :(, should we even bother?
+    - virtual keyboard support on Android requires Java :(, should we even bother?
     - sapp_desc needs a bool whether to initialize depth-stencil surface
     - GL context initialization needs more control (at least what GL version to initialize)
     - application icon
@@ -1723,9 +1723,9 @@ SOKOL_APP_API_DECL int sapp_sample_count(void);
 SOKOL_APP_API_DECL bool sapp_high_dpi(void);
 /* returns the dpi scaling factor (window pixels to framebuffer pixels) */
 SOKOL_APP_API_DECL float sapp_dpi_scale(void);
-/* show or hide the mobile device onscreen keyboard */
+/* show or hide the mobile device virtual keyboard */
 SOKOL_APP_API_DECL void sapp_show_keyboard(bool show);
-/* return true if the mobile device onscreen keyboard is currently shown */
+/* return true if the mobile device virtual keyboard is currently shown */
 SOKOL_APP_API_DECL bool sapp_keyboard_shown(void);
 /* query fullscreen mode */
 SOKOL_APP_API_DECL bool sapp_is_fullscreen(void);
@@ -2362,12 +2362,17 @@ typedef struct {
 } _sapp_wgpu_t;
 #endif
 
+#define _SAPP_EMSC_VKBD_MAX_CODEPOINTS (32)
 typedef struct {
     bool textfield_created;
     bool wants_show_keyboard;
     bool wants_hide_keyboard;
     bool mouse_lock_requested;
     uint16_t mouse_buttons;
+    struct {
+        uint16_t index;
+        uint32_t buffer[_SAPP_EMSC_VKBD_MAX_CODEPOINTS];
+    } vkbd;
     #if defined(SOKOL_WGPU)
     _sapp_wgpu_t wgpu;
     #endif
@@ -2754,7 +2759,7 @@ typedef struct {
     bool quit_ordered;
     bool event_consumed;
     bool html5_ask_leave_site;
-    bool onscreen_keyboard_shown;
+    bool virtual_keyboard_shown;
     int window_width;
     int window_height;
     int framebuffer_width;
@@ -4387,7 +4392,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
             name:UIKeyboardDidChangeFrameNotification object:nil];
     }
     if (shown) {
-        /* setting the text field as first responder brings up the onscreen keyboard */
+        /* setting the text field as first responder brings up the virtual keyboard */
         [_sapp.ios.textfield becomeFirstResponder];
     }
     else {
@@ -4497,7 +4502,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 
 @implementation _sapp_textfield_dlg
 - (void)keyboardWasShown:(NSNotification*)notif {
-    _sapp.onscreen_keyboard_shown = true;
+    _sapp.virtual_keyboard_shown = true;
     /* query the keyboard's size, and modify the content view's size */
     if (_sapp.desc.ios_keyboard_resizes_canvas) {
         NSDictionary* info = notif.userInfo;
@@ -4508,14 +4513,14 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
     }
 }
 - (void)keyboardWillBeHidden:(NSNotification*)notif {
-    _sapp.onscreen_keyboard_shown = false;
+    _sapp.virtual_keyboard_shown = false;
     if (_sapp.desc.ios_keyboard_resizes_canvas) {
         _sapp.ios.view.frame = UIScreen.mainScreen.bounds;
     }
 }
 - (void)keyboardDidChangeFrame:(NSNotification*)notif {
     /* this is for the case when the screen rotation changes while the keyboard is open */
-    if (_sapp.onscreen_keyboard_shown && _sapp.desc.ios_keyboard_resizes_canvas) {
+    if (_sapp.virtual_keyboard_shown && _sapp.desc.ios_keyboard_resizes_canvas) {
         NSDictionary* info = notif.userInfo;
         CGFloat kbd_h = [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].size.height;
         CGRect view_frame = UIScreen.mainScreen.bounds;
@@ -4606,22 +4611,66 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 // >>emscripten
 #if defined(_SAPP_EMSCRIPTEN)
 
+
 #if defined(EM_JS_DEPS)
 EM_JS_DEPS(sokol_app, "$withStackSave,$allocateUTF8OnStack");
 #endif
+
+// virtual keyboard text input helpers
+static void _sapp_emsc_vkbd_reset(void) {
+    _sapp.emsc.vkbd.index = 0;
+}
+
+static void _sapp_emsc_vkbd_append(uint32_t code_point) {
+    if (_sapp.emsc.vkbd.index < _SAPP_EMSC_VKBD_MAX_CODEPOINTS) {
+        _sapp.emsc.vkbd.buffer[_sapp.emsc.vkbd.index++] = code_point;
+    }
+}
+
+static void _sapp_emsc_vkbd_emit_chars(void) {
+    _sapp_init_event(SAPP_EVENTTYPE_CHAR);
+    for (size_t i = 0; i < _sapp.emsc.vkbd.index; i++) {
+        _sapp.event.char_code = _sapp.emsc.vkbd.buffer[i];
+        _sapp_call_event(&_sapp.event);
+    }
+    _sapp_emsc_vkbd_reset();
+}
+
+static void _sapp_emsc_vkbd_utf8_input(const uint8_t* utf8_str) {
+    #define _SAPP_EMSC_NEXT(x) uint8_t x = *utf8_str++; if (0 == x) { break; }; x &= ~0xC0;
+    for (size_t i = 0; i < _SAPP_EMSC_VKBD_MAX_CODEPOINTS; i++) {
+        uint8_t c0 = *utf8_str++;
+        if (0 == c0) { break; }
+        uint32_t c32 = 0;
+        if ((c0 & 0x80) == 0) {
+            // 1-byte sequence
+            c32 = c0;
+        } else if ((c0 & 0xE0) == 0xC0) {
+            // 2-byte sequence
+            _SAPP_EMSC_NEXT(c1);
+            c32 = ((c0 & ~0xC0) << 6) | c1;
+        } else if ((c0 & 0xF0) == 0xE0) {
+            // 3-byte sequence
+            _SAPP_EMSC_NEXT(c1);
+            _SAPP_EMSC_NEXT(c2);
+            c32 = ((c0 & ~0xE0)<<12) | (c1 << 6) | c2;
+        } else if ((c0 & 0xF8) == 0xF0) {
+            // 4-byte sequence
+            _SAPP_EMSC_NEXT(c1);
+            _SAPP_EMSC_NEXT(c2);
+            _SAPP_EMSC_NEXT(c3);
+            c32 = ((c0 & ~0xF0)<<18) | (c1<<12) | (c2<<6) | c3;
+        }
+        _sapp_emsc_vkbd_append(c32);
+    }
+    #undef _SAPP_EMSC_NEXT
+}
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef void (*_sapp_html5_fetch_callback) (const sapp_html5_fetch_response*);
-
-/* this function is called from a JS event handler when the user hides
-    the onscreen keyboard pressing the 'dismiss keyboard key'
-*/
-EMSCRIPTEN_KEEPALIVE void _sapp_emsc_notify_keyboard_hidden(void) {
-    _sapp.onscreen_keyboard_shown = false;
-}
 
 EMSCRIPTEN_KEEPALIVE void _sapp_emsc_onpaste(const char* str) {
     if (_sapp.clipboard.enabled) {
@@ -4704,6 +4753,17 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_invoke_fetch_cb(int index, int success, int
     callback(&response);
 }
 
+/* this function is called from a JS event handler when the user hides
+    the virtual keyboard pressing the 'dismiss keyboard key'
+*/
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_notify_keyboard_hidden(void) {
+    _sapp.virtual_keyboard_shown = false;
+}
+
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_ontextinput(const uint8_t* utf8_str) {
+    _sapp_emsc_vkbd_utf8_input(utf8_str);
+}
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
@@ -4714,9 +4774,18 @@ EM_JS(void, sapp_js_create_textfield, (void), {
     _sapp_inp.type = "text";
     _sapp_inp.id = "_sokol_app_input_element";
     _sapp_inp.autocapitalize = "none";
-    _sapp_inp.addEventListener("focusout", function(_sapp_event) {
+    _sapp_inp.addEventListener("focusout", (ev) => {
         __sapp_emsc_notify_keyboard_hidden()
-
+    });
+    _sapp_inp.addEventListener("input", (ev) => {
+        // put some upper limit on the max text field input length
+        if (ev.target.value.length < SAPP_EMSC_MAX_INPUT_CODE_POINTS) {
+            withStackSave(() => {
+                const cstr = allocateUTF8OnStack(ev.target.value);
+                __sapp_emsc_ontextinput(cstr);
+            });
+        }
+        ev.target.value = "";
     });
     document.body.append(_sapp_inp);
 });
@@ -4871,21 +4940,21 @@ _SOKOL_PRIVATE void _sapp_emsc_update_keyboard_state(void) {
             sapp_js_create_textfield();
         }
         /* focus the text input field, this will bring up the keyboard */
-        _sapp.onscreen_keyboard_shown = true;
+        _sapp.virtual_keyboard_shown = true;
         _sapp.emsc.wants_show_keyboard = false;
         sapp_js_focus_textfield();
     }
     if (_sapp.emsc.wants_hide_keyboard) {
         /* unfocus the text input field */
         if (_sapp.emsc.textfield_created) {
-            _sapp.onscreen_keyboard_shown = false;
+            _sapp.virtual_keyboard_shown = false;
             _sapp.emsc.wants_hide_keyboard = false;
             sapp_js_unfocus_textfield();
         }
     }
 }
 
-/* actually showing the onscreen keyboard must be initiated from a JS
+/* actually showing the virtual keyboard must be initiated from a JS
     input event handler, so we'll just keep track of the desired
     state, and the actual state change will happen with the next input event
 */
@@ -5361,11 +5430,16 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
             _sapp.event.key_repeat = emsc_event->repeat;
             _sapp.event.modifiers = _sapp_emsc_key_event_mods(emsc_event);
             if (type == SAPP_EVENTTYPE_CHAR) {
-                // FIXME: this doesn't appear to work on Android Chrome
+                // FIXME: need to ignore this code when char input is coming
+                // from the textfield HTML element.
                 _sapp.event.char_code = emsc_event->charCode;
-                /* workaround to make Cmd+V work on Safari */
+                // workaround to make Cmd+V work on Safari
                 if ((emsc_event->metaKey) && (emsc_event->charCode == 118)) {
                     retval = false;
+                }
+                if (_sapp_call_event(&_sapp.event)) {
+                    // event was consumed via sapp_consume_event()
+                    retval = true;
                 }
             }
             else {
@@ -5457,15 +5531,15 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                         retval = false;
                         break;
                 }
-            }
-            if (_sapp_call_event(&_sapp.event)) {
-                // event was consumed event via sapp_consume_event()
-                retval = true;
-            }
-            if (send_keyup_followup) {
-                _sapp.event.type = SAPP_EVENTTYPE_KEY_UP;
                 if (_sapp_call_event(&_sapp.event)) {
+                    // event was consumed via sapp_consume_event()
                     retval = true;
+                }
+                if (send_keyup_followup) {
+                    _sapp.event.type = SAPP_EVENTTYPE_KEY_UP;
+                    if (_sapp_call_event(&_sapp.event)) {
+                        retval = true;
+                    }
                 }
             }
         }
@@ -5766,6 +5840,11 @@ _SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers() {
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
     _SOKOL_UNUSED(userData);
     _sapp_timing_external(&_sapp.timing, time / 1000.0);
+
+    // textfield char input handling on mobile
+    if (_sapp.virtual_keyboard_shown) {
+        _sapp_emsc_vkbd_emit_chars();
+    }
 
     #if defined(SOKOL_WGPU)
         /*
@@ -11108,7 +11187,7 @@ SOKOL_API_IMPL void sapp_show_keyboard(bool show) {
 }
 
 SOKOL_API_IMPL bool sapp_keyboard_shown(void) {
-    return _sapp.onscreen_keyboard_shown;
+    return _sapp.virtual_keyboard_shown;
 }
 
 SOKOL_API_IMPL bool sapp_is_fullscreen(void) {
