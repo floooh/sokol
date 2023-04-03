@@ -11713,10 +11713,12 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
             SOKOL_ASSERT(ds_att_img->mtl.depth_tex != _SG_MTL_INVALID_SLOT_INDEX);
             pass_desc.depthAttachment.texture = _sg_mtl_id(ds_att_img->mtl.depth_tex);
             pass_desc.depthAttachment.loadAction = _sg_mtl_load_action(action->depth.action);
+            pass_desc.depthAttachment.storeAction = MTLStoreActionStore;
             pass_desc.depthAttachment.clearDepth = action->depth.value;
             if (_sg_is_depth_stencil_format(ds_att_img->cmn.pixel_format)) {
                 pass_desc.stencilAttachment.texture = _sg_mtl_id(ds_att_img->mtl.depth_tex);
                 pass_desc.stencilAttachment.loadAction = _sg_mtl_load_action(action->stencil.action);
+                pass_desc.stencilAttachment.storeAction = MTLStoreActionStore;
                 pass_desc.stencilAttachment.clearStencil = action->stencil.value;
             }
         }
