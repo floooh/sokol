@@ -261,11 +261,9 @@ jobs:
         with:
           name: ignore-me-rust
           path: src/sokol
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
           toolchain: stable
-          override: true
       - name: prepare-linux
         if: runner.os == 'Linux'
         run: |
@@ -352,11 +350,9 @@ jobs:
         with:
           name: ignore-me-rust
           path: src
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
           toolchain: stable
-          override: true
       - name: "cargo fmt"
         run: cargo fmt
       - name: "commit and push"
