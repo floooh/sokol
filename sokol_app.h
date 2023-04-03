@@ -5459,7 +5459,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                 }
             }
             if (_sapp_call_event(&_sapp.event)) {
-                // event was consumed event via sapp_consume_event()
+                // event was consumed via sapp_consume_event()
                 retval = true;
             }
             if (send_keyup_followup) {
