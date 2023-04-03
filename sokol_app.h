@@ -780,7 +780,7 @@
     programmatically close the browser tab).
 
     On the web it's also not possible to run custom code when the user
-    closes a brower tab, so it's not possible to prevent this with a
+    closes a browser tab, so it's not possible to prevent this with a
     fancy custom dialog box.
 
     Instead the standard "Leave Site?" dialog box can be activated (or
@@ -4015,7 +4015,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
     /*
 
     NOTE: late event polling temporarily out-commented to check if this
-    causes infrequent and almost impossible to reproduce probelms with the
+    causes infrequent and almost impossible to reproduce problems with the
     window close events, see:
     https://github.com/floooh/sokol/pull/483#issuecomment-805148815
 
@@ -5393,7 +5393,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                 {
                     send_keyup_followup = true;
                 }
-                // only forward keys to the browser (can further be supressed by sapp_consume_event())
+                // only forward keys to the browser (can further be suppressed by sapp_consume_event())
                 switch (_sapp.event.key_code) {
                     case SAPP_KEYCODE_WORLD_1:
                     case SAPP_KEYCODE_WORLD_2:
@@ -6290,7 +6290,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     _SOKOL_UNUSED(hr);
     #if defined(SOKOL_DEBUG)
     if (!SUCCEEDED(hr)) {
-        // if initialization with D3D11_CREATE_DEVICE_DEBUG failes, this could be because the
+        // if initialization with D3D11_CREATE_DEVICE_DEBUG fails, this could be because the
         // 'D3D11 debug layer' stopped working, indicated by the error message:
         // ===
         // D3D11CreateDevice: Flags (0x2) were specified which require the D3D11 SDK Layers for Windows 10, but they are not present on the system.
@@ -6318,7 +6318,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     #endif
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.swap_chain && _sapp.d3d11.device && _sapp.d3d11.device_context);
 
-    // mimimize frame latency, disable Alt-Enter
+    // minimize frame latency, disable Alt-Enter
     hr = _sapp_d3d11_QueryInterface(_sapp.d3d11.device, _sapp_win32_refiid(_sapp_IID_IDXGIDevice1), (void**)&_sapp.d3d11.dxgi_device);
     if (SUCCEEDED(hr) && _sapp.d3d11.dxgi_device) {
         _sapp_dxgi_SetMaximumFrameLatency(_sapp.d3d11.dxgi_device, 1);
@@ -6869,7 +6869,7 @@ _SOKOL_PRIVATE void _sapp_win32_lock_mouse(bool lock) {
 
         /* while the mouse is locked, make the mouse cursor invisible and
            confine the mouse movement to a small rectangle inside our window
-           (so that we dont miss any mouse up events)
+           (so that we don't miss any mouse up events)
         */
         RECT client_rect = {
             _sapp.win32.mouse_locked_x,
@@ -10473,7 +10473,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
             }
             break;
         case FocusIn:
-            // NOTE: ingnoring NotifyGrab and NotifyUngrab is same behaviour as GLFW
+            // NOTE: ignoring NotifyGrab and NotifyUngrab is same behaviour as GLFW
             if ((event->xfocus.mode != NotifyGrab) && (event->xfocus.mode != NotifyUngrab)) {
                 _sapp_x11_app_event(SAPP_EVENTTYPE_FOCUSED);
             }
@@ -10483,7 +10483,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
             if (_sapp.mouse.locked) {
                 _sapp_x11_lock_mouse(false);
             }
-            // NOTE: ingnoring NotifyGrab and NotifyUngrab is same behaviour as GLFW
+            // NOTE: ignoring NotifyGrab and NotifyUngrab is same behaviour as GLFW
             if ((event->xfocus.mode != NotifyGrab) && (event->xfocus.mode != NotifyUngrab)) {
                 _sapp_x11_app_event(SAPP_EVENTTYPE_UNFOCUSED);
             }

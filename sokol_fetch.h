@@ -2363,7 +2363,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
     }
     else {
         /* just move all other items (e.g. paused or cancelled)
-           into the outgoing queue, so they wont get lost
+           into the outgoing queue, so they won't get lost
         */
         _sfetch_ring_enqueue(&ctx->chn[item->channel].user_outgoing, slot_id);
     }
