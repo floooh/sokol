@@ -3782,7 +3782,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
      app_menu_item.submenu = app_menu;
      _SAPP_OBJC_RELEASE(window_title_as_nsstring);
      _SAPP_OBJC_RELEASE(app_menu);
-     _SAPP_OBJC_RELEASE(app_menuitem);
+     _SAPP_OBJC_RELEASE(app_menu_item);
      _SAPP_OBJC_RELEASE(menu_bar);
 
     _sapp.macos.win_dlg = [[_sapp_macos_window_delegate alloc] init];
