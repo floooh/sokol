@@ -4779,7 +4779,7 @@ EM_JS(void, sapp_js_create_textfield, (void), {
     });
     _sapp_inp.addEventListener("input", (ev) => {
         // put some upper limit on the max text field input length
-        if (ev.target.value.length < SAPP_EMSC_MAX_INPUT_CODE_POINTS) {
+        if (ev.target.value.length < 32) {
             withStackSave(() => {
                 const cstr = allocateUTF8OnStack(ev.target.value);
                 __sapp_emsc_ontextinput(cstr);
