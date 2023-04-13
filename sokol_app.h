@@ -780,7 +780,7 @@
     programmatically close the browser tab).
 
     On the web it's also not possible to run custom code when the user
-    closes a brower tab, so it's not possible to prevent this with a
+    closes a browser tab, so it's not possible to prevent this with a
     fancy custom dialog box.
 
     Instead the standard "Leave Site?" dialog box can be activated (or
@@ -2300,6 +2300,7 @@ typedef struct {
     uint8_t mouse_buttons;
     NSWindow* window;
     NSTrackingArea* tracking_area;
+    id keyup_monitor;
     _sapp_macos_app_delegate* app_dlg;
     _sapp_macos_window_delegate* win_dlg;
     _sapp_macos_view* view;
@@ -3403,6 +3404,11 @@ _SOKOL_PRIVATE void _sapp_macos_init_keytable(void) {
 
 _SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
     // NOTE: it's safe to call [release] on a nil object
+    if (_sapp.macos.keyup_monitor != nil) {
+        [NSEvent removeMonitor:_sapp.macos.keyup_monitor];
+        // NOTE: removeMonitor also releases the object
+        _sapp.macos.keyup_monitor = nil;
+    }
     _SAPP_OBJC_RELEASE(_sapp.macos.tracking_area);
     _SAPP_OBJC_RELEASE(_sapp.macos.app_dlg);
     _SAPP_OBJC_RELEASE(_sapp.macos.win_dlg);
@@ -3439,11 +3445,22 @@ _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp_macos_init_keytable();
     [NSApplication sharedApplication];
+
     // set the application dock icon as early as possible, otherwise
     // the dummy icon will be visible for a short time
     sapp_set_icon(&_sapp.desc.icon);
     _sapp.macos.app_dlg = [[_sapp_macos_app_delegate alloc] init];
     NSApp.delegate = _sapp.macos.app_dlg;
+
+    // workaround for "no key-up sent while Cmd is pressed" taken from GLFW:
+    NSEvent* (^keyup_monitor)(NSEvent*) = ^NSEvent* (NSEvent* event) {
+        if ([event modifierFlags] & NSEventModifierFlagCommand) {
+            [[NSApp keyWindow] sendEvent:event];
+        }
+        return event;
+    };
+    _sapp.macos.keyup_monitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyUp handler:keyup_monitor];
+
     [NSApp run];
     // NOTE: [NSApp run] never returns, instead cleanup code
     // must be put into applicationWillTerminate
@@ -3998,7 +4015,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
     /*
 
     NOTE: late event polling temporarily out-commented to check if this
-    causes infrequent and almost impossible to reproduce probelms with the
+    causes infrequent and almost impossible to reproduce problems with the
     window close events, see:
     https://github.com/floooh/sokol/pull/483#issuecomment-805148815
 
@@ -4178,15 +4195,8 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
 - (void)keyDown:(NSEvent*)event {
     if (_sapp_events_enabled()) {
         const uint32_t mods = _sapp_macos_mods(event);
-        /* NOTE: macOS doesn't send keyUp events while the Cmd key is pressed,
-            as a workaround, to prevent key presses from sticking we'll send
-            a keyup event following right after the keydown if SUPER is also pressed
-        */
         const sapp_keycode key_code = _sapp_translate_key(event.keyCode);
         _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_DOWN, key_code, event.isARepeat, mods);
-        if (0 != (mods & SAPP_MODIFIER_SUPER)) {
-            _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_UP, key_code, event.isARepeat, mods);
-        }
         const NSString* chars = event.characters;
         const NSUInteger len = chars.length;
         if (len > 0) {
@@ -5351,6 +5361,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
             _sapp.event.key_repeat = emsc_event->repeat;
             _sapp.event.modifiers = _sapp_emsc_key_event_mods(emsc_event);
             if (type == SAPP_EVENTTYPE_CHAR) {
+                // FIXME: this doesn't appear to work on Android Chrome
                 _sapp.event.char_code = emsc_event->charCode;
                 /* workaround to make Cmd+V work on Safari */
                 if ((emsc_event->metaKey) && (emsc_event->charCode == 118)) {
@@ -5358,7 +5369,18 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                 }
             }
             else {
-                _sapp.event.key_code = _sapp_emsc_translate_key(emsc_event->code);
+                if (0 != emsc_event->code[0]) {
+                    // This code path is for desktop browsers which send untranslated 'physical' key code strings
+                    // (which is what we actually want for key events)
+                    _sapp.event.key_code = _sapp_emsc_translate_key(emsc_event->code);
+                } else {
+                    // This code path is for mobile browsers which only send localized key code
+                    // strings. Note that the translation will only work for a small subset
+                    // of localization-agnostic keys (like Enter, arrow keys, etc...), but
+                    // regular alpha-numeric keys will all result in an SAPP_KEYCODE_INVALID)
+                    _sapp.event.key_code = _sapp_emsc_translate_key(emsc_event->key);
+                }
+
                 /* Special hack for macOS: if the Super key is pressed, macOS doesn't
                     send keyUp events. As a workaround, to prevent keys from
                     "sticking", we'll send a keyup event following a keydown
@@ -5371,7 +5393,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                 {
                     send_keyup_followup = true;
                 }
-                /* only forward a certain key ranges to the browser */
+                // only forward keys to the browser (can further be suppressed by sapp_consume_event())
                 switch (_sapp.event.key_code) {
                     case SAPP_KEYCODE_WORLD_1:
                     case SAPP_KEYCODE_WORLD_2:
@@ -5437,7 +5459,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                 }
             }
             if (_sapp_call_event(&_sapp.event)) {
-                /* consume event via sapp_consume_event() */
+                // event was consumed via sapp_consume_event()
                 retval = true;
             }
             if (send_keyup_followup) {
@@ -6268,7 +6290,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     _SOKOL_UNUSED(hr);
     #if defined(SOKOL_DEBUG)
     if (!SUCCEEDED(hr)) {
-        // if initialization with D3D11_CREATE_DEVICE_DEBUG failes, this could be because the
+        // if initialization with D3D11_CREATE_DEVICE_DEBUG fails, this could be because the
         // 'D3D11 debug layer' stopped working, indicated by the error message:
         // ===
         // D3D11CreateDevice: Flags (0x2) were specified which require the D3D11 SDK Layers for Windows 10, but they are not present on the system.
@@ -6296,7 +6318,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     #endif
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.swap_chain && _sapp.d3d11.device && _sapp.d3d11.device_context);
 
-    // mimimize frame latency, disable Alt-Enter
+    // minimize frame latency, disable Alt-Enter
     hr = _sapp_d3d11_QueryInterface(_sapp.d3d11.device, _sapp_win32_refiid(_sapp_IID_IDXGIDevice1), (void**)&_sapp.d3d11.dxgi_device);
     if (SUCCEEDED(hr) && _sapp.d3d11.dxgi_device) {
         _sapp_dxgi_SetMaximumFrameLatency(_sapp.d3d11.dxgi_device, 1);
@@ -6847,7 +6869,7 @@ _SOKOL_PRIVATE void _sapp_win32_lock_mouse(bool lock) {
 
         /* while the mouse is locked, make the mouse cursor invisible and
            confine the mouse movement to a small rectangle inside our window
-           (so that we dont miss any mouse up events)
+           (so that we don't miss any mouse up events)
         */
         RECT client_rect = {
             _sapp.win32.mouse_locked_x,
@@ -7213,19 +7235,20 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     const RAWINPUT* raw_mouse_data = (const RAWINPUT*) &_sapp.win32.raw_input_data;
                     if (raw_mouse_data->data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE) {
                         /* mouse only reports absolute position
-                           NOTE: THIS IS UNTESTED, it's unclear from reading the
-                           Win32 RawInput docs under which circumstances absolute
-                           positions are sent.
+                           NOTE: This code is untested and will most likely behave wrong in Remote Desktop sessions.
+                           (such remote desktop sessions are setting the MOUSE_MOVE_ABSOLUTE flag).
+                           See: https://github.com/floooh/sokol/issues/806 and
+                           https://github.com/microsoft/DirectXTK/commit/ef56b63f3739381e451f7a5a5bd2c9779d2a7555)
                         */
+                        LONG new_x = raw_mouse_data->data.mouse.lLastX;
+                        LONG new_y = raw_mouse_data->data.mouse.lLastY;
                         if (_sapp.win32.raw_input_mousepos_valid) {
-                            LONG new_x = raw_mouse_data->data.mouse.lLastX;
-                            LONG new_y = raw_mouse_data->data.mouse.lLastY;
                             _sapp.mouse.dx = (float) (new_x - _sapp.win32.raw_input_mousepos_x);
                             _sapp.mouse.dy = (float) (new_y - _sapp.win32.raw_input_mousepos_y);
-                            _sapp.win32.raw_input_mousepos_x = new_x;
-                            _sapp.win32.raw_input_mousepos_y = new_y;
-                            _sapp.win32.raw_input_mousepos_valid = true;
                         }
+                        _sapp.win32.raw_input_mousepos_x = new_x;
+                        _sapp.win32.raw_input_mousepos_y = new_y;
+                        _sapp.win32.raw_input_mousepos_valid = true;
                     }
                     else {
                         /* mouse reports movement delta (this seems to be the common case) */
@@ -7507,26 +7530,32 @@ _SOKOL_PRIVATE bool _sapp_win32_set_clipboard_string(const char* str) {
     SOKOL_ASSERT(_sapp.win32.hwnd);
     SOKOL_ASSERT(_sapp.clipboard.enabled && (_sapp.clipboard.buf_size > 0));
 
+    if (!OpenClipboard(_sapp.win32.hwnd)) {
+        return false;
+    }
+
+    HANDLE object = 0;
     wchar_t* wchar_buf = 0;
+
     const SIZE_T wchar_buf_size = (SIZE_T)_sapp.clipboard.buf_size * sizeof(wchar_t);
-    HANDLE object = GlobalAlloc(GMEM_MOVEABLE, wchar_buf_size);
-    if (!object) {
+    object = GlobalAlloc(GMEM_MOVEABLE, wchar_buf_size);
+    if (NULL == object) {
         goto error;
     }
     wchar_buf = (wchar_t*) GlobalLock(object);
-    if (!wchar_buf) {
+    if (NULL == wchar_buf) {
         goto error;
     }
     if (!_sapp_win32_utf8_to_wide(str, wchar_buf, (int)wchar_buf_size)) {
         goto error;
     }
-    GlobalUnlock(wchar_buf);
+    GlobalUnlock(object);
     wchar_buf = 0;
-    if (!OpenClipboard(_sapp.win32.hwnd)) {
+    EmptyClipboard();
+    // NOTE: when successful, SetClipboardData() takes ownership of memory object!
+    if (NULL == SetClipboardData(CF_UNICODETEXT, object)) {
         goto error;
     }
-    EmptyClipboard();
-    SetClipboardData(CF_UNICODETEXT, object);
     CloseClipboard();
     return true;
 
@@ -7537,6 +7566,7 @@ error:
     if (object) {
         GlobalFree(object);
     }
+    CloseClipboard();
     return false;
 }
 
@@ -10443,7 +10473,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
             }
             break;
         case FocusIn:
-            // NOTE: ingnoring NotifyGrab and NotifyUngrab is same behaviour as GLFW
+            // NOTE: ignoring NotifyGrab and NotifyUngrab is same behaviour as GLFW
             if ((event->xfocus.mode != NotifyGrab) && (event->xfocus.mode != NotifyUngrab)) {
                 _sapp_x11_app_event(SAPP_EVENTTYPE_FOCUSED);
             }
@@ -10453,7 +10483,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
             if (_sapp.mouse.locked) {
                 _sapp_x11_lock_mouse(false);
             }
-            // NOTE: ingnoring NotifyGrab and NotifyUngrab is same behaviour as GLFW
+            // NOTE: ignoring NotifyGrab and NotifyUngrab is same behaviour as GLFW
             if ((event->xfocus.mode != NotifyGrab) && (event->xfocus.mode != NotifyUngrab)) {
                 _sapp_x11_app_event(SAPP_EVENTTYPE_UNFOCUSED);
             }

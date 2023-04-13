@@ -4,8 +4,8 @@ on: [push, pull_request]
 
 jobs:
   test-windows:
-      runs-on: windows-latest
-      steps:
+    runs-on: windows-latest
+    steps:
       - uses: actions/checkout@v3
       - name: test_win
         run: |
@@ -14,8 +14,8 @@ jobs:
         shell: cmd
 
   test-mac:
-      runs-on: macos-latest
-      steps:
+    runs-on: macos-latest
+    steps:
       - uses: actions/checkout@v3
       - uses: seanmiddleditch/gha-setup-ninja@master
       - name: test_macos
@@ -24,8 +24,8 @@ jobs:
           ./test_macos.sh
 
   test-linux:
-      runs-on: ubuntu-latest
-      steps:
+    runs-on: ubuntu-latest
+    steps:
       - uses: actions/checkout@v3
       - uses: seanmiddleditch/gha-setup-ninja@master
       - name: prepare
@@ -54,6 +54,10 @@ jobs:
         with:
           repository: floooh/sokol-odin
           path: bindgen/sokol-odin
+      - uses: actions/checkout@v3
+        with:
+          repository: floooh/sokol-rust
+          path: bindgen/sokol-rust
       - name: generate
         run: |
           cd bindgen
@@ -62,21 +66,28 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: ignore-me-zig
-          path: bindgen/sokol-zig/src/sokol
           retention-days: 1
+          path: bindgen/sokol-zig/src/sokol
       - name: upload-nim-artifact
         uses: actions/upload-artifact@v3
         with:
           name: ignore-me-nim
-          path: bindgen/sokol-nim/src/sokol
           retention-days: 1
+          path: bindgen/sokol-nim/src/sokol
       - name: upload-odin-artifact
         uses: actions/upload-artifact@v3
         with:
           name: ignore-me-odin
+          retention-days: 1
           path: |
             bindgen/sokol-odin/sokol
             bindgen/sokol-odin/c
+      - name: upload-rust-artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ignore-me-rust
+          retention-days: 1
+          path: bindgen/sokol-rust/src
 
   test-zig:
     needs: gen-bindings
@@ -106,12 +117,16 @@ jobs:
   test-nim:
     needs: gen-bindings
     strategy:
+      fail-fast: false
       matrix:
         #os: [ubuntu-latest, macos-latest, windows-latest]
         os: [ubuntu-latest, macos-latest ]
     runs-on: ${{matrix.os}}
     steps:
       - uses: jiro4989/setup-nim-action@v1
+        with:
+         nim-version: 1.6.12
+         repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@v3
         with:
           repository: floooh/sokol-nim
@@ -133,6 +148,7 @@ jobs:
   test-odin:
     needs: gen-bindings
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{matrix.os}}
@@ -146,50 +162,115 @@ jobs:
       # NOTE: see https://github.com/floooh/sokol-odin/blob/main/.github/workflows/main.yml
       - uses: ilammy/msvc-dev-cmd@v1
       - if: runner.os == 'Linux'
-        name: prepare-linux
+        name: build-linux
         run: |
           sudo apt-get update
-          sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev llvm-11
-          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2022-08/odin-ubuntu-amd64-dev-2022-08.zip --output odin.zip
+          sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev llvm-11
+          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2023-03/odin-ubuntu-amd64-dev-2023-03.zip --output odin.zip
           unzip odin.zip
-          chmod a+x odin
+          chmod a+x ubuntu_artifacts/odin
           ./build_clibs_linux.sh
+          ubuntu_artifacts/odin build examples/clear -debug
+          ubuntu_artifacts/odin build examples/triangle -debug
+          ubuntu_artifacts/odin build examples/quad -debug
+          ubuntu_artifacts/odin build examples/bufferoffsets -debug
+          ubuntu_artifacts/odin build examples/cube -debug
+          ubuntu_artifacts/odin build examples/noninterleaved -debug
+          ubuntu_artifacts/odin build examples/texcube -debug
+          ubuntu_artifacts/odin build examples/shapes -debug
+          ubuntu_artifacts/odin build examples/offscreen -debug
+          ubuntu_artifacts/odin build examples/instancing -debug
+          ubuntu_artifacts/odin build examples/mrt -debug
+          ubuntu_artifacts/odin build examples/blend -debug
+          ubuntu_artifacts/odin build examples/debugtext -debug
+          ubuntu_artifacts/odin build examples/debugtext-print -debug
+          ubuntu_artifacts/odin build examples/debugtext-userfont -debug
+          ubuntu_artifacts/odin build examples/saudio -debug
+          ubuntu_artifacts/odin build examples/sgl -debug
+          ubuntu_artifacts/odin build examples/sgl-points -debug
+          ubuntu_artifacts/odin build examples/sgl-context -debug
       - if: runner.os == 'macOS'
-        name: prepare-macos
+        name: build-macos
         run: |
           brew install llvm@11
-          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2022-08/odin-macos-amd64-dev-2022-08.zip --output odin.zip
+          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2023-03/odin-macos-amd64-dev-2023-03.zip --output odin.zip
           unzip odin.zip
-          chmod a+x odin
+          chmod a+x macos_artifacts/odin
           ./build_clibs_macos.sh
+          macos_artifacts/odin build examples/clear -debug
+          macos_artifacts/odin build examples/triangle -debug
+          macos_artifacts/odin build examples/quad -debug
+          macos_artifacts/odin build examples/bufferoffsets -debug
+          macos_artifacts/odin build examples/cube -debug
+          macos_artifacts/odin build examples/noninterleaved -debug
+          macos_artifacts/odin build examples/texcube -debug
+          macos_artifacts/odin build examples/shapes -debug
+          macos_artifacts/odin build examples/offscreen -debug
+          macos_artifacts/odin build examples/instancing -debug
+          macos_artifacts/odin build examples/mrt -debug
+          macos_artifacts/odin build examples/blend -debug
+          macos_artifacts/odin build examples/debugtext -debug
+          macos_artifacts/odin build examples/debugtext-print -debug
+          macos_artifacts/odin build examples/debugtext-userfont -debug
+          macos_artifacts/odin build examples/saudio -debug
+          macos_artifacts/odin build examples/sgl -debug
+          macos_artifacts/odin build examples/sgl-points -debug
+          macos_artifacts/odin build examples/sgl-context -debug
       - if: runner.os == 'Windows'
-        name: prepare-windows
+        name: build-windows
         shell: cmd
         run: |
-          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2022-08/odin-windows-amd64-dev-2022-08.zip --output odin.zip
+          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2023-03/odin-windows-amd64-dev-2023-03.zip --output odin.zip
           unzip odin.zip
           build_clibs_windows.cmd
-      - name: build
+          windows_artifacts/odin build examples/clear -debug
+          windows_artifacts/odin build examples/triangle -debug
+          windows_artifacts/odin build examples/quad -debug
+          windows_artifacts/odin build examples/bufferoffsets -debug
+          windows_artifacts/odin build examples/cube -debug
+          windows_artifacts/odin build examples/noninterleaved -debug
+          windows_artifacts/odin build examples/texcube -debug
+          windows_artifacts/odin build examples/shapes -debug
+          windows_artifacts/odin build examples/offscreen -debug
+          windows_artifacts/odin build examples/instancing -debug
+          windows_artifacts/odin build examples/mrt -debug
+          windows_artifacts/odin build examples/blend -debug
+          windows_artifacts/odin build examples/debugtext -debug
+          windows_artifacts/odin build examples/debugtext-print -debug
+          windows_artifacts/odin build examples/debugtext-userfont -debug
+          windows_artifacts/odin build examples/saudio -debug
+          windows_artifacts/odin build examples/sgl -debug
+          windows_artifacts/odin build examples/sgl-points -debug
+          windows_artifacts/odin build examples/sgl-context -debug
+
+  test-rust:
+    needs: gen-bindings
+    env:
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{matrix.os}}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: floooh/sokol-rust
+          submodules: recursive
+      - uses: actions/download-artifact@v3
+        with:
+          name: ignore-me-rust
+          path: src/sokol
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: prepare-linux
+        if: runner.os == 'Linux'
         run: |
-          ./odin build examples/clear -debug
-          ./odin build examples/triangle -debug
-          ./odin build examples/quad -debug
-          ./odin build examples/bufferoffsets -debug
-          ./odin build examples/cube -debug
-          ./odin build examples/noninterleaved -debug
-          ./odin build examples/texcube -debug
-          ./odin build examples/shapes -debug
-          ./odin build examples/offscreen -debug
-          ./odin build examples/instancing -debug
-          ./odin build examples/mrt -debug
-          ./odin build examples/blend -debug
-          ./odin build examples/debugtext -debug
-          ./odin build examples/debugtext-print -debug
-          ./odin build examples/debugtext-userfont -debug
-          ./odin build examples/saudio -debug
-          ./odin build examples/sgl -debug
-          ./odin build examples/sgl-points -debug
-          ./odin build examples/sgl-context -debug
+            sudo apt-get update
+            sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+      - name: build
+        run: cargo build --all-targets
 
   # only deploy the bindings for commits on the main branch
   deploy-zig:
@@ -250,6 +331,35 @@ jobs:
         run: |
           git config user.email "none"
           git config user.name "GH Action"
+          git add -A
+          git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
+          git push
+
+  deploy-rust:
+    needs: test-rust
+    env:
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: floooh/sokol-rust
+          ssh-key: ${{ secrets.GHACTIONS_RUST_PUSH }}
+      - uses: actions/download-artifact@v3
+        with:
+          name: ignore-me-rust
+          path: src
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: "cargo fmt"
+        run: cargo fmt
+      - name: "commit and push"
+        run: |
+          git config user.email "none"
+          git config user.name "GH Action"
+          git status -vv
           git add -A
           git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
           git push
