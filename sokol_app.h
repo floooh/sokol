@@ -4611,7 +4611,6 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 // >>emscripten
 #if defined(_SAPP_EMSCRIPTEN)
 
-
 #if defined(EM_JS_DEPS)
 EM_JS_DEPS(sokol_app, "$withStackSave,$allocateUTF8OnStack");
 #endif
