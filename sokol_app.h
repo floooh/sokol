@@ -4637,9 +4637,9 @@ static void _sapp_emsc_vkbd_emit_chars(void) {
 }
 
 static void _sapp_emsc_vkbd_utf8_input(const uint8_t* utf8_str) {
-    #define _SAPP_EMSC_NEXT(x) uint8_t x = *utf8_str++; if (0 == x) { break; }; x &= ~0xC0;
+    #define _SAPP_EMSC_NEXT(x) uint32_t x = *utf8_str++; if (0 == x) { break; }; x &= ~0xC0u;
     for (size_t i = 0; i < _SAPP_EMSC_VKBD_MAX_CODEPOINTS; i++) {
-        uint8_t c0 = *utf8_str++;
+        uint32_t c0 = *utf8_str++;
         if (0 == c0) { break; }
         uint32_t c32 = 0;
         if ((c0 & 0x80) == 0) {
@@ -4648,18 +4648,18 @@ static void _sapp_emsc_vkbd_utf8_input(const uint8_t* utf8_str) {
         } else if ((c0 & 0xE0) == 0xC0) {
             // 2-byte sequence
             _SAPP_EMSC_NEXT(c1);
-            c32 = ((c0 & ~0xC0) << 6) | c1;
+            c32 = ((c0 & ~0xC0u) << 6) | c1;
         } else if ((c0 & 0xF0) == 0xE0) {
             // 3-byte sequence
             _SAPP_EMSC_NEXT(c1);
             _SAPP_EMSC_NEXT(c2);
-            c32 = ((c0 & ~0xE0)<<12) | (c1 << 6) | c2;
+            c32 = ((c0 & ~0xE0u)<<12) | (c1 << 6) | c2;
         } else if ((c0 & 0xF8) == 0xF0) {
             // 4-byte sequence
             _SAPP_EMSC_NEXT(c1);
             _SAPP_EMSC_NEXT(c2);
             _SAPP_EMSC_NEXT(c3);
-            c32 = ((c0 & ~0xF0)<<18) | (c1<<12) | (c2<<6) | c3;
+            c32 = ((c0 & ~0xF0u)<<18) | (c1<<12) | (c2<<6) | c3;
         }
         _sapp_emsc_vkbd_append(c32);
     }
