@@ -20,7 +20,6 @@
     used by sokol_gfx.h and sokol_app.h):
 
     SOKOL_GLCORE33
-    SOKOL_GLES2
     SOKOL_GLES3
     SOKOL_D3D11
     SOKOL_METAL
@@ -366,7 +365,7 @@ static const char _sfons_fs_source_glsl330[195] = {
     0x79,0x29,0x2e,0x78,0x29,0x20,0x2a,0x20,0x63,0x6f,0x6c,0x6f,0x72,0x3b,0x0a,0x7d,
     0x0a,0x0a,0x00,
 };
-#elif defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+#elif defined(SOKOL_GLES3)
 static const char _sfons_vs_source_glsl100[430] = {
     0x23,0x76,0x65,0x72,0x73,0x69,0x6f,0x6e,0x20,0x31,0x30,0x30,0x0a,0x0a,0x75,0x6e,
     0x69,0x66,0x6f,0x72,0x6d,0x20,0x76,0x65,0x63,0x34,0x20,0x76,0x73,0x5f,0x70,0x61,
@@ -1651,7 +1650,7 @@ static const uint8_t fs_bytecode_wgpu[1000] = {
 static const char* _sfons_vs_source_dummy = "";
 static const char* _sfons_fs_source_dummy = "";
 #else
-#error "Please define one of SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND!"
+#error "Please define one of SOKOL_GLCORE33, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND!"
 #endif
 
 typedef struct _sfons_t {
@@ -1729,7 +1728,7 @@ static int _sfons_render_create(void* user_ptr, int width, int height) {
         #if defined(SOKOL_GLCORE33)
             shd_desc.vs.source = _sfons_vs_source_glsl330;
             shd_desc.fs.source = _sfons_fs_source_glsl330;
-        #elif defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+        #elif defined(SOKOL_GLES3)
             shd_desc.vs.source = _sfons_vs_source_glsl100;
             shd_desc.fs.source = _sfons_fs_source_glsl100;
         #elif defined(SOKOL_METAL)

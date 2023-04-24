@@ -18,7 +18,6 @@
     In the same place define one of the following to select the rendering
     backend:
         #define SOKOL_GLCORE33
-        #define SOKOL_GLES2
         #define SOKOL_GLES3
         #define SOKOL_D3D11
         #define SOKOL_METAL
@@ -346,8 +345,7 @@
         to sokol_gfx.h internals, and may change more often than other
         public API functions and structs.
 
-    --- you can ask at runtime what backend sokol_gfx.h has been compiled
-        for, or whether the GLES3 backend had to fall back to GLES2 with:
+    --- you can ask at runtime what backend sokol_gfx.h has been compiled for:
 
             sg_backend sg_query_backend(void)
 
@@ -509,7 +507,7 @@
                 .vs.uniform_blocks[0] = {
                     ...
                 },
-                // one texture on the fragment-shader-stage, GLES2/WebGL needs name and image type
+                // one texture on the fragment-shader-stage (name is optional)
                 .fs.images[0] = { .name="tex", .type=SG_IMAGETYPE_ARRAY }
                 ...
             };
@@ -524,8 +522,8 @@
                 ...
             };
 
-    --- when creating a shader object, GLES2/WebGL need to know the vertex
-        attribute names as used in the vertex shader:
+    --- when creating a shader object, vertex attribute names may be provided
+        for the GL backends:
 
             sg_shader_desc desc = {
                 .attrs = {
@@ -687,13 +685,7 @@
         - SG_VERTEXFORMAT_SHORT2
         - SG_VERTEXFORMAT_SHORT4
 
-    - WebGL/GLES2 cannot use integer vertex shader inputs (int or ivecn) or the following:
-
-        - SG_VERTEXFORMAT_UINT10_N2
-        - SG_VERTEXFORMAT_HALF2, SG_VERTEXFORMAT_HALF4
-          (commonly supported extension: OES_vertex_half_float)
-
-    So for a vertex input layout which works on all platforms, only use the following
+    For a vertex input layout which works on all platforms, only use the following
     vertex formats, and if needed "expand" the normalized vertex shader
     inputs in the vertex shader by multiplying with 127.0, 255.0, 32767.0 or
     65535.0:
@@ -708,7 +700,9 @@
         - SG_VERTEXFORMAT_USHORT2N
         - SG_VERTEXFORMAT_SHORT4N,
         - SG_VERTEXFORMAT_USHORT4N
-
+        - SG_VERTEXFORMAT_UINT10_N2
+        - SG_VERTEXFORMAT_HALF2
+        - SG_VERTEXFORMAT_HALF4
 
     MEMORY ALLOCATION OVERRIDE
     ==========================
@@ -1090,7 +1084,7 @@ enum {
     SG_MAX_SHADERSTAGE_IMAGES = 12,
     SG_MAX_SHADERSTAGE_UBS = 4,
     SG_MAX_UB_MEMBERS = 16,
-    SG_MAX_VERTEX_ATTRIBUTES = 16,      /* NOTE: actual max vertex attrs can be less on GLES2, see sg_limits! */
+    SG_MAX_VERTEX_ATTRIBUTES = 16,
     SG_MAX_MIPMAPS = 16,
     SG_MAX_TEXTUREARRAY_LAYERS = 128
 };
@@ -1107,14 +1101,9 @@ typedef struct sg_color { float r, g, b, a; } sg_color;
 
     The active 3D-API backend, use the function sg_query_backend()
     to get the currently active backend.
-
-    NOTE that SG_BACKEND_GLES2 will be returned if sokol-gfx was
-    compiled with SOKOL_GLES3, but the runtime platform doesn't support
-    GLES3/WebGL2 and sokol-gfx had to fallback to GLES2/WebGL.
 */
 typedef enum sg_backend {
     SG_BACKEND_GLCORE33,
-    SG_BACKEND_GLES2,
     SG_BACKEND_GLES3,
     SG_BACKEND_D3D11,
     SG_BACKEND_METAL_IOS,
@@ -1128,10 +1117,9 @@ typedef enum sg_backend {
     sg_pixel_format
 
     sokol_gfx.h basically uses the same pixel formats as WebGPU, since these
-    are supported on most newer GPUs. GLES2 and WebGL only supports a much
-    smaller subset of actually available pixel formats. Call
-    sg_query_pixelformat() to check at runtime if a pixel format supports the
-    desired features.
+    are supported on most newer GPUs. smaller subset of actually available
+    pixel formCall sg_query_pixelformat() to check at runtime if a pixel format
+    supports the desired features.
 
     A pixelformat name consist of three parts:
 
@@ -1158,11 +1146,6 @@ typedef enum sg_backend {
         - msaa:   multisample-antialiasing is supported when using the
                   pixelformat for render targets
         - depth:  the pixelformat can be used for depth-stencil attachments
-
-    When targeting GLES2/WebGL, the only safe formats to use
-    as texture are SG_PIXELFORMAT_R8 and SG_PIXELFORMAT_RGBA8. For rendering
-    in GLES2/WebGL, only SG_PIXELFORMAT_RGBA8 is safe. All other formats
-    must be checked via sg_query_pixelformats().
 
     The default pixel format for texture images is SG_PIXELFORMAT_RGBA8.
 
@@ -1274,12 +1257,7 @@ typedef struct sg_pixelformat_info {
     returned by sg_query_features()
 */
 typedef struct sg_features {
-    bool instancing;                    // hardware instancing supported
     bool origin_top_left;               // framebuffer and texture origin is in top left corner
-    bool multiple_render_targets;       // offscreen render passes can have multiple render targets attached
-    bool msaa_render_targets;           // offscreen render passes support MSAA antialiasing
-    bool imagetype_3d;                  // creation of SG_IMAGETYPE_3D images is supported
-    bool imagetype_array;               // creation of SG_IMAGETYPE_ARRAY images is supported
     bool image_clamp_to_border;         // border color and clamp-to-border UV-wrap mode is supported
     bool mrt_independent_blend_state;   // multiple-render-target rendering can use per-render-target blend state
     bool mrt_independent_write_mask;    // multiple-render-target rendering can use per-render-target color write masks
@@ -1297,7 +1275,7 @@ typedef struct sg_limits {
     int max_image_size_3d;          // max width/height/depth of SG_IMAGETYPE_3D images
     int max_image_size_array;       // max width/height of SG_IMAGETYPE_ARRAY images
     int max_image_array_layers;     // max number of layers in SG_IMAGETYPE_ARRAY images
-    int max_vertex_attrs;           // <= SG_MAX_VERTEX_ATTRIBUTES or less (on some GLES2 impls)
+    int max_vertex_attrs;           // max number of vertex attributes, clamped to SG_MAX_VERTEX_ATTRIBUTES
     int gl_max_vertex_uniform_vectors;  // <= GL_MAX_VERTEX_UNIFORM_VECTORS (only on GL backends)
     int gl_max_combined_texture_image_units; // <= GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS (only on GL backends)
 } sg_limits;
@@ -1411,11 +1389,9 @@ typedef enum sg_index_type {
     sg_image_type
 
     Indicates the basic type of an image object (2D-texture, cubemap,
-    3D-texture or 2D-array-texture). 3D- and array-textures are not supported
-    on the GLES2/WebGL backend (use sg_query_features().imagetype_3d and
-    sg_query_features().imagetype_array to check for support). The image type
-    is used in the sg_image_desc.type member when creating an image, and
-    in sg_shader_image_desc when describing a shader's texture sampler binding.
+    3D-texture or 2D-array-texture). Used in the sg_image_desc.type member when
+    creating an image, and in sg_shader_image_desc when describing a shader's
+    texture sampler binding.
 
     The default image type when creating an image is SG_IMAGETYPE_2D.
 */
@@ -1546,7 +1522,7 @@ typedef enum sg_filter {
 
     Platforms which do not support clamp-to-border:
 
-        - GLES2/3 and WebGL/WebGL2
+        - GLES3 and WebGL2
         - Metal on iOS
 */
 typedef enum sg_wrap {
@@ -2108,11 +2084,6 @@ typedef struct sg_image_data {
 
     NOTE:
 
-    SG_IMAGETYPE_ARRAY and SG_IMAGETYPE_3D are not supported on WebGL/GLES2,
-    use sg_query_features().imagetype_array and
-    sg_query_features().imagetype_3d at runtime to check if array- and
-    3D-textures are supported.
-
     Images with usage SG_USAGE_IMMUTABLE must be fully initialized by
     providing a valid .data member which points to initialization data.
 
@@ -2180,7 +2151,7 @@ typedef struct sg_image_desc {
     programs, used as input to the sg_make_shader() function:
 
     - reflection information for vertex attributes (vertex shader inputs):
-        - vertex attribute name (required for GLES2, optional for GLES3 and GL)
+        - vertex attribute name (only optionally used by GLES3 and GL)
         - a semantic name and index (required for D3D11)
     - for each shader-stage (vertex and fragment):
         - the shader source or bytecode
@@ -2197,7 +2168,7 @@ typedef struct sg_image_desc {
         - reflection info for the texture images used by the shader stage:
             - the image type (SG_IMAGETYPE_xxx)
             - the sampler type (SG_SAMPLERTYPE_xxx, default is SG_SAMPLERTYPE_FLOAT)
-            - the name of the texture sampler (required for GLES2, optional everywhere else)
+            - the name of the texture sampler (optional)
 
     For all GL backends, shader source-code must be provided. For D3D11 and Metal,
     either shader source-code or byte-code can be provided.
@@ -2209,7 +2180,7 @@ typedef struct sg_image_desc {
     vertex shader stage and "ps_4_0" for the pixel shader stage.
 */
 typedef struct sg_shader_attr_desc {
-    const char* name;           // GLSL vertex attribute name (only strictly required for GLES2)
+    const char* name;           // GLSL vertex attribute name (optional)
     const char* sem_name;       // HLSL semantic name
     int sem_index;              // HLSL semantic index
 } sg_shader_attr_desc;
@@ -2691,14 +2662,12 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_STD140_ARRAY_TYPE, "uniform arrays only allowed for FLOAT4, INT4, MAT4 in std140 layout") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_CONT_IMGS, "shader images must occupy continuous slots") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMG_NAME, "GL backend requires uniform block member names") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_ATTR_NAMES, "GLES2 backend requires vertex attribute names") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_ATTR_SEMANTICS, "D3D11 backend requires vertex attribute semantics") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_ATTR_STRING_TOO_LONG, "vertex attribute name/semantic string too long (max len 16)") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_CANARY, "sg_pipeline_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_SHADER, "sg_pipeline_desc.shader missing or invalid") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_NO_ATTRS, "sg_pipeline_desc.layout.attrs is empty or not continuous") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4, "sg_pipeline_desc.layout.buffers[].stride must be multiple of 4") \
-    _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_ATTR_NAME, "GLES2/WebGL missing vertex attribute name in shader") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_ATTR_SEMANTICS, "D3D11 missing vertex attribute semantics in shader") \
     _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_CANARY, "sg_pass_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_NO_COLOR_ATTS, "sg_pass_desc.color_attachments[0] must be valid") \
@@ -2800,12 +2769,6 @@ typedef enum sg_log_item {
     .context.depth_format   SG_PIXELFORMAT_DEPTH_STENCIL
     .context.sample_count   1
 
-    GL specific:
-        .context.gl.force_gles2
-            if this is true the GL backend will act in "GLES2 fallback mode" even
-            when compiled with SOKOL_GLES3, this is useful to fall back
-            to traditional WebGL if a browser doesn't support a WebGL2 context
-
     Metal specific:
         (NOTE: All Objective-C object references are transferred through
         a bridged (const void*) to sokol_gfx, which will use a unretained
@@ -2879,10 +2842,6 @@ typedef enum sg_log_item {
     a completely initialized sg_context_desc struct with information
     provided by sokol_app.h.
 */
-typedef struct sg_gl_context_desc {
-    bool force_gles2;
-} sg_gl_context_desc;
-
 typedef struct sg_metal_context_desc {
     const void* device;
     const void* (*renderpass_descriptor_cb)(void);
@@ -2917,7 +2876,6 @@ typedef struct sg_context_desc {
     sg_pixel_format color_format;
     sg_pixel_format depth_format;
     int sample_count;
-    sg_gl_context_desc gl;
     sg_metal_context_desc metal;
     sg_d3d11_context_desc d3d11;
     sg_wgpu_context_desc wgpu;
@@ -3159,8 +3117,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
 #ifdef SOKOL_GFX_IMPL
 #define SOKOL_GFX_IMPL_INCLUDED (1)
 
-#if !(defined(SOKOL_GLCORE33)||defined(SOKOL_GLES2)||defined(SOKOL_GLES3)||defined(SOKOL_D3D11)||defined(SOKOL_METAL)||defined(SOKOL_WGPU)||defined(SOKOL_DUMMY_BACKEND))
-#error "Please select a backend with SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND"
+#if !(defined(SOKOL_GLCORE33)||defined(SOKOL_GLES3)||defined(SOKOL_D3D11)||defined(SOKOL_METAL)||defined(SOKOL_WGPU)||defined(SOKOL_DUMMY_BACKEND))
+#error "Please select a backend with SOKOL_GLCORE33, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND"
 #endif
 #if defined(SOKOL_MALLOC) || defined(SOKOL_CALLOC) || defined(SOKOL_FREE)
 #error "SOKOL_MALLOC/CALLOC/FREE macros are no longer supported, please use sg_desc.allocator to override memory allocation functions"
@@ -3280,7 +3238,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #else
         #include <dawn/webgpu.h>
     #endif
-#elif defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+#elif defined(SOKOL_GLCORE33) || defined(SOKOL_GLES3)
     #define _SOKOL_ANY_GL (1)
 
     // include platform specific GL headers (or on Win32: use an embedded GL loader)
@@ -3311,12 +3269,6 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #elif defined(__EMSCRIPTEN__) || defined(__ANDROID__)
             #if defined(SOKOL_GLES3)
                 #include <GLES3/gl3.h>
-            #elif defined(SOKOL_GLES2)
-                #ifndef GL_EXT_PROTOTYPES
-                #define GL_GLEXT_PROTOTYPES
-                #endif
-                #include <GLES2/gl2.h>
-                #include <GLES2/gl2ext.h>
             #endif
         #elif defined(__linux__) || defined(__unix__)
             #define GL_GLEXT_PROTOTYPES
@@ -3647,27 +3599,6 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #endif
     #ifndef GL_LUMINANCE
     #define GL_LUMINANCE 0x1909
-    #endif
-
-    #ifdef SOKOL_GLES2
-        #ifdef GL_ANGLE_instanced_arrays
-            #define _SOKOL_GL_INSTANCING_ENABLED
-            #define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedANGLE(mode, first, count, instancecount)
-            #define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedANGLE(mode, count, type, indices, instancecount)
-            #define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorANGLE(index, divisor)
-        #elif defined(GL_EXT_draw_instanced) && defined(GL_EXT_instanced_arrays)
-            #define _SOKOL_GL_INSTANCING_ENABLED
-            #define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedEXT(mode, first, count, instancecount)
-            #define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedEXT(mode, count, type, indices, instancecount)
-            #define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorEXT(index, divisor)
-        #else
-            #define _SOKOL_GLES2_INSTANCING_ERROR "Select GL_ANGLE_instanced_arrays or (GL_EXT_draw_instanced & GL_EXT_instanced_arrays) to enable instancing in GLES2"
-            #define glDrawArraysInstanced(mode, first, count, instancecount) SOKOL_ASSERT(0 && _SOKOL_GLES2_INSTANCING_ERROR)
-            #define glDrawElementsInstanced(mode, count, type, indices, instancecount) SOKOL_ASSERT(0 && _SOKOL_GLES2_INSTANCING_ERROR)
-            #define glVertexAttribDivisor(index, divisor) SOKOL_ASSERT(0 && _SOKOL_GLES2_INSTANCING_ERROR)
-        #endif
-    #else
-        #define _SOKOL_GL_INSTANCING_ENABLED
     #endif
     #define _SG_GL_CHECK_ERROR() { SOKOL_ASSERT(glGetError() == GL_NO_ERROR); }
 #endif
@@ -4087,9 +4018,7 @@ typedef _sg_pass_attachment_common_t _sg_pass_attachment_t;
 
 typedef struct {
     _sg_slot_t slot;
-    #if !defined(SOKOL_GLES2)
     GLuint vao;
-    #endif
     GLuint default_framebuffer;
 } _sg_gl_context_t;
 typedef _sg_gl_context_t _sg_context_t;
@@ -4135,7 +4064,6 @@ typedef struct {
 
 typedef struct {
     bool valid;
-    bool gles2;
     bool in_pass;
     int cur_pass_width;
     int cur_pass_height;
@@ -5663,10 +5591,8 @@ _SOKOL_PRIVATE GLenum _sg_gl_texture_target(sg_image_type t) {
     switch (t) {
         case SG_IMAGETYPE_2D:   return GL_TEXTURE_2D;
         case SG_IMAGETYPE_CUBE: return GL_TEXTURE_CUBE_MAP;
-        #if !defined(SOKOL_GLES2)
         case SG_IMAGETYPE_3D:       return GL_TEXTURE_3D;
         case SG_IMAGETYPE_ARRAY:    return GL_TEXTURE_2D_ARRAY;
-        #endif
         default: SOKOL_UNREACHABLE; return 0;
     }
 }
@@ -5909,14 +5835,12 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_type(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RG32F:
         case SG_PIXELFORMAT_RGBA32F:
             return GL_FLOAT;
-        #if !defined(SOKOL_GLES2)
         case SG_PIXELFORMAT_RGB10A2:
             return GL_UNSIGNED_INT_2_10_10_10_REV;
         case SG_PIXELFORMAT_RG11B10F:
             return GL_UNSIGNED_INT_10F_11F_11F_REV;
         case SG_PIXELFORMAT_RGB9E5:
             return GL_UNSIGNED_INT_5_9_9_9_REV;
-        #endif
         case SG_PIXELFORMAT_DEPTH:
             return GL_UNSIGNED_SHORT;
         case SG_PIXELFORMAT_DEPTH_STENCIL:
@@ -5934,39 +5858,28 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_R16SN:
         case SG_PIXELFORMAT_R16F:
         case SG_PIXELFORMAT_R32F:
-            #if defined(SOKOL_GLES2)
-                return GL_LUMINANCE;
-            #else
-            if (_sg.gl.gles2) {
-                return GL_LUMINANCE;
-            }
-            else {
-                return GL_RED;
-            }
-            #endif
-        #if !defined(SOKOL_GLES2)
-            case SG_PIXELFORMAT_R8UI:
-            case SG_PIXELFORMAT_R8SI:
-            case SG_PIXELFORMAT_R16UI:
-            case SG_PIXELFORMAT_R16SI:
-            case SG_PIXELFORMAT_R32UI:
-            case SG_PIXELFORMAT_R32SI:
-                return GL_RED_INTEGER;
-            case SG_PIXELFORMAT_RG8:
-            case SG_PIXELFORMAT_RG8SN:
-            case SG_PIXELFORMAT_RG16:
-            case SG_PIXELFORMAT_RG16SN:
-            case SG_PIXELFORMAT_RG16F:
-            case SG_PIXELFORMAT_RG32F:
-                return GL_RG;
-            case SG_PIXELFORMAT_RG8UI:
-            case SG_PIXELFORMAT_RG8SI:
-            case SG_PIXELFORMAT_RG16UI:
-            case SG_PIXELFORMAT_RG16SI:
-            case SG_PIXELFORMAT_RG32UI:
-            case SG_PIXELFORMAT_RG32SI:
-                return GL_RG_INTEGER;
-        #endif
+            return GL_RED;
+        case SG_PIXELFORMAT_R8UI:
+        case SG_PIXELFORMAT_R8SI:
+        case SG_PIXELFORMAT_R16UI:
+        case SG_PIXELFORMAT_R16SI:
+        case SG_PIXELFORMAT_R32UI:
+        case SG_PIXELFORMAT_R32SI:
+            return GL_RED_INTEGER;
+        case SG_PIXELFORMAT_RG8:
+        case SG_PIXELFORMAT_RG8SN:
+        case SG_PIXELFORMAT_RG16:
+        case SG_PIXELFORMAT_RG16SN:
+        case SG_PIXELFORMAT_RG16F:
+        case SG_PIXELFORMAT_RG32F:
+            return GL_RG;
+        case SG_PIXELFORMAT_RG8UI:
+        case SG_PIXELFORMAT_RG8SI:
+        case SG_PIXELFORMAT_RG16UI:
+        case SG_PIXELFORMAT_RG16SI:
+        case SG_PIXELFORMAT_RG32UI:
+        case SG_PIXELFORMAT_RG32SI:
+            return GL_RG_INTEGER;
         case SG_PIXELFORMAT_RGBA8:
         case SG_PIXELFORMAT_SRGB8A8:
         case SG_PIXELFORMAT_RGBA8SN:
@@ -5976,15 +5889,13 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RGBA32F:
         case SG_PIXELFORMAT_RGB10A2:
             return GL_RGBA;
-        #if !defined(SOKOL_GLES2)
-            case SG_PIXELFORMAT_RGBA8UI:
-            case SG_PIXELFORMAT_RGBA8SI:
-            case SG_PIXELFORMAT_RGBA16UI:
-            case SG_PIXELFORMAT_RGBA16SI:
-            case SG_PIXELFORMAT_RGBA32UI:
-            case SG_PIXELFORMAT_RGBA32SI:
-                return GL_RGBA_INTEGER;
-        #endif
+        case SG_PIXELFORMAT_RGBA8UI:
+        case SG_PIXELFORMAT_RGBA8SI:
+        case SG_PIXELFORMAT_RGBA16UI:
+        case SG_PIXELFORMAT_RGBA16SI:
+        case SG_PIXELFORMAT_RGBA32UI:
+        case SG_PIXELFORMAT_RGBA32SI:
+            return GL_RGBA_INTEGER;
         case SG_PIXELFORMAT_RG11B10F:
         case SG_PIXELFORMAT_RGB9E5:
             return GL_RGB;
@@ -6036,85 +5947,76 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
 }
 
 _SOKOL_PRIVATE GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
-    #if defined(SOKOL_GLES2)
-    return _sg_gl_teximage_format(fmt);
-    #else
-    if (_sg.gl.gles2) {
-        return _sg_gl_teximage_format(fmt);
+    switch (fmt) {
+        case SG_PIXELFORMAT_R8:         return GL_R8;
+        case SG_PIXELFORMAT_R8SN:       return GL_R8_SNORM;
+        case SG_PIXELFORMAT_R8UI:       return GL_R8UI;
+        case SG_PIXELFORMAT_R8SI:       return GL_R8I;
+        #if !defined(SOKOL_GLES3)
+            case SG_PIXELFORMAT_R16:        return GL_R16;
+            case SG_PIXELFORMAT_R16SN:      return GL_R16_SNORM;
+        #endif
+        case SG_PIXELFORMAT_R16UI:      return GL_R16UI;
+        case SG_PIXELFORMAT_R16SI:      return GL_R16I;
+        case SG_PIXELFORMAT_R16F:       return GL_R16F;
+        case SG_PIXELFORMAT_RG8:        return GL_RG8;
+        case SG_PIXELFORMAT_RG8SN:      return GL_RG8_SNORM;
+        case SG_PIXELFORMAT_RG8UI:      return GL_RG8UI;
+        case SG_PIXELFORMAT_RG8SI:      return GL_RG8I;
+        case SG_PIXELFORMAT_R32UI:      return GL_R32UI;
+        case SG_PIXELFORMAT_R32SI:      return GL_R32I;
+        case SG_PIXELFORMAT_R32F:       return GL_R32F;
+        #if !defined(SOKOL_GLES3)
+            case SG_PIXELFORMAT_RG16:       return GL_RG16;
+            case SG_PIXELFORMAT_RG16SN:     return GL_RG16_SNORM;
+        #endif
+        case SG_PIXELFORMAT_RG16UI:     return GL_RG16UI;
+        case SG_PIXELFORMAT_RG16SI:     return GL_RG16I;
+        case SG_PIXELFORMAT_RG16F:      return GL_RG16F;
+        case SG_PIXELFORMAT_RGBA8:      return GL_RGBA8;
+        case SG_PIXELFORMAT_SRGB8A8:    return GL_SRGB8_ALPHA8;
+        case SG_PIXELFORMAT_RGBA8SN:    return GL_RGBA8_SNORM;
+        case SG_PIXELFORMAT_RGBA8UI:    return GL_RGBA8UI;
+        case SG_PIXELFORMAT_RGBA8SI:    return GL_RGBA8I;
+        case SG_PIXELFORMAT_RGB10A2:    return GL_RGB10_A2;
+        case SG_PIXELFORMAT_RG11B10F:   return GL_R11F_G11F_B10F;
+        case SG_PIXELFORMAT_RGB9E5:     return GL_RGB9_E5;
+        case SG_PIXELFORMAT_RG32UI:     return GL_RG32UI;
+        case SG_PIXELFORMAT_RG32SI:     return GL_RG32I;
+        case SG_PIXELFORMAT_RG32F:      return GL_RG32F;
+        #if !defined(SOKOL_GLES3)
+            case SG_PIXELFORMAT_RGBA16:     return GL_RGBA16;
+            case SG_PIXELFORMAT_RGBA16SN:   return GL_RGBA16_SNORM;
+        #endif
+        case SG_PIXELFORMAT_RGBA16UI:   return GL_RGBA16UI;
+        case SG_PIXELFORMAT_RGBA16SI:   return GL_RGBA16I;
+        case SG_PIXELFORMAT_RGBA16F:    return GL_RGBA16F;
+        case SG_PIXELFORMAT_RGBA32UI:   return GL_RGBA32UI;
+        case SG_PIXELFORMAT_RGBA32SI:   return GL_RGBA32I;
+        case SG_PIXELFORMAT_RGBA32F:    return GL_RGBA32F;
+        case SG_PIXELFORMAT_DEPTH:      return GL_DEPTH_COMPONENT16;
+        case SG_PIXELFORMAT_DEPTH_STENCIL:      return GL_DEPTH24_STENCIL8;
+        case SG_PIXELFORMAT_BC1_RGBA:           return GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
+        case SG_PIXELFORMAT_BC2_RGBA:           return GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
+        case SG_PIXELFORMAT_BC3_RGBA:           return GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+        case SG_PIXELFORMAT_BC4_R:              return GL_COMPRESSED_RED_RGTC1;
+        case SG_PIXELFORMAT_BC4_RSN:            return GL_COMPRESSED_SIGNED_RED_RGTC1;
+        case SG_PIXELFORMAT_BC5_RG:             return GL_COMPRESSED_RED_GREEN_RGTC2;
+        case SG_PIXELFORMAT_BC5_RGSN:           return GL_COMPRESSED_SIGNED_RED_GREEN_RGTC2;
+        case SG_PIXELFORMAT_BC6H_RGBF:          return GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT_ARB;
+        case SG_PIXELFORMAT_BC6H_RGBUF:         return GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_ARB;
+        case SG_PIXELFORMAT_BC7_RGBA:           return GL_COMPRESSED_RGBA_BPTC_UNORM_ARB;
+        case SG_PIXELFORMAT_PVRTC_RGB_2BPP:     return GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG;
+        case SG_PIXELFORMAT_PVRTC_RGB_4BPP:     return GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG;
+        case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:    return GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG;
+        case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:    return GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG;
+        case SG_PIXELFORMAT_ETC2_RGB8:          return GL_COMPRESSED_RGB8_ETC2;
+        case SG_PIXELFORMAT_ETC2_RGB8A1:        return GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2;
+        case SG_PIXELFORMAT_ETC2_RGBA8:         return GL_COMPRESSED_RGBA8_ETC2_EAC;
+        case SG_PIXELFORMAT_ETC2_RG11:          return GL_COMPRESSED_RG11_EAC;
+        case SG_PIXELFORMAT_ETC2_RG11SN:        return GL_COMPRESSED_SIGNED_RG11_EAC;
+        default: SOKOL_UNREACHABLE; return 0;
     }
-    else {
-        switch (fmt) {
-            case SG_PIXELFORMAT_R8:         return GL_R8;
-            case SG_PIXELFORMAT_R8SN:       return GL_R8_SNORM;
-            case SG_PIXELFORMAT_R8UI:       return GL_R8UI;
-            case SG_PIXELFORMAT_R8SI:       return GL_R8I;
-            #if !defined(SOKOL_GLES3)
-                case SG_PIXELFORMAT_R16:        return GL_R16;
-                case SG_PIXELFORMAT_R16SN:      return GL_R16_SNORM;
-            #endif
-            case SG_PIXELFORMAT_R16UI:      return GL_R16UI;
-            case SG_PIXELFORMAT_R16SI:      return GL_R16I;
-            case SG_PIXELFORMAT_R16F:       return GL_R16F;
-            case SG_PIXELFORMAT_RG8:        return GL_RG8;
-            case SG_PIXELFORMAT_RG8SN:      return GL_RG8_SNORM;
-            case SG_PIXELFORMAT_RG8UI:      return GL_RG8UI;
-            case SG_PIXELFORMAT_RG8SI:      return GL_RG8I;
-            case SG_PIXELFORMAT_R32UI:      return GL_R32UI;
-            case SG_PIXELFORMAT_R32SI:      return GL_R32I;
-            case SG_PIXELFORMAT_R32F:       return GL_R32F;
-            #if !defined(SOKOL_GLES3)
-                case SG_PIXELFORMAT_RG16:       return GL_RG16;
-                case SG_PIXELFORMAT_RG16SN:     return GL_RG16_SNORM;
-            #endif
-            case SG_PIXELFORMAT_RG16UI:     return GL_RG16UI;
-            case SG_PIXELFORMAT_RG16SI:     return GL_RG16I;
-            case SG_PIXELFORMAT_RG16F:      return GL_RG16F;
-            case SG_PIXELFORMAT_RGBA8:      return GL_RGBA8;
-            case SG_PIXELFORMAT_SRGB8A8:    return GL_SRGB8_ALPHA8;
-            case SG_PIXELFORMAT_RGBA8SN:    return GL_RGBA8_SNORM;
-            case SG_PIXELFORMAT_RGBA8UI:    return GL_RGBA8UI;
-            case SG_PIXELFORMAT_RGBA8SI:    return GL_RGBA8I;
-            case SG_PIXELFORMAT_RGB10A2:    return GL_RGB10_A2;
-            case SG_PIXELFORMAT_RG11B10F:   return GL_R11F_G11F_B10F;
-            case SG_PIXELFORMAT_RGB9E5:     return GL_RGB9_E5;
-            case SG_PIXELFORMAT_RG32UI:     return GL_RG32UI;
-            case SG_PIXELFORMAT_RG32SI:     return GL_RG32I;
-            case SG_PIXELFORMAT_RG32F:      return GL_RG32F;
-            #if !defined(SOKOL_GLES3)
-                case SG_PIXELFORMAT_RGBA16:     return GL_RGBA16;
-                case SG_PIXELFORMAT_RGBA16SN:   return GL_RGBA16_SNORM;
-            #endif
-            case SG_PIXELFORMAT_RGBA16UI:   return GL_RGBA16UI;
-            case SG_PIXELFORMAT_RGBA16SI:   return GL_RGBA16I;
-            case SG_PIXELFORMAT_RGBA16F:    return GL_RGBA16F;
-            case SG_PIXELFORMAT_RGBA32UI:   return GL_RGBA32UI;
-            case SG_PIXELFORMAT_RGBA32SI:   return GL_RGBA32I;
-            case SG_PIXELFORMAT_RGBA32F:    return GL_RGBA32F;
-            case SG_PIXELFORMAT_DEPTH:      return GL_DEPTH_COMPONENT16;
-            case SG_PIXELFORMAT_DEPTH_STENCIL:      return GL_DEPTH24_STENCIL8;
-            case SG_PIXELFORMAT_BC1_RGBA:           return GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
-            case SG_PIXELFORMAT_BC2_RGBA:           return GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
-            case SG_PIXELFORMAT_BC3_RGBA:           return GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
-            case SG_PIXELFORMAT_BC4_R:              return GL_COMPRESSED_RED_RGTC1;
-            case SG_PIXELFORMAT_BC4_RSN:            return GL_COMPRESSED_SIGNED_RED_RGTC1;
-            case SG_PIXELFORMAT_BC5_RG:             return GL_COMPRESSED_RED_GREEN_RGTC2;
-            case SG_PIXELFORMAT_BC5_RGSN:           return GL_COMPRESSED_SIGNED_RED_GREEN_RGTC2;
-            case SG_PIXELFORMAT_BC6H_RGBF:          return GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT_ARB;
-            case SG_PIXELFORMAT_BC6H_RGBUF:         return GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_ARB;
-            case SG_PIXELFORMAT_BC7_RGBA:           return GL_COMPRESSED_RGBA_BPTC_UNORM_ARB;
-            case SG_PIXELFORMAT_PVRTC_RGB_2BPP:     return GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG;
-            case SG_PIXELFORMAT_PVRTC_RGB_4BPP:     return GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG;
-            case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:    return GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG;
-            case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:    return GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG;
-            case SG_PIXELFORMAT_ETC2_RGB8:          return GL_COMPRESSED_RGB8_ETC2;
-            case SG_PIXELFORMAT_ETC2_RGB8A1:        return GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2;
-            case SG_PIXELFORMAT_ETC2_RGBA8:         return GL_COMPRESSED_RGBA8_ETC2_EAC;
-            case SG_PIXELFORMAT_ETC2_RG11:          return GL_COMPRESSED_RG11_EAC;
-            case SG_PIXELFORMAT_ETC2_RG11SN:        return GL_COMPRESSED_SIGNED_RG11_EAC;
-            default: SOKOL_UNREACHABLE; return 0;
-        }
-    }
-    #endif
 }
 
 _SOKOL_PRIVATE GLenum _sg_gl_cubeface_target(int face_index) {
@@ -6139,70 +6041,49 @@ _SOKOL_PRIVATE GLenum _sg_gl_depth_attachment_format(sg_pixel_format fmt) {
 
 /* see: https://www.khronos.org/registry/OpenGL-Refpages/es3.0/html/glTexImage2D.xhtml */
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats(bool has_bgra) {
-    #if !defined(SOKOL_GLES2)
-    if (!_sg.gl.gles2) {
-        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
-    }
-    else {
-        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_R8]);
-    }
-    #else
-    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_R8]);
+    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_R8SN]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R8UI]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R8SI]);
+    #if !defined(SOKOL_GLES3)
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16]);
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16SN]);
     #endif
-    #if !defined(SOKOL_GLES2)
-    if (!_sg.gl.gles2) {
-        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_R8SN]);
-        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R8UI]);
-        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R8SI]);
-        #if !defined(SOKOL_GLES3)
-            _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16]);
-            _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16SN]);
-        #endif
-        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R16UI]);
-        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R16SI]);
-        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG8]);
-        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RG8SN]);
-        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG8UI]);
-        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG8SI]);
-        _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_R32UI]);
-        _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_R32SI]);
-        #if !defined(SOKOL_GLES3)
-            _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16]);
-            _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16SN]);
-        #endif
-        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG16UI]);
-        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG16SI]);
-    }
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R16UI]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R16SI]);
+    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG8]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RG8SN]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG8UI]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG8SI]);
+    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_R32UI]);
+    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_R32SI]);
+    #if !defined(SOKOL_GLES3)
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16]);
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16SN]);
     #endif
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG16UI]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG16SI]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA8]);
-    #if !defined(SOKOL_GLES2)
-    if (!_sg.gl.gles2) {
-        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_SRGB8A8]);
-        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGBA8SN]);
-        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA8UI]);
-        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA8SI]);
-    }
-    #endif
+    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_SRGB8A8]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGBA8SN]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA8UI]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA8SI]);
     if (has_bgra) {
         _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_BGRA8]);
     }
-    #if !defined(SOKOL_GLES2)
-    if (!_sg.gl.gles2) {
-        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGB10A2]);
-        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RG11B10F]);
-        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGB9E5]);
-        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG32UI]);
-        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG32SI]);
-        #if !defined(SOKOL_GLES3)
-            _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16]);
-            _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16SN]);
-        #endif
-        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA16UI]);
-        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA16SI]);
-        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA32UI]);
-        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA32SI]);
-    }
+    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGB10A2]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RG11B10F]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGB9E5]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG32UI]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG32SI]);
+    #if !defined(SOKOL_GLES3)
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16]);
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16SN]);
     #endif
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA16UI]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA16SI]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA32UI]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA32SI]);
     // FIXME: WEBGL_depth_texture extension?
     _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH]);
     _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL]);
@@ -6210,123 +6091,64 @@ _SOKOL_PRIVATE void _sg_gl_init_pixelformats(bool has_bgra) {
 
 /* FIXME: OES_half_float_blend */
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats_half_float(bool has_colorbuffer_half_float, bool has_texture_half_float_linear) {
-    #if !defined(SOKOL_GLES2)
-    if (!_sg.gl.gles2) {
-        if (has_texture_half_float_linear) {
-            if (has_colorbuffer_half_float) {
-                _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16F]);
-                _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16F]);
-                _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
-            }
-            else {
-                _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_R16F]);
-                _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RG16F]);
-                _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
-            }
+    if (has_texture_half_float_linear) {
+        if (has_colorbuffer_half_float) {
+            _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16F]);
+            _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16F]);
+            _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
         }
         else {
-            if (has_colorbuffer_half_float) {
-                _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_R16F]);
-                _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_RG16F]);
-                _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
-            }
-            else {
-                _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_R16F]);
-                _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_RG16F]);
-                _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
-            }
+            _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_R16F]);
+            _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RG16F]);
+            _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
         }
     }
     else {
-    #endif
-        /* GLES2 can only render to RGBA, and there's no RG format */
-        if (has_texture_half_float_linear) {
-            if (has_colorbuffer_half_float) {
-                _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
-            }
-            else {
-                _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
-            }
-            _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_R16F]);
+        if (has_colorbuffer_half_float) {
+            _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_R16F]);
+            _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_RG16F]);
+            _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
         }
         else {
-            if (has_colorbuffer_half_float) {
-                _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
-            }
-            else {
-                _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
-            }
             _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_R16F]);
+            _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_RG16F]);
+            _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
         }
-    #if !defined(SOKOL_GLES2)
     }
-    #endif
 }
 
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats_float(bool has_colorbuffer_float, bool has_texture_float_linear, bool has_float_blend) {
-    #if !defined(SOKOL_GLES2)
-    if (!_sg.gl.gles2) {
-        if (has_texture_float_linear) {
-            if (has_colorbuffer_float) {
-                if (has_float_blend) {
-                    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R32F]);
-                    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG32F]);
-                    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
-                }
-                else {
-                    _sg_pixelformat_sfrm(&_sg.formats[SG_PIXELFORMAT_R32F]);
-                    _sg_pixelformat_sfrm(&_sg.formats[SG_PIXELFORMAT_RG32F]);
-                    _sg_pixelformat_sfrm(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
-                }
+    if (has_texture_float_linear) {
+        if (has_colorbuffer_float) {
+            if (has_float_blend) {
+                _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R32F]);
+                _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+                _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
             }
             else {
-                _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_R32F]);
-                _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RG32F]);
-                _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+                _sg_pixelformat_sfrm(&_sg.formats[SG_PIXELFORMAT_R32F]);
+                _sg_pixelformat_sfrm(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+                _sg_pixelformat_sfrm(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
             }
         }
         else {
-            if (has_colorbuffer_float) {
-                _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_R32F]);
-                _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_RG32F]);
-                _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
-            }
-            else {
-                _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_R32F]);
-                _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_RG32F]);
-                _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
-            }
+            _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_R32F]);
+            _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+            _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
         }
     }
     else {
-    #endif
-        /* GLES2 can only render to RGBA, and there's no RG format */
-        if (has_texture_float_linear) {
-            if (has_colorbuffer_float) {
-                if (has_float_blend) {
-                    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
-                }
-                else {
-                    _sg_pixelformat_sfrm(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
-                }
-            }
-            else {
-                _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
-            }
-            _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_R32F]);
+        if (has_colorbuffer_float) {
+            _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_R32F]);
+            _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+            _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
         }
         else {
-            if (has_colorbuffer_float) {
-                _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
-            }
-            else {
-                _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
-            }
             _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_R32F]);
+            _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+            _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
         }
-    #if !defined(SOKOL_GLES2)
     }
-    #endif
 }
 
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats_s3tc(void) {
@@ -6382,16 +6204,12 @@ _SOKOL_PRIVATE void _sg_gl_init_limits(void) {
     glGetIntegerv(GL_MAX_VERTEX_UNIFORM_VECTORS, &gl_int);
     _SG_GL_CHECK_ERROR();
     _sg.limits.gl_max_vertex_uniform_vectors = gl_int;
-    #if !defined(SOKOL_GLES2)
-    if (!_sg.gl.gles2) {
-        glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &gl_int);
-        _SG_GL_CHECK_ERROR();
-        _sg.limits.max_image_size_3d = gl_int;
-        glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &gl_int);
-        _SG_GL_CHECK_ERROR();
-        _sg.limits.max_image_array_layers = gl_int;
-    }
-    #endif
+    glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &gl_int);
+    _SG_GL_CHECK_ERROR();
+    _sg.limits.max_image_size_3d = gl_int;
+    glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &gl_int);
+    _SG_GL_CHECK_ERROR();
+    _sg.limits.max_image_array_layers = gl_int;
     if (_sg.gl.ext_anisotropic) {
         glGetIntegerv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &gl_int);
         _SG_GL_CHECK_ERROR();
@@ -6410,11 +6228,6 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore33(void) {
     _sg.backend = SG_BACKEND_GLCORE33;
 
     _sg.features.origin_top_left = false;
-    _sg.features.instancing = true;
-    _sg.features.multiple_render_targets = true;
-    _sg.features.msaa_render_targets = true;
-    _sg.features.imagetype_3d = true;
-    _sg.features.imagetype_array = true;
     _sg.features.image_clamp_to_border = true;
     _sg.features.mrt_independent_blend_state = false;
     _sg.features.mrt_independent_write_mask = true;
@@ -6487,11 +6300,6 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.backend = SG_BACKEND_GLES3;
 
     _sg.features.origin_top_left = false;
-    _sg.features.instancing = true;
-    _sg.features.multiple_render_targets = true;
-    _sg.features.msaa_render_targets = true;
-    _sg.features.imagetype_3d = true;
-    _sg.features.imagetype_array = true;
     _sg.features.image_clamp_to_border = false;
     _sg.features.mrt_independent_blend_state = false;
     _sg.features.mrt_independent_write_mask = false;
@@ -6587,89 +6395,6 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
 }
 #endif
 
-#if defined(SOKOL_GLES3) || defined(SOKOL_GLES2)
-_SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
-    _sg.backend = SG_BACKEND_GLES2;
-
-    bool has_s3tc = false;  /* BC1..BC3 */
-    bool has_rgtc = false;  /* BC4 and BC5 */
-    bool has_bptc = false;  /* BC6H and BC7 */
-    bool has_pvrtc = false;
-    bool has_etc2 = false;
-    bool has_texture_float = false;
-    bool has_texture_float_linear = false;
-    bool has_colorbuffer_float = false;
-    bool has_float_blend = false;
-    bool has_instancing = false;
-    const char* ext = (const char*) glGetString(GL_EXTENSIONS);
-    if (ext) {
-        has_s3tc = strstr(ext, "_texture_compression_s3tc") || strstr(ext, "_compressed_texture_s3tc");
-        has_rgtc = strstr(ext, "_texture_compression_rgtc");
-        has_bptc = strstr(ext, "_texture_compression_bptc");
-        has_pvrtc = strstr(ext, "_texture_compression_pvrtc") || strstr(ext, "_compressed_texture_pvrtc");
-        has_etc2 = strstr(ext, "_compressed_texture_etc");
-        has_texture_float = strstr(ext, "_texture_float");
-        has_texture_float_linear = strstr(ext, "_texture_float_linear");
-        has_colorbuffer_float = strstr(ext, "_color_buffer_float");
-        has_float_blend = strstr(ext, "_float_blend");
-        /* don't bother with half_float support on WebGL1
-            has_texture_half_float = strstr(ext, "_texture_half_float");
-            has_texture_half_float_linear = strstr(ext, "_texture_half_float_linear");
-            has_colorbuffer_half_float = strstr(ext, "_color_buffer_half_float");
-        */
-        has_instancing = strstr(ext, "_instanced_arrays");
-        _sg.gl.ext_anisotropic = strstr(ext, "ext_anisotropic");
-    }
-
-    _sg.features.origin_top_left = false;
-    #if defined(_SOKOL_GL_INSTANCING_ENABLED)
-        _sg.features.instancing = has_instancing;
-    #endif
-    _sg.features.multiple_render_targets = false;
-    _sg.features.msaa_render_targets = false;
-    _sg.features.imagetype_3d = false;
-    _sg.features.imagetype_array = false;
-    _sg.features.image_clamp_to_border = false;
-    _sg.features.mrt_independent_blend_state = false;
-    _sg.features.mrt_independent_write_mask = false;
-
-    /* limits */
-    _sg_gl_init_limits();
-
-    /* pixel formats */
-    const bool has_bgra = false;    /* not a bug */
-    const bool has_texture_half_float = false;
-    const bool has_texture_half_float_linear = false;
-    const bool has_colorbuffer_half_float = false;
-    _sg_gl_init_pixelformats(has_bgra);
-    if (has_texture_float) {
-        _sg_gl_init_pixelformats_float(has_colorbuffer_float, has_texture_float_linear, has_float_blend);
-    }
-    if (has_texture_half_float) {
-        _sg_gl_init_pixelformats_half_float(has_colorbuffer_half_float, has_texture_half_float_linear);
-    }
-    if (has_s3tc) {
-        _sg_gl_init_pixelformats_s3tc();
-    }
-    if (has_rgtc) {
-        _sg_gl_init_pixelformats_rgtc();
-    }
-    if (has_bptc) {
-        _sg_gl_init_pixelformats_bptc();
-    }
-    if (has_pvrtc) {
-        _sg_gl_init_pixelformats_pvrtc();
-    }
-    if (has_etc2) {
-        _sg_gl_init_pixelformats_etc2();
-    }
-    /* GLES2 doesn't allow multi-sampled render targets at all */
-    for (int i = 0; i < _SG_PIXELFORMAT_NUM; i++) {
-        _sg.formats[i].msaa = false;
-    }
-}
-#endif
-
 /*-- state cache implementation ----------------------------------------------*/
 _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
     if (force || (_sg.gl.cache.vertex_buffer != 0)) {
@@ -6761,12 +6486,8 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_texture_bindings(bool force) {
             glActiveTexture(gl_texture_slot);
             glBindTexture(GL_TEXTURE_2D, 0);
             glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-            #if !defined(SOKOL_GLES2)
-            if (!_sg.gl.gles2) {
-                glBindTexture(GL_TEXTURE_3D, 0);
-                glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-            }
-            #endif
+            glBindTexture(GL_TEXTURE_3D, 0);
+            glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
             _sg.gl.cache.textures[i].target = 0;
             _sg.gl.cache.textures[i].texture = 0;
             _sg.gl.cache.cur_active_texture = gl_texture_slot;
@@ -6852,12 +6573,8 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_pipeline(_sg_pipeline_t* pip) {
 _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
     if (_sg.gl.cur_context) {
         _SG_GL_CHECK_ERROR();
-        #if !defined(SOKOL_GLES2)
-        if (!_sg.gl.gles2) {
-            glBindVertexArray(_sg.gl.cur_context->vao);
-            _SG_GL_CHECK_ERROR();
-        }
-        #endif
+        glBindVertexArray(_sg.gl.cur_context->vao);
+        _SG_GL_CHECK_ERROR();
         _sg_clear(&_sg.gl.cache, sizeof(_sg.gl.cache));
         _sg_gl_cache_clear_buffer_bindings(true);
         _SG_GL_CHECK_ERROR();
@@ -6931,14 +6648,9 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
 }
 
 _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
+    _SOKOL_UNUSED(desc);
     /* assumes that _sg.gl is already zero-initialized */
     _sg.gl.valid = true;
-    #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
-    _sg.gl.gles2 = desc->context.gl.force_gles2;
-    #else
-    _SOKOL_UNUSED(desc);
-    _sg.gl.gles2 = false;
-    #endif
 
     #if defined(_SOKOL_USE_WIN32_GL_LOADER)
     _sg_gl_load_opengl();
@@ -6951,14 +6663,7 @@ _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
     #if defined(SOKOL_GLCORE33)
         _sg_gl_init_caps_glcore33();
     #elif defined(SOKOL_GLES3)
-        if (_sg.gl.gles2) {
-            _sg_gl_init_caps_gles2();
-        }
-        else {
-            _sg_gl_init_caps_gles3();
-        }
-    #else
-        _sg_gl_init_caps_gles2();
+        _sg_gl_init_caps_gles3();
     #endif
 }
 
@@ -6984,14 +6689,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_context(_sg_context_t* ctx) {
     _SG_GL_CHECK_ERROR();
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&ctx->default_framebuffer);
     _SG_GL_CHECK_ERROR();
-    #if !defined(SOKOL_GLES2)
-    if (!_sg.gl.gles2) {
-        SOKOL_ASSERT(0 == ctx->vao);
-        glGenVertexArrays(1, &ctx->vao);
-        glBindVertexArray(ctx->vao);
-        _SG_GL_CHECK_ERROR();
-    }
-    #endif
+    SOKOL_ASSERT(0 == ctx->vao);
+    glGenVertexArrays(1, &ctx->vao);
+    glBindVertexArray(ctx->vao);
+    _SG_GL_CHECK_ERROR();
     // incoming texture data is generally expected to be packed tightly
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     return SG_RESOURCESTATE_VALID;
@@ -6999,16 +6700,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_context(_sg_context_t* ctx) {
 
 _SOKOL_PRIVATE void _sg_gl_discard_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
-    #if !defined(SOKOL_GLES2)
-    if (!_sg.gl.gles2) {
-        if (ctx->vao) {
-            glDeleteVertexArrays(1, &ctx->vao);
-        }
-        _SG_GL_CHECK_ERROR();
+    if (ctx->vao) {
+        glDeleteVertexArrays(1, &ctx->vao);
     }
-    #else
-    _SOKOL_UNUSED(ctx);
-    #endif
+    _SG_GL_CHECK_ERROR();
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_gl_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
@@ -7073,23 +6768,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
         _SG_ERROR(GL_TEXTURE_FORMAT_NOT_SUPPORTED);
         return SG_RESOURCESTATE_FAILED;
     }
-    /* check for optional texture types */
-    if ((img->cmn.type == SG_IMAGETYPE_3D) && !_sg.features.imagetype_3d) {
-        _SG_ERROR(GL_3D_TEXTURES_NOT_SUPPORTED);
-        return SG_RESOURCESTATE_FAILED;
-    }
-    if ((img->cmn.type == SG_IMAGETYPE_ARRAY) && !_sg.features.imagetype_array) {
-        _SG_ERROR(GL_ARRAY_TEXTURES_NOT_SUPPORTED);
-        return SG_RESOURCESTATE_FAILED;
-    }
 
-    #if !defined(SOKOL_GLES2)
-    bool msaa = false;
-    if (!_sg.gl.gles2) {
-        msaa = (img->cmn.sample_count > 1) && (_sg.features.msaa_render_targets);
-    }
-    #endif
-
+    const bool msaa = (img->cmn.sample_count > 1);
     if (_sg_is_valid_rendertarget_depth_format(img->cmn.pixel_format)) {
         /* special case depth-stencil-buffer? */
         SOKOL_ASSERT((img->cmn.usage == SG_USAGE_IMMUTABLE) && (img->cmn.num_slots == 1));
@@ -7097,13 +6777,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
         glGenRenderbuffers(1, &img->gl.depth_render_buffer);
         glBindRenderbuffer(GL_RENDERBUFFER, img->gl.depth_render_buffer);
         GLenum gl_depth_format = _sg_gl_depth_attachment_format(img->cmn.pixel_format);
-        #if !defined(SOKOL_GLES2)
-        if (!_sg.gl.gles2 && msaa) {
+        if (msaa) {
             glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->cmn.sample_count, gl_depth_format, img->cmn.width, img->cmn.height);
-        }
-        else
-        #endif
-        {
+        } else {
             glRenderbufferStorage(GL_RENDERBUFFER, gl_depth_format, img->cmn.width, img->cmn.height);
         }
     }
@@ -7113,13 +6789,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
         const GLenum gl_internal_format = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
 
         /* if this is a MSAA render target, need to create a separate render buffer */
-        #if !defined(SOKOL_GLES2)
-        if (!_sg.gl.gles2 && img->cmn.render_target && msaa) {
+        if (img->cmn.render_target && msaa) {
             glGenRenderbuffers(1, &img->gl.msaa_render_buffer);
             glBindRenderbuffer(GL_RENDERBUFFER, img->gl.msaa_render_buffer);
             glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->cmn.sample_count, gl_internal_format, img->cmn.width, img->cmn.height);
         }
-        #endif
 
         if (img->gl.ext_textures) {
             /* inject externally GL textures */
@@ -7158,11 +6832,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                 else {
                     glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_S, (GLint)_sg_gl_wrap(img->cmn.wrap_u));
                     glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_T, (GLint)_sg_gl_wrap(img->cmn.wrap_v));
-                    #if !defined(SOKOL_GLES2)
-                    if (!_sg.gl.gles2 && (img->cmn.type == SG_IMAGETYPE_3D)) {
+                    if (img->cmn.type == SG_IMAGETYPE_3D) {
                         glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_R, (GLint)_sg_gl_wrap(img->cmn.wrap_w));
                     }
-                    #endif
                     #if defined(SOKOL_GLCORE33)
                     float border[4];
                     switch (img->cmn.border_color) {
@@ -7179,15 +6851,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                     glTexParameterfv(img->gl.target, GL_TEXTURE_BORDER_COLOR, border);
                     #endif
                 }
-                #if !defined(SOKOL_GLES2)
-                if (!_sg.gl.gles2) {
-                    /* GL spec has strange defaults for mipmap min/max lod: -1000 to +1000 */
-                    const float min_lod = _sg_clamp(desc->min_lod, 0.0f, 1000.0f);
-                    const float max_lod = _sg_clamp(desc->max_lod, 0.0f, 1000.0f);
-                    glTexParameterf(img->gl.target, GL_TEXTURE_MIN_LOD, min_lod);
-                    glTexParameterf(img->gl.target, GL_TEXTURE_MAX_LOD, max_lod);
-                }
-                #endif
+                /* GL spec has strange defaults for mipmap min/max lod: -1000 to +1000 */
+                const float min_lod = _sg_clamp(desc->min_lod, 0.0f, 1000.0f);
+                const float max_lod = _sg_clamp(desc->max_lod, 0.0f, 1000.0f);
+                glTexParameterf(img->gl.target, GL_TEXTURE_MIN_LOD, min_lod);
+                glTexParameterf(img->gl.target, GL_TEXTURE_MAX_LOD, max_lod);
                 const int num_faces = img->cmn.type == SG_IMAGETYPE_CUBE ? 6 : 1;
                 int data_index = 0;
                 for (int face_index = 0; face_index < num_faces; face_index++) {
@@ -7216,9 +6884,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                                 glTexImage2D(gl_img_target, mip_index, (GLint)gl_internal_format,
                                     mip_width, mip_height, 0, gl_format, gl_type, data_ptr);
                             }
-                        }
-                        #if !defined(SOKOL_GLES2)
-                        else if (!_sg.gl.gles2 && ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type))) {
+                        } else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
                             int mip_depth = img->cmn.num_slices;
                             if (SG_IMAGETYPE_3D == img->cmn.type) {
                                 mip_depth >>= mip_index;
@@ -7237,7 +6903,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                                     mip_width, mip_height, mip_depth, 0, gl_format, gl_type, data_ptr);
                             }
                         }
-                        #endif
                     }
                 }
                 _sg_gl_cache_restore_texture_binding(0);
@@ -7301,7 +6966,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
 
     _sg_shader_common_init(&shd->cmn, desc);
 
-    /* copy vertex attribute names over, these are required for GLES2, and optional for GLES3 and GL3.x */
+    /* copy vertex attribute names over, these are used by, but optional on GLES3 and GL3.x */
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
         _sg_strcpy(&shd->gl.attrs[i].name, desc->attrs[i].name);
     }
@@ -7559,11 +7224,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
                         break;
                     default:
                         /* 3D- or array-texture */
-                        #if !defined(SOKOL_GLES2)
-                        if (!_sg.gl.gles2) {
-                            glFramebufferTextureLayer(GL_FRAMEBUFFER, gl_att, gl_tex, mip_level, slice);
-                        }
-                        #endif
+                        glFramebufferTextureLayer(GL_FRAMEBUFFER, gl_att, gl_tex, mip_level, slice);
                         break;
                 }
             }
@@ -7587,17 +7248,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
     }
 
     /* setup color attachments for the framebuffer */
-    #if !defined(SOKOL_GLES2)
-    if (!_sg.gl.gles2) {
-        GLenum att[SG_MAX_COLOR_ATTACHMENTS] = {
-            GL_COLOR_ATTACHMENT0,
-            GL_COLOR_ATTACHMENT1,
-            GL_COLOR_ATTACHMENT2,
-            GL_COLOR_ATTACHMENT3
-        };
-        glDrawBuffers(pass->cmn.num_color_atts, att);
-    }
-    #endif
+    GLenum att[SG_MAX_COLOR_ATTACHMENTS] = {
+        GL_COLOR_ATTACHMENT0,
+        GL_COLOR_ATTACHMENT1,
+        GL_COLOR_ATTACHMENT2,
+        GL_COLOR_ATTACHMENT3
+    };
+    glDrawBuffers(pass->cmn.num_color_atts, att);
 
     /* create MSAA resolve framebuffers if necessary */
     if (is_msaa) {
@@ -7620,11 +7277,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
                             _sg_gl_cubeface_target(cmn_att->slice), gl_tex, cmn_att->mip_level);
                         break;
                     default:
-                        #if !defined(SOKOL_GLES2)
-                        if (!_sg.gl.gles2) {
-                            glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, gl_tex, cmn_att->mip_level, cmn_att->slice);
-                        }
-                        #endif
+                        glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, gl_tex, cmn_att->mip_level, cmn_att->slice);
                         break;
                 }
                 /* check if framebuffer is complete */
@@ -7633,12 +7286,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
                     return SG_RESOURCESTATE_FAILED;
                 }
                 /* setup color attachments for the framebuffer */
-                #if !defined(SOKOL_GLES2)
-                if (!_sg.gl.gles2) {
-                    const GLenum gl_draw_bufs = GL_COLOR_ATTACHMENT0;
-                    glDrawBuffers(1, &gl_draw_bufs);
-                }
-                #endif
+                const GLenum gl_draw_bufs = GL_COLOR_ATTACHMENT0;
+                glDrawBuffers(1, &gl_draw_bufs);
             }
         }
     }
@@ -7778,14 +7427,7 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
         _sg.gl.cache.cur_pipeline = 0;
         _sg.gl.cache.cur_pipeline_id.id = SG_INVALID_ID;
     }
-    bool use_mrt_clear = (0 != pass);
-    #if defined(SOKOL_GLES2)
-    use_mrt_clear = false;
-    #else
-    if (_sg.gl.gles2) {
-        use_mrt_clear = false;
-    }
-    #endif
+    const bool use_mrt_clear = (0 != pass);
     if (!use_mrt_clear) {
         GLbitfield clear_mask = 0;
         if (clear_color) {
@@ -7808,9 +7450,7 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
         if (0 != clear_mask) {
             glClear(clear_mask);
         }
-    }
-    #if !defined SOKOL_GLES2
-    else {
+    } else {
         SOKOL_ASSERT(pass);
         for (int i = 0; i < num_color_atts; i++) {
             if (action->colors[i].action == SG_ACTION_CLEAR) {
@@ -7830,7 +7470,6 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
             }
         }
     }
-    #endif
     _SG_GL_CHECK_ERROR();
 }
 
@@ -7840,8 +7479,7 @@ _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
 
     /* if this was an offscreen pass, and MSAA rendering was used, need
        to resolve into the pass images */
-    #if !defined(SOKOL_GLES2)
-    if (!_sg.gl.gles2 && _sg.gl.cur_pass) {
+    if (_sg.gl.cur_pass) {
         /* check if the pass object is still valid */
         const _sg_pass_t* pass = _sg.gl.cur_pass;
         SOKOL_ASSERT(pass->slot.id == _sg.gl.cur_pass_id.id);
@@ -7866,7 +7504,6 @@ _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
             }
         }
     }
-    #endif
     _sg.gl.cur_pass = 0;
     _sg.gl.cur_pass_id.id = SG_INVALID_ID;
     _sg.gl.cur_pass_width = 0;
@@ -8166,11 +7803,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
                 glVertexAttribPointer(attr_index, attr->size, attr->type,
                     attr->normalized, attr->stride,
                     (const GLvoid*)(GLintptr)vb_offset);
-                #if defined(_SOKOL_GL_INSTANCING_ENABLED)
-                    if (_sg.features.instancing) {
-                        glVertexAttribDivisor(attr_index, (GLuint)attr->divisor);
-                    }
-                #endif
+                glVertexAttribDivisor(attr_index, (GLuint)attr->divisor);
                 cache_attr_dirty = true;
             }
             if (cache_attr->gl_attr.vb_index == -1) {
@@ -8257,22 +7890,16 @@ _SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_inst
         const int ib_offset = _sg.gl.cache.cur_ib_offset;
         const GLvoid* indices = (const GLvoid*)(GLintptr)(base_element*i_size+ib_offset);
         if (_sg.gl.cache.cur_pipeline->cmn.use_instanced_draw) {
-            if (_sg.features.instancing) {
-                glDrawElementsInstanced(p_type, num_elements, i_type, indices, num_instances);
-            }
-        }
-        else {
+            glDrawElementsInstanced(p_type, num_elements, i_type, indices, num_instances);
+        } else {
             glDrawElements(p_type, num_elements, i_type, indices);
         }
     }
     else {
         /* non-indexed rendering */
         if (_sg.gl.cache.cur_pipeline->cmn.use_instanced_draw) {
-            if (_sg.features.instancing) {
-                glDrawArraysInstanced(p_type, base_element, num_elements, num_instances);
-            }
-        }
-        else {
+            glDrawArraysInstanced(p_type, base_element, num_elements, num_instances);
+        } else {
             glDrawArrays(p_type, base_element, num_elements);
         }
     }
@@ -8360,8 +7987,7 @@ _SOKOL_PRIVATE void _sg_gl_update_image(_sg_image_t* img, const sg_image_data* d
                     gl_img_format, gl_img_type,
                     data_ptr);
             }
-            #if !defined(SOKOL_GLES2)
-            else if (!_sg.gl.gles2 && ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type))) {
+            else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
                 int mip_depth = img->cmn.num_slices >> mip_index;
                 if (mip_depth == 0) {
                     mip_depth = 1;
@@ -8373,7 +7999,6 @@ _SOKOL_PRIVATE void _sg_gl_update_image(_sg_image_t* img, const sg_image_data* d
                     data_ptr);
 
             }
-            #endif
         }
     }
     _sg_gl_cache_restore_texture_binding(0);
@@ -9045,12 +8670,7 @@ _SOKOL_PRIVATE UINT8 _sg_d3d11_color_write_mask(sg_color_mask m) {
 _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.backend = SG_BACKEND_D3D11;
 
-    _sg.features.instancing = true;
     _sg.features.origin_top_left = true;
-    _sg.features.multiple_render_targets = true;
-    _sg.features.msaa_render_targets = true;
-    _sg.features.imagetype_3d = true;
-    _sg.features.imagetype_array = true;
     _sg.features.image_clamp_to_border = true;
     _sg.features.mrt_independent_blend_state = true;
     _sg.features.mrt_independent_write_mask = true;
@@ -10822,12 +10442,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
             _sg.backend = SG_BACKEND_METAL_IOS;
         #endif
     #endif
-    _sg.features.instancing = true;
     _sg.features.origin_top_left = true;
-    _sg.features.multiple_render_targets = true;
-    _sg.features.msaa_render_targets = true;
-    _sg.features.imagetype_3d = true;
-    _sg.features.imagetype_array = true;
     #if defined(_SG_TARGET_MACOS)
         _sg.features.image_clamp_to_border = true;
     #else
@@ -12361,12 +11976,7 @@ _SOKOL_PRIVATE WGPUColorWriteMaskFlags _sg_wgpu_colorwritemask(uint8_t m) {
 
 _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.backend = SG_BACKEND_WGPU;
-    _sg.features.instancing = true;
     _sg.features.origin_top_left = true;
-    _sg.features.multiple_render_targets = true;
-    _sg.features.msaa_render_targets = true;
-    _sg.features.imagetype_3d = true;
-    _sg.features.imagetype_array = true;
     _sg.features.image_clamp_to_border = false;
     _sg.features.mrt_independent_blend_state = true;
     _sg.features.mrt_independent_write_mask = true;
@@ -14711,16 +14321,9 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         if (desc->render_target) {
             SOKOL_ASSERT(((int)fmt >= 0) && ((int)fmt < _SG_PIXELFORMAT_NUM));
             _SG_VALIDATE(_sg.formats[fmt].render, VALIDATE_IMAGEDESC_RT_PIXELFORMAT);
-            /* on GLES2, sample count for render targets is completely ignored */
-            #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
-            if (!_sg.gl.gles2) {
-            #endif
-                if (desc->sample_count > 1) {
-                    _SG_VALIDATE(_sg.features.msaa_render_targets && _sg.formats[fmt].msaa, VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT);
-                }
-            #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+            if (desc->sample_count > 1) {
+                _SG_VALIDATE(_sg.formats[fmt].msaa, VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT);
             }
-            #endif
             _SG_VALIDATE(usage == SG_USAGE_IMMUTABLE, VALIDATE_IMAGEDESC_RT_IMMUTABLE);
             _SG_VALIDATE(desc->data.subimage[0][0].ptr==0, VALIDATE_IMAGEDESC_RT_NO_DATA);
         }
@@ -14775,12 +14378,10 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
         _sg_validate_begin();
         _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_SHADERDESC_CANARY);
         _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_SHADERDESC_CANARY);
-        #if defined(SOKOL_GLES2)
-            _SG_VALIDATE(0 != desc->attrs[0].name, VALIDATE_SHADERDESC_ATTR_NAMES);
-        #elif defined(SOKOL_D3D11)
+        #if defined(SOKOL_D3D11)
             _SG_VALIDATE(0 != desc->attrs[0].sem_name, VALIDATE_SHADERDESC_ATTR_SEMANTICS);
         #endif
-        #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+        #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES3)
             /* on GL, must provide shader source code */
             _SG_VALIDATE(0 != desc->vs.source, VALIDATE_SHADERDESC_SOURCE);
             _SG_VALIDATE(0 != desc->fs.source, VALIDATE_SHADERDESC_SOURCE);
@@ -14825,7 +14426,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                         const sg_shader_uniform_desc* u_desc = &ub_desc->uniforms[u_index];
                         if (u_desc->type != SG_UNIFORMTYPE_INVALID) {
                             _SG_VALIDATE(uniforms_continuous, VALIDATE_SHADERDESC_NO_CONT_UB_MEMBERS);
-                            #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+                            #if defined(SOKOL_GLES3)
                             _SG_VALIDATE(0 != u_desc->name, VALIDATE_SHADERDESC_UB_MEMBER_NAME);
                             #endif
                             const int array_count = u_desc->array_count;
@@ -14862,9 +14463,6 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 const sg_shader_image_desc* img_desc = &stage_desc->images[img_index];
                 if (img_desc->image_type != _SG_IMAGETYPE_DEFAULT) {
                     _SG_VALIDATE(images_continuous, VALIDATE_SHADERDESC_NO_CONT_IMGS);
-                    #if defined(SOKOL_GLES2)
-                    _SG_VALIDATE(0 != img_desc->name, VALIDATE_SHADERDESC_IMG_NAME);
-                    #endif
                 }
                 else {
                     images_continuous = false;
@@ -14909,10 +14507,7 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
                 }
                 _SG_VALIDATE(attrs_cont, VALIDATE_PIPELINEDESC_NO_ATTRS);
                 SOKOL_ASSERT(a_desc->buffer_index < SG_MAX_SHADERSTAGE_BUFFERS);
-                #if defined(SOKOL_GLES2)
-                /* on GLES2, vertex attribute names must be provided */
-                _SG_VALIDATE(!_sg_strempty(&shd->gl.attrs[attr_index].name), VALIDATE_PIPELINEDESC_ATTR_NAME);
-                #elif defined(SOKOL_D3D11)
+                #if defined(SOKOL_D3D11)
                 /* on D3D11, semantic names (and semantic indices) must be provided */
                 _SG_VALIDATE(!_sg_strempty(&shd->d3d11.attrs[attr_index].sem_name), VALIDATE_PIPELINEDESC_ATTR_SEMANTICS);
                 #endif

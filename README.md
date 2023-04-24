@@ -87,7 +87,7 @@ A blog post with more background info: [A Tour of sokol_gfx.h](http://floooh.git
 
 # sokol_gfx.h:
 
-- simple, modern wrapper around GLES2/WebGL, GLES3/WebGL2, GL3.3, D3D11 and Metal
+- simple, modern wrapper around GLES3/WebGL2, GL3.3, D3D11 and Metal
 - buffers, images, shaders, pipeline-state-objects and render-passes
 - does *not* handle window creation or 3D API context initialization
 - does *not* provide shader dialect cross-translation (**BUT** there's now an 'official' shader-cross-compiler solution which
@@ -200,7 +200,7 @@ A minimal cross-platform application-wrapper library:
 - 3D context initialization
 - event-based keyboard, mouse and touch input
 - supported platforms: Win32, MacOS, Linux (X11), iOS, WASM, Android, UWP
-- supported 3D-APIs: GL3.3 (GLX/WGL), Metal, D3D11, GLES2/WebGL, GLES3/WebGL2
+- supported 3D-APIs: GL3.3 (GLX/WGL), Metal, D3D11, GLES3/WebGL2
 
 A simple clear-loop sample using sokol_app.h and sokol_gfx.h (does not include
 separate sokol.c/.m implementation file which is necessary
