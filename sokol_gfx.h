@@ -7325,24 +7325,20 @@ _SOKOL_PRIVATE _sg_image_t* _sg_gl_pass_ds_image(const _sg_pass_t* pass) {
 }
 
 _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
-    /* FIXME: what if a texture used as render target is still bound, should we
-       unbind all currently bound textures in begin pass? */
+    // FIXME: what if a texture used as render target is still bound, should we
+    // unbind all currently bound textures in begin pass?
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(!_sg.gl.in_pass);
     _SG_GL_CHECK_ERROR();
     _sg.gl.in_pass = true;
-    _sg.gl.cur_pass = pass; /* can be 0 */
+    _sg.gl.cur_pass = pass; // can be 0
     if (pass) {
         _sg.gl.cur_pass_id.id = pass->slot.id;
-    }
-    else {
+    } else {
         _sg.gl.cur_pass_id.id = SG_INVALID_ID;
     }
     _sg.gl.cur_pass_width = w;
     _sg.gl.cur_pass_height = h;
-
-    /* number of color attachments */
-    const int num_color_atts = pass ? pass->cmn.num_color_atts : 1;
 
     // bind the render pass framebuffer
     //
@@ -7360,8 +7356,7 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
         #endif
         glBindFramebuffer(GL_FRAMEBUFFER, pass->gl.fb);
 
-    }
-    else {
+    } else {
         // default pass
         SOKOL_ASSERT(_sg.gl.cur_context);
         #if defined(SOKOL_GLCORE33)
@@ -7372,11 +7367,14 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
     glViewport(0, 0, w, h);
     glScissor(0, 0, w, h);
 
-    /* clear color and depth-stencil attachments if needed */
-    bool clear_color = false;
+    // number of color attachments
+    const int num_color_atts = pass ? pass->cmn.num_color_atts : 1;
+
+    // clear color and depth-stencil attachments if needed
+    bool clear_any_color = false;
     for (int i = 0; i < num_color_atts; i++) {
         if (SG_ACTION_CLEAR == action->colors[i].action) {
-            clear_color = true;
+            clear_any_color = true;
             break;
         }
     }
@@ -7384,7 +7382,7 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
     const bool clear_stencil = (action->stencil.action == SG_ACTION_CLEAR);
 
     bool need_pip_cache_flush = false;
-    if (clear_color) {
+    if (clear_any_color) {
         bool need_color_mask_flush = false;
         // NOTE: not a bug to iterate over all possible color attachments
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
@@ -7418,8 +7416,8 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
         }
     }
     if (need_pip_cache_flush) {
-        /* we messed with the state cache directly, need to clear cached
-           pipeline to force re-evaluation in next sg_apply_pipeline() */
+        // we messed with the state cache directly, need to clear cached
+        // pipeline to force re-evaluation in next sg_apply_pipeline()
         _sg.gl.cache.cur_pipeline = 0;
         _sg.gl.cache.cur_pipeline_id.id = SG_INVALID_ID;
     }
@@ -7431,11 +7429,9 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
     if ((pass == 0) || (pass->gl.ds_att.image)) {
         if (clear_depth && clear_stencil) {
             glClearBufferfi(GL_DEPTH_STENCIL, 0, action->depth.value, action->stencil.value);
-        }
-        else if (clear_depth) {
+        } else if (clear_depth) {
             glClearBufferfv(GL_DEPTH, 0, &action->depth.value);
-        }
-        else if (clear_stencil) {
+        } else if (clear_stencil) {
             GLint val = (GLint) action->stencil.value;
             glClearBufferiv(GL_STENCIL, 0, &val);
         }
