@@ -5491,7 +5491,6 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     _SG_XMACRO(glTexImage3D,                      void, (GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const void * pixels)) \
     _SG_XMACRO(glCreateShader,                    GLuint, (GLenum type)) \
     _SG_XMACRO(glTexSubImage2D,                   void, (GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void * pixels)) \
-    _SG_XMACRO(glClearDepth,                      void, (GLdouble depth)) \
     _SG_XMACRO(glFramebufferTexture2D,            void, (GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level)) \
     _SG_XMACRO(glCreateProgram,                   GLuint, (void)) \
     _SG_XMACRO(glViewport,                        void, (GLint x, GLint y, GLsizei width, GLsizei height)) \
@@ -5507,7 +5506,6 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     _SG_XMACRO(glDeleteVertexArrays,              void, (GLsizei n, const GLuint * arrays)) \
     _SG_XMACRO(glDepthMask,                       void, (GLboolean flag)) \
     _SG_XMACRO(glDrawArraysInstanced,             void, (GLenum mode, GLint first, GLsizei count, GLsizei instancecount)) \
-    _SG_XMACRO(glClearStencil,                    void, (GLint s)) \
     _SG_XMACRO(glScissor,                         void, (GLint x, GLint y, GLsizei width, GLsizei height)) \
     _SG_XMACRO(glGenRenderbuffers,                void, (GLsizei n, GLuint * renderbuffers)) \
     _SG_XMACRO(glBufferData,                      void, (GLenum target, GLsizeiptr size, const void * data, GLenum usage)) \
@@ -5519,7 +5517,6 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     _SG_XMACRO(glStencilMask,                     void, (GLuint mask)) \
     _SG_XMACRO(glAttachShader,                    void, (GLuint program, GLuint shader)) \
     _SG_XMACRO(glGetError,                        GLenum, (void)) \
-    _SG_XMACRO(glClearColor,                      void, (GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)) \
     _SG_XMACRO(glBlendColor,                      void, (GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)) \
     _SG_XMACRO(glTexParameterf,                   void, (GLenum target, GLenum pname, GLfloat param)) \
     _SG_XMACRO(glTexParameterfv,                  void, (GLenum target, GLenum pname, const GLfloat* params)) \
@@ -5531,7 +5528,6 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     _SG_XMACRO(glBlendFunc,                       void, (GLenum sfactor, GLenum dfactor)) \
     _SG_XMACRO(glReadBuffer,                      void, (GLenum src)) \
     _SG_XMACRO(glReadPixels,                      void, (GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void * data)) \
-    _SG_XMACRO(glClear,                           void, (GLbitfield mask)) \
     _SG_XMACRO(glTexImage2D,                      void, (GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void * pixels)) \
     _SG_XMACRO(glGenVertexArrays,                 void, (GLsizei n, GLuint * arrays)) \
     _SG_XMACRO(glFrontFace,                       void, (GLenum mode)) \
@@ -7427,47 +7423,21 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
         _sg.gl.cache.cur_pipeline = 0;
         _sg.gl.cache.cur_pipeline_id.id = SG_INVALID_ID;
     }
-    const bool use_mrt_clear = (0 != pass);
-    if (!use_mrt_clear) {
-        GLbitfield clear_mask = 0;
-        if (clear_color) {
-            clear_mask |= GL_COLOR_BUFFER_BIT;
-            const sg_color c = action->colors[0].value;
-            glClearColor(c.r, c.g, c.b, c.a);
+    for (int i = 0; i < num_color_atts; i++) {
+        if (action->colors[i].action == SG_ACTION_CLEAR) {
+            glClearBufferfv(GL_COLOR, i, &action->colors[i].value.r);
         }
-        if (clear_depth) {
-            clear_mask |= GL_DEPTH_BUFFER_BIT;
-            #ifdef SOKOL_GLCORE33
-            glClearDepth(action->depth.value);
-            #else
-            glClearDepthf(action->depth.value);
-            #endif
+    }
+    if ((pass == 0) || (pass->gl.ds_att.image)) {
+        if (clear_depth && clear_stencil) {
+            glClearBufferfi(GL_DEPTH_STENCIL, 0, action->depth.value, action->stencil.value);
         }
-        if (clear_stencil) {
-            clear_mask |= GL_STENCIL_BUFFER_BIT;
-            glClearStencil(action->stencil.value);
+        else if (clear_depth) {
+            glClearBufferfv(GL_DEPTH, 0, &action->depth.value);
         }
-        if (0 != clear_mask) {
-            glClear(clear_mask);
-        }
-    } else {
-        SOKOL_ASSERT(pass);
-        for (int i = 0; i < num_color_atts; i++) {
-            if (action->colors[i].action == SG_ACTION_CLEAR) {
-                glClearBufferfv(GL_COLOR, i, &action->colors[i].value.r);
-            }
-        }
-        if (pass->gl.ds_att.image) {
-            if (clear_depth && clear_stencil) {
-                glClearBufferfi(GL_DEPTH_STENCIL, 0, action->depth.value, action->stencil.value);
-            }
-            else if (clear_depth) {
-                glClearBufferfv(GL_DEPTH, 0, &action->depth.value);
-            }
-            else if (clear_stencil) {
-                GLint val = (GLint) action->stencil.value;
-                glClearBufferiv(GL_STENCIL, 0, &val);
-            }
+        else if (clear_stencil) {
+            GLint val = (GLint) action->stencil.value;
+            glClearBufferiv(GL_STENCIL, 0, &val);
         }
     }
     _SG_GL_CHECK_ERROR();
