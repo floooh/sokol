@@ -3926,7 +3926,6 @@ typedef struct {
     _sg_image_common_t cmn;
     struct {
         GLenum target;
-        GLuint depth_render_buffer;
         GLuint msaa_render_buffer;
         GLuint tex[SG_NUM_INFLIGHT_FRAMES];
         bool ext_textures;  /* if true, external textures were injected with sg_image_desc.gl_textures */
@@ -6027,14 +6026,6 @@ _SOKOL_PRIVATE GLenum _sg_gl_cubeface_target(int face_index) {
     }
 }
 
-_SOKOL_PRIVATE GLenum _sg_gl_depth_attachment_format(sg_pixel_format fmt) {
-    switch (fmt) {
-        case SG_PIXELFORMAT_DEPTH:          return GL_DEPTH_COMPONENT16;
-        case SG_PIXELFORMAT_DEPTH_STENCIL:  return GL_DEPTH24_STENCIL8;
-        default: SOKOL_UNREACHABLE; return 0;
-    }
-}
-
 /* see: https://www.khronos.org/registry/OpenGL-Refpages/es3.0/html/glTexImage2D.xhtml */
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats(bool has_bgra) {
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
@@ -6759,150 +6750,130 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
     _sg_image_common_init(&img->cmn, desc);
     img->gl.ext_textures = (0 != desc->gl_textures[0]);
 
-    /* check if texture format is support */
+    // check if texture format is support
     if (!_sg_gl_supported_texture_format(img->cmn.pixel_format)) {
         _SG_ERROR(GL_TEXTURE_FORMAT_NOT_SUPPORTED);
         return SG_RESOURCESTATE_FAILED;
     }
 
+    img->gl.target = _sg_gl_texture_target(img->cmn.type);
+    const GLenum gl_internal_format = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
+
+    // if this is a MSAA render target, need to create a separate render buffer
     const bool msaa = (img->cmn.sample_count > 1);
-    if (_sg_is_valid_rendertarget_depth_format(img->cmn.pixel_format)) {
-        /* special case depth-stencil-buffer? */
-        SOKOL_ASSERT((img->cmn.usage == SG_USAGE_IMMUTABLE) && (img->cmn.num_slots == 1));
-        SOKOL_ASSERT(!img->gl.ext_textures);   /* cannot provide external texture for depth images */
-        glGenRenderbuffers(1, &img->gl.depth_render_buffer);
-        glBindRenderbuffer(GL_RENDERBUFFER, img->gl.depth_render_buffer);
-        GLenum gl_depth_format = _sg_gl_depth_attachment_format(img->cmn.pixel_format);
-        if (msaa) {
-            glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->cmn.sample_count, gl_depth_format, img->cmn.width, img->cmn.height);
-        } else {
-            glRenderbufferStorage(GL_RENDERBUFFER, gl_depth_format, img->cmn.width, img->cmn.height);
-        }
+    if (img->cmn.render_target && msaa) {
+        glGenRenderbuffers(1, &img->gl.msaa_render_buffer);
+        glBindRenderbuffer(GL_RENDERBUFFER, img->gl.msaa_render_buffer);
+        glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->cmn.sample_count, gl_internal_format, img->cmn.width, img->cmn.height);
     }
-    else {
-        /* regular color texture */
-        img->gl.target = _sg_gl_texture_target(img->cmn.type);
-        const GLenum gl_internal_format = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
 
-        /* if this is a MSAA render target, need to create a separate render buffer */
-        if (img->cmn.render_target && msaa) {
-            glGenRenderbuffers(1, &img->gl.msaa_render_buffer);
-            glBindRenderbuffer(GL_RENDERBUFFER, img->gl.msaa_render_buffer);
-            glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->cmn.sample_count, gl_internal_format, img->cmn.width, img->cmn.height);
+    if (img->gl.ext_textures) {
+        // inject externally GL textures
+        for (int slot = 0; slot < img->cmn.num_slots; slot++) {
+            SOKOL_ASSERT(desc->gl_textures[slot]);
+            img->gl.tex[slot] = desc->gl_textures[slot];
         }
-
-        if (img->gl.ext_textures) {
-            /* inject externally GL textures */
-            for (int slot = 0; slot < img->cmn.num_slots; slot++) {
-                SOKOL_ASSERT(desc->gl_textures[slot]);
-                img->gl.tex[slot] = desc->gl_textures[slot];
-            }
-            if (desc->gl_texture_target) {
-                img->gl.target = (GLenum)desc->gl_texture_target;
-            }
+        if (desc->gl_texture_target) {
+            img->gl.target = (GLenum)desc->gl_texture_target;
         }
-        else {
-            /* create our own GL texture(s) */
-            const GLenum gl_format = _sg_gl_teximage_format(img->cmn.pixel_format);
-            const bool is_compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
-            for (int slot = 0; slot < img->cmn.num_slots; slot++) {
-                glGenTextures(1, &img->gl.tex[slot]);
-                SOKOL_ASSERT(img->gl.tex[slot]);
-                _sg_gl_cache_store_texture_binding(0);
-                _sg_gl_cache_bind_texture(0, img->gl.target, img->gl.tex[slot]);
-                GLenum gl_min_filter = _sg_gl_filter(img->cmn.min_filter);
-                GLenum gl_mag_filter = _sg_gl_filter(img->cmn.mag_filter);
-                glTexParameteri(img->gl.target, GL_TEXTURE_MIN_FILTER, (GLint)gl_min_filter);
-                glTexParameteri(img->gl.target, GL_TEXTURE_MAG_FILTER, (GLint)gl_mag_filter);
-                if (_sg.gl.ext_anisotropic && (img->cmn.max_anisotropy > 1)) {
-                    GLint max_aniso = (GLint) img->cmn.max_anisotropy;
-                    if (max_aniso > _sg.gl.max_anisotropy) {
-                        max_aniso = _sg.gl.max_anisotropy;
-                    }
-                    glTexParameteri(img->gl.target, GL_TEXTURE_MAX_ANISOTROPY_EXT, max_aniso);
+    } else {
+        // create our own GL texture(s)
+        const GLenum gl_format = _sg_gl_teximage_format(img->cmn.pixel_format);
+        const bool is_compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
+        for (int slot = 0; slot < img->cmn.num_slots; slot++) {
+            glGenTextures(1, &img->gl.tex[slot]);
+            SOKOL_ASSERT(img->gl.tex[slot]);
+            _sg_gl_cache_store_texture_binding(0);
+            _sg_gl_cache_bind_texture(0, img->gl.target, img->gl.tex[slot]);
+            GLenum gl_min_filter = _sg_gl_filter(img->cmn.min_filter);
+            GLenum gl_mag_filter = _sg_gl_filter(img->cmn.mag_filter);
+            glTexParameteri(img->gl.target, GL_TEXTURE_MIN_FILTER, (GLint)gl_min_filter);
+            glTexParameteri(img->gl.target, GL_TEXTURE_MAG_FILTER, (GLint)gl_mag_filter);
+            if (_sg.gl.ext_anisotropic && (img->cmn.max_anisotropy > 1)) {
+                GLint max_aniso = (GLint) img->cmn.max_anisotropy;
+                if (max_aniso > _sg.gl.max_anisotropy) {
+                    max_aniso = _sg.gl.max_anisotropy;
                 }
-                if (img->cmn.type == SG_IMAGETYPE_CUBE) {
-                    glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                    glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-                }
-                else {
-                    glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_S, (GLint)_sg_gl_wrap(img->cmn.wrap_u));
-                    glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_T, (GLint)_sg_gl_wrap(img->cmn.wrap_v));
-                    if (img->cmn.type == SG_IMAGETYPE_3D) {
-                        glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_R, (GLint)_sg_gl_wrap(img->cmn.wrap_w));
-                    }
-                    #if defined(SOKOL_GLCORE33)
-                    float border[4];
-                    switch (img->cmn.border_color) {
-                        case SG_BORDERCOLOR_TRANSPARENT_BLACK:
-                            border[0] = 0.0f; border[1] = 0.0f; border[2] = 0.0f; border[3] = 0.0f;
-                            break;
-                        case SG_BORDERCOLOR_OPAQUE_WHITE:
-                            border[0] = 1.0f; border[1] = 1.0f; border[2] = 1.0f; border[3] = 1.0f;
-                            break;
-                        default:
-                            border[0] = 0.0f; border[1] = 0.0f; border[2] = 0.0f; border[3] = 1.0f;
-                            break;
-                    }
-                    glTexParameterfv(img->gl.target, GL_TEXTURE_BORDER_COLOR, border);
-                    #endif
-                }
-                /* GL spec has strange defaults for mipmap min/max lod: -1000 to +1000 */
-                const float min_lod = _sg_clamp(desc->min_lod, 0.0f, 1000.0f);
-                const float max_lod = _sg_clamp(desc->max_lod, 0.0f, 1000.0f);
-                glTexParameterf(img->gl.target, GL_TEXTURE_MIN_LOD, min_lod);
-                glTexParameterf(img->gl.target, GL_TEXTURE_MAX_LOD, max_lod);
-                const int num_faces = img->cmn.type == SG_IMAGETYPE_CUBE ? 6 : 1;
-                int data_index = 0;
-                for (int face_index = 0; face_index < num_faces; face_index++) {
-                    for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++, data_index++) {
-                        GLenum gl_img_target = img->gl.target;
-                        if (SG_IMAGETYPE_CUBE == img->cmn.type) {
-                            gl_img_target = _sg_gl_cubeface_target(face_index);
-                        }
-                        const GLvoid* data_ptr = desc->data.subimage[face_index][mip_index].ptr;
-                        int mip_width = img->cmn.width >> mip_index;
-                        if (mip_width == 0) {
-                            mip_width = 1;
-                        }
-                        int mip_height = img->cmn.height >> mip_index;
-                        if (mip_height == 0) {
-                            mip_height = 1;
-                        }
-                        if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
-                            if (is_compressed) {
-                                const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
-                                glCompressedTexImage2D(gl_img_target, mip_index, gl_internal_format,
-                                    mip_width, mip_height, 0, data_size, data_ptr);
-                            }
-                            else {
-                                const GLenum gl_type = _sg_gl_teximage_type(img->cmn.pixel_format);
-                                glTexImage2D(gl_img_target, mip_index, (GLint)gl_internal_format,
-                                    mip_width, mip_height, 0, gl_format, gl_type, data_ptr);
-                            }
-                        } else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
-                            int mip_depth = img->cmn.num_slices;
-                            if (SG_IMAGETYPE_3D == img->cmn.type) {
-                                mip_depth >>= mip_index;
-                            }
-                            if (mip_depth == 0) {
-                                mip_depth = 1;
-                            }
-                            if (is_compressed) {
-                                const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
-                                glCompressedTexImage3D(gl_img_target, mip_index, gl_internal_format,
-                                    mip_width, mip_height, mip_depth, 0, data_size, data_ptr);
-                            }
-                            else {
-                                const GLenum gl_type = _sg_gl_teximage_type(img->cmn.pixel_format);
-                                glTexImage3D(gl_img_target, mip_index, (GLint)gl_internal_format,
-                                    mip_width, mip_height, mip_depth, 0, gl_format, gl_type, data_ptr);
-                            }
-                        }
-                    }
-                }
-                _sg_gl_cache_restore_texture_binding(0);
+                glTexParameteri(img->gl.target, GL_TEXTURE_MAX_ANISOTROPY_EXT, max_aniso);
             }
+            if (img->cmn.type == SG_IMAGETYPE_CUBE) {
+                glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            } else {
+                glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_S, (GLint)_sg_gl_wrap(img->cmn.wrap_u));
+                glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_T, (GLint)_sg_gl_wrap(img->cmn.wrap_v));
+                if (img->cmn.type == SG_IMAGETYPE_3D) {
+                    glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_R, (GLint)_sg_gl_wrap(img->cmn.wrap_w));
+                }
+                #if defined(SOKOL_GLCORE33)
+                float border[4];
+                switch (img->cmn.border_color) {
+                    case SG_BORDERCOLOR_TRANSPARENT_BLACK:
+                        border[0] = 0.0f; border[1] = 0.0f; border[2] = 0.0f; border[3] = 0.0f;
+                        break;
+                    case SG_BORDERCOLOR_OPAQUE_WHITE:
+                        border[0] = 1.0f; border[1] = 1.0f; border[2] = 1.0f; border[3] = 1.0f;
+                        break;
+                    default:
+                        border[0] = 0.0f; border[1] = 0.0f; border[2] = 0.0f; border[3] = 1.0f;
+                        break;
+                }
+                glTexParameterfv(img->gl.target, GL_TEXTURE_BORDER_COLOR, border);
+                #endif
+            }
+            /* GL spec has strange defaults for mipmap min/max lod: -1000 to +1000 */
+            const float min_lod = _sg_clamp(desc->min_lod, 0.0f, 1000.0f);
+            const float max_lod = _sg_clamp(desc->max_lod, 0.0f, 1000.0f);
+            glTexParameterf(img->gl.target, GL_TEXTURE_MIN_LOD, min_lod);
+            glTexParameterf(img->gl.target, GL_TEXTURE_MAX_LOD, max_lod);
+            const int num_faces = img->cmn.type == SG_IMAGETYPE_CUBE ? 6 : 1;
+            int data_index = 0;
+            for (int face_index = 0; face_index < num_faces; face_index++) {
+                for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++, data_index++) {
+                    GLenum gl_img_target = img->gl.target;
+                    if (SG_IMAGETYPE_CUBE == img->cmn.type) {
+                        gl_img_target = _sg_gl_cubeface_target(face_index);
+                    }
+                    const GLvoid* data_ptr = desc->data.subimage[face_index][mip_index].ptr;
+                    int mip_width = img->cmn.width >> mip_index;
+                    if (mip_width == 0) {
+                        mip_width = 1;
+                    }
+                    int mip_height = img->cmn.height >> mip_index;
+                    if (mip_height == 0) {
+                        mip_height = 1;
+                    }
+                    if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
+                        if (is_compressed) {
+                            const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
+                            glCompressedTexImage2D(gl_img_target, mip_index, gl_internal_format,
+                                mip_width, mip_height, 0, data_size, data_ptr);
+                        } else {
+                            const GLenum gl_type = _sg_gl_teximage_type(img->cmn.pixel_format);
+                            glTexImage2D(gl_img_target, mip_index, (GLint)gl_internal_format,
+                                mip_width, mip_height, 0, gl_format, gl_type, data_ptr);
+                        }
+                    } else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
+                        int mip_depth = img->cmn.num_slices;
+                        if (SG_IMAGETYPE_3D == img->cmn.type) {
+                            mip_depth >>= mip_index;
+                        }
+                        if (mip_depth == 0) {
+                            mip_depth = 1;
+                        }
+                        if (is_compressed) {
+                            const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
+                            glCompressedTexImage3D(gl_img_target, mip_index, gl_internal_format,
+                                mip_width, mip_height, mip_depth, 0, data_size, data_ptr);
+                        } else {
+                            const GLenum gl_type = _sg_gl_teximage_type(img->cmn.pixel_format);
+                            glTexImage3D(gl_img_target, mip_index, (GLint)gl_internal_format,
+                                mip_width, mip_height, mip_depth, 0, gl_format, gl_type, data_ptr);
+                        }
+                    }
+                }
+            }
+            _sg_gl_cache_restore_texture_binding(0);
         }
     }
     _SG_GL_CHECK_ERROR();
@@ -6919,9 +6890,6 @@ _SOKOL_PRIVATE void _sg_gl_discard_image(_sg_image_t* img) {
                 glDeleteTextures(1, &img->gl.tex[slot]);
             }
         }
-    }
-    if (img->gl.depth_render_buffer) {
-        glDeleteRenderbuffers(1, &img->gl.depth_render_buffer);
     }
     if (img->gl.msaa_render_buffer) {
         glDeleteRenderbuffers(1, &img->gl.msaa_render_buffer);
@@ -7149,8 +7117,38 @@ _SOKOL_PRIVATE void _sg_gl_discard_pipeline(_sg_pipeline_t* pip) {
     _sg_gl_cache_invalidate_pipeline(pip);
 }
 
+_SOKOL_PRIVATE void _sg_gl_fb_attach_texture(const _sg_gl_attachment_t* gl_att, const _sg_pass_attachment_common_t* cmn_att, GLenum gl_att_type) {
+    const _sg_image_t* img = gl_att->image;
+    SOKOL_ASSERT(img);
+    const GLuint gl_tex = img->gl.tex[0];
+    SOKOL_ASSERT(gl_tex);
+    const int mip_level = cmn_att->mip_level;
+    const int slice = cmn_att->slice;
+    switch (img->cmn.type) {
+        case SG_IMAGETYPE_2D:
+            glFramebufferTexture2D(GL_FRAMEBUFFER, gl_att_type, GL_TEXTURE_2D, gl_tex, mip_level);
+            break;
+        case SG_IMAGETYPE_CUBE:
+            glFramebufferTexture2D(GL_FRAMEBUFFER, gl_att_type, _sg_gl_cubeface_target(slice), gl_tex, mip_level);
+            break;
+        default:
+            glFramebufferTextureLayer(GL_FRAMEBUFFER, gl_att_type, gl_tex, mip_level, slice);
+            break;
+    }
+}
+
+_SOKOL_PRIVATE GLenum _sg_gl_depth_stencil_attachment_type(const _sg_gl_attachment_t* ds_att) {
+    const _sg_image_t* img = ds_att->image;
+    SOKOL_ASSERT(img);
+    if (_sg_is_depth_stencil_format(img->cmn.pixel_format)) {
+        return GL_DEPTH_STENCIL_ATTACHMENT;
+    } else {
+        return GL_DEPTH_ATTACHMENT;
+    }
+}
+
 /*
-    _sg_create_pass
+    _sg_gl_create_pass
 
     att_imgs must point to a _sg_image* att_imgs[SG_MAX_COLOR_ATTACHMENTS+1] array,
     first entries are the color attachment images (or nullptr), last entry
@@ -7163,7 +7161,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
 
     _sg_pass_common_init(&pass->cmn, desc);
 
-    /* copy image pointers */
+    // copy image pointers
     const sg_pass_attachment_desc* att_desc;
     for (int i = 0; i < pass->cmn.num_color_atts; i++) {
         att_desc = &desc->color_attachments[i];
@@ -7182,68 +7180,52 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
         pass->gl.ds_att.image = att_images[ds_img_index];
     }
 
-    /* store current framebuffer binding (restored at end of function) */
+    // store current framebuffer binding (restored at end of function)
     GLuint gl_orig_fb;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&gl_orig_fb);
 
-    /* create a framebuffer object */
+    // create a framebuffer object
     glGenFramebuffers(1, &pass->gl.fb);
     glBindFramebuffer(GL_FRAMEBUFFER, pass->gl.fb);
 
-    /* attach msaa render buffer or textures */
+    // attach msaa render buffer or textures
     const bool is_msaa = (0 != att_images[0]->gl.msaa_render_buffer);
     if (is_msaa) {
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-            const _sg_image_t* att_img = pass->gl.color_atts[i].image;
-            if (att_img) {
+            if (pass->gl.color_atts[i].image) {
+                const _sg_image_t* att_img = pass->gl.color_atts[i].image;
                 const GLuint gl_render_buffer = att_img->gl.msaa_render_buffer;
                 SOKOL_ASSERT(gl_render_buffer);
                 glFramebufferRenderbuffer(GL_FRAMEBUFFER, (GLenum)(GL_COLOR_ATTACHMENT0+i), GL_RENDERBUFFER, gl_render_buffer);
             }
         }
-    }
-    else {
+        if (pass->gl.ds_att.image) {
+            const GLenum gl_att = _sg_gl_depth_stencil_attachment_type(&pass->gl.ds_att);
+            const _sg_image_t* att_img = pass->gl.ds_att.image;
+            const GLuint gl_render_buffer = att_img->gl.msaa_render_buffer;
+            SOKOL_ASSERT(gl_render_buffer);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, gl_att, GL_RENDERBUFFER, gl_render_buffer);
+        }
+    } else {
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-            const _sg_image_t* att_img = pass->gl.color_atts[i].image;
-            const int mip_level = pass->cmn.color_atts[i].mip_level;
-            const int slice = pass->cmn.color_atts[i].slice;
-            if (att_img) {
-                const GLuint gl_tex = att_img->gl.tex[0];
-                SOKOL_ASSERT(gl_tex);
-                const GLenum gl_att = (GLenum)(GL_COLOR_ATTACHMENT0 + i);
-                switch (att_img->cmn.type) {
-                    case SG_IMAGETYPE_2D:
-                        glFramebufferTexture2D(GL_FRAMEBUFFER, gl_att, GL_TEXTURE_2D, gl_tex, mip_level);
-                        break;
-                    case SG_IMAGETYPE_CUBE:
-                        glFramebufferTexture2D(GL_FRAMEBUFFER, gl_att, _sg_gl_cubeface_target(slice), gl_tex, mip_level);
-                        break;
-                    default:
-                        /* 3D- or array-texture */
-                        glFramebufferTextureLayer(GL_FRAMEBUFFER, gl_att, gl_tex, mip_level, slice);
-                        break;
-                }
+            if (pass->gl.color_atts[i].image) {
+                const GLenum gl_att_type = (GLenum)(GL_COLOR_ATTACHMENT0 + i);
+                _sg_gl_fb_attach_texture(&pass->gl.color_atts[i], &pass->cmn.color_atts[i], gl_att_type);
             }
         }
-    }
-
-    /* attach depth-stencil buffer to framebuffer */
-    if (pass->gl.ds_att.image) {
-        const GLuint gl_render_buffer = pass->gl.ds_att.image->gl.depth_render_buffer;
-        SOKOL_ASSERT(gl_render_buffer);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, gl_render_buffer);
-        if (_sg_is_depth_stencil_format(pass->gl.ds_att.image->cmn.pixel_format)) {
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, gl_render_buffer);
+        if (pass->gl.ds_att.image) {
+            const GLenum gl_att_type = _sg_gl_depth_stencil_attachment_type(&pass->gl.ds_att);
+            _sg_gl_fb_attach_texture(&pass->gl.ds_att, &pass->cmn.ds_att, gl_att_type);
         }
     }
 
-    /* check if framebuffer is complete */
+    // check if framebuffer is complete
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
         _SG_ERROR(GL_FRAMEBUFFER_INCOMPLETE);
         return SG_RESOURCESTATE_FAILED;
     }
 
-    /* setup color attachments for the framebuffer */
+    // setup color attachments for the framebuffer
     GLenum att[SG_MAX_COLOR_ATTACHMENTS] = {
         GL_COLOR_ATTACHMENT0,
         GL_COLOR_ATTACHMENT1,
@@ -7252,7 +7234,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
     };
     glDrawBuffers(pass->cmn.num_color_atts, att);
 
-    /* create MSAA resolve framebuffers if necessary */
+    // create MSAA resolve framebuffers if necessary
     if (is_msaa) {
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
             _sg_gl_attachment_t* gl_att = &pass->gl.color_atts[i];
@@ -7261,34 +7243,20 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
                 SOKOL_ASSERT(0 == gl_att->gl_msaa_resolve_buffer);
                 glGenFramebuffers(1, &gl_att->gl_msaa_resolve_buffer);
                 glBindFramebuffer(GL_FRAMEBUFFER, gl_att->gl_msaa_resolve_buffer);
-                const GLuint gl_tex = gl_att->image->gl.tex[0];
-                SOKOL_ASSERT(gl_tex);
-                switch (gl_att->image->cmn.type) {
-                    case SG_IMAGETYPE_2D:
-                        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                            GL_TEXTURE_2D, gl_tex, cmn_att->mip_level);
-                        break;
-                    case SG_IMAGETYPE_CUBE:
-                        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                            _sg_gl_cubeface_target(cmn_att->slice), gl_tex, cmn_att->mip_level);
-                        break;
-                    default:
-                        glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, gl_tex, cmn_att->mip_level, cmn_att->slice);
-                        break;
-                }
-                /* check if framebuffer is complete */
+                _sg_gl_fb_attach_texture(gl_att, cmn_att, GL_COLOR_ATTACHMENT0);
+                // check if framebuffer is complete
                 if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
                     _SG_ERROR(GL_MSAA_FRAMEBUFFER_INCOMPLETE);
                     return SG_RESOURCESTATE_FAILED;
                 }
-                /* setup color attachments for the framebuffer */
+                // setup color attachments for the framebuffer
                 const GLenum gl_draw_bufs = GL_COLOR_ATTACHMENT0;
                 glDrawBuffers(1, &gl_draw_bufs);
             }
         }
     }
 
-    /* restore original framebuffer binding */
+    // restore original framebuffer binding
     glBindFramebuffer(GL_FRAMEBUFFER, gl_orig_fb);
     _SG_GL_CHECK_ERROR();
     return SG_RESOURCESTATE_VALID;
