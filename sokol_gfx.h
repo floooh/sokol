@@ -5837,7 +5837,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_type(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RGB9E5:
             return GL_UNSIGNED_INT_5_9_9_9_REV;
         case SG_PIXELFORMAT_DEPTH:
-            return GL_UNSIGNED_SHORT;
+            return GL_FLOAT;
         case SG_PIXELFORMAT_DEPTH_STENCIL:
             return GL_UNSIGNED_INT_24_8;
         default:
@@ -5989,7 +5989,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RGBA32UI:   return GL_RGBA32UI;
         case SG_PIXELFORMAT_RGBA32SI:   return GL_RGBA32I;
         case SG_PIXELFORMAT_RGBA32F:    return GL_RGBA32F;
-        case SG_PIXELFORMAT_DEPTH:      return GL_DEPTH_COMPONENT16;
+        case SG_PIXELFORMAT_DEPTH:      return GL_DEPTH_COMPONENT32F;
         case SG_PIXELFORMAT_DEPTH_STENCIL:      return GL_DEPTH24_STENCIL8;
         case SG_PIXELFORMAT_BC1_RGBA:           return GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
         case SG_PIXELFORMAT_BC2_RGBA:           return GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
@@ -11782,7 +11782,7 @@ _SOKOL_PRIVATE WGPUTextureFormat _sg_wgpu_textureformat(sg_pixel_format p) {
         case SG_PIXELFORMAT_RGBA32UI:       return WGPUTextureFormat_RGBA32Uint;
         case SG_PIXELFORMAT_RGBA32SI:       return WGPUTextureFormat_RGBA32Sint;
         case SG_PIXELFORMAT_RGBA32F:        return WGPUTextureFormat_RGBA32Float;
-        case SG_PIXELFORMAT_DEPTH:          return WGPUTextureFormat_Depth24Plus;
+        case SG_PIXELFORMAT_DEPTH:          return WGPUTextureFormat_Depth32Float;
         case SG_PIXELFORMAT_DEPTH_STENCIL:  return WGPUTextureFormat_Depth24PlusStencil8;
         case SG_PIXELFORMAT_BC1_RGBA:       return WGPUTextureFormat_BC1RGBAUnorm;
         case SG_PIXELFORMAT_BC2_RGBA:       return WGPUTextureFormat_BC2RGBAUnorm;
