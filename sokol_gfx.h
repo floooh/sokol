@@ -7191,13 +7191,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
     // attach msaa render buffer or textures
     const bool is_msaa = (0 != att_images[0]->gl.msaa_render_buffer);
     if (is_msaa) {
-        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-            if (pass->gl.color_atts[i].image) {
-                const _sg_image_t* att_img = pass->gl.color_atts[i].image;
-                const GLuint gl_render_buffer = att_img->gl.msaa_render_buffer;
-                SOKOL_ASSERT(gl_render_buffer);
-                glFramebufferRenderbuffer(GL_FRAMEBUFFER, (GLenum)(GL_COLOR_ATTACHMENT0+i), GL_RENDERBUFFER, gl_render_buffer);
-            }
+        for (int i = 0; i < pass->cmn.num_color_atts; i++) {
+            const _sg_image_t* att_img = pass->gl.color_atts[i].image;
+            SOKOL_ASSERT(att_img);
+            const GLuint gl_render_buffer = att_img->gl.msaa_render_buffer;
+            SOKOL_ASSERT(gl_render_buffer);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, (GLenum)(GL_COLOR_ATTACHMENT0+i), GL_RENDERBUFFER, gl_render_buffer);
         }
         if (pass->gl.ds_att.image) {
             const GLenum gl_att = _sg_gl_depth_stencil_attachment_type(&pass->gl.ds_att);
@@ -7207,11 +7206,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
             glFramebufferRenderbuffer(GL_FRAMEBUFFER, gl_att, GL_RENDERBUFFER, gl_render_buffer);
         }
     } else {
-        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-            if (pass->gl.color_atts[i].image) {
-                const GLenum gl_att_type = (GLenum)(GL_COLOR_ATTACHMENT0 + i);
-                _sg_gl_fb_attach_texture(&pass->gl.color_atts[i], &pass->cmn.color_atts[i], gl_att_type);
-            }
+        for (int i = 0; i < pass->cmn.num_color_atts; i++) {
+            const GLenum gl_att_type = (GLenum)(GL_COLOR_ATTACHMENT0 + i);
+            _sg_gl_fb_attach_texture(&pass->gl.color_atts[i], &pass->cmn.color_atts[i], gl_att_type);
         }
         if (pass->gl.ds_att.image) {
             const GLenum gl_att_type = _sg_gl_depth_stencil_attachment_type(&pass->gl.ds_att);
@@ -7226,7 +7223,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
     }
 
     // setup color attachments for the framebuffer
-    GLenum att[SG_MAX_COLOR_ATTACHMENTS] = {
+    const GLenum att[SG_MAX_COLOR_ATTACHMENTS] = {
         GL_COLOR_ATTACHMENT0,
         GL_COLOR_ATTACHMENT1,
         GL_COLOR_ATTACHMENT2,
@@ -7236,23 +7233,22 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
 
     // create MSAA resolve framebuffers if necessary
     if (is_msaa) {
-        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        for (int i = 0; i < pass->cmn.num_color_atts; i++) {
             _sg_gl_attachment_t* gl_att = &pass->gl.color_atts[i];
+            SOKOL_ASSERT(gl_att->image);
             _sg_pass_attachment_t* cmn_att = &pass->cmn.color_atts[i];
-            if (gl_att->image) {
-                SOKOL_ASSERT(0 == gl_att->gl_msaa_resolve_buffer);
-                glGenFramebuffers(1, &gl_att->gl_msaa_resolve_buffer);
-                glBindFramebuffer(GL_FRAMEBUFFER, gl_att->gl_msaa_resolve_buffer);
-                _sg_gl_fb_attach_texture(gl_att, cmn_att, GL_COLOR_ATTACHMENT0);
-                // check if framebuffer is complete
-                if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-                    _SG_ERROR(GL_MSAA_FRAMEBUFFER_INCOMPLETE);
-                    return SG_RESOURCESTATE_FAILED;
-                }
-                // setup color attachments for the framebuffer
-                const GLenum gl_draw_bufs = GL_COLOR_ATTACHMENT0;
-                glDrawBuffers(1, &gl_draw_bufs);
+            SOKOL_ASSERT(0 == gl_att->gl_msaa_resolve_buffer);
+            glGenFramebuffers(1, &gl_att->gl_msaa_resolve_buffer);
+            glBindFramebuffer(GL_FRAMEBUFFER, gl_att->gl_msaa_resolve_buffer);
+            _sg_gl_fb_attach_texture(gl_att, cmn_att, GL_COLOR_ATTACHMENT0);
+            // check if framebuffer is complete
+            if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+                _SG_ERROR(GL_MSAA_FRAMEBUFFER_INCOMPLETE);
+                return SG_RESOURCESTATE_FAILED;
             }
+            // setup color attachments for the framebuffer
+            const GLenum gl_draw_bufs = GL_COLOR_ATTACHMENT0;
+            glDrawBuffers(1, &gl_draw_bufs);
         }
     }
 
@@ -7424,18 +7420,23 @@ _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
             SOKOL_ASSERT(pass->gl.color_atts[0].image);
             const int w = pass->gl.color_atts[0].image->cmn.width;
             const int h = pass->gl.color_atts[0].image->cmn.height;
-            for (int att_index = 0; att_index < SG_MAX_COLOR_ATTACHMENTS; att_index++) {
+            const int num_atts = pass->cmn.num_color_atts;
+            for (int att_index = 0; att_index < num_atts; att_index++) {
                 const _sg_gl_attachment_t* gl_att = &pass->gl.color_atts[att_index];
-                if (gl_att->image) {
-                    SOKOL_ASSERT(gl_att->gl_msaa_resolve_buffer);
-                    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl_att->gl_msaa_resolve_buffer);
-                    glReadBuffer((GLenum)(GL_COLOR_ATTACHMENT0 + att_index));
-                    glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-                }
-                else {
-                    break;
-                }
+                SOKOL_ASSERT(gl_att->gl_msaa_resolve_buffer);
+                glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl_att->gl_msaa_resolve_buffer);
+                glReadBuffer((GLenum)(GL_COLOR_ATTACHMENT0 + att_index));
+                glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
             }
+            #if defined(SOKOL_GLES3)
+                const GLenum color_att[SG_MAX_COLOR_ATTACHMENTS] = {
+                    GL_COLOR_ATTACHMENT0,
+                    GL_COLOR_ATTACHMENT1,
+                    GL_COLOR_ATTACHMENT2,
+                    GL_COLOR_ATTACHMENT3
+                };
+                glInvalidateFramebuffer(GL_READ_FRAMEBUFFER, num_atts, color_att);
+            #endif
         }
     }
     _sg.gl.cur_pass = 0;
