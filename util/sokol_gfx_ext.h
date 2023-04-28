@@ -161,21 +161,18 @@ static void _sg_d3d11_query_image_pixels(_sg_image_t* img, void* pixels) {
 
     // create staging texture
     ID3D11Texture2D* staging_tex = NULL;
-    D3D11_TEXTURE2D_DESC staging_desc = {
-        .Width = (UINT)img->cmn.width,
-        .Height = (UINT)img->cmn.height,
-        .MipLevels = 1,
-        .ArraySize = 1,
-        .Format = img->d3d11.format,
-        .SampleDesc = {
-            .Count = 1,
-            .Quality = 0,
-        },
-        .Usage = D3D11_USAGE_STAGING,
-        .BindFlags = 0,
-        .CPUAccessFlags = D3D11_CPU_ACCESS_READ,
-        .MiscFlags = 0
-    };
+    D3D11_TEXTURE2D_DESC staging_desc = {};
+    staging_desc.Width = (UINT)img->cmn.width;
+    staging_desc.Height = (UINT)img->cmn.height;
+    staging_desc.MipLevels = 1;
+    staging_desc.ArraySize = 1;
+    staging_desc.Format = img->d3d11.format;
+    staging_desc.SampleDesc.Count = 1;
+    staging_desc.SampleDesc.Quality = 0;
+    staging_desc.Usage = D3D11_USAGE_STAGING;
+    staging_desc.BindFlags = 0;
+    staging_desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    staging_desc.MiscFlags = 0;
     hr = _sg_d3d11_CreateTexture2D(_sg.d3d11.dev, &staging_desc, NULL, &staging_tex);
     SOKOL_ASSERT(SUCCEEDED(hr));
 
@@ -187,7 +184,8 @@ static void _sg_d3d11_query_image_pixels(_sg_image_t* img, void* pixels) {
         0, NULL);
 
     // map the staging texture's data to CPU-accessible memory
-    D3D11_MAPPED_SUBRESOURCE msr = {.pData = NULL};
+    D3D11_MAPPED_SUBRESOURCE msr = {};
+    msr.pData = NULL;
     hr = _sg_d3d11_Map(_sg.d3d11.ctx, (ID3D11Resource*)staging_tex, 0, D3D11_MAP_READ, 0, &msr);
     SOKOL_ASSERT(SUCCEEDED(hr));
 
@@ -238,14 +236,13 @@ static void _sg_d3d11_query_pixels(int x, int y, int w, int h, bool origin_top_l
 
     // copy the desired portion of the back buffer to the staging texture
     y = (origin_top_left ? y : (_sg.d3d11.cur_height - (y + h)));
-    D3D11_BOX src_box = {
-        .left = (UINT)x,
-        .top = (UINT)y,
-        .front = 0,
-        .right = (UINT)(x + w),
-        .bottom = (UINT)(y + w),
-        .back = 1,
-    };
+    D3D11_BOX src_box = {};
+    src_box.left = (UINT)x;
+    src_box.top = (UINT)y;
+    src_box.front = 0;
+    src_box.right = (UINT)(x + w);
+    src_box.bottom = (UINT)(y + w);
+    src_box.back = 1;
     _sgext_d3d11_CopySubresourceRegion(_sg.d3d11.ctx,
         (ID3D11Resource*)staging_tex,
         0, 0, 0, 0,
@@ -253,7 +250,8 @@ static void _sg_d3d11_query_pixels(int x, int y, int w, int h, bool origin_top_l
         0, &src_box);
 
     // map the staging texture's data to CPU-accessible memory
-    D3D11_MAPPED_SUBRESOURCE msr = {.pData = NULL};
+    D3D11_MAPPED_SUBRESOURCE msr = {};
+    msr.pData = NULL;
     hr = _sg_d3d11_Map(_sg.d3d11.ctx, (ID3D11Resource*)staging_tex, 0, D3D11_MAP_READ, 0, &msr);
     SOKOL_ASSERT(SUCCEEDED(hr));
 
