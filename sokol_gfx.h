@@ -3309,13 +3309,12 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         typedef void  GLvoid;
         typedef int64_t  GLint64;
         typedef float  GLfloat;
-        typedef struct __GLsync * GLsync;
         typedef int  GLint;
         #define GL_INT_2_10_10_10_REV 0x8D9F
         #define GL_R32F 0x822E
         #define GL_PROGRAM_POINT_SIZE 0x8642
-        #define GL_STENCIL_ATTACHMENT 0x8D20
         #define GL_DEPTH_ATTACHMENT 0x8D00
+        #define GL_DEPTH_STENCIL_ATTACHMENT 0x821A
         #define GL_COLOR_ATTACHMENT2 0x8CE2
         #define GL_COLOR_ATTACHMENT0 0x8CE0
         #define GL_R16F 0x822D
@@ -3424,7 +3423,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_LEQUAL 0x0203
         #define GL_STENCIL_TEST 0x0B90
         #define GL_DITHER 0x0BD0
-        #define GL_DEPTH_COMPONENT16 0x81A5
+        #define GL_DEPTH_COMPONENT32F 0x8CAC
         #define GL_EQUAL 0x0202
         #define GL_FRAMEBUFFER 0x8D40
         #define GL_RGB5 0x8050
