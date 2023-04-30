@@ -16,11 +16,11 @@
   Changes in sokol_gfx.h:
   - (breaking change) the following `sg_feature` members have been removed (because those features
     are no longer optional, but guaranteed across all backends):
-      - `sg_feature.instancing`
-      - `sg_feature.multiple_render_targets`
-      - `sg_feature.msaa_render_targets`
-      - `imagetype_3d`
-      - `imagetype_array`
+      - `sg_features.instancing`
+      - `sg_features.multiple_render_targets`
+      - `sg_features.msaa_render_targets`
+      - `sg_features.imagetype_3d`
+      - `sg_features.imagetype_array`
   - (breaking change) the struct `sg_gl_context_desc` and its embedded instance `sg_desc.gl` have been removed
   - `sg_image` objects with `SG_PIXELFORMAT_DEPTH` or `SG_PIXELFORMAT_DEPTH_STENCIL` with
     a `sample_count == 1` are now regular textures in the GL backend (this is not true
