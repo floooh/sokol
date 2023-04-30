@@ -270,7 +270,9 @@ jobs:
             sudo apt-get update
             sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
       - name: build
-        run: cargo build --all-targets
+        run: |
+            cargo --version
+            cargo build --all-targets
 
   # only deploy the bindings for commits on the main branch
   deploy-zig:
