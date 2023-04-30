@@ -391,26 +391,6 @@
             }
         },
         {
-            "name": "emsc_webgl1_debug",
-            "generator": "Ninja",
-            "binaryDir": "build/emsc_webgl1_debug",
-            "toolchainFile": "build/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
-            "cacheVariables": {
-                "SOKOL_BACKEND": "SOKOL_GLES2",
-                "CMAKE_BUILD_TYPE": "Debug"
-            }
-        },
-        {
-            "name": "emsc_webgl1_release",
-            "generator": "Ninja",
-            "binaryDir": "build/emsc_webgl1_release",
-            "toolchainFile": "build/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
-            "cacheVariables": {
-                "SOKOL_BACKEND": "SOKOL_GLES2",
-                "CMAKE_BUILD_TYPE": "Release"
-            }
-        },
-        {
             "name": "android_debug",
             "generator": "Ninja",
             "binaryDir": "build/android_debug",
@@ -663,14 +643,6 @@
         {
             "name": "emsc_webgl2_release",
             "configurePreset": "emsc_webgl2_release"
-        },
-        {
-            "name": "emsc_webgl1_debug",
-            "configurePreset": "emsc_webgl1_debug"
-        },
-        {
-            "name": "emsc_webgl1_release",
-            "configurePreset": "emsc_webgl1_release"
         },
         {
             "name": "android_debug",

@@ -1,5 +1,45 @@
 ## Updates
 
+- **29-Apr-2023**: GLES2/WebGL1 support has been removed from the sokol headers (now that
+  all browsers support WebGL2, and WebGPU is around the corner I feel like it's finally
+  time to ditch GLES2.
+
+  This is a breaking API change in sokol_gfx.h and sokol_app.h.
+
+  Common changes across all headers:
+  - (breaking change) the `SOKOL_GLES2` config macro is no longer accepted and will cause a compile error
+    (use `SOKOL_GLES3` instead)
+  - (breaking change) on Emscripten use the linker option `-s USE_WEBGL2=1`
+  - any embedded GLES shaders have been updated from glsl100 to glsl300es (but glsl100 shaders
+    still work fine with the GLES3 backend)
+
+  Changes in sokol_gfx.h:
+  - (breaking change) the following `sg_feature` members have been removed (because those features
+    are no longer optional, but guaranteed across all backends):
+      - `sg_feature.instancing`
+      - `sg_feature.multiple_render_targets`
+      - `sg_feature.msaa_render_targets`
+      - `imagetype_3d`
+      - `imagetype_array`
+  - (breaking change) the struct `sg_gl_context_desc` and its embedded instance `sg_desc.gl` have been removed
+  - `sg_image` objects with `SG_PIXELFORMAT_DEPTH` or `SG_PIXELFORMAT_DEPTH_STENCIL` with
+    a `sample_count == 1` are now regular textures in the GL backend (this is not true
+    for MSAA depth textures unfortunately, those are still GL render buffer objects)
+  - in the GL backend, `SG_PIXELFORMAT_DEPTH` now resolves to `GL_DEPTH_COMPONENT32F` (same
+    as in the other backends), previously it was `GL_DEPTH_COMPONENT16`
+  - in `sg_begin_pass()`, the GL backend now only uses the new `glClearBuffer*` functions, the
+    old GLES2 clear functions have been removed
+  - in `sg_end_pass()`, the GLES3 backend now invalidates MSAA render buffers after they have
+    been resolved (via `glInvalidateFramebuffer`) - more control over this will come soon-ish
+    when this ticket is implemented: https://github.com/floooh/sokol/issues/816
+  - the instanced rendering functions are no longer wrapped in C macros in the GL backend
+
+  Changes in sokol_app.h:
+  - (breaking) the config item `sapp_desc.gl_force_gles2` has been removed
+  - (breaking) the function `sapp_gles2()` has been removed
+  - any fallback logic from GLES3 to GLES2 has been removed (in the Emscripten, Android and
+    iOS backends)
+
 - **20-Feb-2023**: sokol_gfx.h has a new set of functions to get a 'best-effort'
   desc struct with the creation parameters of a specific resource object:
 

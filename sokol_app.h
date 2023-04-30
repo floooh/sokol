@@ -19,7 +19,6 @@
     project):
 
         #define SOKOL_GLCORE33
-        #define SOKOL_GLES2
         #define SOKOL_GLES3
         #define SOKOL_D3D11
         #define SOKOL_METAL
@@ -88,14 +87,13 @@
     - makes the rendered frame visible
     - provides keyboard-, mouse- and low-level touch-events
     - platforms: MacOS, iOS, HTML5, Win32, Linux/RaspberryPi, Android
-    - 3D-APIs: Metal, D3D11, GL3.2, GLES2, GLES3, WebGL, WebGL2
+    - 3D-APIs: Metal, D3D11, GL3.2, GLES3, WebGL, WebGL2
 
     FEATURE/PLATFORM MATRIX
     =======================
                         | Windows | macOS | Linux |  iOS  | Android |  HTML5
     --------------------+---------+-------+-------+-------+---------+--------
     gl 3.x              | YES     | YES   | YES   | ---   | ---     |  ---
-    gles2/webgl         | ---     | ---   | YES(2)| YES   | YES     |  YES
     gles3/webgl2        | ---     | ---   | YES(2)| YES   | YES     |  YES
     metal               | ---     | YES   | ---   | YES   | ---     |  ---
     d3d11               | YES     | ---   | ---   | ---   | ---     |  ---
@@ -266,11 +264,6 @@
 
         int sapp_sample_count(void)
             Return the MSAA sample count of the default framebuffer.
-
-        bool sapp_gles2(void)
-            Returns true if a GLES2 or WebGL context has been created. This
-            is useful when a GLES3/WebGL2 context was requested but is not
-            available so that sokol_app.h had to fallback to GLES2/WebGL.
 
         const void* sapp_metal_get_device(void)
         const void* sapp_metal_get_renderpass_descriptor(void)
@@ -1641,7 +1634,6 @@ typedef struct sapp_desc {
     sapp_logger logger;                 // logging callback override (default: NO LOGGING!)
 
     /* backend-specific options */
-    bool gl_force_gles2;                // if true, setup GLES2/WebGL even if GLES3/WebGL2 is available
     int gl_major_version;               // override GL major and minor version (the default GL version is 3.2)
     int gl_minor_version;
     bool win32_console_utf8;            // if true, set the output console codepage to UTF-8
@@ -1780,9 +1772,6 @@ SOKOL_APP_API_DECL const void* sapp_egl_get_display(void);
 /* EGL: get EGLContext object */
 SOKOL_APP_API_DECL const void* sapp_egl_get_context(void);
 
-/* GL: return true when GLES2 fallback is active (to detect fallback from GLES3) */
-SOKOL_APP_API_DECL bool sapp_gles2(void);
-
 /* HTML5: enable or disable the hardwired "Leave Site?" dialog box */
 SOKOL_APP_API_DECL void sapp_html5_ask_leave_site(bool ask);
 /* HTML5: get byte size of a dropped file */
@@ -1889,8 +1878,8 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(__EMSCRIPTEN__)
     /* emscripten (asm.js or wasm) */
     #define _SAPP_EMSCRIPTEN (1)
-    #if !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2) && !defined(SOKOL_WGPU)
-    #error("sokol_app.h: unknown 3D API selected for emscripten, must be SOKOL_GLES3, SOKOL_GLES2 or SOKOL_WGPU")
+    #if !defined(SOKOL_GLES3) && !defined(SOKOL_WGPU)
+    #error("sokol_app.h: unknown 3D API selected for emscripten, must be SOKOL_GLES3 or SOKOL_WGPU")
     #endif
 #elif defined(_WIN32)
     /* Windows (D3D11 or GL) */
@@ -1901,8 +1890,8 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(__ANDROID__)
     /* Android */
     #define _SAPP_ANDROID (1)
-    #if !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2)
-    #error("sokol_app.h: unknown 3D API selected for Android, must be SOKOL_GLES3 or SOKOL_GLES2")
+    #if !defined(SOKOL_GLES3)
+    #error("sokol_app.h: unknown 3D API selected for Android, must be SOKOL_GLES3")
     #endif
     #if defined(SOKOL_NO_ENTRY)
     #error("sokol_app.h: SOKOL_NO_ENTRY is not supported on Android")
@@ -1914,8 +1903,8 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #if !defined(SOKOL_FORCE_EGL)
             #define _SAPP_GLX (1)
         #endif
-    #elif !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2)
-        #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE33, SOKOL_GLES3 or SOKOL_GLES2")
+    #elif !defined(SOKOL_GLES3)
+        #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE33, SOKOL_GLES3")
     #endif
 #else
 #error "sokol_app.h: Unknown platform"
@@ -2746,7 +2735,6 @@ typedef struct {
     sapp_desc desc;
     bool valid;
     bool fullscreen;
-    bool gles2_fallback;
     bool first_frame;
     bool init_called;
     bool cleanup_called;
@@ -4430,17 +4418,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         _sapp.ios.view_ctrl.view = _sapp.ios.view;
         _sapp.ios.window.rootViewController = _sapp.ios.view_ctrl;
     #else
-        if (_sapp.desc.gl_force_gles2) {
-            _sapp.ios.eagl_ctx = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES2];
-            _sapp.gles2_fallback = true;
-        }
-        else {
-            _sapp.ios.eagl_ctx = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3];
-            if (_sapp.ios.eagl_ctx == nil) {
-                _sapp.ios.eagl_ctx = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES2];
-                _sapp.gles2_fallback = true;
-            }
-        }
+        _sapp.ios.eagl_ctx = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3];
         _sapp.ios.view = [[_sapp_ios_view alloc] initWithFrame:screen_rect];
         _sapp.ios.view.drawableColorFormat = GLKViewDrawableColorFormatRGBA8888;
         _sapp.ios.view.drawableDepthFormat = GLKViewDrawableDepthFormat24;
@@ -5542,7 +5520,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_blur_cb(int emsc_type, const EmscriptenFocusEv
     return true;
 }
 
-#if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+#if defined(SOKOL_GLES3)
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_webgl_context_cb(int emsc_type, const void* reserved, void* user_data) {
     _SOKOL_UNUSED(reserved);
     _SOKOL_UNUSED(user_data);
@@ -5569,21 +5547,9 @@ _SOKOL_PRIVATE void _sapp_emsc_webgl_init(void) {
     attrs.premultipliedAlpha = _sapp.desc.html5_premultiplied_alpha;
     attrs.preserveDrawingBuffer = _sapp.desc.html5_preserve_drawing_buffer;
     attrs.enableExtensionsByDefault = true;
-    #if defined(SOKOL_GLES3)
-        if (_sapp.desc.gl_force_gles2) {
-            attrs.majorVersion = 1;
-            _sapp.gles2_fallback = true;
-        }
-        else {
-            attrs.majorVersion = 2;
-        }
-    #endif
+    attrs.majorVersion = 2;
     EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx = emscripten_webgl_create_context(_sapp.html5_canvas_selector, &attrs);
-    if (!ctx) {
-        attrs.majorVersion = 1;
-        ctx = emscripten_webgl_create_context(_sapp.html5_canvas_selector, &attrs);
-        _sapp.gles2_fallback = true;
-    }
+    // FIXME: error message?
     emscripten_webgl_make_context_current(ctx);
 
     /* some WebGL extension are not enabled automatically by emscripten */
@@ -5726,7 +5692,7 @@ _SOKOL_PRIVATE void _sapp_emsc_register_eventhandlers(void) {
     if (_sapp.drop.enabled) {
         sapp_js_add_dragndrop_listeners(&_sapp.html5_canvas_selector[1]);
     }
-    #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+    #if defined(SOKOL_GLES3)
         emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_webgl_context_cb);
         emscripten_set_webglcontextrestored_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_webgl_context_cb);
     #endif
@@ -5757,7 +5723,7 @@ _SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers() {
     if (_sapp.drop.enabled) {
         sapp_js_remove_dragndrop_listeners(&_sapp.html5_canvas_selector[1]);
     }
-    #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+    #if defined(SOKOL_GLES3)
         emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_selector, 0, true, 0);
         emscripten_set_webglcontextrestored_callback(_sapp.html5_canvas_selector, 0, true, 0);
     #endif
@@ -5830,7 +5796,7 @@ _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     _sapp.framebuffer_width = (int)roundf(w * _sapp.dpi_scale);
     _sapp.framebuffer_height = (int)roundf(h * _sapp.dpi_scale);
     emscripten_set_canvas_element_size(_sapp.html5_canvas_selector, _sapp.framebuffer_width, _sapp.framebuffer_height);
-    #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+    #if defined(SOKOL_GLES3)
         _sapp_emsc_webgl_init();
     #elif defined(SOKOL_WGPU)
         sapp_js_wgpu_init();
@@ -7853,16 +7819,10 @@ _SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
     if (eglInitialize(display, NULL, NULL) == EGL_FALSE) {
         return false;
     }
-    _sapp.gles2_fallback = _sapp.desc.gl_force_gles2;
-
     EGLint alpha_size = _sapp.desc.alpha ? 8 : 0;
     const EGLint cfg_attributes[] = {
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-        #if defined(SOKOL_GLES3)
-            EGL_RENDERABLE_TYPE, _sapp.desc.gl_force_gles2?EGL_OPENGL_ES2_BIT:EGL_OPENGL_ES3_BIT,
-        #else
-            EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-        #endif
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
         EGL_RED_SIZE, 8,
         EGL_GREEN_SIZE, 8,
         EGL_BLUE_SIZE, 8,
@@ -7899,11 +7859,7 @@ _SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
     }
 
     EGLint ctx_attributes[] = {
-        #if defined(SOKOL_GLES3)
-            EGL_CONTEXT_CLIENT_VERSION, _sapp.desc.gl_force_gles2 ? 2 : 3,
-        #else
-            EGL_CONTEXT_CLIENT_VERSION, 2,
-        #endif
+        EGL_CONTEXT_CLIENT_VERSION, 3,
         EGL_NONE,
     };
     EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT, ctx_attributes);
@@ -10758,9 +10714,7 @@ _SOKOL_PRIVATE void _sapp_egl_init(void) {
         #if defined(SOKOL_GLCORE33)
             EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
         #elif defined(SOKOL_GLES3)
-            EGL_RENDERABLE_TYPE, _sapp.desc.gl_force_gles2 ? EGL_OPENGL_ES2_BIT : EGL_OPENGL_ES3_BIT,
-        #else
-            EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
         #endif
         EGL_RED_SIZE, 8,
         EGL_GREEN_SIZE, 8,
@@ -10825,9 +10779,7 @@ _SOKOL_PRIVATE void _sapp_egl_init(void) {
             EGL_CONTEXT_MINOR_VERSION, _sapp.desc.gl_minor_version,
             EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
         #elif defined(SOKOL_GLES3)
-            EGL_CONTEXT_CLIENT_VERSION, _sapp.desc.gl_force_gles2 ? 2 : 3,
-        #else
-            EGL_CONTEXT_CLIENT_VERSION, 2,
+            EGL_CONTEXT_CLIENT_VERSION, 3,
         #endif
         EGL_NONE,
     };
@@ -10842,10 +10794,6 @@ _SOKOL_PRIVATE void _sapp_egl_init(void) {
     }
 
     eglSwapInterval(_sapp.egl.display, _sapp.swap_interval);
-
-#if defined(SOKOL_GLES3)
-    _sapp.gles2_fallback = _sapp.desc.gl_force_gles2;
-#endif
 }
 
 _SOKOL_PRIVATE void _sapp_egl_destroy(void) {
@@ -11089,10 +11037,6 @@ SOKOL_APP_IMPL const void* sapp_egl_get_context(void) {
     #else
         return 0;
     #endif
-}
-
-SOKOL_API_IMPL bool sapp_gles2(void) {
-    return _sapp.gles2_fallback;
 }
 
 SOKOL_API_IMPL void sapp_show_keyboard(bool show) {

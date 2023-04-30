@@ -4,8 +4,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**20-Feb-2023** a new set of functions in sokol_gfx.h
-to get a pre-filled 'desc struct' for a resource)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**29-Apr-2023** breaking change: GLES2/WebGL1 support has been removed!)
 
 [![Build](/../../actions/workflows/main.yml/badge.svg)](/../../actions/workflows/main.yml) [![Bindings](/../../actions/workflows/gen_bindings.yml/badge.svg)](/../../actions/workflows/gen_bindings.yml) [![build](https://github.com/floooh/sokol-zig/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-zig/actions/workflows/main.yml) [![build](https://github.com/floooh/sokol-nim/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-nim/actions/workflows/main.yml) [![Odin](https://github.com/floooh/sokol-odin/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-odin/actions/workflows/main.yml)[![Rust](https://github.com/floooh/sokol-rust/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-rust/actions/workflows/main.yml)
 
@@ -87,7 +86,7 @@ A blog post with more background info: [A Tour of sokol_gfx.h](http://floooh.git
 
 # sokol_gfx.h:
 
-- simple, modern wrapper around GLES2/WebGL, GLES3/WebGL2, GL3.3, D3D11 and Metal
+- simple, modern wrapper around GLES3/WebGL2, GL3.3, D3D11 and Metal
 - buffers, images, shaders, pipeline-state-objects and render-passes
 - does *not* handle window creation or 3D API context initialization
 - does *not* provide shader dialect cross-translation (**BUT** there's now an 'official' shader-cross-compiler solution which
@@ -200,7 +199,7 @@ A minimal cross-platform application-wrapper library:
 - 3D context initialization
 - event-based keyboard, mouse and touch input
 - supported platforms: Win32, MacOS, Linux (X11), iOS, WASM, Android, UWP
-- supported 3D-APIs: GL3.3 (GLX/WGL), Metal, D3D11, GLES2/WebGL, GLES3/WebGL2
+- supported 3D-APIs: GL3.3 (GLX/WGL), Metal, D3D11, GLES3/WebGL2
 
 A simple clear-loop sample using sokol_app.h and sokol_gfx.h (does not include
 separate sokol.c/.m implementation file which is necessary

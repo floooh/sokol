@@ -1043,7 +1043,6 @@ _SOKOL_PRIVATE void _sg_imgui_draw_resource_slot(const sg_slot_info* slot) {
 _SOKOL_PRIVATE const char* _sg_imgui_backend_string(sg_backend b) {
     switch (b) {
         case SG_BACKEND_GLCORE33:           return "SG_BACKEND_GLCORE33";
-        case SG_BACKEND_GLES2:              return "SG_BACKEND_GLES2";
         case SG_BACKEND_GLES3:              return "SG_BACKEND_GLES3";
         case SG_BACKEND_D3D11:              return "SG_BACKEND_D3D11";
         case SG_BACKEND_METAL_IOS:          return "SG_BACKEND_METAL_IOS";
@@ -3890,12 +3889,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_caps_panel(void) {
     igText("Backend: %s\n\n", _sg_imgui_backend_string(sg_query_backend()));
     sg_features f = sg_query_features();
     igText("Features:");
-    igText("    instancing: %s", _sg_imgui_bool_string(f.instancing));
     igText("    origin_top_left: %s", _sg_imgui_bool_string(f.origin_top_left));
-    igText("    multiple_render_targets: %s", _sg_imgui_bool_string(f.multiple_render_targets));
-    igText("    msaa_render_targets: %s", _sg_imgui_bool_string(f.msaa_render_targets));
-    igText("    imagetype_3d: %s", _sg_imgui_bool_string(f.imagetype_3d));
-    igText("    imagetype_array: %s", _sg_imgui_bool_string(f.imagetype_array));
     igText("    image_clamp_to_border: %s", _sg_imgui_bool_string(f.image_clamp_to_border));
     igText("    mrt_independent_blend_state: %s", _sg_imgui_bool_string(f.mrt_independent_blend_state));
     igText("    mrt_independent_write_mask: %s", _sg_imgui_bool_string(f.mrt_independent_write_mask));

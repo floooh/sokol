@@ -118,7 +118,6 @@ SOKOL_API_IMPL sg_context_desc sapp_sgcontext(void) {
     desc.color_format = (sg_pixel_format) sapp_color_format();
     desc.depth_format = (sg_pixel_format) sapp_depth_format();
     desc.sample_count = sapp_sample_count();
-    desc.gl.force_gles2 = sapp_gles2();
     desc.metal.device = sapp_metal_get_device();
     desc.metal.renderpass_descriptor_cb = sapp_metal_get_renderpass_descriptor;
     desc.metal.drawable_cb = sapp_metal_get_drawable;
