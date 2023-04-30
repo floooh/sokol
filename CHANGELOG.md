@@ -14,7 +14,7 @@
     still work fine with the GLES3 backend)
 
   Changes in sokol_gfx.h:
-  - (breaking change) the following `sg_feature` members have been removed (because those features
+  - (breaking change) the following `sg_features` members have been removed (because those features
     are no longer optional, but guaranteed across all backends):
       - `sg_features.instancing`
       - `sg_features.multiple_render_targets`
