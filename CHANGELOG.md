@@ -1,8 +1,8 @@
 ## Updates
 
 - **29-Apr-2023**: GLES2/WebGL1 support has been removed from the sokol headers (now that
-  all browsers support WebGL2, and WebGPU is around the corner I feel like was finally
-  justified to ditch GLES2).
+  all browsers support WebGL2, and WebGPU is around the corner I feel like it's finally
+  time to ditch GLES2.
 
   This is a breaking API change in sokol_gfx.h and sokol_app.h.
 
