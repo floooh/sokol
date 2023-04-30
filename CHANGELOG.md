@@ -1,13 +1,13 @@
 ## Updates
 
-- **29-Apr-2023**: GLES2/WebGL1 support has been removed from the sokol headers (now that
+- **30-Apr-2023**: GLES2/WebGL1 support has been removed from the sokol headers (now that
   all browsers support WebGL2, and WebGPU is around the corner I feel like it's finally
   time to ditch GLES2.
 
   This is a breaking API change in sokol_gfx.h and sokol_app.h.
 
   Common changes across all headers:
-  - (breaking change) the `SOKOL_GLES2` config macro is no longer accepted and will cause a compile error
+  - (breaking change) the `SOKOL_GLES2` config define is no longer accepted and will cause a compile error
     (use `SOKOL_GLES3` instead)
   - (breaking change) on Emscripten use the linker option `-s USE_WEBGL2=1`
   - any embedded GLES shaders have been updated from glsl100 to glsl300es (but glsl100 shaders
