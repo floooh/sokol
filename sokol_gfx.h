@@ -1860,64 +1860,76 @@ typedef enum sg_color_mask {
 } sg_color_mask;
 
 /*
-    sg_action
+    sg_load_action
 
-    Defines what action should be performed at the start of a render pass:
+    Defines the load action that should be performed at the start of a render pass:
 
-    SG_ACTION_CLEAR:    clear the render target image
-    SG_ACTION_LOAD:     load the previous content of the render target image
-    SG_ACTION_DONTCARE: leave the render target image content undefined
+    SG_LOADACTION_CLEAR:        clear the render target
+    SG_LOADACTION_LOAD:         load the previous content of the render target
+    SG_LOADACTION_DONTCARE:     leave the render target in an undefined state
 
     This is used in the sg_pass_action structure.
 
-    The default action for all pass attachments is SG_ACTION_CLEAR, with the
-    clear color rgba = {0.5f, 0.5f, 0.5f, 1.0f], depth=1.0 and stencil=0.
+    The default load action for all pass attachments is SG_LOADACTION_CLEAR,
+    with the values rgba = { 0.5f, 0.5f, 0.5f, 1.0f }, depth=1.0f and stencil=0.
 
     If you want to override the default behaviour, it is important to not
     only set the clear color, but the 'action' field as well (as long as this
-    is in its _SG_ACTION_DEFAULT, the value fields will be ignored).
+    is _SG_LOADACTION_DEFAULT, the value fields will be ignored).
 */
-typedef enum sg_action {
-    _SG_ACTION_DEFAULT,
-    SG_ACTION_CLEAR,
-    SG_ACTION_LOAD,
-    SG_ACTION_DONTCARE,
-    _SG_ACTION_NUM,
-    _SG_ACTION_FORCE_U32 = 0x7FFFFFFF
-} sg_action;
+typedef enum sg_load_action {
+    _SG_LOADACTION_DEFAULT,
+    SG_LOADACTION_CLEAR,
+    SG_LOADACTION_LOAD,
+    SG_LOADACTION_DONTCARE,
+    _SG_LOADACTION_FORCE_U32 = 0x7FFFFFFF
+} sg_load_action;
+
+/*
+    sg_store_action
+
+    Defines the store action that be performed at the end of a render pass:
+
+    SG_STOREACTION_STORE:       the GPU stores the rendered contents to the render target texture
+    SG_STOREACTION_DONTCARE:    the GPU is free to discard the rendered contents
+
+    Note that the store action only applies to the actual rendering surface, it doesn't
+    control an MSAA resolve operation. MSAA resolve automatically happens when a resolve
+    target has been defined in the color attachment item of an sg_pass_desc.
+*/
+typedef enum sg_store_action {
+    _SG_STOREACTION_DEFAULT,
+    SG_STOREACTION_STORE,
+    SG_STOREACTION_DONTCARE,
+    _SG_STOREACTION_FORCE_U32 = 0x7FFFFFFF
+} sg_store_action;
+
 
 /*
     sg_pass_action
 
     The sg_pass_action struct defines the actions to be performed
-    at the start of a rendering pass in the functions sg_begin_pass()
-    and sg_begin_default_pass().
+    at the start of and end of a render pass.
 
     A separate action and clear values can be defined for each
     color attachment, and for the depth-stencil attachment.
-
-    The default clear values are defined by the macros:
-
-    - SG_DEFAULT_CLEAR_RED:     0.5f
-    - SG_DEFAULT_CLEAR_GREEN:   0.5f
-    - SG_DEFAULT_CLEAR_BLUE:    0.5f
-    - SG_DEFAULT_CLEAR_ALPHA:   1.0f
-    - SG_DEFAULT_CLEAR_DEPTH:   1.0f
-    - SG_DEFAULT_CLEAR_STENCIL: 0
 */
 typedef struct sg_color_attachment_action {
-    sg_action action;
-    sg_color value;
+    sg_load_action load_action;         // default: SG_LOADACTION_CLEAR
+    sg_store_action store_action;       // default: SG_STOREACTION_STORE
+    sg_color clear_value;               // default: { 0.5f, 0.5f, 0.5f, 1.0f }
 } sg_color_attachment_action;
 
 typedef struct sg_depth_attachment_action {
-    sg_action action;
-    float value;
+    sg_load_action load_action;         // default: SG_LOADACTION_CLEAR
+    sg_store_action store_action;       // default: SG_STOREACTION_DONTCARE
+    float clear_value;                  // default: 1.0
 } sg_depth_attachment_action;
 
 typedef struct sg_stencil_attachment_action {
-    sg_action action;
-    uint8_t value;
+    sg_load_action load_action;         // default: SG_LOADACTION_CLEAR
+    sg_store_action store_action;       // default: SG_STOREACTION_DONTCARE
+    uint8_t clear_value;                // default: 0
 } sg_stencil_attachment_action;
 
 typedef struct sg_pass_action {
@@ -2053,7 +2065,7 @@ typedef struct sg_image_data {
     The default configuration is:
 
     .type:              SG_IMAGETYPE_2D
-    .render_target:     false
+    .render_attachment: false
     .width              0 (must be set to >0)
     .height             0 (must be set to >0)
     .num_slices         1 (3D textures: depth; array textures: number of layers)
@@ -2112,7 +2124,7 @@ typedef struct sg_image_data {
 typedef struct sg_image_desc {
     uint32_t _start_canary;
     sg_image_type type;
-    bool render_target;
+    bool render_attachment;
     int width;
     int height;
     int num_slices;
@@ -2386,24 +2398,32 @@ typedef struct sg_pipeline_desc {
     if the image is a cubemap, array-texture or 3D-texture, the
     face-index, array-layer or depth-slice.
 
+    Additionally, color attachments may have an MSAA resolve target image
+    which is used to store the result of the MSAA resolve operation
+    at the end of a render pass.
+
     Pass images must fulfill the following requirements:
 
     All images must have:
-    - been created as render target (sg_image_desc.render_target = true)
+    - been created as render attachment (sg_image_desc.render_attachment = true)
     - the same size
     - the same sample count
+    - when the color attachment image has a sample_count > 1, the
+      optional resolve attachment must have the same size and
+      pixel format
 
-    In addition, all color-attachment images must have the same pixel format.
+    NOTE that MSAA depth-stencil attachments cannot be msaa-resolved!
 */
 typedef struct sg_pass_attachment_desc {
     sg_image image;
     int mip_level;
-    int slice;      /* cube texture: face; array texture: layer; 3D texture: slice */
+    int slice;      // cube texture: face; array texture: layer; 3D texture: slice
 } sg_pass_attachment_desc;
 
 typedef struct sg_pass_desc {
     uint32_t _start_canary;
     sg_pass_attachment_desc color_attachments[SG_MAX_COLOR_ATTACHMENTS];
+    sg_pass_attachment_desc resolve_attachments[SG_MAX_COLOR_ATTACHMENTS];
     sg_pass_attachment_desc depth_stencil_attachment;
     const char* label;
     uint32_t _end_canary;
@@ -3699,7 +3719,7 @@ typedef struct {
     int num_slots;
     int active_slot;
     sg_image_type type;
-    bool render_target;
+    bool render_attachment;
     int width;
     int height;
     int num_slices;
@@ -3723,7 +3743,7 @@ _SOKOL_PRIVATE void _sg_image_common_init(_sg_image_common_t* cmn, const sg_imag
     cmn->num_slots = (desc->usage == SG_USAGE_IMMUTABLE) ? 1 : SG_NUM_INFLIGHT_FRAMES;
     cmn->active_slot = 0;
     cmn->type = desc->type;
-    cmn->render_target = desc->render_target;
+    cmn->render_attachment = desc->render_attachment;
     cmn->width = desc->width;
     cmn->height = desc->height;
     cmn->num_slices = desc->num_slices;
@@ -6718,7 +6738,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
 
     // if this is a MSAA render target, need to create a separate render buffer
     const bool msaa = (img->cmn.sample_count > 1);
-    if (img->cmn.render_target && msaa) {
+    if (img->cmn.render_attachment && msaa) {
         glGenRenderbuffers(1, &img->gl.msaa_render_buffer);
         glBindRenderbuffer(GL_RENDERBUFFER, img->gl.msaa_render_buffer);
         glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->cmn.sample_count, gl_internal_format, img->cmn.width, img->cmn.height);
@@ -8747,7 +8767,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
 
         /* prepare initial content pointers */
         D3D11_SUBRESOURCE_DATA* init_data = 0;
-        if (!injected && (img->cmn.usage == SG_USAGE_IMMUTABLE) && !img->cmn.render_target) {
+        if (!injected && (img->cmn.usage == SG_USAGE_IMMUTABLE) && !img->cmn.render_attachment) {
             _sg_d3d11_fill_subres_data(img, &desc->data);
             init_data = _sg.d3d11.subres_data;
         }
@@ -8789,7 +8809,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 }
                 d3d11_tex_desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
                 d3d11_tex_desc.Format = img->d3d11.format;
-                if (img->cmn.render_target) {
+                if (img->cmn.render_attachment) {
                     d3d11_tex_desc.Usage = D3D11_USAGE_DEFAULT;
                     if (!msaa) {
                         d3d11_tex_desc.BindFlags |= D3D11_BIND_RENDER_TARGET;
@@ -8871,7 +8891,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 d3d11_tex_desc.MipLevels = (UINT)img->cmn.num_mipmaps;
                 d3d11_tex_desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
                 d3d11_tex_desc.Format = img->d3d11.format;
-                if (img->cmn.render_target) {
+                if (img->cmn.render_attachment) {
                     d3d11_tex_desc.Usage = D3D11_USAGE_DEFAULT;
                     if (!msaa) {
                         d3d11_tex_desc.BindFlags |= D3D11_BIND_RENDER_TARGET;
@@ -10673,7 +10693,7 @@ _SOKOL_PRIVATE bool _sg_mtl_init_texdesc_common(MTLTextureDescriptor* mtl_desc, 
         mtl_desc.arrayLength = 1;
     }
     mtl_desc.usage = MTLTextureUsageShaderRead;
-    if (img->cmn.render_target) {
+    if (img->cmn.render_attachment) {
         mtl_desc.usage |= MTLTextureUsageRenderTarget;
     }
     MTLResourceOptions res_options = 0;
@@ -10693,7 +10713,7 @@ _SOKOL_PRIVATE bool _sg_mtl_init_texdesc_common(MTLTextureDescriptor* mtl_desc, 
 
 /* initialize MTLTextureDescritor with rendertarget attributes */
 _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt(MTLTextureDescriptor* mtl_desc, _sg_image_t* img) {
-    SOKOL_ASSERT(img->cmn.render_target);
+    SOKOL_ASSERT(img->cmn.render_attachment);
     _SOKOL_UNUSED(img);
     /* render targets are only visible to the GPU */
     mtl_desc.resourceOptions = MTLResourceStorageModePrivate;
@@ -10739,7 +10759,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg
     /* special case depth-stencil-buffer? */
     if (_sg_is_valid_rendertarget_depth_format(img->cmn.pixel_format)) {
         /* depth-stencil buffer texture must always be a render target */
-        SOKOL_ASSERT(img->cmn.render_target);
+        SOKOL_ASSERT(img->cmn.render_attachment);
         SOKOL_ASSERT(img->cmn.type == SG_IMAGETYPE_2D);
         SOKOL_ASSERT(img->cmn.num_mipmaps == 1);
         SOKOL_ASSERT(!injected);
@@ -10763,7 +10783,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg
             will go into a separate render target texture of type
             MTLTextureType2DMultisample.
         */
-        if (img->cmn.render_target && !msaa) {
+        if (img->cmn.render_attachment && !msaa) {
             _sg_mtl_init_texdesc_rt(mtl_desc, img);
         }
         for (int slot = 0; slot < img->cmn.num_slots; slot++) {
@@ -10774,7 +10794,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg
             }
             else {
                 tex = [_sg.mtl.device newTextureWithDescriptor:mtl_desc];
-                if ((img->cmn.usage == SG_USAGE_IMMUTABLE) && !img->cmn.render_target) {
+                if ((img->cmn.usage == SG_USAGE_IMMUTABLE) && !img->cmn.render_attachment) {
                     _sg_mtl_copy_image_data(img, tex, &desc->data);
                 }
             }
@@ -10783,7 +10803,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg
         }
 
         /* if MSAA color render target, create an additional MSAA render-surface texture */
-        if (img->cmn.render_target && msaa) {
+        if (img->cmn.render_attachment && msaa) {
             _sg_mtl_init_texdesc_rt_msaa(mtl_desc, img);
             id<MTLTexture> tex = [_sg.mtl.device newTextureWithDescriptor:mtl_desc];
             img->mtl.msaa_tex = _sg_mtl_add_resource(tex);
@@ -12525,7 +12545,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
     _sg_clear(&wgpu_tex_desc, sizeof(wgpu_tex_desc));
     _sg_wgpu_init_texdesc_common(&wgpu_tex_desc, desc);
     if (_sg_is_valid_rendertarget_depth_format(img->cmn.pixel_format)) {
-        SOKOL_ASSERT(img->cmn.render_target);
+        SOKOL_ASSERT(img->cmn.render_attachment);
         SOKOL_ASSERT(img->cmn.type == SG_IMAGETYPE_2D);
         SOKOL_ASSERT(img->cmn.num_mipmaps == 1);
         SOKOL_ASSERT(!injected);
@@ -12546,14 +12566,14 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
             /* NOTE: in the MSAA-rendertarget case, both the MSAA texture *and*
                the resolve texture need OutputAttachment usage
             */
-            if (img->cmn.render_target) {
+            if (img->cmn.render_attachment) {
                 wgpu_tex_desc.usage = WGPUTextureUsage_Sampled|WGPUTextureUsage_OutputAttachment;
             }
             img->wgpu.tex = wgpuDeviceCreateTexture(_sg.wgpu.dev, &wgpu_tex_desc);
             SOKOL_ASSERT(img->wgpu.tex);
 
             /* copy content into texture via a throw-away staging buffer */
-            if (desc->usage == SG_USAGE_IMMUTABLE && !desc->render_target) {
+            if (desc->usage == SG_USAGE_IMMUTABLE && !desc->render_attachment) {
                 WGPUBufferDescriptor wgpu_buf_desc;
                 _sg_clear(&wgpu_buf_desc, sizeof(wgpu_buf_desc));
                 wgpu_buf_desc.size = _sg_wgpu_image_data_buffer_size(img);
@@ -12578,7 +12598,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
            which will be resolved into the regular texture at the end of the
            offscreen-render pass
         */
-        if (desc->render_target && is_msaa) {
+        if (desc->render_attachment && is_msaa) {
             wgpu_tex_desc.dimension = WGPUTextureDimension_2D;
             wgpu_tex_desc.size.depth = 1;
             wgpu_tex_desc.arrayLayerCount = 1;
@@ -14199,7 +14219,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
                               (0 != desc->mtl_textures[0]) ||
                               (0 != desc->d3d11_texture) ||
                               (0 != desc->wgpu_texture);
-        if (desc->render_target) {
+        if (desc->render_attachment) {
             SOKOL_ASSERT(((int)fmt >= 0) && ((int)fmt < _SG_PIXELFORMAT_NUM));
             _SG_VALIDATE(_sg.formats[fmt].render, VALIDATE_IMAGEDESC_RT_PIXELFORMAT);
             if (desc->sample_count > 1) {
@@ -14433,7 +14453,7 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
             else if (img->cmn.type == SG_IMAGETYPE_3D) {
                 _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_PASSDESC_SLICE);
             }
-            _SG_VALIDATE(img->cmn.render_target, VALIDATE_PASSDESC_IMAGE_NO_RT);
+            _SG_VALIDATE(img->cmn.render_attachment, VALIDATE_PASSDESC_IMAGE_NO_RT);
             if (att_index == 0) {
                 width = img->cmn.width >> att->mip_level;
                 height = img->cmn.height >> att->mip_level;
@@ -14461,7 +14481,7 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
             else if (img->cmn.type == SG_IMAGETYPE_3D) {
                 _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_PASSDESC_SLICE);
             }
-            _SG_VALIDATE(img->cmn.render_target, VALIDATE_PASSDESC_IMAGE_NO_RT);
+            _SG_VALIDATE(img->cmn.render_attachment, VALIDATE_PASSDESC_IMAGE_NO_RT);
             _SG_VALIDATE(width == img->cmn.width >> att->mip_level, VALIDATE_PASSDESC_IMAGE_SIZES);
             _SG_VALIDATE(height == img->cmn.height >> att->mip_level, VALIDATE_PASSDESC_IMAGE_SIZES);
             _SG_VALIDATE(sample_count == img->cmn.sample_count, VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS);
@@ -14758,7 +14778,7 @@ _SOKOL_PRIVATE sg_image_desc _sg_image_desc_defaults(const sg_image_desc* desc) 
     def.num_slices = _sg_def(def.num_slices, 1);
     def.num_mipmaps = _sg_def(def.num_mipmaps, 1);
     def.usage = _sg_def(def.usage, SG_USAGE_IMMUTABLE);
-    if (desc->render_target) {
+    if (desc->render_attachment) {
         def.pixel_format = _sg_def(def.pixel_format, _sg.desc.context.color_format);
         def.sample_count = _sg_def(def.sample_count, _sg.desc.context.sample_count);
     }
@@ -16380,7 +16400,7 @@ SOKOL_API_IMPL sg_image_desc sg_query_image_desc(sg_image img_id) {
     const _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
     if (img) {
         desc.type = img->cmn.type;
-        desc.render_target = img->cmn.render_target;
+        desc.render_attachment = img->cmn.render_attachment;
         desc.width = img->cmn.width;
         desc.height = img->cmn.height;
         desc.num_slices = img->cmn.num_slices;
