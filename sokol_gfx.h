@@ -2059,8 +2059,7 @@ typedef struct sg_image_data {
 /*
     sg_image_desc
 
-    Creation parameters for sg_image objects, used in the sg_make_image()
-    call.
+    Creation parameters for sg_image objects, used in the sg_make_image() call.
 
     The default configuration is:
 
@@ -5180,22 +5179,31 @@ _SOKOL_PRIVATE void _sg_pixelformat_sfbr(sg_pixelformat_info* pfi) {
 _SOKOL_PRIVATE void _sg_resolve_default_pass_action(const sg_pass_action* from, sg_pass_action* to) {
     SOKOL_ASSERT(from && to);
     *to = *from;
-    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-        if (to->colors[i].action  == _SG_ACTION_DEFAULT) {
-            to->colors[i].action = SG_ACTION_CLEAR;
-            to->colors[i].value.r = SG_DEFAULT_CLEAR_RED;
-            to->colors[i].value.g = SG_DEFAULT_CLEAR_GREEN;
-            to->colors[i].value.b = SG_DEFAULT_CLEAR_BLUE;
-            to->colors[i].value.a = SG_DEFAULT_CLEAR_ALPHA;
+    for (size_t i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        if (to->colors[i].load_action == _SG_LOADACTION_DEFAULT) {
+            to->colors[i].load_action = SG_LOADACTION_CLEAR;
+            to->colors[i].clear_value.r = SG_DEFAULT_CLEAR_RED;
+            to->colors[i].clear_value.g = SG_DEFAULT_CLEAR_GREEN;
+            to->colors[i].clear_value.b = SG_DEFAULT_CLEAR_BLUE;
+            to->colors[i].clear_value.a = SG_DEFAULT_CLEAR_ALPHA;
+        }
+        if (to->colors[i].store_action == _SG_STOREACTION_DEFAULT) {
+            to->colors[i].store_action = SG_STOREACTION_STORE;
         }
     }
-    if (to->depth.action == _SG_ACTION_DEFAULT) {
-        to->depth.action = SG_ACTION_CLEAR;
-        to->depth.value = SG_DEFAULT_CLEAR_DEPTH;
+    if (to->depth.load_action == _SG_LOADACTION_DEFAULT) {
+        to->depth.load_action = SG_LOADACTION_CLEAR;
+        to->depth.clear_value = SG_DEFAULT_CLEAR_DEPTH;
     }
-    if (to->stencil.action == _SG_ACTION_DEFAULT) {
-        to->stencil.action = SG_ACTION_CLEAR;
-        to->stencil.value = SG_DEFAULT_CLEAR_STENCIL;
+    if (to->depth.store_action == _SG_STOREACTION_DEFAULT) {
+        to->depth.store_action = SG_STOREACTION_DONTCARE;
+    }
+    if (to->stencil.load_action == _SG_LOADACTION_DEFAULT) {
+        to->stencil.load_action = SG_LOADACTION_CLEAR;
+        to->stencil.clear_value = SG_DEFAULT_CLEAR_STENCIL;
+    }
+    if (to->stencil.store_action == _SG_STOREACTION_DEFAULT) {
+        to->stencil.store_action = SG_STOREACTION_DONTCARE;
     }
 }
 
@@ -9817,12 +9825,32 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
 #endif
 
 /*-- enum translation functions ----------------------------------------------*/
-_SOKOL_PRIVATE MTLLoadAction _sg_mtl_load_action(sg_action a) {
+_SOKOL_PRIVATE MTLLoadAction _sg_mtl_load_action(sg_load_action a) {
     switch (a) {
-        case SG_ACTION_CLEAR:       return MTLLoadActionClear;
-        case SG_ACTION_LOAD:        return MTLLoadActionLoad;
-        case SG_ACTION_DONTCARE:    return MTLLoadActionDontCare;
-        default: SOKOL_UNREACHABLE; return (MTLLoadAction)0;
+        case SG_LOADACTION_CLEAR:       return MTLLoadActionClear;
+        case SG_LOADACTION_LOAD:        return MTLLoadActionLoad;
+        case SG_LOADACTION_DONTCARE:    return MTLLoadActionDontCare;
+        default: SOKOL_UNREACHABLE;     return (MTLLoadAction)0;
+    }
+}
+
+_SOKOL_PRIVATE MTLStoreAction _sg_mtl_store_action(sg_store_action a, bool resolve) {
+    switch (a) {
+        case SG_STOREACTION_STORE:
+            if (resolve) {
+                return MTLStoreActionStoreAndMultisampleResolve;
+            } else {
+                return MTLStoreActionStore;
+            }
+            break;
+        case SG_STOREACTION_DONTCARE:
+            if (resolve) {
+                return MTLStoreActionMultisampleResolve;
+            } else {
+                return MTLStoreActionDontCare;
+            }
+            break;
+        default: SOKOL_UNREACHABLE; return (MTLStoreAction)0;
     }
 }
 
@@ -11132,7 +11160,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
     */
     if (nil == _sg.mtl.cmd_buffer) {
         SOKOL_ASSERT(nil == _sg.mtl.present_cmd_buffer);
-        /* block until the oldest frame in flight has finished */
+        // block until the oldest frame in flight has finished
         dispatch_semaphore_wait(_sg.mtl.sem, DISPATCH_TIME_FOREVER);
         _sg.mtl.cmd_buffer = [_sg.mtl.cmd_queue commandBufferWithUnretainedReferences];
         _sg.mtl.present_cmd_buffer =  [_sg.mtl.cmd_queue commandBuffer];
@@ -11145,23 +11173,21 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
         }];
     }
 
-    /* if this is first pass in frame, get uniform buffer base pointer */
+    // if this is first pass in frame, get uniform buffer base pointer
     if (0 == _sg.mtl.cur_ub_base_ptr) {
         _sg.mtl.cur_ub_base_ptr = (uint8_t*)[_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index] contents];
     }
 
-    /* initialize a render pass descriptor */
+    // initialize a render pass descriptor
     MTLRenderPassDescriptor* pass_desc = nil;
     if (pass) {
-        /* offscreen render pass */
+        // offscreen render pass
         pass_desc = [MTLRenderPassDescriptor renderPassDescriptor];
-    }
-    else {
-        /* default render pass, call user-provided callback to provide render pass descriptor */
+    } else {
+        // default render pass, call user-provided callback to provide render pass descriptor
         if (_sg.mtl.renderpass_descriptor_cb) {
             pass_desc = (__bridge MTLRenderPassDescriptor*) _sg.mtl.renderpass_descriptor_cb();
-        }
-        else {
+        } else {
             pass_desc = (__bridge MTLRenderPassDescriptor*) _sg.mtl.renderpass_descriptor_userdata_cb(_sg.mtl.user_data);
         }
 
@@ -11170,13 +11196,12 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
         _sg.mtl.pass_valid = true;
     }
     else {
-        /* default pass descriptor will not be valid if window is minimized,
-           don't do any rendering in this case */
+        // default pass descriptor will not be valid if window is minimized, don't do any rendering in this case
         _sg.mtl.pass_valid = false;
         return;
     }
     if (pass) {
-        /* setup pass descriptor for offscreen rendering */
+        // setup pass descriptor for offscreen rendering
         SOKOL_ASSERT(pass->slot.state == SG_RESOURCESTATE_VALID);
         for (NSUInteger i = 0; i < (NSUInteger)pass->cmn.num_color_atts; i++) {
             const _sg_pass_attachment_t* cmn_att = &pass->cmn.color_atts[i];
@@ -11184,12 +11209,13 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
             const _sg_image_t* att_img = mtl_att->image;
             SOKOL_ASSERT(att_img->slot.state == SG_RESOURCESTATE_VALID);
             SOKOL_ASSERT(att_img->slot.id == cmn_att->image_id.id);
-            const bool is_msaa = (att_img->cmn.sample_count > 1);
-            pass_desc.colorAttachments[i].loadAction = _sg_mtl_load_action(action->colors[i].action);
-            pass_desc.colorAttachments[i].storeAction = is_msaa ? MTLStoreActionMultisampleResolve : MTLStoreActionStore;
-            sg_color c = action->colors[i].value;
+            // FIXME: this needs to be changed to the presence of a resolve image
+            const bool resolve_msaa = (att_img->cmn.sample_count > 1);
+            pass_desc.colorAttachments[i].loadAction = _sg_mtl_load_action(action->colors[i].load_action);
+            pass_desc.colorAttachments[i].storeAction = _sg_mtl_store_action(action->colors[i].store_action, resolve_msaa);
+            sg_color c = action->colors[i].clear_value;
             pass_desc.colorAttachments[i].clearColor = MTLClearColorMake(c.r, c.g, c.b, c.a);
-            if (is_msaa) {
+            if (resolve_msaa) {
                 SOKOL_ASSERT(att_img->mtl.msaa_tex != _SG_MTL_INVALID_SLOT_INDEX);
                 SOKOL_ASSERT(att_img->mtl.tex[mtl_att->image->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
                 pass_desc.colorAttachments[i].texture = _sg_mtl_id(att_img->mtl.msaa_tex);
@@ -11205,8 +11231,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
                         break;
                     default: break;
                 }
-            }
-            else {
+            } else {
                 SOKOL_ASSERT(att_img->mtl.tex[att_img->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
                 pass_desc.colorAttachments[i].texture = _sg_mtl_id(att_img->mtl.tex[att_img->cmn.active_slot]);
                 pass_desc.colorAttachments[i].level = (NSUInteger)cmn_att->mip_level;
@@ -11228,36 +11253,35 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
             SOKOL_ASSERT(ds_att_img->slot.id == pass->cmn.ds_att.image_id.id);
             SOKOL_ASSERT(ds_att_img->mtl.depth_tex != _SG_MTL_INVALID_SLOT_INDEX);
             pass_desc.depthAttachment.texture = _sg_mtl_id(ds_att_img->mtl.depth_tex);
-            pass_desc.depthAttachment.loadAction = _sg_mtl_load_action(action->depth.action);
-            pass_desc.depthAttachment.storeAction = MTLStoreActionStore;
-            pass_desc.depthAttachment.clearDepth = action->depth.value;
+            pass_desc.depthAttachment.loadAction = _sg_mtl_load_action(action->depth.load_action);
+            pass_desc.depthAttachment.storeAction = _sg_mtl_store_action(action->depth.store_action, false);
+            pass_desc.depthAttachment.clearDepth = action->depth.clear_value;
             if (_sg_is_depth_stencil_format(ds_att_img->cmn.pixel_format)) {
                 pass_desc.stencilAttachment.texture = _sg_mtl_id(ds_att_img->mtl.depth_tex);
-                pass_desc.stencilAttachment.loadAction = _sg_mtl_load_action(action->stencil.action);
-                pass_desc.stencilAttachment.storeAction = MTLStoreActionStore;
-                pass_desc.stencilAttachment.clearStencil = action->stencil.value;
+                pass_desc.stencilAttachment.loadAction = _sg_mtl_load_action(action->stencil.load_action);
+                pass_desc.stencilAttachment.storeAction = _sg_mtl_store_action(action->depth.store_action, false);
+                pass_desc.stencilAttachment.clearStencil = action->stencil.clear_value;
             }
         }
-    }
-    else {
-        /* setup pass descriptor for default rendering */
-        pass_desc.colorAttachments[0].loadAction = _sg_mtl_load_action(action->colors[0].action);
-        sg_color c = action->colors[0].value;
+    } else {
+        // setup pass descriptor for default rendering
+        pass_desc.colorAttachments[0].loadAction = _sg_mtl_load_action(action->colors[0].load_action);
+        sg_color c = action->colors[0].clear_value;
         pass_desc.colorAttachments[0].clearColor = MTLClearColorMake(c.r, c.g, c.b, c.a);
-        pass_desc.depthAttachment.loadAction = _sg_mtl_load_action(action->depth.action);
-        pass_desc.depthAttachment.clearDepth = action->depth.value;
-        pass_desc.stencilAttachment.loadAction = _sg_mtl_load_action(action->stencil.action);
-        pass_desc.stencilAttachment.clearStencil = action->stencil.value;
+        pass_desc.depthAttachment.loadAction = _sg_mtl_load_action(action->depth.load_action);
+        pass_desc.depthAttachment.clearDepth = action->depth.clear_value;
+        pass_desc.stencilAttachment.loadAction = _sg_mtl_load_action(action->stencil.load_action);
+        pass_desc.stencilAttachment.clearStencil = action->stencil.clear_value;
     }
 
-    /* create a render command encoder, this might return nil if window is minimized */
+    // create a render command encoder, this might return nil if window is minimized
     _sg.mtl.cmd_encoder = [_sg.mtl.cmd_buffer renderCommandEncoderWithDescriptor:pass_desc];
     if (nil == _sg.mtl.cmd_encoder) {
         _sg.mtl.pass_valid = false;
         return;
     }
 
-    /* bind the global uniform buffer, this only happens once per pass */
+    // bind the global uniform buffer, this only happens once per pass
     _sg_mtl_bind_uniform_buffers();
 }
 
@@ -11267,7 +11291,7 @@ _SOKOL_PRIVATE void _sg_mtl_end_pass(void) {
     _sg.mtl.pass_valid = false;
     if (nil != _sg.mtl.cmd_encoder) {
         [_sg.mtl.cmd_encoder endEncoding];
-        /* NOTE: MTLRenderCommandEncoder is autoreleased */
+        // NOTE: MTLRenderCommandEncoder is autoreleased
         _sg.mtl.cmd_encoder = nil;
     }
 }
