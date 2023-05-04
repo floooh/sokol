@@ -2745,9 +2745,11 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMGS, "sg_apply_bindings: vertex shader image count doesn't match sg_shader_desc") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_EXISTS, "sg_apply_bindings: vertex shader image no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_TYPES, "sg_apply_bindings: one or more vertex shader image types don't match sg_shader_desc") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_MSAA, "sg_apply_bindings: cannot bind image with sample_count>1 to vertex stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMGS, "sg_apply_bindings: fragment shader image count doesn't match sg_shader_desc") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_EXISTS, "sg_apply_bindings: fragment shader image no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_TYPES, "sg_apply_bindings: one or more fragment shader image types don't match sg_shader_desc") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_MSAA, "sg_apply_bindings: cannot bind image with sample_count>1 to fragment stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_NO_PIPELINE, "sg_apply_uniforms: must be called after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_NO_UB_AT_SLOT, "sg_apply_uniforms: no uniform block declaration at this shader stage UB slot") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_SIZE, "sg_apply_uniforms: data size exceeds declared uniform block size") \
@@ -10760,7 +10762,6 @@ _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt(MTLTextureDescriptor* mtl_desc, _sg_
 /* initialize MTLTextureDescritor with MSAA attributes */
 _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt_msaa(MTLTextureDescriptor* mtl_desc, _sg_image_t* img) {
     SOKOL_ASSERT(img->cmn.sample_count > 1);
-    // FIXME: set ShaderRead if we want to support optional feature of reading from MSAA textures
     mtl_desc.usage = MTLTextureUsageRenderTarget;
     mtl_desc.resourceOptions = MTLResourceStorageModePrivate;
     mtl_desc.textureType = MTLTextureType2DMultisample;
@@ -14605,7 +14606,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         }
         _sg_validate_begin();
 
-        /* a pipeline object must have been applied */
+        // a pipeline object must have been applied
         _SG_VALIDATE(_sg.cur_pipeline.id != SG_INVALID_ID, VALIDATE_ABND_PIPELINE);
         const _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, _sg.cur_pipeline.id);
         _SG_VALIDATE(pip != 0, VALIDATE_ABND_PIPELINE_EXISTS);
@@ -14615,35 +14616,33 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         _SG_VALIDATE(pip->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ABND_PIPELINE_VALID);
         SOKOL_ASSERT(pip->shader && (pip->cmn.shader_id.id == pip->shader->slot.id));
 
-        /* has expected vertex buffers, and vertex buffers still exist */
+        // has expected vertex buffers, and vertex buffers still exist
         for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
             if (bindings->vertex_buffers[i].id != SG_INVALID_ID) {
                 _SG_VALIDATE(pip->cmn.vertex_layout_valid[i], VALIDATE_ABND_VBS);
-                /* buffers in vertex-buffer-slots must be of type SG_BUFFERTYPE_VERTEXBUFFER */
+                // buffers in vertex-buffer-slots must be of type SG_BUFFERTYPE_VERTEXBUFFER
                 const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, bindings->vertex_buffers[i].id);
                 _SG_VALIDATE(buf != 0, VALIDATE_ABND_VB_EXISTS);
                 if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
                     _SG_VALIDATE(SG_BUFFERTYPE_VERTEXBUFFER == buf->cmn.type, VALIDATE_ABND_VB_TYPE);
                     _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_VB_OVERFLOW);
                 }
-            }
-            else {
-                /* vertex buffer provided in a slot which has no vertex layout in pipeline */
+            } else {
+                // vertex buffer provided in a slot which has no vertex layout in pipeline
                 _SG_VALIDATE(!pip->cmn.vertex_layout_valid[i], VALIDATE_ABND_VBS);
             }
         }
 
-        /* index buffer expected or not, and index buffer still exists */
+        // index buffer expected or not, and index buffer still exists
         if (pip->cmn.index_type == SG_INDEXTYPE_NONE) {
-            /* pipeline defines non-indexed rendering, but index buffer provided */
+            // pipeline defines non-indexed rendering, but index buffer provided
             _SG_VALIDATE(bindings->index_buffer.id == SG_INVALID_ID, VALIDATE_ABND_IB);
-        }
-        else {
-            /* pipeline defines indexed rendering, but no index buffer provided */
+        } else {
+            // pipeline defines indexed rendering, but no index buffer provided
             _SG_VALIDATE(bindings->index_buffer.id != SG_INVALID_ID, VALIDATE_ABND_NO_IB);
         }
         if (bindings->index_buffer.id != SG_INVALID_ID) {
-            /* buffer in index-buffer-slot must be of type SG_BUFFERTYPE_INDEXBUFFER */
+            // buffer in index-buffer-slot must be of type SG_BUFFERTYPE_INDEXBUFFER
             const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, bindings->index_buffer.id);
             _SG_VALIDATE(buf != 0, VALIDATE_ABND_IB_EXISTS);
             if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
@@ -14652,7 +14651,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
             }
         }
 
-        /* has expected vertex shader images */
+        // has expected vertex shader images
         for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
             _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_VS];
             if (bindings->vs_images[i].id != SG_INVALID_ID) {
@@ -14661,14 +14660,14 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 _SG_VALIDATE(img != 0, VALIDATE_ABND_VS_IMG_EXISTS);
                 if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
                     _SG_VALIDATE(img->cmn.type == stage->images[i].image_type, VALIDATE_ABND_VS_IMG_TYPES);
+                    _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_ABND_VS_IMG_MSAA);
                 }
-            }
-            else {
+            } else {
                 _SG_VALIDATE(i >= stage->num_images, VALIDATE_ABND_VS_IMGS);
             }
         }
 
-        /* has expected fragment shader images */
+        // has expected fragment shader images
         for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
             _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_FS];
             if (bindings->fs_images[i].id != SG_INVALID_ID) {
@@ -14677,9 +14676,9 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 _SG_VALIDATE(img != 0, VALIDATE_ABND_FS_IMG_EXISTS);
                 if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
                     _SG_VALIDATE(img->cmn.type == stage->images[i].image_type, VALIDATE_ABND_FS_IMG_TYPES);
+                    _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_ABND_FS_IMG_MSAA);
                 }
-            }
-            else {
+            } else {
                 _SG_VALIDATE(i >= stage->num_images, VALIDATE_ABND_FS_IMGS);
             }
         }
