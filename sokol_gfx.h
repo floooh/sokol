@@ -2720,7 +2720,9 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES, "pass depth attachment image size must match color attachment image size") \
     _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_DEPTH_IMAGE_SAMPLE_COUNTS, "pass depth attachment sample count must match color attachment sample count") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_PASS, "sg_begin_pass: pass must be valid") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_IMAGE, "sg_begin_pass: one or more attachment images are not valid") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE, "sg_begin_pass: one or more color attachment images are not valid") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVE_ATTACHMENT_IMAGE, "sg_begin_pass: one or more resolve attachment images are not valid") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCIL_ATTACHMENT_IMAGE, "sg_begin_pass: one or more depth-stencil attachment images are not valid") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_PIPELINE_VALID_ID, "sg_apply_pipeline: invalid pipeline id provided") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_PIPELINE_EXISTS, "sg_apply_pipeline: pipeline object no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_PIPELINE_VALID, "sg_apply_pipeline: pipeline object not in valid state") \
@@ -10807,8 +10809,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg
         _SG_OBJC_RELEASE(tex);
     }
 
-    // create (possibly shared) sampler state
-    img->mtl.sampler_state = _sg_mtl_create_sampler(_sg.mtl.device, desc);
+    // create (possibly shared) sampler state (not for MSAA textures, which cannot be sampled)
+    if (img->cmn.sample_count == 1) {
+        img->mtl.sampler_state = _sg_mtl_create_sampler(_sg.mtl.device, desc);
+    }
 
     _SG_OBJC_RELEASE(mtl_desc);
     return SG_RESOURCESTATE_VALID;
@@ -11098,13 +11102,19 @@ _SOKOL_PRIVATE void _sg_mtl_discard_pass(_sg_pass_t* pass) {
 }
 
 _SOKOL_PRIVATE _sg_image_t* _sg_mtl_pass_color_image(const _sg_pass_t* pass, int index) {
+    // NOTE: may return null
     SOKOL_ASSERT(pass && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
-    /* NOTE: may return null */
     return pass->mtl.color_atts[index].image;
 }
 
+_SOKOL_PRIVATE _sg_image_t* _sg_mtl_pass_resolve_image(const _sg_pass_t* pass, int index) {
+    // NOTE: may return null
+    SOKOL_ASSERT(pass && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
+    return pass->mtl.resolve_atts[index].image;
+}
+
 _SOKOL_PRIVATE _sg_image_t* _sg_mtl_pass_ds_image(const _sg_pass_t* pass) {
-    /* NOTE: may return null */
+    // NOTE: may return null
     SOKOL_ASSERT(pass);
     return pass->mtl.ds_att.image;
 }
@@ -11163,7 +11173,6 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
         } else {
             pass_desc = (__bridge MTLRenderPassDescriptor*) _sg.mtl.renderpass_descriptor_userdata_cb(_sg.mtl.user_data);
         }
-
     }
     if (pass_desc) {
         _sg.mtl.pass_valid = true;
@@ -13547,6 +13556,22 @@ static inline _sg_image_t* _sg_pass_color_image(const _sg_pass_t* pass, int inde
     #endif
 }
 
+static inline _sg_image_t* _sg_pass_resolve_image(const _sg_pass_t* pass, int index) {
+    #if defined(_SOKOL_ANY_GL)
+    return _sg_gl_pass_resolve_image(pass, index);
+    #elif defined(SOKOL_METAL)
+    return _sg_mtl_pass_resolve_image(pass, index);
+    #elif defined(SOKOL_D3D11)
+    return _sg_d3d11_pass_resolve_image(pass, index);
+    #elif defined(SOKOL_WGPU)
+    return _sg_wgpu_pass_resolve_image(pass, index);
+    #elif defined(SOKOL_DUMMY_BACKEND)
+    return _sg_dummy_pass_resolve_image(pass, index);
+    #else
+    #error("INVALID BACKEND");
+    #endif
+}
+
 static inline _sg_image_t* _sg_pass_ds_image(const _sg_pass_t* pass) {
     #if defined(_SOKOL_ANY_GL)
     return _sg_gl_pass_ds_image(pass);
@@ -14529,18 +14554,24 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(_sg_pass_t* pass) {
         _SG_VALIDATE(pass->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_PASS);
 
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-            const _sg_pass_attachment_t* att = &pass->cmn.color_atts[i];
-            const _sg_image_t* img = _sg_pass_color_image(pass, i);
-            if (img) {
-                _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_IMAGE);
-                _SG_VALIDATE(img->slot.id == att->image_id.id, VALIDATE_BEGINPASS_IMAGE);
+            const _sg_pass_attachment_t* color_att = &pass->cmn.color_atts[i];
+            const _sg_image_t* color_img = _sg_pass_color_image(pass, i);
+            if (color_img) {
+                _SG_VALIDATE(color_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE);
+                _SG_VALIDATE(color_img->slot.id == color_att->image_id.id, VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE);
+            }
+            const _sg_pass_attachment_t* resolve_att = &pass->cmn.resolve_atts[i];
+            const _sg_image_t* resolve_img = _sg_pass_resolve_image(pass, i);
+            if (resolve_img) {
+                _SG_VALIDATE(resolve_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_RESOLVE_ATTACHMENT_IMAGE);
+                _SG_VALIDATE(resolve_img->slot.id == resolve_att->image_id.id, VALIDATE_BEGINPASS_RESOLVE_ATTACHMENT_IMAGE);
             }
         }
         const _sg_image_t* ds_img = _sg_pass_ds_image(pass);
         if (ds_img) {
             const _sg_pass_attachment_t* att = &pass->cmn.ds_att;
-            _SG_VALIDATE(ds_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_IMAGE);
-            _SG_VALIDATE(ds_img->slot.id == att->image_id.id, VALIDATE_BEGINPASS_IMAGE);
+            _SG_VALIDATE(ds_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_DEPTHSTENCIL_ATTACHMENT_IMAGE);
+            _SG_VALIDATE(ds_img->slot.id == att->image_id.id, VALIDATE_BEGINPASS_DEPTHSTENCIL_ATTACHMENT_IMAGE);
         }
         return _sg_validate_end();
     #endif
