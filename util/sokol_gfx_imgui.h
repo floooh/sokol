@@ -3749,12 +3749,12 @@ _SOKOL_PRIVATE void _sg_imgui_draw_passaction_panel(sg_imgui_t* ctx, sg_pass pas
             case SG_LOADACTION_CLEAR:
                 igText("    SG_LOADACTION_CLEAR: %s", _sg_imgui_color_string(&color_str, c_att->clear_value));
                 break;
-            default: break;
+            default: igText("    ???"); break;
         }
         switch (c_att->store_action) {
-            case SG_STOREACTION_STORE: igText("    SG_STOREACTION_LOAD"); break;
+            case SG_STOREACTION_STORE: igText("    SG_STOREACTION_STORE"); break;
             case SG_STOREACTION_DONTCARE: igText("    SG_STOREACTION_DONTCARE"); break;
-            default: break;
+            default: igText("    ???"); break;
         }
     }
     const sg_depth_attachment_action* d_att = &action->depth;
@@ -3763,12 +3763,12 @@ _SOKOL_PRIVATE void _sg_imgui_draw_passaction_panel(sg_imgui_t* ctx, sg_pass pas
         case SG_LOADACTION_LOAD: igText("    SG_LOADACTION_LOAD"); break;
         case SG_LOADACTION_DONTCARE: igText("    SG_LOADACTION_DONTCARE"); break;
         case SG_LOADACTION_CLEAR: igText("    SG_LOADACTION_CLEAR: %.3f", d_att->clear_value); break;
-        default: break;
+        default: igText("    ???"); break;
     }
     switch (d_att->store_action) {
-        case SG_STOREACTION_STORE: igText("    SG_STOREACTION_LOAD"); break;
+        case SG_STOREACTION_STORE: igText("    SG_STOREACTION_STORE"); break;
         case SG_STOREACTION_DONTCARE: igText("    SG_STOREACTION_DONTCARE"); break;
-        default: break;
+        default: igText("    ???"); break;
     }
     const sg_stencil_attachment_action* s_att = &action->stencil;
     igText("  Stencil Attachment");
@@ -3776,12 +3776,12 @@ _SOKOL_PRIVATE void _sg_imgui_draw_passaction_panel(sg_imgui_t* ctx, sg_pass pas
         case SG_LOADACTION_LOAD: igText("    SG_LOADACTION_LOAD"); break;
         case SG_LOADACTION_DONTCARE: igText("    SG_LOADACTION_DONTCARE"); break;
         case SG_LOADACTION_CLEAR: igText("    SG_LOADACTION_CLEAR: 0x%02X", s_att->clear_value); break;
-        default: break;
+        default: igText("    ???"); break;
     }
     switch (d_att->store_action) {
-        case SG_STOREACTION_STORE: igText("    SG_STOREACTION_LOAD"); break;
+        case SG_STOREACTION_STORE: igText("    SG_STOREACTION_STORE"); break;
         case SG_STOREACTION_DONTCARE: igText("    SG_STOREACTION_DONTCARE"); break;
-        default: break;
+        default: igText("    ???"); break;
     }
 }
 
