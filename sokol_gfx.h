@@ -16007,7 +16007,7 @@ SOKOL_API_IMPL void sg_begin_default_pass(const sg_pass_action* pass_action, int
     _sg.cur_pass.id = SG_INVALID_ID;
     _sg.pass_valid = true;
     _sg_begin_pass(0, &pa, width, height);
-    _SG_TRACE_ARGS(begin_default_pass, pass_action, width, height);
+    _SG_TRACE_ARGS(begin_default_pass, &pa, width, height);
 }
 
 SOKOL_API_IMPL void sg_begin_default_passf(const sg_pass_action* pass_action, float width, float height) {
@@ -16029,7 +16029,7 @@ SOKOL_API_IMPL void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_ac
         const int w = img->cmn.width;
         const int h = img->cmn.height;
         _sg_begin_pass(pass, &pa, w, h);
-        _SG_TRACE_ARGS(begin_pass, pass_id, pass_action);
+        _SG_TRACE_ARGS(begin_pass, pass_id, &pa);
     }
     else {
         _sg.pass_valid = false;
