@@ -3973,20 +3973,6 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 
 @implementation _sapp_macos_view
 #if defined(SOKOL_GLCORE33)
-/* NOTE: this is a hack/fix when the initial window size has been clipped by
-    macOS because it didn't fit on the screen, in that case the
-    frame size of the window is reported wrong if low-dpi rendering
-    was requested (instead the high-dpi dimensions are returned)
-    until the window is resized for the first time.
-
-    Hooking into reshape and getting the frame dimensions seems to report
-    the correct dimensions.
-*/
-- (void)reshape {
-    [[self openGLContext] makeCurrentContext];
-    _sapp_macos_update_dimensions();
-    [super reshape];
-}
 - (void)timerFired:(id)sender {
     _SOKOL_UNUSED(sender);
     [self setNeedsDisplay:YES];
