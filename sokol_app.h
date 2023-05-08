@@ -3983,6 +3983,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     the correct dimensions.
 */
 - (void)reshape {
+    [[self openGLContext] makeCurrentContext];
     _sapp_macos_update_dimensions();
     [super reshape];
 }
