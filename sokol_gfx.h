@@ -4038,7 +4038,6 @@ typedef _sg_gl_pipeline_t _sg_pipeline_t;
 
 typedef struct {
     _sg_image_t* image;
-    GLuint gl_msaa_resolve_buffer;
 } _sg_gl_attachment_t;
 
 typedef struct {
@@ -4047,7 +4046,9 @@ typedef struct {
     struct {
         GLuint fb;
         _sg_gl_attachment_t color_atts[SG_MAX_COLOR_ATTACHMENTS];
+        _sg_gl_attachment_t resolve_atts[SG_MAX_COLOR_ATTACHMENTS];
         _sg_gl_attachment_t ds_att;
+        GLuint msaa_resolve_framebuffer[SG_MAX_COLOR_ATTACHMENTS];
     } gl;
 } _sg_gl_pass_t;
 typedef _sg_gl_pass_t _sg_pass_t;
@@ -4110,6 +4111,9 @@ typedef struct {
     _sg_gl_state_cache_t cache;
     bool ext_anisotropic;
     GLint max_anisotropy;
+    sg_store_action color_store_actions[SG_MAX_COLOR_ATTACHMENTS];
+    sg_store_action depth_store_action;
+    sg_store_action stencil_store_action;
     #if _SOKOL_USE_WIN32_GL_LOADER
     HINSTANCE opengl32_dll;
     #endif
@@ -6759,19 +6763,16 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
         _SG_ERROR(GL_TEXTURE_FORMAT_NOT_SUPPORTED);
         return SG_RESOURCESTATE_FAILED;
     }
-
-    img->gl.target = _sg_gl_texture_target(img->cmn.type);
     const GLenum gl_internal_format = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
 
-    // if this is a MSAA render target, need to create a separate render buffer
-    const bool msaa = (img->cmn.sample_count > 1);
-    if (img->cmn.render_attachment && msaa) {
+    // if this is a MSAA render target, a render buffer object will be created instead of a regulat texture
+    // (since GLES3 has no multisampled texture objects)
+    if (img->cmn.render_attachment && (img->cmn.sample_count > 1)) {
         glGenRenderbuffers(1, &img->gl.msaa_render_buffer);
         glBindRenderbuffer(GL_RENDERBUFFER, img->gl.msaa_render_buffer);
         glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->cmn.sample_count, gl_internal_format, img->cmn.width, img->cmn.height);
-    }
-
-    if (img->gl.ext_textures) {
+    } else if (img->gl.ext_textures) {
+        img->gl.target = _sg_gl_texture_target(img->cmn.type);
         // inject externally GL textures
         for (int slot = 0; slot < img->cmn.num_slots; slot++) {
             SOKOL_ASSERT(desc->gl_textures[slot]);
@@ -6782,6 +6783,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
         }
     } else {
         // create our own GL texture(s)
+        img->gl.target = _sg_gl_texture_target(img->cmn.type);
         const GLenum gl_format = _sg_gl_teximage_format(img->cmn.pixel_format);
         const bool is_compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
         for (int slot = 0; slot < img->cmn.num_slots; slot++) {
@@ -7149,37 +7151,36 @@ _SOKOL_PRIVATE GLenum _sg_gl_depth_stencil_attachment_type(const _sg_gl_attachme
     }
 }
 
-/*
-    _sg_gl_create_pass
-
-    att_imgs must point to a _sg_image* att_imgs[SG_MAX_COLOR_ATTACHMENTS+1] array,
-    first entries are the color attachment images (or nullptr), last entry
-    is the depth-stencil image (or nullptr).
-*/
-_SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_t** att_images, const sg_pass_desc* desc) {
-    SOKOL_ASSERT(pass && att_images && desc);
-    SOKOL_ASSERT(att_images && att_images[0]);
+_SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_t** color_images, _sg_image_t** resolve_images, _sg_image_t* ds_image, const sg_pass_desc* desc) {
+    SOKOL_ASSERT(pass && desc);
+    SOKOL_ASSERT(color_images && color_images[0]);
     _SG_GL_CHECK_ERROR();
 
     _sg_pass_common_init(&pass->cmn, desc);
 
     // copy image pointers
-    const sg_pass_attachment_desc* att_desc;
     for (int i = 0; i < pass->cmn.num_color_atts; i++) {
-        att_desc = &desc->color_attachments[i];
-        SOKOL_ASSERT(att_desc->image.id != SG_INVALID_ID);
-        SOKOL_ASSERT(0 == pass->gl.color_atts[i].image);
-        SOKOL_ASSERT(att_images[i] && (att_images[i]->slot.id == att_desc->image.id));
-        SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(att_images[i]->cmn.pixel_format));
-        pass->gl.color_atts[i].image = att_images[i];
+        const sg_pass_attachment_desc* color_desc = &desc->color_attachments[i];
+        if (color_desc->image.id != SG_INVALID_ID) {
+            SOKOL_ASSERT(0 == pass->gl.color_atts[i].image);
+            SOKOL_ASSERT(color_images[i] && (color_images[i]->slot.id == color_desc->image.id));
+            SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(color_images[i]->cmn.pixel_format));
+            pass->gl.color_atts[i].image = color_images[i];
+        }
+        const sg_pass_attachment_desc* resolve_desc = &desc->resolve_attachments[i];
+        if (resolve_desc->image.id != SG_INVALID_ID) {
+            SOKOL_ASSERT(0 == pass->gl.resolve_atts[i].image);
+            SOKOL_ASSERT(resolve_images[i] && (resolve_images[i]->slot.id == resolve_desc->image.id));
+            SOKOL_ASSERT(color_images[i] && (color_images[i]->cmn.pixel_format == resolve_images[i]->cmn.pixel_format));
+            pass->gl.resolve_atts[i].image = resolve_images[i];
+        }
     }
     SOKOL_ASSERT(0 == pass->gl.ds_att.image);
-    att_desc = &desc->depth_stencil_attachment;
-    if (att_desc->image.id != SG_INVALID_ID) {
-        const int ds_img_index = SG_MAX_COLOR_ATTACHMENTS;
-        SOKOL_ASSERT(att_images[ds_img_index] && (att_images[ds_img_index]->slot.id == att_desc->image.id));
-        SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(att_images[ds_img_index]->cmn.pixel_format));
-        pass->gl.ds_att.image = att_images[ds_img_index];
+    const sg_pass_attachment_desc* ds_desc = &desc->depth_stencil_attachment;
+    if (ds_desc->image.id != SG_INVALID_ID) {
+        SOKOL_ASSERT(ds_image && (ds_image->slot.id == ds_desc->image.id));
+        SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(ds_image->cmn.pixel_format));
+        pass->gl.ds_att.image = ds_image;
     }
 
     // store current framebuffer binding (restored at end of function)
@@ -7191,28 +7192,24 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
     glBindFramebuffer(GL_FRAMEBUFFER, pass->gl.fb);
 
     // attach msaa render buffer or textures
-    const bool is_msaa = (0 != att_images[0]->gl.msaa_render_buffer);
-    if (is_msaa) {
-        for (int i = 0; i < pass->cmn.num_color_atts; i++) {
-            const _sg_image_t* att_img = pass->gl.color_atts[i].image;
-            SOKOL_ASSERT(att_img);
-            const GLuint gl_render_buffer = att_img->gl.msaa_render_buffer;
-            SOKOL_ASSERT(gl_render_buffer);
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, (GLenum)(GL_COLOR_ATTACHMENT0+i), GL_RENDERBUFFER, gl_render_buffer);
-        }
-        if (pass->gl.ds_att.image) {
-            const GLenum gl_att = _sg_gl_depth_stencil_attachment_type(&pass->gl.ds_att);
-            const _sg_image_t* att_img = pass->gl.ds_att.image;
-            const GLuint gl_render_buffer = att_img->gl.msaa_render_buffer;
-            SOKOL_ASSERT(gl_render_buffer);
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, gl_att, GL_RENDERBUFFER, gl_render_buffer);
-        }
-    } else {
-        for (int i = 0; i < pass->cmn.num_color_atts; i++) {
+    for (int i = 0; i < pass->cmn.num_color_atts; i++) {
+        const _sg_image_t* color_img = pass->gl.color_atts[i].image;
+        SOKOL_ASSERT(color_img);
+        const GLuint gl_msaa_render_buffer = color_img->gl.msaa_render_buffer;
+        if (gl_msaa_render_buffer) {
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, (GLenum)(GL_COLOR_ATTACHMENT0+i), GL_RENDERBUFFER, gl_msaa_render_buffer);
+        } else {
             const GLenum gl_att_type = (GLenum)(GL_COLOR_ATTACHMENT0 + i);
             _sg_gl_fb_attach_texture(&pass->gl.color_atts[i], &pass->cmn.color_atts[i], gl_att_type);
         }
-        if (pass->gl.ds_att.image) {
+    }
+    if (pass->gl.ds_att.image) {
+        const GLenum gl_att = _sg_gl_depth_stencil_attachment_type(&pass->gl.ds_att);
+        const _sg_image_t* ds_img = pass->gl.ds_att.image;
+        const GLuint gl_msaa_render_buffer = ds_img->gl.msaa_render_buffer;
+        if (gl_msaa_render_buffer) {
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, gl_att, GL_RENDERBUFFER, gl_msaa_render_buffer);
+        } else {
             const GLenum gl_att_type = _sg_gl_depth_stencil_attachment_type(&pass->gl.ds_att);
             _sg_gl_fb_attach_texture(&pass->gl.ds_att, &pass->cmn.ds_att, gl_att_type);
         }
@@ -7225,32 +7222,30 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
     }
 
     // setup color attachments for the framebuffer
-    const GLenum att[SG_MAX_COLOR_ATTACHMENTS] = {
+    static const GLenum gl_draw_bufs[SG_MAX_COLOR_ATTACHMENTS] = {
         GL_COLOR_ATTACHMENT0,
         GL_COLOR_ATTACHMENT1,
         GL_COLOR_ATTACHMENT2,
         GL_COLOR_ATTACHMENT3
     };
-    glDrawBuffers(pass->cmn.num_color_atts, att);
+    glDrawBuffers(pass->cmn.num_color_atts, gl_draw_bufs);
 
     // create MSAA resolve framebuffers if necessary
-    if (is_msaa) {
-        for (int i = 0; i < pass->cmn.num_color_atts; i++) {
-            _sg_gl_attachment_t* gl_att = &pass->gl.color_atts[i];
-            SOKOL_ASSERT(gl_att->image);
-            _sg_pass_attachment_t* cmn_att = &pass->cmn.color_atts[i];
-            SOKOL_ASSERT(0 == gl_att->gl_msaa_resolve_buffer);
-            glGenFramebuffers(1, &gl_att->gl_msaa_resolve_buffer);
-            glBindFramebuffer(GL_FRAMEBUFFER, gl_att->gl_msaa_resolve_buffer);
-            _sg_gl_fb_attach_texture(gl_att, cmn_att, GL_COLOR_ATTACHMENT0);
+    for (int i = 0; i < pass->cmn.num_color_atts; i++) {
+        _sg_gl_attachment_t* gl_resolve_att = &pass->gl.resolve_atts[i];
+        if (gl_resolve_att->image) {
+            _sg_pass_attachment_t* cmn_resolve_att = &pass->cmn.resolve_atts[i];
+            SOKOL_ASSERT(0 == pass->gl.msaa_resolve_framebuffer[i]);
+            glGenFramebuffers(1, &pass->gl.msaa_resolve_framebuffer[i]);
+            glBindFramebuffer(GL_FRAMEBUFFER, pass->gl.msaa_resolve_framebuffer[i]);
+            _sg_gl_fb_attach_texture(gl_resolve_att, cmn_resolve_att, GL_COLOR_ATTACHMENT0);
             // check if framebuffer is complete
             if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
                 _SG_ERROR(GL_MSAA_FRAMEBUFFER_INCOMPLETE);
                 return SG_RESOURCESTATE_FAILED;
             }
             // setup color attachments for the framebuffer
-            const GLenum gl_draw_bufs = GL_COLOR_ATTACHMENT0;
-            glDrawBuffers(1, &gl_draw_bufs);
+            glDrawBuffers(1, &gl_draw_bufs[0]);
         }
     }
 
@@ -7268,24 +7263,24 @@ _SOKOL_PRIVATE void _sg_gl_discard_pass(_sg_pass_t* pass) {
         glDeleteFramebuffers(1, &pass->gl.fb);
     }
     for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-        if (pass->gl.color_atts[i].gl_msaa_resolve_buffer) {
-            glDeleteFramebuffers(1, &pass->gl.color_atts[i].gl_msaa_resolve_buffer);
+        if (pass->gl.msaa_resolve_framebuffer[i]) {
+            glDeleteFramebuffers(1, &pass->gl.msaa_resolve_framebuffer[i]);
         }
-    }
-    if (pass->gl.ds_att.gl_msaa_resolve_buffer) {
-        glDeleteFramebuffers(1, &pass->gl.ds_att.gl_msaa_resolve_buffer);
     }
     _SG_GL_CHECK_ERROR();
 }
 
 _SOKOL_PRIVATE _sg_image_t* _sg_gl_pass_color_image(const _sg_pass_t* pass, int index) {
     SOKOL_ASSERT(pass && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
-    /* NOTE: may return null */
     return pass->gl.color_atts[index].image;
 }
 
+_SOKOL_PRIVATE _sg_image_t* _sg_gl_pass_resolve_image(const _sg_pass_t* pass, int index) {
+    SOKOL_ASSERT(pass && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
+    return pass->gl.resolve_atts[index].image;
+}
+
 _SOKOL_PRIVATE _sg_image_t* _sg_gl_pass_ds_image(const _sg_pass_t* pass) {
-    /* NOTE: may return null */
     SOKOL_ASSERT(pass);
     return pass->gl.ds_att.image;
 }
@@ -7321,7 +7316,6 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
         glEnable(GL_FRAMEBUFFER_SRGB);
         #endif
         glBindFramebuffer(GL_FRAMEBUFFER, pass->gl.fb);
-
     } else {
         // default pass
         SOKOL_ASSERT(_sg.gl.cur_context);
@@ -7339,13 +7333,13 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
     // clear color and depth-stencil attachments if needed
     bool clear_any_color = false;
     for (int i = 0; i < num_color_atts; i++) {
-        if (SG_ACTION_CLEAR == action->colors[i].action) {
+        if (SG_LOADACTION_CLEAR == action->colors[i].load_action) {
             clear_any_color = true;
             break;
         }
     }
-    const bool clear_depth = (action->depth.action == SG_ACTION_CLEAR);
-    const bool clear_stencil = (action->stencil.action == SG_ACTION_CLEAR);
+    const bool clear_depth = (action->depth.load_action == SG_LOADACTION_CLEAR);
+    const bool clear_stencil = (action->stencil.load_action == SG_LOADACTION_CLEAR);
 
     bool need_pip_cache_flush = false;
     if (clear_any_color) {
@@ -7388,20 +7382,27 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
         _sg.gl.cache.cur_pipeline_id.id = SG_INVALID_ID;
     }
     for (int i = 0; i < num_color_atts; i++) {
-        if (action->colors[i].action == SG_ACTION_CLEAR) {
-            glClearBufferfv(GL_COLOR, i, &action->colors[i].value.r);
+        if (action->colors[i].load_action == SG_LOADACTION_CLEAR) {
+            glClearBufferfv(GL_COLOR, i, &action->colors[i].clear_value.r);
         }
     }
     if ((pass == 0) || (pass->gl.ds_att.image)) {
         if (clear_depth && clear_stencil) {
-            glClearBufferfi(GL_DEPTH_STENCIL, 0, action->depth.value, action->stencil.value);
+            glClearBufferfi(GL_DEPTH_STENCIL, 0, action->depth.clear_value, action->stencil.clear_value);
         } else if (clear_depth) {
-            glClearBufferfv(GL_DEPTH, 0, &action->depth.value);
+            glClearBufferfv(GL_DEPTH, 0, &action->depth.clear_value);
         } else if (clear_stencil) {
-            GLint val = (GLint) action->stencil.value;
+            GLint val = (GLint) action->stencil.clear_value;
             glClearBufferiv(GL_STENCIL, 0, &val);
         }
     }
+    // keep store actions for end-pass
+    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        _sg.gl.color_store_actions[i] = action->colors[i].store_action;
+    }
+    _sg.gl.depth_store_action = action->depth.store_action;
+    _sg.gl.stencil_store_action = action->stencil.store_action;
+
     _SG_GL_CHECK_ERROR();
 }
 
@@ -7409,38 +7410,48 @@ _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
     SOKOL_ASSERT(_sg.gl.in_pass);
     _SG_GL_CHECK_ERROR();
 
-    /* if this was an offscreen pass, and MSAA rendering was used, need
-       to resolve into the pass images */
     if (_sg.gl.cur_pass) {
-        /* check if the pass object is still valid */
         const _sg_pass_t* pass = _sg.gl.cur_pass;
         SOKOL_ASSERT(pass->slot.id == _sg.gl.cur_pass_id.id);
-        bool is_msaa = (0 != _sg.gl.cur_pass->gl.color_atts[0].gl_msaa_resolve_buffer);
-        if (is_msaa) {
-            SOKOL_ASSERT(pass->gl.fb);
-            glBindFramebuffer(GL_READ_FRAMEBUFFER, pass->gl.fb);
-            SOKOL_ASSERT(pass->gl.color_atts[0].image);
-            const int w = pass->gl.color_atts[0].image->cmn.width;
-            const int h = pass->gl.color_atts[0].image->cmn.height;
-            const int num_atts = pass->cmn.num_color_atts;
-            for (int att_index = 0; att_index < num_atts; att_index++) {
-                const _sg_gl_attachment_t* gl_att = &pass->gl.color_atts[att_index];
-                SOKOL_ASSERT(gl_att->gl_msaa_resolve_buffer);
-                glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl_att->gl_msaa_resolve_buffer);
-                glReadBuffer((GLenum)(GL_COLOR_ATTACHMENT0 + att_index));
+        bool fb_bound = false;
+        const int num_atts = pass->cmn.num_color_atts;
+        for (int i = 0; i < num_atts; i++) {
+            // perform MSAA resolve if needed
+            if (pass->gl.msaa_resolve_framebuffer[i] != 0) {
+                if (!fb_bound) {
+                    SOKOL_ASSERT(pass->gl.fb);
+                    glBindFramebuffer(GL_READ_FRAMEBUFFER, pass->gl.fb);
+                    fb_bound = true;
+                }
+                const int w = pass->gl.color_atts[i].image->cmn.width;
+                const int h = pass->gl.color_atts[i].image->cmn.height;
+                glBindFramebuffer(GL_DRAW_FRAMEBUFFER, pass->gl.msaa_resolve_framebuffer[i]);
+                glReadBuffer((GLenum)(GL_COLOR_ATTACHMENT0 + i));
                 glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
             }
-            #if defined(SOKOL_GLES3)
-                const GLenum color_att[SG_MAX_COLOR_ATTACHMENTS] = {
-                    GL_COLOR_ATTACHMENT0,
-                    GL_COLOR_ATTACHMENT1,
-                    GL_COLOR_ATTACHMENT2,
-                    GL_COLOR_ATTACHMENT3
-                };
-                glInvalidateFramebuffer(GL_READ_FRAMEBUFFER, num_atts, color_att);
-            #endif
         }
+
+        // invalidate framebuffers
+        #if defined(SOKOL_GLES3)
+        GLenum invalidate_atts[SG_MAX_COLOR_ATTACHMENTS + 2] = { 0 };
+        int att_index = 0;
+        for (int i = 0; i < num_atts; i++) {
+            if (_sg.gl.color_store_actions[i] == SG_STOREACTION_DONTCARE) {
+                invalidate_atts[att_index++] = (GLenum)(GL_COLOR_ATTACHMENT0 + i);
+            }
+        }
+        if (_sg.gl.depth_store_action == SG_STOREACTION_DONTCARE) {
+            invalidate_atts[att_index++] = GL_DEPTH_ATTACHMENT;
+        }
+        if (_sg.gl.stencil_store_action == SG_STOREACTION_DONTCARE) {
+            invalidate_atts[att_index++] = GL_STENCIL_ATTACHMENT;
+        }
+        if (att_index > 0) {
+            glInvalidateFramebuffer(GL_FRAMEBUFFER, att_index, invalidate_atts);
+        }
+        #endif
     }
+
     _sg.gl.cur_pass = 0;
     _sg.gl.cur_pass_id.id = SG_INVALID_ID;
     _sg.gl.cur_pass_width = 0;
@@ -7683,19 +7694,20 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
     _SOKOL_UNUSED(num_vbs);
     _SG_GL_CHECK_ERROR();
 
-    /* bind textures */
+    // bind textures
     _SG_GL_CHECK_ERROR();
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[stage_index];
         const _sg_gl_shader_stage_t* gl_stage = &pip->shader->gl.stage[stage_index];
         _sg_image_t** imgs = (stage_index == SG_SHADERSTAGE_VS)? vs_imgs : fs_imgs;
-        SOKOL_ASSERT(((stage_index == SG_SHADERSTAGE_VS)? num_vs_imgs : num_fs_imgs) == stage->num_images);
+        SOKOL_ASSERT(((stage_index == SG_SHADERSTAGE_VS) ? num_vs_imgs : num_fs_imgs) == stage->num_images);
         for (int img_index = 0; img_index < stage->num_images; img_index++) {
             const _sg_gl_shader_image_t* gl_shd_img = &gl_stage->images[img_index];
             if (gl_shd_img->gl_tex_slot != -1) {
                 _sg_image_t* img = imgs[img_index];
-                const GLuint gl_tex = img->gl.tex[img->cmn.active_slot];
                 SOKOL_ASSERT(img && img->gl.target);
+                SOKOL_ASSERT(img->gl.msaa_render_buffer == 0);
+                const GLuint gl_tex = img->gl.tex[img->cmn.active_slot];
                 SOKOL_ASSERT((gl_shd_img->gl_tex_slot != -1) && gl_tex);
                 _sg_gl_cache_bind_texture(gl_shd_img->gl_tex_slot, img->gl.target, gl_tex);
             }
@@ -7703,12 +7715,12 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
     }
     _SG_GL_CHECK_ERROR();
 
-    /* index buffer (can be 0) */
+    // index buffer (can be 0)
     const GLuint gl_ib = ib ? ib->gl.buf[ib->cmn.active_slot] : 0;
     _sg_gl_cache_bind_buffer(GL_ELEMENT_ARRAY_BUFFER, gl_ib);
     _sg.gl.cache.cur_ib_offset = ib_offset;
 
-    /* vertex attributes */
+    // vertex attributes
     for (GLuint attr_index = 0; attr_index < (GLuint)_sg.limits.max_vertex_attrs; attr_index++) {
         _sg_gl_attr_t* attr = &pip->gl.attrs[attr_index];
         _sg_gl_cache_attr_t* cache_attr = &_sg.gl.cache.attrs[attr_index];
@@ -7716,7 +7728,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
         int vb_offset = 0;
         GLuint gl_vb = 0;
         if (attr->vb_index >= 0) {
-            /* attribute is enabled */
+            // attribute is enabled
             SOKOL_ASSERT(attr->vb_index < num_vbs);
             _sg_buffer_t* vb = vbs[attr->vb_index];
             SOKOL_ASSERT(vb);
@@ -7742,7 +7754,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
                 cache_attr_dirty = true;
             }
         } else {
-            /* attribute is disabled */
+            // attribute is disabled
             if (cache_attr->gl_attr.vb_index != -1) {
                 glDisableVertexAttribArray(attr_index);
                 cache_attr_dirty = true;
@@ -10591,10 +10603,7 @@ _SOKOL_PRIVATE void _sg_mtl_bind_uniform_buffers(void) {
 
 _SOKOL_PRIVATE void _sg_mtl_reset_state_cache(void) {
     _sg_mtl_clear_state_cache();
-
-    /* need to restore the uniform buffer binding (normally happens in
-       _sg_mtl_begin_pass()
-    */
+    // need to restore the uniform buffer binding (normally happens in _sg_mtl_begin_pass()
     if (nil != _sg.mtl.cmd_encoder) {
         _sg_mtl_bind_uniform_buffers();
     }
@@ -11071,7 +11080,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pass(_sg_pass_t* pass, _sg_image
     for (int i = 0; i < pass->cmn.num_color_atts; i++) {
         const sg_pass_attachment_desc* color_desc = &desc->color_attachments[i];
         if (color_desc->image.id != SG_INVALID_ID) {
-            SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
             SOKOL_ASSERT(0 == pass->mtl.color_atts[i].image);
             SOKOL_ASSERT(color_images[i] && (color_images[i]->slot.id == color_desc->image.id));
             SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(color_images[i]->cmn.pixel_format));
@@ -11079,7 +11087,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pass(_sg_pass_t* pass, _sg_image
         }
         const sg_pass_attachment_desc* resolve_desc = &desc->resolve_attachments[i];
         if (resolve_desc->image.id != SG_INVALID_ID) {
-            SOKOL_ASSERT(resolve_desc->image.id != SG_INVALID_ID);
             SOKOL_ASSERT(0 == pass->mtl.resolve_atts[i].image);
             SOKOL_ASSERT(resolve_images[i] && (resolve_images[i]->slot.id == resolve_desc->image.id));
             SOKOL_ASSERT(color_images[i] && (color_images[i]->cmn.pixel_format == resolve_images[i]->cmn.pixel_format));
