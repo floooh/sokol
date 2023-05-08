@@ -4066,7 +4066,16 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
     [self addTrackingArea:_sapp.macos.tracking_area];
     [super updateTrackingAreas];
 }
+
+// helper function to make GL context active
+static void _sapp_gl_make_current(void) {
+    #if defined(SOKOL_GLCORE33)
+    [[_sapp.macos.view openGLContext] makeCurrentContext];
+    #endif
+}
+
 - (void)mouseEntered:(NSEvent*)event {
+    _sapp_gl_make_current();
     _sapp_macos_mouse_update(event);
     /* don't send mouse enter/leave while dragging (so that it behaves the same as
        on Windows while SetCapture is active
@@ -4076,32 +4085,38 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
     }
 }
 - (void)mouseExited:(NSEvent*)event {
+    _sapp_gl_make_current();
     _sapp_macos_mouse_update(event);
     if (0 == _sapp.macos.mouse_buttons) {
         _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mods(event));
     }
 }
 - (void)mouseDown:(NSEvent*)event {
+    _sapp_gl_make_current();
     _sapp_macos_mouse_update(event);
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_LEFT, _sapp_macos_mods(event));
     _sapp.macos.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_LEFT);
 }
 - (void)mouseUp:(NSEvent*)event {
+    _sapp_gl_make_current();
     _sapp_macos_mouse_update(event);
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_LEFT, _sapp_macos_mods(event));
     _sapp.macos.mouse_buttons &= ~(1<<SAPP_MOUSEBUTTON_LEFT);
 }
 - (void)rightMouseDown:(NSEvent*)event {
+    _sapp_gl_make_current();
     _sapp_macos_mouse_update(event);
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mods(event));
     _sapp.macos.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_RIGHT);
 }
 - (void)rightMouseUp:(NSEvent*)event {
+    _sapp_gl_make_current();
     _sapp_macos_mouse_update(event);
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mods(event));
     _sapp.macos.mouse_buttons &= ~(1<<SAPP_MOUSEBUTTON_RIGHT);
 }
 - (void)otherMouseDown:(NSEvent*)event {
+    _sapp_gl_make_current();
     _sapp_macos_mouse_update(event);
     if (2 == event.buttonNumber) {
         _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mods(event));
@@ -4109,6 +4124,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
     }
 }
 - (void)otherMouseUp:(NSEvent*)event {
+    _sapp_gl_make_current();
     _sapp_macos_mouse_update(event);
     if (2 == event.buttonNumber) {
         _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mods(event));
@@ -4116,6 +4132,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
     }
 }
 - (void)otherMouseDragged:(NSEvent*)event {
+    _sapp_gl_make_current();
     _sapp_macos_mouse_update(event);
     if (2 == event.buttonNumber) {
         if (_sapp.mouse.locked) {
@@ -4126,6 +4143,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
     }
 }
 - (void)mouseMoved:(NSEvent*)event {
+    _sapp_gl_make_current();
     _sapp_macos_mouse_update(event);
     if (_sapp.mouse.locked) {
         _sapp.mouse.dx = [event deltaX];
@@ -4134,6 +4152,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mods(event));
 }
 - (void)mouseDragged:(NSEvent*)event {
+    _sapp_gl_make_current();
     _sapp_macos_mouse_update(event);
     if (_sapp.mouse.locked) {
         _sapp.mouse.dx = [event deltaX];
@@ -4142,6 +4161,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mods(event));
 }
 - (void)rightMouseDragged:(NSEvent*)event {
+    _sapp_gl_make_current();
     _sapp_macos_mouse_update(event);
     if (_sapp.mouse.locked) {
         _sapp.mouse.dx = [event deltaX];
@@ -4150,6 +4170,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mods(event));
 }
 - (void)scrollWheel:(NSEvent*)event {
+    _sapp_gl_make_current();
     _sapp_macos_mouse_update(event);
     if (_sapp_events_enabled()) {
         float dx = (float) event.scrollingDeltaX;
@@ -4169,6 +4190,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
 }
 - (void)keyDown:(NSEvent*)event {
     if (_sapp_events_enabled()) {
+        _sapp_gl_make_current();
         const uint32_t mods = _sapp_macos_mods(event);
         const sapp_keycode key_code = _sapp_translate_key(event.keyCode);
         _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_DOWN, key_code, event.isARepeat, mods);
@@ -4195,6 +4217,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
     }
 }
 - (void)keyUp:(NSEvent*)event {
+    _sapp_gl_make_current();
     _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_UP,
         _sapp_translate_key(event.keyCode),
         event.isARepeat,
