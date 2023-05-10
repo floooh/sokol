@@ -2556,6 +2556,7 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(GL_SHADER_COMPILATION_FAILED, "shader compilation failed (gl)") \
     _SG_LOGITEM_XMACRO(GL_SHADER_LINKING_FAILED, "shader linking failed (gl)") \
     _SG_LOGITEM_XMACRO(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER, "vertex attribute not found in shader (gl)") \
+    _SG_LOGITEM_XMACRO(GL_TEXTURE_NAME_NOT_FOUND_IN_SHADER, "texture name not found in shader (gl)") \
     _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_INCOMPLETE, "framebuffer completeness check failed (gl)") \
     _SG_LOGITEM_XMACRO(GL_MSAA_FRAMEBUFFER_INCOMPLETE, "completeness check failed for msaa resolve framebuffer (gl)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_BUFFER_FAILED, "CreateBuffer() failed (d3d11)") \
@@ -6984,6 +6985,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
                 glUniform1i(gl_loc, gl_img->gl_tex_slot);
             } else {
                 gl_img->gl_tex_slot = -1;
+                _SG_ERROR(GL_TEXTURE_NAME_NOT_FOUND_IN_SHADER);
+                _SG_LOGMSG(GL_TEXTURE_NAME_NOT_FOUND_IN_SHADER, img_desc->name);
             }
         }
     }
