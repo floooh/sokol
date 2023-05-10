@@ -103,6 +103,7 @@
     MOUSE_DOWN          | YES     | YES   | YES   | ---   | ---     |  YES
     MOUSE_UP            | YES     | YES   | YES   | ---   | ---     |  YES
     MOUSE_SCROLL        | YES     | YES   | YES   | ---   | ---     |  YES
+    MOUSE_MAGNIFY       | NO      | YES   | NO    | ---   | ---     |  NO
     MOUSE_MOVE          | YES     | YES   | YES   | ---   | ---     |  YES
     MOUSE_ENTER         | YES     | YES   | YES   | ---   | ---     |  YES
     MOUSE_LEAVE         | YES     | YES   | YES   | ---   | ---     |  YES
@@ -1162,6 +1163,7 @@ typedef enum sapp_event_type {
     SAPP_EVENTTYPE_MOUSE_DOWN,
     SAPP_EVENTTYPE_MOUSE_UP,
     SAPP_EVENTTYPE_MOUSE_SCROLL,
+    SAPP_EVENTTYPE_MOUSE_MAGNIFY,
     SAPP_EVENTTYPE_MOUSE_MOVE,
     SAPP_EVENTTYPE_MOUSE_ENTER,
     SAPP_EVENTTYPE_MOUSE_LEAVE,
@@ -1374,6 +1376,7 @@ enum {
     SAPP_MODIFIER_LMB   = 0x100,    // left mouse button
     SAPP_MODIFIER_RMB   = 0x200,    // right mouse button
     SAPP_MODIFIER_MMB   = 0x400,    // middle mouse button
+    SAPP_MODIFIER_TRACKPAD = 0x800, // mouse event originates from a trackpad
 };
 
 /*
@@ -1399,6 +1402,7 @@ typedef struct sapp_event {
     float mouse_dy;                     // relative vertical mouse movement since last frame, always valid
     float scroll_x;                     // horizontal mouse wheel scroll distance, valid in MOUSE_SCROLL events
     float scroll_y;                     // vertical mouse wheel scroll distance, valid in MOUSE_SCROLL events
+    float magnification;                // magnification scale, valid in MOUSE_MAGNIFY events
     int num_touches;                    // number of valid items in the touches[] array
     sapp_touchpoint touches[SAPP_MAX_TOUCHPOINTS];  // current touch points, valid in TOUCHES_BEGIN, TOUCHES_MOVED, TOUCHES_ENDED
     int window_width;                   // current window- and framebuffer sizes in pixels, always valid
@@ -4182,8 +4186,22 @@ static void _sapp_gl_make_current(void) {
         if ((_sapp_absf(dx) > 0.0f) || (_sapp_absf(dy) > 0.0f)) {
             _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
             _sapp.event.modifiers = _sapp_macos_mods(event);
+            if (event.hasPreciseScrollingDeltas)
+                _sapp.event.modifiers |= SAPP_MODIFIER_TRACKPAD;
             _sapp.event.scroll_x = dx;
             _sapp.event.scroll_y = dy;
+            _sapp_call_event(&_sapp.event);
+        }
+    }
+}
+- (void)magnifyWithEvent:(NSEvent *)event {
+    _sapp_macos_update_mouse(event);
+    if (_sapp_events_enabled()) {
+        CGFloat magnification = [event magnification];
+        if (magnification != 1.0f) {
+            _sapp_init_event(SAPP_EVENTTYPE_MOUSE_MAGNIFY);
+            _sapp.event.modifiers = _sapp_macos_mods(event) | SAPP_MODIFIER_TRACKPAD;
+            _sapp.event.magnification = magnification;
             _sapp_call_event(&_sapp.event);
         }
     }
