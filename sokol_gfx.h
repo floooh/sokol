@@ -2751,10 +2751,12 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_EXISTS, "sg_apply_bindings: vertex shader image no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_TYPES, "sg_apply_bindings: one or more vertex shader image types don't match sg_shader_desc") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_MSAA, "sg_apply_bindings: cannot bind image with sample_count>1 to vertex stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_DEPTH, "sg_apply_bindings: cannot bind depth/stencil image to vertex stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMGS, "sg_apply_bindings: fragment shader image count doesn't match sg_shader_desc") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_EXISTS, "sg_apply_bindings: fragment shader image no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_TYPES, "sg_apply_bindings: one or more fragment shader image types don't match sg_shader_desc") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_MSAA, "sg_apply_bindings: cannot bind image with sample_count>1 to fragment stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_DEPTH, "sg_apply_bindings: cannot bind depth/stencil image to fragment stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_NO_PIPELINE, "sg_apply_uniforms: must be called after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_NO_UB_AT_SLOT, "sg_apply_uniforms: no uniform block declaration at this shader stage UB slot") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_SIZE, "sg_apply_uniforms: data size exceeds declared uniform block size") \
@@ -4957,6 +4959,11 @@ _SOKOL_PRIVATE bool _sg_is_valid_rendertarget_depth_format(sg_pixel_format fmt) 
     const int fmt_index = (int) fmt;
     SOKOL_ASSERT((fmt_index >= 0) && (fmt_index < _SG_PIXELFORMAT_NUM));
     return _sg.formats[fmt_index].render && _sg.formats[fmt_index].depth;
+}
+
+// return true if pixel format is a depth- or depth-stencil format
+_SOKOL_PRIVATE bool _sg_is_depth_or_depth_stencil_format(sg_pixel_format fmt) {
+    return (SG_PIXELFORMAT_DEPTH == fmt) || (SG_PIXELFORMAT_DEPTH_STENCIL == fmt);
 }
 
 /* return true if pixel format is a depth-stencil format */
@@ -8821,9 +8828,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
             d3d11_tex_desc.Format = img->d3d11.format;
             if (img->cmn.render_attachment) {
                 d3d11_tex_desc.Usage = D3D11_USAGE_DEFAULT;
-                d3d11_tex_desc.BindFlags = D3D11_BIND_RENDER_TARGET;
-                if (!msaa) {
-                    d3d11_tex_desc.BindFlags |= D3D11_BIND_SHADER_RESOURCE;
+                if (_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format)) {
+                    d3d11_tex_desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+                } else {
+                    d3d11_tex_desc.BindFlags = D3D11_BIND_RENDER_TARGET;
+                    if (!msaa) {
+                        d3d11_tex_desc.BindFlags |= D3D11_BIND_SHADER_RESOURCE;
+                    }
                 }
                 d3d11_tex_desc.CPUAccessFlags = 0;
             } else {
@@ -8844,7 +8855,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
 
         // ...and similar, if not injected, create shader-resource-view
         // FIXME: currently we don't support setting MSAA texture as shader resource
-        if ((0 == img->d3d11.srv) && !msaa) {
+        if ((0 == img->d3d11.srv) && !msaa && !_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format)) {
             D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
             _sg_clear(&d3d11_srv_desc, sizeof(d3d11_srv_desc));
             d3d11_srv_desc.Format = img->d3d11.format;
@@ -14218,7 +14229,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
                               (0 != desc->mtl_textures[0]) ||
                               (0 != desc->d3d11_texture) ||
                               (0 != desc->wgpu_texture);
-        if (_sg_is_depth_stencil_format(fmt)) {
+        if (_sg_is_depth_or_depth_stencil_format(fmt)) {
             _SG_VALIDATE(desc->type != SG_IMAGETYPE_3D, VALIDATE_IMAGEDESC_DEPTH_3D_IMAGE);
         }
         if (desc->render_attachment) {
@@ -14673,6 +14684,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
                     _SG_VALIDATE(img->cmn.type == stage->images[i].image_type, VALIDATE_ABND_VS_IMG_TYPES);
                     _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_ABND_VS_IMG_MSAA);
+                    _SG_VALIDATE(!_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format), VALIDATE_ABND_VS_IMG_DEPTH);
                 }
             } else {
                 _SG_VALIDATE(i >= stage->num_images, VALIDATE_ABND_VS_IMGS);
@@ -14689,6 +14701,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
                     _SG_VALIDATE(img->cmn.type == stage->images[i].image_type, VALIDATE_ABND_FS_IMG_TYPES);
                     _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_ABND_FS_IMG_MSAA);
+                    _SG_VALIDATE(!_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format), VALIDATE_ABND_FS_IMG_DEPTH);
                 }
             } else {
                 _SG_VALIDATE(i >= stage->num_images, VALIDATE_ABND_FS_IMGS);
