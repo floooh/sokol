@@ -11220,7 +11220,6 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
         }
         const _sg_image_t* ds_att_img = pass->mtl.ds_att.image;
         if (0 != ds_att_img) {
-FIXME: level / slice / depthPlane!
             SOKOL_ASSERT(ds_att_img->slot.state == SG_RESOURCESTATE_VALID);
             SOKOL_ASSERT(ds_att_img->slot.id == pass->cmn.ds_att.image_id.id);
             SOKOL_ASSERT(ds_att_img->mtl.tex[ds_att_img->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
@@ -11228,11 +11227,32 @@ FIXME: level / slice / depthPlane!
             pass_desc.depthAttachment.loadAction = _sg_mtl_load_action(action->depth.load_action);
             pass_desc.depthAttachment.storeAction = _sg_mtl_store_action(action->depth.store_action, false);
             pass_desc.depthAttachment.clearDepth = action->depth.clear_value;
+            const _sg_pass_attachment_t* cmn_ds_att = &pass->cmn.ds_att;
+            switch (ds_att_img->cmn.type) {
+                case SG_IMAGETYPE_CUBE:
+                case SG_IMAGETYPE_ARRAY:
+                    pass_desc.depthAttachment.slice = (NSUInteger)cmn_ds_att->slice;
+                    break;
+                case SG_IMAGETYPE_3D:
+                    pass_desc.depthAttachment.resolveDepthPlane = (NSUInteger)cmn_ds_att->slice;
+                    break;
+                default: break;
+            }
             if (_sg_is_depth_stencil_format(ds_att_img->cmn.pixel_format)) {
                 pass_desc.stencilAttachment.texture = _sg_mtl_id(ds_att_img->mtl.tex[ds_att_img->cmn.active_slot]);
                 pass_desc.stencilAttachment.loadAction = _sg_mtl_load_action(action->stencil.load_action);
                 pass_desc.stencilAttachment.storeAction = _sg_mtl_store_action(action->depth.store_action, false);
                 pass_desc.stencilAttachment.clearStencil = action->stencil.clear_value;
+                switch (ds_att_img->cmn.type) {
+                    case SG_IMAGETYPE_CUBE:
+                    case SG_IMAGETYPE_ARRAY:
+                        pass_desc.stencilAttachment.slice = (NSUInteger)cmn_ds_att->slice;
+                        break;
+                    case SG_IMAGETYPE_3D:
+                        pass_desc.stencilAttachment.resolveDepthPlane = (NSUInteger)cmn_ds_att->slice;
+                        break;
+                    default: break;
+                }
             }
         }
     } else {
