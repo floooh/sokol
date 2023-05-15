@@ -45,7 +45,7 @@ static sg_buffer create_buffer(void) {
 
 static sg_image create_image(void) {
     return sg_make_image(&(sg_image_desc){
-        .render_attachment = true,
+        .render_target = true,
         .width = 256,
         .height = 128
     });
@@ -66,7 +66,7 @@ static sg_pipeline create_pipeline(void) {
 
 static sg_pass create_pass(void) {
     sg_image_desc img_desc = {
-        .render_attachment = true,
+        .render_target = true,
         .width = 128,
         .height = 128,
     };
@@ -358,7 +358,7 @@ UTEST(sokol_gfx, make_destroy_images) {
         T(imgptr->slot.ctx_id == _sg.active_context.id);
         T(imgptr->slot.state == SG_RESOURCESTATE_VALID);
         T(imgptr->cmn.type == SG_IMAGETYPE_2D);
-        T(!imgptr->cmn.render_attachment);
+        T(!imgptr->cmn.render_target);
         T(imgptr->cmn.width == 8);
         T(imgptr->cmn.height == 8);
         T(imgptr->cmn.num_slices == 1);
@@ -482,7 +482,7 @@ UTEST(sokol_gfx, make_destroy_passes) {
     sg_pass pass[3] = { {0} };
 
     sg_image_desc img_desc = {
-        .render_attachment = true,
+        .render_target = true,
         .width = 128,
         .height = 128,
     };
@@ -562,7 +562,7 @@ UTEST(sokol_gfx, query_image_defaults) {
     setup(&(sg_desc){0});
     const sg_image_desc desc = sg_query_image_defaults(&(sg_image_desc){0});
     T(desc.type == SG_IMAGETYPE_2D);
-    T(!desc.render_attachment);
+    T(!desc.render_target);
     T(desc.num_mipmaps == 1);
     T(desc.usage == SG_USAGE_IMMUTABLE);
     T(desc.pixel_format == SG_PIXELFORMAT_RGBA8);
@@ -754,7 +754,7 @@ UTEST(sokol_gfx, query_buffer_info) {
 UTEST(sokol_gfx, query_image_info) {
     setup(&(sg_desc){0});
     sg_image img = sg_make_image(&(sg_image_desc){
-        .render_attachment = true,
+        .render_target = true,
         .width = 256,
         .height = 128
     });
@@ -801,7 +801,7 @@ UTEST(sokol_gfx, query_pipeline_info) {
 UTEST(sokol_gfx, query_pass_info) {
     setup(&(sg_desc){0});
     sg_image_desc img_desc = {
-        .render_attachment = true,
+        .render_target = true,
         .width = 128,
         .height = 128,
     };
@@ -891,7 +891,7 @@ UTEST(sokol_gfx, query_image_desc) {
     });
     const sg_image_desc i0_desc = sg_query_image_desc(i0);
     T(i0_desc.type == SG_IMAGETYPE_2D);
-    T(i0_desc.render_attachment == false);
+    T(i0_desc.render_target == false);
     T(i0_desc.width == 256);
     T(i0_desc.height == 512);
     T(i0_desc.num_slices == 1);
@@ -920,7 +920,7 @@ UTEST(sokol_gfx, query_image_desc) {
     sg_destroy_image(i0);
     const sg_image_desc i1_desc = sg_query_image_desc(i0);
     T(i1_desc.type == 0);
-    T(i1_desc.render_attachment == false);
+    T(i1_desc.render_target == false);
     T(i1_desc.width == 0);
     T(i1_desc.height == 0);
     T(i1_desc.num_slices == 0);
@@ -1067,12 +1067,12 @@ UTEST(sokol_gfx, query_pass_desc) {
     setup(&(sg_desc){0});
 
     const sg_image_desc color_img_desc = {
-        .render_attachment = true,
+        .render_target = true,
         .width = 128,
         .height = 128,
     };
     const sg_image_desc depth_img_desc = {
-        .render_attachment = true,
+        .render_target = true,
         .width = 128,
         .height = 128,
         .pixel_format = SG_PIXELFORMAT_DEPTH,
@@ -1124,7 +1124,7 @@ UTEST(sokol_gfx, image_resource_states) {
     setup(&(sg_desc){0});
     sg_image img = sg_alloc_image();
     T(sg_query_image_state(img) == SG_RESOURCESTATE_ALLOC);
-    sg_init_image(img, &(sg_image_desc){ .render_attachment = true, .width = 16, .height = 16 });
+    sg_init_image(img, &(sg_image_desc){ .render_target = true, .width = 16, .height = 16 });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     sg_uninit_image(img);
     T(sg_query_image_state(img) == SG_RESOURCESTATE_ALLOC);
@@ -1167,7 +1167,7 @@ UTEST(sokol_gfx, pass_resource_states) {
     sg_pass pass = sg_alloc_pass();
     T(sg_query_pass_state(pass) == SG_RESOURCESTATE_ALLOC);
     sg_init_pass(pass, &(sg_pass_desc){
-        .color_attachments[0].image = sg_make_image(&(sg_image_desc){ .render_attachment=true, .width=16, .height=16})
+        .color_attachments[0].image = sg_make_image(&(sg_image_desc){ .render_target=true, .width=16, .height=16})
     });
     T(sg_query_pass_state(pass) == SG_RESOURCESTATE_VALID);
     sg_uninit_pass(pass);
@@ -1632,7 +1632,7 @@ UTEST(sokol_gfx, make_pass_with_nonvalid_color_images) {
         },
         .depth_stencil_attachment = {
             .image = sg_make_image(&(sg_image_desc){
-                .render_attachment = true,
+                .render_target = true,
                 .width = 128,
                 .height = 128
             })
@@ -1770,7 +1770,7 @@ UTEST(sokol_gfx, make_image_validate_msaa_no_rt) {
 UTEST(sokol_gfx, make_image_validate_msaa_num_mipmaps) {
     setup(&(sg_desc){0});
     sg_image img = sg_make_image(&(sg_image_desc){
-        .render_attachment = true,
+        .render_target = true,
         .width = 64,
         .height = 64,
         .sample_count = 4,
@@ -1785,7 +1785,7 @@ UTEST(sokol_gfx, make_image_validate_msaa_num_mipmaps) {
 UTEST(sokol_gfx, make_image_validate_msaa_3d_image) {
     setup(&(sg_desc){0});
     sg_image img = sg_make_image(&(sg_image_desc){
-        .render_attachment = true,
+        .render_target = true,
         .type = SG_IMAGETYPE_3D,
         .width = 32,
         .height = 32,
@@ -1801,7 +1801,7 @@ UTEST(sokol_gfx, make_image_validate_msaa_3d_image) {
 UTEST(sokol_gfx, make_image_validate_depth_3d_image_with_depth_format) {
     setup(&(sg_desc){0});
     sg_image img = sg_make_image(&(sg_image_desc){
-        .render_attachment = true,
+        .render_target = true,
         .type = SG_IMAGETYPE_3D,
         .width = 8,
         .height = 8,
@@ -1817,7 +1817,7 @@ UTEST(sokol_gfx, make_image_validate_depth_3d_image_with_depth_format) {
 UTEST(sokol_gfx, make_image_validate_rt_immutable) {
     setup(&(sg_desc){0});
     sg_image img = sg_make_image(&(sg_image_desc){
-        .render_attachment = true,
+        .render_target = true,
         .usage = SG_USAGE_DYNAMIC,
         .width = 8,
         .height = 8,
