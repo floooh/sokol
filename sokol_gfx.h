@@ -3942,6 +3942,7 @@ typedef struct {
     _sg_pass_common_t cmn;
     struct {
         _sg_dummy_attachment_t color_atts[SG_MAX_COLOR_ATTACHMENTS];
+        _sg_dummy_attachment_t resolve_atts[SG_MAX_COLOR_ATTACHMENTS];
         _sg_dummy_attachment_t ds_att;
     } dmy;
 } _sg_dummy_pass_t;
@@ -5339,29 +5340,36 @@ _SOKOL_PRIVATE void _sg_dummy_discard_pipeline(_sg_pipeline_t* pip) {
     _SOKOL_UNUSED(pip);
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_dummy_create_pass(_sg_pass_t* pass, _sg_image_t** att_images, const sg_pass_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_dummy_create_pass(_sg_pass_t* pass, _sg_image_t** color_images, _sg_image_t** resolve_images, _sg_image_t* ds_img, const sg_pass_desc* desc) {
     SOKOL_ASSERT(pass && desc);
-    SOKOL_ASSERT(att_images && att_images[0]);
+    SOKOL_ASSERT(color_images && resolve_images);
 
     _sg_pass_common_init(&pass->cmn, desc);
 
-    const sg_pass_attachment_desc* att_desc;
     for (int i = 0; i < pass->cmn.num_color_atts; i++) {
-        att_desc = &desc->color_attachments[i];
-        SOKOL_ASSERT(att_desc->image.id != SG_INVALID_ID);
+        const sg_pass_attachment_desc* color_desc = &desc->color_attachments[i];
+        _SOKOL_UNUSED(color_desc);
+        SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
         SOKOL_ASSERT(0 == pass->dmy.color_atts[i].image);
-        SOKOL_ASSERT(att_images[i] && (att_images[i]->slot.id == att_desc->image.id));
-        SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(att_images[i]->cmn.pixel_format));
-        pass->dmy.color_atts[i].image = att_images[i];
+        SOKOL_ASSERT(color_images[i] && (color_images[i]->slot.id == color_desc->image.id));
+        SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(color_images[i]->cmn.pixel_format));
+        pass->dmy.color_atts[i].image = color_images[i];
+
+        const sg_pass_attachment_desc* resolve_desc = &desc->resolve_attachments[i];
+        if (resolve_desc->image.id != SG_INVALID_ID) {
+            SOKOL_ASSERT(0 == pass->dmy.resolve_atts[i].image);
+            SOKOL_ASSERT(resolve_images[i] && (resolve_images[i]->slot.id == resolve_desc->image.id));
+            SOKOL_ASSERT(color_images[i] && (color_images[i]->cmn.pixel_format == resolve_images[i]->cmn.pixel_format));
+            pass->dmy.resolve_atts[i].image = resolve_images[i];
+        }
     }
 
     SOKOL_ASSERT(0 == pass->dmy.ds_att.image);
-    att_desc = &desc->depth_stencil_attachment;
-    if (att_desc->image.id != SG_INVALID_ID) {
-        const int ds_img_index = SG_MAX_COLOR_ATTACHMENTS;
-        SOKOL_ASSERT(att_images[ds_img_index] && (att_images[ds_img_index]->slot.id == att_desc->image.id));
-        SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(att_images[ds_img_index]->cmn.pixel_format));
-        pass->dmy.ds_att.image = att_images[ds_img_index];
+    const sg_pass_attachment_desc* ds_desc = &desc->depth_stencil_attachment;
+    if (ds_desc->image.id != SG_INVALID_ID) {
+        SOKOL_ASSERT(ds_img && (ds_img->slot.id == ds_desc->image.id));
+        SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(ds_img->cmn.pixel_format));
+        pass->dmy.ds_att.image = ds_img;
     }
     return SG_RESOURCESTATE_VALID;
 }
@@ -5373,12 +5381,15 @@ _SOKOL_PRIVATE void _sg_dummy_discard_pass(_sg_pass_t* pass) {
 
 _SOKOL_PRIVATE _sg_image_t* _sg_dummy_pass_color_image(const _sg_pass_t* pass, int index) {
     SOKOL_ASSERT(pass && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
-    /* NOTE: may return null */
     return pass->dmy.color_atts[index].image;
 }
 
+_SOKOL_PRIVATE _sg_image_t* _sg_dummy_pass_resolve_image(const _sg_pass_t* pass, int index) {
+    SOKOL_ASSERT(pass && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
+    return pass->dmy.resolve_atts[index].image;
+}
+
 _SOKOL_PRIVATE _sg_image_t* _sg_dummy_pass_ds_image(const _sg_pass_t* pass) {
-    /* NOTE: may return null */
     SOKOL_ASSERT(pass);
     return pass->dmy.ds_att.image;
 }
@@ -7169,6 +7180,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
     // copy image pointers
     for (int i = 0; i < pass->cmn.num_color_atts; i++) {
         const sg_pass_attachment_desc* color_desc = &desc->color_attachments[i];
+        _SOKOL_UNUSED(color_desc);
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
         SOKOL_ASSERT(0 == pass->gl.color_atts[i].image);
         SOKOL_ASSERT(color_images[i] && (color_images[i]->slot.id == color_desc->image.id));
@@ -9344,6 +9356,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pass(_sg_pass_t* pass, _sg_ima
     // copy image pointers
     for (int i = 0; i < pass->cmn.num_color_atts; i++) {
         const sg_pass_attachment_desc* color_desc = &desc->color_attachments[i];
+        _SOKOL_UNUSED(color_desc);
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
         SOKOL_ASSERT(0 == pass->d3d11.color_atts[i].image);
         SOKOL_ASSERT(color_images[i] && (color_images[i]->slot.id == color_desc->image.id));
@@ -11062,6 +11075,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pass(_sg_pass_t* pass, _sg_image
     // copy image pointers
     for (int i = 0; i < pass->cmn.num_color_atts; i++) {
         const sg_pass_attachment_desc* color_desc = &desc->color_attachments[i];
+        _SOKOL_UNUSED(color_desc);
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
         SOKOL_ASSERT(0 == pass->mtl.color_atts[i].image);
         SOKOL_ASSERT(color_images[i] && (color_images[i]->slot.id == color_desc->image.id));
