@@ -2700,8 +2700,8 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_LAYER, "pass attachment image is array texture, but layer index is too big") \
     _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_SLICE, "pass attachment image is 3d texture, but slice value is too big") \
     _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_IMAGE_NO_RT, "pass attachment image must be have render_target=true") \
-    _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_COLOR_INV_PIXELFORMAT, "pass color-attachment images must have a renderable pixel format") \
-    _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT, "pass depth-attachment image must have depth pixel format") \
+    _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_COLOR_INV_PIXELFORMAT, "pass color-attachment images must be renderable color pixel format") \
+    _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT, "pass depth-attachment image must be depth or depth-stencil pixel format") \
     _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_IMAGE_SIZES, "all pass attachments must have the same size") \
     _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS, "all pass attachments must have the same sample count") \
     _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_RESOLVE_COLOR_IMAGE_MSAA, "pass resolve attachments must have a color attachment image with sample count > 1") \
@@ -2721,7 +2721,7 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_DEPTH_SLICE, "pass depth attachment image is 3d texture, but slice value is too big") \
     _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_DEPTH_IMAGE_NO_RT, "pass depth attachment image must be have render_target=true") \
     _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES, "pass depth attachment image size must match color attachment image size") \
-    _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_DEPTH_IMAGE_SAMPLE_COUNTS, "pass depth attachment sample count must match color attachment sample count") \
+    _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_DEPTH_IMAGE_SAMPLE_COUNT, "pass depth attachment sample count must match color attachment sample count") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_PASS, "sg_begin_pass: pass must be valid") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE, "sg_begin_pass: one or more color attachment images are not valid") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVE_ATTACHMENT_IMAGE, "sg_begin_pass: one or more resolve attachment images are not valid") \
@@ -14548,23 +14548,26 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
         if (desc->depth_stencil_attachment.image.id != SG_INVALID_ID) {
             const sg_pass_attachment_desc* att = &desc->depth_stencil_attachment;
             const _sg_image_t* img = _sg_lookup_image(&_sg.pools, att->image.id);
-            SOKOL_ASSERT(img);
-            _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_PASSDESC_DEPTH_IMAGE);
-            _SG_VALIDATE(att->mip_level < img->cmn.num_mipmaps, VALIDATE_PASSDESC_DEPTH_MIPLEVEL);
-            if (img->cmn.type == SG_IMAGETYPE_CUBE) {
-                _SG_VALIDATE(att->slice < 6, VALIDATE_PASSDESC_DEPTH_FACE);
+            _SG_VALIDATE(img, VALIDATE_PASSDESC_DEPTH_IMAGE);
+            if (img) {
+                _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_PASSDESC_DEPTH_IMAGE);
+                _SG_VALIDATE(att->mip_level < img->cmn.num_mipmaps, VALIDATE_PASSDESC_DEPTH_MIPLEVEL);
+                if (img->cmn.type == SG_IMAGETYPE_CUBE) {
+                    _SG_VALIDATE(att->slice < 6, VALIDATE_PASSDESC_DEPTH_FACE);
+                }
+                else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
+                    _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_PASSDESC_DEPTH_LAYER);
+                }
+                else if (img->cmn.type == SG_IMAGETYPE_3D) {
+                    // NOTE: this can't actually happen because of VALIDATE_IMAGEDESC_DEPTH_3D_IMAGE
+                    _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_PASSDESC_DEPTH_SLICE);
+                }
+                _SG_VALIDATE(img->cmn.render_target, VALIDATE_PASSDESC_DEPTH_IMAGE_NO_RT);
+                _SG_VALIDATE(width == img->cmn.width >> att->mip_level, VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
+                _SG_VALIDATE(height == img->cmn.height >> att->mip_level, VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
+                _SG_VALIDATE(sample_count == img->cmn.sample_count, VALIDATE_PASSDESC_DEPTH_IMAGE_SAMPLE_COUNT);
+                _SG_VALIDATE(_sg_is_valid_rendertarget_depth_format(img->cmn.pixel_format), VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT);
             }
-            else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
-                _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_PASSDESC_DEPTH_LAYER);
-            }
-            else if (img->cmn.type == SG_IMAGETYPE_3D) {
-                _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_PASSDESC_DEPTH_SLICE);
-            }
-            _SG_VALIDATE(img->cmn.render_target, VALIDATE_PASSDESC_DEPTH_IMAGE_NO_RT);
-            _SG_VALIDATE(width == img->cmn.width >> att->mip_level, VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
-            _SG_VALIDATE(height == img->cmn.height >> att->mip_level, VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
-            _SG_VALIDATE(sample_count == img->cmn.sample_count, VALIDATE_PASSDESC_DEPTH_IMAGE_SAMPLE_COUNTS);
-            _SG_VALIDATE(_sg_is_valid_rendertarget_depth_format(img->cmn.pixel_format), VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT);
         }
         return _sg_validate_end();
     #endif
