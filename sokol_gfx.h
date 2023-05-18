@@ -386,6 +386,215 @@
     See the documentation block of the sg_desc struct below for more information.
 
 
+    ON RENDER PASSES
+    ================
+    Relevant samples:
+        - https://floooh.github.io/sokol-html5/offscreen-sapp.html
+        - https://floooh.github.io/sokol-html5/offscreen-msaa-sapp.html
+        - https://floooh.github.io/sokol-html5/mrt-sapp.html
+        - https://floooh.github.io/sokol-html5/mrt-pixelformats-sapp.html
+
+    A render pass wraps rendering commands into a set of render target images
+    (called 'pass attachments'). Render target images can be used in subsequent
+    passes as textures (commonly called 'offscreen rendering'). It is invalid
+    to use the same image both as render target and as texture in the same pass.
+
+    The following sokol-gfx functions must be called inside a render pass:
+
+        sg_apply_viewport(f)
+        sg_apply_scissor_rect(f)
+        sg_apply_pipeline
+        sg_apply_bindings
+        sg_apply_uniforms
+        sg_draw
+
+    A frame must have at least one render pass, and this must be the 'default
+    pass' which renders into the 'default' (swapchain) framebuffer. The default
+    pass must always be the last pass in the frame before the sg_commit()
+    call.
+
+    The default and offscreen passes form a dependency tree with the default
+    pass at the root, offscreen passes as nodes, and render target images as
+    dependencies between passes.
+
+    For offscreen render passes, the render target images used in a render pass
+    are baked into an immutable sg_pass object (for the default pass, the
+    pass-state is managed internally instead).
+
+    For a simple offscreen scenario with one color-, one depth-stencil-render
+    target and without multisampling, creating a pass object looks like this:
+
+    First create two render target images, one with a color pixel format,
+    and one with the depth- or depth-stencil pixel format. Both images
+    must have the same dimensions:
+
+        const sg_image color_img = sg_make_image(&(sg_image_desc){
+            .render_target = true,
+            .width = 256,
+            .height = 256,
+            .pixel_format = SG_PIXELFORMAT_RGBA8,
+            .sample_count = 1,
+            // the sampling properties are only used when the image is used as texture
+            .min_filter = SG_FILTER_LINEAR,
+            .mag_filter = SG_FILTER_LINEAR,
+        });
+        const sg_image depth_img = sg_make_image(&(sg_image_desc){
+            .render_target = true,
+            .width = 256,
+            .height = 256,
+            .pixel_format = SG_PIXELFORMAT_DEPTH,
+            .sample_count = 1,
+        });
+
+    NOTE: when creating render target images, have in mind that some default values
+    are aligned with the default framebuffer attributes, this is sometimes not
+    what you want:
+
+        - the default values for .pixel_format and .sample_count are the same
+          as the default framebuffer
+        - the default value for .num_mipmaps is always 1
+
+    Next create a pass object:
+
+        const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+            .color_attachments[0].image = color_img,
+            .depth_stencil_attachment.image = depth_img,
+        });
+
+    When using the sg_pass object in a render pass you also need to define
+    what actions should happen at the start and end of the render pass
+    in an sg_pass_action struct (for instance whether the render target should
+    be cleared).
+
+    A typical sg_pass_action object which clears the color attachment to black
+    might look like this:
+
+        const sg_pass_action = {
+            .colors[0] = {
+                .load_action = SG_LOADACTION_CLEAR,
+                .clear_value = { 0.0f, 0.0f, 0.0f, 1.0f }
+            }
+        };
+
+    This omits the defaults for the color attachment store action, and
+    the depth-stencil-attachments actions. The same pass action with the
+    defaults explicitly filled in would look like this:
+
+        const sg_pass_action = {
+            .colors[0] = {
+                .load_action = SG_LOADACTION_CLEAR,
+                .store_action = SG_STOREACTION_STORE,
+                .clear_value = { 0.0f, 0.0f, 0.0f, 1.0f }
+            },
+            .depth = = {
+                .load_action = SG_LOADACTION_CLEAR,
+                .store_action = SG_STOREACTION_DONTCARE,
+                .clear_value = 1.0f,
+            },
+            .stencil = {
+                .load_action = SG_LOADACTION_CLEAR,
+                .store_action = SG_STOREACTION_DONTCARE,
+                .clear_value = 0
+            }
+        };
+
+    With the sg_pass object and sg_pass_action struct in place everything
+    is ready now for the actual render pass:
+
+        sg_begin_pass(pass, &pass_action);
+        ...
+        sg_end_pass();
+
+    Offscreen rendering can also go into a mipmap, or a slice/face of
+    a cube-, array- or 3d-image (which some restrictions, for instance
+    it's not possible to create a 3D image with a depth/stencil pixel format,
+    these exceptions are generally caught by the sokol-gfx validation layer).
+
+    The mipmap/slice selection happens at pass creation time, for instance
+    to render into mipmap 2 of slice 3 of an array texture:
+
+        const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+            .color_attachments[0] = {
+                .image = color_img,
+                .mip_level = 2,
+                .slice = 3,
+            },
+            .depth_stencil_attachment.image = depth_img,
+        });
+
+    If MSAA offscreen rendering is desired, the multi-sample rendering result
+    must be 'resolved' into a separate 'resolve image', before that image can
+    be used as texture.
+
+    NOTE: currently multisample-images cannot be bound as textures.
+
+    Creating a simple pass object for multisampled rendering requires
+    3 attachment images: the color attachment image which has a sample
+    count > 1, a resolve attachment image of the same size and pixel format
+    but a sample count == 1, and a depth/stencil attachment image with
+    the same size and sample count as the color attachment image:
+
+        const sg_image color_img = sg_make_image(&(sg_image_desc){
+            .render_target = true,
+            .width = 256,
+            .height = 256,
+            .pixel_format = SG_PIXELFORMAT_RGBA8,
+            .sample_count = 4,
+        });
+        const sg_image resolve_img = sg_make_image(&(sg_image_desc){
+            .render_target = true,
+            .width = 256,
+            .height = 256,
+            .pixel_format = SG_PIXELFORMAT_RGBA8,
+            .sample_count = 1,
+            // the resolve image is the one that will be used as texture
+            // in later passes, so define texture sampler properties too:
+            .min_filter = SG_FILTER_LINEAR,
+            .mag_filter = SG_FILTER_LINEAR,
+        });
+        const sg_image depth_img = sg_make_image(&(sg_image_desc){
+            .render_target = true,
+            .width = 256,
+            .height = 256,
+            .pixel_format = SG_PIXELFORMAT_DEPTH,
+            .sample_count = 4,
+        });
+
+    ...create the pass object:
+
+        const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+            .color_attachments[0].image = color_img,
+            .resolve_attachments[0].image = resolve_img,
+            .depth_stencil_attachment.image = depth_img,
+        });
+
+    One a pass object defines a resolve image in a specific resolve attachment slot,
+    an 'msaa resolve operation' will happen in sg_end_pass().
+
+    In this scenario, the content of the MSAA color attachment doesn't need to be
+    preserved (since it's only needed inside sg_end_pass for the msaa-resolve), so
+    the .store_action should be set to "don't care":
+
+        const sg_pass_action = {
+            .colors[0] = {
+                .load_action = SG_LOADACTION_CLEAR,
+                .store_action = SG_STOREACTION_DONTCARE,
+                .clear_value = { 0.0f, 0.0f, 0.0f, 1.0f }
+            }
+        };
+
+    The actual render pass looks as usual:
+
+        sg_begin_pass(pass, &pass_action);
+        ...
+        sg_end_pass();
+
+    ...after sg_end_pass() the only difference to the non-msaa scenario is that the
+    rendering result which is going to be used as texture in a followup pass is
+    in 'resolve_img', not in 'color_img' (in fact, trying to bind color_img as a
+    texture would result in a validation error).
+
+
     UNIFORM DATA LAYOUT:
     ====================
     NOTE: if you use the sokol-shdc shader compiler tool, you don't need to worry
@@ -704,6 +913,7 @@
         - SG_VERTEXFORMAT_HALF2
         - SG_VERTEXFORMAT_HALF4
 
+
     MEMORY ALLOCATION OVERRIDE
     ==========================
     You can override the memory allocation functions at initialization time
@@ -732,6 +942,7 @@
 
     This only affects memory allocation calls done by sokol_gfx.h
     itself though, not any allocations in OS libraries.
+
 
     ERROR REPORTING AND LOGGING
     ===========================
@@ -1890,12 +2101,8 @@ typedef enum sg_load_action {
 
     Defines the store action that be performed at the end of a render pass:
 
-    SG_STOREACTION_STORE:       the GPU stores the rendered contents to the render target texture
-    SG_STOREACTION_DONTCARE:    the GPU is free to discard the rendered contents
-
-    Note that the store action only applies to the actual rendering surface, it doesn't
-    control an MSAA resolve operation. MSAA resolve automatically happens when a resolve
-    target has been defined in the color attachment item of an sg_pass_desc.
+    SG_STOREACTION_STORE:       store the rendered content to the color attachment image
+    SG_STOREACTION_DONTCARE:    allows the GPU to discard the rendered content
 */
 typedef enum sg_store_action {
     _SG_STOREACTION_DEFAULT,
@@ -1911,8 +2118,11 @@ typedef enum sg_store_action {
     The sg_pass_action struct defines the actions to be performed
     at the start of and end of a render pass.
 
-    A separate action and clear values can be defined for each
-    color attachment, and for the depth-stencil attachment.
+    - at the start of the pass whether the render targets should be cleared
+      loaded with their previous content, or start in an undefined state
+    - for clear operations: the clear value (color, depth, or stencil values)
+    - at the end of the pass, whether the rendering result should be
+      stored back into the render target, or discarded
 */
 typedef struct sg_color_attachment_action {
     sg_load_action load_action;         // default: SG_LOADACTION_CLEAR
@@ -2387,29 +2597,28 @@ typedef struct sg_pipeline_desc {
 /*
     sg_pass_desc
 
-    Creation parameters for an sg_pass object, used as argument
-    to the sg_make_pass() function.
+    Creation parameters for an sg_pass object, used as argument to the
+    sg_make_pass() function.
 
-    A pass object contains 1..4 color-attachments and none, or one,
-    depth-stencil-attachment. Each attachment consists of
-    an image, and two additional indices describing
-    which subimage the pass will render to: one mipmap index, and
-    if the image is a cubemap, array-texture or 3D-texture, the
-    face-index, array-layer or depth-slice.
+    A pass object contains 1..4 color attachments, 0..4 msaa-resolve
+    attachemnts, and none or one depth-stencil attachment.
 
-    Additionally, color attachments may have an MSAA resolve target image
-    which is used to store the result of the MSAA resolve operation
-    at the end of a render pass.
+    Each attachment consists of an image, and two additional indices describing
+    which subimage the pass will render into: one mipmap index, and if the image
+    is a cubemap, array-texture or 3D-texture, the face-index, array-layer or
+    depth-slice.
 
-    Pass images must fulfill the following requirements:
+    All attachments must have the same size.
 
-    All images must have:
-    - been created as render attachment (sg_image_desc.render_target = true)
-    - the same size
-    - the same sample count
-    - when the color attachment image has a sample_count > 1, the
-      optional resolve attachment must have the same size and
-      pixel format
+    All color attachments and the depth-stencil attachment must have the
+    same sample count.
+
+    If a resolve attachment is set, an MSAA-resolve operation from the
+    associated color attachment into the resolve attachment image will take
+    place in the sg_end_pass() function. In this case, the color attachment
+    must have a (sample_count>1), and the resolve attachment a
+    (sample_count==1). The resolve attachment also must have the same pixel
+    format as the color attachment.
 
     NOTE that MSAA depth-stencil attachments cannot be msaa-resolved!
 */
