@@ -6,7 +6,7 @@
   - A new documentation section `ON RENDER PASSES` has been added to sokol_gfx.h, this
     gives a much more detailed overview of the new render pass behaviour than this
     changelog, please make sure to give it a read - especially when you are using
-    MSAA offline render passes in your code.
+    MSAA offscreen render passes in your code.
   - `sg_action` has been renamed to `sg_load_action`.
   - A new enum `sg_store_action` has been added.
   - In `sg_pass_action`:
