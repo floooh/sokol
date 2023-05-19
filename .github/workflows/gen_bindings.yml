@@ -272,7 +272,7 @@ jobs:
       - name: build
         run: |
             cargo --version
-            cargo build --all-targets
+            cargo build --examples --verbose
 
   # only deploy the bindings for commits on the main branch
   deploy-zig:
