@@ -59,6 +59,8 @@ overrides = {
 
 enumPrefixOverrides = {
     # sokol_gfx.h
+    'LOADACTION': 'loadAction',
+    'STOREACTION': 'storeAction',
     'PIXELFORMAT': 'pixelFormat',
     'RESOURCESTATE': 'resourceState',
     'BUFFERTYPE': 'bufferType',
