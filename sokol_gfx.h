@@ -394,10 +394,10 @@
         - https://floooh.github.io/sokol-html5/mrt-sapp.html
         - https://floooh.github.io/sokol-html5/mrt-pixelformats-sapp.html
 
-    A render pass wraps rendering commands into a set of render target images
+    A render pass wraps rendering commands into a common set of render target images
     (called 'pass attachments'). Render target images can be used in subsequent
-    passes as textures (commonly called 'offscreen rendering'). It is invalid
-    to use the same image both as render target and as texture in the same pass.
+    passes as textures (it is invalid to use the same image both as render target
+    and as texture in the same pass).
 
     The following sokol-gfx functions must be called inside a render pass:
 
