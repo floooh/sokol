@@ -12,14 +12,14 @@
   - In `sg_pass_action`:
     - `.action` has been renamed to `.load_action`.
     - `.value` has been renamed to `.clear_value`.
-    - A new field `store_action` has been added.
-  - An `sg_image` object with a sample count > 1 no longer maintains a separate
-    internal msaa-resolve texture, instead resolve textures are now separate
-    `sg_image` objects.
-  - When creating a pass object, there's now a separate array of `resolve_attachments[]`,
-    when a `resolve_attachment` has been set, the `color_attachment` at the same slot
-    must be an image with a sample count > 1, and an 'msaa-resolve' operation from the
-    color attachment into the resolve attachment will take place in `sg_end_pass()`.
+    - A new field `.store_action` has been added.
+  - An `sg_image` object with a sample count > 1 no longer contains a second implicit
+    texture for the msaa-resolve operation.
+  - When creating a pass object, there's now an array of `sg_image` objects
+    called `resolve_attachments[]`. When a resolve attachment image is set, the
+    color attachment` at the same slot index must be an image with a sample count >
+    1, and an 'msaa-resolve' operation from the color attachment into the
+    resolve attachment will take place in `sg_end_pass()`.
   - Pass attachments are now more flexible (there were a couple of gaps where specific
     image types were not allowed as pass attachments, especially for the depth-stencil-
     attachment - but this hadn't actually been checked by the validation layer).
