@@ -274,6 +274,7 @@ typedef struct sg_imgui_pass_t {
     sg_pass res_id;
     sg_imgui_str_t label;
     float color_image_scale[SG_MAX_COLOR_ATTACHMENTS];
+    float resolve_image_scale[SG_MAX_COLOR_ATTACHMENTS];
     float ds_image_scale;
     sg_pass_desc desc;
 } sg_imgui_pass_t;
@@ -1579,6 +1580,7 @@ _SOKOL_PRIVATE void _sg_imgui_pass_created(sg_imgui_t* ctx, sg_pass res_id, int 
     pass->res_id = res_id;
     for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
         pass->color_image_scale[i] = 0.25f;
+        pass->resolve_image_scale[i] = 0.25f;
     }
     pass->ds_image_scale = 0.25f;
     pass->label = _sg_imgui_make_str(desc->label);
@@ -3205,14 +3207,17 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_panel(sg_imgui_t* ctx, sg_buffer buf) 
     }
 }
 
-_SOKOL_PRIVATE bool _sg_imgui_image_renderable(sg_image_type type, sg_pixel_format fmt) {
-    return (type == SG_IMAGETYPE_2D) && sg_query_pixelformat(fmt).sample && !sg_query_pixelformat(fmt).depth;
+_SOKOL_PRIVATE bool _sg_imgui_image_renderable(sg_image_type type, sg_pixel_format fmt, int sample_count) {
+    return (type == SG_IMAGETYPE_2D)
+        && sg_query_pixelformat(fmt).sample
+        && !sg_query_pixelformat(fmt).depth
+        && sample_count == 1;
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_embedded_image(sg_imgui_t* ctx, sg_image img, float* scale) {
     if (sg_query_image_state(img) == SG_RESOURCESTATE_VALID) {
         sg_imgui_image_t* img_ui = &ctx->images.slots[_sg_imgui_slot_index(img.id)];
-        if (_sg_imgui_image_renderable(img_ui->desc.type, img_ui->desc.pixel_format)) {
+        if (_sg_imgui_image_renderable(img_ui->desc.type, img_ui->desc.pixel_format, img_ui->desc.sample_count)) {
             igPushID_Int((int)img.id);
             igSliderFloat("Scale", scale, 0.125f, 8.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
             float w = (float)img_ui->desc.width * (*scale);
@@ -3238,24 +3243,24 @@ _SOKOL_PRIVATE void _sg_imgui_draw_image_panel(sg_imgui_t* ctx, sg_image img) {
             igSeparator();
             _sg_imgui_draw_embedded_image(ctx, img, &img_ui->ui_scale);
             igSeparator();
-            igText("Type:              %s", _sg_imgui_imagetype_string(desc->type));
-            igText("Usage:             %s", _sg_imgui_usage_string(desc->usage));
-            igText("Render Target:     %s", _sg_imgui_bool_string(desc->render_target));
-            igText("Width:             %d", desc->width);
-            igText("Height:            %d", desc->height);
-            igText("Num Slices:        %d", desc->num_slices);
-            igText("Num Mipmaps:       %d", desc->num_mipmaps);
-            igText("Pixel Format:      %s", _sg_imgui_pixelformat_string(desc->pixel_format));
-            igText("Sample Count:      %d", desc->sample_count);
-            igText("Min Filter:        %s", _sg_imgui_filter_string(desc->min_filter));
-            igText("Mag Filter:        %s", _sg_imgui_filter_string(desc->mag_filter));
-            igText("Wrap U:            %s", _sg_imgui_wrap_string(desc->wrap_u));
-            igText("Wrap V:            %s", _sg_imgui_wrap_string(desc->wrap_v));
-            igText("Wrap W:            %s", _sg_imgui_wrap_string(desc->wrap_w));
-            igText("Border Color:      %s", _sg_imgui_bordercolor_string(desc->border_color));
-            igText("Max Anisotropy:    %d", desc->max_anisotropy);
-            igText("Min LOD:           %.3f", desc->min_lod);
-            igText("Max LOD:           %.3f", desc->max_lod);
+            igText("Type:           %s", _sg_imgui_imagetype_string(desc->type));
+            igText("Usage:          %s", _sg_imgui_usage_string(desc->usage));
+            igText("Render Target:  %s", _sg_imgui_bool_string(desc->render_target));
+            igText("Width:          %d", desc->width);
+            igText("Height:         %d", desc->height);
+            igText("Num Slices:     %d", desc->num_slices);
+            igText("Num Mipmaps:    %d", desc->num_mipmaps);
+            igText("Pixel Format:   %s", _sg_imgui_pixelformat_string(desc->pixel_format));
+            igText("Sample Count:   %d", desc->sample_count);
+            igText("Min Filter:     %s", _sg_imgui_filter_string(desc->min_filter));
+            igText("Mag Filter:     %s", _sg_imgui_filter_string(desc->mag_filter));
+            igText("Wrap U:         %s", _sg_imgui_wrap_string(desc->wrap_u));
+            igText("Wrap V:         %s", _sg_imgui_wrap_string(desc->wrap_v));
+            igText("Wrap W:         %s", _sg_imgui_wrap_string(desc->wrap_w));
+            igText("Border Color:   %s", _sg_imgui_bordercolor_string(desc->border_color));
+            igText("Max Anisotropy: %d", desc->max_anisotropy);
+            igText("Min LOD:        %.3f", desc->min_lod);
+            igText("Max LOD:        %.3f", desc->max_lod);
             if (desc->usage != SG_USAGE_IMMUTABLE) {
                 igSeparator();
                 igText("Num Slots:     %d", info.num_slots);
@@ -3538,6 +3543,14 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pass_panel(sg_imgui_t* ctx, sg_pass pass) {
                 igText("Color Attachment #%d:", i);
                 _sg_imgui_draw_pass_attachment(ctx, &pass_ui->desc.color_attachments[i], &pass_ui->color_image_scale[i]);
             }
+            for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+                if (pass_ui->desc.resolve_attachments[i].image.id == SG_INVALID_ID) {
+                    break;
+                }
+                igSeparator();
+                igText("Resolve Attachment #%d:", i);
+                _sg_imgui_draw_pass_attachment(ctx, &pass_ui->desc.resolve_attachments[i], &pass_ui->resolve_image_scale[i]);
+            }
             if (pass_ui->desc.depth_stencil_attachment.image.id != SG_INVALID_ID) {
                 igSeparator();
                 igText("Depth-Stencil Attachemnt:");
@@ -3730,27 +3743,45 @@ _SOKOL_PRIVATE void _sg_imgui_draw_passaction_panel(sg_imgui_t* ctx, sg_pass pas
         const sg_color_attachment_action* c_att = &action->colors[i];
         igText("  Color Attachment %d:", i);
         sg_imgui_str_t color_str;
-        switch (c_att->action) {
-            case SG_ACTION_LOAD: igText("    SG_ACTION_LOAD"); break;
-            case SG_ACTION_DONTCARE: igText("    SG_ACTION_DONTCARE"); break;
-            default:
-                igText("    SG_ACTION_CLEAR: %s", _sg_imgui_color_string(&color_str, c_att->value));
+        switch (c_att->load_action) {
+            case SG_LOADACTION_LOAD: igText("    SG_LOADACTION_LOAD"); break;
+            case SG_LOADACTION_DONTCARE: igText("    SG_LOADACTION_DONTCARE"); break;
+            case SG_LOADACTION_CLEAR:
+                igText("    SG_LOADACTION_CLEAR: %s", _sg_imgui_color_string(&color_str, c_att->clear_value));
                 break;
+            default: igText("    ???"); break;
+        }
+        switch (c_att->store_action) {
+            case SG_STOREACTION_STORE: igText("    SG_STOREACTION_STORE"); break;
+            case SG_STOREACTION_DONTCARE: igText("    SG_STOREACTION_DONTCARE"); break;
+            default: igText("    ???"); break;
         }
     }
     const sg_depth_attachment_action* d_att = &action->depth;
     igText("  Depth Attachment:");
-    switch (d_att->action) {
-        case SG_ACTION_LOAD: igText("    SG_ACTION_LOAD"); break;
-        case SG_ACTION_DONTCARE: igText("    SG_ACTION_DONTCARE"); break;
-        default: igText("    SG_ACTION_CLEAR: %.3f", d_att->value); break;
+    switch (d_att->load_action) {
+        case SG_LOADACTION_LOAD: igText("    SG_LOADACTION_LOAD"); break;
+        case SG_LOADACTION_DONTCARE: igText("    SG_LOADACTION_DONTCARE"); break;
+        case SG_LOADACTION_CLEAR: igText("    SG_LOADACTION_CLEAR: %.3f", d_att->clear_value); break;
+        default: igText("    ???"); break;
+    }
+    switch (d_att->store_action) {
+        case SG_STOREACTION_STORE: igText("    SG_STOREACTION_STORE"); break;
+        case SG_STOREACTION_DONTCARE: igText("    SG_STOREACTION_DONTCARE"); break;
+        default: igText("    ???"); break;
     }
     const sg_stencil_attachment_action* s_att = &action->stencil;
     igText("  Stencil Attachment");
-    switch (s_att->action) {
-        case SG_ACTION_LOAD: igText("    SG_ACTION_LOAD"); break;
-        case SG_ACTION_DONTCARE: igText("    SG_ACTION_DONTCARE"); break;
-        default: igText("    SG_ACTION_CLEAR: 0x%02X", s_att->value); break;
+    switch (s_att->load_action) {
+        case SG_LOADACTION_LOAD: igText("    SG_LOADACTION_LOAD"); break;
+        case SG_LOADACTION_DONTCARE: igText("    SG_LOADACTION_DONTCARE"); break;
+        case SG_LOADACTION_CLEAR: igText("    SG_LOADACTION_CLEAR: 0x%02X", s_att->clear_value); break;
+        default: igText("    ???"); break;
+    }
+    switch (d_att->store_action) {
+        case SG_STOREACTION_STORE: igText("    SG_STOREACTION_STORE"); break;
+        case SG_STOREACTION_DONTCARE: igText("    SG_STOREACTION_DONTCARE"); break;
+        default: igText("    ???"); break;
     }
 }
 

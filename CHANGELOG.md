@@ -1,5 +1,42 @@
 ## Updates
 
+- **19-May-2023**: _**BREAKING CHANGES**_ in sokol_gfx.h: Render passes are now more 'harmonized'
+  with Metal and WebGPU by exposing a 'store action', and making MSAA resolve attachments
+  explicit. The changes in detail:
+  - A new documentation section `ON RENDER PASSES` has been added to sokol_gfx.h, this
+    gives a much more detailed overview of the new render pass behaviour than this
+    changelog, please make sure to give it a read - especially when you are using
+    MSAA offline render passes in your code.
+  - `sg_action` has been renamed to `sg_load_action`.
+  - A new enum `sg_store_action` has been added.
+  - In `sg_pass_action`:
+    - `.action` has been renamed to `.load_action`.
+    - `.value` has been renamed to `.clear_value`.
+    - A new field `store_action` has been added.
+  - An `sg_image` object with a sample count > 1 no longer maintains a separate
+    internal msaa-resolve texture, instead resolve textures are now separate
+    `sg_image` objects.
+  - When creating a pass object, there's now a separate array of `resolve_attachments[]`,
+    when a `resolve_attachment` has been set, the `color_attachment` at the same slot
+    must be an image with a sample count > 1, and an 'msaa-resolve' operation from the
+    color attachment into the resolve attachment will take place in `sg_end_pass()`.
+  - Pass attachments are now more flexible (there were a couple of gaps where specific
+    image types were not allowed as pass attachments, especially for the depth-stencil-
+    attachment - but this hadn't actually been checked by the validation layer).
+  - Some gaps in the validation layer around images and passes have been tightened up,
+    those usually don't work in one backend or another, but have been ignored so far
+    in the validation layer, mainly:
+    - MSAA images must have num_mipmaps = 1.
+    - 3D images cannot have a sample_count > 1.
+    - 3D images cannot have depth or depth-stencil image formats.
+    - It's not allowed to bind MSAA images as texture.
+    - It's not allowed to bind depth or depth-stencil images as texture.
+    - (I'll see if I can relax some of those restrictions after the WebGPU backend release)
+  - **A lot** of new tests have been added to cover validation layer checks when creating
+    image and pass objects.
+
+  Next up: WebGPU!
+
 - **30-Apr-2023**: GLES2/WebGL1 support has been removed from the sokol headers (now that
   all browsers support WebGL2, and WebGPU is around the corner I feel like it's finally
   time to ditch GLES2.

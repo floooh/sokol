@@ -11,8 +11,9 @@
 
 #define T(b) EXPECT_TRUE(b)
 
+#define MAX_LOGITEMS (32)
 static int num_log_called = 0;
-static sg_log_item log_item;
+static sg_log_item log_items[MAX_LOGITEMS];
 
 static void test_logger(const char* tag, uint32_t log_level, uint32_t log_item_id, const char* message_or_null, uint32_t line_nr, const char* filename_or_null, void* user_data) {
     (void)tag;
@@ -21,15 +22,21 @@ static void test_logger(const char* tag, uint32_t log_level, uint32_t log_item_i
     (void)line_nr;
     (void)filename_or_null;
     (void)user_data;
-    num_log_called++;
-    log_item = log_item_id;
+    if (num_log_called < MAX_LOGITEMS) {
+        log_items[num_log_called++] = log_item_id;
+    }
     if (message_or_null) {
         printf("%s\n", message_or_null);
     }
 }
 
-static void setup(const sg_desc* desc) {
+static void reset_log_items(void) {
     num_log_called = 0;
+    memset(log_items, 0, sizeof(log_items));
+}
+
+static void setup(const sg_desc* desc) {
+    reset_log_items();
     sg_desc desc_with_logger = *desc;
     desc_with_logger.logger.func = test_logger;
     sg_setup(&desc_with_logger);
@@ -1437,7 +1444,7 @@ UTEST(sokol_gfx, make_dealloc_buffer_warns) {
     sg_buffer buf = create_buffer();
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
     sg_dealloc_buffer(buf);
-    T(log_item == SG_LOGITEM_DEALLOC_BUFFER_INVALID_STATE);
+    T(log_items[0] == SG_LOGITEM_DEALLOC_BUFFER_INVALID_STATE);
     T(num_log_called == 1);
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
     sg_destroy_buffer(buf);
@@ -1450,7 +1457,7 @@ UTEST(sokol_gfx, make_dealloc_image_warns) {
     sg_image img = create_image();
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     sg_dealloc_image(img);
-    T(log_item == SG_LOGITEM_DEALLOC_IMAGE_INVALID_STATE);
+    T(log_items[0] == SG_LOGITEM_DEALLOC_IMAGE_INVALID_STATE);
     T(num_log_called == 1);
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     sg_destroy_image(img);
@@ -1463,7 +1470,7 @@ UTEST(sokol_gfx, make_dealloc_shader_warns) {
     sg_shader shd = create_shader();
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_VALID);
     sg_dealloc_shader(shd);
-    T(log_item == SG_LOGITEM_DEALLOC_SHADER_INVALID_STATE);
+    T(log_items[0] == SG_LOGITEM_DEALLOC_SHADER_INVALID_STATE);
     T(num_log_called == 1);
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_VALID);
     sg_destroy_shader(shd);
@@ -1476,7 +1483,7 @@ UTEST(sokol_gfx, make_dealloc_pipeline_warns) {
     sg_pipeline pip = create_pipeline();
     T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
     sg_dealloc_pipeline(pip);
-    T(log_item == SG_LOGITEM_DEALLOC_PIPELINE_INVALID_STATE);
+    T(log_items[0] == SG_LOGITEM_DEALLOC_PIPELINE_INVALID_STATE);
     T(num_log_called == 1);
     T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
     sg_destroy_pipeline(pip);
@@ -1489,7 +1496,7 @@ UTEST(sokol_gfx, make_dealloc_pass_warns) {
     sg_pass pass = create_pass();
     T(sg_query_pass_state(pass) == SG_RESOURCESTATE_VALID);
     sg_dealloc_pass(pass);
-    T(log_item == SG_LOGITEM_DEALLOC_PASS_INVALID_STATE);
+    T(log_items[0] == SG_LOGITEM_DEALLOC_PASS_INVALID_STATE);
     T(num_log_called == 1);
     T(sg_query_pass_state(pass) == SG_RESOURCESTATE_VALID);
     sg_destroy_pass(pass);
@@ -1502,7 +1509,7 @@ UTEST(sokol_gfx, alloc_uninit_buffer_warns) {
     sg_buffer buf = sg_alloc_buffer();
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_ALLOC);
     sg_uninit_buffer(buf);
-    T(log_item == SG_LOGITEM_UNINIT_BUFFER_INVALID_STATE);
+    T(log_items[0] == SG_LOGITEM_UNINIT_BUFFER_INVALID_STATE);
     T(num_log_called == 1);
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_ALLOC);
     sg_shutdown();
@@ -1513,7 +1520,7 @@ UTEST(sokol_gfx, alloc_uninit_image_warns) {
     sg_image img = sg_alloc_image();
     T(sg_query_image_state(img) == SG_RESOURCESTATE_ALLOC);
     sg_uninit_image(img);
-    T(log_item == SG_LOGITEM_UNINIT_IMAGE_INVALID_STATE);
+    T(log_items[0] == SG_LOGITEM_UNINIT_IMAGE_INVALID_STATE);
     T(num_log_called == 1);
     T(sg_query_image_state(img) == SG_RESOURCESTATE_ALLOC);
     sg_shutdown();
@@ -1524,7 +1531,7 @@ UTEST(sokol_gfx, alloc_uninit_shader_warns) {
     sg_shader shd = sg_alloc_shader();
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_ALLOC);
     sg_uninit_shader(shd);
-    T(log_item == SG_LOGITEM_UNINIT_SHADER_INVALID_STATE);
+    T(log_items[0] == SG_LOGITEM_UNINIT_SHADER_INVALID_STATE);
     T(num_log_called == 1);
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_ALLOC);
     sg_shutdown();
@@ -1535,7 +1542,7 @@ UTEST(sokol_gfx, alloc_uninit_pipeline_warns) {
     sg_pipeline pip = sg_alloc_pipeline();
     T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_ALLOC);
     sg_uninit_pipeline(pip);
-    T(log_item == SG_LOGITEM_UNINIT_PIPELINE_INVALID_STATE);
+    T(log_items[0] == SG_LOGITEM_UNINIT_PIPELINE_INVALID_STATE);
     T(num_log_called == 1);
     T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_ALLOC);
     sg_shutdown();
@@ -1546,7 +1553,7 @@ UTEST(sokol_gfx, alloc_uninit_pass_warns) {
     sg_pass pass = sg_alloc_pass();
     T(sg_query_pass_state(pass) == SG_RESOURCESTATE_ALLOC);
     sg_uninit_pass(pass);
-    T(log_item == SG_LOGITEM_UNINIT_PASS_INVALID_STATE);
+    T(log_items[0] == SG_LOGITEM_UNINIT_PASS_INVALID_STATE);
     T(num_log_called == 1);
     T(sg_query_pass_state(pass) == SG_RESOURCESTATE_ALLOC);
     sg_shutdown();
@@ -1638,5 +1645,947 @@ UTEST(sokol_gfx, make_pass_with_nonvalid_color_images) {
     T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
     sg_destroy_pass(pass);
     T(sg_query_pass_state(pass) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_validate_start_canary) {
+    setup(&(sg_desc){0});
+    const uint32_t data[32] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        ._start_canary = 1234,
+        .data = SG_RANGE(data),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_CANARY);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_validate_end_canary) {
+    setup(&(sg_desc){0});
+    const uint32_t data[32] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .data = SG_RANGE(data),
+        ._end_canary = 1234,
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_CANARY);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_validate_immutable_nodata) {
+    setup(&(sg_desc){0});
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ 0 });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_SIZE);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_DATA);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_validate_size_mismatch) {
+    setup(&(sg_desc){0});
+    const uint32_t data[16] = { 0 };
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .size = 15 * sizeof(uint32_t),
+        .data = SG_RANGE(data),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_DATA_SIZE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_validate_data_ptr_but_no_size) {
+    setup(&(sg_desc){0});
+    const uint32_t data[16] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .data.ptr = data,
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_SIZE);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_DATA);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_image_validate_start_canary) {
+    setup(&(sg_desc){0});
+    const uint32_t pixels[8][8] = {0};
+    sg_image img = sg_make_image(&(sg_image_desc){
+        ._start_canary = 1234,
+        .width = 8,
+        .height = 8,
+        .data.subimage[0][0] = SG_RANGE(pixels),
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_CANARY);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_image_validate_end_canary) {
+    setup(&(sg_desc){0});
+    const uint32_t pixels[8][8] = {0};
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8,
+        .height = 8,
+        .data.subimage[0][0] = SG_RANGE(pixels),
+        ._end_canary = 1234,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_CANARY);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_image_zero_width_height) {
+    setup(&(sg_desc){0});
+    const uint32_t pixels[8][8] = {0};
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 0,
+        .height = 0,
+        .data.subimage[0][0] = SG_RANGE(pixels),
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_WIDTH);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_IMAGEDESC_HEIGHT);
+    T(log_items[2] == SG_LOGITEM_VALIDATE_IMAGEDATA_DATA_SIZE);
+    T(log_items[3] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_image_validate_msaa_no_rt) {
+    setup(&(sg_desc){0});
+    const uint32_t pixels[8][8] = {0};
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8,
+        .height = 8,
+        .sample_count = 4,
+        .data.subimage[0][0] = SG_RANGE(pixels),
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_MSAA_BUT_NO_RT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_image_validate_msaa_num_mipmaps) {
+    setup(&(sg_desc){0});
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .sample_count = 4,
+        .num_mipmaps = 2,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_MSAA_NUM_MIPMAPS);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_image_validate_msaa_3d_image) {
+    setup(&(sg_desc){0});
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .type = SG_IMAGETYPE_3D,
+        .width = 32,
+        .height = 32,
+        .num_slices = 32,
+        .sample_count = 4,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_MSAA_3D_IMAGE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_image_validate_depth_3d_image_with_depth_format) {
+    setup(&(sg_desc){0});
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .type = SG_IMAGETYPE_3D,
+        .width = 8,
+        .height = 8,
+        .num_slices = 8,
+        .pixel_format = SG_PIXELFORMAT_DEPTH,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_DEPTH_3D_IMAGE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_image_validate_rt_immutable) {
+    setup(&(sg_desc){0});
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .usage = SG_USAGE_DYNAMIC,
+        .width = 8,
+        .height = 8,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_RT_IMMUTABLE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_image_validate_dynamic_no_data) {
+    setup(&(sg_desc){0});
+    uint32_t pixels[8][8] = {0};
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8,
+        .height = 8,
+        .usage = SG_USAGE_DYNAMIC,
+        .data.subimage[0][0] = SG_RANGE(pixels),
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_image_valiate_compressed_immutable) {
+    setup(&(sg_desc){0});
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8,
+        .height = 8,
+        .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
+        .usage = SG_USAGE_DYNAMIC,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_image_validate_nodata) {
+    setup(&(sg_desc){0});
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8,
+        .height = 8,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDATA_NODATA);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_IMAGEDATA_DATA_SIZE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_image_validate_data_size) {
+    setup(&(sg_desc){0});
+    uint32_t pixels[4][4] = {0};
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8,
+        .height = 8,
+        .data.subimage[0][0] = SG_RANGE(pixels),
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDATA_DATA_SIZE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_image_validate_missing_mipdata) {
+    setup(&(sg_desc){0});
+    uint32_t mip0[8][8] = {0};
+    uint32_t mip1[4][4] = {0};
+    uint32_t mip2[2][2] = {0};
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8,
+        .height = 8,
+        .num_mipmaps = 4,
+        .data.subimage[0][0] = SG_RANGE(mip0),
+        .data.subimage[0][1] = SG_RANGE(mip1),
+        .data.subimage[0][2] = SG_RANGE(mip2),
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDATA_NODATA);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_IMAGEDATA_DATA_SIZE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_image_validate_wrong_mipsize) {
+    setup(&(sg_desc){0});
+    uint32_t mip0[8][8] = {0};
+    uint32_t mip1[4][4] = {0};
+    uint32_t mip2[2][2] = {0};
+    uint32_t mip3[1][1] = {0};
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8,
+        .height = 8,
+        .num_mipmaps = 4,
+        .data.subimage[0][0] = SG_RANGE(mip0),
+        .data.subimage[0][1] = SG_RANGE(mip2),
+        .data.subimage[0][2] = SG_RANGE(mip1),
+        .data.subimage[0][3] = SG_RANGE(mip3)
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDATA_DATA_SIZE);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_IMAGEDATA_DATA_SIZE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_start_canary) {
+    setup(&(sg_desc){0});
+    sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        ._start_canary = 1234,
+        .color_attachments[0].image = sg_make_image(&(sg_image_desc){
+            .render_target = true,
+            .width = 64,
+            .height = 64,
+        }),
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_CANARY);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_end_canary) {
+    setup(&(sg_desc){0});
+    sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0].image = sg_make_image(&(sg_image_desc){
+            .render_target = true,
+            .width = 64,
+            .height = 64,
+        }),
+        ._end_canary = 1234,
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_CANARY);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_no_color_attrs) {
+    setup(&(sg_desc){0});
+    // FIXME: rendering without color attachments but depth attachment should actually work
+    sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .depth_stencil_attachment.image = sg_make_image(&(sg_image_desc){
+            .render_target = true,
+            .width = 64,
+            .height = 64,
+            .pixel_format = SG_PIXELFORMAT_DEPTH,
+        })
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_NO_COLOR_ATTS);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
+    T(log_items[2] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
+    T(log_items[3] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_IMAGE_SAMPLE_COUNT);
+    T(log_items[4] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_no_cont_color_atts1) {
+    setup(&(sg_desc){0});
+    const sg_image_desc img_desc = { .render_target = true, .width = 64, .height = 64 };
+    sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments = {
+            [0].image = sg_make_image(&img_desc),
+            [2].image = sg_make_image(&img_desc),
+        }
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_NO_CONT_COLOR_ATTS);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_image) {
+    setup(&(sg_desc){0});
+    const sg_image_desc img_desc = { .render_target = true, .width = 64, .height = 64 };
+    const sg_image img0 = sg_make_image(&img_desc);
+    const sg_image img1 = sg_make_image(&img_desc);
+    sg_destroy_image(img1);
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments = {
+            [0].image = img0,
+            [1].image = img1,
+        }
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_IMAGE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_miplevel) {
+    setup(&(sg_desc){0});
+    const sg_image img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 16,
+        .height = 16,
+        .num_mipmaps = 4,
+    });
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0] = { .image = img, .mip_level = 4 }
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_MIPLEVEL);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_face) {
+    setup(&(sg_desc){0});
+    const sg_image img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .type = SG_IMAGETYPE_CUBE,
+        .width = 64,
+        .height = 64,
+    });
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0] = { .image = img, .slice = 6 }
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_FACE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_layer) {
+    setup(&(sg_desc){0});
+    const sg_image img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .type = SG_IMAGETYPE_ARRAY,
+        .width = 64,
+        .height = 64,
+        .num_slices = 4,
+    });
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0] = { .image = img, .slice = 5 },
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_LAYER);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_slice) {
+    setup(&(sg_desc){0});
+    const sg_image img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .type = SG_IMAGETYPE_3D,
+        .width = 64,
+        .height = 64,
+        .num_slices = 4,
+    });
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0] = { .image = img, .slice = 5 },
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_SLICE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_image_no_rt) {
+    setup(&(sg_desc){0});
+    const sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8,
+        .height = 8,
+        .usage = SG_USAGE_DYNAMIC,
+    });
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0].image = img,
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_IMAGE_NO_RT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_color_inv_pixelformat) {
+    setup(&(sg_desc){0});
+    const sg_image_desc img_desc = {
+        .render_target = true,
+        .width = 8,
+        .height = 8,
+        .pixel_format = SG_PIXELFORMAT_DEPTH,
+    };
+    reset_log_items();
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0].image = sg_make_image(&img_desc),
+        .depth_stencil_attachment.image = sg_make_image(&img_desc),
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_COLOR_INV_PIXELFORMAT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_depth_inv_pixelformat) {
+    setup(&(sg_desc){0});
+    const sg_image_desc img_desc = {
+        .render_target = true,
+        .width = 8,
+        .height = 8,
+    };
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0].image = sg_make_image(&img_desc),
+        .depth_stencil_attachment.image = sg_make_image(&img_desc),
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_image_sizes) {
+    setup(&(sg_desc){0});
+    const sg_image img0 = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+    });
+    const sg_image img1 = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 32,
+        .height = 32,
+    });
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments = {
+            [0].image = img0,
+            [1].image = img1,
+        }
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_IMAGE_SIZES);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_PASSDESC_IMAGE_SIZES);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_image_sample_counts) {
+    setup(&(sg_desc){0});
+    const sg_image img0 = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .sample_count = 4,
+    });
+    const sg_image img1 = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .sample_count = 2,
+    });
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments = {
+            [0].image = img0,
+            [1].image = img1,
+        }
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_resolve_color_image_msaa) {
+    setup(&(sg_desc){0});
+    const sg_image color_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .sample_count = 1,
+    });
+    const sg_image resolve_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .sample_count = 1,
+    });
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0].image = color_img,
+        .resolve_attachments[0].image = resolve_img,
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_COLOR_IMAGE_MSAA);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_resolve_image) {
+    setup(&(sg_desc){0});
+    const sg_image color_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .sample_count = 4,
+    });
+    const sg_image resolve_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .sample_count = 1,
+    });
+    sg_destroy_image(resolve_img);
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0].image = color_img,
+        .resolve_attachments[0].image = resolve_img,
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_IMAGE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_resolve_sample_count) {
+    setup(&(sg_desc){0});
+    const sg_image color_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .sample_count = 4,
+    });
+    const sg_image resolve_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .sample_count = 4,
+    });
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0].image = color_img,
+        .resolve_attachments[0].image = resolve_img,
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_SAMPLE_COUNT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_resolve_miplevel) {
+    setup(&(sg_desc){0});
+    const sg_image color_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .sample_count = 4,
+    });
+    const sg_image resolve_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .sample_count = 1,
+    });
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0] = { .image = color_img },
+        .resolve_attachments[0] = { .image = resolve_img, .mip_level = 1 },
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_MIPLEVEL);
+    // FIXME: these are confusing
+    T(log_items[1] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_IMAGE_SIZES);
+    T(log_items[2] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_IMAGE_SIZES);
+    T(log_items[3] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_resolve_face) {
+    setup(&(sg_desc){0});
+    const sg_image color_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .sample_count = 4,
+    });
+    const sg_image resolve_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .type = SG_IMAGETYPE_CUBE,
+        .width = 64,
+        .height = 64,
+        .sample_count = 1,
+    });
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0] = { .image = color_img },
+        .resolve_attachments[0] = { .image = resolve_img, .slice = 6 },
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_FACE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_resolve_layer) {
+    setup(&(sg_desc){0});
+    const sg_image color_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .sample_count = 4,
+    });
+    const sg_image resolve_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .type = SG_IMAGETYPE_ARRAY,
+        .width = 64,
+        .height = 64,
+        .num_slices = 4,
+        .sample_count = 1,
+    });
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0] = { .image = color_img },
+        .resolve_attachments[0] = { .image = resolve_img, .slice = 4 },
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_LAYER);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_resolve_slice) {
+    setup(&(sg_desc){0});
+    const sg_image color_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .sample_count = 4,
+    });
+    const sg_image resolve_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .type = SG_IMAGETYPE_3D,
+        .width = 64,
+        .height = 64,
+        .num_slices = 4,
+        .sample_count = 1,
+    });
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0] = { .image = color_img },
+        .resolve_attachments[0] = { .image = resolve_img, .slice = 4 },
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_SLICE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_resolve_image_no_rt) {
+    setup(&(sg_desc){0});
+    const sg_image color_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .sample_count = 4,
+    });
+    const sg_image resolve_img = sg_make_image(&(sg_image_desc){
+        .width = 64,
+        .height = 64,
+        .usage = SG_USAGE_DYNAMIC,
+        .sample_count = 1,
+    });
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0] = { .image = color_img },
+        .resolve_attachments[0] = { .image = resolve_img },
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_IMAGE_NO_RT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_resolve_image_sizes) {
+    setup(&(sg_desc){0});
+    const sg_image color_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .sample_count = 4,
+    });
+    const sg_image resolve_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 32,
+        .height = 32,
+        .sample_count = 1,
+    });
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0] = { .image = color_img },
+        .resolve_attachments[0] = { .image = resolve_img },
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_IMAGE_SIZES);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_IMAGE_SIZES);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_resolve_image_format) {
+    setup(&(sg_desc){0});
+    const sg_image color_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .sample_count = 4,
+    });
+    const sg_image resolve_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .pixel_format = SG_PIXELFORMAT_R8,
+        .sample_count = 1,
+    });
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0] = { .image = color_img },
+        .resolve_attachments[0] = { .image = resolve_img },
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_IMAGE_FORMAT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_depth_image) {
+    setup(&(sg_desc){0});
+    const sg_image color_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+    });
+    const sg_image depth_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .pixel_format = SG_PIXELFORMAT_DEPTH,
+    });
+    sg_destroy_image(depth_img);
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0] = { .image = color_img },
+        .depth_stencil_attachment.image = depth_img,
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_IMAGE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_depth_miplevel) {
+    setup(&(sg_desc){0});
+    const sg_image color_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+    });
+    const sg_image depth_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .pixel_format = SG_PIXELFORMAT_DEPTH,
+    });
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0] = { .image = color_img },
+        .depth_stencil_attachment = { .image = depth_img, .mip_level = 1 },
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_MIPLEVEL);
+    // FIXME: these additional validation errors are confusing
+    T(log_items[1] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
+    T(log_items[2] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
+    T(log_items[3] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_depth_face) {
+    setup(&(sg_desc){0});
+    const sg_image color_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+    });
+    const sg_image depth_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .type = SG_IMAGETYPE_CUBE,
+        .width = 64,
+        .height = 64,
+        .pixel_format = SG_PIXELFORMAT_DEPTH,
+    });
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0] = { .image = color_img },
+        .depth_stencil_attachment = { .image = depth_img, .slice = 6 },
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_FACE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_depth_layer) {
+    setup(&(sg_desc){0});
+    const sg_image color_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+    });
+    const sg_image depth_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .type = SG_IMAGETYPE_ARRAY,
+        .width = 64,
+        .height = 64,
+        .num_slices = 4,
+        .pixel_format = SG_PIXELFORMAT_DEPTH,
+    });
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0] = { .image = color_img },
+        .depth_stencil_attachment = { .image = depth_img, .slice = 4 },
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_LAYER);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+// NOTE: VALIDATE_PASSDESC_DEPTH_SLICE can't actually happen because VALIDATE_IMAGEDESC_DEPTH_3D_IMAGE
+
+// NOTE: VALIDATE_DEPTH_IMAGE_NO_RT can't actually happen because VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT
+
+UTEST(sokol_gfx, make_pass_validate_depth_image_sizes) {
+    setup(&(sg_desc){0});
+    const sg_image color_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+    });
+    const sg_image depth_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 32,
+        .height = 32,
+        .pixel_format = SG_PIXELFORMAT_DEPTH,
+    });
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0] = { .image = color_img },
+        .depth_stencil_attachment = { .image = depth_img },
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pass_validate_depth_image_sample_count) {
+    setup(&(sg_desc){0});
+    const sg_image color_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .sample_count = 4,
+    });
+    const sg_image depth_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = 64,
+        .height = 64,
+        .pixel_format = SG_PIXELFORMAT_DEPTH,
+        .sample_count = 2,
+    });
+    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0] = { .image = color_img },
+        .depth_stencil_attachment = { .image = depth_img },
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_IMAGE_SAMPLE_COUNT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
