@@ -4667,7 +4667,7 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_drop(int i, const char* name) {
     }
 }
 
-EMSCRIPTEN_KEEPALIVE void _sapp_emsc_end_drop(int x, int y) {
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_end_drop(int x, int y, int mods) {
     if (!_sapp.drop.enabled) {
         return;
     }
@@ -4683,6 +4683,11 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_end_drop(int x, int y) {
         _sapp.mouse.dx = 0.0f;
         _sapp.mouse.dy = 0.0f;
         _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
+        // see sapp_js_add_dragndrop_listeners for mods constants
+        if (mods & 1) { _sapp.event.modifiers |= SAPP_MODIFIER_SHIFT; }
+        if (mods & 2) { _sapp.event.modifiers |= SAPP_MODIFIER_CTRL; }
+        if (mods & 4) { _sapp.event.modifiers |= SAPP_MODIFIER_ALT; }
+        if (mods & 8) { _sapp.event.modifiers |= SAPP_MODIFIER_SUPER; }
         _sapp_call_event(&_sapp.event);
     }
 }
@@ -4805,8 +4810,13 @@ EM_JS(void, sapp_js_add_dragndrop_listeners, (const char* canvas_name_cstr), {
                 __sapp_emsc_drop(i, cstr);
             });
         }
+        let mods = 0;
+        if (event.shiftKey) { mods |= 1; }
+        if (event.ctrlKey) { mods |= 2; }
+        if (event.altKey) { mods |= 4; }
+        if (event.metaKey) { mods |= 8; }
         // FIXME? see computation of targetX/targetY in emscripten via getClientBoundingRect
-        __sapp_emsc_end_drop(event.clientX, event.clientY);
+        __sapp_emsc_end_drop(event.clientX, event.clientY, mods);
     };
     canvas.addEventListener('dragenter', Module.sokol_dragenter, false);
     canvas.addEventListener('dragleave', Module.sokol_dragleave, false);
