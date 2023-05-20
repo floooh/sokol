@@ -10694,6 +10694,8 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                                                                 (unsigned char**) &data);
                 if (_sapp.drop.enabled && result) {
                     if (_sapp_x11_parse_dropped_files_list(data)) {
+                        _sapp.mouse.dx = 0.0f;
+                        _sapp.mouse.dy = 0.0f;
                         if (_sapp_events_enabled()) {
                             _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
                             _sapp_call_event(&_sapp.event);
