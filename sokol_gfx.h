@@ -568,7 +568,7 @@
             .depth_stencil_attachment.image = depth_img,
         });
 
-    One a pass object defines a resolve image in a specific resolve attachment slot,
+    If a pass object defines a resolve image in a specific resolve attachment slot,
     an 'msaa resolve operation' will happen in sg_end_pass().
 
     In this scenario, the content of the MSAA color attachment doesn't need to be
