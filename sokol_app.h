@@ -10697,6 +10697,9 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                         _sapp.mouse.dx = 0.0f;
                         _sapp.mouse.dy = 0.0f;
                         if (_sapp_events_enabled()) {
+                            // FIXME: Figure out how to get modifier key state here.
+                            // The XSelection event has no 'state' item, and
+                            // XQueryKeymap() always returns a zeroed array.
                             _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
                             _sapp_call_event(&_sapp.event);
                         }
