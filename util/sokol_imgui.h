@@ -2268,24 +2268,70 @@ _SOKOL_PRIVATE void _simgui_add_focus_event(ImGuiIO* io, bool focus) {
 
 _SOKOL_PRIVATE void _simgui_add_mouse_pos_event(ImGuiIO* io, float x, float y) {
     #if defined(__cplusplus)
+        #if (IMGUI_VERSION_NUM >= 18950)
+        io->AddMouseSourceEvent(ImGuiMouseSource_Mouse);
+        #endif
         io->AddMousePosEvent(x, y);
     #else
+        #if (IMGUI_VERSION_NUM >= 18950)
+        ImGuiIO_AddMouseSourceEvent(io, ImGuiMouseSource_Mouse);
+        #endif
+        ImGuiIO_AddMousePosEvent(io, x, y);
+    #endif
+}
+
+_SOKOL_PRIVATE void _simgui_add_touch_pos_event(ImGuiIO* io, float x, float y) {
+    #if defined(__cplusplus)
+        #if (IMGUI_VERSION_NUM >= 18950)
+        io->AddMouseSourceEvent(ImGuiMouseSource_TouchScreen);
+        #endif
+        io->AddMousePosEvent(x, y);
+    #else
+        #if (IMGUI_VERSION_NUM >= 18950)
+        ImGuiIO_AddMouseSourceEvent(io, ImGuiMouseSource_TouchScreen);
+        #endif
         ImGuiIO_AddMousePosEvent(io, x, y);
     #endif
 }
 
 _SOKOL_PRIVATE void _simgui_add_mouse_button_event(ImGuiIO* io, int mouse_button, bool down) {
     #if defined(__cplusplus)
+        #if (IMGUI_VERSION_NUM >= 18950)
+        io->AddMouseSourceEvent(ImGuiMouseSource_Mouse);
+        #endif
         io->AddMouseButtonEvent(mouse_button, down);
     #else
+        #if (IMGUI_VERSION_NUM >= 18950)
+        ImGuiIO_AddMouseSourceEvent(io, ImGuiMouseSource_Mouse);
+        #endif
+        ImGuiIO_AddMouseButtonEvent(io, mouse_button, down);
+    #endif
+}
+
+_SOKOL_PRIVATE void _simgui_add_touch_button_event(ImGuiIO* io, int mouse_button, bool down) {
+    #if defined(__cplusplus)
+        #if (IMGUI_VERSION_NUM >= 18950)
+        io->AddMouseSourceEvent(ImGuiMouseSource_TouchScreen);
+        #endif
+        io->AddMouseButtonEvent(mouse_button, down);
+    #else
+        #if (IMGUI_VERSION_NUM >= 18950)
+        ImGuiIO_AddMouseSourceEvent(io, ImGuiMouseSource_TouchScreen);
+        #endif
         ImGuiIO_AddMouseButtonEvent(io, mouse_button, down);
     #endif
 }
 
 _SOKOL_PRIVATE void _simgui_add_mouse_wheel_event(ImGuiIO* io, float wheel_x, float wheel_y) {
     #if defined(__cplusplus)
+        #if (IMGUI_VERSION_NUM >= 18950)
+        io->AddMouseSourceEvent(ImGuiMouseSource_Mouse);
+        #endif
         io->AddMouseWheelEvent(wheel_x, wheel_y);
     #else
+        #if (IMGUI_VERSION_NUM >= 18950)
+        ImGuiIO_AddMouseSourceEvent(io, ImGuiMouseSource_Mouse);
+        #endif
         ImGuiIO_AddMouseWheelEvent(io, wheel_x, wheel_y);
     #endif
 }
@@ -2377,18 +2423,18 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
             _simgui_add_mouse_wheel_event(io, ev->scroll_x, ev->scroll_y);
             break;
         case SAPP_EVENTTYPE_TOUCHES_BEGAN:
-            _simgui_add_mouse_pos_event(io, ev->touches[0].pos_x / dpi_scale, ev->touches[0].pos_y / dpi_scale);
-            _simgui_add_mouse_button_event(io, 0, true);
+            _simgui_add_touch_pos_event(io, ev->touches[0].pos_x / dpi_scale, ev->touches[0].pos_y / dpi_scale);
+            _simgui_add_touch_button_event(io, 0, true);
             break;
         case SAPP_EVENTTYPE_TOUCHES_MOVED:
-            _simgui_add_mouse_pos_event(io, ev->touches[0].pos_x / dpi_scale, ev->touches[0].pos_y / dpi_scale);
+            _simgui_add_touch_pos_event(io, ev->touches[0].pos_x / dpi_scale, ev->touches[0].pos_y / dpi_scale);
             break;
         case SAPP_EVENTTYPE_TOUCHES_ENDED:
-            _simgui_add_mouse_pos_event(io, ev->touches[0].pos_x / dpi_scale, ev->touches[0].pos_y / dpi_scale);
-            _simgui_add_mouse_button_event(io, 0, false);
+            _simgui_add_touch_pos_event(io, ev->touches[0].pos_x / dpi_scale, ev->touches[0].pos_y / dpi_scale);
+            _simgui_add_touch_button_event(io, 0, false);
             break;
         case SAPP_EVENTTYPE_TOUCHES_CANCELLED:
-            _simgui_add_mouse_button_event(io, 0, false);
+            _simgui_add_touch_button_event(io, 0, false);
             break;
         case SAPP_EVENTTYPE_KEY_DOWN:
             _simgui_update_modifiers(io, ev->modifiers);
