@@ -7041,6 +7041,7 @@ _SOKOL_PRIVATE void _sapp_win32_files_dropped(HDROP hdrop) {
     if (!drop_failed) {
         if (_sapp_events_enabled()) {
             _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
+            _sapp.event.modifiers = _sapp_win32_mods();
             _sapp_call_event(&_sapp.event);
         }
     }
