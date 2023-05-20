@@ -5126,8 +5126,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
     if (_sapp.mouse.locked) {
         _sapp.mouse.dx = (float) emsc_event->movementX;
         _sapp.mouse.dy = (float) emsc_event->movementY;
-    }
-    else {
+    } else {
         float new_x = emsc_event->targetX * _sapp.dpi_scale;
         float new_y = emsc_event->targetY * _sapp.dpi_scale;
         if (_sapp.mouse.pos_valid) {
@@ -5141,6 +5140,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
     if (_sapp_events_enabled() && (emsc_event->button >= 0) && (emsc_event->button < SAPP_MAX_MOUSEBUTTONS)) {
         sapp_event_type type;
         bool is_button_event = false;
+        bool clear_dxdy = false;
         switch (emsc_type) {
             case EMSCRIPTEN_EVENT_MOUSEDOWN:
                 type = SAPP_EVENTTYPE_MOUSE_DOWN;
@@ -5155,13 +5155,19 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
                 break;
             case EMSCRIPTEN_EVENT_MOUSEENTER:
                 type = SAPP_EVENTTYPE_MOUSE_ENTER;
+                clear_dxdy = true;
                 break;
             case EMSCRIPTEN_EVENT_MOUSELEAVE:
                 type = SAPP_EVENTTYPE_MOUSE_LEAVE;
+                clear_dxdy = true;
                 break;
             default:
                 type = SAPP_EVENTTYPE_INVALID;
                 break;
+        }
+        if (clear_dxdy) {
+            _sapp.mouse.dx = 0.0f;
+            _sapp.mouse.dy = 0.0f;
         }
         if (type != SAPP_EVENTTYPE_INVALID) {
             _sapp_init_event(type);
@@ -5173,13 +5179,12 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
                     case 2: _sapp.event.mouse_button = SAPP_MOUSEBUTTON_RIGHT; break;
                     default: _sapp.event.mouse_button = (sapp_mousebutton)emsc_event->button; break;
                 }
-            }
-            else {
+            } else {
                 _sapp.event.mouse_button = SAPP_MOUSEBUTTON_INVALID;
             }
             _sapp_call_event(&_sapp.event);
         }
-        /* mouse lock can only be activated in mouse button events (not in move, enter or leave) */
+        // mouse lock can only be activated in mouse button events (not in move, enter or leave)
         if (is_button_event) {
             _sapp_emsc_update_mouse_lock_state();
         }
