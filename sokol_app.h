@@ -7218,6 +7218,8 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                         tme.dwFlags = TME_LEAVE;
                         tme.hwndTrack = _sapp.win32.hwnd;
                         TrackMouseEvent(&tme);
+                        _sapp.mouse.dx = 0.0f;
+                        _sapp.mouse.dy = 0.0f;
                         _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID);
                     }
                     _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID);
@@ -7262,6 +7264,8 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
 
             case WM_MOUSELEAVE:
                 if (!_sapp.mouse.locked) {
+                    _sapp.mouse.dx = 0.0f;
+                    _sapp.mouse.dy = 0.0f;
                     _sapp.win32.mouse_tracked = false;
                     _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID);
                 }
