@@ -1,5 +1,22 @@
 ## Updates
 
+- **20-May-2023**: some minor event-related cleanup in sokol_app.h:
+    - in the event `SAPP_EVENTTYPE_FILESDROPPED`:
+        - the `sapp_event.modifier` field now contains the active modifier keys
+          at the time of the file drop operations on the platforms macOS, Emscripten
+          and Win32 (on Linux I haven't figured out how this might work with the
+          Xlib API)
+        - on macOS, the `sapp_event.mouse_x/y` fields now contain the window-relative
+          mouse position where the drop happened (this already worked as expected on
+          the other desktop platforms)
+        - on macOS and Linux, the `sapp_event.mouse_dx/dy` fields are now set to zero
+          (this already was the case on Emscripten and Win32)
+    - in the events `SAPP_EVENTTYPE_MOUSE_ENTER` and `SAPP_EVENTTYPE_MOUSE_LEAVE`:
+        - the `sapp_event.mouse_dx/dy` fields are now set to zero, previously this
+          could be a very big value on some desktop platforms
+
+    Many thanks to @castano for the initial PR (https://github.com/floooh/sokol/pull/830)!
+
 - **19-May-2023**: _**BREAKING CHANGES**_ in sokol_gfx.h: Render passes are now more 'harmonized'
   with Metal and WebGPU by exposing a 'store action', and making MSAA resolve attachments
   explicit. The changes in detail:
