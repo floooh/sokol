@@ -1,6 +1,8 @@
 ## Updates
 
-- **20-May-2023**: some minor event-related cleanup in sokol_app.h:
+- **20-May-2023**: some minor event-related cleanup in sokol_app.h and
+  a touchscreen fix in sokol_imgui.h
+
     - in the event `SAPP_EVENTTYPE_FILESDROPPED`:
         - the `sapp_event.modifier` field now contains the active modifier keys
           at the time of the file drop operations on the platforms macOS, Emscripten
@@ -16,6 +18,12 @@
           could be a very big value on some desktop platforms
 
     Many thanks to @castano for the initial PR (https://github.com/floooh/sokol/pull/830)!
+
+    - In sokol_imgui.h, the new io.AddMouseSourceEvent() function in Dear ImGui 1.89.5
+      is called to differentiate between mouse- and touch-events, this makes ui tabs
+      work with a single tap (previously a double-tap on the tab was needed). The code
+      won't break if the ImGui version is older (in this case the function simply isn't called)
+
 
 - **19-May-2023**: _**BREAKING CHANGES**_ in sokol_gfx.h: Render passes are now more 'harmonized'
   with Metal and WebGPU by exposing a 'store action', and making MSAA resolve attachments
