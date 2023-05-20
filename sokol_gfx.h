@@ -7966,18 +7966,27 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
             SOKOL_ASSERT(vb);
             gl_vb = vb->gl.buf[vb->cmn.active_slot];
             vb_offset = vb_offsets[attr->vb_index] + attr->offset;
-            if ((gl_vb != cache_attr->gl_vbuf) ||
-                (attr->size != cache_attr->gl_attr.size) ||
+            if (gl_vb != cache_attr->gl_vbuf) 
+            {
+                _sg_gl_cache_bind_buffer(GL_ARRAY_BUFFER, gl_vb);
+                cache_attr_dirty = true;
+            }
+            //It is entirely possible and even common (in production applications)
+            //that the newly bound buffer has the same attributes as the previous one
+            //we can save some state change and gl call performance here.
+            if ((attr->size != cache_attr->gl_attr.size) ||
                 (attr->type != cache_attr->gl_attr.type) ||
                 (attr->normalized != cache_attr->gl_attr.normalized) ||
                 (attr->stride != cache_attr->gl_attr.stride) ||
-                (vb_offset != cache_attr->gl_attr.offset) ||
-                (cache_attr->gl_attr.divisor != attr->divisor))
+                (vb_offset != cache_attr->gl_attr.offset))
             {
-                _sg_gl_cache_bind_buffer(GL_ARRAY_BUFFER, gl_vb);
                 glVertexAttribPointer(attr_index, attr->size, attr->type,
                     attr->normalized, attr->stride,
                     (const GLvoid*)(GLintptr)vb_offset);
+                cache_attr_dirty = true;
+            }
+            if(cache_attr->gl_attr.divisor != attr->divisor)
+            {
                 glVertexAttribDivisor(attr_index, (GLuint)attr->divisor);
                 cache_attr_dirty = true;
             }
