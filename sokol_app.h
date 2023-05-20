@@ -3610,12 +3610,15 @@ _SOKOL_PRIVATE void _sapp_macos_update_window_title(void) {
     [_sapp.macos.window setTitle: [NSString stringWithUTF8String:_sapp.window_title]];
 }
 
-_SOKOL_PRIVATE void _sapp_macos_mouse_update(NSEvent* event) {
+_SOKOL_PRIVATE void _sapp_macos_mouse_update_from_nspoint(NSPoint mouse_pos, bool clear_dxdy) {
     if (!_sapp.mouse.locked) {
-        const NSPoint mouse_pos = event.locationInWindow;
         float new_x = mouse_pos.x * _sapp.dpi_scale;
         float new_y = _sapp.framebuffer_height - (mouse_pos.y * _sapp.dpi_scale) - 1;
-        if (_sapp.mouse.pos_valid) {
+        if (clear_dxdy) {
+            _sapp.mouse.dx = 0.0f;
+            _sapp.mouse.dy = 0.0f;
+        }
+        else if (_sapp.mouse.pos_valid) {
             // don't update dx/dy in the very first update
             _sapp.mouse.dx = new_x - _sapp.mouse.x;
             _sapp.mouse.dy = new_y - _sapp.mouse.y;
@@ -3624,6 +3627,10 @@ _SOKOL_PRIVATE void _sapp_macos_mouse_update(NSEvent* event) {
         _sapp.mouse.y = new_y;
         _sapp.mouse.pos_valid = true;
     }
+}
+
+_SOKOL_PRIVATE void _sapp_macos_mouse_update_from_nsevent(NSEvent* event, bool clear_dxdy) {
+    _sapp_macos_mouse_update_from_nspoint(event.locationInWindow, clear_dxdy);
 }
 
 _SOKOL_PRIVATE void _sapp_macos_show_mouse(bool visible) {
@@ -3956,6 +3963,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         }
         if (!drop_failed) {
             if (_sapp_events_enabled()) {
+                _sapp_macos_mouse_update_from_nspoint(sender.draggingLocation, true);
                 _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
                 _sapp_call_event(&_sapp.event);
             }
@@ -4076,7 +4084,7 @@ static void _sapp_gl_make_current(void) {
 
 - (void)mouseEntered:(NSEvent*)event {
     _sapp_gl_make_current();
-    _sapp_macos_mouse_update(event);
+    _sapp_macos_mouse_update_from_nsevent(event, true);
     /* don't send mouse enter/leave while dragging (so that it behaves the same as
        on Windows while SetCapture is active
     */
@@ -4086,38 +4094,38 @@ static void _sapp_gl_make_current(void) {
 }
 - (void)mouseExited:(NSEvent*)event {
     _sapp_gl_make_current();
-    _sapp_macos_mouse_update(event);
+    _sapp_macos_mouse_update_from_nsevent(event, true);
     if (0 == _sapp.macos.mouse_buttons) {
         _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mods(event));
     }
 }
 - (void)mouseDown:(NSEvent*)event {
     _sapp_gl_make_current();
-    _sapp_macos_mouse_update(event);
+    _sapp_macos_mouse_update_from_nsevent(event, false);
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_LEFT, _sapp_macos_mods(event));
     _sapp.macos.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_LEFT);
 }
 - (void)mouseUp:(NSEvent*)event {
     _sapp_gl_make_current();
-    _sapp_macos_mouse_update(event);
+    _sapp_macos_mouse_update_from_nsevent(event, false);
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_LEFT, _sapp_macos_mods(event));
     _sapp.macos.mouse_buttons &= ~(1<<SAPP_MOUSEBUTTON_LEFT);
 }
 - (void)rightMouseDown:(NSEvent*)event {
     _sapp_gl_make_current();
-    _sapp_macos_mouse_update(event);
+    _sapp_macos_mouse_update_from_nsevent(event, false);
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mods(event));
     _sapp.macos.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_RIGHT);
 }
 - (void)rightMouseUp:(NSEvent*)event {
     _sapp_gl_make_current();
-    _sapp_macos_mouse_update(event);
+    _sapp_macos_mouse_update_from_nsevent(event, false);
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mods(event));
     _sapp.macos.mouse_buttons &= ~(1<<SAPP_MOUSEBUTTON_RIGHT);
 }
 - (void)otherMouseDown:(NSEvent*)event {
     _sapp_gl_make_current();
-    _sapp_macos_mouse_update(event);
+    _sapp_macos_mouse_update_from_nsevent(event, false);
     if (2 == event.buttonNumber) {
         _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mods(event));
         _sapp.macos.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_MIDDLE);
@@ -4125,7 +4133,7 @@ static void _sapp_gl_make_current(void) {
 }
 - (void)otherMouseUp:(NSEvent*)event {
     _sapp_gl_make_current();
-    _sapp_macos_mouse_update(event);
+    _sapp_macos_mouse_update_from_nsevent(event, false);
     if (2 == event.buttonNumber) {
         _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mods(event));
         _sapp.macos.mouse_buttons &= (1<<SAPP_MOUSEBUTTON_MIDDLE);
@@ -4133,7 +4141,7 @@ static void _sapp_gl_make_current(void) {
 }
 - (void)otherMouseDragged:(NSEvent*)event {
     _sapp_gl_make_current();
-    _sapp_macos_mouse_update(event);
+    _sapp_macos_mouse_update_from_nsevent(event, false);
     if (2 == event.buttonNumber) {
         if (_sapp.mouse.locked) {
             _sapp.mouse.dx = [event deltaX];
@@ -4144,7 +4152,7 @@ static void _sapp_gl_make_current(void) {
 }
 - (void)mouseMoved:(NSEvent*)event {
     _sapp_gl_make_current();
-    _sapp_macos_mouse_update(event);
+    _sapp_macos_mouse_update_from_nsevent(event, false);
     if (_sapp.mouse.locked) {
         _sapp.mouse.dx = [event deltaX];
         _sapp.mouse.dy = [event deltaY];
@@ -4153,7 +4161,7 @@ static void _sapp_gl_make_current(void) {
 }
 - (void)mouseDragged:(NSEvent*)event {
     _sapp_gl_make_current();
-    _sapp_macos_mouse_update(event);
+    _sapp_macos_mouse_update_from_nsevent(event, false);
     if (_sapp.mouse.locked) {
         _sapp.mouse.dx = [event deltaX];
         _sapp.mouse.dy = [event deltaY];
@@ -4162,7 +4170,7 @@ static void _sapp_gl_make_current(void) {
 }
 - (void)rightMouseDragged:(NSEvent*)event {
     _sapp_gl_make_current();
-    _sapp_macos_mouse_update(event);
+    _sapp_macos_mouse_update_from_nsevent(event, false);
     if (_sapp.mouse.locked) {
         _sapp.mouse.dx = [event deltaX];
         _sapp.mouse.dy = [event deltaY];
@@ -4171,7 +4179,7 @@ static void _sapp_gl_make_current(void) {
 }
 - (void)scrollWheel:(NSEvent*)event {
     _sapp_gl_make_current();
-    _sapp_macos_mouse_update(event);
+    _sapp_macos_mouse_update_from_nsevent(event, true);
     if (_sapp_events_enabled()) {
         float dx = (float) event.scrollingDeltaX;
         float dy = (float) event.scrollingDeltaY;
