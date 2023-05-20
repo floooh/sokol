@@ -3464,7 +3464,7 @@ int main(int argc, char* argv[]) {
 #endif /* SOKOL_NO_ENTRY */
 
 _SOKOL_PRIVATE uint32_t _sapp_macos_mods(NSEvent* ev) {
-    const NSEventModifierFlags f = ev.modifierFlags;
+    const NSEventModifierFlags f = (ev == nil) ? NSEvent.modifierFlags : ev.modifierFlags;
     const NSUInteger b = NSEvent.pressedMouseButtons;
     uint32_t m = 0;
     if (f & NSEventModifierFlagShift) {
@@ -3965,6 +3965,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
             if (_sapp_events_enabled()) {
                 _sapp_macos_mouse_update_from_nspoint(sender.draggingLocation, true);
                 _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
+                _sapp.event.modifiers = _sapp_macos_mods(nil);
                 _sapp_call_event(&_sapp.event);
             }
         }
