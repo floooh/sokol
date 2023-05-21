@@ -1,5 +1,107 @@
 ## Updates
 
+- **20-May-2023**: some minor event-related cleanup in sokol_app.h and
+  a touchscreen fix in sokol_imgui.h
+
+    - in the event `SAPP_EVENTTYPE_FILESDROPPED`:
+        - the `sapp_event.modifier` field now contains the active modifier keys
+          at the time of the file drop operations on the platforms macOS, Emscripten
+          and Win32 (on Linux I haven't figured out how this might work with the
+          Xlib API)
+        - on macOS, the `sapp_event.mouse_x/y` fields now contain the window-relative
+          mouse position where the drop happened (this already worked as expected on
+          the other desktop platforms)
+        - on macOS and Linux, the `sapp_event.mouse_dx/dy` fields are now set to zero
+          (this already was the case on Emscripten and Win32)
+    - in the events `SAPP_EVENTTYPE_MOUSE_ENTER` and `SAPP_EVENTTYPE_MOUSE_LEAVE`:
+        - the `sapp_event.mouse_dx/dy` fields are now set to zero, previously this
+          could be a very big value on some desktop platforms
+
+    Many thanks to @castano for the initial PR (https://github.com/floooh/sokol/pull/830)!
+
+    - In sokol_imgui.h, the new io.AddMouseSourceEvent() function in Dear ImGui 1.89.5
+      is called to differentiate between mouse- and touch-events, this makes ui tabs
+      work with a single tap (previously a double-tap on the tab was needed). The code
+      won't break if the ImGui version is older (in this case the function simply isn't called)
+
+
+- **19-May-2023**: _**BREAKING CHANGES**_ in sokol_gfx.h: Render passes are now more 'harmonized'
+  with Metal and WebGPU by exposing a 'store action', and making MSAA resolve attachments
+  explicit. The changes in detail:
+  - A new documentation section `ON RENDER PASSES` has been added to sokol_gfx.h, this
+    gives a much more detailed overview of the new render pass behaviour than this
+    changelog, please make sure to give it a read - especially when you are using
+    MSAA offscreen render passes in your code.
+  - `sg_action` has been renamed to `sg_load_action`.
+  - A new enum `sg_store_action` has been added.
+  - In `sg_pass_action`:
+    - `.action` has been renamed to `.load_action`.
+    - `.value` has been renamed to `.clear_value`.
+    - A new field `.store_action` has been added.
+  - An `sg_image` object with a sample count > 1 no longer contains a second implicit
+    texture for the msaa-resolve operation.
+  - When creating a pass object, there's now an array of `sg_image` objects
+    called `resolve_attachments[]`. When a resolve attachment image is set, the
+    color attachment` at the same slot index must be an image with a sample count >
+    1, and an 'msaa-resolve' operation from the color attachment into the
+    resolve attachment will take place in `sg_end_pass()`.
+  - Pass attachments are now more flexible (there were a couple of gaps where specific
+    image types were not allowed as pass attachments, especially for the depth-stencil-
+    attachment - but this hadn't actually been checked by the validation layer).
+  - Some gaps in the validation layer around images and passes have been tightened up,
+    those usually don't work in one backend or another, but have been ignored so far
+    in the validation layer, mainly:
+    - MSAA images must have num_mipmaps = 1.
+    - 3D images cannot have a sample_count > 1.
+    - 3D images cannot have depth or depth-stencil image formats.
+    - It's not allowed to bind MSAA images as texture.
+    - It's not allowed to bind depth or depth-stencil images as texture.
+    - (I'll see if I can relax some of those restrictions after the WebGPU backend release)
+  - **A lot** of new tests have been added to cover validation layer checks when creating
+    image and pass objects.
+
+  Next up: WebGPU!
+
+- **30-Apr-2023**: GLES2/WebGL1 support has been removed from the sokol headers (now that
+  all browsers support WebGL2, and WebGPU is around the corner I feel like it's finally
+  time to ditch GLES2.
+
+  This is a breaking API change in sokol_gfx.h and sokol_app.h.
+
+  Common changes across all headers:
+  - (breaking change) the `SOKOL_GLES2` config define is no longer accepted and will cause a compile error
+    (use `SOKOL_GLES3` instead)
+  - (breaking change) on Emscripten use the linker option `-s USE_WEBGL2=1`
+  - any embedded GLES shaders have been updated from glsl100 to glsl300es (but glsl100 shaders
+    still work fine with the GLES3 backend)
+
+  Changes in sokol_gfx.h:
+  - (breaking change) the following `sg_features` members have been removed (because those features
+    are no longer optional, but guaranteed across all backends):
+      - `sg_features.instancing`
+      - `sg_features.multiple_render_targets`
+      - `sg_features.msaa_render_targets`
+      - `sg_features.imagetype_3d`
+      - `sg_features.imagetype_array`
+  - (breaking change) the struct `sg_gl_context_desc` and its embedded instance `sg_desc.gl` have been removed
+  - `sg_image` objects with `SG_PIXELFORMAT_DEPTH` or `SG_PIXELFORMAT_DEPTH_STENCIL` with
+    a `sample_count == 1` are now regular textures in the GL backend (this is not true
+    for MSAA depth textures unfortunately, those are still GL render buffer objects)
+  - in the GL backend, `SG_PIXELFORMAT_DEPTH` now resolves to `GL_DEPTH_COMPONENT32F` (same
+    as in the other backends), previously it was `GL_DEPTH_COMPONENT16`
+  - in `sg_begin_pass()`, the GL backend now only uses the new `glClearBuffer*` functions, the
+    old GLES2 clear functions have been removed
+  - in `sg_end_pass()`, the GLES3 backend now invalidates MSAA render buffers after they have
+    been resolved (via `glInvalidateFramebuffer`) - more control over this will come soon-ish
+    when this ticket is implemented: https://github.com/floooh/sokol/issues/816
+  - the instanced rendering functions are no longer wrapped in C macros in the GL backend
+
+  Changes in sokol_app.h:
+  - (breaking) the config item `sapp_desc.gl_force_gles2` has been removed
+  - (breaking) the function `sapp_gles2()` has been removed
+  - any fallback logic from GLES3 to GLES2 has been removed (in the Emscripten, Android and
+    iOS backends)
+
 - **20-Feb-2023**: sokol_gfx.h has a new set of functions to get a 'best-effort'
   desc struct with the creation parameters of a specific resource object:
 
