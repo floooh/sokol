@@ -42,7 +42,7 @@
     texture for the msaa-resolve operation.
   - When creating a pass object, there's now an array of `sg_image` objects
     called `resolve_attachments[]`. When a resolve attachment image is set, the
-    color attachment` at the same slot index must be an image with a sample count >
+    `color attachment` at the same slot index must be an image with a sample count >
     1, and an 'msaa-resolve' operation from the color attachment into the
     resolve attachment will take place in `sg_end_pass()`.
   - Pass attachments are now more flexible (there were a couple of gaps where specific
