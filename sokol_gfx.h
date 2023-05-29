@@ -2451,13 +2451,11 @@ typedef struct sg_shader_image_desc {
     sg_image_sample_type sample_type;
     bool multisampled;
     uint8_t binding;
-    uint8_t wgpu_bindgroup;
 } sg_shader_image_desc;
 
 typedef struct sg_shader_sampler_desc {
     sg_sampler_type type;
     uint8_t binding;
-    uint8_t wgpu_bindgroup;
 } sg_shader_sampler_desc;
 
 typedef struct sg_shader_combined_image_sampler_desc {
