@@ -1634,18 +1634,17 @@ typedef enum sg_image_sample_type {
 } sg_image_sample_type;
 
 /*
-    sg_sampler_binding_type
+    sg_sampler_type
 
     FIXME (WGPU only)
 */
-typedef enum sg_sampler_binding_type {
-    _SG_SAMPLERBINDINGTYPE_DEFAULT,
-    SG_SAMPLERBINDINGTYPE_FILTERING,
-    SG_SAMPLERBINDINGTYPE_NONFILTERING,
-    SG_SAMPLERBINDINGTYPE_COMPARISON,
-    _SG_SAMPLERBINDINGTYPE_NUM,
-    _SG_SAMPLERBINDINGTYPE_FORCE_U32,
-} sg_sampler_binding_type;
+typedef enum sg_sampler_type {
+    _SG_SAMPLERTYPE_DEFAULT,
+    SG_SAMPLERTYPE_SAMPLER,
+    SG_SAMPLERTYPE_COMPARISON,
+    _SG_SAMPLERTYPE_NUM,
+    _SG_SAMPLERTYPE_FORCE_U32,
+} sg_sampler_type;
 
 /*
     sg_cube_face
@@ -2457,7 +2456,7 @@ typedef struct sg_shader_image_desc {
 
 typedef struct sg_shader_sampler_desc {
     const char* name;       // GLSL location name (optional)
-    sg_sampler_binding_type type;
+    sg_sampler_type type;
 } sg_shader_sampler_desc;
 
 typedef struct sg_shader_stage_desc {
@@ -11893,11 +11892,12 @@ _SOKOL_PRIVATE WGPUTextureViewDimension _sg_wgpu_tex_viewdim(sg_image_type t) {
     }
 }
 
-_SOKOL_PRIVATE WGPUTextureComponentType _sg_wgpu_tex_comptype(sg_sampler_type t) {
+_SOKOL_PRIVATE WGPUTextureComponentType _sg_wgpu_tex_comptype(sg_image_sample_type t) {
+    // FIXME
     switch (t) {
-        case SG_SAMPLERTYPE_FLOAT:  return WGPUTextureComponentType_Float;
-        case SG_SAMPLERTYPE_SINT:   return WGPUTextureComponentType_Sint;
-        case SG_SAMPLERTYPE_UINT:   return WGPUTextureComponentType_Uint;
+        case SG_IMAGESAMPLETYPE_FLOAT:  return WGPUTextureComponentType_Float;
+        case SG_IMAGESAMPLETYPE_SINT:   return WGPUTextureComponentType_Sint;
+        case SG_IMAGESAMPLETYPE_UINT:   return WGPUTextureComponentType_Uint;
         default: SOKOL_UNREACHABLE; return WGPUTextureComponentType_Force32;
     }
 }
