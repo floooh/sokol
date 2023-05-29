@@ -2447,17 +2447,23 @@ typedef struct sg_shader_uniform_block_desc {
 } sg_shader_uniform_block_desc;
 
 typedef struct sg_shader_image_desc {
-    const char* name;       // GLSL location name (optional)
     sg_image_type image_type;
     sg_image_sample_type sample_type;
     bool multisampled;
-    int glsl_sampler_index;  // GLSL only: index into sg_shader_stage_desc.samplers array to form combined-image-sampler
+    uint8_t binding;
+    uint8_t wgpu_bindgroup;
 } sg_shader_image_desc;
 
 typedef struct sg_shader_sampler_desc {
-    const char* name;       // GLSL location name (optional)
     sg_sampler_type type;
+    uint8_t binding;
+    uint8_t wgpu_bindgroup;
 } sg_shader_sampler_desc;
+
+typedef struct sg_shader_combined_image_sampler_desc {
+    const char* name;       // optional GLSL location
+    uint8_t binding;        // binding location if name not provided
+} sg_shader_combined_image_sampler_desc;
 
 typedef struct sg_shader_stage_desc {
     const char* source;
@@ -2467,6 +2473,7 @@ typedef struct sg_shader_stage_desc {
     sg_shader_uniform_block_desc uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
     sg_shader_image_desc images[SG_MAX_SHADERSTAGE_IMAGES];
     sg_shader_sampler_desc samplers[SG_MAX_SHADERSTAGE_SAMPLERS];
+    sg_shader_combined_image_sampler_desc combined_image_samplers[SG_MAX_SHADERSTAGE_IMAGES];
 } sg_shader_stage_desc;
 
 typedef struct sg_shader_desc {
