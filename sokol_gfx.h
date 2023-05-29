@@ -1255,6 +1255,7 @@ extern "C" {
 */
 typedef struct sg_buffer   { uint32_t id; } sg_buffer;
 typedef struct sg_image    { uint32_t id; } sg_image;
+typedef struct sg_sampler  { uint32_t id; } sg_sampler;
 typedef struct sg_shader   { uint32_t id; } sg_shader;
 typedef struct sg_pipeline { uint32_t id; } sg_pipeline;
 typedef struct sg_pass     { uint32_t id; } sg_pass;
@@ -2341,29 +2342,44 @@ typedef struct sg_image_desc {
     sg_usage usage;
     sg_pixel_format pixel_format;
     int sample_count;
-    sg_filter min_filter;
-    sg_filter mag_filter;
-    sg_wrap wrap_u;
-    sg_wrap wrap_v;
-    sg_wrap wrap_w;
-    sg_border_color border_color;
-    uint32_t max_anisotropy;
-    float min_lod;
-    float max_lod;
     sg_image_data data;
     const char* label;
-    /* GL specific */
+    // optionally inject backend-specific resources
     uint32_t gl_textures[SG_NUM_INFLIGHT_FRAMES];
     uint32_t gl_texture_target;
-    /* Metal specific */
     const void* mtl_textures[SG_NUM_INFLIGHT_FRAMES];
-    /* D3D11 specific */
     const void* d3d11_texture;
     const void* d3d11_shader_resource_view;
-    /* WebGPU specific */
     const void* wgpu_texture;
     uint32_t _end_canary;
 } sg_image_desc;
+
+/*
+    sg_sampler_desc
+
+    FIXME
+*/
+typedef struct sg_sampler_desc {
+    uint32_t _start_canary;
+    sg_filter min_filter;
+    sg_filter mag_filter;
+    sg_filter mipmap_filter;
+    sg_wrap wrap_u;
+    sg_wrap wrap_v;
+    sg_wrap wrap_w;
+    float min_lod;
+    float max_lod;
+    sg_border_color border_color;
+    sg_compare_func compare;
+    uint32_t max_anisotropy;
+    const char* label;
+    // optionally inject backend-specific resources
+    uint32_t gl_sampler;
+    const void* mtl_sampler;
+    const void* d3d11_sampler;
+    const void* wgpu_sampler;
+    uint32_t _end_canary;
+} sg_sampler_desc;
 
 /*
     sg_shader_desc
@@ -2735,38 +2751,42 @@ typedef struct sg_trace_hooks {
     sg_query_pass_info()
 */
 typedef struct sg_slot_info {
-    sg_resource_state state;    /* the current state of this resource slot */
-    uint32_t res_id;        /* type-neutral resource if (e.g. sg_buffer.id) */
-    uint32_t ctx_id;        /* the context this resource belongs to */
+    sg_resource_state state;    // the current state of this resource slot
+    uint32_t res_id;            // type-neutral resource if (e.g. sg_buffer.id)
+    uint32_t ctx_id;            // the context this resource belongs to
 } sg_slot_info;
 
 typedef struct sg_buffer_info {
-    sg_slot_info slot;              /* resource pool slot info */
-    uint32_t update_frame_index;    /* frame index of last sg_update_buffer() */
-    uint32_t append_frame_index;    /* frame index of last sg_append_buffer() */
-    int append_pos;                 /* current position in buffer for sg_append_buffer() */
-    bool append_overflow;           /* is buffer in overflow state (due to sg_append_buffer) */
-    int num_slots;                  /* number of renaming-slots for dynamically updated buffers */
-    int active_slot;                /* currently active write-slot for dynamically updated buffers */
+    sg_slot_info slot;              // resource pool slot info
+    uint32_t update_frame_index;    // frame index of last sg_update_buffer()
+    uint32_t append_frame_index;    // frame index of last sg_append_buffer()
+    int append_pos;                 // current position in buffer for sg_append_buffer()
+    bool append_overflow;           // is buffer in overflow state (due to sg_append_buffer)
+    int num_slots;                  // number of renaming-slots for dynamically updated buffers
+    int active_slot;                // currently active write-slot for dynamically updated buffers
 } sg_buffer_info;
 
 typedef struct sg_image_info {
-    sg_slot_info slot;              /* resource pool slot info */
-    uint32_t upd_frame_index;       /* frame index of last sg_update_image() */
-    int num_slots;                  /* number of renaming-slots for dynamically updated images */
-    int active_slot;                /* currently active write-slot for dynamically updated images */
+    sg_slot_info slot;              // resource pool slot info
+    uint32_t upd_frame_index;       // frame index of last sg_update_image()
+    int num_slots;                  // number of renaming-slots for dynamically updated images
+    int active_slot;                // currently active write-slot for dynamically updated images
 } sg_image_info;
 
+typedef struct sg_sampler_info {
+    sg_slot_info slot;              // resource pool slot info
+} sg_sampler_info;
+
 typedef struct sg_shader_info {
-    sg_slot_info slot;              /* resource pool slot info */
+    sg_slot_info slot;              // resource pool slot info
 } sg_shader_info;
 
 typedef struct sg_pipeline_info {
-    sg_slot_info slot;              /* resource pool slot info */
+    sg_slot_info slot;              // resource pool slot info
 } sg_pipeline_info;
 
 typedef struct sg_pass_info {
-    sg_slot_info slot;              /* resource pool slot info */
+    sg_slot_info slot;              // resource pool slot info
 } sg_pass_info;
 
 /*
@@ -3220,11 +3240,13 @@ SOKOL_GFX_API_DECL bool sg_remove_commit_listener(sg_commit_listener listener);
 /* resource creation, destruction and updating */
 SOKOL_GFX_API_DECL sg_buffer sg_make_buffer(const sg_buffer_desc* desc);
 SOKOL_GFX_API_DECL sg_image sg_make_image(const sg_image_desc* desc);
+SOKOL_GFX_API_DECL sg_sampler sg_make_sampler(const sg_sampler_desc* desc);
 SOKOL_GFX_API_DECL sg_shader sg_make_shader(const sg_shader_desc* desc);
 SOKOL_GFX_API_DECL sg_pipeline sg_make_pipeline(const sg_pipeline_desc* desc);
 SOKOL_GFX_API_DECL sg_pass sg_make_pass(const sg_pass_desc* desc);
 SOKOL_GFX_API_DECL void sg_destroy_buffer(sg_buffer buf);
 SOKOL_GFX_API_DECL void sg_destroy_image(sg_image img);
+SOKOL_GFX_API_DECL void sg_destroy_sampler(sg_sampler smp);
 SOKOL_GFX_API_DECL void sg_destroy_shader(sg_shader shd);
 SOKOL_GFX_API_DECL void sg_destroy_pipeline(sg_pipeline pip);
 SOKOL_GFX_API_DECL void sg_destroy_pass(sg_pass pass);
@@ -3258,24 +3280,28 @@ SOKOL_GFX_API_DECL sg_pixelformat_info sg_query_pixelformat(sg_pixel_format fmt)
 /* get current state of a resource (INITIAL, ALLOC, VALID, FAILED, INVALID) */
 SOKOL_GFX_API_DECL sg_resource_state sg_query_buffer_state(sg_buffer buf);
 SOKOL_GFX_API_DECL sg_resource_state sg_query_image_state(sg_image img);
+SOKOL_GFX_API_DECL sg_resource_state sg_query_sampler_state(sg_sampler smp);
 SOKOL_GFX_API_DECL sg_resource_state sg_query_shader_state(sg_shader shd);
 SOKOL_GFX_API_DECL sg_resource_state sg_query_pipeline_state(sg_pipeline pip);
 SOKOL_GFX_API_DECL sg_resource_state sg_query_pass_state(sg_pass pass);
 /* get runtime information about a resource */
 SOKOL_GFX_API_DECL sg_buffer_info sg_query_buffer_info(sg_buffer buf);
 SOKOL_GFX_API_DECL sg_image_info sg_query_image_info(sg_image img);
+SOKOL_GFX_API_DECL sg_sampler_info sg_query_sampler_info(sg_sampler smp);
 SOKOL_GFX_API_DECL sg_shader_info sg_query_shader_info(sg_shader shd);
 SOKOL_GFX_API_DECL sg_pipeline_info sg_query_pipeline_info(sg_pipeline pip);
 SOKOL_GFX_API_DECL sg_pass_info sg_query_pass_info(sg_pass pass);
 /* get desc structs matching a specific resource (NOTE that not all creation attributes may be provided) */
 SOKOL_GFX_API_DECL sg_buffer_desc sg_query_buffer_desc(sg_buffer buf);
 SOKOL_GFX_API_DECL sg_image_desc sg_query_image_desc(sg_image img);
+SOKOL_GFX_API_DECL sg_sampler_desc sg_query_sampler_desc(sg_sampler smp);
 SOKOL_GFX_API_DECL sg_shader_desc sg_query_shader_desc(sg_shader shd);
 SOKOL_GFX_API_DECL sg_pipeline_desc sg_query_pipeline_desc(sg_pipeline pip);
 SOKOL_GFX_API_DECL sg_pass_desc sg_query_pass_desc(sg_pass pass);
 /* get resource creation desc struct with their default values replaced */
 SOKOL_GFX_API_DECL sg_buffer_desc sg_query_buffer_defaults(const sg_buffer_desc* desc);
 SOKOL_GFX_API_DECL sg_image_desc sg_query_image_defaults(const sg_image_desc* desc);
+SOKOL_GFX_API_DECL sg_sampler_desc sg_query_sampler_defaults(const sg_sampler_desc* desc);
 SOKOL_GFX_API_DECL sg_shader_desc sg_query_shader_defaults(const sg_shader_desc* desc);
 SOKOL_GFX_API_DECL sg_pipeline_desc sg_query_pipeline_defaults(const sg_pipeline_desc* desc);
 SOKOL_GFX_API_DECL sg_pass_desc sg_query_pass_defaults(const sg_pass_desc* desc);
@@ -3283,26 +3309,31 @@ SOKOL_GFX_API_DECL sg_pass_desc sg_query_pass_defaults(const sg_pass_desc* desc)
 /* separate resource allocation and initialization (for async setup) */
 SOKOL_GFX_API_DECL sg_buffer sg_alloc_buffer(void);
 SOKOL_GFX_API_DECL sg_image sg_alloc_image(void);
+SOKOL_GFX_API_DECL sg_sampler sg_alloc_sampler(void);
 SOKOL_GFX_API_DECL sg_shader sg_alloc_shader(void);
 SOKOL_GFX_API_DECL sg_pipeline sg_alloc_pipeline(void);
 SOKOL_GFX_API_DECL sg_pass sg_alloc_pass(void);
 SOKOL_GFX_API_DECL void sg_dealloc_buffer(sg_buffer buf);
 SOKOL_GFX_API_DECL void sg_dealloc_image(sg_image img);
+SOKOL_GFX_API_DECL void sg_dealloc_sampler(sg_sampler smp);
 SOKOL_GFX_API_DECL void sg_dealloc_shader(sg_shader shd);
 SOKOL_GFX_API_DECL void sg_dealloc_pipeline(sg_pipeline pip);
 SOKOL_GFX_API_DECL void sg_dealloc_pass(sg_pass pass);
 SOKOL_GFX_API_DECL void sg_init_buffer(sg_buffer buf, const sg_buffer_desc* desc);
 SOKOL_GFX_API_DECL void sg_init_image(sg_image img, const sg_image_desc* desc);
+SOKOL_GFX_API_DECL void sg_init_sampler(sg_sampler smg, const sg_sampler_desc* desc);
 SOKOL_GFX_API_DECL void sg_init_shader(sg_shader shd, const sg_shader_desc* desc);
 SOKOL_GFX_API_DECL void sg_init_pipeline(sg_pipeline pip, const sg_pipeline_desc* desc);
 SOKOL_GFX_API_DECL void sg_init_pass(sg_pass pass, const sg_pass_desc* desc);
 SOKOL_GFX_API_DECL void sg_uninit_buffer(sg_buffer buf);
 SOKOL_GFX_API_DECL void sg_uninit_image(sg_image img);
+SOKOL_GFX_API_DECL void sg_uninit_sampler(sg_sampler smp);
 SOKOL_GFX_API_DECL void sg_uninit_shader(sg_shader shd);
 SOKOL_GFX_API_DECL void sg_uninit_pipeline(sg_pipeline pip);
 SOKOL_GFX_API_DECL void sg_uninit_pass(sg_pass pass);
 SOKOL_GFX_API_DECL void sg_fail_buffer(sg_buffer buf);
 SOKOL_GFX_API_DECL void sg_fail_image(sg_image img);
+SOKOL_GFX_API_DECL void sg_fail_sampler(sg_sampler smp);
 SOKOL_GFX_API_DECL void sg_fail_shader(sg_shader shd);
 SOKOL_GFX_API_DECL void sg_fail_pipeline(sg_pipeline pip);
 SOKOL_GFX_API_DECL void sg_fail_pass(sg_pass pass);
@@ -3335,6 +3366,7 @@ inline void sg_setup(const sg_desc& desc) { return sg_setup(&desc); }
 
 inline sg_buffer sg_make_buffer(const sg_buffer_desc& desc) { return sg_make_buffer(&desc); }
 inline sg_image sg_make_image(const sg_image_desc& desc) { return sg_make_image(&desc); }
+inline sg_sampler sg_make_sampler(const sg_sampler_desc& desc) { return sg_make_sampler(&desc); }
 inline sg_shader sg_make_shader(const sg_shader_desc& desc) { return sg_make_shader(&desc); }
 inline sg_pipeline sg_make_pipeline(const sg_pipeline_desc& desc) { return sg_make_pipeline(&desc); }
 inline sg_pass sg_make_pass(const sg_pass_desc& desc) { return sg_make_pass(&desc); }
@@ -3348,15 +3380,17 @@ inline void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const sg_rang
 
 inline sg_buffer_desc sg_query_buffer_defaults(const sg_buffer_desc& desc) { return sg_query_buffer_defaults(&desc); }
 inline sg_image_desc sg_query_image_defaults(const sg_image_desc& desc) { return sg_query_image_defaults(&desc); }
+inline sg_sampler_desc sg_query_sampler_defaults(const sg_sampler_desc& desc) { return sg_query_sampler_defaults(&desc); }
 inline sg_shader_desc sg_query_shader_defaults(const sg_shader_desc& desc) { return sg_query_shader_defaults(&desc); }
 inline sg_pipeline_desc sg_query_pipeline_defaults(const sg_pipeline_desc& desc) { return sg_query_pipeline_defaults(&desc); }
 inline sg_pass_desc sg_query_pass_defaults(const sg_pass_desc& desc) { return sg_query_pass_defaults(&desc); }
 
-inline void sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc& desc) { return sg_init_buffer(buf_id, &desc); }
-inline void sg_init_image(sg_image img_id, const sg_image_desc& desc) { return sg_init_image(img_id, &desc); }
-inline void sg_init_shader(sg_shader shd_id, const sg_shader_desc& desc) { return sg_init_shader(shd_id, &desc); }
-inline void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc& desc) { return sg_init_pipeline(pip_id, &desc); }
-inline void sg_init_pass(sg_pass pass_id, const sg_pass_desc& desc) { return sg_init_pass(pass_id, &desc); }
+inline void sg_init_buffer(sg_buffer buf, const sg_buffer_desc& desc) { return sg_init_buffer(buf, &desc); }
+inline void sg_init_image(sg_image img, const sg_image_desc& desc) { return sg_init_image(img, &desc); }
+inline void sg_init_sampler(sg_sampler smp, const sg_sampler_desc& desc) { return sg_init_sampler(smp, &desc); }
+inline void sg_init_shader(sg_shader shd, const sg_shader_desc& desc) { return sg_init_shader(shd, &desc); }
+inline void sg_init_pipeline(sg_pipeline pip, const sg_pipeline_desc& desc) { return sg_init_pipeline(pip, &desc); }
+inline void sg_init_pass(sg_pass pass, const sg_pass_desc& desc) { return sg_init_pass(pass, &desc); }
 
 inline void sg_update_buffer(sg_buffer buf_id, const sg_range& data) { return sg_update_buffer(buf_id, &data); }
 inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_append_buffer(buf_id, &data); }
