@@ -2448,17 +2448,14 @@ typedef struct sg_shader_image_desc {
     sg_image_type image_type;
     sg_image_sample_type sample_type;
     bool multisampled;
-    uint8_t binding;
 } sg_shader_image_desc;
 
 typedef struct sg_shader_sampler_desc {
     sg_sampler_type type;
-    uint8_t binding;
 } sg_shader_sampler_desc;
 
 typedef struct sg_shader_combined_image_sampler_desc {
     const char* name;       // optional GLSL location
-    uint8_t binding;        // binding location if name not provided
 } sg_shader_combined_image_sampler_desc;
 
 typedef struct sg_shader_stage_desc {
@@ -2948,8 +2945,8 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_SIZE_MISMATCH, "size of uniform block members doesn't match uniform block size") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_ARRAY_COUNT, "uniform array count must be >= 1") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_STD140_ARRAY_TYPE, "uniform arrays only allowed for FLOAT4, INT4, MAT4 in std140 layout") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_CONT_IMGS, "shader images must occupy continuous slots") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMG_NAME, "GL backend requires uniform block member names") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_CONT_IMGS, "shader images must occupy continuous slots (sg_shader_desc.vs|fs.images[])") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_CONT_SMPS, "shader samplers must occupy continuous slots (sg_shader_desc.vs|fs.samplers[])") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_ATTR_SEMANTICS, "D3D11 backend requires vertex attribute semantics") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_ATTR_STRING_TOO_LONG, "vertex attribute name/semantic string too long (max len 16)") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_CANARY, "sg_pipeline_desc not initialized") \
@@ -3013,16 +3010,20 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_IB_EXISTS, "sg_apply_bindings: index buffer no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_IB_TYPE, "sg_apply_bindings: buffer in index buffer slot is not a SG_BUFFERTYPE_INDEXBUFFER") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_IB_OVERFLOW, "sg_apply_bindings: buffer in index buffer slot is overflown") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMGS, "sg_apply_bindings: vertex shader image count doesn't match sg_shader_desc") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_EXISTS, "sg_apply_bindings: vertex shader image no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMGS, "sg_apply_bindings: number of images bound to vertex stage doesn't match sg_shader_desc") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_EXISTS, "sg_apply_bindings: image bound to vertex stage no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_TYPES, "sg_apply_bindings: one or more vertex shader image types don't match sg_shader_desc") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_MSAA, "sg_apply_bindings: cannot bind image with sample_count>1 to vertex stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_DEPTH, "sg_apply_bindings: cannot bind depth/stencil image to vertex stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMGS, "sg_apply_bindings: fragment shader image count doesn't match sg_shader_desc") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_SMPS, "sg_apply_bindings: number of samplers bound to vertex stage doesn't match sg_shader_desc") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_SMP_EXISTS, "sg_apply_bindings: sampler bound to vertex stage no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMGS, "sg_apply_bindings: number of images bound to fragment stage doesn't match sg_shader_desc") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_EXISTS, "sg_apply_bindings: fragment shader image no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_TYPES, "sg_apply_bindings: one or more fragment shader image types don't match sg_shader_desc") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_MSAA, "sg_apply_bindings: cannot bind image with sample_count>1 to fragment stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_DEPTH, "sg_apply_bindings: cannot bind depth/stencil image to fragment stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_SMPS, "sg_apply_bindings: number of samplers bound to fragment stage doesn't match sg_shader_desc") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_SMP_EXISTS, "sg_apply_bindings: sampler bound to fragment stage no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_NO_PIPELINE, "sg_apply_uniforms: must be called after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_NO_UB_AT_SLOT, "sg_apply_uniforms: no uniform block declaration at this shader stage UB slot") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_SIZE, "sg_apply_uniforms: data size exceeds declared uniform block size") \
@@ -4070,10 +4071,16 @@ typedef struct {
 } _sg_shader_image_t;
 
 typedef struct {
+    sg_sampler_type type;
+} _sg_shader_sampler_t;
+
+typedef struct {
     int num_uniform_blocks;
     int num_images;
+    int num_samplers;
     _sg_shader_uniform_block_t uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
     _sg_shader_image_t images[SG_MAX_SHADERSTAGE_IMAGES];
+    _sg_shader_sampler_t samplers[SG_MAX_SHADERSTAGE_SAMPLERS];
 } _sg_shader_stage_t;
 
 typedef struct {
@@ -4102,6 +4109,15 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
             stage->images[img_index].image_type = img_desc->image_type;
             stage->images[img_index].sample_type = img_desc->sample_type;
             stage->num_images++;
+        }
+        SOKOL_ASSERT(stage->num_samplers == 0);
+        for (int smp_index = 0; smp_index < SG_MAX_SHADERSTAGE_SAMPLERS; smp_index++) {
+            const sg_shader_sampler_desc* smp_desc = &stage_desc->samplers[smp_index];
+            if (smp_desc->type == _SG_SAMPLERTYPE_DEFAULT) {
+                break;
+            }
+            stage->samplers[smp_index].type = smp_desc->type;
+            stage->num_samplers++;
         }
     }
 }
@@ -4639,6 +4655,10 @@ typedef struct {
     sg_image cur_vs_image_ids[SG_MAX_SHADERSTAGE_IMAGES];
     const _sg_image_t* cur_fs_images[SG_MAX_SHADERSTAGE_IMAGES];
     sg_image cur_fs_image_ids[SG_MAX_SHADERSTAGE_IMAGES];
+    const _sg_sampler_t* cur_vs_samplers[SG_MAX_SHADERSTAGE_SAMPLERS];
+    sg_sampler cur_vs_sampler_ids[SG_MAX_SHADERSTAGE_SAMPLERS];
+    const _sg_sampler_t* cur_fs_samplers[SG_MAX_SHADERSTAGE_SAMPLERS];
+    sg_sampler cur_fs_sampler_ids[SG_MAX_SHADERSTAGE_SAMPLERS];
 } _sg_mtl_state_cache_t;
 
 typedef struct {
@@ -11035,7 +11055,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const 
 
     _sg_shader_common_init(&shd->cmn, desc);
 
-    /* create metal library objects and lookup entry functions */
+    // create metal library objects and lookup entry functions
     id<MTLLibrary> vs_lib = nil;
     id<MTLLibrary> fs_lib = nil;
     id<MTLFunction> vs_func = nil;
@@ -11043,7 +11063,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const 
     const char* vs_entry = desc->vs.entry;
     const char* fs_entry = desc->fs.entry;
     if (desc->vs.bytecode.ptr && desc->fs.bytecode.ptr) {
-        /* separate byte code provided */
+        // separate byte code provided
         vs_lib = _sg_mtl_library_from_bytecode(desc->vs.bytecode.ptr, desc->vs.bytecode.size);
         fs_lib = _sg_mtl_library_from_bytecode(desc->fs.bytecode.ptr, desc->fs.bytecode.size);
         if ((nil == vs_lib) || (nil == fs_lib)) {
@@ -11051,9 +11071,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const 
         }
         vs_func = [vs_lib newFunctionWithName:[NSString stringWithUTF8String:vs_entry]];
         fs_func = [fs_lib newFunctionWithName:[NSString stringWithUTF8String:fs_entry]];
-    }
-    else if (desc->vs.source && desc->fs.source) {
-        /* separate sources provided */
+    } else if (desc->vs.source && desc->fs.source) {
+        // separate sources provided
         vs_lib = _sg_mtl_compile_library(desc->vs.source);
         fs_lib = _sg_mtl_compile_library(desc->fs.source);
         if ((nil == vs_lib) || (nil == fs_lib)) {
@@ -11061,8 +11080,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const 
         }
         vs_func = [vs_lib newFunctionWithName:[NSString stringWithUTF8String:vs_entry]];
         fs_func = [fs_lib newFunctionWithName:[NSString stringWithUTF8String:fs_entry]];
-    }
-    else {
+    } else {
         goto failed;
     }
     if (nil == vs_func) {
@@ -11073,7 +11091,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const 
         _SG_ERROR(METAL_FRAGMENT_SHADER_ENTRY_NOT_FOUND);
         goto failed;
     }
-    /* it is legal to call _sg_mtl_add_resource with a nil value, this will return a special 0xFFFFFFFF index */
+    // it is legal to call _sg_mtl_add_resource with a nil value, this will return a special 0xFFFFFFFF index
     shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_lib  = _sg_mtl_add_resource(vs_lib);
     _SG_OBJC_RELEASE(vs_lib);
     shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_lib  = _sg_mtl_add_resource(fs_lib);
@@ -11125,7 +11143,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
     pip->mtl.winding = _sg_mtl_winding(desc->face_winding);
     pip->mtl.stencil_ref = desc->stencil.ref;
 
-    /* create vertex-descriptor */
+    // create vertex-descriptor
     MTLVertexDescriptor* vtx_desc = [MTLVertexDescriptor vertexDescriptor];
     for (NSUInteger attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         const sg_vertex_attr_state* a_state = &desc->layout.attrs[attr_index];
@@ -11153,7 +11171,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
         }
     }
 
-    /* render-pipeline descriptor */
+    // render-pipeline descriptor
     MTLRenderPipelineDescriptor* rp_desc = [[MTLRenderPipelineDescriptor alloc] init];
     rp_desc.vertexDescriptor = vtx_desc;
     SOKOL_ASSERT(shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_func != _SG_MTL_INVALID_SLOT_INDEX);
@@ -11199,7 +11217,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
         return SG_RESOURCESTATE_FAILED;
     }
 
-    /* depth-stencil-state */
+    // depth-stencil-state
     MTLDepthStencilDescriptor* ds_desc = [[MTLDepthStencilDescriptor alloc] init];
     ds_desc.depthCompareFunction = _sg_mtl_compare_func(desc->depth.compare);
     ds_desc.depthWriteEnabled = desc->depth.write_enabled;
@@ -11562,7 +11580,7 @@ _SOKOL_PRIVATE void _sg_mtl_apply_pipeline(_sg_pipeline_t* pip) {
     }
     SOKOL_ASSERT(nil != _sg.mtl.cmd_encoder);
 
-    if ((_sg.mtl.state_cache.cur_pipeline != pip) || (_sg.mtl.state_cache.cur_pipeline_id.id != pip->slot.id)) {
+    if (_sg.mtl.state_cache.cur_pipeline_id.id != pip->slot.id) {
         _sg.mtl.state_cache.cur_pipeline = pip;
         _sg.mtl.state_cache.cur_pipeline_id.id = pip->slot.id;
         sg_color c = pip->cmn.blend_color;
@@ -11583,7 +11601,9 @@ _SOKOL_PRIVATE void _sg_mtl_apply_bindings(
     _sg_buffer_t** vbs, const int* vb_offsets, int num_vbs,
     _sg_buffer_t* ib, int ib_offset,
     _sg_image_t** vs_imgs, int num_vs_imgs,
-    _sg_image_t** fs_imgs, int num_fs_imgs)
+    _sg_image_t** fs_imgs, int num_fs_imgs,
+    _sg_sampler_t** vs_smps, int num_vs_smps,
+    _sg_sampler_t** fs_smps, int num_fs_smps)
 {
     _SOKOL_UNUSED(pip);
     SOKOL_ASSERT(_sg.mtl.in_pass);
@@ -11604,12 +11624,10 @@ _SOKOL_PRIVATE void _sg_mtl_apply_bindings(
     }
 
     // apply vertex buffers
-    NSUInteger slot;
-    for (slot = 0; slot < (NSUInteger)num_vbs; slot++) {
+    for (NSUInteger slot = 0; slot < (NSUInteger)num_vbs; slot++) {
         const _sg_buffer_t* vb = vbs[slot];
-        if ((_sg.mtl.state_cache.cur_vertexbuffers[slot] != vb) ||
-            (_sg.mtl.state_cache.cur_vertexbuffer_offsets[slot] != vb_offsets[slot]) ||
-            (_sg.mtl.state_cache.cur_vertexbuffer_ids[slot].id != vb->slot.id))
+        if ((_sg.mtl.state_cache.cur_vertexbuffer_ids[slot].id != vb->slot.id) ||
+            (_sg.mtl.state_cache.cur_vertexbuffer_offsets[slot] != vb_offsets[slot]))
         {
             _sg.mtl.state_cache.cur_vertexbuffers[slot] = vb;
             _sg.mtl.state_cache.cur_vertexbuffer_offsets[slot] = vb_offsets[slot];
@@ -11623,9 +11641,9 @@ _SOKOL_PRIVATE void _sg_mtl_apply_bindings(
     }
 
     // apply vertex shader images
-    for (slot = 0; slot < (NSUInteger)num_vs_imgs; slot++) {
+    for (NSUInteger slot = 0; slot < (NSUInteger)num_vs_imgs; slot++) {
         const _sg_image_t* img = vs_imgs[slot];
-        if ((_sg.mtl.state_cache.cur_vs_images[slot] != img) || (_sg.mtl.state_cache.cur_vs_image_ids[slot].id != img->slot.id)) {
+        if (_sg.mtl.state_cache.cur_vs_image_ids[slot].id != img->slot.id) {
             _sg.mtl.state_cache.cur_vs_images[slot] = img;
             _sg.mtl.state_cache.cur_vs_image_ids[slot].id = img->slot.id;
             SOKOL_ASSERT(img->mtl.tex[img->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
@@ -11633,17 +11651,10 @@ _SOKOL_PRIVATE void _sg_mtl_apply_bindings(
         }
     }
 
-    // apply vertex shader samplers
-    // FIXME!
-    /*
-            SOKOL_ASSERT(img->mtl.sampler_state != _SG_MTL_INVALID_SLOT_INDEX);
-            [_sg.mtl.cmd_encoder setVertexSamplerState:_sg_mtl_id(img->mtl.sampler_state) atIndex:slot];
-    */
-
     // apply fragment shader images
-    for (slot = 0; slot < (NSUInteger)num_fs_imgs; slot++) {
+    for (NSUInteger slot = 0; slot < (NSUInteger)num_fs_imgs; slot++) {
         const _sg_image_t* img = fs_imgs[slot];
-        if ((_sg.mtl.state_cache.cur_fs_images[slot] != img) || (_sg.mtl.state_cache.cur_fs_image_ids[slot].id != img->slot.id)) {
+        if (_sg.mtl.state_cache.cur_fs_image_ids[slot].id != img->slot.id) {
             _sg.mtl.state_cache.cur_fs_images[slot] = img;
             _sg.mtl.state_cache.cur_fs_image_ids[slot].id = img->slot.id;
             SOKOL_ASSERT(img->mtl.tex[img->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
@@ -11651,12 +11662,27 @@ _SOKOL_PRIVATE void _sg_mtl_apply_bindings(
         }
     }
 
-    // apply fragme shader samplers
-    // FIXME!
-    /*
-            SOKOL_ASSERT(img->mtl.sampler_state != _SG_MTL_INVALID_SLOT_INDEX);
-            [_sg.mtl.cmd_encoder setFragmentSamplerState:_sg_mtl_id(img->mtl.sampler_state) atIndex:slot];
-    */
+    // apply vertex shader samplers
+    for (NSUInteger slot = 0; slot < (NSUInteger)num_vs_smps; slot++) {
+        const _sg_sampler_t* smp = vs_smps[slot];
+        if (_sg.mtl.state_cache.cur_vs_sampler_ids[slot].id != smp->slot.id) {
+            _sg.mtl.state_cache.cur_vs_samplers[slot] = smp;
+            _sg.mtl.state_cache.cur_vs_sampler_ids[slot].id = smp->slot.id;
+            SOKOL_ASSERT(smp->mtl.sampler_state != _SG_MTL_INVALID_SLOT_INDEX);
+            [_sg.mtl.cmd_encoder setVertexSamplerState:_sg_mtl_id(smp->mtl.sampler_state) atIndex:slot];
+        }
+    }
+
+    // apply fragment shader samplers
+    for (NSUInteger slot = 0; slot < (NSUInteger)num_fs_smps; slot++) {
+        const _sg_sampler_t* smp = fs_smps[slot];
+        if (_sg.mtl.state_cache.cur_fs_sampler_ids[slot].id != smp->slot.id) {
+            _sg.mtl.state_cache.cur_fs_samplers[slot] = smp;
+            _sg.mtl.state_cache.cur_fs_sampler_ids[slot].id = smp->slot.id;
+            SOKOL_ASSERT(smp->mtl.sampler_state != _SG_MTL_INVALID_SLOT_INDEX);
+            [_sg.mtl.cmd_encoder setFragmentSamplerState:_sg_mtl_id(smp->mtl.sampler_state) atIndex:slot];
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sg_mtl_apply_uniforms(sg_shader_stage stage_index, int ub_index, const sg_range* data) {
@@ -13887,18 +13913,20 @@ static inline void _sg_apply_bindings(
     _sg_buffer_t** vbs, const int* vb_offsets, int num_vbs,
     _sg_buffer_t* ib, int ib_offset,
     _sg_image_t** vs_imgs, int num_vs_imgs,
-    _sg_image_t** fs_imgs, int num_fs_imgs)
+    _sg_image_t** fs_imgs, int num_fs_imgs,
+    _sg_sampler_t** vs_smps, int num_vs_smps,
+    _sg_sampler_t** fs_smps, int num_fs_smps)
 {
     #if defined(_SOKOL_ANY_GL)
-    _sg_gl_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
+    _sg_gl_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs, vs_smps, num_vs_smps, fs_smps, num_fs_smps);
     #elif defined(SOKOL_METAL)
-    _sg_mtl_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
+    _sg_mtl_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs, vs_smps, num_vs_smps, fs_smps, num_fs_smps);
     #elif defined(SOKOL_D3D11)
-    _sg_d3d11_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
+    _sg_d3d11_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs, vs_smps, num_vs_smps, fs_smps, num_fs_smps);
     #elif defined(SOKOL_WGPU)
-    _sg_wgpu_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
+    _sg_wgpu_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs, vs_smps, num_vs_smps, fs_smps, num_fs_smps);
     #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
+    _sg_dummy_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs, vs_smps, num_vs_smps, fs_smps, num_fs_smps);
     #else
     #error("INVALID BACKEND");
     #endif
@@ -14578,19 +14606,19 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             _SG_VALIDATE(0 != desc->attrs[0].sem_name, VALIDATE_SHADERDESC_ATTR_SEMANTICS);
         #endif
         #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES3)
-            /* on GL, must provide shader source code */
+            // on GL, must provide shader source code
             _SG_VALIDATE(0 != desc->vs.source, VALIDATE_SHADERDESC_SOURCE);
             _SG_VALIDATE(0 != desc->fs.source, VALIDATE_SHADERDESC_SOURCE);
         #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
-            /* on Metal or D3D11, must provide shader source code or byte code */
+            // on Metal or D3D11, must provide shader source code or byte code
             _SG_VALIDATE((0 != desc->vs.source)||(0 != desc->vs.bytecode.ptr), VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
             _SG_VALIDATE((0 != desc->fs.source)||(0 != desc->fs.bytecode.ptr), VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
         #elif defined(SOKOL_WGPU)
-            /* on WGPU byte code must be provided */
+            // on WGPU byte code must be provided
             _SG_VALIDATE((0 != desc->vs.bytecode.ptr), VALIDATE_SHADERDESC_BYTECODE);
             _SG_VALIDATE((0 != desc->fs.bytecode.ptr), VALIDATE_SHADERDESC_BYTECODE);
         #else
-            /* Dummy Backend, don't require source or bytecode */
+            // Dummy Backend, don't require source or bytecode
         #endif
         for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
             if (desc->attrs[i].name) {
@@ -14600,7 +14628,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 _SG_VALIDATE(strlen(desc->attrs[i].sem_name) < _SG_STRING_SIZE, VALIDATE_SHADERDESC_ATTR_STRING_TOO_LONG);
             }
         }
-        /* if shader byte code, the size must also be provided */
+        // if shader byte code, the size must also be provided
         if (0 != desc->vs.bytecode.ptr) {
             _SG_VALIDATE(desc->vs.bytecode.size > 0, VALIDATE_SHADERDESC_NO_BYTECODE_SIZE);
         }
@@ -14638,8 +14666,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                                     _SG_VALIDATE((u_desc->type == SG_UNIFORMTYPE_FLOAT4) || (u_desc->type == SG_UNIFORMTYPE_INT4) || (u_desc->type == SG_UNIFORMTYPE_MAT4), VALIDATE_SHADERDESC_UB_STD140_ARRAY_TYPE);
                                 }
                             }
-                        }
-                        else {
+                        } else {
                             uniforms_continuous = false;
                         }
                     }
@@ -14649,8 +14676,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                     _SG_VALIDATE((size_t)uniform_offset == ub_desc->size, VALIDATE_SHADERDESC_UB_SIZE_MISMATCH);
                     _SG_VALIDATE(num_uniforms > 0, VALIDATE_SHADERDESC_NO_UB_MEMBERS);
                     #endif
-                }
-                else {
+                } else {
                     uniform_blocks_continuous = false;
                 }
             }
@@ -14659,9 +14685,17 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 const sg_shader_image_desc* img_desc = &stage_desc->images[img_index];
                 if (img_desc->image_type != _SG_IMAGETYPE_DEFAULT) {
                     _SG_VALIDATE(images_continuous, VALIDATE_SHADERDESC_NO_CONT_IMGS);
-                }
-                else {
+                } else {
                     images_continuous = false;
+                }
+            }
+            bool samplers_continuous = true;
+            for (int smp_index = 0; smp_index < SG_MAX_SHADERSTAGE_SAMPLERS; smp_index++) {
+                const sg_shader_sampler_desc* smp_desc = &stage_desc->samplers[smp_index];
+                if (smp_desc->type != _SG_SAMPLERTYPE_DEFAULT) {
+                    _SG_VALIDATE(samplers_continuous, VALIDATE_SHADERDESC_NO_CONT_SMPS);
+                } else {
+                    samplers_continuous = false;
                 }
             }
         }
@@ -14704,7 +14738,7 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
                 _SG_VALIDATE(attrs_cont, VALIDATE_PIPELINEDESC_NO_ATTRS);
                 SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEX_BUFFERS);
                 #if defined(SOKOL_D3D11)
-                /* on D3D11, semantic names (and semantic indices) must be provided */
+                // on D3D11, semantic names (and semantic indices) must be provided
                 _SG_VALIDATE(!_sg_strempty(&shd->d3d11.attrs[attr_index].sem_name), VALIDATE_PIPELINEDESC_ATTR_SEMANTICS);
                 #endif
             }
@@ -14744,19 +14778,16 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
                 _SG_VALIDATE(att->mip_level < img->cmn.num_mipmaps, VALIDATE_PASSDESC_MIPLEVEL);
                 if (img->cmn.type == SG_IMAGETYPE_CUBE) {
                     _SG_VALIDATE(att->slice < 6, VALIDATE_PASSDESC_FACE);
-                }
-                else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
+                } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
                     _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_PASSDESC_LAYER);
-                }
-                else if (img->cmn.type == SG_IMAGETYPE_3D) {
+                } else if (img->cmn.type == SG_IMAGETYPE_3D) {
                     _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_PASSDESC_SLICE);
                 }
                 if (att_index == 0) {
                     width = img->cmn.width >> att->mip_level;
                     height = img->cmn.height >> att->mip_level;
                     sample_count = img->cmn.sample_count;
-                }
-                else {
+                } else {
                     _SG_VALIDATE(width == img->cmn.width >> att->mip_level, VALIDATE_PASSDESC_IMAGE_SIZES);
                     _SG_VALIDATE(height == img->cmn.height >> att->mip_level, VALIDATE_PASSDESC_IMAGE_SIZES);
                     _SG_VALIDATE(sample_count == img->cmn.sample_count, VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS);
@@ -14777,11 +14808,9 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
                         _SG_VALIDATE(res_att->mip_level < res_img->cmn.num_mipmaps, VALIDATE_PASSDESC_RESOLVE_MIPLEVEL);
                         if (res_img->cmn.type == SG_IMAGETYPE_CUBE) {
                             _SG_VALIDATE(res_att->slice < 6, VALIDATE_PASSDESC_RESOLVE_FACE);
-                        }
-                        else if (res_img->cmn.type == SG_IMAGETYPE_ARRAY) {
+                        } else if (res_img->cmn.type == SG_IMAGETYPE_ARRAY) {
                             _SG_VALIDATE(res_att->slice < res_img->cmn.num_slices, VALIDATE_PASSDESC_RESOLVE_LAYER);
-                        }
-                        else if (res_img->cmn.type == SG_IMAGETYPE_3D) {
+                        } else if (res_img->cmn.type == SG_IMAGETYPE_3D) {
                             _SG_VALIDATE(res_att->slice < res_img->cmn.num_slices, VALIDATE_PASSDESC_RESOLVE_SLICE);
                         }
                         _SG_VALIDATE(img->cmn.pixel_format == res_img->cmn.pixel_format, VALIDATE_PASSDESC_RESOLVE_IMAGE_FORMAT);
@@ -14800,11 +14829,9 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
                 _SG_VALIDATE(att->mip_level < img->cmn.num_mipmaps, VALIDATE_PASSDESC_DEPTH_MIPLEVEL);
                 if (img->cmn.type == SG_IMAGETYPE_CUBE) {
                     _SG_VALIDATE(att->slice < 6, VALIDATE_PASSDESC_DEPTH_FACE);
-                }
-                else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
+                } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
                     _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_PASSDESC_DEPTH_LAYER);
-                }
-                else if (img->cmn.type == SG_IMAGETYPE_3D) {
+                } else if (img->cmn.type == SG_IMAGETYPE_3D) {
                     // NOTE: this can't actually happen because of VALIDATE_IMAGEDESC_DEPTH_3D_IMAGE
                     _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_PASSDESC_DEPTH_SLICE);
                 }
@@ -14863,7 +14890,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
             return true;
         }
         _sg_validate_begin();
-        /* the pipeline object must be alive and valid */
+        // the pipeline object must be alive and valid
         _SG_VALIDATE(pip_id.id != SG_INVALID_ID, VALIDATE_APIP_PIPELINE_VALID_ID);
         const _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
         _SG_VALIDATE(pip != 0, VALIDATE_APIP_PIPELINE_EXISTS);
@@ -14871,14 +14898,14 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
             return _sg_validate_end();
         }
         _SG_VALIDATE(pip->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_PIPELINE_VALID);
-        /* the pipeline's shader must be alive and valid */
+        // the pipeline's shader must be alive and valid
         SOKOL_ASSERT(pip->shader);
         _SG_VALIDATE(pip->shader->slot.id == pip->cmn.shader_id.id, VALIDATE_APIP_SHADER_EXISTS);
         _SG_VALIDATE(pip->shader->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_SHADER_VALID);
-        /* check that pipeline attributes match current pass attributes */
+        // check that pipeline attributes match current pass attributes
         const _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, _sg.cur_pass.id);
         if (pass) {
-            /* an offscreen pass */
+            // an offscreen pass
             _SG_VALIDATE(pip->cmn.color_count == pass->cmn.num_color_atts, VALIDATE_APIP_ATT_COUNT);
             for (int i = 0; i < pip->cmn.color_count; i++) {
                 const _sg_image_t* att_img = _sg_pass_color_image(pass, i);
@@ -14888,13 +14915,11 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
             const _sg_image_t* att_dsimg = _sg_pass_ds_image(pass);
             if (att_dsimg) {
                 _SG_VALIDATE(pip->cmn.depth.pixel_format == att_dsimg->cmn.pixel_format, VALIDATE_APIP_DEPTH_FORMAT);
-            }
-            else {
+            } else {
                 _SG_VALIDATE(pip->cmn.depth.pixel_format == SG_PIXELFORMAT_NONE, VALIDATE_APIP_DEPTH_FORMAT);
             }
-        }
-        else {
-            /* default pass */
+        } else {
+            // default pass
             _SG_VALIDATE(pip->cmn.color_count == 1, VALIDATE_APIP_ATT_COUNT);
             _SG_VALIDATE(pip->cmn.colors[0].pixel_format == _sg.desc.context.color_format, VALIDATE_APIP_COLOR_FORMAT);
             _SG_VALIDATE(pip->cmn.depth.pixel_format == _sg.desc.context.depth_format, VALIDATE_APIP_DEPTH_FORMAT);
@@ -14961,7 +14986,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
 
         // has expected vertex shader images
         for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
-            _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_VS];
+            const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_VS];
             if (bindings->vs.images[i].id != SG_INVALID_ID) {
                 _SG_VALIDATE(i < stage->num_images, VALIDATE_ABND_VS_IMGS);
                 const _sg_image_t* img = _sg_lookup_image(&_sg.pools, bindings->vs.images[i].id);
@@ -14976,9 +15001,21 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
             }
         }
 
+        // has expected vertex shader image samplers
+        for (int i = 0; i < SG_MAX_SHADERSTAGE_SAMPLERS; i++) {
+            const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_VS];
+            if (bindings->vs.samplers[i].id != SG_INVALID_ID) {
+                _SG_VALIDATE(i < stage->num_samplers, VALIDATE_ABND_VS_SMPS);
+                const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, bindings->vs.samplers[i].id);
+                _SG_VALIDATE(smp != 0, VALIDATE_ABND_VS_SMP_EXISTS);
+            } else {
+                _SG_VALIDATE(i >= stage->num_samplers, VALIDATE_ABND_VS_SMPS);
+            }
+        }
+
         // has expected fragment shader images
         for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
-            _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_FS];
+            const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_FS];
             if (bindings->fs.images[i].id != SG_INVALID_ID) {
                 _SG_VALIDATE(i < stage->num_images, VALIDATE_ABND_FS_IMGS);
                 const _sg_image_t* img = _sg_lookup_image(&_sg.pools, bindings->fs.images[i].id);
@@ -14992,6 +15029,19 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 _SG_VALIDATE(i >= stage->num_images, VALIDATE_ABND_FS_IMGS);
             }
         }
+
+        // has expected fragment shader samplers
+        for (int i = 0; i < SG_MAX_SHADERSTAGE_SAMPLERS; i++) {
+            const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_FS];
+            if (bindings->fs.samplers[i].id != SG_INVALID_ID) {
+                _SG_VALIDATE(i < stage->num_samplers, VALIDATE_ABND_FS_SMPS);
+                const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, bindings->fs.samplers[i].id);
+                _SG_VALIDATE(smp != 0, VALIDATE_ABND_FS_SMP_EXISTS);
+            } else {
+                _SG_VALIDATE(i >= stage->num_samplers, VALIDATE_ABND_FS_SMPS);
+            }
+        }
+
         return _sg_validate_end();
     #endif
 }
@@ -16521,10 +16571,35 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
             break;
         }
     }
+
+    _sg_sampler_t* vs_smps[SG_MAX_SHADERSTAGE_SAMPLERS] = { 0 };
+    int num_vs_smps = 0;
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_SAMPLERS; i++, num_vs_smps++) {
+        if (bindings->vs.samplers[i].id) {
+            vs_smps[i] = _sg_lookup_sampler(&_sg.pools, bindings->vs.samplers[i].id);
+            SOKOL_ASSERT(vs_smps[i]);
+            _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == vs_smps[i]->slot.state);
+        } else {
+            break;
+        }
+    }
+
+    _sg_sampler_t* fs_smps[SG_MAX_SHADERSTAGE_SAMPLERS] = { 0 };
+    int num_fs_smps = 0;
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_SAMPLERS; i++, num_fs_smps++) {
+        if (bindings->fs.samplers[i].id) {
+            fs_smps[i] = _sg_lookup_sampler(&_sg.pools, bindings->fs.samplers[i].id);
+            SOKOL_ASSERT(fs_smps[i]);
+            _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == fs_smps[i]->slot.state);
+        } else {
+            break;
+        }
+    }
+
     if (_sg.next_draw_valid) {
         const int* vb_offsets = bindings->vertex_buffer_offsets;
         int ib_offset = bindings->index_buffer_offset;
-        _sg_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
+        _sg_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs, vs_smps, num_vs_smps, fs_smps, num_fs_smps);
         _SG_TRACE_ARGS(apply_bindings, bindings);
     } else {
         _SG_TRACE_NOARGS(err_draw_invalid);
