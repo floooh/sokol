@@ -2455,7 +2455,7 @@ typedef struct sg_shader_sampler_desc {
 } sg_shader_sampler_desc;
 
 typedef struct sg_shader_combined_image_sampler_desc {
-    const char* name;       // optional GLSL location
+    const char* name;   // required for GLSL
 } sg_shader_combined_image_sampler_desc;
 
 typedef struct sg_shader_stage_desc {
@@ -4051,6 +4051,7 @@ typedef struct {
 _SOKOL_PRIVATE void _sg_sampler_common_init(_sg_sampler_common_t* cmn, const sg_sampler_desc* desc) {
     cmn->min_filter = desc->min_filter;
     cmn->mag_filter = desc->mag_filter;
+    cmn->mipmap_filter = desc->mipmap_filter;
     cmn->wrap_u = desc->wrap_u;
     cmn->wrap_v = desc->wrap_v;
     cmn->wrap_w = desc->wrap_w;
@@ -10793,13 +10794,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_buffer(_sg_buffer_t* buf, const 
         if (injected) {
             SOKOL_ASSERT(desc->mtl_buffers[slot]);
             mtl_buf = (__bridge id<MTLBuffer>) desc->mtl_buffers[slot];
-        }
-        else {
+        } else {
             if (buf->cmn.usage == SG_USAGE_IMMUTABLE) {
                 SOKOL_ASSERT(desc->data.ptr);
                 mtl_buf = [_sg.mtl.device newBufferWithBytes:desc->data.ptr length:(NSUInteger)buf->cmn.size options:mtl_options];
-            }
-            else {
+            } else {
                 mtl_buf = [_sg.mtl.device newBufferWithLength:(NSUInteger)buf->cmn.size options:mtl_options];
             }
         }
@@ -14070,8 +14069,7 @@ _SOKOL_PRIVATE int _sg_pool_alloc_index(_sg_pool_t* pool) {
         int slot_index = pool->free_queue[--pool->queue_top];
         SOKOL_ASSERT((slot_index > 0) && (slot_index < pool->size));
         return slot_index;
-    }
-    else {
+    } else {
         // pool exhausted
         return _SG_INVALID_SLOT_INDEX;
     }
@@ -14469,8 +14467,7 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
         if (!injected && (desc->usage == SG_USAGE_IMMUTABLE)) {
             _SG_VALIDATE((0 != desc->data.ptr) && (desc->data.size > 0), VALIDATE_BUFFERDESC_DATA);
             _SG_VALIDATE(desc->size == desc->data.size, VALIDATE_BUFFERDESC_DATA_SIZE);
-        }
-        else {
+        } else {
             _SG_VALIDATE(0 == desc->data.ptr, VALIDATE_BUFFERDESC_NO_DATA);
         }
         return _sg_validate_end();
@@ -15149,8 +15146,7 @@ _SOKOL_PRIVATE sg_buffer_desc _sg_buffer_desc_defaults(const sg_buffer_desc* des
     def.usage = _sg_def(def.usage, SG_USAGE_IMMUTABLE);
     if (def.size == 0) {
         def.size = def.data.size;
-    }
-    else if (def.data.size == 0) {
+    } else if (def.data.size == 0) {
         def.data.size = def.size;
     }
     return def;
@@ -15165,8 +15161,7 @@ _SOKOL_PRIVATE sg_image_desc _sg_image_desc_defaults(const sg_image_desc* desc) 
     if (desc->render_target) {
         def.pixel_format = _sg_def(def.pixel_format, _sg.desc.context.color_format);
         def.sample_count = _sg_def(def.sample_count, _sg.desc.context.sample_count);
-    }
-    else {
+    } else {
         def.pixel_format = _sg_def(def.pixel_format, SG_PIXELFORMAT_RGBA8);
         def.sample_count = _sg_def(def.sample_count, 1);
     }
