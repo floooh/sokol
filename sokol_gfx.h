@@ -4921,8 +4921,7 @@ static void _sg_log(sg_log_item log_item, uint32_t log_level, const char* msg, u
             }
         #endif
         _sg.desc.logger.func("sg", log_level, log_item, msg, line_nr, filename, _sg.desc.logger.user_data);
-    }
-    else {
+    } else {
         // for log level PANIC it would be 'undefined behaviour' to continue
         if (log_level == 0) {
             abort();
@@ -4959,8 +4958,7 @@ _SOKOL_PRIVATE void* _sg_malloc(size_t size) {
     void* ptr;
     if (_sg.desc.allocator.alloc) {
         ptr = _sg.desc.allocator.alloc(size, _sg.desc.allocator.user_data);
-    }
-    else {
+    } else {
         ptr = malloc(size);
     }
     if (0 == ptr) {
@@ -4978,8 +4976,7 @@ _SOKOL_PRIVATE void* _sg_malloc_clear(size_t size) {
 _SOKOL_PRIVATE void _sg_free(void* ptr) {
     if (_sg.desc.allocator.free) {
         _sg.desc.allocator.free(ptr, _sg.desc.allocator.user_data);
-    }
-    else {
+    } else {
         free(ptr);
     }
 }
@@ -5001,8 +4998,7 @@ _SOKOL_PRIVATE void _sg_strcpy(_sg_str_t* dst, const char* src) {
         strncpy(dst->buf, src, _SG_STRING_SIZE);
         #endif
         dst->buf[_SG_STRING_SIZE-1] = 0;
-    }
-    else {
+    } else {
         _sg_clear(dst->buf, _SG_STRING_SIZE);
     }
 }
@@ -5049,8 +5045,7 @@ _SOKOL_PRIVATE int _sg_vertexformat_bytesize(sg_vertex_format fmt) {
 _SOKOL_PRIVATE uint32_t _sg_uniform_alignment(sg_uniform_type type, int array_count, sg_uniform_layout ub_layout) {
     if (ub_layout == SG_UNIFORMLAYOUT_NATIVE) {
         return 1;
-    }
-    else {
+    } else {
         SOKOL_ASSERT(array_count > 0);
         if (array_count == 1) {
             switch (type) {
@@ -5071,8 +5066,7 @@ _SOKOL_PRIVATE uint32_t _sg_uniform_alignment(sg_uniform_type type, int array_co
                     SOKOL_UNREACHABLE;
                     return 1;
             }
-        }
-        else {
+        } else {
             return 16;
         }
     }
@@ -5100,8 +5094,7 @@ _SOKOL_PRIVATE uint32_t _sg_uniform_size(sg_uniform_type type, int array_count, 
                 SOKOL_UNREACHABLE;
                 return 0;
         }
-    }
-    else {
+    } else {
         if (ub_layout == SG_UNIFORMLAYOUT_NATIVE) {
             switch (type) {
                 case SG_UNIFORMTYPE_FLOAT:
@@ -5122,8 +5115,7 @@ _SOKOL_PRIVATE uint32_t _sg_uniform_size(sg_uniform_type type, int array_count, 
                     SOKOL_UNREACHABLE;
                     return 0;
             }
-        }
-        else {
+        } else {
             switch (type) {
                 case SG_UNIFORMTYPE_FLOAT:
                 case SG_UNIFORMTYPE_FLOAT2:
@@ -7239,8 +7231,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
                 cur_uniform_offset += u_size;
                 if (u_desc->name) {
                     u->gl_loc = glGetUniformLocation(gl_prog, u_desc->name);
-                }
-                else {
+                } else {
                     u->gl_loc = u_index;
                 }
                 ub->num_uniforms++;
@@ -7351,8 +7342,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
             gl_attr->type = _sg_gl_vertexformat_type(a_desc->format);
             gl_attr->normalized = _sg_gl_vertexformat_normalized(a_desc->format);
             pip->cmn.vertex_layout_valid[a_desc->buffer_index] = true;
-        }
-        else {
+        } else {
             _SG_ERROR(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER);
             _SG_LOGMSG(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER, _sg_strptr(&shd->gl.attrs[attr_index].name));
         }
@@ -8688,8 +8678,7 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_index_format(sg_index_type index_type) {
 _SOKOL_PRIVATE D3D11_FILTER _sg_d3d11_filter(sg_filter min_f, sg_filter mag_f, uint32_t max_anisotropy) {
     if (max_anisotropy > 1) {
         return D3D11_FILTER_ANISOTROPIC;
-    }
-    else if (mag_f == SG_FILTER_NEAREST) {
+    } else if (mag_f == SG_FILTER_NEAREST) {
         switch (min_f) {
             case SG_FILTER_NEAREST:
             case SG_FILTER_NEAREST_MIPMAP_NEAREST:
@@ -8704,8 +8693,7 @@ _SOKOL_PRIVATE D3D11_FILTER _sg_d3d11_filter(sg_filter min_f, sg_filter mag_f, u
             default:
                 SOKOL_UNREACHABLE; break;
         }
-    }
-    else if (mag_f == SG_FILTER_LINEAR) {
+    } else if (mag_f == SG_FILTER_LINEAR) {
         switch (min_f) {
             case SG_FILTER_NEAREST:
             case SG_FILTER_NEAREST_MIPMAP_NEAREST:
@@ -8949,8 +8937,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, cons
     if (injected) {
         buf->d3d11.buf = (ID3D11Buffer*) desc->d3d11_buffer;
         _sg_d3d11_AddRef(buf->d3d11.buf);
-    }
-    else {
+    } else {
         D3D11_BUFFER_DESC d3d11_desc;
         _sg_clear(&d3d11_desc, sizeof(d3d11_desc));
         d3d11_desc.ByteWidth = (UINT)buf->cmn.size;
@@ -9001,8 +8988,7 @@ _SOKOL_PRIVATE void _sg_d3d11_fill_subres_data(const _sg_image_t* img, const sg_
                 if (img->cmn.type == SG_IMAGETYPE_3D) {
                     /* FIXME? const int mip_depth = ((img->depth>>mip_index)>0) ? img->depth>>mip_index : 1; */
                     subres_data->SysMemSlicePitch = (UINT)_sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
-                }
-                else {
+                } else {
                     subres_data->SysMemSlicePitch = 0;
                 }
             }
@@ -9152,8 +9138,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 d3d11_tex_desc.Usage = D3D11_USAGE_DEFAULT;
                 d3d11_tex_desc.BindFlags = D3D11_BIND_RENDER_TARGET;
                 d3d11_tex_desc.CPUAccessFlags = 0;
-            }
-            else {
+            } else {
                 d3d11_tex_desc.Usage = _sg_d3d11_usage(img->cmn.usage);
                 d3d11_tex_desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
                 d3d11_tex_desc.CPUAccessFlags = _sg_d3d11_cpu_access_flags(img->cmn.usage);
@@ -9350,8 +9335,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
         fs_ptr = desc->fs.bytecode.ptr;
         vs_length = desc->vs.bytecode.size;
         fs_length = desc->fs.bytecode.size;
-    }
-    else {
+    } else {
         /* compile from shader source code */
         vs_blob = _sg_d3d11_compile_shader(&desc->vs);
         fs_blob = _sg_d3d11_compile_shader(&desc->fs);
@@ -9455,8 +9439,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
             const sg_buffer_layout_desc* l_desc = &desc->layout.buffers[layout_index];
             SOKOL_ASSERT(l_desc->stride > 0);
             pip->d3d11.vb_strides[layout_index] = (UINT)l_desc->stride;
-        }
-        else {
+        } else {
             pip->d3d11.vb_strides[layout_index] = 0;
         }
     }
@@ -9960,16 +9943,13 @@ _SOKOL_PRIVATE void _sg_d3d11_draw(int base_element, int num_elements, int num_i
     if (_sg.d3d11.use_indexed_draw) {
         if (_sg.d3d11.use_instanced_draw) {
             _sg_d3d11_DrawIndexedInstanced(_sg.d3d11.ctx, (UINT)num_elements, (UINT)num_instances, (UINT)base_element, 0, 0);
-        }
-        else {
+        } else {
             _sg_d3d11_DrawIndexed(_sg.d3d11.ctx, (UINT)num_elements, (UINT)base_element, 0);
         }
-    }
-    else {
+    } else {
         if (_sg.d3d11.use_instanced_draw) {
             _sg_d3d11_DrawInstanced(_sg.d3d11.ctx, (UINT)num_elements, (UINT)num_instances, (UINT)base_element, 0);
-        }
-        else {
+        } else {
             _sg_d3d11_Draw(_sg.d3d11.ctx, (UINT)num_elements, (UINT)base_element);
         }
     }
@@ -9988,8 +9968,7 @@ _SOKOL_PRIVATE void _sg_d3d11_update_buffer(_sg_buffer_t* buf, const sg_range* d
     if (SUCCEEDED(hr)) {
         memcpy(d3d11_msr.pData, data->ptr, data->size);
         _sg_d3d11_Unmap(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0);
-    }
-    else {
+    } else {
         _SG_ERROR(D3D11_MAP_FOR_UPDATE_BUFFER_FAILED);
     }
 }
@@ -10005,8 +9984,7 @@ _SOKOL_PRIVATE int _sg_d3d11_append_buffer(_sg_buffer_t* buf, const sg_range* da
         uint8_t* dst_ptr = (uint8_t*)d3d11_msr.pData + buf->cmn.append_pos;
         memcpy(dst_ptr, data->ptr, data->size);
         _sg_d3d11_Unmap(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0);
-    }
-    else {
+    } else {
         _SG_ERROR(D3D11_MAP_FOR_APPEND_BUFFER_FAILED);
     }
     /* NOTE: this alignment is a requirement from WebGPU, but we want identical behaviour across all backend */
@@ -10038,8 +10016,7 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
                     /* FIXME: need to handle difference in depth-pitch for 3D textures as well! */
                     if (src_pitch == (int)d3d11_msr.RowPitch) {
                         memcpy(d3d11_msr.pData, slice_ptr, slice_size);
-                    }
-                    else {
+                    } else {
                         SOKOL_ASSERT(src_pitch < (int)d3d11_msr.RowPitch);
                         const uint8_t* src_ptr = slice_ptr;
                         uint8_t* dst_ptr = (uint8_t*) d3d11_msr.pData;
@@ -10050,8 +10027,7 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
                         }
                     }
                     _sg_d3d11_Unmap(_sg.d3d11.ctx, img->d3d11.res, subres_index);
-                }
-                else {
+                } else {
                     _SG_ERROR(D3D11_MAP_FOR_UPDATE_IMAGE_FAILED);
                 }
             }
@@ -10845,8 +10821,7 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_data(const _sg_image_t* img, __unsafe_unr
                 bytes_per_image = bytes_per_slice;
                 /* FIXME: apparently the minimal bytes_per_image size for 3D texture
                  is 4 KByte... somehow need to handle this */
-            }
-            else {
+            } else {
                 region = MTLRegionMake2D(0, 0, (NSUInteger)mip_width, (NSUInteger)mip_height);
                 bytes_per_image = 0;
             }
@@ -10865,21 +10840,6 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_data(const _sg_image_t* img, __unsafe_unr
         }
     }
 }
-
-/*
-    FIXME: METAL RESOURCE STORAGE MODE FOR macOS AND iOS
-
-    For immutable textures on macOS, the recommended procedure is to create
-    a MTLStorageModeManaged texture with the immutable content first,
-    and then use the GPU to blit the content into a MTLStorageModePrivate
-    texture before the first use.
-
-    On iOS use the same one-time-blit procedure, but from a
-    MTLStorageModeShared to a MTLStorageModePrivate texture.
-
-    It probably makes sense to handle this in a separate 'resource manager'
-    with a recycable pool of blit-source-textures?
-*/
 
 // initialize MTLTextureDescritor with common attributes
 _SOKOL_PRIVATE bool _sg_mtl_init_texdesc_common(MTLTextureDescriptor* mtl_desc, _sg_image_t* img) {
@@ -11503,8 +11463,7 @@ _SOKOL_PRIVATE void _sg_mtl_commit(void) {
     id<MTLDrawable> cur_drawable = nil;
     if (_sg.mtl.drawable_cb) {
         cur_drawable = (__bridge id<MTLDrawable>) _sg.mtl.drawable_cb();
-    }
-    else {
+    } else {
         cur_drawable = (__bridge id<MTLDrawable>) _sg.mtl.drawable_userdata_cb(_sg.mtl.user_data);
     }
     if (nil != cur_drawable) {
@@ -11703,8 +11662,7 @@ _SOKOL_PRIVATE void _sg_mtl_apply_uniforms(sg_shader_stage stage_index, int ub_i
     memcpy(dst, data->ptr, data->size);
     if (stage_index == SG_SHADERSTAGE_VS) {
         [_sg.mtl.cmd_encoder setVertexBufferOffset:(NSUInteger)_sg.mtl.cur_ub_offset atIndex:(NSUInteger)ub_index];
-    }
-    else {
+    } else {
         [_sg.mtl.cmd_encoder setFragmentBufferOffset:(NSUInteger)_sg.mtl.cur_ub_offset atIndex:(NSUInteger)ub_index];
     }
     _sg.mtl.cur_ub_offset = _sg_roundup(_sg.mtl.cur_ub_offset + (int)data->size, _SG_MTL_UB_ALIGN);
@@ -11729,8 +11687,7 @@ _SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_ins
             indexBuffer:_sg_mtl_id(ib->mtl.buf[ib->cmn.active_slot])
             indexBufferOffset:index_buffer_offset
             instanceCount:(NSUInteger)num_instances];
-    }
-    else {
+    } else {
         /* non-indexed rendering */
         [_sg.mtl.cmd_encoder drawPrimitives:_sg.mtl.state_cache.cur_pipeline->mtl.prim_type
             vertexStart:(NSUInteger)base_element
@@ -11792,8 +11749,7 @@ _SOKOL_PRIVATE WGPUBufferUsageFlags _sg_wgpu_buffer_usage(sg_buffer_type t, sg_u
     WGPUBufferUsageFlags res = 0;
     if (SG_BUFFERTYPE_VERTEXBUFFER == t) {
         res |= WGPUBufferUsage_Vertex;
-    }
-    else {
+    } else {
         res |= WGPUBufferUsage_Index;
     }
     if (SG_USAGE_IMMUTABLE != u) {
@@ -11838,8 +11794,7 @@ _SOKOL_PRIVATE WGPUTextureComponentType _sg_wgpu_tex_comptype(sg_image_sample_ty
 _SOKOL_PRIVATE WGPUTextureDimension _sg_wgpu_tex_dim(sg_image_type t) {
     if (SG_IMAGETYPE_3D == t) {
         return WGPUTextureDimension_3D;
-    }
-    else {
+    } else {
         return WGPUTextureDimension_2D;
     }
 }
@@ -12399,8 +12354,7 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_data(WGPUBuffer stg_buf, uint8_t* st
                 /* can do a single memcpy */
                 uint32_t num_bytes = data->subimage[face_index][mip_index].size;
                 memcpy(dst_base_ptr, src_base_ptr, num_bytes);
-            }
-            else {
+            } else {
                 /* src/dst pitch doesn't match, need to copy row by row */
                 uint8_t* dst_ptr = dst_base_ptr;
                 const uint8_t* src_ptr = src_base_ptr;
@@ -12693,8 +12647,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
     if (injected) {
         buf->wgpu.buf = (WGPUBuffer) desc->wgpu_buffer;
         wgpuBufferReference(buf->wgpu.buf);
-    }
-    else {
+    } else {
         WGPUBufferDescriptor wgpu_buf_desc;
         _sg_clear(&wgpu_buf_desc, sizeof(wgpu_buf_desc));
         wgpu_buf_desc.usage = _sg_wgpu_buffer_usage(buf->cmn.type, buf->cmn.usage);
@@ -12706,8 +12659,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
             SOKOL_ASSERT(res.data && (res.dataLength == buf->cmn.size));
             memcpy(res.data, desc->data.ptr, buf->cmn.size);
             wgpuBufferUnmap(res.buffer);
-        }
-        else {
+        } else {
             buf->wgpu.buf = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &wgpu_buf_desc);
         }
     }
@@ -12730,12 +12682,10 @@ _SOKOL_PRIVATE void _sg_wgpu_init_texdesc_common(WGPUTextureDescriptor* wgpu_tex
     if (desc->type == SG_IMAGETYPE_3D) {
         wgpu_tex_desc->size.depth = desc->num_slices;
         wgpu_tex_desc->arrayLayerCount = 1;
-    }
-    else if (desc->type == SG_IMAGETYPE_CUBE) {
+    } else if (desc->type == SG_IMAGETYPE_CUBE) {
         wgpu_tex_desc->size.depth = 1;
         wgpu_tex_desc->arrayLayerCount = 6;
-    }
-    else {
+    } else {
         wgpu_tex_desc->size.depth = 1;
         wgpu_tex_desc->arrayLayerCount = desc->num_slices;
     }
@@ -12768,13 +12718,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
         wgpu_tex_desc.sampleCount = desc->sample_count;
         img->wgpu.tex = wgpuDeviceCreateTexture(_sg.wgpu.dev, &wgpu_tex_desc);
         SOKOL_ASSERT(img->wgpu.tex);
-    }
-    else {
+    } else {
         if (injected) {
             img->wgpu.tex = (WGPUTexture) desc->wgpu_texture;
             wgpuTextureReference(img->wgpu.tex);
-        }
-        else {
+        } else {
             /* NOTE: in the MSAA-rendertarget case, both the MSAA texture *and*
                the resolve texture need OutputAttachment usage
             */
@@ -13216,8 +13164,7 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
             wgpu_pass_desc.depthStencilAttachment = &wgpu_ds_att_desc;
             _sg.wgpu.pass_enc = wgpuCommandEncoderBeginRenderPass(_sg.wgpu.render_cmd_enc, &wgpu_pass_desc);
         }
-    }
-    else {
+    } else {
         /* default render pass */
         WGPUTextureView wgpu_render_view = _sg.wgpu.render_view_cb ? _sg.wgpu.render_view_cb() : _sg.wgpu.render_view_userdata_cb(_sg.wgpu.user_data);
         WGPUTextureView wgpu_resolve_view = _sg.wgpu.resolve_view_cb ? _sg.wgpu.resolve_view_cb() : _sg.wgpu.resolve_view_userdata_cb(_sg.wgpu.user_data);
@@ -13408,8 +13355,7 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_bindings(
         WGPUBindGroup vs_img_bg = _sg_wgpu_create_images_bindgroup(vs_bgl, vs_imgs, num_vs_imgs);
         wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, 1, vs_img_bg, 0, 0);
         wgpuBindGroupRelease(vs_img_bg);
-    }
-    else {
+    } else {
         wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, 1, _sg.wgpu.empty_bind_group, 0, 0);
     }
     if (num_fs_imgs > 0) {
@@ -13421,8 +13367,7 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_bindings(
         WGPUBindGroup fs_img_bg = _sg_wgpu_create_images_bindgroup(fs_bgl, fs_imgs, num_fs_imgs);
         wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, 2, fs_img_bg, 0, 0);
         wgpuBindGroupRelease(fs_img_bg);
-    }
-    else {
+    } else {
         wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, 2, _sg.wgpu.empty_bind_group, 0, 0);
     }
 }
@@ -13456,8 +13401,7 @@ _SOKOL_PRIVATE void _sg_wgpu_draw(int base_element, int num_elements, int num_in
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
     if (_sg.wgpu.draw_indexed) {
         wgpuRenderPassEncoderDrawIndexed(_sg.wgpu.pass_enc, num_elements, num_instances, base_element, 0, 0);
-    }
-    else {
+    } else {
         wgpuRenderPassEncoderDraw(_sg.wgpu.pass_enc, num_elements, num_instances, base_element, 0);
     }
 }
@@ -14440,8 +14384,7 @@ _SOKOL_PRIVATE bool _sg_validate_end(void) {
         #else
             return false;
         #endif
-    }
-    else {
+    } else {
         return true;
     }
 }
@@ -15781,8 +15724,7 @@ SOKOL_API_IMPL sg_context sg_setup_context(void) {
         ctx->slot.state = _sg_create_context(ctx);
         SOKOL_ASSERT(ctx->slot.state == SG_RESOURCESTATE_VALID);
         _sg_activate_context(ctx);
-    }
-    else {
+    } else {
         /* pool is exhausted */
         res.id = SG_INVALID_ID;
     }
@@ -17055,8 +16997,7 @@ SOKOL_API_IMPL const void* sg_mtl_device(void) {
 #if defined(SOKOL_METAL)
     if (nil != _sg.mtl.device) {
         return (__bridge const void*) _sg.mtl.device;
-    }
-    else {
+    } else {
         return 0;
     }
 #else
@@ -17068,8 +17009,7 @@ SOKOL_API_IMPL const void* sg_mtl_render_command_encoder(void) {
     #if defined(SOKOL_METAL)
         if (nil != _sg.mtl.cmd_encoder) {
             return (__bridge const void*) _sg.mtl.cmd_encoder;
-        }
-        else {
+        } else {
             return 0;
         }
     #else
