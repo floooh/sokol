@@ -4124,7 +4124,7 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
 }
 
 typedef struct {
-    bool vertex_layout_valid[SG_MAX_VERTEX_BUFFERS];
+    bool vertex_buffer_layout_active[SG_MAX_VERTEX_BUFFERS];
     bool use_instanced_draw;
     sg_shader shader_id;
     sg_vertex_layout_state layout;
@@ -4144,7 +4144,7 @@ typedef struct {
 _SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT((desc->color_count >= 1) && (desc->color_count <= SG_MAX_COLOR_ATTACHMENTS));
     for (int i = 0; i < SG_MAX_VERTEX_BUFFERS; i++) {
-        cmn->vertex_layout_valid[i] = false;
+        cmn->vertex_buffer_layout_active[i] = false;
     }
     cmn->use_instanced_draw = false;
     cmn->shader_id = desc->shader;
@@ -5547,7 +5547,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_pipeline(_sg_pipeline_t* pip, 
             break;
         }
         SOKOL_ASSERT(a_desc->buffer_index < SG_MAX_VERTEX_BUFFERS);
-        pip->cmn.vertex_layout_valid[a_desc->buffer_index] = true;
+        pip->cmn.vertex_buffer_layout_active[a_desc->buffer_index] = true;
     }
     return SG_RESOURCESTATE_VALID;
 }
@@ -7343,7 +7343,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
             gl_attr->size = (uint8_t) _sg_gl_vertexformat_size(a_desc->format);
             gl_attr->type = _sg_gl_vertexformat_type(a_desc->format);
             gl_attr->normalized = _sg_gl_vertexformat_normalized(a_desc->format);
-            pip->cmn.vertex_layout_valid[a_desc->buffer_index] = true;
+            pip->cmn.vertex_buffer_layout_active[a_desc->buffer_index] = true;
         } else {
             _SG_ERROR(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER);
             _SG_LOGMSG(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER, _sg_strptr(&shd->gl.attrs[attr_index].name));
@@ -9434,10 +9434,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
             d3d11_comp->InstanceDataStepRate = (UINT)step_rate;
             pip->cmn.use_instanced_draw = true;
         }
-        pip->cmn.vertex_layout_valid[a_desc->buffer_index] = true;
+        pip->cmn.vertex_buffer_layout_active[a_desc->buffer_index] = true;
     }
     for (int layout_index = 0; layout_index < SG_MAX_VERTEX_BUFFERS; layout_index++) {
-        if (pip->cmn.vertex_layout_valid[layout_index]) {
+        if (pip->cmn.vertex_buffer_layout_active[layout_index]) {
             const sg_buffer_layout_desc* l_desc = &desc->layout.buffers[layout_index];
             SOKOL_ASSERT(l_desc->stride > 0);
             pip->d3d11.vb_strides[layout_index] = (UINT)l_desc->stride;
@@ -10543,24 +10543,19 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.origin_top_left = true;
     _sg.features.mrt_independent_blend_state = true;
     _sg.features.mrt_independent_write_mask = true;
+    if (@available(macOS 12.0, iOS 14.0, *)) {
+        _sg.features.image_clamp_to_border = true;
+    } else {
+        _sg.features.image_clamp_to_border = false;
+    }
 
     #if defined(_SG_TARGET_MACOS)
-        if (@available(macOS 12.0, *)) {
-            _sg.features.image_clamp_to_border = true;
-        } else {
-            _sg.features.image_clamp_to_border = false;
-        }
         _sg.limits.max_image_size_2d = 16 * 1024;
         _sg.limits.max_image_size_cube = 16 * 1024;
         _sg.limits.max_image_size_3d = 2 * 1024;
         _sg.limits.max_image_size_array = 16 * 1024;
         _sg.limits.max_image_array_layers = 2 * 1024;
     #else
-        if (@available(iOS 14.0, *)) {
-            _sg.features.image_clamp_to_border = true;
-        } else {
-            _sg.features.image_clamp_to_border = false;
-        }
         // FIXME: newer iOS devices support 16k textures
         _sg.limits.max_image_size_2d = 8 * 1024;
         _sg.limits.max_image_size_cube = 8 * 1024;
@@ -10699,7 +10694,7 @@ _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
             options:MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeShared
         ];
     }
-    if (@available(macOS 10.15, *)) {
+    if (@available(macOS 10.15, iOS 13.0, *)) {
         _sg.mtl.has_unified_memory = _sg.mtl.device.hasUnifiedMemory;
     } else {
         #if defined(_SG_TARGET_MACOS)
@@ -11124,10 +11119,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
         vtx_desc.attributes[attr_index].format = _sg_mtl_vertex_format(a_state->format);
         vtx_desc.attributes[attr_index].offset = (NSUInteger)a_state->offset;
         vtx_desc.attributes[attr_index].bufferIndex = (NSUInteger)(a_state->buffer_index + SG_MAX_SHADERSTAGE_UBS);
-        pip->cmn.vertex_layout_valid[a_state->buffer_index] = true;
+        pip->cmn.vertex_buffer_layout_active[a_state->buffer_index] = true;
     }
     for (NSUInteger layout_index = 0; layout_index < SG_MAX_VERTEX_BUFFERS; layout_index++) {
-        if (pip->cmn.vertex_layout_valid[layout_index]) {
+        if (pip->cmn.vertex_buffer_layout_active[layout_index]) {
             const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[layout_index];
             const NSUInteger mtl_vb_slot = layout_index + SG_MAX_SHADERSTAGE_UBS;
             SOKOL_ASSERT(l_state->stride > 0);
@@ -11156,14 +11151,14 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
     if (desc->depth.pixel_format == SG_PIXELFORMAT_DEPTH_STENCIL) {
         rp_desc.stencilAttachmentPixelFormat = _sg_mtl_pixel_format(desc->depth.pixel_format);
     }
-    /* FIXME: this only works on macOS 10.13!
-    for (int i = 0; i < (SG_MAX_SHADERSTAGE_UBS+SG_MAX_VERTEX_BUFFERS); i++) {
-        rp_desc.vertexBuffers[i].mutability = MTLMutabilityImmutable;
+    if (@available(macOS 10.13, iOS 11.0, *)) {
+        for (NSUInteger i = 0; i < (SG_MAX_SHADERSTAGE_UBS+SG_MAX_VERTEX_BUFFERS); i++) {
+            rp_desc.vertexBuffers[i].mutability = MTLMutabilityImmutable;
+        }
+        for (NSUInteger i = 0; i < SG_MAX_SHADERSTAGE_UBS; i++) {
+            rp_desc.fragmentBuffers[i].mutability = MTLMutabilityImmutable;
+        }
     }
-    for (int i = 0; i < SG_MAX_SHADERSTAGE_UBS; i++) {
-        rp_desc.fragmentBuffers[i].mutability = MTLMutabilityImmutable;
-    }
-    */
     for (NSUInteger i = 0; i < (NSUInteger)desc->color_count; i++) {
         SOKOL_ASSERT(i < SG_MAX_COLOR_ATTACHMENTS);
         const sg_color_target_state* cs = &desc->colors[i];
@@ -12944,7 +12939,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
             if (SG_VERTEXFORMAT_INVALID == src_va_desc->format) {
                 break;
             }
-            pip->cmn.vertex_layout_valid[src_va_desc->buffer_index] = true;
+            pip->cmn.vertex_buffer_layout_active[src_va_desc->buffer_index] = true;
             if (vb_idx == src_va_desc->buffer_index) {
                 va_desc[vb_idx][va_idx].format = _sg_wgpu_vertexformat(src_va_desc->format);
                 va_desc[vb_idx][va_idx].offset = src_va_desc->offset;
@@ -14536,7 +14531,6 @@ _SOKOL_PRIVATE bool _sg_validate_sampler_desc(const sg_sampler_desc* desc) {
         _sg_validate_begin();
         _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_IMAGEDESC_CANARY);
         _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_IMAGEDESC_CANARY);
-        // FIXME
         return _sg_validate_end();
     #endif
 }
@@ -14903,7 +14897,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         // has expected vertex buffers, and vertex buffers still exist
         for (int i = 0; i < SG_MAX_VERTEX_BUFFERS; i++) {
             if (bindings->vertex_buffers[i].id != SG_INVALID_ID) {
-                _SG_VALIDATE(pip->cmn.vertex_layout_valid[i], VALIDATE_ABND_VBS);
+                _SG_VALIDATE(pip->cmn.vertex_buffer_layout_active[i], VALIDATE_ABND_VBS);
                 // buffers in vertex-buffer-slots must be of type SG_BUFFERTYPE_VERTEXBUFFER
                 const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, bindings->vertex_buffers[i].id);
                 _SG_VALIDATE(buf != 0, VALIDATE_ABND_VB_EXISTS);
@@ -14913,7 +14907,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 }
             } else {
                 // vertex buffer provided in a slot which has no vertex layout in pipeline
-                _SG_VALIDATE(!pip->cmn.vertex_layout_valid[i], VALIDATE_ABND_VBS);
+                _SG_VALIDATE(!pip->cmn.vertex_buffer_layout_active[i], VALIDATE_ABND_VBS);
             }
         }
 
