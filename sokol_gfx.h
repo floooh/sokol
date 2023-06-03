@@ -3257,6 +3257,7 @@ typedef struct sg_desc {
     int staging_buffer_size;
     int max_commit_listeners;
     bool disable_validation;    // disable validation layer even in debug mode, useful for tests
+    bool mtl_force_managed_storage_mode; // for debugging: use Metal managed storage mode for resources even with UMA
     sg_allocator allocator;
     sg_logger logger; // optional log function override
     sg_context_desc context;
@@ -3559,7 +3560,6 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #define _SG_TARGET_IOS_SIMULATOR (1)
         #endif
     #endif
-    #define _SG_METAL_HAS_BORDER_COLOR ((__IPHONE_OS_VERSION_MAX_ALLOWED >= 140000) || (__MAC_OS_X_VERSION_MAX_ALLOWED >= 101200))
     #import <Metal/Metal.h>
 #elif defined(SOKOL_WGPU)
     #if defined(__EMSCRIPTEN__)
@@ -4664,6 +4664,8 @@ typedef struct {
 
 typedef struct {
     bool valid;
+    bool has_unified_memory;
+    bool force_managed_storage_mode;
     const void*(*renderpass_descriptor_cb)(void);
     const void*(*renderpass_descriptor_userdata_cb)(void*);
     const void*(*drawable_cb)(void);
@@ -10082,21 +10084,21 @@ _SOKOL_PRIVATE MTLStoreAction _sg_mtl_store_action(sg_store_action a, bool resol
     }
 }
 
+_SOKOL_PRIVATE MTLResourceOptions _sg_mtl_resource_options_storage_mode_managed_or_shared(void) {
+    if (_sg.mtl.force_managed_storage_mode || !_sg.mtl.has_unified_memory) {
+        return MTLResourceStorageModeManaged;
+    } else {
+        return MTLResourceStorageModeShared;
+    }
+}
+
 _SOKOL_PRIVATE MTLResourceOptions _sg_mtl_buffer_resource_options(sg_usage usg) {
     switch (usg) {
         case SG_USAGE_IMMUTABLE:
-            #if defined(_SG_TARGET_MACOS)
-            return MTLResourceStorageModeManaged;
-            #else
-            return MTLResourceStorageModeShared;
-            #endif
+            return _sg_mtl_resource_options_storage_mode_managed_or_shared();
         case SG_USAGE_DYNAMIC:
         case SG_USAGE_STREAM:
-            #if defined(_SG_TARGET_MACOS)
-            return MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeManaged;
-            #else
-            return MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeShared;
-            #endif
+            return MTLResourceCPUCacheModeWriteCombined | _sg_mtl_resource_options_storage_mode_managed_or_shared();
         default:
             SOKOL_UNREACHABLE;
             return 0;
@@ -10539,22 +10541,27 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
         #endif
     #endif
     _sg.features.origin_top_left = true;
-    #if _SG_METAL_HAS_BORDER_COLOR
-        _sg.features.image_clamp_to_border = true;
-    #else
-        _sg.features.image_clamp_to_border = false;
-    #endif
     _sg.features.mrt_independent_blend_state = true;
     _sg.features.mrt_independent_write_mask = true;
 
     #if defined(_SG_TARGET_MACOS)
+        if (@available(macOS 12.0, *)) {
+            _sg.features.image_clamp_to_border = true;
+        } else {
+            _sg.features.image_clamp_to_border = false;
+        }
         _sg.limits.max_image_size_2d = 16 * 1024;
         _sg.limits.max_image_size_cube = 16 * 1024;
         _sg.limits.max_image_size_3d = 2 * 1024;
         _sg.limits.max_image_size_array = 16 * 1024;
         _sg.limits.max_image_array_layers = 2 * 1024;
     #else
-        /* newer iOS devices support 16k textures */
+        if (@available(iOS 14.0, *)) {
+            _sg.features.image_clamp_to_border = true;
+        } else {
+            _sg.features.image_clamp_to_border = false;
+        }
+        // FIXME: newer iOS devices support 16k textures
         _sg.limits.max_image_size_2d = 8 * 1024;
         _sg.limits.max_image_size_cube = 8 * 1024;
         _sg.limits.max_image_size_3d = 2 * 1024;
@@ -10692,6 +10699,16 @@ _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
             options:MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeShared
         ];
     }
+    if (@available(macOS 10.15, *)) {
+        _sg.mtl.has_unified_memory = _sg.mtl.device.hasUnifiedMemory;
+    } else {
+        #if defined(_SG_TARGET_MACOS)
+            _sg.mtl.has_unified_memory = false;
+        #else
+            _sg.mtl.has_unified_memory = true;
+        #endif
+    }
+    _sg.mtl.force_managed_storage_mode = desc->mtl_force_managed_storage_mode;
     _sg_mtl_init_caps();
 }
 
@@ -10867,18 +10884,12 @@ _SOKOL_PRIVATE bool _sg_mtl_init_texdesc_common(MTLTextureDescriptor* mtl_desc, 
     if (img->cmn.usage != SG_USAGE_IMMUTABLE) {
         res_options |= MTLResourceCPUCacheModeWriteCombined;
     }
-    #if defined(_SG_TARGET_MACOS)
-        // macOS: use managed textures
-        res_options |= MTLResourceStorageModeManaged;
-    #else
-        // iOS: use CPU/GPU shared memory
-        res_options |= MTLResourceStorageModeShared;
-    #endif
+    res_options |= _sg_mtl_resource_options_storage_mode_managed_or_shared();
     mtl_desc.resourceOptions = res_options;
     return true;
 }
 
-/* initialize MTLTextureDescritor with rendertarget attributes */
+// initialize MTLTextureDescritor with rendertarget attributes
 _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt(MTLTextureDescriptor* mtl_desc, _sg_image_t* img) {
     SOKOL_ASSERT(img->cmn.render_target);
     _SOKOL_UNUSED(img);
@@ -10886,7 +10897,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt(MTLTextureDescriptor* mtl_desc, _sg_
     mtl_desc.resourceOptions = MTLResourceStorageModePrivate;
 }
 
-/* initialize MTLTextureDescritor with MSAA attributes */
+// initialize MTLTextureDescritor with MSAA attributes
 _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt_msaa(MTLTextureDescriptor* mtl_desc, _sg_image_t* img) {
     SOKOL_ASSERT(img->cmn.sample_count > 1);
     mtl_desc.usage = MTLTextureUsageRenderTarget;
@@ -10957,9 +10968,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_sampler(_sg_sampler_t* smp, cons
         mtl_desc.sAddressMode = _sg_mtl_address_mode(desc->wrap_u);
         mtl_desc.tAddressMode = _sg_mtl_address_mode(desc->wrap_v);
         mtl_desc.rAddressMode = _sg_mtl_address_mode(desc->wrap_w);
-        #if _SG_METAL_HAS_BORDER_COLOR
-        mtl_desc.borderColor  = _sg_mtl_border_color(desc->border_color);
-        #endif
+        if (_sg.features.image_clamp_to_border) {
+            mtl_desc.borderColor  = _sg_mtl_border_color(desc->border_color);
+        }
         mtl_desc.minFilter = _sg_mtl_minmag_filter(desc->min_filter);
         mtl_desc.magFilter = _sg_mtl_minmag_filter(desc->mag_filter);
         mtl_desc.mipFilter = _sg_mtl_mipmap_filter(desc->mipmap_filter);
