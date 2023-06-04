@@ -11718,9 +11718,9 @@ _SOKOL_PRIVATE void _sg_mtl_update_buffer(_sg_buffer_t* buf, const sg_range* dat
     __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot]);
     void* dst_ptr = [mtl_buf contents];
     memcpy(dst_ptr, data->ptr, data->size);
-    #if defined(_SG_TARGET_MACOS)
-    [mtl_buf didModifyRange:NSMakeRange(0, data->size)];
-    #endif
+    if (_sg_mtl_resource_options_storage_mode_managed_or_shared() == MTLStorageModeManaged) {
+        [mtl_buf didModifyRange:NSMakeRange(0, data->size)];
+    }
 }
 
 _SOKOL_PRIVATE int _sg_mtl_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
@@ -11734,9 +11734,9 @@ _SOKOL_PRIVATE int _sg_mtl_append_buffer(_sg_buffer_t* buf, const sg_range* data
     uint8_t* dst_ptr = (uint8_t*) [mtl_buf contents];
     dst_ptr += buf->cmn.append_pos;
     memcpy(dst_ptr, data->ptr, data->size);
-    #if defined(_SG_TARGET_MACOS)
-    [mtl_buf didModifyRange:NSMakeRange((NSUInteger)buf->cmn.append_pos, (NSUInteger)data->size)];
-    #endif
+    if (_sg_mtl_resource_options_storage_mode_managed_or_shared() == MTLStorageModeManaged) {
+        [mtl_buf didModifyRange:NSMakeRange((NSUInteger)buf->cmn.append_pos, (NSUInteger)data->size)];
+    }
     /* NOTE: this is a requirement from WebGPU, but we want identical behaviour across all backends */
     return _sg_roundup((int)data->size, 4);
 }
