@@ -3010,21 +3010,23 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_IB_EXISTS, "sg_apply_bindings: index buffer no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_IB_TYPE, "sg_apply_bindings: buffer in index buffer slot is not a SG_BUFFERTYPE_INDEXBUFFER") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_IB_OVERFLOW, "sg_apply_bindings: buffer in index buffer slot is overflown") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMGS, "sg_apply_bindings: number of images bound to vertex stage doesn't match sg_shader_desc") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_EXPECTED_IMAGE_BINDING, "sg_apply_bindings: missing image binding on vertex stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_EXISTS, "sg_apply_bindings: image bound to vertex stage no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_TYPES, "sg_apply_bindings: one or more vertex shader image types don't match sg_shader_desc") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_MSAA, "sg_apply_bindings: cannot bind image with sample_count>1 to vertex stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_DEPTH, "sg_apply_bindings: cannot bind depth/stencil image to vertex stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMAGE_TYPE_MISMATCH, "sg_apply_bindings: type of image bound to vertex stage doesn't match shader desc") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMAGE_MSAA, "sg_apply_bindings: cannot bind image with sample_count>1 to vertex stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMAGE_DEPTH, "sg_apply_bindings: cannot bind depth/stencil image to vertex stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_UNEXPECTED_IMAGE_BINDING, "sg_apply_bindings: unexpected image binding on vertex stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_EXPECTED_SAMPLER_BINDING, "sg_apply_bindings: missing sampler binding on vertex stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_UNEXPECTED_SAMPLER_COMPARE_NEVER, "sg_apply_bindings: shader expects SG_SAMPLERTYPE_COMPARISON on vertex stage but sampler has SG_COMPAREFUNC_NEVER") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_EXPECTED_SAMPLER_COMPARE_NEVER, "sg_apply_bindings: shader expects SG_SAMPLERTYPE_SAMPLING on vertex stage but sampler doesn't have SG_COMPAREFUNC_NEVER") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_UNEXPECTED_SAMPLER_BINDING, "sg_apply_bindings: unexpected sampler binding on vertex stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_SMP_EXISTS, "sg_apply_bindings: sampler bound to vertex stage no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMGS, "sg_apply_bindings: number of images bound to fragment stage doesn't match sg_shader_desc") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_EXISTS, "sg_apply_bindings: fragment shader image no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_TYPES, "sg_apply_bindings: one or more fragment shader image types don't match sg_shader_desc") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_MSAA, "sg_apply_bindings: cannot bind image with sample_count>1 to fragment stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_DEPTH, "sg_apply_bindings: cannot bind depth/stencil image to fragment stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_EXPECTED_IMAGE_BINDING, "sg_apply_bindings: missing image binding on fragment stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_EXISTS, "sg_apply_bindings: image bound to fragment stage no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMAGE_TYPE_MISMATCH, "sg_apply_bindings: type of image bound to fragment stage doesn't match shader desc") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMAGE_MSAA, "sg_apply_bindings: cannot bind image with sample_count>1 to fragment stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMAGE_DEPTH, "sg_apply_bindings: cannot bind depth/stencil image to fragment stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_UNEXPECTED_IMAGE_BINDING, "sg_apply_bindings: unexpected image binding on fragment stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_EXPECTED_SAMPLER_BINDING, "sg_apply_bindings: missing sampler binding on fragment stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_UNEXPECTED_SAMPLER_COMPARE_NEVER, "sg_apply_bindings: shader expects SG_SAMPLERTYPE_COMPARISON on fragment stage but sampler has SG_COMPAREFUNC_NEVER") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_EXPECTED_SAMPLER_COMPARE_NEVER, "sg_apply_bindings: shader expects SG_SAMPLERTYPE_SAMPLING on fragment stage but sampler doesn't have SG_COMPAREFUNC_NEVER") \
@@ -14938,17 +14940,19 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         // has expected vertex shader images
         for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
             const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_VS];
-            if (bindings->vs.images[i].id != SG_INVALID_ID) {
-                _SG_VALIDATE(i < stage->num_images, VALIDATE_ABND_VS_IMGS);
-                const _sg_image_t* img = _sg_lookup_image(&_sg.pools, bindings->vs.images[i].id);
-                _SG_VALIDATE(img != 0, VALIDATE_ABND_VS_IMG_EXISTS);
-                if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
-                    _SG_VALIDATE(img->cmn.type == stage->images[i].image_type, VALIDATE_ABND_VS_IMG_TYPES);
-                    _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_ABND_VS_IMG_MSAA);
-                    _SG_VALIDATE(!_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format), VALIDATE_ABND_VS_IMG_DEPTH);
+            if (stage->images[i].image_type != _SG_IMAGETYPE_DEFAULT) {
+                _SG_VALIDATE(bindings->vs.images[i].id != SG_INVALID_ID, VALIDATE_ABND_VS_EXPECTED_IMAGE_BINDING);
+                if (bindings->vs.images[i].id != SG_INVALID_ID) {
+                    const _sg_image_t* img = _sg_lookup_image(&_sg.pools, bindings->vs.images[i].id);
+                    _SG_VALIDATE(img != 0, VALIDATE_ABND_VS_IMG_EXISTS);
+                    if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
+                        _SG_VALIDATE(img->cmn.type == stage->images[i].image_type, VALIDATE_ABND_VS_IMAGE_TYPE_MISMATCH);
+                        _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_ABND_VS_IMAGE_MSAA);
+                        _SG_VALIDATE(!_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format), VALIDATE_ABND_VS_IMAGE_DEPTH);
+                    }
                 }
             } else {
-                _SG_VALIDATE(i >= stage->num_images, VALIDATE_ABND_VS_IMGS);
+                _SG_VALIDATE(bindings->vs.images[i].id == SG_INVALID_ID, VALIDATE_ABND_VS_UNEXPECTED_IMAGE_BINDING);
             }
         }
 
@@ -14976,17 +14980,19 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         // has expected fragment shader images
         for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
             const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_FS];
-            if (bindings->fs.images[i].id != SG_INVALID_ID) {
-                _SG_VALIDATE(i < stage->num_images, VALIDATE_ABND_FS_IMGS);
-                const _sg_image_t* img = _sg_lookup_image(&_sg.pools, bindings->fs.images[i].id);
-                _SG_VALIDATE(img != 0, VALIDATE_ABND_FS_IMG_EXISTS);
-                if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
-                    _SG_VALIDATE(img->cmn.type == stage->images[i].image_type, VALIDATE_ABND_FS_IMG_TYPES);
-                    _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_ABND_FS_IMG_MSAA);
-                    _SG_VALIDATE(!_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format), VALIDATE_ABND_FS_IMG_DEPTH);
+            if (stage->images[i].image_type != _SG_IMAGETYPE_DEFAULT) {
+                _SG_VALIDATE(bindings->fs.images[i].id != SG_INVALID_ID, VALIDATE_ABND_FS_EXPECTED_IMAGE_BINDING);
+                if (bindings->fs.images[i].id != SG_INVALID_ID) {
+                    const _sg_image_t* img = _sg_lookup_image(&_sg.pools, bindings->fs.images[i].id);
+                    _SG_VALIDATE(img != 0, VALIDATE_ABND_FS_IMG_EXISTS);
+                    if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
+                        _SG_VALIDATE(img->cmn.type == stage->images[i].image_type, VALIDATE_ABND_FS_IMAGE_TYPE_MISMATCH);
+                        _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_ABND_FS_IMAGE_MSAA);
+                        _SG_VALIDATE(!_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format), VALIDATE_ABND_FS_IMAGE_DEPTH);
+                    }
                 }
             } else {
-                _SG_VALIDATE(i >= stage->num_images, VALIDATE_ABND_FS_IMGS);
+                _SG_VALIDATE(bindings->fs.images[i].id == SG_INVALID_ID, VALIDATE_ABND_FS_UNEXPECTED_IMAGE_BINDING);
             }
         }
 
