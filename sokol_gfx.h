@@ -1638,7 +1638,7 @@ typedef enum sg_image_sample_type {
 */
 typedef enum sg_sampler_type {
     _SG_SAMPLERTYPE_DEFAULT,
-    SG_SAMPLERTYPE_SAMPLER,
+    SG_SAMPLERTYPE_SAMPLING,
     SG_SAMPLERTYPE_COMPARISON,
     _SG_SAMPLERTYPE_NUM,
     _SG_SAMPLERTYPE_FORCE_U32,
@@ -3015,14 +3015,20 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_TYPES, "sg_apply_bindings: one or more vertex shader image types don't match sg_shader_desc") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_MSAA, "sg_apply_bindings: cannot bind image with sample_count>1 to vertex stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_DEPTH, "sg_apply_bindings: cannot bind depth/stencil image to vertex stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_SMPS, "sg_apply_bindings: number of samplers bound to vertex stage doesn't match sg_shader_desc") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_EXPECTED_SAMPLER_BINDING, "sg_apply_bindings: missing sampler binding on vertex stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_UNEXPECTED_SAMPLER_COMPARE_NEVER, "sg_apply_bindings: shader expects SG_SAMPLERTYPE_COMPARISON on vertex stage but sampler has SG_COMPAREFUNC_NEVER") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_EXPECTED_SAMPLER_COMPARE_NEVER, "sg_apply_bindings: shader expects SG_SAMPLERTYPE_SAMPLING on vertex stage but sampler doesn't have SG_COMPAREFUNC_NEVER") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_UNEXPECTED_SAMPLER_BINDING, "sg_apply_bindings: unexpected sampler binding on vertex stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_SMP_EXISTS, "sg_apply_bindings: sampler bound to vertex stage no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMGS, "sg_apply_bindings: number of images bound to fragment stage doesn't match sg_shader_desc") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_EXISTS, "sg_apply_bindings: fragment shader image no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_TYPES, "sg_apply_bindings: one or more fragment shader image types don't match sg_shader_desc") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_MSAA, "sg_apply_bindings: cannot bind image with sample_count>1 to fragment stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_DEPTH, "sg_apply_bindings: cannot bind depth/stencil image to fragment stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_SMPS, "sg_apply_bindings: number of samplers bound to fragment stage doesn't match sg_shader_desc") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_EXPECTED_SAMPLER_BINDING, "sg_apply_bindings: missing sampler binding on fragment stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_UNEXPECTED_SAMPLER_COMPARE_NEVER, "sg_apply_bindings: shader expects SG_SAMPLERTYPE_COMPARISON on fragment stage but sampler has SG_COMPAREFUNC_NEVER") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_EXPECTED_SAMPLER_COMPARE_NEVER, "sg_apply_bindings: shader expects SG_SAMPLERTYPE_SAMPLING on fragment stage but sampler doesn't have SG_COMPAREFUNC_NEVER") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_UNEXPECTED_SAMPLER_BINDING, "sg_apply_bindings: unexpected sampler binding on fragment stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_SMP_EXISTS, "sg_apply_bindings: sampler bound to fragment stage no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_NO_PIPELINE, "sg_apply_uniforms: must be called after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_NO_UB_AT_SLOT, "sg_apply_uniforms: no uniform block declaration at this shader stage UB slot") \
@@ -14949,12 +14955,21 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         // has expected vertex shader image samplers
         for (int i = 0; i < SG_MAX_SHADERSTAGE_SAMPLERS; i++) {
             const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_VS];
-            if (bindings->vs.samplers[i].id != SG_INVALID_ID) {
-                _SG_VALIDATE(i < stage->num_samplers, VALIDATE_ABND_VS_SMPS);
-                const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, bindings->vs.samplers[i].id);
-                _SG_VALIDATE(smp != 0, VALIDATE_ABND_VS_SMP_EXISTS);
+            if (stage->samplers[i].type != _SG_SAMPLERTYPE_DEFAULT) {
+                _SG_VALIDATE(bindings->vs.samplers[i].id != SG_INVALID_ID, VALIDATE_ABND_VS_EXPECTED_SAMPLER_BINDING);
+                if (bindings->vs.samplers[i].id != SG_INVALID_ID) {
+                    const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, bindings->vs.samplers[i].id);
+                    _SG_VALIDATE(smp != 0, VALIDATE_ABND_VS_SMP_EXISTS);
+                    if (smp) {
+                        if (stage->samplers[i].type == SG_SAMPLERTYPE_COMPARISON) {
+                            _SG_VALIDATE(smp->cmn.compare != SG_COMPAREFUNC_NEVER, VALIDATE_ABND_VS_UNEXPECTED_SAMPLER_COMPARE_NEVER);
+                        } else {
+                            _SG_VALIDATE(smp->cmn.compare == SG_COMPAREFUNC_NEVER, VALIDATE_ABND_VS_EXPECTED_SAMPLER_COMPARE_NEVER);
+                        }
+                    }
+                }
             } else {
-                _SG_VALIDATE(i >= stage->num_samplers, VALIDATE_ABND_VS_SMPS);
+                _SG_VALIDATE(bindings->vs.samplers[i].id == SG_INVALID_ID, VALIDATE_ABND_VS_UNEXPECTED_SAMPLER_BINDING);
             }
         }
 
@@ -14978,15 +14993,23 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         // has expected fragment shader samplers
         for (int i = 0; i < SG_MAX_SHADERSTAGE_SAMPLERS; i++) {
             const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_FS];
-            if (bindings->fs.samplers[i].id != SG_INVALID_ID) {
-                _SG_VALIDATE(i < stage->num_samplers, VALIDATE_ABND_FS_SMPS);
-                const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, bindings->fs.samplers[i].id);
-                _SG_VALIDATE(smp != 0, VALIDATE_ABND_FS_SMP_EXISTS);
+            if (stage->samplers[i].type != _SG_SAMPLERTYPE_DEFAULT) {
+                _SG_VALIDATE(bindings->fs.samplers[i].id != SG_INVALID_ID, VALIDATE_ABND_FS_EXPECTED_SAMPLER_BINDING);
+                if (bindings->fs.samplers[i].id != SG_INVALID_ID) {
+                    const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, bindings->fs.samplers[i].id);
+                    _SG_VALIDATE(smp != 0, VALIDATE_ABND_FS_SMP_EXISTS);
+                    if (smp) {
+                        if (stage->samplers[i].type == SG_SAMPLERTYPE_COMPARISON) {
+                            _SG_VALIDATE(smp->cmn.compare != SG_COMPAREFUNC_NEVER, VALIDATE_ABND_FS_UNEXPECTED_SAMPLER_COMPARE_NEVER);
+                        } else {
+                            _SG_VALIDATE(smp->cmn.compare == SG_COMPAREFUNC_NEVER, VALIDATE_ABND_FS_EXPECTED_SAMPLER_COMPARE_NEVER);
+                        }
+                    }
+                }
             } else {
-                _SG_VALIDATE(i >= stage->num_samplers, VALIDATE_ABND_FS_SMPS);
+                _SG_VALIDATE(bindings->fs.samplers[i].id == SG_INVALID_ID, VALIDATE_ABND_FS_UNEXPECTED_SAMPLER_BINDING);
             }
         }
-
         return _sg_validate_end();
     #endif
 }
