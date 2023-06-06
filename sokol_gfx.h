@@ -4448,10 +4448,18 @@ typedef struct {
         ID3D11Texture3D* tex3d;
         ID3D11Resource* res;    // either tex2d or tex3d
         ID3D11ShaderResourceView* srv;
-        ID3D11SamplerState* smp;
     } d3d11;
 } _sg_d3d11_image_t;
 typedef _sg_d3d11_image_t _sg_image_t;
+
+typedef struct {
+    _sg_slot_t slot;
+    _sg_sampler_common_t cmn;
+    struct {
+        ID3D11SamplerState* smp;
+    } d3d11;
+} _sg_d3d11_sampler_t;
+typedef _sg_d3d11_sampler_t _sg_sampler_t;
 
 typedef struct {
     _sg_str_t sem_name;
@@ -8685,43 +8693,43 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_index_format(sg_index_type index_type) {
     }
 }
 
-_SOKOL_PRIVATE D3D11_FILTER _sg_d3d11_filter(sg_filter min_f, sg_filter mag_f, uint32_t max_anisotropy) {
+_SOKOL_PRIVATE D3D11_FILTER _sg_d3d11_filter(sg_filter min_f, sg_filter mag_f, sg_filter mipmap_f, bool comparison, uint32_t max_anisotropy) {
+    uint32_t d3d11_filter = 0;
     if (max_anisotropy > 1) {
-        return D3D11_FILTER_ANISOTROPIC;
-    } else if (mag_f == SG_FILTER_NEAREST) {
-        switch (min_f) {
-            case SG_FILTER_NEAREST:
-            case SG_FILTER_NEAREST_MIPMAP_NEAREST:
-                return D3D11_FILTER_MIN_MAG_MIP_POINT;
-            case SG_FILTER_LINEAR:
-            case SG_FILTER_LINEAR_MIPMAP_NEAREST:
-                return D3D11_FILTER_MIN_LINEAR_MAG_MIP_POINT;
-            case SG_FILTER_NEAREST_MIPMAP_LINEAR:
-                return D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR;
-            case SG_FILTER_LINEAR_MIPMAP_LINEAR:
-                return D3D11_FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR;
-            default:
-                SOKOL_UNREACHABLE; break;
+        // D3D11_FILTER_ANISOTROPIC = 0x55,
+        d3d11_filter |= 0x55;
+    } else {
+        // D3D11_FILTER_MIN_MAG_MIP_POINT = 0,
+        // D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR = 0x1,
+        // D3D11_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT = 0x4,
+        // D3D11_FILTER_MIN_POINT_MAG_MIP_LINEAR = 0x5,
+        // D3D11_FILTER_MIN_LINEAR_MAG_MIP_POINT = 0x10,
+        // D3D11_FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR = 0x11,
+        // D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT = 0x14,
+        // D3D11_FILTER_MIN_MAG_MIP_LINEAR = 0x15,
+        if (mipmap_f == SG_FILTER_LINEAR) {
+            d3d11_filter |= 0x01;
         }
-    } else if (mag_f == SG_FILTER_LINEAR) {
-        switch (min_f) {
-            case SG_FILTER_NEAREST:
-            case SG_FILTER_NEAREST_MIPMAP_NEAREST:
-                return D3D11_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT;
-            case SG_FILTER_LINEAR:
-            case SG_FILTER_LINEAR_MIPMAP_NEAREST:
-                return D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
-            case SG_FILTER_NEAREST_MIPMAP_LINEAR:
-                return D3D11_FILTER_MIN_POINT_MAG_MIP_LINEAR;
-            case SG_FILTER_LINEAR_MIPMAP_LINEAR:
-                return D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-            default:
-                SOKOL_UNREACHABLE; break;
+        if (mag_f == SG_FILTER_LINEAR) {
+            d3d11_filter |= 0x04;
+        }
+        if (min_f == SG_FILTER_LINEAR) {
+            d3d11_filter |= 0x10;
         }
     }
-    /* invalid value for mag filter */
-    SOKOL_UNREACHABLE;
-    return D3D11_FILTER_MIN_MAG_MIP_POINT;
+    // D3D11_FILTER_COMPARISON_MIN_MAG_MIP_POINT = 0x80,
+    // D3D11_FILTER_COMPARISON_MIN_MAG_POINT_MIP_LINEAR = 0x81,
+    // D3D11_FILTER_COMPARISON_MIN_POINT_MAG_LINEAR_MIP_POINT = 0x84,
+    // D3D11_FILTER_COMPARISON_MIN_POINT_MAG_MIP_LINEAR = 0x85,
+    // D3D11_FILTER_COMPARISON_MIN_LINEAR_MAG_MIP_POINT = 0x90,
+    // D3D11_FILTER_COMPARISON_MIN_LINEAR_MAG_POINT_MIP_LINEAR = 0x91,
+    // D3D11_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT = 0x94,
+    // D3D11_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR = 0x95,
+    // D3D11_FILTER_COMPARISON_ANISOTROPIC = 0xd5,
+    if (comparison) {
+        d3d11_filter |= 0x80;
+    }
+    return d3d11_filter;
 }
 
 _SOKOL_PRIVATE D3D11_TEXTURE_ADDRESS_MODE _sg_d3d11_address_mode(sg_wrap m) {
@@ -9008,8 +9016,7 @@ _SOKOL_PRIVATE void _sg_d3d11_fill_subres_data(const _sg_image_t* img, const sg_
 
 _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
-    SOKOL_ASSERT(!img->d3d11.tex2d && !img->d3d11.tex3d);
-    SOKOL_ASSERT(!img->d3d11.srv && !img->d3d11.smp);
+    SOKOL_ASSERT((0 == img->d3d11.tex2d) && (0 == img->d3d11.tex3d) && (0 == img->d3d11.res) && (0 == img->d3d11.srv));
     HRESULT hr;
 
     _sg_image_common_init(&img->cmn, desc);
@@ -9180,40 +9187,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
             }
         }
     }
-
-    // a sampler object is only needed when the texture can be bound to a shader,
-    // NOTE: D3D11 implements an internal shared-pool for sampler objects
-    if (0 != img->d3d11.srv) {
-        D3D11_SAMPLER_DESC d3d11_smp_desc;
-        _sg_clear(&d3d11_smp_desc, sizeof(d3d11_smp_desc));
-        d3d11_smp_desc.Filter = _sg_d3d11_filter(img->cmn.min_filter, img->cmn.mag_filter, img->cmn.max_anisotropy);
-        d3d11_smp_desc.AddressU = _sg_d3d11_address_mode(img->cmn.wrap_u);
-        d3d11_smp_desc.AddressV = _sg_d3d11_address_mode(img->cmn.wrap_v);
-        d3d11_smp_desc.AddressW = _sg_d3d11_address_mode(img->cmn.wrap_w);
-        switch (img->cmn.border_color) {
-            case SG_BORDERCOLOR_TRANSPARENT_BLACK:
-                // all 0.0f
-                break;
-            case SG_BORDERCOLOR_OPAQUE_WHITE:
-                for (int i = 0; i < 4; i++) {
-                    d3d11_smp_desc.BorderColor[i] = 1.0f;
-                }
-                break;
-            default:
-                // opaque black
-                d3d11_smp_desc.BorderColor[3] = 1.0f;
-                break;
-        }
-        d3d11_smp_desc.MaxAnisotropy = img->cmn.max_anisotropy;
-        d3d11_smp_desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
-        d3d11_smp_desc.MinLOD = desc->min_lod;
-        d3d11_smp_desc.MaxLOD = desc->max_lod;
-        hr = _sg_d3d11_CreateSamplerState(_sg.d3d11.dev, &d3d11_smp_desc, &img->d3d11.smp);
-        if (!(SUCCEEDED(hr) && img->d3d11.smp)) {
-            _SG_ERROR(D3D11_CREATE_SAMPLER_STATE_FAILED);
-            return SG_RESOURCESTATE_FAILED;
-        }
-    }
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -9231,8 +9204,55 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_image(_sg_image_t* img) {
     if (img->d3d11.srv) {
         _sg_d3d11_Release(img->d3d11.srv);
     }
-    if (img->d3d11.smp) {
-        _sg_d3d11_Release(img->d3d11.smp);
+}
+
+_SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
+    SOKOL_ASSERT(smp && desc);
+    SOKOL_ASSERT(0 == smp->d3d11.smp);
+    _sg_sampler_common_init(&smp->cmn, desc);
+    const bool injected = (0 != desc->d3d11_sampler);
+    if (injected) {
+        smp->d3d11.smp = (ID3D11SamplerState*)desc->d3d11_sampler;
+        _sg_d3d11_AddRef(smp->d3d11.smp);
+    } else {
+        D3D11_SAMPLER_DESC d3d11_smp_desc;
+        _sg_clear(&d3d11_smp_desc, sizeof(d3d11_smp_desc));
+        d3d11_smp_desc.Filter = _sg_d3d11_filter(desc->min_filter, desc->mag_filter, desc->mipmap_filter, desc->compare != SG_COMPAREFUNC_NEVER, desc->max_anisotropy);
+        d3d11_smp_desc.AddressU = _sg_d3d11_address_mode(desc->wrap_u);
+        d3d11_smp_desc.AddressV = _sg_d3d11_address_mode(desc->wrap_v);
+        d3d11_smp_desc.AddressW = _sg_d3d11_address_mode(desc->wrap_w);
+        d3d11_smp_desc.MipLODBias = 0.0f; // FIXME?
+        switch (desc->border_color) {
+            case SG_BORDERCOLOR_TRANSPARENT_BLACK:
+                // all 0.0f
+                break;
+            case SG_BORDERCOLOR_OPAQUE_WHITE:
+                for (int i = 0; i < 4; i++) {
+                    d3d11_smp_desc.BorderColor[i] = 1.0f;
+                }
+                break;
+            default:
+                // opaque black
+                d3d11_smp_desc.BorderColor[3] = 1.0f;
+                break;
+        }
+        d3d11_smp_desc.MaxAnisotropy = desc->max_anisotropy;
+        d3d11_smp_desc.ComparisonFunc = _sg_d3d11_compare_func(desc->compare);
+        d3d11_smp_desc.MinLOD = desc->min_lod;
+        d3d11_smp_desc.MaxLOD = desc->max_lod;
+        HRESULT hr = _sg_d3d11_CreateSamplerState(_sg.d3d11.dev, &d3d11_smp_desc, &smp->d3d11.smp);
+        if (!(SUCCEEDED(hr) && smp->d3d11.smp)) {
+            _SG_ERROR(D3D11_CREATE_SAMPLER_STATE_FAILED);
+            return SG_RESOURCESTATE_FAILED;
+        }
+    }
+    return SG_RESOURCESTATE_VALID;
+}
+
+_SOKOL_PRIVATE void _sg_d3d11_discard_sampler(_sg_sampler_t* smp) {
+    SOKOL_ASSERT(smp);
+    if (smp->d3d11.smp) {
+        _sg_d3d11_Release(smp->d3d11.smp);
     }
 }
 
@@ -9417,54 +9437,54 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
     pip->d3d11.topology = _sg_d3d11_primitive_topology(desc->primitive_type);
     pip->d3d11.stencil_ref = desc->stencil.ref;
 
-    /* create input layout object */
+    // create input layout object
     HRESULT hr;
     D3D11_INPUT_ELEMENT_DESC d3d11_comps[SG_MAX_VERTEX_ATTRIBUTES];
     _sg_clear(d3d11_comps, sizeof(d3d11_comps));
     int attr_index = 0;
     for (; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
-        const sg_vertex_attr_desc* a_desc = &desc->layout.attrs[attr_index];
-        if (a_desc->format == SG_VERTEXFORMAT_INVALID) {
+        const sg_vertex_attr_state* a_state = &desc->layout.attrs[attr_index];
+        if (a_state->format == SG_VERTEXFORMAT_INVALID) {
             break;
         }
-        SOKOL_ASSERT(a_desc->buffer_index < SG_MAX_VERTEX_BUFFERS);
-        const sg_buffer_layout_desc* l_desc = &desc->layout.buffers[a_desc->buffer_index];
-        const sg_vertex_step step_func = l_desc->step_func;
-        const int step_rate = l_desc->step_rate;
+        SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEX_BUFFERS);
+        const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[a_state->buffer_index];
+        const sg_vertex_step step_func = l_state->step_func;
+        const int step_rate = l_state->step_rate;
         D3D11_INPUT_ELEMENT_DESC* d3d11_comp = &d3d11_comps[attr_index];
         d3d11_comp->SemanticName = _sg_strptr(&shd->d3d11.attrs[attr_index].sem_name);
         d3d11_comp->SemanticIndex = (UINT)shd->d3d11.attrs[attr_index].sem_index;
-        d3d11_comp->Format = _sg_d3d11_vertex_format(a_desc->format);
-        d3d11_comp->InputSlot = (UINT)a_desc->buffer_index;
-        d3d11_comp->AlignedByteOffset = (UINT)a_desc->offset;
+        d3d11_comp->Format = _sg_d3d11_vertex_format(a_state->format);
+        d3d11_comp->InputSlot = (UINT)a_state->buffer_index;
+        d3d11_comp->AlignedByteOffset = (UINT)a_state->offset;
         d3d11_comp->InputSlotClass = _sg_d3d11_input_classification(step_func);
         if (SG_VERTEXSTEP_PER_INSTANCE == step_func) {
             d3d11_comp->InstanceDataStepRate = (UINT)step_rate;
             pip->cmn.use_instanced_draw = true;
         }
-        pip->cmn.vertex_buffer_layout_active[a_desc->buffer_index] = true;
+        pip->cmn.vertex_buffer_layout_active[a_state->buffer_index] = true;
     }
     for (int layout_index = 0; layout_index < SG_MAX_VERTEX_BUFFERS; layout_index++) {
         if (pip->cmn.vertex_buffer_layout_active[layout_index]) {
-            const sg_buffer_layout_desc* l_desc = &desc->layout.buffers[layout_index];
-            SOKOL_ASSERT(l_desc->stride > 0);
-            pip->d3d11.vb_strides[layout_index] = (UINT)l_desc->stride;
+            const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[layout_index];
+            SOKOL_ASSERT(l_state->stride > 0);
+            pip->d3d11.vb_strides[layout_index] = (UINT)l_state->stride;
         } else {
             pip->d3d11.vb_strides[layout_index] = 0;
         }
     }
     hr = _sg_d3d11_CreateInputLayout(_sg.d3d11.dev,
-        d3d11_comps,                /* pInputElementDesc */
-        (UINT)attr_index,           /* NumElements */
-        shd->d3d11.vs_blob,         /* pShaderByteCodeWithInputSignature */
-        shd->d3d11.vs_blob_length,  /* BytecodeLength */
+        d3d11_comps,                // pInputElementDesc
+        (UINT)attr_index,           // NumElements
+        shd->d3d11.vs_blob,         // pShaderByteCodeWithInputSignature
+        shd->d3d11.vs_blob_length,  // BytecodeLength
         &pip->d3d11.il);
     if (!(SUCCEEDED(hr) && pip->d3d11.il)) {
         _SG_ERROR(D3D11_CREATE_INPUT_LAYOUT_FAILED);
         return SG_RESOURCESTATE_FAILED;
     }
 
-    /* create rasterizer state */
+    // create rasterizer state
     D3D11_RASTERIZER_DESC rs_desc;
     _sg_clear(&rs_desc, sizeof(rs_desc));
     rs_desc.FillMode = D3D11_FILL_SOLID;
@@ -9483,7 +9503,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
         return SG_RESOURCESTATE_FAILED;
     }
 
-    /* create depth-stencil state */
+    // create depth-stencil state
     D3D11_DEPTH_STENCIL_DESC dss_desc;
     _sg_clear(&dss_desc, sizeof(dss_desc));
     dss_desc.DepthEnable = TRUE;
@@ -9508,7 +9528,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
         return SG_RESOURCESTATE_FAILED;
     }
 
-    /* create blend state */
+    // create blend state
     D3D11_BLEND_DESC bs_desc;
     _sg_clear(&bs_desc, sizeof(bs_desc));
     bs_desc.AlphaToCoverageEnable = desc->alpha_to_coverage_enabled;
@@ -9884,7 +9904,9 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_bindings(
     _sg_buffer_t** vbs, const int* vb_offsets, int num_vbs,
     _sg_buffer_t* ib, int ib_offset,
     _sg_image_t** vs_imgs, int num_vs_imgs,
-    _sg_image_t** fs_imgs, int num_fs_imgs)
+    _sg_image_t** fs_imgs, int num_fs_imgs,
+    _sg_sampler_t** vs_smps, int num_vs_smps,
+    _sg_sampler_t** fs_smps, int num_fs_smps)
 {
     SOKOL_ASSERT(pip);
     SOKOL_ASSERT(_sg.d3d11.ctx);
@@ -9910,25 +9932,32 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_bindings(
     }
     for (i = 0; i < num_vs_imgs; i++) {
         SOKOL_ASSERT(vs_imgs[i]->d3d11.srv);
-        SOKOL_ASSERT(vs_imgs[i]->d3d11.smp);
         d3d11_vs_srvs[i] = vs_imgs[i]->d3d11.srv;
-        d3d11_vs_smps[i] = vs_imgs[i]->d3d11.smp;
     }
     for (; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
         d3d11_vs_srvs[i] = 0;
+    }
+    for (i = 0; i < num_vs_smps; i++) {
+        SOKOL_ASSERT(vs_smps[i]->d3d11.smp);
+        d3d11_vs_smps[i] = vs_smps[i]->d3d11.smp;
+    }
+    for (; i < SG_MAX_SHADERSTAGE_SAMPLERS; i++) {
         d3d11_vs_smps[i] = 0;
     }
     for (i = 0; i < num_fs_imgs; i++) {
         SOKOL_ASSERT(fs_imgs[i]->d3d11.srv);
-        SOKOL_ASSERT(fs_imgs[i]->d3d11.smp);
         d3d11_fs_srvs[i] = fs_imgs[i]->d3d11.srv;
-        d3d11_fs_smps[i] = fs_imgs[i]->d3d11.smp;
     }
     for (; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
         d3d11_fs_srvs[i] = 0;
+    }
+    for (i = 0; i < num_fs_smps; i++) {
+        SOKOL_ASSERT(fs_smps[i]->d3d11.smp);
+        d3d11_fs_smps[i] = fs_smps[i]->d3d11.smp;
+    }
+    for (; i < SG_MAX_SHADERSTAGE_SAMPLERS; i++) {
         d3d11_fs_smps[i] = 0;
     }
-
     _sg_d3d11_IASetVertexBuffers(_sg.d3d11.ctx, 0, SG_MAX_VERTEX_BUFFERS, d3d11_vbs, pip->d3d11.vb_strides, d3d11_vb_offsets);
     _sg_d3d11_IASetIndexBuffer(_sg.d3d11.ctx, d3d11_ib, pip->d3d11.index_format, (UINT)ib_offset);
     _sg_d3d11_VSSetShaderResources(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_vs_srvs);
