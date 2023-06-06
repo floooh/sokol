@@ -8729,7 +8729,7 @@ _SOKOL_PRIVATE D3D11_FILTER _sg_d3d11_filter(sg_filter min_f, sg_filter mag_f, s
     if (comparison) {
         d3d11_filter |= 0x80;
     }
-    return d3d11_filter;
+    return (D3D11_FILTER)d3d11_filter;
 }
 
 _SOKOL_PRIVATE D3D11_TEXTURE_ADDRESS_MODE _sg_d3d11_address_mode(sg_wrap m) {
@@ -9914,56 +9914,39 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_bindings(
 
     // gather all the D3D11 resources into arrays
     ID3D11Buffer* d3d11_ib = ib ? ib->d3d11.buf : 0;
-    ID3D11Buffer* d3d11_vbs[SG_MAX_VERTEX_BUFFERS];
-    UINT d3d11_vb_offsets[SG_MAX_VERTEX_BUFFERS];
-    ID3D11ShaderResourceView* d3d11_vs_srvs[SG_MAX_SHADERSTAGE_IMAGES];
-    ID3D11SamplerState* d3d11_vs_smps[SG_MAX_SHADERSTAGE_IMAGES];
-    ID3D11ShaderResourceView* d3d11_fs_srvs[SG_MAX_SHADERSTAGE_IMAGES];
-    ID3D11SamplerState* d3d11_fs_smps[SG_MAX_SHADERSTAGE_IMAGES];
-    int i;
-    for (i = 0; i < num_vbs; i++) {
+    ID3D11Buffer* d3d11_vbs[SG_MAX_VERTEX_BUFFERS] = {0};
+    UINT d3d11_vb_offsets[SG_MAX_VERTEX_BUFFERS] = {0};
+    ID3D11ShaderResourceView* d3d11_vs_srvs[SG_MAX_SHADERSTAGE_IMAGES] = {0};
+    ID3D11ShaderResourceView* d3d11_fs_srvs[SG_MAX_SHADERSTAGE_IMAGES] = {0};
+    ID3D11SamplerState* d3d11_vs_smps[SG_MAX_SHADERSTAGE_SAMPLERS] = {0};
+    ID3D11SamplerState* d3d11_fs_smps[SG_MAX_SHADERSTAGE_SAMPLERS] = {0};
+    for (int i = 0; i < num_vbs; i++) {
         SOKOL_ASSERT(vbs[i]->d3d11.buf);
         d3d11_vbs[i] = vbs[i]->d3d11.buf;
         d3d11_vb_offsets[i] = (UINT)vb_offsets[i];
     }
-    for (; i < SG_MAX_VERTEX_BUFFERS; i++) {
-        d3d11_vbs[i] = 0;
-        d3d11_vb_offsets[i] = 0;
-    }
-    for (i = 0; i < num_vs_imgs; i++) {
+    for (int i = 0; i < num_vs_imgs; i++) {
         SOKOL_ASSERT(vs_imgs[i]->d3d11.srv);
         d3d11_vs_srvs[i] = vs_imgs[i]->d3d11.srv;
     }
-    for (; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
-        d3d11_vs_srvs[i] = 0;
-    }
-    for (i = 0; i < num_vs_smps; i++) {
-        SOKOL_ASSERT(vs_smps[i]->d3d11.smp);
-        d3d11_vs_smps[i] = vs_smps[i]->d3d11.smp;
-    }
-    for (; i < SG_MAX_SHADERSTAGE_SAMPLERS; i++) {
-        d3d11_vs_smps[i] = 0;
-    }
-    for (i = 0; i < num_fs_imgs; i++) {
+    for (int i = 0; i < num_fs_imgs; i++) {
         SOKOL_ASSERT(fs_imgs[i]->d3d11.srv);
         d3d11_fs_srvs[i] = fs_imgs[i]->d3d11.srv;
     }
-    for (; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
-        d3d11_fs_srvs[i] = 0;
+    for (int i = 0; i < num_vs_smps; i++) {
+        SOKOL_ASSERT(vs_smps[i]->d3d11.smp);
+        d3d11_vs_smps[i] = vs_smps[i]->d3d11.smp;
     }
-    for (i = 0; i < num_fs_smps; i++) {
+    for (int i = 0; i < num_fs_smps; i++) {
         SOKOL_ASSERT(fs_smps[i]->d3d11.smp);
         d3d11_fs_smps[i] = fs_smps[i]->d3d11.smp;
-    }
-    for (; i < SG_MAX_SHADERSTAGE_SAMPLERS; i++) {
-        d3d11_fs_smps[i] = 0;
     }
     _sg_d3d11_IASetVertexBuffers(_sg.d3d11.ctx, 0, SG_MAX_VERTEX_BUFFERS, d3d11_vbs, pip->d3d11.vb_strides, d3d11_vb_offsets);
     _sg_d3d11_IASetIndexBuffer(_sg.d3d11.ctx, d3d11_ib, pip->d3d11.index_format, (UINT)ib_offset);
     _sg_d3d11_VSSetShaderResources(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_vs_srvs);
-    _sg_d3d11_VSSetSamplers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_vs_smps);
     _sg_d3d11_PSSetShaderResources(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_fs_srvs);
-    _sg_d3d11_PSSetSamplers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_fs_smps);
+    _sg_d3d11_VSSetSamplers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_SAMPLERS, d3d11_vs_smps);
+    _sg_d3d11_PSSetSamplers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_SAMPLERS, d3d11_fs_smps);
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_apply_uniforms(sg_shader_stage stage_index, int ub_index, const sg_range* data) {
