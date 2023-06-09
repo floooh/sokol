@@ -4263,7 +4263,7 @@ typedef struct {
     _sg_buffer_common_t cmn;
     struct {
         GLuint buf[SG_NUM_INFLIGHT_FRAMES];
-        bool ext_buffers;   /* if true, external buffers were injected with sg_buffer_desc.gl_buffers */
+        bool injected;  // if true, external buffers were injected with sg_buffer_desc.gl_buffers
     } gl;
 } _sg_gl_buffer_t;
 typedef _sg_gl_buffer_t _sg_buffer_t;
@@ -4275,10 +4275,20 @@ typedef struct {
         GLenum target;
         GLuint msaa_render_buffer;
         GLuint tex[SG_NUM_INFLIGHT_FRAMES];
-        bool ext_textures;  /* if true, external textures were injected with sg_image_desc.gl_textures */
+        bool injected;  // if true, external textures were injected with sg_image_desc.gl_textures
     } gl;
 } _sg_gl_image_t;
 typedef _sg_gl_image_t _sg_image_t;
+
+typedef struct {
+    _sg_slot_t slot;
+    _sg_sampler_common_t cmn;
+    struct {
+        GLuint smp;
+        bool injected;  // true if external sampler was injects in sg_sampler_desc.gl_sampler
+    } gl;
+} _sg_gl_sampler_t;
+typedef _sg_gl_sampler_t _sg_sampler_t;
 
 typedef struct {
     GLint gl_loc;
@@ -6057,15 +6067,27 @@ _SOKOL_PRIVATE GLenum _sg_gl_blend_op(sg_blend_op op) {
     }
 }
 
-_SOKOL_PRIVATE GLenum _sg_gl_filter(sg_filter f) {
-    switch (f) {
-        case SG_FILTER_NEAREST:                 return GL_NEAREST;
-        case SG_FILTER_LINEAR:                  return GL_LINEAR;
-        case SG_FILTER_NEAREST_MIPMAP_NEAREST:  return GL_NEAREST_MIPMAP_NEAREST;
-        case SG_FILTER_NEAREST_MIPMAP_LINEAR:   return GL_NEAREST_MIPMAP_LINEAR;
-        case SG_FILTER_LINEAR_MIPMAP_NEAREST:   return GL_LINEAR_MIPMAP_NEAREST;
-        case SG_FILTER_LINEAR_MIPMAP_LINEAR:    return GL_LINEAR_MIPMAP_LINEAR;
-        default: SOKOL_UNREACHABLE; return 0;
+_SOKOL_PRIVATE GLenum _sg_gl_min_filter(sg_filter min_f, sg_filter mipmap_f) {
+    if (min_f == SG_FILTER_NEAREST) {
+        if (mipmap_f == SG_FILTER_NEAREST) {
+            return GL_NEAREST_MIPMAP_NEAREST;
+        } else {
+            return GL_NEAREST_MIPMAP_LINEAR;
+        }
+    } else {
+        if (mipmap_f == SG_FILTER_NEAREST) {
+            return GL_LINEAR_MIPMAP_NEAREST;
+        } else {
+            return GL_LINEAR_MIPMAP_LINEAR;
+        }
+    }
+}
+
+_SOKOL_PRIVATE GLenum _sg_gl_mag_filter(sg_filter mag_f) {
+    if (mag_f == SG_FILTER_NEAREST) {
+        return GL_NEAREST;
+    } else {
+        return GL_LINEAR;
     }
 }
 
@@ -6684,20 +6706,20 @@ _SOKOL_PRIVATE void _sg_gl_cache_store_buffer_binding(GLenum target) {
 _SOKOL_PRIVATE void _sg_gl_cache_restore_buffer_binding(GLenum target) {
     if (target == GL_ARRAY_BUFFER) {
         if (_sg.gl.cache.stored_vertex_buffer != 0) {
-            /* we only care restoring valid ids */
+            // we only care about restoring valid ids
             _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_vertex_buffer);
             _sg.gl.cache.stored_vertex_buffer = 0;
         }
     } else {
         if (_sg.gl.cache.stored_index_buffer != 0) {
-            /* we only care restoring valid ids */
+            // we only care about restoring valid ids
             _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_index_buffer);
             _sg.gl.cache.stored_index_buffer = 0;
         }
     }
 }
 
-/* called when _sg_gl_deinit_buffer() */
+// called when _sg_gl_discard_buffer()
 _SOKOL_PRIVATE void _sg_gl_cache_invalidate_buffer(GLuint buf) {
     if (buf == _sg.gl.cache.vertex_buffer) {
         _sg.gl.cache.vertex_buffer = 0;
@@ -6755,11 +6777,11 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_texture(int slot_index, GLenum target, GLu
     _sg_gl_texture_bind_slot* slot = &_sg.gl.cache.textures[slot_index];
     if ((slot->target != target) || (slot->texture != texture)) {
         _sg_gl_cache_active_texture((GLenum)(GL_TEXTURE0 + slot_index));
-        /* if the target has changed, clear the previous binding on that target */
+        // if the target has changed, clear the previous binding on that target
         if ((target != slot->target) && (slot->target != 0)) {
             glBindTexture(slot->target, 0);
         }
-        /* apply new binding (texture can be 0 to unbind) */
+        // apply new binding (texture can be 0 to unbind)
         if (target != 0) {
             glBindTexture(target, texture);
         }
@@ -6777,7 +6799,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_restore_texture_binding(int slot_index) {
     SOKOL_ASSERT((slot_index >= 0) && (slot_index < _SG_GL_IMAGE_CACHE_SIZE));
     _sg_gl_texture_bind_slot* slot = &_sg.gl.cache.stored_texture;
     if (slot->texture != 0) {
-        /* we only care restoring valid ids */
+        // we only care restoring valid ids
         SOKOL_ASSERT(slot->target != 0);
         _sg_gl_cache_bind_texture(slot_index, slot->target, slot->texture);
         slot->target = 0;
@@ -6785,7 +6807,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_restore_texture_binding(int slot_index) {
     }
 }
 
-/* called from _sg_gl_destroy_texture() */
+// called from _sg_gl_discard_texture()
 _SOKOL_PRIVATE void _sg_gl_cache_invalidate_texture(GLuint tex) {
     for (int i = 0; i < _SG_GL_IMAGE_CACHE_SIZE; i++) {
         _sg_gl_texture_bind_slot* slot = &_sg.gl.cache.textures[i];
@@ -6800,6 +6822,13 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_texture(GLuint tex) {
         _sg.gl.cache.stored_texture.target = 0;
         _sg.gl.cache.stored_texture.texture = 0;
     }
+}
+
+// called from _sg_gl_discard_sampler()
+_SOKOL_PRIVATE void _sg_gl_cache_invalidate_sampler(GLuint smp) {
+    // FIXME!
+    (void)smp;
+    SOKOL_ASSERT(false);
 }
 
 /* called from _sg_gl_discard_shader() */
@@ -6958,12 +6987,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_buffer(_sg_buffer_t* buf, const s
     SOKOL_ASSERT(buf && desc);
     _SG_GL_CHECK_ERROR();
     _sg_buffer_common_init(&buf->cmn, desc);
-    buf->gl.ext_buffers = (0 != desc->gl_buffers[0]);
+    buf->gl.injected = (0 != desc->gl_buffers[0]);
     const GLenum gl_target = _sg_gl_buffer_target(buf->cmn.type);
     const GLenum gl_usage  = _sg_gl_usage(buf->cmn.usage);
     for (int slot = 0; slot < buf->cmn.num_slots; slot++) {
         GLuint gl_buf = 0;
-        if (buf->gl.ext_buffers) {
+        if (buf->gl.injected) {
             SOKOL_ASSERT(desc->gl_buffers[slot]);
             gl_buf = desc->gl_buffers[slot];
         } else {
@@ -6990,7 +7019,7 @@ _SOKOL_PRIVATE void _sg_gl_discard_buffer(_sg_buffer_t* buf) {
     for (int slot = 0; slot < buf->cmn.num_slots; slot++) {
         if (buf->gl.buf[slot]) {
             _sg_gl_cache_invalidate_buffer(buf->gl.buf[slot]);
-            if (!buf->gl.ext_buffers) {
+            if (!buf->gl.injected) {
                 glDeleteBuffers(1, &buf->gl.buf[slot]);
             }
         }
@@ -7008,7 +7037,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
     SOKOL_ASSERT(img && desc);
     _SG_GL_CHECK_ERROR();
     _sg_image_common_init(&img->cmn, desc);
-    img->gl.ext_textures = (0 != desc->gl_textures[0]);
+    img->gl.injected = (0 != desc->gl_textures[0]);
 
     // check if texture format is support
     if (!_sg_gl_supported_texture_format(img->cmn.pixel_format)) {
@@ -7023,7 +7052,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
         glGenRenderbuffers(1, &img->gl.msaa_render_buffer);
         glBindRenderbuffer(GL_RENDERBUFFER, img->gl.msaa_render_buffer);
         glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->cmn.sample_count, gl_internal_format, img->cmn.width, img->cmn.height);
-    } else if (img->gl.ext_textures) {
+    } else if (img->gl.injected) {
         img->gl.target = _sg_gl_texture_target(img->cmn.type);
         // inject externally GL textures
         for (int slot = 0; slot < img->cmn.num_slots; slot++) {
@@ -7043,47 +7072,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
             SOKOL_ASSERT(img->gl.tex[slot]);
             _sg_gl_cache_store_texture_binding(0);
             _sg_gl_cache_bind_texture(0, img->gl.target, img->gl.tex[slot]);
-            const GLenum gl_min_filter = _sg_gl_filter(img->cmn.min_filter);
-            const GLenum gl_mag_filter = _sg_gl_filter(img->cmn.mag_filter);
-            glTexParameteri(img->gl.target, GL_TEXTURE_MIN_FILTER, (GLint)gl_min_filter);
-            glTexParameteri(img->gl.target, GL_TEXTURE_MAG_FILTER, (GLint)gl_mag_filter);
-            if (_sg.gl.ext_anisotropic && (img->cmn.max_anisotropy > 1)) {
-                GLint max_aniso = (GLint) img->cmn.max_anisotropy;
-                if (max_aniso > _sg.gl.max_anisotropy) {
-                    max_aniso = _sg.gl.max_anisotropy;
-                }
-                glTexParameteri(img->gl.target, GL_TEXTURE_MAX_ANISOTROPY_EXT, max_aniso);
-            }
-            if (img->cmn.type == SG_IMAGETYPE_CUBE) {
-                glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            } else {
-                glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_S, (GLint)_sg_gl_wrap(img->cmn.wrap_u));
-                glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_T, (GLint)_sg_gl_wrap(img->cmn.wrap_v));
-                if (img->cmn.type == SG_IMAGETYPE_3D) {
-                    glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_R, (GLint)_sg_gl_wrap(img->cmn.wrap_w));
-                }
-                #if defined(SOKOL_GLCORE33)
-                float border[4];
-                switch (img->cmn.border_color) {
-                    case SG_BORDERCOLOR_TRANSPARENT_BLACK:
-                        border[0] = 0.0f; border[1] = 0.0f; border[2] = 0.0f; border[3] = 0.0f;
-                        break;
-                    case SG_BORDERCOLOR_OPAQUE_WHITE:
-                        border[0] = 1.0f; border[1] = 1.0f; border[2] = 1.0f; border[3] = 1.0f;
-                        break;
-                    default:
-                        border[0] = 0.0f; border[1] = 0.0f; border[2] = 0.0f; border[3] = 1.0f;
-                        break;
-                }
-                glTexParameterfv(img->gl.target, GL_TEXTURE_BORDER_COLOR, border);
-                #endif
-            }
-            /* GL spec has strange defaults for mipmap min/max lod: -1000 to +1000 */
-            const float min_lod = _sg_clamp(desc->min_lod, 0.0f, 1000.0f);
-            const float max_lod = _sg_clamp(desc->max_lod, 0.0f, 1000.0f);
-            glTexParameterf(img->gl.target, GL_TEXTURE_MIN_LOD, min_lod);
-            glTexParameterf(img->gl.target, GL_TEXTURE_MAX_LOD, max_lod);
             const int num_faces = img->cmn.type == SG_IMAGETYPE_CUBE ? 6 : 1;
             int data_index = 0;
             for (int face_index = 0; face_index < num_faces; face_index++) {
@@ -7144,13 +7132,79 @@ _SOKOL_PRIVATE void _sg_gl_discard_image(_sg_image_t* img) {
     for (int slot = 0; slot < img->cmn.num_slots; slot++) {
         if (img->gl.tex[slot]) {
             _sg_gl_cache_invalidate_texture(img->gl.tex[slot]);
-            if (!img->gl.ext_textures) {
+            if (!img->gl.injected) {
                 glDeleteTextures(1, &img->gl.tex[slot]);
             }
         }
     }
     if (img->gl.msaa_render_buffer) {
         glDeleteRenderbuffers(1, &img->gl.msaa_render_buffer);
+    }
+    _SG_GL_CHECK_ERROR();
+}
+
+_SOKOL_PRIVATE sg_resource_state _sg_gl_create_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
+    SOKOL_ASSERT(smp && desc);
+    _SG_GL_CHECK_ERROR();
+    _sg_sampler_common_init(&smp->cmn, desc);
+    smp->gl.injected = (0 != desc->gl_sampler);
+    if (smp->gl.injected) {
+        smp->gl.smp = (GLuint) desc->gl_sampler;
+    } else {
+        glGenSamplers(1, &smp->gl.smp);
+        SOKOL_ASSERT(smp->gl.smp);
+
+        const GLenum gl_min_filter = _sg_gl_min_filter(smp->cmn.min_filter, smp->cmn.mipmap_filter);
+        const GLenum gl_mag_filter = _sg_gl_mag_filter(smp->cmn.mag_filter);
+        glSamplerParameteri(smp->gl.smp, GL_TEXTURE_MIN_FILTER, (GLint)gl_min_filter);
+        glSamplerParameteri(smp->gl.smp, GL_TEXTURE_MAG_FILTER, (GLint)gl_mag_filter);
+        // GL spec has strange defaults for mipmap min/max lod: -1000 to +1000
+        const float min_lod = _sg_clamp(desc->min_lod, 0.0f, 1000.0f);
+        const float max_lod = _sg_clamp(desc->max_lod, 0.0f, 1000.0f);
+        glSamplerParameteri(smp->gl.smp, GL_TEXTURE_MIN_LOD, min_lod);
+        glSamplerParameteri(smp->gl.smp, GL_TEXTURE_MAX_LOD, max_lod);
+        glSamplerParameteri(smp->gl.smp, GL_TEXTURE_WRAP_S, (GLint)_sg_gl_wrap(smp->cmn.wrap_u));
+        glSamplerParameteri(smp->gl.smp, GL_TEXTURE_WRAP_T, (GLint)_sg_gl_wrap(smp->cmn.wrap_v));
+        glSamplerParameteri(smp->gl.smp, GL_TEXTURE_WRAP_R, (GLint)_sg_gl_wrap(smp->cmn.wrap_w));
+        #if defined(SOKOL_GLCORE33)
+        float border[4];
+        switch (smp->cmn.border_color) {
+            case SG_BORDERCOLOR_TRANSPARENT_BLACK:
+                border[0] = 0.0f; border[1] = 0.0f; border[2] = 0.0f; border[3] = 0.0f;
+                break;
+            case SG_BORDERCOLOR_OPAQUE_WHITE:
+                border[0] = 1.0f; border[1] = 1.0f; border[2] = 1.0f; border[3] = 1.0f;
+                break;
+            default:
+                border[0] = 0.0f; border[1] = 0.0f; border[2] = 0.0f; border[3] = 1.0f;
+                break;
+        }
+        glSamplerParameterfv(smp->gl.smp, GL_TEXTURE_BORDER_COLOR, border);
+        #endif
+        if (smp->cmn.compare != SG_COMPAREFUNC_NEVER) {
+            glSamplerParameteri(smp->gl.smp, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+            glSamplerParameteri(smp->gl.smp, GL_TEXTURE_COMPARE_FUNC, (GLint)_sg_gl_compare_func(smp->cmn.compare));
+        } else {
+            glSamplerParameteri(smp->gl.smp, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+        }
+        if (_sg.gl.ext_anisotropic && (smp->cmn.max_anisotropy > 1)) {
+            GLint max_aniso = (GLint) smp->cmn.max_anisotropy;
+            if (max_aniso > _sg.gl.max_anisotropy) {
+                max_aniso = _sg.gl.max_anisotropy;
+            }
+            glSamplerParameteri(smp->gl.smp, GL_TEXTURE_MAX_ANISOTROPY_EXT, max_aniso);
+        }
+    }
+    _SG_GL_CHECK_ERROR();
+    return SG_RESOURCESTATE_VALID;
+}
+
+_SOKOL_PRIVATE void _sg_gl_discard_sampler(_sg_sampler_t* smp) {
+    SOKOL_ASSERT(smp);
+    _SG_GL_CHECK_ERROR();
+    _sg_gl_cache_invalidate_sampler(smp->gl.smp);
+    if (!smp->gl.injected) {
+        glDeleteSamplers(1, &smp->gl.smp);
     }
     _SG_GL_CHECK_ERROR();
 }
@@ -7330,14 +7384,14 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
         pip->gl.attrs[attr_index].vb_index = -1;
     }
     for (int attr_index = 0; attr_index < _sg.limits.max_vertex_attrs; attr_index++) {
-        const sg_vertex_attr_desc* a_desc = &desc->layout.attrs[attr_index];
-        if (a_desc->format == SG_VERTEXFORMAT_INVALID) {
+        const sg_vertex_attr_state* a_state = &desc->layout.attrs[attr_index];
+        if (a_state->format == SG_VERTEXFORMAT_INVALID) {
             break;
         }
-        SOKOL_ASSERT(a_desc->buffer_index < SG_MAX_VERTEX_BUFFERS);
-        const sg_buffer_layout_desc* l_desc = &desc->layout.buffers[a_desc->buffer_index];
-        const sg_vertex_step step_func = l_desc->step_func;
-        const int step_rate = l_desc->step_rate;
+        SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEX_BUFFERS);
+        const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[a_state->buffer_index];
+        const sg_vertex_step step_func = l_state->step_func;
+        const int step_rate = l_state->step_rate;
         GLint attr_loc = attr_index;
         if (!_sg_strempty(&shd->gl.attrs[attr_index].name)) {
             attr_loc = glGetAttribLocation(pip->shader->gl.prog, _sg_strptr(&shd->gl.attrs[attr_index].name));
@@ -7346,20 +7400,20 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
         if (attr_loc != -1) {
             _sg_gl_attr_t* gl_attr = &pip->gl.attrs[attr_loc];
             SOKOL_ASSERT(gl_attr->vb_index == -1);
-            gl_attr->vb_index = (int8_t) a_desc->buffer_index;
+            gl_attr->vb_index = (int8_t) a_state->buffer_index;
             if (step_func == SG_VERTEXSTEP_PER_VERTEX) {
                 gl_attr->divisor = 0;
             } else {
                 gl_attr->divisor = (int8_t) step_rate;
                 pip->cmn.use_instanced_draw = true;
             }
-            SOKOL_ASSERT(l_desc->stride > 0);
-            gl_attr->stride = (uint8_t) l_desc->stride;
-            gl_attr->offset = a_desc->offset;
-            gl_attr->size = (uint8_t) _sg_gl_vertexformat_size(a_desc->format);
-            gl_attr->type = _sg_gl_vertexformat_type(a_desc->format);
-            gl_attr->normalized = _sg_gl_vertexformat_normalized(a_desc->format);
-            pip->cmn.vertex_buffer_layout_active[a_desc->buffer_index] = true;
+            SOKOL_ASSERT(l_state->stride > 0);
+            gl_attr->stride = (uint8_t) l_state->stride;
+            gl_attr->offset = a_state->offset;
+            gl_attr->size = (uint8_t) _sg_gl_vertexformat_size(a_state->format);
+            gl_attr->type = _sg_gl_vertexformat_type(a_state->format);
+            gl_attr->normalized = _sg_gl_vertexformat_normalized(a_state->format);
+            pip->cmn.vertex_buffer_layout_active[a_state->buffer_index] = true;
         } else {
             _SG_ERROR(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER);
             _SG_LOGMSG(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER, _sg_strptr(&shd->gl.attrs[attr_index].name));
