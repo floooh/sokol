@@ -2948,8 +2948,13 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_SIZE_MISMATCH, "size of uniform block members doesn't match uniform block size") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_ARRAY_COUNT, "uniform array count must be >= 1") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_STD140_ARRAY_TYPE, "uniform arrays only allowed for FLOAT4, INT4, MAT4 in std140 layout") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_CONT_IMGS, "shader images must occupy continuous slots (sg_shader_desc.vs|fs.images[])") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_CONT_SMPS, "shader samplers must occupy continuous slots (sg_shader_desc.vs|fs.samplers[])") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_CONT_IMAGES, "shader stage images must occupy continuous slots (sg_shader_desc.vs|fs.images[])") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_CONT_SAMPLERS, "shader stage samplers must occupy continuous slots (sg_shader_desc.vs|fs.samplers[])") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_IMAGE_SLOT_OUT_OF_RANGE, "shader stage image-samplers: image slot index is out of range (sg_shader_desc.vs|fs.image_samplers[].image_slot)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_SAMPLER_SLOT_OUT_OF_RANGE, "shader stage image-samplers: image slot index is out of range (sg_shader_desc.vs|fs.image_samplers[].sampler_slot)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_NOT_REFERENCED_BY_IMAGE_SAMPLERS, "shader stage image-samplers: one or more images are note referenced by combined image-samplers (sg_shader_desc.vs|fs.image_samplers[].image_slot)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_NOT_REFERENCED_BY_IMAGE_SAMPLERS, "shader stage image-samplers: one or more samplers are note referenced by combined image-samplers (sg_shader_desc.vs|fs.image_samplers[].sampler_slot)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_CONT_IMAGE_SAMPLERS, "shader stage combined image samplers must occupy continuous slots (sg_shader_desc.vs|fs.image_samplers[])") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_ATTR_SEMANTICS, "D3D11 backend requires vertex attribute semantics") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_ATTR_STRING_TOO_LONG, "vertex attribute name/semantic string too long (max len 16)") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_CANARY, "sg_pipeline_desc not initialized") \
@@ -6772,7 +6777,8 @@ _SOKOL_PRIVATE void _sg_gl_cache_active_texture(GLenum texture) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_gl_cache_clear_texture_bindings(bool force) {
+_SOKOL_PRIVATE void _sg_gl_cache_clear_texture_sampler_bindings(bool force) {
+    _SG_GL_CHECK_ERROR();
     for (int i = 0; (i < _SG_GL_TEXTURE_SAMPLER_CACHE_SIZE) && (i < _sg.limits.gl_max_combined_texture_image_units); i++) {
         if (force || (_sg.gl.cache.texture_samplers[i].texture != 0)) {
             GLenum gl_texture_unit = (GLenum) (GL_TEXTURE0 + i);
@@ -6781,13 +6787,14 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_texture_bindings(bool force) {
             glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
             glBindTexture(GL_TEXTURE_3D, 0);
             glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-            glBindSampler(gl_texture_unit, 0);
+            glBindSampler((GLuint)i, 0);
             _sg.gl.cache.texture_samplers[i].target = 0;
             _sg.gl.cache.texture_samplers[i].texture = 0;
             _sg.gl.cache.texture_samplers[i].sampler = 0;
             _sg.gl.cache.cur_active_texture = gl_texture_unit;
         }
     }
+    _SG_GL_CHECK_ERROR();
 }
 
 _SOKOL_PRIVATE void _sg_gl_cache_bind_texture_sampler(int slot_index, GLenum target, GLuint texture, GLuint sampler) {
@@ -6888,7 +6895,7 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
         _sg_clear(&_sg.gl.cache, sizeof(_sg.gl.cache));
         _sg_gl_cache_clear_buffer_bindings(true);
         _SG_GL_CHECK_ERROR();
-        _sg_gl_cache_clear_texture_bindings(true);
+        _sg_gl_cache_clear_texture_sampler_bindings(true);
         _SG_GL_CHECK_ERROR();
         for (int i = 0; i < _sg.limits.max_vertex_attrs; i++) {
             _sg_gl_attr_t* attr = &_sg.gl.cache.attrs[i].gl_attr;
@@ -6899,11 +6906,11 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
         }
         _sg.gl.cache.cur_primitive_type = GL_TRIANGLES;
 
-        /* shader program */
+        // shader program
         glGetIntegerv(GL_CURRENT_PROGRAM, (GLint*)&_sg.gl.cache.prog);
         _SG_GL_CHECK_ERROR();
 
-        /* depth and stencil state */
+        // depth and stencil state
         _sg.gl.cache.depth.compare = SG_COMPAREFUNC_ALWAYS;
         _sg.gl.cache.stencil.front.compare = SG_COMPAREFUNC_ALWAYS;
         _sg.gl.cache.stencil.front.fail_op = SG_STENCILOP_KEEP;
@@ -6921,7 +6928,7 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
         glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
         glStencilMask(0);
 
-        /* blend state */
+        // blend state
         _sg.gl.cache.blend.src_factor_rgb = SG_BLENDFACTOR_ONE;
         _sg.gl.cache.blend.dst_factor_rgb = SG_BLENDFACTOR_ZERO;
         _sg.gl.cache.blend.op_rgb = SG_BLENDOP_ADD;
@@ -6933,7 +6940,7 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
         glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
         glBlendColor(0.0f, 0.0f, 0.0f, 0.0f);
 
-        /* standalone state */
+        // standalone state
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
             _sg.gl.cache.color_write_mask[i] = SG_COLORMASK_RGBA;
         }
@@ -6959,14 +6966,14 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
 
 _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
     _SOKOL_UNUSED(desc);
-    /* assumes that _sg.gl is already zero-initialized */
+    // assumes that _sg.gl is already zero-initialized
     _sg.gl.valid = true;
 
     #if defined(_SOKOL_USE_WIN32_GL_LOADER)
     _sg_gl_load_opengl();
     #endif
 
-    /* clear initial GL error state */
+    // clear initial GL error state
     #if defined(SOKOL_DEBUG)
         while (glGetError() != GL_NO_ERROR);
     #endif
@@ -8201,7 +8208,7 @@ _SOKOL_PRIVATE void _sg_gl_commit(void) {
     SOKOL_ASSERT(!_sg.gl.in_pass);
     /* "soft" clear bindings (only those that are actually bound) */
     _sg_gl_cache_clear_buffer_bindings(false);
-    _sg_gl_cache_clear_texture_bindings(false);
+    _sg_gl_cache_clear_texture_sampler_bindings(false);
 }
 
 _SOKOL_PRIVATE void _sg_gl_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
@@ -14744,23 +14751,56 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 }
             }
             bool images_continuous = true;
+            int num_images = 0;
             for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
                 const sg_shader_image_desc* img_desc = &stage_desc->images[img_index];
                 if (img_desc->image_type != _SG_IMAGETYPE_DEFAULT) {
-                    _SG_VALIDATE(images_continuous, VALIDATE_SHADERDESC_NO_CONT_IMGS);
+                    _SG_VALIDATE(images_continuous, VALIDATE_SHADERDESC_NO_CONT_IMAGES);
+                    num_images++;
                 } else {
                     images_continuous = false;
                 }
             }
             bool samplers_continuous = true;
+            int num_samplers = 0;
             for (int smp_index = 0; smp_index < SG_MAX_SHADERSTAGE_SAMPLERS; smp_index++) {
                 const sg_shader_sampler_desc* smp_desc = &stage_desc->samplers[smp_index];
                 if (smp_desc->type != _SG_SAMPLERTYPE_DEFAULT) {
-                    _SG_VALIDATE(samplers_continuous, VALIDATE_SHADERDESC_NO_CONT_SMPS);
+                    _SG_VALIDATE(samplers_continuous, VALIDATE_SHADERDESC_NO_CONT_SAMPLERS);
+                    num_samplers++;
                 } else {
                     samplers_continuous = false;
                 }
             }
+            #if defined(_SOKOL_ANY_GL)
+            bool image_samplers_continuous = true;
+            int num_image_samplers = 0;
+            for (int img_smp_index = 0; img_smp_index < SG_MAX_SHADERSTAGE_IMAGES; img_smp_index++) {
+                const sg_shader_image_sampler_desc* img_smp_desc = &stage_desc->image_samplers[img_smp_index];
+                if (img_smp_desc->name != 0) {
+                    _SG_VALIDATE(image_samplers_continuous, VALIDATE_SHADERDESC_NO_CONT_IMAGE_SAMPLERS);
+                    num_image_samplers++;
+                    const bool img_slot_in_range = (img_smp_desc->image_slot >= 0) && (img_smp_desc->image_slot < SG_MAX_SHADERSTAGE_IMAGES);
+                    const bool smp_slot_in_range = (img_smp_desc->sampler_slot >= 0) && (img_smp_desc->sampler_slot < SG_MAX_SHADERSTAGE_SAMPLERS);
+                    _SG_VALIDATE(img_slot_in_range && (img_smp_desc->image_slot < num_images), VALIDATE_SHADERDESC_IMAGE_SAMPLER_IMAGE_SLOT_OUT_OF_RANGE);
+                    _SG_VALIDATE(smp_slot_in_range && (img_smp_desc->sampler_slot < num_samplers), VALIDATE_SHADERDESC_IMAGE_SAMPLER_IMAGE_SLOT_OUT_OF_RANGE);
+                } else {
+                    image_samplers_continuous = false;
+                }
+            }
+            // each image and sampler must be referenced by an image sampler
+            const uint32_t expected_img_slot_mask = (1 << num_images) - 1;
+            const uint32_t expected_smp_slot_mask = (1 << num_samplers) - 1;
+            uint32_t actual_img_slot_mask = 0;
+            uint32_t actual_smp_slot_mask = 0;
+            for (int img_smp_index = 0; img_smp_index < num_image_samplers; img_smp_index++) {
+                const sg_shader_image_sampler_desc* img_smp_desc = &stage_desc->image_samplers[img_smp_index];
+                actual_img_slot_mask |= (1 << ((uint32_t)img_smp_desc->image_slot & 31));
+                actual_smp_slot_mask |= (1 << ((uint32_t)img_smp_desc->sampler_slot & 31));
+            }
+            _SG_VALIDATE(expected_img_slot_mask == actual_img_slot_mask, VALIDATE_SHADERDESC_IMAGE_NOT_REFERENCED_BY_IMAGE_SAMPLERS);
+            _SG_VALIDATE(expected_smp_slot_mask == actual_smp_slot_mask, VALIDATE_SHADERDESC_SAMPLER_NOT_REFERENCED_BY_IMAGE_SAMPLERS);
+            #endif
         }
         return _sg_validate_end();
     #endif
