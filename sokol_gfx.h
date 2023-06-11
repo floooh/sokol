@@ -4164,7 +4164,7 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
         SOKOL_ASSERT(stage->num_image_samplers == 0);
         for (int img_smp_index = 0; img_smp_index < SG_MAX_SHADERSTAGE_IMAGES; img_smp_index++) {
             const sg_shader_image_sampler_pair_desc* img_smp_desc = &stage_desc->image_sampler_pairs[img_smp_index];
-            if (img_smp_desc->name == 0) {
+            if (!img_smp_desc->valid) {
                 break;
             }
             SOKOL_ASSERT((img_smp_desc->image_slot >= 0) && (img_smp_desc->image_slot < stage->num_images));
