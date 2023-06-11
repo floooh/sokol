@@ -1702,13 +1702,18 @@ typedef enum sg_primitive_type {
     sg_filter
 
     The filtering mode when sampling a texture image. This is
-    used in the sg_image_desc.min_filter and sg_image_desc.mag_filter
-    members when creating an image object.
+    used in the sg_sampler_desc.min_filter, sg_sampler_desc.mag_filter
+    and sg_sampler_desc.mipmap_filter members when creating a sampler object.
 
-    The default filter mode is SG_FILTER_NEAREST.
+    For min_filter and mag_filter the default is SG_FILTER_NEAREST.
+
+    For mipmap_filter the default is SG_FILTER_NONE.
+
+    NOTE: an image object with (num_mipmaps == 1) *must* use SG_MIPMAP_FILTER_NONE.
 */
 typedef enum sg_filter {
-    _SG_FILTER_DEFAULT, /* value 0 reserved for default-init */
+    _SG_FILTER_DEFAULT, // value 0 reserved for default-init
+    SG_FILTER_NONE,
     SG_FILTER_NEAREST,
     SG_FILTER_LINEAR,
     _SG_FILTER_NUM,
@@ -2293,15 +2298,6 @@ typedef struct sg_image_data {
     .usage:             SG_USAGE_IMMUTABLE
     .pixel_format:      SG_PIXELFORMAT_RGBA8 for textures, or sg_desc.context.color_format for render targets
     .sample_count:      1 for textures, or sg_desc.context.sample_count for render targets
-    .min_filter:        SG_FILTER_NEAREST
-    .mag_filter:        SG_FILTER_NEAREST
-    .wrap_u:            SG_WRAP_REPEAT
-    .wrap_v:            SG_WRAP_REPEAT
-    .wrap_w:            SG_WRAP_REPEAT (only SG_IMAGETYPE_3D)
-    .border_color       SG_BORDERCOLOR_OPAQUE_BLACK
-    .max_anisotropy     1 (must be 1..16)
-    .min_lod            0.0f
-    .max_lod            FLT_MAX
     .data               an sg_image_data struct to define the initial content
     .label              0       (optional string label for trace hooks)
 
@@ -2368,6 +2364,18 @@ typedef struct sg_image_desc {
     sg_sampler_desc
 
     FIXME
+
+    .min_filter:        SG_FILTER_NEAREST
+    .mag_filter:        SG_FILTER_NEAREST
+    .mipmap_filter      SG_FILTER_NONE
+    .wrap_u:            SG_WRAP_REPEAT
+    .wrap_v:            SG_WRAP_REPEAT
+    .wrap_w:            SG_WRAP_REPEAT (only SG_IMAGETYPE_3D)
+    .border_color       SG_BORDERCOLOR_OPAQUE_BLACK
+    .max_anisotropy     1 (must be 1..16)
+    .min_lod            0.0f
+    .max_lod            FLT_MAX
+
 */
 typedef struct sg_sampler_desc {
     uint32_t _start_canary;
@@ -2936,6 +2944,9 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_INJECTED_NO_DATA, "images with injected textures cannot be initialized with data") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA, "dynamic/stream images cannot be initialized with data") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE, "compressed images must be immutable") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SAMPLERDESC_CANARY, "sg_sampler_desc not initialized") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SAMPLERDESC_MINFILTER_NONE, "sg_sampler_desc.min_filter cannot be SG_FILTER_NONE") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SAMPLERDESC_MAGFILTER_NONE, "sg_sampler_desc.mag_filter cannot be SG_FILTER_NONE") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_CANARY, "sg_shader_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SOURCE, "shader source code required") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_BYTECODE, "shader byte code required") \
@@ -3029,6 +3040,7 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_EXPECTED_SAMPLER_COMPARE_NEVER, "sg_apply_bindings: shader expects SG_SAMPLERTYPE_SAMPLE on vertex stage but sampler doesn't have SG_COMPAREFUNC_NEVER") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_UNEXPECTED_SAMPLER_BINDING, "sg_apply_bindings: unexpected sampler binding on vertex stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_SMP_EXISTS, "sg_apply_bindings: sampler bound to vertex stage no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_SMP_MIPMAPS, "sg_apply_bindings: image bound to vertex stage has mipmap_count == 1, but associated sampler mipmap filer is not SG_MIPMAPFILTER_NONE") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_EXPECTED_IMAGE_BINDING, "sg_apply_bindings: missing image binding on fragment stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_EXISTS, "sg_apply_bindings: image bound to fragment stage no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMAGE_TYPE_MISMATCH, "sg_apply_bindings: type of image bound to fragment stage doesn't match shader desc") \
@@ -3040,6 +3052,7 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_EXPECTED_SAMPLER_COMPARE_NEVER, "sg_apply_bindings: shader expects SG_SAMPLERTYPE_SAMPLE on fragment stage but sampler doesn't have SG_COMPAREFUNC_NEVER") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_UNEXPECTED_SAMPLER_BINDING, "sg_apply_bindings: unexpected sampler binding on fragment stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_SMP_EXISTS, "sg_apply_bindings: sampler bound to fragment stage no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_SMP_MIPMAPS, "sg_apply_bindings: image bound to fragment stage has mipmap_count == 1, but associated sampler mipmap filer is not SG_MIPMAPFILTER_NONE") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_NO_PIPELINE, "sg_apply_uniforms: must be called after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_NO_UB_AT_SLOT, "sg_apply_uniforms: no uniform block declaration at this shader stage UB slot") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_SIZE, "sg_apply_uniforms: data size exceeds declared uniform block size") \
@@ -4154,6 +4167,7 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
             stage->image_samplers[img_smp_index].image_slot = img_smp_desc->image_slot;
             SOKOL_ASSERT((img_smp_desc->sampler_slot >= 0) && (img_smp_desc->sampler_slot < stage->num_samplers));
             stage->image_samplers[img_smp_index].sampler_slot = img_smp_desc->sampler_slot;
+            stage->num_image_samplers++;
         }
     }
 }
@@ -6097,17 +6111,21 @@ _SOKOL_PRIVATE GLenum _sg_gl_blend_op(sg_blend_op op) {
 
 _SOKOL_PRIVATE GLenum _sg_gl_min_filter(sg_filter min_f, sg_filter mipmap_f) {
     if (min_f == SG_FILTER_NEAREST) {
-        if (mipmap_f == SG_FILTER_NEAREST) {
-            return GL_NEAREST_MIPMAP_NEAREST;
-        } else {
-            return GL_NEAREST_MIPMAP_LINEAR;
+        switch (mipmap_f) {
+            case SG_FILTER_NONE:    return GL_NEAREST;
+            case SG_FILTER_NEAREST: return GL_NEAREST_MIPMAP_NEAREST;
+            case SG_FILTER_LINEAR:  return GL_NEAREST_MIPMAP_LINEAR;
+            default: SOKOL_UNREACHABLE; return (GLenum)0;
+        }
+    } else if (min_f == SG_FILTER_LINEAR) {
+        switch (mipmap_f) {
+            case SG_FILTER_NONE:    return GL_LINEAR;
+            case SG_FILTER_NEAREST: return GL_LINEAR_MIPMAP_NEAREST;
+            case SG_FILTER_LINEAR:  return GL_LINEAR_MIPMAP_LINEAR;
+            default: SOKOL_UNREACHABLE; return (GLenum)0;
         }
     } else {
-        if (mipmap_f == SG_FILTER_NEAREST) {
-            return GL_LINEAR_MIPMAP_NEAREST;
-        } else {
-            return GL_LINEAR_MIPMAP_LINEAR;
-        }
+        SOKOL_UNREACHABLE; return (GLenum)0;
     }
 }
 
@@ -6771,10 +6789,12 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_buffer(GLuint buf) {
 }
 
 _SOKOL_PRIVATE void _sg_gl_cache_active_texture(GLenum texture) {
+    _SG_GL_CHECK_ERROR();
     if (_sg.gl.cache.cur_active_texture != texture) {
         _sg.gl.cache.cur_active_texture = texture;
         glActiveTexture(texture);
     }
+    _SG_GL_CHECK_ERROR();
 }
 
 _SOKOL_PRIVATE void _sg_gl_cache_clear_texture_sampler_bindings(bool force) {
@@ -6806,19 +6826,23 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_texture_sampler(int slot_index, GLenum tar
     if (slot_index >= _sg.limits.gl_max_combined_texture_image_units) {
         return;
     }
+    _SG_GL_CHECK_ERROR();
     _sg_gl_cache_texture_sampler_bind_slot* slot = &_sg.gl.cache.texture_samplers[slot_index];
     if ((slot->target != target) || (slot->texture != texture) || (slot->sampler != sampler)) {
         _sg_gl_cache_active_texture((GLenum)(GL_TEXTURE0 + slot_index));
         // if the target has changed, clear the previous binding on that target
         if ((target != slot->target) && (slot->target != 0)) {
             glBindTexture(slot->target, 0);
+            _SG_GL_CHECK_ERROR();
         }
         // apply new binding (can be 0 to unbind)
         if (target != 0) {
             glBindTexture(target, texture);
+            _SG_GL_CHECK_ERROR();
         }
         // apply new sampler (can be 0 to unbind)
         glBindSampler((GLuint)slot_index, sampler);
+        _SG_GL_CHECK_ERROR();
 
         slot->target = target;
         slot->texture = texture;
@@ -6846,12 +6870,15 @@ _SOKOL_PRIVATE void _sg_gl_cache_restore_texture_sampler_binding(int slot_index)
 
 // called from _sg_gl_discard_texture() and _sg_gl_discard_sampler()
 _SOKOL_PRIVATE void _sg_gl_cache_invalidate_texture_sampler(GLuint tex, GLuint smp) {
+    _SG_GL_CHECK_ERROR();
     for (int i = 0; i < _SG_GL_TEXTURE_SAMPLER_CACHE_SIZE; i++) {
         _sg_gl_cache_texture_sampler_bind_slot* slot = &_sg.gl.cache.texture_samplers[i];
-        if ((tex == slot->texture) || (smp == slot->sampler)) {
+        if ((0 != slot->target) && ((tex == slot->texture) || (smp == slot->sampler))) {
             _sg_gl_cache_active_texture((GLenum)(GL_TEXTURE0 + i));
             glBindTexture(slot->target, 0);
-            glBindSampler((GLuint)i, slot->sampler);
+            _SG_GL_CHECK_ERROR();
+            glBindSampler((GLuint)i, 0);
+            _SG_GL_CHECK_ERROR();
             slot->target = 0;
             slot->texture = 0;
             slot->sampler = 0;
@@ -8037,10 +8064,6 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
     _sg_sampler_t** fs_smps, int num_fs_smps)
 {
     SOKOL_ASSERT(pip);
-    _SOKOL_UNUSED(num_fs_imgs);
-    _SOKOL_UNUSED(num_vs_imgs);
-    _SOKOL_UNUSED(num_fs_smps);
-    _SOKOL_UNUSED(num_vs_smps);
     _SOKOL_UNUSED(num_vbs);
     _SG_GL_CHECK_ERROR();
 
@@ -8052,7 +8075,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
         _sg_image_t** imgs = (stage_index == SG_SHADERSTAGE_VS) ? vs_imgs : fs_imgs;
         _sg_sampler_t** smps = (stage_index == SG_SHADERSTAGE_VS) ? vs_smps : fs_smps;
         const int num_imgs = (stage_index == SG_SHADERSTAGE_VS) ? num_vs_imgs : num_fs_imgs;
-        const int num_smps = (stage_index == SG_SHADERSTAGE_FS) ? num_vs_smps : num_fs_smps;
+        const int num_smps = (stage_index == SG_SHADERSTAGE_VS) ? num_vs_smps : num_fs_smps;
         SOKOL_ASSERT(num_imgs == stage->num_images);
         SOKOL_ASSERT(num_smps == stage->num_samplers);
         for (int img_smp_index = 0; img_smp_index < stage->num_image_samplers; img_smp_index++) {
@@ -10500,8 +10523,8 @@ _SOKOL_PRIVATE MTLSamplerBorderColor _sg_mtl_border_color(sg_border_color c) {
 }
 #endif
 
-_SOKOL_PRIVATE MTLSamplerMinMagFilter _sg_mtl_minmag_filter(sg_filter minmag_filter) {
-    switch (minmag_filter) {
+_SOKOL_PRIVATE MTLSamplerMinMagFilter _sg_mtl_minmag_filter(sg_filter f) {
+    switch (f) {
         case SG_FILTER_NEAREST:
             return MTLSamplerMinMagFilterNearest;
         case SG_FILTER_LINEAR:
@@ -10511,8 +10534,10 @@ _SOKOL_PRIVATE MTLSamplerMinMagFilter _sg_mtl_minmag_filter(sg_filter minmag_fil
     }
 }
 
-_SOKOL_PRIVATE MTLSamplerMipFilter _sg_mtl_mipmap_filter(sg_filter mipmap_filter) {
-    switch (mipmap_filter) {
+_SOKOL_PRIVATE MTLSamplerMipFilter _sg_mtl_mipmap_filter(sg_filter f) {
+    switch (f) {
+        case SG_FILTER_NONE:
+            return MTLSamplerMipFilterNotMipmapped;
         case SG_FILTER_NEAREST:
             return MTLSamplerMipFilterNearest;
         case SG_FILTER_LINEAR:
@@ -14654,8 +14679,10 @@ _SOKOL_PRIVATE bool _sg_validate_sampler_desc(const sg_sampler_desc* desc) {
         }
         SOKOL_ASSERT(desc);
         _sg_validate_begin();
-        _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_IMAGEDESC_CANARY);
-        _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_IMAGEDESC_CANARY);
+        _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_SAMPLERDESC_CANARY);
+        _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_SAMPLERDESC_CANARY);
+        _SG_VALIDATE(desc->min_filter != SG_FILTER_NONE, VALIDATE_SAMPLERDESC_MINFILTER_NONE);
+        _SG_VALIDATE(desc->mag_filter != SG_FILTER_NONE, VALIDATE_SAMPLERDESC_MAGFILTER_NONE);
         return _sg_validate_end();
     #endif
 }
@@ -15166,6 +15193,34 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 _SG_VALIDATE(bindings->fs.samplers[i].id == SG_INVALID_ID, VALIDATE_ABND_FS_UNEXPECTED_SAMPLER_BINDING);
             }
         }
+
+        // if image-sampler info was provided in shader desc, check that that the mipmap filter matches image num mipmaps
+        for (int img_smp_index = 0; img_smp_index < pip->shader->cmn.stage[SG_SHADERSTAGE_VS].num_image_samplers; img_smp_index++) {
+            const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_VS];
+            const int img_index = stage->image_samplers[img_smp_index].image_slot;
+            const int smp_index = stage->image_samplers[img_smp_index].sampler_slot;
+            const _sg_image_t* img = _sg_lookup_image(&_sg.pools, bindings->vs.images[img_index].id);
+            const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, bindings->vs.samplers[smp_index].id);
+            if (img && smp) {
+                if (img->cmn.num_mipmaps == 1) {
+                    _SG_VALIDATE(smp->cmn.mipmap_filter == SG_FILTER_NONE, VALIDATE_ABND_VS_IMG_SMP_MIPMAPS);
+                }
+            }
+        }
+        for (int img_smp_index = 0; img_smp_index < pip->shader->cmn.stage[SG_SHADERSTAGE_FS].num_image_samplers; img_smp_index++) {
+            const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_FS];
+            const int img_index = stage->image_samplers[img_smp_index].image_slot;
+            const int smp_index = stage->image_samplers[img_smp_index].sampler_slot;
+            SOKOL_ASSERT(img_index < stage->num_images);
+            SOKOL_ASSERT(smp_index < stage->num_samplers);
+            const _sg_image_t* img = _sg_lookup_image(&_sg.pools, bindings->fs.images[img_index].id);
+            const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, bindings->fs.samplers[smp_index].id);
+            if (img && smp) {
+                if (img->cmn.num_mipmaps == 1) {
+                    _SG_VALIDATE(smp->cmn.mipmap_filter == SG_FILTER_NONE, VALIDATE_ABND_FS_IMG_SMP_MIPMAPS);
+                }
+            }
+        }
         return _sg_validate_end();
     #endif
 }
@@ -15299,7 +15354,7 @@ _SOKOL_PRIVATE sg_sampler_desc _sg_sampler_desc_defaults(const sg_sampler_desc* 
     sg_sampler_desc def = *desc;
     def.min_filter = _sg_def(def.min_filter, SG_FILTER_NEAREST);
     def.mag_filter = _sg_def(def.mag_filter, SG_FILTER_NEAREST);
-    def.mipmap_filter = _sg_def(def.mipmap_filter, SG_FILTER_NEAREST);
+    def.mipmap_filter = _sg_def(def.mipmap_filter, SG_FILTER_NONE);
     def.wrap_u = _sg_def(def.wrap_u, SG_WRAP_REPEAT);
     def.wrap_v = _sg_def(def.wrap_v, SG_WRAP_REPEAT);
     def.wrap_w = _sg_def(def.wrap_w, SG_WRAP_REPEAT);
