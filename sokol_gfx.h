@@ -2462,12 +2462,12 @@ typedef struct sg_shader_sampler_desc {
     sg_sampler_type type;
 } sg_shader_sampler_desc;
 
-// combined image samplers are only needed for GL
-typedef struct sg_shader_image_sampler_desc {
-    const char* name;   // required for GLSL
+typedef struct sg_shader_image_sampler_pair_desc {
+    bool valid;
     int image_slot;     // index into sg_shader_stage_desc.images
     int sampler_slot;   // index into sg_shader_stage_desc.samplers
-} sg_shader_image_sampler_desc;
+    const char* name;   // only required for GLSL, ignored in D3D and Metal
+} sg_shader_image_sampler_pair_desc;
 
 typedef struct sg_shader_stage_desc {
     const char* source;
@@ -2477,7 +2477,7 @@ typedef struct sg_shader_stage_desc {
     sg_shader_uniform_block_desc uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
     sg_shader_image_desc images[SG_MAX_SHADERSTAGE_IMAGES];
     sg_shader_sampler_desc samplers[SG_MAX_SHADERSTAGE_SAMPLERS];
-    sg_shader_image_sampler_desc image_samplers[SG_MAX_SHADERSTAGE_IMAGES];
+    sg_shader_image_sampler_pair_desc image_sampler_pairs[SG_MAX_SHADERSTAGE_IMAGES];
 } sg_shader_stage_desc;
 
 typedef struct sg_shader_desc {
@@ -2961,11 +2961,15 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_STD140_ARRAY_TYPE, "uniform arrays only allowed for FLOAT4, INT4, MAT4 in std140 layout") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_CONT_IMAGES, "shader stage images must occupy continuous slots (sg_shader_desc.vs|fs.images[])") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_CONT_SAMPLERS, "shader stage samplers must occupy continuous slots (sg_shader_desc.vs|fs.samplers[])") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_IMAGE_SLOT_OUT_OF_RANGE, "shader stage image-samplers: image slot index is out of range (sg_shader_desc.vs|fs.image_samplers[].image_slot)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_SAMPLER_SLOT_OUT_OF_RANGE, "shader stage image-samplers: image slot index is out of range (sg_shader_desc.vs|fs.image_samplers[].sampler_slot)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_NOT_REFERENCED_BY_IMAGE_SAMPLERS, "shader stage image-samplers: one or more images are note referenced by combined image-samplers (sg_shader_desc.vs|fs.image_samplers[].image_slot)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_NOT_REFERENCED_BY_IMAGE_SAMPLERS, "shader stage image-samplers: one or more samplers are note referenced by combined image-samplers (sg_shader_desc.vs|fs.image_samplers[].sampler_slot)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_CONT_IMAGE_SAMPLERS, "shader stage combined image samplers must occupy continuous slots (sg_shader_desc.vs|fs.image_samplers[])") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_IMAGE_SLOT_OUT_OF_RANGE, "shader stage image-samplers: image slot index is out of range (sg_shader_desc.vs|fs.image_sampler_pairs[].image_slot)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_SAMPLER_SLOT_OUT_OF_RANGE, "shader stage image-samplers: image slot index is out of range (sg_shader_desc.vs|fs.image_sampler_pairs[].sampler_slot)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_NAME_REQUIRED_FOR_GL, "shader stage image-sampler pairs must be named in GL (sg_shader_desc.vs|fs.image_sampler_pairs[].name)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_HAS_NAME_BUT_NOT_VALID, "shader stage image-sampler pair has name but .valid field not true") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_HAS_IMAGE_BUT_NOT_VALID, "shader stage image-sampler pair has .image_slot != 0 but .valid field not true") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_HAS_SAMPLER_BUT_NOT_VALID, "shader stage image-sampler pair .sampler_slot != 0 but .valid field not true") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_NOT_REFERENCED_BY_IMAGE_SAMPLER_PAIRS, "shader stage image-samplers pairs: one or more images are note referenced by combined image-samplers (sg_shader_desc.vs|fs.image_sampler_pairs[].image_slot)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_NOT_REFERENCED_BY_IMAGE_SAMPLER_PAIRS, "shader stage image-sampler pairs: one or more samplers are note referenced by combined image-samplers (sg_shader_desc.vs|fs.image_sampler_pairs[].sampler_slot)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_CONT_IMAGE_SAMPLER_PAIRS, "shader stage image sampler pairs must occupy continuous slots (sg_shader_desc.vs|fs.image_samplers[])") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_ATTR_SEMANTICS, "D3D11 backend requires vertex attribute semantics") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_ATTR_STRING_TOO_LONG, "vertex attribute name/semantic string too long (max len 16)") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_CANARY, "sg_pipeline_desc not initialized") \
@@ -4159,7 +4163,7 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
         }
         SOKOL_ASSERT(stage->num_image_samplers == 0);
         for (int img_smp_index = 0; img_smp_index < SG_MAX_SHADERSTAGE_IMAGES; img_smp_index++) {
-            const sg_shader_image_sampler_desc* img_smp_desc = &stage_desc->image_samplers[img_smp_index];
+            const sg_shader_image_sampler_pair_desc* img_smp_desc = &stage_desc->image_sampler_pairs[img_smp_index];
             if (img_smp_desc->name == 0) {
                 break;
             }
@@ -7395,7 +7399,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
         const _sg_shader_stage_t* stage = &shd->cmn.stage[stage_index];
         _sg_gl_shader_stage_t* gl_stage = &shd->gl.stage[stage_index];
         for (int img_smp_index = 0; img_smp_index < stage->num_image_samplers; img_smp_index++) {
-            const sg_shader_image_sampler_desc* img_smp_desc = &stage_desc->image_samplers[img_smp_index];
+            const sg_shader_image_sampler_pair_desc* img_smp_desc = &stage_desc->image_sampler_pairs[img_smp_index];
             _sg_gl_shader_image_sampler_t* gl_img_smp = &gl_stage->image_samplers[img_smp_index];
             SOKOL_ASSERT(img_smp_desc->name);
             GLint gl_loc = glGetUniformLocation(gl_prog, img_smp_desc->name);
@@ -14799,19 +14803,24 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                     samplers_continuous = false;
                 }
             }
-            #if defined(_SOKOL_ANY_GL)
             bool image_samplers_continuous = true;
             int num_image_samplers = 0;
             for (int img_smp_index = 0; img_smp_index < SG_MAX_SHADERSTAGE_IMAGES; img_smp_index++) {
-                const sg_shader_image_sampler_desc* img_smp_desc = &stage_desc->image_samplers[img_smp_index];
-                if (img_smp_desc->name != 0) {
-                    _SG_VALIDATE(image_samplers_continuous, VALIDATE_SHADERDESC_NO_CONT_IMAGE_SAMPLERS);
+                const sg_shader_image_sampler_pair_desc* img_smp_desc = &stage_desc->image_sampler_pairs[img_smp_index];
+                if (img_smp_desc->valid) {
+                    _SG_VALIDATE(image_samplers_continuous, VALIDATE_SHADERDESC_NO_CONT_IMAGE_SAMPLER_PAIRS);
                     num_image_samplers++;
                     const bool img_slot_in_range = (img_smp_desc->image_slot >= 0) && (img_smp_desc->image_slot < SG_MAX_SHADERSTAGE_IMAGES);
                     const bool smp_slot_in_range = (img_smp_desc->sampler_slot >= 0) && (img_smp_desc->sampler_slot < SG_MAX_SHADERSTAGE_SAMPLERS);
-                    _SG_VALIDATE(img_slot_in_range && (img_smp_desc->image_slot < num_images), VALIDATE_SHADERDESC_IMAGE_SAMPLER_IMAGE_SLOT_OUT_OF_RANGE);
-                    _SG_VALIDATE(smp_slot_in_range && (img_smp_desc->sampler_slot < num_samplers), VALIDATE_SHADERDESC_IMAGE_SAMPLER_IMAGE_SLOT_OUT_OF_RANGE);
+                    _SG_VALIDATE(img_slot_in_range && (img_smp_desc->image_slot < num_images), VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_IMAGE_SLOT_OUT_OF_RANGE);
+                    _SG_VALIDATE(smp_slot_in_range && (img_smp_desc->sampler_slot < num_samplers), VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_IMAGE_SLOT_OUT_OF_RANGE);
+                    #if defined(_SOKOL_ANY_GL)
+                    _SG_VALIDATE(img_smp_desc->name != 0, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_NAME_REQUIRED_FOR_GL);
+                    #endif
                 } else {
+                    _SG_VALIDATE(img_smp_desc->name == 0, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_HAS_NAME_BUT_NOT_VALID);
+                    _SG_VALIDATE(img_smp_desc->image_slot == 0, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_HAS_IMAGE_BUT_NOT_VALID);
+                    _SG_VALIDATE(img_smp_desc->sampler_slot == 0, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_HAS_SAMPLER_BUT_NOT_VALID);
                     image_samplers_continuous = false;
                 }
             }
@@ -14821,13 +14830,12 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             uint32_t actual_img_slot_mask = 0;
             uint32_t actual_smp_slot_mask = 0;
             for (int img_smp_index = 0; img_smp_index < num_image_samplers; img_smp_index++) {
-                const sg_shader_image_sampler_desc* img_smp_desc = &stage_desc->image_samplers[img_smp_index];
+                const sg_shader_image_sampler_pair_desc* img_smp_desc = &stage_desc->image_sampler_pairs[img_smp_index];
                 actual_img_slot_mask |= (1 << ((uint32_t)img_smp_desc->image_slot & 31));
                 actual_smp_slot_mask |= (1 << ((uint32_t)img_smp_desc->sampler_slot & 31));
             }
-            _SG_VALIDATE(expected_img_slot_mask == actual_img_slot_mask, VALIDATE_SHADERDESC_IMAGE_NOT_REFERENCED_BY_IMAGE_SAMPLERS);
-            _SG_VALIDATE(expected_smp_slot_mask == actual_smp_slot_mask, VALIDATE_SHADERDESC_SAMPLER_NOT_REFERENCED_BY_IMAGE_SAMPLERS);
-            #endif
+            _SG_VALIDATE(expected_img_slot_mask == actual_img_slot_mask, VALIDATE_SHADERDESC_IMAGE_NOT_REFERENCED_BY_IMAGE_SAMPLER_PAIRS);
+            _SG_VALIDATE(expected_smp_slot_mask == actual_smp_slot_mask, VALIDATE_SHADERDESC_SAMPLER_NOT_REFERENCED_BY_IMAGE_SAMPLER_PAIRS);
         }
         return _sg_validate_end();
     #endif
