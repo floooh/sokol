@@ -2967,7 +2967,7 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_HAS_NAME_BUT_NOT_VALID, "shader stage image-sampler pair has name but .valid field not true") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_HAS_IMAGE_BUT_NOT_VALID, "shader stage image-sampler pair has .image_slot != 0 but .valid field not true") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_HAS_SAMPLER_BUT_NOT_VALID, "shader stage image-sampler pair .sampler_slot != 0 but .valid field not true") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_NOT_REFERENCED_BY_IMAGE_SAMPLER_PAIRS, "shader stage image-samplers pairs: one or more images are note referenced by combined image-samplers (sg_shader_desc.vs|fs.image_sampler_pairs[].image_slot)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_NOT_REFERENCED_BY_IMAGE_SAMPLER_PAIRS, "shader stage image-sampler pairs: one or more images are note referenced by combined image-samplers (sg_shader_desc.vs|fs.image_sampler_pairs[].image_slot)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_NOT_REFERENCED_BY_IMAGE_SAMPLER_PAIRS, "shader stage image-sampler pairs: one or more samplers are note referenced by combined image-samplers (sg_shader_desc.vs|fs.image_sampler_pairs[].sampler_slot)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_CONT_IMAGE_SAMPLER_PAIRS, "shader stage image sampler pairs must occupy continuous slots (sg_shader_desc.vs|fs.image_samplers[])") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_ATTR_SEMANTICS, "D3D11 backend requires vertex attribute semantics") \
