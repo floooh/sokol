@@ -1293,6 +1293,7 @@ enum {
     SG_MAX_VERTEX_BUFFERS = 8,
     SG_MAX_SHADERSTAGE_IMAGES = 12,
     SG_MAX_SHADERSTAGE_SAMPLERS = 8,
+    SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS = 12,
     SG_MAX_SHADERSTAGE_UBS = 4,
     SG_MAX_UB_MEMBERS = 16,
     SG_MAX_VERTEX_ATTRIBUTES = 16,
@@ -2453,20 +2454,22 @@ typedef struct sg_shader_uniform_block_desc {
 } sg_shader_uniform_block_desc;
 
 typedef struct sg_shader_image_desc {
+    bool used;
+    bool multisampled;
     sg_image_type image_type;
     sg_image_sample_type sample_type;
-    bool multisampled;
 } sg_shader_image_desc;
 
 typedef struct sg_shader_sampler_desc {
-    sg_sampler_type type;
+    bool used;
+    sg_sampler_type sampler_type;
 } sg_shader_sampler_desc;
 
 typedef struct sg_shader_image_sampler_pair_desc {
-    bool valid;
-    int image_slot;     // index into sg_shader_stage_desc.images
-    int sampler_slot;   // index into sg_shader_stage_desc.samplers
-    const char* name;   // only required for GLSL, ignored in D3D and Metal
+    bool used;
+    int image_slot;
+    int sampler_slot;
+    const char* glsl_name;
 } sg_shader_image_sampler_pair_desc;
 
 typedef struct sg_shader_stage_desc {
@@ -2477,7 +2480,7 @@ typedef struct sg_shader_stage_desc {
     sg_shader_uniform_block_desc uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
     sg_shader_image_desc images[SG_MAX_SHADERSTAGE_IMAGES];
     sg_shader_sampler_desc samplers[SG_MAX_SHADERSTAGE_SAMPLERS];
-    sg_shader_image_sampler_pair_desc image_sampler_pairs[SG_MAX_SHADERSTAGE_IMAGES];
+    sg_shader_image_sampler_pair_desc image_sampler_pairs[SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS];
 } sg_shader_stage_desc;
 
 typedef struct sg_shader_desc {
@@ -2964,9 +2967,9 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_IMAGE_SLOT_OUT_OF_RANGE, "shader stage image-samplers: image slot index is out of range (sg_shader_desc.vs|fs.image_sampler_pairs[].image_slot)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_SAMPLER_SLOT_OUT_OF_RANGE, "shader stage image-samplers: image slot index is out of range (sg_shader_desc.vs|fs.image_sampler_pairs[].sampler_slot)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_NAME_REQUIRED_FOR_GL, "shader stage image-sampler pairs must be named in GL (sg_shader_desc.vs|fs.image_sampler_pairs[].name)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_HAS_NAME_BUT_NOT_VALID, "shader stage image-sampler pair has name but .valid field not true") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_HAS_IMAGE_BUT_NOT_VALID, "shader stage image-sampler pair has .image_slot != 0 but .valid field not true") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_HAS_SAMPLER_BUT_NOT_VALID, "shader stage image-sampler pair .sampler_slot != 0 but .valid field not true") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_HAS_NAME_BUT_NOT_USED, "shader stage image-sampler pair has name but .used field not true") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_HAS_IMAGE_BUT_NOT_USED, "shader stage image-sampler pair has .image_slot != 0 but .used field not true") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_HAS_SAMPLER_BUT_NOT_USED, "shader stage image-sampler pair .sampler_slot != 0 but .used field not true") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_NOT_REFERENCED_BY_IMAGE_SAMPLER_PAIRS, "shader stage image-sampler pairs: one or more images are note referenced by combined image-samplers (sg_shader_desc.vs|fs.image_sampler_pairs[].image_slot)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_NOT_REFERENCED_BY_IMAGE_SAMPLER_PAIRS, "shader stage image-sampler pairs: one or more samplers are note referenced by combined image-samplers (sg_shader_desc.vs|fs.image_sampler_pairs[].sampler_slot)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_CONT_IMAGE_SAMPLER_PAIRS, "shader stage image sampler pairs must occupy continuous slots (sg_shader_desc.vs|fs.image_samplers[])") \
@@ -4102,10 +4105,11 @@ typedef struct {
 typedef struct {
     sg_image_type image_type;
     sg_image_sample_type sample_type;
+    bool multisampled;
 } _sg_shader_image_t;
 
 typedef struct {
-    sg_sampler_type type;
+    sg_sampler_type sampler_type;
 } _sg_shader_sampler_t;
 
 // combined image sampler mappings, only needed on GL
@@ -4122,7 +4126,7 @@ typedef struct {
     _sg_shader_uniform_block_t uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
     _sg_shader_image_t images[SG_MAX_SHADERSTAGE_IMAGES];
     _sg_shader_sampler_t samplers[SG_MAX_SHADERSTAGE_SAMPLERS];
-    _sg_shader_image_sampler_t image_samplers[SG_MAX_SHADERSTAGE_IMAGES];
+    _sg_shader_image_sampler_t image_samplers[SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS];
 } _sg_shader_stage_t;
 
 typedef struct {
@@ -4145,9 +4149,10 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
         SOKOL_ASSERT(stage->num_images == 0);
         for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
             const sg_shader_image_desc* img_desc = &stage_desc->images[img_index];
-            if (img_desc->image_type == _SG_IMAGETYPE_DEFAULT) {
+            if (!img_desc->used) {
                 break;
             }
+            stage->images[img_index].multisampled = img_desc->multisampled;
             stage->images[img_index].image_type = img_desc->image_type;
             stage->images[img_index].sample_type = img_desc->sample_type;
             stage->num_images++;
@@ -4155,16 +4160,16 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
         SOKOL_ASSERT(stage->num_samplers == 0);
         for (int smp_index = 0; smp_index < SG_MAX_SHADERSTAGE_SAMPLERS; smp_index++) {
             const sg_shader_sampler_desc* smp_desc = &stage_desc->samplers[smp_index];
-            if (smp_desc->type == _SG_SAMPLERTYPE_DEFAULT) {
+            if (!smp_desc->used) {
                 break;
             }
-            stage->samplers[smp_index].type = smp_desc->type;
+            stage->samplers[smp_index].sampler_type = smp_desc->sampler_type;
             stage->num_samplers++;
         }
         SOKOL_ASSERT(stage->num_image_samplers == 0);
-        for (int img_smp_index = 0; img_smp_index < SG_MAX_SHADERSTAGE_IMAGES; img_smp_index++) {
+        for (int img_smp_index = 0; img_smp_index < SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS; img_smp_index++) {
             const sg_shader_image_sampler_pair_desc* img_smp_desc = &stage_desc->image_sampler_pairs[img_smp_index];
-            if (!img_smp_desc->valid) {
+            if (!img_smp_desc->used) {
                 break;
             }
             SOKOL_ASSERT((img_smp_desc->image_slot >= 0) && (img_smp_desc->image_slot < stage->num_images));
@@ -4357,7 +4362,7 @@ typedef struct {
 
 typedef struct {
     _sg_gl_uniform_block_t uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
-    _sg_gl_shader_image_sampler_t image_samplers[SG_MAX_SHADERSTAGE_IMAGES];
+    _sg_gl_shader_image_sampler_t image_samplers[SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS];
 } _sg_gl_shader_stage_t;
 
 typedef struct {
@@ -4436,7 +4441,7 @@ typedef struct {
     GLuint sampler;
 } _sg_gl_cache_texture_sampler_bind_slot;
 
-#define _SG_GL_TEXTURE_SAMPLER_CACHE_SIZE (SG_MAX_SHADERSTAGE_IMAGES * SG_NUM_SHADER_STAGES)
+#define _SG_GL_TEXTURE_SAMPLER_CACHE_SIZE (SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS * SG_NUM_SHADER_STAGES)
 
 typedef struct {
     sg_depth_state depth;
@@ -7401,15 +7406,15 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
         for (int img_smp_index = 0; img_smp_index < stage->num_image_samplers; img_smp_index++) {
             const sg_shader_image_sampler_pair_desc* img_smp_desc = &stage_desc->image_sampler_pairs[img_smp_index];
             _sg_gl_shader_image_sampler_t* gl_img_smp = &gl_stage->image_samplers[img_smp_index];
-            SOKOL_ASSERT(img_smp_desc->name);
-            GLint gl_loc = glGetUniformLocation(gl_prog, img_smp_desc->name);
+            SOKOL_ASSERT(img_smp_desc->glsl_name);
+            GLint gl_loc = glGetUniformLocation(gl_prog, img_smp_desc->glsl_name);
             if (gl_loc != -1) {
                 gl_img_smp->gl_tex_slot = gl_tex_slot++;
                 glUniform1i(gl_loc, gl_img_smp->gl_tex_slot);
             } else {
                 gl_img_smp->gl_tex_slot = -1;
                 _SG_ERROR(GL_TEXTURE_NAME_NOT_FOUND_IN_SHADER);
-                _SG_LOGMSG(GL_TEXTURE_NAME_NOT_FOUND_IN_SHADER, img_smp_desc->name);
+                _SG_LOGMSG(GL_TEXTURE_NAME_NOT_FOUND_IN_SHADER, img_smp_desc->glsl_name);
             }
         }
     }
@@ -14785,7 +14790,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             int num_images = 0;
             for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
                 const sg_shader_image_desc* img_desc = &stage_desc->images[img_index];
-                if (img_desc->image_type != _SG_IMAGETYPE_DEFAULT) {
+                if (img_desc->used) {
                     _SG_VALIDATE(images_continuous, VALIDATE_SHADERDESC_NO_CONT_IMAGES);
                     num_images++;
                 } else {
@@ -14796,7 +14801,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             int num_samplers = 0;
             for (int smp_index = 0; smp_index < SG_MAX_SHADERSTAGE_SAMPLERS; smp_index++) {
                 const sg_shader_sampler_desc* smp_desc = &stage_desc->samplers[smp_index];
-                if (smp_desc->type != _SG_SAMPLERTYPE_DEFAULT) {
+                if (smp_desc->used) {
                     _SG_VALIDATE(samplers_continuous, VALIDATE_SHADERDESC_NO_CONT_SAMPLERS);
                     num_samplers++;
                 } else {
@@ -14805,9 +14810,9 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             }
             bool image_samplers_continuous = true;
             int num_image_samplers = 0;
-            for (int img_smp_index = 0; img_smp_index < SG_MAX_SHADERSTAGE_IMAGES; img_smp_index++) {
+            for (int img_smp_index = 0; img_smp_index < SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS; img_smp_index++) {
                 const sg_shader_image_sampler_pair_desc* img_smp_desc = &stage_desc->image_sampler_pairs[img_smp_index];
-                if (img_smp_desc->valid) {
+                if (img_smp_desc->used) {
                     _SG_VALIDATE(image_samplers_continuous, VALIDATE_SHADERDESC_NO_CONT_IMAGE_SAMPLER_PAIRS);
                     num_image_samplers++;
                     const bool img_slot_in_range = (img_smp_desc->image_slot >= 0) && (img_smp_desc->image_slot < SG_MAX_SHADERSTAGE_IMAGES);
@@ -14815,12 +14820,12 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                     _SG_VALIDATE(img_slot_in_range && (img_smp_desc->image_slot < num_images), VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_IMAGE_SLOT_OUT_OF_RANGE);
                     _SG_VALIDATE(smp_slot_in_range && (img_smp_desc->sampler_slot < num_samplers), VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_IMAGE_SLOT_OUT_OF_RANGE);
                     #if defined(_SOKOL_ANY_GL)
-                    _SG_VALIDATE(img_smp_desc->name != 0, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_NAME_REQUIRED_FOR_GL);
+                    _SG_VALIDATE(img_smp_desc->glsl_name != 0, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_NAME_REQUIRED_FOR_GL);
                     #endif
                 } else {
-                    _SG_VALIDATE(img_smp_desc->name == 0, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_HAS_NAME_BUT_NOT_VALID);
-                    _SG_VALIDATE(img_smp_desc->image_slot == 0, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_HAS_IMAGE_BUT_NOT_VALID);
-                    _SG_VALIDATE(img_smp_desc->sampler_slot == 0, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_HAS_SAMPLER_BUT_NOT_VALID);
+                    _SG_VALIDATE(img_smp_desc->glsl_name == 0, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_HAS_NAME_BUT_NOT_USED);
+                    _SG_VALIDATE(img_smp_desc->image_slot == 0, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_HAS_IMAGE_BUT_NOT_USED);
+                    _SG_VALIDATE(img_smp_desc->sampler_slot == 0, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_HAS_SAMPLER_BUT_NOT_USED);
                     image_samplers_continuous = false;
                 }
             }
@@ -15144,13 +15149,13 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         // has expected vertex shader image samplers
         for (int i = 0; i < SG_MAX_SHADERSTAGE_SAMPLERS; i++) {
             const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_VS];
-            if (stage->samplers[i].type != _SG_SAMPLERTYPE_DEFAULT) {
+            if (stage->samplers[i].sampler_type != _SG_SAMPLERTYPE_DEFAULT) {
                 _SG_VALIDATE(bindings->vs.samplers[i].id != SG_INVALID_ID, VALIDATE_ABND_VS_EXPECTED_SAMPLER_BINDING);
                 if (bindings->vs.samplers[i].id != SG_INVALID_ID) {
                     const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, bindings->vs.samplers[i].id);
                     _SG_VALIDATE(smp != 0, VALIDATE_ABND_VS_SMP_EXISTS);
                     if (smp) {
-                        if (stage->samplers[i].type == SG_SAMPLERTYPE_COMPARE) {
+                        if (stage->samplers[i].sampler_type == SG_SAMPLERTYPE_COMPARE) {
                             _SG_VALIDATE(smp->cmn.compare != SG_COMPAREFUNC_NEVER, VALIDATE_ABND_VS_UNEXPECTED_SAMPLER_COMPARE_NEVER);
                         } else {
                             _SG_VALIDATE(smp->cmn.compare == SG_COMPAREFUNC_NEVER, VALIDATE_ABND_VS_EXPECTED_SAMPLER_COMPARE_NEVER);
@@ -15184,13 +15189,13 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         // has expected fragment shader samplers
         for (int i = 0; i < SG_MAX_SHADERSTAGE_SAMPLERS; i++) {
             const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_FS];
-            if (stage->samplers[i].type != _SG_SAMPLERTYPE_DEFAULT) {
+            if (stage->samplers[i].sampler_type != _SG_SAMPLERTYPE_DEFAULT) {
                 _SG_VALIDATE(bindings->fs.samplers[i].id != SG_INVALID_ID, VALIDATE_ABND_FS_EXPECTED_SAMPLER_BINDING);
                 if (bindings->fs.samplers[i].id != SG_INVALID_ID) {
                     const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, bindings->fs.samplers[i].id);
                     _SG_VALIDATE(smp != 0, VALIDATE_ABND_FS_SMP_EXISTS);
                     if (smp) {
-                        if (stage->samplers[i].type == SG_SAMPLERTYPE_COMPARE) {
+                        if (stage->samplers[i].sampler_type == SG_SAMPLERTYPE_COMPARE) {
                             _SG_VALIDATE(smp->cmn.compare != SG_COMPAREFUNC_NEVER, VALIDATE_ABND_FS_UNEXPECTED_SAMPLER_COMPARE_NEVER);
                         } else {
                             _SG_VALIDATE(smp->cmn.compare == SG_COMPAREFUNC_NEVER, VALIDATE_ABND_FS_EXPECTED_SAMPLER_COMPARE_NEVER);
@@ -15408,10 +15413,18 @@ _SOKOL_PRIVATE sg_shader_desc _sg_shader_desc_defaults(const sg_shader_desc* des
         }
         for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
             sg_shader_image_desc* img_desc = &stage_desc->images[img_index];
-            if (img_desc->image_type == _SG_IMAGETYPE_DEFAULT) {
+            if (!img_desc->used) {
                 break;
             }
+            img_desc->image_type = _sg_def(img_desc->image_type, SG_IMAGETYPE_2D);
             img_desc->sample_type = _sg_def(img_desc->sample_type, SG_IMAGESAMPLETYPE_FLOAT);
+        }
+        for (int smp_index = 0; smp_index < SG_MAX_SHADERSTAGE_SAMPLERS; smp_index++) {
+            sg_shader_sampler_desc* smp_desc = &stage_desc->samplers[smp_index];
+            if (!smp_desc->used) {
+                break;
+            }
+            smp_desc->sampler_type = _sg_def(smp_desc->sampler_type, SG_SAMPLERTYPE_SAMPLE);
         }
     }
     return def;
