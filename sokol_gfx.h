@@ -7645,26 +7645,32 @@ _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
     if (_sg.gl.cur_pass) {
         const _sg_pass_t* pass = _sg.gl.cur_pass;
         SOKOL_ASSERT(pass->slot.id == _sg.gl.cur_pass_id.id);
-        bool fb_bound = false;
+        bool fb_read_bound = false;
+        bool fb_draw_bound = true;
         const int num_atts = pass->cmn.num_color_atts;
         for (int i = 0; i < num_atts; i++) {
             // perform MSAA resolve if needed
             if (pass->gl.msaa_resolve_framebuffer[i] != 0) {
-                if (!fb_bound) {
+                if (!fb_read_bound) {
                     SOKOL_ASSERT(pass->gl.fb);
                     glBindFramebuffer(GL_READ_FRAMEBUFFER, pass->gl.fb);
-                    fb_bound = true;
+                    fb_read_bound = true;
                 }
                 const int w = pass->gl.color_atts[i].image->cmn.width;
                 const int h = pass->gl.color_atts[i].image->cmn.height;
                 glBindFramebuffer(GL_DRAW_FRAMEBUFFER, pass->gl.msaa_resolve_framebuffer[i]);
                 glReadBuffer((GLenum)(GL_COLOR_ATTACHMENT0 + i));
                 glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+                fb_draw_bound = true;
             }
         }
 
         // invalidate framebuffers
         #if defined(SOKOL_GLES3)
+        // need to restore framebuffer binding before invalidate if the MSAA resolve had changed the binding
+        if (fb_draw_bound) {
+            glBindFramebuffer(GL_FRAMEBUFFER, pass->gl.fb);
+        }
         GLenum invalidate_atts[SG_MAX_COLOR_ATTACHMENTS + 2] = { 0 };
         int att_index = 0;
         for (int i = 0; i < num_atts; i++) {
@@ -7679,7 +7685,7 @@ _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
             invalidate_atts[att_index++] = GL_STENCIL_ATTACHMENT;
         }
         if (att_index > 0) {
-            glInvalidateFramebuffer(GL_FRAMEBUFFER, att_index, invalidate_atts);
+            glInvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, att_index, invalidate_atts);
         }
         #endif
     }
