@@ -7666,6 +7666,7 @@ _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
         }
 
         // invalidate framebuffers
+        _SOKOL_UNUSED(fb_draw_bound);
         #if defined(SOKOL_GLES3)
         // need to restore framebuffer binding before invalidate if the MSAA resolve had changed the binding
         if (fb_draw_bound) {
