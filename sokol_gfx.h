@@ -2903,6 +2903,7 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(DEALLOC_PASS_INVALID_STATE, "sg_dealloc_pass(): pass must be in ALLOC state") \
     _SG_LOGITEM_XMACRO(INIT_BUFFER_INVALID_STATE, "sg_init_buffer(): buffer must be in ALLOC state") \
     _SG_LOGITEM_XMACRO(INIT_IMAGE_INVALID_STATE, "sg_init_image(): image must be in ALLOC state") \
+    _SG_LOGITEM_XMACRO(INIT_SAMPLER_INVALID_STATE, "sg_init_sampler(): sampler must be in ALLOC state") \
     _SG_LOGITEM_XMACRO(INIT_SHADER_INVALID_STATE, "sg_init_shader(): shader must be in ALLOC state") \
     _SG_LOGITEM_XMACRO(INIT_PIPELINE_INVALID_STATE, "sg_init_pipeline(): pipeline must be in ALLOC state") \
     _SG_LOGITEM_XMACRO(INIT_PASS_INVALID_STATE, "sg_init_pass(): pass must be in ALLOC state") \
@@ -16176,6 +16177,21 @@ SOKOL_API_IMPL void sg_init_image(sg_image img_id, const sg_image_desc* desc) {
         }
     }
     _SG_TRACE_ARGS(init_image, img_id, &desc_def);
+}
+
+SOKOL_API_IMPL void sg_init_sampler(sg_sampler smp_id, const sg_sampler_desc* desc) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_sampler_desc desc_def = _sg_sampler_desc_defaults(desc);
+    _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, smp_id.id);
+    if (smp) {
+        if (smp->slot.state == SG_RESOURCESTATE_ALLOC) {
+            _sg_init_sampler(smp, &desc_def);
+            SOKOL_ASSERT((smp->slot.state == SG_RESOURCESTATE_VALID) || (smp->slot.state == SG_RESOURCESTATE_FAILED));
+        } else {
+            _SG_ERROR(INIT_SAMPLER_INVALID_STATE);
+        }
+    }
+    _SG_TRACE_ARGS(init_sampler, smp_id, &desc_def);
 }
 
 SOKOL_API_IMPL void sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc) {
