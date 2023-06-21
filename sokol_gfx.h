@@ -2759,16 +2759,6 @@ typedef struct sg_trace_hooks {
     void (*fail_pass)(sg_pass pass_id, void* user_data);
     void (*push_debug_group)(const char* name, void* user_data);
     void (*pop_debug_group)(void* user_data);
-    void (*err_buffer_pool_exhausted)(void* user_data);
-    void (*err_image_pool_exhausted)(void* user_data);
-    void (*err_sampler_pool_exhausted)(void* user_data);
-    void (*err_shader_pool_exhausted)(void* user_data);
-    void (*err_pipeline_pool_exhausted)(void* user_data);
-    void (*err_pass_pool_exhausted)(void* user_data);
-    void (*err_context_mismatch)(void* user_data);
-    void (*err_pass_invalid)(void* user_data);
-    void (*err_draw_invalid)(void* user_data);
-    void (*err_bindings_invalid)(void* user_data);
 } sg_trace_hooks;
 
 /*
@@ -15525,7 +15515,6 @@ _SOKOL_PRIVATE sg_buffer _sg_alloc_buffer(void) {
     } else {
         res.id = SG_INVALID_ID;
         _SG_ERROR(BUFFER_POOL_EXHAUSTED);
-        _SG_TRACE_NOARGS(err_buffer_pool_exhausted);
     }
     return res;
 }
@@ -15538,7 +15527,6 @@ _SOKOL_PRIVATE sg_image _sg_alloc_image(void) {
     } else {
         res.id = SG_INVALID_ID;
         _SG_ERROR(IMAGE_POOL_EXHAUSTED);
-        _SG_TRACE_NOARGS(err_image_pool_exhausted);
     }
     return res;
 }
@@ -15551,7 +15539,6 @@ _SOKOL_PRIVATE sg_sampler _sg_alloc_sampler(void) {
     } else {
         res.id = SG_INVALID_ID;
         _SG_ERROR(SAMPLER_POOL_EXHAUSTED);
-        _SG_TRACE_NOARGS(err_sampler_pool_exhausted);
     }
     return res;
 }
@@ -15564,7 +15551,6 @@ _SOKOL_PRIVATE sg_shader _sg_alloc_shader(void) {
     } else {
         res.id = SG_INVALID_ID;
         _SG_ERROR(SHADER_POOL_EXHAUSTED);
-        _SG_TRACE_NOARGS(err_shader_pool_exhausted);
     }
     return res;
 }
@@ -15577,7 +15563,6 @@ _SOKOL_PRIVATE sg_pipeline _sg_alloc_pipeline(void) {
     } else {
         res.id = SG_INVALID_ID;
         _SG_ERROR(PIPELINE_POOL_EXHAUSTED);
-        _SG_TRACE_NOARGS(err_pipeline_pool_exhausted);
     }
     return res;
 }
@@ -15590,7 +15575,6 @@ _SOKOL_PRIVATE sg_pass _sg_alloc_pass(void) {
     } else {
         res.id = SG_INVALID_ID;
         _SG_ERROR(PASS_POOL_EXHAUSTED);
-        _SG_TRACE_NOARGS(err_pass_pool_exhausted);
     }
     return res;
 }
@@ -15742,7 +15726,6 @@ _SOKOL_PRIVATE void _sg_uninit_buffer(_sg_buffer_t* buf) {
         _sg_reset_buffer_to_alloc_state(buf);
     } else {
         _SG_WARN(UNINIT_BUFFER_ACTIVE_CONTEXT_MISMATCH);
-        _SG_TRACE_NOARGS(err_context_mismatch);
     }
 }
 
@@ -15753,7 +15736,6 @@ _SOKOL_PRIVATE void _sg_uninit_image(_sg_image_t* img) {
         _sg_reset_image_to_alloc_state(img);
     } else {
         _SG_WARN(UNINIT_IMAGE_ACTIVE_CONTEXT_MISMATCH);
-        _SG_TRACE_NOARGS(err_context_mismatch);
     }
 }
 
@@ -15764,7 +15746,6 @@ _SOKOL_PRIVATE void _sg_uninit_sampler(_sg_sampler_t* smp) {
         _sg_reset_sampler_to_alloc_state(smp);
     } else {
         _SG_WARN(UNINIT_SAMPLER_ACTIVE_CONTEXT_MISMATCH);
-        _SG_TRACE_NOARGS(err_context_mismatch);
     }
 }
 
@@ -15775,7 +15756,6 @@ _SOKOL_PRIVATE void _sg_uninit_shader(_sg_shader_t* shd) {
         _sg_reset_shader_to_alloc_state(shd);
     } else {
         _SG_WARN(UNINIT_SHADER_ACTIVE_CONTEXT_MISMATCH);
-        _SG_TRACE_NOARGS(err_context_mismatch);
     }
 }
 
@@ -15786,7 +15766,6 @@ _SOKOL_PRIVATE void _sg_uninit_pipeline(_sg_pipeline_t* pip) {
         _sg_reset_pipeline_to_alloc_state(pip);
     } else {
         _SG_WARN(UNINIT_PIPELINE_ACTIVE_CONTEXT_MISMATCH);
-        _SG_TRACE_NOARGS(err_context_mismatch);
     }
 }
 
@@ -15797,7 +15776,6 @@ _SOKOL_PRIVATE void _sg_uninit_pass(_sg_pass_t* pass) {
         _sg_reset_pass_to_alloc_state(pass);
     } else {
         _SG_WARN(UNINIT_PASS_ACTIVE_CONTEXT_MISMATCH);
-        _SG_TRACE_NOARGS(err_context_mismatch);
     }
 }
 
@@ -16673,14 +16651,12 @@ SOKOL_API_IMPL void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_ac
         _SG_TRACE_ARGS(begin_pass, pass_id, &pa);
     } else {
         _sg.pass_valid = false;
-        _SG_TRACE_NOARGS(err_pass_invalid);
     }
 }
 
 SOKOL_API_IMPL void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left) {
     SOKOL_ASSERT(_sg.valid);
     if (!_sg.pass_valid) {
-        _SG_TRACE_NOARGS(err_pass_invalid);
         return;
     }
     _sg_apply_viewport(x, y, width, height, origin_top_left);
@@ -16694,7 +16670,6 @@ SOKOL_API_IMPL void sg_apply_viewportf(float x, float y, float width, float heig
 SOKOL_API_IMPL void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left) {
     SOKOL_ASSERT(_sg.valid);
     if (!_sg.pass_valid) {
-        _SG_TRACE_NOARGS(err_pass_invalid);
         return;
     }
     _sg_apply_scissor_rect(x, y, width, height, origin_top_left);
@@ -16710,11 +16685,9 @@ SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
     _sg.bindings_valid = false;
     if (!_sg_validate_apply_pipeline(pip_id)) {
         _sg.next_draw_valid = false;
-        _SG_TRACE_NOARGS(err_draw_invalid);
         return;
     }
     if (!_sg.pass_valid) {
-        _SG_TRACE_NOARGS(err_pass_invalid);
         return;
     }
     _sg.cur_pipeline = pip_id;
@@ -16732,7 +16705,6 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
     SOKOL_ASSERT((bindings->_start_canary == 0) && (bindings->_end_canary==0));
     if (!_sg_validate_apply_bindings(bindings)) {
         _sg.next_draw_valid = false;
-        _SG_TRACE_NOARGS(err_draw_invalid);
         return;
     }
     _sg.bindings_valid = true;
@@ -16814,8 +16786,6 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
         int ib_offset = bindings->index_buffer_offset;
         _sg_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs, vs_smps, num_vs_smps, fs_smps, num_fs_smps);
         _SG_TRACE_ARGS(apply_bindings, bindings);
-    } else {
-        _SG_TRACE_NOARGS(err_draw_invalid);
     }
 }
 
@@ -16826,15 +16796,12 @@ SOKOL_API_IMPL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
     if (!_sg_validate_apply_uniforms(stage, ub_index, data)) {
         _sg.next_draw_valid = false;
-        _SG_TRACE_NOARGS(err_draw_invalid);
         return;
     }
     if (!_sg.pass_valid) {
-        _SG_TRACE_NOARGS(err_pass_invalid);
         return;
     }
     if (!_sg.next_draw_valid) {
-        _SG_TRACE_NOARGS(err_draw_invalid);
         return;
     }
     _sg_apply_uniforms(stage, ub_index, data);
@@ -16852,22 +16819,18 @@ SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instance
         }
     #endif
     if (!_sg.pass_valid) {
-        _SG_TRACE_NOARGS(err_pass_invalid);
         return;
     }
     if (!_sg.next_draw_valid) {
-        _SG_TRACE_NOARGS(err_draw_invalid);
         return;
     }
     if (!_sg.bindings_valid) {
-        _SG_TRACE_NOARGS(err_bindings_invalid);
         return;
     }
     /* attempting to draw with zero elements or instances is not technically an
        error, but might be handled as an error in the backend API (e.g. on Metal)
     */
     if ((0 == num_elements) || (0 == num_instances)) {
-        _SG_TRACE_NOARGS(err_draw_invalid);
         return;
     }
     _sg_draw(base_element, num_elements, num_instances);
@@ -16877,7 +16840,6 @@ SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instance
 SOKOL_API_IMPL void sg_end_pass(void) {
     SOKOL_ASSERT(_sg.valid);
     if (!_sg.pass_valid) {
-        _SG_TRACE_NOARGS(err_pass_invalid);
         return;
     }
     _sg_end_pass();
