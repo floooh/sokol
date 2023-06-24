@@ -14801,8 +14801,8 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 }
             }
             // each image and sampler must be referenced by an image sampler
-            const uint32_t expected_img_slot_mask = (1 << num_images) - 1;
-            const uint32_t expected_smp_slot_mask = (1 << num_samplers) - 1;
+            const uint32_t expected_img_slot_mask = (1 << (uint32_t)num_images) - 1;
+            const uint32_t expected_smp_slot_mask = (1 << (uint32_t)num_samplers) - 1;
             uint32_t actual_img_slot_mask = 0;
             uint32_t actual_smp_slot_mask = 0;
             for (int img_smp_index = 0; img_smp_index < num_image_samplers; img_smp_index++) {
