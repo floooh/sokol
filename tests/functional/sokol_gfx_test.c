@@ -93,18 +93,19 @@ UTEST(sokol_gfx, init_shutdown) {
 UTEST(sokol_gfx, query_desc) {
     setup(&(sg_desc){
         .buffer_pool_size = 1024,
+        .sampler_pool_size = 8,
         .shader_pool_size = 128,
         .pass_pool_size = 64,
     });
     const sg_desc desc = sg_query_desc();
     T(desc.buffer_pool_size == 1024);
     T(desc.image_pool_size == _SG_DEFAULT_IMAGE_POOL_SIZE);
+    T(desc.sampler_pool_size == 8);
     T(desc.shader_pool_size == 128);
     T(desc.pipeline_pool_size == _SG_DEFAULT_PIPELINE_POOL_SIZE);
     T(desc.pass_pool_size == 64);
     T(desc.context_pool_size == _SG_DEFAULT_CONTEXT_POOL_SIZE);
     T(desc.uniform_buffer_size == _SG_DEFAULT_UB_SIZE);
-    T(desc.sampler_cache_size == _SG_DEFAULT_SAMPLER_CACHE_CAPACITY);
     sg_shutdown();
 }
 
@@ -370,17 +371,11 @@ UTEST(sokol_gfx, make_destroy_images) {
         T(imgptr->cmn.usage == SG_USAGE_IMMUTABLE);
         T(imgptr->cmn.pixel_format == SG_PIXELFORMAT_RGBA8);
         T(imgptr->cmn.sample_count == 1);
-        T(imgptr->cmn.min_filter == SG_FILTER_NEAREST);
-        T(imgptr->cmn.mag_filter == SG_FILTER_NEAREST);
-        T(imgptr->cmn.wrap_u == SG_WRAP_REPEAT);
-        T(imgptr->cmn.wrap_v == SG_WRAP_REPEAT);
-        T(imgptr->cmn.wrap_w == SG_WRAP_REPEAT);
-        T(imgptr->cmn.max_anisotropy == 1);
         T(imgptr->cmn.upd_frame_index == 0);
         T(imgptr->cmn.num_slots == 1);
         T(imgptr->cmn.active_slot == 0);
     }
-    /* trying to create another one fails because buffer is exhausted */
+    // trying to create another one fails because buffer is exhausted
     T(sg_make_image(&desc).id == SG_INVALID_ID);
 
     for (int i = 0; i < 3; i++) {
@@ -463,8 +458,8 @@ UTEST(sokol_gfx, make_destroy_pipelines) {
         T(pipptr->cmn.depth.pixel_format == SG_PIXELFORMAT_DEPTH_STENCIL);
         T(pipptr->cmn.sample_count == 1);
         T(pipptr->cmn.index_type == SG_INDEXTYPE_NONE);
-        T(pipptr->cmn.vertex_layout_valid[0]);
-        T(!pipptr->cmn.vertex_layout_valid[1]);
+        T(pipptr->cmn.vertex_buffer_layout_active[0]);
+        T(!pipptr->cmn.vertex_buffer_layout_active[1]);
     }
     /* trying to create another one fails because buffer is exhausted */
     T(sg_make_pipeline(&desc).id == SG_INVALID_ID);
@@ -571,13 +566,6 @@ UTEST(sokol_gfx, query_image_defaults) {
     T(desc.usage == SG_USAGE_IMMUTABLE);
     T(desc.pixel_format == SG_PIXELFORMAT_RGBA8);
     T(desc.sample_count == 1);
-    T(desc.min_filter == SG_FILTER_NEAREST);
-    T(desc.mag_filter == SG_FILTER_NEAREST);
-    T(desc.wrap_u == SG_WRAP_REPEAT);
-    T(desc.wrap_v == SG_WRAP_REPEAT);
-    T(desc.wrap_w == SG_WRAP_REPEAT);
-    T(desc.max_anisotropy == 1);
-    T(desc.max_lod >= FLT_MAX);
     sg_shutdown();
 }
 
@@ -885,13 +873,7 @@ UTEST(sokol_gfx, query_image_desc) {
         .width = 256,
         .height = 512,
         .pixel_format = SG_PIXELFORMAT_R8,
-        .mag_filter = SG_FILTER_LINEAR,
-        .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
         .usage = SG_USAGE_DYNAMIC,
-        .border_color = SG_BORDERCOLOR_OPAQUE_WHITE,
-        .max_anisotropy = 4,
-        .min_lod = 0.5f,
-        .max_lod = 0.75f,
     });
     const sg_image_desc i0_desc = sg_query_image_desc(i0);
     T(i0_desc.type == SG_IMAGETYPE_2D);
@@ -903,15 +885,6 @@ UTEST(sokol_gfx, query_image_desc) {
     T(i0_desc.usage == SG_USAGE_DYNAMIC);
     T(i0_desc.pixel_format == SG_PIXELFORMAT_R8);
     T(i0_desc.sample_count == 1);
-    T(i0_desc.min_filter == SG_FILTER_NEAREST);
-    T(i0_desc.mag_filter == SG_FILTER_LINEAR);
-    T(i0_desc.wrap_u == SG_WRAP_REPEAT);
-    T(i0_desc.wrap_v == SG_WRAP_CLAMP_TO_EDGE);
-    T(i0_desc.wrap_w == SG_WRAP_REPEAT);
-    T(i0_desc.border_color == SG_BORDERCOLOR_OPAQUE_WHITE);
-    T(i0_desc.max_anisotropy == 4);
-    T(i0_desc.min_lod == 0.5f);
-    T(i0_desc.max_lod == 0.75f);
     T(i0_desc.data.subimage[0][0].ptr == 0);
     T(i0_desc.data.subimage[0][0].size == 0);
     T(i0_desc.gl_textures[0] == 0);
@@ -955,15 +928,21 @@ UTEST(sokol_gfx, query_shader_desc) {
                     }
                 }
             },
-            .images = {
-                [0] = { .name = "img0", .image_type = SG_IMAGETYPE_2D, .sampler_type = SG_SAMPLERTYPE_FLOAT },
-            }
+            .images[0] = { .used = true, .image_type = SG_IMAGETYPE_2D, .sample_type = SG_IMAGESAMPLETYPE_FLOAT, .multisampled = true },
+            .images[1] = { .used = true, .image_type = SG_IMAGETYPE_3D, .sample_type = SG_IMAGESAMPLETYPE_SINT },
+            .samplers[0] = { .used = true, .sampler_type = SG_SAMPLERTYPE_SAMPLE },
+            .samplers[1] = { .used = true, .sampler_type = SG_SAMPLERTYPE_COMPARE },
+            .image_sampler_pairs[0] = { .used = true, .image_slot = 0, .sampler_slot = 1, .glsl_name = "img0" },
+            .image_sampler_pairs[1] = { .used = true, .image_slot = 1, .sampler_slot = 0, .glsl_name = "img1" },
         },
         .fs = {
             .source = "fs_source",
-            .images = {
-                [0] = { .name = "img1", .image_type = SG_IMAGETYPE_ARRAY, .sampler_type = SG_SAMPLERTYPE_UINT },
-            }
+            .images[0] = { .used = true, .image_type = SG_IMAGETYPE_ARRAY, .sample_type = SG_IMAGESAMPLETYPE_DEPTH },
+            .images[1] = { .used = true, .image_type = SG_IMAGETYPE_CUBE, .sample_type = SG_IMAGESAMPLETYPE_FLOAT },
+            .samplers[0] = { .used = true, .sampler_type = SG_SAMPLERTYPE_COMPARE },
+            .samplers[1] = { .used = true, .sampler_type = SG_SAMPLERTYPE_SAMPLE },
+            .image_sampler_pairs[0] = { .used = true, .image_slot = 0, .sampler_slot = 0, .glsl_name = "img3" },
+            .image_sampler_pairs[1] = { .used = true, .image_slot = 1, .sampler_slot = 1, .glsl_name = "img4" },
         },
         .label = "label",
     });
@@ -977,18 +956,52 @@ UTEST(sokol_gfx, query_shader_desc) {
     T(s0_desc.vs.uniform_blocks[0].uniforms[0].name == 0);
     T(s0_desc.vs.uniform_blocks[0].uniforms[0].type == 0);
     T(s0_desc.vs.uniform_blocks[0].uniforms[0].array_count == 0);
-    T(s0_desc.vs.images[0].name == 0);
+    T(s0_desc.vs.images[0].used);
     T(s0_desc.vs.images[0].image_type == SG_IMAGETYPE_2D);
-    T(s0_desc.vs.images[0].sampler_type == SG_SAMPLERTYPE_FLOAT);
+    T(s0_desc.vs.images[0].sample_type == SG_IMAGESAMPLETYPE_FLOAT);
+    T(s0_desc.vs.images[0].multisampled);
+    T(s0_desc.vs.images[1].used);
+    T(s0_desc.vs.images[1].image_type == SG_IMAGETYPE_3D);
+    T(s0_desc.vs.images[1].sample_type == SG_IMAGESAMPLETYPE_SINT);
+    T(s0_desc.vs.images[1].multisampled == false);
+    T(s0_desc.vs.samplers[0].used);
+    T(s0_desc.vs.samplers[0].sampler_type == SG_SAMPLERTYPE_SAMPLE);
+    T(s0_desc.vs.samplers[1].used);
+    T(s0_desc.vs.samplers[1].sampler_type == SG_SAMPLERTYPE_COMPARE);
+    T(s0_desc.vs.image_sampler_pairs[0].used);
+    T(s0_desc.vs.image_sampler_pairs[0].image_slot == 0);
+    T(s0_desc.vs.image_sampler_pairs[0].sampler_slot == 1);
+    T(s0_desc.vs.image_sampler_pairs[0].glsl_name == 0);
+    T(s0_desc.vs.image_sampler_pairs[1].used);
+    T(s0_desc.vs.image_sampler_pairs[1].image_slot == 1);
+    T(s0_desc.vs.image_sampler_pairs[1].sampler_slot == 0);
+    T(s0_desc.vs.image_sampler_pairs[1].glsl_name == 0);
     T(s0_desc.fs.source == 0);
     T(s0_desc.fs.uniform_blocks[0].size == 0);
     T(s0_desc.fs.uniform_blocks[0].layout == 0);
     T(s0_desc.fs.uniform_blocks[0].uniforms[0].name == 0);
     T(s0_desc.fs.uniform_blocks[0].uniforms[0].type == 0);
     T(s0_desc.fs.uniform_blocks[0].uniforms[0].array_count == 0);
-    T(s0_desc.fs.images[0].name == 0);
+    T(s0_desc.fs.images[0].used);
     T(s0_desc.fs.images[0].image_type == SG_IMAGETYPE_ARRAY);
-    T(s0_desc.fs.images[0].sampler_type == SG_SAMPLERTYPE_UINT);
+    T(s0_desc.fs.images[0].sample_type == SG_IMAGESAMPLETYPE_DEPTH);
+    T(s0_desc.fs.images[0].multisampled == false);
+    T(s0_desc.fs.images[1].used);
+    T(s0_desc.fs.images[1].image_type == SG_IMAGETYPE_CUBE);
+    T(s0_desc.fs.images[1].sample_type == SG_IMAGESAMPLETYPE_FLOAT);
+    T(s0_desc.fs.images[1].multisampled == false);
+    T(s0_desc.fs.samplers[0].used);
+    T(s0_desc.fs.samplers[0].sampler_type == SG_SAMPLERTYPE_COMPARE);
+    T(s0_desc.fs.samplers[1].used);
+    T(s0_desc.fs.samplers[1].sampler_type == SG_SAMPLERTYPE_SAMPLE);
+    T(s0_desc.fs.image_sampler_pairs[0].used);
+    T(s0_desc.fs.image_sampler_pairs[0].image_slot == 0);
+    T(s0_desc.fs.image_sampler_pairs[0].sampler_slot == 0);
+    T(s0_desc.fs.image_sampler_pairs[0].glsl_name == 0);
+    T(s0_desc.fs.image_sampler_pairs[1].used);
+    T(s0_desc.fs.image_sampler_pairs[1].image_slot == 1);
+    T(s0_desc.fs.image_sampler_pairs[1].sampler_slot == 1);
+    T(s0_desc.fs.image_sampler_pairs[1].glsl_name == 0);
 
     sg_shutdown();
 }
