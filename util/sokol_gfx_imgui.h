@@ -1817,6 +1817,7 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
                 sg_imgui_str_t res_id = _sg_imgui_sampler_id_string(ctx, item->args.destroy_sampler.sampler);
                 _sg_imgui_snprintf(&str, "%d: sg_destroy_sampler(smp=%s)", index, res_id.buf);
             }
+            break;
 
         case SG_IMGUI_CMD_DESTROY_SHADER:
             {
@@ -1953,6 +1954,7 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
                 sg_imgui_str_t res_id = _sg_imgui_sampler_id_string(ctx, item->args.alloc_sampler.result);
                 _sg_imgui_snprintf(&str, "%d: sg_alloc_sampler() => %s", index, res_id.buf);
             }
+            break;
 
         case SG_IMGUI_CMD_ALLOC_SHADER:
             {
