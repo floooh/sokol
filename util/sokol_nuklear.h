@@ -156,10 +156,12 @@
         and hide the onscreen keyboard as required.
 
     --- NOTE: to create a Nuklear image handle, use the helper function
-        `nk_handle snk_nkhandle(sg_image img, sg_sampler smp)` together with
+        `nk_handle snk_nkhandle(sg_image img)` together with
         the Nuklear function nk_image_handle like this:
 
-        nk_image_handle(snk_nkhandle(img, smp))
+        nk_image_handle(snk_nkhandle(img))
+
+        Note that it's currently not possible to provide a custom sg_sampler object.
 
     LICENSE
     =======
@@ -227,7 +229,7 @@ typedef struct snk_desc_t {
 SOKOL_NUKLEAR_API_DECL void snk_setup(const snk_desc_t* desc);
 SOKOL_NUKLEAR_API_DECL struct nk_context* snk_new_frame(void);
 SOKOL_NUKLEAR_API_DECL void snk_render(int width, int height);
-SOKOL_NUKLEAR_API_DECL nk_handle snk_nkhandle(sg_image img, sg_sampler smp);
+SOKOL_NUKLEAR_API_DECL nk_handle snk_nkhandle(sg_image img);
 #if !defined(SOKOL_NUKLEAR_NO_SOKOL_APP)
 SOKOL_NUKLEAR_API_DECL void snk_handle_event(const sapp_event* ev);
 SOKOL_NUKLEAR_API_DECL nk_flags snk_edit_string(struct nk_context *ctx, nk_flags flags, char *memory, int *len, int max, nk_plugin_filter filter);
@@ -1825,26 +1827,16 @@ SOKOL_API_IMPL struct nk_context* snk_new_frame(void) {
     return &_snuklear.ctx;
 }
 
-SOKOL_API_IMPL nk_handle snk_nkhandle(sg_image img, sg_sampler smp) {
-    return (nk_handle) {
-        .ptr = (void*)(uintptr_t)(((uint64_t)img.id << 32) | smp.id)
-    };
+SOKOL_API_IMPL nk_handle snk_nkhandle(sg_image img) {
+    return (nk_handle) { .ptr = (void*)(uintptr_t)img.id };
 }
 
 _SOKOL_PRIVATE uint32_t _snk_imageid_from_nkhandle(nk_handle h) {
-    uint32_t img_id = (uint32_t)(((uintptr_t)h.ptr) & 0xFFFFFFFF);
+    uint32_t img_id = (uint32_t)(uintptr_t)h.ptr;
     if (0 == img_id) {
         img_id = _snuklear.img.id;
     }
     return img_id;
-}
-
-_SOKOL_PRIVATE uint32_t _snk_samplerid_from_nkhandle(nk_handle h) {
-    uint32_t smp_id = (uint32_t)((((uintptr_t)h.ptr) >> 32) & 0xFFFFFFFF);
-    if (0 == smp_id) {
-        smp_id = _snuklear.smp.id;
-    }
-    return smp_id;
 }
 
 SOKOL_API_IMPL void snk_render(int width, int height) {
@@ -1901,7 +1893,7 @@ SOKOL_API_IMPL void snk_render(int width, int height) {
             if (cmd->elem_count > 0) {
                 sg_apply_bindings(&(sg_bindings){
                     .fs.images[0].id = _snk_imageid_from_nkhandle(cmd->texture),
-                    .fs.samplers[0].id = _snk_samplerid_from_nkhandle(cmd->texture),
+                    .fs.samplers[0] = _snuklear.smp,
                     .vertex_buffers[0] = _snuklear.vbuf,
                     .index_buffer = _snuklear.ibuf,
                     .vertex_buffer_offsets[0] = 0,

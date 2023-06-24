@@ -209,9 +209,9 @@
         simgui_shutdown()
 
     --- use the following helper function to create an ImTextureID handle from
-        a sokol-gfx image and sampler handle:
+        a sokol-gfx image (note that you cannot provide your own sampler currently):
 
-        ImTextureID tex_id = simgui_imtextureid(img, smp);
+        ImTextureID tex_id = simgui_imtextureid(img);
 
         ...an invalid handle {SG_INVALID_ID} will be replaced with the
         default font texture or default sampler object
@@ -340,7 +340,7 @@ typedef struct simgui_frame_desc_t {
 SOKOL_IMGUI_API_DECL void simgui_setup(const simgui_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_new_frame(const simgui_frame_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_render(void);
-SOKOL_IMGUI_API_DECL void* simgui_imtextureid(sg_image img, sg_sampler smp);
+SOKOL_IMGUI_API_DECL void* simgui_imtextureid(sg_image img);
 #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
 SOKOL_IMGUI_API_DECL bool simgui_handle_event(const sapp_event* ev);
 SOKOL_IMGUI_API_DECL int simgui_map_keycode(sapp_keycode keycode);  // returns ImGuiKey_*
@@ -1715,19 +1715,11 @@ static simgui_desc_t _simgui_desc_defaults(const simgui_desc_t* desc) {
 }
 
 static uint32_t _simgui_imageid_from_texid(ImTextureID tex_id) {
-    uint32_t img_id = (uint32_t)(((uintptr_t)tex_id) & 0xFFFFFFFF);
+    uint32_t img_id = (uint32_t)(uintptr_t)tex_id;
     if (0 == img_id) {
         img_id = _simgui.img.id;
     }
     return img_id;
-}
-
-static uint32_t _simgui_samplerid_from_texid(ImTextureID tex_id) {
-    uint32_t smp_id = (uint32_t)((((uintptr_t)tex_id) >> 32) & 0xFFFFFFFF);
-    if (0 == smp_id) {
-        smp_id = _simgui.smp.id;
-    }
-    return smp_id;
 }
 
 SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
@@ -1826,7 +1818,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     smp_desc.mag_filter = SG_FILTER_LINEAR;
     smp_desc.mipmap_filter = SG_FILTER_NONE;
     _simgui.smp = sg_make_sampler(&smp_desc);
-    io->Fonts->TexID = simgui_imtextureid(_simgui.img, _simgui.smp);
+    io->Fonts->TexID = simgui_imtextureid(_simgui.img);
 
     // shader object for using the embedded shader source (or bytecode)
     sg_shader_desc shd_desc;
@@ -1949,8 +1941,8 @@ SOKOL_API_IMPL void simgui_shutdown(void) {
     _simgui_free((void*)_simgui.indices.ptr);
 }
 
-SOKOL_API_IMPL void* simgui_imtextureid(sg_image img, sg_sampler smp) {
-    return (void*) ((((uint64_t)smp.id) << 32) | (img.id));
+SOKOL_API_IMPL void* simgui_imtextureid(sg_image img) {
+    return (void*)(uintptr_t)img.id;
 }
 
 SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
@@ -2090,7 +2082,7 @@ SOKOL_API_IMPL void simgui_render(void) {
     bind.fs.samplers[0] = _simgui.smp;
     ImTextureID tex_id = io->Fonts->TexID;
     bind.fs.images[0].id = _simgui_imageid_from_texid(tex_id);
-    bind.fs.samplers[0].id = _simgui_samplerid_from_texid(tex_id);
+    bind.fs.samplers[0] = _simgui.smp;
     int vb_offset = 0;
     int ib_offset = 0;
     for (int cl_index = 0; cl_index < cmd_list_count; cl_index++) {
@@ -2120,7 +2112,6 @@ SOKOL_API_IMPL void simgui_render(void) {
                     tex_id = pcmd->TextureId;
                     vtx_offset = pcmd->VtxOffset;
                     bind.fs.images[0].id = _simgui_imageid_from_texid(tex_id);
-                    bind.fs.samplers[0].id = _simgui_samplerid_from_texid(tex_id);
                     bind.vertex_buffer_offsets[0] = vb_offset + (int)(pcmd->VtxOffset * sizeof(ImDrawVert));
                     sg_apply_bindings(&bind);
                 }
