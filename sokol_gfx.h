@@ -3566,7 +3566,6 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #pragma comment (lib, "dxgi")
     #pragma comment (lib, "d3d11")
     #endif
-    #endif
 #elif defined(SOKOL_METAL)
     // see https://clang.llvm.org/docs/LanguageExtensions.html#automatic-reference-counting
     #if !defined(__cplusplus)
@@ -5577,6 +5576,17 @@ _SOKOL_PRIVATE void _sg_dummy_discard_image(_sg_image_t* img) {
     _SOKOL_UNUSED(img);
 }
 
+_SOKOL_PRIVATE sg_resource_state _sg_dummy_create_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
+    SOKOL_ASSERT(smp && desc);
+    _sg_sampler_common_init(&smp->cmn, desc);
+    return SG_RESOURCESTATE_VALID;
+}
+
+_SOKOL_PRIVATE void _sg_dummy_discard_sampler(_sg_sampler_t* smp) {
+    SOKOL_ASSERT(smp);
+    _SOKOL_UNUSED(smp);
+}
+
 _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
     _sg_shader_common_init(&shd->cmn, desc);
@@ -5593,12 +5603,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_pipeline(_sg_pipeline_t* pip, 
     pip->shader = shd;
     _sg_pipeline_common_init(&pip->cmn, desc);
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
-        const sg_vertex_attr_desc* a_desc = &desc->layout.attrs[attr_index];
-        if (a_desc->format == SG_VERTEXFORMAT_INVALID) {
+        const sg_vertex_attr_state* a_state = &desc->layout.attrs[attr_index];
+        if (a_state->format == SG_VERTEXFORMAT_INVALID) {
             break;
         }
-        SOKOL_ASSERT(a_desc->buffer_index < SG_MAX_VERTEX_BUFFERS);
-        pip->cmn.vertex_buffer_layout_active[a_desc->buffer_index] = true;
+        SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEX_BUFFERS);
+        pip->cmn.vertex_buffer_layout_active[a_state->buffer_index] = true;
     }
     return SG_RESOURCESTATE_VALID;
 }
@@ -5704,17 +5714,23 @@ _SOKOL_PRIVATE void _sg_dummy_apply_bindings(
     _sg_buffer_t** vbs, const int* vb_offsets, int num_vbs,
     _sg_buffer_t* ib, int ib_offset,
     _sg_image_t** vs_imgs, int num_vs_imgs,
-    _sg_image_t** fs_imgs, int num_fs_imgs)
+    _sg_image_t** fs_imgs, int num_fs_imgs,
+    _sg_sampler_t** vs_smps, int num_vs_smps,
+    _sg_sampler_t** fs_smps, int num_fs_smps)
 {
     SOKOL_ASSERT(pip);
     SOKOL_ASSERT(vbs && vb_offsets);
     SOKOL_ASSERT(vs_imgs);
     SOKOL_ASSERT(fs_imgs);
+    SOKOL_ASSERT(vs_smps);
+    SOKOL_ASSERT(fs_smps);
     _SOKOL_UNUSED(pip);
     _SOKOL_UNUSED(vbs); _SOKOL_UNUSED(vb_offsets); _SOKOL_UNUSED(num_vbs);
     _SOKOL_UNUSED(ib); _SOKOL_UNUSED(ib_offset);
     _SOKOL_UNUSED(vs_imgs); _SOKOL_UNUSED(num_vs_imgs);
     _SOKOL_UNUSED(fs_imgs); _SOKOL_UNUSED(num_fs_imgs);
+    _SOKOL_UNUSED(vs_smps); _SOKOL_UNUSED(num_vs_smps);
+    _SOKOL_UNUSED(fs_smps); _SOKOL_UNUSED(num_fs_smps);
 }
 
 _SOKOL_PRIVATE void _sg_dummy_apply_uniforms(sg_shader_stage stage_index, int ub_index, const sg_range* data) {
@@ -17102,8 +17118,24 @@ SOKOL_API_IMPL sg_shader_desc sg_query_shader_desc(sg_shader shd_id) {
             for (int img_idx = 0; img_idx < stage->num_images; img_idx++) {
                 sg_shader_image_desc* img_desc = &stage_desc->images[img_idx];
                 const _sg_shader_image_t* img = &stage->images[img_idx];
+                img_desc->used = true;
                 img_desc->image_type = img->image_type;
                 img_desc->sample_type = img->sample_type;
+                img_desc->multisampled = img->multisampled;
+            }
+            for (int smp_idx = 0; smp_idx < stage->num_samplers; smp_idx++) {
+                sg_shader_sampler_desc* smp_desc = &stage_desc->samplers[smp_idx];
+                const _sg_shader_sampler_t* smp = &stage->samplers[smp_idx];
+                smp_desc->used = true;
+                smp_desc->sampler_type = smp->sampler_type;
+            }
+            for (int img_smp_idx = 0; img_smp_idx < stage->num_image_samplers; img_smp_idx++) {
+                sg_shader_image_sampler_pair_desc* img_smp_desc = &stage_desc->image_sampler_pairs[img_smp_idx];
+                const _sg_shader_image_sampler_t* img_smp = &stage->image_samplers[img_smp_idx];
+                img_smp_desc->used = true;
+                img_smp_desc->image_slot = img_smp->image_slot;
+                img_smp_desc->sampler_slot = img_smp->sampler_slot;
+                img_smp_desc->glsl_name = 0;
             }
         }
     }
