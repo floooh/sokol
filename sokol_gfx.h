@@ -8074,8 +8074,8 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
         _sg_sampler_t** smps = (stage_index == SG_SHADERSTAGE_VS) ? vs_smps : fs_smps;
         const int num_imgs = (stage_index == SG_SHADERSTAGE_VS) ? num_vs_imgs : num_fs_imgs;
         const int num_smps = (stage_index == SG_SHADERSTAGE_VS) ? num_vs_smps : num_fs_smps;
-        SOKOL_ASSERT(num_imgs == stage->num_images);
-        SOKOL_ASSERT(num_smps == stage->num_samplers);
+        SOKOL_ASSERT(num_imgs == stage->num_images); _SOKOL_UNUSED(num_imgs);
+        SOKOL_ASSERT(num_smps == stage->num_samplers); _SOKOL_UNUSED(num_smps);
         for (int img_smp_index = 0; img_smp_index < stage->num_image_samplers; img_smp_index++) {
             const int gl_tex_slot = gl_stage->image_samplers[img_smp_index].gl_tex_slot;
             if (gl_tex_slot != -1) {
