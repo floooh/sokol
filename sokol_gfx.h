@@ -3865,6 +3865,9 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_MAX_VERTEX_UNIFORM_VECTORS 0x8DFB
         #define GL_UNPACK_ALIGNMENT 0x0CF5
         #define GL_FRAMEBUFFER_SRGB 0x8DB9
+        #define GL_TEXTURE_COMPARE_MODE 0x884C
+        #define GL_TEXTURE_COMPARE_FUNC 0x884D
+        #define GL_COMPARE_REF_TO_TEXTURE 0x884E
     #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
@@ -5883,7 +5886,13 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     _SG_XMACRO(glGenVertexArrays,                 void, (GLsizei n, GLuint * arrays)) \
     _SG_XMACRO(glFrontFace,                       void, (GLenum mode)) \
     _SG_XMACRO(glCullFace,                        void, (GLenum mode)) \
-    _SG_XMACRO(glPixelStorei,                     void, (GLenum pname, GLint param))
+    _SG_XMACRO(glPixelStorei,                     void, (GLenum pname, GLint param)) \
+    _SG_XMACRO(glBindSampler,                     void, (GLuint unit, GLuint sampler)) \
+    _SG_XMACRO(glGenSamplers,                     void, (GLsizei n, GLuint* samplers)) \
+    _SG_XMACRO(glSamplerParameteri,               void, (GLuint sampler, GLenum pname, GLint param)) \
+    _SG_XMACRO(glSamplerParameterf,               void, (GLuint sampler, GLenum pname, GLfloat param)) \
+    _SG_XMACRO(glSamplerParameterfv,              void, (GLuint sampler, GLenum pname, const GLfloat* params)) \
+    _SG_XMACRO(glDeleteSamplers,                  void, (GLsizei n, const GLuint* samplers))
 
 // generate GL function pointer typedefs
 #define _SG_XMACRO(name, ret, args) typedef ret (GL_APIENTRY* PFN_ ## name) args;
@@ -7227,8 +7236,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_sampler(_sg_sampler_t* smp, const
         // GL spec has strange defaults for mipmap min/max lod: -1000 to +1000
         const float min_lod = _sg_clamp(desc->min_lod, 0.0f, 1000.0f);
         const float max_lod = _sg_clamp(desc->max_lod, 0.0f, 1000.0f);
-        glSamplerParameteri(smp->gl.smp, GL_TEXTURE_MIN_LOD, min_lod);
-        glSamplerParameteri(smp->gl.smp, GL_TEXTURE_MAX_LOD, max_lod);
+        glSamplerParameterf(smp->gl.smp, GL_TEXTURE_MIN_LOD, min_lod);
+        glSamplerParameterf(smp->gl.smp, GL_TEXTURE_MAX_LOD, max_lod);
         glSamplerParameteri(smp->gl.smp, GL_TEXTURE_WRAP_S, (GLint)_sg_gl_wrap(smp->cmn.wrap_u));
         glSamplerParameteri(smp->gl.smp, GL_TEXTURE_WRAP_T, (GLint)_sg_gl_wrap(smp->cmn.wrap_v));
         glSamplerParameteri(smp->gl.smp, GL_TEXTURE_WRAP_R, (GLint)_sg_gl_wrap(smp->cmn.wrap_w));
