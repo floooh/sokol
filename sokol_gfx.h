@@ -10228,11 +10228,15 @@ _SOKOL_PRIVATE MTLStoreAction _sg_mtl_store_action(sg_store_action a, bool resol
 }
 
 _SOKOL_PRIVATE MTLResourceOptions _sg_mtl_resource_options_storage_mode_managed_or_shared(void) {
+    #if defined(_SG_TARGET_MACOS)
     if (_sg.mtl.force_managed_storage_mode || !_sg.mtl.has_unified_memory) {
         return MTLResourceStorageModeManaged;
     } else {
         return MTLResourceStorageModeShared;
     }
+    #else
+        return MTLResourceStorageModeShared;
+    #endif
 }
 
 _SOKOL_PRIVATE MTLResourceOptions _sg_mtl_buffer_resource_options(sg_usage usg) {
@@ -10493,22 +10497,29 @@ _SOKOL_PRIVATE bool _sg_mtl_is_pvrtc(sg_pixel_format fmt) {
 }
 
 _SOKOL_PRIVATE MTLSamplerAddressMode _sg_mtl_address_mode(sg_wrap w) {
+    if (_sg.features.image_clamp_to_border) {
+        if (@available(macOS 12.0, iOS 14.0, *)) {
+            // border color feature available
+            switch (w) {
+                case SG_WRAP_REPEAT:            return MTLSamplerAddressModeRepeat;
+                case SG_WRAP_CLAMP_TO_EDGE:     return MTLSamplerAddressModeClampToEdge;
+                case SG_WRAP_CLAMP_TO_BORDER:   return MTLSamplerAddressModeClampToBorderColor;
+                case SG_WRAP_MIRRORED_REPEAT:   return MTLSamplerAddressModeMirrorRepeat;
+                default: SOKOL_UNREACHABLE; return (MTLSamplerAddressMode)0;
+            }
+        }
+    }
+    // fallthrough: clamp to border no supported
     switch (w) {
         case SG_WRAP_REPEAT:            return MTLSamplerAddressModeRepeat;
         case SG_WRAP_CLAMP_TO_EDGE:     return MTLSamplerAddressModeClampToEdge;
-        #if defined(_SG_TARGET_MACOS)
-        case SG_WRAP_CLAMP_TO_BORDER:   return MTLSamplerAddressModeClampToBorderColor;
-        #else
-        // clamp-to-border not supported on iOS, fall back to clamp-to-edge
         case SG_WRAP_CLAMP_TO_BORDER:   return MTLSamplerAddressModeClampToEdge;
-        #endif
         case SG_WRAP_MIRRORED_REPEAT:   return MTLSamplerAddressModeMirrorRepeat;
         default: SOKOL_UNREACHABLE; return (MTLSamplerAddressMode)0;
     }
 }
 
-#if defined(_SG_TARGET_MACOS)
-_SOKOL_PRIVATE MTLSamplerBorderColor _sg_mtl_border_color(sg_border_color c) {
+_SOKOL_PRIVATE API_AVAILABLE(ios(14.0), macos(12.0)) MTLSamplerBorderColor _sg_mtl_border_color(sg_border_color c) {
     switch (c) {
         case SG_BORDERCOLOR_TRANSPARENT_BLACK: return MTLSamplerBorderColorTransparentBlack;
         case SG_BORDERCOLOR_OPAQUE_BLACK: return MTLSamplerBorderColorOpaqueBlack;
@@ -10516,7 +10527,6 @@ _SOKOL_PRIVATE MTLSamplerBorderColor _sg_mtl_border_color(sg_border_color c) {
         default: SOKOL_UNREACHABLE; return (MTLSamplerBorderColor)0;
     }
 }
-#endif
 
 _SOKOL_PRIVATE MTLSamplerMinMagFilter _sg_mtl_minmag_filter(sg_filter f) {
     switch (f) {
@@ -10683,10 +10693,17 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.origin_top_left = true;
     _sg.features.mrt_independent_blend_state = true;
     _sg.features.mrt_independent_write_mask = true;
+
+    _sg.features.image_clamp_to_border = false;
     if (@available(macOS 12.0, iOS 14.0, *)) {
-        _sg.features.image_clamp_to_border = true;
-    } else {
-        _sg.features.image_clamp_to_border = false;
+        _sg.features.image_clamp_to_border = [_sg.mtl.device supportsFamily:MTLGPUFamilyApple7]
+                                             || [_sg.mtl.device supportsFamily:MTLGPUFamilyApple8]
+                                             || [_sg.mtl.device supportsFamily:MTLGPUFamilyMac2];
+        if (!_sg.features.image_clamp_to_border) {
+            if (@available(macOS 13.0, iOS 16.0, *)) {
+                _sg.features.image_clamp_to_border = [_sg.mtl.device supportsFamily:MTLGPUFamilyMetal3];
+            }
+        }
     }
 
     #if defined(_SG_TARGET_MACOS)
@@ -11103,7 +11120,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_sampler(_sg_sampler_t* smp, cons
         mtl_desc.tAddressMode = _sg_mtl_address_mode(desc->wrap_v);
         mtl_desc.rAddressMode = _sg_mtl_address_mode(desc->wrap_w);
         if (_sg.features.image_clamp_to_border) {
-            mtl_desc.borderColor  = _sg_mtl_border_color(desc->border_color);
+            if (@available(macOS 12.0, iOS 14.0, *)) {
+                mtl_desc.borderColor  = _sg_mtl_border_color(desc->border_color);
+            }
         }
         mtl_desc.minFilter = _sg_mtl_minmag_filter(desc->min_filter);
         mtl_desc.magFilter = _sg_mtl_minmag_filter(desc->mag_filter);
@@ -11849,9 +11868,11 @@ _SOKOL_PRIVATE void _sg_mtl_update_buffer(_sg_buffer_t* buf, const sg_range* dat
     __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot]);
     void* dst_ptr = [mtl_buf contents];
     memcpy(dst_ptr, data->ptr, data->size);
+    #if defined(_SG_TARGET_MACOS)
     if (_sg_mtl_resource_options_storage_mode_managed_or_shared() == MTLStorageModeManaged) {
         [mtl_buf didModifyRange:NSMakeRange(0, data->size)];
     }
+    #endif
 }
 
 _SOKOL_PRIVATE int _sg_mtl_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
@@ -11865,9 +11886,11 @@ _SOKOL_PRIVATE int _sg_mtl_append_buffer(_sg_buffer_t* buf, const sg_range* data
     uint8_t* dst_ptr = (uint8_t*) [mtl_buf contents];
     dst_ptr += buf->cmn.append_pos;
     memcpy(dst_ptr, data->ptr, data->size);
+    #if defined(_SG_TARGET_MACOS)
     if (_sg_mtl_resource_options_storage_mode_managed_or_shared() == MTLStorageModeManaged) {
         [mtl_buf didModifyRange:NSMakeRange((NSUInteger)buf->cmn.append_pos, (NSUInteger)data->size)];
     }
+    #endif
     // NOTE: this is a requirement from WebGPU, but we want identical behaviour across all backends
     return _sg_roundup((int)data->size, 4);
 }
