@@ -3325,7 +3325,7 @@ static sspine_atlas _sspine_alloc_atlas(void) {
 }
 
 static const _sspine_image_sampler_pair_t* _sspine_new_image_sampler_pair(sg_image img, sg_sampler smp) {
-    _sspine_image_sampler_pair_t* isp = _sspine_malloc_clear(sizeof(_sspine_image_sampler_pair_t));
+    _sspine_image_sampler_pair_t* isp = (_sspine_image_sampler_pair_t*) _sspine_malloc_clear(sizeof(_sspine_image_sampler_pair_t));
     SOKOL_ASSERT(isp);
     isp->img = img;
     isp->smp = smp;
