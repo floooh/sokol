@@ -2641,6 +2641,11 @@ typedef struct {
 } _sspine_atlas_ref_t;
 
 typedef struct {
+    sg_image img;
+    sg_sampler smp;
+} _sspine_image_sampler_pair_t;
+
+typedef struct {
     _sspine_slot_t slot;
     _sspine_atlas_ref_t atlas;
     spSkeletonData* sp_skel_data;
@@ -2781,9 +2786,9 @@ void _spAtlasPage_createTexture(spAtlasPage* self, const char* path) {
     (void)self; (void)path;
 }
 
-static void _sspine_destroy_atlas_image_sampler(spAtlasPage* p);
+static void _sspine_delete_image_sampler_pair(const _sspine_image_sampler_pair_t* isp);
 void _spAtlasPage_disposeTexture(spAtlasPage* self) {
-    _sspine_destroy_atlas_image_sampler(self);
+    _sspine_delete_image_sampler_pair((const _sspine_image_sampler_pair_t*) self->rendererObject);
 }
 
 char* _spUtil_readFile(const char* path, int* length) {
@@ -3319,21 +3324,32 @@ static sspine_atlas _sspine_alloc_atlas(void) {
     }
 }
 
-static void* _sspine_renderobject_handle(sg_image img, sg_sampler smp) {
-    return (void*) ((((uint64_t)smp.id) << 32) | (img.id));
+static const _sspine_image_sampler_pair_t* _sspine_new_image_sampler_pair(sg_image img, sg_sampler smp) {
+    _sspine_image_sampler_pair_t* isp = _sspine_malloc_clear(sizeof(_sspine_image_sampler_pair_t));
+    SOKOL_ASSERT(isp);
+    isp->img = img;
+    isp->smp = smp;
+    return isp;
 }
 
-static sg_image _sspine_image_from_renderobject_handle(void* render_object) {
-    SOKOL_ASSERT(render_object);
-    uint32_t img_id = (uint32_t)(((uintptr_t)render_object) & 0xFFFFFFFF);
-    sg_image img = { img_id };
-    return img;
+static void _sspine_delete_image_sampler_pair(const _sspine_image_sampler_pair_t* isp) {
+    if (isp) {
+        sg_destroy_sampler(isp->smp);
+        sg_destroy_image(isp->img);
+        _sspine_free((void*)isp);
+    }
 }
 
-static sg_sampler _sspine_sampler_from_renderobject_handle(void* render_object) {
-    uint32_t smp_id = (uint32_t)((((uintptr_t)render_object) >> 32) & 0xFFFFFFFF);
-    sg_sampler smp = { smp_id };
-    return smp;
+static sg_image _sspine_image_from_renderer_object(void* renderer_object) {
+    SOKOL_ASSERT(renderer_object);
+    const _sspine_image_sampler_pair_t* isp = (const _sspine_image_sampler_pair_t*)renderer_object;
+    return isp->img;
+}
+
+static sg_sampler _sspine_sampler_from_renderer_object(void* renderer_object) {
+    SOKOL_ASSERT(renderer_object);
+    const _sspine_image_sampler_pair_t* isp = (const _sspine_image_sampler_pair_t*)renderer_object;
+    return isp->smp;
 }
 
 static sspine_resource_state _sspine_init_atlas(_sspine_atlas_t* atlas, const sspine_atlas_desc* desc) {
@@ -3369,7 +3385,12 @@ static sspine_resource_state _sspine_init_atlas(_sspine_atlas_t* atlas, const ss
             _SSPINE_ERROR(SG_ALLOC_SAMPLER_FAILED);
             return SSPINE_RESOURCESTATE_FAILED;
         }
-        page->rendererObject = _sspine_renderobject_handle(img, smp);
+
+        // need to put the image and sampler handle into a heap-alloc unfortunately,
+        // because a void* isn't big enough to stash two 32-bit handles into
+        // it directly on platforms with 32-bit pointers (like wasm)
+        page->rendererObject = (void*) _sspine_new_image_sampler_pair(img, smp);
+
         if (desc->override.premul_alpha_enabled) {
             // NOTE: -1 is spine-c convention for 'true'
             page->pma = -1;
@@ -3423,16 +3444,6 @@ static spAtlasPage* _sspine_lookup_atlas_page(uint32_t atlas_id, int page_index)
         }
     }
     return 0;
-}
-
-static void _sspine_destroy_atlas_image_sampler(spAtlasPage* p) {
-    SOKOL_ASSERT(p);
-    if (p->rendererObject != 0) {
-        const sg_image img = _sspine_image_from_renderobject_handle(p->rendererObject);
-        const sg_sampler smp = _sspine_sampler_from_renderobject_handle(p->rendererObject);
-        sg_destroy_image(img);
-        sg_destroy_sampler(smp);
-    }
 }
 
 // ███████ ██   ██ ███████ ██      ███████ ████████  ██████  ███    ██
@@ -4159,8 +4170,8 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
             num_indices = 6;
             uvs = region->uvs;
             const spAtlasPage* sp_page = ((spAtlasRegion*)region->rendererObject)->page;
-            img = _sspine_image_from_renderobject_handle(sp_page->rendererObject);
-            smp = _sspine_sampler_from_renderobject_handle(sp_page->rendererObject);
+            img = _sspine_image_from_renderer_object(sp_page->rendererObject);
+            smp = _sspine_sampler_from_renderer_object(sp_page->rendererObject);
             premul_alpha = sp_page->pma != 0;
         } else if (sp_slot->attachment->type == SP_ATTACHMENT_MESH) {
             spMeshAttachment* mesh = (spMeshAttachment*)sp_slot->attachment;
@@ -4179,8 +4190,8 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
             num_indices = mesh->trianglesCount; // actually indicesCount???
             uvs = mesh->uvs;
             const spAtlasPage* sp_page = ((spAtlasRegion*)mesh->rendererObject)->page;
-            img = _sspine_image_from_renderobject_handle(sp_page->rendererObject);
-            smp = _sspine_sampler_from_renderobject_handle(sp_page->rendererObject);
+            img = _sspine_image_from_renderer_object(sp_page->rendererObject);
+            smp = _sspine_sampler_from_renderer_object(sp_page->rendererObject);
             premul_alpha = sp_page->pma != 0;
         } else if (sp_slot->attachment->type == SP_ATTACHMENT_CLIPPING) {
             spClippingAttachment* clip_attachment = (spClippingAttachment*) sp_slot->attachment;
@@ -4447,8 +4458,8 @@ static void _sspine_init_image_info(const _sspine_atlas_t* atlas, int index, ssp
     SOKOL_ASSERT(page);
     SOKOL_ASSERT(page->name);
     info->valid = true;
-    info->sgimage = _sspine_image_from_renderobject_handle(page->rendererObject);
-    info->sgsampler = _sspine_sampler_from_renderobject_handle(page->rendererObject);
+    info->sgimage = _sspine_image_from_renderer_object(page->rendererObject);
+    info->sgsampler = _sspine_sampler_from_renderer_object(page->rendererObject);
     if (with_overrides && (atlas->overrides.min_filter != _SG_FILTER_DEFAULT)) {
         info->min_filter = atlas->overrides.min_filter;
     } else {
