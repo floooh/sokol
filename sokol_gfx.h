@@ -2972,7 +2972,7 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4, "sg_pipeline_desc.layout.buffers[].stride must be multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_ATTR_SEMANTICS, "D3D11 missing vertex attribute semantics in shader") \
     _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_CANARY, "sg_pass_desc not initialized") \
-    _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_NO_COLOR_ATTS, "sg_pass_desc.color_attachments[0] must be valid") \
+    _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_NO_ATTACHMENTS, "sg_pass_desc no color or depth-stencil attachments") \
     _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_NO_CONT_COLOR_ATTS, "color attachments must occupy continuous slots") \
     _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_IMAGE, "pass attachment image is not valid") \
     _SG_LOGITEM_XMACRO(VALIDATE_PASSDESC_MIPLEVEL, "pass attachment mip level is bigger than image has mipmaps") \
@@ -14906,16 +14906,17 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
         _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_PASSDESC_CANARY);
         _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_PASSDESC_CANARY);
         bool atts_cont = true;
-        int width = -1, height = -1, sample_count = -1;
+        int color_width = -1, color_height = -1, color_sample_count = -1;
+        bool has_color_atts = false;
         // color attachments
         for (int att_index = 0; att_index < SG_MAX_COLOR_ATTACHMENTS; att_index++) {
             const sg_pass_attachment_desc* att = &desc->color_attachments[att_index];
             if (att->image.id == SG_INVALID_ID) {
-                _SG_VALIDATE(att_index > 0, VALIDATE_PASSDESC_NO_COLOR_ATTS);
                 atts_cont = false;
                 continue;
             }
             _SG_VALIDATE(atts_cont, VALIDATE_PASSDESC_NO_CONT_COLOR_ATTS);
+            has_color_atts = true;
             const _sg_image_t* img = _sg_lookup_image(&_sg.pools, att->image.id);
             _SG_VALIDATE(img, VALIDATE_PASSDESC_IMAGE);
             if (0 != img) {
@@ -14930,13 +14931,13 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
                     _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_PASSDESC_SLICE);
                 }
                 if (att_index == 0) {
-                    width = img->cmn.width >> att->mip_level;
-                    height = img->cmn.height >> att->mip_level;
-                    sample_count = img->cmn.sample_count;
+                    color_width = img->cmn.width >> att->mip_level;
+                    color_height = img->cmn.height >> att->mip_level;
+                    color_sample_count = img->cmn.sample_count;
                 } else {
-                    _SG_VALIDATE(width == img->cmn.width >> att->mip_level, VALIDATE_PASSDESC_IMAGE_SIZES);
-                    _SG_VALIDATE(height == img->cmn.height >> att->mip_level, VALIDATE_PASSDESC_IMAGE_SIZES);
-                    _SG_VALIDATE(sample_count == img->cmn.sample_count, VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS);
+                    _SG_VALIDATE(color_width == img->cmn.width >> att->mip_level, VALIDATE_PASSDESC_IMAGE_SIZES);
+                    _SG_VALIDATE(color_height == img->cmn.height >> att->mip_level, VALIDATE_PASSDESC_IMAGE_SIZES);
+                    _SG_VALIDATE(color_sample_count == img->cmn.sample_count, VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS);
                 }
                 _SG_VALIDATE(_sg_is_valid_rendertarget_color_format(img->cmn.pixel_format), VALIDATE_PASSDESC_COLOR_INV_PIXELFORMAT);
 
@@ -14960,16 +14961,18 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
                             _SG_VALIDATE(res_att->slice < res_img->cmn.num_slices, VALIDATE_PASSDESC_RESOLVE_SLICE);
                         }
                         _SG_VALIDATE(img->cmn.pixel_format == res_img->cmn.pixel_format, VALIDATE_PASSDESC_RESOLVE_IMAGE_FORMAT);
-                        _SG_VALIDATE(width == res_img->cmn.width >> res_att->mip_level, VALIDATE_PASSDESC_RESOLVE_IMAGE_SIZES);
-                        _SG_VALIDATE(height == res_img->cmn.height >> res_att->mip_level, VALIDATE_PASSDESC_RESOLVE_IMAGE_SIZES);
+                        _SG_VALIDATE(color_width == res_img->cmn.width >> res_att->mip_level, VALIDATE_PASSDESC_RESOLVE_IMAGE_SIZES);
+                        _SG_VALIDATE(color_height == res_img->cmn.height >> res_att->mip_level, VALIDATE_PASSDESC_RESOLVE_IMAGE_SIZES);
                     }
                 }
             }
         }
+        bool has_depth_stencil_att;
         if (desc->depth_stencil_attachment.image.id != SG_INVALID_ID) {
             const sg_pass_attachment_desc* att = &desc->depth_stencil_attachment;
             const _sg_image_t* img = _sg_lookup_image(&_sg.pools, att->image.id);
             _SG_VALIDATE(img, VALIDATE_PASSDESC_DEPTH_IMAGE);
+            has_depth_stencil_att = true;
             if (img) {
                 _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_PASSDESC_DEPTH_IMAGE);
                 _SG_VALIDATE(att->mip_level < img->cmn.num_mipmaps, VALIDATE_PASSDESC_DEPTH_MIPLEVEL);
@@ -14982,12 +14985,13 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
                     _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_PASSDESC_DEPTH_SLICE);
                 }
                 _SG_VALIDATE(img->cmn.render_target, VALIDATE_PASSDESC_DEPTH_IMAGE_NO_RT);
-                _SG_VALIDATE(width == img->cmn.width >> att->mip_level, VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
-                _SG_VALIDATE(height == img->cmn.height >> att->mip_level, VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
-                _SG_VALIDATE(sample_count == img->cmn.sample_count, VALIDATE_PASSDESC_DEPTH_IMAGE_SAMPLE_COUNT);
+                _SG_VALIDATE((color_width == -1) || (color_width == img->cmn.width >> att->mip_level), VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
+                _SG_VALIDATE((color_height == -1) || (color_height == img->cmn.height >> att->mip_level), VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
+                _SG_VALIDATE((color_sample_count == -1) || (color_sample_count == img->cmn.sample_count), VALIDATE_PASSDESC_DEPTH_IMAGE_SAMPLE_COUNT);
                 _SG_VALIDATE(_sg_is_valid_rendertarget_depth_format(img->cmn.pixel_format), VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT);
             }
         }
+        _SG_VALIDATE(has_color_atts || has_depth_stencil_att, VALIDATE_PASSDESC_NO_ATTACHMENTS);
         return _sg_validate_end();
     #endif
 }
