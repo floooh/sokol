@@ -4190,7 +4190,7 @@ typedef struct {
 } _sg_pipeline_common_t;
 
 _SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const sg_pipeline_desc* desc) {
-    SOKOL_ASSERT((desc->color_count >= 1) && (desc->color_count <= SG_MAX_COLOR_ATTACHMENTS));
+    SOKOL_ASSERT((desc->color_count >= 0) && (desc->color_count <= SG_MAX_COLOR_ATTACHMENTS));
     for (int i = 0; i < SG_MAX_VERTEX_BUFFERS; i++) {
         cmn->vertex_buffer_layout_active[i] = false;
     }
@@ -15457,7 +15457,12 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
 
     def.depth.compare = _sg_def(def.depth.compare, SG_COMPAREFUNC_ALWAYS);
     def.depth.pixel_format = _sg_def(def.depth.pixel_format, _sg.desc.context.depth_format);
-    def.color_count = _sg_def(def.color_count, 1);
+    if (def.colors[0].pixel_format == SG_PIXELFORMAT_NONE) {
+        // special case depth-only rendering, enforce a color count of 0
+        def.color_count = 0;
+    } else {
+        def.color_count = _sg_def(def.color_count, 1);
+    }
     if (def.color_count > SG_MAX_COLOR_ATTACHMENTS) {
         def.color_count = SG_MAX_COLOR_ATTACHMENTS;
     }
