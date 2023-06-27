@@ -5559,7 +5559,6 @@ _SOKOL_PRIVATE void _sg_dummy_activate_context(_sg_context_t* ctx) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
-    _sg_buffer_common_init(&buf->cmn, desc);
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -5570,7 +5569,6 @@ _SOKOL_PRIVATE void _sg_dummy_discard_buffer(_sg_buffer_t* buf) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
-    _sg_image_common_init(&img->cmn, desc);
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -5581,7 +5579,6 @@ _SOKOL_PRIVATE void _sg_dummy_discard_image(_sg_image_t* img) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
     SOKOL_ASSERT(smp && desc);
-    _sg_sampler_common_init(&smp->cmn, desc);
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -5592,7 +5589,6 @@ _SOKOL_PRIVATE void _sg_dummy_discard_sampler(_sg_sampler_t* smp) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
-    _sg_shader_common_init(&shd->cmn, desc);
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -5604,7 +5600,6 @@ _SOKOL_PRIVATE void _sg_dummy_discard_shader(_sg_shader_t* shd) {
 _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && desc);
     pip->shader = shd;
-    _sg_pipeline_common_init(&pip->cmn, desc);
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         const sg_vertex_attr_state* a_state = &desc->layout.attrs[attr_index];
         if (a_state->format == SG_VERTEXFORMAT_INVALID) {
@@ -5624,8 +5619,6 @@ _SOKOL_PRIVATE void _sg_dummy_discard_pipeline(_sg_pipeline_t* pip) {
 _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_pass(_sg_pass_t* pass, _sg_image_t** color_images, _sg_image_t** resolve_images, _sg_image_t* ds_img, const sg_pass_desc* desc) {
     SOKOL_ASSERT(pass && desc);
     SOKOL_ASSERT(color_images && resolve_images);
-
-    _sg_pass_common_init(&pass->cmn, desc);
 
     for (int i = 0; i < pass->cmn.num_color_atts; i++) {
         const sg_pass_attachment_desc* color_desc = &desc->color_attachments[i];
@@ -7061,7 +7054,6 @@ _SOKOL_PRIVATE void _sg_gl_discard_context(_sg_context_t* ctx) {
 _SOKOL_PRIVATE sg_resource_state _sg_gl_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
     _SG_GL_CHECK_ERROR();
-    _sg_buffer_common_init(&buf->cmn, desc);
     buf->gl.injected = (0 != desc->gl_buffers[0]);
     const GLenum gl_target = _sg_gl_buffer_target(buf->cmn.type);
     const GLenum gl_usage  = _sg_gl_usage(buf->cmn.usage);
@@ -7111,7 +7103,6 @@ _SOKOL_PRIVATE bool _sg_gl_supported_texture_format(sg_pixel_format fmt) {
 _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     _SG_GL_CHECK_ERROR();
-    _sg_image_common_init(&img->cmn, desc);
     img->gl.injected = (0 != desc->gl_textures[0]);
 
     // check if texture format is support
@@ -7221,7 +7212,6 @@ _SOKOL_PRIVATE void _sg_gl_discard_image(_sg_image_t* img) {
 _SOKOL_PRIVATE sg_resource_state _sg_gl_create_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
     SOKOL_ASSERT(smp && desc);
     _SG_GL_CHECK_ERROR();
-    _sg_sampler_common_init(&smp->cmn, desc);
     smp->gl.injected = (0 != desc->gl_sampler);
     if (smp->gl.injected) {
         smp->gl.smp = (GLuint) desc->gl_sampler;
@@ -7314,8 +7304,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
     SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(!shd->gl.prog);
     _SG_GL_CHECK_ERROR();
-
-    _sg_shader_common_init(&shd->cmn, desc);
 
     // copy the optional vertex attribute names over
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
@@ -7439,7 +7427,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
     SOKOL_ASSERT(desc->shader.id == shd->slot.id);
     SOKOL_ASSERT(shd->gl.prog);
     pip->shader = shd;
-    _sg_pipeline_common_init(&pip->cmn, desc);
     pip->gl.primitive_type = desc->primitive_type;
     pip->gl.depth = desc->depth;
     pip->gl.stencil = desc->stencil;
@@ -7535,8 +7522,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
     SOKOL_ASSERT(pass && desc);
     SOKOL_ASSERT(color_images && resolve_images);
     _SG_GL_CHECK_ERROR();
-
-    _sg_pass_common_init(&pass->cmn, desc);
 
     // copy image pointers
     for (int i = 0; i < pass->cmn.num_color_atts; i++) {
@@ -9085,7 +9070,6 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_context(_sg_context_t* ctx) {
 _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(!buf->d3d11.buf);
-    _sg_buffer_common_init(&buf->cmn, desc);
     const bool injected = (0 != desc->d3d11_buffer);
     if (injected) {
         buf->d3d11.buf = (ID3D11Buffer*) desc->d3d11_buffer;
@@ -9154,7 +9138,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
     SOKOL_ASSERT((0 == img->d3d11.tex2d) && (0 == img->d3d11.tex3d) && (0 == img->d3d11.res) && (0 == img->d3d11.srv));
     HRESULT hr;
 
-    _sg_image_common_init(&img->cmn, desc);
     const bool injected = (0 != desc->d3d11_texture) || (0 != desc->d3d11_shader_resource_view);
     const bool msaa = (img->cmn.sample_count > 1);
     img->d3d11.format = _sg_d3d11_pixel_format(img->cmn.pixel_format);
@@ -9344,7 +9327,6 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_image(_sg_image_t* img) {
 _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
     SOKOL_ASSERT(smp && desc);
     SOKOL_ASSERT(0 == smp->d3d11.smp);
-    _sg_sampler_common_init(&smp->cmn, desc);
     const bool injected = (0 != desc->d3d11_sampler);
     if (injected) {
         smp->d3d11.smp = (ID3D11SamplerState*)desc->d3d11_sampler;
@@ -9448,8 +9430,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
     SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(!shd->d3d11.vs && !shd->d3d11.fs && !shd->d3d11.vs_blob);
     HRESULT hr;
-
-    _sg_shader_common_init(&shd->cmn, desc);
 
     // copy vertex attribute semantic names and indices
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
@@ -9555,7 +9535,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
     SOKOL_ASSERT(!pip->d3d11.il && !pip->d3d11.rs && !pip->d3d11.dss && !pip->d3d11.bs);
 
     pip->shader = shd;
-    _sg_pipeline_common_init(&pip->cmn, desc);
     pip->d3d11.index_format = _sg_d3d11_index_format(pip->cmn.index_type);
     pip->d3d11.topology = _sg_d3d11_primitive_topology(desc->primitive_type);
     pip->d3d11.stencil_ref = desc->stencil.ref;
@@ -9711,8 +9690,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pass(_sg_pass_t* pass, _sg_ima
     SOKOL_ASSERT(pass && desc);
     SOKOL_ASSERT(color_images && resolve_images);
     SOKOL_ASSERT(_sg.d3d11.dev);
-
-    _sg_pass_common_init(&pass->cmn, desc);
 
     // copy image pointers
     for (int i = 0; i < pass->cmn.num_color_atts; i++) {
@@ -10931,7 +10908,6 @@ _SOKOL_PRIVATE void _sg_mtl_activate_context(_sg_context_t* ctx) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
-    _sg_buffer_common_init(&buf->cmn, desc);
     const bool injected = (0 != desc->mtl_buffers[0]);
     MTLResourceOptions mtl_options = _sg_mtl_buffer_resource_options(buf->cmn.usage);
     for (int slot = 0; slot < buf->cmn.num_slots; slot++) {
@@ -11059,7 +11035,6 @@ _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt_msaa(MTLTextureDescriptor* mtl_desc,
 
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
-    _sg_image_common_init(&img->cmn, desc);
     const bool injected = (0 != desc->mtl_textures[0]);
 
     // first initialize all Metal resource pool slots to 'empty'
@@ -11108,7 +11083,6 @@ _SOKOL_PRIVATE void _sg_mtl_discard_image(_sg_image_t* img) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
     SOKOL_ASSERT(smp && desc);
-    _sg_sampler_common_init(&smp->cmn, desc);
     id<MTLSamplerState> mtl_smp;
     const bool injected = (0 != desc->mtl_sampler);
     if (injected) {
@@ -11175,8 +11149,6 @@ _SOKOL_PRIVATE id<MTLLibrary> _sg_mtl_library_from_bytecode(const void* ptr, siz
 
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
-
-    _sg_shader_common_init(&shd->cmn, desc);
 
     // create metal library objects and lookup entry functions
     id<MTLLibrary> vs_lib = nil;
@@ -11254,7 +11226,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
     SOKOL_ASSERT(desc->shader.id == shd->slot.id);
 
     pip->shader = shd;
-    _sg_pipeline_common_init(&pip->cmn, desc);
 
     sg_primitive_type prim_type = desc->primitive_type;
     pip->mtl.prim_type = _sg_mtl_primitive_type(prim_type);
@@ -11382,8 +11353,6 @@ _SOKOL_PRIVATE void _sg_mtl_discard_pipeline(_sg_pipeline_t* pip) {
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pass(_sg_pass_t* pass, _sg_image_t** color_images, _sg_image_t** resolve_images, _sg_image_t* ds_img, const sg_pass_desc* desc) {
     SOKOL_ASSERT(pass && desc);
     SOKOL_ASSERT(color_images && resolve_images);
-
-    _sg_pass_common_init(&pass->cmn, desc);
 
     // copy image pointers
     for (int i = 0; i < pass->cmn.num_color_atts; i++) {
@@ -12811,7 +12780,6 @@ _SOKOL_PRIVATE void _sg_wgpu_activate_context(_sg_context_t* ctx) {
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
     const bool injected = (0 != desc->wgpu_buffer);
-    _sg_buffer_common_init(&buf->cmn, desc);
     if (injected) {
         buf->wgpu.buf = (WGPUBuffer) desc->wgpu_buffer;
         wgpuBufferReference(buf->wgpu.buf);
@@ -12866,8 +12834,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(_sg.wgpu.dev);
     SOKOL_ASSERT(_sg.wgpu.staging_cmd_enc);
-
-    _sg_image_common_init(&img->cmn, desc);
 
     const bool injected = (0 != desc->wgpu_texture);
     const bool is_msaa = desc->sample_count > 1;
@@ -12992,7 +12958,6 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_image(_sg_image_t* img) {
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(desc->vs.bytecode.ptr && desc->fs.bytecode.ptr);
-    _sg_shader_common_init(&shd->cmn, desc);
 
     bool success = true;
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
@@ -13066,7 +13031,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     SOKOL_ASSERT(shd->wgpu.stage[SG_SHADERSTAGE_VS].bind_group_layout);
     SOKOL_ASSERT(shd->wgpu.stage[SG_SHADERSTAGE_FS].bind_group_layout);
     pip->shader = shd;
-    _sg_pipeline_common_init(&pip->cmn, desc);
     pip->wgpu.stencil_ref = (uint32_t) desc->stencil.ref;
 
     WGPUBindGroupLayout pip_bgl[3] = {
@@ -13199,7 +13163,6 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_pipeline(_sg_pipeline_t* pip) {
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_image_t** att_images, const sg_pass_desc* desc) {
     SOKOL_ASSERT(pass && desc);
     SOKOL_ASSERT(att_images && att_images[0]);
-    _sg_pass_common_init(&pass->cmn, desc);
 
     // copy image pointers and create render-texture views
     const sg_pass_attachment_desc* att_desc;
@@ -15641,6 +15604,7 @@ _SOKOL_PRIVATE void _sg_init_buffer(_sg_buffer_t* buf, const sg_buffer_desc* des
     SOKOL_ASSERT(desc);
     buf->slot.ctx_id = _sg.active_context.id;
     if (_sg_validate_buffer_desc(desc)) {
+        _sg_buffer_common_init(&buf->cmn, desc);
         buf->slot.state = _sg_create_buffer(buf, desc);
     } else {
         buf->slot.state = SG_RESOURCESTATE_FAILED;
@@ -15653,6 +15617,7 @@ _SOKOL_PRIVATE void _sg_init_image(_sg_image_t* img, const sg_image_desc* desc) 
     SOKOL_ASSERT(desc);
     img->slot.ctx_id = _sg.active_context.id;
     if (_sg_validate_image_desc(desc)) {
+        _sg_image_common_init(&img->cmn, desc);
         img->slot.state = _sg_create_image(img, desc);
     } else {
         img->slot.state = SG_RESOURCESTATE_FAILED;
@@ -15665,6 +15630,7 @@ _SOKOL_PRIVATE void _sg_init_sampler(_sg_sampler_t* smp, const sg_sampler_desc* 
     SOKOL_ASSERT(desc);
     smp->slot.ctx_id = _sg.active_context.id;
     if (_sg_validate_sampler_desc(desc)) {
+        _sg_sampler_common_init(&smp->cmn, desc);
         smp->slot.state = _sg_create_sampler(smp, desc);
     } else {
         smp->slot.state = SG_RESOURCESTATE_FAILED;
@@ -15677,6 +15643,7 @@ _SOKOL_PRIVATE void _sg_init_shader(_sg_shader_t* shd, const sg_shader_desc* des
     SOKOL_ASSERT(desc);
     shd->slot.ctx_id = _sg.active_context.id;
     if (_sg_validate_shader_desc(desc)) {
+        _sg_shader_common_init(&shd->cmn, desc);
         shd->slot.state = _sg_create_shader(shd, desc);
     } else {
         shd->slot.state = SG_RESOURCESTATE_FAILED;
@@ -15691,6 +15658,7 @@ _SOKOL_PRIVATE void _sg_init_pipeline(_sg_pipeline_t* pip, const sg_pipeline_des
     if (_sg_validate_pipeline_desc(desc)) {
         _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, desc->shader.id);
         if (shd && (shd->slot.state == SG_RESOURCESTATE_VALID)) {
+            _sg_pipeline_common_init(&pip->cmn, desc);
             pip->slot.state = _sg_create_pipeline(pip, shd, desc);
         } else {
             pip->slot.state = SG_RESOURCESTATE_FAILED;
@@ -15733,6 +15701,7 @@ _SOKOL_PRIVATE void _sg_init_pass(_sg_pass_t* pass, const sg_pass_desc* desc) {
                 return;
             }
         }
+        _sg_pass_common_init(&pass->cmn, desc);
         pass->slot.state = _sg_create_pass(pass, color_images, resolve_images, ds_image, desc);
     } else {
         pass->slot.state = SG_RESOURCESTATE_FAILED;
