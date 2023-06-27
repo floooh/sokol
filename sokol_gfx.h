@@ -4219,6 +4219,8 @@ typedef struct {
 } _sg_pass_attachment_common_t;
 
 typedef struct {
+    int width;
+    int height;
     int num_color_atts;
     _sg_pass_attachment_common_t color_atts[SG_MAX_COLOR_ATTACHMENTS];
     _sg_pass_attachment_common_t resolve_atts[SG_MAX_COLOR_ATTACHMENTS];
@@ -4231,7 +4233,10 @@ _SOKOL_PRIVATE void _sg_pass_attachment_common_init(_sg_pass_attachment_common_t
     cmn->slice = desc->slice;
 }
 
-_SOKOL_PRIVATE void _sg_pass_common_init(_sg_pass_common_t* cmn, const sg_pass_desc* desc) {
+_SOKOL_PRIVATE void _sg_pass_common_init(_sg_pass_common_t* cmn, const sg_pass_desc* desc, int width, int height) {
+    SOKOL_ASSERT((width > 0) && (height > 0));
+    cmn->width = width;
+    cmn->height = height;
     for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
         if (desc->color_attachments[i].image.id != SG_INVALID_ID) {
             cmn->num_color_atts++;
@@ -5406,6 +5411,11 @@ _SOKOL_PRIVATE int _sg_num_rows(sg_pixel_format fmt, int height) {
         num_rows = 1;
     }
     return num_rows;
+}
+
+// return size of a mipmap level
+_SOKOL_PRIVATE int _sg_miplevel_dim(int base_dim, int mip_level) {
+    return _sg_max(base_dim >> mip_level, 1);
 }
 
 /* return pitch of a 2D subimage / texture slice
@@ -7147,14 +7157,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                         gl_img_target = _sg_gl_cubeface_target(face_index);
                     }
                     const GLvoid* data_ptr = desc->data.subimage[face_index][mip_index].ptr;
-                    int mip_width = img->cmn.width >> mip_index;
-                    if (mip_width == 0) {
-                        mip_width = 1;
-                    }
-                    int mip_height = img->cmn.height >> mip_index;
-                    if (mip_height == 0) {
-                        mip_height = 1;
-                    }
+                    const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
+                    const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
                     if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
                         if (is_compressed) {
                             const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
@@ -7168,10 +7172,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                     } else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
                         int mip_depth = img->cmn.num_slices;
                         if (SG_IMAGETYPE_3D == img->cmn.type) {
-                            mip_depth >>= mip_index;
-                        }
-                        if (mip_depth == 0) {
-                            mip_depth = 1;
+                            mip_depth = _sg_miplevel_dim(mip_depth, mip_index);
                         }
                         if (is_compressed) {
                             const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
@@ -8286,14 +8287,8 @@ _SOKOL_PRIVATE void _sg_gl_update_image(_sg_image_t* img, const sg_image_data* d
                 gl_img_target = _sg_gl_cubeface_target(face_index);
             }
             const GLvoid* data_ptr = data->subimage[face_index][mip_index].ptr;
-            int mip_width = img->cmn.width >> mip_index;
-            if (mip_width == 0) {
-                mip_width = 1;
-            }
-            int mip_height = img->cmn.height >> mip_index;
-            if (mip_height == 0) {
-                mip_height = 1;
-            }
+            int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
+            int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
             if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
                 glTexSubImage2D(gl_img_target, mip_index,
                     0, 0,
@@ -8301,9 +8296,9 @@ _SOKOL_PRIVATE void _sg_gl_update_image(_sg_image_t* img, const sg_image_data* d
                     gl_img_format, gl_img_type,
                     data_ptr);
             } else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
-                int mip_depth = img->cmn.num_slices >> mip_index;
-                if (mip_depth == 0) {
-                    mip_depth = 1;
+                int mip_depth = img->cmn.num_slices;
+                if (SG_IMAGETYPE_3D == img->cmn.type) {
+                    mip_depth = _sg_miplevel_dim(img->cmn.num_slices, mip_index);
                 }
                 glTexSubImage3D(gl_img_target, mip_index,
                     0, 0, 0,
@@ -9114,8 +9109,8 @@ _SOKOL_PRIVATE void _sg_d3d11_fill_subres_data(const _sg_image_t* img, const sg_
             for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++, subres_index++) {
                 SOKOL_ASSERT(subres_index < (SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS));
                 D3D11_SUBRESOURCE_DATA* subres_data = &_sg.d3d11.subres_data[subres_index];
-                const int mip_width = ((img->cmn.width>>mip_index)>0) ? img->cmn.width>>mip_index : 1;
-                const int mip_height = ((img->cmn.height>>mip_index)>0) ? img->cmn.height>>mip_index : 1;
+                const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
+                const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
                 const sg_range* subimg_data = &(data->subimage[face_index][mip_index]);
                 const size_t slice_size = subimg_data->size / (size_t)num_slices;
                 const size_t slice_offset = slice_size * (size_t)slice_index;
@@ -9123,7 +9118,7 @@ _SOKOL_PRIVATE void _sg_d3d11_fill_subres_data(const _sg_image_t* img, const sg_
                 subres_data->pSysMem = ptr + slice_offset;
                 subres_data->SysMemPitch = (UINT)_sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
                 if (img->cmn.type == SG_IMAGETYPE_3D) {
-                    // FIXME? const int mip_depth = ((img->depth>>mip_index)>0) ? img->depth>>mip_index : 1;
+                    // FIXME? const int mip_depth = _sg_miplevel_dim(img->depth, mip_index);
                     subres_data->SysMemSlicePitch = (UINT)_sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
                 } else {
                     subres_data->SysMemSlicePitch = 0;
@@ -10126,8 +10121,8 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
         for (int slice_index = 0; slice_index < num_slices; slice_index++) {
             for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++, subres_index++) {
                 SOKOL_ASSERT(subres_index < (SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS));
-                const int mip_width = ((img->cmn.width>>mip_index)>0) ? img->cmn.width>>mip_index : 1;
-                const int mip_height = ((img->cmn.height>>mip_index)>0) ? img->cmn.height>>mip_index : 1;
+                const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
+                const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
                 const int src_pitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
                 const sg_range* subimg_data = &(data->subimage[face_index][mip_index]);
                 const size_t slice_size = subimg_data->size / (size_t)num_slices;
@@ -10945,8 +10940,8 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_data(const _sg_image_t* img, __unsafe_unr
             SOKOL_ASSERT(data->subimage[face_index][mip_index].ptr);
             SOKOL_ASSERT(data->subimage[face_index][mip_index].size > 0);
             const uint8_t* data_ptr = (const uint8_t*)data->subimage[face_index][mip_index].ptr;
-            const int mip_width = _sg_max(img->cmn.width >> mip_index, 1);
-            const int mip_height = _sg_max(img->cmn.height >> mip_index, 1);
+            const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
+            const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
             // special case PVRTC formats: bytePerRow and bytesPerImage must be 0
             int bytes_per_row = 0;
             int bytes_per_slice = 0;
@@ -10961,7 +10956,7 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_data(const _sg_image_t* img, __unsafe_unr
             MTLRegion region;
             int bytes_per_image;
             if (img->cmn.type == SG_IMAGETYPE_3D) {
-                const int mip_depth = _sg_max(img->cmn.num_slices >> mip_index, 1);
+                const int mip_depth = _sg_miplevel_dim(img->cmn.num_slices, mip_index);
                 region = MTLRegionMake3D(0, 0, 0, (NSUInteger)mip_width, (NSUInteger)mip_height, (NSUInteger)mip_depth);
                 bytes_per_image = bytes_per_slice;
                 // FIXME: apparently the minimal bytes_per_image size for 3D texture is 4 KByte... somehow need to handle this
@@ -12434,8 +12429,8 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_image_data_buffer_size(const _sg_image_t* img) 
     const uint32_t num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
     const uint32_t num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.num_slices : 1;
     for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
-        const uint32_t mip_width = _sg_max(img->cmn.width >> mip_index, 1);
-        const uint32_t mip_height = _sg_max(img->cmn.height >> mip_index, 1);
+        const uint32_t mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
+        const uint32_t mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
         // row-pitch must be 256-aligend
         const uint32_t bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, _SG_WGPU_ROWPITCH_ALIGN);
         num_bytes += bytes_per_slice * num_slices * num_faces;
@@ -12472,9 +12467,9 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_data(WGPUBuffer stg_buf, uint8_t* st
             SOKOL_ASSERT(src_base_ptr);
             uint8_t* dst_base_ptr = stg_base_ptr + stg_offset;
 
-            const uint32_t mip_width  = _sg_max(img->cmn.width >> mip_index, 1);
-            const uint32_t mip_height = _sg_max(img->cmn.height >> mip_index, 1);
-            const uint32_t mip_depth  = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_max(img->cmn.num_slices >> mip_index, 1) : 1;
+            const uint32_t mip_width  = _sg_miplevel_dim(img->cmn.width, mip_index);
+            const uint32_t mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
+            const uint32_t mip_depth  = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : 1;
             const uint32_t num_rows   = _sg_num_rows(fmt, mip_height);
             const uint32_t src_bytes_per_row   = _sg_row_pitch(fmt, mip_width, 1);
             const uint32_t dst_bytes_per_row   = _sg_row_pitch(fmt, mip_width, _SG_WGPU_ROWPITCH_ALIGN);
@@ -14563,8 +14558,8 @@ _SOKOL_PRIVATE void _sg_validate_image_data(const sg_image_data* data, sg_pixel_
                 const bool has_data = data->subimage[face_index][mip_index].ptr != 0;
                 const bool has_size = data->subimage[face_index][mip_index].size > 0;
                 _SG_VALIDATE(has_data && has_size, VALIDATE_IMAGEDATA_NODATA);
-                const int mip_width = _sg_max(width >> mip_index, 1);
-                const int mip_height = _sg_max(height >> mip_index, 1);
+                const int mip_width = _sg_miplevel_dim(width, mip_index);
+                const int mip_height = _sg_miplevel_dim(height, mip_index);
                 const int bytes_per_slice = _sg_surface_pitch(fmt, mip_width, mip_height, 1);
                 const int expected_size = bytes_per_slice * num_slices;
                 _SG_VALIDATE(expected_size == (int)data->subimage[face_index][mip_index].size, VALIDATE_IMAGEDATA_DATA_SIZE);
@@ -14894,12 +14889,12 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
                     _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_PASSDESC_SLICE);
                 }
                 if (att_index == 0) {
-                    color_width = img->cmn.width >> att->mip_level;
-                    color_height = img->cmn.height >> att->mip_level;
+                    color_width = _sg_miplevel_dim(img->cmn.width, att->mip_level);
+                    color_height = _sg_miplevel_dim(img->cmn.height, att->mip_level);
                     color_sample_count = img->cmn.sample_count;
                 } else {
-                    _SG_VALIDATE(color_width == img->cmn.width >> att->mip_level, VALIDATE_PASSDESC_IMAGE_SIZES);
-                    _SG_VALIDATE(color_height == img->cmn.height >> att->mip_level, VALIDATE_PASSDESC_IMAGE_SIZES);
+                    _SG_VALIDATE(color_width == _sg_miplevel_dim(img->cmn.width, att->mip_level), VALIDATE_PASSDESC_IMAGE_SIZES);
+                    _SG_VALIDATE(color_height == _sg_miplevel_dim(img->cmn.height, att->mip_level), VALIDATE_PASSDESC_IMAGE_SIZES);
                     _SG_VALIDATE(color_sample_count == img->cmn.sample_count, VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS);
                 }
                 _SG_VALIDATE(_sg_is_valid_rendertarget_color_format(img->cmn.pixel_format), VALIDATE_PASSDESC_COLOR_INV_PIXELFORMAT);
@@ -14924,8 +14919,8 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
                             _SG_VALIDATE(res_att->slice < res_img->cmn.num_slices, VALIDATE_PASSDESC_RESOLVE_SLICE);
                         }
                         _SG_VALIDATE(img->cmn.pixel_format == res_img->cmn.pixel_format, VALIDATE_PASSDESC_RESOLVE_IMAGE_FORMAT);
-                        _SG_VALIDATE(color_width == res_img->cmn.width >> res_att->mip_level, VALIDATE_PASSDESC_RESOLVE_IMAGE_SIZES);
-                        _SG_VALIDATE(color_height == res_img->cmn.height >> res_att->mip_level, VALIDATE_PASSDESC_RESOLVE_IMAGE_SIZES);
+                        _SG_VALIDATE(color_width == _sg_miplevel_dim(res_img->cmn.width, res_att->mip_level), VALIDATE_PASSDESC_RESOLVE_IMAGE_SIZES);
+                        _SG_VALIDATE(color_height == _sg_miplevel_dim(res_img->cmn.height, res_att->mip_level), VALIDATE_PASSDESC_RESOLVE_IMAGE_SIZES);
                     }
                 }
             }
@@ -14948,8 +14943,8 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
                     _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_PASSDESC_DEPTH_SLICE);
                 }
                 _SG_VALIDATE(img->cmn.render_target, VALIDATE_PASSDESC_DEPTH_IMAGE_NO_RT);
-                _SG_VALIDATE((color_width == -1) || (color_width == img->cmn.width >> att->mip_level), VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
-                _SG_VALIDATE((color_height == -1) || (color_height == img->cmn.height >> att->mip_level), VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
+                _SG_VALIDATE((color_width == -1) || (color_width == _sg_miplevel_dim(img->cmn.width, att->mip_level)), VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
+                _SG_VALIDATE((color_height == -1) || (color_height == _sg_miplevel_dim(img->cmn.height, att->mip_level)), VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
                 _SG_VALIDATE((color_sample_count == -1) || (color_sample_count == img->cmn.sample_count), VALIDATE_PASSDESC_DEPTH_IMAGE_SAMPLE_COUNT);
                 _SG_VALIDATE(_sg_is_valid_rendertarget_depth_format(img->cmn.pixel_format), VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT);
             }
@@ -15678,6 +15673,9 @@ _SOKOL_PRIVATE void _sg_init_pass(_sg_pass_t* pass, const sg_pass_desc* desc) {
         _sg_image_t* color_images[SG_MAX_COLOR_ATTACHMENTS] = { 0 };
         _sg_image_t* resolve_images[SG_MAX_COLOR_ATTACHMENTS] = { 0 };
         _sg_image_t* ds_image = 0;
+        // NOTE: validation already checked that all surfaces are same width/height
+        int width = 0;
+        int height = 0;
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
             if (desc->color_attachments[i].image.id) {
                 color_images[i] = _sg_lookup_image(&_sg.pools, desc->color_attachments[i].image.id);
@@ -15685,6 +15683,9 @@ _SOKOL_PRIVATE void _sg_init_pass(_sg_pass_t* pass, const sg_pass_desc* desc) {
                     pass->slot.state = SG_RESOURCESTATE_FAILED;
                     return;
                 }
+                const int mip_level = desc->color_attachments[i].mip_level;
+                width = _sg_miplevel_dim(color_images[i]->cmn.width, mip_level);
+                height = _sg_miplevel_dim(color_images[i]->cmn.height, mip_level);
             }
             if (desc->resolve_attachments[i].image.id) {
                 resolve_images[i] = _sg_lookup_image(&_sg.pools, desc->resolve_attachments[i].image.id);
@@ -15700,8 +15701,11 @@ _SOKOL_PRIVATE void _sg_init_pass(_sg_pass_t* pass, const sg_pass_desc* desc) {
                 pass->slot.state = SG_RESOURCESTATE_FAILED;
                 return;
             }
+            const int mip_level = desc->depth_stencil_attachment.mip_level;
+            width = _sg_miplevel_dim(ds_image->cmn.width, mip_level);
+            height = _sg_miplevel_dim(ds_image->cmn.height, mip_level);
         }
-        _sg_pass_common_init(&pass->cmn, desc);
+        _sg_pass_common_init(&pass->cmn, desc, width, height);
         pass->slot.state = _sg_create_pass(pass, color_images, resolve_images, ds_image, desc);
     } else {
         pass->slot.state = SG_RESOURCESTATE_FAILED;
@@ -16629,11 +16633,7 @@ SOKOL_API_IMPL void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_ac
         _sg.pass_valid = true;
         sg_pass_action pa;
         _sg_resolve_default_pass_action(pass_action, &pa);
-        const _sg_image_t* img = _sg_pass_color_image(pass, 0);
-        SOKOL_ASSERT(img);
-        const int w = img->cmn.width;
-        const int h = img->cmn.height;
-        _sg_begin_pass(pass, &pa, w, h);
+        _sg_begin_pass(pass, &pa, pass->cmn.width, pass->cmn.height);
         _SG_TRACE_ARGS(begin_pass, pass_id, &pa);
     } else {
         _sg.pass_valid = false;
