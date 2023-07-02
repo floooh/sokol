@@ -14865,7 +14865,6 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
         bool atts_cont = true;
         int color_width = -1, color_height = -1, color_sample_count = -1;
         bool has_color_atts = false;
-        // color attachments
         for (int att_index = 0; att_index < SG_MAX_COLOR_ATTACHMENTS; att_index++) {
             const sg_pass_attachment_desc* att = &desc->color_attachments[att_index];
             if (att->image.id == SG_INVALID_ID) {
@@ -14924,7 +14923,7 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
                 }
             }
         }
-        bool has_depth_stencil_att;
+        bool has_depth_stencil_att = false;
         if (desc->depth_stencil_attachment.image.id != SG_INVALID_ID) {
             const sg_pass_attachment_desc* att = &desc->depth_stencil_attachment;
             const _sg_image_t* img = _sg_lookup_image(&_sg.pools, att->image.id);
