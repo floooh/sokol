@@ -1817,6 +1817,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     smp_desc.min_filter = SG_FILTER_LINEAR;
     smp_desc.mag_filter = SG_FILTER_LINEAR;
     smp_desc.mipmap_filter = SG_FILTER_NONE;
+    smp_desc.label = "sokol-imgui-sampler";
     _simgui.smp = sg_make_sampler(&smp_desc);
     io->Fonts->TexID = simgui_imtextureid(_simgui.img);
 
