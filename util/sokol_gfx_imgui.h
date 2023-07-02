@@ -3316,7 +3316,6 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_panel(sg_imgui_t* ctx, sg_buffer buf) 
 _SOKOL_PRIVATE bool _sg_imgui_image_renderable(sg_image_type type, sg_pixel_format fmt, int sample_count) {
     return (type == SG_IMAGETYPE_2D)
         && sg_query_pixelformat(fmt).sample
-        && !sg_query_pixelformat(fmt).depth
         && sample_count == 1;
 }
 
