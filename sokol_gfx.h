@@ -3031,7 +3031,6 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_EXISTS, "sg_apply_bindings: image bound to vertex stage no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMAGE_TYPE_MISMATCH, "sg_apply_bindings: type of image bound to vertex stage doesn't match shader desc") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMAGE_MSAA, "sg_apply_bindings: cannot bind image with sample_count>1 to vertex stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMAGE_DEPTH, "sg_apply_bindings: cannot bind depth/stencil image to vertex stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_UNEXPECTED_IMAGE_BINDING, "sg_apply_bindings: unexpected image binding on vertex stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_EXPECTED_SAMPLER_BINDING, "sg_apply_bindings: missing sampler binding on vertex stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_UNEXPECTED_SAMPLER_COMPARE_NEVER, "sg_apply_bindings: shader expects SG_SAMPLERTYPE_COMPARE on vertex stage but sampler has SG_COMPAREFUNC_NEVER") \
@@ -3043,7 +3042,6 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_EXISTS, "sg_apply_bindings: image bound to fragment stage no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMAGE_TYPE_MISMATCH, "sg_apply_bindings: type of image bound to fragment stage doesn't match shader desc") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMAGE_MSAA, "sg_apply_bindings: cannot bind image with sample_count>1 to fragment stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMAGE_DEPTH, "sg_apply_bindings: cannot bind depth/stencil image to fragment stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_UNEXPECTED_IMAGE_BINDING, "sg_apply_bindings: unexpected image binding on fragment stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_EXPECTED_SAMPLER_BINDING, "sg_apply_bindings: missing sampler binding on fragment stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_UNEXPECTED_SAMPLER_COMPARE_NEVER, "sg_apply_bindings: shader expects SG_SAMPLERTYPE_COMPARE on fragment stage but sampler has SG_COMPAREFUNC_NEVER") \
@@ -7424,7 +7422,7 @@ _SOKOL_PRIVATE void _sg_gl_discard_shader(_sg_shader_t* shd) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && shd && desc);
-    SOKOL_ASSERT(!pip->shader && pip->cmn.shader_id.id == SG_INVALID_ID);
+    SOKOL_ASSERT((pip->shader == 0) && (pip->cmn.shader_id.id != SG_INVALID_ID));
     SOKOL_ASSERT(desc->shader.id == shd->slot.id);
     SOKOL_ASSERT(shd->gl.prog);
     pip->shader = shd;
@@ -7939,9 +7937,9 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
             cache_ss->ref = state_ss->ref;
         }
 
-        // update blend state
-        // FIXME: separate blend state per color attachment not support, needs GL4
-        {
+        if (pip->cmn.color_count > 0) {
+            // update blend state
+            // FIXME: separate blend state per color attachment not support, needs GL4
             const sg_blend_state* state_bs = &pip->gl.blend;
             sg_blend_state* cache_bs = &_sg.gl.cache.blend;
             if (state_bs->enabled != cache_bs->enabled) {
@@ -7971,39 +7969,40 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
                 cache_bs->op_alpha = state_bs->op_alpha;
                 glBlendEquationSeparate(_sg_gl_blend_op(state_bs->op_rgb), _sg_gl_blend_op(state_bs->op_alpha));
             }
-        }
 
-        // standalone state
-        for (GLuint i = 0; i < (GLuint)pip->cmn.color_count; i++) {
-            if (pip->gl.color_write_mask[i] != _sg.gl.cache.color_write_mask[i]) {
-                const sg_color_mask cm = pip->gl.color_write_mask[i];
-                _sg.gl.cache.color_write_mask[i] = cm;
-                #ifdef SOKOL_GLCORE33
-                    glColorMaski(i,
-                                (cm & SG_COLORMASK_R) != 0,
-                                (cm & SG_COLORMASK_G) != 0,
-                                (cm & SG_COLORMASK_B) != 0,
-                                (cm & SG_COLORMASK_A) != 0);
-                #else
-                    if (0 == i) {
-                        glColorMask((cm & SG_COLORMASK_R) != 0,
+            // standalone color target state
+            for (GLuint i = 0; i < (GLuint)pip->cmn.color_count; i++) {
+                if (pip->gl.color_write_mask[i] != _sg.gl.cache.color_write_mask[i]) {
+                    const sg_color_mask cm = pip->gl.color_write_mask[i];
+                    _sg.gl.cache.color_write_mask[i] = cm;
+                    #ifdef SOKOL_GLCORE33
+                        glColorMaski(i,
+                                    (cm & SG_COLORMASK_R) != 0,
                                     (cm & SG_COLORMASK_G) != 0,
                                     (cm & SG_COLORMASK_B) != 0,
                                     (cm & SG_COLORMASK_A) != 0);
-                    }
-                #endif
+                    #else
+                        if (0 == i) {
+                            glColorMask((cm & SG_COLORMASK_R) != 0,
+                                        (cm & SG_COLORMASK_G) != 0,
+                                        (cm & SG_COLORMASK_B) != 0,
+                                        (cm & SG_COLORMASK_A) != 0);
+                        }
+                    #endif
+                }
             }
-        }
 
-        if (!_sg_fequal(pip->cmn.blend_color.r, _sg.gl.cache.blend_color.r, 0.0001f) ||
-            !_sg_fequal(pip->cmn.blend_color.g, _sg.gl.cache.blend_color.g, 0.0001f) ||
-            !_sg_fequal(pip->cmn.blend_color.b, _sg.gl.cache.blend_color.b, 0.0001f) ||
-            !_sg_fequal(pip->cmn.blend_color.a, _sg.gl.cache.blend_color.a, 0.0001f))
-        {
-            sg_color c = pip->cmn.blend_color;
-            _sg.gl.cache.blend_color = c;
-            glBlendColor(c.r, c.g, c.b, c.a);
-        }
+            if (!_sg_fequal(pip->cmn.blend_color.r, _sg.gl.cache.blend_color.r, 0.0001f) ||
+                !_sg_fequal(pip->cmn.blend_color.g, _sg.gl.cache.blend_color.g, 0.0001f) ||
+                !_sg_fequal(pip->cmn.blend_color.b, _sg.gl.cache.blend_color.b, 0.0001f) ||
+                !_sg_fequal(pip->cmn.blend_color.a, _sg.gl.cache.blend_color.a, 0.0001f))
+            {
+                sg_color c = pip->cmn.blend_color;
+                _sg.gl.cache.blend_color = c;
+                glBlendColor(c.r, c.g, c.b, c.a);
+            }
+        } // pip->cmn.color_count > 0
+
         if (pip->gl.cull_mode != _sg.gl.cache.cull_mode) {
             _sg.gl.cache.cull_mode = pip->gl.cull_mode;
             if (SG_CULLMODE_NONE == pip->gl.cull_mode) {
@@ -15103,7 +15102,6 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                     if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
                         _SG_VALIDATE(img->cmn.type == stage->images[i].image_type, VALIDATE_ABND_VS_IMAGE_TYPE_MISMATCH);
                         _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_ABND_VS_IMAGE_MSAA);
-                        _SG_VALIDATE(!_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format), VALIDATE_ABND_VS_IMAGE_DEPTH);
                     }
                 }
             } else {
@@ -15143,7 +15141,6 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                     if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
                         _SG_VALIDATE(img->cmn.type == stage->images[i].image_type, VALIDATE_ABND_FS_IMAGE_TYPE_MISMATCH);
                         _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_ABND_FS_IMAGE_MSAA);
-                        _SG_VALIDATE(!_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format), VALIDATE_ABND_FS_IMAGE_DEPTH);
                     }
                 }
             } else {
