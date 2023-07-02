@@ -1854,6 +1854,20 @@ UTEST(sokol_gfx, make_pass_with_nonvalid_color_images) {
     sg_shutdown();
 }
 
+UTEST(sokol_gfx, make_pass_without_color_attachments) {
+    setup(&(sg_desc){0});
+    sg_pass pass = sg_make_pass(&(sg_pass_desc){
+        .depth_stencil_attachment.image = sg_make_image(&(sg_image_desc){
+            .render_target = true,
+            .width = 64,
+            .height = 64,
+            .pixel_format = SG_PIXELFORMAT_DEPTH,
+        })
+    });
+    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_VALID);
+    sg_shutdown();
+}
+
 UTEST(sokol_gfx, make_buffer_validate_start_canary) {
     setup(&(sg_desc){0});
     const uint32_t data[32] = {0};
@@ -2164,26 +2178,6 @@ UTEST(sokol_gfx, make_pass_validate_end_canary) {
     T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_CANARY);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_pass_validate_no_color_attrs) {
-    setup(&(sg_desc){0});
-    // FIXME: rendering without color attachments but depth attachment should actually work
-    sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .depth_stencil_attachment.image = sg_make_image(&(sg_image_desc){
-            .render_target = true,
-            .width = 64,
-            .height = 64,
-            .pixel_format = SG_PIXELFORMAT_DEPTH,
-        })
-    });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_NO_COLOR_ATTS);
-    T(log_items[1] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
-    T(log_items[2] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
-    T(log_items[3] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_IMAGE_SAMPLE_COUNT);
-    T(log_items[4] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
