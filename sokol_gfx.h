@@ -5567,6 +5567,8 @@ _SOKOL_PRIVATE void _sg_dummy_activate_context(_sg_context_t* ctx) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
+    _SOKOL_UNUSED(buf);
+    _SOKOL_UNUSED(desc);
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -5577,6 +5579,8 @@ _SOKOL_PRIVATE void _sg_dummy_discard_buffer(_sg_buffer_t* buf) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
+    _SOKOL_UNUSED(img);
+    _SOKOL_UNUSED(desc);
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -5587,6 +5591,8 @@ _SOKOL_PRIVATE void _sg_dummy_discard_image(_sg_image_t* img) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
     SOKOL_ASSERT(smp && desc);
+    _SOKOL_UNUSED(smp);
+    _SOKOL_UNUSED(desc);
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -5597,6 +5603,8 @@ _SOKOL_PRIVATE void _sg_dummy_discard_sampler(_sg_sampler_t* smp) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
+    _SOKOL_UNUSED(shd);
+    _SOKOL_UNUSED(desc);
     return SG_RESOURCESTATE_VALID;
 }
 
