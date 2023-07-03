@@ -7564,7 +7564,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
     glGenFramebuffers(1, &pass->gl.fb);
     glBindFramebuffer(GL_FRAMEBUFFER, pass->gl.fb);
 
-    // attach msaa render buffer or textures
+    // attach color attachments to framebuffer
     for (int i = 0; i < pass->cmn.num_color_atts; i++) {
         const _sg_image_t* color_img = pass->gl.color_atts[i].image;
         SOKOL_ASSERT(color_img);
@@ -7576,6 +7576,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
             _sg_gl_fb_attach_texture(&pass->gl.color_atts[i], &pass->cmn.color_atts[i], gl_att_type);
         }
     }
+    // attach depth-stencil attachement
     if (pass->gl.ds_att.image) {
         const GLenum gl_att = _sg_gl_depth_stencil_attachment_type(&pass->gl.ds_att);
         const _sg_image_t* ds_img = pass->gl.ds_att.image;
