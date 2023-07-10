@@ -352,7 +352,7 @@ static void _sg_metal_encode_texture_pixels(int x, int y, int w, int h, bool ori
 
 static void _sg_metal_query_image_pixels(_sg_image_t* img, void* pixels) {
     id<MTLTexture> mtl_src_texture = _sg.mtl.idpool.pool[img->mtl.tex[0]];
-    _sg_metal_encode_texture_pixels(0, 0, mtl_src_texture.width, mtl_src_texture.height, true, mtl_src_texture, pixels);
+    _sg_metal_encode_texture_pixels(0, 0, (int)mtl_src_texture.width, (int)mtl_src_texture.height, true, mtl_src_texture, pixels);
 }
 
 static void _sg_metal_query_pixels(int x, int y, int w, int h, bool origin_top_left, void *pixels) {
