@@ -162,7 +162,7 @@ jobs:
       # NOTE: see https://github.com/floooh/sokol-odin/blob/main/.github/workflows/main.yml
       - uses: ilammy/msvc-dev-cmd@v1
       - if: runner.os == 'Linux'
-        name: build-linux
+        name: prepare-linux
         run: |
           sudo apt-get update
           sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev llvm-11
@@ -170,59 +170,23 @@ jobs:
           unzip odin.zip
           chmod a+x ./odin
           ./build_clibs_linux.sh
-          ./odin build examples/clear -debug
-          ./odin build examples/triangle -debug
-          ./odin build examples/quad -debug
-          ./odin build examples/bufferoffsets -debug
-          ./odin build examples/cube -debug
-          ./odin build examples/noninterleaved -debug
-          ./odin build examples/texcube -debug
-          ./odin build examples/shapes -debug
-          ./odin build examples/offscreen -debug
-          ./odin build examples/instancing -debug
-          ./odin build examples/mrt -debug
-          ./odin build examples/blend -debug
-          ./odin build examples/debugtext -debug
-          ./odin build examples/debugtext-print -debug
-          ./odin build examples/debugtext-userfont -debug
-          ./odin build examples/saudio -debug
-          ./odin build examples/sgl -debug
-          ./odin build examples/sgl-points -debug
-          ./odin build examples/sgl-context -debug
       - if: runner.os == 'macOS'
-        name: build-macos
+        name: prepare-macos
         run: |
           brew install llvm@11
           curl -L https://github.com/odin-lang/Odin/releases/download/dev-2023-07/odin-macos-amd64-dev-2023-07.zip --output odin.zip
           unzip odin.zip
           chmod a+x ./odin
           ./build_clibs_macos.sh
-          ./odin build examples/clear -debug
-          ./odin build examples/triangle -debug
-          ./odin build examples/quad -debug
-          ./odin build examples/bufferoffsets -debug
-          ./odin build examples/cube -debug
-          ./odin build examples/noninterleaved -debug
-          ./odin build examples/texcube -debug
-          ./odin build examples/shapes -debug
-          ./odin build examples/offscreen -debug
-          ./odin build examples/instancing -debug
-          ./odin build examples/mrt -debug
-          ./odin build examples/blend -debug
-          ./odin build examples/debugtext -debug
-          ./odin build examples/debugtext-print -debug
-          ./odin build examples/debugtext-userfont -debug
-          ./odin build examples/saudio -debug
-          ./odin build examples/sgl -debug
-          ./odin build examples/sgl-points -debug
-          ./odin build examples/sgl-context -debug
       - if: runner.os == 'Windows'
-        name: build-windows
+        name: prepare-windows
         shell: cmd
         run: |
           curl -L https://github.com/odin-lang/Odin/releases/download/dev-2023-07/odin-windows-amd64-dev-2023-07.zip --output odin.zip
           unzip odin.zip
           build_clibs_windows.cmd
+      - name: build
+        run: |
           ./odin build examples/clear -debug
           ./odin build examples/triangle -debug
           ./odin build examples/quad -debug
