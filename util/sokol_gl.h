@@ -48,7 +48,7 @@
     FEATURE OVERVIEW:
     =================
     sokol_gl.h implements a subset of the OpenGLES 1.x feature set useful for
-    when you just want to quickly render a bunch of colored triangles or
+    when you just want to quickly render a bunch of triangles or
     lines without having to mess with buffers and shaders.
 
     The current feature set is mostly useful for debug visualizations
@@ -233,7 +233,11 @@
 
             sgl_enable_texture()
             sgl_disable_texture()
-            sgl_texture(sg_image img)
+            sgl_texture(sg_image img, sg_sampler smp)
+
+        NOTE: the img and smp handles can be invalid (SG_INVALID_ID), in this
+        case, sokol-gl will fall back to the internal default (white) texture
+        and sampler.
 
     --- set the current viewport and scissor rect with:
 
