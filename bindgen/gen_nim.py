@@ -89,9 +89,10 @@ enumPrefixOverrides = {
 }
 
 prim_types = {
-    'int':          'int32',
+    'int':          'int',
+    'uint':         'uint',
     'bool':         'bool',
-    'char':         'char',
+    'char':         'byte',
     'int8_t':       'int8',
     'uint8_t':      'uint8',
     'int16_t':      'int16',
@@ -102,13 +103,14 @@ prim_types = {
     'uint64_t':     'uint64',
     'float':        'float32',
     'double':       'float64',
-    'uintptr_t':    'uint',
-    'intptr_t':     'int',
+    'uintptr_t':    'ptr uint',
+    'intptr_t':     'ptr int',
     'size_t':       'int',  # not a bug, Nim's sizeof() returns int
 }
 
 prim_defaults = {
     'int':          '0',
+    'uint':         '0',
     'bool':         'false',
     'int8_t':       '0',
     'uint8_t':      '0',
@@ -120,8 +122,8 @@ prim_defaults = {
     'uint64_t':     '0',
     'float':        '0.0f',
     'double':       '0.0',
-    'uintptr_t':    '0',
-    'intptr_t':     '0',
+    'uintptr_t':    'nil',
+    'intptr_t':     'nil',
     'size_t':       '0'
 }
 
