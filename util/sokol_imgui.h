@@ -239,6 +239,27 @@
     itself though, not any allocations in Dear ImGui.
 
 
+    IMGUI EVENT HANDLING
+    ====================
+    You can call these functions from your platform's events to handle ImGui events
+    when SOKOL_IMGUI_NO_SOKOL_APP is defined.
+
+    E.g. mouse position events can be dispatched like this:
+
+        simgui_add_mouse_pos_event(100, 200);
+
+    Key events require a mapping function to convert your platform's key values to ImGuiKey's:
+
+        int map_keycode(int keycode) { 
+            // Your mapping logic here...
+        }
+        simgui_add_key_event(map_keycode, keycode, true);
+
+    Take note that modifiers (shift, ctrl, etc.) must be updated manually.
+
+    If sokol_app is being used, ImGui events are handled for you.
+
+
     LICENSE
     =======
 
@@ -332,6 +353,15 @@ typedef struct simgui_frame_desc_t {
 SOKOL_IMGUI_API_DECL void simgui_setup(const simgui_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_new_frame(const simgui_frame_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_render(void);
+SOKOL_IMGUI_API_DECL void simgui_add_focus_event(bool focus);
+SOKOL_IMGUI_API_DECL void simgui_add_mouse_pos_event(float x, float y);
+SOKOL_IMGUI_API_DECL void simgui_add_touch_pos_event(float x, float y);
+SOKOL_IMGUI_API_DECL void simgui_add_mouse_button_event(int mouse_button, bool down);
+SOKOL_IMGUI_API_DECL void simgui_add_mouse_wheel_event(float wheel_x, float wheel_y);
+SOKOL_IMGUI_API_DECL void simgui_add_key_event(int (*map_keycode)(int), int keycode, bool down);
+SOKOL_IMGUI_API_DECL void simgui_add_input_character(uint32_t c);
+SOKOL_IMGUI_API_DECL void simgui_add_input_characters_utf8(const char* c);
+SOKOL_IMGUI_API_DECL void simgui_add_touch_button_event(int mouse_button, bool down);
 #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
 SOKOL_IMGUI_API_DECL bool simgui_handle_event(const sapp_event* ev);
 SOKOL_IMGUI_API_DECL int simgui_map_keycode(sapp_keycode keycode);  // returns ImGuiKey_*
@@ -2137,6 +2167,129 @@ SOKOL_API_IMPL void simgui_render(void) {
     sg_pop_debug_group();
 }
 
+SOKOL_API_IMPL void simgui_add_focus_event(bool focus) {
+    #if defined(__cplusplus)
+        ImGuiIO* io = &ImGui::GetIO();
+        io->AddFocusEvent(focus);
+    #else
+        ImGuiIO* io = igGetIO();
+        ImGuiIO_AddFocusEvent(io, focus);
+    #endif
+}
+
+SOKOL_API_IMPL void simgui_add_mouse_pos_event(float x, float y) {
+    #if defined(__cplusplus)
+        ImGuiIO* io = &ImGui::GetIO();
+        #if (IMGUI_VERSION_NUM >= 18950)
+        io->AddMouseSourceEvent(ImGuiMouseSource_Mouse);
+        #endif
+        io->AddMousePosEvent(x, y);
+    #else
+        ImGuiIO* io = igGetIO();
+        #if (IMGUI_VERSION_NUM >= 18950)
+        ImGuiIO_AddMouseSourceEvent(io, ImGuiMouseSource_Mouse);
+        #endif
+        ImGuiIO_AddMousePosEvent(io, x, y);
+    #endif
+}
+
+SOKOL_API_IMPL void simgui_add_touch_pos_event(float x, float y) {
+    #if defined(__cplusplus)
+        ImGuiIO* io = &ImGui::GetIO();
+        #if (IMGUI_VERSION_NUM >= 18950)
+        io->AddMouseSourceEvent(ImGuiMouseSource_TouchScreen);
+        #endif
+        io->AddMousePosEvent(x, y);
+    #else
+        ImGuiIO* io = igGetIO();
+        #if (IMGUI_VERSION_NUM >= 18950)
+        ImGuiIO_AddMouseSourceEvent(io, ImGuiMouseSource_TouchScreen);
+        #endif
+        ImGuiIO_AddMousePosEvent(io, x, y);
+    #endif
+}
+
+SOKOL_API_IMPL void simgui_add_mouse_button_event(int mouse_button, bool down) {
+    #if defined(__cplusplus)
+        ImGuiIO* io = &ImGui::GetIO();
+        #if (IMGUI_VERSION_NUM >= 18950)
+        io->AddMouseSourceEvent(ImGuiMouseSource_Mouse);
+        #endif
+        io->AddMouseButtonEvent(mouse_button, down);
+    #else
+        ImGuiIO* io = igGetIO();
+        #if (IMGUI_VERSION_NUM >= 18950)
+        ImGuiIO_AddMouseSourceEvent(io, ImGuiMouseSource_Mouse);
+        #endif
+        ImGuiIO_AddMouseButtonEvent(io, mouse_button, down);
+    #endif
+}
+
+SOKOL_API_IMPL void simgui_add_touch_button_event(int mouse_button, bool down) {
+    #if defined(__cplusplus)
+        ImGuiIO* io = &ImGui::GetIO();
+        #if (IMGUI_VERSION_NUM >= 18950)
+        io->AddMouseSourceEvent(ImGuiMouseSource_TouchScreen);
+        #endif
+        io->AddMouseButtonEvent(mouse_button, down);
+    #else
+        ImGuiIO* io = igGetIO();
+        #if (IMGUI_VERSION_NUM >= 18950)
+        ImGuiIO_AddMouseSourceEvent(io, ImGuiMouseSource_TouchScreen);
+        #endif
+        ImGuiIO_AddMouseButtonEvent(io, mouse_button, down);
+    #endif
+}
+
+SOKOL_API_IMPL void simgui_add_mouse_wheel_event(float wheel_x, float wheel_y) {
+    #if defined(__cplusplus)
+        ImGuiIO* io = &ImGui::GetIO();
+        #if (IMGUI_VERSION_NUM >= 18950)
+        io->AddMouseSourceEvent(ImGuiMouseSource_Mouse);
+        #endif
+        io->AddMouseWheelEvent(wheel_x, wheel_y);
+    #else
+        ImGuiIO* io = igGetIO();
+        #if (IMGUI_VERSION_NUM >= 18950)
+        ImGuiIO_AddMouseSourceEvent(io, ImGuiMouseSource_Mouse);
+        #endif
+        ImGuiIO_AddMouseWheelEvent(io, wheel_x, wheel_y);
+    #endif
+}
+
+SOKOL_API_IMPL void simgui_add_key_event(int (*map_keycode)(int), int keycode, bool down) {
+    const ImGuiKey imgui_key = (ImGuiKey)map_keycode(keycode);
+    #if defined(__cplusplus)
+        ImGuiIO* io = &ImGui::GetIO();
+        io->AddKeyEvent(imgui_key, down);
+        io->SetKeyEventNativeData(imgui_key, keycode, 0, -1);
+    #else
+        ImGuiIO* io = igGetIO();
+        ImGuiIO_AddKeyEvent(io, imgui_key, down);
+        ImGuiIO_SetKeyEventNativeData(io, imgui_key, keycode, 0, -1);
+    #endif
+}
+
+SOKOL_API_IMPL void simgui_add_input_character(uint32_t c) {
+    #if defined(__cplusplus)
+        ImGuiIO* io = &ImGui::GetIO();
+        io->AddInputCharacter(c);
+    #else
+        ImGuiIO* io = igGetIO();
+        ImGuiIO_AddInputCharacter(io, c);
+    #endif
+}
+
+SOKOL_API_IMPL void simgui_add_input_characters_utf8(const char* c) {
+    #if defined(__cplusplus)
+        ImGuiIO* io = &ImGui::GetIO();
+        io->AddInputCharactersUTF8(c);
+    #else
+        ImGuiIO* io = igGetIO();
+        ImGuiIO_AddInputCharactersUTF8(io, c);
+    #endif
+}
+
 #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
 _SOKOL_PRIVATE bool _simgui_is_ctrl(uint32_t modifiers) {
     if (_simgui.is_osx) {
@@ -2258,84 +2411,6 @@ _SOKOL_PRIVATE ImGuiKey _simgui_map_keycode(sapp_keycode key) {
     }
 }
 
-_SOKOL_PRIVATE void _simgui_add_focus_event(ImGuiIO* io, bool focus) {
-    #if defined(__cplusplus)
-        io->AddFocusEvent(focus);
-    #else
-        ImGuiIO_AddFocusEvent(io, focus);
-    #endif
-}
-
-_SOKOL_PRIVATE void _simgui_add_mouse_pos_event(ImGuiIO* io, float x, float y) {
-    #if defined(__cplusplus)
-        #if (IMGUI_VERSION_NUM >= 18950)
-        io->AddMouseSourceEvent(ImGuiMouseSource_Mouse);
-        #endif
-        io->AddMousePosEvent(x, y);
-    #else
-        #if (IMGUI_VERSION_NUM >= 18950)
-        ImGuiIO_AddMouseSourceEvent(io, ImGuiMouseSource_Mouse);
-        #endif
-        ImGuiIO_AddMousePosEvent(io, x, y);
-    #endif
-}
-
-_SOKOL_PRIVATE void _simgui_add_touch_pos_event(ImGuiIO* io, float x, float y) {
-    #if defined(__cplusplus)
-        #if (IMGUI_VERSION_NUM >= 18950)
-        io->AddMouseSourceEvent(ImGuiMouseSource_TouchScreen);
-        #endif
-        io->AddMousePosEvent(x, y);
-    #else
-        #if (IMGUI_VERSION_NUM >= 18950)
-        ImGuiIO_AddMouseSourceEvent(io, ImGuiMouseSource_TouchScreen);
-        #endif
-        ImGuiIO_AddMousePosEvent(io, x, y);
-    #endif
-}
-
-_SOKOL_PRIVATE void _simgui_add_mouse_button_event(ImGuiIO* io, int mouse_button, bool down) {
-    #if defined(__cplusplus)
-        #if (IMGUI_VERSION_NUM >= 18950)
-        io->AddMouseSourceEvent(ImGuiMouseSource_Mouse);
-        #endif
-        io->AddMouseButtonEvent(mouse_button, down);
-    #else
-        #if (IMGUI_VERSION_NUM >= 18950)
-        ImGuiIO_AddMouseSourceEvent(io, ImGuiMouseSource_Mouse);
-        #endif
-        ImGuiIO_AddMouseButtonEvent(io, mouse_button, down);
-    #endif
-}
-
-_SOKOL_PRIVATE void _simgui_add_touch_button_event(ImGuiIO* io, int mouse_button, bool down) {
-    #if defined(__cplusplus)
-        #if (IMGUI_VERSION_NUM >= 18950)
-        io->AddMouseSourceEvent(ImGuiMouseSource_TouchScreen);
-        #endif
-        io->AddMouseButtonEvent(mouse_button, down);
-    #else
-        #if (IMGUI_VERSION_NUM >= 18950)
-        ImGuiIO_AddMouseSourceEvent(io, ImGuiMouseSource_TouchScreen);
-        #endif
-        ImGuiIO_AddMouseButtonEvent(io, mouse_button, down);
-    #endif
-}
-
-_SOKOL_PRIVATE void _simgui_add_mouse_wheel_event(ImGuiIO* io, float wheel_x, float wheel_y) {
-    #if defined(__cplusplus)
-        #if (IMGUI_VERSION_NUM >= 18950)
-        io->AddMouseSourceEvent(ImGuiMouseSource_Mouse);
-        #endif
-        io->AddMouseWheelEvent(wheel_x, wheel_y);
-    #else
-        #if (IMGUI_VERSION_NUM >= 18950)
-        ImGuiIO_AddMouseSourceEvent(io, ImGuiMouseSource_Mouse);
-        #endif
-        ImGuiIO_AddMouseWheelEvent(io, wheel_x, wheel_y);
-    #endif
-}
-
 _SOKOL_PRIVATE void _simgui_add_sapp_key_event(ImGuiIO* io, sapp_keycode sapp_key, bool down) {
     const ImGuiKey imgui_key = _simgui_map_keycode(sapp_key);
     #if defined(__cplusplus)
@@ -2352,14 +2427,6 @@ _SOKOL_PRIVATE void _simgui_add_imgui_key_event(ImGuiIO* io, ImGuiKey imgui_key,
         io->AddKeyEvent(imgui_key, down);
     #else
         ImGuiIO_AddKeyEvent(io, imgui_key, down);
-    #endif
-}
-
-_SOKOL_PRIVATE void _simgui_add_input_character(ImGuiIO* io, uint32_t c) {
-    #if defined(__cplusplus)
-        io->AddInputCharacter(c);
-    #else
-        ImGuiIO_AddInputCharacter(io, c);
     #endif
 }
 
@@ -2388,23 +2455,23 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
     #endif
     switch (ev->type) {
         case SAPP_EVENTTYPE_FOCUSED:
-            _simgui_add_focus_event(io, true);
+            simgui_add_focus_event(true);
             break;
         case SAPP_EVENTTYPE_UNFOCUSED:
-            _simgui_add_focus_event(io, false);
+            simgui_add_focus_event(false);
             break;
         case SAPP_EVENTTYPE_MOUSE_DOWN:
-            _simgui_add_mouse_pos_event(io, ev->mouse_x / dpi_scale, ev->mouse_y / dpi_scale);
-            _simgui_add_mouse_button_event(io, (int)ev->mouse_button, true);
+            simgui_add_mouse_pos_event(ev->mouse_x / dpi_scale, ev->mouse_y / dpi_scale);
+            simgui_add_mouse_button_event((int)ev->mouse_button, true);
             _simgui_update_modifiers(io, ev->modifiers);
             break;
         case SAPP_EVENTTYPE_MOUSE_UP:
-            _simgui_add_mouse_pos_event(io, ev->mouse_x / dpi_scale, ev->mouse_y / dpi_scale);
-            _simgui_add_mouse_button_event(io, (int)ev->mouse_button, false);
+            simgui_add_mouse_pos_event(ev->mouse_x / dpi_scale, ev->mouse_y / dpi_scale);
+            simgui_add_mouse_button_event((int)ev->mouse_button, false);
             _simgui_update_modifiers(io, ev->modifiers);
             break;
         case SAPP_EVENTTYPE_MOUSE_MOVE:
-            _simgui_add_mouse_pos_event(io, ev->mouse_x / dpi_scale, ev->mouse_y / dpi_scale);
+            simgui_add_mouse_pos_event(ev->mouse_x / dpi_scale, ev->mouse_y / dpi_scale);
             break;
         case SAPP_EVENTTYPE_MOUSE_ENTER:
         case SAPP_EVENTTYPE_MOUSE_LEAVE:
@@ -2415,26 +2482,26 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
             // "platform behaviour flags".
             #if defined(__EMSCRIPTEN__)
             for (int i = 0; i < SAPP_MAX_MOUSEBUTTONS; i++) {
-                _simgui_add_mouse_button_event(io, i, false);
+                simgui_add_mouse_button_event(i, false);
             }
             #endif
             break;
         case SAPP_EVENTTYPE_MOUSE_SCROLL:
-            _simgui_add_mouse_wheel_event(io, ev->scroll_x, ev->scroll_y);
+            simgui_add_mouse_wheel_event(ev->scroll_x, ev->scroll_y);
             break;
         case SAPP_EVENTTYPE_TOUCHES_BEGAN:
-            _simgui_add_touch_pos_event(io, ev->touches[0].pos_x / dpi_scale, ev->touches[0].pos_y / dpi_scale);
-            _simgui_add_touch_button_event(io, 0, true);
+            simgui_add_touch_pos_event(ev->touches[0].pos_x / dpi_scale, ev->touches[0].pos_y / dpi_scale);
+            simgui_add_touch_button_event(0, true);
             break;
         case SAPP_EVENTTYPE_TOUCHES_MOVED:
-            _simgui_add_touch_pos_event(io, ev->touches[0].pos_x / dpi_scale, ev->touches[0].pos_y / dpi_scale);
+            simgui_add_touch_pos_event(ev->touches[0].pos_x / dpi_scale, ev->touches[0].pos_y / dpi_scale);
             break;
         case SAPP_EVENTTYPE_TOUCHES_ENDED:
-            _simgui_add_touch_pos_event(io, ev->touches[0].pos_x / dpi_scale, ev->touches[0].pos_y / dpi_scale);
-            _simgui_add_touch_button_event(io, 0, false);
+            simgui_add_touch_pos_event(ev->touches[0].pos_x / dpi_scale, ev->touches[0].pos_y / dpi_scale);
+            simgui_add_touch_button_event(0, false);
             break;
         case SAPP_EVENTTYPE_TOUCHES_CANCELLED:
-            _simgui_add_touch_button_event(io, 0, false);
+            simgui_add_touch_button_event(0, false);
             break;
         case SAPP_EVENTTYPE_KEY_DOWN:
             _simgui_update_modifiers(io, ev->modifiers);
@@ -2481,7 +2548,7 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
                 (ev->char_code != 127) &&
                 (0 == (ev->modifiers & (SAPP_MODIFIER_ALT|SAPP_MODIFIER_CTRL|SAPP_MODIFIER_SUPER))))
             {
-                _simgui_add_input_character(io, ev->char_code);
+                simgui_add_input_character(ev->char_code);
             }
             break;
         case SAPP_EVENTTYPE_CLIPBOARD_PASTED:
