@@ -125,6 +125,13 @@ See the new [shadows-depthtex-sapp](https://floooh.github.io/sokol-html5/shadows
     - `sg_layout_desc` => `sg_vertex_layout_state`
     - `sg_color_state` => `sg_color_target_state`
 
+- bugfixes and under-the-hood changes
+    - `sg_begin_pass()` used the wrong framebuffer size when rendering to a mip-level != 0
+    - on macOS the Metal backend now creates resources in Shared resource storage mode if
+      supported by the device
+    - on iOS the Metal backend now supports clamp-to-border-color if possible (depends on
+      iOS version and GPU family)
+
 ##### **sokol_gl.h**
 
 - The function `sgl_texture(sg_image img)` has been changed to accept a sampler
