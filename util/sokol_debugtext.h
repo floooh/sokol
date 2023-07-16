@@ -82,7 +82,7 @@
             fonts that can be used for rendering. To use all builtin
             fonts call sdtx_setup() like this (in C99):
 
-            sdtx_setup(&sdtx_desc_t){
+            sdtx_setup(&(sdtx_desc_t){
                 .fonts = {
                     [0] = sdtx_font_kc853(),
                     [1] = sdtx_font_kc854(),
