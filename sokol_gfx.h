@@ -800,96 +800,6 @@
     to use the sokol-shdc shader cross-compiler tool!
 
 
-    BACKEND-SPECIFIC TOPICS:
-    ========================
-    FIXME: delete this block after the new shader creation block is complete
-
-    --- The GL backends need to know about the internal structure of uniform
-        blocks, and the texture type. The uniform layout details
-        are  described in the UNIFORM DATA LAYOUT section above.
-
-            // uniform block structure and texture image definition in sg_shader_desc:
-            sg_shader_desc desc = {
-                // uniform block description (size and internal structure)
-                .vs.uniform_blocks[0] = {
-                    ...
-                },
-                // one texture on the fragment-shader-stage (name is optional)
-                .fs.images[0] = { .type=SG_IMAGETYPE_ARRAY }
-                ...
-            };
-
-    --- the Metal and D3D11 backends only need to know the size of uniform blocks,
-        not their internal member structure, and they only need to know
-        the type of a texture sampler, not its name:
-
-            sg_shader_desc desc = {
-                .vs.uniform_blocks[0].size = sizeof(params_t),
-                .fs.images[0].type = SG_IMAGETYPE_ARRAY,
-                ...
-            };
-
-    --- when creating a shader object, vertex attribute names may be provided
-        for the GL backends:
-
-            sg_shader_desc desc = {
-                .attrs = {
-                    [0] = { .name="position" },
-                    [1] = { .name="color1" }
-                }
-            };
-
-        The vertex attribute names provided when creating a shader will be
-        used later in sg_create_pipeline() for matching the vertex layout
-        to vertex shader inputs.
-
-    --- on D3D11 you need to provide a semantic name and semantic index in the
-        shader description struct instead (see the D3D11 documentation on
-        D3D11_INPUT_ELEMENT_DESC for details):
-
-            sg_shader_desc desc = {
-                .attrs = {
-                    [0] = { .sem_name="POSITION", .sem_index=0 }
-                    [1] = { .sem_name="COLOR", .sem_index=1 }
-                }
-            };
-
-        The provided semantic information will be used later in sg_create_pipeline()
-        to match the vertex layout to vertex shader inputs.
-
-    --- on D3D11, and when passing HLSL source code (instead of byte code) to shader
-        creation, you can optionally define the shader model targets on the vertex
-        stage:
-
-            sg_shader_Desc desc = {
-                .vs = {
-                    ...
-                    .d3d11_target = "vs_5_0"
-                },
-                .fs = {
-                    ...
-                    .d3d11_target = "ps_5_0"
-                }
-            };
-
-        The default targets are "ps_4_0" and "fs_4_0". Note that those target names
-        are only used when compiling shaders from source. They are ignored when
-        creating a shader from bytecode.
-
-    --- on Metal, GL 3.3 or GLES3/WebGL2, you don't need to provide an attribute
-        name or semantic name, since vertex attributes can be bound by their slot index
-        (this is mandatory in Metal, and optional in GL):
-
-            sg_pipeline_desc desc = {
-                .layout = {
-                    .attrs = {
-                        [0] = { .format=SG_VERTEXFORMAT_FLOAT3 },
-                        [1] = { .format=SG_VERTEXFORMAT_FLOAT4 }
-                    }
-                }
-            };
-
-
     WORKING WITH CONTEXTS
     =====================
     sokol-gfx allows to switch between different rendering contexts and
@@ -7027,13 +6937,6 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_texture_sampler(GLuint tex, GLuint s
         _sg.gl.cache.stored_texture_sampler.texture = 0;
         _sg.gl.cache.stored_texture_sampler.sampler = 0;
     }
-}
-
-// called from _sg_gl_discard_sampler()
-_SOKOL_PRIVATE void _sg_gl_cache_invalidate_sampler(GLuint smp) {
-    // FIXME!
-    (void)smp;
-    SOKOL_ASSERT(false);
 }
 
 // called from _sg_gl_discard_shader()
