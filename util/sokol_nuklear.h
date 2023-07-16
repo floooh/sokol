@@ -159,7 +159,7 @@
         `nk_handle snk_nkhandle(sg_image img)` together with
         the Nuklear function nk_image_handle like this:
 
-        nk_image_handle(snk_nkhandle(img))
+        nk_image nki = nk_image_handle(snk_nkhandle(img));
 
         Note that it's currently not possible to provide a custom sg_sampler object.
 
