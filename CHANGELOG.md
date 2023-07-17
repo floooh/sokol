@@ -129,6 +129,11 @@ See the new [shadows-depthtex-sapp](https://floooh.github.io/sokol-html5/shadows
 
 - bugfixes and under-the-hood changes
     - `sg_begin_pass()` used the wrong framebuffer size when rendering to a mip-level != 0
+    - the Metal backend code started to use the `if (@available(...))` statement
+      to check for runtime-availability of macOS/iOS API features (this caused problems
+      in the sokol-zig bindings with Zig version 0.10.1, this is fixed in the current
+      zig-0.11.0-dev version => I'll merge the zig-0.11.0 branch of the bindings into
+      master a bit early, hopefully zig 0.11.0 isn't too far out)
     - on macOS the Metal backend now creates resources in Shared resource storage mode if
       supported by the device
     - on iOS the Metal backend now supports clamp-to-border-color if possible (depends on
