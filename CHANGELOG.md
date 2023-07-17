@@ -1,33 +1,235 @@
 ## Updates
 
-- **20-May-2023**: some minor event-related cleanup in sokol_app.h and
-  a touchscreen fix in sokol_imgui.h
+#### 16-Jul-2023
 
-    - in the event `SAPP_EVENTTYPE_FILESDROPPED`:
-        - the `sapp_event.modifier` field now contains the active modifier keys
-          at the time of the file drop operations on the platforms macOS, Emscripten
-          and Win32 (on Linux I haven't figured out how this might work with the
-          Xlib API)
-        - on macOS, the `sapp_event.mouse_x/y` fields now contain the window-relative
-          mouse position where the drop happened (this already worked as expected on
-          the other desktop platforms)
-        - on macOS and Linux, the `sapp_event.mouse_dx/dy` fields are now set to zero
-          (this already was the case on Emscripten and Win32)
-    - in the events `SAPP_EVENTTYPE_MOUSE_ENTER` and `SAPP_EVENTTYPE_MOUSE_LEAVE`:
-        - the `sapp_event.mouse_dx/dy` fields are now set to zero, previously this
-          could be a very big value on some desktop platforms
+**BREAKING CHANGES**
 
-    Many thanks to @castano for the initial PR (https://github.com/floooh/sokol/pull/830)!
+The main topic of this update is to separate sampler state from image state in
+sokol_gfx.h which became possible after GLES2 support had been removed from
+sokol_gfx.h.
 
-    - In sokol_imgui.h, the new io.AddMouseSourceEvent() function in Dear ImGui 1.89.5
-      is called to differentiate between mouse- and touch-events, this makes ui tabs
-      work with a single tap (previously a double-tap on the tab was needed). The code
-      won't break if the ImGui version is older (in this case the function simply isn't called)
+This also causes some 'colateral changes' in shader authoring and
+other sokol headers, but there was opportunity to fill a few feature gaps
+in sokol_gfx.h as well:
+
+- it's now possible to sample depth textures in shaders both with regular
+  samplers, and with 'comparison samplers' (which is mainly useful for shadow mapping)
+- it's now possible to create render passes without color attachments for
+  'depth-only' rendering
+
+See the new [shadows-depthtex-sapp](https://floooh.github.io/sokol-html5/shadows-depthtex-sapp.html) sample which demonstrates both features.
+
+> NOTE: all related projects have a git tag `pre-separate-samplers` in case you are not ready yet to make the switch
+
+> NOTE 2: if you use sokol-gfx with the sokol-shdc shader compiler, you'll also need
+> to update the sokol-shdc binaries from https://github.com/floooh/sokol-tools-bin
+
+##### **sokol_gfx.h**
+
+- texture sampler state has been removed from `sg_image_desc`, instead you now
+  need to create separate sampler objects:
+
+    ```c
+    sg_sampler smp = sg_make_sampler(&(sg_sampler_desc){
+        .min_filter = SG_FILTER_LINEAR,
+        .mag_filter = SG_FILTER_LINEAR,
+        .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
+        .wrap_v = SG_WRAP_CLAMP_TO_EDGE
+    });
+    ```
+
+- texture filtering is now described by 3 separate filters:
+    - min_filter = SG_FILTER_NEAREST | SG_FILTER_LINEAR
+    - mag_filter = SG_FILTER_NEAREST | SG_FILTER_LINEAR
+    - mipmap_filter = SG_FILTER_NONE | SG_FILTER_NEAREST | SG_FILTER_LINEAR
+
+  ...this basically switches from the esoteric GL convention to a convention
+  that's used by all other 3D APIs. There's still a limitation that's caused by
+  GL though: a sampler which is going to be used with an image that has a
+  `mipmap_count = 1` requires that `.mipmap_filter = SG_FILTER_NONE`.
+
+- another new sampler state in `sg_sampler_desc` is `sg_compare_func compare;`,
+  this allows to create 'comparison samplers' for shadow mapping
+
+- when calling `sg_apply_bindings()` the struct `sg_bindings` now has changed
+  to also include sampler objects, note that there is no 1:1 relationship
+  between images and samplers required:
+
+    ```c
+    sg_apply_bindings(&(sg_bindings){
+        .vertex_buffers[0] = vbuf,
+        .fs = {
+            .images = {
+                [0] = img0,
+                [1] = img1,
+                [2] = img2,
+            },
+            .samplers[0] = smp,
+        }
+    });
+    ```
+
+- if you use sokol-shdc, you need to rewrite your shaders from 'OpenGL GLSL style' (with
+  combined image samplers) to 'Vulkan GLSL style' (with separate textures and samplers):
+
+  E.g. the old GL-style shader with combined image samplers:
+
+  ```glsl
+  sampler2D tex;
+
+  void main() {
+      frag_color = texture(tex, uv);
+  }
+  ```
+  ...now needs to look like this:
+
+  ```glsl
+  texture2D tex;
+  sampler smp;
+
+  void main() {
+      frag_color = texture(sampler2D(tex, smp), uv);
+  }
+  ```
+
+  sokol-shdc will now throw an error if it encounters an 'old' shader using combined
+  image-samplers, this helps you to catch all places where a rewrite to separate
+  texture and sampler objects is required.
+
+- If you *don't* use sokol-shdc and instead provide your own backend-specific
+  shaders, you need to provide more shader interface reflection info about the texture
+  and sampler usage in a shader when calling `sg_make_shader`.
+  Please see the new documentation block `ON SHADER CREATION` in sokol_gfx.h for more details!
+
+  Also refer to the updated 3D-backend-specific samples here:
+
+  - for GL: https://github.com/floooh/sokol-samples/tree/master/glfw
+  - for GLES3: https://github.com/floooh/sokol-samples/tree/master/html5
+  - for D3D11: https://github.com/floooh/sokol-samples/tree/master/d3d11
+  - for Metal: https://github.com/floooh/sokol-samples/tree/master/metal
+
+- it's now possible to create `sg_pass` objects without color attachments to
+  enable depth-only rendering, see the new sample for details [shadows-depthtex-sapp](https://floooh.github.io/sokol-html5/shadows-depthtex-sapp.html),
+  specifically be aware of the caveat that a compatible `sg_pipeline` object
+  needs to 'deactivate' the first color target by setting its pixel format
+  to `NONE`:
+
+  ```c
+  sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
+      ...
+      .colors[0].pixel_format = SG_PIXELFORMAT_NONE,
+      ...
+  });
+  ```
+
+- the following struct names have been changed to be more in line with related
+  struct names, this also makes those names similar to WebGPU types:
+
+    - `sg_buffer_layout_desc` => `sg_vertex_buffer_layout_state`
+    - `sg_vertex_attr_desc` => `sg_vertex_attr_state`
+    - `sg_layout_desc` => `sg_vertex_layout_state`
+    - `sg_color_state` => `sg_color_target_state`
+
+- bugfixes and under-the-hood changes
+    - `sg_begin_pass()` used the wrong framebuffer size when rendering to a mip-level != 0
+    - the Metal backend code started to use the `if (@available(...))` statement
+      to check for runtime-availability of macOS/iOS API features (this caused problems
+      in the sokol-zig bindings with Zig version 0.10.1, this is fixed in the current
+      zig-0.11.0-dev version => I'll merge the zig-0.11.0 branch of the bindings into
+      master a bit early, hopefully zig 0.11.0 isn't too far out)
+    - **NOTE:** this change (`if (@available(...))`) caused linking problems in
+      the Zig and Rust bindings on GH Actions (missing symbol
+      `___isPlatformVersionAtLeast`) which I could not reproduce locally on my
+      M1 Mac. On Zig this could be fixed by moving to the latest zig-0.11.0-dev
+      version, but for Rust this still needs to be fixed).
+    - on macOS the Metal backend now creates resources in Shared resource storage mode if
+      supported by the device
+    - on iOS the Metal backend now supports clamp-to-border-color if possible (depends on
+      iOS version and GPU family)
+
+##### **sokol_gl.h**
+
+- The function `sgl_texture(sg_image img)` has been changed to accept a sampler
+  object to `sgl_texture(sg_image img, sg_sampler smp)`. Passing an invalid image handle
+  will use the builtin default (white) texture, and passing an invalid sampler
+  handle will use the builtin default sampler.
+
+##### **sokol_shape.h**
+
+- Some sokol-shape functions have been renamed to match renamed structs in sokol-gfx:
+
+    - `sshape_buffer_layout_desc()` => `sshape_vertex_buffer_layout_state()`
+    - `sshape_position_attr_desc()` => `sshape_position_vertex_attr_state()`
+    - `sshape_normal_attr_desc()` => `sshape_normal_vertex_attr_state()`
+    - `sshape_texcoord_attr_desc()` => `sshape_texcoord_vertex_attr_state()`
+    - `sshape_color_attr_desc()` => `sshape_color_vertex_attr_state()`
+
+##### **sokol_spine.h**
+
+- A sokol-spine atlas object now allocates both an `sg_image` and `sg_sampler` handle
+  and expects the user code to initialize those handles to complete image and
+  sampler objects. Check the updates sokol-spine samples here for more details:
+
+  https://github.com/floooh/sokol-samples/tree/master/sapp
+
+##### **sokol_imgui.h**
+
+- sokol_imgui.h has a new public function to create an ImTextureID handle from
+  an `sg_image` handle which can be used like this:
+
+    ```c
+    ImTextureID tex_id = simgui_imtextureid(img);
+    ```
+
+  Note that sokol-imgui currently doesn't currently allow to pass user-provided `sg_sampler`
+  object with the user-provided image.
+
+##### **sokol_nuklear.h**
+
+- similar to sokol_imgui.h, there's a new public function `snk_nkhandle()`
+  which creates a Nuklear handle from a sokol-gfx image handle which can be
+  used like this to create a Nuklear image handle:
+
+    ```c
+    nk_image nki = nk_image_handle(snk_nkhandle(img));
+    ```
+
+  As with sokol_imgui.h, it's currently not possible to pass a user-provided `sg_sampler`
+  object with the image.
 
 
-- **19-May-2023**: _**BREAKING CHANGES**_ in sokol_gfx.h: Render passes are now more 'harmonized'
-  with Metal and WebGPU by exposing a 'store action', and making MSAA resolve attachments
-  explicit. The changes in detail:
+#### 20-May-2023
+
+Some minor event-related cleanup in sokol_app.h and a touchscreen fix in sokol_imgui.h
+
+- in the event `SAPP_EVENTTYPE_FILESDROPPED`:
+    - the `sapp_event.modifier` field now contains the active modifier keys
+      at the time of the file drop operations on the platforms macOS, Emscripten
+      and Win32 (on Linux I haven't figured out how this might work with the
+      Xlib API)
+    - on macOS, the `sapp_event.mouse_x/y` fields now contain the window-relative
+      mouse position where the drop happened (this already worked as expected on
+      the other desktop platforms)
+    - on macOS and Linux, the `sapp_event.mouse_dx/dy` fields are now set to zero
+      (this already was the case on Emscripten and Win32)
+- in the events `SAPP_EVENTTYPE_MOUSE_ENTER` and `SAPP_EVENTTYPE_MOUSE_LEAVE`:
+    - the `sapp_event.mouse_dx/dy` fields are now set to zero, previously this
+      could be a very big value on some desktop platforms
+
+Many thanks to @castano for the initial PR (https://github.com/floooh/sokol/pull/830)!
+
+- In sokol_imgui.h, the new io.AddMouseSourceEvent() function in Dear ImGui 1.89.5
+  is called to differentiate between mouse- and touch-events, this makes ui tabs
+  work with a single tap (previously a double-tap on the tab was needed). The code
+  won't break if the ImGui version is older (in this case the function simply isn't called)
+
+
+#### 19-May-2023
+
+**BREAKING CHANGES**_ in sokol_gfx.h: Render passes are now more 'harmonized'
+with Metal and WebGPU by exposing a 'store action', and making MSAA resolve attachments
+explicit. The changes in detail:
+
   - A new documentation section `ON RENDER PASSES` has been added to sokol_gfx.h, this
     gives a much more detailed overview of the new render pass behaviour than this
     changelog, please make sure to give it a read - especially when you are using
@@ -62,7 +264,9 @@
 
   Next up: WebGPU!
 
-- **30-Apr-2023**: GLES2/WebGL1 support has been removed from the sokol headers (now that
+#### 30-Apr-2023
+
+GLES2/WebGL1 support has been removed from the sokol headers (now that
   all browsers support WebGL2, and WebGPU is around the corner I feel like it's finally
   time to ditch GLES2.
 

@@ -168,36 +168,36 @@ UTEST(sokol_shape, torus_buffer_sizes) {
 }
 
 UTEST(sokol_shape, buffer_layout_desc) {
-    const sg_buffer_layout_desc desc = sshape_buffer_layout_desc();
-    T(sizeof(sshape_vertex_t) == desc.stride);
-    T(0 == desc.step_func);
-    T(0 == desc.step_rate);
+    const sg_vertex_buffer_layout_state l_state = sshape_vertex_buffer_layout_state();
+    T(sizeof(sshape_vertex_t) == l_state.stride);
+    T(0 == l_state.step_func);
+    T(0 == l_state.step_rate);
 }
 
 UTEST(sokol_shape, attr_descs) {
     {
-        const sg_vertex_attr_desc desc = sshape_position_attr_desc();
-        T(offsetof(sshape_vertex_t, x) == desc.offset);
-        T(SG_VERTEXFORMAT_FLOAT3 == desc.format);
-        T(0 == desc.buffer_index);
+        const sg_vertex_attr_state a_state = sshape_position_vertex_attr_state();
+        T(offsetof(sshape_vertex_t, x) == a_state.offset);
+        T(SG_VERTEXFORMAT_FLOAT3 == a_state.format);
+        T(0 == a_state.buffer_index);
     }
     {
-        const sg_vertex_attr_desc desc = sshape_normal_attr_desc();
-        T(offsetof(sshape_vertex_t, normal) == desc.offset);
-        T(SG_VERTEXFORMAT_BYTE4N == desc.format);
-        T(0 == desc.buffer_index);
+        const sg_vertex_attr_state a_state = sshape_normal_vertex_attr_state();
+        T(offsetof(sshape_vertex_t, normal) == a_state.offset);
+        T(SG_VERTEXFORMAT_BYTE4N == a_state.format);
+        T(0 == a_state.buffer_index);
     }
     {
-        const sg_vertex_attr_desc desc = sshape_texcoord_attr_desc();
-        T(offsetof(sshape_vertex_t, u) == desc.offset);
-        T(SG_VERTEXFORMAT_USHORT2N == desc.format);
-        T(0 == desc.buffer_index);
+        const sg_vertex_attr_state a_state = sshape_texcoord_vertex_attr_state();
+        T(offsetof(sshape_vertex_t, u) == a_state.offset);
+        T(SG_VERTEXFORMAT_USHORT2N == a_state.format);
+        T(0 == a_state.buffer_index);
     }
     {
-        const sg_vertex_attr_desc desc = sshape_color_attr_desc();
-        T(offsetof(sshape_vertex_t, color) == desc.offset);
-        T(SG_VERTEXFORMAT_UBYTE4N == desc.format);
-        T(0 == desc.buffer_index);
+        const sg_vertex_attr_state a_state = sshape_color_vertex_attr_state();
+        T(offsetof(sshape_vertex_t, color) == a_state.offset);
+        T(SG_VERTEXFORMAT_UBYTE4N == a_state.format);
+        T(0 == a_state.buffer_index);
     }
 }
 

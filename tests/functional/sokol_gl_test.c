@@ -98,11 +98,47 @@ UTEST(sokol_gl, texture) {
         .height = 8,
         .data.subimage[0][0] = SG_RANGE(pixels),
     });
-    sgl_texture(img);
+    sg_sampler smp = sg_make_sampler(&(sg_sampler_desc){0});
+    sgl_texture(img, smp);
     T(_sgl.cur_ctx->cur_img.id == img.id);
+    T(_sgl.cur_ctx->cur_smp.id == smp.id);
     shutdown();
 }
 
+UTEST(sokol_gl, texture_image_nosampler) {
+    init();
+    T(_sgl.cur_ctx->cur_img.id == _sgl.def_img.id);
+    uint32_t pixels[64] = { 0 };
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .type = SG_IMAGETYPE_2D,
+        .width = 8,
+        .height = 8,
+        .data.subimage[0][0] = SG_RANGE(pixels),
+    });
+    sgl_texture(img, (sg_sampler){0});
+    T(_sgl.cur_ctx->cur_img.id == img.id);
+    T(_sgl.cur_ctx->cur_smp.id == _sgl.def_smp.id);
+    shutdown();
+}
+
+UTEST(sokol_gl, texture_noimage_sampler) {
+    init();
+    T(_sgl.cur_ctx->cur_img.id == _sgl.def_img.id);
+    sg_sampler smp = sg_make_sampler(&(sg_sampler_desc){0});
+    sgl_texture((sg_image){0}, smp);
+    T(_sgl.cur_ctx->cur_img.id == _sgl.def_img.id);
+    T(_sgl.cur_ctx->cur_smp.id == smp.id);
+    shutdown();
+}
+
+UTEST(sokol_gl, texture_noimage_nosampler) {
+    init();
+    T(_sgl.cur_ctx->cur_img.id == _sgl.def_img.id);
+    sgl_texture((sg_image){0}, (sg_sampler){0});
+    T(_sgl.cur_ctx->cur_img.id == _sgl.def_img.id);
+    T(_sgl.cur_ctx->cur_smp.id == _sgl.def_smp.id);
+    shutdown();
+}
 UTEST(sokol_gl, begin_end) {
     init();
     sgl_begin_triangles();
