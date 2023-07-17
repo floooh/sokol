@@ -19,6 +19,8 @@ in sokol_gfx.h as well:
 
 See the new [shadows-depthtex-sapp](https://floooh.github.io/sokol-html5/shadows-depthtex-sapp.html) sample which demonstrates both features.
 
+> NOTE: all related projects have a git tag `pre-separate-samplers` in case you are not ready yet to make the switch
+
 ##### **sokol_gfx.h**
 
 - texture sampler state has been removed from `sg_image_desc`, instead you now
