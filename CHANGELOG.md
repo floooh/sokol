@@ -134,6 +134,11 @@ See the new [shadows-depthtex-sapp](https://floooh.github.io/sokol-html5/shadows
       in the sokol-zig bindings with Zig version 0.10.1, this is fixed in the current
       zig-0.11.0-dev version => I'll merge the zig-0.11.0 branch of the bindings into
       master a bit early, hopefully zig 0.11.0 isn't too far out)
+    - **NOTE:** this change (`if (@available(...))`) caused linking problems in
+      the Zig and Rust bindings on GH Actions (missing symbol
+      `___isPlatformVersionAtLeast`) which I could not reproduce locally on my
+      M1 Mac. On Zig this could be fixed by moving to the latest zig-0.11.0-dev
+      version, but for Rust this still needs to be fixed).
     - on macOS the Metal backend now creates resources in Shared resource storage mode if
       supported by the device
     - on iOS the Metal backend now supports clamp-to-border-color if possible (depends on
