@@ -21,6 +21,9 @@ See the new [shadows-depthtex-sapp](https://floooh.github.io/sokol-html5/shadows
 
 > NOTE: all related projects have a git tag `pre-separate-samplers` in case you are not ready yet to make the switch
 
+> NOTE 2: if you use sokol-gfx with the sokol-shdc shader compiler, you'll also need
+> to update the sokol-shdc binaries from https://github.com/floooh/sokol-tools-bin
+
 ##### **sokol_gfx.h**
 
 - texture sampler state has been removed from `sg_image_desc`, instead you now
