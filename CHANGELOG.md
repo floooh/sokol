@@ -109,8 +109,8 @@ See the new [shadows-depthtex-sapp](https://floooh.github.io/sokol-html5/shadows
   - for Metal: https://github.com/floooh/sokol-samples/tree/master/metal
 
 - it's now possible to create `sg_pass` objects without color attachments to
-  enable depth-only rendering, see the new sample for details [shadows-depthtex-sapp](https://floooh.github.io/sokol-html5/shadows-depthtex-sapp.html),
-  specifically be aware of the caveat that a compatible `sg_pipeline` object
+  enable depth-only rendering, see the new sample [shadows-depthtex-sapp](https://floooh.github.io/sokol-html5/shadows-depthtex-sapp.html) for details,
+  specifically be aware of the caveat that a depth-only-compatible `sg_pipeline` object
   needs to 'deactivate' the first color target by setting its pixel format
   to `NONE`:
 
@@ -165,7 +165,7 @@ See the new [shadows-depthtex-sapp](https://floooh.github.io/sokol-html5/shadows
 
 - A sokol-spine atlas object now allocates both an `sg_image` and `sg_sampler` handle
   and expects the user code to initialize those handles to complete image and
-  sampler objects. Check the updates sokol-spine samples here for more details:
+  sampler objects. Check the updated sokol-spine samples here for more details:
 
   https://github.com/floooh/sokol-samples/tree/master/sapp
 
