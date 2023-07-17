@@ -75,7 +75,7 @@ See the new [shadows-depthtex-sapp](https://floooh.github.io/sokol-html5/shadows
   E.g. the old GL-style shader with combined image samplers:
 
   ```glsl
-  sampler2D tex;
+  uniform sampler2D tex;
 
   void main() {
       frag_color = texture(tex, uv);
@@ -84,8 +84,8 @@ See the new [shadows-depthtex-sapp](https://floooh.github.io/sokol-html5/shadows
   ...now needs to look like this:
 
   ```glsl
-  texture2D tex;
-  sampler smp;
+  uniform texture2D tex;
+  uniform sampler smp;
 
   void main() {
       frag_color = texture(sampler2D(tex, smp), uv);
