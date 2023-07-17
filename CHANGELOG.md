@@ -60,11 +60,11 @@ See the new [shadows-depthtex-sapp](https://floooh.github.io/sokol-html5/shadows
         .vertex_buffers[0] = vbuf,
         .fs = {
             .images = {
-                [0] = img0,
-                [1] = img1,
-                [2] = img2,
+                [SLOT_tex0] = img0,
+                [SLOT_tex1] = img1,
+                [SLOT_tex2] = img2,
             },
-            .samplers[0] = smp,
+            .samplers[SLOT_smp] = smp,
         }
     });
     ```
