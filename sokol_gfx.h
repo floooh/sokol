@@ -594,7 +594,7 @@
     ON SHADER CREATION
     ==================
     sokol-gfx doesn't come with an integrated shader cross-compiler, instead
-    backend-specific shader sources or binary blobs need to provided when
+    backend-specific shader sources or binary blobs need to be provided when
     creating a shader object, along with information about the shader interface
     needed in the sokol-gfx validation layer and to properly bind shader resources
     on the CPU-side to be consumable by the GPU-side.
@@ -611,7 +611,7 @@
         ...
 
         // create shader using a code-generated helper function from the C header:
-        sg_shader shd = sg_make_shader(mshader_shader_desc(sg_query_backend()));
+        sg_shader shd = sg_make_shader(myshader_shader_desc(sg_query_backend()));
 
     The samples in the 'sapp' subdirectory of the sokol-samples project
     also use the sokol-shdc approach:
@@ -638,7 +638,7 @@
           MSL version should be in 'metal-1.1' (other versions may work but are not tested)
         - optionally the following shader-code related attributes can be provided:
             - an entry function name (only on D3D11 or Metal, but not OpenGL)
-            - on D3D11 only, a compilation target (default is "vs_4_0" and "ps_4_0"
+            - on D3D11 only, a compilation target (default is "vs_4_0" and "ps_4_0")
 
     - Depending on backend, information about the input vertex attributes used by the
       vertex shader:
@@ -646,7 +646,7 @@
           by their attribute location defined in the shader via '[[attribute(N)]]'
         - GLSL: vertex attribute names can be optionally provided, in that case their
           location will be looked up by name, otherwise, the vertex attribute location
-          can be defined 'layout(location = N)', PLEASE NOTE that the name-lookup method
+          can be defined with 'layout(location = N)', PLEASE NOTE that the name-lookup method
           may be removed at some point
         - D3D11: a 'semantic name' and 'semantic index' must be provided for each vertex
           attribute, e.g. if the vertex attribute is defined as 'TEXCOORD1' in the shader,
@@ -654,7 +654,7 @@
 
     - Information about each uniform block used in the shader:
         - The size of the uniform block in number of bytes.
-        - A layout hint (currently 'native' or 'std140') where 'native' defines a
+        - A memory layout hint (currently 'native' or 'std140') where 'native' defines a
           backend-specific memory layout which shouldn't be used for cross-platform code.
           Only std140 guarantees a backend-agnostic memory layout.
         - For GLSL only: a description of the internal uniform block layout, which maps
@@ -673,7 +673,7 @@
     - A description of each sampler used in the shader:
         - just wether the sampler is a regular 'sampling sampler',
           or a 'comparison sampler' (which is usually used for
-          texture mapping)
+          shadow mapping)
 
     - An array of 'image-sampler-pairs' used by the shader to sample textures,
       for D3D11 and Metal this is only used for validation purposes to check
@@ -796,7 +796,7 @@
     std140 layout rules, this means that the cbuffer declarations in HLSL code
     must be tweaked so that the layout is compatible with std140.
 
-    The by far easiest way to tacke the common uniform block layout problem is
+    The by far easiest way to tackle the common uniform block layout problem is
     to use the sokol-shdc shader cross-compiler tool!
 
 
@@ -1197,7 +1197,7 @@
     to create a pipeline object with a shader that's not in VALID state will
     trigger a validation layer error, or if the validation layer is disabled,
     result in a pipeline object in FAILED state. Same when trying to create
-    a pass object with image invalid image objects.
+    a pass object with invalid image objects.
 
     LICENSE
     =======
