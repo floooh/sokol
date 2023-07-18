@@ -198,11 +198,11 @@
     sshape_element_range_t sshape_element_range(const sshape_buffer_t* buf);
     sg_buffer_desc sshape_vertex_buffer_desc(const sshape_buffer_t* buf);
     sg_buffer_desc sshape_index_buffer_desc(const sshape_buffer_t* buf);
-    sg_buffer_layout_desc sshape_buffer_layout_desc(void);
-    sg_vertex_attr_desc sshape_position_attr_desc(void);
-    sg_vertex_attr_desc sshape_normal_attr_desc(void);
-    sg_vertex_attr_desc sshape_texcoord_attr_desc(void);
-    sg_vertex_attr_desc sshape_color_attr_desc(void);
+    sg_vertex_buffer_layout_state sshape_vertex_buffer_layout_state(void);
+    sg_vertex_attr_state sshape_position_vertex_attr_state(void);
+    sg_vertex_attr_state sshape_normal_vertex_attr_state(void);
+    sg_vertex_attr_state sshape_texcoord_vertex_attr_state(void);
+    sg_vertex_attr_state sshape_color_vertex_attr_state(void);
     ```
 
     The sshape_element_range_t struct contains the base-index and number of
@@ -234,12 +234,12 @@
     ```c
     sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
         .layout = {
-            .buffers[0] = sshape_buffer_layout_desc(),
+            .buffers[0] = sshape_vertex_buffer_layout_state(),
             .attrs = {
-                [0] = sshape_position_attr_desc(),
-                [1] = ssape_normal_attr_desc(),
-                [2] = sshape_texcoord_attr_desc(),
-                [3] = sshape_color_attr_desc()
+                [0] = sshape_position_vertex_attr_state(),
+                [1] = ssape_normal_vertex_attr_state(),
+                [2] = sshape_texcoord_vertex_attr_state(),
+                [3] = sshape_color_vertex_attr_state()
             }
         },
         ...
@@ -247,8 +247,8 @@
     ```
 
     Note that you don't have to use all generated vertex attributes in the
-    pipeline's vertex layout, the sg_buffer_layout_desc struct returned
-    by sshape_buffer_layout_desc() contains the correct vertex stride
+    pipeline's vertex layout, the sg_vertex_buffer_layout_state struct returned
+    by sshape_vertex_buffer_layout_state() contains the correct vertex stride
     to skip vertex components.
 
     WRITING MULTIPLE SHAPES INTO THE SAME BUFFER
@@ -522,11 +522,11 @@ SOKOL_SHAPE_API_DECL sshape_sizes_t sshape_torus_sizes(uint32_t sides, uint32_t 
 SOKOL_SHAPE_API_DECL sshape_element_range_t sshape_element_range(const sshape_buffer_t* buf);
 SOKOL_SHAPE_API_DECL sg_buffer_desc sshape_vertex_buffer_desc(const sshape_buffer_t* buf);
 SOKOL_SHAPE_API_DECL sg_buffer_desc sshape_index_buffer_desc(const sshape_buffer_t* buf);
-SOKOL_SHAPE_API_DECL sg_buffer_layout_desc sshape_buffer_layout_desc(void);
-SOKOL_SHAPE_API_DECL sg_vertex_attr_desc sshape_position_attr_desc(void);
-SOKOL_SHAPE_API_DECL sg_vertex_attr_desc sshape_normal_attr_desc(void);
-SOKOL_SHAPE_API_DECL sg_vertex_attr_desc sshape_texcoord_attr_desc(void);
-SOKOL_SHAPE_API_DECL sg_vertex_attr_desc sshape_color_attr_desc(void);
+SOKOL_SHAPE_API_DECL sg_vertex_buffer_layout_state sshape_vertex_buffer_layout_state(void);
+SOKOL_SHAPE_API_DECL sg_vertex_attr_state sshape_position_vertex_attr_state(void);
+SOKOL_SHAPE_API_DECL sg_vertex_attr_state sshape_normal_vertex_attr_state(void);
+SOKOL_SHAPE_API_DECL sg_vertex_attr_state sshape_texcoord_vertex_attr_state(void);
+SOKOL_SHAPE_API_DECL sg_vertex_attr_state sshape_color_vertex_attr_state(void);
 
 /* helper functions to build packed color value from floats or bytes */
 SOKOL_SHAPE_API_DECL uint32_t sshape_color_4f(float r, float g, float b, float a);
@@ -1397,38 +1397,38 @@ SOKOL_SHAPE_API_DECL sshape_element_range_t sshape_element_range(const sshape_bu
     return range;
 }
 
-SOKOL_API_IMPL sg_buffer_layout_desc sshape_buffer_layout_desc(void) {
-    sg_buffer_layout_desc desc = { 0 };
-    desc.stride = sizeof(sshape_vertex_t);
-    return desc;
+SOKOL_API_IMPL sg_vertex_buffer_layout_state sshape_vertex_buffer_layout_state(void) {
+    sg_vertex_buffer_layout_state state = { 0 };
+    state.stride = sizeof(sshape_vertex_t);
+    return state;
 }
 
-SOKOL_API_IMPL sg_vertex_attr_desc sshape_position_attr_desc(void) {
-    sg_vertex_attr_desc desc = { 0 };
-    desc.offset = offsetof(sshape_vertex_t, x);
-    desc.format = SG_VERTEXFORMAT_FLOAT3;
-    return desc;
+SOKOL_API_IMPL sg_vertex_attr_state sshape_position_vertex_attr_state(void) {
+    sg_vertex_attr_state state = { 0 };
+    state.offset = offsetof(sshape_vertex_t, x);
+    state.format = SG_VERTEXFORMAT_FLOAT3;
+    return state;
 }
 
-SOKOL_API_IMPL sg_vertex_attr_desc sshape_normal_attr_desc(void) {
-    sg_vertex_attr_desc desc = { 0 };
-    desc.offset = offsetof(sshape_vertex_t, normal);
-    desc.format = SG_VERTEXFORMAT_BYTE4N;
-    return desc;
+SOKOL_API_IMPL sg_vertex_attr_state sshape_normal_vertex_attr_state(void) {
+    sg_vertex_attr_state state = { 0 };
+    state.offset = offsetof(sshape_vertex_t, normal);
+    state.format = SG_VERTEXFORMAT_BYTE4N;
+    return state;
 }
 
-SOKOL_API_IMPL sg_vertex_attr_desc sshape_texcoord_attr_desc(void) {
-    sg_vertex_attr_desc desc = { 0 };
-    desc.offset = offsetof(sshape_vertex_t, u);
-    desc.format = SG_VERTEXFORMAT_USHORT2N;
-    return desc;
+SOKOL_API_IMPL sg_vertex_attr_state sshape_texcoord_vertex_attr_state(void) {
+    sg_vertex_attr_state state = { 0 };
+    state.offset = offsetof(sshape_vertex_t, u);
+    state.format = SG_VERTEXFORMAT_USHORT2N;
+    return state;
 }
 
-SOKOL_API_IMPL sg_vertex_attr_desc sshape_color_attr_desc(void) {
-    sg_vertex_attr_desc desc = { 0 };
-    desc.offset = offsetof(sshape_vertex_t, color);
-    desc.format = SG_VERTEXFORMAT_UBYTE4N;
-    return desc;
+SOKOL_API_IMPL sg_vertex_attr_state sshape_color_vertex_attr_state(void) {
+    sg_vertex_attr_state state = { 0 };
+    state.offset = offsetof(sshape_vertex_t, color);
+    state.format = SG_VERTEXFORMAT_UBYTE4N;
+    return state;
 }
 
 #ifdef __clang__

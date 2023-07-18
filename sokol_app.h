@@ -11062,7 +11062,7 @@ SOKOL_API_IMPL float sapp_dpi_scale(void) {
     return _sapp.dpi_scale;
 }
 
-SOKOL_APP_IMPL const void* sapp_egl_get_display(void) {
+SOKOL_API_IMPL const void* sapp_egl_get_display(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_ANDROID)
         return _sapp.android.display;
@@ -11073,7 +11073,7 @@ SOKOL_APP_IMPL const void* sapp_egl_get_display(void) {
     #endif
 }
 
-SOKOL_APP_IMPL const void* sapp_egl_get_context(void) {
+SOKOL_API_IMPL const void* sapp_egl_get_context(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_ANDROID)
         return _sapp.android.context;

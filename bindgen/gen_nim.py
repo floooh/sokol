@@ -437,7 +437,7 @@ def gen_func_nim(decl, prefix):
             arg_name = param_decl['name']
             arg_type = param_decl['type']
             if is_const_struct_ptr(arg_type):
-                s += f"unsafeAddr({arg_name})"
+                s += f"addr({arg_name})"
             else:
                 s += arg_name
         s += ")"
@@ -562,7 +562,7 @@ def gen_extra(inp):
     #if inp['prefix'] in ['sg_', 'sdtx_', 'sshape_']:
     #    l('# helper function to convert "anything" into a Range')
     #    l('converter to_Range*[T](source: T): Range =')
-    #    l('  Range(addr: source.unsafeAddr, size: source.sizeof.uint)')
+    #    l('  Range(addr: source.addr, size: source.sizeof.uint)')
     #    l('')
     c_source_path = '/'.join(c_source_paths[inp['prefix']].split('/')[3:])
     l('{.passc:"-DSOKOL_NIM_IMPL".}')
