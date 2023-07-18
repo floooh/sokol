@@ -23,7 +23,6 @@ extern "C" {
 
 SOKOL_GFX_API_DECL void sg_query_image_pixels(sg_image img_id, void* pixels, int size);
 SOKOL_GFX_API_DECL void sg_query_pixels(int x, int y, int w, int h, bool origin_top_left, void *pixels, int size);
-SOKOL_GFX_API_DECL void sg_update_texture_filter(sg_image img_id, sg_filter min_filter, sg_filter mag_filter);
 
 #ifdef __cplusplus
 } // extern "C"
@@ -86,18 +85,6 @@ static void _sg_gl_query_pixels(int x, int y, int w, int h, bool origin_top_left
     _SG_GL_CHECK_ERROR();
     glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
     _SG_GL_CHECK_ERROR();
-}
-
-static void _sg_gl_update_texture_filter(_sg_image_t* img, sg_filter min_filter, sg_filter mag_filter) {
-    _sg_gl_cache_store_texture_binding(0);
-    _sg_gl_cache_bind_texture(0, img->gl.target, img->gl.tex[img->cmn.active_slot]);
-    img->cmn.min_filter = min_filter;
-    img->cmn.mag_filter = mag_filter;
-    GLenum gl_min_filter = _sg_gl_filter(img->cmn.min_filter);
-    GLenum gl_mag_filter = _sg_gl_filter(img->cmn.mag_filter);
-    glTexParameteri(img->gl.target, GL_TEXTURE_MIN_FILTER, (GLint)gl_min_filter);
-    glTexParameteri(img->gl.target, GL_TEXTURE_MAG_FILTER, (GLint)gl_mag_filter);
-    _sg_gl_cache_restore_texture_binding(0);
 }
 
 #elif defined(SOKOL_D3D11)
@@ -272,21 +259,6 @@ static void _sg_d3d11_query_pixels(int x, int y, int w, int h, bool origin_top_l
     if(staging_tex) _sg_d3d11_Release(staging_tex);
 }
 
-static void _sg_d3d11_update_texture_filter(_sg_image_t* img, sg_filter min_filter, sg_filter mag_filter) {
-    SOKOL_ASSERT(img->d3d11.tex2d || img->d3d11.tex3d);
-    HRESULT hr;
-    _SOKOL_UNUSED(hr);
-    D3D11_SAMPLER_DESC d3d11_smp_desc;
-    memset(&d3d11_smp_desc, 0, sizeof(d3d11_smp_desc));
-    _sgext_d3d11_SamplerState_GetDesc(img->d3d11.smp, &d3d11_smp_desc);
-    _sg_d3d11_Release(img->d3d11.smp);
-    img->cmn.min_filter = min_filter;
-    img->cmn.mag_filter = mag_filter;
-    d3d11_smp_desc.Filter = _sg_d3d11_filter(img->cmn.min_filter, img->cmn.mag_filter, img->cmn.max_anisotropy);
-    hr = _sg_d3d11_CreateSamplerState(_sg.d3d11.dev, &d3d11_smp_desc, &img->d3d11.smp);
-    SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.smp);
-}
-
 #elif defined(SOKOL_METAL)
 
 #import <Metal/Metal.h>
@@ -360,22 +332,6 @@ static void _sg_metal_query_pixels(int x, int y, int w, int h, bool origin_top_l
     _sg_metal_encode_texture_pixels(x, y, w, h, origin_top_left, mtl_drawable.texture, pixels);
 }
 
-static void _sg_metal_update_texture_filter(_sg_image_t* img, sg_filter min_filter, sg_filter mag_filter) {
-    sg_image_desc image_desc = {
-        .min_filter = min_filter,
-        .mag_filter = mag_filter,
-        .wrap_u = img->cmn.wrap_u,
-        .wrap_v = img->cmn.wrap_v,
-        .wrap_w = img->cmn.wrap_w,
-        .max_anisotropy = img->cmn.max_anisotropy,
-        .border_color = img->cmn.border_color,
-    };
-    sg_image_desc desc_def = _sg_image_desc_defaults(&image_desc);
-    img->mtl.sampler_state = _sg_mtl_create_sampler(_sg.mtl.device, &desc_def);
-    img->cmn.min_filter = min_filter;
-    img->cmn.mag_filter = mag_filter;
-}
-
 #endif
 
 void sg_query_image_pixels(sg_image img_id, void* pixels, int size) {
@@ -404,19 +360,6 @@ void sg_query_pixels(int x, int y, int w, int h, bool origin_top_left, void *pix
     _sg_d3d11_query_pixels(x, y, w, h, origin_top_left, pixels);
 #elif defined(SOKOL_METAL)
     _sg_metal_query_pixels(x, y, w, h, origin_top_left, pixels);
-#endif
-}
-
-void sg_update_texture_filter(sg_image img_id, sg_filter min_filter, sg_filter mag_filter) {
-    SOKOL_ASSERT(img_id.id != SG_INVALID_ID);
-    _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
-    SOKOL_ASSERT(img);
-#if defined(_SOKOL_ANY_GL)
-    _sg_gl_update_texture_filter(img, min_filter, mag_filter);
-#elif defined(SOKOL_D3D11)
-    _sg_d3d11_update_texture_filter(img, min_filter, mag_filter);
-#elif defined(SOKOL_METAL)
-    _sg_metal_update_texture_filter(img, min_filter, mag_filter);
 #endif
 }
 
