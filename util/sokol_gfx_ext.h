@@ -45,13 +45,6 @@ SOKOL_GFX_API_DECL void sg_query_pixels(int x, int y, int w, int h, bool origin_
 static void _sg_gl_query_image_pixels(_sg_image_t* img, void* pixels) {
     SOKOL_ASSERT(img->gl.target == GL_TEXTURE_2D);
     SOKOL_ASSERT(0 != img->gl.tex[img->cmn.active_slot]);
-#if defined(SOKOL_GLCORE33)
-    _sg_gl_cache_store_texture_binding(0);
-    _sg_gl_cache_bind_texture(0, img->gl.target, img->gl.tex[img->cmn.active_slot]);
-    glGetTexImage(img->gl.target, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-    _SG_GL_CHECK_ERROR();
-    _sg_gl_cache_restore_texture_binding(0);
-#else
     static GLuint newFbo = 0;
     GLuint oldFbo = 0;
     if(newFbo == 0) {
@@ -64,7 +57,6 @@ static void _sg_gl_query_image_pixels(_sg_image_t* img, void* pixels) {
     glBindFramebuffer(GL_FRAMEBUFFER, oldFbo);
     //glDeleteFramebuffers(1, &newFbo);
     _SG_GL_CHECK_ERROR();
-#endif
 }
 
 static void _sg_gl_query_pixels(int x, int y, int w, int h, bool origin_top_left, void *pixels) {
