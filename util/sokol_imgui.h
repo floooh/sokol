@@ -323,6 +323,33 @@
 extern "C" {
 #endif
 
+enum {
+    SIMGUI_INVALID_ID = 0,
+};
+
+/*
+    simgui_image_t
+
+    A combined image-sampler pair used to inject custom images and samplers into Dear ImGui.
+
+    Create with simgui_make_image(), and convert to an ImTextureID handle via
+    simgui_imtextureid().
+*/
+typedef struct simgui_image_t { uint32_t id } simgui_image_t;
+
+/*
+    simgui_image_desc_t
+
+    Descriptor struct for simgui_make_image(). You must provide
+    at least an sg_image handle. Keeping the sg_sampler handle
+    zero-initialized will select the builtin default sampler
+    which uses linear filtering.
+*/
+typedef struct simgui_image_desc_t {
+    sg_image image;
+    sg_sampler sampler
+} simgui_image_desc_t;
+
 /*
     simgui_allocator_t
 
@@ -339,6 +366,7 @@ typedef struct simgui_allocator_t {
 
 typedef struct simgui_desc_t {
     int max_vertices;
+    int image_pool_size;            // default size: 256
     sg_pixel_format color_format;
     sg_pixel_format depth_format;
     int sample_count;
@@ -361,7 +389,9 @@ typedef struct simgui_frame_desc_t {
 SOKOL_IMGUI_API_DECL void simgui_setup(const simgui_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_new_frame(const simgui_frame_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_render(void);
-SOKOL_IMGUI_API_DECL void* simgui_imtextureid(sg_image img);
+SOKOL_IMGUI_API_DECL simgui_image_t simgui_make_image(simgui_image_desc_t* desc);
+SOKOL_IMGUI_API_DECL void simgui_destroy_image(simgui_image_t img);
+SOKOL_IMGUI_API_DECL void* simgui_imtextureid(simgui_image_t img);
 SOKOL_IMGUI_API_DECL void simgui_add_focus_event(bool focus);
 SOKOL_IMGUI_API_DECL void simgui_add_mouse_pos_event(float x, float y);
 SOKOL_IMGUI_API_DECL void simgui_add_touch_pos_event(float x, float y);
@@ -432,6 +462,11 @@ inline void simgui_new_frame(const simgui_frame_desc_t& desc) { return simgui_ne
     #endif
 #endif
 
+#define _SIMGUI_INVALID_SLOT_INDEX (0)
+#define _SIMGUI_SLOT_SHIFT (16)
+#define _SIMGUI_MAX_POOL_SIZE (1<<_SIMGUI_SLOT_SHIFT)
+#define _SIMGUI_SLOT_MASK (_SIMGUI_MAX_POOL_SIZE-1)
+
 // helper macros and constants
 #define _simgui_def(val, def) (((val) == 0) ? (def) : (val))
 
@@ -439,6 +474,37 @@ typedef struct {
     ImVec2 disp_size;
     uint8_t _pad_8[8];
 } _simgui_vs_params_t;
+
+typedef enum {
+    _SIMGUI_RESOURCESTATE_INITIAL,
+    _SIMGUI_RESOURCESTATE_ALLOC,
+    _SIMGUI_RESOURCESTATE_VALID,
+    _SIMGUI_RESOURCESTATE_FAILED,
+    _SIMGUI_RESOURCESTATE_INVALID,
+    _SIMGUI_RESOURCESTATE_FORCE_U32 = 0x7FFFFFFF
+} _simgui_resource_state;
+
+typedef struct {
+    uint32_t id;
+    _simgui_resource_state state;
+} _simgui_slot_t;
+
+typedef struct {
+    int size;
+    int queue_top;
+    uint32_t* gen_ctrs;
+    int* free_queue;
+} _simgui_pool_t;
+
+typedef struct {
+    sg_image img;
+    sg_sampler smp;
+} _simgui_image_t;
+
+typedef struct {
+    _simgui_pool_t pool;
+    _simgui_image_t* items;
+} _simgui_image_pool_t;
 
 typedef struct {
     simgui_desc_t desc;
@@ -451,7 +517,8 @@ typedef struct {
     sg_pipeline pip;
     sg_range vertices;
     sg_range indices;
-    bool is_osx;    // return true if running on OSX (or HTML5 OSX), needed for copy/paste
+    bool is_osx;
+    _simgui_image_pool_t image_pool;
 } _simgui_state_t;
 static _simgui_state_t _simgui;
 
@@ -1717,12 +1784,120 @@ static void* _simgui_malloc(size_t size) {
     return ptr;
 }
 
+static void* _simgui_malloc_clear(size_t size) {
+    void* ptr = _sspine_malloc(size);
+    _sspine_clear(ptr, size);
+    return ptr;
+}
+
 static void _simgui_free(void* ptr) {
     if (_simgui.desc.allocator.free) {
         _simgui.desc.allocator.free(ptr, _simgui.desc.allocator.user_data);
     } else {
         free(ptr);
     }
+}
+
+static void _simgui_init_pool(_simgui_pool_t* pool, int num) {
+    SOKOL_ASSERT(pool && (num >= 1));
+    // slot 0 is reserved for the 'invalid id', so bump the pool size by 1
+    pool->size = num + 1;
+    pool->queue_top = 0;
+    // generation counters indexable by pool slot index, slot 0 is reserved
+    size_t gen_ctrs_size = sizeof(uint32_t) * (size_t)pool->size;
+    pool->gen_ctrs = (uint32_t*) _sspine_malloc_clear(gen_ctrs_size);
+    // it's not a bug to only reserve 'num' here
+    pool->free_queue = (int*) _sspine_malloc_clear(sizeof(int) * (size_t)num);
+    // never allocate the zero-th pool item since the invalid id is 0
+    for (int i = pool->size-1; i >= 1; i--) {
+        pool->free_queue[pool->queue_top++] = i;
+    }
+}
+
+static void _simgui_discard_pool(_simgui_pool_t* pool) {
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    _simgui_free(pool->free_queue);
+    pool->free_queue = 0;
+    SOKOL_ASSERT(pool->gen_ctrs);
+    _simgui_free(pool->gen_ctrs);
+    pool->gen_ctrs = 0;
+    pool->size = 0;
+    pool->queue_top = 0;
+}
+
+static int _simgui_pool_alloc_index(_simgui_pool_t* pool) {
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    if (pool->queue_top > 0) {
+        int slot_index = pool->free_queue[--pool->queue_top];
+        SOKOL_ASSERT((slot_index > 0) && (slot_index < pool->size));
+        return slot_index;
+    } else {
+        // pool exhausted
+        return _SIMGUI_INVALID_SLOT_INDEX;
+    }
+}
+
+static void _simgui_pool_free_index(_simgui_pool_t* pool, int slot_index) {
+    SOKOL_ASSERT((slot_index > _SIMGUI_INVALID_SLOT_INDEX) && (slot_index < pool->size));
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    SOKOL_ASSERT(pool->queue_top < pool->size);
+    #ifdef SOKOL_DEBUG
+    // debug check against double-free
+    for (int i = 0; i < pool->queue_top; i++) {
+        SOKOL_ASSERT(pool->free_queue[i] != slot_index);
+    }
+    #endif
+    pool->free_queue[pool->queue_top++] = slot_index;
+    SOKOL_ASSERT(pool->queue_top <= (pool->size-1));
+}
+
+/* initiailize a pool slot:
+    - bump the slot's generation counter
+    - create a resource id from the generation counter and slot index
+    - set the slot's id to this id
+    - set the slot's state to ALLOC
+    - return the handle id
+*/
+static uint32_t _simgui_slot_init(_simgui_pool_t* pool, _simgui_slot_t* slot, int slot_index) {
+    /* FIXME: add handling for an overflowing generation counter,
+       for now, just overflow (another option is to disable
+       the slot)
+    */
+    SOKOL_ASSERT(pool && pool->gen_ctrs);
+    SOKOL_ASSERT((slot_index > _SIMGUI_INVALID_SLOT_INDEX) && (slot_index < pool->size));
+    SOKOL_ASSERT((slot->state == _SIMGUI_RESOURCESTATE_INITIAL) && (slot->id == SIMGUI_INVALID_ID));
+    uint32_t ctr = ++pool->gen_ctrs[slot_index];
+    slot->id = (ctr<<_SIMGUI_SLOT_SHIFT)|(slot_index & _SIMGUI_SLOT_MASK);
+    slot->state = _SIMGUI_RESOURCESTATE_ALLOC;
+    return slot->id;
+}
+
+// extract slot index from id
+static int _simgui_slot_index(uint32_t id) {
+    int slot_index = (int) (id & _SIMGUI_SLOT_MASK);
+    SOKOL_ASSERT(_SIMGUI_INVALID_SLOT_INDEX != slot_index);
+    return slot_index;
+}
+
+static void _simgui_init_item_pool(_simgui_pool_t* pool, int pool_size, void** items_ptr, size_t item_size_bytes) {
+    // NOTE: the pools will have an additional item, since slot 0 is reserved
+    SOKOL_ASSERT(pool && (pool->size == 0));
+    SOKOL_ASSERT((pool_size > 0) && (pool_size < _SIMGUI_MAX_POOL_SIZE));
+    SOKOL_ASSERT(items_ptr && (*items_ptr == 0));
+    SOKOL_ASSERT(item_size_bytes > 0);
+    _sspine_init_pool(pool, pool_size);
+    const size_t pool_size_bytes = item_size_bytes * (size_t)pool->size;
+    *items_ptr = _sspine_malloc_clear(pool_size_bytes);
+}
+
+static void _simgui_discard_item_pool(_simgui_pool_t* pool, void** items_ptr) {
+    SOKOL_ASSERT(pool && (pool->size != 0));
+    SOKOL_ASSERT(items_ptr && (*items_ptr != 0));
+    _sspine_free(*items_ptr); *items_ptr = 0;
+    _sspine_discard_pool(pool);
 }
 
 static bool _simgui_is_osx(void) {
