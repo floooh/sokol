@@ -102,6 +102,10 @@
                 sokol-imgui will use this to compute the size of the vertex-
                 and index-buffers allocated via sokol_gfx.h
 
+            int image_pool_size
+                Number of simgui_image_t objects which can be alive at the same time.
+                The default is 256.
+
             sg_pixel_format color_format
                 The color pixel format of the render pass where the UI
                 will be rendered. The default (0) matches sokoL_gfx.h's
@@ -158,9 +162,20 @@
                 Used to override memory allocation functions. See further below
                 for details.
 
+            simgui_logger_t logger
+                A user-provided logging callback. Note that without logging
+                callback, sokol-imgui will be completely silent!
+                See the section about ERROR REPORTING AND LOGGING below
+                for more details.
+
     --- At the start of a frame, call:
 
-        simgui_new_frame(&(simgui_frame_desc_t){.width = ..., .height = ..., .delta_time = ..., .dpi_scale = ...});
+        simgui_new_frame(&(simgui_frame_desc_t){
+            .width = ...,
+            .height = ...,
+            .delta_time = ...,
+            .dpi_scale = ...
+        });
 
         'width' and 'height' are the dimensions of the rendering surface,
         passed to ImGui::GetIO().DisplaySize.
@@ -217,6 +232,42 @@
         default font texture or default sampler object
 
 
+    ON USER-PROVIDED IMAGES AND SAMPLERS
+    ====================================
+    To render your own images via ImGui::Image(), first create an simgui_image_t
+    object from a sokol-gfx image and sampler object.
+
+        // create a sokol-imgui image object which associates an sg_image with an sg_sampler
+        simgui_image_t simgui_img = simgui_make_image(&(simgui_image_desc_t){
+            .image = sg_make_image(...),
+            .sampler = sg_make_sampler(...),
+        });
+
+        // convert the returned image handle into a ImTextureID handle
+        ImTextureID tex_id = simgui_imtextureid(simgui_img);
+
+        // use the ImTextureID handle in Dear ImGui calls:
+        ImGui::Image(tex_id, ...);
+
+    simgui_image_t objects are small and cheap (literally just the image and sampler
+    handle).
+
+    You can omit the sampler handle in the simgui_make_image() call, in this case a
+    default sampler will be used with nearest-filtering and clamp-to-edge.
+
+    Trying to render with an invalid simgui_image_t handle will render a small 8x8
+    white default texture instead.
+
+    To destroy a sokol-imgui image object, call
+
+        simgui_destroy_image(simgui_img);
+
+    But please be aware that the image object needs to be around until simgui_render() is called
+    in a frame (if this turns out to be too much of a hassle we could introduce some sort
+    of garbage collection where destroyed simgui_image_t objects are kept around until
+    the simgui_render() call).
+
+
     MEMORY ALLOCATION OVERRIDE
     ==========================
     You can override the memory allocation functions at initialization time
@@ -245,6 +296,47 @@
 
     This only affects memory allocation calls done by sokol_imgui.h
     itself though, not any allocations in Dear ImGui.
+
+
+    ERROR REPORTING AND LOGGING
+    ===========================
+    To get any logging information at all you need to provide a logging callback in the setup call
+    the easiest way is to use sokol_log.h:
+
+        #include "sokol_log.h"
+
+        simgui_setup(&(simgui_desc_t){
+            .logger.func = slog_func
+        });
+
+    To override logging with your own callback, first write a logging function like this:
+
+        void my_log(const char* tag,                // e.g. 'simgui'
+                    uint32_t log_level,             // 0=panic, 1=error, 2=warn, 3=info
+                    uint32_t log_item_id,           // SIMGUI_LOGITEM_*
+                    const char* message_or_null,    // a message string, may be nullptr in release mode
+                    uint32_t line_nr,               // line number in sokol_imgui.h
+                    const char* filename_or_null,   // source filename, may be nullptr in release mode
+                    void* user_data)
+        {
+            ...
+        }
+
+    ...and then setup sokol-imgui like this:
+
+        simgui_setup(&(simgui_desc_t){
+            .logger = {
+                .func = my_log,
+                .user_data = my_user_data,
+            }
+        });
+
+    The provided logging function must be reentrant (e.g. be callable from
+    different threads).
+
+    If you don't want to provide your own custom logger it is highly recommended to use
+    the standard logger in sokol_log.h instead, otherwise you won't see any warnings or
+    errors.
 
 
     IMGUI EVENT HANDLING
@@ -323,6 +415,50 @@
 extern "C" {
 #endif
 
+enum {
+    SIMGUI_INVALID_ID = 0,
+};
+
+/*
+    simgui_image_t
+
+    A combined image-sampler pair used to inject custom images and samplers into Dear ImGui.
+
+    Create with simgui_make_image(), and convert to an ImTextureID handle via
+    simgui_imtextureid().
+*/
+typedef struct simgui_image_t { uint32_t id; } simgui_image_t;
+
+/*
+    simgui_image_desc_t
+
+    Descriptor struct for simgui_make_image(). You must provide
+    at least an sg_image handle. Keeping the sg_sampler handle
+    zero-initialized will select the builtin default sampler
+    which uses linear filtering.
+*/
+typedef struct simgui_image_desc_t {
+    sg_image image;
+    sg_sampler sampler;
+} simgui_image_desc_t;
+
+/*
+    simgui_log_item
+
+    An enum with a unique item for each log message, warning, error
+    and validation layer message.
+*/
+#define _SIMGUI_LOG_ITEMS \
+    _SIMGUI_LOGITEM_XMACRO(OK, "Ok") \
+    _SIMGUI_LOGITEM_XMACRO(MALLOC_FAILED, "memory allocation failed") \
+    _SIMGUI_LOGITEM_XMACRO(IMAGE_POOL_EXHAUSTED, "image pool exhausted") \
+
+#define _SIMGUI_LOGITEM_XMACRO(item,msg) SIMGUI_LOGITEM_##item,
+typedef enum simgui_log_item_t {
+    _SIMGUI_LOG_ITEMS
+} simgui_log_item_t;
+#undef _SIMGUI_LOGITEM_XMACRO
+
 /*
     simgui_allocator_t
 
@@ -337,8 +473,31 @@ typedef struct simgui_allocator_t {
     void* user_data;
 } simgui_allocator_t;
 
+/*
+    simgui_logger
+
+    Used in simgui_desc to provide a logging function. Please be aware
+    that without logging function, sokol-imgui will be completely
+    silent, e.g. it will not report errors, warnings and
+    validation layer messages. For maximum error verbosity,
+    compile in debug mode (e.g. NDEBUG *not* defined) and install
+    a logger (for instance the standard logging function from sokol_log.h).
+*/
+typedef struct simgui_logger_t {
+    void (*func)(
+        const char* tag,                // always "simgui"
+        uint32_t log_level,             // 0=panic, 1=error, 2=warning, 3=info
+        uint32_t log_item_id,           // SIMGUI_LOGITEM_*
+        const char* message_or_null,    // a message string, may be nullptr in release mode
+        uint32_t line_nr,               // line number in sokol_imgui.h
+        const char* filename_or_null,   // source filename, may be nullptr in release mode
+        void* user_data);
+    void* user_data;
+} simgui_logger_t;
+
 typedef struct simgui_desc_t {
-    int max_vertices;
+    int max_vertices;               // default: 65536
+    int image_pool_size;            // default: 256
     sg_pixel_format color_format;
     sg_pixel_format depth_format;
     int sample_count;
@@ -349,6 +508,7 @@ typedef struct simgui_desc_t {
     bool disable_windows_resize_from_edges; // if true, only resize edges from the bottom right corner
     bool write_alpha_channel;       // if true, alpha values get written into the framebuffer
     simgui_allocator_t allocator;   // optional memory allocation overrides (default: malloc/free)
+    simgui_logger_t logger;         // optional log function override
 } simgui_desc_t;
 
 typedef struct simgui_frame_desc_t {
@@ -361,7 +521,9 @@ typedef struct simgui_frame_desc_t {
 SOKOL_IMGUI_API_DECL void simgui_setup(const simgui_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_new_frame(const simgui_frame_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_render(void);
-SOKOL_IMGUI_API_DECL void* simgui_imtextureid(sg_image img);
+SOKOL_IMGUI_API_DECL simgui_image_t simgui_make_image(const simgui_image_desc_t* desc);
+SOKOL_IMGUI_API_DECL void simgui_destroy_image(simgui_image_t img);
+SOKOL_IMGUI_API_DECL void* simgui_imtextureid(simgui_image_t img);
 SOKOL_IMGUI_API_DECL void simgui_add_focus_event(bool focus);
 SOKOL_IMGUI_API_DECL void simgui_add_mouse_pos_event(float x, float y);
 SOKOL_IMGUI_API_DECL void simgui_add_touch_pos_event(float x, float y);
@@ -382,6 +544,7 @@ SOKOL_IMGUI_API_DECL void simgui_shutdown(void);
 
 // reference-based equivalents for C++
 inline void simgui_setup(const simgui_desc_t& desc) { return simgui_setup(&desc); }
+inline simgui_image_t simgui_make_image(const simgui_image_desc_t& desc) { return simgui_make_image(&desc); }
 inline void simgui_new_frame(const simgui_frame_desc_t& desc) { return simgui_new_frame(&desc); }
 
 #endif
@@ -432,6 +595,12 @@ inline void simgui_new_frame(const simgui_frame_desc_t& desc) { return simgui_ne
     #endif
 #endif
 
+#define _SIMGUI_INIT_COOKIE (0xBABEBABE)
+#define _SIMGUI_INVALID_SLOT_INDEX (0)
+#define _SIMGUI_SLOT_SHIFT (16)
+#define _SIMGUI_MAX_POOL_SIZE (1<<_SIMGUI_SLOT_SHIFT)
+#define _SIMGUI_SLOT_MASK (_SIMGUI_MAX_POOL_SIZE-1)
+
 // helper macros and constants
 #define _simgui_def(val, def) (((val) == 0) ? (def) : (val))
 
@@ -440,18 +609,55 @@ typedef struct {
     uint8_t _pad_8[8];
 } _simgui_vs_params_t;
 
+typedef enum {
+    _SIMGUI_RESOURCESTATE_INITIAL,
+    _SIMGUI_RESOURCESTATE_ALLOC,
+    _SIMGUI_RESOURCESTATE_VALID,
+    _SIMGUI_RESOURCESTATE_FAILED,
+    _SIMGUI_RESOURCESTATE_INVALID,
+    _SIMGUI_RESOURCESTATE_FORCE_U32 = 0x7FFFFFFF
+} _simgui_resource_state;
+
 typedef struct {
+    uint32_t id;
+    _simgui_resource_state state;
+} _simgui_slot_t;
+
+typedef struct {
+    int size;
+    int queue_top;
+    uint32_t* gen_ctrs;
+    int* free_queue;
+} _simgui_pool_t;
+
+typedef struct {
+    _simgui_slot_t slot;
+    sg_image image;
+    sg_sampler sampler;
+} _simgui_image_t;
+
+typedef struct {
+    _simgui_pool_t pool;
+    _simgui_image_t* items;
+} _simgui_image_pool_t;
+
+typedef struct {
+    uint32_t init_cookie;
     simgui_desc_t desc;
     float cur_dpi_scale;
     sg_buffer vbuf;
     sg_buffer ibuf;
-    sg_image img;
-    sg_sampler smp;
+    sg_image font_img;
+    sg_sampler font_smp;
+    simgui_image_t default_font;
+    sg_image def_img;       // used as default image for user images
+    sg_sampler def_smp;     // used as default sampler for user images
     sg_shader shd;
     sg_pipeline pip;
     sg_range vertices;
     sg_range indices;
-    bool is_osx;    // return true if running on OSX (or HTML5 OSX), needed for copy/paste
+    bool is_osx;
+    _simgui_image_pool_t image_pool;
 } _simgui_state_t;
 static _simgui_state_t _simgui;
 
@@ -1700,6 +1906,52 @@ EM_JS(int, simgui_js_is_osx, (void), {
 });
 #endif
 
+// ██       ██████   ██████   ██████  ██ ███    ██  ██████
+// ██      ██    ██ ██       ██       ██ ████   ██ ██
+// ██      ██    ██ ██   ███ ██   ███ ██ ██ ██  ██ ██   ███
+// ██      ██    ██ ██    ██ ██    ██ ██ ██  ██ ██ ██    ██
+// ███████  ██████   ██████   ██████  ██ ██   ████  ██████
+//
+// >>logging
+#if defined(SOKOL_DEBUG)
+#define _SIMGUI_LOGITEM_XMACRO(item,msg) #item ": " msg,
+static const char* _simgui_log_messages[] = {
+    _SIMGUI_LOG_ITEMS
+};
+#undef _SIMGUI_LOGITEM_XMACRO
+#endif // SOKOL_DEBUG
+
+#define _SIMGUI_PANIC(code) _simgui_log(SIMGUI_LOGITEM_ ##code, 0, 0, __LINE__)
+#define _SIMGUI_ERROR(code) _simgui_log(SIMGUI_LOGITEM_ ##code, 1, 0, __LINE__)
+#define _SIMGUI_WARN(code) _simgui_log(SIMGUI_LOGITEM_ ##code, 2, 0, __LINE__)
+#define _SIMGUI_INFO(code) _simgui_log(SIMGUI_LOGITEM_ ##code, 3, 0, __LINE__)
+#define _SIMGUI_LOGMSG(code,msg) _simgui_log(SIMGUI_LOGITEM_ ##code, 3, msg, __LINE__)
+
+static void _simgui_log(simgui_log_item_t log_item, uint32_t log_level, const char* msg, uint32_t line_nr) {
+    if (_simgui.desc.logger.func) {
+        const char* filename = 0;
+        #if defined(SOKOL_DEBUG)
+            filename = __FILE__;
+            if (0 == msg) {
+                msg = _simgui_log_messages[log_item];
+            }
+        #endif
+        _simgui.desc.logger.func("simgui", log_level, log_item, msg, line_nr, filename, _simgui.desc.logger.user_data);
+    } else {
+        // for log level PANIC it would be 'undefined behaviour' to continue
+        if (log_level == 0) {
+            abort();
+        }
+    }
+}
+
+// ███    ███ ███████ ███    ███  ██████  ██████  ██    ██
+// ████  ████ ██      ████  ████ ██    ██ ██   ██  ██  ██
+// ██ ████ ██ █████   ██ ████ ██ ██    ██ ██████    ████
+// ██  ██  ██ ██      ██  ██  ██ ██    ██ ██   ██    ██
+// ██      ██ ███████ ██      ██  ██████  ██   ██    ██
+//
+// >>memory
 static void _simgui_clear(void* ptr, size_t size) {
     SOKOL_ASSERT(ptr && (size > 0));
     memset(ptr, 0, size);
@@ -1713,7 +1965,15 @@ static void* _simgui_malloc(size_t size) {
     } else {
         ptr = malloc(size);
     }
-    SOKOL_ASSERT(ptr);
+    if (0 == ptr) {
+        _SIMGUI_PANIC(MALLOC_FAILED);
+    }
+    return ptr;
+}
+
+static void* _simgui_malloc_clear(size_t size) {
+    void* ptr = _simgui_malloc(size);
+    _simgui_clear(ptr, size);
     return ptr;
 }
 
@@ -1723,6 +1983,200 @@ static void _simgui_free(void* ptr) {
     } else {
         free(ptr);
     }
+}
+
+// ██████   ██████   ██████  ██
+// ██   ██ ██    ██ ██    ██ ██
+// ██████  ██    ██ ██    ██ ██
+// ██      ██    ██ ██    ██ ██
+// ██       ██████   ██████  ███████
+//
+// >>pool
+static void _simgui_init_pool(_simgui_pool_t* pool, int num) {
+    SOKOL_ASSERT(pool && (num >= 1));
+    // slot 0 is reserved for the 'invalid id', so bump the pool size by 1
+    pool->size = num + 1;
+    pool->queue_top = 0;
+    // generation counters indexable by pool slot index, slot 0 is reserved
+    size_t gen_ctrs_size = sizeof(uint32_t) * (size_t)pool->size;
+    pool->gen_ctrs = (uint32_t*) _simgui_malloc_clear(gen_ctrs_size);
+    // it's not a bug to only reserve 'num' here
+    pool->free_queue = (int*) _simgui_malloc_clear(sizeof(int) * (size_t)num);
+    // never allocate the zero-th pool item since the invalid id is 0
+    for (int i = pool->size-1; i >= 1; i--) {
+        pool->free_queue[pool->queue_top++] = i;
+    }
+}
+
+static void _simgui_discard_pool(_simgui_pool_t* pool) {
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    _simgui_free(pool->free_queue);
+    pool->free_queue = 0;
+    SOKOL_ASSERT(pool->gen_ctrs);
+    _simgui_free(pool->gen_ctrs);
+    pool->gen_ctrs = 0;
+    pool->size = 0;
+    pool->queue_top = 0;
+}
+
+static int _simgui_pool_alloc_index(_simgui_pool_t* pool) {
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    if (pool->queue_top > 0) {
+        int slot_index = pool->free_queue[--pool->queue_top];
+        SOKOL_ASSERT((slot_index > 0) && (slot_index < pool->size));
+        return slot_index;
+    } else {
+        // pool exhausted
+        return _SIMGUI_INVALID_SLOT_INDEX;
+    }
+}
+
+static void _simgui_pool_free_index(_simgui_pool_t* pool, int slot_index) {
+    SOKOL_ASSERT((slot_index > _SIMGUI_INVALID_SLOT_INDEX) && (slot_index < pool->size));
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    SOKOL_ASSERT(pool->queue_top < pool->size);
+    #ifdef SOKOL_DEBUG
+    // debug check against double-free
+    for (int i = 0; i < pool->queue_top; i++) {
+        SOKOL_ASSERT(pool->free_queue[i] != slot_index);
+    }
+    #endif
+    pool->free_queue[pool->queue_top++] = slot_index;
+    SOKOL_ASSERT(pool->queue_top <= (pool->size-1));
+}
+
+/* initiailize a pool slot:
+    - bump the slot's generation counter
+    - create a resource id from the generation counter and slot index
+    - set the slot's id to this id
+    - set the slot's state to ALLOC
+    - return the handle id
+*/
+static uint32_t _simgui_slot_init(_simgui_pool_t* pool, _simgui_slot_t* slot, int slot_index) {
+    /* FIXME: add handling for an overflowing generation counter,
+       for now, just overflow (another option is to disable
+       the slot)
+    */
+    SOKOL_ASSERT(pool && pool->gen_ctrs);
+    SOKOL_ASSERT((slot_index > _SIMGUI_INVALID_SLOT_INDEX) && (slot_index < pool->size));
+    SOKOL_ASSERT((slot->state == _SIMGUI_RESOURCESTATE_INITIAL) && (slot->id == SIMGUI_INVALID_ID));
+    uint32_t ctr = ++pool->gen_ctrs[slot_index];
+    slot->id = (ctr<<_SIMGUI_SLOT_SHIFT)|(slot_index & _SIMGUI_SLOT_MASK);
+    slot->state = _SIMGUI_RESOURCESTATE_ALLOC;
+    return slot->id;
+}
+
+// extract slot index from id
+static int _simgui_slot_index(uint32_t id) {
+    int slot_index = (int) (id & _SIMGUI_SLOT_MASK);
+    SOKOL_ASSERT(_SIMGUI_INVALID_SLOT_INDEX != slot_index);
+    return slot_index;
+}
+
+static void _simgui_init_item_pool(_simgui_pool_t* pool, int pool_size, void** items_ptr, size_t item_size_bytes) {
+    // NOTE: the pools will have an additional item, since slot 0 is reserved
+    SOKOL_ASSERT(pool && (pool->size == 0));
+    SOKOL_ASSERT((pool_size > 0) && (pool_size < _SIMGUI_MAX_POOL_SIZE));
+    SOKOL_ASSERT(items_ptr && (*items_ptr == 0));
+    SOKOL_ASSERT(item_size_bytes > 0);
+    _simgui_init_pool(pool, pool_size);
+    const size_t pool_size_bytes = item_size_bytes * (size_t)pool->size;
+    *items_ptr = _simgui_malloc_clear(pool_size_bytes);
+}
+
+static void _simgui_discard_item_pool(_simgui_pool_t* pool, void** items_ptr) {
+    SOKOL_ASSERT(pool && (pool->size != 0));
+    SOKOL_ASSERT(items_ptr && (*items_ptr != 0));
+    _simgui_free(*items_ptr); *items_ptr = 0;
+    _simgui_discard_pool(pool);
+}
+
+static void _simgui_setup_image_pool(int pool_size) {
+    _simgui_image_pool_t* p = &_simgui.image_pool;
+    _simgui_init_item_pool(&p->pool, pool_size, (void**)&p->items, sizeof(_simgui_image_t));
+}
+
+static void _simgui_discard_image_pool(void) {
+    _simgui_image_pool_t* p = &_simgui.image_pool;
+    _simgui_discard_item_pool(&p->pool, (void**)&p->items);
+}
+
+static simgui_image_t _simgui_make_image_handle(uint32_t id) {
+    simgui_image_t handle = { id };
+    return handle;
+}
+
+static _simgui_image_t* _simgui_image_at(uint32_t id) {
+    SOKOL_ASSERT(SIMGUI_INVALID_ID != id);
+    const _simgui_image_pool_t* p = &_simgui.image_pool;
+    int slot_index = _simgui_slot_index(id);
+    SOKOL_ASSERT((slot_index > _SIMGUI_INVALID_SLOT_INDEX) && (slot_index < p->pool.size));
+    return &p->items[slot_index];
+}
+
+static _simgui_image_t* _simgui_lookup_image(uint32_t id) {
+    if (SIMGUI_INVALID_ID != id) {
+        _simgui_image_t* img = _simgui_image_at(id);
+        if (img->slot.id == id) {
+            return img;
+        }
+    }
+    return 0;
+}
+
+static simgui_image_t _simgui_alloc_image(void) {
+    _simgui_image_pool_t* p = &_simgui.image_pool;
+    int slot_index = _simgui_pool_alloc_index(&p->pool);
+    if (_SIMGUI_INVALID_SLOT_INDEX != slot_index) {
+        uint32_t id = _simgui_slot_init(&p->pool, &p->items[slot_index].slot, slot_index);
+        return _simgui_make_image_handle(id);
+    } else {
+        // pool exhausted
+        return _simgui_make_image_handle(SIMGUI_INVALID_ID);
+    }
+}
+
+static _simgui_resource_state _simgui_init_image(_simgui_image_t* img, const simgui_image_desc_t* desc) {
+    SOKOL_ASSERT(img && (img->slot.state == _SIMGUI_RESOURCESTATE_ALLOC));
+    SOKOL_ASSERT(desc);
+    img->image = desc->image;
+    img->sampler = desc->sampler;
+    return _SIMGUI_RESOURCESTATE_VALID;
+}
+
+static void _simgui_deinit_image(_simgui_image_t* img) {
+    SOKOL_ASSERT(img);
+    img->image.id = SIMGUI_INVALID_ID;
+    img->sampler.id = SIMGUI_INVALID_ID;
+}
+
+static void _simgui_destroy_image(simgui_image_t img_id) {
+    _simgui_image_t* img = _simgui_lookup_image(img_id.id);
+    if (img) {
+        _simgui_deinit_image(img);
+        _simgui_image_pool_t* p = &_simgui.image_pool;
+        _simgui_clear(img, sizeof(_simgui_image_t));
+        _simgui_pool_free_index(&p->pool, _simgui_slot_index(img_id.id));
+    }
+}
+
+static void _simgui_destroy_all_images(void) {
+    _simgui_image_pool_t* p = &_simgui.image_pool;
+    for (int i = 0; i < p->pool.size; i++) {
+        _simgui_image_t* img = &p->items[i];
+        _simgui_destroy_image(_simgui_make_image_handle(img->slot.id));
+    }
+}
+
+static simgui_image_desc_t _simgui_image_desc_defaults(const simgui_image_desc_t* desc) {
+    SOKOL_ASSERT(desc);
+    simgui_image_desc_t res = *desc;
+    res.image.id = _simgui_def(res.image.id, _simgui.def_img.id);
+    res.sampler.id = _simgui_def(res.sampler.id, _simgui.def_smp.id);
+    return res;
 }
 
 static bool _simgui_is_osx(void) {
@@ -1741,20 +2195,14 @@ static simgui_desc_t _simgui_desc_defaults(const simgui_desc_t* desc) {
     SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
     simgui_desc_t res = *desc;
     res.max_vertices = _simgui_def(res.max_vertices, 65536);
+    res.image_pool_size = _simgui_def(res.image_pool_size, 256);
     return res;
-}
-
-static uint32_t _simgui_imageid_from_texid(ImTextureID tex_id) {
-    uint32_t img_id = (uint32_t)(uintptr_t)tex_id;
-    if (0 == img_id) {
-        img_id = _simgui.img.id;
-    }
-    return img_id;
 }
 
 SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     SOKOL_ASSERT(desc);
     _simgui_clear(&_simgui, sizeof(_simgui));
+    _simgui.init_cookie = _SIMGUI_INIT_COOKIE;
     _simgui.desc = _simgui_desc_defaults(desc);
     _simgui.cur_dpi_scale = 1.0f;
     #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
@@ -1762,6 +2210,9 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     #endif
     // can keep color_format, depth_format and sample_count as is,
     // since sokol_gfx.h will do its own default-value handling
+
+    // setup image pool
+    _simgui_setup_image_pool(_simgui.desc.image_pool_size);
 
     // allocate an intermediate vertex- and index-buffer
     SOKOL_ASSERT(_simgui.desc.max_vertices > 0);
@@ -1817,6 +2268,27 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     ib_desc.label = "sokol-imgui-indices";
     _simgui.ibuf = sg_make_buffer(&ib_desc);
 
+    // a default font sampler
+    sg_sampler_desc font_smp_desc;
+    _simgui_clear(&font_smp_desc, sizeof(font_smp_desc));
+    font_smp_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
+    font_smp_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
+    font_smp_desc.min_filter = SG_FILTER_LINEAR;
+    font_smp_desc.mag_filter = SG_FILTER_LINEAR;
+    font_smp_desc.mipmap_filter = SG_FILTER_NONE;
+    font_smp_desc.label = "sokol-imgui-font-sampler";
+    _simgui.font_smp = sg_make_sampler(&font_smp_desc);
+
+    // a default user-image sampler
+    sg_sampler_desc def_sampler_desc;
+    _simgui_clear(&def_sampler_desc, sizeof(def_sampler_desc));
+    def_sampler_desc.min_filter = SG_FILTER_NEAREST;
+    def_sampler_desc.mag_filter = SG_FILTER_NEAREST;
+    def_sampler_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
+    def_sampler_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
+    def_sampler_desc.label = "sokol-imgui-default-sampler";
+    _simgui.def_smp = sg_make_sampler(&def_sampler_desc);
+
     // default font texture
     if (!_simgui.desc.no_default_font) {
         unsigned char* font_pixels;
@@ -1827,29 +2299,36 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
             int bytes_per_pixel;
             ImFontAtlas_GetTexDataAsRGBA32(io->Fonts, &font_pixels, &font_width, &font_height, &bytes_per_pixel);
         #endif
-        sg_image_desc img_desc;
+        sg_image_desc font_img_desc;
+        _simgui_clear(&font_img_desc, sizeof(font_img_desc));
+        font_img_desc.width = font_width;
+        font_img_desc.height = font_height;
+        font_img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+        font_img_desc.data.subimage[0][0].ptr = font_pixels;
+        font_img_desc.data.subimage[0][0].size = (size_t)(font_width * font_height) * sizeof(uint32_t);
+        font_img_desc.label = "sokol-imgui-font-image";
+        _simgui.font_img = sg_make_image(&font_img_desc);
+
+        simgui_image_desc_t img_desc;
         _simgui_clear(&img_desc, sizeof(img_desc));
-        img_desc.width = font_width;
-        img_desc.height = font_height;
-        img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
-        img_desc.data.subimage[0][0].ptr = font_pixels;
-        img_desc.data.subimage[0][0].size = (size_t)(font_width * font_height) * sizeof(uint32_t);
-        img_desc.label = "sokol-imgui-font";
-        _simgui.img = sg_make_image(&img_desc);
-        io->Fonts->TexID = (ImTextureID)(uintptr_t) _simgui.img.id;
+        img_desc.image = _simgui.font_img;
+        img_desc.sampler = _simgui.font_smp;
+        _simgui.default_font = simgui_make_image(&img_desc);
+        io->Fonts->TexID = simgui_imtextureid(_simgui.default_font);
     }
 
-    // a sampler for the font texture
-    sg_sampler_desc smp_desc;
-    _simgui_clear(&smp_desc, sizeof(smp_desc));
-    smp_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
-    smp_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
-    smp_desc.min_filter = SG_FILTER_LINEAR;
-    smp_desc.mag_filter = SG_FILTER_LINEAR;
-    smp_desc.mipmap_filter = SG_FILTER_NONE;
-    smp_desc.label = "sokol-imgui-sampler";
-    _simgui.smp = sg_make_sampler(&smp_desc);
-    io->Fonts->TexID = simgui_imtextureid(_simgui.img);
+    // a default user image
+    static uint32_t def_pixels[64];
+    memset(def_pixels, 0xFF, sizeof(def_pixels));
+    sg_image_desc def_image_desc;
+    _simgui_clear(&def_image_desc, sizeof(def_image_desc));
+    def_image_desc.width = 8;
+    def_image_desc.height = 8;
+    def_image_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    def_image_desc.data.subimage[0][0].ptr = def_pixels;
+    def_image_desc.data.subimage[0][0].size = sizeof(def_pixels);
+    def_image_desc.label = "sokol-imgui-default-image";
+    _simgui.def_img = sg_make_image(&def_image_desc);
 
     // shader object for using the embedded shader source (or bytecode)
     sg_shader_desc shd_desc;
@@ -1952,31 +2431,59 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
 }
 
 SOKOL_API_IMPL void simgui_shutdown(void) {
+    SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     #if defined(__cplusplus)
         ImGui::DestroyContext();
     #else
         igDestroyContext(0);
     #endif
     // NOTE: it's valid to call the destroy funcs with SG_INVALID_ID
-    sg_push_debug_group("sokol-imgui");
     sg_destroy_pipeline(_simgui.pip);
     sg_destroy_shader(_simgui.shd);
-    sg_destroy_sampler(_simgui.smp);
-    sg_destroy_image(_simgui.img);
+    sg_destroy_sampler(_simgui.font_smp);
+    sg_destroy_image(_simgui.font_img);
+    sg_destroy_sampler(_simgui.def_smp);
+    sg_destroy_image(_simgui.def_img);
     sg_destroy_buffer(_simgui.ibuf);
     sg_destroy_buffer(_simgui.vbuf);
     sg_pop_debug_group();
+    sg_push_debug_group("sokol-imgui");
+    _simgui_destroy_all_images();
+    _simgui_discard_image_pool();
     SOKOL_ASSERT(_simgui.vertices.ptr);
     _simgui_free((void*)_simgui.vertices.ptr);
     SOKOL_ASSERT(_simgui.indices.ptr);
     _simgui_free((void*)_simgui.indices.ptr);
+    _simgui.init_cookie = 0;
 }
 
-SOKOL_API_IMPL void* simgui_imtextureid(sg_image img) {
+SOKOL_API_IMPL simgui_image_t simgui_make_image(const simgui_image_desc_t* desc) {
+    SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
+    SOKOL_ASSERT(desc);
+    const simgui_image_desc_t desc_def = _simgui_image_desc_defaults(desc);
+    simgui_image_t img_id = _simgui_alloc_image();
+    _simgui_image_t* img = _simgui_lookup_image(img_id.id);
+    if (img) {
+        img->slot.state = _simgui_init_image(img, &desc_def);
+        SOKOL_ASSERT((img->slot.state == _SIMGUI_RESOURCESTATE_VALID) || (img->slot.state == _SIMGUI_RESOURCESTATE_FAILED));
+    } else {
+        _SIMGUI_ERROR(IMAGE_POOL_EXHAUSTED);
+    }
+    return img_id;
+}
+
+SOKOL_API_IMPL void simgui_destroy_image(simgui_image_t img) {
+    SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
+    _simgui_destroy_image(img);
+}
+
+SOKOL_API_IMPL void* simgui_imtextureid(simgui_image_t img) {
+    SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     return (void*)(uintptr_t)img.id;
 }
 
 SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
+    SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->width > 0);
     SOKOL_ASSERT(desc->height > 0);
@@ -2025,7 +2532,19 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
     #endif
 }
 
+static void _simgui_bind_image_sampler(sg_bindings* bindings, ImTextureID tex_id) {
+    _simgui_image_t* img = _simgui_lookup_image((uint32_t)(uintptr_t)tex_id);
+    if (img) {
+        bindings->fs.images[0] = img->image;
+        bindings->fs.samplers[0] = img->sampler;
+    } else {
+        bindings->fs.images[0] = _simgui.def_img;
+        bindings->fs.samplers[0] = _simgui.def_smp;
+    }
+}
+
 SOKOL_API_IMPL void simgui_render(void) {
+    SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     #if defined(__cplusplus)
         ImGui::Render();
         ImDrawData* draw_data = ImGui::GetDrawData();
@@ -2110,10 +2629,8 @@ SOKOL_API_IMPL void simgui_render(void) {
     _simgui_clear((void*)&bind, sizeof(bind));
     bind.vertex_buffers[0] = _simgui.vbuf;
     bind.index_buffer = _simgui.ibuf;
-    bind.fs.samplers[0] = _simgui.smp;
     ImTextureID tex_id = io->Fonts->TexID;
-    bind.fs.images[0].id = _simgui_imageid_from_texid(tex_id);
-    bind.fs.samplers[0] = _simgui.smp;
+    _simgui_bind_image_sampler(&bind, tex_id);
     int vb_offset = 0;
     int ib_offset = 0;
     for (int cl_index = 0; cl_index < cmd_list_count; cl_index++) {
@@ -2142,7 +2659,7 @@ SOKOL_API_IMPL void simgui_render(void) {
                 if ((tex_id != pcmd->TextureId) || (vtx_offset != pcmd->VtxOffset)) {
                     tex_id = pcmd->TextureId;
                     vtx_offset = pcmd->VtxOffset;
-                    bind.fs.images[0].id = _simgui_imageid_from_texid(tex_id);
+                    _simgui_bind_image_sampler(&bind, tex_id);
                     bind.vertex_buffer_offsets[0] = vb_offset + (int)(pcmd->VtxOffset * sizeof(ImDrawVert));
                     sg_apply_bindings(&bind);
                 }
@@ -2170,6 +2687,7 @@ SOKOL_API_IMPL void simgui_render(void) {
 }
 
 SOKOL_API_IMPL void simgui_add_focus_event(bool focus) {
+    SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
         io->AddFocusEvent(focus);
@@ -2180,6 +2698,7 @@ SOKOL_API_IMPL void simgui_add_focus_event(bool focus) {
 }
 
 SOKOL_API_IMPL void simgui_add_mouse_pos_event(float x, float y) {
+    SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
         #if (IMGUI_VERSION_NUM >= 18950)
@@ -2196,6 +2715,7 @@ SOKOL_API_IMPL void simgui_add_mouse_pos_event(float x, float y) {
 }
 
 SOKOL_API_IMPL void simgui_add_touch_pos_event(float x, float y) {
+    SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
         #if (IMGUI_VERSION_NUM >= 18950)
@@ -2212,6 +2732,7 @@ SOKOL_API_IMPL void simgui_add_touch_pos_event(float x, float y) {
 }
 
 SOKOL_API_IMPL void simgui_add_mouse_button_event(int mouse_button, bool down) {
+    SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
         #if (IMGUI_VERSION_NUM >= 18950)
@@ -2228,6 +2749,7 @@ SOKOL_API_IMPL void simgui_add_mouse_button_event(int mouse_button, bool down) {
 }
 
 SOKOL_API_IMPL void simgui_add_touch_button_event(int mouse_button, bool down) {
+    SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
         #if (IMGUI_VERSION_NUM >= 18950)
@@ -2244,6 +2766,7 @@ SOKOL_API_IMPL void simgui_add_touch_button_event(int mouse_button, bool down) {
 }
 
 SOKOL_API_IMPL void simgui_add_mouse_wheel_event(float wheel_x, float wheel_y) {
+    SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
         #if (IMGUI_VERSION_NUM >= 18950)
@@ -2260,6 +2783,7 @@ SOKOL_API_IMPL void simgui_add_mouse_wheel_event(float wheel_x, float wheel_y) {
 }
 
 SOKOL_API_IMPL void simgui_add_key_event(int (*map_keycode)(int), int keycode, bool down) {
+    SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     const ImGuiKey imgui_key = (ImGuiKey)map_keycode(keycode);
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
@@ -2273,6 +2797,7 @@ SOKOL_API_IMPL void simgui_add_key_event(int (*map_keycode)(int), int keycode, b
 }
 
 SOKOL_API_IMPL void simgui_add_input_character(uint32_t c) {
+    SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
         io->AddInputCharacter(c);
@@ -2283,6 +2808,7 @@ SOKOL_API_IMPL void simgui_add_input_character(uint32_t c) {
 }
 
 SOKOL_API_IMPL void simgui_add_input_characters_utf8(const char* c) {
+    SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
         io->AddInputCharactersUTF8(c);
@@ -2444,10 +2970,12 @@ _SOKOL_PRIVATE ImGuiKey _simgui_copypaste_modifier(void) {
 }
 
 SOKOL_API_IMPL int simgui_map_keycode(sapp_keycode keycode) {
+    SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     return (int)_simgui_map_keycode(keycode);
 }
 
 SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
+    SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     const float dpi_scale = _simgui.cur_dpi_scale;
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
