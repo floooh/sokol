@@ -267,6 +267,17 @@
     of garbage collection where destroyed simgui_image_t objects are kept around until
     the simgui_render() call).
 
+    You can call:
+
+        simgui_image_desc_t desc = simgui_query_image_desc(img)
+
+    ...to get the original desc struct, useful if you need to get the sokol-gfx image
+    and sampler handle of the simgui_image_t object.
+
+    You can convert an ImTextureID back into an simgui_image_t handle:
+
+        simgui_image_t img = simgui_image_from_imtextureid(tex_id);
+
 
     MEMORY ALLOCATION OVERRIDE
     ==========================
@@ -523,7 +534,9 @@ SOKOL_IMGUI_API_DECL void simgui_new_frame(const simgui_frame_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_render(void);
 SOKOL_IMGUI_API_DECL simgui_image_t simgui_make_image(const simgui_image_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_destroy_image(simgui_image_t img);
+SOKOL_IMGUI_API_DECL simgui_image_desc_t simgui_query_image_desc(simgui_image_t img);
 SOKOL_IMGUI_API_DECL void* simgui_imtextureid(simgui_image_t img);
+SOKOL_IMGUI_API_DECL simgui_image_t simgui_image_from_imtextureid(void* imtextureid);
 SOKOL_IMGUI_API_DECL void simgui_add_focus_event(bool focus);
 SOKOL_IMGUI_API_DECL void simgui_add_mouse_pos_event(float x, float y);
 SOKOL_IMGUI_API_DECL void simgui_add_touch_pos_event(float x, float y);
@@ -2472,14 +2485,32 @@ SOKOL_API_IMPL simgui_image_t simgui_make_image(const simgui_image_desc_t* desc)
     return img_id;
 }
 
-SOKOL_API_IMPL void simgui_destroy_image(simgui_image_t img) {
+SOKOL_API_IMPL void simgui_destroy_image(simgui_image_t img_id) {
     SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
-    _simgui_destroy_image(img);
+    _simgui_destroy_image(img_id);
+}
+
+SOKOL_API_IMPL simgui_image_desc_t simgui_query_image_desc(simgui_image_t img_id) {
+    SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
+    _simgui_image_t* img = _simgui_lookup_image(img_id.id);
+    simgui_image_desc_t desc;
+    _simgui_clear(&desc, sizeof(desc));
+    if (img) {
+        desc.image = img->image;
+        desc.sampler = img->sampler;
+    }
+    return desc;
 }
 
 SOKOL_API_IMPL void* simgui_imtextureid(simgui_image_t img) {
     SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     return (void*)(uintptr_t)img.id;
+}
+
+SOKOL_API_IMPL simgui_image_t simgui_image_from_imtextureid(void* imtextureid) {
+    SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
+    simgui_image_t img = { (uint32_t)(uintptr_t) imtextureid };
+    return img;
 }
 
 SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
