@@ -3334,7 +3334,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_embedded_image(sg_imgui_t* ctx, sg_image img,
             igSliderFloat("Scale", scale, 0.125f, 8.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
             float w = (float)img_ui->desc.width * (*scale);
             float h = (float)img_ui->desc.height * (*scale);
-            igImage((ImTextureID)simgui_imtextureid(img_ui->simgui_img), IMVEC2(w, h), IMVEC2(0,0), IMVEC2(1,1), IMVEC4(1,1,1,1), IMVEC4(0,0,0,0));
+            igImage(simgui_imtextureid(img_ui->simgui_img), IMVEC2(w, h), IMVEC2(0,0), IMVEC2(1,1), IMVEC4(1,1,1,1), IMVEC4(0,0,0,0));
             igPopID();
         } else {
             igText("Image not renderable.");
