@@ -521,7 +521,7 @@ typedef struct simgui_frame_desc_t {
 SOKOL_IMGUI_API_DECL void simgui_setup(const simgui_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_new_frame(const simgui_frame_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_render(void);
-SOKOL_IMGUI_API_DECL simgui_image_t simgui_make_image(simgui_image_desc_t* desc);
+SOKOL_IMGUI_API_DECL simgui_image_t simgui_make_image(const simgui_image_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_destroy_image(simgui_image_t img);
 SOKOL_IMGUI_API_DECL void* simgui_imtextureid(simgui_image_t img);
 SOKOL_IMGUI_API_DECL void simgui_add_focus_event(bool focus);
@@ -544,6 +544,7 @@ SOKOL_IMGUI_API_DECL void simgui_shutdown(void);
 
 // reference-based equivalents for C++
 inline void simgui_setup(const simgui_desc_t& desc) { return simgui_setup(&desc); }
+inline simgui_image_t simgui_make_image(const simgui_image_desc_t& desc) { return simgui_make_image(&desc); }
 inline void simgui_new_frame(const simgui_frame_desc_t& desc) { return simgui_new_frame(&desc); }
 
 #endif
@@ -2456,7 +2457,7 @@ SOKOL_API_IMPL void simgui_shutdown(void) {
     _simgui.init_cookie = 0;
 }
 
-SOKOL_API_IMPL simgui_image_t simgui_make_image(simgui_image_desc_t* desc) {
+SOKOL_API_IMPL simgui_image_t simgui_make_image(const simgui_image_desc_t* desc) {
     SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     SOKOL_ASSERT(desc);
     const simgui_image_desc_t desc_def = _simgui_image_desc_defaults(desc);
