@@ -29,6 +29,8 @@ in sokol_imgui.h, and also check out the new sample:
 
 https://floooh.github.io/sokol-html5/imgui-images-sapp.html
 
+Associated PR: https://github.com/floooh/sokol/pull/861
+
 #### 16-Jul-2023
 
 **BREAKING CHANGES**
