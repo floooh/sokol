@@ -1,5 +1,34 @@
 ## Updates
 
+#### 23-Jul-2023
+
+**sokol_imgui.h**: Add proper support for injecting user-provided sokol-gfx
+images and samplers into Dear ImGui UIs. With the introduction of separate
+sampler objects in sokol_gfx.h there's a temporary feature regression in
+sokol_imgui.h and sokol_nuklear.h in that user provided images had to use a
+shared sampler that's hardwired into the respective headers. This update fixes
+this problem for sokol_imgui.h, with a similar fix for sokol_nuklear.h coming
+up next.
+
+The sokol_imgui.h changes in detail are:
+
+- a new object type `simgui_image_t` which wraps a sokol-gfx image and sampler
+  object under a common handle
+- two new function `simgui_make_image()` and `simgui_destroy_image()` to
+  create and destroy such a new `simgui_image_t` object.
+- the existing function `simgui_imtextureid()` has been changed to take
+  an `simgui_image_t`
+- sokol_imgui.h now also uses the same error-handling and logging callback
+  as the other sokol headers (this was needed because creating an `simgui_image_t`
+  object may fail because the object pool is exhausted) - don't forget
+  to provide a logging callback (for instance via sokol_log.h), otherwise
+  sokol_imgui.h will be entirely silent in case of errors.
+
+Please also read the new documentation section `ON USER-PROVIDED IMAGES AND SAMPLERS`
+in sokol_imgui.h, and also check out the new sample:
+
+https://floooh.github.io/sokol-html5/imgui-images-sapp.html
+
 #### 16-Jul-2023
 
 **BREAKING CHANGES**
