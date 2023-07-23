@@ -102,6 +102,10 @@
                 sokol-imgui will use this to compute the size of the vertex-
                 and index-buffers allocated via sokol_gfx.h
 
+            int image_pool_size
+                Number of simgui_image_t objects which can be alive at the same time.
+                The default is 256.
+
             sg_pixel_format color_format
                 The color pixel format of the render pass where the UI
                 will be rendered. The default (0) matches sokoL_gfx.h's
@@ -158,9 +162,20 @@
                 Used to override memory allocation functions. See further below
                 for details.
 
+            simgui_logger_t logger
+                A user-provided logging callback. Note that without logging
+                callback, sokol-imgui will be completely silent!
+                See the section about ERROR REPORTING AND LOGGING below
+                for more details.
+
     --- At the start of a frame, call:
 
-        simgui_new_frame(&(simgui_frame_desc_t){.width = ..., .height = ..., .delta_time = ..., .dpi_scale = ...});
+        simgui_new_frame(&(simgui_frame_desc_t){
+            .width = ...,
+            .height = ...,
+            .delta_time = ...,
+            .dpi_scale = ...
+        });
 
         'width' and 'height' are the dimensions of the rendering surface,
         passed to ImGui::GetIO().DisplaySize.
@@ -217,6 +232,42 @@
         default font texture or default sampler object
 
 
+    ON USER-PROVIDED IMAGES AND SAMPLERS
+    ====================================
+    To render your own images via ImGui::Image(), first create an simgui_image_t
+    object from a sokol-gfx image and sampler object.
+
+        // create a sokol-imgui image object which associates an sg_image with an sg_sampler
+        simgui_image_t simgui_img = simgui_make_image(&(simgui_image_desc_t){
+            .image = sg_make_image(...),
+            .sampler = sg_make_sampler(...),
+        });
+
+        // convert the returned image handle into a ImTextureID handle
+        ImTextureID tex_id = simgui_imtextureid(simgui_img);
+
+        // use the ImTextureID handle in Dear ImGui calls:
+        ImGui::Image(tex_id, ...);
+
+    simgui_image_t objects are small and cheap (literally just the image and sampler
+    handle).
+
+    You can omit the sampler handle in the simgui_make_image() call, in this case a
+    default sampler will be used with nearest-filtering and clamp-to-edge.
+
+    Trying to render with an invalid simgui_image_t handle will render a small 8x8
+    white default texture instead.
+
+    To destroy a sokol-imgui image object, call
+
+        simgui_destroy_image(simgui_img);
+
+    But please be aware that the image object needs to be around until simgui_render() is called
+    in a frame (if this turns out to be too much of a hassle we could introduce some sort
+    of garbage collection where destroyed simgui_image_t objects are kept around until
+    the simgui_render() call).
+
+
     MEMORY ALLOCATION OVERRIDE
     ==========================
     You can override the memory allocation functions at initialization time
@@ -245,6 +296,47 @@
 
     This only affects memory allocation calls done by sokol_imgui.h
     itself though, not any allocations in Dear ImGui.
+
+
+    ERROR REPORTING AND LOGGING
+    ===========================
+    To get any logging information at all you need to provide a logging callback in the setup call
+    the easiest way is to use sokol_log.h:
+
+        #include "sokol_log.h"
+
+        simgui_setup(&(simgui_desc_t){
+            .logger.func = slog_func
+        });
+
+    To override logging with your own callback, first write a logging function like this:
+
+        void my_log(const char* tag,                // e.g. 'simgui'
+                    uint32_t log_level,             // 0=panic, 1=error, 2=warn, 3=info
+                    uint32_t log_item_id,           // SIMGUI_LOGITEM_*
+                    const char* message_or_null,    // a message string, may be nullptr in release mode
+                    uint32_t line_nr,               // line number in sokol_imgui.h
+                    const char* filename_or_null,   // source filename, may be nullptr in release mode
+                    void* user_data)
+        {
+            ...
+        }
+
+    ...and then setup sokol-imgui like this:
+
+        simgui_setup(&(simgui_desc_t){
+            .logger = {
+                .func = my_log,
+                .user_data = my_user_data,
+            }
+        });
+
+    The provided logging function must be reentrant (e.g. be callable from
+    different threads).
+
+    If you don't want to provide your own custom logger it is highly recommended to use
+    the standard logger in sokol_log.h instead, otherwise you won't see any warnings or
+    errors.
 
 
     IMGUI EVENT HANDLING
