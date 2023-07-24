@@ -487,7 +487,7 @@ typedef struct simgui_allocator_t {
 /*
     simgui_logger
 
-    Used in simgui_desc to provide a logging function. Please be aware
+    Used in simgui_desc_t to provide a logging function. Please be aware
     that without logging function, sokol-imgui will be completely
     silent, e.g. it will not report errors, warnings and
     validation layer messages. For maximum error verbosity,
