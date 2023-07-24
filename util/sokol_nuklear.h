@@ -192,12 +192,16 @@
 #define SOKOL_NUKLEAR_INCLUDED (1)
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 #if !defined(SOKOL_GFX_INCLUDED)
 #error "Please include sokol_gfx.h before sokol_nuklear.h"
 #endif
 #if !defined(SOKOL_NUKLEAR_NO_SOKOL_APP) && !defined(SOKOL_APP_INCLUDED)
 #error "Please include sokol_app.h before sokol_nuklear.h"
+#endif
+#if !defined(NK_UNDEFINED)
+#error "Please include nuklear.h before sokol_nuklear.h"
 #endif
 
 #if defined(SOKOL_API_DECL) && !defined(SOKOL_NUKLEAR_API_DECL)
@@ -217,19 +221,106 @@
 extern "C" {
 #endif
 
+enum {
+    SNK_INVALID_ID = 0,
+};
+
+/*
+    snk_image_t
+
+    A combined image-sampler pair used to inject custom images and samplers into Nuklear
+
+    Create with snk_make_image(), and convert to an nk_handle via snk_nkhandle().
+*/
+typedef struct snk_image_t { uint32_t id; } snk_image_t;
+
+/*
+    snk_image_desc_t
+
+    Descriptor struct for snk_make_image(). You must provide
+    at least an sg_image handle. Keeping the sg_sampler handle
+    zero-initialized will select the builtin default sampler
+    which uses linear filtering.
+*/
+typedef struct snk_image_desc_t {
+    sg_image image;
+    sg_sampler sampler;
+} snk_image_desc_t;
+
+/*
+    snk_log_item
+
+    An enum with a unique item for each log message, warning, error
+    and validation layer message.
+*/
+#define _SNK_LOG_ITEMS \
+    _SNK_LOGITEM_XMACRO(OK, "Ok") \
+    _SNK_LOGITEM_XMACRO(MALLOC_FAILED, "memory allocation failed") \
+    _SNK_LOGITEM_XMACRO(IMAGE_POOL_EXHAUSTED, "image pool exhausted") \
+
+#define _SNK_LOGITEM_XMACRO(item,msg) SNK_LOGITEM_##item,
+typedef enum snk_log_item_t {
+    _SNK_LOG_ITEMS
+} snk_log_item_t;
+#undef _SNK_LOGITEM_XMACRO
+
+/*
+    snk_allocator_t
+
+    Used in snk_desc_t to provide custom memory-alloc and -free functions
+    to sokol_nuklear.h. If memory management should be overridden, both the
+    alloc and free function must be provided (e.g. it's not valid to
+    override one function but not the other).
+*/
+typedef struct snk_allocator_t {
+    void* (*alloc)(size_t size, void* user_data);
+    void (*free)(void* ptr, void* user_data);
+    void* user_data;
+} snk_allocator_t;
+
+/*
+    snk_logger
+
+    Used in snk_desc_t to provide a logging function. Please be aware
+    that without logging function, sokol-nuklear will be completely
+    silent, e.g. it will not report errors, warnings and
+    validation layer messages. For maximum error verbosity,
+    compile in debug mode (e.g. NDEBUG *not* defined) and install
+    a logger (for instance the standard logging function from sokol_log.h).
+*/
+typedef struct snk_logger_t {
+    void (*func)(
+        const char* tag,                // always "snk"
+        uint32_t log_level,             // 0=panic, 1=error, 2=warning, 3=info
+        uint32_t log_item_id,           // SNK_LOGITEM_*
+        const char* message_or_null,    // a message string, may be nullptr in release mode
+        uint32_t line_nr,               // line number in sokol_imgui.h
+        const char* filename_or_null,   // source filename, may be nullptr in release mode
+        void* user_data);
+    void* user_data;
+} snk_logger_t;
+
+
 typedef struct snk_desc_t {
-    int max_vertices;
+    int max_vertices;                   // default: 65536
+    int image_pool_size;                // default: 256
     sg_pixel_format color_format;
     sg_pixel_format depth_format;
     int sample_count;
     float dpi_scale;
     bool no_default_font;
+    snk_allocator_t allocator;          // optional memory allocation overrides (default: malloc/free)
+    snk_logger_t logger;                // optional log function override
 } snk_desc_t;
 
 SOKOL_NUKLEAR_API_DECL void snk_setup(const snk_desc_t* desc);
 SOKOL_NUKLEAR_API_DECL struct nk_context* snk_new_frame(void);
 SOKOL_NUKLEAR_API_DECL void snk_render(int width, int height);
-SOKOL_NUKLEAR_API_DECL nk_handle snk_nkhandle(sg_image img);
+SOKOL_NUKLEAR_API_DECL snk_image_t snk_make_image(const snk_image_desc_t* desc);
+SOKOL_NUKLEAR_API_DECL void snk_destroy_image(snk_image_t img);
+SOKOL_NUKLEAR_API_DECL snk_image_desc_t snk_query_image_desc(snk_image_t img);
+SOKOL_NUKLEAR_API_DECL nk_handle snk_nkhandle(snk_image_t img);
+SOKOL_NUKLEAR_API_DECL snk_image_t snk_image_from_nkhandle(nk_handle handle);
 #if !defined(SOKOL_NUKLEAR_NO_SOKOL_APP)
 SOKOL_NUKLEAR_API_DECL void snk_handle_event(const sapp_event* ev);
 SOKOL_NUKLEAR_API_DECL nk_flags snk_edit_string(struct nk_context *ctx, nk_flags flags, char *memory, int *len, int max, nk_plugin_filter filter);
@@ -241,6 +332,7 @@ SOKOL_NUKLEAR_API_DECL void snk_shutdown(void);
 
 /* reference-based equivalents for C++ */
 inline void snk_setup(const snk_desc_t& desc) { return snk_setup(&desc); }
+inline snk_image_t snk_make_image(const snk_image_desc_t& desc) { return snk_make_image(&desc); }
 
 #endif
 #endif /* SOKOL_NUKLEAR_INCLUDED */
@@ -248,10 +340,6 @@ inline void snk_setup(const snk_desc_t& desc) { return snk_setup(&desc); }
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
 #ifdef SOKOL_NUKLEAR_IMPL
 #define SOKOL_NUKLEAR_IMPL_INCLUDED (1)
-
-#if !defined(NK_UNDEFINED)
-#error "Please include nuklear.h before the sokol_nuklear.h implementation"
-#endif
 
 #if !defined(NK_INCLUDE_VERTEX_BUFFER_OUTPUT)
 #error "Please ensure that NK_INCLUDE_VERTEX_BUFFER_OUTPUT is #defined before including nuklear.h"
@@ -261,9 +349,8 @@ inline void snk_setup(const snk_desc_t& desc) { return snk_setup(&desc); }
 #error "The sokol_nuklear.h implementation must be compiled as C."
 #endif
 
-
-#include <stddef.h> /* offsetof */
-#include <string.h> /* memset */
+#include <stdlib.h>
+#include <string.h> // memset
 
 #if defined(__EMSCRIPTEN__) && !defined(SOKOL_NUKLEAR_NO_SOKOL_APP) && !defined(SOKOL_DUMMY_BACKEND)
 #include <emscripten.h>
@@ -289,7 +376,13 @@ inline void snk_setup(const snk_desc_t& desc) { return snk_setup(&desc); }
     #endif
 #endif
 
-/* helper macros */
+#define _SNK_INIT_COOKIE (0xBABEBABE)
+#define _SNK_INVALID_SLOT_INDEX (0)
+#define _SNK_SLOT_SHIFT (16)
+#define _SNK_MAX_POOL_SIZE (1<<_SNK_SLOT_SHIFT)
+#define _SNK_SLOT_MASK (_SNK_MAX_POOL_SIZE-1)
+
+// helper macros
 #define _snk_def(val, def) (((val) == 0) ? (def) : (val))
 
 typedef struct _snk_vertex_t {
@@ -303,7 +396,40 @@ typedef struct _snk_vs_params_t {
     uint8_t _pad_8[8];
 } _snk_vs_params_t;
 
+typedef enum {
+    _SNK_RESOURCESTATE_INITIAL,
+    _SNK_RESOURCESTATE_ALLOC,
+    _SNK_RESOURCESTATE_VALID,
+    _SNK_RESOURCESTATE_FAILED,
+    _SNK_RESOURCESTATE_INVALID,
+    _SNK_RESOURCESTATE_FORCE_U32 = 0x7FFFFFFF
+} _snk_resource_state;
+
 typedef struct {
+    uint32_t id;
+    _snk_resource_state state;
+} _snk_slot_t;
+
+typedef struct {
+    int size;
+    int queue_top;
+    uint32_t* gen_ctrs;
+    int* free_queue;
+} _snk_pool_t;
+
+typedef struct {
+    _snk_slot_t slot;
+    sg_image image;
+    sg_sampler sampler;
+} _snk_image_t;
+
+typedef struct {
+    _snk_pool_t pool;
+    _snk_image_t* items;
+} _snk_image_pool_t;
+
+typedef struct {
+    uint32_t init_cookie;
     snk_desc_t desc;
     struct nk_context ctx;
     struct nk_font_atlas atlas;
@@ -312,11 +438,15 @@ typedef struct {
     size_t index_buffer_size;
     sg_buffer vbuf;
     sg_buffer ibuf;
-    sg_image img;
-    sg_sampler smp;
+    sg_image font_img;
+    sg_sampler font_smp;
+    snk_image_t default_font;
+    sg_image def_img;
+    sg_sampler def_smp;
     sg_shader shd;
     sg_pipeline pip;
-    bool is_osx;    /* return true if running on OSX (or HTML5 OSX), needed for copy/paste */
+    bool is_osx;    // true if running on OSX (or HTML5 OSX), needed for copy/paste
+    _snk_image_pool_t image_pool;
     #if !defined(SOKOL_NUKLEAR_NO_SOKOL_APP)
     int mouse_pos[2];
     float mouse_scroll[2];
@@ -1593,17 +1723,307 @@ static bool _snk_is_osx(void) {
 }
 #endif // !SOKOL_NUKLEAR_NO_SOKOL_APP
 
+// ██       ██████   ██████   ██████  ██ ███    ██  ██████
+// ██      ██    ██ ██       ██       ██ ████   ██ ██
+// ██      ██    ██ ██   ███ ██   ███ ██ ██ ██  ██ ██   ███
+// ██      ██    ██ ██    ██ ██    ██ ██ ██  ██ ██ ██    ██
+// ███████  ██████   ██████   ██████  ██ ██   ████  ██████
+//
+// >>logging
+#if defined(SOKOL_DEBUG)
+#define _SNK_LOGITEM_XMACRO(item,msg) #item ": " msg,
+static const char* _snk_log_messages[] = {
+    _SNK_LOG_ITEMS
+};
+#undef _SNK_LOGITEM_XMACRO
+#endif // SOKOL_DEBUG
+
+#define _SNK_PANIC(code) _snk_log(SNK_LOGITEM_ ##code, 0, 0, __LINE__)
+#define _SNK_ERROR(code) _snk_log(SNK_LOGITEM_ ##code, 1, 0, __LINE__)
+#define _SNK_WARN(code) _snk_log(SNK_LOGITEM_ ##code, 2, 0, __LINE__)
+#define _SNK_INFO(code) _snk_log(SNK_LOGITEM_ ##code, 3, 0, __LINE__)
+#define _SNK_LOGMSG(code,msg) _snk_log(SNK_LOGITEM_ ##code, 3, msg, __LINE__)
+
+static void _snk_log(snk_log_item_t log_item, uint32_t log_level, const char* msg, uint32_t line_nr) {
+    if (_snuklear.desc.logger.func) {
+        const char* filename = 0;
+        #if defined(SOKOL_DEBUG)
+            filename = __FILE__;
+            if (0 == msg) {
+                msg = _snk_log_messages[log_item];
+            }
+        #endif
+        _snuklear.desc.logger.func("snk", log_level, log_item, msg, line_nr, filename, _snuklear.desc.logger.user_data);
+    } else {
+        // for log level PANIC it would be 'undefined behaviour' to continue
+        if (log_level == 0) {
+            abort();
+        }
+    }
+}
+
+// ███    ███ ███████ ███    ███  ██████  ██████  ██    ██
+// ████  ████ ██      ████  ████ ██    ██ ██   ██  ██  ██
+// ██ ████ ██ █████   ██ ████ ██ ██    ██ ██████    ████
+// ██  ██  ██ ██      ██  ██  ██ ██    ██ ██   ██    ██
+// ██      ██ ███████ ██      ██  ██████  ██   ██    ██
+//
+// >>memory
+static void _snk_clear(void* ptr, size_t size) {
+    SOKOL_ASSERT(ptr && (size > 0));
+    memset(ptr, 0, size);
+}
+
+static void* _snk_malloc(size_t size) {
+    SOKOL_ASSERT(size > 0);
+    void* ptr;
+    if (_snuklear.desc.allocator.alloc) {
+        ptr = _snuklear.desc.allocator.alloc(size, _snuklear.desc.allocator.user_data);
+    } else {
+        ptr = malloc(size);
+    }
+    if (0 == ptr) {
+        _SNK_PANIC(MALLOC_FAILED);
+    }
+    return ptr;
+}
+
+static void* _snk_malloc_clear(size_t size) {
+    void* ptr = _snk_malloc(size);
+    _snk_clear(ptr, size);
+    return ptr;
+}
+
+static void _snk_free(void* ptr) {
+    if (_snuklear.desc.allocator.free) {
+        _snuklear.desc.allocator.free(ptr, _snuklear.desc.allocator.user_data);
+    } else {
+        free(ptr);
+    }
+}
+
+// ██████   ██████   ██████  ██
+// ██   ██ ██    ██ ██    ██ ██
+// ██████  ██    ██ ██    ██ ██
+// ██      ██    ██ ██    ██ ██
+// ██       ██████   ██████  ███████
+//
+// >>pool
+static void _snk_init_pool(_snk_pool_t* pool, int num) {
+    SOKOL_ASSERT(pool && (num >= 1));
+    // slot 0 is reserved for the 'invalid id', so bump the pool size by 1
+    pool->size = num + 1;
+    pool->queue_top = 0;
+    // generation counters indexable by pool slot index, slot 0 is reserved
+    size_t gen_ctrs_size = sizeof(uint32_t) * (size_t)pool->size;
+    pool->gen_ctrs = (uint32_t*) _snk_malloc_clear(gen_ctrs_size);
+    // it's not a bug to only reserve 'num' here
+    pool->free_queue = (int*) _snk_malloc_clear(sizeof(int) * (size_t)num);
+    // never allocate the zero-th pool item since the invalid id is 0
+    for (int i = pool->size-1; i >= 1; i--) {
+        pool->free_queue[pool->queue_top++] = i;
+    }
+}
+
+static void _snk_discard_pool(_snk_pool_t* pool) {
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    _snk_free(pool->free_queue);
+    pool->free_queue = 0;
+    SOKOL_ASSERT(pool->gen_ctrs);
+    _snk_free(pool->gen_ctrs);
+    pool->gen_ctrs = 0;
+    pool->size = 0;
+    pool->queue_top = 0;
+}
+
+static int _snk_pool_alloc_index(_snk_pool_t* pool) {
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    if (pool->queue_top > 0) {
+        int slot_index = pool->free_queue[--pool->queue_top];
+        SOKOL_ASSERT((slot_index > 0) && (slot_index < pool->size));
+        return slot_index;
+    } else {
+        // pool exhausted
+        return _SNK_INVALID_SLOT_INDEX;
+    }
+}
+
+static void _snk_pool_free_index(_snk_pool_t* pool, int slot_index) {
+    SOKOL_ASSERT((slot_index > _SNK_INVALID_SLOT_INDEX) && (slot_index < pool->size));
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    SOKOL_ASSERT(pool->queue_top < pool->size);
+    #ifdef SOKOL_DEBUG
+    // debug check against double-free
+    for (int i = 0; i < pool->queue_top; i++) {
+        SOKOL_ASSERT(pool->free_queue[i] != slot_index);
+    }
+    #endif
+    pool->free_queue[pool->queue_top++] = slot_index;
+    SOKOL_ASSERT(pool->queue_top <= (pool->size-1));
+}
+
+/* initiailize a pool slot:
+    - bump the slot's generation counter
+    - create a resource id from the generation counter and slot index
+    - set the slot's id to this id
+    - set the slot's state to ALLOC
+    - return the handle id
+*/
+static uint32_t _snk_slot_init(_snk_pool_t* pool, _snk_slot_t* slot, int slot_index) {
+    /* FIXME: add handling for an overflowing generation counter,
+       for now, just overflow (another option is to disable
+       the slot)
+    */
+    SOKOL_ASSERT(pool && pool->gen_ctrs);
+    SOKOL_ASSERT((slot_index > _SNK_INVALID_SLOT_INDEX) && (slot_index < pool->size));
+    SOKOL_ASSERT((slot->state == _SNK_RESOURCESTATE_INITIAL) && (slot->id == SNK_INVALID_ID));
+    uint32_t ctr = ++pool->gen_ctrs[slot_index];
+    slot->id = (ctr<<_SNK_SLOT_SHIFT)|(slot_index & _SNK_SLOT_MASK);
+    slot->state = _SNK_RESOURCESTATE_ALLOC;
+    return slot->id;
+}
+
+// extract slot index from id
+static int _snk_slot_index(uint32_t id) {
+    int slot_index = (int) (id & _SNK_SLOT_MASK);
+    SOKOL_ASSERT(_SNK_INVALID_SLOT_INDEX != slot_index);
+    return slot_index;
+}
+
+static void _snk_init_item_pool(_snk_pool_t* pool, int pool_size, void** items_ptr, size_t item_size_bytes) {
+    // NOTE: the pools will have an additional item, since slot 0 is reserved
+    SOKOL_ASSERT(pool && (pool->size == 0));
+    SOKOL_ASSERT((pool_size > 0) && (pool_size < _SNK_MAX_POOL_SIZE));
+    SOKOL_ASSERT(items_ptr && (*items_ptr == 0));
+    SOKOL_ASSERT(item_size_bytes > 0);
+    _snk_init_pool(pool, pool_size);
+    const size_t pool_size_bytes = item_size_bytes * (size_t)pool->size;
+    *items_ptr = _snk_malloc_clear(pool_size_bytes);
+}
+
+static void _snk_discard_item_pool(_snk_pool_t* pool, void** items_ptr) {
+    SOKOL_ASSERT(pool && (pool->size != 0));
+    SOKOL_ASSERT(items_ptr && (*items_ptr != 0));
+    _snk_free(*items_ptr); *items_ptr = 0;
+    _snk_discard_pool(pool);
+}
+
+static void _snk_setup_image_pool(int pool_size) {
+    _snk_image_pool_t* p = &_snuklear.image_pool;
+    _snk_init_item_pool(&p->pool, pool_size, (void**)&p->items, sizeof(_snk_image_t));
+}
+
+static void _snk_discard_image_pool(void) {
+    _snk_image_pool_t* p = &_snuklear.image_pool;
+    _snk_discard_item_pool(&p->pool, (void**)&p->items);
+}
+
+static snk_image_t _snk_make_image_handle(uint32_t id) {
+    snk_image_t handle = { id };
+    return handle;
+}
+
+static _snk_image_t* _snk_image_at(uint32_t id) {
+    SOKOL_ASSERT(SNK_INVALID_ID != id);
+    const _snk_image_pool_t* p = &_snuklear.image_pool;
+    int slot_index = _snk_slot_index(id);
+    SOKOL_ASSERT((slot_index > _SNK_INVALID_SLOT_INDEX) && (slot_index < p->pool.size));
+    return &p->items[slot_index];
+}
+
+static _snk_image_t* _snk_lookup_image(uint32_t id) {
+    if (SNK_INVALID_ID != id) {
+        _snk_image_t* img = _snk_image_at(id);
+        if (img->slot.id == id) {
+            return img;
+        }
+    }
+    return 0;
+}
+
+static snk_image_t _snk_alloc_image(void) {
+    _snk_image_pool_t* p = &_snuklear.image_pool;
+    int slot_index = _snk_pool_alloc_index(&p->pool);
+    if (_SNK_INVALID_SLOT_INDEX != slot_index) {
+        uint32_t id = _snk_slot_init(&p->pool, &p->items[slot_index].slot, slot_index);
+        return _snk_make_image_handle(id);
+    } else {
+        // pool exhausted
+        return _snk_make_image_handle(SNK_INVALID_ID);
+    }
+}
+
+static _snk_resource_state _snk_init_image(_snk_image_t* img, const snk_image_desc_t* desc) {
+    SOKOL_ASSERT(img && (img->slot.state == _SNK_RESOURCESTATE_ALLOC));
+    SOKOL_ASSERT(desc);
+    img->image = desc->image;
+    img->sampler = desc->sampler;
+    return _SNK_RESOURCESTATE_VALID;
+}
+
+static void _snk_deinit_image(_snk_image_t* img) {
+    SOKOL_ASSERT(img);
+    img->image.id = SNK_INVALID_ID;
+    img->sampler.id = SNK_INVALID_ID;
+}
+
+static void _snk_destroy_image(snk_image_t img_id) {
+    _snk_image_t* img = _snk_lookup_image(img_id.id);
+    if (img) {
+        _snk_deinit_image(img);
+        _snk_image_pool_t* p = &_snuklear.image_pool;
+        _snk_clear(img, sizeof(_snk_image_t));
+        _snk_pool_free_index(&p->pool, _snk_slot_index(img_id.id));
+    }
+}
+
+static void _snk_destroy_all_images(void) {
+    _snk_image_pool_t* p = &_snuklear.image_pool;
+    for (int i = 0; i < p->pool.size; i++) {
+        _snk_image_t* img = &p->items[i];
+        _snk_destroy_image(_snk_make_image_handle(img->slot.id));
+    }
+}
+
+static snk_image_desc_t _snk_image_desc_defaults(const snk_image_desc_t* desc) {
+    SOKOL_ASSERT(desc);
+    snk_image_desc_t res = *desc;
+    res.image.id = _snk_def(res.image.id, _snuklear.def_img.id);
+    res.sampler.id = _snk_def(res.sampler.id, _snuklear.def_smp.id);
+    return res;
+}
+
+static snk_desc_t _snk_desc_defaults(const snk_desc_t* desc) {
+    SOKOL_ASSERT(desc);
+    snk_desc_t res = *desc;
+    res.max_vertices = _snk_def(res.max_vertices, 65536);
+    res.dpi_scale = _snk_def(res.dpi_scale, 1.0f);
+    res.image_pool_size = _snk_def(res.image_pool_size, 256);
+    return res;
+}
+
+// ██████  ██    ██ ██████  ██      ██  ██████
+// ██   ██ ██    ██ ██   ██ ██      ██ ██
+// ██████  ██    ██ ██████  ██      ██ ██
+// ██      ██    ██ ██   ██ ██      ██ ██
+// ██       ██████  ██████  ███████ ██  ██████
+//
+// >>public
 SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
     SOKOL_ASSERT(desc);
-    memset(&_snuklear, 0, sizeof(_snuklear));
-    _snuklear.desc = *desc;
-    _snuklear.desc.max_vertices = _snk_def(_snuklear.desc.max_vertices, 65536);
-    _snuklear.desc.dpi_scale = _snk_def(_snuklear.desc.dpi_scale, 1.0f);
+    _snk_clear(&_snuklear, sizeof(_snuklear));
+    _snuklear.init_cookie = _SNK_INIT_COOKIE;
+    _snuklear.desc = _snk_desc_defaults(desc);
     #if !defined(SOKOL_NUKLEAR_NO_SOKOL_APP)
     _snuklear.is_osx = _snk_is_osx();
     #endif
     // can keep color_format, depth_format and sample_count as is,
     // since sokol_gfx.h will do its own default-value handling
+
+    _snk_setup_image_pool(_snuklear.desc.image_pool_size);
 
     // initialize Nuklear
     nk_bool init_res = nk_init_default(&_snuklear.ctx, 0);
@@ -1633,6 +2053,24 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
         .label = "sokol-nuklear-indices"
     });
 
+    // default font sampler
+    _snuklear.font_smp = sg_make_sampler(&(sg_sampler_desc){
+        .min_filter = SG_FILTER_LINEAR,
+        .mag_filter = SG_FILTER_LINEAR,
+        .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
+        .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
+        .label = "sokol-nuklear-font-sampler",
+    });
+
+    // default user-image sampler
+    _snuklear.def_smp = sg_make_sampler(&(sg_sampler_desc){
+        .min_filter = SG_FILTER_NEAREST,
+        .mag_filter = SG_FILTER_NEAREST,
+        .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
+        .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
+        .label = "sokol-nuklear-default-sampler",
+    });
+
     // default font texture
     if (!_snuklear.desc.no_default_font) {
         nk_font_atlas_init_default(&_snuklear.atlas);
@@ -1640,7 +2078,7 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
         int font_width = 0, font_height = 0;
         const void* pixels = nk_font_atlas_bake(&_snuklear.atlas, &font_width, &font_height, NK_FONT_ATLAS_RGBA32);
         SOKOL_ASSERT((font_width > 0) && (font_height > 0));
-        _snuklear.img = sg_make_image(&(sg_image_desc){
+        _snuklear.font_img = sg_make_image(&(sg_image_desc){
             .width = font_width,
             .height = font_height,
             .pixel_format = SG_PIXELFORMAT_RGBA8,
@@ -1650,19 +2088,26 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
             },
             .label = "sokol-nuklear-font"
         });
-        nk_font_atlas_end(&_snuklear.atlas, nk_handle_id((int)_snuklear.img.id), 0);
+        _snuklear.default_font = snk_make_image(&(snk_image_desc_t){
+            .image = _snuklear.font_img,
+            .sampler = _snuklear.font_smp,
+        });
+        nk_font_atlas_end(&_snuklear.atlas, snk_nkhandle(_snuklear.default_font), 0);
         nk_font_atlas_cleanup(&_snuklear.atlas);
         if (_snuklear.atlas.default_font) {
             nk_style_set_font(&_snuklear.ctx, &_snuklear.atlas.default_font->handle);
         }
     }
 
-    // default font sampler
-    _snuklear.smp = sg_make_sampler(&(sg_sampler_desc){
-        .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
-        .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
-        .min_filter = SG_FILTER_LINEAR,
-        .mag_filter = SG_FILTER_LINEAR,
+    // default user image
+    static uint32_t def_pixels[64];
+    memset(def_pixels, 0xFF, sizeof(def_pixels));
+    _snuklear.def_img = sg_make_image(&(sg_image_desc){
+        .width = 8,
+        .height = 8,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .data.subimage[0][0] = SG_RANGE(def_pixels),
+        .label = "sokol-nuklear-default-image",
     });
 
     // shader
@@ -1769,6 +2214,7 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
 }
 
 SOKOL_API_IMPL void snk_shutdown(void) {
+    SOKOL_ASSERT(_SNK_INIT_COOKIE == _snuklear.init_cookie);
     nk_free(&_snuklear.ctx);
     nk_font_atlas_clear(&_snuklear.atlas);
 
@@ -1776,14 +2222,20 @@ SOKOL_API_IMPL void snk_shutdown(void) {
     sg_push_debug_group("sokol-nuklear");
     sg_destroy_pipeline(_snuklear.pip);
     sg_destroy_shader(_snuklear.shd);
-    sg_destroy_sampler(_snuklear.smp);
-    sg_destroy_image(_snuklear.img);
+    sg_destroy_sampler(_snuklear.font_smp);
+    sg_destroy_image(_snuklear.font_img);
+    sg_destroy_sampler(_snuklear.def_smp);
+    sg_destroy_image(_snuklear.def_img);
     sg_destroy_buffer(_snuklear.ibuf);
     sg_destroy_buffer(_snuklear.vbuf);
     sg_pop_debug_group();
+    _snk_destroy_all_images();
+    _snk_discard_image_pool();
+    _snuklear.init_cookie = 0;
 }
 
 SOKOL_API_IMPL struct nk_context* snk_new_frame(void) {
+    SOKOL_ASSERT(_SNK_INIT_COOKIE == _snuklear.init_cookie);
     #if !defined(SOKOL_NUKLEAR_NO_SOKOL_APP)
     nk_input_begin(&_snuklear.ctx);
     if (_snuklear.mouse_did_move) {
@@ -1808,7 +2260,7 @@ SOKOL_API_IMPL struct nk_context* snk_new_frame(void) {
         for (size_t i = 0; i < char_buffer_len; i++) {
             nk_input_char(&_snuklear.ctx, _snuklear.char_buffer[i]);
         }
-        memset(_snuklear.char_buffer, 0, NK_INPUT_MAX);
+        _snk_clear(_snuklear.char_buffer, NK_INPUT_MAX);
     }
     for (int i = 0; i < NK_KEY_MAX; i++) {
         if (_snuklear.keys_down[i]) {
@@ -1827,19 +2279,62 @@ SOKOL_API_IMPL struct nk_context* snk_new_frame(void) {
     return &_snuklear.ctx;
 }
 
-SOKOL_API_IMPL nk_handle snk_nkhandle(sg_image img) {
-    return (nk_handle) { .ptr = (void*)(uintptr_t)img.id };
-}
-
-_SOKOL_PRIVATE uint32_t _snk_imageid_from_nkhandle(nk_handle h) {
-    uint32_t img_id = (uint32_t)(uintptr_t)h.ptr;
-    if (0 == img_id) {
-        img_id = _snuklear.img.id;
+SOKOL_API_IMPL snk_image_t snk_make_image(const snk_image_desc_t* desc) {
+    SOKOL_ASSERT(_SNK_INIT_COOKIE == _snuklear.init_cookie);
+    SOKOL_ASSERT(desc);
+    const snk_image_desc_t desc_def = _snk_image_desc_defaults(desc);
+    snk_image_t img_id = _snk_alloc_image();
+    _snk_image_t* img = _snk_lookup_image(img_id.id);
+    if (img) {
+        img->slot.state = _snk_init_image(img, &desc_def);
+        SOKOL_ASSERT((img->slot.state == _SNK_RESOURCESTATE_VALID) || (img->slot.state == _SNK_RESOURCESTATE_FAILED));
+    } else {
+        _SNK_ERROR(IMAGE_POOL_EXHAUSTED);
     }
     return img_id;
 }
 
+SOKOL_API_IMPL void snk_destroy_image(snk_image_t img_id) {
+    SOKOL_ASSERT(_SNK_INIT_COOKIE == _snuklear.init_cookie);
+    _snk_destroy_image(img_id);
+}
+
+SOKOL_API_IMPL snk_image_desc_t snk_query_image_desc(snk_image_t img_id) {
+    SOKOL_ASSERT(_SNK_INIT_COOKIE == _snuklear.init_cookie);
+    _snk_image_t* img = _snk_lookup_image(img_id.id);
+    if (img) {
+        return (snk_image_desc_t){
+            .image = img->image,
+            .sampler = img->sampler,
+        };
+    } else {
+        return (snk_image_desc_t){0};
+    }
+}
+
+SOKOL_API_IMPL nk_handle snk_nkhandle(snk_image_t img) {
+    SOKOL_ASSERT(_SNK_INIT_COOKIE == _snuklear.init_cookie);
+    return (nk_handle) { .id = (int)img.id };
+}
+
+SOKOL_API_IMPL snk_image_t snk_image_from_nkhandle(nk_handle h) {
+    SOKOL_ASSERT(_SNK_INIT_COOKIE == _snuklear.init_cookie);
+    return (snk_image_t){ .id = (uint32_t) h.id };
+}
+
+static void _snk_bind_image_sampler(sg_bindings* bindings, nk_handle h) {
+    _snk_image_t* img = _snk_lookup_image((uint32_t)h.id);
+    if (img) {
+        bindings->fs.images[0] = img->image;
+        bindings->fs.samplers[0] = img->sampler;
+    } else {
+        bindings->fs.images[0] = _snuklear.def_img;
+        bindings->fs.samplers[0] = _snuklear.def_smp;
+    }
+}
+
 SOKOL_API_IMPL void snk_render(int width, int height) {
+    SOKOL_ASSERT(_SNK_INIT_COOKIE == _snuklear.init_cookie);
     static const struct nk_draw_vertex_layout_element vertex_layout[] = {
         {NK_VERTEX_POSITION, NK_FORMAT_FLOAT, NK_OFFSETOF(struct _snk_vertex_t, pos)},
         {NK_VERTEX_TEXCOORD, NK_FORMAT_FLOAT, NK_OFFSETOF(struct _snk_vertex_t, uv)},
@@ -1889,23 +2384,22 @@ SOKOL_API_IMPL void snk_render(int width, int height) {
         // Iterate through the command list, rendering each one
         const struct nk_draw_command* cmd = NULL;
         int idx_offset = 0;
+        sg_bindings bindings = {
+            .vertex_buffers[0] = _snuklear.vbuf,
+            .index_buffer = _snuklear.ibuf,
+            .index_buffer_offset = idx_offset
+        };
         nk_draw_foreach(cmd, &_snuklear.ctx, &cmds) {
             if (cmd->elem_count > 0) {
-                sg_apply_bindings(&(sg_bindings){
-                    .fs.images[0].id = _snk_imageid_from_nkhandle(cmd->texture),
-                    .fs.samplers[0] = _snuklear.smp,
-                    .vertex_buffers[0] = _snuklear.vbuf,
-                    .index_buffer = _snuklear.ibuf,
-                    .vertex_buffer_offsets[0] = 0,
-                    .index_buffer_offset = idx_offset
-                });
+                _snk_bind_image_sampler(&bindings, cmd->texture);
+                sg_apply_bindings(&bindings);
                 sg_apply_scissor_rectf(cmd->clip_rect.x * dpi_scale,
                                        cmd->clip_rect.y * dpi_scale,
                                        cmd->clip_rect.w * dpi_scale,
                                        cmd->clip_rect.h * dpi_scale,
                                        true);
                 sg_draw(0, (int)cmd->elem_count, 1);
-                idx_offset += (int)cmd->elem_count * (int)sizeof(uint16_t);
+                bindings.index_buffer_offset += (int)cmd->elem_count * (int)sizeof(uint16_t);
             }
         }
         sg_apply_scissor_rect(0, 0, fb_width, fb_height, true);
@@ -1985,6 +2479,7 @@ _SOKOL_PRIVATE enum nk_keys _snk_event_to_nuklearkey(const sapp_event* ev) {
 }
 
 SOKOL_API_IMPL void snk_handle_event(const sapp_event* ev) {
+    SOKOL_ASSERT(_SNK_INIT_COOKIE == _snuklear.init_cookie);
     const float dpi_scale = _snuklear.desc.dpi_scale;
     switch (ev->type) {
         case SAPP_EVENTTYPE_MOUSE_DOWN:
@@ -2104,6 +2599,7 @@ SOKOL_API_IMPL void snk_handle_event(const sapp_event* ev) {
 }
 
 SOKOL_API_IMPL nk_flags snk_edit_string(struct nk_context *ctx, nk_flags flags, char *memory, int *len, int max, nk_plugin_filter filter) {
+    SOKOL_ASSERT(_SNK_INIT_COOKIE == _snuklear.init_cookie);
     nk_flags event = nk_edit_string(ctx, flags, memory, len, max, filter);
     if ((event & NK_EDIT_ACTIVATED) && !sapp_keyboard_shown()) {
         sapp_show_keyboard(true);
