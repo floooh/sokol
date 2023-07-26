@@ -223,14 +223,6 @@
 
         simgui_shutdown()
 
-    --- use the following helper function to create an ImTextureID handle from
-        a sokol-gfx image (note that you cannot provide your own sampler currently):
-
-        ImTextureID tex_id = simgui_imtextureid(img);
-
-        ...an invalid handle {SG_INVALID_ID} will be replaced with the
-        default font texture or default sampler object
-
 
     ON USER-PROVIDED IMAGES AND SAMPLERS
     ====================================
