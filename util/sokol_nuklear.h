@@ -50,10 +50,6 @@
 
         sokol_gfx.h
         sokol_app.h     (except SOKOL_NUKLEAR_NO_SOKOL_APP)
-
-    Additionally, include the following headers before including the
-    implementation:
-
         nuklear.h
 
     NOTE: Unlike most other sokol-headers, the implementation must be compiled
@@ -93,6 +89,10 @@
                 The maximum number of vertices used for UI rendering, default is 65536.
                 sokol-nuklear will use this to compute the size of the vertex-
                 and index-buffers allocated via sokol_gfx.h
+
+            int image_pool_size
+                Number of snk_image_t objects which can be alive at the same time.
+                The default is 256.
 
             sg_pixel_format color_format
                 The color pixel format of the render pass where the UI
@@ -155,13 +155,127 @@
         nk_edit_string(...), called snk_edit_string(...) which will show
         and hide the onscreen keyboard as required.
 
-    --- NOTE: to create a Nuklear image handle, use the helper function
-        `nk_handle snk_nkhandle(sg_image img)` together with
-        the Nuklear function nk_image_handle like this:
 
-        nk_image nki = nk_image_handle(snk_nkhandle(img));
+    ON USER-PROVIDED IMAGES AND SAMPLERS
+    ====================================
+    To render your own images via nk_image(), first create an snk_image_t
+    object from a sokol-gfx image and sampler object.
 
-        Note that it's currently not possible to provide a custom sg_sampler object.
+        // create a sokol-nuklear image object which associates an sg_image with an sg_sampler
+        snk_image_t snk_img = snk_make_image(&(snk_image_desc_t){
+            .image = sg_make_image(...),
+            .sampler = sg_make_sampler(...),
+        });
+
+        // convert the returned image handle into an nk_handle object
+        struct nk_handle nk_hnd = snk_nkhandle(snk_img);
+
+        // create a nuklear image from the generic handle (note that there a different helper functions for this)
+        struct nk_image nk_img = nk_image_handle(nk_hnd);
+
+        // finally specify a Nuklear image UI object
+        nk_image(ctx, nk_img);
+
+    snk_image_t objects are small and cheap (literally just the image and sampler
+    handle).
+
+    You can omit the sampler handle in the snk_make_image() call, in this case a
+    default sampler will be used with nearest-filtering and clamp-to-edge.
+
+    Trying to render with an invalid snk_image_t handle will render a small 8x8
+    white default texture instead.
+
+    To destroy a sokol-nuklear image object, call
+
+        snk_destroy_image(snk_img);
+
+    But please be aware that the image object needs to be around until snk_render() is called
+    in a frame (if this turns out to be too much of a hassle we could introduce some sort
+    of garbage collection where destroyed snk_image_t objects are kept around until
+    the snk_render() call).
+
+    You can call:
+
+        snk_image_desc_t desc = snk_query_image_desc(img)
+
+    ...to get the original desc struct, useful if you need to get the sokol-gfx image
+    and sampler handle of the snk_image_t object.
+
+    You can convert an nk_handle back into an snk_image_t handle:
+
+        snk_image_t img = snk_image_from_nkhandle(nk_hnd);
+
+
+    MEMORY ALLOCATION OVERRIDE
+    ==========================
+    You can override the memory allocation functions at initialization time
+    like this:
+
+        void* my_alloc(size_t size, void* user_data) {
+            return malloc(size);
+        }
+
+        void my_free(void* ptr, void* user_data) {
+            free(ptr);
+        }
+
+        ...
+            snk_setup(&(snk_desc_t){
+                // ...
+                .allocator = {
+                    .alloc = my_alloc,
+                    .free = my_free,
+                    .user_data = ...;
+                }
+            });
+        ...
+
+    If no overrides are provided, malloc and free will be used.
+
+    This only affects memory allocation calls done by sokol_nuklear.h
+    itself though, not any allocations in Nuklear.
+
+
+    ERROR REPORTING AND LOGGING
+    ===========================
+    To get any logging information at all you need to provide a logging callback in the setup call
+    the easiest way is to use sokol_log.h:
+
+        #include "sokol_log.h"
+
+        snk_setup(&(snk_desc_t){
+            .logger.func = slog_func
+        });
+
+    To override logging with your own callback, first write a logging function like this:
+
+        void my_log(const char* tag,                // e.g. 'snk'
+                    uint32_t log_level,             // 0=panic, 1=error, 2=warn, 3=info
+                    uint32_t log_item_id,           // SNK_LOGITEM_*
+                    const char* message_or_null,    // a message string, may be nullptr in release mode
+                    uint32_t line_nr,               // line number in sokol_nuklear.h
+                    const char* filename_or_null,   // source filename, may be nullptr in release mode
+                    void* user_data)
+        {
+            ...
+        }
+
+    ...and then setup sokol-nuklear like this:
+
+        snk_setup(&(snk_desc_t){
+            .logger = {
+                .func = my_log,
+                .user_data = my_user_data,
+            }
+        });
+
+    The provided logging function must be reentrant (e.g. be callable from
+    different threads).
+
+    If you don't want to provide your own custom logger it is highly recommended to use
+    the standard logger in sokol_log.h instead, otherwise you won't see any warnings or
+    errors.
+
 
     LICENSE
     =======
