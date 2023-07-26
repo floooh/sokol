@@ -2,7 +2,7 @@
 
 #### 26-Jul-2023
 
-**sokol_nuklear.h**: The same image+sampler support has been added as in sokol_nuklear.h
+**sokol_nuklear.h**: The same image+sampler support has been added as in sokol_imgui.h
 three days ago:
 
 - a new object type `snk_image_t` which wraps a sokol-gfx image and sampler
