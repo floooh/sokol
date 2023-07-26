@@ -223,14 +223,6 @@
 
         simgui_shutdown()
 
-    --- use the following helper function to create an ImTextureID handle from
-        a sokol-gfx image (note that you cannot provide your own sampler currently):
-
-        ImTextureID tex_id = simgui_imtextureid(img);
-
-        ...an invalid handle {SG_INVALID_ID} will be replaced with the
-        default font texture or default sampler object
-
 
     ON USER-PROVIDED IMAGES AND SAMPLERS
     ====================================
@@ -487,7 +479,7 @@ typedef struct simgui_allocator_t {
 /*
     simgui_logger
 
-    Used in simgui_desc to provide a logging function. Please be aware
+    Used in simgui_desc_t to provide a logging function. Please be aware
     that without logging function, sokol-imgui will be completely
     silent, e.g. it will not report errors, warnings and
     validation layer messages. For maximum error verbosity,
@@ -2212,6 +2204,13 @@ static simgui_desc_t _simgui_desc_defaults(const simgui_desc_t* desc) {
     return res;
 }
 
+// ██████  ██    ██ ██████  ██      ██  ██████
+// ██   ██ ██    ██ ██   ██ ██      ██ ██
+// ██████  ██    ██ ██████  ██      ██ ██
+// ██      ██    ██ ██   ██ ██      ██ ██
+// ██       ██████  ██████  ███████ ██  ██████
+//
+// >>public
 SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     SOKOL_ASSERT(desc);
     _simgui_clear(&_simgui, sizeof(_simgui));

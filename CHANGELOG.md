@@ -1,5 +1,32 @@
 ## Updates
 
+#### 26-Jul-2023
+
+**sokol_nuklear.h**: The same image+sampler support has been added as in sokol_imgui.h
+three days ago:
+
+- a new object type `snk_image_t` which wraps a sokol-gfx image and sampler
+  under a common handle
+- new functions:
+  - snk_make_image()
+  - snk_destroy_image()
+  - snk_query_image_desc()
+  - snk_image_from_nkhandle()
+- the function snk_nkhandle() now takes an snk_image_t handle instead of an sg_image handle
+- the nuklear.h header needs to be included before the declaration (not just the implementation),
+  this was already required before, but now you get a proper error message if the include is missing
+- the 'standard' logging- and error-reporting callback has been added as in the other sokol headers
+  (don't forget to add a logging callback in snk_setup(), otherwise sokol-nuklear will be silent)
+- since sokol-nuklear now needs to allocate memory, an allocator can now be provided to the
+  snk_setup() call (otherwise malloc/free will be used)
+
+Please also read the new documentation section `ON USER-PROVIDED IMAGES AND SAMPLERS`
+in sokol_nuklear.h, and also check out the (rewritten) sample:
+
+https://floooh.github.io/sokol-html5/nuklear-images-sapp.html
+
+Associated PR: https://github.com/floooh/sokol/pull/862
+
 #### 23-Jul-2023
 
 **sokol_imgui.h**: Add proper support for injecting user-provided sokol-gfx
