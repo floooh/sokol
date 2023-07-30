@@ -2902,6 +2902,7 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(METAL_FRAGMENT_SHADER_ENTRY_NOT_FOUND, "fragment shader entry not found (metal)") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_FAILED, "failed to create render pipeline state (metal)") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_OUTPUT, "") \
+    _SG_LOGITEM_XMACRO(WGPU_MAP_UNIFORM_BUFFER_FAILED, "failed to map uniform buffer (wgpu)") \
     _SG_LOGITEM_XMACRO(UNINIT_BUFFER_ACTIVE_CONTEXT_MISMATCH, "active context mismatch in buffer uninit (must be same as for creation)") \
     _SG_LOGITEM_XMACRO(UNINIT_IMAGE_ACTIVE_CONTEXT_MISMATCH, "active context mismatch in image uninit (must be same as for creation)") \
     _SG_LOGITEM_XMACRO(UNINIT_SAMPLER_ACTIVE_CONTEXT_MISMATCH, "active context mismatch in sampler uninit (must be same as for creation)") \
@@ -4898,7 +4899,6 @@ typedef struct {
     bool use_indexed_draw;
     int cur_width;
     int cur_height;
-    WGPUQueue queue;
     WGPUCommandEncoder render_cmd_enc;
     WGPUCommandEncoder staging_cmd_enc;
     WGPURenderPassEncoder pass_enc;
@@ -12326,13 +12326,11 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
       buffer, but this isn't currently allowed in Dawn.
 */
 _SOKOL_PRIVATE void _sg_wgpu_ubpool_init(const sg_desc* desc) {
-
-    /* Add the max-uniform-update size (64 KB) to the requested buffer size,
-       this is to prevent validation errors in the WebGPU implementation
-       if the entire buffer size is used per frame. 64 KB is the allowed
-       max uniform update size on NVIDIA
-    */
-    _sg.wgpu.ub.num_bytes = desc->uniform_buffer_size + _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE;
+    // Add the max-uniform-update size (64 KB) to the requested buffer size,
+    // this is to prevent validation errors in the WebGPU implementation
+    // if the entire buffer size is used per frame. 64 KB is the allowed
+    // max uniform update size on NVIDIA
+    _sg.wgpu.ub.num_bytes = (uint32_t)desc->uniform_buffer_size + _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE;
 
     WGPUBufferDescriptor ub_desc;
     _sg_clear(&ub_desc, sizeof(ub_desc));
@@ -12341,42 +12339,42 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_init(const sg_desc* desc) {
     _sg.wgpu.ub.buf = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &ub_desc);
     SOKOL_ASSERT(_sg.wgpu.ub.buf);
 
-    WGPUBindGroupLayoutBinding ub_bglb_desc[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_UBS];
-    _sg_clear(ub_bglb_desc, sizeof(ub_bglb_desc));
-    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
+    WGPUBindGroupLayoutEntry ub_bgle_desc[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_UBS];
+    _sg_clear(ub_bgle_desc, sizeof(ub_bgle_desc));
+    for (uint32_t stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         WGPUShaderStage vis = (stage_index == SG_SHADERSTAGE_VS) ? WGPUShaderStage_Vertex : WGPUShaderStage_Fragment;
-        for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
-            int bind_index = stage_index * SG_MAX_SHADERSTAGE_UBS + ub_index;
-            ub_bglb_desc[stage_index][ub_index].binding = bind_index;
-            ub_bglb_desc[stage_index][ub_index].visibility = vis;
-            ub_bglb_desc[stage_index][ub_index].type = WGPUBindingType_UniformBuffer;
-            ub_bglb_desc[stage_index][ub_index].hasDynamicOffset = true;
+        for (uint32_t ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
+            uint32_t bind_index = stage_index * SG_MAX_SHADERSTAGE_UBS + ub_index;
+            ub_bgle_desc[stage_index][ub_index].binding = bind_index;
+            ub_bgle_desc[stage_index][ub_index].visibility = vis;
+            ub_bgle_desc[stage_index][ub_index].buffer.type = WGPUBufferBindingType_Uniform;
+            ub_bgle_desc[stage_index][ub_index].buffer.hasDynamicOffset = true;
         }
     }
 
     WGPUBindGroupLayoutDescriptor ub_bgl_desc;
     _sg_clear(&ub_bgl_desc, sizeof(ub_bgl_desc));
-    ub_bgl_desc.bindingCount = SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_UBS;
-    ub_bgl_desc.bindings = &ub_bglb_desc[0][0];
+    ub_bgl_desc.entryCount = SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_UBS;
+    ub_bgl_desc.entries = &ub_bgle_desc[0][0];
     _sg.wgpu.ub.bindgroup_layout = wgpuDeviceCreateBindGroupLayout(_sg.wgpu.dev, &ub_bgl_desc);
     SOKOL_ASSERT(_sg.wgpu.ub.bindgroup_layout);
 
-    WGPUBindGroupBinding ub_bgb[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_UBS];
-    _sg_clear(ub_bgb, sizeof(ub_bgb));
-    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
-        for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
-            int bind_index = stage_index * SG_MAX_SHADERSTAGE_UBS + ub_index;
-            ub_bgb[stage_index][ub_index].binding = bind_index;
-            ub_bgb[stage_index][ub_index].buffer = _sg.wgpu.ub.buf;
+    WGPUBindGroupEntry ub_bge[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_UBS];
+    _sg_clear(ub_bge, sizeof(ub_bge));
+    for (uint32_t stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
+        for (uint32_t ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
+            uint32_t bind_index = stage_index * SG_MAX_SHADERSTAGE_UBS + ub_index;
+            ub_bge[stage_index][ub_index].binding = bind_index;
+            ub_bge[stage_index][ub_index].buffer = _sg.wgpu.ub.buf;
             // FIXME FIXME FIXME FIXME: HACK FOR VALIDATION BUG IN DAWN
-            ub_bgb[stage_index][ub_index].size = (1<<16);
+            // ub_bge[stage_index][ub_index].size = (1<<16);
         }
     }
     WGPUBindGroupDescriptor bg_desc;
     _sg_clear(&bg_desc, sizeof(bg_desc));
     bg_desc.layout = _sg.wgpu.ub.bindgroup_layout;
-    bg_desc.bindingCount = SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_UBS;
-    bg_desc.bindings = &ub_bgb[0][0];
+    bg_desc.entryCount = SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_UBS;
+    bg_desc.entries = &ub_bge[0][0];
     _sg.wgpu.ub.bindgroup = wgpuDeviceCreateBindGroup(_sg.wgpu.dev, &bg_desc);
     SOKOL_ASSERT(_sg.wgpu.ub.bindgroup);
 }
@@ -12403,7 +12401,7 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_discard(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_ubpool_mapped_callback(WGPUBufferMapAsyncStatus status, void* data, uint64_t data_len, void* user_data) {
+_SOKOL_PRIVATE void _sg_wgpu_ubpool_mapped_callback(WGPUBufferMapAsyncStatus status, void* user_data) {
     if (!_sg.wgpu.valid) {
         return;
     }
@@ -12412,8 +12410,9 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_mapped_callback(WGPUBufferMapAsyncStatus sta
         _SG_ERROR(WGPU_MAP_UNIFORM_BUFFER_FAILED);
         SOKOL_ASSERT(false);
     }
-    SOKOL_ASSERT(data && (data_len == _sg.wgpu.ub.num_bytes));
     int index = (int)(intptr_t) user_data;
+    void* data = wgpuBufferGetMappedRange(_sg.wgpu.ub.stage.buf[index], 0, _sg.wgpu.ub.num_bytes);
+    SOKOL_ASSERT(data);
     SOKOL_ASSERT(index < _sg.wgpu.ub.stage.num);
     SOKOL_ASSERT(0 == _sg.wgpu.ub.stage.ptr[index]);
     _sg.wgpu.ub.stage.ptr[index] = (uint8_t*) data;
@@ -12424,7 +12423,7 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_next_frame(bool first_frame) {
     // immediately request a new mapping for the last frame's current staging buffer
     if (!first_frame) {
         WGPUBuffer ub_src = _sg.wgpu.ub.stage.buf[_sg.wgpu.ub.stage.cur];
-        wgpuBufferMapWriteAsync(ub_src, _sg_wgpu_ubpool_mapped_callback, (void*)(intptr_t)_sg.wgpu.ub.stage.cur);
+        wgpuBufferMapAsync(ub_src, WGPUMapMode_Write, 0, 0, _sg_wgpu_ubpool_mapped_callback, (void*)(intptr_t)_sg.wgpu.ub.stage.cur);
     }
 
     // rewind per-frame offsets
@@ -12446,14 +12445,13 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_next_frame(bool first_frame) {
 
     WGPUBufferDescriptor desc;
     _sg_clear(&desc, sizeof(desc));
-    desc.size = _sg.wgpu.ub.num_bytes;
     desc.usage = WGPUBufferUsage_CopySrc|WGPUBufferUsage_MapWrite;
-    WGPUCreateBufferMappedResult res = wgpuDeviceCreateBufferMapped(_sg.wgpu.dev, &desc);
-    _sg.wgpu.ub.stage.buf[cur] = res.buffer;
-    _sg.wgpu.ub.stage.ptr[cur] = (uint8_t*) res.data;
+    desc.size = _sg.wgpu.ub.num_bytes;
+    desc.mappedAtCreation = true;
+    _sg.wgpu.ub.stage.buf[cur] = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &desc);
+    _sg.wgpu.ub.stage.ptr[cur] = wgpuBufferGetMappedRange(_sg.wgpu.ub.stage.buf[cur], 0, _sg.wgpu.ub.num_bytes);
     SOKOL_ASSERT(_sg.wgpu.ub.stage.buf[cur]);
     SOKOL_ASSERT(_sg.wgpu.ub.stage.ptr[cur]);
-    SOKOL_ASSERT(res.dataLength == _sg.wgpu.ub.num_bytes);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_ubpool_flush(void) {
@@ -12469,6 +12467,7 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_flush(void) {
     }
 }
 
+/*
 // helper function to compute number of bytes needed in staging buffer to copy image data
 _SOKOL_PRIVATE uint32_t _sg_wgpu_image_data_buffer_size(const _sg_image_t* img) {
     uint32_t num_bytes = 0;
@@ -12484,9 +12483,6 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_image_data_buffer_size(const _sg_image_t* img) 
     return num_bytes;
 }
 
-/* helper function to copy image data into a texture via a staging buffer, returns number of
-   bytes copied
-*/
 _SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_data(WGPUBuffer stg_buf, uint8_t* stg_base_ptr, uint32_t stg_base_offset, _sg_image_t* img, const sg_image_data* data) {
     SOKOL_ASSERT(_sg.wgpu.staging_cmd_enc);
     SOKOL_ASSERT(stg_buf && stg_base_ptr);
@@ -12567,168 +12563,8 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_data(WGPUBuffer stg_buf, uint8_t* st
     SOKOL_ASSERT(stg_offset >= stg_base_offset);
     return (stg_offset - stg_base_offset);
 }
-
-/*
-    The WGPU staging buffer implementation:
-
-    Very similar to the uniform buffer pool, there's a pool of big
-    per-frame staging buffers, each must be big enough to hold
-    all data uploaded to dynamic resources for one frame.
-
-    Staging buffers are created on demand and reused, because the
-    'frame pipeline depth' of WGPU isn't predictable.
-
-    The difference to the uniform buffer system is that there isn't
-    a 1:1 relationship for source- and destination for the
-    data-copy operation. There's always one staging buffer as copy-source
-    per frame, but many copy-destinations (regular vertex/index buffers
-    or images). Instead of one big copy-operation at the end of the frame,
-    multiple copy-operations will be written throughout the frame.
 */
-_SOKOL_PRIVATE void _sg_wgpu_staging_init(const sg_desc* desc) {
-    SOKOL_ASSERT(desc && (desc->staging_buffer_size > 0));
-    _sg.wgpu.staging.num_bytes = desc->staging_buffer_size;
-    // there's actually nothing more to do here
-}
 
-_SOKOL_PRIVATE void _sg_wgpu_staging_discard(void) {
-    for (int i = 0; i < _sg.wgpu.staging.num; i++) {
-        if (_sg.wgpu.staging.buf[i]) {
-            wgpuBufferRelease(_sg.wgpu.staging.buf[i]);
-            _sg.wgpu.staging.buf[i] = 0;
-            _sg.wgpu.staging.ptr[i] = 0;
-        }
-    }
-}
-
-_SOKOL_PRIVATE void _sg_wgpu_staging_mapped_callback(WGPUBufferMapAsyncStatus status, void* data, uint64_t data_len, void* user_data) {
-    if (!_sg.wgpu.valid) {
-        return;
-    }
-    // FIXME: better handling for this
-    if (WGPUBufferMapAsyncStatus_Success != status) {
-        SOKOL_ASSERT("Mapping staging buffer failed!\n");
-        SOKOL_ASSERT(false);
-    }
-    SOKOL_ASSERT(data && (data_len == _sg.wgpu.staging.num_bytes));
-    int index = (int)(intptr_t) user_data;
-    SOKOL_ASSERT(index < _sg.wgpu.staging.num);
-    SOKOL_ASSERT(0 == _sg.wgpu.staging.ptr[index]);
-    _sg.wgpu.staging.ptr[index] = (uint8_t*) data;
-}
-
-_SOKOL_PRIVATE void _sg_wgpu_staging_next_frame(bool first_frame) {
-
-    // immediately request a new mapping for the last frame's current staging buffer
-    if (!first_frame) {
-        WGPUBuffer cur_buf = _sg.wgpu.staging.buf[_sg.wgpu.staging.cur];
-        wgpuBufferMapWriteAsync(cur_buf, _sg_wgpu_staging_mapped_callback, (void*)(intptr_t)_sg.wgpu.staging.cur);
-    }
-
-    // rewind staging-buffer offset
-    _sg.wgpu.staging.offset = 0;
-
-    // check if mapped staging buffer is available, otherwise create one
-    for (int i = 0; i < _sg.wgpu.staging.num; i++) {
-        if (_sg.wgpu.staging.ptr[i]) {
-            _sg.wgpu.staging.cur = i;
-            return;
-        }
-    }
-
-    // no mapped buffer available, create one
-    SOKOL_ASSERT(_sg.wgpu.staging.num < _SG_WGPU_STAGING_PIPELINE_SIZE);
-    _sg.wgpu.staging.cur = _sg.wgpu.staging.num++;
-    const int cur = _sg.wgpu.staging.cur;
-
-    WGPUBufferDescriptor desc;
-    _sg_clear(&desc, sizeof(desc));
-    desc.size = _sg.wgpu.staging.num_bytes;
-    desc.usage = WGPUBufferUsage_CopySrc|WGPUBufferUsage_MapWrite;
-    WGPUCreateBufferMappedResult res = wgpuDeviceCreateBufferMapped(_sg.wgpu.dev, &desc);
-    _sg.wgpu.staging.buf[cur] = res.buffer;
-    _sg.wgpu.staging.ptr[cur] = (uint8_t*) res.data;
-    SOKOL_ASSERT(_sg.wgpu.staging.buf[cur]);
-    SOKOL_ASSERT(_sg.wgpu.staging.ptr[cur]);
-    SOKOL_ASSERT(res.dataLength == _sg.wgpu.staging.num_bytes);
-}
-
-_SOKOL_PRIVATE uint32_t _sg_wgpu_staging_copy_to_buffer(WGPUBuffer dst_buf, uint32_t dst_buf_offset, const void* data, uint32_t data_num_bytes) {
-    /* Copy a chunk of data into the staging buffer, and record a blit-operation into
-        the command encoder, bump the offset for the next data chunk, return 0 if there
-        was not enough room in the staging buffer, return the number of actually
-        copied bytes on success.
-
-        NOTE: that the number of staging bytes to be copied must be a multiple of 4.
-
-    */
-    SOKOL_ASSERT(_sg.wgpu.staging_cmd_enc);
-    SOKOL_ASSERT((dst_buf_offset & 3) == 0);
-    SOKOL_ASSERT(data_num_bytes > 0);
-    uint32_t copy_num_bytes = _sg_roundup(data_num_bytes, 4);
-    if ((_sg.wgpu.staging.offset + copy_num_bytes) >= _sg.wgpu.staging.num_bytes) {
-        _SG_ERROR(WGPU_STAGING_BUFFER_FULL_COPY_TO_BUFFER);
-        return false;
-    }
-    const int cur = _sg.wgpu.staging.cur;
-    SOKOL_ASSERT(_sg.wgpu.staging.ptr[cur]);
-    uint32_t stg_buf_offset = _sg.wgpu.staging.offset;
-    uint8_t* stg_ptr = _sg.wgpu.staging.ptr[cur] + stg_buf_offset;
-    memcpy(stg_ptr, data, data_num_bytes);
-    WGPUBuffer stg_buf = _sg.wgpu.staging.buf[cur];
-    wgpuCommandEncoderCopyBufferToBuffer(_sg.wgpu.staging_cmd_enc, stg_buf, stg_buf_offset, dst_buf, dst_buf_offset, copy_num_bytes);
-    _sg.wgpu.staging.offset = stg_buf_offset + copy_num_bytes;
-    return copy_num_bytes;
-}
-
-_SOKOL_PRIVATE bool _sg_wgpu_staging_copy_to_texture(_sg_image_t* img, const sg_image_data* data) {
-    // similar to _sg_wgpu_staging_copy_to_buffer(), but with image data instead
-    SOKOL_ASSERT(_sg.wgpu.staging_cmd_enc);
-    uint32_t num_bytes = _sg_wgpu_image_data_buffer_size(img);
-    if ((_sg.wgpu.staging.offset + num_bytes) >= _sg.wgpu.staging.num_bytes) {
-        _SG_ERROR(WGPU_STAGING_BUFFER_FULL_COPY_TO_TEXTURE);
-        return false;
-    }
-    const int cur = _sg.wgpu.staging.cur;
-    SOKOL_ASSERT(_sg.wgpu.staging.ptr[cur]);
-    uint32_t stg_offset = _sg.wgpu.staging.offset;
-    uint8_t* stg_ptr = _sg.wgpu.staging.ptr[cur];
-    WGPUBuffer stg_buf = _sg.wgpu.staging.buf[cur];
-    uint32_t bytes_copied = _sg_wgpu_copy_image_data(stg_buf, stg_ptr, stg_offset, img, data);
-    _SOKOL_UNUSED(bytes_copied);
-    SOKOL_ASSERT(bytes_copied == num_bytes);
-    _sg.wgpu.staging.offset = _sg_roundup(stg_offset + num_bytes, _SG_WGPU_STAGING_ALIGN);
-    return true;
-}
-
-_SOKOL_PRIVATE void _sg_wgpu_staging_unmap(void) {
-    // called at end of frame before queue-submit
-    const int cur = _sg.wgpu.staging.cur;
-    SOKOL_ASSERT(_sg.wgpu.staging.ptr[cur]);
-    _sg.wgpu.staging.ptr[cur] = 0;
-    wgpuBufferUnmap(_sg.wgpu.staging.buf[cur]);
-}
-
-_SOKOL_PRIVATE WGPUSampler _sg_wgpu_create_sampler(const sg_image_desc* img_desc) {
-    SOKOL_ASSERT(img_desc);
-    // create a new WGPU sampler
-    // FIXME: anisotropic filtering not supported?
-    WGPUSamplerDescriptor smp_desc;
-    _sg_clear(&smp_desc, sizeof(smp_desc));
-    smp_desc.addressModeU = _sg_wgpu_sampler_addrmode(img_desc->wrap_u);
-    smp_desc.addressModeV = _sg_wgpu_sampler_addrmode(img_desc->wrap_v);
-    smp_desc.addressModeW = _sg_wgpu_sampler_addrmode(img_desc->wrap_w);
-    smp_desc.magFilter = _sg_wgpu_sampler_minmagfilter(img_desc->mag_filter);
-    smp_desc.minFilter = _sg_wgpu_sampler_minmagfilter(img_desc->min_filter);
-    smp_desc.mipmapFilter = _sg_wgpu_sampler_mipfilter(img_desc->min_filter);
-    smp_desc.lodMinClamp = img_desc->min_lod;
-    smp_desc.lodMaxClamp = img_desc->max_lod;
-    WGPUSampler smp = wgpuDeviceCreateSampler(_sg.wgpu.dev, &smp_desc);
-    SOKOL_ASSERT(smp);
-    return smp;
-}
-
-//--- WGPU backend API functions ---
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->context.wgpu.device);
@@ -12747,8 +12583,6 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     _sg.wgpu.depth_stencil_view_cb = (WGPUTextureView(*)(void)) desc->context.wgpu.depth_stencil_view_cb;
     _sg.wgpu.depth_stencil_view_userdata_cb = (WGPUTextureView(*)(void*)) desc->context.wgpu.depth_stencil_view_userdata_cb;
     _sg.wgpu.user_data = desc->context.wgpu.user_data;
-    _sg.wgpu.queue = wgpuDeviceCreateQueue(_sg.wgpu.dev);
-    SOKOL_ASSERT(_sg.wgpu.queue);
 
     // setup WebGPU features and limits
     _sg_wgpu_init_caps();
@@ -12756,8 +12590,6 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     // setup the uniform and staging buffer pools
     _sg_wgpu_ubpool_init(desc);
     _sg_wgpu_ubpool_next_frame(true);
-    _sg_wgpu_staging_init(desc);
-    _sg_wgpu_staging_next_frame(true);
 
     // create an empty bind group for shader stages without bound images
     WGPUBindGroupLayoutDescriptor bgl_desc;
@@ -12786,20 +12618,15 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
     SOKOL_ASSERT(_sg.wgpu.staging_cmd_enc);
     _sg.wgpu.valid = false;
     _sg_wgpu_ubpool_discard();
-    _sg_wgpu_staging_discard();
     wgpuBindGroupRelease(_sg.wgpu.empty_bind_group);
     wgpuCommandEncoderRelease(_sg.wgpu.render_cmd_enc);
     _sg.wgpu.render_cmd_enc = 0;
     wgpuCommandEncoderRelease(_sg.wgpu.staging_cmd_enc);
     _sg.wgpu.staging_cmd_enc = 0;
-    if (_sg.wgpu.queue) {
-        wgpuQueueRelease(_sg.wgpu.queue);
-        _sg.wgpu.queue = 0;
-    }
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_reset_state_cache(void) {
-    _SG_WARN(WGPU_RESET_STATE_CACHE_FIXME);
+    // FIXME
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_context(_sg_context_t* ctx) {
@@ -12815,7 +12642,7 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_context(_sg_context_t* ctx) {
 
 _SOKOL_PRIVATE void _sg_wgpu_activate_context(_sg_context_t* ctx) {
     (void)ctx;
-    _SG_WARN(WGPU_ACTIVATE_CONTEXT_FIXME);
+    // FIXME
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
