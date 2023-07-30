@@ -2902,11 +2902,6 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(METAL_FRAGMENT_SHADER_ENTRY_NOT_FOUND, "fragment shader entry not found (metal)") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_FAILED, "failed to create render pipeline state (metal)") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_OUTPUT, "") \
-    _SG_LOGITEM_XMACRO(WGPU_MAP_UNIFORM_BUFFER_FAILED, "mapping uniform buffer failed (wgpu)") \
-    _SG_LOGITEM_XMACRO(WGPU_STAGING_BUFFER_FULL_COPY_TO_BUFFER, "per frame staging buffer full when copying to buffer (wgpu)") \
-    _SG_LOGITEM_XMACRO(WGPU_STAGING_BUFFER_FULL_COPY_TO_TEXTURE, "per frame staging buffer full when copying to texture (wgpu)") \
-    _SG_LOGITEM_XMACRO(WGPU_RESET_STATE_CACHE_FIXME, "_sg_wgpu_reset_state_cache: fixme") \
-    _SG_LOGITEM_XMACRO(WGPU_ACTIVATE_CONTEXT_FIXME, "_sg_wgpu_activate_context: fixme") \
     _SG_LOGITEM_XMACRO(UNINIT_BUFFER_ACTIVE_CONTEXT_MISMATCH, "active context mismatch in buffer uninit (must be same as for creation)") \
     _SG_LOGITEM_XMACRO(UNINIT_IMAGE_ACTIVE_CONTEXT_MISMATCH, "active context mismatch in image uninit (must be same as for creation)") \
     _SG_LOGITEM_XMACRO(UNINIT_SAMPLER_ACTIVE_CONTEXT_MISMATCH, "active context mismatch in sampler uninit (must be same as for creation)") \
@@ -3134,7 +3129,7 @@ typedef enum sg_log_item {
     .context.color_format: default value depends on selected backend:
         all GL backends:    SG_PIXELFORMAT_RGBA8
         Metal and D3D11:    SG_PIXELFORMAT_BGRA8
-        WGPU:               *no default* (must be queried from WGPU swapchain)
+        WebGPU:             *no default* (must be queried from swapchain)
     .context.depth_format   SG_PIXELFORMAT_DEPTH_STENCIL
     .context.sample_count   1
 
@@ -3236,7 +3231,7 @@ typedef struct sg_wgpu_context_desc {
     const void* (*render_view_userdata_cb)(void*);
     const void* (*resolve_view_cb)(void);  // returns WGPUTextureView
     const void* (*resolve_view_userdata_cb)(void*);
-    const void* (*depth_stencil_view_cb)(void);    // returns WGPUTextureView, must be WGPUTextureFormat_Depth24Plus8
+    const void* (*depth_stencil_view_cb)(void);    // returns WGPUTextureView
     const void* (*depth_stencil_view_userdata_cb)(void*);
     void* user_data;
 } sg_wgpu_context_desc;
@@ -3614,11 +3609,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #endif
     #import <Metal/Metal.h>
 #elif defined(SOKOL_WGPU)
-    #if defined(__EMSCRIPTEN__)
-        #include <webgpu/webgpu.h>
-    #else
-        #include <dawn/webgpu.h>
-    #endif
+    #include <webgpu/webgpu.h>
 #elif defined(SOKOL_GLCORE33) || defined(SOKOL_GLES3)
     #define _SOKOL_ANY_GL (1)
 
@@ -4814,12 +4805,19 @@ typedef struct {
     _sg_image_common_t cmn;
     struct {
         WGPUTexture tex;
-        WGPUTextureView tex_view;
-        WGPUTexture msaa_tex;
-        WGPUSampler sampler;
+        WGPUTextureView view;
     } wgpu;
 } _sg_wgpu_image_t;
 typedef _sg_wgpu_image_t _sg_image_t;
+
+typedef struct {
+    _sg_slot_t slot;
+    _sg_sampler_common_t cmn;
+    struct {
+        WGPUSampler smp;
+    } wgpu;
+} _sg_wgpu_sampler_t;
+typedef _sg_wgpu_sampler_t _sg_sampler_t;
 
 typedef struct {
     WGPUShaderModule module;
@@ -4849,8 +4847,7 @@ typedef _sg_wgpu_pipeline_t _sg_pipeline_t;
 
 typedef struct {
     _sg_image_t* image;
-    WGPUTextureView render_tex_view;
-    WGPUTextureView resolve_tex_view;
+    WGPUTextureView view;
 } _sg_wgpu_attachment_t;
 
 typedef struct {
@@ -4858,6 +4855,7 @@ typedef struct {
     _sg_pass_common_t cmn;
     struct {
         _sg_wgpu_attachment_t color_atts[SG_MAX_COLOR_ATTACHMENTS];
+        _sg_wgpu_attachment_t resolve_atts[SG_MAX_COLOR_ATTACHMENTS];
         _sg_wgpu_attachment_t ds_att;
     } wgpu;
 } _sg_wgpu_pass_t;
@@ -4885,23 +4883,9 @@ typedef struct {
     } stage;
 } _sg_wgpu_ubpool_t;
 
-// ...a similar pool (like uniform buffer pool) of dynamic-resource staging buffers
-typedef struct {
-    uint32_t num_bytes;
-    uint32_t offset;    // current offset into current frame's staging buffer
-    int num;            // number of staging buffers
-    int cur;            // this frame's staging buffer
-    WGPUBuffer buf[_SG_WGPU_STAGING_PIPELINE_SIZE]; // CPU-side staging buffers
-    uint8_t* ptr[_SG_WGPU_STAGING_PIPELINE_SIZE];   // if != 0, staging buffer currently mapped
-} _sg_wgpu_stagingpool_t;
-
 // the WGPU backend state
 typedef struct {
     bool valid;
-    bool in_pass;
-    bool draw_indexed;
-    int cur_width;
-    int cur_height;
     WGPUDevice dev;
     WGPUTextureView (*render_view_cb)(void);
     WGPUTextureView (*render_view_userdata_cb)(void*);
@@ -4910,6 +4894,10 @@ typedef struct {
     WGPUTextureView (*depth_stencil_view_cb)(void);
     WGPUTextureView (*depth_stencil_view_userdata_cb)(void*);
     void* user_data;
+    bool in_pass;
+    bool use_indexed_draw;
+    int cur_width;
+    int cur_height;
     WGPUQueue queue;
     WGPUCommandEncoder render_cmd_enc;
     WGPUCommandEncoder staging_cmd_enc;
@@ -4918,7 +4906,6 @@ typedef struct {
     const _sg_pipeline_t* cur_pipeline;
     sg_pipeline cur_pipeline_id;
     _sg_wgpu_ubpool_t ub;
-    _sg_wgpu_stagingpool_t staging;
 } _sg_wgpu_backend_t;
 #endif
 
@@ -11956,16 +11943,28 @@ _SOKOL_PRIVATE WGPUBufferUsageFlags _sg_wgpu_buffer_usage(sg_buffer_type t, sg_u
     return res;
 }
 
-_SOKOL_PRIVATE WGPULoadOp _sg_wgpu_load_op(sg_action a) {
+_SOKOL_PRIVATE WGPULoadOp _sg_wgpu_load_op(sg_load_action a) {
     switch (a) {
-        case SG_ACTION_CLEAR:
-        case SG_ACTION_DONTCARE:
+        case SG_LOADACTION_CLEAR:
+        case SG_LOADACTION_DONTCARE:
             return WGPULoadOp_Clear;
-        case SG_ACTION_LOAD:
+        case SG_LOADACTION_LOAD:
             return WGPULoadOp_Load;
         default:
             SOKOL_UNREACHABLE;
-            return (WGPULoadOp)0;
+            return WGPULoadOp_Force32;
+    }
+}
+
+_SOKOL_PRIVATE WGPUStoreOp _sg_wgpu_store_op(sg_store_action a) {
+    switch (a) {
+        case SG_STOREACTION_STORE:
+            return WGPUStoreOp_Store;
+        case SG_STOREACTION_DONTCARE:
+            return WGPUStoreOp_Discard;
+        default:
+            SOKOL_UNREACHABLE;
+            return WGPUStoreOp_Force32;
     }
 }
 
@@ -11979,13 +11978,13 @@ _SOKOL_PRIVATE WGPUTextureViewDimension _sg_wgpu_tex_viewdim(sg_image_type t) {
     }
 }
 
-_SOKOL_PRIVATE WGPUTextureComponentType _sg_wgpu_tex_comptype(sg_image_sample_type t) {
-    // FIXME
+_SOKOL_PRIVATE WGPUTextureSampleType _sg_wgpu_tex_sample_type(sg_image_sample_type t) {
     switch (t) {
-        case SG_IMAGESAMPLETYPE_FLOAT:  return WGPUTextureComponentType_Float;
-        case SG_IMAGESAMPLETYPE_SINT:   return WGPUTextureComponentType_Sint;
-        case SG_IMAGESAMPLETYPE_UINT:   return WGPUTextureComponentType_Uint;
-        default: SOKOL_UNREACHABLE; return WGPUTextureComponentType_Force32;
+        case SG_IMAGESAMPLETYPE_FLOAT:  return WGPUTextureSampleType_Float;
+        case SG_IMAGESAMPLETYPE_DEPTH:  return WGPUTextureSampleType_Depth;
+        case SG_IMAGESAMPLETYPE_SINT:   return WGPUTextureSampleType_Sint;
+        case SG_IMAGESAMPLETYPE_UINT:   return WGPUTextureSampleType_Uint;
+        default: SOKOL_UNREACHABLE;     return WGPUTextureSampleType_Force32;
     }
 }
 
@@ -12015,12 +12014,8 @@ _SOKOL_PRIVATE WGPUAddressMode _sg_wgpu_sampler_addrmode(sg_wrap m) {
 _SOKOL_PRIVATE WGPUFilterMode _sg_wgpu_sampler_minmagfilter(sg_filter f) {
     switch (f) {
         case SG_FILTER_NEAREST:
-        case SG_FILTER_NEAREST_MIPMAP_NEAREST:
-        case SG_FILTER_NEAREST_MIPMAP_LINEAR:
             return WGPUFilterMode_Nearest;
         case SG_FILTER_LINEAR:
-        case SG_FILTER_LINEAR_MIPMAP_NEAREST:
-        case SG_FILTER_LINEAR_MIPMAP_LINEAR:
             return WGPUFilterMode_Linear;
         default:
             SOKOL_UNREACHABLE;
@@ -12028,15 +12023,12 @@ _SOKOL_PRIVATE WGPUFilterMode _sg_wgpu_sampler_minmagfilter(sg_filter f) {
     }
 }
 
-_SOKOL_PRIVATE WGPUFilterMode _sg_wgpu_sampler_mipfilter(sg_filter f) {
+_SOKOL_PRIVATE WGPUFilterMode _sg_wgpu_sampler_mipmap_filter(sg_filter f) {
     switch (f) {
+        case SG_FILTER_NONE:
         case SG_FILTER_NEAREST:
-        case SG_FILTER_LINEAR:
-        case SG_FILTER_NEAREST_MIPMAP_NEAREST:
-        case SG_FILTER_LINEAR_MIPMAP_NEAREST:
             return WGPUFilterMode_Nearest;
-        case SG_FILTER_NEAREST_MIPMAP_LINEAR:
-        case SG_FILTER_LINEAR_MIPMAP_LINEAR:
+        case SG_FILTER_LINEAR:
             return WGPUFilterMode_Linear;
         default:
             SOKOL_UNREACHABLE;
@@ -12049,28 +12041,28 @@ _SOKOL_PRIVATE WGPUIndexFormat _sg_wgpu_indexformat(sg_index_type t) {
     return (t == SG_INDEXTYPE_UINT16) ? WGPUIndexFormat_Uint16 : WGPUIndexFormat_Uint32;
 }
 
-_SOKOL_PRIVATE WGPUInputStepMode _sg_wgpu_stepmode(sg_vertex_step s) {
-    return (s == SG_VERTEXSTEP_PER_VERTEX) ? WGPUInputStepMode_Vertex : WGPUInputStepMode_Instance;
+_SOKOL_PRIVATE WGPUVertexStepMode _sg_wgpu_stepmode(sg_vertex_step s) {
+    return (s == SG_VERTEXSTEP_PER_VERTEX) ? WGPUVertexStepMode_Vertex : WGPUVertexStepMode_Instance;
 }
 
 _SOKOL_PRIVATE WGPUVertexFormat _sg_wgpu_vertexformat(sg_vertex_format f) {
     switch (f) {
-        case SG_VERTEXFORMAT_FLOAT:         return WGPUVertexFormat_Float;
-        case SG_VERTEXFORMAT_FLOAT2:        return WGPUVertexFormat_Float2;
-        case SG_VERTEXFORMAT_FLOAT3:        return WGPUVertexFormat_Float3;
-        case SG_VERTEXFORMAT_FLOAT4:        return WGPUVertexFormat_Float4;
-        case SG_VERTEXFORMAT_BYTE4:         return WGPUVertexFormat_Char4;
-        case SG_VERTEXFORMAT_BYTE4N:        return WGPUVertexFormat_Char4Norm;
-        case SG_VERTEXFORMAT_UBYTE4:        return WGPUVertexFormat_UChar4;
-        case SG_VERTEXFORMAT_UBYTE4N:       return WGPUVertexFormat_UChar4Norm;
-        case SG_VERTEXFORMAT_SHORT2:        return WGPUVertexFormat_Short2;
-        case SG_VERTEXFORMAT_SHORT2N:       return WGPUVertexFormat_Short2Norm;
-        case SG_VERTEXFORMAT_USHORT2N:      return WGPUVertexFormat_UShort2Norm;
-        case SG_VERTEXFORMAT_SHORT4:        return WGPUVertexFormat_Short4;
-        case SG_VERTEXFORMAT_SHORT4N:       return WGPUVertexFormat_Short4Norm;
-        case SG_VERTEXFORMAT_USHORT4N:      return WGPUVertexFormat_UShort4Norm;
-        case SG_VERTEXFORMAT_HALF2:         return WGPUVertexFormat_Half2;
-        case SG_VERTEXFORMAT_HALF3:         return WGPUVertexFormat_Half4;
+        case SG_VERTEXFORMAT_FLOAT:         return WGPUVertexFormat_Float32;
+        case SG_VERTEXFORMAT_FLOAT2:        return WGPUVertexFormat_Float32x2;
+        case SG_VERTEXFORMAT_FLOAT3:        return WGPUVertexFormat_Float32x3;
+        case SG_VERTEXFORMAT_FLOAT4:        return WGPUVertexFormat_Float32x4;
+        case SG_VERTEXFORMAT_BYTE4:         return WGPUVertexFormat_Sint8x4;
+        case SG_VERTEXFORMAT_BYTE4N:        return WGPUVertexFormat_Snorm8x4;
+        case SG_VERTEXFORMAT_UBYTE4:        return WGPUVertexFormat_Uint8x4;
+        case SG_VERTEXFORMAT_UBYTE4N:       return WGPUVertexFormat_Unorm8x4;
+        case SG_VERTEXFORMAT_SHORT2:        return WGPUVertexFormat_Sint16x2;
+        case SG_VERTEXFORMAT_SHORT2N:       return WGPUVertexFormat_Snorm16x2;
+        case SG_VERTEXFORMAT_USHORT2N:      return WGPUVertexFormat_Uint16x2;
+        case SG_VERTEXFORMAT_SHORT4:        return WGPUVertexFormat_Sint16x4;
+        case SG_VERTEXFORMAT_SHORT4N:       return WGPUVertexFormat_Snorm16x4;
+        case SG_VERTEXFORMAT_USHORT4N:      return WGPUVertexFormat_Unorm16x4;
+        case SG_VERTEXFORMAT_HALF2:         return WGPUVertexFormat_Float16x2;
+        case SG_VERTEXFORMAT_HALF4:         return WGPUVertexFormat_Float16x4;
         // FIXME! UINT10_N2
         case SG_VERTEXFORMAT_UINT10_N2:
         default:
@@ -12129,7 +12121,7 @@ _SOKOL_PRIVATE WGPUTextureFormat _sg_wgpu_textureformat(sg_pixel_format p) {
         case SG_PIXELFORMAT_RGBA8SI:        return WGPUTextureFormat_RGBA8Sint;
         case SG_PIXELFORMAT_BGRA8:          return WGPUTextureFormat_BGRA8Unorm;
         case SG_PIXELFORMAT_RGB10A2:        return WGPUTextureFormat_RGB10A2Unorm;
-        case SG_PIXELFORMAT_RG11B10F:       return WGPUTextureFormat_RG11B10Float;
+        case SG_PIXELFORMAT_RG11B10F:       return WGPUTextureFormat_RG11B10Ufloat;
         case SG_PIXELFORMAT_RG32UI:         return WGPUTextureFormat_RG32Uint;
         case SG_PIXELFORMAT_RG32SI:         return WGPUTextureFormat_RG32Sint;
         case SG_PIXELFORMAT_RG32F:          return WGPUTextureFormat_RG32Float;
@@ -12148,7 +12140,7 @@ _SOKOL_PRIVATE WGPUTextureFormat _sg_wgpu_textureformat(sg_pixel_format p) {
         case SG_PIXELFORMAT_BC4_RSN:        return WGPUTextureFormat_BC4RSnorm;
         case SG_PIXELFORMAT_BC5_RG:         return WGPUTextureFormat_BC5RGUnorm;
         case SG_PIXELFORMAT_BC5_RGSN:       return WGPUTextureFormat_BC5RGSnorm;
-        case SG_PIXELFORMAT_BC6H_RGBF:      return WGPUTextureFormat_BC6HRGBSfloat;
+        case SG_PIXELFORMAT_BC6H_RGBF:      return WGPUTextureFormat_BC6HRGBFloat;
         case SG_PIXELFORMAT_BC6H_RGBUF:     return WGPUTextureFormat_BC6HRGBUfloat;
         case SG_PIXELFORMAT_BC7_RGBA:       return WGPUTextureFormat_BC7RGBAUnorm;
 
@@ -12175,18 +12167,6 @@ _SOKOL_PRIVATE WGPUTextureFormat _sg_wgpu_textureformat(sg_pixel_format p) {
             return WGPUTextureFormat_Force32;
     }
 }
-
-/*
-FIXME ??? this isn't needed anywhere?
-_SOKOL_PRIVATE WGPUTextureAspect _sg_wgpu_texture_aspect(sg_pixel_format fmt) {
-    if (_sg_is_valid_rendertarget_depth_format(fmt)) {
-        if (!_sg_is_depth_stencil_format(fmt)) {
-            return WGPUTextureAspect_DepthOnly;
-        }
-    }
-    return WGPUTextureAspect_All;
-}
-*/
 
 _SOKOL_PRIVATE WGPUCompareFunction _sg_wgpu_comparefunc(sg_compare_func f) {
     switch (f) {
@@ -12229,20 +12209,20 @@ _SOKOL_PRIVATE WGPUBlendFactor _sg_wgpu_blendfactor(sg_blend_factor f) {
     switch (f) {
         case SG_BLENDFACTOR_ZERO:                   return WGPUBlendFactor_Zero;
         case SG_BLENDFACTOR_ONE:                    return WGPUBlendFactor_One;
-        case SG_BLENDFACTOR_SRC_COLOR:              return WGPUBlendFactor_SrcColor;
-        case SG_BLENDFACTOR_ONE_MINUS_SRC_COLOR:    return WGPUBlendFactor_OneMinusSrcColor;
+        case SG_BLENDFACTOR_SRC_COLOR:              return WGPUBlendFactor_Src;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC_COLOR:    return WGPUBlendFactor_OneMinusSrc;
         case SG_BLENDFACTOR_SRC_ALPHA:              return WGPUBlendFactor_SrcAlpha;
         case SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA:    return WGPUBlendFactor_OneMinusSrcAlpha;
-        case SG_BLENDFACTOR_DST_COLOR:              return WGPUBlendFactor_DstColor;
-        case SG_BLENDFACTOR_ONE_MINUS_DST_COLOR:    return WGPUBlendFactor_OneMinusDstColor;
+        case SG_BLENDFACTOR_DST_COLOR:              return WGPUBlendFactor_Dst;
+        case SG_BLENDFACTOR_ONE_MINUS_DST_COLOR:    return WGPUBlendFactor_OneMinusDst;
         case SG_BLENDFACTOR_DST_ALPHA:              return WGPUBlendFactor_DstAlpha;
         case SG_BLENDFACTOR_ONE_MINUS_DST_ALPHA:    return WGPUBlendFactor_OneMinusDstAlpha;
         case SG_BLENDFACTOR_SRC_ALPHA_SATURATED:    return WGPUBlendFactor_SrcAlphaSaturated;
-        case SG_BLENDFACTOR_BLEND_COLOR:            return WGPUBlendFactor_BlendColor;
-        case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return WGPUBlendFactor_OneMinusBlendColor;
+        case SG_BLENDFACTOR_BLEND_COLOR:            return WGPUBlendFactor_Constant;
+        case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return WGPUBlendFactor_OneMinusConstant;
         // FIXME: separate blend alpha value not supported?
-        case SG_BLENDFACTOR_BLEND_ALPHA:            return WGPUBlendFactor_BlendColor;
-        case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return WGPUBlendFactor_OneMinusBlendColor;
+        case SG_BLENDFACTOR_BLEND_ALPHA:            return WGPUBlendFactor_Constant;
+        case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return WGPUBlendFactor_OneMinusConstant;
         default:
             SOKOL_UNREACHABLE; return WGPUBlendFactor_Force32;
     }
