@@ -2904,6 +2904,7 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_FAILED, "failed to create render pipeline state (metal)") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_OUTPUT, "") \
     _SG_LOGITEM_XMACRO(WGPU_MAP_UNIFORM_BUFFER_FAILED, "failed to map uniform buffer (wgpu)") \
+    _SG_LOGITEM_XMACRO(WGPU_CREATE_BUFFER_FAILED, "failed to create buffer (wgpu)") \
     _SG_LOGITEM_XMACRO(UNINIT_BUFFER_ACTIVE_CONTEXT_MISMATCH, "active context mismatch in buffer uninit (must be same as for creation)") \
     _SG_LOGITEM_XMACRO(UNINIT_IMAGE_ACTIVE_CONTEXT_MISMATCH, "active context mismatch in image uninit (must be same as for creation)") \
     _SG_LOGITEM_XMACRO(UNINIT_SAMPLER_ACTIVE_CONTEXT_MISMATCH, "active context mismatch in sampler uninit (must be same as for creation)") \
@@ -5327,6 +5328,10 @@ _SOKOL_PRIVATE int _sg_pixelformat_bytesize(sg_pixel_format fmt) {
 }
 
 _SOKOL_PRIVATE int _sg_roundup(int val, int round_to) {
+    return (val+(round_to-1)) & ~(round_to-1);
+}
+
+_SOKOL_PRIVATE uint64_t _sg_roundup_u64(uint64_t val, uint64_t round_to) {
     return (val+(round_to-1)) & ~(round_to-1);
 }
 
@@ -12649,39 +12654,44 @@ _SOKOL_PRIVATE void _sg_wgpu_activate_context(_sg_context_t* ctx) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
-/*
     const bool injected = (0 != desc->wgpu_buffer);
     if (injected) {
         buf->wgpu.buf = (WGPUBuffer) desc->wgpu_buffer;
         wgpuBufferReference(buf->wgpu.buf);
     } else {
+        // buffer mapping size must be multiple of 4, so round up buffer size (only a problem
+        // with index buffers containing odd number of indices)
+        const uint64_t wgpu_buf_size = _sg_roundup_u64((uint64_t)buf->cmn.size, 4);
+        const bool map_at_creation = (SG_USAGE_IMMUTABLE == buf->cmn.usage);
+
         WGPUBufferDescriptor wgpu_buf_desc;
         _sg_clear(&wgpu_buf_desc, sizeof(wgpu_buf_desc));
         wgpu_buf_desc.usage = _sg_wgpu_buffer_usage(buf->cmn.type, buf->cmn.usage);
-        wgpu_buf_desc.size = buf->cmn.size;
-        if (SG_USAGE_IMMUTABLE == buf->cmn.usage) {
-            SOKOL_ASSERT(desc->data.ptr);
-            WGPUCreateBufferMappedResult res = wgpuDeviceCreateBufferMapped(_sg.wgpu.dev, &wgpu_buf_desc);
-            buf->wgpu.buf = res.buffer;
-            SOKOL_ASSERT(res.data && (res.dataLength == buf->cmn.size));
-            memcpy(res.data, desc->data.ptr, buf->cmn.size);
-            wgpuBufferUnmap(res.buffer);
-        } else {
-            buf->wgpu.buf = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &wgpu_buf_desc);
+        wgpu_buf_desc.size = wgpu_buf_size;
+        wgpu_buf_desc.mappedAtCreation = map_at_creation;
+        buf->wgpu.buf = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &wgpu_buf_desc);
+        if (0 == buf->wgpu.buf) {
+            _SG_ERROR(WGPU_CREATE_BUFFER_FAILED);
+            return SG_RESOURCESTATE_FAILED;
+        }
+        if (map_at_creation) {
+            SOKOL_ASSERT(desc->data.ptr && (desc->data.size > 0));
+            SOKOL_ASSERT(desc->data.size <= (size_t)buf->cmn.size);
+            // FIXME: inefficient on WASM
+            void* ptr = wgpuBufferGetMappedRange(buf->wgpu.buf, 0, wgpu_buf_size);
+            SOKOL_ASSERT(ptr);
+            memcpy(ptr, desc->data.ptr, desc->data.size);
+            wgpuBufferUnmap(buf->wgpu.buf);
         }
     }
-*/
     return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
-/*
-    WGPUBuffer wgpu_buf = buf->wgpu.buf;
-    if (0 != wgpu_buf) {
-        wgpuBufferRelease(wgpu_buf);
+    if (buf->wgpu.buf) {
+        wgpuBufferRelease(buf->wgpu.buf);
     }
-*/
 }
 
 /*
