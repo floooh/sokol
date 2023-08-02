@@ -4902,6 +4902,8 @@ typedef struct {
     bool use_indexed_draw;
     int cur_width;
     int cur_height;
+    WGPUSupportedLimits limits;
+    WGPUQueue queue;
     WGPUCommandEncoder render_cmd_enc;
     WGPURenderPassEncoder pass_enc;
     WGPUBindGroup empty_bind_group;
@@ -12259,12 +12261,15 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.mrt_independent_blend_state = true;
     _sg.features.mrt_independent_write_mask = true;
 
-    // FIXME: max images size???
-    _sg.limits.max_image_size_2d = 8 * 1024;
-    _sg.limits.max_image_size_cube = 8 * 1024;
-    _sg.limits.max_image_size_3d = 2 * 1024;
-    _sg.limits.max_image_size_array = 8 * 1024;
-    _sg.limits.max_image_array_layers = 256;
+    bool success = wgpuDeviceGetLimits(_sg.wgpu.dev, &_sg.wgpu.limits);
+    SOKOL_ASSERT(success);
+
+    const WGPULimits* l = &_sg.wgpu.limits.limits;
+    _sg.limits.max_image_size_2d = (int) l->maxTextureDimension2D;
+    _sg.limits.max_image_size_cube = (int) l->maxTextureDimension2D; // not a bug, see: https://github.com/gpuweb/gpuweb/issues/1327
+    _sg.limits.max_image_size_3d = (int) l->maxTextureDimension3D;
+    _sg.limits.max_image_size_array = (int) l->maxTextureDimension2D;
+    _sg.limits.max_image_array_layers = (int) l->maxTextureArrayLayers;
     _sg.limits.max_vertex_attrs = SG_MAX_VERTEX_ATTRIBUTES;
 
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
@@ -12595,6 +12600,8 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     _sg.wgpu.depth_stencil_view_cb = (WGPUTextureView(*)(void)) desc->context.wgpu.depth_stencil_view_cb;
     _sg.wgpu.depth_stencil_view_userdata_cb = (WGPUTextureView(*)(void*)) desc->context.wgpu.depth_stencil_view_userdata_cb;
     _sg.wgpu.user_data = desc->context.wgpu.user_data;
+    _sg.wgpu.queue = wgpuDeviceGetQueue(_sg.wgpu.dev);
+    SOKOL_ASSERT(_sg.wgpu.queue);
 
     // setup WebGPU features and limits
     _sg_wgpu_init_caps();
@@ -12627,9 +12634,10 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
     SOKOL_ASSERT(_sg.wgpu.render_cmd_enc);
     _sg.wgpu.valid = false;
     _sg_wgpu_ubpool_discard();
-    wgpuBindGroupRelease(_sg.wgpu.empty_bind_group);
-    wgpuCommandEncoderRelease(_sg.wgpu.render_cmd_enc);
-    _sg.wgpu.render_cmd_enc = 0;
+    wgpuBindGroupRelease(_sg.wgpu.empty_bind_group); _sg.wgpu.empty_bind_group = 0;
+    wgpuCommandEncoderRelease(_sg.wgpu.render_cmd_enc); _sg.wgpu.render_cmd_enc = 0;
+    wgpuQueueRelease(_sg.wgpu.queue); _sg.wgpu.queue = 0;
+
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_reset_state_cache(void) {
@@ -12669,6 +12677,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
         wgpu_buf_desc.usage = _sg_wgpu_buffer_usage(buf->cmn.type, buf->cmn.usage);
         wgpu_buf_desc.size = wgpu_buf_size;
         wgpu_buf_desc.mappedAtCreation = map_at_creation;
+        wgpu_buf_desc.label = desc->label;
         buf->wgpu.buf = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &wgpu_buf_desc);
         if (0 == buf->wgpu.buf) {
             _SG_ERROR(WGPU_CREATE_BUFFER_FAILED);
@@ -12849,7 +12858,7 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_sampler(_sg_sampler_t* smp) {
 */
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
-    SOKOL_ASSERT(desc->vs.bytecode.ptr && desc->fs.bytecode.ptr);
+    SOKOL_ASSERT(desc->vs.source && desc->fs.source);
 
     bool success = true;
 /*
@@ -13254,11 +13263,8 @@ _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
     wgpuCommandEncoderRelease(_sg.wgpu.render_cmd_enc);
     _sg.wgpu.render_cmd_enc = 0;
 
-    WGPUQueue wgpu_queue = wgpuDeviceGetQueue(_sg.wgpu.dev);
-    SOKOL_ASSERT(wgpu_queue);
-    wgpuQueueSubmit(wgpu_queue, 1, &wgpu_cmd_buf);
+    wgpuQueueSubmit(_sg.wgpu.queue, 1, &wgpu_cmd_buf);
     wgpuCommandBufferRelease(wgpu_cmd_buf);
-    wgpuQueueRelease(wgpu_queue);
 
     // create a new render-command-encoder for next frame
     WGPUCommandEncoderDescriptor cmd_enc_desc;
@@ -14580,18 +14586,14 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
         #if defined(SOKOL_D3D11)
             _SG_VALIDATE(0 != desc->attrs[0].sem_name, VALIDATE_SHADERDESC_ATTR_SEMANTICS);
         #endif
-        #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES3)
-            // on GL, must provide shader source code
+        #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES3) || defined(SOKOL_WGPU)
+            // on GL or WebGPU, must provide shader source code
             _SG_VALIDATE(0 != desc->vs.source, VALIDATE_SHADERDESC_SOURCE);
             _SG_VALIDATE(0 != desc->fs.source, VALIDATE_SHADERDESC_SOURCE);
         #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
             // on Metal or D3D11, must provide shader source code or byte code
             _SG_VALIDATE((0 != desc->vs.source)||(0 != desc->vs.bytecode.ptr), VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
             _SG_VALIDATE((0 != desc->fs.source)||(0 != desc->fs.bytecode.ptr), VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
-        #elif defined(SOKOL_WGPU)
-            // on WGPU byte code must be provided
-            _SG_VALIDATE((0 != desc->vs.bytecode.ptr), VALIDATE_SHADERDESC_BYTECODE);
-            _SG_VALIDATE((0 != desc->fs.bytecode.ptr), VALIDATE_SHADERDESC_BYTECODE);
         #else
             // Dummy Backend, don't require source or bytecode
         #endif
