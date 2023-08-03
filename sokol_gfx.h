@@ -2904,7 +2904,11 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_FAILED, "failed to create render pipeline state (metal)") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_OUTPUT, "") \
     _SG_LOGITEM_XMACRO(WGPU_MAP_UNIFORM_BUFFER_FAILED, "failed to map uniform buffer (wgpu)") \
-    _SG_LOGITEM_XMACRO(WGPU_CREATE_BUFFER_FAILED, "failed to create buffer (wgpu)") \
+    _SG_LOGITEM_XMACRO(WGPU_CREATE_BUFFER_FAILED, "wgpuDeviceCreateBuffer() failed") \
+    _SG_LOGITEM_XMACRO(WGPU_CREATE_SHADER_MODULE_FAILED, "wgpuDeviceCreateShaderModule failed") \
+    _SG_LOGITEM_XMACRO(WGPU_SHADER_TOO_MANY_IMAGES, "shader uses too many sampled images on shader stage (wgpu)") \
+    _SG_LOGITEM_XMACRO(WGPU_SHADER_TOO_MANY_SAMPLERS, "shader uses too many samplers on shader stage (wgpu)") \
+    _SG_LOGITEM_XMACRO(WGPU_SHADER_CREATE_BINDGROUP_LAYOUT_FAILED, "wgpuDeviceCreateBindGroupLayout for shader stage failed") \
     _SG_LOGITEM_XMACRO(UNINIT_BUFFER_ACTIVE_CONTEXT_MISMATCH, "active context mismatch in buffer uninit (must be same as for creation)") \
     _SG_LOGITEM_XMACRO(UNINIT_IMAGE_ACTIVE_CONTEXT_MISMATCH, "active context mismatch in image uninit (must be same as for creation)") \
     _SG_LOGITEM_XMACRO(UNINIT_SAMPLER_ACTIVE_CONTEXT_MISMATCH, "active context mismatch in sampler uninit (must be same as for creation)") \
@@ -11976,7 +11980,7 @@ _SOKOL_PRIVATE WGPUStoreOp _sg_wgpu_store_op(sg_store_action a) {
     }
 }
 
-_SOKOL_PRIVATE WGPUTextureViewDimension _sg_wgpu_tex_viewdim(sg_image_type t) {
+_SOKOL_PRIVATE WGPUTextureViewDimension _sg_wgpu_tex_view_dimension(sg_image_type t) {
     switch (t) {
         case SG_IMAGETYPE_2D:       return WGPUTextureViewDimension_2D;
         case SG_IMAGETYPE_CUBE:     return WGPUTextureViewDimension_Cube;
@@ -12002,6 +12006,15 @@ _SOKOL_PRIVATE WGPUTextureDimension _sg_wgpu_tex_dim(sg_image_type t) {
         return WGPUTextureDimension_3D;
     } else {
         return WGPUTextureDimension_2D;
+    }
+}
+
+_SOKOL_PRIVATE WGPUSamplerBindingType _sg_wgpu_sampler_binding_type(sg_sampler_type t) {
+    switch (t) {
+        // FIXME: NonFiltering
+        case SG_SAMPLERTYPE_SAMPLE: return WGPUSamplerBindingType_Filtering;
+        case SG_SAMPLERTYPE_COMPARE: return WGPUSamplerBindingType_Comparison;
+        default: SOKOL_UNREACHABLE; return WGPUSamplerBindingType_Force32;
     }
 }
 
@@ -12860,62 +12873,76 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
     SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(desc->vs.source && desc->fs.source);
 
-    bool success = true;
-/*
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS) ? &desc->vs : &desc->fs;
-        SOKOL_ASSERT((stage_desc->bytecode.size & 3) == 0);
 
         _sg_shader_stage_t* cmn_stage = &shd->cmn.stage[stage_index];
         _sg_wgpu_shader_stage_t* wgpu_stage = &shd->wgpu.stage[stage_index];
-
         _sg_strcpy(&wgpu_stage->entry, stage_desc->entry);
+
+        WGPUShaderModuleWGSLDescriptor wgpu_shdmod_wgsl_desc;
+        _sg_clear(&wgpu_shdmod_wgsl_desc, sizeof(wgpu_shdmod_wgsl_desc));
+        wgpu_shdmod_wgsl_desc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
+        wgpu_shdmod_wgsl_desc.code = stage_desc->source;
+
         WGPUShaderModuleDescriptor wgpu_shdmod_desc;
         _sg_clear(&wgpu_shdmod_desc, sizeof(wgpu_shdmod_desc));
-        wgpu_shdmod_desc.codeSize = stage_desc->bytecode.size >> 2;
-        wgpu_shdmod_desc.code = (const uint32_t*) stage_desc->bytecode.ptr;
+        wgpu_shdmod_desc.nextInChain = &wgpu_shdmod_wgsl_desc.chain;
+        wgpu_shdmod_desc.label = desc->label;
+
         wgpu_stage->module = wgpuDeviceCreateShaderModule(_sg.wgpu.dev, &wgpu_shdmod_desc);
         if (0 == wgpu_stage->module) {
-            success = false;
+            _SG_ERROR(WGPU_CREATE_SHADER_MODULE_FAILED);
+            return SG_RESOURCESTATE_FAILED;
         }
 
-        // create image/sampler bind group for the shader stage
-        WGPUShaderStage vis = (stage_index == SG_SHADERSTAGE_VS) ? WGPUShaderStage_Vertex : WGPUShaderStage_Fragment;
-        int num_imgs = cmn_stage->num_images;
-        if (num_imgs > _SG_WGPU_MAX_SHADERSTAGE_IMAGES) {
-            num_imgs = _SG_WGPU_MAX_SHADERSTAGE_IMAGES;
+        // create image/sampler bind group
+        WGPUShaderStage wgpu_shader_stage = (stage_index == SG_SHADERSTAGE_VS) ? WGPUShaderStage_Vertex : WGPUShaderStage_Fragment;
+        const int num_images = cmn_stage->num_images;
+        if (num_images > (int)_sg.wgpu.limits.limits.maxSampledTexturesPerShaderStage) {
+            _SG_ERROR(WGPU_SHADER_TOO_MANY_IMAGES);
+            return SG_RESOURCESTATE_FAILED;
         }
-        WGPUBindGroupLayoutBinding bglb_desc[_SG_WGPU_MAX_SHADERSTAGE_IMAGES * 2];
-        _sg_clear(bglb_desc, sizeof(bglb_desc));
-        for (int img_index = 0; img_index < num_imgs; img_index++) {
-            // texture- and sampler-bindings
-            WGPUBindGroupLayoutBinding* tex_desc = &bglb_desc[img_index*2 + 0];
-            WGPUBindGroupLayoutBinding* smp_desc = &bglb_desc[img_index*2 + 1];
-
-            tex_desc->binding = img_index;
-            tex_desc->visibility = vis;
-            tex_desc->type = WGPUBindingType_SampledTexture;
-            tex_desc->textureDimension = _sg_wgpu_tex_viewdim(cmn_stage->images[img_index].image_type);
-            tex_desc->textureComponentType = _sg_wgpu_tex_comptype(cmn_stage->images[img_index].sampler_type);
-
-            smp_desc->binding = img_index + _SG_WGPU_MAX_SHADERSTAGE_IMAGES;
-            smp_desc->visibility = vis;
-            smp_desc->type = WGPUBindingType_Sampler;
+        const int num_samplers = cmn_stage->num_samplers;
+        if (num_samplers > (int)_sg.wgpu.limits.limits.maxSamplersPerShaderStage) {
+            _SG_ERROR(WGPU_SHADER_TOO_MANY_SAMPLERS);
+            return SG_RESOURCESTATE_FAILED;
         }
-        WGPUBindGroupLayoutDescriptor img_bgl_desc;
-        _sg_clear(&img_bgl_desc, sizeof(img_bgl_desc));
-        img_bgl_desc.bindingCount = num_imgs * 2;
-        img_bgl_desc.bindings = &bglb_desc[0];
-        wgpu_stage->bind_group_layout = wgpuDeviceCreateBindGroupLayout(_sg.wgpu.dev, &img_bgl_desc);
-        SOKOL_ASSERT(wgpu_stage->bind_group_layout);
+        WGPUBindGroupLayoutEntry wgpu_bgl_entries[SG_MAX_SHADERSTAGE_IMAGES + SG_MAX_SHADERSTAGE_SAMPLERS];
+        _sg_clear(wgpu_bgl_entries, sizeof(wgpu_bgl_entries));
+        for (int img_index = 0; img_index < num_images; img_index++) {
+            const int bind_index = img_index;
+            WGPUBindGroupLayoutEntry* wgpu_bgl_entry = &wgpu_bgl_entries[bind_index];
+            const sg_shader_image_desc* img_desc = &stage_desc->images[img_index];
+            wgpu_bgl_entry->binding = (uint32_t)bind_index;
+            wgpu_bgl_entry->visibility = wgpu_shader_stage;
+            wgpu_bgl_entry->texture.viewDimension = _sg_wgpu_tex_view_dimension(img_desc->image_type);
+            wgpu_bgl_entry->texture.sampleType = _sg_wgpu_tex_sample_type(img_desc->sample_type);
+            wgpu_bgl_entry->texture.multisampled = img_desc->multisampled;
+        }
+        for (int smp_index = 0; smp_index < num_samplers; smp_index++) {
+            const int bind_index = smp_index;
+            WGPUBindGroupLayoutEntry* wgpu_bgl_entry = &wgpu_bgl_entries[bind_index];
+            const sg_shader_sampler_desc* smp_desc = &stage_desc->samplers[smp_index];
+            wgpu_bgl_entry->binding = (uint32_t)bind_index;
+            wgpu_bgl_entry->visibility = wgpu_shader_stage;
+            wgpu_bgl_entry->sampler.type = _sg_wgpu_sampler_binding_type(smp_desc->sampler_type);
+        }
+        WGPUBindGroupLayoutDescriptor wgpu_bgl_desc;
+        _sg_clear(&wgpu_bgl_desc, sizeof(wgpu_bgl_desc));
+        wgpu_bgl_desc.entryCount = (size_t)(num_images + num_samplers);
+        wgpu_bgl_desc.entries = &wgpu_bgl_entries[0];
+        wgpu_stage->bind_group_layout = wgpuDeviceCreateBindGroupLayout(_sg.wgpu.dev, &wgpu_bgl_desc);
+        if (wgpu_stage->bind_group_layout == 0) {
+            _SG_ERROR(WGPU_SHADER_CREATE_BINDGROUP_LAYOUT_FAILED);
+            return SG_RESOURCESTATE_FAILED;
+        }
     }
-*/
-    return success ? SG_RESOURCESTATE_VALID : SG_RESOURCESTATE_FAILED;
+    return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_shader(_sg_shader_t* shd) {
     SOKOL_ASSERT(shd);
-/*
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         _sg_wgpu_shader_stage_t* wgpu_stage = &shd->wgpu.stage[stage_index];
         if (wgpu_stage->module) {
@@ -12927,7 +12954,6 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_shader(_sg_shader_t* shd) {
             wgpu_stage->bind_group_layout = 0;
         }
     }
-*/
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
