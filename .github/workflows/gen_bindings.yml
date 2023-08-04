@@ -101,7 +101,7 @@ jobs:
           repository: floooh/sokol-zig
       - uses: goto-bus-stop/setup-zig@v2
         with:
-          version: 0.11.0-dev.4004+a57608217
+          version: 0.11.0
       - uses: actions/download-artifact@v3
         with:
           name: ignore-me-zig
