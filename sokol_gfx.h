@@ -4798,6 +4798,7 @@ typedef struct {
 #define _SG_WGPU_ROWPITCH_ALIGN (256)
 #define _SG_WGPU_MAX_SHADERSTAGE_IMAGES (8)
 #define _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE (1<<16)
+#define _SG_WGPU_NUM_BINDGROUPS (3) // 1: uniforms, 2: vertex stage images & samplers, 3: fragment stage images & samplers
 
 typedef struct {
     _sg_slot_t slot;
@@ -4848,7 +4849,7 @@ typedef struct {
     _sg_shader_t* shader;
     struct {
         WGPURenderPipeline pip;
-        uint32_t stencil_ref;
+        WGPUColor blend_color;
     } wgpu;
 } _sg_wgpu_pipeline_t;
 typedef _sg_wgpu_pipeline_t _sg_pipeline_t;
@@ -12063,6 +12064,16 @@ _SOKOL_PRIVATE WGPUIndexFormat _sg_wgpu_indexformat(sg_index_type t) {
     return (t == SG_INDEXTYPE_UINT16) ? WGPUIndexFormat_Uint16 : WGPUIndexFormat_Uint32;
 }
 
+_SOKOL_PRIVATE WGPUIndexFormat _sg_wgpu_stripindexformat(sg_primitive_type prim_type, sg_index_type idx_type) {
+    if (idx_type == SG_INDEXTYPE_NONE) {
+        return WGPUIndexFormat_Undefined;
+    } else if ((prim_type == SG_PRIMITIVETYPE_LINE_STRIP) || (prim_type == SG_PRIMITIVETYPE_TRIANGLE_STRIP)) {
+        return _sg_wgpu_indexformat(idx_type);
+    } else {
+        return WGPUIndexFormat_Undefined;
+    }
+}
+
 _SOKOL_PRIVATE WGPUVertexStepMode _sg_wgpu_stepmode(sg_vertex_step s) {
     return (s == SG_VERTEXSTEP_PER_VERTEX) ? WGPUVertexStepMode_Vertex : WGPUVertexStepMode_Instance;
 }
@@ -12958,137 +12969,140 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_shader(_sg_shader_t* shd) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && shd && desc);
-/*
     SOKOL_ASSERT(desc->shader.id == shd->slot.id);
     SOKOL_ASSERT(shd->wgpu.stage[SG_SHADERSTAGE_VS].bind_group_layout);
     SOKOL_ASSERT(shd->wgpu.stage[SG_SHADERSTAGE_FS].bind_group_layout);
     pip->shader = shd;
-    pip->wgpu.stencil_ref = (uint32_t) desc->stencil.ref;
 
-    WGPUBindGroupLayout pip_bgl[3] = {
+    pip->wgpu.blend_color.r = (double) desc->blend_color.r;
+    pip->wgpu.blend_color.g = (double) desc->blend_color.g;
+    pip->wgpu.blend_color.b = (double) desc->blend_color.b;
+    pip->wgpu.blend_color.a = (double) desc->blend_color.a;
+
+    // - 1 bindgroup for uniform block,
+    // - 1 bindgroup for vertex shader resources
+    // - 1 bindgroup for fragment shader resources
+    WGPUBindGroupLayout wgpu_bgl[_SG_WGPU_NUM_BINDGROUPS] = {
         _sg.wgpu.ub.bindgroup_layout,
         shd->wgpu.stage[SG_SHADERSTAGE_VS].bind_group_layout,
         shd->wgpu.stage[SG_SHADERSTAGE_FS].bind_group_layout
     };
-    WGPUPipelineLayoutDescriptor pl_desc;
-    _sg_clear(&pl_desc, sizeof(pl_desc));
-    pl_desc.bindGroupLayoutCount = 3;
-    pl_desc.bindGroupLayouts = &pip_bgl[0];
-    WGPUPipelineLayout pip_layout = wgpuDeviceCreatePipelineLayout(_sg.wgpu.dev, &pl_desc);
+    WGPUPipelineLayoutDescriptor wgpu_pl_desc;
+    _sg_clear(&wgpu_pl_desc, sizeof(wgpu_pl_desc));
+    wgpu_pl_desc.bindGroupLayoutCount = _SG_WGPU_NUM_BINDGROUPS;
+    wgpu_pl_desc.bindGroupLayouts = &wgpu_bgl[0];
+    const WGPUPipelineLayout wgpu_pip_layout = wgpuDeviceCreatePipelineLayout(_sg.wgpu.dev, &wgpu_pl_desc);
+    SOKOL_ASSERT(wgpu_pip_layout);
 
-    WGPUVertexBufferLayoutDescriptor vb_desc[SG_MAX_VERTEX_BUFFERS];
-    _sg_clear(&vb_desc, sizeof(vb_desc));
-    WGPUVertexAttributeDescriptor va_desc[SG_MAX_VERTEX_BUFFERS][SG_MAX_VERTEX_ATTRIBUTES];
-    _sg_clear(&va_desc, sizeof(va_desc));
-    int vb_idx = 0;
-    for (; vb_idx < SG_MAX_VERTEX_BUFFERS; vb_idx++) {
-        const sg_buffer_layout_desc* src_vb_desc = &desc->layout.buffers[vb_idx];
-        if (0 == src_vb_desc->stride) {
+    WGPUVertexBufferLayout wgpu_vb_layouts[SG_MAX_VERTEX_BUFFERS];
+    _sg_clear(wgpu_vb_layouts, sizeof(wgpu_vb_layouts));
+    WGPUVertexAttribute wgpu_vtx_attrs[SG_MAX_VERTEX_BUFFERS][SG_MAX_VERTEX_ATTRIBUTES];
+    _sg_clear(wgpu_vtx_attrs, sizeof(wgpu_vtx_attrs));
+    int wgpu_vb_num = 0;
+    for (int vb_idx = 0; vb_idx < SG_MAX_VERTEX_BUFFERS; vb_idx++, wgpu_vb_num++) {
+        const sg_vertex_buffer_layout_state* vbl_state = &desc->layout.buffers[vb_idx];
+        if (0 == vbl_state->stride) {
             break;
         }
-        vb_desc[vb_idx].arrayStride = src_vb_desc->stride;
-        vb_desc[vb_idx].stepMode = _sg_wgpu_stepmode(src_vb_desc->step_func);
-        int va_idx = 0;
-        for (int va_loc = 0; va_loc < SG_MAX_VERTEX_ATTRIBUTES; va_loc++) {
-            const sg_vertex_attr_desc* src_va_desc = &desc->layout.attrs[va_loc];
-            if (SG_VERTEXFORMAT_INVALID == src_va_desc->format) {
-                break;
-            }
-            pip->cmn.vertex_buffer_layout_active[src_va_desc->buffer_index] = true;
-            if (vb_idx == src_va_desc->buffer_index) {
-                va_desc[vb_idx][va_idx].format = _sg_wgpu_vertexformat(src_va_desc->format);
-                va_desc[vb_idx][va_idx].offset = src_va_desc->offset;
-                va_desc[vb_idx][va_idx].shaderLocation = va_loc;
-                va_idx++;
+        wgpu_vb_layouts[vb_idx].arrayStride = (uint64_t)vbl_state->stride;
+        wgpu_vb_layouts[vb_idx].stepMode = _sg_wgpu_stepmode(vbl_state->step_func);
+        wgpu_vb_layouts[vb_idx].attributes = &wgpu_vtx_attrs[vb_idx][0];
+    }
+    for (int va_idx = 0; va_idx < SG_MAX_VERTEX_ATTRIBUTES; va_idx++) {
+        const sg_vertex_attr_state* va_state = &desc->layout.attrs[va_idx];
+        if (SG_VERTEXFORMAT_INVALID == va_state->format) {
+            break;
+        }
+        const int vb_idx = va_state->buffer_index;
+        SOKOL_ASSERT(vb_idx < SG_MAX_VERTEX_BUFFERS);
+        pip->cmn.vertex_buffer_layout_active[vb_idx] = true;
+        const uint32_t wgpu_attr_idx = wgpu_vb_layouts[vb_idx].attributeCount;
+        wgpu_vb_layouts[vb_idx].attributeCount += 1;
+        wgpu_vtx_attrs[vb_idx][wgpu_attr_idx].format = _sg_wgpu_vertexformat(va_state->format);
+        wgpu_vtx_attrs[vb_idx][wgpu_attr_idx].offset = (uint64_t)va_state->offset;
+        wgpu_vtx_attrs[vb_idx][wgpu_attr_idx].shaderLocation = (uint32_t)va_idx;
+    }
+
+    WGPURenderPipelineDescriptor wgpu_pip_desc;
+    _sg_clear(&wgpu_pip_desc, sizeof(wgpu_pip_desc));
+    wgpu_pip_desc.label = desc->label;
+    wgpu_pip_desc.layout = wgpu_pip_layout;
+    wgpu_pip_desc.vertex.module = shd->wgpu.stage[SG_SHADERSTAGE_VS].module;
+    wgpu_pip_desc.vertex.entryPoint = shd->wgpu.stage[SG_SHADERSTAGE_VS].entry.buf;
+    wgpu_pip_desc.vertex.bufferCount = (size_t)wgpu_vb_num;
+    wgpu_pip_desc.vertex.buffers = &wgpu_vb_layouts[0];
+    wgpu_pip_desc.primitive.topology = _sg_wgpu_topology(desc->primitive_type);
+    wgpu_pip_desc.primitive.stripIndexFormat = _sg_wgpu_stripindexformat(desc->primitive_type, desc->index_type);
+    wgpu_pip_desc.primitive.frontFace = _sg_wgpu_frontface(desc->face_winding);
+    wgpu_pip_desc.primitive.cullMode = _sg_wgpu_cullmode(desc->cull_mode);
+    if (SG_PIXELFORMAT_NONE != desc->depth.pixel_format) {
+        WGPUDepthStencilState wgpu_ds_state;
+        _sg_clear(&wgpu_ds_state, sizeof(wgpu_ds_state));
+        wgpu_ds_state.format = _sg_wgpu_textureformat(desc->depth.pixel_format);
+        wgpu_ds_state.depthWriteEnabled = desc->depth.write_enabled;
+        wgpu_ds_state.depthCompare = _sg_wgpu_comparefunc(desc->depth.compare);
+        wgpu_ds_state.stencilFront.compare = _sg_wgpu_comparefunc(desc->stencil.front.compare);
+        wgpu_ds_state.stencilFront.failOp = _sg_wgpu_stencilop(desc->stencil.front.fail_op);
+        wgpu_ds_state.stencilFront.depthFailOp = _sg_wgpu_stencilop(desc->stencil.front.depth_fail_op);
+        wgpu_ds_state.stencilFront.passOp = _sg_wgpu_stencilop(desc->stencil.front.pass_op);
+        wgpu_ds_state.stencilBack.compare = _sg_wgpu_comparefunc(desc->stencil.back.compare);
+        wgpu_ds_state.stencilBack.failOp = _sg_wgpu_stencilop(desc->stencil.back.fail_op);
+        wgpu_ds_state.stencilBack.depthFailOp = _sg_wgpu_stencilop(desc->stencil.back.depth_fail_op);
+        wgpu_ds_state.stencilBack.passOp = _sg_wgpu_stencilop(desc->stencil.back.pass_op);
+        wgpu_ds_state.stencilReadMask = desc->stencil.read_mask;
+        wgpu_ds_state.stencilWriteMask = desc->stencil.write_mask;
+        wgpu_ds_state.depthBias = (int32_t)desc->depth.bias;
+        wgpu_ds_state.depthBiasSlopeScale = desc->depth.bias_slope_scale;
+        wgpu_ds_state.depthBiasClamp = desc->depth.bias_clamp;
+        wgpu_pip_desc.depthStencil = &wgpu_ds_state;
+    }
+    wgpu_pip_desc.multisample.count = (uint32_t)desc->sample_count;
+    wgpu_pip_desc.multisample.mask = 0xFFFFFFFF;
+    wgpu_pip_desc.multisample.alphaToCoverageEnabled = desc->alpha_to_coverage_enabled;
+    if (desc->color_count > 0) {
+        WGPUFragmentState wgpu_frag_state;
+        _sg_clear(&wgpu_frag_state, sizeof(wgpu_frag_state));
+        WGPUColorTargetState wgpu_ctgt_state[SG_MAX_COLOR_ATTACHMENTS];
+        _sg_clear(&wgpu_ctgt_state, sizeof(wgpu_ctgt_state));
+        WGPUBlendState wgpu_blend_state[SG_MAX_COLOR_ATTACHMENTS];
+        _sg_clear(&wgpu_blend_state, sizeof(wgpu_blend_state));
+        wgpu_frag_state.module = shd->wgpu.stage[SG_SHADERSTAGE_FS].module;
+        wgpu_frag_state.entryPoint = shd->wgpu.stage[SG_SHADERSTAGE_FS].entry.buf;
+        wgpu_frag_state.targetCount = (size_t)desc->color_count;
+        wgpu_frag_state.targets = &wgpu_ctgt_state[0];
+        for (int i = 0; i < desc->color_count; i++) {
+            SOKOL_ASSERT(i < SG_MAX_COLOR_ATTACHMENTS);
+            wgpu_ctgt_state[i].format = _sg_wgpu_textureformat(desc->colors[i].pixel_format);
+            wgpu_ctgt_state[i].writeMask = _sg_wgpu_colorwritemask(desc->colors[i].write_mask);
+            if (desc->colors[i].blend.enabled) {
+                wgpu_ctgt_state[i].blend = &wgpu_blend_state[i];
+                wgpu_blend_state[i].color.operation = _sg_wgpu_blendop(desc->colors[i].blend.op_rgb);
+                wgpu_blend_state[i].color.srcFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.src_factor_rgb);
+                wgpu_blend_state[i].color.dstFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.dst_factor_rgb);
+                wgpu_blend_state[i].alpha.operation = _sg_wgpu_blendop(desc->colors[i].blend.op_alpha);
+                wgpu_blend_state[i].alpha.srcFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.src_factor_alpha);
+                wgpu_blend_state[i].alpha.dstFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.dst_factor_alpha);
             }
         }
-        vb_desc[vb_idx].attributeCount = va_idx;
-        vb_desc[vb_idx].attributes = &va_desc[vb_idx][0];
+        wgpu_pip_desc.fragment = &wgpu_frag_state;
     }
-    WGPUVertexStateDescriptor vx_state_desc;
-    _sg_clear(&vx_state_desc, sizeof(vx_state_desc));
-    vx_state_desc.indexFormat = _sg_wgpu_indexformat(desc->index_type);
-    vx_state_desc.vertexBufferCount = vb_idx;
-    vx_state_desc.vertexBuffers = vb_desc;
-
-    WGPURasterizationStateDescriptor rs_desc;
-    _sg_clear(&rs_desc, sizeof(rs_desc));
-    rs_desc.frontFace = _sg_wgpu_frontface(desc->face_winding);
-    rs_desc.cullMode = _sg_wgpu_cullmode(desc->cull_mode);
-    rs_desc.depthBias = (int32_t) desc->depth.bias;
-    rs_desc.depthBiasClamp = desc->depth.bias_clamp;
-    rs_desc.depthBiasSlopeScale = desc->depth.bias_slope_scale;
-
-    WGPUDepthStencilStateDescriptor ds_desc;
-    _sg_clear(&ds_desc, sizeof(ds_desc));
-    ds_desc.format = _sg_wgpu_textureformat(desc->depth.pixel_format);
-    ds_desc.depthWriteEnabled = desc->depth.write_enabled;
-    ds_desc.depthCompare = _sg_wgpu_comparefunc(desc->depth.compare);
-    ds_desc.stencilReadMask = desc->stencil.read_mask;
-    ds_desc.stencilWriteMask = desc->stencil.write_mask;
-    ds_desc.stencilFront.compare = _sg_wgpu_comparefunc(desc->stencil.front.compare);
-    ds_desc.stencilFront.failOp = _sg_wgpu_stencilop(desc->stencil.front.fail_op);
-    ds_desc.stencilFront.depthFailOp = _sg_wgpu_stencilop(desc->stencil.front.depth_fail_op);
-    ds_desc.stencilFront.passOp = _sg_wgpu_stencilop(desc->stencil.front.pass_op);
-    ds_desc.stencilBack.compare = _sg_wgpu_comparefunc(desc->stencil.back.compare);
-    ds_desc.stencilBack.failOp = _sg_wgpu_stencilop(desc->stencil.back.fail_op);
-    ds_desc.stencilBack.depthFailOp = _sg_wgpu_stencilop(desc->stencil.back.depth_fail_op);
-    ds_desc.stencilBack.passOp = _sg_wgpu_stencilop(desc->stencil.back.pass_op);
-
-    WGPUProgrammableStageDescriptor fs_desc;
-    _sg_clear(&fs_desc, sizeof(fs_desc));
-    fs_desc.module = shd->wgpu.stage[SG_SHADERSTAGE_FS].module;
-    fs_desc.entryPoint = shd->wgpu.stage[SG_SHADERSTAGE_VS].entry.buf;
-
-    WGPUColorStateDescriptor cs_desc[SG_MAX_COLOR_ATTACHMENTS];
-    _sg_clear(cs_desc, sizeof(cs_desc));
-    for (uint32_t i = 0; i < desc->color_count; i++) {
-        SOKOL_ASSERT(i < SG_MAX_COLOR_ATTACHMENTS);
-        cs_desc[i].format = _sg_wgpu_textureformat(desc->colors[i].pixel_format);
-        cs_desc[i].colorBlend.operation = _sg_wgpu_blendop(desc->colors[i].blend.op_rgb);
-        cs_desc[i].colorBlend.srcFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.src_factor_rgb);
-        cs_desc[i].colorBlend.dstFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.dst_factor_rgb);
-        cs_desc[i].alphaBlend.operation = _sg_wgpu_blendop(desc->colors[i].blend.op_alpha);
-        cs_desc[i].alphaBlend.srcFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.src_factor_alpha);
-        cs_desc[i].alphaBlend.dstFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.dst_factor_alpha);
-        cs_desc[i].writeMask = _sg_wgpu_colorwritemask(desc->colors[i].write_mask);
-    }
-
-    WGPURenderPipelineDescriptor pip_desc;
-    _sg_clear(&pip_desc, sizeof(pip_desc));
-    pip_desc.layout = pip_layout;
-    pip_desc.vertexStage.module = shd->wgpu.stage[SG_SHADERSTAGE_VS].module;
-    pip_desc.vertexStage.entryPoint = shd->wgpu.stage[SG_SHADERSTAGE_VS].entry.buf;
-    pip_desc.fragmentStage = &fs_desc;
-    pip_desc.vertexState = &vx_state_desc;
-    pip_desc.primitiveTopology  = _sg_wgpu_topology(desc->primitive_type);
-    pip_desc.rasterizationState = &rs_desc;
-    pip_desc.sampleCount = desc->sample_count;
-    if (SG_PIXELFORMAT_NONE != desc->depth.pixel_format) {
-        pip_desc.depthStencilState = &ds_desc;
-    }
-    pip_desc.colorStateCount = desc->color_count;
-    pip_desc.colorStates = cs_desc;
-    pip_desc.sampleMask = 0xFFFFFFFF;   // FIXME: ???
-    pip->wgpu.pip = wgpuDeviceCreateRenderPipeline(_sg.wgpu.dev, &pip_desc);
+    pip->wgpu.pip = wgpuDeviceCreateRenderPipeline(_sg.wgpu.dev, &wgpu_pip_desc);
     SOKOL_ASSERT(0 != pip->wgpu.pip);
-    wgpuPipelineLayoutRelease(pip_layout);
-*/
+    wgpuPipelineLayoutRelease(wgpu_pip_layout);
+
     return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
-/*
     if (pip == _sg.wgpu.cur_pipeline) {
         _sg.wgpu.cur_pipeline = 0;
-        _Sg.wgpu.cur_pipeline_id.id = SG_INVALID_ID;
+        _sg.wgpu.cur_pipeline_id.id = SG_INVALID_ID;
     }
     if (pip->wgpu.pip) {
         wgpuRenderPipelineRelease(pip->wgpu.pip);
         pip->wgpu.pip = 0;
     }
-*/
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_image_t** color_images, _sg_image_t** resolve_images, _sg_image_t* ds_img, const sg_pass_desc* desc) {
@@ -13337,18 +13351,16 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_scissor_rect(int x, int y, int w, int h, bool
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
-/*
     SOKOL_ASSERT(pip);
     SOKOL_ASSERT(pip->wgpu.pip);
     SOKOL_ASSERT(_sg.wgpu.in_pass);
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
-    _sg.wgpu.draw_indexed = (pip->cmn.index_type != SG_INDEXTYPE_NONE);
+    _sg.wgpu.use_indexed_draw = (pip->cmn.index_type != SG_INDEXTYPE_NONE);
     _sg.wgpu.cur_pipeline = pip;
     _sg.wgpu.cur_pipeline_id.id = pip->slot.id;
     wgpuRenderPassEncoderSetPipeline(_sg.wgpu.pass_enc, pip->wgpu.pip);
-    wgpuRenderPassEncoderSetBlendColor(_sg.wgpu.pass_enc, (WGPUColor*)&pip->cmn.blend_color);
-    wgpuRenderPassEncoderSetStencilReference(_sg.wgpu.pass_enc, pip->wgpu.stencil_ref);
-*/
+    wgpuRenderPassEncoderSetBlendConstant(_sg.wgpu.pass_enc, &pip->wgpu.blend_color);
+    wgpuRenderPassEncoderSetStencilReference(_sg.wgpu.pass_enc, pip->cmn.stencil.ref);
 }
 
 /*
