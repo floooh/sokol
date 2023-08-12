@@ -4796,9 +4796,12 @@ typedef struct {
 #define _SG_WGPU_STAGING_ALIGN (256)
 #define _SG_WGPU_STAGING_PIPELINE_SIZE (8)
 #define _SG_WGPU_ROWPITCH_ALIGN (256)
-#define _SG_WGPU_MAX_SHADERSTAGE_IMAGES (8)
 #define _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE (1<<16)
-#define _SG_WGPU_NUM_BINDGROUPS (3) // 1: uniforms, 2: vertex stage images & samplers, 3: fragment stage images & samplers
+#define _SG_WGPU_NUM_BINDGROUPS (3) // 0: uniforms, 1: vertex stage images & samplers, 2: fragment stage images & samplers
+#define _SG_WGPU_UNIFORMS_BINDGROUP_INDEX (0)
+#define _SG_WGPU_VS_BINDGROUP_INDEX (1)
+#define _SG_WGPU_FS_BINDGROUP_INDEX (2)
+
 
 typedef struct {
     _sg_slot_t slot;
@@ -12907,7 +12910,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
             return SG_RESOURCESTATE_FAILED;
         }
 
-        // create image/sampler bind group
+        // create image/sampler bind group layout:
+        //  - first all images
+        //  - followed by all samplers
         WGPUShaderStage wgpu_shader_stage = (stage_index == SG_SHADERSTAGE_VS) ? WGPUShaderStage_Vertex : WGPUShaderStage_Fragment;
         const int num_images = cmn_stage->num_images;
         if (num_images > (int)_sg.wgpu.limits.limits.maxSampledTexturesPerShaderStage) {
@@ -12932,7 +12937,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
             wgpu_bgl_entry->texture.multisampled = img_desc->multisampled;
         }
         for (int smp_index = 0; smp_index < num_samplers; smp_index++) {
-            const int bind_index = smp_index;
+            const int bind_index = num_images + smp_index;
             WGPUBindGroupLayoutEntry* wgpu_bgl_entry = &wgpu_bgl_entries[bind_index];
             const sg_shader_sampler_desc* smp_desc = &stage_desc->samplers[smp_index];
             wgpu_bgl_entry->binding = (uint32_t)bind_index;
@@ -12982,11 +12987,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     // - 1 bindgroup for uniform block,
     // - 1 bindgroup for vertex shader resources
     // - 1 bindgroup for fragment shader resources
-    WGPUBindGroupLayout wgpu_bgl[_SG_WGPU_NUM_BINDGROUPS] = {
-        _sg.wgpu.ub.bindgroup_layout,
-        shd->wgpu.stage[SG_SHADERSTAGE_VS].bind_group_layout,
-        shd->wgpu.stage[SG_SHADERSTAGE_FS].bind_group_layout
-    };
+    WGPUBindGroupLayout wgpu_bgl[_SG_WGPU_NUM_BINDGROUPS];
+    wgpu_bgl[_SG_WGPU_UNIFORMS_BINDGROUP_INDEX] = _sg.wgpu.ub.bindgroup_layout;
+    wgpu_bgl[_SG_WGPU_VS_BINDGROUP_INDEX] = shd->wgpu.stage[SG_SHADERSTAGE_VS].bind_group_layout;
+    wgpu_bgl[_SG_WGPU_FS_BINDGROUP_INDEX] = shd->wgpu.stage[SG_SHADERSTAGE_FS].bind_group_layout;
     WGPUPipelineLayoutDescriptor wgpu_pl_desc;
     _sg_clear(&wgpu_pl_desc, sizeof(wgpu_pl_desc));
     wgpu_pl_desc.bindGroupLayoutCount = _SG_WGPU_NUM_BINDGROUPS;
@@ -13363,30 +13367,38 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
     wgpuRenderPassEncoderSetStencilReference(_sg.wgpu.pass_enc, pip->cmn.stencil.ref);
 }
 
-/*
-_SOKOL_PRIVATE WGPUBindGroup _sg_wgpu_create_images_bindgroup(WGPUBindGroupLayout bgl, _sg_image_t** imgs, int num_imgs) {
+_SOKOL_PRIVATE WGPUBindGroup _sg_wgpu_create_bindgroup(
+    WGPUBindGroupLayout bgl,
+    _sg_image_t** imgs, int num_imgs,
+    _sg_sampler_t** smps, int num_smps)
+{
     SOKOL_ASSERT(_sg.wgpu.dev);
-    SOKOL_ASSERT(num_imgs <= _SG_WGPU_MAX_SHADERSTAGE_IMAGES);
-    WGPUBindGroupBinding img_bgb[_SG_WGPU_MAX_SHADERSTAGE_IMAGES * 2];
-    _sg_clear(&img_bgb, sizeof(img_bgb));
+    SOKOL_ASSERT(imgs && (num_imgs <= SG_MAX_SHADERSTAGE_IMAGES));
+    SOKOL_ASSERT(smps && (num_smps <= SG_MAX_SHADERSTAGE_SAMPLERS));
+
+    WGPUBindGroupEntry wgpu_entries[SG_MAX_SHADERSTAGE_IMAGES + SG_MAX_SHADERSTAGE_SAMPLERS];
+    _sg_clear(&wgpu_entries, sizeof(wgpu_entries));
     for (int img_index = 0; img_index < num_imgs; img_index++) {
-        WGPUBindGroupBinding* tex_bdg = &img_bgb[img_index*2 + 0];
-        WGPUBindGroupBinding* smp_bdg = &img_bgb[img_index*2 + 1];
-        tex_bdg->binding = img_index;
-        tex_bdg->textureView = imgs[img_index]->wgpu.tex_view;
-        smp_bdg->binding = img_index + _SG_WGPU_MAX_SHADERSTAGE_IMAGES;
-        smp_bdg->sampler = imgs[img_index]->wgpu.sampler;
+        uint32_t wgpu_bind_index = (uint32_t)img_index;
+        WGPUBindGroupEntry* wgpu_entry = &wgpu_entries[wgpu_bind_index];
+        wgpu_entry->binding = wgpu_bind_index;
+        wgpu_entry->textureView = imgs[img_index]->wgpu.view;
+    }
+    for (int smp_index = 0; smp_index < num_smps; smp_index++) {
+        uint32_t wgpu_bind_index = (uint32_t)(num_imgs + smp_index);
+        WGPUBindGroupEntry* wgpu_entry = &wgpu_entries[wgpu_bind_index];
+        wgpu_entry->binding = wgpu_bind_index;
+        wgpu_entry->sampler = smps[smp_index]->wgpu.smp;
     }
     WGPUBindGroupDescriptor bg_desc;
     _sg_clear(&bg_desc, sizeof(bg_desc));
     bg_desc.layout = bgl;
-    bg_desc.bindingCount = 2 * num_imgs;
-    bg_desc.bindings = &img_bgb[0];
+    bg_desc.entryCount = (size_t)(num_imgs + num_smps);
+    bg_desc.entries = &wgpu_entries[0];
     WGPUBindGroup bg = wgpuDeviceCreateBindGroup(_sg.wgpu.dev, &bg_desc);
     SOKOL_ASSERT(bg);
     return bg;
 }
-*/
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_bindings(
     _sg_pipeline_t* pip,
@@ -13398,46 +13410,47 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_bindings(
     _sg_sampler_t** fs_smps, int num_fs_smps)
 {
     SOKOL_ASSERT(_sg.wgpu.in_pass);
-/*
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
     SOKOL_ASSERT(pip->shader && (pip->cmn.shader_id.id == pip->shader->slot.id));
 
     // index buffer
     if (ib) {
-        wgpuRenderPassEncoderSetIndexBuffer(_sg.wgpu.pass_enc, ib->wgpu.buf, ib_offset);
+        const WGPUIndexFormat format = _sg_wgpu_indexformat(pip->cmn.index_type);
+        const uint64_t buf_size = (uint64_t)ib->cmn.size;
+        const uint64_t offset = (uint64_t)ib_offset;
+        SOKOL_ASSERT(buf_size > offset);
+        const uint64_t max_bytes = buf_size - offset;
+        wgpuRenderPassEncoderSetIndexBuffer(_sg.wgpu.pass_enc, ib->wgpu.buf, format, offset, max_bytes);
     }
 
     // vertex buffers
     for (uint32_t slot = 0; slot < (uint32_t)num_vbs; slot++) {
-        wgpuRenderPassEncoderSetVertexBuffer(_sg.wgpu.pass_enc, slot, vbs[slot]->wgpu.buf, (uint64_t)vb_offsets[slot]);
+        const uint64_t buf_size = (uint64_t)vbs[slot]->cmn.size;
+        const uint64_t offset = (uint64_t)vb_offsets[slot];
+        SOKOL_ASSERT(buf_size > offset);
+        const uint64_t max_bytes = buf_size - offset;
+        wgpuRenderPassEncoderSetVertexBuffer(_sg.wgpu.pass_enc, slot, vbs[slot]->wgpu.buf, offset, max_bytes);
     }
 
-    // need to create throw-away bind groups for images
-    if (num_vs_imgs > 0) {
-        if (num_vs_imgs > _SG_WGPU_MAX_SHADERSTAGE_IMAGES) {
-            num_vs_imgs = _SG_WGPU_MAX_SHADERSTAGE_IMAGES;
-        }
+    // FIXME: create adhoc bind group objects for images and samplers per stage
+    if ((num_vs_imgs + num_vs_smps) > 0) {
         WGPUBindGroupLayout vs_bgl = pip->shader->wgpu.stage[SG_SHADERSTAGE_VS].bind_group_layout;
         SOKOL_ASSERT(vs_bgl);
-        WGPUBindGroup vs_img_bg = _sg_wgpu_create_images_bindgroup(vs_bgl, vs_imgs, num_vs_imgs);
-        wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, 1, vs_img_bg, 0, 0);
-        wgpuBindGroupRelease(vs_img_bg);
+        WGPUBindGroup vs_bg = _sg_wgpu_create_bindgroup(vs_bgl, vs_imgs, num_vs_imgs, vs_smps, num_vs_smps);
+        wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, _SG_WGPU_VS_BINDGROUP_INDEX, vs_bg, 0, 0);
+        wgpuBindGroupRelease(vs_bg);
     } else {
-        wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, 1, _sg.wgpu.empty_bind_group, 0, 0);
+        wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, _SG_WGPU_VS_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
     }
-    if (num_fs_imgs > 0) {
-        if (num_fs_imgs > _SG_WGPU_MAX_SHADERSTAGE_IMAGES) {
-            num_fs_imgs = _SG_WGPU_MAX_SHADERSTAGE_IMAGES;
-        }
+    if ((num_fs_imgs + num_fs_smps) > 0) {
         WGPUBindGroupLayout fs_bgl = pip->shader->wgpu.stage[SG_SHADERSTAGE_FS].bind_group_layout;
         SOKOL_ASSERT(fs_bgl);
-        WGPUBindGroup fs_img_bg = _sg_wgpu_create_images_bindgroup(fs_bgl, fs_imgs, num_fs_imgs);
-        wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, 2, fs_img_bg, 0, 0);
-        wgpuBindGroupRelease(fs_img_bg);
+        WGPUBindGroup fs_bg = _sg_wgpu_create_bindgroup(fs_bgl, fs_imgs, num_fs_imgs, fs_smps, num_fs_smps);
+        wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, _SG_WGPU_FS_BINDGROUP_INDEX, fs_bg, 0, 0);
+        wgpuBindGroupRelease(fs_bg);
     } else {
-        wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, 2, _sg.wgpu.empty_bind_group, 0, 0);
+        wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, _SG_WGPU_FS_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
     }
-*/
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(sg_shader_stage stage_index, int ub_index, const sg_range* data) {
