@@ -4013,7 +4013,6 @@ enum {
     _SG_DEFAULT_PASS_POOL_SIZE = 16,
     _SG_DEFAULT_CONTEXT_POOL_SIZE = 16,
     _SG_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
-    _SG_DEFAULT_STAGING_SIZE = 8 * 1024 * 1024,
     _SG_DEFAULT_MAX_COMMIT_LISTENERS = 1024,
 };
 
@@ -4793,14 +4792,12 @@ typedef struct {
 
 #elif defined(SOKOL_WGPU)
 
-#define _SG_WGPU_STAGING_ALIGN (256)
 #define _SG_WGPU_ROWPITCH_ALIGN (256)
-#define _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE (1<<16)
+#define _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE (1<<16) // also see WGPULimits.maxUniformBufferBindingSize
 #define _SG_WGPU_NUM_BINDGROUPS (3) // 0: uniforms, 1: vertex stage images & samplers, 2: fragment stage images & samplers
 #define _SG_WGPU_UNIFORMS_BINDGROUP_INDEX (0)
 #define _SG_WGPU_VS_BINDGROUP_INDEX (1)
 #define _SG_WGPU_FS_BINDGROUP_INDEX (2)
-
 
 typedef struct {
     _sg_slot_t slot;
@@ -5333,6 +5330,10 @@ _SOKOL_PRIVATE int _sg_pixelformat_bytesize(sg_pixel_format fmt) {
 }
 
 _SOKOL_PRIVATE int _sg_roundup(int val, int round_to) {
+    return (val+(round_to-1)) & ~(round_to-1);
+}
+
+_SOKOL_PRIVATE uint64_t _sg_roundup_u32(uint32_t val, uint32_t round_to) {
     return (val+(round_to-1)) & ~(round_to-1);
 }
 
@@ -12417,7 +12418,6 @@ _SOKOL_PRIVATE void _sg_wgpu_uniform_buffer_discard(void) {
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_uniform_buffer_on_begin_pass(void) {
-    // FIXME: is this still needed?
     wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc,
                                       0, // groupIndex 0 is reserved for uniform buffers
                                       _sg.wgpu.uniform.bind.group,
@@ -12549,10 +12549,7 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     _sg.wgpu.queue = wgpuDeviceGetQueue(_sg.wgpu.dev);
     SOKOL_ASSERT(_sg.wgpu.queue);
 
-    // setup WebGPU features and limits
     _sg_wgpu_init_caps();
-
-    // setup the uniform and staging buffer pools
     _sg_wgpu_uniform_buffer_init(desc);
 
     // create an empty bind group for shader stages without bound images
@@ -12773,33 +12770,6 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_sampler(_sg_sampler_t* smp) {
     // FIXME
 }
 
-/*
-    How BindGroups work in WebGPU:
-
-    - up to 4 bind groups can be bound simultaneously
-    - up to 16 bindings per bind group
-    - 'binding' slots are local per bind group
-    - in the shader:
-        layout(set=0, binding=1) corresponds to bind group 0, binding 1
-
-    Now how to map this to sokol-gfx's bind model:
-
-    Reduce SG_MAX_SHADERSTAGE_IMAGES to 8, then:
-
-        1 bind group for all 8 uniform buffers
-        1 bind group for vertex shader textures + samplers
-        1 bind group for fragment shader textures + samples
-
-    Alternatively:
-
-        1 bind group for 8 uniform buffer slots
-        1 bind group for 8 vs images + 8 vs samplers
-        1 bind group for 12 fs images
-        1 bind group for 12 fs samplers
-
-    I guess this means that we need to create BindGroups on the
-    fly during sg_apply_bindings() :/
-*/
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(desc->vs.source && desc->fs.source);
@@ -13343,6 +13313,7 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_bindings(
     }
 
     // FIXME: create adhoc bind group objects for images and samplers per stage
+    // (either use a bindgroup-cache or introduce bindgroups as sokol-gfx objects)
     if ((num_vs_imgs + num_vs_smps) > 0) {
         WGPUBindGroupLayout vs_bgl = pip->shader->wgpu.stage[SG_SHADERSTAGE_VS].bind_group_layout;
         SOKOL_ASSERT(vs_bgl);
@@ -13364,29 +13335,26 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_bindings(
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(sg_shader_stage stage_index, int ub_index, const sg_range* data) {
-/*
+    const uint32_t alignment = _sg.wgpu.limits.limits.minUniformBufferOffsetAlignment;
     SOKOL_ASSERT(_sg.wgpu.in_pass);
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
-    SOKOL_ASSERT((_sg.wgpu.ub.offset + data->size) <= _sg.wgpu.ub.num_bytes);
-    SOKOL_ASSERT((_sg.wgpu.ub.offset & (_SG_WGPU_STAGING_ALIGN-1)) == 0);
+    SOKOL_ASSERT((_sg.wgpu.uniform.offset + data->size) <= _sg.wgpu.uniform.num_bytes);
+    SOKOL_ASSERT((_sg.wgpu.uniform.offset & (alignment - 1)) == 0);
     SOKOL_ASSERT(_sg.wgpu.cur_pipeline && _sg.wgpu.cur_pipeline->shader);
     SOKOL_ASSERT(_sg.wgpu.cur_pipeline->slot.id == _sg.wgpu.cur_pipeline_id.id);
     SOKOL_ASSERT(_sg.wgpu.cur_pipeline->shader->slot.id == _sg.wgpu.cur_pipeline->cmn.shader_id.id);
     SOKOL_ASSERT(ub_index < _sg.wgpu.cur_pipeline->shader->cmn.stage[stage_index].num_uniform_blocks);
     SOKOL_ASSERT(data->size <= _sg.wgpu.cur_pipeline->shader->cmn.stage[stage_index].uniform_blocks[ub_index].size);
     SOKOL_ASSERT(data->size <= _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE);
-    SOKOL_ASSERT(0 != _sg.wgpu.ub.stage.ptr[_sg.wgpu.ub.stage.cur]);
 
-    uint8_t* dst_ptr = _sg.wgpu.ub.stage.ptr[_sg.wgpu.ub.stage.cur] + _sg.wgpu.ub.offset;
-    memcpy(dst_ptr, data->ptr, data->size);
-    _sg.wgpu.ub.bind_offsets[stage_index][ub_index] = _sg.wgpu.ub.offset;
+    wgpuQueueWriteBuffer(_sg.wgpu.queue, _sg.wgpu.uniform.buf, _sg.wgpu.uniform.offset, data->ptr, data->size);
+    _sg.wgpu.uniform.bind.offsets[stage_index][ub_index] = _sg.wgpu.uniform.offset;
     wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc,
-                                      0, // groupIndex 0 is reserved for uniform buffers
-                                      _sg.wgpu.ub.bindgroup,
+                                      _SG_WGPU_UNIFORMS_BINDGROUP_INDEX,
+                                      _sg.wgpu.uniform.bind.group,
                                       SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_UBS,
-                                      &_sg.wgpu.ub.bind_offsets[0][0]);
-    _sg.wgpu.ub.offset = _sg_roundup(_sg.wgpu.ub.offset + data->size, _SG_WGPU_STAGING_ALIGN);
-*/
+                                      &_sg.wgpu.uniform.bind.offsets[0][0]);
+    _sg.wgpu.uniform.offset = _sg_roundup_u32(_sg.wgpu.uniform.offset + data->size, alignment);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_draw(int base_element, int num_elements, int num_instances) {
