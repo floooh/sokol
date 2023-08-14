@@ -2905,7 +2905,9 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_OUTPUT, "") \
     _SG_LOGITEM_XMACRO(WGPU_MAP_UNIFORM_BUFFER_FAILED, "failed to map uniform buffer (wgpu)") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_BUFFER_FAILED, "wgpuDeviceCreateBuffer() failed") \
-    _SG_LOGITEM_XMACRO(WGPU_CREATE_SHADER_MODULE_FAILED, "wgpuDeviceCreateShaderModule failed") \
+    _SG_LOGITEM_XMACRO(WGPU_CREATE_TEXTURE_FAILED, "wgpuDeviceCreateTexture() failed") \
+    _SG_LOGITEM_XMACRO(WGPU_CREATE_TEXTURE_VIEW_FAILED, "wgpuTextureCreateView() failed") \
+    _SG_LOGITEM_XMACRO(WGPU_CREATE_SHADER_MODULE_FAILED, "wgpuDeviceCreateShaderModule() failed") \
     _SG_LOGITEM_XMACRO(WGPU_SHADER_TOO_MANY_IMAGES, "shader uses too many sampled images on shader stage (wgpu)") \
     _SG_LOGITEM_XMACRO(WGPU_SHADER_TOO_MANY_SAMPLERS, "shader uses too many samplers on shader stage (wgpu)") \
     _SG_LOGITEM_XMACRO(WGPU_SHADER_CREATE_BINDGROUP_LAYOUT_FAILED, "wgpuDeviceCreateBindGroupLayout for shader stage failed") \
@@ -11991,7 +11993,7 @@ _SOKOL_PRIVATE WGPUTextureViewDimension _sg_wgpu_texture_view_dimension(sg_image
     }
 }
 
-_SOKOL_PRIVATE WGPUTextureDimension _sg_wgpu_texture_dim(sg_image_type t) {
+_SOKOL_PRIVATE WGPUTextureDimension _sg_wgpu_texture_dimension(sg_image_type t) {
     if (SG_IMAGETYPE_3D == t) {
         return WGPUTextureDimension_3D;
     } else {
@@ -12431,104 +12433,6 @@ _SOKOL_PRIVATE void _sg_wgpu_uniform_buffer_on_commit(void) {
     _sg_clear(&_sg.wgpu.uniform.bind.offsets[0][0], sizeof(_sg.wgpu.uniform.bind.offsets));
 }
 
-/*
-// helper function to compute number of bytes needed in staging buffer to copy image data
-_SOKOL_PRIVATE uint32_t _sg_wgpu_image_data_buffer_size(const _sg_image_t* img) {
-    uint32_t num_bytes = 0;
-    const uint32_t num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
-    const uint32_t num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.num_slices : 1;
-    for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
-        const uint32_t mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
-        const uint32_t mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
-        // row-pitch must be 256-aligend
-        const uint32_t bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, _SG_WGPU_ROWPITCH_ALIGN);
-        num_bytes += bytes_per_slice * num_slices * num_faces;
-    }
-    return num_bytes;
-}
-
-_SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_data(WGPUBuffer stg_buf, uint8_t* stg_base_ptr, uint32_t stg_base_offset, _sg_image_t* img, const sg_image_data* data) {
-    SOKOL_ASSERT(_sg.wgpu.staging_cmd_enc);
-    SOKOL_ASSERT(stg_buf && stg_base_ptr);
-    SOKOL_ASSERT(img);
-    SOKOL_ASSERT(data);
-    uint32_t stg_offset = stg_base_offset;
-    const uint32_t num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
-    const uint32_t num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.num_slices : 1;
-    const sg_pixel_format fmt = img->cmn.pixel_format;
-    WGPUBufferCopyView src_view;
-    _sg_clear(&src_view, sizeof(src_view));
-    src_view.buffer = stg_buf;
-    WGPUTextureCopyView dst_view;
-    _sg_clear(&dst_view, sizeof(dst_view));
-    dst_view.texture = img->wgpu.tex;
-    WGPUExtent3D extent;
-    _sg_clear(&extent, sizeof(extent));
-
-    for (uint32_t face_index = 0; face_index < num_faces; face_index++) {
-        for (uint32_t mip_index = 0; mip_index < (uint32_t)img->cmn.num_mipmaps; mip_index++) {
-            SOKOL_ASSERT(data->subimage[face_index][mip_index].ptr);
-            SOKOL_ASSERT(data->subimage[face_index][mip_index].size > 0);
-            const uint8_t* src_base_ptr = (const uint8_t*)data->subimage[face_index][mip_index].ptr;
-            SOKOL_ASSERT(src_base_ptr);
-            uint8_t* dst_base_ptr = stg_base_ptr + stg_offset;
-
-            const uint32_t mip_width  = _sg_miplevel_dim(img->cmn.width, mip_index);
-            const uint32_t mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
-            const uint32_t mip_depth  = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : 1;
-            const uint32_t num_rows   = _sg_num_rows(fmt, mip_height);
-            const uint32_t src_bytes_per_row   = _sg_row_pitch(fmt, mip_width, 1);
-            const uint32_t dst_bytes_per_row   = _sg_row_pitch(fmt, mip_width, _SG_WGPU_ROWPITCH_ALIGN);
-            const uint32_t src_bytes_per_slice = _sg_surface_pitch(fmt, mip_width, mip_height, 1);
-            const uint32_t dst_bytes_per_slice = _sg_surface_pitch(fmt, mip_width, mip_height, _SG_WGPU_ROWPITCH_ALIGN);
-            SOKOL_ASSERT((uint32_t)data->subimage[face_index][mip_index].size == (src_bytes_per_slice * num_slices));
-            SOKOL_ASSERT(src_bytes_per_row <= dst_bytes_per_row);
-            SOKOL_ASSERT(src_bytes_per_slice == (src_bytes_per_row * num_rows));
-            SOKOL_ASSERT(dst_bytes_per_slice == (dst_bytes_per_row * num_rows));
-            _SOKOL_UNUSED(src_bytes_per_slice);
-
-            // copy data into mapped staging buffer
-            if (src_bytes_per_row == dst_bytes_per_row) {
-                // can do a single memcpy
-                uint32_t num_bytes = data->subimage[face_index][mip_index].size;
-                memcpy(dst_base_ptr, src_base_ptr, num_bytes);
-            } else {
-                // src/dst pitch doesn't match, need to copy row by row
-                uint8_t* dst_ptr = dst_base_ptr;
-                const uint8_t* src_ptr = src_base_ptr;
-                for (uint32_t slice_index = 0; slice_index < num_slices; slice_index++) {
-                    SOKOL_ASSERT(dst_ptr == dst_base_ptr + slice_index * dst_bytes_per_slice);
-                    for (uint32_t row_index = 0; row_index < num_rows; row_index++) {
-                        memcpy(dst_ptr, src_ptr, src_bytes_per_row);
-                        src_ptr += src_bytes_per_row;
-                        dst_ptr += dst_bytes_per_row;
-                    }
-                }
-            }
-
-            // record the staging copy operation into command encoder
-            src_view.imageHeight = mip_height;
-            src_view.rowPitch = dst_bytes_per_row;
-            dst_view.mipLevel = mip_index;
-            extent.width = mip_width;
-            extent.height = mip_height;
-            extent.depth = mip_depth;
-            SOKOL_ASSERT((img->cmn.type != SG_IMAGETYPE_CUBE) || (num_slices == 1));
-            for (uint32_t slice_index = 0; slice_index < num_slices; slice_index++) {
-                const uint32_t layer_index = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? slice_index : face_index;
-                src_view.offset = stg_offset;
-                dst_view.arrayLayer = layer_index;
-                wgpuCommandEncoderCopyBufferToTexture(_sg.wgpu.staging_cmd_enc, &src_view, &dst_view, &extent);
-                stg_offset += dst_bytes_per_slice;
-                SOKOL_ASSERT(stg_offset <= _sg.wgpu.staging.num_bytes);
-            }
-        }
-    }
-    SOKOL_ASSERT(stg_offset >= stg_base_offset);
-    return (stg_offset - stg_base_offset);
-}
-*/
-
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->context.wgpu.device);
@@ -12644,118 +12548,100 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_buffer(_sg_buffer_t* buf) {
     }
 }
 
-/*
-_SOKOL_PRIVATE void _sg_wgpu_init_texdesc_common(WGPUTextureDescriptor* wgpu_tex_desc, const sg_image_desc* desc) {
-    wgpu_tex_desc->usage = WGPUTextureUsage_Sampled|WGPUTextureUsage_CopyDst;
-    wgpu_tex_desc->dimension = _sg_wgpu_tex_dim(desc->type);
-    wgpu_tex_desc->size.width = desc->width;
-    wgpu_tex_desc->size.height = desc->height;
-    if (desc->type == SG_IMAGETYPE_3D) {
-        wgpu_tex_desc->size.depth = desc->num_slices;
-        wgpu_tex_desc->arrayLayerCount = 1;
-    } else if (desc->type == SG_IMAGETYPE_CUBE) {
-        wgpu_tex_desc->size.depth = 1;
-        wgpu_tex_desc->arrayLayerCount = 6;
-    } else {
-        wgpu_tex_desc->size.depth = 1;
-        wgpu_tex_desc->arrayLayerCount = desc->num_slices;
+_SOKOL_PRIVATE void _sg_wgpu_copy_image_data(const _sg_image_t* img, WGPUTexture wgpu_tex, const sg_image_data* data) {
+    WGPUTextureDataLayout wgpu_layout;
+    _sg_clear(&wgpu_layout, sizeof(wgpu_layout));
+    WGPUImageCopyTexture wgpu_copy_tex;
+    _sg_clear(&wgpu_copy_tex, sizeof(wgpu_copy_tex));
+    wgpu_copy_tex.texture = wgpu_tex;
+    wgpu_copy_tex.aspect = WGPUTextureAspect_All;
+    WGPUExtent3D wgpu_extent;
+    _sg_clear(&wgpu_extent, sizeof(wgpu_extent));
+    for (int mip_level = 0; mip_level < img->cmn.num_mipmaps; mip_level++) {
+        wgpu_copy_tex.mipLevel = (uint32_t)mip_level;
+        const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_level);
+        const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_level);
+        int mip_slices;
+        switch (img->cmn.type) {
+            case SG_IMAGETYPE_CUBE:
+                mip_slices = 6;
+                break;
+            case SG_IMAGETYPE_3D:
+                mip_slices = _sg_miplevel_dim(img->cmn.num_slices, mip_level);
+                break;
+            default:
+                mip_slices = img->cmn.num_slices;
+                break;
+        }
+        const int row_pitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
+        const int num_rows = _sg_num_rows(img->cmn.pixel_format, mip_height);
+        wgpu_layout.offset = 0;
+        wgpu_layout.bytesPerRow = (uint32_t)row_pitch;
+        wgpu_layout.rowsPerImage = (uint32_t)num_rows;
+        wgpu_extent.width = (uint32_t)mip_width;
+        wgpu_extent.height = (uint32_t)mip_height;
+        wgpu_extent.depthOrArrayLayers = (uint32_t)mip_slices;
+        const sg_range* mip_data = &data->subimage[0][mip_level];
+        wgpuQueueWriteTexture(_sg.wgpu.queue, &wgpu_copy_tex, mip_data->ptr, mip_data->size, &wgpu_layout, &wgpu_extent);
     }
-    wgpu_tex_desc->format = _sg_wgpu_textureformat(desc->pixel_format);
-    wgpu_tex_desc->mipLevelCount = desc->num_mipmaps;
-    wgpu_tex_desc->sampleCount = 1;
 }
-*/
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
-    SOKOL_ASSERT(_sg.wgpu.dev);
-/*
-    SOKOL_ASSERT(_sg.wgpu.staging_cmd_enc);
-
     const bool injected = (0 != desc->wgpu_texture);
-    const bool is_msaa = desc->sample_count > 1;
-    WGPUTextureDescriptor wgpu_tex_desc;
-    _sg_clear(&wgpu_tex_desc, sizeof(wgpu_tex_desc));
-    _sg_wgpu_init_texdesc_common(&wgpu_tex_desc, desc);
-    if (_sg_is_valid_rendertarget_depth_format(img->cmn.pixel_format)) {
-        SOKOL_ASSERT(img->cmn.render_target);
-        SOKOL_ASSERT(img->cmn.type == SG_IMAGETYPE_2D);
-        SOKOL_ASSERT(img->cmn.num_mipmaps == 1);
-        SOKOL_ASSERT(!injected);
-        wgpu_tex_desc.usage = WGPUTextureUsage_OutputAttachment;
-        wgpu_tex_desc.sampleCount = desc->sample_count;
-        img->wgpu.tex = wgpuDeviceCreateTexture(_sg.wgpu.dev, &wgpu_tex_desc);
-        SOKOL_ASSERT(img->wgpu.tex);
+    if (injected) {
+        img->wgpu.tex = (WGPUTexture)desc->wgpu_texture;
+        wgpuTextureReference(img->wgpu.tex);
     } else {
-        if (injected) {
-            img->wgpu.tex = (WGPUTexture) desc->wgpu_texture;
-            wgpuTextureReference(img->wgpu.tex);
-        } else {
-            if (img->cmn.render_target) {
-                wgpu_tex_desc.usage = WGPUTextureUsage_Sampled|WGPUTextureUsage_OutputAttachment;
-            }
-            img->wgpu.tex = wgpuDeviceCreateTexture(_sg.wgpu.dev, &wgpu_tex_desc);
-            SOKOL_ASSERT(img->wgpu.tex);
-
-            // copy content into texture via a throw-away staging buffer
-            if (desc->usage == SG_USAGE_IMMUTABLE && !desc->render_target) {
-                WGPUBufferDescriptor wgpu_buf_desc;
-                _sg_clear(&wgpu_buf_desc, sizeof(wgpu_buf_desc));
-                wgpu_buf_desc.size = _sg_wgpu_image_data_buffer_size(img);
-                wgpu_buf_desc.usage = WGPUBufferUsage_CopySrc|WGPUBufferUsage_CopyDst;
-                WGPUCreateBufferMappedResult map = wgpuDeviceCreateBufferMapped(_sg.wgpu.dev, &wgpu_buf_desc);
-                SOKOL_ASSERT(map.buffer && map.data);
-                uint32_t num_bytes = _sg_wgpu_copy_image_data(map.buffer, (uint8_t*)map.data, 0, img, &desc->data);
-                _SOKOL_UNUSED(num_bytes);
-                SOKOL_ASSERT(num_bytes == wgpu_buf_desc.size);
-                wgpuBufferUnmap(map.buffer);
-                wgpuBufferRelease(map.buffer);
-            }
+        WGPUTextureDescriptor wgpu_tex_desc;
+        _sg_clear(&wgpu_tex_desc, sizeof(wgpu_tex_desc));
+        wgpu_tex_desc.label = desc->label;
+        wgpu_tex_desc.usage = WGPUTextureUsage_TextureBinding|WGPUTextureUsage_CopyDst;
+        if (desc->render_target) {
+            wgpu_tex_desc.usage |= WGPUTextureUsage_RenderAttachment;
         }
-
-        // create texture view object
-        WGPUTextureViewDescriptor wgpu_view_desc;
-        _sg_clear(&wgpu_view_desc, sizeof(wgpu_view_desc));
-        wgpu_view_desc.dimension = _sg_wgpu_tex_viewdim(desc->type);
-        img->wgpu.tex_view = wgpuTextureCreateView(img->wgpu.tex, &wgpu_view_desc);
-
-        if (desc->render_target && is_msaa) {
-            wgpu_tex_desc.dimension = WGPUTextureDimension_2D;
-            wgpu_tex_desc.size.depth = 1;
-            wgpu_tex_desc.arrayLayerCount = 1;
-            wgpu_tex_desc.mipLevelCount = 1;
-            wgpu_tex_desc.usage = WGPUTextureUsage_OutputAttachment;
-            wgpu_tex_desc.sampleCount = desc->sample_count;
-            img->wgpu.msaa_tex = wgpuDeviceCreateTexture(_sg.wgpu.dev, &wgpu_tex_desc);
-            SOKOL_ASSERT(img->wgpu.msaa_tex);
+        wgpu_tex_desc.dimension = _sg_wgpu_texture_dimension(desc->type);
+        wgpu_tex_desc.size.width = (uint32_t) desc->width;
+        wgpu_tex_desc.size.height = (uint32_t) desc->height;
+        wgpu_tex_desc.size.depthOrArrayLayers = (uint32_t) desc->num_slices;
+        wgpu_tex_desc.format = _sg_wgpu_textureformat(desc->pixel_format);
+        wgpu_tex_desc.mipLevelCount = (uint32_t) desc->num_mipmaps;
+        wgpu_tex_desc.sampleCount = (uint32_t) desc->sample_count;
+        img->wgpu.tex = wgpuDeviceCreateTexture(_sg.wgpu.dev, &wgpu_tex_desc);
+        if (0 == img->wgpu.tex) {
+            _SG_ERROR(WGPU_CREATE_TEXTURE_FAILED);
+            return SG_RESOURCESTATE_FAILED;
         }
-
-        // create sampler via shared-sampler-cache
-        img->wgpu.sampler = _sg_wgpu_create_sampler(desc);
-        SOKOL_ASSERT(img->wgpu.sampler);
+        if ((img->cmn.usage == SG_USAGE_IMMUTABLE) && !img->cmn.render_target) {
+            _sg_wgpu_copy_image_data(img, img->wgpu.tex, &desc->data);
+        }
     }
-*/
+    WGPUTextureViewDescriptor wgpu_texview_desc;
+    _sg_clear(&wgpu_texview_desc, sizeof(wgpu_texview_desc));
+    wgpu_texview_desc.label = desc->label;
+    wgpu_texview_desc.dimension = _sg_wgpu_texture_view_dimension(img->cmn.type);
+    wgpu_texview_desc.mipLevelCount = (uint32_t)img->cmn.num_mipmaps;
+    wgpu_texview_desc.arrayLayerCount = (uint32_t)img->cmn.num_slices;
+    // FIXME: should aspect be DepthOnly for all depth texture formats?
+    wgpu_texview_desc.aspect = WGPUTextureAspect_All;
+    img->wgpu.view = wgpuTextureCreateView(img->wgpu.tex, &wgpu_texview_desc);
+    if (0 == img->wgpu.view) {
+        _SG_ERROR(WGPU_CREATE_TEXTURE_VIEW_FAILED);
+        return SG_RESOURCESTATE_FAILED;
+    }
     return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_image(_sg_image_t* img) {
     SOKOL_ASSERT(img);
-/*
     if (img->wgpu.tex) {
         wgpuTextureRelease(img->wgpu.tex);
         img->wgpu.tex = 0;
     }
-    if (img->wgpu.tex_view) {
-        wgpuTextureViewRelease(img->wgpu.tex_view);
-        img->wgpu.tex_view = 0;
+    if (img->wgpu.view) {
+        wgpuTextureViewRelease(img->wgpu.view);
+        img->wgpu.view = 0;
     }
-    if (img->wgpu.msaa_tex) {
-        wgpuTextureRelease(img->wgpu.msaa_tex);
-        img->wgpu.msaa_tex = 0;
-    }
-    // NOTE: do *not* destroy the sampler from the shared-sampler-cache
-    img->wgpu.sampler = 0;
-*/
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
