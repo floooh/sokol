@@ -2907,6 +2907,7 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(WGPU_CREATE_BUFFER_FAILED, "wgpuDeviceCreateBuffer() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_TEXTURE_FAILED, "wgpuDeviceCreateTexture() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_TEXTURE_VIEW_FAILED, "wgpuTextureCreateView() failed") \
+    _SG_LOGITEM_XMACRO(WGPU_CREATE_SAMPLER_FAILED, "wgpuDeviceCreateSampler() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_SHADER_MODULE_FAILED, "wgpuDeviceCreateShaderModule() failed") \
     _SG_LOGITEM_XMACRO(WGPU_SHADER_TOO_MANY_IMAGES, "shader uses too many sampled images on shader stage (wgpu)") \
     _SG_LOGITEM_XMACRO(WGPU_SHADER_TOO_MANY_SAMPLERS, "shader uses too many samplers on shader stage (wgpu)") \
@@ -12021,7 +12022,7 @@ _SOKOL_PRIVATE WGPUSamplerBindingType _sg_wgpu_sampler_binding_type(sg_sampler_t
     }
 }
 
-_SOKOL_PRIVATE WGPUAddressMode _sg_wgpu_sampler_addrmode(sg_wrap m) {
+_SOKOL_PRIVATE WGPUAddressMode _sg_wgpu_sampler_address_mode(sg_wrap m) {
     switch (m) {
         case SG_WRAP_REPEAT:
             return WGPUAddressMode_Repeat;
@@ -12048,16 +12049,16 @@ _SOKOL_PRIVATE WGPUFilterMode _sg_wgpu_sampler_minmag_filter(sg_filter f) {
     }
 }
 
-_SOKOL_PRIVATE WGPUFilterMode _sg_wgpu_sampler_mipmap_filter(sg_filter f) {
+_SOKOL_PRIVATE WGPUMipmapFilterMode _sg_wgpu_sampler_mipmap_filter(sg_filter f) {
     switch (f) {
         case SG_FILTER_NONE:
         case SG_FILTER_NEAREST:
-            return WGPUFilterMode_Nearest;
+            return WGPUMipmapFilterMode_Nearest;
         case SG_FILTER_LINEAR:
-            return WGPUFilterMode_Linear;
+            return WGPUMipmapFilterMode_Linear;
         default:
             SOKOL_UNREACHABLE;
-            return WGPUFilterMode_Force32;
+            return WGPUMipmapFilterMode_Force32;
     }
 }
 
@@ -12468,7 +12469,7 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(_sg.wgpu.empty_bind_group);
     wgpuBindGroupLayoutRelease(empty_bgl);
 
-    // create initial per-frame command encoders
+    // create initial per-frame command encoder
     WGPUCommandEncoderDescriptor cmd_enc_desc;
     _sg_clear(&cmd_enc_desc, sizeof(cmd_enc_desc));
     _sg.wgpu.render_cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
@@ -12647,13 +12648,36 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_image(_sg_image_t* img) {
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
     SOKOL_ASSERT(smp && desc);
     SOKOL_ASSERT(_sg.wgpu.dev);
-    // FIXME
+    WGPUSamplerDescriptor wgpu_desc;
+    _sg_clear(&wgpu_desc, sizeof(wgpu_desc));
+    wgpu_desc.label = desc->label;
+    wgpu_desc.addressModeU = _sg_wgpu_sampler_address_mode(desc->wrap_u);
+    wgpu_desc.addressModeV = _sg_wgpu_sampler_address_mode(desc->wrap_v);
+    wgpu_desc.addressModeW = _sg_wgpu_sampler_address_mode(desc->wrap_w);
+    wgpu_desc.magFilter = _sg_wgpu_sampler_minmag_filter(desc->mag_filter);
+    wgpu_desc.minFilter = _sg_wgpu_sampler_minmag_filter(desc->min_filter);
+    wgpu_desc.mipmapFilter = _sg_wgpu_sampler_mipmap_filter(desc->mipmap_filter);
+    wgpu_desc.lodMinClamp = desc->min_lod;
+    wgpu_desc.lodMaxClamp = desc->max_lod;
+    wgpu_desc.compare = _sg_wgpu_comparefunc(desc->compare);
+    if (wgpu_desc.compare == WGPUCompareFunction_Never) {
+        wgpu_desc.compare = WGPUCompareFunction_Undefined;
+    }
+    wgpu_desc.maxAnisotropy = (uint16_t)desc->max_anisotropy;
+    smp->wgpu.smp = wgpuDeviceCreateSampler(_sg.wgpu.dev, &wgpu_desc);
+    if (0 == smp->wgpu.smp) {
+        _SG_ERROR(WGPU_CREATE_SAMPLER_FAILED);
+        return SG_RESOURCESTATE_FAILED;
+    }
     return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_sampler(_sg_sampler_t* smp) {
     SOKOL_ASSERT(smp);
-    // FIXME
+    if (smp->wgpu.smp) {
+        wgpuSamplerReference(smp->wgpu.smp);
+        smp->wgpu.smp = 0;
+    }
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
