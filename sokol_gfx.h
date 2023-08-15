@@ -12837,6 +12837,14 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
 
     WGPURenderPipelineDescriptor wgpu_pip_desc;
     _sg_clear(&wgpu_pip_desc, sizeof(wgpu_pip_desc));
+    WGPUDepthStencilState wgpu_ds_state;
+    _sg_clear(&wgpu_ds_state, sizeof(wgpu_ds_state));
+    WGPUFragmentState wgpu_frag_state;
+    _sg_clear(&wgpu_frag_state, sizeof(wgpu_frag_state));
+    WGPUColorTargetState wgpu_ctgt_state[SG_MAX_COLOR_ATTACHMENTS];
+    _sg_clear(&wgpu_ctgt_state, sizeof(wgpu_ctgt_state));
+    WGPUBlendState wgpu_blend_state[SG_MAX_COLOR_ATTACHMENTS];
+    _sg_clear(&wgpu_blend_state, sizeof(wgpu_blend_state));
     wgpu_pip_desc.label = desc->label;
     wgpu_pip_desc.layout = wgpu_pip_layout;
     wgpu_pip_desc.vertex.module = shd->wgpu.stage[SG_SHADERSTAGE_VS].module;
@@ -12848,8 +12856,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     wgpu_pip_desc.primitive.frontFace = _sg_wgpu_frontface(desc->face_winding);
     wgpu_pip_desc.primitive.cullMode = _sg_wgpu_cullmode(desc->cull_mode);
     if (SG_PIXELFORMAT_NONE != desc->depth.pixel_format) {
-        WGPUDepthStencilState wgpu_ds_state;
-        _sg_clear(&wgpu_ds_state, sizeof(wgpu_ds_state));
         wgpu_ds_state.format = _sg_wgpu_textureformat(desc->depth.pixel_format);
         wgpu_ds_state.depthWriteEnabled = desc->depth.write_enabled;
         wgpu_ds_state.depthCompare = _sg_wgpu_comparefunc(desc->depth.compare);
@@ -12872,12 +12878,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     wgpu_pip_desc.multisample.mask = 0xFFFFFFFF;
     wgpu_pip_desc.multisample.alphaToCoverageEnabled = desc->alpha_to_coverage_enabled;
     if (desc->color_count > 0) {
-        WGPUFragmentState wgpu_frag_state;
-        _sg_clear(&wgpu_frag_state, sizeof(wgpu_frag_state));
-        WGPUColorTargetState wgpu_ctgt_state[SG_MAX_COLOR_ATTACHMENTS];
-        _sg_clear(&wgpu_ctgt_state, sizeof(wgpu_ctgt_state));
-        WGPUBlendState wgpu_blend_state[SG_MAX_COLOR_ATTACHMENTS];
-        _sg_clear(&wgpu_blend_state, sizeof(wgpu_blend_state));
         wgpu_frag_state.module = shd->wgpu.stage[SG_SHADERSTAGE_FS].module;
         wgpu_frag_state.entryPoint = shd->wgpu.stage[SG_SHADERSTAGE_FS].entry.buf;
         wgpu_frag_state.targetCount = (size_t)desc->color_count;
