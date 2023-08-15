@@ -1313,6 +1313,7 @@ typedef enum sapp_keycode {
     SAPP_KEYCODE_RIGHT_ALT        = 346,
     SAPP_KEYCODE_RIGHT_SUPER      = 347,
     SAPP_KEYCODE_MENU             = 348,
+    SAPP_KEYCODE_BACK             = 349, /*Android back button*/
 } sapp_keycode;
 
 /*
@@ -8092,20 +8093,221 @@ _SOKOL_PRIVATE bool _sapp_android_touch_event(const AInputEvent* e) {
     _sapp_call_event(&_sapp.event);
     return true;
 }
+_SOKOL_PRIVATE sapp_keycode _sapp_android_translate_key(int scancode) {
+    switch (scancode) {
+        case AKEYCODE_ESCAPE:         return SAPP_KEYCODE_ESCAPE;
+        case AKEYCODE_TAB:            return SAPP_KEYCODE_TAB;
+        case AKEYCODE_SHIFT_LEFT:     return SAPP_KEYCODE_LEFT_SHIFT;
+        case AKEYCODE_SHIFT_RIGHT:    return SAPP_KEYCODE_RIGHT_SHIFT;
+        case AKEYCODE_CTRL_LEFT:      return SAPP_KEYCODE_LEFT_CONTROL;
+        case AKEYCODE_CTRL_RIGHT:     return SAPP_KEYCODE_RIGHT_CONTROL;
+        case AKEYCODE_ALT_LEFT:       return SAPP_KEYCODE_LEFT_ALT;
+        case AKEYCODE_ALT_RIGHT:      return SAPP_KEYCODE_RIGHT_ALT;
+        case AKEYCODE_META_LEFT:      return SAPP_KEYCODE_LEFT_SUPER;
+        case AKEYCODE_META_RIGHT:     return SAPP_KEYCODE_RIGHT_SUPER;
+        case AKEYCODE_MENU:           return SAPP_KEYCODE_MENU;
+        case AKEYCODE_NUM_LOCK:       return SAPP_KEYCODE_NUM_LOCK;
+        case AKEYCODE_CAPS_LOCK:      return SAPP_KEYCODE_CAPS_LOCK;
+        case AKEYCODE_SYSRQ:          return SAPP_KEYCODE_PRINT_SCREEN;
+        case AKEYCODE_SCROLL_LOCK:    return SAPP_KEYCODE_SCROLL_LOCK;
+        case AKEYCODE_BREAK:          return SAPP_KEYCODE_PAUSE;
+        case AKEYCODE_FORWARD_DEL:    return SAPP_KEYCODE_DELETE;
+        case AKEYCODE_DEL:            return SAPP_KEYCODE_BACKSPACE;
+        case AKEYCODE_ENTER:          return SAPP_KEYCODE_ENTER;
+        case AKEYCODE_MOVE_HOME:      return SAPP_KEYCODE_HOME;
+        case AKEYCODE_MOVE_END:       return SAPP_KEYCODE_END;
+        case AKEYCODE_PAGE_UP:        return SAPP_KEYCODE_PAGE_UP;
+        case AKEYCODE_PAGE_DOWN:      return SAPP_KEYCODE_PAGE_DOWN;
+        case AKEYCODE_INSERT:         return SAPP_KEYCODE_INSERT;
+        case AKEYCODE_DPAD_LEFT:      return SAPP_KEYCODE_LEFT;
+        case AKEYCODE_DPAD_RIGHT:     return SAPP_KEYCODE_RIGHT;
+        case AKEYCODE_DPAD_DOWN:      return SAPP_KEYCODE_DOWN;
+        case AKEYCODE_DPAD_UP:        return SAPP_KEYCODE_UP;
+        case AKEYCODE_F1:             return SAPP_KEYCODE_F1;
+        case AKEYCODE_F2:             return SAPP_KEYCODE_F2;
+        case AKEYCODE_F3:             return SAPP_KEYCODE_F3;
+        case AKEYCODE_F4:             return SAPP_KEYCODE_F4;
+        case AKEYCODE_F5:             return SAPP_KEYCODE_F5;
+        case AKEYCODE_F6:             return SAPP_KEYCODE_F6;
+        case AKEYCODE_F7:             return SAPP_KEYCODE_F7;
+        case AKEYCODE_F8:             return SAPP_KEYCODE_F8;
+        case AKEYCODE_F9:             return SAPP_KEYCODE_F9;
+        case AKEYCODE_F10:            return SAPP_KEYCODE_F10;
+        case AKEYCODE_F11:            return SAPP_KEYCODE_F11;
+        case AKEYCODE_F12:            return SAPP_KEYCODE_F12;
+        case AKEYCODE_NUMPAD_DIVIDE:      return SAPP_KEYCODE_KP_DIVIDE;
+        case AKEYCODE_NUMPAD_MULTIPLY:    return SAPP_KEYCODE_KP_MULTIPLY;
+        case AKEYCODE_NUMPAD_SUBTRACT:    return SAPP_KEYCODE_KP_SUBTRACT;
+        case AKEYCODE_NUMPAD_ADD:         return SAPP_KEYCODE_KP_ADD;
+        case AKEYCODE_NUMPAD_0:           return SAPP_KEYCODE_KP_0;
+        case AKEYCODE_NUMPAD_1:           return SAPP_KEYCODE_KP_1;
+        case AKEYCODE_NUMPAD_2:           return SAPP_KEYCODE_KP_2;
+        case AKEYCODE_NUMPAD_3:           return SAPP_KEYCODE_KP_3;
+        case AKEYCODE_NUMPAD_4:           return SAPP_KEYCODE_KP_4;
+        case AKEYCODE_NUMPAD_5:           return SAPP_KEYCODE_KP_5;
+        case AKEYCODE_NUMPAD_6:           return SAPP_KEYCODE_KP_6;
+        case AKEYCODE_NUMPAD_7:           return SAPP_KEYCODE_KP_7;
+        case AKEYCODE_NUMPAD_8:           return SAPP_KEYCODE_KP_8;
+        case AKEYCODE_NUMPAD_9:           return SAPP_KEYCODE_KP_9;
+        case AKEYCODE_NUMPAD_DOT:         return SAPP_KEYCODE_KP_DECIMAL;
+        case AKEYCODE_NUMPAD_EQUALS:      return SAPP_KEYCODE_KP_EQUAL;
+        case AKEYCODE_NUMPAD_ENTER:       return SAPP_KEYCODE_KP_ENTER;
+        case AKEYCODE_A:              return SAPP_KEYCODE_A;
+        case AKEYCODE_B:              return SAPP_KEYCODE_B;
+        case AKEYCODE_C:              return SAPP_KEYCODE_C;
+        case AKEYCODE_D:              return SAPP_KEYCODE_D;
+        case AKEYCODE_E:              return SAPP_KEYCODE_E;
+        case AKEYCODE_F:              return SAPP_KEYCODE_F;
+        case AKEYCODE_G:              return SAPP_KEYCODE_G;
+        case AKEYCODE_H:              return SAPP_KEYCODE_H;
+        case AKEYCODE_I:              return SAPP_KEYCODE_I;
+        case AKEYCODE_J:              return SAPP_KEYCODE_J;
+        case AKEYCODE_K:              return SAPP_KEYCODE_K;
+        case AKEYCODE_L:              return SAPP_KEYCODE_L;
+        case AKEYCODE_M:              return SAPP_KEYCODE_M;
+        case AKEYCODE_N:              return SAPP_KEYCODE_N;
+        case AKEYCODE_O:              return SAPP_KEYCODE_O;
+        case AKEYCODE_P:              return SAPP_KEYCODE_P;
+        case AKEYCODE_Q:              return SAPP_KEYCODE_Q;
+        case AKEYCODE_R:              return SAPP_KEYCODE_R;
+        case AKEYCODE_S:              return SAPP_KEYCODE_S;
+        case AKEYCODE_T:              return SAPP_KEYCODE_T;
+        case AKEYCODE_U:              return SAPP_KEYCODE_U;
+        case AKEYCODE_V:              return SAPP_KEYCODE_V;
+        case AKEYCODE_W:              return SAPP_KEYCODE_W;
+        case AKEYCODE_X:              return SAPP_KEYCODE_X;
+        case AKEYCODE_Y:              return SAPP_KEYCODE_Y;
+        case AKEYCODE_Z:              return SAPP_KEYCODE_Z;
+        case AKEYCODE_1:              return SAPP_KEYCODE_1;
+        case AKEYCODE_2:              return SAPP_KEYCODE_2;
+        case AKEYCODE_3:              return SAPP_KEYCODE_3;
+        case AKEYCODE_4:              return SAPP_KEYCODE_4;
+        case AKEYCODE_5:              return SAPP_KEYCODE_5;
+        case AKEYCODE_6:              return SAPP_KEYCODE_6;
+        case AKEYCODE_7:              return SAPP_KEYCODE_7;
+        case AKEYCODE_8:              return SAPP_KEYCODE_8;
+        case AKEYCODE_9:              return SAPP_KEYCODE_9;
+        case AKEYCODE_0:              return SAPP_KEYCODE_0;
+        case AKEYCODE_SPACE:          return SAPP_KEYCODE_SPACE;
+        case AKEYCODE_MINUS:          return SAPP_KEYCODE_MINUS;
+        case AKEYCODE_EQUALS:         return SAPP_KEYCODE_EQUAL;
+        case AKEYCODE_LEFT_BRACKET:   return SAPP_KEYCODE_LEFT_BRACKET;
+        case AKEYCODE_RIGHT_BRACKET:  return SAPP_KEYCODE_RIGHT_BRACKET;
+        case AKEYCODE_BACKSLASH:      return SAPP_KEYCODE_BACKSLASH;
+        case AKEYCODE_SEMICOLON:      return SAPP_KEYCODE_SEMICOLON;
+        case AKEYCODE_APOSTROPHE:     return SAPP_KEYCODE_APOSTROPHE;
+        case AKEYCODE_GRAVE:          return SAPP_KEYCODE_GRAVE_ACCENT;
+        case AKEYCODE_COMMA:          return SAPP_KEYCODE_COMMA;
+        case AKEYCODE_PERIOD:         return SAPP_KEYCODE_PERIOD;
+        case AKEYCODE_SLASH:          return SAPP_KEYCODE_SLASH;
+        case AKEYCODE_BACK:           return SAPP_KEYCODE_BACK; /* Navigation back button */
+        default:              return SAPP_KEYCODE_INVALID;
+    }
+    return SAPP_KEYCODE_INVALID;
+}
+_SOKOL_PRIVATE uint32_t _sapp_android_mods(const AInputEvent* e) {
+    uint32_t meta_state = AKeyEvent_getMetaState(e);
+    uint32_t mods = 0;
+    if (meta_state& AMETA_SHIFT_ON) {
+        mods |= SAPP_MODIFIER_SHIFT;
+    }
+    if (meta_state& AMETA_CTRL_ON) {
+        mods |= SAPP_MODIFIER_CTRL;
+    }
+    if (meta_state& AMETA_ALT_ON) {
+        mods |= SAPP_MODIFIER_ALT;
+    }
+    if (meta_state& AMETA_META_ON) {
+        mods |= SAPP_MODIFIER_SUPER;
+    }
+    return mods;
+}
+int _sapp_android_keycode_to_char(int eventType, int keyCode, int metaState)
+{
+    ANativeActivity* activity =(ANativeActivity*)sapp_android_get_native_activity();
+    // Attaches the current thread to the JVM.
+    JavaVM *javaVM = activity->vm;
+    JNIEnv *jniEnv = activity->env;
 
+    jint result = (*javaVM)->AttachCurrentThread(javaVM, &jniEnv, NULL);
+    if(result == JNI_ERR){
+        return 0;
+    }
+
+    jclass class_key_event = (*jniEnv)->FindClass(jniEnv,"android/view/KeyEvent");
+    int unicodeKey;
+
+    if(metaState == 0){
+        jmethodID method_get_unicode_char = (*jniEnv)->GetMethodID(jniEnv,class_key_event, "getUnicodeChar", "()I");
+        jmethodID eventConstructor = (*jniEnv)->GetMethodID(jniEnv,class_key_event, "<init>", "(II)V");
+        jobject eventObj = (*jniEnv)->NewObject(jniEnv,class_key_event, eventConstructor, eventType, keyCode);
+        unicodeKey = (*jniEnv)->CallIntMethod(jniEnv,eventObj, method_get_unicode_char);
+    }else{
+        jmethodID method_get_unicode_char = (*jniEnv)->GetMethodID(jniEnv,class_key_event, "getUnicodeChar", "(I)I");
+        jmethodID eventConstructor = (*jniEnv)->GetMethodID(jniEnv,class_key_event, "<init>", "(II)V");
+        jobject eventObj = (*jniEnv)->NewObject(jniEnv,class_key_event, eventConstructor, eventType, keyCode);
+        unicodeKey = (*jniEnv)->CallIntMethod(jniEnv,eventObj, method_get_unicode_char, metaState);
+    }
+
+    (*javaVM)->DetachCurrentThread(javaVM);
+
+    return unicodeKey;
+}
+_SOKOL_PRIVATE void _sapp_android_char_event(uint32_t keycode, bool repeat,const AInputEvent* e) {
+    if (_sapp_events_enabled() ) {
+        _sapp_init_event(SAPP_EVENTTYPE_CHAR);
+        _sapp.event.modifiers = _sapp_android_mods(e);
+        _sapp.event.char_code = _sapp_android_keycode_to_char(AInputEvent_getType(e),keycode,AKeyEvent_getMetaState(e));
+        _sapp.event.key_repeat = repeat;
+        _sapp_call_event(&_sapp.event);
+    }
+}
 _SOKOL_PRIVATE bool _sapp_android_key_event(const AInputEvent* e) {
     if (AInputEvent_getType(e) != AINPUT_EVENT_TYPE_KEY) {
         return false;
     }
-    if (AKeyEvent_getKeyCode(e) == AKEYCODE_BACK) {
-        /* FIXME: this should be hooked into a "really quit?" mechanism
-           so the app can ask the user for confirmation, this is currently
-           generally missing in sokol_app.h
-        */
-        _sapp_android_shutdown();
-        return true;
+    if (!_sapp_events_enabled()) {
+        return false;
     }
-    return false;
+        int32_t action = AKeyEvent_getAction(e);
+    // Don't process soft keyboard commands as they are not reliable through this interface.
+    if(AKeyEvent_getFlags(e)&AKEY_EVENT_FLAG_SOFT_KEYBOARD)return false;
+    sapp_event_type type = SAPP_EVENTTYPE_INVALID;
+    switch (action) {
+
+        case AKEY_EVENT_ACTION_DOWN :
+            SOKOL_LOG("Key: down");
+            type = SAPP_EVENTTYPE_KEY_DOWN;
+            break;
+        case AKEY_EVENT_ACTION_UP:
+            SOKOL_LOG("Key: up");
+            type = SAPP_EVENTTYPE_KEY_UP;
+            break;
+        default:
+            break;
+    }
+    if (type == SAPP_EVENTTYPE_INVALID) {
+        return false;
+    }
+    bool repeat = AKeyEvent_getRepeatCount(e)>0;
+    _sapp_init_event(type);
+    _sapp.event.key_code  = _sapp_android_translate_key(AKeyEvent_getKeyCode(e));
+    _sapp.event.modifiers = _sapp_android_mods(e);
+    _sapp.event.key_repeat = repeat;
+    _sapp_call_event(&_sapp.event);
+    if(type==SAPP_EVENTTYPE_KEY_DOWN){
+        _sapp_android_char_event(AKeyEvent_getKeyCode(e),repeat,e);
+    }
+        /* check if a CLIPBOARD_PASTED event must be sent too */
+    if (_sapp.clipboard.enabled &&
+        (type == SAPP_EVENTTYPE_KEY_DOWN) &&
+        (_sapp.event.modifiers == SAPP_MODIFIER_CTRL) &&
+        (_sapp.event.key_code == SAPP_KEYCODE_V))
+    {
+        _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
+        _sapp_call_event(&_sapp.event);
+    }
+    return true;
 }
 
 _SOKOL_PRIVATE int _sapp_android_input_cb(int fd, int events, void* data) {
@@ -8268,6 +8470,16 @@ _SOKOL_PRIVATE void* _sapp_android_loop(void* arg) {
             bool block_until_event = !_sapp.android.is_thread_stopping && !_sapp_android_should_update();
             process_events = ALooper_pollOnce(block_until_event ? -1 : 0, NULL, NULL, NULL) == ALOOPER_POLL_CALLBACK;
         }
+        /* handle quit-requested, either from window or from sapp_request_quit() */
+        if (_sapp.quit_requested && !_sapp.quit_ordered) {
+            /* give user code a chance to intervene */
+            _sapp_android_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
+            /* if user code hasn't intervened, quit the app */
+            if (_sapp.quit_requested) {
+                _sapp.quit_ordered = true;
+            }
+        }
+        if(_sapp.quit_ordered) _sapp_android_shutdown();
     }
 
     /* cleanup thread */
