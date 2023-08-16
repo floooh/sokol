@@ -8279,6 +8279,10 @@ _SOKOL_PRIVATE bool _sapp_android_key_event(const AInputEvent* e) {
     if (AKeyEvent_getFlags(e) & AKEY_EVENT_FLAG_SOFT_KEYBOARD) {
         return false;
     }
+    // Don't relay key press events from joysticks or game pads as Sokol key down events
+    if((AInputEvent_getSource(e) & AINPUT_SOURCE_GAMEPAD) || (AInputEvent_getSource(e) & AINPUT_SOURCE_JOYSTICK)) {
+        return false;
+    }
     sapp_event_type type = SAPP_EVENTTYPE_INVALID;
     switch (action) {
 
@@ -8312,7 +8316,7 @@ _SOKOL_PRIVATE bool _sapp_android_key_event(const AInputEvent* e) {
         _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
         _sapp_call_event(&_sapp.event);
     }
-    return true;
+    return false;
 }
 
 _SOKOL_PRIVATE int _sapp_android_input_cb(int fd, int events, void* data) {
