@@ -8093,6 +8093,7 @@ _SOKOL_PRIVATE bool _sapp_android_touch_event(const AInputEvent* e) {
     _sapp_call_event(&_sapp.event);
     return true;
 }
+
 _SOKOL_PRIVATE sapp_keycode _sapp_android_translate_key(int scancode) {
     switch (scancode) {
         case AKEYCODE_ESCAPE:         return SAPP_KEYCODE_ESCAPE;
@@ -8205,24 +8206,26 @@ _SOKOL_PRIVATE sapp_keycode _sapp_android_translate_key(int scancode) {
     }
     return SAPP_KEYCODE_INVALID;
 }
+
 _SOKOL_PRIVATE uint32_t _sapp_android_mods(const AInputEvent* e) {
-    uint32_t meta_state = AKeyEvent_getMetaState(e);
+    int32_t meta_state = AKeyEvent_getMetaState(e);
     uint32_t mods = 0;
-    if (meta_state& AMETA_SHIFT_ON) {
+    if (meta_state & AMETA_SHIFT_ON) {
         mods |= SAPP_MODIFIER_SHIFT;
     }
-    if (meta_state& AMETA_CTRL_ON) {
+    if (meta_state & AMETA_CTRL_ON) {
         mods |= SAPP_MODIFIER_CTRL;
     }
-    if (meta_state& AMETA_ALT_ON) {
+    if (meta_state & AMETA_ALT_ON) {
         mods |= SAPP_MODIFIER_ALT;
     }
-    if (meta_state& AMETA_META_ON) {
+    if (meta_state & AMETA_META_ON) {
         mods |= SAPP_MODIFIER_SUPER;
     }
     return mods;
 }
-int _sapp_android_keycode_to_char(int eventType, int keyCode, int metaState)
+
+_SOKOL_PRIVATE uint32_t _sapp_android_keycode_to_char(int32_t eventType, int32_t keyCode, int32_t metaState)
 {
     ANativeActivity* activity =(ANativeActivity*)sapp_android_get_native_activity();
     // Attaches the current thread to the JVM.
@@ -8230,38 +8233,40 @@ int _sapp_android_keycode_to_char(int eventType, int keyCode, int metaState)
     JNIEnv *jniEnv = activity->env;
 
     jint result = (*javaVM)->AttachCurrentThread(javaVM, &jniEnv, NULL);
-    if(result == JNI_ERR){
+    if (result == JNI_ERR) {
         return 0;
     }
 
     jclass class_key_event = (*jniEnv)->FindClass(jniEnv,"android/view/KeyEvent");
     int unicodeKey;
 
-    if(metaState == 0){
-        jmethodID method_get_unicode_char = (*jniEnv)->GetMethodID(jniEnv,class_key_event, "getUnicodeChar", "()I");
-        jmethodID eventConstructor = (*jniEnv)->GetMethodID(jniEnv,class_key_event, "<init>", "(II)V");
-        jobject eventObj = (*jniEnv)->NewObject(jniEnv,class_key_event, eventConstructor, eventType, keyCode);
-        unicodeKey = (*jniEnv)->CallIntMethod(jniEnv,eventObj, method_get_unicode_char);
-    }else{
-        jmethodID method_get_unicode_char = (*jniEnv)->GetMethodID(jniEnv,class_key_event, "getUnicodeChar", "(I)I");
-        jmethodID eventConstructor = (*jniEnv)->GetMethodID(jniEnv,class_key_event, "<init>", "(II)V");
-        jobject eventObj = (*jniEnv)->NewObject(jniEnv,class_key_event, eventConstructor, eventType, keyCode);
-        unicodeKey = (*jniEnv)->CallIntMethod(jniEnv,eventObj, method_get_unicode_char, metaState);
+    if (metaState == 0) {
+        jmethodID method_get_unicode_char = (*jniEnv)->GetMethodID(jniEnv, class_key_event, "getUnicodeChar", "()I");
+        jmethodID eventConstructor = (*jniEnv)->GetMethodID(jniEnv, class_key_event, "<init>", "(II)V");
+        jobject eventObj = (*jniEnv)->NewObject(jniEnv, class_key_event, eventConstructor, eventType, keyCode);
+        unicodeKey = (*jniEnv)->CallIntMethod(jniEnv, eventObj, method_get_unicode_char);
+    } else {
+        jmethodID method_get_unicode_char = (*jniEnv)->GetMethodID(jniEnv, class_key_event, "getUnicodeChar", "(I)I");
+        jmethodID eventConstructor = (*jniEnv)->GetMethodID(jniEnv, class_key_event, "<init>", "(II)V");
+        jobject eventObj = (*jniEnv)->NewObject(jniEnv, class_key_event, eventConstructor, eventType, keyCode);
+        unicodeKey = (*jniEnv)->CallIntMethod(jniEnv, eventObj, method_get_unicode_char, metaState);
     }
 
     (*javaVM)->DetachCurrentThread(javaVM);
 
-    return unicodeKey;
+    return (uint32_t)unicodeKey;
 }
-_SOKOL_PRIVATE void _sapp_android_char_event(uint32_t keycode, bool repeat,const AInputEvent* e) {
-    if (_sapp_events_enabled() ) {
+
+_SOKOL_PRIVATE void _sapp_android_char_event(int32_t keycode, bool repeat, const AInputEvent* e) {
+    if (_sapp_events_enabled()) {
         _sapp_init_event(SAPP_EVENTTYPE_CHAR);
         _sapp.event.modifiers = _sapp_android_mods(e);
-        _sapp.event.char_code = _sapp_android_keycode_to_char(AInputEvent_getType(e),keycode,AKeyEvent_getMetaState(e));
+        _sapp.event.char_code = _sapp_android_keycode_to_char(AInputEvent_getType(e), keycode, AKeyEvent_getMetaState(e));
         _sapp.event.key_repeat = repeat;
         _sapp_call_event(&_sapp.event);
     }
 }
+
 _SOKOL_PRIVATE bool _sapp_android_key_event(const AInputEvent* e) {
     if (AInputEvent_getType(e) != AINPUT_EVENT_TYPE_KEY) {
         return false;
@@ -8269,18 +8274,18 @@ _SOKOL_PRIVATE bool _sapp_android_key_event(const AInputEvent* e) {
     if (!_sapp_events_enabled()) {
         return false;
     }
-        int32_t action = AKeyEvent_getAction(e);
+    int32_t action = AKeyEvent_getAction(e);
     // Don't process soft keyboard commands as they are not reliable through this interface.
-    if(AKeyEvent_getFlags(e)&AKEY_EVENT_FLAG_SOFT_KEYBOARD)return false;
+    if (AKeyEvent_getFlags(e) & AKEY_EVENT_FLAG_SOFT_KEYBOARD) {
+        return false;
+    }
     sapp_event_type type = SAPP_EVENTTYPE_INVALID;
     switch (action) {
 
         case AKEY_EVENT_ACTION_DOWN :
-            SOKOL_LOG("Key: down");
             type = SAPP_EVENTTYPE_KEY_DOWN;
             break;
         case AKEY_EVENT_ACTION_UP:
-            SOKOL_LOG("Key: up");
             type = SAPP_EVENTTYPE_KEY_UP;
             break;
         default:
@@ -8289,13 +8294,13 @@ _SOKOL_PRIVATE bool _sapp_android_key_event(const AInputEvent* e) {
     if (type == SAPP_EVENTTYPE_INVALID) {
         return false;
     }
-    bool repeat = AKeyEvent_getRepeatCount(e)>0;
+    bool repeat = AKeyEvent_getRepeatCount(e) > 0;
     _sapp_init_event(type);
     _sapp.event.key_code  = _sapp_android_translate_key(AKeyEvent_getKeyCode(e));
     _sapp.event.modifiers = _sapp_android_mods(e);
     _sapp.event.key_repeat = repeat;
     _sapp_call_event(&_sapp.event);
-    if(type==SAPP_EVENTTYPE_KEY_DOWN){
+    if (type == SAPP_EVENTTYPE_KEY_DOWN) {
         _sapp_android_char_event(AKeyEvent_getKeyCode(e),repeat,e);
     }
         /* check if a CLIPBOARD_PASTED event must be sent too */
@@ -8479,7 +8484,9 @@ _SOKOL_PRIVATE void* _sapp_android_loop(void* arg) {
                 _sapp.quit_ordered = true;
             }
         }
-        if(_sapp.quit_ordered) _sapp_android_shutdown();
+        if (_sapp.quit_ordered) {
+            _sapp_android_shutdown();
+        }
     }
 
     /* cleanup thread */
