@@ -8285,7 +8285,6 @@ _SOKOL_PRIVATE bool _sapp_android_key_event(const AInputEvent* e) {
     }
     sapp_event_type type = SAPP_EVENTTYPE_INVALID;
     switch (action) {
-
         case AKEY_EVENT_ACTION_DOWN :
             type = SAPP_EVENTTYPE_KEY_DOWN;
             break;
