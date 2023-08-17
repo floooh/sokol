@@ -12296,7 +12296,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.mrt_independent_write_mask = true;
 
     bool success = wgpuDeviceGetLimits(_sg.wgpu.dev, &_sg.wgpu.limits);
-    SOKOL_ASSERT(success);
+    SOKOL_ASSERT(success); _SOKOL_UNUSED(success);
 
     const WGPULimits* l = &_sg.wgpu.limits.limits;
     _sg.limits.max_image_size_2d = (int) l->maxTextureDimension2D;
@@ -13307,14 +13307,13 @@ _SOKOL_PRIVATE void _sg_wgpu_draw(int base_element, int num_elements, int num_in
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
-/*
-    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    uint32_t copied_num_bytes = _sg_wgpu_staging_copy_to_buffer(buf->wgpu.buf, 0, data->ptr, data->size);
-    SOKOL_ASSERT(copied_num_bytes > 0); _SOKOL_UNUSED(copied_num_bytes);
-*/
+    SOKOL_ASSERT(data && data->ptr && (data->size > 0));
+    SOKOL_ASSERT(buf);
+    wgpuQueueWriteBuffer(_sg.wgpu.queue, buf->wgpu.buf, 0, data->ptr, data->size);
 }
 
 _SOKOL_PRIVATE int _sg_wgpu_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
+SOKOL_ASSERT(false);
 return 0;
 /*
     SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
@@ -13326,6 +13325,7 @@ return 0;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_update_image(_sg_image_t* img, const sg_image_data* data) {
+SOKOL_ASSERT(false);
     /*
     SOKOL_ASSERT(img && data);
     bool success = _sg_wgpu_staging_copy_to_texture(img, data);
