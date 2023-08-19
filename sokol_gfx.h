@@ -13325,13 +13325,8 @@ return 0;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_update_image(_sg_image_t* img, const sg_image_data* data) {
-SOKOL_ASSERT(false);
-    /*
     SOKOL_ASSERT(img && data);
-    bool success = _sg_wgpu_staging_copy_to_texture(img, data);
-    SOKOL_ASSERT(success);
-    _SOKOL_UNUSED(success);
-*/
+    _sg_wgpu_copy_image_data(img, img->wgpu.tex, data);
 }
 #endif
 
