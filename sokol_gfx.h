@@ -5799,7 +5799,6 @@ _SOKOL_PRIVATE void _sg_dummy_draw(int base_element, int num_elements, int num_i
 
 _SOKOL_PRIVATE void _sg_dummy_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
     SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    SOKOL_ASSERT(_sg_multiple_u64(data->size, 4));
     _SOKOL_UNUSED(data);
     if (++buf->cmn.active_slot >= buf->cmn.num_slots) {
         buf->cmn.active_slot = 0;
@@ -5808,7 +5807,6 @@ _SOKOL_PRIVATE void _sg_dummy_update_buffer(_sg_buffer_t* buf, const sg_range* d
 
 _SOKOL_PRIVATE void _sg_dummy_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
     SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    SOKOL_ASSERT(_sg_multiple_u64(data->size, 4));
     _SOKOL_UNUSED(data);
     if (new_frame) {
         if (++buf->cmn.active_slot >= buf->cmn.num_slots) {
@@ -8277,7 +8275,6 @@ _SOKOL_PRIVATE void _sg_gl_commit(void) {
 
 _SOKOL_PRIVATE void _sg_gl_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
     SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    SOKOL_ASSERT(_sg_multiple_u64(data->size, 4));
     // only one update per buffer per frame allowed
     if (++buf->cmn.active_slot >= buf->cmn.num_slots) {
         buf->cmn.active_slot = 0;
@@ -8296,7 +8293,6 @@ _SOKOL_PRIVATE void _sg_gl_update_buffer(_sg_buffer_t* buf, const sg_range* data
 
 _SOKOL_PRIVATE void _sg_gl_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
     SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    SOKOL_ASSERT(_sg_multiple_u64(data->size, 4));
     if (new_frame) {
         if (++buf->cmn.active_slot >= buf->cmn.num_slots) {
             buf->cmn.active_slot = 0;
@@ -10153,7 +10149,6 @@ _SOKOL_PRIVATE void _sg_d3d11_commit(void) {
 
 _SOKOL_PRIVATE void _sg_d3d11_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
     SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    SOKOL_ASSERT(_sg_multiple_u64(data->size, 4));
     SOKOL_ASSERT(_sg.d3d11.ctx);
     SOKOL_ASSERT(buf->d3d11.buf);
     D3D11_MAPPED_SUBRESOURCE d3d11_msr;
@@ -10168,7 +10163,6 @@ _SOKOL_PRIVATE void _sg_d3d11_update_buffer(_sg_buffer_t* buf, const sg_range* d
 
 _SOKOL_PRIVATE void _sg_d3d11_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
     SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    SOKOL_ASSERT(_sg_multiple_u64(data->size, 4));
     SOKOL_ASSERT(_sg.d3d11.ctx);
     SOKOL_ASSERT(buf->d3d11.buf);
     D3D11_MAP map_type = new_frame ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE;
@@ -11901,7 +11895,6 @@ _SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_ins
 
 _SOKOL_PRIVATE void _sg_mtl_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
     SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    SOKOL_ASSERT(_sg_multiple_u64(data->size, 4));
     if (++buf->cmn.active_slot >= buf->cmn.num_slots) {
         buf->cmn.active_slot = 0;
     }
@@ -11917,7 +11910,6 @@ _SOKOL_PRIVATE void _sg_mtl_update_buffer(_sg_buffer_t* buf, const sg_range* dat
 
 _SOKOL_PRIVATE void _sg_mtl_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
     SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    SOKOL_ASSERT(_sg_multiple_u64(data->size, 4));
     if (new_frame) {
         if (++buf->cmn.active_slot >= buf->cmn.num_slots) {
             buf->cmn.active_slot = 0;
@@ -12557,6 +12549,26 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
     if (buf->wgpu.buf) {
         wgpuBufferRelease(buf->wgpu.buf);
+    }
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_copy_buffer_data(const _sg_buffer_t* buf, uint64_t offset, const sg_range* data) {
+    SOKOL_ASSERT((offset + data->size) <= (size_t)buf->cmn.size);
+    // WebGPU's write-buffer requires the size to be a multiple of four, so we may need to split the copy
+    // operation into two writeBuffer calls
+    uint64_t clamped_size = data->size & ~3UL;
+    uint64_t extra_size = data->size & 3UL;
+    SOKOL_ASSERT(extra_size < 4);
+    wgpuQueueWriteBuffer(_sg.wgpu.queue, buf->wgpu.buf, offset, data->ptr, clamped_size);
+    if (extra_size > 0) {
+        const uint64_t extra_src_offset = clamped_size;
+        const uint64_t extra_dst_offset = offset + clamped_size;
+        uint8_t extra_data[4] = { 0 };
+        uint8_t* extra_src_ptr = ((uint8_t*)data->ptr) + extra_src_offset;
+        for (size_t i = 0; i < extra_size; i++) {
+            extra_data[i] = extra_src_ptr[i];
+        }
+        wgpuQueueWriteBuffer(_sg.wgpu.queue, buf->wgpu.buf, extra_dst_offset, extra_src_ptr, 4);
     }
 }
 
@@ -13312,17 +13324,14 @@ _SOKOL_PRIVATE void _sg_wgpu_draw(int base_element, int num_elements, int num_in
 
 _SOKOL_PRIVATE void _sg_wgpu_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
-    SOKOL_ASSERT(_sg_multiple_u64(data->size, 4));
     SOKOL_ASSERT(buf);
-    wgpuQueueWriteBuffer(_sg.wgpu.queue, buf->wgpu.buf, 0, data->ptr, data->size);
+    _sg_wgpu_copy_buffer_data(buf, 0, data);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
-    SOKOL_ASSERT(_sg_multiple_u64(data->size, 4));
-    SOKOL_ASSERT(_sg_multiple_u64((uint64_t)buf->cmn.append_pos, 4));
     _SOKOL_UNUSED(new_frame);
-    wgpuQueueWriteBuffer(_sg.wgpu.queue, buf->wgpu.buf, (uint64_t)buf->cmn.append_pos, data->ptr, data->size);
+    _sg_wgpu_copy_buffer_data(buf, (uint64_t)buf->cmn.append_pos, data);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_update_image(_sg_image_t* img, const sg_image_data* data) {
@@ -15017,7 +15026,6 @@ _SOKOL_PRIVATE bool _sg_validate_update_buffer(const _sg_buffer_t* buf, const sg
         _SG_VALIDATE(buf->cmn.size >= (int)data->size, VALIDATE_UPDATEBUF_SIZE);
         _SG_VALIDATE(buf->cmn.update_frame_index != _sg.frame_index, VALIDATE_UPDATEBUF_ONCE);
         _SG_VALIDATE(buf->cmn.append_frame_index != _sg.frame_index, VALIDATE_UPDATEBUF_APPEND);
-        // FIXME: data->size must be a multiple of 4
         return _sg_validate_end();
     #endif
 }
@@ -15036,7 +15044,6 @@ _SOKOL_PRIVATE bool _sg_validate_append_buffer(const _sg_buffer_t* buf, const sg
         _SG_VALIDATE(buf->cmn.usage != SG_USAGE_IMMUTABLE, VALIDATE_APPENDBUF_USAGE);
         _SG_VALIDATE(buf->cmn.size >= (buf->cmn.append_pos + (int)data->size), VALIDATE_APPENDBUF_SIZE);
         _SG_VALIDATE(buf->cmn.update_frame_index != _sg.frame_index, VALIDATE_APPENDBUF_UPDATE);
-        // FIXME: data->size must be a multiple of 4
         return _sg_validate_end();
     #endif
 }
@@ -16649,19 +16656,20 @@ SOKOL_API_IMPL int sg_append_buffer(sg_buffer buf_id, const sg_range* data) {
             buf->cmn.append_pos = 0;
             buf->cmn.append_overflow = false;
         }
-        if ((buf->cmn.append_pos + _sg_roundup((int)data->size, 4)) > buf->cmn.size) {
+        if ((buf->cmn.append_pos + data->size) > (size_t)buf->cmn.size) {
             buf->cmn.append_overflow = true;
         }
         const int start_pos = buf->cmn.append_pos;
+        // NOTE: the multiple-of-4 requirement for the buffer offset is coming
+        // from WebGPU, but we want identical behaviour between backends
+        SOKOL_ASSERT(_sg_multiple_u64((uint64_t)start_pos, 4));
         if (buf->slot.state == SG_RESOURCESTATE_VALID) {
             if (_sg_validate_append_buffer(buf, data)) {
-                SOKOL_ASSERT(_sg_multiple_u64(data->size, 4));
                 if (!buf->cmn.append_overflow && (data->size > 0)) {
                     // update and append on same buffer in same frame not allowed
                     SOKOL_ASSERT(buf->cmn.update_frame_index != _sg.frame_index);
-                    SOKOL_ASSERT(_sg_multiple_u64((uint64_t)buf->cmn.append_pos, 4));
                     _sg_append_buffer(buf, data, buf->cmn.append_frame_index != _sg.frame_index);
-                    buf->cmn.append_pos += (int)data->size;
+                    buf->cmn.append_pos += (int) _sg_roundup_u64(data->size, 4);
                     buf->cmn.append_frame_index = _sg.frame_index;
                 }
             }
