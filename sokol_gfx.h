@@ -3451,12 +3451,18 @@ SOKOL_GFX_API_DECL void sg_discard_context(sg_context ctx_id);
 
 // D3D11: return ID3D11Device
 SOKOL_GFX_API_DECL const void* sg_d3d11_device(void);
-
 // Metal: return __bridge-casted MTLDevice
 SOKOL_GFX_API_DECL const void* sg_mtl_device(void);
-
 // Metal: return __bridge-casted MTLRenderCommandEncoder in current pass (or zero if outside pass)
 SOKOL_GFX_API_DECL const void* sg_mtl_render_command_encoder(void);
+// WebGPU: return WGPUDevice object
+SOKOL_GFX_API_DECL const void* sg_wgpu_device(void);
+// WebGPU: return WGPUQueue object
+SOKOL_GFX_API_DECL const void* sg_wgpu_queue(void);
+// WebGPU: return this frame's WGPUCommandEncoder
+SOKOL_GFX_API_DECL const void* sg_wgpu_command_encoder(void);
+// WebGPU: return WGPURenderPassEncoder of currrent pass
+SOKOL_GFX_API_DECL const void* sg_wgpu_render_pass_encoder(void);
 
 #ifdef __cplusplus
 } // extern "C"
@@ -4910,7 +4916,7 @@ typedef struct {
     int cur_height;
     WGPUSupportedLimits limits;
     WGPUQueue queue;
-    WGPUCommandEncoder render_cmd_enc;
+    WGPUCommandEncoder cmd_enc;
     WGPURenderPassEncoder pass_enc;
     WGPUBindGroup empty_bind_group;
     const _sg_pipeline_t* cur_pipeline;
@@ -12475,17 +12481,17 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     // create initial per-frame command encoder
     WGPUCommandEncoderDescriptor cmd_enc_desc;
     _sg_clear(&cmd_enc_desc, sizeof(cmd_enc_desc));
-    _sg.wgpu.render_cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
-    SOKOL_ASSERT(_sg.wgpu.render_cmd_enc);
+    _sg.wgpu.cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
+    SOKOL_ASSERT(_sg.wgpu.cmd_enc);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
     SOKOL_ASSERT(_sg.wgpu.valid);
-    SOKOL_ASSERT(_sg.wgpu.render_cmd_enc);
+    SOKOL_ASSERT(_sg.wgpu.cmd_enc);
     _sg.wgpu.valid = false;
     _sg_wgpu_uniform_buffer_discard();
     wgpuBindGroupRelease(_sg.wgpu.empty_bind_group); _sg.wgpu.empty_bind_group = 0;
-    wgpuCommandEncoderRelease(_sg.wgpu.render_cmd_enc); _sg.wgpu.render_cmd_enc = 0;
+    wgpuCommandEncoderRelease(_sg.wgpu.cmd_enc); _sg.wgpu.cmd_enc = 0;
     wgpuQueueRelease(_sg.wgpu.queue); _sg.wgpu.queue = 0;
 }
 
@@ -12671,26 +12677,32 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_image(_sg_image_t* img) {
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
     SOKOL_ASSERT(smp && desc);
     SOKOL_ASSERT(_sg.wgpu.dev);
-    WGPUSamplerDescriptor wgpu_desc;
-    _sg_clear(&wgpu_desc, sizeof(wgpu_desc));
-    wgpu_desc.label = desc->label;
-    wgpu_desc.addressModeU = _sg_wgpu_sampler_address_mode(desc->wrap_u);
-    wgpu_desc.addressModeV = _sg_wgpu_sampler_address_mode(desc->wrap_v);
-    wgpu_desc.addressModeW = _sg_wgpu_sampler_address_mode(desc->wrap_w);
-    wgpu_desc.magFilter = _sg_wgpu_sampler_minmag_filter(desc->mag_filter);
-    wgpu_desc.minFilter = _sg_wgpu_sampler_minmag_filter(desc->min_filter);
-    wgpu_desc.mipmapFilter = _sg_wgpu_sampler_mipmap_filter(desc->mipmap_filter);
-    wgpu_desc.lodMinClamp = desc->min_lod;
-    wgpu_desc.lodMaxClamp = desc->max_lod;
-    wgpu_desc.compare = _sg_wgpu_comparefunc(desc->compare);
-    if (wgpu_desc.compare == WGPUCompareFunction_Never) {
-        wgpu_desc.compare = WGPUCompareFunction_Undefined;
-    }
-    wgpu_desc.maxAnisotropy = (uint16_t)desc->max_anisotropy;
-    smp->wgpu.smp = wgpuDeviceCreateSampler(_sg.wgpu.dev, &wgpu_desc);
-    if (0 == smp->wgpu.smp) {
-        _SG_ERROR(WGPU_CREATE_SAMPLER_FAILED);
-        return SG_RESOURCESTATE_FAILED;
+    const bool injected = (0 != desc->wgpu_sampler);
+    if (injected) {
+        smp->wgpu.smp = (WGPUSampler) desc->wgpu_sampler;
+        wgpuSamplerReference(smp->wgpu.smp);
+    } else {
+        WGPUSamplerDescriptor wgpu_desc;
+        _sg_clear(&wgpu_desc, sizeof(wgpu_desc));
+        wgpu_desc.label = desc->label;
+        wgpu_desc.addressModeU = _sg_wgpu_sampler_address_mode(desc->wrap_u);
+        wgpu_desc.addressModeV = _sg_wgpu_sampler_address_mode(desc->wrap_v);
+        wgpu_desc.addressModeW = _sg_wgpu_sampler_address_mode(desc->wrap_w);
+        wgpu_desc.magFilter = _sg_wgpu_sampler_minmag_filter(desc->mag_filter);
+        wgpu_desc.minFilter = _sg_wgpu_sampler_minmag_filter(desc->min_filter);
+        wgpu_desc.mipmapFilter = _sg_wgpu_sampler_mipmap_filter(desc->mipmap_filter);
+        wgpu_desc.lodMinClamp = desc->min_lod;
+        wgpu_desc.lodMaxClamp = desc->max_lod;
+        wgpu_desc.compare = _sg_wgpu_comparefunc(desc->compare);
+        if (wgpu_desc.compare == WGPUCompareFunction_Never) {
+            wgpu_desc.compare = WGPUCompareFunction_Undefined;
+        }
+        wgpu_desc.maxAnisotropy = (uint16_t)desc->max_anisotropy;
+        smp->wgpu.smp = wgpuDeviceCreateSampler(_sg.wgpu.dev, &wgpu_desc);
+        if (0 == smp->wgpu.smp) {
+            _SG_ERROR(WGPU_CREATE_SAMPLER_FAILED);
+            return SG_RESOURCESTATE_FAILED;
+        }
     }
     return SG_RESOURCESTATE_VALID;
 }
@@ -13073,7 +13085,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_ds_att(WGPURenderPassDepthStencilAttachment* w
 _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(!_sg.wgpu.in_pass);
-    SOKOL_ASSERT(_sg.wgpu.render_cmd_enc);
+    SOKOL_ASSERT(_sg.wgpu.cmd_enc);
     SOKOL_ASSERT(_sg.wgpu.dev);
     SOKOL_ASSERT(_sg.wgpu.render_view_cb || _sg.wgpu.render_view_userdata_cb);
     SOKOL_ASSERT(_sg.wgpu.resolve_view_cb || _sg.wgpu.resolve_view_userdata_cb);
@@ -13084,7 +13096,6 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
     _sg.wgpu.cur_pipeline = 0;
     _sg.wgpu.cur_pipeline_id.id = SG_INVALID_ID;
 
-    SOKOL_ASSERT(_sg.wgpu.render_cmd_enc);
     WGPURenderPassDescriptor wgpu_pass_desc;
     WGPURenderPassColorAttachment wgpu_color_att[SG_MAX_COLOR_ATTACHMENTS];
     WGPURenderPassDepthStencilAttachment wgpu_ds_att;
@@ -13114,7 +13125,7 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
         }
         wgpu_pass_desc.depthStencilAttachment = &wgpu_ds_att;
     }
-    _sg.wgpu.pass_enc = wgpuCommandEncoderBeginRenderPass(_sg.wgpu.render_cmd_enc, &wgpu_pass_desc);
+    _sg.wgpu.pass_enc = wgpuCommandEncoderBeginRenderPass(_sg.wgpu.cmd_enc, &wgpu_pass_desc);
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
 
     // initial uniform buffer binding (required even if no uniforms are set in the frame)
@@ -13132,14 +13143,14 @@ _SOKOL_PRIVATE void _sg_wgpu_end_pass(void) {
 
 _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
     SOKOL_ASSERT(!_sg.wgpu.in_pass);
-    SOKOL_ASSERT(_sg.wgpu.render_cmd_enc);
+    SOKOL_ASSERT(_sg.wgpu.cmd_enc);
 
     WGPUCommandBufferDescriptor cmd_buf_desc;
     _sg_clear(&cmd_buf_desc, sizeof(cmd_buf_desc));
-    WGPUCommandBuffer wgpu_cmd_buf = wgpuCommandEncoderFinish(_sg.wgpu.render_cmd_enc, &cmd_buf_desc);
+    WGPUCommandBuffer wgpu_cmd_buf = wgpuCommandEncoderFinish(_sg.wgpu.cmd_enc, &cmd_buf_desc);
     SOKOL_ASSERT(wgpu_cmd_buf);
-    wgpuCommandEncoderRelease(_sg.wgpu.render_cmd_enc);
-    _sg.wgpu.render_cmd_enc = 0;
+    wgpuCommandEncoderRelease(_sg.wgpu.cmd_enc);
+    _sg.wgpu.cmd_enc = 0;
 
     wgpuQueueSubmit(_sg.wgpu.queue, 1, &wgpu_cmd_buf);
     wgpuCommandBufferRelease(wgpu_cmd_buf);
@@ -13147,7 +13158,7 @@ _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
     // create a new render-command-encoder for next frame
     WGPUCommandEncoderDescriptor cmd_enc_desc;
     _sg_clear(&cmd_enc_desc, sizeof(cmd_enc_desc));
-    _sg.wgpu.render_cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
+    _sg.wgpu.cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
 
     // reset uniform buffer offsets
     _sg_wgpu_uniform_buffer_on_commit();
@@ -16656,7 +16667,7 @@ SOKOL_API_IMPL int sg_append_buffer(sg_buffer buf_id, const sg_range* data) {
             buf->cmn.append_pos = 0;
             buf->cmn.append_overflow = false;
         }
-        if ((buf->cmn.append_pos + data->size) > (size_t)buf->cmn.size) {
+        if (((size_t)buf->cmn.append_pos + data->size) > (size_t)buf->cmn.size) {
             buf->cmn.append_overflow = true;
         }
         const int start_pos = buf->cmn.append_pos;
@@ -17033,6 +17044,38 @@ SOKOL_API_IMPL const void* sg_mtl_render_command_encoder(void) {
         } else {
             return 0;
         }
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sg_wgpu_device(void) {
+    #if defined(SOKOL_WGPU)
+        return _sg.wgpu.dev;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sg_wgpu_queue(void) {
+    #if defined(SOKOL_WGPU)
+        return _sg.wgpu.queue;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sg_wgpu_command_encoder(void) {
+    #if defined(SOKOL_WGPU)
+        return _sg.wgpu.cmd_enc;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sg_wgpu_render_pass_encoder(void) {
+    #if defined(SOKOL_WGPU)
+        return _sg.wgpu.pass_enc;
     #else
         return 0;
     #endif
