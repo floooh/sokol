@@ -12327,8 +12327,9 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.mrt_independent_blend_state = true;
     _sg.features.mrt_independent_write_mask = true;
 
-    bool success = wgpuDeviceGetLimits(_sg.wgpu.dev, &_sg.wgpu.limits);
-    SOKOL_ASSERT(success); _SOKOL_UNUSED(success);
+    // FIXME: in webgpu.h, wgpuDeviceGetLimits() has a boolean return value, but
+    // the JS shim doesn't actually return anything
+    wgpuDeviceGetLimits(_sg.wgpu.dev, &_sg.wgpu.limits);
 
     const WGPULimits* l = &_sg.wgpu.limits.limits;
     _sg.limits.max_image_size_2d = (int) l->maxTextureDimension2D;
