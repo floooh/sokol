@@ -4782,7 +4782,6 @@ typedef struct {
     const void*(*drawable_cb)(void);
     const void*(*drawable_userdata_cb)(void*);
     void* user_data;
-    uint32_t frame_index;
     uint32_t cur_frame_rotate_index;
     int ub_size;
     int cur_ub_offset;
@@ -10886,7 +10885,6 @@ _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
     _sg.mtl.drawable_cb = desc->context.metal.drawable_cb;
     _sg.mtl.drawable_userdata_cb = desc->context.metal.drawable_userdata_cb;
     _sg.mtl.user_data = desc->context.metal.user_data;
-    _sg.mtl.frame_index = 1;
     _sg.mtl.ub_size = desc->uniform_buffer_size;
     _sg.mtl.sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
     _sg.mtl.device = (__bridge id<MTLDevice>) desc->context.metal.device;
@@ -10920,7 +10918,7 @@ _SOKOL_PRIVATE void _sg_mtl_discard_backend(void) {
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         dispatch_semaphore_signal(_sg.mtl.sem);
     }
-    _sg_mtl_garbage_collect(_sg.mtl.frame_index + SG_NUM_INFLIGHT_FRAMES + 2);
+    _sg_mtl_garbage_collect(_sg.frame_index + SG_NUM_INFLIGHT_FRAMES + 2);
     _sg_mtl_destroy_pool();
     _sg.mtl.valid = false;
 
@@ -11002,7 +11000,7 @@ _SOKOL_PRIVATE void _sg_mtl_discard_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
     for (int slot = 0; slot < buf->cmn.num_slots; slot++) {
         // it's valid to call release resource with '0'
-        _sg_mtl_release_resource(_sg.mtl.frame_index, buf->mtl.buf[slot]);
+        _sg_mtl_release_resource(_sg.frame_index, buf->mtl.buf[slot]);
     }
 }
 
@@ -11146,7 +11144,7 @@ _SOKOL_PRIVATE void _sg_mtl_discard_image(_sg_image_t* img) {
     SOKOL_ASSERT(img);
     // it's valid to call release resource with a 'null resource'
     for (int slot = 0; slot < img->cmn.num_slots; slot++) {
-        _sg_mtl_release_resource(_sg.mtl.frame_index, img->mtl.tex[slot]);
+        _sg_mtl_release_resource(_sg.frame_index, img->mtl.tex[slot]);
     }
 }
 
@@ -11187,7 +11185,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_sampler(_sg_sampler_t* smp, cons
 _SOKOL_PRIVATE void _sg_mtl_discard_sampler(_sg_sampler_t* smp) {
     SOKOL_ASSERT(smp);
     // it's valid to call release resource with a 'null resource'
-    _sg_mtl_release_resource(_sg.mtl.frame_index, smp->mtl.sampler_state);
+    _sg_mtl_release_resource(_sg.frame_index, smp->mtl.sampler_state);
 }
 
 _SOKOL_PRIVATE id<MTLLibrary> _sg_mtl_compile_library(const char* src) {
@@ -11284,10 +11282,10 @@ failed:
 _SOKOL_PRIVATE void _sg_mtl_discard_shader(_sg_shader_t* shd) {
     SOKOL_ASSERT(shd);
     // it is valid to call _sg_mtl_release_resource with a 'null resource'
-    _sg_mtl_release_resource(_sg.mtl.frame_index, shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_func);
-    _sg_mtl_release_resource(_sg.mtl.frame_index, shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_lib);
-    _sg_mtl_release_resource(_sg.mtl.frame_index, shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_func);
-    _sg_mtl_release_resource(_sg.mtl.frame_index, shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_lib);
+    _sg_mtl_release_resource(_sg.frame_index, shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_func);
+    _sg_mtl_release_resource(_sg.frame_index, shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_lib);
+    _sg_mtl_release_resource(_sg.frame_index, shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_func);
+    _sg_mtl_release_resource(_sg.frame_index, shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_lib);
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
@@ -11415,8 +11413,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
 _SOKOL_PRIVATE void _sg_mtl_discard_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     // it's valid to call release resource with a 'null resource'
-    _sg_mtl_release_resource(_sg.mtl.frame_index, pip->mtl.rps);
-    _sg_mtl_release_resource(_sg.mtl.frame_index, pip->mtl.dss);
+    _sg_mtl_release_resource(_sg.frame_index, pip->mtl.rps);
+    _sg_mtl_release_resource(_sg.frame_index, pip->mtl.dss);
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pass(_sg_pass_t* pass, _sg_image_t** color_images, _sg_image_t** resolve_images, _sg_image_t* ds_img, const sg_pass_desc* desc) {
@@ -11675,13 +11673,12 @@ _SOKOL_PRIVATE void _sg_mtl_commit(void) {
     [_sg.mtl.present_cmd_buffer commit];
 
     // garbage-collect resources pending for release
-    _sg_mtl_garbage_collect(_sg.mtl.frame_index);
+    _sg_mtl_garbage_collect(_sg.frame_index);
 
     // rotate uniform buffer slot
     if (++_sg.mtl.cur_frame_rotate_index >= SG_NUM_INFLIGHT_FRAMES) {
         _sg.mtl.cur_frame_rotate_index = 0;
     }
-    _sg.mtl.frame_index++;
     _sg.mtl.cur_ub_offset = 0;
     _sg.mtl.cur_ub_base_ptr = 0;
     // NOTE: MTLCommandBuffer is autoreleased
