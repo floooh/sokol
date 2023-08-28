@@ -1,5 +1,11 @@
 ## Updates
 
+#### 28-Aug-2023
+
+**sokol_gfx.h metal**: A new attempt at fixing a rare Metal validation layer
+error about MTKView swapchain resource lifetimes. See PR https://github.com/floooh/sokol/pull/873
+for details.
+
 #### 26-Jul-2023
 
 **sokol_nuklear.h**: The same image+sampler support has been added as in sokol_imgui.h

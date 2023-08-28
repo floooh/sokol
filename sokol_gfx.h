@@ -4796,7 +4796,6 @@ typedef struct {
     id<MTLDevice> device;
     id<MTLCommandQueue> cmd_queue;
     id<MTLCommandBuffer> cmd_buffer;
-    id<MTLCommandBuffer> present_cmd_buffer;
     id<MTLRenderCommandEncoder> cmd_encoder;
     id<MTLBuffer> uniform_buffers[SG_NUM_INFLIGHT_FRAMES];
 } _sg_mtl_backend_t;
@@ -10606,7 +10605,8 @@ _SOKOL_PRIVATE void _sg_mtl_init_pool(const sg_desc* desc) {
             1 * desc->sampler_pool_size +
             4 * desc->shader_pool_size +
             2 * desc->pipeline_pool_size +
-            desc->pass_pool_size
+            desc->pass_pool_size +
+            128
         );
     _sg.mtl.idpool.pool = [NSMutableArray arrayWithCapacity:(NSUInteger)_sg.mtl.idpool.num_slots];
     _SG_OBJC_RETAIN(_sg.mtl.idpool.pool);
@@ -10930,7 +10930,6 @@ _SOKOL_PRIVATE void _sg_mtl_discard_backend(void) {
     }
     // NOTE: MTLCommandBuffer and MTLRenderCommandEncoder are auto-released
     _sg.mtl.cmd_buffer = nil;
-    _sg.mtl.present_cmd_buffer = nil;
     _sg.mtl.cmd_encoder = nil;
 }
 
@@ -11495,14 +11494,11 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
         Also see: https://github.com/floooh/sokol/issues/762
     */
     if (nil == _sg.mtl.cmd_buffer) {
-        SOKOL_ASSERT(nil == _sg.mtl.present_cmd_buffer);
         // block until the oldest frame in flight has finished
         dispatch_semaphore_wait(_sg.mtl.sem, DISPATCH_TIME_FOREVER);
         _sg.mtl.cmd_buffer = [_sg.mtl.cmd_queue commandBufferWithUnretainedReferences];
-        _sg.mtl.present_cmd_buffer =  [_sg.mtl.cmd_queue commandBuffer];
         [_sg.mtl.cmd_buffer enqueue];
-        [_sg.mtl.present_cmd_buffer enqueue];
-        [_sg.mtl.present_cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buf) {
+        [_sg.mtl.cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buf) {
             // NOTE: this code is called on a different thread!
             _SOKOL_UNUSED(cmd_buf);
             dispatch_semaphore_signal(_sg.mtl.sem);
@@ -11526,6 +11522,10 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
         } else {
             pass_desc = (__bridge MTLRenderPassDescriptor*) _sg.mtl.renderpass_descriptor_userdata_cb(_sg.mtl.user_data);
         }
+        // pin the swapchain resources into memory so that they outlive their command buffer
+        // (this is necessary because the command buffer doesn't retain references)
+        int default_pass_desc_ref = _sg_mtl_add_resource(pass_desc);
+        _sg_mtl_release_resource(_sg.frame_index, default_pass_desc_ref);
     }
     if (pass_desc) {
         _sg.mtl.pass_valid = true;
@@ -11657,7 +11657,6 @@ _SOKOL_PRIVATE void _sg_mtl_commit(void) {
     SOKOL_ASSERT(_sg.mtl.drawable_cb || _sg.mtl.drawable_userdata_cb);
     SOKOL_ASSERT(nil == _sg.mtl.cmd_encoder);
     SOKOL_ASSERT(nil != _sg.mtl.cmd_buffer);
-    SOKOL_ASSERT(nil != _sg.mtl.present_cmd_buffer);
 
     // present, commit and signal semaphore when done
     id<MTLDrawable> cur_drawable = nil;
@@ -11667,10 +11666,9 @@ _SOKOL_PRIVATE void _sg_mtl_commit(void) {
         cur_drawable = (__bridge id<MTLDrawable>) _sg.mtl.drawable_userdata_cb(_sg.mtl.user_data);
     }
     if (nil != cur_drawable) {
-        [_sg.mtl.present_cmd_buffer presentDrawable:cur_drawable];
+        [_sg.mtl.cmd_buffer presentDrawable:cur_drawable];
     }
     [_sg.mtl.cmd_buffer commit];
-    [_sg.mtl.present_cmd_buffer commit];
 
     // garbage-collect resources pending for release
     _sg_mtl_garbage_collect(_sg.frame_index);
@@ -11683,7 +11681,6 @@ _SOKOL_PRIVATE void _sg_mtl_commit(void) {
     _sg.mtl.cur_ub_base_ptr = 0;
     // NOTE: MTLCommandBuffer is autoreleased
     _sg.mtl.cmd_buffer = nil;
-    _sg.mtl.present_cmd_buffer = nil;
 }
 
 _SOKOL_PRIVATE void _sg_mtl_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
