@@ -3207,7 +3207,7 @@ typedef enum sg_log_item {
         .context.wgpu.depth_stencil_view_cb
         .context.wgpu.depth_stencil_view_userdata_cb
             callback to get current default-pass depth-stencil-surface WGPUTextureView
-            the pixel format of the default WGPUTextureView must be WGPUTextureFormat_Depth24Plus8
+            the pixel format of the default WGPUTextureView must be WGPUTextureFormat_Depth32FloatStencil8
         .context.wgpu.user_data
             optional user data pointer passed to the userdata versions of
             callback functions
@@ -12173,7 +12173,7 @@ _SOKOL_PRIVATE WGPUTextureFormat _sg_wgpu_textureformat(sg_pixel_format p) {
         case SG_PIXELFORMAT_RGBA32SI:       return WGPUTextureFormat_RGBA32Sint;
         case SG_PIXELFORMAT_RGBA32F:        return WGPUTextureFormat_RGBA32Float;
         case SG_PIXELFORMAT_DEPTH:          return WGPUTextureFormat_Depth32Float;
-        case SG_PIXELFORMAT_DEPTH_STENCIL:  return WGPUTextureFormat_Depth24PlusStencil8;
+        case SG_PIXELFORMAT_DEPTH_STENCIL:  return WGPUTextureFormat_Depth32FloatStencil8;
         case SG_PIXELFORMAT_BC1_RGBA:       return WGPUTextureFormat_BC1RGBAUnorm;
         case SG_PIXELFORMAT_BC2_RGBA:       return WGPUTextureFormat_BC2RGBAUnorm;
         case SG_PIXELFORMAT_BC3_RGBA:       return WGPUTextureFormat_BC3RGBAUnorm;
