@@ -3,7 +3,7 @@
 #### 28-Aug-2023
 
 **sokol_gfx.h metal**: A new attempt at fixing a rare Metal validation layer
-error for MTKView swapchain resources. See ticket PR https://github.com/floooh/sokol/pull/873
+error about MTKView swapchain resource lifetimes. See PR https://github.com/floooh/sokol/pull/873
 for details.
 
 #### 26-Jul-2023
