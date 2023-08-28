@@ -150,7 +150,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # FIXME: macOS Odin vs Homebrew LLVM currently seems broken
+        # os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v3
@@ -174,7 +176,7 @@ jobs:
         name: prepare-macos
         run: |
           brew install llvm@14
-          curl -L https://f001.backblazeb2.com/file/odin-binaries/nightly/odin-macos-amd64-nightly%2B2023-08-27.zip --output odin.zip
+          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2023-08/odin-macos-amd64-dev-2023-08.zip --output odin.zip
           unzip odin.zip
           chmod a+x ./odin
           ./build_clibs_macos.sh
