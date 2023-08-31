@@ -2293,7 +2293,7 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
             .entry = fs_entry,
             .d3d11_target = "ps_4_0",
             .images[0] = { .used = true, .image_type = SG_IMAGETYPE_2D, .sample_type = SG_IMAGESAMPLETYPE_FLOAT },
-            .samplers[0] = { .used = true, .sampler_type = SG_SAMPLERTYPE_SAMPLE },
+            .samplers[0] = { .used = true, .sampler_type = SG_SAMPLERTYPE_FILTERING },
             .image_sampler_pairs[0] = { .used = true, .glsl_name = "tex_smp", .image_slot = 0, .sampler_slot = 0 },
         },
         .label = "sokol-nuklear-shader"

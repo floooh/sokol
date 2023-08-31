@@ -4007,7 +4007,7 @@ static void _sdtx_setup_common(void) {
     shd_desc.fs.images[0].image_type = SG_IMAGETYPE_2D;
     shd_desc.fs.images[0].sample_type = SG_IMAGESAMPLETYPE_FLOAT;
     shd_desc.fs.samplers[0].used = true;
-    shd_desc.fs.samplers[0].sampler_type = SG_SAMPLERTYPE_SAMPLE;
+    shd_desc.fs.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
     shd_desc.fs.image_sampler_pairs[0].used = true;
     shd_desc.fs.image_sampler_pairs[0].image_slot = 0;
     shd_desc.fs.image_sampler_pairs[0].sampler_slot = 0;

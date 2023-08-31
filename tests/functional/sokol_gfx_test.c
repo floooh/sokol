@@ -1064,8 +1064,8 @@ UTEST(sokol_gfx, query_shader_desc) {
             },
             .images[0] = { .used = true, .image_type = SG_IMAGETYPE_2D, .sample_type = SG_IMAGESAMPLETYPE_FLOAT, .multisampled = true },
             .images[1] = { .used = true, .image_type = SG_IMAGETYPE_3D, .sample_type = SG_IMAGESAMPLETYPE_SINT },
-            .samplers[0] = { .used = true, .sampler_type = SG_SAMPLERTYPE_SAMPLE },
-            .samplers[1] = { .used = true, .sampler_type = SG_SAMPLERTYPE_COMPARE },
+            .samplers[0] = { .used = true, .sampler_type = SG_SAMPLERTYPE_FILTERING },
+            .samplers[1] = { .used = true, .sampler_type = SG_SAMPLERTYPE_COMPARISON },
             .image_sampler_pairs[0] = { .used = true, .image_slot = 0, .sampler_slot = 1, .glsl_name = "img0" },
             .image_sampler_pairs[1] = { .used = true, .image_slot = 1, .sampler_slot = 0, .glsl_name = "img1" },
         },
@@ -1073,8 +1073,8 @@ UTEST(sokol_gfx, query_shader_desc) {
             .source = "fs_source",
             .images[0] = { .used = true, .image_type = SG_IMAGETYPE_ARRAY, .sample_type = SG_IMAGESAMPLETYPE_DEPTH },
             .images[1] = { .used = true, .image_type = SG_IMAGETYPE_CUBE, .sample_type = SG_IMAGESAMPLETYPE_FLOAT },
-            .samplers[0] = { .used = true, .sampler_type = SG_SAMPLERTYPE_COMPARE },
-            .samplers[1] = { .used = true, .sampler_type = SG_SAMPLERTYPE_SAMPLE },
+            .samplers[0] = { .used = true, .sampler_type = SG_SAMPLERTYPE_COMPARISON },
+            .samplers[1] = { .used = true, .sampler_type = SG_SAMPLERTYPE_FILTERING },
             .image_sampler_pairs[0] = { .used = true, .image_slot = 0, .sampler_slot = 0, .glsl_name = "img3" },
             .image_sampler_pairs[1] = { .used = true, .image_slot = 1, .sampler_slot = 1, .glsl_name = "img4" },
         },
@@ -1099,9 +1099,9 @@ UTEST(sokol_gfx, query_shader_desc) {
     T(s0_desc.vs.images[1].sample_type == SG_IMAGESAMPLETYPE_SINT);
     T(s0_desc.vs.images[1].multisampled == false);
     T(s0_desc.vs.samplers[0].used);
-    T(s0_desc.vs.samplers[0].sampler_type == SG_SAMPLERTYPE_SAMPLE);
+    T(s0_desc.vs.samplers[0].sampler_type == SG_SAMPLERTYPE_FILTERING);
     T(s0_desc.vs.samplers[1].used);
-    T(s0_desc.vs.samplers[1].sampler_type == SG_SAMPLERTYPE_COMPARE);
+    T(s0_desc.vs.samplers[1].sampler_type == SG_SAMPLERTYPE_COMPARISON);
     T(s0_desc.vs.image_sampler_pairs[0].used);
     T(s0_desc.vs.image_sampler_pairs[0].image_slot == 0);
     T(s0_desc.vs.image_sampler_pairs[0].sampler_slot == 1);
@@ -1125,9 +1125,9 @@ UTEST(sokol_gfx, query_shader_desc) {
     T(s0_desc.fs.images[1].sample_type == SG_IMAGESAMPLETYPE_FLOAT);
     T(s0_desc.fs.images[1].multisampled == false);
     T(s0_desc.fs.samplers[0].used);
-    T(s0_desc.fs.samplers[0].sampler_type == SG_SAMPLERTYPE_COMPARE);
+    T(s0_desc.fs.samplers[0].sampler_type == SG_SAMPLERTYPE_COMPARISON);
     T(s0_desc.fs.samplers[1].used);
-    T(s0_desc.fs.samplers[1].sampler_type == SG_SAMPLERTYPE_SAMPLE);
+    T(s0_desc.fs.samplers[1].sampler_type == SG_SAMPLERTYPE_FILTERING);
     T(s0_desc.fs.image_sampler_pairs[0].used);
     T(s0_desc.fs.image_sampler_pairs[0].image_slot == 0);
     T(s0_desc.fs.image_sampler_pairs[0].sampler_slot == 0);

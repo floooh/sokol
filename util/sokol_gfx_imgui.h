@@ -1136,15 +1136,17 @@ _SOKOL_PRIVATE const char* _sg_imgui_imagesampletype_string(sg_image_sample_type
         case SG_IMAGESAMPLETYPE_DEPTH:  return "SG_IMAGESAMPLETYPE_DEPTH";
         case SG_IMAGESAMPLETYPE_SINT:   return "SG_IMAGESAMPLETYPE_SINT";
         case SG_IMAGESAMPLETYPE_UINT:   return "SG_IMAGESAMPLETYPE_UINT";
+        case SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT: return "SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT";
         default:                        return "???";
     }
 }
 
 _SOKOL_PRIVATE const char* _sg_imgui_samplertype_string(sg_sampler_type t) {
     switch (t) {
-        case SG_SAMPLERTYPE_SAMPLE:     return "SG_SAMPLERTYPE_SAMPLE";
-        case SG_SAMPLERTYPE_COMPARE:    return "SG_SAMPLERTYPE_COMPARE";
-        default:                        return "???";
+        case SG_SAMPLERTYPE_FILTERING:      return "SG_SAMPLERTYPE_FILTERING";
+        case SG_SAMPLERTYPE_COMPARISON:     return "SG_SAMPLERTYPE_COMPARISON";
+        case SG_SAMPLERTYPE_NONFILTERING:   return "SG_SAMPLERTYPE_NONFILTERING";
+        default:                            return "???";
     }
 }
 
