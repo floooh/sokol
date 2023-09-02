@@ -12680,7 +12680,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
     wgpu_texview_desc.label = desc->label;
     wgpu_texview_desc.dimension = _sg_wgpu_texture_view_dimension(img->cmn.type);
     wgpu_texview_desc.mipLevelCount = (uint32_t)img->cmn.num_mipmaps;
-    wgpu_texview_desc.arrayLayerCount = (uint32_t)img->cmn.num_slices;
+    // FIXME: cubemap??
+    if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
+        wgpu_texview_desc.arrayLayerCount = (uint32_t)img->cmn.num_slices;
+    } else {
+        wgpu_texview_desc.arrayLayerCount = 1;
+    }
     // FIXME: should aspect be DepthOnly for all depth texture formats?
     wgpu_texview_desc.aspect = WGPUTextureAspect_All;
     img->wgpu.view = wgpuTextureCreateView(img->wgpu.tex, &wgpu_texview_desc);
