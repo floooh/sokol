@@ -5743,12 +5743,21 @@ _SOKOL_PRIVATE void _sapp_emsc_wgpu_request_adapter_cb(WGPURequestAdapterStatus 
     }
     SOKOL_ASSERT(adapter);
     _sapp.wgpu.adapter = adapter;
-    const WGPUFeatureName requiredFeatures[1] = {
+    size_t cur_feature_index = 1;
+    WGPUFeatureName requiredFeatures[8] = {
         WGPUFeatureName_Depth32FloatStencil8,
     };
+    // check for optional features we're interested in
+    // FIXME: ASTC texture compression
+    if (wgpuAdapterHasFeature(adapter, WGPUFeatureName_TextureCompressionBC)) {
+        requiredFeatures[cur_feature_index++] = WGPUFeatureName_TextureCompressionBC;
+    } else if (wgpuAdapterHasFeature(adapter, WGPUFeatureName_TextureCompressionETC2)) {
+        requiredFeatures[cur_feature_index++] = WGPUFeatureName_TextureCompressionETC2;
+    }
+
     WGPUDeviceDescriptor dev_desc;
     _sapp_clear(&dev_desc, sizeof(dev_desc));
-    dev_desc.requiredFeaturesCount = 1,
+    dev_desc.requiredFeaturesCount = cur_feature_index;
     dev_desc.requiredFeatures = requiredFeatures,
     wgpuAdapterRequestDevice(adapter, &dev_desc, _sapp_emsc_wgpu_request_device_cb, 0);
 }
