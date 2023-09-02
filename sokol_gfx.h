@@ -12625,8 +12625,8 @@ _SOKOL_PRIVATE void _sg_wgpu_copy_image_data(const _sg_image_t* img, WGPUTexture
     _sg_clear(&wgpu_extent, sizeof(wgpu_extent));
     for (int mip_level = 0; mip_level < img->cmn.num_mipmaps; mip_level++) {
         wgpu_copy_tex.mipLevel = (uint32_t)mip_level;
-        const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_level);
-        const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_level);
+        int mip_width = _sg_miplevel_dim(img->cmn.width, mip_level);
+        int mip_height = _sg_miplevel_dim(img->cmn.height, mip_level);
         int mip_slices;
         switch (img->cmn.type) {
             case SG_IMAGETYPE_CUBE:
@@ -12641,6 +12641,10 @@ _SOKOL_PRIVATE void _sg_wgpu_copy_image_data(const _sg_image_t* img, WGPUTexture
         }
         const int row_pitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
         const int num_rows = _sg_num_rows(img->cmn.pixel_format, mip_height);
+        if (_sg_is_compressed_pixel_format(img->cmn.pixel_format)) {
+            mip_width = _sg_roundup(mip_width, 4);
+            mip_height = _sg_roundup(mip_height, 4);
+        }
         wgpu_layout.offset = 0;
         wgpu_layout.bytesPerRow = (uint32_t)row_pitch;
         wgpu_layout.rowsPerImage = (uint32_t)num_rows;
