@@ -12766,6 +12766,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
 
     #define _sg_wgpu_create_shader_max_bgl_entries (SG_NUM_SHADER_STAGES * (SG_MAX_SHADERSTAGE_IMAGES + SG_MAX_SHADERSTAGE_SAMPLERS))
     WGPUBindGroupLayoutEntry wgpu_bgl_entries[_sg_wgpu_create_shader_max_bgl_entries];
+    _sg_clear(wgpu_bgl_entries, sizeof(wgpu_bgl_entries));
     int bgl_index = 0;
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS) ? &desc->vs : &desc->fs;
@@ -12800,7 +12801,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
             _SG_ERROR(WGPU_SHADER_TOO_MANY_SAMPLERS);
             return SG_RESOURCESTATE_FAILED;
         }
-        _sg_clear(wgpu_bgl_entries, sizeof(wgpu_bgl_entries));
         for (int img_index = 0; img_index < num_images; img_index++) {
             SOKOL_ASSERT(bgl_index < _sg_wgpu_create_shader_max_bgl_entries);
             WGPUBindGroupLayoutEntry* wgpu_bgl_entry = &wgpu_bgl_entries[bgl_index++];
