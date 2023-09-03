@@ -1098,6 +1098,7 @@ _SOKOL_PRIVATE const char* _sg_imgui_backend_string(sg_backend b) {
         case SG_BACKEND_METAL_IOS:          return "SG_BACKEND_METAL_IOS";
         case SG_BACKEND_METAL_MACOS:        return "SG_BACKEND_METAL_MACOS";
         case SG_BACKEND_METAL_SIMULATOR:    return "SG_BACKEND_METAL_SIMULATOR";
+        case SG_BACKEND_WGPU:               return "SG_BACKEND_WGPU";
         case SG_BACKEND_DUMMY:              return "SG_BACKEND_DUMMY";
         default: return "???";
     }
