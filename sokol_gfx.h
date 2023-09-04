@@ -12337,40 +12337,49 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.limits.max_image_array_layers = (int) l->maxTextureArrayLayers;
     _sg.limits.max_vertex_attrs = SG_MAX_VERTEX_ATTRIBUTES;
 
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
-    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_R8SN]);
-    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R8UI]);
-    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R8SI]);
     // NOTE: no WGPUTextureFormat_R16Unorm
-    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R16UI]);
-    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R16SI]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16F]);
+    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG8]);
+    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA8]);
+    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_BGRA8]);
+    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16F]);
+    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16F]);
+    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
+    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGB10A2]);
+
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_R8SN]);
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RG8SN]);
-    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG8UI]);
-    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG8SI]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGBA8SN]);
+
+    // FIXME: can be made renderable via extension
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RG11B10F]);
+
+    // NOTE: msaa rendering is possible in WebGPU, but no resolve
+    // which is a combination that's not currently supported in sokol-gfx
+    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_R8UI]);
+    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_R8SI]);
+    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RG8UI]);
+    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RG8SI]);
+    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RGBA8UI]);
+    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RGBA8SI]);
+    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_R16UI]);
+    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_R16SI]);
+    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RG16UI]);
+    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RG16SI]);
+    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RGBA16UI]);
+    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RGBA16SI]);
     _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_R32UI]);
     _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_R32SI]);
-    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_R32F]);
-    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG16UI]);
-    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG16SI]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16F]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA8]);
-    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGBA8SN]);
-    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA8UI]);
-    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA8SI]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_BGRA8]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGB10A2]);
-    // FIXME: missing SG_PIXELFORMAT_RG11B10F
     _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RG32UI]);
     _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RG32SI]);
-    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RG32F]);
-    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA16UI]);
-    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA16SI]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
     _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RGBA32UI]);
     _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RGBA32SI]);
+
+    // FIXME: can be made filterable with extension
+    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_R32F]);
+    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RG32F]);
     _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+
     _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH]);
     _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL]);
 
