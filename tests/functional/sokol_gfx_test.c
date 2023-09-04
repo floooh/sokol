@@ -1016,6 +1016,7 @@ UTEST(sokol_gfx, query_sampler_desc) {
     setup(&(sg_desc){0});
     sg_sampler s0 = sg_make_sampler(&(sg_sampler_desc){
         .min_filter = SG_FILTER_LINEAR,
+        .mag_filter = SG_FILTER_LINEAR,
         .mipmap_filter = SG_FILTER_LINEAR,
         .wrap_v = SG_WRAP_MIRRORED_REPEAT,
         .max_anisotropy = 8,
@@ -1024,7 +1025,7 @@ UTEST(sokol_gfx, query_sampler_desc) {
     });
     const sg_sampler_desc s0_desc = sg_query_sampler_desc(s0);
     T(s0_desc.min_filter == SG_FILTER_LINEAR);
-    T(s0_desc.mag_filter == SG_FILTER_NEAREST);
+    T(s0_desc.mag_filter == SG_FILTER_LINEAR);
     T(s0_desc.mipmap_filter == SG_FILTER_LINEAR);
     T(s0_desc.wrap_u == SG_WRAP_REPEAT);
     T(s0_desc.wrap_v == SG_WRAP_MIRRORED_REPEAT);
@@ -2147,6 +2148,91 @@ UTEST(sokol_gfx, make_image_validate_wrong_mipsize) {
     T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDATA_DATA_SIZE);
     T(log_items[1] == SG_LOGITEM_VALIDATE_IMAGEDATA_DATA_SIZE);
     T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_sampler_validate_start_canary) {
+    setup(&(sg_desc){0});
+    sg_sampler smp = sg_make_sampler(&(sg_sampler_desc){
+        ._start_canary = 1234,
+    });
+    T(sg_query_sampler_state(smp) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_SAMPLERDESC_CANARY);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_sampler_validate_minfilter_none) {
+    setup(&(sg_desc){0});
+    sg_sampler smp = sg_make_sampler(&(sg_sampler_desc){
+        .min_filter = SG_FILTER_NONE,
+    });
+    T(sg_query_sampler_state(smp) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_SAMPLERDESC_MINFILTER_NONE);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_sampler_validate_magfilter_none) {
+    setup(&(sg_desc){0});
+    sg_sampler smp = sg_make_sampler(&(sg_sampler_desc){
+        .mag_filter = SG_FILTER_NONE,
+    });
+    T(sg_query_sampler_state(smp) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_SAMPLERDESC_MAGFILTER_NONE);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_sampler_validate_anistropic_requires_linear_filtering) {
+    setup(&(sg_desc){0});
+    sg_sampler smp;
+
+    smp = sg_make_sampler(&(sg_sampler_desc){
+        .max_anisotropy = 2,
+        .min_filter = SG_FILTER_LINEAR,
+        .mag_filter = SG_FILTER_LINEAR,
+        .mipmap_filter = SG_FILTER_NONE,
+    });
+    T(sg_query_sampler_state(smp) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_SAMPLERDESC_ANISTROPIC_REQUIRES_LINEAR_FILTERING);
+
+    reset_log_items();
+    smp = sg_make_sampler(&(sg_sampler_desc){
+        .max_anisotropy = 2,
+        .min_filter = SG_FILTER_LINEAR,
+        .mag_filter = SG_FILTER_LINEAR,
+        .mipmap_filter = SG_FILTER_NEAREST,
+    });
+    T(sg_query_sampler_state(smp) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_SAMPLERDESC_ANISTROPIC_REQUIRES_LINEAR_FILTERING);
+
+    reset_log_items();
+    smp = sg_make_sampler(&(sg_sampler_desc){
+        .max_anisotropy = 2,
+        .min_filter = SG_FILTER_NEAREST,
+        .mag_filter = SG_FILTER_LINEAR,
+        .mipmap_filter = SG_FILTER_LINEAR,
+    });
+    T(sg_query_sampler_state(smp) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_SAMPLERDESC_ANISTROPIC_REQUIRES_LINEAR_FILTERING);
+
+    reset_log_items();
+    smp = sg_make_sampler(&(sg_sampler_desc){
+        .max_anisotropy = 2,
+        .min_filter = SG_FILTER_LINEAR,
+        .mag_filter = SG_FILTER_NEAREST,
+        .mipmap_filter = SG_FILTER_LINEAR,
+    });
+    T(sg_query_sampler_state(smp) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_SAMPLERDESC_ANISTROPIC_REQUIRES_LINEAR_FILTERING);
+
+    reset_log_items();
+    smp = sg_make_sampler(&(sg_sampler_desc){
+        .max_anisotropy = 2,
+        .min_filter = SG_FILTER_LINEAR,
+        .mag_filter = SG_FILTER_LINEAR,
+        .mipmap_filter = SG_FILTER_LINEAR,
+    });
+    T(sg_query_sampler_state(smp) == SG_RESOURCESTATE_VALID);
+
     sg_shutdown();
 }
 
