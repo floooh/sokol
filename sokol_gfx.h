@@ -7318,7 +7318,7 @@ _SOKOL_PRIVATE GLuint _sg_gl_compile_shader(sg_shader_stage stage, const char* s
         glGetShaderiv(gl_shd, GL_INFO_LOG_LENGTH, &log_len);
         if (log_len > 0) {
             GLchar* log_buf = (GLchar*) _sg_malloc((size_t)log_len);
-            glGetShaderInfoLog(gl_shd, log_len, &log_len, log_buf);
+            glGetShaderInfoLog(gl_shd, log_len, NULL, log_buf);
             _SG_ERROR(GL_SHADER_COMPILATION_FAILED);
             _SG_LOGMSG(GL_SHADER_COMPILATION_FAILED, log_buf);
             _sg_free(log_buf);
@@ -7360,7 +7360,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
         glGetProgramiv(gl_prog, GL_INFO_LOG_LENGTH, &log_len);
         if (log_len > 0) {
             GLchar* log_buf = (GLchar*) _sg_malloc((size_t)log_len);
-            glGetProgramInfoLog(gl_prog, log_len, &log_len, log_buf);
+            glGetProgramInfoLog(gl_prog, log_len, NULL, log_buf);
             _SG_ERROR(GL_SHADER_LINKING_FAILED);
             _SG_LOGMSG(GL_SHADER_LINKING_FAILED, log_buf);
             _sg_free(log_buf);
