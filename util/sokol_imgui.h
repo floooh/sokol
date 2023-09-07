@@ -639,6 +639,7 @@ typedef struct {
     _simgui_slot_t slot;
     sg_image image;
     sg_sampler sampler;
+    sg_pipeline pip;    // this will either be _simgui.def_pip or _simgui.pip_unfilterable
 } _simgui_image_t;
 
 typedef struct {
@@ -657,8 +658,11 @@ typedef struct {
     simgui_image_t default_font;
     sg_image def_img;       // used as default image for user images
     sg_sampler def_smp;     // used as default sampler for user images
-    sg_shader shd;
-    sg_pipeline pip;
+    sg_shader def_shd;
+    sg_pipeline def_pip;
+    // separate shader and pipeline for unfilterable user images
+    sg_shader shd_unfilterable;
+    sg_pipeline pip_unfilterable;
     sg_range vertices;
     sg_range indices;
     bool is_osx;
@@ -2081,8 +2085,15 @@ static simgui_image_t _simgui_alloc_image(void) {
 static _simgui_resource_state _simgui_init_image(_simgui_image_t* img, const simgui_image_desc_t* desc) {
     SOKOL_ASSERT(img && (img->slot.state == _SIMGUI_RESOURCESTATE_ALLOC));
     SOKOL_ASSERT(desc);
+    SOKOL_ASSERT(_simgui.def_pip.id != SIMGUI_INVALID_ID);
+    SOKOL_ASSERT(_simgui.pip_unfilterable.id != SIMGUI_INVALID_ID);
     img->image = desc->image;
     img->sampler = desc->sampler;
+    if (sg_query_pixelformat(sg_query_image_desc(desc->image).pixel_format).filter) {
+        img->pip = _simgui.def_pip;
+    } else {
+        img->pip = _simgui.pip_unfilterable;
+    }
     return _SIMGUI_RESOURCESTATE_VALID;
 }
 
@@ -2090,6 +2101,7 @@ static void _simgui_deinit_image(_simgui_image_t* img) {
     SOKOL_ASSERT(img);
     img->image.id = SIMGUI_INVALID_ID;
     img->sampler.id = SIMGUI_INVALID_ID;
+    img->pip.id = SIMGUI_INVALID_ID;
 }
 
 static void _simgui_destroy_image(simgui_image_t img_id) {
@@ -2198,84 +2210,6 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     // create sokol-gfx resources
     sg_push_debug_group("sokol-imgui");
 
-    // NOTE: since we're in C++ mode here we can't use C99 designated init
-    sg_buffer_desc vb_desc;
-    _simgui_clear(&vb_desc, sizeof(vb_desc));
-    vb_desc.usage = SG_USAGE_STREAM;
-    vb_desc.size = _simgui.vertices.size;
-    vb_desc.label = "sokol-imgui-vertices";
-    _simgui.vbuf = sg_make_buffer(&vb_desc);
-
-    sg_buffer_desc ib_desc;
-    _simgui_clear(&ib_desc, sizeof(ib_desc));
-    ib_desc.type = SG_BUFFERTYPE_INDEXBUFFER;
-    ib_desc.usage = SG_USAGE_STREAM;
-    ib_desc.size = _simgui.indices.size;
-    ib_desc.label = "sokol-imgui-indices";
-    _simgui.ibuf = sg_make_buffer(&ib_desc);
-
-    // a default font sampler
-    sg_sampler_desc font_smp_desc;
-    _simgui_clear(&font_smp_desc, sizeof(font_smp_desc));
-    font_smp_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
-    font_smp_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
-    font_smp_desc.min_filter = SG_FILTER_LINEAR;
-    font_smp_desc.mag_filter = SG_FILTER_LINEAR;
-    font_smp_desc.mipmap_filter = SG_FILTER_NONE;
-    font_smp_desc.label = "sokol-imgui-font-sampler";
-    _simgui.font_smp = sg_make_sampler(&font_smp_desc);
-
-    // a default user-image sampler
-    sg_sampler_desc def_sampler_desc;
-    _simgui_clear(&def_sampler_desc, sizeof(def_sampler_desc));
-    def_sampler_desc.min_filter = SG_FILTER_NEAREST;
-    def_sampler_desc.mag_filter = SG_FILTER_NEAREST;
-    def_sampler_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
-    def_sampler_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
-    def_sampler_desc.label = "sokol-imgui-default-sampler";
-    _simgui.def_smp = sg_make_sampler(&def_sampler_desc);
-
-    // default font texture
-    if (!_simgui.desc.no_default_font) {
-        unsigned char* font_pixels;
-        int font_width, font_height;
-        #if defined(__cplusplus)
-            io->Fonts->GetTexDataAsRGBA32(&font_pixels, &font_width, &font_height);
-        #else
-            int bytes_per_pixel;
-            ImFontAtlas_GetTexDataAsRGBA32(io->Fonts, &font_pixels, &font_width, &font_height, &bytes_per_pixel);
-        #endif
-        sg_image_desc font_img_desc;
-        _simgui_clear(&font_img_desc, sizeof(font_img_desc));
-        font_img_desc.width = font_width;
-        font_img_desc.height = font_height;
-        font_img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
-        font_img_desc.data.subimage[0][0].ptr = font_pixels;
-        font_img_desc.data.subimage[0][0].size = (size_t)(font_width * font_height) * sizeof(uint32_t);
-        font_img_desc.label = "sokol-imgui-font-image";
-        _simgui.font_img = sg_make_image(&font_img_desc);
-
-        simgui_image_desc_t img_desc;
-        _simgui_clear(&img_desc, sizeof(img_desc));
-        img_desc.image = _simgui.font_img;
-        img_desc.sampler = _simgui.font_smp;
-        _simgui.default_font = simgui_make_image(&img_desc);
-        io->Fonts->TexID = simgui_imtextureid(_simgui.default_font);
-    }
-
-    // a default user image
-    static uint32_t def_pixels[64];
-    memset(def_pixels, 0xFF, sizeof(def_pixels));
-    sg_image_desc def_image_desc;
-    _simgui_clear(&def_image_desc, sizeof(def_image_desc));
-    def_image_desc.width = 8;
-    def_image_desc.height = 8;
-    def_image_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
-    def_image_desc.data.subimage[0][0].ptr = def_pixels;
-    def_image_desc.data.subimage[0][0].size = sizeof(def_pixels);
-    def_image_desc.label = "sokol-imgui-default-image";
-    _simgui.def_img = sg_make_image(&def_image_desc);
-
     // shader object for using the embedded shader source (or bytecode)
     sg_shader_desc shd_desc;
     _simgui_clear(&shd_desc, sizeof(shd_desc));
@@ -2336,7 +2270,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         shd_desc.vs.source = _simgui_vs_source_dummy;
         shd_desc.fs.source = _simgui_fs_source_dummy;
     #endif
-    _simgui.shd = sg_make_shader(&shd_desc);
+    _simgui.def_shd = sg_make_shader(&shd_desc);
 
     // pipeline object for imgui rendering
     sg_pipeline_desc pip_desc;
@@ -2357,7 +2291,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         attr->offset = offsetof(ImDrawVert, col);
         attr->format = SG_VERTEXFORMAT_UBYTE4N;
     }
-    pip_desc.shader = _simgui.shd;
+    pip_desc.shader = _simgui.def_shd;
     pip_desc.index_type = SG_INDEXTYPE_UINT16;
     pip_desc.sample_count = _simgui.desc.sample_count;
     pip_desc.depth.pixel_format = _simgui.desc.depth_format;
@@ -2371,7 +2305,94 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         pip_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
     }
     pip_desc.label = "sokol-imgui-pipeline";
-    _simgui.pip = sg_make_pipeline(&pip_desc);
+    _simgui.def_pip = sg_make_pipeline(&pip_desc);
+
+    // create a unfilterable/nonfiltering variants of the shader and pipeline
+    shd_desc.fs.images[0].sample_type = SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT;
+    shd_desc.fs.samplers[0].sampler_type = SG_SAMPLERTYPE_NONFILTERING;
+    shd_desc.label = "sokol-imgui-shader-unfilterable";
+    _simgui.shd_unfilterable = sg_make_shader(&shd_desc);
+    pip_desc.shader = _simgui.shd_unfilterable;
+    pip_desc.label = "sokol-imgui-pipeline-unfilterable";
+    _simgui.pip_unfilterable = sg_make_pipeline(&pip_desc);
+
+    // NOTE: since we're in C++ mode here we can't use C99 designated init
+    sg_buffer_desc vb_desc;
+    _simgui_clear(&vb_desc, sizeof(vb_desc));
+    vb_desc.usage = SG_USAGE_STREAM;
+    vb_desc.size = _simgui.vertices.size;
+    vb_desc.label = "sokol-imgui-vertices";
+    _simgui.vbuf = sg_make_buffer(&vb_desc);
+
+    sg_buffer_desc ib_desc;
+    _simgui_clear(&ib_desc, sizeof(ib_desc));
+    ib_desc.type = SG_BUFFERTYPE_INDEXBUFFER;
+    ib_desc.usage = SG_USAGE_STREAM;
+    ib_desc.size = _simgui.indices.size;
+    ib_desc.label = "sokol-imgui-indices";
+    _simgui.ibuf = sg_make_buffer(&ib_desc);
+
+    // a default font sampler
+    sg_sampler_desc font_smp_desc;
+    _simgui_clear(&font_smp_desc, sizeof(font_smp_desc));
+    font_smp_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
+    font_smp_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
+    font_smp_desc.min_filter = SG_FILTER_LINEAR;
+    font_smp_desc.mag_filter = SG_FILTER_LINEAR;
+    font_smp_desc.mipmap_filter = SG_FILTER_NONE;
+    font_smp_desc.label = "sokol-imgui-font-sampler";
+    _simgui.font_smp = sg_make_sampler(&font_smp_desc);
+
+    // a default user-image sampler
+    sg_sampler_desc def_sampler_desc;
+    _simgui_clear(&def_sampler_desc, sizeof(def_sampler_desc));
+    def_sampler_desc.min_filter = SG_FILTER_NEAREST;
+    def_sampler_desc.mag_filter = SG_FILTER_NEAREST;
+    def_sampler_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
+    def_sampler_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
+    def_sampler_desc.label = "sokol-imgui-default-sampler";
+    _simgui.def_smp = sg_make_sampler(&def_sampler_desc);
+
+    // a default user image
+    static uint32_t def_pixels[64];
+    memset(def_pixels, 0xFF, sizeof(def_pixels));
+    sg_image_desc def_image_desc;
+    _simgui_clear(&def_image_desc, sizeof(def_image_desc));
+    def_image_desc.width = 8;
+    def_image_desc.height = 8;
+    def_image_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    def_image_desc.data.subimage[0][0].ptr = def_pixels;
+    def_image_desc.data.subimage[0][0].size = sizeof(def_pixels);
+    def_image_desc.label = "sokol-imgui-default-image";
+    _simgui.def_img = sg_make_image(&def_image_desc);
+
+    // default font texture
+    if (!_simgui.desc.no_default_font) {
+        unsigned char* font_pixels;
+        int font_width, font_height;
+        #if defined(__cplusplus)
+            io->Fonts->GetTexDataAsRGBA32(&font_pixels, &font_width, &font_height);
+        #else
+            int bytes_per_pixel;
+            ImFontAtlas_GetTexDataAsRGBA32(io->Fonts, &font_pixels, &font_width, &font_height, &bytes_per_pixel);
+        #endif
+        sg_image_desc font_img_desc;
+        _simgui_clear(&font_img_desc, sizeof(font_img_desc));
+        font_img_desc.width = font_width;
+        font_img_desc.height = font_height;
+        font_img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+        font_img_desc.data.subimage[0][0].ptr = font_pixels;
+        font_img_desc.data.subimage[0][0].size = (size_t)(font_width * font_height) * sizeof(uint32_t);
+        font_img_desc.label = "sokol-imgui-font-image";
+        _simgui.font_img = sg_make_image(&font_img_desc);
+
+        simgui_image_desc_t img_desc;
+        _simgui_clear(&img_desc, sizeof(img_desc));
+        img_desc.image = _simgui.font_img;
+        img_desc.sampler = _simgui.font_smp;
+        _simgui.default_font = simgui_make_image(&img_desc);
+        io->Fonts->TexID = simgui_imtextureid(_simgui.default_font);
+    }
 
     sg_pop_debug_group();
 }
@@ -2384,8 +2405,10 @@ SOKOL_API_IMPL void simgui_shutdown(void) {
         igDestroyContext(0);
     #endif
     // NOTE: it's valid to call the destroy funcs with SG_INVALID_ID
-    sg_destroy_pipeline(_simgui.pip);
-    sg_destroy_shader(_simgui.shd);
+    sg_destroy_pipeline(_simgui.pip_unfilterable);
+    sg_destroy_shader(_simgui.shd_unfilterable);
+    sg_destroy_pipeline(_simgui.def_pip);
+    sg_destroy_shader(_simgui.def_shd);
     sg_destroy_sampler(_simgui.font_smp);
     sg_destroy_image(_simgui.font_img);
     sg_destroy_sampler(_simgui.def_smp);
@@ -2496,8 +2519,8 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
     #endif
 }
 
-static void _simgui_bind_image_sampler(sg_bindings* bindings, ImTextureID tex_id) {
-    _simgui_image_t* img = _simgui_lookup_image((uint32_t)(uintptr_t)tex_id);
+static const _simgui_image_t* _simgui_bind_image_sampler(sg_bindings* bindings, ImTextureID tex_id) {
+    const _simgui_image_t* img = _simgui_lookup_image((uint32_t)(uintptr_t)tex_id);
     if (img) {
         bindings->fs.images[0] = img->image;
         bindings->fs.samplers[0] = img->sampler;
@@ -2505,6 +2528,7 @@ static void _simgui_bind_image_sampler(sg_bindings* bindings, ImTextureID tex_id
         bindings->fs.images[0] = _simgui.def_img;
         bindings->fs.samplers[0] = _simgui.def_smp;
     }
+    return img;
 }
 
 SOKOL_API_IMPL void simgui_render(void) {
@@ -2583,7 +2607,7 @@ SOKOL_API_IMPL void simgui_render(void) {
     sg_apply_viewport(0, 0, fb_width, fb_height, true);
     sg_apply_scissor_rect(0, 0, fb_width, fb_height, true);
 
-    sg_apply_pipeline(_simgui.pip);
+    sg_apply_pipeline(_simgui.def_pip);
     _simgui_vs_params_t vs_params;
     _simgui_clear((void*)&vs_params, sizeof(vs_params));
     vs_params.disp_size.x = io->DisplaySize.x;
@@ -2616,14 +2640,20 @@ SOKOL_API_IMPL void simgui_render(void) {
                 pcmd->UserCallback(cl, pcmd);
                 // need to re-apply all state after calling a user callback
                 sg_apply_viewport(0, 0, fb_width, fb_height, true);
-                sg_apply_pipeline(_simgui.pip);
+                sg_apply_pipeline(_simgui.def_pip);
                 sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, SG_RANGE_REF(vs_params));
                 sg_apply_bindings(&bind);
             } else {
                 if ((tex_id != pcmd->TextureId) || (vtx_offset != pcmd->VtxOffset)) {
                     tex_id = pcmd->TextureId;
                     vtx_offset = pcmd->VtxOffset;
-                    _simgui_bind_image_sampler(&bind, tex_id);
+                    const _simgui_image_t* img = _simgui_bind_image_sampler(&bind, tex_id);
+                    if (img) {
+                        sg_apply_pipeline(img->pip);
+                    } else {
+                        sg_apply_pipeline(_simgui.def_pip);
+                    }
+                    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, SG_RANGE_REF(vs_params));
                     bind.vertex_buffer_offsets[0] = vb_offset + (int)(pcmd->VtxOffset * sizeof(ImDrawVert));
                     sg_apply_bindings(&bind);
                 }
