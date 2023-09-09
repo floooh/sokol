@@ -12641,36 +12641,40 @@ _SOKOL_PRIVATE void _sg_wgpu_copy_image_data(const _sg_image_t* img, WGPUTexture
     wgpu_copy_tex.aspect = WGPUTextureAspect_All;
     WGPUExtent3D wgpu_extent;
     _sg_clear(&wgpu_extent, sizeof(wgpu_extent));
-    for (int mip_level = 0; mip_level < img->cmn.num_mipmaps; mip_level++) {
-        wgpu_copy_tex.mipLevel = (uint32_t)mip_level;
-        int mip_width = _sg_miplevel_dim(img->cmn.width, mip_level);
-        int mip_height = _sg_miplevel_dim(img->cmn.height, mip_level);
-        int mip_slices;
-        switch (img->cmn.type) {
-            case SG_IMAGETYPE_CUBE:
-                mip_slices = 6;
-                break;
-            case SG_IMAGETYPE_3D:
-                mip_slices = _sg_miplevel_dim(img->cmn.num_slices, mip_level);
-                break;
-            default:
-                mip_slices = img->cmn.num_slices;
-                break;
+    const int num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6 : 1;
+    for (int face_index = 0; face_index < num_faces; face_index++) {
+        for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
+            wgpu_copy_tex.mipLevel = (uint32_t)mip_index;
+            wgpu_copy_tex.origin.z = (uint32_t)face_index;
+            int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
+            int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
+            int mip_slices;
+            switch (img->cmn.type) {
+                case SG_IMAGETYPE_CUBE:
+                    mip_slices = 1;
+                    break;
+                case SG_IMAGETYPE_3D:
+                    mip_slices = _sg_miplevel_dim(img->cmn.num_slices, mip_index);
+                    break;
+                default:
+                    mip_slices = img->cmn.num_slices;
+                    break;
+            }
+            const int row_pitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
+            const int num_rows = _sg_num_rows(img->cmn.pixel_format, mip_height);
+            if (_sg_is_compressed_pixel_format(img->cmn.pixel_format)) {
+                mip_width = _sg_roundup(mip_width, 4);
+                mip_height = _sg_roundup(mip_height, 4);
+            }
+            wgpu_layout.offset = 0;
+            wgpu_layout.bytesPerRow = (uint32_t)row_pitch;
+            wgpu_layout.rowsPerImage = (uint32_t)num_rows;
+            wgpu_extent.width = (uint32_t)mip_width;
+            wgpu_extent.height = (uint32_t)mip_height;
+            wgpu_extent.depthOrArrayLayers = (uint32_t)mip_slices;
+            const sg_range* mip_data = &data->subimage[face_index][mip_index];
+            wgpuQueueWriteTexture(_sg.wgpu.queue, &wgpu_copy_tex, mip_data->ptr, mip_data->size, &wgpu_layout, &wgpu_extent);
         }
-        const int row_pitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
-        const int num_rows = _sg_num_rows(img->cmn.pixel_format, mip_height);
-        if (_sg_is_compressed_pixel_format(img->cmn.pixel_format)) {
-            mip_width = _sg_roundup(mip_width, 4);
-            mip_height = _sg_roundup(mip_height, 4);
-        }
-        wgpu_layout.offset = 0;
-        wgpu_layout.bytesPerRow = (uint32_t)row_pitch;
-        wgpu_layout.rowsPerImage = (uint32_t)num_rows;
-        wgpu_extent.width = (uint32_t)mip_width;
-        wgpu_extent.height = (uint32_t)mip_height;
-        wgpu_extent.depthOrArrayLayers = (uint32_t)mip_slices;
-        const sg_range* mip_data = &data->subimage[0][mip_level];
-        wgpuQueueWriteTexture(_sg.wgpu.queue, &wgpu_copy_tex, mip_data->ptr, mip_data->size, &wgpu_layout, &wgpu_extent);
     }
 }
 
@@ -12688,13 +12692,17 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
         if (desc->render_target) {
             wgpu_tex_desc.usage |= WGPUTextureUsage_RenderAttachment;
         }
-        wgpu_tex_desc.dimension = _sg_wgpu_texture_dimension(desc->type);
-        wgpu_tex_desc.size.width = (uint32_t) desc->width;
-        wgpu_tex_desc.size.height = (uint32_t) desc->height;
-        wgpu_tex_desc.size.depthOrArrayLayers = (uint32_t) desc->num_slices;
-        wgpu_tex_desc.format = _sg_wgpu_textureformat(desc->pixel_format);
-        wgpu_tex_desc.mipLevelCount = (uint32_t) desc->num_mipmaps;
-        wgpu_tex_desc.sampleCount = (uint32_t) desc->sample_count;
+        wgpu_tex_desc.dimension = _sg_wgpu_texture_dimension(img->cmn.type);
+        wgpu_tex_desc.size.width = (uint32_t) img->cmn.width;
+        wgpu_tex_desc.size.height = (uint32_t) img->cmn.height;
+        if (desc->type == SG_IMAGETYPE_CUBE) {
+            wgpu_tex_desc.size.depthOrArrayLayers = 6;
+        } else {
+            wgpu_tex_desc.size.depthOrArrayLayers = (uint32_t) img->cmn.num_slices;
+        }
+        wgpu_tex_desc.format = _sg_wgpu_textureformat(img->cmn.pixel_format);
+        wgpu_tex_desc.mipLevelCount = (uint32_t) img->cmn.num_mipmaps;
+        wgpu_tex_desc.sampleCount = (uint32_t) img->cmn.sample_count;
         img->wgpu.tex = wgpuDeviceCreateTexture(_sg.wgpu.dev, &wgpu_tex_desc);
         if (0 == img->wgpu.tex) {
             _SG_ERROR(WGPU_CREATE_TEXTURE_FAILED);
@@ -12709,11 +12717,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
     wgpu_texview_desc.label = desc->label;
     wgpu_texview_desc.dimension = _sg_wgpu_texture_view_dimension(img->cmn.type);
     wgpu_texview_desc.mipLevelCount = (uint32_t)img->cmn.num_mipmaps;
-    // FIXME: cubemap??
-    if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
-        wgpu_texview_desc.arrayLayerCount = (uint32_t)img->cmn.num_slices;
+    if (img->cmn.type == SG_IMAGETYPE_CUBE) {
+        wgpu_texview_desc.arrayLayerCount = 6;
     } else {
-        wgpu_texview_desc.arrayLayerCount = 1;
+        wgpu_texview_desc.arrayLayerCount = (uint32_t)img->cmn.num_slices;
     }
     // FIXME: should aspect be DepthOnly for all depth texture formats?
     wgpu_texview_desc.aspect = WGPUTextureAspect_All;
