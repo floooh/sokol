@@ -7811,7 +7811,7 @@ _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
         const _sg_pass_t* pass = _sg.gl.cur_pass;
         SOKOL_ASSERT(pass->slot.id == _sg.gl.cur_pass_id.id);
         bool fb_read_bound = false;
-        bool fb_draw_bound = true;
+        bool fb_draw_bound = false;
         const int num_atts = pass->cmn.num_color_atts;
         for (int i = 0; i < num_atts; i++) {
             // perform MSAA resolve if needed
