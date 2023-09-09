@@ -2531,6 +2531,14 @@ static const _simgui_image_t* _simgui_bind_image_sampler(sg_bindings* bindings, 
     return img;
 }
 
+static ImDrawList* _simgui_imdrawlist_at(ImDrawData* draw_data, int cl_index) {
+    #if defined(__cplusplus)
+        return draw_data->CmdLists[cl_index];
+    #else
+        return draw_data->CmdLists.Data[cl_index];
+    #endif
+}
+
 SOKOL_API_IMPL void simgui_render(void) {
     SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     #if defined(__cplusplus)
@@ -2558,7 +2566,7 @@ SOKOL_API_IMPL void simgui_render(void) {
     size_t all_idx_size = 0;
     int cmd_list_count = 0;
     for (int cl_index = 0; cl_index < draw_data->CmdListsCount; cl_index++, cmd_list_count++) {
-        ImDrawList* cl = draw_data->CmdLists[cl_index];
+        ImDrawList* cl = _simgui_imdrawlist_at(draw_data, cl_index);
         const size_t vtx_size = (size_t)cl->VtxBuffer.Size * sizeof(ImDrawVert);
         const size_t idx_size = (size_t)cl->IdxBuffer.Size * sizeof(ImDrawIdx);
 
@@ -2622,7 +2630,7 @@ SOKOL_API_IMPL void simgui_render(void) {
     int vb_offset = 0;
     int ib_offset = 0;
     for (int cl_index = 0; cl_index < cmd_list_count; cl_index++) {
-        const ImDrawList* cl = draw_data->CmdLists[cl_index];
+        ImDrawList* cl = _simgui_imdrawlist_at(draw_data, cl_index);
 
         bind.vertex_buffer_offsets[0] = vb_offset;
         bind.index_buffer_offset = ib_offset;

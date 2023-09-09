@@ -1,5 +1,12 @@
 ## Updates
 
+#### 09-Sep-2023
+
+- a small PR has been merged which fixes a redundant glBindFramebuffer() in the GLES3 backend
+  in `sg_end_pass()` (see: https://github.com/floooh/sokol/pull/878), many thanks to @danielchasehooper
+  for catching that issue!
+- sokol_imgui.h has been fixed for cimgui 1.89.9 (see https://github.com/floooh/sokol/issues/879)
+
 #### 28-Aug-2023
 
 **sokol_gfx.h metal**: A new attempt at fixing a rare Metal validation layer
