@@ -811,3 +811,36 @@ UTEST(sokol_fetch, load_file_cancel) {
     T(load_file_cancel_passed);
     sfetch_shutdown();
 }
+
+bool load_file_cancel_finished_failed = false;
+void load_file_cancel_finished_callback(const sfetch_response_t *response)
+{
+    if (response->cancelled && !response->finished)
+    {
+        load_file_cancel_finished_failed = true;
+    }
+}
+
+UTEST(sokol_fetch, load_file_cancel_finished)
+{
+    sfetch_setup(&(sfetch_desc_t){
+        .num_channels = 1});
+    sfetch_handle_t h = sfetch_send(&(sfetch_request_t){
+        .path = "comsi.s3m",
+        .callback = load_file_cancel_finished_callback,
+    });
+
+    // Cancels before dispatch
+    sfetch_cancel(h);
+
+    int frame_count = 0;
+    const int max_frames = 10000;
+    while (sfetch_handle_valid(h) && (frame_count++ < max_frames))
+    {
+        sfetch_dowork();
+        sleep_ms(1);
+    }
+    T(frame_count < max_frames);
+    T(!load_file_cancel_finished_failed);
+    sfetch_shutdown();
+}
