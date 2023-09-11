@@ -13385,6 +13385,8 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(sg_shader_stage stage_index, int ub_
     SOKOL_ASSERT(data->size <= _sg.wgpu.cur_pipeline->shader->cmn.stage[stage_index].uniform_blocks[ub_index].size);
     SOKOL_ASSERT(data->size <= _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE);
 
+    // FIXME: memcpy into an intermediate memory buffer here, and do a single big
+    // wgpuQueueWriteBuffer at the end of the frame
     wgpuQueueWriteBuffer(_sg.wgpu.queue, _sg.wgpu.uniform.buf, _sg.wgpu.uniform.offset, data->ptr, data->size);
     _sg.wgpu.uniform.bind.offsets[stage_index][ub_index] = _sg.wgpu.uniform.offset;
     wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc,
