@@ -12608,6 +12608,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
 _SOKOL_PRIVATE void _sg_wgpu_discard_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
     if (buf->wgpu.buf) {
+        wgpuBufferDestroy(buf->wgpu.buf);
         wgpuBufferRelease(buf->wgpu.buf);
     }
 }
@@ -12734,13 +12735,14 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_image(_sg_image_t* img) {
     SOKOL_ASSERT(img);
-    if (img->wgpu.tex) {
-        wgpuTextureRelease(img->wgpu.tex);
-        img->wgpu.tex = 0;
-    }
     if (img->wgpu.view) {
         wgpuTextureViewRelease(img->wgpu.view);
         img->wgpu.view = 0;
+    }
+    if (img->wgpu.tex) {
+        wgpuTextureDestroy(img->wgpu.tex);
+        wgpuTextureRelease(img->wgpu.tex);
+        img->wgpu.tex = 0;
     }
 }
 
