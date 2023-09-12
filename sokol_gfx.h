@@ -10982,6 +10982,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_buffer(_sg_buffer_t* buf, const 
             } else {
                 mtl_buf = [_sg.mtl.device newBufferWithLength:(NSUInteger)buf->cmn.size options:mtl_options];
             }
+            if (!mtl_buf) return SG_RESOURCESTATE_FAILED;
         }
         buf->mtl.buf[slot] = _sg_mtl_add_resource(mtl_buf);
         _SG_OBJC_RELEASE(mtl_buf);
