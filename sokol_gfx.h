@@ -4929,6 +4929,16 @@ typedef struct {
     const _sg_pipeline_t* cur_pipeline;
     sg_pipeline cur_pipeline_id;
     _sg_wgpu_uniform_buffer_t uniform;
+    struct {
+        struct {
+            sg_buffer buffer;
+            int offset;
+        } vbs[SG_MAX_VERTEX_BUFFERS];
+        struct {
+            sg_buffer buffer;
+            int offset;
+        } ib;
+    } bindcache;
 } _sg_wgpu_backend_t;
 #endif
 
@@ -5352,7 +5362,7 @@ _SOKOL_PRIVATE int _sg_roundup(int val, int round_to) {
     return (val+(round_to-1)) & ~(round_to-1);
 }
 
-_SOKOL_PRIVATE uint64_t _sg_roundup_u32(uint32_t val, uint32_t round_to) {
+_SOKOL_PRIVATE uint32_t _sg_roundup_u32(uint32_t val, uint32_t round_to) {
     return (val+(round_to-1)) & ~(round_to-1);
 }
 
@@ -12497,6 +12507,32 @@ _SOKOL_PRIVATE void _sg_wgpu_uniform_buffer_on_commit(void) {
     _sg_clear(&_sg.wgpu.uniform.bind.offsets[0][0], sizeof(_sg.wgpu.uniform.bind.offsets));
 }
 
+_SOKOL_PRIVATE void _sg_wgpu_bindcache_clear(void) {
+    memset(&_sg.wgpu.bindcache, 0, sizeof(_sg.wgpu.bindcache));
+}
+
+_SOKOL_PRIVATE bool _sg_wgpu_bindcache_vb_dirty(int index, const _sg_buffer_t* vb, int offset) {
+    SOKOL_ASSERT(vb && (index >= 0) && (index < SG_MAX_VERTEX_BUFFERS));
+    return (vb->slot.id != _sg.wgpu.bindcache.vbs[index].buffer.id) || (offset != _sg.wgpu.bindcache.vbs[index].offset);
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_bindcache_vb_update(int index, const _sg_buffer_t* vb, int offset) {
+    SOKOL_ASSERT(vb && (index >= 0) && (index < SG_MAX_VERTEX_BUFFERS));
+    _sg.wgpu.bindcache.vbs[index].buffer.id = vb->slot.id;
+    _sg.wgpu.bindcache.vbs[index].offset = offset;
+}
+
+_SOKOL_PRIVATE bool _sg_wgpu_bindcache_ib_dirty(const _sg_buffer_t* ib, int ib_offset) {
+    SOKOL_ASSERT(ib);
+    return (ib->slot.id != _sg.wgpu.bindcache.ib.buffer.id) || (ib_offset != _sg.wgpu.bindcache.ib.offset);
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_bindcache_ib_update(const _sg_buffer_t* ib, int ib_offset) {
+    SOKOL_ASSERT(ib);
+    _sg.wgpu.bindcache.ib.buffer.id = ib->slot.id;
+    _sg.wgpu.bindcache.ib.offset = ib_offset;
+}
+
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->context.wgpu.device);
@@ -12517,6 +12553,7 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     _sg.wgpu.queue = wgpuDeviceGetQueue(_sg.wgpu.dev);
     SOKOL_ASSERT(_sg.wgpu.queue);
 
+    _sg_wgpu_bindcache_clear();
     _sg_wgpu_init_caps();
     _sg_wgpu_uniform_buffer_init(desc);
 
@@ -12927,7 +12964,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
         const int vb_idx = va_state->buffer_index;
         SOKOL_ASSERT(vb_idx < SG_MAX_VERTEX_BUFFERS);
         pip->cmn.vertex_buffer_layout_active[vb_idx] = true;
-        const uint32_t wgpu_attr_idx = wgpu_vb_layouts[vb_idx].attributeCount;
+        const size_t wgpu_attr_idx = wgpu_vb_layouts[vb_idx].attributeCount;
         wgpu_vb_layouts[vb_idx].attributeCount += 1;
         wgpu_vtx_attrs[vb_idx][wgpu_attr_idx].format = _sg_wgpu_vertexformat(va_state->format);
         wgpu_vtx_attrs[vb_idx][wgpu_attr_idx].offset = (uint64_t)va_state->offset;
@@ -13166,6 +13203,7 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
     _sg.wgpu.cur_height = h;
     _sg.wgpu.cur_pipeline = 0;
     _sg.wgpu.cur_pipeline_id.id = SG_INVALID_ID;
+    _sg_wgpu_bindcache_clear();
 
     WGPURenderPassDescriptor wgpu_pass_desc;
     WGPURenderPassColorAttachment wgpu_color_att[SG_MAX_COLOR_ATTACHMENTS];
@@ -13344,21 +13382,29 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_bindings(
 
     // index buffer
     if (ib) {
-        const WGPUIndexFormat format = _sg_wgpu_indexformat(pip->cmn.index_type);
-        const uint64_t buf_size = (uint64_t)ib->cmn.size;
-        const uint64_t offset = (uint64_t)ib_offset;
-        SOKOL_ASSERT(buf_size > offset);
-        const uint64_t max_bytes = buf_size - offset;
-        wgpuRenderPassEncoderSetIndexBuffer(_sg.wgpu.pass_enc, ib->wgpu.buf, format, offset, max_bytes);
+        if (_sg_wgpu_bindcache_ib_dirty(ib, ib_offset)) {
+            _sg_wgpu_bindcache_ib_update(ib, ib_offset);
+            const WGPUIndexFormat format = _sg_wgpu_indexformat(pip->cmn.index_type);
+            const uint64_t buf_size = (uint64_t)ib->cmn.size;
+            const uint64_t offset = (uint64_t)ib_offset;
+            SOKOL_ASSERT(buf_size > offset);
+            const uint64_t max_bytes = buf_size - offset;
+            wgpuRenderPassEncoderSetIndexBuffer(_sg.wgpu.pass_enc, ib->wgpu.buf, format, offset, max_bytes);
+        }
     }
+    // FIXME: else-path should actually set a null index buffer (this was just recently implemented in WebGPU)
 
     // vertex buffers
-    for (uint32_t slot = 0; slot < (uint32_t)num_vbs; slot++) {
-        const uint64_t buf_size = (uint64_t)vbs[slot]->cmn.size;
-        const uint64_t offset = (uint64_t)vb_offsets[slot];
-        SOKOL_ASSERT(buf_size > offset);
-        const uint64_t max_bytes = buf_size - offset;
-        wgpuRenderPassEncoderSetVertexBuffer(_sg.wgpu.pass_enc, slot, vbs[slot]->wgpu.buf, offset, max_bytes);
+    for (int slot = 0; slot < num_vbs; slot++) {
+        if (_sg_wgpu_bindcache_vb_dirty(slot, vbs[slot], vb_offsets[slot])) {
+            _sg_wgpu_bindcache_vb_update(slot, vbs[slot], vb_offsets[slot]);
+            const uint64_t buf_size = (uint64_t)vbs[slot]->cmn.size;
+            const uint64_t offset = (uint64_t)vb_offsets[slot];
+            SOKOL_ASSERT(buf_size > offset);
+            const uint64_t max_bytes = buf_size - offset;
+            wgpuRenderPassEncoderSetVertexBuffer(_sg.wgpu.pass_enc, (uint32_t)slot, vbs[slot]->wgpu.buf, offset, max_bytes);
+        }
+        // FIXME: else-path should actually set a null vertex buffer (this was just recently implemented in WebGPU)
     }
 
     // FIXME: create adhoc bind group object for images and samplers
@@ -13396,7 +13442,7 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(sg_shader_stage stage_index, int ub_
                                       _sg.wgpu.uniform.bind.group,
                                       SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_UBS,
                                       &_sg.wgpu.uniform.bind.offsets[0][0]);
-    _sg.wgpu.uniform.offset = _sg_roundup_u32(_sg.wgpu.uniform.offset + data->size, alignment);
+    _sg.wgpu.uniform.offset = _sg_roundup_u32(_sg.wgpu.uniform.offset + (uint32_t)data->size, alignment);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_draw(int base_element, int num_elements, int num_instances) {
