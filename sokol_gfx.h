@@ -10883,12 +10883,17 @@ _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
     _sg.mtl.sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
     _sg.mtl.device = (__bridge id<MTLDevice>) desc->context.metal.device;
     _sg.mtl.cmd_queue = [_sg.mtl.device newCommandQueue];
+
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         _sg.mtl.uniform_buffers[i] = [_sg.mtl.device
             newBufferWithLength:(NSUInteger)_sg.mtl.ub_size
             options:MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeShared
         ];
+        #if defined(SOKOL_DEBUG)
+            _sg.mtl.uniform_buffers[i].label = [NSString stringWithFormat:@"sg-uniform-buffer.%d", i];
+        #endif
     }
+
     if (@available(macOS 10.15, iOS 13.0, *)) {
         _sg.mtl.has_unified_memory = _sg.mtl.device.hasUnifiedMemory;
     } else {
@@ -10983,6 +10988,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_buffer(_sg_buffer_t* buf, const 
                 mtl_buf = [_sg.mtl.device newBufferWithLength:(NSUInteger)buf->cmn.size options:mtl_options];
             }
         }
+        #if defined(SOKOL_DEBUG)
+            if (desc->label) {
+                mtl_buf.label = [NSString stringWithFormat:@"%s.%d", desc->label, slot];
+            }
+        #endif
         buf->mtl.buf[slot] = _sg_mtl_add_resource(mtl_buf);
         _SG_OBJC_RELEASE(mtl_buf);
     }
@@ -11126,6 +11136,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg
                 _sg_mtl_copy_image_data(img, mtl_tex, &desc->data);
             }
         }
+        #if defined(SOKOL_DEBUG)
+            if (desc->label) {
+                mtl_tex.label = [NSString stringWithFormat:@"%s.%d", desc->label, slot];
+            }
+        #endif
         img->mtl.tex[slot] = _sg_mtl_add_resource(mtl_tex);
         _SG_OBJC_RELEASE(mtl_tex);
     }
@@ -11167,6 +11182,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_sampler(_sg_sampler_t* smp, cons
         mtl_desc.maxAnisotropy = desc->max_anisotropy;
         mtl_desc.normalizedCoordinates = YES;
         mtl_desc.compareFunction = _sg_mtl_compare_func(desc->compare);
+        #if defined(SOKOL_DEBUG)
+            if (desc->label) {
+                mtl_desc.label = [NSString stringWithUTF8String:desc->label];
+            }
+        #endif
         mtl_smp = [_sg.mtl.device newSamplerStateWithDescriptor:mtl_desc];
         _SG_OBJC_RELEASE(mtl_desc);
     }
@@ -11246,6 +11266,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const 
         _SG_ERROR(METAL_FRAGMENT_SHADER_ENTRY_NOT_FOUND);
         goto failed;
     }
+    #if defined(SOKOL_DEBUG)
+        if (desc->label) {
+            vs_lib.label = [NSString stringWithFormat:@"%s.vs", desc->label];
+            fs_lib.label = [NSString stringWithFormat:@"%s.fs", desc->label];
+        }
+    #endif
     // it is legal to call _sg_mtl_add_resource with a nil value, this will return a special 0xFFFFFFFF index
     shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_lib  = _sg_mtl_add_resource(vs_lib);
     _SG_OBJC_RELEASE(vs_lib);
@@ -11361,6 +11387,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
         rp_desc.colorAttachments[i].sourceAlphaBlendFactor = _sg_mtl_blend_factor(cs->blend.src_factor_alpha);
         rp_desc.colorAttachments[i].sourceRGBBlendFactor = _sg_mtl_blend_factor(cs->blend.src_factor_rgb);
     }
+    #if defined(SOKOL_DEBUG)
+        if (desc->label) {
+            rp_desc.label = [NSString stringWithFormat:@"%s", desc->label];
+        }
+    #endif
     NSError* err = NULL;
     id<MTLRenderPipelineState> mtl_rps = [_sg.mtl.device newRenderPipelineStateWithDescriptor:rp_desc error:&err];
     _SG_OBJC_RELEASE(rp_desc);
@@ -11393,6 +11424,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
         ds_desc.frontFaceStencil.readMask = desc->stencil.read_mask;
         ds_desc.frontFaceStencil.writeMask = desc->stencil.write_mask;
     }
+    #if defined(SOKOL_DEBUG)
+        if (desc->label) {
+            ds_desc.label = [NSString stringWithFormat:@"%s.dss", desc->label];
+        }
+    #endif
     // FIXME: can this actually fail?
     id<MTLDepthStencilState> mtl_dss = [_sg.mtl.device newDepthStencilStateWithDescriptor:ds_desc];
     _SG_OBJC_RELEASE(ds_desc);
@@ -11929,6 +11965,19 @@ _SOKOL_PRIVATE void _sg_mtl_update_image(_sg_image_t* img, const sg_image_data* 
     }
     __unsafe_unretained id<MTLTexture> mtl_tex = _sg_mtl_id(img->mtl.tex[img->cmn.active_slot]);
     _sg_mtl_copy_image_data(img, mtl_tex, data);
+}
+
+_SOKOL_PRIVATE void _sg_mtl_push_debug_group(const char* name) {
+    SOKOL_ASSERT(name);
+    if (_sg.mtl.cmd_encoder) {
+        [_sg.mtl.cmd_encoder pushDebugGroup:[NSString stringWithUTF8String:name]];
+    }
+}
+
+_SOKOL_PRIVATE void _sg_mtl_pop_debug_group(void) {
+    if (_sg.mtl.cmd_encoder) {
+        [_sg.mtl.cmd_encoder popDebugGroup];
+    }
 }
 
 // ██     ██ ███████ ██████   ██████  ██████  ██    ██     ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
@@ -14157,6 +14206,20 @@ static inline void _sg_update_image(_sg_image_t* img, const sg_image_data* data)
     _sg_dummy_update_image(img, data);
     #else
     #error("INVALID BACKEND");
+    #endif
+}
+
+static inline void _sg_push_debug_group(const char* name) {
+    #if defined(SOKOL_METAL)
+    _sg_mtl_push_debug_group(name);
+    #else
+    _SOKOL_UNUSED(name);
+    #endif
+}
+
+static inline void _sg_pop_debug_group(void) {
+    #if defined(SOKOL_METAL)
+    _sg_mtl_pop_debug_group();
     #endif
 }
 
@@ -17002,12 +17065,13 @@ SOKOL_API_IMPL void sg_update_image(sg_image img_id, const sg_image_data* data) 
 SOKOL_API_IMPL void sg_push_debug_group(const char* name) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(name);
-    _SOKOL_UNUSED(name);
+    _sg_push_debug_group(name);
     _SG_TRACE_ARGS(push_debug_group, name);
 }
 
 SOKOL_API_IMPL void sg_pop_debug_group(void) {
     SOKOL_ASSERT(_sg.valid);
+    _sg_pop_debug_group();
     _SG_TRACE_NOARGS(pop_debug_group);
 }
 
