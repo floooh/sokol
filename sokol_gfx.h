@@ -7523,11 +7523,13 @@ _SOKOL_PRIVATE void _sg_gl_fb_attach_texture(const _sg_gl_attachment_t* gl_att, 
     SOKOL_ASSERT(img);
     const GLuint gl_tex = img->gl.tex[0];
     SOKOL_ASSERT(gl_tex);
+    const GLuint gl_target = img->gl.target;
+    SOKOL_ASSERT(gl_target);
     const int mip_level = cmn_att->mip_level;
     const int slice = cmn_att->slice;
     switch (img->cmn.type) {
         case SG_IMAGETYPE_2D:
-            glFramebufferTexture2D(GL_FRAMEBUFFER, gl_att_type, GL_TEXTURE_2D, gl_tex, mip_level);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, gl_att_type, gl_target, gl_tex, mip_level);
             break;
         case SG_IMAGETYPE_CUBE:
             glFramebufferTexture2D(GL_FRAMEBUFFER, gl_att_type, _sg_gl_cubeface_target(slice), gl_tex, mip_level);
