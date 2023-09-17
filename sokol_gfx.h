@@ -14220,8 +14220,6 @@ static inline void _sg_push_debug_group(const char* name) {
 static inline void _sg_pop_debug_group(void) {
     #if defined(SOKOL_METAL)
     _sg_mtl_pop_debug_group();
-    #else
-    _SOKOL_UNUSED(name);
     #endif
 }
 
