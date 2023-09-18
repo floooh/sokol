@@ -2,7 +2,7 @@
 
 #### 18-Sep-2023
 
-- PR https://github.com/floooh/sokol/pull/893 has been merged, this fixes a small issue
+- PR https://github.com/floooh/sokol/pull/893 has been merged, this fixes a minor issue
   in the GL backend when using an injected texture as framebuffer attachment.
 - Issue https://github.com/floooh/sokol/issues/884 has been fixed via PR https://github.com/floooh/sokol/pull/894,
   this adds missing error code paths in the Metal backend when Metal object creation fails.
