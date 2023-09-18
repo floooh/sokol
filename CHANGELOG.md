@@ -7,6 +7,8 @@
 - Issue https://github.com/floooh/sokol/issues/884 has been fixed via PR https://github.com/floooh/sokol/pull/894,
   this adds missing error code paths in the Metal backend when Metal object creation fails.
 - Clarified `sapp_run()` behaviour in the sokol_app.h documentation header (search for `OPTIONAL: DON'T HIJACK main()`)
+- sokol_args.h now fully supports "key-only args", see issue https://github.com/floooh/sokol/issues/876 for details,
+  fixed via PR https://github.com/floooh/sokol/pull/896
 
 #### 17-Sep-2023
 
