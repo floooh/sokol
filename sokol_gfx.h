@@ -2894,7 +2894,10 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_UPDATE_BUFFER_FAILED, "Map() failed when updating buffer (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_APPEND_BUFFER_FAILED, "Map() failed when appending to buffer (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_UPDATE_IMAGE_FAILED, "Map() failed when updating image (d3d11)") \
+    _SG_LOGITEM_XMACRO(METAL_CREATE_BUFFER_FAILED, "failed to create buffer object (metal)") \
     _SG_LOGITEM_XMACRO(METAL_TEXTURE_FORMAT_NOT_SUPPORTED, "pixel format not supported for texture (metal)") \
+    _SG_LOGITEM_XMACRO(METAL_CREATE_TEXTURE_FAILED, "failed to create texture object (metal)") \
+    _SG_LOGITEM_XMACRO(METAL_CREATE_SAMPLER_FAILED, "failed to create sampler object (metal)") \
     _SG_LOGITEM_XMACRO(METAL_SHADER_COMPILATION_FAILED, "shader compilation failed (metal)") \
     _SG_LOGITEM_XMACRO(METAL_SHADER_CREATION_FAILED, "shader creation failed (metal)") \
     _SG_LOGITEM_XMACRO(METAL_SHADER_COMPILATION_OUTPUT, "") \
@@ -2902,6 +2905,7 @@ typedef struct sg_pass_info {
     _SG_LOGITEM_XMACRO(METAL_FRAGMENT_SHADER_ENTRY_NOT_FOUND, "fragment shader entry not found (metal)") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_FAILED, "failed to create render pipeline state (metal)") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_OUTPUT, "") \
+    _SG_LOGITEM_XMACRO(METAL_CREATE_DSS_FAILED, "failed to create depth stencil state (metal)") \
     _SG_LOGITEM_XMACRO(WGPU_MAP_UNIFORM_BUFFER_FAILED, "mapping uniform buffer failed (wgpu)") \
     _SG_LOGITEM_XMACRO(WGPU_STAGING_BUFFER_FULL_COPY_TO_BUFFER, "per frame staging buffer full when copying to buffer (wgpu)") \
     _SG_LOGITEM_XMACRO(WGPU_STAGING_BUFFER_FULL_COPY_TO_TEXTURE, "per frame staging buffer full when copying to texture (wgpu)") \
@@ -10989,6 +10993,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_buffer(_sg_buffer_t* buf, const 
             } else {
                 mtl_buf = [_sg.mtl.device newBufferWithLength:(NSUInteger)buf->cmn.size options:mtl_options];
             }
+            if (nil == mtl_buf) {
+                _SG_ERROR(METAL_CREATE_BUFFER_FAILED);
+                return SG_RESOURCESTATE_FAILED;
+            }
         }
         #if defined(SOKOL_DEBUG)
             if (desc->label) {
@@ -11134,6 +11142,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg
             mtl_tex = (__bridge id<MTLTexture>) desc->mtl_textures[slot];
         } else {
             mtl_tex = [_sg.mtl.device newTextureWithDescriptor:mtl_desc];
+            if (nil == mtl_tex) {
+                _SG_OBJC_RELEASE(mtl_desc);
+                _SG_ERROR(METAL_CREATE_TEXTURE_FAILED);
+                return SG_RESOURCESTATE_FAILED;
+            }
             if ((img->cmn.usage == SG_USAGE_IMMUTABLE) && !img->cmn.render_target) {
                 _sg_mtl_copy_image_data(img, mtl_tex, &desc->data);
             }
@@ -11191,6 +11204,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_sampler(_sg_sampler_t* smp, cons
         #endif
         mtl_smp = [_sg.mtl.device newSamplerStateWithDescriptor:mtl_desc];
         _SG_OBJC_RELEASE(mtl_desc);
+        if (nil == mtl_smp) {
+            _SG_ERROR(METAL_CREATE_SAMPLER_FAILED);
+            return SG_RESOURCESTATE_FAILED;
+        }
     }
     smp->mtl.sampler_state = _sg_mtl_add_resource(mtl_smp);
     _SG_OBJC_RELEASE(mtl_smp);
@@ -11403,6 +11420,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
         _SG_LOGMSG(METAL_CREATE_RPS_OUTPUT, [err.localizedDescription UTF8String]);
         return SG_RESOURCESTATE_FAILED;
     }
+    pip->mtl.rps = _sg_mtl_add_resource(mtl_rps);
+    _SG_OBJC_RELEASE(mtl_rps);
 
     // depth-stencil-state
     MTLDepthStencilDescriptor* ds_desc = [[MTLDepthStencilDescriptor alloc] init];
@@ -11431,11 +11450,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
             ds_desc.label = [NSString stringWithFormat:@"%s.dss", desc->label];
         }
     #endif
-    // FIXME: can this actually fail?
     id<MTLDepthStencilState> mtl_dss = [_sg.mtl.device newDepthStencilStateWithDescriptor:ds_desc];
     _SG_OBJC_RELEASE(ds_desc);
-    pip->mtl.rps = _sg_mtl_add_resource(mtl_rps);
-    _SG_OBJC_RELEASE(mtl_rps);
+    if (nil == mtl_dss) {
+        _SG_ERROR(METAL_CREATE_DSS_FAILED);
+        return SG_RESOURCESTATE_FAILED;
+    }
     pip->mtl.dss = _sg_mtl_add_resource(mtl_dss);
     _SG_OBJC_RELEASE(mtl_dss);
     return SG_RESOURCESTATE_VALID;
