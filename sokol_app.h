@@ -951,9 +951,11 @@
 
     OPTIONAL: DON'T HIJACK main() (#define SOKOL_NO_ENTRY)
     ======================================================
+    NOTE: SOKOL_NO_ENTRY and sapp_run() is currently not supported on Android.
+
     In its default configuration, sokol_app.h "hijacks" the platform's
     standard main() function. This was done because different platforms
-    have different main functions which are not compatible with
+    have different entry point conventions which are not compatible with
     C's main() (for instance WinMain on Windows has completely different
     arguments). However, this "main hijacking" posed a problem for
     usage scenarios like integrating sokol_app.h with other languages than
@@ -965,12 +967,30 @@
     - instead provide the standard main() function of the platform
     - from the main function, call the function ```sapp_run()``` which
       takes a pointer to an ```sapp_desc``` structure.
-    - ```sapp_run()``` takes over control and calls the provided init-, frame-,
-      shutdown- and event-callbacks just like in the default model, it
-      will only return when the application quits (or not at all on some
-      platforms, like emscripten)
+    - from here on```sapp_run()``` takes over control and calls the provided
+      init-, frame-, event- and cleanup-callbacks just like in the default model.
 
-    NOTE: SOKOL_NO_ENTRY is currently not supported on Android.
+    sapp_run() behaves differently across platforms:
+
+        - on some platforms, sapp_run() will return when the application quits
+        - on other platforms, sapp_run() will never return, even when the
+          application quits (the operating system is free to simply terminate
+          the application at any time)
+        - on Emscripten specifically, sapp_run() will return immediately while
+          the frame callback keeps being called
+
+    This different behaviour of sapp_run() essentially means that there shouldn't
+    be any code *after* sapp_run(), because that may either never be called, or in
+    case of Emscripten will be called at an unexpected time (at application start).
+
+    An application also should not depend on the cleanup-callback being called
+    when cross-platform compatibility is required.
+
+    Since sapp_run() returns immediately on Emscripten you shouldn't activate
+    the 'EXIT_RUNTIME' linker option (this is disabled by default when compiling
+    for the browser target), since this would be called immediately at
+    application start, causing any global objects to be destroyed and global
+    variables to be zeroed.
 
     WINDOWS CONSOLE OUTPUT
     ======================
