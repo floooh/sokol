@@ -988,7 +988,7 @@
 
     Since sapp_run() returns immediately on Emscripten you shouldn't activate
     the 'EXIT_RUNTIME' linker option (this is disabled by default when compiling
-    for the browser target), since this would be called immediately at
+    for the browser target), since the C/C++ exit runtime would be called immediately at
     application start, causing any global objects to be destroyed and global
     variables to be zeroed.
 
