@@ -2457,6 +2457,12 @@ _SOKOL_PRIVATE void _sfetch_invoke_response_callback(_sfetch_item_t* item) {
     item->callback(&response);
 }
 
+_SOKOL_PRIVATE void _sfetch_cancel_item(_sfetch_item_t* item) {
+    item->state = _SFETCH_STATE_FAILED;
+    item->user.finished = true;
+    item->user.error_code = SFETCH_ERROR_CANCELLED;
+}
+
 /* per-frame channel stuff: move requests in and out of the IO threads, call response callbacks */
 _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_t* pool) {
 
@@ -2469,9 +2475,16 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         _sfetch_item_t* item = _sfetch_pool_item_lookup(pool, slot_id);
         SOKOL_ASSERT(item);
         SOKOL_ASSERT(item->state == _SFETCH_STATE_ALLOCATED);
+        // if the item was cancelled early, kick it out immediately
+        if (item->user.cancel) {
+            _sfetch_cancel_item(item);
+            _sfetch_invoke_response_callback(item);
+            _sfetch_pool_item_free(pool, slot_id);
+            continue;
+        }
         item->state = _SFETCH_STATE_DISPATCHED;
         item->lane = _sfetch_ring_dequeue(&chn->free_lanes);
-        /* if no buffer provided yet, invoke response callback to do so */
+        // if no buffer provided yet, invoke response callback to do so
         if (0 == item->buffer.ptr) {
             _sfetch_invoke_response_callback(item);
         }
@@ -2498,8 +2511,7 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
             item->user.cont = false;
         }
         if (item->user.cancel) {
-            item->state = _SFETCH_STATE_FAILED;
-            item->user.finished = true;
+            _sfetch_cancel_item(item);
         }
         switch (item->state) {
             case _SFETCH_STATE_DISPATCHED:
@@ -2541,7 +2553,7 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         item->user.fetched_offset = item->thread.fetched_offset;
         item->user.fetched_size = item->thread.fetched_size;
         if (item->user.cancel) {
-            item->user.error_code = SFETCH_ERROR_CANCELLED;
+            _sfetch_cancel_item(item);
         }
         else {
             item->user.error_code = item->thread.error_code;
@@ -2558,7 +2570,7 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         }
         _sfetch_invoke_response_callback(item);
 
-        /* when the request is finish, free the lane for another request,
+        /* when the request is finished, free the lane for another request,
            otherwise feed it back into the incoming queue
         */
         if (item->user.finished) {
