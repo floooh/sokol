@@ -7323,8 +7323,8 @@ _SOKOL_PRIVATE GLuint _sg_gl_compile_shader(sg_shader_stage stage, const char* s
         if (log_len > 0) {
             GLchar* log_buf = (GLchar*) _sg_malloc((size_t)log_len);
             glGetShaderInfoLog(gl_shd, log_len, &log_len, log_buf);
-            _SG_ERROR(GL_SHADER_COMPILATION_FAILED);
             _SG_LOGMSG(GL_SHADER_COMPILATION_FAILED, log_buf);
+            _SG_ERROR(GL_SHADER_COMPILATION_FAILED);
             _sg_free(log_buf);
         }
         glDeleteShader(gl_shd);
@@ -7365,8 +7365,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
         if (log_len > 0) {
             GLchar* log_buf = (GLchar*) _sg_malloc((size_t)log_len);
             glGetProgramInfoLog(gl_prog, log_len, &log_len, log_buf);
-            _SG_ERROR(GL_SHADER_LINKING_FAILED);
             _SG_LOGMSG(GL_SHADER_LINKING_FAILED, log_buf);
+            _SG_ERROR(GL_SHADER_LINKING_FAILED);
             _sg_free(log_buf);
         }
         glDeleteProgram(gl_prog);
@@ -7434,8 +7434,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
                 glUniform1i(gl_loc, gl_img_smp->gl_tex_slot);
             } else {
                 gl_img_smp->gl_tex_slot = -1;
-                _SG_ERROR(GL_TEXTURE_NAME_NOT_FOUND_IN_SHADER);
                 _SG_LOGMSG(GL_TEXTURE_NAME_NOT_FOUND_IN_SHADER, img_smp_desc->glsl_name);
+                _SG_ERROR(GL_TEXTURE_NAME_NOT_FOUND_IN_SHADER);
             }
         }
     }
@@ -7510,8 +7510,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
             gl_attr->normalized = _sg_gl_vertexformat_normalized(a_state->format);
             pip->cmn.vertex_buffer_layout_active[a_state->buffer_index] = true;
         } else {
-            _SG_ERROR(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER);
             _SG_LOGMSG(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER, _sg_strptr(&shd->gl.attrs[attr_index].name));
+            _SG_ERROR(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER);
         }
     }
     return SG_RESOURCESTATE_VALID;
@@ -9478,8 +9478,8 @@ _SOKOL_PRIVATE ID3DBlob* _sg_d3d11_compile_shader(const sg_shader_stage_desc* st
         _SG_ERROR(D3D11_SHADER_COMPILATION_FAILED);
     }
     if (errors_or_warnings) {
-        _SG_WARN(D3D11_SHADER_COMPILATION_OUTPUT);
         _SG_LOGMSG(D3D11_SHADER_COMPILATION_OUTPUT, (LPCSTR)_sg_d3d11_GetBufferPointer(errors_or_warnings));
+        _SG_WARN(D3D11_SHADER_COMPILATION_OUTPUT);
         _sg_d3d11_Release(errors_or_warnings); errors_or_warnings = NULL;
     }
     if (FAILED(hr)) {
@@ -11228,8 +11228,8 @@ _SOKOL_PRIVATE id<MTLLibrary> _sg_mtl_compile_library(const char* src) {
         error:&err
     ];
     if (err) {
-        _SG_ERROR(METAL_SHADER_COMPILATION_FAILED);
         _SG_LOGMSG(METAL_SHADER_COMPILATION_OUTPUT, [err.localizedDescription UTF8String]);
+        _SG_ERROR(METAL_SHADER_COMPILATION_FAILED);
     }
     return lib;
 }
@@ -11239,8 +11239,8 @@ _SOKOL_PRIVATE id<MTLLibrary> _sg_mtl_library_from_bytecode(const void* ptr, siz
     dispatch_data_t lib_data = dispatch_data_create(ptr, num_bytes, NULL, DISPATCH_DATA_DESTRUCTOR_DEFAULT);
     id<MTLLibrary> lib = [_sg.mtl.device newLibraryWithData:lib_data error:&err];
     if (err) {
-        _SG_ERROR(METAL_SHADER_CREATION_FAILED);
         _SG_LOGMSG(METAL_SHADER_COMPILATION_OUTPUT, [err.localizedDescription UTF8String]);
+        _SG_ERROR(METAL_SHADER_CREATION_FAILED);
     }
     _SG_OBJC_RELEASE(lib_data);
     return lib;
@@ -11416,8 +11416,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
     _SG_OBJC_RELEASE(rp_desc);
     if (nil == mtl_rps) {
         SOKOL_ASSERT(err);
-        _SG_ERROR(METAL_CREATE_RPS_FAILED);
         _SG_LOGMSG(METAL_CREATE_RPS_OUTPUT, [err.localizedDescription UTF8String]);
+        _SG_ERROR(METAL_CREATE_RPS_FAILED);
         return SG_RESOURCESTATE_FAILED;
     }
     pip->mtl.rps = _sg_mtl_add_resource(mtl_rps);
