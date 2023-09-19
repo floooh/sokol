@@ -1,5 +1,12 @@
 ## Updates
 
+#### 19-Sep-2023
+
+- sokol_fetch.h: fixed a minor issue where a request that was cancelled before it was dispatched
+  had an incomplete response state set in the response callback (the `finished`, `failed` and
+  `error_code` fields were not set). This fixes issue https://github.com/floooh/sokol/issues/882
+  via PR https://github.com/floooh/sokol/pull/898
+
 #### 18-Sep-2023
 
 - PR https://github.com/floooh/sokol/pull/893 has been merged, this fixes a minor issue
