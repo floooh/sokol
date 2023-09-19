@@ -3246,8 +3246,8 @@ typedef struct sg_wgpu_context_desc {
 } sg_wgpu_context_desc;
 
 typedef struct sg_gl_context_desc {
-    GLuint (*default_framebuffer_cb)(void);
-    GLuint (*default_framebuffer_userdata_cb)(void*);
+    unsigned int (*default_framebuffer_cb)(void);
+    unsigned int (*default_framebuffer_userdata_cb)(void*);
     void* user_data;
 } sg_gl_context_desc;
 
