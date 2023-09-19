@@ -271,6 +271,8 @@ def funcptr_result_c(field_type):
     res_type = field_type[:field_type.index('(*)')].strip()
     if res_type == 'void':
         return 'void'
+    elif is_prim_type(res_type):
+        return as_zig_prim_type(res_type)
     elif util.is_const_void_ptr(res_type):
         return '?*const anyopaque'
     elif util.is_void_ptr(res_type):
