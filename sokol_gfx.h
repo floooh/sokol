@@ -7043,6 +7043,7 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
 }
 
 _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
+    _SOKOL_UNUSED(desc);
     SOKOL_ASSERT(desc->context.gl.default_framebuffer_cb == NULL || desc->context.gl.default_framebuffer_userdata_cb == NULL);
     
     // assumes that _sg.gl is already zero-initialized
