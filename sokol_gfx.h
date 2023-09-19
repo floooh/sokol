@@ -15370,7 +15370,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_uniforms(sg_shader_stage stage_index, int
         const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[stage_index];
         _SG_VALIDATE(ub_index < stage->num_uniform_blocks, VALIDATE_AUB_NO_UB_AT_SLOT);
 
-        // check that the provided data size doesn't exceed the uniform block size
+        // check that the provided data size matches the uniform block size
         _SG_VALIDATE(data->size == stage->uniform_blocks[ub_index].size, VALIDATE_AUB_SIZE);
 
         return _sg_validate_end();
