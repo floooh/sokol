@@ -4769,8 +4769,7 @@ typedef struct {
 
 typedef struct {
     bool valid;
-    bool has_unified_memory;
-    bool force_managed_storage_mode;
+    bool use_shared_storage_mode;
     const void*(*renderpass_descriptor_cb)(void);
     const void*(*renderpass_descriptor_userdata_cb)(void*);
     const void*(*drawable_cb)(void);
@@ -10271,15 +10270,11 @@ _SOKOL_PRIVATE MTLStoreAction _sg_mtl_store_action(sg_store_action a, bool resol
 }
 
 _SOKOL_PRIVATE MTLResourceOptions _sg_mtl_resource_options_storage_mode_managed_or_shared(void) {
-    #if defined(_SG_TARGET_MACOS)
-    if (_sg.mtl.force_managed_storage_mode || !_sg.mtl.has_unified_memory) {
-        return MTLResourceStorageModeManaged;
+    if (_sg.mtl.use_shared_storage_mode) {
+        return MTLResourceStorageModeShared;
     } else {
-        return MTLResourceStorageModeShared;
+        return MTLResourceStorageModeManaged;
     }
-    #else
-        return MTLResourceStorageModeShared;
-    #endif
 }
 
 _SOKOL_PRIVATE MTLResourceOptions _sg_mtl_buffer_resource_options(sg_usage usg) {
@@ -10904,16 +10899,25 @@ _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
         #endif
     }
 
-    if (@available(macOS 10.15, iOS 13.0, *)) {
-        _sg.mtl.has_unified_memory = _sg.mtl.device.hasUnifiedMemory;
+    if (desc->mtl_force_managed_storage_mode) {
+        _sg.mtl.use_shared_storage_mode = false;
+    } else if (@available(macOS 10.15, iOS 13.0, *)) {
+        // on Intel Macs, always use managed resources even though the
+        // device says it supports unified memory (because of texture restrictions)
+        const bool isMac1 = [_sg.mtl.device supportsFamily:MTLGPUFamilyMac1];
+        const bool isMac2 = [_sg.mtl.device supportsFamily:MTLGPUFamilyMac2];
+        if (isMac1 || isMac2) {
+            _sg.mtl.use_shared_storage_mode = false;
+        } else {
+            _sg.mtl.use_shared_storage_mode = _sg.mtl.device.hasUnifiedMemory;
+        }
     } else {
         #if defined(_SG_TARGET_MACOS)
-            _sg.mtl.has_unified_memory = false;
+            _sg.mtl.use_shared_storage_mode = false;
         #else
-            _sg.mtl.has_unified_memory = true;
+            _sg.mtl.use_shared_storage_mode = true;
         #endif
     }
-    _sg.mtl.force_managed_storage_mode = desc->mtl_force_managed_storage_mode;
     _sg_mtl_init_caps();
 }
 
