@@ -10739,6 +10739,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.mrt_independent_write_mask = true;
 
     _sg.features.image_clamp_to_border = false;
+    #if (MAC_OS_X_VERSION_MAX_ALLOWED >= 120000) || (__IPHONE_OS_VERSION_MAX_ALLOWED >= 140000)
     if (@available(macOS 12.0, iOS 14.0, *)) {
         _sg.features.image_clamp_to_border = [_sg.mtl.device supportsFamily:MTLGPUFamilyApple7]
                                              || [_sg.mtl.device supportsFamily:MTLGPUFamilyApple8]
@@ -10749,6 +10750,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
             }
         }
     }
+    #endif
 
     #if defined(_SG_TARGET_MACOS)
         _sg.limits.max_image_size_2d = 16 * 1024;
