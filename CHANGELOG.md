@@ -1,5 +1,12 @@
 ## Updates
 
+#### 22-Sep-2023
+
+- sokol_gfx.h: Fixed a Metal validation error on Intel Macs when creating textures (Intel Macs
+  have unified memory, but don't support textures in shared storage mode). This was a regression
+  in the image/sampler split update in mid-July 2023. Fixes issue https://github.com/floooh/sokol/issues/905
+  via PR https://github.com/floooh/sokol/pull/907.
+
 #### 19-Sep-2023
 
 - sokol_fetch.h: fixed a minor issue where a request that was cancelled before it was dispatched

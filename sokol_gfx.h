@@ -4769,8 +4769,7 @@ typedef struct {
 
 typedef struct {
     bool valid;
-    bool has_unified_memory;
-    bool force_managed_storage_mode;
+    bool use_shared_storage_mode;
     const void*(*renderpass_descriptor_cb)(void);
     const void*(*renderpass_descriptor_userdata_cb)(void*);
     const void*(*drawable_cb)(void);
@@ -10272,12 +10271,13 @@ _SOKOL_PRIVATE MTLStoreAction _sg_mtl_store_action(sg_store_action a, bool resol
 
 _SOKOL_PRIVATE MTLResourceOptions _sg_mtl_resource_options_storage_mode_managed_or_shared(void) {
     #if defined(_SG_TARGET_MACOS)
-    if (_sg.mtl.force_managed_storage_mode || !_sg.mtl.has_unified_memory) {
-        return MTLResourceStorageModeManaged;
-    } else {
+    if (_sg.mtl.use_shared_storage_mode) {
         return MTLResourceStorageModeShared;
+    } else {
+        return MTLResourceStorageModeManaged;
     }
     #else
+        // MTLResourceStorageModeManaged is not even defined on iOS SDK
         return MTLResourceStorageModeShared;
     #endif
 }
@@ -10739,16 +10739,20 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.mrt_independent_write_mask = true;
 
     _sg.features.image_clamp_to_border = false;
+    #if (MAC_OS_X_VERSION_MAX_ALLOWED >= 120000) || (__IPHONE_OS_VERSION_MAX_ALLOWED >= 140000)
     if (@available(macOS 12.0, iOS 14.0, *)) {
         _sg.features.image_clamp_to_border = [_sg.mtl.device supportsFamily:MTLGPUFamilyApple7]
                                              || [_sg.mtl.device supportsFamily:MTLGPUFamilyApple8]
                                              || [_sg.mtl.device supportsFamily:MTLGPUFamilyMac2];
+        #if (MAC_OS_X_VERSION_MAX_ALLOWED >= 130000) || (__IPHONE_OS_VERSION_MAX_ALLOWED >= 160000)
         if (!_sg.features.image_clamp_to_border) {
             if (@available(macOS 13.0, iOS 16.0, *)) {
                 _sg.features.image_clamp_to_border = [_sg.mtl.device supportsFamily:MTLGPUFamilyMetal3];
             }
         }
+        #endif
     }
+    #endif
 
     #if defined(_SG_TARGET_MACOS)
         _sg.limits.max_image_size_2d = 16 * 1024;
@@ -10900,16 +10904,24 @@ _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
         #endif
     }
 
-    if (@available(macOS 10.15, iOS 13.0, *)) {
-        _sg.mtl.has_unified_memory = _sg.mtl.device.hasUnifiedMemory;
+    if (desc->mtl_force_managed_storage_mode) {
+        _sg.mtl.use_shared_storage_mode = false;
+    } else if (@available(macOS 10.15, iOS 13.0, *)) {
+        // on Intel Macs, always use managed resources even though the
+        // device says it supports unified memory (because of texture restrictions)
+        const bool is_apple_gpu = [_sg.mtl.device supportsFamily:MTLGPUFamilyApple1];
+        if (!is_apple_gpu) {
+            _sg.mtl.use_shared_storage_mode = false;
+        } else {
+            _sg.mtl.use_shared_storage_mode = true;
+        }
     } else {
         #if defined(_SG_TARGET_MACOS)
-            _sg.mtl.has_unified_memory = false;
+            _sg.mtl.use_shared_storage_mode = false;
         #else
-            _sg.mtl.has_unified_memory = true;
+            _sg.mtl.use_shared_storage_mode = true;
         #endif
     }
-    _sg.mtl.force_managed_storage_mode = desc->mtl_force_managed_storage_mode;
     _sg_mtl_init_caps();
 }
 
