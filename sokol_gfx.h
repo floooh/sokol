@@ -3245,6 +3245,12 @@ typedef struct sg_wgpu_context_desc {
     void* user_data;
 } sg_wgpu_context_desc;
 
+typedef struct sg_gl_context_desc {
+    uint32_t (*default_framebuffer_cb)(void);
+    uint32_t (*default_framebuffer_userdata_cb)(void*);
+    void* user_data;
+} sg_gl_context_desc;
+
 typedef struct sg_context_desc {
     sg_pixel_format color_format;
     sg_pixel_format depth_format;
@@ -3252,6 +3258,7 @@ typedef struct sg_context_desc {
     sg_metal_context_desc metal;
     sg_d3d11_context_desc d3d11;
     sg_wgpu_context_desc wgpu;
+    sg_gl_context_desc gl;
 } sg_context_desc;
 
 /*
@@ -7036,6 +7043,8 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
 
 _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
     _SOKOL_UNUSED(desc);
+    SOKOL_ASSERT(desc->context.gl.default_framebuffer_cb == 0 || desc->context.gl.default_framebuffer_userdata_cb == 0);
+    
     // assumes that _sg.gl is already zero-initialized
     _sg.gl.valid = true;
 
@@ -7724,6 +7733,12 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
         #if defined(SOKOL_GLCORE33)
         glDisable(GL_FRAMEBUFFER_SRGB);
         #endif
+        if (_sg.desc.context.gl.default_framebuffer_userdata_cb) {
+            _sg.gl.cur_context->default_framebuffer = _sg.desc.context.gl.default_framebuffer_userdata_cb(_sg.desc.context.gl.user_data);
+        } else if (_sg.desc.context.gl.default_framebuffer_cb) {
+            _sg.gl.cur_context->default_framebuffer = _sg.desc.context.gl.default_framebuffer_cb();
+        }
+
         glBindFramebuffer(GL_FRAMEBUFFER, _sg.gl.cur_context->default_framebuffer);
     }
     glViewport(0, 0, w, h);
