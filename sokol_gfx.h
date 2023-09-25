@@ -939,8 +939,8 @@
             sg_setup(&(sg_desc){
                 // ...
                 .allocator = {
-                    .alloc = my_alloc,
-                    .free = my_free,
+                    .alloc_fn = my_alloc,
+                    .free_fn = my_free,
                     .user_data = ...,
                 }
             });
@@ -3131,8 +3131,8 @@ typedef enum sg_log_item {
     .max_commit_listeners   1024
     .disable_validation     false
 
-    .allocator.alloc        0 (in this case, malloc() will be called)
-    .allocator.free         0 (in this case, free() will be called)
+    .allocator.alloc_fn     0 (in this case, malloc() will be called)
+    .allocator.free_fn      0 (in this case, free() will be called)
     .allocator.user_data    0
 
     .context.color_format: default value depends on selected backend:
@@ -3280,12 +3280,12 @@ typedef struct sg_commit_listener {
 
     Used in sg_desc to provide custom memory-alloc and -free functions
     to sokol_gfx.h. If memory management should be overridden, both the
-    alloc and free function must be provided (e.g. it's not valid to
+    alloc_fn and free_fn function must be provided (e.g. it's not valid to
     override one function but not the other).
 */
 typedef struct sg_allocator {
-    void* (*alloc)(size_t size, void* user_data);
-    void (*free)(void* ptr, void* user_data);
+    void* (*alloc_fn)(size_t size, void* user_data);
+    void (*free_fn)(void* ptr, void* user_data);
     void* user_data;
 } sg_allocator;
 
@@ -5067,8 +5067,8 @@ _SOKOL_PRIVATE void _sg_clear(void* ptr, size_t size) {
 _SOKOL_PRIVATE void* _sg_malloc(size_t size) {
     SOKOL_ASSERT(size > 0);
     void* ptr;
-    if (_sg.desc.allocator.alloc) {
-        ptr = _sg.desc.allocator.alloc(size, _sg.desc.allocator.user_data);
+    if (_sg.desc.allocator.alloc_fn) {
+        ptr = _sg.desc.allocator.alloc_fn(size, _sg.desc.allocator.user_data);
     } else {
         ptr = malloc(size);
     }
@@ -5085,8 +5085,8 @@ _SOKOL_PRIVATE void* _sg_malloc_clear(size_t size) {
 }
 
 _SOKOL_PRIVATE void _sg_free(void* ptr) {
-    if (_sg.desc.allocator.free) {
-        _sg.desc.allocator.free(ptr, _sg.desc.allocator.user_data);
+    if (_sg.desc.allocator.free_fn) {
+        _sg.desc.allocator.free_fn(ptr, _sg.desc.allocator.user_data);
     } else {
         free(ptr);
     }
@@ -7044,7 +7044,7 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
 _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
     _SOKOL_UNUSED(desc);
     SOKOL_ASSERT(desc->context.gl.default_framebuffer_cb == 0 || desc->context.gl.default_framebuffer_userdata_cb == 0);
-    
+
     // assumes that _sg.gl is already zero-initialized
     _sg.gl.valid = true;
 
@@ -16059,7 +16059,7 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
 SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
-    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
+    SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
     _SG_CLEAR_ARC_STRUCT(_sg_state_t, _sg);
     _sg.desc = _sg_desc_defaults(desc);
     _sg_setup_pools(&_sg.pools, &_sg.desc);

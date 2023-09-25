@@ -427,8 +427,8 @@
             sdtx_setup(&(sdtx_desc_t){
                 // ...
                 .allocator = {
-                    .alloc = my_alloc,
-                    .free = my_free,
+                    .alloc_fn = my_alloc,
+                    .free_fn = my_free,
                     .user_data = ...;
                 }
             });
@@ -658,12 +658,12 @@ typedef struct sdtx_context_desc_t {
 
     Used in sdtx_desc_t to provide custom memory-alloc and -free functions
     to sokol_debugtext.h. If memory management should be overridden, both the
-    alloc and free function must be provided (e.g. it's not valid to
+    alloc_fn and free_fn function must be provided (e.g. it's not valid to
     override one function but not the other).
 */
 typedef struct sdtx_allocator_t {
-    void* (*alloc)(size_t size, void* user_data);
-    void (*free)(void* ptr, void* user_data);
+    void* (*alloc_fn)(size_t size, void* user_data);
+    void (*free_fn)(void* ptr, void* user_data);
     void* user_data;
 } sdtx_allocator_t;
 
@@ -3660,8 +3660,8 @@ static void _sdtx_clear(void* ptr, size_t size) {
 static void* _sdtx_malloc(size_t size) {
     SOKOL_ASSERT(size > 0);
     void* ptr;
-    if (_sdtx.desc.allocator.alloc) {
-        ptr = _sdtx.desc.allocator.alloc(size, _sdtx.desc.allocator.user_data);
+    if (_sdtx.desc.allocator.alloc_fn) {
+        ptr = _sdtx.desc.allocator.alloc_fn(size, _sdtx.desc.allocator.user_data);
     } else {
         ptr = malloc(size);
     }
@@ -3678,8 +3678,8 @@ static void* _sdtx_malloc_clear(size_t size) {
 }
 
 static void _sdtx_free(void* ptr) {
-    if (_sdtx.desc.allocator.free) {
-        _sdtx.desc.allocator.free(ptr, _sdtx.desc.allocator.user_data);
+    if (_sdtx.desc.allocator.free_fn) {
+        _sdtx.desc.allocator.free_fn(ptr, _sdtx.desc.allocator.user_data);
     } else {
         free(ptr);
     }
@@ -4259,7 +4259,7 @@ SOKOL_API_IMPL void _sdtx_draw_layer(_sdtx_context_t* ctx, int layer_id) {
 
 
 static sdtx_desc_t _sdtx_desc_defaults(const sdtx_desc_t* desc) {
-    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
+    SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
     sdtx_desc_t res = *desc;
     res.context_pool_size = _sdtx_def(res.context_pool_size, _SDTX_DEFAULT_CONTEXT_POOL_SIZE);
     res.printf_buf_size = _sdtx_def(res.printf_buf_size, _SDTX_DEFAULT_PRINTF_BUF_SIZE);

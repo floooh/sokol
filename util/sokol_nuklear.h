@@ -223,8 +223,8 @@
             snk_setup(&(snk_desc_t){
                 // ...
                 .allocator = {
-                    .alloc = my_alloc,
-                    .free = my_free,
+                    .alloc_fn = my_alloc,
+                    .free_fn = my_free,
                     .user_data = ...;
                 }
             });
@@ -383,12 +383,12 @@ typedef enum snk_log_item_t {
 
     Used in snk_desc_t to provide custom memory-alloc and -free functions
     to sokol_nuklear.h. If memory management should be overridden, both the
-    alloc and free function must be provided (e.g. it's not valid to
+    alloc_fn and free_fn function must be provided (e.g. it's not valid to
     override one function but not the other).
 */
 typedef struct snk_allocator_t {
-    void* (*alloc)(size_t size, void* user_data);
-    void (*free)(void* ptr, void* user_data);
+    void* (*alloc_fn)(size_t size, void* user_data);
+    void (*free_fn)(void* ptr, void* user_data);
     void* user_data;
 } snk_allocator_t;
 
@@ -1891,8 +1891,8 @@ static void _snk_clear(void* ptr, size_t size) {
 static void* _snk_malloc(size_t size) {
     SOKOL_ASSERT(size > 0);
     void* ptr;
-    if (_snuklear.desc.allocator.alloc) {
-        ptr = _snuklear.desc.allocator.alloc(size, _snuklear.desc.allocator.user_data);
+    if (_snuklear.desc.allocator.alloc_fn) {
+        ptr = _snuklear.desc.allocator.alloc_fn(size, _snuklear.desc.allocator.user_data);
     } else {
         ptr = malloc(size);
     }
@@ -1909,8 +1909,8 @@ static void* _snk_malloc_clear(size_t size) {
 }
 
 static void _snk_free(void* ptr) {
-    if (_snuklear.desc.allocator.free) {
-        _snuklear.desc.allocator.free(ptr, _snuklear.desc.allocator.user_data);
+    if (_snuklear.desc.allocator.free_fn) {
+        _snuklear.desc.allocator.free_fn(ptr, _snuklear.desc.allocator.user_data);
     } else {
         free(ptr);
     }

@@ -1039,8 +1039,8 @@
             return (sapp_desc){
                 // ...
                 .allocator = {
-                    .alloc = my_alloc,
-                    .free = my_free,
+                    .alloc_fn = my_alloc,
+                    .free_fn = my_free,
                     .user_data = ...,
                 }
             };
@@ -1493,12 +1493,12 @@ typedef struct sapp_icon_desc {
 
     Used in sapp_desc to provide custom memory-alloc and -free functions
     to sokol_app.h. If memory management should be overridden, both the
-    alloc and free function must be provided (e.g. it's not valid to
+    alloc_fb and free_fn function must be provided (e.g. it's not valid to
     override one function but not the other).
 */
 typedef struct sapp_allocator {
-    void* (*alloc)(size_t size, void* user_data);
-    void (*free)(void* ptr, void* user_data);
+    void* (*alloc_fn)(size_t size, void* user_data);
+    void (*free_fn)(void* ptr, void* user_data);
     void* user_data;
 } sapp_allocator;
 
@@ -2862,10 +2862,9 @@ _SOKOL_PRIVATE void _sapp_clear(void* ptr, size_t size) {
 _SOKOL_PRIVATE void* _sapp_malloc(size_t size) {
     SOKOL_ASSERT(size > 0);
     void* ptr;
-    if (_sapp.desc.allocator.alloc) {
-        ptr = _sapp.desc.allocator.alloc(size, _sapp.desc.allocator.user_data);
-    }
-    else {
+    if (_sapp.desc.allocator.alloc_fn) {
+        ptr = _sapp.desc.allocator.alloc_fn(size, _sapp.desc.allocator.user_data);
+    } else {
         ptr = malloc(size);
     }
     if (0 == ptr) {
@@ -2881,8 +2880,8 @@ _SOKOL_PRIVATE void* _sapp_malloc_clear(size_t size) {
 }
 
 _SOKOL_PRIVATE void _sapp_free(void* ptr) {
-    if (_sapp.desc.allocator.free) {
-        _sapp.desc.allocator.free(ptr, _sapp.desc.allocator.user_data);
+    if (_sapp.desc.allocator.free_fn) {
+        _sapp.desc.allocator.free_fn(ptr, _sapp.desc.allocator.user_data);
     }
     else {
         free(ptr);
@@ -2986,7 +2985,7 @@ _SOKOL_PRIVATE bool _sapp_strcpy(const char* src, char* dst, int max_len) {
 }
 
 _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* desc) {
-    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
+    SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
     sapp_desc res = *desc;
     res.sample_count = _sapp_def(res.sample_count, 1);
     res.swap_interval = _sapp_def(res.swap_interval, 1);

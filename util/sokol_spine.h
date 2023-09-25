@@ -202,8 +202,8 @@
 
         sspine_setup(&(sspine_desc){
             .allocator = {
-                .alloc = my_alloc,
-                .free = my_free,
+                .alloc_fn = my_alloc,
+                .free_fn = my_free,
                 .user_data = ...,
             },
             .logger = {
@@ -908,8 +908,8 @@
             sspine_setup(&(sspine_desc){
                 // ...
                 .allocator = {
-                    .alloc = my_alloc,
-                    .free = my_free,
+                    .alloc_fn = my_alloc,
+                    .free_fn = my_free,
                     .user_data = ...;
                 }
             });
@@ -1198,8 +1198,8 @@ typedef struct sspine_instance_desc {
 } sspine_instance_desc;
 
 typedef struct sspine_allocator {
-    void* (*alloc)(size_t size, void* user_data);
-    void (*free)(void* ptr, void* user_data);
+    void* (*alloc_fn)(size_t size, void* user_data);
+    void (*free_fn)(void* ptr, void* user_data);
     void* user_data;
 } sspine_allocator;
 
@@ -2893,8 +2893,8 @@ static sspine_string _sspine_string(const char* cstr) {
 static void* _sspine_malloc(size_t size) {
     SOKOL_ASSERT(size > 0);
     void* ptr;
-    if (_sspine.desc.allocator.alloc) {
-        ptr = _sspine.desc.allocator.alloc(size, _sspine.desc.allocator.user_data);
+    if (_sspine.desc.allocator.alloc_fn) {
+        ptr = _sspine.desc.allocator.alloc_fn(size, _sspine.desc.allocator.user_data);
     } else {
         ptr = malloc(size);
     }
@@ -2911,8 +2911,8 @@ static void* _sspine_malloc_clear(size_t size) {
 }
 
 static void _sspine_free(void* ptr) {
-    if (_sspine.desc.allocator.free) {
-        _sspine.desc.allocator.free(ptr, _sspine.desc.allocator.user_data);
+    if (_sspine.desc.allocator.free_fn) {
+        _sspine.desc.allocator.free_fn(ptr, _sspine.desc.allocator.user_data);
     } else {
         free(ptr);
     }
@@ -4392,7 +4392,7 @@ static void _sspine_draw_layer(_sspine_context_t* ctx, int layer, const sspine_l
 
 // return sspine_desc with patched defaults
 static sspine_desc _sspine_desc_defaults(const sspine_desc* desc) {
-    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
+    SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
     sspine_desc res = *desc;
     res.max_vertices = _sspine_def(desc->max_vertices, _SSPINE_DEFAULT_MAX_VERTICES);
     res.max_commands = _sspine_def(desc->max_commands, _SSPINE_DEFAULT_MAX_COMMANDS);
