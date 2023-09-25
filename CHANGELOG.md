@@ -10,6 +10,9 @@
   This is a breaking change only if you've been providing your own allocator functions to
   the sokol headers.
 
+  See issue https://github.com/floooh/sokol/issues/903 and PR https://github.com/floooh/sokol/pull/908
+  for details.
+
 #### 23-Sep-2023
 
 - sokol_gfx.h gl: Allow to inject an external GL framebuffer id into the sokol-gfx default
