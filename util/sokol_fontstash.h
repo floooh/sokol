@@ -147,8 +147,8 @@
         FONScontext* fons_context = sfons_create(&(sfons_desc_t){
             ...
             .allocator = {
-                .alloc = my_alloc,
-                .free = my_free,
+                .alloc_fn = my_alloc,
+                .free_fn = my_free,
                 .user_data = ...,
             }
         });
@@ -213,15 +213,15 @@ extern "C" {
 
     Used in sfons_desc_t to provide custom memory-alloc and -free functions
     to sokol_fontstash.h. If memory management should be overridden, both the
-    alloc and free function must be provided (e.g. it's not valid to
+    alloc_fn and free_fn function must be provided (e.g. it's not valid to
     override one function but not the other).
 
     NOTE that this does not affect memory allocation calls inside
     fontstash.h
 */
 typedef struct sfons_allocator_t {
-    void* (*alloc)(size_t size, void* user_data);
-    void (*free)(void* ptr, void* user_data);
+    void* (*alloc_fn)(size_t size, void* user_data);
+    void (*free_fn)(void* ptr, void* user_data);
     void* user_data;
 } sfons_allocator_t;
 
@@ -1610,8 +1610,8 @@ static void _sfons_clear(void* ptr, size_t size) {
 static void* _sfons_malloc(const sfons_allocator_t* allocator, size_t size) {
     SOKOL_ASSERT(allocator && (size > 0));
     void* ptr;
-    if (allocator->alloc) {
-        ptr = allocator->alloc(size, allocator->user_data);
+    if (allocator->alloc_fn) {
+        ptr = allocator->alloc_fn(size, allocator->user_data);
     } else {
         ptr = malloc(size);
     }
@@ -1627,8 +1627,8 @@ static void* _sfons_malloc_clear(const sfons_allocator_t* allocator, size_t size
 
 static void _sfons_free(const sfons_allocator_t* allocator, void* ptr) {
     SOKOL_ASSERT(allocator);
-    if (allocator->free) {
-        allocator->free(ptr, allocator->user_data);
+    if (allocator->free_fn) {
+        allocator->free_fn(ptr, allocator->user_data);
     } else {
         free(ptr);
     }
@@ -1809,7 +1809,7 @@ static sfons_desc_t _sfons_desc_defaults(const sfons_desc_t* desc) {
 
 SOKOL_API_IMPL FONScontext* sfons_create(const sfons_desc_t* desc) {
     SOKOL_ASSERT(desc);
-    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
+    SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
     _sfons_t* sfons = (_sfons_t*) _sfons_malloc_clear(&desc->allocator, sizeof(_sfons_t));
     sfons->desc = _sfons_desc_defaults(desc);
     FONSparams params;

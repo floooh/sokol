@@ -73,8 +73,8 @@
 
             sg_imgui_init(&sg_imgui, &(sg_imgui_desc_t){
                 .allocator = {
-                    .alloc = my_malloc,
-                    .free = my_free,
+                    .alloc_fn = my_malloc,
+                    .free_fn = my_free,
                 }
             });
 
@@ -169,8 +169,8 @@
             sg_imgui_init(&(&ctx, &(sg_imgui_desc_t){
                 // ...
                 .allocator = {
-                    .alloc = my_alloc,
-                    .free = my_free,
+                    .alloc_fn = my_alloc,
+                    .free_fn = my_free,
                     .user_data = ...;
                 }
             });
@@ -718,8 +718,8 @@ typedef struct sg_imgui_caps_t {
     override one function but not the other).
 */
 typedef struct sg_imgui_allocator_t {
-    void* (*alloc)(size_t size, void* user_data);
-    void (*free)(void* ptr, void* user_data);
+    void* (*alloc_fn)(size_t size, void* user_data);
+    void (*free_fn)(void* ptr, void* user_data);
     void* user_data;
 } sg_imgui_allocator_t;
 
@@ -914,8 +914,8 @@ _SOKOL_PRIVATE void _sg_imgui_clear(void* ptr, size_t size) {
 _SOKOL_PRIVATE void* _sg_imgui_malloc(const sg_imgui_allocator_t* allocator, size_t size) {
     SOKOL_ASSERT(allocator && (size > 0));
     void* ptr;
-    if (allocator->alloc) {
-        ptr = allocator->alloc(size, allocator->user_data);
+    if (allocator->alloc_fn) {
+        ptr = allocator->alloc_fn(size, allocator->user_data);
     } else {
         ptr = malloc(size);
     }
@@ -931,8 +931,8 @@ _SOKOL_PRIVATE void* _sg_imgui_malloc_clear(const sg_imgui_allocator_t* allocato
 
 _SOKOL_PRIVATE void _sg_imgui_free(const sg_imgui_allocator_t* allocator, void* ptr) {
     SOKOL_ASSERT(allocator);
-    if (allocator->free) {
-        allocator->free(ptr, allocator->user_data);
+    if (allocator->free_fn) {
+        allocator->free_fn(ptr, allocator->user_data);
     } else {
         free(ptr);
     }
@@ -4145,7 +4145,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_caps_panel(void) {
 #define _sg_imgui_def(val, def) (((val) == 0) ? (def) : (val))
 
 _SOKOL_PRIVATE sg_imgui_desc_t _sg_imgui_desc_defaults(const sg_imgui_desc_t* desc) {
-    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
+    SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
     sg_imgui_desc_t res = *desc;
     // FIXME: any additional default overrides would go here
     return res;

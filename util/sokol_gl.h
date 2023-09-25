@@ -606,8 +606,8 @@
             sgl_setup(&(sgl_desc_t){
                 // ...
                 .allocator = {
-                    .alloc = my_alloc,
-                    .free = my_free,
+                    .alloc_fn = my_alloc,
+                    .free_fn = my_free,
                     .user_data = ...;
                 }
             });
@@ -796,8 +796,8 @@ typedef struct sgl_context_desc_t {
     override one function but not the other).
 */
 typedef struct sgl_allocator_t {
-    void* (*alloc)(size_t size, void* user_data);
-    void (*free)(void* ptr, void* user_data);
+    void* (*alloc_fn)(size_t size, void* user_data);
+    void (*free_fn)(void* ptr, void* user_data);
     void* user_data;
 } sgl_allocator_t;
 
@@ -2503,8 +2503,8 @@ static void _sgl_clear(void* ptr, size_t size) {
 static void* _sgl_malloc(size_t size) {
     SOKOL_ASSERT(size > 0);
     void* ptr;
-    if (_sgl.desc.allocator.alloc) {
-        ptr = _sgl.desc.allocator.alloc(size, _sgl.desc.allocator.user_data);
+    if (_sgl.desc.allocator.alloc_fn) {
+        ptr = _sgl.desc.allocator.alloc_fn(size, _sgl.desc.allocator.user_data);
     } else {
         ptr = malloc(size);
     }
@@ -2521,8 +2521,8 @@ static void* _sgl_malloc_clear(size_t size) {
 }
 
 static void _sgl_free(void* ptr) {
-    if (_sgl.desc.allocator.free) {
-        _sgl.desc.allocator.free(ptr, _sgl.desc.allocator.user_data);
+    if (_sgl.desc.allocator.free_fn) {
+        _sgl.desc.allocator.free_fn(ptr, _sgl.desc.allocator.user_data);
     } else {
         free(ptr);
     }
@@ -3283,7 +3283,7 @@ static _sgl_matrix_t* _sgl_matrix(_sgl_context_t* ctx) {
 
 // return sg_context_desc_t with patched defaults
 static sgl_desc_t _sgl_desc_defaults(const sgl_desc_t* desc) {
-    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
+    SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
     sgl_desc_t res = *desc;
     res.max_vertices = _sgl_def(desc->max_vertices, _SGL_DEFAULT_MAX_VERTICES);
     res.max_commands = _sgl_def(desc->max_commands, _SGL_DEFAULT_MAX_COMMANDS);

@@ -1,5 +1,18 @@
 ## Updates
 
+#### 25-Sep-2023
+
+- The allocator callback functions in all headers that support custom allocators have been renamed
+  from `alloc` and `free` to `alloc_fn` and `free_fn`, this is because the symbol `free` is quite
+  likely to collide with a preprocessor macro of the same name if the standard C allocator is
+  replaced with a custom allocator.
+
+  This is a breaking change only if you've been providing your own allocator functions to
+  the sokol headers.
+
+  See issue https://github.com/floooh/sokol/issues/903 and PR https://github.com/floooh/sokol/pull/908
+  for details.
+
 #### 23-Sep-2023
 
 - sokol_gfx.h gl: Allow to inject an external GL framebuffer id into the sokol-gfx default

@@ -820,8 +820,8 @@
             sfetch_setup(&(sfetch_desc_t){
                 // ...
                 .allocator = {
-                    .alloc = my_alloc,
-                    .free = my_free,
+                    .alloc_fn = my_alloc,
+                    .free_fn = my_free,
                     .user_data = ...,
                 }
             });
@@ -1024,8 +1024,8 @@ typedef struct sfetch_range_t {
     override one function but not the other).
 */
 typedef struct sfetch_allocator_t {
-    void* (*alloc)(size_t size, void* user_data);
-    void (*free)(void* ptr, void* user_data);
+    void* (*alloc_fn)(size_t size, void* user_data);
+    void (*free_fn)(void* ptr, void* user_data);
     void* user_data;
 } sfetch_allocator_t;
 
@@ -1424,10 +1424,9 @@ _SOKOL_PRIVATE void _sfetch_clear(void* ptr, size_t size) {
 _SOKOL_PRIVATE void* _sfetch_malloc_with_allocator(const sfetch_allocator_t* allocator, size_t size) {
     SOKOL_ASSERT(size > 0);
     void* ptr;
-    if (allocator->alloc) {
-        ptr = allocator->alloc(size, allocator->user_data);
-    }
-    else {
+    if (allocator->alloc_fn) {
+        ptr = allocator->alloc_fn(size, allocator->user_data);
+    } else {
         ptr = malloc(size);
     }
     if (0 == ptr) {
@@ -1447,10 +1446,9 @@ _SOKOL_PRIVATE void* _sfetch_malloc_clear(size_t size) {
 }
 
 _SOKOL_PRIVATE void _sfetch_free(void* ptr) {
-    if (_sfetch->desc.allocator.free) {
-        _sfetch->desc.allocator.free(ptr, _sfetch->desc.allocator.user_data);
-    }
-    else {
+    if (_sfetch->desc.allocator.free_fn) {
+        _sfetch->desc.allocator.free_fn(ptr, _sfetch->desc.allocator.user_data);
+    } else {
         free(ptr);
     }
 }
@@ -2620,7 +2618,7 @@ _SOKOL_PRIVATE bool _sfetch_validate_request(_sfetch_t* ctx, const sfetch_reques
 }
 
 _SOKOL_PRIVATE sfetch_desc_t _sfetch_desc_defaults(const sfetch_desc_t* desc) {
-    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
+    SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
     sfetch_desc_t res = *desc;
     res.max_requests = _sfetch_def(desc->max_requests, 128);
     res.num_channels = _sfetch_def(desc->num_channels, 1);
