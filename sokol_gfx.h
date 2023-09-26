@@ -3330,6 +3330,8 @@ typedef struct sg_desc {
     int max_commit_listeners;
     bool disable_validation;    // disable validation layer even in debug mode, useful for tests
     bool mtl_force_managed_storage_mode; // for debugging: use Metal managed storage mode for resources even with UMA
+    bool wgpu_disable_bindgroup_cache;  // set to false to disable the WebGPU backend BindGroup cache
+    int wgpu_bindgroup_cache_size;      // number of slots in the WebGPU bindgroup cache (must be 2^N)
     sg_allocator allocator;
     sg_logger logger; // optional log function override
     sg_context_desc context;
@@ -4021,6 +4023,14 @@ typedef struct {
     sg_resource_state state;
 } _sg_slot_t;
 
+// a common resource pool housekeeping struct
+typedef struct {
+    int size;
+    int queue_top;
+    uint32_t* gen_ctrs;
+    int* free_queue;
+} _sg_pool_t;
+
 // constants
 enum {
     _SG_STRING_SIZE = 16,
@@ -4036,6 +4046,7 @@ enum {
     _SG_DEFAULT_CONTEXT_POOL_SIZE = 16,
     _SG_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
     _SG_DEFAULT_MAX_COMMIT_LISTENERS = 1024,
+    _SG_DEFAULT_WGPU_BINDGROUP_CACHE_SIZE = 1024,
 };
 
 // fixed-size string
@@ -4907,6 +4918,25 @@ typedef struct {
     } bind;
 } _sg_wgpu_uniform_buffer_t;
 
+// an internal bindgroup wrapper object (referenced by bindgroup cache)
+#define _SG_WGPU_BINDGROUP_KEY_NUM (1+SG_NUM_SHADER_STAGES*(SG_MAX_SHADERSTAGE_IMAGES+SG_MAX_SHADERSTAGE_SAMPLERS))
+typedef struct {
+    _sg_slot_t slot;
+    WGPUBindGroup bg;
+    uint64_t hash;
+    uint32_t key[_SG_WGPU_BINDGROUP_KEY_NUM];  // pipeline + image + sampler ids
+} _sg_wgpu_bindgroup_t;
+
+typedef struct {
+    uint32_t id;
+} _sg_wgpu_bindgroup_handle_t;
+
+typedef struct {
+    size_t num;             // must be 2^n
+    uint64_t index_mask;    // mask to turn hash into valid index
+    _sg_wgpu_bindgroup_handle_t* items;
+} _sg_wgpu_bindgroup_cache_t;
+
 typedef struct {
     struct {
         sg_buffer buffer;
@@ -4916,7 +4946,13 @@ typedef struct {
         sg_buffer buffer;
         int offset;
     } ib;
-} _sg_wgpu_bindcache_t;
+    _sg_wgpu_bindgroup_handle_t bindgroup;
+} _sg_wgpu_bindings_cache_t;
+
+typedef struct {
+    _sg_pool_t pool;
+    _sg_wgpu_bindgroup_t* bindgroups;
+} _sg_wgpu_bindgroup_pool_t;
 
 // the WGPU backend state
 typedef struct {
@@ -4941,7 +4977,9 @@ typedef struct {
     const _sg_pipeline_t* cur_pipeline;
     sg_pipeline cur_pipeline_id;
     _sg_wgpu_uniform_buffer_t uniform;
-    _sg_wgpu_bindcache_t bindcache;
+    _sg_wgpu_bindings_cache_t bindings_cache;
+    _sg_wgpu_bindgroup_cache_t bingroup_cache;
+    _sg_wgpu_bindgroup_pool_t bindgroup_pool;
 } _sg_wgpu_backend_t;
 #endif
 
@@ -4949,13 +4987,6 @@ typedef struct {
 
 // this *MUST* remain 0
 #define _SG_INVALID_SLOT_INDEX (0)
-
-typedef struct {
-    int size;
-    int queue_top;
-    uint32_t* gen_ctrs;
-    int* free_queue;
-} _sg_pool_t;
 
 typedef struct {
     _sg_pool_t buffer_pool;
@@ -12521,29 +12552,29 @@ _SOKOL_PRIVATE void _sg_wgpu_uniform_buffer_on_commit(void) {
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_bindcache_clear(void) {
-    memset(&_sg.wgpu.bindcache, 0, sizeof(_sg.wgpu.bindcache));
+    memset(&_sg.wgpu.bindings_cache, 0, sizeof(_sg.wgpu.bindings_cache));
 }
 
 _SOKOL_PRIVATE bool _sg_wgpu_bindcache_vb_dirty(int index, const _sg_buffer_t* vb, int offset) {
     SOKOL_ASSERT(vb && (index >= 0) && (index < SG_MAX_VERTEX_BUFFERS));
-    return (vb->slot.id != _sg.wgpu.bindcache.vbs[index].buffer.id) || (offset != _sg.wgpu.bindcache.vbs[index].offset);
+    return (vb->slot.id != _sg.wgpu.bindings_cache.vbs[index].buffer.id) || (offset != _sg.wgpu.bindings_cache.vbs[index].offset);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_bindcache_vb_update(int index, const _sg_buffer_t* vb, int offset) {
     SOKOL_ASSERT(vb && (index >= 0) && (index < SG_MAX_VERTEX_BUFFERS));
-    _sg.wgpu.bindcache.vbs[index].buffer.id = vb->slot.id;
-    _sg.wgpu.bindcache.vbs[index].offset = offset;
+    _sg.wgpu.bindings_cache.vbs[index].buffer.id = vb->slot.id;
+    _sg.wgpu.bindings_cache.vbs[index].offset = offset;
 }
 
 _SOKOL_PRIVATE bool _sg_wgpu_bindcache_ib_dirty(const _sg_buffer_t* ib, int ib_offset) {
     SOKOL_ASSERT(ib);
-    return (ib->slot.id != _sg.wgpu.bindcache.ib.buffer.id) || (ib_offset != _sg.wgpu.bindcache.ib.offset);
+    return (ib->slot.id != _sg.wgpu.bindings_cache.ib.buffer.id) || (ib_offset != _sg.wgpu.bindings_cache.ib.offset);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_bindcache_ib_update(const _sg_buffer_t* ib, int ib_offset) {
     SOKOL_ASSERT(ib);
-    _sg.wgpu.bindcache.ib.buffer.id = ib->slot.id;
-    _sg.wgpu.bindcache.ib.offset = ib_offset;
+    _sg.wgpu.bindings_cache.ib.buffer.id = ib->slot.id;
+    _sg.wgpu.bindings_cache.ib.offset = ib_offset;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
@@ -15852,6 +15883,7 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
     res.context_pool_size = _sg_def(res.context_pool_size, _SG_DEFAULT_CONTEXT_POOL_SIZE);
     res.uniform_buffer_size = _sg_def(res.uniform_buffer_size, _SG_DEFAULT_UB_SIZE);
     res.max_commit_listeners = _sg_def(res.max_commit_listeners, _SG_DEFAULT_MAX_COMMIT_LISTENERS);
+    res.wgpu_bindgroup_cache_size = _sg_def(res.wgpu_bindgroup_cache_size, _SG_DEFAULT_WGPU_BINDGROUP_CACHE_SIZE);
     return res;
 }
 
