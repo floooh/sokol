@@ -3330,8 +3330,8 @@ typedef struct sg_desc {
     int max_commit_listeners;
     bool disable_validation;    // disable validation layer even in debug mode, useful for tests
     bool mtl_force_managed_storage_mode; // for debugging: use Metal managed storage mode for resources even with UMA
-    bool wgpu_disable_bindgroup_cache;  // set to false to disable the WebGPU backend BindGroup cache
-    int wgpu_bindgroup_cache_size;      // number of slots in the WebGPU bindgroup cache (must be 2^N)
+    bool wgpu_disable_bindgroups_cache;  // set to false to disable the WebGPU backend BindGroup cache
+    int wgpu_bindgroups_cache_size;      // number of slots in the WebGPU bindgroup cache (must be 2^N)
     sg_allocator allocator;
     sg_logger logger; // optional log function override
     sg_context_desc context;
@@ -4030,6 +4030,14 @@ typedef struct {
     uint32_t* gen_ctrs;
     int* free_queue;
 } _sg_pool_t;
+
+_SOKOL_PRIVATE void _sg_init_pool(_sg_pool_t* pool, int num);
+_SOKOL_PRIVATE void _sg_discard_pool(_sg_pool_t* pool);
+_SOKOL_PRIVATE int _sg_pool_alloc_index(_sg_pool_t* pool);
+_SOKOL_PRIVATE void _sg_pool_free_index(_sg_pool_t* pool, int slot_index);
+_SOKOL_PRIVATE void _sg_reset_slot(_sg_slot_t* slot);
+_SOKOL_PRIVATE uint32_t _sg_slot_alloc(_sg_pool_t* pool, _sg_slot_t* slot, int slot_index);
+_SOKOL_PRIVATE int _sg_slot_index(uint32_t id);
 
 // constants
 enum {
@@ -4935,7 +4943,12 @@ typedef struct {
     size_t num;             // must be 2^n
     uint64_t index_mask;    // mask to turn hash into valid index
     _sg_wgpu_bindgroup_handle_t* items;
-} _sg_wgpu_bindgroup_cache_t;
+} _sg_wgpu_bindgroups_cache_t;
+
+typedef struct {
+    _sg_pool_t pool;
+    _sg_wgpu_bindgroup_t* bindgroups;
+} _sg_wgpu_bindgroups_pool_t;
 
 typedef struct {
     struct {
@@ -4948,11 +4961,6 @@ typedef struct {
     } ib;
     _sg_wgpu_bindgroup_handle_t bindgroup;
 } _sg_wgpu_bindings_cache_t;
-
-typedef struct {
-    _sg_pool_t pool;
-    _sg_wgpu_bindgroup_t* bindgroups;
-} _sg_wgpu_bindgroup_pool_t;
 
 // the WGPU backend state
 typedef struct {
@@ -4978,8 +4986,8 @@ typedef struct {
     sg_pipeline cur_pipeline_id;
     _sg_wgpu_uniform_buffer_t uniform;
     _sg_wgpu_bindings_cache_t bindings_cache;
-    _sg_wgpu_bindgroup_cache_t bingroup_cache;
-    _sg_wgpu_bindgroup_pool_t bindgroup_pool;
+    _sg_wgpu_bindgroups_cache_t bingroups_cache;
+    _sg_wgpu_bindgroups_pool_t bindgroups_pool;
 } _sg_wgpu_backend_t;
 #endif
 
@@ -12551,6 +12559,52 @@ _SOKOL_PRIVATE void _sg_wgpu_uniform_buffer_on_commit(void) {
     _sg_clear(&_sg.wgpu.uniform.bind.offsets[0][0], sizeof(_sg.wgpu.uniform.bind.offsets));
 }
 
+_SOKOL_PRIVATE void _sg_wgpu_bindgroups_pool_init(const sg_desc* desc) {
+    SOKOL_ASSERT(!desc->wgpu_disable_bindgroups_cache);
+    SOKOL_ASSERT((desc->wgpu_bindgroups_cache_size > 0) && (desc->wgpu_bindgroups_cache_size < _SG_MAX_POOL_SIZE));
+    SOKOL_ASSERT(0 == _sg.wgpu.bindgroups_pool.bindgroups);
+    const int pool_size = desc->wgpu_bindgroups_cache_size;
+    _sg_init_pool(&_sg.wgpu.bindgroups_pool.pool, pool_size);
+    size_t pool_byte_size = sizeof(_sg_wgpu_bindgroup_t) * (size_t)pool_size;
+    _sg.wgpu.bindgroups_pool.bindgroups = _sg_malloc_clear(pool_byte_size);
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_bindgroups_pool_discard(_sg_wgpu_bindgroups_pool_t* p) {
+    SOKOL_ASSERT(p && p->bindgroups);
+    _sg_free(p->bindgroups); p->bindgroups = 0;
+    _sg_discard_pool(&p->pool);
+}
+
+_SOKOL_PRIVATE _sg_wgpu_bindgroup_t* _sg_wgpu_bindgroup_at(_sg_wgpu_bindgroups_pool_t* p, uint32_t bg_id) {
+    SOKOL_ASSERT(p && (SG_INVALID_ID != bg_id));
+    int slot_index = _sg_slot_index(bg_id);
+    SOKOL_ASSERT((slot_index > _SG_INVALID_SLOT_INDEX) && (slot_index < p->pool.size));
+    return &p->bindgroups[slot_index];
+}
+
+_SOKOL_PRIVATE _sg_wgpu_bindgroup_t* _sg_wgpu_lookup_bindgroup(_sg_wgpu_bindgroups_pool_t* p, uint32_t bg_id) {
+    if (SG_INVALID_ID != bg_id) {
+        _sg_wgpu_bindgroup_t* bg = _sg_wgpu_bindgroup_at(p, bg_id);
+        if (bg->slot.id == bg_id) {
+            return bg;
+        }
+    }
+    return 0;
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_discard_bindgroup(_sg_wgpu_bindgroup_t* bg) {
+    // FIXME!
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_discard_all_bindgroups(_sg_wgpu_bindgroups_pool_t* p) {
+    for (int i = 0; i < p->pool.size; i++) {
+        sg_resource_state state = p->bindgroups[i].slot.state;
+        if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
+            _sg_wgpu_discard_bindgroup(&p->bindgroups[i]);
+        }
+    }
+}
+
 _SOKOL_PRIVATE void _sg_wgpu_bindcache_clear(void) {
     memset(&_sg.wgpu.bindings_cache, 0, sizeof(_sg.wgpu.bindings_cache));
 }
@@ -12600,6 +12654,9 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     _sg_wgpu_bindcache_clear();
     _sg_wgpu_init_caps();
     _sg_wgpu_uniform_buffer_init(desc);
+    if (!desc->wgpu_disable_bindgroups_cache) {
+        _sg_wgpu_bindgroups_pool_init(desc);
+    }
 
     // create an empty bind group for shader stages without bound images
     WGPUBindGroupLayoutDescriptor bgl_desc;
@@ -12624,6 +12681,10 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
     SOKOL_ASSERT(_sg.wgpu.valid);
     SOKOL_ASSERT(_sg.wgpu.cmd_enc);
     _sg.wgpu.valid = false;
+    if (!_sg.desc.wgpu_disable_bindgroups_cache) {
+        _sg_wgpu_discard_all_bindgroups(&_sg.wgpu.bindgroups_pool);
+        _sg_wgpu_bindgroups_pool_discard(&_sg.wgpu.bindgroups_pool);
+    }
     _sg_wgpu_uniform_buffer_discard();
     wgpuBindGroupRelease(_sg.wgpu.empty_bind_group); _sg.wgpu.empty_bind_group = 0;
     wgpuCommandEncoderRelease(_sg.wgpu.cmd_enc); _sg.wgpu.cmd_enc = 0;
@@ -15883,7 +15944,7 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
     res.context_pool_size = _sg_def(res.context_pool_size, _SG_DEFAULT_CONTEXT_POOL_SIZE);
     res.uniform_buffer_size = _sg_def(res.uniform_buffer_size, _SG_DEFAULT_UB_SIZE);
     res.max_commit_listeners = _sg_def(res.max_commit_listeners, _SG_DEFAULT_MAX_COMMIT_LISTENERS);
-    res.wgpu_bindgroup_cache_size = _sg_def(res.wgpu_bindgroup_cache_size, _SG_DEFAULT_WGPU_BINDGROUP_CACHE_SIZE);
+    res.wgpu_bindgroups_cache_size = _sg_def(res.wgpu_bindgroups_cache_size, _SG_DEFAULT_WGPU_BINDGROUP_CACHE_SIZE);
     return res;
 }
 
