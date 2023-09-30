@@ -12553,8 +12553,8 @@ _SOKOL_PRIVATE void _sg_wgpu_bindgroups_pool_init(const sg_desc* desc) {
     SOKOL_ASSERT(0 == p->bindgroups);
     const int pool_size = desc->wgpu_bindgroups_cache_size;
     _sg_init_pool(&p->pool, pool_size);
-    size_t pool_byte_size = sizeof(_sg_wgpu_bindgroup_t) * (size_t)pool_size;
-    p->bindgroups = _sg_malloc_clear(pool_byte_size);
+    size_t pool_byte_size = sizeof(_sg_wgpu_bindgroup_t) * (size_t)p->pool.size;
+    p->bindgroups = (_sg_wgpu_bindgroup_t*) _sg_malloc_clear(pool_byte_size);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_bindgroups_pool_discard(void) {
@@ -12789,7 +12789,7 @@ _SOKOL_PRIVATE void _sg_wgpu_bindgroups_cache_init(const sg_desc* desc) {
     _sg.wgpu.bindgroups_cache.num = (uint32_t)desc->wgpu_bindgroups_cache_size;
     _sg.wgpu.bindgroups_cache.index_mask = _sg.wgpu.bindgroups_cache.num - 1;
     size_t size_in_bytes = sizeof(_sg_wgpu_bindgroup_handle_t) * (size_t)num;
-    _sg.wgpu.bindgroups_cache.items = _sg_malloc_clear(size_in_bytes);
+    _sg.wgpu.bindgroups_cache.items = (_sg_wgpu_bindgroup_handle_t*)_sg_malloc_clear(size_in_bytes);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_bindgroups_cache_discard(void) {
@@ -14504,7 +14504,8 @@ _SOKOL_PRIVATE uint32_t _sg_slot_alloc(_sg_pool_t* pool, _sg_slot_t* slot, int s
     */
     SOKOL_ASSERT(pool && pool->gen_ctrs);
     SOKOL_ASSERT((slot_index > _SG_INVALID_SLOT_INDEX) && (slot_index < pool->size));
-    SOKOL_ASSERT((slot->state == SG_RESOURCESTATE_INITIAL) && (slot->id == SG_INVALID_ID));
+    SOKOL_ASSERT(slot->id == SG_INVALID_ID);
+    SOKOL_ASSERT(slot->state == SG_RESOURCESTATE_INITIAL);
     uint32_t ctr = ++pool->gen_ctrs[slot_index];
     slot->id = (ctr<<_SG_SLOT_SHIFT)|(slot_index & _SG_SLOT_MASK);
     slot->state = SG_RESOURCESTATE_ALLOC;
