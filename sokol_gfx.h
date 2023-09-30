@@ -5023,6 +5023,24 @@ typedef struct {
     sg_commit_listener* items;
 } _sg_commit_listeners_t;
 
+// resolved resource bindings struct
+typedef struct {
+    _sg_pipeline_t* pip;
+    int num_vbs;
+    int num_vs_imgs;
+    int num_vs_smps;
+    int num_fs_imgs;
+    int num_fs_smps;
+    int vb_offsets[SG_MAX_VERTEX_BUFFERS];
+    int ib_offset;
+    _sg_buffer_t* vbs[SG_MAX_VERTEX_BUFFERS];
+    _sg_buffer_t* ib;
+    _sg_image_t* vs_imgs[SG_MAX_SHADERSTAGE_IMAGES];
+    _sg_sampler_t* vs_smps[SG_MAX_SHADERSTAGE_SAMPLERS];
+    _sg_image_t* fs_imgs[SG_MAX_SHADERSTAGE_IMAGES];
+    _sg_sampler_t* fs_smps[SG_MAX_SHADERSTAGE_SAMPLERS];
+} _sg_bindings_t;
+
 typedef struct {
     bool valid;
     sg_desc desc;       // original desc with default values patched in
@@ -5031,7 +5049,7 @@ typedef struct {
     sg_pass cur_pass;
     sg_pipeline cur_pipeline;
     bool pass_valid;
-    bool bindings_valid;
+    bool bindings_applied;
     bool next_draw_valid;
     #if defined(SOKOL_DEBUG)
     sg_log_item validate_error;
@@ -5830,28 +5848,11 @@ _SOKOL_PRIVATE void _sg_dummy_apply_pipeline(_sg_pipeline_t* pip) {
     _SOKOL_UNUSED(pip);
 }
 
-_SOKOL_PRIVATE void _sg_dummy_apply_bindings(
-    _sg_pipeline_t* pip,
-    _sg_buffer_t** vbs, const int* vb_offsets, int num_vbs,
-    _sg_buffer_t* ib, int ib_offset,
-    _sg_image_t** vs_imgs, int num_vs_imgs,
-    _sg_image_t** fs_imgs, int num_fs_imgs,
-    _sg_sampler_t** vs_smps, int num_vs_smps,
-    _sg_sampler_t** fs_smps, int num_fs_smps)
-{
-    SOKOL_ASSERT(pip);
-    SOKOL_ASSERT(vbs && vb_offsets);
-    SOKOL_ASSERT(vs_imgs);
-    SOKOL_ASSERT(fs_imgs);
-    SOKOL_ASSERT(vs_smps);
-    SOKOL_ASSERT(fs_smps);
-    _SOKOL_UNUSED(pip);
-    _SOKOL_UNUSED(vbs); _SOKOL_UNUSED(vb_offsets); _SOKOL_UNUSED(num_vbs);
-    _SOKOL_UNUSED(ib); _SOKOL_UNUSED(ib_offset);
-    _SOKOL_UNUSED(vs_imgs); _SOKOL_UNUSED(num_vs_imgs);
-    _SOKOL_UNUSED(fs_imgs); _SOKOL_UNUSED(num_fs_imgs);
-    _SOKOL_UNUSED(vs_smps); _SOKOL_UNUSED(num_vs_smps);
-    _SOKOL_UNUSED(fs_smps); _SOKOL_UNUSED(num_fs_smps);
+_SOKOL_PRIVATE bool _sg_dummy_apply_bindings(_sg_bindings_t* bnd) {
+    SOKOL_ASSERT(bnd);
+    SOKOL_ASSERT(bnd->pip);
+    _SOKOL_UNUSED(bnd);
+    return true;
 }
 
 _SOKOL_PRIVATE void _sg_dummy_apply_uniforms(sg_shader_stage stage_index, int ub_index, const sg_range* data) {
@@ -8163,28 +8164,20 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE bool _sg_gl_apply_bindings(
-    _sg_pipeline_t* pip,
-    _sg_buffer_t** vbs, const int* vb_offsets, int num_vbs,
-    _sg_buffer_t* ib, int ib_offset,
-    _sg_image_t** vs_imgs, int num_vs_imgs,
-    _sg_image_t** fs_imgs, int num_fs_imgs,
-    _sg_sampler_t** vs_smps, int num_vs_smps,
-    _sg_sampler_t** fs_smps, int num_fs_smps)
-{
-    SOKOL_ASSERT(pip);
-    _SOKOL_UNUSED(num_vbs);
+_SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_t* bnd) {
+    SOKOL_ASSERT(bnd);
+    SOKOL_ASSERT(bnd->pip);
     _SG_GL_CHECK_ERROR();
 
     // bind combined image-samplers
     _SG_GL_CHECK_ERROR();
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
-        const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[stage_index];
-        const _sg_gl_shader_stage_t* gl_stage = &pip->shader->gl.stage[stage_index];
-        _sg_image_t** imgs = (stage_index == SG_SHADERSTAGE_VS) ? vs_imgs : fs_imgs;
-        _sg_sampler_t** smps = (stage_index == SG_SHADERSTAGE_VS) ? vs_smps : fs_smps;
-        const int num_imgs = (stage_index == SG_SHADERSTAGE_VS) ? num_vs_imgs : num_fs_imgs;
-        const int num_smps = (stage_index == SG_SHADERSTAGE_VS) ? num_vs_smps : num_fs_smps;
+        const _sg_shader_stage_t* stage = &bnd->pip->shader->cmn.stage[stage_index];
+        const _sg_gl_shader_stage_t* gl_stage = &bnd->pip->shader->gl.stage[stage_index];
+        _sg_image_t** imgs = (stage_index == SG_SHADERSTAGE_VS) ? bnd->vs_imgs : bnd->fs_imgs;
+        _sg_sampler_t** smps = (stage_index == SG_SHADERSTAGE_VS) ? bnd->vs_smps : bnd->fs_smps;
+        const int num_imgs = (stage_index == SG_SHADERSTAGE_VS) ? bnd->num_vs_imgs : bnd->num_fs_imgs;
+        const int num_smps = (stage_index == SG_SHADERSTAGE_VS) ? bnd->num_vs_smps : bnd->num_fs_smps;
         SOKOL_ASSERT(num_imgs == stage->num_images); _SOKOL_UNUSED(num_imgs);
         SOKOL_ASSERT(num_smps == stage->num_samplers); _SOKOL_UNUSED(num_smps);
         for (int img_smp_index = 0; img_smp_index < stage->num_image_samplers; img_smp_index++) {
@@ -8206,24 +8199,24 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(
     _SG_GL_CHECK_ERROR();
 
     // index buffer (can be 0)
-    const GLuint gl_ib = ib ? ib->gl.buf[ib->cmn.active_slot] : 0;
+    const GLuint gl_ib = bnd->ib ? bnd->ib->gl.buf[bnd->ib->cmn.active_slot] : 0;
     _sg_gl_cache_bind_buffer(GL_ELEMENT_ARRAY_BUFFER, gl_ib);
-    _sg.gl.cache.cur_ib_offset = ib_offset;
+    _sg.gl.cache.cur_ib_offset = bnd->ib_offset;
 
     // vertex attributes
     for (GLuint attr_index = 0; attr_index < (GLuint)_sg.limits.max_vertex_attrs; attr_index++) {
-        _sg_gl_attr_t* attr = &pip->gl.attrs[attr_index];
+        _sg_gl_attr_t* attr = &bnd->pip->gl.attrs[attr_index];
         _sg_gl_cache_attr_t* cache_attr = &_sg.gl.cache.attrs[attr_index];
         bool cache_attr_dirty = false;
         int vb_offset = 0;
         GLuint gl_vb = 0;
         if (attr->vb_index >= 0) {
             // attribute is enabled
-            SOKOL_ASSERT(attr->vb_index < num_vbs);
-            _sg_buffer_t* vb = vbs[attr->vb_index];
+            SOKOL_ASSERT(attr->vb_index < bnd->num_vbs);
+            _sg_buffer_t* vb = bnd->vbs[attr->vb_index];
             SOKOL_ASSERT(vb);
             gl_vb = vb->gl.buf[vb->cmn.active_slot];
-            vb_offset = vb_offsets[attr->vb_index] + attr->offset;
+            vb_offset = bnd->vb_offsets[attr->vb_index] + attr->offset;
             if ((gl_vb != cache_attr->gl_vbuf) ||
                 (attr->size != cache_attr->gl_attr.size) ||
                 (attr->type != cache_attr->gl_attr.type) ||
@@ -8233,9 +8226,7 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(
                 (cache_attr->gl_attr.divisor != attr->divisor))
             {
                 _sg_gl_cache_bind_buffer(GL_ARRAY_BUFFER, gl_vb);
-                glVertexAttribPointer(attr_index, attr->size, attr->type,
-                    attr->normalized, attr->stride,
-                    (const GLvoid*)(GLintptr)vb_offset);
+                glVertexAttribPointer(attr_index, attr->size, attr->type, attr->normalized, attr->stride, (const GLvoid*)(GLintptr)vb_offset);
                 glVertexAttribDivisor(attr_index, (GLuint)attr->divisor);
                 cache_attr_dirty = true;
             }
@@ -10136,50 +10127,43 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
     _sg_d3d11_PSSetConstantBuffers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, pip->shader->d3d11.stage[SG_SHADERSTAGE_FS].cbufs);
 }
 
-_SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(
-    _sg_pipeline_t* pip,
-    _sg_buffer_t** vbs, const int* vb_offsets, int num_vbs,
-    _sg_buffer_t* ib, int ib_offset,
-    _sg_image_t** vs_imgs, int num_vs_imgs,
-    _sg_image_t** fs_imgs, int num_fs_imgs,
-    _sg_sampler_t** vs_smps, int num_vs_smps,
-    _sg_sampler_t** fs_smps, int num_fs_smps)
-{
-    SOKOL_ASSERT(pip);
+_SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
+    SOKOL_ASSERT(bnd);
+    SOKOL_ASSERT(bnd->pip);
     SOKOL_ASSERT(_sg.d3d11.ctx);
     SOKOL_ASSERT(_sg.d3d11.in_pass);
 
     // gather all the D3D11 resources into arrays
-    ID3D11Buffer* d3d11_ib = ib ? ib->d3d11.buf : 0;
+    ID3D11Buffer* d3d11_ib = bnd->ib ? ib->d3d11.buf : 0;
     ID3D11Buffer* d3d11_vbs[SG_MAX_VERTEX_BUFFERS] = {0};
     UINT d3d11_vb_offsets[SG_MAX_VERTEX_BUFFERS] = {0};
     ID3D11ShaderResourceView* d3d11_vs_srvs[SG_MAX_SHADERSTAGE_IMAGES] = {0};
     ID3D11ShaderResourceView* d3d11_fs_srvs[SG_MAX_SHADERSTAGE_IMAGES] = {0};
     ID3D11SamplerState* d3d11_vs_smps[SG_MAX_SHADERSTAGE_SAMPLERS] = {0};
     ID3D11SamplerState* d3d11_fs_smps[SG_MAX_SHADERSTAGE_SAMPLERS] = {0};
-    for (int i = 0; i < num_vbs; i++) {
-        SOKOL_ASSERT(vbs[i]->d3d11.buf);
-        d3d11_vbs[i] = vbs[i]->d3d11.buf;
-        d3d11_vb_offsets[i] = (UINT)vb_offsets[i];
+    for (int i = 0; i < bnd->num_vbs; i++) {
+        SOKOL_ASSERT(bnd->vbs[i]->d3d11.buf);
+        d3d11_vbs[i] = bnd->vbs[i]->d3d11.buf;
+        d3d11_vb_offsets[i] = (UINT)bnd->vb_offsets[i];
     }
-    for (int i = 0; i < num_vs_imgs; i++) {
-        SOKOL_ASSERT(vs_imgs[i]->d3d11.srv);
-        d3d11_vs_srvs[i] = vs_imgs[i]->d3d11.srv;
+    for (int i = 0; i < bnd->num_vs_imgs; i++) {
+        SOKOL_ASSERT(bnd->vs_imgs[i]->d3d11.srv);
+        d3d11_vs_srvs[i] = bnd->vs_imgs[i]->d3d11.srv;
     }
-    for (int i = 0; i < num_fs_imgs; i++) {
-        SOKOL_ASSERT(fs_imgs[i]->d3d11.srv);
-        d3d11_fs_srvs[i] = fs_imgs[i]->d3d11.srv;
+    for (int i = 0; i < bnd->num_fs_imgs; i++) {
+        SOKOL_ASSERT(bnd->fs_imgs[i]->d3d11.srv);
+        d3d11_fs_srvs[i] = bnd->fs_imgs[i]->d3d11.srv;
     }
-    for (int i = 0; i < num_vs_smps; i++) {
-        SOKOL_ASSERT(vs_smps[i]->d3d11.smp);
-        d3d11_vs_smps[i] = vs_smps[i]->d3d11.smp;
+    for (int i = 0; i < bnd->num_vs_smps; i++) {
+        SOKOL_ASSERT(bnd->vs_smps[i]->d3d11.smp);
+        d3d11_vs_smps[i] = bnd->vs_smps[i]->d3d11.smp;
     }
-    for (int i = 0; i < num_fs_smps; i++) {
-        SOKOL_ASSERT(fs_smps[i]->d3d11.smp);
-        d3d11_fs_smps[i] = fs_smps[i]->d3d11.smp;
+    for (int i = 0; i < bnd->num_fs_smps; i++) {
+        SOKOL_ASSERT(bnd->fs_smps[i]->d3d11.smp);
+        d3d11_fs_smps[i] = bnd->fs_smps[i]->d3d11.smp;
     }
-    _sg_d3d11_IASetVertexBuffers(_sg.d3d11.ctx, 0, SG_MAX_VERTEX_BUFFERS, d3d11_vbs, pip->d3d11.vb_strides, d3d11_vb_offsets);
-    _sg_d3d11_IASetIndexBuffer(_sg.d3d11.ctx, d3d11_ib, pip->d3d11.index_format, (UINT)ib_offset);
+    _sg_d3d11_IASetVertexBuffers(_sg.d3d11.ctx, 0, SG_MAX_VERTEX_BUFFERS, d3d11_vbs, bnd->pip->d3d11.vb_strides, d3d11_vb_offsets);
+    _sg_d3d11_IASetIndexBuffer(_sg.d3d11.ctx, d3d11_ib, pip->d3d11.index_format, (UINT)bnd->ib_offset);
     _sg_d3d11_VSSetShaderResources(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_vs_srvs);
     _sg_d3d11_PSSetShaderResources(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_fs_srvs);
     _sg_d3d11_VSSetSamplers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_SAMPLERS, d3d11_vs_smps);
@@ -11819,53 +11803,47 @@ _SOKOL_PRIVATE void _sg_mtl_apply_pipeline(_sg_pipeline_t* pip) {
     }
 }
 
-_SOKOL_PRIVATE bool _sg_mtl_apply_bindings(
-    _sg_pipeline_t* pip,
-    _sg_buffer_t** vbs, const int* vb_offsets, int num_vbs,
-    _sg_buffer_t* ib, int ib_offset,
-    _sg_image_t** vs_imgs, int num_vs_imgs,
-    _sg_image_t** fs_imgs, int num_fs_imgs,
-    _sg_sampler_t** vs_smps, int num_vs_smps,
-    _sg_sampler_t** fs_smps, int num_fs_smps)
-{
-    _SOKOL_UNUSED(pip);
+_SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
+    SOKOL_ASSERT(bnd);
+    SOKOL_ASSERT(bnd->pip);
     SOKOL_ASSERT(_sg.mtl.in_pass);
     if (!_sg.mtl.pass_valid) {
-        return;
+        return false;
     }
     SOKOL_ASSERT(nil != _sg.mtl.cmd_encoder);
 
     // store index buffer binding, this will be needed later in sg_draw()
-    _sg.mtl.state_cache.cur_indexbuffer = ib;
-    _sg.mtl.state_cache.cur_indexbuffer_offset = ib_offset;
-    if (ib) {
-        SOKOL_ASSERT(pip->cmn.index_type != SG_INDEXTYPE_NONE);
-        _sg.mtl.state_cache.cur_indexbuffer_id.id = ib->slot.id;
+    _sg.mtl.state_cache.cur_indexbuffer = bnd->ib;
+    _sg.mtl.state_cache.cur_indexbuffer_offset = bnd->ib_offset;
+    if (bnd->ib) {
+        SOKOL_ASSERT(bnd->pip->cmn.index_type != SG_INDEXTYPE_NONE);
+        _sg.mtl.state_cache.cur_indexbuffer_id.id = bnd->ib->slot.id;
     } else {
-        SOKOL_ASSERT(pip->cmn.index_type == SG_INDEXTYPE_NONE);
+        SOKOL_ASSERT(bnd->pip->cmn.index_type == SG_INDEXTYPE_NONE);
         _sg.mtl.state_cache.cur_indexbuffer_id.id = SG_INVALID_ID;
     }
 
     // apply vertex buffers
-    for (NSUInteger slot = 0; slot < (NSUInteger)num_vbs; slot++) {
-        const _sg_buffer_t* vb = vbs[slot];
+    for (NSUInteger slot = 0; slot < (NSUInteger)bnd->num_vbs; slot++) {
+        const _sg_buffer_t* vb = bnd->vbs[slot];
+        const int vb_offset = bnd->vb_offsets[slot];
         if ((_sg.mtl.state_cache.cur_vertexbuffer_ids[slot].id != vb->slot.id) ||
-            (_sg.mtl.state_cache.cur_vertexbuffer_offsets[slot] != vb_offsets[slot]))
+            (_sg.mtl.state_cache.cur_vertexbuffer_offsets[slot] != vb_offset))
         {
             _sg.mtl.state_cache.cur_vertexbuffers[slot] = vb;
-            _sg.mtl.state_cache.cur_vertexbuffer_offsets[slot] = vb_offsets[slot];
+            _sg.mtl.state_cache.cur_vertexbuffer_offsets[slot] = vb_offset;
             _sg.mtl.state_cache.cur_vertexbuffer_ids[slot].id = vb->slot.id;
             const NSUInteger mtl_slot = SG_MAX_SHADERSTAGE_UBS + slot;
             SOKOL_ASSERT(vb->mtl.buf[vb->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
             [_sg.mtl.cmd_encoder setVertexBuffer:_sg_mtl_id(vb->mtl.buf[vb->cmn.active_slot])
-                offset:(NSUInteger)vb_offsets[slot]
+                offset:(NSUInteger)vb_offset
                 atIndex:mtl_slot];
         }
     }
 
     // apply vertex shader images
-    for (NSUInteger slot = 0; slot < (NSUInteger)num_vs_imgs; slot++) {
-        const _sg_image_t* img = vs_imgs[slot];
+    for (NSUInteger slot = 0; slot < (NSUInteger)bnd->num_vs_imgs; slot++) {
+        const _sg_image_t* img = bnd->vs_imgs[slot];
         if (_sg.mtl.state_cache.cur_vs_image_ids[slot].id != img->slot.id) {
             _sg.mtl.state_cache.cur_vs_images[slot] = img;
             _sg.mtl.state_cache.cur_vs_image_ids[slot].id = img->slot.id;
@@ -11874,20 +11852,9 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(
         }
     }
 
-    // apply fragment shader images
-    for (NSUInteger slot = 0; slot < (NSUInteger)num_fs_imgs; slot++) {
-        const _sg_image_t* img = fs_imgs[slot];
-        if (_sg.mtl.state_cache.cur_fs_image_ids[slot].id != img->slot.id) {
-            _sg.mtl.state_cache.cur_fs_images[slot] = img;
-            _sg.mtl.state_cache.cur_fs_image_ids[slot].id = img->slot.id;
-            SOKOL_ASSERT(img->mtl.tex[img->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
-            [_sg.mtl.cmd_encoder setFragmentTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:slot];
-        }
-    }
-
     // apply vertex shader samplers
-    for (NSUInteger slot = 0; slot < (NSUInteger)num_vs_smps; slot++) {
-        const _sg_sampler_t* smp = vs_smps[slot];
+    for (NSUInteger slot = 0; slot < (NSUInteger)bnd->num_vs_smps; slot++) {
+        const _sg_sampler_t* smp = bnd->vs_smps[slot];
         if (_sg.mtl.state_cache.cur_vs_sampler_ids[slot].id != smp->slot.id) {
             _sg.mtl.state_cache.cur_vs_samplers[slot] = smp;
             _sg.mtl.state_cache.cur_vs_sampler_ids[slot].id = smp->slot.id;
@@ -11896,9 +11863,20 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(
         }
     }
 
+    // apply fragment shader images
+    for (NSUInteger slot = 0; slot < (NSUInteger)bnd->num_fs_imgs; slot++) {
+        const _sg_image_t* img = bnd->fs_imgs[slot];
+        if (_sg.mtl.state_cache.cur_fs_image_ids[slot].id != img->slot.id) {
+            _sg.mtl.state_cache.cur_fs_images[slot] = img;
+            _sg.mtl.state_cache.cur_fs_image_ids[slot].id = img->slot.id;
+            SOKOL_ASSERT(img->mtl.tex[img->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
+            [_sg.mtl.cmd_encoder setFragmentTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:slot];
+        }
+    }
+
     // apply fragment shader samplers
-    for (NSUInteger slot = 0; slot < (NSUInteger)num_fs_smps; slot++) {
-        const _sg_sampler_t* smp = fs_smps[slot];
+    for (NSUInteger slot = 0; slot < (NSUInteger)bnd->num_fs_smps; slot++) {
+        const _sg_sampler_t* smp = bnd->fs_smps[slot];
         if (_sg.mtl.state_cache.cur_fs_sampler_ids[slot].id != smp->slot.id) {
             _sg.mtl.state_cache.cur_fs_samplers[slot] = smp;
             _sg.mtl.state_cache.cur_fs_sampler_ids[slot].id = smp->slot.id;
@@ -12631,41 +12609,36 @@ _SOKOL_PRIVATE uint64_t _sg_wgpu_hash(void* ptr, size_t num_bytes) {
     return 0;
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_init_bindgroupscache_key(_sg_wgpu_bindgroupscache_key_t* key,
-    _sg_pipeline_t* pip,
-    _sg_image_t** vs_imgs, int num_vs_imgs,
-    _sg_sampler_t** vs_smps, int num_vs_smps,
-    _sg_image_t** fs_imgs, int num_fs_imgs,
-    _sg_sampler_t** fs_smps, int num_fs_smps)
-{
-    SOKOL_ASSERT(pip);
-    SOKOL_ASSERT(vs_imgs && (num_vs_imgs <= SG_MAX_SHADERSTAGE_IMAGES));
-    SOKOL_ASSERT(vs_smps && (num_vs_smps <= SG_MAX_SHADERSTAGE_SAMPLERS));
-    SOKOL_ASSERT(fs_imgs && (num_fs_imgs <= SG_MAX_SHADERSTAGE_IMAGES));
-    SOKOL_ASSERT(fs_smps && (num_fs_smps <= SG_MAX_SHADERSTAGE_SAMPLERS));
+_SOKOL_PRIVATE void _sg_wgpu_init_bindgroupscache_key(_sg_wgpu_bindgroupscache_key_t* key, const _sg_bindings_t* bnd) {
+    SOKOL_ASSERT(bnd);
+    SOKOL_ASSERT(bnd->pip);
+    SOKOL_ASSERT(bnd->num_vs_imgs <= SG_MAX_SHADERSTAGE_IMAGES);
+    SOKOL_ASSERT(bnd->num_vs_smps <= SG_MAX_SHADERSTAGE_SAMPLERS);
+    SOKOL_ASSERT(bnd->num_fs_imgs <= SG_MAX_SHADERSTAGE_IMAGES);
+    SOKOL_ASSERT(bnd->num_fs_smps <= SG_MAX_SHADERSTAGE_SAMPLERS);
 
     _sg_clear(key->items, sizeof(key->items));
-    key->items[0] = pip->slot.id;
+    key->items[0] = bnd->pip->slot.id;
     const int vs_imgs_offset = 1;
     const int vs_smps_offset = vs_imgs_offset + SG_MAX_SHADERSTAGE_IMAGES;
     const int fs_imgs_offset = vs_smps_offset + SG_MAX_SHADERSTAGE_SAMPLERS;
     const int fs_smps_offset = fs_imgs_offset + SG_MAX_SHADERSTAGE_IMAGES;
     SOKOL_ASSERT((fs_smps_offset + SG_MAX_SHADERSTAGE_SAMPLERS) == _SG_WGPU_BINDGROUPSCACHE_NUM_ITEMS);
-    for (int i = 0; i < num_vs_imgs; i++) {
-        SOKOL_ASSERT(vs_imgs[i]);
-        key->items[vs_imgs_offset + i] = vs_imgs[i]->slot.id;
+    for (int i = 0; i < bnd->num_vs_imgs; i++) {
+        SOKOL_ASSERT(bnd->vs_imgs[i]);
+        key->items[vs_imgs_offset + i] = bnd->vs_imgs[i]->slot.id;
     }
-    for (int i = 0; i < num_vs_smps; i++) {
-        SOKOL_ASSERT(vs_smps[i]);
-        key->items[vs_smps_offset + i] = vs_smps[i]->slot.id;
+    for (int i = 0; i < bnd->num_vs_smps; i++) {
+        SOKOL_ASSERT(bnd->vs_smps[i]);
+        key->items[vs_smps_offset + i] = bnd->vs_smps[i]->slot.id;
     }
-    for (int i = 0; i < num_fs_imgs; i++) {
-        SOKOL_ASSERT(fs_imgs[i]);
-        key->items[fs_imgs_offset + i] = fs_imgs[i]->slot.id;
+    for (int i = 0; i < bnd->num_fs_imgs; i++) {
+        SOKOL_ASSERT(bnd->fs_imgs[i]);
+        key->items[fs_imgs_offset + i] = bnd->fs_imgs[i]->slot.id;
     }
-    for (int i = 0; i < num_fs_smps; i++) {
-        SOKOL_ASSERT(fs_smps[i]);
-        key->items[fs_smps_offset + i] = fs_smps[i]->slot.id;
+    for (int i = 0; i < bnd->num_fs_smps; i++) {
+        SOKOL_ASSERT(bnd->fs_smps[i]);
+        key->items[fs_smps_offset + i] = bnd->fs_smps[i]->slot.id;
     }
     key->hash = _sg_wgpu_hash(&key->items, sizeof(key->items));
 }
@@ -12681,16 +12654,10 @@ _SOKOL_PRIVATE bool _sg_wgpu_compare_bindgroupscache_key(_sg_wgpu_bindgroupscach
     return true;
 }
 
-_SOKOL_PRIVATE _sg_wgpu_bindgroup_t* _sg_wgpu_create_bindgroup(
-    _sg_pipeline_t* pip,
-    _sg_image_t** vs_imgs, int num_vs_imgs,
-    _sg_sampler_t** vs_smps, int num_vs_smps,
-    _sg_image_t** fs_imgs, int num_fs_imgs,
-    _sg_sampler_t** fs_smps, int num_fs_smps)
-{
+_SOKOL_PRIVATE _sg_wgpu_bindgroup_t* _sg_wgpu_create_bindgroup(_sg_bindings_t* bnd) {
     SOKOL_ASSERT(_sg.wgpu.dev);
-    SOKOL_ASSERT(pip);
-    SOKOL_ASSERT(pip->shader && (pip->cmn.shader_id.id == pip->shader->slot.id));
+    SOKOL_ASSERT(bnd->pip);
+    SOKOL_ASSERT(bnd->pip->shader && (bnd->pip->cmn.shader_id.id == bnd->pip->shader->slot.id));
     _sg_wgpu_bindgroup_handle_t bg_id = _sg_wgpu_alloc_bindgroup(&_sg.wgpu.bindgroups_pool);
     if (bg_id.id == SG_INVALID_ID) {
         return 0;
@@ -12699,30 +12666,30 @@ _SOKOL_PRIVATE _sg_wgpu_bindgroup_t* _sg_wgpu_create_bindgroup(
     SOKOL_ASSERT(bg && (bg->slot.state == SG_RESOURCESTATE_ALLOC));
 
     // create wgpu bindgroup object
-    WGPUBindGroupLayout bgl = pip->shader->wgpu.bind_group_layout;
+    WGPUBindGroupLayout bgl = bnd->pip->shader->wgpu.bind_group_layout;
     SOKOL_ASSERT(bgl);
     WGPUBindGroupEntry wgpu_entries[SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_IMAGES + SG_MAX_SHADERSTAGE_SAMPLERS];
     _sg_clear(&wgpu_entries, sizeof(wgpu_entries));
     int bge_index = 0;
-    for (int i = 0; i < num_vs_imgs; i++) {
+    for (int i = 0; i < bnd->num_vs_imgs; i++) {
         WGPUBindGroupEntry* wgpu_entry = &wgpu_entries[bge_index++];
         wgpu_entry->binding = _sg_wgpu_image_binding(SG_SHADERSTAGE_VS, i);
-        wgpu_entry->textureView = vs_imgs[i]->wgpu.view;
+        wgpu_entry->textureView = bnd->vs_imgs[i]->wgpu.view;
     }
-    for (int i = 0; i < num_vs_smps; i++) {
+    for (int i = 0; i < bnd->num_vs_smps; i++) {
         WGPUBindGroupEntry* wgpu_entry = &wgpu_entries[bge_index++];
         wgpu_entry->binding = _sg_wgpu_sampler_binding(SG_SHADERSTAGE_VS, i);
-        wgpu_entry->sampler = vs_smps[i]->wgpu.smp;
+        wgpu_entry->sampler = bnd->vs_smps[i]->wgpu.smp;
     }
-    for (int i = 0; i < num_fs_imgs; i++) {
+    for (int i = 0; i < bnd->num_fs_imgs; i++) {
         WGPUBindGroupEntry* wgpu_entry = &wgpu_entries[bge_index++];
         wgpu_entry->binding = _sg_wgpu_image_binding(SG_SHADERSTAGE_FS, i);
-        wgpu_entry->textureView = fs_imgs[i]->wgpu.view;
+        wgpu_entry->textureView = bnd->fs_imgs[i]->wgpu.view;
     }
-    for (int i = 0; i < num_fs_smps; i++) {
+    for (int i = 0; i < bnd->num_fs_smps; i++) {
         WGPUBindGroupEntry* wgpu_entry = &wgpu_entries[bge_index++];
         wgpu_entry->binding = _sg_wgpu_sampler_binding(SG_SHADERSTAGE_FS, i);
-        wgpu_entry->sampler = fs_smps[i]->wgpu.smp;
+        wgpu_entry->sampler = bnd->fs_smps[i]->wgpu.smp;
     }
     WGPUBindGroupDescriptor bg_desc;
     _sg_clear(&bg_desc, sizeof(bg_desc));
@@ -12736,7 +12703,7 @@ _SOKOL_PRIVATE _sg_wgpu_bindgroup_t* _sg_wgpu_create_bindgroup(
         return bg;
     }
 
-    _sg_wgpu_init_bindgroupscache_key(&bg->key, pip, vs_imgs, num_vs_imgs, vs_smps, num_vs_smps, fs_imgs, num_fs_imgs, fs_smps, num_fs_smps);
+    _sg_wgpu_init_bindgroupscache_key(&bg->key, bnd);
 
     bg->slot.state = SG_RESOURCESTATE_VALID;
     return bg;
@@ -12793,16 +12760,10 @@ _SOKOL_PRIVATE void _sg_wgpu_bindcache_ib_update(const _sg_buffer_t* ib, int ib_
     _sg.wgpu.bindings_cache.ib.offset = ib_offset;
 }
 
-_SOKOL_PRIVATE bool _sg_wgpu_apply_bindgroup(
-    _sg_pipeline_t* pip,
-    _sg_image_t** vs_imgs, int num_vs_imgs,
-    _sg_sampler_t** vs_smps, int num_vs_smps,
-    _sg_image_t** fs_imgs, int num_fs_imgs,
-    _sg_sampler_t** fs_smps, int num_fs_smps)
-{
-    if ((num_vs_imgs + num_vs_smps + num_fs_imgs + num_fs_smps) > 0) {
+_SOKOL_PRIVATE bool _sg_wgpu_apply_bindgroup(_sg_bindings_t* bnd) {
+    if ((bnd->num_vs_imgs + bnd->num_vs_smps + bnd->num_fs_imgs + bnd->num_fs_smps) > 0) {
         // FIXME: use bindgroups cache!
-        _sg_wgpu_bindgroup_t* bg = _sg_wgpu_create_bindgroup(pip, vs_imgs, num_vs_imgs, vs_smps, num_vs_smps, fs_imgs, num_fs_imgs, fs_smps, num_fs_smps);
+        _sg_wgpu_bindgroup_t* bg = _sg_wgpu_create_bindgroup(bnd);
         if (bg) {
             if (bg->slot.state == SG_RESOURCESTATE_VALID) {
                 SOKOL_ASSERT(bg->bindgroup);
@@ -13608,48 +13569,41 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
     wgpuRenderPassEncoderSetStencilReference(_sg.wgpu.pass_enc, pip->cmn.stencil.ref);
 }
 
-_SOKOL_PRIVATE bool _sg_wgpu_apply_bindings(
-    _sg_pipeline_t* pip,
-    _sg_buffer_t** vbs, const int* vb_offsets, int num_vbs,
-    _sg_buffer_t* ib, int ib_offset,
-    _sg_image_t** vs_imgs, int num_vs_imgs,
-    _sg_image_t** fs_imgs, int num_fs_imgs,
-    _sg_sampler_t** vs_smps, int num_vs_smps,
-    _sg_sampler_t** fs_smps, int num_fs_smps)
-{
+_SOKOL_PRIVATE bool _sg_wgpu_apply_bindings(_sg_bindings_t* bnd) {
     SOKOL_ASSERT(_sg.wgpu.in_pass);
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
-    SOKOL_ASSERT(pip->shader && (pip->cmn.shader_id.id == pip->shader->slot.id));
+    SOKOL_ASSERT(bnd);
+    SOKOL_ASSERT(bnd->pip->shader && (bnd->pip->cmn.shader_id.id == bnd->pip->shader->slot.id));
     bool retval = true;
 
     // index buffer
-    if (ib) {
-        if (_sg_wgpu_bindcache_ib_dirty(ib, ib_offset)) {
-            _sg_wgpu_bindcache_ib_update(ib, ib_offset);
-            const WGPUIndexFormat format = _sg_wgpu_indexformat(pip->cmn.index_type);
-            const uint64_t buf_size = (uint64_t)ib->cmn.size;
-            const uint64_t offset = (uint64_t)ib_offset;
+    if (bnd->ib) {
+        if (_sg_wgpu_bindcache_ib_dirty(bnd->ib, bnd->ib_offset)) {
+            _sg_wgpu_bindcache_ib_update(bnd->ib, bnd->ib_offset);
+            const WGPUIndexFormat format = _sg_wgpu_indexformat(bnd->pip->cmn.index_type);
+            const uint64_t buf_size = (uint64_t)bnd->ib->cmn.size;
+            const uint64_t offset = (uint64_t)bnd->ib_offset;
             SOKOL_ASSERT(buf_size > offset);
             const uint64_t max_bytes = buf_size - offset;
-            wgpuRenderPassEncoderSetIndexBuffer(_sg.wgpu.pass_enc, ib->wgpu.buf, format, offset, max_bytes);
+            wgpuRenderPassEncoderSetIndexBuffer(_sg.wgpu.pass_enc, bnd->ib->wgpu.buf, format, offset, max_bytes);
         }
     }
     // FIXME: else-path should actually set a null index buffer (this was just recently implemented in WebGPU)
 
     // vertex buffers
-    for (int slot = 0; slot < num_vbs; slot++) {
-        if (_sg_wgpu_bindcache_vb_dirty(slot, vbs[slot], vb_offsets[slot])) {
-            _sg_wgpu_bindcache_vb_update(slot, vbs[slot], vb_offsets[slot]);
-            const uint64_t buf_size = (uint64_t)vbs[slot]->cmn.size;
-            const uint64_t offset = (uint64_t)vb_offsets[slot];
+    for (int slot = 0; slot < bnd->num_vbs; slot++) {
+        if (_sg_wgpu_bindcache_vb_dirty(slot, bnd->vbs[slot], bnd->vb_offsets[slot])) {
+            _sg_wgpu_bindcache_vb_update(slot, bnd->vbs[slot], bnd->vb_offsets[slot]);
+            const uint64_t buf_size = (uint64_t)bnd->vbs[slot]->cmn.size;
+            const uint64_t offset = (uint64_t)bnd->vb_offsets[slot];
             SOKOL_ASSERT(buf_size > offset);
             const uint64_t max_bytes = buf_size - offset;
-            wgpuRenderPassEncoderSetVertexBuffer(_sg.wgpu.pass_enc, (uint32_t)slot, vbs[slot]->wgpu.buf, offset, max_bytes);
+            wgpuRenderPassEncoderSetVertexBuffer(_sg.wgpu.pass_enc, (uint32_t)slot, bnd->vbs[slot]->wgpu.buf, offset, max_bytes);
         }
         // FIXME: else-path should actually set a null vertex buffer (this was just recently implemented in WebGPU)
     }
 
-    _sg_wgpu_apply_bindgroup(pip, vs_imgs, num_vs_imgs, vs_smps, num_vs_smps, fs_imgs, num_fs_imgs, fs_smps, num_fs_smps);
+    _sg_wgpu_apply_bindgroup(bnd);
 
     return retval;
 }
@@ -14130,25 +14084,17 @@ static inline void _sg_apply_pipeline(_sg_pipeline_t* pip) {
     #endif
 }
 
-static inline bool _sg_apply_bindings(
-    _sg_pipeline_t* pip,
-    _sg_buffer_t** vbs, const int* vb_offsets, int num_vbs,
-    _sg_buffer_t* ib, int ib_offset,
-    _sg_image_t** vs_imgs, int num_vs_imgs,
-    _sg_image_t** fs_imgs, int num_fs_imgs,
-    _sg_sampler_t** vs_smps, int num_vs_smps,
-    _sg_sampler_t** fs_smps, int num_fs_smps)
-{
+static inline bool _sg_apply_bindings(_sg_bindings_t* bnd) {
     #if defined(_SOKOL_ANY_GL)
-    return _sg_gl_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs, vs_smps, num_vs_smps, fs_smps, num_fs_smps);
+    return _sg_gl_apply_bindings(bnd);
     #elif defined(SOKOL_METAL)
-    return _sg_mtl_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs, vs_smps, num_vs_smps, fs_smps, num_fs_smps);
+    return _sg_mtl_apply_bindings(bnd);
     #elif defined(SOKOL_D3D11)
-    return _sg_d3d11_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs, vs_smps, num_vs_smps, fs_smps, num_fs_smps);
+    return _sg_d3d11_apply_bindings(bnd);
     #elif defined(SOKOL_WGPU)
-    return _sg_wgpu_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs, vs_smps, num_vs_smps, fs_smps, num_fs_smps);
+    return _sg_wgpu_apply_bindings(bnd);
     #elif defined(SOKOL_DUMMY_BACKEND)
-    return _sg_dummy_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs, vs_smps, num_vs_smps, fs_smps, num_fs_smps);
+    return _sg_dummy_apply_bindings(bnd);
     #else
     #error("INVALID BACKEND");
     #endif
@@ -16869,7 +16815,7 @@ SOKOL_API_IMPL void sg_apply_scissor_rectf(float x, float y, float width, float 
 
 SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
     SOKOL_ASSERT(_sg.valid);
-    _sg.bindings_valid = false;
+    _sg.bindings_applied = false;
     if (!_sg_validate_apply_pipeline(pip_id)) {
         _sg.next_draw_valid = false;
         return;
@@ -16894,91 +16840,95 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
         _sg.next_draw_valid = false;
         return;
     }
-    _sg.bindings_valid = true;
+    _sg.bindings_applied = true;
 
-    _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, _sg.cur_pipeline.id);
-    SOKOL_ASSERT(pip);
+    _sg_bindings_t bnd;
+    _sg_clear(&bnd, sizeof(bnd));
+    bnd.pip = _sg_lookup_pipeline(&_sg.pools, _sg.cur_pipeline.id);
+    if (0 == bnd.pip) {
+        _sg.next_draw_valid = false;
+    }
 
-    _sg_buffer_t* vbs[SG_MAX_VERTEX_BUFFERS] = { 0 };
-    int num_vbs = 0;
-    for (int i = 0; i < SG_MAX_VERTEX_BUFFERS; i++, num_vbs++) {
+    for (int i = 0; i < SG_MAX_VERTEX_BUFFERS; i++, bnd.num_vbs++) {
         if (bindings->vertex_buffers[i].id) {
-            vbs[i] = _sg_lookup_buffer(&_sg.pools, bindings->vertex_buffers[i].id);
-            SOKOL_ASSERT(vbs[i]);
-            _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == vbs[i]->slot.state);
-            _sg.next_draw_valid &= !vbs[i]->cmn.append_overflow;
+            bnd.vbs[i] = _sg_lookup_buffer(&_sg.pools, bindings->vertex_buffers[i].id);
+            bnd.vb_offsets[i] = bindings->vertex_buffer_offsets[i];
+            if (bnd.vbs[i]) {
+                _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == bnd.vbs[i]->slot.state);
+                _sg.next_draw_valid &= !bnd.vbs[i]->cmn.append_overflow;
+            } else {
+                _sg.next_draw_valid = false;
+            }
         } else {
             break;
         }
     }
 
-    _sg_buffer_t* ib = 0;
     if (bindings->index_buffer.id) {
-        ib = _sg_lookup_buffer(&_sg.pools, bindings->index_buffer.id);
-        SOKOL_ASSERT(ib);
-        _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == ib->slot.state);
-        _sg.next_draw_valid &= !ib->cmn.append_overflow;
+        bnd.ib = _sg_lookup_buffer(&_sg.pools, bindings->index_buffer.id);
+        bnd.ib_offset = bindings->index_buffer_offset;
+        if (bnd.ib) {
+            _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == bnd.ib->slot.state);
+            _sg.next_draw_valid &= !bnd.ib->cmn.append_overflow;
+        } else {
+            _sg.next_draw_valid = false;
+        }
     }
 
-    _sg_image_t* vs_imgs[SG_MAX_SHADERSTAGE_IMAGES] = { 0 };
-    int num_vs_imgs = 0;
-    for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++, num_vs_imgs++) {
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++, bnd.num_vs_imgs++) {
         if (bindings->vs.images[i].id) {
-            vs_imgs[i] = _sg_lookup_image(&_sg.pools, bindings->vs.images[i].id);
-            SOKOL_ASSERT(vs_imgs[i]);
-            _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == vs_imgs[i]->slot.state);
+            bnd.vs_imgs[i] = _sg_lookup_image(&_sg.pools, bindings->vs.images[i].id);
+            if (bnd.vs_imgs[i]) {
+                _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == bnd.vs_imgs[i]->slot.state);
+            } else {
+                _sg.next_draw_valid = false;
+            }
         } else {
             break;
         }
     }
 
-    _sg_image_t* fs_imgs[SG_MAX_SHADERSTAGE_IMAGES] = { 0 };
-    int num_fs_imgs = 0;
-    for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++, num_fs_imgs++) {
-        if (bindings->fs.images[i].id) {
-            fs_imgs[i] = _sg_lookup_image(&_sg.pools, bindings->fs.images[i].id);
-            SOKOL_ASSERT(fs_imgs[i]);
-            _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == fs_imgs[i]->slot.state);
-        } else {
-            break;
-        }
-    }
-
-    _sg_sampler_t* vs_smps[SG_MAX_SHADERSTAGE_SAMPLERS] = { 0 };
-    int num_vs_smps = 0;
-    for (int i = 0; i < SG_MAX_SHADERSTAGE_SAMPLERS; i++, num_vs_smps++) {
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_SAMPLERS; i++, bnd.num_vs_smps++) {
         if (bindings->vs.samplers[i].id) {
-            vs_smps[i] = _sg_lookup_sampler(&_sg.pools, bindings->vs.samplers[i].id);
-            SOKOL_ASSERT(vs_smps[i]);
-            _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == vs_smps[i]->slot.state);
+            bnd.vs_smps[i] = _sg_lookup_sampler(&_sg.pools, bindings->vs.samplers[i].id);
+            if (bnd.vs_smps[i]) {
+                _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == bnd.vs_smps[i]->slot.state);
+            } else {
+                _sg.next_draw_valid = false;
+            }
         } else {
             break;
         }
     }
 
-    _sg_sampler_t* fs_smps[SG_MAX_SHADERSTAGE_SAMPLERS] = { 0 };
-    int num_fs_smps = 0;
-    for (int i = 0; i < SG_MAX_SHADERSTAGE_SAMPLERS; i++, num_fs_smps++) {
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++, bnd.num_fs_imgs++) {
+        if (bindings->fs.images[i].id) {
+            bnd.fs_imgs[i] = _sg_lookup_image(&_sg.pools, bindings->fs.images[i].id);
+            if (bnd.fs_imgs[i]) {
+                _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == bnd.fs_imgs[i]->slot.state);
+            } else {
+                _sg.next_draw_valid = false;
+            }
+        } else {
+            break;
+        }
+    }
+
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_SAMPLERS; i++, bnd.num_fs_smps++) {
         if (bindings->fs.samplers[i].id) {
-            fs_smps[i] = _sg_lookup_sampler(&_sg.pools, bindings->fs.samplers[i].id);
-            SOKOL_ASSERT(fs_smps[i]);
-            _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == fs_smps[i]->slot.state);
+            bnd.fs_smps[i] = _sg_lookup_sampler(&_sg.pools, bindings->fs.samplers[i].id);
+            if (bnd.fs_smps[i]) {
+                _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == bnd.fs_smps[i]->slot.state);
+            } else {
+                _sg.next_draw_valid = false;
+            }
         } else {
             break;
         }
     }
 
     if (_sg.next_draw_valid) {
-        const int* vb_offsets = bindings->vertex_buffer_offsets;
-        int ib_offset = bindings->index_buffer_offset;
-        _sg.next_draw_valid = _sg_apply_bindings(
-            pip,
-            vbs, vb_offsets, num_vbs,
-            ib, ib_offset,
-            vs_imgs, num_vs_imgs,
-            fs_imgs, num_fs_imgs,
-            vs_smps, num_vs_smps,
-            fs_smps, num_fs_smps);
+        _sg.next_draw_valid &= _sg_apply_bindings(&bnd);
         _SG_TRACE_ARGS(apply_bindings, bindings);
     }
 }
@@ -17008,7 +16958,7 @@ SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instance
     SOKOL_ASSERT(num_elements >= 0);
     SOKOL_ASSERT(num_instances >= 0);
     #if defined(SOKOL_DEBUG)
-        if (!_sg.bindings_valid) {
+        if (!_sg.bindings_applied) {
             _SG_WARN(DRAW_WITHOUT_BINDINGS);
         }
     #endif
@@ -17018,7 +16968,7 @@ SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instance
     if (!_sg.next_draw_valid) {
         return;
     }
-    if (!_sg.bindings_valid) {
+    if (!_sg.bindings_applied) {
         return;
     }
     /* attempting to draw with zero elements or instances is not technically an
