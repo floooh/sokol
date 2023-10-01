@@ -350,6 +350,10 @@
         to sokol_gfx.h internals, and may change more often than other
         public API functions and structs.
 
+    --- you can query various internal per-frame stats via:
+
+            sg_query_frame_stats()
+
     --- you can ask at runtime what backend sokol_gfx.h has been compiled for:
 
             sg_backend sg_query_backend(void)
@@ -2855,6 +2859,54 @@ typedef struct sg_pass_info {
 } sg_pass_info;
 
 /*
+    sg_frame_stats
+
+    Allows to track generic and backend-specific tracking stats about a
+    render frame. Obtained by calling sg_query_frame_stats(). The returned
+    struct will contains information about the *previous* frame.
+*/
+typedef struct sg_frame_stats_gl {
+    uint32_t fixme;
+} sg_frame_stats_gl;
+
+typedef struct sg_frame_stats_d3d11 {
+    uint32_t fixme;
+} sg_frame_stats_d3d11;
+
+typedef struct sg_frame_stats_metal {
+    uint32_t fixme;
+} sg_frame_stats_metal;
+
+typedef struct sg_frame_stats_wgpu {
+    uint32_t fixme;
+} sg_frame_stats_wgpu;
+
+typedef struct sg_frame_stats {
+    uint32_t frame_index;   // current frame counter, starts at 0
+
+    uint32_t num_passes;
+    uint32_t num_apply_viewport;
+    uint32_t num_apply_scissor_rect;
+    uint32_t num_apply_pipeline;
+    uint32_t num_apply_bindings;
+    uint32_t num_apply_uniforms;
+    uint32_t num_draw;
+    uint32_t num_update_buffer;
+    uint32_t num_append_buffer;
+    uint32_t num_update_image;
+
+    uint32_t size_apply_uniforms;
+    uint32_t size_update_buffer;
+    uint32_t size_append_buffer;
+    uint32_t size_update_image;
+
+    sg_frame_stats_gl gl;
+    sg_frame_stats_d3d11 d3d11;
+    sg_frame_stats_metal metal;
+    sg_frame_stats_wgpu wgpu;
+} sg_frame_stats;
+
+/*
     sg_log_item
 
     An enum with a unique item for each log message, warning, error
@@ -3392,6 +3444,7 @@ SOKOL_GFX_API_DECL sg_backend sg_query_backend(void);
 SOKOL_GFX_API_DECL sg_features sg_query_features(void);
 SOKOL_GFX_API_DECL sg_limits sg_query_limits(void);
 SOKOL_GFX_API_DECL sg_pixelformat_info sg_query_pixelformat(sg_pixel_format fmt);
+SOKOL_GFX_API_DECL sg_frame_stats sg_query_frame_stats(void);
 // get current state of a resource (INITIAL, ALLOC, VALID, FAILED, INVALID)
 SOKOL_GFX_API_DECL sg_resource_state sg_query_buffer_state(sg_buffer buf);
 SOKOL_GFX_API_DECL sg_resource_state sg_query_image_state(sg_image img);
@@ -5061,6 +5114,8 @@ typedef struct {
     sg_features features;
     sg_limits limits;
     sg_pixelformat_info formats[_SG_PIXELFORMAT_NUM];
+    sg_frame_stats stats;
+    sg_frame_stats prev_stats;
     #if defined(_SOKOL_ANY_GL)
     _sg_gl_backend_t gl;
     #elif defined(SOKOL_METAL)
@@ -16902,6 +16957,7 @@ SOKOL_API_IMPL void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_ac
 
 SOKOL_API_IMPL void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left) {
     SOKOL_ASSERT(_sg.valid);
+    _sg.stats.num_apply_viewport++;
     if (!_sg.pass_valid) {
         return;
     }
@@ -16915,6 +16971,7 @@ SOKOL_API_IMPL void sg_apply_viewportf(float x, float y, float width, float heig
 
 SOKOL_API_IMPL void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left) {
     SOKOL_ASSERT(_sg.valid);
+    _sg.stats.num_apply_scissor_rect++;
     if (!_sg.pass_valid) {
         return;
     }
@@ -16928,6 +16985,7 @@ SOKOL_API_IMPL void sg_apply_scissor_rectf(float x, float y, float width, float 
 
 SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
     SOKOL_ASSERT(_sg.valid);
+    _sg.stats.num_apply_pipeline++;
     _sg.bindings_applied = false;
     if (!_sg_validate_apply_pipeline(pip_id)) {
         _sg.next_draw_valid = false;
@@ -16949,6 +17007,7 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(bindings);
     SOKOL_ASSERT((bindings->_start_canary == 0) && (bindings->_end_canary==0));
+    _sg.stats.num_apply_bindings++;
     if (!_sg_validate_apply_bindings(bindings)) {
         _sg.next_draw_valid = false;
         return;
@@ -17051,6 +17110,8 @@ SOKOL_API_IMPL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const
     SOKOL_ASSERT((stage == SG_SHADERSTAGE_VS) || (stage == SG_SHADERSTAGE_FS));
     SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_SHADERSTAGE_UBS));
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
+    _sg.stats.num_apply_uniforms++;
+    _sg.stats.size_apply_uniforms += data->size;
     if (!_sg_validate_apply_uniforms(stage, ub_index, data)) {
         _sg.next_draw_valid = false;
         return;
@@ -17070,6 +17131,7 @@ SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instance
     SOKOL_ASSERT(base_element >= 0);
     SOKOL_ASSERT(num_elements >= 0);
     SOKOL_ASSERT(num_instances >= 0);
+    _sg.stats.num_draw++;
     #if defined(SOKOL_DEBUG)
         if (!_sg.bindings_applied) {
             _SG_WARN(DRAW_WITHOUT_BINDINGS);
@@ -17096,6 +17158,7 @@ SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instance
 
 SOKOL_API_IMPL void sg_end_pass(void) {
     SOKOL_ASSERT(_sg.valid);
+    _sg.stats.num_passes++;
     if (!_sg.pass_valid) {
         return;
     }
@@ -17109,6 +17172,9 @@ SOKOL_API_IMPL void sg_end_pass(void) {
 SOKOL_API_IMPL void sg_commit(void) {
     SOKOL_ASSERT(_sg.valid);
     _sg_commit();
+    _sg.stats.frame_index = _sg.frame_index;
+    _sg.prev_stats = _sg.stats;
+    _sg_clear(&_sg.stats, sizeof(_sg.stats));
     _sg_notify_commit_listeners();
     _SG_TRACE_NOARGS(commit);
     _sg.frame_index++;
@@ -17123,6 +17189,8 @@ SOKOL_API_IMPL void sg_reset_state_cache(void) {
 SOKOL_API_IMPL void sg_update_buffer(sg_buffer buf_id, const sg_range* data) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
+    _sg.stats.num_update_buffer++;
+    _sg.stats.size_update_buffer += data->size;
     _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
     if ((data->size > 0) && buf && (buf->slot.state == SG_RESOURCESTATE_VALID)) {
         if (_sg_validate_update_buffer(buf, data)) {
@@ -17141,6 +17209,8 @@ SOKOL_API_IMPL void sg_update_buffer(sg_buffer buf_id, const sg_range* data) {
 SOKOL_API_IMPL int sg_append_buffer(sg_buffer buf_id, const sg_range* data) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(data && data->ptr);
+    _sg.stats.num_append_buffer++;
+    _sg.stats.size_append_buffer += data->size;
     _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
     int result;
     if (buf) {
@@ -17202,6 +17272,15 @@ SOKOL_API_IMPL bool sg_query_buffer_will_overflow(sg_buffer buf_id, size_t size)
 
 SOKOL_API_IMPL void sg_update_image(sg_image img_id, const sg_image_data* data) {
     SOKOL_ASSERT(_sg.valid);
+    _sg.stats.num_update_image++;
+    for (int face_index = 0; face_index < SG_CUBEFACE_NUM; face_index++) {
+        for (int mip_index = 0; mip_index < SG_MAX_MIPMAPS; mip_index++) {
+            if (data->subimage[face_index][mip_index].size == 0) {
+                break;
+            }
+            _sg.stats.size_update_image += data->subimage[face_index][mip_index].size;
+        }
+    }
     _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
     if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
         if (_sg_validate_update_image(img, data)) {
