@@ -2869,7 +2869,17 @@ typedef struct sg_pass_info {
     struct will contains information about the *previous* frame.
 */
 typedef struct sg_frame_stats_gl {
-    uint32_t fixme;
+    uint32_t num_bind_buffer;
+    uint32_t num_active_texture;
+    uint32_t num_bind_texture;
+    uint32_t num_bind_sampler;
+    uint32_t num_use_program;
+    uint32_t num_render_state;
+    uint32_t num_vertex_attrib_pointer;
+    uint32_t num_vertex_attrib_divisor;
+    uint32_t num_enable_vertex_attrib_array;
+    uint32_t num_disable_vertex_attrib_array;
+    uint32_t num_uniform;
 } sg_frame_stats_gl;
 
 typedef struct sg_frame_stats_d3d11 {
@@ -6965,10 +6975,12 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
     if (force || (_sg.gl.cache.vertex_buffer != 0)) {
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         _sg.gl.cache.vertex_buffer = 0;
+        _sg_stats_add(gl.num_bind_buffer, 1);
     }
     if (force || (_sg.gl.cache.index_buffer != 0)) {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
         _sg.gl.cache.index_buffer = 0;
+        _sg_stats_add(gl.num_bind_buffer, 1);
     }
 }
 
@@ -6978,11 +6990,13 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_buffer(GLenum target, GLuint buffer) {
         if (_sg.gl.cache.vertex_buffer != buffer) {
             _sg.gl.cache.vertex_buffer = buffer;
             glBindBuffer(target, buffer);
+            _sg_stats_add(gl.num_bind_buffer, 1);
         }
     } else {
         if (_sg.gl.cache.index_buffer != buffer) {
             _sg.gl.cache.index_buffer = buffer;
             glBindBuffer(target, buffer);
+            _sg_stats_add(gl.num_bind_buffer, 1);
         }
     }
 }
@@ -7016,10 +7030,12 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_buffer(GLuint buf) {
     if (buf == _sg.gl.cache.vertex_buffer) {
         _sg.gl.cache.vertex_buffer = 0;
         glBindBuffer(GL_ARRAY_BUFFER, 0);
+        _sg_stats_add(gl.num_bind_buffer, 1);
     }
     if (buf == _sg.gl.cache.index_buffer) {
         _sg.gl.cache.index_buffer = 0;
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+        _sg_stats_add(gl.num_bind_buffer, 1);
     }
     if (buf == _sg.gl.cache.stored_vertex_buffer) {
         _sg.gl.cache.stored_vertex_buffer = 0;
@@ -7039,6 +7055,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_active_texture(GLenum texture) {
     if (_sg.gl.cache.cur_active_texture != texture) {
         _sg.gl.cache.cur_active_texture = texture;
         glActiveTexture(texture);
+        _sg_stats_add(gl.num_active_texture, 1);
     }
     _SG_GL_CHECK_ERROR();
 }
@@ -7049,11 +7066,14 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_texture_sampler_bindings(bool force) {
         if (force || (_sg.gl.cache.texture_samplers[i].texture != 0)) {
             GLenum gl_texture_unit = (GLenum) (GL_TEXTURE0 + i);
             glActiveTexture(gl_texture_unit);
+            _sg_stats_add(gl.num_active_texture, 1);
             glBindTexture(GL_TEXTURE_2D, 0);
             glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
             glBindTexture(GL_TEXTURE_3D, 0);
             glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+            _sg_stats_add(gl.num_bind_texture, 4);
             glBindSampler((GLuint)i, 0);
+            _sg_stats_add(gl.num_bind_sampler, 1);
             _sg.gl.cache.texture_samplers[i].target = 0;
             _sg.gl.cache.texture_samplers[i].texture = 0;
             _sg.gl.cache.texture_samplers[i].sampler = 0;
@@ -7080,15 +7100,18 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_texture_sampler(int slot_index, GLenum tar
         if ((target != slot->target) && (slot->target != 0)) {
             glBindTexture(slot->target, 0);
             _SG_GL_CHECK_ERROR();
+            _sg_stats_add(gl.num_bind_texture, 1);
         }
         // apply new binding (can be 0 to unbind)
         if (target != 0) {
             glBindTexture(target, texture);
             _SG_GL_CHECK_ERROR();
+            _sg_stats_add(gl.num_bind_texture, 1);
         }
         // apply new sampler (can be 0 to unbind)
         glBindSampler((GLuint)slot_index, sampler);
         _SG_GL_CHECK_ERROR();
+        _sg_stats_add(gl.num_bind_sampler, 1);
 
         slot->target = target;
         slot->texture = texture;
@@ -7123,8 +7146,10 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_texture_sampler(GLuint tex, GLuint s
             _sg_gl_cache_active_texture((GLenum)(GL_TEXTURE0 + i));
             glBindTexture(slot->target, 0);
             _SG_GL_CHECK_ERROR();
+            _sg_stats_add(gl.num_bind_texture, 1);
             glBindSampler((GLuint)i, 0);
             _SG_GL_CHECK_ERROR();
+            _sg_stats_add(gl.num_bind_sampler, 1);
             slot->target = 0;
             slot->texture = 0;
             slot->sampler = 0;
@@ -7142,6 +7167,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_program(GLuint prog) {
     if (prog == _sg.gl.cache.prog) {
         _sg.gl.cache.prog = 0;
         glUseProgram(0);
+        _sg_stats_add(gl.num_use_program, 1);
     }
 }
 
@@ -7169,6 +7195,7 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
             attr->divisor = -1;
             glDisableVertexAttribArray((GLuint)i);
             _SG_GL_CHECK_ERROR();
+            _sg_stats_add(gl.num_disable_vertex_attrib_array, 1);
         }
         _sg.gl.cache.cur_primitive_type = GL_TRIANGLES;
 
@@ -7193,6 +7220,7 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
         glStencilFunc(GL_ALWAYS, 0, 0);
         glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
         glStencilMask(0);
+        _sg_stats_add(gl.num_render_state, 7);
 
         // blend state
         _sg.gl.cache.blend.src_factor_rgb = SG_BLENDFACTOR_ONE;
@@ -7205,6 +7233,7 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
         glBlendFuncSeparate(GL_ONE, GL_ZERO, GL_ONE, GL_ZERO);
         glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
         glBlendColor(0.0f, 0.0f, 0.0f, 0.0f);
+        _sg_stats_add(gl.num_render_state, 4);
 
         // standalone state
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
@@ -7223,9 +7252,11 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
         glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
         glEnable(GL_DITHER);
         glDisable(GL_POLYGON_OFFSET_FILL);
+        _sg_stats_add(gl.num_render_state, 10);
         #if defined(SOKOL_GLCORE33)
             glEnable(GL_MULTISAMPLE);
             glEnable(GL_PROGRAM_POINT_SIZE);
+            _sg_stats_add(gl.num_render_state, 2);
         #endif
     }
 }
@@ -8095,10 +8126,12 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
             if (state_ds->compare != cache_ds->compare) {
                 cache_ds->compare = state_ds->compare;
                 glDepthFunc(_sg_gl_compare_func(state_ds->compare));
+                _sg_stats_add(gl.num_render_state, 1);
             }
             if (state_ds->write_enabled != cache_ds->write_enabled) {
                 cache_ds->write_enabled = state_ds->write_enabled;
                 glDepthMask(state_ds->write_enabled);
+                _sg_stats_add(gl.num_render_state, 1);
             }
             if (!_sg_fequal(state_ds->bias, cache_ds->bias, 0.000001f) ||
                 !_sg_fequal(state_ds->bias_slope_scale, cache_ds->bias_slope_scale, 0.000001f))
@@ -8111,6 +8144,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
                 cache_ds->bias = state_ds->bias;
                 cache_ds->bias_slope_scale = state_ds->bias_slope_scale;
                 glPolygonOffset(state_ds->bias_slope_scale, state_ds->bias);
+                _sg_stats_add(gl.num_render_state, 1);
                 bool po_enabled = true;
                 if (_sg_fequal(state_ds->bias, 0.0f, 0.000001f) &&
                     _sg_fequal(state_ds->bias_slope_scale, 0.0f, 0.000001f))
@@ -8124,6 +8158,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
                     } else {
                         glDisable(GL_POLYGON_OFFSET_FILL);
                     }
+                    _sg_stats_add(gl.num_render_state, 1);
                 }
             }
         }
@@ -8139,10 +8174,12 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
                 } else {
                     glDisable(GL_STENCIL_TEST);
                 }
+                _sg_stats_add(gl.num_render_state, 1);
             }
             if (state_ss->write_mask != cache_ss->write_mask) {
                 cache_ss->write_mask = state_ss->write_mask;
                 glStencilMask(state_ss->write_mask);
+                _sg_stats_add(gl.num_render_state, 1);
             }
             for (int i = 0; i < 2; i++) {
                 const sg_stencil_face_state* state_sfs = (i==0)? &state_ss->front : &state_ss->back;
@@ -8157,6 +8194,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
                         _sg_gl_compare_func(state_sfs->compare),
                         state_ss->ref,
                         state_ss->read_mask);
+                    _sg_stats_add(gl.num_render_state, 1);
                 }
                 if ((state_sfs->fail_op != cache_sfs->fail_op) ||
                     (state_sfs->depth_fail_op != cache_sfs->depth_fail_op) ||
@@ -8169,6 +8207,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
                         _sg_gl_stencil_op(state_sfs->fail_op),
                         _sg_gl_stencil_op(state_sfs->depth_fail_op),
                         _sg_gl_stencil_op(state_sfs->pass_op));
+                    _sg_stats_add(gl.num_render_state, 1);
                 }
             }
             cache_ss->read_mask = state_ss->read_mask;
@@ -8187,6 +8226,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
                 } else {
                     glDisable(GL_BLEND);
                 }
+                _sg_stats_add(gl.num_render_state, 1);
             }
             if ((state_bs->src_factor_rgb != cache_bs->src_factor_rgb) ||
                 (state_bs->dst_factor_rgb != cache_bs->dst_factor_rgb) ||
@@ -8201,11 +8241,13 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
                     _sg_gl_blend_factor(state_bs->dst_factor_rgb),
                     _sg_gl_blend_factor(state_bs->src_factor_alpha),
                     _sg_gl_blend_factor(state_bs->dst_factor_alpha));
+                _sg_stats_add(gl.num_render_state, 1);
             }
             if ((state_bs->op_rgb != cache_bs->op_rgb) || (state_bs->op_alpha != cache_bs->op_alpha)) {
                 cache_bs->op_rgb = state_bs->op_rgb;
                 cache_bs->op_alpha = state_bs->op_alpha;
                 glBlendEquationSeparate(_sg_gl_blend_op(state_bs->op_rgb), _sg_gl_blend_op(state_bs->op_alpha));
+                _sg_stats_add(gl.num_render_state, 1);
             }
 
             // standalone color target state
@@ -8227,6 +8269,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
                                         (cm & SG_COLORMASK_A) != 0);
                         }
                     #endif
+                    _sg_stats_add(gl.num_render_state, 1);
                 }
             }
 
@@ -8238,6 +8281,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
                 sg_color c = pip->cmn.blend_color;
                 _sg.gl.cache.blend_color = c;
                 glBlendColor(c.r, c.g, c.b, c.a);
+                _sg_stats_add(gl.num_render_state, 1);
             }
         } // pip->cmn.color_count > 0
 
@@ -8245,16 +8289,19 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
             _sg.gl.cache.cull_mode = pip->gl.cull_mode;
             if (SG_CULLMODE_NONE == pip->gl.cull_mode) {
                 glDisable(GL_CULL_FACE);
+                _sg_stats_add(gl.num_render_state, 1);
             } else {
                 glEnable(GL_CULL_FACE);
                 GLenum gl_mode = (SG_CULLMODE_FRONT == pip->gl.cull_mode) ? GL_FRONT : GL_BACK;
                 glCullFace(gl_mode);
+                _sg_stats_add(gl.num_render_state, 2);
             }
         }
         if (pip->gl.face_winding != _sg.gl.cache.face_winding) {
             _sg.gl.cache.face_winding = pip->gl.face_winding;
             GLenum gl_winding = (SG_FACEWINDING_CW == pip->gl.face_winding) ? GL_CW : GL_CCW;
             glFrontFace(gl_winding);
+            _sg_stats_add(gl.num_render_state, 1);
         }
         if (pip->gl.alpha_to_coverage_enabled != _sg.gl.cache.alpha_to_coverage_enabled) {
             _sg.gl.cache.alpha_to_coverage_enabled = pip->gl.alpha_to_coverage_enabled;
@@ -8263,6 +8310,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
             } else {
                 glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
             }
+            _sg_stats_add(gl.num_render_state, 1);
         }
         #ifdef SOKOL_GLCORE33
         if (pip->gl.sample_count != _sg.gl.cache.sample_count) {
@@ -8272,6 +8320,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
             } else {
                 glDisable(GL_MULTISAMPLE);
             }
+            _sg_stats_add(gl.num_render_state, 1);
         }
         #endif
 
@@ -8279,6 +8328,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
         if (pip->shader->gl.prog != _sg.gl.cache.prog) {
             _sg.gl.cache.prog = pip->shader->gl.prog;
             glUseProgram(pip->shader->gl.prog);
+            _sg_stats_add(gl.num_use_program, 1);
         }
     }
     _SG_GL_CHECK_ERROR();
@@ -8347,17 +8397,21 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_t* bnd) {
             {
                 _sg_gl_cache_bind_buffer(GL_ARRAY_BUFFER, gl_vb);
                 glVertexAttribPointer(attr_index, attr->size, attr->type, attr->normalized, attr->stride, (const GLvoid*)(GLintptr)vb_offset);
+                _sg_stats_add(gl.num_vertex_attrib_pointer, 1);
                 glVertexAttribDivisor(attr_index, (GLuint)attr->divisor);
+                _sg_stats_add(gl.num_vertex_attrib_divisor, 1);
                 cache_attr_dirty = true;
             }
             if (cache_attr->gl_attr.vb_index == -1) {
                 glEnableVertexAttribArray(attr_index);
+                _sg_stats_add(gl.num_enable_vertex_attrib_array, 1);
                 cache_attr_dirty = true;
             }
         } else {
             // attribute is disabled
             if (cache_attr->gl_attr.vb_index != -1) {
                 glDisableVertexAttribArray(attr_index);
+                _sg_stats_add(gl.num_disable_vertex_attrib_array, 1);
                 cache_attr_dirty = true;
             }
         }
@@ -8385,6 +8439,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_uniforms(sg_shader_stage stage_index, int ub_in
         if (u->gl_loc == -1) {
             continue;
         }
+        _sg_stats_add(gl.num_uniform, 1);
         GLfloat* fptr = (GLfloat*) (((uint8_t*)data->ptr) + u->offset);
         GLint* iptr = (GLint*) (((uint8_t*)data->ptr) + u->offset);
         switch (u->type) {
