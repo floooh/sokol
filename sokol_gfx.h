@@ -2876,9 +2876,46 @@ typedef struct sg_frame_stats_d3d11 {
     uint32_t fixme;
 } sg_frame_stats_d3d11;
 
+typedef struct sg_frame_stats_metal_idpool {
+    uint32_t num_added;
+    uint32_t num_released;
+    uint32_t num_garbage_collected;
+} sg_frame_stats_metal_idpool;
+
+typedef struct sg_frame_stats_metal_pipeline {
+    uint32_t num_set_blend_color;
+    uint32_t num_set_cull_mode;
+    uint32_t num_set_front_facing_winding;
+    uint32_t num_set_stencil_reference_value;
+    uint32_t num_set_depth_bias;
+    uint32_t num_set_render_pipeline_state;
+    uint32_t num_set_depth_stencil_state;
+} sg_frame_stats_metal_pipeline;
+
+typedef struct sg_frame_stats_metal_bindings {
+    uint32_t num_set_vertex_buffer;
+    uint32_t num_set_vertex_texture;
+    uint32_t num_set_vertex_sampler_state;
+    uint32_t num_set_fragment_texture;
+    uint32_t num_set_fragment_sampler_state;
+} sg_frame_stats_metal_bindings;
+
+typedef struct sg_frame_stats_metal_uniforms {
+    uint32_t num_set_vertex_buffer_offset;
+    uint32_t num_set_fragment_buffer_offset;
+} sg_frame_stats_metal_uniforms;
+
 typedef struct sg_frame_stats_metal {
-    uint32_t fixme;
+    sg_frame_stats_metal_idpool idpool;
+    sg_frame_stats_metal_pipeline pipeline;
+    sg_frame_stats_metal_bindings bindings;
+    sg_frame_stats_metal_uniforms uniforms;
 } sg_frame_stats_metal;
+
+typedef struct sg_frame_stats_wgpu_uniforms {
+    uint32_t num_set_bindgroup;
+    uint32_t size_write_buffer;
+} sg_frame_stats_wgpu_uniforms;
 
 typedef struct sg_frame_stats_wgpu_bindings {
     uint32_t num_set_vertex_buffer;
@@ -2896,8 +2933,7 @@ typedef struct sg_frame_stats_wgpu_bindings {
 } sg_frame_stats_wgpu_bindings;
 
 typedef struct sg_frame_stats_wgpu {
-    uint32_t num_uniform_set_bindgroup;
-    uint32_t size_uniform_write_buffer;
+    sg_frame_stats_wgpu_uniforms uniforms;
     sg_frame_stats_wgpu_bindings bindings;
 } sg_frame_stats_wgpu;
 
@@ -10795,6 +10831,7 @@ _SOKOL_PRIVATE int _sg_mtl_add_resource(id res) {
     if (nil == res) {
         return _SG_MTL_INVALID_SLOT_INDEX;
     }
+    _sg_stats_add(metal.idpool.num_added, 1);
     const int slot_index = _sg_mtl_alloc_pool_slot();
     // NOTE: the NSMutableArray will take ownership of its items
     SOKOL_ASSERT([NSNull null] == _sg.mtl.idpool.pool[(NSUInteger)slot_index]);
@@ -10811,6 +10848,7 @@ _SOKOL_PRIVATE void _sg_mtl_release_resource(uint32_t frame_index, int slot_inde
     if (slot_index == _SG_MTL_INVALID_SLOT_INDEX) {
         return;
     }
+    _sg_stats_add(metal.idpool.num_released, 1);
     SOKOL_ASSERT((slot_index > 0) && (slot_index < _sg.mtl.idpool.num_slots));
     SOKOL_ASSERT([NSNull null] != _sg.mtl.idpool.pool[(NSUInteger)slot_index]);
     int release_index = _sg.mtl.idpool.release_queue_front++;
@@ -10833,6 +10871,7 @@ _SOKOL_PRIVATE void _sg_mtl_garbage_collect(uint32_t frame_index) {
             // don't need to check further, release-items past this are too young
             break;
         }
+        _sg_stats_add(metal.idpool.num_garbage_collected, 1);
         // safe to release this resource
         const int slot_index = _sg.mtl.idpool.release_queue[_sg.mtl.idpool.release_queue_back].slot_index;
         SOKOL_ASSERT((slot_index > 0) && (slot_index < _sg.mtl.idpool.num_slots));
@@ -11876,14 +11915,21 @@ _SOKOL_PRIVATE void _sg_mtl_apply_pipeline(_sg_pipeline_t* pip) {
         _sg.mtl.state_cache.cur_pipeline_id.id = pip->slot.id;
         sg_color c = pip->cmn.blend_color;
         [_sg.mtl.cmd_encoder setBlendColorRed:c.r green:c.g blue:c.b alpha:c.a];
+        _sg_stats_add(metal.pipeline.num_set_blend_color, 1);
         [_sg.mtl.cmd_encoder setCullMode:pip->mtl.cull_mode];
+        _sg_stats_add(metal.pipeline.num_set_cull_mode, 1);
         [_sg.mtl.cmd_encoder setFrontFacingWinding:pip->mtl.winding];
+        _sg_stats_add(metal.pipeline.num_set_front_facing_winding, 1);
         [_sg.mtl.cmd_encoder setStencilReferenceValue:pip->mtl.stencil_ref];
+        _sg_stats_add(metal.pipeline.num_set_stencil_reference_value, 1);
         [_sg.mtl.cmd_encoder setDepthBias:pip->cmn.depth.bias slopeScale:pip->cmn.depth.bias_slope_scale clamp:pip->cmn.depth.bias_clamp];
+        _sg_stats_add(metal.pipeline.num_set_depth_bias, 1);
         SOKOL_ASSERT(pip->mtl.rps != _SG_MTL_INVALID_SLOT_INDEX);
         [_sg.mtl.cmd_encoder setRenderPipelineState:_sg_mtl_id(pip->mtl.rps)];
+        _sg_stats_add(metal.pipeline.num_set_render_pipeline_state, 1);
         SOKOL_ASSERT(pip->mtl.dss != _SG_MTL_INVALID_SLOT_INDEX);
         [_sg.mtl.cmd_encoder setDepthStencilState:_sg_mtl_id(pip->mtl.dss)];
+        _sg_stats_add(metal.pipeline.num_set_depth_stencil_state, 1);
     }
 }
 
@@ -11922,6 +11968,7 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
             [_sg.mtl.cmd_encoder setVertexBuffer:_sg_mtl_id(vb->mtl.buf[vb->cmn.active_slot])
                 offset:(NSUInteger)vb_offset
                 atIndex:mtl_slot];
+            _sg_stats_add(metal.bindings.num_set_vertex_buffer, 1);
         }
     }
 
@@ -11933,6 +11980,7 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
             _sg.mtl.state_cache.cur_vs_image_ids[slot].id = img->slot.id;
             SOKOL_ASSERT(img->mtl.tex[img->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
             [_sg.mtl.cmd_encoder setVertexTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:slot];
+            _sg_stats_add(metal.bindings.num_set_vertex_texture, 1);
         }
     }
 
@@ -11944,6 +11992,7 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
             _sg.mtl.state_cache.cur_vs_sampler_ids[slot].id = smp->slot.id;
             SOKOL_ASSERT(smp->mtl.sampler_state != _SG_MTL_INVALID_SLOT_INDEX);
             [_sg.mtl.cmd_encoder setVertexSamplerState:_sg_mtl_id(smp->mtl.sampler_state) atIndex:slot];
+            _sg_stats_add(metal.bindings.num_set_vertex_sampler_state, 1);
         }
     }
 
@@ -11955,6 +12004,7 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
             _sg.mtl.state_cache.cur_fs_image_ids[slot].id = img->slot.id;
             SOKOL_ASSERT(img->mtl.tex[img->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
             [_sg.mtl.cmd_encoder setFragmentTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:slot];
+            _sg_stats_add(metal.bindings.num_set_fragment_texture, 1);
         }
     }
 
@@ -11966,6 +12016,7 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
             _sg.mtl.state_cache.cur_fs_sampler_ids[slot].id = smp->slot.id;
             SOKOL_ASSERT(smp->mtl.sampler_state != _SG_MTL_INVALID_SLOT_INDEX);
             [_sg.mtl.cmd_encoder setFragmentSamplerState:_sg_mtl_id(smp->mtl.sampler_state) atIndex:slot];
+            _sg_stats_add(metal.bindings.num_set_fragment_sampler_state, 1);
         }
     }
     return true;
@@ -11990,8 +12041,10 @@ _SOKOL_PRIVATE void _sg_mtl_apply_uniforms(sg_shader_stage stage_index, int ub_i
     memcpy(dst, data->ptr, data->size);
     if (stage_index == SG_SHADERSTAGE_VS) {
         [_sg.mtl.cmd_encoder setVertexBufferOffset:(NSUInteger)_sg.mtl.cur_ub_offset atIndex:(NSUInteger)ub_index];
+        _sg_stats_add(metal.uniforms.num_set_vertex_buffer_offset, 1);
     } else {
         [_sg.mtl.cmd_encoder setFragmentBufferOffset:(NSUInteger)_sg.mtl.cur_ub_offset atIndex:(NSUInteger)ub_index];
+        _sg_stats_add(metal.uniforms.num_set_fragment_buffer_offset, 1);
     }
     _sg.mtl.cur_ub_offset = _sg_roundup(_sg.mtl.cur_ub_offset + (int)data->size, _SG_MTL_UB_ALIGN);
 }
