@@ -4215,13 +4215,15 @@ _SOKOL_PRIVATE void _sg_imgui_draw_caps_panel(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_imgui_frame_stats_row(const char* key, uint32_t value) {
+_SOKOL_PRIVATE void _sg_imgui_frame_add_stats_row(const char* key, uint32_t value) {
     igTableNextRow(0, 0.0f);
     igTableSetColumnIndex(0);
     igText(key);
     igTableSetColumnIndex(1);
     igText("%d", value);
 }
+
+#define _sg_imgui_frame_stats(key) _sg_imgui_frame_add_stats_row(#key, stats->key)
 
 _SOKOL_PRIVATE void _sg_imgui_draw_frame_stats_panel(sg_imgui_t* ctx) {
     _SOKOL_UNUSED(ctx);
@@ -4237,36 +4239,59 @@ _SOKOL_PRIVATE void _sg_imgui_draw_frame_stats_panel(sg_imgui_t* ctx) {
         igTableSetupColumn("key", ImGuiTableColumnFlags_None, 0, 0);
         igTableSetupColumn("value", ImGuiTableColumnFlags_None, 0, 0);
         igTableHeadersRow();
-        _sg_imgui_frame_stats_row("frame_index", stats->frame_index);
-        _sg_imgui_frame_stats_row("num_passes", stats->num_passes);
-        _sg_imgui_frame_stats_row("num_apply_viewport", stats->num_apply_viewport);
-        _sg_imgui_frame_stats_row("num_apply_scissor_rect", stats->num_apply_scissor_rect);
-        _sg_imgui_frame_stats_row("num_apply_pipeline", stats->num_apply_pipeline);
-        _sg_imgui_frame_stats_row("num_apply_bindings", stats->num_apply_bindings);
-        _sg_imgui_frame_stats_row("num_apply_uniforms", stats->num_apply_uniforms);
-        _sg_imgui_frame_stats_row("num_draw", stats->num_draw);
-        _sg_imgui_frame_stats_row("num_update_buffer", stats->num_update_buffer);
-        _sg_imgui_frame_stats_row("num_append_buffer", stats->num_append_buffer);
-        _sg_imgui_frame_stats_row("num_update_image", stats->num_update_image);
-        _sg_imgui_frame_stats_row("size_apply_uniforms", stats->size_apply_uniforms);
-        _sg_imgui_frame_stats_row("size_update_buffer", stats->size_update_buffer);
-        _sg_imgui_frame_stats_row("size_append_buffer", stats->size_append_buffer);
-        _sg_imgui_frame_stats_row("size_update_image", stats->size_update_image);
-        if (sg_query_backend() == SG_BACKEND_WGPU) {
-            _sg_imgui_frame_stats_row("wgpu.num_uniform_set_bindgroup", stats->wgpu.num_uniform_set_bindgroup);
-            _sg_imgui_frame_stats_row("wgpu.size_uniform_write_buffer", stats->wgpu.size_uniform_write_buffer);
-            _sg_imgui_frame_stats_row("wgpu.bindings.num_set_vertex_buffer", stats->wgpu.bindings.num_set_vertex_buffer);
-            _sg_imgui_frame_stats_row("wgpu.bindings.num_skip_set_vertex_buffer", stats->wgpu.bindings.num_skip_set_vertex_buffer);
-            _sg_imgui_frame_stats_row("wgpu.bindings.num_set_index_buffer", stats->wgpu.bindings.num_set_index_buffer);
-            _sg_imgui_frame_stats_row("wgpu.bindings.num_skip_set_index_buffer", stats->wgpu.bindings.num_skip_set_index_buffer);
-            _sg_imgui_frame_stats_row("wgpu.bindings.num_create_bindgroup", stats->wgpu.bindings.num_create_bindgroup);
-            _sg_imgui_frame_stats_row("wgpu.bindings.num_discard_bindgroup", stats->wgpu.bindings.num_discard_bindgroup);
-            _sg_imgui_frame_stats_row("wgpu.bindings.num_set_bindgroup", stats->wgpu.bindings.num_set_bindgroup);
-            _sg_imgui_frame_stats_row("wgpu.bindings.num_set_empty_bindgroup", stats->wgpu.bindings.num_set_empty_bindgroup);
-            _sg_imgui_frame_stats_row("wgpu.bindings.num_bindgroup_cache_hits", stats->wgpu.bindings.num_bindgroup_cache_hits);
-            _sg_imgui_frame_stats_row("wpgu.bindings.num_bindgroup_cache_misses", stats->wgpu.bindings.num_bindgroup_cache_misses);
-            _sg_imgui_frame_stats_row("wgpu.bindings.num_bindgroup_cache_collisions", stats->wgpu.bindings.num_bindgroup_cache_collisions);
-            _sg_imgui_frame_stats_row("wgpu.bindings.num_bindgroup_cache_hash_vs_key_mismatches", stats->wgpu.bindings.num_bindgroup_cache_hash_vs_key_mismatch);
+        _sg_imgui_frame_stats(num_passes);
+        _sg_imgui_frame_stats(num_apply_viewport);
+        _sg_imgui_frame_stats(num_apply_scissor_rect);
+        _sg_imgui_frame_stats(num_apply_pipeline);
+        _sg_imgui_frame_stats(num_apply_bindings);
+        _sg_imgui_frame_stats(num_apply_uniforms);
+        _sg_imgui_frame_stats(num_draw);
+        _sg_imgui_frame_stats(num_update_buffer);
+        _sg_imgui_frame_stats(num_append_buffer);
+        _sg_imgui_frame_stats(num_update_image);
+        _sg_imgui_frame_stats(size_apply_uniforms);
+        _sg_imgui_frame_stats(size_update_buffer);
+        _sg_imgui_frame_stats(size_append_buffer);
+        _sg_imgui_frame_stats(size_update_image);
+        switch (sg_query_backend()) {
+            case SG_BACKEND_WGPU:
+                _sg_imgui_frame_stats(wgpu.uniforms.num_set_bindgroup);
+                _sg_imgui_frame_stats(wgpu.uniforms.size_write_buffer);
+                _sg_imgui_frame_stats(wgpu.bindings.num_set_vertex_buffer);
+                _sg_imgui_frame_stats(wgpu.bindings.num_skip_set_vertex_buffer);
+                _sg_imgui_frame_stats(wgpu.bindings.num_set_index_buffer);
+                _sg_imgui_frame_stats(wgpu.bindings.num_skip_set_index_buffer);
+                _sg_imgui_frame_stats(wgpu.bindings.num_create_bindgroup);
+                _sg_imgui_frame_stats(wgpu.bindings.num_discard_bindgroup);
+                _sg_imgui_frame_stats(wgpu.bindings.num_set_bindgroup);
+                _sg_imgui_frame_stats(wgpu.bindings.num_set_empty_bindgroup);
+                _sg_imgui_frame_stats(wgpu.bindings.num_bindgroup_cache_hits);
+                _sg_imgui_frame_stats(wgpu.bindings.num_bindgroup_cache_misses);
+                _sg_imgui_frame_stats(wgpu.bindings.num_bindgroup_cache_collisions);
+                _sg_imgui_frame_stats(wgpu.bindings.num_bindgroup_cache_hash_vs_key_mismatch);
+                break;
+            case SG_BACKEND_METAL_MACOS:
+            case SG_BACKEND_METAL_IOS:
+            case SG_BACKEND_METAL_SIMULATOR:
+                _sg_imgui_frame_stats(metal.idpool.num_added);
+                _sg_imgui_frame_stats(metal.idpool.num_released);
+                _sg_imgui_frame_stats(metal.idpool.num_garbage_collected);
+                _sg_imgui_frame_stats(metal.pipeline.num_set_blend_color);
+                _sg_imgui_frame_stats(metal.pipeline.num_set_cull_mode);
+                _sg_imgui_frame_stats(metal.pipeline.num_set_front_facing_winding);
+                _sg_imgui_frame_stats(metal.pipeline.num_set_stencil_reference_value);
+                _sg_imgui_frame_stats(metal.pipeline.num_set_depth_bias);
+                _sg_imgui_frame_stats(metal.pipeline.num_set_render_pipeline_state);
+                _sg_imgui_frame_stats(metal.pipeline.num_set_depth_stencil_state);
+                _sg_imgui_frame_stats(metal.bindings.num_set_vertex_buffer);
+                _sg_imgui_frame_stats(metal.bindings.num_set_vertex_texture);
+                _sg_imgui_frame_stats(metal.bindings.num_set_vertex_sampler_state);
+                _sg_imgui_frame_stats(metal.bindings.num_set_fragment_texture);
+                _sg_imgui_frame_stats(metal.bindings.num_set_fragment_sampler_state);
+                _sg_imgui_frame_stats(metal.uniforms.num_set_vertex_buffer_offset);
+                _sg_imgui_frame_stats(metal.uniforms.num_set_fragment_buffer_offset);
+                break;
+            default: break;
         }
         igEndTable();
     }
