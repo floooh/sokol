@@ -721,6 +721,8 @@ typedef struct sg_imgui_caps_t {
 
 typedef struct sg_imgui_frame_stats_t {
     bool open;
+    bool disable_sokol_imgui_stats;
+    bool in_sokol_imgui;
     sg_frame_stats stats;
     // FIXME: add a ringbuffer for a stats history here
 } sg_imgui_frame_stats_t;
@@ -952,6 +954,9 @@ _SOKOL_PRIVATE void igTableNextRow(ImGuiTableRowFlags row_flags, float min_row_h
 }
 _SOKOL_PRIVATE bool igTableSetColumnIndex(int column_n) {
     return ImGui::TableSetColumnIndex(column_n);
+}
+_SOKOL_PRIVATE bool igCheckbox(const char* label, bool* v) {
+    return ImGui::Checkbox(label, v);
 }
 #else
 #define IMVEC2(x,y) (ImVec2){x,y}
@@ -3109,6 +3114,12 @@ _SOKOL_PRIVATE void _sg_imgui_fail_pass(sg_pass pass_id, void* user_data) {
 _SOKOL_PRIVATE void _sg_imgui_push_debug_group(const char* name, void* user_data) {
     sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
+    if (0 == strcmp(name, "sokol-imgui")) {
+        ctx->frame_stats.in_sokol_imgui = true;
+        if (ctx->frame_stats.disable_sokol_imgui_stats) {
+            sg_disable_frame_stats();
+        }
+    }
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_PUSH_DEBUG_GROUP;
@@ -3123,6 +3134,12 @@ _SOKOL_PRIVATE void _sg_imgui_push_debug_group(const char* name, void* user_data
 _SOKOL_PRIVATE void _sg_imgui_pop_debug_group(void* user_data) {
     sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
+    if (ctx->frame_stats.in_sokol_imgui) {
+        ctx->frame_stats.in_sokol_imgui = false;
+        if (ctx->frame_stats.disable_sokol_imgui_stats) {
+            sg_enable_frame_stats();
+        }
+    }
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_POP_DEBUG_GROUP;
@@ -4208,6 +4225,7 @@ _SOKOL_PRIVATE void _sg_imgui_frame_stats_row(const char* key, uint32_t value) {
 
 _SOKOL_PRIVATE void _sg_imgui_draw_frame_stats_panel(sg_imgui_t* ctx) {
     _SOKOL_UNUSED(ctx);
+    igCheckbox("Ignore sokol_imgui.h", &ctx->frame_stats.disable_sokol_imgui_stats);
     const sg_frame_stats* stats = &ctx->frame_stats.stats;
     const ImGuiTableFlags flags =
         ImGuiTableFlags_Resizable |
