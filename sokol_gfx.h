@@ -2879,17 +2879,17 @@ typedef struct sg_frame_stats_metal {
 
 typedef struct sg_frame_stats_wgpu_bindings {
     uint32_t num_set_vertex_buffer;
-    uint32_t num_redundant_vertex_buffer;
+    uint32_t num_skip_set_vertex_buffer;
     uint32_t num_set_index_buffer;
-    uint32_t num_redundant_index_buffer;
+    uint32_t num_skip_set_index_buffer;
     uint32_t num_create_bindgroup;
     uint32_t num_discard_bindgroup;
     uint32_t num_set_bindgroup;
     uint32_t num_set_empty_bindgroup;
-    uint32_t num_cache_hits;
-    uint32_t num_cache_misses;
-    uint32_t num_cache_collisions;
-    uint32_t num_hash_vs_key_mismatch;
+    uint32_t num_bindgroup_cache_hits;
+    uint32_t num_bindgroup_cache_misses;
+    uint32_t num_bindgroup_cache_collisions;
+    uint32_t num_bindgroup_cache_hash_vs_key_mismatch;
 } sg_frame_stats_wgpu_bindings;
 
 typedef struct sg_frame_stats_wgpu {
@@ -12761,7 +12761,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_compare_bindgroups_cache_key(_sg_wgpu_bindgroups_ca
         return false;
     }
     if (memcmp(&k0->items, &k1->items, sizeof(k0->items)) != 0) {
-        _sg.stats.wgpu.bindings.num_hash_vs_key_mismatch++;
+        _sg.stats.wgpu.bindings.num_bindgroup_cache_hash_vs_key_mismatch++;
         return false;
     }
     return true;
@@ -12930,15 +12930,15 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindgroup(_sg_bindings_t* bnd) {
                 SOKOL_ASSERT(bg && (bg->slot.state == SG_RESOURCESTATE_VALID));
                 if (!_sg_wgpu_compare_bindgroups_cache_key(&key, &bg->key)) {
                     // cache collision, need to delete cached bindgroup
-                    _sg.stats.wgpu.bindings.num_cache_collisions++;
+                    _sg.stats.wgpu.bindings.num_bindgroup_cache_collisions++;
                     _sg_wgpu_discard_bindgroup(bg);
                     _sg_wgpu_bindgroups_cache_set(key.hash, SG_INVALID_ID);
                     bg = 0;
                 } else {
-                    _sg.stats.wgpu.bindings.num_cache_hits++;
+                    _sg.stats.wgpu.bindings.num_bindgroup_cache_hits++;
                 }
             } else {
-                _sg.stats.wgpu.bindings.num_cache_misses++;
+                _sg.stats.wgpu.bindings.num_bindgroup_cache_misses++;
             }
             if (bg == 0) {
                 // either no cache entry yet, or cache collision, create new bindgroup and store in cache
@@ -13784,7 +13784,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindings(_sg_bindings_t* bnd) {
             wgpuRenderPassEncoderSetIndexBuffer(_sg.wgpu.pass_enc, bnd->ib->wgpu.buf, format, offset, max_bytes);
             _sg.stats.wgpu.bindings.num_set_index_buffer++;
         } else {
-            _sg.stats.wgpu.bindings.num_redundant_index_buffer++;
+            _sg.stats.wgpu.bindings.num_skip_set_index_buffer++;
         }
     }
     // FIXME: else-path should actually set a null index buffer (this was just recently implemented in WebGPU)
@@ -13800,7 +13800,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindings(_sg_bindings_t* bnd) {
             wgpuRenderPassEncoderSetVertexBuffer(_sg.wgpu.pass_enc, (uint32_t)slot, bnd->vbs[slot]->wgpu.buf, offset, max_bytes);
             _sg.stats.wgpu.bindings.num_set_vertex_buffer++;
         } else {
-            _sg.stats.wgpu.bindings.num_redundant_vertex_buffer++;
+            _sg.stats.wgpu.bindings.num_skip_set_vertex_buffer++;
         }
         // FIXME: else-path should actually set a null vertex buffer (this was just recently implemented in WebGPU)
     }
@@ -16296,6 +16296,11 @@ SOKOL_API_IMPL sg_pixelformat_info sg_query_pixelformat(sg_pixel_format fmt) {
     int fmt_index = (int) fmt;
     SOKOL_ASSERT((fmt_index > SG_PIXELFORMAT_NONE) && (fmt_index < _SG_PIXELFORMAT_NUM));
     return _sg.formats[fmt_index];
+}
+
+SOKOL_API_IMPL sg_frame_stats sg_query_frame_stats(void) {
+    SOKOL_ASSERT(_sg.valid);
+    return _sg.prev_stats;
 }
 
 SOKOL_API_IMPL sg_context sg_setup_context(void) {
