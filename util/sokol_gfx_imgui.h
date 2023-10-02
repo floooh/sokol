@@ -84,7 +84,12 @@
 
         this won't draw anything yet, since no windows are open.
 
-    --- open and close windows directly by setting the following public
+    --- call the convenience function sg_imgui_draw_menu(ctx, title)
+        to render a menu which allows to open/close the provided debug windows
+
+            sg_imgui_draw_menu(&sg_imgui, "sokol-gfx");
+
+    --- alternative, open and close windows directly by setting the following public
         booleans in the sg_imgui_t struct:
 
             sg_imgui.buffers.open = true;
@@ -751,6 +756,8 @@ SOKOL_GFX_IMGUI_API_DECL void sg_imgui_init(sg_imgui_t* ctx, const sg_imgui_desc
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_discard(sg_imgui_t* ctx);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw(sg_imgui_t* ctx);
 
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_menu(sg_imgui_t* ctx, const char* title);
+
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_buffers_content(sg_imgui_t* ctx);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_images_content(sg_imgui_t* ctx);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_samplers_content(sg_imgui_t* ctx);
@@ -899,6 +906,15 @@ _SOKOL_PRIVATE bool igBegin(const char* name,bool* p_open,ImGuiWindowFlags flags
 }
 _SOKOL_PRIVATE void igEnd() {
     return ImGui::End();
+}
+_SOKOL_PRIVATE bool igBeginMenu(const char* label, bool enabled) {
+    return ImGui::BeginMenu(label, enabled);
+}
+_SOKOL_PRIVATE void igEndMenu(void) {
+    ImGui::EndMenu();
+}
+_SOKOL_PRIVATE bool igMenuItem_BoolPtr(const char* label, const char* shortcut, bool* p_selected, bool enabled) {
+    return ImGui::MenuItem(label, shortcut, p_selected, enabled);
 }
 #else
 #define IMVEC2(x,y) (ImVec2){x,y}
@@ -4326,6 +4342,22 @@ SOKOL_API_IMPL void sg_imgui_draw(sg_imgui_t* ctx) {
     sg_imgui_draw_passes_window(ctx);
     sg_imgui_draw_capture_window(ctx);
     sg_imgui_draw_capabilities_window(ctx);
+}
+
+SOKOL_API_IMPL void sg_imgui_draw_menu(sg_imgui_t* ctx, const char* title) {
+    SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
+    SOKOL_ASSERT(title);
+    if (igBeginMenu(title, true)) {
+        igMenuItem_BoolPtr("Capabilities", 0, &ctx->caps.open, true);
+        igMenuItem_BoolPtr("Buffers", 0, &ctx->buffers.open, true);
+        igMenuItem_BoolPtr("Images", 0, &ctx->images.open, true);
+        igMenuItem_BoolPtr("Samplers", 0, &ctx->samplers.open, true);
+        igMenuItem_BoolPtr("Shaders", 0, &ctx->shaders.open, true);
+        igMenuItem_BoolPtr("Pipelines", 0, &ctx->pipelines.open, true);
+        igMenuItem_BoolPtr("Passes", 0, &ctx->passes.open, true);
+        igMenuItem_BoolPtr("Calls", 0, &ctx->capture.open, true);
+        igEndMenu();
+    }
 }
 
 SOKOL_API_IMPL void sg_imgui_draw_buffers_window(sg_imgui_t* ctx) {
