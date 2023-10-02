@@ -4254,6 +4254,20 @@ _SOKOL_PRIVATE void _sg_imgui_draw_frame_stats_panel(sg_imgui_t* ctx) {
         _sg_imgui_frame_stats(size_append_buffer);
         _sg_imgui_frame_stats(size_update_image);
         switch (sg_query_backend()) {
+            case SG_BACKEND_GLCORE33:
+            case SG_BACKEND_GLES3:
+                _sg_imgui_frame_stats(gl.num_bind_buffer);
+                _sg_imgui_frame_stats(gl.num_active_texture);
+                _sg_imgui_frame_stats(gl.num_bind_texture);
+                _sg_imgui_frame_stats(gl.num_bind_sampler);
+                _sg_imgui_frame_stats(gl.num_use_program);
+                _sg_imgui_frame_stats(gl.num_render_state);
+                _sg_imgui_frame_stats(gl.num_vertex_attrib_pointer);
+                _sg_imgui_frame_stats(gl.num_vertex_attrib_divisor);
+                _sg_imgui_frame_stats(gl.num_enable_vertex_attrib_array);
+                _sg_imgui_frame_stats(gl.num_disable_vertex_attrib_array);
+                _sg_imgui_frame_stats(gl.num_uniform);
+                break;
             case SG_BACKEND_WGPU:
                 _sg_imgui_frame_stats(wgpu.uniforms.num_set_bindgroup);
                 _sg_imgui_frame_stats(wgpu.uniforms.size_write_buffer);
