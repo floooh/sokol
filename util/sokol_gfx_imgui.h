@@ -827,6 +827,8 @@ SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capabilities_window(sg_imgui_t* ctx)
 #define _SG_IMGUI_LIST_WIDTH (192)
 #define _SG_IMGUI_COLOR_OTHER 0xFFCCCCCC
 #define _SG_IMGUI_COLOR_RSRC 0xFF00FFFF
+#define _SG_IMGUI_COLOR_PASS 0xFFFFFF00
+#define _SG_IMGUI_COLOR_APPLY 0xFFCCCC00
 #define _SG_IMGUI_COLOR_DRAW 0xFF00FF00
 #define _SG_IMGUI_COLOR_ERR 0xFF8888FF
 
@@ -2457,7 +2459,7 @@ _SOKOL_PRIVATE void _sg_imgui_begin_default_pass(const sg_pass_action* pass_acti
     if (item) {
         SOKOL_ASSERT(pass_action);
         item->cmd = SG_IMGUI_CMD_BEGIN_DEFAULT_PASS;
-        item->color = _SG_IMGUI_COLOR_DRAW;
+        item->color = _SG_IMGUI_COLOR_PASS;
         item->args.begin_default_pass.action = *pass_action;
         item->args.begin_default_pass.width = width;
         item->args.begin_default_pass.height = height;
@@ -2474,7 +2476,7 @@ _SOKOL_PRIVATE void _sg_imgui_begin_pass(sg_pass pass, const sg_pass_action* pas
     if (item) {
         SOKOL_ASSERT(pass_action);
         item->cmd = SG_IMGUI_CMD_BEGIN_PASS;
-        item->color = _SG_IMGUI_COLOR_DRAW;
+        item->color = _SG_IMGUI_COLOR_PASS;
         item->args.begin_pass.pass = pass;
         item->args.begin_pass.action = *pass_action;
     }
@@ -2489,7 +2491,7 @@ _SOKOL_PRIVATE void _sg_imgui_apply_viewport(int x, int y, int width, int height
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_APPLY_VIEWPORT;
-        item->color = _SG_IMGUI_COLOR_DRAW;
+        item->color = _SG_IMGUI_COLOR_APPLY;
         item->args.apply_viewport.x = x;
         item->args.apply_viewport.y = y;
         item->args.apply_viewport.width = width;
@@ -2507,7 +2509,7 @@ _SOKOL_PRIVATE void _sg_imgui_apply_scissor_rect(int x, int y, int width, int he
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_APPLY_SCISSOR_RECT;
-        item->color = _SG_IMGUI_COLOR_DRAW;
+        item->color = _SG_IMGUI_COLOR_APPLY;
         item->args.apply_scissor_rect.x = x;
         item->args.apply_scissor_rect.y = y;
         item->args.apply_scissor_rect.width = width;
@@ -2526,7 +2528,7 @@ _SOKOL_PRIVATE void _sg_imgui_apply_pipeline(sg_pipeline pip, void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_APPLY_PIPELINE;
-        item->color = _SG_IMGUI_COLOR_DRAW;
+        item->color = _SG_IMGUI_COLOR_APPLY;
         item->args.apply_pipeline.pipeline = pip;
     }
     if (ctx->hooks.apply_pipeline) {
@@ -2541,7 +2543,7 @@ _SOKOL_PRIVATE void _sg_imgui_apply_bindings(const sg_bindings* bindings, void* 
     if (item) {
         SOKOL_ASSERT(bindings);
         item->cmd = SG_IMGUI_CMD_APPLY_BINDINGS;
-        item->color = _SG_IMGUI_COLOR_DRAW;
+        item->color = _SG_IMGUI_COLOR_APPLY;
         item->args.apply_bindings.bindings = *bindings;
     }
     if (ctx->hooks.apply_bindings) {
@@ -2556,7 +2558,7 @@ _SOKOL_PRIVATE void _sg_imgui_apply_uniforms(sg_shader_stage stage, int ub_index
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_APPLY_UNIFORMS;
-        item->color = _SG_IMGUI_COLOR_DRAW;
+        item->color = _SG_IMGUI_COLOR_APPLY;
         sg_imgui_args_apply_uniforms_t* args = &item->args.apply_uniforms;
         args->stage = stage;
         args->ub_index = ub_index;
@@ -2592,7 +2594,7 @@ _SOKOL_PRIVATE void _sg_imgui_end_pass(void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_END_PASS;
-        item->color = _SG_IMGUI_COLOR_DRAW;
+        item->color = _SG_IMGUI_COLOR_PASS;
     }
     if (ctx->hooks.end_pass) {
         ctx->hooks.end_pass(ctx->hooks.user_data);
@@ -2605,7 +2607,7 @@ _SOKOL_PRIVATE void _sg_imgui_commit(void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_COMMIT;
-        item->color = _SG_IMGUI_COLOR_DRAW;
+        item->color = _SG_IMGUI_COLOR_OTHER;
     }
     _sg_imgui_capture_next_frame(ctx);
     if (ctx->hooks.commit) {
