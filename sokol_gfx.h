@@ -350,9 +350,12 @@
         to sokol_gfx.h internals, and may change more often than other
         public API functions and structs.
 
-    --- you can query various internal per-frame stats via:
+    --- you can query frame stats and control stats collection via:
 
             sg_query_frame_stats()
+            sg_enable_frame_stats()
+            sg_disable_frame_stats()
+            sg_frame_stats_enabled()
 
     --- you can ask at runtime what backend sokol_gfx.h has been compiled for:
 
@@ -3461,7 +3464,6 @@ SOKOL_GFX_API_DECL sg_backend sg_query_backend(void);
 SOKOL_GFX_API_DECL sg_features sg_query_features(void);
 SOKOL_GFX_API_DECL sg_limits sg_query_limits(void);
 SOKOL_GFX_API_DECL sg_pixelformat_info sg_query_pixelformat(sg_pixel_format fmt);
-SOKOL_GFX_API_DECL sg_frame_stats sg_query_frame_stats(void);
 // get current state of a resource (INITIAL, ALLOC, VALID, FAILED, INVALID)
 SOKOL_GFX_API_DECL sg_resource_state sg_query_buffer_state(sg_buffer buf);
 SOKOL_GFX_API_DECL sg_resource_state sg_query_image_state(sg_image img);
@@ -3522,6 +3524,12 @@ SOKOL_GFX_API_DECL void sg_fail_sampler(sg_sampler smp);
 SOKOL_GFX_API_DECL void sg_fail_shader(sg_shader shd);
 SOKOL_GFX_API_DECL void sg_fail_pipeline(sg_pipeline pip);
 SOKOL_GFX_API_DECL void sg_fail_pass(sg_pass pass);
+
+// frame stats
+SOKOL_GFX_API_DECL void sg_enable_frame_stats(void);
+SOKOL_GFX_API_DECL void sg_disable_frame_stats(void);
+SOKOL_GFX_API_DECL bool sg_frame_stats_enabled(void);
+SOKOL_GFX_API_DECL sg_frame_stats sg_query_frame_stats(void);
 
 // rendering contexts (optional)
 SOKOL_GFX_API_DECL sg_context sg_setup_context(void);
@@ -4143,6 +4151,7 @@ typedef struct {
 #define _sg_clamp(v,v0,v1) (((v)<(v0))?(v0):(((v)>(v1))?(v1):(v)))
 #define _sg_fequal(val,cmp,delta) ((((val)-(cmp))> -(delta))&&(((val)-(cmp))<(delta)))
 #define _sg_ispow2(val) ((val&(val-1))==0)
+#define _sg_stats_add(key,val) {if(_sg.stats_enabled){ _sg.stats.key+=val;}}
 
 _SOKOL_PRIVATE void* _sg_malloc_clear(size_t size);
 _SOKOL_PRIVATE void _sg_free(void* ptr);
@@ -5131,6 +5140,7 @@ typedef struct {
     sg_features features;
     sg_limits limits;
     sg_pixelformat_info formats[_SG_PIXELFORMAT_NUM];
+    bool stats_enabled;
     sg_frame_stats stats;
     sg_frame_stats prev_stats;
     #if defined(_SOKOL_ANY_GL)
@@ -12615,7 +12625,7 @@ _SOKOL_PRIVATE void _sg_wgpu_uniform_buffer_on_begin_pass(void) {
 
 _SOKOL_PRIVATE void _sg_wgpu_uniform_buffer_on_commit(void) {
     wgpuQueueWriteBuffer(_sg.wgpu.queue, _sg.wgpu.uniform.buf, 0, _sg.wgpu.uniform.staging, _sg.wgpu.uniform.offset);
-    _sg.stats.wgpu.size_uniform_write_buffer += _sg.wgpu.uniform.offset;
+    _sg_stats_add(wgpu.size_uniform_write_buffer, _sg.wgpu.uniform.offset);
     _sg.wgpu.uniform.offset = 0;
     _sg_clear(&_sg.wgpu.uniform.bind.offsets[0][0], sizeof(_sg.wgpu.uniform.bind.offsets));
 }
@@ -12761,7 +12771,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_compare_bindgroups_cache_key(_sg_wgpu_bindgroups_ca
         return false;
     }
     if (memcmp(&k0->items, &k1->items, sizeof(k0->items)) != 0) {
-        _sg.stats.wgpu.bindings.num_bindgroup_cache_hash_vs_key_mismatch++;
+        _sg_stats_add(wgpu.bindings.num_bindgroup_cache_hash_vs_key_mismatch, 1);
         return false;
     }
     return true;
@@ -12771,7 +12781,7 @@ _SOKOL_PRIVATE _sg_wgpu_bindgroup_t* _sg_wgpu_create_bindgroup(_sg_bindings_t* b
     SOKOL_ASSERT(_sg.wgpu.dev);
     SOKOL_ASSERT(bnd->pip);
     SOKOL_ASSERT(bnd->pip->shader && (bnd->pip->cmn.shader_id.id == bnd->pip->shader->slot.id));
-    _sg.stats.wgpu.bindings.num_create_bindgroup++;
+    _sg_stats_add(wgpu.bindings.num_create_bindgroup, 1);
     _sg_wgpu_bindgroup_handle_t bg_id = _sg_wgpu_alloc_bindgroup();
     if (bg_id.id == SG_INVALID_ID) {
         return 0;
@@ -12825,7 +12835,7 @@ _SOKOL_PRIVATE _sg_wgpu_bindgroup_t* _sg_wgpu_create_bindgroup(_sg_bindings_t* b
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_bindgroup(_sg_wgpu_bindgroup_t* bg) {
     SOKOL_ASSERT(bg);
-    _sg.stats.wgpu.bindings.num_discard_bindgroup++;
+    _sg_stats_add(wgpu.bindings.num_discard_bindgroup, 1);
     if (bg->slot.state == SG_RESOURCESTATE_VALID) {
         if (bg->bindgroup) {
             wgpuBindGroupRelease(bg->bindgroup);
@@ -12930,15 +12940,15 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindgroup(_sg_bindings_t* bnd) {
                 SOKOL_ASSERT(bg && (bg->slot.state == SG_RESOURCESTATE_VALID));
                 if (!_sg_wgpu_compare_bindgroups_cache_key(&key, &bg->key)) {
                     // cache collision, need to delete cached bindgroup
-                    _sg.stats.wgpu.bindings.num_bindgroup_cache_collisions++;
+                    _sg_stats_add(wgpu.bindings.num_bindgroup_cache_collisions, 1);
                     _sg_wgpu_discard_bindgroup(bg);
                     _sg_wgpu_bindgroups_cache_set(key.hash, SG_INVALID_ID);
                     bg = 0;
                 } else {
-                    _sg.stats.wgpu.bindings.num_bindgroup_cache_hits++;
+                    _sg_stats_add(wgpu.bindings.num_bindgroup_cache_hits, 1);
                 }
             } else {
-                _sg.stats.wgpu.bindings.num_bindgroup_cache_misses++;
+                _sg_stats_add(wgpu.bindings.num_bindgroup_cache_misses, 1);
             }
             if (bg == 0) {
                 // either no cache entry yet, or cache collision, create new bindgroup and store in cache
@@ -12947,7 +12957,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindgroup(_sg_bindings_t* bnd) {
             }
             if (bg && bg->slot.state == SG_RESOURCESTATE_VALID) {
                 SOKOL_ASSERT(bg->bindgroup);
-                _sg.stats.wgpu.bindings.num_set_bindgroup++;
+                _sg_stats_add(wgpu.bindings.num_set_bindgroup, 1);
                 wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, _SG_WGPU_IMAGE_SAMPLER_BINDGROUP_INDEX, bg->bindgroup, 0, 0);
             } else {
                 return false;
@@ -12958,7 +12968,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindgroup(_sg_bindings_t* bnd) {
             if (bg) {
                 if (bg->slot.state == SG_RESOURCESTATE_VALID) {
                     SOKOL_ASSERT(bg->bindgroup);
-                    _sg.stats.wgpu.bindings.num_set_bindgroup++;
+                    _sg_stats_add(wgpu.bindings.num_set_bindgroup, 1);
                     wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, _SG_WGPU_IMAGE_SAMPLER_BINDGROUP_INDEX, bg->bindgroup, 0, 0);
                 }
                 _sg_wgpu_discard_bindgroup(bg);
@@ -12967,7 +12977,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindgroup(_sg_bindings_t* bnd) {
             }
         }
     } else {
-        _sg.stats.wgpu.bindings.num_set_empty_bindgroup++;
+        _sg_stats_add(wgpu.bindings.num_set_empty_bindgroup, 1);
         wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, _SG_WGPU_IMAGE_SAMPLER_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
     }
     return true;
@@ -13782,9 +13792,9 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindings(_sg_bindings_t* bnd) {
             SOKOL_ASSERT(buf_size > offset);
             const uint64_t max_bytes = buf_size - offset;
             wgpuRenderPassEncoderSetIndexBuffer(_sg.wgpu.pass_enc, bnd->ib->wgpu.buf, format, offset, max_bytes);
-            _sg.stats.wgpu.bindings.num_set_index_buffer++;
+            _sg_stats_add(wgpu.bindings.num_set_index_buffer, 1);
         } else {
-            _sg.stats.wgpu.bindings.num_skip_set_index_buffer++;
+            _sg_stats_add(wgpu.bindings.num_skip_set_index_buffer, 1);
         }
     }
     // FIXME: else-path should actually set a null index buffer (this was just recently implemented in WebGPU)
@@ -13798,9 +13808,9 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindings(_sg_bindings_t* bnd) {
             SOKOL_ASSERT(buf_size > offset);
             const uint64_t max_bytes = buf_size - offset;
             wgpuRenderPassEncoderSetVertexBuffer(_sg.wgpu.pass_enc, (uint32_t)slot, bnd->vbs[slot]->wgpu.buf, offset, max_bytes);
-            _sg.stats.wgpu.bindings.num_set_vertex_buffer++;
+            _sg_stats_add(wgpu.bindings.num_set_vertex_buffer, 1);
         } else {
-            _sg.stats.wgpu.bindings.num_skip_set_vertex_buffer++;
+            _sg_stats_add(wgpu.bindings.num_skip_set_vertex_buffer, 1);
         }
         // FIXME: else-path should actually set a null vertex buffer (this was just recently implemented in WebGPU)
     }
@@ -13824,7 +13834,7 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(sg_shader_stage stage_index, int ub_
     SOKOL_ASSERT(data->size <= _sg.wgpu.cur_pipeline->shader->cmn.stage[stage_index].uniform_blocks[ub_index].size);
     SOKOL_ASSERT(data->size <= _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE);
 
-    _sg.stats.wgpu.num_uniform_set_bindgroup++;
+    _sg_stats_add(wgpu.num_uniform_set_bindgroup, 1);
     memcpy(_sg.wgpu.uniform.staging + _sg.wgpu.uniform.offset, data->ptr, data->size);
     _sg.wgpu.uniform.bind.offsets[stage_index][ub_index] = _sg.wgpu.uniform.offset;
     _sg.wgpu.uniform.offset = _sg_roundup_u32(_sg.wgpu.uniform.offset + (uint32_t)data->size, alignment);
@@ -16244,6 +16254,7 @@ SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
     _sg_setup_pools(&_sg.pools, &_sg.desc);
     _sg_setup_commit_listeners(&_sg.desc);
     _sg.frame_index = 1;
+    _sg.stats_enabled = true;
     _sg_setup_backend(&_sg.desc);
     _sg.valid = true;
     sg_setup_context();
@@ -16998,7 +17009,7 @@ SOKOL_API_IMPL void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_ac
 
 SOKOL_API_IMPL void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left) {
     SOKOL_ASSERT(_sg.valid);
-    _sg.stats.num_apply_viewport++;
+    _sg_stats_add(num_apply_viewport, 1);
     if (!_sg.pass_valid) {
         return;
     }
@@ -17012,7 +17023,7 @@ SOKOL_API_IMPL void sg_apply_viewportf(float x, float y, float width, float heig
 
 SOKOL_API_IMPL void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left) {
     SOKOL_ASSERT(_sg.valid);
-    _sg.stats.num_apply_scissor_rect++;
+    _sg_stats_add(num_apply_scissor_rect, 1);
     if (!_sg.pass_valid) {
         return;
     }
@@ -17026,7 +17037,7 @@ SOKOL_API_IMPL void sg_apply_scissor_rectf(float x, float y, float width, float 
 
 SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
     SOKOL_ASSERT(_sg.valid);
-    _sg.stats.num_apply_pipeline++;
+    _sg_stats_add(num_apply_pipeline, 1);
     _sg.bindings_applied = false;
     if (!_sg_validate_apply_pipeline(pip_id)) {
         _sg.next_draw_valid = false;
@@ -17048,7 +17059,7 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(bindings);
     SOKOL_ASSERT((bindings->_start_canary == 0) && (bindings->_end_canary==0));
-    _sg.stats.num_apply_bindings++;
+    _sg_stats_add(num_apply_bindings, 1);
     if (!_sg_validate_apply_bindings(bindings)) {
         _sg.next_draw_valid = false;
         return;
@@ -17151,8 +17162,8 @@ SOKOL_API_IMPL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const
     SOKOL_ASSERT((stage == SG_SHADERSTAGE_VS) || (stage == SG_SHADERSTAGE_FS));
     SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_SHADERSTAGE_UBS));
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
-    _sg.stats.num_apply_uniforms++;
-    _sg.stats.size_apply_uniforms += (uint32_t)data->size;
+    _sg_stats_add(num_apply_uniforms, 1);
+    _sg_stats_add(size_apply_uniforms, (uint32_t)data->size);
     if (!_sg_validate_apply_uniforms(stage, ub_index, data)) {
         _sg.next_draw_valid = false;
         return;
@@ -17172,7 +17183,7 @@ SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instance
     SOKOL_ASSERT(base_element >= 0);
     SOKOL_ASSERT(num_elements >= 0);
     SOKOL_ASSERT(num_instances >= 0);
-    _sg.stats.num_draw++;
+    _sg_stats_add(num_draw, 1);
     #if defined(SOKOL_DEBUG)
         if (!_sg.bindings_applied) {
             _SG_WARN(DRAW_WITHOUT_BINDINGS);
@@ -17199,7 +17210,7 @@ SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instance
 
 SOKOL_API_IMPL void sg_end_pass(void) {
     SOKOL_ASSERT(_sg.valid);
-    _sg.stats.num_passes++;
+    _sg_stats_add(num_passes, 1);
     if (!_sg.pass_valid) {
         return;
     }
@@ -17230,8 +17241,8 @@ SOKOL_API_IMPL void sg_reset_state_cache(void) {
 SOKOL_API_IMPL void sg_update_buffer(sg_buffer buf_id, const sg_range* data) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
-    _sg.stats.num_update_buffer++;
-    _sg.stats.size_update_buffer += (uint32_t)data->size;
+    _sg_stats_add(num_update_buffer, 1);
+    _sg_stats_add(size_update_buffer, (uint32_t)data->size);
     _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
     if ((data->size > 0) && buf && (buf->slot.state == SG_RESOURCESTATE_VALID)) {
         if (_sg_validate_update_buffer(buf, data)) {
@@ -17250,8 +17261,8 @@ SOKOL_API_IMPL void sg_update_buffer(sg_buffer buf_id, const sg_range* data) {
 SOKOL_API_IMPL int sg_append_buffer(sg_buffer buf_id, const sg_range* data) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(data && data->ptr);
-    _sg.stats.num_append_buffer++;
-    _sg.stats.size_append_buffer += (uint32_t)data->size;
+    _sg_stats_add(num_append_buffer, 1);
+    _sg_stats_add(size_append_buffer, (uint32_t)data->size);
     _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
     int result;
     if (buf) {
@@ -17313,13 +17324,13 @@ SOKOL_API_IMPL bool sg_query_buffer_will_overflow(sg_buffer buf_id, size_t size)
 
 SOKOL_API_IMPL void sg_update_image(sg_image img_id, const sg_image_data* data) {
     SOKOL_ASSERT(_sg.valid);
-    _sg.stats.num_update_image++;
+    _sg_stats_add(num_update_image, 1);
     for (int face_index = 0; face_index < SG_CUBEFACE_NUM; face_index++) {
         for (int mip_index = 0; mip_index < SG_MAX_MIPMAPS; mip_index++) {
             if (data->subimage[face_index][mip_index].size == 0) {
                 break;
             }
-            _sg.stats.size_update_image += (uint32_t)data->subimage[face_index][mip_index].size;
+            _sg_stats_add(size_update_image, (uint32_t)data->subimage[face_index][mip_index].size);
         }
     }
     _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
@@ -17353,6 +17364,20 @@ SOKOL_API_IMPL bool sg_add_commit_listener(sg_commit_listener listener) {
 SOKOL_API_IMPL bool sg_remove_commit_listener(sg_commit_listener listener) {
     SOKOL_ASSERT(_sg.valid);
     return _sg_remove_commit_listener(&listener);
+}
+
+SOKOL_API_IMPL void sg_enable_frame_stats(void) {
+    SOKOL_ASSERT(_sg.valid);
+    _sg.stats_enabled = true;
+}
+
+SOKOL_API_IMPL void sg_disable_frame_stats(void) {
+    SOKOL_ASSERT(_sg.valid);
+    _sg.stats_enabled = false;
+}
+
+SOKOL_API_IMPL bool sg_frame_stats_enabled(void) {
+    return _sg.stats_enabled;
 }
 
 SOKOL_API_IMPL sg_buffer_info sg_query_buffer_info(sg_buffer buf_id) {
