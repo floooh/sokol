@@ -92,6 +92,8 @@
     --- alternative, open and close windows directly by setting the following public
         booleans in the sg_imgui_t struct:
 
+            sg_imgui.caps.open = true;
+            sg_imgui.frame_stats.open = true;
             sg_imgui.buffers.open = true;
             sg_imgui.images.open = true;
             sg_imgui.samplers.open = true;
@@ -99,12 +101,15 @@
             sg_imgui.pipelines.open = true;
             sg_imgui.passes.open = true;
             sg_imgui.capture.open = true;
+            sg_imgui.frame_stats.open = true;
 
         ...for instance, to control the window visibility through
         menu items, the following code can be used:
 
             if (ImGui::BeginMainMenuBar()) {
                 if (ImGui::BeginMenu("sokol-gfx")) {
+                    ImGui::MenuItem("Capabilities", 0, &sg_imgui.caps.open);
+                    ImGui::MenuItem("Frame Stats", 0, &sg_imgui.frame_stats.open);
                     ImGui::MenuItem("Buffers", 0, &sg_imgui.buffers.open);
                     ImGui::MenuItem("Images", 0, &sg_imgui.images.open);
                     ImGui::MenuItem("Samplers", 0, &sg_imgui.samplers.open);
@@ -714,6 +719,12 @@ typedef struct sg_imgui_caps_t {
     bool open;
 } sg_imgui_caps_t;
 
+typedef struct sg_imgui_frame_stats_t {
+    bool open;
+    sg_frame_stats stats;
+    // FIXME: add a ringbuffer for a stats history here
+} sg_imgui_frame_stats_t;
+
 /*
     sg_imgui_allocator_t
 
@@ -748,6 +759,7 @@ typedef struct sg_imgui_t {
     sg_imgui_passes_t passes;
     sg_imgui_capture_t capture;
     sg_imgui_caps_t caps;
+    sg_imgui_frame_stats_t frame_stats;
     sg_pipeline cur_pipeline;
     sg_trace_hooks hooks;
 } sg_imgui_t;
@@ -766,6 +778,7 @@ SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_pipelines_content(sg_imgui_t* ctx);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_passes_content(sg_imgui_t* ctx);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capture_content(sg_imgui_t* ctx);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capabilities_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_frame_stats_content(sg_imgui_t* ctx);
 
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_buffers_window(sg_imgui_t* ctx);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_images_window(sg_imgui_t* ctx);
@@ -775,6 +788,7 @@ SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_pipelines_window(sg_imgui_t* ctx);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_passes_window(sg_imgui_t* ctx);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capture_window(sg_imgui_t* ctx);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capabilities_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_frame_stats_window(sg_imgui_t* ctx);
 
 #if defined(__cplusplus)
 } /* extern "C" */
@@ -917,6 +931,27 @@ _SOKOL_PRIVATE void igEndMenu(void) {
 }
 _SOKOL_PRIVATE bool igMenuItem_BoolPtr(const char* label, const char* shortcut, bool* p_selected, bool enabled) {
     return ImGui::MenuItem(label, shortcut, p_selected, enabled);
+}
+_SOKOL_PRIVATE bool igBeginTable(const char* str_id, int column, ImGuiTableFlags flags, const ImVec2 outer_size, float inner_width) {
+    return ImGui::BeginTable(str_id, column, flags, outer_size, inner_width);
+}
+_SOKOL_PRIVATE void igEndTable(void) {
+    ImGui::EndTable();
+}
+_SOKOL_PRIVATE void igTableSetupScrollFreeze(int cols, int rows) {
+    ImGui::TableSetupScrollFreeze(cols, rows);
+}
+_SOKOL_PRIVATE void igTableSetupColumn(const char* label, ImGuiTableColumnFlags flags, float init_width_or_weight, ImGuiID user_id) {
+    ImGui::TableSetupColumn(label, flags, init_width_or_weight, user_id);
+}
+_SOKOL_PRIVATE void igTableHeadersRow(void) {
+    ImGui::TableHeadersRow();
+}
+_SOKOL_PRIVATE void igTableNextRow(ImGuiTableRowFlags row_flags, float min_row_height) {
+    ImGui::TableNextRow(row_flags, min_row_height);
+}
+_SOKOL_PRIVATE bool igTableSetColumnIndex(int column_n) {
+    return ImGui::TableSetColumnIndex(column_n);
 }
 #else
 #define IMVEC2(x,y) (ImVec2){x,y}
@@ -4163,6 +4198,62 @@ _SOKOL_PRIVATE void _sg_imgui_draw_caps_panel(void) {
     }
 }
 
+_SOKOL_PRIVATE void _sg_imgui_frame_stats_row(const char* key, uint32_t value) {
+    igTableNextRow(0, 0.0f);
+    igTableSetColumnIndex(0);
+    igText(key);
+    igTableSetColumnIndex(1);
+    igText("%d", value);
+}
+
+_SOKOL_PRIVATE void _sg_imgui_draw_frame_stats_panel(sg_imgui_t* ctx) {
+    _SOKOL_UNUSED(ctx);
+    const sg_frame_stats* stats = &ctx->frame_stats.stats;
+    const ImGuiTableFlags flags =
+        ImGuiTableFlags_Resizable |
+        ImGuiTableFlags_ScrollY |
+        ImGuiTableFlags_SizingFixedFit |
+        ImGuiTableFlags_Borders;
+    if (igBeginTable("##frame_stats_table", 2, flags, IMVEC2(0, 0), 0)) {
+        igTableSetupScrollFreeze(0, 1);
+        igTableSetupColumn("key", ImGuiTableColumnFlags_None, 0, 0);
+        igTableSetupColumn("value", ImGuiTableColumnFlags_None, 0, 0);
+        igTableHeadersRow();
+        _sg_imgui_frame_stats_row("frame_index", stats->frame_index);
+        _sg_imgui_frame_stats_row("num_passes", stats->num_passes);
+        _sg_imgui_frame_stats_row("num_apply_viewport", stats->num_apply_viewport);
+        _sg_imgui_frame_stats_row("num_apply_scissor_rect", stats->num_apply_scissor_rect);
+        _sg_imgui_frame_stats_row("num_apply_pipeline", stats->num_apply_pipeline);
+        _sg_imgui_frame_stats_row("num_apply_bindings", stats->num_apply_bindings);
+        _sg_imgui_frame_stats_row("num_apply_uniforms", stats->num_apply_uniforms);
+        _sg_imgui_frame_stats_row("num_draw", stats->num_draw);
+        _sg_imgui_frame_stats_row("num_update_buffer", stats->num_update_buffer);
+        _sg_imgui_frame_stats_row("num_append_buffer", stats->num_append_buffer);
+        _sg_imgui_frame_stats_row("num_update_image", stats->num_update_image);
+        _sg_imgui_frame_stats_row("size_apply_uniforms", stats->size_apply_uniforms);
+        _sg_imgui_frame_stats_row("size_update_buffer", stats->size_update_buffer);
+        _sg_imgui_frame_stats_row("size_append_buffer", stats->size_append_buffer);
+        _sg_imgui_frame_stats_row("size_update_image", stats->size_update_image);
+        if (sg_query_backend() == SG_BACKEND_WGPU) {
+            _sg_imgui_frame_stats_row("wgpu.num_uniform_set_bindgroup", stats->wgpu.num_uniform_set_bindgroup);
+            _sg_imgui_frame_stats_row("wgpu.size_uniform_write_buffer", stats->wgpu.size_uniform_write_buffer);
+            _sg_imgui_frame_stats_row("wgpu.bindings.num_set_vertex_buffer", stats->wgpu.bindings.num_set_vertex_buffer);
+            _sg_imgui_frame_stats_row("wgpu.bindings.num_skip_set_vertex_buffer", stats->wgpu.bindings.num_skip_set_vertex_buffer);
+            _sg_imgui_frame_stats_row("wgpu.bindings.num_set_index_buffer", stats->wgpu.bindings.num_set_index_buffer);
+            _sg_imgui_frame_stats_row("wgpu.bindings.num_skip_set_index_buffer", stats->wgpu.bindings.num_skip_set_index_buffer);
+            _sg_imgui_frame_stats_row("wgpu.bindings.num_create_bindgroup", stats->wgpu.bindings.num_create_bindgroup);
+            _sg_imgui_frame_stats_row("wgpu.bindings.num_discard_bindgroup", stats->wgpu.bindings.num_discard_bindgroup);
+            _sg_imgui_frame_stats_row("wgpu.bindings.num_set_bindgroup", stats->wgpu.bindings.num_set_bindgroup);
+            _sg_imgui_frame_stats_row("wgpu.bindings.num_set_empty_bindgroup", stats->wgpu.bindings.num_set_empty_bindgroup);
+            _sg_imgui_frame_stats_row("wgpu.bindings.num_bindgroup_cache_hits", stats->wgpu.bindings.num_bindgroup_cache_hits);
+            _sg_imgui_frame_stats_row("wpgu.bindings.num_bindgroup_cache_misses", stats->wgpu.bindings.num_bindgroup_cache_misses);
+            _sg_imgui_frame_stats_row("wgpu.bindings.num_bindgroup_cache_collisions", stats->wgpu.bindings.num_bindgroup_cache_collisions);
+            _sg_imgui_frame_stats_row("wgpu.bindings.num_bindgroup_cache_hash_vs_key_mismatches", stats->wgpu.bindings.num_bindgroup_cache_hash_vs_key_mismatch);
+        }
+        igEndTable();
+    }
+}
+
 #define _sg_imgui_def(val, def) (((val) == 0) ? (def) : (val))
 
 _SOKOL_PRIVATE sg_imgui_desc_t _sg_imgui_desc_defaults(const sg_imgui_desc_t* desc) {
@@ -4344,6 +4435,7 @@ SOKOL_API_IMPL void sg_imgui_draw(sg_imgui_t* ctx) {
     sg_imgui_draw_passes_window(ctx);
     sg_imgui_draw_capture_window(ctx);
     sg_imgui_draw_capabilities_window(ctx);
+    sg_imgui_draw_frame_stats_window(ctx);
 }
 
 SOKOL_API_IMPL void sg_imgui_draw_menu(sg_imgui_t* ctx, const char* title) {
@@ -4351,6 +4443,7 @@ SOKOL_API_IMPL void sg_imgui_draw_menu(sg_imgui_t* ctx, const char* title) {
     SOKOL_ASSERT(title);
     if (igBeginMenu(title, true)) {
         igMenuItem_BoolPtr("Capabilities", 0, &ctx->caps.open, true);
+        igMenuItem_BoolPtr("Frame Stats", 0, &ctx->frame_stats.open, true);
         igMenuItem_BoolPtr("Buffers", 0, &ctx->buffers.open, true);
         igMenuItem_BoolPtr("Images", 0, &ctx->images.open, true);
         igMenuItem_BoolPtr("Samplers", 0, &ctx->samplers.open, true);
@@ -4458,6 +4551,18 @@ SOKOL_API_IMPL void sg_imgui_draw_capabilities_window(sg_imgui_t* ctx) {
     igEnd();
 }
 
+SOKOL_API_IMPL void sg_imgui_draw_frame_stats_window(sg_imgui_t* ctx) {
+    SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
+    if (!ctx->frame_stats.open) {
+        return;
+    }
+    igSetNextWindowSize(IMVEC2(512, 400), ImGuiCond_Once);
+    if (igBegin("Frame Stats", &ctx->frame_stats.open, 0)) {
+        sg_imgui_draw_frame_stats_content(ctx);
+    }
+    igEnd();
+}
+
 SOKOL_API_IMPL void sg_imgui_draw_buffers_content(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     _sg_imgui_draw_buffer_list(ctx);
@@ -4511,6 +4616,12 @@ SOKOL_API_IMPL void sg_imgui_draw_capabilities_content(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     _SOKOL_UNUSED(ctx);
     _sg_imgui_draw_caps_panel();
+}
+
+SOKOL_API_IMPL void sg_imgui_draw_frame_stats_content(sg_imgui_t* ctx) {
+    SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
+    ctx->frame_stats.stats = sg_query_frame_stats();
+    _sg_imgui_draw_frame_stats_panel(ctx);
 }
 
 #endif /* SOKOL_GFX_IMGUI_IMPL */
