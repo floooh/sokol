@@ -2882,8 +2882,53 @@ typedef struct sg_frame_stats_gl {
     uint32_t num_uniform;
 } sg_frame_stats_gl;
 
+typedef struct sg_frame_stats_d3d11_pass {
+    uint32_t num_om_set_render_targets;
+    uint32_t num_clear_render_target_view;
+    uint32_t num_clear_depth_stencil_view;
+    uint32_t num_resolve_subresource;
+} sg_frame_stats_d3d11_pass;
+
+typedef struct sg_frame_stats_d3d11_pipeline {
+    uint32_t num_rs_set_state;
+    uint32_t num_om_set_depth_stencil_state;
+    uint32_t num_om_set_blend_state;
+    uint32_t num_ia_set_primitive_topology;
+    uint32_t num_ia_set_input_layout;
+    uint32_t num_vs_set_shader;
+    uint32_t num_vs_set_constant_buffers;
+    uint32_t num_ps_set_shader;
+    uint32_t num_ps_set_constant_buffers;
+} sg_frame_stats_d3d11_pipeline;
+
+typedef struct sg_frame_stats_d3d11_bindings {
+    uint32_t num_ia_set_vertex_buffers;
+    uint32_t num_ia_set_index_buffer;
+    uint32_t num_vs_set_shader_resources;
+    uint32_t num_ps_set_shader_resources;
+    uint32_t num_vs_set_samplers;
+    uint32_t num_ps_set_samplers;
+} sg_frame_stats_d3d11_bindings;
+
+typedef struct sg_frame_stats_d3d11_uniforms {
+    uint32_t num_update_subresource;
+} sg_frame_stats_d3d11_uniforms;
+
+typedef struct sg_frame_stats_d3d11_draw {
+    uint32_t num_draw_indexed_instanced;
+    uint32_t num_draw_indexed;
+    uint32_t num_draw_instanced;
+    uint32_t num_draw;
+} sg_frame_stats_d3d11_draw;
+
 typedef struct sg_frame_stats_d3d11 {
-    uint32_t fixme;
+    sg_frame_stats_d3d11_pass pass;
+    sg_frame_stats_d3d11_pipeline pipeline;
+    sg_frame_stats_d3d11_bindings bindings;
+    sg_frame_stats_d3d11_uniforms uniforms;
+    sg_frame_stats_d3d11_draw draw;
+    uint32_t num_map;
+    uint32_t num_unmap;
 } sg_frame_stats_d3d11;
 
 typedef struct sg_frame_stats_metal_idpool {
@@ -10171,6 +10216,7 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(_sg_pass_t* pass, const sg_pass_action*
     }
     // apply the render-target- and depth-stencil-views
     _sg_d3d11_OMSetRenderTargets(_sg.d3d11.ctx, SG_MAX_COLOR_ATTACHMENTS, _sg.d3d11.cur_rtvs, _sg.d3d11.cur_dsv);
+    _sg_stats_add(d3d11.pass.num_om_set_render_targets, 1);
 
     // set viewport and scissor rect to cover whole screen
     D3D11_VIEWPORT vp;
@@ -10190,6 +10236,7 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(_sg_pass_t* pass, const sg_pass_action*
     for (int i = 0; i < _sg.d3d11.num_rtvs; i++) {
         if (action->colors[i].load_action == SG_LOADACTION_CLEAR) {
             _sg_d3d11_ClearRenderTargetView(_sg.d3d11.ctx, _sg.d3d11.cur_rtvs[i], &action->colors[i].clear_value.r);
+            _sg_stats_add(d3d11.pass.num_clear_render_target_view, 1);
         }
     }
     UINT ds_flags = 0;
@@ -10201,6 +10248,7 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(_sg_pass_t* pass, const sg_pass_action*
     }
     if ((0 != ds_flags) && _sg.d3d11.cur_dsv) {
         _sg_d3d11_ClearDepthStencilView(_sg.d3d11.ctx, _sg.d3d11.cur_dsv, ds_flags, action->depth.clear_value, action->stencil.clear_value);
+        _sg_stats_add(d3d11.pass.num_clear_depth_stencil_view, 1);
     }
 }
 
@@ -10240,6 +10288,7 @@ _SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
                     color_img->d3d11.res,
                     src_subres,
                     color_img->d3d11.format);
+                _sg_stats_add(d3d11.pass.num_resolve_subresource, 1);
             }
         }
     }
@@ -10300,6 +10349,15 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
     _sg_d3d11_VSSetConstantBuffers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, pip->shader->d3d11.stage[SG_SHADERSTAGE_VS].cbufs);
     _sg_d3d11_PSSetShader(_sg.d3d11.ctx, pip->shader->d3d11.fs, NULL, 0);
     _sg_d3d11_PSSetConstantBuffers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, pip->shader->d3d11.stage[SG_SHADERSTAGE_FS].cbufs);
+    _sg_stats_add(d3d11.pipeline.num_rs_set_state, 1);
+    _sg_stats_add(d3d11.pipeline.num_om_set_depth_stencil_state, 1);
+    _sg_stats_add(d3d11.pipeline.num_om_set_blend_state, 1);
+    _sg_stats_add(d3d11.pipeline.num_ia_set_primitive_topology, 1);
+    _sg_stats_add(d3d11.pipeline.num_ia_set_input_layout, 1);
+    _sg_stats_add(d3d11.pipeline.num_vs_set_shader, 1);
+    _sg_stats_add(d3d11.pipeline.num_vs_set_constant_buffers, 1);
+    _sg_stats_add(d3d11.pipeline.num_ps_set_shader, 1);
+    _sg_stats_add(d3d11.pipeline.num_ps_set_constant_buffers, 1);
 }
 
 _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
@@ -10343,6 +10401,12 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
     _sg_d3d11_PSSetShaderResources(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_fs_srvs);
     _sg_d3d11_VSSetSamplers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_SAMPLERS, d3d11_vs_smps);
     _sg_d3d11_PSSetSamplers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_SAMPLERS, d3d11_fs_smps);
+    _sg_stats_add(d3d11.bindings.num_ia_set_vertex_buffers, 1);
+    _sg_stats_add(d3d11.bindings.num_ia_set_index_buffer, 1);
+    _sg_stats_add(d3d11.bindings.num_vs_set_shader_resources, 1);
+    _sg_stats_add(d3d11.bindings.num_ps_set_shader_resources, 1);
+    _sg_stats_add(d3d11.bindings.num_vs_set_samplers, 1);
+    _sg_stats_add(d3d11.bindings.num_ps_set_samplers, 1);
     return true;
 }
 
@@ -10355,6 +10419,7 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_uniforms(sg_shader_stage stage_index, int ub
     ID3D11Buffer* cb = _sg.d3d11.cur_pipeline->shader->d3d11.stage[stage_index].cbufs[ub_index];
     SOKOL_ASSERT(cb);
     _sg_d3d11_UpdateSubresource(_sg.d3d11.ctx, (ID3D11Resource*)cb, 0, NULL, data->ptr, 0, 0);
+    _sg_stats_add(d3d11.uniforms.num_update_subresource, 1);
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_draw(int base_element, int num_elements, int num_instances) {
@@ -10362,14 +10427,18 @@ _SOKOL_PRIVATE void _sg_d3d11_draw(int base_element, int num_elements, int num_i
     if (_sg.d3d11.use_indexed_draw) {
         if (_sg.d3d11.use_instanced_draw) {
             _sg_d3d11_DrawIndexedInstanced(_sg.d3d11.ctx, (UINT)num_elements, (UINT)num_instances, (UINT)base_element, 0, 0);
+            _sg_stats_add(d3d11.draw.num_draw_indexed_instanced, 1);
         } else {
             _sg_d3d11_DrawIndexed(_sg.d3d11.ctx, (UINT)num_elements, (UINT)base_element, 0);
+            _sg_stats_add(d3d11.draw.num_draw_indexed, 1);
         }
     } else {
         if (_sg.d3d11.use_instanced_draw) {
             _sg_d3d11_DrawInstanced(_sg.d3d11.ctx, (UINT)num_elements, (UINT)num_instances, (UINT)base_element, 0);
+            _sg_stats_add(d3d11.draw.num_draw_instanced, 1);
         } else {
             _sg_d3d11_Draw(_sg.d3d11.ctx, (UINT)num_elements, (UINT)base_element);
+            _sg_stats_add(d3d11.draw.num_draw, 1);
         }
     }
 }
@@ -10384,9 +10453,11 @@ _SOKOL_PRIVATE void _sg_d3d11_update_buffer(_sg_buffer_t* buf, const sg_range* d
     SOKOL_ASSERT(buf->d3d11.buf);
     D3D11_MAPPED_SUBRESOURCE d3d11_msr;
     HRESULT hr = _sg_d3d11_Map(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0, D3D11_MAP_WRITE_DISCARD, 0, &d3d11_msr);
+    _sg_stats_add(d3d11.num_map, 1);
     if (SUCCEEDED(hr)) {
         memcpy(d3d11_msr.pData, data->ptr, data->size);
         _sg_d3d11_Unmap(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0);
+        _sg_stats_add(d3d11.num_unmap, 1);
     } else {
         _SG_ERROR(D3D11_MAP_FOR_UPDATE_BUFFER_FAILED);
     }
@@ -10399,10 +10470,12 @@ _SOKOL_PRIVATE void _sg_d3d11_append_buffer(_sg_buffer_t* buf, const sg_range* d
     D3D11_MAP map_type = new_frame ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE;
     D3D11_MAPPED_SUBRESOURCE d3d11_msr;
     HRESULT hr = _sg_d3d11_Map(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0, map_type, 0, &d3d11_msr);
+    _sg_stats_add(d3d11.num_map, 1);
     if (SUCCEEDED(hr)) {
         uint8_t* dst_ptr = (uint8_t*)d3d11_msr.pData + buf->cmn.append_pos;
         memcpy(dst_ptr, data->ptr, data->size);
         _sg_d3d11_Unmap(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0);
+        _sg_stats_add(d3d11.num_unmap, 1);
     } else {
         _SG_ERROR(D3D11_MAP_FOR_APPEND_BUFFER_FAILED);
     }
@@ -10429,6 +10502,7 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
                 const size_t slice_offset = slice_size * (size_t)slice_index;
                 const uint8_t* slice_ptr = ((const uint8_t*)subimg_data->ptr) + slice_offset;
                 hr = _sg_d3d11_Map(_sg.d3d11.ctx, img->d3d11.res, subres_index, D3D11_MAP_WRITE_DISCARD, 0, &d3d11_msr);
+                _sg_stats_add(d3d11.num_map, 1);
                 if (SUCCEEDED(hr)) {
                     // FIXME: need to handle difference in depth-pitch for 3D textures as well!
                     if (src_pitch == (int)d3d11_msr.RowPitch) {
@@ -10444,6 +10518,7 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
                         }
                     }
                     _sg_d3d11_Unmap(_sg.d3d11.ctx, img->d3d11.res, subres_index);
+                    _sg_stats_add(d3d11.num_unmap, 1);
                 } else {
                     _SG_ERROR(D3D11_MAP_FOR_UPDATE_IMAGE_FAILED);
                 }
