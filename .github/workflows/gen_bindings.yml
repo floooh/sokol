@@ -227,7 +227,7 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: ignore-me-rust
-          path: src/sokol
+          path: src
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable

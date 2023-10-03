@@ -252,3 +252,51 @@ UTEST(sokol_args, escape_sequence) {
     TSTR(sargs_value_at(2), "val2\tval3");
     sargs_shutdown();
 }
+
+static char* argv_11[] = { "exe_name", "kvp0 kvp1", "kvp2 = val2", "kvp3", "kvp4=val4" };
+UTEST(sokol_args, key_only_args) {
+    sargs_setup(&(sargs_desc){
+        .argc = NUM_ARGS(argv_11),
+        .argv = argv_11,
+    });
+    T(sargs_isvalid());
+    T(sargs_num_args() == 5);
+    T(0 == sargs_find("kvp0"));
+    T(1 == sargs_find("kvp1"));
+    T(2 == sargs_find("kvp2"));
+    T(3 == sargs_find("kvp3"));
+    T(4 == sargs_find("kvp4"))
+    T(-1 == sargs_find("kvp5"));
+    T(-1 == sargs_find("val2"));
+    T(-1 == sargs_find("val4"));
+    T(sargs_exists("kvp0"));
+    T(sargs_exists("kvp1"));
+    T(sargs_exists("kvp2"));
+    T(sargs_exists("kvp3"));
+    T(sargs_exists("kvp4"));
+    T(!sargs_exists("kvp5"));
+    TSTR(sargs_value("kvp0"), "");
+    TSTR(sargs_value("kvp1"), "");
+    TSTR(sargs_value("kvp2"), "val2");
+    TSTR(sargs_value("kvp3"), "");
+    TSTR(sargs_value("kvp4"), "val4");
+    TSTR(sargs_value("kvp5"), "");
+    TSTR(sargs_value_def("kvp0", "bla0"), "bla0");
+    TSTR(sargs_value_def("kvp1", "bla1"), "bla1");
+    TSTR(sargs_value_def("kvp2", "bla2"), "val2");
+    TSTR(sargs_value_def("kvp3", "bla3"), "bla3");
+    TSTR(sargs_value_def("kvp4", "bla4"), "val4");
+    TSTR(sargs_value_def("kvp5", "bla5"), "bla5");
+    TSTR(sargs_key_at(0), "kvp0");
+    TSTR(sargs_key_at(1), "kvp1");
+    TSTR(sargs_key_at(2), "kvp2");
+    TSTR(sargs_key_at(3), "kvp3");
+    TSTR(sargs_key_at(4), "kvp4");
+    TSTR(sargs_key_at(5), "");
+    TSTR(sargs_value_at(0), "");
+    TSTR(sargs_value_at(1), "");
+    TSTR(sargs_value_at(2), "val2");
+    TSTR(sargs_value_at(3), "");
+    TSTR(sargs_value_at(4), "val4");
+    TSTR(sargs_value_at(5), "");
+}

@@ -288,8 +288,8 @@
             simgui_setup(&(simgui_desc_t){
                 // ...
                 .allocator = {
-                    .alloc = my_alloc,
-                    .free = my_free,
+                    .alloc_fn = my_alloc,
+                    .free_fn = my_free,
                     .user_data = ...;
                 }
             });
@@ -467,12 +467,12 @@ typedef enum simgui_log_item_t {
 
     Used in simgui_desc_t to provide custom memory-alloc and -free functions
     to sokol_imgui.h. If memory management should be overridden, both the
-    alloc and free function must be provided (e.g. it's not valid to
+    alloc_fn and free_fn function must be provided (e.g. it's not valid to
     override one function but not the other).
 */
 typedef struct simgui_allocator_t {
-    void* (*alloc)(size_t size, void* user_data);
-    void (*free)(void* ptr, void* user_data);
+    void* (*alloc_fn)(size_t size, void* user_data);
+    void (*free_fn)(void* ptr, void* user_data);
     void* user_data;
 } simgui_allocator_t;
 
@@ -1903,8 +1903,8 @@ static void _simgui_clear(void* ptr, size_t size) {
 static void* _simgui_malloc(size_t size) {
     SOKOL_ASSERT(size > 0);
     void* ptr;
-    if (_simgui.desc.allocator.alloc) {
-        ptr = _simgui.desc.allocator.alloc(size, _simgui.desc.allocator.user_data);
+    if (_simgui.desc.allocator.alloc_fn) {
+        ptr = _simgui.desc.allocator.alloc_fn(size, _simgui.desc.allocator.user_data);
     } else {
         ptr = malloc(size);
     }
@@ -1921,8 +1921,8 @@ static void* _simgui_malloc_clear(size_t size) {
 }
 
 static void _simgui_free(void* ptr) {
-    if (_simgui.desc.allocator.free) {
-        _simgui.desc.allocator.free(ptr, _simgui.desc.allocator.user_data);
+    if (_simgui.desc.allocator.free_fn) {
+        _simgui.desc.allocator.free_fn(ptr, _simgui.desc.allocator.user_data);
     } else {
         free(ptr);
     }
@@ -2143,7 +2143,7 @@ static bool _simgui_is_osx(void) {
 }
 
 static simgui_desc_t _simgui_desc_defaults(const simgui_desc_t* desc) {
-    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
+    SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
     simgui_desc_t res = *desc;
     res.max_vertices = _simgui_def(res.max_vertices, 65536);
     res.image_pool_size = _simgui_def(res.image_pool_size, 256);

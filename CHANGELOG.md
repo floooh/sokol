@@ -1,5 +1,69 @@
 ## Updates
 
+#### 03-Oct-2023
+
+- sokol_app.h win/gl: PR https://github.com/floooh/sokol/pull/886 has been merged, this makes
+  GL context initialization on Windows slightly more efficient. Many thanks to @dtrebilco!
+
+#### 25-Sep-2023
+
+- The allocator callback functions in all headers that support custom allocators have been renamed
+  from `alloc` and `free` to `alloc_fn` and `free_fn`, this is because the symbol `free` is quite
+  likely to collide with a preprocessor macro of the same name if the standard C allocator is
+  replaced with a custom allocator.
+
+  This is a breaking change only if you've been providing your own allocator functions to
+  the sokol headers.
+
+  See issue https://github.com/floooh/sokol/issues/903 and PR https://github.com/floooh/sokol/pull/908
+  for details.
+
+#### 23-Sep-2023
+
+- sokol_gfx.h gl: Allow to inject an external GL framebuffer id into the sokol-gfx default
+  pass. See PR https://github.com/floooh/sokol/pull/899 and issue https://github.com/floooh/sokol/issues/892
+  for details. Many thanks to @danielchasehooper for the discussion and PR!
+
+  Further down the road I want to make the whole topic more flexible while at the same time
+  simplifying the sokol-gfx API, see here: https://github.com/floooh/sokol/issues/904
+
+#### 22-Sep-2023
+
+- sokol_gfx.h: Fixed a Metal validation error on Intel Macs when creating textures (Intel Macs
+  have unified memory, but don't support textures in shared storage mode). This was a regression
+  in the image/sampler split update in mid-July 2023. Fixes issue https://github.com/floooh/sokol/issues/905
+  via PR https://github.com/floooh/sokol/pull/907.
+
+#### 19-Sep-2023
+
+- sokol_fetch.h: fixed a minor issue where a request that was cancelled before it was dispatched
+  had an incomplete response state set in the response callback (the `finished`, `failed` and
+  `error_code` fields were not set). This fixes issue https://github.com/floooh/sokol/issues/882
+  via PR https://github.com/floooh/sokol/pull/898
+
+#### 18-Sep-2023
+
+- PR https://github.com/floooh/sokol/pull/893 has been merged, this fixes a minor issue
+  in the GL backend when using an injected texture as framebuffer attachment.
+- Issue https://github.com/floooh/sokol/issues/884 has been fixed via PR https://github.com/floooh/sokol/pull/894,
+  this adds missing error code paths in the Metal backend when Metal object creation fails.
+- Clarified `sapp_run()` behaviour in the sokol_app.h documentation header (search for `OPTIONAL: DON'T HIJACK main()`)
+- sokol_args.h now fully supports "key-only args", see issue https://github.com/floooh/sokol/issues/876 for details,
+  fixed via PR https://github.com/floooh/sokol/pull/896
+
+#### 17-Sep-2023
+
+- The sokol-gfx Metal backend now adds debug labels to Metal resource objects and
+  also passes through the `sg_push/pop_debug_group()` calls. If you use the push/pop
+  debug group calls, please be aware of the following limitations:
+
+  - a push inside a render pass must have an associated pop inside the same render pass
+  - a push outside any render pass must have an associated pop outside any render pass
+  - Metal will ignore any push/pop calls outside render passes (this is because in Metal
+    these are MTLCommandEncoder methods)
+
+  Associated issue: https://github.com/floooh/sokol/issues/889, and PR: https://github.com/floooh/sokol/pull/890.
+
 #### 09-Sep-2023
 
 - a small PR has been merged which fixes a redundant glBindFramebuffer() in the GLES3 backend
