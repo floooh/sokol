@@ -1,5 +1,10 @@
 ## Updates
 
+#### 03-Oct-2023
+
+- sokol_app.h win/gl: PR https://github.com/floooh/sokol/pull/886 has been merged, this makes
+  GL context initialization on Windows slightly more efficient. Many thanks to @dtrebilco!
+
 #### 25-Sep-2023
 
 - The allocator callback functions in all headers that support custom allocators have been renamed
