@@ -6596,7 +6596,8 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
     SOKOL_ASSERT(_sapp.wgl.arb_pixel_format);
     const _sapp_gl_fbconfig* closest;
 
-    const int QUERY_TAGS[] = {
+    #define _sapp_wgl_num_query_tags (12)
+    const int query_tags[_sapp_wgl_num_query_tags] = {
       WGL_SUPPORT_OPENGL_ARB,
       WGL_DRAW_TO_WINDOW_ARB,
       WGL_PIXEL_TYPE_ARB,
@@ -6610,25 +6611,25 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
       WGL_STENCIL_BITS_ARB,
       WGL_SAMPLES_ARB,
     };
-    const int RESULT_SUPPORT_OPENGL_INDEX = 0;
-    const int RESULT_DRAW_TO_WINDOW_INDEX = 1;
-    const int RESULT_PIXEL_TYPE_INDEX = 2;
-    const int RESULT_ACCELERATION_INDEX = 3;
-    const int RESULT_DOUBLE_BUFFER_INDEX = 4;
-    const int RESULT_RED_BITS_INDEX = 5;
-    const int RESULT_GREEN_BITS_INDEX = 6;
-    const int RESULT_BLUE_BITS_INDEX = 7;
-    const int RESULT_ALPHA_BITS_INDEX = 8;
-    const int RESULT_DEPTH_BITS_INDEX = 9;
-    const int RESULT_STENCIL_BITS_INDEX = 10;
-    const int RESULT_SAMPLES_INDEX = 11;
+    const int result_support_opengl_index = 0;
+    const int result_draw_to_window_index = 1;
+    const int result_pixel_type_index = 2;
+    const int result_acceleration_index = 3;
+    const int result_double_buffer_index = 4;
+    const int result_red_bits_index = 5;
+    const int result_green_bits_index = 6;
+    const int result_blue_bits_index = 7;
+    const int result_alpha_bits_index = 8;
+    const int result_depth_bits_index = 9;
+    const int result_stencil_bits_index = 10;
+    const int result_samples_index = 11;
 
-    int query_results[12] = {0};
+    int query_results[_sapp_wgl_num_query_tags] = {0};
     // Drop the last item if multisample extension is not supported.
     //  If in future querying with multiple extensions, will have to shuffle index values to have active extensions on the end.
-    int query_count = 12;
+    int query_count = _sapp_wgl_num_query_tags;
     if (!_sapp.wgl.arb_multisample) {
-        query_count = 11;
+        query_count = _sapp_wgl_num_query_tags - 1;
     }
 
     int native_count = _sapp_wgl_attrib(1, WGL_NUMBER_PIXEL_FORMATS_ARB);
@@ -6639,26 +6640,26 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
         const int n = i + 1;
         _sapp_gl_fbconfig* u = usable_configs + usable_count;
         _sapp_gl_init_fbconfig(u);
-        _sapp_wgl_attribiv(n, query_count, QUERY_TAGS, query_results);
+        _sapp_wgl_attribiv(n, query_count, query_tags, query_results);
 
-        if (query_results[RESULT_SUPPORT_OPENGL_INDEX] == 0
-          || query_results[RESULT_DRAW_TO_WINDOW_INDEX] == 0
-          || query_results[RESULT_PIXEL_TYPE_INDEX] != WGL_TYPE_RGBA_ARB
-          || query_results[RESULT_ACCELERATION_INDEX] == WGL_NO_ACCELERATION_ARB)
+        if (query_results[result_support_opengl_index] == 0
+          || query_results[result_draw_to_window_index] == 0
+          || query_results[result_pixel_type_index] != WGL_TYPE_RGBA_ARB
+          || query_results[result_acceleration_index] == WGL_NO_ACCELERATION_ARB)
         {
             continue;
         }
-        u->red_bits     = query_results[RESULT_RED_BITS_INDEX];
-        u->green_bits   = query_results[RESULT_GREEN_BITS_INDEX];
-        u->blue_bits    = query_results[RESULT_BLUE_BITS_INDEX];
-        u->alpha_bits   = query_results[RESULT_ALPHA_BITS_INDEX];
-        u->depth_bits   = query_results[RESULT_DEPTH_BITS_INDEX];
-        u->stencil_bits = query_results[RESULT_STENCIL_BITS_INDEX];
-        if (query_results[RESULT_DOUBLE_BUFFER_INDEX]) {
+        u->red_bits     = query_results[result_red_bits_index];
+        u->green_bits   = query_results[result_green_bits_index];
+        u->blue_bits    = query_results[result_blue_bits_index];
+        u->alpha_bits   = query_results[result_alpha_bits_index];
+        u->depth_bits   = query_results[result_depth_bits_index];
+        u->stencil_bits = query_results[result_stencil_bits_index];
+        if (query_results[result_double_buffer_index]) {
             u->doublebuffer = true;
         }
 
-        u->samples = query_results[RESULT_SAMPLES_INDEX]; // Note: If arb_multisample is not supported  - just takes the default 0
+        u->samples = query_results[result_samples_index]; // NOTE: If arb_multisample is not supported  - just takes the default 0
 
         u->handle = (uintptr_t)n;
         usable_count++;
