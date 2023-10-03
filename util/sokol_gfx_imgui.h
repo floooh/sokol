@@ -4235,10 +4235,11 @@ _SOKOL_PRIVATE void _sg_imgui_draw_frame_stats_panel(sg_imgui_t* ctx) {
         ImGuiTableFlags_SizingFixedFit |
         ImGuiTableFlags_Borders;
     if (igBeginTable("##frame_stats_table", 2, flags, IMVEC2(0, 0), 0)) {
-        igTableSetupScrollFreeze(0, 1);
+        igTableSetupScrollFreeze(0, 2);
         igTableSetupColumn("key", ImGuiTableColumnFlags_None, 0, 0);
         igTableSetupColumn("value", ImGuiTableColumnFlags_None, 0, 0);
         igTableHeadersRow();
+        _sg_imgui_frame_stats(frame_index);
         _sg_imgui_frame_stats(num_passes);
         _sg_imgui_frame_stats(num_apply_viewport);
         _sg_imgui_frame_stats(num_apply_scissor_rect);
@@ -4304,6 +4305,34 @@ _SOKOL_PRIVATE void _sg_imgui_draw_frame_stats_panel(sg_imgui_t* ctx) {
                 _sg_imgui_frame_stats(metal.bindings.num_set_fragment_sampler_state);
                 _sg_imgui_frame_stats(metal.uniforms.num_set_vertex_buffer_offset);
                 _sg_imgui_frame_stats(metal.uniforms.num_set_fragment_buffer_offset);
+                break;
+            case SG_BACKEND_D3D11:
+                _sg_imgui_frame_stats(d3d11.pass.num_om_set_render_targets);
+                _sg_imgui_frame_stats(d3d11.pass.num_clear_render_target_view);
+                _sg_imgui_frame_stats(d3d11.pass.num_clear_depth_stencil_view);
+                _sg_imgui_frame_stats(d3d11.pass.num_resolve_subresource);
+                _sg_imgui_frame_stats(d3d11.pipeline.num_rs_set_state);
+                _sg_imgui_frame_stats(d3d11.pipeline.num_om_set_depth_stencil_state);
+                _sg_imgui_frame_stats(d3d11.pipeline.num_om_set_blend_state);
+                _sg_imgui_frame_stats(d3d11.pipeline.num_ia_set_primitive_topology);
+                _sg_imgui_frame_stats(d3d11.pipeline.num_ia_set_input_layout);
+                _sg_imgui_frame_stats(d3d11.pipeline.num_vs_set_shader);
+                _sg_imgui_frame_stats(d3d11.pipeline.num_vs_set_constant_buffers);
+                _sg_imgui_frame_stats(d3d11.pipeline.num_ps_set_shader);
+                _sg_imgui_frame_stats(d3d11.pipeline.num_ps_set_constant_buffers);
+                _sg_imgui_frame_stats(d3d11.bindings.num_ia_set_vertex_buffers);
+                _sg_imgui_frame_stats(d3d11.bindings.num_ia_set_index_buffer);
+                _sg_imgui_frame_stats(d3d11.bindings.num_vs_set_shader_resources);
+                _sg_imgui_frame_stats(d3d11.bindings.num_ps_set_shader_resources);
+                _sg_imgui_frame_stats(d3d11.bindings.num_vs_set_samplers);
+                _sg_imgui_frame_stats(d3d11.bindings.num_ps_set_samplers);
+                _sg_imgui_frame_stats(d3d11.uniforms.num_update_subresource);
+                _sg_imgui_frame_stats(d3d11.draw.num_draw_indexed_instanced);
+                _sg_imgui_frame_stats(d3d11.draw.num_draw_indexed);
+                _sg_imgui_frame_stats(d3d11.draw.num_draw_instanced);
+                _sg_imgui_frame_stats(d3d11.draw.num_draw);
+                _sg_imgui_frame_stats(d3d11.num_map);
+                _sg_imgui_frame_stats(d3d11.num_unmap);
                 break;
             default: break;
         }
