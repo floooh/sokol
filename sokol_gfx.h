@@ -4103,6 +4103,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_TEXTURE_COMPARE_MODE 0x884C
         #define GL_TEXTURE_COMPARE_FUNC 0x884D
         #define GL_COMPARE_REF_TO_TEXTURE 0x884E
+        #define GL_TEXTURE_CUBE_MAP_SEAMLESS 0x884F
     #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
@@ -7366,6 +7367,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_context(_sg_context_t* ctx) {
     _SG_GL_CHECK_ERROR();
     // incoming texture data is generally expected to be packed tightly
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    #if defined(SOKOL_GLCORE33)
+        // enable seamless cubemap sampling (only desktop GL)
+        glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+    #endif
     return SG_RESOURCESTATE_VALID;
 }
 
