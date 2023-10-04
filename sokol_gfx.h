@@ -3908,6 +3908,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_TEXTURE_COMPARE_MODE 0x884C
         #define GL_TEXTURE_COMPARE_FUNC 0x884D
         #define GL_COMPARE_REF_TO_TEXTURE 0x884E
+        #define GL_TEXTURE_MAX_LEVEL 0x813D
     #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
