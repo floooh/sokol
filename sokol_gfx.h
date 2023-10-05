@@ -5387,6 +5387,23 @@ _SOKOL_PRIVATE uint32_t _sg_align_u32(uint32_t val, uint32_t align) {
     return (val + (align - 1)) & ~(align - 1);
 }
 
+typedef struct { int x, y, w, h; } _sg_recti_t;
+
+_SOKOL_PRIVATE _sg_recti_t _sg_clipi(int x, int y, int w, int h, int clip_width, int clip_height) {
+    x = _sg_min(_sg_max(0, x), clip_width-1);
+    y = _sg_min(_sg_max(0, y), clip_height-1);
+    if ((x + w) > clip_width) {
+        w = clip_width - x;
+    }
+    if ((y + h) > clip_height) {
+        h = clip_height - y;
+    }
+    w = _sg_max(w, 1);
+    h = _sg_max(h, 1);
+    const _sg_recti_t res = { x, y, w, h };
+    return res;
+}
+
 _SOKOL_PRIVATE int _sg_vertexformat_bytesize(sg_vertex_format fmt) {
     switch (fmt) {
         case SG_VERTEXFORMAT_FLOAT:     return 4;
@@ -12102,22 +12119,12 @@ _SOKOL_PRIVATE void _sg_mtl_apply_scissor_rect(int x, int y, int w, int h, bool 
     }
     SOKOL_ASSERT(nil != _sg.mtl.cmd_encoder);
     // clip against framebuffer rect
-    x = _sg_min(_sg_max(0, x), _sg.mtl.cur_width-1);
-    y = _sg_min(_sg_max(0, y), _sg.mtl.cur_height-1);
-    if ((x + w) > _sg.mtl.cur_width) {
-        w = _sg.mtl.cur_width - x;
-    }
-    if ((y + h) > _sg.mtl.cur_height) {
-        h = _sg.mtl.cur_height - y;
-    }
-    w = _sg_max(w, 1);
-    h = _sg_max(h, 1);
-
+    const _sg_recti_t clip = _sg_clipi(x, y, w, h, _sg.mtl.cur_width, _sg.mtl.cur_height);
     MTLScissorRect r;
-    r.x = (NSUInteger)x;
-    r.y = (NSUInteger) (origin_top_left ? y : (_sg.mtl.cur_height - (y + h)));
-    r.width = (NSUInteger)w;
-    r.height = (NSUInteger)h;
+    r.x = (NSUInteger)clip.x;
+    r.y = (NSUInteger) (origin_top_left ? clip.y : (_sg.mtl.cur_height - (clip.y + clip.h)));
+    r.width = (NSUInteger)clip.w;
+    r.height = (NSUInteger)clip.h;
     [_sg.mtl.cmd_encoder setScissorRect:r];
 }
 
@@ -14016,35 +14023,26 @@ _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
 _SOKOL_PRIVATE void _sg_wgpu_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_sg.wgpu.in_pass);
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
-    float xf = (float) x;
-    float yf = (float) (origin_top_left ? y : (_sg.wgpu.cur_height - (y + h)));
-    float wf = (float) w;
-    float hf = (float) h;
+    // FIXME FIXME FIXME: CLIPPING THE VIEWPORT HERE IS WRONG!!!
+    // (but currently required because WebGPU insists that the viewport rectangle must be
+    // fully contained inside the framebuffer, but this doesn't make any sense, and also
+    // isn't required by the backend APIs)
+    const _sg_recti_t clip = _sg_clipi(x, y, w, h, _sg.wgpu.cur_width, _sg.wgpu.cur_height);
+    float xf = (float) clip.x;
+    float yf = (float) (origin_top_left ? clip.y : (_sg.wgpu.cur_height - (clip.y + clip.h)));
+    float wf = (float) clip.w;
+    float hf = (float) clip.h;
     wgpuRenderPassEncoderSetViewport(_sg.wgpu.pass_enc, xf, yf, wf, hf, 0.0f, 1.0f);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_sg.wgpu.in_pass);
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
-    SOKOL_ASSERT(_sg.wgpu.in_pass);
-    SOKOL_ASSERT(_sg.wgpu.pass_enc);
-
-    // clip against framebuffer rect
-    x = _sg_min(_sg_max(0, x), _sg.wgpu.cur_width-1);
-    y = _sg_min(_sg_max(0, y), _sg.wgpu.cur_height-1);
-    if ((x + w) > _sg.wgpu.cur_width) {
-        w = _sg.wgpu.cur_width - x;
-    }
-    if ((y + h) > _sg.wgpu.cur_height) {
-        h = _sg.wgpu.cur_height - y;
-    }
-    w = _sg_max(w, 1);
-    h = _sg_max(h, 1);
-
-    uint32_t sx = (uint32_t) x;
-    uint32_t sy = (uint32_t) (origin_top_left ? y : (_sg.wgpu.cur_height - (y + h)));
-    uint32_t sw = (uint32_t) w;
-    uint32_t sh = (uint32_t) h;
+    const _sg_recti_t clip = _sg_clipi(x, y, w, h, _sg.wgpu.cur_width, _sg.wgpu.cur_height);
+    uint32_t sx = (uint32_t) clip.x;
+    uint32_t sy = (uint32_t) (origin_top_left ? clip.y : (_sg.wgpu.cur_height - (clip.y + clip.h)));
+    uint32_t sw = (uint32_t) clip.w;
+    uint32_t sh = (uint32_t) clip.h;
     wgpuRenderPassEncoderSetScissorRect(_sg.wgpu.pass_enc, sx, sy, sw, sh);
 }
 
