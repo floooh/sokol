@@ -10757,7 +10757,6 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     #if (MAC_OS_X_VERSION_MAX_ALLOWED >= 120000) || (__IPHONE_OS_VERSION_MAX_ALLOWED >= 140000)
     if (@available(macOS 12.0, iOS 14.0, *)) {
         _sg.features.image_clamp_to_border = [_sg.mtl.device supportsFamily:MTLGPUFamilyApple7]
-                                             || [_sg.mtl.device supportsFamily:MTLGPUFamilyApple8]
                                              || [_sg.mtl.device supportsFamily:MTLGPUFamilyMac2];
         #if (MAC_OS_X_VERSION_MAX_ALLOWED >= 130000) || (__IPHONE_OS_VERSION_MAX_ALLOWED >= 160000)
         if (!_sg.features.image_clamp_to_border) {
