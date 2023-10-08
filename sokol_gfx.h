@@ -13505,6 +13505,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
     wgpu_texview_desc.mipLevelCount = (uint32_t)img->cmn.num_mipmaps;
     if (img->cmn.type == SG_IMAGETYPE_CUBE) {
         wgpu_texview_desc.arrayLayerCount = 6;
+    } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
+        wgpu_texview_desc.arrayLayerCount = (uint32_t)img->cmn.num_slices;
     } else {
         wgpu_texview_desc.arrayLayerCount = 1;
     }
