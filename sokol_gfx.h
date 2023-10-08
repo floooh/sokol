@@ -13506,10 +13506,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
     if (img->cmn.type == SG_IMAGETYPE_CUBE) {
         wgpu_texview_desc.arrayLayerCount = 6;
     } else {
-        wgpu_texview_desc.arrayLayerCount = (uint32_t)img->cmn.num_slices;
+        wgpu_texview_desc.arrayLayerCount = 1;
     }
-    // FIXME: should aspect be DepthOnly for all depth texture formats?
-    wgpu_texview_desc.aspect = WGPUTextureAspect_All;
+    if (_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format)) {
+        wgpu_texview_desc.aspect = WGPUTextureAspect_DepthOnly;
+    } else {
+        wgpu_texview_desc.aspect = WGPUTextureAspect_All;
+    }
     img->wgpu.view = wgpuTextureCreateView(img->wgpu.tex, &wgpu_texview_desc);
     if (0 == img->wgpu.view) {
         _SG_ERROR(WGPU_CREATE_TEXTURE_VIEW_FAILED);
