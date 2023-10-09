@@ -13420,6 +13420,7 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     _sg_wgpu_bindings_cache_clear();
 
     // create an empty bind group for shader stages without bound images
+    // FIXME: once WebGPU supports setting null objects, this can be removed
     WGPUBindGroupLayoutDescriptor bgl_desc;
     _sg_clear(&bgl_desc, sizeof(bgl_desc));
     WGPUBindGroupLayout empty_bgl = wgpuDeviceCreateBindGroupLayout(_sg.wgpu.dev, &bgl_desc);
@@ -13689,7 +13690,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_sampler(_sg_sampler_t* smp, con
 _SOKOL_PRIVATE void _sg_wgpu_discard_sampler(_sg_sampler_t* smp) {
     SOKOL_ASSERT(smp);
     if (smp->wgpu.smp) {
-        wgpuSamplerReference(smp->wgpu.smp);
+        wgpuSamplerRelease(smp->wgpu.smp);
         smp->wgpu.smp = 0;
     }
 }
