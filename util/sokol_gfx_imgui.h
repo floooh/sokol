@@ -4273,13 +4273,13 @@ _SOKOL_PRIVATE void _sg_imgui_draw_frame_stats_panel(sg_imgui_t* ctx) {
                 _sg_imgui_frame_stats(wgpu.uniforms.num_set_bindgroup);
                 _sg_imgui_frame_stats(wgpu.uniforms.size_write_buffer);
                 _sg_imgui_frame_stats(wgpu.bindings.num_set_vertex_buffer);
-                _sg_imgui_frame_stats(wgpu.bindings.num_skip_set_vertex_buffer);
+                _sg_imgui_frame_stats(wgpu.bindings.num_skip_redundant_vertex_buffer);
                 _sg_imgui_frame_stats(wgpu.bindings.num_set_index_buffer);
-                _sg_imgui_frame_stats(wgpu.bindings.num_skip_set_index_buffer);
+                _sg_imgui_frame_stats(wgpu.bindings.num_skip_redundant_index_buffer);
                 _sg_imgui_frame_stats(wgpu.bindings.num_create_bindgroup);
                 _sg_imgui_frame_stats(wgpu.bindings.num_discard_bindgroup);
                 _sg_imgui_frame_stats(wgpu.bindings.num_set_bindgroup);
-                _sg_imgui_frame_stats(wgpu.bindings.num_set_empty_bindgroup);
+                _sg_imgui_frame_stats(wgpu.bindings.num_skip_redundant_bindgroup);
                 _sg_imgui_frame_stats(wgpu.bindings.num_bindgroup_cache_hits);
                 _sg_imgui_frame_stats(wgpu.bindings.num_bindgroup_cache_misses);
                 _sg_imgui_frame_stats(wgpu.bindings.num_bindgroup_cache_collisions);
