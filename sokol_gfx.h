@@ -68,7 +68,7 @@
 
     sokol_gfx DOES NOT:
     ===================
-    - create a window or the 3D-API context/device, you must do this
+    - create a window, swapchain or the 3D-API context/device, you must do this
       before sokol_gfx is initialized, and pass any required information
       (like 3D device pointers) to the sokol_gfx initialization call
 
@@ -404,7 +404,7 @@
         - https://floooh.github.io/sokol-html5/mrt-sapp.html
         - https://floooh.github.io/sokol-html5/mrt-pixelformats-sapp.html
 
-    A render pass wraps rendering commands into a common set of render target images
+    A render pass groups rendering commands into a set of render target images
     (called 'pass attachments'). Render target images can be used in subsequent
     passes as textures (it is invalid to use the same image both as render target
     and as texture in the same pass).
@@ -1259,7 +1259,7 @@ extern "C" {
     sg_buffer:      vertex- and index-buffers
     sg_image:       images used as textures and render targets
     sg_sampler      sampler object describing how a texture is sampled in a shader
-    sg_shader:      vertex- and fragment-shaders, uniform blocks
+    sg_shader:      vertex- and fragment-shaders and shader interface information
     sg_pipeline:    associated shader and vertex-layouts, and render states
     sg_pass:        a bundle of render targets and actions on them
     sg_context:     a 'context handle' for switching between 3D-API contexts
@@ -2974,13 +2974,13 @@ typedef struct sg_frame_stats_wgpu_uniforms {
 
 typedef struct sg_frame_stats_wgpu_bindings {
     uint32_t num_set_vertex_buffer;
-    uint32_t num_skip_set_vertex_buffer;
+    uint32_t num_skip_redundant_vertex_buffer;
     uint32_t num_set_index_buffer;
-    uint32_t num_skip_set_index_buffer;
+    uint32_t num_skip_redundant_index_buffer;
     uint32_t num_create_bindgroup;
     uint32_t num_discard_bindgroup;
     uint32_t num_set_bindgroup;
-    uint32_t num_set_empty_bindgroup;
+    uint32_t num_skip_redundant_bindgroup;
     uint32_t num_bindgroup_cache_hits;
     uint32_t num_bindgroup_cache_misses;
     uint32_t num_bindgroup_cache_collisions;
@@ -3313,6 +3313,9 @@ typedef enum sg_log_item {
     .uniform_buffer_size    4 MB (4*1024*1024)
     .max_commit_listeners   1024
     .disable_validation     false
+    .mtl_force_managed_storage_mode false
+    .wgpu_disable_bindgroups_cache  false
+    .wgpu_bindgroups_cache_size     1024
 
     .allocator.alloc_fn     0 (in this case, malloc() will be called)
     .allocator.free_fn      0 (in this case, free() will be called)
@@ -3333,6 +3336,10 @@ typedef enum sg_log_item {
         must hold a strong reference to the Objective-C object for the
         duration of the sokol_gfx call!
 
+        .mtl_force_managed_storage_mode
+            when enabled, Metal buffers and texture resources are created in managed storage
+            mode, otherwise sokol-gfx will decide whether to create buffers and
+            textures in managed or shared storage mode (this is mainly a debugging option)
         .context.metal.device
             a pointer to the MTLDevice object
         .context.metal.renderpass_descriptor_cb
@@ -3372,6 +3379,19 @@ typedef enum sg_log_item {
             callback functions
 
     WebGPU specific:
+        .wgpu_disable_bindgroups_cache
+            When this is true, the WebGPU backend will create and immediately
+            release a BindGroup object in the sg_apply_bindings() call, only
+            use this for debugging purposes.
+        .wgpu_bindgroups_cache_size
+            The size of the bindgroups cache for re-using BindGroup objects
+            between sg_apply_bindings() calls. The smaller the cache size,
+            the more likely are cache slot collisions which will cause
+            a BindGroups object to be destroyed and a new one created.
+            Use the information returned by sg_query_stats() to check
+            if this is a frequent occurence, and increase the cache size as
+            needed (the default is 1024).
+            NOTE: wgpu_bindgroups_cache_size must be a power-of-2 number!
         .context.wgpu.device
             a WGPUDevice handle
         .context.wgpu.render_format
@@ -3507,7 +3527,7 @@ typedef struct sg_desc {
     int max_commit_listeners;
     bool disable_validation;    // disable validation layer even in debug mode, useful for tests
     bool mtl_force_managed_storage_mode; // for debugging: use Metal managed storage mode for resources even with UMA
-    bool wgpu_disable_bindgroups_cache;  // set to false to disable the WebGPU backend BindGroup cache
+    bool wgpu_disable_bindgroups_cache;  // set to true to disable the WebGPU backend BindGroup cache
     int wgpu_bindgroups_cache_size;      // number of slots in the WebGPU bindgroup cache (must be 2^N)
     sg_allocator allocator;
     sg_logger logger; // optional log function override
@@ -4207,7 +4227,7 @@ typedef struct {
     sg_resource_state state;
 } _sg_slot_t;
 
-// a common resource pool housekeeping struct
+// resource pool housekeeping struct
 typedef struct {
     int size;
     int queue_top;
@@ -5147,6 +5167,7 @@ typedef struct {
         sg_buffer buffer;
         int offset;
     } ib;
+    _sg_wgpu_bindgroup_handle_t bg;
 } _sg_wgpu_bindings_cache_t;
 
 // the WGPU backend state
@@ -12526,8 +12547,8 @@ _SOKOL_PRIVATE WGPUVertexFormat _sg_wgpu_vertexformat(sg_vertex_format f) {
         case SG_VERTEXFORMAT_USHORT4N:      return WGPUVertexFormat_Unorm16x4;
         case SG_VERTEXFORMAT_HALF2:         return WGPUVertexFormat_Float16x2;
         case SG_VERTEXFORMAT_HALF4:         return WGPUVertexFormat_Float16x4;
-        // FIXME! UINT10_N2
-        case SG_VERTEXFORMAT_UINT10_N2:
+        // FIXME! UINT10_N2 (see https://github.com/gpuweb/gpuweb/issues/4275)
+        case SG_VERTEXFORMAT_UINT10_N2:     return WGPUVertexFormat_Undefined;
         default:
             SOKOL_UNREACHABLE;
             return WGPUVertexFormat_Force32;
@@ -12541,7 +12562,9 @@ _SOKOL_PRIVATE WGPUPrimitiveTopology _sg_wgpu_topology(sg_primitive_type t) {
         case SG_PRIMITIVETYPE_LINE_STRIP:       return WGPUPrimitiveTopology_LineStrip;
         case SG_PRIMITIVETYPE_TRIANGLES:        return WGPUPrimitiveTopology_TriangleList;
         case SG_PRIMITIVETYPE_TRIANGLE_STRIP:   return WGPUPrimitiveTopology_TriangleStrip;
-        default: SOKOL_UNREACHABLE; return WGPUPrimitiveTopology_Force32;
+        default:
+            SOKOL_UNREACHABLE;
+            return WGPUPrimitiveTopology_Force32;
     }
 }
 
@@ -12554,7 +12577,9 @@ _SOKOL_PRIVATE WGPUCullMode _sg_wgpu_cullmode(sg_cull_mode cm) {
         case SG_CULLMODE_NONE:      return WGPUCullMode_None;
         case SG_CULLMODE_FRONT:     return WGPUCullMode_Front;
         case SG_CULLMODE_BACK:      return WGPUCullMode_Back;
-        default: SOKOL_UNREACHABLE; return WGPUCullMode_Force32;
+        default:
+            SOKOL_UNREACHABLE;
+            return WGPUCullMode_Force32;
     }
 }
 
@@ -12625,6 +12650,8 @@ _SOKOL_PRIVATE WGPUTextureFormat _sg_wgpu_textureformat(sg_pixel_format p) {
         case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
         case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:
         case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:
+            return WGPUTextureFormat_Undefined;
+
         default:
             SOKOL_UNREACHABLE;
             return WGPUTextureFormat_Force32;
@@ -12641,7 +12668,9 @@ _SOKOL_PRIVATE WGPUCompareFunction _sg_wgpu_comparefunc(sg_compare_func f) {
         case SG_COMPAREFUNC_NOT_EQUAL:      return WGPUCompareFunction_NotEqual;
         case SG_COMPAREFUNC_GREATER_EQUAL:  return WGPUCompareFunction_GreaterEqual;
         case SG_COMPAREFUNC_ALWAYS:         return WGPUCompareFunction_Always;
-        default: SOKOL_UNREACHABLE; return WGPUCompareFunction_Force32;
+        default:
+            SOKOL_UNREACHABLE;
+            return WGPUCompareFunction_Force32;
     }
 }
 
@@ -12655,7 +12684,9 @@ _SOKOL_PRIVATE WGPUStencilOperation _sg_wgpu_stencilop(sg_stencil_op op) {
         case SG_STENCILOP_INVERT:       return WGPUStencilOperation_Invert;
         case SG_STENCILOP_INCR_WRAP:    return WGPUStencilOperation_IncrementWrap;
         case SG_STENCILOP_DECR_WRAP:    return WGPUStencilOperation_DecrementWrap;
-        default: SOKOL_UNREACHABLE; return WGPUStencilOperation_Force32;
+        default:
+            SOKOL_UNREACHABLE;
+            return WGPUStencilOperation_Force32;
     }
 }
 
@@ -12664,7 +12695,9 @@ _SOKOL_PRIVATE WGPUBlendOperation _sg_wgpu_blendop(sg_blend_op op) {
         case SG_BLENDOP_ADD:                return WGPUBlendOperation_Add;
         case SG_BLENDOP_SUBTRACT:           return WGPUBlendOperation_Subtract;
         case SG_BLENDOP_REVERSE_SUBTRACT:   return WGPUBlendOperation_ReverseSubtract;
-        default: SOKOL_UNREACHABLE; return WGPUBlendOperation_Force32;
+        default:
+            SOKOL_UNREACHABLE;
+            return WGPUBlendOperation_Force32;
     }
 }
 
@@ -12687,7 +12720,8 @@ _SOKOL_PRIVATE WGPUBlendFactor _sg_wgpu_blendfactor(sg_blend_factor f) {
         case SG_BLENDFACTOR_BLEND_ALPHA:            return WGPUBlendFactor_Constant;
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return WGPUBlendFactor_OneMinusConstant;
         default:
-            SOKOL_UNREACHABLE; return WGPUBlendFactor_Force32;
+            SOKOL_UNREACHABLE;
+            return WGPUBlendFactor_Force32;
     }
 }
 
@@ -12751,6 +12785,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
 
     // FIXME: in webgpu.h, wgpuDeviceGetLimits() has a boolean return value, but
     // the JS shim doesn't actually return anything
+    // (see: https://github.com/emscripten-core/emscripten/issues/20278)
     wgpuDeviceGetLimits(_sg.wgpu.dev, &_sg.wgpu.limits);
 
     const WGPULimits* l = &_sg.wgpu.limits.limits;
@@ -13194,30 +13229,81 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_bindgroups_cache_get(uint64_t hash) {
     return _sg.wgpu.bindgroups_cache.items[index].id;
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_bindcache_clear(void) {
+_SOKOL_PRIVATE void _sg_wgpu_bindings_cache_clear(void) {
     memset(&_sg.wgpu.bindings_cache, 0, sizeof(_sg.wgpu.bindings_cache));
 }
 
-_SOKOL_PRIVATE bool _sg_wgpu_bindcache_vb_dirty(int index, const _sg_buffer_t* vb, int offset) {
-    SOKOL_ASSERT(vb && (index >= 0) && (index < SG_MAX_VERTEX_BUFFERS));
-    return (vb->slot.id != _sg.wgpu.bindings_cache.vbs[index].buffer.id) || (offset != _sg.wgpu.bindings_cache.vbs[index].offset);
+_SOKOL_PRIVATE bool _sg_wgpu_bindings_cache_vb_dirty(int index, const _sg_buffer_t* vb, int offset) {
+    SOKOL_ASSERT((index >= 0) && (index < SG_MAX_VERTEX_BUFFERS));
+    if (vb) {
+        return (_sg.wgpu.bindings_cache.vbs[index].buffer.id != vb->slot.id)
+            || (_sg.wgpu.bindings_cache.vbs[index].offset != offset);
+    } else {
+        return _sg.wgpu.bindings_cache.vbs[index].buffer.id != SG_INVALID_ID;
+    }
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_bindcache_vb_update(int index, const _sg_buffer_t* vb, int offset) {
-    SOKOL_ASSERT(vb && (index >= 0) && (index < SG_MAX_VERTEX_BUFFERS));
-    _sg.wgpu.bindings_cache.vbs[index].buffer.id = vb->slot.id;
-    _sg.wgpu.bindings_cache.vbs[index].offset = offset;
+_SOKOL_PRIVATE void _sg_wgpu_bindings_cache_vb_update(int index, const _sg_buffer_t* vb, int offset) {
+    SOKOL_ASSERT((index >= 0) && (index < SG_MAX_VERTEX_BUFFERS));
+    if (vb) {
+        _sg.wgpu.bindings_cache.vbs[index].buffer.id = vb->slot.id;
+        _sg.wgpu.bindings_cache.vbs[index].offset = offset;
+    } else {
+        _sg.wgpu.bindings_cache.vbs[index].buffer.id = SG_INVALID_ID;
+        _sg.wgpu.bindings_cache.vbs[index].offset = 0;
+    }
 }
 
-_SOKOL_PRIVATE bool _sg_wgpu_bindcache_ib_dirty(const _sg_buffer_t* ib, int ib_offset) {
-    SOKOL_ASSERT(ib);
-    return (ib->slot.id != _sg.wgpu.bindings_cache.ib.buffer.id) || (ib_offset != _sg.wgpu.bindings_cache.ib.offset);
+_SOKOL_PRIVATE bool _sg_wgpu_bindings_cache_ib_dirty(const _sg_buffer_t* ib, int offset) {
+    if (ib) {
+        return (_sg.wgpu.bindings_cache.ib.buffer.id != ib->slot.id)
+            || (_sg.wgpu.bindings_cache.ib.offset != offset);
+    } else {
+        return _sg.wgpu.bindings_cache.ib.buffer.id != SG_INVALID_ID;
+    }
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_bindcache_ib_update(const _sg_buffer_t* ib, int ib_offset) {
-    SOKOL_ASSERT(ib);
-    _sg.wgpu.bindings_cache.ib.buffer.id = ib->slot.id;
-    _sg.wgpu.bindings_cache.ib.offset = ib_offset;
+_SOKOL_PRIVATE void _sg_wgpu_bindings_cache_ib_update(const _sg_buffer_t* ib, int offset) {
+    if (ib) {
+        _sg.wgpu.bindings_cache.ib.buffer.id = ib->slot.id;
+        _sg.wgpu.bindings_cache.ib.offset = offset;
+    } else {
+        _sg.wgpu.bindings_cache.ib.buffer.id = SG_INVALID_ID;
+        _sg.wgpu.bindings_cache.ib.offset = 0;
+    }
+}
+
+_SOKOL_PRIVATE bool _sg_wgpu_bindings_cache_bg_dirty(const _sg_wgpu_bindgroup_t* bg) {
+    if (bg) {
+        return _sg.wgpu.bindings_cache.bg.id != bg->slot.id;
+    } else {
+        return _sg.wgpu.bindings_cache.bg.id != SG_INVALID_ID;
+    }
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_bindings_cache_bg_update(const _sg_wgpu_bindgroup_t* bg) {
+    if (bg) {
+        _sg.wgpu.bindings_cache.bg.id = bg->slot.id;
+    } else {
+        _sg.wgpu.bindings_cache.bg.id = SG_INVALID_ID;
+    }
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_set_image_sampler_bindgroup(_sg_wgpu_bindgroup_t* bg) {
+    if (_sg_wgpu_bindings_cache_bg_dirty(bg)) {
+        _sg_wgpu_bindings_cache_bg_update(bg);
+        _sg_stats_add(wgpu.bindings.num_set_bindgroup, 1);
+        if (bg) {
+            SOKOL_ASSERT(bg->slot.state == SG_RESOURCESTATE_VALID);
+            SOKOL_ASSERT(bg->bindgroup);
+            wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, _SG_WGPU_IMAGE_SAMPLER_BINDGROUP_INDEX, bg->bindgroup, 0, 0);
+        } else {
+            // a nullptr bindgroup means setting the empty bindgroup
+            wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, _SG_WGPU_IMAGE_SAMPLER_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
+        }
+    } else {
+        _sg_stats_add(wgpu.bindings.num_skip_redundant_bindgroup, 1);
+    }
 }
 
 _SOKOL_PRIVATE bool _sg_wgpu_apply_bindgroup(_sg_bindings_t* bnd) {
@@ -13249,9 +13335,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindgroup(_sg_bindings_t* bnd) {
                 _sg_wgpu_bindgroups_cache_set(key.hash, bg->slot.id);
             }
             if (bg && bg->slot.state == SG_RESOURCESTATE_VALID) {
-                SOKOL_ASSERT(bg->bindgroup);
-                _sg_stats_add(wgpu.bindings.num_set_bindgroup, 1);
-                wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, _SG_WGPU_IMAGE_SAMPLER_BINDGROUP_INDEX, bg->bindgroup, 0, 0);
+                _sg_wgpu_set_image_sampler_bindgroup(bg);
             } else {
                 return false;
             }
@@ -13260,9 +13344,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindgroup(_sg_bindings_t* bnd) {
             _sg_wgpu_bindgroup_t* bg = _sg_wgpu_create_bindgroup(bnd);
             if (bg) {
                 if (bg->slot.state == SG_RESOURCESTATE_VALID) {
-                    SOKOL_ASSERT(bg->bindgroup);
-                    _sg_stats_add(wgpu.bindings.num_set_bindgroup, 1);
-                    wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, _SG_WGPU_IMAGE_SAMPLER_BINDGROUP_INDEX, bg->bindgroup, 0, 0);
+                    _sg_wgpu_set_image_sampler_bindgroup(bg);
                 }
                 _sg_wgpu_discard_bindgroup(bg);
             } else {
@@ -13270,9 +13352,44 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindgroup(_sg_bindings_t* bnd) {
             }
         }
     } else {
-        _sg_stats_add(wgpu.bindings.num_set_empty_bindgroup, 1);
-        wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, _SG_WGPU_IMAGE_SAMPLER_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
+        _sg_wgpu_set_image_sampler_bindgroup(0);
     }
+    return true;
+}
+_SOKOL_PRIVATE bool _sg_wgpu_apply_index_buffer(_sg_bindings_t* bnd) {
+    if (_sg_wgpu_bindings_cache_ib_dirty(bnd->ib, bnd->ib_offset)) {
+        _sg_wgpu_bindings_cache_ib_update(bnd->ib, bnd->ib_offset);
+        if (bnd->ib) {
+            const WGPUIndexFormat format = _sg_wgpu_indexformat(bnd->pip->cmn.index_type);
+            const uint64_t buf_size = (uint64_t)bnd->ib->cmn.size;
+            const uint64_t offset = (uint64_t)bnd->ib_offset;
+            SOKOL_ASSERT(buf_size > offset);
+            const uint64_t max_bytes = buf_size - offset;
+            wgpuRenderPassEncoderSetIndexBuffer(_sg.wgpu.pass_enc, bnd->ib->wgpu.buf, format, offset, max_bytes);
+            _sg_stats_add(wgpu.bindings.num_set_index_buffer, 1);
+        }
+        // FIXME: else-path should actually set a null index buffer (this was just recently implemented in WebGPU)
+    } else {
+        _sg_stats_add(wgpu.bindings.num_skip_redundant_index_buffer, 1);
+    }
+    return true;
+}
+
+_SOKOL_PRIVATE bool _sg_wgpu_apply_vertex_buffers(_sg_bindings_t* bnd) {
+    for (int slot = 0; slot < bnd->num_vbs; slot++) {
+        if (_sg_wgpu_bindings_cache_vb_dirty(slot, bnd->vbs[slot], bnd->vb_offsets[slot])) {
+            _sg_wgpu_bindings_cache_vb_update(slot, bnd->vbs[slot], bnd->vb_offsets[slot]);
+            const uint64_t buf_size = (uint64_t)bnd->vbs[slot]->cmn.size;
+            const uint64_t offset = (uint64_t)bnd->vb_offsets[slot];
+            SOKOL_ASSERT(buf_size > offset);
+            const uint64_t max_bytes = buf_size - offset;
+            wgpuRenderPassEncoderSetVertexBuffer(_sg.wgpu.pass_enc, (uint32_t)slot, bnd->vbs[slot]->wgpu.buf, offset, max_bytes);
+            _sg_stats_add(wgpu.bindings.num_set_vertex_buffer, 1);
+        } else {
+            _sg_stats_add(wgpu.bindings.num_skip_redundant_vertex_buffer, 1);
+        }
+    }
+    // FIXME: remaining vb slots should actually set a null vertex buffer (this was just recently implemented in WebGPU)
     return true;
 }
 
@@ -13296,11 +13413,11 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     _sg.wgpu.queue = wgpuDeviceGetQueue(_sg.wgpu.dev);
     SOKOL_ASSERT(_sg.wgpu.queue);
 
-    _sg_wgpu_bindcache_clear();
     _sg_wgpu_init_caps();
     _sg_wgpu_uniform_buffer_init(desc);
     _sg_wgpu_bindgroups_pool_init(desc);
     _sg_wgpu_bindgroups_cache_init(desc);
+    _sg_wgpu_bindings_cache_clear();
 
     // create an empty bind group for shader stages without bound images
     WGPUBindGroupLayoutDescriptor bgl_desc;
@@ -13335,7 +13452,7 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_reset_state_cache(void) {
-    // FIXME
+    _sg_wgpu_bindings_cache_clear();
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_context(_sg_context_t* ctx) {
@@ -13956,7 +14073,7 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
     _sg.wgpu.cur_height = h;
     _sg.wgpu.cur_pipeline = 0;
     _sg.wgpu.cur_pipeline_id.id = SG_INVALID_ID;
-    _sg_wgpu_bindcache_clear();
+    _sg_wgpu_bindings_cache_clear();
 
     WGPURenderPassDescriptor wgpu_pass_desc;
     WGPURenderPassColorAttachment wgpu_color_att[SG_MAX_COLOR_ATTACHMENTS];
@@ -14070,42 +14187,9 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindings(_sg_bindings_t* bnd) {
     SOKOL_ASSERT(bnd);
     SOKOL_ASSERT(bnd->pip->shader && (bnd->pip->cmn.shader_id.id == bnd->pip->shader->slot.id));
     bool retval = true;
-
-    // index buffer
-    if (bnd->ib) {
-        if (_sg_wgpu_bindcache_ib_dirty(bnd->ib, bnd->ib_offset)) {
-            _sg_wgpu_bindcache_ib_update(bnd->ib, bnd->ib_offset);
-            const WGPUIndexFormat format = _sg_wgpu_indexformat(bnd->pip->cmn.index_type);
-            const uint64_t buf_size = (uint64_t)bnd->ib->cmn.size;
-            const uint64_t offset = (uint64_t)bnd->ib_offset;
-            SOKOL_ASSERT(buf_size > offset);
-            const uint64_t max_bytes = buf_size - offset;
-            wgpuRenderPassEncoderSetIndexBuffer(_sg.wgpu.pass_enc, bnd->ib->wgpu.buf, format, offset, max_bytes);
-            _sg_stats_add(wgpu.bindings.num_set_index_buffer, 1);
-        } else {
-            _sg_stats_add(wgpu.bindings.num_skip_set_index_buffer, 1);
-        }
-    }
-    // FIXME: else-path should actually set a null index buffer (this was just recently implemented in WebGPU)
-
-    // vertex buffers
-    for (int slot = 0; slot < bnd->num_vbs; slot++) {
-        if (_sg_wgpu_bindcache_vb_dirty(slot, bnd->vbs[slot], bnd->vb_offsets[slot])) {
-            _sg_wgpu_bindcache_vb_update(slot, bnd->vbs[slot], bnd->vb_offsets[slot]);
-            const uint64_t buf_size = (uint64_t)bnd->vbs[slot]->cmn.size;
-            const uint64_t offset = (uint64_t)bnd->vb_offsets[slot];
-            SOKOL_ASSERT(buf_size > offset);
-            const uint64_t max_bytes = buf_size - offset;
-            wgpuRenderPassEncoderSetVertexBuffer(_sg.wgpu.pass_enc, (uint32_t)slot, bnd->vbs[slot]->wgpu.buf, offset, max_bytes);
-            _sg_stats_add(wgpu.bindings.num_set_vertex_buffer, 1);
-        } else {
-            _sg_stats_add(wgpu.bindings.num_skip_set_vertex_buffer, 1);
-        }
-        // FIXME: else-path should actually set a null vertex buffer (this was just recently implemented in WebGPU)
-    }
-
-    _sg_wgpu_apply_bindgroup(bnd);
-
+    retval &= _sg_wgpu_apply_index_buffer(bnd);
+    retval &= _sg_wgpu_apply_vertex_buffers(bnd);
+    retval &= _sg_wgpu_apply_bindgroup(bnd);
     return retval;
 }
 
