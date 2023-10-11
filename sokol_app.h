@@ -5922,7 +5922,7 @@ _SOKOL_PRIVATE void _sapp_gl_init_fbselect(_sapp_gl_fbselect* fbselect) {
     fbselect->best_match = false;
 }
 
-_SOKOL_PRIVATE const bool _sapp_gl_select_fbconfig(_sapp_gl_fbselect* fbselect, const _sapp_gl_fbconfig* desired, const _sapp_gl_fbconfig* current) {
+_SOKOL_PRIVATE bool _sapp_gl_select_fbconfig(_sapp_gl_fbselect* fbselect, const _sapp_gl_fbconfig* desired, const _sapp_gl_fbconfig* current) {
     int missing = 0;
     if (desired->doublebuffer != current->doublebuffer) {
         return false;
