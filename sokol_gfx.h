@@ -602,9 +602,9 @@
     ==================
     sokol-gfx doesn't come with an integrated shader cross-compiler, instead
     backend-specific shader sources or binary blobs need to be provided when
-    creating a shader object, along with information about the shader interface
-    needed in the sokol-gfx validation layer and to properly bind shader resources
-    on the CPU-side to be consumable by the GPU-side.
+    creating a shader object, along with information about the shader resource
+    binding interface needed in the sokol-gfx validation layer and to properly
+    bind shader resources on the CPU-side to be consumable by the GPU-side.
 
     The easiest way to provide all this shader creation data is to use the
     sokol-shdc shader compiler tool to compile shaders from a common
@@ -643,6 +643,7 @@
           load 'd3dcompiler_47.dll'
         - for the Metal backends, shaders can be provided as source or binary blobs, the
           MSL version should be in 'metal-1.1' (other versions may work but are not tested)
+        - for the WebGPU backend, shader must be provided as WGSL source code
         - optionally the following shader-code related attributes can be provided:
             - an entry function name (only on D3D11 or Metal, but not OpenGL)
             - on D3D11 only, a compilation target (default is "vs_4_0" and "ps_4_0")
@@ -651,6 +652,8 @@
       vertex shader:
         - Metal: no information needed since vertex attributes are always bound
           by their attribute location defined in the shader via '[[attribute(N)]]'
+        - WebGPU: no information needed since vertex attributes are always
+          bound by their attribute location defined in the shader via `@location(N)`
         - GLSL: vertex attribute names can be optionally provided, in that case their
           location will be looked up by name, otherwise, the vertex attribute location
           can be defined with 'layout(location = N)', PLEASE NOTE that the name-lookup method
@@ -671,23 +674,36 @@
           and CROSS-BACKEND COMMON UNIFORM DATA LAYOUT below!
 
     - A description of each texture/image used in the shader:
-        - the expected image type (e.g. 2D, 3D, etc...)
-        - the 'image sample type' (e.g. float, depth, signed- or unsigned-int)
+        - the expected image type:
+            - SG_IMAGETYPE_2D
+            - SG_IMAGETYPE_CUBE
+            - SG_IMAGETYPE_3D
+            - SG_IMAGETYPE_ARRAY
+        - the expected 'image sample type':
+            - SG_IMAGESAMPLETYPE_FLOAT
+            - SG_IMAGESAMPLETYPE_DEPTH
+            - SG_IMAGESAMPLETYPE_SINT
+            - SG_IMAGESAMPLETYPE_UINT
+            - SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT
         - a flag whether the texture is expected to be multisampled
           (currently it's not supported to fetch data from multisampled
           textures in shaders, but this is planned for a later time)
 
     - A description of each sampler used in the shader:
-        - just wether the sampler is a regular 'sampling sampler',
-          or a 'comparison sampler' (which is usually used for
-          shadow mapping)
+        - SG_SAMPLERTYPE_FILTERING,
+        - SG_SAMPLERTYPE_NONFILTERING,
+        - SG_SAMPLERTYPE_COMPARISON,
 
     - An array of 'image-sampler-pairs' used by the shader to sample textures,
-      for D3D11 and Metal this is only used for validation purposes to check
-      whether the texture and sampler are compatible with each other. For GLSL
-      an additional 'combined-image-sampler name' must be provided because
-      'OpenGL style GLSL' cannot handle separate texture and sampler objects,
-      but still groups them into a tradtional GLSL 'sampler object'.
+      for D3D11, Metal and WebGPU this is used for validation purposes to check
+      whether the texture and sampler are compatible with each other (especially
+      WebGPU is very picky about combining the correct
+      texture-sample-type with the correct sampler-type). For GLSL an
+      additional 'combined-image-sampler name' must be provided because 'OpenGL
+      style GLSL' cannot handle separate texture and sampler objects, but still
+      groups them into a tradtional GLSL 'sampler object'.
+
+
 
     For example code of how to create backend-specific shader objects,
     please refer to the following samples:
@@ -696,6 +712,47 @@
         - for Metal:    https://github.com/floooh/sokol-samples/tree/master/metal
         - for OpenGL:   https://github.com/floooh/sokol-samples/tree/master/glfw
         - for GLES3:    https://github.com/floooh/sokol-samples/tree/master/html5
+        - for WebGPI:   https://github.com/floooh/sokol-samples/tree/master/wgpu
+
+
+    ON SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT AND SG_SAMPLERTYPE_NONFILTERING
+    ========================================================================
+    The WebGPU backend introduces the concept of 'unfilterable-float' textures,
+    which can only be combined with 'nonfiltering' samplers (this is a restriction
+    specific to WebGPU, but since the same sokol-gfx code should work across
+    all backend, the sokol-gfx validation layer also enforces this restriction
+    - the alternative would be undefined behaviour in some backend APIs on
+    some devices).
+
+    The background is that some mobile devices (most notably iOS devices) can
+    not perform linear filtering when sampling textures with certain pixel
+    formats, most notable the 32F formats:
+
+        - SG_PIXELFORMAT_R32F
+        - SG_PIXELFORMAT_RG32F
+        - SG_PIXELFORMAT_RGBA32F
+
+    The information of whether a shader is going to be used with such an
+    unfilterable-float texture must already be provided in the sg_shader_desc
+    struct when creating the shader (see the above section "ON SHADER CREATION").
+
+    If you are using the sokol-shdc shader compiler, the information whether a
+    texture/sampler binding expects an 'unfilterable-float/nonfiltering'
+    texture/sampler combination cannot be inferred from the shader source
+    alone, you'll need to provide this hint via annotation-tags. For instance
+    here is an example from the ozz-skin-sapp.c sample shader which samples an
+    RGBA32F texture with skinning matrices in the vertex shader:
+
+    ```glsl
+    @image_sample_type joint_tex unfilterable_float
+    uniform texture2D joint_tex;
+    @sampler_type smp nonfiltering
+    uniform sampler smp;
+    ```
+
+    This will result in SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT and
+    SG_SAMPLERTYPE_NONFILTERING being written to the code-generated
+    sg_shader_desc struct.
 
 
     UNIFORM DATA LAYOUT:
@@ -1205,6 +1262,17 @@
     trigger a validation layer error, or if the validation layer is disabled,
     result in a pipeline object in FAILED state. Same when trying to create
     a pass object with invalid image objects.
+
+
+
+    WEBGPU CAVEATS
+    ==============
+    For a general overview and design notes of the WebGPU backend see:
+
+        https://floooh.github.io/2023/10/16/sokol-webgpu.html
+
+    TODO!
+
 
     LICENSE
     =======
