@@ -38,7 +38,7 @@ The major topic of this update is the 'finalized' WebGPU support in sokol_gfx.h 
 
 - There is a tiny breaking change in the sokol_gfx.h API (only requires action when not using sokol-shdc):
 
-  - the following `sg_sampler_type` enum items have been renamed to better harmonize with WebGPU:
+  - the following `sg_sampler_type` enum items have been renamed to better match their WebGPU counterparts:
     - SG_SAMPLERTYPE_SAMPLE => SG_SAMPLERTYPE_FILTERING
     - SG_SAMPLERTYPE_COMPARE => SG_SAMPLERTYPE_COMPARISON
 
@@ -68,7 +68,7 @@ The major topic of this update is the 'finalized' WebGPU support in sokol_gfx.h 
 - In sokol_app.h, the old wip WebGPU device and swapchain setup code is now implemented
   in pure C code (previously this was a mix of Javascript and C).
 
-- Also note that sokol_app.h currently only supports WebGPU setup in the Emscripten backend.
+- Also note that sokol_app.h currently only supports WebGPU in the Emscripten backend.
   If you want to use sokol_gfx.h with the WebGPU backend in a native scenario, you'll have
   to use a different window system glue library (like GLFW). The sokol-samples directory
   has a handful of examples for using sokol_gfx.h + Dawn + GLFW.
