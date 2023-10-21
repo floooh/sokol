@@ -1802,6 +1802,17 @@ typedef enum sg_image_type {
     layer in sg_apply_bindings() to check if the provided image object
     is compatible with what the shader expects, and also required by the
     WebGPU backend.
+
+    NOTE that the following texture pixel formats require the use
+    of SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT, combined with a sampler
+    of type SG_SAMPLERTYPE_NONFILTERING:
+
+    - SG_PIXELFORMAT_R32F
+    - SG_PIXELFORMAT_RG32F
+    - SG_PIXELFORMAT_RGBA32F
+
+    (when using sokol-shdc, also check out the tags `@image_sample_type`
+    and `@sampler_type`)
 */
 typedef enum sg_image_sample_type {
     _SG_IMAGESAMPLETYPE_DEFAULT,  // value 0 reserved for default-init
@@ -1819,6 +1830,16 @@ typedef enum sg_image_sample_type {
 
     The basic type of a texture sampler (sampling vs comparison) as
     defined in a shader. Must be provided in sg_shader_sampler_desc.
+
+    sg_image_sample_type and sg_sampler_type for a texture/sampler
+    pair must be compatible with each other, specifically only
+    the following pairs are allowed:
+
+    - SG_IMAGESAMPLETYPE_FLOAT / (SG_SAMPLERTYPE_FILTERING or SG_SAMPLERTYPE_NONFILTERING)
+    - SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT / SG_SAMPLERTYPE_NONFILTERING
+    - SG_IMAGESAMPLETYPE_SINT / SG_SAMPLERTYPE_NONFILTERING
+    - SG_IMAGESAMPLETYPE_UINT / SG_SAMPLERTYPE_NONFILTERING
+    - SG_IMAGESAMPLETYPE_DEPTH / SG_SAMPLERTYPE_COMPARISON
 */
 typedef enum sg_sampler_type {
     _SG_SAMPLERTYPE_DEFAULT,
