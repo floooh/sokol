@@ -1264,14 +1264,99 @@
     a pass object with invalid image objects.
 
 
-
     WEBGPU CAVEATS
     ==============
     For a general overview and design notes of the WebGPU backend see:
 
         https://floooh.github.io/2023/10/16/sokol-webgpu.html
 
-    TODO!
+    In general, don't expect an automatic speedup when switching from the WebGL2
+    backend to the WebGPU backend. Some WebGPU functions currently actually
+    have a higher CPU overhead than similar WebGL2 functions, leading to the
+    paradoxical situation that WebGPU code is slower than similar WebGL2
+    code.
+
+    - when writing WGSL shader code by hand, a specific bind-slot convention
+      must be used:
+
+      All uniform block structs must use `@group(0)`, with up to
+      4 uniform blocks per shader stage.
+        - Vertex shader uniform block bindings must start at `@group(0) @binding(0)`
+        - Fragment shader uniform blocks bindings must start at `@group(0) @binding(4)`
+
+      All textures and samplers must use `@group(1)` and start at specific
+      offsets depending on resource type and shader stage.
+        - Vertex shader textures must start at `@group(1) @binding(0)`
+        - Vertex shader samplers must start at `@group(1) @binding(16)`
+        - Fragment shader textures must start at `@group(1) @binding(32)`
+        - Fragment shader samplers must start at `@group(1) @binding(48)`
+
+      Note that the actual number of allowed per-stage texture- and sampler-bindings
+      in sokol-gfx is currently lower than the above ranges (currently only up to
+      12 textures and 8 samplers per shader stage are allowed).
+
+      If you use sokol-shdc to generate WGSL shader code, you don't need to worry
+      about the above binding convention since sokol-shdc assigns bind slots
+      automatically.
+
+    - The sokol-gfx WebGPU backend uses the sg_desc.uniform_buffer_size item
+      to allocate a single per-frame uniform buffer which must be big enough
+      to hold all data written by sg_apply_uniforms() during a single frame,
+      including a worst-case 256-byte alignment (e.g. each sg_apply_uniform
+      call will cost 256 bytes of uniform buffer size). The default size
+      is 4 MB, which is enough for 16384 sg_apply_uniform() calls per
+      frame (assuming the uniform data 'payload' is less than 256 bytes
+      per call). These rules are the same as for the Metal backend, so if
+      you are already using the Metal backend you'll be fine.
+
+    - sg_apply_bindings(): the sokol-gfx WebGPU backend implements a bindgroup
+      cache to prevent excessive creation and destruction of BindGroup objects
+      when calling sg_apply_bindings(). The number of slots in the bindgroups
+      cache is defined in sg_desc.wgpu_bindgroups_cache_size when calling
+      sg_setup. The cache size must be a power-of-2 numbers, with the default being
+      1024. The bindgroups cache behaviour can be observed by calling the new
+      function sg_query_frame_stats(), where the following struct items are
+      of interest:
+
+        .wgpu.num_bindgroup_cache_hits
+        .wgpu.num_bindgroup_cache_misses
+        .wgpu.num_bindgroup_cache_collisions
+        .wgpu.num_bindgroup_cache_vs_hash_key_mismatch
+
+      The value to pay attention to is `.wgpu.num_bindgroup_cache_collisions`,
+      if this number if consistently higher than a few percent of the
+      .wgpu.num_set_bindgroup value, it might be a good idea to bump the
+      bindgroups cache size to the next power-of-2.
+
+    - sg_apply_viewport(): WebGPU currently has a unique restriction that viewport
+      rectangles must be contained entirely within the framebuffer. As a shitty
+      workaround sokol_gfx.h will clip incoming viewport rectangles against
+      the framebuffer, but this will distort the clipspace-to-screenspace mapping.
+      There's no proper way to handle this inside sokol_gfx.h, this must be fixed
+      in a future WebGPU update.
+
+    - The sokol shader compiler generally adds `diagnostic(off, derivative_uniformity);`
+      into the WGSL output. Currently only the Chrome WebGPU implementation seems
+      to accept this.
+
+    - The vertex format SG_VERTEXFORMAT_UINT10_N2 is currently not supported because
+      WebGPU lacks a matching vertex format (this is currently being worked on though,
+      as soon as the vertex format shows up in webgpu.h, sokol_gfx.h will add support.
+
+    - Likewise, the following sokol-gfx vertex formats are not supported in WebGPU:
+      R16, R16SN, RG16, RG16SN, RGBA16, RGBA16SN and all PVRTC compressed format.
+      Unlike unsupported vertex formats, unsupported pixel formats can be queried
+      in cross-backend code via sg_query_pixel_format() though.
+
+    - The Emscripten WebGPU shim currently doesn't support the Closure minification
+      post-link-step (e.g. currently the emcc argument '--closure 1' or '--closure 2'
+      will generate broken Javascript code.
+
+    - sokol-gfx requires the WebGPU device feature `depth32float-stencil8` to be enabled
+      (this should be supported widely supported)
+
+    - sokol-gfx expects that the WebGPU device feature `float32-filterable` to *not* be
+      enabled (this would exclude all iOS devices)
 
 
     LICENSE
