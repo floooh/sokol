@@ -391,6 +391,26 @@
             }
         },
         {
+            "name": "emsc_wgpu_debug",
+            "generator": "Ninja",
+            "binaryDir": "build/emsc_wgpu_debug",
+            "toolchainFile": "build/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_WGPU",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "emsc_wgpu_release",
+            "generator": "Ninja",
+            "binaryDir": "build/emsc_wgpu_release",
+            "toolchainFile": "build/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_WGPU",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
             "name": "android_debug",
             "generator": "Ninja",
             "binaryDir": "build/android_debug",
@@ -643,6 +663,14 @@
         {
             "name": "emsc_webgl2_release",
             "configurePreset": "emsc_webgl2_release"
+        },
+        {
+            "name": "emsc_wgpu_debug",
+            "configurePreset": "emsc_wgpu_debug"
+        },
+        {
+            "name": "emsc_wgpu_release",
+            "configurePreset": "emsc_wgpu_release"
         },
         {
             "name": "android_debug",
