@@ -4390,7 +4390,9 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #ifndef GL_LUMINANCE
     #define GL_LUMINANCE 0x1909
     #endif
+    #ifndef _SG_GL_CHECK_ERROR
     #define _SG_GL_CHECK_ERROR() { SOKOL_ASSERT(glGetError() == GL_NO_ERROR); }
+    #endif
 #endif
 
 // ███████ ████████ ██████  ██    ██  ██████ ████████ ███████
@@ -11293,7 +11295,6 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     #if (MAC_OS_X_VERSION_MAX_ALLOWED >= 120000) || (__IPHONE_OS_VERSION_MAX_ALLOWED >= 140000)
     if (@available(macOS 12.0, iOS 14.0, *)) {
         _sg.features.image_clamp_to_border = [_sg.mtl.device supportsFamily:MTLGPUFamilyApple7]
-                                             || [_sg.mtl.device supportsFamily:MTLGPUFamilyApple8]
                                              || [_sg.mtl.device supportsFamily:MTLGPUFamilyMac2];
         #if (MAC_OS_X_VERSION_MAX_ALLOWED >= 130000) || (__IPHONE_OS_VERSION_MAX_ALLOWED >= 160000)
         if (!_sg.features.image_clamp_to_border) {
