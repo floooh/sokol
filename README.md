@@ -40,7 +40,7 @@ useful details for integrating the Sokol headers into your own project with your
 
 ## Core libraries
 
-- [**sokol\_gfx.h**](https://github.com/floooh/sokol/blob/master/sokol_gfx.h): 3D-API wrapper (GL + Metal + D3D11)
+- [**sokol\_gfx.h**](https://github.com/floooh/sokol/blob/master/sokol_gfx.h): 3D-API wrapper (GL/GLES3/WebGL2 + Metal + D3D11 + WebGPU)
 - [**sokol\_app.h**](https://github.com/floooh/sokol/blob/master/sokol_app.h): app framework wrapper (entry + window + 3D-context + input)
 - [**sokol\_time.h**](https://github.com/floooh/sokol/blob/master/sokol_time.h): time measurement
 - [**sokol\_audio.h**](https://github.com/floooh/sokol/blob/master/sokol_audio.h): minimal buffer-streaming audio playback
