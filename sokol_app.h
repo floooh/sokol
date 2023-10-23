@@ -5983,27 +5983,28 @@ _SOKOL_PRIVATE void _sapp_gl_init_fbselect(_sapp_gl_fbselect* fbselect) {
     fbselect->best_match = false;
 }
 
+// NOTE: this is used only in the WGL code path
 _SOKOL_PRIVATE bool _sapp_gl_select_fbconfig(_sapp_gl_fbselect* fbselect, const _sapp_gl_fbconfig* desired, const _sapp_gl_fbconfig* current) {
     int missing = 0;
     if (desired->doublebuffer != current->doublebuffer) {
         return false;
     }
 
-    if (desired->alpha_bits > 0 && current->alpha_bits == 0) {
+    if ((desired->alpha_bits > 0) && (current->alpha_bits == 0)) {
         missing++;
     }
-    if (desired->depth_bits > 0 && current->depth_bits == 0) {
+    if ((desired->depth_bits > 0) && (current->depth_bits == 0)) {
         missing++;
     }
-    if (desired->stencil_bits > 0 && current->stencil_bits == 0) {
+    if ((desired->stencil_bits > 0) && (current->stencil_bits == 0)) {
         missing++;
     }
-    if (desired->samples > 0 && current->samples == 0) {
-      /* Technically, several multisampling buffers could be
-          involved, but that's a lower level implementation detail and
-          not important to us here, so we count them as one
-      */
-      missing++;
+    if ((desired->samples > 0) && (current->samples == 0)) {
+        /* Technically, several multisampling buffers could be
+            involved, but that's a lower level implementation detail and
+            not important to us here, so we count them as one
+        */
+        missing++;
     }
 
     /* These polynomials make many small channel size differences matter
@@ -6043,10 +6044,9 @@ _SOKOL_PRIVATE bool _sapp_gl_select_fbconfig(_sapp_gl_fbselect* fbselect, const 
     bool new_closest = false;
     if (missing < fbselect->least_missing) {
         new_closest = true;
-    }
-    else if (missing == fbselect->least_missing) {
+    } else if (missing == fbselect->least_missing) {
         if ((color_diff < fbselect->least_color_diff) ||
-          (color_diff == fbselect->least_color_diff && extra_diff < fbselect->least_extra_diff))
+            ((color_diff == fbselect->least_color_diff) && (extra_diff < fbselect->least_extra_diff)))
         {
             new_closest = true;
         }
@@ -6060,6 +6060,7 @@ _SOKOL_PRIVATE bool _sapp_gl_select_fbconfig(_sapp_gl_fbselect* fbselect, const 
     return new_closest;
 }
 
+// NOTE: this is used only in the GLX code path
 _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_fbconfig* desired, const _sapp_gl_fbconfig* alternatives, int count) {
     int missing, least_missing = 1000000;
     int color_diff, least_color_diff = 10000000;
@@ -6750,18 +6751,18 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
 
     #define _sapp_wgl_num_query_tags (12)
     const int query_tags[_sapp_wgl_num_query_tags] = {
-      WGL_SUPPORT_OPENGL_ARB,
-      WGL_DRAW_TO_WINDOW_ARB,
-      WGL_PIXEL_TYPE_ARB,
-      WGL_ACCELERATION_ARB,
-      WGL_DOUBLE_BUFFER_ARB,
-      WGL_RED_BITS_ARB,
-      WGL_GREEN_BITS_ARB,
-      WGL_BLUE_BITS_ARB,
-      WGL_ALPHA_BITS_ARB,
-      WGL_DEPTH_BITS_ARB,
-      WGL_STENCIL_BITS_ARB,
-      WGL_SAMPLES_ARB,
+        WGL_SUPPORT_OPENGL_ARB,
+        WGL_DRAW_TO_WINDOW_ARB,
+        WGL_PIXEL_TYPE_ARB,
+        WGL_ACCELERATION_ARB,
+        WGL_DOUBLE_BUFFER_ARB,
+        WGL_RED_BITS_ARB,
+        WGL_GREEN_BITS_ARB,
+        WGL_BLUE_BITS_ARB,
+        WGL_ALPHA_BITS_ARB,
+        WGL_DEPTH_BITS_ARB,
+        WGL_STENCIL_BITS_ARB,
+        WGL_SAMPLES_ARB,
     };
     const int result_support_opengl_index = 0;
     const int result_draw_to_window_index = 1;
@@ -6795,7 +6796,7 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
     desired.depth_bits = 24;
     desired.stencil_bits = 8;
     desired.doublebuffer = true;
-    desired.samples = _sapp.sample_count > 1 ? _sapp.sample_count : 0;
+    desired.samples = (_sapp.sample_count > 1) ? _sapp.sample_count : 0;
 
     int pixel_format = 0;
     _sapp_gl_fbconfig u;
@@ -6808,9 +6809,9 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
         _sapp_wgl_attribiv(n, query_count, query_tags, query_results);
 
         if (query_results[result_support_opengl_index] == 0
-          || query_results[result_draw_to_window_index] == 0
-          || query_results[result_pixel_type_index] != WGL_TYPE_RGBA_ARB
-          || query_results[result_acceleration_index] == WGL_NO_ACCELERATION_ARB)
+            || query_results[result_draw_to_window_index] == 0
+            || query_results[result_pixel_type_index] != WGL_TYPE_RGBA_ARB
+            || query_results[result_acceleration_index] == WGL_NO_ACCELERATION_ARB)
         {
             continue;
         }
