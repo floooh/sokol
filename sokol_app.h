@@ -5968,6 +5968,99 @@ _SOKOL_PRIVATE void _sapp_gl_init_fbconfig(_sapp_gl_fbconfig* fbconfig) {
     fbconfig->samples = -1;
 }
 
+typedef struct {
+    int least_missing;
+    int least_color_diff;
+    int least_extra_diff;
+    bool best_match;
+} _sapp_gl_fbselect;
+
+_SOKOL_PRIVATE void _sapp_gl_init_fbselect(_sapp_gl_fbselect* fbselect) {
+    _sapp_clear(fbselect, sizeof(_sapp_gl_fbselect));
+    fbselect->least_missing = 1000000;
+    fbselect->least_color_diff = 10000000;
+    fbselect->least_extra_diff = 10000000;
+    fbselect->best_match = false;
+}
+
+// NOTE: this is used only in the WGL code path
+_SOKOL_PRIVATE bool _sapp_gl_select_fbconfig(_sapp_gl_fbselect* fbselect, const _sapp_gl_fbconfig* desired, const _sapp_gl_fbconfig* current) {
+    int missing = 0;
+    if (desired->doublebuffer != current->doublebuffer) {
+        return false;
+    }
+
+    if ((desired->alpha_bits > 0) && (current->alpha_bits == 0)) {
+        missing++;
+    }
+    if ((desired->depth_bits > 0) && (current->depth_bits == 0)) {
+        missing++;
+    }
+    if ((desired->stencil_bits > 0) && (current->stencil_bits == 0)) {
+        missing++;
+    }
+    if ((desired->samples > 0) && (current->samples == 0)) {
+        /* Technically, several multisampling buffers could be
+            involved, but that's a lower level implementation detail and
+            not important to us here, so we count them as one
+        */
+        missing++;
+    }
+
+    /* These polynomials make many small channel size differences matter
+        less than one large channel size difference
+        Calculate color channel size difference value
+    */
+    int color_diff = 0;
+    if (desired->red_bits != -1) {
+        color_diff += (desired->red_bits - current->red_bits) * (desired->red_bits - current->red_bits);
+    }
+    if (desired->green_bits != -1) {
+        color_diff += (desired->green_bits - current->green_bits) * (desired->green_bits - current->green_bits);
+    }
+    if (desired->blue_bits != -1) {
+        color_diff += (desired->blue_bits - current->blue_bits) * (desired->blue_bits - current->blue_bits);
+    }
+
+    /* Calculate non-color channel size difference value */
+    int extra_diff = 0;
+    if (desired->alpha_bits != -1) {
+        extra_diff += (desired->alpha_bits - current->alpha_bits) * (desired->alpha_bits - current->alpha_bits);
+    }
+    if (desired->depth_bits != -1) {
+        extra_diff += (desired->depth_bits - current->depth_bits) * (desired->depth_bits - current->depth_bits);
+    }
+    if (desired->stencil_bits != -1) {
+        extra_diff += (desired->stencil_bits - current->stencil_bits) * (desired->stencil_bits - current->stencil_bits);
+    }
+    if (desired->samples != -1) {
+        extra_diff += (desired->samples - current->samples) * (desired->samples - current->samples);
+    }
+
+    /* Figure out if the current one is better than the best one found so far
+        Least number of missing buffers is the most important heuristic,
+        then color buffer size match and lastly size match for other buffers
+    */
+    bool new_closest = false;
+    if (missing < fbselect->least_missing) {
+        new_closest = true;
+    } else if (missing == fbselect->least_missing) {
+        if ((color_diff < fbselect->least_color_diff) ||
+            ((color_diff == fbselect->least_color_diff) && (extra_diff < fbselect->least_extra_diff)))
+        {
+            new_closest = true;
+        }
+    }
+    if (new_closest) {
+        fbselect->least_missing = missing;
+        fbselect->least_color_diff = color_diff;
+        fbselect->least_extra_diff = extra_diff;
+        fbselect->best_match = (missing | color_diff | extra_diff) == 0;
+    }
+    return new_closest;
+}
+
+// NOTE: this is used only in the GLX code path
 _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_fbconfig* desired, const _sapp_gl_fbconfig* alternatives, int count) {
     int missing, least_missing = 1000000;
     int color_diff, least_color_diff = 10000000;
@@ -6655,22 +6748,21 @@ _SOKOL_PRIVATE void _sapp_wgl_attribiv(int pixel_format, int num_attribs, const 
 _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
     SOKOL_ASSERT(_sapp.win32.dc);
     SOKOL_ASSERT(_sapp.wgl.arb_pixel_format);
-    const _sapp_gl_fbconfig* closest;
 
     #define _sapp_wgl_num_query_tags (12)
     const int query_tags[_sapp_wgl_num_query_tags] = {
-      WGL_SUPPORT_OPENGL_ARB,
-      WGL_DRAW_TO_WINDOW_ARB,
-      WGL_PIXEL_TYPE_ARB,
-      WGL_ACCELERATION_ARB,
-      WGL_DOUBLE_BUFFER_ARB,
-      WGL_RED_BITS_ARB,
-      WGL_GREEN_BITS_ARB,
-      WGL_BLUE_BITS_ARB,
-      WGL_ALPHA_BITS_ARB,
-      WGL_DEPTH_BITS_ARB,
-      WGL_STENCIL_BITS_ARB,
-      WGL_SAMPLES_ARB,
+        WGL_SUPPORT_OPENGL_ARB,
+        WGL_DRAW_TO_WINDOW_ARB,
+        WGL_PIXEL_TYPE_ARB,
+        WGL_ACCELERATION_ARB,
+        WGL_DOUBLE_BUFFER_ARB,
+        WGL_RED_BITS_ARB,
+        WGL_GREEN_BITS_ARB,
+        WGL_BLUE_BITS_ARB,
+        WGL_ALPHA_BITS_ARB,
+        WGL_DEPTH_BITS_ARB,
+        WGL_STENCIL_BITS_ARB,
+        WGL_SAMPLES_ARB,
     };
     const int result_support_opengl_index = 0;
     const int result_draw_to_window_index = 1;
@@ -6694,38 +6786,7 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
     }
 
     int native_count = _sapp_wgl_attrib(1, WGL_NUMBER_PIXEL_FORMATS_ARB);
-    _sapp_gl_fbconfig* usable_configs = (_sapp_gl_fbconfig*) _sapp_malloc_clear((size_t)native_count * sizeof(_sapp_gl_fbconfig));
-    SOKOL_ASSERT(usable_configs);
-    int usable_count = 0;
-    for (int i = 0; i < native_count; i++) {
-        const int n = i + 1;
-        _sapp_gl_fbconfig* u = usable_configs + usable_count;
-        _sapp_gl_init_fbconfig(u);
-        _sapp_wgl_attribiv(n, query_count, query_tags, query_results);
 
-        if (query_results[result_support_opengl_index] == 0
-          || query_results[result_draw_to_window_index] == 0
-          || query_results[result_pixel_type_index] != WGL_TYPE_RGBA_ARB
-          || query_results[result_acceleration_index] == WGL_NO_ACCELERATION_ARB)
-        {
-            continue;
-        }
-        u->red_bits     = query_results[result_red_bits_index];
-        u->green_bits   = query_results[result_green_bits_index];
-        u->blue_bits    = query_results[result_blue_bits_index];
-        u->alpha_bits   = query_results[result_alpha_bits_index];
-        u->depth_bits   = query_results[result_depth_bits_index];
-        u->stencil_bits = query_results[result_stencil_bits_index];
-        if (query_results[result_double_buffer_index]) {
-            u->doublebuffer = true;
-        }
-
-        u->samples = query_results[result_samples_index]; // NOTE: If arb_multisample is not supported  - just takes the default 0
-
-        u->handle = (uintptr_t)n;
-        usable_count++;
-    }
-    SOKOL_ASSERT(usable_count > 0);
     _sapp_gl_fbconfig desired;
     _sapp_gl_init_fbconfig(&desired);
     desired.red_bits = 8;
@@ -6735,13 +6796,49 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
     desired.depth_bits = 24;
     desired.stencil_bits = 8;
     desired.doublebuffer = true;
-    desired.samples = _sapp.sample_count > 1 ? _sapp.sample_count : 0;
-    closest = _sapp_gl_choose_fbconfig(&desired, usable_configs, usable_count);
+    desired.samples = (_sapp.sample_count > 1) ? _sapp.sample_count : 0;
+
     int pixel_format = 0;
-    if (closest) {
-        pixel_format = (int) closest->handle;
+    _sapp_gl_fbconfig u;
+    _sapp_gl_init_fbconfig(&u);
+
+    _sapp_gl_fbselect fbselect;
+    _sapp_gl_init_fbselect(&fbselect);
+    for (int i = 0; i < native_count; i++) {
+        const int n = i + 1;
+        _sapp_wgl_attribiv(n, query_count, query_tags, query_results);
+
+        if (query_results[result_support_opengl_index] == 0
+            || query_results[result_draw_to_window_index] == 0
+            || query_results[result_pixel_type_index] != WGL_TYPE_RGBA_ARB
+            || query_results[result_acceleration_index] == WGL_NO_ACCELERATION_ARB)
+        {
+            continue;
+        }
+
+        u.red_bits     = query_results[result_red_bits_index];
+        u.green_bits   = query_results[result_green_bits_index];
+        u.blue_bits    = query_results[result_blue_bits_index];
+        u.alpha_bits   = query_results[result_alpha_bits_index];
+        u.depth_bits   = query_results[result_depth_bits_index];
+        u.stencil_bits = query_results[result_stencil_bits_index];
+        if (query_results[result_double_buffer_index]) {
+            u.doublebuffer = true;
+        }
+
+        u.samples = query_results[result_samples_index]; // NOTE: If arb_multisample is not supported  - just takes the default 0
+
+        // Test if this pixel format is better than the previous one
+        if (_sapp_gl_select_fbconfig(&fbselect, &desired, &u)) {
+            pixel_format = (uintptr_t)n;
+
+            // Early exit if matching as good as possible
+            if (fbselect.best_match) {
+                break;
+            }
+        }
     }
-    _sapp_free(usable_configs);
+
     return pixel_format;
 }
 
