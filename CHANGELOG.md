@@ -1,5 +1,10 @@
 ## Updates
 
+#### 23-Oct-2023
+
+- sokol_app.h gl: some further startup optimizations in the WGL code path
+  via PR https://github.com/floooh/sokol/pull/916
+
 #### 21-Oct-2023
 
 The major topic of this update is the 'finalized' WebGPU support in sokol_gfx.h and sokol_app.h.
