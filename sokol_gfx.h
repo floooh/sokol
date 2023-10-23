@@ -12784,8 +12784,8 @@ _SOKOL_PRIVATE WGPUTextureFormat _sg_wgpu_textureformat(sg_pixel_format p) {
         case SG_PIXELFORMAT_RG16UI:         return WGPUTextureFormat_RG16Uint;
         case SG_PIXELFORMAT_RG16SI:         return WGPUTextureFormat_RG16Sint;
         case SG_PIXELFORMAT_RG16F:          return WGPUTextureFormat_RG16Float;
-        case SG_PIXELFORMAT_RGBA8:          return WGPUTextureFormat_RGBA8UnormSrgb;
-        case SG_PIXELFORMAT_SRGB8A8:        return WGPUTextureFormat_RGBA8Unorm;
+        case SG_PIXELFORMAT_RGBA8:          return WGPUTextureFormat_RGBA8Unorm;
+        case SG_PIXELFORMAT_SRGB8A8:        return WGPUTextureFormat_RGBA8UnormSrgb;
         case SG_PIXELFORMAT_RGBA8SN:        return WGPUTextureFormat_RGBA8Snorm;
         case SG_PIXELFORMAT_RGBA8UI:        return WGPUTextureFormat_RGBA8Uint;
         case SG_PIXELFORMAT_RGBA8SI:        return WGPUTextureFormat_RGBA8Sint;
@@ -12981,6 +12981,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG8]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA8]);
+    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_SRGB8A8]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_BGRA8]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16F]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16F]);
@@ -13022,6 +13023,8 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
 
     _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH]);
     _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL]);
+
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGB9E5]);
 
     if (wgpuDeviceHasFeature(_sg.wgpu.dev, WGPUFeatureName_TextureCompressionBC)) {
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC1_RGBA]);
