@@ -1,5 +1,13 @@
 ## Updates
 
+#### 26-Oct-2023
+
+- sokol_app.h gl: fix a regression introduced in https://github.com/floooh/sokol/pull/916
+  which could select the wrong framebuffer pixel format and break rendering
+  on some GL drivers (in my case: an older Intel GPU).
+
+  If you are using the GL backend on Windows, please make sure to upgrade!
+
 #### 23-Oct-2023
 
 - sokol_app.h gl: some further startup optimizations in the WGL code path

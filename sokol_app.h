@@ -6799,8 +6799,6 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
     desired.samples = (_sapp.sample_count > 1) ? _sapp.sample_count : 0;
 
     int pixel_format = 0;
-    _sapp_gl_fbconfig u;
-    _sapp_gl_init_fbconfig(&u);
 
     _sapp_gl_fbselect fbselect;
     _sapp_gl_init_fbselect(&fbselect);
@@ -6816,16 +6814,15 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
             continue;
         }
 
+        _sapp_gl_fbconfig u;
+        _sapp_clear(&u, sizeof(u));
         u.red_bits     = query_results[result_red_bits_index];
         u.green_bits   = query_results[result_green_bits_index];
         u.blue_bits    = query_results[result_blue_bits_index];
         u.alpha_bits   = query_results[result_alpha_bits_index];
         u.depth_bits   = query_results[result_depth_bits_index];
         u.stencil_bits = query_results[result_stencil_bits_index];
-        if (query_results[result_double_buffer_index]) {
-            u.doublebuffer = true;
-        }
-
+        u.doublebuffer = 0 != query_results[result_double_buffer_index];
         u.samples = query_results[result_samples_index]; // NOTE: If arb_multisample is not supported  - just takes the default 0
 
         // Test if this pixel format is better than the previous one
