@@ -4309,6 +4309,11 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_COMPARE_REF_TO_TEXTURE 0x884E
         #define GL_TEXTURE_CUBE_MAP_SEAMLESS 0x884F
         #define GL_TEXTURE_MAX_LEVEL 0x813D
+        #define GL_FRAMEBUFFER_UNDEFINED 0x8219
+        #define GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT 0x8CD6
+        #define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
+        #define GL_FRAMEBUFFER_UNSUPPORTED 0x8CDD
+        #define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE 0x8D56
     #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
