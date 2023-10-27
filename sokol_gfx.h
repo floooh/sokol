@@ -1920,13 +1920,6 @@ typedef enum sg_primitive_type {
     For min_filter and mag_filter the default is SG_FILTER_NEAREST.
 
     For mipmap_filter the default is SG_FILTER_NONE.
-
-    The following restrictions apply:
-
-    - an image object with (num_mipmaps == 1) must use SG_FILTER_NONE
-    - min_filter and mag_filter cannot be SG_FILTER_NONE
-
-    Those restrictions are checked in the validation layer.
 */
 typedef enum sg_filter {
     _SG_FILTER_DEFAULT, // value 0 reserved for default-init
@@ -3437,7 +3430,6 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_EXPECTED_NONFILTERING_SAMPLER, "sg_apply_bindings: shader expected SG_SAMPLERTYPE_NONFILTERING on vertex stage, but sampler has SG_FILTER_LINEAR filters") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_UNEXPECTED_SAMPLER_BINDING, "sg_apply_bindings: unexpected sampler binding on vertex stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_SMP_EXISTS, "sg_apply_bindings: sampler bound to vertex stage no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_SMP_MIPMAPS, "sg_apply_bindings: image bound to vertex stage has mipmap_count == 1, but associated sampler mipmap filer is not SG_MIPMAPFILTER_NONE") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_EXPECTED_IMAGE_BINDING, "sg_apply_bindings: image binding on fragment stage is missing or the image handle is invalid") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_EXISTS, "sg_apply_bindings: image bound to fragment stage no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMAGE_TYPE_MISMATCH, "sg_apply_bindings: type of image bound to fragment stage doesn't match shader desc") \
@@ -3451,7 +3443,6 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_EXPECTED_NONFILTERING_SAMPLER, "sg_apply_bindings: shader expected SG_SAMPLERTYPE_NONFILTERING on fragment stage, but sampler has SG_FILTER_LINEAR filters") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_UNEXPECTED_SAMPLER_BINDING, "sg_apply_bindings: unexpected sampler binding on fragment stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_SMP_EXISTS, "sg_apply_bindings: sampler bound to fragment stage no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_SMP_MIPMAPS, "sg_apply_bindings: image bound to fragment stage has mipmap_count == 1, but associated sampler mipmap filer is not SG_MIPMAPFILTER_NONE") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_NO_PIPELINE, "sg_apply_uniforms: must be called after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_NO_UB_AT_SLOT, "sg_apply_uniforms: no uniform block declaration at this shader stage UB slot") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_SIZE, "sg_apply_uniforms: data size doesn't match declared uniform block size") \
@@ -16159,34 +16150,6 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 }
             } else {
                 _SG_VALIDATE(bindings->fs.samplers[i].id == SG_INVALID_ID, VALIDATE_ABND_FS_UNEXPECTED_SAMPLER_BINDING);
-            }
-        }
-
-        // if image-sampler-pair info was provided in shader desc, check that that the mipmap filter matches image num mipmaps
-        for (int img_smp_index = 0; img_smp_index < pip->shader->cmn.stage[SG_SHADERSTAGE_VS].num_image_samplers; img_smp_index++) {
-            const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_VS];
-            const int img_index = stage->image_samplers[img_smp_index].image_slot;
-            const int smp_index = stage->image_samplers[img_smp_index].sampler_slot;
-            const _sg_image_t* img = _sg_lookup_image(&_sg.pools, bindings->vs.images[img_index].id);
-            const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, bindings->vs.samplers[smp_index].id);
-            if (img && smp) {
-                if (img->cmn.num_mipmaps == 1) {
-                    _SG_VALIDATE(smp->cmn.mipmap_filter == SG_FILTER_NONE, VALIDATE_ABND_VS_IMG_SMP_MIPMAPS);
-                }
-            }
-        }
-        for (int img_smp_index = 0; img_smp_index < pip->shader->cmn.stage[SG_SHADERSTAGE_FS].num_image_samplers; img_smp_index++) {
-            const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_FS];
-            const int img_index = stage->image_samplers[img_smp_index].image_slot;
-            const int smp_index = stage->image_samplers[img_smp_index].sampler_slot;
-            SOKOL_ASSERT(img_index < stage->num_images);
-            SOKOL_ASSERT(smp_index < stage->num_samplers);
-            const _sg_image_t* img = _sg_lookup_image(&_sg.pools, bindings->fs.images[img_index].id);
-            const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, bindings->fs.samplers[smp_index].id);
-            if (img && smp) {
-                if (img->cmn.num_mipmaps == 1) {
-                    _SG_VALIDATE(smp->cmn.mipmap_filter == SG_FILTER_NONE, VALIDATE_ABND_FS_IMG_SMP_MIPMAPS);
-                }
             }
         }
         return _sg_validate_end();
