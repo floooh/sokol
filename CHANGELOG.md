@@ -18,6 +18,7 @@ because of an incomplete-framebuffer error. This is fixed now. The changes in de
   and Vulkan)
 
 Ticket: https://github.com/floooh/sokol/issues/923
+
 PR: https://github.com/floooh/sokol/pull/924
 
 There's also a new render-to-mipmap sample which covers to close this 'feature gap':
