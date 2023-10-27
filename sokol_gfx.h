@@ -1920,13 +1920,6 @@ typedef enum sg_primitive_type {
     For min_filter and mag_filter the default is SG_FILTER_NEAREST.
 
     For mipmap_filter the default is SG_FILTER_NONE.
-
-    The following restrictions apply:
-
-    - an image object with (num_mipmaps == 1) must use SG_FILTER_NONE
-    - min_filter and mag_filter cannot be SG_FILTER_NONE
-
-    Those restrictions are checked in the validation layer.
 */
 typedef enum sg_filter {
     _SG_FILTER_DEFAULT, // value 0 reserved for default-init
@@ -3213,8 +3206,12 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(GL_SHADER_LINKING_FAILED, "shader linking failed (gl)") \
     _SG_LOGITEM_XMACRO(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER, "vertex attribute not found in shader (gl)") \
     _SG_LOGITEM_XMACRO(GL_TEXTURE_NAME_NOT_FOUND_IN_SHADER, "texture name not found in shader (gl)") \
-    _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_INCOMPLETE, "framebuffer completeness check failed (gl)") \
-    _SG_LOGITEM_XMACRO(GL_MSAA_FRAMEBUFFER_INCOMPLETE, "completeness check failed for msaa resolve framebuffer (gl)") \
+    _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_UNDEFINED, "framebuffer completeness check failed with GL_FRAMEBUFFER_UNDEFINED (gl)") \
+    _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_INCOMPLETE_ATTACHMENT, "framebuffer completeness check failed with GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT (gl)") \
+    _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_INCOMPLETE_MISSING_ATTACHMENT, "framebuffer completeness check failed with GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT (gl)") \
+    _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_UNSUPPORTED, "framebuffer completeness check failed with GL_FRAMEBUFFER_UNSUPPORTED (gl)") \
+    _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_INCOMPLETE_MULTISAMPLE, "framebuffer completeness check failed with GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE (gl)") \
+    _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_UNKNOWN, "framebuffer completeness check failed (unknown reason) (gl)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_BUFFER_FAILED, "CreateBuffer() failed (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_DEPTH_TEXTURE_UNSUPPORTED_PIXEL_FORMAT, "pixel format not supported for depth-stencil texture (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_DEPTH_TEXTURE_FAILED, "CreateTexture2D() failed for depth-stencil texture (d3d11)") \
@@ -3433,7 +3430,6 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_EXPECTED_NONFILTERING_SAMPLER, "sg_apply_bindings: shader expected SG_SAMPLERTYPE_NONFILTERING on vertex stage, but sampler has SG_FILTER_LINEAR filters") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_UNEXPECTED_SAMPLER_BINDING, "sg_apply_bindings: unexpected sampler binding on vertex stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_SMP_EXISTS, "sg_apply_bindings: sampler bound to vertex stage no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VS_IMG_SMP_MIPMAPS, "sg_apply_bindings: image bound to vertex stage has mipmap_count == 1, but associated sampler mipmap filer is not SG_MIPMAPFILTER_NONE") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_EXPECTED_IMAGE_BINDING, "sg_apply_bindings: image binding on fragment stage is missing or the image handle is invalid") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_EXISTS, "sg_apply_bindings: image bound to fragment stage no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMAGE_TYPE_MISMATCH, "sg_apply_bindings: type of image bound to fragment stage doesn't match shader desc") \
@@ -3447,7 +3443,6 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_EXPECTED_NONFILTERING_SAMPLER, "sg_apply_bindings: shader expected SG_SAMPLERTYPE_NONFILTERING on fragment stage, but sampler has SG_FILTER_LINEAR filters") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_UNEXPECTED_SAMPLER_BINDING, "sg_apply_bindings: unexpected sampler binding on fragment stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_SMP_EXISTS, "sg_apply_bindings: sampler bound to fragment stage no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_FS_IMG_SMP_MIPMAPS, "sg_apply_bindings: image bound to fragment stage has mipmap_count == 1, but associated sampler mipmap filer is not SG_MIPMAPFILTER_NONE") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_NO_PIPELINE, "sg_apply_uniforms: must be called after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_NO_UB_AT_SLOT, "sg_apply_uniforms: no uniform block declaration at this shader stage UB slot") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_SIZE, "sg_apply_uniforms: data size doesn't match declared uniform block size") \
@@ -4304,6 +4299,12 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_TEXTURE_COMPARE_FUNC 0x884D
         #define GL_COMPARE_REF_TO_TEXTURE 0x884E
         #define GL_TEXTURE_CUBE_MAP_SEAMLESS 0x884F
+        #define GL_TEXTURE_MAX_LEVEL 0x813D
+        #define GL_FRAMEBUFFER_UNDEFINED 0x8219
+        #define GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT 0x8CD6
+        #define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
+        #define GL_FRAMEBUFFER_UNSUPPORTED 0x8CDD
+        #define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE 0x8D56
     #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
@@ -7689,6 +7690,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
             SOKOL_ASSERT(img->gl.tex[slot]);
             _sg_gl_cache_store_texture_sampler_binding(0);
             _sg_gl_cache_bind_texture_sampler(0, img->gl.target, img->gl.tex[slot], 0);
+            glTexParameteri(img->gl.target, GL_TEXTURE_MAX_LEVEL, img->cmn.num_mipmaps - 1);
             const int num_faces = img->cmn.type == SG_IMAGETYPE_CUBE ? 6 : 1;
             int data_index = 0;
             for (int face_index = 0; face_index < num_faces; face_index++) {
@@ -8127,9 +8129,31 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
     }
 
     // check if framebuffer is complete
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        _SG_ERROR(GL_FRAMEBUFFER_INCOMPLETE);
-        return SG_RESOURCESTATE_FAILED;
+    {
+        const GLenum fb_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (fb_status != GL_FRAMEBUFFER_COMPLETE) {
+            switch (fb_status) {
+                case GL_FRAMEBUFFER_UNDEFINED:
+                    _SG_ERROR(GL_FRAMEBUFFER_STATUS_UNDEFINED);
+                    break;
+                case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
+                    _SG_ERROR(GL_FRAMEBUFFER_STATUS_INCOMPLETE_ATTACHMENT);
+                    break;
+                case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
+                    _SG_ERROR(GL_FRAMEBUFFER_STATUS_INCOMPLETE_MISSING_ATTACHMENT);
+                    break;
+                case GL_FRAMEBUFFER_UNSUPPORTED:
+                    _SG_ERROR(GL_FRAMEBUFFER_STATUS_UNSUPPORTED);
+                    break;
+                case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:
+                    _SG_ERROR(GL_FRAMEBUFFER_STATUS_INCOMPLETE_MULTISAMPLE);
+                    break;
+                default:
+                    _SG_ERROR(GL_FRAMEBUFFER_STATUS_UNKNOWN);
+                    break;
+            }
+            return SG_RESOURCESTATE_FAILED;
+        }
     }
 
     // setup color attachments for the framebuffer
@@ -8151,8 +8175,28 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
             glBindFramebuffer(GL_FRAMEBUFFER, pass->gl.msaa_resolve_framebuffer[i]);
             _sg_gl_fb_attach_texture(gl_resolve_att, cmn_resolve_att, GL_COLOR_ATTACHMENT0);
             // check if framebuffer is complete
-            if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-                _SG_ERROR(GL_MSAA_FRAMEBUFFER_INCOMPLETE);
+            const GLenum fb_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+            if (fb_status != GL_FRAMEBUFFER_COMPLETE) {
+                switch (fb_status) {
+                    case GL_FRAMEBUFFER_UNDEFINED:
+                        _SG_ERROR(GL_FRAMEBUFFER_STATUS_UNDEFINED);
+                        break;
+                    case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
+                        _SG_ERROR(GL_FRAMEBUFFER_STATUS_INCOMPLETE_ATTACHMENT);
+                        break;
+                    case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
+                        _SG_ERROR(GL_FRAMEBUFFER_STATUS_INCOMPLETE_MISSING_ATTACHMENT);
+                        break;
+                    case GL_FRAMEBUFFER_UNSUPPORTED:
+                        _SG_ERROR(GL_FRAMEBUFFER_STATUS_UNSUPPORTED);
+                        break;
+                    case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:
+                        _SG_ERROR(GL_FRAMEBUFFER_STATUS_INCOMPLETE_MULTISAMPLE);
+                        break;
+                    default:
+                        _SG_ERROR(GL_FRAMEBUFFER_STATUS_UNKNOWN);
+                        break;
+                }
                 return SG_RESOURCESTATE_FAILED;
             }
             // setup color attachments for the framebuffer
@@ -16106,34 +16150,6 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 }
             } else {
                 _SG_VALIDATE(bindings->fs.samplers[i].id == SG_INVALID_ID, VALIDATE_ABND_FS_UNEXPECTED_SAMPLER_BINDING);
-            }
-        }
-
-        // if image-sampler-pair info was provided in shader desc, check that that the mipmap filter matches image num mipmaps
-        for (int img_smp_index = 0; img_smp_index < pip->shader->cmn.stage[SG_SHADERSTAGE_VS].num_image_samplers; img_smp_index++) {
-            const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_VS];
-            const int img_index = stage->image_samplers[img_smp_index].image_slot;
-            const int smp_index = stage->image_samplers[img_smp_index].sampler_slot;
-            const _sg_image_t* img = _sg_lookup_image(&_sg.pools, bindings->vs.images[img_index].id);
-            const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, bindings->vs.samplers[smp_index].id);
-            if (img && smp) {
-                if (img->cmn.num_mipmaps == 1) {
-                    _SG_VALIDATE(smp->cmn.mipmap_filter == SG_FILTER_NONE, VALIDATE_ABND_VS_IMG_SMP_MIPMAPS);
-                }
-            }
-        }
-        for (int img_smp_index = 0; img_smp_index < pip->shader->cmn.stage[SG_SHADERSTAGE_FS].num_image_samplers; img_smp_index++) {
-            const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_FS];
-            const int img_index = stage->image_samplers[img_smp_index].image_slot;
-            const int smp_index = stage->image_samplers[img_smp_index].sampler_slot;
-            SOKOL_ASSERT(img_index < stage->num_images);
-            SOKOL_ASSERT(smp_index < stage->num_samplers);
-            const _sg_image_t* img = _sg_lookup_image(&_sg.pools, bindings->fs.images[img_index].id);
-            const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, bindings->fs.samplers[smp_index].id);
-            if (img && smp) {
-                if (img->cmn.num_mipmaps == 1) {
-                    _SG_VALIDATE(smp->cmn.mipmap_filter == SG_FILTER_NONE, VALIDATE_ABND_FS_IMG_SMP_MIPMAPS);
-                }
             }
         }
         return _sg_validate_end();
