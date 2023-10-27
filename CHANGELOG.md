@@ -4,7 +4,7 @@
 
 Fix broken render-to-mipmap in the sokol_gfx.h GL backend.
 
-There was a subtle bug / feature gap lurking in sokol_gfx.h GL backend: trying
+There was a subtle bug / "feature gap" lurking in sokol_gfx.h GL backend: trying
 to render to any mipmap except the top-level mipmap resulted in a black screen
 because of an incomplete-framebuffer error. This is fixed now. The changes in detail:
 
@@ -16,6 +16,9 @@ because of an incomplete-framebuffer error. This is fixed now. The changes in de
   relaxed (a later update will remove SG_FILTER_NONE entirely since it's not needed anymore
   and the concept of a "none" mipmap filter only exists in GL and Metal, but not D3D, WebGPU
   and Vulkan)
+
+Ticket: https://github.com/floooh/sokol/issues/923
+PR: https://github.com/floooh/sokol/pull/924
 
 There's also a new render-to-mipmap sample which covers to close this 'feature gap':
 
