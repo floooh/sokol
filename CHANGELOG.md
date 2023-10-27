@@ -1,5 +1,29 @@
 ## Updates
 
+#### 27-Oct-2023
+
+Fix broken render-to-mipmap in the sokol_gfx.h GL backend.
+
+There was a subtle bug / feature gap lurking in sokol_gfx.h GL backend: trying
+to render to any mipmap except the top-level mipmap resulted in a black screen
+because of an incomplete-framebuffer error. This is fixed now. The changes in detail:
+
+- creating a texture in the GL backend now sets the GL_TEXTURE_MAX_LEVEL property
+  (this is the fix to make everything work)
+- the framebuffer completeness check in the GL backend now has more detailed error logging
+- in the validation layer, the requirement that a sampler that's used with a
+  single-mipmap-texture must use `.mipmap_filter = SG_FILTER_NONE` has been
+  relaxed (a later update will remove SG_FILTER_NONE entirely since it's not needed anymore
+  and the concept of a "none" mipmap filter only exists in GL and Metal, but not D3D, WebGPU
+  and Vulkan)
+
+There's also a new render-to-mipmap sample which covers to close this 'feature gap':
+
+https://floooh.github.io/sokol-html5/miprender-sapp.html
+
+A couple of similar samples will follow over the next few days
+(rendering to texture array layers and 3d texture slices).
+
 #### 26-Oct-2023
 
 - sokol_app.h gl: fix a regression introduced in https://github.com/floooh/sokol/pull/916
