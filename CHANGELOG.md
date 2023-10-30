@@ -2,7 +2,7 @@
 
 #### 30-Oct-2023
 
-Some sokol_gfx.h backend-specific updates and tweaks (very minor chance that this is breaking):
+Some sokol_gfx.h backend-specific updates and tweaks (very minor chance that this is breaking if you are injecting textures into the D3D11 backend).
 
 - a new set of public API functions to access the native backend 3D-API resource objects of
   sokol-gfx resource objects:
