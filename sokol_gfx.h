@@ -2529,15 +2529,16 @@ typedef struct sg_image_data {
     .mtl_textures[SG_NUM_INFLIGHT_FRAMES]
     .d3d11_texture
     .d3d11_shader_resource_view
+    .wgpu_texture
+    .wgpu_texture_view
 
     For GL, you can also specify the texture target or leave it empty to use
     the default texture target for the image type (GL_TEXTURE_2D for
     SG_IMAGETYPE_2D etc)
 
-    For D3D11, you can provide either a D3D11 texture, or a
-    shader-resource-view, or both. If only a texture is provided, a matching
-    shader-resource-view will be created. If only a shader-resource-view is
-    provided, the texture will be looked up from the shader-resource-view.
+    For D3D11 and WebGPU, either only provide a texture, or both a texture and
+    shader-resource-view / texture-view object. If you want to use access the
+    injected texture in a shader you *must* provide a shader-resource-view.
 
     The same rules apply as for injecting native buffers (see sg_buffer_desc
     documentation for more details).
