@@ -3930,6 +3930,31 @@ typedef struct sg_wgpu_pass_info {
     void* ds_view;  // WGPUTextureView
 } sg_wgpu_pass_info;
 
+typedef struct sg_gl_buffer_info {
+    uint32_t buf[SG_NUM_INFLIGHT_FRAMES];
+    int active_slot;
+} sg_gl_buffer_info;
+
+typedef struct sg_gl_image_info {
+    uint32_t tex[SG_NUM_INFLIGHT_FRAMES];
+    uint32_t tex_target;
+    uint32_t msaa_render_buffer;
+    int active_slot;
+} sg_gl_image_info;
+
+typedef struct sg_gl_sampler_info {
+    uint32_t smp;
+} sg_gl_sampler_info;
+
+typedef struct sg_gl_shader_info {
+    uint32_t prog;
+} sg_gl_shader_info;
+
+typedef struct sg_gl_pass_info {
+    uint32_t frame_buffer;
+    uint32_t msaa_resolve_framebuffer[SG_MAX_COLOR_ATTACHMENTS];
+} sg_gl_pass_info;
+
 // D3D11: return ID3D11Device
 SOKOL_GFX_API_DECL const void* sg_d3d11_device(void);
 // D3D11: return ID3D11DeviceContext
@@ -3982,6 +4007,17 @@ SOKOL_GFX_API_DECL sg_wgpu_shader_info sg_wgpu_query_shader_info(sg_shader shd);
 SOKOL_GFX_API_DECL sg_wgpu_pipeline_info sg_wgpu_query_pipeline_info(sg_pipeline pip);
 // WebGPU: get internal pass resource objects
 SOKOL_GFX_API_DECL sg_wgpu_pass_info sg_wgpu_query_pass_info(sg_pass pass);
+
+// GL: get internal buffer resource objects
+SOKOL_GFX_API_DECL sg_gl_buffer_info sg_gl_query_buffer_info(sg_buffer buf);
+// GL: get internal image resource objects
+SOKOL_GFX_API_DECL sg_gl_image_info sg_gl_query_image_info(sg_image img);
+// GL: get internal sampler resource objects
+SOKOL_GFX_API_DECL sg_gl_sampler_info sg_gl_query_sampler_info(sg_sampler smp);
+// GL: get internal shader resource objects
+SOKOL_GFX_API_DECL sg_gl_shader_info sg_gl_query_shader_info(sg_shader shd);
+// GL: get internal pass resource objects
+SOKOL_GFX_API_DECL sg_gl_pass_info sg_gl_query_pass_info(sg_pass pass);
 
 #ifdef __cplusplus
 } // extern "C"
@@ -18744,6 +18780,92 @@ SOKOL_API_IMPL sg_wgpu_pass_info sg_wgpu_query_pass_info(sg_pass pass_id) {
                 res.resolve_view[i] = (void*) pass->wgpu.resolve_atts[i].view;
             }
             res.ds_view = (void*) pass->wgpu.ds_att.view;
+        }
+    #else
+        _SOKOL_UNUSED(pass_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_gl_buffer_info sg_gl_query_buffer_info(sg_buffer buf_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_gl_buffer_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(_SOKOL_ANY_GL)
+        const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+        if (buf) {
+            for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+                res.buf[i] = buf->gl.buf[i];
+            }
+            res.active_slot = buf->cmn.active_slot;
+        }
+    #else
+        _SOKOL_UNUSED(buf_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_gl_image_info sg_gl_query_image_info(sg_image img_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_gl_image_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(_SOKOL_ANY_GL)
+        const _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
+        if (img) {
+            for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+                res.tex[i] = img->gl.tex[i];
+            }
+            res.tex_target = img->gl.target;
+            res.msaa_render_buffer = img->gl.msaa_render_buffer;
+            res.active_slot = img->cmn.active_slot;
+        }
+    #else
+        _SOKOL_UNUSED(img_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_gl_sampler_info sg_gl_query_sampler_info(sg_sampler smp_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_gl_sampler_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(_SOKOL_ANY_GL)
+        const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, smp_id.id);
+        if (smp) {
+            res.smp = smp->gl.smp;
+        }
+    #else
+        _SOKOL_UNUSED(smp_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_gl_shader_info sg_gl_query_shader_info(sg_shader shd_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_gl_shader_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(_SOKOL_ANY_GL)
+        const _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
+        if (shd) {
+            res.prog = shd->gl.prog;
+        }
+    #else
+        _SOKOL_UNUSED(shd_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_gl_pass_info sg_gl_query_pass_info(sg_pass pass_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_gl_pass_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(_SOKOL_ANY_GL)
+        const _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
+        if (pass) {
+            res.frame_buffer = pass->gl.fb;
+            for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+                res.msaa_resolve_framebuffer[i] = pass->gl.msaa_resolve_framebuffer[i];
+            }
         }
     #else
         _SOKOL_UNUSED(pass_id);
