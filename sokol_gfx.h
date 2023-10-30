@@ -9972,10 +9972,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
             if (img->d3d11.srv) {
                 _sg_d3d11_AddRef(img->d3d11.srv);
             }
-        }
-
-        if (0 == img->d3d11.tex2d) {
-            // if not injected, create texture
+        } else {
+            // if not injected, create 2D texture
             D3D11_TEXTURE2D_DESC d3d11_tex_desc;
             _sg_clear(&d3d11_tex_desc, sizeof(d3d11_tex_desc));
             d3d11_tex_desc.Width = (UINT)img->cmn.width;
@@ -10012,40 +10010,40 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 _SG_ERROR(D3D11_CREATE_2D_TEXTURE_FAILED);
                 return SG_RESOURCESTATE_FAILED;
             }
+
+            // create shader-resource-view for 2D texture
+            // FIXME: currently we don't support setting MSAA texture as shader resource
+            if (!msaa) {
+                D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
+                _sg_clear(&d3d11_srv_desc, sizeof(d3d11_srv_desc));
+                d3d11_srv_desc.Format = _sg_d3d11_srv_pixel_format(img->cmn.pixel_format);
+                switch (img->cmn.type) {
+                    case SG_IMAGETYPE_2D:
+                        d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+                        d3d11_srv_desc.Texture2D.MipLevels = (UINT)img->cmn.num_mipmaps;
+                        break;
+                    case SG_IMAGETYPE_CUBE:
+                        d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
+                        d3d11_srv_desc.TextureCube.MipLevels = (UINT)img->cmn.num_mipmaps;
+                        break;
+                    case SG_IMAGETYPE_ARRAY:
+                        d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+                        d3d11_srv_desc.Texture2DArray.MipLevels = (UINT)img->cmn.num_mipmaps;
+                        d3d11_srv_desc.Texture2DArray.ArraySize = (UINT)img->cmn.num_slices;
+                        break;
+                    default:
+                        SOKOL_UNREACHABLE; break;
+                }
+                hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)img->d3d11.tex2d, &d3d11_srv_desc, &img->d3d11.srv);
+                if (!(SUCCEEDED(hr) && img->d3d11.srv)) {
+                    _SG_ERROR(D3D11_CREATE_2D_SRV_FAILED);
+                    return SG_RESOURCESTATE_FAILED;
+                }
+            }
         }
         SOKOL_ASSERT(img->d3d11.tex2d);
         img->d3d11.res = (ID3D11Resource*)img->d3d11.tex2d;
         _sg_d3d11_AddRef(img->d3d11.res);
-
-        // ...and similar, if not injected, create shader-resource-view
-        // FIXME: currently we don't support setting MSAA texture as shader resource
-        if ((0 == img->d3d11.srv) && !msaa) {
-            D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
-            _sg_clear(&d3d11_srv_desc, sizeof(d3d11_srv_desc));
-            d3d11_srv_desc.Format = _sg_d3d11_srv_pixel_format(img->cmn.pixel_format);
-            switch (img->cmn.type) {
-                case SG_IMAGETYPE_2D:
-                    d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-                    d3d11_srv_desc.Texture2D.MipLevels = (UINT)img->cmn.num_mipmaps;
-                    break;
-                case SG_IMAGETYPE_CUBE:
-                    d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
-                    d3d11_srv_desc.TextureCube.MipLevels = (UINT)img->cmn.num_mipmaps;
-                    break;
-                case SG_IMAGETYPE_ARRAY:
-                    d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
-                    d3d11_srv_desc.Texture2DArray.MipLevels = (UINT)img->cmn.num_mipmaps;
-                    d3d11_srv_desc.Texture2DArray.ArraySize = (UINT)img->cmn.num_slices;
-                    break;
-                default:
-                    SOKOL_UNREACHABLE; break;
-            }
-            hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, img->d3d11.res, &d3d11_srv_desc, &img->d3d11.srv);
-            if (!(SUCCEEDED(hr) && img->d3d11.srv)) {
-                _SG_ERROR(D3D11_CREATE_2D_SRV_FAILED);
-                return SG_RESOURCESTATE_FAILED;
-            }
-        }
     } else {
         // 3D texture - same procedure, first check if injected, than create non-injected
         if (injected) {
@@ -10061,9 +10059,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
             if (img->d3d11.srv) {
                 _sg_d3d11_AddRef(img->d3d11.srv);
             }
-        }
-
-        if (0 == img->d3d11.tex3d) {
+        } else {
+            // not injected, create 3d texture
             D3D11_TEXTURE3D_DESC d3d11_tex_desc;
             _sg_clear(&d3d11_tex_desc, sizeof(d3d11_tex_desc));
             d3d11_tex_desc.Width = (UINT)img->cmn.width;
@@ -10089,23 +10086,24 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 _SG_ERROR(D3D11_CREATE_3D_TEXTURE_FAILED);
                 return SG_RESOURCESTATE_FAILED;
             }
+
+            // create shader-resource-view for 3D texture
+            if (!msaa) {
+                D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
+                _sg_clear(&d3d11_srv_desc, sizeof(d3d11_srv_desc));
+                d3d11_srv_desc.Format = _sg_d3d11_srv_pixel_format(img->cmn.pixel_format);
+                d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
+                d3d11_srv_desc.Texture3D.MipLevels = (UINT)img->cmn.num_mipmaps;
+                hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)img->d3d11.tex3d, &d3d11_srv_desc, &img->d3d11.srv);
+                if (!(SUCCEEDED(hr) && img->d3d11.srv)) {
+                    _SG_ERROR(D3D11_CREATE_3D_SRV_FAILED);
+                    return SG_RESOURCESTATE_FAILED;
+                }
+            }
         }
         SOKOL_ASSERT(img->d3d11.tex3d);
         img->d3d11.res = (ID3D11Resource*)img->d3d11.tex3d;
         _sg_d3d11_AddRef(img->d3d11.res);
-
-        if ((0 == img->d3d11.srv) && !msaa) {
-            D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
-            _sg_clear(&d3d11_srv_desc, sizeof(d3d11_srv_desc));
-            d3d11_srv_desc.Format = _sg_d3d11_srv_pixel_format(img->cmn.pixel_format);
-            d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
-            d3d11_srv_desc.Texture3D.MipLevels = (UINT)img->cmn.num_mipmaps;
-            hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, img->d3d11.res, &d3d11_srv_desc, &img->d3d11.srv);
-            if (!(SUCCEEDED(hr) && img->d3d11.srv)) {
-                _SG_ERROR(D3D11_CREATE_3D_SRV_FAILED);
-                return SG_RESOURCESTATE_FAILED;
-            }
-        }
     }
     return SG_RESOURCESTATE_VALID;
 }
