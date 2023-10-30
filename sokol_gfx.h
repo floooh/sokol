@@ -9941,7 +9941,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
     SOKOL_ASSERT((0 == img->d3d11.tex2d) && (0 == img->d3d11.tex3d) && (0 == img->d3d11.res) && (0 == img->d3d11.srv));
     HRESULT hr;
 
-    const bool injected = (0 != desc->d3d11_texture) || (0 != desc->d3d11_shader_resource_view);
+    const bool injected = (0 != desc->d3d11_texture);
     const bool msaa = (img->cmn.sample_count > 1);
     img->d3d11.format = _sg_d3d11_texture_pixel_format(img->cmn.pixel_format);
     if (img->d3d11.format == DXGI_FORMAT_UNKNOWN) {
@@ -9960,16 +9960,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
         // first check for injected texture and/or resource view
         if (injected) {
             img->d3d11.tex2d = (ID3D11Texture2D*) desc->d3d11_texture;
+            _sg_d3d11_AddRef(img->d3d11.tex2d);
             img->d3d11.srv = (ID3D11ShaderResourceView*) desc->d3d11_shader_resource_view;
-            if (img->d3d11.tex2d) {
-                _sg_d3d11_AddRef(img->d3d11.tex2d);
-            } else {
-                // if only a shader-resource-view was provided, but no texture, lookup
-                // the texture from the shader-resource-view, this also bumps the refcount
-                SOKOL_ASSERT(img->d3d11.srv);
-                _sg_d3d11_GetResource((ID3D11View*)img->d3d11.srv, (ID3D11Resource**)&img->d3d11.tex2d);
-                SOKOL_ASSERT(img->d3d11.tex2d);
-            }
             if (img->d3d11.srv) {
                 _sg_d3d11_AddRef(img->d3d11.srv);
             }
@@ -10049,14 +10041,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
         // 3D texture - same procedure, first check if injected, than create non-injected
         if (injected) {
             img->d3d11.tex3d = (ID3D11Texture3D*) desc->d3d11_texture;
+            _sg_d3d11_AddRef(img->d3d11.tex3d);
             img->d3d11.srv = (ID3D11ShaderResourceView*) desc->d3d11_shader_resource_view;
-            if (img->d3d11.tex3d) {
-                _sg_d3d11_AddRef(img->d3d11.tex3d);
-            } else {
-                SOKOL_ASSERT(img->d3d11.srv);
-                _sg_d3d11_GetResource((ID3D11View*)img->d3d11.srv, (ID3D11Resource**)&img->d3d11.tex3d);
-                SOKOL_ASSERT(img->d3d11.tex3d);
-            }
             if (img->d3d11.srv) {
                 _sg_d3d11_AddRef(img->d3d11.srv);
             }
