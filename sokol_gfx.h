@@ -3874,6 +3874,32 @@ typedef struct sg_d3d11_pass_info {
     void* dsv;  // ID3D11DepthStencilView
 } sg_d3d11_pass_info;
 
+typedef struct sg_mtl_buffer_info {
+    void* buf[SG_NUM_INFLIGHT_FRAMES];  // id<MTLBuffer>
+    int active_slot;
+} sg_mtl_buffer_info;
+
+typedef struct sg_mtl_image_info {
+    void* tex[SG_NUM_INFLIGHT_FRAMES]; // id<MTLTexture>
+    int active_slot;
+} sg_mtl_image_info;
+
+typedef struct sg_mtl_sampler_info {
+    void* smp;  // id<MTLSamplerState>
+} sg_mtl_sampler_info;
+
+typedef struct sg_mtl_shader_info {
+    void* vs_lib;   // id<MTLLibrary>
+    void* fs_lib;   // id<MTLLibrary>
+    void* vs_func;  // id<MTLFunction>
+    void* fs_func;  // id<MTLFunction>
+} sg_mtl_shader_info;
+
+typedef struct sg_mtl_pipeline_info {
+    void* rps;      // id<MTLRenderPipelineState>
+    void* dss;      // id<MTLDepthStencilState>
+} sg_mtl_pipeline_info;
+
 // D3D11: return ID3D11Device
 SOKOL_GFX_API_DECL const void* sg_d3d11_device(void);
 // D3D11: return ID3D11DeviceContext
@@ -3895,6 +3921,17 @@ SOKOL_GFX_API_DECL sg_d3d11_pass_info sg_d3d11_query_pass_info(sg_pass pass);
 SOKOL_GFX_API_DECL const void* sg_mtl_device(void);
 // Metal: return __bridge-casted MTLRenderCommandEncoder in current pass (or zero if outside pass)
 SOKOL_GFX_API_DECL const void* sg_mtl_render_command_encoder(void);
+// Metal: get internal __bridge-casted buffer resource objects
+SOKOL_GFX_API_DECL sg_mtl_buffer_info sg_mtl_query_buffer_info(sg_buffer buf);
+// Metal: get internal __bridge-casted image resource objects
+SOKOL_GFX_API_DECL sg_mtl_image_info sg_mtl_query_image_info(sg_image img);
+// Metal: get internal __bridge-casted sampler resource objects
+SOKOL_GFX_API_DECL sg_mtl_sampler_info sg_mtl_query_sampler_info(sg_sampler smp);
+// Metal: get internal __bridge-casted shader resource objects
+SOKOL_GFX_API_DECL sg_mtl_shader_info sg_mtl_query_shader_info(sg_shader shd);
+// Metal: get internal __bridge-casted pipeline resource objects
+SOKOL_GFX_API_DECL sg_mtl_pipeline_info sg_mtl_query_pipeline_info(sg_pipeline pip);
+
 // WebGPU: return WGPUDevice object
 SOKOL_GFX_API_DECL const void* sg_wgpu_device(void);
 // WebGPU: return WGPUQueue object
@@ -18430,6 +18467,113 @@ SOKOL_API_IMPL const void* sg_mtl_render_command_encoder(void) {
     #else
         return 0;
     #endif
+}
+
+SOKOL_API_IMPL sg_mtl_buffer_info sg_mtl_query_buffer_info(sg_buffer buf_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_mtl_buffer_info res;
+    _sg_clear(&res, sizeof(res));
+#if defined(SOKOL_METAL)
+    const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+    if (buf) {
+        for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+            if (buf->mtl.buf[i] != 0) {
+                res.buf[i] = (__bridge void*) _sg_mtl_id(buf->mtl.buf[i]);
+            }
+        }
+        res.active_slot = buf->cmn.active_slot;
+    }
+#else
+    _SOKOL_UNUSED(buf_id);
+#endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_mtl_image_info sg_mtl_query_image_info(sg_image img_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_mtl_image_info res;
+    _sg_clear(&res, sizeof(res));
+#if defined(SOKOL_METAL)
+    const _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
+    if (img) {
+        for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+            if (img->mtl.tex[i] != 0) {
+                res.tex[i] = (__bridge void*) _sg_mtl_id(img->mtl.tex[i]);
+            }
+        }
+        res.active_slot = img->cmn.active_slot;
+    }
+#else
+    _SOKOL_UNUSED(img_id);
+#endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_mtl_sampler_info sg_mtl_query_sampler_info(sg_sampler smp_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_mtl_sampler_info res;
+    _sg_clear(&res, sizeof(res));
+#if defined(SOKOL_METAL)
+    const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, smp_id.id);
+    if (smp) {
+        if (smp->mtl.sampler_state != 0) {
+            res.smp = (__bridge void*) _sg_mtl_id(smp->mtl.sampler_state);
+        }
+    }
+#else
+    _SOKOL_UNUSED(smp_id);
+#endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_mtl_shader_info sg_mtl_query_shader_info(sg_shader shd_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_mtl_shader_info res;
+    _sg_clear(&res, sizeof(res));
+#if defined(SOKOL_METAL)
+    const _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
+    if (shd) {
+        const int vs_lib  = shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_lib;
+        const int vs_func = shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_func;
+        const int fs_lib  = shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_lib;
+        const int fs_func = shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_func;
+        if (vs_lib != 0) {
+            res.vs_lib = (__bridge void*) _sg_mtl_id(vs_lib);
+        }
+        if (fs_lib != 0) {
+            res.fs_lib = (__bridge void*) _sg_mtl_id(fs_lib);
+        }
+        if (vs_func != 0) {
+            res.vs_func = (__bridge void*) _sg_mtl_id(vs_func);
+        }
+        if (fs_func != 0) {
+            res.fs_func = (__bridge void*) _sg_mtl_id(fs_func);
+        }
+    }
+#else
+    _SOKOL_UNUSED(shd_id);
+#endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_mtl_pipeline_info sg_mtl_query_pipeline_info(sg_pipeline pip_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_mtl_pipeline_info res;
+    _sg_clear(&res, sizeof(res));
+#if defined(SOKOL_METAL)
+    const _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
+    if (pip) {
+        if (pip->mtl.rps != 0) {
+            res.rps = (__bridge void*) _sg_mtl_id(pip->mtl.rps);
+        }
+        if (pip->mtl.dss != 0) {
+            res.dss = (__bridge void*) _sg_mtl_id(pip->mtl.dss);
+        }
+    }
+#else
+    _SOKOL_UNUSED(pip_id);
+#endif
+    return res;
 }
 
 SOKOL_API_IMPL const void* sg_wgpu_device(void) {
