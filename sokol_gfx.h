@@ -3900,6 +3900,35 @@ typedef struct sg_mtl_pipeline_info {
     void* dss;      // id<MTLDepthStencilState>
 } sg_mtl_pipeline_info;
 
+typedef struct sg_wgpu_buffer_info {
+    void* buf;  // WGPUBuffer
+} sg_wgpu_buffer_info;
+
+typedef struct sg_wgpu_image_info {
+    void* tex;  // WGPUTexture
+    void* view; // WGPUTextureView
+} sg_wgpu_image_info;
+
+typedef struct sg_wgpu_sampler_info {
+    void* smp;  // WGPUSampler
+} sg_wgpu_sampler_info;
+
+typedef struct sg_wgpu_shader_info {
+    void* vs_mod;   // WGPUShaderModule
+    void* fs_mod;   // WGPUShaderModule
+    void* bgl;      // WGPUBindGroupLayout;
+} sg_wgpu_shader_info;
+
+typedef struct sg_wgpu_pipeline_info {
+    void* pip;      // WGPURenderPipeline
+} sg_wgpu_pipeline_info;
+
+typedef struct sg_wgpu_pass_info {
+    void* color_view[SG_MAX_COLOR_ATTACHMENTS];     // WGPUTextureView
+    void* resolve_view[SG_MAX_COLOR_ATTACHMENTS];    // WGPUTextureView
+    void* ds_view;  // WGPUTextureView
+} sg_wgpu_pass_info;
+
 // D3D11: return ID3D11Device
 SOKOL_GFX_API_DECL const void* sg_d3d11_device(void);
 // D3D11: return ID3D11DeviceContext
@@ -3940,6 +3969,18 @@ SOKOL_GFX_API_DECL const void* sg_wgpu_queue(void);
 SOKOL_GFX_API_DECL const void* sg_wgpu_command_encoder(void);
 // WebGPU: return WGPURenderPassEncoder of currrent pass
 SOKOL_GFX_API_DECL const void* sg_wgpu_render_pass_encoder(void);
+// WebGPU: get internal buffer resource objects
+SOKOL_GFX_API_DECL sg_wgpu_buffer_info sg_wgpu_query_buffer_info(sg_buffer buf);
+// WebGPU: get internal image resource objects
+SOKOL_GFX_API_DECL sg_wgpu_image_info sg_wgpu_query_image_info(sg_image img);
+// WebGPU: get internal sampler resource objects
+SOKOL_GFX_API_DECL sg_wgpu_sampler_info sg_wgpu_query_sampler_info(sg_sampler smp);
+// WebGPU: get internal shader resource objects
+SOKOL_GFX_API_DECL sg_wgpu_shader_info sg_wgpu_query_shader_info(sg_shader shd);
+// WebGPU: get internal pipeline resource objects
+SOKOL_GFX_API_DECL sg_wgpu_pipeline_info sg_wgpu_query_pipeline_info(sg_pipeline pip);
+// WebGPU: get internal pass resource objects
+SOKOL_GFX_API_DECL sg_wgpu_pass_info sg_wgpu_query_pass_info(sg_pass pass);
 
 #ifdef __cplusplus
 } // extern "C"
@@ -18325,33 +18366,33 @@ SOKOL_API_IMPL sg_pass_desc sg_query_pass_defaults(const sg_pass_desc* desc) {
 }
 
 SOKOL_API_IMPL const void* sg_d3d11_device(void) {
-#if defined(SOKOL_D3D11)
-    return (const void*) _sg.d3d11.dev;
-#else
-    return 0;
-#endif
+    #if defined(SOKOL_D3D11)
+        return (const void*) _sg.d3d11.dev;
+    #else
+        return 0;
+    #endif
 }
 
 SOKOL_API_IMPL const void* sg_d3d11_device_context(void) {
-#if defined(SOKOL_D3D11)
-    return (const void*) _sg.d3d11.ctx;
-#else
-    return 0;
-#endif
+    #if defined(SOKOL_D3D11)
+        return (const void*) _sg.d3d11.ctx;
+    #else
+        return 0;
+    #endif
 }
 
 SOKOL_API_IMPL sg_d3d11_buffer_info sg_d3d11_query_buffer_info(sg_buffer buf_id) {
     SOKOL_ASSERT(_sg.valid);
     sg_d3d11_buffer_info res;
     _sg_clear(&res, sizeof(res));
-#if defined(SOKOL_D3D11)
-    const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
-    if (buf) {
-        res.buf = (void*) buf->d3d11.buf;
-    }
-#else
-    _SOKOL_UNUSED(buf_id);
-#endif
+    #if defined(SOKOL_D3D11)
+        const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+        if (buf) {
+            res.buf = (void*) buf->d3d11.buf;
+        }
+    #else
+        _SOKOL_UNUSED(buf_id);
+    #endif
     return res;
 }
 
@@ -18359,17 +18400,17 @@ SOKOL_API_IMPL sg_d3d11_image_info sg_d3d11_query_image_info(sg_image img_id) {
     SOKOL_ASSERT(_sg.valid);
     sg_d3d11_image_info res;
     _sg_clear(&res, sizeof(res));
-#if defined(SOKOL_D3D11)
-    const _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
-    if (img) {
-        res.tex2d = (void*) img->d3d11.tex2d;
-        res.tex3d = (void*) img->d3d11.tex3d;
-        res.res = (void*) img->d3d11.res;
-        res.srv = (void*) img->d3d11.srv;
-    }
-#else
-    _SOKOL_UNUSED(img_id);
-#endif
+    #if defined(SOKOL_D3D11)
+        const _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
+        if (img) {
+            res.tex2d = (void*) img->d3d11.tex2d;
+            res.tex3d = (void*) img->d3d11.tex3d;
+            res.res = (void*) img->d3d11.res;
+            res.srv = (void*) img->d3d11.srv;
+        }
+    #else
+        _SOKOL_UNUSED(img_id);
+    #endif
     return res;
 }
 
@@ -18377,14 +18418,14 @@ SOKOL_API_IMPL sg_d3d11_sampler_info sg_d3d11_query_sampler_info(sg_sampler smp_
     SOKOL_ASSERT(_sg.valid);
     sg_d3d11_sampler_info res;
     _sg_clear(&res, sizeof(res));
-#if defined(SOKOL_D3D11)
-    const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, smp_id.id);
-    if (smp) {
-        res.smp = (void*) smp->d3d11.smp;
-    }
-#else
-    _SOKOL_UNUSED(smp_id);
-#endif
+    #if defined(SOKOL_D3D11)
+        const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, smp_id.id);
+        if (smp) {
+            res.smp = (void*) smp->d3d11.smp;
+        }
+    #else
+        _SOKOL_UNUSED(smp_id);
+    #endif
     return res;
 }
 
@@ -18392,19 +18433,19 @@ SOKOL_API_IMPL sg_d3d11_shader_info sg_d3d11_query_shader_info(sg_shader shd_id)
     SOKOL_ASSERT(_sg.valid);
     sg_d3d11_shader_info res;
     _sg_clear(&res, sizeof(res));
-#if defined(SOKOL_D3D11)
-    const _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
-    if (shd) {
-        for (int i = 0; i < SG_MAX_SHADERSTAGE_UBS; i++) {
-            res.vs_cbufs[i] = (void*) shd->d3d11.stage[SG_SHADERSTAGE_VS].cbufs[i];
-            res.fs_cbufs[i] = (void*) shd->d3d11.stage[SG_SHADERSTAGE_FS].cbufs[i];
+    #if defined(SOKOL_D3D11)
+        const _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
+        if (shd) {
+            for (int i = 0; i < SG_MAX_SHADERSTAGE_UBS; i++) {
+                res.vs_cbufs[i] = (void*) shd->d3d11.stage[SG_SHADERSTAGE_VS].cbufs[i];
+                res.fs_cbufs[i] = (void*) shd->d3d11.stage[SG_SHADERSTAGE_FS].cbufs[i];
+            }
+            res.vs = (void*) shd->d3d11.vs;
+            res.fs = (void*) shd->d3d11.fs;
         }
-        res.vs = (void*) shd->d3d11.vs;
-        res.fs = (void*) shd->d3d11.fs;
-    }
-#else
-    _SOKOL_UNUSED(shd_id);
-#endif
+    #else
+        _SOKOL_UNUSED(shd_id);
+    #endif
     return res;
 }
 
@@ -18412,17 +18453,17 @@ SOKOL_API_IMPL sg_d3d11_pipeline_info sg_d3d11_query_pipeline_info(sg_pipeline p
     SOKOL_ASSERT(_sg.valid);
     sg_d3d11_pipeline_info res;
     _sg_clear(&res, sizeof(res));
-#if defined(SOKOL_D3D11)
-    const _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
-    if (pip) {
-        res.il = pip->d3d11.il;
-        res.rs = pip->d3d11.rs;
-        res.dss = pip->d3d11.dss;
-        res.bs = pip->d3d11.bs;
-    }
-#else
-    _SOKOL_UNUSED(pip_id);
-#endif
+    #if defined(SOKOL_D3D11)
+        const _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
+        if (pip) {
+            res.il = pip->d3d11.il;
+            res.rs = pip->d3d11.rs;
+            res.dss = pip->d3d11.dss;
+            res.bs = pip->d3d11.bs;
+        }
+    #else
+        _SOKOL_UNUSED(pip_id);
+    #endif
     return res;
 }
 
@@ -18430,31 +18471,31 @@ SOKOL_API_IMPL sg_d3d11_pass_info sg_d3d11_query_pass_info(sg_pass pass_id) {
     SOKOL_ASSERT(_sg.valid);
     sg_d3d11_pass_info res;
     _sg_clear(&res, sizeof(res));
-#if defined(SOKOL_D3D11)
-    const _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
-    if (pass) {
-        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-            res.color_rtv[i] = pass->d3d11.color_atts[i].view.rtv;
-            res.resolve_rtv[i] = pass->d3d11.resolve_atts[i].view.rtv;
+    #if defined(SOKOL_D3D11)
+        const _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
+        if (pass) {
+            for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+                res.color_rtv[i] = pass->d3d11.color_atts[i].view.rtv;
+                res.resolve_rtv[i] = pass->d3d11.resolve_atts[i].view.rtv;
+            }
+            res.dsv = pass->d3d11.ds_att.view.dsv;
         }
-        res.dsv = pass->d3d11.ds_att.view.dsv;
-    }
-#else
-    _SOKOL_UNUSED(pass_id);
-#endif
+    #else
+        _SOKOL_UNUSED(pass_id);
+    #endif
     return res;
 }
 
 SOKOL_API_IMPL const void* sg_mtl_device(void) {
-#if defined(SOKOL_METAL)
-    if (nil != _sg.mtl.device) {
-        return (__bridge const void*) _sg.mtl.device;
-    } else {
+    #if defined(SOKOL_METAL)
+        if (nil != _sg.mtl.device) {
+            return (__bridge const void*) _sg.mtl.device;
+        } else {
+            return 0;
+        }
+    #else
         return 0;
-    }
-#else
-    return 0;
-#endif
+    #endif
 }
 
 SOKOL_API_IMPL const void* sg_mtl_render_command_encoder(void) {
@@ -18473,19 +18514,19 @@ SOKOL_API_IMPL sg_mtl_buffer_info sg_mtl_query_buffer_info(sg_buffer buf_id) {
     SOKOL_ASSERT(_sg.valid);
     sg_mtl_buffer_info res;
     _sg_clear(&res, sizeof(res));
-#if defined(SOKOL_METAL)
-    const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
-    if (buf) {
-        for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
-            if (buf->mtl.buf[i] != 0) {
-                res.buf[i] = (__bridge void*) _sg_mtl_id(buf->mtl.buf[i]);
+    #if defined(SOKOL_METAL)
+        const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+        if (buf) {
+            for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+                if (buf->mtl.buf[i] != 0) {
+                    res.buf[i] = (__bridge void*) _sg_mtl_id(buf->mtl.buf[i]);
+                }
             }
+            res.active_slot = buf->cmn.active_slot;
         }
-        res.active_slot = buf->cmn.active_slot;
-    }
-#else
-    _SOKOL_UNUSED(buf_id);
-#endif
+    #else
+        _SOKOL_UNUSED(buf_id);
+    #endif
     return res;
 }
 
@@ -18493,19 +18534,19 @@ SOKOL_API_IMPL sg_mtl_image_info sg_mtl_query_image_info(sg_image img_id) {
     SOKOL_ASSERT(_sg.valid);
     sg_mtl_image_info res;
     _sg_clear(&res, sizeof(res));
-#if defined(SOKOL_METAL)
-    const _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
-    if (img) {
-        for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
-            if (img->mtl.tex[i] != 0) {
-                res.tex[i] = (__bridge void*) _sg_mtl_id(img->mtl.tex[i]);
+    #if defined(SOKOL_METAL)
+        const _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
+        if (img) {
+            for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+                if (img->mtl.tex[i] != 0) {
+                    res.tex[i] = (__bridge void*) _sg_mtl_id(img->mtl.tex[i]);
+                }
             }
+            res.active_slot = img->cmn.active_slot;
         }
-        res.active_slot = img->cmn.active_slot;
-    }
-#else
-    _SOKOL_UNUSED(img_id);
-#endif
+    #else
+        _SOKOL_UNUSED(img_id);
+    #endif
     return res;
 }
 
@@ -18513,16 +18554,16 @@ SOKOL_API_IMPL sg_mtl_sampler_info sg_mtl_query_sampler_info(sg_sampler smp_id) 
     SOKOL_ASSERT(_sg.valid);
     sg_mtl_sampler_info res;
     _sg_clear(&res, sizeof(res));
-#if defined(SOKOL_METAL)
-    const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, smp_id.id);
-    if (smp) {
-        if (smp->mtl.sampler_state != 0) {
-            res.smp = (__bridge void*) _sg_mtl_id(smp->mtl.sampler_state);
+    #if defined(SOKOL_METAL)
+        const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, smp_id.id);
+        if (smp) {
+            if (smp->mtl.sampler_state != 0) {
+                res.smp = (__bridge void*) _sg_mtl_id(smp->mtl.sampler_state);
+            }
         }
-    }
-#else
-    _SOKOL_UNUSED(smp_id);
-#endif
+    #else
+        _SOKOL_UNUSED(smp_id);
+    #endif
     return res;
 }
 
@@ -18530,29 +18571,29 @@ SOKOL_API_IMPL sg_mtl_shader_info sg_mtl_query_shader_info(sg_shader shd_id) {
     SOKOL_ASSERT(_sg.valid);
     sg_mtl_shader_info res;
     _sg_clear(&res, sizeof(res));
-#if defined(SOKOL_METAL)
-    const _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
-    if (shd) {
-        const int vs_lib  = shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_lib;
-        const int vs_func = shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_func;
-        const int fs_lib  = shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_lib;
-        const int fs_func = shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_func;
-        if (vs_lib != 0) {
-            res.vs_lib = (__bridge void*) _sg_mtl_id(vs_lib);
+    #if defined(SOKOL_METAL)
+        const _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
+        if (shd) {
+            const int vs_lib  = shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_lib;
+            const int vs_func = shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_func;
+            const int fs_lib  = shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_lib;
+            const int fs_func = shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_func;
+            if (vs_lib != 0) {
+                res.vs_lib = (__bridge void*) _sg_mtl_id(vs_lib);
+            }
+            if (fs_lib != 0) {
+                res.fs_lib = (__bridge void*) _sg_mtl_id(fs_lib);
+            }
+            if (vs_func != 0) {
+                res.vs_func = (__bridge void*) _sg_mtl_id(vs_func);
+            }
+            if (fs_func != 0) {
+                res.fs_func = (__bridge void*) _sg_mtl_id(fs_func);
+            }
         }
-        if (fs_lib != 0) {
-            res.fs_lib = (__bridge void*) _sg_mtl_id(fs_lib);
-        }
-        if (vs_func != 0) {
-            res.vs_func = (__bridge void*) _sg_mtl_id(vs_func);
-        }
-        if (fs_func != 0) {
-            res.fs_func = (__bridge void*) _sg_mtl_id(fs_func);
-        }
-    }
-#else
-    _SOKOL_UNUSED(shd_id);
-#endif
+    #else
+        _SOKOL_UNUSED(shd_id);
+    #endif
     return res;
 }
 
@@ -18560,19 +18601,19 @@ SOKOL_API_IMPL sg_mtl_pipeline_info sg_mtl_query_pipeline_info(sg_pipeline pip_i
     SOKOL_ASSERT(_sg.valid);
     sg_mtl_pipeline_info res;
     _sg_clear(&res, sizeof(res));
-#if defined(SOKOL_METAL)
-    const _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
-    if (pip) {
-        if (pip->mtl.rps != 0) {
-            res.rps = (__bridge void*) _sg_mtl_id(pip->mtl.rps);
+    #if defined(SOKOL_METAL)
+        const _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
+        if (pip) {
+            if (pip->mtl.rps != 0) {
+                res.rps = (__bridge void*) _sg_mtl_id(pip->mtl.rps);
+            }
+            if (pip->mtl.dss != 0) {
+                res.dss = (__bridge void*) _sg_mtl_id(pip->mtl.dss);
+            }
         }
-        if (pip->mtl.dss != 0) {
-            res.dss = (__bridge void*) _sg_mtl_id(pip->mtl.dss);
-        }
-    }
-#else
-    _SOKOL_UNUSED(pip_id);
-#endif
+    #else
+        _SOKOL_UNUSED(pip_id);
+    #endif
     return res;
 }
 
@@ -18606,6 +18647,103 @@ SOKOL_API_IMPL const void* sg_wgpu_render_pass_encoder(void) {
     #else
         return 0;
     #endif
+}
+
+SOKOL_API_IMPL sg_wgpu_buffer_info sg_wgpu_query_buffer_info(sg_buffer buf_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_wgpu_buffer_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_WGPU)
+        const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+        if (buf) {
+            res.buf = (void*) buf->wgpu.buf;
+        }
+    #else
+        _SOKOL_UNUSED(buf_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_wgpu_image_info sg_wgpu_query_image_info(sg_image img_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_wgpu_image_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_WGPU)
+        const _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
+        if (img) {
+            res.tex = (void*) img->wgpu.tex;
+            res.view = (void*) img->wgpu.view;
+        }
+    #else
+        _SOKOL_UNUSED(img_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_wgpu_sampler_info sg_wgpu_query_sampler_info(sg_sampler smp_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_wgpu_sampler_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_WGPU)
+        const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, smp_id.id);
+        if (smp) {
+            res.smp = (void*) smp->wgpu.smp;
+        }
+    #else
+        _SOKOL_UNUSED(smp_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_wgpu_shader_info sg_wgpu_query_shader_info(sg_shader shd_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_wgpu_shader_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_WGPU)
+        const _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
+        if (shd) {
+            res.vs_mod = (void*) shd->wgpu.stage[SG_SHADERSTAGE_VS].module;
+            res.fs_mod = (void*) shd->wgpu.stage[SG_SHADERSTAGE_FS].module;
+            res.bgl = (void*) shd->wgpu.bind_group_layout;
+        }
+    #else
+        _SOKOL_UNUSED(shd_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_wgpu_pipeline_info sg_wgpu_query_pipeline_info(sg_pipeline pip_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_wgpu_pipeline_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_WGPU)
+        const _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
+        if (pip) {
+            res.pip = (void*) pip->wgpu.pip;
+        }
+    #else
+        _SOKOL_UNUSED(pip_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_wgpu_pass_info sg_wgpu_query_pass_info(sg_pass pass_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_wgpu_pass_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_WGPU)
+        const _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
+        if (pass) {
+            for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+                res.color_view[i] = (void*) pass->wgpu.color_atts[i].view;
+                res.resolve_view[i] = (void*) pass->wgpu.resolve_atts[i].view;
+            }
+            res.ds_view = (void*) pass->wgpu.ds_att.view;
+        }
+    #else
+        _SOKOL_UNUSED(pass_id);
+    #endif
+    return res;
 }
 
 #ifdef _MSC_VER
