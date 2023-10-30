@@ -2562,6 +2562,7 @@ typedef struct sg_image_desc {
     const void* d3d11_texture;
     const void* d3d11_shader_resource_view;
     const void* wgpu_texture;
+    const void* wgpu_texture_view;
     uint32_t _end_canary;
 } sg_image_desc;
 
@@ -13944,6 +13945,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
     if (injected) {
         img->wgpu.tex = (WGPUTexture)desc->wgpu_texture;
         wgpuTextureReference(img->wgpu.tex);
+        img->wgpu.view = (WGPUTextureView)desc->wgpu_texture_view;
+        if (img->wgpu.view) {
+            wgpuTextureViewReference(img->wgpu.view);
+        }
     } else {
         WGPUTextureDescriptor wgpu_tex_desc;
         _sg_clear(&wgpu_tex_desc, sizeof(wgpu_tex_desc));
@@ -13971,28 +13976,28 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
         if ((img->cmn.usage == SG_USAGE_IMMUTABLE) && !img->cmn.render_target) {
             _sg_wgpu_copy_image_data(img, img->wgpu.tex, &desc->data);
         }
-    }
-    WGPUTextureViewDescriptor wgpu_texview_desc;
-    _sg_clear(&wgpu_texview_desc, sizeof(wgpu_texview_desc));
-    wgpu_texview_desc.label = desc->label;
-    wgpu_texview_desc.dimension = _sg_wgpu_texture_view_dimension(img->cmn.type);
-    wgpu_texview_desc.mipLevelCount = (uint32_t)img->cmn.num_mipmaps;
-    if (img->cmn.type == SG_IMAGETYPE_CUBE) {
-        wgpu_texview_desc.arrayLayerCount = 6;
-    } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
-        wgpu_texview_desc.arrayLayerCount = (uint32_t)img->cmn.num_slices;
-    } else {
-        wgpu_texview_desc.arrayLayerCount = 1;
-    }
-    if (_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format)) {
-        wgpu_texview_desc.aspect = WGPUTextureAspect_DepthOnly;
-    } else {
-        wgpu_texview_desc.aspect = WGPUTextureAspect_All;
-    }
-    img->wgpu.view = wgpuTextureCreateView(img->wgpu.tex, &wgpu_texview_desc);
-    if (0 == img->wgpu.view) {
-        _SG_ERROR(WGPU_CREATE_TEXTURE_VIEW_FAILED);
-        return SG_RESOURCESTATE_FAILED;
+        WGPUTextureViewDescriptor wgpu_texview_desc;
+        _sg_clear(&wgpu_texview_desc, sizeof(wgpu_texview_desc));
+        wgpu_texview_desc.label = desc->label;
+        wgpu_texview_desc.dimension = _sg_wgpu_texture_view_dimension(img->cmn.type);
+        wgpu_texview_desc.mipLevelCount = (uint32_t)img->cmn.num_mipmaps;
+        if (img->cmn.type == SG_IMAGETYPE_CUBE) {
+            wgpu_texview_desc.arrayLayerCount = 6;
+        } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
+            wgpu_texview_desc.arrayLayerCount = (uint32_t)img->cmn.num_slices;
+        } else {
+            wgpu_texview_desc.arrayLayerCount = 1;
+        }
+        if (_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format)) {
+            wgpu_texview_desc.aspect = WGPUTextureAspect_DepthOnly;
+        } else {
+            wgpu_texview_desc.aspect = WGPUTextureAspect_All;
+        }
+        img->wgpu.view = wgpuTextureCreateView(img->wgpu.tex, &wgpu_texview_desc);
+        if (0 == img->wgpu.view) {
+            _SG_ERROR(WGPU_CREATE_TEXTURE_VIEW_FAILED);
+            return SG_RESOURCESTATE_FAILED;
+        }
     }
     return SG_RESOURCESTATE_VALID;
 }
