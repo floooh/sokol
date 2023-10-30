@@ -2529,15 +2529,16 @@ typedef struct sg_image_data {
     .mtl_textures[SG_NUM_INFLIGHT_FRAMES]
     .d3d11_texture
     .d3d11_shader_resource_view
+    .wgpu_texture
+    .wgpu_texture_view
 
     For GL, you can also specify the texture target or leave it empty to use
     the default texture target for the image type (GL_TEXTURE_2D for
     SG_IMAGETYPE_2D etc)
 
-    For D3D11, you can provide either a D3D11 texture, or a
-    shader-resource-view, or both. If only a texture is provided, a matching
-    shader-resource-view will be created. If only a shader-resource-view is
-    provided, the texture will be looked up from the shader-resource-view.
+    For D3D11 and WebGPU, either only provide a texture, or both a texture and
+    shader-resource-view / texture-view object. If you want to use access the
+    injected texture in a shader you *must* provide a shader-resource-view.
 
     The same rules apply as for injecting native buffers (see sg_buffer_desc
     documentation for more details).
@@ -2562,6 +2563,7 @@ typedef struct sg_image_desc {
     const void* d3d11_texture;
     const void* d3d11_shader_resource_view;
     const void* wgpu_texture;
+    const void* wgpu_texture_view;
     uint32_t _end_canary;
 } sg_image_desc;
 
@@ -3833,18 +3835,159 @@ SOKOL_GFX_API_DECL sg_context sg_setup_context(void);
 SOKOL_GFX_API_DECL void sg_activate_context(sg_context ctx_id);
 SOKOL_GFX_API_DECL void sg_discard_context(sg_context ctx_id);
 
-/* Backend-specific helper functions, these may come in handy for mixing
+/* Backend-specific structs and functions, these may come in handy for mixing
    sokol-gfx rendering with 'native backend' rendering functions.
 
    This group of functions will be expanded as needed.
 */
 
+typedef struct sg_d3d11_buffer_info {
+    const void* buf;      // ID3D11Buffer*
+} sg_d3d11_buffer_info;
+
+typedef struct sg_d3d11_image_info {
+    const void* tex2d;    // ID3D11Texture2D*
+    const void* tex3d;    // ID3D11Texture3D*
+    const void* res;      // ID3D11Resource* (either tex2d or tex3d)
+    const void* srv;      // ID3D11ShaderResourceView*
+} sg_d3d11_image_info;
+
+typedef struct sg_d3d11_sampler_info {
+    const void* smp;      // ID3D11SamplerState*
+} sg_d3d11_sampler_info;
+
+typedef struct sg_d3d11_shader_info {
+    const void* vs_cbufs[SG_MAX_SHADERSTAGE_UBS]; // ID3D11Buffer* (vertex stage constant buffers)
+    const void* fs_cbufs[SG_MAX_SHADERSTAGE_UBS]; // ID3D11BUffer* (fragment stage constant buffers)
+    const void* vs;   // ID3D11VertexShader*
+    const void* fs;   // ID3D11PixelShader*
+} sg_d3d11_shader_info;
+
+typedef struct sg_d3d11_pipeline_info {
+    const void* il;   // ID3D11InputLayout*
+    const void* rs;   // ID3D11RasterizerState*
+    const void* dss;  // ID3D11DepthStencilState*
+    const void* bs;   // ID3D11BlendState*
+} sg_d3d11_pipeline_info;
+
+typedef struct sg_d3d11_pass_info {
+    const void* color_rtv[SG_MAX_COLOR_ATTACHMENTS];      // ID3D11RenderTargetView
+    const void* resolve_rtv[SG_MAX_COLOR_ATTACHMENTS];    // ID3D11RenderTargetView
+    const void* dsv;  // ID3D11DepthStencilView
+} sg_d3d11_pass_info;
+
+typedef struct sg_mtl_buffer_info {
+    const void* buf[SG_NUM_INFLIGHT_FRAMES];  // id<MTLBuffer>
+    int active_slot;
+} sg_mtl_buffer_info;
+
+typedef struct sg_mtl_image_info {
+    const void* tex[SG_NUM_INFLIGHT_FRAMES]; // id<MTLTexture>
+    int active_slot;
+} sg_mtl_image_info;
+
+typedef struct sg_mtl_sampler_info {
+    const void* smp;  // id<MTLSamplerState>
+} sg_mtl_sampler_info;
+
+typedef struct sg_mtl_shader_info {
+    const void* vs_lib;   // id<MTLLibrary>
+    const void* fs_lib;   // id<MTLLibrary>
+    const void* vs_func;  // id<MTLFunction>
+    const void* fs_func;  // id<MTLFunction>
+} sg_mtl_shader_info;
+
+typedef struct sg_mtl_pipeline_info {
+    const void* rps;      // id<MTLRenderPipelineState>
+    const void* dss;      // id<MTLDepthStencilState>
+} sg_mtl_pipeline_info;
+
+typedef struct sg_wgpu_buffer_info {
+    const void* buf;  // WGPUBuffer
+} sg_wgpu_buffer_info;
+
+typedef struct sg_wgpu_image_info {
+    const void* tex;  // WGPUTexture
+    const void* view; // WGPUTextureView
+} sg_wgpu_image_info;
+
+typedef struct sg_wgpu_sampler_info {
+    const void* smp;  // WGPUSampler
+} sg_wgpu_sampler_info;
+
+typedef struct sg_wgpu_shader_info {
+    const void* vs_mod;   // WGPUShaderModule
+    const void* fs_mod;   // WGPUShaderModule
+    const void* bgl;      // WGPUBindGroupLayout;
+} sg_wgpu_shader_info;
+
+typedef struct sg_wgpu_pipeline_info {
+    const void* pip;      // WGPURenderPipeline
+} sg_wgpu_pipeline_info;
+
+typedef struct sg_wgpu_pass_info {
+    const void* color_view[SG_MAX_COLOR_ATTACHMENTS];     // WGPUTextureView
+    const void* resolve_view[SG_MAX_COLOR_ATTACHMENTS];    // WGPUTextureView
+    const void* ds_view;  // WGPUTextureView
+} sg_wgpu_pass_info;
+
+typedef struct sg_gl_buffer_info {
+    uint32_t buf[SG_NUM_INFLIGHT_FRAMES];
+    int active_slot;
+} sg_gl_buffer_info;
+
+typedef struct sg_gl_image_info {
+    uint32_t tex[SG_NUM_INFLIGHT_FRAMES];
+    uint32_t tex_target;
+    uint32_t msaa_render_buffer;
+    int active_slot;
+} sg_gl_image_info;
+
+typedef struct sg_gl_sampler_info {
+    uint32_t smp;
+} sg_gl_sampler_info;
+
+typedef struct sg_gl_shader_info {
+    uint32_t prog;
+} sg_gl_shader_info;
+
+typedef struct sg_gl_pass_info {
+    uint32_t frame_buffer;
+    uint32_t msaa_resolve_framebuffer[SG_MAX_COLOR_ATTACHMENTS];
+} sg_gl_pass_info;
+
 // D3D11: return ID3D11Device
 SOKOL_GFX_API_DECL const void* sg_d3d11_device(void);
+// D3D11: return ID3D11DeviceContext
+SOKOL_GFX_API_DECL const void* sg_d3d11_device_context(void);
+// D3D11: get internal buffer resource objects
+SOKOL_GFX_API_DECL sg_d3d11_buffer_info sg_d3d11_query_buffer_info(sg_buffer buf);
+// D3D11: get internal image resource objects
+SOKOL_GFX_API_DECL sg_d3d11_image_info sg_d3d11_query_image_info(sg_image img);
+// D3D11: get internal sampler resource objects
+SOKOL_GFX_API_DECL sg_d3d11_sampler_info sg_d3d11_query_sampler_info(sg_sampler smp);
+// D3D11: get internal shader resource objects
+SOKOL_GFX_API_DECL sg_d3d11_shader_info sg_d3d11_query_shader_info(sg_shader shd);
+// D3D11: get internal pipeline resource objects
+SOKOL_GFX_API_DECL sg_d3d11_pipeline_info sg_d3d11_query_pipeline_info(sg_pipeline pip);
+// D3D11: get internal pass resource objects
+SOKOL_GFX_API_DECL sg_d3d11_pass_info sg_d3d11_query_pass_info(sg_pass pass);
+
 // Metal: return __bridge-casted MTLDevice
 SOKOL_GFX_API_DECL const void* sg_mtl_device(void);
 // Metal: return __bridge-casted MTLRenderCommandEncoder in current pass (or zero if outside pass)
 SOKOL_GFX_API_DECL const void* sg_mtl_render_command_encoder(void);
+// Metal: get internal __bridge-casted buffer resource objects
+SOKOL_GFX_API_DECL sg_mtl_buffer_info sg_mtl_query_buffer_info(sg_buffer buf);
+// Metal: get internal __bridge-casted image resource objects
+SOKOL_GFX_API_DECL sg_mtl_image_info sg_mtl_query_image_info(sg_image img);
+// Metal: get internal __bridge-casted sampler resource objects
+SOKOL_GFX_API_DECL sg_mtl_sampler_info sg_mtl_query_sampler_info(sg_sampler smp);
+// Metal: get internal __bridge-casted shader resource objects
+SOKOL_GFX_API_DECL sg_mtl_shader_info sg_mtl_query_shader_info(sg_shader shd);
+// Metal: get internal __bridge-casted pipeline resource objects
+SOKOL_GFX_API_DECL sg_mtl_pipeline_info sg_mtl_query_pipeline_info(sg_pipeline pip);
+
 // WebGPU: return WGPUDevice object
 SOKOL_GFX_API_DECL const void* sg_wgpu_device(void);
 // WebGPU: return WGPUQueue object
@@ -3853,6 +3996,29 @@ SOKOL_GFX_API_DECL const void* sg_wgpu_queue(void);
 SOKOL_GFX_API_DECL const void* sg_wgpu_command_encoder(void);
 // WebGPU: return WGPURenderPassEncoder of currrent pass
 SOKOL_GFX_API_DECL const void* sg_wgpu_render_pass_encoder(void);
+// WebGPU: get internal buffer resource objects
+SOKOL_GFX_API_DECL sg_wgpu_buffer_info sg_wgpu_query_buffer_info(sg_buffer buf);
+// WebGPU: get internal image resource objects
+SOKOL_GFX_API_DECL sg_wgpu_image_info sg_wgpu_query_image_info(sg_image img);
+// WebGPU: get internal sampler resource objects
+SOKOL_GFX_API_DECL sg_wgpu_sampler_info sg_wgpu_query_sampler_info(sg_sampler smp);
+// WebGPU: get internal shader resource objects
+SOKOL_GFX_API_DECL sg_wgpu_shader_info sg_wgpu_query_shader_info(sg_shader shd);
+// WebGPU: get internal pipeline resource objects
+SOKOL_GFX_API_DECL sg_wgpu_pipeline_info sg_wgpu_query_pipeline_info(sg_pipeline pip);
+// WebGPU: get internal pass resource objects
+SOKOL_GFX_API_DECL sg_wgpu_pass_info sg_wgpu_query_pass_info(sg_pass pass);
+
+// GL: get internal buffer resource objects
+SOKOL_GFX_API_DECL sg_gl_buffer_info sg_gl_query_buffer_info(sg_buffer buf);
+// GL: get internal image resource objects
+SOKOL_GFX_API_DECL sg_gl_image_info sg_gl_query_image_info(sg_image img);
+// GL: get internal sampler resource objects
+SOKOL_GFX_API_DECL sg_gl_sampler_info sg_gl_query_sampler_info(sg_sampler smp);
+// GL: get internal shader resource objects
+SOKOL_GFX_API_DECL sg_gl_shader_info sg_gl_query_shader_info(sg_shader shd);
+// GL: get internal pass resource objects
+SOKOL_GFX_API_DECL sg_gl_pass_info sg_gl_query_pass_info(sg_pass pass);
 
 #ifdef __cplusplus
 } // extern "C"
@@ -9775,7 +9941,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
     SOKOL_ASSERT((0 == img->d3d11.tex2d) && (0 == img->d3d11.tex3d) && (0 == img->d3d11.res) && (0 == img->d3d11.srv));
     HRESULT hr;
 
-    const bool injected = (0 != desc->d3d11_texture) || (0 != desc->d3d11_shader_resource_view);
+    const bool injected = (0 != desc->d3d11_texture);
     const bool msaa = (img->cmn.sample_count > 1);
     img->d3d11.format = _sg_d3d11_texture_pixel_format(img->cmn.pixel_format);
     if (img->d3d11.format == DXGI_FORMAT_UNKNOWN) {
@@ -9794,23 +9960,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
         // first check for injected texture and/or resource view
         if (injected) {
             img->d3d11.tex2d = (ID3D11Texture2D*) desc->d3d11_texture;
+            _sg_d3d11_AddRef(img->d3d11.tex2d);
             img->d3d11.srv = (ID3D11ShaderResourceView*) desc->d3d11_shader_resource_view;
-            if (img->d3d11.tex2d) {
-                _sg_d3d11_AddRef(img->d3d11.tex2d);
-            } else {
-                // if only a shader-resource-view was provided, but no texture, lookup
-                // the texture from the shader-resource-view, this also bumps the refcount
-                SOKOL_ASSERT(img->d3d11.srv);
-                _sg_d3d11_GetResource((ID3D11View*)img->d3d11.srv, (ID3D11Resource**)&img->d3d11.tex2d);
-                SOKOL_ASSERT(img->d3d11.tex2d);
-            }
             if (img->d3d11.srv) {
                 _sg_d3d11_AddRef(img->d3d11.srv);
             }
-        }
-
-        if (0 == img->d3d11.tex2d) {
-            // if not injected, create texture
+        } else {
+            // if not injected, create 2D texture
             D3D11_TEXTURE2D_DESC d3d11_tex_desc;
             _sg_clear(&d3d11_tex_desc, sizeof(d3d11_tex_desc));
             d3d11_tex_desc.Width = (UINT)img->cmn.width;
@@ -9847,58 +10003,51 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 _SG_ERROR(D3D11_CREATE_2D_TEXTURE_FAILED);
                 return SG_RESOURCESTATE_FAILED;
             }
+
+            // create shader-resource-view for 2D texture
+            // FIXME: currently we don't support setting MSAA texture as shader resource
+            if (!msaa) {
+                D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
+                _sg_clear(&d3d11_srv_desc, sizeof(d3d11_srv_desc));
+                d3d11_srv_desc.Format = _sg_d3d11_srv_pixel_format(img->cmn.pixel_format);
+                switch (img->cmn.type) {
+                    case SG_IMAGETYPE_2D:
+                        d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+                        d3d11_srv_desc.Texture2D.MipLevels = (UINT)img->cmn.num_mipmaps;
+                        break;
+                    case SG_IMAGETYPE_CUBE:
+                        d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
+                        d3d11_srv_desc.TextureCube.MipLevels = (UINT)img->cmn.num_mipmaps;
+                        break;
+                    case SG_IMAGETYPE_ARRAY:
+                        d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+                        d3d11_srv_desc.Texture2DArray.MipLevels = (UINT)img->cmn.num_mipmaps;
+                        d3d11_srv_desc.Texture2DArray.ArraySize = (UINT)img->cmn.num_slices;
+                        break;
+                    default:
+                        SOKOL_UNREACHABLE; break;
+                }
+                hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)img->d3d11.tex2d, &d3d11_srv_desc, &img->d3d11.srv);
+                if (!(SUCCEEDED(hr) && img->d3d11.srv)) {
+                    _SG_ERROR(D3D11_CREATE_2D_SRV_FAILED);
+                    return SG_RESOURCESTATE_FAILED;
+                }
+            }
         }
         SOKOL_ASSERT(img->d3d11.tex2d);
         img->d3d11.res = (ID3D11Resource*)img->d3d11.tex2d;
         _sg_d3d11_AddRef(img->d3d11.res);
-
-        // ...and similar, if not injected, create shader-resource-view
-        // FIXME: currently we don't support setting MSAA texture as shader resource
-        if ((0 == img->d3d11.srv) && !msaa) {
-            D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
-            _sg_clear(&d3d11_srv_desc, sizeof(d3d11_srv_desc));
-            d3d11_srv_desc.Format = _sg_d3d11_srv_pixel_format(img->cmn.pixel_format);
-            switch (img->cmn.type) {
-                case SG_IMAGETYPE_2D:
-                    d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-                    d3d11_srv_desc.Texture2D.MipLevels = (UINT)img->cmn.num_mipmaps;
-                    break;
-                case SG_IMAGETYPE_CUBE:
-                    d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
-                    d3d11_srv_desc.TextureCube.MipLevels = (UINT)img->cmn.num_mipmaps;
-                    break;
-                case SG_IMAGETYPE_ARRAY:
-                    d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
-                    d3d11_srv_desc.Texture2DArray.MipLevels = (UINT)img->cmn.num_mipmaps;
-                    d3d11_srv_desc.Texture2DArray.ArraySize = (UINT)img->cmn.num_slices;
-                    break;
-                default:
-                    SOKOL_UNREACHABLE; break;
-            }
-            hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, img->d3d11.res, &d3d11_srv_desc, &img->d3d11.srv);
-            if (!(SUCCEEDED(hr) && img->d3d11.srv)) {
-                _SG_ERROR(D3D11_CREATE_2D_SRV_FAILED);
-                return SG_RESOURCESTATE_FAILED;
-            }
-        }
     } else {
         // 3D texture - same procedure, first check if injected, than create non-injected
         if (injected) {
             img->d3d11.tex3d = (ID3D11Texture3D*) desc->d3d11_texture;
+            _sg_d3d11_AddRef(img->d3d11.tex3d);
             img->d3d11.srv = (ID3D11ShaderResourceView*) desc->d3d11_shader_resource_view;
-            if (img->d3d11.tex3d) {
-                _sg_d3d11_AddRef(img->d3d11.tex3d);
-            } else {
-                SOKOL_ASSERT(img->d3d11.srv);
-                _sg_d3d11_GetResource((ID3D11View*)img->d3d11.srv, (ID3D11Resource**)&img->d3d11.tex3d);
-                SOKOL_ASSERT(img->d3d11.tex3d);
-            }
             if (img->d3d11.srv) {
                 _sg_d3d11_AddRef(img->d3d11.srv);
             }
-        }
-
-        if (0 == img->d3d11.tex3d) {
+        } else {
+            // not injected, create 3d texture
             D3D11_TEXTURE3D_DESC d3d11_tex_desc;
             _sg_clear(&d3d11_tex_desc, sizeof(d3d11_tex_desc));
             d3d11_tex_desc.Width = (UINT)img->cmn.width;
@@ -9924,23 +10073,24 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 _SG_ERROR(D3D11_CREATE_3D_TEXTURE_FAILED);
                 return SG_RESOURCESTATE_FAILED;
             }
+
+            // create shader-resource-view for 3D texture
+            if (!msaa) {
+                D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
+                _sg_clear(&d3d11_srv_desc, sizeof(d3d11_srv_desc));
+                d3d11_srv_desc.Format = _sg_d3d11_srv_pixel_format(img->cmn.pixel_format);
+                d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
+                d3d11_srv_desc.Texture3D.MipLevels = (UINT)img->cmn.num_mipmaps;
+                hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)img->d3d11.tex3d, &d3d11_srv_desc, &img->d3d11.srv);
+                if (!(SUCCEEDED(hr) && img->d3d11.srv)) {
+                    _SG_ERROR(D3D11_CREATE_3D_SRV_FAILED);
+                    return SG_RESOURCESTATE_FAILED;
+                }
+            }
         }
         SOKOL_ASSERT(img->d3d11.tex3d);
         img->d3d11.res = (ID3D11Resource*)img->d3d11.tex3d;
         _sg_d3d11_AddRef(img->d3d11.res);
-
-        if ((0 == img->d3d11.srv) && !msaa) {
-            D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
-            _sg_clear(&d3d11_srv_desc, sizeof(d3d11_srv_desc));
-            d3d11_srv_desc.Format = _sg_d3d11_srv_pixel_format(img->cmn.pixel_format);
-            d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
-            d3d11_srv_desc.Texture3D.MipLevels = (UINT)img->cmn.num_mipmaps;
-            hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, img->d3d11.res, &d3d11_srv_desc, &img->d3d11.srv);
-            if (!(SUCCEEDED(hr) && img->d3d11.srv)) {
-                _SG_ERROR(D3D11_CREATE_3D_SRV_FAILED);
-                return SG_RESOURCESTATE_FAILED;
-            }
-        }
     }
     return SG_RESOURCESTATE_VALID;
 }
@@ -13816,6 +13966,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
     if (injected) {
         img->wgpu.tex = (WGPUTexture)desc->wgpu_texture;
         wgpuTextureReference(img->wgpu.tex);
+        img->wgpu.view = (WGPUTextureView)desc->wgpu_texture_view;
+        if (img->wgpu.view) {
+            wgpuTextureViewReference(img->wgpu.view);
+        }
     } else {
         WGPUTextureDescriptor wgpu_tex_desc;
         _sg_clear(&wgpu_tex_desc, sizeof(wgpu_tex_desc));
@@ -13843,28 +13997,28 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
         if ((img->cmn.usage == SG_USAGE_IMMUTABLE) && !img->cmn.render_target) {
             _sg_wgpu_copy_image_data(img, img->wgpu.tex, &desc->data);
         }
-    }
-    WGPUTextureViewDescriptor wgpu_texview_desc;
-    _sg_clear(&wgpu_texview_desc, sizeof(wgpu_texview_desc));
-    wgpu_texview_desc.label = desc->label;
-    wgpu_texview_desc.dimension = _sg_wgpu_texture_view_dimension(img->cmn.type);
-    wgpu_texview_desc.mipLevelCount = (uint32_t)img->cmn.num_mipmaps;
-    if (img->cmn.type == SG_IMAGETYPE_CUBE) {
-        wgpu_texview_desc.arrayLayerCount = 6;
-    } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
-        wgpu_texview_desc.arrayLayerCount = (uint32_t)img->cmn.num_slices;
-    } else {
-        wgpu_texview_desc.arrayLayerCount = 1;
-    }
-    if (_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format)) {
-        wgpu_texview_desc.aspect = WGPUTextureAspect_DepthOnly;
-    } else {
-        wgpu_texview_desc.aspect = WGPUTextureAspect_All;
-    }
-    img->wgpu.view = wgpuTextureCreateView(img->wgpu.tex, &wgpu_texview_desc);
-    if (0 == img->wgpu.view) {
-        _SG_ERROR(WGPU_CREATE_TEXTURE_VIEW_FAILED);
-        return SG_RESOURCESTATE_FAILED;
+        WGPUTextureViewDescriptor wgpu_texview_desc;
+        _sg_clear(&wgpu_texview_desc, sizeof(wgpu_texview_desc));
+        wgpu_texview_desc.label = desc->label;
+        wgpu_texview_desc.dimension = _sg_wgpu_texture_view_dimension(img->cmn.type);
+        wgpu_texview_desc.mipLevelCount = (uint32_t)img->cmn.num_mipmaps;
+        if (img->cmn.type == SG_IMAGETYPE_CUBE) {
+            wgpu_texview_desc.arrayLayerCount = 6;
+        } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
+            wgpu_texview_desc.arrayLayerCount = (uint32_t)img->cmn.num_slices;
+        } else {
+            wgpu_texview_desc.arrayLayerCount = 1;
+        }
+        if (_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format)) {
+            wgpu_texview_desc.aspect = WGPUTextureAspect_DepthOnly;
+        } else {
+            wgpu_texview_desc.aspect = WGPUTextureAspect_All;
+        }
+        img->wgpu.view = wgpuTextureCreateView(img->wgpu.tex, &wgpu_texview_desc);
+        if (0 == img->wgpu.view) {
+            _SG_ERROR(WGPU_CREATE_TEXTURE_VIEW_FAILED);
+            return SG_RESOURCESTATE_FAILED;
+        }
     }
     return SG_RESOURCESTATE_VALID;
 }
@@ -18238,23 +18392,136 @@ SOKOL_API_IMPL sg_pass_desc sg_query_pass_defaults(const sg_pass_desc* desc) {
 }
 
 SOKOL_API_IMPL const void* sg_d3d11_device(void) {
-#if defined(SOKOL_D3D11)
-    return (const void*) _sg.d3d11.dev;
-#else
-    return 0;
-#endif
+    #if defined(SOKOL_D3D11)
+        return (const void*) _sg.d3d11.dev;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sg_d3d11_device_context(void) {
+    #if defined(SOKOL_D3D11)
+        return (const void*) _sg.d3d11.ctx;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL sg_d3d11_buffer_info sg_d3d11_query_buffer_info(sg_buffer buf_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_d3d11_buffer_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_D3D11)
+        const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+        if (buf) {
+            res.buf = (const void*) buf->d3d11.buf;
+        }
+    #else
+        _SOKOL_UNUSED(buf_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_d3d11_image_info sg_d3d11_query_image_info(sg_image img_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_d3d11_image_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_D3D11)
+        const _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
+        if (img) {
+            res.tex2d = (const void*) img->d3d11.tex2d;
+            res.tex3d = (const void*) img->d3d11.tex3d;
+            res.res = (const void*) img->d3d11.res;
+            res.srv = (const void*) img->d3d11.srv;
+        }
+    #else
+        _SOKOL_UNUSED(img_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_d3d11_sampler_info sg_d3d11_query_sampler_info(sg_sampler smp_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_d3d11_sampler_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_D3D11)
+        const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, smp_id.id);
+        if (smp) {
+            res.smp = (const void*) smp->d3d11.smp;
+        }
+    #else
+        _SOKOL_UNUSED(smp_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_d3d11_shader_info sg_d3d11_query_shader_info(sg_shader shd_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_d3d11_shader_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_D3D11)
+        const _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
+        if (shd) {
+            for (int i = 0; i < SG_MAX_SHADERSTAGE_UBS; i++) {
+                res.vs_cbufs[i] = (const void*) shd->d3d11.stage[SG_SHADERSTAGE_VS].cbufs[i];
+                res.fs_cbufs[i] = (const void*) shd->d3d11.stage[SG_SHADERSTAGE_FS].cbufs[i];
+            }
+            res.vs = (const void*) shd->d3d11.vs;
+            res.fs = (const void*) shd->d3d11.fs;
+        }
+    #else
+        _SOKOL_UNUSED(shd_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_d3d11_pipeline_info sg_d3d11_query_pipeline_info(sg_pipeline pip_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_d3d11_pipeline_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_D3D11)
+        const _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
+        if (pip) {
+            res.il = (const void*) pip->d3d11.il;
+            res.rs = (const void*) pip->d3d11.rs;
+            res.dss = (const void*) pip->d3d11.dss;
+            res.bs = (const void*) pip->d3d11.bs;
+        }
+    #else
+        _SOKOL_UNUSED(pip_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_d3d11_pass_info sg_d3d11_query_pass_info(sg_pass pass_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_d3d11_pass_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_D3D11)
+        const _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
+        if (pass) {
+            for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+                res.color_rtv[i] = (const void*) pass->d3d11.color_atts[i].view.rtv;
+                res.resolve_rtv[i] = (const void*) pass->d3d11.resolve_atts[i].view.rtv;
+            }
+            res.dsv = (const void*) pass->d3d11.ds_att.view.dsv;
+        }
+    #else
+        _SOKOL_UNUSED(pass_id);
+    #endif
+    return res;
 }
 
 SOKOL_API_IMPL const void* sg_mtl_device(void) {
-#if defined(SOKOL_METAL)
-    if (nil != _sg.mtl.device) {
-        return (__bridge const void*) _sg.mtl.device;
-    } else {
+    #if defined(SOKOL_METAL)
+        if (nil != _sg.mtl.device) {
+            return (__bridge const void*) _sg.mtl.device;
+        } else {
+            return 0;
+        }
+    #else
         return 0;
-    }
-#else
-    return 0;
-#endif
+    #endif
 }
 
 SOKOL_API_IMPL const void* sg_mtl_render_command_encoder(void) {
@@ -18269,9 +18536,116 @@ SOKOL_API_IMPL const void* sg_mtl_render_command_encoder(void) {
     #endif
 }
 
+SOKOL_API_IMPL sg_mtl_buffer_info sg_mtl_query_buffer_info(sg_buffer buf_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_mtl_buffer_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_METAL)
+        const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+        if (buf) {
+            for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+                if (buf->mtl.buf[i] != 0) {
+                    res.buf[i] = (__bridge void*) _sg_mtl_id(buf->mtl.buf[i]);
+                }
+            }
+            res.active_slot = buf->cmn.active_slot;
+        }
+    #else
+        _SOKOL_UNUSED(buf_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_mtl_image_info sg_mtl_query_image_info(sg_image img_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_mtl_image_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_METAL)
+        const _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
+        if (img) {
+            for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+                if (img->mtl.tex[i] != 0) {
+                    res.tex[i] = (__bridge void*) _sg_mtl_id(img->mtl.tex[i]);
+                }
+            }
+            res.active_slot = img->cmn.active_slot;
+        }
+    #else
+        _SOKOL_UNUSED(img_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_mtl_sampler_info sg_mtl_query_sampler_info(sg_sampler smp_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_mtl_sampler_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_METAL)
+        const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, smp_id.id);
+        if (smp) {
+            if (smp->mtl.sampler_state != 0) {
+                res.smp = (__bridge void*) _sg_mtl_id(smp->mtl.sampler_state);
+            }
+        }
+    #else
+        _SOKOL_UNUSED(smp_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_mtl_shader_info sg_mtl_query_shader_info(sg_shader shd_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_mtl_shader_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_METAL)
+        const _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
+        if (shd) {
+            const int vs_lib  = shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_lib;
+            const int vs_func = shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_func;
+            const int fs_lib  = shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_lib;
+            const int fs_func = shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_func;
+            if (vs_lib != 0) {
+                res.vs_lib = (__bridge void*) _sg_mtl_id(vs_lib);
+            }
+            if (fs_lib != 0) {
+                res.fs_lib = (__bridge void*) _sg_mtl_id(fs_lib);
+            }
+            if (vs_func != 0) {
+                res.vs_func = (__bridge void*) _sg_mtl_id(vs_func);
+            }
+            if (fs_func != 0) {
+                res.fs_func = (__bridge void*) _sg_mtl_id(fs_func);
+            }
+        }
+    #else
+        _SOKOL_UNUSED(shd_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_mtl_pipeline_info sg_mtl_query_pipeline_info(sg_pipeline pip_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_mtl_pipeline_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_METAL)
+        const _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
+        if (pip) {
+            if (pip->mtl.rps != 0) {
+                res.rps = (__bridge void*) _sg_mtl_id(pip->mtl.rps);
+            }
+            if (pip->mtl.dss != 0) {
+                res.dss = (__bridge void*) _sg_mtl_id(pip->mtl.dss);
+            }
+        }
+    #else
+        _SOKOL_UNUSED(pip_id);
+    #endif
+    return res;
+}
+
 SOKOL_API_IMPL const void* sg_wgpu_device(void) {
     #if defined(SOKOL_WGPU)
-        return _sg.wgpu.dev;
+        return (const void*) _sg.wgpu.dev;
     #else
         return 0;
     #endif
@@ -18279,7 +18653,7 @@ SOKOL_API_IMPL const void* sg_wgpu_device(void) {
 
 SOKOL_API_IMPL const void* sg_wgpu_queue(void) {
     #if defined(SOKOL_WGPU)
-        return _sg.wgpu.queue;
+        return (const void*) _sg.wgpu.queue;
     #else
         return 0;
     #endif
@@ -18287,7 +18661,7 @@ SOKOL_API_IMPL const void* sg_wgpu_queue(void) {
 
 SOKOL_API_IMPL const void* sg_wgpu_command_encoder(void) {
     #if defined(SOKOL_WGPU)
-        return _sg.wgpu.cmd_enc;
+        return (const void*) _sg.wgpu.cmd_enc;
     #else
         return 0;
     #endif
@@ -18295,10 +18669,193 @@ SOKOL_API_IMPL const void* sg_wgpu_command_encoder(void) {
 
 SOKOL_API_IMPL const void* sg_wgpu_render_pass_encoder(void) {
     #if defined(SOKOL_WGPU)
-        return _sg.wgpu.pass_enc;
+        return (const void*) _sg.wgpu.pass_enc;
     #else
         return 0;
     #endif
+}
+
+SOKOL_API_IMPL sg_wgpu_buffer_info sg_wgpu_query_buffer_info(sg_buffer buf_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_wgpu_buffer_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_WGPU)
+        const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+        if (buf) {
+            res.buf = (const void*) buf->wgpu.buf;
+        }
+    #else
+        _SOKOL_UNUSED(buf_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_wgpu_image_info sg_wgpu_query_image_info(sg_image img_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_wgpu_image_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_WGPU)
+        const _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
+        if (img) {
+            res.tex = (const void*) img->wgpu.tex;
+            res.view = (const void*) img->wgpu.view;
+        }
+    #else
+        _SOKOL_UNUSED(img_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_wgpu_sampler_info sg_wgpu_query_sampler_info(sg_sampler smp_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_wgpu_sampler_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_WGPU)
+        const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, smp_id.id);
+        if (smp) {
+            res.smp = (const void*) smp->wgpu.smp;
+        }
+    #else
+        _SOKOL_UNUSED(smp_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_wgpu_shader_info sg_wgpu_query_shader_info(sg_shader shd_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_wgpu_shader_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_WGPU)
+        const _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
+        if (shd) {
+            res.vs_mod = (const void*) shd->wgpu.stage[SG_SHADERSTAGE_VS].module;
+            res.fs_mod = (const void*) shd->wgpu.stage[SG_SHADERSTAGE_FS].module;
+            res.bgl = (const void*) shd->wgpu.bind_group_layout;
+        }
+    #else
+        _SOKOL_UNUSED(shd_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_wgpu_pipeline_info sg_wgpu_query_pipeline_info(sg_pipeline pip_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_wgpu_pipeline_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_WGPU)
+        const _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
+        if (pip) {
+            res.pip = (const void*) pip->wgpu.pip;
+        }
+    #else
+        _SOKOL_UNUSED(pip_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_wgpu_pass_info sg_wgpu_query_pass_info(sg_pass pass_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_wgpu_pass_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_WGPU)
+        const _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
+        if (pass) {
+            for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+                res.color_view[i] = (const void*) pass->wgpu.color_atts[i].view;
+                res.resolve_view[i] = (const void*) pass->wgpu.resolve_atts[i].view;
+            }
+            res.ds_view = (const void*) pass->wgpu.ds_att.view;
+        }
+    #else
+        _SOKOL_UNUSED(pass_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_gl_buffer_info sg_gl_query_buffer_info(sg_buffer buf_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_gl_buffer_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(_SOKOL_ANY_GL)
+        const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+        if (buf) {
+            for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+                res.buf[i] = buf->gl.buf[i];
+            }
+            res.active_slot = buf->cmn.active_slot;
+        }
+    #else
+        _SOKOL_UNUSED(buf_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_gl_image_info sg_gl_query_image_info(sg_image img_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_gl_image_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(_SOKOL_ANY_GL)
+        const _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
+        if (img) {
+            for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+                res.tex[i] = img->gl.tex[i];
+            }
+            res.tex_target = img->gl.target;
+            res.msaa_render_buffer = img->gl.msaa_render_buffer;
+            res.active_slot = img->cmn.active_slot;
+        }
+    #else
+        _SOKOL_UNUSED(img_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_gl_sampler_info sg_gl_query_sampler_info(sg_sampler smp_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_gl_sampler_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(_SOKOL_ANY_GL)
+        const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, smp_id.id);
+        if (smp) {
+            res.smp = smp->gl.smp;
+        }
+    #else
+        _SOKOL_UNUSED(smp_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_gl_shader_info sg_gl_query_shader_info(sg_shader shd_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_gl_shader_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(_SOKOL_ANY_GL)
+        const _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
+        if (shd) {
+            res.prog = shd->gl.prog;
+        }
+    #else
+        _SOKOL_UNUSED(shd_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_gl_pass_info sg_gl_query_pass_info(sg_pass pass_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_gl_pass_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(_SOKOL_ANY_GL)
+        const _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
+        if (pass) {
+            res.frame_buffer = pass->gl.fb;
+            for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+                res.msaa_resolve_framebuffer[i] = pass->gl.msaa_resolve_framebuffer[i];
+            }
+        }
+    #else
+        _SOKOL_UNUSED(pass_id);
+    #endif
+    return res;
 }
 
 #ifdef _MSC_VER
