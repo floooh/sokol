@@ -18303,7 +18303,7 @@ SOKOL_API_IMPL const void* sg_d3d11_device_context(void) {
 #endif
 }
 
-SOKOL_GFX_API_IMPL sg_d3d11_buffer_info sg_d3d11_query_buffer_info(sg_buffer buf_id) {
+SOKOL_API_IMPL sg_d3d11_buffer_info sg_d3d11_query_buffer_info(sg_buffer buf_id) {
     SOKOL_ASSERT(_sg.valid);
     sg_d3d11_buffer_info res;
     _sg_clear(&res, sizeof(res));
@@ -18312,11 +18312,13 @@ SOKOL_GFX_API_IMPL sg_d3d11_buffer_info sg_d3d11_query_buffer_info(sg_buffer buf
     if (buf) {
         res.buf = (void*) buf->d3d11.buf;
     }
+#else
+    _SOKOL_UNUSED(buf_id);
 #endif
     return res;
 }
 
-SOKOL_GFX_API_IMPL sg_d3d11_image_info sg_d3d11_query_image_info(sg_image img_id) {
+SOKOL_API_IMPL sg_d3d11_image_info sg_d3d11_query_image_info(sg_image img_id) {
     SOKOL_ASSERT(_sg.valid);
     sg_d3d11_image_info res;
     _sg_clear(&res, sizeof(res));
@@ -18328,11 +18330,13 @@ SOKOL_GFX_API_IMPL sg_d3d11_image_info sg_d3d11_query_image_info(sg_image img_id
         res.res = (void*) img->d3d11.res;
         res.srv = (void*) img->d3d11.srv;
     }
+#else
+    _SOKOL_UNUSED(img_id);
 #endif
     return res;
 }
 
-SOKOL_GFX_API_IMPL sg_d3d11_sampler_info sg_d3d11_query_sampler_info(sg_sampler smp_id) {
+SOKOL_API_IMPL sg_d3d11_sampler_info sg_d3d11_query_sampler_info(sg_sampler smp_id) {
     SOKOL_ASSERT(_sg.valid);
     sg_d3d11_sampler_info res;
     _sg_clear(&res, sizeof(res));
@@ -18341,11 +18345,13 @@ SOKOL_GFX_API_IMPL sg_d3d11_sampler_info sg_d3d11_query_sampler_info(sg_sampler 
     if (smp) {
         res.smp = (void*) smp->d3d11.smp;
     }
+#else
+    _SOKOL_UNUSED(smp_id);
 #endif
     return res;
 }
 
-SOKOL_GFX_API_IMPL sg_d3d11_shader_info sg_d3d11_query_shader_info(sg_shader shd_id) {
+SOKOL_API_IMPL sg_d3d11_shader_info sg_d3d11_query_shader_info(sg_shader shd_id) {
     SOKOL_ASSERT(_sg.valid);
     sg_d3d11_shader_info res;
     _sg_clear(&res, sizeof(res));
@@ -18359,11 +18365,13 @@ SOKOL_GFX_API_IMPL sg_d3d11_shader_info sg_d3d11_query_shader_info(sg_shader shd
         res.vs = (void*) shd->d3d11.vs;
         res.fs = (void*) shd->d3d11.fs;
     }
+#else
+    _SOKOL_UNUSED(shd_id);
 #endif
     return res;
 }
 
-SOKOL_GFX_API_IMPL sg_d3d11_pipeline_info sg_d3d11_query_pipeline_info(sg_pipeline pip_id) {
+SOKOL_API_IMPL sg_d3d11_pipeline_info sg_d3d11_query_pipeline_info(sg_pipeline pip_id) {
     SOKOL_ASSERT(_sg.valid);
     sg_d3d11_pipeline_info res;
     _sg_clear(&res, sizeof(res));
@@ -18375,11 +18383,13 @@ SOKOL_GFX_API_IMPL sg_d3d11_pipeline_info sg_d3d11_query_pipeline_info(sg_pipeli
         res.dss = pip->d3d11.dss;
         res.bs = pip->d3d11.bs;
     }
+#else
+    _SOKOL_UNUSED(pip_id);
 #endif
     return res;
 }
 
-SOKOL_GFX_API_IMPL sg_d3d11_pass_info sg_d3d11_query_pass_info(sg_pass pass_id) {
+SOKOL_API_IMPL sg_d3d11_pass_info sg_d3d11_query_pass_info(sg_pass pass_id) {
     SOKOL_ASSERT(_sg.valid);
     sg_d3d11_pass_info res;
     _sg_clear(&res, sizeof(res));
@@ -18387,11 +18397,13 @@ SOKOL_GFX_API_IMPL sg_d3d11_pass_info sg_d3d11_query_pass_info(sg_pass pass_id) 
     const _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
     if (pass) {
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-            res.color_rtv[i] = pass->d3d11.color_atts[i].rtv;
-            res.resolve_rtv[i] = pass->d3d11.resolve_attrs[i].rtv;
+            res.color_rtv[i] = pass->d3d11.color_atts[i].view.rtv;
+            res.resolve_rtv[i] = pass->d3d11.resolve_atts[i].view.rtv;
         }
-        res.dsv = pass->d3d11.ds_att.dsv;
+        res.dsv = pass->d3d11.ds_att.view.dsv;
     }
+#else
+    _SOKOL_UNUSED(pass_id);
 #endif
     return res;
 }
