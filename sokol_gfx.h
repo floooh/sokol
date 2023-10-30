@@ -3841,93 +3841,93 @@ SOKOL_GFX_API_DECL void sg_discard_context(sg_context ctx_id);
 */
 
 typedef struct sg_d3d11_buffer_info {
-    void* buf;      // ID3D11Buffer*
+    const void* buf;      // ID3D11Buffer*
 } sg_d3d11_buffer_info;
 
 typedef struct sg_d3d11_image_info {
-    void* tex2d;    // ID3D11Texture2D*
-    void* tex3d;    // ID3D11Texture3D*
-    void* res;      // ID3D11Resource* (either tex2d or tex3d)
-    void* srv;      // ID3D11ShaderResourceView*
+    const void* tex2d;    // ID3D11Texture2D*
+    const void* tex3d;    // ID3D11Texture3D*
+    const void* res;      // ID3D11Resource* (either tex2d or tex3d)
+    const void* srv;      // ID3D11ShaderResourceView*
 } sg_d3d11_image_info;
 
 typedef struct sg_d3d11_sampler_info {
-    void* smp;      // ID3D11SamplerState*
+    const void* smp;      // ID3D11SamplerState*
 } sg_d3d11_sampler_info;
 
 typedef struct sg_d3d11_shader_info {
-    void* vs_cbufs[SG_MAX_SHADERSTAGE_UBS]; // ID3D11Buffer* (vertex stage constant buffers)
-    void* fs_cbufs[SG_MAX_SHADERSTAGE_UBS]; // ID3D11BUffer* (fragment stage constant buffers)
-    void* vs;   // ID3D11VertexShader*
-    void* fs;   // ID3D11PixelShader*
+    const void* vs_cbufs[SG_MAX_SHADERSTAGE_UBS]; // ID3D11Buffer* (vertex stage constant buffers)
+    const void* fs_cbufs[SG_MAX_SHADERSTAGE_UBS]; // ID3D11BUffer* (fragment stage constant buffers)
+    const void* vs;   // ID3D11VertexShader*
+    const void* fs;   // ID3D11PixelShader*
 } sg_d3d11_shader_info;
 
 typedef struct sg_d3d11_pipeline_info {
-    void* il;   // ID3D11InputLayout*
-    void* rs;   // ID3D11RasterizerState*
-    void* dss;  // ID3D11DepthStencilState*
-    void* bs;   // ID3D11BlendState*
+    const void* il;   // ID3D11InputLayout*
+    const void* rs;   // ID3D11RasterizerState*
+    const void* dss;  // ID3D11DepthStencilState*
+    const void* bs;   // ID3D11BlendState*
 } sg_d3d11_pipeline_info;
 
 typedef struct sg_d3d11_pass_info {
-    void* color_rtv[SG_MAX_COLOR_ATTACHMENTS];      // ID3D11RenderTargetView
-    void* resolve_rtv[SG_MAX_COLOR_ATTACHMENTS];    // ID3D11RenderTargetView
-    void* dsv;  // ID3D11DepthStencilView
+    const void* color_rtv[SG_MAX_COLOR_ATTACHMENTS];      // ID3D11RenderTargetView
+    const void* resolve_rtv[SG_MAX_COLOR_ATTACHMENTS];    // ID3D11RenderTargetView
+    const void* dsv;  // ID3D11DepthStencilView
 } sg_d3d11_pass_info;
 
 typedef struct sg_mtl_buffer_info {
-    void* buf[SG_NUM_INFLIGHT_FRAMES];  // id<MTLBuffer>
+    const void* buf[SG_NUM_INFLIGHT_FRAMES];  // id<MTLBuffer>
     int active_slot;
 } sg_mtl_buffer_info;
 
 typedef struct sg_mtl_image_info {
-    void* tex[SG_NUM_INFLIGHT_FRAMES]; // id<MTLTexture>
+    const void* tex[SG_NUM_INFLIGHT_FRAMES]; // id<MTLTexture>
     int active_slot;
 } sg_mtl_image_info;
 
 typedef struct sg_mtl_sampler_info {
-    void* smp;  // id<MTLSamplerState>
+    const void* smp;  // id<MTLSamplerState>
 } sg_mtl_sampler_info;
 
 typedef struct sg_mtl_shader_info {
-    void* vs_lib;   // id<MTLLibrary>
-    void* fs_lib;   // id<MTLLibrary>
-    void* vs_func;  // id<MTLFunction>
-    void* fs_func;  // id<MTLFunction>
+    const void* vs_lib;   // id<MTLLibrary>
+    const void* fs_lib;   // id<MTLLibrary>
+    const void* vs_func;  // id<MTLFunction>
+    const void* fs_func;  // id<MTLFunction>
 } sg_mtl_shader_info;
 
 typedef struct sg_mtl_pipeline_info {
-    void* rps;      // id<MTLRenderPipelineState>
-    void* dss;      // id<MTLDepthStencilState>
+    const void* rps;      // id<MTLRenderPipelineState>
+    const void* dss;      // id<MTLDepthStencilState>
 } sg_mtl_pipeline_info;
 
 typedef struct sg_wgpu_buffer_info {
-    void* buf;  // WGPUBuffer
+    const void* buf;  // WGPUBuffer
 } sg_wgpu_buffer_info;
 
 typedef struct sg_wgpu_image_info {
-    void* tex;  // WGPUTexture
-    void* view; // WGPUTextureView
+    const void* tex;  // WGPUTexture
+    const void* view; // WGPUTextureView
 } sg_wgpu_image_info;
 
 typedef struct sg_wgpu_sampler_info {
-    void* smp;  // WGPUSampler
+    const void* smp;  // WGPUSampler
 } sg_wgpu_sampler_info;
 
 typedef struct sg_wgpu_shader_info {
-    void* vs_mod;   // WGPUShaderModule
-    void* fs_mod;   // WGPUShaderModule
-    void* bgl;      // WGPUBindGroupLayout;
+    const void* vs_mod;   // WGPUShaderModule
+    const void* fs_mod;   // WGPUShaderModule
+    const void* bgl;      // WGPUBindGroupLayout;
 } sg_wgpu_shader_info;
 
 typedef struct sg_wgpu_pipeline_info {
-    void* pip;      // WGPURenderPipeline
+    const void* pip;      // WGPURenderPipeline
 } sg_wgpu_pipeline_info;
 
 typedef struct sg_wgpu_pass_info {
-    void* color_view[SG_MAX_COLOR_ATTACHMENTS];     // WGPUTextureView
-    void* resolve_view[SG_MAX_COLOR_ATTACHMENTS];    // WGPUTextureView
-    void* ds_view;  // WGPUTextureView
+    const void* color_view[SG_MAX_COLOR_ATTACHMENTS];     // WGPUTextureView
+    const void* resolve_view[SG_MAX_COLOR_ATTACHMENTS];    // WGPUTextureView
+    const void* ds_view;  // WGPUTextureView
 } sg_wgpu_pass_info;
 
 typedef struct sg_gl_buffer_info {
@@ -18429,7 +18429,7 @@ SOKOL_API_IMPL sg_d3d11_buffer_info sg_d3d11_query_buffer_info(sg_buffer buf_id)
     #if defined(SOKOL_D3D11)
         const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
         if (buf) {
-            res.buf = (void*) buf->d3d11.buf;
+            res.buf = (const void*) buf->d3d11.buf;
         }
     #else
         _SOKOL_UNUSED(buf_id);
@@ -18444,10 +18444,10 @@ SOKOL_API_IMPL sg_d3d11_image_info sg_d3d11_query_image_info(sg_image img_id) {
     #if defined(SOKOL_D3D11)
         const _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
         if (img) {
-            res.tex2d = (void*) img->d3d11.tex2d;
-            res.tex3d = (void*) img->d3d11.tex3d;
-            res.res = (void*) img->d3d11.res;
-            res.srv = (void*) img->d3d11.srv;
+            res.tex2d = (const void*) img->d3d11.tex2d;
+            res.tex3d = (const void*) img->d3d11.tex3d;
+            res.res = (const void*) img->d3d11.res;
+            res.srv = (const void*) img->d3d11.srv;
         }
     #else
         _SOKOL_UNUSED(img_id);
@@ -18462,7 +18462,7 @@ SOKOL_API_IMPL sg_d3d11_sampler_info sg_d3d11_query_sampler_info(sg_sampler smp_
     #if defined(SOKOL_D3D11)
         const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, smp_id.id);
         if (smp) {
-            res.smp = (void*) smp->d3d11.smp;
+            res.smp = (const void*) smp->d3d11.smp;
         }
     #else
         _SOKOL_UNUSED(smp_id);
@@ -18478,11 +18478,11 @@ SOKOL_API_IMPL sg_d3d11_shader_info sg_d3d11_query_shader_info(sg_shader shd_id)
         const _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
         if (shd) {
             for (int i = 0; i < SG_MAX_SHADERSTAGE_UBS; i++) {
-                res.vs_cbufs[i] = (void*) shd->d3d11.stage[SG_SHADERSTAGE_VS].cbufs[i];
-                res.fs_cbufs[i] = (void*) shd->d3d11.stage[SG_SHADERSTAGE_FS].cbufs[i];
+                res.vs_cbufs[i] = (const void*) shd->d3d11.stage[SG_SHADERSTAGE_VS].cbufs[i];
+                res.fs_cbufs[i] = (const void*) shd->d3d11.stage[SG_SHADERSTAGE_FS].cbufs[i];
             }
-            res.vs = (void*) shd->d3d11.vs;
-            res.fs = (void*) shd->d3d11.fs;
+            res.vs = (const void*) shd->d3d11.vs;
+            res.fs = (const void*) shd->d3d11.fs;
         }
     #else
         _SOKOL_UNUSED(shd_id);
@@ -18497,10 +18497,10 @@ SOKOL_API_IMPL sg_d3d11_pipeline_info sg_d3d11_query_pipeline_info(sg_pipeline p
     #if defined(SOKOL_D3D11)
         const _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
         if (pip) {
-            res.il = pip->d3d11.il;
-            res.rs = pip->d3d11.rs;
-            res.dss = pip->d3d11.dss;
-            res.bs = pip->d3d11.bs;
+            res.il = (const void*) pip->d3d11.il;
+            res.rs = (const void*) pip->d3d11.rs;
+            res.dss = (const void*) pip->d3d11.dss;
+            res.bs = (const void*) pip->d3d11.bs;
         }
     #else
         _SOKOL_UNUSED(pip_id);
@@ -18516,10 +18516,10 @@ SOKOL_API_IMPL sg_d3d11_pass_info sg_d3d11_query_pass_info(sg_pass pass_id) {
         const _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
         if (pass) {
             for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-                res.color_rtv[i] = pass->d3d11.color_atts[i].view.rtv;
-                res.resolve_rtv[i] = pass->d3d11.resolve_atts[i].view.rtv;
+                res.color_rtv[i] = (const void*) pass->d3d11.color_atts[i].view.rtv;
+                res.resolve_rtv[i] = (const void*) pass->d3d11.resolve_atts[i].view.rtv;
             }
-            res.dsv = pass->d3d11.ds_att.view.dsv;
+            res.dsv = (const void*) pass->d3d11.ds_att.view.dsv;
         }
     #else
         _SOKOL_UNUSED(pass_id);
@@ -18660,7 +18660,7 @@ SOKOL_API_IMPL sg_mtl_pipeline_info sg_mtl_query_pipeline_info(sg_pipeline pip_i
 
 SOKOL_API_IMPL const void* sg_wgpu_device(void) {
     #if defined(SOKOL_WGPU)
-        return _sg.wgpu.dev;
+        return (const void*) _sg.wgpu.dev;
     #else
         return 0;
     #endif
@@ -18668,7 +18668,7 @@ SOKOL_API_IMPL const void* sg_wgpu_device(void) {
 
 SOKOL_API_IMPL const void* sg_wgpu_queue(void) {
     #if defined(SOKOL_WGPU)
-        return _sg.wgpu.queue;
+        return (const void*) _sg.wgpu.queue;
     #else
         return 0;
     #endif
@@ -18676,7 +18676,7 @@ SOKOL_API_IMPL const void* sg_wgpu_queue(void) {
 
 SOKOL_API_IMPL const void* sg_wgpu_command_encoder(void) {
     #if defined(SOKOL_WGPU)
-        return _sg.wgpu.cmd_enc;
+        return (const void*) _sg.wgpu.cmd_enc;
     #else
         return 0;
     #endif
@@ -18684,7 +18684,7 @@ SOKOL_API_IMPL const void* sg_wgpu_command_encoder(void) {
 
 SOKOL_API_IMPL const void* sg_wgpu_render_pass_encoder(void) {
     #if defined(SOKOL_WGPU)
-        return _sg.wgpu.pass_enc;
+        return (const void*) _sg.wgpu.pass_enc;
     #else
         return 0;
     #endif
@@ -18697,7 +18697,7 @@ SOKOL_API_IMPL sg_wgpu_buffer_info sg_wgpu_query_buffer_info(sg_buffer buf_id) {
     #if defined(SOKOL_WGPU)
         const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
         if (buf) {
-            res.buf = (void*) buf->wgpu.buf;
+            res.buf = (const void*) buf->wgpu.buf;
         }
     #else
         _SOKOL_UNUSED(buf_id);
@@ -18712,8 +18712,8 @@ SOKOL_API_IMPL sg_wgpu_image_info sg_wgpu_query_image_info(sg_image img_id) {
     #if defined(SOKOL_WGPU)
         const _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
         if (img) {
-            res.tex = (void*) img->wgpu.tex;
-            res.view = (void*) img->wgpu.view;
+            res.tex = (const void*) img->wgpu.tex;
+            res.view = (const void*) img->wgpu.view;
         }
     #else
         _SOKOL_UNUSED(img_id);
@@ -18728,7 +18728,7 @@ SOKOL_API_IMPL sg_wgpu_sampler_info sg_wgpu_query_sampler_info(sg_sampler smp_id
     #if defined(SOKOL_WGPU)
         const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, smp_id.id);
         if (smp) {
-            res.smp = (void*) smp->wgpu.smp;
+            res.smp = (const void*) smp->wgpu.smp;
         }
     #else
         _SOKOL_UNUSED(smp_id);
@@ -18743,9 +18743,9 @@ SOKOL_API_IMPL sg_wgpu_shader_info sg_wgpu_query_shader_info(sg_shader shd_id) {
     #if defined(SOKOL_WGPU)
         const _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
         if (shd) {
-            res.vs_mod = (void*) shd->wgpu.stage[SG_SHADERSTAGE_VS].module;
-            res.fs_mod = (void*) shd->wgpu.stage[SG_SHADERSTAGE_FS].module;
-            res.bgl = (void*) shd->wgpu.bind_group_layout;
+            res.vs_mod = (const void*) shd->wgpu.stage[SG_SHADERSTAGE_VS].module;
+            res.fs_mod = (const void*) shd->wgpu.stage[SG_SHADERSTAGE_FS].module;
+            res.bgl = (const void*) shd->wgpu.bind_group_layout;
         }
     #else
         _SOKOL_UNUSED(shd_id);
@@ -18760,7 +18760,7 @@ SOKOL_API_IMPL sg_wgpu_pipeline_info sg_wgpu_query_pipeline_info(sg_pipeline pip
     #if defined(SOKOL_WGPU)
         const _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
         if (pip) {
-            res.pip = (void*) pip->wgpu.pip;
+            res.pip = (const void*) pip->wgpu.pip;
         }
     #else
         _SOKOL_UNUSED(pip_id);
@@ -18776,10 +18776,10 @@ SOKOL_API_IMPL sg_wgpu_pass_info sg_wgpu_query_pass_info(sg_pass pass_id) {
         const _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
         if (pass) {
             for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-                res.color_view[i] = (void*) pass->wgpu.color_atts[i].view;
-                res.resolve_view[i] = (void*) pass->wgpu.resolve_atts[i].view;
+                res.color_view[i] = (const void*) pass->wgpu.color_atts[i].view;
+                res.resolve_view[i] = (const void*) pass->wgpu.resolve_atts[i].view;
             }
-            res.ds_view = (void*) pass->wgpu.ds_att.view;
+            res.ds_view = (const void*) pass->wgpu.ds_att.view;
         }
     #else
         _SOKOL_UNUSED(pass_id);
