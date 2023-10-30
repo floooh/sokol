@@ -3833,7 +3833,7 @@ SOKOL_GFX_API_DECL sg_context sg_setup_context(void);
 SOKOL_GFX_API_DECL void sg_activate_context(sg_context ctx_id);
 SOKOL_GFX_API_DECL void sg_discard_context(sg_context ctx_id);
 
-/* Backend-specific helper functions, these may come in handy for mixing
+/* Backend-specific structs and functions, these may come in handy for mixing
    sokol-gfx rendering with 'native backend' rendering functions.
 
    This group of functions will be expanded as needed.
@@ -3841,6 +3841,8 @@ SOKOL_GFX_API_DECL void sg_discard_context(sg_context ctx_id);
 
 // D3D11: return ID3D11Device
 SOKOL_GFX_API_DECL const void* sg_d3d11_device(void);
+// D3D11: return ID3D11DeviceContext
+SOKOL_GFX_API_DECL const void* sg_d3d11_device_context(void);
 // Metal: return __bridge-casted MTLDevice
 SOKOL_GFX_API_DECL const void* sg_mtl_device(void);
 // Metal: return __bridge-casted MTLRenderCommandEncoder in current pass (or zero if outside pass)
@@ -18240,6 +18242,14 @@ SOKOL_API_IMPL sg_pass_desc sg_query_pass_defaults(const sg_pass_desc* desc) {
 SOKOL_API_IMPL const void* sg_d3d11_device(void) {
 #if defined(SOKOL_D3D11)
     return (const void*) _sg.d3d11.dev;
+#else
+    return 0;
+#endif
+}
+
+SOKOL_API_IMPL const void* sg_d3d11_device_context(void) {
+#if defined(SOKOL_D3D11)
+    return (const void*) _sg.d3d11.ctx;
 #else
     return 0;
 #endif
