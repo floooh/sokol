@@ -3839,10 +3839,58 @@ SOKOL_GFX_API_DECL void sg_discard_context(sg_context ctx_id);
    This group of functions will be expanded as needed.
 */
 
+typedef struct sg_d3d11_buffer_info {
+    void* buf;      // ID3D11Buffer*
+} sg_d3d11_buffer_info;
+
+typedef struct sg_d3d11_image_info {
+    void* tex2d;    // ID3D11Texture2D*
+    void* tex3d;    // ID3D11Texture3D*
+    void* res;      // ID3D11Resource* (either tex2d or tex3d)
+    void* srv;      // ID3D11ShaderResourceView*
+} sg_d3d11_image_info;
+
+typedef struct sg_d3d11_sampler_info {
+    void* smp;      // ID3D11SamplerState*
+} sg_d3d11_sampler_info;
+
+typedef struct sg_d3d11_shader_info {
+    void* vs_cbufs[SG_MAX_SHADERSTAGE_UBS]; // ID3D11Buffer* (vertex stage constant buffers)
+    void* fs_cbufs[SG_MAX_SHADERSTAGE_UBS]; // ID3D11BUffer* (fragment stage constant buffers)
+    void* vs;   // ID3D11VertexShader*
+    void* fs;   // ID3D11PixelShader*
+} sg_d3d11_shader_info;
+
+typedef struct sg_d3d11_pipeline_info {
+    void* il;   // ID3D11InputLayout*
+    void* rs;   // ID3D11RasterizerState*
+    void* dss;  // ID3D11DepthStencilState*
+    void* bs;   // ID3D11BlendState*
+} sg_d3d11_pipeline_info;
+
+typedef struct sg_d3d11_pass_info {
+    void* color_rtv[SG_MAX_COLOR_ATTACHMENTS];      // ID3D11RenderTargetView
+    void* resolve_rtv[SG_MAX_COLOR_ATTACHMENTS];    // ID3D11RenderTargetView
+    void* dsv;  // ID3D11DepthStencilView
+} sg_d3d11_pass_info;
+
 // D3D11: return ID3D11Device
 SOKOL_GFX_API_DECL const void* sg_d3d11_device(void);
 // D3D11: return ID3D11DeviceContext
 SOKOL_GFX_API_DECL const void* sg_d3d11_device_context(void);
+// D3D11: get internal buffer resource objects
+SOKOL_GFX_API_DECL sg_d3d11_buffer_info sg_d3d11_query_buffer_info(sg_buffer buf);
+// D3D11: get internal image resource objects
+SOKOL_GFX_API_DECL sg_d3d11_image_info sg_d3d11_query_image_info(sg_image img);
+// D3D11: get internal sampler resource objects
+SOKOL_GFX_API_DECL sg_d3d11_sampler_info sg_d3d11_query_sampler_info(sg_sampler smp);
+// D3D11: get internal shader resource objects
+SOKOL_GFX_API_DECL sg_d3d11_shader_info sg_d3d11_query_shader_info(sg_shader shd);
+// D3D11: get internal pipeline resource objects
+SOKOL_GFX_API_DECL sg_d3d11_pipeline_info sg_d3d11_query_pipeline_info(sg_pipeline pip);
+// D3D11: get internal pass resource objects
+SOKOL_GFX_API_DECL sg_d3d11_pass_info sg_d3d11_query_pass_info(sg_pass pass);
+
 // Metal: return __bridge-casted MTLDevice
 SOKOL_GFX_API_DECL const void* sg_mtl_device(void);
 // Metal: return __bridge-casted MTLRenderCommandEncoder in current pass (or zero if outside pass)
@@ -18253,6 +18301,99 @@ SOKOL_API_IMPL const void* sg_d3d11_device_context(void) {
 #else
     return 0;
 #endif
+}
+
+SOKOL_GFX_API_IMPL sg_d3d11_buffer_info sg_d3d11_query_buffer_info(sg_buffer buf_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_d3d11_buffer_info res;
+    _sg_clear(&res, sizeof(res));
+#if defined(SOKOL_D3D11)
+    const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+    if (buf) {
+        res.buf = (void*) buf->d3d11.buf;
+    }
+#endif
+    return res;
+}
+
+SOKOL_GFX_API_IMPL sg_d3d11_image_info sg_d3d11_query_image_info(sg_image img_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_d3d11_image_info res;
+    _sg_clear(&res, sizeof(res));
+#if defined(SOKOL_D3D11)
+    const _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
+    if (img) {
+        res.tex2d = (void*) img->d3d11.tex2d;
+        res.tex3d = (void*) img->d3d11.tex3d;
+        res.res = (void*) img->d3d11.res;
+        res.srv = (void*) img->d3d11.srv;
+    }
+#endif
+    return res;
+}
+
+SOKOL_GFX_API_IMPL sg_d3d11_sampler_info sg_d3d11_query_sampler_info(sg_sampler smp_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_d3d11_sampler_info res;
+    _sg_clear(&res, sizeof(res));
+#if defined(SOKOL_D3D11)
+    const _sg_sampler_t* smp = _sg_lookup_sampler(&_sg.pools, smp_id.id);
+    if (smp) {
+        res.smp = (void*) smp->d3d11.smp;
+    }
+#endif
+    return res;
+}
+
+SOKOL_GFX_API_IMPL sg_d3d11_shader_info sg_d3d11_query_shader_info(sg_shader shd_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_d3d11_shader_info res;
+    _sg_clear(&res, sizeof(res));
+#if defined(SOKOL_D3D11)
+    const _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
+    if (shd) {
+        for (int i = 0; i < SG_MAX_SHADERSTAGE_UBS; i++) {
+            res.vs_cbufs[i] = (void*) shd->d3d11.stage[SG_SHADERSTAGE_VS].cbufs[i];
+            res.fs_cbufs[i] = (void*) shd->d3d11.stage[SG_SHADERSTAGE_FS].cbufs[i];
+        }
+        res.vs = (void*) shd->d3d11.vs;
+        res.fs = (void*) shd->d3d11.fs;
+    }
+#endif
+    return res;
+}
+
+SOKOL_GFX_API_IMPL sg_d3d11_pipeline_info sg_d3d11_query_pipeline_info(sg_pipeline pip_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_d3d11_pipeline_info res;
+    _sg_clear(&res, sizeof(res));
+#if defined(SOKOL_D3D11)
+    const _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
+    if (pip) {
+        res.il = pip->d3d11.il;
+        res.rs = pip->d3d11.rs;
+        res.dss = pip->d3d11.dss;
+        res.bs = pip->d3d11.bs;
+    }
+#endif
+    return res;
+}
+
+SOKOL_GFX_API_IMPL sg_d3d11_pass_info sg_d3d11_query_pass_info(sg_pass pass_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_d3d11_pass_info res;
+    _sg_clear(&res, sizeof(res));
+#if defined(SOKOL_D3D11)
+    const _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
+    if (pass) {
+        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+            res.color_rtv[i] = pass->d3d11.color_atts[i].rtv;
+            res.resolve_rtv[i] = pass->d3d11.resolve_attrs[i].rtv;
+        }
+        res.dsv = pass->d3d11.ds_att.dsv;
+    }
+#endif
+    return res;
 }
 
 SOKOL_API_IMPL const void* sg_mtl_device(void) {
