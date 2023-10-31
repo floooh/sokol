@@ -8299,9 +8299,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
         const GLenum fb_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
         if (fb_status != GL_FRAMEBUFFER_COMPLETE) {
             switch (fb_status) {
+                #if defined(SOKOL_GLCORE33)
                 case GL_FRAMEBUFFER_UNDEFINED:
                     _SG_ERROR(GL_FRAMEBUFFER_STATUS_UNDEFINED);
                     break;
+                #endif
                 case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
                     _SG_ERROR(GL_FRAMEBUFFER_STATUS_INCOMPLETE_ATTACHMENT);
                     break;
@@ -8344,9 +8346,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
             const GLenum fb_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
             if (fb_status != GL_FRAMEBUFFER_COMPLETE) {
                 switch (fb_status) {
+                    #if defined(SOKOL_GLCORE33)
                     case GL_FRAMEBUFFER_UNDEFINED:
                         _SG_ERROR(GL_FRAMEBUFFER_STATUS_UNDEFINED);
                         break;
+                    #endif
                     case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
                         _SG_ERROR(GL_FRAMEBUFFER_STATUS_INCOMPLETE_ATTACHMENT);
                         break;
