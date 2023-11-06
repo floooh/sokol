@@ -1,5 +1,18 @@
 ## Updates
 
+#### 06-Nov-2023
+
+A bugfix in the sokol_gfx.h D3D11 backend, and some related cleanup when creating depth-stencil
+render target images and resource views:
+
+- fixed: render target images with format SG_PIXELFORMAT_DEPTH_STENCIL triggered a validation
+  error because the pixel format capabilities code marked them as non-renderable. Now
+  the SG_PIXELFORMAT_DEPTH_STENCIL pixel format is properly reported as renderable.
+- the DXGIFormats for SG_PIXELFORMAT_DEPTH_STENCIL images are now as follows:
+  - D3D11 texture object: DXGI_FORMAT_R24G8_TYPELESS
+  - D3D11 shader-resource-view object: DXGI_FORMAT_R24_UNORM_X8_TYPELESS
+  - D3D11 depth-stencil-view object: DXGI_FORMAT_D24_UNORM_S8_UINT
+
 #### 30-Oct-2023
 
 Some sokol_gfx.h backend-specific updates and tweaks (very minor chance that this is breaking if you are injecting textures into the D3D11 backend).
