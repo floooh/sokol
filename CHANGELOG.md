@@ -13,6 +13,8 @@ render target images and resource views:
   - D3D11 shader-resource-view object: DXGI_FORMAT_R24_UNORM_X8_TYPELESS
   - D3D11 depth-stencil-view object: DXGI_FORMAT_D24_UNORM_S8_UINT
 
+Related PR: https://github.com/floooh/sokol/pull/937
+
 #### 30-Oct-2023
 
 Some sokol_gfx.h backend-specific updates and tweaks (very minor chance that this is breaking if you are injecting textures into the D3D11 backend).
