@@ -355,6 +355,8 @@ def funcptr_result_c(field_type):
     res_type = field_type[: field_type.index("(*)")].strip()
     if res_type == "void":
         return ""
+    elif is_prim_type(res_type):
+        return f" -> {as_rust_prim_type(res_type)}"
     elif util.is_const_void_ptr(res_type):
         return " -> *const core::ffi::c_void"
     elif util.is_void_ptr(res_type):

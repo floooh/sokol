@@ -73,8 +73,8 @@
 
             sg_imgui_init(&sg_imgui, &(sg_imgui_desc_t){
                 .allocator = {
-                    .alloc = my_malloc,
-                    .free = my_free,
+                    .alloc_fn = my_malloc,
+                    .free_fn = my_free,
                 }
             });
 
@@ -84,9 +84,16 @@
 
         this won't draw anything yet, since no windows are open.
 
-    --- open and close windows directly by setting the following public
+    --- call the convenience function sg_imgui_draw_menu(ctx, title)
+        to render a menu which allows to open/close the provided debug windows
+
+            sg_imgui_draw_menu(&sg_imgui, "sokol-gfx");
+
+    --- alternative, open and close windows directly by setting the following public
         booleans in the sg_imgui_t struct:
 
+            sg_imgui.caps.open = true;
+            sg_imgui.frame_stats.open = true;
             sg_imgui.buffers.open = true;
             sg_imgui.images.open = true;
             sg_imgui.samplers.open = true;
@@ -94,12 +101,15 @@
             sg_imgui.pipelines.open = true;
             sg_imgui.passes.open = true;
             sg_imgui.capture.open = true;
+            sg_imgui.frame_stats.open = true;
 
         ...for instance, to control the window visibility through
         menu items, the following code can be used:
 
             if (ImGui::BeginMainMenuBar()) {
                 if (ImGui::BeginMenu("sokol-gfx")) {
+                    ImGui::MenuItem("Capabilities", 0, &sg_imgui.caps.open);
+                    ImGui::MenuItem("Frame Stats", 0, &sg_imgui.frame_stats.open);
                     ImGui::MenuItem("Buffers", 0, &sg_imgui.buffers.open);
                     ImGui::MenuItem("Images", 0, &sg_imgui.images.open);
                     ImGui::MenuItem("Samplers", 0, &sg_imgui.samplers.open);
@@ -169,8 +179,8 @@
             sg_imgui_init(&(&ctx, &(sg_imgui_desc_t){
                 // ...
                 .allocator = {
-                    .alloc = my_alloc,
-                    .free = my_free,
+                    .alloc_fn = my_alloc,
+                    .free_fn = my_free,
                     .user_data = ...;
                 }
             });
@@ -709,6 +719,14 @@ typedef struct sg_imgui_caps_t {
     bool open;
 } sg_imgui_caps_t;
 
+typedef struct sg_imgui_frame_stats_t {
+    bool open;
+    bool disable_sokol_imgui_stats;
+    bool in_sokol_imgui;
+    sg_frame_stats stats;
+    // FIXME: add a ringbuffer for a stats history here
+} sg_imgui_frame_stats_t;
+
 /*
     sg_imgui_allocator_t
 
@@ -718,8 +736,8 @@ typedef struct sg_imgui_caps_t {
     override one function but not the other).
 */
 typedef struct sg_imgui_allocator_t {
-    void* (*alloc)(size_t size, void* user_data);
-    void (*free)(void* ptr, void* user_data);
+    void* (*alloc_fn)(size_t size, void* user_data);
+    void (*free_fn)(void* ptr, void* user_data);
     void* user_data;
 } sg_imgui_allocator_t;
 
@@ -743,6 +761,7 @@ typedef struct sg_imgui_t {
     sg_imgui_passes_t passes;
     sg_imgui_capture_t capture;
     sg_imgui_caps_t caps;
+    sg_imgui_frame_stats_t frame_stats;
     sg_pipeline cur_pipeline;
     sg_trace_hooks hooks;
 } sg_imgui_t;
@@ -750,6 +769,8 @@ typedef struct sg_imgui_t {
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_init(sg_imgui_t* ctx, const sg_imgui_desc_t* desc);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_discard(sg_imgui_t* ctx);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw(sg_imgui_t* ctx);
+
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_menu(sg_imgui_t* ctx, const char* title);
 
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_buffers_content(sg_imgui_t* ctx);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_images_content(sg_imgui_t* ctx);
@@ -759,6 +780,7 @@ SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_pipelines_content(sg_imgui_t* ctx);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_passes_content(sg_imgui_t* ctx);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capture_content(sg_imgui_t* ctx);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capabilities_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_frame_stats_content(sg_imgui_t* ctx);
 
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_buffers_window(sg_imgui_t* ctx);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_images_window(sg_imgui_t* ctx);
@@ -768,6 +790,7 @@ SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_pipelines_window(sg_imgui_t* ctx);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_passes_window(sg_imgui_t* ctx);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capture_window(sg_imgui_t* ctx);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capabilities_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_frame_stats_window(sg_imgui_t* ctx);
 
 #if defined(__cplusplus)
 } /* extern "C" */
@@ -820,6 +843,8 @@ SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capabilities_window(sg_imgui_t* ctx)
 #define _SG_IMGUI_LIST_WIDTH (192)
 #define _SG_IMGUI_COLOR_OTHER 0xFFCCCCCC
 #define _SG_IMGUI_COLOR_RSRC 0xFF00FFFF
+#define _SG_IMGUI_COLOR_PASS 0xFFFFFF00
+#define _SG_IMGUI_COLOR_APPLY 0xFFCCCC00
 #define _SG_IMGUI_COLOR_DRAW 0xFF00FF00
 #define _SG_IMGUI_COLOR_ERR 0xFF8888FF
 
@@ -900,6 +925,39 @@ _SOKOL_PRIVATE bool igBegin(const char* name,bool* p_open,ImGuiWindowFlags flags
 _SOKOL_PRIVATE void igEnd() {
     return ImGui::End();
 }
+_SOKOL_PRIVATE bool igBeginMenu(const char* label, bool enabled) {
+    return ImGui::BeginMenu(label, enabled);
+}
+_SOKOL_PRIVATE void igEndMenu(void) {
+    ImGui::EndMenu();
+}
+_SOKOL_PRIVATE bool igMenuItem_BoolPtr(const char* label, const char* shortcut, bool* p_selected, bool enabled) {
+    return ImGui::MenuItem(label, shortcut, p_selected, enabled);
+}
+_SOKOL_PRIVATE bool igBeginTable(const char* str_id, int column, ImGuiTableFlags flags, const ImVec2 outer_size, float inner_width) {
+    return ImGui::BeginTable(str_id, column, flags, outer_size, inner_width);
+}
+_SOKOL_PRIVATE void igEndTable(void) {
+    ImGui::EndTable();
+}
+_SOKOL_PRIVATE void igTableSetupScrollFreeze(int cols, int rows) {
+    ImGui::TableSetupScrollFreeze(cols, rows);
+}
+_SOKOL_PRIVATE void igTableSetupColumn(const char* label, ImGuiTableColumnFlags flags, float init_width_or_weight, ImGuiID user_id) {
+    ImGui::TableSetupColumn(label, flags, init_width_or_weight, user_id);
+}
+_SOKOL_PRIVATE void igTableHeadersRow(void) {
+    ImGui::TableHeadersRow();
+}
+_SOKOL_PRIVATE void igTableNextRow(ImGuiTableRowFlags row_flags, float min_row_height) {
+    ImGui::TableNextRow(row_flags, min_row_height);
+}
+_SOKOL_PRIVATE bool igTableSetColumnIndex(int column_n) {
+    return ImGui::TableSetColumnIndex(column_n);
+}
+_SOKOL_PRIVATE bool igCheckbox(const char* label, bool* v) {
+    return ImGui::Checkbox(label, v);
+}
 #else
 #define IMVEC2(x,y) (ImVec2){x,y}
 #define IMVEC4(x,y,z,w) (ImVec4){x,y,z,w}
@@ -914,8 +972,8 @@ _SOKOL_PRIVATE void _sg_imgui_clear(void* ptr, size_t size) {
 _SOKOL_PRIVATE void* _sg_imgui_malloc(const sg_imgui_allocator_t* allocator, size_t size) {
     SOKOL_ASSERT(allocator && (size > 0));
     void* ptr;
-    if (allocator->alloc) {
-        ptr = allocator->alloc(size, allocator->user_data);
+    if (allocator->alloc_fn) {
+        ptr = allocator->alloc_fn(size, allocator->user_data);
     } else {
         ptr = malloc(size);
     }
@@ -931,8 +989,8 @@ _SOKOL_PRIVATE void* _sg_imgui_malloc_clear(const sg_imgui_allocator_t* allocato
 
 _SOKOL_PRIVATE void _sg_imgui_free(const sg_imgui_allocator_t* allocator, void* ptr) {
     SOKOL_ASSERT(allocator);
-    if (allocator->free) {
-        allocator->free(ptr, allocator->user_data);
+    if (allocator->free_fn) {
+        allocator->free_fn(ptr, allocator->user_data);
     } else {
         free(ptr);
     }
@@ -1098,6 +1156,7 @@ _SOKOL_PRIVATE const char* _sg_imgui_backend_string(sg_backend b) {
         case SG_BACKEND_METAL_IOS:          return "SG_BACKEND_METAL_IOS";
         case SG_BACKEND_METAL_MACOS:        return "SG_BACKEND_METAL_MACOS";
         case SG_BACKEND_METAL_SIMULATOR:    return "SG_BACKEND_METAL_SIMULATOR";
+        case SG_BACKEND_WGPU:               return "SG_BACKEND_WGPU";
         case SG_BACKEND_DUMMY:              return "SG_BACKEND_DUMMY";
         default: return "???";
     }
@@ -1136,15 +1195,17 @@ _SOKOL_PRIVATE const char* _sg_imgui_imagesampletype_string(sg_image_sample_type
         case SG_IMAGESAMPLETYPE_DEPTH:  return "SG_IMAGESAMPLETYPE_DEPTH";
         case SG_IMAGESAMPLETYPE_SINT:   return "SG_IMAGESAMPLETYPE_SINT";
         case SG_IMAGESAMPLETYPE_UINT:   return "SG_IMAGESAMPLETYPE_UINT";
+        case SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT: return "SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT";
         default:                        return "???";
     }
 }
 
 _SOKOL_PRIVATE const char* _sg_imgui_samplertype_string(sg_sampler_type t) {
     switch (t) {
-        case SG_SAMPLERTYPE_SAMPLE:     return "SG_SAMPLERTYPE_SAMPLE";
-        case SG_SAMPLERTYPE_COMPARE:    return "SG_SAMPLERTYPE_COMPARE";
-        default:                        return "???";
+        case SG_SAMPLERTYPE_FILTERING:      return "SG_SAMPLERTYPE_FILTERING";
+        case SG_SAMPLERTYPE_COMPARISON:     return "SG_SAMPLERTYPE_COMPARISON";
+        case SG_SAMPLERTYPE_NONFILTERING:   return "SG_SAMPLERTYPE_NONFILTERING";
+        default:                            return "???";
     }
 }
 
@@ -2438,7 +2499,7 @@ _SOKOL_PRIVATE void _sg_imgui_begin_default_pass(const sg_pass_action* pass_acti
     if (item) {
         SOKOL_ASSERT(pass_action);
         item->cmd = SG_IMGUI_CMD_BEGIN_DEFAULT_PASS;
-        item->color = _SG_IMGUI_COLOR_DRAW;
+        item->color = _SG_IMGUI_COLOR_PASS;
         item->args.begin_default_pass.action = *pass_action;
         item->args.begin_default_pass.width = width;
         item->args.begin_default_pass.height = height;
@@ -2455,7 +2516,7 @@ _SOKOL_PRIVATE void _sg_imgui_begin_pass(sg_pass pass, const sg_pass_action* pas
     if (item) {
         SOKOL_ASSERT(pass_action);
         item->cmd = SG_IMGUI_CMD_BEGIN_PASS;
-        item->color = _SG_IMGUI_COLOR_DRAW;
+        item->color = _SG_IMGUI_COLOR_PASS;
         item->args.begin_pass.pass = pass;
         item->args.begin_pass.action = *pass_action;
     }
@@ -2470,7 +2531,7 @@ _SOKOL_PRIVATE void _sg_imgui_apply_viewport(int x, int y, int width, int height
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_APPLY_VIEWPORT;
-        item->color = _SG_IMGUI_COLOR_DRAW;
+        item->color = _SG_IMGUI_COLOR_APPLY;
         item->args.apply_viewport.x = x;
         item->args.apply_viewport.y = y;
         item->args.apply_viewport.width = width;
@@ -2488,7 +2549,7 @@ _SOKOL_PRIVATE void _sg_imgui_apply_scissor_rect(int x, int y, int width, int he
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_APPLY_SCISSOR_RECT;
-        item->color = _SG_IMGUI_COLOR_DRAW;
+        item->color = _SG_IMGUI_COLOR_APPLY;
         item->args.apply_scissor_rect.x = x;
         item->args.apply_scissor_rect.y = y;
         item->args.apply_scissor_rect.width = width;
@@ -2507,7 +2568,7 @@ _SOKOL_PRIVATE void _sg_imgui_apply_pipeline(sg_pipeline pip, void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_APPLY_PIPELINE;
-        item->color = _SG_IMGUI_COLOR_DRAW;
+        item->color = _SG_IMGUI_COLOR_APPLY;
         item->args.apply_pipeline.pipeline = pip;
     }
     if (ctx->hooks.apply_pipeline) {
@@ -2522,7 +2583,7 @@ _SOKOL_PRIVATE void _sg_imgui_apply_bindings(const sg_bindings* bindings, void* 
     if (item) {
         SOKOL_ASSERT(bindings);
         item->cmd = SG_IMGUI_CMD_APPLY_BINDINGS;
-        item->color = _SG_IMGUI_COLOR_DRAW;
+        item->color = _SG_IMGUI_COLOR_APPLY;
         item->args.apply_bindings.bindings = *bindings;
     }
     if (ctx->hooks.apply_bindings) {
@@ -2537,7 +2598,7 @@ _SOKOL_PRIVATE void _sg_imgui_apply_uniforms(sg_shader_stage stage, int ub_index
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_APPLY_UNIFORMS;
-        item->color = _SG_IMGUI_COLOR_DRAW;
+        item->color = _SG_IMGUI_COLOR_APPLY;
         sg_imgui_args_apply_uniforms_t* args = &item->args.apply_uniforms;
         args->stage = stage;
         args->ub_index = ub_index;
@@ -2573,7 +2634,7 @@ _SOKOL_PRIVATE void _sg_imgui_end_pass(void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_END_PASS;
-        item->color = _SG_IMGUI_COLOR_DRAW;
+        item->color = _SG_IMGUI_COLOR_PASS;
     }
     if (ctx->hooks.end_pass) {
         ctx->hooks.end_pass(ctx->hooks.user_data);
@@ -2586,7 +2647,7 @@ _SOKOL_PRIVATE void _sg_imgui_commit(void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_COMMIT;
-        item->color = _SG_IMGUI_COLOR_DRAW;
+        item->color = _SG_IMGUI_COLOR_OTHER;
     }
     _sg_imgui_capture_next_frame(ctx);
     if (ctx->hooks.commit) {
@@ -3053,6 +3114,12 @@ _SOKOL_PRIVATE void _sg_imgui_fail_pass(sg_pass pass_id, void* user_data) {
 _SOKOL_PRIVATE void _sg_imgui_push_debug_group(const char* name, void* user_data) {
     sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
+    if (0 == strcmp(name, "sokol-imgui")) {
+        ctx->frame_stats.in_sokol_imgui = true;
+        if (ctx->frame_stats.disable_sokol_imgui_stats) {
+            sg_disable_frame_stats();
+        }
+    }
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_PUSH_DEBUG_GROUP;
@@ -3067,6 +3134,12 @@ _SOKOL_PRIVATE void _sg_imgui_push_debug_group(const char* name, void* user_data
 _SOKOL_PRIVATE void _sg_imgui_pop_debug_group(void* user_data) {
     sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
+    if (ctx->frame_stats.in_sokol_imgui) {
+        ctx->frame_stats.in_sokol_imgui = false;
+        if (ctx->frame_stats.disable_sokol_imgui_stats) {
+            sg_enable_frame_stats();
+        }
+    }
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_POP_DEBUG_GROUP;
@@ -4142,10 +4215,135 @@ _SOKOL_PRIVATE void _sg_imgui_draw_caps_panel(void) {
     }
 }
 
+_SOKOL_PRIVATE void _sg_imgui_frame_add_stats_row(const char* key, uint32_t value) {
+    igTableNextRow(0, 0.0f);
+    igTableSetColumnIndex(0);
+    igText(key);
+    igTableSetColumnIndex(1);
+    igText("%d", value);
+}
+
+#define _sg_imgui_frame_stats(key) _sg_imgui_frame_add_stats_row(#key, stats->key)
+
+_SOKOL_PRIVATE void _sg_imgui_draw_frame_stats_panel(sg_imgui_t* ctx) {
+    _SOKOL_UNUSED(ctx);
+    igCheckbox("Ignore sokol_imgui.h", &ctx->frame_stats.disable_sokol_imgui_stats);
+    const sg_frame_stats* stats = &ctx->frame_stats.stats;
+    const ImGuiTableFlags flags =
+        ImGuiTableFlags_Resizable |
+        ImGuiTableFlags_ScrollY |
+        ImGuiTableFlags_SizingFixedFit |
+        ImGuiTableFlags_Borders;
+    if (igBeginTable("##frame_stats_table", 2, flags, IMVEC2(0, 0), 0)) {
+        igTableSetupScrollFreeze(0, 2);
+        igTableSetupColumn("key", ImGuiTableColumnFlags_None, 0, 0);
+        igTableSetupColumn("value", ImGuiTableColumnFlags_None, 0, 0);
+        igTableHeadersRow();
+        _sg_imgui_frame_stats(frame_index);
+        _sg_imgui_frame_stats(num_passes);
+        _sg_imgui_frame_stats(num_apply_viewport);
+        _sg_imgui_frame_stats(num_apply_scissor_rect);
+        _sg_imgui_frame_stats(num_apply_pipeline);
+        _sg_imgui_frame_stats(num_apply_bindings);
+        _sg_imgui_frame_stats(num_apply_uniforms);
+        _sg_imgui_frame_stats(num_draw);
+        _sg_imgui_frame_stats(num_update_buffer);
+        _sg_imgui_frame_stats(num_append_buffer);
+        _sg_imgui_frame_stats(num_update_image);
+        _sg_imgui_frame_stats(size_apply_uniforms);
+        _sg_imgui_frame_stats(size_update_buffer);
+        _sg_imgui_frame_stats(size_append_buffer);
+        _sg_imgui_frame_stats(size_update_image);
+        switch (sg_query_backend()) {
+            case SG_BACKEND_GLCORE33:
+            case SG_BACKEND_GLES3:
+                _sg_imgui_frame_stats(gl.num_bind_buffer);
+                _sg_imgui_frame_stats(gl.num_active_texture);
+                _sg_imgui_frame_stats(gl.num_bind_texture);
+                _sg_imgui_frame_stats(gl.num_bind_sampler);
+                _sg_imgui_frame_stats(gl.num_use_program);
+                _sg_imgui_frame_stats(gl.num_render_state);
+                _sg_imgui_frame_stats(gl.num_vertex_attrib_pointer);
+                _sg_imgui_frame_stats(gl.num_vertex_attrib_divisor);
+                _sg_imgui_frame_stats(gl.num_enable_vertex_attrib_array);
+                _sg_imgui_frame_stats(gl.num_disable_vertex_attrib_array);
+                _sg_imgui_frame_stats(gl.num_uniform);
+                break;
+            case SG_BACKEND_WGPU:
+                _sg_imgui_frame_stats(wgpu.uniforms.num_set_bindgroup);
+                _sg_imgui_frame_stats(wgpu.uniforms.size_write_buffer);
+                _sg_imgui_frame_stats(wgpu.bindings.num_set_vertex_buffer);
+                _sg_imgui_frame_stats(wgpu.bindings.num_skip_redundant_vertex_buffer);
+                _sg_imgui_frame_stats(wgpu.bindings.num_set_index_buffer);
+                _sg_imgui_frame_stats(wgpu.bindings.num_skip_redundant_index_buffer);
+                _sg_imgui_frame_stats(wgpu.bindings.num_create_bindgroup);
+                _sg_imgui_frame_stats(wgpu.bindings.num_discard_bindgroup);
+                _sg_imgui_frame_stats(wgpu.bindings.num_set_bindgroup);
+                _sg_imgui_frame_stats(wgpu.bindings.num_skip_redundant_bindgroup);
+                _sg_imgui_frame_stats(wgpu.bindings.num_bindgroup_cache_hits);
+                _sg_imgui_frame_stats(wgpu.bindings.num_bindgroup_cache_misses);
+                _sg_imgui_frame_stats(wgpu.bindings.num_bindgroup_cache_collisions);
+                _sg_imgui_frame_stats(wgpu.bindings.num_bindgroup_cache_hash_vs_key_mismatch);
+                break;
+            case SG_BACKEND_METAL_MACOS:
+            case SG_BACKEND_METAL_IOS:
+            case SG_BACKEND_METAL_SIMULATOR:
+                _sg_imgui_frame_stats(metal.idpool.num_added);
+                _sg_imgui_frame_stats(metal.idpool.num_released);
+                _sg_imgui_frame_stats(metal.idpool.num_garbage_collected);
+                _sg_imgui_frame_stats(metal.pipeline.num_set_blend_color);
+                _sg_imgui_frame_stats(metal.pipeline.num_set_cull_mode);
+                _sg_imgui_frame_stats(metal.pipeline.num_set_front_facing_winding);
+                _sg_imgui_frame_stats(metal.pipeline.num_set_stencil_reference_value);
+                _sg_imgui_frame_stats(metal.pipeline.num_set_depth_bias);
+                _sg_imgui_frame_stats(metal.pipeline.num_set_render_pipeline_state);
+                _sg_imgui_frame_stats(metal.pipeline.num_set_depth_stencil_state);
+                _sg_imgui_frame_stats(metal.bindings.num_set_vertex_buffer);
+                _sg_imgui_frame_stats(metal.bindings.num_set_vertex_texture);
+                _sg_imgui_frame_stats(metal.bindings.num_set_vertex_sampler_state);
+                _sg_imgui_frame_stats(metal.bindings.num_set_fragment_texture);
+                _sg_imgui_frame_stats(metal.bindings.num_set_fragment_sampler_state);
+                _sg_imgui_frame_stats(metal.uniforms.num_set_vertex_buffer_offset);
+                _sg_imgui_frame_stats(metal.uniforms.num_set_fragment_buffer_offset);
+                break;
+            case SG_BACKEND_D3D11:
+                _sg_imgui_frame_stats(d3d11.pass.num_om_set_render_targets);
+                _sg_imgui_frame_stats(d3d11.pass.num_clear_render_target_view);
+                _sg_imgui_frame_stats(d3d11.pass.num_clear_depth_stencil_view);
+                _sg_imgui_frame_stats(d3d11.pass.num_resolve_subresource);
+                _sg_imgui_frame_stats(d3d11.pipeline.num_rs_set_state);
+                _sg_imgui_frame_stats(d3d11.pipeline.num_om_set_depth_stencil_state);
+                _sg_imgui_frame_stats(d3d11.pipeline.num_om_set_blend_state);
+                _sg_imgui_frame_stats(d3d11.pipeline.num_ia_set_primitive_topology);
+                _sg_imgui_frame_stats(d3d11.pipeline.num_ia_set_input_layout);
+                _sg_imgui_frame_stats(d3d11.pipeline.num_vs_set_shader);
+                _sg_imgui_frame_stats(d3d11.pipeline.num_vs_set_constant_buffers);
+                _sg_imgui_frame_stats(d3d11.pipeline.num_ps_set_shader);
+                _sg_imgui_frame_stats(d3d11.pipeline.num_ps_set_constant_buffers);
+                _sg_imgui_frame_stats(d3d11.bindings.num_ia_set_vertex_buffers);
+                _sg_imgui_frame_stats(d3d11.bindings.num_ia_set_index_buffer);
+                _sg_imgui_frame_stats(d3d11.bindings.num_vs_set_shader_resources);
+                _sg_imgui_frame_stats(d3d11.bindings.num_ps_set_shader_resources);
+                _sg_imgui_frame_stats(d3d11.bindings.num_vs_set_samplers);
+                _sg_imgui_frame_stats(d3d11.bindings.num_ps_set_samplers);
+                _sg_imgui_frame_stats(d3d11.uniforms.num_update_subresource);
+                _sg_imgui_frame_stats(d3d11.draw.num_draw_indexed_instanced);
+                _sg_imgui_frame_stats(d3d11.draw.num_draw_indexed);
+                _sg_imgui_frame_stats(d3d11.draw.num_draw_instanced);
+                _sg_imgui_frame_stats(d3d11.draw.num_draw);
+                _sg_imgui_frame_stats(d3d11.num_map);
+                _sg_imgui_frame_stats(d3d11.num_unmap);
+                break;
+            default: break;
+        }
+        igEndTable();
+    }
+}
+
 #define _sg_imgui_def(val, def) (((val) == 0) ? (def) : (val))
 
 _SOKOL_PRIVATE sg_imgui_desc_t _sg_imgui_desc_defaults(const sg_imgui_desc_t* desc) {
-    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
+    SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
     sg_imgui_desc_t res = *desc;
     // FIXME: any additional default overrides would go here
     return res;
@@ -4323,6 +4521,24 @@ SOKOL_API_IMPL void sg_imgui_draw(sg_imgui_t* ctx) {
     sg_imgui_draw_passes_window(ctx);
     sg_imgui_draw_capture_window(ctx);
     sg_imgui_draw_capabilities_window(ctx);
+    sg_imgui_draw_frame_stats_window(ctx);
+}
+
+SOKOL_API_IMPL void sg_imgui_draw_menu(sg_imgui_t* ctx, const char* title) {
+    SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
+    SOKOL_ASSERT(title);
+    if (igBeginMenu(title, true)) {
+        igMenuItem_BoolPtr("Capabilities", 0, &ctx->caps.open, true);
+        igMenuItem_BoolPtr("Frame Stats", 0, &ctx->frame_stats.open, true);
+        igMenuItem_BoolPtr("Buffers", 0, &ctx->buffers.open, true);
+        igMenuItem_BoolPtr("Images", 0, &ctx->images.open, true);
+        igMenuItem_BoolPtr("Samplers", 0, &ctx->samplers.open, true);
+        igMenuItem_BoolPtr("Shaders", 0, &ctx->shaders.open, true);
+        igMenuItem_BoolPtr("Pipelines", 0, &ctx->pipelines.open, true);
+        igMenuItem_BoolPtr("Passes", 0, &ctx->passes.open, true);
+        igMenuItem_BoolPtr("Calls", 0, &ctx->capture.open, true);
+        igEndMenu();
+    }
 }
 
 SOKOL_API_IMPL void sg_imgui_draw_buffers_window(sg_imgui_t* ctx) {
@@ -4421,6 +4637,18 @@ SOKOL_API_IMPL void sg_imgui_draw_capabilities_window(sg_imgui_t* ctx) {
     igEnd();
 }
 
+SOKOL_API_IMPL void sg_imgui_draw_frame_stats_window(sg_imgui_t* ctx) {
+    SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
+    if (!ctx->frame_stats.open) {
+        return;
+    }
+    igSetNextWindowSize(IMVEC2(512, 400), ImGuiCond_Once);
+    if (igBegin("Frame Stats", &ctx->frame_stats.open, 0)) {
+        sg_imgui_draw_frame_stats_content(ctx);
+    }
+    igEnd();
+}
+
 SOKOL_API_IMPL void sg_imgui_draw_buffers_content(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     _sg_imgui_draw_buffer_list(ctx);
@@ -4474,6 +4702,12 @@ SOKOL_API_IMPL void sg_imgui_draw_capabilities_content(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     _SOKOL_UNUSED(ctx);
     _sg_imgui_draw_caps_panel();
+}
+
+SOKOL_API_IMPL void sg_imgui_draw_frame_stats_content(sg_imgui_t* ctx) {
+    SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
+    ctx->frame_stats.stats = sg_query_frame_stats();
+    _sg_imgui_draw_frame_stats_panel(ctx);
 }
 
 #endif /* SOKOL_GFX_IMGUI_IMPL */
