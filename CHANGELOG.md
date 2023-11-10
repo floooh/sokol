@@ -1,5 +1,12 @@
 ## Updates
 
+#### 10-Nov-2023
+
+A small change in the sokol_gfx.h GL backend on Windows only:
+
+PR https://github.com/floooh/sokol/pull/839 has been merged, in debug mode this creates
+the GL context with WGL_CONTEXT_DEBUG_BIT_ARB. Thanks to @castano for the PR!
+
 #### 06-Nov-2023
 
 A bugfix in the sokol_gfx.h D3D11 backend, and some related cleanup when creating depth-stencil
