@@ -612,9 +612,9 @@ UTEST(sokol_fetch, load_file_chunked) {
 /* load N big files in small chunks interleaved on the same channel via lanes */
 #define LOAD_FILE_LANES_NUM_LANES (4)
 
-uint8_t load_file_lanes_chunk_buf[LOAD_FILE_LANES_NUM_LANES][8192];
-uint8_t load_file_lanes_content[LOAD_FILE_LANES_NUM_LANES][500000];
-int load_file_lanes_passed[LOAD_FILE_LANES_NUM_LANES];
+static uint8_t load_file_lanes_chunk_buf[LOAD_FILE_LANES_NUM_LANES][8192];
+static uint8_t load_file_lanes_content[LOAD_FILE_LANES_NUM_LANES][500000];
+static int load_file_lanes_passed[LOAD_FILE_LANES_NUM_LANES];
 static void load_file_lanes_callback(const sfetch_response_t* response) {
     assert((response->channel == 0) && (response->lane < LOAD_FILE_LANES_NUM_LANES));
     if (response->fetched) {
@@ -669,9 +669,9 @@ UTEST(sokol_fetch, load_file_lanes) {
 #define LOAD_FILE_THROTTLE_NUM_PASSES (3)
 #define LOAD_FILE_THROTTLE_NUM_REQUESTS (12)    // lanes * passes
 
-uint8_t load_file_throttle_chunk_buf[LOAD_FILE_THROTTLE_NUM_LANES][128000];
-uint8_t load_file_throttle_content[LOAD_FILE_THROTTLE_NUM_PASSES][LOAD_FILE_THROTTLE_NUM_LANES][500000];
-int load_file_throttle_passed[LOAD_FILE_THROTTLE_NUM_LANES];
+static uint8_t load_file_throttle_chunk_buf[LOAD_FILE_THROTTLE_NUM_LANES][128000];
+static uint8_t load_file_throttle_content[LOAD_FILE_THROTTLE_NUM_PASSES][LOAD_FILE_THROTTLE_NUM_LANES][500000];
+static int load_file_throttle_passed[LOAD_FILE_THROTTLE_NUM_LANES];
 
 static void load_file_throttle_callback(const sfetch_response_t* response) {
     assert((response->channel == 0) && (response->lane < LOAD_FILE_LANES_NUM_LANES));
@@ -733,8 +733,8 @@ UTEST(sokol_fetch, load_file_throttle) {
 
 /* test parallel fetches on multiple channels */
 #define LOAD_CHANNEL_NUM_CHANNELS (16)
-uint8_t load_channel_buf[LOAD_CHANNEL_NUM_CHANNELS][500000];
-bool load_channel_passed[LOAD_CHANNEL_NUM_CHANNELS];
+static uint8_t load_channel_buf[LOAD_CHANNEL_NUM_CHANNELS][500000];
+static bool load_channel_passed[LOAD_CHANNEL_NUM_CHANNELS];
 
 void load_channel_callback(const sfetch_response_t* response) {
     assert(response->channel < LOAD_CHANNEL_NUM_CHANNELS);
@@ -781,15 +781,13 @@ UTEST(sokol_fetch, load_channel) {
     sfetch_shutdown();
 }
 
-bool load_file_cancel_passed = false;
-void load_file_cancel_callback(const sfetch_response_t* response) {
+static bool load_file_cancel_passed = false;
+static void load_file_cancel_callback(const sfetch_response_t* response) {
     if (response->dispatched) {
         sfetch_cancel(response->handle);
     }
-    if (response->failed) {
-        if (response->cancelled && response->finished && (response->error_code == SFETCH_ERROR_CANCELLED)) {
-            load_file_cancel_passed = true;
-        }
+    if (response->cancelled && response->finished && response->failed && (response->error_code == SFETCH_ERROR_CANCELLED)) {
+        load_file_cancel_passed = true;
     }
 }
 
@@ -809,5 +807,56 @@ UTEST(sokol_fetch, load_file_cancel) {
     }
     T(frame_count < max_frames);
     T(load_file_cancel_passed);
+    sfetch_shutdown();
+}
+
+static bool load_file_cancel_before_dispatch_passed = false;
+static void load_file_cancel_before_dispatch_callback(const sfetch_response_t* response) {
+    // cancelled, finished, failed and error code must all be set
+    if (response->cancelled && response->finished && response->failed && (response->error_code == SFETCH_ERROR_CANCELLED)) {
+        load_file_cancel_before_dispatch_passed = true;
+    }
+}
+
+UTEST(sokol_fetch, load_file_cancel_before_dispatch) {
+    sfetch_setup(&(sfetch_desc_t){
+        .num_channels = 1,
+    });
+    sfetch_handle_t h = sfetch_send(&(sfetch_request_t){
+        .path = "comsi.s3m",
+        .callback = load_file_cancel_before_dispatch_callback,
+    });
+    sfetch_cancel(h);
+    sfetch_dowork();
+    T(load_file_cancel_before_dispatch_passed);
+    sfetch_shutdown();
+}
+
+static bool load_file_cancel_after_dispatch_passed = false;
+static void load_file_cancel_after_dispatch_callback(const sfetch_response_t* response) {
+    // when cancelled, then finished, failed and error code must all be set
+    if (response->cancelled && response->finished && response->failed && (response->error_code == SFETCH_ERROR_CANCELLED)) {
+        load_file_cancel_after_dispatch_passed = true;
+    }
+}
+
+UTEST(sokol_fetch, load_file_cancel_after_dispatch) {
+    sfetch_setup(&(sfetch_desc_t){
+        .num_channels = 1,
+    });
+    sfetch_handle_t h = sfetch_send(&(sfetch_request_t){
+        .path = "comsi.s3m",
+        .callback = load_file_cancel_after_dispatch_callback,
+        .buffer = SFETCH_RANGE(load_file_buf),
+    });
+    int frame_count = 0;
+    const int max_frames = 10000;
+    while (sfetch_handle_valid(h) && (frame_count++ < max_frames)) {
+        sfetch_dowork();
+        sfetch_cancel(h);
+        sleep_ms(1);
+    }
+    T(frame_count < max_frames);
+    T(load_file_cancel_after_dispatch_passed);
     sfetch_shutdown();
 }

@@ -99,9 +99,9 @@ jobs:
       - uses: actions/checkout@v3
         with:
           repository: floooh/sokol-zig
-      - uses: goto-bus-stop/setup-zig@v1
+      - uses: goto-bus-stop/setup-zig@v2
         with:
-          version: 0.10.0
+          version: 0.11.0
       - uses: actions/download-artifact@v3
         with:
           name: ignore-me-zig
@@ -125,7 +125,7 @@ jobs:
     steps:
       - uses: jiro4989/setup-nim-action@v1
         with:
-         nim-version: 1.6.12
+         nim-version: devel
          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@v3
         with:
@@ -150,7 +150,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # FIXME: macOS Odin vs Homebrew LLVM currently seems broken
+        # os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v3
@@ -162,86 +164,50 @@ jobs:
       # NOTE: see https://github.com/floooh/sokol-odin/blob/main/.github/workflows/main.yml
       - uses: ilammy/msvc-dev-cmd@v1
       - if: runner.os == 'Linux'
-        name: build-linux
+        name: prepare-linux
         run: |
           sudo apt-get update
-          sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev llvm-11
-          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2023-03/odin-ubuntu-amd64-dev-2023-03.zip --output odin.zip
+          sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev llvm-14
+          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2023-08/odin-ubuntu-amd64-dev-2023-08.zip --output odin.zip
           unzip odin.zip
-          chmod a+x ubuntu_artifacts/odin
+          chmod a+x ./odin
           ./build_clibs_linux.sh
-          ubuntu_artifacts/odin build examples/clear -debug
-          ubuntu_artifacts/odin build examples/triangle -debug
-          ubuntu_artifacts/odin build examples/quad -debug
-          ubuntu_artifacts/odin build examples/bufferoffsets -debug
-          ubuntu_artifacts/odin build examples/cube -debug
-          ubuntu_artifacts/odin build examples/noninterleaved -debug
-          ubuntu_artifacts/odin build examples/texcube -debug
-          ubuntu_artifacts/odin build examples/shapes -debug
-          ubuntu_artifacts/odin build examples/offscreen -debug
-          ubuntu_artifacts/odin build examples/instancing -debug
-          ubuntu_artifacts/odin build examples/mrt -debug
-          ubuntu_artifacts/odin build examples/blend -debug
-          ubuntu_artifacts/odin build examples/debugtext -debug
-          ubuntu_artifacts/odin build examples/debugtext-print -debug
-          ubuntu_artifacts/odin build examples/debugtext-userfont -debug
-          ubuntu_artifacts/odin build examples/saudio -debug
-          ubuntu_artifacts/odin build examples/sgl -debug
-          ubuntu_artifacts/odin build examples/sgl-points -debug
-          ubuntu_artifacts/odin build examples/sgl-context -debug
       - if: runner.os == 'macOS'
-        name: build-macos
+        name: prepare-macos
         run: |
-          brew install llvm@11
-          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2023-03/odin-macos-amd64-dev-2023-03.zip --output odin.zip
+          brew install llvm@14
+          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2023-08/odin-macos-amd64-dev-2023-08.zip --output odin.zip
           unzip odin.zip
-          chmod a+x macos_artifacts/odin
+          chmod a+x ./odin
           ./build_clibs_macos.sh
-          macos_artifacts/odin build examples/clear -debug
-          macos_artifacts/odin build examples/triangle -debug
-          macos_artifacts/odin build examples/quad -debug
-          macos_artifacts/odin build examples/bufferoffsets -debug
-          macos_artifacts/odin build examples/cube -debug
-          macos_artifacts/odin build examples/noninterleaved -debug
-          macos_artifacts/odin build examples/texcube -debug
-          macos_artifacts/odin build examples/shapes -debug
-          macos_artifacts/odin build examples/offscreen -debug
-          macos_artifacts/odin build examples/instancing -debug
-          macos_artifacts/odin build examples/mrt -debug
-          macos_artifacts/odin build examples/blend -debug
-          macos_artifacts/odin build examples/debugtext -debug
-          macos_artifacts/odin build examples/debugtext-print -debug
-          macos_artifacts/odin build examples/debugtext-userfont -debug
-          macos_artifacts/odin build examples/saudio -debug
-          macos_artifacts/odin build examples/sgl -debug
-          macos_artifacts/odin build examples/sgl-points -debug
-          macos_artifacts/odin build examples/sgl-context -debug
       - if: runner.os == 'Windows'
-        name: build-windows
+        name: prepare-windows
         shell: cmd
         run: |
-          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2023-03/odin-windows-amd64-dev-2023-03.zip --output odin.zip
+          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2023-08/odin-windows-amd64-dev-2023-08.zip --output odin.zip
           unzip odin.zip
           build_clibs_windows.cmd
-          windows_artifacts/odin build examples/clear -debug
-          windows_artifacts/odin build examples/triangle -debug
-          windows_artifacts/odin build examples/quad -debug
-          windows_artifacts/odin build examples/bufferoffsets -debug
-          windows_artifacts/odin build examples/cube -debug
-          windows_artifacts/odin build examples/noninterleaved -debug
-          windows_artifacts/odin build examples/texcube -debug
-          windows_artifacts/odin build examples/shapes -debug
-          windows_artifacts/odin build examples/offscreen -debug
-          windows_artifacts/odin build examples/instancing -debug
-          windows_artifacts/odin build examples/mrt -debug
-          windows_artifacts/odin build examples/blend -debug
-          windows_artifacts/odin build examples/debugtext -debug
-          windows_artifacts/odin build examples/debugtext-print -debug
-          windows_artifacts/odin build examples/debugtext-userfont -debug
-          windows_artifacts/odin build examples/saudio -debug
-          windows_artifacts/odin build examples/sgl -debug
-          windows_artifacts/odin build examples/sgl-points -debug
-          windows_artifacts/odin build examples/sgl-context -debug
+      - name: build
+        run: |
+          ./odin build examples/clear -debug
+          ./odin build examples/triangle -debug
+          ./odin build examples/quad -debug
+          ./odin build examples/bufferoffsets -debug
+          ./odin build examples/cube -debug
+          ./odin build examples/noninterleaved -debug
+          ./odin build examples/texcube -debug
+          ./odin build examples/shapes -debug
+          ./odin build examples/offscreen -debug
+          ./odin build examples/instancing -debug
+          ./odin build examples/mrt -debug
+          ./odin build examples/blend -debug
+          ./odin build examples/debugtext -debug
+          ./odin build examples/debugtext-print -debug
+          ./odin build examples/debugtext-userfont -debug
+          ./odin build examples/saudio -debug
+          ./odin build examples/sgl -debug
+          ./odin build examples/sgl-points -debug
+          ./odin build examples/sgl-context -debug
 
   test-rust:
     needs: gen-bindings
@@ -250,7 +216,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v3
@@ -260,7 +227,7 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: ignore-me-rust
-          path: src/sokol
+          path: src
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable

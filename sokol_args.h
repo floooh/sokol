@@ -35,11 +35,22 @@
 
     When running as WebAssembly app, arguments are taken from the page URL:
 
-    https://floooh.github.io/tiny8bit/kc85.html?type=kc85_3&mod=m022&snapshot=kc85/jungle.kcc
+        https://floooh.github.io/tiny8bit/kc85.html?type=kc85_3&mod=m022&snapshot=kc85/jungle.kcc
 
     The same arguments provided to a command line app:
 
-    kc85 type=kc85_3 mod=m022 snapshot=kc85/jungle.kcc
+        kc85 type=kc85_3 mod=m022 snapshot=kc85/jungle.kcc
+
+    You can also use standalone keys without value:
+
+        https://floooh.github.io/tiny8bit/kc85.html?bla&blub
+
+    On the command line:
+
+        kc85 bla blub
+
+    Such value-less keys are reported as the value being an empty string, but they
+    can be tested with `sapp_exists("bla")` or `sapp_boolean("blub")`.
 
     ARGUMENT FORMATTING
     ===================
@@ -57,6 +68,12 @@
 
         key=value
 
+    or
+
+        key
+
+    When a key has no value, the value will be assigned an empty string.
+
     Key/value pairs are separated by 'whitespace', valid whitespace
     characters are space and tab.
 
@@ -70,9 +87,6 @@
         key=value
 
     The 'key' string must be a simple string without escape sequences or whitespace.
-
-    Currently 'single keys' without values are not allowed, but may be
-    in the future.
 
     The 'value' string can be quoted, and quoted value strings can contain
     whitespace:
@@ -123,7 +137,7 @@
                 ...
             }
 
-            // check if a key's value is "true", "yes" or "on"
+            // check if a key's value is "true", "yes" or "on" or if this is a standalone key
             if (sargs_boolean("joystick_enabled")) {
                 ...
             }
@@ -183,23 +197,23 @@
         Return true between sargs_setup() and sargs_shutdown()
 
     bool sargs_exists(const char* key)
-        Test if a key arg exists.
+        Test if an argument exists by its key name.
 
     const char* sargs_value(const char* key)
-        Return value associated with key. Returns an empty
-        string ("") if the key doesn't exist.
+        Return value associated with key. Returns an empty string ("") if the
+        key doesn't exist, or if the key doesn't have a value.
 
     const char* sargs_value_def(const char* key, const char* default)
-        Return value associated with key, or the provided default
-        value if the value doesn't exist.
+        Return value associated with key, or the provided default value if the
+        key doesn't exist, or this is a value-less key.
 
     bool sargs_equals(const char* key, const char* val);
         Return true if the value associated with key matches
         the 'val' argument.
 
     bool sargs_boolean(const char* key)
-        Return true if the value string of 'key' is one
-        of 'true', 'yes', 'on'.
+        Return true if the value string of 'key' is one of 'true', 'yes', 'on',
+        or this is a key without value.
 
     int sargs_find(const char* key)
         Find argument by key name and return its index, or -1 if not found.
@@ -213,7 +227,7 @@
 
     const char* sargs_value_at(int index)
         Return the value of argument at index. Returns empty string
-        if index is outside range.
+        if the key at index has no value, or the index is out-of-range.
 
 
     MEMORY ALLOCATION OVERRIDE
@@ -233,8 +247,8 @@
             sargs_setup(&(sargs_desc){
                 // ...
                 .allocator = {
-                    .alloc = my_alloc,
-                    .free = my_free,
+                    .alloc_fn = my_alloc,
+                    .free_fn = my_free,
                     .user_data = ...,
                 }
             });
@@ -302,12 +316,12 @@ extern "C" {
 
     Used in sargs_desc to provide custom memory-alloc and -free functions
     to sokol_args.h. If memory management should be overridden, both the
-    alloc and free function must be provided (e.g. it's not valid to
+    alloc_fn and free_fn function must be provided (e.g. it's not valid to
     override one function but not the other).
 */
 typedef struct sargs_allocator {
-    void* (*alloc)(size_t size, void* user_data);
-    void (*free)(void* ptr, void* user_data);
+    void* (*alloc_fn)(size_t size, void* user_data);
+    void (*free_fn)(void* ptr, void* user_data);
     void* user_data;
 } sargs_allocator;
 
@@ -327,13 +341,13 @@ SOKOL_ARGS_API_DECL void sargs_shutdown(void);
 SOKOL_ARGS_API_DECL bool sargs_isvalid(void);
 /* test if an argument exists by key name */
 SOKOL_ARGS_API_DECL bool sargs_exists(const char* key);
-/* get value by key name, return empty string if key doesn't exist */
+/* get value by key name, return empty string if key doesn't exist or an existing key has no value */
 SOKOL_ARGS_API_DECL const char* sargs_value(const char* key);
-/* get value by key name, return provided default if key doesn't exist */
+/* get value by key name, return provided default if key doesn't exist or has no value */
 SOKOL_ARGS_API_DECL const char* sargs_value_def(const char* key, const char* def);
 /* return true if val arg matches the value associated with key */
 SOKOL_ARGS_API_DECL bool sargs_equals(const char* key, const char* val);
-/* return true if key's value is "true", "yes" or "on" */
+/* return true if key's value is "true", "yes", "on" or an existing key has no value */
 SOKOL_ARGS_API_DECL bool sargs_boolean(const char* key);
 /* get index of arg by key name, return -1 if not exists */
 SOKOL_ARGS_API_DECL int sargs_find(const char* key);
@@ -433,10 +447,9 @@ _SOKOL_PRIVATE void _sargs_clear(void* ptr, size_t size) {
 _SOKOL_PRIVATE void* _sargs_malloc(size_t size) {
     SOKOL_ASSERT(size > 0);
     void* ptr;
-    if (_sargs.allocator.alloc) {
-        ptr = _sargs.allocator.alloc(size, _sargs.allocator.user_data);
-    }
-    else {
+    if (_sargs.allocator.alloc_fn) {
+        ptr = _sargs.allocator.alloc_fn(size, _sargs.allocator.user_data);
+    } else {
         ptr = malloc(size);
     }
     SOKOL_ASSERT(ptr);
@@ -450,10 +463,9 @@ _SOKOL_PRIVATE void* _sargs_malloc_clear(size_t size) {
 }
 
 _SOKOL_PRIVATE void _sargs_free(void* ptr) {
-    if (_sargs.allocator.free) {
-        _sargs.allocator.free(ptr, _sargs.allocator.user_data);
-    }
-    else {
+    if (_sargs.allocator.free_fn) {
+        _sargs.allocator.free_fn(ptr, _sargs.allocator.user_data);
+    } else {
         free(ptr);
     }
 }
@@ -486,8 +498,8 @@ _SOKOL_PRIVATE bool _sargs_val_expected(void) {
     return 0 != (_sargs.parse_state & _SARGS_EXPECT_VAL);
 }
 
-_SOKOL_PRIVATE void _sargs_expect_sep(void) {
-    _sargs.parse_state = _SARGS_EXPECT_SEP;
+_SOKOL_PRIVATE void _sargs_expect_sep_or_key(void) {
+    _sargs.parse_state = _SARGS_EXPECT_SEP | _SARGS_EXPECT_KEY;
 }
 
 _SOKOL_PRIVATE bool _sargs_any_expected(void) {
@@ -524,14 +536,17 @@ _SOKOL_PRIVATE bool _sargs_is_whitespace(char c) {
 }
 
 _SOKOL_PRIVATE void _sargs_start_key(void) {
-    SOKOL_ASSERT(_sargs.num_args < _sargs.max_args);
+    SOKOL_ASSERT((_sargs.num_args >= 0) && (_sargs.num_args < _sargs.max_args));
     _sargs.parse_state = _SARGS_PARSING_KEY;
     _sargs.args[_sargs.num_args].key = _sargs.buf_pos;
 }
 
 _SOKOL_PRIVATE void _sargs_end_key(void) {
-    SOKOL_ASSERT(_sargs.num_args < _sargs.max_args);
+    SOKOL_ASSERT((_sargs.num_args >= 0) && (_sargs.num_args < _sargs.max_args));
     _sargs_putc(0);
+    // declare val as empty string in case this is a key-only arg
+    _sargs.args[_sargs.num_args].val = _sargs.buf_pos - 1;
+    _sargs.num_args++;
     _sargs.parse_state = 0;
 }
 
@@ -540,15 +555,13 @@ _SOKOL_PRIVATE bool _sargs_parsing_key(void) {
 }
 
 _SOKOL_PRIVATE void _sargs_start_val(void) {
-    SOKOL_ASSERT(_sargs.num_args < _sargs.max_args);
+    SOKOL_ASSERT((_sargs.num_args > 0) && (_sargs.num_args <= _sargs.max_args));
     _sargs.parse_state = _SARGS_PARSING_VAL;
-    _sargs.args[_sargs.num_args].val = _sargs.buf_pos;
+    _sargs.args[_sargs.num_args - 1].val = _sargs.buf_pos;
 }
 
 _SOKOL_PRIVATE void _sargs_end_val(void) {
-    SOKOL_ASSERT(_sargs.num_args < _sargs.max_args);
     _sargs_putc(0);
-    _sargs.num_args++;
     _sargs.parse_state = 0;
 }
 
@@ -596,7 +609,12 @@ _SOKOL_PRIVATE bool _sargs_parse_carg(const char* src) {
         if (_sargs_any_expected()) {
             if (!_sargs_is_whitespace(c)) {
                 /* start of key, value or separator */
-                if (_sargs_key_expected()) {
+                if (_sargs_is_separator(c)) {
+                    /* skip separator and expect value */
+                    _sargs_expect_val();
+                    continue;
+                }
+                else if (_sargs_key_expected()) {
                     /* start of new key */
                     _sargs_start_key();
                 }
@@ -607,13 +625,6 @@ _SOKOL_PRIVATE bool _sargs_parse_carg(const char* src) {
                         continue;
                     }
                     _sargs_start_val();
-                }
-                else {
-                    /* separator */
-                    if (_sargs_is_separator(c)) {
-                        _sargs_expect_val();
-                        continue;
-                    }
                 }
             }
             else {
@@ -629,7 +640,7 @@ _SOKOL_PRIVATE bool _sargs_parse_carg(const char* src) {
                     _sargs_expect_val();
                 }
                 else {
-                    _sargs_expect_sep();
+                    _sargs_expect_sep_or_key();
                 }
                 continue;
             }
@@ -657,7 +668,7 @@ _SOKOL_PRIVATE bool _sargs_parse_carg(const char* src) {
     }
     if (_sargs_parsing_key()) {
         _sargs_end_key();
-        _sargs_expect_sep();
+        _sargs_expect_sep_or_key();
     }
     else if (_sargs_parsing_val() && !_sargs_in_quotes()) {
         _sargs_end_val();
@@ -823,7 +834,13 @@ SOKOL_API_IMPL const char* sargs_value_def(const char* key, const char* def) {
     SOKOL_ASSERT(_sargs.valid && key && def);
     int arg_index = sargs_find(key);
     if (-1 != arg_index) {
-        return sargs_value_at(arg_index);
+        const char* res = sargs_value_at(arg_index);
+        SOKOL_ASSERT(res);
+        if (res[0] == 0) {
+            return def;
+        } else {
+            return res;
+        }
     }
     else {
         return def;
@@ -836,10 +853,15 @@ SOKOL_API_IMPL bool sargs_equals(const char* key, const char* val) {
 }
 
 SOKOL_API_IMPL bool sargs_boolean(const char* key) {
-    const char* val = sargs_value(key);
-    return (0 == strcmp("true", val)) ||
-           (0 == strcmp("yes", val)) ||
-           (0 == strcmp("on", val));
+    if (sargs_exists(key)) {
+        const char* val = sargs_value(key);
+        return (0 == strcmp("true", val)) ||
+               (0 == strcmp("yes", val)) ||
+               (0 == strcmp("on", val)) ||
+               (0 == strcmp("", val));
+    } else {
+        return false;
+    }
 }
 
 #endif /* SOKOL_ARGS_IMPL */

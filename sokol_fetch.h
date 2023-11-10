@@ -820,8 +820,8 @@
             sfetch_setup(&(sfetch_desc_t){
                 // ...
                 .allocator = {
-                    .alloc = my_alloc,
-                    .free = my_free,
+                    .alloc_fn = my_alloc,
+                    .free_fn = my_free,
                     .user_data = ...,
                 }
             });
@@ -1024,8 +1024,8 @@ typedef struct sfetch_range_t {
     override one function but not the other).
 */
 typedef struct sfetch_allocator_t {
-    void* (*alloc)(size_t size, void* user_data);
-    void (*free)(void* ptr, void* user_data);
+    void* (*alloc_fn)(size_t size, void* user_data);
+    void (*free_fn)(void* ptr, void* user_data);
     void* user_data;
 } sfetch_allocator_t;
 
@@ -1424,10 +1424,9 @@ _SOKOL_PRIVATE void _sfetch_clear(void* ptr, size_t size) {
 _SOKOL_PRIVATE void* _sfetch_malloc_with_allocator(const sfetch_allocator_t* allocator, size_t size) {
     SOKOL_ASSERT(size > 0);
     void* ptr;
-    if (allocator->alloc) {
-        ptr = allocator->alloc(size, allocator->user_data);
-    }
-    else {
+    if (allocator->alloc_fn) {
+        ptr = allocator->alloc_fn(size, allocator->user_data);
+    } else {
         ptr = malloc(size);
     }
     if (0 == ptr) {
@@ -1447,10 +1446,9 @@ _SOKOL_PRIVATE void* _sfetch_malloc_clear(size_t size) {
 }
 
 _SOKOL_PRIVATE void _sfetch_free(void* ptr) {
-    if (_sfetch->desc.allocator.free) {
-        _sfetch->desc.allocator.free(ptr, _sfetch->desc.allocator.user_data);
-    }
-    else {
+    if (_sfetch->desc.allocator.free_fn) {
+        _sfetch->desc.allocator.free_fn(ptr, _sfetch->desc.allocator.user_data);
+    } else {
         free(ptr);
     }
 }
@@ -2457,6 +2455,12 @@ _SOKOL_PRIVATE void _sfetch_invoke_response_callback(_sfetch_item_t* item) {
     item->callback(&response);
 }
 
+_SOKOL_PRIVATE void _sfetch_cancel_item(_sfetch_item_t* item) {
+    item->state = _SFETCH_STATE_FAILED;
+    item->user.finished = true;
+    item->user.error_code = SFETCH_ERROR_CANCELLED;
+}
+
 /* per-frame channel stuff: move requests in and out of the IO threads, call response callbacks */
 _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_t* pool) {
 
@@ -2469,9 +2473,16 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         _sfetch_item_t* item = _sfetch_pool_item_lookup(pool, slot_id);
         SOKOL_ASSERT(item);
         SOKOL_ASSERT(item->state == _SFETCH_STATE_ALLOCATED);
+        // if the item was cancelled early, kick it out immediately
+        if (item->user.cancel) {
+            _sfetch_cancel_item(item);
+            _sfetch_invoke_response_callback(item);
+            _sfetch_pool_item_free(pool, slot_id);
+            continue;
+        }
         item->state = _SFETCH_STATE_DISPATCHED;
         item->lane = _sfetch_ring_dequeue(&chn->free_lanes);
-        /* if no buffer provided yet, invoke response callback to do so */
+        // if no buffer provided yet, invoke response callback to do so
         if (0 == item->buffer.ptr) {
             _sfetch_invoke_response_callback(item);
         }
@@ -2498,8 +2509,7 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
             item->user.cont = false;
         }
         if (item->user.cancel) {
-            item->state = _SFETCH_STATE_FAILED;
-            item->user.finished = true;
+            _sfetch_cancel_item(item);
         }
         switch (item->state) {
             case _SFETCH_STATE_DISPATCHED:
@@ -2541,7 +2551,7 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         item->user.fetched_offset = item->thread.fetched_offset;
         item->user.fetched_size = item->thread.fetched_size;
         if (item->user.cancel) {
-            item->user.error_code = SFETCH_ERROR_CANCELLED;
+            _sfetch_cancel_item(item);
         }
         else {
             item->user.error_code = item->thread.error_code;
@@ -2558,7 +2568,7 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         }
         _sfetch_invoke_response_callback(item);
 
-        /* when the request is finish, free the lane for another request,
+        /* when the request is finished, free the lane for another request,
            otherwise feed it back into the incoming queue
         */
         if (item->user.finished) {
@@ -2608,7 +2618,7 @@ _SOKOL_PRIVATE bool _sfetch_validate_request(_sfetch_t* ctx, const sfetch_reques
 }
 
 _SOKOL_PRIVATE sfetch_desc_t _sfetch_desc_defaults(const sfetch_desc_t* desc) {
-    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
+    SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
     sfetch_desc_t res = *desc;
     res.max_requests = _sfetch_def(desc->max_requests, 128);
     res.num_channels = _sfetch_def(desc->num_channels, 1);
