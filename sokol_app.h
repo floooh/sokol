@@ -5165,6 +5165,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(user_data);
+    bool consume_event = false;
     _sapp.emsc.mouse_buttons = emsc_event->buttons;
     if (_sapp.mouse.locked) {
         _sapp.mouse.dx = (float) emsc_event->movementX;
@@ -5225,7 +5226,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
             } else {
                 _sapp.event.mouse_button = SAPP_MOUSEBUTTON_INVALID;
             }
-            _sapp_call_event(&_sapp.event);
+            consume_event = _sapp_call_event(&_sapp.event);
         }
         // mouse lock can only be activated in mouse button events (not in move, enter or leave)
         if (is_button_event) {
@@ -5233,7 +5234,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
         }
     }
     _sapp_emsc_update_keyboard_state();
-    return true;
+    return consume_event;
 }
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelEvent* emsc_event, void* user_data) {
@@ -5257,6 +5258,8 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelE
     }
     _sapp_emsc_update_keyboard_state();
     _sapp_emsc_update_mouse_lock_state();
+    // NOTE: wheel events are always consumed because they try to scroll the
+    // page which looks pretty bad
     return true;
 }
 
@@ -5521,7 +5524,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(user_data);
-    bool retval = true;
+    bool consume_event = false;
     if (_sapp_events_enabled()) {
         sapp_event_type type;
         switch (emsc_type) {
@@ -5539,7 +5542,6 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchE
                 break;
             default:
                 type = SAPP_EVENTTYPE_INVALID;
-                retval = false;
                 break;
         }
         if (type != SAPP_EVENTTYPE_INVALID) {
@@ -5557,11 +5559,11 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchE
                 dst->pos_y = src->targetY * _sapp.dpi_scale;
                 dst->changed = src->isChanged;
             }
-            _sapp_call_event(&_sapp.event);
+            consume_event = _sapp_call_event(&_sapp.event);
         }
     }
     _sapp_emsc_update_keyboard_state();
-    return retval;
+    return consume_event;
 }
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_focus_cb(int emsc_type, const EmscriptenFocusEvent* emsc_event, void* user_data) {
