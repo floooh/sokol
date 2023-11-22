@@ -566,6 +566,8 @@ def gen_extra(inp):
     #    l('')
     c_source_path = '/'.join(c_source_paths[inp['prefix']].split('/')[3:])
     l('{.passc:"-DSOKOL_NIM_IMPL".}')
+    l('when defined(release):')
+    l('  {.passc:"-DNDEBUG".}')
     l(f'{{.compile:"{c_source_path}".}}')
 
 def gen_module(inp, dep_prefixes):
