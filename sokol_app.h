@@ -11200,6 +11200,7 @@ SOKOL_API_IMPL void sapp_run(const sapp_desc* desc) {
 }
 
 /* this is just a stub so the linker doesn't complain */
+#ifndef SOKOL_REMOVE_MAIN_STUB
 sapp_desc sokol_main(int argc, char* argv[]) {
     _SOKOL_UNUSED(argc);
     _SOKOL_UNUSED(argv);
@@ -11207,6 +11208,7 @@ sapp_desc sokol_main(int argc, char* argv[]) {
     _sapp_clear(&desc, sizeof(desc));
     return desc;
 }
+#endif
 #else
 /* likewise, in normal mode, sapp_run() is just an empty stub */
 SOKOL_API_IMPL void sapp_run(const sapp_desc* desc) {
