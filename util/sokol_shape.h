@@ -421,18 +421,12 @@ typedef struct sshape_vertex_t {
 typedef struct sshape_element_range_t {
     int base_element;
     int num_elements;
-    #if defined(SOKOL_ZIG_BINDINGS)
-    uint32_t __pad[3];
-    #endif
 } sshape_element_range_t;
 
 /* number of elements and byte size of build actions */
 typedef struct sshape_sizes_item_t {
     uint32_t num;       // number of elements
     uint32_t size;      // the same as size in bytes
-    #if defined(SOKOL_ZIG_BINDINGS)
-    uint32_t __pad[3];
-    #endif
 } sshape_sizes_item_t;
 
 typedef struct sshape_sizes_t {
