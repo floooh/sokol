@@ -457,15 +457,15 @@ def gen_array_converters(decl, prefix):
             if util.is_1d_array_type(field['type']):
                 n = array_sizes[0]
                 l(f'converter to{struct_name}{field_name}*[N:static[int]](items: array[N, {array_base_type}]): array[{n}, {array_base_type}] =')
-                l(f'  static: assert(N < {n})')
+                l(f'  static: assert(N <= {n})')
                 l(f'  for index,item in items.pairs: result[index]=item')
                 l('')
             elif util.is_2d_array_type(field['type']):
                 x = array_sizes[1]
                 y = array_sizes[0]
                 l(f'converter to{struct_name}{field_name}*[Y:static[int], X:static[int]](items: array[Y, array[X, {array_base_type}]]): array[{y}, array[{x}, {array_base_type}]] =')
-                l(f'  static: assert(X < {x})')
-                l(f'  static: assert(Y < {y})')
+                l(f'  static: assert(X <= {x})')
+                l(f'  static: assert(Y <= {y})')
                 l(f'  for indexY,itemY in items.pairs:')
                 l(f'    for indexX, itemX in itemY.pairs:')
                 l(f'      result[indexY][indexX] = itemX')
@@ -568,6 +568,8 @@ def gen_extra(inp):
     #    l('')
     c_source_path = '/'.join(c_source_paths[inp['prefix']].split('/')[3:])
     l('{.passc:"-DSOKOL_NIM_IMPL".}')
+    l('when defined(release):')
+    l('  {.passc:"-DNDEBUG".}')
     l(f'{{.compile:"{c_source_path}".}}')
 
 def gen_module(inp, dep_prefixes):
