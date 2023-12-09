@@ -2411,9 +2411,6 @@ typedef struct {
 #endif
 
 typedef struct {
-    bool textfield_created;
-    bool wants_show_keyboard;
-    bool wants_hide_keyboard;
     bool mouse_lock_requested;
     uint16_t mouse_buttons;
 } _sapp_emsc_t;
@@ -4648,13 +4645,6 @@ extern "C" {
 
 typedef void (*_sapp_html5_fetch_callback) (const sapp_html5_fetch_response*);
 
-/* this function is called from a JS event handler when the user hides
-    the onscreen keyboard pressing the 'dismiss keyboard key'
-*/
-EMSCRIPTEN_KEEPALIVE void _sapp_emsc_notify_keyboard_hidden(void) {
-    _sapp.onscreen_keyboard_shown = false;
-}
-
 EMSCRIPTEN_KEEPALIVE void _sapp_emsc_onpaste(const char* str) {
     if (_sapp.clipboard.enabled) {
         _sapp_strcpy(str, _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
@@ -4744,27 +4734,6 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_invoke_fetch_cb(int index, int success, int
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-
-/* Javascript helper functions for mobile virtual keyboard input */
-EM_JS(void, sapp_js_create_textfield, (void), {
-    const _sapp_inp = document.createElement("input");
-    _sapp_inp.type = "text";
-    _sapp_inp.id = "_sokol_app_input_element";
-    _sapp_inp.autocapitalize = "none";
-    _sapp_inp.addEventListener("focusout", function(_sapp_event) {
-        __sapp_emsc_notify_keyboard_hidden()
-
-    });
-    document.body.append(_sapp_inp);
-});
-
-EM_JS(void, sapp_js_focus_textfield, (void), {
-    document.getElementById("_sokol_app_input_element").focus();
-});
-
-EM_JS(void, sapp_js_unfocus_textfield, (void), {
-    document.getElementById("_sokol_app_input_element").blur();
-});
 
 EM_JS(void, sapp_js_add_beforeunload_listener, (void), {
     Module.sokol_beforeunload = (event) => {
@@ -4900,45 +4869,6 @@ EM_JS(void, sapp_js_remove_dragndrop_listeners, (const char* canvas_name_cstr), 
     canvas.removeEventListener('dragover',  Module.sokol_dragover);
     canvas.removeEventListener('drop',      Module.sokol_drop);
 });
-
-/* called from the emscripten event handler to update the keyboard visibility
-    state, this must happen from an JS input event handler, otherwise
-    the request will be ignored by the browser
-*/
-_SOKOL_PRIVATE void _sapp_emsc_update_keyboard_state(void) {
-    if (_sapp.emsc.wants_show_keyboard) {
-        /* create input text field on demand */
-        if (!_sapp.emsc.textfield_created) {
-            _sapp.emsc.textfield_created = true;
-            sapp_js_create_textfield();
-        }
-        /* focus the text input field, this will bring up the keyboard */
-        _sapp.onscreen_keyboard_shown = true;
-        _sapp.emsc.wants_show_keyboard = false;
-        sapp_js_focus_textfield();
-    }
-    if (_sapp.emsc.wants_hide_keyboard) {
-        /* unfocus the text input field */
-        if (_sapp.emsc.textfield_created) {
-            _sapp.onscreen_keyboard_shown = false;
-            _sapp.emsc.wants_hide_keyboard = false;
-            sapp_js_unfocus_textfield();
-        }
-    }
-}
-
-/* actually showing the onscreen keyboard must be initiated from a JS
-    input event handler, so we'll just keep track of the desired
-    state, and the actual state change will happen with the next input event
-*/
-_SOKOL_PRIVATE void _sapp_emsc_show_keyboard(bool show) {
-    if (show) {
-        _sapp.emsc.wants_show_keyboard = true;
-    }
-    else {
-        _sapp.emsc.wants_hide_keyboard = true;
-    }
-}
 
 EM_JS(void, sapp_js_init, (const char* c_str_target), {
     // lookup and store canvas object by name
@@ -5233,7 +5163,6 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
             _sapp_emsc_update_mouse_lock_state();
         }
     }
-    _sapp_emsc_update_keyboard_state();
     return consume_event;
 }
 
@@ -5256,7 +5185,6 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelE
         _sapp.event.scroll_y = scale * (float)emsc_event->deltaY;
         _sapp_call_event(&_sapp.event);
     }
-    _sapp_emsc_update_keyboard_state();
     _sapp_emsc_update_mouse_lock_state();
     // NOTE: wheel events are always consumed because they try to scroll the
     // page which looks pretty bad
@@ -5517,7 +5445,6 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
             }
         }
     }
-    _sapp_emsc_update_keyboard_state();
     _sapp_emsc_update_mouse_lock_state();
     return retval;
 }
@@ -5562,7 +5489,6 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchE
             consume_event = _sapp_call_event(&_sapp.event);
         }
     }
-    _sapp_emsc_update_keyboard_state();
     return consume_event;
 }
 
@@ -11311,8 +11237,6 @@ SOKOL_API_IMPL const void* sapp_egl_get_context(void) {
 SOKOL_API_IMPL void sapp_show_keyboard(bool show) {
     #if defined(_SAPP_IOS)
     _sapp_ios_show_keyboard(show);
-    #elif defined(_SAPP_EMSCRIPTEN)
-    _sapp_emsc_show_keyboard(show);
     #elif defined(_SAPP_ANDROID)
     _sapp_android_show_keyboard(show);
     #else
