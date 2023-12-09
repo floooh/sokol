@@ -1641,9 +1641,6 @@ typedef struct sg_pixelformat_info {
     bool blend;         // alpha-blending is supported
     bool msaa;          // pixel format can be used as MSAA render target
     bool depth;         // pixel format is a depth format
-    #if defined(SOKOL_ZIG_BINDINGS)
-    uint32_t __pad[3];
-    #endif
 } sg_pixelformat_info;
 
 /*
@@ -1655,9 +1652,6 @@ typedef struct sg_features {
     bool image_clamp_to_border;         // border color and clamp-to-border UV-wrap mode is supported
     bool mrt_independent_blend_state;   // multiple-render-target rendering can use per-render-target blend state
     bool mrt_independent_write_mask;    // multiple-render-target rendering can use per-render-target color write masks
-    #if defined(SOKOL_ZIG_BINDINGS)
-    uint32_t __pad[3];
-    #endif
 } sg_features;
 
 /*
@@ -2778,18 +2772,12 @@ typedef struct sg_vertex_buffer_layout_state {
     int stride;
     sg_vertex_step step_func;
     int step_rate;
-    #if defined(SOKOL_ZIG_BINDINGS)
-    uint32_t __pad[2];
-    #endif
 } sg_vertex_buffer_layout_state;
 
 typedef struct sg_vertex_attr_state {
     int buffer_index;
     int offset;
     sg_vertex_format format;
-    #if defined(SOKOL_ZIG_BINDINGS)
-    uint32_t __pad[2];
-    #endif
 } sg_vertex_attr_state;
 
 typedef struct sg_vertex_layout_state {

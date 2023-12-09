@@ -32,8 +32,8 @@
     SOKOL_METAL
     SOKOL_WGPU
 
-    Optionally provide the following configuration defines before including the
-    implementation:
+    Optionally provide the following configuration define both before including the
+    the declaration and implementation:
 
     SOKOL_IMGUI_NO_SOKOL_APP    - don't depend on sokol_app.h (see below for details)
 

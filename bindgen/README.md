@@ -23,6 +23,7 @@ To update the Zig bindings:
 > git clone https://github.com/floooh/sokol-zig
 > git clone https://github.com/floooh/sokol-nim
 > git clone https://github.com/floooh/sokol-odin
+> git clone https://github.com/floooh/sokol-rust
 > python3 gen_all.py
 ```
 
