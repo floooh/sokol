@@ -33,7 +33,7 @@
     sokol_args.h provides a simple unified argument parsing API for WebAssembly and
     native apps.
 
-    When running as WebAssembly app, arguments are taken from the page URL:
+    When running as a WebAssembly app, arguments are taken from the page URL:
 
         https://floooh.github.io/tiny8bit/kc85.html?type=kc85_3&mod=m022&snapshot=kc85/jungle.kcc
 
