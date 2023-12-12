@@ -1665,7 +1665,7 @@ typedef struct sapp_desc {
     sapp_allocator allocator;           // optional memory allocation overrides (default: malloc/free)
     sapp_logger logger;                 // logging callback override (default: NO LOGGING!)
 
-    /* backend-specific options */
+    // backend-specific options
     int gl_major_version;               // override GL major and minor version (the default GL version is 3.2)
     int gl_minor_version;
     bool win32_console_utf8;            // if true, set the output console codepage to UTF-8
@@ -5314,7 +5314,7 @@ _SOKOL_PRIVATE sapp_keycode _sapp_emsc_translate_key(const char* str) {
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboardEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(user_data);
-    bool retval = true;
+    bool consume_event = false;
     if (_sapp_events_enabled()) {
         sapp_event_type type;
         switch (emsc_type) {
@@ -5337,14 +5337,9 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
             _sapp.event.key_repeat = emsc_event->repeat;
             _sapp.event.modifiers = _sapp_emsc_key_event_mods(emsc_event);
             if (type == SAPP_EVENTTYPE_CHAR) {
-                // FIXME: this doesn't appear to work on Android Chrome
+                // NOTE: cahrCode doesn't appear to be supported on Android Chrome
                 _sapp.event.char_code = emsc_event->charCode;
-                /* workaround to make Cmd+V work on Safari */
-                if ((emsc_event->metaKey) && (emsc_event->charCode == 118)) {
-                    retval = false;
-                }
-            }
-            else {
+            } else {
                 if (0 != emsc_event->code[0]) {
                     // This code path is for desktop browsers which send untranslated 'physical' key code strings
                     // (which is what we actually want for key events)
@@ -5368,7 +5363,9 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                 {
                     send_keyup_followup = true;
                 }
-                // only forward keys to the browser (can further be suppressed by sapp_consume_event())
+                // Only forward alpha-numeric keys to the browser (can further be suppressed by sapp_consume_event())
+                // NOTE: it should be possible to disable this behaviour via sapp_desc to give apps more
+                // controls over input event bubbling.
                 switch (_sapp.event.key_code) {
                     case SAPP_KEYCODE_WORLD_1:
                     case SAPP_KEYCODE_WORLD_2:
@@ -5425,28 +5422,29 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                     case SAPP_KEYCODE_RIGHT_ALT:
                     case SAPP_KEYCODE_RIGHT_SUPER:
                     case SAPP_KEYCODE_MENU:
-                        /* consume the event */
+                        // consume the event
+                        consume_event = true;
                         break;
                     default:
-                        /* forward key to browser */
-                        retval = false;
+                        // forward key to browser
+                        consume_event = false;
                         break;
                 }
             }
             if (_sapp_call_event(&_sapp.event)) {
                 // event was consumed via sapp_consume_event()
-                retval = true;
+                consume_event = true;
             }
             if (send_keyup_followup) {
                 _sapp.event.type = SAPP_EVENTTYPE_KEY_UP;
                 if (_sapp_call_event(&_sapp.event)) {
-                    retval = true;
+                    consume_event = true;
                 }
             }
         }
     }
     _sapp_emsc_update_mouse_lock_state();
-    return retval;
+    return consume_event;
 }
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchEvent* emsc_event, void* user_data) {
@@ -5732,6 +5730,9 @@ _SOKOL_PRIVATE void _sapp_emsc_wgpu_frame(void) {
 #endif // SOKOL_WGPU
 
 _SOKOL_PRIVATE void _sapp_emsc_register_eventhandlers(void) {
+    // NOTE: HTML canvas doesn't receive input focus, this is why key event handlers are added
+    // to the window object (this could be worked around by adding a "tab index" to the
+    // canvas)
     emscripten_set_mousedown_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_mouse_cb);
     emscripten_set_mouseup_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_mouse_cb);
     emscripten_set_mousemove_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_mouse_cb);
