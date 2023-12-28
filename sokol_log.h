@@ -122,7 +122,7 @@ extern "C" {
 #endif
 
 /*
-    Plug this function into the 'logger.func' struct item when initializating any of the sokol
+    Plug this function into the 'logger.func' struct item when initializing any of the sokol
     headers. For instance for sokol_audio.h it would loom like this:
 
     saudio_setup(&(saudio_desc){

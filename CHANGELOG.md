@@ -329,7 +329,7 @@ The main topic of this update is to separate sampler state from image state in
 sokol_gfx.h which became possible after GLES2 support had been removed from
 sokol_gfx.h.
 
-This also causes some 'colateral changes' in shader authoring and
+This also causes some 'collateral changes' in shader authoring and
 other sokol headers, but there was opportunity to fill a few feature gaps
 in sokol_gfx.h as well:
 

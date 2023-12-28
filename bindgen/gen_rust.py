@@ -766,7 +766,7 @@ def gen_helpers(inp):
     if inp['prefix'] in ['sg_', 'sdtx_', 'sshape_', 'sapp_']:
         l("/// Helper function to cast a rust slice into a sokol Range")
         l(f"pub fn slice_as_range<T>(data: &[T]) -> {range_struct_name} {{")
-        l(f"    {range_struct_name} {{ size: data.len() * std::mem::size_of::<T>(), ptr: data.as_ptr() as *const _ }}")
+        l(f"    {range_struct_name} {{ size: std::mem::size_of_val(data), ptr: data.as_ptr() as *const _ }}")
         l("}")
         l("/// Helper function to cast a rust reference into a sokol Range")
         l(f"pub fn value_as_range<T>(value: &T) -> {range_struct_name} {{")
