@@ -5337,7 +5337,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
             _sapp.event.key_repeat = emsc_event->repeat;
             _sapp.event.modifiers = _sapp_emsc_key_event_mods(emsc_event);
             if (type == SAPP_EVENTTYPE_CHAR) {
-                // NOTE: cahrCode doesn't appear to be supported on Android Chrome
+                // NOTE: charCode doesn't appear to be supported on Android Chrome
                 _sapp.event.char_code = emsc_event->charCode;
             } else {
                 if (0 != emsc_event->code[0]) {
