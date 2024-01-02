@@ -126,7 +126,7 @@
     ==========================
     During initialization:
 
-        - call sspine_setup() after initializating sokol-gfx
+        - call sspine_setup() after initializing sokol-gfx
         - create an atlas object from a Spine atlas file with sspine_make_atlas()
         - load and initialize the sokol-gfx image objects referenced by the atlas
         - create a skeleton object from a Spine skeleton file with sspine_make_skeleton()
@@ -424,7 +424,7 @@
         sspine_shutdown();
         sg_shutdown();
 
-    - You can explicitely destroy the base object types if you don't need them
+    - You can explicitly destroy the base object types if you don't need them
       any longer. This will cause the underlying spine-c objects to be
       freed and the memory to be returned to the operating system:
 
@@ -578,10 +578,10 @@
         - sspine_context_draw_layer_in_instance(ctx, ...)
         - sspine_context_draw_layer(ctx, ...)
 
-    These explicitely take a context argument, completely ignore
+    These explicitly take a context argument, completely ignore
     and don't change the active context.
 
-    You can query some information about the a context with the function:
+    You can query some information about a context with the function:
 
         sspine_context_info info = ssgpine_get_context_info(ctx);
 
@@ -604,7 +604,7 @@
         - SSPINE_RESOURCE_VALID: the object is valid and ready to use
         - SSPINE_RESOURCE_FAILED: the object creation has failed
         - SSPINE_RESOURCE_INVALID: the object or one of its dependencies is
-          invalid, it either no longer exists, or the the handle hasn't been
+          invalid, it either no longer exists, or the handle hasn't been
           initialized with a call to one of the object creation functions
 
     MISC HELPER FUNCTIONS:
