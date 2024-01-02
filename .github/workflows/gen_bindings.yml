@@ -125,7 +125,7 @@ jobs:
     steps:
       - uses: jiro4989/setup-nim-action@v1
         with:
-         nim-version: devel
+         nim-version: '2.x'
          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@v4
         with:
