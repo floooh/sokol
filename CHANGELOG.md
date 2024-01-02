@@ -1,5 +1,23 @@
 ## Updates
 
+#### 02-Jan-2024
+
+Happy New Year! A couple of input-related changes in the sokol_app.h Emscripten backend:
+
+- Mouse and touch events now bubble up to the HTML document instead of being consumed, in some scenarios this
+  allows better integration with the surrounding web page. To prevent event bubbling,
+  call `sapp_consume_event()` from within the sokol_app.h event callback function.
+- **NOTE**: wheel/scroll events behave as before and are always consumed. This prevents
+  an ugly "scroll bumping" effect when a wheel event bubbles up on a page where
+  scrolling shouldn't be possible.
+- The hidden HTML text input field hack for text input on mobile browsers has been
+  removed. This idea never really worked across all browsers, and it actually
+  interfered with Dear ImGui text input fields because the hidden HTML text field
+  generated focus-in/out events which confused the Dear ImGui input handling code.
+
+Those changes fix a couple of problem when trying to integrate sokol_app.h applications
+into VSCode webview panels, see: https://marketplace.visualstudio.com/items?itemName=floooh.vscode-kcide
+
 #### 10-Nov-2023
 
 A small change in the sokol_gfx.h GL backend on Windows only:
