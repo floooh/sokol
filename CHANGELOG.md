@@ -18,6 +18,8 @@ Happy New Year! A couple of input-related changes in the sokol_app.h Emscripten 
 Those changes fix a couple of problem when trying to integrate sokol_app.h applications
 into VSCode webview panels, see: https://marketplace.visualstudio.com/items?itemName=floooh.vscode-kcide
 
+Related PR: https://github.com/floooh/sokol/pull/939
+
 #### 10-Nov-2023
 
 A small change in the sokol_gfx.h GL backend on Windows only:
