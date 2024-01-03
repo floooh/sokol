@@ -1,5 +1,12 @@
 ## Updates
 
+#### 03-Jan-2024
+
+- sokol_nuklear.h: `snk_handle_event()` now returns a bool to indicate whether the
+  event was handled by Nuklear (this allows an application to skip its own event
+  handling if Nuklear already handled the event). Issue link: https://github.com/floooh/sokol/issues/958,
+  fixed in PR: https://github.com/floooh/sokol/pull/959. Many thanks to @adamrt for the PR!
+
 #### 02-Jan-2024
 
 Happy New Year! A couple of input-related changes in the sokol_app.h Emscripten backend:
