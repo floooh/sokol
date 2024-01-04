@@ -1894,8 +1894,8 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 // NOTE: the pixel format values *must* be compatible with sg_pixel_format
 #define _SAPP_PIXELFORMAT_RGBA8 (23)
 #define _SAPP_PIXELFORMAT_BGRA8 (28)
-#define _SAPP_PIXELFORMAT_DEPTH (42)
-#define _SAPP_PIXELFORMAT_DEPTH_STENCIL (43)
+#define _SAPP_PIXELFORMAT_DEPTH (43)
+#define _SAPP_PIXELFORMAT_DEPTH_STENCIL (44)
 
 #if defined(_SAPP_MACOS) || defined(_SAPP_IOS)
     // this is ARC compatible

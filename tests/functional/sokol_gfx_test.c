@@ -2875,3 +2875,90 @@ UTEST(sokol_gfx, make_pass_validate_depth_image_sample_count) {
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
+
+UTEST(sokol_gfx, query_pixelformat_bytesperpixel) {
+    setup(&(sg_desc){0});
+    T(sg_query_pixelformat(SG_PIXELFORMAT_R8).bytes_per_pixel == 1);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_R8SN).bytes_per_pixel == 1);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_R8UI).bytes_per_pixel == 1);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_R8SI).bytes_per_pixel == 1);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_R16).bytes_per_pixel == 2);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_R16SN).bytes_per_pixel == 2);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_R16UI).bytes_per_pixel == 2);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_R16SI).bytes_per_pixel == 2);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_R16F).bytes_per_pixel == 2);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RG8).bytes_per_pixel == 2);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RG8SN).bytes_per_pixel == 2);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RG8UI).bytes_per_pixel == 2);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RG8SI).bytes_per_pixel == 2);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_R32UI).bytes_per_pixel == 4);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_R32SI).bytes_per_pixel == 4);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_R32F).bytes_per_pixel == 4);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RG16).bytes_per_pixel == 4);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RG16SN).bytes_per_pixel == 4);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RG16UI).bytes_per_pixel == 4);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RG16SI).bytes_per_pixel == 4);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RG16F).bytes_per_pixel == 4);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RGBA8).bytes_per_pixel == 4);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_SRGB8A8).bytes_per_pixel == 4);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RGBA8SN).bytes_per_pixel == 4);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RGBA8UI).bytes_per_pixel == 4);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RGBA8SI).bytes_per_pixel == 4);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_BGRA8).bytes_per_pixel == 4);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RGB10A2).bytes_per_pixel == 4);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RG11B10F).bytes_per_pixel == 4);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RGB9E5).bytes_per_pixel == 4);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RG32UI).bytes_per_pixel == 8);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RG32SI).bytes_per_pixel == 8);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RG32F).bytes_per_pixel == 8);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RGBA16).bytes_per_pixel == 8);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RGBA16SN).bytes_per_pixel == 8);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RGBA16UI).bytes_per_pixel == 8);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RGBA16SI).bytes_per_pixel == 8);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RGBA16F).bytes_per_pixel == 8);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RGBA32UI).bytes_per_pixel == 16);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RGBA32SI).bytes_per_pixel == 16);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_RGBA32F).bytes_per_pixel == 16);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_DEPTH).bytes_per_pixel == 4);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_DEPTH_STENCIL).bytes_per_pixel == 4);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_BC1_RGBA).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_BC2_RGBA).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_BC3_RGBA).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_BC4_R).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_BC4_RSN).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_BC5_RG).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_BC5_RGSN).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_BC6H_RGBF).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_BC6H_RGBUF).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_BC7_RGBA).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_PVRTC_RGB_2BPP).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_PVRTC_RGB_4BPP).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_PVRTC_RGBA_2BPP).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_PVRTC_RGBA_4BPP).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_ETC2_RGB8).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_ETC2_RGB8A1).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_ETC2_RGBA8).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_ETC2_RG11).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_ETC2_RG11SN).bytes_per_pixel == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, query_pixelformat_compressed) {
+    setup(&(sg_desc){0});
+    int i = SG_PIXELFORMAT_NONE + 1;
+    for (; i < SG_PIXELFORMAT_BC1_RGBA; i++) {
+        T(sg_query_pixelformat((sg_pixel_format)i).compressed == false);
+    }
+    for (; i < _SG_PIXELFORMAT_NUM; i++) {
+        T(sg_query_pixelformat((sg_pixel_format)i).compressed == true);
+    }
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, query_row_pitch) {
+    setup(&(sg_desc){0});
+    T(sg_query_row_pitch(SG_PIXELFORMAT_R8, 13, 1) == 13);
+    T(sg_query_row_pitch(SG_PIXELFORMAT_R8, 13, 32) == 32);
+    T(sg_query_row_pitch(SG_PIXELFORMAT_RGBA8, 256, 16) == 1024);
+    sg_shutdown();
+}
