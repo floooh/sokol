@@ -2959,6 +2959,27 @@ UTEST(sokol_gfx, query_row_pitch) {
     setup(&(sg_desc){0});
     T(sg_query_row_pitch(SG_PIXELFORMAT_R8, 13, 1) == 13);
     T(sg_query_row_pitch(SG_PIXELFORMAT_R8, 13, 32) == 32);
+    T(sg_query_row_pitch(SG_PIXELFORMAT_RG8SN, 256, 16) == 512);
     T(sg_query_row_pitch(SG_PIXELFORMAT_RGBA8, 256, 16) == 1024);
+    T(sg_query_row_pitch(SG_PIXELFORMAT_BC1_RGBA, 1024, 1) == 2048);
+    T(sg_query_row_pitch(SG_PIXELFORMAT_BC1_RGBA, 1, 1) == 8);
+    T(sg_query_row_pitch(SG_PIXELFORMAT_DEPTH, 256, 4) == 1024);
+    T(sg_query_row_pitch(SG_PIXELFORMAT_DEPTH_STENCIL, 256, 4) == 1024);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, sg_query_surface_pitch) {
+    setup(&(sg_desc){0});
+    T(sg_query_surface_pitch(SG_PIXELFORMAT_R8, 256, 256, 1) == (256 * 256));
+    T(sg_query_surface_pitch(SG_PIXELFORMAT_R8, 256, 256, 1024) == (256 * 1024));
+    T(sg_query_surface_pitch(SG_PIXELFORMAT_RG8, 1, 1, 1) == 2);
+    T(sg_query_surface_pitch(SG_PIXELFORMAT_RG8, 256, 256, 4) == (256 * 256 * 2));
+    T(sg_query_surface_pitch(SG_PIXELFORMAT_RGBA32F, 256, 256, 1) == (256 * 256 * 16));
+    T(sg_query_surface_pitch(SG_PIXELFORMAT_BC1_RGBA, 256, 256, 1) == (256 * 2 * 64));
+    T(sg_query_surface_pitch(SG_PIXELFORMAT_BC1_RGBA, 256, 1, 1) == (256 * 2));
+    T(sg_query_surface_pitch(SG_PIXELFORMAT_BC1_RGBA, 256, 2, 1) == (256 * 2));
+    T(sg_query_surface_pitch(SG_PIXELFORMAT_BC1_RGBA, 256, 3, 1) == (256 * 2));
+    T(sg_query_surface_pitch(SG_PIXELFORMAT_BC1_RGBA, 256, 4, 1) == (256 * 2));
+    T(sg_query_surface_pitch(SG_PIXELFORMAT_BC1_RGBA, 256, 5, 1) == (256 * 2 * 2));
     sg_shutdown();
 }
