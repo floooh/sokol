@@ -6,11 +6,11 @@
 because the pixel format enum in sokol_gfx.h has been shuffled around a bit, and as a result, some internal
 pixel format constants in sokol_app.h had to move too!
 
-- sokol_gfx.h: some minor non-breaking features:
+- sokol_gfx.h: some minor new features (non-breaking):
   - the struct `sg_pixel_format` has two new items:
     - `bool compressed`: true if this is a hardware-compressed pixel format
-    - `int bytes_per_pixel`: as the name says, with the caveats that this is
-      zero for compressed formats (because the smallest element in compressed format is a block)
+    - `int bytes_per_pixel`: as the name says, with the caveat that this is
+      zero for compressed pixel formats (because the smallest element in compressed formats is a block, not a pixel)
   - two previously private helper functions have been exposed to help with size computations
     for texture data, these may be useful when preparing image data for consumption by `sg_make_image()`
     and `sg_update_image()`:
@@ -24,7 +24,7 @@ pixel format constants in sokol_app.h had to move too!
         pixel format. `width` and `hight` are always in pixels.
 
     The `row_align_bytes` parammeter is for added flexibility. For image data that goes into
-    the `sg_make_image()` or `sg_update_image()` this should generally be 1, because these
+    the `sg_make_image()` or `sg_update_image()` functions this should generally be 1, because these
     functions take tightly packed image data as input no matter what alignment restrictions
     exist in the backend 3D APIs.
 - Related issue: https://github.com/floooh/sokol/issues/946, and PR: https://github.com/floooh/sokol/pull/962
