@@ -23,6 +23,7 @@
     the `sg_make_image()` or `sg_update_image()` this should generally be 1, because these
     functions take tightly packed image data as input no matter what alignment restrictions
     exist in the backend 3D APIs.
+- Related issue: https://github.com/floooh/sokol/issues/946, and PR: https://github.com/floooh/sokol/pull/962
 
 #### 03-Jan-2024
 
