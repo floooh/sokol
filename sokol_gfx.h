@@ -361,6 +361,25 @@
 
             sg_backend sg_query_backend(void)
 
+    --- call the following helper functions to compute the number of
+        bytes in a texture row or surface for a specific pixel format.
+        These functions might be helpful when preparing image data for consumption
+        by sg_make_image() or sg_update_image():
+
+            int sg_query_row_pitch(sg_pixel_format fmt, int width, int int row_align_bytes);
+            int sg_query_surface_pitch(sg_pixel_format fmt, int width, int height, int row_align_bytes);
+
+        Width and height are generally in number pixels, but note that 'row' has different meaning
+        for uncompressed vs compressed pixel formats: for uncompressed formats, a row is identical
+        with a single line if pixels, while in compressed formats, one row is a line of *compression blocks*.
+
+        This is why calling sg_query_surface_pitch() for a compressed pixel format and height
+        N, N+1, N+2, ... may return the same result.
+
+        The row_align_bytes parammeter is for added flexibility. For image data that goes into
+        the sg_make_image() or sg_update_image() this should generally be 1, because these
+        functions take tightly packed image data as input no matter what alignment restrictions
+        exist in the backend 3D APIs.
 
     ON INITIALIZATION:
     ==================
@@ -1528,7 +1547,7 @@ typedef enum sg_backend {
 
     Not all pixel formats can be used for everything, call sg_query_pixelformat()
     to inspect the capabilities of a given pixelformat. The function returns
-    an sg_pixelformat_info struct with the following bool members:
+    an sg_pixelformat_info struct with the following members:
 
         - sample: the pixelformat can be sampled as texture at least with
                   nearest filtering
@@ -1540,6 +1559,8 @@ typedef enum sg_backend {
         - msaa:   multisample-antialiasing is supported when using the
                   pixelformat for render targets
         - depth:  the pixelformat can be used for depth-stencil attachments
+        - compressed: this is a block-compressed format
+        - bytes_per_pixel: the numbers of bytes in a pixel (0 for compressed formats)
 
     The default pixel format for texture images is SG_PIXELFORMAT_RGBA8.
 
@@ -1643,7 +1664,7 @@ typedef struct sg_pixelformat_info {
     bool msaa;              // pixel format can be used as MSAA render target
     bool depth;             // pixel format is a depth format
     bool compressed;        // true if this is a hardware-compressed format
-    int bytes_per_pixel;    // NOTE: 0 for compressed formats, use sg_query_row_pitch() / sg_query_surface_pitch() as alternative
+    int bytes_per_pixel;    // NOTE: this is 0 for compressed formats, use sg_query_row_pitch() / sg_query_surface_pitch() as alternative
 } sg_pixelformat_info;
 
 /*

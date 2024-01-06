@@ -1,5 +1,29 @@
 ## Updates
 
+#### 06-Jan-2024
+
+- sokol_gfx.h: some minor non-breaking features:
+  - the struct `sg_pixel_format` has two no items:
+    - `bool compressed`: true if this is a hardware-compressed pixel format
+    - `int bytes_per_pixel`: as the name says, with the caveats that this is
+      zero for compressed formats (because the smallest element in compressed format is a block)
+  - two previously private helper functions have been exposed to help with size computations
+    for texture data, these may be useful when preparing image data for consumption by `sg_make_image()`
+    and `sg_update_image()`:
+      - `int sg_query_row_pitch(sg_pixel_format fmt, int width, int row_align_bytes)`:
+        Computes the number of bytes in a texture row for a given pixel format. A 'row' has
+        different meanings for uncompressed vs compressed formats: For uncompressed pixel
+        formats, a row is a single line of pixels, while for compressed formats, a row is
+        a line of 'compression blocks'. `width` is always in pixels.
+      - `int sg_query_surface_pitch(sg_pixel_format fmt, int width, int height, int row_align_bytes)`:
+        Computes number of bytes in a texture surface (e.g. a single mipmap) for a given
+        pixel format. `width` and `hight` are always in pixels.
+
+    The `row_align_bytes` parammeter is for added flexibility. For image data that goes into
+    the `sg_make_image()` or `sg_update_image()` this should generally be 1, because these
+    functions take tightly packed image data as input no matter what alignment restrictions
+    exist in the backend 3D APIs.
+
 #### 03-Jan-2024
 
 - sokol_nuklear.h: `snk_handle_event()` now returns a bool to indicate whether the
