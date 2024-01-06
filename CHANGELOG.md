@@ -2,6 +2,10 @@
 
 #### 06-Jan-2024
 
+> NOTE: if you use sokol_gfx.h and sokol_app.h together, make sure to update both. This is
+because the pixel format enum in sokol_gfx.h has been shuffled around a bit, and as a result, some internal
+pixel format constants in sokol_app.h had to move too!
+
 - sokol_gfx.h: some minor non-breaking features:
   - the struct `sg_pixel_format` has two no items:
     - `bool compressed`: true if this is a hardware-compressed pixel format
