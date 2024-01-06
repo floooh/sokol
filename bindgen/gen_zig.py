@@ -497,7 +497,7 @@ def gen_helpers(inp):
         l('};')
         l('// std.fmt-style formatted print')
         l('pub fn print(comptime fmt: anytype, args: anytype) void {')
-        l('    var writer: Writer = .{};')
+        l('    const writer: Writer = .{};')
         l('    @import("std").fmt.format(writer, fmt, args) catch {};')
         l('}')
         l('')

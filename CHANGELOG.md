@@ -1,5 +1,68 @@
 ## Updates
 
+#### 06-Jan-2024
+
+> NOTE: if you use sokol_gfx.h and sokol_app.h together, make sure to update both. This is
+because the pixel format enum in sokol_gfx.h has been shuffled around a bit, and as a result, some internal
+pixel format constants in sokol_app.h had to move too!
+
+- sokol_gfx.h: some minor new features (non-breaking):
+  - the struct `sg_pixel_format` has two new items:
+    - `bool compressed`: true if this is a hardware-compressed pixel format
+    - `int bytes_per_pixel`: as the name says, with the caveat that this is
+      zero for compressed pixel formats (because the smallest element in compressed formats is a block, not a pixel)
+  - two previously private helper functions have been exposed to help with size computations
+    for texture data, these may be useful when preparing image data for consumption by `sg_make_image()`
+    and `sg_update_image()`:
+      - `int sg_query_row_pitch(sg_pixel_format fmt, int width, int row_align_bytes)`:
+        Computes the number of bytes in a texture row for a given pixel format. A 'row' has
+        different meanings for uncompressed vs compressed formats: For uncompressed pixel
+        formats, a row is a single line of pixels, while for compressed formats, a row is
+        a line of 'compression blocks'. `width` is always in pixels.
+      - `int sg_query_surface_pitch(sg_pixel_format fmt, int width, int height, int row_align_bytes)`:
+        Computes number of bytes in a texture surface (e.g. a single mipmap) for a given
+        pixel format. `width` and `hight` are always in pixels.
+
+    The `row_align_bytes` parammeter is for added flexibility. For image data that goes into
+    the `sg_make_image()` or `sg_update_image()` functions this should generally be 1, because these
+    functions take tightly packed image data as input no matter what alignment restrictions
+    exist in the backend 3D APIs.
+- Related issue: https://github.com/floooh/sokol/issues/946, and PR: https://github.com/floooh/sokol/pull/962
+
+#### 03-Jan-2024
+
+- sokol_nuklear.h: `snk_handle_event()` now returns a bool to indicate whether the
+  event was handled by Nuklear (this allows an application to skip its own event
+  handling if Nuklear already handled the event). Issue link: https://github.com/floooh/sokol/issues/958,
+  fixed in PR: https://github.com/floooh/sokol/pull/959. Many thanks to @adamrt for the PR!
+
+#### 02-Jan-2024
+
+Happy New Year! A couple of input-related changes in the sokol_app.h Emscripten backend:
+
+- Mouse and touch events now bubble up to the HTML document instead of being consumed, in some scenarios this
+  allows better integration with the surrounding web page. To prevent event bubbling,
+  call `sapp_consume_event()` from within the sokol_app.h event callback function.
+- **NOTE**: wheel/scroll events behave as before and are always consumed. This prevents
+  an ugly "scroll bumping" effect when a wheel event bubbles up on a page where
+  scrolling shouldn't be possible.
+- The hidden HTML text input field hack for text input on mobile browsers has been
+  removed. This idea never really worked across all browsers, and it actually
+  interfered with Dear ImGui text input fields because the hidden HTML text field
+  generated focus-in/out events which confused the Dear ImGui input handling code.
+
+Those changes fix a couple of problem when trying to integrate sokol_app.h applications
+into VSCode webview panels, see: https://marketplace.visualstudio.com/items?itemName=floooh.vscode-kcide
+
+Related PR: https://github.com/floooh/sokol/pull/939
+
+#### 10-Nov-2023
+
+A small change in the sokol_gfx.h GL backend on Windows only:
+
+PR https://github.com/floooh/sokol/pull/839 has been merged, in debug mode this creates
+the GL context with WGL_CONTEXT_DEBUG_BIT_ARB. Thanks to @castano for the PR!
+
 #### 06-Nov-2023
 
 A bugfix in the sokol_gfx.h D3D11 backend, and some related cleanup when creating depth-stencil
@@ -322,7 +385,7 @@ The main topic of this update is to separate sampler state from image state in
 sokol_gfx.h which became possible after GLES2 support had been removed from
 sokol_gfx.h.
 
-This also causes some 'colateral changes' in shader authoring and
+This also causes some 'collateral changes' in shader authoring and
 other sokol headers, but there was opportunity to fill a few feature gaps
 in sokol_gfx.h as well:
 

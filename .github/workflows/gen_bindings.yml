@@ -6,7 +6,7 @@ jobs:
   test-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: test_win
         run: |
           cd tests
@@ -16,7 +16,7 @@ jobs:
   test-mac:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: seanmiddleditch/gha-setup-ninja@master
       - name: test_macos
         run: |
@@ -26,7 +26,7 @@ jobs:
   test-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: seanmiddleditch/gha-setup-ninja@master
       - name: prepare
         run: |
@@ -41,20 +41,20 @@ jobs:
     needs: [ test-windows, test-mac, test-linux ]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           repository: floooh/sokol-zig
           path: bindgen/sokol-zig
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: floooh/sokol-nim
           path: bindgen/sokol-nim
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: floooh/sokol-odin
           path: bindgen/sokol-odin
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: floooh/sokol-rust
           path: bindgen/sokol-rust
@@ -96,7 +96,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{matrix.os}}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: floooh/sokol-zig
       - uses: goto-bus-stop/setup-zig@v2
@@ -125,9 +125,9 @@ jobs:
     steps:
       - uses: jiro4989/setup-nim-action@v1
         with:
-         nim-version: devel
+         nim-version: '2.x'
          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: floooh/sokol-nim
       - uses: actions/download-artifact@v3
@@ -155,7 +155,7 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{matrix.os}}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: floooh/sokol-odin
       - uses: actions/download-artifact@v3
@@ -220,7 +220,7 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{matrix.os}}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: floooh/sokol-rust
           submodules: recursive
@@ -247,7 +247,7 @@ jobs:
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: floooh/sokol-zig
           ssh-key: ${{ secrets.GHACTIONS_ZIG_PUSH }}
@@ -268,7 +268,7 @@ jobs:
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: floooh/sokol-nim
           ssh-key: ${{ secrets.GHACTIONS_NIM_PUSH }}
@@ -289,7 +289,7 @@ jobs:
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: floooh/sokol-odin
           ssh-key: ${{ secrets.GHACTIONS_ODIN_PUSH }}
@@ -311,7 +311,7 @@ jobs:
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: floooh/sokol-rust
           ssh-key: ${{ secrets.GHACTIONS_RUST_PUSH }}
