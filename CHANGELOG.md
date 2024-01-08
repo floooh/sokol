@@ -1,5 +1,12 @@
 ## Updates
 
+#### 07-Jan-2024
+
+- sokol_app.h (macos+metal): window content no longer 'wobbles' during window resizing. Many
+  thanks to @Seb-degraff for picking up and investigating this longstanding issue
+  (https://github.com/floooh/sokol/issues/700), finding a fix for the remaining problem
+  and providing a really nice PR (https://github.com/floooh/sokol/issues/700)!
+
 #### 06-Jan-2024
 
 > NOTE: if you use sokol_gfx.h and sokol_app.h together, make sure to update both. This is
