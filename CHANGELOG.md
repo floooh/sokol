@@ -28,7 +28,7 @@ pixel format constants in sokol_app.h had to move too!
         a line of 'compression blocks'. `width` is always in pixels.
       - `int sg_query_surface_pitch(sg_pixel_format fmt, int width, int height, int row_align_bytes)`:
         Computes number of bytes in a texture surface (e.g. a single mipmap) for a given
-        pixel format. `width` and `hight` are always in pixels.
+        pixel format. `width` and `height` are always in pixels.
 
     The `row_align_bytes` parameter is for added flexibility. For image data that goes into
     the `sg_make_image()` or `sg_update_image()` functions this should generally be 1, because these
