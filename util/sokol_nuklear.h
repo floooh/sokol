@@ -145,7 +145,11 @@
     --- if you're using sokol_app.h, from inside the sokol_app.h event callback,
         call:
 
-        void snk_handle_event(const sapp_event* ev);
+        bool snk_handle_event(const sapp_event* ev);
+
+        This will feed the event into Nuklear's event handling code, and return
+        true if the event was handled by Nuklear, or false if the event should
+        be handled by the application.
 
     --- finally, on application shutdown, call
 
@@ -436,7 +440,7 @@ SOKOL_NUKLEAR_API_DECL snk_image_desc_t snk_query_image_desc(snk_image_t img);
 SOKOL_NUKLEAR_API_DECL nk_handle snk_nkhandle(snk_image_t img);
 SOKOL_NUKLEAR_API_DECL snk_image_t snk_image_from_nkhandle(nk_handle handle);
 #if !defined(SOKOL_NUKLEAR_NO_SOKOL_APP)
-SOKOL_NUKLEAR_API_DECL void snk_handle_event(const sapp_event* ev);
+SOKOL_NUKLEAR_API_DECL bool snk_handle_event(const sapp_event* ev);
 SOKOL_NUKLEAR_API_DECL nk_flags snk_edit_string(struct nk_context *ctx, nk_flags flags, char *memory, int *len, int max, nk_plugin_filter filter);
 #endif
 SOKOL_NUKLEAR_API_DECL void snk_shutdown(void);
@@ -2526,7 +2530,7 @@ _SOKOL_PRIVATE enum nk_keys _snk_event_to_nuklearkey(const sapp_event* ev) {
     }
 }
 
-SOKOL_API_IMPL void snk_handle_event(const sapp_event* ev) {
+SOKOL_API_IMPL bool snk_handle_event(const sapp_event* ev) {
     SOKOL_ASSERT(_SNK_INIT_COOKIE == _snuklear.init_cookie);
     const float dpi_scale = _snuklear.desc.dpi_scale;
     switch (ev->type) {
@@ -2644,6 +2648,7 @@ SOKOL_API_IMPL void snk_handle_event(const sapp_event* ev) {
         default:
             break;
     }
+    return nk_item_is_any_active(&_snuklear.ctx);
 }
 
 SOKOL_API_IMPL nk_flags snk_edit_string(struct nk_context *ctx, nk_flags flags, char *memory, int *len, int max, nk_plugin_filter filter) {

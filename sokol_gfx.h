@@ -361,6 +361,25 @@
 
             sg_backend sg_query_backend(void)
 
+    --- call the following helper functions to compute the number of
+        bytes in a texture row or surface for a specific pixel format.
+        These functions might be helpful when preparing image data for consumption
+        by sg_make_image() or sg_update_image():
+
+            int sg_query_row_pitch(sg_pixel_format fmt, int width, int int row_align_bytes);
+            int sg_query_surface_pitch(sg_pixel_format fmt, int width, int height, int row_align_bytes);
+
+        Width and height are generally in number pixels, but note that 'row' has different meaning
+        for uncompressed vs compressed pixel formats: for uncompressed formats, a row is identical
+        with a single line if pixels, while in compressed formats, one row is a line of *compression blocks*.
+
+        This is why calling sg_query_surface_pitch() for a compressed pixel format and height
+        N, N+1, N+2, ... may return the same result.
+
+        The row_align_bytes parammeter is for added flexibility. For image data that goes into
+        the sg_make_image() or sg_update_image() this should generally be 1, because these
+        functions take tightly packed image data as input no matter what alignment restrictions
+        exist in the backend 3D APIs.
 
     ON INITIALIZATION:
     ==================
@@ -1528,7 +1547,7 @@ typedef enum sg_backend {
 
     Not all pixel formats can be used for everything, call sg_query_pixelformat()
     to inspect the capabilities of a given pixelformat. The function returns
-    an sg_pixelformat_info struct with the following bool members:
+    an sg_pixelformat_info struct with the following members:
 
         - sample: the pixelformat can be sampled as texture at least with
                   nearest filtering
@@ -1540,6 +1559,8 @@ typedef enum sg_backend {
         - msaa:   multisample-antialiasing is supported when using the
                   pixelformat for render targets
         - depth:  the pixelformat can be used for depth-stencil attachments
+        - compressed: this is a block-compressed format
+        - bytes_per_pixel: the numbers of bytes in a pixel (0 for compressed formats)
 
     The default pixel format for texture images is SG_PIXELFORMAT_RGBA8.
 
@@ -1587,6 +1608,7 @@ typedef enum sg_pixel_format {
     SG_PIXELFORMAT_BGRA8,
     SG_PIXELFORMAT_RGB10A2,
     SG_PIXELFORMAT_RG11B10F,
+    SG_PIXELFORMAT_RGB9E5,
 
     SG_PIXELFORMAT_RG32UI,
     SG_PIXELFORMAT_RG32SI,
@@ -1601,9 +1623,11 @@ typedef enum sg_pixel_format {
     SG_PIXELFORMAT_RGBA32SI,
     SG_PIXELFORMAT_RGBA32F,
 
+    // NOTE: when adding/removing pixel formats before DEPTH, also update sokol_app.h/SAPP_PIXELFORMAT_*
     SG_PIXELFORMAT_DEPTH,
     SG_PIXELFORMAT_DEPTH_STENCIL,
 
+    // NOTE: don't put any new compressed format in front of here
     SG_PIXELFORMAT_BC1_RGBA,
     SG_PIXELFORMAT_BC2_RGBA,
     SG_PIXELFORMAT_BC3_RGBA,
@@ -1624,8 +1648,6 @@ typedef enum sg_pixel_format {
     SG_PIXELFORMAT_ETC2_RG11,
     SG_PIXELFORMAT_ETC2_RG11SN,
 
-    SG_PIXELFORMAT_RGB9E5,
-
     _SG_PIXELFORMAT_NUM,
     _SG_PIXELFORMAT_FORCE_U32 = 0x7FFFFFFF
 } sg_pixel_format;
@@ -1635,12 +1657,14 @@ typedef enum sg_pixel_format {
     by sg_query_pixelformat().
 */
 typedef struct sg_pixelformat_info {
-    bool sample;        // pixel format can be sampled in shaders at least with nearest filtering
-    bool filter;        // pixel format can be sampled with linear filtering
-    bool render;        // pixel format can be used as render target
-    bool blend;         // alpha-blending is supported
-    bool msaa;          // pixel format can be used as MSAA render target
-    bool depth;         // pixel format is a depth format
+    bool sample;            // pixel format can be sampled in shaders at least with nearest filtering
+    bool filter;            // pixel format can be sampled with linear filtering
+    bool render;            // pixel format can be used as render target
+    bool blend;             // alpha-blending is supported
+    bool msaa;              // pixel format can be used as MSAA render target
+    bool depth;             // pixel format is a depth format
+    bool compressed;        // true if this is a hardware-compressed format
+    int bytes_per_pixel;    // NOTE: this is 0 for compressed formats, use sg_query_row_pitch() / sg_query_surface_pitch() as alternative
 } sg_pixelformat_info;
 
 /*
@@ -3751,6 +3775,8 @@ SOKOL_GFX_API_DECL sg_backend sg_query_backend(void);
 SOKOL_GFX_API_DECL sg_features sg_query_features(void);
 SOKOL_GFX_API_DECL sg_limits sg_query_limits(void);
 SOKOL_GFX_API_DECL sg_pixelformat_info sg_query_pixelformat(sg_pixel_format fmt);
+SOKOL_GFX_API_DECL int sg_query_row_pitch(sg_pixel_format fmt, int width, int row_align_bytes);
+SOKOL_GFX_API_DECL int sg_query_surface_pitch(sg_pixel_format fmt, int width, int height, int row_align_bytes);
 // get current state of a resource (INITIAL, ALLOC, VALID, FAILED, INVALID)
 SOKOL_GFX_API_DECL sg_resource_state sg_query_buffer_state(sg_buffer buf);
 SOKOL_GFX_API_DECL sg_resource_state sg_query_image_state(sg_image img);
@@ -5583,6 +5609,15 @@ typedef struct {
 } _sg_bindings_t;
 
 typedef struct {
+    bool sample;
+    bool filter;
+    bool render;
+    bool blend;
+    bool msaa;
+    bool depth;
+} _sg_pixelformat_info_t;
+
+typedef struct {
     bool valid;
     sg_desc desc;       // original desc with default values patched in
     uint32_t frame_index;
@@ -5599,7 +5634,7 @@ typedef struct {
     sg_backend backend;
     sg_features features;
     sg_limits limits;
-    sg_pixelformat_info formats[_SG_PIXELFORMAT_NUM];
+    _sg_pixelformat_info_t formats[_SG_PIXELFORMAT_NUM];
     bool stats_enabled;
     sg_frame_stats stats;
     sg_frame_stats prev_stats;
@@ -5977,6 +6012,9 @@ _SOKOL_PRIVATE int _sg_pixelformat_bytesize(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RGBA32SI:
         case SG_PIXELFORMAT_RGBA32F:
             return 16;
+        case SG_PIXELFORMAT_DEPTH:
+        case SG_PIXELFORMAT_DEPTH_STENCIL:
+            return 4;
         default:
             SOKOL_UNREACHABLE;
             return 0;
@@ -6113,7 +6151,7 @@ _SOKOL_PRIVATE int _sg_surface_pitch(sg_pixel_format fmt, int width, int height,
 }
 
 // capability table pixel format helper functions
-_SOKOL_PRIVATE void _sg_pixelformat_all(sg_pixelformat_info* pfi) {
+_SOKOL_PRIVATE void _sg_pixelformat_all(_sg_pixelformat_info_t* pfi) {
     pfi->sample = true;
     pfi->filter = true;
     pfi->blend = true;
@@ -6121,53 +6159,53 @@ _SOKOL_PRIVATE void _sg_pixelformat_all(sg_pixelformat_info* pfi) {
     pfi->msaa = true;
 }
 
-_SOKOL_PRIVATE void _sg_pixelformat_s(sg_pixelformat_info* pfi) {
+_SOKOL_PRIVATE void _sg_pixelformat_s(_sg_pixelformat_info_t* pfi) {
     pfi->sample = true;
 }
 
-_SOKOL_PRIVATE void _sg_pixelformat_sf(sg_pixelformat_info* pfi) {
+_SOKOL_PRIVATE void _sg_pixelformat_sf(_sg_pixelformat_info_t* pfi) {
     pfi->sample = true;
     pfi->filter = true;
 }
 
-_SOKOL_PRIVATE void _sg_pixelformat_sr(sg_pixelformat_info* pfi) {
+_SOKOL_PRIVATE void _sg_pixelformat_sr(_sg_pixelformat_info_t* pfi) {
     pfi->sample = true;
     pfi->render = true;
 }
 
-_SOKOL_PRIVATE void _sg_pixelformat_srmd(sg_pixelformat_info* pfi) {
+_SOKOL_PRIVATE void _sg_pixelformat_srmd(_sg_pixelformat_info_t* pfi) {
     pfi->sample = true;
     pfi->render = true;
     pfi->msaa = true;
     pfi->depth = true;
 }
 
-_SOKOL_PRIVATE void _sg_pixelformat_srm(sg_pixelformat_info* pfi) {
+_SOKOL_PRIVATE void _sg_pixelformat_srm(_sg_pixelformat_info_t* pfi) {
     pfi->sample = true;
     pfi->render = true;
     pfi->msaa = true;
 }
 
-_SOKOL_PRIVATE void _sg_pixelformat_sfrm(sg_pixelformat_info* pfi) {
+_SOKOL_PRIVATE void _sg_pixelformat_sfrm(_sg_pixelformat_info_t* pfi) {
     pfi->sample = true;
     pfi->filter = true;
     pfi->render = true;
     pfi->msaa = true;
 }
-_SOKOL_PRIVATE void _sg_pixelformat_sbrm(sg_pixelformat_info* pfi) {
+_SOKOL_PRIVATE void _sg_pixelformat_sbrm(_sg_pixelformat_info_t* pfi) {
     pfi->sample = true;
     pfi->blend = true;
     pfi->render = true;
     pfi->msaa = true;
 }
 
-_SOKOL_PRIVATE void _sg_pixelformat_sbr(sg_pixelformat_info* pfi) {
+_SOKOL_PRIVATE void _sg_pixelformat_sbr(_sg_pixelformat_info_t* pfi) {
     pfi->sample = true;
     pfi->blend = true;
     pfi->render = true;
 }
 
-_SOKOL_PRIVATE void _sg_pixelformat_sfbr(sg_pixelformat_info* pfi) {
+_SOKOL_PRIVATE void _sg_pixelformat_sfbr(_sg_pixelformat_info_t* pfi) {
     pfi->sample = true;
     pfi->filter = true;
     pfi->blend = true;
@@ -9804,7 +9842,7 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
         const UINT srv_dxgi_fmt_caps = _sg_d3d11_dxgi_fmt_caps(_sg_d3d11_srv_pixel_format((sg_pixel_format)fmt));
         const UINT rtv_dxgi_fmt_caps = _sg_d3d11_dxgi_fmt_caps(_sg_d3d11_rtv_pixel_format((sg_pixel_format)fmt));
         const UINT dsv_dxgi_fmt_caps = _sg_d3d11_dxgi_fmt_caps(_sg_d3d11_dsv_pixel_format((sg_pixel_format)fmt));
-        sg_pixelformat_info* info = &_sg.formats[fmt];
+        _sg_pixelformat_info_t* info = &_sg.formats[fmt];
         const bool render = 0 != (rtv_dxgi_fmt_caps & D3D11_FORMAT_SUPPORT_RENDER_TARGET);
         const bool depth  = 0 != (dsv_dxgi_fmt_caps & D3D11_FORMAT_SUPPORT_DEPTH_STENCIL);
         info->sample = 0 != (srv_dxgi_fmt_caps & D3D11_FORMAT_SUPPORT_TEXTURE2D);
@@ -16202,7 +16240,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                     if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
                         _SG_VALIDATE(img->cmn.type == stage->images[i].image_type, VALIDATE_ABND_VS_IMAGE_TYPE_MISMATCH);
                         _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_ABND_VS_IMAGE_MSAA);
-                        const sg_pixelformat_info* info = &_sg.formats[img->cmn.pixel_format];
+                        const _sg_pixelformat_info_t* info = &_sg.formats[img->cmn.pixel_format];
                         switch (stage->images[i].sample_type) {
                             case SG_IMAGESAMPLETYPE_FLOAT:
                                 _SG_VALIDATE(info->filter, VALIDATE_ABND_VS_EXPECTED_FILTERABLE_IMAGE);
@@ -16258,7 +16296,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                     if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
                         _SG_VALIDATE(img->cmn.type == stage->images[i].image_type, VALIDATE_ABND_FS_IMAGE_TYPE_MISMATCH);
                         _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_ABND_FS_IMAGE_MSAA);
-                        const sg_pixelformat_info* info = &_sg.formats[img->cmn.pixel_format];
+                        const _sg_pixelformat_info_t* info = &_sg.formats[img->cmn.pixel_format];
                         switch (stage->images[i].sample_type) {
                             case SG_IMAGESAMPLETYPE_FLOAT:
                                 _SG_VALIDATE(info->filter, VALIDATE_ABND_FS_EXPECTED_FILTERABLE_IMAGE);
@@ -17048,7 +17086,36 @@ SOKOL_API_IMPL sg_pixelformat_info sg_query_pixelformat(sg_pixel_format fmt) {
     SOKOL_ASSERT(_sg.valid);
     int fmt_index = (int) fmt;
     SOKOL_ASSERT((fmt_index > SG_PIXELFORMAT_NONE) && (fmt_index < _SG_PIXELFORMAT_NUM));
-    return _sg.formats[fmt_index];
+    const _sg_pixelformat_info_t* src = &_sg.formats[fmt_index];
+    sg_pixelformat_info res;
+    _sg_clear(&res, sizeof(res));
+    res.sample = src->sample;
+    res.filter = src->filter;
+    res.render = src->render;
+    res.blend = src->blend;
+    res.msaa = src->msaa;
+    res.depth = src->depth;
+    res.compressed = _sg_is_compressed_pixel_format(fmt);
+    if (!res.compressed) {
+        res.bytes_per_pixel = _sg_pixelformat_bytesize(fmt);
+    }
+    return res;
+}
+
+SOKOL_API_IMPL int sg_query_row_pitch(sg_pixel_format fmt, int width, int row_align_bytes) {
+    SOKOL_ASSERT(_sg.valid);
+    SOKOL_ASSERT(width > 0);
+    SOKOL_ASSERT((row_align_bytes > 0) && _sg_ispow2(row_align_bytes));
+    SOKOL_ASSERT(((int)fmt > SG_PIXELFORMAT_NONE) && ((int)fmt < _SG_PIXELFORMAT_NUM));
+    return _sg_row_pitch(fmt, width, row_align_bytes);
+}
+
+SOKOL_API_IMPL int sg_query_surface_pitch(sg_pixel_format fmt, int width, int height, int row_align_bytes) {
+    SOKOL_ASSERT(_sg.valid);
+    SOKOL_ASSERT((width > 0) && (height > 0));
+    SOKOL_ASSERT((row_align_bytes > 0) && _sg_ispow2(row_align_bytes));
+    SOKOL_ASSERT(((int)fmt > SG_PIXELFORMAT_NONE) && ((int)fmt < _SG_PIXELFORMAT_NUM));
+    return _sg_surface_pitch(fmt, width, height, row_align_bytes);
 }
 
 SOKOL_API_IMPL sg_frame_stats sg_query_frame_stats(void) {
