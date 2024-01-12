@@ -1545,6 +1545,7 @@ typedef struct sapp_allocator {
     _SAPP_LOGITEM_XMACRO(LINUX_GLX_NO_SUITABLE_GLXFBCONFIG, "failed to find a suitable GLXFBConfig") \
     _SAPP_LOGITEM_XMACRO(LINUX_GLX_GET_VISUAL_FROM_FBCONFIG_FAILED, "glXGetVisualFromFBConfig failed") \
     _SAPP_LOGITEM_XMACRO(LINUX_GLX_REQUIRED_EXTENSIONS_MISSING, "GLX extensions ARB_create_context and ARB_create_context_profile missing") \
+    _SAPP_LOGITEM_XMACRO(LINUX_GLX_ES_REQUIRED_EXTENSIONS_MISSING, "GLX extension EXT_create_context_es_profile missing") \
     _SAPP_LOGITEM_XMACRO(LINUX_GLX_CREATE_CONTEXT_FAILED, "Failed to create GL context via glXCreateContextAttribsARB") \
     _SAPP_LOGITEM_XMACRO(LINUX_GLX_CREATE_WINDOW_FAILED, "glXCreateWindow() failed") \
     _SAPP_LOGITEM_XMACRO(LINUX_X11_CREATE_WINDOW_FAILED, "XCreateWindow() failed") \
@@ -1955,11 +1956,11 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(__linux__) || defined(__unix__)
     /* Linux */
     #define _SAPP_LINUX (1)
-    #if defined(SOKOL_GLCORE33)
+    #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES3)
         #if !defined(SOKOL_FORCE_EGL)
             #define _SAPP_GLX (1)
         #endif
-    #elif !defined(SOKOL_GLES3)
+    #else
         #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE33, SOKOL_GLES3")
     #endif
 #else
@@ -2606,6 +2607,7 @@ typedef struct {
 #define GLX_SAMPLES 0x186a1
 #define GLX_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
 #define GLX_CONTEXT_PROFILE_MASK_ARB 0x9126
+#define GLX_CONTEXT_ES_PROFILE_BIT_EXT 0x00000004
 #define GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x00000002
 #define GLX_CONTEXT_MAJOR_VERSION_ARB 0x2091
 #define GLX_CONTEXT_MINOR_VERSION_ARB 0x2092
@@ -2723,6 +2725,8 @@ typedef struct {
     bool ARB_multisample;
     bool ARB_create_context;
     bool ARB_create_context_profile;
+    bool EXT_create_context_es_profile;
+    bool EXT_create_context_es2_profile;
 } _sapp_glx_t;
 
 #else
@@ -5892,7 +5896,7 @@ int main(int argc, char* argv[]) {
 //  ██████  ███████     ██   ██ ███████ ███████ ██      ███████ ██   ██ ███████
 //
 // >>gl helpers
-#if defined(SOKOL_GLCORE33)
+#if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES3)
 typedef struct {
     int         red_bits;
     int         green_bits;
@@ -9707,6 +9711,8 @@ _SOKOL_PRIVATE void _sapp_glx_init() {
         _sapp.glx.ARB_create_context = 0 != _sapp.glx.CreateContextAttribsARB;
     }
     _sapp.glx.ARB_create_context_profile = _sapp_glx_extsupported("GLX_ARB_create_context_profile", exts);
+    _sapp.glx.EXT_create_context_es_profile = _sapp_glx_extsupported("GLX_EXT_create_context_es_profile", exts);
+    _sapp.glx.EXT_create_context_es2_profile = _sapp_glx_extsupported("GLX_EXT_create_context_es2_profile", exts);
 }
 
 _SOKOL_PRIVATE int _sapp_glx_attrib(GLXFBConfig fbconfig, int attrib) {
@@ -9810,11 +9816,21 @@ _SOKOL_PRIVATE void _sapp_glx_create_context(void) {
     if (!(_sapp.glx.ARB_create_context && _sapp.glx.ARB_create_context_profile)) {
         _SAPP_PANIC(LINUX_GLX_REQUIRED_EXTENSIONS_MISSING);
     }
+#if defined(SOKOL_GLES3)
+    //  At least one of extension strings must be exported
+    if (!(_sapp.glx.EXT_create_context_es_profile || _sapp.glx.EXT_create_context_es2_profile)) {
+        _SAPP_PANIC(LINUX_GLX_ES_REQUIRED_EXTENSIONS_MISSING);
+    }
+#endif
     _sapp_x11_grab_error_handler();
     const int attribs[] = {
         GLX_CONTEXT_MAJOR_VERSION_ARB, _sapp.desc.gl_major_version,
         GLX_CONTEXT_MINOR_VERSION_ARB, _sapp.desc.gl_minor_version,
+    #if defined(SOKOL_GLES3)
+        GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_ES_PROFILE_BIT_EXT,
+    #else
         GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
+    #endif
         GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
         0, 0
     };
