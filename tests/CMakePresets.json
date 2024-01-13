@@ -371,6 +371,32 @@
             }
         },
         {
+            "name": "linux_gles3_egl_debug",
+            "generator": "Ninja",
+            "binaryDir": "build/linux_gles3_egl_debug",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "SOKOL_FORCE_EGL": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "linux_gles3_egl_release",
+            "generator": "Ninja",
+            "binaryDir": "build/linux_gles3_egl_release",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "SOKOL_FORCE_EGL": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
             "name": "emsc_webgl2_debug",
             "generator": "Ninja",
             "binaryDir": "build/emsc_webgl2_debug",
@@ -655,6 +681,14 @@
         {
             "name": "linux_gl_egl_release",
             "configurePreset": "linux_gl_egl_release"
+        },
+        {
+            "name": "linux_gles3_egl_debug",
+            "configurePreset": "linux_gles3_egl_debug"
+        },
+        {
+            "name": "linux_gles3_egl_release",
+            "configurePreset": "linux_gles3_egl_release"
         },
         {
             "name": "emsc_webgl2_debug",
