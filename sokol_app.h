@@ -94,7 +94,7 @@
                         | Windows | macOS | Linux |  iOS  | Android |  HTML5
     --------------------+---------+-------+-------+-------+---------+--------
     gl 3.x              | YES     | YES   | YES   | ---   | ---     |  ---
-    gles3/webgl2        | ---     | ---   | YES(2)| YES   | YES     |  YES
+    gles3/webgl2        | ---     | ---   | YES   | YES   | YES     |  YES
     metal               | ---     | YES   | ---   | YES   | ---     |  ---
     d3d11               | YES     | ---   | ---   | ---   | ---     |  ---
     KEY_DOWN            | YES     | YES   | YES   | SOME  | TODO    |  YES
@@ -134,7 +134,6 @@
     window icon         | YES     | YES(1)| YES   | ---   | ---     |  YES
 
     (1) macOS has no regular window icons, instead the dock icon is changed
-    (2) supported with EGL only (not GLX)
 
     STEP BY STEP
     ============
