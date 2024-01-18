@@ -1631,6 +1631,7 @@ typedef enum sg_pixel_format {
     SG_PIXELFORMAT_BC1_RGBA,
     SG_PIXELFORMAT_BC2_RGBA,
     SG_PIXELFORMAT_BC3_RGBA,
+    SG_PIXELFORMAT_BC3_SRGBA,
     SG_PIXELFORMAT_BC4_R,
     SG_PIXELFORMAT_BC4_RSN,
     SG_PIXELFORMAT_BC5_RG,
@@ -1638,15 +1639,21 @@ typedef enum sg_pixel_format {
     SG_PIXELFORMAT_BC6H_RGBF,
     SG_PIXELFORMAT_BC6H_RGBUF,
     SG_PIXELFORMAT_BC7_RGBA,
+    SG_PIXELFORMAT_BC7_SRGBA,
     SG_PIXELFORMAT_PVRTC_RGB_2BPP,
     SG_PIXELFORMAT_PVRTC_RGB_4BPP,
     SG_PIXELFORMAT_PVRTC_RGBA_2BPP,
     SG_PIXELFORMAT_PVRTC_RGBA_4BPP,
     SG_PIXELFORMAT_ETC2_RGB8,
+    SG_PIXELFORMAT_ETC2_SRGB8,
     SG_PIXELFORMAT_ETC2_RGB8A1,
     SG_PIXELFORMAT_ETC2_RGBA8,
+    SG_PIXELFORMAT_ETC2_SRGB8A8,
     SG_PIXELFORMAT_ETC2_RG11,
     SG_PIXELFORMAT_ETC2_RG11SN,
+
+    SG_PIXELFORMAT_ASTC_4x4_RGBA,
+    SG_PIXELFORMAT_ASTC_4x4_SRGBA,
 
     _SG_PIXELFORMAT_NUM,
     _SG_PIXELFORMAT_FORCE_U32 = 0x7FFFFFFF
@@ -4508,6 +4515,9 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #ifndef GL_COMPRESSED_RGBA_S3TC_DXT5_EXT
     #define GL_COMPRESSED_RGBA_S3TC_DXT5_EXT 0x83F3
     #endif
+    #ifndef GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT
+    #define GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT 0x8C4F
+    #endif
     #ifndef GL_COMPRESSED_RED_RGTC1
     #define GL_COMPRESSED_RED_RGTC1 0x8DBB
     #endif
@@ -4547,8 +4557,14 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #ifndef GL_COMPRESSED_RGB8_ETC2
     #define GL_COMPRESSED_RGB8_ETC2 0x9274
     #endif
+    #ifndef GL_COMPRESSED_SRGB8_ETC2
+    #define GL_COMPRESSED_SRGB8_ETC2 0x9275
+    #endif
     #ifndef GL_COMPRESSED_RGBA8_ETC2_EAC
     #define GL_COMPRESSED_RGBA8_ETC2_EAC 0x9278
+    #endif
+    #ifndef GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC
+    #define GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC 0x9279
     #endif
     #ifndef GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2
     #define GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2 0x9276
@@ -4558,6 +4574,12 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #endif
     #ifndef GL_COMPRESSED_SIGNED_RG11_EAC
     #define GL_COMPRESSED_SIGNED_RG11_EAC 0x9273
+    #endif
+    #ifndef GL_COMPRESSED_RGBA_ASTC_4x4_KHR
+    #define GL_COMPRESSED_RGBA_ASTC_4x4_KHR 0x93B0
+    #endif
+    #ifndef GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR
+    #define GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR 0x93D0
     #endif
     #ifndef GL_DEPTH24_STENCIL8
     #define GL_DEPTH24_STENCIL8 0x88F0
@@ -5922,6 +5944,7 @@ _SOKOL_PRIVATE bool _sg_is_compressed_pixel_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_BC1_RGBA:
         case SG_PIXELFORMAT_BC2_RGBA:
         case SG_PIXELFORMAT_BC3_RGBA:
+        case SG_PIXELFORMAT_BC3_SRGBA:
         case SG_PIXELFORMAT_BC4_R:
         case SG_PIXELFORMAT_BC4_RSN:
         case SG_PIXELFORMAT_BC5_RG:
@@ -5929,15 +5952,20 @@ _SOKOL_PRIVATE bool _sg_is_compressed_pixel_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_BC6H_RGBF:
         case SG_PIXELFORMAT_BC6H_RGBUF:
         case SG_PIXELFORMAT_BC7_RGBA:
+        case SG_PIXELFORMAT_BC7_SRGBA:
         case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
         case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
         case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:
         case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:
         case SG_PIXELFORMAT_ETC2_RGB8:
+        case SG_PIXELFORMAT_ETC2_SRGB8:
         case SG_PIXELFORMAT_ETC2_RGB8A1:
         case SG_PIXELFORMAT_ETC2_RGBA8:
+        case SG_PIXELFORMAT_ETC2_SRGB8A8:
         case SG_PIXELFORMAT_ETC2_RG11:
         case SG_PIXELFORMAT_ETC2_RG11SN:
+        case SG_PIXELFORMAT_ASTC_4x4_RGBA:
+        case SG_PIXELFORMAT_ASTC_4x4_SRGBA:
             return true;
         default:
             return false;
@@ -6061,20 +6089,26 @@ _SOKOL_PRIVATE int _sg_row_pitch(sg_pixel_format fmt, int width, int row_align) 
         case SG_PIXELFORMAT_BC4_R:
         case SG_PIXELFORMAT_BC4_RSN:
         case SG_PIXELFORMAT_ETC2_RGB8:
+        case SG_PIXELFORMAT_ETC2_SRGB8:
         case SG_PIXELFORMAT_ETC2_RGB8A1:
             pitch = ((width + 3) / 4) * 8;
             pitch = pitch < 8 ? 8 : pitch;
             break;
         case SG_PIXELFORMAT_BC2_RGBA:
         case SG_PIXELFORMAT_BC3_RGBA:
+        case SG_PIXELFORMAT_BC3_SRGBA:
         case SG_PIXELFORMAT_BC5_RG:
         case SG_PIXELFORMAT_BC5_RGSN:
         case SG_PIXELFORMAT_BC6H_RGBF:
         case SG_PIXELFORMAT_BC6H_RGBUF:
         case SG_PIXELFORMAT_BC7_RGBA:
+        case SG_PIXELFORMAT_BC7_SRGBA:
         case SG_PIXELFORMAT_ETC2_RGBA8:
+        case SG_PIXELFORMAT_ETC2_SRGB8A8:
         case SG_PIXELFORMAT_ETC2_RG11:
         case SG_PIXELFORMAT_ETC2_RG11SN:
+        case SG_PIXELFORMAT_ASTC_4x4_RGBA:
+        case SG_PIXELFORMAT_ASTC_4x4_SRGBA:
             pitch = ((width + 3) / 4) * 16;
             pitch = pitch < 16 ? 16 : pitch;
             break;
@@ -6102,17 +6136,23 @@ _SOKOL_PRIVATE int _sg_num_rows(sg_pixel_format fmt, int height) {
         case SG_PIXELFORMAT_BC4_R:
         case SG_PIXELFORMAT_BC4_RSN:
         case SG_PIXELFORMAT_ETC2_RGB8:
+        case SG_PIXELFORMAT_ETC2_SRGB8:
         case SG_PIXELFORMAT_ETC2_RGB8A1:
         case SG_PIXELFORMAT_ETC2_RGBA8:
+        case SG_PIXELFORMAT_ETC2_SRGB8A8:
         case SG_PIXELFORMAT_ETC2_RG11:
         case SG_PIXELFORMAT_ETC2_RG11SN:
         case SG_PIXELFORMAT_BC2_RGBA:
         case SG_PIXELFORMAT_BC3_RGBA:
+        case SG_PIXELFORMAT_BC3_SRGBA:
         case SG_PIXELFORMAT_BC5_RG:
         case SG_PIXELFORMAT_BC5_RGSN:
         case SG_PIXELFORMAT_BC6H_RGBF:
         case SG_PIXELFORMAT_BC6H_RGBUF:
         case SG_PIXELFORMAT_BC7_RGBA:
+        case SG_PIXELFORMAT_BC7_SRGBA:
+        case SG_PIXELFORMAT_ASTC_4x4_RGBA:
+        case SG_PIXELFORMAT_ASTC_4x4_SRGBA:
             num_rows = ((height + 3) / 4);
             break;
         case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
@@ -6998,6 +7038,8 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
             return GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
         case SG_PIXELFORMAT_BC3_RGBA:
             return GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+        case SG_PIXELFORMAT_BC3_SRGBA:
+            return GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT;
         case SG_PIXELFORMAT_BC4_R:
             return GL_COMPRESSED_RED_RGTC1;
         case SG_PIXELFORMAT_BC4_RSN:
@@ -7012,6 +7054,8 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
             return GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_ARB;
         case SG_PIXELFORMAT_BC7_RGBA:
             return GL_COMPRESSED_RGBA_BPTC_UNORM_ARB;
+        case SG_PIXELFORMAT_BC7_SRGBA:
+            return GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM_ARB;
         case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
             return GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG;
         case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
@@ -7022,14 +7066,22 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
             return GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG;
         case SG_PIXELFORMAT_ETC2_RGB8:
             return GL_COMPRESSED_RGB8_ETC2;
+        case SG_PIXELFORMAT_ETC2_SRGB8:
+            return GL_COMPRESSED_SRGB8_ETC2;
         case SG_PIXELFORMAT_ETC2_RGB8A1:
             return GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2;
         case SG_PIXELFORMAT_ETC2_RGBA8:
             return GL_COMPRESSED_RGBA8_ETC2_EAC;
+        case SG_PIXELFORMAT_ETC2_SRGB8A8:
+            return GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC;
         case SG_PIXELFORMAT_ETC2_RG11:
             return GL_COMPRESSED_RG11_EAC;
         case SG_PIXELFORMAT_ETC2_RG11SN:
             return GL_COMPRESSED_SIGNED_RG11_EAC;
+        case SG_PIXELFORMAT_ASTC_4x4_RGBA:
+            return GL_COMPRESSED_RGBA_ASTC_4x4_KHR;
+        case SG_PIXELFORMAT_ASTC_4x4_SRGBA:
+            return GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR;
         default:
             SOKOL_UNREACHABLE; return 0;
     }
@@ -7088,6 +7140,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_BC1_RGBA:           return GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
         case SG_PIXELFORMAT_BC2_RGBA:           return GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
         case SG_PIXELFORMAT_BC3_RGBA:           return GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+        case SG_PIXELFORMAT_BC3_SRGBA:          return GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT;
         case SG_PIXELFORMAT_BC4_R:              return GL_COMPRESSED_RED_RGTC1;
         case SG_PIXELFORMAT_BC4_RSN:            return GL_COMPRESSED_SIGNED_RED_RGTC1;
         case SG_PIXELFORMAT_BC5_RG:             return GL_COMPRESSED_RED_GREEN_RGTC2;
@@ -7095,15 +7148,20 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_BC6H_RGBF:          return GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT_ARB;
         case SG_PIXELFORMAT_BC6H_RGBUF:         return GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_ARB;
         case SG_PIXELFORMAT_BC7_RGBA:           return GL_COMPRESSED_RGBA_BPTC_UNORM_ARB;
+        case SG_PIXELFORMAT_BC7_SRGBA:          return GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM_ARB;
         case SG_PIXELFORMAT_PVRTC_RGB_2BPP:     return GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG;
         case SG_PIXELFORMAT_PVRTC_RGB_4BPP:     return GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG;
         case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:    return GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG;
         case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:    return GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG;
         case SG_PIXELFORMAT_ETC2_RGB8:          return GL_COMPRESSED_RGB8_ETC2;
+        case SG_PIXELFORMAT_ETC2_SRGB8:         return GL_COMPRESSED_SRGB8_ETC2;
         case SG_PIXELFORMAT_ETC2_RGB8A1:        return GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2;
         case SG_PIXELFORMAT_ETC2_RGBA8:         return GL_COMPRESSED_RGBA8_ETC2_EAC;
+        case SG_PIXELFORMAT_ETC2_SRGB8A8:       return GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC;
         case SG_PIXELFORMAT_ETC2_RG11:          return GL_COMPRESSED_RG11_EAC;
         case SG_PIXELFORMAT_ETC2_RG11SN:        return GL_COMPRESSED_SIGNED_RG11_EAC;
+        case SG_PIXELFORMAT_ASTC_4x4_RGBA:      return GL_COMPRESSED_RGBA_ASTC_4x4_KHR;
+        case SG_PIXELFORMAT_ASTC_4x4_SRGBA:     return GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR;
         default: SOKOL_UNREACHABLE; return 0;
     }
 }
@@ -7216,6 +7274,7 @@ _SOKOL_PRIVATE void _sg_gl_init_pixelformats_s3tc(void) {
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC1_RGBA]);
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC2_RGBA]);
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC3_RGBA]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC3_SRGBA]);
 }
 
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats_rgtc(void) {
@@ -7229,6 +7288,7 @@ _SOKOL_PRIVATE void _sg_gl_init_pixelformats_bptc(void) {
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC6H_RGBF]);
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC6H_RGBUF]);
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC7_RGBA]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC7_SRGBA]);
 }
 
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats_pvrtc(void) {
@@ -7240,11 +7300,18 @@ _SOKOL_PRIVATE void _sg_gl_init_pixelformats_pvrtc(void) {
 
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats_etc2(void) {
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_SRGB8]);
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8A1]);
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGBA8]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_SRGB8A8]);
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RG11]);
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RG11SN]);
 }
+
+_SOKOL_PRIVATE void _sg_gl_init_pixelformats_astc(void) {
+     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ASTC_4x4_RGBA]);
+     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ASTC_4x4_SRGBA]);
+ }
 
 _SOKOL_PRIVATE void _sg_gl_init_limits(void) {
     _SG_GL_CHECK_ERROR();
@@ -7298,6 +7365,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore33(void) {
     bool has_bptc = false;  // BC6H and BC7
     bool has_pvrtc = false;
     bool has_etc2 = false;
+    bool has_astc = false;
     GLint num_ext = 0;
     glGetIntegerv(GL_NUM_EXTENSIONS, &num_ext);
     for (int i = 0; i < num_ext; i++) {
@@ -7315,6 +7383,8 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore33(void) {
                 has_etc2 = true;
             } else if (strstr(ext, "_texture_filter_anisotropic")) {
                 _sg.gl.ext_anisotropic = true;
+            } else if (strstr(ext, "_texture_compression_astc_ldr")) {
+                has_astc = true;
             }
         }
     }
@@ -7346,6 +7416,9 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore33(void) {
     if (has_etc2) {
         _sg_gl_init_pixelformats_etc2();
     }
+    if (has_astc) {
+        _sg_gl_init_pixelformats_astc();
+    }
 }
 #endif
 
@@ -7367,6 +7440,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     #else
         bool has_etc2 = true;
     #endif
+    bool has_astc = false;
     bool has_colorbuffer_float = false;
     bool has_colorbuffer_half_float = false;
     bool has_texture_float_linear = false;
@@ -7390,6 +7464,8 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
                 has_pvrtc = true;
             } else if (strstr(ext, "_compressed_texture_etc")) {
                 has_etc2 = true;
+            } else if (strstr(ext, "_compressed_texture_astc")) {
+                has_astc = true;
             } else if (strstr(ext, "_color_buffer_float")) {
                 has_colorbuffer_float = true;
             } else if (strstr(ext, "_color_buffer_half_float")) {
@@ -7435,6 +7511,9 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     }
     if (has_etc2) {
         _sg_gl_init_pixelformats_etc2();
+    }
+    if (has_astc) {
+        _sg_gl_init_pixelformats_astc();
     }
 }
 #endif
@@ -9584,6 +9663,7 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_texture_pixel_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_BC1_RGBA:       return DXGI_FORMAT_BC1_UNORM;
         case SG_PIXELFORMAT_BC2_RGBA:       return DXGI_FORMAT_BC2_UNORM;
         case SG_PIXELFORMAT_BC3_RGBA:       return DXGI_FORMAT_BC3_UNORM;
+        case SG_PIXELFORMAT_BC3_SRGBA:      return DXGI_FORMAT_BC3_UNORM_SRGB;
         case SG_PIXELFORMAT_BC4_R:          return DXGI_FORMAT_BC4_UNORM;
         case SG_PIXELFORMAT_BC4_RSN:        return DXGI_FORMAT_BC4_SNORM;
         case SG_PIXELFORMAT_BC5_RG:         return DXGI_FORMAT_BC5_UNORM;
@@ -9591,6 +9671,7 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_texture_pixel_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_BC6H_RGBF:      return DXGI_FORMAT_BC6H_SF16;
         case SG_PIXELFORMAT_BC6H_RGBUF:     return DXGI_FORMAT_BC6H_UF16;
         case SG_PIXELFORMAT_BC7_RGBA:       return DXGI_FORMAT_BC7_UNORM;
+        case SG_PIXELFORMAT_BC7_SRGBA:      return DXGI_FORMAT_BC7_UNORM_SRGB;
         default:                            return DXGI_FORMAT_UNKNOWN;
     };
 }
@@ -11164,6 +11245,7 @@ _SOKOL_PRIVATE MTLPixelFormat _sg_mtl_pixel_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_BC1_RGBA:               return MTLPixelFormatBC1_RGBA;
         case SG_PIXELFORMAT_BC2_RGBA:               return MTLPixelFormatBC2_RGBA;
         case SG_PIXELFORMAT_BC3_RGBA:               return MTLPixelFormatBC3_RGBA;
+        case SG_PIXELFORMAT_BC3_SRGBA:              return MTLPixelFormatBC3_RGBA_sRGB;
         case SG_PIXELFORMAT_BC4_R:                  return MTLPixelFormatBC4_RUnorm;
         case SG_PIXELFORMAT_BC4_RSN:                return MTLPixelFormatBC4_RSnorm;
         case SG_PIXELFORMAT_BC5_RG:                 return MTLPixelFormatBC5_RGUnorm;
@@ -11171,16 +11253,21 @@ _SOKOL_PRIVATE MTLPixelFormat _sg_mtl_pixel_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_BC6H_RGBF:              return MTLPixelFormatBC6H_RGBFloat;
         case SG_PIXELFORMAT_BC6H_RGBUF:             return MTLPixelFormatBC6H_RGBUfloat;
         case SG_PIXELFORMAT_BC7_RGBA:               return MTLPixelFormatBC7_RGBAUnorm;
+        case SG_PIXELFORMAT_BC7_SRGBA:              return MTLPixelFormatBC7_RGBAUnorm_sRGB;
         #else
         case SG_PIXELFORMAT_PVRTC_RGB_2BPP:         return MTLPixelFormatPVRTC_RGB_2BPP;
         case SG_PIXELFORMAT_PVRTC_RGB_4BPP:         return MTLPixelFormatPVRTC_RGB_4BPP;
         case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:        return MTLPixelFormatPVRTC_RGBA_2BPP;
         case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:        return MTLPixelFormatPVRTC_RGBA_4BPP;
         case SG_PIXELFORMAT_ETC2_RGB8:              return MTLPixelFormatETC2_RGB8;
+        case SG_PIXELFORMAT_ETC2_SRGB8:             return MTLPixelFormatETC2_RGB8_sRGB;
         case SG_PIXELFORMAT_ETC2_RGB8A1:            return MTLPixelFormatETC2_RGB8A1;
         case SG_PIXELFORMAT_ETC2_RGBA8:             return MTLPixelFormatEAC_RGBA8;
+        case SG_PIXELFORMAT_ETC2_SRGB8A8:           return MTLPixelFormatEAC_RGBA8_sRGB;
         case SG_PIXELFORMAT_ETC2_RG11:              return MTLPixelFormatEAC_RG11Unorm;
         case SG_PIXELFORMAT_ETC2_RG11SN:            return MTLPixelFormatEAC_RG11Snorm;
+        case SG_PIXELFORMAT_ASTC_4x4_RGBA:          return MTLPixelFormatASTC_4x4_LDR;
+        case SG_PIXELFORMAT_ASTC_4x4_SRGBA:         return MTLPixelFormatASTC_4x4_sRGB;
         #endif
         default: return MTLPixelFormatInvalid;
     }
@@ -11632,6 +11719,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC1_RGBA]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC2_RGBA]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC3_RGBA]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC3_SRGBA]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC4_R]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC4_RSN]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC5_RG]);
@@ -11639,16 +11727,22 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC6H_RGBF]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC6H_RGBUF]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC7_RGBA]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC7_SRGBA]);
     #else
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGB_2BPP]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGB_4BPP]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGBA_2BPP]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGBA_4BPP]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_SRGB8]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8A1]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGBA8]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_SRGB8A8]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RG11]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RG11SN]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ASTC_4x4_RGBA]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ASTC_4x4_SRGBA]);
+
     #endif
 }
 
@@ -13034,6 +13128,7 @@ _SOKOL_PRIVATE WGPUTextureFormat _sg_wgpu_textureformat(sg_pixel_format p) {
         case SG_PIXELFORMAT_BC1_RGBA:       return WGPUTextureFormat_BC1RGBAUnorm;
         case SG_PIXELFORMAT_BC2_RGBA:       return WGPUTextureFormat_BC2RGBAUnorm;
         case SG_PIXELFORMAT_BC3_RGBA:       return WGPUTextureFormat_BC3RGBAUnorm;
+        case SG_PIXELFORMAT_BC3_SRGBA:      return WGPUTextureFormat_BC3RGBAUnormSrgb;
         case SG_PIXELFORMAT_BC4_R:          return WGPUTextureFormat_BC4RUnorm;
         case SG_PIXELFORMAT_BC4_RSN:        return WGPUTextureFormat_BC4RSnorm;
         case SG_PIXELFORMAT_BC5_RG:         return WGPUTextureFormat_BC5RGUnorm;
@@ -13041,13 +13136,17 @@ _SOKOL_PRIVATE WGPUTextureFormat _sg_wgpu_textureformat(sg_pixel_format p) {
         case SG_PIXELFORMAT_BC6H_RGBF:      return WGPUTextureFormat_BC6HRGBFloat;
         case SG_PIXELFORMAT_BC6H_RGBUF:     return WGPUTextureFormat_BC6HRGBUfloat;
         case SG_PIXELFORMAT_BC7_RGBA:       return WGPUTextureFormat_BC7RGBAUnorm;
+        case SG_PIXELFORMAT_BC7_SRGBA:      return WGPUTextureFormat_BC7RGBAUnormSrgb;
         case SG_PIXELFORMAT_ETC2_RGB8:      return WGPUTextureFormat_ETC2RGB8Unorm;
         case SG_PIXELFORMAT_ETC2_RGB8A1:    return WGPUTextureFormat_ETC2RGB8A1Unorm;
         case SG_PIXELFORMAT_ETC2_RGBA8:     return WGPUTextureFormat_ETC2RGBA8Unorm;
+        case SG_PIXELFORMAT_ETC2_SRGB8:     return WGPUTextureFormat_ETC2RGB8UnormSrgb;
+        case SG_PIXELFORMAT_ETC2_SRGB8A8:   return WGPUTextureFormat_ETC2RGBA8UnormSrgb;
         case SG_PIXELFORMAT_ETC2_RG11:      return WGPUTextureFormat_EACR11Unorm;
         case SG_PIXELFORMAT_ETC2_RG11SN:    return WGPUTextureFormat_EACR11Snorm;
         case SG_PIXELFORMAT_RGB9E5:         return WGPUTextureFormat_RGB9E5Ufloat;
-
+        case SG_PIXELFORMAT_ASTC_4x4_RGBA:  return WGPUTextureFormat_ASTC4x4Unorm;
+        case SG_PIXELFORMAT_ASTC_4x4_SRGBA: return WGPUTextureFormat_ASTC4x4UnormSrgb;
         // NOT SUPPORTED
         case SG_PIXELFORMAT_R16:
         case SG_PIXELFORMAT_R16SN:
@@ -13258,6 +13357,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC1_RGBA]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC2_RGBA]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC3_RGBA]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC3_SRGBA]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC4_R]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC4_RSN]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC5_RG]);
@@ -13265,13 +13365,21 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC6H_RGBF]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC6H_RGBUF]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC7_RGBA]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC7_SRGBA]);
     }
     if (wgpuDeviceHasFeature(_sg.wgpu.dev, WGPUFeatureName_TextureCompressionETC2)) {
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_SRGB8]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8A1]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGBA8]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_SRGB8A8]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RG11]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RG11SN]);
+    }
+
+    if (wgpuDeviceHasFeature(_sg.wgpu.dev, WGPUFeatureName_TextureCompressionASTC)) {
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ASTC_4x4_RGBA]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ASTC_4x4_SRGBA]);
     }
 }
 

@@ -1282,6 +1282,12 @@ _SOKOL_PRIVATE const char* _sg_imgui_pixelformat_string(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_ETC2_RG11: return "SG_PIXELFORMAT_ETC2_RG11";
         case SG_PIXELFORMAT_ETC2_RG11SN: return "SG_PIXELFORMAT_ETC2_RG11SN";
         case SG_PIXELFORMAT_RGB9E5: return "SG_PIXELFORMAT_RGB9E5";
+        case SG_PIXELFORMAT_BC3_SRGBA: return "SG_PIXELFORMAT_BC3_SRGBA";
+        case SG_PIXELFORMAT_BC7_SRGBA: return "SG_PIXELFORMAT_BC7_SRGBA";
+        case SG_PIXELFORMAT_ETC2_SRGB8: return "SG_PIXELFORMAT_ETC2_SRGB8";
+        case SG_PIXELFORMAT_ETC2_SRGB8A8: return "SG_PIXELFORMAT_ETC2_SRGB8A8";
+        case SG_PIXELFORMAT_ASTC_4x4_RGBA: return "SG_PIXELFORMAT_ASTC_4x4_RGBA";
+        case SG_PIXELFORMAT_ASTC_4x4_SRGBA: return "SG_PIXELFORMAT_ASTC_4x4_SRGBA";
         default: return "???";
     }
 }
