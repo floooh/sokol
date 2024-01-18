@@ -1,5 +1,19 @@
 ## Updates
 
+#### 18-Jan-2024
+
+- sokol_gfx.h: added support for the following pixel formats:
+  - BC3_SRGBA
+  - BC7_SRGBA
+  - ETC2_SRGB8
+  - ETC2_SRGB8A8
+  - ASTC_4x4_RGBA
+  - ASTC_4x4_SRGBA
+
+  Related PR: https://github.com/floooh/sokol/pull/967
+
+  Many thanks to GH user @allcreater!
+
 #### 07-Jan-2024
 
 - sokol_app.h (macos+metal): window content no longer 'wobbles' during window resizing. Many
