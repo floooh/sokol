@@ -1631,6 +1631,7 @@ typedef enum sg_pixel_format {
     SG_PIXELFORMAT_BC1_RGBA,
     SG_PIXELFORMAT_BC2_RGBA,
     SG_PIXELFORMAT_BC3_RGBA,
+    SG_PIXELFORMAT_BC3_SRGBA,
     SG_PIXELFORMAT_BC4_R,
     SG_PIXELFORMAT_BC4_RSN,
     SG_PIXELFORMAT_BC5_RG,
@@ -1638,20 +1639,19 @@ typedef enum sg_pixel_format {
     SG_PIXELFORMAT_BC6H_RGBF,
     SG_PIXELFORMAT_BC6H_RGBUF,
     SG_PIXELFORMAT_BC7_RGBA,
+    SG_PIXELFORMAT_BC7_SRGBA,
     SG_PIXELFORMAT_PVRTC_RGB_2BPP,
     SG_PIXELFORMAT_PVRTC_RGB_4BPP,
     SG_PIXELFORMAT_PVRTC_RGBA_2BPP,
     SG_PIXELFORMAT_PVRTC_RGBA_4BPP,
     SG_PIXELFORMAT_ETC2_RGB8,
+    SG_PIXELFORMAT_ETC2_SRGB8,
     SG_PIXELFORMAT_ETC2_RGB8A1,
     SG_PIXELFORMAT_ETC2_RGBA8,
+    SG_PIXELFORMAT_ETC2_SRGB8A8,
     SG_PIXELFORMAT_ETC2_RG11,
     SG_PIXELFORMAT_ETC2_RG11SN,
 
-    SG_PIXELFORMAT_BC3_SRGBA,
-    SG_PIXELFORMAT_BC7_SRGBA,
-    SG_PIXELFORMAT_ETC2_SRGB8,
-    SG_PIXELFORMAT_ETC2_SRGB8A8,
     SG_PIXELFORMAT_ASTC_4x4_RGBA,
     SG_PIXELFORMAT_ASTC_4x4_SRGBA,
 
@@ -7464,11 +7464,9 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
                 has_pvrtc = true;
             } else if (strstr(ext, "_compressed_texture_etc")) {
                 has_etc2 = true;
-            }
-            else if (strstr(ext, "_compressed_texture_astc")) {
+            } else if (strstr(ext, "_compressed_texture_astc")) {
                 has_astc = true;
-            }
-            else if (strstr(ext, "_color_buffer_float")) {
+            } else if (strstr(ext, "_color_buffer_float")) {
                 has_colorbuffer_float = true;
             } else if (strstr(ext, "_color_buffer_half_float")) {
                 has_colorbuffer_half_float = true;
