@@ -1,5 +1,13 @@
 ## Updates
 
+#### 19-Jan-2024
+
+- sokol_app.h wgpu: tiny fix for a breaking API change in webgpu.h in the Emscripten 3.1.52 SDK
+- Merged PR https://github.com/floooh/sokol/pull/970 (many thanks to @waywardmonkeys) which
+  fixes a couple of strict-prototype warnings (e.g. C functions using func() instead of func(void)).
+  I also enabled `-Wstrict-prototypes` now in the CI tests for GCC and Clang, so such cases
+  should be caught in the future.
+
 #### 18-Jan-2024
 
 - sokol_gfx.h: added support for the following pixel formats:

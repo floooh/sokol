@@ -5722,7 +5722,7 @@ _SOKOL_PRIVATE void _sapp_emsc_wgpu_request_adapter_cb(WGPURequestAdapterStatus 
 
     WGPUDeviceDescriptor dev_desc;
     _sapp_clear(&dev_desc, sizeof(dev_desc));
-    dev_desc.requiredFeaturesCount = cur_feature_index;
+    dev_desc.requiredFeatureCount = cur_feature_index;
     dev_desc.requiredFeatures = requiredFeatures,
     wgpuAdapterRequestDevice(adapter, &dev_desc, _sapp_emsc_wgpu_request_device_cb, 0);
 }
