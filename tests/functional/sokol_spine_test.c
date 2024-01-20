@@ -15,7 +15,7 @@ static void log_func(const char* tag, uint32_t log_level, uint32_t log_item, con
     last_logitem = log_item;
 }
 
-static void init() {
+static void init(void) {
     last_logitem = SSPINE_LOGITEM_OK;
     sg_setup(&(sg_desc){0});
     sspine_setup(&(sspine_desc){ .logger = { .func = log_func } });
@@ -29,7 +29,7 @@ static void init_with_desc(const sspine_desc* desc) {
     sspine_setup(&desc1);
 }
 
-static void shutdown() {
+static void shutdown(void) {
     sspine_shutdown();
     sg_shutdown();
 }
