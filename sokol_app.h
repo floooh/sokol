@@ -537,7 +537,7 @@
     Like clipboard support, drag'n'drop support must be explicitly enabled
     at startup in the sapp_desc struct.
 
-        sapp_desc sokol_main() {
+        sapp_desc sokol_main(void) {
             return (sapp_desc) {
                 .enable_dragndrop = true,   // default is false
                 ...
@@ -547,7 +547,7 @@
     You can also adjust the maximum number of files that are accepted
     in a drop operation, and the maximum path length in bytes if needed:
 
-        sapp_desc sokol_main() {
+        sapp_desc sokol_main(void) {
             return (sapp_desc) {
                 .enable_dragndrop = true,               // default is false
                 .max_dropped_files = 8,                 // default is 1
@@ -687,7 +687,7 @@
     For instance on a Retina Mac, returning the following sapp_desc
     struct from sokol_main():
 
-    sapp_desc sokol_main() {
+    sapp_desc sokol_main(void) {
         return (sapp_desc) {
             .width = 640,
             .height = 480,
@@ -4046,7 +4046,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 }
 #endif
 
-_SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
+_SOKOL_PRIVATE void _sapp_macos_poll_input_events(void) {
     /*
 
     NOTE: late event polling temporarily out-commented to check if this
@@ -5782,7 +5782,7 @@ _SOKOL_PRIVATE void _sapp_emsc_register_eventhandlers(void) {
     #endif
 }
 
-_SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers() {
+_SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers(void) {
     emscripten_set_mousedown_callback(_sapp.html5_canvas_selector, 0, true, 0);
     emscripten_set_mouseup_callback(_sapp.html5_canvas_selector, 0, true, 0);
     emscripten_set_mousemove_callback(_sapp.html5_canvas_selector, 0, true, 0);
@@ -9640,7 +9640,7 @@ _SOKOL_PRIVATE void* _sapp_glx_getprocaddr(const char* procname)
     }
 }
 
-_SOKOL_PRIVATE void _sapp_glx_init() {
+_SOKOL_PRIVATE void _sapp_glx_init(void) {
     const char* sonames[] = { "libGL.so.1", "libGL.so", 0 };
     for (int i = 0; sonames[i]; i++) {
         _sapp.glx.libgl = dlopen(sonames[i], RTLD_LAZY|RTLD_GLOBAL);
@@ -9715,7 +9715,7 @@ _SOKOL_PRIVATE int _sapp_glx_attrib(GLXFBConfig fbconfig, int attrib) {
     return value;
 }
 
-_SOKOL_PRIVATE GLXFBConfig _sapp_glx_choosefbconfig() {
+_SOKOL_PRIVATE GLXFBConfig _sapp_glx_choosefbconfig(void) {
     GLXFBConfig* native_configs;
     _sapp_gl_fbconfig* usable_configs;
     const _sapp_gl_fbconfig* closest;
