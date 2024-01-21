@@ -88,7 +88,7 @@ A blog post with more background info: [A Tour of sokol_gfx.h](http://floooh.git
 
 # sokol_gfx.h:
 
-- simple, modern wrapper around GLES3/WebGL2, GL3.3, D3D11 and Metal
+- simple, modern wrapper around GLES3/WebGL2, GL3.3, D3D11, Metal, and WebGPU
 - buffers, images, shaders, pipeline-state-objects and render-passes
 - does *not* handle window creation or 3D API context initialization
 - does *not* provide shader dialect cross-translation (**BUT** there's now an 'official' shader-cross-compiler solution which
