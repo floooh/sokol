@@ -13291,9 +13291,6 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.mrt_independent_blend_state = true;
     _sg.features.mrt_independent_write_mask = true;
 
-    // FIXME: in webgpu.h, wgpuDeviceGetLimits() has a boolean return value, but
-    // the JS shim doesn't actually return anything
-    // (see: https://github.com/emscripten-core/emscripten/issues/20278)
     wgpuDeviceGetLimits(_sg.wgpu.dev, &_sg.wgpu.limits);
 
     const WGPULimits* l = &_sg.wgpu.limits.limits;
