@@ -1,5 +1,12 @@
 ## Updates
 
+#### 23-Jan-2034
+
+- sokol_app.h android: Touch event coordinates are now using AMotionEvent_getX/Y() instead
+  of AMotionEvent_getRawX/Y(). The raw functions don't work well in multi-window
+  scenarios. See PR https://github.com/floooh/sokol/pull/974 for details.
+  Many thanks to Github user @Comanx!
+
 #### 19-Jan-2024
 
 - sokol_app.h wgpu: tiny fix for a breaking API change in webgpu.h in the Emscripten 3.1.52 SDK
