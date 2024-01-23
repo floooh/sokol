@@ -1676,6 +1676,10 @@ typedef struct sapp_desc {
     bool html5_preserve_drawing_buffer; // HTML5 only: whether to preserve default framebuffer content between frames
     bool html5_premultiplied_alpha;     // HTML5 only: whether the rendered pixels use premultiplied alpha convention
     bool html5_ask_leave_site;          // initial state of the internal html5_ask_leave_site flag (see sapp_html5_ask_leave_site())
+    bool html5_bubble_mouse_events;     // if true, mouse events will bubble up to the web page
+    bool html5_bubble_touch_events;     // same for touch events
+    bool html5_bubble_wheel_events;     // same for wheel events
+    bool html5_bubble_key_events;       // same for all key events
     bool ios_keyboard_resizes_canvas;   // if true, showing the iOS keyboard shrinks the canvas
 } sapp_desc;
 
@@ -5115,7 +5119,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(user_data);
-    bool consume_event = false;
+    bool consume_event = !_sapp.desc.html5_bubble_mouse_events;
     _sapp.emsc.mouse_buttons = emsc_event->buttons;
     if (_sapp.mouse.locked) {
         _sapp.mouse.dx = (float) emsc_event->movementX;
@@ -5176,7 +5180,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
             } else {
                 _sapp.event.mouse_button = SAPP_MOUSEBUTTON_INVALID;
             }
-            consume_event = _sapp_call_event(&_sapp.event);
+            consume_event |= _sapp_call_event(&_sapp.event);
         }
         // mouse lock can only be activated in mouse button events (not in move, enter or leave)
         if (is_button_event) {
@@ -5189,6 +5193,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(emsc_type);
     _SOKOL_UNUSED(user_data);
+    bool consume_event = !_sapp.desc.html5_bubble_wheel_events;
     _sapp.emsc.mouse_buttons = emsc_event->mouse.buttons;
     if (_sapp_events_enabled()) {
         _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
@@ -5203,12 +5208,10 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelE
         }
         _sapp.event.scroll_x = scale * (float)emsc_event->deltaX;
         _sapp.event.scroll_y = scale * (float)emsc_event->deltaY;
-        _sapp_call_event(&_sapp.event);
+        consume_event |= _sapp_call_event(&_sapp.event);
     }
     _sapp_emsc_update_mouse_lock_state();
-    // NOTE: wheel events are always consumed because they try to scroll the
-    // page which looks pretty bad
-    return true;
+    return consume_event;
 }
 
 static struct {
@@ -5469,7 +5472,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(user_data);
-    bool consume_event = false;
+    bool consume_event = !_sapp.desc.html5_bubble_touch_events;
     if (_sapp_events_enabled()) {
         sapp_event_type type;
         switch (emsc_type) {
@@ -5504,7 +5507,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchE
                 dst->pos_y = src->targetY * _sapp.dpi_scale;
                 dst->changed = src->isChanged;
             }
-            consume_event = _sapp_call_event(&_sapp.event);
+            consume_event |= _sapp_call_event(&_sapp.event);
         }
     }
     return consume_event;
