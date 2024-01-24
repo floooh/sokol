@@ -1897,17 +1897,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #define _SAPP_PIXELFORMAT_DEPTH (43)
 #define _SAPP_PIXELFORMAT_DEPTH_STENCIL (44)
 
-#if defined(_SAPP_MACOS) || defined(_SAPP_IOS)
-    // this is ARC compatible
-    #if defined(__cplusplus)
-        #define _SAPP_CLEAR_ARC_STRUCT(type, item) { item = type(); }
-    #else
-        #define _SAPP_CLEAR_ARC_STRUCT(type, item) { item = (type) { 0 }; }
-    #endif
-#else
-    #define _SAPP_CLEAR_ARC_STRUCT(type, item) { _sapp_clear(&item, sizeof(item)); }
-#endif
-
 // check if the config defines are alright
 #if defined(__APPLE__)
     // see https://clang.llvm.org/docs/LanguageExtensions.html#automatic-reference-counting
@@ -2099,6 +2088,18 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <pthread.h>    /* only used a linker-guard, search for _sapp_linux_run() and see first comment */
     #include <time.h>
 #endif
+
+#if defined(_SAPP_APPLE)
+    // this is ARC compatible
+    #if defined(__cplusplus)
+        #define _SAPP_CLEAR_ARC_STRUCT(type, item) { item = type(); }
+    #else
+        #define _SAPP_CLEAR_ARC_STRUCT(type, item) { item = (type) { 0 }; }
+    #endif
+#else
+    #define _SAPP_CLEAR_ARC_STRUCT(type, item) { _sapp_clear(&item, sizeof(item)); }
+#endif
+
 
 // ███████ ██████   █████  ███    ███ ███████     ████████ ██ ███    ███ ██ ███    ██  ██████
 // ██      ██   ██ ██   ██ ████  ████ ██             ██    ██ ████  ████ ██ ████   ██ ██
