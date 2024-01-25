@@ -1,5 +1,324 @@
 ## Updates
 
+#### 23-Jan-2034
+
+- sokol_app.h android: Touch event coordinates are now using AMotionEvent_getX/Y() instead
+  of AMotionEvent_getRawX/Y(). The raw functions don't work well in multi-window
+  scenarios. See PR https://github.com/floooh/sokol/pull/974 for details.
+  Many thanks to Github user @Comanx!
+
+#### 19-Jan-2024
+
+- sokol_app.h wgpu: tiny fix for a breaking API change in webgpu.h in the Emscripten 3.1.52 SDK
+- Merged PR https://github.com/floooh/sokol/pull/970 (many thanks to @waywardmonkeys) which
+  fixes a couple of strict-prototype warnings (e.g. C functions using func() instead of func(void)).
+  I also enabled `-Wstrict-prototypes` now in the CI tests for GCC and Clang, so such cases
+  should be caught in the future.
+
+#### 18-Jan-2024
+
+- sokol_gfx.h: added support for the following pixel formats:
+  - BC3_SRGBA
+  - BC7_SRGBA
+  - ETC2_SRGB8
+  - ETC2_SRGB8A8
+  - ASTC_4x4_RGBA
+  - ASTC_4x4_SRGBA
+
+  Related PR: https://github.com/floooh/sokol/pull/967
+
+  Many thanks to GH user @allcreater!
+
+#### 07-Jan-2024
+
+- sokol_app.h (macos+metal): window content no longer 'wobbles' during window resizing. Many
+  thanks to @Seb-degraff for picking up and investigating this longstanding issue
+  (https://github.com/floooh/sokol/issues/700), finding a fix for the remaining problem
+  and providing a really nice PR (https://github.com/floooh/sokol/pull/963)
+
+#### 06-Jan-2024
+
+> NOTE: if you use sokol_gfx.h and sokol_app.h together, make sure to update both. This is
+because the pixel format enum in sokol_gfx.h has been shuffled around a bit, and as a result, some internal
+pixel format constants in sokol_app.h had to move too!
+
+- sokol_gfx.h: some minor new features (non-breaking):
+  - the struct `sg_pixel_format` has two new items:
+    - `bool compressed`: true if this is a hardware-compressed pixel format
+    - `int bytes_per_pixel`: as the name says, with the caveat that this is
+      zero for compressed pixel formats (because the smallest element in compressed formats is a block, not a pixel)
+  - two previously private helper functions have been exposed to help with size computations
+    for texture data, these may be useful when preparing image data for consumption by `sg_make_image()`
+    and `sg_update_image()`:
+      - `int sg_query_row_pitch(sg_pixel_format fmt, int width, int row_align_bytes)`:
+        Computes the number of bytes in a texture row for a given pixel format. A 'row' has
+        different meanings for uncompressed vs compressed formats: For uncompressed pixel
+        formats, a row is a single line of pixels, while for compressed formats, a row is
+        a line of 'compression blocks'. `width` is always in pixels.
+      - `int sg_query_surface_pitch(sg_pixel_format fmt, int width, int height, int row_align_bytes)`:
+        Computes number of bytes in a texture surface (e.g. a single mipmap) for a given
+        pixel format. `width` and `height` are always in pixels.
+
+    The `row_align_bytes` parameter is for added flexibility. For image data that goes into
+    the `sg_make_image()` or `sg_update_image()` functions this should generally be 1, because these
+    functions take tightly packed image data as input no matter what alignment restrictions
+    exist in the backend 3D APIs.
+- Related issue: https://github.com/floooh/sokol/issues/946, and PR: https://github.com/floooh/sokol/pull/962
+
+#### 03-Jan-2024
+
+- sokol_nuklear.h: `snk_handle_event()` now returns a bool to indicate whether the
+  event was handled by Nuklear (this allows an application to skip its own event
+  handling if Nuklear already handled the event). Issue link: https://github.com/floooh/sokol/issues/958,
+  fixed in PR: https://github.com/floooh/sokol/pull/959. Many thanks to @adamrt for the PR!
+
+#### 02-Jan-2024
+
+Happy New Year! A couple of input-related changes in the sokol_app.h Emscripten backend:
+
+- Mouse and touch events now bubble up to the HTML document instead of being consumed, in some scenarios this
+  allows better integration with the surrounding web page. To prevent event bubbling,
+  call `sapp_consume_event()` from within the sokol_app.h event callback function.
+- **NOTE**: wheel/scroll events behave as before and are always consumed. This prevents
+  an ugly "scroll bumping" effect when a wheel event bubbles up on a page where
+  scrolling shouldn't be possible.
+- The hidden HTML text input field hack for text input on mobile browsers has been
+  removed. This idea never really worked across all browsers, and it actually
+  interfered with Dear ImGui text input fields because the hidden HTML text field
+  generated focus-in/out events which confused the Dear ImGui input handling code.
+
+Those changes fix a couple of problem when trying to integrate sokol_app.h applications
+into VSCode webview panels, see: https://marketplace.visualstudio.com/items?itemName=floooh.vscode-kcide
+
+Related PR: https://github.com/floooh/sokol/pull/939
+
+#### 10-Nov-2023
+
+A small change in the sokol_gfx.h GL backend on Windows only:
+
+PR https://github.com/floooh/sokol/pull/839 has been merged, in debug mode this creates
+the GL context with WGL_CONTEXT_DEBUG_BIT_ARB. Thanks to @castano for the PR!
+
+#### 06-Nov-2023
+
+A bugfix in the sokol_gfx.h D3D11 backend, and some related cleanup when creating depth-stencil
+render target images and resource views:
+
+- fixed: render target images with format SG_PIXELFORMAT_DEPTH_STENCIL triggered a validation
+  error because the pixel format capabilities code marked them as non-renderable. Now
+  the SG_PIXELFORMAT_DEPTH_STENCIL pixel format is properly reported as renderable.
+- the DXGIFormats for SG_PIXELFORMAT_DEPTH_STENCIL images are now as follows:
+  - D3D11 texture object: DXGI_FORMAT_R24G8_TYPELESS
+  - D3D11 shader-resource-view object: DXGI_FORMAT_R24_UNORM_X8_TYPELESS
+  - D3D11 depth-stencil-view object: DXGI_FORMAT_D24_UNORM_S8_UINT
+
+Related PR: https://github.com/floooh/sokol/pull/937
+
+#### 30-Oct-2023
+
+Some sokol_gfx.h backend-specific updates and tweaks (very minor chance that this is breaking if you are injecting textures into the D3D11 backend).
+
+- a new set of public API functions to access the native backend 3D-API resource objects of
+  sokol-gfx resource objects:
+
+  ```
+  sg_[api]_[type]_info sg_[api]_query_[type]_info(sg_[type])
+  ```
+  ...where `[api]` is any of `[gl, d3d11, mtl, wgpu]` and `[type]` is any of `[buffer, image, sampler, shader, pipeline, pass]`.
+
+  This is mainly useful when mixing native 3D-API code with sokol-gfx code.
+
+  See issue https://github.com/floooh/sokol/issues/931 for details.
+
+- WebGPU backend: `sg_make_image()` will no longer automatically create a WebGPU texture-view object when injecting a WebGPU texture object, instead
+this must now be explicitly provided.
+
+- D3D11 backend: `sg_make_image()` will no longer automatically create a
+shader-resource-view object when injecting a D3D11 texture object, and
+vice versa, a texture object will no longer be looked up from an injected
+shader-resource-view object (e.g. the injection rules are now more straightforward and explicit). See issue https://github.com/floooh/sokol/issues/930 for details.
+
+For the detailed changes, see PR https://github.com/floooh/sokol/pull/932.
+
+#### 27-Oct-2023
+
+Fix broken render-to-mipmap in the sokol_gfx.h GL backend.
+
+There was a subtle bug / "feature gap" lurking in sokol_gfx.h GL backend: trying
+to render to any mipmap except the top-level mipmap resulted in a black screen
+because of an incomplete-framebuffer error. This is fixed now. The changes in detail:
+
+- creating a texture in the GL backend now sets the GL_TEXTURE_MAX_LEVEL property
+  (this is the fix to make everything work)
+- the framebuffer completeness check in the GL backend now has more detailed error logging
+- in the validation layer, the requirement that a sampler that's used with a
+  single-mipmap-texture must use `.mipmap_filter = SG_FILTER_NONE` has been
+  relaxed (a later update will remove SG_FILTER_NONE entirely since it's not needed anymore
+  and the concept of a "none" mipmap filter only exists in GL and Metal, but not D3D, WebGPU
+  and Vulkan)
+
+Ticket: https://github.com/floooh/sokol/issues/923
+
+PR: https://github.com/floooh/sokol/pull/924
+
+There's also a new render-to-mipmap sample which covers to close this 'feature gap':
+
+https://floooh.github.io/sokol-html5/miprender-sapp.html
+
+A couple of similar samples will follow over the next few days
+(rendering to texture array layers and 3d texture slices).
+
+#### 26-Oct-2023
+
+- sokol_app.h gl: fix a regression introduced in https://github.com/floooh/sokol/pull/916
+  which could select the wrong framebuffer pixel format and break rendering
+  on some GL drivers (in my case: an older Intel GPU).
+
+  If you are using the GL backend on Windows, please make sure to upgrade!
+
+#### 23-Oct-2023
+
+- sokol_app.h gl: some further startup optimizations in the WGL code path
+  via PR https://github.com/floooh/sokol/pull/916
+
+#### 21-Oct-2023
+
+The major topic of this update is the 'finalized' WebGPU support in sokol_gfx.h and sokol_app.h.
+
+- WebGPU samples are hosted here:
+
+  https://floooh.github.io/sokol-webgpu/
+
+- WebGL2 samples remain hosted here:
+
+  https://floooh.github.io/sokol-html5/
+
+- Please read the following blog post as introduction:
+
+  https://floooh.github.io/2023/10/16/sokol-webgpu.html
+
+- ...and the changelog and updated documentation in the sokol-shdc repository:
+
+  https://github.com/floooh/sokol-tools
+
+- You'll also need to update the sokol-shdc binaries:
+
+  https://github.com/floooh/sokol-tools-bin
+
+- Please also read the following new or updated sections in the embedded   sokol_gfx.h header documentation:
+
+  - `ON SHADER CREATION`
+  - `ON SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT AND SG_SAMPLERTYPE_NONFILTERING`
+  - `WEBGPU CAVEATS`
+
+  Please do this especially when using any of the following texture pixel formats, as you will most likely encounter new validation layer errors:
+
+  - `SG_PIXELFORMAT_R32F`
+  - `SG_PIXELFORMAT_RG32F`
+  - `SG_PIXELFORMAT_RGBA32F`
+
+- There is a tiny breaking change in the sokol_gfx.h API (only requires action when not using sokol-shdc):
+
+  - the following `sg_sampler_type` enum items have been renamed to better match their WebGPU counterparts:
+    - SG_SAMPLERTYPE_SAMPLE => SG_SAMPLERTYPE_FILTERING
+    - SG_SAMPLERTYPE_COMPARE => SG_SAMPLERTYPE_COMPARISON
+
+  - the enum `sg_image_sample_type` gained a new item:
+    - SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT
+
+  - the enum `sg_sampler_type` gained a new item:
+    - SG_SAMPLERTYPE_NONFILTERING
+
+- The sokol_gfx.h struct `sg_desc` has two new items:
+  - `.wgpu_bindgroups_cache_size` - must be power-of-2, default: 1024
+  - `.wgpu_disable_bindgroups_cache` - default: false
+
+- sokol_gfx.h gained the following new public API functions to query per-frame information:
+  - `sg_frame_stats sg_query_frame_stats()`
+  - `void sg_enable_frame_stats(void)`
+  - `void sg_disable_frame_stats(void)`
+  - `bool sg_frame_stats_enabled(void)`
+
+  Frame statistics gathering is enabled after startup, but can be temporarily
+  disabled and enabled again via `sg_disable_frame_stats()` and `sg_enable_frame_stats`.
+
+- The sokol_gfx.h validation layer has new validation checks in `sg_make_shader()`
+  regarding image/sampler pair compatibility (WebGPU is particularly strict about
+  this stuff).
+
+- In sokol_app.h, the old wip WebGPU device and swapchain setup code is now implemented
+  in pure C code (previously this was a mix of Javascript and C).
+
+- Also note that sokol_app.h currently only supports WebGPU in the Emscripten backend.
+  If you want to use sokol_gfx.h with the WebGPU backend in a native scenario, you'll have
+  to use a different window system glue library (like GLFW). The sokol-samples directory
+  has a handful of examples for using sokol_gfx.h + Dawn + GLFW.
+
+- The following headers have been made compatible with the sokol_gfx.h WebGPU backend
+  (mainly by embedding WGSL shader code):
+  - sokol_debugtext.h
+  - sokol_fontstash.h
+  - sokol_gl.h
+  - sokol_spine.h
+  - sokol_imgui.h (also required some more changes for embedding `unfilterable-float`
+    textures, since these now require separate shader and pipeline objects)
+  - sokol_nuklear.h (works in WebGPU, but doesn't contain the work from sokol_imgui.h
+    to support `unfilterable-float` user textures)
+
+- sokol_gfx_imgui.h gained a new function `sg_imgui_draw_menu()` which renders a
+  menu panel to show/hide all debug windows. Previously this had to be done
+  outside the header.
+
+- sokol_gfx_imgui.h gained a new 'frame stats' window, which allows to peak into
+  sokol_gfx.h frame-rendering internals. This basically visualizes the struct
+  `sg_frame_stats` returned by the new sokol_gfx.h function `sg_query_frame_stats()`.
+
+- The sokol-samples repository gained 3 new samples:
+  - cubemap-jpeg-sapp.c (load a cubemap from seperate JPEG files)
+  - cubemaprt-sapp.c (render into cubemap faces - this demo actually existed a while but wasn't "official" so far)
+  - drawcallperf-sapp.c (a sample to explore the performance overhead of sg_apply_bindings, sg_apply_uniforms and sg_draw)
+
+#### 03-Oct-2023
+
+- sokol_app.h win/gl: PR https://github.com/floooh/sokol/pull/886 has been merged, this makes
+  GL context initialization on Windows slightly more efficient. Many thanks to @dtrebilco!
+
+#### 25-Sep-2023
+
+- The allocator callback functions in all headers that support custom allocators have been renamed
+  from `alloc` and `free` to `alloc_fn` and `free_fn`, this is because the symbol `free` is quite
+  likely to collide with a preprocessor macro of the same name if the standard C allocator is
+  replaced with a custom allocator.
+
+  This is a breaking change only if you've been providing your own allocator functions to
+  the sokol headers.
+
+  See issue https://github.com/floooh/sokol/issues/903 and PR https://github.com/floooh/sokol/pull/908
+  for details.
+
+#### 23-Sep-2023
+
+- sokol_gfx.h gl: Allow to inject an external GL framebuffer id into the sokol-gfx default
+  pass. See PR https://github.com/floooh/sokol/pull/899 and issue https://github.com/floooh/sokol/issues/892
+  for details. Many thanks to @danielchasehooper for the discussion and PR!
+
+  Further down the road I want to make the whole topic more flexible while at the same time
+  simplifying the sokol-gfx API, see here: https://github.com/floooh/sokol/issues/904
+
+#### 22-Sep-2023
+
+- sokol_gfx.h: Fixed a Metal validation error on Intel Macs when creating textures (Intel Macs
+  have unified memory, but don't support textures in shared storage mode). This was a regression
+  in the image/sampler split update in mid-July 2023. Fixes issue https://github.com/floooh/sokol/issues/905
+  via PR https://github.com/floooh/sokol/pull/907.
+
+#### 19-Sep-2023
+
+- sokol_fetch.h: fixed a minor issue where a request that was cancelled before it was dispatched
+  had an incomplete response state set in the response callback (the `finished`, `failed` and
+  `error_code` fields were not set). This fixes issue https://github.com/floooh/sokol/issues/882
+  via PR https://github.com/floooh/sokol/pull/898
+
 #### 18-Sep-2023
 
 - PR https://github.com/floooh/sokol/pull/893 has been merged, this fixes a minor issue
@@ -102,7 +421,7 @@ The main topic of this update is to separate sampler state from image state in
 sokol_gfx.h which became possible after GLES2 support had been removed from
 sokol_gfx.h.
 
-This also causes some 'colateral changes' in shader authoring and
+This also causes some 'collateral changes' in shader authoring and
 other sokol headers, but there was opportunity to fill a few feature gaps
 in sokol_gfx.h as well:
 

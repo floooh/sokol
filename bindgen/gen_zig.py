@@ -271,6 +271,8 @@ def funcptr_result_c(field_type):
     res_type = field_type[:field_type.index('(*)')].strip()
     if res_type == 'void':
         return 'void'
+    elif is_prim_type(res_type):
+        return as_zig_prim_type(res_type)
     elif util.is_const_void_ptr(res_type):
         return '?*const anyopaque'
     elif util.is_void_ptr(res_type):
@@ -485,17 +487,23 @@ def gen_helpers(inp):
         l('            putc(byte);')
         l('        }')
         l('    }')
-        l('    pub fn writeByteNTimes(self: Writer, byte: u8, n: u64) Error!void {')
+        l('    pub fn writeByteNTimes(self: Writer, byte: u8, n: usize) Error!void {')
         l('        _ = self;')
         l('        var i: u64 = 0;')
         l('        while (i < n) : (i += 1) {')
         l('            putc(byte);')
         l('        }')
         l('    }')
+        l('    pub fn writeBytesNTimes(self: Writer, bytes: []const u8, n: usize) Error!void {')
+        l('        var i: usize = 0;')
+        l('        while (i < n) : (i += 1) {')
+        l('            try self.writeAll(bytes);')
+        l('        }')
+        l('    }')
         l('};')
         l('// std.fmt-style formatted print')
         l('pub fn print(comptime fmt: anytype, args: anytype) void {')
-        l('    var writer: Writer = .{};')
+        l('    const writer: Writer = .{};')
         l('    @import("std").fmt.format(writer, fmt, args) catch {};')
         l('}')
         l('')

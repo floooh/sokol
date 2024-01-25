@@ -397,8 +397,8 @@
             saudio_setup(&(saudio_desc){
                 // ...
                 .allocator = {
-                    .alloc = my_alloc,
-                    .free = my_free,
+                    .alloc_fn = my_alloc,
+                    .free_fn = my_free,
                     .user_data = ...,
                 }
             });
@@ -575,12 +575,12 @@ typedef struct saudio_logger {
 
     Used in saudio_desc to provide custom memory-alloc and -free functions
     to sokol_audio.h. If memory management should be overridden, both the
-    alloc and free function must be provided (e.g. it's not valid to
+    alloc_fn and free_fn function must be provided (e.g. it's not valid to
     override one function but not the other).
 */
 typedef struct saudio_allocator {
-    void* (*alloc)(size_t size, void* user_data);
-    void (*free)(void* ptr, void* user_data);
+    void* (*alloc_fn)(size_t size, void* user_data);
+    void (*free_fn)(void* ptr, void* user_data);
     void* user_data;
 } saudio_allocator;
 
@@ -1146,10 +1146,9 @@ _SOKOL_PRIVATE void _saudio_clear(void* ptr, size_t size) {
 _SOKOL_PRIVATE void* _saudio_malloc(size_t size) {
     SOKOL_ASSERT(size > 0);
     void* ptr;
-    if (_saudio.desc.allocator.alloc) {
-        ptr = _saudio.desc.allocator.alloc(size, _saudio.desc.allocator.user_data);
-    }
-    else {
+    if (_saudio.desc.allocator.alloc_fn) {
+        ptr = _saudio.desc.allocator.alloc_fn(size, _saudio.desc.allocator.user_data);
+    } else {
         ptr = malloc(size);
     }
     if (0 == ptr) {
@@ -1165,10 +1164,9 @@ _SOKOL_PRIVATE void* _saudio_malloc_clear(size_t size) {
 }
 
 _SOKOL_PRIVATE void _saudio_free(void* ptr) {
-    if (_saudio.desc.allocator.free) {
-        _saudio.desc.allocator.free(ptr, _saudio.desc.allocator.user_data);
-    }
-    else {
+    if (_saudio.desc.allocator.free_fn) {
+        _saudio.desc.allocator.free_fn(ptr, _saudio.desc.allocator.user_data);
+    } else {
         free(ptr);
     }
 }
@@ -2485,7 +2483,7 @@ void _saudio_backend_shutdown(void) {
 SOKOL_API_IMPL void saudio_setup(const saudio_desc* desc) {
     SOKOL_ASSERT(!_saudio.valid);
     SOKOL_ASSERT(desc);
-    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
+    SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
     _saudio_clear(&_saudio, sizeof(_saudio));
     _saudio.desc = *desc;
     _saudio.stream_cb = desc->stream_cb;

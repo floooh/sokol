@@ -33,7 +33,7 @@
     sokol_args.h provides a simple unified argument parsing API for WebAssembly and
     native apps.
 
-    When running as WebAssembly app, arguments are taken from the page URL:
+    When running as a WebAssembly app, arguments are taken from the page URL:
 
         https://floooh.github.io/tiny8bit/kc85.html?type=kc85_3&mod=m022&snapshot=kc85/jungle.kcc
 
@@ -247,8 +247,8 @@
             sargs_setup(&(sargs_desc){
                 // ...
                 .allocator = {
-                    .alloc = my_alloc,
-                    .free = my_free,
+                    .alloc_fn = my_alloc,
+                    .free_fn = my_free,
                     .user_data = ...,
                 }
             });
@@ -316,12 +316,12 @@ extern "C" {
 
     Used in sargs_desc to provide custom memory-alloc and -free functions
     to sokol_args.h. If memory management should be overridden, both the
-    alloc and free function must be provided (e.g. it's not valid to
+    alloc_fn and free_fn function must be provided (e.g. it's not valid to
     override one function but not the other).
 */
 typedef struct sargs_allocator {
-    void* (*alloc)(size_t size, void* user_data);
-    void (*free)(void* ptr, void* user_data);
+    void* (*alloc_fn)(size_t size, void* user_data);
+    void (*free_fn)(void* ptr, void* user_data);
     void* user_data;
 } sargs_allocator;
 
@@ -447,10 +447,9 @@ _SOKOL_PRIVATE void _sargs_clear(void* ptr, size_t size) {
 _SOKOL_PRIVATE void* _sargs_malloc(size_t size) {
     SOKOL_ASSERT(size > 0);
     void* ptr;
-    if (_sargs.allocator.alloc) {
-        ptr = _sargs.allocator.alloc(size, _sargs.allocator.user_data);
-    }
-    else {
+    if (_sargs.allocator.alloc_fn) {
+        ptr = _sargs.allocator.alloc_fn(size, _sargs.allocator.user_data);
+    } else {
         ptr = malloc(size);
     }
     SOKOL_ASSERT(ptr);
@@ -464,10 +463,9 @@ _SOKOL_PRIVATE void* _sargs_malloc_clear(size_t size) {
 }
 
 _SOKOL_PRIVATE void _sargs_free(void* ptr) {
-    if (_sargs.allocator.free) {
-        _sargs.allocator.free(ptr, _sargs.allocator.user_data);
-    }
-    else {
+    if (_sargs.allocator.free_fn) {
+        _sargs.allocator.free_fn(ptr, _sargs.allocator.user_data);
+    } else {
         free(ptr);
     }
 }

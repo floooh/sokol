@@ -27,8 +27,8 @@
         sg_setup(&(sg_desc){
             //...
             .allocator = {
-                .alloc = smemtrack_alloc,
-                .free = smemtrack_free,
+                .alloc_fn = smemtrack_alloc,
+                .free_fn = smemtrack_free,
             }
         });
 

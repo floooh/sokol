@@ -4,7 +4,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**17-Set-2023** debug label support in sokol_gfx.h Metal backend)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**06-Jan-2024**: some new size computation helper functions in sokol_gfx.h)
 
 [![Build](/../../actions/workflows/main.yml/badge.svg)](/../../actions/workflows/main.yml) [![Bindings](/../../actions/workflows/gen_bindings.yml/badge.svg)](/../../actions/workflows/gen_bindings.yml) [![build](https://github.com/floooh/sokol-zig/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-zig/actions/workflows/main.yml) [![build](https://github.com/floooh/sokol-nim/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-nim/actions/workflows/main.yml) [![Odin](https://github.com/floooh/sokol-odin/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-odin/actions/workflows/main.yml)[![Rust](https://github.com/floooh/sokol-rust/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-rust/actions/workflows/main.yml)
 
@@ -15,8 +15,6 @@ cross-platform libraries for C and C++, written in C.
 - [Doom Shareware](https://floooh.github.io/doom-sokol/) ported to the Sokol headers ([source](https://github.com/floooh/doom-sokol))
 
 - [sokol_gp.h](https://github.com/edubart/sokol_gp) a 2D shape drawing library on top of sokol_gfx.h
-
-- [LearnOpenGL examples ported to sokol-gfx](https://www.geertarien.com/learnopengl-examples-html5/) by @geertarien (cool stuff!)
 
 - [Dear ImGui starterkit](https://github.com/floooh/cimgui-sokol-starterkit) a self-contained starterkit for writing Dear ImGui apps in C.
 
@@ -40,7 +38,7 @@ useful details for integrating the Sokol headers into your own project with your
 
 ## Core libraries
 
-- [**sokol\_gfx.h**](https://github.com/floooh/sokol/blob/master/sokol_gfx.h): 3D-API wrapper (GL + Metal + D3D11)
+- [**sokol\_gfx.h**](https://github.com/floooh/sokol/blob/master/sokol_gfx.h): 3D-API wrapper (GL/GLES3/WebGL2 + Metal + D3D11 + WebGPU)
 - [**sokol\_app.h**](https://github.com/floooh/sokol/blob/master/sokol_app.h): app framework wrapper (entry + window + 3D-context + input)
 - [**sokol\_time.h**](https://github.com/floooh/sokol/blob/master/sokol_time.h): time measurement
 - [**sokol\_audio.h**](https://github.com/floooh/sokol/blob/master/sokol_audio.h): minimal buffer-streaming audio playback
@@ -88,7 +86,7 @@ A blog post with more background info: [A Tour of sokol_gfx.h](http://floooh.git
 
 # sokol_gfx.h:
 
-- simple, modern wrapper around GLES3/WebGL2, GL3.3, D3D11 and Metal
+- simple, modern wrapper around GLES3/WebGL2, GL3.3, D3D11, Metal, and WebGPU
 - buffers, images, shaders, pipeline-state-objects and render-passes
 - does *not* handle window creation or 3D API context initialization
 - does *not* provide shader dialect cross-translation (**BUT** there's now an 'official' shader-cross-compiler solution which
