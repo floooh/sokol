@@ -11838,12 +11838,16 @@ _SOKOL_PRIVATE void _sg_mtl_apply_bindings(
         {
             _sg.mtl.state_cache.cur_vertexbuffers[slot] = vb;
             _sg.mtl.state_cache.cur_vertexbuffer_offsets[slot] = vb_offsets[slot];
-            _sg.mtl.state_cache.cur_vertexbuffer_ids[slot].id = vb->slot.id;
             const NSUInteger mtl_slot = SG_MAX_SHADERSTAGE_UBS + slot;
-            SOKOL_ASSERT(vb->mtl.buf[vb->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
-            [_sg.mtl.cmd_encoder setVertexBuffer:_sg_mtl_id(vb->mtl.buf[vb->cmn.active_slot])
-                offset:(NSUInteger)vb_offsets[slot]
-                atIndex:mtl_slot];
+            if (_sg.mtl.state_cache.cur_vertexbuffer_ids[slot].id != vb->slot.id) {
+                _sg.mtl.state_cache.cur_vertexbuffer_ids[slot].id = vb->slot.id;
+                SOKOL_ASSERT(vb->mtl.buf[vb->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
+                [_sg.mtl.cmd_encoder setVertexBuffer:_sg_mtl_id(vb->mtl.buf[vb->cmn.active_slot])
+                                              offset:(NSUInteger)vb_offsets[slot]
+                                             atIndex:mtl_slot];
+            } else {
+                [_sg.mtl.cmd_encoder setVertexBufferOffset:(NSUInteger)vb_offsets[slot] atIndex:mtl_slot];
+            }
         }
     }
 
