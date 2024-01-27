@@ -5425,7 +5425,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                     send_keyup_followup = true;
                 }
 
-                // 'character events' will always need to bubble up, otherwise the browser
+                // 'character key events' will always need to bubble up, otherwise the browser
                 // wouldn't be able to generate character events.
                 if (!_sapp_emsc_is_char_key(_sapp.event.key_code)) {
                     consume_event |= !_sapp.desc.html5_bubble_key_events;
