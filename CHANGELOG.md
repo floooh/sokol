@@ -1,6 +1,22 @@
 ## Updates
 
-#### 23-Jan-2034
+#### 27-Jan-2024
+
+- sokol_app.h web: The HTML5 event bubbling changes introduced in the 02-Jan-2024
+  update have been reverted because they introduced some undesired side effects.
+  By default, most input events now *don't* bubble up (which restores the
+  old behaviour), but it's now possible to enable bubbling for categories
+  of input events (mouse, touch, wheel, keys and chars) during sokol-app setup.
+  It's then possible to control bubbling of individual events by calling
+  `sapp_consume_event()` from within the sokol-app event callback.
+
+  See issue https://github.com/floooh/sokol/issues/972 for details and
+  PR https://github.com/floooh/sokol/pull/975 for the actual changes.
+
+  Also check out the new doc section `INPUT EVENT BUBBLING ON THE WEB PLATFORM`
+  in the sokol_app.h header documentation block.
+
+#### 23-Jan-2024
 
 - sokol_app.h android: Touch event coordinates are now using AMotionEvent_getX/Y() instead
   of AMotionEvent_getRawX/Y(). The raw functions don't work well in multi-window
