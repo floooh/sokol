@@ -1679,6 +1679,8 @@ typedef struct sapp_desc {
     bool html5_bubble_mouse_events;     // if true, mouse events will bubble up to the web page
     bool html5_bubble_touch_events;     // same for touch events
     bool html5_bubble_wheel_events;     // same for wheel events
+    bool html5_bubble_key_events;       // if true, bubble up *all* key events to browser, not just key events that represent characters
+    bool html5_bubble_char_events;      // if true, bubble up character events to browser
     bool ios_keyboard_resizes_canvas;   // if true, showing the iOS keyboard shrinks the canvas
 } sapp_desc;
 
@@ -5334,6 +5336,12 @@ _SOKOL_PRIVATE sapp_keycode _sapp_emsc_translate_key(const char* str) {
     return SAPP_KEYCODE_INVALID;
 }
 
+// returns true if the key code is a 'character key', this is used to decide
+// if a key event needs to bubble up to create a char event
+_SOKOL_PRIVATE bool _sapp_emsc_is_char_key(sapp_keycode key_code) {
+    return key_code < SAPP_KEYCODE_WORLD_1;
+}
+
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboardEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(user_data);
     bool consume_event = false;
@@ -5361,6 +5369,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
             if (type == SAPP_EVENTTYPE_CHAR) {
                 // NOTE: charCode doesn't appear to be supported on Android Chrome
                 _sapp.event.char_code = emsc_event->charCode;
+                consume_event |= !_sapp.desc.html5_bubble_char_events;
             } else {
                 if (0 != emsc_event->code[0]) {
                     // This code path is for desktop browsers which send untranslated 'physical' key code strings
@@ -5385,83 +5394,17 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                 {
                     send_keyup_followup = true;
                 }
-                // Only forward alpha-numeric keys to the browser (can further be suppressed by sapp_consume_event())
-                // NOTE: it should be possible to disable this behaviour via sapp_desc to give apps more
-                // controls over input event bubbling.
-                switch (_sapp.event.key_code) {
-                    case SAPP_KEYCODE_WORLD_1:
-                    case SAPP_KEYCODE_WORLD_2:
-                    case SAPP_KEYCODE_ESCAPE:
-                    case SAPP_KEYCODE_ENTER:
-                    case SAPP_KEYCODE_TAB:
-                    case SAPP_KEYCODE_BACKSPACE:
-                    case SAPP_KEYCODE_INSERT:
-                    case SAPP_KEYCODE_DELETE:
-                    case SAPP_KEYCODE_RIGHT:
-                    case SAPP_KEYCODE_LEFT:
-                    case SAPP_KEYCODE_DOWN:
-                    case SAPP_KEYCODE_UP:
-                    case SAPP_KEYCODE_PAGE_UP:
-                    case SAPP_KEYCODE_PAGE_DOWN:
-                    case SAPP_KEYCODE_HOME:
-                    case SAPP_KEYCODE_END:
-                    case SAPP_KEYCODE_CAPS_LOCK:
-                    case SAPP_KEYCODE_SCROLL_LOCK:
-                    case SAPP_KEYCODE_NUM_LOCK:
-                    case SAPP_KEYCODE_PRINT_SCREEN:
-                    case SAPP_KEYCODE_PAUSE:
-                    case SAPP_KEYCODE_F1:
-                    case SAPP_KEYCODE_F2:
-                    case SAPP_KEYCODE_F3:
-                    case SAPP_KEYCODE_F4:
-                    case SAPP_KEYCODE_F5:
-                    case SAPP_KEYCODE_F6:
-                    case SAPP_KEYCODE_F7:
-                    case SAPP_KEYCODE_F8:
-                    case SAPP_KEYCODE_F9:
-                    case SAPP_KEYCODE_F10:
-                    case SAPP_KEYCODE_F11:
-                    case SAPP_KEYCODE_F12:
-                    case SAPP_KEYCODE_F13:
-                    case SAPP_KEYCODE_F14:
-                    case SAPP_KEYCODE_F15:
-                    case SAPP_KEYCODE_F16:
-                    case SAPP_KEYCODE_F17:
-                    case SAPP_KEYCODE_F18:
-                    case SAPP_KEYCODE_F19:
-                    case SAPP_KEYCODE_F20:
-                    case SAPP_KEYCODE_F21:
-                    case SAPP_KEYCODE_F22:
-                    case SAPP_KEYCODE_F23:
-                    case SAPP_KEYCODE_F24:
-                    case SAPP_KEYCODE_F25:
-                    case SAPP_KEYCODE_LEFT_SHIFT:
-                    case SAPP_KEYCODE_LEFT_CONTROL:
-                    case SAPP_KEYCODE_LEFT_ALT:
-                    case SAPP_KEYCODE_LEFT_SUPER:
-                    case SAPP_KEYCODE_RIGHT_SHIFT:
-                    case SAPP_KEYCODE_RIGHT_CONTROL:
-                    case SAPP_KEYCODE_RIGHT_ALT:
-                    case SAPP_KEYCODE_RIGHT_SUPER:
-                    case SAPP_KEYCODE_MENU:
-                        // consume the event
-                        consume_event = true;
-                        break;
-                    default:
-                        // forward key to browser
-                        consume_event = false;
-                        break;
+
+                // 'character events' will always need to bubble up, otherwise the browser
+                // wouldn't be able to generate character events.
+                if (!_sapp_emsc_is_char_key(_sapp.event.key_code)) {
+                    consume_event |= !_sapp.desc.html5_bubble_key_events;
                 }
             }
-            if (_sapp_call_event(&_sapp.event)) {
-                // event was consumed via sapp_consume_event()
-                consume_event = true;
-            }
+            consume_event |= _sapp_call_event(&_sapp.event);
             if (send_keyup_followup) {
                 _sapp.event.type = SAPP_EVENTTYPE_KEY_UP;
-                if (_sapp_call_event(&_sapp.event)) {
-                    consume_event = true;
-                }
+                consume_event |= _sapp_call_event(&_sapp.event);
             }
         }
     }
