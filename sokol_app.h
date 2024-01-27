@@ -941,13 +941,10 @@
 
         sapp_show_keyboard(false);
 
-    Note that on the web platform, the keyboard can only be shown from
-    inside an input handler. On such platforms, sapp_show_keyboard()
-    will only work as expected when it is called from inside the
-    sokol-app event callback function. When called from other places,
-    an internal flag will be set, and the onscreen keyboard will be
-    called at the next 'legal' opportunity (when the next input event
-    is handled).
+    Note that onscreen keyboard functionality is no longer supported
+    on the browser platform (the previous hacks and workarounds to make browser
+    keyboards work for on web applications that don't use HTML UIs
+    never really worked across browsers).
 
     OPTIONAL: DON'T HIJACK main() (#define SOKOL_NO_ENTRY)
     ======================================================
@@ -1101,10 +1098,7 @@
 
     TEMP NOTE DUMP
     ==============
-    - onscreen keyboard support on Android requires Java :(, should we even bother?
     - sapp_desc needs a bool whether to initialize depth-stencil surface
-    - GL context initialization needs more control (at least what GL version to initialize)
-    - application icon
     - the Android implementation calls cleanup_cb() and destroys the egl context in onDestroy
       at the latest but should do it earlier, in onStop, as an app is "killable" after onStop
       on Android Honeycomb and later (it can't be done at the moment as the app may be started
