@@ -16,6 +16,15 @@
   Also check out the new doc section `INPUT EVENT BUBBLING ON THE WEB PLATFORM`
   in the sokol_app.h header documentation block.
 
+- sokol_gfx.h metal: Merged PR https://github.com/floooh/sokol/pull/980. When
+  only the offset changes in a vertex buffer binding, only the buffer offset
+  is now updated (e.g. instead of the Metal method `setVertexBuffer:offset:atIndex`,
+  the leaner method `setVertexBufferOffset:atIndex` is called. Apart from the
+  actual PR I also removed a couple of actually unused items from the Metal
+  backend state cache. Many thanks to @staminajim for the PR!
+
+  Related issue: https://github.com/floooh/sokol/issues/979
+
 #### 23-Jan-2024
 
 - sokol_app.h android: Touch event coordinates are now using AMotionEvent_getX/Y() instead

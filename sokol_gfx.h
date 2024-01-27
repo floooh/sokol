@@ -5380,16 +5380,11 @@ typedef struct {
     const _sg_buffer_t* cur_indexbuffer;
     int cur_indexbuffer_offset;
     sg_buffer cur_indexbuffer_id;
-    const _sg_buffer_t* cur_vertexbuffers[SG_MAX_VERTEX_BUFFERS];
     int cur_vertexbuffer_offsets[SG_MAX_VERTEX_BUFFERS];
     sg_buffer cur_vertexbuffer_ids[SG_MAX_VERTEX_BUFFERS];
-    const _sg_image_t* cur_vs_images[SG_MAX_SHADERSTAGE_IMAGES];
     sg_image cur_vs_image_ids[SG_MAX_SHADERSTAGE_IMAGES];
-    const _sg_image_t* cur_fs_images[SG_MAX_SHADERSTAGE_IMAGES];
     sg_image cur_fs_image_ids[SG_MAX_SHADERSTAGE_IMAGES];
-    const _sg_sampler_t* cur_vs_samplers[SG_MAX_SHADERSTAGE_SAMPLERS];
     sg_sampler cur_vs_sampler_ids[SG_MAX_SHADERSTAGE_SAMPLERS];
-    const _sg_sampler_t* cur_fs_samplers[SG_MAX_SHADERSTAGE_SAMPLERS];
     sg_sampler cur_fs_sampler_ids[SG_MAX_SHADERSTAGE_SAMPLERS];
 } _sg_mtl_state_cache_t;
 
@@ -12711,14 +12706,17 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
         if ((_sg.mtl.state_cache.cur_vertexbuffer_ids[slot].id != vb->slot.id) ||
             (_sg.mtl.state_cache.cur_vertexbuffer_offsets[slot] != vb_offset))
         {
-            _sg.mtl.state_cache.cur_vertexbuffers[slot] = vb;
             _sg.mtl.state_cache.cur_vertexbuffer_offsets[slot] = vb_offset;
-            _sg.mtl.state_cache.cur_vertexbuffer_ids[slot].id = vb->slot.id;
             const NSUInteger mtl_slot = SG_MAX_SHADERSTAGE_UBS + slot;
-            SOKOL_ASSERT(vb->mtl.buf[vb->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
-            [_sg.mtl.cmd_encoder setVertexBuffer:_sg_mtl_id(vb->mtl.buf[vb->cmn.active_slot])
-                offset:(NSUInteger)vb_offset
-                atIndex:mtl_slot];
+            if (_sg.mtl.state_cache.cur_vertexbuffer_ids[slot].id != vb->slot.id) {
+                _sg.mtl.state_cache.cur_vertexbuffer_ids[slot].id = vb->slot.id;
+                SOKOL_ASSERT(vb->mtl.buf[vb->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
+                [_sg.mtl.cmd_encoder setVertexBuffer:_sg_mtl_id(vb->mtl.buf[vb->cmn.active_slot])
+                    offset:(NSUInteger)vb_offset
+                    atIndex:mtl_slot];
+            } else {
+                [_sg.mtl.cmd_encoder setVertexBufferOffset:(NSUInteger)vb_offset atIndex:mtl_slot];
+            }
             _sg_stats_add(metal.bindings.num_set_vertex_buffer, 1);
         }
     }
@@ -12727,7 +12725,6 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
     for (NSUInteger slot = 0; slot < (NSUInteger)bnd->num_vs_imgs; slot++) {
         const _sg_image_t* img = bnd->vs_imgs[slot];
         if (_sg.mtl.state_cache.cur_vs_image_ids[slot].id != img->slot.id) {
-            _sg.mtl.state_cache.cur_vs_images[slot] = img;
             _sg.mtl.state_cache.cur_vs_image_ids[slot].id = img->slot.id;
             SOKOL_ASSERT(img->mtl.tex[img->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
             [_sg.mtl.cmd_encoder setVertexTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:slot];
@@ -12739,7 +12736,6 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
     for (NSUInteger slot = 0; slot < (NSUInteger)bnd->num_vs_smps; slot++) {
         const _sg_sampler_t* smp = bnd->vs_smps[slot];
         if (_sg.mtl.state_cache.cur_vs_sampler_ids[slot].id != smp->slot.id) {
-            _sg.mtl.state_cache.cur_vs_samplers[slot] = smp;
             _sg.mtl.state_cache.cur_vs_sampler_ids[slot].id = smp->slot.id;
             SOKOL_ASSERT(smp->mtl.sampler_state != _SG_MTL_INVALID_SLOT_INDEX);
             [_sg.mtl.cmd_encoder setVertexSamplerState:_sg_mtl_id(smp->mtl.sampler_state) atIndex:slot];
@@ -12751,7 +12747,6 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
     for (NSUInteger slot = 0; slot < (NSUInteger)bnd->num_fs_imgs; slot++) {
         const _sg_image_t* img = bnd->fs_imgs[slot];
         if (_sg.mtl.state_cache.cur_fs_image_ids[slot].id != img->slot.id) {
-            _sg.mtl.state_cache.cur_fs_images[slot] = img;
             _sg.mtl.state_cache.cur_fs_image_ids[slot].id = img->slot.id;
             SOKOL_ASSERT(img->mtl.tex[img->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
             [_sg.mtl.cmd_encoder setFragmentTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:slot];
@@ -12763,7 +12758,6 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
     for (NSUInteger slot = 0; slot < (NSUInteger)bnd->num_fs_smps; slot++) {
         const _sg_sampler_t* smp = bnd->fs_smps[slot];
         if (_sg.mtl.state_cache.cur_fs_sampler_ids[slot].id != smp->slot.id) {
-            _sg.mtl.state_cache.cur_fs_samplers[slot] = smp;
             _sg.mtl.state_cache.cur_fs_sampler_ids[slot].id = smp->slot.id;
             SOKOL_ASSERT(smp->mtl.sampler_state != _SG_MTL_INVALID_SLOT_INDEX);
             [_sg.mtl.cmd_encoder setFragmentSamplerState:_sg_mtl_id(smp->mtl.sampler_state) atIndex:slot];
