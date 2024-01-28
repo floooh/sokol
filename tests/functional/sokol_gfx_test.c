@@ -104,7 +104,6 @@ UTEST(sokol_gfx, query_desc) {
     T(desc.shader_pool_size == 128);
     T(desc.pipeline_pool_size == _SG_DEFAULT_PIPELINE_POOL_SIZE);
     T(desc.pass_pool_size == 64);
-    T(desc.context_pool_size == _SG_DEFAULT_CONTEXT_POOL_SIZE);
     T(desc.uniform_buffer_size == _SG_DEFAULT_UB_SIZE);
     sg_shutdown();
 }
@@ -122,7 +121,6 @@ UTEST(sokol_gfx, pool_size) {
         .shader_pool_size = 128,
         .pipeline_pool_size = 256,
         .pass_pool_size = 64,
-        .context_pool_size = 64
     });
     T(sg_isvalid());
     /* pool slot 0 is reserved (this is the "invalid slot") */
@@ -131,13 +129,11 @@ UTEST(sokol_gfx, pool_size) {
     T(_sg.pools.shader_pool.size == 129);
     T(_sg.pools.pipeline_pool.size == 257);
     T(_sg.pools.pass_pool.size == 65);
-    T(_sg.pools.context_pool.size == 65);
     T(_sg.pools.buffer_pool.queue_top == 1024);
     T(_sg.pools.image_pool.queue_top == 2048);
     T(_sg.pools.shader_pool.queue_top == 128);
     T(_sg.pools.pipeline_pool.queue_top == 256);
     T(_sg.pools.pass_pool.queue_top == 64);
-    T(_sg.pools.context_pool.queue_top == 63);  /* default context has been created already */
     sg_shutdown();
 }
 
@@ -345,7 +341,6 @@ UTEST(sokol_gfx, make_destroy_buffers) {
         const _sg_buffer_t* bufptr = _sg_lookup_buffer(&_sg.pools, buf[i].id);
         T(bufptr);
         T(bufptr->slot.id == buf[i].id);
-        T(bufptr->slot.ctx_id == _sg.active_context.id);
         T(bufptr->slot.state == SG_RESOURCESTATE_VALID);
         T(bufptr->cmn.size == sizeof(data));
         T(bufptr->cmn.append_pos == 0);
@@ -390,7 +385,6 @@ UTEST(sokol_gfx, make_destroy_images) {
         const _sg_image_t* imgptr = _sg_lookup_image(&_sg.pools, img[i].id);
         T(imgptr);
         T(imgptr->slot.id == img[i].id);
-        T(imgptr->slot.ctx_id == _sg.active_context.id);
         T(imgptr->slot.state == SG_RESOURCESTATE_VALID);
         T(imgptr->cmn.type == SG_IMAGETYPE_2D);
         T(!imgptr->cmn.render_target);
@@ -432,7 +426,6 @@ UTEST(sokol_gfx, make_destroy_samplers) {
         const _sg_sampler_t* smpptr = _sg_lookup_sampler(&_sg.pools, smp[i].id);
         T(smpptr);
         T(smpptr->slot.id == smp[i].id);
-        T(smpptr->slot.ctx_id == _sg.active_context.id);
         T(smpptr->slot.state == SG_RESOURCESTATE_VALID);
         T(smpptr->cmn.min_filter == SG_FILTER_NEAREST);
         T(smpptr->cmn.mag_filter == SG_FILTER_NEAREST);
@@ -477,7 +470,6 @@ UTEST(sokol_gfx, make_destroy_shaders) {
         const _sg_shader_t* shdptr = _sg_lookup_shader(&_sg.pools, shd[i].id);
         T(shdptr);
         T(shdptr->slot.id == shd[i].id);
-        T(shdptr->slot.ctx_id == _sg.active_context.id);
         T(shdptr->slot.state == SG_RESOURCESTATE_VALID);
         T(shdptr->cmn.stage[SG_SHADERSTAGE_VS].num_uniform_blocks == 1);
         T(shdptr->cmn.stage[SG_SHADERSTAGE_VS].num_images == 0);
@@ -520,7 +512,6 @@ UTEST(sokol_gfx, make_destroy_pipelines) {
         const _sg_pipeline_t* pipptr = _sg_lookup_pipeline(&_sg.pools, pip[i].id);
         T(pipptr);
         T(pipptr->slot.id == pip[i].id);
-        T(pipptr->slot.ctx_id == _sg.active_context.id);
         T(pipptr->slot.state == SG_RESOURCESTATE_VALID);
         T(pipptr->shader == _sg_lookup_shader(&_sg.pools, desc.shader.id));
         T(pipptr->cmn.shader_id.id == desc.shader.id);
@@ -571,7 +562,6 @@ UTEST(sokol_gfx, make_destroy_passes) {
         const _sg_pass_t* passptr = _sg_lookup_pass(&_sg.pools, pass[i].id);
         T(passptr);
         T(passptr->slot.id == pass[i].id);
-        T(passptr->slot.ctx_id == _sg.active_context.id);
         T(passptr->slot.state == SG_RESOURCESTATE_VALID);
         T(passptr->cmn.num_color_atts == 3);
         for (int ai = 0; ai < 3; ai++) {
