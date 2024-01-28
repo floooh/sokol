@@ -1,5 +1,12 @@
 ## Updates
 
+#### 28-Jan-2024:
+
+- sokol_app.h web: the canvas resize callback is now unregistered on cleanup.
+
+  Related issue: https://github.com/floooh/sokol/issues/983 and PR: https://github.com/floooh/sokol/pull/984
+  Many thanks to @edubart!
+
 #### 27-Jan-2024
 
 - sokol_app.h web: The HTML5 event bubbling changes introduced in the 02-Jan-2024
