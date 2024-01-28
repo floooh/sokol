@@ -3916,12 +3916,12 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     [NSEvent setMouseCoalescingEnabled:NO];
 
     /* 
-    it has a time interval between app did launch and the window fully actived.
+    it has a time interval between app did launch and the window fully activated.
     the time interval becomes longer when init_cb is slower.
 
-    if there are mouse events(eg. mouse move) during the interval, then app can not be actived and focus will lost evan when app launched and order front.
+    if there are mouse events(eg. mouse move) during the interval, then app can not be activated and focus will lost even when app launched and order front.
     I read some Apple documents and found nothing about this situation.I think maybe it's a bug in Cocoa Appkit.
-    By the way, GTK also has this problem. And GTK solved it evan though they are not 100% sure about the root cause.
+    By the way, GTK also has this problem. And GTK solved it even though they are not 100% sure about the root cause.
     see: https://gitlab.gnome.org/GNOME/gtk/-/issues/2342    
 
     As a walkaround, we send a focus event in front of event queue.    
