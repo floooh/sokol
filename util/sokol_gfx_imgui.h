@@ -1144,7 +1144,6 @@ _SOKOL_PRIVATE const char* _sg_imgui_resourcestate_string(sg_resource_state s) {
 
 _SOKOL_PRIVATE void _sg_imgui_draw_resource_slot(const sg_slot_info* slot) {
     igText("ResId: %08X", slot->res_id);
-    igText("CtxId: %08X", slot->ctx_id);
     igText("State: %s", _sg_imgui_resourcestate_string(slot->state));
 }
 
