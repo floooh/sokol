@@ -3240,7 +3240,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(WGPU_SHADER_CREATE_BINDGROUP_LAYOUT_FAILED, "wgpuDeviceCreateBindGroupLayout() for shader stage failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_PIPELINE_LAYOUT_FAILED, "wgpuDeviceCreatePipelineLayout() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_RENDER_PIPELINE_FAILED, "wgpuDeviceCreateRenderPipeline() failed") \
-    _SG_LOGITEM_XMACRO(WGPU_PASS_CREATE_TEXTURE_VIEW_FAILED, "wgpuTextureCreateView() failed in create pass") \
+    _SG_LOGITEM_XMACRO(WGPU_ATTACHMENTS_CREATE_TEXTURE_VIEW_FAILED, "wgpuTextureCreateView() failed in create attachments") \
     _SG_LOGITEM_XMACRO(IDENTICAL_COMMIT_LISTENER, "attempting to add identical commit listener") \
     _SG_LOGITEM_XMACRO(COMMIT_LISTENER_ARRAY_FULL, "commit listener array full") \
     _SG_LOGITEM_XMACRO(TRACE_HOOKS_NOT_ENABLED, "sg_install_trace_hooks() called, but SG_TRACE_HOOKS is not defined") \
@@ -14260,20 +14260,20 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_pipeline(_sg_pipeline_t* pip) {
     }
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_image_t** color_images, _sg_image_t** resolve_images, _sg_image_t* ds_img, const sg_pass_desc* desc) {
-    SOKOL_ASSERT(pass && desc);
+_SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_attachments(_sg_attachments_t* atts, _sg_image_t** color_images, _sg_image_t** resolve_images, _sg_image_t* ds_img, const sg_attachments_desc* desc) {
+    SOKOL_ASSERT(atts && desc);
     SOKOL_ASSERT(color_images && resolve_images);
 
     // copy image pointers and create renderable wgpu texture views
-    for (int i = 0; i < pass->cmn.num_color_atts; i++) {
-        const sg_pass_attachment_desc* color_desc = &desc->color_attachments[i];
+    for (int i = 0; i < atts->cmn.num_color_atts; i++) {
+        const sg_attachment_desc* color_desc = &desc->color_attachments[i];
         _SOKOL_UNUSED(color_desc);
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
-        SOKOL_ASSERT(0 == pass->wgpu.color_atts[i].image);
+        SOKOL_ASSERT(0 == atts->wgpu.color_atts[i].image);
         SOKOL_ASSERT(color_images[i] && (color_images[i]->slot.id == color_desc->image.id));
         SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(color_images[i]->cmn.pixel_format));
         SOKOL_ASSERT(color_images[i]->wgpu.tex);
-        pass->wgpu.color_atts[i].image = color_images[i];
+        atts->wgpu.color_atts[i].image = color_images[i];
 
         WGPUTextureViewDescriptor wgpu_color_view_desc;
         _sg_clear(&wgpu_color_view_desc, sizeof(wgpu_color_view_desc));
@@ -14281,19 +14281,19 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_imag
         wgpu_color_view_desc.mipLevelCount = 1;
         wgpu_color_view_desc.baseArrayLayer = (uint32_t) color_desc->slice;
         wgpu_color_view_desc.arrayLayerCount = 1;
-        pass->wgpu.color_atts[i].view = wgpuTextureCreateView(color_images[i]->wgpu.tex, &wgpu_color_view_desc);
-        if (0 == pass->wgpu.color_atts[i].view) {
-            _SG_ERROR(WGPU_PASS_CREATE_TEXTURE_VIEW_FAILED);
+        atts->wgpu.color_atts[i].view = wgpuTextureCreateView(color_images[i]->wgpu.tex, &wgpu_color_view_desc);
+        if (0 == atts->wgpu.color_atts[i].view) {
+            _SG_ERROR(WGPU_ATTACHMENTS_CREATE_TEXTURE_VIEW_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
 
-        const sg_pass_attachment_desc* resolve_desc = &desc->resolve_attachments[i];
+        const sg_attachment_desc* resolve_desc = &desc->resolve_attachments[i];
         if (resolve_desc->image.id != SG_INVALID_ID) {
-            SOKOL_ASSERT(0 == pass->wgpu.resolve_atts[i].image);
+            SOKOL_ASSERT(0 == atts->wgpu.resolve_atts[i].image);
             SOKOL_ASSERT(resolve_images[i] && (resolve_images[i]->slot.id == resolve_desc->image.id));
             SOKOL_ASSERT(color_images[i] && (color_images[i]->cmn.pixel_format == resolve_images[i]->cmn.pixel_format));
             SOKOL_ASSERT(resolve_images[i]->wgpu.tex);
-            pass->wgpu.resolve_atts[i].image = resolve_images[i];
+            atts->wgpu.resolve_atts[i].image = resolve_images[i];
 
             WGPUTextureViewDescriptor wgpu_resolve_view_desc;
             _sg_clear(&wgpu_resolve_view_desc, sizeof(wgpu_resolve_view_desc));
@@ -14301,20 +14301,20 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_imag
             wgpu_resolve_view_desc.mipLevelCount = 1;
             wgpu_resolve_view_desc.baseArrayLayer = (uint32_t) resolve_desc->slice;
             wgpu_resolve_view_desc.arrayLayerCount = 1;
-            pass->wgpu.resolve_atts[i].view = wgpuTextureCreateView(resolve_images[i]->wgpu.tex, &wgpu_resolve_view_desc);
-            if (0 == pass->wgpu.resolve_atts[i].view) {
-                _SG_ERROR(WGPU_PASS_CREATE_TEXTURE_VIEW_FAILED);
+            atts->wgpu.resolve_atts[i].view = wgpuTextureCreateView(resolve_images[i]->wgpu.tex, &wgpu_resolve_view_desc);
+            if (0 == atts->wgpu.resolve_atts[i].view) {
+                _SG_ERROR(WGPU_ATTACHMENTS_CREATE_TEXTURE_VIEW_FAILED);
                 return SG_RESOURCESTATE_FAILED;
             }
         }
     }
-    SOKOL_ASSERT(0 == pass->wgpu.ds_att.image);
-    const sg_pass_attachment_desc* ds_desc = &desc->depth_stencil_attachment;
+    SOKOL_ASSERT(0 == atts->wgpu.ds_att.image);
+    const sg_attachment_desc* ds_desc = &desc->depth_stencil_attachment;
     if (ds_desc->image.id != SG_INVALID_ID) {
         SOKOL_ASSERT(ds_img && (ds_img->slot.id == ds_desc->image.id));
         SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(ds_img->cmn.pixel_format));
         SOKOL_ASSERT(ds_img->wgpu.tex);
-        pass->wgpu.ds_att.image = ds_img;
+        atts->wgpu.ds_att.image = ds_img;
 
         WGPUTextureViewDescriptor wgpu_ds_view_desc;
         _sg_clear(&wgpu_ds_view_desc, sizeof(wgpu_ds_view_desc));
@@ -14322,49 +14322,49 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_imag
         wgpu_ds_view_desc.mipLevelCount = 1;
         wgpu_ds_view_desc.baseArrayLayer = (uint32_t) ds_desc->slice;
         wgpu_ds_view_desc.arrayLayerCount = 1;
-        pass->wgpu.ds_att.view = wgpuTextureCreateView(ds_img->wgpu.tex, &wgpu_ds_view_desc);
-        if (0 == pass->wgpu.ds_att.view) {
-            _SG_ERROR(WGPU_PASS_CREATE_TEXTURE_VIEW_FAILED);
+        atts->wgpu.ds_att.view = wgpuTextureCreateView(ds_img->wgpu.tex, &wgpu_ds_view_desc);
+        if (0 == atts->wgpu.ds_att.view) {
+            _SG_ERROR(WGPU_ATTACHMENTS_CREATE_TEXTURE_VIEW_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
     }
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_discard_pass(_sg_pass_t* pass) {
-    SOKOL_ASSERT(pass);
-    for (int i = 0; i < pass->cmn.num_color_atts; i++) {
-        if (pass->wgpu.color_atts[i].view) {
-            wgpuTextureViewRelease(pass->wgpu.color_atts[i].view);
-            pass->wgpu.color_atts[i].view = 0;
+_SOKOL_PRIVATE void _sg_wgpu_discard_attachments(_sg_attachments_t* atts) {
+    SOKOL_ASSERT(atts);
+    for (int i = 0; i < atts->cmn.num_color_atts; i++) {
+        if (atts->wgpu.color_atts[i].view) {
+            wgpuTextureViewRelease(atts->wgpu.color_atts[i].view);
+            atts->wgpu.color_atts[i].view = 0;
         }
-        if (pass->wgpu.resolve_atts[i].view) {
-            wgpuTextureViewRelease(pass->wgpu.resolve_atts[i].view);
-            pass->wgpu.resolve_atts[i].view = 0;
+        if (atts->wgpu.resolve_atts[i].view) {
+            wgpuTextureViewRelease(atts->wgpu.resolve_atts[i].view);
+            atts->wgpu.resolve_atts[i].view = 0;
         }
     }
-    if (pass->wgpu.ds_att.view) {
-        wgpuTextureViewRelease(pass->wgpu.ds_att.view);
-        pass->wgpu.ds_att.view = 0;
+    if (atts->wgpu.ds_att.view) {
+        wgpuTextureViewRelease(atts->wgpu.ds_att.view);
+        atts->wgpu.ds_att.view = 0;
     }
 }
 
-_SOKOL_PRIVATE _sg_image_t* _sg_wgpu_pass_color_image(const _sg_pass_t* pass, int index) {
-    SOKOL_ASSERT(pass && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
+_SOKOL_PRIVATE _sg_image_t* _sg_wgpu_attachments_color_image(const _sg_attachments_t* atts, int index) {
+    SOKOL_ASSERT(atts && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
     // NOTE: may return null
-    return pass->wgpu.color_atts[index].image;
+    return atts->wgpu.color_atts[index].image;
 }
 
-_SOKOL_PRIVATE _sg_image_t* _sg_wgpu_pass_resolve_image(const _sg_pass_t* pass, int index) {
-    SOKOL_ASSERT(pass && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
+_SOKOL_PRIVATE _sg_image_t* _sg_wgpu_attachments_resolve_image(const _sg_attachments_t* atts, int index) {
+    SOKOL_ASSERT(atts && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
     // NOTE: may return null
-    return pass->wgpu.resolve_atts[index].image;
+    return atts->wgpu.resolve_atts[index].image;
 }
 
-_SOKOL_PRIVATE _sg_image_t* _sg_wgpu_pass_ds_image(const _sg_pass_t* pass) {
+_SOKOL_PRIVATE _sg_image_t* _sg_wgpu_attachments_ds_image(const _sg_attachments_t* atts) {
     // NOTE: may return null
-    SOKOL_ASSERT(pass);
-    return pass->wgpu.ds_att.image;
+    SOKOL_ASSERT(atts);
+    return atts->wgpu.ds_att.image;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_init_color_att(WGPURenderPassColorAttachment* wgpu_att, const sg_color_attachment_action* action, WGPUTextureView color_view, WGPUTextureView resolve_view) {
@@ -14395,7 +14395,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_ds_att(WGPURenderPassDepthStencilAttachment* w
     wgpu_att->stencilReadOnly = false;
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
+_SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_attachments_t* atts, const sg_pass_action* action, int w, int h) {
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(!_sg.wgpu.in_pass);
     SOKOL_ASSERT(_sg.wgpu.cmd_enc);
@@ -14415,15 +14415,15 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
     _sg_clear(&wgpu_pass_desc, sizeof(wgpu_pass_desc));
     _sg_clear(&wgpu_color_att, sizeof(wgpu_color_att));
     _sg_clear(&wgpu_ds_att, sizeof(wgpu_ds_att));
-    if (pass) {
-        SOKOL_ASSERT(pass->slot.state == SG_RESOURCESTATE_VALID);
-        for (int i = 0; i < pass->cmn.num_color_atts; i++) {
-            _sg_wgpu_init_color_att(&wgpu_color_att[i], &action->colors[i], pass->wgpu.color_atts[i].view, pass->wgpu.resolve_atts[i].view);
+    if (atts) {
+        SOKOL_ASSERT(atts->slot.state == SG_RESOURCESTATE_VALID);
+        for (int i = 0; i < atts->cmn.num_color_atts; i++) {
+            _sg_wgpu_init_color_att(&wgpu_color_att[i], &action->colors[i], atts->wgpu.color_atts[i].view, atts->wgpu.resolve_atts[i].view);
         }
-        wgpu_pass_desc.colorAttachmentCount = (size_t)pass->cmn.num_color_atts;
+        wgpu_pass_desc.colorAttachmentCount = (size_t)atts->cmn.num_color_atts;
         wgpu_pass_desc.colorAttachments = &wgpu_color_att[0];
-        if (pass->wgpu.ds_att.image) {
-            _sg_wgpu_init_ds_att(&wgpu_ds_att, action, pass->wgpu.ds_att.image->cmn.pixel_format, pass->wgpu.ds_att.view);
+        if (atts->wgpu.ds_att.image) {
+            _sg_wgpu_init_ds_att(&wgpu_ds_att, action, atts->wgpu.ds_att.image->cmn.pixel_format, atts->wgpu.ds_att.view);
             wgpu_pass_desc.depthStencilAttachment = &wgpu_ds_att;
         }
     } else {
