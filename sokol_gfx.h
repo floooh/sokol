@@ -5161,7 +5161,7 @@ typedef struct {
         _sg_d3d11_attachment_t resolve_atts[SG_MAX_COLOR_ATTACHMENTS];
         _sg_d3d11_attachment_t ds_att;
     } d3d11;
-} _sg_d3d11_pass_t;
+} _sg_d3d11_attachments_t;
 typedef _sg_d3d11_attachments_t _sg_attachments_t;
 
 typedef struct {
@@ -5179,8 +5179,8 @@ typedef struct {
     int cur_width;
     int cur_height;
     int num_rtvs;
-    _sg_attachments_t* cur_attachments;
-    sg_atachments cur_attachments_id;
+    _sg_attachments_t* cur_atts;
+    sg_attachments cur_atts_id;
     _sg_pipeline_t* cur_pipeline;
     sg_pipeline cur_pipeline_id;
     ID3D11RenderTargetView* cur_rtvs[SG_MAX_COLOR_ATTACHMENTS];
@@ -10435,42 +10435,42 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_pipeline(_sg_pipeline_t* pip) {
     }
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pass(_sg_pass_t* pass, _sg_image_t** color_images, _sg_image_t** resolve_images, _sg_image_t* ds_img, const sg_pass_desc* desc) {
-    SOKOL_ASSERT(pass && desc);
+_SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t* atts, _sg_image_t** color_images, _sg_image_t** resolve_images, _sg_image_t* ds_img, const sg_attachments_desc* desc) {
+    SOKOL_ASSERT(atts && desc);
     SOKOL_ASSERT(color_images && resolve_images);
     SOKOL_ASSERT(_sg.d3d11.dev);
 
     // copy image pointers
-    for (int i = 0; i < pass->cmn.num_color_atts; i++) {
-        const sg_pass_attachment_desc* color_desc = &desc->color_attachments[i];
+    for (int i = 0; i < atts->cmn.num_color_atts; i++) {
+        const sg_attachment_desc* color_desc = &desc->color_attachments[i];
         _SOKOL_UNUSED(color_desc);
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
-        SOKOL_ASSERT(0 == pass->d3d11.color_atts[i].image);
+        SOKOL_ASSERT(0 == atts->d3d11.color_atts[i].image);
         SOKOL_ASSERT(color_images[i] && (color_images[i]->slot.id == color_desc->image.id));
         SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(color_images[i]->cmn.pixel_format));
-        pass->d3d11.color_atts[i].image = color_images[i];
+        atts->d3d11.color_atts[i].image = color_images[i];
 
-        const sg_pass_attachment_desc* resolve_desc = &desc->resolve_attachments[i];
+        const sg_attachment_desc* resolve_desc = &desc->resolve_attachments[i];
         if (resolve_desc->image.id != SG_INVALID_ID) {
-            SOKOL_ASSERT(0 == pass->d3d11.resolve_atts[i].image);
+            SOKOL_ASSERT(0 == atts->d3d11.resolve_atts[i].image);
             SOKOL_ASSERT(resolve_images[i] && (resolve_images[i]->slot.id == resolve_desc->image.id));
             SOKOL_ASSERT(color_images[i] && (color_images[i]->cmn.pixel_format == resolve_images[i]->cmn.pixel_format));
-            pass->d3d11.resolve_atts[i].image = resolve_images[i];
+            atts->d3d11.resolve_atts[i].image = resolve_images[i];
         }
     }
-    SOKOL_ASSERT(0 == pass->d3d11.ds_att.image);
-    const sg_pass_attachment_desc* ds_desc = &desc->depth_stencil_attachment;
+    SOKOL_ASSERT(0 == atts->d3d11.ds_att.image);
+    const sg_attachment_desc* ds_desc = &desc->depth_stencil_attachment;
     if (ds_desc->image.id != SG_INVALID_ID) {
         SOKOL_ASSERT(ds_img && (ds_img->slot.id == ds_desc->image.id));
         SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(ds_img->cmn.pixel_format));
-        pass->d3d11.ds_att.image = ds_img;
+        atts->d3d11.ds_att.image = ds_img;
     }
 
     // create render-target views
-    for (int i = 0; i < pass->cmn.num_color_atts; i++) {
-        const _sg_pass_attachment_t* cmn_color_att = &pass->cmn.color_atts[i];
+    for (int i = 0; i < atts->cmn.num_color_atts; i++) {
+        const _sg_attachment_common_t* cmn_color_att = &atts->cmn.color_atts[i];
         const _sg_image_t* color_img = color_images[i];
-        SOKOL_ASSERT(0 == pass->d3d11.color_atts[i].view.rtv);
+        SOKOL_ASSERT(0 == atts->d3d11.color_atts[i].view.rtv);
         const bool msaa = color_img->cmn.sample_count > 1;
         D3D11_RENDER_TARGET_VIEW_DESC d3d11_rtv_desc;
         _sg_clear(&d3d11_rtv_desc, sizeof(d3d11_rtv_desc));
@@ -10502,15 +10502,15 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pass(_sg_pass_t* pass, _sg_ima
             d3d11_rtv_desc.Texture3D.WSize = 1;
         }
         SOKOL_ASSERT(color_img->d3d11.res);
-        HRESULT hr = _sg_d3d11_CreateRenderTargetView(_sg.d3d11.dev, color_img->d3d11.res, &d3d11_rtv_desc, &pass->d3d11.color_atts[i].view.rtv);
-        if (!(SUCCEEDED(hr) && pass->d3d11.color_atts[i].view.rtv)) {
+        HRESULT hr = _sg_d3d11_CreateRenderTargetView(_sg.d3d11.dev, color_img->d3d11.res, &d3d11_rtv_desc, &atts->d3d11.color_atts[i].view.rtv);
+        if (!(SUCCEEDED(hr) && atts->d3d11.color_atts[i].view.rtv)) {
             _SG_ERROR(D3D11_CREATE_RTV_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
     }
-    SOKOL_ASSERT(0 == pass->d3d11.ds_att.view.dsv);
+    SOKOL_ASSERT(0 == atts->d3d11.ds_att.view.dsv);
     if (ds_desc->image.id != SG_INVALID_ID) {
-        const _sg_pass_attachment_t* cmn_ds_att = &pass->cmn.ds_att;
+        const _sg_attachment_common_t* cmn_ds_att = &atts->cmn.ds_att;
         const bool msaa = ds_img->cmn.sample_count > 1;
         D3D11_DEPTH_STENCIL_VIEW_DESC d3d11_dsv_desc;
         _sg_clear(&d3d11_dsv_desc, sizeof(d3d11_dsv_desc));
@@ -10536,8 +10536,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pass(_sg_pass_t* pass, _sg_ima
             }
         }
         SOKOL_ASSERT(ds_img->d3d11.res);
-        HRESULT hr = _sg_d3d11_CreateDepthStencilView(_sg.d3d11.dev, ds_img->d3d11.res, &d3d11_dsv_desc, &pass->d3d11.ds_att.view.dsv);
-        if (!(SUCCEEDED(hr) && pass->d3d11.ds_att.view.dsv)) {
+        HRESULT hr = _sg_d3d11_CreateDepthStencilView(_sg.d3d11.dev, ds_img->d3d11.res, &d3d11_dsv_desc, &atts->d3d11.ds_att.view.dsv);
+        if (!(SUCCEEDED(hr) && atts->d3d11.ds_att.view.dsv)) {
             _SG_ERROR(D3D11_CREATE_DSV_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
@@ -10545,38 +10545,38 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pass(_sg_pass_t* pass, _sg_ima
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_d3d11_discard_pass(_sg_pass_t* pass) {
-    SOKOL_ASSERT(pass);
-    SOKOL_ASSERT(pass != _sg.d3d11.cur_pass);
+_SOKOL_PRIVATE void _sg_d3d11_discard_attachments(_sg_attachments_t* atts) {
+    SOKOL_ASSERT(atts);
+    SOKOL_ASSERT(atts != _sg.d3d11.cur_atts);
     for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-        if (pass->d3d11.color_atts[i].view.rtv) {
-            _sg_d3d11_Release(pass->d3d11.color_atts[i].view.rtv);
+        if (atts->d3d11.color_atts[i].view.rtv) {
+            _sg_d3d11_Release(atts->d3d11.color_atts[i].view.rtv);
         }
-        if (pass->d3d11.resolve_atts[i].view.rtv) {
-            _sg_d3d11_Release(pass->d3d11.resolve_atts[i].view.rtv);
+        if (atts->d3d11.resolve_atts[i].view.rtv) {
+            _sg_d3d11_Release(atts->d3d11.resolve_atts[i].view.rtv);
         }
     }
-    if (pass->d3d11.ds_att.view.dsv) {
-        _sg_d3d11_Release(pass->d3d11.ds_att.view.dsv);
+    if (atts->d3d11.ds_att.view.dsv) {
+        _sg_d3d11_Release(atts->d3d11.ds_att.view.dsv);
     }
 }
 
-_SOKOL_PRIVATE _sg_image_t* _sg_d3d11_pass_color_image(const _sg_pass_t* pass, int index) {
-    SOKOL_ASSERT(pass && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
-    return pass->d3d11.color_atts[index].image;
+_SOKOL_PRIVATE _sg_image_t* _sg_d3d11_attachments_color_image(const _sg_attachments_t* atts, int index) {
+    SOKOL_ASSERT(atts && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
+    return atts->d3d11.color_atts[index].image;
 }
 
-_SOKOL_PRIVATE _sg_image_t* _sg_d3d11_pass_resolve_image(const _sg_pass_t* pass, int index) {
-    SOKOL_ASSERT(pass && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
-    return pass->d3d11.resolve_atts[index].image;
+_SOKOL_PRIVATE _sg_image_t* _sg_d3d11_attachments_resolve_image(const _sg_attachments_t* atts, int index) {
+    SOKOL_ASSERT(atts && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
+    return atts->d3d11.resolve_atts[index].image;
 }
 
-_SOKOL_PRIVATE _sg_image_t* _sg_d3d11_pass_ds_image(const _sg_pass_t* pass) {
-    SOKOL_ASSERT(pass);
-    return pass->d3d11.ds_att.image;
+_SOKOL_PRIVATE _sg_image_t* _sg_d3d11_attachments_ds_image(const _sg_attachments_t* atts) {
+    SOKOL_ASSERT(atts);
+    return atts->d3d11.ds_att.image;
 }
 
-_SOKOL_PRIVATE void _sg_d3d11_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
+_SOKOL_PRIVATE void _sg_d3d11_begin_pass(_sg_attachments_t* atts, const sg_pass_action* action, int w, int h) {
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(!_sg.d3d11.in_pass);
     SOKOL_ASSERT(_sg.d3d11.rtv_cb || _sg.d3d11.rtv_userdata_cb);
@@ -10584,21 +10584,21 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(_sg_pass_t* pass, const sg_pass_action*
     _sg.d3d11.in_pass = true;
     _sg.d3d11.cur_width = w;
     _sg.d3d11.cur_height = h;
-    if (pass) {
-        _sg.d3d11.cur_pass = pass;
-        _sg.d3d11.cur_pass_id.id = pass->slot.id;
+    if (atts) {
+        _sg.d3d11.cur_atts = atts;
+        _sg.d3d11.cur_atts_id.id = atts->slot.id;
         _sg.d3d11.num_rtvs = 0;
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-            _sg.d3d11.cur_rtvs[i] = pass->d3d11.color_atts[i].view.rtv;
+            _sg.d3d11.cur_rtvs[i] = atts->d3d11.color_atts[i].view.rtv;
             if (_sg.d3d11.cur_rtvs[i]) {
                 _sg.d3d11.num_rtvs++;
             }
         }
-        _sg.d3d11.cur_dsv = pass->d3d11.ds_att.view.dsv;
+        _sg.d3d11.cur_dsv = atts->d3d11.ds_att.view.dsv;
     } else {
         // render to default frame buffer
-        _sg.d3d11.cur_pass = 0;
-        _sg.d3d11.cur_pass_id.id = SG_INVALID_ID;
+        _sg.d3d11.cur_atts = 0;
+        _sg.d3d11.cur_atts_id.id = SG_INVALID_ID;
         _sg.d3d11.num_rtvs = 1;
         if (_sg.d3d11.rtv_cb) {
             _sg.d3d11.cur_rtvs[0] = (ID3D11RenderTargetView*) _sg.d3d11.rtv_cb();
@@ -10663,14 +10663,14 @@ _SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
     _sg.d3d11.in_pass = false;
 
     // need to resolve MSAA render attachments into texture?
-    if (_sg.d3d11.cur_pass) {
-        SOKOL_ASSERT(_sg.d3d11.cur_pass->slot.id == _sg.d3d11.cur_pass_id.id);
+    if (_sg.d3d11.cur_atts) {
+        SOKOL_ASSERT(_sg.d3d11.cur_atts->slot.id == _sg.d3d11.cur_atts_id.id);
         for (int i = 0; i < _sg.d3d11.num_rtvs; i++) {
-            const _sg_image_t* resolve_img = _sg.d3d11.cur_pass->d3d11.resolve_atts[i].image;
+            const _sg_image_t* resolve_img = _sg.d3d11.cur_atts->d3d11.resolve_atts[i].image;
             if (resolve_img) {
-                const _sg_image_t* color_img = _sg.d3d11.cur_pass->d3d11.color_atts[i].image;
-                const _sg_pass_attachment_t* cmn_color_att = &_sg.d3d11.cur_pass->cmn.color_atts[i];
-                const _sg_pass_attachment_t* cmn_resolve_att = &_sg.d3d11.cur_pass->cmn.resolve_atts[i];
+                const _sg_image_t* color_img = _sg.d3d11.cur_atts->d3d11.color_atts[i].image;
+                const _sg_attachment_common_t* cmn_color_att = &_sg.d3d11.cur_atts->cmn.color_atts[i];
+                const _sg_attachment_common_t* cmn_resolve_att = &_sg.d3d11.cur_atts->cmn.resolve_atts[i];
                 SOKOL_ASSERT(resolve_img->slot.id == cmn_resolve_att->image_id.id);
                 SOKOL_ASSERT(color_img && (color_img->slot.id == cmn_color_att->image_id.id));
                 SOKOL_ASSERT(color_img->cmn.sample_count > 1);
@@ -10694,8 +10694,8 @@ _SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
         }
     }
 
-    _sg.d3d11.cur_pass = 0;
-    _sg.d3d11.cur_pass_id.id = SG_INVALID_ID;
+    _sg.d3d11.cur_atts = 0;
+    _sg.d3d11.cur_atts_id.id = SG_INVALID_ID;
     _sg.d3d11.cur_pipeline = 0;
     _sg.d3d11.cur_pipeline_id.id = SG_INVALID_ID;
     for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
