@@ -2341,12 +2341,38 @@ typedef struct sg_stencil_attachment_action {
 } sg_stencil_attachment_action;
 
 typedef struct sg_pass_action {
-    uint32_t _start_canary;
     sg_color_attachment_action colors[SG_MAX_COLOR_ATTACHMENTS];
     sg_depth_attachment_action depth;
     sg_stencil_attachment_action stencil;
-    uint32_t _end_canary;
 } sg_pass_action;
+
+/*
+    sg_swapchain
+
+    FIXME
+*/
+typedef struct sg_swapchain {
+    int width;
+    int height;
+    int sample_count;
+    sg_pixel_format color_format;
+    sg_pixel_format depth_format;
+    // FIXME: platform-specific swapchain surfaces
+} sg_swapchain;
+
+/*
+    sg_pass
+
+    FIXME
+*/
+typedef struct sg_pass {
+    uint32_t _start_canary;
+    sg_pass_action action;
+    sg_attachments attachments;
+    sg_swapchain swapchain;
+    const char* label;
+    uint32_t _end_canary;
+} sg_pass;
 
 /*
     sg_bindings
@@ -2862,6 +2888,8 @@ typedef struct sg_pipeline_desc {
 
     NOTE that MSAA depth-stencil attachments cannot be msaa-resolved!
 */
+
+// FIXME: rename this? easy to confuse with sg_attachments_desc
 typedef struct sg_attachment_desc {
     sg_image image;
     int mip_level;
@@ -2870,9 +2898,9 @@ typedef struct sg_attachment_desc {
 
 typedef struct sg_attachments_desc {
     uint32_t _start_canary;
-    sg_attachment_desc color_attachments[SG_MAX_COLOR_ATTACHMENTS];
-    sg_attachment_desc resolve_attachments[SG_MAX_COLOR_ATTACHMENTS];
-    sg_attachment_desc depth_stencil_attachment;
+    sg_attachment_desc colors[SG_MAX_COLOR_ATTACHMENTS];
+    sg_attachment_desc resolves[SG_MAX_COLOR_ATTACHMENTS];
+    sg_attachment_desc depth_stencil;
     const char* label;
     uint32_t _end_canary;
 } sg_attachments_desc;
@@ -2908,7 +2936,7 @@ typedef struct sg_trace_hooks {
     void (*update_image)(sg_image img, const sg_image_data* data, void* user_data);
     void (*append_buffer)(sg_buffer buf, const sg_range* data, int result, void* user_data);
     void (*begin_default_pass)(const sg_pass_action* pass_action, int width, int height, void* user_data);
-    void (*begin_pass)(sg_attachments atts, const sg_pass_action* pass_action, void* user_data);
+    void (*begin_pass)(const sg_pass* pass, void* user_data);
     void (*apply_viewport)(int x, int y, int width, int height, bool origin_top_left, void* user_data);
     void (*apply_scissor_rect)(int x, int y, int width, int height, bool origin_top_left, void* user_data);
     void (*apply_pipeline)(sg_pipeline pip, void* user_data);
@@ -3274,6 +3302,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(SHADER_POOL_EXHAUSTED, "shader pool exhausted") \
     _SG_LOGITEM_XMACRO(PIPELINE_POOL_EXHAUSTED, "pipeline pool exhausted") \
     _SG_LOGITEM_XMACRO(PASS_POOL_EXHAUSTED, "pass pool exhausted") \
+    _SG_LOGITEM_XMACRO(BEGINPASS_ATTACHMENT_INVALID, "sg_begin_pass: an attachment was provided that no longer exists") \
     _SG_LOGITEM_XMACRO(DRAW_WITHOUT_BINDINGS, "attempting to draw without resource bindings") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_CANARY, "sg_buffer_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_SIZE, "sg_buffer_desc.size and .data.size cannot both be 0") \
@@ -3713,7 +3742,7 @@ SOKOL_GFX_API_DECL bool sg_query_buffer_will_overflow(sg_buffer buf, size_t size
 // rendering functions
 SOKOL_GFX_API_DECL void sg_begin_default_pass(const sg_pass_action* pass_action, int width, int height);
 SOKOL_GFX_API_DECL void sg_begin_default_passf(const sg_pass_action* pass_action, float width, float height);
-SOKOL_GFX_API_DECL void sg_begin_pass(sg_attachments attachments, const sg_pass_action* pass_action);
+SOKOL_GFX_API_DECL void sg_begin_pass(const sg_pass* pass);
 SOKOL_GFX_API_DECL void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left);
 SOKOL_GFX_API_DECL void sg_apply_viewportf(float x, float y, float width, float height, bool origin_top_left);
 SOKOL_GFX_API_DECL void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left);
@@ -4001,7 +4030,7 @@ inline void sg_update_image(sg_image img, const sg_image_data& data) { return sg
 
 inline void sg_begin_default_pass(const sg_pass_action& pass_action, int width, int height) { return sg_begin_default_pass(&pass_action, width, height); }
 inline void sg_begin_default_passf(const sg_pass_action& pass_action, float width, float height) { return sg_begin_default_passf(&pass_action, width, height); }
-inline void sg_begin_pass(sg_attachments atts, const sg_pass_action& pass_action) { return sg_begin_pass(atts, &pass_action); }
+inline void sg_begin_pass(const sg_pass& pass) { return sg_begin_pass(&pass); }
 inline void sg_apply_bindings(const sg_bindings& bindings) { return sg_apply_bindings(&bindings); }
 inline void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const sg_range& data) { return sg_apply_uniforms(stage, ub_index, &data); }
 
@@ -4822,10 +4851,10 @@ typedef struct {
 typedef struct {
     int width;
     int height;
-    int num_color_atts;
-    _sg_attachment_common_t color_atts[SG_MAX_COLOR_ATTACHMENTS];
-    _sg_attachment_common_t resolve_atts[SG_MAX_COLOR_ATTACHMENTS];
-    _sg_attachment_common_t ds_att;
+    int num_colors;
+    _sg_attachment_common_t colors[SG_MAX_COLOR_ATTACHMENTS];
+    _sg_attachment_common_t resolves[SG_MAX_COLOR_ATTACHMENTS];
+    _sg_attachment_common_t depth_stencil;
 } _sg_attachments_common_t;
 
 _SOKOL_PRIVATE void _sg_attachment_common_init(_sg_attachment_common_t* cmn, const sg_attachment_desc* desc) {
@@ -4839,14 +4868,14 @@ _SOKOL_PRIVATE void _sg_attachments_common_init(_sg_attachments_common_t* cmn, c
     cmn->width = width;
     cmn->height = height;
     for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-        if (desc->color_attachments[i].image.id != SG_INVALID_ID) {
-            cmn->num_color_atts++;
-            _sg_attachment_common_init(&cmn->color_atts[i], &desc->color_attachments[i]);
-            _sg_attachment_common_init(&cmn->resolve_atts[i], &desc->resolve_attachments[i]);
+        if (desc->colors[i].image.id != SG_INVALID_ID) {
+            cmn->num_colors++;
+            _sg_attachment_common_init(&cmn->colors[i], &desc->colors[i]);
+            _sg_attachment_common_init(&cmn->resolves[i], &desc->resolves[i]);
         }
     }
-    if (desc->depth_stencil_attachment.image.id != SG_INVALID_ID) {
-        _sg_attachment_common_init(&cmn->ds_att, &desc->depth_stencil_attachment);
+    if (desc->depth_stencil.image.id != SG_INVALID_ID) {
+        _sg_attachment_common_init(&cmn->depth_stencil, &desc->depth_stencil);
     }
 }
 
@@ -4890,9 +4919,9 @@ typedef struct {
     _sg_slot_t slot;
     _sg_pass_common_t cmn;
     struct {
-        _sg_dummy_attachment_t color_atts[SG_MAX_COLOR_ATTACHMENTS];
-        _sg_dummy_attachment_t resolve_atts[SG_MAX_COLOR_ATTACHMENTS];
-        _sg_dummy_attachment_t ds_att;
+        _sg_dummy_attachment_t colors[SG_MAX_COLOR_ATTACHMENTS];
+        _sg_dummy_attachment_t resolves[SG_MAX_COLOR_ATTACHMENTS];
+        _sg_dummy_attachment_t depth_stencil;
     } dmy;
 } _sg_dummy_attachments_t;
 typedef _sg_dummy_attachments_t _sg_attachments_t;
@@ -5004,9 +5033,9 @@ typedef struct {
     _sg_attachments_common_t cmn;
     struct {
         GLuint fb;
-        _sg_gl_attachment_t color_atts[SG_MAX_COLOR_ATTACHMENTS];
-        _sg_gl_attachment_t resolve_atts[SG_MAX_COLOR_ATTACHMENTS];
-        _sg_gl_attachment_t ds_att;
+        _sg_gl_attachment_t colors[SG_MAX_COLOR_ATTACHMENTS];
+        _sg_gl_attachment_t resolves[SG_MAX_COLOR_ATTACHMENTS];
+        _sg_gl_attachment_t depth_stencil;
         GLuint msaa_resolve_framebuffer[SG_MAX_COLOR_ATTACHMENTS];
     } gl;
 } _sg_gl_attachments_t;
@@ -5157,9 +5186,9 @@ typedef struct {
     _sg_slot_t slot;
     _sg_attachments_common_t cmn;
     struct {
-        _sg_d3d11_attachment_t color_atts[SG_MAX_COLOR_ATTACHMENTS];
-        _sg_d3d11_attachment_t resolve_atts[SG_MAX_COLOR_ATTACHMENTS];
-        _sg_d3d11_attachment_t ds_att;
+        _sg_d3d11_attachment_t colors[SG_MAX_COLOR_ATTACHMENTS];
+        _sg_d3d11_attachment_t resolves[SG_MAX_COLOR_ATTACHMENTS];
+        _sg_d3d11_attachment_t depth_stencil;
     } d3d11;
 } _sg_d3d11_attachments_t;
 typedef _sg_d3d11_attachments_t _sg_attachments_t;
@@ -5283,9 +5312,9 @@ typedef struct {
     _sg_slot_t slot;
     _sg_attachments_common_t cmn;
     struct {
-        _sg_mtl_attachment_t color_atts[SG_MAX_COLOR_ATTACHMENTS];
-        _sg_mtl_attachment_t resolve_atts[SG_MAX_COLOR_ATTACHMENTS];
-        _sg_mtl_attachment_t ds_att;
+        _sg_mtl_attachment_t colors[SG_MAX_COLOR_ATTACHMENTS];
+        _sg_mtl_attachment_t resolves[SG_MAX_COLOR_ATTACHMENTS];
+        _sg_mtl_attachment_t depth_stencil;
     } mtl;
 } _sg_mtl_attachments_t;
 typedef _sg_mtl_attachments_t _sg_attachments_t;
@@ -5402,9 +5431,9 @@ typedef struct {
     _sg_slot_t slot;
     _sg_attachments_common_t cmn;
     struct {
-        _sg_wgpu_attachment_t color_atts[SG_MAX_COLOR_ATTACHMENTS];
-        _sg_wgpu_attachment_t resolve_atts[SG_MAX_COLOR_ATTACHMENTS];
-        _sg_wgpu_attachment_t ds_att;
+        _sg_wgpu_attachment_t colors[SG_MAX_COLOR_ATTACHMENTS];
+        _sg_wgpu_attachment_t resolves[SG_MAX_COLOR_ATTACHMENTS];
+        _sg_wgpu_attachment_t depth_stencil;
     } wgpu;
 } _sg_wgpu_attachments_t;
 typedef _sg_wgpu_attachments_t _sg_attachments_t;
@@ -6155,7 +6184,7 @@ _SOKOL_PRIVATE void _sg_pixelformat_sfbr(_sg_pixelformat_info_t* pfi) {
     pfi->render = true;
 }
 
-_SOKOL_PRIVATE void _sg_resolve_default_pass_action(const sg_pass_action* from, sg_pass_action* to) {
+_SOKOL_PRIVATE void _sg_resolve_pass_action(const sg_pass_action* from, sg_pass_action* to) {
     SOKOL_ASSERT(from && to);
     *to = *from;
     for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
@@ -6289,30 +6318,30 @@ _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_attachments(_sg_attachments_t*
     SOKOL_ASSERT(atts && desc);
     SOKOL_ASSERT(color_images && resolve_images);
 
-    for (int i = 0; i < atts->cmn.num_color_atts; i++) {
-        const sg_attachment_desc* color_desc = &desc->color_attachments[i];
+    for (int i = 0; i < atts->cmn.num_colors; i++) {
+        const sg_attachment_desc* color_desc = &desc->colors[i];
         _SOKOL_UNUSED(color_desc);
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
-        SOKOL_ASSERT(0 == atts->dmy.color_atts[i].image);
+        SOKOL_ASSERT(0 == atts->dmy.colors[i].image);
         SOKOL_ASSERT(color_images[i] && (color_images[i]->slot.id == color_desc->image.id));
         SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(color_images[i]->cmn.pixel_format));
-        atts->dmy.color_atts[i].image = color_images[i];
+        atts->dmy.colors[i].image = color_images[i];
 
-        const sg_attachment_desc* resolve_desc = &desc->resolve_attachments[i];
+        const sg_attachment_desc* resolve_desc = &desc->resolves[i];
         if (resolve_desc->image.id != SG_INVALID_ID) {
-            SOKOL_ASSERT(0 == atts->dmy.resolve_atts[i].image);
+            SOKOL_ASSERT(0 == atts->dmy.resolves[i].image);
             SOKOL_ASSERT(resolve_images[i] && (resolve_images[i]->slot.id == resolve_desc->image.id));
             SOKOL_ASSERT(color_images[i] && (color_images[i]->cmn.pixel_format == resolve_images[i]->cmn.pixel_format));
-            atts->dmy.resolve_atts[i].image = resolve_images[i];
+            atts->dmy.resolves[i].image = resolve_images[i];
         }
     }
 
-    SOKOL_ASSERT(0 == atts->dmy.ds_att.image);
-    const sg_attachment_desc* ds_desc = &desc->depth_stencil_attachment;
+    SOKOL_ASSERT(0 == atts->dmy.depth_stencil.image);
+    const sg_attachment_desc* ds_desc = &desc->depth_stencil;
     if (ds_desc->image.id != SG_INVALID_ID) {
         SOKOL_ASSERT(ds_img && (ds_img->slot.id == ds_desc->image.id));
         SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(ds_img->cmn.pixel_format));
-        atts->dmy.ds_att.image = ds_img;
+        atts->dmy.depth_stencil.image = ds_img;
     }
     return SG_RESOURCESTATE_VALID;
 }
@@ -6324,17 +6353,17 @@ _SOKOL_PRIVATE void _sg_dummy_discard_attachments(_sg_attachments_t* atts) {
 
 _SOKOL_PRIVATE _sg_image_t* _sg_dummy_attachments_color_image(const _sg_attachments_t* atts, int index) {
     SOKOL_ASSERT(atts && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
-    return atts->dmy.color_atts[index].image;
+    return atts->dmy.colors[index].image;
 }
 
 _SOKOL_PRIVATE _sg_image_t* _sg_dummy_attachments_resolve_image(const _sg_attachments_t* atts, int index) {
     SOKOL_ASSERT(atts && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
-    return atts->dmy.resolve_atts[index].image;
+    return atts->dmy.resolves[index].image;
 }
 
 _SOKOL_PRIVATE _sg_image_t* _sg_dummy_attachments_ds_image(const _sg_attachments_t* atts) {
     SOKOL_ASSERT(atts);
-    return atts->dmy.ds_att.image;
+    return atts->dmy.depth_stencil.image;
 }
 
 _SOKOL_PRIVATE void _sg_dummy_begin_pass(_sg_attachments_t* atts, const sg_pass_action* action, int w, int h) {
@@ -8208,29 +8237,29 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* at
     _SG_GL_CHECK_ERROR();
 
     // copy image pointers
-    for (int i = 0; i < atts->cmn.num_color_atts; i++) {
-        const sg_attachment_desc* color_desc = &desc->color_attachments[i];
+    for (int i = 0; i < atts->cmn.num_colors; i++) {
+        const sg_attachment_desc* color_desc = &desc->colors[i];
         _SOKOL_UNUSED(color_desc);
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
-        SOKOL_ASSERT(0 == atts->gl.color_atts[i].image);
+        SOKOL_ASSERT(0 == atts->gl.colors[i].image);
         SOKOL_ASSERT(color_images[i] && (color_images[i]->slot.id == color_desc->image.id));
         SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(color_images[i]->cmn.pixel_format));
-        atts->gl.color_atts[i].image = color_images[i];
+        atts->gl.colors[i].image = color_images[i];
 
-        const sg_attachment_desc* resolve_desc = &desc->resolve_attachments[i];
+        const sg_attachment_desc* resolve_desc = &desc->resolves[i];
         if (resolve_desc->image.id != SG_INVALID_ID) {
-            SOKOL_ASSERT(0 == atts->gl.resolve_atts[i].image);
+            SOKOL_ASSERT(0 == atts->gl.resolves[i].image);
             SOKOL_ASSERT(resolve_images[i] && (resolve_images[i]->slot.id == resolve_desc->image.id));
             SOKOL_ASSERT(color_images[i] && (color_images[i]->cmn.pixel_format == resolve_images[i]->cmn.pixel_format));
-            atts->gl.resolve_atts[i].image = resolve_images[i];
+            atts->gl.resolves[i].image = resolve_images[i];
         }
     }
-    SOKOL_ASSERT(0 == atts->gl.ds_att.image);
-    const sg_attachment_desc* ds_desc = &desc->depth_stencil_attachment;
+    SOKOL_ASSERT(0 == atts->gl.depth_stencil.image);
+    const sg_attachment_desc* ds_desc = &desc->depth_stencil;
     if (ds_desc->image.id != SG_INVALID_ID) {
         SOKOL_ASSERT(ds_image && (ds_image->slot.id == ds_desc->image.id));
         SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(ds_image->cmn.pixel_format));
-        atts->gl.ds_att.image = ds_image;
+        atts->gl.depth_stencil.image = ds_image;
     }
 
     // store current framebuffer binding (restored at end of function)
@@ -8242,27 +8271,27 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* at
     glBindFramebuffer(GL_FRAMEBUFFER, atts->gl.fb);
 
     // attach color attachments to framebuffer
-    for (int i = 0; i < atts->cmn.num_color_atts; i++) {
-        const _sg_image_t* color_img = atts->gl.color_atts[i].image;
+    for (int i = 0; i < atts->cmn.num_colors; i++) {
+        const _sg_image_t* color_img = atts->gl.colors[i].image;
         SOKOL_ASSERT(color_img);
         const GLuint gl_msaa_render_buffer = color_img->gl.msaa_render_buffer;
         if (gl_msaa_render_buffer) {
             glFramebufferRenderbuffer(GL_FRAMEBUFFER, (GLenum)(GL_COLOR_ATTACHMENT0+i), GL_RENDERBUFFER, gl_msaa_render_buffer);
         } else {
             const GLenum gl_att_type = (GLenum)(GL_COLOR_ATTACHMENT0 + i);
-            _sg_gl_fb_attach_texture(&atts->gl.color_atts[i], &atts->cmn.color_atts[i], gl_att_type);
+            _sg_gl_fb_attach_texture(&atts->gl.colors[i], &atts->cmn.colors[i], gl_att_type);
         }
     }
     // attach depth-stencil attachement
-    if (atts->gl.ds_att.image) {
-        const GLenum gl_att = _sg_gl_depth_stencil_attachment_type(&atts->gl.ds_att);
-        const _sg_image_t* ds_img = atts->gl.ds_att.image;
+    if (atts->gl.depth_stencil.image) {
+        const GLenum gl_att = _sg_gl_depth_stencil_attachment_type(&atts->gl.depth_stencil);
+        const _sg_image_t* ds_img = atts->gl.depth_stencil.image;
         const GLuint gl_msaa_render_buffer = ds_img->gl.msaa_render_buffer;
         if (gl_msaa_render_buffer) {
             glFramebufferRenderbuffer(GL_FRAMEBUFFER, gl_att, GL_RENDERBUFFER, gl_msaa_render_buffer);
         } else {
-            const GLenum gl_att_type = _sg_gl_depth_stencil_attachment_type(&atts->gl.ds_att);
-            _sg_gl_fb_attach_texture(&atts->gl.ds_att, &atts->cmn.ds_att, gl_att_type);
+            const GLenum gl_att_type = _sg_gl_depth_stencil_attachment_type(&atts->gl.depth_stencil);
+            _sg_gl_fb_attach_texture(&atts->gl.depth_stencil, &atts->cmn.depth_stencil, gl_att_type);
         }
     }
 
@@ -8301,13 +8330,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* at
         GL_COLOR_ATTACHMENT2,
         GL_COLOR_ATTACHMENT3
     };
-    glDrawBuffers(atts->cmn.num_color_atts, gl_draw_bufs);
+    glDrawBuffers(atts->cmn.num_colors, gl_draw_bufs);
 
     // create MSAA resolve framebuffers if necessary
-    for (int i = 0; i < atts->cmn.num_color_atts; i++) {
-        _sg_gl_attachment_t* gl_resolve_att = &atts->gl.resolve_atts[i];
+    for (int i = 0; i < atts->cmn.num_colors; i++) {
+        _sg_gl_attachment_t* gl_resolve_att = &atts->gl.resolves[i];
         if (gl_resolve_att->image) {
-            _sg_attachment_common_t* cmn_resolve_att = &atts->cmn.resolve_atts[i];
+            _sg_attachment_common_t* cmn_resolve_att = &atts->cmn.resolves[i];
             SOKOL_ASSERT(0 == atts->gl.msaa_resolve_framebuffer[i]);
             glGenFramebuffers(1, &atts->gl.msaa_resolve_framebuffer[i]);
             glBindFramebuffer(GL_FRAMEBUFFER, atts->gl.msaa_resolve_framebuffer[i]);
@@ -8365,17 +8394,17 @@ _SOKOL_PRIVATE void _sg_gl_discard_attachments(_sg_attachments_t* atts) {
 
 _SOKOL_PRIVATE _sg_image_t* _sg_gl_attachments_color_image(const _sg_attachments_t* atts, int index) {
     SOKOL_ASSERT(atts && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
-    return atts->gl.color_atts[index].image;
+    return atts->gl.colors[index].image;
 }
 
 _SOKOL_PRIVATE _sg_image_t* _sg_gl_attachments_resolve_image(const _sg_attachments_t* atts, int index) {
     SOKOL_ASSERT(atts && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
-    return atts->gl.resolve_atts[index].image;
+    return atts->gl.resolves[index].image;
 }
 
 _SOKOL_PRIVATE _sg_image_t* _sg_gl_attachments_ds_image(const _sg_attachments_t* atts) {
     SOKOL_ASSERT(atts);
-    return atts->gl.ds_att.image;
+    return atts->gl.depth_stencil.image;
 }
 
 _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_attachments_t* atts, const sg_pass_action* action, int w, int h) {
@@ -8425,7 +8454,7 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_attachments_t* atts, const sg_pass_act
     glScissor(0, 0, w, h);
 
     // number of color attachments
-    const int num_color_atts = atts ? atts->cmn.num_color_atts : 1;
+    const int num_color_atts = atts ? atts->cmn.num_colors : 1;
 
     // clear color and depth-stencil attachments if needed
     bool clear_any_color = false;
@@ -8483,7 +8512,7 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_attachments_t* atts, const sg_pass_act
             glClearBufferfv(GL_COLOR, i, &action->colors[i].clear_value.r);
         }
     }
-    if ((atts == 0) || (atts->gl.ds_att.image)) {
+    if ((atts == 0) || (atts->gl.depth_stencil.image)) {
         if (clear_depth && clear_stencil) {
             glClearBufferfi(GL_DEPTH_STENCIL, 0, action->depth.clear_value, action->stencil.clear_value);
         } else if (clear_depth) {
@@ -8512,7 +8541,7 @@ _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
         SOKOL_ASSERT(atts->slot.id == _sg.gl.cur_atts_id.id);
         bool fb_read_bound = false;
         bool fb_draw_bound = false;
-        const int num_color_atts = atts->cmn.num_color_atts;
+        const int num_color_atts = atts->cmn.num_colors;
         for (int i = 0; i < num_color_atts; i++) {
             // perform MSAA resolve if needed
             if (atts->gl.msaa_resolve_framebuffer[i] != 0) {
@@ -8521,8 +8550,8 @@ _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
                     glBindFramebuffer(GL_READ_FRAMEBUFFER, atts->gl.fb);
                     fb_read_bound = true;
                 }
-                const int w = atts->gl.color_atts[i].image->cmn.width;
-                const int h = atts->gl.color_atts[i].image->cmn.height;
+                const int w = atts->gl.colors[i].image->cmn.width;
+                const int h = atts->gl.colors[i].image->cmn.height;
                 glBindFramebuffer(GL_DRAW_FRAMEBUFFER, atts->gl.msaa_resolve_framebuffer[i]);
                 glReadBuffer((GLenum)(GL_COLOR_ATTACHMENT0 + i));
                 glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
@@ -10441,36 +10470,36 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
     SOKOL_ASSERT(_sg.d3d11.dev);
 
     // copy image pointers
-    for (int i = 0; i < atts->cmn.num_color_atts; i++) {
+    for (int i = 0; i < atts->cmn.num_colors; i++) {
         const sg_attachment_desc* color_desc = &desc->color_attachments[i];
         _SOKOL_UNUSED(color_desc);
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
-        SOKOL_ASSERT(0 == atts->d3d11.color_atts[i].image);
+        SOKOL_ASSERT(0 == atts->d3d11.colors[i].image);
         SOKOL_ASSERT(color_images[i] && (color_images[i]->slot.id == color_desc->image.id));
         SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(color_images[i]->cmn.pixel_format));
-        atts->d3d11.color_atts[i].image = color_images[i];
+        atts->d3d11.colors[i].image = color_images[i];
 
         const sg_attachment_desc* resolve_desc = &desc->resolve_attachments[i];
         if (resolve_desc->image.id != SG_INVALID_ID) {
-            SOKOL_ASSERT(0 == atts->d3d11.resolve_atts[i].image);
+            SOKOL_ASSERT(0 == atts->d3d11.resolves[i].image);
             SOKOL_ASSERT(resolve_images[i] && (resolve_images[i]->slot.id == resolve_desc->image.id));
             SOKOL_ASSERT(color_images[i] && (color_images[i]->cmn.pixel_format == resolve_images[i]->cmn.pixel_format));
-            atts->d3d11.resolve_atts[i].image = resolve_images[i];
+            atts->d3d11.resolves[i].image = resolve_images[i];
         }
     }
-    SOKOL_ASSERT(0 == atts->d3d11.ds_att.image);
+    SOKOL_ASSERT(0 == atts->d3d11.depth_stencil.image);
     const sg_attachment_desc* ds_desc = &desc->depth_stencil_attachment;
     if (ds_desc->image.id != SG_INVALID_ID) {
         SOKOL_ASSERT(ds_img && (ds_img->slot.id == ds_desc->image.id));
         SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(ds_img->cmn.pixel_format));
-        atts->d3d11.ds_att.image = ds_img;
+        atts->d3d11.depth_stencil.image = ds_img;
     }
 
     // create render-target views
-    for (int i = 0; i < atts->cmn.num_color_atts; i++) {
-        const _sg_attachment_common_t* cmn_color_att = &atts->cmn.color_atts[i];
+    for (int i = 0; i < atts->cmn.num_colors; i++) {
+        const _sg_attachment_common_t* cmn_color_att = &atts->cmn.colors[i];
         const _sg_image_t* color_img = color_images[i];
-        SOKOL_ASSERT(0 == atts->d3d11.color_atts[i].view.rtv);
+        SOKOL_ASSERT(0 == atts->d3d11.colors[i].view.rtv);
         const bool msaa = color_img->cmn.sample_count > 1;
         D3D11_RENDER_TARGET_VIEW_DESC d3d11_rtv_desc;
         _sg_clear(&d3d11_rtv_desc, sizeof(d3d11_rtv_desc));
@@ -10502,15 +10531,15 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
             d3d11_rtv_desc.Texture3D.WSize = 1;
         }
         SOKOL_ASSERT(color_img->d3d11.res);
-        HRESULT hr = _sg_d3d11_CreateRenderTargetView(_sg.d3d11.dev, color_img->d3d11.res, &d3d11_rtv_desc, &atts->d3d11.color_atts[i].view.rtv);
-        if (!(SUCCEEDED(hr) && atts->d3d11.color_atts[i].view.rtv)) {
+        HRESULT hr = _sg_d3d11_CreateRenderTargetView(_sg.d3d11.dev, color_img->d3d11.res, &d3d11_rtv_desc, &atts->d3d11.colors[i].view.rtv);
+        if (!(SUCCEEDED(hr) && atts->d3d11.colors[i].view.rtv)) {
             _SG_ERROR(D3D11_CREATE_RTV_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
     }
-    SOKOL_ASSERT(0 == atts->d3d11.ds_att.view.dsv);
+    SOKOL_ASSERT(0 == atts->d3d11.depth_stencil.view.dsv);
     if (ds_desc->image.id != SG_INVALID_ID) {
-        const _sg_attachment_common_t* cmn_ds_att = &atts->cmn.ds_att;
+        const _sg_attachment_common_t* cmn_ds_att = &atts->cmn.depth_stencil;
         const bool msaa = ds_img->cmn.sample_count > 1;
         D3D11_DEPTH_STENCIL_VIEW_DESC d3d11_dsv_desc;
         _sg_clear(&d3d11_dsv_desc, sizeof(d3d11_dsv_desc));
@@ -10536,8 +10565,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
             }
         }
         SOKOL_ASSERT(ds_img->d3d11.res);
-        HRESULT hr = _sg_d3d11_CreateDepthStencilView(_sg.d3d11.dev, ds_img->d3d11.res, &d3d11_dsv_desc, &atts->d3d11.ds_att.view.dsv);
-        if (!(SUCCEEDED(hr) && atts->d3d11.ds_att.view.dsv)) {
+        HRESULT hr = _sg_d3d11_CreateDepthStencilView(_sg.d3d11.dev, ds_img->d3d11.res, &d3d11_dsv_desc, &atts->d3d11.depth_stencil.view.dsv);
+        if (!(SUCCEEDED(hr) && atts->d3d11.depth_stencil.view.dsv)) {
             _SG_ERROR(D3D11_CREATE_DSV_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
@@ -10549,31 +10578,31 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_attachments(_sg_attachments_t* atts) {
     SOKOL_ASSERT(atts);
     SOKOL_ASSERT(atts != _sg.d3d11.cur_atts);
     for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-        if (atts->d3d11.color_atts[i].view.rtv) {
-            _sg_d3d11_Release(atts->d3d11.color_atts[i].view.rtv);
+        if (atts->d3d11.colors[i].view.rtv) {
+            _sg_d3d11_Release(atts->d3d11.colors[i].view.rtv);
         }
-        if (atts->d3d11.resolve_atts[i].view.rtv) {
-            _sg_d3d11_Release(atts->d3d11.resolve_atts[i].view.rtv);
+        if (atts->d3d11.resolves[i].view.rtv) {
+            _sg_d3d11_Release(atts->d3d11.resolves[i].view.rtv);
         }
     }
-    if (atts->d3d11.ds_att.view.dsv) {
-        _sg_d3d11_Release(atts->d3d11.ds_att.view.dsv);
+    if (atts->d3d11.depth_stencil.view.dsv) {
+        _sg_d3d11_Release(atts->d3d11.depth_stencil.view.dsv);
     }
 }
 
 _SOKOL_PRIVATE _sg_image_t* _sg_d3d11_attachments_color_image(const _sg_attachments_t* atts, int index) {
     SOKOL_ASSERT(atts && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
-    return atts->d3d11.color_atts[index].image;
+    return atts->d3d11.colors[index].image;
 }
 
 _SOKOL_PRIVATE _sg_image_t* _sg_d3d11_attachments_resolve_image(const _sg_attachments_t* atts, int index) {
     SOKOL_ASSERT(atts && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
-    return atts->d3d11.resolve_atts[index].image;
+    return atts->d3d11.resolves[index].image;
 }
 
 _SOKOL_PRIVATE _sg_image_t* _sg_d3d11_attachments_ds_image(const _sg_attachments_t* atts) {
     SOKOL_ASSERT(atts);
-    return atts->d3d11.ds_att.image;
+    return atts->d3d11.depth_stencil.image;
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_begin_pass(_sg_attachments_t* atts, const sg_pass_action* action, int w, int h) {
@@ -10589,12 +10618,12 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(_sg_attachments_t* atts, const sg_pass_
         _sg.d3d11.cur_atts_id.id = atts->slot.id;
         _sg.d3d11.num_rtvs = 0;
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-            _sg.d3d11.cur_rtvs[i] = atts->d3d11.color_atts[i].view.rtv;
+            _sg.d3d11.cur_rtvs[i] = atts->d3d11.colors[i].view.rtv;
             if (_sg.d3d11.cur_rtvs[i]) {
                 _sg.d3d11.num_rtvs++;
             }
         }
-        _sg.d3d11.cur_dsv = atts->d3d11.ds_att.view.dsv;
+        _sg.d3d11.cur_dsv = atts->d3d11.depth_stencil.view.dsv;
     } else {
         // render to default frame buffer
         _sg.d3d11.cur_atts = 0;
@@ -10666,11 +10695,11 @@ _SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
     if (_sg.d3d11.cur_atts) {
         SOKOL_ASSERT(_sg.d3d11.cur_atts->slot.id == _sg.d3d11.cur_atts_id.id);
         for (int i = 0; i < _sg.d3d11.num_rtvs; i++) {
-            const _sg_image_t* resolve_img = _sg.d3d11.cur_atts->d3d11.resolve_atts[i].image;
+            const _sg_image_t* resolve_img = _sg.d3d11.cur_atts->d3d11.resolves[i].image;
             if (resolve_img) {
-                const _sg_image_t* color_img = _sg.d3d11.cur_atts->d3d11.color_atts[i].image;
-                const _sg_attachment_common_t* cmn_color_att = &_sg.d3d11.cur_atts->cmn.color_atts[i];
-                const _sg_attachment_common_t* cmn_resolve_att = &_sg.d3d11.cur_atts->cmn.resolve_atts[i];
+                const _sg_image_t* color_img = _sg.d3d11.cur_atts->d3d11.colors[i].image;
+                const _sg_attachment_common_t* cmn_color_att = &_sg.d3d11.cur_atts->cmn.colors[i];
+                const _sg_attachment_common_t* cmn_resolve_att = &_sg.d3d11.cur_atts->cmn.resolves[i];
                 SOKOL_ASSERT(resolve_img->slot.id == cmn_resolve_att->image_id.id);
                 SOKOL_ASSERT(color_img && (color_img->slot.id == cmn_color_att->image_id.id));
                 SOKOL_ASSERT(color_img->cmn.sample_count > 1);
@@ -12188,29 +12217,29 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_attachments(_sg_attachments_t* a
     SOKOL_ASSERT(color_images && resolve_images);
 
     // copy image pointers
-    for (int i = 0; i < atts->cmn.num_color_atts; i++) {
-        const sg_attachment_desc* color_desc = &desc->color_attachments[i];
+    for (int i = 0; i < atts->cmn.num_colors; i++) {
+        const sg_attachment_desc* color_desc = &desc->colors[i];
         _SOKOL_UNUSED(color_desc);
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
-        SOKOL_ASSERT(0 == atts->mtl.color_atts[i].image);
+        SOKOL_ASSERT(0 == atts->mtl.colors[i].image);
         SOKOL_ASSERT(color_images[i] && (color_images[i]->slot.id == color_desc->image.id));
         SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(color_images[i]->cmn.pixel_format));
-        atts->mtl.color_atts[i].image = color_images[i];
+        atts->mtl.colors[i].image = color_images[i];
 
-        const sg_attachment_desc* resolve_desc = &desc->resolve_attachments[i];
+        const sg_attachment_desc* resolve_desc = &desc->resolves[i];
         if (resolve_desc->image.id != SG_INVALID_ID) {
-            SOKOL_ASSERT(0 == atts->mtl.resolve_atts[i].image);
+            SOKOL_ASSERT(0 == atts->mtl.resolves[i].image);
             SOKOL_ASSERT(resolve_images[i] && (resolve_images[i]->slot.id == resolve_desc->image.id));
             SOKOL_ASSERT(color_images[i] && (color_images[i]->cmn.pixel_format == resolve_images[i]->cmn.pixel_format));
-            atts->mtl.resolve_atts[i].image = resolve_images[i];
+            atts->mtl.resolves[i].image = resolve_images[i];
         }
     }
-    SOKOL_ASSERT(0 == atts->mtl.ds_att.image);
-    const sg_attachment_desc* ds_desc = &desc->depth_stencil_attachment;
+    SOKOL_ASSERT(0 == atts->mtl.depth_stencil.image);
+    const sg_attachment_desc* ds_desc = &desc->depth_stencil;
     if (ds_desc->image.id != SG_INVALID_ID) {
         SOKOL_ASSERT(ds_img && (ds_img->slot.id == ds_desc->image.id));
         SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(ds_img->cmn.pixel_format));
-        atts->mtl.ds_att.image = ds_img;
+        atts->mtl.depth_stencil.image = ds_img;
     }
     return SG_RESOURCESTATE_VALID;
 }
@@ -12223,19 +12252,19 @@ _SOKOL_PRIVATE void _sg_mtl_discard_attachments(_sg_attachments_t* atts) {
 _SOKOL_PRIVATE _sg_image_t* _sg_mtl_attachments_color_image(const _sg_attachments_t* atts, int index) {
     // NOTE: may return null
     SOKOL_ASSERT(atts && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
-    return atts->mtl.color_atts[index].image;
+    return atts->mtl.colors[index].image;
 }
 
 _SOKOL_PRIVATE _sg_image_t* _sg_mtl_attachments_resolve_image(const _sg_attachments_t* atts, int index) {
     // NOTE: may return null
     SOKOL_ASSERT(atts && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
-    return atts->mtl.resolve_atts[index].image;
+    return atts->mtl.resolves[index].image;
 }
 
 _SOKOL_PRIVATE _sg_image_t* _sg_mtl_attachments_ds_image(const _sg_attachments_t* atts) {
     // NOTE: may return null
     SOKOL_ASSERT(atts);
-    return atts->mtl.ds_att.image;
+    return atts->mtl.depth_stencil.image;
 }
 
 _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_attachments_t* atts, const sg_pass_action* action, int w, int h) {
@@ -12304,12 +12333,12 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_attachments_t* atts, const sg_pass_ac
     if (atts) {
         // setup pass descriptor for offscreen rendering
         SOKOL_ASSERT(atts->slot.state == SG_RESOURCESTATE_VALID);
-        for (NSUInteger i = 0; i < (NSUInteger)atts->cmn.num_color_atts; i++) {
-            const _sg_attachment_common_t* cmn_color_att = &atts->cmn.color_atts[i];
-            const _sg_mtl_attachment_t* mtl_color_att = &atts->mtl.color_atts[i];
+        for (NSUInteger i = 0; i < (NSUInteger)atts->cmn.num_colors; i++) {
+            const _sg_attachment_common_t* cmn_color_att = &atts->cmn.colors[i];
+            const _sg_mtl_attachment_t* mtl_color_att = &atts->mtl.colors[i];
             const _sg_image_t* color_att_img = mtl_color_att->image;
-            const _sg_attachment_common_t* cmn_resolve_att = &atts->cmn.resolve_atts[i];
-            const _sg_mtl_attachment_t* mtl_resolve_att = &atts->mtl.resolve_atts[i];
+            const _sg_attachment_common_t* cmn_resolve_att = &atts->cmn.resolves[i];
+            const _sg_mtl_attachment_t* mtl_resolve_att = &atts->mtl.resolves[i];
             const _sg_image_t* resolve_att_img = mtl_resolve_att->image;
             SOKOL_ASSERT(color_att_img->slot.state == SG_RESOURCESTATE_VALID);
             SOKOL_ASSERT(color_att_img->slot.id == cmn_color_att->image_id.id);
@@ -12348,16 +12377,16 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_attachments_t* atts, const sg_pass_ac
                 }
             }
         }
-        const _sg_image_t* ds_att_img = atts->mtl.ds_att.image;
+        const _sg_image_t* ds_att_img = atts->mtl.depth_stencil.image;
         if (0 != ds_att_img) {
             SOKOL_ASSERT(ds_att_img->slot.state == SG_RESOURCESTATE_VALID);
-            SOKOL_ASSERT(ds_att_img->slot.id == atts->cmn.ds_att.image_id.id);
+            SOKOL_ASSERT(ds_att_img->slot.id == atts->cmn.depth_stencil.image_id.id);
             SOKOL_ASSERT(ds_att_img->mtl.tex[ds_att_img->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
             pass_desc.depthAttachment.texture = _sg_mtl_id(ds_att_img->mtl.tex[ds_att_img->cmn.active_slot]);
             pass_desc.depthAttachment.loadAction = _sg_mtl_load_action(action->depth.load_action);
             pass_desc.depthAttachment.storeAction = _sg_mtl_store_action(action->depth.store_action, false);
             pass_desc.depthAttachment.clearDepth = action->depth.clear_value;
-            const _sg_attachment_common_t* cmn_ds_att = &atts->cmn.ds_att;
+            const _sg_attachment_common_t* cmn_ds_att = &atts->cmn.depth_stencil;
             switch (ds_att_img->cmn.type) {
                 case SG_IMAGETYPE_CUBE:
                 case SG_IMAGETYPE_ARRAY:
@@ -14265,15 +14294,15 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_attachments(_sg_attachments_t* 
     SOKOL_ASSERT(color_images && resolve_images);
 
     // copy image pointers and create renderable wgpu texture views
-    for (int i = 0; i < atts->cmn.num_color_atts; i++) {
-        const sg_attachment_desc* color_desc = &desc->color_attachments[i];
+    for (int i = 0; i < atts->cmn.num_colors; i++) {
+        const sg_attachment_desc* color_desc = &desc->colors[i];
         _SOKOL_UNUSED(color_desc);
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
-        SOKOL_ASSERT(0 == atts->wgpu.color_atts[i].image);
+        SOKOL_ASSERT(0 == atts->wgpu.colors[i].image);
         SOKOL_ASSERT(color_images[i] && (color_images[i]->slot.id == color_desc->image.id));
         SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(color_images[i]->cmn.pixel_format));
         SOKOL_ASSERT(color_images[i]->wgpu.tex);
-        atts->wgpu.color_atts[i].image = color_images[i];
+        atts->wgpu.colors[i].image = color_images[i];
 
         WGPUTextureViewDescriptor wgpu_color_view_desc;
         _sg_clear(&wgpu_color_view_desc, sizeof(wgpu_color_view_desc));
@@ -14281,19 +14310,19 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_attachments(_sg_attachments_t* 
         wgpu_color_view_desc.mipLevelCount = 1;
         wgpu_color_view_desc.baseArrayLayer = (uint32_t) color_desc->slice;
         wgpu_color_view_desc.arrayLayerCount = 1;
-        atts->wgpu.color_atts[i].view = wgpuTextureCreateView(color_images[i]->wgpu.tex, &wgpu_color_view_desc);
-        if (0 == atts->wgpu.color_atts[i].view) {
+        atts->wgpu.colors[i].view = wgpuTextureCreateView(color_images[i]->wgpu.tex, &wgpu_color_view_desc);
+        if (0 == atts->wgpu.colors[i].view) {
             _SG_ERROR(WGPU_ATTACHMENTS_CREATE_TEXTURE_VIEW_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
 
-        const sg_attachment_desc* resolve_desc = &desc->resolve_attachments[i];
+        const sg_attachment_desc* resolve_desc = &desc->resolves[i];
         if (resolve_desc->image.id != SG_INVALID_ID) {
-            SOKOL_ASSERT(0 == atts->wgpu.resolve_atts[i].image);
+            SOKOL_ASSERT(0 == atts->wgpu.resolves[i].image);
             SOKOL_ASSERT(resolve_images[i] && (resolve_images[i]->slot.id == resolve_desc->image.id));
             SOKOL_ASSERT(color_images[i] && (color_images[i]->cmn.pixel_format == resolve_images[i]->cmn.pixel_format));
             SOKOL_ASSERT(resolve_images[i]->wgpu.tex);
-            atts->wgpu.resolve_atts[i].image = resolve_images[i];
+            atts->wgpu.resolves[i].image = resolve_images[i];
 
             WGPUTextureViewDescriptor wgpu_resolve_view_desc;
             _sg_clear(&wgpu_resolve_view_desc, sizeof(wgpu_resolve_view_desc));
@@ -14301,20 +14330,20 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_attachments(_sg_attachments_t* 
             wgpu_resolve_view_desc.mipLevelCount = 1;
             wgpu_resolve_view_desc.baseArrayLayer = (uint32_t) resolve_desc->slice;
             wgpu_resolve_view_desc.arrayLayerCount = 1;
-            atts->wgpu.resolve_atts[i].view = wgpuTextureCreateView(resolve_images[i]->wgpu.tex, &wgpu_resolve_view_desc);
-            if (0 == atts->wgpu.resolve_atts[i].view) {
+            atts->wgpu.resolves[i].view = wgpuTextureCreateView(resolve_images[i]->wgpu.tex, &wgpu_resolve_view_desc);
+            if (0 == atts->wgpu.resolves[i].view) {
                 _SG_ERROR(WGPU_ATTACHMENTS_CREATE_TEXTURE_VIEW_FAILED);
                 return SG_RESOURCESTATE_FAILED;
             }
         }
     }
-    SOKOL_ASSERT(0 == atts->wgpu.ds_att.image);
-    const sg_attachment_desc* ds_desc = &desc->depth_stencil_attachment;
+    SOKOL_ASSERT(0 == atts->wgpu.depth_stencil.image);
+    const sg_attachment_desc* ds_desc = &desc->depth_stencil;
     if (ds_desc->image.id != SG_INVALID_ID) {
         SOKOL_ASSERT(ds_img && (ds_img->slot.id == ds_desc->image.id));
         SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(ds_img->cmn.pixel_format));
         SOKOL_ASSERT(ds_img->wgpu.tex);
-        atts->wgpu.ds_att.image = ds_img;
+        atts->wgpu.depth_stencil.image = ds_img;
 
         WGPUTextureViewDescriptor wgpu_ds_view_desc;
         _sg_clear(&wgpu_ds_view_desc, sizeof(wgpu_ds_view_desc));
@@ -14322,8 +14351,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_attachments(_sg_attachments_t* 
         wgpu_ds_view_desc.mipLevelCount = 1;
         wgpu_ds_view_desc.baseArrayLayer = (uint32_t) ds_desc->slice;
         wgpu_ds_view_desc.arrayLayerCount = 1;
-        atts->wgpu.ds_att.view = wgpuTextureCreateView(ds_img->wgpu.tex, &wgpu_ds_view_desc);
-        if (0 == atts->wgpu.ds_att.view) {
+        atts->wgpu.depth_stencil.view = wgpuTextureCreateView(ds_img->wgpu.tex, &wgpu_ds_view_desc);
+        if (0 == atts->wgpu.depth_stencil.view) {
             _SG_ERROR(WGPU_ATTACHMENTS_CREATE_TEXTURE_VIEW_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
@@ -14333,38 +14362,38 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_attachments(_sg_attachments_t* 
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_attachments(_sg_attachments_t* atts) {
     SOKOL_ASSERT(atts);
-    for (int i = 0; i < atts->cmn.num_color_atts; i++) {
-        if (atts->wgpu.color_atts[i].view) {
-            wgpuTextureViewRelease(atts->wgpu.color_atts[i].view);
-            atts->wgpu.color_atts[i].view = 0;
+    for (int i = 0; i < atts->cmn.num_colors; i++) {
+        if (atts->wgpu.colors[i].view) {
+            wgpuTextureViewRelease(atts->wgpu.colors[i].view);
+            atts->wgpu.colors[i].view = 0;
         }
-        if (atts->wgpu.resolve_atts[i].view) {
-            wgpuTextureViewRelease(atts->wgpu.resolve_atts[i].view);
-            atts->wgpu.resolve_atts[i].view = 0;
+        if (atts->wgpu.resolves[i].view) {
+            wgpuTextureViewRelease(atts->wgpu.resolves[i].view);
+            atts->wgpu.resolves[i].view = 0;
         }
     }
-    if (atts->wgpu.ds_att.view) {
-        wgpuTextureViewRelease(atts->wgpu.ds_att.view);
-        atts->wgpu.ds_att.view = 0;
+    if (atts->wgpu.depth_stencil.view) {
+        wgpuTextureViewRelease(atts->wgpu.depth_stencil.view);
+        atts->wgpu.depth_stencil.view = 0;
     }
 }
 
 _SOKOL_PRIVATE _sg_image_t* _sg_wgpu_attachments_color_image(const _sg_attachments_t* atts, int index) {
     SOKOL_ASSERT(atts && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
     // NOTE: may return null
-    return atts->wgpu.color_atts[index].image;
+    return atts->wgpu.colors[index].image;
 }
 
 _SOKOL_PRIVATE _sg_image_t* _sg_wgpu_attachments_resolve_image(const _sg_attachments_t* atts, int index) {
     SOKOL_ASSERT(atts && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
     // NOTE: may return null
-    return atts->wgpu.resolve_atts[index].image;
+    return atts->wgpu.resolves[index].image;
 }
 
 _SOKOL_PRIVATE _sg_image_t* _sg_wgpu_attachments_ds_image(const _sg_attachments_t* atts) {
     // NOTE: may return null
     SOKOL_ASSERT(atts);
-    return atts->wgpu.ds_att.image;
+    return atts->wgpu.depth_stencil.image;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_init_color_att(WGPURenderPassColorAttachment* wgpu_att, const sg_color_attachment_action* action, WGPUTextureView color_view, WGPUTextureView resolve_view) {
@@ -14417,13 +14446,13 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_attachments_t* atts, const sg_pass_a
     _sg_clear(&wgpu_ds_att, sizeof(wgpu_ds_att));
     if (atts) {
         SOKOL_ASSERT(atts->slot.state == SG_RESOURCESTATE_VALID);
-        for (int i = 0; i < atts->cmn.num_color_atts; i++) {
-            _sg_wgpu_init_color_att(&wgpu_color_att[i], &action->colors[i], atts->wgpu.color_atts[i].view, atts->wgpu.resolve_atts[i].view);
+        for (int i = 0; i < atts->cmn.num_colors; i++) {
+            _sg_wgpu_init_color_att(&wgpu_color_att[i], &action->colors[i], atts->wgpu.colors[i].view, atts->wgpu.resolves[i].view);
         }
-        wgpu_pass_desc.colorAttachmentCount = (size_t)atts->cmn.num_color_atts;
+        wgpu_pass_desc.colorAttachmentCount = (size_t)atts->cmn.num_colors;
         wgpu_pass_desc.colorAttachments = &wgpu_color_att[0];
-        if (atts->wgpu.ds_att.image) {
-            _sg_wgpu_init_ds_att(&wgpu_ds_att, action, atts->wgpu.ds_att.image->cmn.pixel_format, atts->wgpu.ds_att.view);
+        if (atts->wgpu.depth_stencil.image) {
+            _sg_wgpu_init_ds_att(&wgpu_ds_att, action, atts->wgpu.depth_stencil.image->cmn.pixel_format, atts->wgpu.depth_stencil.view);
             wgpu_pass_desc.depthStencilAttachment = &wgpu_ds_att;
         }
     } else {
@@ -15830,7 +15859,7 @@ _SOKOL_PRIVATE bool _sg_validate_attachments_desc(const sg_attachments_desc* des
         int color_width = -1, color_height = -1, color_sample_count = -1;
         bool has_color_atts = false;
         for (int att_index = 0; att_index < SG_MAX_COLOR_ATTACHMENTS; att_index++) {
-            const sg_attachment_desc* att = &desc->color_attachments[att_index];
+            const sg_attachment_desc* att = &desc->colors[att_index];
             if (att->image.id == SG_INVALID_ID) {
                 atts_cont = false;
                 continue;
@@ -15862,7 +15891,7 @@ _SOKOL_PRIVATE bool _sg_validate_attachments_desc(const sg_attachments_desc* des
                 _SG_VALIDATE(_sg_is_valid_rendertarget_color_format(img->cmn.pixel_format), VALIDATE_ATTACHMENTSDESC_COLOR_INV_PIXELFORMAT);
 
                 // check resolve attachment
-                const sg_attachment_desc* res_att = &desc->resolve_attachments[att_index];
+                const sg_attachment_desc* res_att = &desc->resolves[att_index];
                 if (res_att->image.id != SG_INVALID_ID) {
                     // associated color attachment must be MSAA
                     _SG_VALIDATE(img->cmn.sample_count > 1, VALIDATE_ATTACHMENTSDESC_RESOLVE_COLOR_IMAGE_MSAA);
@@ -15888,8 +15917,8 @@ _SOKOL_PRIVATE bool _sg_validate_attachments_desc(const sg_attachments_desc* des
             }
         }
         bool has_depth_stencil_att = false;
-        if (desc->depth_stencil_attachment.image.id != SG_INVALID_ID) {
-            const sg_attachment_desc* att = &desc->depth_stencil_attachment;
+        if (desc->depth_stencil.image.id != SG_INVALID_ID) {
+            const sg_attachment_desc* att = &desc->depth_stencil;
             const _sg_image_t* img = _sg_lookup_image(&_sg.pools, att->image.id);
             _SG_VALIDATE(img, VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE);
             has_depth_stencil_att = true;
@@ -15926,15 +15955,14 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(_sg_attachments_t* atts) {
         }
         _sg_validate_begin();
         _SG_VALIDATE(atts->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_PASS);
-
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-            const _sg_attachment_common_t* color_att = &atts->cmn.color_atts[i];
+            const _sg_attachment_common_t* color_att = &atts->cmn.colors[i];
             const _sg_image_t* color_img = _sg_attachments_color_image(atts, i);
             if (color_img) {
                 _SG_VALIDATE(color_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE);
                 _SG_VALIDATE(color_img->slot.id == color_att->image_id.id, VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE);
             }
-            const _sg_attachment_common_t* resolve_att = &atts->cmn.resolve_atts[i];
+            const _sg_attachment_common_t* resolve_att = &atts->cmn.resolves[i];
             const _sg_image_t* resolve_img = _sg_attachments_resolve_image(atts, i);
             if (resolve_img) {
                 _SG_VALIDATE(resolve_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_RESOLVE_ATTACHMENT_IMAGE);
@@ -15943,7 +15971,7 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(_sg_attachments_t* atts) {
         }
         const _sg_image_t* ds_img = _sg_attachments_ds_image(atts);
         if (ds_img) {
-            const _sg_attachment_common_t* att = &atts->cmn.ds_att;
+            const _sg_attachment_common_t* att = &atts->cmn.depth_stencil;
             _SG_VALIDATE(ds_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_DEPTHSTENCIL_ATTACHMENT_IMAGE);
             _SG_VALIDATE(ds_img->slot.id == att->image_id.id, VALIDATE_BEGINPASS_DEPTHSTENCIL_ATTACHMENT_IMAGE);
         }
@@ -15976,7 +16004,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
         const _sg_attachments_t* atts = _sg_lookup_attachments(&_sg.pools, _sg.cur_atts.id);
         if (atts) {
             // an offscreen pass
-            _SG_VALIDATE(pip->cmn.color_count == atts->cmn.num_color_atts, VALIDATE_APIP_ATT_COUNT);
+            _SG_VALIDATE(pip->cmn.color_count == atts->cmn.num_colors, VALIDATE_APIP_ATT_COUNT);
             for (int i = 0; i < pip->cmn.color_count; i++) {
                 const _sg_image_t* att_img = _sg_attachments_color_image(atts, i);
                 _SG_VALIDATE(pip->cmn.colors[i].pixel_format == att_img->cmn.pixel_format, VALIDATE_APIP_COLOR_FORMAT);
@@ -16447,7 +16475,6 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
 }
 
 _SOKOL_PRIVATE sg_attachments_desc _sg_attachments_desc_defaults(const sg_attachments_desc* desc) {
-    // FIXME: no values to replace in sg_pass_desc?
     sg_attachments_desc def = *desc;
     return def;
 }
@@ -16637,31 +16664,31 @@ _SOKOL_PRIVATE void _sg_init_attachments(_sg_attachments_t* atts, const sg_attac
         int width = 0;
         int height = 0;
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-            if (desc->color_attachments[i].image.id) {
-                color_images[i] = _sg_lookup_image(&_sg.pools, desc->color_attachments[i].image.id);
+            if (desc->colors[i].image.id) {
+                color_images[i] = _sg_lookup_image(&_sg.pools, desc->colors[i].image.id);
                 if (!(color_images[i] && color_images[i]->slot.state == SG_RESOURCESTATE_VALID)) {
                     atts->slot.state = SG_RESOURCESTATE_FAILED;
                     return;
                 }
-                const int mip_level = desc->color_attachments[i].mip_level;
+                const int mip_level = desc->colors[i].mip_level;
                 width = _sg_miplevel_dim(color_images[i]->cmn.width, mip_level);
                 height = _sg_miplevel_dim(color_images[i]->cmn.height, mip_level);
             }
-            if (desc->resolve_attachments[i].image.id) {
-                resolve_images[i] = _sg_lookup_image(&_sg.pools, desc->resolve_attachments[i].image.id);
+            if (desc->resolves[i].image.id) {
+                resolve_images[i] = _sg_lookup_image(&_sg.pools, desc->resolves[i].image.id);
                 if (!(resolve_images[i] && resolve_images[i]->slot.state == SG_RESOURCESTATE_VALID)) {
                     atts->slot.state = SG_RESOURCESTATE_FAILED;
                     return;
                 }
             }
         }
-        if (desc->depth_stencil_attachment.image.id) {
-            ds_image = _sg_lookup_image(&_sg.pools, desc->depth_stencil_attachment.image.id);
+        if (desc->depth_stencil.image.id) {
+            ds_image = _sg_lookup_image(&_sg.pools, desc->depth_stencil.image.id);
             if (!(ds_image && ds_image->slot.state == SG_RESOURCESTATE_VALID)) {
                 atts->slot.state = SG_RESOURCESTATE_FAILED;
                 return;
             }
-            const int mip_level = desc->depth_stencil_attachment.mip_level;
+            const int mip_level = desc->depth_stencil.mip_level;
             width = _sg_miplevel_dim(ds_image->cmn.width, mip_level);
             height = _sg_miplevel_dim(ds_image->cmn.height, mip_level);
         }
@@ -17523,9 +17550,8 @@ SOKOL_API_IMPL void sg_destroy_attachments(sg_attachments atts_id) {
 SOKOL_API_IMPL void sg_begin_default_pass(const sg_pass_action* pass_action, int width, int height) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(pass_action);
-    SOKOL_ASSERT((pass_action->_start_canary == 0) && (pass_action->_end_canary == 0));
     sg_pass_action pa;
-    _sg_resolve_default_pass_action(pass_action, &pa);
+    _sg_resolve_pass_action(pass_action, &pa);
     _sg.cur_atts.id = SG_INVALID_ID;
     _sg.pass_valid = true;
     _sg_begin_pass(0, &pa, width, height);
@@ -17536,21 +17562,26 @@ SOKOL_API_IMPL void sg_begin_default_passf(const sg_pass_action* pass_action, fl
     sg_begin_default_pass(pass_action, (int)width, (int)height);
 }
 
-SOKOL_API_IMPL void sg_begin_pass(sg_attachments atts_id, const sg_pass_action* pass_action) {
+SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
     SOKOL_ASSERT(_sg.valid);
-    SOKOL_ASSERT(pass_action);
-    SOKOL_ASSERT((pass_action->_start_canary == 0) && (pass_action->_end_canary == 0));
-    _sg.cur_atts = atts_id;
-    _sg_attachments_t* atts = _sg_lookup_attachments(&_sg.pools, atts_id.id);
-    if (atts && _sg_validate_begin_pass(atts)) {
-        _sg.pass_valid = true;
-        sg_pass_action pa;
-        _sg_resolve_default_pass_action(pass_action, &pa);
-        _sg_begin_pass(atts, &pa, atts->cmn.width, atts->cmn.height);
-        _SG_TRACE_ARGS(begin_pass, atts_id, &pa);
-    } else {
-        _sg.pass_valid = false;
+    SOKOL_ASSERT(pass);
+    SOKOL_ASSERT((pass->_start_canary == 0) && (pass->_end_canary == 0));
+    _sg.pass_valid = false;
+    _sg.cur_atts.id = SG_INVALID_ID;
+    _sg_attachments_t* atts = _sg_lookup_attachments(&_sg.pools, pass->attachments.id);
+    if (0 == atts) {
+        _SG_ERROR(BEGINPASS_ATTACHMENT_INVALID);
+        return;
     }
+    if (!_sg_validate_begin_pass(atts)) {
+        return;
+    }
+    _sg.pass_valid = true;
+    _sg.cur_atts = pass->attachments;
+    sg_pass_action pa;
+    _sg_resolve_pass_action(&pass->action, &pa);
+    _sg_begin_pass(atts, &pa, atts->cmn.width, atts->cmn.height);
+    _SG_TRACE_ARGS(begin_pass, pass);
 }
 
 SOKOL_API_IMPL void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left) {
@@ -18143,14 +18174,14 @@ SOKOL_API_IMPL sg_attachments_desc sg_query_attachments_desc(sg_attachments atts
     _sg_clear(&desc, sizeof(desc));
     const _sg_attachments_t* atts = _sg_lookup_attachments(&_sg.pools, atts_id.id);
     if (atts) {
-        for (int i = 0; i < atts->cmn.num_color_atts; i++) {
-            desc.color_attachments[i].image = atts->cmn.color_atts[i].image_id;
-            desc.color_attachments[i].mip_level = atts->cmn.color_atts[i].mip_level;
-            desc.color_attachments[i].slice = atts->cmn.color_atts[i].slice;
+        for (int i = 0; i < atts->cmn.num_colors; i++) {
+            desc.colors[i].image = atts->cmn.colors[i].image_id;
+            desc.colors[i].mip_level = atts->cmn.colors[i].mip_level;
+            desc.colors[i].slice = atts->cmn.colors[i].slice;
         }
-        desc.depth_stencil_attachment.image = atts->cmn.ds_att.image_id;
-        desc.depth_stencil_attachment.mip_level = atts->cmn.ds_att.mip_level;
-        desc.depth_stencil_attachment.slice = atts->cmn.ds_att.slice;
+        desc.depth_stencil.image = atts->cmn.depth_stencil.image_id;
+        desc.depth_stencil.mip_level = atts->cmn.depth_stencil.mip_level;
+        desc.depth_stencil.slice = atts->cmn.depth_stencil.slice;
     }
     return desc;
 }
@@ -18295,10 +18326,10 @@ SOKOL_API_IMPL sg_d3d11_attachments_info sg_d3d11_query_pass_info(sg_attachments
         const _sg_attachments_t* atts = _sg_lookup_attachments(&_sg.pools, atts_id.id);
         if (atts) {
             for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-                res.color_rtv[i] = (const void*) atts->d3d11.color_atts[i].view.rtv;
-                res.resolve_rtv[i] = (const void*) atts->d3d11.resolve_atts[i].view.rtv;
+                res.color_rtv[i] = (const void*) atts->d3d11.colors[i].view.rtv;
+                res.resolve_rtv[i] = (const void*) atts->d3d11.resolves[i].view.rtv;
             }
-            res.dsv = (const void*) atts->d3d11.ds_att.view.dsv;
+            res.dsv = (const void*) atts->d3d11.depth_stencil.view.dsv;
         }
     #else
         _SOKOL_UNUSED(atts_id);
@@ -18555,10 +18586,10 @@ SOKOL_API_IMPL sg_wgpu_attachments_info sg_wgpu_query_attachments_info(sg_attach
         const _sg_attachments_t* atts = _sg_lookup_attachments(&_sg.pools, atts_id.id);
         if (atts) {
             for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-                res.color_view[i] = (const void*) atts->wgpu.color_atts[i].view;
-                res.resolve_view[i] = (const void*) atts->wgpu.resolve_atts[i].view;
+                res.color_view[i] = (const void*) atts->wgpu.colors[i].view;
+                res.resolve_view[i] = (const void*) atts->wgpu.resolves[i].view;
             }
-            res.ds_view = (const void*) atts->wgpu.ds_att.view;
+            res.ds_view = (const void*) atts->wgpu.depth_stencil.view;
         }
     #else
         _SOKOL_UNUSED(atts_id);
