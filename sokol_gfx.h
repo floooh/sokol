@@ -10471,7 +10471,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
 
     // copy image pointers
     for (int i = 0; i < atts->cmn.num_colors; i++) {
-        const sg_attachment_desc* color_desc = &desc->color_attachments[i];
+        const sg_attachment_desc* color_desc = &desc->colors[i];
         _SOKOL_UNUSED(color_desc);
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
         SOKOL_ASSERT(0 == atts->d3d11.colors[i].image);
@@ -10479,7 +10479,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
         SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(color_images[i]->cmn.pixel_format));
         atts->d3d11.colors[i].image = color_images[i];
 
-        const sg_attachment_desc* resolve_desc = &desc->resolve_attachments[i];
+        const sg_attachment_desc* resolve_desc = &desc->resolves[i];
         if (resolve_desc->image.id != SG_INVALID_ID) {
             SOKOL_ASSERT(0 == atts->d3d11.resolves[i].image);
             SOKOL_ASSERT(resolve_images[i] && (resolve_images[i]->slot.id == resolve_desc->image.id));
@@ -10488,7 +10488,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
         }
     }
     SOKOL_ASSERT(0 == atts->d3d11.depth_stencil.image);
-    const sg_attachment_desc* ds_desc = &desc->depth_stencil_attachment;
+    const sg_attachment_desc* ds_desc = &desc->depth_stencil;
     if (ds_desc->image.id != SG_INVALID_ID) {
         SOKOL_ASSERT(ds_img && (ds_img->slot.id == ds_desc->image.id));
         SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(ds_img->cmn.pixel_format));
