@@ -6359,12 +6359,12 @@ _SOKOL_PRIVATE _sg_image_t* _sg_dummy_attachments_ds_image(const _sg_attachments
     return atts->dmy.depth_stencil.image;
 }
 
-_SOKOL_PRIVATE void _sg_dummy_begin_pass(_sg_attachments_t* atts, const sg_pass_action* action, int w, int h) {
+_SOKOL_PRIVATE void _sg_dummy_begin_pass(const sg_pass_action* action, _sg_attachments* atts, const sg_swapchain* swapchain) {
     SOKOL_ASSERT(action);
-    _SOKOL_UNUSED(atts);
+    SOKOL_ASSERT(swapchain);
     _SOKOL_UNUSED(action);
-    _SOKOL_UNUSED(w);
-    _SOKOL_UNUSED(h);
+    _SOKOL_UNUSED(atts);
+    _SOKOL_UNUSED(swapchain);
 }
 
 _SOKOL_PRIVATE void _sg_dummy_end_pass(void) {
