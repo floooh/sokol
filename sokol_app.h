@@ -3914,6 +3914,20 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     [_sapp.macos.window makeKeyAndOrderFront:nil];
     _sapp_macos_update_dimensions();
     [NSEvent setMouseCoalescingEnabled:NO];
+
+    // workaround for window not being focused during a long init callback
+    // for details see: https://github.com/floooh/sokol/pull/982
+    // also see: https://gitlab.gnome.org/GNOME/gtk/-/issues/2342
+    NSEvent *focusevent = [NSEvent otherEventWithType:NSEventTypeAppKitDefined
+        location:NSZeroPoint
+        modifierFlags:0x40
+        timestamp:0
+        windowNumber:0
+        context:nil
+        subtype:NSEventSubtypeApplicationActivated
+        data1:0
+        data2:0];
+    [NSApp postEvent:focusevent atStart:YES];
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
