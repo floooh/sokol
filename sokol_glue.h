@@ -95,6 +95,7 @@ extern "C" {
 
 #if defined(SOKOL_GFX_INCLUDED) && defined(SOKOL_APP_INCLUDED)
 SOKOL_GLUE_API_DECL sg_context_desc sapp_sgcontext(void);
+SOKOL_GLUE_API_DECL sg_swapchain sapp_sgswapchain(void);
 #endif
 
 #ifdef __cplusplus
@@ -119,17 +120,30 @@ SOKOL_API_IMPL sg_context_desc sapp_sgcontext(void) {
     desc.depth_format = (sg_pixel_format) sapp_depth_format();
     desc.sample_count = sapp_sample_count();
     desc.metal.device = sapp_metal_get_device();
-    desc.metal.renderpass_descriptor_cb = sapp_metal_get_renderpass_descriptor;
-    desc.metal.drawable_cb = sapp_metal_get_drawable;
     desc.d3d11.device = sapp_d3d11_get_device();
     desc.d3d11.device_context = sapp_d3d11_get_device_context();
-    desc.d3d11.render_target_view_cb = sapp_d3d11_get_render_target_view;
-    desc.d3d11.depth_stencil_view_cb = sapp_d3d11_get_depth_stencil_view;
     desc.wgpu.device = sapp_wgpu_get_device();
-    desc.wgpu.render_view_cb = sapp_wgpu_get_render_view;
-    desc.wgpu.resolve_view_cb = sapp_wgpu_get_resolve_view;
-    desc.wgpu.depth_stencil_view_cb = sapp_wgpu_get_depth_stencil_view;
     return desc;
+}
+
+SOKOL_API_IMPL sg_swapchain sapp_sgswapchain(void) {
+    sg_swapchain swapchain;
+    memset(&swapchain, 0, sizeof(swapchain));
+    swapchain.width = sapp_width();
+    swapchain.height = sapp_height();
+    swapchain.sample_count = sapp_sample_count();
+    swapchain.color_format = (sg_pixel_format)sapp_color_format();
+    swapchain.depth_format = (sg_pixel_format)sapp_depth_format();
+    swapchain.metal.render_pass_descriptor = sapp_metal_get_renderpass_descriptor();
+    swapchain.metal.drawable = sapp_metal_get_drawable();
+    swapchain.d3d11.render_target_view = sapp_d3d11_get_render_target_view();
+    swapchain.d3d11.depth_stencil_view = sapp_d3d11_get_depth_stencil_view();
+    swapchain.wgpu.render_view = sapp_wgpu_get_render_view();
+    swapchain.wgpu.resolve_view = sapp_wgpu_get_resolve_view();
+    swapchain.wgpu.depth_stencil_view = sapp_wgpu_get_depth_stencil_view();
+    // FIXME!
+    // swapchain.gl.framebuffer = sapp_gl_get_framebuffer();
+    return swapchain;
 }
 #endif
 
