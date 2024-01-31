@@ -1,5 +1,17 @@
 ## Updates
 
+#### 31-Jan-2024:
+
+- sokol_app.h macOS: merged a workaround for the application window not being focused
+  if the init callback takes a while (not reproducible on my M1 Mac with latest Sonoma,
+  but might fix the issue for older Macs, and the change seems harmless enough -
+  sokol_app.h essentially sends a focusEvent to itself.
+
+  Related issue: https://github.com/floooh/sokol/issues/757
+  Implemented in PR: https://github.com/floooh/sokol/pull/982
+
+  Many thanks to @zoo-3d for investigating the issue and the PR!
+
 #### 28-Jan-2024:
 
 - sokol_app.h web: the canvas resize callback is now unregistered on cleanup.
