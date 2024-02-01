@@ -3777,6 +3777,8 @@ static sdtx_context_desc_t _sdtx_context_desc_defaults(const sdtx_context_desc_t
     res.tab_width = _sdtx_def(res.tab_width, _SDTX_DEFAULT_TAB_WIDTH);
     // keep pixel format attrs are passed as is into pipeline creation
     SOKOL_ASSERT(res.char_buf_size > 0);
+    SOKOL_ASSERT(!isnan(res.canvas_width));
+    SOKOL_ASSERT(!isnan(res.canvas_height));
     SOKOL_ASSERT(res.canvas_width > 0.0f);
     SOKOL_ASSERT(res.canvas_height > 0.0f);
     return res;
@@ -4336,6 +4338,8 @@ SOKOL_API_IMPL void sdtx_font(int font_index) {
 
 SOKOL_API_IMPL void sdtx_canvas(float w, float h) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    SOKOL_ASSERT(!isnan(w));
+    SOKOL_ASSERT(!isnan(h));
     SOKOL_ASSERT((w > 0.0f) && (h > 0.0f));
     _sdtx_context_t* ctx = _sdtx.cur_ctx;
     if (ctx) {
