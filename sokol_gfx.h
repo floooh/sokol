@@ -5505,13 +5505,6 @@ typedef struct {
 typedef struct {
     bool valid;
     WGPUDevice dev;
-    WGPUTextureView (*render_view_cb)(void);
-    WGPUTextureView (*render_view_userdata_cb)(void*);
-    WGPUTextureView (*resolve_view_cb)(void);
-    WGPUTextureView (*resolve_view_userdata_cb)(void*);
-    WGPUTextureView (*depth_stencil_view_cb)(void);
-    WGPUTextureView (*depth_stencil_view_userdata_cb)(void*);
-    void* user_data;
     bool in_pass;
     bool use_indexed_draw;
     int cur_width;
@@ -12265,6 +12258,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass_action* action, _sg_attachm
     SOKOL_ASSERT(nil == _sg.mtl.cmd_encoder);
     SOKOL_ASSERT(nil == _sg.mtl.cur_drawable);
     _sg.mtl.in_pass = true;
+    // FIXME: move this up into sg_begin_pass
     if (atts) {
         _sg.mtl.cur_width = atts->cmn.width;
         _sg.mtl.cur_height = atts->cmn.height;
@@ -13761,20 +13755,10 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_vertex_buffers(_sg_bindings_t* bnd) {
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->context.wgpu.device);
-    SOKOL_ASSERT(desc->context.wgpu.render_view_cb || desc->context.wgpu.render_view_userdata_cb);
-    SOKOL_ASSERT(desc->context.wgpu.resolve_view_cb || desc->context.wgpu.resolve_view_userdata_cb);
-    SOKOL_ASSERT(desc->context.wgpu.depth_stencil_view_cb || desc->context.wgpu.depth_stencil_view_userdata_cb);
     SOKOL_ASSERT(desc->uniform_buffer_size > 0);
     _sg.backend = SG_BACKEND_WGPU;
     _sg.wgpu.valid = true;
     _sg.wgpu.dev = (WGPUDevice) desc->context.wgpu.device;
-    _sg.wgpu.render_view_cb = (WGPUTextureView(*)(void)) desc->context.wgpu.render_view_cb;
-    _sg.wgpu.render_view_userdata_cb = (WGPUTextureView(*)(void*)) desc->context.wgpu.render_view_userdata_cb;
-    _sg.wgpu.resolve_view_cb = (WGPUTextureView(*)(void)) desc->context.wgpu.resolve_view_cb;
-    _sg.wgpu.resolve_view_userdata_cb = (WGPUTextureView(*)(void*)) desc->context.wgpu.resolve_view_userdata_cb;
-    _sg.wgpu.depth_stencil_view_cb = (WGPUTextureView(*)(void)) desc->context.wgpu.depth_stencil_view_cb;
-    _sg.wgpu.depth_stencil_view_userdata_cb = (WGPUTextureView(*)(void*)) desc->context.wgpu.depth_stencil_view_userdata_cb;
-    _sg.wgpu.user_data = desc->context.wgpu.user_data;
     _sg.wgpu.queue = wgpuDeviceGetQueue(_sg.wgpu.dev);
     SOKOL_ASSERT(_sg.wgpu.queue);
 
@@ -14414,17 +14398,23 @@ _SOKOL_PRIVATE void _sg_wgpu_init_ds_att(WGPURenderPassDepthStencilAttachment* w
     wgpu_att->stencilReadOnly = false;
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_attachments_t* atts, const sg_pass_action* action, int w, int h) {
+_SOKOL_PRIVATE void _sg_wgpu_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain) {
     SOKOL_ASSERT(action);
+    SOKOL_ASSERT(swapchain);
     SOKOL_ASSERT(!_sg.wgpu.in_pass);
     SOKOL_ASSERT(_sg.wgpu.cmd_enc);
     SOKOL_ASSERT(_sg.wgpu.dev);
-    SOKOL_ASSERT(_sg.wgpu.render_view_cb || _sg.wgpu.render_view_userdata_cb);
-    SOKOL_ASSERT(_sg.wgpu.resolve_view_cb || _sg.wgpu.resolve_view_userdata_cb);
-    SOKOL_ASSERT(_sg.wgpu.depth_stencil_view_cb || _sg.wgpu.depth_stencil_view_userdata_cb);
     _sg.wgpu.in_pass = true;
-    _sg.wgpu.cur_width = w;
-    _sg.wgpu.cur_height = h;
+    // FIXME: move this up into sg_begin_pass
+    if (atts) {
+        _sg.wgpu.cur_width = atts->cmn.width;
+        _sg.wgpu.cur_height = atts->cmn.height;
+    } else {
+        SOKOL_ASSERT(swapchain->width > 0);
+        SOKOL_ASSERT(swapchain->height > 0);
+        _sg.wgpu.cur_width = swapchain->width;
+        _sg.wgpu.cur_height = swapchain->height;
+    }
     _sg.wgpu.cur_pipeline = 0;
     _sg.wgpu.cur_pipeline_id.id = SG_INVALID_ID;
 
@@ -14446,14 +14436,15 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_attachments_t* atts, const sg_pass_a
             wgpu_pass_desc.depthStencilAttachment = &wgpu_ds_att;
         }
     } else {
-        WGPUTextureView wgpu_color_view = _sg.wgpu.render_view_cb ? _sg.wgpu.render_view_cb() : _sg.wgpu.render_view_userdata_cb(_sg.wgpu.user_data);
-        WGPUTextureView wgpu_resolve_view = _sg.wgpu.resolve_view_cb ? _sg.wgpu.resolve_view_cb() : _sg.wgpu.resolve_view_userdata_cb(_sg.wgpu.user_data);
-        WGPUTextureView wgpu_depth_stencil_view = _sg.wgpu.depth_stencil_view_cb ? _sg.wgpu.depth_stencil_view_cb() : _sg.wgpu.depth_stencil_view_userdata_cb(_sg.wgpu.user_data);
+        WGPUTextureView wgpu_color_view = (WGPUTextureView) swapchain->wgpu.render_view;
+        WGPUTextureView wgpu_resolve_view = (WGPUTextureView) swapchain->wgpu.resolve_view;
+        WGPUTextureView wgpu_depth_stencil_view = (WGPUTextureView) swapchain->wgpu.depth_stencil_view;
         _sg_wgpu_init_color_att(&wgpu_color_att[0], &action->colors[0], wgpu_color_view, wgpu_resolve_view);
         wgpu_pass_desc.colorAttachmentCount = 1;
         wgpu_pass_desc.colorAttachments = &wgpu_color_att[0];
         if (wgpu_depth_stencil_view) {
-            _sg_wgpu_init_ds_att(&wgpu_ds_att, action, _sg.desc.context.depth_format, wgpu_depth_stencil_view);
+            SOKOL_ASSERT(swapchain->depth_format > SG_PIXELFORMAT_NONE);
+            _sg_wgpu_init_ds_att(&wgpu_ds_att, action, swapchain->depth_format, wgpu_depth_stencil_view);
         }
         wgpu_pass_desc.depthStencilAttachment = &wgpu_ds_att;
     }
