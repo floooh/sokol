@@ -5219,11 +5219,6 @@ typedef struct {
     bool valid;
     ID3D11Device* dev;
     ID3D11DeviceContext* ctx;
-    const void* (*rtv_cb)(void);
-    const void* (*rtv_userdata_cb)(void*);
-    const void* (*dsv_cb)(void);
-    const void* (*dsv_userdata_cb)(void*);
-    void* user_data;
     bool in_pass;
     bool use_indexed_draw;
     bool use_instanced_draw;
@@ -5234,8 +5229,6 @@ typedef struct {
     sg_attachments cur_atts_id;
     _sg_pipeline_t* cur_pipeline;
     sg_pipeline cur_pipeline_id;
-    ID3D11RenderTargetView* cur_rtvs[SG_MAX_COLOR_ATTACHMENTS];
-    ID3D11DepthStencilView* cur_dsv;
     // on-demand loaded d3dcompiler_47.dll handles
     HINSTANCE d3dcompiler_dll;
     bool d3dcompiler_dll_load_failed;
@@ -9851,16 +9844,9 @@ _SOKOL_PRIVATE void _sg_d3d11_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->context.d3d11.device);
     SOKOL_ASSERT(desc->context.d3d11.device_context);
-    SOKOL_ASSERT(desc->context.d3d11.render_target_view_cb || desc->context.d3d11.render_target_view_userdata_cb);
-    SOKOL_ASSERT(desc->context.d3d11.depth_stencil_view_cb || desc->context.d3d11.depth_stencil_view_userdata_cb);
     _sg.d3d11.valid = true;
     _sg.d3d11.dev = (ID3D11Device*) desc->context.d3d11.device;
     _sg.d3d11.ctx = (ID3D11DeviceContext*) desc->context.d3d11.device_context;
-    _sg.d3d11.rtv_cb = desc->context.d3d11.render_target_view_cb;
-    _sg.d3d11.rtv_userdata_cb = desc->context.d3d11.render_target_view_userdata_cb;
-    _sg.d3d11.dsv_cb = desc->context.d3d11.depth_stencil_view_cb;
-    _sg.d3d11.dsv_userdata_cb = desc->context.d3d11.depth_stencil_view_userdata_cb;
-    _sg.d3d11.user_data = desc->context.d3d11.user_data;
     _sg_d3d11_init_caps();
 }
 
@@ -10623,67 +10609,65 @@ _SOKOL_PRIVATE _sg_image_t* _sg_d3d11_attachments_ds_image(const _sg_attachments
     return atts->d3d11.depth_stencil.image;
 }
 
-_SOKOL_PRIVATE void _sg_d3d11_begin_pass(_sg_attachments_t* atts, const sg_pass_action* action, int w, int h) {
+_SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain) {
     SOKOL_ASSERT(action);
+    SOKOL_ASSERT(swapchain);
     SOKOL_ASSERT(!_sg.d3d11.in_pass);
-    SOKOL_ASSERT(_sg.d3d11.rtv_cb || _sg.d3d11.rtv_userdata_cb);
-    SOKOL_ASSERT(_sg.d3d11.dsv_cb || _sg.d3d11.dsv_userdata_cb);
     _sg.d3d11.in_pass = true;
-    _sg.d3d11.cur_width = w;
-    _sg.d3d11.cur_height = h;
+    // FIXME: this should go up into sg_begin_pass()
+    if (atts) {
+        _sg.d3d11.cur_width = atts->cmn.width;
+        _sg.d3d11.cur_height = atts->cmn.height;
+    } else {
+        SOKOL_ASSERT(swapchain->width > 0);
+        SOKOL_ASSERT(swapchain->height > 0);
+        _sg.d3d11.cur_width = swapchain->width;
+        _sg.d3d11.cur_height = swapchain->height;
+    }
+    _sg.d3d11.num_rtvs = 0;
+    ID3D11RenderTargetView* rtvs[SG_MAX_COLOR_ATTACHMENTS] = { 0 };
+    ID3D11DepthStencilView* dsv = 0;
     if (atts) {
         _sg.d3d11.cur_atts = atts;
         _sg.d3d11.cur_atts_id.id = atts->slot.id;
-        _sg.d3d11.num_rtvs = 0;
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-            _sg.d3d11.cur_rtvs[i] = atts->d3d11.colors[i].view.rtv;
-            if (_sg.d3d11.cur_rtvs[i]) {
+            rtvs[i] = atts->d3d11.colors[i].view.rtv;
+            if (rtvs[i]) {
                 _sg.d3d11.num_rtvs++;
             }
         }
-        _sg.d3d11.cur_dsv = atts->d3d11.depth_stencil.view.dsv;
+        dsv = atts->d3d11.depth_stencil.view.dsv;
     } else {
-        // render to default frame buffer
+        // NOTE: depth-stencil-view is optional
+        SOKOL_ASSERT(swapchain->d3d11.render_target_view);
         _sg.d3d11.cur_atts = 0;
         _sg.d3d11.cur_atts_id.id = SG_INVALID_ID;
         _sg.d3d11.num_rtvs = 1;
-        if (_sg.d3d11.rtv_cb) {
-            _sg.d3d11.cur_rtvs[0] = (ID3D11RenderTargetView*) _sg.d3d11.rtv_cb();
-        } else {
-            _sg.d3d11.cur_rtvs[0] = (ID3D11RenderTargetView*) _sg.d3d11.rtv_userdata_cb(_sg.d3d11.user_data);
-        }
-        for (int i = 1; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-            _sg.d3d11.cur_rtvs[i] = 0;
-        }
-        if (_sg.d3d11.dsv_cb) {
-            _sg.d3d11.cur_dsv = (ID3D11DepthStencilView*) _sg.d3d11.dsv_cb();
-        } else {
-            _sg.d3d11.cur_dsv = (ID3D11DepthStencilView*) _sg.d3d11.dsv_userdata_cb(_sg.d3d11.user_data);
-        }
-        SOKOL_ASSERT(_sg.d3d11.cur_rtvs[0] && _sg.d3d11.cur_dsv);
+        rtvs[0] = (ID3D11RenderTargetView*) swapchain->d3d11.render_target_view;
+        dsv = (ID3D11DepthStencilView*) swapchain->d3d11.depth_stencil_view;
     }
     // apply the render-target- and depth-stencil-views
-    _sg_d3d11_OMSetRenderTargets(_sg.d3d11.ctx, SG_MAX_COLOR_ATTACHMENTS, _sg.d3d11.cur_rtvs, _sg.d3d11.cur_dsv);
+    _sg_d3d11_OMSetRenderTargets(_sg.d3d11.ctx, SG_MAX_COLOR_ATTACHMENTS, rtvs, dsv);
     _sg_stats_add(d3d11.pass.num_om_set_render_targets, 1);
 
     // set viewport and scissor rect to cover whole screen
     D3D11_VIEWPORT vp;
     _sg_clear(&vp, sizeof(vp));
-    vp.Width = (FLOAT) w;
-    vp.Height = (FLOAT) h;
+    vp.Width = (FLOAT) _sg.d3d11.cur_width;
+    vp.Height = (FLOAT) _sg.d3d11.cur_height;
     vp.MaxDepth = 1.0f;
     _sg_d3d11_RSSetViewports(_sg.d3d11.ctx, 1, &vp);
     D3D11_RECT rect;
     rect.left = 0;
     rect.top = 0;
-    rect.right = w;
-    rect.bottom = h;
+    rect.right = _sg.d3d11.cur_width;
+    rect.bottom = _sg.d3d11.cur_height;
     _sg_d3d11_RSSetScissorRects(_sg.d3d11.ctx, 1, &rect);
 
     // perform clear action
     for (int i = 0; i < _sg.d3d11.num_rtvs; i++) {
         if (action->colors[i].load_action == SG_LOADACTION_CLEAR) {
-            _sg_d3d11_ClearRenderTargetView(_sg.d3d11.ctx, _sg.d3d11.cur_rtvs[i], &action->colors[i].clear_value.r);
+            _sg_d3d11_ClearRenderTargetView(_sg.d3d11.ctx, rtvs[i], &action->colors[i].clear_value.r);
             _sg_stats_add(d3d11.pass.num_clear_render_target_view, 1);
         }
     }
@@ -10694,8 +10678,8 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(_sg_attachments_t* atts, const sg_pass_
     if (action->stencil.load_action == SG_LOADACTION_CLEAR) {
         ds_flags |= D3D11_CLEAR_STENCIL;
     }
-    if ((0 != ds_flags) && _sg.d3d11.cur_dsv) {
-        _sg_d3d11_ClearDepthStencilView(_sg.d3d11.ctx, _sg.d3d11.cur_dsv, ds_flags, action->depth.clear_value, action->stencil.clear_value);
+    if ((0 != ds_flags) && dsv) {
+        _sg_d3d11_ClearDepthStencilView(_sg.d3d11.ctx, dsv, ds_flags, action->depth.clear_value, action->stencil.clear_value);
         _sg_stats_add(d3d11.pass.num_clear_depth_stencil_view, 1);
     }
 }
@@ -10740,15 +10724,10 @@ _SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
             }
         }
     }
-
     _sg.d3d11.cur_atts = 0;
     _sg.d3d11.cur_atts_id.id = SG_INVALID_ID;
     _sg.d3d11.cur_pipeline = 0;
     _sg.d3d11.cur_pipeline_id.id = SG_INVALID_ID;
-    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-        _sg.d3d11.cur_rtvs[i] = 0;
-    }
-    _sg.d3d11.cur_dsv = 0;
     _sg_d3d11_clear_state();
 }
 
@@ -12431,7 +12410,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass_action* action, _sg_attachm
             }
         }
     } else {
-        // setup pass descriptor for default rendering
+        // setup pass descriptor for swapchain rendering
         pass_desc.colorAttachments[0].loadAction = _sg_mtl_load_action(action->colors[0].load_action);
         sg_color c = action->colors[0].clear_value;
         pass_desc.colorAttachments[0].clearColor = MTLClearColorMake(c.r, c.g, c.b, c.a);
