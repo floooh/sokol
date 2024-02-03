@@ -3418,6 +3418,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_NO_RT, "pass depth attachment image must be have render_target=true") \
     _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SIZES, "pass depth attachment image size must match color attachment image size") \
     _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SAMPLE_COUNT, "pass depth attachment sample count must match color attachment sample count") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_CANARY, "sg_begin_pass: pass struct not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_ATTACHMENTS_EXISTS, "sg_begin_pass: attachments object no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_ATTACHMENTS_VALID, "sg_begin_pass: attachemnts object not in resource state VALID") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE, "sg_begin_pass: one or more color attachment images are not valid") \
@@ -3452,6 +3453,8 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_PIPELINE_VALID, "sg_apply_pipeline: pipeline object not in valid state") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_SHADER_EXISTS, "sg_apply_pipeline: shader object no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_SHADER_VALID, "sg_apply_pipeline: shader object not in valid state") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_CURPASS_ATTACHMENTS_EXISTS, "sg_apply_pipeline: current pass attachments no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_CURPASS_ATTACHMENTS_VALID, "sg_apply_pipeline: current pass attachments not in valid state") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_ATT_COUNT, "sg_apply_pipeline: number of pipeline color attachments doesn't match number of pass color attachments") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_COLOR_FORMAT, "sg_apply_pipeline: pipeline color attachment pixel format doesn't match pass color attachment pixel format") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_DEPTH_FORMAT, "sg_apply_pipeline: pipeline depth pixel_format doesn't match pass depth attachment pixel format") \
@@ -4939,7 +4942,7 @@ typedef struct {
 
 typedef struct {
     _sg_slot_t slot;
-    _sg_pass_common_t cmn;
+    _sg_attachemnts_common_t cmn;
     struct {
         _sg_dummy_attachment_t colors[SG_MAX_COLOR_ATTACHMENTS];
         _sg_dummy_attachment_t resolves[SG_MAX_COLOR_ATTACHMENTS];
@@ -5356,10 +5359,6 @@ typedef struct {
     int ub_size;
     int cur_ub_offset;
     uint8_t* cur_ub_base_ptr;
-    bool in_pass;
-    bool pass_valid;
-    int cur_width;
-    int cur_height;
     _sg_mtl_state_cache_t state_cache;
     _sg_mtl_idpool_t idpool;
     dispatch_semaphore_t sem;
@@ -5580,10 +5579,21 @@ typedef struct {
     bool valid;
     sg_desc desc;       // original desc with default values patched in
     uint32_t frame_index;
-    sg_attachments cur_atts;
+    struct {
+        bool valid;
+        bool in_pass;
+        sg_attachments atts_id;     // SG_INVALID_ID in a swapchain pass
+        _sg_attachments_t* atts;    // 0 in a swapchain pass
+        int width;
+        int height;
+        struct {
+            sg_pixel_format color_fmt;
+            sg_pixel_format depth_fmt;
+            int sample_count;
+        } swapchain;
+    } cur_pass;
     sg_pipeline cur_pipeline;
-    bool pass_valid;
-    bool bindings_applied;
+    bool apply_bindings_called;
     bool next_draw_valid;
     #if defined(SOKOL_DEBUG)
     sg_log_item validate_error;
@@ -12253,21 +12263,9 @@ _SOKOL_PRIVATE _sg_image_t* _sg_mtl_attachments_ds_image(const _sg_attachments_t
 _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain) {
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(swapchain);
-    SOKOL_ASSERT(!_sg.mtl.in_pass);
     SOKOL_ASSERT(_sg.mtl.cmd_queue);
     SOKOL_ASSERT(nil == _sg.mtl.cmd_encoder);
     SOKOL_ASSERT(nil == _sg.mtl.cur_drawable);
-    _sg.mtl.in_pass = true;
-    // FIXME: move this up into sg_begin_pass
-    if (atts) {
-        _sg.mtl.cur_width = atts->cmn.width;
-        _sg.mtl.cur_height = atts->cmn.height;
-    } else {
-        SOKOL_ASSERT(swapchain->width > 0);
-        SOKOL_ASSERT(swapchain->height > 0);
-        _sg.mtl.cur_width = swapchain->width;
-        _sg.mtl.cur_height = swapchain->height;
-    }
     _sg_mtl_clear_state_cache();
 
     /*
@@ -12304,9 +12302,12 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass_action* action, _sg_attachm
         // offscreen render pass
         pass_desc = [MTLRenderPassDescriptor renderPassDescriptor];
     } else {
-        // a swapchain pass descriptor will not be valid if window is minimized, don't do any rendering in this case
+        // NOTE: at least in macOS Sonoma this no longer seems to be the case, the
+        // render pass descriptor is also valid in a minimized window
+        // ===
+        // an MTKView render pass descriptor will not be valid if window is minimized, don't do any rendering in this case
         if (0 == swapchain->metal.render_pass_descriptor) {
-            _sg.mtl.pass_valid = false;
+            _sg.cur_pass.valid = false;
             return;
         }
         pass_desc = (__bridge MTLRenderPassDescriptor*) swapchain->metal.render_pass_descriptor;
@@ -12318,7 +12319,6 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass_action* action, _sg_attachm
         _sg.mtl.cur_drawable = (__bridge id<MTLDrawable>) swapchain->metal.drawable;
     }
     SOKOL_ASSERT(pass_desc);
-    _sg.mtl.pass_valid = true;
     if (atts) {
         // setup pass descriptor for offscreen rendering
         SOKOL_ASSERT(atts->slot.state == SG_RESOURCESTATE_VALID);
@@ -12414,10 +12414,13 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass_action* action, _sg_attachm
         pass_desc.stencilAttachment.clearStencil = action->stencil.clear_value;
     }
 
+    // NOTE: at least in macOS Sonoma, the following is no longer the case, a valid
+    // render command encoder is also returned in a minimized window
+    // ===
     // create a render command encoder, this might return nil if window is minimized
     _sg.mtl.cmd_encoder = [_sg.mtl.cmd_buffer renderCommandEncoderWithDescriptor:pass_desc];
     if (nil == _sg.mtl.cmd_encoder) {
-        _sg.mtl.pass_valid = false;
+        _sg.cur_pass.valid = false;
         return;
     }
 
@@ -12426,9 +12429,6 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass_action* action, _sg_attachm
 }
 
 _SOKOL_PRIVATE void _sg_mtl_end_pass(void) {
-    SOKOL_ASSERT(_sg.mtl.in_pass);
-    _sg.mtl.in_pass = false;
-    _sg.mtl.pass_valid = false;
     if (nil != _sg.mtl.cmd_encoder) {
         [_sg.mtl.cmd_encoder endEncoding];
         // NOTE: MTLRenderCommandEncoder is autoreleased
@@ -12442,8 +12442,6 @@ _SOKOL_PRIVATE void _sg_mtl_end_pass(void) {
 }
 
 _SOKOL_PRIVATE void _sg_mtl_commit(void) {
-    SOKOL_ASSERT(!_sg.mtl.in_pass);
-    SOKOL_ASSERT(!_sg.mtl.pass_valid);
     SOKOL_ASSERT(nil == _sg.mtl.cmd_encoder);
     SOKOL_ASSERT(nil != _sg.mtl.cmd_buffer);
 
@@ -12464,14 +12462,11 @@ _SOKOL_PRIVATE void _sg_mtl_commit(void) {
 }
 
 _SOKOL_PRIVATE void _sg_mtl_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
-    SOKOL_ASSERT(_sg.mtl.in_pass);
-    if (!_sg.mtl.pass_valid) {
-        return;
-    }
     SOKOL_ASSERT(nil != _sg.mtl.cmd_encoder);
+    SOKOL_ASSERT(_sg.cur_pass.height > 0);
     MTLViewport vp;
     vp.originX = (double) x;
-    vp.originY = (double) (origin_top_left ? y : (_sg.mtl.cur_height - (y + h)));
+    vp.originY = (double) (origin_top_left ? y : (_sg.cur_pass.height - (y + h)));
     vp.width   = (double) w;
     vp.height  = (double) h;
     vp.znear   = 0.0;
@@ -12480,16 +12475,14 @@ _SOKOL_PRIVATE void _sg_mtl_apply_viewport(int x, int y, int w, int h, bool orig
 }
 
 _SOKOL_PRIVATE void _sg_mtl_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
-    SOKOL_ASSERT(_sg.mtl.in_pass);
-    if (!_sg.mtl.pass_valid) {
-        return;
-    }
     SOKOL_ASSERT(nil != _sg.mtl.cmd_encoder);
+    SOKOL_ASSERT(_sg.cur_pass.width > 0);
+    SOKOL_ASSERT(_sg.cur_pass.height > 0);
     // clip against framebuffer rect
-    const _sg_recti_t clip = _sg_clipi(x, y, w, h, _sg.mtl.cur_width, _sg.mtl.cur_height);
+    const _sg_recti_t clip = _sg_clipi(x, y, w, h, _sg.cur_pass.width, _sg.cur_pass.height);
     MTLScissorRect r;
     r.x = (NSUInteger)clip.x;
-    r.y = (NSUInteger) (origin_top_left ? clip.y : (_sg.mtl.cur_height - (clip.y + clip.h)));
+    r.y = (NSUInteger) (origin_top_left ? clip.y : (_sg.cur_pass.height - (clip.y + clip.h)));
     r.width = (NSUInteger)clip.w;
     r.height = (NSUInteger)clip.h;
     [_sg.mtl.cmd_encoder setScissorRect:r];
@@ -12498,10 +12491,6 @@ _SOKOL_PRIVATE void _sg_mtl_apply_scissor_rect(int x, int y, int w, int h, bool 
 _SOKOL_PRIVATE void _sg_mtl_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     SOKOL_ASSERT(pip->shader && (pip->cmn.shader_id.id == pip->shader->slot.id));
-    SOKOL_ASSERT(_sg.mtl.in_pass);
-    if (!_sg.mtl.pass_valid) {
-        return;
-    }
     SOKOL_ASSERT(nil != _sg.mtl.cmd_encoder);
 
     if (_sg.mtl.state_cache.cur_pipeline_id.id != pip->slot.id) {
@@ -12530,10 +12519,6 @@ _SOKOL_PRIVATE void _sg_mtl_apply_pipeline(_sg_pipeline_t* pip) {
 _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
     SOKOL_ASSERT(bnd);
     SOKOL_ASSERT(bnd->pip);
-    SOKOL_ASSERT(_sg.mtl.in_pass);
-    if (!_sg.mtl.pass_valid) {
-        return false;
-    }
     SOKOL_ASSERT(nil != _sg.mtl.cmd_encoder);
 
     // store index buffer binding, this will be needed later in sg_draw()
@@ -12616,10 +12601,6 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
 }
 
 _SOKOL_PRIVATE void _sg_mtl_apply_uniforms(sg_shader_stage stage_index, int ub_index, const sg_range* data) {
-    SOKOL_ASSERT(_sg.mtl.in_pass);
-    if (!_sg.mtl.pass_valid) {
-        return;
-    }
     SOKOL_ASSERT(nil != _sg.mtl.cmd_encoder);
     SOKOL_ASSERT(((size_t)_sg.mtl.cur_ub_offset + data->size) <= (size_t)_sg.mtl.ub_size);
     SOKOL_ASSERT((_sg.mtl.cur_ub_offset & (_SG_MTL_UB_ALIGN-1)) == 0);
@@ -12643,10 +12624,6 @@ _SOKOL_PRIVATE void _sg_mtl_apply_uniforms(sg_shader_stage stage_index, int ub_i
 }
 
 _SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_instances) {
-    SOKOL_ASSERT(_sg.mtl.in_pass);
-    if (!_sg.mtl.pass_valid) {
-        return;
-    }
     SOKOL_ASSERT(nil != _sg.mtl.cmd_encoder);
     SOKOL_ASSERT(_sg.mtl.state_cache.cur_pipeline && (_sg.mtl.state_cache.cur_pipeline->slot.id == _sg.mtl.state_cache.cur_pipeline_id.id));
     if (SG_INDEXTYPE_NONE != _sg.mtl.state_cache.cur_pipeline->cmn.index_type) {
@@ -15935,6 +15912,8 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
             return true;
         }
         _sg_validate_begin();
+        _SG_VALIDATE(pass->_start_canary == 0, VALIDATE_BEGINPASS_CANARY);
+        _SG_VALIDATE(pass->_end_canary == 0, VALIDATE_BEGINPASS_CANARY);
         if (pass->attachments.id == SG_INVALID_ID) {
             // this is a swapchain pass
             _SG_VALIDATE(pass->swapchain.width > 0, VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_WIDTH);
@@ -15962,27 +15941,30 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
         } else {
             // this is an 'offscreen pass'
             const _sg_attachments_t* atts = _sg_lookup_attachments(&_sg.pools, pass->attachments.id);
-            _SG_VALIDATE(atts != 0, VALIDATE_BEGINPASS_ATTACHMENTS_EXISTS);
-            _SG_VALIDATE(atts->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_ATTACHMENTS_VALID);
-            for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-                const _sg_attachment_common_t* color_att = &atts->cmn.colors[i];
-                const _sg_image_t* color_img = _sg_attachments_color_image(atts, i);
-                if (color_img) {
-                    _SG_VALIDATE(color_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE);
-                    _SG_VALIDATE(color_img->slot.id == color_att->image_id.id, VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE);
+            if (atts) {
+                _SG_VALIDATE(atts->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_ATTACHMENTS_VALID);
+                for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+                    const _sg_attachment_common_t* color_att = &atts->cmn.colors[i];
+                    const _sg_image_t* color_img = _sg_attachments_color_image(atts, i);
+                    if (color_img) {
+                        _SG_VALIDATE(color_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE);
+                        _SG_VALIDATE(color_img->slot.id == color_att->image_id.id, VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE);
+                    }
+                    const _sg_attachment_common_t* resolve_att = &atts->cmn.resolves[i];
+                    const _sg_image_t* resolve_img = _sg_attachments_resolve_image(atts, i);
+                    if (resolve_img) {
+                        _SG_VALIDATE(resolve_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_RESOLVE_ATTACHMENT_IMAGE);
+                        _SG_VALIDATE(resolve_img->slot.id == resolve_att->image_id.id, VALIDATE_BEGINPASS_RESOLVE_ATTACHMENT_IMAGE);
+                    }
                 }
-                const _sg_attachment_common_t* resolve_att = &atts->cmn.resolves[i];
-                const _sg_image_t* resolve_img = _sg_attachments_resolve_image(atts, i);
-                if (resolve_img) {
-                    _SG_VALIDATE(resolve_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_RESOLVE_ATTACHMENT_IMAGE);
-                    _SG_VALIDATE(resolve_img->slot.id == resolve_att->image_id.id, VALIDATE_BEGINPASS_RESOLVE_ATTACHMENT_IMAGE);
+                const _sg_image_t* ds_img = _sg_attachments_ds_image(atts);
+                if (ds_img) {
+                    const _sg_attachment_common_t* att = &atts->cmn.depth_stencil;
+                    _SG_VALIDATE(ds_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_DEPTHSTENCIL_ATTACHMENT_IMAGE);
+                    _SG_VALIDATE(ds_img->slot.id == att->image_id.id, VALIDATE_BEGINPASS_DEPTHSTENCIL_ATTACHMENT_IMAGE);
                 }
-            }
-            const _sg_image_t* ds_img = _sg_attachments_ds_image(atts);
-            if (ds_img) {
-                const _sg_attachment_common_t* att = &atts->cmn.depth_stencil;
-                _SG_VALIDATE(ds_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_DEPTHSTENCIL_ATTACHMENT_IMAGE);
-                _SG_VALIDATE(ds_img->slot.id == att->image_id.id, VALIDATE_BEGINPASS_DEPTHSTENCIL_ATTACHMENT_IMAGE);
+            } else {
+                _SG_VALIDATE(atts != 0, VALIDATE_BEGINPASS_ATTACHMENTS_EXISTS);
             }
             // swapchain params must be all zero!
             _SG_VALIDATE(pass->swapchain.width == 0, VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_WIDTH_NOTSET);
@@ -16031,9 +16013,13 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
         _SG_VALIDATE(pip->shader->slot.id == pip->cmn.shader_id.id, VALIDATE_APIP_SHADER_EXISTS);
         _SG_VALIDATE(pip->shader->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_SHADER_VALID);
         // check that pipeline attributes match current pass attributes
-        const _sg_attachments_t* atts = _sg_lookup_attachments(&_sg.pools, _sg.cur_atts.id);
-        if (atts) {
+        if (_sg.cur_pass.atts_id.id != SG_INVALID_ID) {
             // an offscreen pass
+            const _sg_attachments_t* atts = _sg.cur_pass.atts;
+            SOKOL_ASSERT(atts);
+            _SG_VALIDATE(atts->slot.id == _sg.cur_pass.atts_id.id, VALIDATE_APIP_CURPASS_ATTACHMENTS_EXISTS);
+            _SG_VALIDATE(atts->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_CURPASS_ATTACHMENTS_VALID);
+
             _SG_VALIDATE(pip->cmn.color_count == atts->cmn.num_colors, VALIDATE_APIP_ATT_COUNT);
             for (int i = 0; i < pip->cmn.color_count; i++) {
                 const _sg_image_t* att_img = _sg_attachments_color_image(atts, i);
@@ -16048,11 +16034,10 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
             }
         } else {
             // default pass
-            // FIXME: match against swapchain attributes
             _SG_VALIDATE(pip->cmn.color_count == 1, VALIDATE_APIP_ATT_COUNT);
-            _SG_VALIDATE(pip->cmn.colors[0].pixel_format == _sg.desc.context.color_format, VALIDATE_APIP_COLOR_FORMAT);
-            _SG_VALIDATE(pip->cmn.depth.pixel_format == _sg.desc.context.depth_format, VALIDATE_APIP_DEPTH_FORMAT);
-            _SG_VALIDATE(pip->cmn.sample_count == _sg.desc.context.sample_count, VALIDATE_APIP_SAMPLE_COUNT);
+            _SG_VALIDATE(pip->cmn.colors[0].pixel_format == _sg.cur_pass.swapchain.color_fmt, VALIDATE_APIP_COLOR_FORMAT);
+            _SG_VALIDATE(pip->cmn.depth.pixel_format == _sg.cur_pass.swapchain.depth_fmt, VALIDATE_APIP_DEPTH_FORMAT);
+            _SG_VALIDATE(pip->cmn.sample_count == _sg.cur_pass.swapchain.sample_count, VALIDATE_APIP_SAMPLE_COUNT);
         }
         return _sg_validate_end();
     #endif
@@ -17580,33 +17565,49 @@ SOKOL_API_IMPL void sg_destroy_attachments(sg_attachments atts_id) {
 
 SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
     SOKOL_ASSERT(_sg.valid);
+    SOKOL_ASSERT(!_sg.cur_pass.valid);
+    SOKOL_ASSERT(!_sg.cur_pass.in_pass);
     SOKOL_ASSERT(pass);
     SOKOL_ASSERT((pass->_start_canary == 0) && (pass->_end_canary == 0));
-    _sg.pass_valid = false;
-    _sg.cur_atts.id = SG_INVALID_ID;
     if (!_sg_validate_begin_pass(pass)) {
         return;
     }
-    _sg_attachments_t* atts = 0;
     if (pass->attachments.id != SG_INVALID_ID) {
-        atts = _sg_lookup_attachments(&_sg.pools, pass->attachments.id);
-        if (0 == atts) {
+        // an offscreen pass
+        SOKOL_ASSERT(_sg.cur_pass.atts == 0);
+        _sg.cur_pass.atts = _sg_lookup_attachments(&_sg.pools, pass->attachments.id);
+        if (0 == _sg.cur_pass.atts) {
             _SG_ERROR(BEGINPASS_ATTACHMENT_INVALID);
             return;
         }
-        _sg.cur_atts = pass->attachments;
+        _sg.cur_pass.atts_id = pass->attachments;
+        _sg.cur_pass.width = _sg.cur_pass.atts->cmn.width;
+        _sg.cur_pass.height = _sg.cur_pass.atts->cmn.height;
+    } else {
+        // a swapchain pass
+        SOKOL_ASSERT(pass->swapchain.width > 0);
+        SOKOL_ASSERT(pass->swapchain.height > 0);
+        SOKOL_ASSERT(pass->swapchain.color_format > SG_PIXELFORMAT_NONE);
+        SOKOL_ASSERT(pass->swapchain.sample_count > 0);
+        _sg.cur_pass.width = pass->swapchain.width;
+        _sg.cur_pass.height = pass->swapchain.height;
+        _sg.cur_pass.swapchain.color_fmt = pass->swapchain.color_format;
+        _sg.cur_pass.swapchain.depth_fmt = pass->swapchain.depth_format;
+        _sg.cur_pass.swapchain.sample_count = pass->swapchain.sample_count;
     }
+    _sg.cur_pass.valid = true;  // may be overruled by backend begin-pass functions
+    _sg.cur_pass.in_pass = true;
     sg_pass_action pa;
     _sg_resolve_pass_action(&pass->action, &pa);
-    _sg.pass_valid = true;
-    _sg_begin_pass(&pa, atts, &pass->swapchain);
+    _sg_begin_pass(&pa, _sg.cur_pass.atts, &pass->swapchain);
     _SG_TRACE_ARGS(begin_pass, pass);
 }
 
 SOKOL_API_IMPL void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left) {
     SOKOL_ASSERT(_sg.valid);
+    SOKOL_ASSERT(_sg.cur_pass.in_pass);
     _sg_stats_add(num_apply_viewport, 1);
-    if (!_sg.pass_valid) {
+    if (!_sg.cur_pass.valid) {
         return;
     }
     _sg_apply_viewport(x, y, width, height, origin_top_left);
@@ -17619,8 +17620,9 @@ SOKOL_API_IMPL void sg_apply_viewportf(float x, float y, float width, float heig
 
 SOKOL_API_IMPL void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left) {
     SOKOL_ASSERT(_sg.valid);
+    SOKOL_ASSERT(_sg.cur_pass.in_pass);
     _sg_stats_add(num_apply_scissor_rect, 1);
-    if (!_sg.pass_valid) {
+    if (!_sg.cur_pass.valid) {
         return;
     }
     _sg_apply_scissor_rect(x, y, width, height, origin_top_left);
@@ -17633,13 +17635,14 @@ SOKOL_API_IMPL void sg_apply_scissor_rectf(float x, float y, float width, float 
 
 SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
     SOKOL_ASSERT(_sg.valid);
+    SOKOL_ASSERT(_sg.cur_pass.in_pass);
     _sg_stats_add(num_apply_pipeline, 1);
-    _sg.bindings_applied = false;
+    _sg.apply_bindings_called = false;
     if (!_sg_validate_apply_pipeline(pip_id)) {
         _sg.next_draw_valid = false;
         return;
     }
-    if (!_sg.pass_valid) {
+    if (!_sg.cur_pass.valid) {
         return;
     }
     _sg.cur_pipeline = pip_id;
@@ -17653,14 +17656,18 @@ SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
 
 SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
     SOKOL_ASSERT(_sg.valid);
+    SOKOL_ASSERT(_sg.cur_pass.in_pass);
     SOKOL_ASSERT(bindings);
     SOKOL_ASSERT((bindings->_start_canary == 0) && (bindings->_end_canary==0));
     _sg_stats_add(num_apply_bindings, 1);
+    _sg.apply_bindings_called = true;
     if (!_sg_validate_apply_bindings(bindings)) {
         _sg.next_draw_valid = false;
         return;
     }
-    _sg.bindings_applied = true;
+    if (!_sg.cur_pass.valid) {
+        return;
+    }
 
     _sg_bindings_t bnd;
     _sg_clear(&bnd, sizeof(bnd));
@@ -17755,6 +17762,7 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
 
 SOKOL_API_IMPL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const sg_range* data) {
     SOKOL_ASSERT(_sg.valid);
+    SOKOL_ASSERT(_sg.cur_pass.in_pass);
     SOKOL_ASSERT((stage == SG_SHADERSTAGE_VS) || (stage == SG_SHADERSTAGE_FS));
     SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_SHADERSTAGE_UBS));
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
@@ -17764,7 +17772,7 @@ SOKOL_API_IMPL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const
         _sg.next_draw_valid = false;
         return;
     }
-    if (!_sg.pass_valid) {
+    if (!_sg.cur_pass.valid) {
         return;
     }
     if (!_sg.next_draw_valid) {
@@ -17776,22 +17784,23 @@ SOKOL_API_IMPL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const
 
 SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instances) {
     SOKOL_ASSERT(_sg.valid);
+    SOKOL_ASSERT(_sg.cur_pass.in_pass);
     SOKOL_ASSERT(base_element >= 0);
     SOKOL_ASSERT(num_elements >= 0);
     SOKOL_ASSERT(num_instances >= 0);
     _sg_stats_add(num_draw, 1);
     #if defined(SOKOL_DEBUG)
-        if (!_sg.bindings_applied) {
+        if (!_sg.apply_bindings_called) {
             _SG_WARN(DRAW_WITHOUT_BINDINGS);
         }
     #endif
-    if (!_sg.pass_valid) {
+    if (!_sg.cur_pass.valid) {
         return;
     }
     if (!_sg.next_draw_valid) {
         return;
     }
-    if (!_sg.bindings_applied) {
+    if (!_sg.apply_bindings_called) {
         return;
     }
     /* attempting to draw with zero elements or instances is not technically an
@@ -17806,19 +17815,19 @@ SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instance
 
 SOKOL_API_IMPL void sg_end_pass(void) {
     SOKOL_ASSERT(_sg.valid);
+    SOKOL_ASSERT(_sg.cur_pass.in_pass);
     _sg_stats_add(num_passes, 1);
-    if (!_sg.pass_valid) {
-        return;
-    }
+    // NOTE: don't exit early if !_sg.cur_pass.valid
     _sg_end_pass();
-    _sg.cur_atts.id = SG_INVALID_ID;
     _sg.cur_pipeline.id = SG_INVALID_ID;
-    _sg.pass_valid = false;
+    _sg_clear(&_sg.cur_pass, sizeof(_sg.cur_pass));
     _SG_TRACE_NOARGS(end_pass);
 }
 
 SOKOL_API_IMPL void sg_commit(void) {
     SOKOL_ASSERT(_sg.valid);
+    SOKOL_ASSERT(!_sg.cur_pass.valid);
+    SOKOL_ASSERT(!_sg.cur_pass.in_pass);
     _sg_commit();
     _sg.stats.frame_index = _sg.frame_index;
     _sg.prev_stats = _sg.stats;
