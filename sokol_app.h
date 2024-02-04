@@ -1879,6 +1879,9 @@ SOKOL_APP_API_DECL const void* sapp_wgpu_get_resolve_view(void);
 /* WebGPU: get swapchain's WGPUTextureView for the depth-stencil surface */
 SOKOL_APP_API_DECL const void* sapp_wgpu_get_depth_stencil_view(void);
 
+/* GL: get framebuffer object */
+SOKOL_APP_API_DECL uint32_t sapp_gl_get_framebuffer(void);
+
 /* Android: get native activity handle */
 SOKOL_APP_API_DECL const void* sapp_android_get_native_activity(void);
 
@@ -1990,6 +1993,10 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #error "sokol_app.h: Unknown platform"
 #endif
 
+#if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES3)
+    #define _SAPP_ANY_GL (1)
+#endif
+
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL
 #endif
@@ -2023,16 +2030,18 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #import <MetalKit/MetalKit.h>
     #endif
     #if defined(_SAPP_MACOS)
-        #if !defined(SOKOL_METAL)
+        #if defined(_SAPP_ANY_GL)
             #ifndef GL_SILENCE_DEPRECATION
             #define GL_SILENCE_DEPRECATION
             #endif
             #include <Cocoa/Cocoa.h>
+            #include <OpenGL/gl3.h>
         #endif
     #elif defined(_SAPP_IOS)
         #import <UIKit/UIKit.h>
-        #if !defined(SOKOL_METAL)
+        #if defined(_SAPP_ANY_GL)
             #import <GLKit/GLKit.h>
+            #include <OpenGLES/ES3/gl.h>
         #endif
     #endif
     #include <AvailabilityMacros.h>
@@ -2753,6 +2762,9 @@ typedef struct {
     PFNGLXSWAPINTERVALMESAPROC SwapIntervalMESA;
     PFNGLXCREATECONTEXTATTRIBSARBPROC CreateContextAttribsARB;
 
+    // special case glGetIntegerv
+    void (*GetIntegerv)(uint32_t pname, int32_t* data);
+
     // extension availability
     bool EXT_swap_control;
     bool MESA_swap_control;
@@ -2770,8 +2782,13 @@ typedef struct {
 } _sapp_egl_t;
 
 #endif // _SAPP_GLX
-
 #endif // _SAPP_LINUX
+
+#if defined(_SAPP_ANY_GL)
+typedef struct {
+    GLuint framebuffer;
+} _sapp_gl_t;
+#endif
 
 typedef struct {
     bool enabled;
@@ -2849,6 +2866,9 @@ typedef struct {
         #else
             _sapp_egl_t egl;
         #endif
+    #endif
+    #if defined(_SAPP_ANY_GL)
+        _sapp_gl_t gl;
     #endif
     char html5_canvas_selector[_SAPP_MAX_TITLE_LENGTH];
     char window_title[_SAPP_MAX_TITLE_LENGTH];      // UTF-8
@@ -4127,13 +4147,16 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events(void) {
 
 - (void)drawRect:(NSRect)rect {
     _SOKOL_UNUSED(rect);
+    #if defined(_SAPP_ANY_GL)
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
+    #endif
     _sapp_timing_measure(&_sapp.timing);
     /* Catch any last-moment input events */
     _sapp_macos_poll_input_events();
     @autoreleasepool {
         _sapp_macos_frame();
     }
-    #if !defined(SOKOL_METAL)
+    #if defined(_SAPP_ANY_GL)
     [[_sapp.macos.view openGLContext] flushBuffer];
     #endif
 }
@@ -4656,6 +4679,9 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 @implementation _sapp_ios_view
 - (void)drawRect:(CGRect)rect {
     _SOKOL_UNUSED(rect);
+    #if defined(_SAPP_ANY_GL)
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
+    #endif
     _sapp_timing_measure(&_sapp.timing);
     @autoreleasepool {
         _sapp_ios_frame();
@@ -6550,6 +6576,8 @@ _SOKOL_PRIVATE void _sapp_wgl_init(void) {
     SOKOL_ASSERT(_sapp.wgl.GetCurrentDC);
     _sapp.wgl.MakeCurrent = (PFN_wglMakeCurrent)(void*) GetProcAddress(_sapp.wgl.opengl32, "wglMakeCurrent");
     SOKOL_ASSERT(_sapp.wgl.MakeCurrent);
+    _sapp.wgl.GetIntegerv = (void(*)(uint32_t, int32_t*) GetProcAddress(_sapp.wgl.opengl32, "glGetIntegerv");
+    SOKOL_ASSERT(_sapp.wgl.GetIntegerv);
 
     _sapp.wgl.msg_hwnd = CreateWindowExW(WS_EX_OVERLAPPEDWINDOW,
         L"SOKOLAPP",
@@ -6814,6 +6842,8 @@ _SOKOL_PRIVATE void _sapp_wgl_create_context(void) {
         /* FIXME: DwmIsCompositionEnabled() (see GLFW) */
         _sapp.wgl.SwapIntervalEXT(_sapp.swap_interval);
     }
+    const uint32_t gl_framebuffer_binding = 0x8CA6;
+    _sapp.wgl.GetIntegerv(gl_framebuffer_binding, &_sapp.gl.framebuffer);
 }
 
 _SOKOL_PRIVATE void _sapp_wgl_destroy_context(void) {
@@ -11640,6 +11670,15 @@ SOKOL_API_IMPL const void* sapp_wgpu_get_depth_stencil_view(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_EMSCRIPTEN) && defined(SOKOL_WGPU)
         return (const void*) _sapp.wgpu.depth_stencil_view;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL uint32_t sapp_gl_get_framebuffer(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(_SAPP_ANY_GL)
+        return _sapp.gl.framebuffer;
     #else
         return 0;
     #endif
