@@ -8557,11 +8557,11 @@ _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
         #if defined(SOKOL_GLES3)
         // need to restore framebuffer binding before invalidate if the MSAA resolve had changed the binding
         if (fb_draw_bound) {
-            glBindFramebuffer(GL_FRAMEBUFFER, pass->gl.fb);
+            glBindFramebuffer(GL_FRAMEBUFFER, atts->gl.fb);
         }
         GLenum invalidate_atts[SG_MAX_COLOR_ATTACHMENTS + 2] = { 0 };
         int att_index = 0;
-        for (int i = 0; i < num_atts; i++) {
+        for (int i = 0; i < num_color_atts; i++) {
             if (_sg.gl.color_store_actions[i] == SG_STOREACTION_DONTCARE) {
                 invalidate_atts[att_index++] = (GLenum)(GL_COLOR_ATTACHMENT0 + i);
             }
