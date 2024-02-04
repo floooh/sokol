@@ -5507,11 +5507,8 @@ typedef struct {
 // the WGPU backend state
 typedef struct {
     bool valid;
-    WGPUDevice dev;
-    bool in_pass;
     bool use_indexed_draw;
-    int cur_width;
-    int cur_height;
+    WGPUDevice dev;
     WGPUSupportedLimits limits;
     WGPUQueue queue;
     WGPUCommandEncoder cmd_enc;
@@ -13735,11 +13732,11 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_vertex_buffers(_sg_bindings_t* bnd) {
 
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(desc->context.wgpu.device);
+    SOKOL_ASSERT(desc->environment.wgpu.device);
     SOKOL_ASSERT(desc->uniform_buffer_size > 0);
     _sg.backend = SG_BACKEND_WGPU;
     _sg.wgpu.valid = true;
-    _sg.wgpu.dev = (WGPUDevice) desc->context.wgpu.device;
+    _sg.wgpu.dev = (WGPUDevice) desc->environment.wgpu.device;
     _sg.wgpu.queue = wgpuDeviceGetQueue(_sg.wgpu.dev);
     SOKOL_ASSERT(_sg.wgpu.queue);
 
@@ -14382,20 +14379,8 @@ _SOKOL_PRIVATE void _sg_wgpu_init_ds_att(WGPURenderPassDepthStencilAttachment* w
 _SOKOL_PRIVATE void _sg_wgpu_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain) {
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(swapchain);
-    SOKOL_ASSERT(!_sg.wgpu.in_pass);
     SOKOL_ASSERT(_sg.wgpu.cmd_enc);
     SOKOL_ASSERT(_sg.wgpu.dev);
-    _sg.wgpu.in_pass = true;
-    // FIXME: move this up into sg_begin_pass
-    if (atts) {
-        _sg.wgpu.cur_width = atts->cmn.width;
-        _sg.wgpu.cur_height = atts->cmn.height;
-    } else {
-        SOKOL_ASSERT(swapchain->width > 0);
-        SOKOL_ASSERT(swapchain->height > 0);
-        _sg.wgpu.cur_width = swapchain->width;
-        _sg.wgpu.cur_height = swapchain->height;
-    }
     _sg.wgpu.cur_pipeline = 0;
     _sg.wgpu.cur_pipeline_id.id = SG_INVALID_ID;
 
@@ -14442,16 +14427,14 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(const sg_pass_action* action, _sg_attach
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_end_pass(void) {
-    SOKOL_ASSERT(_sg.wgpu.in_pass);
-    SOKOL_ASSERT(_sg.wgpu.pass_enc);
-    _sg.wgpu.in_pass = false;
-    wgpuRenderPassEncoderEnd(_sg.wgpu.pass_enc);
-    wgpuRenderPassEncoderRelease(_sg.wgpu.pass_enc);
-    _sg.wgpu.pass_enc = 0;
+    if (_sg.wgpu.pass_enc) {
+        wgpuRenderPassEncoderEnd(_sg.wgpu.pass_enc);
+        wgpuRenderPassEncoderRelease(_sg.wgpu.pass_enc);
+        _sg.wgpu.pass_enc = 0;
+    }
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
-    SOKOL_ASSERT(!_sg.wgpu.in_pass);
     SOKOL_ASSERT(_sg.wgpu.cmd_enc);
 
     _sg_wgpu_uniform_buffer_on_commit();
@@ -14473,26 +14456,24 @@ _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
-    SOKOL_ASSERT(_sg.wgpu.in_pass);
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
     // FIXME FIXME FIXME: CLIPPING THE VIEWPORT HERE IS WRONG!!!
     // (but currently required because WebGPU insists that the viewport rectangle must be
     // fully contained inside the framebuffer, but this doesn't make any sense, and also
     // isn't required by the backend APIs)
-    const _sg_recti_t clip = _sg_clipi(x, y, w, h, _sg.wgpu.cur_width, _sg.wgpu.cur_height);
+    const _sg_recti_t clip = _sg_clipi(x, y, w, h, _sg.cur_pass.width, _sg.cur_pass.height);
     float xf = (float) clip.x;
-    float yf = (float) (origin_top_left ? clip.y : (_sg.wgpu.cur_height - (clip.y + clip.h)));
+    float yf = (float) (origin_top_left ? clip.y : (_sg.cur_pass.height - (clip.y + clip.h)));
     float wf = (float) clip.w;
     float hf = (float) clip.h;
     wgpuRenderPassEncoderSetViewport(_sg.wgpu.pass_enc, xf, yf, wf, hf, 0.0f, 1.0f);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
-    SOKOL_ASSERT(_sg.wgpu.in_pass);
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
-    const _sg_recti_t clip = _sg_clipi(x, y, w, h, _sg.wgpu.cur_width, _sg.wgpu.cur_height);
+    const _sg_recti_t clip = _sg_clipi(x, y, w, h, _sg.cur_pass.width, _sg.cur_pass.height);
     uint32_t sx = (uint32_t) clip.x;
-    uint32_t sy = (uint32_t) (origin_top_left ? clip.y : (_sg.wgpu.cur_height - (clip.y + clip.h)));
+    uint32_t sy = (uint32_t) (origin_top_left ? clip.y : (_sg.cur_pass.height - (clip.y + clip.h)));
     uint32_t sw = (uint32_t) clip.w;
     uint32_t sh = (uint32_t) clip.h;
     wgpuRenderPassEncoderSetScissorRect(_sg.wgpu.pass_enc, sx, sy, sw, sh);
@@ -14501,7 +14482,6 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_scissor_rect(int x, int y, int w, int h, bool
 _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     SOKOL_ASSERT(pip->wgpu.pip);
-    SOKOL_ASSERT(_sg.wgpu.in_pass);
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
     _sg.wgpu.use_indexed_draw = (pip->cmn.index_type != SG_INDEXTYPE_NONE);
     _sg.wgpu.cur_pipeline = pip;
@@ -14512,7 +14492,6 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
 }
 
 _SOKOL_PRIVATE bool _sg_wgpu_apply_bindings(_sg_bindings_t* bnd) {
-    SOKOL_ASSERT(_sg.wgpu.in_pass);
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
     SOKOL_ASSERT(bnd);
     SOKOL_ASSERT(bnd->pip->shader && (bnd->pip->cmn.shader_id.id == bnd->pip->shader->slot.id));
@@ -14525,7 +14504,6 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindings(_sg_bindings_t* bnd) {
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(sg_shader_stage stage_index, int ub_index, const sg_range* data) {
     const uint32_t alignment = _sg.wgpu.limits.limits.minUniformBufferOffsetAlignment;
-    SOKOL_ASSERT(_sg.wgpu.in_pass);
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
     SOKOL_ASSERT(_sg.wgpu.uniform.staging);
     SOKOL_ASSERT((_sg.wgpu.uniform.offset + data->size) <= _sg.wgpu.uniform.num_bytes);
@@ -14549,7 +14527,6 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(sg_shader_stage stage_index, int ub_
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_draw(int base_element, int num_elements, int num_instances) {
-    SOKOL_ASSERT(_sg.wgpu.in_pass);
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
     SOKOL_ASSERT(_sg.wgpu.cur_pipeline && (_sg.wgpu.cur_pipeline->slot.id == _sg.wgpu.cur_pipeline_id.id));
     if (SG_INDEXTYPE_NONE != _sg.wgpu.cur_pipeline->cmn.index_type) {
@@ -15936,7 +15913,7 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
             #elif defined(SOKOL_WGPU)
                 _SG_VALIDATE(pass->swapchain.wgpu.render_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_RENDERVIEW);
                 _SG_VALIDATE(pass->swapchain.wgpu.depth_stencil_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_DEPTHSTENCILVIEW);
-                if (pass->swapchain.sample_count > 0) {
+                if (pass->swapchain.sample_count > 1) {
                     _SG_VALIDATE(pass->swapchain.wgpu.resolve_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_RESOLVEVIEW);
                 } else {
                     _SG_VALIDATE(pass->swapchain.wgpu.resolve_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_RESOLVEVIEW_NOTSET);
@@ -16839,7 +16816,7 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
     */
     sg_desc res = *desc;
     #if defined(SOKOL_WGPU)
-        SOKOL_ASSERT(SG_PIXELFORMAT_NONE != res.context.color_format);
+        SOKOL_ASSERT(SG_PIXELFORMAT_NONE != res.environment.defaults.color_format);
     #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
         res.environment.defaults.color_format = _sg_def(res.environment.defaults.color_format, SG_PIXELFORMAT_BGRA8);
     #else
