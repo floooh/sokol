@@ -5112,13 +5112,7 @@ typedef struct {
 
 typedef struct {
     bool valid;
-    bool in_pass;
-    int cur_pass_width;
-    int cur_pass_height;
     GLuint vao;
-    GLuint default_framebuffer;
-    _sg_attachments_t* cur_atts;
-    sg_attachments cur_atts_id;
     _sg_gl_state_cache_t cache;
     bool ext_anisotropic;
     GLint max_anisotropy;
@@ -7740,7 +7734,6 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
 
 _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
     _SOKOL_UNUSED(desc);
-    SOKOL_ASSERT(desc->context.gl.default_framebuffer_cb == 0 || desc->context.gl.default_framebuffer_userdata_cb == 0);
 
     // assumes that _sg.gl is already zero-initialized
     _sg.gl.valid = true;
@@ -7759,8 +7752,6 @@ _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
         _sg_gl_init_caps_gles3();
     #endif
 
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sg.gl.default_framebuffer);
-    _SG_GL_CHECK_ERROR();
     glGenVertexArrays(1, &_sg.gl.vao);
     glBindVertexArray(_sg.gl.vao);
     _SG_GL_CHECK_ERROR();
@@ -8394,7 +8385,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* at
 
 _SOKOL_PRIVATE void _sg_gl_discard_attachments(_sg_attachments_t* atts) {
     SOKOL_ASSERT(atts);
-    SOKOL_ASSERT(atts != _sg.gl.cur_atts);
     _SG_GL_CHECK_ERROR();
     if (0 != atts->gl.fb) {
         glDeleteFramebuffers(1, &atts->gl.fb);
@@ -8422,21 +8412,12 @@ _SOKOL_PRIVATE _sg_image_t* _sg_gl_attachments_ds_image(const _sg_attachments_t*
     return atts->gl.depth_stencil.image;
 }
 
-_SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_attachments_t* atts, const sg_pass_action* action, int w, int h) {
+_SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain) {
     // FIXME: what if a texture used as render target is still bound, should we
     // unbind all currently bound textures in begin pass?
     SOKOL_ASSERT(action);
-    SOKOL_ASSERT(!_sg.gl.in_pass);
+    SOKOL_ASSERT(swapchain);
     _SG_GL_CHECK_ERROR();
-    _sg.gl.in_pass = true;
-    _sg.gl.cur_atts = atts; // can be 0
-    if (atts) {
-        _sg.gl.cur_atts_id.id = atts->slot.id;
-    } else {
-        _sg.gl.cur_atts_id.id = SG_INVALID_ID;
-    }
-    _sg.gl.cur_pass_width = w;
-    _sg.gl.cur_pass_height = h;
 
     // bind the render pass framebuffer
     //
@@ -8458,15 +8439,13 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_attachments_t* atts, const sg_pass_act
         #if defined(SOKOL_GLCORE33)
         glDisable(GL_FRAMEBUFFER_SRGB);
         #endif
-        if (_sg.desc.context.gl.default_framebuffer_userdata_cb) {
-            _sg.gl.default_framebuffer = _sg.desc.context.gl.default_framebuffer_userdata_cb(_sg.desc.context.gl.user_data);
-        } else if (_sg.desc.context.gl.default_framebuffer_cb) {
-            _sg.gl.default_framebuffer = _sg.desc.context.gl.default_framebuffer_cb();
-        }
-        glBindFramebuffer(GL_FRAMEBUFFER, _sg.gl.default_framebuffer);
+        // NOTE: on some platforms, the default framebuffer of a context
+        // is null, so we can't actually assert here that the
+        // framebuffer has been provided
+        glBindFramebuffer(GL_FRAMEBUFFER, swapchain->gl.framebuffer);
     }
-    glViewport(0, 0, w, h);
-    glScissor(0, 0, w, h);
+    glViewport(0, 0, _sg.cur_pass.width, _sg.cur_pass.height);
+    glScissor(0, 0, _sg.cur_pass.width, _sg.cur_pass.height);
 
     // number of color attachments
     const int num_color_atts = atts ? atts->cmn.num_colors : 1;
@@ -8548,12 +8527,11 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_attachments_t* atts, const sg_pass_act
 }
 
 _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
-    SOKOL_ASSERT(_sg.gl.in_pass);
     _SG_GL_CHECK_ERROR();
 
-    if (_sg.gl.cur_atts) {
-        const _sg_attachments_t* atts = _sg.gl.cur_atts;
-        SOKOL_ASSERT(atts->slot.id == _sg.gl.cur_atts_id.id);
+    if (_sg.cur_pass.atts) {
+        const _sg_attachments_t* atts = _sg.cur_pass.atts;
+        SOKOL_ASSERT(atts->slot.id == _sg.cur_pass.atts_id.id);
         bool fb_read_bound = false;
         bool fb_draw_bound = false;
         const int num_color_atts = atts->cmn.num_colors;
@@ -8599,26 +8577,16 @@ _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
         }
         #endif
     }
-
-    _sg.gl.cur_atts = 0;
-    _sg.gl.cur_atts_id.id = SG_INVALID_ID;
-    _sg.gl.cur_pass_width = 0;
-    _sg.gl.cur_pass_height = 0;
-
-    glBindFramebuffer(GL_FRAMEBUFFER, _sg.gl.default_framebuffer);
-    _sg.gl.in_pass = false;
     _SG_GL_CHECK_ERROR();
 }
 
 _SOKOL_PRIVATE void _sg_gl_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
-    SOKOL_ASSERT(_sg.gl.in_pass);
-    y = origin_top_left ? (_sg.gl.cur_pass_height - (y+h)) : y;
+    y = origin_top_left ? (_sg.cur_pass.height - (y+h)) : y;
     glViewport(x, y, w, h);
 }
 
 _SOKOL_PRIVATE void _sg_gl_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
-    SOKOL_ASSERT(_sg.gl.in_pass);
-    y = origin_top_left ? (_sg.gl.cur_pass_height - (y+h)) : y;
+    y = origin_top_left ? (_sg.cur_pass.height - (y+h)) : y;
     glScissor(x, y, w, h);
 }
 
@@ -9017,7 +8985,6 @@ _SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_inst
 }
 
 _SOKOL_PRIVATE void _sg_gl_commit(void) {
-    SOKOL_ASSERT(!_sg.gl.in_pass);
     // "soft" clear bindings (only those that are actually bound)
     _sg_gl_cache_clear_buffer_bindings(false);
     _sg_gl_cache_clear_texture_sampler_bindings(false);
@@ -16816,11 +16783,11 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
     */
     sg_desc res = *desc;
     #if defined(SOKOL_WGPU)
-        SOKOL_ASSERT(SG_PIXELFORMAT_NONE != res.environment.defaults.color_format);
+        SOKOL_ASSERT(SG_PIXELFORMAT_NONE < res.environment.defaults.color_format);
     #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
         res.environment.defaults.color_format = _sg_def(res.environment.defaults.color_format, SG_PIXELFORMAT_BGRA8);
     #else
-        res.context.color_format = _sg_def(res.context.color_format, SG_PIXELFORMAT_RGBA8);
+        res.environment.defaults.color_format = _sg_def(res.environment.defaults.color_format, SG_PIXELFORMAT_RGBA8);
     #endif
     res.environment.defaults.depth_format = _sg_def(res.environment.defaults.depth_format, SG_PIXELFORMAT_DEPTH_STENCIL);
     res.environment.defaults.sample_count = _sg_def(res.environment.defaults.sample_count, 1);

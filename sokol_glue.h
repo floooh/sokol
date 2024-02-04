@@ -141,8 +141,7 @@ SOKOL_API_IMPL sg_swapchain sapp_sgswapchain(void) {
     swapchain.wgpu.render_view = sapp_wgpu_get_render_view();
     swapchain.wgpu.resolve_view = sapp_wgpu_get_resolve_view();
     swapchain.wgpu.depth_stencil_view = sapp_wgpu_get_depth_stencil_view();
-    // FIXME!
-    // swapchain.gl.framebuffer = sapp_gl_get_framebuffer();
+    swapchain.gl.framebuffer = sapp_gl_get_framebuffer();
     return swapchain;
 }
 #endif
