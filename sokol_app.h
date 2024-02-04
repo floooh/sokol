@@ -2050,6 +2050,9 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #if defined(SOKOL_WGPU)
         #include <webgpu/webgpu.h>
     #endif
+    #if defined(SOKOL_GLES3)
+        #include <GLES3/gl3.h>
+    #endif
     #include <emscripten/emscripten.h>
     #include <emscripten/html5.h>
 #elif defined(_SAPP_WIN32)
@@ -5564,8 +5567,10 @@ _SOKOL_PRIVATE void _sapp_emsc_webgl_init(void) {
     EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx = emscripten_webgl_create_context(_sapp.html5_canvas_selector, &attrs);
     // FIXME: error message?
     emscripten_webgl_make_context_current(ctx);
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
 
-    /* some WebGL extension are not enabled automatically by emscripten */
+    // FIXME: remove PVRTC support here and in sokol-gfx at some point
+    // some WebGL extension are not enabled automatically by emscripten
     emscripten_webgl_enable_extension(ctx, "WEBKIT_WEBGL_compressed_texture_pvrtc");
 }
 #endif
