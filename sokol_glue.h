@@ -94,7 +94,7 @@ extern "C" {
 #endif
 
 #if defined(SOKOL_GFX_INCLUDED) && defined(SOKOL_APP_INCLUDED)
-SOKOL_GLUE_API_DECL sg_context_desc sapp_sgcontext(void);
+SOKOL_GLUE_API_DECL sg_environment sapp_sgenvironment(void);
 SOKOL_GLUE_API_DECL sg_swapchain sapp_sgswapchain(void);
 #endif
 
@@ -113,17 +113,17 @@ SOKOL_GLUE_API_DECL sg_swapchain sapp_sgswapchain(void);
 #endif
 
 #if defined(SOKOL_GFX_INCLUDED) && defined(SOKOL_APP_INCLUDED)
-SOKOL_API_IMPL sg_context_desc sapp_sgcontext(void) {
-    sg_context_desc desc;
-    memset(&desc, 0, sizeof(desc));
-    desc.color_format = (sg_pixel_format) sapp_color_format();
-    desc.depth_format = (sg_pixel_format) sapp_depth_format();
-    desc.sample_count = sapp_sample_count();
-    desc.metal.device = sapp_metal_get_device();
-    desc.d3d11.device = sapp_d3d11_get_device();
-    desc.d3d11.device_context = sapp_d3d11_get_device_context();
-    desc.wgpu.device = sapp_wgpu_get_device();
-    return desc;
+SOKOL_API_IMPL sg_environment sapp_sgenvironment(void) {
+    sg_environment env;
+    memset(&env, 0, sizeof(env));
+    env.defaults.color_format = (sg_pixel_format) sapp_color_format();
+    env.defaults.depth_format = (sg_pixel_format) sapp_depth_format();
+    env.defaults.sample_count = sapp_sample_count();
+    env.metal.device = sapp_metal_get_device();
+    env.d3d11.device = sapp_d3d11_get_device();
+    env.d3d11.device_context = sapp_d3d11_get_device_context();
+    env.wgpu.device = sapp_wgpu_get_device();
+    return env;
 }
 
 SOKOL_API_IMPL sg_swapchain sapp_sgswapchain(void) {

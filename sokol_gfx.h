@@ -3646,27 +3646,31 @@ typedef enum sg_log_item {
     a completely initialized sg_context_desc struct with information
     provided by sokol_app.h.
 */
-typedef struct sg_metal_context_desc {
-    const void* device;
-} sg_metal_context_desc;
-
-typedef struct sg_d3d11_context_desc {
-    const void* device;
-    const void* device_context;
-} sg_d3d11_context_desc;
-
-typedef struct sg_wgpu_context_desc {
-    const void* device;                    // WGPUDevice
-} sg_wgpu_context_desc;
-
-typedef struct sg_context_desc {
+typedef struct sg_environment_defaults {
     sg_pixel_format color_format;
     sg_pixel_format depth_format;
     int sample_count;
-    sg_metal_context_desc metal;
-    sg_d3d11_context_desc d3d11;
-    sg_wgpu_context_desc wgpu;
-} sg_context_desc;
+} sg_environment_defaults;
+
+typedef struct sg_metal_environment {
+    const void* device;
+} sg_metal_environment;
+
+typedef struct sg_d3d11_environment {
+    const void* device;
+    const void* device_context;
+} sg_d3d11_environment;
+
+typedef struct sg_wgpu_environment {
+    const void* device;                    // WGPUDevice
+} sg_wgpu_environment;
+
+typedef struct sg_environment {
+    sg_environment_defaults defaults;
+    sg_metal_environment metal;
+    sg_d3d11_environment d3d11;
+    sg_wgpu_environment wgpu;
+} sg_environment;
 
 /*
     sg_commit_listener
@@ -3734,7 +3738,7 @@ typedef struct sg_desc {
     int wgpu_bindgroups_cache_size;      // number of slots in the WebGPU bindgroup cache (must be 2^N)
     sg_allocator allocator;
     sg_logger logger; // optional log function override
-    sg_context_desc context;
+    sg_environment environment;
     uint32_t _end_canary;
 } sg_desc;
 
@@ -11626,14 +11630,14 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
 _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
     // assume already zero-initialized
     SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(desc->context.metal.device);
+    SOKOL_ASSERT(desc->environment.metal.device);
     SOKOL_ASSERT(desc->uniform_buffer_size > 0);
     _sg_mtl_init_pool(desc);
     _sg_mtl_clear_state_cache();
     _sg.mtl.valid = true;
     _sg.mtl.ub_size = desc->uniform_buffer_size;
     _sg.mtl.sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
-    _sg.mtl.device = (__bridge id<MTLDevice>) desc->context.metal.device;
+    _sg.mtl.device = (__bridge id<MTLDevice>) desc->environment.metal.device;
     _sg.mtl.cmd_queue = [_sg.mtl.device newCommandQueue];
 
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
@@ -16329,8 +16333,8 @@ _SOKOL_PRIVATE sg_image_desc _sg_image_desc_defaults(const sg_image_desc* desc) 
     def.num_mipmaps = _sg_def(def.num_mipmaps, 1);
     def.usage = _sg_def(def.usage, SG_USAGE_IMMUTABLE);
     if (desc->render_target) {
-        def.pixel_format = _sg_def(def.pixel_format, _sg.desc.context.color_format);
-        def.sample_count = _sg_def(def.sample_count, _sg.desc.context.sample_count);
+        def.pixel_format = _sg_def(def.pixel_format, _sg.desc.environment.defaults.color_format);
+        def.sample_count = _sg_def(def.sample_count, _sg.desc.environment.defaults.sample_count);
     } else {
         def.pixel_format = _sg_def(def.pixel_format, SG_PIXELFORMAT_RGBA8);
         def.sample_count = _sg_def(def.sample_count, 1);
@@ -16412,7 +16416,7 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
     def.index_type = _sg_def(def.index_type, SG_INDEXTYPE_NONE);
     def.cull_mode = _sg_def(def.cull_mode, SG_CULLMODE_NONE);
     def.face_winding = _sg_def(def.face_winding, SG_FACEWINDING_CW);
-    def.sample_count = _sg_def(def.sample_count, _sg.desc.context.sample_count);
+    def.sample_count = _sg_def(def.sample_count, _sg.desc.environment.defaults.sample_count);
 
     def.stencil.front.compare = _sg_def(def.stencil.front.compare, SG_COMPAREFUNC_ALWAYS);
     def.stencil.front.fail_op = _sg_def(def.stencil.front.fail_op, SG_STENCILOP_KEEP);
@@ -16424,7 +16428,7 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
     def.stencil.back.pass_op = _sg_def(def.stencil.back.pass_op, SG_STENCILOP_KEEP);
 
     def.depth.compare = _sg_def(def.depth.compare, SG_COMPAREFUNC_ALWAYS);
-    def.depth.pixel_format = _sg_def(def.depth.pixel_format, _sg.desc.context.depth_format);
+    def.depth.pixel_format = _sg_def(def.depth.pixel_format, _sg.desc.environment.defaults.depth_format);
     if (def.colors[0].pixel_format == SG_PIXELFORMAT_NONE) {
         // special case depth-only rendering, enforce a color count of 0
         def.color_count = 0;
@@ -16436,7 +16440,7 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
     }
     for (int i = 0; i < def.color_count; i++) {
         sg_color_target_state* cs = &def.colors[i];
-        cs->pixel_format = _sg_def(cs->pixel_format, _sg.desc.context.color_format);
+        cs->pixel_format = _sg_def(cs->pixel_format, _sg.desc.environment.defaults.color_format);
         cs->write_mask = _sg_def(cs->write_mask, SG_COLORMASK_RGBA);
         sg_blend_state* bs = &def.colors[i].blend;
         bs->src_factor_rgb = _sg_def(bs->src_factor_rgb, SG_BLENDFACTOR_ONE);
@@ -16837,12 +16841,12 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
     #if defined(SOKOL_WGPU)
         SOKOL_ASSERT(SG_PIXELFORMAT_NONE != res.context.color_format);
     #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
-        res.context.color_format = _sg_def(res.context.color_format, SG_PIXELFORMAT_BGRA8);
+        res.environment.defaults.color_format = _sg_def(res.environment.defaults.color_format, SG_PIXELFORMAT_BGRA8);
     #else
         res.context.color_format = _sg_def(res.context.color_format, SG_PIXELFORMAT_RGBA8);
     #endif
-    res.context.depth_format = _sg_def(res.context.depth_format, SG_PIXELFORMAT_DEPTH_STENCIL);
-    res.context.sample_count = _sg_def(res.context.sample_count, 1);
+    res.environment.defaults.depth_format = _sg_def(res.environment.defaults.depth_format, SG_PIXELFORMAT_DEPTH_STENCIL);
+    res.environment.defaults.sample_count = _sg_def(res.environment.defaults.sample_count, 1);
     res.buffer_pool_size = _sg_def(res.buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE);
     res.image_pool_size = _sg_def(res.image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE);
     res.sampler_pool_size = _sg_def(res.sampler_pool_size, _SG_DEFAULT_SAMPLER_POOL_SIZE);
