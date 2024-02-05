@@ -2583,6 +2583,8 @@ typedef struct {
     PFNWGLGETEXTENSIONSSTRINGEXTPROC GetExtensionsStringEXT;
     PFNWGLGETEXTENSIONSSTRINGARBPROC GetExtensionsStringARB;
     PFNWGLCREATECONTEXTATTRIBSARBPROC CreateContextAttribsARB;
+    // special case glGetIntegerv
+    void (*GetIntegerv)(uint32_t pname, int32_t* data);
     bool ext_swap_control;
     bool arb_multisample;
     bool arb_pixel_format;
@@ -2794,7 +2796,7 @@ typedef struct {
 
 #if defined(_SAPP_ANY_GL)
 typedef struct {
-    GLuint framebuffer;
+    uint32_t framebuffer;
 } _sapp_gl_t;
 #endif
 
@@ -6586,7 +6588,7 @@ _SOKOL_PRIVATE void _sapp_wgl_init(void) {
     SOKOL_ASSERT(_sapp.wgl.GetCurrentDC);
     _sapp.wgl.MakeCurrent = (PFN_wglMakeCurrent)(void*) GetProcAddress(_sapp.wgl.opengl32, "wglMakeCurrent");
     SOKOL_ASSERT(_sapp.wgl.MakeCurrent);
-    _sapp.wgl.GetIntegerv = (void(*)(uint32_t, int32_t*) GetProcAddress(_sapp.wgl.opengl32, "glGetIntegerv");
+    _sapp.wgl.GetIntegerv = (void(*)(uint32_t, int32_t*)) GetProcAddress(_sapp.wgl.opengl32, "glGetIntegerv");
     SOKOL_ASSERT(_sapp.wgl.GetIntegerv);
 
     _sapp.wgl.msg_hwnd = CreateWindowExW(WS_EX_OVERLAPPEDWINDOW,
@@ -6853,7 +6855,7 @@ _SOKOL_PRIVATE void _sapp_wgl_create_context(void) {
         _sapp.wgl.SwapIntervalEXT(_sapp.swap_interval);
     }
     const uint32_t gl_framebuffer_binding = 0x8CA6;
-    _sapp.wgl.GetIntegerv(gl_framebuffer_binding, &_sapp.gl.framebuffer);
+    _sapp.wgl.GetIntegerv(gl_framebuffer_binding, (int32_t*)&_sapp.gl.framebuffer);
 }
 
 _SOKOL_PRIVATE void _sapp_wgl_destroy_context(void) {
