@@ -5225,14 +5225,8 @@ typedef struct {
     bool valid;
     ID3D11Device* dev;
     ID3D11DeviceContext* ctx;
-    bool in_pass;
     bool use_indexed_draw;
     bool use_instanced_draw;
-    int cur_width;
-    int cur_height;
-    int num_rtvs;
-    _sg_attachments_t* cur_atts;
-    sg_attachments cur_atts_id;
     _sg_pipeline_t* cur_pipeline;
     sg_pipeline cur_pipeline_id;
     // on-demand loaded d3dcompiler_47.dll handles
@@ -9818,11 +9812,11 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
 _SOKOL_PRIVATE void _sg_d3d11_setup_backend(const sg_desc* desc) {
     // assume _sg.d3d11 already is zero-initialized
     SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(desc->context.d3d11.device);
-    SOKOL_ASSERT(desc->context.d3d11.device_context);
+    SOKOL_ASSERT(desc->environment.d3d11.device);
+    SOKOL_ASSERT(desc->environment.d3d11.device_context);
     _sg.d3d11.valid = true;
-    _sg.d3d11.dev = (ID3D11Device*) desc->context.d3d11.device;
-    _sg.d3d11.ctx = (ID3D11DeviceContext*) desc->context.d3d11.device_context;
+    _sg.d3d11.dev = (ID3D11Device*) desc->environment.d3d11.device;
+    _sg.d3d11.ctx = (ID3D11DeviceContext*) desc->environment.d3d11.device_context;
     _sg_d3d11_init_caps();
 }
 
@@ -10556,7 +10550,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
 
 _SOKOL_PRIVATE void _sg_d3d11_discard_attachments(_sg_attachments_t* atts) {
     SOKOL_ASSERT(atts);
-    SOKOL_ASSERT(atts != _sg.d3d11.cur_atts);
     for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
         if (atts->d3d11.colors[i].view.rtv) {
             _sg_d3d11_Release(atts->d3d11.colors[i].view.rtv);
@@ -10588,37 +10581,19 @@ _SOKOL_PRIVATE _sg_image_t* _sg_d3d11_attachments_ds_image(const _sg_attachments
 _SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain) {
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(swapchain);
-    SOKOL_ASSERT(!_sg.d3d11.in_pass);
-    _sg.d3d11.in_pass = true;
-    // FIXME: this should go up into sg_begin_pass()
-    if (atts) {
-        _sg.d3d11.cur_width = atts->cmn.width;
-        _sg.d3d11.cur_height = atts->cmn.height;
-    } else {
-        SOKOL_ASSERT(swapchain->width > 0);
-        SOKOL_ASSERT(swapchain->height > 0);
-        _sg.d3d11.cur_width = swapchain->width;
-        _sg.d3d11.cur_height = swapchain->height;
-    }
-    _sg.d3d11.num_rtvs = 0;
+    int num_rtvs = 0;
     ID3D11RenderTargetView* rtvs[SG_MAX_COLOR_ATTACHMENTS] = { 0 };
     ID3D11DepthStencilView* dsv = 0;
     if (atts) {
-        _sg.d3d11.cur_atts = atts;
-        _sg.d3d11.cur_atts_id.id = atts->slot.id;
+        num_rtvs = atts->cmn.num_colors;
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
             rtvs[i] = atts->d3d11.colors[i].view.rtv;
-            if (rtvs[i]) {
-                _sg.d3d11.num_rtvs++;
-            }
         }
         dsv = atts->d3d11.depth_stencil.view.dsv;
     } else {
         // NOTE: depth-stencil-view is optional
         SOKOL_ASSERT(swapchain->d3d11.render_target_view);
-        _sg.d3d11.cur_atts = 0;
-        _sg.d3d11.cur_atts_id.id = SG_INVALID_ID;
-        _sg.d3d11.num_rtvs = 1;
+        num_rtvs = 1;
         rtvs[0] = (ID3D11RenderTargetView*) swapchain->d3d11.render_target_view;
         dsv = (ID3D11DepthStencilView*) swapchain->d3d11.depth_stencil_view;
     }
@@ -10629,19 +10604,19 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass_action* action, _sg_attac
     // set viewport and scissor rect to cover whole screen
     D3D11_VIEWPORT vp;
     _sg_clear(&vp, sizeof(vp));
-    vp.Width = (FLOAT) _sg.d3d11.cur_width;
-    vp.Height = (FLOAT) _sg.d3d11.cur_height;
+    vp.Width = (FLOAT) _sg.cur_pass.width;
+    vp.Height = (FLOAT) _sg.cur_pass.height;
     vp.MaxDepth = 1.0f;
     _sg_d3d11_RSSetViewports(_sg.d3d11.ctx, 1, &vp);
     D3D11_RECT rect;
     rect.left = 0;
     rect.top = 0;
-    rect.right = _sg.d3d11.cur_width;
-    rect.bottom = _sg.d3d11.cur_height;
+    rect.right = _sg.cur_pass.width;
+    rect.bottom = _sg.cur_pass.height;
     _sg_d3d11_RSSetScissorRects(_sg.d3d11.ctx, 1, &rect);
 
     // perform clear action
-    for (int i = 0; i < _sg.d3d11.num_rtvs; i++) {
+    for (int i = 0; i < num_rtvs; i++) {
         if (action->colors[i].load_action == SG_LOADACTION_CLEAR) {
             _sg_d3d11_ClearRenderTargetView(_sg.d3d11.ctx, rtvs[i], &action->colors[i].clear_value.r);
             _sg_stats_add(d3d11.pass.num_clear_render_target_view, 1);
@@ -10666,18 +10641,19 @@ _SOKOL_PRIVATE UINT _sg_d3d11_calcsubresource(UINT mip_slice, UINT array_slice, 
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
-    SOKOL_ASSERT(_sg.d3d11.in_pass && _sg.d3d11.ctx);
-    _sg.d3d11.in_pass = false;
+    SOKOL_ASSERT(_sg.d3d11.ctx);
+
+    // FIXME: MSAA resolve for swapchains should be handled here too
 
     // need to resolve MSAA render attachments into texture?
-    if (_sg.d3d11.cur_atts) {
-        SOKOL_ASSERT(_sg.d3d11.cur_atts->slot.id == _sg.d3d11.cur_atts_id.id);
-        for (int i = 0; i < _sg.d3d11.num_rtvs; i++) {
-            const _sg_image_t* resolve_img = _sg.d3d11.cur_atts->d3d11.resolves[i].image;
+    if (_sg.cur_pass.atts_id.id != SG_INVALID_ID) {
+        SOKOL_ASSERT(_sg.cur_pass.atts && _sg.cur_pass.atts->slot.id == _sg.cur_pass.atts_id.id);
+        for (int i = 0; i < _sg.cur_pass.atts->cmn.num_colors; i++) {
+            const _sg_image_t* resolve_img = _sg.cur_pass.atts->d3d11.resolves[i].image;
             if (resolve_img) {
-                const _sg_image_t* color_img = _sg.d3d11.cur_atts->d3d11.colors[i].image;
-                const _sg_attachment_common_t* cmn_color_att = &_sg.d3d11.cur_atts->cmn.colors[i];
-                const _sg_attachment_common_t* cmn_resolve_att = &_sg.d3d11.cur_atts->cmn.resolves[i];
+                const _sg_image_t* color_img = _sg.cur_pass.atts->d3d11.colors[i].image;
+                const _sg_attachment_common_t* cmn_color_att = &_sg.cur_pass.atts->cmn.colors[i];
+                const _sg_attachment_common_t* cmn_resolve_att = &_sg.cur_pass.atts->cmn.resolves[i];
                 SOKOL_ASSERT(resolve_img->slot.id == cmn_resolve_att->image_id.id);
                 SOKOL_ASSERT(color_img && (color_img->slot.id == cmn_color_att->image_id.id));
                 SOKOL_ASSERT(color_img->cmn.sample_count > 1);
@@ -10700,8 +10676,6 @@ _SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
             }
         }
     }
-    _sg.d3d11.cur_atts = 0;
-    _sg.d3d11.cur_atts_id.id = SG_INVALID_ID;
     _sg.d3d11.cur_pipeline = 0;
     _sg.d3d11.cur_pipeline_id.id = SG_INVALID_ID;
     _sg_d3d11_clear_state();
@@ -10709,10 +10683,9 @@ _SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
 
 _SOKOL_PRIVATE void _sg_d3d11_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_sg.d3d11.ctx);
-    SOKOL_ASSERT(_sg.d3d11.in_pass);
     D3D11_VIEWPORT vp;
     vp.TopLeftX = (FLOAT) x;
-    vp.TopLeftY = (FLOAT) (origin_top_left ? y : (_sg.d3d11.cur_height - (y + h)));
+    vp.TopLeftY = (FLOAT) (origin_top_left ? y : (_sg.cur_pass.height - (y + h)));
     vp.Width = (FLOAT) w;
     vp.Height = (FLOAT) h;
     vp.MinDepth = 0.0f;
@@ -10722,12 +10695,11 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_viewport(int x, int y, int w, int h, bool or
 
 _SOKOL_PRIVATE void _sg_d3d11_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_sg.d3d11.ctx);
-    SOKOL_ASSERT(_sg.d3d11.in_pass);
     D3D11_RECT rect;
     rect.left = x;
-    rect.top = (origin_top_left ? y : (_sg.d3d11.cur_height - (y + h)));
+    rect.top = (origin_top_left ? y : (_sg.cur_pass.height - (y + h)));
     rect.right = x + w;
-    rect.bottom = origin_top_left ? (y + h) : (_sg.d3d11.cur_height - y);
+    rect.bottom = origin_top_left ? (y + h) : (_sg.cur_pass.height - y);
     _sg_d3d11_RSSetScissorRects(_sg.d3d11.ctx, 1, &rect);
 }
 
@@ -10735,7 +10707,6 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     SOKOL_ASSERT(pip->shader && (pip->cmn.shader_id.id == pip->shader->slot.id));
     SOKOL_ASSERT(_sg.d3d11.ctx);
-    SOKOL_ASSERT(_sg.d3d11.in_pass);
     SOKOL_ASSERT(pip->d3d11.rs && pip->d3d11.bs && pip->d3d11.dss && pip->d3d11.il);
 
     _sg.d3d11.cur_pipeline = pip;
@@ -10767,7 +10738,6 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
     SOKOL_ASSERT(bnd);
     SOKOL_ASSERT(bnd->pip);
     SOKOL_ASSERT(_sg.d3d11.ctx);
-    SOKOL_ASSERT(_sg.d3d11.in_pass);
 
     // gather all the D3D11 resources into arrays
     ID3D11Buffer* d3d11_ib = bnd->ib ? bnd->ib->d3d11.buf : 0;
@@ -10814,7 +10784,7 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_apply_uniforms(sg_shader_stage stage_index, int ub_index, const sg_range* data) {
-    SOKOL_ASSERT(_sg.d3d11.ctx && _sg.d3d11.in_pass);
+    SOKOL_ASSERT(_sg.d3d11.ctx);
     SOKOL_ASSERT(_sg.d3d11.cur_pipeline && _sg.d3d11.cur_pipeline->slot.id == _sg.d3d11.cur_pipeline_id.id);
     SOKOL_ASSERT(_sg.d3d11.cur_pipeline->shader && _sg.d3d11.cur_pipeline->shader->slot.id == _sg.d3d11.cur_pipeline->cmn.shader_id.id);
     SOKOL_ASSERT(ub_index < _sg.d3d11.cur_pipeline->shader->cmn.stage[stage_index].num_uniform_blocks);
@@ -10826,7 +10796,6 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_uniforms(sg_shader_stage stage_index, int ub
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_draw(int base_element, int num_elements, int num_instances) {
-    SOKOL_ASSERT(_sg.d3d11.in_pass);
     if (_sg.d3d11.use_indexed_draw) {
         if (_sg.d3d11.use_instanced_draw) {
             _sg_d3d11_DrawIndexedInstanced(_sg.d3d11.ctx, (UINT)num_elements, (UINT)num_instances, (UINT)base_element, 0, 0);
@@ -10847,7 +10816,7 @@ _SOKOL_PRIVATE void _sg_d3d11_draw(int base_element, int num_elements, int num_i
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_commit(void) {
-    SOKOL_ASSERT(!_sg.d3d11.in_pass);
+    // empty
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
