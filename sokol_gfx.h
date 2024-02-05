@@ -4242,8 +4242,13 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
                 #include <GLES3/gl3.h>
             #endif
         #elif defined(__linux__) || defined(__unix__)
-            #define GL_GLEXT_PROTOTYPES
-            #include <GL/gl.h>
+            #if defined(SOKOL_GLCORE33)
+                #define GL_GLEXT_PROTOTYPES
+                #include <GL/gl.h>
+            #else
+                #include <GLES3/gl3.h>
+                #include <GLES3/gl3ext.h>
+            #endif
         #endif
     #endif
 
