@@ -1986,7 +1986,12 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #if !defined(SOKOL_FORCE_EGL)
             #define _SAPP_GLX (1)
         #endif
-    #elif !defined(SOKOL_GLES3)
+        #define GL_GLEXT_PROTOTYPES
+        #include <GL/gl.h>
+    #elif defined(SOKOL_GLES3)
+        #include <GLES3/gl3.h>
+        #include <GLES3/gl3ext.h>
+    #else
         #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE33, SOKOL_GLES3")
     #endif
 #else
@@ -9813,6 +9818,11 @@ _SOKOL_PRIVATE void _sapp_glx_choose_visual(Visual** visual, int* depth) {
     XFree(result);
 }
 
+_SOKOL_PRIVATE void _sapp_glx_make_current(void) {
+    _sapp.glx.MakeCurrent(_sapp.x11.display, _sapp.glx.window, _sapp.glx.ctx);
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer); 
+}
+
 _SOKOL_PRIVATE void _sapp_glx_create_context(void) {
     GLXFBConfig native = _sapp_glx_choosefbconfig();
     if (0 == native){
@@ -9838,6 +9848,7 @@ _SOKOL_PRIVATE void _sapp_glx_create_context(void) {
     if (!_sapp.glx.window) {
         _SAPP_PANIC(LINUX_GLX_CREATE_WINDOW_FAILED);
     }
+    _sapp_glx_make_current();
 }
 
 _SOKOL_PRIVATE void _sapp_glx_destroy_context(void) {
@@ -9851,16 +9862,11 @@ _SOKOL_PRIVATE void _sapp_glx_destroy_context(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_glx_make_current(void) {
-    _sapp.glx.MakeCurrent(_sapp.x11.display, _sapp.glx.window, _sapp.glx.ctx);
-}
-
 _SOKOL_PRIVATE void _sapp_glx_swap_buffers(void) {
     _sapp.glx.SwapBuffers(_sapp.x11.display, _sapp.glx.window);
 }
 
 _SOKOL_PRIVATE void _sapp_glx_swapinterval(int interval) {
-    _sapp_glx_make_current();
     if (_sapp.glx.EXT_swap_control) {
         _sapp.glx.SwapIntervalEXT(_sapp.x11.display, _sapp.glx.window, interval);
     }
@@ -11018,6 +11024,7 @@ _SOKOL_PRIVATE void _sapp_egl_init(void) {
     if (!eglMakeCurrent(_sapp.egl.display, _sapp.egl.surface, _sapp.egl.surface, _sapp.egl.context)) {
         _SAPP_PANIC(LINUX_EGL_MAKE_CURRENT_FAILED);
     }
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
 
     eglSwapInterval(_sapp.egl.display, _sapp.swap_interval);
 }
