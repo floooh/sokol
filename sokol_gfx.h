@@ -2358,9 +2358,9 @@ typedef struct sg_metal_swapchain {
 } sg_metal_swapchain;
 
 typedef struct sg_d3d11_swapchain {
-    const void* render_target_view;     // ID3D11RenderTargetView
+    const void* render_view;            // ID3D11RenderTargetView
+    const void* resolve_view;           // ID3D11RenderTargetView
     const void* depth_stencil_view;     // ID3D11DepthStencilView
-    // FIXME: MSAA resolve should happen in sokol-gfx!
 } sg_d3d11_swapchain;
 
 typedef struct sg_wgpu_swapchain {
@@ -3437,10 +3437,12 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_RENDERPASSDESCRIPTOR_NOTSET, "sg_begin_pass: expected pass.swapchain.metal.render_pass_descriptor == 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_DRAWABLE, "sg_begin_pass: expected pass.swapchain.metal.drawable != 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_DRAWABLE_NOTSET, "sg_begin_pass: expected pass.swapchain.metal.drawable == 0") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RTV, "sg_begin_pass: expected pass.swapchain.d3d11.render_target_view != 0") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RTV_NOTSET, "sg_begin_pass: expected pass.swapchain.d3d11.render_target_view == 0") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_DSV, "sg_begin_pass: expected pass.swapchain.d3d11.depth_stencil_view != 0") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_DSV_NOTSET, "sg_begin_pass: expected pass.swapchain.d3d11.depth_stencil_view == 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RENDERVIEW, "sg_begin_pass: expected pass.swapchain.d3d11.render_view != 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RENDERVIEW_NOTSET, "sg_begin_pass: expected pass.swapchain.d3d11.render_view == 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RESOLVEVIEW, "sg_begin_pass: expected pass.swapchain.d3d11.resolve_view != 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RESOLVEVIEW_NOTSET, "sg_begin_pass: expected pass.swapchain.d3d11.resolve_view == 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_DEPTHSTENCILVIEW, "sg_begin_pass: expected pass.swapchain.d3d11.depth_stencil_view != 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_DEPTHSTENCILVIEW_NOTSET, "sg_begin_pass: expected pass.swapchain.d3d11.depth_stencil_view == 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_RENDERVIEW, "sg_begin_pass: expected pass.swapchain.wgpu.render_view != 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_RENDERVIEW_NOTSET, "sg_begin_pass: expected pass.swapchain.wgpu.render_view == 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_RESOLVEVIEW, "sg_begin_pass: expected pass.swapchain.wgpu.resolve_view != 0") \
@@ -5229,6 +5231,10 @@ typedef struct {
     bool use_instanced_draw;
     _sg_pipeline_t* cur_pipeline;
     sg_pipeline cur_pipeline_id;
+    struct {
+        ID3D11RenderTargetView* render_view;
+        ID3D11RenderTargetView* resolve_view;
+    } cur_pass;
     // on-demand loaded d3dcompiler_47.dll handles
     HINSTANCE d3dcompiler_dll;
     bool d3dcompiler_dll_load_failed;
@@ -10584,6 +10590,8 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass_action* action, _sg_attac
     int num_rtvs = 0;
     ID3D11RenderTargetView* rtvs[SG_MAX_COLOR_ATTACHMENTS] = { 0 };
     ID3D11DepthStencilView* dsv = 0;
+    _sg.d3d11.cur_pass.render_view = 0;
+    _sg.d3d11.cur_pass.resolve_view = 0;
     if (atts) {
         num_rtvs = atts->cmn.num_colors;
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
@@ -10592,10 +10600,12 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass_action* action, _sg_attac
         dsv = atts->d3d11.depth_stencil.view.dsv;
     } else {
         // NOTE: depth-stencil-view is optional
-        SOKOL_ASSERT(swapchain->d3d11.render_target_view);
+        SOKOL_ASSERT(swapchain->d3d11.render_view);
         num_rtvs = 1;
-        rtvs[0] = (ID3D11RenderTargetView*) swapchain->d3d11.render_target_view;
+        rtvs[0] = (ID3D11RenderTargetView*) swapchain->d3d11.render_view;
         dsv = (ID3D11DepthStencilView*) swapchain->d3d11.depth_stencil_view;
+        _sg.d3d11.cur_pass.render_view = (ID3D11RenderTargetView*) swapchain->d3d11.render_view;
+        _sg.d3d11.cur_pass.resolve_view = (ID3D11RenderTargetView*) swapchain->d3d11.resolve_view;
     }
     // apply the render-target- and depth-stencil-views
     _sg_d3d11_OMSetRenderTargets(_sg.d3d11.ctx, SG_MAX_COLOR_ATTACHMENTS, rtvs, dsv);
@@ -10643,10 +10653,9 @@ _SOKOL_PRIVATE UINT _sg_d3d11_calcsubresource(UINT mip_slice, UINT array_slice, 
 _SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
     SOKOL_ASSERT(_sg.d3d11.ctx);
 
-    // FIXME: MSAA resolve for swapchains should be handled here too
-
     // need to resolve MSAA render attachments into texture?
     if (_sg.cur_pass.atts_id.id != SG_INVALID_ID) {
+        // ...for offscreen pass...
         SOKOL_ASSERT(_sg.cur_pass.atts && _sg.cur_pass.atts->slot.id == _sg.cur_pass.atts_id.id);
         for (int i = 0; i < _sg.cur_pass.atts->cmn.num_colors; i++) {
             const _sg_image_t* resolve_img = _sg.cur_pass.atts->d3d11.resolves[i].image;
@@ -10675,7 +10684,27 @@ _SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
                 _sg_stats_add(d3d11.pass.num_resolve_subresource, 1);
             }
         }
+    } else {
+        // ...for swapchain pass...
+        if (_sg.d3d11.cur_pass.resolve_view) {
+            SOKOL_ASSERT(_sg.d3d11.cur_pass.render_view);
+            SOKOL_ASSERT(_sg.cur_pass.swapchain.sample_count > 1);
+            SOKOL_ASSERT(_sg.cur_pass.swapchain.color_fmt > SG_PIXELFORMAT_NONE);
+            ID3D11Resource* d3d11_render_res = 0;
+            ID3D11Resource* d3d11_resolve_res = 0;
+            _sg_d3d11_GetResource((ID3D11View*)_sg.d3d11.cur_pass.render_view, &d3d11_render_res);
+            _sg_d3d11_GetResource((ID3D11View*)_sg.d3d11.cur_pass.resolve_view, &d3d11_resolve_res);
+            SOKOL_ASSERT(d3d11_render_res);
+            SOKOL_ASSERT(d3d11_resolve_res);
+            const sg_pixel_format color_fmt = _sg.cur_pass.swapchain.color_fmt;
+            _sg_d3d11_ResolveSubresource(_sg.d3d11.ctx, d3d11_resolve_res, 0, d3d11_render_res, 0, _sg_d3d11_rtv_pixel_format(color_fmt));
+            _sg_d3d11_Release(d3d11_render_res);
+            _sg_d3d11_Release(d3d11_resolve_res);
+            _sg_stats_add(d3d11.pass.num_resolve_subresource, 1);
+        }
     }
+    _sg.d3d11.cur_pass.render_view = 0;
+    _sg.d3d11.cur_pass.resolve_view = 0;
     _sg.d3d11.cur_pipeline = 0;
     _sg.d3d11.cur_pipeline_id.id = SG_INVALID_ID;
     _sg_d3d11_clear_state();
@@ -15848,9 +15877,13 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
                 _SG_VALIDATE(pass->swapchain.metal.render_pass_descriptor != 0, VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_RENDERPASSDESCRIPTOR);
                 _SG_VALIDATE(pass->swapchain.metal.drawable != 0, VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_DRAWABLE);
             #elif defined(SOKOL_D3D11)
-                _SG_VALIDATE(pass->swapchain.d3d11.render_target_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RTV);
-                _SG_VALIDATE(pass->swapchain.d3d11.depth_stencil_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_DSV);
-                // FIXME: resolve_view
+                _SG_VALIDATE(pass->swapchain.d3d11.render_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RENDERVIEW);
+                _SG_VALIDATE(pass->swapchain.d3d11.depth_stencil_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_DEPTHSTENCILVIEW);
+                if (pass->swapchain.sample_count > 1) {
+                    _SG_VALIDATE(pass->swapchain.d3d11.resolve_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RESOLVEVIEW);
+                } else {
+                    _SG_VALIDATE(pass->swapchain.d3d11.resolve_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RESOLVEVIEW_NOTSET);
+                }
             #elif defined(SOKOL_WGPU)
                 _SG_VALIDATE(pass->swapchain.wgpu.render_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_RENDERVIEW);
                 _SG_VALIDATE(pass->swapchain.wgpu.depth_stencil_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_DEPTHSTENCILVIEW);
@@ -15898,8 +15931,9 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
                 _SG_VALIDATE(pass->swapchain.metal.render_pass_descriptor == 0, VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_RENDERPASSDESCRIPTOR_NOTSET);
                 _SG_VALIDATE(pass->swapchain.metal.drawable == 0, VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_DRAWABLE_NOTSET);
             #elif defined(SOKOL_D3D11)
-                _SG_VALIDATE(pass->swapchain.d3d11.render_target_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RTV_NOTSET);
-                _SG_VALIDATE(pass->swapchain.d3d11.depth_stencil_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_DSV_NOTSET);
+                _SG_VALIDATE(pass->swapchain.d3d11.render_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RENDERVIEW_NOTSET);
+                _SG_VALIDATE(pass->swapchain.d3d11.depth_stencil_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_DEPTHSTENCILVIEW_NOTSET);
+                _SG_VALIDATE(pass->swapchain.d3d11.resolve_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RESOLVEVIEW_NOTSET);
                 // FIXME: resolve_view
             #elif defined(SOKOL_WGPU)
                 _SG_VALIDATE(pass->swapchain.wgpu.render_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_RENDERVIEW_NOTSET);

@@ -294,7 +294,8 @@
 
         const void* sapp_d3d11_get_device(void)
         const void* sapp_d3d11_get_device_context(void)
-        const void* sapp_d3d11_get_render_target_view(void)
+        const void* sapp_d3d11_get_render_view(void)
+        const void* sapp_d3d11_get_resolve_view(void);
         const void* sapp_d3d11_get_depth_stencil_view(void)
             Similar to the sapp_metal_* functions, the sapp_d3d11_* functions
             return pointers to D3D11 API objects required for rendering,
@@ -1863,9 +1864,11 @@ SOKOL_APP_API_DECL const void* sapp_d3d11_get_device(void);
 SOKOL_APP_API_DECL const void* sapp_d3d11_get_device_context(void);
 /* D3D11: get pointer to IDXGISwapChain object */
 SOKOL_APP_API_DECL const void* sapp_d3d11_get_swap_chain(void);
-/* D3D11: get pointer to ID3D11RenderTargetView object */
-SOKOL_APP_API_DECL const void* sapp_d3d11_get_render_target_view(void);
-/* D3D11: get pointer to ID3D11DepthStencilView */
+/* D3D11: get pointer to ID3D11RenderTargetView object for rendering */
+SOKOL_APP_API_DECL const void* sapp_d3d11_get_render_view(void);
+/* D3D11: get pointer ID3D11RenderTargetView object for msaa-resolve (may return null) */
+SOKOL_APP_API_DECL const void* sapp_d3d11_get_resolve_view(void);
+/* D3D11: get pointer ID3D11DepthStencilView */
 SOKOL_APP_API_DECL const void* sapp_d3d11_get_depth_stencil_view(void);
 /* Win32: get the HWND window handle */
 SOKOL_APP_API_DECL const void* sapp_win32_get_hwnd(void);
@@ -6319,14 +6322,6 @@ static inline HRESULT _sapp_d3d11_CreateDepthStencilView(ID3D11Device* self, ID3
     #endif
 }
 
-static inline void _sapp_d3d11_ResolveSubresource(ID3D11DeviceContext* self, ID3D11Resource* pDstResource, UINT DstSubresource, ID3D11Resource* pSrcResource, UINT SrcSubresource, DXGI_FORMAT Format) {
-    #if defined(__cplusplus)
-        self->ResolveSubresource(pDstResource, DstSubresource, pSrcResource, SrcSubresource, Format);
-    #else
-        self->lpVtbl->ResolveSubresource(self, pDstResource, DstSubresource, pSrcResource, SrcSubresource, Format);
-    #endif
-}
-
 static inline HRESULT _sapp_dxgi_ResizeBuffers(IDXGISwapChain* self, UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags) {
     #if defined(__cplusplus)
         return self->ResizeBuffers(BufferCount, Width, Height, NewFormat, SwapChainFlags);
@@ -6552,12 +6547,6 @@ _SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_d3d11_present(bool do_not_wait) {
-    /* do MSAA resolve if needed */
-    if (_sapp.sample_count > 1) {
-        SOKOL_ASSERT(_sapp.d3d11.rt);
-        SOKOL_ASSERT(_sapp.d3d11.msaa_rt);
-        _sapp_d3d11_ResolveSubresource(_sapp.d3d11.device_context, (ID3D11Resource*)_sapp.d3d11.rt, 0, (ID3D11Resource*)_sapp.d3d11.msaa_rt, 0, DXGI_FORMAT_B8G8R8A8_UNORM);
-    }
     UINT flags = 0;
     if (_sapp.win32.is_win10_or_greater && do_not_wait) {
         /* this hack/workaround somewhat improves window-movement and -sizing
@@ -11611,14 +11600,29 @@ SOKOL_API_IMPL const void* sapp_d3d11_get_swap_chain(void) {
 #endif
 }
 
-SOKOL_API_IMPL const void* sapp_d3d11_get_render_target_view(void) {
+SOKOL_API_IMPL const void* sapp_d3d11_get_render_view(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_D3D11)
-        if (_sapp.d3d11.msaa_rtv) {
+        if (_sapp.sample_count > 1) {
+            SOKOL_ASSERT(_sapp.d3d11.msaa_rtv);
             return _sapp.d3d11.msaa_rtv;
-        }
-        else {
+        } else {
+            SOKOL_ASSERT(_sapp.d3d11.rtv);
             return _sapp.d3d11.rtv;
+        }
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sapp_d3d11_get_resolve_view(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_D3D11)
+        if (_sapp.sample_count > 1) {
+            SOKOL_ASSERT(_sapp.d3d11.rtv);
+            return _sapp.d3d11.rtv;
+        } else {
+            return 0;
         }
     #else
         return 0;
@@ -11656,9 +11660,10 @@ SOKOL_API_IMPL const void* sapp_wgpu_get_render_view(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_EMSCRIPTEN) && defined(SOKOL_WGPU)
         if (_sapp.sample_count > 1) {
+            SOKOL_ASSERT(_sapp.wgpu.msaa_view);
             return (const void*) _sapp.wgpu.msaa_view;
-        }
-        else {
+        } else {
+            SOKOL_ASSERT(_sapp.wgpu.swapchain_view);
             return (const void*) _sapp.wgpu.swapchain_view;
         }
     #else
@@ -11670,9 +11675,9 @@ SOKOL_API_IMPL const void* sapp_wgpu_get_resolve_view(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_EMSCRIPTEN) && defined(SOKOL_WGPU)
         if (_sapp.sample_count > 1) {
+            SOKOL_ASSERT(_sapp.wgpu.swapchain_view);
             return (const void*) _sapp.wgpu.swapchain_view;
-        }
-        else {
+        } else {
             return 0;
         }
     #else
