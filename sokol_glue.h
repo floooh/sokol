@@ -42,12 +42,23 @@
     PROVIDED FUNCTIONS
     ==================
 
-    - if sokol_app.h and sokol_gfx.h is included:
+    sg_environment sglue_environment(void)
 
-        sg_context_desc sapp_sgcontext(void):
+        Returns an sg_environment struct initialized by calling sokol_app.h
+        functions. Use this in the sg_setup() call like this:
 
-            Returns an initialized sg_context_desc function initialized
-            by calling sokol_app.h functions.
+        sg_setup(&(sg_desc){
+            .environment = sglue_enviornment(),
+            ...
+        });
+
+    sg_swapchain sglue_swapchain(void)
+
+        Returns an sg_swapchain struct initialized by calling sokol_app.h
+        functions. Use this in sg_begin_pass() for a 'swapchain pass' like
+        this:
+
+        sg_begin_pass(&(sg_pass){ .swapchain = sglue_swapchain(), ... });
 
     LICENSE
     =======
@@ -93,10 +104,8 @@
 extern "C" {
 #endif
 
-#if defined(SOKOL_GFX_INCLUDED) && defined(SOKOL_APP_INCLUDED)
-SOKOL_GLUE_API_DECL sg_environment sapp_sgenvironment(void);
-SOKOL_GLUE_API_DECL sg_swapchain sapp_sgswapchain(void);
-#endif
+SOKOL_GLUE_API_DECL sg_environment sglue_environment(void);
+SOKOL_GLUE_API_DECL sg_swapchain sglue_swapchain(void);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -112,8 +121,7 @@ SOKOL_GLUE_API_DECL sg_swapchain sapp_sgswapchain(void);
     #define SOKOL_API_IMPL
 #endif
 
-#if defined(SOKOL_GFX_INCLUDED) && defined(SOKOL_APP_INCLUDED)
-SOKOL_API_IMPL sg_environment sapp_sgenvironment(void) {
+SOKOL_API_IMPL sg_environment sglue_environment(void) {
     sg_environment env;
     memset(&env, 0, sizeof(env));
     env.defaults.color_format = (sg_pixel_format) sapp_color_format();
@@ -126,7 +134,7 @@ SOKOL_API_IMPL sg_environment sapp_sgenvironment(void) {
     return env;
 }
 
-SOKOL_API_IMPL sg_swapchain sapp_sgswapchain(void) {
+SOKOL_API_IMPL sg_swapchain sglue_swapchain(void) {
     sg_swapchain swapchain;
     memset(&swapchain, 0, sizeof(swapchain));
     swapchain.width = sapp_width();
@@ -145,6 +153,5 @@ SOKOL_API_IMPL sg_swapchain sapp_sgswapchain(void) {
     swapchain.gl.framebuffer = sapp_gl_get_framebuffer();
     return swapchain;
 }
-#endif
 
 #endif /* SOKOL_GLUE_IMPL */
