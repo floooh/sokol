@@ -5345,8 +5345,8 @@ typedef struct {
     const _sg_pipeline_t* cur_pipeline;
     sg_pipeline cur_pipeline_id;
     const _sg_buffer_t* cur_indexbuffer;
-    int cur_indexbuffer_offset;
     sg_buffer cur_indexbuffer_id;
+    int cur_indexbuffer_offset;
     int cur_vertexbuffer_offsets[SG_MAX_VERTEX_BUFFERS];
     sg_buffer cur_vertexbuffer_ids[SG_MAX_VERTEX_BUFFERS];
     sg_image cur_vs_image_ids[SG_MAX_SHADERSTAGE_IMAGES];
