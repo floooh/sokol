@@ -148,7 +148,7 @@
 
         - to render characters at 16x16 physical pixels:
 
-            sdtx_canvas(sapp_width()/2.0f, sapp_heigth()/2.0f);
+            sdtx_canvas(sapp_width()/2.0f, sapp_height()/2.0f);
 
         Do *not* use integer math here, since this will not look nice
         when the render target size isn't divisible by 2.
@@ -4135,7 +4135,7 @@ static void _sdtx_render_char(_sdtx_context_t* ctx, uint8_t c) {
         const float x1 = x0 + ctx->glyph_size.x;
         const float y1 = y0 + ctx->glyph_size.y;
 
-        // glyph width and heigth in font texture space
+        // glyph width and height in font texture space
         // NOTE: the '+1' and '-2' fixes texture bleeding into the neighboring font texture cell
         const uint16_t uvw = 0x10000 / 0x100;
         const uint16_t uvh = 0x10000 / SDTX_MAX_FONTS;

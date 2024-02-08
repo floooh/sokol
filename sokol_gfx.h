@@ -720,7 +720,7 @@
       texture-sample-type with the correct sampler-type). For GLSL an
       additional 'combined-image-sampler name' must be provided because 'OpenGL
       style GLSL' cannot handle separate texture and sampler objects, but still
-      groups them into a tradtional GLSL 'sampler object'.
+      groups them into a traditional GLSL 'sampler object'.
 
     Compatibility rules for image-sample-type vs sampler-type are as follows:
 
@@ -2883,7 +2883,7 @@ typedef struct sg_pipeline_desc {
     sg_make_pass() function.
 
     A pass object contains 1..4 color attachments, 0..4 msaa-resolve
-    attachemnts, and none or one depth-stencil attachment.
+    attachments, and none or one depth-stencil attachment.
 
     Each attachment consists of an image, and two additional indices describing
     which subimage the pass will render into: one mipmap index, and if the image
@@ -3585,7 +3585,7 @@ typedef enum sg_log_item {
             the more likely are cache slot collisions which will cause
             a BindGroups object to be destroyed and a new one created.
             Use the information returned by sg_query_stats() to check
-            if this is a frequent occurence, and increase the cache size as
+            if this is a frequent occurrence, and increase the cache size as
             needed (the default is 1024).
             NOTE: wgpu_bindgroups_cache_size must be a power-of-2 number!
         .context.wgpu.device
@@ -3879,7 +3879,7 @@ typedef struct sg_d3d11_sampler_info {
 
 typedef struct sg_d3d11_shader_info {
     const void* vs_cbufs[SG_MAX_SHADERSTAGE_UBS]; // ID3D11Buffer* (vertex stage constant buffers)
-    const void* fs_cbufs[SG_MAX_SHADERSTAGE_UBS]; // ID3D11BUffer* (fragment stage constant buffers)
+    const void* fs_cbufs[SG_MAX_SHADERSTAGE_UBS]; // ID3D11Buffer* (fragment stage constant buffers)
     const void* vs;   // ID3D11VertexShader*
     const void* fs;   // ID3D11PixelShader*
 } sg_d3d11_shader_info;
@@ -4015,7 +4015,7 @@ SOKOL_GFX_API_DECL const void* sg_wgpu_device(void);
 SOKOL_GFX_API_DECL const void* sg_wgpu_queue(void);
 // WebGPU: return this frame's WGPUCommandEncoder
 SOKOL_GFX_API_DECL const void* sg_wgpu_command_encoder(void);
-// WebGPU: return WGPURenderPassEncoder of currrent pass
+// WebGPU: return WGPURenderPassEncoder of current pass
 SOKOL_GFX_API_DECL const void* sg_wgpu_render_pass_encoder(void);
 // WebGPU: get internal buffer resource objects
 SOKOL_GFX_API_DECL sg_wgpu_buffer_info sg_wgpu_query_buffer_info(sg_buffer buf);
@@ -5373,7 +5373,7 @@ typedef struct {
 } _sg_mtl_context_t;
 typedef _sg_mtl_context_t _sg_context_t;
 
-// resouce binding state cache
+// resource binding state cache
 typedef struct {
     const _sg_pipeline_t* cur_pipeline;
     sg_pipeline cur_pipeline_id;
@@ -8381,7 +8381,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
             _sg_gl_fb_attach_texture(&pass->gl.color_atts[i], &pass->cmn.color_atts[i], gl_att_type);
         }
     }
-    // attach depth-stencil attachement
+    // attach depth-stencil attachment
     if (pass->gl.ds_att.image) {
         const GLenum gl_att = _sg_gl_depth_stencil_attachment_type(&pass->gl.ds_att);
         const _sg_image_t* ds_img = pass->gl.ds_att.image;
@@ -11945,7 +11945,7 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_data(const _sg_image_t* img, __unsafe_unr
     }
 }
 
-// initialize MTLTextureDescritor with common attributes
+// initialize MTLTextureDescriptor with common attributes
 _SOKOL_PRIVATE bool _sg_mtl_init_texdesc_common(MTLTextureDescriptor* mtl_desc, _sg_image_t* img) {
     mtl_desc.textureType = _sg_mtl_texture_type(img->cmn.type);
     mtl_desc.pixelFormat = _sg_mtl_pixel_format(img->cmn.pixel_format);
@@ -11976,7 +11976,7 @@ _SOKOL_PRIVATE bool _sg_mtl_init_texdesc_common(MTLTextureDescriptor* mtl_desc, 
     return true;
 }
 
-// initialize MTLTextureDescritor with rendertarget attributes
+// initialize MTLTextureDescriptor with rendertarget attributes
 _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt(MTLTextureDescriptor* mtl_desc, _sg_image_t* img) {
     SOKOL_ASSERT(img->cmn.render_target);
     _SOKOL_UNUSED(img);
@@ -11984,7 +11984,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt(MTLTextureDescriptor* mtl_desc, _sg_
     mtl_desc.resourceOptions = MTLResourceStorageModePrivate;
 }
 
-// initialize MTLTextureDescritor with MSAA attributes
+// initialize MTLTextureDescriptor with MSAA attributes
 _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt_msaa(MTLTextureDescriptor* mtl_desc, _sg_image_t* img) {
     SOKOL_ASSERT(img->cmn.sample_count > 1);
     mtl_desc.usage = MTLTextureUsageRenderTarget;

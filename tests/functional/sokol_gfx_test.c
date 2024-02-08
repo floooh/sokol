@@ -1442,7 +1442,7 @@ UTEST(sokol_gfx, commit_listener_add_remove_add) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, commit_listener_remove_non_existant) {
+UTEST(sokol_gfx, commit_listener_remove_non_existent) {
     reset_commit_listener();
     setup(&(sg_desc){0});
     const sg_commit_listener l0 = {
