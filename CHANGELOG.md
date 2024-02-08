@@ -318,7 +318,7 @@ The major topic of this update is the 'finalized' WebGPU support in sokol_gfx.h 
   `sg_frame_stats` returned by the new sokol_gfx.h function `sg_query_frame_stats()`.
 
 - The sokol-samples repository gained 3 new samples:
-  - cubemap-jpeg-sapp.c (load a cubemap from seperate JPEG files)
+  - cubemap-jpeg-sapp.c (load a cubemap from separate JPEG files)
   - cubemaprt-sapp.c (render into cubemap faces - this demo actually existed a while but wasn't "official" so far)
   - drawcallperf-sapp.c (a sample to explore the performance overhead of sg_apply_bindings, sg_apply_uniforms and sg_draw)
 
@@ -890,7 +890,7 @@ GLES2/WebGL1 support has been removed from the sokol headers (now that
   A new header ```sokol_log.h``` has been added to provide a standard logging callback implementation
   which provides logging output on all platforms to stderr and/or platform specific logging
   facilities. ```sokol_log.h``` only uses fputs() and platform specific logging function instead
-  of fprintf() to preverse some executable size.
+  of fprintf() to preserve some executable size.
 
   **QUESTION**: Why are the sokol headers now silent, unless a logging callback is installed?
   This is mainly because a standard logging function which does something meaningful on all
@@ -1375,7 +1375,7 @@ so that it's easier to publish new bindings after updates to the sokol headers).
       of uniform block members. The default (SG_UNIFORMLAYOUT_NATIVE) keeps the same
       behaviour, so existing code shouldn't need to be changed. With the packing
       rule SG_UNIFORMLAYOUT_STD140 the uniform block interior is expected to be
-      layed out according to the OpenGL std140 packing rule.
+      laid out according to the OpenGL std140 packing rule.
     - Note that the SG_UNIFORMLAYOUT_STD140 only allows a subset of the actual std140
       packing rule: arrays are only allowed for the types vec4, int4 and mat4.
       This is because the uniform data must still be compatible with

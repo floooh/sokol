@@ -3790,7 +3790,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pass_panel(sg_imgui_t* ctx, sg_pass pass) {
             }
             if (pass_ui->desc.depth_stencil_attachment.image.id != SG_INVALID_ID) {
                 igSeparator();
-                igText("Depth-Stencil Attachemnt:");
+                igText("Depth-Stencil Attachment:");
                 _sg_imgui_draw_pass_attachment(ctx, &pass_ui->desc.depth_stencil_attachment, &pass_ui->ds_image_scale);
             }
         } else {
