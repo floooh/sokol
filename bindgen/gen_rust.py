@@ -600,7 +600,7 @@ def gen_consts(decl, prefix):
     for item in decl["items"]:
         #
         # TODO: What type should these constants have? Currently giving all `usize`
-        #       unless specifically overriden by `special_constant_types`
+        #       unless specifically overridden by `special_constant_types`
         #
 
         item_name = check_override(item["name"])
