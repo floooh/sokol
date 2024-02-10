@@ -142,8 +142,9 @@ SOKOL_API_IMPL sg_swapchain sglue_swapchain(void) {
     swapchain.sample_count = sapp_sample_count();
     swapchain.color_format = (sg_pixel_format)sapp_color_format();
     swapchain.depth_format = (sg_pixel_format)sapp_depth_format();
-    swapchain.metal.render_pass_descriptor = sapp_metal_get_renderpass_descriptor();
-    swapchain.metal.drawable = sapp_metal_get_drawable();
+    swapchain.metal.current_drawable = sapp_metal_get_current_drawable();
+    swapchain.metal.depth_stencil_texture = sapp_metal_get_depth_stencil_texture();
+    swapchain.metal.msaa_color_texture = sapp_metal_get_msaa_color_texture();
     swapchain.d3d11.render_view = sapp_d3d11_get_render_view();
     swapchain.d3d11.resolve_view = sapp_d3d11_get_resolve_view();
     swapchain.d3d11.depth_stencil_view = sapp_d3d11_get_depth_stencil_view();

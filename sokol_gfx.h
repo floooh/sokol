@@ -2352,9 +2352,9 @@ typedef struct sg_pass_action {
     FIXME
 */
 typedef struct sg_metal_swapchain {
-    // FIXME: replace with textures and setup RenderPassDescriptor in begin-pass?
-    const void* render_pass_descriptor; // MTLRenderPassDescriptor
-    const void* drawable;               // MTLDrawable
+    const void* current_drawable;       // CAMetalDrawable (NOT MTLDrawable!!!)
+    const void* depth_stencil_texture;  // MTLTexture
+    const void* msaa_color_texture;     // MTLTexture
 } sg_metal_swapchain;
 
 typedef struct sg_d3d11_swapchain {
@@ -3433,10 +3433,12 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_COLORFORMAT, "sg_begin_pass: expected pass.swapchain.color_format to be valid") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_COLORFORMAT_NOTSET, "sg_begin_pass: expected pass.swapchain.color_format to be unset") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_DEPTHFORMAT_NOTSET, "sg_begin_pass: expected pass.swapchain.depth_format to be unset") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_RENDERPASSDESCRIPTOR, "sg_begin_pass: expected pass.swapchain.metal.render_pass_descriptor != 0") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_RENDERPASSDESCRIPTOR_NOTSET, "sg_begin_pass: expected pass.swapchain.metal.render_pass_descriptor == 0") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_DRAWABLE, "sg_begin_pass: expected pass.swapchain.metal.drawable != 0") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_DRAWABLE_NOTSET, "sg_begin_pass: expected pass.swapchain.metal.drawable == 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_CURRENTDRAWABLE, "sg_begin_pass: expected pass.swapchain.metal.current_drawable != 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_CURRENTDRAWABLE_NOTSET, "sg_begin_pass: expected pass.swapchain.metal.current_drawable == 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_DEPTHSTENCILTEXTURE, "sg_begin_pass: expected pass.swapchain.metal.depth_stencil_texture != 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_DEPTHSTENCILTEXTURE_NOTSET, "sg_begin_pass: expected pass.swapchain.metal.depth_stencil_texture == 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_MSAACOLORTEXTURE, "sg_begin_pass: expected pass.swapchain.metal.msaa_color_texture != 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_MSAACOLORTEXTURE_NOTSET, "sg_begin_pass: expected pass.swapchain.metal.msaa_color_texture == 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RENDERVIEW, "sg_begin_pass: expected pass.swapchain.d3d11.render_view != 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RENDERVIEW_NOTSET, "sg_begin_pass: expected pass.swapchain.d3d11.render_view == 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RESOLVEVIEW, "sg_begin_pass: expected pass.swapchain.d3d11.resolve_view != 0") \
@@ -5369,7 +5371,7 @@ typedef struct {
     id<MTLCommandQueue> cmd_queue;
     id<MTLCommandBuffer> cmd_buffer;
     id<MTLRenderCommandEncoder> cmd_encoder;
-    id<MTLDrawable> cur_drawable;
+    id<CAMetalDrawable> cur_drawable;
     id<MTLBuffer> uniform_buffers[SG_NUM_INFLIGHT_FRAMES];
 } _sg_mtl_backend_t;
 
@@ -12267,28 +12269,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass_action* action, _sg_attachm
         _sg.mtl.cur_ub_base_ptr = (uint8_t*)[_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index] contents];
     }
 
-    // initialize a render pass descriptor
-    MTLRenderPassDescriptor* pass_desc = nil;
-    if (atts) {
-        // offscreen render pass
-        pass_desc = [MTLRenderPassDescriptor renderPassDescriptor];
-    } else {
-        // NOTE: at least in macOS Sonoma this no longer seems to be the case, the
-        // render pass descriptor is also valid in a minimized window
-        // ===
-        // an MTKView render pass descriptor will not be valid if window is minimized, don't do any rendering in this case
-        if (0 == swapchain->metal.render_pass_descriptor) {
-            _sg.cur_pass.valid = false;
-            return;
-        }
-        pass_desc = (__bridge MTLRenderPassDescriptor*) swapchain->metal.render_pass_descriptor;
-        // pin the swapchain resources into memory so that they outlive their command buffer
-        // (this is necessary because the command buffer doesn't retain references)
-        int default_pass_desc_ref = _sg_mtl_add_resource(pass_desc);
-        _sg_mtl_release_resource(_sg.frame_index, default_pass_desc_ref);
-        SOKOL_ASSERT(swapchain->metal.drawable);
-        _sg.mtl.cur_drawable = (__bridge id<MTLDrawable>) swapchain->metal.drawable;
-    }
+    MTLRenderPassDescriptor* pass_desc = [MTLRenderPassDescriptor renderPassDescriptor];
     SOKOL_ASSERT(pass_desc);
     if (atts) {
         // setup pass descriptor for offscreen rendering
@@ -12376,6 +12357,44 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass_action* action, _sg_attachm
         }
     } else {
         // setup pass descriptor for swapchain rendering
+        //
+        // NOTE: at least in macOS Sonoma this no longer seems to be the case, the
+        // current drawable is also valid in a minimized window
+        // ===
+        // an MTKView current_drawable will not be valid if window is minimized, don't do any rendering in this case
+        if (0 == swapchain->metal.current_drawable) {
+            _sg.cur_pass.valid = false;
+            return;
+        }
+        _sg.mtl.cur_drawable = (__bridge id<CAMetalDrawable>) swapchain->metal.current_drawable;
+        if (swapchain->sample_count > 1) {
+            // multi-sampling: render into msaa texture, resolve into drawable texture
+            id<MTLTexture> msaa_tex = (__bridge id<MTLTexture>) swapchain->metal.msaa_color_texture;
+            SOKOL_ASSERT(msaa_tex != nil);
+            // need to pin texture object so that it may outlive the command buffer
+            int msaa_tex_ref = _sg_mtl_add_resource(msaa_tex);
+            _sg_mtl_release_resource(_sg.frame_index, msaa_tex_ref);
+            pass_desc.colorAttachments[0].texture = msaa_tex;
+            pass_desc.colorAttachments[0].resolveTexture = _sg.mtl.cur_drawable.texture;
+            pass_desc.colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
+        } else {
+            // non-msaa: render into current_drawable
+            pass_desc.colorAttachments[0].texture = _sg.mtl.cur_drawable.texture;
+            pass_desc.colorAttachments[0].storeAction = MTLStoreActionStore;
+        }
+        // FIXME: depth-stencil-texture should be optional
+        // depth-stencil texture
+        id<MTLTexture> ds_tex = (__bridge id<MTLTexture>) swapchain->metal.depth_stencil_texture;
+        SOKOL_ASSERT(ds_tex != nil);
+        // need to pin texture object so that it may outlive the command buffer
+        int ds_tex_ref = _sg_mtl_add_resource(ds_tex);
+        _sg_mtl_release_resource(_sg.frame_index, ds_tex_ref);
+        pass_desc.depthAttachment.texture = ds_tex;
+        pass_desc.depthAttachment.storeAction = MTLStoreActionDontCare;
+        pass_desc.stencilAttachment.texture = ds_tex;
+        pass_desc.stencilAttachment.loadAction = MTLStoreActionDontCare;
+
+        // configure load actions and clear values
         pass_desc.colorAttachments[0].loadAction = _sg_mtl_load_action(action->colors[0].load_action);
         sg_color c = action->colors[0].clear_value;
         pass_desc.colorAttachments[0].clearColor = MTLClearColorMake(c.r, c.g, c.b, c.a);
@@ -15874,8 +15893,13 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
             // NOTE: depth buffer is optional, so depth_format is allowed to be invalid
             // NOTE: the GL framebuffer handle may actually be 0
             #if defined(SOKOL_METAL)
-                _SG_VALIDATE(pass->swapchain.metal.render_pass_descriptor != 0, VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_RENDERPASSDESCRIPTOR);
-                _SG_VALIDATE(pass->swapchain.metal.drawable != 0, VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_DRAWABLE);
+                _SG_VALIDATE(pass->swapchain.metal.current_drawable != 0, VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_CURRENTDRAWABLE);
+                _SG_VALIDATE(pass->swapchain.metal.depth_stencil_texture != 0, VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_DEPTHSTENCILTEXTURE);
+                if (pass->swapchain.sample_count > 1) {
+                    _SG_VALIDATE(pass->swapchain.metal.msaa_color_texture != 0, VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_MSAACOLORTEXTURE);
+                } else {
+                    _SG_VALIDATE(pass->swapchain.metal.msaa_color_texture == 0, VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_MSAACOLORTEXTURE_NOTSET);
+                }
             #elif defined(SOKOL_D3D11)
                 _SG_VALIDATE(pass->swapchain.d3d11.render_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RENDERVIEW);
                 _SG_VALIDATE(pass->swapchain.d3d11.depth_stencil_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_DEPTHSTENCILVIEW);
@@ -15928,8 +15952,9 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
             _SG_VALIDATE(pass->swapchain.color_format == _SG_PIXELFORMAT_DEFAULT, VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_COLORFORMAT_NOTSET);
             _SG_VALIDATE(pass->swapchain.depth_format == _SG_PIXELFORMAT_DEFAULT, VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_DEPTHFORMAT_NOTSET);
             #if defined(SOKOL_METAL)
-                _SG_VALIDATE(pass->swapchain.metal.render_pass_descriptor == 0, VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_RENDERPASSDESCRIPTOR_NOTSET);
-                _SG_VALIDATE(pass->swapchain.metal.drawable == 0, VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_DRAWABLE_NOTSET);
+                _SG_VALIDATE(pass->swapchain.metal.current_drawable == 0, VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_CURRENTDRAWABLE_NOTSET);
+                _SG_VALIDATE(pass->swapchain.metal.depth_stencil_texture == 0, VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_DEPTHSTENCILTEXTURE_NOTSET);
+                _SG_VALIDATE(pass->swapchain.metal.msaa_color_texture == 0, VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_MSAACOLORTEXTURE_NOTSET);
             #elif defined(SOKOL_D3D11)
                 _SG_VALIDATE(pass->swapchain.d3d11.render_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RENDERVIEW_NOTSET);
                 _SG_VALIDATE(pass->swapchain.d3d11.depth_stencil_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_DEPTHSTENCILVIEW_NOTSET);
