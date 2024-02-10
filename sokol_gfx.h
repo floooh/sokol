@@ -8419,11 +8419,12 @@ _SOKOL_PRIVATE _sg_image_t* _sg_gl_attachments_ds_image(const _sg_attachments_t*
     return atts->gl.depth_stencil.image;
 }
 
-_SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain) {
+_SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain, const char* label) {
     // FIXME: what if a texture used as render target is still bound, should we
     // unbind all currently bound textures in begin pass?
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(swapchain);
+    _SOKOL_UNUSED(label);
     _SG_GL_CHECK_ERROR();
 
     // bind the render pass framebuffer
@@ -10586,9 +10587,10 @@ _SOKOL_PRIVATE _sg_image_t* _sg_d3d11_attachments_ds_image(const _sg_attachments
     return atts->d3d11.depth_stencil.image;
 }
 
-_SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain) {
+_SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain, const char* label) {
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(swapchain);
+    _SOKOL_UNUSED(label);
     int num_rtvs = 0;
     ID3D11RenderTargetView* rtvs[SG_MAX_COLOR_ATTACHMENTS] = { 0 };
     ID3D11DepthStencilView* dsv = 0;
@@ -12233,7 +12235,7 @@ _SOKOL_PRIVATE _sg_image_t* _sg_mtl_attachments_ds_image(const _sg_attachments_t
     return atts->mtl.depth_stencil.image;
 }
 
-_SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain) {
+_SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain, const char* label) {
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(swapchain);
     SOKOL_ASSERT(_sg.mtl.cmd_queue);
@@ -12413,6 +12415,14 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass_action* action, _sg_attachm
         _sg.cur_pass.valid = false;
         return;
     }
+
+    #if defined(SOKOL_DEBUG)
+        if (label) {
+            _sg.mtl.cmd_encoder.label = [NSString stringWithUTF8String:label];
+        }
+    #else
+        _SOKOL_UNUSED(label);
+    #endif
 
     // bind the global uniform buffer, this only happens once per pass
     _sg_mtl_bind_uniform_buffers();
@@ -14365,7 +14375,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_ds_att(WGPURenderPassDepthStencilAttachment* w
     wgpu_att->stencilReadOnly = false;
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain) {
+_SOKOL_PRIVATE void _sg_wgpu_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain, const char* label) {
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(swapchain);
     SOKOL_ASSERT(_sg.wgpu.cmd_enc);
@@ -14379,6 +14389,7 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(const sg_pass_action* action, _sg_attach
     _sg_clear(&wgpu_pass_desc, sizeof(wgpu_pass_desc));
     _sg_clear(&wgpu_color_att, sizeof(wgpu_color_att));
     _sg_clear(&wgpu_ds_att, sizeof(wgpu_ds_att));
+    wgpu_pass_desc.label = label;
     if (atts) {
         SOKOL_ASSERT(atts->slot.state == SG_RESOURCESTATE_VALID);
         for (int i = 0; i < atts->cmn.num_colors; i++) {
@@ -14838,17 +14849,17 @@ static inline _sg_image_t* _sg_attachments_ds_image(const _sg_attachments_t* att
     #endif
 }
 
-static inline void _sg_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain) {
+static inline void _sg_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain, const char* label) {
     #if defined(_SOKOL_ANY_GL)
-    _sg_gl_begin_pass(action, atts, swapchain);
+    _sg_gl_begin_pass(action, atts, swapchain, label);
     #elif defined(SOKOL_METAL)
-    _sg_mtl_begin_pass(action, atts, swapchain);
+    _sg_mtl_begin_pass(action, atts, swapchain, label);
     #elif defined(SOKOL_D3D11)
-    _sg_d3d11_begin_pass(action, atts, swapchain);
+    _sg_d3d11_begin_pass(action, atts, swapchain, label);
     #elif defined(SOKOL_WGPU)
-    _sg_wgpu_begin_pass(action, atts, swapchain);
+    _sg_wgpu_begin_pass(action, atts, swapchain, label);
     #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_begin_pass(action, atts, swapchain);
+    _sg_dummy_begin_pass(action, atts, swapchain, label);
     #else
     #error("INVALID BACKEND");
     #endif
@@ -17580,7 +17591,7 @@ SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
     _sg.cur_pass.in_pass = true;
     sg_pass_action pa;
     _sg_resolve_pass_action(&pass->action, &pa);
-    _sg_begin_pass(&pa, _sg.cur_pass.atts, &pass->swapchain);
+    _sg_begin_pass(&pa, _sg.cur_pass.atts, &pass->swapchain, pass->label);
     _SG_TRACE_ARGS(begin_pass, pass);
 }
 
