@@ -266,8 +266,9 @@
             Return the MSAA sample count of the default framebuffer.
 
         const void* sapp_metal_get_device(void)
-        const void* sapp_metal_get_renderpass_descriptor(void)
-        const void* sapp_metal_get_drawable(void)
+        const void* sapp_metal_get_current_drawable(void)
+        const void* sapp_metal_get_depth_stencil_texture(void)
+        const void* sapp_metal_get_msaa_color_texture(void)
             If the Metal backend has been selected, these functions return pointers
             to various Metal API objects required for rendering, otherwise
             they return a null pointer. These void pointers are actually
@@ -1849,10 +1850,12 @@ SOKOL_APP_API_DECL void sapp_html5_fetch_dropped_file(const sapp_html5_fetch_req
 
 /* Metal: get bridged pointer to Metal device object */
 SOKOL_APP_API_DECL const void* sapp_metal_get_device(void);
-/* Metal: get bridged pointer to this frame's renderpass descriptor */
-SOKOL_APP_API_DECL const void* sapp_metal_get_renderpass_descriptor(void);
-/* Metal: get bridged pointer to current drawable */
-SOKOL_APP_API_DECL const void* sapp_metal_get_drawable(void);
+/* Metal: get bridged pointer to MTKView's current drawable of type CAMetalDrawable */
+SOKOL_APP_API_DECL const void* sapp_metal_get_current_drawable(void);
+/* Metal: get bridged pointer to MTKView's depth-stencil texture of type MTLTexture */
+SOKOL_APP_API_DECL const void* sapp_metal_get_depth_stencil_texture(void);
+/* Metal: get bridged pointer to MTKView's msaa-color-texture of type MTLTexture (may be null) */
+SOKOL_APP_API_DECL const void* sapp_metal_get_msaa_color_texture(void);
 /* macOS: get bridged pointer to macOS NSWindow */
 SOKOL_APP_API_DECL const void* sapp_macos_get_window(void);
 /* iOS: get bridged pointer to iOS UIWindow */
@@ -11525,22 +11528,7 @@ SOKOL_API_IMPL const void* sapp_metal_get_device(void) {
     #endif
 }
 
-SOKOL_API_IMPL const void* sapp_metal_get_renderpass_descriptor(void) {
-    SOKOL_ASSERT(_sapp.valid);
-    #if defined(SOKOL_METAL)
-        #if defined(_SAPP_MACOS)
-            const void* obj = (__bridge const void*) [_sapp.macos.view currentRenderPassDescriptor];
-        #else
-            const void* obj = (__bridge const void*) [_sapp.ios.view currentRenderPassDescriptor];
-        #endif
-        SOKOL_ASSERT(obj);
-        return obj;
-    #else
-        return 0;
-    #endif
-}
-
-SOKOL_API_IMPL const void* sapp_metal_get_drawable(void) {
+SOKOL_API_IMPL const void* sapp_metal_get_current_drawable(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_METAL)
         #if defined(_SAPP_MACOS)
@@ -11549,6 +11537,34 @@ SOKOL_API_IMPL const void* sapp_metal_get_drawable(void) {
             const void* obj = (__bridge const void*) [_sapp.ios.view currentDrawable];
         #endif
         SOKOL_ASSERT(obj);
+        return obj;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sapp_metal_get_depth_stencil_texture(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_METAL)
+        #if defined(_SAPP_MACOS)
+            const void* obj = (__bridge const void*) [_sapp.macos.view depthStencilTexture];
+        #else
+            const void* obj = (__bridge const void*) [_sapp.ios.view depthStencilTexture];
+        #endif
+        return obj;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sapp_metal_get_msaa_color_texture(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_METAL)
+        #if defined(_SAPP_MACOS)
+            const void* obj = (__bridge const void*) [_sapp.macos.view multisampleColorTexture];
+        #else
+            const void* obj = (__bridge const void*) [_sapp.ios.view multisampleColorTexture];
+        #endif
         return obj;
     #else
         return 0;
