@@ -2960,7 +2960,7 @@ typedef struct sg_trace_hooks {
     void (*update_buffer)(sg_buffer buf, const sg_range* data, void* user_data);
     void (*update_image)(sg_image img, const sg_image_data* data, void* user_data);
     void (*append_buffer)(sg_buffer buf, const sg_range* data, int result, void* user_data);
-    void (*begin_pass)(const sg_pass* pass, void* user_data);
+    void (*begin_pass)(const sg_pass* pass, const sg_pass_action* resolved_pass_action, void* user_data);
     void (*apply_viewport)(int x, int y, int width, int height, bool origin_top_left, void* user_data);
     void (*apply_scissor_rect)(int x, int y, int width, int height, bool origin_top_left, void* user_data);
     void (*apply_pipeline)(sg_pipeline pip, void* user_data);
@@ -12393,7 +12393,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass_action* action, _sg_attachm
         pass_desc.depthAttachment.texture = ds_tex;
         pass_desc.depthAttachment.storeAction = MTLStoreActionDontCare;
         pass_desc.stencilAttachment.texture = ds_tex;
-        pass_desc.stencilAttachment.loadAction = MTLStoreActionDontCare;
+        pass_desc.stencilAttachment.storeAction = MTLStoreActionDontCare;
 
         // configure load actions and clear values
         pass_desc.colorAttachments[0].loadAction = _sg_mtl_load_action(action->colors[0].load_action);
@@ -17588,10 +17588,10 @@ SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
     }
     _sg.cur_pass.valid = true;  // may be overruled by backend begin-pass functions
     _sg.cur_pass.in_pass = true;
-    sg_pass_action pa;
-    _sg_resolve_pass_action(&pass->action, &pa);
-    _sg_begin_pass(&pa, _sg.cur_pass.atts, &pass->swapchain, pass->label);
-    _SG_TRACE_ARGS(begin_pass, pass);
+    sg_pass_action resolved_action;
+    _sg_resolve_pass_action(&pass->action, &resolved_action);
+    _sg_begin_pass(&resolved_action, _sg.cur_pass.atts, &pass->swapchain, pass->label);
+    _SG_TRACE_ARGS(begin_pass, pass, &resolved_action);
 }
 
 SOKOL_API_IMPL void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left) {
