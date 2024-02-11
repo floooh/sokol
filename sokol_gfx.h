@@ -2960,7 +2960,6 @@ typedef struct sg_trace_hooks {
     void (*update_buffer)(sg_buffer buf, const sg_range* data, void* user_data);
     void (*update_image)(sg_image img, const sg_image_data* data, void* user_data);
     void (*append_buffer)(sg_buffer buf, const sg_range* data, int result, void* user_data);
-    void (*begin_default_pass)(const sg_pass_action* pass_action, int width, int height, void* user_data);
     void (*begin_pass)(const sg_pass* pass, void* user_data);
     void (*apply_viewport)(int x, int y, int width, int height, bool origin_top_left, void* user_data);
     void (*apply_scissor_rect)(int x, int y, int width, int height, bool origin_top_left, void* user_data);
