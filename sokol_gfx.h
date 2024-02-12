@@ -4207,6 +4207,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #endif
     #endif
     #import <Metal/Metal.h>
+    #import <QuartzCore/CoreAnimation.h> // needed for CAMetalDrawable
 #elif defined(SOKOL_WGPU)
     #include <webgpu/webgpu.h>
     #if defined(__EMSCRIPTEN__)
@@ -4954,7 +4955,7 @@ typedef struct {
 
 typedef struct {
     _sg_slot_t slot;
-    _sg_attachemnts_common_t cmn;
+    _sg_attachments_common_t cmn;
     struct {
         _sg_dummy_attachment_t colors[SG_MAX_COLOR_ATTACHMENTS];
         _sg_dummy_attachment_t resolves[SG_MAX_COLOR_ATTACHMENTS];
@@ -6381,12 +6382,13 @@ _SOKOL_PRIVATE _sg_image_t* _sg_dummy_attachments_ds_image(const _sg_attachments
     return atts->dmy.depth_stencil.image;
 }
 
-_SOKOL_PRIVATE void _sg_dummy_begin_pass(const sg_pass_action* action, _sg_attachments* atts, const sg_swapchain* swapchain) {
+_SOKOL_PRIVATE void _sg_dummy_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain, const char* label) {
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(swapchain);
     _SOKOL_UNUSED(action);
     _SOKOL_UNUSED(atts);
     _SOKOL_UNUSED(swapchain);
+    _SOKOL_UNUSED(label);
 }
 
 _SOKOL_PRIVATE void _sg_dummy_end_pass(void) {
