@@ -4005,6 +4005,46 @@ _SOKOL_PRIVATE void _sgimgui_draw_passaction_panel(sgimgui_t* ctx, sg_attachment
     }
 }
 
+_SOKOL_PRIVATE void _sgimgui_draw_swapchain_panel(sg_swapchain* swapchain) {
+    igText("Swapchain");
+    igText("  Width: %d", swapchain->width);
+    igText("  Height: %d", swapchain->height);
+    igText("  Sample Count: %d", swapchain->sample_count);
+    igText("  Color Format: %s", _sgimgui_pixelformat_string(swapchain->color_format));
+    igText("  Depth Format: %s", _sgimgui_pixelformat_string(swapchain->depth_format));
+    igSeparator();
+    switch (sg_query_backend()) {
+        case SG_BACKEND_D3D11:
+            igText("D3D11 Objects:");
+            igText("  Render View: %p", swapchain->d3d11.render_view);
+            igText("  Resolve View: %p", swapchain->d3d11.resolve_view);
+            igText("  Depth Stencil View: %p", swapchain->d3d11.depth_stencil_view);
+            break;
+        case SG_BACKEND_WGPU:
+            igText("WGPU Objects:");
+            igText("  Render View: %p", swapchain->wgpu.render_view);
+            igText("  Resolve View: %p", swapchain->wgpu.resolve_view);
+            igText("  Depth Stencil View: %p", swapchain->wgpu.depth_stencil_view);
+            break;
+        case SG_BACKEND_METAL_MACOS:
+        case SG_BACKEND_METAL_IOS:
+        case SG_BACKEND_METAL_SIMULATOR:
+            igText("Metal Objects:");
+            igText("  Current Drawable: %p", swapchain->metal.current_drawable);
+            igText("  Depth Stencil Texture: %p", swapchain->metal.depth_stencil_texture);
+            igText("  MSAA Color Texture: %p", swapchain->metal.msaa_color_texture);
+            break;
+        case SG_BACKEND_GLCORE33:
+        case SG_BACKEND_GLES3:
+            igText("GL Objects:");
+            igText("  Framebuffer: %d", swapchain->gl.framebuffer);
+            break;
+        default:
+            igText("  UNKNOWN BACKEND!");
+            break;
+    }
+}
+
 _SOKOL_PRIVATE void _sgimgui_draw_capture_panel(sgimgui_t* ctx) {
     int sel_item_index = ctx->capture_window.sel_item;
     if (sel_item_index >= _sgimgui_capture_num_read_items(ctx)) {
@@ -4067,8 +4107,11 @@ _SOKOL_PRIVATE void _sgimgui_draw_capture_panel(sgimgui_t* ctx) {
         case SGIMGUI_CMD_BEGIN_PASS:
             _sgimgui_draw_passaction_panel(ctx, item->args.begin_pass.pass.attachments, &item->args.begin_pass.pass.action);
             igSeparator();
-            _sgimgui_draw_attachments_panel(ctx, item->args.begin_pass.pass.attachments);
-            // FIXME: swapchain panel
+            if (item->args.begin_pass.pass.attachments.id != SG_INVALID_ID) {
+                _sgimgui_draw_attachments_panel(ctx, item->args.begin_pass.pass.attachments);
+            } else {
+                _sgimgui_draw_swapchain_panel(&item->args.begin_pass.pass.swapchain);
+            }
             break;
         case SGIMGUI_CMD_APPLY_VIEWPORT:
         case SGIMGUI_CMD_APPLY_SCISSOR_RECT:
