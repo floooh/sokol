@@ -18339,7 +18339,7 @@ SOKOL_API_IMPL sg_d3d11_pipeline_info sg_d3d11_query_pipeline_info(sg_pipeline p
     return res;
 }
 
-SOKOL_API_IMPL sg_d3d11_attachments_info sg_d3d11_query_pass_info(sg_attachments atts_id) {
+SOKOL_API_IMPL sg_d3d11_attachments_info sg_d3d11_query_attachments_info(sg_attachments atts_id) {
     SOKOL_ASSERT(_sg.valid);
     sg_d3d11_attachments_info res;
     _sg_clear(&res, sizeof(res));
