@@ -16872,15 +16872,18 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
 
 _SOKOL_PRIVATE sg_pass _sg_pass_defaults(const sg_pass* pass) {
     sg_pass res = *pass;
-    res.swapchain.sample_count = _sg_def(res.swapchain.sample_count, 1);
-    #if defined(SOKOL_WGPU)
-        SOKOL_ASSERT(SG_PIXELFORMAT_NONE < res.swapchain.color_format);
-    #elif (defined(SOKOL_METAL) || defined(SOKOL_D3D11))
-        res.swapchain.color_format = _sg_def(res.swapchain.color_format, SG_PIXELFORMAT_BGRA8);
-    #else
-        res.swapchain.color_format = _sg_def(res.swapchain.color_format, SG_PIXELFORMAT_RGBA8);
-    #endif
-    res.swapchain.depth_format = _sg_def(res.swapchain.depth_format, SG_PIXELFORMAT_DEPTH_STENCIL);
+    if (res.attachments.id == SG_INVALID_ID) {
+        // this is a swapchain-pass
+        res.swapchain.sample_count = _sg_def(res.swapchain.sample_count, 1);
+        #if defined(SOKOL_WGPU)
+            SOKOL_ASSERT(SG_PIXELFORMAT_NONE < res.swapchain.color_format);
+        #elif (defined(SOKOL_METAL) || defined(SOKOL_D3D11))
+            res.swapchain.color_format = _sg_def(res.swapchain.color_format, SG_PIXELFORMAT_BGRA8);
+        #else
+            res.swapchain.color_format = _sg_def(res.swapchain.color_format, SG_PIXELFORMAT_RGBA8);
+        #endif
+        res.swapchain.depth_format = _sg_def(res.swapchain.depth_format, SG_PIXELFORMAT_DEPTH_STENCIL);
+    }
     res.action = _sg_pass_action_defaults(&res.action);
     return res;
 }
