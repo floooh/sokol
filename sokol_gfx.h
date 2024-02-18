@@ -2960,7 +2960,7 @@ typedef struct sg_trace_hooks {
     void (*update_buffer)(sg_buffer buf, const sg_range* data, void* user_data);
     void (*update_image)(sg_image img, const sg_image_data* data, void* user_data);
     void (*append_buffer)(sg_buffer buf, const sg_range* data, int result, void* user_data);
-    void (*begin_pass)(const sg_pass* pass, const sg_pass_action* resolved_pass_action, void* user_data);
+    void (*begin_pass)(const sg_pass* pass, void* user_data);
     void (*apply_viewport)(int x, int y, int width, int height, bool origin_top_left, void* user_data);
     void (*apply_scissor_rect)(int x, int y, int width, int height, bool origin_top_left, void* user_data);
     void (*apply_pipeline)(sg_pipeline pip, void* user_data);
@@ -3737,6 +3737,7 @@ typedef struct sg_desc {
     int max_commit_listeners;
     bool disable_validation;    // disable validation layer even in debug mode, useful for tests
     bool mtl_force_managed_storage_mode; // for debugging: use Metal managed storage mode for resources even with UMA
+    bool mtl_use_command_buffer_with_retained_references;    // Metal: use a managed MTLCommandBuffer which ref-counts used resources
     bool wgpu_disable_bindgroups_cache;  // set to true to disable the WebGPU backend BindGroup cache
     int wgpu_bindgroups_cache_size;      // number of slots in the WebGPU bindgroup cache (must be 2^N)
     sg_allocator allocator;
@@ -6200,35 +6201,36 @@ _SOKOL_PRIVATE void _sg_pixelformat_sfbr(_sg_pixelformat_info_t* pfi) {
     pfi->render = true;
 }
 
-_SOKOL_PRIVATE void _sg_resolve_pass_action(const sg_pass_action* from, sg_pass_action* to) {
-    SOKOL_ASSERT(from && to);
-    *to = *from;
+_SOKOL_PRIVATE sg_pass_action _sg_pass_action_defaults(const sg_pass_action* action) {
+    SOKOL_ASSERT(action);
+    sg_pass_action res = *action;
     for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-        if (to->colors[i].load_action == _SG_LOADACTION_DEFAULT) {
-            to->colors[i].load_action = SG_LOADACTION_CLEAR;
-            to->colors[i].clear_value.r = SG_DEFAULT_CLEAR_RED;
-            to->colors[i].clear_value.g = SG_DEFAULT_CLEAR_GREEN;
-            to->colors[i].clear_value.b = SG_DEFAULT_CLEAR_BLUE;
-            to->colors[i].clear_value.a = SG_DEFAULT_CLEAR_ALPHA;
+        if (res.colors[i].load_action == _SG_LOADACTION_DEFAULT) {
+            res.colors[i].load_action = SG_LOADACTION_CLEAR;
+            res.colors[i].clear_value.r = SG_DEFAULT_CLEAR_RED;
+            res.colors[i].clear_value.g = SG_DEFAULT_CLEAR_GREEN;
+            res.colors[i].clear_value.b = SG_DEFAULT_CLEAR_BLUE;
+            res.colors[i].clear_value.a = SG_DEFAULT_CLEAR_ALPHA;
         }
-        if (to->colors[i].store_action == _SG_STOREACTION_DEFAULT) {
-            to->colors[i].store_action = SG_STOREACTION_STORE;
+        if (res.colors[i].store_action == _SG_STOREACTION_DEFAULT) {
+            res.colors[i].store_action = SG_STOREACTION_STORE;
         }
     }
-    if (to->depth.load_action == _SG_LOADACTION_DEFAULT) {
-        to->depth.load_action = SG_LOADACTION_CLEAR;
-        to->depth.clear_value = SG_DEFAULT_CLEAR_DEPTH;
+    if (res.depth.load_action == _SG_LOADACTION_DEFAULT) {
+        res.depth.load_action = SG_LOADACTION_CLEAR;
+        res.depth.clear_value = SG_DEFAULT_CLEAR_DEPTH;
     }
-    if (to->depth.store_action == _SG_STOREACTION_DEFAULT) {
-        to->depth.store_action = SG_STOREACTION_DONTCARE;
+    if (res.depth.store_action == _SG_STOREACTION_DEFAULT) {
+        res.depth.store_action = SG_STOREACTION_DONTCARE;
     }
-    if (to->stencil.load_action == _SG_LOADACTION_DEFAULT) {
-        to->stencil.load_action = SG_LOADACTION_CLEAR;
-        to->stencil.clear_value = SG_DEFAULT_CLEAR_STENCIL;
+    if (res.stencil.load_action == _SG_LOADACTION_DEFAULT) {
+        res.stencil.load_action = SG_LOADACTION_CLEAR;
+        res.stencil.clear_value = SG_DEFAULT_CLEAR_STENCIL;
     }
-    if (to->stencil.store_action == _SG_STOREACTION_DEFAULT) {
-        to->stencil.store_action = SG_STOREACTION_DONTCARE;
+    if (res.stencil.store_action == _SG_STOREACTION_DEFAULT) {
+        res.stencil.store_action = SG_STOREACTION_DONTCARE;
     }
+    return res;
 }
 
 // ██████  ██    ██ ███    ███ ███    ███ ██    ██     ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
@@ -6382,13 +6384,9 @@ _SOKOL_PRIVATE _sg_image_t* _sg_dummy_attachments_ds_image(const _sg_attachments
     return atts->dmy.depth_stencil.image;
 }
 
-_SOKOL_PRIVATE void _sg_dummy_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain, const char* label) {
-    SOKOL_ASSERT(action);
-    SOKOL_ASSERT(swapchain);
-    _SOKOL_UNUSED(action);
-    _SOKOL_UNUSED(atts);
-    _SOKOL_UNUSED(swapchain);
-    _SOKOL_UNUSED(label);
+_SOKOL_PRIVATE void _sg_dummy_begin_pass(const sg_pass* pass);
+    SOKOL_ASSERT(pass);
+    _SOKOL_UNUSED(pass);
 }
 
 _SOKOL_PRIVATE void _sg_dummy_end_pass(void) {
@@ -8420,13 +8418,14 @@ _SOKOL_PRIVATE _sg_image_t* _sg_gl_attachments_ds_image(const _sg_attachments_t*
     return atts->gl.depth_stencil.image;
 }
 
-_SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain, const char* label) {
+_SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass) {
     // FIXME: what if a texture used as render target is still bound, should we
     // unbind all currently bound textures in begin pass?
-    SOKOL_ASSERT(action);
-    SOKOL_ASSERT(swapchain);
-    _SOKOL_UNUSED(label);
+    SOKOL_ASSERT(pass);
     _SG_GL_CHECK_ERROR();
+    const _sg_attachments_t* atts = _sg.cur_pass.atts;
+    const sg_swapchain* swapchain = &pass->swapchain;
+    const sg_pass_action* action = &pass->action;
 
     // bind the render pass framebuffer
     //
@@ -10588,10 +10587,13 @@ _SOKOL_PRIVATE _sg_image_t* _sg_d3d11_attachments_ds_image(const _sg_attachments
     return atts->d3d11.depth_stencil.image;
 }
 
-_SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain, const char* label) {
-    SOKOL_ASSERT(action);
-    SOKOL_ASSERT(swapchain);
-    _SOKOL_UNUSED(label);
+_SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass* pass) {
+    SOKOL_ASSERT(pass);
+
+    const _sg_attachments_t* atts = _sg.cur_pass.atts;
+    const sg_swapchain* swapchain = &pass->swapchain;
+    const sg_pass_action* action = &pass->action;
+
     int num_rtvs = 0;
     ID3D11RenderTargetView* rtvs[SG_MAX_COLOR_ATTACHMENTS] = { 0 };
     ID3D11DepthStencilView* dsv = 0;
@@ -12236,13 +12238,16 @@ _SOKOL_PRIVATE _sg_image_t* _sg_mtl_attachments_ds_image(const _sg_attachments_t
     return atts->mtl.depth_stencil.image;
 }
 
-_SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain, const char* label) {
-    SOKOL_ASSERT(action);
-    SOKOL_ASSERT(swapchain);
+_SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass* pass) {
+    SOKOL_ASSERT(pass);
     SOKOL_ASSERT(_sg.mtl.cmd_queue);
     SOKOL_ASSERT(nil == _sg.mtl.cmd_encoder);
     SOKOL_ASSERT(nil == _sg.mtl.cur_drawable);
     _sg_mtl_clear_state_cache();
+
+    const _sg_attachments_t* atts = _sg.cur_pass.atts;
+    const sg_swapchain* swapchain = &pass->swapchain;
+    const sg_pass_action* action = &pass->action;
 
     /*
         if this is the first pass in the frame, create command buffers
@@ -12258,7 +12263,11 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass_action* action, _sg_attachm
     if (nil == _sg.mtl.cmd_buffer) {
         // block until the oldest frame in flight has finished
         dispatch_semaphore_wait(_sg.mtl.sem, DISPATCH_TIME_FOREVER);
-        _sg.mtl.cmd_buffer = [_sg.mtl.cmd_queue commandBufferWithUnretainedReferences];
+        if (_sg.desc.mtl_use_command_buffer_with_retained_references) {
+            _sg.mtl.cmd_buffer = [_sg.mtl.cmd_queue commandBuffer];
+        } else {
+            _sg.mtl.cmd_buffer = [_sg.mtl.cmd_queue commandBufferWithUnretainedReferences];
+        }
         [_sg.mtl.cmd_buffer enqueue];
         [_sg.mtl.cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buf) {
             // NOTE: this code is called on a different thread!
@@ -12369,14 +12378,16 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass_action* action, _sg_attachm
             _sg.cur_pass.valid = false;
             return;
         }
+        // pin the swapchain resources into memory so that they outlive their command buffer
+        // (this is necessary because the command buffer doesn't retain references)
+        int pass_desc_ref = _sg_mtl_add_resource(pass_desc);
+        _sg_mtl_release_resource(_sg.frame_index, pass_desc_ref);
+
         _sg.mtl.cur_drawable = (__bridge id<CAMetalDrawable>) swapchain->metal.current_drawable;
         if (swapchain->sample_count > 1) {
             // multi-sampling: render into msaa texture, resolve into drawable texture
             id<MTLTexture> msaa_tex = (__bridge id<MTLTexture>) swapchain->metal.msaa_color_texture;
             SOKOL_ASSERT(msaa_tex != nil);
-            // need to pin texture object so that it may outlive the command buffer
-            int msaa_tex_ref = _sg_mtl_add_resource(msaa_tex);
-            _sg_mtl_release_resource(_sg.frame_index, msaa_tex_ref);
             pass_desc.colorAttachments[0].texture = msaa_tex;
             pass_desc.colorAttachments[0].resolveTexture = _sg.mtl.cur_drawable.texture;
             pass_desc.colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
@@ -12385,26 +12396,23 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass_action* action, _sg_attachm
             pass_desc.colorAttachments[0].texture = _sg.mtl.cur_drawable.texture;
             pass_desc.colorAttachments[0].storeAction = MTLStoreActionStore;
         }
-        // FIXME: depth-stencil-texture should be optional
-        // depth-stencil texture
-        id<MTLTexture> ds_tex = (__bridge id<MTLTexture>) swapchain->metal.depth_stencil_texture;
-        SOKOL_ASSERT(ds_tex != nil);
-        // need to pin texture object so that it may outlive the command buffer
-        int ds_tex_ref = _sg_mtl_add_resource(ds_tex);
-        _sg_mtl_release_resource(_sg.frame_index, ds_tex_ref);
-        pass_desc.depthAttachment.texture = ds_tex;
-        pass_desc.depthAttachment.storeAction = MTLStoreActionDontCare;
-        pass_desc.stencilAttachment.texture = ds_tex;
-        pass_desc.stencilAttachment.storeAction = MTLStoreActionDontCare;
-
-        // configure load actions and clear values
         pass_desc.colorAttachments[0].loadAction = _sg_mtl_load_action(action->colors[0].load_action);
-        sg_color c = action->colors[0].clear_value;
+        const sg_color c = action->colors[0].clear_value;
         pass_desc.colorAttachments[0].clearColor = MTLClearColorMake(c.r, c.g, c.b, c.a);
-        pass_desc.depthAttachment.loadAction = _sg_mtl_load_action(action->depth.load_action);
-        pass_desc.depthAttachment.clearDepth = action->depth.clear_value;
-        pass_desc.stencilAttachment.loadAction = _sg_mtl_load_action(action->stencil.load_action);
-        pass_desc.stencilAttachment.clearStencil = action->stencil.clear_value;
+
+        // optional depth-stencil texture
+        if (swapchain->metal.depth_stencil_texture) {
+            id<MTLTexture> ds_tex = (__bridge id<MTLTexture>) swapchain->metal.depth_stencil_texture;
+            SOKOL_ASSERT(ds_tex != nil);
+            pass_desc.depthAttachment.texture = ds_tex;
+            pass_desc.depthAttachment.storeAction = MTLStoreActionDontCare;
+            pass_desc.stencilAttachment.texture = ds_tex;
+            pass_desc.stencilAttachment.storeAction = MTLStoreActionDontCare;
+            pass_desc.depthAttachment.loadAction = _sg_mtl_load_action(action->depth.load_action);
+            pass_desc.depthAttachment.clearDepth = action->depth.clear_value;
+            pass_desc.stencilAttachment.loadAction = _sg_mtl_load_action(action->stencil.load_action);
+            pass_desc.stencilAttachment.clearStencil = action->stencil.clear_value;
+        }
     }
 
     // NOTE: at least in macOS Sonoma, the following is no longer the case, a valid
@@ -12418,11 +12426,9 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass_action* action, _sg_attachm
     }
 
     #if defined(SOKOL_DEBUG)
-        if (label) {
-            _sg.mtl.cmd_encoder.label = [NSString stringWithUTF8String:label];
+        if (pass->label) {
+            _sg.mtl.cmd_encoder.label = [NSString stringWithUTF8String:pass->label];
         }
-    #else
-        _SOKOL_UNUSED(label);
     #endif
 
     // bind the global uniform buffer, this only happens once per pass
@@ -14376,11 +14382,15 @@ _SOKOL_PRIVATE void _sg_wgpu_init_ds_att(WGPURenderPassDepthStencilAttachment* w
     wgpu_att->stencilReadOnly = false;
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain, const char* label) {
-    SOKOL_ASSERT(action);
-    SOKOL_ASSERT(swapchain);
+_SOKOL_PRIVATE void _sg_wgpu_begin_pass(const sg_pass* pass) {
+    SOKOL_ASSERT(pass);
     SOKOL_ASSERT(_sg.wgpu.cmd_enc);
     SOKOL_ASSERT(_sg.wgpu.dev);
+
+    const _sg_attachments_t* atts = _sg.cur_pass.atts;
+    const sg_swapchain* swapchain = &pass->swapchain;
+    const sg_pass_action* action = &pass->action;
+
     _sg.wgpu.cur_pipeline = 0;
     _sg.wgpu.cur_pipeline_id.id = SG_INVALID_ID;
 
@@ -14390,7 +14400,7 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(const sg_pass_action* action, _sg_attach
     _sg_clear(&wgpu_pass_desc, sizeof(wgpu_pass_desc));
     _sg_clear(&wgpu_color_att, sizeof(wgpu_color_att));
     _sg_clear(&wgpu_ds_att, sizeof(wgpu_ds_att));
-    wgpu_pass_desc.label = label;
+    wgpu_pass_desc.label = pass->label;
     if (atts) {
         SOKOL_ASSERT(atts->slot.state == SG_RESOURCESTATE_VALID);
         for (int i = 0; i < atts->cmn.num_colors; i++) {
@@ -14850,17 +14860,17 @@ static inline _sg_image_t* _sg_attachments_ds_image(const _sg_attachments_t* att
     #endif
 }
 
-static inline void _sg_begin_pass(const sg_pass_action* action, _sg_attachments_t* atts, const sg_swapchain* swapchain, const char* label) {
+static inline void _sg_begin_pass(const sg_pass* pass) {
     #if defined(_SOKOL_ANY_GL)
-    _sg_gl_begin_pass(action, atts, swapchain, label);
+    _sg_gl_begin_pass(pass);
     #elif defined(SOKOL_METAL)
-    _sg_mtl_begin_pass(action, atts, swapchain, label);
+    _sg_mtl_begin_pass(pass);
     #elif defined(SOKOL_D3D11)
-    _sg_d3d11_begin_pass(action, atts, swapchain, label);
+    _sg_d3d11_begin_pass(pass);
     #elif defined(SOKOL_WGPU)
-    _sg_wgpu_begin_pass(action, atts, swapchain, label);
+    _sg_wgpu_begin_pass(pass);
     #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_begin_pass(action, atts, swapchain, label);
+    _sg_dummy_begin_pass(pass);
     #else
     #error("INVALID BACKEND");
     #endif
@@ -15906,7 +15916,11 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
             // NOTE: the GL framebuffer handle may actually be 0
             #if defined(SOKOL_METAL)
                 _SG_VALIDATE(pass->swapchain.metal.current_drawable != 0, VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_CURRENTDRAWABLE);
-                _SG_VALIDATE(pass->swapchain.metal.depth_stencil_texture != 0, VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_DEPTHSTENCILTEXTURE);
+                if (pass->swapchain.depth_format == SG_PIXELFORMAT_NONE) {
+                    _SG_VALIDATE(pass->swapchain.metal.depth_stencil_texture == 0, VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_DEPTHSTENCILTEXTURE_NOTSET);
+                } else {
+                    _SG_VALIDATE(pass->swapchain.metal.depth_stencil_texture != 0, VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_DEPTHSTENCILTEXTURE);
+                }
                 if (pass->swapchain.sample_count > 1) {
                     _SG_VALIDATE(pass->swapchain.metal.msaa_color_texture != 0, VALIDATE_BEGINPASS_SWAPCHAIN_METAL_EXPECT_MSAACOLORTEXTURE);
                 } else {
@@ -15914,7 +15928,11 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
                 }
             #elif defined(SOKOL_D3D11)
                 _SG_VALIDATE(pass->swapchain.d3d11.render_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RENDERVIEW);
-                _SG_VALIDATE(pass->swapchain.d3d11.depth_stencil_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_DEPTHSTENCILVIEW);
+                if (pass->swapchain.depth_format == SG_PIXELFORMAT_NONE) {
+                    _SG_VALIDATE(pass->swapchain.d3d11.depth_stencil_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_DEPTHSTENCILVIEW_NOTSET);
+                } else {
+                    _SG_VALIDATE(pass->swapchain.d3d11.depth_stencil_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_DEPTHSTENCILVIEW);
+                }
                 if (pass->swapchain.sample_count > 1) {
                     _SG_VALIDATE(pass->swapchain.d3d11.resolve_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RESOLVEVIEW);
                 } else {
@@ -15922,7 +15940,11 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
                 }
             #elif defined(SOKOL_WGPU)
                 _SG_VALIDATE(pass->swapchain.wgpu.render_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_RENDERVIEW);
-                _SG_VALIDATE(pass->swapchain.wgpu.depth_stencil_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_DEPTHSTENCILVIEW);
+                if (pass->swapchain.depth_format == SG_PIXELFORMAT_NONE) {
+                    _SG_VALIDATE(pass->swapchain.wgpu.depth_stencil_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_DEPTHSTENCILVIEW_NOTSET);
+                } else {
+                    _SG_VALIDATE(pass->swapchain.wgpu.depth_stencil_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_DEPTHSTENCILVIEW);
+                }
                 if (pass->swapchain.sample_count > 1) {
                     _SG_VALIDATE(pass->swapchain.wgpu.resolve_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_RESOLVEVIEW);
                 } else {
@@ -16848,6 +16870,21 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
     return res;
 }
 
+_SOKOL_PRIVATE sg_pass _sg_pass_defaults(const sg_pass* pass) {
+    sg_pass res = *pass;
+    res.swapchain.sample_count = _sg_def(res.swapchain.sample_count, 1);
+    #if defined(SOKOL_WGPU)
+        SOKOL_ASSERT(SG_PIXELFORMAT_NONE < res.swapchain.color_format);
+    #elif (defined(SOKOL_METAL) || defined(SOKOL_D3D11))
+        res.swapchain.color_format = _sg_def(res.swapchain.color_format, SG_PIXELFORMAT_BGRA8);
+    #else
+        res.swapchain.color_format = _sg_def(res.swapchain.color_format, SG_PIXELFORMAT_RGBA8);
+    #endif
+    res.swapchain.depth_format = _sg_def(res.swapchain.depth_format, SG_PIXELFORMAT_DEPTH_STENCIL);
+    res.action = _sg_pass_action_defaults(&res.action);
+    return res;
+}
+
 // ██████  ██    ██ ██████  ██      ██  ██████
 // ██   ██ ██    ██ ██   ██ ██      ██ ██
 // ██████  ██    ██ ██████  ██      ██ ██
@@ -17562,38 +17599,37 @@ SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
     SOKOL_ASSERT(!_sg.cur_pass.in_pass);
     SOKOL_ASSERT(pass);
     SOKOL_ASSERT((pass->_start_canary == 0) && (pass->_end_canary == 0));
-    if (!_sg_validate_begin_pass(pass)) {
+    const sg_pass pass_def = _sg_pass_defaults(pass);
+    if (!_sg_validate_begin_pass(&pass_def)) {
         return;
     }
-    if (pass->attachments.id != SG_INVALID_ID) {
+    if (pass_def.attachments.id != SG_INVALID_ID) {
         // an offscreen pass
         SOKOL_ASSERT(_sg.cur_pass.atts == 0);
-        _sg.cur_pass.atts = _sg_lookup_attachments(&_sg.pools, pass->attachments.id);
+        _sg.cur_pass.atts = _sg_lookup_attachments(&_sg.pools, pass_def.attachments.id);
         if (0 == _sg.cur_pass.atts) {
             _SG_ERROR(BEGINPASS_ATTACHMENT_INVALID);
             return;
         }
-        _sg.cur_pass.atts_id = pass->attachments;
+        _sg.cur_pass.atts_id = pass_def.attachments;
         _sg.cur_pass.width = _sg.cur_pass.atts->cmn.width;
         _sg.cur_pass.height = _sg.cur_pass.atts->cmn.height;
     } else {
         // a swapchain pass
-        SOKOL_ASSERT(pass->swapchain.width > 0);
-        SOKOL_ASSERT(pass->swapchain.height > 0);
-        SOKOL_ASSERT(pass->swapchain.color_format > SG_PIXELFORMAT_NONE);
-        SOKOL_ASSERT(pass->swapchain.sample_count > 0);
-        _sg.cur_pass.width = pass->swapchain.width;
-        _sg.cur_pass.height = pass->swapchain.height;
-        _sg.cur_pass.swapchain.color_fmt = pass->swapchain.color_format;
-        _sg.cur_pass.swapchain.depth_fmt = pass->swapchain.depth_format;
-        _sg.cur_pass.swapchain.sample_count = pass->swapchain.sample_count;
+        SOKOL_ASSERT(pass_def.swapchain.width > 0);
+        SOKOL_ASSERT(pass_def.swapchain.height > 0);
+        SOKOL_ASSERT(pass_def.swapchain.color_format > SG_PIXELFORMAT_NONE);
+        SOKOL_ASSERT(pass_def.swapchain.sample_count > 0);
+        _sg.cur_pass.width = pass_def.swapchain.width;
+        _sg.cur_pass.height = pass_def.swapchain.height;
+        _sg.cur_pass.swapchain.color_fmt = pass_def.swapchain.color_format;
+        _sg.cur_pass.swapchain.depth_fmt = pass_def.swapchain.depth_format;
+        _sg.cur_pass.swapchain.sample_count = pass_def.swapchain.sample_count;
     }
     _sg.cur_pass.valid = true;  // may be overruled by backend begin-pass functions
     _sg.cur_pass.in_pass = true;
-    sg_pass_action resolved_action;
-    _sg_resolve_pass_action(&pass->action, &resolved_action);
-    _sg_begin_pass(&resolved_action, _sg.cur_pass.atts, &pass->swapchain, pass->label);
-    _SG_TRACE_ARGS(begin_pass, pass, &resolved_action);
+    _sg_begin_pass(&pass_def);
+    _SG_TRACE_ARGS(begin_pass, &pass_def);
 }
 
 SOKOL_API_IMPL void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left) {

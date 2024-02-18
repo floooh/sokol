@@ -2480,7 +2480,7 @@ _SOKOL_PRIVATE void _sgimgui_append_buffer(sg_buffer buf, const sg_range* data, 
     }
 }
 
-_SOKOL_PRIVATE void _sgimgui_begin_pass(const sg_pass* pass, const sg_pass_action* resolved_pass_action, void* user_data) {
+_SOKOL_PRIVATE void _sgimgui_begin_pass(const sg_pass* pass, void* user_data) {
     sgimgui_t* ctx = (sgimgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     sgimgui_capture_item_t* item = _sgimgui_capture_next_write_item(ctx);
@@ -2489,10 +2489,9 @@ _SOKOL_PRIVATE void _sgimgui_begin_pass(const sg_pass* pass, const sg_pass_actio
         item->cmd = SGIMGUI_CMD_BEGIN_PASS;
         item->color = _SGIMGUI_COLOR_PASS;
         item->args.begin_pass.pass = *pass;
-        item->args.begin_pass.pass.action = *resolved_pass_action;
     }
     if (ctx->hooks.begin_pass) {
-        ctx->hooks.begin_pass(pass, resolved_pass_action, ctx->hooks.user_data);
+        ctx->hooks.begin_pass(pass, ctx->hooks.user_data);
     }
 }
 
