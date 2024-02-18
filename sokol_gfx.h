@@ -14422,8 +14422,8 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(const sg_pass* pass) {
         if (wgpu_depth_stencil_view) {
             SOKOL_ASSERT(swapchain->depth_format > SG_PIXELFORMAT_NONE);
             _sg_wgpu_init_ds_att(&wgpu_ds_att, action, swapchain->depth_format, wgpu_depth_stencil_view);
+            wgpu_pass_desc.depthStencilAttachment = &wgpu_ds_att;
         }
-        wgpu_pass_desc.depthStencilAttachment = &wgpu_ds_att;
     }
     _sg.wgpu.pass_enc = wgpuCommandEncoderBeginRenderPass(_sg.wgpu.cmd_enc, &wgpu_pass_desc);
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
