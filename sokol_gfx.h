@@ -6384,7 +6384,7 @@ _SOKOL_PRIVATE _sg_image_t* _sg_dummy_attachments_ds_image(const _sg_attachments
     return atts->dmy.depth_stencil.image;
 }
 
-_SOKOL_PRIVATE void _sg_dummy_begin_pass(const sg_pass* pass);
+_SOKOL_PRIVATE void _sg_dummy_begin_pass(const sg_pass* pass) {
     SOKOL_ASSERT(pass);
     _SOKOL_UNUSED(pass);
 }
