@@ -20,6 +20,7 @@ module_names = {
     'sgl_':     'gl',
     'sdtx_':    'debugtext',
     'sshape_':  'shape',
+    'sglue_':   'glue',
 }
 
 c_source_paths = {
@@ -31,6 +32,7 @@ c_source_paths = {
     'sgl_':     'sokol-zig/src/sokol/c/sokol_gl.c',
     'sdtx_':    'sokol-zig/src/sokol/c/sokol_debugtext.c',
     'sshape_':  'sokol-zig/src/sokol/c/sokol_shape.c',
+    'sglue_':   'sokol-zig/src/sokol/c/sokol_glue.c',
 }
 
 ignores = [
