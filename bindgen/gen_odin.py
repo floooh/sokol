@@ -21,6 +21,7 @@ module_names = {
     'sgl_':     'gl',
     'sdtx_':    'debugtext',
     'sshape_':  'shape',
+    'sglue_':   'glue',
 }
 
 system_libs = {
@@ -75,6 +76,7 @@ c_source_names = {
     'sgl_':     'sokol_gl.c',
     'sdtx_':    'sokol_debugtext.c',
     'sshape_':  'sokol_shape.c',
+    'sglue_':   'sokol_glue.c',
 }
 
 ignores = [
@@ -87,10 +89,6 @@ ignores = [
 # NOTE: syntax for function results: "func_name.RESULT"
 overrides = {
     'context':                              'ctx',  # reserved keyword
-    'sapp_sgcontext':                       'sapp_sgctx',
-    'sapp_sgcontext':                       'sapp_sgctx',
-    'sg_context_desc.color_format':         'int',
-    'sg_context_desc.depth_format':         'int',
     'SGL_NO_ERROR':                         'SGL_ERROR_NO_ERROR',
 }
 
