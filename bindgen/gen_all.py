@@ -4,7 +4,7 @@ tasks = [
     [ '../sokol_log.h',            'slog_',     [] ],
     [ '../sokol_gfx.h',            'sg_',       [] ],
     [ '../sokol_app.h',            'sapp_',     [] ],
-    [ '../sokol_glue.h',           'sglue_',     ['sg_', 'sapp_'] ],
+    [ '../sokol_glue.h',           'sglue_',     ['sg_'] ],
     [ '../sokol_time.h',           'stm_',      [] ],
     [ '../sokol_audio.h',          'saudio_',   [] ],
     [ '../util/sokol_gl.h',        'sgl_',      ['sg_'] ],

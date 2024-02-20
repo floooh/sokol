@@ -15,7 +15,6 @@ module_names = {
     'slog_':    'log',
     'sg_':      'gfx',
     'sapp_':    'app',
-    'sapp_sg':  'glue',
     'stm_':     'time',
     'saudio_':  'audio',
     'sgl_':     'gl',
