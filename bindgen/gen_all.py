@@ -4,7 +4,7 @@ tasks = [
     [ '../sokol_log.h',            'slog_',     [] ],
     [ '../sokol_gfx.h',            'sg_',       [] ],
     [ '../sokol_app.h',            'sapp_',     [] ],
-    [ '../sokol_glue.h',           'sglue_',     ['sg_'] ],
+    [ '../sokol_glue.h',           'sglue_',    ['sg_'] ],
     [ '../sokol_time.h',           'stm_',      [] ],
     [ '../sokol_audio.h',          'saudio_',   [] ],
     [ '../util/sokol_gl.h',        'sgl_',      ['sg_'] ],
@@ -31,7 +31,11 @@ for task in tasks:
     gen_zig.gen(c_header_path, main_prefix, dep_prefixes)
 
 # Rust
+rust_tasks = [
+    *tasks,
+    [ '../util/sokol_imgui.h', 'simgui_', ['sg_', 'sapp_'] ],
+]
 gen_rust.prepare()
-for task in tasks:
+for task in rust_tasks:
     [c_header_path, main_prefix, dep_prefixes] = task
     gen_rust.gen(c_header_path, main_prefix, dep_prefixes)

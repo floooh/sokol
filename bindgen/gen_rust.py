@@ -19,14 +19,12 @@ module_names = {
     "sgl_": "gl",
     "sdtx_": "debugtext",
     "sshape_": "shape",
-    "sapp_sg": "glue",
     "simgui_": "imgui",
-    "sg_imgui_": "gfx_imgui",
+    "sglue_": "glue",
 }
 
 module_requires_rust_feature = {
     module_names["simgui_"]: "imgui",
-    module_names["sg_imgui_"]: "imgui",
 }
 
 c_source_paths = {
@@ -38,14 +36,14 @@ c_source_paths = {
     "sgl_": "sokol-rust/src/sokol/c/sokol_gl.c",
     "sdtx_": "sokol-rust/src/sokol/c/sokol_debugtext.c",
     "sshape_": "sokol-rust/src/sokol/c/sokol_shape.c",
-    "sapp_sg": "sokol-rust/src/sokol/c/sokol_glue.c",
     "simgui_": "sokol-rust/src/sokol/c/sokol_imgui.c",
-    "sg_imgui_": "sokol-rust/src/sokol/c/sokol_gfx_imgui.c",
+    "sglue_": "sokol-rust/src/sokol/c/sokol_glue.c",
 }
 
 ignores = [
     "sdtx_printf",
     "sdtx_vprintf",
+    "simgui_add_key_event",
     # "sg_install_trace_hooks",
     # "sg_trace_hooks",
 ]
