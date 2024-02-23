@@ -10031,28 +10031,19 @@ _SOKOL_PRIVATE void _sapp_x11_lock_mouse(bool lock) {
     XFlush(_sapp.x11.display);
 }
 
-_SOKOL_PRIVATE Bool _sa_sapp_x11_is_sel_prop_new_value_notify(Display* display, XEvent* event, XPointer pointer)
-{
-    XEvent* notification = (XEvent*) pointer;
-    return event->type == PropertyNotify &&
-           event->xproperty.state == PropertyNewValue &&
-           event->xproperty.window == notification->xselection.requestor &&
-           event->xproperty.atom == notification->xselection.property;
-}
-
 _SOKOL_PRIVATE void _sapp_x11_set_clipboard_string(const char* str) {
     SOKOL_ASSERT(_sapp.clipboard.enabled && _sapp.clipboard.buffer);
     size_t len = strlen(str) + 1;
-    if (len > _sapp.clipboard.buf_size) {
+    if (len > (size_t)_sapp.clipboard.buf_size) {
         _SAPP_ERROR(CLIPBOARD_STRING_TOO_BIG);
     }
     XSetSelectionOwner(_sapp.x11.display, _sapp.x11.CLIPBOARD, _sapp.x11.window, CurrentTime);
-    if (XGetSelectionOwner(_sapp.x11.display, _sapp.x11.CLIPBOARD) != _sapp.x11.window){
+    if (XGetSelectionOwner(_sapp.x11.display, _sapp.x11.CLIPBOARD) != _sapp.x11.window) {
         _SAPP_ERROR(LINUX_X11_FAILED_TO_BECOME_OWNER_OF_CLIPBOARD);
     }
 }
 
-_SOKOL_PRIVATE const char* _sa_sapp_x11_get_clipboard_string() {
+_SOKOL_PRIVATE const char* _sa_sapp_x11_get_clipboard_string(void) {
     // Note: This function is a simplified version of implementation in glfw
     SOKOL_ASSERT(_sapp.clipboard.enabled && _sapp.clipboard.buffer);
 
@@ -10068,7 +10059,7 @@ _SOKOL_PRIVATE const char* _sa_sapp_x11_get_clipboard_string() {
     Atom actualType;
     int actualFormat;
     unsigned long itemCount, bytesAfter;
-    XEvent notification, dummy;
+    XEvent notification;
 
     XConvertSelection(_sapp.x11.display,
                       _sapp.x11.CLIPBOARD,
@@ -10109,7 +10100,7 @@ _SOKOL_PRIVATE const char* _sa_sapp_x11_get_clipboard_string() {
         XFree(data);
         return NULL;
     }
-    if (actualType == incr || itemCount > _sapp.clipboard.buf_size) {
+    if (actualType == incr || itemCount > (size_t)_sapp.clipboard.buf_size) {
         _SAPP_ERROR(CLIPBOARD_STRING_TOO_BIG);
         XFree(data);
         return NULL;
@@ -11482,8 +11473,10 @@ SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
         _sapp_emsc_set_clipboard_string(str);
     #elif defined(_SAPP_WIN32)
         _sapp_win32_set_clipboard_string(str);
-    #else
+    #elif defined(_SAPP_LINUX)
         _sapp_x11_set_clipboard_string(str);
+    #else
+        /* not implemented */
     #endif
     _sapp_strcpy(str, _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
 }
@@ -11498,8 +11491,11 @@ SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
         return _sapp.clipboard.buffer;
     #elif defined(_SAPP_WIN32)
         return _sapp_win32_get_clipboard_string();
-    #else
+    #elif defined(_SAPP_LINUX)
         return _sa_sapp_x11_get_clipboard_string();
+    #else
+        /* not implemented */
+        return _sapp.clipboard.buffer;
     #endif
 }
 
