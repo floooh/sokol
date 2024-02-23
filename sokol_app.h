@@ -4930,26 +4930,30 @@ EM_JS(void, sapp_js_fetch_dropped_file, (int index, _sapp_html5_fetch_callback c
     reader.readAsArrayBuffer(files[index]);
 });
 
-EM_JS(void, sapp_js_remove_dragndrop_listeners, (const char* canvas_name_cstr), {
-    const canvas_name = UTF8ToString(canvas_name_cstr);
-    const canvas = document.getElementById(canvas_name);
-    canvas.removeEventListener('dragenter', Module.sokol_dragenter);
-    canvas.removeEventListener('dragleave', Module.sokol_dragleave);
-    canvas.removeEventListener('dragover',  Module.sokol_dragover);
-    canvas.removeEventListener('drop',      Module.sokol_drop);
-});
+void sapp_js_remove_dragndrop_listeners(const char* canvas_name_cstr) {
+    MAIN_THREAD_EM_ASM({
+        const canvas_name = UTF8ToString($0);
+        const canvas = document.getElementById(canvas_name);
+        canvas.removeEventListener('dragenter', Module.sokol_dragenter);
+        canvas.removeEventListener('dragleave', Module.sokol_dragleave);
+        canvas.removeEventListener('dragover',  Module.sokol_dragover);
+        canvas.removeEventListener('drop',      Module.sokol_drop);
+    }, canvas_name_cstr);
+}
 
-EM_JS(void, sapp_js_init, (const char* c_str_target), {
-    // lookup and store canvas object by name
-    const target_str = UTF8ToString(c_str_target);
-    Module.sapp_emsc_target = document.getElementById(target_str);
-    if (!Module.sapp_emsc_target) {
-        console.log("sokol_app.h: invalid target:" + target_str);
-    }
-    if (!Module.sapp_emsc_target.requestPointerLock) {
-        console.log("sokol_app.h: target doesn't support requestPointerLock:" + target_str);
-    }
-});
+void sapp_js_init(const char* c_str_target) {
+    MAIN_THREAD_EM_ASM({
+        // lookup and store canvas object by name
+        const target_str = UTF8ToString($0);
+        Module.sapp_emsc_target = document.getElementById(target_str);
+        if (!Module.sapp_emsc_target) {
+            console.log("sokol_app.h: invalid target:" + target_str);
+        }
+        if (!Module.sapp_emsc_target.requestPointerLock) {
+            console.log("sokol_app.h: target doesn't support requestPointerLock:" + target_str);
+        }
+    }, c_str_target);
+}
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_pointerlockchange_cb(int emsc_type, const EmscriptenPointerlockChangeEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(emsc_type);
@@ -4975,11 +4979,13 @@ EM_JS(void, sapp_js_request_pointerlock, (void), {
     }
 });
 
-EM_JS(void, sapp_js_exit_pointerlock, (void), {
-    if (document.exitPointerLock) {
-        document.exitPointerLock();
-    }
-});
+void sapp_js_exit_pointerlock(void) {
+    MAIN_THREAD_EM_ASM({
+        if (document.exitPointerLock) {
+            document.exitPointerLock();
+        }
+    });
+}
 
 _SOKOL_PRIVATE void _sapp_emsc_lock_mouse(bool lock) {
     if (lock) {
@@ -5034,27 +5040,30 @@ _SOKOL_PRIVATE void _sapp_emsc_update_cursor(sapp_mouse_cursor cursor, bool show
 }
 
 /* JS helper functions to update browser tab favicon */
-EM_JS(void, sapp_js_clear_favicon, (void), {
-    const link = document.getElementById('sokol-app-favicon');
-    if (link) {
-        document.head.removeChild(link);
-    }
-});
-
-EM_JS(void, sapp_js_set_favicon, (int w, int h, const uint8_t* pixels), {
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    const img_data = ctx.createImageData(w, h);
-    img_data.data.set(HEAPU8.subarray(pixels, pixels + w*h*4));
-    ctx.putImageData(img_data, 0, 0);
-    const new_link = document.createElement('link');
-    new_link.id = 'sokol-app-favicon';
-    new_link.rel = 'shortcut icon';
-    new_link.href = canvas.toDataURL();
-    document.head.appendChild(new_link);
-});
+void sapp_js_clear_favicon(void) {
+    MAIN_THREAD_EM_ASM({
+        const link = document.getElementById('sokol-app-favicon');
+        if (link) {
+            document.head.removeChild(link);
+        }
+    });
+}
+void sapp_js_set_favicon(int w, int h, const uint8_t* pixels) {
+    MAIN_THREAD_EM_ASM({
+        const canvas = document.createElement('canvas');
+        canvas.width = $0;
+        canvas.height = $1;
+        const ctx = canvas.getContext('2d');
+        const img_data = ctx.createImageData($0, $1);
+        img_data.data.set(HEAPU8.subarray($2, $2 + $0*$1*4));
+        ctx.putImageData(img_data, 0, 0);
+        const new_link = document.createElement('link');
+        new_link.id = 'sokol-app-favicon';
+        new_link.rel = 'shortcut icon';
+        new_link.href = canvas.toDataURL();
+        document.head.appendChild(new_link);
+    }, w, h, pixels);
+}
 
 _SOKOL_PRIVATE void _sapp_emsc_set_icon(const sapp_icon_desc* icon_desc, int num_images) {
     SOKOL_ASSERT((num_images > 0) && (num_images <= SAPP_MAX_ICONIMAGES));
