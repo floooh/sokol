@@ -89,7 +89,7 @@
             sg_setup(const sg_desc*)
 
         Depending on the selected 3D backend, sokol-gfx requires some
-        information, like a device pointer framebuffer pixel formats
+        information, like a device pointer, default swapchain pixel formats
         and so on. If you are using sokol_app.h for the window system
         glue, you can use a helper function provided in the sokol_glue.h
         header:
@@ -99,7 +99,7 @@
             #include "sokol_glue.h"
             //...
             sg_setup(&(sg_desc){
-                .context = sapp_sgcontext(),
+                .environment = sglue_environment(),
             });
 
         To get any logging output for errors and from the validation layer, you
@@ -113,30 +113,37 @@
             });
 
     --- create resource objects (at least buffers, shaders and pipelines,
-        and optionally images, samplers and passes):
+        and optionally images, samplers and render-pass-attachments):
 
             sg_buffer sg_make_buffer(const sg_buffer_desc*)
             sg_image sg_make_image(const sg_image_desc*)
             sg_sampler sg_make_sampler(const sg_sampler_desc*)
             sg_shader sg_make_shader(const sg_shader_desc*)
             sg_pipeline sg_make_pipeline(const sg_pipeline_desc*)
-            sg_pass sg_make_pass(const sg_pass_desc*)
+            sg_attachments sg_make_attachments(const sg_attachments_desc*)
 
-    --- start rendering to the default frame buffer with:
+    --- start a render pass:
 
-            sg_begin_default_pass(const sg_pass_action* action, int width, int height)
+            sg_begin_pass(const sg_pass* pass);
 
-        ...or alternatively with:
+        Typically, passes render into an externally provided swapchain which
+        presents the rendering result on the display. Such a 'swapchain pass'
+        is started like this:
 
-            sg_begin_default_passf(const sg_pass_action* action, float width, float height)
+            sg_begin_pass(&(sg_pass){ .action = { ... }, .swapchain = sglue_swapchain() })
 
-        ...which takes the framebuffer width and height as float values.
+        ...where .action is an sg_pass_action struct containing actions to be performed
+        at the start and end of a render pass (such as clearing the render surfaces to
+        a specific color), and .swapchain is an sg_swapchain
+        struct all the required information to render into the swapchain's surfaces.
 
-    --- or start rendering to an offscreen framebuffer with:
+        To start an 'offscreen pass' into sokol-gfx image objects, an sg_attachment
+        object handle is required instead of an sg_swapchain struct. An offscreen
+        pass is started like this (assuming attachments is an sg_attachments handle):
 
-            sg_begin_pass(sg_pass pass, const sg_pass_action* action)
+            sg_begin_pass(&(sg_pass){ .action = { ... }, .attachments = attachemnts });
 
-    --- set the pipeline state for the next draw call with:
+    --- set the render pipeline state for the next draw call with:
 
             sg_apply_pipeline(sg_pipeline pip)
 
@@ -189,7 +196,7 @@
             sg_destroy_sampler(sg_sampler smp)
             sg_destroy_shader(sg_shader shd)
             sg_destroy_pipeline(sg_pipeline pip)
-            sg_destroy_pass(sg_pass pass)
+            sg_destroy_attachments(sg_attachments atts)
 
     --- to set a new viewport rectangle, call
 
@@ -310,7 +317,7 @@
             sg_sampler_desc sg_query_sampler_desc(sg_sampler smp)
             sg_shader_desc sq_query_shader_desc(sg_shader shd)
             sg_pipeline_desc sg_query_pipeline_desc(sg_pipeline pip)
-            sg_pass_desc sg_query_pass_desc(sg_pass pass)
+            sg_attachments_desc sg_query_attachments_desc(sg_attachments atts)
 
         ...but NOTE that the returned desc structs may be incomplete, only
         creation attributes that are kept around internally after resource
@@ -330,7 +337,7 @@
             sg_sampler_desc sg_query_sampler_defaults(const sg_sampler_desc* desc)
             sg_shader_desc sg_query_shader_defaults(const sg_shader_desc* desc)
             sg_pipeline_desc sg_query_pipeline_defaults(const sg_pipeline_desc* desc)
-            sg_pass_desc sg_query_pass_defaults(const sg_pass_desc* desc)
+            sg_attachments_desc sg_query_attachments_defaults(const sg_attachments_desc* desc)
 
         These functions take a pointer to a desc structure which may contain
         zero-initialized items for default values. These zero-init values
@@ -344,7 +351,7 @@
             sg_sampler_info sg_query_sampler_info(sg_sampler smp)
             sg_shader_info sg_query_shader_info(sg_shader shd)
             sg_pipeline_info sg_query_pipeline_info(sg_pipeline pip)
-            sg_pass_info sg_query_pass_info(sg_pass pass)
+            sg_attachments_info sg_query_attachments_info(sg_attachments atts)
 
         ...please note that the returned info-structs are tied quite closely
         to sokol_gfx.h internals, and may change more often than other
@@ -400,17 +407,15 @@
             Not all of those limit values are used by all backends, but it is
             good practice to provide them none-the-less.
 
-        (2) 3D-API "context information" (sometimes also called "bindings"):
-            sokol_gfx.h doesn't create or initialize 3D API objects which are
-            closely related to the presentation layer (this includes the "rendering
-            device", the swapchain, and any objects which depend on the
-            swapchain). These API objects (or callback functions to obtain
-            them, if those objects might change between frames), must
-            be provided in a nested sg_context_desc struct inside the
-            sg_desc struct. If sokol_gfx.h is used together with
-            sokol_app.h, have a look at the sokol_glue.h header which provides
-            a convenience function to get a sg_context_desc struct filled out
-            with context information provided by sokol_app.h
+        (2) 3D backend "environment information" in a nested sg_environment struct:
+            - pointers to backend-specific context- or device-objects (for instance
+              the D3D11, WebGPU or Metal device objects)
+            - defaults for external swapchain pixel formats and sample counts,
+              these will be used as default values in image and pipeline objects,
+              and the sg_swapchain struct passed into sg_begin_pass()
+            Usually you provide a complete sg_environment struct through
+            a helper function, as an example look at the sglue_environment()
+            function in the sokol_glue.h header.
 
     See the documentation block of the sg_desc struct below for more information.
 
@@ -428,7 +433,7 @@
     passes as textures (it is invalid to use the same image both as render target
     and as texture in the same pass).
 
-    The following sokol-gfx functions must be called inside a render pass:
+    The following sokol-gfx functions must only be called inside a render pass:
 
         sg_apply_viewport(f)
         sg_apply_scissor_rect(f)
@@ -437,21 +442,49 @@
         sg_apply_uniforms
         sg_draw
 
-    A frame must have at least one render pass, and this must be the 'default
-    pass' which renders into the 'default' (swapchain) framebuffer. The default
-    pass must always be the last pass in the frame before the sg_commit()
-    call.
+    A frame must have at least one 'swapchain render pass' which renders into an
+    externally provided swapchain provided as an sg_swapchain struct to the
+    sg_begin_pass() function. The sg_swapchain struct must contain the
+    following information:
 
-    The default and offscreen passes form a dependency tree with the default
-    pass at the root, offscreen passes as nodes, and render target images as
-    dependencies between passes.
+        - the color pixel-format of the swapchain's render surface
+        - an optional depth/stencil pixel format if the swapchain
+          has a depth/stencil buffer
+        - an optional sample-count for MSAA rendering
+        - NOTE: the above three values can be zero-initialized, in that
+          case the defaults from the sg_environment struct will be used that
+          had been passed to the sg_setup() function.
+        - a number of backend specific objects:
+            - GL/GLES3: just a GL framebuffer handle
+            - D3D11:
+                - an ID3D11RenderTargetView for the rendering surface
+                - if MSAA is used, an ID3D11RenderTargetView as
+                  MSAA resolve-target
+                - an optional ID3D11DepthStencilView for the
+                  depth/stencil buffer
+            - Metal:
+                - a CAMetalDrawable object for the rendering surface
+                - if MSAA is used, an MTLTexture as MSAA resolve target
+                - an optional MTLTexture for the depth/stencil buffer
+            - WebGPU
+                - a WGPUTextureView object for the rendering surface
+                - if MSAA is used, a WGPUTextureView object as MSAA resolve target
+                - an optional WGPUTextureView for the
+
+    It's recommended that you create a helper function which returns an
+    initialized sg_swapchain struct by value. This can then be directly plugged
+    into the sg_begin_pass function like this:
+
+        sg_begin_pass(&(sg_pass){ .swapchain = sglue_swapchain() });
+
+    As an example for such a helper function check out the function sglue_swapchain()
+    in the sokol_glue.h header.
 
     For offscreen render passes, the render target images used in a render pass
-    are baked into an immutable sg_pass object (for the default pass, the
-    pass-state is managed internally instead).
+    are baked into an immutable sg_attachments object.
 
     For a simple offscreen scenario with one color-, one depth-stencil-render
-    target and without multisampling, creating a pass object looks like this:
+    target and without multisampling, creating an attachment object looks like this:
 
     First create two render target images, one with a color pixel format,
     and one with the depth- or depth-stencil pixel format. Both images
@@ -473,24 +506,35 @@
         });
 
     NOTE: when creating render target images, have in mind that some default values
-    are aligned with the default framebuffer attributes, this is sometimes not
-    what you want:
+    are aligned with the default environment attributes in the sg_environment struct
+    that was passed into the sg_setup() call:
 
-        - the default values for .pixel_format and .sample_count are the same
-          as the default framebuffer
-        - the default value for .num_mipmaps is always 1
+        - the default value for sg_image_desc.pixel_format is taken from
+          sg_environment.defaults.color_format
+        - the default value for sg_image_desc.sample_count is taken from
+          sg_environment.defaults.sample_count
+        - the default value for sg_image_desc.num_mipmaps is always 1
 
-    Next create a pass object:
+    Next create an attachments object:
 
-        const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-            .color_attachments[0].image = color_img,
-            .depth_stencil_attachment.image = depth_img,
+        const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+            .colors[0].image = color_img,
+            .depth_stencil.image = depth_img,
         });
 
-    When using the sg_pass object in a render pass you also need to define
-    what actions should happen at the start and end of the render pass
-    in an sg_pass_action struct (for instance whether the render target should
-    be cleared).
+    This attachments object is then passed into the sg_begin_pass() function
+    in place of the swapchain struct:
+
+        sg_begin_pass(&(sg_pass){ .attachments = atts });
+
+    Swapchain and offscreen passes form dependency trees each with a swapchain
+    pass at the root, offscreen passes as nodes, and render target images as
+    dependencies between passes.
+
+    sg_pass_action structs are used to define actions that should happen at the
+    start and end of rendering passes (such as clearing pass attachments to a
+    specific color or depth-value, or performing an MSAA resolve operation at
+    the end of a pass).
 
     A typical sg_pass_action object which clears the color attachment to black
     might look like this:
@@ -506,7 +550,7 @@
     the depth-stencil-attachments actions. The same pass action with the
     defaults explicitly filled in would look like this:
 
-        const sg_pass_action = {
+        const sg_pass_action pass_action = {
             .colors[0] = {
                 .load_action = SG_LOADACTION_CLEAR,
                 .store_action = SG_STOREACTION_STORE,
@@ -527,7 +571,22 @@
     With the sg_pass object and sg_pass_action struct in place everything
     is ready now for the actual render pass:
 
-        sg_begin_pass(pass, &pass_action);
+    Using such this prepared sg_pass_action in a swapchain pass looks like
+    this:
+
+        sg_begin_pass(&(sg_pass){
+            .action = pass_action,
+            .swapchain = sglue_swapchain()
+        });
+        ...
+        sg_end_pass();
+
+    ...of alternatively in one offscreen pass:
+
+        sg_begin_pass(&(sg_pass){
+            .action = pass_action,
+            .attachments = attachments,
+        });
         ...
         sg_end_pass();
 
@@ -536,16 +595,16 @@
     it's not possible to create a 3D image with a depth/stencil pixel format,
     these exceptions are generally caught by the sokol-gfx validation layer).
 
-    The mipmap/slice selection happens at pass creation time, for instance
+    The mipmap/slice selection happens at attachments creation time, for instance
     to render into mipmap 2 of slice 3 of an array texture:
 
-        const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-            .color_attachments[0] = {
+        const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+            .colors[0] = {
                 .image = color_img,
                 .mip_level = 2,
                 .slice = 3,
             },
-            .depth_stencil_attachment.image = depth_img,
+            .depth_stencil.image = depth_img,
         });
 
     If MSAA offscreen rendering is desired, the multi-sample rendering result
@@ -554,7 +613,7 @@
 
     NOTE: currently multisample-images cannot be bound as textures.
 
-    Creating a simple pass object for multisampled rendering requires
+    Creating a simple attachments object for multisampled rendering requires
     3 attachment images: the color attachment image which has a sample
     count > 1, a resolve attachment image of the same size and pixel format
     but a sample count == 1, and a depth/stencil attachment image with
@@ -582,15 +641,15 @@
             .sample_count = 4,
         });
 
-    ...create the pass object:
+    ...create the attachments object:
 
-        const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-            .color_attachments[0].image = color_img,
-            .resolve_attachments[0].image = resolve_img,
-            .depth_stencil_attachment.image = depth_img,
+        const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+            .colors[0].image = color_img,
+            .resolves[0].image = resolve_img,
+            .depth_stencil.image = depth_img,
         });
 
-    If a pass object defines a resolve image in a specific resolve attachment slot,
+    If an attachments object defines a resolve image in a specific resolve attachment slot,
     an 'msaa resolve operation' will happen in sg_end_pass().
 
     In this scenario, the content of the MSAA color attachment doesn't need to be
@@ -607,7 +666,7 @@
 
     The actual render pass looks as usual:
 
-        sg_begin_pass(pass, &pass_action);
+        sg_begin_pass(&(sg_pass){ .action = pass_action, .attachments = atts });
         ...
         sg_end_pass();
 
@@ -1090,7 +1149,7 @@
         sg_sampler sg_make_sampler(const sg_sampler_desc* desc)
         sg_shader sg_make_shader(const sg_shader_desc* desc)
         sg_pipeline sg_make_pipeline(const sg_pipeline_desc* desc)
-        sg_pass sg_make_pass(const sg_pass_desc* desc)
+        sg_attachments sg_make_attachments(const sg_attachments_desc* desc)
 
     This will result in one of three cases:
 
@@ -1148,7 +1207,7 @@
         sg_sampler sg_alloc_sampler(void)
         sg_shader sg_alloc_shader(void)
         sg_pipeline sg_alloc_pipeline(void)
-        sg_pass sg_alloc_pass(void)
+        sg_attachments sg_alloc_attachments(void)
 
     This will return a handle with the underlying resource object in the
     ALLOC state:
@@ -1173,7 +1232,7 @@
         void sg_init_sampler(sg_sampler smp, const sg_sampler_desc* desc)
         void sg_init_shader(sg_shader shd, const sg_shader_desc* desc)
         void sg_init_pipeline(sg_pipeline pip, const sg_pipeline_desc* desc)
-        void sg_init_pass(sg_pass pass, const sg_pass_desc* desc)
+        void sg_init_attachments(sg_attachments atts, const sg_attachments_desc* desc)
 
     The init functions expect a resource in ALLOC state, and after the function
     returns, the resource will be either in VALID or FAILED state. Calling
@@ -1189,7 +1248,7 @@
         void sg_uninit_sampler(sg_sampler smp)
         void sg_uninit_shader(sg_shader shd)
         void sg_uninit_pipeline(sg_pipeline pip)
-        void sg_uninit_pass(sg_pass pass)
+        void sg_uninit_attachments(sg_attachments pass)
 
     Calling the 'uninit functions' with a resource that is not in the VALID or
     FAILED state is a no-op.
@@ -1201,7 +1260,7 @@
         void sg_dealloc_sampler(sg_sampler smp)
         void sg_dealloc_shader(sg_shader shd)
         void sg_dealloc_pipeline(sg_pipeline pip)
-        void sg_dealloc_pass(sg_pass pass)
+        void sg_dealloc_attachments(sg_attachments atts)
 
     Calling the 'dealloc functions' on a resource that's not in ALLOC state is
     a no-op, but will generate a warning log message.
@@ -1214,7 +1273,7 @@
         void sg_destroy_sampler(sg_sampler smp)
         void sg_destroy_shader(sg_shader shd)
         void sg_destroy_pipeline(sg_pipeline pip)
-        void sg_destroy_pass(sg_pass pass)
+        void sg_destroy_attachments(sg_attachments atts)
 
     The 'destroy functions' can be called on resources in any state and generally
     do the right thing (for instance if the resource is in ALLOC state, the destroy
@@ -1228,21 +1287,21 @@
         sg_fail_sampler(sg_sampler smp)
         sg_fail_shader(sg_shader shd)
         sg_fail_pipeline(sg_pipeline pip)
-        sg_fail_pass(sg_pass pass)
+        sg_fail_attachments(sg_attachments atts)
 
     This is recommended if anything went wrong outside of sokol-gfx during asynchronous
-    resource creation (for instance a file loading operation failed). In this case,
+    resource setup (for instance a file loading operation failed). In this case,
     the 'fail function' should be called instead of the 'init function'.
 
     Calling a 'fail function' on a resource that's not in ALLOC state is a no-op,
     but will generate a warning log message.
 
     NOTE: that two-step resource creation usually only makes sense for buffers
-    and images, but not for samplers, shaders, pipelines or passes. Most notably, trying
+    and images, but not for samplers, shaders, pipelines or attachments. Most notably, trying
     to create a pipeline object with a shader that's not in VALID state will
     trigger a validation layer error, or if the validation layer is disabled,
     result in a pipeline object in FAILED state. Same when trying to create
-    a pass object with invalid image objects.
+    an attachments object with invalid image objects.
 
 
     WEBGPU CAVEATS
@@ -1254,7 +1313,7 @@
     In general, don't expect an automatic speedup when switching from the WebGL2
     backend to the WebGPU backend. Some WebGPU functions currently actually
     have a higher CPU overhead than similar WebGL2 functions, leading to the
-    paradoxical situation that WebGPU code is slower than similar WebGL2
+    paradoxical situation that some WebGPU code may be slower than similar WebGL2
     code.
 
     - when writing WGSL shader code by hand, a specific bind-slot convention
@@ -1294,7 +1353,7 @@
       cache to prevent excessive creation and destruction of BindGroup objects
       when calling sg_apply_bindings(). The number of slots in the bindgroups
       cache is defined in sg_desc.wgpu_bindgroups_cache_size when calling
-      sg_setup. The cache size must be a power-of-2 numbers, with the default being
+      sg_setup. The cache size must be a power-of-2 number, with the default being
       1024. The bindgroups cache behaviour can be observed by calling the new
       function sg_query_frame_stats(), where the following struct items are
       of interest:
@@ -1318,7 +1377,7 @@
 
     - The sokol shader compiler generally adds `diagnostic(off, derivative_uniformity);`
       into the WGSL output. Currently only the Chrome WebGPU implementation seems
-      to accept this.
+      to recognize this.
 
     - The vertex format SG_VERTEXFORMAT_UINT10_N2 is currently not supported because
       WebGPU lacks a matching vertex format (this is currently being worked on though,
@@ -1334,10 +1393,10 @@
       will generate broken Javascript code.
 
     - sokol-gfx requires the WebGPU device feature `depth32float-stencil8` to be enabled
-      (this should be supported widely supported)
+      (this should be widely supported)
 
     - sokol-gfx expects that the WebGPU device feature `float32-filterable` to *not* be
-      enabled (this would exclude all iOS devices)
+      enabled (since this would exclude all iOS devices)
 
 
     LICENSE
@@ -1388,8 +1447,6 @@ extern "C" {
 #endif
 
 /*
-    FIXME
-
     Resource id typedefs:
 
     sg_buffer:      vertex- and index-buffers
@@ -1397,19 +1454,19 @@ extern "C" {
     sg_sampler      sampler object describing how a texture is sampled in a shader
     sg_shader:      vertex- and fragment-shaders and shader interface information
     sg_pipeline:    associated shader and vertex-layouts, and render states
-    sg_pass:        a bundle of render targets and actions on them
+    sg_attachments: a baked collection of render pass attachment images
 
     Instead of pointers, resource creation functions return a 32-bit
     number which uniquely identifies the resource object.
 
     The 32-bit resource id is split into a 16-bit pool index in the lower bits,
-    and a 16-bit 'unique counter' in the upper bits. The index allows fast
-    pool lookups, and combined with the unique-mask it allows to detect
+    and a 16-bit 'generation counter' in the upper bits. The index allows fast
+    pool lookups, and combined with the generation-counter it allows to detect
     'dangling accesses' (trying to use an object which no longer exists, and
     its pool slot has been reused for a new object)
 
-    The resource ids are wrapped into a struct so that the compiler
-    can complain when the wrong resource type is used.
+    The resource ids are wrapped into a strongly-typed struct so that
+    trying to pass an incompatible resource id is a compile error.
 */
 typedef struct sg_buffer        { uint32_t id; } sg_buffer;
 typedef struct sg_image         { uint32_t id; } sg_image;
