@@ -462,14 +462,20 @@
                   MSAA resolve-target
                 - an optional ID3D11DepthStencilView for the
                   depth/stencil buffer
-            - Metal:
-                - a CAMetalDrawable object for the rendering surface
-                - if MSAA is used, an MTLTexture as MSAA resolve target
-                - an optional MTLTexture for the depth/stencil buffer
             - WebGPU
                 - a WGPUTextureView object for the rendering surface
                 - if MSAA is used, a WGPUTextureView object as MSAA resolve target
                 - an optional WGPUTextureView for the
+            - Metal (NOTE that the roles of provided surfaces is slightly
+              different in Metal than in D3D11 or WebGPU, notably, the
+              CAMetalDrawable is either rendered to directly, or serves
+              as MSAA resolve target):
+                - a CAMetalDrawable object which is either rendered
+                  into directly, or in case of MSAA rendering, serves
+                  as MSAA-resolve-target
+                - if MSAA is used, an multisampled MTLTexture where
+                  rendering goes into
+                - an optional MTLTexture for the depth/stencil buffer
 
     It's recommended that you create a helper function which returns an
     initialized sg_swapchain struct by value. This can then be directly plugged
@@ -1577,14 +1583,12 @@ typedef enum sg_backend {
 
     The default pixel format for texture images is SG_PIXELFORMAT_RGBA8.
 
-    The default pixel format for render target images is platform-dependent:
-        - for Metal and D3D11 it is SG_PIXELFORMAT_BGRA8
-        - for GL backends it is SG_PIXELFORMAT_RGBA8
+    The default pixel format for render target images is platform-dependent
+    and taken from the sg_environment struct passed into sg_setup(). Typically
+    the default formats are:
 
-    This is mainly because of the default framebuffer which is setup outside
-    of sokol_gfx.h. On some backends, using BGRA for the default frame buffer
-    allows more efficient frame flips. For your own offscreen-render-targets,
-    use whatever renderable pixel format is convenient for you.
+        - for the Metal, D3D11 and WebGPU backends: SG_PIXELFORMAT_BGRA8
+        - for GL backends: SG_PIXELFORMAT_RGBA8
 */
 typedef enum sg_pixel_format {
     _SG_PIXELFORMAT_DEFAULT,    // value 0 reserved for default-init
@@ -1636,7 +1640,7 @@ typedef enum sg_pixel_format {
     SG_PIXELFORMAT_RGBA32SI,
     SG_PIXELFORMAT_RGBA32F,
 
-    // NOTE: when adding/removing pixel formats before DEPTH, also update sokol_app.h/SAPP_PIXELFORMAT_*
+    // NOTE: when adding/removing pixel formats before DEPTH, also update sokol_app.h/_SAPP_PIXELFORMAT_*
     SG_PIXELFORMAT_DEPTH,
     SG_PIXELFORMAT_DEPTH_STENCIL,
 
@@ -1653,10 +1657,10 @@ typedef enum sg_pixel_format {
     SG_PIXELFORMAT_BC6H_RGBUF,
     SG_PIXELFORMAT_BC7_RGBA,
     SG_PIXELFORMAT_BC7_SRGBA,
-    SG_PIXELFORMAT_PVRTC_RGB_2BPP,
-    SG_PIXELFORMAT_PVRTC_RGB_4BPP,
-    SG_PIXELFORMAT_PVRTC_RGBA_2BPP,
-    SG_PIXELFORMAT_PVRTC_RGBA_4BPP,
+    SG_PIXELFORMAT_PVRTC_RGB_2BPP,      // FIXME: deprecated
+    SG_PIXELFORMAT_PVRTC_RGB_4BPP,      // FIXME: deprecated
+    SG_PIXELFORMAT_PVRTC_RGBA_2BPP,     // FIXME: deprecated
+    SG_PIXELFORMAT_PVRTC_RGBA_4BPP,     // FIXME: deprecated
     SG_PIXELFORMAT_ETC2_RGB8,
     SG_PIXELFORMAT_ETC2_SRGB8,
     SG_PIXELFORMAT_ETC2_RGB8A1,
@@ -1844,8 +1848,10 @@ typedef enum sg_image_type {
     The basic data type of a texture sample as expected by a shader.
     Must be provided in sg_shader_image_desc and used by the validation
     layer in sg_apply_bindings() to check if the provided image object
-    is compatible with what the shader expects, and also required by the
-    WebGPU backend.
+    is compatible with what the shader expects. Apart from the sokol-gfx
+    validation layer, WebGPU is the only backend API which actually requires
+    matching texture and sampler type to be provided upfront for validation
+    (after 3D APIs treat texture/sampler type mismatches as undefined behaviour).
 
     NOTE that the following texture pixel formats require the use
     of SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT, combined with a sampler
@@ -1855,7 +1861,7 @@ typedef enum sg_image_type {
     - SG_PIXELFORMAT_RG32F
     - SG_PIXELFORMAT_RGBA32F
 
-    (when using sokol-shdc, also check out the tags `@image_sample_type`
+    (when using sokol-shdc, also check out the meta tags `@image_sample_type`
     and `@sampler_type`)
 */
 typedef enum sg_image_sample_type {
@@ -1961,7 +1967,7 @@ typedef enum sg_primitive_type {
 */
 typedef enum sg_filter {
     _SG_FILTER_DEFAULT, // value 0 reserved for default-init
-    SG_FILTER_NONE,
+    SG_FILTER_NONE,     // FIXME: deprecated
     SG_FILTER_NEAREST,
     SG_FILTER_LINEAR,
     _SG_FILTER_NUM,
@@ -2371,13 +2377,13 @@ typedef enum sg_store_action {
     sg_pass_action
 
     The sg_pass_action struct defines the actions to be performed
-    at the start of and end of a render pass.
+    at the start and end of a render pass.
 
-    - at the start of the pass whether the render targets should be cleared
+    - at the start of the pass: whether the render targets should be cleared,
       loaded with their previous content, or start in an undefined state
     - for clear operations: the clear value (color, depth, or stencil values)
-    - at the end of the pass, whether the rendering result should be
-      stored back into the render target, or discarded
+    - at the end of the pass: whether the rendering result should be
+      stored back into the render target or discarded
 */
 typedef struct sg_color_attachment_action {
     sg_load_action load_action;         // default: SG_LOADACTION_CLEAR
@@ -2406,7 +2412,66 @@ typedef struct sg_pass_action {
 /*
     sg_swapchain
 
-    FIXME
+    Used in sg_begin_pass() to provide details about an external swapchain
+    (pixel formats, sample count and backend-API specific render surface objects).
+
+    The following information must be provided:
+
+    - the width and height of the swapchain surfaces in number of pixels,
+    - the pixel format of the render- and optional msaa-resolve-surface
+    - the pixel format of the optional depth- or depth-stencil-surface
+    - the MSAA sample count for the render and depth-stencil surface
+
+    If the pixel formats and MSAA sample counts are left zero-initialized,
+    their defaults are taken from the sg_environment struct provided in the
+    sg_setup() call.
+
+    The width and height *must* be > 0.
+
+    Additionally the following backend API specific objects must be passed in
+    as 'type erased' void pointers:
+
+    GL: on all GL backends, a GL framebuffer object must be provided. This
+    can be zero for the defaul framebuffer.
+
+    D3D11:
+        - an ID3D11RenderTargetView for the rendering surface, without
+          MSAA rendering this surface will also be displayed
+        - an optional ID3D11DepthStencilView for the depth- or depth/stencil
+          buffer surface
+        - when MSAA rendering is used, another ID3D11RenderTargetView
+          which serves as MSAA resolve target and will be displayed
+
+    WebGPU (same as D3D11, except different types)
+        - a WGPUTextureView for the rendering surface, without
+          MSAA rendering this surface will also be displayed
+        - an optional WGPUTextureView for the depth- or depth/stencil
+          buffer surface
+        - when MSAA rendering is used, another WGPUTextureView
+          which serves as MSAA resolve target and will be displayed
+
+    Metal (NOTE that the rolves of provided surfaces is slightly different
+    than on D3D11 or WebGPU in case of MSAA vs non-MSAA rendering):
+
+        - A current CAMetalDrawable (NOT an MTLDrawable!) which will be presented.
+          This will either be rendered to directly (if no MSAA is used), or serve
+          as MSAA-resolve target.
+        - an optional MTLTexture for the depth- or depth-stencil buffer
+        - an optional multisampled MTLTexture which serves as intermediate
+          rendering surface which will then be resolved into the
+          CAMetalDrawable.
+
+    NOTE that for Metal you must use an ObjC __bridge cast to
+    properly tunnel the ObjC object handle through a C void*, e.g.:
+
+        swapchain.metal.current_drawable = (__bridge const void*) [mtkView currentDrawable];
+
+    On all other backends you shouldn't need to mess with the reference count.
+
+    It's a good practice to write a helper function which returns an initialized
+    sg_swapchain structs, which can then be plugged directly into
+    sg_pass.swapchain. Look at the function sglue_swapchain() in the sokol_glue.h
+    as an example.
 */
 typedef struct sg_metal_swapchain {
     const void* current_drawable;       // CAMetalDrawable (NOT MTLDrawable!!!)
@@ -2445,7 +2510,33 @@ typedef struct sg_swapchain {
 /*
     sg_pass
 
-    FIXME
+    The sg_pass structure is passed as argument into the sg_begin_pass()
+    function.
+
+    For an offscreen rendering pass, an sg_pass_action struct and sg_attachments
+    object must be provided, and for swapchain passes, and sg_pass_action and
+    an sg_swapchain struct. It is an error to provide both an sg_attachments
+    handle and an initialized sg_swapchain struct in the same sg_begin_pass().
+
+    An sg_begin_pass() call for an offscreen pass would look like this (where
+    `attachments` is an sg_attachments handle):
+
+        sg_begin_pass(&(sg_pass){
+            .action = { ... },
+            .attachments = attachments,
+        });
+
+    ...and a swapchain render pass would look like this (using the sokol_glue.h
+    helper function sglue_swapchain() which gets the swapchain properties from
+    sokol_app.h):
+
+        sg_begin_pass(&(sg_pass){
+            .action = { ... },
+            .swapchain = sglue_swapchain(),
+        });
+
+    You can also omit the .action object to get default pass action behaviour
+    (clear to color=grey, depth=1 and stencil=0).
 */
 typedef struct sg_pass {
     uint32_t _start_canary;
@@ -2590,17 +2681,17 @@ typedef struct sg_image_data {
     .num_slices         1 (3D textures: depth; array textures: number of layers)
     .num_mipmaps:       1
     .usage:             SG_USAGE_IMMUTABLE
-    .pixel_format:      SG_PIXELFORMAT_RGBA8 for textures, or sg_desc.context.color_format for render targets
-    .sample_count:      1 for textures, or sg_desc.context.sample_count for render targets
+    .pixel_format:      SG_PIXELFORMAT_RGBA8 for textures, or sg_desc.environment.defaults.color_format for render targets
+    .sample_count:      1 for textures, or sg_desc.environment.defaults.sample_count for render targets
     .data               an sg_image_data struct to define the initial content
     .label              0 (optional string label for trace hooks)
 
     Q: Why is the default sample_count for render targets identical with the
-    "default sample count" from sg_desc.context.sample_count?
+    "default sample count" from sg_desc.environment.defaults.sample_count?
 
     A: So that it matches the default sample count in pipeline objects. Even
     though it is a bit strange/confusing that offscreen render targets by default
-    get the same sample count as the default framebuffer, but it's better that
+    get the same sample count as 'default swapchains', but it's better that
     an offscreen render target created with default parameters matches
     a pipeline object created with default parameters.
 
@@ -2941,18 +3032,19 @@ typedef struct sg_pipeline_desc {
 } sg_pipeline_desc;
 
 /*
-    FIXME
+    sg_attachments_desc
 
-    sg_pass_desc
+    Creation parameters for an sg_attachments object, used as argument to the
+    sg_make_attachments() function.
 
-    Creation parameters for an sg_pass object, used as argument to the
-    sg_make_pass() function.
+    An attachments object bundles 0..4 color attachments, 0..4 msaa-resolve
+    attachments, and none or one depth-stencil attachmente for use
+    in a render pass. At least one color attachment or one depth-stencil
+    attachment must be provided (no color attachment and a depth-stencil
+    attachment is useful for a depth-only render pass).
 
-    A pass object contains 1..4 color attachments, 0..4 msaa-resolve
-    attachments, and none or one depth-stencil attachment.
-
-    Each attachment consists of an image, and two additional indices describing
-    which subimage the pass will render into: one mipmap index, and if the image
+    Each attachment definition consists of an image object, and two additional indices
+    describing which subimage the pass will render into: one mipmap index, and if the image
     is a cubemap, array-texture or 3D-texture, the face-index, array-layer or
     depth-slice.
 
@@ -2962,7 +3054,7 @@ typedef struct sg_pipeline_desc {
     same sample count.
 
     If a resolve attachment is set, an MSAA-resolve operation from the
-    associated color attachment into the resolve attachment image will take
+    associated color attachment image into the resolve attachment image will take
     place in the sg_end_pass() function. In this case, the color attachment
     must have a (sample_count>1), and the resolve attachment a
     (sample_count==1). The resolve attachment also must have the same pixel
@@ -2970,8 +3062,6 @@ typedef struct sg_pipeline_desc {
 
     NOTE that MSAA depth-stencil attachments cannot be msaa-resolved!
 */
-
-// FIXME: rename this? easy to confuse with sg_attachments_desc
 typedef struct sg_attachment_desc {
     sg_image image;
     int mip_level;
@@ -3588,8 +3678,6 @@ typedef enum sg_log_item {
     either initialize one or the other depending on whether you pass data
     to your callbacks.
 
-    FIXME: explain the various configuration options
-
     The default configuration is:
 
     .buffer_pool_size       128
@@ -3609,12 +3697,12 @@ typedef enum sg_log_item {
     .allocator.free_fn      0 (in this case, free() will be called)
     .allocator.user_data    0
 
-    .context.color_format: default value depends on selected backend:
+    .environment.defaults.color_format: default value depends on selected backend:
         all GL backends:    SG_PIXELFORMAT_RGBA8
         Metal and D3D11:    SG_PIXELFORMAT_BGRA8
-        WebGPU:             *no default* (must be queried from swapchain)
-    .context.depth_format   SG_PIXELFORMAT_DEPTH_STENCIL
-    .context.sample_count   1
+        WebGPU:             *no default* (must be queried from WebGPU swapchain object)
+    .environment.defaults.depth_format: SG_PIXELFORMAT_DEPTH_STENCIL
+    .environment.defaults.sample_count: 1
 
     Metal specific:
         (NOTE: All Objective-C object references are transferred through
@@ -3628,43 +3716,21 @@ typedef enum sg_log_item {
             when enabled, Metal buffers and texture resources are created in managed storage
             mode, otherwise sokol-gfx will decide whether to create buffers and
             textures in managed or shared storage mode (this is mainly a debugging option)
-        .context.metal.device
+        .mtl_use_command_buffer_with_retained_references
+            when true, the sokol-gfx Metal backend will use Metal command buffers which
+            bump the reference count of resource objects as long as they are inflight,
+            this is slower than the default command-buffer-with-unretained-references
+            method, this may be a workaround when confronted with lifetime validation
+            errors from the Metal validation layer until a proper fix has been implemented
+        .environment.metal.device
             a pointer to the MTLDevice object
-        .context.metal.renderpass_descriptor_cb
-        .context.metal_renderpass_descriptor_userdata_cb
-            A C callback function to obtain the MTLRenderPassDescriptor for the
-            current frame when rendering to the default framebuffer, will be called
-            in sg_begin_default_pass().
-        .context.metal.drawable_cb
-        .context.metal.drawable_userdata_cb
-            a C callback function to obtain a MTLDrawable for the current
-            frame when rendering to the default framebuffer, will be called in
-            sg_end_pass() of the default pass
-        .context.metal.user_data
-            optional user data pointer passed to the userdata versions of
-            callback functions
 
     D3D11 specific:
-        .context.d3d11.device
+        .environment.d3d11.device
             a pointer to the ID3D11Device object, this must have been created
             before sg_setup() is called
-        .context.d3d11.device_context
+        .environment.d3d11.device_context
             a pointer to the ID3D11DeviceContext object
-        .context.d3d11.render_target_view_cb
-        .context.d3d11.render_target_view_userdata_cb
-            a C callback function to obtain a pointer to the current
-            ID3D11RenderTargetView object of the default framebuffer,
-            this function will be called in sg_begin_pass() when rendering
-            to the default framebuffer
-        .context.d3d11.depth_stencil_view_cb
-        .context.d3d11.depth_stencil_view_userdata_cb
-            a C callback function to obtain a pointer to the current
-            ID3D11DepthStencilView object of the default framebuffer,
-            this function will be called in sg_begin_pass() when rendering
-            to the default framebuffer
-        .context.d3d11.user_data
-            optional user data pointer passed to the userdata versions of
-            callback functions
 
     WebGPU specific:
         .wgpu_disable_bindgroups_cache
@@ -3680,30 +3746,13 @@ typedef enum sg_log_item {
             if this is a frequent occurrence, and increase the cache size as
             needed (the default is 1024).
             NOTE: wgpu_bindgroups_cache_size must be a power-of-2 number!
-        .context.wgpu.device
+        .environment.wgpu.device
             a WGPUDevice handle
-        .context.wgpu.render_format
-            WGPUTextureFormat of the swap chain surface
-        .context.wgpu.render_view_cb
-        .context.wgpu.render_view_userdata_cb
-            callback to get the current WGPUTextureView of the swapchain's
-            rendering attachment (may be an MSAA surface)
-        .context.wgpu.resolve_view_cb
-        .context.wgpu.resolve_view_userdata_cb
-            callback to get the current WGPUTextureView of the swapchain's
-            MSAA-resolve-target surface, must return 0 if not MSAA rendering
-        .context.wgpu.depth_stencil_view_cb
-        .context.wgpu.depth_stencil_view_userdata_cb
-            callback to get current default-pass depth-stencil-surface WGPUTextureView
-            the pixel format of the default WGPUTextureView must be WGPUTextureFormat_Depth32FloatStencil8
-        .context.wgpu.user_data
-            optional user data pointer passed to the userdata versions of
-            callback functions
 
     When using sokol_gfx.h and sokol_app.h together, consider using the
-    helper function sapp_sgcontext() in the sokol_glue.h header to
-    initialize the sg_desc.context nested struct. sapp_sgcontext() returns
-    a completely initialized sg_context_desc struct with information
+    helper function sglue_environment() in the sokol_glue.h header to
+    initialize the sg_desc.environment nested struct. sglue_environment() returns
+    a completely initialized sg_environment struct with information
     provided by sokol_app.h.
 */
 typedef struct sg_environment_defaults {
