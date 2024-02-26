@@ -4716,6 +4716,15 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #endif
 #endif
 
+#if defined(SOKOL_GLES3)
+    // on WebGL2, GL_FRAMEBUFFER_UNDEFINED technically doesn't exist (it is defined
+    // in the Emscripten headers, but may not exist in other WebGL2 shims)
+    // see: https://github.com/floooh/sokol/pull/933
+    #ifndef GL_FRAMEBUFFER_UNDEFINED
+    #define GL_FRAMEBUFFER_UNDEFINED 0x8219
+    #endif
+#endif
+
 // ███████ ████████ ██████  ██    ██  ██████ ████████ ███████
 // ██         ██    ██   ██ ██    ██ ██         ██    ██
 // ███████    ██    ██████  ██    ██ ██         ██    ███████
