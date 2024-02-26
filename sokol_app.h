@@ -313,6 +313,10 @@
             objects and values required for rendering. If sokol_app.h
             is not compiled with SOKOL_WGPU, these functions return null.
 
+        const uint32_t sapp_gl_get_framebuffer(void)
+            This returns the 'default framebuffer' of the GL context.
+            Typically this will be zero.
+
         const void* sapp_android_get_native_activity(void);
             On Android, get the native activity ANativeActivity pointer, otherwise
             a null pointer.
