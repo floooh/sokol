@@ -6591,8 +6591,13 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
 // optional GL loader for win32
 #if defined(_SOKOL_USE_WIN32_GL_LOADER)
 
+#ifndef SG_GL_FUNCS_EXT
+#define SG_GL_FUNCS_EXT
+#endif
+
 // X Macro list of GL function names and signatures
 #define _SG_GL_FUNCS \
+    SG_GL_FUNCS_EXT \
     _SG_XMACRO(glBindVertexArray,                 void, (GLuint array)) \
     _SG_XMACRO(glFramebufferTextureLayer,         void, (GLenum target, GLenum attachment, GLuint texture, GLint level, GLint layer)) \
     _SG_XMACRO(glGenFramebuffers,                 void, (GLsizei n, GLuint * framebuffers)) \
@@ -8689,10 +8694,10 @@ _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
                 invalidate_atts[att_index++] = (GLenum)(GL_COLOR_ATTACHMENT0 + i);
             }
         }
-        if (_sg.gl.depth_store_action == SG_STOREACTION_DONTCARE) {
+        if ((_sg.gl.depth_store_action == SG_STOREACTION_DONTCARE) && (_sg.gl.cur_pass->cmn.ds_att.image_id.id != SG_INVALID_ID)) {
             invalidate_atts[att_index++] = GL_DEPTH_ATTACHMENT;
         }
-        if (_sg.gl.stencil_store_action == SG_STOREACTION_DONTCARE) {
+        if ((_sg.gl.stencil_store_action == SG_STOREACTION_DONTCARE) && (_sg.gl.cur_pass->cmn.ds_att.image_id.id != SG_INVALID_ID)) {
             invalidate_atts[att_index++] = GL_STENCIL_ATTACHMENT;
         }
         if (att_index > 0) {

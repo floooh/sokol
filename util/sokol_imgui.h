@@ -609,6 +609,12 @@ inline void simgui_new_frame(const simgui_frame_desc_t& desc) { return simgui_ne
 // helper macros and constants
 #define _simgui_def(val, def) (((val) == 0) ? (def) : (val))
 
+// workaround for missing ImDrawCallback_ResetRenderState in cimgui.h
+// see: https://github.com/cimgui/cimgui/issues/261
+#ifndef ImDrawCallback_ResetRenderState
+#define ImDrawCallback_ResetRenderState (ImDrawCallback)(-8)
+#endif
+
 typedef struct {
     ImVec2 disp_size;
     uint8_t _pad_8[8];
@@ -2644,13 +2650,18 @@ SOKOL_API_IMPL void simgui_render(void) {
         uint32_t vtx_offset = 0;
         for (int cmd_index = 0; cmd_index < num_cmds; cmd_index++) {
             ImDrawCmd* pcmd = &cl->CmdBuffer.Data[cmd_index];
-            if (pcmd->UserCallback) {
-                pcmd->UserCallback(cl, pcmd);
-                // need to re-apply all state after calling a user callback
-                sg_apply_viewport(0, 0, fb_width, fb_height, true);
-                sg_apply_pipeline(_simgui.def_pip);
-                sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, SG_RANGE_REF(vs_params));
-                sg_apply_bindings(&bind);
+            if (pcmd->UserCallback != 0) {
+                // User callback, registered via ImDrawList::AddCallback()
+                // (ImDrawCallback_ResetRenderState is a special callback value used by the user to request the renderer to reset render state.)
+                if (pcmd->UserCallback != ImDrawCallback_ResetRenderState) {
+                    pcmd->UserCallback(cl, pcmd);
+                    // need to re-apply all state after calling a user callback
+                    sg_reset_state_cache();
+                    sg_apply_viewport(0, 0, fb_width, fb_height, true);
+                    sg_apply_pipeline(_simgui.def_pip);
+                    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, SG_RANGE_REF(vs_params));
+                    sg_apply_bindings(&bind);
+                }
             } else {
                 if ((tex_id != pcmd->TextureId) || (vtx_offset != pcmd->VtxOffset)) {
                     tex_id = pcmd->TextureId;

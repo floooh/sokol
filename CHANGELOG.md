@@ -1,5 +1,37 @@
 ## Updates
 
+### 27-Feb-2024:
+
+- Merged PR https://github.com/floooh/sokol/pull/1001, this is a small fix for GLES3 to avoid
+  calling glInvalidateFramebuffer() on non-existing depth/stencil surfaces.
+
+  Many thanks to @danielchasehooper!
+
+#### 26-Feb-2024:
+
+- Minor fix in sokol_imgui.h: The drawing code now detects and skips the special
+  `ImDrawCallback_ResetRenderState` constant, not doing so would try to call a function
+  at address (-8) which then results in a crash.
+
+  See for what this is: https://github.com/ocornut/imgui/blob/277ae93c41314ba5f4c7444f37c4319cdf07e8cf/imgui.h#L2583-L2587
+
+  sokol_imgui.h doesn't have any handling for this special callback, it will just ignore it.
+
+  As a minor additional behaviour change, any user callback will now also cause `sg_reset_state_cache()`
+  to be called. This is just a precaution in case the user callback code calls any native 3D backend API
+  functions.
+
+  Related issue: https://github.com/floooh/sokol/issues/1000
+
+#### 21-Feb-2024:
+
+- PR https://github.com/floooh/sokol/pull/993 has been merged, this allows to inject
+  additional GL functions into the Win32 GL loader of sokol_gfx.h (TBH, it's a very specialized
+  feature for people who know what they're doing, but it also fixes a very specific problem
+  while at the same time resolving to 'nothing' when not used).
+
+  Many thanks for @kcbanner for the PR!
+
 #### 31-Jan-2024:
 
 - sokol_app.h macOS: merged a workaround for the application window not being focused
