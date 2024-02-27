@@ -8679,10 +8679,10 @@ _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
                 invalidate_atts[att_index++] = (GLenum)(GL_COLOR_ATTACHMENT0 + i);
             }
         }
-        if (_sg.gl.depth_store_action == SG_STOREACTION_DONTCARE) {
+        if ((_sg.gl.depth_store_action == SG_STOREACTION_DONTCARE) && (_sg.gl.cur_pass->cmn.ds_att.image_id.id != SG_INVALID_ID)) {
             invalidate_atts[att_index++] = GL_DEPTH_ATTACHMENT;
         }
-        if (_sg.gl.stencil_store_action == SG_STOREACTION_DONTCARE) {
+        if ((_sg.gl.stencil_store_action == SG_STOREACTION_DONTCARE) && (_sg.gl.cur_pass->cmn.ds_att.image_id.id != SG_INVALID_ID)) {
             invalidate_atts[att_index++] = GL_STENCIL_ATTACHMENT;
         }
         if (att_index > 0) {

@@ -1,5 +1,12 @@
 ## Updates
 
+### 27-Feb-2024:
+
+- Merged PR https://github.com/floooh/sokol/pull/1001, this is a small fix for GLES3 to avoid
+  calling glInvalidateFramebuffer() on non-existing depth/stencil surfaces.
+
+  Many thanks to @danielchasehooper!
+
 #### 26-Feb-2024:
 
 - Minor fix in sokol_imgui.h: The drawing code now detects and skips the special
