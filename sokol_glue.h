@@ -30,14 +30,9 @@
 
     OVERVIEW
     ========
-    The sokol core headers should not depend on each other, but sometimes
-    it's useful to have a set of helper functions as "glue" between
-    two or more sokol headers.
-
-    This is what sokol_glue.h is for. Simply include the header after other
-    sokol headers (both for the implementation and declaration), and
-    depending on what headers have been included before, sokol_glue.h
-    will make available "glue functions".
+    sokol_glue.h provides glue helper functions between sokol_gfx.h and sokol_app.h,
+    so that sokol_gfx.h doesn't need to depend on sokol_app.h but can be
+    used with different window system glue libraries.
 
     PROVIDED FUNCTIONS
     ==================
