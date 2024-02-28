@@ -288,11 +288,6 @@
             Before being used as Objective-C object, the void* must be converted
             back with a (ARC) __bridge cast.
 
-        const void* sapp_win32_get_hwnd(void)
-            On Windows, get the window's HWND, otherwise a null pointer. The
-            HWND has been cast to a void pointer in order to be tunneled
-            through code which doesn't include Windows.h.
-
         const void* sapp_d3d11_get_device(void)
         const void* sapp_d3d11_get_device_context(void)
         const void* sapp_d3d11_get_render_view(void)
@@ -304,6 +299,11 @@
             return a null pointer. Note that the returned pointers to the
             render-target-view and depth-stencil-view may change from one
             frame to the next!
+
+        const void* sapp_win32_get_hwnd(void)
+            On Windows, get the window's HWND, otherwise a null pointer. The
+            HWND has been cast to a void pointer in order to be tunneled
+            through code which doesn't include Windows.h.
 
         const void* sapp_wgpu_get_device(void)
         const void* sapp_wgpu_get_render_view(void)
