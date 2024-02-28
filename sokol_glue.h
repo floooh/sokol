@@ -100,6 +100,10 @@
 #endif
 #endif
 
+#ifndef SOKOL_GFX_INCLUDED
+#error "Please include sokol_gfx.h before sokol_glue.h"
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -117,9 +121,14 @@ SOKOL_GLUE_API_DECL sg_swapchain sglue_swapchain(void);
 #define SOKOL_GLUE_IMPL_INCLUDED (1)
 #include <string.h> /* memset */
 
+#ifndef SOKOL_APP_IMPL_INCLUDED
+#error "Please include the sokol_app.h implementation before the sokol_glue.h implementation"
+#endif
+
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL
 #endif
+
 
 SOKOL_API_IMPL sg_environment sglue_environment(void) {
     sg_environment env;
