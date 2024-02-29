@@ -1,5 +1,37 @@
 ## Updates
 
+### 29-Feb-2024:
+
+**BREAKING CHANGES** in sokol_gfx.h, sokol_app.h, sokol_glue.h and sokol_gfx_imgui.h
+(the 'big render pass cleanup').
+
+- In sokol_gfx.h, the concepts of 'render contexts' and 'default render passes' have
+  been removed and replaced with a unified `sg_begin_pass()` which handles both
+  rendering into 'offscreen-passes' and 'swapchain-passes'.
+
+  [Please read this blog
+  post](https://floooh.github.io/2024/02/26/sokol-spring-cleaning-2024.html)
+  carefully for a detailed overview what has changed, why the changes make
+  sense, and how existing code needs to be updated.
+
+- There are also minimal related changes in the sokol_app.h and a complete
+  rewrite of the sokol_glue.h APIs, also detailed in the above blog post.
+
+- The namespace-prefix for the header sokol_gfx_imgui.h has been changed from
+  `sg_imgui_` to `sgimgui_`.
+
+- In sokol_gfx.h with the Metal backend, a runtime configuration flag has been
+  added to `sg_desc` to create a Metal command buffer with
+  'retained-references'. See issue
+  [#981](https://github.com/floooh/sokol/issues/981) for details.
+
+- Also in sokol_gfx.h, the struct item `sg_limits.gl_max_vertex_uniform_vectors` has been changed
+  to `sg_limits.gl_max_vertex_uniform_components` (note that there are 4x more 'components'
+  than 'vectors'). See issue [#714](https://github.com/floooh/sokol/issues/714) for details.
+
+- All sampples, language binding examples and 'side projects' have been updated, see the above blog post
+  for links to the respective PRs.
+
 ### 27-Feb-2024:
 
 - Merged PR https://github.com/floooh/sokol/pull/1001, this is a small fix for GLES3 to avoid
