@@ -11,7 +11,7 @@
 #include "sokol_gfx_imgui.h"
 
 void use_gfx_imgui_impl(void) {
-    sg_imgui_t ctx = {0};
-    sg_imgui_init(&ctx, &(sg_imgui_desc_t){0});
-    sg_imgui_discard(&ctx);
+    sgimgui_t ctx = {0};
+    sgimgui_init(&ctx, &(sgimgui_desc_t){0});
+    sgimgui_discard(&ctx);
 }

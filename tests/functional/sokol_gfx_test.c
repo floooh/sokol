@@ -68,14 +68,14 @@ static sg_pipeline create_pipeline(void) {
     });
 }
 
-static sg_pass create_pass(void) {
+static sg_attachments create_attachments(void) {
     sg_image_desc img_desc = {
         .render_target = true,
         .width = 128,
         .height = 128,
     };
-    return sg_make_pass(&(sg_pass_desc){
-        .color_attachments = {
+    return sg_make_attachments(&(sg_attachments_desc){
+        .colors = {
             [0].image = sg_make_image(&img_desc),
             [1].image = sg_make_image(&img_desc),
             [2].image = sg_make_image(&img_desc)
@@ -95,7 +95,7 @@ UTEST(sokol_gfx, query_desc) {
         .buffer_pool_size = 1024,
         .sampler_pool_size = 8,
         .shader_pool_size = 128,
-        .pass_pool_size = 64,
+        .attachments_pool_size = 64,
     });
     const sg_desc desc = sg_query_desc();
     T(desc.buffer_pool_size == 1024);
@@ -103,8 +103,7 @@ UTEST(sokol_gfx, query_desc) {
     T(desc.sampler_pool_size == 8);
     T(desc.shader_pool_size == 128);
     T(desc.pipeline_pool_size == _SG_DEFAULT_PIPELINE_POOL_SIZE);
-    T(desc.pass_pool_size == 64);
-    T(desc.context_pool_size == _SG_DEFAULT_CONTEXT_POOL_SIZE);
+    T(desc.attachments_pool_size == 64);
     T(desc.uniform_buffer_size == _SG_DEFAULT_UB_SIZE);
     sg_shutdown();
 }
@@ -121,8 +120,7 @@ UTEST(sokol_gfx, pool_size) {
         .image_pool_size = 2048,
         .shader_pool_size = 128,
         .pipeline_pool_size = 256,
-        .pass_pool_size = 64,
-        .context_pool_size = 64
+        .attachments_pool_size = 64,
     });
     T(sg_isvalid());
     /* pool slot 0 is reserved (this is the "invalid slot") */
@@ -130,14 +128,12 @@ UTEST(sokol_gfx, pool_size) {
     T(_sg.pools.image_pool.size == 2049);
     T(_sg.pools.shader_pool.size == 129);
     T(_sg.pools.pipeline_pool.size == 257);
-    T(_sg.pools.pass_pool.size == 65);
-    T(_sg.pools.context_pool.size == 65);
+    T(_sg.pools.attachments_pool.size == 65);
     T(_sg.pools.buffer_pool.queue_top == 1024);
     T(_sg.pools.image_pool.queue_top == 2048);
     T(_sg.pools.shader_pool.queue_top == 128);
     T(_sg.pools.pipeline_pool.queue_top == 256);
-    T(_sg.pools.pass_pool.queue_top == 64);
-    T(_sg.pools.context_pool.queue_top == 63);  /* default context has been created already */
+    T(_sg.pools.attachments_pool.queue_top == 64);
     sg_shutdown();
 }
 
@@ -296,33 +292,33 @@ UTEST(sokol_gfx, alloc_fail_destroy_pipelines) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, alloc_fail_destroy_passes) {
+UTEST(sokol_gfx, alloc_fail_destroy_attachments) {
     setup(&(sg_desc){
-        .pass_pool_size = 3
+        .attachments_pool_size = 3
     });
     T(sg_isvalid());
 
-    sg_pass pass[3] = { {0} };
+    sg_attachments atts[3] = { {0} };
     for (int i = 0; i < 3; i++) {
-        pass[i] = sg_alloc_pass();
-        T(pass[i].id != SG_INVALID_ID);
-        T((2-i) == _sg.pools.pass_pool.queue_top);
-        T(sg_query_pass_state(pass[i]) == SG_RESOURCESTATE_ALLOC);
+        atts[i] = sg_alloc_attachments();
+        T(atts[i].id != SG_INVALID_ID);
+        T((2-i) == _sg.pools.attachments_pool.queue_top);
+        T(sg_query_attachments_state(atts[i]) == SG_RESOURCESTATE_ALLOC);
     }
     /* the next alloc will fail because the pool is exhausted */
-    sg_pass p3 = sg_alloc_pass();
-    T(p3.id == SG_INVALID_ID);
-    T(sg_query_pass_state(p3) == SG_RESOURCESTATE_INVALID);
+    sg_attachments a3 = sg_alloc_attachments();
+    T(a3.id == SG_INVALID_ID);
+    T(sg_query_attachments_state(a3) == SG_RESOURCESTATE_INVALID);
 
     /* before destroying, the resources must be either in valid or failed state */
     for (int i = 0; i < 3; i++) {
-        sg_fail_pass(pass[i]);
-        T(sg_query_pass_state(pass[i]) == SG_RESOURCESTATE_FAILED);
+        sg_fail_attachments(atts[i]);
+        T(sg_query_attachments_state(atts[i]) == SG_RESOURCESTATE_FAILED);
     }
     for (int i = 0; i < 3; i++) {
-        sg_destroy_pass(pass[i]);
-        T(sg_query_pass_state(pass[i]) == SG_RESOURCESTATE_INVALID);
-        T((i+1) == _sg.pools.pass_pool.queue_top);
+        sg_destroy_attachments(atts[i]);
+        T(sg_query_attachments_state(atts[i]) == SG_RESOURCESTATE_INVALID);
+        T((i+1) == _sg.pools.attachments_pool.queue_top);
     }
     sg_shutdown();
 }
@@ -345,7 +341,6 @@ UTEST(sokol_gfx, make_destroy_buffers) {
         const _sg_buffer_t* bufptr = _sg_lookup_buffer(&_sg.pools, buf[i].id);
         T(bufptr);
         T(bufptr->slot.id == buf[i].id);
-        T(bufptr->slot.ctx_id == _sg.active_context.id);
         T(bufptr->slot.state == SG_RESOURCESTATE_VALID);
         T(bufptr->cmn.size == sizeof(data));
         T(bufptr->cmn.append_pos == 0);
@@ -390,7 +385,6 @@ UTEST(sokol_gfx, make_destroy_images) {
         const _sg_image_t* imgptr = _sg_lookup_image(&_sg.pools, img[i].id);
         T(imgptr);
         T(imgptr->slot.id == img[i].id);
-        T(imgptr->slot.ctx_id == _sg.active_context.id);
         T(imgptr->slot.state == SG_RESOURCESTATE_VALID);
         T(imgptr->cmn.type == SG_IMAGETYPE_2D);
         T(!imgptr->cmn.render_target);
@@ -432,7 +426,6 @@ UTEST(sokol_gfx, make_destroy_samplers) {
         const _sg_sampler_t* smpptr = _sg_lookup_sampler(&_sg.pools, smp[i].id);
         T(smpptr);
         T(smpptr->slot.id == smp[i].id);
-        T(smpptr->slot.ctx_id == _sg.active_context.id);
         T(smpptr->slot.state == SG_RESOURCESTATE_VALID);
         T(smpptr->cmn.min_filter == SG_FILTER_NEAREST);
         T(smpptr->cmn.mag_filter == SG_FILTER_NEAREST);
@@ -477,7 +470,6 @@ UTEST(sokol_gfx, make_destroy_shaders) {
         const _sg_shader_t* shdptr = _sg_lookup_shader(&_sg.pools, shd[i].id);
         T(shdptr);
         T(shdptr->slot.id == shd[i].id);
-        T(shdptr->slot.ctx_id == _sg.active_context.id);
         T(shdptr->slot.state == SG_RESOURCESTATE_VALID);
         T(shdptr->cmn.stage[SG_SHADERSTAGE_VS].num_uniform_blocks == 1);
         T(shdptr->cmn.stage[SG_SHADERSTAGE_VS].num_images == 0);
@@ -520,7 +512,6 @@ UTEST(sokol_gfx, make_destroy_pipelines) {
         const _sg_pipeline_t* pipptr = _sg_lookup_pipeline(&_sg.pools, pip[i].id);
         T(pipptr);
         T(pipptr->slot.id == pip[i].id);
-        T(pipptr->slot.ctx_id == _sg.active_context.id);
         T(pipptr->slot.state == SG_RESOURCESTATE_VALID);
         T(pipptr->shader == _sg_lookup_shader(&_sg.pools, desc.shader.id));
         T(pipptr->cmn.shader_id.id == desc.shader.id);
@@ -543,50 +534,49 @@ UTEST(sokol_gfx, make_destroy_pipelines) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_destroy_passes) {
+UTEST(sokol_gfx, make_destroy_attachments) {
     setup(&(sg_desc){
-        .pass_pool_size = 3
+        .attachments_pool_size = 3
     });
     T(sg_isvalid());
 
-    sg_pass pass[3] = { {0} };
+    sg_attachments atts[3] = { {0} };
 
     sg_image_desc img_desc = {
         .render_target = true,
         .width = 128,
         .height = 128,
     };
-    sg_pass_desc pass_desc = (sg_pass_desc){
-        .color_attachments = {
+    sg_attachments_desc atts_desc = (sg_attachments_desc){
+        .colors = {
             [0].image = sg_make_image(&img_desc),
             [1].image = sg_make_image(&img_desc),
             [2].image = sg_make_image(&img_desc)
         },
     };
     for (int i = 0; i < 3; i++) {
-        pass[i] = sg_make_pass(&pass_desc);
-        T(pass[i].id != SG_INVALID_ID);
-        T((2-i) == _sg.pools.pass_pool.queue_top);
-        T(sg_query_pass_state(pass[i]) == SG_RESOURCESTATE_VALID);
-        const _sg_pass_t* passptr = _sg_lookup_pass(&_sg.pools, pass[i].id);
-        T(passptr);
-        T(passptr->slot.id == pass[i].id);
-        T(passptr->slot.ctx_id == _sg.active_context.id);
-        T(passptr->slot.state == SG_RESOURCESTATE_VALID);
-        T(passptr->cmn.num_color_atts == 3);
+        atts[i] = sg_make_attachments(&atts_desc);
+        T(atts[i].id != SG_INVALID_ID);
+        T((2-i) == _sg.pools.attachments_pool.queue_top);
+        T(sg_query_attachments_state(atts[i]) == SG_RESOURCESTATE_VALID);
+        const _sg_attachments_t* attsptr = _sg_lookup_attachments(&_sg.pools, atts[i].id);
+        T(attsptr);
+        T(attsptr->slot.id == atts[i].id);
+        T(attsptr->slot.state == SG_RESOURCESTATE_VALID);
+        T(attsptr->cmn.num_colors == 3);
         for (int ai = 0; ai < 3; ai++) {
-            const _sg_image_t* img = _sg_pass_color_image(passptr, ai);
-            T(img == _sg_lookup_image(&_sg.pools, pass_desc.color_attachments[ai].image.id));
-            T(passptr->cmn.color_atts[ai].image_id.id == pass_desc.color_attachments[ai].image.id);
+            const _sg_image_t* img = _sg_attachments_color_image(attsptr, ai);
+            T(img == _sg_lookup_image(&_sg.pools, atts_desc.colors[ai].image.id));
+            T(attsptr->cmn.colors[ai].image_id.id == atts_desc.colors[ai].image.id);
         }
     }
     /* trying to create another one fails because pool is exhausted */
-    T(sg_make_pass(&pass_desc).id == SG_INVALID_ID);
+    T(sg_make_attachments(&atts_desc).id == SG_INVALID_ID);
 
     for (int i = 0; i < 3; i++) {
-        sg_destroy_pass(pass[i]);
-        T(sg_query_pass_state(pass[i]) == SG_RESOURCESTATE_INVALID);
-        T((i+1) == _sg.pools.pass_pool.queue_top);
+        sg_destroy_attachments(atts[i]);
+        T(sg_query_attachments_state(atts[i]) == SG_RESOURCESTATE_INVALID);
+        T((i+1) == _sg.pools.attachments_pool.queue_top);
     }
     sg_shutdown();
 }
@@ -809,12 +799,12 @@ UTEST(sokol_gfx, multiple_color_state) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, query_pass_defaults) {
+UTEST(sokol_gfx, query_attachments_defaults) {
     setup(&(sg_desc){0});
-    /* sg_pass_desc doesn't actually have any meaningful default values */
-    const sg_pass_desc desc = sg_query_pass_defaults(&(sg_pass_desc){0});
-    T(desc.color_attachments[0].image.id == SG_INVALID_ID);
-    T(desc.color_attachments[0].mip_level == 0);
+    /* sg_attachments_desc doesn't actually have any meaningful default values */
+    const sg_attachments_desc desc = sg_query_attachments_defaults(&(sg_attachments_desc){0});
+    T(desc.colors[0].image.id == SG_INVALID_ID);
+    T(desc.colors[0].mip_level == 0);
     sg_shutdown();
 }
 
@@ -892,23 +882,23 @@ UTEST(sokol_gfx, query_pipeline_info) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, query_pass_info) {
+UTEST(sokol_gfx, query_attachments_info) {
     setup(&(sg_desc){0});
     sg_image_desc img_desc = {
         .render_target = true,
         .width = 128,
         .height = 128,
     };
-    sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments = {
+    sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors = {
             [0].image = sg_make_image(&img_desc),
             [1].image = sg_make_image(&img_desc),
             [2].image = sg_make_image(&img_desc)
         },
     });
-    const sg_pass_info info = sg_query_pass_info(pass);
+    const sg_attachments_info info = sg_query_attachments_info(atts);
     T(info.slot.state == SG_RESOURCESTATE_VALID);
-    T(info.slot.res_id == pass.id);
+    T(info.slot.res_id == atts.id);
     sg_shutdown();
 }
 
@@ -1215,7 +1205,7 @@ UTEST(sokol_gfx, query_pipeline_desc) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, query_pass_desc) {
+UTEST(sokol_gfx, query_attachments_desc) {
     setup(&(sg_desc){0});
 
     const sg_image_desc color_img_desc = {
@@ -1234,27 +1224,27 @@ UTEST(sokol_gfx, query_pass_desc) {
     sg_image color_img_2 = sg_make_image(&color_img_desc);
     sg_image depth_img = sg_make_image(&depth_img_desc);
 
-    sg_pass p0 = sg_make_pass(&(sg_pass_desc){
-        .color_attachments = {
+    sg_attachments a0 = sg_make_attachments(&(sg_attachments_desc){
+        .colors = {
             [0].image = color_img_0,
             [1].image = color_img_1,
             [2].image = color_img_2,
         },
-        .depth_stencil_attachment.image = depth_img,
+        .depth_stencil.image = depth_img,
     });
-    const sg_pass_desc p0_desc = sg_query_pass_desc(p0);
-    T(p0_desc.color_attachments[0].image.id == color_img_0.id);
-    T(p0_desc.color_attachments[0].mip_level == 0);
-    T(p0_desc.color_attachments[0].slice == 0);
-    T(p0_desc.color_attachments[1].image.id == color_img_1.id);
-    T(p0_desc.color_attachments[1].mip_level == 0);
-    T(p0_desc.color_attachments[1].slice == 0);
-    T(p0_desc.color_attachments[2].image.id == color_img_2.id);
-    T(p0_desc.color_attachments[2].mip_level == 0);
-    T(p0_desc.color_attachments[2].slice == 0);
-    T(p0_desc.depth_stencil_attachment.image.id == depth_img.id);
-    T(p0_desc.depth_stencil_attachment.mip_level == 0);
-    T(p0_desc.depth_stencil_attachment.slice == 0);
+    const sg_attachments_desc a0_desc = sg_query_attachments_desc(a0);
+    T(a0_desc.colors[0].image.id == color_img_0.id);
+    T(a0_desc.colors[0].mip_level == 0);
+    T(a0_desc.colors[0].slice == 0);
+    T(a0_desc.colors[1].image.id == color_img_1.id);
+    T(a0_desc.colors[1].mip_level == 0);
+    T(a0_desc.colors[1].slice == 0);
+    T(a0_desc.colors[2].image.id == color_img_2.id);
+    T(a0_desc.colors[2].mip_level == 0);
+    T(a0_desc.colors[2].slice == 0);
+    T(a0_desc.depth_stencil.image.id == depth_img.id);
+    T(a0_desc.depth_stencil.mip_level == 0);
+    T(a0_desc.depth_stencil.slice == 0);
 
     sg_shutdown();
 }
@@ -1327,18 +1317,18 @@ UTEST(sokol_gfx, pipeline_resource_states) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, pass_resource_states) {
+UTEST(sokol_gfx, attachments_resource_states) {
     setup(&(sg_desc){0});
-    sg_pass pass = sg_alloc_pass();
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_ALLOC);
-    sg_init_pass(pass, &(sg_pass_desc){
-        .color_attachments[0].image = sg_make_image(&(sg_image_desc){ .render_target=true, .width=16, .height=16})
+    sg_attachments atts = sg_alloc_attachments();
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_ALLOC);
+    sg_init_attachments(atts, &(sg_attachments_desc){
+        .colors[0].image = sg_make_image(&(sg_image_desc){ .render_target=true, .width=16, .height=16})
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_VALID);
-    sg_uninit_pass(pass);
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_ALLOC);
-    sg_dealloc_pass(pass);
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_INVALID);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_VALID);
+    sg_uninit_attachments(atts);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_ALLOC);
+    sg_dealloc_attachments(atts);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_INVALID);
     sg_shutdown();
 }
 
@@ -1600,14 +1590,14 @@ UTEST(sokol_gfx, pipeline_double_destroy_is_ok) {
     sg_shutdown();
 }
 
-UTEST(sokoL_gfx, pass_double_destroy_is_ok) {
+UTEST(sokoL_gfx, attachments_double_destroy_is_ok) {
     setup(&(sg_desc){0});
-    sg_pass pass = create_pass();
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_VALID);
-    sg_destroy_pass(pass);
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_INVALID);
-    sg_destroy_pass(pass);
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_INVALID);
+    sg_attachments atts = create_attachments();
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_VALID);
+    sg_destroy_attachments(atts);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_INVALID);
+    sg_destroy_attachments(atts);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_INVALID);
     sg_shutdown();
 }
 
@@ -1676,16 +1666,16 @@ UTEST(sokol_gfx, make_dealloc_pipeline_warns) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_dealloc_pass_warns) {
+UTEST(sokol_gfx, make_dealloc_attachments_warns) {
     setup(&(sg_desc){0});
-    sg_pass pass = create_pass();
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_VALID);
-    sg_dealloc_pass(pass);
-    T(log_items[0] == SG_LOGITEM_DEALLOC_PASS_INVALID_STATE);
+    sg_attachments atts = create_attachments();
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_VALID);
+    sg_dealloc_attachments(atts);
+    T(log_items[0] == SG_LOGITEM_DEALLOC_ATTACHMENTS_INVALID_STATE);
     T(num_log_called == 1);
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_VALID);
-    sg_destroy_pass(pass);
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_INVALID);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_VALID);
+    sg_destroy_attachments(atts);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_INVALID);
     sg_shutdown();
 }
 
@@ -1744,14 +1734,14 @@ UTEST(sokol_gfx, alloc_uninit_pipeline_warns) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, alloc_uninit_pass_warns) {
+UTEST(sokol_gfx, alloc_uninit_attachments_warns) {
     setup(&(sg_desc){0});
-    sg_pass pass = sg_alloc_pass();
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_ALLOC);
-    sg_uninit_pass(pass);
-    T(log_items[0] == SG_LOGITEM_UNINIT_PASS_INVALID_STATE);
+    sg_attachments atts = sg_alloc_attachments();
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_ALLOC);
+    sg_uninit_attachments(atts);
+    T(log_items[0] == SG_LOGITEM_UNINIT_ATTACHMENTS_INVALID_STATE);
     T(num_log_called == 1);
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_ALLOC);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_ALLOC);
     sg_shutdown();
 }
 
@@ -1806,13 +1796,13 @@ UTEST(sokol_gfx, alloc_destroy_pipeline_is_ok) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, alloc_destroy_pass_is_ok) {
+UTEST(sokol_gfx, alloc_destroy_attachments_is_ok) {
     setup(&(sg_desc){0});
-    sg_pass pass = sg_alloc_pass();
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_ALLOC);
-    sg_destroy_pass(pass);
+    sg_attachments atts = sg_alloc_attachments();
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_ALLOC);
+    sg_destroy_attachments(atts);
     T(num_log_called == 0);
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_INVALID);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_INVALID);
     sg_shutdown();
 }
 
@@ -1832,16 +1822,16 @@ UTEST(sokol_gfx, make_pipeline_with_nonvalid_shader) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_with_nonvalid_color_images) {
+UTEST(sokol_gfx, make_attachments_with_nonvalid_color_images) {
     setup(&(sg_desc){
         .disable_validation = true,
     });
-    sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments = {
+    sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors = {
             [0].image = sg_alloc_image(),
             [1].image = sg_alloc_image(),
         },
-        .depth_stencil_attachment = {
+        .depth_stencil = {
             .image = sg_make_image(&(sg_image_desc){
                 .render_target = true,
                 .width = 128,
@@ -1849,23 +1839,23 @@ UTEST(sokol_gfx, make_pass_with_nonvalid_color_images) {
             })
         }
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    sg_destroy_pass(pass);
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_INVALID);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    sg_destroy_attachments(atts);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_INVALID);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_without_color_attachments) {
+UTEST(sokol_gfx, make_attachments_without_color_attachments) {
     setup(&(sg_desc){0});
-    sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .depth_stencil_attachment.image = sg_make_image(&(sg_image_desc){
+    sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .depth_stencil.image = sg_make_image(&(sg_image_desc){
             .render_target = true,
             .width = 64,
             .height = 64,
             .pixel_format = SG_PIXELFORMAT_DEPTH,
         })
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_VALID);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_VALID);
     sg_shutdown();
 }
 
@@ -2236,71 +2226,71 @@ UTEST(sokol_gfx, make_sampler_validate_anistropic_requires_linear_filtering) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_start_canary) {
+UTEST(sokol_gfx, make_attachments_validate_start_canary) {
     setup(&(sg_desc){0});
-    sg_pass pass = sg_make_pass(&(sg_pass_desc){
+    sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
         ._start_canary = 1234,
-        .color_attachments[0].image = sg_make_image(&(sg_image_desc){
+        .colors[0].image = sg_make_image(&(sg_image_desc){
             .render_target = true,
             .width = 64,
             .height = 64,
         }),
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_CANARY);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_CANARY);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_end_canary) {
+UTEST(sokol_gfx, make_attachments_validate_end_canary) {
     setup(&(sg_desc){0});
-    sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0].image = sg_make_image(&(sg_image_desc){
+    sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0].image = sg_make_image(&(sg_image_desc){
             .render_target = true,
             .width = 64,
             .height = 64,
         }),
         ._end_canary = 1234,
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_CANARY);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_CANARY);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_no_cont_color_atts1) {
+UTEST(sokol_gfx, make_attachments_validate_no_cont_color_atts1) {
     setup(&(sg_desc){0});
     const sg_image_desc img_desc = { .render_target = true, .width = 64, .height = 64 };
-    sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments = {
+    sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors = {
             [0].image = sg_make_image(&img_desc),
             [2].image = sg_make_image(&img_desc),
         }
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_NO_CONT_COLOR_ATTS);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_NO_CONT_COLOR_ATTS);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_image) {
+UTEST(sokol_gfx, make_attachments_validate_image) {
     setup(&(sg_desc){0});
     const sg_image_desc img_desc = { .render_target = true, .width = 64, .height = 64 };
     const sg_image img0 = sg_make_image(&img_desc);
     const sg_image img1 = sg_make_image(&img_desc);
     sg_destroy_image(img1);
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments = {
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors = {
             [0].image = img0,
             [1].image = img1,
         }
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_IMAGE);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_IMAGE);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_miplevel) {
+UTEST(sokol_gfx, make_attachments_validate_miplevel) {
     setup(&(sg_desc){0});
     const sg_image img = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2308,16 +2298,16 @@ UTEST(sokol_gfx, make_pass_validate_miplevel) {
         .height = 16,
         .num_mipmaps = 4,
     });
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0] = { .image = img, .mip_level = 4 }
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0] = { .image = img, .mip_level = 4 }
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_MIPLEVEL);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_MIPLEVEL);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_face) {
+UTEST(sokol_gfx, make_attachments_validate_face) {
     setup(&(sg_desc){0});
     const sg_image img = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2325,16 +2315,16 @@ UTEST(sokol_gfx, make_pass_validate_face) {
         .width = 64,
         .height = 64,
     });
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0] = { .image = img, .slice = 6 }
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0] = { .image = img, .slice = 6 }
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_FACE);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_FACE);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_layer) {
+UTEST(sokol_gfx, make_attachments_validate_layer) {
     setup(&(sg_desc){0});
     const sg_image img = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2343,16 +2333,16 @@ UTEST(sokol_gfx, make_pass_validate_layer) {
         .height = 64,
         .num_slices = 4,
     });
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0] = { .image = img, .slice = 5 },
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0] = { .image = img, .slice = 5 },
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_LAYER);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_LAYER);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_slice) {
+UTEST(sokol_gfx, make_attachments_validate_slice) {
     setup(&(sg_desc){0});
     const sg_image img = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2361,32 +2351,32 @@ UTEST(sokol_gfx, make_pass_validate_slice) {
         .height = 64,
         .num_slices = 4,
     });
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0] = { .image = img, .slice = 5 },
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0] = { .image = img, .slice = 5 },
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_SLICE);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_SLICE);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_image_no_rt) {
+UTEST(sokol_gfx, make_attachments_validate_image_no_rt) {
     setup(&(sg_desc){0});
     const sg_image img = sg_make_image(&(sg_image_desc){
         .width = 8,
         .height = 8,
         .usage = SG_USAGE_DYNAMIC,
     });
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0].image = img,
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0].image = img,
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_IMAGE_NO_RT);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_IMAGE_NO_RT);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_color_inv_pixelformat) {
+UTEST(sokol_gfx, make_attachments_validate_color_inv_pixelformat) {
     setup(&(sg_desc){0});
     const sg_image_desc img_desc = {
         .render_target = true,
@@ -2395,34 +2385,34 @@ UTEST(sokol_gfx, make_pass_validate_color_inv_pixelformat) {
         .pixel_format = SG_PIXELFORMAT_DEPTH,
     };
     reset_log_items();
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0].image = sg_make_image(&img_desc),
-        .depth_stencil_attachment.image = sg_make_image(&img_desc),
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0].image = sg_make_image(&img_desc),
+        .depth_stencil.image = sg_make_image(&img_desc),
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_COLOR_INV_PIXELFORMAT);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_COLOR_INV_PIXELFORMAT);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_depth_inv_pixelformat) {
+UTEST(sokol_gfx, make_attachments_validate_depth_inv_pixelformat) {
     setup(&(sg_desc){0});
     const sg_image_desc img_desc = {
         .render_target = true,
         .width = 8,
         .height = 8,
     };
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0].image = sg_make_image(&img_desc),
-        .depth_stencil_attachment.image = sg_make_image(&img_desc),
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0].image = sg_make_image(&img_desc),
+        .depth_stencil.image = sg_make_image(&img_desc),
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_DEPTH_INV_PIXELFORMAT);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_image_sizes) {
+UTEST(sokol_gfx, make_attachments_validate_image_sizes) {
     setup(&(sg_desc){0});
     const sg_image img0 = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2434,20 +2424,20 @@ UTEST(sokol_gfx, make_pass_validate_image_sizes) {
         .width = 32,
         .height = 32,
     });
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments = {
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors = {
             [0].image = img0,
             [1].image = img1,
         }
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_IMAGE_SIZES);
-    T(log_items[1] == SG_LOGITEM_VALIDATE_PASSDESC_IMAGE_SIZES);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_IMAGE_SIZES);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_IMAGE_SIZES);
     T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_image_sample_counts) {
+UTEST(sokol_gfx, make_attachments_validate_image_sample_counts) {
     setup(&(sg_desc){0});
     const sg_image img0 = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2461,19 +2451,19 @@ UTEST(sokol_gfx, make_pass_validate_image_sample_counts) {
         .height = 64,
         .sample_count = 2,
     });
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments = {
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors = {
             [0].image = img0,
             [1].image = img1,
         }
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_IMAGE_SAMPLE_COUNTS);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_resolve_color_image_msaa) {
+UTEST(sokol_gfx, make_attachments_validate_resolve_color_image_msaa) {
     setup(&(sg_desc){0});
     const sg_image color_img = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2487,17 +2477,17 @@ UTEST(sokol_gfx, make_pass_validate_resolve_color_image_msaa) {
         .height = 64,
         .sample_count = 1,
     });
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0].image = color_img,
-        .resolve_attachments[0].image = resolve_img,
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0].image = color_img,
+        .resolves[0].image = resolve_img,
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_COLOR_IMAGE_MSAA);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_COLOR_IMAGE_MSAA);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_resolve_image) {
+UTEST(sokol_gfx, make_attachments_validate_resolve_image) {
     setup(&(sg_desc){0});
     const sg_image color_img = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2512,17 +2502,17 @@ UTEST(sokol_gfx, make_pass_validate_resolve_image) {
         .sample_count = 1,
     });
     sg_destroy_image(resolve_img);
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0].image = color_img,
-        .resolve_attachments[0].image = resolve_img,
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0].image = color_img,
+        .resolves[0].image = resolve_img,
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_IMAGE);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_resolve_sample_count) {
+UTEST(sokol_gfx, make_attachments_validate_resolve_sample_count) {
     setup(&(sg_desc){0});
     const sg_image color_img = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2536,17 +2526,17 @@ UTEST(sokol_gfx, make_pass_validate_resolve_sample_count) {
         .height = 64,
         .sample_count = 4,
     });
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0].image = color_img,
-        .resolve_attachments[0].image = resolve_img,
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0].image = color_img,
+        .resolves[0].image = resolve_img,
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_SAMPLE_COUNT);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_SAMPLE_COUNT);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_resolve_miplevel) {
+UTEST(sokol_gfx, make_attachments_validate_resolve_miplevel) {
     setup(&(sg_desc){0});
     const sg_image color_img = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2560,20 +2550,20 @@ UTEST(sokol_gfx, make_pass_validate_resolve_miplevel) {
         .height = 64,
         .sample_count = 1,
     });
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0] = { .image = color_img },
-        .resolve_attachments[0] = { .image = resolve_img, .mip_level = 1 },
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0] = { .image = color_img },
+        .resolves[0] = { .image = resolve_img, .mip_level = 1 },
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_MIPLEVEL);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_MIPLEVEL);
     // FIXME: these are confusing
-    T(log_items[1] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_IMAGE_SIZES);
-    T(log_items[2] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_IMAGE_SIZES);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_SIZES);
+    T(log_items[2] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_SIZES);
     T(log_items[3] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_resolve_face) {
+UTEST(sokol_gfx, make_attachments_validate_resolve_face) {
     setup(&(sg_desc){0});
     const sg_image color_img = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2588,17 +2578,17 @@ UTEST(sokol_gfx, make_pass_validate_resolve_face) {
         .height = 64,
         .sample_count = 1,
     });
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0] = { .image = color_img },
-        .resolve_attachments[0] = { .image = resolve_img, .slice = 6 },
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0] = { .image = color_img },
+        .resolves[0] = { .image = resolve_img, .slice = 6 },
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_FACE);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_FACE);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_resolve_layer) {
+UTEST(sokol_gfx, make_attachments_validate_resolve_layer) {
     setup(&(sg_desc){0});
     const sg_image color_img = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2614,17 +2604,17 @@ UTEST(sokol_gfx, make_pass_validate_resolve_layer) {
         .num_slices = 4,
         .sample_count = 1,
     });
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0] = { .image = color_img },
-        .resolve_attachments[0] = { .image = resolve_img, .slice = 4 },
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0] = { .image = color_img },
+        .resolves[0] = { .image = resolve_img, .slice = 4 },
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_LAYER);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_LAYER);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_resolve_slice) {
+UTEST(sokol_gfx, make_attachments_validate_resolve_slice) {
     setup(&(sg_desc){0});
     const sg_image color_img = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2640,17 +2630,17 @@ UTEST(sokol_gfx, make_pass_validate_resolve_slice) {
         .num_slices = 4,
         .sample_count = 1,
     });
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0] = { .image = color_img },
-        .resolve_attachments[0] = { .image = resolve_img, .slice = 4 },
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0] = { .image = color_img },
+        .resolves[0] = { .image = resolve_img, .slice = 4 },
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_SLICE);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_SLICE);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_resolve_image_no_rt) {
+UTEST(sokol_gfx, make_attachments_validate_resolve_image_no_rt) {
     setup(&(sg_desc){0});
     const sg_image color_img = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2664,17 +2654,17 @@ UTEST(sokol_gfx, make_pass_validate_resolve_image_no_rt) {
         .usage = SG_USAGE_DYNAMIC,
         .sample_count = 1,
     });
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0] = { .image = color_img },
-        .resolve_attachments[0] = { .image = resolve_img },
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0] = { .image = color_img },
+        .resolves[0] = { .image = resolve_img },
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_IMAGE_NO_RT);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_NO_RT);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_resolve_image_sizes) {
+UTEST(sokol_gfx, make_attachments_validate_resolve_image_sizes) {
     setup(&(sg_desc){0});
     const sg_image color_img = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2688,18 +2678,18 @@ UTEST(sokol_gfx, make_pass_validate_resolve_image_sizes) {
         .height = 32,
         .sample_count = 1,
     });
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0] = { .image = color_img },
-        .resolve_attachments[0] = { .image = resolve_img },
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0] = { .image = color_img },
+        .resolves[0] = { .image = resolve_img },
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_IMAGE_SIZES);
-    T(log_items[1] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_IMAGE_SIZES);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_SIZES);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_SIZES);
     T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_resolve_image_format) {
+UTEST(sokol_gfx, make_attachments_validate_resolve_image_format) {
     setup(&(sg_desc){0});
     const sg_image color_img = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2714,17 +2704,17 @@ UTEST(sokol_gfx, make_pass_validate_resolve_image_format) {
         .pixel_format = SG_PIXELFORMAT_R8,
         .sample_count = 1,
     });
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0] = { .image = color_img },
-        .resolve_attachments[0] = { .image = resolve_img },
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0] = { .image = color_img },
+        .resolves[0] = { .image = resolve_img },
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_RESOLVE_IMAGE_FORMAT);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_FORMAT);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_depth_image) {
+UTEST(sokol_gfx, make_attachments_validate_depth_image) {
     setup(&(sg_desc){0});
     const sg_image color_img = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2738,17 +2728,17 @@ UTEST(sokol_gfx, make_pass_validate_depth_image) {
         .pixel_format = SG_PIXELFORMAT_DEPTH,
     });
     sg_destroy_image(depth_img);
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0] = { .image = color_img },
-        .depth_stencil_attachment.image = depth_img,
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0] = { .image = color_img },
+        .depth_stencil.image = depth_img,
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_IMAGE);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_depth_miplevel) {
+UTEST(sokol_gfx, make_attachments_validate_depth_miplevel) {
     setup(&(sg_desc){0});
     const sg_image color_img = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2761,20 +2751,20 @@ UTEST(sokol_gfx, make_pass_validate_depth_miplevel) {
         .height = 64,
         .pixel_format = SG_PIXELFORMAT_DEPTH,
     });
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0] = { .image = color_img },
-        .depth_stencil_attachment = { .image = depth_img, .mip_level = 1 },
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0] = { .image = color_img },
+        .depth_stencil = { .image = depth_img, .mip_level = 1 },
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_MIPLEVEL);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_DEPTH_MIPLEVEL);
     // FIXME: these additional validation errors are confusing
-    T(log_items[1] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
-    T(log_items[2] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SIZES);
+    T(log_items[2] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SIZES);
     T(log_items[3] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_depth_face) {
+UTEST(sokol_gfx, make_attachments_validate_depth_face) {
     setup(&(sg_desc){0});
     const sg_image color_img = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2788,17 +2778,17 @@ UTEST(sokol_gfx, make_pass_validate_depth_face) {
         .height = 64,
         .pixel_format = SG_PIXELFORMAT_DEPTH,
     });
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0] = { .image = color_img },
-        .depth_stencil_attachment = { .image = depth_img, .slice = 6 },
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0] = { .image = color_img },
+        .depth_stencil = { .image = depth_img, .slice = 6 },
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_FACE);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_DEPTH_FACE);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_depth_layer) {
+UTEST(sokol_gfx, make_attachments_validate_depth_layer) {
     setup(&(sg_desc){0});
     const sg_image color_img = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2813,12 +2803,12 @@ UTEST(sokol_gfx, make_pass_validate_depth_layer) {
         .num_slices = 4,
         .pixel_format = SG_PIXELFORMAT_DEPTH,
     });
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0] = { .image = color_img },
-        .depth_stencil_attachment = { .image = depth_img, .slice = 4 },
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0] = { .image = color_img },
+        .depth_stencil = { .image = depth_img, .slice = 4 },
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_LAYER);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_DEPTH_LAYER);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
@@ -2827,7 +2817,7 @@ UTEST(sokol_gfx, make_pass_validate_depth_layer) {
 
 // NOTE: VALIDATE_DEPTH_IMAGE_NO_RT can't actually happen because VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT
 
-UTEST(sokol_gfx, make_pass_validate_depth_image_sizes) {
+UTEST(sokol_gfx, make_attachments_validate_depth_image_sizes) {
     setup(&(sg_desc){0});
     const sg_image color_img = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2840,18 +2830,18 @@ UTEST(sokol_gfx, make_pass_validate_depth_image_sizes) {
         .height = 32,
         .pixel_format = SG_PIXELFORMAT_DEPTH,
     });
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0] = { .image = color_img },
-        .depth_stencil_attachment = { .image = depth_img },
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0] = { .image = color_img },
+        .depth_stencil = { .image = depth_img },
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
-    T(log_items[1] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_IMAGE_SIZES);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SIZES);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SIZES);
     T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_pass_validate_depth_image_sample_count) {
+UTEST(sokol_gfx, make_attachments_validate_depth_image_sample_count) {
     setup(&(sg_desc){0});
     const sg_image color_img = sg_make_image(&(sg_image_desc){
         .render_target = true,
@@ -2866,12 +2856,12 @@ UTEST(sokol_gfx, make_pass_validate_depth_image_sample_count) {
         .pixel_format = SG_PIXELFORMAT_DEPTH,
         .sample_count = 2,
     });
-    const sg_pass pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0] = { .image = color_img },
-        .depth_stencil_attachment = { .image = depth_img },
+    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+        .colors[0] = { .image = color_img },
+        .depth_stencil = { .image = depth_img },
     });
-    T(sg_query_pass_state(pass) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_PASSDESC_DEPTH_IMAGE_SAMPLE_COUNT);
+    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SAMPLE_COUNT);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }

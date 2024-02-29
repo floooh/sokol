@@ -221,7 +221,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: floooh/sokol-rust
-          submodules: recursive
       - uses: actions/download-artifact@v3
         with:
           name: ignore-me-rust
