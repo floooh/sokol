@@ -14,6 +14,8 @@
   carefully for a detailed overview what has changed, why the changes make
   sense, and how existing code needs to be updated.
 
+  Also see the related PR for further details: https://github.com/floooh/sokol/pull/985
+
 - There are also minimal related changes in the sokol_app.h and a complete
   rewrite of the sokol_glue.h APIs, also detailed in the above blog post.
 
