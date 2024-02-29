@@ -116,12 +116,12 @@ SOKOL_GLUE_API_DECL sg_swapchain sglue_swapchain(void);
 #define SOKOL_GLUE_IMPL_INCLUDED (1)
 #include <string.h> /* memset */
 
-#ifndef SOKOL_APP_IMPL_INCLUDED
-#error "Please include the sokol_app.h implementation before the sokol_glue.h implementation"
+#ifndef SOKOL_APP_INCLUDED
+#error "Please include sokol_app.h before the sokol_glue.h implementation"
 #endif
 
 #ifndef SOKOL_API_IMPL
-    #define SOKOL_API_IMPL
+#define SOKOL_API_IMPL
 #endif
 
 
