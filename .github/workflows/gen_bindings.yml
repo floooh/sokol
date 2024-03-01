@@ -63,19 +63,19 @@ jobs:
           cd bindgen
           python3 gen_all.py
       - name: upload-zig-artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ignore-me-zig
           retention-days: 1
           path: bindgen/sokol-zig/src/sokol
       - name: upload-nim-artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ignore-me-nim
           retention-days: 1
           path: bindgen/sokol-nim/src/sokol
       - name: upload-odin-artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ignore-me-odin
           retention-days: 1
@@ -83,7 +83,7 @@ jobs:
             bindgen/sokol-odin/sokol
             bindgen/sokol-odin/c
       - name: upload-rust-artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ignore-me-rust
           retention-days: 1
@@ -100,7 +100,7 @@ jobs:
         with:
           repository: floooh/sokol-zig
       - uses: goto-bus-stop/setup-zig@v2
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: ignore-me-zig
           path: src/sokol
@@ -128,7 +128,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: floooh/sokol-nim
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: ignore-me-nim
           path: src/sokol
@@ -156,7 +156,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: floooh/sokol-odin
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: ignore-me-odin
       # NOTE: see https://github.com/floooh/sokol-odin/blob/main/.github/workflows/main.yml
@@ -221,7 +221,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: floooh/sokol-rust
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: ignore-me-rust
           path: src
@@ -248,7 +248,7 @@ jobs:
         with:
           repository: floooh/sokol-zig
           ssh-key: ${{ secrets.GHACTIONS_ZIG_PUSH }}
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: ignore-me-zig
           path: src/sokol
@@ -269,7 +269,7 @@ jobs:
         with:
           repository: floooh/sokol-nim
           ssh-key: ${{ secrets.GHACTIONS_NIM_PUSH }}
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: ignore-me-nim
           path: src/sokol
@@ -290,7 +290,7 @@ jobs:
         with:
           repository: floooh/sokol-odin
           ssh-key: ${{ secrets.GHACTIONS_ODIN_PUSH }}
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: ignore-me-odin
       - name: "commit and push"
@@ -312,7 +312,7 @@ jobs:
         with:
           repository: floooh/sokol-rust
           ssh-key: ${{ secrets.GHACTIONS_RUST_PUSH }}
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: ignore-me-rust
           path: src
