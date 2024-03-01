@@ -14,6 +14,12 @@ The [Metal samples in the sokol-samples project](https://github.com/floooh/sokol
 of SG_PIXELFORMAT_NONE, SG_PIXELFORMAT_DEPTH and SG_PIXELFORMAT_DEPTH_STENCIL
 now to catch similar regressions in the future.
 
+Plus 2 minor drive-by fixes:
+
+- fix the sokol_gfx.h WebGPU backend for a spec-fix in Chrome (see https://github.com/floooh/sokol/issues/1003)
+- in the Emscripten backends of sokol_app.h and sokol_args.h, replace the deprecated JS helper function
+  `allocateUTF8OnStack` with its replacement `stringToUTF8OnStack` (see: https://github.com/floooh/sokol/commit/49a75e1476153cb2605d3b3ebd2f07e3eb0536d9)
+
 ### 29-Feb-2024:
 
 **BREAKING CHANGES** in sokol_gfx.h, sokol_app.h, sokol_glue.h and sokol_gfx_imgui.h
