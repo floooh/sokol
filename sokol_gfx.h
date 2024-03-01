@@ -14477,6 +14477,7 @@ _SOKOL_PRIVATE _sg_image_t* _sg_wgpu_attachments_ds_image(const _sg_attachments_
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_init_color_att(WGPURenderPassColorAttachment* wgpu_att, const sg_color_attachment_action* action, WGPUTextureView color_view, WGPUTextureView resolve_view) {
+    wgpu_att->depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
     wgpu_att->view = color_view;
     wgpu_att->resolveTarget = resolve_view;
     wgpu_att->loadOp = _sg_wgpu_load_op(color_view, action->load_action);
