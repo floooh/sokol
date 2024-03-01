@@ -12526,12 +12526,14 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass* pass) {
             SOKOL_ASSERT(ds_tex != nil);
             pass_desc.depthAttachment.texture = ds_tex;
             pass_desc.depthAttachment.storeAction = MTLStoreActionDontCare;
-            pass_desc.stencilAttachment.texture = ds_tex;
-            pass_desc.stencilAttachment.storeAction = MTLStoreActionDontCare;
             pass_desc.depthAttachment.loadAction = _sg_mtl_load_action(action->depth.load_action);
             pass_desc.depthAttachment.clearDepth = action->depth.clear_value;
-            pass_desc.stencilAttachment.loadAction = _sg_mtl_load_action(action->stencil.load_action);
-            pass_desc.stencilAttachment.clearStencil = action->stencil.clear_value;
+            if (_sg_is_depth_stencil_format(swapchain->depth_format)) {
+                pass_desc.stencilAttachment.texture = ds_tex;
+                pass_desc.stencilAttachment.storeAction = MTLStoreActionDontCare;
+                pass_desc.stencilAttachment.loadAction = _sg_mtl_load_action(action->stencil.load_action);
+                pass_desc.stencilAttachment.clearStencil = action->stencil.clear_value;
+            }
         }
     }
 

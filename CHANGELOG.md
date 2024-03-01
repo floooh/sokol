@@ -1,5 +1,19 @@
 ## Updates
 
+### 01-Mar-2024:
+
+Minor regression fix for yesterdays merge in the sokol_gfx.h Metal backend:
+
+A swapchain render pass with an SG_PIXELFORMAT_DEPTH depth-buffer would try
+to set a stencil surface (currently this only matters if you use your own
+window system glue since sokol_app.h always creates a depth+stencil-buffer).
+
+See https://github.com/floooh/sokol/issues/1004 for details.
+
+The [Metal samples in the sokol-samples project](https://github.com/floooh/sokol-samples/tree/master/metal) have been updated to use all variants
+of SG_PIXELFORMAT_NONE, SG_PIXELFORMAT_DEPTH and SG_PIXELFORMAT_DEPTH_STENCIL
+now to catch similar regressions in the future.
+
 ### 29-Feb-2024:
 
 **BREAKING CHANGES** in sokol_gfx.h, sokol_app.h, sokol_glue.h and sokol_gfx_imgui.h
