@@ -4751,7 +4751,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 #if defined(_SAPP_EMSCRIPTEN)
 
 #if defined(EM_JS_DEPS)
-EM_JS_DEPS(sokol_app, "$withStackSave,$allocateUTF8OnStack");
+EM_JS_DEPS(sokol_app, "$withStackSave,$stringToUTF8OnStack");
 #endif
 
 #ifdef __cplusplus
@@ -4868,7 +4868,7 @@ EM_JS(void, sapp_js_add_clipboard_listener, (void), {
     Module.sokol_paste = (event) => {
         const pasted_str = event.clipboardData.getData('text');
         withStackSave(() => {
-            const cstr = allocateUTF8OnStack(pasted_str);
+            const cstr = stringToUTF8OnStack(pasted_str);
             __sapp_emsc_onpaste(cstr);
         });
     };
@@ -4925,7 +4925,7 @@ EM_JS(void, sapp_js_add_dragndrop_listeners, (const char* canvas_name_cstr), {
         __sapp_emsc_begin_drop(files.length);
         for (let i = 0; i < files.length; i++) {
             withStackSave(() => {
-                const cstr = allocateUTF8OnStack(files[i].name);
+                const cstr = stringToUTF8OnStack(files[i].name);
                 __sapp_emsc_drop(i, cstr);
             });
         }

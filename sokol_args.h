@@ -695,7 +695,7 @@ extern "C" {
 #endif
 
 #if defined(EM_JS_DEPS)
-EM_JS_DEPS(sokol_audio, "$withStackSave,$allocateUTF8OnStack");
+EM_JS_DEPS(sokol_audio, "$withStackSave,$stringToUTF8OnStack");
 #endif
 
 EMSCRIPTEN_KEEPALIVE void _sargs_add_kvp(const char* key, const char* val) {
@@ -734,8 +734,8 @@ EM_JS(void, sargs_js_parse_url, (void), {
         const key = p.value[0];
         const val = p.value[1];
         withStackSave(() => {
-            const key_cstr = allocateUTF8OnStack(key);
-            const val_cstr = allocateUTF8OnStack(val);
+            const key_cstr = stringToUTF8OnStack(key);
+            const val_cstr = stringToUTF8OnStack(val);
             __sargs_add_kvp(key_cstr, val_cstr)
         });
     }
