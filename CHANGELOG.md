@@ -1,5 +1,24 @@
 ## Updates
 
+### 02-Mar-2024:
+
+- sokol_app.h emscripten: two new flags in `sapp_desc` to configure the Emscripten main loop:
+  - `.html5_use_emsc_set_main_loop`: when this is true, the function `emscripten_set_main_loop()` will be used
+    to drive the sokol-app frame callback (otherwise `emscripten_request_animation_frame()` as before)
+  - `.html5_emsc_set_main_loop_simulate_infinite_loop`: this is passed as the `simulate_infinite_loop` parameter
+    into the `emscripten_set_main_loop()` function.
+  In general you should stick with sokol_app.h's default behaviour and only use those settings if you run
+  into specific problems, for instance as discussed here: https://github.com/floooh/sokol/issues/843
+
+  Related PR: https://github.com/floooh/sokol/pull/997
+
+  Many thanks to @Dvad for the PR, and also to @ambrusc for an alternative PR that hadn't been used, @voidware
+  for kicking of the discussion and all contributors!
+
+  The sample `texcube-sapp` has been updated to use the set-main-loop method:
+
+  https://floooh.github.io/sokol-html5/texcube-sapp.html
+
 ### 01-Mar-2024:
 
 Minor regression fix for yesterdays merge in the sokol_gfx.h Metal backend:
