@@ -15,6 +15,10 @@
   Many thanks to @Dvad for the PR, and also to @ambrusc for an alternative PR that hadn't been used, @voidware
   for kicking of the discussion and all contributors!
 
+  The sample `texcube-sapp` has been updated to use the set-main-loop method:
+
+  https://floooh.github.io/sokol-html5/texcube-sapp.html
+
 ### 01-Mar-2024:
 
 Minor regression fix for yesterdays merge in the sokol_gfx.h Metal backend:
