@@ -1716,7 +1716,7 @@ typedef struct sapp_desc {
     bool html5_bubble_wheel_events;     // same for wheel events
     bool html5_bubble_key_events;       // if true, bubble up *all* key events to browser, not just key events that represent characters
     bool html5_bubble_char_events;      // if true, bubble up character events to browser
-    bool html5_use_emsc_set_main_loop;  // if true, use set_main_loop instead of request_animation_frame_loop
+    bool html5_use_emsc_set_main_loop;  // if true, use emscripten_set_main_loop() instead of emscripten_request_animation_frame_loop()
     bool ios_keyboard_resizes_canvas;   // if true, showing the iOS keyboard shrinks the canvas
 } sapp_desc;
 
@@ -5884,7 +5884,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame_animation_loop(double time, void* userDa
 
 _SOKOL_PRIVATE void _sapp_emsc_frame_main_loop(void) {
     const double time = emscripten_performance_now();
-    if(!_sapp_emsc_frame_animation_loop(time, NULL)) {
+    if (!_sapp_emsc_frame_animation_loop(time, 0)) {
         emscripten_cancel_main_loop();
     }
 }
