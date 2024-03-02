@@ -27,6 +27,8 @@
   See the PR for details, and the updated sample https://floooh.github.io/sokol-html5/imgui-highdpi-sapp.html
   via this PR: https://github.com/floooh/sokol-samples/pull/135
 
+  Many thanks to @Dvad for the PR!
+
 ### 01-Mar-2024:
 
 Minor regression fix for yesterdays merge in the sokol_gfx.h Metal backend:
