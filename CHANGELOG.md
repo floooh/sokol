@@ -14,7 +14,7 @@
   Related PR: https://github.com/floooh/sokol/pull/997
 
   Many thanks to @Dvad for the PR, and also to @ambrusc for an alternative PR that hadn't been used, @voidware
-  for kicking of the discussion and all contributors!
+  for kicking off the discussion and all contributors!
 
   The sample `texcube-sapp` has been updated to use the set-main-loop method:
 
