@@ -20,6 +20,13 @@
 
   https://floooh.github.io/sokol-html5/texcube-sapp.html
 
+- sokol_imgui.h: PR https://github.com/floooh/sokol/pull/994 has been merged, this adds two
+  font management helper functions which drastically reduce boilerplate code
+  when injecting a custom font into Dear ImGui via sokol_imgui.h.
+
+  See the PR for details, and the updated sample https://floooh.github.io/sokol-html5/imgui-highdpi-sapp.html
+  via this PR: https://github.com/floooh/sokol-samples/pull/135
+
 ### 01-Mar-2024:
 
 Minor regression fix for yesterdays merge in the sokol_gfx.h Metal backend:
