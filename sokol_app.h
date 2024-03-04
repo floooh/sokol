@@ -2596,7 +2596,7 @@ typedef struct {
     PFNWGLGETEXTENSIONSSTRINGARBPROC GetExtensionsStringARB;
     PFNWGLCREATECONTEXTATTRIBSARBPROC CreateContextAttribsARB;
     // special case glGetIntegerv
-    void (*GetIntegerv)(uint32_t pname, int32_t* data);
+    void (WINAPI *GetIntegerv)(uint32_t pname, int32_t* data);
     bool ext_swap_control;
     bool arb_multisample;
     bool arb_pixel_format;
@@ -6613,7 +6613,7 @@ _SOKOL_PRIVATE void _sapp_wgl_init(void) {
     SOKOL_ASSERT(_sapp.wgl.GetCurrentDC);
     _sapp.wgl.MakeCurrent = (PFN_wglMakeCurrent)(void*) GetProcAddress(_sapp.wgl.opengl32, "wglMakeCurrent");
     SOKOL_ASSERT(_sapp.wgl.MakeCurrent);
-    _sapp.wgl.GetIntegerv = (void(*)(uint32_t, int32_t*)) GetProcAddress(_sapp.wgl.opengl32, "glGetIntegerv");
+    _sapp.wgl.GetIntegerv = (void(WINAPI*)(uint32_t, int32_t*)) GetProcAddress(_sapp.wgl.opengl32, "glGetIntegerv");
     SOKOL_ASSERT(_sapp.wgl.GetIntegerv);
 
     _sapp.wgl.msg_hwnd = CreateWindowExW(WS_EX_OVERLAPPEDWINDOW,
