@@ -13,24 +13,24 @@ module_names = {
     'slog_':    'log',
     'sg_':      'gfx',
     'sapp_':    'app',
-    'sapp_sg':  'glue',
     'stm_':     'time',
     'saudio_':  'audio',
     'sgl_':     'gl',
     'sdtx_':    'debugtext',
     'sshape_':  'shape',
+    'sglue_':   'glue',
 }
 
 c_source_paths = {
     'slog_':    'sokol-nim/src/sokol/c/sokol_log.c',
     'sg_':      'sokol-nim/src/sokol/c/sokol_gfx.c',
     'sapp_':    'sokol-nim/src/sokol/c/sokol_app.c',
-    'sapp_sg':  'sokol-nim/src/sokol/c/sokol_glue.c',
     'stm_':     'sokol-nim/src/sokol/c/sokol_time.c',
     'saudio_':  'sokol-nim/src/sokol/c/sokol_audio.c',
     'sgl_':     'sokol-nim/src/sokol/c/sokol_gl.c',
     'sdtx_':    'sokol-nim/src/sokol/c/sokol_debugtext.c',
     'sshape_':  'sokol-nim/src/sokol/c/sokol_shape.c',
+    'sglue_':   'sokol-nim/src/sokol/c/sokol_glue.c',
 }
 
 c_callbacks = [
@@ -46,8 +46,6 @@ overrides = {
     'sgl_error':                    'sgl_get_error',
     'sgl_deg':                      'sgl_as_degrees',
     'sgl_rad':                      'sgl_as_radians',
-    'sg_context_desc.color_format': 'int',
-    'sg_context_desc.depth_format': 'int',
     'SGL_NO_ERROR':                 'SGL_ERROR_NO_ERROR',
     'SG_BUFFERTYPE_VERTEXBUFFER':   'SG_BUFFERTYPE_VERTEX_BUFFER',
     'SG_BUFFERTYPE_INDEXBUFFER':    'SG_BUFFERTYPE_INDEX_BUFFER',

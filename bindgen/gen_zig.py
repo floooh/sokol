@@ -20,6 +20,7 @@ module_names = {
     'sgl_':     'gl',
     'sdtx_':    'debugtext',
     'sshape_':  'shape',
+    'sglue_':   'glue',
 }
 
 c_source_paths = {
@@ -31,6 +32,7 @@ c_source_paths = {
     'sgl_':     'sokol-zig/src/sokol/c/sokol_gl.c',
     'sdtx_':    'sokol-zig/src/sokol/c/sokol_debugtext.c',
     'sshape_':  'sokol-zig/src/sokol/c/sokol_shape.c',
+    'sglue_':   'sokol-zig/src/sokol/c/sokol_glue.c',
 }
 
 ignores = [
@@ -50,8 +52,6 @@ overrides = {
     'sgl_error':                            'sgl_get_error',   # 'error' is reserved in Zig
     'sgl_deg':                              'sgl_as_degrees',
     'sgl_rad':                              'sgl_as_radians',
-    'sg_context_desc.color_format':         'int',
-    'sg_context_desc.depth_format':         'int',
     'sg_apply_uniforms.ub_index':           'uint32_t',
     'sg_draw.base_element':                 'uint32_t',
     'sg_draw.num_elements':                 'uint32_t',
@@ -487,11 +487,17 @@ def gen_helpers(inp):
         l('            putc(byte);')
         l('        }')
         l('    }')
-        l('    pub fn writeByteNTimes(self: Writer, byte: u8, n: u64) Error!void {')
+        l('    pub fn writeByteNTimes(self: Writer, byte: u8, n: usize) Error!void {')
         l('        _ = self;')
         l('        var i: u64 = 0;')
         l('        while (i < n) : (i += 1) {')
         l('            putc(byte);')
+        l('        }')
+        l('    }')
+        l('    pub fn writeBytesNTimes(self: Writer, bytes: []const u8, n: usize) Error!void {')
+        l('        var i: usize = 0;')
+        l('        while (i < n) : (i += 1) {')
+        l('            try self.writeAll(bytes);')
         l('        }')
         l('    }')
         l('};')

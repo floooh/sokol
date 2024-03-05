@@ -4,6 +4,7 @@ file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets/comsi.s3m DESTINATION ${CMAKE_BINAR
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets/comsi.s3m DESTINATION ${CMAKE_BINARY_DIR}/Debug)
 
 set(c_sources
+    sokol_log_test.c
     sokol_args_test.c
     sokol_audio_test.c
     sokol_debugtext_test.c

@@ -1,5 +1,200 @@
 ## Updates
 
+### 02-Mar-2024:
+
+- sokol_app.h emscripten: two new flags in `sapp_desc` to configure the Emscripten main loop:
+  - `.html5_use_emsc_set_main_loop`: when this is true, the function `emscripten_set_main_loop()` will be used
+    to drive the sokol-app frame callback (otherwise `emscripten_request_animation_frame()` as before)
+  - `.html5_emsc_set_main_loop_simulate_infinite_loop`: this is passed as the `simulate_infinite_loop` parameter
+    into the `emscripten_set_main_loop()` function.
+
+  In general you should stick with sokol_app.h's default behaviour and only use those settings if you run
+  into specific problems, for instance as discussed here: https://github.com/floooh/sokol/issues/843
+
+  Related PR: https://github.com/floooh/sokol/pull/997
+
+  Many thanks to @Dvad for the PR, and also to @ambrusc for an alternative PR that hadn't been used, @voidware
+  for kicking off the discussion and all contributors!
+
+  The sample `texcube-sapp` has been updated to use the set-main-loop method:
+
+  https://floooh.github.io/sokol-html5/texcube-sapp.html
+
+- sokol_imgui.h: PR https://github.com/floooh/sokol/pull/994 has been merged, this adds two
+  font management helper functions which drastically reduce boilerplate code
+  when injecting a custom font into Dear ImGui via sokol_imgui.h.
+
+  See the PR for details, and the updated sample https://floooh.github.io/sokol-html5/imgui-highdpi-sapp.html
+  via this PR: https://github.com/floooh/sokol-samples/pull/135
+
+  Many thanks to @Dvad for the PR!
+
+### 01-Mar-2024:
+
+Minor regression fix for yesterdays merge in the sokol_gfx.h Metal backend:
+
+A swapchain render pass with an SG_PIXELFORMAT_DEPTH depth-buffer would try
+to set a stencil surface (currently this only matters if you use your own
+window system glue since sokol_app.h always creates a depth+stencil-buffer).
+
+See https://github.com/floooh/sokol/issues/1004 for details.
+
+The [Metal samples in the sokol-samples project](https://github.com/floooh/sokol-samples/tree/master/metal) have been updated to use all variants
+of SG_PIXELFORMAT_NONE, SG_PIXELFORMAT_DEPTH and SG_PIXELFORMAT_DEPTH_STENCIL
+now to catch similar regressions in the future.
+
+Plus 2 minor drive-by fixes:
+
+- fix the sokol_gfx.h WebGPU backend for a spec-fix in Chrome (see https://github.com/floooh/sokol/issues/1003)
+- in the Emscripten backends of sokol_app.h and sokol_args.h, replace the deprecated JS helper function
+  `allocateUTF8OnStack` with its replacement `stringToUTF8OnStack` (see: https://github.com/floooh/sokol/commit/49a75e1476153cb2605d3b3ebd2f07e3eb0536d9)
+
+### 29-Feb-2024:
+
+**BREAKING CHANGES** in sokol_gfx.h, sokol_app.h, sokol_glue.h and sokol_gfx_imgui.h
+(the 'big render pass cleanup').
+
+- In sokol_gfx.h, the concepts of 'render contexts' and 'default render passes' have
+  been removed and replaced with a unified `sg_begin_pass()` which handles both
+  rendering into 'offscreen-passes' and 'swapchain-passes'.
+
+  [Please read this blog
+  post](https://floooh.github.io/2024/02/26/sokol-spring-cleaning-2024.html)
+  carefully for a detailed overview what has changed, why the changes make
+  sense, and how existing code needs to be updated.
+
+  Also see the related PR for further details: https://github.com/floooh/sokol/pull/985
+
+- There are also minimal related changes in the sokol_app.h and a complete
+  rewrite of the sokol_glue.h APIs, also detailed in the above blog post.
+
+- The namespace-prefix for the header sokol_gfx_imgui.h has been changed from
+  `sg_imgui_` to `sgimgui_`.
+
+- In sokol_gfx.h with the Metal backend, a runtime configuration flag has been
+  added to `sg_desc` to create a Metal command buffer with
+  'retained-references'. See issue
+  [#981](https://github.com/floooh/sokol/issues/981) for details.
+
+- Also in sokol_gfx.h, the struct item `sg_limits.gl_max_vertex_uniform_vectors` has been changed
+  to `sg_limits.gl_max_vertex_uniform_components` (note that there are 4x more 'components'
+  than 'vectors'). See issue [#714](https://github.com/floooh/sokol/issues/714) for details.
+
+- All sampples, language binding examples and 'side projects' have been updated, see the above blog post
+  for links to the respective PRs.
+
+### 27-Feb-2024:
+
+- Merged PR https://github.com/floooh/sokol/pull/1001, this is a small fix for GLES3 to avoid
+  calling glInvalidateFramebuffer() on non-existing depth/stencil surfaces.
+
+  Many thanks to @danielchasehooper!
+
+#### 26-Feb-2024:
+
+- Minor fix in sokol_imgui.h: The drawing code now detects and skips the special
+  `ImDrawCallback_ResetRenderState` constant, not doing so would try to call a function
+  at address (-8) which then results in a crash.
+
+  See for what this is: https://github.com/ocornut/imgui/blob/277ae93c41314ba5f4c7444f37c4319cdf07e8cf/imgui.h#L2583-L2587
+
+  sokol_imgui.h doesn't have any handling for this special callback, it will just ignore it.
+
+  As a minor additional behaviour change, any user callback will now also cause `sg_reset_state_cache()`
+  to be called. This is just a precaution in case the user callback code calls any native 3D backend API
+  functions.
+
+  Related issue: https://github.com/floooh/sokol/issues/1000
+
+#### 21-Feb-2024:
+
+- PR https://github.com/floooh/sokol/pull/993 has been merged, this allows to inject
+  additional GL functions into the Win32 GL loader of sokol_gfx.h (TBH, it's a very specialized
+  feature for people who know what they're doing, but it also fixes a very specific problem
+  while at the same time resolving to 'nothing' when not used).
+
+  Many thanks for @kcbanner for the PR!
+
+#### 31-Jan-2024:
+
+- sokol_app.h macOS: merged a workaround for the application window not being focused
+  if the init callback takes a while (not reproducible on my M1 Mac with latest Sonoma,
+  but might fix the issue for older Macs, and the change seems harmless enough -
+  sokol_app.h essentially sends a focusEvent to itself)
+
+  Related issue: https://github.com/floooh/sokol/issues/757
+  Implemented in PR: https://github.com/floooh/sokol/pull/982
+
+  Many thanks to @zoo-3d for investigating the issue and the PR!
+
+#### 28-Jan-2024:
+
+- sokol_app.h web: the canvas resize callback is now unregistered on cleanup.
+
+  Related issue: https://github.com/floooh/sokol/issues/983 and PR: https://github.com/floooh/sokol/pull/984
+  Many thanks to @edubart!
+
+#### 27-Jan-2024
+
+- sokol_app.h web: The HTML5 event bubbling changes introduced in the 02-Jan-2024
+  update have been reverted because they introduced some undesired side effects.
+  By default, most input events now *don't* bubble up (which restores the
+  old behaviour), but it's now possible to enable bubbling for categories
+  of input events (mouse, touch, wheel, keys and chars) during sokol-app setup.
+  It's then possible to control bubbling of individual events by calling
+  `sapp_consume_event()` from within the sokol-app event callback.
+
+  See issue https://github.com/floooh/sokol/issues/972 for details and
+  PR https://github.com/floooh/sokol/pull/975 for the actual changes.
+
+  Also check out the new doc section `INPUT EVENT BUBBLING ON THE WEB PLATFORM`
+  in the sokol_app.h header documentation block.
+
+- sokol_gfx.h metal: Merged PR https://github.com/floooh/sokol/pull/980. When
+  only the offset changes in a vertex buffer binding, only the buffer offset
+  is now updated (e.g. instead of the Metal method `setVertexBuffer:offset:atIndex`,
+  the leaner method `setVertexBufferOffset:atIndex` is called. Apart from the
+  actual PR I also removed a couple of actually unused items from the Metal
+  backend state cache. Many thanks to @staminajim for the PR!
+
+  Related issue: https://github.com/floooh/sokol/issues/979
+
+#### 23-Jan-2024
+
+- sokol_app.h android: Touch event coordinates are now using AMotionEvent_getX/Y() instead
+  of AMotionEvent_getRawX/Y(). The raw functions don't work well in multi-window
+  scenarios. See PR https://github.com/floooh/sokol/pull/974 for details.
+  Many thanks to Github user @Comanx!
+
+#### 19-Jan-2024
+
+- sokol_app.h wgpu: tiny fix for a breaking API change in webgpu.h in the Emscripten 3.1.52 SDK
+- Merged PR https://github.com/floooh/sokol/pull/970 (many thanks to @waywardmonkeys) which
+  fixes a couple of strict-prototype warnings (e.g. C functions using func() instead of func(void)).
+  I also enabled `-Wstrict-prototypes` now in the CI tests for GCC and Clang, so such cases
+  should be caught in the future.
+
+#### 18-Jan-2024
+
+- sokol_gfx.h: added support for the following pixel formats:
+  - BC3_SRGBA
+  - BC7_SRGBA
+  - ETC2_SRGB8
+  - ETC2_SRGB8A8
+  - ASTC_4x4_RGBA
+  - ASTC_4x4_SRGBA
+
+  Related PR: https://github.com/floooh/sokol/pull/967
+
+  Many thanks to GH user @allcreater!
+
+#### 07-Jan-2024
+
+- sokol_app.h (macos+metal): window content no longer 'wobbles' during window resizing. Many
+  thanks to @Seb-degraff for picking up and investigating this longstanding issue
+  (https://github.com/floooh/sokol/issues/700), finding a fix for the remaining problem
+  and providing a really nice PR (https://github.com/floooh/sokol/pull/963)
+
 #### 06-Jan-2024
 
 > NOTE: if you use sokol_gfx.h and sokol_app.h together, make sure to update both. This is
@@ -21,9 +216,9 @@ pixel format constants in sokol_app.h had to move too!
         a line of 'compression blocks'. `width` is always in pixels.
       - `int sg_query_surface_pitch(sg_pixel_format fmt, int width, int height, int row_align_bytes)`:
         Computes number of bytes in a texture surface (e.g. a single mipmap) for a given
-        pixel format. `width` and `hight` are always in pixels.
+        pixel format. `width` and `height` are always in pixels.
 
-    The `row_align_bytes` parammeter is for added flexibility. For image data that goes into
+    The `row_align_bytes` parameter is for added flexibility. For image data that goes into
     the `sg_make_image()` or `sg_update_image()` functions this should generally be 1, because these
     functions take tightly packed image data as input no matter what alignment restrictions
     exist in the backend 3D APIs.
@@ -238,7 +433,7 @@ The major topic of this update is the 'finalized' WebGPU support in sokol_gfx.h 
   `sg_frame_stats` returned by the new sokol_gfx.h function `sg_query_frame_stats()`.
 
 - The sokol-samples repository gained 3 new samples:
-  - cubemap-jpeg-sapp.c (load a cubemap from seperate JPEG files)
+  - cubemap-jpeg-sapp.c (load a cubemap from separate JPEG files)
   - cubemaprt-sapp.c (render into cubemap faces - this demo actually existed a while but wasn't "official" so far)
   - drawcallperf-sapp.c (a sample to explore the performance overhead of sg_apply_bindings, sg_apply_uniforms and sg_draw)
 
@@ -810,7 +1005,7 @@ GLES2/WebGL1 support has been removed from the sokol headers (now that
   A new header ```sokol_log.h``` has been added to provide a standard logging callback implementation
   which provides logging output on all platforms to stderr and/or platform specific logging
   facilities. ```sokol_log.h``` only uses fputs() and platform specific logging function instead
-  of fprintf() to preverse some executable size.
+  of fprintf() to preserve some executable size.
 
   **QUESTION**: Why are the sokol headers now silent, unless a logging callback is installed?
   This is mainly because a standard logging function which does something meaningful on all
@@ -1295,7 +1490,7 @@ so that it's easier to publish new bindings after updates to the sokol headers).
       of uniform block members. The default (SG_UNIFORMLAYOUT_NATIVE) keeps the same
       behaviour, so existing code shouldn't need to be changed. With the packing
       rule SG_UNIFORMLAYOUT_STD140 the uniform block interior is expected to be
-      layed out according to the OpenGL std140 packing rule.
+      laid out according to the OpenGL std140 packing rule.
     - Note that the SG_UNIFORMLAYOUT_STD140 only allows a subset of the actual std140
       packing rule: arrays are only allowed for the types vec4, int4 and mat4.
       This is because the uniform data must still be compatible with

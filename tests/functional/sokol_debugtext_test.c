@@ -3,6 +3,7 @@
 //  For best results, run with ASAN and UBSAN.
 //------------------------------------------------------------------------------
 #include "sokol_gfx.h"
+#include "sokol_log.h"
 #define SOKOL_DEBUGTEXT_IMPL
 #include "sokol_debugtext.h"
 #include "utest.h"
@@ -11,8 +12,8 @@
 #define TFLT(f0,f1) {T(fabs((f0)-(f1))<=(0.000001));}
 
 static void init(void) {
-    sg_setup(&(sg_desc){0});
-    sdtx_setup(&(sdtx_desc_t){0});
+    sg_setup(&(sg_desc){ .logger = { .func = slog_func }});
+    sdtx_setup(&(sdtx_desc_t){ .logger = { .func = slog_func }});
 }
 
 static void init_with(const sdtx_desc_t* desc) {
@@ -401,7 +402,15 @@ UTEST(sokol_debugtext, rewind_after_draw) {
     T(_sdtx.cur_ctx->cur_font == 3);
     sdtx_printf("Hello World!\n");
     T(_sdtx.cur_ctx->vertices.next != 0);
-    sg_begin_default_pass(&(sg_pass_action){ 0 }, 256, 256);
+    sg_begin_pass(&(sg_pass){
+        .swapchain = {
+            .width = 256,
+            .height = 256,
+            .sample_count = 1,
+            .color_format = SG_PIXELFORMAT_RGBA8,
+            .depth_format = SG_PIXELFORMAT_DEPTH_STENCIL,
+        }
+    });
     sdtx_draw();
     sg_end_pass();
     sg_commit();
