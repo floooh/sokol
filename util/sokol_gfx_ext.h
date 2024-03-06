@@ -191,7 +191,7 @@ static void _sg_d3d11_query_pixels(int x, int y, int w, int h, bool origin_top_l
 
     // fallback to window render target
     if(!render_target_view)
-        render_target_view = (ID3D11RenderTargetView*)_sg.d3d11.rtv_cb();
+        render_target_view = (ID3D11RenderTargetView*)_sg.d3d11.cur_pass.render_view;
     SOKOL_ASSERT(render_target_view);
 
     // get the back buffer texture
@@ -214,7 +214,7 @@ static void _sg_d3d11_query_pixels(int x, int y, int w, int h, bool origin_top_l
     _SOKOL_UNUSED(hr);
 
     // copy the desired portion of the back buffer to the staging texture
-    y = (origin_top_left ? y : (_sg.d3d11.cur_height - (y + h)));
+    // y = (origin_top_left ? y : (_sg.d3d11.cur_height - (y + h)));
     D3D11_BOX src_box = {};
     src_box.left = (UINT)x;
     src_box.top = (UINT)y;
