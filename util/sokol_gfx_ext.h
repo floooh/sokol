@@ -268,7 +268,7 @@ static uint32_t _sg_metal_texture_format_to_sdl_pixel_format(MTLPixelFormat text
 }
 
 static void _sg_metal_commit_command_buffer() {
-    SOKOL_ASSERT(!_sg.mtl.in_pass);
+    SOKOL_ASSERT(!_sg.cur_pass.in_pass);
     if(_sg.mtl.cmd_buffer) {
         #if defined(_SG_TARGET_MACOS)
         [_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index] didModifyRange:NSMakeRange(0, _sg.mtl.cur_ub_offset)];
@@ -280,7 +280,7 @@ static void _sg_metal_commit_command_buffer() {
 }
 
 static void _sg_metal_encode_texture_pixels(int x, int y, int w, int h, bool origin_top_left, id<MTLTexture> mtl_src_texture, void* pixels) {
-    SOKOL_ASSERT(!_sg.mtl.in_pass);
+    SOKOL_ASSERT(!_sg.cur_pass.in_pass);
     _sg_metal_commit_command_buffer();
     MTLTextureDescriptor* mtl_dst_texture_desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:mtl_src_texture.pixelFormat width:w height:h mipmapped:NO];
     mtl_dst_texture_desc.storageMode = MTLStorageModeManaged;
@@ -320,8 +320,7 @@ static void _sg_metal_query_image_pixels(_sg_image_t* img, void* pixels) {
 }
 
 static void _sg_metal_query_pixels(int x, int y, int w, int h, bool origin_top_left, void *pixels) {
-    id<CAMetalDrawable> mtl_drawable = (__bridge id<CAMetalDrawable>)_sg.mtl.drawable_cb();
-    _sg_metal_encode_texture_pixels(x, y, w, h, origin_top_left, mtl_drawable.texture, pixels);
+    _sg_metal_encode_texture_pixels(x, y, w, h, origin_top_left, _sg.mtl.cur_drawable.texture, pixels);
 }
 
 #endif
