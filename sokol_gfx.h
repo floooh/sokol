@@ -2851,9 +2851,7 @@ typedef struct sg_shader_uniform_block_desc {
 } sg_shader_uniform_block_desc;
 
 typedef struct sg_shader_storage_buffer_desc {
-    // FIXME: this should probably be '.used', because storage buffers
-    // are not limited to arrays (like for instance D3D's StructuredBuffer)
-    size_t item_size;
+    bool used;
 } sg_shader_storage_buffer_desc;
 
 typedef struct sg_shader_image_desc {
@@ -3524,6 +3522,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_SIZE_MISMATCH, "size of uniform block members doesn't match uniform block size") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_ARRAY_COUNT, "uniform array count must be >= 1") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_STD140_ARRAY_TYPE, "uniform arrays only allowed for FLOAT4, INT4, MAT4 in std140 layout") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_CONT_STORAGEBUFFERS, "shader stage storage buffers must occupy continuous slots (sg_shader_desc.vs|fs.storage_buffers[])") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_CONT_IMAGES, "shader stage images must occupy continuous slots (sg_shader_desc.vs|fs.images[])") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_CONT_SAMPLERS, "shader stage samplers must occupy continuous slots (sg_shader_desc.vs|fs.samplers[])") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_IMAGE_SLOT_OUT_OF_RANGE, "shader stage: image-sampler-pair image slot index is out of range (sg_shader_desc.vs|fs.image_sampler_pairs[].image_slot)") \
@@ -4896,7 +4895,7 @@ typedef struct {
 } _sg_shader_uniform_block_t;
 
 typedef struct {
-    size_t item_size;
+    bool used;
 } _sg_shader_storage_buffer_t;
 
 typedef struct {
@@ -4917,10 +4916,10 @@ typedef struct {
 
 typedef struct {
     int num_uniform_blocks;
+    int num_storage_buffers;
     int num_images;
     int num_samplers;
     int num_image_samplers;
-    int num_storage_buffers;
     _sg_shader_uniform_block_t uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
     _sg_shader_storage_buffer_t storage_buffers[SG_MAX_SHADERSTAGE_STORAGE_BUFFERS];
     _sg_shader_image_t images[SG_MAX_SHADERSTAGE_IMAGES];
@@ -4980,10 +4979,10 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
         SOKOL_ASSERT(stage->num_storage_buffers == 0);
         for (int sbuf_index = 0; sbuf_index < SG_MAX_SHADERSTAGE_STORAGE_BUFFERS; sbuf_index++) {
             const sg_shader_storage_buffer_desc* sbuf_desc = &stage_desc->storage_buffers[sbuf_index];
-            if (0 == sbuf_desc->item_size) {
+            if (!sbuf_desc->used) {
                 break;
             }
-            stage->storage_buffers[sbuf_index].item_size = sbuf_desc->item_size;
+            stage->storage_buffers[sbuf_index].used = sbuf_desc->used;
             stage->num_storage_buffers++;
         }
     }
@@ -15860,6 +15859,15 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                     uniform_blocks_continuous = false;
                 }
             }
+            bool storage_buffers_continuous = true;
+            for (int sbuf_index = 0; sbuf_index < SG_MAX_SHADERSTAGE_STORAGE_BUFFERS; sbuf_index++) {
+                const sg_shader_storage_buffer_desc* sbuf_desc = &stage_desc->storage_buffers[sbuf_index];
+                if (sbuf_desc->used) {
+                    _SG_VALIDATE(storage_buffers_continuous, VALIDATE_SHADERDESC_NO_CONT_STORAGEBUFFERS);
+                } else {
+                    storage_buffers_continuous = false;
+                }
+            }
             bool images_continuous = true;
             int num_images = 0;
             for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
@@ -16355,7 +16363,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         // has expected vertex shader storage buffers
         for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGE_BUFFERS; i++) {
             const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_VS];
-            if (stage->storage_buffers[i].item_size != 0) {
+            if (stage->storage_buffers[i].used) {
                 _SG_VALIDATE(bindings->vs.storage_buffers[i].id != SG_INVALID_ID, VALIDATE_ABND_VS_EXPECTED_STORAGEBUFFER_BINDING);
                 if (bindings->vs.storage_buffers[i].id != SG_INVALID_ID) {
                     const _sg_buffer_t* sbuf = _sg_lookup_buffer(&_sg.pools, bindings->vs.storage_buffers[i].id);
@@ -16428,7 +16436,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         // has expected fragment shader storage buffers
         for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGE_BUFFERS; i++) {
             const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_FS];
-            if (stage->storage_buffers[i].item_size != 0) {
+            if (stage->storage_buffers[i].used) {
                 _SG_VALIDATE(bindings->fs.storage_buffers[i].id != SG_INVALID_ID, VALIDATE_ABND_FS_EXPECTED_STORAGEBUFFER_BINDING);
                 if (bindings->fs.storage_buffers[i].id != SG_INVALID_ID) {
                     const _sg_buffer_t* sbuf = _sg_lookup_buffer(&_sg.pools, bindings->fs.storage_buffers[i].id);
