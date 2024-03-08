@@ -4309,6 +4309,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(sgimgui_t* ctx) {
                 _sgimgui_frame_stats(metal.bindings.num_set_vertex_buffer);
                 _sgimgui_frame_stats(metal.bindings.num_set_vertex_texture);
                 _sgimgui_frame_stats(metal.bindings.num_set_vertex_sampler_state);
+                _sgimgui_frame_stats(metal.bindings.num_set_fragment_buffer);
                 _sgimgui_frame_stats(metal.bindings.num_set_fragment_texture);
                 _sgimgui_frame_stats(metal.bindings.num_set_fragment_sampler_state);
                 _sgimgui_frame_stats(metal.uniforms.num_set_vertex_buffer_offset);

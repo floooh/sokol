@@ -2565,12 +2565,17 @@ typedef struct sg_pass {
     - 0..1 index buffer offsets
     - 0..N vertex shader stage images
     - 0..N vertex shader stage samplers
+    - 0..N vertex shader storage buffers
     - 0..N fragment shader stage images
     - 0..N fragment shader stage samplers
+    - 0..N fragment shader storage buffers
 
-    The max number of vertex buffer and shader stage images
-    are defined by the SG_MAX_VERTEX_BUFFERS and
-    SG_MAX_SHADERSTAGE_IMAGES configuration constants.
+    For the max number of bindings, see the constant definitions:
+
+    - SG_MAX_VERTEX_BUFFERS
+    - SG_MAX_SHADERSTAGE_IMAGES
+    - SG_MAX_SHADERSTAGE_SAMPLERS
+    - SG_MAX_SHADERSTAGE_STORAGE_BUFFERS
 
     The optional buffer offsets can be used to put different unrelated
     chunks of vertex- and/or index-data into the same buffer objects.
@@ -3310,6 +3315,7 @@ typedef struct sg_frame_stats_metal_bindings {
     uint32_t num_set_vertex_buffer;
     uint32_t num_set_vertex_texture;
     uint32_t num_set_vertex_sampler_state;
+    uint32_t num_set_fragment_buffer;
     uint32_t num_set_fragment_texture;
     uint32_t num_set_fragment_sampler_state;
 } sg_frame_stats_metal_bindings;
@@ -5504,6 +5510,8 @@ typedef struct {
     sg_image cur_fs_image_ids[SG_MAX_SHADERSTAGE_IMAGES];
     sg_sampler cur_vs_sampler_ids[SG_MAX_SHADERSTAGE_SAMPLERS];
     sg_sampler cur_fs_sampler_ids[SG_MAX_SHADERSTAGE_SAMPLERS];
+    sg_buffer cur_vs_storagebuffer_ids[SG_MAX_SHADERSTAGE_STORAGE_BUFFERS];
+    sg_buffer cur_fs_storagebuffer_ids[SG_MAX_SHADERSTAGE_STORAGE_BUFFERS];
 } _sg_mtl_state_cache_t;
 
 typedef struct {
@@ -12748,12 +12756,15 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
 
     // apply vertex stage storage buffers
     // FIXME: move start slot after UBs (?)
-    // FIXME: caching
     for (NSUInteger slot = 0; slot < (NSUInteger)bnd->num_vs_sbufs; slot++) {
         const _sg_buffer_t* sbuf = bnd->vs_sbufs[slot];
-        const NSUInteger mtl_slot = SG_MAX_SHADERSTAGE_UBS + SG_MAX_VERTEX_BUFFERS + slot;
-        [_sg.mtl.cmd_encoder setVertexBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:0 atIndex:mtl_slot];
-        _sg_stats_add(metal.bindings.num_set_vertex_buffer, 1);
+        if (_sg.mtl.state_cache.cur_vs_storagebuffer_ids[slot].id != sbuf->slot.id) {
+            _sg.mtl.state_cache.cur_vs_storagebuffer_ids[slot].id = sbuf->slot.id;
+            SOKOL_ASSERT(sbuf->mtl.buf[sbuf->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
+            const NSUInteger mtl_slot = SG_MAX_SHADERSTAGE_UBS + SG_MAX_VERTEX_BUFFERS + slot;
+            [_sg.mtl.cmd_encoder setVertexBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:0 atIndex:mtl_slot];
+            _sg_stats_add(metal.bindings.num_set_vertex_buffer, 1);
+        }
     }
 
     // apply fragment stage images
@@ -12781,9 +12792,13 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
     // apply fragment stage storage buffers
     for (NSUInteger slot = 0; slot < (NSUInteger)bnd->num_fs_sbufs; slot++) {
         const _sg_buffer_t* sbuf = bnd->fs_sbufs[slot];
-        const NSUInteger mtl_slot = SG_MAX_SHADERSTAGE_UBS + slot;
-        [_sg.mtl.cmd_encoder setFragmentBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:0 atIndex:mtl_slot];
-        // FIXME: _sg_stats_add(metal.bindings.num_set_fragment_buffer, 1);
+        if (_sg.mtl.state_cache.cur_fs_storagebuffer_ids[slot].id != sbuf->slot.id) {
+            _sg.mtl.state_cache.cur_fs_storagebuffer_ids[slot].id = sbuf->slot.id;
+            SOKOL_ASSERT(sbuf->mtl.buf[sbuf->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
+            const NSUInteger mtl_slot = SG_MAX_SHADERSTAGE_UBS + slot;
+            [_sg.mtl.cmd_encoder setFragmentBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:0 atIndex:mtl_slot];
+            _sg_stats_add(metal.bindings.num_set_fragment_buffer, 1);
+        }
     }
 
     return true;
