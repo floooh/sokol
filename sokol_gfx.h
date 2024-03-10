@@ -17,7 +17,7 @@
 
     In the same place define one of the following to select the rendering
     backend:
-        #define SOKOL_GLCORE33
+        #define SOKOL_GLCORE
         #define SOKOL_GLES3
         #define SOKOL_D3D11
         #define SOKOL_METAL
@@ -29,7 +29,7 @@
     #include ...
     #include ...
     #define SOKOL_IMPL
-    #define SOKOL_GLCORE33
+    #define SOKOL_GLCORE
     #include "sokol_gfx.h"
 
     The dummy backend replaces the platform-specific backend code with empty
@@ -4229,8 +4229,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
 #ifdef SOKOL_GFX_IMPL
 #define SOKOL_GFX_IMPL_INCLUDED (1)
 
-#if !(defined(SOKOL_GLCORE33)||defined(SOKOL_GLES3)||defined(SOKOL_D3D11)||defined(SOKOL_METAL)||defined(SOKOL_WGPU)||defined(SOKOL_DUMMY_BACKEND))
-#error "Please select a backend with SOKOL_GLCORE33, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND"
+#if !(defined(SOKOL_GLCORE)||defined(SOKOL_GLES3)||defined(SOKOL_D3D11)||defined(SOKOL_METAL)||defined(SOKOL_WGPU)||defined(SOKOL_DUMMY_BACKEND))
+#error "Please select a backend with SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND"
 #endif
 #if defined(SOKOL_MALLOC) || defined(SOKOL_CALLOC) || defined(SOKOL_FREE)
 #error "SOKOL_MALLOC/CALLOC/FREE macros are no longer supported, please use sg_desc.allocator to override memory allocation functions"
@@ -4347,13 +4347,13 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #if defined(__EMSCRIPTEN__)
         #include <emscripten/emscripten.h>
     #endif
-#elif defined(SOKOL_GLCORE33) || defined(SOKOL_GLES3)
+#elif defined(SOKOL_GLCORE) || defined(SOKOL_GLES3)
     #define _SOKOL_ANY_GL (1)
 
     // include platform specific GL headers (or on Win32: use an embedded GL loader)
     #if !defined(SOKOL_EXTERNAL_GL_LOADER)
         #if defined(_WIN32)
-            #if defined(SOKOL_GLCORE33) && !defined(SOKOL_EXTERNAL_GL_LOADER)
+            #if defined(SOKOL_GLCORE) && !defined(SOKOL_EXTERNAL_GL_LOADER)
                 #ifndef WIN32_LEAN_AND_MEAN
                 #define WIN32_LEAN_AND_MEAN
                 #endif
@@ -4380,7 +4380,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
                 #include <GLES3/gl3.h>
             #endif
         #elif defined(__linux__) || defined(__unix__)
-            #if defined(SOKOL_GLCORE33)
+            #if defined(SOKOL_GLCORE)
                 #define GL_GLEXT_PROTOTYPES
                 #include <GL/gl.h>
             #else
@@ -7008,7 +7008,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_mag_filter(sg_filter mag_f) {
 _SOKOL_PRIVATE GLenum _sg_gl_wrap(sg_wrap w) {
     switch (w) {
         case SG_WRAP_CLAMP_TO_EDGE:     return GL_CLAMP_TO_EDGE;
-        #if defined(SOKOL_GLCORE33)
+        #if defined(SOKOL_GLCORE)
         case SG_WRAP_CLAMP_TO_BORDER:   return GL_CLAMP_TO_BORDER;
         #else
         case SG_WRAP_CLAMP_TO_BORDER:   return GL_CLAMP_TO_EDGE;
@@ -7453,7 +7453,7 @@ _SOKOL_PRIVATE void _sg_gl_init_limits(void) {
     _sg.limits.gl_max_combined_texture_image_units = gl_int;
 }
 
-#if defined(SOKOL_GLCORE33)
+#if defined(SOKOL_GLCORE)
 _SOKOL_PRIVATE void _sg_gl_init_caps_glcore33(void) {
     _sg.backend = SG_BACKEND_GLCORE33;
 
@@ -7905,7 +7905,7 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
     glEnable(GL_DITHER);
     glDisable(GL_POLYGON_OFFSET_FILL);
     _sg_stats_add(gl.num_render_state, 10);
-    #if defined(SOKOL_GLCORE33)
+    #if defined(SOKOL_GLCORE)
         glEnable(GL_MULTISAMPLE);
         glEnable(GL_PROGRAM_POINT_SIZE);
         _sg_stats_add(gl.num_render_state, 2);
@@ -7926,7 +7926,7 @@ _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
     #if defined(SOKOL_DEBUG)
         while (glGetError() != GL_NO_ERROR);
     #endif
-    #if defined(SOKOL_GLCORE33)
+    #if defined(SOKOL_GLCORE)
         _sg_gl_init_caps_glcore33();
     #elif defined(SOKOL_GLES3)
         _sg_gl_init_caps_gles3();
@@ -7937,7 +7937,7 @@ _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
     _SG_GL_CHECK_ERROR();
     // incoming texture data is generally expected to be packed tightly
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    #if defined(SOKOL_GLCORE33)
+    #if defined(SOKOL_GLCORE)
         // enable seamless cubemap sampling (only desktop GL)
         glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
     #endif
@@ -8128,7 +8128,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_sampler(_sg_sampler_t* smp, const
         glSamplerParameteri(smp->gl.smp, GL_TEXTURE_WRAP_S, (GLint)_sg_gl_wrap(smp->cmn.wrap_u));
         glSamplerParameteri(smp->gl.smp, GL_TEXTURE_WRAP_T, (GLint)_sg_gl_wrap(smp->cmn.wrap_v));
         glSamplerParameteri(smp->gl.smp, GL_TEXTURE_WRAP_R, (GLint)_sg_gl_wrap(smp->cmn.wrap_w));
-        #if defined(SOKOL_GLCORE33)
+        #if defined(SOKOL_GLCORE)
         float border[4];
         switch (smp->cmn.border_color) {
             case SG_BORDERCOLOR_TRANSPARENT_BLACK:
@@ -8612,13 +8612,13 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass) {
     if (atts) {
         // offscreen pass
         SOKOL_ASSERT(atts->gl.fb);
-        #if defined(SOKOL_GLCORE33)
+        #if defined(SOKOL_GLCORE)
         glEnable(GL_FRAMEBUFFER_SRGB);
         #endif
         glBindFramebuffer(GL_FRAMEBUFFER, atts->gl.fb);
     } else {
         // default pass
-        #if defined(SOKOL_GLCORE33)
+        #if defined(SOKOL_GLCORE)
         glDisable(GL_FRAMEBUFFER_SRGB);
         #endif
         // NOTE: on some platforms, the default framebuffer of a context
@@ -8918,7 +8918,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
                 if (pip->gl.color_write_mask[i] != _sg.gl.cache.color_write_mask[i]) {
                     const sg_color_mask cm = pip->gl.color_write_mask[i];
                     _sg.gl.cache.color_write_mask[i] = cm;
-                    #ifdef SOKOL_GLCORE33
+                    #ifdef SOKOL_GLCORE
                         glColorMaski(i,
                                     (cm & SG_COLORMASK_R) != 0,
                                     (cm & SG_COLORMASK_G) != 0,
@@ -8975,7 +8975,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
             }
             _sg_stats_add(gl.num_render_state, 1);
         }
-        #ifdef SOKOL_GLCORE33
+        #ifdef SOKOL_GLCORE
         if (pip->gl.sample_count != _sg.gl.cache.sample_count) {
             _sg.gl.cache.sample_count = pip->gl.sample_count;
             if (pip->gl.sample_count > 1) {
@@ -15924,7 +15924,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
         _sg_validate_begin();
         _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_SHADERDESC_CANARY);
         _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_SHADERDESC_CANARY);
-        #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES3) || defined(SOKOL_WGPU)
+        #if defined(SOKOL_GLCORE) || defined(SOKOL_GLES3) || defined(SOKOL_WGPU)
             // on GL or WebGPU, must provide shader source code
             _SG_VALIDATE(0 != desc->vs.source, VALIDATE_SHADERDESC_SOURCE);
             _SG_VALIDATE(0 != desc->fs.source, VALIDATE_SHADERDESC_SOURCE);

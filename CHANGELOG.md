@@ -1240,8 +1240,8 @@ GLES2/WebGL1 support has been removed from the sokol headers (now that
   GLX for the window system glue code and can create a GLES2 or GLES3 context
   instead of a 'desktop GL' context.
   To get EGL+GLES2/GLES3, just define SOKOL_GLES2 or SOKOL_GLES3 to compile the
-  implementation. To get EGL+GL, define SOKOL_GLCORE33 *and* SOKOL_FORCE_EGL.
-  By default, defining just SOKOL_GLCORE33 uses GLX for the window system glue
+  implementation. To get EGL+GL, define SOKOL_GLCORE *and* SOKOL_FORCE_EGL.
+  By default, defining just SOKOL_GLCORE uses GLX for the window system glue
   (just as before). Many thanks to GH user @billzez for the PR!
 
 - **10-Sep-2022**: sokol_app.h and sokol_args.h has been fixed for Emscripten 3.21, those headers

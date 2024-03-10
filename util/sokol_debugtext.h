@@ -17,7 +17,7 @@
     platform-specific embedded shader code (these are the same defines as
     used by sokol_gfx.h and sokol_app.h):
 
-    SOKOL_GLCORE33
+    SOKOL_GLCORE
     SOKOL_GLES3
     SOKOL_D3D11
     SOKOL_METAL
@@ -2405,7 +2405,7 @@ static const uint8_t _sdtx_font_oric[2048] = {
 
         @program debugtext vs fs
 */
-#if defined(SOKOL_GLCORE33)
+#if defined(SOKOL_GLCORE)
 static const char _sdtx_vs_source_glsl330[298] = {
     0x23,0x76,0x65,0x72,0x73,0x69,0x6f,0x6e,0x20,0x33,0x33,0x30,0x0a,0x0a,0x6c,0x61,
     0x79,0x6f,0x75,0x74,0x28,0x6c,0x6f,0x63,0x61,0x74,0x69,0x6f,0x6e,0x20,0x3d,0x20,
@@ -3459,7 +3459,7 @@ static const char _sdtx_fs_source_wgsl[663] = {
 static const char* _sdtx_vs_src_dummy = "";
 static const char* _sdtx_fs_src_dummy = "";
 #else
-#error "Please define one of SOKOL_GLCORE33, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND!"
+#error "Please define one of SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND!"
 #endif
 
 // ███████ ████████ ██████  ██    ██  ██████ ████████ ███████
@@ -3952,7 +3952,7 @@ static void _sdtx_setup_common(void) {
     shd_desc.fs.image_sampler_pairs[0].image_slot = 0;
     shd_desc.fs.image_sampler_pairs[0].sampler_slot = 0;
     shd_desc.fs.image_sampler_pairs[0].glsl_name = "tex_smp";
-    #if defined(SOKOL_GLCORE33)
+    #if defined(SOKOL_GLCORE)
         shd_desc.vs.source = _sdtx_vs_source_glsl330;
         shd_desc.fs.source = _sdtx_fs_source_glsl330;
     #elif defined(SOKOL_GLES3)

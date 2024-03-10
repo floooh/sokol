@@ -19,7 +19,7 @@
     platform-specific embedded shader code (these are the same defines as
     used by sokol_gfx.h and sokol_app.h):
 
-    SOKOL_GLCORE33
+    SOKOL_GLCORE
     SOKOL_GLES3
     SOKOL_D3D11
     SOKOL_METAL
@@ -278,7 +278,7 @@ SOKOL_FONTSTASH_API_DECL uint32_t sfons_rgba(uint8_t r, uint8_t g, uint8_t b, ui
     #define _SOKOL_UNUSED(x) (void)(x)
 #endif
 
-#if defined(SOKOL_GLCORE33)
+#if defined(SOKOL_GLCORE)
 /*
     Embedded source code compiled with:
 
@@ -1521,7 +1521,7 @@ static const char _sfons_fs_source_wgsl[674] = {
 static const char* _sfons_vs_source_dummy = "";
 static const char* _sfons_fs_source_dummy = "";
 #else
-#error "Please define one of SOKOL_GLCORE33, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND!"
+#error "Please define one of SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND!"
 #endif
 
 typedef struct _sfons_t {
@@ -1601,7 +1601,7 @@ static int _sfons_render_create(void* user_ptr, int width, int height) {
         shd_desc.fs.image_sampler_pairs[0].image_slot = 0;
         shd_desc.fs.image_sampler_pairs[0].sampler_slot = 0;
         shd_desc.label = "sokol-fontstash-shader";
-        #if defined(SOKOL_GLCORE33)
+        #if defined(SOKOL_GLCORE)
             shd_desc.vs.source = _sfons_vs_source_glsl330;
             shd_desc.fs.source = _sfons_fs_source_glsl330;
         #elif defined(SOKOL_GLES3)
