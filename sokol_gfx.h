@@ -6770,7 +6770,8 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     _SG_XMACRO(glSamplerParameteri,               void, (GLuint sampler, GLenum pname, GLint param)) \
     _SG_XMACRO(glSamplerParameterf,               void, (GLuint sampler, GLenum pname, GLfloat param)) \
     _SG_XMACRO(glSamplerParameterfv,              void, (GLuint sampler, GLenum pname, const GLfloat* params)) \
-    _SG_XMACRO(glDeleteSamplers,                  void, (GLsizei n, const GLuint* samplers))
+    _SG_XMACRO(glDeleteSamplers,                  void, (GLsizei n, const GLuint* samplers)) \
+    _SG_XMACRO(glBindBufferBase,                  void, (GLenum target, GLuint index, GLuint buffer))
 
 // generate GL function pointer typedefs
 #define _SG_XMACRO(name, ret, args) typedef ret (GL_APIENTRY* PFN_ ## name) args;
@@ -17334,16 +17335,15 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
     res.environment.defaults.depth_format = _sg_def(res.environment.defaults.depth_format, SG_PIXELFORMAT_DEPTH_STENCIL);
     res.environment.defaults.sample_count = _sg_def(res.environment.defaults.sample_count, 1);
     #if defined(SOKOL_GLCORE)
+        res.environment.gl.major_version = _sg_def(res.environment.gl.major_version, 4);
         #if defined(__APPLE__)
-            res.environment.gl.major_version = 4;
-            res.environment.gl.minor_version = 1;
+            res.environment.gl.minor_version = _sg_def(res.environment.gl.minor_version, 1);
         #else
-            res.environment.gl.major_version = 4;
-            res.environment.gl.minor_version = 3;
+            res.environment.gl.minor_version = _sg_def(res.environment.gl.minor_version, 3);
         #endif
     #elif defined(SOKOL_GLES3)
-        res.environment.gl.major_version = 3;
-        res.environment.gl.minor_version = 0;
+        res.environment.gl.major_version = _sg_def(res.environment.gl.major_version, 3);
+        res.environment.gl.minor_version = _sg_def(res.environment.gl.minor_version, 0);
     #endif
     res.buffer_pool_size = _sg_def(res.buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE);
     res.image_pool_size = _sg_def(res.image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE);
