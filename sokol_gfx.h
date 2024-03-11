@@ -1538,7 +1538,7 @@ typedef struct sg_color { float r, g, b, a; } sg_color;
     to get the currently active backend.
 */
 typedef enum sg_backend {
-    SG_BACKEND_GLCORE33,
+    SG_BACKEND_GLCORE,
     SG_BACKEND_GLES3,
     SG_BACKEND_D3D11,
     SG_BACKEND_METAL_IOS,
@@ -3498,6 +3498,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_DATA, "immutable buffers must be initialized with data (sg_buffer_desc.data.ptr and sg_buffer_desc.data.size)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_DATA_SIZE, "immutable buffer data size differs from buffer size") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_NO_DATA, "dynamic/stream usage buffers cannot be initialized with data") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STORAGEBUFFER_SUPPORTED, "storage buffers not supported by the backend 3D API (requires OpenGL >= 4.3)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STORAGEBUFFER_SIZE_MULTIPLE_4, "size of storage buffers must be a multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDATA_NODATA, "sg_image_data: no data (.ptr and/or .size is zero)") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDATA_DATA_SIZE, "sg_image_data: data size doesn't match expected surface size") \
@@ -3801,11 +3802,17 @@ typedef struct sg_wgpu_environment {
     const void* device;                    // WGPUDevice
 } sg_wgpu_environment;
 
+typedef struct sg_gl_environment {
+    int major_version;
+    int minor_version;
+} sg_gl_environment;
+
 typedef struct sg_environment {
     sg_environment_defaults defaults;
     sg_metal_environment metal;
     sg_d3d11_environment d3d11;
     sg_wgpu_environment wgpu;
+    sg_gl_environment gl;
 } sg_environment;
 
 /*
@@ -5251,6 +5258,7 @@ typedef struct {
 } _sg_gl_cache_texture_sampler_bind_slot;
 
 #define _SG_GL_TEXTURE_SAMPLER_CACHE_SIZE (SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS * SG_NUM_SHADER_STAGES)
+#define _SG_GL_MAX_STORAGEBUFFERS (SG_MAX_SHADERSTAGE_STORAGE_BUFFERS * SG_NUM_SHADER_STAGES)
 
 typedef struct {
     sg_depth_state depth;
@@ -5266,8 +5274,10 @@ typedef struct {
     _sg_gl_cache_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
     GLuint vertex_buffer;
     GLuint index_buffer;
+    GLuint storage_buffers[_SG_GL_MAX_STORAGEBUFFERS];
     GLuint stored_vertex_buffer;
     GLuint stored_index_buffer;
+    GLuint stored_storage_buffer;
     GLuint prog;
     _sg_gl_cache_texture_sampler_bind_slot texture_samplers[_SG_GL_TEXTURE_SAMPLER_CACHE_SIZE];
     _sg_gl_cache_texture_sampler_bind_slot stored_texture_sampler;
@@ -6799,6 +6809,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_buffer_target(sg_buffer_type t) {
     switch (t) {
         case SG_BUFFERTYPE_VERTEXBUFFER:    return GL_ARRAY_BUFFER;
         case SG_BUFFERTYPE_INDEXBUFFER:     return GL_ELEMENT_ARRAY_BUFFER;
+        case SG_BUFFERTYPE_STORAGEBUFFER:   return GL_SHADER_STORAGE_BUFFER;
         default: SOKOL_UNREACHABLE; return 0;
     }
 }
@@ -7454,14 +7465,15 @@ _SOKOL_PRIVATE void _sg_gl_init_limits(void) {
 }
 
 #if defined(SOKOL_GLCORE)
-_SOKOL_PRIVATE void _sg_gl_init_caps_glcore33(void) {
-    _sg.backend = SG_BACKEND_GLCORE33;
+_SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
+    _sg.backend = SG_BACKEND_GLCORE;
 
+    const int version = _sg.desc.environment.gl.major_version * 100 + _sg.desc.environment.gl.minor_version * 10;
     _sg.features.origin_top_left = false;
     _sg.features.image_clamp_to_border = true;
     _sg.features.mrt_independent_blend_state = false;
     _sg.features.mrt_independent_write_mask = true;
-    _sg.features.storage_buffer = false;
+    _sg.features.storage_buffer = version >= 430;
 
     // scan extensions
     bool has_s3tc = false;  // BC1..BC3
@@ -7635,30 +7647,50 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
         _sg.gl.cache.index_buffer = 0;
         _sg_stats_add(gl.num_bind_buffer, 1);
     }
+    for (int i = 0; i < _SG_GL_MAX_STORAGEBUFFERS; i++) {
+        if (force || (_sg.gl.cache.storage_buffers[i] != 0)) {
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, (GLuint)i, 0);
+            _sg.gl.cache.storage_buffers[i] = 0;
+            _sg_stats_add(gl.num_bind_buffer, 1);
+        }
+    }
 }
 
-_SOKOL_PRIVATE void _sg_gl_cache_bind_buffer(GLenum target, GLuint buffer) {
-    SOKOL_ASSERT((GL_ARRAY_BUFFER == target) || (GL_ELEMENT_ARRAY_BUFFER == target));
+_SOKOL_PRIVATE void _sg_gl_cache_bind_buffer(GLenum target, GLuint buffer, GLuint index) {
+    SOKOL_ASSERT((GL_ARRAY_BUFFER == target) || (GL_ELEMENT_ARRAY_BUFFER == target) || (GL_SHADER_STORAGE_BUFFER == target));
+    SOKOL_ASSERT(index < _SG_GL_MAX_STORAGEBUFFERS);
     if (target == GL_ARRAY_BUFFER) {
         if (_sg.gl.cache.vertex_buffer != buffer) {
             _sg.gl.cache.vertex_buffer = buffer;
             glBindBuffer(target, buffer);
             _sg_stats_add(gl.num_bind_buffer, 1);
         }
-    } else {
+    } else if (target == GL_ELEMENT_ARRAY_BUFFER) {
         if (_sg.gl.cache.index_buffer != buffer) {
             _sg.gl.cache.index_buffer = buffer;
             glBindBuffer(target, buffer);
             _sg_stats_add(gl.num_bind_buffer, 1);
         }
+    } else if (target == GL_SHADER_STORAGE_BUFFER) {
+        if (_sg.gl.cache.storage_buffers[index] != buffer) {
+            _sg.gl.cache.storage_buffers[index] = buffer;
+            glBindBufferBase(target, index, buffer);
+            _sg_stats_add(gl.num_bind_buffer, 1);
+        }
+    } else {
+        SOKOL_UNREACHABLE;
     }
 }
 
 _SOKOL_PRIVATE void _sg_gl_cache_store_buffer_binding(GLenum target) {
     if (target == GL_ARRAY_BUFFER) {
         _sg.gl.cache.stored_vertex_buffer = _sg.gl.cache.vertex_buffer;
-    } else {
+    } else if (target == GL_ELEMENT_ARRAY_BUFFER) {
         _sg.gl.cache.stored_index_buffer = _sg.gl.cache.index_buffer;
+    } else if (target == GL_SHADER_STORAGE_BUFFER) {
+        _sg.gl.cache.stored_storage_buffer = _sg.gl.cache.storage_buffers[0];
+    } else {
+        SOKOL_UNREACHABLE;
     }
 }
 
@@ -7666,15 +7698,23 @@ _SOKOL_PRIVATE void _sg_gl_cache_restore_buffer_binding(GLenum target) {
     if (target == GL_ARRAY_BUFFER) {
         if (_sg.gl.cache.stored_vertex_buffer != 0) {
             // we only care about restoring valid ids
-            _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_vertex_buffer);
+            _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_vertex_buffer, 0);
             _sg.gl.cache.stored_vertex_buffer = 0;
         }
-    } else {
+    } else if (target == GL_ELEMENT_ARRAY_BUFFER) {
         if (_sg.gl.cache.stored_index_buffer != 0) {
             // we only care about restoring valid ids
-            _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_index_buffer);
+            _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_index_buffer, 0);
             _sg.gl.cache.stored_index_buffer = 0;
         }
+    } else if (target == GL_SHADER_STORAGE_BUFFER) {
+        if (_sg.gl.cache.stored_storage_buffer != 0) {
+            // we only care about restoring valid ids
+            _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_storage_buffer, 0);
+            _sg.gl.cache.stored_storage_buffer = 0;
+        }
+    } else {
+        SOKOL_UNREACHABLE;
     }
 }
 
@@ -7690,11 +7730,21 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_buffer(GLuint buf) {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
         _sg_stats_add(gl.num_bind_buffer, 1);
     }
+    for (int i = 0; i < _SG_GL_MAX_STORAGEBUFFERS; i++) {
+        if (buf == _sg.gl.cache.storage_buffers[i]) {
+            _sg.gl.cache.storage_buffers[i] = 0;
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, (GLuint)i, 0);
+            _sg_stats_add(gl.num_bind_buffer, 1);
+        }
+    }
     if (buf == _sg.gl.cache.stored_vertex_buffer) {
         _sg.gl.cache.stored_vertex_buffer = 0;
     }
     if (buf == _sg.gl.cache.stored_index_buffer) {
         _sg.gl.cache.stored_index_buffer = 0;
+    }
+    if (buf == _sg.gl.cache.stored_storage_buffer) {
+        _sg.gl.cache.stored_storage_buffer = 0;
     }
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
         if (buf == _sg.gl.cache.attrs[i].gl_vbuf) {
@@ -7927,7 +7977,7 @@ _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
         while (glGetError() != GL_NO_ERROR);
     #endif
     #if defined(SOKOL_GLCORE)
-        _sg_gl_init_caps_glcore33();
+        _sg_gl_init_caps_glcore();
     #elif defined(SOKOL_GLES3)
         _sg_gl_init_caps_gles3();
     #endif
@@ -7971,7 +8021,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_buffer(_sg_buffer_t* buf, const s
             glGenBuffers(1, &gl_buf);
             SOKOL_ASSERT(gl_buf);
             _sg_gl_cache_store_buffer_binding(gl_target);
-            _sg_gl_cache_bind_buffer(gl_target, gl_buf);
+            _sg_gl_cache_bind_buffer(gl_target, gl_buf, 0);
             glBufferData(gl_target, buf->cmn.size, 0, gl_usage);
             if (buf->cmn.usage == SG_USAGE_IMMUTABLE) {
                 SOKOL_ASSERT(desc->data.ptr);
@@ -9033,7 +9083,7 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_t* bnd) {
 
     // index buffer (can be 0)
     const GLuint gl_ib = bnd->ib ? bnd->ib->gl.buf[bnd->ib->cmn.active_slot] : 0;
-    _sg_gl_cache_bind_buffer(GL_ELEMENT_ARRAY_BUFFER, gl_ib);
+    _sg_gl_cache_bind_buffer(GL_ELEMENT_ARRAY_BUFFER, gl_ib, 0);
     _sg.gl.cache.cur_ib_offset = bnd->ib_offset;
 
     // vertex attributes
@@ -9058,7 +9108,7 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_t* bnd) {
                 (vb_offset != cache_attr->gl_attr.offset) ||
                 (cache_attr->gl_attr.divisor != attr->divisor))
             {
-                _sg_gl_cache_bind_buffer(GL_ARRAY_BUFFER, gl_vb);
+                _sg_gl_cache_bind_buffer(GL_ARRAY_BUFFER, gl_vb, 0);
                 glVertexAttribPointer(attr_index, attr->size, attr->type, attr->normalized, attr->stride, (const GLvoid*)(GLintptr)vb_offset);
                 _sg_stats_add(gl.num_vertex_attrib_pointer, 1);
                 glVertexAttribDivisor(attr_index, (GLuint)attr->divisor);
@@ -9184,7 +9234,7 @@ _SOKOL_PRIVATE void _sg_gl_update_buffer(_sg_buffer_t* buf, const sg_range* data
     SOKOL_ASSERT(gl_buf);
     _SG_GL_CHECK_ERROR();
     _sg_gl_cache_store_buffer_binding(gl_tgt);
-    _sg_gl_cache_bind_buffer(gl_tgt, gl_buf);
+    _sg_gl_cache_bind_buffer(gl_tgt, gl_buf, 0);
     glBufferSubData(gl_tgt, 0, (GLsizeiptr)data->size, data->ptr);
     _sg_gl_cache_restore_buffer_binding(gl_tgt);
     _SG_GL_CHECK_ERROR();
@@ -9203,7 +9253,7 @@ _SOKOL_PRIVATE void _sg_gl_append_buffer(_sg_buffer_t* buf, const sg_range* data
     SOKOL_ASSERT(gl_buf);
     _SG_GL_CHECK_ERROR();
     _sg_gl_cache_store_buffer_binding(gl_tgt);
-    _sg_gl_cache_bind_buffer(gl_tgt, gl_buf);
+    _sg_gl_cache_bind_buffer(gl_tgt, gl_buf, 0);
     glBufferSubData(gl_tgt, buf->cmn.append_pos, (GLsizeiptr)data->size, data->ptr);
     _sg_gl_cache_restore_buffer_binding(gl_tgt);
     _SG_GL_CHECK_ERROR();
@@ -15785,6 +15835,7 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
             _SG_VALIDATE(0 == desc->data.ptr, VALIDATE_BUFFERDESC_NO_DATA);
         }
         if (desc->type == SG_BUFFERTYPE_STORAGEBUFFER) {
+            _SG_VALIDATE(_sg.features.storage_buffer, VALIDATE_BUFFERDESC_STORAGEBUFFER_SUPPORTED);
             _SG_VALIDATE(_sg_multiple_u64(desc->size, 4), VALIDATE_BUFFERDESC_STORAGEBUFFER_SIZE_MULTIPLE_4);
         }
         return _sg_validate_end();
@@ -17220,6 +17271,18 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
     #endif
     res.environment.defaults.depth_format = _sg_def(res.environment.defaults.depth_format, SG_PIXELFORMAT_DEPTH_STENCIL);
     res.environment.defaults.sample_count = _sg_def(res.environment.defaults.sample_count, 1);
+    #if defined(SOKOL_GLCORE)
+        #if defined(__APPLE__)
+            res.environment.gl.major_version = 4;
+            res.environment.gl.minor_version = 1;
+        #else
+            res.environment.gl.major_version = 4;
+            res.environment.gl.minor_version = 3;
+        #endif
+    #elif defined(SOKOL_GLES3)
+        res.environment.gl.major_version = 3;
+        res.environment.gl.minor_version = 0;
+    #endif
     res.buffer_pool_size = _sg_def(res.buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE);
     res.image_pool_size = _sg_def(res.image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE);
     res.sampler_pool_size = _sg_def(res.sampler_pool_size, _SG_DEFAULT_SAMPLER_POOL_SIZE);
