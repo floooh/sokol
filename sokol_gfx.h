@@ -4759,6 +4759,12 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #endif
 #endif
 
+// make some GL constants generally available to simplify compilation,
+// use of those constants will be filtered by runtime flags
+#ifndef GL_SHADER_STORAGE_BUFFER
+#define GL_SHADER_STORAGE_BUFFER 0x90D2
+#endif
+
 // ███████ ████████ ██████  ██    ██  ██████ ████████ ███████
 // ██         ██    ██   ██ ██    ██ ██         ██    ██
 // ███████    ██    ██████  ██    ██ ██         ██    ███████
@@ -7656,7 +7662,9 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
         _sg_stats_add(gl.num_bind_buffer, 1);
     }
     if (force || (_sg.gl.cache.storage_buffer != 0)) {
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+        if (_sg.features.storage_buffer) {
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+        }
         _sg.gl.cache.storage_buffer = 0;
         _sg_stats_add(gl.num_bind_buffer, 1);
     }
@@ -7664,7 +7672,9 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
         for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGE_BUFFERS; i++) {
             if (force || (_sg.gl.cache.stage_storage_buffers[stage][i] != 0)) {
                 const GLuint bind_index = _sg_gl_storagebuffer_bind_index(stage, i);
-                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, bind_index, 0);
+                if (_sg.features.storage_buffer) {
+                    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, bind_index, 0);
+                }
                 _sg.gl.cache.stage_storage_buffers[stage][i] = 0;
                 _sg_stats_add(gl.num_bind_buffer, 1);
             }
@@ -7689,7 +7699,9 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_buffer(GLenum target, GLuint buffer) {
     } else if (target == GL_SHADER_STORAGE_BUFFER) {
         if (_sg.gl.cache.storage_buffer != buffer) {
             _sg.gl.cache.storage_buffer = buffer;
-            glBindBuffer(target, buffer);
+            if (_sg.features.storage_buffer) {
+                glBindBuffer(target, buffer);
+            }
             _sg_stats_add(gl.num_bind_buffer, 1);
         }
     } else {
@@ -7704,7 +7716,9 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_storage_buffer(int stage, int slot, GLuint
         _sg.gl.cache.stage_storage_buffers[stage][slot] = buffer;
         _sg.gl.cache.storage_buffer = buffer; // not a bug
         GLuint bind_index = _sg_gl_storagebuffer_bind_index(stage, slot);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, bind_index, buffer);
+        if (_sg.features.storage_buffer) {
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, bind_index, buffer);
+        }
         _sg_stats_add(gl.num_bind_buffer, 1);
     }
 }
