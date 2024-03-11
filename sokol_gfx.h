@@ -5132,6 +5132,10 @@ typedef struct {
 typedef _sg_dummy_attachments_t _sg_attachments_t;
 
 #elif defined(_SOKOL_ANY_GL)
+
+#define _SG_GL_TEXTURE_SAMPLER_CACHE_SIZE (SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS * SG_NUM_SHADER_STAGES)
+#define _SG_GL_STORAGEBUFFER_STAGE_INDEX_PITCH (16)
+
 typedef struct {
     _sg_slot_t slot;
     _sg_buffer_common_t cmn;
@@ -5257,9 +5261,6 @@ typedef struct {
     GLuint sampler;
 } _sg_gl_cache_texture_sampler_bind_slot;
 
-#define _SG_GL_TEXTURE_SAMPLER_CACHE_SIZE (SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS * SG_NUM_SHADER_STAGES)
-#define _SG_GL_MAX_STORAGEBUFFERS (SG_MAX_SHADERSTAGE_STORAGE_BUFFERS * SG_NUM_SHADER_STAGES)
-
 typedef struct {
     sg_depth_state depth;
     sg_stencil_state stencil;
@@ -5274,7 +5275,8 @@ typedef struct {
     _sg_gl_cache_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
     GLuint vertex_buffer;
     GLuint index_buffer;
-    GLuint storage_buffers[_SG_GL_MAX_STORAGEBUFFERS];
+    GLuint storage_buffer;  // general bind point
+    GLuint stage_storage_buffers[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_STORAGE_BUFFERS];
     GLuint stored_vertex_buffer;
     GLuint stored_index_buffer;
     GLuint stored_storage_buffer;
@@ -7636,6 +7638,12 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
 #endif
 
 //-- state cache implementation ------------------------------------------------
+_SOKOL_PRIVATE GLuint _sg_gl_storagebuffer_bind_index(int stage, int slot) {
+    SOKOL_ASSERT((stage >= 0) && (stage < SG_NUM_SHADER_STAGES));
+    SOKOL_ASSERT((slot >= 0) && (slot < SG_MAX_SHADERSTAGE_STORAGE_BUFFERS));
+    return (GLuint) (stage * _SG_GL_STORAGEBUFFER_STAGE_INDEX_PITCH + slot);
+}
+
 _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
     if (force || (_sg.gl.cache.vertex_buffer != 0)) {
         glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -7647,18 +7655,25 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
         _sg.gl.cache.index_buffer = 0;
         _sg_stats_add(gl.num_bind_buffer, 1);
     }
-    for (int i = 0; i < _SG_GL_MAX_STORAGEBUFFERS; i++) {
-        if (force || (_sg.gl.cache.storage_buffers[i] != 0)) {
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, (GLuint)i, 0);
-            _sg.gl.cache.storage_buffers[i] = 0;
-            _sg_stats_add(gl.num_bind_buffer, 1);
+    if (force || (_sg.gl.cache.storage_buffer != 0)) {
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+        _sg.gl.cache.storage_buffer = 0;
+        _sg_stats_add(gl.num_bind_buffer, 1);
+    }
+    for (int stage = 0; stage < SG_NUM_SHADER_STAGES; stage++) {
+        for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGE_BUFFERS; i++) {
+            if (force || (_sg.gl.cache.stage_storage_buffers[stage][i] != 0)) {
+                const GLuint bind_index = _sg_gl_storagebuffer_bind_index(stage, i);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, bind_index, 0);
+                _sg.gl.cache.stage_storage_buffers[stage][i] = 0;
+                _sg_stats_add(gl.num_bind_buffer, 1);
+            }
         }
     }
 }
 
-_SOKOL_PRIVATE void _sg_gl_cache_bind_buffer(GLenum target, GLuint buffer, GLuint index) {
+_SOKOL_PRIVATE void _sg_gl_cache_bind_buffer(GLenum target, GLuint buffer) {
     SOKOL_ASSERT((GL_ARRAY_BUFFER == target) || (GL_ELEMENT_ARRAY_BUFFER == target) || (GL_SHADER_STORAGE_BUFFER == target));
-    SOKOL_ASSERT(index < _SG_GL_MAX_STORAGEBUFFERS);
     if (target == GL_ARRAY_BUFFER) {
         if (_sg.gl.cache.vertex_buffer != buffer) {
             _sg.gl.cache.vertex_buffer = buffer;
@@ -7672,13 +7687,25 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_buffer(GLenum target, GLuint buffer, GLuin
             _sg_stats_add(gl.num_bind_buffer, 1);
         }
     } else if (target == GL_SHADER_STORAGE_BUFFER) {
-        if (_sg.gl.cache.storage_buffers[index] != buffer) {
-            _sg.gl.cache.storage_buffers[index] = buffer;
-            glBindBufferBase(target, index, buffer);
+        if (_sg.gl.cache.storage_buffer != buffer) {
+            _sg.gl.cache.storage_buffer = buffer;
+            glBindBuffer(target, buffer);
             _sg_stats_add(gl.num_bind_buffer, 1);
         }
     } else {
         SOKOL_UNREACHABLE;
+    }
+}
+
+_SOKOL_PRIVATE void _sg_gl_cache_bind_storage_buffer(int stage, int slot, GLuint buffer) {
+    SOKOL_ASSERT((stage >= 0) && (stage < SG_NUM_SHADER_STAGES));
+    SOKOL_ASSERT((slot >= 0) && (slot < SG_MAX_SHADERSTAGE_STORAGE_BUFFERS));
+    if (_sg.gl.cache.stage_storage_buffers[stage][slot] != buffer) {
+        _sg.gl.cache.stage_storage_buffers[stage][slot] = buffer;
+        _sg.gl.cache.storage_buffer = buffer; // not a bug
+        GLuint bind_index = _sg_gl_storagebuffer_bind_index(stage, slot);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, bind_index, buffer);
+        _sg_stats_add(gl.num_bind_buffer, 1);
     }
 }
 
@@ -7688,7 +7715,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_store_buffer_binding(GLenum target) {
     } else if (target == GL_ELEMENT_ARRAY_BUFFER) {
         _sg.gl.cache.stored_index_buffer = _sg.gl.cache.index_buffer;
     } else if (target == GL_SHADER_STORAGE_BUFFER) {
-        _sg.gl.cache.stored_storage_buffer = _sg.gl.cache.storage_buffers[0];
+        _sg.gl.cache.stored_storage_buffer = _sg.gl.cache.storage_buffer;
     } else {
         SOKOL_UNREACHABLE;
     }
@@ -7698,19 +7725,19 @@ _SOKOL_PRIVATE void _sg_gl_cache_restore_buffer_binding(GLenum target) {
     if (target == GL_ARRAY_BUFFER) {
         if (_sg.gl.cache.stored_vertex_buffer != 0) {
             // we only care about restoring valid ids
-            _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_vertex_buffer, 0);
+            _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_vertex_buffer);
             _sg.gl.cache.stored_vertex_buffer = 0;
         }
     } else if (target == GL_ELEMENT_ARRAY_BUFFER) {
         if (_sg.gl.cache.stored_index_buffer != 0) {
             // we only care about restoring valid ids
-            _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_index_buffer, 0);
+            _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_index_buffer);
             _sg.gl.cache.stored_index_buffer = 0;
         }
     } else if (target == GL_SHADER_STORAGE_BUFFER) {
         if (_sg.gl.cache.stored_storage_buffer != 0) {
             // we only care about restoring valid ids
-            _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_storage_buffer, 0);
+            _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_storage_buffer);
             _sg.gl.cache.stored_storage_buffer = 0;
         }
     } else {
@@ -7730,11 +7757,20 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_buffer(GLuint buf) {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
         _sg_stats_add(gl.num_bind_buffer, 1);
     }
-    for (int i = 0; i < _SG_GL_MAX_STORAGEBUFFERS; i++) {
-        if (buf == _sg.gl.cache.storage_buffers[i]) {
-            _sg.gl.cache.storage_buffers[i] = 0;
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, (GLuint)i, 0);
-            _sg_stats_add(gl.num_bind_buffer, 1);
+    if (buf == _sg.gl.cache.storage_buffer) {
+        _sg.gl.cache.storage_buffer = 0;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+        _sg_stats_add(gl.num_bind_buffer, 1);
+    }
+    for (int stage = 0; stage < SG_NUM_SHADER_STAGES; stage++) {
+        for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGE_BUFFERS; i++) {
+            if (buf == _sg.gl.cache.stage_storage_buffers[stage][i]) {
+                _sg.gl.cache.stage_storage_buffers[stage][i] = 0;
+                _sg.gl.cache.storage_buffer = 0; // not a bug!
+                const GLuint bind_index = _sg_gl_storagebuffer_bind_index(stage, i);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, bind_index, 0);
+                _sg_stats_add(gl.num_bind_buffer, 1);
+            }
         }
     }
     if (buf == _sg.gl.cache.stored_vertex_buffer) {
@@ -8021,7 +8057,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_buffer(_sg_buffer_t* buf, const s
             glGenBuffers(1, &gl_buf);
             SOKOL_ASSERT(gl_buf);
             _sg_gl_cache_store_buffer_binding(gl_target);
-            _sg_gl_cache_bind_buffer(gl_target, gl_buf, 0);
+            _sg_gl_cache_bind_buffer(gl_target, gl_buf);
             glBufferData(gl_target, buf->cmn.size, 0, gl_usage);
             if (buf->cmn.usage == SG_USAGE_IMMUTABLE) {
                 SOKOL_ASSERT(desc->data.ptr);
@@ -9081,9 +9117,21 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_t* bnd) {
     }
     _SG_GL_CHECK_ERROR();
 
+    // bind storage buffers
+    for (int slot = 0; slot < bnd->num_vs_sbufs; slot++) {
+        _sg_buffer_t* sb = bnd->vs_sbufs[slot];
+        GLuint gl_sb = sb->gl.buf[sb->cmn.active_slot];
+        _sg_gl_cache_bind_storage_buffer(SG_SHADERSTAGE_VS, slot, gl_sb);
+    }
+    for (int slot = 0; slot < bnd->num_fs_sbufs; slot++) {
+        _sg_buffer_t* sb = bnd->fs_sbufs[slot];
+        GLuint gl_sb = sb->gl.buf[sb->cmn.active_slot];
+        _sg_gl_cache_bind_storage_buffer(SG_SHADERSTAGE_FS, slot, gl_sb);
+    }
+
     // index buffer (can be 0)
     const GLuint gl_ib = bnd->ib ? bnd->ib->gl.buf[bnd->ib->cmn.active_slot] : 0;
-    _sg_gl_cache_bind_buffer(GL_ELEMENT_ARRAY_BUFFER, gl_ib, 0);
+    _sg_gl_cache_bind_buffer(GL_ELEMENT_ARRAY_BUFFER, gl_ib);
     _sg.gl.cache.cur_ib_offset = bnd->ib_offset;
 
     // vertex attributes
@@ -9108,7 +9156,7 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_t* bnd) {
                 (vb_offset != cache_attr->gl_attr.offset) ||
                 (cache_attr->gl_attr.divisor != attr->divisor))
             {
-                _sg_gl_cache_bind_buffer(GL_ARRAY_BUFFER, gl_vb, 0);
+                _sg_gl_cache_bind_buffer(GL_ARRAY_BUFFER, gl_vb);
                 glVertexAttribPointer(attr_index, attr->size, attr->type, attr->normalized, attr->stride, (const GLvoid*)(GLintptr)vb_offset);
                 _sg_stats_add(gl.num_vertex_attrib_pointer, 1);
                 glVertexAttribDivisor(attr_index, (GLuint)attr->divisor);
@@ -9234,7 +9282,7 @@ _SOKOL_PRIVATE void _sg_gl_update_buffer(_sg_buffer_t* buf, const sg_range* data
     SOKOL_ASSERT(gl_buf);
     _SG_GL_CHECK_ERROR();
     _sg_gl_cache_store_buffer_binding(gl_tgt);
-    _sg_gl_cache_bind_buffer(gl_tgt, gl_buf, 0);
+    _sg_gl_cache_bind_buffer(gl_tgt, gl_buf);
     glBufferSubData(gl_tgt, 0, (GLsizeiptr)data->size, data->ptr);
     _sg_gl_cache_restore_buffer_binding(gl_tgt);
     _SG_GL_CHECK_ERROR();
@@ -9253,7 +9301,7 @@ _SOKOL_PRIVATE void _sg_gl_append_buffer(_sg_buffer_t* buf, const sg_range* data
     SOKOL_ASSERT(gl_buf);
     _SG_GL_CHECK_ERROR();
     _sg_gl_cache_store_buffer_binding(gl_tgt);
-    _sg_gl_cache_bind_buffer(gl_tgt, gl_buf, 0);
+    _sg_gl_cache_bind_buffer(gl_tgt, gl_buf);
     glBufferSubData(gl_tgt, buf->cmn.append_pos, (GLsizeiptr)data->size, data->ptr);
     _sg_gl_cache_restore_buffer_binding(gl_tgt);
     _SG_GL_CHECK_ERROR();
