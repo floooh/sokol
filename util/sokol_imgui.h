@@ -2369,13 +2369,6 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     def_image_desc.label = "sokol-imgui-default-image";
     _simgui.def_img = sg_make_image(&def_image_desc);
 
-    // default font texture
-    if (!_simgui.desc.no_default_font) {
-        simgui_font_tex_desc_t simgui_font_smp_desc;
-        _simgui_clear(&simgui_font_smp_desc, sizeof(simgui_font_smp_desc));
-        simgui_create_fonts_texture(&simgui_font_smp_desc);
-    }
-
     sg_pop_debug_group();
 }
 
@@ -2515,6 +2508,11 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
     #else
         ImGuiIO* io = igGetIO();
     #endif
+    if (!io->Fonts->TexReady) {
+        simgui_font_tex_desc_t simgui_font_smp_desc;
+        _simgui_clear(&simgui_font_smp_desc, sizeof(simgui_font_smp_desc));
+        simgui_create_fonts_texture(&simgui_font_smp_desc);
+    }
     io->DisplaySize.x = ((float)desc->width) / _simgui.cur_dpi_scale;
     io->DisplaySize.y = ((float)desc->height) / _simgui.cur_dpi_scale;
     io->DeltaTime = (float)desc->delta_time;
