@@ -2432,7 +2432,7 @@ typedef struct sg_pass_action {
     as 'type erased' void pointers:
 
     GL: on all GL backends, a GL framebuffer object must be provided. This
-    can be zero for the defaul framebuffer.
+    can be zero for the default framebuffer.
 
     D3D11:
         - an ID3D11RenderTargetView for the rendering surface, without
