@@ -10,6 +10,8 @@
   with custom texture sampler attributes (the new implicit re-creation inside `simgui_new_frame()`
   calls `sg_make_sampler()` with default attributes).
 
+  Many thanks to @elloramir for the PR!
+
 ### 02-Mar-2024:
 
 - sokol_app.h emscripten: two new flags in `sapp_desc` to configure the Emscripten main loop:
