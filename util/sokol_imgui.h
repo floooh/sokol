@@ -2521,6 +2521,12 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
     #else
         ImGuiIO* io = igGetIO();
     #endif
+    if (!io->Fonts->TexReady) {
+        simgui_destroy_fonts_texture();
+        simgui_font_tex_desc_t simgui_font_smp_desc;
+        _simgui_clear(&simgui_font_smp_desc, sizeof(simgui_font_smp_desc));
+        simgui_create_fonts_texture(&simgui_font_smp_desc);
+    }
     io->DisplaySize.x = ((float)desc->width) / _simgui.cur_dpi_scale;
     io->DisplaySize.y = ((float)desc->height) / _simgui.cur_dpi_scale;
     io->DeltaTime = (float)desc->delta_time;
