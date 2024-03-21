@@ -1,5 +1,15 @@
 ## Updates
 
+### 21-Mar-2024:
+
+- sokol_imgui.h: merged PR https://github.com/floooh/sokol/pull/1010, this will automatically
+  re-create the sokol-gfx font texture resources in the `simgui_new_frame()` call
+  when the Dear ImGui texture atlas has changed. This is an alternative to calling the
+  functions `simgui_create_fonts_texture()` and `simgui_destroy_fonts_texture()` manually.
+  One important reason why you'd want to call those functions manually is to create the fonts texture
+  with custom texture sampler attributes (the new implicit re-creation inside `simgui_new_frame()`
+  calls `sg_make_sampler()` with default attributes).
+
 ### 02-Mar-2024:
 
 - sokol_app.h emscripten: two new flags in `sapp_desc` to configure the Emscripten main loop:
