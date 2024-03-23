@@ -31,9 +31,9 @@ cleanup in sokol_gfx.h)
 
 - A [Minigolf game](https://mgerdes.github.io/minigolf.html) ([source](https://github.com/mgerdes/minigolf)).
 
-- - [hIghQube](https://github.com/RuiVarela/hIghQube) A game demo that used sokol rendering extensively
+- [hIghQube](https://github.com/RuiVarela/hIghQube) A game demo that used sokol rendering extensively
 
-- - [Senos](https://github.com/RuiVarela/Senos) A music app that uses sokol as backend
+- [Senos](https://github.com/RuiVarela/Senos) A music app that uses sokol as backend
 
 - ['Dealer's Dungeon'](https://dealers-dungeon.com/demo/) ([lower graphics quality](https://dealers-dungeon.com/demo/?q=3),
 [source](https://github.com/bqqbarbhg/spear))
