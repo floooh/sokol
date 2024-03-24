@@ -58,6 +58,10 @@ jobs:
         with:
           repository: floooh/sokol-rust
           path: bindgen/sokol-rust
+      - uses: actions/checkout@v4
+        with:
+          repository: kassane/sokol-d
+          path: bindgen/sokol-d
       - name: generate
         run: |
           cd bindgen
@@ -88,6 +92,12 @@ jobs:
           name: ignore-me-rust
           retention-days: 1
           path: bindgen/sokol-rust/src
+      - name: upload-d-artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ignore-me-d
+          retention-days: 1
+          path: bindgen/sokol-d/src/sokol
 
   test-zig:
     needs: gen-bindings
@@ -238,6 +248,32 @@ jobs:
             cargo --version
             cargo build --examples --verbose
 
+  test-d:
+    needs: gen-bindings
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{matrix.os}}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: kassane/sokol-d
+      - uses: goto-bus-stop/setup-zig@v2
+      - uses: dlang-community/setup-dlang@v1
+        with:
+          compiler: ldc-master
+      - uses: actions/download-artifact@v3
+        with:
+          name: ignore-me-d
+          path: src/sokol
+      - name: prepare
+        if: runner.os == 'Linux'
+        run: |
+            sudo apt-get update
+            sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+      - name: build
+        run: zig build --summary all
+
   # only deploy the bindings for commits on the main branch
   deploy-zig:
     needs: test-zig
@@ -326,6 +362,27 @@ jobs:
           git config user.email "none"
           git config user.name "GH Action"
           git status -vv
+          git add -A
+          git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
+          git push
+
+  deploy-d:
+    needs: test-d
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: kassane/sokol-d
+          ssh-key: ${{ secrets.GHACTIONS_D_PUSH }}
+      - uses: actions/download-artifact@v3
+        with:
+          name: ignore-me-d
+          path: src/sokol
+      - name: "commit and push"
+        run: |
+          git config user.email "none"
+          git config user.name "GH Action"
           git add -A
           git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
           git push
