@@ -1,8 +1,15 @@
-# Sokol
+<p align="center">
+    <img src="assets/logo_full_large.png" style="width: 60%" />
+    </br>
+    </br>
+    Simple
+    <a href="https://github.com/nothings/stb/blob/master/docs/stb_howto.txt">STB-style</a>
+    cross-platform libraries for C and C++, written in C.
+    </br>
+    </br>
+</p>
 
-Simple
-[STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
-cross-platform libraries for C and C++, written in C.
+# Sokol
 
 [**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**29-Feb-2024**: **BREAKING CHANGES** 'unified render pass'
 cleanup in sokol_gfx.h)
