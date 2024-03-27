@@ -17,7 +17,7 @@
     platform-specific embedded shader code (these are the same defines as
     used by sokol_gfx.h and sokol_app.h):
 
-    SOKOL_GLCORE33
+    SOKOL_GLCORE
     SOKOL_GLES3
     SOKOL_D3D11
     SOKOL_METAL
@@ -1013,7 +1013,7 @@ inline sgl_pipeline sgl_context_make_pipeline(sgl_context ctx, const sg_pipeline
     @program sgl vs fs
 */
 
-#if defined(SOKOL_GLCORE33)
+#if defined(SOKOL_GLCORE)
 static const char _sgl_vs_source_glsl330[478] = {
     0x23,0x76,0x65,0x72,0x73,0x69,0x6f,0x6e,0x20,0x33,0x33,0x30,0x0a,0x0a,0x75,0x6e,
     0x69,0x66,0x6f,0x72,0x6d,0x20,0x76,0x65,0x63,0x34,0x20,0x76,0x73,0x5f,0x70,0x61,
@@ -2202,7 +2202,7 @@ static const char _sgl_fs_source_wgsl[647] = {
 static const char* _sgl_vs_source_dummy = "";
 static const char* _sgl_fs_source_dummy = "";
 #else
-#error "Please define one of SOKOL_GLCORE33, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND!"
+#error "Please define one of SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND!"
 #endif
 
 // ████████ ██    ██ ██████  ███████ ███████
@@ -3284,7 +3284,7 @@ static void _sgl_setup_common(void) {
     shd_desc.fs.image_sampler_pairs[0].sampler_slot = 0;
     shd_desc.fs.image_sampler_pairs[0].glsl_name = "tex_smp";
     shd_desc.label = "sgl-shader";
-    #if defined(SOKOL_GLCORE33)
+    #if defined(SOKOL_GLCORE)
         shd_desc.vs.source = _sgl_vs_source_glsl330;
         shd_desc.fs.source = _sgl_fs_source_glsl330;
     #elif defined(SOKOL_GLES3)

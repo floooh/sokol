@@ -11,7 +11,7 @@
             "generator": "Ninja",
             "binaryDir": "build/macos_gl_debug",
             "cacheVariables": {
-                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "SOKOL_BACKEND": "SOKOL_GLCORE",
                 "CMAKE_BUILD_TYPE": "Debug"
             }
         },
@@ -20,7 +20,7 @@
             "generator": "Ninja",
             "binaryDir": "build/macos_gl_release",
             "cacheVariables": {
-                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "SOKOL_BACKEND": "SOKOL_GLCORE",
                 "CMAKE_BUILD_TYPE": "Release"
             }
         },
@@ -29,7 +29,7 @@
             "generator": "Ninja",
             "binaryDir": "build/macos_gl_analyze",
             "cacheVariables": {
-                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "SOKOL_BACKEND": "SOKOL_GLCORE",
                 "CMAKE_BUILD_TYPE": "Debug",
                 "USE_ANALYZER": {
                     "type": "BOOL",
@@ -77,7 +77,7 @@
             "generator": "Ninja",
             "binaryDir": "build/macos_arc_gl_debug",
             "cacheVariables": {
-                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "SOKOL_BACKEND": "SOKOL_GLCORE",
                 "USE_ARC": {
                     "type": "BOOL",
                     "value": "ON"
@@ -90,7 +90,7 @@
             "generator": "Ninja",
             "binaryDir": "build/macos_arc_gl_release",
             "cacheVariables": {
-                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "SOKOL_BACKEND": "SOKOL_GLCORE",
                 "USE_ARC": {
                     "type": "BOOL",
                     "value": "ON"
@@ -103,7 +103,7 @@
             "generator": "Ninja",
             "binaryDir": "build/macos_arc_gl_analyze",
             "cacheVariables": {
-                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "SOKOL_BACKEND": "SOKOL_GLCORE",
                 "USE_ARC": {
                     "type": "BOOL",
                     "value": "ON"
@@ -283,7 +283,7 @@
             "generator": "Ninja",
             "binaryDir": "build/linux_gl_debug",
             "cacheVariables": {
-                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "SOKOL_BACKEND": "SOKOL_GLCORE",
                 "CMAKE_BUILD_TYPE": "Debug"
             }
         },
@@ -292,7 +292,7 @@
             "generator": "Ninja",
             "binaryDir": "build/linux_gl_release",
             "cacheVariables": {
-                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "SOKOL_BACKEND": "SOKOL_GLCORE",
                 "CMAKE_BUILD_TYPE": "Release"
             }
         },
@@ -301,7 +301,7 @@
             "generator": "Ninja",
             "binaryDir": "build/linux_gl_analyze",
             "cacheVariables": {
-                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "SOKOL_BACKEND": "SOKOL_GLCORE",
                 "CMAKE_BUILD_TYPE": "Debug",
                 "USE_ANALYZER": {
                     "type": "BOOL",
@@ -349,7 +349,7 @@
             "generator": "Ninja",
             "binaryDir": "build/linux_gl_egl_debug",
             "cacheVariables": {
-                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "SOKOL_BACKEND": "SOKOL_GLCORE",
                 "SOKOL_FORCE_EGL": {
                     "type": "BOOL",
                     "value": "ON"
@@ -362,7 +362,7 @@
             "generator": "Ninja",
             "binaryDir": "build/linux_gl_egl_release",
             "cacheVariables": {
-                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "SOKOL_BACKEND": "SOKOL_GLCORE",
                 "SOKOL_FORCE_EGL": {
                     "type": "BOOL",
                     "value": "ON"
@@ -470,7 +470,7 @@
             "name": "win_gl",
             "binaryDir": "build/win_gl",
             "cacheVariables": {
-                "SOKOL_BACKEND": "SOKOL_GLCORE33"
+                "SOKOL_BACKEND": "SOKOL_GLCORE"
             }
         },
         {
@@ -478,7 +478,7 @@
             "generator": "Ninja",
             "binaryDir": "build/win_gl_analyze",
             "cacheVariables": {
-                "SOKOL_BACKEND": "SOKOL_GLCORE33",
+                "SOKOL_BACKEND": "SOKOL_GLCORE",
                 "CMAKE_BUILD_TYPE": "Debug",
                 "USE_ANALYZER": {
                     "type": "BOOL",

@@ -1140,7 +1140,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_resource_slot(const sg_slot_info* slot) {
 
 _SOKOL_PRIVATE const char* _sgimgui_backend_string(sg_backend b) {
     switch (b) {
-        case SG_BACKEND_GLCORE33:           return "SG_BACKEND_GLCORE33";
+        case SG_BACKEND_GLCORE:             return "SG_BACKEND_GLCORE";
         case SG_BACKEND_GLES3:              return "SG_BACKEND_GLES3";
         case SG_BACKEND_D3D11:              return "SG_BACKEND_D3D11";
         case SG_BACKEND_METAL_IOS:          return "SG_BACKEND_METAL_IOS";
@@ -4033,7 +4033,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_swapchain_panel(sg_swapchain* swapchain) {
             igText("  Depth Stencil Texture: %p", swapchain->metal.depth_stencil_texture);
             igText("  MSAA Color Texture: %p", swapchain->metal.msaa_color_texture);
             break;
-        case SG_BACKEND_GLCORE33:
+        case SG_BACKEND_GLCORE:
         case SG_BACKEND_GLES3:
             igText("GL Objects:");
             igText("  Framebuffer: %d", swapchain->gl.framebuffer);
@@ -4196,6 +4196,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
     igText("    image_clamp_to_border: %s", _sgimgui_bool_string(f.image_clamp_to_border));
     igText("    mrt_independent_blend_state: %s", _sgimgui_bool_string(f.mrt_independent_blend_state));
     igText("    mrt_independent_write_mask: %s", _sgimgui_bool_string(f.mrt_independent_write_mask));
+    igText("    storage_buffer: %s", _sgimgui_bool_string(f.storage_buffer));
     sg_limits l = sg_query_limits();
     igText("\nLimits:\n");
     igText("    max_image_size_2d: %d", l.max_image_size_2d);
@@ -4263,7 +4264,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(sgimgui_t* ctx) {
         _sgimgui_frame_stats(size_append_buffer);
         _sgimgui_frame_stats(size_update_image);
         switch (sg_query_backend()) {
-            case SG_BACKEND_GLCORE33:
+            case SG_BACKEND_GLCORE:
             case SG_BACKEND_GLES3:
                 _sgimgui_frame_stats(gl.num_bind_buffer);
                 _sgimgui_frame_stats(gl.num_active_texture);
@@ -4309,6 +4310,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(sgimgui_t* ctx) {
                 _sgimgui_frame_stats(metal.bindings.num_set_vertex_buffer);
                 _sgimgui_frame_stats(metal.bindings.num_set_vertex_texture);
                 _sgimgui_frame_stats(metal.bindings.num_set_vertex_sampler_state);
+                _sgimgui_frame_stats(metal.bindings.num_set_fragment_buffer);
                 _sgimgui_frame_stats(metal.bindings.num_set_fragment_texture);
                 _sgimgui_frame_stats(metal.bindings.num_set_fragment_sampler_state);
                 _sgimgui_frame_stats(metal.uniforms.num_set_vertex_buffer_offset);

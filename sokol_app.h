@@ -18,7 +18,7 @@
     the backend selected for sokol_gfx.h if both are used in the same
     project):
 
-        #define SOKOL_GLCORE33
+        #define SOKOL_GLCORE
         #define SOKOL_GLES3
         #define SOKOL_D3D11
         #define SOKOL_METAL
@@ -47,7 +47,7 @@
     On Windows, SOKOL_DLL will define SOKOL_APP_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
-    On Linux, SOKOL_GLCORE33 can use either GLX or EGL.
+    On Linux, SOKOL_GLCORE can use either GLX or EGL.
     GLX is default, set SOKOL_FORCE_EGL to override.
 
     For example code, see https://github.com/floooh/sokol-samples/tree/master/sapp
@@ -1959,8 +1959,8 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
         /* MacOS */
         #define _SAPP_MACOS (1)
-        #if !defined(SOKOL_METAL) && !defined(SOKOL_GLCORE33)
-        #error("sokol_app.h: unknown 3D API selected for MacOS, must be SOKOL_METAL or SOKOL_GLCORE33")
+        #if !defined(SOKOL_METAL) && !defined(SOKOL_GLCORE)
+        #error("sokol_app.h: unknown 3D API selected for MacOS, must be SOKOL_METAL or SOKOL_GLCORE")
         #endif
     #else
         /* iOS or iOS Simulator */
@@ -1978,8 +1978,8 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(_WIN32)
     /* Windows (D3D11 or GL) */
     #define _SAPP_WIN32 (1)
-    #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE33)
-    #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11 or SOKOL_GLCORE33")
+    #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE)
+    #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11 or SOKOL_GLCORE")
     #endif
 #elif defined(__ANDROID__)
     /* Android */
@@ -1993,7 +1993,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(__linux__) || defined(__unix__)
     /* Linux */
     #define _SAPP_LINUX (1)
-    #if defined(SOKOL_GLCORE33)
+    #if defined(SOKOL_GLCORE)
         #if !defined(SOKOL_FORCE_EGL)
             #define _SAPP_GLX (1)
         #endif
@@ -2003,13 +2003,13 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #include <GLES3/gl3.h>
         #include <GLES3/gl3ext.h>
     #else
-        #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE33, SOKOL_GLES3")
+        #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE, SOKOL_GLES3")
     #endif
 #else
 #error "sokol_app.h: Unknown platform"
 #endif
 
-#if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES3)
+#if defined(SOKOL_GLCORE) || defined(SOKOL_GLES3)
     #define _SAPP_ANY_GL (1)
 #endif
 
@@ -2399,11 +2399,11 @@ _SOKOL_PRIVATE double _sapp_timing_get_avg(_sapp_timing_t* t) {
 #if defined(SOKOL_METAL)
     @interface _sapp_macos_view : MTKView
     @end
-#elif defined(SOKOL_GLCORE33)
+#elif defined(SOKOL_GLCORE)
     @interface _sapp_macos_view : NSOpenGLView
     - (void)timerFired:(id)sender;
     @end
-#endif // SOKOL_GLCORE33
+#endif // SOKOL_GLCORE
 
 typedef struct {
     uint32_t flags_changed_store;
@@ -2545,7 +2545,7 @@ typedef struct {
     uint8_t raw_input_data[256];
 } _sapp_win32_t;
 
-#if defined(SOKOL_GLCORE33)
+#if defined(SOKOL_GLCORE)
 #define WGL_NUMBER_PIXEL_FORMATS_ARB 0x2000
 #define WGL_SUPPORT_OPENGL_ARB 0x2010
 #define WGL_DRAW_TO_WINDOW_ARB 0x2001
@@ -2605,7 +2605,7 @@ typedef struct {
     HWND msg_hwnd;
     HDC msg_dc;
 } _sapp_wgl_t;
-#endif // SOKOL_GLCORE33
+#endif // SOKOL_GLCORE
 
 #endif // _SAPP_WIN32
 
@@ -2876,7 +2876,7 @@ typedef struct {
         _sapp_win32_t win32;
         #if defined(SOKOL_D3D11)
             _sapp_d3d11_t d3d11;
-        #elif defined(SOKOL_GLCORE33)
+        #elif defined(SOKOL_GLCORE)
             _sapp_wgl_t wgl;
         #endif
     #elif defined(_SAPP_ANDROID)
@@ -3650,7 +3650,7 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
         const int cur_fb_height = (int)roundf(fb_size.height);
         const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) ||
                                  (_sapp.framebuffer_height != cur_fb_height);
-    #elif defined(SOKOL_GLCORE33)
+    #elif defined(SOKOL_GLCORE)
         const int cur_fb_width = (int)roundf(bounds.size.width * _sapp.dpi_scale);
         const int cur_fb_height = (int)roundf(bounds.size.height * _sapp.dpi_scale);
         const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) ||
@@ -3892,7 +3892,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         _sapp.macos.window.contentView = _sapp.macos.view;
         [_sapp.macos.window makeFirstResponder:_sapp.macos.view];
         _sapp.macos.view.layer.magnificationFilter = kCAFilterNearest;
-    #elif defined(SOKOL_GLCORE33)
+    #elif defined(SOKOL_GLCORE)
         NSOpenGLPixelFormatAttribute attrs[32];
         int i = 0;
         attrs[i++] = NSOpenGLPFAAccelerated;
@@ -4124,7 +4124,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 @end
 
 @implementation _sapp_macos_view
-#if defined(SOKOL_GLCORE33)
+#if defined(SOKOL_GLCORE)
 - (void)timerFired:(id)sender {
     _SOKOL_UNUSED(sender);
     [self setNeedsDisplay:YES];
@@ -4224,7 +4224,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events(void) {
 
 // helper function to make GL context active
 static void _sapp_gl_make_current(void) {
-    #if defined(SOKOL_GLCORE33)
+    #if defined(SOKOL_GLCORE)
     [[_sapp.macos.view openGLContext] makeCurrentContext];
     #endif
 }
@@ -5945,7 +5945,7 @@ int main(int argc, char* argv[]) {
 //  ██████  ███████     ██   ██ ███████ ███████ ██      ███████ ██   ██ ███████
 //
 // >>gl helpers
-#if defined(SOKOL_GLCORE33)
+#if defined(SOKOL_GLCORE)
 typedef struct {
     int         red_bits;
     int         green_bits;
@@ -6596,7 +6596,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_present(bool do_not_wait) {
 
 #endif /* SOKOL_D3D11 */
 
-#if defined(SOKOL_GLCORE33)
+#if defined(SOKOL_GLCORE)
 _SOKOL_PRIVATE void _sapp_wgl_init(void) {
     _sapp.wgl.opengl32 = LoadLibraryA("opengl32.dll");
     if (!_sapp.wgl.opengl32) {
@@ -6894,7 +6894,7 @@ _SOKOL_PRIVATE void _sapp_wgl_swap_buffers(void) {
     /* FIXME: DwmIsCompositionEnabled? (see GLFW) */
     SwapBuffers(_sapp.win32.dc);
 }
-#endif /* SOKOL_GLCORE33 */
+#endif /* SOKOL_GLCORE */
 
 _SOKOL_PRIVATE bool _sapp_win32_wide_to_utf8(const wchar_t* src, char* dst, int dst_num_bytes) {
     SOKOL_ASSERT(src && dst && (dst_num_bytes > 1));
@@ -7311,7 +7311,7 @@ _SOKOL_PRIVATE void _sapp_win32_timing_measure(void) {
         // fallback if swap model isn't "flip-discard" or GetFrameStatistics failed for another reason
         _sapp_timing_measure(&_sapp.timing);
     #endif
-    #if defined(SOKOL_GLCORE33)
+    #if defined(SOKOL_GLCORE)
         _sapp_timing_measure(&_sapp.timing);
     #endif
 }
@@ -7513,7 +7513,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     // present with DXGI_PRESENT_DO_NOT_WAIT
                     _sapp_d3d11_present(true);
                 #endif
-                #if defined(SOKOL_GLCORE33)
+                #if defined(SOKOL_GLCORE)
                     _sapp_wgl_swap_buffers();
                 #endif
                 /* NOTE: resizing the swap-chain during resize leads to a substantial
@@ -7926,7 +7926,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         _sapp_d3d11_create_device_and_swapchain();
         _sapp_d3d11_create_default_render_target();
     #endif
-    #if defined(SOKOL_GLCORE33)
+    #if defined(SOKOL_GLCORE)
         _sapp_wgl_init();
         _sapp_wgl_load_extensions();
         _sapp_wgl_create_context();
@@ -7954,7 +7954,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
                 Sleep((DWORD)(16 * _sapp.swap_interval));
             }
         #endif
-        #if defined(SOKOL_GLCORE33)
+        #if defined(SOKOL_GLCORE)
             _sapp_wgl_swap_buffers();
         #endif
         /* check for window resized, this cannot happen in WM_SIZE as it explodes memory usage */
@@ -10947,7 +10947,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
 #if !defined(_SAPP_GLX)
 
 _SOKOL_PRIVATE void _sapp_egl_init(void) {
-#if defined(SOKOL_GLCORE33)
+#if defined(SOKOL_GLCORE)
     if (!eglBindAPI(EGL_OPENGL_API)) {
         _SAPP_PANIC(LINUX_EGL_BIND_OPENGL_API_FAILED);
     }
@@ -10971,7 +10971,7 @@ _SOKOL_PRIVATE void _sapp_egl_init(void) {
     EGLint alpha_size = _sapp.desc.alpha ? 8 : 0;
     const EGLint config_attrs[] = {
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-        #if defined(SOKOL_GLCORE33)
+        #if defined(SOKOL_GLCORE)
             EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
         #elif defined(SOKOL_GLES3)
             EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
@@ -11034,7 +11034,7 @@ _SOKOL_PRIVATE void _sapp_egl_init(void) {
     }
 
     EGLint ctx_attrs[] = {
-        #if defined(SOKOL_GLCORE33)
+        #if defined(SOKOL_GLCORE)
             EGL_CONTEXT_MAJOR_VERSION, _sapp.desc.gl_major_version,
             EGL_CONTEXT_MINOR_VERSION, _sapp.desc.gl_minor_version,
             EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
