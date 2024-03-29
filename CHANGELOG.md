@@ -176,7 +176,7 @@ Plus 2 minor drive-by fixes:
 - sokol_app.h android: Touch event coordinates are now using AMotionEvent_getX/Y() instead
   of AMotionEvent_getRawX/Y(). The raw functions don't work well in multi-window
   scenarios. See PR https://github.com/floooh/sokol/pull/974 for details.
-  Many thanks to Github user @Comanx!
+  Many thanks to GitHub user @Comanx!
 
 #### 19-Jan-2024
 
@@ -1104,7 +1104,7 @@ GLES2/WebGL1 support has been removed from the sokol headers (now that
   buffer with retained references).
 
 - **15-Dec-2022**: A small but important update in sokol_imgui.h which fixes
-  touch input handling on mobile devices. Many thanks to github user @Xadiant
+  touch input handling on mobile devices. Many thanks to GitHub user @Xadiant
   for the bug investigation and [PR](https://github.com/floooh/sokol/pull/760).
 
 - **25-Nov-2022**: Some code cleanup around resource creation and destruction in sokol_gfx.h:
@@ -1180,7 +1180,7 @@ GLES2/WebGL1 support has been removed from the sokol headers (now that
 
 - **03-Nov-2022** The language bindings generation has been updated for Zig 0.10.0,
   and clang-14 (there was a minor change in the JSON ast-dump format).
-  Many thanks to github user @kcbanner for the Zig PR!
+  Many thanks to GitHub user @kcbanner for the Zig PR!
 
 - **02-Nov-2022** A new header sokol_spine.h (in the util dir), this is a
   renderer and 'handle wrapper' around the spine-c runtime (Spine is a popular 2D
@@ -1193,14 +1193,14 @@ GLES2/WebGL1 support has been removed from the sokol headers (now that
 - **22-Oct-2022** All sokol headers now allow to override logging with a
   callback function (installed in the setup call) instead of defining a SOKOL_LOG
   macro. Overriding SOKOL_LOG still works as default fallback, but this is no
-  longer documented, consider this deprecated. Many thanks to github user
+  longer documented, consider this deprecated. Many thanks to GitHub user
   @Manuzor for the PR (see https://github.com/floooh/sokol/pull/721 for details)
 
 - **21-Oct-2022** RGB9E5 pixel format support in sokol_gfx.h and a GLES2 related
   bugfix in the sokol_app.h Android backend:
   - sokol_gfx.h now supports RGB9E5 textures (3*9 bit RGB + 5 bit shared exponent),
     this works in all backends except GLES2 and WebGL1 (use ```sg_query_pixelformat()```
-    to check for runtime support). Many thanks to github user @allcreater for the PR!
+    to check for runtime support). Many thanks to GitHub user @allcreater for the PR!
   - a bugfix in the sokol_app.h Android backend: when forcing a GLES2 context via
     sapp_desc.gl_force_gles2, the Android backend correctly created a GLES2 context,
     but then didn't communicate this through the function ```sapp_gles2()``` (which
@@ -1303,7 +1303,7 @@ work.
 - **29-May-2022**: The code generation scripts for the
 [sokol-nim](https://github.com/floooh/sokol-nim) language bindings have been
 revised and updated, many thanks to Gustav Olsson for the PR! (I'm planning to
-spend a few more days integrating the bindings generation with Github Actions,
+spend a few more days integrating the bindings generation with GitHub Actions,
 so that it's easier to publish new bindings after updates to the sokol headers).
 
 - **26-May-2022**: The GL backend in sokol_app.h now allows to override the GL
@@ -1316,7 +1316,7 @@ so that it's easier to publish new bindings after updates to the sokol headers).
   (Android, iOS, web). Furthermore, on macOS only the GL versions 3.2 and 4.1
   are available (plus the special config major=1 minor=0 creates an
   NSOpenGLProfileVersionLegacy context). In general: use at your risk :) Many
-  thanks to Github user @pplux for the PR!
+  thanks to GitHub user @pplux for the PR!
 
 - **15-May-2022**: The way internal memory allocation can be overridden with
   your own functions has been changed from global macros to callbacks
@@ -1554,7 +1554,7 @@ so that it's easier to publish new bindings after updates to the sokol headers).
 - **19-Dec-2021**: some sokol_audio.h changes:
   - on Windows, sokol_audio.h no longer converts audio samples
     from float to int16_t, but instead configures WASAPI to directly accept
-    float samples. Many thanks to github user iOrange for the PR!
+    float samples. Many thanks to GitHub user iOrange for the PR!
   - sokol_audio.h has a new public function ```saudio_suspended()``` which
     returns true if the audio device/context is currently in suspended mode.
     On all backends except WebAudio this always returns false. This allows
