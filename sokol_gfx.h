@@ -1851,7 +1851,7 @@ typedef enum sg_image_type {
     is compatible with what the shader expects. Apart from the sokol-gfx
     validation layer, WebGPU is the only backend API which actually requires
     matching texture and sampler type to be provided upfront for validation
-    (after 3D APIs treat texture/sampler type mismatches as undefined behaviour).
+    (other 3D APIs treat texture/sampler type mismatches as undefined behaviour).
 
     NOTE that the following texture pixel formats require the use
     of SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT, combined with a sampler
