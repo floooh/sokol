@@ -1156,6 +1156,7 @@ _SOKOL_PRIVATE const char* _sgimgui_buffertype_string(sg_buffer_type t) {
     switch (t) {
         case SG_BUFFERTYPE_VERTEXBUFFER:    return "SG_BUFFERTYPE_VERTEXBUFFER";
         case SG_BUFFERTYPE_INDEXBUFFER:     return "SG_BUFFERTYPE_INDEXBUFFER";
+        case SG_BUFFERTYPE_STORAGEBUFFER:   return "SG_BUFFERTYPE_STORAGEBUFFER";
         default:                            return "???";
     }
 }
