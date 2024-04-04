@@ -5781,7 +5781,6 @@ typedef struct {
         } swapchain;
     } cur_pass;
     sg_pipeline cur_pipeline;
-    bool apply_bindings_called;
     bool next_draw_valid;
     #if defined(SOKOL_DEBUG)
     sg_log_item validate_error;
@@ -18150,7 +18149,6 @@ SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(_sg.cur_pass.in_pass);
     _sg_stats_add(num_apply_pipeline, 1);
-    _sg.apply_bindings_called = false;
     if (!_sg_validate_apply_pipeline(pip_id)) {
         _sg.next_draw_valid = false;
         return;
@@ -18173,7 +18171,6 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
     SOKOL_ASSERT(bindings);
     SOKOL_ASSERT((bindings->_start_canary == 0) && (bindings->_end_canary==0));
     _sg_stats_add(num_apply_bindings, 1);
-    _sg.apply_bindings_called = true;
     if (!_sg_validate_apply_bindings(bindings)) {
         _sg.next_draw_valid = false;
         return;
@@ -18327,18 +18324,10 @@ SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instance
     SOKOL_ASSERT(num_elements >= 0);
     SOKOL_ASSERT(num_instances >= 0);
     _sg_stats_add(num_draw, 1);
-    #if defined(SOKOL_DEBUG)
-        if (!_sg.apply_bindings_called) {
-            _SG_WARN(DRAW_WITHOUT_BINDINGS);
-        }
-    #endif
     if (!_sg.cur_pass.valid) {
         return;
     }
     if (!_sg.next_draw_valid) {
-        return;
-    }
-    if (!_sg.apply_bindings_called) {
         return;
     }
     /* attempting to draw with zero elements or instances is not technically an
