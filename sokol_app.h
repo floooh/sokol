@@ -313,9 +313,14 @@
             objects and values required for rendering. If sokol_app.h
             is not compiled with SOKOL_WGPU, these functions return null.
 
-        const uint32_t sapp_gl_get_framebuffer(void)
+        uint32_t sapp_gl_get_framebuffer(void)
             This returns the 'default framebuffer' of the GL context.
             Typically this will be zero.
+
+        int sapp_gl_get_major_version(void)
+        int sapp_gl_get_minor_version(void)
+            Returns the major and minor version of the GL context
+            (only for SOKOL_GLCORE, all other backends return zero here, including SOKOL_GLES3)
 
         const void* sapp_android_get_native_activity(void);
             On Android, get the native activity ANativeActivity pointer, otherwise
@@ -1892,6 +1897,10 @@ SOKOL_APP_API_DECL const void* sapp_wgpu_get_depth_stencil_view(void);
 
 /* GL: get framebuffer object */
 SOKOL_APP_API_DECL uint32_t sapp_gl_get_framebuffer(void);
+/* GL: get major version (only valid for desktop GL) */
+SOKOL_APP_API_DECL int sapp_gl_get_major_version(void);
+/* GL: get minor version (only valid for desktop GL) */
+SOKOL_APP_API_DECL int sapp_gl_get_minor_version(void);
 
 /* Android: get native activity handle */
 SOKOL_APP_API_DECL const void* sapp_android_get_native_activity(void);
@@ -3085,8 +3094,13 @@ _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* desc) {
     // (or expressed differently: zero is a valid value for gl_minor_version
     // and can't be used to indicate 'default')
     if (0 == res.gl_major_version) {
-        res.gl_major_version = 3;
-        res.gl_minor_version = 2;
+        #if defined(_SAPP_APPLE)
+            res.gl_major_version = 4;
+            res.gl_minor_version = 1;
+        #else
+            res.gl_major_version = 4;
+            res.gl_minor_version = 3;
+        #endif
     }
     res.html5_canvas_name = _sapp_def(res.html5_canvas_name, "canvas");
     res.clipboard_size = _sapp_def(res.clipboard_size, 8192);
@@ -11748,6 +11762,24 @@ SOKOL_API_IMPL uint32_t sapp_gl_get_framebuffer(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_ANY_GL)
         return _sapp.gl.framebuffer;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL int sapp_gl_get_major_version(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_GLCORE)
+        return _sapp.desc.gl_major_version;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL int sapp_gl_get_minor_version(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_GLCORE)
+        return _sapp.desc.gl_minor_version;
     #else
         return 0;
     #endif
