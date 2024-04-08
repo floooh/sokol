@@ -3849,8 +3849,8 @@ static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* i
     pip_desc.colors[0].blend.enabled = true;
     pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
     pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-    pip_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ZERO;
-    pip_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
+    pip_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+    pip_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ZERO;
     pip_desc.label = "sdtx-pipeline";
     ctx->pip = sg_make_pipeline(&pip_desc);
     SOKOL_ASSERT(SG_INVALID_ID != ctx->pip.id);
