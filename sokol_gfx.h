@@ -9258,19 +9258,20 @@ _SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_inst
     SOKOL_ASSERT(_sg.gl.cache.cur_pipeline);
     const GLenum i_type = _sg.gl.cache.cur_index_type;
     const GLenum p_type = _sg.gl.cache.cur_primitive_type;
+    const bool use_instanced_draw = (num_instances > 1) || (_sg.gl.cache.cur_pipeline->cmn.use_instanced_draw);
     if (0 != i_type) {
         // indexed rendering
         const int i_size = (i_type == GL_UNSIGNED_SHORT) ? 2 : 4;
         const int ib_offset = _sg.gl.cache.cur_ib_offset;
         const GLvoid* indices = (const GLvoid*)(GLintptr)(base_element*i_size+ib_offset);
-        if (_sg.gl.cache.cur_pipeline->cmn.use_instanced_draw) {
+        if (use_instanced_draw) {
             glDrawElementsInstanced(p_type, num_elements, i_type, indices, num_instances);
         } else {
             glDrawElements(p_type, num_elements, i_type, indices);
         }
     } else {
         // non-indexed rendering
-        if (_sg.gl.cache.cur_pipeline->cmn.use_instanced_draw) {
+        if (use_instanced_draw) {
             glDrawArraysInstanced(p_type, base_element, num_elements, num_instances);
         } else {
             glDrawArrays(p_type, base_element, num_elements);
@@ -11185,8 +11186,9 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_uniforms(sg_shader_stage stage_index, int ub
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_draw(int base_element, int num_elements, int num_instances) {
+    const bool use_instanced_draw = (num_instances > 1) || (_sg.d3d11.use_instanced_draw);
     if (_sg.d3d11.use_indexed_draw) {
-        if (_sg.d3d11.use_instanced_draw) {
+        if (use_instanced_draw) {
             _sg_d3d11_DrawIndexedInstanced(_sg.d3d11.ctx, (UINT)num_elements, (UINT)num_instances, (UINT)base_element, 0, 0);
             _sg_stats_add(d3d11.draw.num_draw_indexed_instanced, 1);
         } else {
@@ -11194,7 +11196,7 @@ _SOKOL_PRIVATE void _sg_d3d11_draw(int base_element, int num_elements, int num_i
             _sg_stats_add(d3d11.draw.num_draw_indexed, 1);
         }
     } else {
-        if (_sg.d3d11.use_instanced_draw) {
+        if (use_instanced_draw) {
             _sg_d3d11_DrawInstanced(_sg.d3d11.ctx, (UINT)num_elements, (UINT)num_instances, (UINT)base_element, 0);
             _sg_stats_add(d3d11.draw.num_draw_instanced, 1);
         } else {
