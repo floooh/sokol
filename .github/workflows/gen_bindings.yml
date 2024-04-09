@@ -182,7 +182,7 @@ jobs:
         name: prepare-windows
         shell: cmd
         run: |
-          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2023-08/odin-windows-amd64-dev-2023-08.zip --output odin.zip
+          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2024-04/odin-windows-amd64-dev-2024-04.zip --output odin.zip
           unzip odin.zip
           build_clibs_windows.cmd
       - name: build
