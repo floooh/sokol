@@ -148,9 +148,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # FIXME: macOS Odin vs Homebrew LLVM currently seems broken
-        # os: [ubuntu-latest, macos-latest, windows-latest]
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v4
@@ -165,24 +163,33 @@ jobs:
         name: prepare-linux
         run: |
           sudo apt-get update
-          sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev llvm-14
-          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2023-08/odin-ubuntu-amd64-dev-2023-08.zip --output odin.zip
+          sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          echo "/usr/lib/llvm-17/bin" >> $GITHUB_PATH
+          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2024-04/odin-ubuntu-amd64-dev-2024-04.zip --output odin.zip
           unzip odin.zip
+          unzip dist.zip
+          rm -r ./dist/examples
+          mv ./dist/* ./
           chmod a+x ./odin
           ./build_clibs_linux.sh
       - if: runner.os == 'macOS'
         name: prepare-macos
         run: |
-          brew install llvm@14
-          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2023-08/odin-macos-amd64-dev-2023-08.zip --output odin.zip
+          brew install llvm@17
+          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2024-04/odin-macos-amd64-dev-2024-04.zip --output odin.zip
           unzip odin.zip
+          unzip dist.zip
+          rm -r ./dist/examples
+          mv ./dist/* ./
           chmod a+x ./odin
           ./build_clibs_macos.sh
       - if: runner.os == 'Windows'
         name: prepare-windows
         shell: cmd
         run: |
-          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2023-08/odin-windows-amd64-dev-2023-08.zip --output odin.zip
+          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2024-04/odin-windows-amd64-dev-2024-04.zip --output odin.zip
           unzip odin.zip
           build_clibs_windows.cmd
       - name: build
