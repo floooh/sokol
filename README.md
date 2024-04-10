@@ -28,6 +28,8 @@ cleanup in sokol_gfx.h)
 - [Tiny 8-bit emulators](https://floooh.github.io/tiny8bit/)
 
 - A 'single-file' [Pacman clone in C99](https://github.com/floooh/pacman.c/), also available in [Zig](https://github.com/floooh/pacman.zig/)
+  
+- [Solar Storm](https://store.steampowered.com/app/2754920/Solar_Storm/), a turn-based scifi artillery game built with Odin and Sokol, released on Steam.
 
 - [MEG-4](https://bztsrc.gitlab.io/meg4) a virtual fantasy console emulator in C89, ported to sokol
 
