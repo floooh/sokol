@@ -4295,6 +4295,9 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #pragma comment (lib, "user32")
     #pragma comment (lib, "dxgi")
     #pragma comment (lib, "d3d11")
+    #if defined(SOKOL_DEBUG)
+    #pragma comment (lib, "dxguid") // for debug-only D3DDebugObjectNames
+    #endif
     #endif
 #elif defined(SOKOL_METAL)
     // see https://clang.llvm.org/docs/LanguageExtensions.html#automatic-reference-counting
@@ -9222,6 +9225,12 @@ _SOKOL_PRIVATE void _sg_gl_update_image(_sg_image_t* img, const sg_image_data* d
 #define _sg_d3d11_Release(self) (self)->lpVtbl->Release(self)
 #endif
 
+#if defined(__cplusplus)
+#define _sg_d3d11_SetPrivateData(self, guid, DataSize, pData) (self)->SetPrivateData(guid, DataSize, pData)
+#else
+#define _sg_d3d11_SetPrivateData(self, guid, DataSize, pData) (self)->lpVtbl->SetPrivateData(self, &guid, DataSize, pData)
+#endif
+
 //-- D3D11 C/C++ wrappers ------------------------------------------------------
 static inline HRESULT _sg_d3d11_CheckFormatSupport(ID3D11Device* self, DXGI_FORMAT Format, UINT* pFormatSupport) {
     #if defined(__cplusplus)
@@ -9991,6 +10000,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, cons
             _SG_ERROR(D3D11_CREATE_BUFFER_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
+        #if defined(SOKOL_DEBUG)
+        _sg_d3d11_SetPrivateData(buf->d3d11.buf, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+        #endif
     }
     return SG_RESOURCESTATE_VALID;
 }
@@ -10097,6 +10109,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 _SG_ERROR(D3D11_CREATE_2D_TEXTURE_FAILED);
                 return SG_RESOURCESTATE_FAILED;
             }
+            #if defined(SOKOL_DEBUG)
+            _sg_d3d11_SetPrivateData(img->d3d11.tex2d, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+            #endif
 
             // create shader-resource-view for 2D texture
             // FIXME: currently we don't support setting MSAA texture as shader resource
@@ -10126,6 +10141,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                     _SG_ERROR(D3D11_CREATE_2D_SRV_FAILED);
                     return SG_RESOURCESTATE_FAILED;
                 }
+                #if defined(SOKOL_DEBUG)
+                _sg_d3d11_SetPrivateData(img->d3d11.srv, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+                #endif
             }
         }
         SOKOL_ASSERT(img->d3d11.tex2d);
@@ -10167,6 +10185,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 _SG_ERROR(D3D11_CREATE_3D_TEXTURE_FAILED);
                 return SG_RESOURCESTATE_FAILED;
             }
+            #if defined(SOKOL_DEBUG)
+            _sg_d3d11_SetPrivateData(img->d3d11.tex3d, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+            #endif
 
             // create shader-resource-view for 3D texture
             if (!msaa) {
@@ -10180,6 +10201,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                     _SG_ERROR(D3D11_CREATE_3D_SRV_FAILED);
                     return SG_RESOURCESTATE_FAILED;
                 }
+                #if defined(SOKOL_DEBUG)
+                _sg_d3d11_SetPrivateData(img->d3d11.srv, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+                #endif
             }
         }
         SOKOL_ASSERT(img->d3d11.tex3d);
@@ -10243,6 +10267,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_sampler(_sg_sampler_t* smp, co
             _SG_ERROR(D3D11_CREATE_SAMPLER_STATE_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
+        #if defined(SOKOL_DEBUG)
+        _sg_d3d11_SetPrivateData(smp->d3d11.smp, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+        #endif
     }
     return SG_RESOURCESTATE_VALID;
 }
@@ -10337,6 +10364,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
                 _SG_ERROR(D3D11_CREATE_CONSTANT_BUFFER_FAILED);
                 return SG_RESOURCESTATE_FAILED;
             }
+            #if defined(SOKOL_DEBUG)
+            _sg_d3d11_SetPrivateData(d3d11_stage->cbufs[ub_index], WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+            #endif
         }
     }
 
@@ -10375,6 +10405,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
             SOKOL_ASSERT(shd->d3d11.vs_blob);
             memcpy(shd->d3d11.vs_blob, vs_ptr, vs_length);
             result = SG_RESOURCESTATE_VALID;
+            #if defined(SOKOL_DEBUG)
+            _sg_d3d11_SetPrivateData(shd->d3d11.vs, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+            _sg_d3d11_SetPrivateData(shd->d3d11.fs, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+            #endif
         }
     }
     if (vs_blob) {
@@ -10466,6 +10500,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
         _SG_ERROR(D3D11_CREATE_INPUT_LAYOUT_FAILED);
         return SG_RESOURCESTATE_FAILED;
     }
+    #if defined(SOKOL_DEBUG)
+    _sg_d3d11_SetPrivateData(pip->d3d11.il, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+    #endif
 
     // create rasterizer state
     D3D11_RASTERIZER_DESC rs_desc;
@@ -10485,6 +10522,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
         _SG_ERROR(D3D11_CREATE_RASTERIZER_STATE_FAILED);
         return SG_RESOURCESTATE_FAILED;
     }
+    #if defined(SOKOL_DEBUG)
+    _sg_d3d11_SetPrivateData(pip->d3d11.rs, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+    #endif
 
     // create depth-stencil state
     D3D11_DEPTH_STENCIL_DESC dss_desc;
@@ -10510,6 +10550,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
         _SG_ERROR(D3D11_CREATE_DEPTH_STENCIL_STATE_FAILED);
         return SG_RESOURCESTATE_FAILED;
     }
+    #if defined(SOKOL_DEBUG)
+    _sg_d3d11_SetPrivateData(pip->d3d11.dss, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+    #endif
 
     // create blend state
     D3D11_BLEND_DESC bs_desc;
@@ -10544,6 +10587,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
         _SG_ERROR(D3D11_CREATE_BLEND_STATE_FAILED);
         return SG_RESOURCESTATE_FAILED;
     }
+    #if defined(SOKOL_DEBUG)
+    _sg_d3d11_SetPrivateData(pip->d3d11.bs, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+    #endif
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -10639,6 +10685,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
             _SG_ERROR(D3D11_CREATE_RTV_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
+        #if defined(SOKOL_DEBUG)
+        _sg_d3d11_SetPrivateData(atts->d3d11.colors[i].view.rtv, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+        #endif
     }
     SOKOL_ASSERT(0 == atts->d3d11.depth_stencil.view.dsv);
     if (ds_desc->image.id != SG_INVALID_ID) {
@@ -10673,6 +10722,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
             _SG_ERROR(D3D11_CREATE_DSV_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
+        #if defined(SOKOL_DEBUG)
+        _sg_d3d11_SetPrivateData(atts->d3d11.depth_stencil.view.dsv, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+        #endif
     }
     return SG_RESOURCESTATE_VALID;
 }
