@@ -173,7 +173,7 @@ jobs:
           rm -r ./dist/examples
           mv ./dist/* ./
           chmod a+x ./odin
-          ./build_clibs_linux.sh
+          ./sokol/build_clibs_linux.sh
       - if: runner.os == 'macOS'
         name: prepare-macos
         run: |
@@ -184,14 +184,14 @@ jobs:
           rm -r ./dist/examples
           mv ./dist/* ./
           chmod a+x ./odin
-          ./build_clibs_macos.sh
+          ./sokol/build_clibs_macos.sh
       - if: runner.os == 'Windows'
         name: prepare-windows
         shell: cmd
         run: |
           curl -L https://github.com/odin-lang/Odin/releases/download/dev-2024-04/odin-windows-amd64-dev-2024-04.zip --output odin.zip
           unzip odin.zip
-          build_clibs_windows.cmd
+          sokol/build_clibs_windows.cmd
       - name: build
         run: |
           ./odin build examples/clear -debug
