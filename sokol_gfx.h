@@ -4756,7 +4756,7 @@ _SOKOL_PRIVATE int _sg_slot_index(uint32_t id);
 
 // constants
 enum {
-    _SG_STRING_SIZE = 16,
+    _SG_STRING_SIZE = 32,
     _SG_SLOT_SHIFT = 16,
     _SG_SLOT_MASK = (1<<_SG_SLOT_SHIFT)-1,
     _SG_MAX_POOL_SIZE = (1<<_SG_SLOT_SHIFT),
