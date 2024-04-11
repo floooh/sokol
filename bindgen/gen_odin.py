@@ -337,7 +337,8 @@ def get_system_libs(module, platform, backend):
     return ''
 
 def gen_c_imports(inp, c_prefix, prefix):
-    clib_prefix = f'sokol_{inp["module"]}'
+    module_name = inp["module"]
+    clib_prefix = f'sokol_{module_name}'
     clib_import = f'{clib_prefix}_clib'
     windows_d3d11_libs = get_system_libs(prefix, 'windows', 'd3d11')
     windows_gl_libs = get_system_libs(prefix, 'windows', 'gl')
@@ -347,48 +348,50 @@ def gen_c_imports(inp, c_prefix, prefix):
     l( 'import "core:c"')
     l( '')
     l( 'SOKOL_DEBUG :: #config(SOKOL_DEBUG, ODIN_DEBUG)')
-    l( 'SOKOL_USE_GL :: #config(SOKOL_USE_GL, false)')
-    l( 'SOKOL_DLL :: #config(SOKOL_DLL, false)')
+    l( '')
+    l(f'DEBUG :: #config(SOKOL_{module_name.upper()}_DEBUG, SOKOL_DEBUG)')
+    l( 'USE_GL :: #config(SOKOL_USE_GL, false)')
+    l( 'USE_DLL :: #config(SOKOL_DLL, false)')
     l( '')
     l( 'when ODIN_OS == .Windows {')
-    l( '    when SOKOL_DLL {')
-    l( '        when SOKOL_USE_GL {')
-    l(f'            when SOKOL_DEBUG {{ foreign import {clib_import} {{ "../sokol_dll_windows_x64_gl_debug.lib"{windows_gl_libs} }} }}')
-    l(f'            else             {{ foreign import {clib_import} {{ "../sokol_dll_windows_x64_gl_release.lib"{windows_gl_libs} }} }}')
+    l( '    when USE_DLL {')
+    l( '        when USE_GL {')
+    l(f'            when DEBUG {{ foreign import {clib_import} {{ "../sokol_dll_windows_x64_gl_debug.lib"{windows_gl_libs} }} }}')
+    l(f'            else       {{ foreign import {clib_import} {{ "../sokol_dll_windows_x64_gl_release.lib"{windows_gl_libs} }} }}')
     l( '        } else {')
-    l(f'            when SOKOL_DEBUG {{ foreign import {clib_import} {{ "../sokol_dll_windows_x64_d3d11_debug.lib"{windows_d3d11_libs} }} }}')
-    l(f'            else             {{ foreign import {clib_import} {{ "../sokol_dll_windows_x64_d3d11_release.lib"{windows_d3d11_libs} }} }}')
+    l(f'            when DEBUG {{ foreign import {clib_import} {{ "../sokol_dll_windows_x64_d3d11_debug.lib"{windows_d3d11_libs} }} }}')
+    l(f'            else       {{ foreign import {clib_import} {{ "../sokol_dll_windows_x64_d3d11_release.lib"{windows_d3d11_libs} }} }}')
     l( '        }')
     l( '    } else {')
-    l( '        when SOKOL_USE_GL {')
-    l(f'            when SOKOL_DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_windows_x64_gl_debug.lib"{windows_gl_libs} }} }}')
-    l(f'            else             {{ foreign import {clib_import} {{ "{clib_prefix}_windows_x64_gl_release.lib"{windows_gl_libs} }} }}')
+    l( '        when USE_GL {')
+    l(f'            when DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_windows_x64_gl_debug.lib"{windows_gl_libs} }} }}')
+    l(f'            else       {{ foreign import {clib_import} {{ "{clib_prefix}_windows_x64_gl_release.lib"{windows_gl_libs} }} }}')
     l( '        } else {')
-    l(f'            when SOKOL_DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_windows_x64_d3d11_debug.lib"{windows_d3d11_libs} }} }}')
-    l(f'            else             {{ foreign import {clib_import} {{ "{clib_prefix}_windows_x64_d3d11_release.lib"{windows_d3d11_libs} }} }}')
+    l(f'            when DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_windows_x64_d3d11_debug.lib"{windows_d3d11_libs} }} }}')
+    l(f'            else       {{ foreign import {clib_import} {{ "{clib_prefix}_windows_x64_d3d11_release.lib"{windows_d3d11_libs} }} }}')
     l( '        }')
     l( '    }')
     l( '} else when ODIN_OS == .Darwin {')
-    l( '    when SOKOL_USE_GL {')
+    l( '    when USE_GL {')
     l( '        when ODIN_ARCH == .arm64 {')
-    l(f'            when SOKOL_DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_macos_arm64_gl_debug.a"{macos_gl_libs} }} }}')
-    l(f'            else             {{ foreign import {clib_import} {{ "{clib_prefix}_macos_arm64_gl_release.a"{macos_gl_libs} }} }}')
+    l(f'            when DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_macos_arm64_gl_debug.a"{macos_gl_libs} }} }}')
+    l(f'            else       {{ foreign import {clib_import} {{ "{clib_prefix}_macos_arm64_gl_release.a"{macos_gl_libs} }} }}')
     l( '       } else {')
-    l(f'            when SOKOL_DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_macos_x64_gl_debug.a"{macos_gl_libs} }} }}')
-    l(f'            else             {{ foreign import {clib_import} {{ "{clib_prefix}_macos_x64_gl_release.a"{macos_gl_libs} }} }}')
+    l(f'            when DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_macos_x64_gl_debug.a"{macos_gl_libs} }} }}')
+    l(f'            else       {{ foreign import {clib_import} {{ "{clib_prefix}_macos_x64_gl_release.a"{macos_gl_libs} }} }}')
     l( '        }')
     l( '    } else {')
     l( '        when ODIN_ARCH == .arm64 {')
-    l(f'            when SOKOL_DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_macos_arm64_metal_debug.a"{macos_metal_libs} }} }}')
-    l(f'            else             {{ foreign import {clib_import} {{ "{clib_prefix}_macos_arm64_metal_release.a"{macos_metal_libs} }} }}')
+    l(f'            when DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_macos_arm64_metal_debug.a"{macos_metal_libs} }} }}')
+    l(f'            else       {{ foreign import {clib_import} {{ "{clib_prefix}_macos_arm64_metal_release.a"{macos_metal_libs} }} }}')
     l( '        } else {')
-    l(f'            when SOKOL_DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_macos_x64_metal_debug.a"{macos_metal_libs} }} }}')
-    l(f'            else             {{ foreign import {clib_import} {{ "{clib_prefix}_macos_x64_metal_release.a"{macos_metal_libs} }} }}')
+    l(f'            when DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_macos_x64_metal_debug.a"{macos_metal_libs} }} }}')
+    l(f'            else       {{ foreign import {clib_import} {{ "{clib_prefix}_macos_x64_metal_release.a"{macos_metal_libs} }} }}')
     l( '        }')
     l( '    }')
     l( '} else when ODIN_OS == .Linux {')
-    l(f'    when SOKOL_DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_debug.a"{linux_gl_libs} }} }}')
-    l(f'    else             {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_release.a"{linux_gl_libs} }} }}')
+    l(f'    when DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_debug.a"{linux_gl_libs} }} }}')
+    l(f'    else       {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_release.a"{linux_gl_libs} }} }}')
     l( '} else {')
     l( '    #panic("This OS is currently not supported")')
     l( '}')
@@ -413,11 +416,13 @@ def gen_c_imports(inp, c_prefix, prefix):
             else:
                 l(f"    {as_snake_case(decl['name'], c_prefix)} :: proc({args}) {res_str} ---")
     l('}')
+    l('')
 
 def gen_consts(decl, prefix):
     for item in decl['items']:
         item_name = check_override(item['name'])
         l(f"{as_snake_case(item_name, prefix)} :: {item['value']}")
+    l('')
 
 def gen_struct(decl, prefix):
     c_struct_name = check_override(decl['name'])
@@ -432,6 +437,7 @@ def gen_struct(decl, prefix):
         else:
             l(f'    {field_name} : {field_type},')
     l('}')
+    l('')
 
 def gen_enum(decl, prefix):
     enum_name = check_override(decl['name'])
@@ -444,6 +450,7 @@ def gen_enum(decl, prefix):
             else:
                 l(f"    {item_name},")
     l('}')
+    l('')
 
 def gen_imports(dep_prefixes):
     for dep_prefix in dep_prefixes:
