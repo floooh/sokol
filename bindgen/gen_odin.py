@@ -8,7 +8,7 @@ import gen_util as util
 import os, shutil, sys
 
 bindings_root = 'sokol-odin'
-c_root = f'{bindings_root}/c'
+c_root = f'{bindings_root}/sokol/c'
 module_root = f'{bindings_root}/sokol'
 
 module_names = {
@@ -337,7 +337,8 @@ def get_system_libs(module, platform, backend):
     return ''
 
 def gen_c_imports(inp, c_prefix, prefix):
-    clib_import = f'sokol_{inp["module"]}_clib'
+    clib_prefix = f'sokol_{inp["module"]}'
+    clib_import = f'{clib_prefix}_clib'
     windows_d3d11_libs = get_system_libs(prefix, 'windows', 'd3d11')
     windows_gl_libs = get_system_libs(prefix, 'windows', 'gl')
     macos_metal_libs = get_system_libs(prefix, 'macos', 'metal')
@@ -360,34 +361,34 @@ def gen_c_imports(inp, c_prefix, prefix):
     l( '        }')
     l( '    } else {')
     l( '        when SOKOL_USE_GL {')
-    l(f'            when SOKOL_DEBUG {{ foreign import {clib_import} {{ "sokol_windows_x64_gl_debug.lib"{windows_gl_libs} }} }}')
-    l(f'            else             {{ foreign import {clib_import} {{ "sokol_windows_x64_gl_release.lib"{windows_gl_libs} }} }}')
+    l(f'            when SOKOL_DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_windows_x64_gl_debug.lib"{windows_gl_libs} }} }}')
+    l(f'            else             {{ foreign import {clib_import} {{ "{clib_prefix}_windows_x64_gl_release.lib"{windows_gl_libs} }} }}')
     l( '        } else {')
-    l(f'            when SOKOL_DEBUG {{ foreign import {clib_import} {{ "sokol_windows_x64_d3d11_debug.lib"{windows_d3d11_libs} }} }}')
-    l(f'            else             {{ foreign import {clib_import} {{ "sokol_windows_x64_d3d11_release.lib"{windows_d3d11_libs} }} }}')
+    l(f'            when SOKOL_DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_windows_x64_d3d11_debug.lib"{windows_d3d11_libs} }} }}')
+    l(f'            else             {{ foreign import {clib_import} {{ "{clib_prefix}_windows_x64_d3d11_release.lib"{windows_d3d11_libs} }} }}')
     l( '        }')
     l( '    }')
     l( '} else when ODIN_OS == .Darwin {')
     l( '    when SOKOL_USE_GL {')
     l( '        when ODIN_ARCH == .arm64 {')
-    l(f'            when SOKOL_DEBUG {{ foreign import {clib_import} {{ "sokol_macos_arm64_gl_debug.a"{macos_gl_libs} }} }}')
-    l(f'            else             {{ foreign import {clib_import} {{ "sokol_macos_arm64_gl_release.a"{macos_gl_libs} }} }}')
+    l(f'            when SOKOL_DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_macos_arm64_gl_debug.a"{macos_gl_libs} }} }}')
+    l(f'            else             {{ foreign import {clib_import} {{ "{clib_prefix}_macos_arm64_gl_release.a"{macos_gl_libs} }} }}')
     l( '       } else {')
-    l(f'            when SOKOL_DEBUG {{ foreign import {clib_import} {{ "sokol_macos_x64_gl_debug.a"{macos_gl_libs} }} }}')
-    l(f'            else             {{ foreign import {clib_import} {{ "sokol_macos_x64_gl_release.a"{macos_gl_libs} }} }}')
+    l(f'            when SOKOL_DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_macos_x64_gl_debug.a"{macos_gl_libs} }} }}')
+    l(f'            else             {{ foreign import {clib_import} {{ "{clib_prefix}_macos_x64_gl_release.a"{macos_gl_libs} }} }}')
     l( '        }')
     l( '    } else {')
     l( '        when ODIN_ARCH == .arm64 {')
-    l(f'            when SOKOL_DEBUG {{ foreign import {clib_import} {{ "sokol_macos_arm64_metal_debug.a"{macos_metal_libs} }} }}')
-    l(f'            else             {{ foreign import {clib_import} {{ "sokol_macos_arm64_metal_release.a"{macos_metal_libs} }} }}')
+    l(f'            when SOKOL_DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_macos_arm64_metal_debug.a"{macos_metal_libs} }} }}')
+    l(f'            else             {{ foreign import {clib_import} {{ "{clib_prefix}_macos_arm64_metal_release.a"{macos_metal_libs} }} }}')
     l( '        } else {')
-    l(f'            when SOKOL_DEBUG {{ foreign import {clib_import} {{ "sokol_macos_x64_metal_debug.a"{macos_metal_libs} }} }}')
-    l(f'            else             {{ foreign import {clib_import} {{ "sokol_macos_x64_metal_release.a"{macos_metal_libs} }} }}')
+    l(f'            when SOKOL_DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_macos_x64_metal_debug.a"{macos_metal_libs} }} }}')
+    l(f'            else             {{ foreign import {clib_import} {{ "{clib_prefix}_macos_x64_metal_release.a"{macos_metal_libs} }} }}')
     l( '        }')
     l( '    }')
     l( '} else when ODIN_OS == .Linux {')
-    l(f'    when SOKOL_DEBUG {{ foreign import {clib_import} {{ "sokol_linux_x64_gl_debug.a"{linux_gl_libs} }} }}')
-    l(f'    else             {{ foreign import {clib_import} {{ "sokol_linux_x64_gl_release.a"{linux_gl_libs} }} }}')
+    l(f'    when SOKOL_DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_debug.a"{linux_gl_libs} }} }}')
+    l(f'    else             {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_release.a"{linux_gl_libs} }} }}')
     l( '} else {')
     l( '    #panic("This OS is currently not supported")')
     l( '}')
@@ -495,10 +496,10 @@ def pre_parse(inp):
 
 def prepare():
     print('=== Generating Odin bindings:')
-    if not os.path.isdir(c_root):
-        os.makedirs(c_root)
     if not os.path.isdir(module_root):
         os.makedirs(module_root)
+    if not os.path.isdir(c_root):
+        os.makedirs(c_root)
 
 def gen(c_header_path, c_prefix, dep_c_prefixes):
     if not c_prefix in module_names:
