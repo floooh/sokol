@@ -10014,9 +10014,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, cons
             _SG_ERROR(D3D11_CREATE_BUFFER_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
-        #if defined(SOKOL_DEBUG)
         _sg_d3d11_setlabel(buf->d3d11.buf, desc->label);
-        #endif
     }
     return SG_RESOURCESTATE_VALID;
 }
