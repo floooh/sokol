@@ -10755,7 +10755,7 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass* pass) {
     // perform clear action
     for (int i = 0; i < num_rtvs; i++) {
         if (action->colors[i].load_action == SG_LOADACTION_CLEAR) {
-            _sg_d3d11_ClearRenderTargetView(_sg.d3d11.ctx, rtvs[i], &action->colors[i].clear_value.r);
+            _sg_d3d11_ClearRenderTargetView(_sg.d3d11.ctx, rtvs[i], (float*)&action->colors[i].clear_value);
             _sg_stats_add(d3d11.pass.num_clear_render_target_view, 1);
         }
     }
@@ -10872,7 +10872,7 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
 
     _sg_d3d11_RSSetState(_sg.d3d11.ctx, pip->d3d11.rs);
     _sg_d3d11_OMSetDepthStencilState(_sg.d3d11.ctx, pip->d3d11.dss, pip->d3d11.stencil_ref);
-    _sg_d3d11_OMSetBlendState(_sg.d3d11.ctx, pip->d3d11.bs, &pip->cmn.blend_color.r, 0xFFFFFFFF);
+    _sg_d3d11_OMSetBlendState(_sg.d3d11.ctx, pip->d3d11.bs, (float*)&pip->cmn.blend_color, 0xFFFFFFFF);
     _sg_d3d11_IASetPrimitiveTopology(_sg.d3d11.ctx, pip->d3d11.topology);
     _sg_d3d11_IASetInputLayout(_sg.d3d11.ctx, pip->d3d11.il);
     _sg_d3d11_VSSetShader(_sg.d3d11.ctx, pip->shader->d3d11.vs, NULL, 0);
