@@ -4295,9 +4295,6 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #pragma comment (lib, "user32")
     #pragma comment (lib, "dxgi")
     #pragma comment (lib, "d3d11")
-    #if defined(SOKOL_DEBUG)
-    #pragma comment (lib, "dxguid") // for debug-only D3DDebugObjectNames
-    #endif
     #endif
 #elif defined(SOKOL_METAL)
     // see https://clang.llvm.org/docs/LanguageExtensions.html#automatic-reference-counting
@@ -9225,11 +9222,21 @@ _SOKOL_PRIVATE void _sg_gl_update_image(_sg_image_t* img, const sg_image_data* d
 #define _sg_d3d11_Release(self) (self)->lpVtbl->Release(self)
 #endif
 
+// NOTE: This needs to be a macro since we can't use the polymorphism in C. It's called on many kinds of resources.
+// NOTE: Based on microsoft docs, it's fine to call this with pData=NULL if DataSize is also zero.
 #if defined(__cplusplus)
 #define _sg_d3d11_SetPrivateData(self, guid, DataSize, pData) (self)->SetPrivateData(guid, DataSize, pData)
 #else
-#define _sg_d3d11_SetPrivateData(self, guid, DataSize, pData) (self)->lpVtbl->SetPrivateData(self, &guid, DataSize, pData)
+#define _sg_d3d11_SetPrivateData(self, guid, DataSize, pData) (self)->lpVtbl->SetPrivateData(self, guid, DataSize, pData)
 #endif
+
+#if defined(__cplusplus)
+#define _sg_win32_refguid(guid) guid
+#else
+#define _sg_win32_refguid(guid) &guid
+#endif
+
+static const GUID _sg_d3d11_WKPDID_D3DDebugObjectName = { 0x429b8c22,0x9188,0x4b0c, {0x87,0x42,0xac,0xb0,0xbf,0x85,0xc2,0x00} };
 
 //-- D3D11 C/C++ wrappers ------------------------------------------------------
 static inline HRESULT _sg_d3d11_CheckFormatSupport(ID3D11Device* self, DXGI_FORMAT Format, UINT* pFormatSupport) {
@@ -10001,7 +10008,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, cons
             return SG_RESOURCESTATE_FAILED;
         }
         #if defined(SOKOL_DEBUG)
-        _sg_d3d11_SetPrivateData(buf->d3d11.buf, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+        _sg_d3d11_SetPrivateData(buf->d3d11.buf, _sg_win32_refguid(_sg_d3d11_WKPDID_D3DDebugObjectName), (UINT)strlen(desc->label), desc->label);
         #endif
     }
     return SG_RESOURCESTATE_VALID;
@@ -10110,7 +10117,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 return SG_RESOURCESTATE_FAILED;
             }
             #if defined(SOKOL_DEBUG)
-            _sg_d3d11_SetPrivateData(img->d3d11.tex2d, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+            _sg_d3d11_SetPrivateData(img->d3d11.tex2d, _sg_win32_refguid(_sg_d3d11_WKPDID_D3DDebugObjectName), (UINT)strlen(desc->label), desc->label);
             #endif
 
             // create shader-resource-view for 2D texture
@@ -10142,7 +10149,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                     return SG_RESOURCESTATE_FAILED;
                 }
                 #if defined(SOKOL_DEBUG)
-                _sg_d3d11_SetPrivateData(img->d3d11.srv, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+                _sg_d3d11_SetPrivateData(img->d3d11.srv, _sg_win32_refguid(_sg_d3d11_WKPDID_D3DDebugObjectName), (UINT)strlen(desc->label), desc->label);
                 #endif
             }
         }
@@ -10186,7 +10193,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 return SG_RESOURCESTATE_FAILED;
             }
             #if defined(SOKOL_DEBUG)
-            _sg_d3d11_SetPrivateData(img->d3d11.tex3d, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+            _sg_d3d11_SetPrivateData(img->d3d11.tex3d, _sg_win32_refguid(_sg_d3d11_WKPDID_D3DDebugObjectName), (UINT)strlen(desc->label), desc->label);
             #endif
 
             // create shader-resource-view for 3D texture
@@ -10202,7 +10209,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                     return SG_RESOURCESTATE_FAILED;
                 }
                 #if defined(SOKOL_DEBUG)
-                _sg_d3d11_SetPrivateData(img->d3d11.srv, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+                _sg_d3d11_SetPrivateData(img->d3d11.srv, _sg_win32_refguid(_sg_d3d11_WKPDID_D3DDebugObjectName), (UINT)strlen(desc->label), desc->label);
                 #endif
             }
         }
@@ -10268,7 +10275,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_sampler(_sg_sampler_t* smp, co
             return SG_RESOURCESTATE_FAILED;
         }
         #if defined(SOKOL_DEBUG)
-        _sg_d3d11_SetPrivateData(smp->d3d11.smp, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+        _sg_d3d11_SetPrivateData(smp->d3d11.smp, _sg_win32_refguid(_sg_d3d11_WKPDID_D3DDebugObjectName), (UINT)strlen(desc->label), desc->label);
         #endif
     }
     return SG_RESOURCESTATE_VALID;
@@ -10365,7 +10372,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
                 return SG_RESOURCESTATE_FAILED;
             }
             #if defined(SOKOL_DEBUG)
-            _sg_d3d11_SetPrivateData(d3d11_stage->cbufs[ub_index], WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+            _sg_d3d11_SetPrivateData(d3d11_stage->cbufs[ub_index], _sg_win32_refguid(_sg_d3d11_WKPDID_D3DDebugObjectName), (UINT)strlen(desc->label), desc->label);
             #endif
         }
     }
@@ -10406,8 +10413,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
             memcpy(shd->d3d11.vs_blob, vs_ptr, vs_length);
             result = SG_RESOURCESTATE_VALID;
             #if defined(SOKOL_DEBUG)
-            _sg_d3d11_SetPrivateData(shd->d3d11.vs, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
-            _sg_d3d11_SetPrivateData(shd->d3d11.fs, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+            _sg_d3d11_SetPrivateData(shd->d3d11.vs, _sg_win32_refguid(_sg_d3d11_WKPDID_D3DDebugObjectName), (UINT)strlen(desc->label), desc->label);
+            _sg_d3d11_SetPrivateData(shd->d3d11.fs, _sg_win32_refguid(_sg_d3d11_WKPDID_D3DDebugObjectName), (UINT)strlen(desc->label), desc->label);
             #endif
         }
     }
@@ -10501,7 +10508,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
         return SG_RESOURCESTATE_FAILED;
     }
     #if defined(SOKOL_DEBUG)
-    _sg_d3d11_SetPrivateData(pip->d3d11.il, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+    _sg_d3d11_SetPrivateData(pip->d3d11.il, _sg_win32_refguid(_sg_d3d11_WKPDID_D3DDebugObjectName), (UINT)strlen(desc->label), desc->label);
     #endif
 
     // create rasterizer state
@@ -10523,7 +10530,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
         return SG_RESOURCESTATE_FAILED;
     }
     #if defined(SOKOL_DEBUG)
-    _sg_d3d11_SetPrivateData(pip->d3d11.rs, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+    _sg_d3d11_SetPrivateData(pip->d3d11.rs, _sg_win32_refguid(_sg_d3d11_WKPDID_D3DDebugObjectName), (UINT)strlen(desc->label), desc->label);
     #endif
 
     // create depth-stencil state
@@ -10551,7 +10558,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
         return SG_RESOURCESTATE_FAILED;
     }
     #if defined(SOKOL_DEBUG)
-    _sg_d3d11_SetPrivateData(pip->d3d11.dss, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+    _sg_d3d11_SetPrivateData(pip->d3d11.dss, _sg_win32_refguid(_sg_d3d11_WKPDID_D3DDebugObjectName), (UINT)strlen(desc->label), desc->label);
     #endif
 
     // create blend state
@@ -10588,7 +10595,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
         return SG_RESOURCESTATE_FAILED;
     }
     #if defined(SOKOL_DEBUG)
-    _sg_d3d11_SetPrivateData(pip->d3d11.bs, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+    _sg_d3d11_SetPrivateData(pip->d3d11.bs, _sg_win32_refguid(_sg_d3d11_WKPDID_D3DDebugObjectName), (UINT)strlen(desc->label), desc->label);
     #endif
     return SG_RESOURCESTATE_VALID;
 }
@@ -10686,7 +10693,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
             return SG_RESOURCESTATE_FAILED;
         }
         #if defined(SOKOL_DEBUG)
-        _sg_d3d11_SetPrivateData(atts->d3d11.colors[i].view.rtv, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+        _sg_d3d11_SetPrivateData(atts->d3d11.colors[i].view.rtv, _sg_win32_refguid(_sg_d3d11_WKPDID_D3DDebugObjectName), (UINT)strlen(desc->label), desc->label);
         #endif
     }
     SOKOL_ASSERT(0 == atts->d3d11.depth_stencil.view.dsv);
@@ -10723,7 +10730,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
             return SG_RESOURCESTATE_FAILED;
         }
         #if defined(SOKOL_DEBUG)
-        _sg_d3d11_SetPrivateData(atts->d3d11.depth_stencil.view.dsv, WKPDID_D3DDebugObjectName, (UINT)strlen(desc->label), desc->label);
+        _sg_d3d11_SetPrivateData(atts->d3d11.depth_stencil.view.dsv, _sg_win32_refguid(_sg_d3d11_WKPDID_D3DDebugObjectName), (UINT)strlen(desc->label), desc->label);
         #endif
     }
     return SG_RESOURCESTATE_VALID;
