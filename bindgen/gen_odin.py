@@ -421,7 +421,7 @@ def gen_enum(decl, prefix):
     l(f'{as_struct_or_enum_type(enum_name, prefix)} :: enum i32 {{')
     for item in decl['items']:
         item_name = as_enum_item_name(check_override(item['name']))
-        if item_name != 'FORCE_U32':
+        if item_name != 'FORCE_U32' and item_name != 'NUM':
             if 'value' in item:
                 l(f"    {item_name} = {item['value']},")
             else:
