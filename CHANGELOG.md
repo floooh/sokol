@@ -11,6 +11,15 @@
   the directory structure of the bindings to make them a bit friendlier to integrate
   with Odin projects, and also adds a couple of smaller improvements and fixes.
   Many thanks to @jakubtomsu for the PRs!
+- Also a couple of smaller 'drive-by PRs' I merged over the last couple of days but didn't mention
+  yet in the changelog:
+  - https://github.com/floooh/sokol/pull/1029: exclude NUM enum items in Odin bindings, many thanks to @jakubtomsu
+  - https://github.com/floooh/sokol/pull/1028: in sokol_gfx.h fix GCC warnings in the d3d11 backend (when compiling
+    via mingw on Windows), many thanks @edubart
+  - https://github.com/floooh/sokol/pull/1026: in sokol_gfx.h increase the internal `_SG_STRING_SIZE` from
+    16 to 32, by @jakubtomsu
+  - https://github.com/floooh/sokol/pull/1021, https://github.com/floooh/sokol-odin/pull/10: re-enable Odin CI builds
+    for macOS (by linking against LLVM 17), also by @jakubtomsu
 
 ### 21-Mar-2024:
 
