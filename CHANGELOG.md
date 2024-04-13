@@ -4,7 +4,13 @@
 
 - sokol_gfx.h d3d11: resource label strings are now communicated to D3D11 resource objects,
   making it easier to identify those resources in tools like the Visual Studio Graphics Debugger
-  or RenderDoc. See PR https://github.com/floooh/sokol/pull/1025 for details. Many thanks to @jakubtomsu for the PR!
+  or RenderDoc. See PR https://github.com/floooh/sokol/pull/1025 for details. Many thanks to
+  @jakubtomsu for the PR!
+- Odin bindings: merged https://github.com/floooh/sokol/pull/1023 (and related PR
+  https://github.com/floooh/sokol-odin/pull/11) in the actual bindings repo. This changes
+  the directory structure of the bindings to make them a bit friendlier to integrate
+  with Odin projects, and also adds a couple of smaller improvements and fixes.
+  Many thanks to @jakubtomsu for the PRs!
 
 ### 21-Mar-2024:
 
