@@ -4,7 +4,7 @@
 
 - sokol_gfx.h d3d11: resource label strings are now communicated to D3D11 resource objects,
   making it easier to identify those resources in tools like the Visual Studio Graphics Debugger
-  or RenderDoc. See PR #1025 for details. Many thanks to @jakubtomsu for the PR!
+  or RenderDoc. See PR https://github.com/floooh/sokol/pull/1025 for details. Many thanks to @jakubtomsu for the PR!
 
 ### 21-Mar-2024:
 
