@@ -1516,7 +1516,7 @@ enum {
     SG_MAX_SHADERSTAGE_IMAGES = 12,
     SG_MAX_SHADERSTAGE_SAMPLERS = 8,
     SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS = 12,
-    SG_MAX_SHADERSTAGE_STORAGE_BUFFERS = 4,     // FIXME: bump to 8?
+    SG_MAX_SHADERSTAGE_STORAGE_BUFFERS = 8,
     SG_MAX_SHADERSTAGE_UBS = 4,
     SG_MAX_UB_MEMBERS = 16,
     SG_MAX_VERTEX_ATTRIBUTES = 16,
@@ -12942,7 +12942,6 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
     }
 
     // apply vertex stage storage buffers
-    // FIXME: move start slot after UBs (?)
     for (NSUInteger slot = 0; slot < (NSUInteger)bnd->num_vs_sbufs; slot++) {
         const _sg_buffer_t* sbuf = bnd->vs_sbufs[slot];
         if (_sg.mtl.state_cache.cur_vs_storagebuffer_ids[slot].id != sbuf->slot.id) {
@@ -13464,20 +13463,20 @@ _SOKOL_PRIVATE WGPUColorWriteMaskFlags _sg_wgpu_colorwritemask(uint8_t m) {
 
 // image/sampler binding on wgpu follows this convention:
 //
-//  FIXME reshuffle bindings to include storage buffers!
-//
 //  - all images and sampler are in @group(1)
 //  - vertex stage images start at @binding(0)
 //  - vertex stage samplers start at @binding(16)
-//  - fragment stage images start at @binding(32)
-//  - fragment stage samplers start at @binding(48)
+//  - vertex stage storage buffers start at @binding(32)
+//  - fragment stage images start at @binding(48)
+//  - fragment stage samplers start at @binding(64)
+//  - fragment stage storage buffers start at @binding(80)
 //
 _SOKOL_PRIVATE uint32_t _sg_wgpu_image_binding(sg_shader_stage stage, int img_slot) {
     SOKOL_ASSERT((img_slot >= 0) && (img_slot < 16));
     if (SG_SHADERSTAGE_VS == stage) {
         return 0 + (uint32_t)img_slot;
     } else {
-        return 32 + (uint32_t)img_slot;
+        return 48 + (uint32_t)img_slot;
     }
 }
 
@@ -13486,14 +13485,14 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_sampler_binding(sg_shader_stage stage, int smp_
     if (SG_SHADERSTAGE_VS == stage) {
         return 16 + (uint32_t)smp_slot;
     } else {
-        return 48 + (uint32_t)smp_slot;
+        return 64 + (uint32_t)smp_slot;
     }
 }
 
 _SOKOL_PRIVATE uint32_t _sg_wgpu_storagebuffer_binding(sg_shader_stage stage, int sbuf_slot) {
     SOKOL_ASSERT((sbuf_slot >= 0) && (sbuf_slot < 16));
     if (SG_SHADERSTAGE_VS == stage) {
-        return 64 + (uint32_t)sbuf_slot;
+        return 32 + (uint32_t)sbuf_slot;
     } else {
         return 80 + (uint32_t)sbuf_slot;
     }
