@@ -14,7 +14,7 @@ if (IS_DIRECTORY ${spineruntimes_dir})
     message("### ${spineruntimes_dir} exists...")
 else()
     message("### Fetching spine runtimes to ${spineruntimes_dir} (this may take a while...)")
-    execute_process(COMMAND git clone --depth=1 --recursive https://github.com/EsotericSoftware/spine-runtimes ${spineruntimes_dir})
+    execute_process(COMMAND git clone --depth=1 --branch 4.1 --recursive https://github.com/EsotericSoftware/spine-runtimes ${spineruntimes_dir})
 endif()
 
 add_library(cimgui
