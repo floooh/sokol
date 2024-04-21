@@ -353,7 +353,7 @@
         sapp_consume_event() from inside the event handler (NOTE that
         this behaviour is currently only implemented for some HTML5
         events, support for other platforms and event types will
-        be added as needed, please open a github ticket and/or provide
+        be added as needed, please open a GitHub ticket and/or provide
         a PR if needed).
 
         NOTE: Do *not* call any 3D API rendering functions in the event

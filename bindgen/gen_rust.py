@@ -1,7 +1,7 @@
 # -------------------------------------------------------------------------------
-#   Generate rust bindings.
+#   Generate Rust bindings.
 #
-#   rust coding style:
+#   Rust coding style:
 #   - types are PascalCase
 #   - otherwise snake_case
 # -------------------------------------------------------------------------------
@@ -50,7 +50,7 @@ ignores = [
 
 range_struct_name = "Range"
 
-# functions that need to be exposed as 'raw' C callbacks without a rust wrapper function
+# functions that need to be exposed as 'raw' C callbacks without a Rust wrapper function
 c_callbacks = ["slog_func"]
 
 # NOTE: syntax for function results: "func_name.RESULT"
@@ -753,7 +753,7 @@ def gen_imports(inp, dep_prefixes):
 
 
 def gen_helpers(inp):
-    l("/// Helper function to convert a C string to a rust string slice")
+    l("/// Helper function to convert a C string to a Rust string slice")
     l("#[inline]")
     l("fn c_char_ptr_to_rust_str(c_char_ptr: *const core::ffi::c_char) -> &'static str {")
     l("    let c_str = unsafe { core::ffi::CStr::from_ptr(c_char_ptr) };")
@@ -762,11 +762,11 @@ def gen_helpers(inp):
     l("")
 
     if inp['prefix'] in ['sg_', 'sdtx_', 'sshape_', 'sapp_']:
-        l("/// Helper function to cast a rust slice into a sokol Range")
+        l("/// Helper function to cast a Rust slice into a sokol Range")
         l(f"pub fn slice_as_range<T>(data: &[T]) -> {range_struct_name} {{")
         l(f"    {range_struct_name} {{ size: std::mem::size_of_val(data), ptr: data.as_ptr() as *const _ }}")
         l("}")
-        l("/// Helper function to cast a rust reference into a sokol Range")
+        l("/// Helper function to cast a Rust reference into a sokol Range")
         l(f"pub fn value_as_range<T>(value: &T) -> {range_struct_name} {{")
         l(f"    {range_struct_name} {{ size: std::mem::size_of::<T>(), ptr: value as *const T as *const _ }}")
         l("}")

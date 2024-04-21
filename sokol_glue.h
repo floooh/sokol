@@ -43,7 +43,7 @@
         functions. Use this in the sg_setup() call like this:
 
         sg_setup(&(sg_desc){
-            .environment = sglue_enviornment(),
+            .environment = sglue_environment(),
             ...
         });
 

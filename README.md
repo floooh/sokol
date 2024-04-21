@@ -1,8 +1,10 @@
-# Sokol
+<p align="center">
+    <img src="assets/logo_full_large.png" style="width: 60%" /><br/><br/>Simple
+    <a href="https://github.com/nothings/stb/blob/master/docs/stb_howto.txt">STB-style</a>
+    cross-platform libraries for C and C++, written in C.<br/><br/>
+</p>
 
-Simple
-[STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
-cross-platform libraries for C and C++, written in C.
+# Sokol
 
 [**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**29-Feb-2024**: **BREAKING CHANGES** 'unified render pass'
 cleanup in sokol_gfx.h)
@@ -27,9 +29,15 @@ cleanup in sokol_gfx.h)
 
 - A 'single-file' [Pacman clone in C99](https://github.com/floooh/pacman.c/), also available in [Zig](https://github.com/floooh/pacman.zig/)
 
+- [Solar Storm](https://store.steampowered.com/app/2754920/Solar_Storm/), a turn-based scifi artillery game built with Odin and Sokol, released on Steam.
+
 - [MEG-4](https://bztsrc.gitlab.io/meg4) a virtual fantasy console emulator in C89, ported to sokol
 
 - A [Minigolf game](https://mgerdes.github.io/minigolf.html) ([source](https://github.com/mgerdes/minigolf)).
+
+- [hIghQube](https://github.com/RuiVarela/hIghQube) A game demo that used sokol rendering extensively
+
+- [Senos](https://github.com/RuiVarela/Senos) A music app that uses sokol as backend
 
 - ['Dealer's Dungeon'](https://dealers-dungeon.com/demo/) ([lower graphics quality](https://dealers-dungeon.com/demo/?q=3),
 [source](https://github.com/bqqbarbhg/spear))

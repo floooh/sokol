@@ -2385,6 +2385,9 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
 
 SOKOL_API_IMPL void simgui_create_fonts_texture(const simgui_font_tex_desc_t* desc) {
     SOKOL_ASSERT(desc);
+    SOKOL_ASSERT(SG_INVALID_ID == _simgui.font_smp.id);
+    SOKOL_ASSERT(SG_INVALID_ID == _simgui.font_img.id);
+    SOKOL_ASSERT(SIMGUI_INVALID_ID == _simgui.default_font.id);
 
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
@@ -2434,6 +2437,9 @@ SOKOL_API_IMPL void simgui_destroy_fonts_texture(void) {
     sg_destroy_sampler(_simgui.font_smp);
     sg_destroy_image(_simgui.font_img);
     simgui_destroy_image(_simgui.default_font);
+    _simgui.font_smp.id = SG_INVALID_ID;
+    _simgui.font_img.id = SG_INVALID_ID;
+    _simgui.default_font.id = SIMGUI_INVALID_ID;
 }
 
 SOKOL_API_IMPL void simgui_shutdown(void) {
@@ -2519,6 +2525,12 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
     #else
         ImGuiIO* io = igGetIO();
     #endif
+    if (!io->Fonts->TexReady) {
+        simgui_destroy_fonts_texture();
+        simgui_font_tex_desc_t simgui_font_smp_desc;
+        _simgui_clear(&simgui_font_smp_desc, sizeof(simgui_font_smp_desc));
+        simgui_create_fonts_texture(&simgui_font_smp_desc);
+    }
     io->DisplaySize.x = ((float)desc->width) / _simgui.cur_dpi_scale;
     io->DisplaySize.y = ((float)desc->height) / _simgui.cur_dpi_scale;
     io->DeltaTime = (float)desc->delta_time;

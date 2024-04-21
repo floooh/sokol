@@ -2156,7 +2156,7 @@ _SOKOL_PRIVATE sgimgui_str_t _sgimgui_capture_item_string(sgimgui_t* ctx, int in
         case SGIMGUI_CMD_UNINIT_ATTACHMENTS:
             {
                 sgimgui_str_t res_id = _sgimgui_attachments_id_string(ctx, item->args.uninit_attachments.attachments);
-                _sgimgui_snprintf(&str, "%d: sg_uninit_attachemnts(atts=%s)", index, res_id.buf);
+                _sgimgui_snprintf(&str, "%d: sg_uninit_attachments(atts=%s)", index, res_id.buf);
             }
             break;
 
