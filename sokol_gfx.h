@@ -5141,7 +5141,7 @@ typedef _sg_dummy_attachments_t _sg_attachments_t;
 #elif defined(_SOKOL_ANY_GL)
 
 #define _SG_GL_TEXTURE_SAMPLER_CACHE_SIZE (SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS * SG_NUM_SHADER_STAGES)
-#define _SG_GL_STORAGEBUFFER_STAGE_INDEX_PITCH (16)
+#define _SG_GL_STORAGEBUFFER_STAGE_INDEX_PITCH (SG_MAX_SHADERSTAGE_STORAGE_BUFFERS)
 
 typedef struct {
     _sg_slot_t slot;
