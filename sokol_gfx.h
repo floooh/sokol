@@ -10724,8 +10724,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
             _SG_ERROR(D3D11_CREATE_INPUT_LAYOUT_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
+        _sg_d3d11_setlabel(pip->d3d11.il, desc->label);
     }
-    _sg_d3d11_setlabel(pip->d3d11.il, desc->label);
 
     // create rasterizer state
     D3D11_RASTERIZER_DESC rs_desc;
