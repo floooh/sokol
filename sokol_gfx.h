@@ -1516,7 +1516,7 @@ enum {
     SG_MAX_SHADERSTAGE_IMAGES = 12,
     SG_MAX_SHADERSTAGE_SAMPLERS = 8,
     SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS = 12,
-    SG_MAX_SHADERSTAGE_STORAGE_BUFFERS = 8,
+    SG_MAX_SHADERSTAGE_STORAGEBUFFERS = 8,
     SG_MAX_SHADERSTAGE_UBS = 4,
     SG_MAX_UB_MEMBERS = 16,
     SG_MAX_VERTEX_ATTRIBUTES = 16,
@@ -2575,7 +2575,7 @@ typedef struct sg_pass {
     - SG_MAX_VERTEX_BUFFERS
     - SG_MAX_SHADERSTAGE_IMAGES
     - SG_MAX_SHADERSTAGE_SAMPLERS
-    - SG_MAX_SHADERSTAGE_STORAGE_BUFFERS
+    - SG_MAX_SHADERSTAGE_STORAGEBUFFERS
 
     The optional buffer offsets can be used to put different unrelated
     chunks of vertex- and/or index-data into the same buffer objects.
@@ -2583,7 +2583,7 @@ typedef struct sg_pass {
 typedef struct sg_stage_bindings {
     sg_image images[SG_MAX_SHADERSTAGE_IMAGES];
     sg_sampler samplers[SG_MAX_SHADERSTAGE_SAMPLERS];
-    sg_buffer storage_buffers[SG_MAX_SHADERSTAGE_STORAGE_BUFFERS];
+    sg_buffer storage_buffers[SG_MAX_SHADERSTAGE_STORAGEBUFFERS];
 } sg_stage_bindings;
 
 typedef struct sg_bindings {
@@ -2885,7 +2885,7 @@ typedef struct sg_shader_stage_desc {
     const char* entry;
     const char* d3d11_target;
     sg_shader_uniform_block_desc uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
-    sg_shader_storage_buffer_desc storage_buffers[SG_MAX_SHADERSTAGE_STORAGE_BUFFERS];
+    sg_shader_storage_buffer_desc storage_buffers[SG_MAX_SHADERSTAGE_STORAGEBUFFERS];
     sg_shader_image_desc images[SG_MAX_SHADERSTAGE_IMAGES];
     sg_shader_sampler_desc samplers[SG_MAX_SHADERSTAGE_SAMPLERS];
     sg_shader_image_sampler_pair_desc image_sampler_pairs[SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS];
@@ -4945,7 +4945,7 @@ typedef struct {
     int num_samplers;
     int num_image_samplers;
     _sg_shader_uniform_block_t uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
-    _sg_shader_storage_buffer_t storage_buffers[SG_MAX_SHADERSTAGE_STORAGE_BUFFERS];
+    _sg_shader_storage_buffer_t storage_buffers[SG_MAX_SHADERSTAGE_STORAGEBUFFERS];
     _sg_shader_image_t images[SG_MAX_SHADERSTAGE_IMAGES];
     _sg_shader_sampler_t samplers[SG_MAX_SHADERSTAGE_SAMPLERS];
     _sg_shader_image_sampler_t image_samplers[SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS];
@@ -5001,7 +5001,7 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
             stage->num_image_samplers++;
         }
         SOKOL_ASSERT(stage->num_storage_buffers == 0);
-        for (int sbuf_index = 0; sbuf_index < SG_MAX_SHADERSTAGE_STORAGE_BUFFERS; sbuf_index++) {
+        for (int sbuf_index = 0; sbuf_index < SG_MAX_SHADERSTAGE_STORAGEBUFFERS; sbuf_index++) {
             const sg_shader_storage_buffer_desc* sbuf_desc = &stage_desc->storage_buffers[sbuf_index];
             if (!sbuf_desc->used) {
                 break;
@@ -5141,7 +5141,7 @@ typedef _sg_dummy_attachments_t _sg_attachments_t;
 #elif defined(_SOKOL_ANY_GL)
 
 #define _SG_GL_TEXTURE_SAMPLER_CACHE_SIZE (SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS * SG_NUM_SHADER_STAGES)
-#define _SG_GL_STORAGEBUFFER_STAGE_INDEX_PITCH (SG_MAX_SHADERSTAGE_STORAGE_BUFFERS)
+#define _SG_GL_STORAGEBUFFER_STAGE_INDEX_PITCH (SG_MAX_SHADERSTAGE_STORAGEBUFFERS)
 
 typedef struct {
     _sg_slot_t slot;
@@ -5283,7 +5283,7 @@ typedef struct {
     GLuint vertex_buffer;
     GLuint index_buffer;
     GLuint storage_buffer;  // general bind point
-    GLuint stage_storage_buffers[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_STORAGE_BUFFERS];
+    GLuint stage_storage_buffers[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_STORAGEBUFFERS];
     GLuint stored_vertex_buffer;
     GLuint stored_index_buffer;
     GLuint stored_storage_buffer;
@@ -5535,8 +5535,8 @@ typedef struct {
     sg_image cur_fs_image_ids[SG_MAX_SHADERSTAGE_IMAGES];
     sg_sampler cur_vs_sampler_ids[SG_MAX_SHADERSTAGE_SAMPLERS];
     sg_sampler cur_fs_sampler_ids[SG_MAX_SHADERSTAGE_SAMPLERS];
-    sg_buffer cur_vs_storagebuffer_ids[SG_MAX_SHADERSTAGE_STORAGE_BUFFERS];
-    sg_buffer cur_fs_storagebuffer_ids[SG_MAX_SHADERSTAGE_STORAGE_BUFFERS];
+    sg_buffer cur_vs_storagebuffer_ids[SG_MAX_SHADERSTAGE_STORAGEBUFFERS];
+    sg_buffer cur_fs_storagebuffer_ids[SG_MAX_SHADERSTAGE_STORAGEBUFFERS];
 } _sg_mtl_state_cache_t;
 
 typedef struct {
@@ -5564,7 +5564,7 @@ typedef struct {
 #define _SG_WGPU_NUM_BINDGROUPS (2) // 0: uniforms, 1: images and sampler on both shader stages
 #define _SG_WGPU_UNIFORM_BINDGROUP_INDEX (0)
 #define _SG_WGPU_IMAGE_SAMPLER_BINDGROUP_INDEX (1)
-#define _SG_WGPU_MAX_BINDGROUP_ENTRIES (SG_NUM_SHADER_STAGES * (SG_MAX_SHADERSTAGE_IMAGES + SG_MAX_SHADERSTAGE_SAMPLERS + SG_MAX_SHADERSTAGE_STORAGE_BUFFERS))
+#define _SG_WGPU_MAX_BINDGROUP_ENTRIES (SG_NUM_SHADER_STAGES * (SG_MAX_SHADERSTAGE_IMAGES + SG_MAX_SHADERSTAGE_SAMPLERS + SG_MAX_SHADERSTAGE_STORAGEBUFFERS))
 
 typedef struct {
     _sg_slot_t slot;
@@ -5749,10 +5749,10 @@ typedef struct {
     _sg_buffer_t* ib;
     _sg_image_t* vs_imgs[SG_MAX_SHADERSTAGE_IMAGES];
     _sg_sampler_t* vs_smps[SG_MAX_SHADERSTAGE_SAMPLERS];
-    _sg_buffer_t* vs_sbufs[SG_MAX_SHADERSTAGE_STORAGE_BUFFERS];
+    _sg_buffer_t* vs_sbufs[SG_MAX_SHADERSTAGE_STORAGEBUFFERS];
     _sg_image_t* fs_imgs[SG_MAX_SHADERSTAGE_IMAGES];
     _sg_sampler_t* fs_smps[SG_MAX_SHADERSTAGE_SAMPLERS];
-    _sg_buffer_t* fs_sbufs[SG_MAX_SHADERSTAGE_STORAGE_BUFFERS];
+    _sg_buffer_t* fs_sbufs[SG_MAX_SHADERSTAGE_STORAGEBUFFERS];
 } _sg_bindings_t;
 
 typedef struct {
@@ -7647,7 +7647,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
 //-- state cache implementation ------------------------------------------------
 _SOKOL_PRIVATE GLuint _sg_gl_storagebuffer_bind_index(int stage, int slot) {
     SOKOL_ASSERT((stage >= 0) && (stage < SG_NUM_SHADER_STAGES));
-    SOKOL_ASSERT((slot >= 0) && (slot < SG_MAX_SHADERSTAGE_STORAGE_BUFFERS));
+    SOKOL_ASSERT((slot >= 0) && (slot < SG_MAX_SHADERSTAGE_STORAGEBUFFERS));
     return (GLuint) (stage * _SG_GL_STORAGEBUFFER_STAGE_INDEX_PITCH + slot);
 }
 
@@ -7670,7 +7670,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
         _sg_stats_add(gl.num_bind_buffer, 1);
     }
     for (int stage = 0; stage < SG_NUM_SHADER_STAGES; stage++) {
-        for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGE_BUFFERS; i++) {
+        for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGEBUFFERS; i++) {
             if (force || (_sg.gl.cache.stage_storage_buffers[stage][i] != 0)) {
                 const GLuint bind_index = _sg_gl_storagebuffer_bind_index(stage, i);
                 if (_sg.features.storage_buffer) {
@@ -7712,7 +7712,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_buffer(GLenum target, GLuint buffer) {
 
 _SOKOL_PRIVATE void _sg_gl_cache_bind_storage_buffer(int stage, int slot, GLuint buffer) {
     SOKOL_ASSERT((stage >= 0) && (stage < SG_NUM_SHADER_STAGES));
-    SOKOL_ASSERT((slot >= 0) && (slot < SG_MAX_SHADERSTAGE_STORAGE_BUFFERS));
+    SOKOL_ASSERT((slot >= 0) && (slot < SG_MAX_SHADERSTAGE_STORAGEBUFFERS));
     if (_sg.gl.cache.stage_storage_buffers[stage][slot] != buffer) {
         _sg.gl.cache.stage_storage_buffers[stage][slot] = buffer;
         _sg.gl.cache.storage_buffer = buffer; // not a bug
@@ -7778,7 +7778,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_buffer(GLuint buf) {
         _sg_stats_add(gl.num_bind_buffer, 1);
     }
     for (int stage = 0; stage < SG_NUM_SHADER_STAGES; stage++) {
-        for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGE_BUFFERS; i++) {
+        for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGEBUFFERS; i++) {
             if (buf == _sg.gl.cache.stage_storage_buffers[stage][i]) {
                 _sg.gl.cache.stage_storage_buffers[stage][i] = 0;
                 _sg.gl.cache.storage_buffer = 0; // not a bug!
@@ -13843,20 +13843,20 @@ _SOKOL_PRIVATE void _sg_wgpu_init_bindgroups_cache_key(_sg_wgpu_bindgroups_cache
     SOKOL_ASSERT(bnd->pip);
     SOKOL_ASSERT(bnd->num_vs_imgs <= SG_MAX_SHADERSTAGE_IMAGES);
     SOKOL_ASSERT(bnd->num_vs_smps <= SG_MAX_SHADERSTAGE_SAMPLERS);
-    SOKOL_ASSERT(bnd->num_vs_sbufs <= SG_MAX_SHADERSTAGE_STORAGE_BUFFERS);
+    SOKOL_ASSERT(bnd->num_vs_sbufs <= SG_MAX_SHADERSTAGE_STORAGEBUFFERS);
     SOKOL_ASSERT(bnd->num_fs_imgs <= SG_MAX_SHADERSTAGE_IMAGES);
     SOKOL_ASSERT(bnd->num_fs_smps <= SG_MAX_SHADERSTAGE_SAMPLERS);
-    SOKOL_ASSERT(bnd->num_fs_sbufs <= SG_MAX_SHADERSTAGE_STORAGE_BUFFERS);
+    SOKOL_ASSERT(bnd->num_fs_sbufs <= SG_MAX_SHADERSTAGE_STORAGEBUFFERS);
 
     _sg_clear(key->items, sizeof(key->items));
     key->items[0] = bnd->pip->slot.id;
     const int vs_imgs_offset = 1;
     const int vs_smps_offset = vs_imgs_offset + SG_MAX_SHADERSTAGE_IMAGES;
     const int vs_sbufs_offset = vs_smps_offset + SG_MAX_SHADERSTAGE_SAMPLERS;
-    const int fs_imgs_offset = vs_sbufs_offset + SG_MAX_SHADERSTAGE_STORAGE_BUFFERS;
+    const int fs_imgs_offset = vs_sbufs_offset + SG_MAX_SHADERSTAGE_STORAGEBUFFERS;
     const int fs_smps_offset = fs_imgs_offset + SG_MAX_SHADERSTAGE_IMAGES;
     const int fs_sbufs_offset = fs_smps_offset + SG_MAX_SHADERSTAGE_SAMPLERS;
-    SOKOL_ASSERT((fs_sbufs_offset + SG_MAX_SHADERSTAGE_STORAGE_BUFFERS) == _SG_WGPU_BINDGROUPSCACHE_NUM_ITEMS);
+    SOKOL_ASSERT((fs_sbufs_offset + SG_MAX_SHADERSTAGE_STORAGEBUFFERS) == _SG_WGPU_BINDGROUPSCACHE_NUM_ITEMS);
     for (int i = 0; i < bnd->num_vs_imgs; i++) {
         SOKOL_ASSERT(bnd->vs_imgs[i]);
         key->items[vs_imgs_offset + i] = bnd->vs_imgs[i]->slot.id;
@@ -16149,7 +16149,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 }
             }
             bool storage_buffers_continuous = true;
-            for (int sbuf_index = 0; sbuf_index < SG_MAX_SHADERSTAGE_STORAGE_BUFFERS; sbuf_index++) {
+            for (int sbuf_index = 0; sbuf_index < SG_MAX_SHADERSTAGE_STORAGEBUFFERS; sbuf_index++) {
                 const sg_shader_storage_buffer_desc* sbuf_desc = &stage_desc->storage_buffers[sbuf_index];
                 if (sbuf_desc->used) {
                     _SG_VALIDATE(storage_buffers_continuous, VALIDATE_SHADERDESC_NO_CONT_STORAGEBUFFERS);
@@ -16651,7 +16651,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         }
 
         // has expected vertex shader storage buffers
-        for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGE_BUFFERS; i++) {
+        for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGEBUFFERS; i++) {
             const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_VS];
             if (stage->storage_buffers[i].used) {
                 _SG_VALIDATE(bindings->vs.storage_buffers[i].id != SG_INVALID_ID, VALIDATE_ABND_VS_EXPECTED_STORAGEBUFFER_BINDING);
@@ -16724,7 +16724,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         }
 
         // has expected fragment shader storage buffers
-        for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGE_BUFFERS; i++) {
+        for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGEBUFFERS; i++) {
             const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_FS];
             if (stage->storage_buffers[i].used) {
                 _SG_VALIDATE(bindings->fs.storage_buffers[i].id != SG_INVALID_ID, VALIDATE_ABND_FS_EXPECTED_STORAGEBUFFER_BINDING);
@@ -18279,7 +18279,7 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
         }
     }
 
-    for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGE_BUFFERS; i++, bnd.num_vs_sbufs++) {
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGEBUFFERS; i++, bnd.num_vs_sbufs++) {
         if (bindings->vs.storage_buffers[i].id) {
             bnd.vs_sbufs[i] = _sg_lookup_buffer(&_sg.pools, bindings->vs.storage_buffers[i].id);
             if (bnd.vs_sbufs[i]) {
@@ -18318,7 +18318,7 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
         }
     }
 
-    for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGE_BUFFERS; i++, bnd.num_fs_sbufs++) {
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGEBUFFERS; i++, bnd.num_fs_sbufs++) {
         if (bindings->fs.storage_buffers[i].id) {
             bnd.fs_sbufs[i] = _sg_lookup_buffer(&_sg.pools, bindings->fs.storage_buffers[i].id);
             if (bnd.fs_sbufs[i]) {
