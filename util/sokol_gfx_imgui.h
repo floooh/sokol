@@ -3484,6 +3484,15 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_stage(const sg_shader_stage_desc* stage
             break;
         }
     }
+    int num_valid_storage_buffers = 0;
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGEBUFFERS; i++) {
+        if (stage->storage_buffers[i].used) {
+            num_valid_storage_buffers++;
+        } else {
+            break;
+        }
+    }
+
     if (num_valid_ubs > 0) {
         if (igTreeNode_Str("Uniform Blocks")) {
             for (int i = 0; i < num_valid_ubs; i++) {
@@ -3534,6 +3543,15 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_stage(const sg_shader_stage_desc* stage
                     sispd->image_slot,
                     sispd->sampler_slot,
                     sispd->glsl_name ? sispd->glsl_name : "---");
+            }
+            igTreePop();
+        }
+    }
+    if (num_valid_storage_buffers > 0) {
+        if (igTreeNode_Str("Storage Buffers")) {
+            for (int i = 0; i < num_valid_storage_buffers; i++) {
+                const sg_shader_storage_buffer_desc* sbuf_desc = &stage->storage_buffers[i];
+                igText("slot: %d\n  readonly: %s\n", i, sbuf_desc->readonly ? "true" : "false");
             }
             igTreePop();
         }
@@ -3818,6 +3836,17 @@ _SOKOL_PRIVATE void _sgimgui_draw_bindings_panel(sgimgui_t* ctx, const sg_bindin
             break;
         }
     }
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGEBUFFERS; i++) {
+        sg_buffer buf = bnd->vs.storage_buffers[i];
+        if (buf.id != SG_INVALID_ID) {
+            igSeparator();
+            igText("Vertex Stage Storage Buffer Slot #%d:", i);
+            igText("  Buffer: "); igSameLine(0,-1);
+            if (_sgimgui_draw_buffer_link(ctx, buf)) {
+                _sgimgui_show_buffer(ctx, buf);
+            }
+        }
+    }
     for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
         sg_image img = bnd->fs.images[i];
         if (img.id != SG_INVALID_ID) {
@@ -3837,6 +3866,17 @@ _SOKOL_PRIVATE void _sgimgui_draw_bindings_panel(sgimgui_t* ctx, const sg_bindin
             igText("  Sampler: "); igSameLine(0,-1);
             if (_sgimgui_draw_sampler_link(ctx, smp)) {
                 _sgimgui_show_sampler(ctx, smp);
+            }
+        }
+    }
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGEBUFFERS; i++) {
+        sg_buffer buf = bnd->fs.storage_buffers[i];
+        if (buf.id != SG_INVALID_ID) {
+            igSeparator();
+            igText("Fragment Stage Storage Buffer Slot #%d:", i);
+            igText("  Buffer: "); igSameLine(0,-1);
+            if (_sgimgui_draw_buffer_link(ctx, buf)) {
+                _sgimgui_show_buffer(ctx, buf);
             }
         }
     }
