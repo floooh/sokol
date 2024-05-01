@@ -13944,7 +13944,7 @@ _SOKOL_PRIVATE _sg_wgpu_bindgroup_t* _sg_wgpu_create_bindgroup(_sg_bindings_t* b
         WGPUBindGroupEntry* wgpu_entry = &wgpu_entries[bge_index++];
         wgpu_entry->binding = _sg_wgpu_storagebuffer_binding(SG_SHADERSTAGE_FS, i);
         wgpu_entry->buffer = bnd->fs_sbufs[i]->wgpu.buf;
-        wgpu_entry->size = (uint64_t) bnd->vs_sbufs[i]->cmn.size;
+        wgpu_entry->size = (uint64_t) bnd->fs_sbufs[i]->cmn.size;
     }
     WGPUBindGroupDescriptor bg_desc;
     _sg_clear(&bg_desc, sizeof(bg_desc));
