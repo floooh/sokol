@@ -24,7 +24,7 @@
         #define SOKOL_WGPU
         #define SOKOL_DUMMY_BACKEND
 
-    I.e. for the GL 3.3 Core Profile it should look like this:
+    I.e. for the desktop GL it should look like this:
 
     #include ...
     #include ...
@@ -148,9 +148,8 @@
             sg_apply_pipeline(sg_pipeline pip)
 
     --- fill an sg_bindings struct with the resource bindings for the next
-        draw call (1..N vertex buffers, 0 or 1 index buffer, 0..N image objects and
-        0..N sampler objects on the vertex-shader- and fragment-shader-stage
-        and then call
+        draw call (0..N vertex buffers, 0 or 1 index buffer, 0..N image-objects,
+        samplers and storage-buffers), and call:
 
             sg_apply_bindings(const sg_bindings* bindings)
 
@@ -718,7 +717,9 @@
     the sg_make_shader() function requires the following information:
 
     - Shader code or shader binary blobs for the vertex- and fragment- shader-stage:
-        - for the desktop GL backend, source code must be provided in '#version 330' syntax
+        - for the desktop GL backend, source code can be provided in '#version 410' or
+          '#version 430', version 430 is required for storage buffer support, but note
+          that this is not available on macOS
         - for the GLES3 backend, source code must be provided in '#version 300 es' syntax
         - for the D3D11 backend, shaders can be provided as source or binary blobs, the
           source code should be in HLSL4.0 (for best compatibility) or alternatively
@@ -757,6 +758,12 @@
         - please also NOTE the documentation sections about UNIFORM DATA LAYOUT
           and CROSS-BACKEND COMMON UNIFORM DATA LAYOUT below!
 
+    - A description of each storage buffer used in the shader:
+        - a boolean 'readonly' flag, note that currently only
+          readonly storage buffers are supported
+        - note that storage buffers are not supported on all backends
+          and platforms
+
     - A description of each texture/image used in the shader:
         - the expected image type:
             - SG_IMAGETYPE_2D
@@ -773,7 +780,7 @@
           (currently it's not supported to fetch data from multisampled
           textures in shaders, but this is planned for a later time)
 
-    - A description of each sampler used in the shader:
+    - A description of each texture sampler used in the shader:
         - SG_SAMPLERTYPE_FILTERING,
         - SG_SAMPLERTYPE_NONFILTERING,
         - SG_SAMPLERTYPE_COMPARISON,
@@ -952,6 +959,60 @@
 
     The by far easiest way to tackle the common uniform block layout problem is
     to use the sokol-shdc shader cross-compiler tool!
+
+    ON STORAGE BUFFERS
+    ==================
+    Storage buffers can be used to pass large amounts of random access structured
+    data fromt the CPU side to the shaders. They are similar to data textures, but are
+    more convenient to use both on the CPU and shader side since they can be accessed
+    in shaders as as a 1-dimensional array of struct items.
+
+    Storage buffers are *NOT* supported on the following platform/backend combos:
+
+    - macOS+GL (because storage buffers require GL 4.3, while macOS only goes up to GL 4.1)
+    - all GLES3 platforms (WebGL2, iOS, Android - with the option that support on
+      Android may be added at a later point)
+
+    Currently only 'readonly' storage buffers are supported (meaning it's not possible
+    to write to storage buffers from shaders).
+
+    To use storage buffers, the following steps are required:
+
+        - write a shader which uses storage buffers (also see the example links below)
+        - create one or more storage buffers via sg_make_buffer() with the
+          buffer type SG_BUFFERTYPE_STORAGEBUFFER
+        - when creating a shader via sg_make_shader(), populate the sg_shader_desc
+          struct with binding info (when using sokol-shdc, this step will be taken care
+          of automatically)
+            - which storage buffer bind slots on the vertex- and fragment-stage
+              are occupied
+            - whether the storage buffer on that bind slot is readonly (this is currently required
+              to be true)
+        - when calling sg_apply_bindings(), apply the matching bind slots with the previously
+          created storage buffers
+        - ...and that's it.
+
+    For more details, see the following backend-agnostic sokol samples:
+
+    - simple vertex pulling from a storage buffer:
+        - C code: https://github.com/floooh/sokol-samples/blob/master/sapp/vertexpull-sapp.c
+        - shader: https://github.com/floooh/sokol-samples/blob/master/sapp/vertexpull-sapp.glsl
+    - instanced rendering via storage buffers (vertex- and instance-pulling):
+        - C code: https://github.com/floooh/sokol-samples/blob/master/sapp/instancing-pull-sapp.c
+        - shader: https://github.com/floooh/sokol-samples/blob/master/sapp/instancing-pull-sapp.glsl
+    - storage buffers both on the vertex- and fragment-stage:
+        - C code: https://github.com/floooh/sokol-samples/blob/master/sapp/sbuftex-sapp.c
+        - shader: https://github.com/floooh/sokol-samples/blob/master/sapp/sbuftex-sapp.glsl
+    - the Ozz animation sample rewritten to pull all rendering data from storage buffers:
+        - C code: https://github.com/floooh/sokol-samples/blob/master/sapp/ozz-storagebuffer-sapp.cc
+        - shader: https://github.com/floooh/sokol-samples/blob/master/sapp/ozz-storagebuffer-sapp.glsl
+
+    ...also see the following backend-specific vertex pulling samples (those also don't use sokol-shdc):
+
+    - D3D11: https://github.com/floooh/sokol-samples/blob/master/d3d11/vertexpulling-d3d11.c
+    - desktop GL: https://github.com/floooh/sokol-samples/blob/master/glfw/vertexpulling-glfw.c
+    - Metal: https://github.com/floooh/sokol-samples/blob/master/metal/vertexpulling-metal.c
+    - WebGPU: https://github.com/floooh/sokol-samples/blob/master/wgpu/vertexpulling-wgpu.c
 
 
     TRACE HOOKS:
@@ -1334,12 +1395,14 @@
       offsets depending on resource type and shader stage.
         - Vertex shader textures must start at `@group(1) @binding(0)`
         - Vertex shader samplers must start at `@group(1) @binding(16)`
-        - Fragment shader textures must start at `@group(1) @binding(32)`
-        - Fragment shader samplers must start at `@group(1) @binding(48)`
+        - Vertex shader storage buffers must start at `@group(1) @binding(32)`
+        - Fragment shader textures must start at `@group(1) @binding(48)`
+        - Fragment shader samplers must start at `@group(1) @binding(64)`
+        - Fragment shader storage buffers must start at `@group(1) @binding(80)`
 
       Note that the actual number of allowed per-stage texture- and sampler-bindings
       in sokol-gfx is currently lower than the above ranges (currently only up to
-      12 textures and 8 samplers per shader stage are allowed).
+      12 textures, 8 samplers and 8 storage buffers are allowed per shader stage).
 
       If you use sokol-shdc to generate WGSL shader code, you don't need to worry
       about the above binding convention since sokol-shdc assigns bind slots
