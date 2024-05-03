@@ -6,7 +6,7 @@
   to the sokol_app.h Windows backend by defining SOKOL_NOAPI before including the implementation.
   Same thing as GLFW's NOAPI mode basically, to allow using the sokol_app.h windowing features
   without setting up D3D11 or OpenGL. NOAPI implementations for other platforms will follow in the
-  future.
+  future. Many thanks to @pplux and @castano!
 
 ### 13-Apr-2024:
 
