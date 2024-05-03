@@ -1,5 +1,13 @@
 ## Updates
 
+### 03-May-2024:
+
+- sokol_app.h win32: Merged PR https://github.com/floooh/sokol/pull/1034, this adds a NOAPI mode
+  to the sokol_app.h Windows backend by defining SOKOL_NOAPI before including the implementation.
+  Same thing as GLFW's NOAPI mode basically, to allow using the sokol_app.h windowing features
+  without setting up D3D11 or OpenGL. NOAPI implementations for other platforms will follow in the
+  future.
+
 ### 13-Apr-2024:
 
 - sokol_gfx.h d3d11: resource label strings are now communicated to D3D11 resource objects,
