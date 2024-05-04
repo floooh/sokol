@@ -386,7 +386,7 @@ def gen_c_imports(inp, c_prefix, prefix):
     l( '            when ODIN_ARCH == .arm64 {')
     l(f'                when DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_macos_arm64_gl_debug.a"{macos_gl_libs} }} }}')
     l(f'                else       {{ foreign import {clib_import} {{ "{clib_prefix}_macos_arm64_gl_release.a"{macos_gl_libs} }} }}')
-    l( '           } else {')
+    l( '            } else {')
     l(f'                when DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_macos_x64_gl_debug.a"{macos_gl_libs} }} }}')
     l(f'                else       {{ foreign import {clib_import} {{ "{clib_prefix}_macos_x64_gl_release.a"{macos_gl_libs} }} }}')
     l( '            }')
