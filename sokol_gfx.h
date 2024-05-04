@@ -1014,6 +1014,72 @@
     - Metal: https://github.com/floooh/sokol-samples/blob/master/metal/vertexpulling-metal.c
     - WebGPU: https://github.com/floooh/sokol-samples/blob/master/wgpu/vertexpulling-wgpu.c
 
+    Storage buffer shader authoring caveats when using sokol-shdc:
+
+        - declare a storage buffer interface block with `readonly buffer [name] { ... }`
+        - do NOT annotate storage buffers with `layout(...)`, sokol-shdc will take care of that
+        - declare a struct which describes a single array item in the storage buffer interface block
+        - only put a single flexible array member into the storage buffer interface block
+
+        E.g. a complete example in 'sokol-shdc GLSL':
+
+        ```glsl
+        // declare a struct:
+        struct sb_vertex {
+            vec3 pos;
+            vec4 color;
+        }
+        // declare a buffer interface block with a single flexible struct array:
+        readonly buffer vertices {
+            sb_vertex vtx[];
+        }
+        // in the shader function, access the storage buffer like this:
+        void main() {
+            vec3 pos = vtx[gl_VertexIndex].pos;
+            ...
+        }
+        ```
+
+    Backend-specific storage-buffer caveats (not relevant when using sokol-shdc):
+
+        D3D11:
+            - storage buffers are created as 'raw' Byte Address Buffers
+              (https://learn.microsoft.com/en-us/windows/win32/direct3d11/overviews-direct3d-11-resources-intro#raw-views-of-buffers)
+            - in HLSL, use a ByteAddressBuffer to access the buffer content
+              (https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/sm5-object-byteaddressbuffer)
+            - in D3D11, storage buffers and textures share the same bind slots, sokol-gfx reserves
+              shader resource slots 0..15 for textures and 16..23 for storage buffers.
+            - e.g. in HLSL, storage buffer bindings start at register(t16) no matter the shader stage
+
+        Metal:
+            - in Metal there is no internal difference between vertex-, uniform- and
+              storage-buffers, all are bound to the same 'buffer bind slots' with the
+              following reserved ranges:
+                - vertex shader stage:
+                    - uniform buffers (internal): slots 0..3
+                    - vertex buffers: slots 4..11
+                    - storage buffers: slots 12..19
+                - fragment shader stage:
+                    - uniform buffers (internal): slots 0..3
+                    - storage buffers: slots 4..11
+            - this means in MSL, storage buffer bindings start at [[buffer(12)]] in the vertex
+              shaders, and at [[buffer(4)]] in fragment shaders
+
+        GL:
+            - the GL backend doesn't use name-lookup to find storage buffer bindings, this
+              means you must annotate buffers with `layout(std430, binding=N)` in GLSL
+            - ...where N is 0..7 in the vertex shader, and 8..15 in the fragment shader
+
+        WebGPU:
+            - in WGSL, use the following bind locations for the various shader resource types:
+            - vertex shader stage:
+                - textures `@group(1) @binding(0..15)`
+                - samplers `@group(1) @binding(16..31)`
+                - storage buffers `@group(1) @binding(32..47)`
+            - fragment shader stage:
+                - textures `@group(1) @binding(48..63)`
+                - samplers `@group(1) @binding(64..79)`
+                - storage buffers `@group(1) @binding(80..95)`
 
     TRACE HOOKS:
     ============
@@ -1854,8 +1920,10 @@ typedef enum sg_usage {
 /*
     sg_buffer_type
 
-    This indicates whether a buffer contains vertex- or index-data,
-    used in the sg_buffer_desc.type member when creating a buffer.
+    Indicates whether a buffer will be bound as vertex-,
+    index- or storage-buffer.
+
+    Used in the sg_buffer_desc.type member when creating a buffer.
 
     The default value is SG_BUFFERTYPE_VERTEXBUFFER.
 */
@@ -1987,12 +2055,12 @@ typedef enum sg_cube_face {
     sg_shader_stage
 
     There are 2 shader stages: vertex- and fragment-shader-stage.
-    Each shader stage consists of:
+    Each shader stage
 
-    - one slot for a shader function (provided as source- or byte-code)
-    - SG_MAX_SHADERSTAGE_UBS slots for uniform blocks
-    - SG_MAX_SHADERSTAGE_IMAGES slots for images used as textures by
-      the shader function
+    - SG_MAX_SHADERSTAGE_UBS slots for applying uniform data
+    - SG_MAX_SHADERSTAGE_IMAGES slots for images used as textures
+    - SG_MAX_SHADERSTAGE_SAMPLERS slots for texture samplers
+    - SG_MAX_SHADERSTAGE_STORAGEBUFFERS slots for storage buffer bindings
 */
 typedef enum sg_shader_stage {
     SG_SHADERSTAGE_VS,
@@ -2673,11 +2741,7 @@ typedef struct sg_bindings {
     .usage:     SG_USAGE_IMMUTABLE
     .data.ptr   0       (*must* be valid for immutable buffers)
     .data.size  0       (*must* be > 0 for immutable buffers)
-    .label      0       (optional string label for trace hooks)
-
-    The label will be ignored by sokol_gfx.h, it is only useful
-    when hooking into sg_make_buffer() or sg_init_buffer() via
-    the sg_install_trace_hooks() function.
+    .label      0       (optional string label)
 
     For immutable buffers which are initialized with initial data,
     keep the .size item zero-initialized, and set the size together with the
@@ -2890,6 +2954,9 @@ typedef struct sg_sampler_desc {
             - the texture slot of the involved texture
             - the sampler slot of the involved sampler
             - for GLSL only: the name of the combined image-sampler object
+        - reflection info for each storage-buffer used by the shader:
+            - whether the storage buffer is readonly (currently this
+              must be true)
 
     For all GL backends, shader source-code must be provided. For D3D11 and Metal,
     either shader source-code or byte-code can be provided.
@@ -3292,9 +3359,9 @@ typedef struct sg_attachments_info {
 /*
     sg_frame_stats
 
-    Allows to track generic and backend-specific tracking stats about a
+    Allows to track generic and backend-specific stats about a
     render frame. Obtained by calling sg_query_frame_stats(). The returned
-    struct will contains information about the *previous* frame.
+    struct contains information about the *previous* frame.
 */
 typedef struct sg_frame_stats_gl {
     uint32_t num_bind_buffer;
@@ -3765,11 +3832,6 @@ typedef enum sg_log_item {
     The sg_desc struct contains configuration values for sokol_gfx,
     it is used as parameter to the sg_setup() call.
 
-    NOTE that all callback function pointers come in two versions, one without
-    a userdata pointer, and one with a userdata pointer. You would
-    either initialize one or the other depending on whether you pass data
-    to your callbacks.
-
     The default configuration is:
 
     .buffer_pool_size       128
@@ -3824,6 +3886,25 @@ typedef enum sg_log_item {
         .environment.d3d11.device_context
             a pointer to the ID3D11DeviceContext object
 
+    GL specific:
+        .environment.gl.major_version
+        .environment.gl.minor_version
+            The major and minor version of the desktop(!) GL context (e.g. only
+            relevant when SOKOL_GLCORE is defined). Only two combinations are
+            currently supported (but you are free to pass in a higher minor version,
+            sokol_gfx.h just won't make use of higher-version features):
+
+            .major_version = 4, .minor_version = 1
+                Storage buffers are not available. This is the highest GL version
+                supported on macOS.
+
+            .major_version = 4, .minor_version = 3
+                Storage buffers are available.
+
+            Keeping the major_version zero-initialized will use the following defaults:
+                - macOS: .major_version = 4, .minor_version = 1
+                - otherwise: .major_version = 4, .minor_version = 3
+
     WebGPU specific:
         .wgpu_disable_bindgroups_cache
             When this is true, the WebGPU backend will create and immediately
@@ -3863,7 +3944,7 @@ typedef struct sg_d3d11_environment {
 } sg_d3d11_environment;
 
 typedef struct sg_wgpu_environment {
-    const void* device;                    // WGPUDevice
+    const void* device;
 } sg_wgpu_environment;
 
 typedef struct sg_gl_environment {
@@ -3914,8 +3995,9 @@ typedef struct sg_allocator {
     that without logging function, sokol-gfx will be completely
     silent, e.g. it will not report errors, warnings and
     validation layer messages. For maximum error verbosity,
-    compile in debug mode (e.g. NDEBUG *not* defined) and install
-    a logger (for instance the standard logging function from sokol_log.h).
+    compile in debug mode (e.g. NDEBUG *not* defined) and provide a
+    compatible logger function in the sg_setup() call
+    (for instance the standard logging function from sokol_log.h).
 */
 typedef struct sg_logger {
     void (*func)(
