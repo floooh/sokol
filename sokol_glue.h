@@ -135,8 +135,6 @@ SOKOL_API_IMPL sg_environment sglue_environment(void) {
     env.d3d11.device = sapp_d3d11_get_device();
     env.d3d11.device_context = sapp_d3d11_get_device_context();
     env.wgpu.device = sapp_wgpu_get_device();
-    env.gl.major_version = sapp_gl_get_major_version();
-    env.gl.minor_version = sapp_gl_get_minor_version();
     return env;
 }
 

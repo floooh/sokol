@@ -3886,25 +3886,6 @@ typedef enum sg_log_item {
         .environment.d3d11.device_context
             a pointer to the ID3D11DeviceContext object
 
-    GL specific:
-        .environment.gl.major_version
-        .environment.gl.minor_version
-            The major and minor version of the desktop(!) GL context (e.g. only
-            relevant when SOKOL_GLCORE is defined). Only two combinations are
-            currently supported (but you are free to pass in a higher minor version,
-            sokol_gfx.h just won't make use of higher-version features):
-
-            .major_version = 4, .minor_version = 1
-                Storage buffers are not available. This is the highest GL version
-                supported on macOS.
-
-            .major_version = 4, .minor_version = 3
-                Storage buffers are available.
-
-            Keeping the major_version zero-initialized will use the following defaults:
-                - macOS: .major_version = 4, .minor_version = 1
-                - otherwise: .major_version = 4, .minor_version = 3
-
     WebGPU specific:
         .wgpu_disable_bindgroups_cache
             When this is true, the WebGPU backend will create and immediately
@@ -3947,17 +3928,11 @@ typedef struct sg_wgpu_environment {
     const void* device;
 } sg_wgpu_environment;
 
-typedef struct sg_gl_environment {
-    int major_version;
-    int minor_version;
-} sg_gl_environment;
-
 typedef struct sg_environment {
     sg_environment_defaults defaults;
     sg_metal_environment metal;
     sg_d3d11_environment d3d11;
     sg_wgpu_environment wgpu;
-    sg_gl_environment gl;
 } sg_environment;
 
 /*
@@ -7622,7 +7597,11 @@ _SOKOL_PRIVATE void _sg_gl_init_limits(void) {
 _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
     _sg.backend = SG_BACKEND_GLCORE;
 
-    const int version = _sg.desc.environment.gl.major_version * 100 + _sg.desc.environment.gl.minor_version * 10;
+    GLint major_version = 0;
+    GLint minor_version = 0;
+    glGetIntegerv(GL_MAJOR_VERSION, &major_version);
+    glGetIntegerv(GL_MINOR_VERSION, &minor_version);
+    const int version = major_version * 100 + minor_version * 10;
     _sg.features.origin_top_left = false;
     _sg.features.image_clamp_to_border = true;
     _sg.features.mrt_independent_blend_state = false;
@@ -17519,17 +17498,6 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
     #endif
     res.environment.defaults.depth_format = _sg_def(res.environment.defaults.depth_format, SG_PIXELFORMAT_DEPTH_STENCIL);
     res.environment.defaults.sample_count = _sg_def(res.environment.defaults.sample_count, 1);
-    #if defined(SOKOL_GLCORE)
-        res.environment.gl.major_version = _sg_def(res.environment.gl.major_version, 4);
-        #if defined(__APPLE__)
-            res.environment.gl.minor_version = _sg_def(res.environment.gl.minor_version, 1);
-        #else
-            res.environment.gl.minor_version = _sg_def(res.environment.gl.minor_version, 3);
-        #endif
-    #elif defined(SOKOL_GLES3)
-        res.environment.gl.major_version = _sg_def(res.environment.gl.major_version, 3);
-        res.environment.gl.minor_version = _sg_def(res.environment.gl.minor_version, 0);
-    #endif
     res.buffer_pool_size = _sg_def(res.buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE);
     res.image_pool_size = _sg_def(res.image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE);
     res.sampler_pool_size = _sg_def(res.sampler_pool_size, _SG_DEFAULT_SAMPLER_POOL_SIZE);
