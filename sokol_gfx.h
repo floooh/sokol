@@ -4765,6 +4765,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
         #define GL_FRAMEBUFFER_UNSUPPORTED 0x8CDD
         #define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE 0x8D56
+        #define GL_MAJOR_VERSION 0x821B
+        #define GL_MINOR_VERSION 0x821C
     #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
