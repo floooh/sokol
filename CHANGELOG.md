@@ -1,5 +1,118 @@
 ## Updates
 
+### 09-May-2024
+
+The 'storage buffer update'. sokol_gfx.h now has (readonly) storage buffer support, providing
+a more flexible way to pass array-like random access data from the CPU to the GPU side.
+
+Please see the following [blog post](https://floooh.github.io/2024/05/06/sokol-storage-buffers.html)
+and the [associated PR #1007](https://github.com/floooh/sokol/pull/1007) for details.
+
+Please also note the new documentation section `ON STORAGE BUFFERS` in sokol_gfx.h.
+
+Also see the related [changes in sokol-shdc](https://github.com/floooh/sokol-tools/blob/master/CHANGELOG.md).
+
+...and finally the following new samples (note that the demo are running on WebGPU and currently
+require a recent Chrome on macOS or Windows):
+
+- rendering without buffer bindings (this sample actually also runs on WebGL2):
+  - WebGPU: https://floooh.github.io/2024/05/06/sokol-storage-buffers.html
+  - C source: https://github.com/floooh/sokol-samples/blob/master/sapp/triangle-bufferless-sapp.c
+  - GLSL source: https://github.com/floooh/sokol-samples/blob/master/sapp/triangle-bufferless-sapp.glsl
+- vertex pulling from a storage buffer:
+  - WebGPU: https://floooh.github.io/sokol-webgpu/vertexpull-sapp.html
+  - C source: https://github.com/floooh/sokol-samples/tree/master/sapp/vertexpull-sapp.c
+  - GLSL source: https://github.com/floooh/sokol-samples/tree/master/sapp/vertexpull-sapp.glsl
+- reading storage buffer content in fragment shader:
+  - WebGPU: https://floooh.github.io/sokol-webgpu/sbuftex-sapp.html
+  - C source: https://github.com/floooh/sokol-samples/tree/master/sapp/sbuftex-sapp.c
+  - GLSL source: https://github.com/floooh/sokol-samples/tree/master/sapp/sbuftex-sapp.glsl
+- instanced rendering via storage buffer:
+  - WebGPU: https://floooh.github.io/sokol-webgpu/instancing-pull-sapp.html
+  - C source: https://github.com/floooh/sokol-samples/tree/master/sapp/instancing-pull.c
+  - GLSL source: https://github.com/floooh/sokol-samples/tree/master/sapp/instancing-pull.glsl
+- skinned character rendering via storage buffers:
+  - WebGPU: https://floooh.github.io/sokol-webgpu/ozz-storagebuffer-sapp.html
+  - C source: https://github.com/floooh/sokol-samples/tree/master/sapp/ozz-storagebuffer-sapp.c
+  - GLSL source: https://github.com/floooh/sokol-samples/tree/master/sapp/ozz-storagebuffer-sapp.glsl
+
+Also see the following backend-specific samples which don't use sokol-shdc:
+
+- D3D11: https://github.com/floooh/sokol-samples/blob/master/d3d11/vertexpulling-d3d11.c
+- Metal: https://github.com/floooh/sokol-samples/blob/master/metal/vertexpulling-metal.c
+- WebGPU: https://github.com/floooh/sokol-samples/blob/master/wgpu/vertexpulling-wgpu.c
+- Desktop GL: https://github.com/floooh/sokol-samples/blob/master/glfw/vertexpulling-glfw.c
+
+Storage support is not available on the following platform/backend combos:
+
+- macOS + GL (stuck at GL 4.1)
+- iOS + GL (stuck at GLES 3.0)
+- WebGL2 (stuck at GLES 3.0)
+- Android (support may be implemented at a later time)
+
+#### **BREAKING CHANGES**
+
+- the config define `SOKOL_GLCORE33` has been renamed to `SOKOL_GLCORE`, this affects
+  the following headers:
+    - sokol_gfx.h
+    - sokol_app.gh
+    - sokol_debugtext.h
+    - sokol_fontstash.h
+    - sokol_gl.h
+    - sokol_imgui.h
+    - sokol_nuklear.h
+    - sokol_spine.h
+- likewise in the sokol_gfx.h enum `sg_backend` the enum item `SG_BACKEND_GLCORE33` has been
+  renamed to `SG_BACKEND_GLCORE`
+- sokol_gfx.h now expects a minimal desktop GL version of 4.1 on macOS, and 4.3 on other
+  platforms (this only matters if you don't use sokol_app.h), storage buffer support is only
+  available on GL 4.3 contexts
+- likewise, shaders passed into sokol_gfx.h when the desktop GL backend is active are now expected
+  to be `#version 410` or `#version 430` (`#version 330` may still work but though but is untested)
+- likewise, by default sokol_app.h now creates a GL 4.1 context on macOS and a GL 4.3 context on other
+  desktop platforms when `SOKOL_GLCORE` is defined
+- if you're passing WGSL shaders directly into sokol_gfx.h (instead of using sokol-shdc), please
+  be aware that the binding offets for the different shader resource types have moved:
+    - vertex shader stage:
+      - textures: `@group(1) @binding(0..15)`
+      - samplers: `@group(1) @binding(16..31)`
+      - storage buffers: `@group(1) @binding(32..37)`
+    - fragment shader stage:
+      - textures: `@group(1) @binding(48..63)`
+      - samplers: `@group(1) @binding(64..79)`
+      - storage buffers `@group(1) @binding(80..95)`
+
+#### **NON-BREAKING CHANGES**
+
+- **sokol_app.h** learned two new functions to get the desktop GL version (note that on GLES
+  these return 0, this behaviour may change at a later time):
+  - `int sapp_gl_get_major_version(void)`
+  - `int sapp_gl_get_minor_version(void)`
+
+- **sokol_gfx.h**:
+  - The enum `sg_buffer_type` has a new member `SG_BUFFERTYPE_STORAGEBUFFER`, used
+    in the `sg_make_buffer()` call to create a storage buffer
+  - The struct `sg_features` has a new member `bool storage_buffer`, used to indicate
+    that the current 3D backend supports storage buffers
+  - The stats struct `sg_frame_stats_metal_bindings` has a new member `num_set_fragment_buffer`
+  - There are various new error codes and validation checks related to storage buffers
+  - A new struct `sg_shader_storage_buffer_desc`, nested in `sg_shader_desc`.
+    This is used in the `sg_make_shader()` call to communicate to sokol_gfx.h
+    what storage buffer bind slots are used in a shader
+
+- **sokol_gfx_imgui.h**: The debug UI panels have been updated to visualize the new
+  storage buffer related state
+
+- in the following headers, the embedded shaders have been updated via the new
+  sokol-shdc version, switching the embedded GLSL shaders to `#version 410`
+  - sokol_debugtext.h
+  - sokol_fontstash.h
+  - sokol_gl.h
+  - sokol_imgui.h
+  - sokol_nuklear.h
+  - sokol_spine.h
+
+
 ### 03-May-2024:
 
 - sokol_app.h win32: Merged PR https://github.com/floooh/sokol/pull/1034, this adds a NOAPI mode
