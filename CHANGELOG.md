@@ -77,7 +77,7 @@ Storage buffer support is not available on the following platform/backend combos
     - vertex shader stage:
       - textures: `@group(1) @binding(0..15)`
       - samplers: `@group(1) @binding(16..31)`
-      - storage buffers: `@group(1) @binding(32..37)`
+      - storage buffers: `@group(1) @binding(32..47)`
     - fragment shader stage:
       - textures: `@group(1) @binding(48..63)`
       - samplers: `@group(1) @binding(64..79)`
