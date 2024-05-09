@@ -43,7 +43,7 @@ Also see the following backend-specific samples which don't use sokol-shdc:
 - WebGPU: https://github.com/floooh/sokol-samples/blob/master/wgpu/vertexpulling-wgpu.c
 - Desktop GL: https://github.com/floooh/sokol-samples/blob/master/glfw/vertexpulling-glfw.c
 
-Storage support is not available on the following platform/backend combos:
+Storage buffer support is not available on the following platform/backend combos:
 
 - macOS + GL (stuck at GL 4.1)
 - iOS + GL (stuck at GLES 3.0)
