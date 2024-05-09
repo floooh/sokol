@@ -16,7 +16,7 @@ Also see the related [changes in sokol-shdc](https://github.com/floooh/sokol-too
 require a recent Chrome on macOS or Windows):
 
 - rendering without buffer bindings (this sample actually also runs on WebGL2):
-  - WebGPU: https://floooh.github.io/2024/05/06/sokol-storage-buffers.html
+  - WebGPU: https://floooh.github.io/sokol-webgpu/triangle-bufferless-sapp.html
   - C source: https://github.com/floooh/sokol-samples/blob/master/sapp/triangle-bufferless-sapp.c
   - GLSL source: https://github.com/floooh/sokol-samples/blob/master/sapp/triangle-bufferless-sapp.glsl
 - vertex pulling from a storage buffer:
@@ -29,11 +29,11 @@ require a recent Chrome on macOS or Windows):
   - GLSL source: https://github.com/floooh/sokol-samples/tree/master/sapp/sbuftex-sapp.glsl
 - instanced rendering via storage buffer:
   - WebGPU: https://floooh.github.io/sokol-webgpu/instancing-pull-sapp.html
-  - C source: https://github.com/floooh/sokol-samples/tree/master/sapp/instancing-pull.c
-  - GLSL source: https://github.com/floooh/sokol-samples/tree/master/sapp/instancing-pull.glsl
+  - C source: https://github.com/floooh/sokol-samples/tree/master/sapp/instancing-pull-sapp.c
+  - GLSL source: https://github.com/floooh/sokol-samples/tree/master/sapp/instancing-pull-sapp.glsl
 - skinned character rendering via storage buffers:
   - WebGPU: https://floooh.github.io/sokol-webgpu/ozz-storagebuffer-sapp.html
-  - C source: https://github.com/floooh/sokol-samples/tree/master/sapp/ozz-storagebuffer-sapp.c
+  - C source: https://github.com/floooh/sokol-samples/tree/master/sapp/ozz-storagebuffer-sapp.cc
   - GLSL source: https://github.com/floooh/sokol-samples/tree/master/sapp/ozz-storagebuffer-sapp.glsl
 
 Also see the following backend-specific samples which don't use sokol-shdc:
