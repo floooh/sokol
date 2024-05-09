@@ -12,11 +12,12 @@ Please also note the new documentation section `ON STORAGE BUFFERS` in sokol_gfx
 
 Also see the related [changes in sokol-shdc](https://github.com/floooh/sokol-tools/blob/master/CHANGELOG.md).
 
-...and finally the following new samples (note that the demo are running on WebGPU and currently
+...and finally the following new samples (note that the demos are running on WebGPU and currently
 require a recent Chrome on macOS or Windows):
 
 - rendering without buffer bindings (this sample actually also runs on WebGL2):
   - WebGPU: https://floooh.github.io/sokol-webgpu/triangle-bufferless-sapp.html
+  - WebGL2: https://floooh.github.io/sokol-html5/triangle-bufferless-sapp.html
   - C source: https://github.com/floooh/sokol-samples/blob/master/sapp/triangle-bufferless-sapp.c
   - GLSL source: https://github.com/floooh/sokol-samples/blob/master/sapp/triangle-bufferless-sapp.glsl
 - vertex pulling from a storage buffer:
