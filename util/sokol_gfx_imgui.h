@@ -1140,7 +1140,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_resource_slot(const sg_slot_info* slot) {
 
 _SOKOL_PRIVATE const char* _sgimgui_backend_string(sg_backend b) {
     switch (b) {
-        case SG_BACKEND_GLCORE33:           return "SG_BACKEND_GLCORE33";
+        case SG_BACKEND_GLCORE:             return "SG_BACKEND_GLCORE";
         case SG_BACKEND_GLES3:              return "SG_BACKEND_GLES3";
         case SG_BACKEND_D3D11:              return "SG_BACKEND_D3D11";
         case SG_BACKEND_METAL_IOS:          return "SG_BACKEND_METAL_IOS";
@@ -1156,6 +1156,7 @@ _SOKOL_PRIVATE const char* _sgimgui_buffertype_string(sg_buffer_type t) {
     switch (t) {
         case SG_BUFFERTYPE_VERTEXBUFFER:    return "SG_BUFFERTYPE_VERTEXBUFFER";
         case SG_BUFFERTYPE_INDEXBUFFER:     return "SG_BUFFERTYPE_INDEXBUFFER";
+        case SG_BUFFERTYPE_STORAGEBUFFER:   return "SG_BUFFERTYPE_STORAGEBUFFER";
         default:                            return "???";
     }
 }
@@ -3483,6 +3484,15 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_stage(const sg_shader_stage_desc* stage
             break;
         }
     }
+    int num_valid_storage_buffers = 0;
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGEBUFFERS; i++) {
+        if (stage->storage_buffers[i].used) {
+            num_valid_storage_buffers++;
+        } else {
+            break;
+        }
+    }
+
     if (num_valid_ubs > 0) {
         if (igTreeNode_Str("Uniform Blocks")) {
             for (int i = 0; i < num_valid_ubs; i++) {
@@ -3533,6 +3543,15 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_stage(const sg_shader_stage_desc* stage
                     sispd->image_slot,
                     sispd->sampler_slot,
                     sispd->glsl_name ? sispd->glsl_name : "---");
+            }
+            igTreePop();
+        }
+    }
+    if (num_valid_storage_buffers > 0) {
+        if (igTreeNode_Str("Storage Buffers")) {
+            for (int i = 0; i < num_valid_storage_buffers; i++) {
+                const sg_shader_storage_buffer_desc* sbuf_desc = &stage->storage_buffers[i];
+                igText("slot: %d\n  readonly: %s\n", i, sbuf_desc->readonly ? "true" : "false");
             }
             igTreePop();
         }
@@ -3817,6 +3836,17 @@ _SOKOL_PRIVATE void _sgimgui_draw_bindings_panel(sgimgui_t* ctx, const sg_bindin
             break;
         }
     }
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGEBUFFERS; i++) {
+        sg_buffer buf = bnd->vs.storage_buffers[i];
+        if (buf.id != SG_INVALID_ID) {
+            igSeparator();
+            igText("Vertex Stage Storage Buffer Slot #%d:", i);
+            igText("  Buffer: "); igSameLine(0,-1);
+            if (_sgimgui_draw_buffer_link(ctx, buf)) {
+                _sgimgui_show_buffer(ctx, buf);
+            }
+        }
+    }
     for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
         sg_image img = bnd->fs.images[i];
         if (img.id != SG_INVALID_ID) {
@@ -3836,6 +3866,17 @@ _SOKOL_PRIVATE void _sgimgui_draw_bindings_panel(sgimgui_t* ctx, const sg_bindin
             igText("  Sampler: "); igSameLine(0,-1);
             if (_sgimgui_draw_sampler_link(ctx, smp)) {
                 _sgimgui_show_sampler(ctx, smp);
+            }
+        }
+    }
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGEBUFFERS; i++) {
+        sg_buffer buf = bnd->fs.storage_buffers[i];
+        if (buf.id != SG_INVALID_ID) {
+            igSeparator();
+            igText("Fragment Stage Storage Buffer Slot #%d:", i);
+            igText("  Buffer: "); igSameLine(0,-1);
+            if (_sgimgui_draw_buffer_link(ctx, buf)) {
+                _sgimgui_show_buffer(ctx, buf);
             }
         }
     }
@@ -4033,7 +4074,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_swapchain_panel(sg_swapchain* swapchain) {
             igText("  Depth Stencil Texture: %p", swapchain->metal.depth_stencil_texture);
             igText("  MSAA Color Texture: %p", swapchain->metal.msaa_color_texture);
             break;
-        case SG_BACKEND_GLCORE33:
+        case SG_BACKEND_GLCORE:
         case SG_BACKEND_GLES3:
             igText("GL Objects:");
             igText("  Framebuffer: %d", swapchain->gl.framebuffer);
@@ -4196,6 +4237,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
     igText("    image_clamp_to_border: %s", _sgimgui_bool_string(f.image_clamp_to_border));
     igText("    mrt_independent_blend_state: %s", _sgimgui_bool_string(f.mrt_independent_blend_state));
     igText("    mrt_independent_write_mask: %s", _sgimgui_bool_string(f.mrt_independent_write_mask));
+    igText("    storage_buffer: %s", _sgimgui_bool_string(f.storage_buffer));
     sg_limits l = sg_query_limits();
     igText("\nLimits:\n");
     igText("    max_image_size_2d: %d", l.max_image_size_2d);
@@ -4263,7 +4305,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(sgimgui_t* ctx) {
         _sgimgui_frame_stats(size_append_buffer);
         _sgimgui_frame_stats(size_update_image);
         switch (sg_query_backend()) {
-            case SG_BACKEND_GLCORE33:
+            case SG_BACKEND_GLCORE:
             case SG_BACKEND_GLES3:
                 _sgimgui_frame_stats(gl.num_bind_buffer);
                 _sgimgui_frame_stats(gl.num_active_texture);
@@ -4309,6 +4351,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(sgimgui_t* ctx) {
                 _sgimgui_frame_stats(metal.bindings.num_set_vertex_buffer);
                 _sgimgui_frame_stats(metal.bindings.num_set_vertex_texture);
                 _sgimgui_frame_stats(metal.bindings.num_set_vertex_sampler_state);
+                _sgimgui_frame_stats(metal.bindings.num_set_fragment_buffer);
                 _sgimgui_frame_stats(metal.bindings.num_set_fragment_texture);
                 _sgimgui_frame_stats(metal.bindings.num_set_fragment_sampler_state);
                 _sgimgui_frame_stats(metal.uniforms.num_set_vertex_buffer_offset);
