@@ -68,7 +68,7 @@ Storage buffer support is not available on the following platform/backend combos
   platforms (this only matters if you don't use sokol_app.h), storage buffer support is only
   available on GL 4.3 contexts
 - likewise, shaders passed into sokol_gfx.h when the desktop GL backend is active are now expected
-  to be `#version 410` or `#version 430` (`#version 330` may still work but though but is untested)
+  to be `#version 410` or `#version 430` (`#version 330` may still work but is untested)
 - likewise, by default sokol_app.h now creates a GL 4.1 context on macOS and a GL 4.3 context on other
   desktop platforms when `SOKOL_GLCORE` is defined
 - if you're passing WGSL shaders directly into sokol_gfx.h (instead of using sokol-shdc), please
