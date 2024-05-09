@@ -55,7 +55,7 @@ Storage buffer support is not available on the following platform/backend combos
 - the config define `SOKOL_GLCORE33` has been renamed to `SOKOL_GLCORE`, this affects
   the following headers:
     - sokol_gfx.h
-    - sokol_app.gh
+    - sokol_app.h
     - sokol_debugtext.h
     - sokol_fontstash.h
     - sokol_gl.h
