@@ -2928,8 +2928,10 @@ UTEST(sokol_gfx, query_pixelformat_bytesperpixel) {
     T(sg_query_pixelformat(SG_PIXELFORMAT_ETC2_RGB8).bytes_per_pixel == 0);
     T(sg_query_pixelformat(SG_PIXELFORMAT_ETC2_RGB8A1).bytes_per_pixel == 0);
     T(sg_query_pixelformat(SG_PIXELFORMAT_ETC2_RGBA8).bytes_per_pixel == 0);
-    T(sg_query_pixelformat(SG_PIXELFORMAT_ETC2_RG11).bytes_per_pixel == 0);
-    T(sg_query_pixelformat(SG_PIXELFORMAT_ETC2_RG11SN).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_EAC_R11).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_EAC_R11SN).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_EAC_R11).bytes_per_pixel == 0);
+    T(sg_query_pixelformat(SG_PIXELFORMAT_EAC_R11SN).bytes_per_pixel == 0);
     sg_shutdown();
 }
 

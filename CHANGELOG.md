@@ -1,5 +1,16 @@
 ## Updates
 
+### 10-May-2024
+
+A minor breaking change regarding ETC2/EAC pixel formats:
+
+- `SG_PIXELFORMAT_ETC2_RG11` has been renamed to `SG_PIXELFORMAT_EAC_RG11`
+- `SG_PIXELFORMAT_ETC2_RG11SN` has been renamed to `SG_PIXELFORMAT_EAC_RG11SN`
+- the pixel formats `SG_PIXELFORMAT_ETC2_R11` and `SG_PIXELFORMAT_ETC2_R11SN` have been added
+- fixed a pixel format mapping bug in WebGPU (the EAC RG11 formats were actually mapped to R11)
+
+See ticket https://github.com/floooh/sokol/issues/1041, and PR https://github.com/floooh/sokol/pull/1044 for details.
+
 ### 09-May-2024
 
 The 'storage buffer update'. sokol_gfx.h now has (readonly) storage buffer support, providing
