@@ -219,11 +219,11 @@ def as_c_arg_type(arg_type, prefix):
     elif util.is_string_ptr(arg_type):
         return "scope const(char)*"
     elif is_const_struct_ptr(arg_type):
-        return f"const {as_d_struct_type(util.extract_ptr_type(arg_type), prefix)} *"
+        return f"scope const {as_d_struct_type(util.extract_ptr_type(arg_type), prefix)} *"
     elif is_prim_ptr(arg_type):
-        return f"{as_d_prim_type(util.extract_ptr_type(arg_type))} *"
+        return f"scope {as_d_prim_type(util.extract_ptr_type(arg_type))} *"
     elif is_const_prim_ptr(arg_type):
-        return f"const {as_d_prim_type(util.extract_ptr_type(arg_type))} *"
+        return f"scope const {as_d_prim_type(util.extract_ptr_type(arg_type))} *"
     else:
         sys.exit(f"Error as_c_arg_type(): {arg_type}")
 
@@ -248,13 +248,13 @@ def as_d_arg_type(arg_prefix, arg_type, prefix):
     elif util.is_string_ptr(arg_type):
         return "scope const(char)*" + pre
     elif is_struct_ptr(arg_type):
-        return f"ref {as_d_struct_type(util.extract_ptr_type(arg_type), prefix)}" + pre
+        return f"scope ref {as_d_struct_type(util.extract_ptr_type(arg_type), prefix)}" + pre
     elif is_const_struct_ptr(arg_type):
-        return f"ref {as_d_struct_type(util.extract_ptr_type(arg_type), prefix)}" + pre
+        return f"scope ref {as_d_struct_type(util.extract_ptr_type(arg_type), prefix)}" + pre
     elif is_prim_ptr(arg_type):
-        return f"{as_d_prim_type(util.extract_ptr_type(arg_type))} *" + pre
+        return f"scope {as_d_prim_type(util.extract_ptr_type(arg_type))} *" + pre
     elif is_const_prim_ptr(arg_type):
-        return f"const {as_d_prim_type(util.extract_ptr_type(arg_type))} *" + pre
+        return f"scope const {as_d_prim_type(util.extract_ptr_type(arg_type))} *" + pre
     else:
         sys.exit(f"ERROR as_d_arg_type(): {arg_type}")
 
