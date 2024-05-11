@@ -6483,6 +6483,12 @@ _SOKOL_PRIVATE void _sg_pixelformat_sr(_sg_pixelformat_info_t* pfi) {
     pfi->render = true;
 }
 
+_SOKOL_PRIVATE void _sg_pixelformat_sfr(_sg_pixelformat_info_t* pfi) {
+    pfi->sample = true;
+    pfi->filter = true;
+    pfi->render = true;
+}
+
 _SOKOL_PRIVATE void _sg_pixelformat_srmd(_sg_pixelformat_info_t* pfi) {
     pfi->sample = true;
     pfi->render = true;
@@ -13756,10 +13762,15 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RGBA32UI]);
     _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RGBA32SI]);
 
-    // FIXME: can be made filterable with extension
-    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_R32F]);
-    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RG32F]);
-    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+    if (wgpuDeviceHasFeature(_sg.wgpu.dev, WGPUFeatureName_Float32Filterable)) {
+        _sg_pixelformat_sfr(&_sg.formats[SG_PIXELFORMAT_R32F]);
+        _sg_pixelformat_sfr(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+        _sg_pixelformat_sfr(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+    } else {
+        _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_R32F]);
+        _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+        _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+    }
 
     _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH]);
     _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL]);
