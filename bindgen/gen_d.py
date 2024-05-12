@@ -215,15 +215,15 @@ def as_c_arg_type(arg_type, prefix):
     elif util.is_void_ptr(arg_type):
         return "void*"
     elif util.is_const_void_ptr(arg_type):
-        return "scope const(void)*"
+        return "const(void)*"
     elif util.is_string_ptr(arg_type):
-        return "scope const(char)*"
+        return "const(char)*"
     elif is_const_struct_ptr(arg_type):
-        return f"scope const {as_d_struct_type(util.extract_ptr_type(arg_type), prefix)} *"
+        return f"const {as_d_struct_type(util.extract_ptr_type(arg_type), prefix)} *"
     elif is_prim_ptr(arg_type):
-        return f"scope {as_d_prim_type(util.extract_ptr_type(arg_type))} *"
+        return f"{as_d_prim_type(util.extract_ptr_type(arg_type))} *"
     elif is_const_prim_ptr(arg_type):
-        return f"scope const {as_d_prim_type(util.extract_ptr_type(arg_type))} *"
+        return f"const {as_d_prim_type(util.extract_ptr_type(arg_type))} *"
     else:
         sys.exit(f"Error as_c_arg_type(): {arg_type}")
 
