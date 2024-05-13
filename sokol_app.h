@@ -5769,11 +5769,17 @@ _SOKOL_PRIVATE void _sapp_emsc_wgpu_request_adapter_cb(WGPURequestAdapterStatus 
         WGPUFeatureName_Depth32FloatStencil8,
     };
     // check for optional features we're interested in
-    // FIXME: ASTC texture compression
     if (wgpuAdapterHasFeature(adapter, WGPUFeatureName_TextureCompressionBC)) {
         requiredFeatures[cur_feature_index++] = WGPUFeatureName_TextureCompressionBC;
-    } else if (wgpuAdapterHasFeature(adapter, WGPUFeatureName_TextureCompressionETC2)) {
+    }
+    if (wgpuAdapterHasFeature(adapter, WGPUFeatureName_TextureCompressionETC2)) {
         requiredFeatures[cur_feature_index++] = WGPUFeatureName_TextureCompressionETC2;
+    }
+    if (wgpuAdapterHasFeature(adapter, WGPUFeatureName_TextureCompressionASTC)) {
+        requiredFeatures[cur_feature_index++] = WGPUFeatureName_TextureCompressionASTC;
+    }
+    if (wgpuAdapterHasFeature(adapter, WGPUFeatureName_Float32Filterable)) {
+        requiredFeatures[cur_feature_index++] = WGPUFeatureName_Float32Filterable;
     }
 
     WGPUDeviceDescriptor dev_desc;
