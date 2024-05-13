@@ -10,6 +10,8 @@ https://github.com/kassane/sokol-d
 ...this also includes a matching output format `sokol_d` in the sokol-shdc shader
 compiler.
 
+Also see PR https://github.com/floooh/sokol/pull/955.
+
 Many thanks to @kassane for the hard work!
 
 ...and a couple minor texture format related fixes in the WebGPU backends in sokol_gfx.h and sokol_app.h:
