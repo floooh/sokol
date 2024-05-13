@@ -2,7 +2,17 @@
 
 ### 13-May-2024
 
-A couple minor texture format related fixes in the WebGPU backends in sokol_gfx.h and sokol_app.h:
+Official bindings for the **D language** have been added, like the other official
+bindings those will be automatically updated on commits to the main repository:
+
+https://github.com/kassane/sokol-d
+
+...this also includes a matching output format `sokol_d` in the sokol-shdc shader
+compiler.
+
+Many thanks to @kassane for the hard work!
+
+...and a couple minor texture format related fixes in the WebGPU backends in sokol_gfx.h and sokol_app.h:
 
 - merged PR https://github.com/floooh/sokol/pull/1045, this sets 32-bit float textures
   to filterable if supported (depending on `WGPUFeatureName_Float32Filterable`), many
