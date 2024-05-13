@@ -1,5 +1,20 @@
 ## Updates
 
+### 13-May-2024
+
+A couple minor texture format related fixes in the WebGPU backends in sokol_gfx.h and sokol_app.h:
+
+- merged PR https://github.com/floooh/sokol/pull/1045, this sets 32-bit float textures
+  to filterable if supported (depending on `WGPUFeatureName_Float32Filterable`), many
+  thanks to @jdah!
+- in sokol_app.h, the WebGPU feature detection code has been fixed:
+  - previously, BC and ETC2 texture compression support was mutually exclusive, which
+    was a bug (for instance on Apple Silicon, both formats are available)
+  - the missing ASTC texture compression detection has been added (sokol_gfx.h already
+    checked the WebGPU device for support of ASTC compression, but this code never
+    worked because the feature was not requested when the WebGPU device was created
+    in sokol_app.h
+
 ### 10-May-2024
 
 A minor breaking change regarding ETC2/EAC pixel formats:
