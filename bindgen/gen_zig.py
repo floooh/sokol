@@ -21,6 +21,7 @@ module_names = {
     'sdtx_':    'debugtext',
     'sshape_':  'shape',
     'sglue_':   'glue',
+    'sfetch_':  'sfetch',
 }
 
 c_source_paths = {
@@ -33,6 +34,7 @@ c_source_paths = {
     'sdtx_':    'sokol-zig/src/sokol/c/sokol_debugtext.c',
     'sshape_':  'sokol-zig/src/sokol/c/sokol_shape.c',
     'sglue_':   'sokol-zig/src/sokol/c/sokol_glue.c',
+    'sfetch_':   'sokol-zig/src/sokol/c/sokol_fetch.c'
 }
 
 ignores = [
@@ -60,6 +62,8 @@ overrides = {
     'sshape_element_range_t.num_elements':  'uint32_t',
     'sdtx_font.font_index':                 'uint32_t',
     'SGL_NO_ERROR':                         'SGL_ERROR_NO_ERROR',
+    'sfetch_continue':                      'fetch_continue', # 'fetch' is reserved in Zig
+    'sfetch_desc':                          'description'     # 'desc' shadowed by earlier definiton
 }
 
 prim_types = {
@@ -373,6 +377,8 @@ def gen_struct(decl, prefix):
                 sys.exit(f"ERROR gen_struct is_2d_array_type: {array_type}")
             t0 = f"[{array_sizes[0]}][{array_sizes[1]}]{zig_type}"
             l(f"    {field_name}: {t0} = [_][{array_sizes[1]}]{zig_type}{{[_]{zig_type}{{{def_val}}} ** {array_sizes[1]}}} ** {array_sizes[0]},")
+        elif field_name == "callback":
+            l(f"    {field_name}: fn (*Response) void,")
         else:
             sys.exit(f"ERROR gen_struct: {field_name}: {field_type};")
     l("};")

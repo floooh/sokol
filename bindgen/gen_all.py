@@ -7,6 +7,7 @@ tasks = [
     [ '../sokol_glue.h',           'sglue_',    ['sg_'] ],
     [ '../sokol_time.h',           'stm_',      [] ],
     [ '../sokol_audio.h',          'saudio_',   [] ],
+    [ '../sokol_fetch.h',          'sfetch_',     [] ],
     [ '../util/sokol_gl.h',        'sgl_',      ['sg_'] ],
     [ '../util/sokol_debugtext.h', 'sdtx_',     ['sg_'] ],
     [ '../util/sokol_shape.h',     'sshape_',   ['sg_'] ],
