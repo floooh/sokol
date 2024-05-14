@@ -377,8 +377,6 @@ def gen_struct(decl, prefix):
                 sys.exit(f"ERROR gen_struct is_2d_array_type: {array_type}")
             t0 = f"[{array_sizes[0]}][{array_sizes[1]}]{zig_type}"
             l(f"    {field_name}: {t0} = [_][{array_sizes[1]}]{zig_type}{{[_]{zig_type}{{{def_val}}} ** {array_sizes[1]}}} ** {array_sizes[0]},")
-        elif field_name == "callback":
-            l(f"    {field_name}: fn (*Response) void,")
         else:
             sys.exit(f"ERROR gen_struct: {field_name}: {field_type};")
     l("};")
