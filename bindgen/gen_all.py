@@ -7,7 +7,6 @@ tasks = [
     [ '../sokol_glue.h',           'sglue_',    ['sg_'] ],
     [ '../sokol_time.h',           'stm_',      [] ],
     [ '../sokol_audio.h',          'saudio_',   [] ],
-    [ '../sokol_fetch.h',          'sfetch_',     [] ],
     [ '../util/sokol_gl.h',        'sgl_',      ['sg_'] ],
     [ '../util/sokol_debugtext.h', 'sdtx_',     ['sg_'] ],
     [ '../util/sokol_shape.h',     'sshape_',   ['sg_'] ],
@@ -26,8 +25,12 @@ for task in tasks:
     gen_nim.gen(c_header_path, main_prefix, dep_prefixes)
 
 # Zig
+zig_tasks = [
+    *tasks,
+    [ '../sokol_fetch.h', 'sfetch_', [] ],
+]
 gen_zig.prepare()
-for task in tasks:
+for task in zig_tasks:
     [c_header_path, main_prefix, dep_prefixes] = task
     gen_zig.gen(c_header_path, main_prefix, dep_prefixes)
 

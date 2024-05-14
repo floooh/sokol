@@ -62,8 +62,8 @@ overrides = {
     'sshape_element_range_t.num_elements':  'uint32_t',
     'sdtx_font.font_index':                 'uint32_t',
     'SGL_NO_ERROR':                         'SGL_ERROR_NO_ERROR',
-    'sfetch_continue':                      'fetch_continue', # 'fetch' is reserved in Zig
-    'sfetch_desc':                          'description'     # 'desc' shadowed by earlier definiton
+    'sfetch_continue':                      'continue_fetching',  # 'continue' is reserved in Zig
+    'sfetch_desc':                          'sfetch_get_desc'     # 'desc' shadowed by earlier definiton
 }
 
 prim_types = {
