@@ -21,7 +21,7 @@ module_names = {
     'sdtx_':    'debugtext',
     'sshape_':  'shape',
     'sglue_':   'glue',
-    'sfetch_':  'sfetch',
+    'sfetch_':  'fetch',
 }
 
 c_source_paths = {
