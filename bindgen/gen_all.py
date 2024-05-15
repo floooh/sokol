@@ -25,8 +25,12 @@ for task in tasks:
     gen_nim.gen(c_header_path, main_prefix, dep_prefixes)
 
 # Zig
+zig_tasks = [
+    *tasks,
+    [ '../sokol_fetch.h', 'sfetch_', [] ],
+]
 gen_zig.prepare()
-for task in tasks:
+for task in zig_tasks:
     [c_header_path, main_prefix, dep_prefixes] = task
     gen_zig.gen(c_header_path, main_prefix, dep_prefixes)
 

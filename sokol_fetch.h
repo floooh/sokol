@@ -1071,17 +1071,14 @@ typedef struct sfetch_response_t {
     sfetch_range_t buffer;          // the user-provided buffer which holds the fetched data
 } sfetch_response_t;
 
-/* response callback function signature */
-typedef void(*sfetch_callback_t)(const sfetch_response_t*);
-
 /* request parameters passed to sfetch_send() */
 typedef struct sfetch_request_t {
-    uint32_t channel;               // index of channel this request is assigned to (default: 0)
-    const char* path;               // filesystem path or HTTP URL (required)
-    sfetch_callback_t callback;     // response callback function pointer (required)
-    uint32_t chunk_size;            // number of bytes to load per stream-block (optional)
-    sfetch_range_t buffer;          // a memory buffer where the data will be loaded into (optional)
-    sfetch_range_t user_data;       // ptr/size of a POD user data block which will be memcpy'd (optional)
+    uint32_t channel;                                // index of channel this request is assigned to (default: 0)
+    const char* path;                                // filesystem path or HTTP URL (required)
+    void (*callback) (const sfetch_response_t*);     // response callback function pointer (required)
+    uint32_t chunk_size;                             // number of bytes to load per stream-block (optional)
+    sfetch_range_t buffer;                           // a memory buffer where the data will be loaded into (optional)
+    sfetch_range_t user_data;                        // ptr/size of a POD user data block which will be memcpy'd (optional)
 } sfetch_request_t;
 
 /* setup sokol-fetch (can be called on multiple threads) */
@@ -1302,7 +1299,7 @@ typedef struct {
     uint32_t channel;
     uint32_t lane;
     uint32_t chunk_size;
-    sfetch_callback_t callback;
+    void (*callback) (const sfetch_response_t*);
     sfetch_range_t buffer;
 
     /* updated by IO-thread, off-limits to user thread */
