@@ -460,7 +460,7 @@ def gen_helpers(inp):
     l('fn cStrToZig(c_str: [*c]const u8) [:0]const u8 {')
     l('    return @import("std").mem.span(c_str);')
     l('}')
-    if inp['prefix'] in ['sg_', 'sdtx_', 'sshape_']:
+    if inp['prefix'] in ['sg_', 'sdtx_', 'sshape_', 'sfetch_']:
         l('// helper function to convert "anything" to a Range struct')
         l('pub fn asRange(val: anytype) Range {')
         l('    const type_info = @typeInfo(@TypeOf(val));')
