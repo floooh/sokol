@@ -30,6 +30,8 @@
 
 - [Solar Storm](https://store.steampowered.com/app/2754920/Solar_Storm/), a turn-based scifi artillery game built with Odin and Sokol, released on Steam.
 
+- [Spanking Runners (Samogonki)](https://store.steampowered.com/app/2599800/Spanking_Runners/), arcade racing in a bright and unusual world, released on Steam.
+
 - [MEG-4](https://bztsrc.gitlab.io/meg4) a virtual fantasy console emulator in C89, ported to sokol
 
 - A [Minigolf game](https://mgerdes.github.io/minigolf.html) ([source](https://github.com/mgerdes/minigolf)).
