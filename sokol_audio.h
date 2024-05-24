@@ -39,6 +39,7 @@
 
     - on macOS: AudioToolbox
     - on iOS: AudioToolbox, AVFoundation
+    - on FreeBSD: asound
     - on Linux: asound
     - on Android: link with OpenSLES or aaudio
     - on Windows with MSVC or Clang toolchain: no action needed, libs are defined in-source via pragma-comment-lib
@@ -51,6 +52,7 @@
 
     - Windows: WASAPI
     - Linux: ALSA
+    - FreeBSD: ALSA
     - macOS: CoreAudio
     - iOS: CoreAudio+AVAudioSession
     - emscripten: WebAudio with ScriptProcessorNode
@@ -780,7 +782,9 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
         #include "aaudio/AAudio.h"
     #endif
 #elif defined(_SAUDIO_LINUX)
-    #include <alloca.h>
+    #if !defined(__FreeBSD__)
+        #include <alloca.h>
+    #endif
     #define _SAUDIO_PTHREADS (1)
     #include <pthread.h>
     #define ALSA_PCM_NEW_HW_PARAMS_API
