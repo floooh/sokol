@@ -16,6 +16,9 @@
 
 - [Doom Shareware](https://floooh.github.io/doom-sokol/) ported to the Sokol headers ([source](https://github.com/floooh/doom-sokol))
 
+- [Everybody wants to Crank the World](https://aras-p.github.io/demo-pd-cranktheworld/) demo by
+Aras Pranckevičius, PC/web port via sokol ([source](https://github.com/aras-p/demo-pd-cranktheworld)).
+
 - [sokol_gp.h](https://github.com/edubart/sokol_gp) a 2D shape drawing library on top of sokol_gfx.h
 
 - [LearnOpenGL examples ported to sokol-gfx](https://zeromake.github.io/learnopengl-examples/) ([git repo](https://github.com/zeromake/learnopengl-examples))
