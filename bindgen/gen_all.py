@@ -28,6 +28,7 @@ for task in tasks:
 zig_tasks = [
     *tasks,
     [ '../sokol_fetch.h', 'sfetch_', [] ],
+    [ '../util/sokol_imgui.h', 'simgui_',   ['sg_', 'sapp_'] ],
 ]
 gen_zig.prepare()
 for task in zig_tasks:
