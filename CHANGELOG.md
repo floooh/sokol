@@ -1,5 +1,23 @@
 ## Updates
 
+### 01-Jun-2024
+
+sokol_imgui.h is now officially supported in the [sokol-zig bindings](https://github.com/floooh/sokol-zig).
+
+This caused a very minor breaking change in the sokol_imgui.h function
+`simgui_add_key_event()`: previously this took a callback function pointer
+which mapped the incoming key code to a Dear ImGui compatible keycode,
+this is now expected to be performed by the caller before calling
+`simgui_add_key_event()`.
+
+Other than the minor API change there's an equally minor internal code cleanup:
+The ImGuiIO method `SetKeyEventNativeData()` is no longer called. This change shouldn't
+have any side effects.
+
+For more details about the Zig sokol_imgui.h also see this example project:
+
+https://github.com/floooh/sokol-zig-imgui-sample
+
 ### 14-May-2024
 
 sokol_fetch.h: A minor breaking change in which hopefully doesn't affect anybody:
