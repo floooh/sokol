@@ -351,12 +351,10 @@
 
         simgui_add_mouse_pos_event(100, 200);
 
-    Key events require a mapping function to convert your platform's key values to ImGuiKey's:
+    For adding key events, you're responsible to map your own key codes to ImGuiKey
+    values and pass those as int:
 
-        int map_keycode(int keycode) {
-            // Your mapping logic here...
-        }
-        simgui_add_key_event(map_keycode, keycode, true);
+        simgui_add_key_event(imgui_key, true);
 
     Take note that modifiers (shift, ctrl, etc.) must be updated manually.
 
@@ -533,13 +531,13 @@ SOKOL_IMGUI_API_DECL simgui_image_t simgui_make_image(const simgui_image_desc_t*
 SOKOL_IMGUI_API_DECL void simgui_destroy_image(simgui_image_t img);
 SOKOL_IMGUI_API_DECL simgui_image_desc_t simgui_query_image_desc(simgui_image_t img);
 SOKOL_IMGUI_API_DECL void* simgui_imtextureid(simgui_image_t img);
-SOKOL_IMGUI_API_DECL simgui_image_t simgui_image_from_imtextureid(void* imtextureid);
+SOKOL_IMGUI_API_DECL simgui_image_t simgui_image_from_imtextureid(void* im_texture_id);
 SOKOL_IMGUI_API_DECL void simgui_add_focus_event(bool focus);
 SOKOL_IMGUI_API_DECL void simgui_add_mouse_pos_event(float x, float y);
 SOKOL_IMGUI_API_DECL void simgui_add_touch_pos_event(float x, float y);
 SOKOL_IMGUI_API_DECL void simgui_add_mouse_button_event(int mouse_button, bool down);
 SOKOL_IMGUI_API_DECL void simgui_add_mouse_wheel_event(float wheel_x, float wheel_y);
-SOKOL_IMGUI_API_DECL void simgui_add_key_event(int (*map_keycode)(int), int keycode, bool down);
+SOKOL_IMGUI_API_DECL void simgui_add_key_event(int imgui_key, bool down);
 SOKOL_IMGUI_API_DECL void simgui_add_input_character(uint32_t c);
 SOKOL_IMGUI_API_DECL void simgui_add_input_characters_utf8(const char* c);
 SOKOL_IMGUI_API_DECL void simgui_add_touch_button_event(int mouse_button, bool down);
@@ -2508,9 +2506,9 @@ SOKOL_API_IMPL void* simgui_imtextureid(simgui_image_t img) {
     return (void*)(uintptr_t)img.id;
 }
 
-SOKOL_API_IMPL simgui_image_t simgui_image_from_imtextureid(void* imtextureid) {
+SOKOL_API_IMPL simgui_image_t simgui_image_from_imtextureid(void* im_texture_id) {
     SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
-    simgui_image_t img = { (uint32_t)(uintptr_t) imtextureid };
+    simgui_image_t img = { (uint32_t)(uintptr_t) im_texture_id };
     return img;
 }
 
@@ -2840,17 +2838,14 @@ SOKOL_API_IMPL void simgui_add_mouse_wheel_event(float wheel_x, float wheel_y) {
     #endif
 }
 
-SOKOL_API_IMPL void simgui_add_key_event(int (*map_keycode)(int), int keycode, bool down) {
+SOKOL_API_IMPL void simgui_add_key_event(int imgui_key, bool down) {
     SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
-    const ImGuiKey imgui_key = (ImGuiKey)map_keycode(keycode);
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
-        io->AddKeyEvent(imgui_key, down);
-        io->SetKeyEventNativeData(imgui_key, keycode, 0, -1);
+        io->AddKeyEvent((ImGuiKey)imgui_key, down);
     #else
         ImGuiIO* io = igGetIO();
-        ImGuiIO_AddKeyEvent(io, imgui_key, down);
-        ImGuiIO_SetKeyEventNativeData(io, imgui_key, keycode, 0, -1);
+        ImGuiIO_AddKeyEvent(io, (ImGuiKey)imgui_key, down);
     #endif
 }
 
@@ -3000,10 +2995,8 @@ _SOKOL_PRIVATE void _simgui_add_sapp_key_event(ImGuiIO* io, sapp_keycode sapp_ke
     const ImGuiKey imgui_key = _simgui_map_keycode(sapp_key);
     #if defined(__cplusplus)
         io->AddKeyEvent(imgui_key, down);
-        io->SetKeyEventNativeData(imgui_key, (int)sapp_key, 0, -1);
     #else
         ImGuiIO_AddKeyEvent(io, imgui_key, down);
-        ImGuiIO_SetKeyEventNativeData(io, imgui_key, (int)sapp_key, 0, -1);
     #endif
 }
 

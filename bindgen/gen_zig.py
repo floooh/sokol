@@ -22,6 +22,7 @@ module_names = {
     'sshape_':  'shape',
     'sglue_':   'glue',
     'sfetch_':  'fetch',
+    'simgui_':  'imgui',
 }
 
 c_source_paths = {
@@ -34,7 +35,8 @@ c_source_paths = {
     'sdtx_':    'sokol-zig/src/sokol/c/sokol_debugtext.c',
     'sshape_':  'sokol-zig/src/sokol/c/sokol_shape.c',
     'sglue_':   'sokol-zig/src/sokol/c/sokol_glue.c',
-    'sfetch_':   'sokol-zig/src/sokol/c/sokol_fetch.c'
+    'sfetch_':  'sokol-zig/src/sokol/c/sokol_fetch.c',
+    'simgui_':  'sokol-zig/src/sokol/c/sokol_imgui.c',
 }
 
 ignores = [
