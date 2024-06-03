@@ -23,6 +23,8 @@ module_names = {
     'sdtx_':    'debugtext',
     'sshape_':  'shape',
     'sglue_':   'glue',
+    'sfetch_':  'fetch',
+    'simgui_':  'imgui',
 }
 
 c_source_paths = {
@@ -35,6 +37,8 @@ c_source_paths = {
     'sdtx_':    'sokol-d/src/sokol/c/sokol_debugtext.c',
     'sshape_':  'sokol-d/src/sokol/c/sokol_shape.c',
     'sglue_':   'sokol-d/src/sokol/c/sokol_glue.c',
+    'sfetch_':  'sokol-d/src/sokol/c/sokol_fetch.c',
+    'simgui_':  'sokol-d/src/sokol/c/sokol_imgui.c',
 }
 
 ignores = [
@@ -63,6 +67,7 @@ overrides = {
     'sshape_element_range_t.num_elements':  'uint32_t',
     'sdtx_font.font_index':                 'uint32_t',
     'SGL_NO_ERROR':                         'SGL_ERROR_NO_ERROR',
+    'sfetch_continue':                      'continue_fetching',  # 'continue' is reserved in D
 }
 
 prim_types = {
