@@ -11437,12 +11437,15 @@ _SOKOL_PRIVATE void _sg_d3d11_append_buffer(_sg_buffer_t* buf, const sg_range* d
     }
 }
 
+// see: https://learn.microsoft.com/en-us/windows/win32/direct3d11/overviews-direct3d-11-resources-subresources
+// also see: https://learn.microsoft.com/en-us/windows/win32/api/d3d11/nf-d3d11-d3d11calcsubresource
 _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data* data) {
     SOKOL_ASSERT(img && data);
     SOKOL_ASSERT(_sg.d3d11.ctx);
     SOKOL_ASSERT(img->d3d11.res);
     const int num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
     const int num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.num_slices:1;
+    const int num_depth_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? img->cmn.num_slices:1;
     UINT subres_index = 0;
     HRESULT hr;
     D3D11_MAPPED_SUBRESOURCE d3d11_msr;
@@ -11452,26 +11455,35 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
                 SOKOL_ASSERT(subres_index < (SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS));
                 const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
                 const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
-                const int src_pitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
+                const int src_row_pitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
+                const int src_depth_pitch = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
                 const sg_range* subimg_data = &(data->subimage[face_index][mip_index]);
                 const size_t slice_size = subimg_data->size / (size_t)num_slices;
+                SOKOL_ASSERT(slice_size == (size_t)(src_depth_pitch * num_depth_slices));
                 const size_t slice_offset = slice_size * (size_t)slice_index;
                 const uint8_t* slice_ptr = ((const uint8_t*)subimg_data->ptr) + slice_offset;
                 hr = _sg_d3d11_Map(_sg.d3d11.ctx, img->d3d11.res, subres_index, D3D11_MAP_WRITE_DISCARD, 0, &d3d11_msr);
                 _sg_stats_add(d3d11.num_map, 1);
                 if (SUCCEEDED(hr)) {
-                    // FIXME: need to handle difference in depth-pitch for 3D textures as well!
-                    if (src_pitch == (int)d3d11_msr.RowPitch) {
-                        memcpy(d3d11_msr.pData, slice_ptr, slice_size);
-                    } else {
-                        SOKOL_ASSERT(src_pitch < (int)d3d11_msr.RowPitch);
-                        const uint8_t* src_ptr = slice_ptr;
-                        uint8_t* dst_ptr = (uint8_t*) d3d11_msr.pData;
-                        for (int row_index = 0; row_index < mip_height; row_index++) {
-                            memcpy(dst_ptr, src_ptr, (size_t)src_pitch);
-                            src_ptr += src_pitch;
-                            dst_ptr += d3d11_msr.RowPitch;
+                    const uint8_t* src_ptr = slice_ptr;
+                    uint8_t* dst_ptr = (uint8_t*)d3d11_msr.pData;
+                    for (int depth_index = 0; depth_index < num_depth_slices; depth_index++) {
+                        if (src_row_pitch == (int)d3d11_msr.RowPitch) {
+                            const size_t copy_size = slice_size / (size_t)num_depth_slices;
+                            SOKOL_ASSERT((copy_size * (size_t)num_depth_slices) == slice_size);
+                            memcpy(dst_ptr, src_ptr, copy_size);
+                        } else {
+                            SOKOL_ASSERT(src_row_pitch < (int)d3d11_msr.RowPitch);
+                            const uint8_t* src_row_ptr = src_ptr;
+                            uint8_t* dst_row_ptr = dst_ptr;
+                            for (int row_index = 0; row_index < mip_height; row_index++) {
+                                memcpy(dst_row_ptr, src_row_ptr, (size_t)src_row_pitch);
+                                src_row_ptr += src_row_pitch;
+                                dst_row_ptr += d3d11_msr.RowPitch;
+                            }
                         }
+                        src_ptr += src_depth_pitch;
+                        dst_ptr += d3d11_msr.DepthPitch;
                     }
                     _sg_d3d11_Unmap(_sg.d3d11.ctx, img->d3d11.res, subres_index);
                     _sg_stats_add(d3d11.num_unmap, 1);
