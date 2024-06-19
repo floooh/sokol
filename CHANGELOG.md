@@ -2,11 +2,11 @@
 
 ### 19-Jun-2024
 
-Bugfix in the sokol_gfx.h D3D11 backend: calling `sg_update_image()` for a
-small-ish 3D texture didn't take the 'depth pitch' into account which then
-caused invalid texture content. This happened at a specific size cutoff which
-is CPU specific (on my laptop with integrated Intel GPU only for textures
-smaller than 32x32xN).
+Bugfix in the sokol_gfx.h D3D11 backend: calling `sg_update_image()` with a 3D texture
+didn't take the 'depth pitch' into account which then caused invalid texture content
+in small-ish textures. This happened at a specific size cutoff which seems to be GPU
+specific (on my laptop with integrated Intel GPU only for textures smaller than
+32x32xN).
 
 Related ticket: https://github.com/floooh/sokol/issues/1066
 ...and PR: https://github.com/floooh/sokol/pull/1065
