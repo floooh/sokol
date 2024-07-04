@@ -1,5 +1,10 @@
 ## Updates
 
+### 04-Jul-2024
+
+The public sokol_audio.h functions now have an assert to make sure that saudio_setup()
+has already been called.
+
 ### 19-Jun-2024
 
 Bugfix in the sokol_gfx.h D3D11 backend: calling `sg_update_image()` with a 3D texture
