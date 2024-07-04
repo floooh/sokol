@@ -1067,6 +1067,7 @@ typedef struct {
 /* sokol-audio state */
 typedef struct {
     bool valid;
+    bool setup_called;
     void (*stream_cb)(float* buffer, int num_frames, int num_channels);
     void (*stream_userdata_cb)(float* buffer, int num_frames, int num_channels, void* user_data);
     void* user_data;
@@ -2486,9 +2487,11 @@ void _saudio_backend_shutdown(void) {
 // >>public
 SOKOL_API_IMPL void saudio_setup(const saudio_desc* desc) {
     SOKOL_ASSERT(!_saudio.valid);
+    SOKOL_ASSERT(!_saudio.setup_called);
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
     _saudio_clear(&_saudio, sizeof(_saudio));
+    _saudio.setup_called = true;
     _saudio.desc = *desc;
     _saudio.stream_cb = desc->stream_cb;
     _saudio.stream_userdata_cb = desc->stream_userdata_cb;
@@ -2519,6 +2522,8 @@ SOKOL_API_IMPL void saudio_setup(const saudio_desc* desc) {
 }
 
 SOKOL_API_IMPL void saudio_shutdown(void) {
+    SOKOL_ASSERT(_saudio.setup_called);
+    _saudio.setup_called = false;
     if (_saudio.valid) {
         _saudio_backend_shutdown();
         _saudio_fifo_shutdown(&_saudio.fifo);
@@ -2532,26 +2537,32 @@ SOKOL_API_IMPL bool saudio_isvalid(void) {
 }
 
 SOKOL_API_IMPL void* saudio_userdata(void) {
+    SOKOL_ASSERT(_saudio.setup_called);
     return _saudio.desc.user_data;
 }
 
 SOKOL_API_IMPL saudio_desc saudio_query_desc(void) {
+    SOKOL_ASSERT(_saudio.setup_called);
     return _saudio.desc;
 }
 
 SOKOL_API_IMPL int saudio_sample_rate(void) {
+    SOKOL_ASSERT(_saudio.setup_called);
     return _saudio.sample_rate;
 }
 
 SOKOL_API_IMPL int saudio_buffer_frames(void) {
+    SOKOL_ASSERT(_saudio.setup_called);
     return _saudio.buffer_frames;
 }
 
 SOKOL_API_IMPL int saudio_channels(void) {
+    SOKOL_ASSERT(_saudio.setup_called);
     return _saudio.num_channels;
 }
 
 SOKOL_API_IMPL bool saudio_suspended(void) {
+    SOKOL_ASSERT(_saudio.setup_called);
     #if defined(_SAUDIO_EMSCRIPTEN)
         if (_saudio.valid) {
             return 1 == saudio_js_suspended();
@@ -2565,6 +2576,7 @@ SOKOL_API_IMPL bool saudio_suspended(void) {
 }
 
 SOKOL_API_IMPL int saudio_expect(void) {
+    SOKOL_ASSERT(_saudio.setup_called);
     if (_saudio.valid) {
         const int num_frames = _saudio_fifo_writable_bytes(&_saudio.fifo) / _saudio.bytes_per_frame;
         return num_frames;
@@ -2575,6 +2587,7 @@ SOKOL_API_IMPL int saudio_expect(void) {
 }
 
 SOKOL_API_IMPL int saudio_push(const float* frames, int num_frames) {
+    SOKOL_ASSERT(_saudio.setup_called);
     SOKOL_ASSERT(frames && (num_frames > 0));
     if (_saudio.valid) {
         const int num_bytes = num_frames * _saudio.bytes_per_frame;
