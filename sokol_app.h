@@ -6303,6 +6303,7 @@ _SOKOL_PRIVATE void _sapp_win32_init_keytable(void) {
     _sapp.keycodes[0x138] = SAPP_KEYCODE_RIGHT_ALT;
     _sapp.keycodes[0x11D] = SAPP_KEYCODE_RIGHT_CONTROL;
     _sapp.keycodes[0x036] = SAPP_KEYCODE_RIGHT_SHIFT;
+    _sapp.keycodes[0x136] = SAPP_KEYCODE_RIGHT_SHIFT;
     _sapp.keycodes[0x15C] = SAPP_KEYCODE_RIGHT_SUPER;
     _sapp.keycodes[0x150] = SAPP_KEYCODE_DOWN;
     _sapp.keycodes[0x14B] = SAPP_KEYCODE_LEFT;
