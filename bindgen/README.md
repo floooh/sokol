@@ -2,7 +2,7 @@
 
 > REMINDER: we can pass `-fparse-all-comments` to the clang ast-dump command line which adds the following node types to the ast-dump.json: FullComment, ParagraphComment, TextComment. This might allow us to preserve comments in the language bindings (might be useful as part of a bigger change to make sokol header comments autodoc and Intellisense-friendly)
 
-### Zig
+### Updating the bindings
 
 First make sure that clang and python3 are in the path:
 
@@ -26,10 +26,11 @@ To update the Zig bindings:
 > git clone https://github.com/floooh/sokol-nim
 > git clone https://github.com/floooh/sokol-odin
 > git clone https://github.com/floooh/sokol-rust
+> git clone https://github.com/floooh/sokol-d
 > python3 gen_all.py
 ```
 
-Test and run samples:
+...and then to test and run Zig samples:
 
 ```
 > cd sokol/bindgen/sokol-zig
