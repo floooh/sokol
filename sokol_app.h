@@ -2750,6 +2750,7 @@ typedef struct {
     int window_state;
     float dpi;
     unsigned char error_code;
+    XkbDescPtr keyboard;
     Atom UTF8_STRING;
     Atom WM_PROTOCOLS;
     Atom WM_DELETE_WINDOW;
@@ -10436,11 +10437,16 @@ _SOKOL_PRIVATE void _sapp_x11_char_event(uint32_t chr, bool repeat, uint32_t mod
 }
 
 _SOKOL_PRIVATE sapp_keycode _sapp_x11_translate_key(int scancode) {
-    int dummy;
-    KeySym* keysyms = XGetKeyboardMapping(_sapp.x11.display, scancode, 1, &dummy);
-    SOKOL_ASSERT(keysyms);
-    KeySym keysym = keysyms[0];
-    XFree(keysyms);
+    unsigned mod = 0;
+    KeySym keysym;
+    XkbTranslateKeyCode(_sapp.x11.keyboard, scancode, mod, &mod, &keysym);
+    if (!keysym) {
+        int dummy;
+        KeySym* keysyms = XGetKeyboardMapping(_sapp.x11.display, scancode, 1, &dummy);
+        SOKOL_ASSERT(keysyms);
+        keysym = keysyms[0];
+        XFree(keysyms);
+    }
     switch (keysym) {
         case XK_Escape:         return SAPP_KEYCODE_ESCAPE;
         case XK_Tab:            return SAPP_KEYCODE_TAB;
@@ -11152,6 +11158,11 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     if (_sapp.fullscreen) {
         _sapp_x11_set_fullscreen(true);
     }
+
+    XkbComponentNamesRec names = {};
+    names.symbols = (char *)"us";
+    _sapp.x11.keyboard = XkbGetKeyboardByName(_sapp.x11.display, XkbUseCoreKbd, &names,
+        XkbAllComponentsMask, XkbAllComponentsMask, false);
 
     XFlush(_sapp.x11.display);
     while (!_sapp.quit_ordered) {
