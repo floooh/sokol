@@ -1,6 +1,6 @@
 ## Updates
 
-### 14-Jul-2024
+### 15-Jul-2024
 
 sokol_app.h Linux: Fixed a long-standing issue on Linux where sokol-app key
 up/down events were not keyboard layout independent. Instead the first keyboard
