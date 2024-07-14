@@ -2767,7 +2767,7 @@ typedef struct {
     // XLib manual says keycodes are in the range [8, 255] inclusive.
     // https://tronche.com/gui/x/xlib/input/keyboard-encoding.html
     bool key_repeat[_SAPP_X11_MAX_X11_KEYCODES];
-    int16_t keycodes[SAPP_KEYCODE_MAX];
+    int16_t keycodes[_SAPP_X11_MAX_X11_KEYCODES];
 } _sapp_x11_t;
 
 #if defined(_SAPP_GLX)
@@ -10791,139 +10791,10 @@ _SOKOL_PRIVATE void _sapp_x11_char_event(uint32_t chr, bool repeat, uint32_t mod
 }
 
 _SOKOL_PRIVATE sapp_keycode _sapp_x11_translate_key(int scancode) {
-    int dummy;
-    KeySym* keysyms = XGetKeyboardMapping(_sapp.x11.display, scancode, 1, &dummy);
-    SOKOL_ASSERT(keysyms);
-    KeySym keysym = keysyms[0];
-    XFree(keysyms);
-    switch (keysym) {
-        case XK_Escape:         return SAPP_KEYCODE_ESCAPE;
-        case XK_Tab:            return SAPP_KEYCODE_TAB;
-        case XK_Shift_L:        return SAPP_KEYCODE_LEFT_SHIFT;
-        case XK_Shift_R:        return SAPP_KEYCODE_RIGHT_SHIFT;
-        case XK_Control_L:      return SAPP_KEYCODE_LEFT_CONTROL;
-        case XK_Control_R:      return SAPP_KEYCODE_RIGHT_CONTROL;
-        case XK_Meta_L:
-        case XK_Alt_L:          return SAPP_KEYCODE_LEFT_ALT;
-        case XK_Mode_switch:    /* Mapped to Alt_R on many keyboards */
-        case XK_ISO_Level3_Shift: /* AltGr on at least some machines */
-        case XK_Meta_R:
-        case XK_Alt_R:          return SAPP_KEYCODE_RIGHT_ALT;
-        case XK_Super_L:        return SAPP_KEYCODE_LEFT_SUPER;
-        case XK_Super_R:        return SAPP_KEYCODE_RIGHT_SUPER;
-        case XK_Menu:           return SAPP_KEYCODE_MENU;
-        case XK_Num_Lock:       return SAPP_KEYCODE_NUM_LOCK;
-        case XK_Caps_Lock:      return SAPP_KEYCODE_CAPS_LOCK;
-        case XK_Print:          return SAPP_KEYCODE_PRINT_SCREEN;
-        case XK_Scroll_Lock:    return SAPP_KEYCODE_SCROLL_LOCK;
-        case XK_Pause:          return SAPP_KEYCODE_PAUSE;
-        case XK_Delete:         return SAPP_KEYCODE_DELETE;
-        case XK_BackSpace:      return SAPP_KEYCODE_BACKSPACE;
-        case XK_Return:         return SAPP_KEYCODE_ENTER;
-        case XK_Home:           return SAPP_KEYCODE_HOME;
-        case XK_End:            return SAPP_KEYCODE_END;
-        case XK_Page_Up:        return SAPP_KEYCODE_PAGE_UP;
-        case XK_Page_Down:      return SAPP_KEYCODE_PAGE_DOWN;
-        case XK_Insert:         return SAPP_KEYCODE_INSERT;
-        case XK_Left:           return SAPP_KEYCODE_LEFT;
-        case XK_Right:          return SAPP_KEYCODE_RIGHT;
-        case XK_Down:           return SAPP_KEYCODE_DOWN;
-        case XK_Up:             return SAPP_KEYCODE_UP;
-        case XK_F1:             return SAPP_KEYCODE_F1;
-        case XK_F2:             return SAPP_KEYCODE_F2;
-        case XK_F3:             return SAPP_KEYCODE_F3;
-        case XK_F4:             return SAPP_KEYCODE_F4;
-        case XK_F5:             return SAPP_KEYCODE_F5;
-        case XK_F6:             return SAPP_KEYCODE_F6;
-        case XK_F7:             return SAPP_KEYCODE_F7;
-        case XK_F8:             return SAPP_KEYCODE_F8;
-        case XK_F9:             return SAPP_KEYCODE_F9;
-        case XK_F10:            return SAPP_KEYCODE_F10;
-        case XK_F11:            return SAPP_KEYCODE_F11;
-        case XK_F12:            return SAPP_KEYCODE_F12;
-        case XK_F13:            return SAPP_KEYCODE_F13;
-        case XK_F14:            return SAPP_KEYCODE_F14;
-        case XK_F15:            return SAPP_KEYCODE_F15;
-        case XK_F16:            return SAPP_KEYCODE_F16;
-        case XK_F17:            return SAPP_KEYCODE_F17;
-        case XK_F18:            return SAPP_KEYCODE_F18;
-        case XK_F19:            return SAPP_KEYCODE_F19;
-        case XK_F20:            return SAPP_KEYCODE_F20;
-        case XK_F21:            return SAPP_KEYCODE_F21;
-        case XK_F22:            return SAPP_KEYCODE_F22;
-        case XK_F23:            return SAPP_KEYCODE_F23;
-        case XK_F24:            return SAPP_KEYCODE_F24;
-        case XK_F25:            return SAPP_KEYCODE_F25;
-
-        case XK_KP_Divide:      return SAPP_KEYCODE_KP_DIVIDE;
-        case XK_KP_Multiply:    return SAPP_KEYCODE_KP_MULTIPLY;
-        case XK_KP_Subtract:    return SAPP_KEYCODE_KP_SUBTRACT;
-        case XK_KP_Add:         return SAPP_KEYCODE_KP_ADD;
-
-        case XK_KP_Insert:      return SAPP_KEYCODE_KP_0;
-        case XK_KP_End:         return SAPP_KEYCODE_KP_1;
-        case XK_KP_Down:        return SAPP_KEYCODE_KP_2;
-        case XK_KP_Page_Down:   return SAPP_KEYCODE_KP_3;
-        case XK_KP_Left:        return SAPP_KEYCODE_KP_4;
-        case XK_KP_Begin:       return SAPP_KEYCODE_KP_5;
-        case XK_KP_Right:       return SAPP_KEYCODE_KP_6;
-        case XK_KP_Home:        return SAPP_KEYCODE_KP_7;
-        case XK_KP_Up:          return SAPP_KEYCODE_KP_8;
-        case XK_KP_Page_Up:     return SAPP_KEYCODE_KP_9;
-        case XK_KP_Delete:      return SAPP_KEYCODE_KP_DECIMAL;
-        case XK_KP_Equal:       return SAPP_KEYCODE_KP_EQUAL;
-        case XK_KP_Enter:       return SAPP_KEYCODE_KP_ENTER;
-
-        case XK_a:              return SAPP_KEYCODE_A;
-        case XK_b:              return SAPP_KEYCODE_B;
-        case XK_c:              return SAPP_KEYCODE_C;
-        case XK_d:              return SAPP_KEYCODE_D;
-        case XK_e:              return SAPP_KEYCODE_E;
-        case XK_f:              return SAPP_KEYCODE_F;
-        case XK_g:              return SAPP_KEYCODE_G;
-        case XK_h:              return SAPP_KEYCODE_H;
-        case XK_i:              return SAPP_KEYCODE_I;
-        case XK_j:              return SAPP_KEYCODE_J;
-        case XK_k:              return SAPP_KEYCODE_K;
-        case XK_l:              return SAPP_KEYCODE_L;
-        case XK_m:              return SAPP_KEYCODE_M;
-        case XK_n:              return SAPP_KEYCODE_N;
-        case XK_o:              return SAPP_KEYCODE_O;
-        case XK_p:              return SAPP_KEYCODE_P;
-        case XK_q:              return SAPP_KEYCODE_Q;
-        case XK_r:              return SAPP_KEYCODE_R;
-        case XK_s:              return SAPP_KEYCODE_S;
-        case XK_t:              return SAPP_KEYCODE_T;
-        case XK_u:              return SAPP_KEYCODE_U;
-        case XK_v:              return SAPP_KEYCODE_V;
-        case XK_w:              return SAPP_KEYCODE_W;
-        case XK_x:              return SAPP_KEYCODE_X;
-        case XK_y:              return SAPP_KEYCODE_Y;
-        case XK_z:              return SAPP_KEYCODE_Z;
-        case XK_1:              return SAPP_KEYCODE_1;
-        case XK_2:              return SAPP_KEYCODE_2;
-        case XK_3:              return SAPP_KEYCODE_3;
-        case XK_4:              return SAPP_KEYCODE_4;
-        case XK_5:              return SAPP_KEYCODE_5;
-        case XK_6:              return SAPP_KEYCODE_6;
-        case XK_7:              return SAPP_KEYCODE_7;
-        case XK_8:              return SAPP_KEYCODE_8;
-        case XK_9:              return SAPP_KEYCODE_9;
-        case XK_0:              return SAPP_KEYCODE_0;
-        case XK_space:          return SAPP_KEYCODE_SPACE;
-        case XK_minus:          return SAPP_KEYCODE_MINUS;
-        case XK_equal:          return SAPP_KEYCODE_EQUAL;
-        case XK_bracketleft:    return SAPP_KEYCODE_LEFT_BRACKET;
-        case XK_bracketright:   return SAPP_KEYCODE_RIGHT_BRACKET;
-        case XK_backslash:      return SAPP_KEYCODE_BACKSLASH;
-        case XK_semicolon:      return SAPP_KEYCODE_SEMICOLON;
-        case XK_apostrophe:     return SAPP_KEYCODE_APOSTROPHE;
-        case XK_grave:          return SAPP_KEYCODE_GRAVE_ACCENT;
-        case XK_comma:          return SAPP_KEYCODE_COMMA;
-        case XK_period:         return SAPP_KEYCODE_PERIOD;
-        case XK_slash:          return SAPP_KEYCODE_SLASH;
-        case XK_less:           return SAPP_KEYCODE_WORLD_1; /* At least in some layouts... */
-        default:                return SAPP_KEYCODE_INVALID;
+    if ((scancode >= 0) && (scancode < _SAPP_X11_MAX_X11_KEYCODES)) {
+        return _sapp.x11.keycodes[scancode];
+    } else {
+        return SAPP_KEYCODE_INVALID;
     }
 }
 
