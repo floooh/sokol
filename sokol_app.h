@@ -2668,6 +2668,7 @@ typedef struct {
 #if defined(_SAPP_LINUX)
 
 #define _SAPP_X11_XDND_VERSION (5)
+#define _SAPP_X11_MAX_KEYCODES (255)
 
 #define GLX_VENDOR 1
 #define GLX_RGBA_BIT 0x00000001
@@ -2761,6 +2762,9 @@ typedef struct {
     Atom NET_WM_STATE_FULLSCREEN;
     _sapp_xi_t xi;
     _sapp_xdnd_t xdnd;
+    // XLib manual says keycodes are in the range [8, 255] inclusive.
+    // https://tronche.com/gui/x/xlib/input/keyboard-encoding.html
+    bool key_repeat[_SAPP_X11_MAX_KEYCODES];
 } _sapp_x11_t;
 
 #if defined(_SAPP_GLX)
@@ -10607,6 +10611,21 @@ _SOKOL_PRIVATE int32_t _sapp_x11_keysym_to_unicode(KeySym keysym) {
     return -1;
 }
 
+_SOKOL_PRIVATE bool _sapp_x11_keypress_repeat(int keycode) {
+    bool repeat = false;
+    if ((keycode >= 0) && (keycode < _SAPP_X11_MAX_KEYCODES)) {
+        repeat = _sapp.x11.key_repeat[keycode];
+        _sapp.x11.key_repeat[keycode] = true;
+    }
+    return repeat;
+}
+
+_SOKOL_PRIVATE void _sapp_x11_keyrelease_repeat(int keycode) {
+    if ((keycode >= 0) && (keycode < _SAPP_X11_MAX_KEYCODES)) {
+        _sapp.x11.key_repeat[keycode] = false;
+    }
+}
+
 _SOKOL_PRIVATE bool _sapp_x11_parse_dropped_files_list(const char* src) {
     SOKOL_ASSERT(src);
     SOKOL_ASSERT(_sapp.drop.buffer);
@@ -10685,293 +10704,331 @@ _SOKOL_PRIVATE bool _sapp_x11_parse_dropped_files_list(const char* src) {
     }
 }
 
-// XLib manual says keycodes are in the range [8, 255] inclusive.
-// https://tronche.com/gui/x/xlib/input/keyboard-encoding.html
-static bool _sapp_x11_keycodes[256];
+_SOKOL_PRIVATE void _sapp_x11_on_genericevent(XEvent* event) {
+    if (_sapp.mouse.locked && _sapp.x11.xi.available) {
+        if (event->xcookie.extension == _sapp.x11.xi.major_opcode) {
+            if (XGetEventData(_sapp.x11.display, &event->xcookie)) {
+                if (event->xcookie.evtype == XI_RawMotion) {
+                    XIRawEvent* re = (XIRawEvent*) event->xcookie.data;
+                    if (re->valuators.mask_len) {
+                        const double* values = re->raw_values;
+                        if (XIMaskIsSet(re->valuators.mask, 0)) {
+                            _sapp.mouse.dx = (float) *values;
+                            values++;
+                        }
+                        if (XIMaskIsSet(re->valuators.mask, 1)) {
+                            _sapp.mouse.dy = (float) *values;
+                        }
+                        _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mods(event->xmotion.state));
+                    }
+                }
+                XFreeEventData(_sapp.x11.display, &event->xcookie);
+            }
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_x11_on_focusin(XEvent* event) {
+    // NOTE: ignoring NotifyGrab and NotifyUngrab is same behaviour as GLFW
+    if ((event->xfocus.mode != NotifyGrab) && (event->xfocus.mode != NotifyUngrab)) {
+        _sapp_x11_app_event(SAPP_EVENTTYPE_FOCUSED);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_x11_on_focusout(XEvent* event) {
+    // if focus is lost for any reason, and we're in mouse locked mode, disable mouse lock
+    if (_sapp.mouse.locked) {
+        _sapp_x11_lock_mouse(false);
+    }
+    // NOTE: ignoring NotifyGrab and NotifyUngrab is same behaviour as GLFW
+    if ((event->xfocus.mode != NotifyGrab) && (event->xfocus.mode != NotifyUngrab)) {
+        _sapp_x11_app_event(SAPP_EVENTTYPE_UNFOCUSED);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_x11_on_keypress(XEvent* event) {
+    int keycode = (int)event->xkey.keycode;
+
+    const sapp_keycode key = _sapp_x11_translate_key(keycode);
+    const bool repeat = _sapp_x11_keypress_repeat(keycode);
+    uint32_t mods = _sapp_x11_mods(event->xkey.state);
+    // X11 doesn't set modifier bit on key down, so emulate that
+    mods |= _sapp_x11_key_modifier_bit(key);
+    if (key != SAPP_KEYCODE_INVALID) {
+        _sapp_x11_key_event(SAPP_EVENTTYPE_KEY_DOWN, key, repeat, mods);
+    }
+    KeySym keysym;
+    XLookupString(&event->xkey, NULL, 0, &keysym, NULL);
+    int32_t chr = _sapp_x11_keysym_to_unicode(keysym);
+    if (chr > 0) {
+        _sapp_x11_char_event((uint32_t)chr, repeat, mods);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_x11_on_keyrelease(XEvent* event) {
+    int keycode = (int)event->xkey.keycode;
+    const sapp_keycode key = _sapp_x11_translate_key(keycode);
+    _sapp_x11_keyrelease_repeat(keycode);
+    if (key != SAPP_KEYCODE_INVALID) {
+        uint32_t mods = _sapp_x11_mods(event->xkey.state);
+        // X11 doesn't clear modifier bit on key up, so emulate that
+        mods &= ~_sapp_x11_key_modifier_bit(key);
+        _sapp_x11_key_event(SAPP_EVENTTYPE_KEY_UP, key, false, mods);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_x11_on_buttonpress(XEvent* event) {
+    _sapp_x11_mouse_update(event->xbutton.x, event->xbutton.y, false);
+    const sapp_mousebutton btn = _sapp_x11_translate_button(event);
+    uint32_t mods = _sapp_x11_mods(event->xbutton.state);
+    // X11 doesn't set modifier bit on button down, so emulate that
+    mods |= _sapp_x11_button_modifier_bit(btn);
+    if (btn != SAPP_MOUSEBUTTON_INVALID) {
+        _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, btn, mods);
+        _sapp.x11.mouse_buttons |= (1 << btn);
+    }
+    else {
+        // might be a scroll event
+        switch (event->xbutton.button) {
+            case 4: _sapp_x11_scroll_event(0.0f, 1.0f, mods); break;
+            case 5: _sapp_x11_scroll_event(0.0f, -1.0f, mods); break;
+            case 6: _sapp_x11_scroll_event(1.0f, 0.0f, mods); break;
+            case 7: _sapp_x11_scroll_event(-1.0f, 0.0f, mods); break;
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_x11_on_buttonrelease(XEvent* event) {
+    _sapp_x11_mouse_update(event->xbutton.x, event->xbutton.y, false);
+    const sapp_mousebutton btn = _sapp_x11_translate_button(event);
+    if (btn != SAPP_MOUSEBUTTON_INVALID) {
+        uint32_t mods = _sapp_x11_mods(event->xbutton.state);
+        // X11 doesn't clear modifier bit on button up, so emulate that
+        mods &= ~_sapp_x11_button_modifier_bit(btn);
+        _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, btn, mods);
+        _sapp.x11.mouse_buttons &= ~(1 << btn);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_x11_on_enternotify(XEvent* event) {
+    // don't send enter/leave events while mouse button held down
+    if (0 == _sapp.x11.mouse_buttons) {
+        _sapp_x11_mouse_update(event->xcrossing.x, event->xcrossing.y, true);
+        _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mods(event->xcrossing.state));
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_x11_on_leavenotify(XEvent* event) {
+    if (0 == _sapp.x11.mouse_buttons) {
+        _sapp_x11_mouse_update(event->xcrossing.x, event->xcrossing.y, true);
+        _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mods(event->xcrossing.state));
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_x11_on_motionnotify(XEvent* event) {
+    if (!_sapp.mouse.locked) {
+        _sapp_x11_mouse_update(event->xmotion.x, event->xmotion.y, false);
+        _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mods(event->xmotion.state));
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_x11_on_configurenotify(XEvent* event) {
+    if ((event->xconfigure.width != _sapp.window_width) || (event->xconfigure.height != _sapp.window_height)) {
+        _sapp.window_width = event->xconfigure.width;
+        _sapp.window_height = event->xconfigure.height;
+        _sapp.framebuffer_width = _sapp.window_width;
+        _sapp.framebuffer_height = _sapp.window_height;
+        _sapp_x11_app_event(SAPP_EVENTTYPE_RESIZED);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_x11_on_propertynotify(XEvent* event) {
+    if (event->xproperty.state == PropertyNewValue) {
+        if (event->xproperty.atom == _sapp.x11.WM_STATE) {
+            const int state = _sapp_x11_get_window_state();
+            if (state != _sapp.x11.window_state) {
+                _sapp.x11.window_state = state;
+                if (state == IconicState) {
+                    _sapp_x11_app_event(SAPP_EVENTTYPE_ICONIFIED);
+                }
+                else if (state == NormalState) {
+                    _sapp_x11_app_event(SAPP_EVENTTYPE_RESTORED);
+                }
+            }
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_x11_on_selectionnotify(XEvent* event) {
+    if (event->xselection.property == _sapp.x11.xdnd.XdndSelection) {
+        char* data = 0;
+        uint32_t result = _sapp_x11_get_window_property(event->xselection.requestor,
+                                                        event->xselection.property,
+                                                        event->xselection.target,
+                                                        (unsigned char**) &data);
+        if (_sapp.drop.enabled && result) {
+            if (_sapp_x11_parse_dropped_files_list(data)) {
+                _sapp.mouse.dx = 0.0f;
+                _sapp.mouse.dy = 0.0f;
+                if (_sapp_events_enabled()) {
+                    // FIXME: Figure out how to get modifier key state here.
+                    // The XSelection event has no 'state' item, and
+                    // XQueryKeymap() always returns a zeroed array.
+                    _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
+                    _sapp_call_event(&_sapp.event);
+                }
+            }
+        }
+        if (_sapp.x11.xdnd.version >= 2) {
+            XEvent reply;
+            _sapp_clear(&reply, sizeof(reply));
+            reply.type = ClientMessage;
+            reply.xclient.window = _sapp.x11.xdnd.source;
+            reply.xclient.message_type = _sapp.x11.xdnd.XdndFinished;
+            reply.xclient.format = 32;
+            reply.xclient.data.l[0] = (long)_sapp.x11.window;
+            reply.xclient.data.l[1] = result;
+            reply.xclient.data.l[2] = (long)_sapp.x11.xdnd.XdndActionCopy;
+            XSendEvent(_sapp.x11.display, _sapp.x11.xdnd.source, False, NoEventMask, &reply);
+            XFlush(_sapp.x11.display);
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_x11_on_clientmessage(XEvent* event) {
+    if (XFilterEvent(event, None)) {
+        return;
+    }
+    if (event->xclient.message_type == _sapp.x11.WM_PROTOCOLS) {
+        const Atom protocol = (Atom)event->xclient.data.l[0];
+        if (protocol == _sapp.x11.WM_DELETE_WINDOW) {
+            _sapp.quit_requested = true;
+        }
+    } else if (event->xclient.message_type == _sapp.x11.xdnd.XdndEnter) {
+        const bool is_list = 0 != (event->xclient.data.l[1] & 1);
+        _sapp.x11.xdnd.source  = (Window)event->xclient.data.l[0];
+        _sapp.x11.xdnd.version = event->xclient.data.l[1] >> 24;
+        _sapp.x11.xdnd.format  = None;
+        if (_sapp.x11.xdnd.version > _SAPP_X11_XDND_VERSION) {
+            return;
+        }
+        uint32_t count = 0;
+        Atom* formats = 0;
+        if (is_list) {
+            count = _sapp_x11_get_window_property(_sapp.x11.xdnd.source, _sapp.x11.xdnd.XdndTypeList, XA_ATOM, (unsigned char**)&formats);
+        } else {
+            count = 3;
+            formats = (Atom*) event->xclient.data.l + 2;
+        }
+        for (uint32_t i = 0; i < count; i++) {
+            if (formats[i] == _sapp.x11.xdnd.text_uri_list) {
+                _sapp.x11.xdnd.format = _sapp.x11.xdnd.text_uri_list;
+                break;
+            }
+        }
+        if (is_list && formats) {
+            XFree(formats);
+        }
+    } else if (event->xclient.message_type == _sapp.x11.xdnd.XdndDrop) {
+        if (_sapp.x11.xdnd.version > _SAPP_X11_XDND_VERSION) {
+            return;
+        }
+        Time time = CurrentTime;
+        if (_sapp.x11.xdnd.format) {
+            if (_sapp.x11.xdnd.version >= 1) {
+                time = (Time)event->xclient.data.l[2];
+            }
+            XConvertSelection(_sapp.x11.display,
+                                _sapp.x11.xdnd.XdndSelection,
+                                _sapp.x11.xdnd.format,
+                                _sapp.x11.xdnd.XdndSelection,
+                                _sapp.x11.window,
+                                time);
+        } else if (_sapp.x11.xdnd.version >= 2) {
+            XEvent reply;
+            _sapp_clear(&reply, sizeof(reply));
+            reply.type = ClientMessage;
+            reply.xclient.window = _sapp.x11.xdnd.source;
+            reply.xclient.message_type = _sapp.x11.xdnd.XdndFinished;
+            reply.xclient.format = 32;
+            reply.xclient.data.l[0] = (long)_sapp.x11.window;
+            reply.xclient.data.l[1] = 0;    // drag was rejected
+            reply.xclient.data.l[2] = None;
+            XSendEvent(_sapp.x11.display, _sapp.x11.xdnd.source, False, NoEventMask, &reply);
+            XFlush(_sapp.x11.display);
+        }
+    } else if (event->xclient.message_type == _sapp.x11.xdnd.XdndPosition) {
+        // drag operation has moved over the window
+        //  FIXME: we could track the mouse position here, but
+        //  this isn't implemented on other platforms either so far
+        if (_sapp.x11.xdnd.version > _SAPP_X11_XDND_VERSION) {
+            return;
+        }
+        XEvent reply;
+        _sapp_clear(&reply, sizeof(reply));
+        reply.type = ClientMessage;
+        reply.xclient.window = _sapp.x11.xdnd.source;
+        reply.xclient.message_type = _sapp.x11.xdnd.XdndStatus;
+        reply.xclient.format = 32;
+        reply.xclient.data.l[0] = (long)_sapp.x11.window;
+        if (_sapp.x11.xdnd.format) {
+            /* reply that we are ready to copy the dragged data */
+            reply.xclient.data.l[1] = 1;    // accept with no rectangle
+            if (_sapp.x11.xdnd.version >= 2) {
+                reply.xclient.data.l[4] = (long)_sapp.x11.xdnd.XdndActionCopy;
+            }
+        }
+        XSendEvent(_sapp.x11.display, _sapp.x11.xdnd.source, False, NoEventMask, &reply);
+        XFlush(_sapp.x11.display);
+    }
+}
 
 _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
-    Bool filtered = XFilterEvent(event, None);
     switch (event->type) {
         case GenericEvent:
-            if (_sapp.mouse.locked && _sapp.x11.xi.available) {
-                if (event->xcookie.extension == _sapp.x11.xi.major_opcode) {
-                    if (XGetEventData(_sapp.x11.display, &event->xcookie)) {
-                        if (event->xcookie.evtype == XI_RawMotion) {
-                            XIRawEvent* re = (XIRawEvent*) event->xcookie.data;
-                            if (re->valuators.mask_len) {
-                                const double* values = re->raw_values;
-                                if (XIMaskIsSet(re->valuators.mask, 0)) {
-                                    _sapp.mouse.dx = (float) *values;
-                                    values++;
-                                }
-                                if (XIMaskIsSet(re->valuators.mask, 1)) {
-                                    _sapp.mouse.dy = (float) *values;
-                                }
-                                _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mods(event->xmotion.state));
-                            }
-                        }
-                        XFreeEventData(_sapp.x11.display, &event->xcookie);
-                    }
-                }
-            }
+            _sapp_x11_on_genericevent(event);
             break;
         case FocusIn:
-            // NOTE: ignoring NotifyGrab and NotifyUngrab is same behaviour as GLFW
-            if ((event->xfocus.mode != NotifyGrab) && (event->xfocus.mode != NotifyUngrab)) {
-                _sapp_x11_app_event(SAPP_EVENTTYPE_FOCUSED);
-            }
+            _sapp_x11_on_focusin(event);
             break;
         case FocusOut:
-            /* if focus is lost for any reason, and we're in mouse locked mode, disable mouse lock */
-            if (_sapp.mouse.locked) {
-                _sapp_x11_lock_mouse(false);
-            }
-            // NOTE: ignoring NotifyGrab and NotifyUngrab is same behaviour as GLFW
-            if ((event->xfocus.mode != NotifyGrab) && (event->xfocus.mode != NotifyUngrab)) {
-                _sapp_x11_app_event(SAPP_EVENTTYPE_UNFOCUSED);
-            }
+            _sapp_x11_on_focusout(event);
             break;
         case KeyPress:
-            {
-                int keycode = (int)event->xkey.keycode;
-                const sapp_keycode key = _sapp_x11_translate_key(keycode);
-                bool repeat = _sapp_x11_keycodes[keycode & 0xFF];
-                _sapp_x11_keycodes[keycode & 0xFF] = true;
-                uint32_t mods = _sapp_x11_mods(event->xkey.state);
-                // X11 doesn't set modifier bit on key down, so emulate that
-                mods |= _sapp_x11_key_modifier_bit(key);
-                if (key != SAPP_KEYCODE_INVALID) {
-                    _sapp_x11_key_event(SAPP_EVENTTYPE_KEY_DOWN, key, repeat, mods);
-                }
-                KeySym keysym;
-                XLookupString(&event->xkey, NULL, 0, &keysym, NULL);
-                int32_t chr = _sapp_x11_keysym_to_unicode(keysym);
-                if (chr > 0) {
-                    _sapp_x11_char_event((uint32_t)chr, repeat, mods);
-                }
-            }
+            _sapp_x11_on_keypress(event);
             break;
         case KeyRelease:
-            {
-                int keycode = (int)event->xkey.keycode;
-                const sapp_keycode key = _sapp_x11_translate_key(keycode);
-                _sapp_x11_keycodes[keycode & 0xFF] = false;
-                if (key != SAPP_KEYCODE_INVALID) {
-                    uint32_t mods = _sapp_x11_mods(event->xkey.state);
-                    // X11 doesn't clear modifier bit on key up, so emulate that
-                    mods &= ~_sapp_x11_key_modifier_bit(key);
-                    _sapp_x11_key_event(SAPP_EVENTTYPE_KEY_UP, key, false, mods);
-                }
-            }
+            _sapp_x11_on_keyrelease(event);
             break;
         case ButtonPress:
-            {
-                _sapp_x11_mouse_update(event->xbutton.x, event->xbutton.y, false);
-                const sapp_mousebutton btn = _sapp_x11_translate_button(event);
-                uint32_t mods = _sapp_x11_mods(event->xbutton.state);
-                // X11 doesn't set modifier bit on button down, so emulate that
-                mods |= _sapp_x11_button_modifier_bit(btn);
-                if (btn != SAPP_MOUSEBUTTON_INVALID) {
-                    _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, btn, mods);
-                    _sapp.x11.mouse_buttons |= (1 << btn);
-                }
-                else {
-                    /* might be a scroll event */
-                    switch (event->xbutton.button) {
-                        case 4: _sapp_x11_scroll_event(0.0f, 1.0f, mods); break;
-                        case 5: _sapp_x11_scroll_event(0.0f, -1.0f, mods); break;
-                        case 6: _sapp_x11_scroll_event(1.0f, 0.0f, mods); break;
-                        case 7: _sapp_x11_scroll_event(-1.0f, 0.0f, mods); break;
-                    }
-                }
-            }
+            _sapp_x11_on_buttonpress(event);
             break;
         case ButtonRelease:
-            {
-                _sapp_x11_mouse_update(event->xbutton.x, event->xbutton.y, false);
-                const sapp_mousebutton btn = _sapp_x11_translate_button(event);
-                if (btn != SAPP_MOUSEBUTTON_INVALID) {
-                    uint32_t mods = _sapp_x11_mods(event->xbutton.state);
-                    // X11 doesn't clear modifier bit on button up, so emulate that
-                    mods &= ~_sapp_x11_button_modifier_bit(btn);
-                    _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, btn, mods);
-                    _sapp.x11.mouse_buttons &= ~(1 << btn);
-                }
-            }
+            _sapp_x11_on_buttonrelease(event);
             break;
         case EnterNotify:
-            /* don't send enter/leave events while mouse button held down */
-            if (0 == _sapp.x11.mouse_buttons) {
-                _sapp_x11_mouse_update(event->xcrossing.x, event->xcrossing.y, true);
-                _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mods(event->xcrossing.state));
-            }
+            _sapp_x11_on_enternotify(event);
             break;
         case LeaveNotify:
-            if (0 == _sapp.x11.mouse_buttons) {
-                _sapp_x11_mouse_update(event->xcrossing.x, event->xcrossing.y, true);
-                _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mods(event->xcrossing.state));
-            }
+            _sapp_x11_on_leavenotify(event);
             break;
         case MotionNotify:
-            if (!_sapp.mouse.locked) {
-                _sapp_x11_mouse_update(event->xmotion.x, event->xmotion.y, false);
-                _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mods(event->xmotion.state));
-            }
+            _sapp_x11_on_motionnotify(event);
             break;
         case ConfigureNotify:
-            if ((event->xconfigure.width != _sapp.window_width) || (event->xconfigure.height != _sapp.window_height)) {
-                _sapp.window_width = event->xconfigure.width;
-                _sapp.window_height = event->xconfigure.height;
-                _sapp.framebuffer_width = _sapp.window_width;
-                _sapp.framebuffer_height = _sapp.window_height;
-                _sapp_x11_app_event(SAPP_EVENTTYPE_RESIZED);
-            }
+            _sapp_x11_on_configurenotify(event);
             break;
         case PropertyNotify:
-            if (event->xproperty.state == PropertyNewValue) {
-                if (event->xproperty.atom == _sapp.x11.WM_STATE) {
-                    const int state = _sapp_x11_get_window_state();
-                    if (state != _sapp.x11.window_state) {
-                        _sapp.x11.window_state = state;
-                        if (state == IconicState) {
-                            _sapp_x11_app_event(SAPP_EVENTTYPE_ICONIFIED);
-                        }
-                        else if (state == NormalState) {
-                            _sapp_x11_app_event(SAPP_EVENTTYPE_RESTORED);
-                        }
-                    }
-                }
-            }
-            break;
-        case ClientMessage:
-            if (filtered) {
-                return;
-            }
-            if (event->xclient.message_type == _sapp.x11.WM_PROTOCOLS) {
-                const Atom protocol = (Atom)event->xclient.data.l[0];
-                if (protocol == _sapp.x11.WM_DELETE_WINDOW) {
-                    _sapp.quit_requested = true;
-                }
-            }
-            else if (event->xclient.message_type == _sapp.x11.xdnd.XdndEnter) {
-                const bool is_list = 0 != (event->xclient.data.l[1] & 1);
-                _sapp.x11.xdnd.source  = (Window)event->xclient.data.l[0];
-                _sapp.x11.xdnd.version = event->xclient.data.l[1] >> 24;
-                _sapp.x11.xdnd.format  = None;
-                if (_sapp.x11.xdnd.version > _SAPP_X11_XDND_VERSION) {
-                    return;
-                }
-                uint32_t count = 0;
-                Atom* formats = 0;
-                if (is_list) {
-                    count = _sapp_x11_get_window_property(_sapp.x11.xdnd.source, _sapp.x11.xdnd.XdndTypeList, XA_ATOM, (unsigned char**)&formats);
-                }
-                else {
-                    count = 3;
-                    formats = (Atom*) event->xclient.data.l + 2;
-                }
-                for (uint32_t i = 0; i < count; i++) {
-                    if (formats[i] == _sapp.x11.xdnd.text_uri_list) {
-                        _sapp.x11.xdnd.format = _sapp.x11.xdnd.text_uri_list;
-                        break;
-                    }
-                }
-                if (is_list && formats) {
-                    XFree(formats);
-                }
-            }
-            else if (event->xclient.message_type == _sapp.x11.xdnd.XdndDrop) {
-                if (_sapp.x11.xdnd.version > _SAPP_X11_XDND_VERSION) {
-                    return;
-                }
-                Time time = CurrentTime;
-                if (_sapp.x11.xdnd.format) {
-                    if (_sapp.x11.xdnd.version >= 1) {
-                        time = (Time)event->xclient.data.l[2];
-                    }
-                    XConvertSelection(_sapp.x11.display,
-                                      _sapp.x11.xdnd.XdndSelection,
-                                      _sapp.x11.xdnd.format,
-                                      _sapp.x11.xdnd.XdndSelection,
-                                      _sapp.x11.window,
-                                      time);
-                }
-                else if (_sapp.x11.xdnd.version >= 2) {
-                    XEvent reply;
-                    _sapp_clear(&reply, sizeof(reply));
-                    reply.type = ClientMessage;
-                    reply.xclient.window = _sapp.x11.xdnd.source;
-                    reply.xclient.message_type = _sapp.x11.xdnd.XdndFinished;
-                    reply.xclient.format = 32;
-                    reply.xclient.data.l[0] = (long)_sapp.x11.window;
-                    reply.xclient.data.l[1] = 0;    // drag was rejected
-                    reply.xclient.data.l[2] = None;
-                    XSendEvent(_sapp.x11.display, _sapp.x11.xdnd.source, False, NoEventMask, &reply);
-                    XFlush(_sapp.x11.display);
-                }
-            }
-            else if (event->xclient.message_type == _sapp.x11.xdnd.XdndPosition) {
-                /* drag operation has moved over the window
-                   FIXME: we could track the mouse position here, but
-                   this isn't implemented on other platforms either so far
-                */
-                if (_sapp.x11.xdnd.version > _SAPP_X11_XDND_VERSION) {
-                    return;
-                }
-                XEvent reply;
-                _sapp_clear(&reply, sizeof(reply));
-                reply.type = ClientMessage;
-                reply.xclient.window = _sapp.x11.xdnd.source;
-                reply.xclient.message_type = _sapp.x11.xdnd.XdndStatus;
-                reply.xclient.format = 32;
-                reply.xclient.data.l[0] = (long)_sapp.x11.window;
-                if (_sapp.x11.xdnd.format) {
-                    /* reply that we are ready to copy the dragged data */
-                    reply.xclient.data.l[1] = 1;    // accept with no rectangle
-                    if (_sapp.x11.xdnd.version >= 2) {
-                        reply.xclient.data.l[4] = (long)_sapp.x11.xdnd.XdndActionCopy;
-                    }
-                }
-                XSendEvent(_sapp.x11.display, _sapp.x11.xdnd.source, False, NoEventMask, &reply);
-                XFlush(_sapp.x11.display);
-            }
+            _sapp_x11_on_propertynotify(event);
             break;
         case SelectionNotify:
-            if (event->xselection.property == _sapp.x11.xdnd.XdndSelection) {
-                char* data = 0;
-                uint32_t result = _sapp_x11_get_window_property(event->xselection.requestor,
-                                                                event->xselection.property,
-                                                                event->xselection.target,
-                                                                (unsigned char**) &data);
-                if (_sapp.drop.enabled && result) {
-                    if (_sapp_x11_parse_dropped_files_list(data)) {
-                        _sapp.mouse.dx = 0.0f;
-                        _sapp.mouse.dy = 0.0f;
-                        if (_sapp_events_enabled()) {
-                            // FIXME: Figure out how to get modifier key state here.
-                            // The XSelection event has no 'state' item, and
-                            // XQueryKeymap() always returns a zeroed array.
-                            _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
-                            _sapp_call_event(&_sapp.event);
-                        }
-                    }
-                }
-                if (_sapp.x11.xdnd.version >= 2) {
-                    XEvent reply;
-                    _sapp_clear(&reply, sizeof(reply));
-                    reply.type = ClientMessage;
-                    reply.xclient.window = _sapp.x11.xdnd.source;
-                    reply.xclient.message_type = _sapp.x11.xdnd.XdndFinished;
-                    reply.xclient.format = 32;
-                    reply.xclient.data.l[0] = (long)_sapp.x11.window;
-                    reply.xclient.data.l[1] = result;
-                    reply.xclient.data.l[2] = (long)_sapp.x11.xdnd.XdndActionCopy;
-                    XSendEvent(_sapp.x11.display, _sapp.x11.xdnd.source, False, NoEventMask, &reply);
-                    XFlush(_sapp.x11.display);
-                }
-            }
+            _sapp_x11_on_selectionnotify(event);
             break;
         case DestroyNotify:
+            // not a bug
+            break;
+        case ClientMessage:
+            _sapp_x11_on_clientmessage(event);
             break;
     }
 }
