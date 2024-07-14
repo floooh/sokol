@@ -1376,8 +1376,6 @@ typedef enum sapp_keycode {
     SAPP_KEYCODE_RIGHT_ALT        = 346,
     SAPP_KEYCODE_RIGHT_SUPER      = 347,
     SAPP_KEYCODE_MENU             = 348,
-
-    SAPP_KEYCODE_MAX = 512,
 } sapp_keycode;
 
 /*
@@ -2767,7 +2765,6 @@ typedef struct {
     // XLib manual says keycodes are in the range [8, 255] inclusive.
     // https://tronche.com/gui/x/xlib/input/keyboard-encoding.html
     bool key_repeat[_SAPP_X11_MAX_X11_KEYCODES];
-    sapp_keycode keycodes[_SAPP_X11_MAX_X11_KEYCODES];
 } _sapp_x11_t;
 
 #if defined(_SAPP_GLX)
@@ -9648,7 +9645,7 @@ _SOKOL_PRIVATE void _sapp_x11_init_extensions(void) {
 // NOTE: this is only used as a fallback, in case the XBK method fails
 //       it is layout-dependent and will fail partially on most non-US layouts.
 //
-_SOKOL_PRIVATE int _sapp_x11_translate_keysyms(const KeySym* keysyms, int width) {
+_SOKOL_PRIVATE sapp_keycode _sapp_x11_translate_keysyms(const KeySym* keysyms, int width) {
     if (width > 1) {
         switch (keysyms[1]) {
             case XK_KP_0:           return SAPP_KEYCODE_KP_0;
@@ -9813,9 +9810,9 @@ _SOKOL_PRIVATE int _sapp_x11_translate_keysyms(const KeySym* keysyms, int width)
 // for getting layout-independent keycodes on X11.
 //
 // see GLFW x11_init.c/createKeyTables()
-_SOKOL_PRIVATE void _sapp_x11_init_keytables(void) {
-    for (int i = 0; i < SAPP_KEYCODE_MAX; i++) {
-        _sapp.x11.keycodes[i] = -1;
+_SOKOL_PRIVATE void _sapp_x11_init_keytable(void) {
+    for (int i = 0; i < SAPP_MAX_KEYCODES; i++) {
+        _sapp.keycodes[i] = SAPP_KEYCODE_INVALID;
     }
     // use XKB to determine physical key locations independently of the current keyboard layout
     XkbDescPtr desc = XkbGetMap(_sapp.x11.display, 0, XkbUseCoreKbd);
@@ -9975,7 +9972,7 @@ _SOKOL_PRIVATE void _sapp_x11_init_keytables(void) {
                 }
             }
         }
-        _sapp.x11.keycodes[scancode] = key;
+        _sapp.keycodes[scancode] = key;
     }
     XkbFreeNames(desc, XkbKeyNamesMask, True);
     XkbFreeKeyboard(desc, 0, True);
@@ -9984,9 +9981,9 @@ _SOKOL_PRIVATE void _sapp_x11_init_keytables(void) {
     KeySym* keysyms = XGetKeyboardMapping(_sapp.x11.display, scancode_min, scancode_max - scancode_min + 1, &width);
     for (int scancode = scancode_min; scancode <= scancode_max; scancode++) {
         // translate untranslated key codes using the traditional X11 KeySym lookups
-        if (_sapp.x11.keycodes[scancode] < 0) {
+        if (_sapp.keycodes[scancode] == SAPP_KEYCODE_INVALID) {
             const size_t base = (size_t)((scancode - scancode_min) * width);
-            _sapp.x11.keycodes[scancode] = _sapp_x11_translate_keysyms(&keysyms[base], width);
+            _sapp.keycodes[scancode] = _sapp_x11_translate_keysyms(&keysyms[base], width);
         }
     }
     XFree(keysyms);
@@ -10792,7 +10789,7 @@ _SOKOL_PRIVATE void _sapp_x11_char_event(uint32_t chr, bool repeat, uint32_t mod
 
 _SOKOL_PRIVATE sapp_keycode _sapp_x11_translate_key(int scancode) {
     if ((scancode >= 0) && (scancode < _SAPP_X11_MAX_X11_KEYCODES)) {
-        return _sapp.x11.keycodes[scancode];
+        return _sapp.keycodes[scancode];
     } else {
         return SAPP_KEYCODE_INVALID;
     }
@@ -11414,7 +11411,7 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     _sapp_x11_init_extensions();
     _sapp_x11_create_cursors();
     XkbSetDetectableAutoRepeat(_sapp.x11.display, true, NULL);
-    _sapp_x11_init_keytables();
+    _sapp_x11_init_keytable();
 #if defined(_SAPP_GLX)
     _sapp_glx_init();
     Visual* visual = 0;
