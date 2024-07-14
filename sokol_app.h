@@ -2767,7 +2767,7 @@ typedef struct {
     // XLib manual says keycodes are in the range [8, 255] inclusive.
     // https://tronche.com/gui/x/xlib/input/keyboard-encoding.html
     bool key_repeat[_SAPP_X11_MAX_X11_KEYCODES];
-    int16_t keycodes[_SAPP_X11_MAX_X11_KEYCODES];
+    sapp_keycode keycodes[_SAPP_X11_MAX_X11_KEYCODES];
 } _sapp_x11_t;
 
 #if defined(_SAPP_GLX)
@@ -9825,7 +9825,7 @@ _SOKOL_PRIVATE void _sapp_x11_init_keytables(void) {
     const int scancode_min = desc->min_key_code;
     const int scancode_max = desc->max_key_code;
 
-    const struct { int key; char* name; } keymap[] = {
+    const struct { sapp_keycode key; const char* name; } keymap[] = {
         { SAPP_KEYCODE_GRAVE_ACCENT, "TLDE" },
         { SAPP_KEYCODE_1, "AE01" },
         { SAPP_KEYCODE_2, "AE02" },
