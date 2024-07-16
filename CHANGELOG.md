@@ -1,5 +1,28 @@
 ## Updates
 
+### 15-Jul-2024
+
+sokol_app.h Linux: Fixed a long-standing issue on Linux where sokol-app key
+up/down events were not keyboard layout independent. Instead the first keyboard
+layout in the system settings would be used (this was responsible for why the
+bug slipped through for so long, because on my Linux laptop I have a US layout
+first in the list, followed by the German layout - this caused sokol-app key
+codes to always be consistent with the US layout, even when the German layout
+was selected, which is the intended behaviour. The bug only manifested itself
+when moving the German layout into the top spot.
+
+The fix has been adapted from GLFW by building a runtime-dynamic mapping table
+from keyboard scan codes to sokol-app key codes at application start. As always,
+big kudos to GLFW for investigating and implementing a fix after running into
+the same issue before.
+
+Also many thanks to GH user @marekmaskarinec for providing an initial PR
+(https://github.com/floooh/sokol/pull/1078) which unfortunately couldn't be
+used because it doesn't work on XWayland.
+
+For more details see issue https://github.com/floooh/sokol/issues/1080 and
+PR https://github.com/floooh/sokol/pull/1081.
+
 ### 04-Jul-2024
 
 The public sokol_audio.h functions now have an assert to make sure that saudio_setup()
