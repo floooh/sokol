@@ -22,7 +22,7 @@ via the glTexStorage calls (this is entirely valid GL and WebGL2 though).
 The breakage manifests as a 'stuck' offscreen rendering in Chrome, and as
 a lost WebGL context in Safari Tech Preview (ok, that one isn't exactly 'subtle').
 
-The workaround in the sokol_gfx.h backend is:
+The workaround in the sokol_gfx.h GL backend is:
 
 - on Emscripten only:
 - for textures without initial data, explicitly allocate texture storage
