@@ -36,7 +36,7 @@ GL on macOS is stuck at version 4.1, while glTexStorage has only been added in G
 
 > NOTE: if you are affected by the breakage but cannot update to the most recent
 sokol_gfx.h version, a simpler hotfix might be to just comment out this call
-in `_sg_gl_create_texture`, but this will only work for render target textures
+in `_sg_gl_create_image`, but this will only work for render target textures
 with a single mip level (which is the common case though):
 
 ```c
