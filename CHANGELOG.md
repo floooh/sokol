@@ -20,7 +20,7 @@ GL_TEXTURE_MAX_LEVEL set, but don't explicitly allocate texture storage
 via the glTexStorage calls (this is entirely valid GL and WebGL2 though).
 
 The breakage manifests as a 'stuck' offscreen rendering in Chrome, and as
-a lost WebGL context in Safari Tech Preview.
+a lost WebGL context in Safari Tech Preview (ok, that one isn't exactly 'subtle').
 
 The workaround in the sokol_gfx.h backend is:
 
@@ -29,10 +29,10 @@ The workaround in the sokol_gfx.h backend is:
   via the glTexStorage functions
 - and otherwise call the glTexImage functions as before
 
-A proper fix which I'll tackle later is to rewrite the GL texture initialization
+A proper fix which I'll tackle later would be to rewrite the GL texture initialization
 to generally use glTexStorage + glTexSubImage, but this will require a separate
 fallback code path for macOS which doesn't have the glTexStorage calls because
-GL on macOS is stuck at version 4.1.
+GL on macOS is stuck at version 4.1, while glTexStorage has only been added in GL 4.2.
 
 > NOTE: if you are affected by the breakage but cannot update to the most recent
 sokol_gfx.h version, a simpler hotfix might be to just comment out this call
