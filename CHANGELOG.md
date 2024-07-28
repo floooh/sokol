@@ -3,7 +3,7 @@
 ### 28-Jul-2024
 
 sokol_gfx.h WebGL2: An important hotfix/workaround for a regression
-in Chrome v127 and Safari Technology Preview 199 which broke all offscreen
+in Chrome v127 on macOS and Safari Technology Preview 199 which broke all offscreen
 rendering in sokol_gfx.h on WebGL2. The details are here https://github.com/floooh/sokol/issues/1085
 and in this Chromium ticket: https://issues.chromium.org/issues/355605685.
 
