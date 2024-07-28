@@ -29,7 +29,7 @@ The workaround in the sokol_gfx.h backend is:
   via the glTexStorage functions
 - and otherwise call the glTexImage functions as before
 
-A proper fix which I'll tackle later would be to rewrite the GL texture initialization
+A better fix which I'll tackle later would be to rewrite the GL texture initialization
 to generally use glTexStorage + glTexSubImage, but this will require a separate
 fallback code path for macOS which doesn't have the glTexStorage calls because
 GL on macOS is stuck at version 4.1, while glTexStorage has only been added in GL 4.2.
