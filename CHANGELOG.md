@@ -1,5 +1,50 @@
 ## Updates
 
+### 28-Jul-2024
+
+sokol_gfx.h WebGL2: An important hotfix/workaround for a regression
+in Chrome v127 and Safari Technology Preview 199 which broke all offscreen
+rendering in sokol_gfx.h on WebGL2. The details are here https://github.com/floooh/sokol/issues/1085
+and in this Chromium ticket: https://issues.chromium.org/issues/355605685.
+
+The PR is here: https://github.com/floooh/sokol/pull/1087
+
+It might take a little bit before the Chrome/Safari fix lands, and I fully expect
+that the breakage will very slowly crawl through all sorts of other products
+depending on Chromium (like VSCode, or the Qt WebView widget), so it made sense
+to implement a workaround instead of waiting for the upstream fix to arrive.
+
+The TL;DR is: A regression in the Chrome and Safari WebGL2 Metal backends
+subtly breaks offscreen rendering for render target textures which have their
+GL_TEXTURE_MAX_LEVEL set, but don't explicitly allocate texture storage
+via the glTexStorage calls (this is entirely valid GL and WebGL2 though).
+
+The breakage manifests as a 'stuck' offscreen rendering in Chrome, and as
+a lost WebGL context in Safari Tech Preview (ok, that one isn't exactly 'subtle').
+
+The workaround in the sokol_gfx.h backend is:
+
+- on Emscripten only:
+- for textures without initial data, explicitly allocate texture storage
+  via the glTexStorage functions
+- and otherwise call the glTexImage functions as before
+
+A proper fix which I'll tackle later would be to rewrite the GL texture initialization
+to generally use glTexStorage + glTexSubImage, but this will require a separate
+fallback code path for macOS which doesn't have the glTexStorage calls because
+GL on macOS is stuck at version 4.1, while glTexStorage has only been added in GL 4.2.
+
+> NOTE: if you are affected by the breakage but cannot update to the most recent
+sokol_gfx.h version, a simpler hotfix might be to just comment out this call
+in `_sg_gl_create_texture`, but this will only work for render target textures
+with a single mip level (which is the common case though):
+
+```c
+glTexParameteri(img->gl.target, GL_TEXTURE_MAX_LEVEL, img->cmn.num_mipmaps - 1);
+```
+
+
+
 ### 16-Jul-2024
 
 sokol_app.h Linux: Fixed a long-standing issue on Linux where sokol-app key

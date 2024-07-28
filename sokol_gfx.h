@@ -8299,40 +8299,57 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
             _sg_gl_cache_store_texture_sampler_binding(0);
             _sg_gl_cache_bind_texture_sampler(0, img->gl.target, img->gl.tex[slot], 0);
             glTexParameteri(img->gl.target, GL_TEXTURE_MAX_LEVEL, img->cmn.num_mipmaps - 1);
-            const int num_faces = img->cmn.type == SG_IMAGETYPE_CUBE ? 6 : 1;
-            int data_index = 0;
-            for (int face_index = 0; face_index < num_faces; face_index++) {
-                for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++, data_index++) {
-                    GLenum gl_img_target = img->gl.target;
-                    if (SG_IMAGETYPE_CUBE == img->cmn.type) {
-                        gl_img_target = _sg_gl_cubeface_target(face_index);
-                    }
-                    const GLvoid* data_ptr = desc->data.subimage[face_index][mip_index].ptr;
-                    const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
-                    const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
+
+            // NOTE: workaround for https://issues.chromium.org/issues/355605685
+            // FIXME: on GLES3 and GL 4.3 (e.g. not macOS) the texture initialization
+            // should be rewritten to use glTexStorage + glTexSubImage
+            bool tex_storage_allocated = false;
+            #if defined(__EMSCRIPTEN__)
+                if (desc->data.subimage[0][0].ptr == 0) {
+                    tex_storage_allocated = true;
                     if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
-                        if (is_compressed) {
-                            const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
-                            glCompressedTexImage2D(gl_img_target, mip_index, gl_internal_format,
-                                mip_width, mip_height, 0, data_size, data_ptr);
-                        } else {
-                            const GLenum gl_type = _sg_gl_teximage_type(img->cmn.pixel_format);
-                            glTexImage2D(gl_img_target, mip_index, (GLint)gl_internal_format,
-                                mip_width, mip_height, 0, gl_format, gl_type, data_ptr);
-                        }
+                        glTexStorage2D(img->gl.target, img->cmn.num_mipmaps, gl_internal_format, img->cmn.width, img->cmn.height);
                     } else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
-                        int mip_depth = img->cmn.num_slices;
-                        if (SG_IMAGETYPE_3D == img->cmn.type) {
-                            mip_depth = _sg_miplevel_dim(mip_depth, mip_index);
+                        glTexStorage3D(img->gl.target, img->cmn.num_mipmaps, gl_internal_format, img->cmn.width, img->cmn.height, img->cmn.num_slices);
+                    }
+                }
+            #endif
+            if (!tex_storage_allocated) {
+                const int num_faces = img->cmn.type == SG_IMAGETYPE_CUBE ? 6 : 1;
+                int data_index = 0;
+                for (int face_index = 0; face_index < num_faces; face_index++) {
+                    for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++, data_index++) {
+                        GLenum gl_img_target = img->gl.target;
+                        if (SG_IMAGETYPE_CUBE == img->cmn.type) {
+                            gl_img_target = _sg_gl_cubeface_target(face_index);
                         }
-                        if (is_compressed) {
-                            const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
-                            glCompressedTexImage3D(gl_img_target, mip_index, gl_internal_format,
-                                mip_width, mip_height, mip_depth, 0, data_size, data_ptr);
-                        } else {
-                            const GLenum gl_type = _sg_gl_teximage_type(img->cmn.pixel_format);
-                            glTexImage3D(gl_img_target, mip_index, (GLint)gl_internal_format,
-                                mip_width, mip_height, mip_depth, 0, gl_format, gl_type, data_ptr);
+                        const GLvoid* data_ptr = desc->data.subimage[face_index][mip_index].ptr;
+                        const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
+                        const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
+                        if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
+                            if (is_compressed) {
+                                const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
+                                glCompressedTexImage2D(gl_img_target, mip_index, gl_internal_format,
+                                    mip_width, mip_height, 0, data_size, data_ptr);
+                            } else {
+                                const GLenum gl_type = _sg_gl_teximage_type(img->cmn.pixel_format);
+                                glTexImage2D(gl_img_target, mip_index, (GLint)gl_internal_format,
+                                    mip_width, mip_height, 0, gl_format, gl_type, data_ptr);
+                            }
+                        } else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
+                            int mip_depth = img->cmn.num_slices;
+                            if (SG_IMAGETYPE_3D == img->cmn.type) {
+                                mip_depth = _sg_miplevel_dim(mip_depth, mip_index);
+                            }
+                            if (is_compressed) {
+                                const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
+                                glCompressedTexImage3D(gl_img_target, mip_index, gl_internal_format,
+                                    mip_width, mip_height, mip_depth, 0, data_size, data_ptr);
+                            } else {
+                                const GLenum gl_type = _sg_gl_teximage_type(img->cmn.pixel_format);
+                                glTexImage3D(gl_img_target, mip_index, (GLint)gl_internal_format,
+                                    mip_width, mip_height, mip_depth, 0, gl_format, gl_type, data_ptr);
+                            }
                         }
                     }
                 }
