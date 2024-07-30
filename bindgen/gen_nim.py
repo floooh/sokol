@@ -494,7 +494,7 @@ def gen_extra(inp):
         l('  const d3d11* = false')
         l('  const metal* = false')
         l('  const emscripten* = true')
-        l('elif when defined gl:')
+        l('elif defined gl:')
         l('  const gl*    = true')
         l('  const d3d11* = false')
         l('  const metal* = false')
