@@ -1,5 +1,13 @@
 ## Updates
 
+### 30-Jul-2024
+
+Merged PR https://github.com/floooh/sokol/pull/1086 which adds Emscripten target platform
+support for the Nim bindings. Please also see PR https://github.com/floooh/sokol-nim/pull/31
+and the sokol-nim readme for details: https://github.com/floooh/sokol-nim
+
+Many thanks to @Nazariglez for the PRs!
+
 ### 28-Jul-2024
 
 sokol_gfx.h WebGL2: An important hotfix/workaround for a regression
