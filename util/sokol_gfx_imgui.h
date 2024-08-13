@@ -4287,7 +4287,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(sgimgui_t* ctx) {
         ImGuiTableFlags_SizingFixedFit |
         ImGuiTableFlags_Borders;
     if (igBeginTable("##frame_stats_table", 2, flags, IMVEC2(0, 0), 0)) {
-        igTableSetupScrollFreeze(0, 2);
+        igTableSetupScrollFreeze(0, 1);
         igTableSetupColumn("key", ImGuiTableColumnFlags_None, 0, 0);
         igTableSetupColumn("value", ImGuiTableColumnFlags_None, 0, 0);
         igTableHeadersRow();
