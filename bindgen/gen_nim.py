@@ -521,7 +521,7 @@ def gen_extra(inp):
         l('when defined emscripten:')
         l('  {.passl:"-lGL -ldl".}')
         l('  {.passc:"-DSOKOL_GLES3".}')
-        l('  {.passL: "-s USE_WEBGL2=1".}')
+        l('  {.passL: "-s MIN_WEBGL_VERSION=2 -s MAX_WEBGL_VERSION=2".}')
         l('elif defined windows:')
         l('  when not defined vcc:')
         l('    {.passl:"-lkernel32 -luser32 -lshell32 -lgdi32".}')
