@@ -97,13 +97,13 @@ jobs:
           retention-days: 1
           path: bindgen/sokol-rust/src
       - name: upload-d-artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ignore-me-d
           retention-days: 1
           path: bindgen/sokol-d/src/sokol
       - name: upload-jai-artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ignore-me-jai
           retention-days: 1
@@ -289,7 +289,7 @@ jobs:
       - uses: dlang-community/setup-dlang@v1
         with:
           compiler: ldc-master
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: ignore-me-d
           path: src/sokol
@@ -310,7 +310,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: colinbellino/sokol-jai
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: ignore-me-jai
           path: sokol
@@ -423,7 +423,7 @@ jobs:
         with:
           repository: kassane/sokol-d
           ssh-key: ${{ secrets.GHACTIONS_D_PUSH }}
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: ignore-me-d
           path: src/sokol
@@ -444,7 +444,7 @@ jobs:
         with:
           repository: colinbellino/sokol-jai
           ssh-key: ${{ secrets.GHACTIONS_JAI_PUSH }}
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: ignore-me-jai
           path: sokol
