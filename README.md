@@ -83,6 +83,7 @@ These are automatically updated on changes to the C headers:
 - [sokol-nim](https://github.com/floooh/sokol-nim)
 - [sokol-rust](https://github.com/floooh/sokol-rust)
 - [sokol-d](https://github.com/kassane/sokol-d)
+- [sokol-jai](https://github.com/colinbellino/sokol-jai)
 
 ## Notes
 

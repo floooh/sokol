@@ -1,5 +1,18 @@
 ## Updates
 
+### 14-Aug-2024
+
+The previously 'inofficial' Jai bindings at https://github.com/colinbellino/sokol-jai
+have now been properly integrated with the sokol main repository (meaning that each
+change to the sokol headers will update the bindings automatically).
+
+The only missing part currently is that no test compilation happens in the
+CI pipeline (that's also why the Jai bindings have no badge yet in the readme
+- I think these things will have to wait until Jai leaves closed beta).
+
+Many thanks to @colinbellino for creating the bindings scripts and preparing
+the PR (https://github.com/floooh/sokol/pull/1090).
+
 ### 30-Jul-2024
 
 Merged PR https://github.com/floooh/sokol/pull/1086 which adds Emscripten target platform
