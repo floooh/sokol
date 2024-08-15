@@ -102,7 +102,7 @@ in small-ish textures. This happened at a specific size cutoff which seems to be
 specific (on my laptop with integrated Intel GPU only for textures smaller than
 32x32xN).
 
-Related ticket: https://github.com/floooh/sokol/issues/1066
+Related ticket: https://github.com/floooh/sokol/issues/1063
 ...and PR: https://github.com/floooh/sokol/pull/1065
 
 I also wrote a new sample for investigating the issue and to protect from
