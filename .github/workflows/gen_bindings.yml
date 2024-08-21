@@ -140,10 +140,11 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{matrix.os}}
     steps:
-      - uses: jiro4989/setup-nim-action@v2
-        with:
-         nim-version: '2.0.x'
-         repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - if: runner.os == 'Linux'
+        name: prepare
+        run: |
+            sudo apt-get update
+            sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
       - uses: actions/checkout@main
         with:
           repository: floooh/sokol-nim
@@ -151,11 +152,10 @@ jobs:
         with:
           name: ignore-me-nim
           path: src/sokol
-      - if: runner.os == 'Linux'
-        name: prepare
-        run: |
-            sudo apt-get update
-            sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+      - uses: jiro4989/setup-nim-action@v2
+        with:
+         nim-version: '2.0.x'
+         repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: build
         run: |
           nimble install -Y
