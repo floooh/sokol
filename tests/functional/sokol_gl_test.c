@@ -35,7 +35,7 @@ UTEST(sokol_gl, default_init_shutdown) {
     T(_sgl.cur_ctx->vertices.ptr != 0);
     T(_sgl.cur_ctx->uniforms.ptr != 0);
     T(_sgl.cur_ctx->commands.ptr != 0);
-    T(_sgl.cur_ctx->error == SGL_NO_ERROR);
+    T(_sgl.cur_ctx->error.any == false);
     T(!_sgl.cur_ctx->in_begin);
     T(_sgl.cur_ctx->def_pip.id != SG_INVALID_ID);
     T(_sgl.pip_pool.pool.size == (_SGL_DEFAULT_PIPELINE_POOL_SIZE + 1));
@@ -43,6 +43,8 @@ UTEST(sokol_gl, default_init_shutdown) {
     TFLT(_sgl.cur_ctx->v, 0.0f, FLT_MIN);
     T(_sgl.cur_ctx->rgba == 0xFFFFFFFF);
     T(_sgl.cur_ctx->cur_img.id == _sgl.def_img.id);
+    T(sgl_num_commands() == 0);
+    T(sgl_num_vertices() == 0);
     shutdown();
 }
 
@@ -70,6 +72,7 @@ UTEST(sokol_gl, viewport) {
 UTEST(sokol_gl, scissor_rect) {
     init();
     sgl_scissor_rect(10, 20, 30, 40, true);
+    T(sgl_num_commands() == 1);
     T(_sgl.cur_ctx->commands.next == 1);
     T(_sgl.cur_ctx->commands.ptr[0].cmd == SGL_COMMAND_SCISSOR_RECT);
     T(_sgl.cur_ctx->commands.ptr[0].args.scissor_rect.x == 10);
@@ -78,6 +81,7 @@ UTEST(sokol_gl, scissor_rect) {
     T(_sgl.cur_ctx->commands.ptr[0].args.scissor_rect.h == 40);
     T(_sgl.cur_ctx->commands.ptr[0].args.scissor_rect.origin_top_left);
     sgl_scissor_rect(50, 60, 70, 80, false);
+    T(sgl_num_commands() == 2);
     T(_sgl.cur_ctx->commands.next == 2);
     T(_sgl.cur_ctx->commands.ptr[1].cmd == SGL_COMMAND_SCISSOR_RECT);
     T(_sgl.cur_ctx->commands.ptr[1].args.scissor_rect.x == 50);
@@ -141,11 +145,15 @@ UTEST(sokol_gl, texture_noimage_nosampler) {
 }
 UTEST(sokol_gl, begin_end) {
     init();
+    T(sgl_num_commands() == 0);
+    T(sgl_num_vertices() == 0);
     sgl_begin_triangles();
     sgl_v3f(1.0f, 2.0f, 3.0f);
     sgl_v3f(4.0f, 5.0f, 6.0f);
     sgl_v3f(7.0f, 8.0f, 9.0f);
     sgl_end();
+    T(sgl_num_commands() == 1);
+    T(sgl_num_vertices() == 3);
     T(_sgl.cur_ctx->base_vertex == 0);
     T(_sgl.cur_ctx->vertices.next == 3);
     T(_sgl.cur_ctx->commands.next == 1);
@@ -282,7 +290,8 @@ UTEST(sokol_gl, destroy_active_context) {
     sgl_set_context(ctx);
     sgl_destroy_context(ctx);
     T(_sgl.cur_ctx == 0);
-    T(sgl_error() == SGL_ERROR_NO_CONTEXT);
+    T(sgl_error().no_context);
+    T(sgl_error().any);
     shutdown();
 }
 
