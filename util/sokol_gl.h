@@ -372,8 +372,8 @@
         the last call to sgl_draw() through sokol-gfx, and will 'rewind' the internal
         vertex-, uniform- and command-buffers.
 
-    --- each sokol-gl context tracks an internal error code, to query the
-        current error code for the currently active context call:
+    --- each sokol-gl context tracks internal error states which can
+        be obtains via:
 
             sgl_error_t sgl_error()
 
@@ -381,18 +381,28 @@
 
             sgl_error_t sgl_context_error(ctx);
 
-        ...which can return the following error codes:
+        ...this returns a struct with the following booleans:
 
-        SGL_NO_ERROR                - all OK, no error occurred since last sgl_draw()
-        SGL_ERROR_VERTICES_FULL     - internal vertex buffer is full (checked in sgl_end())
-        SGL_ERROR_UNIFORMS_FULL     - the internal uniforms buffer is full (checked in sgl_end())
-        SGL_ERROR_COMMANDS_FULL     - the internal command buffer is full (checked in sgl_end())
-        SGL_ERROR_STACK_OVERFLOW    - matrix- or pipeline-stack overflow
-        SGL_ERROR_STACK_UNDERFLOW   - matrix- or pipeline-stack underflow
-        SGL_ERROR_NO_CONTEXT        - the active context no longer exists
+            .any                - true if any of the below errors is true
+            .vertices_full      - internal vertex buffer is full (checked in sgl_end())
+            .uniforms_full      - the internal uniforms buffer is full (checked in sgl_end())
+            .commands_full      - the internal command buffer is full (checked in sgl_end())
+            .stack_overflow     - matrix- or pipeline-stack overflow
+            .stack_underflow    - matrix- or pipeline-stack underflow
+            .no_context         - the active context no longer exists
 
-        ...if sokol-gl is in an error-state, sgl_draw() will skip any rendering,
-        and reset the error code to SGL_NO_ERROR.
+        ...depending on the above error state, sgl_draw() may skip rendering
+        completely, or only draw partial geometry
+
+    --- you can get the number of recorded vertices and draw commands in the current
+        frame and active sokol-gl context via:
+
+            int sgl_num_vertices()
+            int sgl_num_commands()
+
+        ...this allows you to check whether the vertex or command pools are running
+        full before the overflow actually happens (in this case you could also
+        check the error booleans in the result of sgl_error()).
 
     RENDER LAYERS
     =============
@@ -762,14 +772,14 @@ typedef struct sgl_context { uint32_t id; } sgl_context;
     Errors are reset each frame after calling sgl_draw(),
     get the last error code with sgl_error()
 */
-typedef enum sgl_error_t {
-    SGL_NO_ERROR = 0,
-    SGL_ERROR_VERTICES_FULL,
-    SGL_ERROR_UNIFORMS_FULL,
-    SGL_ERROR_COMMANDS_FULL,
-    SGL_ERROR_STACK_OVERFLOW,
-    SGL_ERROR_STACK_UNDERFLOW,
-    SGL_ERROR_NO_CONTEXT,
+typedef struct sgl_error_t {
+    bool any;
+    bool vertices_full;
+    bool uniforms_full;
+    bool commands_full;
+    bool stack_overflow;
+    bool stack_underflow;
+    bool no_context;
 } sgl_error_t;
 
 /*
@@ -831,6 +841,10 @@ SOKOL_GL_API_DECL void sgl_destroy_context(sgl_context ctx);
 SOKOL_GL_API_DECL void sgl_set_context(sgl_context ctx);
 SOKOL_GL_API_DECL sgl_context sgl_get_context(void);
 SOKOL_GL_API_DECL sgl_context sgl_default_context(void);
+
+/* get information about recorded vertices and commands in current context */
+SOKOL_GL_API_DECL int sgl_num_vertices(void);
+SOKOL_GL_API_DECL int sgl_num_commands(void);
 
 /* draw recorded commands (call inside a sokol-gfx render pass) */
 SOKOL_GL_API_DECL void sgl_draw(void);
@@ -2342,7 +2356,7 @@ typedef struct {
 
     /* state tracking */
     int base_vertex;
-    int vtx_count;          /* number of times vtx function has been called, used for non-triangle primitives */
+    int quad_vtx_count; /* number of times vtx function has been called, used for non-triangle primitives */
     sgl_error_t error;
     bool in_begin;
     int layer_id;
@@ -2903,10 +2917,24 @@ static void _sgl_destroy_context(sgl_context ctx_id) {
 // ██      ██ ██ ███████  ██████
 //
 // >>misc
+
+static sgl_error_t _sgl_error_defaults(void) {
+    sgl_error_t defaults = {0};
+    return defaults;
+}
+
+static int _sgl_num_vertices(_sgl_context_t* ctx) {
+    return ctx->vertices.next;
+}
+
+static int _sgl_num_commands(_sgl_context_t* ctx) {
+    return ctx->commands.next;
+}
+
 static void _sgl_begin(_sgl_context_t* ctx, _sgl_primitive_type_t mode) {
     ctx->in_begin = true;
     ctx->base_vertex = ctx->vertices.next;
-    ctx->vtx_count = 0;
+    ctx->quad_vtx_count = 0;
     ctx->cur_prim_type = mode;
 }
 
@@ -2916,7 +2944,7 @@ static void _sgl_rewind(_sgl_context_t* ctx) {
     ctx->uniforms.next = 0;
     ctx->commands.next = 0;
     ctx->base_vertex = 0;
-    ctx->error = SGL_NO_ERROR;
+    ctx->error = _sgl_error_defaults();
     ctx->layer_id = 0;
     ctx->matrix_dirty = true;
 }
@@ -2938,7 +2966,8 @@ static _sgl_vertex_t* _sgl_next_vertex(_sgl_context_t* ctx) {
     if (ctx->vertices.next < ctx->vertices.cap) {
         return &ctx->vertices.ptr[ctx->vertices.next++];
     } else {
-        ctx->error = SGL_ERROR_VERTICES_FULL;
+        ctx->error.vertices_full = true;
+        ctx->error.any = true;
         return 0;
     }
 }
@@ -2947,7 +2976,8 @@ static _sgl_uniform_t* _sgl_next_uniform(_sgl_context_t* ctx) {
     if (ctx->uniforms.next < ctx->uniforms.cap) {
         return &ctx->uniforms.ptr[ctx->uniforms.next++];
     } else {
-        ctx->error = SGL_ERROR_UNIFORMS_FULL;
+        ctx->error.uniforms_full = true;
+        ctx->error.any = true;
         return 0;
     }
 }
@@ -2964,7 +2994,8 @@ static _sgl_command_t* _sgl_next_command(_sgl_context_t* ctx) {
     if (ctx->commands.next < ctx->commands.cap) {
         return &ctx->commands.ptr[ctx->commands.next++];
     } else {
-        ctx->error = SGL_ERROR_COMMANDS_FULL;
+        ctx->error.commands_full = true;
+        ctx->error.any = true;
         return 0;
     }
 }
@@ -2991,7 +3022,7 @@ static void _sgl_vtx(_sgl_context_t* ctx, float x, float y, float z, float u, fl
     SOKOL_ASSERT(ctx->in_begin);
     _sgl_vertex_t* vtx;
     /* handle non-native primitive types */
-    if ((ctx->cur_prim_type == SGL_PRIMITIVETYPE_QUADS) && ((ctx->vtx_count & 3) == 3)) {
+    if ((ctx->cur_prim_type == SGL_PRIMITIVETYPE_QUADS) && ((ctx->quad_vtx_count & 3) == 3)) {
         /* for quads, before writing the last quad vertex, reuse
            the first and third vertex to start the second triangle in the quad
         */
@@ -3007,7 +3038,7 @@ static void _sgl_vtx(_sgl_context_t* ctx, float x, float y, float z, float u, fl
         vtx->rgba = rgba;
         vtx->psize = ctx->point_size;
     }
-    ctx->vtx_count++;
+    ctx->quad_vtx_count++;
 }
 
 static void _sgl_identity(_sgl_matrix_t* m) {
@@ -3342,7 +3373,7 @@ static bool _sgl_is_default_context(sgl_context ctx_id) {
 
 static void _sgl_draw(_sgl_context_t* ctx, int layer_id) {
     SOKOL_ASSERT(ctx);
-    if ((ctx->error == SGL_NO_ERROR) && (ctx->vertices.next > 0) && (ctx->commands.next > 0)) {
+    if ((ctx->vertices.next > 0) && (ctx->commands.next > 0)) {
         sg_push_debug_group("sokol-gl");
 
         uint32_t cur_pip_id = SG_INVALID_ID;
@@ -3356,6 +3387,8 @@ static void _sgl_draw(_sgl_context_t* ctx, int layer_id) {
             sg_update_buffer(ctx->vbuf, &range);
         }
 
+        // render all successfully recorded commands (this may be less than the
+        // issued commands if we're in an error state)
         for (int i = 0; i < ctx->commands.next; i++) {
             const _sgl_command_t* cmd = &ctx->commands.ptr[i];
             if (cmd->layer_id != layer_id) {
@@ -3463,7 +3496,10 @@ SOKOL_API_IMPL sgl_error_t sgl_error(void) {
     if (ctx) {
         return ctx->error;
     } else {
-        return SGL_ERROR_NO_CONTEXT;
+        sgl_error_t err = _sgl_error_defaults();
+        err.no_context = true;
+        err.any = true;
+        return err;
     }
 }
 
@@ -3472,7 +3508,10 @@ SOKOL_API_IMPL sgl_error_t sgl_context_error(sgl_context ctx_id) {
     if (ctx) {
         return ctx->error;
     } else {
-        return SGL_ERROR_NO_CONTEXT;
+        sgl_error_t err = _sgl_error_defaults();
+        err.no_context = true;
+        err.any = true;
+        return err;
     }
 }
 
@@ -3519,6 +3558,26 @@ SOKOL_API_IMPL sgl_context sgl_get_context(void) {
 
 SOKOL_API_IMPL sgl_context sgl_default_context(void) {
     return SGL_DEFAULT_CONTEXT;
+}
+
+SOKOL_API_IMPL int sgl_num_vertices(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        return _sgl_num_vertices(ctx);
+    } else {
+        return 0;
+    }
+}
+
+SOKOL_API_IMPL int sgl_num_commands(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        return _sgl_num_commands(ctx);
+    } else {
+        return 0;
+    }
 }
 
 SOKOL_API_IMPL sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc* desc) {
@@ -3576,7 +3635,8 @@ SOKOL_API_IMPL void sgl_push_pipeline(void) {
         ctx->pip_tos++;
         ctx->pip_stack[ctx->pip_tos] = ctx->pip_stack[ctx->pip_tos-1];
     } else {
-        ctx->error = SGL_ERROR_STACK_OVERFLOW;
+        ctx->error.stack_overflow = true;
+        ctx->error.any = true;
     }
 }
 
@@ -3589,7 +3649,8 @@ SOKOL_API_IMPL void sgl_pop_pipeline(void) {
     if (ctx->pip_tos > 0) {
         ctx->pip_tos--;
     } else {
-        ctx->error = SGL_ERROR_STACK_UNDERFLOW;
+        ctx->error.stack_underflow = true;
+        ctx->error.any = true;
     }
 }
 
@@ -3778,6 +3839,7 @@ SOKOL_API_IMPL void sgl_end(void) {
     SOKOL_ASSERT(ctx->in_begin);
     SOKOL_ASSERT(ctx->vertices.next >= ctx->base_vertex);
     ctx->in_begin = false;
+
     bool matrix_dirty = ctx->matrix_dirty;
     if (matrix_dirty) {
         ctx->matrix_dirty = false;
@@ -3787,6 +3849,12 @@ SOKOL_API_IMPL void sgl_end(void) {
             uni->tm = *_sgl_matrix_texture(ctx);
         }
     }
+
+    // don't record any new commands when we're in an error state
+    if (ctx->error.any) {
+        return;
+    }
+
     // check if command can be merged with current command
     sg_pipeline pip = _sgl_get_pipeline(ctx->pip_stack[ctx->pip_tos], ctx->cur_prim_type);
     sg_image img = ctx->texturing_enabled ? ctx->cur_img : _sgl.def_img;
@@ -4205,7 +4273,8 @@ SOKOL_GL_API_DECL void sgl_push_matrix(void) {
         _sgl_matrix_t* dst = _sgl_matrix(ctx);
         *dst = *src;
     } else {
-        ctx->error = SGL_ERROR_STACK_OVERFLOW;
+        ctx->error.stack_overflow = true;
+        ctx->error.any = true;
     }
 }
 
@@ -4220,7 +4289,8 @@ SOKOL_GL_API_DECL void sgl_pop_matrix(void) {
     if (ctx->matrix_tos[ctx->cur_matrix_mode] > 0) {
         ctx->matrix_tos[ctx->cur_matrix_mode]--;
     } else {
-        ctx->error = SGL_ERROR_STACK_UNDERFLOW;
+        ctx->error.stack_underflow = true;
+        ctx->error.any = true;
     }
 }
 
