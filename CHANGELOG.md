@@ -7,7 +7,7 @@ A small behaviour update for sokol_gl.h (may be breaking if you call `sgl_error(
 - Instead of skipping rendering completely for the current frame if an error is encountered
   (for instance the vertex- or command-buffer running full), sokol-gl will now
   render all successfully recorded draw commands before the error was recorded.
-- Minor breaking change: `sgl_error` has been changed from an error code enum to
+- Minor breaking change: `sgl_error_t` has been changed from an error code enum to
   a struct with a boolean flag per error type, that way no error information is
   lost if multiple error happen in the same frame.
 - Two new functions to query the current number of recorded vertices and commands
