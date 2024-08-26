@@ -15,7 +15,7 @@ A small behaviour update for sokol_gl.h (may be breaking if you call `sgl_error(
     - `int sgl_num_vertices(void)`
     - `int sgl_num_commands(void)`
 
-Also see ticket #1092 and PR (fixme) for details!
+Also see ticket #1092 and PR #1096 for details!
 
 ### 14-Aug-2024
 
