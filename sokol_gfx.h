@@ -14239,6 +14239,25 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_bindgroups_cache_get(uint64_t hash) {
     return _sg.wgpu.bindgroups_cache.items[index].id;
 }
 
+// Called when any image, sampler or storage buffer is destroyed,
+// this invalidates the entire bind groups cache and destroys all
+// cached bindgroups, which is a drastic measure. Could be made
+// smarter by keeping track of what resources are inside a bind
+// group, and then only selectively invalidate cache entries
+// which reference a specific image, sampler or storage buffer
+_SOKOL_PRIVATE void _sg_wgpu_bindgroups_cache_invalidate(void) {
+    SOKOL_ASSERT(_sg.wgpu.bindgroups_cache.items);
+    for (uint32_t i = 0; i < _sg.wgpu.bindgroups_cache.num; i++) {
+        const uint32_t bg_id = _sg.wgpu.bindgroups_cache.items[i].id;
+        if (bg_id != SG_INVALID_ID) {
+            _sg_wgpu_bindgroup_t* bg = _sg_wgpu_lookup_bindgroup(bg_id);
+            SOKOL_ASSERT(bg && (bg->slot.state == SG_RESOURCESTATE_VALID));
+            _sg_wgpu_discard_bindgroup(bg);
+        }
+        _sg_wgpu_bindgroups_cache_set(i, SG_INVALID_ID);
+    }
+}
+
 _SOKOL_PRIVATE void _sg_wgpu_bindings_cache_clear(void) {
     memset(&_sg.wgpu.bindings_cache, 0, sizeof(_sg.wgpu.bindings_cache));
 }
@@ -14495,6 +14514,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
+    if (buf->cmn.type == SG_BUFFERTYPE_STORAGEBUFFER) {
+        _sg_wgpu_bindgroups_cache_invalidate();
+    }
     if (buf->wgpu.buf) {
         wgpuBufferDestroy(buf->wgpu.buf);
         wgpuBufferRelease(buf->wgpu.buf);
@@ -14632,6 +14654,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_image(_sg_image_t* img) {
     SOKOL_ASSERT(img);
+    _sg_wgpu_bindgroups_cache_invalidate();
     if (img->wgpu.view) {
         wgpuTextureViewRelease(img->wgpu.view);
         img->wgpu.view = 0;
@@ -14678,6 +14701,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_sampler(_sg_sampler_t* smp, con
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_sampler(_sg_sampler_t* smp) {
     SOKOL_ASSERT(smp);
+    _sg_wgpu_bindgroups_cache_invalidate();
     if (smp->wgpu.smp) {
         wgpuSamplerRelease(smp->wgpu.smp);
         smp->wgpu.smp = 0;
