@@ -5783,10 +5783,18 @@ typedef struct {
     uint32_t id;
 } _sg_wgpu_bindgroup_handle_t;
 
+typedef enum {
+    _SG_WGPU_BINDGROUPS_CACHE_ITEM_TYPE_NONE = 0,
+    _SG_WGPU_BINDGROUPS_CACHE_ITEM_TYPE_IMAGE = 0x0101010101010101,
+    _SG_WGPU_BINDGROUPS_CACHE_ITEM_TYPE_SAMPLER = 0x0202020202020202,
+    _SG_WGPU_BINDGROUPS_CACHE_ITEM_TYPE_STORAGEBUFFER = 0x0303030303030303,
+} _sg_wgpu_bindgroups_cache_item_type_t;
+
 #define _SG_WGPU_BINDGROUPSCACHE_NUM_ITEMS (1 + _SG_WGPU_MAX_BINDGROUP_ENTRIES)
 typedef struct {
     uint64_t hash;
-    uint32_t items[_SG_WGPU_BINDGROUPSCACHE_NUM_ITEMS];
+    // (_sg_wgpu_bindgroups_cache_item_type_t << 32) | handle.id
+    uint64_t items[_SG_WGPU_BINDGROUPSCACHE_NUM_ITEMS];
 } _sg_wgpu_bindgroups_cache_key_t;
 
 typedef struct {
@@ -14053,29 +14061,32 @@ _SOKOL_PRIVATE void _sg_wgpu_init_bindgroups_cache_key(_sg_wgpu_bindgroups_cache
     const int fs_smps_offset = fs_imgs_offset + SG_MAX_SHADERSTAGE_IMAGES;
     const int fs_sbufs_offset = fs_smps_offset + SG_MAX_SHADERSTAGE_SAMPLERS;
     SOKOL_ASSERT((fs_sbufs_offset + SG_MAX_SHADERSTAGE_STORAGEBUFFERS) == _SG_WGPU_BINDGROUPSCACHE_NUM_ITEMS);
+    const uint64_t type_img = ((uint64_t)_SG_WGPU_BINDGROUPS_CACHE_ITEM_TYPE_IMAGE) << 32;
+    const uint64_t type_smp = ((uint64_t)_SG_WGPU_BINDGROUPS_CACHE_ITEM_TYPE_SAMPLER) << 32;
+    const uint64_t type_sbuf = ((uint64_t)_SG_WGPU_BINDGROUPS_CACHE_ITEM_TYPE_STORAGEBUFFER) << 32;
     for (int i = 0; i < bnd->num_vs_imgs; i++) {
         SOKOL_ASSERT(bnd->vs_imgs[i]);
-        key->items[vs_imgs_offset + i] = bnd->vs_imgs[i]->slot.id;
+        key->items[vs_imgs_offset + i] = type_img | bnd->vs_imgs[i]->slot.id;
     }
     for (int i = 0; i < bnd->num_vs_smps; i++) {
         SOKOL_ASSERT(bnd->vs_smps[i]);
-        key->items[vs_smps_offset + i] = bnd->vs_smps[i]->slot.id;
+        key->items[vs_smps_offset + i] = type_smp | bnd->vs_smps[i]->slot.id;
     }
     for (int i = 0; i < bnd->num_vs_sbufs; i++) {
         SOKOL_ASSERT(bnd->vs_sbufs[i]);
-        key->items[vs_sbufs_offset + i] = bnd->vs_sbufs[i]->slot.id;
+        key->items[vs_sbufs_offset + i] = type_sbuf | bnd->vs_sbufs[i]->slot.id;
     }
     for (int i = 0; i < bnd->num_fs_imgs; i++) {
         SOKOL_ASSERT(bnd->fs_imgs[i]);
-        key->items[fs_imgs_offset + i] = bnd->fs_imgs[i]->slot.id;
+        key->items[fs_imgs_offset + i] = type_img | bnd->fs_imgs[i]->slot.id;
     }
     for (int i = 0; i < bnd->num_fs_smps; i++) {
         SOKOL_ASSERT(bnd->fs_smps[i]);
-        key->items[fs_smps_offset + i] = bnd->fs_smps[i]->slot.id;
+        key->items[fs_smps_offset + i] = type_smp | bnd->fs_smps[i]->slot.id;
     }
     for (int i = 0; i < bnd->num_fs_sbufs; i++) {
         SOKOL_ASSERT(bnd->fs_sbufs[i]);
-        key->items[fs_sbufs_offset + i] = bnd->fs_sbufs[i]->slot.id;
+        key->items[fs_sbufs_offset + i] = type_sbuf | bnd->fs_sbufs[i]->slot.id;
     }
     key->hash = _sg_wgpu_hash(&key->items, (int)sizeof(key->items), 0x1234567887654321);
 }
@@ -14288,7 +14299,7 @@ _SOKOL_PRIVATE void _sg_wgpu_bindings_cache_bg_update(const _sg_wgpu_bindgroup_t
     }
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_set_bindings_bindgroup(_sg_wgpu_bindgroup_t* bg) {
+_SOKOL_PRIVATE void _sg_wgpu_set_bindgroup(_sg_wgpu_bindgroup_t* bg) {
     if (_sg_wgpu_bindings_cache_bg_dirty(bg)) {
         _sg_wgpu_bindings_cache_bg_update(bg);
         _sg_stats_add(wgpu.bindings.num_set_bindgroup, 1);
@@ -14334,7 +14345,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindgroup(_sg_bindings_t* bnd) {
                 _sg_wgpu_bindgroups_cache_set(key.hash, bg->slot.id);
             }
             if (bg && bg->slot.state == SG_RESOURCESTATE_VALID) {
-                _sg_wgpu_set_bindings_bindgroup(bg);
+                _sg_wgpu_set_bindgroup(bg);
             } else {
                 return false;
             }
@@ -14343,7 +14354,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindgroup(_sg_bindings_t* bnd) {
             _sg_wgpu_bindgroup_t* bg = _sg_wgpu_create_bindgroup(bnd);
             if (bg) {
                 if (bg->slot.state == SG_RESOURCESTATE_VALID) {
-                    _sg_wgpu_set_bindings_bindgroup(bg);
+                    _sg_wgpu_set_bindgroup(bg);
                 }
                 _sg_wgpu_discard_bindgroup(bg);
             } else {
@@ -14351,7 +14362,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindgroup(_sg_bindings_t* bnd) {
             }
         }
     } else {
-        _sg_wgpu_set_bindings_bindgroup(0);
+        _sg_wgpu_set_bindgroup(0);
     }
     return true;
 }
