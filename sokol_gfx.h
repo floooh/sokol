@@ -14279,7 +14279,6 @@ _SOKOL_PRIVATE void _sg_wgpu_bindgroups_cache_invalidate(_sg_wgpu_bindgroups_cac
                 }
             }
             if (invalidate_cache_item) {
-                __builtin_printf(">> discard bindgroups cache item\n");
                 _sg_wgpu_discard_bindgroup(bg); bg = 0;
                 _sg_wgpu_bindgroups_cache_set(cache_item_idx, SG_INVALID_ID);
                 _sg_stats_add(wgpu.bindings.num_bindgroup_cache_invalidates, 1);
