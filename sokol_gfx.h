@@ -1496,6 +1496,7 @@
         .wgpu.num_bindgroup_cache_hits
         .wgpu.num_bindgroup_cache_misses
         .wgpu.num_bindgroup_cache_collisions
+        .wgpu_num_bindgroup_cache_invalidates
         .wgpu.num_bindgroup_cache_vs_hash_key_mismatch
 
       The value to pay attention to is `.wgpu.num_bindgroup_cache_collisions`,
@@ -3482,6 +3483,7 @@ typedef struct sg_frame_stats_wgpu_bindings {
     uint32_t num_bindgroup_cache_hits;
     uint32_t num_bindgroup_cache_misses;
     uint32_t num_bindgroup_cache_collisions;
+    uint32_t num_bindgroup_cache_invalidates;
     uint32_t num_bindgroup_cache_hash_vs_key_mismatch;
 } sg_frame_stats_wgpu_bindings;
 
@@ -14280,6 +14282,7 @@ _SOKOL_PRIVATE void _sg_wgpu_bindgroups_cache_invalidate(_sg_wgpu_bindgroups_cac
                 __builtin_printf(">> discard bindgroups cache item\n");
                 _sg_wgpu_discard_bindgroup(bg); bg = 0;
                 _sg_wgpu_bindgroups_cache_set(cache_item_idx, SG_INVALID_ID);
+                _sg_stats_add(wgpu.bindings.num_bindgroup_cache_invalidates, 1);
             }
         }
     }
