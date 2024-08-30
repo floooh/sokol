@@ -14547,7 +14547,6 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_buffer(_sg_buffer_t* buf) {
         _sg_wgpu_bindgroups_cache_invalidate(_SG_WGPU_BINDGROUPSCACHEITEMTYPE_STORAGEBUFFER, buf->slot.id);
     }
     if (buf->wgpu.buf) {
-        wgpuBufferDestroy(buf->wgpu.buf);
         wgpuBufferRelease(buf->wgpu.buf);
     }
 }
@@ -14689,7 +14688,6 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_image(_sg_image_t* img) {
         img->wgpu.view = 0;
     }
     if (img->wgpu.tex) {
-        wgpuTextureDestroy(img->wgpu.tex);
         wgpuTextureRelease(img->wgpu.tex);
         img->wgpu.tex = 0;
     }
