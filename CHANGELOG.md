@@ -2,7 +2,7 @@
 
 ### 31-Aug-2024
 
-- Some cleanup work the WebGPU backend bindgroups cache which fixes
+- Some cleanup work in the WebGPU backend bindgroups cache which fixes
   a number of issues: Destroying an image, sampler, storage buffer
   or pipeline object now properly evicts any associated item in
   the bindgroups cache and releases the associated WebGPU BindGroup
