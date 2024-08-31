@@ -9,6 +9,9 @@
   object. Doing this while the BindGroup is in flight also no longer
   causes WebGPU errors.
 
+  For details see issue https://github.com/floooh/sokol/issues/1066
+  and PR https://github.com/floooh/sokol/pull/1097
+
 - A fix in the sokol-zig bindings generator for a breaking naming convention
   change in the Zig stdlib. The fix supports both the old and new naming
   convention so that sokol-zig continues to be compatible with zig 0.13.0.
