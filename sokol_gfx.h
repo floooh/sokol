@@ -5796,7 +5796,8 @@ typedef enum {
 #define _SG_WGPU_BINDGROUPSCACHEKEY_NUM_ITEMS (1 + _SG_WGPU_MAX_BINDGROUP_ENTRIES)
 typedef struct {
     uint64_t hash;
-    // (_sg_wgpu_bindgroups_cache_item_type_t << 32) | handle.id
+    // the format of cache key items is (_sg_wgpu_bindgroups_cache_item_type_t << 32) | handle.id,
+    // where the item type is a per-resource-type bit pattern
     uint64_t items[_SG_WGPU_BINDGROUPSCACHEKEY_NUM_ITEMS];
 } _sg_wgpu_bindgroups_cache_key_t;
 
