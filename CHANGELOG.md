@@ -12,6 +12,8 @@ To update the sokol-zig depenency in your project, just run:
 zig fetch --save=sokol git+https://github.com/floooh/sokol-zig.git
 ```
 
+Details in PR https://github.com/floooh/sokol/pull/1100
+
 ### 26-Aug-2024
 
 A small behaviour update for sokol_gl.h (may be breaking if you call `sgl_error()`):
