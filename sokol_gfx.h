@@ -1496,6 +1496,7 @@
         .wgpu.num_bindgroup_cache_hits
         .wgpu.num_bindgroup_cache_misses
         .wgpu.num_bindgroup_cache_collisions
+        .wgpu_num_bindgroup_cache_invalidates
         .wgpu.num_bindgroup_cache_vs_hash_key_mismatch
 
       The value to pay attention to is `.wgpu.num_bindgroup_cache_collisions`,
@@ -3482,6 +3483,7 @@ typedef struct sg_frame_stats_wgpu_bindings {
     uint32_t num_bindgroup_cache_hits;
     uint32_t num_bindgroup_cache_misses;
     uint32_t num_bindgroup_cache_collisions;
+    uint32_t num_bindgroup_cache_invalidates;
     uint32_t num_bindgroup_cache_hash_vs_key_mismatch;
 } sg_frame_stats_wgpu_bindings;
 
@@ -5783,10 +5785,20 @@ typedef struct {
     uint32_t id;
 } _sg_wgpu_bindgroup_handle_t;
 
-#define _SG_WGPU_BINDGROUPSCACHE_NUM_ITEMS (1 + _SG_WGPU_MAX_BINDGROUP_ENTRIES)
+typedef enum {
+    _SG_WGPU_BINDGROUPSCACHEITEMTYPE_NONE = 0,
+    _SG_WGPU_BINDGROUPSCACHEITEMTYPE_IMAGE = 0x1111111111111111,
+    _SG_WGPU_BINDGROUPSCACHEITEMTYPE_SAMPLER = 0x2222222222222222,
+    _SG_WGPU_BINDGROUPSCACHEITEMTYPE_STORAGEBUFFER = 0x3333333333333333,
+    _SG_WGPU_BINDGROUPSCACHEITEMTYPE_PIPELINE = 0x4444444444444444,
+} _sg_wgpu_bindgroups_cache_item_type_t;
+
+#define _SG_WGPU_BINDGROUPSCACHEKEY_NUM_ITEMS (1 + _SG_WGPU_MAX_BINDGROUP_ENTRIES)
 typedef struct {
     uint64_t hash;
-    uint32_t items[_SG_WGPU_BINDGROUPSCACHE_NUM_ITEMS];
+    // the format of cache key items is (_sg_wgpu_bindgroups_cache_item_type_t << 32) | handle.id,
+    // where the item type is a per-resource-type bit pattern
+    uint64_t items[_SG_WGPU_BINDGROUPSCACHEKEY_NUM_ITEMS];
 } _sg_wgpu_bindgroups_cache_key_t;
 
 typedef struct {
@@ -14034,6 +14046,26 @@ _SOKOL_PRIVATE uint64_t _sg_wgpu_hash(const void* key, int len, uint64_t seed) {
     return h;
 }
 
+_SOKOL_PRIVATE uint64_t _sg_wgpu_bindgroups_cache_item(_sg_wgpu_bindgroups_cache_item_type_t type, uint32_t id) {
+    return (((uint64_t)type) << 32) | id;
+}
+
+_SOKOL_PRIVATE uint64_t _sg_wgpu_bindgroups_cache_pip_item(uint32_t id) {
+    return _sg_wgpu_bindgroups_cache_item(_SG_WGPU_BINDGROUPSCACHEITEMTYPE_PIPELINE, id);
+}
+
+_SOKOL_PRIVATE uint64_t _sg_wgpu_bindgroups_cache_image_item(uint32_t id) {
+    return _sg_wgpu_bindgroups_cache_item(_SG_WGPU_BINDGROUPSCACHEITEMTYPE_IMAGE, id);
+}
+
+_SOKOL_PRIVATE uint64_t _sg_wgpu_bindgroups_cache_sampler_item(uint32_t id) {
+    return _sg_wgpu_bindgroups_cache_item(_SG_WGPU_BINDGROUPSCACHEITEMTYPE_SAMPLER, id);
+}
+
+_SOKOL_PRIVATE uint64_t _sg_wgpu_bindgroups_cache_sbuf_item(uint32_t id) {
+    return _sg_wgpu_bindgroups_cache_item(_SG_WGPU_BINDGROUPSCACHEITEMTYPE_STORAGEBUFFER, id);
+}
+
 _SOKOL_PRIVATE void _sg_wgpu_init_bindgroups_cache_key(_sg_wgpu_bindgroups_cache_key_t* key, const _sg_bindings_t* bnd) {
     SOKOL_ASSERT(bnd);
     SOKOL_ASSERT(bnd->pip);
@@ -14045,38 +14077,39 @@ _SOKOL_PRIVATE void _sg_wgpu_init_bindgroups_cache_key(_sg_wgpu_bindgroups_cache
     SOKOL_ASSERT(bnd->num_fs_sbufs <= SG_MAX_SHADERSTAGE_STORAGEBUFFERS);
 
     _sg_clear(key->items, sizeof(key->items));
-    key->items[0] = bnd->pip->slot.id;
-    const int vs_imgs_offset = 1;
-    const int vs_smps_offset = vs_imgs_offset + SG_MAX_SHADERSTAGE_IMAGES;
-    const int vs_sbufs_offset = vs_smps_offset + SG_MAX_SHADERSTAGE_SAMPLERS;
-    const int fs_imgs_offset = vs_sbufs_offset + SG_MAX_SHADERSTAGE_STORAGEBUFFERS;
-    const int fs_smps_offset = fs_imgs_offset + SG_MAX_SHADERSTAGE_IMAGES;
-    const int fs_sbufs_offset = fs_smps_offset + SG_MAX_SHADERSTAGE_SAMPLERS;
-    SOKOL_ASSERT((fs_sbufs_offset + SG_MAX_SHADERSTAGE_STORAGEBUFFERS) == _SG_WGPU_BINDGROUPSCACHE_NUM_ITEMS);
+    int item_idx = 0;
+    key->items[item_idx++] = _sg_wgpu_bindgroups_cache_pip_item(bnd->pip->slot.id);
     for (int i = 0; i < bnd->num_vs_imgs; i++) {
         SOKOL_ASSERT(bnd->vs_imgs[i]);
-        key->items[vs_imgs_offset + i] = bnd->vs_imgs[i]->slot.id;
+        SOKOL_ASSERT(item_idx < _SG_WGPU_BINDGROUPSCACHEKEY_NUM_ITEMS);
+        key->items[item_idx++] = _sg_wgpu_bindgroups_cache_image_item(bnd->vs_imgs[i]->slot.id);
     }
     for (int i = 0; i < bnd->num_vs_smps; i++) {
         SOKOL_ASSERT(bnd->vs_smps[i]);
-        key->items[vs_smps_offset + i] = bnd->vs_smps[i]->slot.id;
+        SOKOL_ASSERT(item_idx < _SG_WGPU_BINDGROUPSCACHEKEY_NUM_ITEMS);
+        key->items[item_idx++] = _sg_wgpu_bindgroups_cache_sampler_item(bnd->vs_smps[i]->slot.id);
     }
     for (int i = 0; i < bnd->num_vs_sbufs; i++) {
         SOKOL_ASSERT(bnd->vs_sbufs[i]);
-        key->items[vs_sbufs_offset + i] = bnd->vs_sbufs[i]->slot.id;
+        SOKOL_ASSERT(item_idx < _SG_WGPU_BINDGROUPSCACHEKEY_NUM_ITEMS);
+        key->items[item_idx++] = _sg_wgpu_bindgroups_cache_sbuf_item(bnd->vs_sbufs[i]->slot.id);
     }
     for (int i = 0; i < bnd->num_fs_imgs; i++) {
         SOKOL_ASSERT(bnd->fs_imgs[i]);
-        key->items[fs_imgs_offset + i] = bnd->fs_imgs[i]->slot.id;
+        SOKOL_ASSERT(item_idx < _SG_WGPU_BINDGROUPSCACHEKEY_NUM_ITEMS);
+        key->items[item_idx++] = _sg_wgpu_bindgroups_cache_image_item(bnd->fs_imgs[i]->slot.id);
     }
     for (int i = 0; i < bnd->num_fs_smps; i++) {
         SOKOL_ASSERT(bnd->fs_smps[i]);
-        key->items[fs_smps_offset + i] = bnd->fs_smps[i]->slot.id;
+        SOKOL_ASSERT(item_idx < _SG_WGPU_BINDGROUPSCACHEKEY_NUM_ITEMS);
+        key->items[item_idx++] = _sg_wgpu_bindgroups_cache_sampler_item(bnd->fs_smps[i]->slot.id);
     }
     for (int i = 0; i < bnd->num_fs_sbufs; i++) {
         SOKOL_ASSERT(bnd->fs_sbufs[i]);
-        key->items[fs_sbufs_offset + i] = bnd->fs_sbufs[i]->slot.id;
+        SOKOL_ASSERT(item_idx < _SG_WGPU_BINDGROUPSCACHEKEY_NUM_ITEMS);
+        key->items[item_idx++] = _sg_wgpu_bindgroups_cache_sbuf_item(bnd->fs_sbufs[i]->slot.id);
     }
+    SOKOL_ASSERT(item_idx == (1 + bnd->num_vs_imgs + bnd->num_vs_smps + bnd->num_vs_sbufs + bnd->num_fs_imgs + bnd->num_fs_smps + bnd->num_fs_sbufs));
     key->hash = _sg_wgpu_hash(&key->items, (int)sizeof(key->items), 0x1234567887654321);
 }
 
@@ -14228,6 +14261,33 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_bindgroups_cache_get(uint64_t hash) {
     return _sg.wgpu.bindgroups_cache.items[index].id;
 }
 
+// called from wgpu resource destroy functions to also invalidate any
+// bindgroups cache slot and bindgroup referencing that resource
+_SOKOL_PRIVATE void _sg_wgpu_bindgroups_cache_invalidate(_sg_wgpu_bindgroups_cache_item_type_t type, uint32_t id) {
+    const uint64_t key_item = _sg_wgpu_bindgroups_cache_item(type, id);
+    SOKOL_ASSERT(_sg.wgpu.bindgroups_cache.items);
+    for (uint32_t cache_item_idx = 0; cache_item_idx < _sg.wgpu.bindgroups_cache.num; cache_item_idx++) {
+        const uint32_t bg_id = _sg.wgpu.bindgroups_cache.items[cache_item_idx].id;
+        if (bg_id != SG_INVALID_ID) {
+            _sg_wgpu_bindgroup_t* bg = _sg_wgpu_lookup_bindgroup(bg_id);
+            SOKOL_ASSERT(bg && (bg->slot.state == SG_RESOURCESTATE_VALID));
+            // check if resource is in bindgroup, if yes discard bindgroup and invalidate cache slot
+            bool invalidate_cache_item = false;
+            for (int key_item_idx = 0; key_item_idx < _SG_WGPU_BINDGROUPSCACHEKEY_NUM_ITEMS; key_item_idx++) {
+                if (bg->key.items[key_item_idx] == key_item) {
+                    invalidate_cache_item = true;
+                    break;
+                }
+            }
+            if (invalidate_cache_item) {
+                _sg_wgpu_discard_bindgroup(bg); bg = 0;
+                _sg_wgpu_bindgroups_cache_set(cache_item_idx, SG_INVALID_ID);
+                _sg_stats_add(wgpu.bindings.num_bindgroup_cache_invalidates, 1);
+            }
+        }
+    }
+}
+
 _SOKOL_PRIVATE void _sg_wgpu_bindings_cache_clear(void) {
     memset(&_sg.wgpu.bindings_cache, 0, sizeof(_sg.wgpu.bindings_cache));
 }
@@ -14288,7 +14348,7 @@ _SOKOL_PRIVATE void _sg_wgpu_bindings_cache_bg_update(const _sg_wgpu_bindgroup_t
     }
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_set_bindings_bindgroup(_sg_wgpu_bindgroup_t* bg) {
+_SOKOL_PRIVATE void _sg_wgpu_set_bindgroup(_sg_wgpu_bindgroup_t* bg) {
     if (_sg_wgpu_bindings_cache_bg_dirty(bg)) {
         _sg_wgpu_bindings_cache_bg_update(bg);
         _sg_stats_add(wgpu.bindings.num_set_bindgroup, 1);
@@ -14334,7 +14394,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindgroup(_sg_bindings_t* bnd) {
                 _sg_wgpu_bindgroups_cache_set(key.hash, bg->slot.id);
             }
             if (bg && bg->slot.state == SG_RESOURCESTATE_VALID) {
-                _sg_wgpu_set_bindings_bindgroup(bg);
+                _sg_wgpu_set_bindgroup(bg);
             } else {
                 return false;
             }
@@ -14343,7 +14403,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindgroup(_sg_bindings_t* bnd) {
             _sg_wgpu_bindgroup_t* bg = _sg_wgpu_create_bindgroup(bnd);
             if (bg) {
                 if (bg->slot.state == SG_RESOURCESTATE_VALID) {
-                    _sg_wgpu_set_bindings_bindgroup(bg);
+                    _sg_wgpu_set_bindgroup(bg);
                 }
                 _sg_wgpu_discard_bindgroup(bg);
             } else {
@@ -14351,7 +14411,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindgroup(_sg_bindings_t* bnd) {
             }
         }
     } else {
-        _sg_wgpu_set_bindings_bindgroup(0);
+        _sg_wgpu_set_bindgroup(0);
     }
     return true;
 }
@@ -14484,8 +14544,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
+    if (buf->cmn.type == SG_BUFFERTYPE_STORAGEBUFFER) {
+        _sg_wgpu_bindgroups_cache_invalidate(_SG_WGPU_BINDGROUPSCACHEITEMTYPE_STORAGEBUFFER, buf->slot.id);
+    }
     if (buf->wgpu.buf) {
-        wgpuBufferDestroy(buf->wgpu.buf);
         wgpuBufferRelease(buf->wgpu.buf);
     }
 }
@@ -14621,12 +14683,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_image(_sg_image_t* img) {
     SOKOL_ASSERT(img);
+    _sg_wgpu_bindgroups_cache_invalidate(_SG_WGPU_BINDGROUPSCACHEITEMTYPE_IMAGE, img->slot.id);
     if (img->wgpu.view) {
         wgpuTextureViewRelease(img->wgpu.view);
         img->wgpu.view = 0;
     }
     if (img->wgpu.tex) {
-        wgpuTextureDestroy(img->wgpu.tex);
         wgpuTextureRelease(img->wgpu.tex);
         img->wgpu.tex = 0;
     }
@@ -14667,6 +14729,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_sampler(_sg_sampler_t* smp, con
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_sampler(_sg_sampler_t* smp) {
     SOKOL_ASSERT(smp);
+    _sg_wgpu_bindgroups_cache_invalidate(_SG_WGPU_BINDGROUPSCACHEITEMTYPE_SAMPLER, smp->slot.id);
     if (smp->wgpu.smp) {
         wgpuSamplerRelease(smp->wgpu.smp);
         smp->wgpu.smp = 0;
@@ -14904,6 +14967,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
+    _sg_wgpu_bindgroups_cache_invalidate(_SG_WGPU_BINDGROUPSCACHEITEMTYPE_PIPELINE, pip->slot.id);
     if (pip == _sg.wgpu.cur_pipeline) {
         _sg.wgpu.cur_pipeline = 0;
         _sg.wgpu.cur_pipeline_id.id = SG_INVALID_ID;

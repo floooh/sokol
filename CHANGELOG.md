@@ -2,17 +2,27 @@
 
 ### 31-Aug-2024
 
-A fix in the sokol-zig bindings generator for a breaking naming convention
-change in the Zig stdlib. The fix supports both the old and new naming
-convention so that sokol-zig continues to be compatible with zig 0.13.0.
+- Some cleanup work the WebGPU backend bindgroups cache which fixes
+  a number of issues: Destroying an image, sampler, storage buffer
+  or pipeline object now properly evicts any associated item in
+  the bindgroups cache and releases the associated WebGPU BindGroup
+  object. Doing this while the BindGroup is in flight also no longer
+  causes WebGPU errors.
 
-To update the sokol-zig depenency in your project, just run:
+  For details see issue https://github.com/floooh/sokol/issues/1066
+  and PR https://github.com/floooh/sokol/pull/1097
 
-```
-zig fetch --save=sokol git+https://github.com/floooh/sokol-zig.git
-```
+- A fix in the sokol-zig bindings generator for a breaking naming convention
+  change in the Zig stdlib. The fix supports both the old and new naming
+  convention so that sokol-zig continues to be compatible with zig 0.13.0.
 
-Details in PR https://github.com/floooh/sokol/pull/1100
+  To update the sokol-zig depenency in your project, just run:
+
+  ```
+  zig fetch --save=sokol git+https://github.com/floooh/sokol-zig.git
+  ```
+
+  More Details in PR https://github.com/floooh/sokol/pull/1100
 
 ### 26-Aug-2024
 

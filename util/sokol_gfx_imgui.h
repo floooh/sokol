@@ -4335,6 +4335,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(sgimgui_t* ctx) {
                 _sgimgui_frame_stats(wgpu.bindings.num_bindgroup_cache_hits);
                 _sgimgui_frame_stats(wgpu.bindings.num_bindgroup_cache_misses);
                 _sgimgui_frame_stats(wgpu.bindings.num_bindgroup_cache_collisions);
+                _sgimgui_frame_stats(wgpu.bindings.num_bindgroup_cache_invalidates);
                 _sgimgui_frame_stats(wgpu.bindings.num_bindgroup_cache_hash_vs_key_mismatch);
                 break;
             case SG_BACKEND_METAL_MACOS:
