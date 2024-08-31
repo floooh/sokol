@@ -1,5 +1,19 @@
 ## Updates
 
+### 31-Aug-2024
+
+A fix in the sokol-zig bindings generator for a breaking naming convention
+change in the Zig stdlib. The fix supports both the old and new naming
+convention so that sokol-zig continues to be compatible with zig 0.13.0.
+
+To update the sokol-zig depenency in your project, just run:
+
+```
+zig fetch --save=sokol git+https://github.com/floooh/sokol-zig.git
+```
+
+Details in PR https://github.com/floooh/sokol/pull/1100
+
 ### 26-Aug-2024
 
 A small behaviour update for sokol_gl.h (may be breaking if you call `sgl_error()`):
