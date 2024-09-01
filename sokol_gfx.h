@@ -3889,6 +3889,12 @@ typedef enum sg_log_item {
             before sg_setup() is called
         .environment.d3d11.device_context
             a pointer to the ID3D11DeviceContext object
+        .d3d11_shader_debugging
+            set this to true to compile shaders which are provided as HLSL source
+            code with debug information and without optimization, this allows
+            shader debugging in tools like RenderDoc, to output source code
+            instead of byte code from sokol-shdc, omit the `--binary` cmdline
+            option
 
     WebGPU specific:
         .wgpu_disable_bindgroups_cache
@@ -4001,6 +4007,7 @@ typedef struct sg_desc {
     int uniform_buffer_size;
     int max_commit_listeners;
     bool disable_validation;    // disable validation layer even in debug mode, useful for tests
+    bool d3d11_shader_debugging;    // if true, HLSL shaders are compiled with D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION
     bool mtl_force_managed_storage_mode; // for debugging: use Metal managed storage mode for resources even with UMA
     bool mtl_use_command_buffer_with_retained_references;    // Metal: use a managed MTLCommandBuffer which ref-counts used resources
     bool wgpu_disable_bindgroups_cache;  // set to true to disable the WebGPU backend BindGroup cache
@@ -10712,6 +10719,12 @@ _SOKOL_PRIVATE ID3DBlob* _sg_d3d11_compile_shader(const sg_shader_stage_desc* st
         return NULL;
     }
     SOKOL_ASSERT(stage_desc->d3d11_target);
+    UINT flags1 = D3DCOMPILE_PACK_MATRIX_COLUMN_MAJOR;
+    if (_sg.desc.d3d11_shader_debugging) {
+        flags1 |= D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+    } else {
+        flags1 |= D3DCOMPILE_OPTIMIZATION_LEVEL3;
+    }
     ID3DBlob* output = NULL;
     ID3DBlob* errors_or_warnings = NULL;
     HRESULT hr = _sg.d3d11.D3DCompile_func(
@@ -10722,7 +10735,7 @@ _SOKOL_PRIVATE ID3DBlob* _sg_d3d11_compile_shader(const sg_shader_stage_desc* st
         NULL,                           // pInclude
         stage_desc->entry ? stage_desc->entry : "main",     // pEntryPoint
         stage_desc->d3d11_target,       // pTarget
-        D3DCOMPILE_PACK_MATRIX_COLUMN_MAJOR | D3DCOMPILE_OPTIMIZATION_LEVEL3,   // Flags1
+        flags1,     // Flags1
         0,          // Flags2
         &output,    // ppCode
         &errors_or_warnings);   // ppErrorMsgs
