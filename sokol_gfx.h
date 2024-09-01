@@ -963,7 +963,7 @@
     ON STORAGE BUFFERS
     ==================
     Storage buffers can be used to pass large amounts of random access structured
-    data fromt the CPU side to the shaders. They are similar to data textures, but are
+    data from the CPU side to the shaders. They are similar to data textures, but are
     more convenient to use both on the CPU and shader side since they can be accessed
     in shaders as as a 1-dimensional array of struct items.
 

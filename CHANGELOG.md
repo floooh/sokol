@@ -30,7 +30,7 @@
   change in the Zig stdlib. The fix supports both the old and new naming
   convention so that sokol-zig continues to be compatible with zig 0.13.0.
 
-  To update the sokol-zig depenency in your project, just run:
+  To update the sokol-zig dependency in your project, just run:
 
   ```
   zig fetch --save=sokol git+https://github.com/floooh/sokol-zig.git
@@ -57,7 +57,7 @@ Also see ticket https://github.com/floooh/sokol/issues/1092 and PR https://githu
 
 ### 14-Aug-2024
 
-The previously 'inofficial' Jai bindings at https://github.com/colinbellino/sokol-jai
+The previously 'unofficial' Jai bindings at https://github.com/colinbellino/sokol-jai
 have now been properly integrated with the sokol main repository (meaning that each
 change to the sokol headers will update the bindings automatically).
 
@@ -301,7 +301,7 @@ Storage buffer support is not available on the following platform/backend combos
 - likewise, by default sokol_app.h now creates a GL 4.1 context on macOS and a GL 4.3 context on other
   desktop platforms when `SOKOL_GLCORE` is defined
 - if you're passing WGSL shaders directly into sokol_gfx.h (instead of using sokol-shdc), please
-  be aware that the binding offets for the different shader resource types have moved:
+  be aware that the binding offsets for the different shader resource types have moved:
     - vertex shader stage:
       - textures: `@group(1) @binding(0..15)`
       - samplers: `@group(1) @binding(16..31)`
