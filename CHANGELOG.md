@@ -1,5 +1,19 @@
 ## Updates
 
+### 01-Sep-2024
+
+- sokol_gfx.h d3d11: added a new configuration flag `d3d11_shader_debugging`
+  to the `sg_desc` struct. When this is true, D3D11 shaders which are provided
+  as HLSL source code will be compiled with debug information and no optimization
+  which allows shader debugging in tools like RenderDoc. If you use `sokol-shdc`
+  to build shaders, just omit the `--bytecode / -b` cmdline option to get
+  HLSL source code instead of bytecode, if you use the `fips` build system
+  wrapper (like the `sokol-samples` project), just replace the cmake macro
+  `sokol_shader()` with `sokol_shader_debuggable()`.
+
+  For details see issue https://github.com/floooh/sokol/issues/1043
+  and PR: https://github.com/floooh/sokol/pull/1101.
+
 ### 31-Aug-2024
 
 - Some cleanup work in the WebGPU backend bindgroups cache which fixes
