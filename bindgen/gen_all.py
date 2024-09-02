@@ -42,8 +42,12 @@ for task in zig_tasks:
     gen_zig.gen(c_header_path, main_prefix, dep_prefixes)
 
 # D
+d_tasks = [
+    *tasks,
+    [ '../util/sokol_imgui.h', 'simgui_',   ['sg_', 'sapp_'] ],
+]
 gen_d.prepare()
-for task in tasks:
+for task in d_tasks:
     [c_header_path, main_prefix, dep_prefixes] = task
     gen_d.gen(c_header_path, main_prefix, dep_prefixes)
 
