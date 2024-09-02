@@ -236,7 +236,7 @@
             .overrides = {
                 .min_filter = SG_FILTER_NEAREST,
                 .mag_filter = SG_FILTER_NEAREST,
-                .mipmap_filter = SG_FILTER_NONE,
+                .mipmap_filter = SG_FILTER_NEAREST,
                 .wrap_u = SG_WRAP_MIRROR,
                 .wrap_v = SG_WRAP_MIRROR,
                 .premul_alpha_enabled = ...,
@@ -4573,15 +4573,19 @@ static sg_filter _sspine_as_sampler_filter(spAtlasFilter filter) {
 
 static sg_filter _sspine_as_sampler_mipmap_filter(spAtlasFilter filter) {
     switch (filter) {
-        case SP_ATLAS_UNKNOWN_FILTER: return _SG_FILTER_DEFAULT;
-        case SP_ATLAS_NEAREST: return SG_FILTER_NONE;
-        case SP_ATLAS_LINEAR: return SG_FILTER_NONE;
-        case SP_ATLAS_MIPMAP: return SG_FILTER_NEAREST;
-        case SP_ATLAS_MIPMAP_NEAREST_NEAREST: return SG_FILTER_NEAREST;
-        case SP_ATLAS_MIPMAP_LINEAR_NEAREST: return SG_FILTER_NEAREST;
-        case SP_ATLAS_MIPMAP_NEAREST_LINEAR: return SG_FILTER_LINEAR;
-        case SP_ATLAS_MIPMAP_LINEAR_LINEAR: return SG_FILTER_LINEAR;
-        default: return SG_FILTER_NEAREST;
+        case SP_ATLAS_UNKNOWN_FILTER:
+            return _SG_FILTER_DEFAULT;
+        case SP_ATLAS_NEAREST:
+        case SP_ATLAS_LINEAR:
+        case SP_ATLAS_MIPMAP:
+        case SP_ATLAS_MIPMAP_NEAREST_NEAREST:
+        case SP_ATLAS_MIPMAP_LINEAR_NEAREST:
+            return SG_FILTER_NEAREST;
+        case SP_ATLAS_MIPMAP_NEAREST_LINEAR:
+        case SP_ATLAS_MIPMAP_LINEAR_LINEAR:
+            return SG_FILTER_LINEAR;
+        default:
+            return SG_FILTER_NEAREST;
     }
 }
 

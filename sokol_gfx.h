@@ -2098,13 +2098,10 @@ typedef enum sg_primitive_type {
     used in the sg_sampler_desc.min_filter, sg_sampler_desc.mag_filter
     and sg_sampler_desc.mipmap_filter members when creating a sampler object.
 
-    For min_filter and mag_filter the default is SG_FILTER_NEAREST.
-
-    For mipmap_filter the default is SG_FILTER_NONE.
+    For the default is SG_FILTER_NEAREST.
 */
 typedef enum sg_filter {
     _SG_FILTER_DEFAULT, // value 0 reserved for default-init
-    SG_FILTER_NONE,     // FIXME: deprecated
     SG_FILTER_NEAREST,
     SG_FILTER_LINEAR,
     _SG_FILTER_NUM,
@@ -2893,7 +2890,7 @@ typedef struct sg_image_desc {
 
     .min_filter:        SG_FILTER_NEAREST
     .mag_filter:        SG_FILTER_NEAREST
-    .mipmap_filter      SG_FILTER_NONE
+    .mipmap_filter      SG_FILTER_NEAREST
     .wrap_u:            SG_WRAP_REPEAT
     .wrap_v:            SG_WRAP_REPEAT
     .wrap_w:            SG_WRAP_REPEAT (only SG_IMAGETYPE_3D)
@@ -3652,8 +3649,6 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA, "dynamic/stream images cannot be initialized with data") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE, "compressed images must be immutable") \
     _SG_LOGITEM_XMACRO(VALIDATE_SAMPLERDESC_CANARY, "sg_sampler_desc not initialized") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SAMPLERDESC_MINFILTER_NONE, "sg_sampler_desc.min_filter cannot be SG_FILTER_NONE") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SAMPLERDESC_MAGFILTER_NONE, "sg_sampler_desc.mag_filter cannot be SG_FILTER_NONE") \
     _SG_LOGITEM_XMACRO(VALIDATE_SAMPLERDESC_ANISTROPIC_REQUIRES_LINEAR_FILTERING, "sg_sampler_desc.max_anisotropy > 1 requires min/mag/mipmap_filter to be SG_FILTER_LINEAR") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_CANARY, "sg_shader_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SOURCE, "shader source code required") \
@@ -7161,14 +7156,12 @@ _SOKOL_PRIVATE GLenum _sg_gl_blend_op(sg_blend_op op) {
 _SOKOL_PRIVATE GLenum _sg_gl_min_filter(sg_filter min_f, sg_filter mipmap_f) {
     if (min_f == SG_FILTER_NEAREST) {
         switch (mipmap_f) {
-            case SG_FILTER_NONE:    return GL_NEAREST;
             case SG_FILTER_NEAREST: return GL_NEAREST_MIPMAP_NEAREST;
             case SG_FILTER_LINEAR:  return GL_NEAREST_MIPMAP_LINEAR;
             default: SOKOL_UNREACHABLE; return (GLenum)0;
         }
     } else if (min_f == SG_FILTER_LINEAR) {
         switch (mipmap_f) {
-            case SG_FILTER_NONE:    return GL_LINEAR;
             case SG_FILTER_NEAREST: return GL_LINEAR_MIPMAP_NEAREST;
             case SG_FILTER_LINEAR:  return GL_LINEAR_MIPMAP_LINEAR;
             default: SOKOL_UNREACHABLE; return (GLenum)0;
@@ -11907,8 +11900,6 @@ _SOKOL_PRIVATE MTLSamplerMinMagFilter _sg_mtl_minmag_filter(sg_filter f) {
 
 _SOKOL_PRIVATE MTLSamplerMipFilter _sg_mtl_mipmap_filter(sg_filter f) {
     switch (f) {
-        case SG_FILTER_NONE:
-            return MTLSamplerMipFilterNotMipmapped;
         case SG_FILTER_NEAREST:
             return MTLSamplerMipFilterNearest;
         case SG_FILTER_LINEAR:
@@ -13464,7 +13455,6 @@ _SOKOL_PRIVATE WGPUFilterMode _sg_wgpu_sampler_minmag_filter(sg_filter f) {
 
 _SOKOL_PRIVATE WGPUMipmapFilterMode _sg_wgpu_sampler_mipmap_filter(sg_filter f) {
     switch (f) {
-        case SG_FILTER_NONE:
         case SG_FILTER_NEAREST:
             return WGPUMipmapFilterMode_Nearest;
         case SG_FILTER_LINEAR:
@@ -16325,8 +16315,6 @@ _SOKOL_PRIVATE bool _sg_validate_sampler_desc(const sg_sampler_desc* desc) {
         _sg_validate_begin();
         _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_SAMPLERDESC_CANARY);
         _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_SAMPLERDESC_CANARY);
-        _SG_VALIDATE(desc->min_filter != SG_FILTER_NONE, VALIDATE_SAMPLERDESC_MINFILTER_NONE);
-        _SG_VALIDATE(desc->mag_filter != SG_FILTER_NONE, VALIDATE_SAMPLERDESC_MAGFILTER_NONE);
         // restriction from WebGPU: when anisotropy > 1, all filters must be linear
         if (desc->max_anisotropy > 1) {
             _SG_VALIDATE((desc->min_filter == SG_FILTER_LINEAR)
@@ -17146,7 +17134,7 @@ _SOKOL_PRIVATE sg_sampler_desc _sg_sampler_desc_defaults(const sg_sampler_desc* 
     sg_sampler_desc def = *desc;
     def.min_filter = _sg_def(def.min_filter, SG_FILTER_NEAREST);
     def.mag_filter = _sg_def(def.mag_filter, SG_FILTER_NEAREST);
-    def.mipmap_filter = _sg_def(def.mipmap_filter, SG_FILTER_NONE);
+    def.mipmap_filter = _sg_def(def.mipmap_filter, SG_FILTER_NEAREST);
     def.wrap_u = _sg_def(def.wrap_u, SG_WRAP_REPEAT);
     def.wrap_v = _sg_def(def.wrap_v, SG_WRAP_REPEAT);
     def.wrap_w = _sg_def(def.wrap_w, SG_WRAP_REPEAT);

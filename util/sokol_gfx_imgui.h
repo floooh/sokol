@@ -1287,7 +1287,6 @@ _SOKOL_PRIVATE const char* _sgimgui_pixelformat_string(sg_pixel_format fmt) {
 
 _SOKOL_PRIVATE const char* _sgimgui_filter_string(sg_filter f) {
     switch (f) {
-        case SG_FILTER_NONE:    return "SG_FILTER_NONE";
         case SG_FILTER_NEAREST: return "SG_FILTER_NEAREST";
         case SG_FILTER_LINEAR:  return "SG_FILTER_LINEAR";
         default:                return "???";

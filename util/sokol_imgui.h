@@ -2400,7 +2400,6 @@ SOKOL_API_IMPL void simgui_create_fonts_texture(const simgui_font_tex_desc_t* de
     font_smp_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
     font_smp_desc.min_filter = desc->min_filter;
     font_smp_desc.mag_filter = desc->mag_filter;
-    font_smp_desc.mipmap_filter = SG_FILTER_NONE;
     font_smp_desc.label = "sokol-imgui-font-sampler";
     _simgui.font_smp = sg_make_sampler(&font_smp_desc);
 
