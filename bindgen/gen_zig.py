@@ -65,7 +65,7 @@ overrides = {
     'sdtx_font.font_index':                 'uint32_t',
     'SGL_NO_ERROR':                         'SGL_ERROR_NO_ERROR',
     'sfetch_continue':                      'continue_fetching',  # 'continue' is reserved in Zig
-    'sfetch_desc':                          'sfetch_get_desc'     # 'desc' shadowed by earlier definiton
+    'sfetch_desc':                          'sfetch_get_desc'     # 'desc' shadowed by earlier definition
 }
 
 prim_types = {
