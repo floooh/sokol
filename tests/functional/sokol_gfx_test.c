@@ -429,7 +429,7 @@ UTEST(sokol_gfx, make_destroy_samplers) {
         T(smpptr->slot.state == SG_RESOURCESTATE_VALID);
         T(smpptr->cmn.min_filter == SG_FILTER_NEAREST);
         T(smpptr->cmn.mag_filter == SG_FILTER_NEAREST);
-        T(smpptr->cmn.mipmap_filter == SG_FILTER_NONE);
+        T(smpptr->cmn.mipmap_filter == SG_FILTER_NEAREST);
         T(smpptr->cmn.wrap_u == SG_WRAP_REPEAT);
         T(smpptr->cmn.wrap_v == SG_WRAP_REPEAT);
         T(smpptr->cmn.wrap_w == SG_WRAP_REPEAT);
@@ -635,7 +635,7 @@ UTEST(sokol_gfx, query_sampler_defaults) {
     const sg_sampler_desc desc = sg_query_sampler_defaults(&(sg_sampler_desc){0});
     T(desc.min_filter == SG_FILTER_NEAREST);
     T(desc.mag_filter == SG_FILTER_NEAREST);
-    T(desc.mipmap_filter == SG_FILTER_NONE);
+    T(desc.mipmap_filter == SG_FILTER_NEAREST);
     T(desc.wrap_u == SG_WRAP_REPEAT);
     T(desc.wrap_v == SG_WRAP_REPEAT);
     T(desc.wrap_w == SG_WRAP_REPEAT);
@@ -2151,26 +2151,6 @@ UTEST(sokol_gfx, make_sampler_validate_start_canary) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_sampler_validate_minfilter_none) {
-    setup(&(sg_desc){0});
-    sg_sampler smp = sg_make_sampler(&(sg_sampler_desc){
-        .min_filter = SG_FILTER_NONE,
-    });
-    T(sg_query_sampler_state(smp) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_SAMPLERDESC_MINFILTER_NONE);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_sampler_validate_magfilter_none) {
-    setup(&(sg_desc){0});
-    sg_sampler smp = sg_make_sampler(&(sg_sampler_desc){
-        .mag_filter = SG_FILTER_NONE,
-    });
-    T(sg_query_sampler_state(smp) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_SAMPLERDESC_MAGFILTER_NONE);
-    sg_shutdown();
-}
-
 UTEST(sokol_gfx, make_sampler_validate_anistropic_requires_linear_filtering) {
     setup(&(sg_desc){0});
     sg_sampler smp;
@@ -2179,7 +2159,7 @@ UTEST(sokol_gfx, make_sampler_validate_anistropic_requires_linear_filtering) {
         .max_anisotropy = 2,
         .min_filter = SG_FILTER_LINEAR,
         .mag_filter = SG_FILTER_LINEAR,
-        .mipmap_filter = SG_FILTER_NONE,
+        .mipmap_filter = SG_FILTER_NEAREST,
     });
     T(sg_query_sampler_state(smp) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_VALIDATE_SAMPLERDESC_ANISTROPIC_REQUIRES_LINEAR_FILTERING);

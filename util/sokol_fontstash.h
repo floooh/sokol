@@ -1661,7 +1661,6 @@ static int _sfons_render_create(void* user_ptr, int width, int height) {
         _sfons_clear(&smp_desc, sizeof(smp_desc));
         smp_desc.min_filter = SG_FILTER_LINEAR;
         smp_desc.mag_filter = SG_FILTER_LINEAR;
-        smp_desc.mipmap_filter = SG_FILTER_NONE;
         sfons->smp = sg_make_sampler(&smp_desc);
     }
 
