@@ -1,5 +1,20 @@
 ## Updates
 
+### 02-Sep-2024
+
+- Minor breaking change in sokol_gfx.h: The enum item `SG_FILTER_NONE` has been
+  removed. Until around Oct-2023 this was required to be used as mip-filter
+  on textures without mipmaps because of an unnecessary restriction in the
+  GL backend (see https://github.com/floooh/sokol/issues/929 for details).
+  The concept of a 'none' mipmap filter never mapped to some 3D backends
+  (specifically D3D11 and WebGPU).
+  If you are currently creating samplers with `.mipmap_filter = SG_FILTER_NONE`
+  you can simply remove that line. The new default value is `SG_FILTER_NEAREST`.
+  To restrict mipmap sampling access to a specific mipmap (or mipmap range),
+  use the `.min_lod` and `.max_lod` items in struct `sg_sampler_desc`.
+
+  The change has been implemented in PR https://github.com/floooh/sokol/pull/1103.
+
 ### 01-Sep-2024
 
 - sokol_gfx.h d3d11: added a new configuration flag `d3d11_shader_debugging`
