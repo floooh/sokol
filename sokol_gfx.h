@@ -1639,19 +1639,18 @@ typedef struct sg_range {
 //  various compile-time constants
 enum {
     SG_INVALID_ID = 0,
-    SG_NUM_SHADER_STAGES = 2,
     SG_NUM_INFLIGHT_FRAMES = 2,
     SG_MAX_COLOR_ATTACHMENTS = 4,
-    SG_MAX_VERTEX_BUFFERS = 8,
-    SG_MAX_SHADERSTAGE_IMAGES = 12,
-    SG_MAX_SHADERSTAGE_SAMPLERS = 8,
-    SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS = 12,
-    SG_MAX_SHADERSTAGE_STORAGEBUFFERS = 8,
-    SG_MAX_SHADERSTAGE_UBS = 4,
-    SG_MAX_UB_MEMBERS = 16,
+    SG_MAX_UNIFORMBLOCK_MEMBERS = 16,
     SG_MAX_VERTEX_ATTRIBUTES = 16,
     SG_MAX_MIPMAPS = 16,
-    SG_MAX_TEXTUREARRAY_LAYERS = 128
+    SG_MAX_TEXTUREARRAY_LAYERS = 128,
+    SG_MAX_UNIFORMBLOCK_BINDSLOTS = 8,
+    SG_MAX_VERTEXBUFFER_BINDSLOTS = 8,
+    SG_MAX_IMAGE_BINDSLOTS = 16,
+    SG_MAX_SAMPLER_BINDSLOTS = 16,
+    SG_MAX_STORAGEBUFFER_BINDSLOTS = 8,
+    DSG_MAX_IMAGESAMPLERPAIRS = 16,
 };
 
 /*
@@ -2053,23 +2052,6 @@ typedef enum sg_cube_face {
     SG_CUBEFACE_NUM,
     _SG_CUBEFACE_FORCE_U32 = 0x7FFFFFFF
 } sg_cube_face;
-
-/*
-    sg_shader_stage
-
-    There are 2 shader stages: vertex- and fragment-shader-stage.
-    Each shader stage
-
-    - SG_MAX_SHADERSTAGE_UBS slots for applying uniform data
-    - SG_MAX_SHADERSTAGE_IMAGES slots for images used as textures
-    - SG_MAX_SHADERSTAGE_SAMPLERS slots for texture samplers
-    - SG_MAX_SHADERSTAGE_STORAGEBUFFERS slots for storage buffer bindings
-*/
-typedef enum sg_shader_stage {
-    SG_SHADERSTAGE_VS,
-    SG_SHADERSTAGE_FS,
-    _SG_SHADERSTAGE_FORCE_U32 = 0x7FFFFFFF
-} sg_shader_stage;
 
 /*
     sg_primitive_type
@@ -2711,20 +2693,15 @@ typedef struct sg_pass {
     The optional buffer offsets can be used to put different unrelated
     chunks of vertex- and/or index-data into the same buffer objects.
 */
-typedef struct sg_stage_bindings {
-    sg_image images[SG_MAX_SHADERSTAGE_IMAGES];
-    sg_sampler samplers[SG_MAX_SHADERSTAGE_SAMPLERS];
-    sg_buffer storage_buffers[SG_MAX_SHADERSTAGE_STORAGEBUFFERS];
-} sg_stage_bindings;
-
 typedef struct sg_bindings {
     uint32_t _start_canary;
-    sg_buffer vertex_buffers[SG_MAX_VERTEX_BUFFERS];
-    int vertex_buffer_offsets[SG_MAX_VERTEX_BUFFERS];
+    sg_buffer vertex_buffers[SG_MAX_VERTEXBUFFER_BINDSLOTS];
+    uint32_t vertex_buffer_offsets[SG_MAX_VERTEXBUFFER_BINDSLOTS];
     sg_buffer index_buffer;
-    int index_buffer_offset;
-    sg_stage_bindings vs;
-    sg_stage_bindings fs;
+    uint32_t index_buffer_offset;
+    sg_image images[SG_MAX_IMAGE_BINDSLOTS];
+    sg_sampler samplers[SG_MAX_SAMPLER_BINDSLOTS];
+    sg_buffer storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
     uint32_t _end_canary;
 } sg_bindings;
 
@@ -4051,7 +4028,7 @@ SOKOL_GFX_API_DECL void sg_apply_scissor_rect(int x, int y, int width, int heigh
 SOKOL_GFX_API_DECL void sg_apply_scissor_rectf(float x, float y, float width, float height, bool origin_top_left);
 SOKOL_GFX_API_DECL void sg_apply_pipeline(sg_pipeline pip);
 SOKOL_GFX_API_DECL void sg_apply_bindings(const sg_bindings* bindings);
-SOKOL_GFX_API_DECL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const sg_range* data);
+SOKOL_GFX_API_DECL void sg_apply_uniforms(int ub_bind_slot, const sg_range* data);
 SOKOL_GFX_API_DECL void sg_draw(int base_element, int num_elements, int num_instances);
 SOKOL_GFX_API_DECL void sg_end_pass(void);
 SOKOL_GFX_API_DECL void sg_commit(void);
