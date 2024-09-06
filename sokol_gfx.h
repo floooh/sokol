@@ -2959,7 +2959,7 @@ typedef struct sg_shader_uniform_desc {
 typedef struct sg_shader_uniform_block_desc {
     size_t size;
     sg_uniform_layout layout;
-    sg_shader_uniform_desc uniforms[SG_MAX_UB_MEMBERS];
+    sg_shader_uniform_desc uniforms[SG_MAX_UNIFORMBLOCK_MEMBERS];
 } sg_shader_uniform_block_desc;
 
 typedef struct sg_shader_storage_buffer_desc {
@@ -2986,16 +2986,18 @@ typedef struct sg_shader_image_sampler_pair_desc {
     const char* glsl_name;
 } sg_shader_image_sampler_pair_desc;
 
+typedef struct sg_shader_bindings_desc {
+    sg_shader_uniform_block_desc uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
+    sg_shader_storage_buffer_desc storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
+    sg_shader_image_desc images[SG_MAX_IMAGE_BINDSLOTS];
+    sg_shader_sampler_desc samplers[SG_MAX_SAMPLER_BINDSLOTS];
+} sg_shader_bindings_desc;
+
 typedef struct sg_shader_stage_desc {
     const char* source;
     sg_range bytecode;
     const char* entry;
     const char* d3d11_target;
-    sg_shader_uniform_block_desc uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
-    sg_shader_storage_buffer_desc storage_buffers[SG_MAX_SHADERSTAGE_STORAGEBUFFERS];
-    sg_shader_image_desc images[SG_MAX_SHADERSTAGE_IMAGES];
-    sg_shader_sampler_desc samplers[SG_MAX_SHADERSTAGE_SAMPLERS];
-    sg_shader_image_sampler_pair_desc image_sampler_pairs[SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS];
 } sg_shader_stage_desc;
 
 typedef struct sg_shader_desc {
@@ -3003,6 +3005,7 @@ typedef struct sg_shader_desc {
     sg_shader_attr_desc attrs[SG_MAX_VERTEX_ATTRIBUTES];
     sg_shader_stage_desc vs;
     sg_shader_stage_desc fs;
+    sg_shader_bindings_desc bindings;
     const char* label;
     uint32_t _end_canary;
 } sg_shader_desc;
