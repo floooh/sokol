@@ -1650,7 +1650,7 @@ enum {
     SG_MAX_IMAGE_BINDSLOTS = 16,
     SG_MAX_SAMPLER_BINDSLOTS = 16,
     SG_MAX_STORAGEBUFFER_BINDSLOTS = 8,
-    DSG_MAX_IMAGESAMPLERPAIRS = 16,
+    SG_MAX_GLSL_COMBINED_IMAGE_SAMPLERS = 16,
 };
 
 /*
@@ -2903,6 +2903,8 @@ typedef struct sg_sampler_desc {
 /*
     sg_shader_desc
 
+    FIXME: UPDATE!
+
     The structure sg_shader_desc defines all creation parameters for shader
     programs, used as input to the sg_make_shader() function:
 
@@ -2944,68 +2946,90 @@ typedef struct sg_sampler_desc {
     sg_shader_stage_desc.d3d11_target, the default target is "vs_4_0" for the
     vertex shader stage and "ps_4_0" for the pixel shader stage.
 */
-typedef struct sg_shader_attr_desc {
-    const char* name;           // GLSL vertex attribute name (optional)
-    const char* sem_name;       // HLSL semantic name
-    int sem_index;              // HLSL semantic index
-} sg_shader_attr_desc;
+typedef enum sg_shader_bind_stage {
+    _SG_SHADERBINDSTAGE_DEFAULT,
+    SG_SHADERBINDSTAGE_NONE,
+    SG_SHADERBINDSTAGE_VERTEX,
+    SG_SHADERBINDSTAGE_FRAGMENT,
+} sg_shader_bind_stage;
 
-typedef struct sg_shader_uniform_desc {
-    const char* name;
+typedef struct sg_shader_vertex_attr {
+    bool used;
+    uint8_t msl_attribute_n;    // MSL [[attribute(n)]]
+    uint8_t glsl_location_n;    // GLSL layout(location=n)
+    uint8_t hlsl_sem_index;     // HLSL semantic index
+    const char* hlsl_sem_name;  // HLSL semantic name
+} sg_shader_vertex_attr;
+
+typedef struct sg_glsl_shader_uniform {
     sg_uniform_type type;
-    int array_count;
-} sg_shader_uniform_desc;
+    uint32_t offset;            // offset into uniform block struct
+    uint16_t array_count;       // 0 if for scalars, or >1 for arrays
+    uint8_t location_n;         // layout(location = n)
+} sg_glsl_shader_uniform;
 
-typedef struct sg_shader_uniform_block_desc {
-    size_t size;
-    sg_uniform_layout layout;
-    sg_shader_uniform_desc uniforms[SG_MAX_UNIFORMBLOCK_MEMBERS];
-} sg_shader_uniform_block_desc;
+typedef struct sg_shader_uniform_block {
+    sg_shader_bind_stage stage;
+    sg_uniform_layout layout;       // FIXME: still needed with explicit offsets?
+    uint32_t size;
+    uint8_t hlsl_register_b_n;      // HLSL register(bn)
+    uint8_t msl_buffer_n;           // MSL [[buffer(n)]]
+    uint8_t wgsl_group0_bindings_n; // WGSL @group(0) @binding(n)
+    sg_glsl_shader_uniform glsl_uniforms[SG_MAX_UNIFORMBLOCK_MEMBERS];
+} sg_shader_uniform_block;
 
-typedef struct sg_shader_storage_buffer_desc {
-    bool used;
-    bool readonly;
-} sg_shader_storage_buffer_desc;
-
-typedef struct sg_shader_image_desc {
-    bool used;
-    bool multisampled;
+typedef struct sg_shader_image {
+    sg_shader_bind_stage stage;
     sg_image_type image_type;
-    sg_image_sample_type sample_type;
-} sg_shader_image_desc;
-
-typedef struct sg_shader_sampler_desc {
-    bool used;
     sg_sampler_type sampler_type;
-} sg_shader_sampler_desc;
+    bool multisampled;
+    uint8_t hlsl_register_t_n;      // HLSL register(tn) bind slot
+    uint8_t msl_texture_n;          // MSL [[texture(n)]] bind slot
+    uint8_t wgsl_group1_binding_n;  // WGSL @group(1) @binding(n) bind slot
+} sg_shader_image;
 
-typedef struct sg_shader_image_sampler_pair_desc {
-    bool used;
-    int image_slot;
-    int sampler_slot;
-    const char* glsl_name;
-} sg_shader_image_sampler_pair_desc;
+typedef struct sg_shader_sampler {
+    sg_shader_bind_stage stage;
+    sg_sampler_type sampler_type;
+    uint8_t hlsl_register_s_n;      // HLSL register(sn) bind slot
+    uint8_t msl_sampler_n;          // MSL [[sampler(n)]] bind slot
+    uint8_t wgsl_group1_binding_n;  // WGSL @group(1) @binding(n) bind slot
+} sg_shader_sampler;
 
-typedef struct sg_shader_bindings_desc {
-    sg_shader_uniform_block_desc uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
-    sg_shader_storage_buffer_desc storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
-    sg_shader_image_desc images[SG_MAX_IMAGE_BINDSLOTS];
-    sg_shader_sampler_desc samplers[SG_MAX_SAMPLER_BINDSLOTS];
-} sg_shader_bindings_desc;
+typedef struct sg_shader_storage_buffer {
+    sg_shader_bind_stage stage;
+    bool readonly;
+    uint8_t hlsl_register_t_n;      // HLSL register(tn) bind slot
+    uint8_t msl_buffer_n;           // MSL [[buffer(n)]] bind slot
+    uint8_t wgsl_group1_binding_n;  // WGSL @group(1) @binding(n) bind slot
+    uint8_t glsl_binding_n;         // GLSL layout(binding=n)
+} sg_shader_storage_buffer;
 
-typedef struct sg_shader_stage_desc {
+typedef struct sg_shader_glsl_combined_image_sampler {
+    const char* name;
+    sg_shader_bind_stage stage;
+    uint8_t image_binding_index;
+    uint8_t sampler_binding_index;
+    uint8_t binding_n;              // GLSL layout(binding=n)
+} sg_shader_glsl_combined_image_sampler;
+
+typedef struct sg_shader_function {
     const char* source;
     sg_range bytecode;
     const char* entry;
     const char* d3d11_target;
-} sg_shader_stage_desc;
+} sg_shader_function;
 
 typedef struct sg_shader_desc {
     uint32_t _start_canary;
-    sg_shader_attr_desc attrs[SG_MAX_VERTEX_ATTRIBUTES];
-    sg_shader_stage_desc vs;
-    sg_shader_stage_desc fs;
-    sg_shader_bindings_desc bindings;
+    sg_shader_function vertex_function;
+    sg_shader_function fragment_function;
+    sg_shader_vertex_attr vertex_attrs[SG_MAX_VERTEX_ATTRIBUTES];
+    sg_shader_uniform_block uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
+    sg_shader_image images[SG_MAX_IMAGE_BINDSLOTS];
+    sg_shader_sampler samplers[SG_MAX_SAMPLER_BINDSLOTS];
+    sg_shader_storage_buffer storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
+    sg_shader_glsl_combined_image_sampler glsl_combined_image_samplers[SG_MAX_GLSL_COMBINED_IMAGE_SAMPLERS];
     const char* label;
     uint32_t _end_canary;
 } sg_shader_desc;
