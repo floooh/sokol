@@ -3008,8 +3008,8 @@ typedef struct sg_shader_storage_buffer {
 typedef struct sg_shader_glsl_combined_image_sampler {
     const char* name;
     sg_shader_bind_stage stage;
-    uint8_t image_binding_index;
-    uint8_t sampler_binding_index;
+    uint8_t image_index;
+    uint8_t sampler_index;
     uint8_t binding_n;              // GLSL layout(binding=n)
 } sg_shader_glsl_combined_image_sampler;
 
