@@ -3261,7 +3261,7 @@ typedef struct sg_trace_hooks {
     void (*apply_scissor_rect)(int x, int y, int width, int height, bool origin_top_left, void* user_data);
     void (*apply_pipeline)(sg_pipeline pip, void* user_data);
     void (*apply_bindings)(const sg_bindings* bindings, void* user_data);
-    void (*apply_uniforms)(sg_shader_stage stage, int ub_index, const sg_range* data, void* user_data);
+    void (*apply_uniforms)(int ub_index, const sg_range* data, void* user_data);
     void (*draw)(int base_element, int num_elements, int num_instances, void* user_data);
     void (*end_pass)(void* user_data);
     void (*commit)(void* user_data);
@@ -4157,8 +4157,7 @@ typedef struct sg_d3d11_sampler_info {
 } sg_d3d11_sampler_info;
 
 typedef struct sg_d3d11_shader_info {
-    const void* vs_cbufs[SG_MAX_SHADERSTAGE_UBS]; // ID3D11Buffer* (vertex stage constant buffers)
-    const void* fs_cbufs[SG_MAX_SHADERSTAGE_UBS]; // ID3D11Buffer* (fragment stage constant buffers)
+    const void* cbufs[SG_MAX_UNIFORMBLOCK_BINDSLOTS]; // ID3D11Buffer* (constant buffers by bind slot)
     const void* vs;   // ID3D11VertexShader*
     const void* fs;   // ID3D11PixelShader*
 } sg_d3d11_shader_info;
