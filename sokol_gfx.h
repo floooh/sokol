@@ -2685,7 +2685,7 @@ typedef struct sg_pass {
 
     For the max number of bindings, see the constant definitions:
 
-    - SG_MAX_VERTEX_BUFFERS
+    - SG_MAX_VERTEXBUFFER_BINDSLOTS
     - SG_MAX_SHADERSTAGE_IMAGES
     - SG_MAX_SHADERSTAGE_SAMPLERS
     - SG_MAX_SHADERSTAGE_STORAGEBUFFERS
@@ -2964,7 +2964,7 @@ typedef struct sg_shader_vertex_attr {
 typedef struct sg_glsl_shader_uniform {
     sg_uniform_type type;
     uint32_t offset;            // offset into uniform block struct
-    uint16_t array_count;       // 0 if for scalars, or >1 for arrays
+    uint16_t array_count;       // 0 for scalars, or >1 for arrays
     uint8_t location_n;         // layout(location = n)
 } sg_glsl_shader_uniform;
 
@@ -3116,7 +3116,7 @@ typedef struct sg_vertex_attr_state {
 } sg_vertex_attr_state;
 
 typedef struct sg_vertex_layout_state {
-    sg_vertex_buffer_layout_state buffers[SG_MAX_VERTEX_BUFFERS];
+    sg_vertex_buffer_layout_state buffers[SG_MAX_VERTEXBUFFER_BINDSLOTS];
     sg_vertex_attr_state attrs[SG_MAX_VERTEX_ATTRIBUTES];
 } sg_vertex_layout_state;
 
@@ -5152,7 +5152,7 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
 }
 
 typedef struct {
-    bool vertex_buffer_layout_active[SG_MAX_VERTEX_BUFFERS];
+    bool vertex_buffer_layout_active[SG_MAX_VERTEXBUFFER_BINDSLOTS];
     bool use_instanced_draw;
     sg_shader shader_id;
     sg_vertex_layout_state layout;
@@ -5171,7 +5171,7 @@ typedef struct {
 
 _SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT((desc->color_count >= 0) && (desc->color_count <= SG_MAX_COLOR_ATTACHMENTS));
-    for (int i = 0; i < SG_MAX_VERTEX_BUFFERS; i++) {
+    for (int i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
         cmn->vertex_buffer_layout_active[i] = false;
     }
     cmn->use_instanced_draw = false;
@@ -5513,7 +5513,7 @@ typedef struct {
     _sg_shader_t* shader;
     struct {
         UINT stencil_ref;
-        UINT vb_strides[SG_MAX_VERTEX_BUFFERS];
+        UINT vb_strides[SG_MAX_VERTEXBUFFER_BINDSLOTS];
         D3D_PRIMITIVE_TOPOLOGY topology;
         DXGI_FORMAT index_format;
         ID3D11InputLayout* il;
@@ -5667,8 +5667,8 @@ typedef struct {
     const _sg_buffer_t* cur_indexbuffer;
     sg_buffer cur_indexbuffer_id;
     int cur_indexbuffer_offset;
-    int cur_vertexbuffer_offsets[SG_MAX_VERTEX_BUFFERS];
-    sg_buffer cur_vertexbuffer_ids[SG_MAX_VERTEX_BUFFERS];
+    int cur_vertexbuffer_offsets[SG_MAX_VERTEXBUFFER_BINDSLOTS];
+    sg_buffer cur_vertexbuffer_ids[SG_MAX_VERTEXBUFFER_BINDSLOTS];
     sg_image cur_vs_image_ids[SG_MAX_SHADERSTAGE_IMAGES];
     sg_image cur_fs_image_ids[SG_MAX_SHADERSTAGE_IMAGES];
     sg_sampler cur_vs_sampler_ids[SG_MAX_SHADERSTAGE_SAMPLERS];
@@ -5828,10 +5828,10 @@ typedef struct {
     struct {
         sg_buffer buffer;
         int offset;
-    } vbs[SG_MAX_VERTEX_BUFFERS];
+    } vbs[SG_MAX_VERTEXBUFFER_BINDSLOTS];
     struct {
         sg_buffer buffer;
-        int offset;
+        uint32_t offset;
     } ib;
     _sg_wgpu_bindgroup_handle_t bg;
 } _sg_wgpu_bindings_cache_t;
@@ -5891,9 +5891,9 @@ typedef struct {
     int num_fs_imgs;
     int num_fs_smps;
     int num_fs_sbufs;
-    int vb_offsets[SG_MAX_VERTEX_BUFFERS];
+    uint32_t vb_offsets[SG_MAX_VERTEXBUFFER_BINDSLOTS];
     int ib_offset;
-    _sg_buffer_t* vbs[SG_MAX_VERTEX_BUFFERS];
+    _sg_buffer_t* vbs[SG_MAX_VERTEXBUFFER_BINDSLOTS];
     _sg_buffer_t* ib;
     _sg_image_t* vs_imgs[SG_MAX_SHADERSTAGE_IMAGES];
     _sg_sampler_t* vs_smps[SG_MAX_SHADERSTAGE_SAMPLERS];
@@ -6666,7 +6666,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_pipeline(_sg_pipeline_t* pip, 
         if (a_state->format == SG_VERTEXFORMAT_INVALID) {
             break;
         }
-        SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEX_BUFFERS);
+        SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
         pip->cmn.vertex_buffer_layout_active[a_state->buffer_index] = true;
     }
     return SG_RESOURCESTATE_VALID;
@@ -8637,7 +8637,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
         if (a_state->format == SG_VERTEXFORMAT_INVALID) {
             break;
         }
-        SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEX_BUFFERS);
+        SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
         const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[a_state->buffer_index];
         const sg_vertex_step step_func = l_state->step_func;
         const int step_rate = l_state->step_rate;
@@ -10883,7 +10883,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
         if (a_state->format == SG_VERTEXFORMAT_INVALID) {
             break;
         }
-        SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEX_BUFFERS);
+        SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
         const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[a_state->buffer_index];
         const sg_vertex_step step_func = l_state->step_func;
         const int step_rate = l_state->step_rate;
@@ -10900,7 +10900,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
         }
         pip->cmn.vertex_buffer_layout_active[a_state->buffer_index] = true;
     }
-    for (int layout_index = 0; layout_index < SG_MAX_VERTEX_BUFFERS; layout_index++) {
+    for (int layout_index = 0; layout_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; layout_index++) {
         if (pip->cmn.vertex_buffer_layout_active[layout_index]) {
             const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[layout_index];
             SOKOL_ASSERT(l_state->stride > 0);
@@ -11358,8 +11358,8 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
 
     // gather all the D3D11 resources into arrays
     ID3D11Buffer* d3d11_ib = bnd->ib ? bnd->ib->d3d11.buf : 0;
-    ID3D11Buffer* d3d11_vbs[SG_MAX_VERTEX_BUFFERS] = {0};
-    UINT d3d11_vb_offsets[SG_MAX_VERTEX_BUFFERS] = {0};
+    ID3D11Buffer* d3d11_vbs[SG_MAX_VERTEXBUFFER_BINDSLOTS] = {0};
+    UINT d3d11_vb_offsets[SG_MAX_VERTEXBUFFER_BINDSLOTS] = {0};
     ID3D11ShaderResourceView* d3d11_vs_srvs[_SG_D3D11_MAX_SHADERSTAGE_SRVS] = {0};
     ID3D11ShaderResourceView* d3d11_fs_srvs[_SG_D3D11_MAX_SHADERSTAGE_SRVS] = {0};
     ID3D11SamplerState* d3d11_vs_smps[SG_MAX_SHADERSTAGE_SAMPLERS] = {0};
@@ -11393,7 +11393,7 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
         SOKOL_ASSERT(bnd->fs_smps[i]->d3d11.smp);
         d3d11_fs_smps[i] = bnd->fs_smps[i]->d3d11.smp;
     }
-    _sg_d3d11_IASetVertexBuffers(_sg.d3d11.ctx, 0, SG_MAX_VERTEX_BUFFERS, d3d11_vbs, bnd->pip->d3d11.vb_strides, d3d11_vb_offsets);
+    _sg_d3d11_IASetVertexBuffers(_sg.d3d11.ctx, 0, SG_MAX_VERTEXBUFFER_BINDSLOTS, d3d11_vbs, bnd->pip->d3d11.vb_strides, d3d11_vb_offsets);
     _sg_d3d11_IASetIndexBuffer(_sg.d3d11.ctx, d3d11_ib, bnd->pip->d3d11.index_format, (UINT)bnd->ib_offset);
     _sg_d3d11_VSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_SHADERSTAGE_SRVS, d3d11_vs_srvs);
     _sg_d3d11_PSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_SHADERSTAGE_SRVS, d3d11_fs_srvs);
@@ -12669,13 +12669,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
         if (a_state->format == SG_VERTEXFORMAT_INVALID) {
             break;
         }
-        SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEX_BUFFERS);
+        SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
         vtx_desc.attributes[attr_index].format = _sg_mtl_vertex_format(a_state->format);
         vtx_desc.attributes[attr_index].offset = (NSUInteger)a_state->offset;
         vtx_desc.attributes[attr_index].bufferIndex = (NSUInteger)(a_state->buffer_index + SG_MAX_SHADERSTAGE_UBS);
         pip->cmn.vertex_buffer_layout_active[a_state->buffer_index] = true;
     }
-    for (NSUInteger layout_index = 0; layout_index < SG_MAX_VERTEX_BUFFERS; layout_index++) {
+    for (NSUInteger layout_index = 0; layout_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; layout_index++) {
         if (pip->cmn.vertex_buffer_layout_active[layout_index]) {
             const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[layout_index];
             const NSUInteger mtl_vb_slot = layout_index + SG_MAX_SHADERSTAGE_UBS;
@@ -12706,7 +12706,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
         rp_desc.stencilAttachmentPixelFormat = _sg_mtl_pixel_format(desc->depth.pixel_format);
     }
     if (@available(macOS 10.13, iOS 11.0, *)) {
-        for (NSUInteger i = 0; i < (SG_MAX_SHADERSTAGE_UBS+SG_MAX_VERTEX_BUFFERS); i++) {
+        for (NSUInteger i = 0; i < (SG_MAX_SHADERSTAGE_UBS+SG_MAX_VERTEXBUFFER_BINDSLOTS); i++) {
             rp_desc.vertexBuffers[i].mutability = MTLMutabilityImmutable;
         }
         for (NSUInteger i = 0; i < SG_MAX_SHADERSTAGE_UBS; i++) {
@@ -13196,7 +13196,7 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
         if (_sg.mtl.state_cache.cur_vs_storagebuffer_ids[slot].id != sbuf->slot.id) {
             _sg.mtl.state_cache.cur_vs_storagebuffer_ids[slot].id = sbuf->slot.id;
             SOKOL_ASSERT(sbuf->mtl.buf[sbuf->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
-            const NSUInteger mtl_slot = SG_MAX_SHADERSTAGE_UBS + SG_MAX_VERTEX_BUFFERS + slot;
+            const NSUInteger mtl_slot = SG_MAX_SHADERSTAGE_UBS + SG_MAX_VERTEXBUFFER_BINDSLOTS + slot;
             [_sg.mtl.cmd_encoder setVertexBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:0 atIndex:mtl_slot];
             _sg_stats_add(metal.bindings.num_set_vertex_buffer, 1);
         }
@@ -14303,7 +14303,7 @@ _SOKOL_PRIVATE void _sg_wgpu_bindings_cache_clear(void) {
 }
 
 _SOKOL_PRIVATE bool _sg_wgpu_bindings_cache_vb_dirty(int index, const _sg_buffer_t* vb, int offset) {
-    SOKOL_ASSERT((index >= 0) && (index < SG_MAX_VERTEX_BUFFERS));
+    SOKOL_ASSERT((index >= 0) && (index < SG_MAX_VERTEXBUFFER_BINDSLOTS));
     if (vb) {
         return (_sg.wgpu.bindings_cache.vbs[index].buffer.id != vb->slot.id)
             || (_sg.wgpu.bindings_cache.vbs[index].offset != offset);
@@ -14313,7 +14313,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_bindings_cache_vb_dirty(int index, const _sg_buffer
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_bindings_cache_vb_update(int index, const _sg_buffer_t* vb, int offset) {
-    SOKOL_ASSERT((index >= 0) && (index < SG_MAX_VERTEX_BUFFERS));
+    SOKOL_ASSERT((index >= 0) && (index < SG_MAX_VERTEXBUFFER_BINDSLOTS));
     if (vb) {
         _sg.wgpu.bindings_cache.vbs[index].buffer.id = vb->slot.id;
         _sg.wgpu.bindings_cache.vbs[index].offset = offset;
@@ -14874,12 +14874,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     }
     SOKOL_ASSERT(wgpu_pip_layout);
 
-    WGPUVertexBufferLayout wgpu_vb_layouts[SG_MAX_VERTEX_BUFFERS];
+    WGPUVertexBufferLayout wgpu_vb_layouts[SG_MAX_VERTEXBUFFER_BINDSLOTS];
     _sg_clear(wgpu_vb_layouts, sizeof(wgpu_vb_layouts));
-    WGPUVertexAttribute wgpu_vtx_attrs[SG_MAX_VERTEX_BUFFERS][SG_MAX_VERTEX_ATTRIBUTES];
+    WGPUVertexAttribute wgpu_vtx_attrs[SG_MAX_VERTEXBUFFER_BINDSLOTS][SG_MAX_VERTEX_ATTRIBUTES];
     _sg_clear(wgpu_vtx_attrs, sizeof(wgpu_vtx_attrs));
     int wgpu_vb_num = 0;
-    for (int vb_idx = 0; vb_idx < SG_MAX_VERTEX_BUFFERS; vb_idx++, wgpu_vb_num++) {
+    for (int vb_idx = 0; vb_idx < SG_MAX_VERTEXBUFFER_BINDSLOTS; vb_idx++, wgpu_vb_num++) {
         const sg_vertex_buffer_layout_state* vbl_state = &desc->layout.buffers[vb_idx];
         if (0 == vbl_state->stride) {
             break;
@@ -14894,7 +14894,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
             break;
         }
         const int vb_idx = va_state->buffer_index;
-        SOKOL_ASSERT(vb_idx < SG_MAX_VERTEX_BUFFERS);
+        SOKOL_ASSERT(vb_idx < SG_MAX_VERTEXBUFFER_BINDSLOTS);
         pip->cmn.vertex_buffer_layout_active[vb_idx] = true;
         const size_t wgpu_attr_idx = wgpu_vb_layouts[vb_idx].attributeCount;
         wgpu_vb_layouts[vb_idx].attributeCount += 1;
@@ -16513,7 +16513,7 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
         _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_PIPELINEDESC_CANARY);
         _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_PIPELINEDESC_CANARY);
         _SG_VALIDATE(desc->shader.id != SG_INVALID_ID, VALIDATE_PIPELINEDESC_SHADER);
-        for (int buf_index = 0; buf_index < SG_MAX_VERTEX_BUFFERS; buf_index++) {
+        for (int buf_index = 0; buf_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; buf_index++) {
             const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[buf_index];
             if (l_state->stride == 0) {
                 continue;
@@ -16532,7 +16532,7 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
                     continue;
                 }
                 _SG_VALIDATE(attrs_cont, VALIDATE_PIPELINEDESC_NO_CONT_ATTRS);
-                SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEX_BUFFERS);
+                SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
                 #if defined(SOKOL_D3D11)
                 // on D3D11, semantic names (and semantic indices) must be provided
                 _SG_VALIDATE(!_sg_strempty(&shd->d3d11.attrs[attr_index].sem_name), VALIDATE_PIPELINEDESC_ATTR_SEMANTICS);
@@ -16828,7 +16828,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         SOKOL_ASSERT(pip->shader && (pip->cmn.shader_id.id == pip->shader->slot.id));
 
         // has expected vertex buffers, and vertex buffers still exist
-        for (int i = 0; i < SG_MAX_VERTEX_BUFFERS; i++) {
+        for (int i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
             if (bindings->vertex_buffers[i].id != SG_INVALID_ID) {
                 _SG_VALIDATE(pip->cmn.vertex_buffer_layout_active[i], VALIDATE_ABND_VBS);
                 // buffers in vertex-buffer-slots must be of type SG_BUFFERTYPE_VERTEXBUFFER
@@ -17251,14 +17251,14 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
         if (a_state->format == SG_VERTEXFORMAT_INVALID) {
             break;
         }
-        SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEX_BUFFERS);
+        SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
         sg_vertex_buffer_layout_state* l_state = &def.layout.buffers[a_state->buffer_index];
         l_state->step_func = _sg_def(l_state->step_func, SG_VERTEXSTEP_PER_VERTEX);
         l_state->step_rate = _sg_def(l_state->step_rate, 1);
     }
 
     // resolve vertex layout strides and offsets
-    int auto_offset[SG_MAX_VERTEX_BUFFERS];
+    int auto_offset[SG_MAX_VERTEXBUFFER_BINDSLOTS];
     _sg_clear(auto_offset, sizeof(auto_offset));
     bool use_auto_offset = true;
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
@@ -17272,14 +17272,14 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
         if (a_state->format == SG_VERTEXFORMAT_INVALID) {
             break;
         }
-        SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEX_BUFFERS);
+        SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
         if (use_auto_offset) {
             a_state->offset = auto_offset[a_state->buffer_index];
         }
         auto_offset[a_state->buffer_index] += _sg_vertexformat_bytesize(a_state->format);
     }
     // compute vertex strides if needed
-    for (int buf_index = 0; buf_index < SG_MAX_VERTEX_BUFFERS; buf_index++) {
+    for (int buf_index = 0; buf_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; buf_index++) {
         sg_vertex_buffer_layout_state* l_state = &def.layout.buffers[buf_index];
         if (l_state->stride == 0) {
             l_state->stride = auto_offset[buf_index];
@@ -18484,7 +18484,7 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
         _sg.next_draw_valid = false;
     }
 
-    for (int i = 0; i < SG_MAX_VERTEX_BUFFERS; i++, bnd.num_vbs++) {
+    for (int i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++, bnd.num_vbs++) {
         if (bindings->vertex_buffers[i].id) {
             bnd.vbs[i] = _sg_lookup_buffer(&_sg.pools, bindings->vertex_buffers[i].id);
             bnd.vb_offsets[i] = bindings->vertex_buffer_offsets[i];
