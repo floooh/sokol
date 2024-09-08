@@ -2981,7 +2981,7 @@ typedef struct sg_shader_uniform_block {
 typedef struct sg_shader_image {
     sg_shader_bind_stage stage;
     sg_image_type image_type;
-    sg_sampler_type sampler_type;
+    sg_image_sample_type sample_type;
     bool multisampled;
     uint8_t hlsl_register_t_n;      // HLSL register(tn) bind slot
     uint8_t msl_texture_n;          // MSL [[texture(n)]] bind slot
@@ -3006,10 +3006,9 @@ typedef struct sg_shader_storage_buffer {
 } sg_shader_storage_buffer;
 
 typedef struct sg_shader_glsl_combined_image_sampler {
-    const char* name;
     sg_shader_bind_stage stage;
-    uint8_t image_index;
-    uint8_t sampler_index;
+    uint8_t image_slot;
+    uint8_t sampler_slot;
     uint8_t binding_n;              // GLSL layout(binding=n)
 } sg_shader_glsl_combined_image_sampler;
 
@@ -3026,9 +3025,9 @@ typedef struct sg_shader_desc {
     sg_shader_function fragment_function;
     sg_shader_vertex_attr vertex_attrs[SG_MAX_VERTEX_ATTRIBUTES];
     sg_shader_uniform_block uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
+    sg_shader_storage_buffer storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
     sg_shader_image images[SG_MAX_IMAGE_BINDSLOTS];
     sg_shader_sampler samplers[SG_MAX_SAMPLER_BINDSLOTS];
-    sg_shader_storage_buffer storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
     sg_shader_glsl_combined_image_sampler glsl_combined_image_samplers[SG_MAX_GLSL_COMBINED_IMAGE_SAMPLERS];
     const char* label;
     uint32_t _end_canary;
@@ -5051,101 +5050,88 @@ _SOKOL_PRIVATE void _sg_sampler_common_init(_sg_sampler_common_t* cmn, const sg_
 }
 
 typedef struct {
-    size_t size;
+    sg_shader_bind_stage stage;
+    uint32_t size;
 } _sg_shader_uniform_block_t;
 
 typedef struct {
-    bool used;
+    sg_shader_bind_stage stage;
     bool readonly;
 } _sg_shader_storage_buffer_t;
 
 typedef struct {
+    sg_shader_bind_stage stage;
     sg_image_type image_type;
     sg_image_sample_type sample_type;
     bool multisampled;
 } _sg_shader_image_t;
 
 typedef struct {
+    sg_shader_bind_stage stage;
     sg_sampler_type sampler_type;
 } _sg_shader_sampler_t;
 
 // combined image sampler mappings, only needed on GL
 typedef struct {
-    int image_slot;
-    int sampler_slot;
+    sg_shader_bind_stage stage;
+    uint8_t image_slot;
+    uint8_t sampler_slot;
 } _sg_shader_image_sampler_t;
 
 typedef struct {
-    int num_uniform_blocks;
-    int num_storage_buffers;
-    int num_images;
-    int num_samplers;
-    int num_image_samplers;
-    _sg_shader_uniform_block_t uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
-    _sg_shader_storage_buffer_t storage_buffers[SG_MAX_SHADERSTAGE_STORAGEBUFFERS];
-    _sg_shader_image_t images[SG_MAX_SHADERSTAGE_IMAGES];
-    _sg_shader_sampler_t samplers[SG_MAX_SHADERSTAGE_SAMPLERS];
-    _sg_shader_image_sampler_t image_samplers[SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS];
-} _sg_shader_stage_t;
-
-typedef struct {
-    _sg_shader_stage_t stage[SG_NUM_SHADER_STAGES];
+    _sg_shader_uniform_block_t uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
+    _sg_shader_storage_buffer_t storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
+    _sg_shader_image_t images[SG_MAX_IMAGE_BINDSLOTS];
+    _sg_shader_sampler_t samplers[SG_MAX_SAMPLER_BINDSLOTS];
+    _sg_shader_image_sampler_t image_samplers[SG_MAX_GLSL_COMBINED_IMAGE_SAMPLERS];
 } _sg_shader_common_t;
 
 _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_shader_desc* desc) {
-    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
-        const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS) ? &desc->vs : &desc->fs;
-        _sg_shader_stage_t* stage = &cmn->stage[stage_index];
-        SOKOL_ASSERT(stage->num_uniform_blocks == 0);
-        for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
-            const sg_shader_uniform_block_desc* ub_desc = &stage_desc->uniform_blocks[ub_index];
-            if (0 == ub_desc->size) {
-                break;
-            }
-            stage->uniform_blocks[ub_index].size = ub_desc->size;
-            stage->num_uniform_blocks++;
+    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
+        const sg_shader_uniform_block* src = &desc->uniform_blocks[i];
+        _sg_shader_uniform_block_t* dst = &cmn->uniform_blocks[i];
+        if (src->stage != SG_SHADERBINDSTAGE_NONE) {
+            dst->stage = src->stage;
+            dst->size = src->size;
         }
-        SOKOL_ASSERT(stage->num_images == 0);
-        for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
-            const sg_shader_image_desc* img_desc = &stage_desc->images[img_index];
-            if (!img_desc->used) {
-                break;
-            }
-            stage->images[img_index].multisampled = img_desc->multisampled;
-            stage->images[img_index].image_type = img_desc->image_type;
-            stage->images[img_index].sample_type = img_desc->sample_type;
-            stage->num_images++;
+    }
+    for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
+        const sg_shader_storage_buffer* src = &desc->storage_buffers[i];
+        _sg_shader_storage_buffer_t* dst = &cmn->storage_buffers[i];
+        if (src->stage != SG_SHADERBINDSTAGE_NONE) {
+            dst->stage = src->stage;
+            dst->readonly = src->readonly;
         }
-        SOKOL_ASSERT(stage->num_samplers == 0);
-        for (int smp_index = 0; smp_index < SG_MAX_SHADERSTAGE_SAMPLERS; smp_index++) {
-            const sg_shader_sampler_desc* smp_desc = &stage_desc->samplers[smp_index];
-            if (!smp_desc->used) {
-                break;
-            }
-            stage->samplers[smp_index].sampler_type = smp_desc->sampler_type;
-            stage->num_samplers++;
+    }
+    for (size_t i = 0; i < SG_MAX_IMAGE_BINDSLOTS; i++) {
+        const sg_shader_image* src = &desc->images[i];
+        _sg_shader_image_t* dst = &cmn->images[i];
+        if (src->stage != SG_SHADERBINDSTAGE_NONE) {
+            dst->stage = src->stage;
+            dst->image_type = src->image_type;
+            dst->sample_type = src->sample_type;
+            dst->multisampled = src->multisampled;
         }
-        SOKOL_ASSERT(stage->num_image_samplers == 0);
-        for (int img_smp_index = 0; img_smp_index < SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS; img_smp_index++) {
-            const sg_shader_image_sampler_pair_desc* img_smp_desc = &stage_desc->image_sampler_pairs[img_smp_index];
-            if (!img_smp_desc->used) {
-                break;
-            }
-            SOKOL_ASSERT((img_smp_desc->image_slot >= 0) && (img_smp_desc->image_slot < stage->num_images));
-            stage->image_samplers[img_smp_index].image_slot = img_smp_desc->image_slot;
-            SOKOL_ASSERT((img_smp_desc->sampler_slot >= 0) && (img_smp_desc->sampler_slot < stage->num_samplers));
-            stage->image_samplers[img_smp_index].sampler_slot = img_smp_desc->sampler_slot;
-            stage->num_image_samplers++;
+    }
+    for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+        const sg_shader_sampler* src = &desc->samplers[i];
+        _sg_shader_sampler_t* dst = &cmn->samplers[i];
+        if (src->stage != SG_SHADERBINDSTAGE_NONE) {
+            dst->stage = src->stage;
+            dst->sampler_type = src->sampler_type;
         }
-        SOKOL_ASSERT(stage->num_storage_buffers == 0);
-        for (int sbuf_index = 0; sbuf_index < SG_MAX_SHADERSTAGE_STORAGEBUFFERS; sbuf_index++) {
-            const sg_shader_storage_buffer_desc* sbuf_desc = &stage_desc->storage_buffers[sbuf_index];
-            if (!sbuf_desc->used) {
-                break;
-            }
-            stage->storage_buffers[sbuf_index].used = sbuf_desc->used;
-            stage->storage_buffers[sbuf_index].readonly = sbuf_desc->readonly;
-            stage->num_storage_buffers++;
+    }
+    for (size_t i = 0; i < SG_MAX_GLSL_COMBINED_IMAGE_SAMPLERS; i++) {
+        const sg_shader_glsl_combined_image_sampler* src = &desc->glsl_combined_image_samplers[i];
+        _sg_shader_image_sampler_t* dst = &cmn->image_samplers[i];
+        if (src->stage != SG_SHADERBINDSTAGE_NONE) {
+            dst->stage = src->stage;
+            SOKOL_ASSERT((src->image_slot >= 0) && (src->image_slot < SG_MAX_IMAGE_BINDSLOTS));
+            SOKOL_ASSERT(desc->images[src->image_slot].stage == src->stage);
+            dst->image_slot = src->image_slot;
+            SOKOL_ASSERT((src->sampler_slot >= 0) && (src->sampler_slot < SG_MAX_SAMPLER_BINDSLOTS));
+            SOKOL_ASSERT(desc->samplers[src->sampler_slot].stage == src->stage);
+            dst->sampler_slot = src->sampler_slot;
         }
     }
 }
