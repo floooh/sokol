@@ -8015,7 +8015,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     #if defined(SOKOL_D3D11)
         _sapp_d3d11_destroy_default_render_target();
         _sapp_d3d11_destroy_device_and_swapchain();
-    #else
+    #elif defined(SOKOL_GLCORE)
         _sapp_wgl_destroy_context();
         _sapp_wgl_shutdown();
     #endif
