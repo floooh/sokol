@@ -1,5 +1,11 @@
 ## Updates
 
+### 10-Sep-2024
+
+- Update sokol_imgui.h for Dear ImGui and cimgui version 1.91.1. This
+  breaks compatibility with older ImGui versions.
+  Fixes issue https://github.com/floooh/sokol/issues/1105.
+
 ### 02-Sep-2024
 
 - Minor breaking change in sokol_gfx.h: The enum item `SG_FILTER_NONE` has been
