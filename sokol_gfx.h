@@ -16355,6 +16355,8 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             _SG_VALIDATE(desc->fragment_func.bytecode.size > 0, VALIDATE_SHADERDESC_NO_BYTECODE_SIZE);
         }
 
+        // FIXME: accumulate MSL bind slots in an uint and check for bind
+        // slot collisions (across uniform blocks and storage buffers)
         for (size_t ub_idx = 0; ub_idx < SG_MAX_UNIFORMBLOCK_BINDSLOTS; ub_idx++) {
             const sg_shader_uniform_block* ub_desc = &desc->uniform_blocks[ub_idx];
             if (ub_desc->stage == SG_SHADERBINDSTAGE_NONE) {
@@ -16397,6 +16399,8 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             #endif
         }
 
+        // FIXME: accumulate MSL bind slots in an uint and check for bind
+        // slot collisions (across uniform blocks and storage buffers)
         for (size_t sbuf_idx = 0; sbuf_idx < SG_MAX_STORAGEBUFFER_BINDSLOTS; sbuf_idx++) {
             const sg_shader_storage_buffer* sbuf_desc = &desc->storage_buffers[sbuf_idx];
             if (sbuf_desc->stage == SG_SHADERBINDSTAGE_NONE) {
@@ -16408,6 +16412,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             #endif
         }
 
+        // FIXME: check for MSL bind slot collisions
         uint64_t img_slot_mask = 0;
         for (size_t img_idx = 0; img_idx < SG_MAX_IMAGE_BINDSLOTS; img_idx++) {
             const sg_shader_image* img_desc = &desc->images[img_idx];
@@ -16420,6 +16425,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             #endif
         }
 
+        // FIXME: check for MSL bind slot collisions
         uint32_t smp_slot_mask = 0;
         for (size_t smp_idx = 0; smp_idx < SG_MAX_SAMPLER_BINDSLOTS; smp_idx++) {
             const sg_shader_sampler* smp_desc = &desc->samplers[smp_idx];
