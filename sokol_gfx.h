@@ -16473,8 +16473,8 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 ref_smp_slot_mask |= 1 << img_smp_desc->sampler_slot;
                 const sg_shader_image* img_desc = &desc->images[img_smp_desc->image_slot];
                 const sg_shader_sampler* smp_desc = &desc->samplers[img_smp_desc->sampler_slot];
-                _SG_VALIDATE(img_desc->stage != img_smp_desc->stage, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_IMAGE_STAGE_MISMATCH);
-                _SG_VALIDATE(smp_desc->stage != img_smp_desc->stage, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_SAMPLER_STAGE_MISMATCH);
+                _SG_VALIDATE(img_desc->stage == img_smp_desc->stage, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_IMAGE_STAGE_MISMATCH);
+                _SG_VALIDATE(smp_desc->stage == img_smp_desc->stage, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_SAMPLER_STAGE_MISMATCH);
                 const bool needs_nonfiltering = (img_desc->sample_type == SG_IMAGESAMPLETYPE_UINT)
                                              || (img_desc->sample_type == SG_IMAGESAMPLETYPE_SINT)
                                              || (img_desc->sample_type == SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT);
