@@ -3658,6 +3658,8 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_SIZE_IS_ZERO, "bound uniform block size cannot be zero") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_METAL_BUFFER_SLOT_OUT_OF_RANGE, "uniform block 'msl_buffer_n' is out of range") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_METAL_BUFFER_SLOT_COLLISION, "uniform block 'msl_buffer_n' must be unique across uniform blocks and storage buffers in same shader stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_HLSL_REGISTER_B_OUT_OF_RANGE, "uniform block 'hlsl_register_b_n' is out of range") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_HLSL_REGISTER_B_COLLISION, "uniform block 'hlsl_register_b_n' must be unique across uniform blocks in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_UB_MEMBERS, "GL backend requires uniform block member declarations") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_MEMBER_NAME, "uniform block member name missing") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_SIZE_MISMATCH, "size of uniform block members doesn't match uniform block size") \
@@ -3665,11 +3667,17 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_STD140_ARRAY_TYPE, "uniform arrays only allowed for FLOAT4, INT4, MAT4 in std140 layout") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_METAL_BUFFER_SLOT_OUT_OF_RANGE, "storage buffer 'msl_buffer_n' is out of range") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_METAL_BUFFER_SLOT_COLLISION, "storage buffer 'msl_buffer_n' must be unique across uniform blocks and storage buffer in same shader stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_HLSL_REGISTER_T_OUT_OF_RANGE, "storage buffer 'hlsl_register_t_n' is out of range") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_HLSL_REGISTER_T_COLLISION, "storage_buffer 'hlsl_register_t_n' must be unique across storage buffers and images in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_READONLY, "shader stage storage buffers must be readonly (sg_shader_desc.vs|fs.storage_buffers[].readonly)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_METAL_TEXTURE_SLOT_OUT_OF_RANGE, "image 'msl_texture_n' is out of range") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_METAL_TEXTURE_SLOT_COLLISION, "image 'msl_texture_n' must be unique in same shader stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_HLSL_REGISTER_T_OUT_OF_RANGE, "image 'hlsl_register_t_n' is out of range") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_HLSL_REGISTER_T_COLLISION, "image 'hlsl_register_t_n' must be unique across images and storage buffers in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_METAL_SAMPLER_SLOT_OUT_OF_RANGE, "sampler 'msl_sampler_n' is out of range") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_METAL_SAMPLER_SLOT_COLLISION, "sampler 'msl_sampler_n' must be unique in same shader stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_HLSL_REGISTER_S_OUT_OF_RANGE, "sampler 'hlsl_register_s_n' is out of range") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_HLSL_REGISTER_S_COLLISION, "sampler 'hlsl_register_s_n' must be unique in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_IMAGE_SLOT_OUT_OF_RANGE, "shader stage: image-sampler-pair image slot index is out of range (sg_shader_desc.vs|fs.image_sampler_pairs[].image_slot)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_SAMPLER_SLOT_OUT_OF_RANGE, "shader stage: image-sampler-pair image slot index is out of range (sg_shader_desc.vs|fs.image_sampler_pairs[].sampler_slot)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_IMAGE_STAGE_MISMATCH, "shader stage: image-sampler-pair stage doesn't match referenced image stage") \
@@ -5472,6 +5480,7 @@ typedef struct {
         uint8_t img_register_t_n[SG_MAX_IMAGE_BINDSLOTS];
         uint8_t smp_register_s_n[SG_MAX_SAMPLER_BINDSLOTS];
         uint8_t sbuf_register_t_n[SG_MAX_STORAGEBUFFER_BINDSLOTS];
+        ID3D11Buffer* all_cbufs[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
         ID3D11Buffer* vs_cbufs[_SG_D3D11_MAX_STAGE_UB_BINDINGS];
         ID3D11Buffer* fs_cbufs[_SG_D3D11_MAX_STAGE_UB_BINDINGS];
     } d3d11;
@@ -10768,15 +10777,16 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
             return SG_RESOURCESTATE_FAILED;
         }
         _sg_d3d11_setlabel(cbuf, desc->label);
+        shd->d3d11.all_cbufs[ub_index] = cbuf;
 
-        const uint8_t slot = shd->d3d11.ub_register_b_n[ub_index];
-        SOKOL_ASSERT(slot < _SG_D3D11_MAX_STAGE_UB_BINDINGS);
+        const uint8_t d3d11_slot = shd->d3d11.ub_register_b_n[ub_index];
+        SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_UB_BINDINGS);
         if (stage == SG_SHADERSTAGE_VERTEX) {
-            SOKOL_ASSERT(0 == shd->d3d11.vs_cbufs[slot]);
-            shd->d3d11.vs_cbufs[slot] = cbuf;
+            SOKOL_ASSERT(0 == shd->d3d11.vs_cbufs[d3d11_slot]);
+            shd->d3d11.vs_cbufs[d3d11_slot] = cbuf;
         } else {
-            SOKOL_ASSERT(0 == shd->d3d11.fs_cbufs[slot]);
-            shd->d3d11.fs_cbufs[slot] = cbuf;
+            SOKOL_ASSERT(0 == shd->d3d11.fs_cbufs[d3d11_slot]);
+            shd->d3d11.fs_cbufs[d3d11_slot] = cbuf;
         }
     }
 
@@ -10840,12 +10850,9 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_shader(_sg_shader_t* shd) {
     if (shd->d3d11.vs_blob) {
         _sg_free(shd->d3d11.vs_blob);
     }
-    for (size_t i = 0; i < _SG_D3D11_MAX_STAGE_UB_BINDINGS; i++) {
-        if (shd->d3d11.vs_cbufs[i]) {
-            _sg_d3d11_Release(shd->d3d11.vs_cbufs[i]);
-        }
-        if (shd->d3d11.fs_cbufs[i]) {
-            _sg_d3d11_Release(shd->d3d11.fs_cbufs[i]);
+    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
+        if (shd->d3d11.all_cbufs[i]) {
+            _sg_d3d11_Release(shd->d3d11.all_cbufs[i]);
         }
     }
 }
@@ -11342,8 +11349,10 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
 
 _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
     SOKOL_ASSERT(bnd);
-    SOKOL_ASSERT(bnd->pip);
+    SOKOL_ASSERT(bnd->pip && bnd->pip->shader);
+    SOKOL_ASSERT(bnd->pip->shader->slot.id == bnd->pip->cmn.shader_id.id);
     SOKOL_ASSERT(_sg.d3d11.ctx);
+    const _sg_shader_t* shd = bnd->pip->shader;
 
     // gather all the D3D11 resources into arrays
     ID3D11Buffer* d3d11_ib = bnd->ib ? bnd->ib->d3d11.buf : 0;
@@ -11353,42 +11362,65 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
     ID3D11ShaderResourceView* d3d11_fs_srvs[_SG_D3D11_MAX_STAGE_TEX_SBUF_BINDINGS] = {0};
     ID3D11SamplerState* d3d11_vs_smps[_SG_D3D11_MAX_STAGE_SMP_BINDINGS] = {0};
     ID3D11SamplerState* d3d11_fs_smps[_SG_D3D11_MAX_STAGE_SMP_BINDINGS] = {0};
-FIXME FIXME FIXME
-    for (int i = 0; i < bnd->num_vbs; i++) {
-        SOKOL_ASSERT(bnd->vbs[i]->d3d11.buf);
-        d3d11_vbs[i] = bnd->vbs[i]->d3d11.buf;
+    for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
+        const _sg_buffer_t* vb = bnd->vbs[i];
+        if (vb == 0) {
+            continue;
+        }
+        d3d11_vbs[i] = vb->d3d11.buf;
         d3d11_vb_offsets[i] = (UINT)bnd->vb_offsets[i];
     }
-    for (int i = 0; i < bnd->num_vs_imgs; i++) {
-        SOKOL_ASSERT(bnd->vs_imgs[i]->d3d11.srv);
-        d3d11_vs_srvs[_SG_D3D11_SHADERSTAGE_IMAGE_SRV_OFFSET + i] = bnd->vs_imgs[i]->d3d11.srv;
+    for (size_t i = 0; i < SG_MAX_IMAGE_BINDSLOTS; i++) {
+        const _sg_image_t* img = bnd->imgs[i];
+        if (img == 0) {
+            continue;
+        }
+        const sg_shader_stage stage = shd->cmn.images[i].stage;
+        SOKOL_ASSERT((stage == SG_SHADERSTAGE_VERTEX) || (stage == SG_SHADERSTAGE_FRAGMENT));
+        const uint8_t d3d11_slot = shd->d3d11.img_register_t_n[i];
+        SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_TEX_SBUF_BINDINGS);
+        if (stage == SG_SHADERSTAGE_VERTEX) {
+            d3d11_vs_srvs[d3d11_slot] = img->d3d11.srv;
+        } else {
+            d3d11_fs_srvs[d3d11_slot] = img->d3d11.srv;
+        }
     }
-    for (int i = 0; i < bnd->num_vs_sbufs; i++) {
-        SOKOL_ASSERT(bnd->vs_sbufs[i]->d3d11.srv);
-        d3d11_vs_srvs[_SG_D3D11_SHADERSTAGE_BUFFER_SRV_OFFSET + i] = bnd->vs_sbufs[i]->d3d11.srv;
+    for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
+        const _sg_buffer_t* sbuf = bnd->sbufs[i];
+        if (sbuf == 0) {
+            continue;
+        }
+        const sg_shader_stage stage = shd->cmn.storage_buffers[i].stage;
+        SOKOL_ASSERT((stage == SG_SHADERSTAGE_VERTEX) || (stage == SG_SHADERSTAGE_FRAGMENT));
+        const uint8_t d3d11_slot = shd->d3d11.sbuf_register_t_n[i];
+        SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_TEX_SBUF_BINDINGS);
+        if (stage == SG_SHADERSTAGE_VERTEX) {
+            d3d11_vs_srvs[d3d11_slot] = sbuf->d3d11.srv;
+        } else {
+            d3d11_fs_srvs[d3d11_slot] = sbuf->d3d11.srv;
+        }
     }
-    for (int i = 0; i < bnd->num_fs_imgs; i++) {
-        SOKOL_ASSERT(bnd->fs_imgs[i]->d3d11.srv);
-        d3d11_fs_srvs[_SG_D3D11_SHADERSTAGE_IMAGE_SRV_OFFSET + i] = bnd->fs_imgs[i]->d3d11.srv;
-    }
-    for (int i = 0; i < bnd->num_fs_sbufs; i++) {
-        SOKOL_ASSERT(bnd->fs_sbufs[i]->d3d11.srv);
-        d3d11_fs_srvs[_SG_D3D11_SHADERSTAGE_BUFFER_SRV_OFFSET + i] = bnd->fs_sbufs[i]->d3d11.srv;
-    }
-    for (int i = 0; i < bnd->num_vs_smps; i++) {
-        SOKOL_ASSERT(bnd->vs_smps[i]->d3d11.smp);
-        d3d11_vs_smps[i] = bnd->vs_smps[i]->d3d11.smp;
-    }
-    for (int i = 0; i < bnd->num_fs_smps; i++) {
-        SOKOL_ASSERT(bnd->fs_smps[i]->d3d11.smp);
-        d3d11_fs_smps[i] = bnd->fs_smps[i]->d3d11.smp;
+    for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+        const _sg_sampler_t* smp = bnd->smps[i];
+        if (smp == 0) {
+            continue;
+        }
+        const sg_shader_stage stage = shd->cmn.samplers[i].stage;
+        SOKOL_ASSERT((stage == SG_SHADERSTAGE_VERTEX) || (stage == SG_SHADERSTAGE_FRAGMENT));
+        const uint8_t d3d11_slot = shd->d3d11.smp_register_s_n[i];
+        SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_SMP_BINDINGS);
+        if (stage == SG_SHADERSTAGE_VERTEX) {
+            d3d11_vs_smps[d3d11_slot] = smp->d3d11.smp;
+        } else {
+            d3d11_fs_smps[d3d11_slot] = smp->d3d11.smp;
+        }
     }
     _sg_d3d11_IASetVertexBuffers(_sg.d3d11.ctx, 0, SG_MAX_VERTEXBUFFER_BINDSLOTS, d3d11_vbs, bnd->pip->d3d11.vb_strides, d3d11_vb_offsets);
     _sg_d3d11_IASetIndexBuffer(_sg.d3d11.ctx, d3d11_ib, bnd->pip->d3d11.index_format, (UINT)bnd->ib_offset);
-    _sg_d3d11_VSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_SHADERSTAGE_SRVS, d3d11_vs_srvs);
-    _sg_d3d11_PSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_SHADERSTAGE_SRVS, d3d11_fs_srvs);
-    _sg_d3d11_VSSetSamplers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_SAMPLERS, d3d11_vs_smps);
-    _sg_d3d11_PSSetSamplers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_SAMPLERS, d3d11_fs_smps);
+    _sg_d3d11_VSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_TEX_SBUF_BINDINGS, d3d11_vs_srvs);
+    _sg_d3d11_PSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_TEX_SBUF_BINDINGS, d3d11_fs_srvs);
+    _sg_d3d11_VSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, d3d11_vs_smps);
+    _sg_d3d11_PSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, d3d11_fs_smps);
     _sg_stats_add(d3d11.bindings.num_ia_set_vertex_buffers, 1);
     _sg_stats_add(d3d11.bindings.num_ia_set_index_buffer, 1);
     _sg_stats_add(d3d11.bindings.num_vs_set_shader_resources, 1);
@@ -11398,15 +11430,17 @@ FIXME FIXME FIXME
     return true;
 }
 
-_SOKOL_PRIVATE void _sg_d3d11_apply_uniforms(sg_shader_stage stage_index, int ub_index, const sg_range* data) {
+_SOKOL_PRIVATE void _sg_d3d11_apply_uniforms(int ub_index, const sg_range* data) {
     SOKOL_ASSERT(_sg.d3d11.ctx);
+    SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
     SOKOL_ASSERT(_sg.d3d11.cur_pipeline && _sg.d3d11.cur_pipeline->slot.id == _sg.d3d11.cur_pipeline_id.id);
-    SOKOL_ASSERT(_sg.d3d11.cur_pipeline->shader && _sg.d3d11.cur_pipeline->shader->slot.id == _sg.d3d11.cur_pipeline->cmn.shader_id.id);
-    SOKOL_ASSERT(ub_index < _sg.d3d11.cur_pipeline->shader->cmn.stage[stage_index].num_uniform_blocks);
-    SOKOL_ASSERT(data->size == _sg.d3d11.cur_pipeline->shader->cmn.stage[stage_index].uniform_blocks[ub_index].size);
-    ID3D11Buffer* cb = _sg.d3d11.cur_pipeline->shader->d3d11.stage[stage_index].cbufs[ub_index];
-    SOKOL_ASSERT(cb);
-    _sg_d3d11_UpdateSubresource(_sg.d3d11.ctx, (ID3D11Resource*)cb, 0, NULL, data->ptr, 0, 0);
+    const _sg_shader_t* shd = _sg.d3d11.cur_pipeline->shader;
+    SOKOL_ASSERT(shd && (shd->slot.id == _sg.d3d11.cur_pipeline->cmn.shader_id.id));
+    SOKOL_ASSERT(data->size == shd->cmn.uniform_blocks[ub_index].size);
+
+    ID3D11Buffer* cbuf = shd->d3d11.all_cbufs[ub_index];
+    SOKOL_ASSERT(cbuf);
+    _sg_d3d11_UpdateSubresource(_sg.d3d11.ctx, (ID3D11Resource*)cbuf, 0, NULL, data->ptr, 0, 0);
     _sg_stats_add(d3d11.uniforms.num_update_subresource, 1);
 }
 
@@ -19052,9 +19086,8 @@ SOKOL_API_IMPL sg_d3d11_shader_info sg_d3d11_query_shader_info(sg_shader shd_id)
     #if defined(SOKOL_D3D11)
         const _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
         if (shd) {
-            for (int i = 0; i < SG_MAX_SHADERSTAGE_UBS; i++) {
-                res.vs_cbufs[i] = (const void*) shd->d3d11.stage[SG_SHADERSTAGE_VS].cbufs[i];
-                res.fs_cbufs[i] = (const void*) shd->d3d11.stage[SG_SHADERSTAGE_FS].cbufs[i];
+            for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
+                res.cbufs[i] = (const void*) shd->d3d11.all_cbufs[i];
             }
             res.vs = (const void*) shd->d3d11.vs;
             res.fs = (const void*) shd->d3d11.fs;
