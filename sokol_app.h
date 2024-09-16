@@ -9613,11 +9613,7 @@ _SOKOL_PRIVATE void _sapp_x11_release_error_handler(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_x11_init_extensions(void) {
-    if (_sapp.clipboard.enabled) {
-        _sapp.x11.UTF8_STRING         = XInternAtom(_sapp.x11.display, "UTF8_STRING", False);
-        _sapp.x11.CLIPBOARD           = XInternAtom(_sapp.x11.display, "CLIPBOARD", False);
-        _sapp.x11.TARGETS             = XInternAtom(_sapp.x11.display, "TARGETS", False);
-    }
+    _sapp.x11.UTF8_STRING             = XInternAtom(_sapp.x11.display, "UTF8_STRING", False);
     _sapp.x11.WM_PROTOCOLS            = XInternAtom(_sapp.x11.display, "WM_PROTOCOLS", False);
     _sapp.x11.WM_DELETE_WINDOW        = XInternAtom(_sapp.x11.display, "WM_DELETE_WINDOW", False);
     _sapp.x11.WM_STATE                = XInternAtom(_sapp.x11.display, "WM_STATE", False);
@@ -9626,6 +9622,10 @@ _SOKOL_PRIVATE void _sapp_x11_init_extensions(void) {
     _sapp.x11.NET_WM_ICON             = XInternAtom(_sapp.x11.display, "_NET_WM_ICON", False);
     _sapp.x11.NET_WM_STATE            = XInternAtom(_sapp.x11.display, "_NET_WM_STATE", False);
     _sapp.x11.NET_WM_STATE_FULLSCREEN = XInternAtom(_sapp.x11.display, "_NET_WM_STATE_FULLSCREEN", False);
+    if (_sapp.clipboard.enabled) {
+        _sapp.x11.CLIPBOARD = XInternAtom(_sapp.x11.display, "CLIPBOARD", False);
+        _sapp.x11.TARGETS   = XInternAtom(_sapp.x11.display, "TARGETS", False);
+    }
     if (_sapp.drop.enabled) {
         _sapp.x11.xdnd.XdndAware        = XInternAtom(_sapp.x11.display, "XdndAware", False);
         _sapp.x11.xdnd.XdndEnter        = XInternAtom(_sapp.x11.display, "XdndEnter", False);
