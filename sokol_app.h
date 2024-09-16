@@ -10498,10 +10498,7 @@ _SOKOL_PRIVATE const char* _sapp_x11_get_clipboard_string(void) {
                       _sapp.x11.window,
                       CurrentTime);
     XEvent event;
-    while (!XCheckTypedWindowEvent(_sapp.x11.display,
-                                   _sapp.x11.window,
-                                   SelectionNotify,
-                                   &event)) {
+    while (!XCheckTypedWindowEvent(_sapp.x11.display, _sapp.x11.window, SelectionNotify, &event)) {
         // Wait for event data to arrive on the X11 display socket
         struct pollfd fd = { ConnectionNumber(_sapp.x11.display), POLLIN };
         while (!XPending(_sapp.x11.display)) {
@@ -10533,7 +10530,7 @@ _SOKOL_PRIVATE const char* _sapp_x11_get_clipboard_string(void) {
         }
         return NULL;
     }
-    if (actualType == incremental || itemCount >= (size_t)_sapp.clipboard.buf_size) {
+    if ((actualType == incremental) || (itemCount >= (size_t)_sapp.clipboard.buf_size)) {
         _SAPP_ERROR(CLIPBOARD_STRING_TOO_BIG);
         XFree(data);
         return NULL;
@@ -11282,6 +11279,44 @@ _SOKOL_PRIVATE void _sapp_x11_on_clientmessage(XEvent* event) {
     }
 }
 
+_SOKOL_PRIVATE void _sapp_x11_on_selectionrequest(XEvent* event) {
+    XSelectionRequestEvent* req = &event->xselectionrequest;
+    if (req->selection != _sapp.x11.CLIPBOARD) {
+        return;
+    }
+    XSelectionEvent reply;
+    _sapp_clear(&reply, sizeof(reply));
+    reply.type = SelectionNotify;
+    reply.display = req->display;
+    reply.requestor = req->requestor;
+    reply.selection = req->selection;
+    reply.target = req->target;
+    reply.property = req->property;
+    reply.time = req->time;
+    if (req->target == _sapp.x11.UTF8_STRING) {
+        XChangeProperty(_sapp.x11.display,
+                        req->requestor,
+                        req->property,
+                        _sapp.x11.UTF8_STRING,
+                        8,
+                        PropModeReplace,
+                        (unsigned char*) _sapp.clipboard.buffer,
+                        strlen(_sapp.clipboard.buffer));
+    } else if (req->target == _sapp.x11.TARGETS) {
+        XChangeProperty(_sapp.x11.display,
+                        req->requestor,
+                        req->property,
+                        XA_ATOM,
+                        32,
+                        PropModeReplace,
+                        (unsigned char*) &_sapp.x11.UTF8_STRING,
+                        1);
+    } else {
+        reply.property = None;
+    }
+    XSendEvent(_sapp.x11.display, req->requestor, False, 0, (XEvent*) &reply);
+}
+
 _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
     switch (event->type) {
         case GenericEvent:
@@ -11323,44 +11358,9 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
         case SelectionNotify:
             _sapp_x11_on_selectionnotify(event);
             break;
-        case SelectionRequest: {
-            XSelectionRequestEvent* req = &event->xselectionrequest;
-            if (req->selection != _sapp.x11.CLIPBOARD) {
-                break;
-            }
-            XSelectionEvent reply = {
-                .type = SelectionNotify,
-                .display = req->display,
-                .requestor = req->requestor,
-                .selection = req->selection,
-                .target = req->target,
-                .property = req->property,
-                .time = req->time
-            };
-            if (req->target == _sapp.x11.UTF8_STRING) {
-                XChangeProperty(_sapp.x11.display,
-                                req->requestor,
-                                req->property,
-                                _sapp.x11.UTF8_STRING,
-                                8,
-                                PropModeReplace,
-                                (unsigned char*) _sapp.clipboard.buffer,
-                                strlen(_sapp.clipboard.buffer));
-            } else if (req->target == _sapp.x11.TARGETS) {
-                XChangeProperty(_sapp.x11.display,
-                                req->requestor,
-                                req->property,
-                                XA_ATOM,
-                                32,
-                                PropModeReplace,
-                                (unsigned char*) &_sapp.x11.UTF8_STRING,
-                                1);
-            } else {
-                reply.property = None;
-            }
-            XSendEvent(_sapp.x11.display, req->requestor, False, 0, (XEvent*) &reply);
+        case SelectionRequest:
+            _sapp_x11_on_selectionrequest(event);
             break;
-        }
         case DestroyNotify:
             // not a bug
             break;
