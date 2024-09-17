@@ -9622,10 +9622,8 @@ _SOKOL_PRIVATE void _sapp_x11_init_extensions(void) {
     _sapp.x11.NET_WM_ICON             = XInternAtom(_sapp.x11.display, "_NET_WM_ICON", False);
     _sapp.x11.NET_WM_STATE            = XInternAtom(_sapp.x11.display, "_NET_WM_STATE", False);
     _sapp.x11.NET_WM_STATE_FULLSCREEN = XInternAtom(_sapp.x11.display, "_NET_WM_STATE_FULLSCREEN", False);
-    if (_sapp.clipboard.enabled) {
-        _sapp.x11.CLIPBOARD = XInternAtom(_sapp.x11.display, "CLIPBOARD", False);
-        _sapp.x11.TARGETS   = XInternAtom(_sapp.x11.display, "TARGETS", False);
-    }
+    _sapp.x11.CLIPBOARD = XInternAtom(_sapp.x11.display, "CLIPBOARD", False);
+    _sapp.x11.TARGETS   = XInternAtom(_sapp.x11.display, "TARGETS", False);
     if (_sapp.drop.enabled) {
         _sapp.x11.xdnd.XdndAware        = XInternAtom(_sapp.x11.display, "XdndAware", False);
         _sapp.x11.xdnd.XdndEnter        = XInternAtom(_sapp.x11.display, "XdndEnter", False);
@@ -11284,6 +11282,10 @@ _SOKOL_PRIVATE void _sapp_x11_on_selectionrequest(XEvent* event) {
     if (req->selection != _sapp.x11.CLIPBOARD) {
         return;
     }
+    if (!_sapp.clipboard.enabled) {
+        return;
+    }
+    SOKOL_ASSERT(_sapp.clipboard.buffer);
     XSelectionEvent reply;
     _sapp_clear(&reply, sizeof(reply));
     reply.type = SelectionNotify;
