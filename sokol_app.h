@@ -130,7 +130,7 @@
     screen keyboard     | ---     | ---   | ---   | YES   | TODO    |  YES
     swap interval       | YES     | YES   | YES   | YES   | TODO    |  YES
     high-dpi            | YES     | YES   | TODO  | YES   | YES     |  YES
-    clipboard           | YES     | YES   | TODO  | ---   | ---     |  YES
+    clipboard           | YES     | YES   | YES   | ---   | ---     |  YES
     MSAA                | YES     | YES   | YES   | YES   | YES     |  YES
     drag'n'drop         | YES     | YES   | YES   | ---   | ---     |  YES
     window icon         | YES     | YES(1)| YES   | ---   | ---     |  YES
