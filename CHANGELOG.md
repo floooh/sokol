@@ -5,8 +5,8 @@
 - The sokol_app.h Linux backend now has clipboard support. Many thanks to
   @Dvad for the initial PR with most of the work and @qwx9 for the addtional
   updates. See PR https://github.com/floooh/sokol/pull/1108 for details (this
-  isn't quite what ended up in sokol_app.h, because I did a couple of code
-  cleanup changes in during the merge).
+  isn't quite what ended up in sokol_app.h either, because I did a couple of code
+  cleanup changes during the merge).
 
 ### 10-Sep-2024
 
