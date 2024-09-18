@@ -2962,7 +2962,7 @@ typedef struct sg_glsl_shader_uniform {
     sg_uniform_type type;
     uint32_t offset;            // offset into uniform block struct
     uint16_t array_count;       // 0 for scalars, or >1 for arrays
-    uint8_t location_n;         // layout(location = n)
+    uint8_t glsl_location_n;    // layout(location = n)
 } sg_glsl_shader_uniform;
 
 typedef struct sg_shader_uniform_block {
@@ -5252,9 +5252,6 @@ typedef _sg_dummy_attachments_t _sg_attachments_t;
 
 #elif defined(_SOKOL_ANY_GL)
 
-#define _SG_GL_TEXTURE_SAMPLER_CACHE_SIZE (SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS * SG_NUM_SHADER_STAGES)
-#define _SG_GL_STORAGEBUFFER_STAGE_INDEX_PITCH (SG_MAX_SHADERSTAGE_STORAGEBUFFERS)
-
 typedef struct {
     _sg_slot_t slot;
     _sg_buffer_common_t cmn;
@@ -5296,30 +5293,22 @@ typedef struct {
 
 typedef struct {
     int num_uniforms;
-    _sg_gl_uniform_t uniforms[SG_MAX_UB_MEMBERS];
+    _sg_gl_uniform_t uniforms[SG_MAX_UNIFORMBLOCK_MEMBERS];
 } _sg_gl_uniform_block_t;
-
-typedef struct {
-    int gl_tex_slot;
-} _sg_gl_shader_image_sampler_t;
 
 typedef struct {
     _sg_str_t name;
 } _sg_gl_shader_attr_t;
 
 typedef struct {
-    _sg_gl_uniform_block_t uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
-    _sg_gl_shader_image_sampler_t image_samplers[SG_MAX_SHADERSTAGE_IMAGESAMPLERPAIRS];
-} _sg_gl_shader_stage_t;
-
-typedef struct {
     _sg_slot_t slot;
     _sg_shader_common_t cmn;
-    struct {
-        GLuint prog;
-        _sg_gl_shader_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
-        _sg_gl_shader_stage_t stage[SG_NUM_SHADER_STAGES];
-    } gl;
+    GLuint vs_prog;
+    GLuint fs_prog;
+    _sg_gl_shader_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
+    _sg_gl_uniform_block_t uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
+    uint8_t sbuf_binding[SG_MAX_STORAGEBUFFER_BINDSLOTS];
+    uint8_t tex_slot[SG_MAX_IMAGE_SAMPLER_PAIRS]; // GL texture unit index
 } _sg_gl_shader_t;
 typedef _sg_gl_shader_t _sg_shader_t;
 
@@ -5380,6 +5369,8 @@ typedef struct {
     GLuint sampler;
 } _sg_gl_cache_texture_sampler_bind_slot;
 
+#define _SG_GL_MAX_SBUF_BINDINGS (SG_MAX_STORAGEBUFFER_BINDSLOTS)
+#define _SG_GL_MAX_IMG_SMP_BINDINGS (SG_MAX_IMAGE_SAMPLER_PAIRS)
 typedef struct {
     sg_depth_state depth;
     sg_stencil_state stencil;
@@ -5395,12 +5386,12 @@ typedef struct {
     GLuint vertex_buffer;
     GLuint index_buffer;
     GLuint storage_buffer;  // general bind point
-    GLuint stage_storage_buffers[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_STORAGEBUFFERS];
+    GLuint storage_buffers[_SG_GL_MAX_SBUF_BINDINGS];
     GLuint stored_vertex_buffer;
     GLuint stored_index_buffer;
     GLuint stored_storage_buffer;
     GLuint prog;
-    _sg_gl_cache_texture_sampler_bind_slot texture_samplers[_SG_GL_TEXTURE_SAMPLER_CACHE_SIZE];
+    _sg_gl_cache_texture_sampler_bind_slot texture_samplers[_SG_GL_MAX_IMG_SMP_BINDINGS];
     _sg_gl_cache_texture_sampler_bind_slot stored_texture_sampler;
     int cur_ib_offset;
     GLenum cur_primitive_type;
@@ -6982,8 +6973,8 @@ _SOKOL_PRIVATE GLenum _sg_gl_usage(sg_usage u) {
 
 _SOKOL_PRIVATE GLenum _sg_gl_shader_stage(sg_shader_stage stage) {
     switch (stage) {
-        case SG_SHADERSTAGE_VS:     return GL_VERTEX_SHADER;
-        case SG_SHADERSTAGE_FS:     return GL_FRAGMENT_SHADER;
+        case SG_SHADERSTAGE_VERTEX:   return GL_VERTEX_SHADER;
+        case SG_SHADERSTAGE_FRAGMENT: return GL_FRAGMENT_SHADER;
         default: SOKOL_UNREACHABLE; return 0;
     }
 }
@@ -7796,12 +7787,6 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
 #endif
 
 //-- state cache implementation ------------------------------------------------
-_SOKOL_PRIVATE GLuint _sg_gl_storagebuffer_bind_index(int stage, int slot) {
-    SOKOL_ASSERT((stage >= 0) && (stage < SG_NUM_SHADER_STAGES));
-    SOKOL_ASSERT((slot >= 0) && (slot < SG_MAX_SHADERSTAGE_STORAGEBUFFERS));
-    return (GLuint) (stage * _SG_GL_STORAGEBUFFER_STAGE_INDEX_PITCH + slot);
-}
-
 _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
     if (force || (_sg.gl.cache.vertex_buffer != 0)) {
         glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -7820,16 +7805,13 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
         _sg.gl.cache.storage_buffer = 0;
         _sg_stats_add(gl.num_bind_buffer, 1);
     }
-    for (int stage = 0; stage < SG_NUM_SHADER_STAGES; stage++) {
-        for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGEBUFFERS; i++) {
-            if (force || (_sg.gl.cache.stage_storage_buffers[stage][i] != 0)) {
-                const GLuint bind_index = _sg_gl_storagebuffer_bind_index(stage, i);
-                if (_sg.features.storage_buffer) {
-                    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, bind_index, 0);
-                }
-                _sg.gl.cache.stage_storage_buffers[stage][i] = 0;
-                _sg_stats_add(gl.num_bind_buffer, 1);
+    for (size_t i = 0; i < _SG_GL_MAX_SBUF_BINDINGS; i++) {
+        if (force || (_sg.gl.cache.storage_buffers[i] != 0)) {
+            if (_sg.features.storage_buffer) {
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, 0);
             }
+            _sg.gl.cache.storage_buffers[i] = 0;
+            _sg_stats_add(gl.num_bind_buffer, 1);
         }
     }
 }
@@ -7861,15 +7843,13 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_buffer(GLenum target, GLuint buffer) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_gl_cache_bind_storage_buffer(int stage, int slot, GLuint buffer) {
-    SOKOL_ASSERT((stage >= 0) && (stage < SG_NUM_SHADER_STAGES));
-    SOKOL_ASSERT((slot >= 0) && (slot < SG_MAX_SHADERSTAGE_STORAGEBUFFERS));
-    if (_sg.gl.cache.stage_storage_buffers[stage][slot] != buffer) {
-        _sg.gl.cache.stage_storage_buffers[stage][slot] = buffer;
+_SOKOL_PRIVATE void _sg_gl_cache_bind_storage_buffer(uint8_t glsl_binding_n, GLuint buffer) {
+    SOKOL_ASSERT(glsl_binding_n < _SG_GL_MAX_SBUF_BINDINGS);
+    if (_sg.gl.cache.storage_buffers[glsl_binding_n] != buffer) {
+        _sg.gl.cache.storage_buffers[glsl_binding_n] = buffer;
         _sg.gl.cache.storage_buffer = buffer; // not a bug
-        GLuint bind_index = _sg_gl_storagebuffer_bind_index(stage, slot);
         if (_sg.features.storage_buffer) {
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, bind_index, buffer);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, glsl_binding_n, buffer);
         }
         _sg_stats_add(gl.num_bind_buffer, 1);
     }
@@ -7911,7 +7891,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_restore_buffer_binding(GLenum target) {
     }
 }
 
-// called when _sg_gl_discard_buffer()
+// called from _sg_gl_discard_buffer()
 _SOKOL_PRIVATE void _sg_gl_cache_invalidate_buffer(GLuint buf) {
     if (buf == _sg.gl.cache.vertex_buffer) {
         _sg.gl.cache.vertex_buffer = 0;
@@ -7928,15 +7908,12 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_buffer(GLuint buf) {
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
         _sg_stats_add(gl.num_bind_buffer, 1);
     }
-    for (int stage = 0; stage < SG_NUM_SHADER_STAGES; stage++) {
-        for (int i = 0; i < SG_MAX_SHADERSTAGE_STORAGEBUFFERS; i++) {
-            if (buf == _sg.gl.cache.stage_storage_buffers[stage][i]) {
-                _sg.gl.cache.stage_storage_buffers[stage][i] = 0;
-                _sg.gl.cache.storage_buffer = 0; // not a bug!
-                const GLuint bind_index = _sg_gl_storagebuffer_bind_index(stage, i);
-                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, bind_index, 0);
-                _sg_stats_add(gl.num_bind_buffer, 1);
-            }
+    for (size_t i = 0; i < _SG_GL_MAX_SBUF_BINDINGS; i++) {
+        if (buf == _sg.gl.cache.storage_buffers[i]) {
+            _sg.gl.cache.storage_buffers[i] = 0;
+            _sg.gl.cache.storage_buffer = 0; // not a bug!
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, 0);
+            _sg_stats_add(gl.num_bind_buffer, 1);
         }
     }
     if (buf == _sg.gl.cache.stored_vertex_buffer) {
@@ -7967,7 +7944,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_active_texture(GLenum texture) {
 
 _SOKOL_PRIVATE void _sg_gl_cache_clear_texture_sampler_bindings(bool force) {
     _SG_GL_CHECK_ERROR();
-    for (int i = 0; (i < _SG_GL_TEXTURE_SAMPLER_CACHE_SIZE) && (i < _sg.limits.gl_max_combined_texture_image_units); i++) {
+    for (int i = 0; (i < _SG_GL_MAX_IMG_SMP_BINDINGS) && (i < _sg.limits.gl_max_combined_texture_image_units); i++) {
         if (force || (_sg.gl.cache.texture_samplers[i].texture != 0)) {
             GLenum gl_texture_unit = (GLenum) (GL_TEXTURE0 + i);
             glActiveTexture(gl_texture_unit);
@@ -7988,19 +7965,19 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_texture_sampler_bindings(bool force) {
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE void _sg_gl_cache_bind_texture_sampler(int slot_index, GLenum target, GLuint texture, GLuint sampler) {
+_SOKOL_PRIVATE void _sg_gl_cache_bind_texture_sampler(uint8_t gl_tex_slot, GLenum target, GLuint texture, GLuint sampler) {
     /* it's valid to call this function with target=0 and/or texture=0
        target=0 will unbind the previous binding, texture=0 will clear
        the new binding
     */
-    SOKOL_ASSERT((slot_index >= 0) && (slot_index < _SG_GL_TEXTURE_SAMPLER_CACHE_SIZE));
-    if (slot_index >= _sg.limits.gl_max_combined_texture_image_units) {
+    SOKOL_ASSERT(gl_tex_slot < _SG_GL_MAX_IMG_SMP_BINDINGS);
+    if (gl_tex_slot >= _sg.limits.gl_max_combined_texture_image_units) {
         return;
     }
     _SG_GL_CHECK_ERROR();
-    _sg_gl_cache_texture_sampler_bind_slot* slot = &_sg.gl.cache.texture_samplers[slot_index];
+    _sg_gl_cache_texture_sampler_bind_slot* slot = &_sg.gl.cache.texture_samplers[gl_tex_slot];
     if ((slot->target != target) || (slot->texture != texture) || (slot->sampler != sampler)) {
-        _sg_gl_cache_active_texture((GLenum)(GL_TEXTURE0 + slot_index));
+        _sg_gl_cache_active_texture((GLenum)(GL_TEXTURE0 + gl_tex_slot));
         // if the target has changed, clear the previous binding on that target
         if ((target != slot->target) && (slot->target != 0)) {
             glBindTexture(slot->target, 0);
@@ -8014,7 +7991,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_texture_sampler(int slot_index, GLenum tar
             _sg_stats_add(gl.num_bind_texture, 1);
         }
         // apply new sampler (can be 0 to unbind)
-        glBindSampler((GLuint)slot_index, sampler);
+        glBindSampler(gl_tex_slot, sampler);
         _SG_GL_CHECK_ERROR();
         _sg_stats_add(gl.num_bind_sampler, 1);
 
@@ -8024,18 +8001,18 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_texture_sampler(int slot_index, GLenum tar
     }
 }
 
-_SOKOL_PRIVATE void _sg_gl_cache_store_texture_sampler_binding(int slot_index) {
-    SOKOL_ASSERT((slot_index >= 0) && (slot_index < _SG_GL_TEXTURE_SAMPLER_CACHE_SIZE));
-    _sg.gl.cache.stored_texture_sampler = _sg.gl.cache.texture_samplers[slot_index];
+_SOKOL_PRIVATE void _sg_gl_cache_store_texture_sampler_binding(uint8_t gl_tex_slot) {
+    SOKOL_ASSERT(gl_tex_slot < _SG_GL_MAX_IMG_SMP_BINDINGS);
+    _sg.gl.cache.stored_texture_sampler = _sg.gl.cache.texture_samplers[gl_tex_slot];
 }
 
-_SOKOL_PRIVATE void _sg_gl_cache_restore_texture_sampler_binding(int slot_index) {
-    SOKOL_ASSERT((slot_index >= 0) && (slot_index < _SG_GL_TEXTURE_SAMPLER_CACHE_SIZE));
+_SOKOL_PRIVATE void _sg_gl_cache_restore_texture_sampler_binding(uint8_t gl_tex_slot) {
+    SOKOL_ASSERT(gl_tex_slot < _SG_GL_MAX_IMG_SMP_BINDINGS);
     _sg_gl_cache_texture_sampler_bind_slot* slot = &_sg.gl.cache.stored_texture_sampler;
     if (slot->texture != 0) {
         // we only care about restoring valid ids
         SOKOL_ASSERT(slot->target != 0);
-        _sg_gl_cache_bind_texture_sampler(slot_index, slot->target, slot->texture, slot->sampler);
+        _sg_gl_cache_bind_texture_sampler(gl_tex_slot, slot->target, slot->texture, slot->sampler);
         slot->target = 0;
         slot->texture = 0;
         slot->sampler = 0;
@@ -8045,14 +8022,14 @@ _SOKOL_PRIVATE void _sg_gl_cache_restore_texture_sampler_binding(int slot_index)
 // called from _sg_gl_discard_texture() and _sg_gl_discard_sampler()
 _SOKOL_PRIVATE void _sg_gl_cache_invalidate_texture_sampler(GLuint tex, GLuint smp) {
     _SG_GL_CHECK_ERROR();
-    for (int i = 0; i < _SG_GL_TEXTURE_SAMPLER_CACHE_SIZE; i++) {
+    for (size_t i = 0; i < _SG_GL_MAX_IMG_SMP_BINDINGS; i++) {
         _sg_gl_cache_texture_sampler_bind_slot* slot = &_sg.gl.cache.texture_samplers[i];
         if ((0 != slot->target) && ((tex == slot->texture) || (smp == slot->sampler))) {
             _sg_gl_cache_active_texture((GLenum)(GL_TEXTURE0 + i));
             glBindTexture(slot->target, 0);
             _SG_GL_CHECK_ERROR();
             _sg_stats_add(gl.num_bind_texture, 1);
-            glBindSampler((GLuint)i, 0);
+            glBindSampler(i, 0);
             _SG_GL_CHECK_ERROR();
             _sg_stats_add(gl.num_bind_sampler, 1);
             slot->target = 0;
