@@ -16429,8 +16429,11 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
         }
 
         // MSL bind slot collision bit masks
+        #if defined(SOKOL_METAL)
         uint64_t msl_buf_bits = 0, msl_tex_bits = 0, msl_smp_bits = 0;
+        #elif defined(SOKOL_D3D11)
         uint64_t hlsl_buf_bits = 0, hlsl_tex_bits = 0, hlsl_smp_bits = 0;
+        #endif
         for (size_t ub_idx = 0; ub_idx < SG_MAX_UNIFORMBLOCK_BINDSLOTS; ub_idx++) {
             const sg_shader_uniform_block* ub_desc = &desc->uniform_blocks[ub_idx];
             if (ub_desc->stage == SG_SHADERSTAGE_NONE) {
@@ -16441,8 +16444,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             _SG_VALIDATE(ub_desc->msl_buffer_n < _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS, VALIDATE_SHADERDESC_UB_METAL_BUFFER_SLOT_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(msl_buf_bits, ub_desc->stage, ub_desc->msl_buffer_n), VALIDATE_SHADERDESC_UB_METAL_BUFFER_SLOT_COLLISION);
             msl_buf_bits = _sg_validate_set_slot_bit(msl_buf_bits, ub_desc->stage, ub_desc->msl_buffer_n);
-            #endif
-            #if defined(SOKOL_D3D11)
+            #elif defined(SOKOL_D3D11)
             _SG_VALIDATE(ub_desc->hlsl_register_b_n < _SG_D3D11_MAX_STAGE_UB_BINDINGS, VALIDATE_SHADERDESC_UB_HLSL_REGISTER_B_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(hlsl_buf_bits, ub_desc->stage, ub_desc->hlsl_register_b_n), VALIDATE_SHADERDESC_UB_HLSL_REGISTER_B_COLLISION);
             hlsl_buf_bits = _sg_validate_set_slot_bit(hlsl_buf_bits, ub_desc->stage, ub_desc->hlsl_register_b_n);
@@ -16490,8 +16492,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             _SG_VALIDATE(sbuf_desc->msl_buffer_n < _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS, VALIDATE_SHADERDESC_STORAGEBUFFER_METAL_BUFFER_SLOT_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(msl_buf_bits, sbuf_desc->stage, sbuf_desc->msl_buffer_n), VALIDATE_SHADERDESC_STORAGEBUFFER_METAL_BUFFER_SLOT_COLLISION);
             msl_buf_bits = _sg_validate_set_slot_bit(msl_buf_bits, sbuf_desc->stage, sbuf_desc->msl_buffer_n);
-            #endif
-            #if defined(SOKOL_D3D11)
+            #elif defined(SOKOL_D3D11)
             _SG_VALIDATE(sbuf_desc->hlsl_register_t_n < _SG_D3D11_MAX_STAGE_TEX_SBUF_BINDINGS, VALIDATE_SHADERDESC_STORAGEBUFFER_HLSL_REGISTER_T_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(hlsl_tex_bits, sbuf_desc->stage, sbuf_desc->hlsl_register_t_n), VALIDATE_SHADERDESC_STORAGEBUFFER_HLSL_REGISTER_T_COLLISION);
             hlsl_tex_bits = _sg_validate_set_slot_bit(hlsl_tex_bits, sbuf_desc->stage, sbuf_desc->hlsl_register_t_n);
@@ -16509,8 +16510,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             _SG_VALIDATE(img_desc->msl_texture_n < _SG_MTL_MAX_STAGE_IMAGE_BINDINGS, VALIDATE_SHADERDESC_IMAGE_METAL_TEXTURE_SLOT_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(msl_tex_bits, img_desc->stage, img_desc->msl_texture_n), VALIDATE_SHADERDESC_IMAGE_METAL_TEXTURE_SLOT_COLLISION);
             msl_tex_bits = _sg_validate_set_slot_bit(msl_tex_bits, img_desc->stage, img_desc->msl_texture_n);
-            #endif
-            #if defined(SOKOL_D3D11)
+            #elif defined(SOKOL_D3D11)
             _SG_VALIDATE(img_desc->hlsl_register_t_n < _SG_D3D11_MAX_STAGE_TEX_SBUF_BINDINGS, VALIDATE_SHADERDESC_IMAGE_HLSL_REGISTER_T_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(hlsl_tex_bits, img_desc->stage, img_desc->hlsl_register_t_n), VALIDATE_SHADERDESC_IMAGE_HLSL_REGISTER_T_COLLISION);
             hlsl_tex_bits = _sg_validate_set_slot_bit(hlsl_tex_bits, img_desc->stage, img_desc->hlsl_register_t_n);
@@ -16528,8 +16528,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             _SG_VALIDATE(smp_desc->msl_sampler_n < _SG_MTL_MAX_STAGE_SAMPLER_BINDINGS, VALIDATE_SHADERDESC_SAMPLER_METAL_SAMPLER_SLOT_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(msl_smp_bits, smp_desc->stage, smp_desc->msl_sampler_n), VALIDATE_SHADERDESC_SAMPLER_METAL_SAMPLER_SLOT_COLLISION);
             msl_smp_bits = _sg_validate_set_slot_bit(msl_smp_bits, smp_desc->stage, smp_desc->msl_sampler_n);
-            #endif
-            #if defined(SOKOL_D3D11)
+            #elif defined(SOKOL_D3D11)
             _SG_VALIDATE(smp_desc->hlsl_register_s_n < _SG_D3D11_MAX_STAGE_SMP_BINDINGS, VALIDATE_SHADERDESC_SAMPLER_HLSL_REGISTER_S_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(hlsl_smp_bits, smp_desc->stage, smp_desc->hlsl_register_s_n), VALIDATE_SHADERDESC_SAMPLER_HLSL_REGISTER_S_COLLISION);
             hlsl_smp_bits = _sg_validate_set_slot_bit(hlsl_smp_bits, smp_desc->stage, smp_desc->hlsl_register_s_n);
