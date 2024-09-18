@@ -3020,7 +3020,7 @@ typedef struct sg_shader_desc {
     uint32_t _start_canary;
     sg_shader_function vertex_func;
     sg_shader_function fragment_func;
-    sg_shader_vertex_attr vertex_attrs[SG_MAX_VERTEX_ATTRIBUTES];
+    sg_shader_vertex_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
     sg_shader_uniform_block uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
     sg_shader_storage_buffer storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
     sg_shader_image images[SG_MAX_IMAGE_BINDSLOTS];
@@ -10738,8 +10738,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
 
     // copy vertex attribute semantic names and indices
     for (size_t i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-        _sg_strcpy(&shd->d3d11.attrs[i].sem_name, desc->vertex_attrs[i].hlsl_sem_name);
-        shd->d3d11.attrs[i].sem_index = desc->vertex_attrs[i].hlsl_sem_index;
+        _sg_strcpy(&shd->d3d11.attrs[i].sem_name, desc->attrs[i].hlsl_sem_name);
+        shd->d3d11.attrs[i].sem_index = desc->attrs[i].hlsl_sem_index;
     }
 
     // copy HLSL bind slots
@@ -16413,11 +16413,11 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             // Dummy Backend, don't require source or bytecode
         #endif
         for (size_t i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-            if (desc->vertex_attrs[i].glsl_name) {
-                _SG_VALIDATE(strlen(desc->vertex_attrs[i].glsl_name) < _SG_STRING_SIZE, VALIDATE_SHADERDESC_ATTR_STRING_TOO_LONG);
+            if (desc->attrs[i].glsl_name) {
+                _SG_VALIDATE(strlen(desc->attrs[i].glsl_name) < _SG_STRING_SIZE, VALIDATE_SHADERDESC_ATTR_STRING_TOO_LONG);
             }
-            if (desc->vertex_attrs[i].hlsl_sem_name) {
-                _SG_VALIDATE(strlen(desc->vertex_attrs[i].hlsl_sem_name) < _SG_STRING_SIZE, VALIDATE_SHADERDESC_ATTR_STRING_TOO_LONG);
+            if (desc->attrs[i].hlsl_sem_name) {
+                _SG_VALIDATE(strlen(desc->attrs[i].hlsl_sem_name) < _SG_STRING_SIZE, VALIDATE_SHADERDESC_ATTR_STRING_TOO_LONG);
             }
         }
         // if shader byte code, the size must also be provided
