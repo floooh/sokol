@@ -3006,7 +3006,7 @@ typedef struct sg_shader_image_sampler_pair {
     sg_shader_stage stage;
     uint8_t image_slot;
     uint8_t sampler_slot;
-    uint8_t glsl_binding_n;         // GLSL layout(binding=n)
+    uint8_t glsl_location_n;        // GLSL layout(location=n)
 } sg_shader_image_sampler_pair;
 
 typedef struct sg_shader_function {
@@ -3529,7 +3529,6 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(GL_SHADER_COMPILATION_FAILED, "shader compilation failed (gl)") \
     _SG_LOGITEM_XMACRO(GL_SHADER_LINKING_FAILED, "shader linking failed (gl)") \
     _SG_LOGITEM_XMACRO(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER, "vertex attribute not found in shader (gl)") \
-    _SG_LOGITEM_XMACRO(GL_TEXTURE_NAME_NOT_FOUND_IN_SHADER, "texture name not found in shader (gl)") \
     _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_UNDEFINED, "framebuffer completeness check failed with GL_FRAMEBUFFER_UNDEFINED (gl)") \
     _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_INCOMPLETE_ATTACHMENT, "framebuffer completeness check failed with GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT (gl)") \
     _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_INCOMPLETE_MISSING_ATTACHMENT, "framebuffer completeness check failed with GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT (gl)") \
@@ -5303,12 +5302,13 @@ typedef struct {
 typedef struct {
     _sg_slot_t slot;
     _sg_shader_common_t cmn;
-    GLuint vs_prog;
-    GLuint fs_prog;
-    _sg_gl_shader_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
-    _sg_gl_uniform_block_t uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
-    uint8_t sbuf_binding[SG_MAX_STORAGEBUFFER_BINDSLOTS];
-    uint8_t tex_slot[SG_MAX_IMAGE_SAMPLER_PAIRS]; // GL texture unit index
+    struct {
+        GLuint prog;
+        _sg_gl_shader_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
+        _sg_gl_uniform_block_t uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
+        uint8_t sbuf_binding[SG_MAX_STORAGEBUFFER_BINDSLOTS];
+        uint8_t tex_slot[SG_MAX_IMAGE_SAMPLER_PAIRS]; // GL texture unit index
+    } gl;
 } _sg_gl_shader_t;
 typedef _sg_gl_shader_t _sg_shader_t;
 
@@ -8450,11 +8450,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
 
     // copy the optional vertex attribute names over
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-        _sg_strcpy(&shd->gl.attrs[i].name, desc->attrs[i].name);
+        _sg_strcpy(&shd->gl.attrs[i].name, desc->attrs[i].glsl_name);
     }
 
-    GLuint gl_vs = _sg_gl_compile_shader(SG_SHADERSTAGE_VS, desc->vs.source);
-    GLuint gl_fs = _sg_gl_compile_shader(SG_SHADERSTAGE_FS, desc->fs.source);
+    GLuint gl_vs = _sg_gl_compile_shader(SG_SHADERSTAGE_VERTEX, desc->vertex_func.source);
+    GLuint gl_fs = _sg_gl_compile_shader(SG_SHADERSTAGE_FRAGMENT, desc->fragment_func.source);
     if (!(gl_vs && gl_fs)) {
         return SG_RESOURCESTATE_FAILED;
     }
@@ -8485,69 +8485,64 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
 
     // resolve uniforms
     _SG_GL_CHECK_ERROR();
-    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
-        const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS)? &desc->vs : &desc->fs;
-        const _sg_shader_stage_t* stage = &shd->cmn.stage[stage_index];
-        _sg_gl_shader_stage_t* gl_stage = &shd->gl.stage[stage_index];
-        for (int ub_index = 0; ub_index < stage->num_uniform_blocks; ub_index++) {
-            const sg_shader_uniform_block_desc* ub_desc = &stage_desc->uniform_blocks[ub_index];
-            SOKOL_ASSERT(ub_desc->size > 0);
-            _sg_gl_uniform_block_t* ub = &gl_stage->uniform_blocks[ub_index];
-            SOKOL_ASSERT(ub->num_uniforms == 0);
-            uint32_t cur_uniform_offset = 0;
-            for (int u_index = 0; u_index < SG_MAX_UB_MEMBERS; u_index++) {
-                const sg_shader_uniform_desc* u_desc = &ub_desc->uniforms[u_index];
-                if (u_desc->type == SG_UNIFORMTYPE_INVALID) {
-                    break;
-                }
-                const uint32_t u_align = _sg_uniform_alignment(u_desc->type, u_desc->array_count, ub_desc->layout);
-                const uint32_t u_size = _sg_uniform_size(u_desc->type, u_desc->array_count, ub_desc->layout);
-                cur_uniform_offset = _sg_align_u32(cur_uniform_offset, u_align);
-                _sg_gl_uniform_t* u = &ub->uniforms[u_index];
-                u->type = u_desc->type;
-                u->count = (uint16_t) u_desc->array_count;
-                u->offset = (uint16_t) cur_uniform_offset;
-                cur_uniform_offset += u_size;
-                if (u_desc->name) {
-                    u->gl_loc = glGetUniformLocation(gl_prog, u_desc->name);
-                } else {
-                    u->gl_loc = u_index;
-                }
-                ub->num_uniforms++;
-            }
-            if (ub_desc->layout == SG_UNIFORMLAYOUT_STD140) {
-                cur_uniform_offset = _sg_align_u32(cur_uniform_offset, 16);
-            }
-            SOKOL_ASSERT(ub_desc->size == (size_t)cur_uniform_offset);
-            _SOKOL_UNUSED(cur_uniform_offset);
+    for (size_t ub_index = 0; ub_index < SG_MAX_UNIFORMBLOCK_BINDSLOTS; ub_index++) {
+        const sg_shader_uniform_block* ub_desc = &desc->uniform_blocks[ub_index];
+        if (ub_desc->stage == SG_SHADERSTAGE_NONE) {
+            continue;
         }
+        SOKOL_ASSERT(ub_desc->size > 0);
+        _sg_gl_uniform_block_t* ub = &shd->gl.uniform_blocks[ub_index];
+        SOKOL_ASSERT(ub->num_uniforms == 0);
+        uint32_t cur_uniform_offset = 0;
+        for (int u_index = 0; u_index < SG_MAX_UNIFORMBLOCK_MEMBERS; u_index++) {
+            const sg_glsl_shader_uniform* u_desc = &ub_desc->glsl_uniforms[u_index];
+            if (u_desc->type == SG_UNIFORMTYPE_INVALID) {
+                break;
+            }
+            const uint32_t u_align = _sg_uniform_alignment(u_desc->type, u_desc->array_count, ub_desc->layout);
+            const uint32_t u_size = _sg_uniform_size(u_desc->type, u_desc->array_count, ub_desc->layout);
+            cur_uniform_offset = _sg_align_u32(cur_uniform_offset, u_align);
+            _sg_gl_uniform_t* u = &ub->uniforms[u_index];
+            u->type = u_desc->type;
+            u->count = (uint16_t) u_desc->array_count;
+            u->offset = (uint16_t) cur_uniform_offset;
+            u->gl_loc = (GLint) u_desc->glsl_location_n;
+            cur_uniform_offset += u_size;
+            ub->num_uniforms++;
+        }
+        if (ub_desc->layout == SG_UNIFORMLAYOUT_STD140) {
+            cur_uniform_offset = _sg_align_u32(cur_uniform_offset, 16);
+        }
+        SOKOL_ASSERT(ub_desc->size == (size_t)cur_uniform_offset);
+        _SOKOL_UNUSED(cur_uniform_offset);
     }
 
-    // resolve combined image samplers
+    // copy storage buffer bind slots
+    for (size_t sbuf_index = 0; sbuf_index < SG_MAX_STORAGEBUFFER_BINDSLOTS; sbuf_index++) {
+        const sg_shader_storage_buffer* sbuf_desc = &desc->storage_buffers[sbuf_index];
+        if (sbuf_desc->stage == SG_SHADERSTAGE_NONE) {
+            continue;
+        }
+        SOKOL_ASSERT(sbuf_desc->glsl_binding_n < _SG_GL_MAX_SBUF_BINDINGS);
+        shd->gl.sbuf_binding[sbuf_index] = sbuf_desc->glsl_binding_n;
+    }
+
+    // record image sampler location in shader program
     _SG_GL_CHECK_ERROR();
     GLuint cur_prog = 0;
     glGetIntegerv(GL_CURRENT_PROGRAM, (GLint*)&cur_prog);
     glUseProgram(gl_prog);
-    int gl_tex_slot = 0;
-    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
-        const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS)? &desc->vs : &desc->fs;
-        const _sg_shader_stage_t* stage = &shd->cmn.stage[stage_index];
-        _sg_gl_shader_stage_t* gl_stage = &shd->gl.stage[stage_index];
-        for (int img_smp_index = 0; img_smp_index < stage->num_image_samplers; img_smp_index++) {
-            const sg_shader_image_sampler_pair_desc* img_smp_desc = &stage_desc->image_sampler_pairs[img_smp_index];
-            _sg_gl_shader_image_sampler_t* gl_img_smp = &gl_stage->image_samplers[img_smp_index];
-            SOKOL_ASSERT(img_smp_desc->glsl_name);
-            GLint gl_loc = glGetUniformLocation(gl_prog, img_smp_desc->glsl_name);
-            if (gl_loc != -1) {
-                gl_img_smp->gl_tex_slot = gl_tex_slot++;
-                glUniform1i(gl_loc, gl_img_smp->gl_tex_slot);
-            } else {
-                gl_img_smp->gl_tex_slot = -1;
-                _SG_ERROR(GL_TEXTURE_NAME_NOT_FOUND_IN_SHADER);
-                _SG_LOGMSG(GL_TEXTURE_NAME_NOT_FOUND_IN_SHADER, img_smp_desc->glsl_name);
-            }
+    GLint gl_tex_slot = 0;
+    for (size_t img_smp_index = 0; img_smp_index < SG_MAX_IMAGE_SAMPLER_PAIRS; img_smp_index++) {
+        const sg_shader_image_sampler_pair* img_smp_desc = &desc->image_sampler_pairs[img_smp_index];
+        if (img_smp_desc->stage == SG_SHADERSTAGE_NONE) {
+            continue;
         }
+        shd->gl.tex_slot[img_smp_index] = gl_tex_slot++;
+        GLint gl_loc = (GLint)img_smp_desc->glsl_location_n;
+        glUniform1i(gl_loc, gl_tex_slot);
     }
+
     // it's legal to call glUseProgram with 0
     glUseProgram(cur_prog);
     _SG_GL_CHECK_ERROR();
@@ -9245,48 +9240,38 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
 
 _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_t* bnd) {
     SOKOL_ASSERT(bnd);
-    SOKOL_ASSERT(bnd->pip);
+    SOKOL_ASSERT(bnd->pip && bnd->pip->shader);
+    SOKOL_ASSERT(bnd->pip->shader->slot.id == bnd->pip->cmn.shader_id.id);
     _SG_GL_CHECK_ERROR();
+    const _sg_shader_t* shd = bnd->pip->shader;
 
     // bind combined image-samplers
     _SG_GL_CHECK_ERROR();
-    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
-        const _sg_shader_stage_t* stage = &bnd->pip->shader->cmn.stage[stage_index];
-        const _sg_gl_shader_stage_t* gl_stage = &bnd->pip->shader->gl.stage[stage_index];
-        _sg_image_t** imgs = (stage_index == SG_SHADERSTAGE_VS) ? bnd->vs_imgs : bnd->fs_imgs;
-        _sg_sampler_t** smps = (stage_index == SG_SHADERSTAGE_VS) ? bnd->vs_smps : bnd->fs_smps;
-        const int num_imgs = (stage_index == SG_SHADERSTAGE_VS) ? bnd->num_vs_imgs : bnd->num_fs_imgs;
-        const int num_smps = (stage_index == SG_SHADERSTAGE_VS) ? bnd->num_vs_smps : bnd->num_fs_smps;
-        SOKOL_ASSERT(num_imgs == stage->num_images); _SOKOL_UNUSED(num_imgs);
-        SOKOL_ASSERT(num_smps == stage->num_samplers); _SOKOL_UNUSED(num_smps);
-        for (int img_smp_index = 0; img_smp_index < stage->num_image_samplers; img_smp_index++) {
-            const int gl_tex_slot = gl_stage->image_samplers[img_smp_index].gl_tex_slot;
-            if (gl_tex_slot != -1) {
-                const int img_index = stage->image_samplers[img_smp_index].image_slot;
-                const int smp_index = stage->image_samplers[img_smp_index].sampler_slot;
-                SOKOL_ASSERT(img_index < num_imgs);
-                SOKOL_ASSERT(smp_index < num_smps);
-                _sg_image_t* img = imgs[img_index];
-                _sg_sampler_t* smp = smps[smp_index];
-                const GLenum gl_tgt = img->gl.target;
-                const GLuint gl_tex = img->gl.tex[img->cmn.active_slot];
-                const GLuint gl_smp = smp->gl.smp;
-                _sg_gl_cache_bind_texture_sampler(gl_tex_slot, gl_tgt, gl_tex, gl_smp);
-            }
+    for (size_t img_smp_index = 0; img_smp_index < SG_MAX_IMAGE_SAMPLER_PAIRS; img_smp_index++) {
+        const _sg_shader_image_sampler_t* img_smp = &shd->cmn.image_samplers[img_smp_index];
+        if (img_smp->stage == SG_SHADERSTAGE_NONE) {
+            continue;
         }
+        const GLint gl_tex_slot = (GLint)shd->gl.tex_slot[img_smp_index];
+        SOKOL_ASSERT(img_smp->image_slot < SG_MAX_IMAGE_BINDSLOTS);
+        SOKOL_ASSERT(img_smp->sampler_slot < SG_MAX_SAMPLER_BINDSLOTS);
+        const _sg_image_t* img = bnd->imgs[img_smp->image_slot];
+        const _sg_sampler_t* smp = bnd->smps[img_smp->sampler_slot];
+        SOKOL_ASSERT(img);
+        SOKOL_ASSERT(smp);
+        const GLenum gl_tgt = img->gl.target;
+        const GLuint gl_tex = img->gl.tex[img->cmn.active_slot];
+        const GLuint gl_smp = smp->gl.smp;
+        _sg_gl_cache_bind_texture_sampler(gl_tex_slot, gl_tgt, gl_tex, gl_smp);
     }
     _SG_GL_CHECK_ERROR();
 
     // bind storage buffers
-    for (int slot = 0; slot < bnd->num_vs_sbufs; slot++) {
-        _sg_buffer_t* sb = bnd->vs_sbufs[slot];
-        GLuint gl_sb = sb->gl.buf[sb->cmn.active_slot];
-        _sg_gl_cache_bind_storage_buffer(SG_SHADERSTAGE_VS, slot, gl_sb);
-    }
-    for (int slot = 0; slot < bnd->num_fs_sbufs; slot++) {
-        _sg_buffer_t* sb = bnd->fs_sbufs[slot];
-        GLuint gl_sb = sb->gl.buf[sb->cmn.active_slot];
-        _sg_gl_cache_bind_storage_buffer(SG_SHADERSTAGE_FS, slot, gl_sb);
+    for (size_t sbuf_index = 0; sbuf_index < SG_MAX_STORAGEBUFFER_BINDSLOTS; sbuf_index++) {
+        const _sg_buffer_t* sbuf = bnd->sbufs[sbuf_index];
+        const uint8_t binding = shd->gl.sbuf_binding[sbuf_index];
+        GLuint gl_sbuf = sbuf->gl.buf[sbuf->cmn.active_slot];
+        _sg_gl_cache_bind_storage_buffer(binding, gl_sbuf);
     }
 
     // index buffer (can be 0)
@@ -9303,7 +9288,7 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_t* bnd) {
         GLuint gl_vb = 0;
         if (attr->vb_index >= 0) {
             // attribute is enabled
-            SOKOL_ASSERT(attr->vb_index < bnd->num_vbs);
+            SOKOL_ASSERT(attr->vb_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
             _sg_buffer_t* vb = bnd->vbs[attr->vb_index];
             SOKOL_ASSERT(vb);
             gl_vb = vb->gl.buf[vb->cmn.active_slot];
