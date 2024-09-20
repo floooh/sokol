@@ -2919,7 +2919,8 @@ static void _sgl_destroy_context(sgl_context ctx_id) {
 // >>misc
 
 static sgl_error_t _sgl_error_defaults(void) {
-    sgl_error_t defaults = {0};
+    sgl_error_t defaults;
+    _sgl_clear(&defaults, sizeof(defaults));
     return defaults;
 }
 
