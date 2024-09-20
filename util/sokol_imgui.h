@@ -2200,7 +2200,6 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         ImGui::CreateContext();
         ImGui::StyleColorsDark();
         ImGuiIO* io = &ImGui::GetIO();
-        ImGuiPlatformIO* pio = &ImGui::GetPlatformIO();
         if (!_simgui.desc.no_default_font) {
             io->Fonts->AddFontDefault();
         }
@@ -2208,7 +2207,6 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         igCreateContext(NULL);
         igStyleColorsDark(igGetStyle());
         ImGuiIO* io = igGetIO();
-        ImGuiPlatformIO* pio = igGetPlatformIO();
         if (!_simgui.desc.no_default_font) {
             ImFontAtlas_AddFontDefault(io->Fonts, NULL);
         }
@@ -2220,6 +2218,11 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         if (!_simgui.desc.disable_set_mouse_cursor) {
             io->BackendFlags |= ImGuiBackendFlags_HasMouseCursors;
         }
+        #if defined(__cplusplus)
+            ImGuiPlatformIO* pio = &ImGui::GetPlatformIO();
+        #else
+            ImGuiPlatformIO* pio = igGetPlatformIO();
+        #endif
         pio->Platform_SetClipboardTextFn = _simgui_set_clipboard;
         pio->Platform_GetClipboardTextFn = _simgui_get_clipboard;
     #endif
