@@ -16428,7 +16428,6 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             _SG_VALIDATE(desc->fragment_func.bytecode.size > 0, VALIDATE_SHADERDESC_NO_BYTECODE_SIZE);
         }
 
-        // MSL bind slot collision bit masks
         #if defined(SOKOL_METAL)
         uint64_t msl_buf_bits = 0, msl_tex_bits = 0, msl_smp_bits = 0;
         #elif defined(SOKOL_D3D11)
