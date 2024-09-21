@@ -2962,7 +2962,7 @@ typedef struct sg_glsl_shader_uniform {
     sg_uniform_type type;
     uint32_t offset;            // offset into uniform block struct
     uint16_t array_count;       // 0 for scalars, or >1 for arrays
-    uint8_t glsl_location_n;    // layout(location = n)
+    const char* glsl_name;      // glsl name binding is required on GL 4.1 and WebGL2
 } sg_glsl_shader_uniform;
 
 typedef struct sg_shader_uniform_block {
@@ -3006,7 +3006,7 @@ typedef struct sg_shader_image_sampler_pair {
     sg_shader_stage stage;
     uint8_t image_slot;
     uint8_t sampler_slot;
-    uint8_t glsl_location_n;        // GLSL layout(location=n)
+    const char* glsl_name;          // glsl name binding required because of GL 4.1 and WebGL2
 } sg_shader_image_sampler_pair;
 
 typedef struct sg_shader_function {
@@ -3529,6 +3529,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(GL_SHADER_COMPILATION_FAILED, "shader compilation failed (gl)") \
     _SG_LOGITEM_XMACRO(GL_SHADER_LINKING_FAILED, "shader linking failed (gl)") \
     _SG_LOGITEM_XMACRO(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER, "vertex attribute not found in shader (gl)") \
+    _SG_LOGITEM_XMACRO(GL_IMAGE_SAMPLER_NAME_NOT_FOUND_IN_SHADER, "image-sampler name not found in shader (gl)") \
     _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_UNDEFINED, "framebuffer completeness check failed with GL_FRAMEBUFFER_UNDEFINED (gl)") \
     _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_INCOMPLETE_ATTACHMENT, "framebuffer completeness check failed with GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT (gl)") \
     _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_INCOMPLETE_MISSING_ATTACHMENT, "framebuffer completeness check failed with GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT (gl)") \
@@ -3659,10 +3660,8 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_METAL_BUFFER_SLOT_COLLISION, "uniform block 'msl_buffer_n' must be unique across uniform blocks and storage buffers in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_HLSL_REGISTER_B_OUT_OF_RANGE, "uniform block 'hlsl_register_b_n' is out of range") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_HLSL_REGISTER_B_COLLISION, "uniform block 'hlsl_register_b_n' must be unique across uniform blocks in same shader stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_GLSL_UNIFORM_LOCATION_OUT_OF_RANGE, "glsl uniform 'glsl_location_n' is out of range") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_GLSL_UNIFORM_LOCATION_COLLISION, "glsl uniform 'glsl_location_n' must be unique across all uniforms and image-samplers on all shader stages") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_UB_MEMBERS, "GL backend requires uniform block member declarations") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_MEMBER_NAME, "uniform block member name missing") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_UNIFORM_GLSL_NAME, "uniform block member 'glsl_name' missing") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_SIZE_MISMATCH, "size of uniform block members doesn't match uniform block size") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_ARRAY_COUNT, "uniform array count must be >= 1") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_STD140_ARRAY_TYPE, "uniform arrays only allowed for FLOAT4, INT4, MAT4 in std140 layout") \
@@ -3685,12 +3684,11 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_SAMPLER_SLOT_OUT_OF_RANGE, "image-sampler-pair image slot index is out of range (sg_shader_desc.vs|fs.image_sampler_pairs[].sampler_slot)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_IMAGE_STAGE_MISMATCH, "image-sampler-pair stage doesn't match referenced image stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_SAMPLER_STAGE_MISMATCH, "image-sampler-pair stage doesn't match referenced sampler stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_GLSL_LOCATION_OUT_OF_RANGE, "image-sampler-pair 'glsl_location_n' is out of range") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_GLSL_LOCATION_COLLISION, "image-sampler-pair 'glsl_location_n' must be unique across all uniforms and image-samplers on all shader stages") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NONFILTERING_SAMPLER_REQUIRED, "shader stage: image sample type UNFILTERABLE_FLOAT, UINT, SINT can only be used with NONFILTERING sampler") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_COMPARISON_SAMPLER_REQUIRED, "shader stage: image sample type DEPTH can only be used with COMPARISON sampler") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_NOT_REFERENCED_BY_IMAGE_SAMPLER_PAIRS, "shader stage: one or more images are note referenced by  (sg_shader_desc.vs|fs.image_sampler_pairs[].image_slot)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_NOT_REFERENCED_BY_IMAGE_SAMPLER_PAIRS, "shader stage: one or more samplers are not referenced by image-sampler-pairs (sg_shader_desc.vs|fs.image_sampler_pairs[].sampler_slot)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_GLSL_NAME, "image-sampler-pair 'glsl_name' missing") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NONFILTERING_SAMPLER_REQUIRED, "image sample type UNFILTERABLE_FLOAT, UINT, SINT can only be used with NONFILTERING sampler") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_COMPARISON_SAMPLER_REQUIRED, "image sample type DEPTH can only be used with COMPARISON sampler") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_NOT_REFERENCED_BY_IMAGE_SAMPLER_PAIRS, "one or more images are note referenced by  (sg_shader_desc.vs|fs.image_sampler_pairs[].image_slot)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_NOT_REFERENCED_BY_IMAGE_SAMPLER_PAIRS, "one or more samplers are not referenced by image-sampler-pairs (sg_shader_desc.vs|fs.image_sampler_pairs[].sampler_slot)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_ATTR_STRING_TOO_LONG, "vertex attribute name/semantic string too long (max len 16)") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_CANARY, "sg_pipeline_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_SHADER, "sg_pipeline_desc.shader missing or invalid") \
@@ -5313,7 +5311,7 @@ typedef struct {
         _sg_gl_shader_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
         _sg_gl_uniform_block_t uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
         uint8_t sbuf_binding[SG_MAX_STORAGEBUFFER_BINDSLOTS];
-        uint8_t tex_slot[SG_MAX_IMAGE_SAMPLER_PAIRS]; // GL texture unit index
+        int8_t tex_slot[SG_MAX_IMAGE_SAMPLER_PAIRS]; // GL texture unit index
     } gl;
 } _sg_gl_shader_t;
 typedef _sg_gl_shader_t _sg_shader_t;
@@ -7971,12 +7969,12 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_texture_sampler_bindings(bool force) {
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE void _sg_gl_cache_bind_texture_sampler(uint8_t gl_tex_slot, GLenum target, GLuint texture, GLuint sampler) {
+_SOKOL_PRIVATE void _sg_gl_cache_bind_texture_sampler(int8_t gl_tex_slot, GLenum target, GLuint texture, GLuint sampler) {
     /* it's valid to call this function with target=0 and/or texture=0
        target=0 will unbind the previous binding, texture=0 will clear
        the new binding
     */
-    SOKOL_ASSERT(gl_tex_slot < _SG_GL_MAX_IMG_SMP_BINDINGS);
+    SOKOL_ASSERT((gl_tex_slot >= 0) && (gl_tex_slot < _SG_GL_MAX_IMG_SMP_BINDINGS));
     if (gl_tex_slot >= _sg.limits.gl_max_combined_texture_image_units) {
         return;
     }
@@ -7997,7 +7995,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_texture_sampler(uint8_t gl_tex_slot, GLenu
             _sg_stats_add(gl.num_bind_texture, 1);
         }
         // apply new sampler (can be 0 to unbind)
-        glBindSampler(gl_tex_slot, sampler);
+        glBindSampler((GLuint)gl_tex_slot, sampler);
         _SG_GL_CHECK_ERROR();
         _sg_stats_add(gl.num_bind_sampler, 1);
 
@@ -8007,13 +8005,13 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_texture_sampler(uint8_t gl_tex_slot, GLenu
     }
 }
 
-_SOKOL_PRIVATE void _sg_gl_cache_store_texture_sampler_binding(uint8_t gl_tex_slot) {
-    SOKOL_ASSERT(gl_tex_slot < _SG_GL_MAX_IMG_SMP_BINDINGS);
+_SOKOL_PRIVATE void _sg_gl_cache_store_texture_sampler_binding(int8_t gl_tex_slot) {
+    SOKOL_ASSERT((gl_tex_slot >= 0) && (gl_tex_slot < _SG_GL_MAX_IMG_SMP_BINDINGS));
     _sg.gl.cache.stored_texture_sampler = _sg.gl.cache.texture_samplers[gl_tex_slot];
 }
 
-_SOKOL_PRIVATE void _sg_gl_cache_restore_texture_sampler_binding(uint8_t gl_tex_slot) {
-    SOKOL_ASSERT(gl_tex_slot < _SG_GL_MAX_IMG_SMP_BINDINGS);
+_SOKOL_PRIVATE void _sg_gl_cache_restore_texture_sampler_binding(int8_t gl_tex_slot) {
+    SOKOL_ASSERT((gl_tex_slot >= 0) && (gl_tex_slot < _SG_GL_MAX_IMG_SMP_BINDINGS));
     _sg_gl_cache_texture_sampler_bind_slot* slot = &_sg.gl.cache.stored_texture_sampler;
     if (slot->texture != 0) {
         // we only care about restoring valid ids
@@ -8512,7 +8510,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
             u->type = u_desc->type;
             u->count = (uint16_t) u_desc->array_count;
             u->offset = (uint16_t) cur_uniform_offset;
-            u->gl_loc = (GLint) u_desc->glsl_location_n;
+            SOKOL_ASSERT(u_desc->glsl_name);
+            u->gl_loc = glGetUniformLocation(gl_prog, u_desc->glsl_name);
             cur_uniform_offset += u_size;
             ub->num_uniforms++;
         }
@@ -8544,9 +8543,16 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
         if (img_smp_desc->stage == SG_SHADERSTAGE_NONE) {
             continue;
         }
-        shd->gl.tex_slot[img_smp_index] = gl_tex_slot++;
-        GLint gl_loc = (GLint)img_smp_desc->glsl_location_n;
-        glUniform1i(gl_loc, gl_tex_slot);
+        SOKOL_ASSERT(img_smp_desc->glsl_name);
+        GLint gl_loc = glGetUniformLocation(gl_prog, img_smp_desc->glsl_name);
+        if (gl_loc != -1) {
+            glUniform1i(gl_loc, gl_tex_slot);
+            shd->gl.tex_slot[img_smp_index] = gl_tex_slot++;
+        } else {
+            shd->gl.tex_slot[img_smp_index] = -1;
+            _SG_ERROR(GL_IMAGE_SAMPLER_NAME_NOT_FOUND_IN_SHADER);
+            _SG_LOGMSG(GL_IMAGE_SAMPLER_NAME_NOT_FOUND_IN_SHADER, img_smp_desc->glsl_name);
+        }
     }
 
     // it's legal to call glUseProgram with 0
@@ -9258,22 +9264,27 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_t* bnd) {
         if (img_smp->stage == SG_SHADERSTAGE_NONE) {
             continue;
         }
-        const GLint gl_tex_slot = (GLint)shd->gl.tex_slot[img_smp_index];
-        SOKOL_ASSERT(img_smp->image_slot < SG_MAX_IMAGE_BINDSLOTS);
-        SOKOL_ASSERT(img_smp->sampler_slot < SG_MAX_SAMPLER_BINDSLOTS);
-        const _sg_image_t* img = bnd->imgs[img_smp->image_slot];
-        const _sg_sampler_t* smp = bnd->smps[img_smp->sampler_slot];
-        SOKOL_ASSERT(img);
-        SOKOL_ASSERT(smp);
-        const GLenum gl_tgt = img->gl.target;
-        const GLuint gl_tex = img->gl.tex[img->cmn.active_slot];
-        const GLuint gl_smp = smp->gl.smp;
-        _sg_gl_cache_bind_texture_sampler(gl_tex_slot, gl_tgt, gl_tex, gl_smp);
+        const int8_t gl_tex_slot = (GLint)shd->gl.tex_slot[img_smp_index];
+        if (gl_tex_slot != -1) {
+            SOKOL_ASSERT(img_smp->image_slot < SG_MAX_IMAGE_BINDSLOTS);
+            SOKOL_ASSERT(img_smp->sampler_slot < SG_MAX_SAMPLER_BINDSLOTS);
+            const _sg_image_t* img = bnd->imgs[img_smp->image_slot];
+            const _sg_sampler_t* smp = bnd->smps[img_smp->sampler_slot];
+            SOKOL_ASSERT(img);
+            SOKOL_ASSERT(smp);
+            const GLenum gl_tgt = img->gl.target;
+            const GLuint gl_tex = img->gl.tex[img->cmn.active_slot];
+            const GLuint gl_smp = smp->gl.smp;
+            _sg_gl_cache_bind_texture_sampler(gl_tex_slot, gl_tgt, gl_tex, gl_smp);
+        }
     }
     _SG_GL_CHECK_ERROR();
 
     // bind storage buffers
     for (size_t sbuf_index = 0; sbuf_index < SG_MAX_STORAGEBUFFER_BINDSLOTS; sbuf_index++) {
+        if (shd->cmn.storage_buffers[sbuf_index].stage == SG_SHADERSTAGE_NONE) {
+            continue;
+        }
         const _sg_buffer_t* sbuf = bnd->sbufs[sbuf_index];
         const uint8_t binding = shd->gl.sbuf_binding[sbuf_index];
         GLuint gl_sbuf = sbuf->gl.buf[sbuf->cmn.active_slot];
@@ -9351,6 +9362,9 @@ _SOKOL_PRIVATE void _sg_gl_apply_uniforms(int ub_bind_slot, const sg_range* data
     for (int u_index = 0; u_index < gl_ub->num_uniforms; u_index++) {
         const _sg_gl_uniform_t* u = &gl_ub->uniforms[u_index];
         SOKOL_ASSERT(u->type != SG_UNIFORMTYPE_INVALID);
+        if (u->gl_loc == -1) {
+            continue;
+        }
         _sg_stats_add(gl.num_uniform, 1);
         GLfloat* fptr = (GLfloat*) (((uint8_t*)data->ptr) + u->offset);
         GLint* iptr = (GLint*) (((uint8_t*)data->ptr) + u->offset);
@@ -16420,7 +16434,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
         #elif defined(SOKOL_D3D11)
         uint64_t hlsl_buf_bits = 0, hlsl_tex_bits = 0, hlsl_smp_bits = 0;
         #elif defined(_SOKOL_ANY_GL)
-        uint64_t glsl_loc_bits = 0, glsl_bnd_bits = 0;
+        uint64_t glsl_bnd_bits = 0;
         #endif
         for (size_t ub_idx = 0; ub_idx < SG_MAX_UNIFORMBLOCK_BINDSLOTS; ub_idx++) {
             const sg_shader_uniform_block* ub_desc = &desc->uniform_blocks[ub_idx];
@@ -16445,6 +16459,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 const sg_glsl_shader_uniform* u_desc = &ub_desc->glsl_uniforms[u_index];
                 if (u_desc->type != SG_UNIFORMTYPE_INVALID) {
                     _SG_VALIDATE(uniforms_continuous, VALIDATE_SHADERDESC_NO_CONT_UB_MEMBERS);
+                    _SG_VALIDATE(u_desc->glsl_name, VALIDATE_SHADERDESC_UB_UNIFORM_GLSL_NAME);
                     const int array_count = u_desc->array_count;
                     _SG_VALIDATE(array_count > 0, VALIDATE_SHADERDESC_UB_ARRAY_COUNT);
                     const uint32_t u_align = _sg_uniform_alignment(u_desc->type, array_count, ub_desc->layout);
@@ -16458,9 +16473,6 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                             _SG_VALIDATE((u_desc->type == SG_UNIFORMTYPE_FLOAT4) || (u_desc->type == SG_UNIFORMTYPE_INT4) || (u_desc->type == SG_UNIFORMTYPE_MAT4), VALIDATE_SHADERDESC_UB_STD140_ARRAY_TYPE);
                         }
                     }
-                    _SG_VALIDATE(u_desc->glsl_location_n < 64, VALIDATE_SHADERDESC_UB_GLSL_UNIFORM_LOCATION_OUT_OF_RANGE);
-                    _SG_VALIDATE(_sg_validate_slot_bits(glsl_loc_bits, SG_SHADERSTAGE_NONE, u_desc->glsl_location_n), VALIDATE_SHADERDESC_UB_GLSL_UNIFORM_LOCATION_COLLISION);
-                    glsl_loc_bits = _sg_validate_set_slot_bit(glsl_loc_bits, SG_SHADERSTAGE_NONE, u_desc->glsl_location_n);
                 } else {
                     uniforms_continuous = false;
                 }
@@ -16537,6 +16549,9 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             if (img_smp_desc->stage == SG_SHADERSTAGE_NONE) {
                 continue;
             }
+            #if defined(_SOKOL_ANY_GL)
+            _SG_VALIDATE(img_smp_desc->glsl_name != 0, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_GLSL_NAME);
+            #endif
             const bool img_slot_in_range = (img_smp_desc->image_slot >= 0) && (img_smp_desc->image_slot < SG_MAX_IMAGE_BINDSLOTS);
             const bool smp_slot_in_range = (img_smp_desc->sampler_slot >= 0) && (img_smp_desc->sampler_slot < SG_MAX_SAMPLER_BINDSLOTS);
             _SG_VALIDATE(img_slot_in_range, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_IMAGE_SLOT_OUT_OF_RANGE);
@@ -16559,11 +16574,6 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                     _SG_VALIDATE(needs_comparison && (smp_desc->sampler_type == SG_SAMPLERTYPE_COMPARISON), VALIDATE_SHADERDESC_COMPARISON_SAMPLER_REQUIRED);
                 }
             }
-            #if defined(_SOKOL_ANY_GL)
-            _SG_VALIDATE(img_smp_desc->glsl_location_n < _SG_GL_MAX_IMG_SMP_BINDINGS, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_GLSL_LOCATION_OUT_OF_RANGE);
-            _SG_VALIDATE(_sg_validate_slot_bits(glsl_loc_bits, SG_SHADERSTAGE_NONE, img_smp_desc->glsl_location_n), VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_GLSL_LOCATION_COLLISION);
-            glsl_loc_bits = _sg_validate_set_slot_bit(glsl_loc_bits, SG_SHADERSTAGE_NONE, img_smp_desc->glsl_location_n);
-            #endif
         }
         // each image and sampler must be referenced by an image sampler
         _SG_VALIDATE(img_slot_mask == ref_img_slot_mask, VALIDATE_SHADERDESC_IMAGE_NOT_REFERENCED_BY_IMAGE_SAMPLER_PAIRS);
