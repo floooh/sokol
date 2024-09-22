@@ -17020,8 +17020,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
 
 _SOKOL_PRIVATE bool _sg_validate_apply_uniforms(int ub_bind_slot, const sg_range* data) {
     #if !defined(SOKOL_DEBUG)
-        _SOKOL_UNUSED(stage_index);
-        _SOKOL_UNUSED(ub_index);
+        _SOKOL_UNUSED(ub_bind_slot);
         _SOKOL_UNUSED(data);
         return true;
     #else
