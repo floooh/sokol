@@ -13373,8 +13373,30 @@ _SOKOL_PRIVATE void _sg_mtl_pop_debug_group(void) {
 // >>wgpu
 #elif defined(SOKOL_WGPU)
 
-_SOKOL_PRIVATE WGPUBufferUsageFlags _sg_wgpu_buffer_usage(sg_buffer_type t, sg_usage u) {
-    WGPUBufferUsageFlags res = 0;
+#if !defined(__EMSCRIPTEN__)
+// FIXME: webgpu.h differences between Dawn and Emscripten webgpu.h
+#define wgpuBufferReference wgpuBufferAddRef
+#define wgpuTextureReference wgpuTextureAddRef
+#define wgpuTextureViewReference wgpuTextureViewAddRef
+#define wgpuSamplerReference wgpuSamplerAddRef
+#define WGPUSType_ShaderModuleWGSLDescriptor WGPUSType_ShaderSourceWGSL
+_SOKOL_PRIVATE WGPUStringView _sg_wgpu_stringview(const char* str) {
+    WGPUStringView res;
+    if (str) {
+        res.data = str;
+        res.length = strlen(str);
+    } else {
+        res.data = 0;
+        res.length = 0;
+    }
+    return res;
+}
+#else
+#define _sg_wgpu_stringview(str) str
+#endif
+
+_SOKOL_PRIVATE WGPUBufferUsage _sg_wgpu_buffer_usage(sg_buffer_type t, sg_usage u) {
+    WGPUBufferUsage res = 0;
     if (SG_BUFFERTYPE_VERTEXBUFFER == t) {
         res = WGPUBufferUsage_Vertex;
     } else if (SG_BUFFERTYPE_STORAGEBUFFER == t) {
@@ -13532,7 +13554,7 @@ _SOKOL_PRIVATE WGPUVertexFormat _sg_wgpu_vertexformat(sg_vertex_format f) {
         case SG_VERTEXFORMAT_HALF2:         return WGPUVertexFormat_Float16x2;
         case SG_VERTEXFORMAT_HALF4:         return WGPUVertexFormat_Float16x4;
         // FIXME! UINT10_N2 (see https://github.com/gpuweb/gpuweb/issues/4275)
-        case SG_VERTEXFORMAT_UINT10_N2:     return WGPUVertexFormat_Undefined;
+        // case SG_VERTEXFORMAT_UINT10_N2:     return WGPUVertexFormat_Undefined;
         default:
             SOKOL_UNREACHABLE;
             return WGPUVertexFormat_Force32;
@@ -13716,8 +13738,8 @@ _SOKOL_PRIVATE WGPUBlendFactor _sg_wgpu_blendfactor(sg_blend_factor f) {
     }
 }
 
-_SOKOL_PRIVATE WGPUColorWriteMaskFlags _sg_wgpu_colorwritemask(uint8_t m) {
-    WGPUColorWriteMaskFlags res = 0;
+_SOKOL_PRIVATE WGPUColorWriteMask _sg_wgpu_colorwritemask(uint8_t m) {
+    WGPUColorWriteMask res = 0;
     if (0 != (m & SG_COLORMASK_R)) {
         res |= WGPUColorWriteMask_Red;
     }
@@ -14469,7 +14491,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
         wgpu_buf_desc.usage = _sg_wgpu_buffer_usage(buf->cmn.type, buf->cmn.usage);
         wgpu_buf_desc.size = wgpu_buf_size;
         wgpu_buf_desc.mappedAtCreation = map_at_creation;
-        wgpu_buf_desc.label = desc->label;
+        wgpu_buf_desc.label = _sg_wgpu_stringview(desc->label);
         buf->wgpu.buf = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &wgpu_buf_desc);
         if (0 == buf->wgpu.buf) {
             _SG_ERROR(WGPU_CREATE_BUFFER_FAILED);
@@ -14577,7 +14599,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
     } else {
         WGPUTextureDescriptor wgpu_tex_desc;
         _sg_clear(&wgpu_tex_desc, sizeof(wgpu_tex_desc));
-        wgpu_tex_desc.label = desc->label;
+        wgpu_tex_desc.label = _sg_wgpu_stringview(desc->label);
         wgpu_tex_desc.usage = WGPUTextureUsage_TextureBinding|WGPUTextureUsage_CopyDst;
         if (desc->render_target) {
             wgpu_tex_desc.usage |= WGPUTextureUsage_RenderAttachment;
@@ -14603,7 +14625,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
         }
         WGPUTextureViewDescriptor wgpu_texview_desc;
         _sg_clear(&wgpu_texview_desc, sizeof(wgpu_texview_desc));
-        wgpu_texview_desc.label = desc->label;
+        wgpu_texview_desc.label = _sg_wgpu_stringview(desc->label);
         wgpu_texview_desc.dimension = _sg_wgpu_texture_view_dimension(img->cmn.type);
         wgpu_texview_desc.mipLevelCount = (uint32_t)img->cmn.num_mipmaps;
         if (img->cmn.type == SG_IMAGETYPE_CUBE) {
@@ -14650,7 +14672,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_sampler(_sg_sampler_t* smp, con
     } else {
         WGPUSamplerDescriptor wgpu_desc;
         _sg_clear(&wgpu_desc, sizeof(wgpu_desc));
-        wgpu_desc.label = desc->label;
+        wgpu_desc.label = _sg_wgpu_stringview(desc->label);
         wgpu_desc.addressModeU = _sg_wgpu_sampler_address_mode(desc->wrap_u);
         wgpu_desc.addressModeV = _sg_wgpu_sampler_address_mode(desc->wrap_v);
         wgpu_desc.addressModeW = _sg_wgpu_sampler_address_mode(desc->wrap_w);
@@ -14694,12 +14716,12 @@ _SOKOL_PRIVATE _sg_wgpu_shader_func_t _sg_wgpu_create_shader_func(const sg_shade
     WGPUShaderModuleWGSLDescriptor wgpu_shdmod_wgsl_desc;
     _sg_clear(&wgpu_shdmod_wgsl_desc, sizeof(wgpu_shdmod_wgsl_desc));
     wgpu_shdmod_wgsl_desc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
-    wgpu_shdmod_wgsl_desc.code = func->source;
+    wgpu_shdmod_wgsl_desc.code = _sg_wgpu_stringview(func->source);
 
     WGPUShaderModuleDescriptor wgpu_shdmod_desc;
     _sg_clear(&wgpu_shdmod_desc, sizeof(wgpu_shdmod_desc));
     wgpu_shdmod_desc.nextInChain = &wgpu_shdmod_wgsl_desc.chain;
-    wgpu_shdmod_desc.label = label;
+    wgpu_shdmod_desc.label = _sg_wgpu_stringview(label);
 
     res.module = wgpuDeviceCreateShaderModule(_sg.wgpu.dev, &wgpu_shdmod_desc);
     if (0 == res.module) {
@@ -14914,7 +14936,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     _sg_clear(&wgpu_ctgt_state, sizeof(wgpu_ctgt_state));
     WGPUBlendState wgpu_blend_state[SG_MAX_COLOR_ATTACHMENTS];
     _sg_clear(&wgpu_blend_state, sizeof(wgpu_blend_state));
-    wgpu_pip_desc.label = desc->label;
+    wgpu_pip_desc.label = _sg_wgpu_stringview(desc->label);
     wgpu_pip_desc.layout = wgpu_pip_layout;
     wgpu_pip_desc.vertex.module = shd->wgpu.vertex_func.module;
     wgpu_pip_desc.vertex.entryPoint = shd->wgpu.vertex_func.entry.buf;
@@ -15143,7 +15165,7 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(const sg_pass* pass) {
     _sg_clear(&wgpu_pass_desc, sizeof(wgpu_pass_desc));
     _sg_clear(&wgpu_color_att, sizeof(wgpu_color_att));
     _sg_clear(&wgpu_ds_att, sizeof(wgpu_ds_att));
-    wgpu_pass_desc.label = pass->label;
+    wgpu_pass_desc.label = _sg_wgpu_stringview(pass->label);
     if (atts) {
         SOKOL_ASSERT(atts->slot.state == SG_RESOURCESTATE_VALID);
         for (int i = 0; i < atts->cmn.num_colors; i++) {
