@@ -5832,7 +5832,6 @@ typedef struct {
     WGPUQueue queue;
     WGPUCommandEncoder cmd_enc;
     WGPURenderPassEncoder pass_enc;
-    WGPUBindGroup empty_bind_group;
     const _sg_pipeline_t* cur_pipeline;
     sg_pipeline cur_pipeline_id;
     _sg_wgpu_uniform_buffer_t uniform;
@@ -14323,8 +14322,7 @@ _SOKOL_PRIVATE void _sg_wgpu_set_bindgroup(_sg_wgpu_bindgroup_t* bg) {
             SOKOL_ASSERT(bg->bindgroup);
             wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, _SG_WGPU_IMG_SMP_SBUF_BINDGROUP_INDEX, bg->bindgroup, 0, 0);
         } else {
-            // a nullptr bindgroup means setting the empty bindgroup
-            wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, _SG_WGPU_IMG_SMP_SBUF_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
+            wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, _SG_WGPU_IMG_SMP_SBUF_BINDGROUP_INDEX, 0, 0, 0);
         }
     } else {
         _sg_stats_add(wgpu.bindings.num_skip_redundant_bindgroup, 1);
@@ -14437,19 +14435,6 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     _sg_wgpu_bindgroups_cache_init(desc);
     _sg_wgpu_bindings_cache_clear();
 
-    // create an empty bind group for shader stages without bound images
-    // FIXME: once WebGPU supports setting null objects, this can be removed
-    WGPUBindGroupLayoutDescriptor bgl_desc;
-    _sg_clear(&bgl_desc, sizeof(bgl_desc));
-    WGPUBindGroupLayout empty_bgl = wgpuDeviceCreateBindGroupLayout(_sg.wgpu.dev, &bgl_desc);
-    SOKOL_ASSERT(empty_bgl);
-    WGPUBindGroupDescriptor bg_desc;
-    _sg_clear(&bg_desc, sizeof(bg_desc));
-    bg_desc.layout = empty_bgl;
-    _sg.wgpu.empty_bind_group = wgpuDeviceCreateBindGroup(_sg.wgpu.dev, &bg_desc);
-    SOKOL_ASSERT(_sg.wgpu.empty_bind_group);
-    wgpuBindGroupLayoutRelease(empty_bgl);
-
     // create initial per-frame command encoder
     WGPUCommandEncoderDescriptor cmd_enc_desc;
     _sg_clear(&cmd_enc_desc, sizeof(cmd_enc_desc));
@@ -14465,7 +14450,6 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
     _sg_wgpu_bindgroups_cache_discard();
     _sg_wgpu_bindgroups_pool_discard();
     _sg_wgpu_uniform_buffer_discard();
-    wgpuBindGroupRelease(_sg.wgpu.empty_bind_group); _sg.wgpu.empty_bind_group = 0;
     wgpuCommandEncoderRelease(_sg.wgpu.cmd_enc); _sg.wgpu.cmd_enc = 0;
     wgpuQueueRelease(_sg.wgpu.queue); _sg.wgpu.queue = 0;
 }
@@ -15193,10 +15177,10 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(const sg_pass* pass) {
     _sg.wgpu.pass_enc = wgpuCommandEncoderBeginRenderPass(_sg.wgpu.cmd_enc, &wgpu_pass_desc);
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
 
-    // clear bindings cache and apply empty bind groups
+    // clear bindings cache and bindings
     _sg_wgpu_bindings_cache_clear();
-    wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, _SG_WGPU_UB_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
-    wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, _SG_WGPU_IMG_SMP_SBUF_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
+    wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, _SG_WGPU_UB_BINDGROUP_INDEX, 0, 0, 0);
+    wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, _SG_WGPU_IMG_SMP_SBUF_BINDGROUP_INDEX, 0, 0, 0);
     _sg_stats_add(wgpu.bindings.num_set_bindgroup, 1);
 }
 
