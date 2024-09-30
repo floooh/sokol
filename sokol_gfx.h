@@ -14258,7 +14258,7 @@ _SOKOL_PRIVATE void _sg_wgpu_bindings_cache_clear(void) {
     memset(&_sg.wgpu.bindings_cache, 0, sizeof(_sg.wgpu.bindings_cache));
 }
 
-_SOKOL_PRIVATE bool _sg_wgpu_bindings_cache_vb_dirty(int index, const _sg_buffer_t* vb, uint64_t offset) {
+_SOKOL_PRIVATE bool _sg_wgpu_bindings_cache_vb_dirty(size_t index, const _sg_buffer_t* vb, uint64_t offset) {
     SOKOL_ASSERT((index >= 0) && (index < SG_MAX_VERTEXBUFFER_BINDSLOTS));
     if (vb) {
         return (_sg.wgpu.bindings_cache.vbs[index].buffer.id != vb->slot.id)
@@ -14268,7 +14268,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_bindings_cache_vb_dirty(int index, const _sg_buffer
     }
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_bindings_cache_vb_update(int index, const _sg_buffer_t* vb, uint64_t offset) {
+_SOKOL_PRIVATE void _sg_wgpu_bindings_cache_vb_update(size_t index, const _sg_buffer_t* vb, uint64_t offset) {
     SOKOL_ASSERT((index >= 0) && (index < SG_MAX_VERTEXBUFFER_BINDSLOTS));
     if (vb) {
         _sg.wgpu.bindings_cache.vbs[index].buffer.id = vb->slot.id;
