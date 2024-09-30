@@ -3581,9 +3581,6 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(WGPU_CREATE_TEXTURE_VIEW_FAILED, "wgpuTextureCreateView() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_SAMPLER_FAILED, "wgpuDeviceCreateSampler() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_SHADER_MODULE_FAILED, "wgpuDeviceCreateShaderModule() failed") \
-    _SG_LOGITEM_XMACRO(WGPU_SHADER_TOO_MANY_IMAGES, "shader uses too many sampled images on shader stage (wgpu)") \
-    _SG_LOGITEM_XMACRO(WGPU_SHADER_TOO_MANY_SAMPLERS, "shader uses too many samplers on shader stage (wgpu)") \
-    _SG_LOGITEM_XMACRO(WGPU_SHADER_TOO_MANY_STORAGEBUFFERS, "shader uses too many storage buffer bindings on shader stage (wgpu)") \
     _SG_LOGITEM_XMACRO(WGPU_SHADER_CREATE_BINDGROUP_LAYOUT_FAILED, "wgpuDeviceCreateBindGroupLayout() for shader stage failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_PIPELINE_LAYOUT_FAILED, "wgpuDeviceCreatePipelineLayout() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_RENDER_PIPELINE_FAILED, "wgpuDeviceCreateRenderPipeline() failed") \
@@ -3660,6 +3657,8 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_METAL_BUFFER_SLOT_COLLISION, "uniform block 'msl_buffer_n' must be unique across uniform blocks and storage buffers in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_HLSL_REGISTER_B_OUT_OF_RANGE, "uniform block 'hlsl_register_b_n' is out of range") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_HLSL_REGISTER_B_COLLISION, "uniform block 'hlsl_register_b_n' must be unique across uniform blocks in same shader stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_WGSL_GROUP0_BINDING_OUT_OF_RANGE, "uniform block 'wgsl_group0_binding_n' is out of range") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_WGSL_GROUP0_BINDING_COLLISION, "uniform block 'wgsl_group0_binding_n' must be unique across all uniform blocks and shader stages") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_UB_MEMBERS, "GL backend requires uniform block member declarations") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_UNIFORM_GLSL_NAME, "uniform block member 'glsl_name' missing") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_SIZE_MISMATCH, "size of uniform block members doesn't match uniform block size") \
@@ -3671,15 +3670,21 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_HLSL_REGISTER_T_COLLISION, "storage_buffer 'hlsl_register_t_n' must be unique across storage buffers and images in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE, "storage buffer 'glsl_binding_n' is out of range") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_GLSL_BINDING_COLLISION, "storage buffer 'glsl_binding_n' must be unique across shader stages") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_WGSL_GROUP1_BINDING_OUT_OF_RANGE, "storage buffer 'wgsl_group1_binding_n' is out of range") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_WGSL_GROUP1_BINDING_COLLISION, "storage buffer 'wgsl_group1_binding_n' must be unique across shader stages") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_READONLY, "shader stage storage buffers must be readonly (sg_shader_desc.vs|fs.storage_buffers[].readonly)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_METAL_TEXTURE_SLOT_OUT_OF_RANGE, "image 'msl_texture_n' is out of range") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_METAL_TEXTURE_SLOT_COLLISION, "image 'msl_texture_n' must be unique in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_HLSL_REGISTER_T_OUT_OF_RANGE, "image 'hlsl_register_t_n' is out of range") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_HLSL_REGISTER_T_COLLISION, "image 'hlsl_register_t_n' must be unique across images and storage buffers in same shader stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_WGSL_GROUP1_BINDING_OUT_OF_RANGE, "image 'wgsl_group1_binding_n' is out of range") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_WGSL_GROUP1_BINDING_COLLISION, "image 'wgsl_group1_binding_n' must be unique across shader stages") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_METAL_SAMPLER_SLOT_OUT_OF_RANGE, "sampler 'msl_sampler_n' is out of range") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_METAL_SAMPLER_SLOT_COLLISION, "sampler 'msl_sampler_n' must be unique in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_HLSL_REGISTER_S_OUT_OF_RANGE, "sampler 'hlsl_register_s_n' is out of range") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_HLSL_REGISTER_S_COLLISION, "sampler 'hlsl_register_s_n' must be unique in same shader stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_WGSL_GROUP1_BINDING_OUT_OF_RANGE, "sampler 'wgsl_group1_binding_n' is out of range") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_WGSL_GROUP1_BINDING_COLLISION, "sampler 'wgsl_group1_binding_n' must be unique across shader stages") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_IMAGE_SLOT_OUT_OF_RANGE, "image-sampler-pair image slot index is out of range (sg_shader_desc.vs|fs.image_sampler_pairs[].image_slot)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_SAMPLER_SLOT_OUT_OF_RANGE, "image-sampler-pair image slot index is out of range (sg_shader_desc.vs|fs.image_sampler_pairs[].sampler_slot)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_IMAGE_STAGE_MISMATCH, "image-sampler-pair stage doesn't match referenced image stage") \
@@ -16419,29 +16424,14 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             _SG_VALIDATE(desc->fragment_func.bytecode.size > 0, VALIDATE_SHADERDESC_NO_BYTECODE_SIZE);
         }
 
-        // WGPU FIXME: max resource per shader stage1
-        //const int num_images = cmn_stage->num_images;
-        //if (num_images > (int)_sg.wgpu.limits.limits.maxSampledTexturesPerShaderStage) {
-        //    _SG_ERROR(WGPU_SHADER_TOO_MANY_IMAGES);
-        //    return SG_RESOURCESTATE_FAILED;
-        //}
-        //const int num_samplers = cmn_stage->num_samplers;
-        //if (num_samplers > (int)_sg.wgpu.limits.limits.maxSamplersPerShaderStage) {
-        //    _SG_ERROR(WGPU_SHADER_TOO_MANY_SAMPLERS);
-        //    return SG_RESOURCESTATE_FAILED;
-        //}
-        //const int num_sbufs = cmn_stage->num_storage_buffers;
-        //if  (num_sbufs > (int)_sg.wgpu.limits.limits.maxStorageBuffersPerShaderStage) {
-        //    _SG_ERROR(WGPU_SHADER_TOO_MANY_STORAGEBUFFERS);
-        //    return SG_RESOURCESTATE_FAILED;
-        //}
-
         #if defined(SOKOL_METAL)
         uint64_t msl_buf_bits = 0, msl_tex_bits = 0, msl_smp_bits = 0;
         #elif defined(SOKOL_D3D11)
         uint64_t hlsl_buf_bits = 0, hlsl_tex_bits = 0, hlsl_smp_bits = 0;
         #elif defined(_SOKOL_ANY_GL)
         uint64_t glsl_bnd_bits = 0;
+        #elif defined(SOKOL_WGPU)
+        uint64_t wgsl_group0_bits = 0, wgsl_group1_bits = 0;
         #endif
         for (size_t ub_idx = 0; ub_idx < SG_MAX_UNIFORMBLOCK_BINDSLOTS; ub_idx++) {
             const sg_shader_uniform_block* ub_desc = &desc->uniform_blocks[ub_idx];
@@ -16457,6 +16447,10 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             _SG_VALIDATE(ub_desc->hlsl_register_b_n < _SG_D3D11_MAX_STAGE_UB_BINDINGS, VALIDATE_SHADERDESC_UB_HLSL_REGISTER_B_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(hlsl_buf_bits, ub_desc->stage, ub_desc->hlsl_register_b_n), VALIDATE_SHADERDESC_UB_HLSL_REGISTER_B_COLLISION);
             hlsl_buf_bits = _sg_validate_set_slot_bit(hlsl_buf_bits, ub_desc->stage, ub_desc->hlsl_register_b_n);
+            #elif defined(SOKOL_WGPU)
+            _SG_VALIDATE(ub_desc->wgsl_group0_binding_n < _SG_WGPU_MAX_UB_BINDGROUP_ENTRIES, VALIDATE_SHADERDESC_UB_WGSL_GROUP0_BINDING_OUT_OF_RANGE);
+            _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group0_bits, SG_SHADERSTAGE_NONE, ub_desc->wgsl_group0_binding_n), VALIDATE_SHADERDESC_UB_WGSL_GROUP0_BINDING_COLLISION);
+            wgsl_group0_bits = _sg_validate_set_slot_bit(wgsl_group0_bits, SG_SHADERSTAGE_NONE, ub_desc->wgsl_group0_binding_n);
             #endif
             #if defined(_SOKOL_ANY_GL)
             bool uniforms_continuous = true;
@@ -16510,6 +16504,10 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             _SG_VALIDATE(sbuf_desc->glsl_binding_n < _SG_GL_MAX_SBUF_BINDINGS, VALIDATE_SHADERDESC_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(glsl_bnd_bits, SG_SHADERSTAGE_NONE, sbuf_desc->glsl_binding_n), VALIDATE_SHADERDESC_STORAGEBUFFER_GLSL_BINDING_COLLISION);
             glsl_bnd_bits = _sg_validate_set_slot_bit(glsl_bnd_bits, SG_SHADERSTAGE_NONE, sbuf_desc->glsl_binding_n);
+            #elif defined(SOKOL_WGPU)
+            _SG_VALIDATE(sbuf_desc->wgsl_group1_binding_n < _SG_WGPU_MAX_IMG_SMP_SBUF_BINDGROUP_ENTRIES, VALIDATE_SHADERDESC_STORAGEBUFFER_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
+            _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group1_bits, SG_SHADERSTAGE_NONE, sbuf_desc->wgsl_group1_binding_n), VALIDATE_SHADERDESC_STORAGEBUFFER_WGSL_GROUP1_BINDING_COLLISION);
+            wgsl_group1_bits = _sg_validate_set_slot_bit(wgsl_group1_bits, SG_SHADERSTAGE_NONE, sbuf_desc->wgsl_group1_binding_n);
             #endif
         }
 
@@ -16528,6 +16526,10 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             _SG_VALIDATE(img_desc->hlsl_register_t_n < _SG_D3D11_MAX_STAGE_TEX_SBUF_BINDINGS, VALIDATE_SHADERDESC_IMAGE_HLSL_REGISTER_T_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(hlsl_tex_bits, img_desc->stage, img_desc->hlsl_register_t_n), VALIDATE_SHADERDESC_IMAGE_HLSL_REGISTER_T_COLLISION);
             hlsl_tex_bits = _sg_validate_set_slot_bit(hlsl_tex_bits, img_desc->stage, img_desc->hlsl_register_t_n);
+            #elif defined(SOKOL_WGPU)
+            _SG_VALIDATE(img_desc->wgsl_group1_binding_n < _SG_WGPU_MAX_IMG_SMP_SBUF_BINDGROUP_ENTRIES, VALIDATE_SHADERDESC_IMAGE_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
+            _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group1_bits, SG_SHADERSTAGE_NONE, img_desc->wgsl_group1_binding_n), VALIDATE_SHADERDESC_IMAGE_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
+            wgsl_group1_bits = _sg_validate_set_slot_bit(wgsl_group1_bits, SG_SHADERSTAGE_NONE, img_desc->wgsl_group1_binding_n);
             #endif
         }
 
@@ -16546,6 +16548,10 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             _SG_VALIDATE(smp_desc->hlsl_register_s_n < _SG_D3D11_MAX_STAGE_SMP_BINDINGS, VALIDATE_SHADERDESC_SAMPLER_HLSL_REGISTER_S_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(hlsl_smp_bits, smp_desc->stage, smp_desc->hlsl_register_s_n), VALIDATE_SHADERDESC_SAMPLER_HLSL_REGISTER_S_COLLISION);
             hlsl_smp_bits = _sg_validate_set_slot_bit(hlsl_smp_bits, smp_desc->stage, smp_desc->hlsl_register_s_n);
+            #elif defined(SOKOL_WGPU)
+            _SG_VALIDATE(smp_desc->wgsl_group1_binding_n < _SG_WGPU_MAX_IMG_SMP_SBUF_BINDGROUP_ENTRIES, VALIDATE_SHADERDESC_SAMPLER_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
+            _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group1_bits, SG_SHADERSTAGE_NONE, smp_desc->wgsl_group1_binding_n), VALIDATE_SHADERDESC_SAMPLER_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
+            wgsl_group1_bits = _sg_validate_set_slot_bit(wgsl_group1_bits, SG_SHADERSTAGE_NONE, smp_desc->wgsl_group1_binding_n);
             #endif
         }
 
