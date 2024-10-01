@@ -5734,6 +5734,7 @@ typedef struct {
         _sg_wgpu_shader_func_t fragment_func;
         WGPUBindGroupLayout bgl_ub;
         WGPUBindGroup bg_ub;
+        size_t bg_ub_num_entries;
         WGPUBindGroupLayout bgl_img_smp_sbuf;
         uint8_t ub_grp0_bnd_n[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
         uint8_t img_grp1_bnd_n[SG_MAX_IMAGE_BINDSLOTS];
@@ -14789,6 +14790,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
     bg_desc.layout = shd->wgpu.bgl_ub;
     bg_desc.entryCount = bgl_index;
     bg_desc.entries = bg_entries;
+    shd->wgpu.bg_ub_num_entries = bgl_index;
     shd->wgpu.bg_ub = wgpuDeviceCreateBindGroup(_sg.wgpu.dev, &bg_desc);
     SOKOL_ASSERT(shd->wgpu.bg_ub);
 
@@ -14870,7 +14872,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     pip->wgpu.blend_color.a = (double) desc->blend_color.a;
 
     // - @group(0) for uniform blocks
-    // - @group(1) for all image and sampler resources
+    // - @group(1) for all image, sampler and storagebuffer resources
     WGPUBindGroupLayout wgpu_bgl[_SG_WGPU_NUM_BINDGROUPS];
     _sg_clear(&wgpu_bgl, sizeof(wgpu_bgl));
     wgpu_bgl[_SG_WGPU_UB_BINDGROUP_INDEX ] = shd->wgpu.bgl_ub;
@@ -15289,7 +15291,7 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(int ub_bind_slot, const sg_range* da
     wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc,
                                       _SG_WGPU_UB_BINDGROUP_INDEX,
                                       shd->wgpu.bg_ub,
-                                      SG_MAX_UNIFORMBLOCK_BINDSLOTS,
+                                      shd->wgpu.bg_ub_num_entries,
                                       _sg.wgpu.uniform.bind_offsets);
 }
 
