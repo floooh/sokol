@@ -16369,13 +16369,13 @@ _SOKOL_PRIVATE uint64_t _sg_validate_set_slot_bit(uint64_t bits, sg_shader_stage
     switch (stage) {
         case SG_SHADERSTAGE_NONE:
             SOKOL_ASSERT(slot < 64);
-            return bits | (1 << slot);
+            return bits | (1ULL << slot);
         case SG_SHADERSTAGE_VERTEX:
             SOKOL_ASSERT(slot < 32);
-            return bits | (1 << slot);
+            return bits | (1ULL << slot);
         case SG_SHADERSTAGE_FRAGMENT:
             SOKOL_ASSERT(slot < 32);
-            return bits | (1 << (32 + slot));
+            return bits | (1ULL << (32 + slot));
     }
     SOKOL_UNREACHABLE;
     return 0;
@@ -16386,15 +16386,15 @@ _SOKOL_PRIVATE bool _sg_validate_slot_bits(uint64_t bits, sg_shader_stage stage,
     switch (stage) {
         case SG_SHADERSTAGE_NONE:
             SOKOL_ASSERT(slot < 64);
-            mask = 1 << slot;
+            mask = 1ULL << slot;
             break;
         case SG_SHADERSTAGE_VERTEX:
             SOKOL_ASSERT(slot < 32);
-            mask = 1 << slot;
+            mask = 1ULL << slot;
             break;
         case SG_SHADERSTAGE_FRAGMENT:
             SOKOL_ASSERT(slot < 32);
-            mask = 1 << (32 + slot);
+            mask = 1ULL << (32 + slot);
             break;
         default:
             SOKOL_UNREACHABLE;
