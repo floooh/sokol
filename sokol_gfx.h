@@ -13402,7 +13402,7 @@ _SOKOL_PRIVATE WGPUOptionalBool _sg_wgpu_optional_bool(bool b) {
 }
 #else
 #define _sg_wgpu_stringview(str) str
-#define _sg_wgpu_optional_bool(bool b) (b)
+#define _sg_wgpu_optional_bool(b) (b)
 #endif
 
 _SOKOL_PRIVATE WGPUBufferUsage _sg_wgpu_buffer_usage(sg_buffer_type t, sg_usage u) {
