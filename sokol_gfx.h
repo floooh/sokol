@@ -13406,7 +13406,8 @@ _SOKOL_PRIVATE WGPUOptionalBool _sg_wgpu_optional_bool(bool b) {
 #endif
 
 _SOKOL_PRIVATE WGPUBufferUsage _sg_wgpu_buffer_usage(sg_buffer_type t, sg_usage u) {
-    WGPUBufferUsage res = 0;
+    // FIXME: change to WGPUBufferUsage once Emscripten and Dawn webgpu.h agree
+    int res = 0;
     if (SG_BUFFERTYPE_VERTEXBUFFER == t) {
         res = WGPUBufferUsage_Vertex;
     } else if (SG_BUFFERTYPE_STORAGEBUFFER == t) {
@@ -13417,7 +13418,7 @@ _SOKOL_PRIVATE WGPUBufferUsage _sg_wgpu_buffer_usage(sg_buffer_type t, sg_usage 
     if (SG_USAGE_IMMUTABLE != u) {
         res |= WGPUBufferUsage_CopyDst;
     }
-    return res;
+    return (WGPUBufferUsage)res;
 }
 
 _SOKOL_PRIVATE WGPULoadOp _sg_wgpu_load_op(WGPUTextureView view, sg_load_action a) {
@@ -13749,7 +13750,8 @@ _SOKOL_PRIVATE WGPUBlendFactor _sg_wgpu_blendfactor(sg_blend_factor f) {
 }
 
 _SOKOL_PRIVATE WGPUColorWriteMask _sg_wgpu_colorwritemask(uint8_t m) {
-    WGPUColorWriteMask res = 0;
+    // FIXME: change to WGPUColorWriteMask once Emscripten and Dawn webgpu.h agree
+    int res = 0;
     if (0 != (m & SG_COLORMASK_R)) {
         res |= WGPUColorWriteMask_Red;
     }
@@ -13762,7 +13764,7 @@ _SOKOL_PRIVATE WGPUColorWriteMask _sg_wgpu_colorwritemask(uint8_t m) {
     if (0 != (m & SG_COLORMASK_A)) {
         res |= WGPUColorWriteMask_Alpha;
     }
-    return res;
+    return (WGPUColorWriteMask)res;
 }
 
 _SOKOL_PRIVATE WGPUShaderStage _sg_wgpu_shader_stage(sg_shader_stage stage) {
