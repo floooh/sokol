@@ -14798,7 +14798,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
         bgl_entry->visibility = _sg_wgpu_shader_stage(shd->cmn.uniform_blocks[i].stage);
         bgl_entry->buffer.type = WGPUBufferBindingType_Uniform;
         bgl_entry->buffer.hasDynamicOffset = true;
-        bg_entry->binding = bgl_entries[bgl_index].binding;
+        bg_entry->binding = bgl_entry->binding;
         bg_entry->buffer = _sg.wgpu.uniform.buf;
         bg_entry->size = _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE;
         bgl_index += 1;
