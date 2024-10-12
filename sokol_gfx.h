@@ -5378,7 +5378,7 @@ typedef struct {
     GLuint sampler;
 } _sg_gl_cache_texture_sampler_bind_slot;
 
-#define _SG_GL_MAX_SBUF_BINDINGS (SG_MAX_STORAGEBUFFER_BINDSLOTS)
+#define _SG_GL_MAX_SBUF_BINDINGS (2 * SG_MAX_STORAGEBUFFER_BINDSLOTS)
 #define _SG_GL_MAX_IMG_SMP_BINDINGS (SG_MAX_IMAGE_SAMPLER_PAIRS)
 typedef struct {
     sg_depth_state depth;
@@ -5691,7 +5691,9 @@ typedef struct {
 #define _SG_WGPU_UB_BINDGROUP_INDEX (0)
 #define _SG_WGPU_IMG_SMP_SBUF_BINDGROUP_INDEX (1)
 #define _SG_WGPU_MAX_UB_BINDGROUP_ENTRIES (SG_MAX_UNIFORMBLOCK_BINDSLOTS)
+#define _SG_WGPU_MAX_UB_BINDGROUP_BIND_SLOTS (2 * SG_MAX_UNIFORMBLOCK_BINDSLOTS)
 #define _SG_WGPU_MAX_IMG_SMP_SBUF_BINDGROUP_ENTRIES (SG_MAX_IMAGE_BINDSLOTS + SG_MAX_SAMPLER_BINDSLOTS + SG_MAX_STORAGEBUFFER_BINDSLOTS)
+#define _SG_WGPU_MAX_IMG_SMP_SBUF_BIND_SLOTS (128)
 
 typedef struct {
     _sg_slot_t slot;
@@ -5785,17 +5787,22 @@ typedef struct {
 } _sg_wgpu_bindgroup_handle_t;
 
 typedef enum {
-    _SG_WGPU_BINDGROUPSCACHEITEMTYPE_NONE = 0,
-    _SG_WGPU_BINDGROUPSCACHEITEMTYPE_IMAGE = 0x1111111111111111,
-    _SG_WGPU_BINDGROUPSCACHEITEMTYPE_SAMPLER = 0x2222222222222222,
-    _SG_WGPU_BINDGROUPSCACHEITEMTYPE_STORAGEBUFFER = 0x3333333333333333,
-    _SG_WGPU_BINDGROUPSCACHEITEMTYPE_PIPELINE = 0x4444444444444444,
+    _SG_WGPU_BINDGROUPSCACHEITEMTYPE_NONE           = 0,
+    _SG_WGPU_BINDGROUPSCACHEITEMTYPE_IMAGE          = 0x00001111,
+    _SG_WGPU_BINDGROUPSCACHEITEMTYPE_SAMPLER        = 0x00002222,
+    _SG_WGPU_BINDGROUPSCACHEITEMTYPE_STORAGEBUFFER  = 0x00003333,
+    _SG_WGPU_BINDGROUPSCACHEITEMTYPE_PIPELINE       = 0x00004444,
 } _sg_wgpu_bindgroups_cache_item_type_t;
 
 #define _SG_WGPU_BINDGROUPSCACHEKEY_NUM_ITEMS (1 + _SG_WGPU_MAX_IMG_SMP_SBUF_BINDGROUP_ENTRIES)
 typedef struct {
     uint64_t hash;
-    // the format of cache key items is (_sg_wgpu_bindgroups_cache_item_type_t << 32) | handle.id,
+    // the format of cache key items is BBBBTTTTIIIIIIII
+    // where
+    //  - BBBB is 2x the WGPU binding
+    //  - TTTT is the _sg_wgpu_bindgroups_cache_item_type_t
+    //  - IIIIIIII is the resource id
+    //
     // where the item type is a per-resource-type bit pattern
     uint64_t items[_SG_WGPU_BINDGROUPSCACHEKEY_NUM_ITEMS];
 } _sg_wgpu_bindgroups_cache_key_t;
@@ -14019,24 +14026,28 @@ _SOKOL_PRIVATE uint64_t _sg_wgpu_hash(const void* key, int len, uint64_t seed) {
     return h;
 }
 
-_SOKOL_PRIVATE uint64_t _sg_wgpu_bindgroups_cache_item(_sg_wgpu_bindgroups_cache_item_type_t type, uint32_t id) {
-    return (((uint64_t)type) << 32) | id;
+_SOKOL_PRIVATE uint64_t _sg_wgpu_bindgroups_cache_item(_sg_wgpu_bindgroups_cache_item_type_t type, uint8_t wgpu_binding, uint32_t id) {
+    // key pattern is bbbbttttiiiiiiii
+    const uint64_t bb = (uint64_t)wgpu_binding;
+    const uint64_t tttt = (uint64_t)type;
+    const uint64_t iiiiiiii = (uint64_t)id;
+    return (bb << 56) | (bb << 48) | (tttt << 32) | iiiiiiii;
 }
 
 _SOKOL_PRIVATE uint64_t _sg_wgpu_bindgroups_cache_pip_item(uint32_t id) {
-    return _sg_wgpu_bindgroups_cache_item(_SG_WGPU_BINDGROUPSCACHEITEMTYPE_PIPELINE, id);
+    return _sg_wgpu_bindgroups_cache_item(_SG_WGPU_BINDGROUPSCACHEITEMTYPE_PIPELINE, 0xFF, id);
 }
 
-_SOKOL_PRIVATE uint64_t _sg_wgpu_bindgroups_cache_image_item(uint32_t id) {
-    return _sg_wgpu_bindgroups_cache_item(_SG_WGPU_BINDGROUPSCACHEITEMTYPE_IMAGE, id);
+_SOKOL_PRIVATE uint64_t _sg_wgpu_bindgroups_cache_image_item(uint8_t wgpu_binding, uint32_t id) {
+    return _sg_wgpu_bindgroups_cache_item(_SG_WGPU_BINDGROUPSCACHEITEMTYPE_IMAGE, wgpu_binding, id);
 }
 
-_SOKOL_PRIVATE uint64_t _sg_wgpu_bindgroups_cache_sampler_item(uint32_t id) {
-    return _sg_wgpu_bindgroups_cache_item(_SG_WGPU_BINDGROUPSCACHEITEMTYPE_SAMPLER, id);
+_SOKOL_PRIVATE uint64_t _sg_wgpu_bindgroups_cache_sampler_item(uint8_t wgpu_binding, uint32_t id) {
+    return _sg_wgpu_bindgroups_cache_item(_SG_WGPU_BINDGROUPSCACHEITEMTYPE_SAMPLER, wgpu_binding, id);
 }
 
-_SOKOL_PRIVATE uint64_t _sg_wgpu_bindgroups_cache_sbuf_item(uint32_t id) {
-    return _sg_wgpu_bindgroups_cache_item(_SG_WGPU_BINDGROUPSCACHEITEMTYPE_STORAGEBUFFER, id);
+_SOKOL_PRIVATE uint64_t _sg_wgpu_bindgroups_cache_sbuf_item(uint8_t wgpu_binding, uint32_t id) {
+    return _sg_wgpu_bindgroups_cache_item(_SG_WGPU_BINDGROUPSCACHEITEMTYPE_STORAGEBUFFER, wgpu_binding, id);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_init_bindgroups_cache_key(_sg_wgpu_bindgroups_cache_key_t* key, const _sg_bindings_t* bnd) {
@@ -14052,30 +14063,36 @@ _SOKOL_PRIVATE void _sg_wgpu_init_bindgroups_cache_key(_sg_wgpu_bindgroups_cache
             continue;
         }
         SOKOL_ASSERT(bnd->imgs[i]);
-        const size_t item_idx = 1 + shd->wgpu.img_grp1_bnd_n[i];
+        const size_t item_idx = i + 1;
         SOKOL_ASSERT(item_idx < _SG_WGPU_BINDGROUPSCACHEKEY_NUM_ITEMS);
         SOKOL_ASSERT(0 == key->items[item_idx]);
-        key->items[item_idx] = _sg_wgpu_bindgroups_cache_image_item(bnd->imgs[i]->slot.id);
+        const uint8_t wgpu_binding = shd->wgpu.img_grp1_bnd_n[i];
+        const uint32_t id = bnd->imgs[i]->slot.id;
+        key->items[item_idx] = _sg_wgpu_bindgroups_cache_image_item(wgpu_binding, id);
     }
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
         if (shd->cmn.samplers[i].stage == SG_SHADERSTAGE_NONE) {
             continue;
         }
         SOKOL_ASSERT(bnd->smps[i]);
-        const size_t item_idx = 1 + shd->wgpu.smp_grp1_bnd_n[i];
+        const size_t item_idx = i + 1 + SG_MAX_IMAGE_BINDSLOTS;
         SOKOL_ASSERT(item_idx < _SG_WGPU_BINDGROUPSCACHEKEY_NUM_ITEMS);
         SOKOL_ASSERT(0 == key->items[item_idx]);
-        key->items[item_idx] = _sg_wgpu_bindgroups_cache_sampler_item(bnd->smps[i]->slot.id);
+        const uint8_t wgpu_binding = shd->wgpu.smp_grp1_bnd_n[i];
+        const uint32_t id = bnd->smps[i]->slot.id;
+        key->items[item_idx] = _sg_wgpu_bindgroups_cache_sampler_item(wgpu_binding, id);
     }
     for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
         if (shd->cmn.storage_buffers[i].stage == SG_SHADERSTAGE_NONE) {
             continue;
         }
         SOKOL_ASSERT(bnd->sbufs[i]);
-        const size_t item_idx = 1 + shd->wgpu.sbuf_grp1_bnd_n[i];
+        const size_t item_idx = i + 1 + SG_MAX_IMAGE_BINDSLOTS + SG_MAX_SAMPLER_BINDSLOTS;
         SOKOL_ASSERT(item_idx < _SG_WGPU_BINDGROUPSCACHEKEY_NUM_ITEMS);
         SOKOL_ASSERT(0 == key->items[item_idx]);
-        key->items[item_idx] = _sg_wgpu_bindgroups_cache_sbuf_item(bnd->sbufs[i]->slot.id);
+        const uint8_t wgpu_binding = shd->wgpu.sbuf_grp1_bnd_n[i];
+        const uint32_t id = bnd->sbufs[i]->slot.id;
+        key->items[item_idx] = _sg_wgpu_bindgroups_cache_sbuf_item(wgpu_binding, id);
     }
     key->hash = _sg_wgpu_hash(&key->items, (int)sizeof(key->items), 0x1234567887654321);
 }
@@ -14232,7 +14249,8 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_bindgroups_cache_get(uint64_t hash) {
 // called from wgpu resource destroy functions to also invalidate any
 // bindgroups cache slot and bindgroup referencing that resource
 _SOKOL_PRIVATE void _sg_wgpu_bindgroups_cache_invalidate(_sg_wgpu_bindgroups_cache_item_type_t type, uint32_t id) {
-    const uint64_t key_item = _sg_wgpu_bindgroups_cache_item(type, id);
+    const uint64_t key_mask = 0x0000FFFFFFFFFFFF;
+    const uint64_t key_item = _sg_wgpu_bindgroups_cache_item(type, 0, id) & key_mask;
     SOKOL_ASSERT(_sg.wgpu.bindgroups_cache.items);
     for (uint32_t cache_item_idx = 0; cache_item_idx < _sg.wgpu.bindgroups_cache.num; cache_item_idx++) {
         const uint32_t bg_id = _sg.wgpu.bindgroups_cache.items[cache_item_idx].id;
@@ -14242,7 +14260,7 @@ _SOKOL_PRIVATE void _sg_wgpu_bindgroups_cache_invalidate(_sg_wgpu_bindgroups_cac
             // check if resource is in bindgroup, if yes discard bindgroup and invalidate cache slot
             bool invalidate_cache_item = false;
             for (int key_item_idx = 0; key_item_idx < _SG_WGPU_BINDGROUPSCACHEKEY_NUM_ITEMS; key_item_idx++) {
-                if (bg->key.items[key_item_idx] == key_item) {
+                if ((bg->key.items[key_item_idx] & key_mask) == key_item) {
                     invalidate_cache_item = true;
                     break;
                 }
@@ -14390,8 +14408,10 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_index_buffer(_sg_bindings_t* bnd) {
             SOKOL_ASSERT(buf_size > offset);
             const uint64_t max_bytes = buf_size - offset;
             wgpuRenderPassEncoderSetIndexBuffer(_sg.wgpu.pass_enc, ib->wgpu.buf, format, offset, max_bytes);
+        /* FIXME: the else-pass should actually set a null index buffer, but that doesn't seem to work yet
         } else {
             wgpuRenderPassEncoderSetIndexBuffer(_sg.wgpu.pass_enc, 0, WGPUIndexFormat_Undefined, 0, 0);
+        */
         }
         _sg_stats_add(wgpu.bindings.num_set_index_buffer, 1);
     } else {
@@ -14411,8 +14431,10 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_vertex_buffers(_sg_bindings_t* bnd) {
                 SOKOL_ASSERT(buf_size > offset);
                 const uint64_t max_bytes = buf_size - offset;
                 wgpuRenderPassEncoderSetVertexBuffer(_sg.wgpu.pass_enc, slot, vb->wgpu.buf, offset, max_bytes);
+            /* FIXME: the else-pass should actually set a null vertex buffer, but that doesn't seem to work yet
             } else {
                 wgpuRenderPassEncoderSetVertexBuffer(_sg.wgpu.pass_enc, slot, 0, 0, 0);
+            */
             }
             _sg_stats_add(wgpu.bindings.num_set_vertex_buffer, 1);
         } else {
@@ -16367,42 +16389,62 @@ _SOKOL_PRIVATE bool _sg_validate_sampler_desc(const sg_sampler_desc* desc) {
     #endif
 }
 
-_SOKOL_PRIVATE uint64_t _sg_validate_set_slot_bit(uint64_t bits, sg_shader_stage stage, uint8_t slot) {
-    switch (stage) {
-        case SG_SHADERSTAGE_NONE:
-            SOKOL_ASSERT(slot < 64);
-            return bits | (1ULL << slot);
-        case SG_SHADERSTAGE_VERTEX:
-            SOKOL_ASSERT(slot < 32);
-            return bits | (1ULL << slot);
-        case SG_SHADERSTAGE_FRAGMENT:
-            SOKOL_ASSERT(slot < 32);
-            return bits | (1ULL << (32 + slot));
-    }
-    SOKOL_UNREACHABLE;
-    return 0;
+typedef struct {
+    uint64_t lo, hi;
+} _sg_u128_t;
+
+_sg_u128_t _sg_u128(void) {
+    _sg_u128_t res;
+    _sg_clear(&res, sizeof(res));
+    return res;
 }
 
-_SOKOL_PRIVATE bool _sg_validate_slot_bits(uint64_t bits, sg_shader_stage stage, uint8_t slot) {
-    uint64_t mask = 0;
+_SOKOL_PRIVATE _sg_u128_t _sg_validate_set_slot_bit(_sg_u128_t bits, sg_shader_stage stage, uint8_t slot) {
     switch (stage) {
         case SG_SHADERSTAGE_NONE:
-            SOKOL_ASSERT(slot < 64);
-            mask = 1ULL << slot;
+            SOKOL_ASSERT(slot < 128);
+            if (slot < 64) {
+                bits.lo |= 1ULL << slot;
+            } else {
+                bits.hi |= 1ULL << (slot - 64);
+            }
             break;
         case SG_SHADERSTAGE_VERTEX:
-            SOKOL_ASSERT(slot < 32);
-            mask = 1ULL << slot;
+            SOKOL_ASSERT(slot < 64);
+            bits.lo |= 1ULL << slot;
             break;
         case SG_SHADERSTAGE_FRAGMENT:
-            SOKOL_ASSERT(slot < 32);
-            mask = 1ULL << (32 + slot);
+            SOKOL_ASSERT(slot < 64);
+            bits.hi |= 1ULL << slot;
+            break;
+    }
+    return bits;
+}
+
+_SOKOL_PRIVATE bool _sg_validate_slot_bits(_sg_u128_t bits, sg_shader_stage stage, uint8_t slot) {
+    _sg_u128_t mask = _sg_u128();
+    switch (stage) {
+        case SG_SHADERSTAGE_NONE:
+            SOKOL_ASSERT(slot < 128);
+            if (slot < 64) {
+                mask.lo = 1ULL << slot;
+            } else {
+                mask.hi = 1ULL << (slot - 64);
+            }
+            break;
+        case SG_SHADERSTAGE_VERTEX:
+            SOKOL_ASSERT(slot < 64);
+            mask.lo = 1ULL << slot;
+            break;
+        case SG_SHADERSTAGE_FRAGMENT:
+            SOKOL_ASSERT(slot < 64);
+            mask.hi = 1ULL << slot;
             break;
         default:
             SOKOL_UNREACHABLE;
             break;
     }
-    return (bits & mask) == 0;
+    return ((bits.lo & mask.lo) == 0) && ((bits.hi & mask.hi) == 0);
 }
 
 _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
@@ -16445,13 +16487,18 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
         }
 
         #if defined(SOKOL_METAL)
-        uint64_t msl_buf_bits = 0, msl_tex_bits = 0, msl_smp_bits = 0;
+        _sg_u128_t msl_buf_bits = _sg_u128();
+        _sg_u128_t msl_tex_bits = _sg_u128();
+        _sg_u128_t msl_smp_bits = _sg_u128();
         #elif defined(SOKOL_D3D11)
-        uint64_t hlsl_buf_bits = 0, hlsl_tex_bits = 0, hlsl_smp_bits = 0;
+        _sg_u128_t hlsl_buf_bits = _sg_u128();
+        _sg_u128_t hlsl_tex_bits = _sg_u128();
+        _sg_u128_t hlsl_smp_bits = _sg_u128();
         #elif defined(_SOKOL_ANY_GL)
-        uint64_t glsl_bnd_bits = 0;
+        _sg_u128_t glsl_bnd_bits = _sg_u128();
         #elif defined(SOKOL_WGPU)
-        uint64_t wgsl_group0_bits = 0, wgsl_group1_bits = 0;
+        _sg_u128_t wgsl_group0_bits = _sg_u128();
+        _sg_u128_t wgsl_group1_bits = _sg_u128();
         #endif
         for (size_t ub_idx = 0; ub_idx < SG_MAX_UNIFORMBLOCK_BINDSLOTS; ub_idx++) {
             const sg_shader_uniform_block* ub_desc = &desc->uniform_blocks[ub_idx];
@@ -16468,7 +16515,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             _SG_VALIDATE(_sg_validate_slot_bits(hlsl_buf_bits, ub_desc->stage, ub_desc->hlsl_register_b_n), VALIDATE_SHADERDESC_UB_HLSL_REGISTER_B_COLLISION);
             hlsl_buf_bits = _sg_validate_set_slot_bit(hlsl_buf_bits, ub_desc->stage, ub_desc->hlsl_register_b_n);
             #elif defined(SOKOL_WGPU)
-            _SG_VALIDATE(ub_desc->wgsl_group0_binding_n < _SG_WGPU_MAX_UB_BINDGROUP_ENTRIES, VALIDATE_SHADERDESC_UB_WGSL_GROUP0_BINDING_OUT_OF_RANGE);
+            _SG_VALIDATE(ub_desc->wgsl_group0_binding_n < _SG_WGPU_MAX_UB_BINDGROUP_BIND_SLOTS, VALIDATE_SHADERDESC_UB_WGSL_GROUP0_BINDING_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group0_bits, SG_SHADERSTAGE_NONE, ub_desc->wgsl_group0_binding_n), VALIDATE_SHADERDESC_UB_WGSL_GROUP0_BINDING_COLLISION);
             wgsl_group0_bits = _sg_validate_set_slot_bit(wgsl_group0_bits, SG_SHADERSTAGE_NONE, ub_desc->wgsl_group0_binding_n);
             #endif
@@ -16525,7 +16572,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             _SG_VALIDATE(_sg_validate_slot_bits(glsl_bnd_bits, SG_SHADERSTAGE_NONE, sbuf_desc->glsl_binding_n), VALIDATE_SHADERDESC_STORAGEBUFFER_GLSL_BINDING_COLLISION);
             glsl_bnd_bits = _sg_validate_set_slot_bit(glsl_bnd_bits, SG_SHADERSTAGE_NONE, sbuf_desc->glsl_binding_n);
             #elif defined(SOKOL_WGPU)
-            _SG_VALIDATE(sbuf_desc->wgsl_group1_binding_n < _SG_WGPU_MAX_IMG_SMP_SBUF_BINDGROUP_ENTRIES, VALIDATE_SHADERDESC_STORAGEBUFFER_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
+            _SG_VALIDATE(sbuf_desc->wgsl_group1_binding_n < _SG_WGPU_MAX_IMG_SMP_SBUF_BIND_SLOTS, VALIDATE_SHADERDESC_STORAGEBUFFER_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group1_bits, SG_SHADERSTAGE_NONE, sbuf_desc->wgsl_group1_binding_n), VALIDATE_SHADERDESC_STORAGEBUFFER_WGSL_GROUP1_BINDING_COLLISION);
             wgsl_group1_bits = _sg_validate_set_slot_bit(wgsl_group1_bits, SG_SHADERSTAGE_NONE, sbuf_desc->wgsl_group1_binding_n);
             #endif
@@ -16547,7 +16594,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             _SG_VALIDATE(_sg_validate_slot_bits(hlsl_tex_bits, img_desc->stage, img_desc->hlsl_register_t_n), VALIDATE_SHADERDESC_IMAGE_HLSL_REGISTER_T_COLLISION);
             hlsl_tex_bits = _sg_validate_set_slot_bit(hlsl_tex_bits, img_desc->stage, img_desc->hlsl_register_t_n);
             #elif defined(SOKOL_WGPU)
-            _SG_VALIDATE(img_desc->wgsl_group1_binding_n < _SG_WGPU_MAX_IMG_SMP_SBUF_BINDGROUP_ENTRIES, VALIDATE_SHADERDESC_IMAGE_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
+            _SG_VALIDATE(img_desc->wgsl_group1_binding_n < _SG_WGPU_MAX_IMG_SMP_SBUF_BIND_SLOTS, VALIDATE_SHADERDESC_IMAGE_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group1_bits, SG_SHADERSTAGE_NONE, img_desc->wgsl_group1_binding_n), VALIDATE_SHADERDESC_IMAGE_WGSL_GROUP1_BINDING_COLLISION);
             wgsl_group1_bits = _sg_validate_set_slot_bit(wgsl_group1_bits, SG_SHADERSTAGE_NONE, img_desc->wgsl_group1_binding_n);
             #endif
@@ -16569,7 +16616,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             _SG_VALIDATE(_sg_validate_slot_bits(hlsl_smp_bits, smp_desc->stage, smp_desc->hlsl_register_s_n), VALIDATE_SHADERDESC_SAMPLER_HLSL_REGISTER_S_COLLISION);
             hlsl_smp_bits = _sg_validate_set_slot_bit(hlsl_smp_bits, smp_desc->stage, smp_desc->hlsl_register_s_n);
             #elif defined(SOKOL_WGPU)
-            _SG_VALIDATE(smp_desc->wgsl_group1_binding_n < _SG_WGPU_MAX_IMG_SMP_SBUF_BINDGROUP_ENTRIES, VALIDATE_SHADERDESC_SAMPLER_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
+            _SG_VALIDATE(smp_desc->wgsl_group1_binding_n < _SG_WGPU_MAX_IMG_SMP_SBUF_BIND_SLOTS, VALIDATE_SHADERDESC_SAMPLER_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group1_bits, SG_SHADERSTAGE_NONE, smp_desc->wgsl_group1_binding_n), VALIDATE_SHADERDESC_SAMPLER_WGSL_GROUP1_BINDING_COLLISION);
             wgsl_group1_bits = _sg_validate_set_slot_bit(wgsl_group1_bits, SG_SHADERSTAGE_NONE, smp_desc->wgsl_group1_binding_n);
             #endif
