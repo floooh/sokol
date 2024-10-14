@@ -1,5 +1,12 @@
 ## Updates
 
+### 14-Oct-2024
+
+- sokol_gfx.h: The pixel format RG11B10F is now marked as renderable in the GL
+  backend (generally on desktop GL, and on GLES3/WebGL2 when the necessary
+  extensions are present). Many thanks to @kcbanner for the PR
+  (https://github.com/floooh/sokol/pull/1121)!
+
 ### 17-Sep-2024
 
 - The sokol_app.h Linux backend now has clipboard support. Many thanks to
