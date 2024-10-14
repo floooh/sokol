@@ -4369,7 +4369,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
 #error "SOKOL_MALLOC/CALLOC/FREE macros are no longer supported, please use sg_desc.allocator to override memory allocation functions"
 #endif
 
-#include <stdlib.h> // malloc, free
+#include <stdlib.h> // malloc, free, qsort
 #include <string.h> // memset
 #include <float.h> // FLT_MAX
 
@@ -5737,6 +5737,9 @@ typedef struct {
         WGPUBindGroupLayout bgl_ub;
         WGPUBindGroup bg_ub;
         WGPUBindGroupLayout bgl_img_smp_sbuf;
+        // a mapping of sokol-gfx bind slots to setBindGroup dynamic-offset-array indices
+        uint8_t ub_num_dynoffsets;
+        uint8_t ub_dynoffsets[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
         // indexed by sokol-gfx bind slot:
         uint8_t ub_grp0_bnd_n[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
         uint8_t img_grp1_bnd_n[SG_MAX_IMAGE_BINDSLOTS];
@@ -14759,6 +14762,16 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_shader_func(_sg_wgpu_shader_func_t* func) {
     }
 }
 
+typedef struct { uint8_t sokol_slot, wgpu_slot; } _sg_wgpu_dynoffset_mapping_t;
+
+_SOKOL_PRIVATE int _sg_wgpu_dynoffset_cmp(const void* a, const void* b) {
+    const _sg_wgpu_dynoffset_mapping_t* aa = (const _sg_wgpu_dynoffset_mapping_t*)a;
+    const _sg_wgpu_dynoffset_mapping_t* bb = (const _sg_wgpu_dynoffset_mapping_t*)b;
+    if (aa->wgpu_slot < bb->wgpu_slot) return -1;
+    else if (aa->wgpu_slot > bb->wgpu_slot) return 1;
+    return 0;
+}
+
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(desc->vertex_func.source && desc->fragment_func.source);
@@ -14776,6 +14789,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
     }
 
     // create bind group layout and bind group for uniform blocks
+    // NOTE also need to create a mapping of sokol ub bind slots to array indices
+    // for the dynamic offsets array in the setBindGroup call
     SOKOL_ASSERT(_SG_WGPU_MAX_UB_BINDGROUP_ENTRIES <= _SG_WGPU_MAX_IMG_SMP_SBUF_BINDGROUP_ENTRIES);
     WGPUBindGroupLayoutEntry bgl_entries[_SG_WGPU_MAX_IMG_SMP_SBUF_BINDGROUP_ENTRIES];
     _sg_clear(bgl_entries, sizeof(bgl_entries));
@@ -14785,7 +14800,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
     _sg_clear(&bg_entries, sizeof(bg_entries));
     WGPUBindGroupDescriptor bg_desc;
     _sg_clear(&bg_desc, sizeof(bg_desc));
-
+    _sg_wgpu_dynoffset_mapping_t dynoffset_map[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
+    _sg_clear(dynoffset_map, sizeof(dynoffset_map));
     size_t bgl_index = 0;
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
         if (shd->cmn.uniform_blocks[i].stage == SG_SHADERSTAGE_NONE) {
@@ -14801,6 +14817,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
         bg_entry->binding = bgl_entry->binding;
         bg_entry->buffer = _sg.wgpu.uniform.buf;
         bg_entry->size = _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE;
+        dynoffset_map[i].sokol_slot = i;
+        dynoffset_map[i].wgpu_slot = bgl_entry->binding;
         bgl_index += 1;
     }
     bgl_desc.entryCount = bgl_index;
@@ -14812,6 +14830,16 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
     bg_desc.entries = bg_entries;
     shd->wgpu.bg_ub = wgpuDeviceCreateBindGroup(_sg.wgpu.dev, &bg_desc);
     SOKOL_ASSERT(shd->wgpu.bg_ub);
+
+    // sort the dynoffset_map by wgpu bindings, this is because the
+    // dynamic offsets of the WebGPU setBindGroup call must be in
+    // 'binding order', not 'bindgroup entry order'
+    qsort(dynoffset_map, bgl_index, sizeof(_sg_wgpu_dynoffset_mapping_t), _sg_wgpu_dynoffset_cmp);
+    shd->wgpu.ub_num_dynoffsets = bgl_index;
+    for (uint8_t i = 0; i < bgl_index; i++) {
+        const uint8_t sokol_slot = dynoffset_map[i].sokol_slot;
+        shd->wgpu.ub_dynoffsets[sokol_slot] = i;
+    }
 
     // create bind group layout for images, samplers and storage buffers
     _sg_clear(bgl_entries, sizeof(bgl_entries));
@@ -15270,18 +15298,23 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_scissor_rect(int x, int y, int w, int h, bool
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_set_ub_bindgroup(const _sg_shader_t* shd) {
-    // remap offsets from sparse sokol-gfx bind slots to dense wgpu bindgroup layout
-    uint32_t wgpu_bind_offsets[_SG_WGPU_MAX_UB_BINDGROUP_ENTRIES];
-    size_t bg_index = 0;
+    // NOTE: dynamic offsets must be in binding order, not in BindGroupEntry order
+    SOKOL_ASSERT(shd->wgpu.ub_num_dynoffsets < SG_MAX_UNIFORMBLOCK_BINDSLOTS);
+    uint32_t dyn_offsets[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
+    _sg_clear(dyn_offsets, sizeof(dyn_offsets));
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
         if (shd->cmn.uniform_blocks[i].stage == SG_SHADERSTAGE_NONE) {
             continue;
         }
-        SOKOL_ASSERT(bg_index < _SG_WGPU_MAX_UB_BINDGROUP_ENTRIES);
-        wgpu_bind_offsets[bg_index] = _sg.wgpu.uniform.bind_offsets[i];
-        bg_index += 1;
+        uint8_t dynoffset_index = shd->wgpu.ub_dynoffsets[i];
+        SOKOL_ASSERT(dynoffset_index < shd->wgpu.ub_num_dynoffsets);
+        dyn_offsets[dynoffset_index] = _sg.wgpu.uniform.bind_offsets[i];
     }
-    wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, _SG_WGPU_UB_BINDGROUP_INDEX, shd->wgpu.bg_ub, bg_index, wgpu_bind_offsets);
+    wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc,
+        _SG_WGPU_UB_BINDGROUP_INDEX,
+        shd->wgpu.bg_ub,
+        shd->wgpu.ub_num_dynoffsets,
+        dyn_offsets);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
