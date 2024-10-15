@@ -7832,7 +7832,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
     for (size_t i = 0; i < _SG_GL_MAX_SBUF_BINDINGS; i++) {
         if (force || (_sg.gl.cache.storage_buffers[i] != 0)) {
             if (_sg.features.storage_buffer) {
-                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, 0);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, (GLuint)i, 0);
             }
             _sg.gl.cache.storage_buffers[i] = 0;
             _sg_stats_add(gl.num_bind_buffer, 1);
@@ -7936,7 +7936,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_buffer(GLuint buf) {
         if (buf == _sg.gl.cache.storage_buffers[i]) {
             _sg.gl.cache.storage_buffers[i] = 0;
             _sg.gl.cache.storage_buffer = 0; // not a bug!
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, 0);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, (GLuint)i, 0);
             _sg_stats_add(gl.num_bind_buffer, 1);
         }
     }
@@ -8053,7 +8053,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_texture_sampler(GLuint tex, GLuint s
             glBindTexture(slot->target, 0);
             _SG_GL_CHECK_ERROR();
             _sg_stats_add(gl.num_bind_texture, 1);
-            glBindSampler(i, 0);
+            glBindSampler((GLuint)i, 0);
             _SG_GL_CHECK_ERROR();
             _sg_stats_add(gl.num_bind_sampler, 1);
             slot->target = 0;
@@ -8567,7 +8567,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
         GLint gl_loc = glGetUniformLocation(gl_prog, img_smp_desc->glsl_name);
         if (gl_loc != -1) {
             glUniform1i(gl_loc, gl_tex_slot);
-            shd->gl.tex_slot[img_smp_index] = gl_tex_slot++;
+            shd->gl.tex_slot[img_smp_index] = (int8_t)gl_tex_slot++;
         } else {
             shd->gl.tex_slot[img_smp_index] = -1;
             _SG_ERROR(GL_IMAGE_SAMPLER_NAME_NOT_FOUND_IN_SHADER);
