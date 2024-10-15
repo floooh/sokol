@@ -1586,10 +1586,62 @@ static const uint8_t _sfons_fs_source_metal_sim[464] = {
     0x70,0x2c,0x20,0x69,0x6e,0x2e,0x75,0x76,0x2e,0x78,0x79,0x29,0x2e,0x78,0x29,0x20,
     0x2a,0x20,0x69,0x6e,0x2e,0x63,0x6f,0x6c,0x6f,0x72,0x3b,0x0a,0x20,0x20,0x20,0x20,
     0x72,0x65,0x74,0x75,0x72,0x6e,0x20,0x6f,0x75,0x74,0x3b,0x0a,0x7d,0x0a,0x0a,0x00,
-
 };
 #elif defined(SOKOL_D3D11)
-FIXME
+/*
+    cbuffer vs_params : register(b0)
+    {
+        row_major float4x4 _19_mvp : packoffset(c0);
+        row_major float4x4 _19_tm : packoffset(c4);
+    };
+
+
+    static float4 gl_Position;
+    static float gl_PointSize;
+    static float4 position;
+    static float psize;
+    static float4 uv;
+    static float2 texcoord0;
+    static float4 color;
+    static float4 color0;
+
+    struct SPIRV_Cross_Input
+    {
+        float4 position : TEXCOORD0;
+        float2 texcoord0 : TEXCOORD1;
+        float4 color0 : TEXCOORD2;
+        float psize : TEXCOORD3;
+    };
+
+    struct SPIRV_Cross_Output
+    {
+        float4 uv : TEXCOORD0;
+        float4 color : TEXCOORD1;
+        float4 gl_Position : SV_Position;
+    };
+
+    void vert_main()
+    {
+        gl_Position = mul(position, _19_mvp);
+        gl_PointSize = psize;
+        uv = mul(float4(texcoord0, 0.0f, 1.0f), _19_tm);
+        color = color0;
+    }
+
+    SPIRV_Cross_Output main(SPIRV_Cross_Input stage_input)
+    {
+        position = stage_input.position;
+        psize = stage_input.psize;
+        texcoord0 = stage_input.texcoord0;
+        color0 = stage_input.color0;
+        vert_main();
+        SPIRV_Cross_Output stage_output;
+        stage_output.gl_Position = gl_Position;
+        stage_output.uv = uv;
+        stage_output.color = color;
+        return stage_output;
+    }
+*/
 static const uint8_t _sfons_vs_bytecode_hlsl4[1032] = {
     0x44,0x58,0x42,0x43,0x74,0x7f,0x01,0xd9,0xf4,0xd5,0xed,0x1d,0x74,0xc1,0x30,0x27,
     0xd8,0xe9,0x9d,0x50,0x01,0x00,0x00,0x00,0x08,0x04,0x00,0x00,0x05,0x00,0x00,0x00,
@@ -1657,6 +1709,40 @@ static const uint8_t _sfons_vs_bytecode_hlsl4[1032] = {
     0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
     0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
 };
+/*
+    Texture2D<float4> tex : register(t0);
+    SamplerState smp : register(s0);
+
+    static float4 frag_color;
+    static float4 uv;
+    static float4 color;
+
+    struct SPIRV_Cross_Input
+    {
+        float4 uv : TEXCOORD0;
+        float4 color : TEXCOORD1;
+    };
+
+    struct SPIRV_Cross_Output
+    {
+        float4 frag_color : SV_Target0;
+    };
+
+    void frag_main()
+    {
+        frag_color = float4(1.0f, 1.0f, 1.0f, tex.Sample(smp, uv.xy).x) * color;
+    }
+
+    SPIRV_Cross_Output main(SPIRV_Cross_Input stage_input)
+    {
+        uv = stage_input.uv;
+        color = stage_input.color;
+        frag_main();
+        SPIRV_Cross_Output stage_output;
+        stage_output.frag_color = frag_color;
+        return stage_output;
+    }
+*/
 static const uint8_t _sfons_fs_bytecode_hlsl4[628] = {
     0x44,0x58,0x42,0x43,0xb6,0x66,0xf0,0xfc,0x09,0x54,0x2a,0x35,0x84,0x1d,0x27,0xd2,
     0xff,0xb3,0x2e,0xdb,0x01,0x00,0x00,0x00,0x74,0x02,0x00,0x00,0x05,0x00,0x00,0x00,
