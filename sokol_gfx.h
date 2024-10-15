@@ -16611,7 +16611,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             #endif
         }
 
-        uint64_t img_slot_mask = 0;
+        uint32_t img_slot_mask = 0;
         for (size_t img_idx = 0; img_idx < SG_MAX_IMAGE_BINDSLOTS; img_idx++) {
             const sg_shader_image* img_desc = &desc->images[img_idx];
             if (img_desc->stage == SG_SHADERSTAGE_NONE) {
@@ -16655,8 +16655,8 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             #endif
         }
 
-        uint64_t ref_img_slot_mask = 0;
-        uint64_t ref_smp_slot_mask = 0;
+        uint32_t ref_img_slot_mask = 0;
+        uint32_t ref_smp_slot_mask = 0;
         for (size_t img_smp_idx = 0; img_smp_idx < SG_MAX_IMAGE_SAMPLER_PAIRS; img_smp_idx++) {
             const sg_shader_image_sampler_pair* img_smp_desc = &desc->image_sampler_pairs[img_smp_idx];
             if (img_smp_desc->stage == SG_SHADERSTAGE_NONE) {
