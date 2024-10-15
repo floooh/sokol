@@ -1648,7 +1648,54 @@ static const uint8_t _sspine_fs_source_glsl300es[399] = {
     0x6d,0x73,0x5b,0x30,0x5d,0x2e,0x78,0x29,0x29,0x3b,0x0a,0x7d,0x0a,0x0a,0x00,
 };
 #elif defined(SOKOL_D3D11)
-FIXME
+/*
+    cbuffer vs_params : register(b0)
+    {
+        row_major float4x4 _19_mvp : packoffset(c0);
+    };
+
+
+    static float4 gl_Position;
+    static float2 position;
+    static float2 uv;
+    static float2 texcoord0;
+    static float4 color;
+    static float4 color0;
+
+    struct SPIRV_Cross_Input
+    {
+        float2 position : TEXCOORD0;
+        float2 texcoord0 : TEXCOORD1;
+        float4 color0 : TEXCOORD2;
+    };
+
+    struct SPIRV_Cross_Output
+    {
+        float2 uv : TEXCOORD0;
+        float4 color : TEXCOORD1;
+        float4 gl_Position : SV_Position;
+    };
+
+    void vert_main()
+    {
+        gl_Position = mul(float4(position, 0.0f, 1.0f), _19_mvp);
+        uv = texcoord0;
+        color = color0;
+    }
+
+    SPIRV_Cross_Output main(SPIRV_Cross_Input stage_input)
+    {
+        position = stage_input.position;
+        texcoord0 = stage_input.texcoord0;
+        color0 = stage_input.color0;
+        vert_main();
+        SPIRV_Cross_Output stage_output;
+        stage_output.gl_Position = gl_Position;
+        stage_output.uv = uv;
+        stage_output.color = color;
+        return stage_output;
+    }
+*/
 static const uint8_t _sspine_vs_bytecode_hlsl4[844] = {
     0x44,0x58,0x42,0x43,0x2a,0xc9,0x57,0x52,0x4b,0x3d,0x3e,0x89,0x00,0xf4,0xfa,0x41,
     0xfd,0xd7,0x63,0xc3,0x01,0x00,0x00,0x00,0x4c,0x03,0x00,0x00,0x05,0x00,0x00,0x00,
@@ -1704,6 +1751,47 @@ static const uint8_t _sspine_vs_bytecode_hlsl4[844] = {
     0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
     0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
 };
+/*
+    cbuffer fs_params : register(b0)
+    {
+        float _53_pma : packoffset(c0);
+    };
+
+    Texture2D<float4> tex : register(t0);
+    SamplerState smp : register(s0);
+
+    static float2 uv;
+    static float4 color;
+    static float4 frag_color;
+
+    struct SPIRV_Cross_Input
+    {
+        float2 uv : TEXCOORD0;
+        float4 color : TEXCOORD1;
+    };
+
+    struct SPIRV_Cross_Output
+    {
+        float4 frag_color : SV_Target0;
+    };
+
+    void frag_main()
+    {
+        float4 _28 = tex.Sample(smp, uv) * color;
+        float _37 = _28.w;
+        frag_color = lerp(_28, float4(_28.xyz * _37, _37) * color, _53_pma.xxxx);
+    }
+
+    SPIRV_Cross_Output main(SPIRV_Cross_Input stage_input)
+    {
+        uv = stage_input.uv;
+        color = stage_input.color;
+        frag_main();
+        SPIRV_Cross_Output stage_output;
+        stage_output.frag_color = frag_color;
+        return stage_output;
+    }
+*/
 static const uint8_t _sspine_fs_bytecode_hlsl4[868] = {
     0x44,0x58,0x42,0x43,0xfb,0x9d,0xdb,0x19,0x85,0xbc,0x50,0x5d,0x6b,0x03,0xd4,0xc8,
     0x1b,0xea,0x59,0xf5,0x01,0x00,0x00,0x00,0x64,0x03,0x00,0x00,0x05,0x00,0x00,0x00,
