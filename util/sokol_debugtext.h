@@ -3531,7 +3531,48 @@ static const uint8_t _sdtx_fs_source_metal_sim[441] = {
     0x6f,0x75,0x74,0x3b,0x0a,0x7d,0x0a,0x0a,0x00,
 };
 #elif defined(SOKOL_D3D11)
-FIXME!
+/*
+    static float4 gl_Position;
+    static float2 position;
+    static float2 uv;
+    static float2 texcoord0;
+    static float4 color;
+    static float4 color0;
+
+    struct SPIRV_Cross_Input
+    {
+        float2 position : TEXCOORD0;
+        float2 texcoord0 : TEXCOORD1;
+        float4 color0 : TEXCOORD2;
+    };
+
+    struct SPIRV_Cross_Output
+    {
+        float2 uv : TEXCOORD0;
+        float4 color : TEXCOORD1;
+        float4 gl_Position : SV_Position;
+    };
+
+    void vert_main()
+    {
+        gl_Position = float4(mad(position, float2(2.0f, -2.0f), float2(-1.0f, 1.0f)), 0.0f, 1.0f);
+        uv = texcoord0;
+        color = color0;
+    }
+
+    SPIRV_Cross_Output main(SPIRV_Cross_Input stage_input)
+    {
+        position = stage_input.position;
+        texcoord0 = stage_input.texcoord0;
+        color0 = stage_input.color0;
+        vert_main();
+        SPIRV_Cross_Output stage_output;
+        stage_output.gl_Position = gl_Position;
+        stage_output.uv = uv;
+        stage_output.color = color;
+        return stage_output;
+    }
+*/
 static const uint8_t _sdtx_vs_bytecode_hlsl4[692] = {
     0x44,0x58,0x42,0x43,0x07,0x05,0xa0,0xb3,0x53,0xc1,0x0a,0x0d,0x1e,0xf4,0xe4,0xa6,
     0x91,0xaf,0x4c,0xca,0x01,0x00,0x00,0x00,0xb4,0x02,0x00,0x00,0x05,0x00,0x00,0x00,
@@ -3578,6 +3619,40 @@ static const uint8_t _sdtx_vs_bytecode_hlsl4[692] = {
     0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
     0x00,0x00,0x00,0x00,
 };
+/*
+    Texture2D<float4> tex : register(t0);
+    SamplerState smp : register(s0);
+
+    static float4 frag_color;
+    static float2 uv;
+    static float4 color;
+
+    struct SPIRV_Cross_Input
+    {
+        float2 uv : TEXCOORD0;
+        float4 color : TEXCOORD1;
+    };
+
+    struct SPIRV_Cross_Output
+    {
+        float4 frag_color : SV_Target0;
+    };
+
+    void frag_main()
+    {
+        frag_color = tex.Sample(smp, uv).xxxx * color;
+    }
+
+    SPIRV_Cross_Output main(SPIRV_Cross_Input stage_input)
+    {
+        uv = stage_input.uv;
+        color = stage_input.color;
+        frag_main();
+        SPIRV_Cross_Output stage_output;
+        stage_output.frag_color = frag_color;
+        return stage_output;
+    }
+*/
 static const uint8_t _sdtx_fs_bytecode_hlsl4[608] = {
     0x44,0x58,0x42,0x43,0xb7,0xcd,0xbd,0xb1,0x6f,0x85,0x5d,0x59,0x07,0x7e,0xa3,0x6e,
     0xe2,0x23,0x68,0xa0,0x01,0x00,0x00,0x00,0x60,0x02,0x00,0x00,0x05,0x00,0x00,0x00,
