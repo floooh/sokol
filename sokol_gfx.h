@@ -16667,8 +16667,8 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             #if defined(_SOKOL_ANY_GL)
             _SG_VALIDATE(img_smp_desc->glsl_name != 0, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_GLSL_NAME);
             #endif
-            const bool img_slot_in_range = (img_smp_desc->image_slot >= 0) && (img_smp_desc->image_slot < SG_MAX_IMAGE_BINDSLOTS);
-            const bool smp_slot_in_range = (img_smp_desc->sampler_slot >= 0) && (img_smp_desc->sampler_slot < SG_MAX_SAMPLER_BINDSLOTS);
+            const bool img_slot_in_range = img_smp_desc->image_slot < SG_MAX_IMAGE_BINDSLOTS;
+            const bool smp_slot_in_range = img_smp_desc->sampler_slot < SG_MAX_SAMPLER_BINDSLOTS;
             _SG_VALIDATE(img_slot_in_range, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_IMAGE_SLOT_OUT_OF_RANGE);
             _SG_VALIDATE(smp_slot_in_range, VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_SAMPLER_SLOT_OUT_OF_RANGE);
             if (img_slot_in_range && smp_slot_in_range) {
