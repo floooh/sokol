@@ -458,7 +458,8 @@ UTEST(sokol_gfx, make_destroy_shaders) {
 
     sg_shader shd[3] = { {0} };
     sg_shader_desc desc = {
-        .vs.uniform_blocks[0] = {
+        .uniform_blocks[0] = {
+            .stage = SG_SHADERSTAGE_VERTEX,
             .size = 16
         }
     };
@@ -471,11 +472,8 @@ UTEST(sokol_gfx, make_destroy_shaders) {
         T(shdptr);
         T(shdptr->slot.id == shd[i].id);
         T(shdptr->slot.state == SG_RESOURCESTATE_VALID);
-        T(shdptr->cmn.stage[SG_SHADERSTAGE_VS].num_uniform_blocks == 1);
-        T(shdptr->cmn.stage[SG_SHADERSTAGE_VS].num_images == 0);
-        T(shdptr->cmn.stage[SG_SHADERSTAGE_VS].uniform_blocks[0].size == 16);
-        T(shdptr->cmn.stage[SG_SHADERSTAGE_FS].num_uniform_blocks == 0);
-        T(shdptr->cmn.stage[SG_SHADERSTAGE_FS].num_images == 0);
+        T(shdptr->cmn.uniform_blocks[0].stage == SG_SHADERSTAGE_VERTEX);
+        T(shdptr->cmn.uniform_blocks[0].size == 16);
     }
     /* trying to create another one fails because pool is exhausted */
     T(sg_make_shader(&desc).id == SG_INVALID_ID);
@@ -650,8 +648,8 @@ UTEST(sokol_gfx, query_sampler_defaults) {
 UTEST(sokol_gfx, query_shader_defaults) {
     setup(&(sg_desc){0});
     const sg_shader_desc desc = sg_query_shader_defaults(&(sg_shader_desc){0});
-    T(0 == strcmp(desc.vs.entry, "main"));
-    T(0 == strcmp(desc.fs.entry, "main"));
+    T(0 == strcmp(desc.vertex_func.entry, "main"));
+    T(0 == strcmp(desc.fragment_func.entry, "main"));
     sg_shutdown();
 }
 
@@ -851,10 +849,10 @@ UTEST(sokol_gfx, query_shader_info) {
     setup(&(sg_desc){0});
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
         .attrs = {
-            [0] = { .name = "pos" }
+            [0] = { .glsl_name = "pos" }
         },
-        .vs.source = "bla",
-        .fs.source = "blub"
+        .vertex_func.source = "bla",
+        .fragment_func.source = "blub"
     });
     const sg_shader_info info = sg_query_shader_info(shd);
     T(info.slot.state == SG_RESOURCESTATE_VALID);
@@ -870,10 +868,10 @@ UTEST(sokol_gfx, query_pipeline_info) {
         },
         .shader = sg_make_shader(&(sg_shader_desc){
             .attrs = {
-                [0] = { .name = "pos" }
+                [0] = { .glsl_name = "pos" }
             },
-            .vs.source = "bla",
-            .fs.source = "blub"
+            .vertex_func.source = "bla",
+            .fragment_func.source = "blub"
         })
     });
     const sg_pipeline_info info = sg_query_pipeline_info(pip);
@@ -1039,94 +1037,86 @@ UTEST(sokol_gfx, query_shader_desc) {
 
     sg_shader s0 = sg_make_shader(&(sg_shader_desc){
         .attrs = {
-            [0] = { .name = "pos", .sem_name = "POS", .sem_index = 1 },
+            [0] = { .glsl_name = "pos", .hlsl_sem_name = "POS", .hlsl_sem_index = 1 },
         },
-        .vs = {
-            .source = "vs_source",
-            .uniform_blocks = {
-                [0] = {
-                    .size = 128,
-                    .layout = SG_UNIFORMLAYOUT_STD140,
-                    .uniforms = {
-                        [0] = { .name = "blub", .type = SG_UNIFORMTYPE_FLOAT4, .array_count = 1 },
-                        [1] = { .name = "blob", .type = SG_UNIFORMTYPE_FLOAT2, .array_count = 1 },
-                    }
+        .vertex_func.source = "vs_source",
+        .fragment_func.source = "fs_source",
+        .uniform_blocks = {
+            [0] = {
+                .stage = SG_SHADERSTAGE_VERTEX,
+                .size = 128,
+                .layout = SG_UNIFORMLAYOUT_STD140,
+                .glsl_uniforms = {
+                    [0] = { .glsl_name = "blub", .type = SG_UNIFORMTYPE_FLOAT4, .array_count = 1 },
+                    [1] = { .glsl_name = "blob", .type = SG_UNIFORMTYPE_FLOAT2, .array_count = 1 },
                 }
-            },
-            .images[0] = { .used = true, .image_type = SG_IMAGETYPE_2D, .sample_type = SG_IMAGESAMPLETYPE_FLOAT, .multisampled = true },
-            .images[1] = { .used = true, .image_type = SG_IMAGETYPE_3D, .sample_type = SG_IMAGESAMPLETYPE_DEPTH },
-            .samplers[0] = { .used = true, .sampler_type = SG_SAMPLERTYPE_FILTERING },
-            .samplers[1] = { .used = true, .sampler_type = SG_SAMPLERTYPE_COMPARISON },
-            .image_sampler_pairs[0] = { .used = true, .image_slot = 0, .sampler_slot = 0, .glsl_name = "img0" },
-            .image_sampler_pairs[1] = { .used = true, .image_slot = 1, .sampler_slot = 1, .glsl_name = "img1" },
+            }
         },
-        .fs = {
-            .source = "fs_source",
-            .images[0] = { .used = true, .image_type = SG_IMAGETYPE_ARRAY, .sample_type = SG_IMAGESAMPLETYPE_DEPTH },
-            .images[1] = { .used = true, .image_type = SG_IMAGETYPE_CUBE, .sample_type = SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT },
-            .samplers[0] = { .used = true, .sampler_type = SG_SAMPLERTYPE_COMPARISON },
-            .samplers[1] = { .used = true, .sampler_type = SG_SAMPLERTYPE_NONFILTERING },
-            .image_sampler_pairs[0] = { .used = true, .image_slot = 0, .sampler_slot = 0, .glsl_name = "img3" },
-            .image_sampler_pairs[1] = { .used = true, .image_slot = 1, .sampler_slot = 1, .glsl_name = "img4" },
-        },
+        .images[0] = { .stage = SG_SHADERSTAGE_VERTEX, .image_type = SG_IMAGETYPE_2D, .sample_type = SG_IMAGESAMPLETYPE_FLOAT, .multisampled = true },
+        .images[1] = { .stage = SG_SHADERSTAGE_VERTEX, .image_type = SG_IMAGETYPE_3D, .sample_type = SG_IMAGESAMPLETYPE_DEPTH },
+        .images[2] = { .stage = SG_SHADERSTAGE_FRAGMENT, .image_type = SG_IMAGETYPE_ARRAY, .sample_type = SG_IMAGESAMPLETYPE_DEPTH },
+        .images[3] = { .stage = SG_SHADERSTAGE_FRAGMENT, .image_type = SG_IMAGETYPE_CUBE, .sample_type = SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT },
+        .samplers[0] = { .stage = SG_SHADERSTAGE_VERTEX, .sampler_type = SG_SAMPLERTYPE_FILTERING },
+        .samplers[1] = { .stage = SG_SHADERSTAGE_VERTEX, .sampler_type = SG_SAMPLERTYPE_COMPARISON },
+        .samplers[2] = { .stage = SG_SHADERSTAGE_FRAGMENT, .sampler_type = SG_SAMPLERTYPE_COMPARISON },
+        .samplers[3] = { .stage = SG_SHADERSTAGE_FRAGMENT, .sampler_type = SG_SAMPLERTYPE_NONFILTERING },
+        .image_sampler_pairs[0] = { .stage = SG_SHADERSTAGE_VERTEX, .image_slot = 0, .sampler_slot = 0, .glsl_name = "img0" },
+        .image_sampler_pairs[1] = { .stage = SG_SHADERSTAGE_VERTEX, .image_slot = 1, .sampler_slot = 1, .glsl_name = "img1" },
+        .image_sampler_pairs[2] = { .stage = SG_SHADERSTAGE_FRAGMENT, .image_slot = 2, .sampler_slot = 2, .glsl_name = "img3" },
+        .image_sampler_pairs[3] = { .stage = SG_SHADERSTAGE_FRAGMENT, .image_slot = 3, .sampler_slot = 3, .glsl_name = "img4" },
         .label = "label",
     });
     const sg_shader_desc s0_desc = sg_query_shader_desc(s0);
-    T(s0_desc.attrs[0].name == 0);
-    T(s0_desc.attrs[0].sem_name == 0);
-    T(s0_desc.attrs[0].sem_index == 0);
-    T(s0_desc.vs.source == 0);
-    T(s0_desc.vs.uniform_blocks[0].size == 128);
-    T(s0_desc.vs.uniform_blocks[0].layout == 0);
-    T(s0_desc.vs.uniform_blocks[0].uniforms[0].name == 0);
-    T(s0_desc.vs.uniform_blocks[0].uniforms[0].type == 0);
-    T(s0_desc.vs.uniform_blocks[0].uniforms[0].array_count == 0);
-    T(s0_desc.vs.images[0].used);
-    T(s0_desc.vs.images[0].image_type == SG_IMAGETYPE_2D);
-    T(s0_desc.vs.images[0].sample_type == SG_IMAGESAMPLETYPE_FLOAT);
-    T(s0_desc.vs.images[0].multisampled);
-    T(s0_desc.vs.images[1].used);
-    T(s0_desc.vs.images[1].image_type == SG_IMAGETYPE_3D);
-    T(s0_desc.vs.images[1].sample_type == SG_IMAGESAMPLETYPE_DEPTH);
-    T(s0_desc.vs.images[1].multisampled == false);
-    T(s0_desc.vs.samplers[0].used);
-    T(s0_desc.vs.samplers[0].sampler_type == SG_SAMPLERTYPE_FILTERING);
-    T(s0_desc.vs.samplers[1].used);
-    T(s0_desc.vs.samplers[1].sampler_type == SG_SAMPLERTYPE_COMPARISON);
-    T(s0_desc.vs.image_sampler_pairs[0].used);
-    T(s0_desc.vs.image_sampler_pairs[0].image_slot == 0);
-    T(s0_desc.vs.image_sampler_pairs[0].sampler_slot == 0);
-    T(s0_desc.vs.image_sampler_pairs[0].glsl_name == 0);
-    T(s0_desc.vs.image_sampler_pairs[1].used);
-    T(s0_desc.vs.image_sampler_pairs[1].image_slot == 1);
-    T(s0_desc.vs.image_sampler_pairs[1].sampler_slot == 1);
-    T(s0_desc.vs.image_sampler_pairs[1].glsl_name == 0);
-    T(s0_desc.fs.source == 0);
-    T(s0_desc.fs.uniform_blocks[0].size == 0);
-    T(s0_desc.fs.uniform_blocks[0].layout == 0);
-    T(s0_desc.fs.uniform_blocks[0].uniforms[0].name == 0);
-    T(s0_desc.fs.uniform_blocks[0].uniforms[0].type == 0);
-    T(s0_desc.fs.uniform_blocks[0].uniforms[0].array_count == 0);
-    T(s0_desc.fs.images[0].used);
-    T(s0_desc.fs.images[0].image_type == SG_IMAGETYPE_ARRAY);
-    T(s0_desc.fs.images[0].sample_type == SG_IMAGESAMPLETYPE_DEPTH);
-    T(s0_desc.fs.images[0].multisampled == false);
-    T(s0_desc.fs.images[1].used);
-    T(s0_desc.fs.images[1].image_type == SG_IMAGETYPE_CUBE);
-    T(s0_desc.fs.images[1].sample_type == SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT);
-    T(s0_desc.fs.images[1].multisampled == false);
-    T(s0_desc.fs.samplers[0].used);
-    T(s0_desc.fs.samplers[0].sampler_type == SG_SAMPLERTYPE_COMPARISON);
-    T(s0_desc.fs.samplers[1].used);
-    T(s0_desc.fs.samplers[1].sampler_type == SG_SAMPLERTYPE_NONFILTERING);
-    T(s0_desc.fs.image_sampler_pairs[0].used);
-    T(s0_desc.fs.image_sampler_pairs[0].image_slot == 0);
-    T(s0_desc.fs.image_sampler_pairs[0].sampler_slot == 0);
-    T(s0_desc.fs.image_sampler_pairs[0].glsl_name == 0);
-    T(s0_desc.fs.image_sampler_pairs[1].used);
-    T(s0_desc.fs.image_sampler_pairs[1].image_slot == 1);
-    T(s0_desc.fs.image_sampler_pairs[1].sampler_slot == 1);
-    T(s0_desc.fs.image_sampler_pairs[1].glsl_name == 0);
+    T(s0_desc.attrs[0].glsl_name == 0);
+    T(s0_desc.attrs[0].hlsl_sem_name == 0);
+    T(s0_desc.attrs[0].hlsl_sem_index == 0);
+    T(s0_desc.vertex_func.source == 0);
+    T(s0_desc.fragment_func.source == 0);
+    T(s0_desc.uniform_blocks[0].size == 128);
+    T(s0_desc.uniform_blocks[0].layout == 0);
+    T(s0_desc.uniform_blocks[0].glsl_uniforms[0].glsl_name == 0);
+    T(s0_desc.uniform_blocks[0].glsl_uniforms[0].type == 0);
+    T(s0_desc.uniform_blocks[0].glsl_uniforms[0].array_count == 0);
+    T(s0_desc.images[0].stage == SG_SHADERSTAGE_VERTEX);
+    T(s0_desc.images[0].image_type == SG_IMAGETYPE_2D);
+    T(s0_desc.images[0].sample_type == SG_IMAGESAMPLETYPE_FLOAT);
+    T(s0_desc.images[0].multisampled);
+    T(s0_desc.images[1].stage == SG_SHADERSTAGE_VERTEX);
+    T(s0_desc.images[1].image_type == SG_IMAGETYPE_3D);
+    T(s0_desc.images[1].sample_type == SG_IMAGESAMPLETYPE_DEPTH);
+    T(s0_desc.images[1].multisampled == false);
+    T(s0_desc.images[2].stage == SG_SHADERSTAGE_FRAGMENT);
+    T(s0_desc.images[2].image_type == SG_IMAGETYPE_ARRAY);
+    T(s0_desc.images[2].sample_type == SG_IMAGESAMPLETYPE_DEPTH);
+    T(s0_desc.images[2].multisampled == false);
+    T(s0_desc.images[3].stage == SG_SHADERSTAGE_FRAGMENT);
+    T(s0_desc.images[3].image_type == SG_IMAGETYPE_CUBE);
+    T(s0_desc.images[3].sample_type == SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT);
+    T(s0_desc.images[3].multisampled == false);
+    T(s0_desc.samplers[0].stage == SG_SHADERSTAGE_VERTEX);
+    T(s0_desc.samplers[0].sampler_type == SG_SAMPLERTYPE_FILTERING);
+    T(s0_desc.samplers[1].stage == SG_SHADERSTAGE_VERTEX);
+    T(s0_desc.samplers[1].sampler_type == SG_SAMPLERTYPE_COMPARISON);
+    T(s0_desc.samplers[2].stage == SG_SHADERSTAGE_FRAGMENT);
+    T(s0_desc.samplers[2].sampler_type == SG_SAMPLERTYPE_COMPARISON);
+    T(s0_desc.samplers[3].stage == SG_SHADERSTAGE_FRAGMENT);
+    T(s0_desc.samplers[3].sampler_type == SG_SAMPLERTYPE_NONFILTERING);
+    T(s0_desc.image_sampler_pairs[0].stage == SG_SHADERSTAGE_VERTEX);
+    T(s0_desc.image_sampler_pairs[0].image_slot == 0);
+    T(s0_desc.image_sampler_pairs[0].sampler_slot == 0);
+    T(s0_desc.image_sampler_pairs[0].glsl_name == 0);
+    T(s0_desc.image_sampler_pairs[1].stage == SG_SHADERSTAGE_VERTEX);
+    T(s0_desc.image_sampler_pairs[1].image_slot == 1);
+    T(s0_desc.image_sampler_pairs[1].sampler_slot == 1);
+    T(s0_desc.image_sampler_pairs[1].glsl_name == 0);
+    T(s0_desc.image_sampler_pairs[2].stage == SG_SHADERSTAGE_FRAGMENT);
+    T(s0_desc.image_sampler_pairs[2].image_slot == 2);
+    T(s0_desc.image_sampler_pairs[2].sampler_slot == 2);
+    T(s0_desc.image_sampler_pairs[2].glsl_name == 0);
+    T(s0_desc.image_sampler_pairs[3].stage == SG_SHADERSTAGE_FRAGMENT);
+    T(s0_desc.image_sampler_pairs[3].image_slot == 3);
+    T(s0_desc.image_sampler_pairs[3].sampler_slot == 3);
+    T(s0_desc.image_sampler_pairs[3].glsl_name == 0);
 
     sg_shutdown();
 }
