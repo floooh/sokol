@@ -4051,7 +4051,7 @@ SOKOL_GFX_API_DECL void sg_apply_scissor_rect(int x, int y, int width, int heigh
 SOKOL_GFX_API_DECL void sg_apply_scissor_rectf(float x, float y, float width, float height, bool origin_top_left);
 SOKOL_GFX_API_DECL void sg_apply_pipeline(sg_pipeline pip);
 SOKOL_GFX_API_DECL void sg_apply_bindings(const sg_bindings* bindings);
-SOKOL_GFX_API_DECL void sg_apply_uniforms(int ub_bind_slot, const sg_range* data);
+SOKOL_GFX_API_DECL void sg_apply_uniforms(int ub_slot, const sg_range* data);
 SOKOL_GFX_API_DECL void sg_draw(int base_element, int num_elements, int num_instances);
 SOKOL_GFX_API_DECL void sg_end_pass(void);
 SOKOL_GFX_API_DECL void sg_commit(void);
@@ -4331,7 +4331,7 @@ inline void sg_update_image(sg_image img, const sg_image_data& data) { return sg
 
 inline void sg_begin_pass(const sg_pass& pass) { return sg_begin_pass(&pass); }
 inline void sg_apply_bindings(const sg_bindings& bindings) { return sg_apply_bindings(&bindings); }
-inline void sg_apply_uniforms(int ub_bind_slot, const sg_range& data) { return sg_apply_uniforms(ub_bind_slot, &data); }
+inline void sg_apply_uniforms(int ub_slot, const sg_range& data) { return sg_apply_uniforms(ub_slot, &data); }
 
 inline sg_buffer_desc sg_query_buffer_defaults(const sg_buffer_desc& desc) { return sg_query_buffer_defaults(&desc); }
 inline sg_image_desc sg_query_image_defaults(const sg_image_desc& desc) { return sg_query_image_defaults(&desc); }
@@ -6763,9 +6763,8 @@ _SOKOL_PRIVATE bool _sg_dummy_apply_bindings(_sg_bindings_t* bnd) {
     return true;
 }
 
-_SOKOL_PRIVATE void _sg_dummy_apply_uniforms(sg_shader_stage stage_index, int ub_index, const sg_range* data) {
-    _SOKOL_UNUSED(stage_index);
-    _SOKOL_UNUSED(ub_index);
+_SOKOL_PRIVATE void _sg_dummy_apply_uniforms(int ub_slot, const sg_range* data) {
+    _SOKOL_UNUSED(ub_slot);
     _SOKOL_UNUSED(data);
 }
 
@@ -9368,17 +9367,17 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_t* bnd) {
     return true;
 }
 
-_SOKOL_PRIVATE void _sg_gl_apply_uniforms(int ub_bind_slot, const sg_range* data) {
+_SOKOL_PRIVATE void _sg_gl_apply_uniforms(int ub_slot, const sg_range* data) {
     SOKOL_ASSERT(_sg.gl.cache.cur_pipeline);
-    SOKOL_ASSERT((ub_bind_slot >= 0) && (ub_bind_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
+    SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
     const _sg_pipeline_t* pip = _sg.gl.cache.cur_pipeline;
     SOKOL_ASSERT(pip && pip->shader);
     SOKOL_ASSERT(pip->slot.id == _sg.gl.cache.cur_pipeline_id.id);
     const _sg_shader_t* shd = pip->shader;
     SOKOL_ASSERT(shd->slot.id == pip->cmn.shader_id.id);
-    SOKOL_ASSERT(SG_SHADERSTAGE_NONE != shd->cmn.uniform_blocks[ub_bind_slot].stage);
-    SOKOL_ASSERT(data->size == shd->cmn.uniform_blocks[ub_bind_slot].size);
-    const _sg_gl_uniform_block_t* gl_ub = &shd->gl.uniform_blocks[ub_bind_slot];
+    SOKOL_ASSERT(SG_SHADERSTAGE_NONE != shd->cmn.uniform_blocks[ub_slot].stage);
+    SOKOL_ASSERT(data->size == shd->cmn.uniform_blocks[ub_slot].size);
+    const _sg_gl_uniform_block_t* gl_ub = &shd->gl.uniform_blocks[ub_slot];
     for (int u_index = 0; u_index < gl_ub->num_uniforms; u_index++) {
         const _sg_gl_uniform_t* u = &gl_ub->uniforms[u_index];
         SOKOL_ASSERT(u->type != SG_UNIFORMTYPE_INVALID);
@@ -11432,15 +11431,15 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
     return true;
 }
 
-_SOKOL_PRIVATE void _sg_d3d11_apply_uniforms(int ub_index, const sg_range* data) {
+_SOKOL_PRIVATE void _sg_d3d11_apply_uniforms(int ub_slot, const sg_range* data) {
     SOKOL_ASSERT(_sg.d3d11.ctx);
-    SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
+    SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
     SOKOL_ASSERT(_sg.d3d11.cur_pipeline && _sg.d3d11.cur_pipeline->slot.id == _sg.d3d11.cur_pipeline_id.id);
     const _sg_shader_t* shd = _sg.d3d11.cur_pipeline->shader;
     SOKOL_ASSERT(shd && (shd->slot.id == _sg.d3d11.cur_pipeline->cmn.shader_id.id));
-    SOKOL_ASSERT(data->size == shd->cmn.uniform_blocks[ub_index].size);
+    SOKOL_ASSERT(data->size == shd->cmn.uniform_blocks[ub_slot].size);
 
-    ID3D11Buffer* cbuf = shd->d3d11.all_cbufs[ub_index];
+    ID3D11Buffer* cbuf = shd->d3d11.all_cbufs[ub_slot];
     SOKOL_ASSERT(cbuf);
     _sg_d3d11_UpdateSubresource(_sg.d3d11.ctx, (ID3D11Resource*)cbuf, 0, NULL, data->ptr, 0, 0);
     _sg_stats_add(d3d11.uniforms.num_update_subresource, 1);
@@ -12592,6 +12591,9 @@ _SOKOL_PRIVATE bool _sg_mtl_create_shader_func(const sg_shader_function* func, c
         SOKOL_ASSERT(label_ext);
         mtl_lib.label = [NSString stringWithFormat:@"%s.%s", label, label_ext];
     }
+    #else
+    _SOKOL_UNUSED(label);
+    _SOKOL_UNUSED(label_ext);
     #endif
     SOKOL_ASSERT(func->entry);
     id<MTLFunction> mtl_func = [mtl_lib newFunctionWithName:[NSString stringWithUTF8String:func->entry]];
@@ -13270,9 +13272,9 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
     return true;
 }
 
-_SOKOL_PRIVATE void _sg_mtl_apply_uniforms(int ub_bind_slot, const sg_range* data) {
+_SOKOL_PRIVATE void _sg_mtl_apply_uniforms(int ub_slot, const sg_range* data) {
     SOKOL_ASSERT(nil != _sg.mtl.cmd_encoder);
-    SOKOL_ASSERT((ub_bind_slot >= 0) && (ub_bind_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
+    SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
     SOKOL_ASSERT(((size_t)_sg.mtl.cur_ub_offset + data->size) <= (size_t)_sg.mtl.ub_size);
     SOKOL_ASSERT((_sg.mtl.cur_ub_offset & (_SG_MTL_UB_ALIGN-1)) == 0);
     const _sg_pipeline_t* pip = _sg.mtl.state_cache.cur_pipeline;
@@ -13280,10 +13282,10 @@ _SOKOL_PRIVATE void _sg_mtl_apply_uniforms(int ub_bind_slot, const sg_range* dat
     SOKOL_ASSERT(pip->slot.id == _sg.mtl.state_cache.cur_pipeline_id.id);
     const _sg_shader_t* shd = pip->shader;
     SOKOL_ASSERT(shd->slot.id == pip->cmn.shader_id.id);
-    SOKOL_ASSERT(data->size == shd->cmn.uniform_blocks[ub_bind_slot].size);
+    SOKOL_ASSERT(data->size == shd->cmn.uniform_blocks[ub_slot].size);
 
-    const sg_shader_stage stage = shd->cmn.uniform_blocks[ub_bind_slot].stage;
-    const NSUInteger mtl_slot = shd->mtl.ub_buffer_n[ub_bind_slot];
+    const sg_shader_stage stage = shd->cmn.uniform_blocks[ub_slot].stage;
+    const NSUInteger mtl_slot = shd->mtl.ub_buffer_n[ub_slot];
 
     // copy to global uniform buffer, record offset into cmd encoder, and advance offset
     uint8_t* dst = &_sg.mtl.cur_ub_base_ptr[_sg.mtl.cur_ub_offset];
@@ -15345,11 +15347,11 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindings(_sg_bindings_t* bnd) {
     return retval;
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(int ub_bind_slot, const sg_range* data) {
+_SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(int ub_slot, const sg_range* data) {
     const uint32_t alignment = _sg.wgpu.limits.limits.minUniformBufferOffsetAlignment;
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
     SOKOL_ASSERT(_sg.wgpu.uniform.staging);
-    SOKOL_ASSERT((ub_bind_slot >= 0) && (ub_bind_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
+    SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
     SOKOL_ASSERT((_sg.wgpu.uniform.offset + data->size) <= _sg.wgpu.uniform.num_bytes);
     SOKOL_ASSERT((_sg.wgpu.uniform.offset & (alignment - 1)) == 0);
     const _sg_pipeline_t* pip = _sg.wgpu.cur_pipeline;
@@ -15357,12 +15359,12 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(int ub_bind_slot, const sg_range* da
     SOKOL_ASSERT(pip->slot.id == _sg.wgpu.cur_pipeline_id.id);
     const _sg_shader_t* shd = pip->shader;
     SOKOL_ASSERT(shd->slot.id == pip->cmn.shader_id.id);
-    SOKOL_ASSERT(data->size == shd->cmn.uniform_blocks[ub_bind_slot].size);
+    SOKOL_ASSERT(data->size == shd->cmn.uniform_blocks[ub_slot].size);
     SOKOL_ASSERT(data->size <= _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE);
 
     _sg_stats_add(wgpu.uniforms.num_set_bindgroup, 1);
     memcpy(_sg.wgpu.uniform.staging + _sg.wgpu.uniform.offset, data->ptr, data->size);
-    _sg.wgpu.uniform.bind_offsets[ub_bind_slot] = _sg.wgpu.uniform.offset;
+    _sg.wgpu.uniform.bind_offsets[ub_slot] = _sg.wgpu.uniform.offset;
     _sg.wgpu.uniform.offset = _sg_roundup_u32(_sg.wgpu.uniform.offset + (uint32_t)data->size, alignment);
 
     _sg_wgpu_set_ub_bindgroup(shd);
@@ -15787,17 +15789,17 @@ static inline bool _sg_apply_bindings(_sg_bindings_t* bnd) {
     #endif
 }
 
-static inline void _sg_apply_uniforms(int ub_bind_slot, const sg_range* data) {
+static inline void _sg_apply_uniforms(int ub_slot, const sg_range* data) {
     #if defined(_SOKOL_ANY_GL)
-    _sg_gl_apply_uniforms(ub_bind_slot, data);
+    _sg_gl_apply_uniforms(ub_slot, data);
     #elif defined(SOKOL_METAL)
-    _sg_mtl_apply_uniforms(ub_bind_slot, data);
+    _sg_mtl_apply_uniforms(ub_slot, data);
     #elif defined(SOKOL_D3D11)
-    _sg_d3d11_apply_uniforms(ub_bind_slot, data);
+    _sg_d3d11_apply_uniforms(ub_slot, data);
     #elif defined(SOKOL_WGPU)
-    _sg_wgpu_apply_uniforms(ub_bind_slot, data);
+    _sg_wgpu_apply_uniforms(ub_slot, data);
     #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_apply_uniforms(ub_bind_slot, data);
+    _sg_dummy_apply_uniforms(ub_slot, data);
     #else
     #error("INVALID BACKEND");
     #endif
@@ -17132,28 +17134,25 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
     #endif
 }
 
-_SOKOL_PRIVATE bool _sg_validate_apply_uniforms(int ub_bind_slot, const sg_range* data) {
+_SOKOL_PRIVATE bool _sg_validate_apply_uniforms(int ub_slot, const sg_range* data) {
     #if !defined(SOKOL_DEBUG)
-        _SOKOL_UNUSED(ub_bind_slot);
+        _SOKOL_UNUSED(ub_slot);
         _SOKOL_UNUSED(data);
         return true;
     #else
         if (_sg.desc.disable_validation) {
             return true;
         }
-        SOKOL_ASSERT((ub_bind_slot >= 0) && (ub_bind_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
+        SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
         _sg_validate_begin();
         _SG_VALIDATE(_sg.cur_pipeline.id != SG_INVALID_ID, VALIDATE_AUB_NO_PIPELINE);
         const _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, _sg.cur_pipeline.id);
         SOKOL_ASSERT(pip && (pip->slot.id == _sg.cur_pipeline.id));
         SOKOL_ASSERT(pip->shader && (pip->shader->slot.id == pip->cmn.shader_id.id));
 
-        // check that there is a uniform block at 'stage' and 'ub_index'
         const _sg_shader_t* shd = pip->shader;
-        _SG_VALIDATE(shd->cmn.uniform_blocks[ub_bind_slot].stage != SG_SHADERSTAGE_NONE, VALIDATE_AUB_NO_UB_AT_SLOT);
-
-        // check that the provided data size matches the uniform block size
-        _SG_VALIDATE(data->size == shd->cmn.uniform_blocks[ub_bind_slot].size, VALIDATE_AUB_SIZE);
+        _SG_VALIDATE(shd->cmn.uniform_blocks[ub_slot].stage != SG_SHADERSTAGE_NONE, VALIDATE_AUB_NO_UB_AT_SLOT);
+        _SG_VALIDATE(data->size == shd->cmn.uniform_blocks[ub_slot].size, VALIDATE_AUB_SIZE);
 
         return _sg_validate_end();
     #endif
@@ -18659,14 +18658,14 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
     }
 }
 
-SOKOL_API_IMPL void sg_apply_uniforms(int ub_bind_slot, const sg_range* data) {
+SOKOL_API_IMPL void sg_apply_uniforms(int ub_slot, const sg_range* data) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(_sg.cur_pass.in_pass);
-    SOKOL_ASSERT((ub_bind_slot >= 0) && (ub_bind_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
+    SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
     _sg_stats_add(num_apply_uniforms, 1);
     _sg_stats_add(size_apply_uniforms, (uint32_t)data->size);
-    if (!_sg_validate_apply_uniforms(ub_bind_slot, data)) {
+    if (!_sg_validate_apply_uniforms(ub_slot, data)) {
         _sg.next_draw_valid = false;
         return;
     }
@@ -18676,8 +18675,8 @@ SOKOL_API_IMPL void sg_apply_uniforms(int ub_bind_slot, const sg_range* data) {
     if (!_sg.next_draw_valid) {
         return;
     }
-    _sg_apply_uniforms(ub_bind_slot, data);
-    _SG_TRACE_ARGS(apply_uniforms, ub_bind_slot, data);
+    _sg_apply_uniforms(ub_slot, data);
+    _SG_TRACE_ARGS(apply_uniforms, ub_slot, data);
 }
 
 SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instances) {
