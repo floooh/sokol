@@ -1,5 +1,20 @@
 ## Updates
 
+### 22-Jun-2025
+
+- sokol_gfx.h: Add explicit depth / stencil formats:
+  - `SG_PIXELFORMAT_DEPTH24PLUS`,
+  - `SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8`
+  - `SG_PIXELFORMAT_DEPTH32F`
+  - `SG_PIXELFORMAT_DEPTH32F_STENCIL8`
+
+  This allows selection of an explicit format type, resulting in a consistent
+  precision regardless of backend. Existing `SG_PIXELFORMAT_DEPTH` and
+  `SG_PIXELFORMAT_DEPTH_STENCIL` formats are unchanged.
+
+  For details see the proposal https://github.com/floooh/sokol/issues/1122
+  and PR: https://github.com/floooh/sokol/pull/1124
+
 ### 15-Jun-2025
 
 The sokol_app.h and sokol_gfx.h WebGPU backends have been updated for the new
