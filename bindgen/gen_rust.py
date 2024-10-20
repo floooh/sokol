@@ -58,7 +58,7 @@ overrides = {
     "type": "_type",
     "ref": "_ref",
 
-    "sg_apply_uniforms.ub_index": "uintptr_t",
+    "sg_apply_uniforms.ub_slot": "uintptr_t",
     "sg_draw.base_element": "uintptr_t",
     "sg_draw.num_elements": "uintptr_t",
     "sg_draw.num_instances": "uintptr_t",
