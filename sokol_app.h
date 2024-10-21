@@ -1974,7 +1974,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
         /* MacOS */
         #define _SAPP_MACOS (1)
-        #if !defined(SOKOL_METAL) && !defined(SOKOL_GLCORE)
+        #if !defined(SOKOL_METAL) && !defined(SOKOL_GLCORE) && !defined(SOKOL_WGPU)
         #error("sokol_app.h: unknown 3D API selected for MacOS, must be SOKOL_METAL or SOKOL_GLCORE")
         #endif
     #else
@@ -1991,10 +1991,10 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #error("sokol_app.h: unknown 3D API selected for emscripten, must be SOKOL_GLES3 or SOKOL_WGPU")
     #endif
 #elif defined(_WIN32)
-    /* Windows (D3D11 or GL) */
+    /* Windows (D3D11 or GL or WGPU) */
     #define _SAPP_WIN32 (1)
-    #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE) && !defined(SOKOL_NOAPI)
-    #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11, SOKOL_GLCORE or SOKOL_NOAPI")
+    #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE) && !defined(SOKOL_WGPU) && !defined(SOKOL_NOAPI)
+    #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11, SOKOL_GLCORE, SOKOL_WGPU or SOKOL_NOAPI")
     #endif
 #elif defined(__ANDROID__)
     /* Android */
@@ -2061,6 +2061,12 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #import <MetalKit/MetalKit.h>
     #endif
     #if defined(_SAPP_MACOS)
+        #if defined(SOKOL_WGPU)
+            #import <Metal/Metal.h>
+            #import <MetalKit/MetalKit.h>
+            #include <Cocoa/Cocoa.h>
+            #include <webgpu/webgpu.h>
+        #endif
         #if defined(_SAPP_ANY_GL)
             #ifndef GL_SILENCE_DEPRECATION
             #define GL_SILENCE_DEPRECATION
@@ -2412,8 +2418,11 @@ _SOKOL_PRIVATE double _sapp_timing_get_avg(_sapp_timing_t* t) {
 @end
 @interface _sapp_macos_window_delegate : NSObject<NSWindowDelegate>
 @end
-#if defined(SOKOL_METAL)
-    @interface _sapp_macos_view : MTKView
+#if defined(SOKOL_METAL) || defined(SOKOL_WGPU)
+    @interface _sapp_macos_view : NSView <CALayerDelegate>
+    @property (nonatomic, assign) CVDisplayLinkRef displayLink;
+    - (void)setupDisplayLink;
+    - (void)render;
     @end
 #elif defined(SOKOL_GLCORE)
     @interface _sapp_macos_view : NSOpenGLView
@@ -2431,7 +2440,7 @@ typedef struct {
     _sapp_macos_window_delegate* win_dlg;
     _sapp_macos_view* view;
     NSCursor* cursors[_SAPP_MOUSECURSOR_NUM];
-    #if defined(SOKOL_METAL)
+    #if defined(SOKOL_METAL) || defined (SOKOL_WGPU)
         id<MTLDevice> mtl_device;
     #endif
 } _sapp_macos_t;
@@ -2472,8 +2481,6 @@ typedef struct {
 
 #endif // _SAPP_IOS
 
-#if defined(_SAPP_EMSCRIPTEN)
-
 #if defined(SOKOL_WGPU)
 typedef struct {
     WGPUInstance instance;
@@ -2490,6 +2497,8 @@ typedef struct {
     bool async_init_done;
 } _sapp_wgpu_t;
 #endif
+
+#if defined(_SAPP_EMSCRIPTEN)
 
 typedef struct {
     bool mouse_lock_requested;
@@ -2887,6 +2896,9 @@ typedef struct {
     uint32_t* default_icon_pixels;
     #if defined(_SAPP_MACOS)
         _sapp_macos_t macos;
+        #if defined(SOKOL_WGPU)
+            _sapp_wgpu_t wgpu;
+        #endif
     #elif defined(_SAPP_IOS)
         _sapp_ios_t ios;
     #elif defined(_SAPP_EMSCRIPTEN)
@@ -2900,6 +2912,8 @@ typedef struct {
             _sapp_d3d11_t d3d11;
         #elif defined(SOKOL_GLCORE)
             _sapp_wgl_t wgl;
+        #elif defined(SOKOL_WGPU)
+            _sapp_wgpu_t wgpu;
         #endif
     #elif defined(_SAPP_ANDROID)
         _sapp_android_t android;
@@ -3389,6 +3403,194 @@ _SOKOL_PRIVATE void _sapp_setup_default_icon(void) {
     SOKOL_ASSERT(dst == dst_end);
 }
 
+
+// MARK: WGPU helpers
+
+#if defined(SOKOL_WGPU)
+
+_SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(void) {
+    SOKOL_ASSERT(_sapp.wgpu.instance);
+    SOKOL_ASSERT(_sapp.wgpu.device);
+    SOKOL_ASSERT(_sapp.wgpu.surface);
+    SOKOL_ASSERT(0 == _sapp.wgpu.swapchain);
+    SOKOL_ASSERT(0 == _sapp.wgpu.msaa_tex);
+    SOKOL_ASSERT(0 == _sapp.wgpu.msaa_view);
+    SOKOL_ASSERT(0 == _sapp.wgpu.depth_stencil_tex);
+    SOKOL_ASSERT(0 == _sapp.wgpu.depth_stencil_view);
+    SOKOL_ASSERT(0 == _sapp.wgpu.swapchain_view);
+
+    _sapp.wgpu.render_format = WGPUTextureFormat_BGRA8Unorm;
+
+    WGPUSwapChainDescriptor sc_desc;
+    _sapp_clear(&sc_desc, sizeof(sc_desc));
+    sc_desc.usage = WGPUTextureUsage_RenderAttachment;
+    sc_desc.format = _sapp.wgpu.render_format;
+    sc_desc.width = (uint32_t)_sapp.framebuffer_width;
+    sc_desc.height = (uint32_t)_sapp.framebuffer_height;
+    sc_desc.presentMode = WGPUPresentMode_Fifo;
+    _sapp.wgpu.swapchain = wgpuDeviceCreateSwapChain(_sapp.wgpu.device, _sapp.wgpu.surface, &sc_desc);
+    if (0 == _sapp.wgpu.swapchain) {
+        _SAPP_PANIC(WGPU_SWAPCHAIN_CREATE_SWAPCHAIN_FAILED);
+    }
+
+    WGPUTextureDescriptor ds_desc;
+    _sapp_clear(&ds_desc, sizeof(ds_desc));
+    ds_desc.usage = WGPUTextureUsage_RenderAttachment;
+    ds_desc.dimension = WGPUTextureDimension_2D;
+    ds_desc.size.width = (uint32_t)_sapp.framebuffer_width;
+    ds_desc.size.height = (uint32_t)_sapp.framebuffer_height;
+    ds_desc.size.depthOrArrayLayers = 1;
+    ds_desc.format = WGPUTextureFormat_Depth32FloatStencil8;
+    ds_desc.mipLevelCount = 1;
+    ds_desc.sampleCount = (uint32_t)_sapp.sample_count;
+    _sapp.wgpu.depth_stencil_tex = wgpuDeviceCreateTexture(_sapp.wgpu.device, &ds_desc);
+    if (0 == _sapp.wgpu.depth_stencil_tex) {
+        _SAPP_PANIC(WGPU_SWAPCHAIN_CREATE_DEPTH_STENCIL_TEXTURE_FAILED);
+    }
+    _sapp.wgpu.depth_stencil_view = wgpuTextureCreateView(_sapp.wgpu.depth_stencil_tex, 0);
+    if (0 == _sapp.wgpu.depth_stencil_view) {
+        _SAPP_PANIC(WGPU_SWAPCHAIN_CREATE_DEPTH_STENCIL_VIEW_FAILED);
+    }
+
+    if (_sapp.sample_count > 1) {
+        WGPUTextureDescriptor msaa_desc;
+        _sapp_clear(&msaa_desc, sizeof(msaa_desc));
+        msaa_desc.usage = WGPUTextureUsage_RenderAttachment;
+        msaa_desc.dimension = WGPUTextureDimension_2D;
+        msaa_desc.size.width = (uint32_t)_sapp.framebuffer_width;
+        msaa_desc.size.height = (uint32_t)_sapp.framebuffer_height;
+        msaa_desc.size.depthOrArrayLayers = 1;
+        msaa_desc.format = _sapp.wgpu.render_format;
+        msaa_desc.mipLevelCount = 1;
+        msaa_desc.sampleCount = (uint32_t)_sapp.sample_count;
+        _sapp.wgpu.msaa_tex = wgpuDeviceCreateTexture(_sapp.wgpu.device, &msaa_desc);
+        if (0 == _sapp.wgpu.msaa_tex) {
+            _SAPP_PANIC(WGPU_SWAPCHAIN_CREATE_MSAA_TEXTURE_FAILED);
+        }
+        _sapp.wgpu.msaa_view = wgpuTextureCreateView(_sapp.wgpu.msaa_tex, 0);
+        if (0 == _sapp.wgpu.msaa_view) {
+            _SAPP_PANIC(WGPU_SWAPCHAIN_CREATE_MSAA_VIEW_FAILED);
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wgpu_discard_swapchain(void) {
+    if (_sapp.wgpu.msaa_view) {
+        wgpuTextureViewRelease(_sapp.wgpu.msaa_view);
+        _sapp.wgpu.msaa_view = 0;
+    }
+    if (_sapp.wgpu.msaa_tex) {
+        wgpuTextureRelease(_sapp.wgpu.msaa_tex);
+        _sapp.wgpu.msaa_tex = 0;
+    }
+    if (_sapp.wgpu.depth_stencil_view) {
+        wgpuTextureViewRelease(_sapp.wgpu.depth_stencil_view);
+        _sapp.wgpu.depth_stencil_view = 0;
+    }
+    if (_sapp.wgpu.depth_stencil_tex) {
+        wgpuTextureRelease(_sapp.wgpu.depth_stencil_tex);
+        _sapp.wgpu.depth_stencil_tex = 0;
+    }
+    if (_sapp.wgpu.swapchain) {
+        wgpuSwapChainRelease(_sapp.wgpu.swapchain);
+        _sapp.wgpu.swapchain = 0;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wgpu_size_changed(void) {
+    _sapp_wgpu_discard_swapchain();
+    _sapp_wgpu_create_swapchain();
+}
+
+_SOKOL_PRIVATE void _sapp_wgpu_request_device_cb(WGPURequestDeviceStatus status, WGPUDevice device, const char* msg, void* userdata) {
+    _SOKOL_UNUSED(msg);
+    _SOKOL_UNUSED(userdata);
+    SOKOL_ASSERT(!_sapp.wgpu.async_init_done);
+    if (status != WGPURequestDeviceStatus_Success) {
+        if (status == WGPURequestDeviceStatus_Error) {
+            _SAPP_PANIC(WGPU_REQUEST_DEVICE_STATUS_ERROR);
+        } else {
+            _SAPP_PANIC(WGPU_REQUEST_DEVICE_STATUS_UNKNOWN);
+        }
+    }
+    SOKOL_ASSERT(device);
+    _sapp.wgpu.device = device;
+    _sapp.wgpu.async_init_done = true;
+}
+
+_SOKOL_PRIVATE void _sapp_wgpu_request_adapter_cb(WGPURequestAdapterStatus status, WGPUAdapter adapter, const char* msg, void* userdata) {
+    _SOKOL_UNUSED(msg);
+    _SOKOL_UNUSED(userdata);
+    if (status != WGPURequestAdapterStatus_Success) {
+        switch (status) {
+            case WGPURequestAdapterStatus_Unavailable: _SAPP_PANIC(WGPU_REQUEST_ADAPTER_STATUS_UNAVAILABLE); break;
+            case WGPURequestAdapterStatus_Error: _SAPP_PANIC(WGPU_REQUEST_ADAPTER_STATUS_ERROR); break;
+            default: _SAPP_PANIC(WGPU_REQUEST_ADAPTER_STATUS_UNKNOWN); break;
+        }
+    }
+    SOKOL_ASSERT(adapter);
+    _sapp.wgpu.adapter = adapter;
+    size_t cur_feature_index = 1;
+    WGPUFeatureName requiredFeatures[8] = {
+        WGPUFeatureName_Depth32FloatStencil8,
+    };
+    // check for optional features we're interested in
+    // FIXME: ASTC texture compression
+    if (wgpuAdapterHasFeature(adapter, WGPUFeatureName_TextureCompressionBC)) {
+        requiredFeatures[cur_feature_index++] = WGPUFeatureName_TextureCompressionBC;
+    } else if (wgpuAdapterHasFeature(adapter, WGPUFeatureName_TextureCompressionETC2)) {
+        requiredFeatures[cur_feature_index++] = WGPUFeatureName_TextureCompressionETC2;
+    }
+
+    // LT-FIX
+    WGPURequiredLimits reqLimits;
+    _sapp_clear(&reqLimits, sizeof(reqLimits));
+
+    // defined limits
+    reqLimits.limits.maxTextureDimension2D = 16384;
+    reqLimits.limits.maxStorageBuffersPerShaderStage = 10;
+    reqLimits.limits.maxBufferSize = 4ull * 1024ull * 1024ull * 1024ull;
+
+    // up to dawn
+    reqLimits.limits.maxTextureDimension1D = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxTextureDimension3D = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxTextureArrayLayers = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxBindGroups = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxBindGroupsPlusVertexBuffers = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxBindingsPerBindGroup = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxDynamicUniformBuffersPerPipelineLayout = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxDynamicStorageBuffersPerPipelineLayout = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxSampledTexturesPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxSamplersPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxStorageTexturesPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxUniformBuffersPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxUniformBufferBindingSize = WGPU_LIMIT_U64_UNDEFINED;
+    reqLimits.limits.maxStorageBufferBindingSize = WGPU_LIMIT_U64_UNDEFINED;
+    reqLimits.limits.minUniformBufferOffsetAlignment = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.minStorageBufferOffsetAlignment = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxVertexBuffers = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxVertexAttributes = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxVertexBufferArrayStride = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxInterStageShaderComponents = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxInterStageShaderVariables = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxColorAttachments = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxColorAttachmentBytesPerSample = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxComputeWorkgroupStorageSize = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxComputeInvocationsPerWorkgroup = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxComputeWorkgroupSizeX = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxComputeWorkgroupSizeY = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxComputeWorkgroupSizeZ = WGPU_LIMIT_U32_UNDEFINED;
+    reqLimits.limits.maxComputeWorkgroupsPerDimension = WGPU_LIMIT_U32_UNDEFINED;
+
+    WGPUDeviceDescriptor dev_desc;
+    _sapp_clear(&dev_desc, sizeof(dev_desc));
+    dev_desc.requiredFeatureCount = cur_feature_index;
+    dev_desc.requiredFeatures = requiredFeatures;
+    dev_desc.requiredLimits = &reqLimits;
+    wgpuAdapterRequestDevice(adapter, &dev_desc, _sapp_wgpu_request_device_cb, 0);
+}
+#endif // SOKOL_WGPU
+
 //  █████  ██████  ██████  ██      ███████
 // ██   ██ ██   ██ ██   ██ ██      ██
 // ███████ ██████  ██████  ██      █████
@@ -3669,10 +3871,12 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
     const NSRect bounds = [_sapp.macos.view bounds];
     _sapp.window_width = (int)roundf(bounds.size.width);
     _sapp.window_height = (int)roundf(bounds.size.height);
-    #if defined(SOKOL_METAL)
+    #if defined(SOKOL_METAL) || defined(SOKOL_WGPU)
         _sapp.framebuffer_width = (int)roundf(bounds.size.width * _sapp.dpi_scale);
         _sapp.framebuffer_height = (int)roundf(bounds.size.height * _sapp.dpi_scale);
-        const CGSize fb_size = _sapp.macos.view.drawableSize;
+        CAMetalLayer *metalLayer = (CAMetalLayer *)_sapp.macos.view.layer;
+
+        const CGSize fb_size = metalLayer.drawableSize;
         const int cur_fb_width = (int)roundf(fb_size.width);
         const int cur_fb_height = (int)roundf(fb_size.height);
         const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) ||
@@ -3698,12 +3902,17 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
         _sapp.window_height = 1;
     }
     if (dim_changed) {
-        #if defined(SOKOL_METAL)
+        #if defined(SOKOL_METAL) || defined(SOKOL_WGPU)
             CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
-            _sapp.macos.view.drawableSize = drawable_size;
+            CAMetalLayer *metalLayer = (CAMetalLayer *)_sapp.macos.view.layer;
+            metalLayer.drawableSize = drawable_size;
+            #if defined(SOKOL_WGPU)
+            _sapp_wgpu_size_changed();
+            #endif
         #else
             // nothing to do for GL?
         #endif
+
         if (!_sapp.first_frame) {
             _sapp_macos_app_event(SAPP_EVENTTYPE_RESIZED);
         }
@@ -3861,12 +4070,75 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
     CGImageRelease(cg_img);
 }
 
+#if defined(SOKOL_WGPU)
+
+static void _sapp_win32_wgpu_error_cb(WGPUErrorType type, const char* message, void* userdata) {
+    (void)type; (void)userdata;
+    if (type != WGPUErrorType_NoError) {
+        printf("ERROR: %s\n", message);
+    }
+}
+
+static void _sapp_win32_wgpu_logging_cb(WGPULoggingType type, const char* message, void* userdata) {
+    (void)type; (void)userdata;
+    printf("LOG: %s\n", message);
+}
+#endif
+
 _SOKOL_PRIVATE void _sapp_macos_frame(void) {
+
+#if defined(SOKOL_WGPU)
+    wgpuDevicePushErrorScope(_sapp.wgpu.device, WGPUErrorFilter_Validation);
+    _sapp.wgpu.swapchain_view = wgpuSwapChainGetCurrentTextureView(_sapp.wgpu.swapchain);
+#endif
+
     _sapp_frame();
+
+#if defined(SOKOL_WGPU)
+    wgpuSwapChainPresent(_sapp.wgpu.swapchain);
+    wgpuTextureViewRelease(_sapp.wgpu.swapchain_view);
+    _sapp.wgpu.swapchain_view = 0;
+    wgpuDevicePopErrorScope(_sapp.wgpu.device, _sapp_win32_wgpu_error_cb, 0);
+    wgpuInstanceProcessEvents(_sapp.wgpu.instance);
+#endif
+
     if (_sapp.quit_requested || _sapp.quit_ordered) {
         [_sapp.macos.window performClose:nil];
     }
 }
+
+#if defined(SOKOL_WGPU)
+
+_SOKOL_PRIVATE void _sapp_macos_wgpu_init(void) {
+    SOKOL_ASSERT(0 == _sapp.wgpu.instance);
+    SOKOL_ASSERT(!_sapp.wgpu.async_init_done);
+    _sapp.wgpu.instance = wgpuCreateInstance(0);
+    if (0 == _sapp.wgpu.instance) {
+        _SAPP_PANIC(WGPU_CREATE_INSTANCE_FAILED);
+    }
+    // FIXME: power preference?
+    wgpuInstanceRequestAdapter(_sapp.wgpu.instance, 0, _sapp_wgpu_request_adapter_cb, 0);
+
+    wgpuDeviceSetUncapturedErrorCallback(_sapp.wgpu.device, _sapp_win32_wgpu_error_cb, 0);
+    wgpuDeviceSetLoggingCallback(_sapp.wgpu.device, _sapp_win32_wgpu_logging_cb, 0);
+    wgpuDeviceSetDeviceLostCallback(_sapp.wgpu.device, 0, 0);
+    wgpuDevicePushErrorScope(_sapp.wgpu.device, WGPUErrorFilter_Validation);
+
+    WGPUSurfaceDescriptorFromMetalLayer desc = { .chain = { .sType = WGPUSType_SurfaceSourceMetalLayer } };
+
+    desc.layer = (__bridge void*) [_sapp.macos.view layer];
+
+    WGPUSurfaceDescriptor descriptor;
+    _sapp_clear(&descriptor, sizeof(descriptor));
+
+    descriptor.nextInChain = (WGPUChainedStruct*)&desc;
+    _sapp.wgpu.surface = wgpuInstanceCreateSurface (_sapp.wgpu.instance, &descriptor);
+
+    _sapp_wgpu_create_swapchain();
+    wgpuDevicePopErrorScope(_sapp.wgpu.device, _sapp_win32_wgpu_error_cb, 0);
+    wgpuInstanceProcessEvents(_sapp.wgpu.instance);
+}
+#endif // defined(SOKOL_WGPU)
 
 @implementation _sapp_macos_app_delegate
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
@@ -3900,25 +4172,40 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 
     _sapp.macos.win_dlg = [[_sapp_macos_window_delegate alloc] init];
     _sapp.macos.window.delegate = _sapp.macos.win_dlg;
-    #if defined(SOKOL_METAL)
-        NSInteger max_fps = 60;
-        #if (__MAC_OS_X_VERSION_MAX_ALLOWED >= 120000)
-        if (@available(macOS 12.0, *)) {
-            max_fps = [NSScreen.mainScreen maximumFramesPerSecond];
-        }
-        #endif
+    #if defined(SOKOL_METAL) || defined(SOKOL_WGPU)
         _sapp.macos.mtl_device = MTLCreateSystemDefaultDevice();
-        _sapp.macos.view = [[_sapp_macos_view alloc] init];
+        _sapp.macos.view = [[_sapp_macos_view alloc] initWithFrame:window_rect];
+        
+        _sapp.macos.view.wantsLayer = YES;
+        _sapp.macos.view.layerContentsRedrawPolicy = NSViewLayerContentsRedrawDuringViewResize;
+        _sapp.macos.view.layerContentsRedrawPolicy = NSViewLayerContentsRedrawOnSetNeedsDisplay;
+    
+        // CAMetalLayer *metalLayer = (CAMetalLayer *)_sapp.macos.view.layer;
+        CAMetalLayer *metalLayer = [CAMetalLayer layer];
+        metalLayer.device = _sapp.macos.mtl_device;
+        metalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+
+        // metalLayer.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+
+        _sapp.macos.view.layer = metalLayer;
+
         [_sapp.macos.view updateTrackingAreas];
-        _sapp.macos.view.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
-        _sapp.macos.view.device = _sapp.macos.mtl_device;
-        _sapp.macos.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
-        _sapp.macos.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-        _sapp.macos.view.sampleCount = (NSUInteger) _sapp.sample_count;
-        _sapp.macos.view.autoResizeDrawable = false;
+        // _sapp.macos.view.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
+        // _sapp.macos.view.device = _sapp.macos.mtl_device;
+        // _sapp.macos.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
+        // _sapp.macos.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+        // _sapp.macos.view.sampleCount = (NSUInteger) _sapp.sample_count;
+        // _sapp.macos.view.autoResizeDrawable = false;
+
+      #if defined(SOKOL_WGPU)
+        _sapp_macos_wgpu_init();
+      #endif
+
         _sapp.macos.window.contentView = _sapp.macos.view;
         [_sapp.macos.window makeFirstResponder:_sapp.macos.view];
         _sapp.macos.view.layer.magnificationFilter = kCAFilterNearest;
+
+        [_sapp.macos.view setupDisplayLink];
     #elif defined(SOKOL_GLCORE)
         NSOpenGLPixelFormatAttribute attrs[32];
         int i = 0;
@@ -4151,6 +4438,87 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 @end
 
 @implementation _sapp_macos_view
+
++ (Class)layerClass {
+    return [CAMetalLayer class];
+}
+
+- (instancetype)initWithFrame:(NSRect)frame
+{
+    self = [super initWithFrame:frame];
+    if (self) {
+        [self setupDisplayLink];
+    }
+    return self;
+}
+
+- (void)setFrame:(NSRect)frame
+{
+    [super setFrame:frame];
+    [self updateDrawableSize];
+}
+
+- (void)setBounds:(NSRect)bounds
+{
+    [super setBounds:bounds];
+    [self updateDrawableSize];
+}
+
+- (void)updateDrawableSize
+{
+    _sapp_macos_update_dimensions();
+}
+
+- (void)setupDisplayLink
+{
+    CVReturn cvReturn = CVDisplayLinkCreateWithActiveCGDisplays(&_displayLink);
+    if (cvReturn != kCVReturnSuccess) {
+        NSLog(@"Failed to create display link");
+        return;
+    }
+
+    cvReturn = CVDisplayLinkSetOutputCallback(self.displayLink, &DisplayLinkCallback, (__bridge void *)self);
+    if (cvReturn != kCVReturnSuccess) {
+        NSLog(@"Failed to set callback for display link");
+        return;
+    }
+
+    cvReturn = CVDisplayLinkStart(self.displayLink);
+    if (cvReturn != kCVReturnSuccess) {
+        NSLog(@"Failed to start display link");
+        return;
+    }
+}
+
+
+static CVReturn DisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTimeStamp *now, const CVTimeStamp *outputTime, CVOptionFlags flagsIn, CVOptionFlags *flagsOut, void *displayLinkContext)
+{
+    _sapp_macos_view *view = (__bridge _sapp_macos_view *)displayLinkContext;
+    
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [view render];
+    });
+    
+    return kCVReturnSuccess;
+}
+
+
+- (void)render {
+    #if defined(_SAPP_ANY_GL)
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
+    #endif
+
+    _sapp_timing_measure(&_sapp.timing);
+    /* Catch any last-moment input events */
+    _sapp_macos_poll_input_events();
+    @autoreleasepool {
+        _sapp_macos_frame();
+    }
+    #if defined(_SAPP_ANY_GL)
+    [[_sapp.macos.view openGLContext] flushBuffer];
+    #endif
+}
+
 #if defined(SOKOL_GLCORE)
 - (void)timerFired:(id)sender {
     _SOKOL_UNUSED(sender);
@@ -4166,13 +4534,6 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 #endif
 
 _SOKOL_PRIVATE void _sapp_macos_poll_input_events(void) {
-    /*
-
-    NOTE: late event polling temporarily out-commented to check if this
-    causes infrequent and almost impossible to reproduce problems with the
-    window close events, see:
-    https://github.com/floooh/sokol/pull/483#issuecomment-805148815
-
 
     const NSEventMask mask = NSEventMaskLeftMouseDown |
                              NSEventMaskLeftMouseUp|
@@ -4205,23 +4566,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events(void) {
             [NSApp sendEvent:event];
         }
     }
-    */
-}
 
-- (void)drawRect:(NSRect)rect {
-    _SOKOL_UNUSED(rect);
-    #if defined(_SAPP_ANY_GL)
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
-    #endif
-    _sapp_timing_measure(&_sapp.timing);
-    /* Catch any last-moment input events */
-    _sapp_macos_poll_input_events();
-    @autoreleasepool {
-        _sapp_macos_frame();
-    }
-    #if defined(_SAPP_ANY_GL)
-    [[_sapp.macos.view openGLContext] flushBuffer];
-    #endif
 }
 
 - (BOOL)isOpaque {
@@ -5178,7 +5523,7 @@ _SOKOL_PRIVATE uint32_t _sapp_emsc_touch_event_mods(const EmscriptenTouchEvent* 
     return m;
 }
 
-#if defined(SOKOL_WGPU)
+#if defined(_SAPP_EMSCRIPTEN) && defined(SOKOL_WGPU)
 _SOKOL_PRIVATE void _sapp_emsc_wgpu_size_changed(void);
 #endif
 
@@ -5226,7 +5571,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
     _sapp.framebuffer_height = (int)roundf(h * _sapp.dpi_scale);
     SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
     emscripten_set_canvas_element_size(_sapp.html5_canvas_selector, _sapp.framebuffer_width, _sapp.framebuffer_height);
-    #if defined(SOKOL_WGPU)
+    #if defined(_SAPP_EMSCRIPTEN) && defined(SOKOL_WGPU)
         // on WebGPU: recreate size-dependent rendering surfaces
         _sapp_emsc_wgpu_size_changed();
     #endif
@@ -6636,6 +6981,53 @@ _SOKOL_PRIVATE void _sapp_d3d11_present(bool do_not_wait) {
 
 #endif /* SOKOL_D3D11 */
 
+#if defined(SOKOL_WGPU)
+
+static void _sapp_win32_wgpu_error_cb(WGPUErrorType type, const char* message, void* userdata) {
+    (void)type; (void)userdata;
+    if (type != WGPUErrorType_NoError) {
+        printf("ERROR: %s\n", message);
+    }
+}
+
+static void _sapp_win32_wgpu_logging_cb(WGPULoggingType type, const char* message, void* userdata) {
+    (void)type; (void)userdata;
+    printf("LOG: %s\n", message);
+}
+
+_SOKOL_PRIVATE void _sapp_win32_wgpu_init(void) {
+    SOKOL_ASSERT(0 == _sapp.wgpu.instance);
+    SOKOL_ASSERT(!_sapp.wgpu.async_init_done);
+    _sapp.wgpu.instance = wgpuCreateInstance(0);
+    if (0 == _sapp.wgpu.instance) {
+        _SAPP_PANIC(WGPU_CREATE_INSTANCE_FAILED);
+    }
+    // FIXME: power preference?
+    wgpuInstanceRequestAdapter(_sapp.wgpu.instance, 0, _sapp_wgpu_request_adapter_cb, 0);
+
+    wgpuDeviceSetUncapturedErrorCallback(_sapp.wgpu.device, _sapp_win32_wgpu_error_cb, 0);
+    wgpuDeviceSetLoggingCallback(_sapp.wgpu.device, _sapp_win32_wgpu_logging_cb, 0);
+    wgpuDeviceSetDeviceLostCallback(_sapp.wgpu.device, 0, 0);
+    wgpuDevicePushErrorScope(_sapp.wgpu.device, WGPUErrorFilter_Validation);
+
+    WGPUSurfaceSourceWindowsHWND desc = { .chain = { .sType = WGPUSType_SurfaceSourceWindowsHWND } };
+
+    desc.hwnd = _sapp.win32.hwnd;
+    desc.hinstance = GetModuleHandleW(NULL);
+
+    WGPUSurfaceDescriptor descriptor;
+    _sapp_clear(&descriptor, sizeof(descriptor));
+
+    descriptor.nextInChain = (WGPUChainedStruct*)&desc;
+    _sapp.wgpu.surface = wgpuInstanceCreateSurface (_sapp.wgpu.instance, &descriptor);
+
+    _sapp_wgpu_create_swapchain();
+    wgpuDevicePopErrorScope(_sapp.wgpu.device, _sapp_win32_wgpu_error_cb, 0);
+    wgpuInstanceProcessEvents(_sapp.wgpu.instance);
+}
+
+#endif // SOKOL_WGPU
+
 #if defined(SOKOL_GLCORE)
 _SOKOL_PRIVATE void _sapp_wgl_init(void) {
     _sapp.wgl.opengl32 = LoadLibraryA("opengl32.dll");
@@ -7551,7 +7943,19 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 break;
             case WM_TIMER:
                 _sapp_win32_timing_measure();
+
+                #if defined(SOKOL_WGPU)
+                    wgpuDevicePushErrorScope(_sapp.wgpu.device, WGPUErrorFilter_Validation);
+                    _sapp.wgpu.swapchain_view = wgpuSwapChainGetCurrentTextureView(_sapp.wgpu.swapchain);
+                #endif
                 _sapp_frame();
+                #if defined(SOKOL_WGPU)
+                    wgpuSwapChainPresent(_sapp.wgpu.swapchain);
+                    wgpuTextureViewRelease(_sapp.wgpu.swapchain_view);
+                    _sapp.wgpu.swapchain_view = 0;
+                    wgpuDevicePopErrorScope(_sapp.wgpu.device, _sapp_win32_wgpu_error_cb, 0);
+                    wgpuInstanceProcessEvents(_sapp.wgpu.instance);
+                #endif
                 #if defined(SOKOL_D3D11)
                     // present with DXGI_PRESENT_DO_NOT_WAIT
                     _sapp_d3d11_present(true);
@@ -7974,6 +8378,9 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         _sapp_wgl_load_extensions();
         _sapp_wgl_create_context();
     #endif
+    #if defined(SOKOL_WGPU)
+        _sapp_win32_wgpu_init();
+    #endif
     _sapp.valid = true;
 
     bool done = false;
@@ -7990,7 +8397,14 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
                 DispatchMessageW(&msg);
             }
         }
+
+        #if defined(SOKOL_WGPU)
+            wgpuDevicePushErrorScope(_sapp.wgpu.device, WGPUErrorFilter_Validation);
+            _sapp.wgpu.swapchain_view = wgpuSwapChainGetCurrentTextureView(_sapp.wgpu.swapchain);
+        #endif
+
         _sapp_frame();
+
         #if defined(SOKOL_D3D11)
             _sapp_d3d11_present(false);
             if (IsIconic(_sapp.win32.hwnd)) {
@@ -8000,10 +8414,19 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         #if defined(SOKOL_GLCORE)
             _sapp_wgl_swap_buffers();
         #endif
+        #if defined(SOKOL_WGPU)
+            wgpuSwapChainPresent(_sapp.wgpu.swapchain);
+            wgpuTextureViewRelease(_sapp.wgpu.swapchain_view);
+            _sapp.wgpu.swapchain_view = 0;
+            wgpuDevicePopErrorScope(_sapp.wgpu.device, _sapp_win32_wgpu_error_cb, 0);
+            wgpuInstanceProcessEvents(_sapp.wgpu.instance);
+        #endif
         /* check for window resized, this cannot happen in WM_SIZE as it explodes memory usage */
         if (_sapp_win32_update_dimensions()) {
             #if defined(SOKOL_D3D11)
             _sapp_d3d11_resize_default_render_target();
+            #elif defined(SOKOL_WGPU)
+            _sapp_wgpu_size_changed();
             #endif
             _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
         }
@@ -8025,6 +8448,15 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     #elif defined(SOKOL_GLCORE)
         _sapp_wgl_destroy_context();
         _sapp_wgl_shutdown();
+    #elif defined(SOKOL_WGPU)
+        _sapp_wgpu_discard_swapchain();
+        if (_sapp.wgpu.surface) {
+            wgpuSurfaceRelease(_sapp.wgpu.surface);
+            _sapp.wgpu.surface = 0;
+        }
+        wgpuDeviceRelease(_sapp.wgpu.device);
+        wgpuAdapterRelease(_sapp.wgpu.adapter);
+        wgpuInstanceRelease(_sapp.wgpu.instance);
     #endif
     _sapp_win32_destroy_window();
     _sapp_win32_destroy_icons();
@@ -11677,7 +12109,7 @@ SOKOL_API_IMPL float sapp_heightf(void) {
 }
 
 SOKOL_API_IMPL int sapp_color_format(void) {
-    #if defined(_SAPP_EMSCRIPTEN) && defined(SOKOL_WGPU)
+    #if defined(SOKOL_WGPU)
         switch (_sapp.wgpu.render_format) {
             case WGPUTextureFormat_RGBA8Unorm:
                 return _SAPP_PIXELFORMAT_RGBA8;
@@ -11687,7 +12119,7 @@ SOKOL_API_IMPL int sapp_color_format(void) {
                 SOKOL_UNREACHABLE;
                 return 0;
         }
-    #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
+    #elif defined(SOKOL_METAL) || defined(SOKOL_WGPU) || defined(SOKOL_D3D11)
         return _SAPP_PIXELFORMAT_BGRA8;
     #else
         return _SAPP_PIXELFORMAT_RGBA8;
@@ -11983,7 +12415,7 @@ SOKOL_API_IMPL void sapp_html5_fetch_dropped_file(const sapp_html5_fetch_request
 
 SOKOL_API_IMPL const void* sapp_metal_get_device(void) {
     SOKOL_ASSERT(_sapp.valid);
-    #if defined(SOKOL_METAL)
+    #if defined(SOKOL_METAL) || defined(SOKOL_WGPU)
         #if defined(_SAPP_MACOS)
             const void* obj = (__bridge const void*) _sapp.macos.mtl_device;
         #else
@@ -12135,7 +12567,7 @@ SOKOL_API_IMPL const void* sapp_win32_get_hwnd(void) {
 
 SOKOL_API_IMPL const void* sapp_wgpu_get_device(void) {
     SOKOL_ASSERT(_sapp.valid);
-    #if defined(_SAPP_EMSCRIPTEN) && defined(SOKOL_WGPU)
+    #if defined(SOKOL_WGPU)
         return (const void*) _sapp.wgpu.device;
     #else
         return 0;
@@ -12144,7 +12576,7 @@ SOKOL_API_IMPL const void* sapp_wgpu_get_device(void) {
 
 SOKOL_API_IMPL const void* sapp_wgpu_get_render_view(void) {
     SOKOL_ASSERT(_sapp.valid);
-    #if defined(_SAPP_EMSCRIPTEN) && defined(SOKOL_WGPU)
+    #if defined(SOKOL_WGPU)
         if (_sapp.sample_count > 1) {
             SOKOL_ASSERT(_sapp.wgpu.msaa_view);
             return (const void*) _sapp.wgpu.msaa_view;
@@ -12159,7 +12591,7 @@ SOKOL_API_IMPL const void* sapp_wgpu_get_render_view(void) {
 
 SOKOL_API_IMPL const void* sapp_wgpu_get_resolve_view(void) {
     SOKOL_ASSERT(_sapp.valid);
-    #if defined(_SAPP_EMSCRIPTEN) && defined(SOKOL_WGPU)
+    #if defined(SOKOL_WGPU)
         if (_sapp.sample_count > 1) {
             SOKOL_ASSERT(_sapp.wgpu.swapchain_view);
             return (const void*) _sapp.wgpu.swapchain_view;
@@ -12173,7 +12605,7 @@ SOKOL_API_IMPL const void* sapp_wgpu_get_resolve_view(void) {
 
 SOKOL_API_IMPL const void* sapp_wgpu_get_depth_stencil_view(void) {
     SOKOL_ASSERT(_sapp.valid);
-    #if defined(_SAPP_EMSCRIPTEN) && defined(SOKOL_WGPU)
+    #if defined(SOKOL_WGPU)
         return (const void*) _sapp.wgpu.depth_stencil_view;
     #else
         return 0;
