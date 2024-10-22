@@ -16,6 +16,15 @@
   - https://github.com/fips-libs/fips-cimgui
   - https://github.com/fips-libs/fips-imgui-dock
 
+  PS: This Dear ImGui change will also allow to remove a lot of complexity
+  from sokol_imgui again which was necessary after the image/sampler split
+  in sokol_gfx.h. Since ImTextureID is now guaranteed to be 64-bits (even when
+  the pointer size is 32-bits like on WASM), it's possible to stash the sokol-gfx
+  image- and sampler-handles (which are 32-bits each) directly into the 64-bit
+  ImTextureID instead of maintaining an internal object in sokol_imgui.h just
+  to associate a sokol-gfx image handle with a sampler handle. That's for a later
+  time though :)
+
 ### 14-Oct-2024
 
 - sokol_gfx.h: The pixel format RG11B10F is now marked as renderable in the GL
