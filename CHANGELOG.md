@@ -1,5 +1,21 @@
 ## Updates
 
+### 22-Oct-2024
+
+- sokol_imgui.h: Fixed for latest Dear ImGui version 1.91.4 (Dear ImGui has
+  changed the ImTextureID handle from `void*` to `uint64_t` which requires some
+  minor fixes, also in the public API (so technically it's a breaking change
+  but it's unlikely that most code will be affected).
+
+  Many thanks to @DctrNoob for the PR (https://github.com/floooh/sokol/pull/1134).
+
+  Also related change if you're using fips: the following ImGui wrapper repos
+  have been updated to 1.91.4:
+
+  - https://github.com/fips-libs/fips-imgui
+  - https://github.com/fips-libs/fips-cimgui
+  - https://github.com/fips-libs/fips-imgui-dock
+
 ### 14-Oct-2024
 
 - sokol_gfx.h: The pixel format RG11B10F is now marked as renderable in the GL
