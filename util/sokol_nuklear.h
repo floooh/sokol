@@ -2153,7 +2153,7 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
         if (_snuklear.atlas.default_font) {
             nk_style_set_font(&_snuklear.ctx, &_snuklear.atlas.default_font->handle);
             // This adds the default cursors into the nuklear overlay for use.
-            nk_style_load_all_cursors(&_snuklear.ctx, &_snuklear.atlas.cursors);
+            nk_style_load_all_cursors(&_snuklear.ctx, &_snuklear.atlas.cursors[0]);
         }
     }
 
