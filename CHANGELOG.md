@@ -1,5 +1,10 @@
 ## Updates
 
+### 24-Oct-2024
+
+- sokol_nuklear.h: Merged https://github.com/floooh/sokol/pull/1138 which
+  allows to use Nuklear's software mouse cursors. Many thanks to @dlannan!
+
 ### 22-Oct-2024
 
 - sokol_imgui.h: Fixed for latest Dear ImGui version 1.91.4 (Dear ImGui has
