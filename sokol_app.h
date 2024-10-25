@@ -94,7 +94,7 @@
     =======================
                         | Windows | macOS | Linux |  iOS  | Android |  HTML5
     --------------------+---------+-------+-------+-------+---------+--------
-    gl 3.x              | YES     | YES   | YES   | ---   | ---     |  ---
+    gl 4.x              | YES     | YES   | YES   | ---   | ---     |  ---
     gles3/webgl2        | ---     | ---   | YES(2)| YES   | YES     |  YES
     metal               | ---     | YES   | ---   | YES   | ---     |  ---
     d3d11               | YES     | ---   | ---   | ---   | ---     |  ---
@@ -275,10 +275,9 @@
             to various Metal API objects required for rendering, otherwise
             they return a null pointer. These void pointers are actually
             Objective-C ids converted with a (ARC) __bridge cast so that
-            the ids can be tunnel through C code. Also note that the returned
-            pointers to the renderpass-descriptor and drawable may change from one
-            frame to the next, only the Metal device object is guaranteed to
-            stay the same.
+            the ids can be tunneled through C code. Also note that the returned
+            pointers may change from one frame to the next, only the Metal device
+            object is guaranteed to stay the same.
 
         const void* sapp_macos_get_window(void)
             On macOS, get the NSWindow object pointer, otherwise a null pointer.
@@ -338,7 +337,8 @@
     --- Optionally implement the event-callback to handle input events.
         sokol-app provides the following type of input events:
             - a 'virtual key' was pressed down or released
-            - a single text character was entered (provided as UTF-32 code point)
+            - a single text character was entered (provided as UTF-32 encoded
+              UNICODE code point)
             - a mouse button was pressed down or released (left, right, middle)
             - mouse-wheel or 2D scrolling events
             - the mouse was moved
@@ -844,6 +844,8 @@
         - on Linux: highly dependent on the used window manager, but usually
           the window's title bar icon and/or the task bar icon
         - on HTML5: the favicon shown in the page's browser tab
+        - on macOS: the application icon shown in the dock, but only
+          for currently running applications
 
     NOTE that it is not possible to set the actual application icon which is
     displayed by the operating system on the desktop or 'home screen'. Those
@@ -974,7 +976,7 @@
       the browser will not generate UNICODE character events)
     - all other key events *do not* bubble up by default (this prevents side effects
       like F1 opening help, or F7 starting 'caret browsing')
-    - character events do no bubble up (although I haven't noticed any side effects
+    - character events do not bubble up (although I haven't noticed any side effects
       otherwise)
 
     Event bubbling can be enabled for input event categories during initialization
@@ -991,9 +993,10 @@
             };
         }
 
-    This basically opens the floodgates lets *all* input events bubble up to the browser.
+    This basically opens the floodgates and lets *all* input events bubble up to the browser.
+
     To prevent individual events from bubbling, call sapp_consume_event() from within
-    the sokol_app.h event callback.
+    the sokol_app.h event callback when that specific event is reported.
 
     OPTIONAL: DON'T HIJACK main() (#define SOKOL_NO_ENTRY)
     ======================================================

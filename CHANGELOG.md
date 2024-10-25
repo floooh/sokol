@@ -1,5 +1,35 @@
 ## Updates
 
+### 24-Oct-2024
+
+- sokol_nuklear.h: Merged https://github.com/floooh/sokol/pull/1138 which
+  allows to use Nuklear's software mouse cursors. Many thanks to @dlannan!
+
+### 22-Oct-2024
+
+- sokol_imgui.h: Fixed for latest Dear ImGui version 1.91.4 (Dear ImGui has
+  changed the ImTextureID handle from `void*` to `uint64_t` which requires some
+  minor fixes, also in the public API (so technically it's a breaking change
+  but it's unlikely that most code will be affected).
+
+  Many thanks to @DctrNoob for the PR (https://github.com/floooh/sokol/pull/1134).
+
+  Also related change if you're using fips: the following ImGui wrapper repos
+  have been updated to 1.91.4:
+
+  - https://github.com/fips-libs/fips-imgui
+  - https://github.com/fips-libs/fips-cimgui
+  - https://github.com/fips-libs/fips-imgui-dock
+
+  PS: This Dear ImGui change will also allow to remove a lot of complexity
+  from sokol_imgui again which was necessary after the image/sampler split
+  in sokol_gfx.h. Since ImTextureID is now guaranteed to be 64-bits (even when
+  the pointer size is 32-bits like on WASM), it's possible to stash the sokol-gfx
+  image- and sampler-handles (which are 32-bits each) directly into the 64-bit
+  ImTextureID instead of maintaining an internal object in sokol_imgui.h just
+  to associate a sokol-gfx image handle with a sampler handle. That's for a later
+  time though :)
+
 ### 14-Oct-2024
 
 - sokol_gfx.h: The pixel format RG11B10F is now marked as renderable in the GL

@@ -530,8 +530,8 @@ SOKOL_IMGUI_API_DECL void simgui_render(void);
 SOKOL_IMGUI_API_DECL simgui_image_t simgui_make_image(const simgui_image_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_destroy_image(simgui_image_t img);
 SOKOL_IMGUI_API_DECL simgui_image_desc_t simgui_query_image_desc(simgui_image_t img);
-SOKOL_IMGUI_API_DECL void* simgui_imtextureid(simgui_image_t img);
-SOKOL_IMGUI_API_DECL simgui_image_t simgui_image_from_imtextureid(void* im_texture_id);
+SOKOL_IMGUI_API_DECL uint64_t simgui_imtextureid(simgui_image_t img);
+SOKOL_IMGUI_API_DECL simgui_image_t simgui_image_from_imtextureid(uint64_t im_texture_id);
 SOKOL_IMGUI_API_DECL void simgui_add_focus_event(bool focus);
 SOKOL_IMGUI_API_DECL void simgui_add_mouse_pos_event(float x, float y);
 SOKOL_IMGUI_API_DECL void simgui_add_touch_pos_event(float x, float y);
@@ -2960,14 +2960,14 @@ SOKOL_API_IMPL simgui_image_desc_t simgui_query_image_desc(simgui_image_t img_id
     return desc;
 }
 
-SOKOL_API_IMPL void* simgui_imtextureid(simgui_image_t img) {
+SOKOL_API_IMPL uint64_t simgui_imtextureid(simgui_image_t img) {
     SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
-    return (void*)(uintptr_t)img.id;
+    return (uint64_t)(uintptr_t)img.id;
 }
 
-SOKOL_API_IMPL simgui_image_t simgui_image_from_imtextureid(void* im_texture_id) {
+SOKOL_API_IMPL simgui_image_t simgui_image_from_imtextureid(uint64_t im_texture_id) {
     SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
-    simgui_image_t img = { (uint32_t)(uintptr_t) im_texture_id };
+    simgui_image_t img = { (uint32_t)im_texture_id };
     return img;
 }
 
