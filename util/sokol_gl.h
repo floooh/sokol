@@ -3725,7 +3725,6 @@ static _sgl_matrix_t* _sgl_matrix(_sgl_context_t* ctx) {
     return &ctx->matrix_stack[ctx->cur_matrix_mode][ctx->matrix_tos[ctx->cur_matrix_mode]];
 }
 
-// return sg_context_desc_t with patched defaults
 static sgl_desc_t _sgl_desc_defaults(const sgl_desc_t* desc) {
     SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
     sgl_desc_t res = *desc;
