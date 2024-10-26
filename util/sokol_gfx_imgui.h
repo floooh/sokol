@@ -3522,9 +3522,9 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
                             const sg_glsl_shader_uniform* u = &ub->glsl_uniforms[j];
                             if (SG_UNIFORMTYPE_INVALID != u->type) {
                                 if (u->array_count <= 1) {
-                                    igText("    %s %s (offset: %d)", _sgimgui_uniformtype_string(u->type), u->glsl_name ? u->glsl_name : "", u->offset);
+                                    igText("    %s %s", _sgimgui_uniformtype_string(u->type), u->glsl_name ? u->glsl_name : "");
                                 } else {
-                                    igText("    %s[%d] %s (offset: %d)", _sgimgui_uniformtype_string(u->type), u->array_count, u->glsl_name ? u->glsl_name : "", u->offset);
+                                    igText("    %s[%d] %s", _sgimgui_uniformtype_string(u->type), u->array_count, u->glsl_name ? u->glsl_name : "");
                                 }
                             }
                         }

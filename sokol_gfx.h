@@ -2960,7 +2960,6 @@ typedef struct sg_shader_vertex_attr {
 
 typedef struct sg_glsl_shader_uniform {
     sg_uniform_type type;
-    uint32_t offset;            // optional explicit offset into uniform block struct (if zero, the offset will be computed)
     uint16_t array_count;       // 0 for scalars, or >1 for arrays
     const char* glsl_name;      // glsl name binding is required on GL 4.1 and WebGL2
 } sg_glsl_shader_uniform;
