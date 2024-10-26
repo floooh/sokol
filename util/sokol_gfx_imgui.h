@@ -855,6 +855,9 @@ _SOKOL_PRIVATE void igSameLine(float offset_from_start_x, float spacing) {
 _SOKOL_PRIVATE void igPushID_Int(int int_id) {
     return ImGui::PushID(int_id);
 }
+_SOKOL_PRIVATE void igPushID_Str(const char* str_id) {
+    return ImGui::PushID(str_id);
+}
 _SOKOL_PRIVATE void igPopID() {
     return ImGui::PopID();
 }
@@ -3784,6 +3787,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_attachments_panel(sgimgui_t* ctx, sg_attachmen
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_bindings_panel(sgimgui_t* ctx, const sg_bindings* bnd) {
+    igPushID_Str("bnd_vbufs");
     for (int i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
         sg_buffer buf = bnd->vertex_buffers[i];
         if (buf.id != SG_INVALID_ID) {
@@ -3794,10 +3798,10 @@ _SOKOL_PRIVATE void _sgimgui_draw_bindings_panel(sgimgui_t* ctx, const sg_bindin
                 _sgimgui_show_buffer(ctx, buf);
             }
             igText("  Offset: %d", bnd->vertex_buffer_offsets[i]);
-        } else {
-            break;
         }
     }
+    igPopID();
+    igPushID_Str("bnd_ibuf");
     if (bnd->index_buffer.id != SG_INVALID_ID) {
         sg_buffer buf = bnd->index_buffer;
         if (buf.id != SG_INVALID_ID) {
@@ -3810,6 +3814,8 @@ _SOKOL_PRIVATE void _sgimgui_draw_bindings_panel(sgimgui_t* ctx, const sg_bindin
             igText("  Offset: %d", bnd->index_buffer_offset);
         }
     }
+    igPopID();
+    igPushID_Str("bnd_sbufs");
     for (int i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
         sg_buffer buf = bnd->storage_buffers[i];
         if (buf.id != SG_INVALID_ID) {
@@ -3821,6 +3827,8 @@ _SOKOL_PRIVATE void _sgimgui_draw_bindings_panel(sgimgui_t* ctx, const sg_bindin
             }
         }
     }
+    igPopID();
+    igPushID_Str("bnd_imgs");
     for (int i = 0; i < SG_MAX_IMAGE_BINDSLOTS; i++) {
         sg_image img = bnd->images[i];
         if (img.id != SG_INVALID_ID) {
@@ -3830,10 +3838,10 @@ _SOKOL_PRIVATE void _sgimgui_draw_bindings_panel(sgimgui_t* ctx, const sg_bindin
             if (_sgimgui_draw_image_link(ctx, img)) {
                 _sgimgui_show_image(ctx, img);
             }
-        } else {
-            break;
         }
     }
+    igPopID();
+    igPushID_Str("bnd_smps");
     for (int i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
         sg_sampler smp = bnd->samplers[i];
         if (smp.id != SG_INVALID_ID) {
@@ -3843,10 +3851,9 @@ _SOKOL_PRIVATE void _sgimgui_draw_bindings_panel(sgimgui_t* ctx, const sg_bindin
             if (_sgimgui_draw_sampler_link(ctx, smp)) {
                 _sgimgui_show_sampler(ctx, smp);
             }
-        } else {
-            break;
         }
     }
+    igPopID();
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_uniforms_panel(sgimgui_t* ctx, const sgimgui_args_apply_uniforms_t* args) {
