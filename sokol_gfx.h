@@ -6668,6 +6668,7 @@ _SOKOL_PRIVATE void _sg_dummy_discard_shader(_sg_shader_t* shd) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && desc);
+    _SOKOL_UNUSED(desc);
     pip->shader = shd;
     return SG_RESOURCESTATE_VALID;
 }
