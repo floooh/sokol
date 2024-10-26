@@ -3584,6 +3584,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(WGPU_CREATE_PIPELINE_LAYOUT_FAILED, "wgpuDeviceCreatePipelineLayout() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_RENDER_PIPELINE_FAILED, "wgpuDeviceCreateRenderPipeline() failed") \
     _SG_LOGITEM_XMACRO(WGPU_ATTACHMENTS_CREATE_TEXTURE_VIEW_FAILED, "wgpuTextureCreateView() failed in create attachments") \
+    _SG_LOGITEM_XMACRO(DRAW_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING, "call to sg_apply_bindings() and/or sg_apply_uniforms() missing after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(IDENTICAL_COMMIT_LISTENER, "attempting to add identical commit listener") \
     _SG_LOGITEM_XMACRO(COMMIT_LISTENER_ARRAY_FULL, "commit listener array full") \
     _SG_LOGITEM_XMACRO(TRACE_HOOKS_NOT_ENABLED, "sg_install_trace_hooks() called, but SOKOL_TRACE_HOOKS is not defined") \
@@ -5075,6 +5076,7 @@ typedef struct {
 } _sg_shader_image_sampler_t;
 
 typedef struct {
+    uint32_t required_bindings_and_uniforms;
     _sg_shader_uniform_block_t uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
     _sg_shader_storage_buffer_t storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
     _sg_shader_image_t images[SG_MAX_IMAGE_BINDSLOTS];
@@ -5087,14 +5089,17 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
         const sg_shader_uniform_block* src = &desc->uniform_blocks[i];
         _sg_shader_uniform_block_t* dst = &cmn->uniform_blocks[i];
         if (src->stage != SG_SHADERSTAGE_NONE) {
+            cmn->required_bindings_and_uniforms |= (1 << i);
             dst->stage = src->stage;
             dst->size = src->size;
         }
     }
+    const uint32_t required_bindings_flag = (1 << SG_MAX_UNIFORMBLOCK_BINDSLOTS);
     for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
         const sg_shader_storage_buffer* src = &desc->storage_buffers[i];
         _sg_shader_storage_buffer_t* dst = &cmn->storage_buffers[i];
         if (src->stage != SG_SHADERSTAGE_NONE) {
+            cmn->required_bindings_and_uniforms |= required_bindings_flag;
             dst->stage = src->stage;
             dst->readonly = src->readonly;
         }
@@ -5103,6 +5108,7 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
         const sg_shader_image* src = &desc->images[i];
         _sg_shader_image_t* dst = &cmn->images[i];
         if (src->stage != SG_SHADERSTAGE_NONE) {
+            cmn->required_bindings_and_uniforms |= required_bindings_flag;
             dst->stage = src->stage;
             dst->image_type = src->image_type;
             dst->sample_type = src->sample_type;
@@ -5113,6 +5119,7 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
         const sg_shader_sampler* src = &desc->samplers[i];
         _sg_shader_sampler_t* dst = &cmn->samplers[i];
         if (src->stage != SG_SHADERSTAGE_NONE) {
+            cmn->required_bindings_and_uniforms |= required_bindings_flag;
             dst->stage = src->stage;
             dst->sampler_type = src->sampler_type;
         }
@@ -5135,6 +5142,7 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
 typedef struct {
     bool vertex_buffer_layout_active[SG_MAX_VERTEXBUFFER_BINDSLOTS];
     bool use_instanced_draw;
+    uint32_t required_bindings_and_uniforms;
     sg_shader shader_id;
     sg_vertex_layout_state layout;
     sg_depth_state depth;
@@ -5152,8 +5160,14 @@ typedef struct {
 
 _SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT((desc->color_count >= 0) && (desc->color_count <= SG_MAX_COLOR_ATTACHMENTS));
+    const uint32_t require_bindings_required_flag = (1 << SG_MAX_UNIFORMBLOCK_BINDSLOTS);
     for (int i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
-        cmn->vertex_buffer_layout_active[i] = false;
+        const sg_vertex_attr_state* a_state = &desc->layout.attrs[i];
+        if (a_state->format != SG_VERTEXFORMAT_INVALID) {
+            SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
+            cmn->vertex_buffer_layout_active[a_state->buffer_index] = true;
+            cmn->required_bindings_and_uniforms |= require_bindings_required_flag;
+        }
     }
     cmn->use_instanced_draw = false;
     cmn->shader_id = desc->shader;
@@ -5166,6 +5180,9 @@ _SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const s
     }
     cmn->primitive_type = desc->primitive_type;
     cmn->index_type = desc->index_type;
+    if (cmn->index_type != SG_INDEXTYPE_NONE) {
+        cmn->required_bindings_and_uniforms |= require_bindings_required_flag;
+    }
     cmn->cull_mode = desc->cull_mode;
     cmn->face_winding = desc->face_winding;
     cmn->sample_count = desc->sample_count;
@@ -5923,6 +5940,8 @@ typedef struct {
     } cur_pass;
     sg_pipeline cur_pipeline;
     bool next_draw_valid;
+    uint32_t required_bindings_and_uniforms;    // used to check that bindings and uniforms are applied after applying pipeline
+    uint32_t applied_bindings_and_uniforms;     // bits 0..7: uniform blocks, bit 8: bindings
     #if defined(SOKOL_DEBUG)
     sg_log_item validate_error;
     #endif
@@ -6653,14 +6672,6 @@ _SOKOL_PRIVATE void _sg_dummy_discard_shader(_sg_shader_t* shd) {
 _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && desc);
     pip->shader = shd;
-    for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
-        const sg_vertex_attr_state* a_state = &desc->layout.attrs[attr_index];
-        if (a_state->format == SG_VERTEXFORMAT_INVALID) {
-            break;
-        }
-        SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
-        pip->cmn.vertex_buffer_layout_active[a_state->buffer_index] = true;
-    }
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -8618,6 +8629,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
             break;
         }
         SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
+        SOKOL_ASSERT(pip->cmn.vertex_buffer_layout_active[a_state->buffer_index]);
         const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[a_state->buffer_index];
         const sg_vertex_step step_func = l_state->step_func;
         const int step_rate = l_state->step_rate;
@@ -8642,10 +8654,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
             gl_attr->size = (uint8_t) _sg_gl_vertexformat_size(a_state->format);
             gl_attr->type = _sg_gl_vertexformat_type(a_state->format);
             gl_attr->normalized = _sg_gl_vertexformat_normalized(a_state->format);
-            pip->cmn.vertex_buffer_layout_active[a_state->buffer_index] = true;
         } else {
             _SG_WARN(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER);
             _SG_LOGMSG(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER, _sg_strptr(&shd->gl.attrs[attr_index].name));
+            pip->cmn.vertex_buffer_layout_active[a_state->buffer_index] = false;
         }
     }
     return SG_RESOURCESTATE_VALID;
@@ -10880,6 +10892,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
             break;
         }
         SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
+        SOKOL_ASSERT(pip->cmn.vertex_buffer_layout_active[a_state->buffer_index]);
         const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[a_state->buffer_index];
         const sg_vertex_step step_func = l_state->step_func;
         const int step_rate = l_state->step_rate;
@@ -10894,7 +10907,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
             d3d11_comp->InstanceDataStepRate = (UINT)step_rate;
             pip->cmn.use_instanced_draw = true;
         }
-        pip->cmn.vertex_buffer_layout_active[a_state->buffer_index] = true;
     }
     for (int layout_index = 0; layout_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; layout_index++) {
         if (pip->cmn.vertex_buffer_layout_active[layout_index]) {
@@ -12671,10 +12683,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
             break;
         }
         SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
+        SOKOL_ASSERT(pip->cmn.vertex_buffer_layout_active[a_state->buffer_index]);
         vtx_desc.attributes[attr_index].format = _sg_mtl_vertex_format(a_state->format);
         vtx_desc.attributes[attr_index].offset = (NSUInteger)a_state->offset;
         vtx_desc.attributes[attr_index].bufferIndex = (NSUInteger)(a_state->buffer_index + SG_MAX_UNIFORMBLOCK_BINDSLOTS + SG_MAX_STORAGEBUFFER_BINDSLOTS);
-        pip->cmn.vertex_buffer_layout_active[a_state->buffer_index] = true;
     }
     for (NSUInteger layout_index = 0; layout_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; layout_index++) {
         if (pip->cmn.vertex_buffer_layout_active[layout_index]) {
@@ -14963,7 +14975,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
         }
         const int vb_idx = va_state->buffer_index;
         SOKOL_ASSERT(vb_idx < SG_MAX_VERTEXBUFFER_BINDSLOTS);
-        pip->cmn.vertex_buffer_layout_active[vb_idx] = true;
+        SOKOL_ASSERT(pip->cmn.vertex_buffer_layout_active[vb_idx]);
         const size_t wgpu_attr_idx = wgpu_vb_layouts[vb_idx].attributeCount;
         wgpu_vb_layouts[vb_idx].attributeCount += 1;
         wgpu_vtx_attrs[vb_idx][wgpu_attr_idx].format = _sg_wgpu_vertexformat(va_state->format);
@@ -18570,6 +18582,11 @@ SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
     _sg.next_draw_valid = (SG_RESOURCESTATE_VALID == pip->slot.state);
     SOKOL_ASSERT(pip->shader && (pip->shader->slot.id == pip->cmn.shader_id.id));
     _sg_apply_pipeline(pip);
+
+    // set the expected bindings and uniform block flags
+    _sg.required_bindings_and_uniforms = pip->cmn.required_bindings_and_uniforms | pip->shader->cmn.required_bindings_and_uniforms;
+    _sg.applied_bindings_and_uniforms = 0;
+
     _SG_TRACE_ARGS(apply_pipeline, pip_id);
 }
 
@@ -18579,6 +18596,7 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
     SOKOL_ASSERT(bindings);
     SOKOL_ASSERT((bindings->_start_canary == 0) && (bindings->_end_canary==0));
     _sg_stats_add(num_apply_bindings, 1);
+    _sg.applied_bindings_and_uniforms |= (1 << SG_MAX_UNIFORMBLOCK_BINDSLOTS);
     if (!_sg_validate_apply_bindings(bindings)) {
         _sg.next_draw_valid = false;
         return;
@@ -18664,6 +18682,7 @@ SOKOL_API_IMPL void sg_apply_uniforms(int ub_slot, const sg_range* data) {
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
     _sg_stats_add(num_apply_uniforms, 1);
     _sg_stats_add(size_apply_uniforms, (uint32_t)data->size);
+    _sg.applied_bindings_and_uniforms |= 1 << ub_slot;
     if (!_sg_validate_apply_uniforms(ub_slot, data)) {
         _sg.next_draw_valid = false;
         return;
@@ -18691,6 +18710,12 @@ SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instance
     if (!_sg.next_draw_valid) {
         return;
     }
+    #if defined(SOKOL_DEBUG)
+    if (_sg.required_bindings_and_uniforms != _sg.applied_bindings_and_uniforms) {
+        _SG_ERROR(DRAW_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
+        return;
+    }
+    #endif
     /* attempting to draw with zero elements or instances is not technically an
        error, but might be handled as an error in the backend API (e.g. on Metal)
     */
