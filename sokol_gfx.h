@@ -3779,7 +3779,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE, "sg_apply_bindings: must be called after sg_apply_pipeline") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE_EXISTS, "sg_apply_bindings: currently applied pipeline object no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE_VALID, "sg_apply_bindings: currently applied pipeline object not in valid state") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBS, "sg_apply_bindings: number of vertex buffers doesn't match number of pipeline vertex layouts") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_VB, "sg_apply_bindings: vertex buffer binding is missing or buffer handle is invalid") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VB_EXISTS, "sg_apply_bindings: vertex buffer no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VB_TYPE, "sg_apply_bindings: buffer in vertex buffer slot is not a SG_BUFFERTYPE_VERTEXBUFFER") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VB_OVERFLOW, "sg_apply_bindings: buffer in vertex buffer slot is overflown") \
@@ -3794,17 +3794,14 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_IMAGE_MSAA, "sg_apply_bindings: cannot bind image with sample_count>1") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_FILTERABLE_IMAGE, "sg_apply_bindings: filterable image expected") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_DEPTH_IMAGE, "sg_apply_bindings: depth image expected") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_UNEXPECTED_IMAGE_BINDING, "sg_apply_bindings: unexpected image binding") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_SAMPLER_BINDING, "sg_apply_bindings: sampler binding is missing or the sampler handle is invalid") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_UNEXPECTED_SAMPLER_COMPARE_NEVER, "sg_apply_bindings: shader expects SG_SAMPLERTYPE_COMPARISON but sampler has SG_COMPAREFUNC_NEVER") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_SAMPLER_COMPARE_NEVER, "sg_apply_bindings: shader expects SG_SAMPLERTYPE_FILTERING or SG_SAMPLERTYPE_NONFILTERING but sampler doesn't have SG_COMPAREFUNC_NEVER") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_NONFILTERING_SAMPLER, "sg_apply_bindings: shader expected SG_SAMPLERTYPE_NONFILTERING, but sampler has SG_FILTER_LINEAR filters") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_UNEXPECTED_SAMPLER_BINDING, "sg_apply_bindings: unexpected sampler binding") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SMP_EXISTS, "sg_apply_bindings: bound sampler no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_STORAGEBUFFER_BINDING, "sg_apply_bindings: storage buffer binding is missing or the buffer handle is invalid") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_STORAGEBUFFER_EXISTS, "sg_apply_bindings: bound storage buffer no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_STORAGEBUFFER_BINDING_BUFFERTYPE, "sg_apply_bindings: buffer bound storage buffer slot is not of type storage buffer") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_UNEXPECTED_STORAGEBUFFER_BINDING, "sg_apply_bindings: unexpected storage buffer binding") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_NO_PIPELINE, "sg_apply_uniforms: must be called after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_NO_UB_AT_SLOT, "sg_apply_uniforms: no uniform block declaration at this shader stage UB slot") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_SIZE, "sg_apply_uniforms: data size doesn't match declared uniform block size") \
@@ -17039,8 +17036,8 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
 
         // has expected vertex buffers, and vertex buffers still exist
         for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
-            if (bindings->vertex_buffers[i].id != SG_INVALID_ID) {
-                _SG_VALIDATE(pip->cmn.vertex_buffer_layout_active[i], VALIDATE_ABND_VBS);
+            if (pip->cmn.vertex_buffer_layout_active[i]) {
+                _SG_VALIDATE(bindings->vertex_buffers[i].id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_VB);
                 // buffers in vertex-buffer-slots must be of type SG_BUFFERTYPE_VERTEXBUFFER
                 const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, bindings->vertex_buffers[i].id);
                 _SG_VALIDATE(buf != 0, VALIDATE_ABND_VB_EXISTS);
@@ -17048,9 +17045,6 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                     _SG_VALIDATE(SG_BUFFERTYPE_VERTEXBUFFER == buf->cmn.type, VALIDATE_ABND_VB_TYPE);
                     _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_VB_OVERFLOW);
                 }
-            } else {
-                // vertex buffer provided in a slot which has no vertex layout in pipeline
-                _SG_VALIDATE(!pip->cmn.vertex_buffer_layout_active[i], VALIDATE_ABND_VBS);
             }
         }
 
@@ -17095,8 +17089,6 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                         }
                     }
                 }
-            } else {
-                _SG_VALIDATE(bindings->images[i].id == SG_INVALID_ID, VALIDATE_ABND_UNEXPECTED_IMAGE_BINDING);
             }
         }
 
@@ -17121,8 +17113,6 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                         }
                     }
                 }
-            } else {
-                _SG_VALIDATE(bindings->samplers[i].id == SG_INVALID_ID, VALIDATE_ABND_UNEXPECTED_SAMPLER_BINDING);
             }
         }
 
@@ -17137,8 +17127,6 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                         _SG_VALIDATE(sbuf->cmn.type == SG_BUFFERTYPE_STORAGEBUFFER, VALIDATE_ABND_STORAGEBUFFER_BINDING_BUFFERTYPE);
                     }
                 }
-            } else {
-                _SG_VALIDATE(bindings->storage_buffers[i].id == SG_INVALID_ID, VALIDATE_ABND_UNEXPECTED_STORAGEBUFFER_BINDING);
             }
         }
         return _sg_validate_end();
@@ -18611,9 +18599,12 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
     if (0 == bnd.pip) {
         _sg.next_draw_valid = false;
     }
+    SOKOL_ASSERT(bnd.pip->shader && (bnd.pip->cmn.shader_id.id == bnd.pip->shader->slot.id));
+    const _sg_shader_t* shd = bnd.pip->shader;
 
     for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
-        if (bindings->vertex_buffers[i].id) {
+        if (bnd.pip->cmn.vertex_buffer_layout_active[i]) {
+            SOKOL_ASSERT(bindings->vertex_buffers[i].id != SG_INVALID_ID);
             bnd.vbs[i] = _sg_lookup_buffer(&_sg.pools, bindings->vertex_buffers[i].id);
             bnd.vb_offsets[i] = bindings->vertex_buffer_offsets[i];
             if (bnd.vbs[i]) {
@@ -18637,7 +18628,8 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
     }
 
     for (int i = 0; i < SG_MAX_IMAGE_BINDSLOTS; i++) {
-        if (bindings->images[i].id) {
+        if (shd->cmn.images[i].stage != SG_SHADERSTAGE_NONE) {
+            SOKOL_ASSERT(bindings->images[i].id != SG_INVALID_ID);
             bnd.imgs[i] = _sg_lookup_image(&_sg.pools, bindings->images[i].id);
             if (bnd.imgs[i]) {
                 _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == bnd.imgs[i]->slot.state);
@@ -18648,7 +18640,8 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
     }
 
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
-        if (bindings->samplers[i].id) {
+        if (shd->cmn.samplers[i].stage != SG_SHADERSTAGE_NONE) {
+            SOKOL_ASSERT(bindings->samplers[i].id != SG_INVALID_ID);
             bnd.smps[i] = _sg_lookup_sampler(&_sg.pools, bindings->samplers[i].id);
             if (bnd.smps[i]) {
                 _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == bnd.smps[i]->slot.state);
@@ -18659,7 +18652,8 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
     }
 
     for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
-        if (bindings->storage_buffers[i].id) {
+        if (shd->cmn.storage_buffers[i].stage != SG_SHADERSTAGE_NONE) {
+            SOKOL_ASSERT(bindings->storage_buffers[i].id != SG_INVALID_ID);
             bnd.sbufs[i] = _sg_lookup_buffer(&_sg.pools, bindings->storage_buffers[i].id);
             if (bnd.sbufs[i]) {
                 _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == bnd.sbufs[i]->slot.state);
