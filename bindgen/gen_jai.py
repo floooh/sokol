@@ -81,8 +81,6 @@ c_source_names = {
 ignores = [
     'sdtx_printf',
     'sdtx_vprintf',
-    'sg_install_trace_hooks',
-    'sg_trace_hooks',
 ]
 
 # NOTE: syntax for function results: "func_name.RESULT"
