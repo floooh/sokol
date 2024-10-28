@@ -2966,7 +2966,7 @@ typedef struct sg_glsl_shader_uniform {
 
 typedef struct sg_shader_uniform_block {
     sg_shader_stage stage;
-    sg_uniform_layout layout;       // FIXME: still needed with explicit offsets?
+    sg_uniform_layout layout;
     uint32_t size;
     uint8_t hlsl_register_b_n;      // HLSL register(bn)
     uint8_t msl_buffer_n;           // MSL [[buffer(n)]]
