@@ -12847,6 +12847,23 @@ _SOKOL_PRIVATE _sg_image_t* _sg_mtl_attachments_ds_image(const _sg_attachments_t
     return atts->mtl.depth_stencil.image;
 }
 
+_SOKOL_PRIVATE void _sg_mtl_bind_uniform_buffers(void) {
+    SOKOL_ASSERT(nil != _sg.mtl.cmd_encoder);
+    // On Metal, uniform buffer bindings happen once in sg_begin_pass() and
+    // remain valid for the entire pass. Only binding offsets will be updated
+    // in sg_apply_uniforms()
+    for (size_t slot = 0; slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS; slot++) {
+        [_sg.mtl.cmd_encoder
+            setVertexBuffer:_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index]
+            offset:0
+            atIndex:slot];
+        [_sg.mtl.cmd_encoder
+            setFragmentBuffer:_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index]
+            offset:0
+            atIndex:slot];
+    }
+}
+
 _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass* pass) {
     SOKOL_ASSERT(pass);
     SOKOL_ASSERT(_sg.mtl.cmd_queue);
@@ -13041,6 +13058,9 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass* pass) {
             _sg.mtl.cmd_encoder.label = [NSString stringWithUTF8String:pass->label];
         }
     #endif
+
+    // bind uniform buffers, those bindings remain valid for the entire pass
+    _sg_mtl_bind_uniform_buffers();
 }
 
 _SOKOL_PRIVATE void _sg_mtl_end_pass(void) {
@@ -13103,32 +13123,6 @@ _SOKOL_PRIVATE void _sg_mtl_apply_scissor_rect(int x, int y, int w, int h, bool 
     [_sg.mtl.cmd_encoder setScissorRect:r];
 }
 
-_SOKOL_PRIVATE void _sg_mtl_bind_uniform_buffers(_sg_shader_t* shd) {
-    SOKOL_ASSERT(nil != _sg.mtl.cmd_encoder);
-    // NOTE: uniform buffers need to be re-bound in sg_apply_pipeline()
-    // because they share a bindspace with storage buffers
-
-    // FIXME: it would be good if uniform buffer bindings would also
-    // go through the bindings cache in _sg_mtl_state_cache_t, but
-    // we'd need reserved slot id's for the 'raw' MTLBuffers
-    for (size_t slot = 0; slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS; slot++) {
-        const sg_shader_stage stage = shd->cmn.uniform_blocks[slot].stage;
-        const NSUInteger mtl_slot = shd->mtl.ub_buffer_n[slot];
-        SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS);
-        if (stage == SG_SHADERSTAGE_VERTEX) {
-            [_sg.mtl.cmd_encoder
-                setVertexBuffer:_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index]
-                offset:0
-                atIndex:mtl_slot];
-        } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
-            [_sg.mtl.cmd_encoder
-                setFragmentBuffer:_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index]
-                offset:0
-                atIndex:mtl_slot];
-        }
-    }
-}
-
 _SOKOL_PRIVATE void _sg_mtl_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     SOKOL_ASSERT(pip->shader && (pip->cmn.shader_id.id == pip->shader->slot.id));
@@ -13154,7 +13148,6 @@ _SOKOL_PRIVATE void _sg_mtl_apply_pipeline(_sg_pipeline_t* pip) {
         SOKOL_ASSERT(pip->mtl.dss != _SG_MTL_INVALID_SLOT_INDEX);
         [_sg.mtl.cmd_encoder setDepthStencilState:_sg_mtl_id(pip->mtl.dss)];
         _sg_stats_add(metal.pipeline.num_set_depth_stencil_state, 1);
-        _sg_mtl_bind_uniform_buffers(pip->shader);
     }
 }
 
