@@ -5157,13 +5157,13 @@ typedef struct {
 
 _SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT((desc->color_count >= 0) && (desc->color_count <= SG_MAX_COLOR_ATTACHMENTS));
-    const uint32_t require_bindings_required_flag = (1 << SG_MAX_UNIFORMBLOCK_BINDSLOTS);
+    const uint32_t required_bindings_flag = (1 << SG_MAX_UNIFORMBLOCK_BINDSLOTS);
     for (int i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
         const sg_vertex_attr_state* a_state = &desc->layout.attrs[i];
         if (a_state->format != SG_VERTEXFORMAT_INVALID) {
             SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
             cmn->vertex_buffer_layout_active[a_state->buffer_index] = true;
-            cmn->required_bindings_and_uniforms |= require_bindings_required_flag;
+            cmn->required_bindings_and_uniforms |= required_bindings_flag;
         }
     }
     cmn->use_instanced_draw = false;
@@ -5178,7 +5178,7 @@ _SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const s
     cmn->primitive_type = desc->primitive_type;
     cmn->index_type = desc->index_type;
     if (cmn->index_type != SG_INDEXTYPE_NONE) {
-        cmn->required_bindings_and_uniforms |= require_bindings_required_flag;
+        cmn->required_bindings_and_uniforms |= required_bindings_flag;
     }
     cmn->cull_mode = desc->cull_mode;
     cmn->face_winding = desc->face_winding;
