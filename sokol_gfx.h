@@ -8604,6 +8604,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
     SOKOL_ASSERT((pip->shader == 0) && (pip->cmn.shader_id.id != SG_INVALID_ID));
     SOKOL_ASSERT(desc->shader.id == shd->slot.id);
     SOKOL_ASSERT(shd->gl.prog);
+    SOKOL_ASSERT(_sg.limits.max_vertex_attrs <= SG_MAX_VERTEX_ATTRIBUTES);
     pip->shader = shd;
     pip->gl.primitive_type = desc->primitive_type;
     pip->gl.depth = desc->depth;
@@ -8618,6 +8619,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
     pip->gl.sample_count = desc->sample_count;
     pip->gl.alpha_to_coverage_enabled = desc->alpha_to_coverage_enabled;
 
+    // NOTE: GLSL compilers may remove unused vertex attributes so we can't rely
+    // on the 'prepopulated' vertex_buffer_layout_active[] state and need to
+    // fill this array from scratch with the actual info after GLSL compilation
+    for (int i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
+        pip->cmn.vertex_buffer_layout_active[i] = false;
+    }
+
     // resolve vertex attributes
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         pip->gl.attrs[attr_index].vb_index = -1;
@@ -8628,7 +8636,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
             break;
         }
         SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
-        SOKOL_ASSERT(pip->cmn.vertex_buffer_layout_active[a_state->buffer_index]);
         const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[a_state->buffer_index];
         const sg_vertex_step step_func = l_state->step_func;
         const int step_rate = l_state->step_rate;
@@ -8636,8 +8643,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
         if (!_sg_strempty(&shd->gl.attrs[attr_index].name)) {
             attr_loc = glGetAttribLocation(pip->shader->gl.prog, _sg_strptr(&shd->gl.attrs[attr_index].name));
         }
-        SOKOL_ASSERT(attr_loc < (GLint)_sg.limits.max_vertex_attrs);
         if (attr_loc != -1) {
+            SOKOL_ASSERT(attr_loc < (GLint)_sg.limits.max_vertex_attrs);
             _sg_gl_attr_t* gl_attr = &pip->gl.attrs[attr_loc];
             SOKOL_ASSERT(gl_attr->vb_index == -1);
             gl_attr->vb_index = (int8_t) a_state->buffer_index;
@@ -8653,10 +8660,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
             gl_attr->size = (uint8_t) _sg_gl_vertexformat_size(a_state->format);
             gl_attr->type = _sg_gl_vertexformat_type(a_state->format);
             gl_attr->normalized = _sg_gl_vertexformat_normalized(a_state->format);
+            pip->cmn.vertex_buffer_layout_active[a_state->buffer_index] = true;
         } else {
             _SG_WARN(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER);
             _SG_LOGMSG(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER, _sg_strptr(&shd->gl.attrs[attr_index].name));
-            pip->cmn.vertex_buffer_layout_active[a_state->buffer_index] = false;
         }
     }
     return SG_RESOURCESTATE_VALID;
