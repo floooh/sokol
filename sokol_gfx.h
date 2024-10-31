@@ -64,7 +64,7 @@
     Optionally define the following to force debug checks and validations
     even in release mode:
 
-    SOKOL_DEBUG         - by default this is defined if _DEBUG is defined
+    SOKOL_DEBUG - by default this is defined if _DEBUG is defined
 
     sokol_gfx DOES NOT:
     ===================
@@ -77,7 +77,7 @@
 
     - provide a unified shader language, instead 3D-API-specific shader
       source-code or shader-bytecode must be provided (for the "official"
-      offline shader cross-compiler, see here:
+      offline shader cross-compiler / code-generator, see here:
       https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md)
 
 
@@ -157,7 +157,7 @@
 
     --- optionally update shader uniform data with:
 
-            sg_apply_uniforms(sg_shader_stage stage, int ub_index, const sg_range* data)
+            sg_apply_uniforms(int ub_slot, const sg_range* data)
 
         Read the section 'UNIFORM DATA LAYOUT' to learn about the expected memory layout
         of the uniform data passed into sg_apply_uniforms().
@@ -443,8 +443,10 @@
 
     A frame must have at least one 'swapchain render pass' which renders into an
     externally provided swapchain provided as an sg_swapchain struct to the
-    sg_begin_pass() function. The sg_swapchain struct must contain the
-    following information:
+    sg_begin_pass() function. If you use sokol_gfx.h together with sokol_app.h,
+    just call the sglue_swapchain() helper function in sokol_glue.h to
+    provide the swapchain information. Otherwise the following information
+    must be provided:
 
         - the color pixel-format of the swapchain's render surface
         - an optional depth/stencil pixel format if the swapchain
@@ -686,8 +688,8 @@
     sokol-gfx doesn't come with an integrated shader cross-compiler, instead
     backend-specific shader sources or binary blobs need to be provided when
     creating a shader object, along with information about the shader resource
-    binding interface needed in the sokol-gfx validation layer and to properly
-    bind shader resources on the CPU-side to be consumable by the GPU-side.
+    binding interface needed to bind sokol-gfx resources to the proper
+    shader inputs.
 
     The easiest way to provide all this shader creation data is to use the
     sokol-shdc shader compiler tool to compile shaders from a common
@@ -728,7 +730,7 @@
           load 'd3dcompiler_47.dll'
         - for the Metal backends, shaders can be provided as source or binary blobs, the
           MSL version should be in 'metal-1.1' (other versions may work but are not tested)
-        - for the WebGPU backend, shader must be provided as WGSL source code
+        - for the WebGPU backend, shaders must be provided as WGSL source code
         - optionally the following shader-code related attributes can be provided:
             - an entry function name (only on D3D11 or Metal, but not OpenGL)
             - on D3D11 only, a compilation target (default is "vs_4_0" and "ps_4_0")
@@ -741,17 +743,24 @@
           bound by their attribute location defined in the shader via `@location(N)`
         - GLSL: vertex attribute names can be optionally provided, in that case their
           location will be looked up by name, otherwise, the vertex attribute location
-          can be defined with 'layout(location = N)', PLEASE NOTE that the name-lookup method
-          may be removed at some point
+          can be defined with 'layout(location = N)'
         - D3D11: a 'semantic name' and 'semantic index' must be provided for each vertex
           attribute, e.g. if the vertex attribute is defined as 'TEXCOORD1' in the shader,
           the semantic name would be 'TEXCOORD', and the semantic index would be '1'
 
+      NOTE that vertex attributes currently must not have gaps. This requirement
+      may be relaxed in the future.
+
     - Information about each uniform block used in the shader:
-        - The size of the uniform block in number of bytes.
-        - A memory layout hint (currently 'native' or 'std140') where 'native' defines a
+        - the shader stage of the uniform block (vertex or fragment)
+        - the size of the uniform block in number of bytes
+        - a memory layout hint (currently 'native' or 'std140') where 'native' defines a
           backend-specific memory layout which shouldn't be used for cross-platform code.
           Only std140 guarantees a backend-agnostic memory layout.
+        - a backend-specific bind slot:
+            - D3D11/HLSL: the buffer register N (`register(bN)`) where N is 0..7
+            - Metal/MSL: the buffer bind slot N (`[[buffer(N)]]`) where N is 0..7
+            - WebGPU: the binding N in `@group(0) @binding(N)` where N is 0..15
         - For GLSL only: a description of the internal uniform block layout, which maps
           member types and their offsets on the CPU side to uniform variable names
           in the GLSL shader
@@ -759,12 +768,20 @@
           and CROSS-BACKEND COMMON UNIFORM DATA LAYOUT below!
 
     - A description of each storage buffer used in the shader:
+        - the shader stage of the storage buffer
         - a boolean 'readonly' flag, note that currently only
           readonly storage buffers are supported
+        - a backend-specific bind slot:
+            - D3D11/HLSL: the texture register N (`register(tN)`) where N is 0..23
+              (in HLSL, storage buffers and texture share the same bind space)
+            - Metal/MSL: the buffer bind slot N (`[[buffer(N)]]`) where N is 8..15
+            - WebGPU/WGSL: the binding N in `@group(0) @binding(N)` where N is 0..127
+            - GL/GLSL: the buffer binding N in `layout(binding=N)` where N is 0..8
         - note that storage buffers are not supported on all backends
           and platforms
 
     - A description of each texture/image used in the shader:
+        - the shader stage of the texture (vertex or fragment)
         - the expected image type:
             - SG_IMAGETYPE_2D
             - SG_IMAGETYPE_CUBE
@@ -779,11 +796,22 @@
         - a flag whether the texture is expected to be multisampled
           (currently it's not supported to fetch data from multisampled
           textures in shaders, but this is planned for a later time)
+        - a backend-specific bind slot:
+            - D3D11/HLSL: the texture register N (`register(tN)`) where N is 0..23
+              (in HLSL, storage buffers and texture share the same bind space)
+            - Metal/MSL: the texture bind slot N (`[[texture(N)]]`) where N is 0..15
+            - WebGPU/WGSL: the binding N in `@group(0) @binding(N)` where N is 0..127
 
-    - A description of each texture sampler used in the shader:
-        - SG_SAMPLERTYPE_FILTERING,
-        - SG_SAMPLERTYPE_NONFILTERING,
-        - SG_SAMPLERTYPE_COMPARISON,
+    - A description of each sampler used in the shader:
+        - the shader stage of the sampler (vertex or fragment)
+        - the expected sampler type:
+            - SG_SAMPLERTYPE_FILTERING,
+            - SG_SAMPLERTYPE_NONFILTERING,
+            - SG_SAMPLERTYPE_COMPARISON,
+        - a backend-specific bind slot:
+            - D3D11/HLSL: the sampler register N (`register(sN)`) where N is 0..15
+            - Metal/MSL: the sampler bind slot N (`[[sampler(N)]]`) where N is 0..15
+            - WebGPU/WGSL: the binding N in `@group(0) @binding(N)` where N is 0..127
 
     - An array of 'image-sampler-pairs' used by the shader to sample textures,
       for D3D11, Metal and WebGPU this is used for validation purposes to check
@@ -801,6 +829,28 @@
         - SG_IMAGESAMPLETYPE_SINT => SG_SAMPLERTYPE_NONFILTERING
         - SG_IMAGESAMPLETYPE_UINT => SG_SAMPLERTYPE_NONFILTERING
         - SG_IMAGESAMPLETYPE_DEPTH => SG_SAMPLERTYPE_COMPARISON
+
+    Backend-specific bindslot ranges (not relevant when using sokol-shdc):
+
+        - D3D11/HLSL:
+            - separate bindslot space per shader stage
+            - uniform blocks (as cbuffer): `register(b0..b7)`
+            - textures and storage buffers: `register(t0..t23)`
+            - samplers: `register(s0..s15)`
+        - Metal/MSL:
+            - separate bindslot space per shader stage
+            - uniform blocks: `[[buffer(0..7)]]`
+            - storage buffers: `[[buffer(8..15)]]`
+            - textures: `[[texture(0..15)]]`
+            - samplers: `[[sampler(0..15)]]`
+        - WebGPU/WGSL:
+            - common bindslot space across shader stages
+            - uniform blocks: `@group(0) @binding(0..15)`
+            - textures, samplers and storage buffers: `@group(1) @binding(0..127)`
+        - GL/GLSL:
+            - uniforms and image-samplers are bound by name
+            - storage buffers: `layout(std430, binding=0..7)` (common
+              bindslot space across shader stages)
 
     For example code of how to create backend-specific shader objects,
     please refer to the following samples:
@@ -1016,8 +1066,8 @@
 
     Storage buffer shader authoring caveats when using sokol-shdc:
 
-        - declare a storage buffer interface block with `readonly buffer [name] { ... }`
-        - do NOT annotate storage buffers with `layout(...)`, sokol-shdc will take care of that
+        - declare a storage buffer interface block with `layout(binding=N) readonly buffer [name] { ... }`
+          (where 'N' is the index in `sg_bindings.storage_buffers[N]`)
         - declare a struct which describes a single array item in the storage buffer interface block
         - only put a single flexible array member into the storage buffer interface block
 
@@ -1030,7 +1080,7 @@
             vec4 color;
         }
         // declare a buffer interface block with a single flexible struct array:
-        readonly buffer vertices {
+        layout(binding=0) readonly buffer vertices {
             sb_vertex vtx[];
         }
         // in the shader function, access the storage buffer like this:
@@ -1047,23 +1097,22 @@
               (https://learn.microsoft.com/en-us/windows/win32/direct3d11/overviews-direct3d-11-resources-intro#raw-views-of-buffers)
             - in HLSL, use a ByteAddressBuffer to access the buffer content
               (https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/sm5-object-byteaddressbuffer)
-            - in D3D11, storage buffers and textures share the same bind slots, sokol-gfx reserves
-              shader resource slots 0..15 for textures and 16..23 for storage buffers.
-            - e.g. in HLSL, storage buffer bindings start at register(t16) no matter the shader stage
+            - in D3D11, storage buffers and textures share the same bind slots (declared as
+              `register(tN)` in HLSL), where N must be in the range 0..23)
 
         Metal:
             - in Metal there is no internal difference between vertex-, uniform- and
               storage-buffers, all are bound to the same 'buffer bind slots' with the
               following reserved ranges:
                 - vertex shader stage:
-                    - uniform buffers (internal): slots 0..3
-                    - vertex buffers: slots 4..11
-                    - storage buffers: slots 12..19
+                    - uniform buffers: slots 0..7
+                    - storage buffers: slots 8..15
+                    - vertex buffers: slots 15..23
                 - fragment shader stage:
-                    - uniform buffers (internal): slots 0..3
-                    - storage buffers: slots 4..11
-            - this means in MSL, storage buffer bindings start at [[buffer(12)]] in the vertex
-              shaders, and at [[buffer(4)]] in fragment shaders
+                    - uniform buffers: slots 0..7
+                    - storage buffers: slots 8..15
+            - this means in MSL, storage buffer bindings start at [[buffer(8)]] both in
+              the vertex and fragment stage
 
         GL:
             - the GL backend doesn't use name-lookup to find storage buffer bindings, this
@@ -1071,15 +1120,10 @@
             - ...where N is 0..7 in the vertex shader, and 8..15 in the fragment shader
 
         WebGPU:
-            - in WGSL, use the following bind locations for the various shader resource types:
-            - vertex shader stage:
-                - textures `@group(1) @binding(0..15)`
-                - samplers `@group(1) @binding(16..31)`
-                - storage buffers `@group(1) @binding(32..47)`
-            - fragment shader stage:
-                - textures `@group(1) @binding(48..63)`
-                - samplers `@group(1) @binding(64..79)`
-                - storage buffers `@group(1) @binding(80..95)`
+            - in WGSL, textures, samplers and storage buffers all use a shared
+              bindspace across all shader stages on bindgroup 1:
+
+              `@group(1) @binding(0..127)
 
     TRACE HOOKS:
     ============
