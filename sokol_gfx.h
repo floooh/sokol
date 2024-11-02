@@ -3147,7 +3147,7 @@ typedef struct sg_shader_desc {
 
     The default configuration is as follows:
 
-    .shader:            0 (must be initialized with a valid sg_shader id!)
+    .shader:                0 (must be initialized with a valid sg_shader id!)
     .layout:
         .buffers[]:         vertex buffer layouts
             .stride:        0 (if no stride is given it will be computed)
@@ -3614,7 +3614,8 @@ typedef struct sg_frame_stats {
     sg_log_item
 
     An enum with a unique item for each log message, warning, error
-    and validation layer message.
+    and validation layer message. Note that these messages are only
+    visible when a logger function is installed in the sg_setup() call.
 */
 #define _SG_LOG_ITEMS \
     _SG_LOGITEM_XMACRO(OK, "Ok") \
@@ -3953,11 +3954,11 @@ typedef enum sg_log_item {
 
     Metal specific:
         (NOTE: All Objective-C object references are transferred through
-        a bridged (const void*) to sokol_gfx, which will use a unretained
-        bridged cast (__bridged id<xxx>) to retrieve the Objective-C
+        a bridged cast (__bridge const void*) to sokol_gfx, which will use an
+        unretained bridged cast (__bridge id<xxx>) to retrieve the Objective-C
         references back. Since the bridge cast is unretained, the caller
-        must hold a strong reference to the Objective-C object for the
-        duration of the sokol_gfx call!
+        must hold a strong reference to the Objective-C object until sg_setup()
+        returns.
 
         .mtl_force_managed_storage_mode
             when enabled, Metal buffers and texture resources are created in managed storage
