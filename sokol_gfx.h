@@ -148,7 +148,7 @@
             sg_apply_pipeline(sg_pipeline pip)
 
     --- fill an sg_bindings struct with the resource bindings for the next
-        draw call (0..N vertex buffers, 0 or 1 index buffer, 0..N image-objects,
+        draw call (0..N vertex buffers, 0 or 1 index buffer, 0..N images,
         samplers and storage-buffers), and call:
 
             sg_apply_bindings(const sg_bindings* bindings)
@@ -1496,33 +1496,30 @@
     - when writing WGSL shader code by hand, a specific bind-slot convention
       must be used:
 
-      All uniform block structs must use `@group(0)`, with up to
-      4 uniform blocks per shader stage.
-        - Vertex shader uniform block bindings must start at `@group(0) @binding(0)`
-        - Fragment shader uniform blocks bindings must start at `@group(0) @binding(4)`
+      All uniform block structs must use `@group(0)` and bindings in the
+      range 0..127:
 
-      All textures and samplers must use `@group(1)` and start at specific
-      offsets depending on resource type and shader stage.
-        - Vertex shader textures must start at `@group(1) @binding(0)`
-        - Vertex shader samplers must start at `@group(1) @binding(16)`
-        - Vertex shader storage buffers must start at `@group(1) @binding(32)`
-        - Fragment shader textures must start at `@group(1) @binding(48)`
-        - Fragment shader samplers must start at `@group(1) @binding(64)`
-        - Fragment shader storage buffers must start at `@group(1) @binding(80)`
+        @group(0) @binding(0..7)
 
-      Note that the actual number of allowed per-stage texture- and sampler-bindings
-      in sokol-gfx is currently lower than the above ranges (currently only up to
-      12 textures, 8 samplers and 8 storage buffers are allowed per shader stage).
+      All textures, samplers and storage buffers must use `@group(1)` and
+      bindings must be in the range 0..127:
+
+        @group(1) @binding(0..127)
+
+      Note that the number of texture, sampler and storage buffer bindings
+      is still limited despite the large bind range:
+
+        - up to 16 textures and sampler across all shader stages
+        - up to 8 storage buffers across all shader stages
 
       If you use sokol-shdc to generate WGSL shader code, you don't need to worry
-      about the above binding convention since sokol-shdc assigns bind slots
-      automatically.
+      about the above binding conventions since sokol-shdc.
 
     - The sokol-gfx WebGPU backend uses the sg_desc.uniform_buffer_size item
       to allocate a single per-frame uniform buffer which must be big enough
       to hold all data written by sg_apply_uniforms() during a single frame,
       including a worst-case 256-byte alignment (e.g. each sg_apply_uniform
-      call will cost 256 bytes of uniform buffer size). The default size
+      call will cost at least 256 bytes of uniform buffer size). The default size
       is 4 MB, which is enough for 16384 sg_apply_uniform() calls per
       frame (assuming the uniform data 'payload' is less than 256 bytes
       per call). These rules are the same as for the Metal backend, so if
@@ -1544,7 +1541,7 @@
         .wgpu.num_bindgroup_cache_vs_hash_key_mismatch
 
       The value to pay attention to is `.wgpu.num_bindgroup_cache_collisions`,
-      if this number if consistently higher than a few percent of the
+      if this number is consistently higher than a few percent of the
       .wgpu.num_set_bindgroup value, it might be a good idea to bump the
       bindgroups cache size to the next power-of-2.
 
@@ -1630,14 +1627,14 @@ extern "C" {
     Resource id typedefs:
 
     sg_buffer:      vertex- and index-buffers
-    sg_image:       images used as textures and render targets
-    sg_sampler      sampler object describing how a texture is sampled in a shader
+    sg_image:       images used as textures and render-pass attachments
+    sg_sampler      sampler objects describing how a texture is sampled in a shader
     sg_shader:      vertex- and fragment-shaders and shader interface information
     sg_pipeline:    associated shader and vertex-layouts, and render states
     sg_attachments: a baked collection of render pass attachment images
 
     Instead of pointers, resource creation functions return a 32-bit
-    number which uniquely identifies the resource object.
+    handle which uniquely identifies the resource object.
 
     The 32-bit resource id is split into a 16-bit pool index in the lower bits,
     and a 16-bit 'generation counter' in the upper bits. The index allows fast
@@ -1680,7 +1677,7 @@ typedef struct sg_range {
 #define SG_RANGE_REF(x) &(sg_range){ &x, sizeof(x) }
 #endif
 
-//  various compile-time constants
+// various compile-time constants in the public API
 enum {
     SG_INVALID_ID = 0,
     SG_NUM_INFLIGHT_FRAMES = 2,
@@ -1744,13 +1741,12 @@ typedef enum sg_backend {
 
         - sample: the pixelformat can be sampled as texture at least with
                   nearest filtering
-        - filter: the pixelformat can be samples as texture with linear
+        - filter: the pixelformat can be sampled as texture with linear
                   filtering
-        - render: the pixelformat can be used for render targets
-        - blend:  blending is supported when using the pixelformat for
-                  render targets
-        - msaa:   multisample-antialiasing is supported when using the
-                  pixelformat for render targets
+        - render: the pixelformat can be used as render-pass attachment
+        - blend:  blending is supported when used as render-pass attachment
+        - msaa:   multisample-antialiasing is supported when used
+                  as render-pass attachment
         - depth:  the pixelformat can be used for depth-stencil attachments
         - compressed: this is a block-compressed format
         - bytes_per_pixel: the numbers of bytes in a pixel (0 for compressed formats)
@@ -1853,27 +1849,25 @@ typedef enum sg_pixel_format {
 } sg_pixel_format;
 
 /*
-    Runtime information about a pixel format, returned
-    by sg_query_pixelformat().
+    Runtime information about a pixel format, returned by sg_query_pixelformat().
 */
 typedef struct sg_pixelformat_info {
     bool sample;            // pixel format can be sampled in shaders at least with nearest filtering
     bool filter;            // pixel format can be sampled with linear filtering
-    bool render;            // pixel format can be used as render target
-    bool blend;             // alpha-blending is supported
-    bool msaa;              // pixel format can be used as MSAA render target
+    bool render;            // pixel format can be used as render-pass attachment
+    bool blend;             // pixel format supports alpha-blending when used as render-pass attachment
+    bool msaa;              // pixel format supports MSAA when used as render-pass attachment
     bool depth;             // pixel format is a depth format
     bool compressed;        // true if this is a hardware-compressed format
     int bytes_per_pixel;    // NOTE: this is 0 for compressed formats, use sg_query_row_pitch() / sg_query_surface_pitch() as alternative
 } sg_pixelformat_info;
 
 /*
-    Runtime information about available optional features,
-    returned by sg_query_features()
+    Runtime information about available optional features, returned by sg_query_features()
 */
 typedef struct sg_features {
-    bool origin_top_left;               // framebuffer and texture origin is in top left corner
-    bool image_clamp_to_border;         // border color and clamp-to-border UV-wrap mode is supported
+    bool origin_top_left;               // framebuffer- and texture-origin is in top left corner
+    bool image_clamp_to_border;         // border color and clamp-to-border uv-wrap mode is supported
     bool mrt_independent_blend_state;   // multiple-render-target rendering can use per-render-target blend state
     bool mrt_independent_write_mask;    // multiple-render-target rendering can use per-render-target color write masks
     bool storage_buffer;                // storage buffers are supported
@@ -1987,6 +1981,7 @@ typedef enum sg_buffer_type {
 
     Indicates whether indexed rendering (fetching vertex-indices from an
     index buffer) is used, and if yes, the index data type (16- or 32-bits).
+
     This is used in the sg_pipeline_desc.index_type member when creating a
     pipeline object.
 
@@ -2026,7 +2021,7 @@ typedef enum sg_image_type {
     sg_image_sample_type
 
     The basic data type of a texture sample as expected by a shader.
-    Must be provided in sg_shader_image_desc and used by the validation
+    Must be provided in sg_shader_image and used by the validation
     layer in sg_apply_bindings() to check if the provided image object
     is compatible with what the shader expects. Apart from the sokol-gfx
     validation layer, WebGPU is the only backend API which actually requires
@@ -2231,7 +2226,8 @@ typedef enum sg_vertex_step {
 
     The data type of a uniform block member. This is used to
     describe the internal layout of uniform blocks when creating
-    a shader object.
+    a shader object. This is only required for the GL backend, all
+    other backends will ignore the interior layout of uniform blocks.
 */
 typedef enum sg_uniform_type {
     SG_UNIFORMTYPE_INVALID,
@@ -2252,7 +2248,7 @@ typedef enum sg_uniform_type {
     sg_uniform_layout
 
     A hint for the interior memory layout of uniform blocks. This is
-    only really relevant for the GL backend where the internal layout
+    only relevant for the GL backend where the internal layout
     of uniform blocks must be known to sokol-gfx. For all other backends the
     internal memory layout of uniform blocks doesn't matter, sokol-gfx
     will just pass uniform data as a single memory blob to the
@@ -2332,6 +2328,8 @@ typedef enum sg_face_winding {
     in pipeline objects, and for texture samplers which perform a comparison
     instead of regular sampling operation.
 
+    Used in the following structs:
+
     sg_pipeline_desc
         .depth
             .compare
@@ -2345,7 +2343,7 @@ typedef enum sg_face_winding {
     The default compare func for depth- and stencil-tests is
     SG_COMPAREFUNC_ALWAYS.
 
-    The default compare func for sampler is SG_COMPAREFUNC_NEVER.
+    The default compare func for samplers is SG_COMPAREFUNC_NEVER.
 */
 typedef enum sg_compare_func {
     _SG_COMPAREFUNC_DEFAULT,    // value 0 reserved for default-init
@@ -2366,7 +2364,7 @@ typedef enum sg_compare_func {
 
     The operation performed on a currently stored stencil-value when a
     comparison test passes or fails. This is used when creating a pipeline
-    object in the members:
+    object in the following sg_pipeline_desc struct items:
 
     sg_pipeline_desc
         .stencil
@@ -2437,8 +2435,8 @@ typedef enum sg_blend_factor {
     sg_blend_op
 
     Describes how the source and destination values are combined in the
-    fragment blending operation. It is used in the following members when
-    creating a pipeline object:
+    fragment blending operation. It is used in the following struct items
+    when creating a pipeline object:
 
     sg_pipeline_desc
         .colors[i]
@@ -2520,7 +2518,7 @@ typedef enum sg_load_action {
 /*
     sg_store_action
 
-    Defines the store action that be performed at the end of a render pass:
+    Defines the store action that should be performed at the end of a render pass:
 
     SG_STOREACTION_STORE:       store the rendered content to the color attachment image
     SG_STOREACTION_DONTCARE:    allows the GPU to discard the rendered content
@@ -2539,11 +2537,11 @@ typedef enum sg_store_action {
     The sg_pass_action struct defines the actions to be performed
     at the start and end of a render pass.
 
-    - at the start of the pass: whether the render targets should be cleared,
+    - at the start of the pass: whether the render attachments should be cleared,
       loaded with their previous content, or start in an undefined state
     - for clear operations: the clear value (color, depth, or stencil values)
     - at the end of the pass: whether the rendering result should be
-      stored back into the render target or discarded
+      stored back into the render attachment or discarded
 */
 typedef struct sg_color_attachment_action {
     sg_load_action load_action;         // default: SG_LOADACTION_CLEAR
@@ -2591,8 +2589,9 @@ typedef struct sg_pass_action {
     Additionally the following backend API specific objects must be passed in
     as 'type erased' void pointers:
 
-    GL: on all GL backends, a GL framebuffer object must be provided. This
-    can be zero for the default framebuffer.
+    GL:
+        - on all GL backends, a GL framebuffer object must be provided. This
+          can be zero for the default framebuffer.
 
     D3D11:
         - an ID3D11RenderTargetView for the rendering surface, without
@@ -2610,7 +2609,7 @@ typedef struct sg_pass_action {
         - when MSAA rendering is used, another WGPUTextureView
           which serves as MSAA resolve target and will be displayed
 
-    Metal (NOTE that the rolves of provided surfaces is slightly different
+    Metal (NOTE that the roles of provided surfaces is slightly different
     than on D3D11 or WebGPU in case of MSAA vs non-MSAA rendering):
 
         - A current CAMetalDrawable (NOT an MTLDrawable!) which will be presented.
@@ -2622,7 +2621,7 @@ typedef struct sg_pass_action {
           CAMetalDrawable.
 
     NOTE that for Metal you must use an ObjC __bridge cast to
-    properly tunnel the ObjC object handle through a C void*, e.g.:
+    properly tunnel the ObjC object id through a C void*, e.g.:
 
         swapchain.metal.current_drawable = (__bridge const void*) [mtkView currentDrawable];
 
@@ -2674,7 +2673,7 @@ typedef struct sg_swapchain {
     function.
 
     For an offscreen rendering pass, an sg_pass_action struct and sg_attachments
-    object must be provided, and for swapchain passes, and sg_pass_action and
+    object must be provided, and for swapchain passes, an sg_pass_action and
     an sg_swapchain struct. It is an error to provide both an sg_attachments
     handle and an initialized sg_swapchain struct in the same sg_begin_pass().
 
@@ -2710,9 +2709,14 @@ typedef struct sg_pass {
 /*
     sg_bindings
 
-    The sg_bindings structure defines the resource binding slots
-    of the sokol_gfx render pipeline, used as argument to the
-    sg_apply_bindings() function.
+    The sg_bindings structure defines the buffers, images and
+    samplers resource bindings for the next draw call.
+
+    To update the resource bindings, call sg_apply_bindings() with
+    a pointer to a populated sg_bindings struct. Note that
+    sg_apply_bindings() must be called after sg_apply_pipeline()
+    and that bindings are not preserved across sg_apply_pipeline()
+    calls, even when the new pipeline uses the same 'bindings layout'.
 
     A resource binding struct contains:
 
@@ -2720,19 +2724,68 @@ typedef struct sg_pass {
     - 0..N vertex buffer offsets
     - 0..1 index buffers
     - 0..1 index buffer offsets
-    - 0..N vertex shader stage images
-    - 0..N vertex shader stage samplers
-    - 0..N vertex shader storage buffers
-    - 0..N fragment shader stage images
-    - 0..N fragment shader stage samplers
-    - 0..N fragment shader storage buffers
+    - 0..N images
+    - 0..N samplers
+    - 0..N storage buffers
 
-    For the max number of bindings, see the constant definitions:
+    Where 'N' is defined in the following constants:
 
     - SG_MAX_VERTEXBUFFER_BINDSLOTS
-    - SG_MAX_SHADERSTAGE_IMAGES
-    - SG_MAX_SHADERSTAGE_SAMPLERS
-    - SG_MAX_SHADERSTAGE_STORAGEBUFFERS
+    - SG_MAX_IMAGE_BINDLOTS
+    - SG_MAX_SAMPLER_BINDSLOTS
+    - SG_MAX_STORAGEBUFFER_BINDGLOTS
+
+    When using sokol-shdc for shader authoring, the `layout(binding=N)`
+    annotation in the shader code directly maps to the slot index for that
+    resource type in the bindings struct, for instance the following vertex-
+    and fragment-shader interface for sokol-shdc:
+
+        @vs vs
+        layout(binding=0) uniform vs_params { ... };
+        layout(binding=0) readonly buffer ssbo { ... };
+        layout(binding=0) uniform texture2D vs_tex;
+        layout(binding=0) uniform sampler vs_smp;
+        ...
+        @end
+
+        @fs fs
+        layout(binding=1) uniform fs_params { ... };
+        layout(binding=1) uniform texture2D fs_tex;
+        layout(binding=1) uniform sampler fs_smp;
+        ...
+        @end
+
+    ...would map to the following sg_bindings struct:
+
+        const sg_bindings bnd = {
+            .vertex_buffers[0] = ...,
+            .images[0] = vs_tex,
+            .images[1] = fs_tex,
+            .samplers[0] = vs_smp,
+            .samplers[1] = fs_smp,
+            .storage_buffers[0] = ssbo,
+        };
+
+    ...alternatively you can use code-generated slot indices:
+
+        const sg_bindings bnd = {
+            .vertex_buffers[0] = ...,
+            .images[IMG_vs_tex] = vs_tex,
+            .images[IMG_fs_tex] = fs_tex,
+            .samplers[SMP_vs_smp] = vs_smp,
+            .samplers[SMP_fs_smp] = fs_smp,
+            .storage_buffers[SBUF_ssbo] = ssbo,
+        };
+
+    Resource bindslots for a specific shader/pipeline may have gaps, and an
+    sg_bindings struct may have populated bind slots which are not used by a
+    specific shader. This allows to use the same sg_bindings struct across
+    different shader variants.
+
+    When not using sokol-shdc, the bindslot indices in the sg_bindings
+    struct need to match the per-resource reflection info slot indices
+    in the sg_shader_desc struct (for details about that see the
+    sg_shader_desc struct documentation).
 
     The optional buffer offsets can be used to put different unrelated
     chunks of vertex- and/or index-data into the same buffer objects.
