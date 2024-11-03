@@ -3000,42 +3000,100 @@ typedef struct sg_sampler_desc {
 /*
     sg_shader_desc
 
-    FIXME: UPDATE!
+    Used as parameter of sg_make_shader() to create a shader object which
+    communicates shader source or bytecode and shader interface
+    reflection information to sokol-gfx.
 
-    The structure sg_shader_desc defines all creation parameters for shader
-    programs, used as input to the sg_make_shader() function:
+    If you use sokol-shdc you can ignore the following information since
+    the sg_shader_desc struct will be code generated.
 
-    - reflection information for vertex attributes (vertex shader inputs):
-        - vertex attribute name (only optionally used by GLES3 and GL)
-        - a semantic name and index (required for D3D11)
-    - for each shader-stage (vertex and fragment):
+    Otherwise you need to provide the following information to the
+    sg_make_shader() call:
+
+    - a vertex- and fragment-shader function:
         - the shader source or bytecode
-        - an optional entry function name
-        - an optional compile target (only for D3D11 when source is provided,
-          defaults are "vs_4_0" and "ps_4_0")
-        - reflection info for each uniform block used by the shader stage:
-            - the size of the uniform block in bytes
-            - a memory layout hint (native vs std140, only required for GL backends)
-            - reflection info for each uniform block member (only required for GL backends):
-                - member name
-                - member type (SG_UNIFORMTYPE_xxx)
-                - if the member is an array, the number of array items
-        - reflection info for textures used in the shader stage:
-            - the image type (SG_IMAGETYPE_xxx)
-            - the image-sample type (SG_IMAGESAMPLETYPE_xxx, default is SG_IMAGESAMPLETYPE_FLOAT)
-            - whether the shader expects a multisampled texture
-        - reflection info for samplers used in the shader stage:
-            - the sampler type (SG_SAMPLERTYPE_xxx)
-        - reflection info for each image-sampler-pair used by the shader:
-            - the texture slot of the involved texture
-            - the sampler slot of the involved sampler
-            - for GLSL only: the name of the combined image-sampler object
-        - reflection info for each storage-buffer used by the shader:
-            - whether the storage buffer is readonly (currently this
-              must be true)
+        - an optional entry point name
+        - for D3D11: an optional compile target when source code is provided
+          (the defaults are "vs_4_0" and "ps_4_0")
+
+    - vertex attributes required by some backends:
+        - for the GL backend: optional vertex attribute names
+          used for name lookup
+        - for the D3D11 backend: semantic names and indices
+
+    - reflection information for each uniform block used by the shader:
+        - the shader stage the uniform block appears in (SG_SHADERSTAGE_*)
+        - the size in bytes of the uniform block
+        - backend-specific bindslots:
+            - HLSL: the constant buffer register `register(b0..7)`
+            - MSL: the buffer attribute `[[buffer(0..7)]]`
+            - WGSL: the binding in `@group(0) @binding(0..15)`
+        - GLSL only: a description of the uniform block interior
+            - the memory layout standard (SG_UNIFORMLAYOUT_*)
+            - for each member in the uniform block:
+                - the member type (SG_UNIFORM_*)
+                - if the member is an array, the array count
+                - the member name
+
+    - reflection information for each texture used by the shader:
+        - the shader stage the texture appears in (SG_SHADERSTAGE_*)
+        - the image type (SG_IMAGETYPE_*)
+        - the image-sample type (SG_IMAGESAMPLETYPE_*)
+        - whether the texture is multisampled
+        - backend specific bindslots:
+            - HLSL: the texture register `register(t0..23)`
+            - MSL: the texture attribute `[[texture(0..15)]]`
+            - WGSL: the binding in `@group(1) @binding(0..127)`
+
+    - reflection information for each sampler used by the shader:
+        - the shader stage the sampler appears in (SG_SHADERSTAGE_*)
+        - the sampler type (SG_SAMPLERTYPE_*)
+        - backend specific bindslots:
+            - HLSL: the sampler register `register(s0..15)`
+            - MSL: the sampler attribute `[[sampler(0..15)]]`
+            - WGSL: the binding in `@group(0) @binding(0..127)`
+
+    - reflection information for each storage buffer used by the shader:
+        - the shader stage the storage buffer appears in (SG_SHADERSTAGE_*)
+        - whether the storage buffer is readonly (currently this must
+          always be true)
+        - backend specific bindslots:
+            - HLSL: the texture(sic) register `register(t0..23)`
+            - MSL: the buffer attribute `[[buffer(8..15)]]`
+            - WGSL: the binding in `@group(1) @binding(0..127)`
+
+    - reflection information for each combined image-sampler object
+      used by the shader:
+        - the shader stage (SG_SHADERSTAGE_*)
+        - the texture's array index in the sg_shader_desc.images[] array
+        - the sampler's array index in the sg_shader_desc.samplers[] array
+        - GLSL only: the name of the combined image-sampler object
+
+    The number and order of items in the sg_shader_desc.attrs[]
+    array corresponds to the items in sg_pipeline_desc.layout.attrs.
+
+        - sg_shader_desc.attrs[N] => sg_pipeline_desc.layout.attrs[N]
+
+    NOTE that vertex attribute indices currently cannot have gaps.
+
+    The items index in the sg_shader_desc.uniform_blocks[] array corresponds
+    to the ub_slot arg in sg_apply_uniforms():
+
+        - sg_shader_desc.uniform_blocks[N] => sg_apply_uniforms(N, ...)
+
+    The items in the shader_desc images, samplers and storage_buffers
+    arrays correspond to the same array items in the sg_bindings struct:
+
+        - sg_shader_desc.images[N] => sg_bindings.images[N]
+        - sg_shader_desc.samplers[N] => sg_bindings.samplers[N]
+        - sg_shader_desc.storage_buffers[N] => sg_bindings.storage_buffers[N]
 
     For all GL backends, shader source-code must be provided. For D3D11 and Metal,
     either shader source-code or byte-code can be provided.
+
+    NOTE that the uniform block, image, sampler and storage_buffer arrays
+    can have gaps. This allows to use the same sg_bindings struct for
+    different related shader variants.
 
     For D3D11, if source code is provided, the d3dcompiler_47.dll will be loaded
     on demand. If this fails, shader creation will fail. When compiling HLSL
@@ -3049,6 +3107,13 @@ typedef enum sg_shader_stage {
     SG_SHADERSTAGE_FRAGMENT,
 } sg_shader_stage;
 
+typedef struct sg_shader_function {
+    const char* source;
+    sg_range bytecode;
+    const char* entry;
+    const char* d3d11_target;   // default: "vs_4_0" or "ps_4_0"
+} sg_shader_function;
+
 typedef struct sg_shader_vertex_attr {
     const char* glsl_name;      // [optional] GLSL attribute name
     const char* hlsl_sem_name;  // HLSL semantic name
@@ -3057,17 +3122,17 @@ typedef struct sg_shader_vertex_attr {
 
 typedef struct sg_glsl_shader_uniform {
     sg_uniform_type type;
-    uint16_t array_count;       // 0 for scalars, or >1 for arrays
+    uint16_t array_count;       // 0 or 1 for scalars, >1 for arrays
     const char* glsl_name;      // glsl name binding is required on GL 4.1 and WebGL2
 } sg_glsl_shader_uniform;
 
 typedef struct sg_shader_uniform_block {
     sg_shader_stage stage;
-    sg_uniform_layout layout;
     uint32_t size;
-    uint8_t hlsl_register_b_n;      // HLSL register(bn)
-    uint8_t msl_buffer_n;           // MSL [[buffer(n)]]
+    uint8_t hlsl_register_b_n;  // HLSL register(bn)
+    uint8_t msl_buffer_n;       // MSL [[buffer(n)]]
     uint8_t wgsl_group0_binding_n; // WGSL @group(0) @binding(n)
+    sg_uniform_layout layout;
     sg_glsl_shader_uniform glsl_uniforms[SG_MAX_UNIFORMBLOCK_MEMBERS];
 } sg_shader_uniform_block;
 
@@ -3104,13 +3169,6 @@ typedef struct sg_shader_image_sampler_pair {
     uint8_t sampler_slot;
     const char* glsl_name;          // glsl name binding required because of GL 4.1 and WebGL2
 } sg_shader_image_sampler_pair;
-
-typedef struct sg_shader_function {
-    const char* source;
-    sg_range bytecode;
-    const char* entry;
-    const char* d3d11_target;
-} sg_shader_function;
 
 typedef struct sg_shader_desc {
     uint32_t _start_canary;
