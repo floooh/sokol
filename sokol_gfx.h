@@ -776,7 +776,7 @@
               (in HLSL, storage buffers and texture share the same bind space)
             - Metal/MSL: the buffer bind slot N (`[[buffer(N)]]`) where N is 8..15
             - WebGPU/WGSL: the binding N in `@group(0) @binding(N)` where N is 0..127
-            - GL/GLSL: the buffer binding N in `layout(binding=N)` where N is 0..8
+            - GL/GLSL: the buffer binding N in `layout(binding=N)` where N is 0..16
         - note that storage buffers are not supported on all backends
           and platforms
 
@@ -3061,6 +3061,7 @@ typedef struct sg_sampler_desc {
             - HLSL: the texture(sic) register `register(t0..23)`
             - MSL: the buffer attribute `[[buffer(8..15)]]`
             - WGSL: the binding in `@group(1) @binding(0..127)`
+            - GL: the binding in `layout(binding=0..16)`
 
     - reflection information for each combined image-sampler object
       used by the shader:
