@@ -26,7 +26,7 @@ TL;DR:
     - backend 3D API specific resource bindslots to map sokol-gfx
       bindslots to 3D API bindslots
 
-The update is implemented in [PR #1111](https://github.com/floooh/sokol/pull/1111).
+The update is implemented in PR https://github.com/floooh/sokol/pull/1111.
 
 The detailed API changes in the sokol_gfx.h API:
 
