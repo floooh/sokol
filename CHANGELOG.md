@@ -1,5 +1,95 @@
 ## Updates
 
+### 07-Nov-2024
+
+The sokol-gfx 'bindings cleanup update'. This is a breaking change.
+
+Please read this blog post to get an idea what the update is about
+and how existing code needs to be changed:
+
+https://floooh.github.io/2024/11/04/sokol-fall-2024-update.html
+
+TL;DR:
+
+- sokol-shdc input shader sources now require to annotate uniform blocks,
+  textures, samplers and storage buffers with `layout(binding=N)` where `N`
+  directly maps to sokol-gfx bindslots
+- the concept of 'shader stages' has mostly been removed from the sokol-gfx API
+- in the `sg_bindings` struct, the nested per-shader-stage binding arrays have
+  been replaced with unified binding arrays
+- in the function `sg_apply_uniforms()`, the shader stage parameter has been
+  removed
+- only relevant if you don't use sokol-shdc: the interior of the `sg_shader_desc`
+  struct has been changed according to the new binding model, and additional
+  information must be provided for each resource binding:
+    - what shader change the binding appears in
+    - backend 3D API specific resource bindslots to map sokol-gfx
+      bindslots to 3D API bindslots
+
+The update is implemented in [PR #1111](https://github.com/floooh/sokol/pull/1111).
+
+The detailed API changes in the sokol_gfx.h API:
+
+- the `sg_apply_uniforms()` function no longer has a shader stage parameter:
+    ```c
+    void sg_apply_uniforms(int ub_slot, const sg_range* data);
+    ```
+- the `sg_bindings` struct interior no longer separates resource
+  bindings by shader stages:
+    ```c
+    typedef struct sg_bindings {
+        uint32_t _start_canary;
+        sg_buffer vertex_buffers[SG_MAX_VERTEXBUFFER_BINDSLOTS];
+        int vertex_buffer_offsets[SG_MAX_VERTEXBUFFER_BINDSLOTS];
+        sg_buffer index_buffer;
+        int index_buffer_offset;
+        sg_image images[SG_MAX_IMAGE_BINDSLOTS];
+        sg_sampler samplers[SG_MAX_SAMPLER_BINDSLOTS];
+        sg_buffer storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
+        uint32_t _end_canary;
+    } sg_bindings;
+    ```
+- some public constants starting with `SG_NUM_*` or `SG_MAX_*`
+  have been removed or renamed (those typically shouldn't show up
+  in user code)
+- similar to the `sg_bindings` struct, the bindings reflection is no
+  longer split between shader stages:
+  ```c
+  typedef struct sg_shader_desc {
+      uint32_t _start_canary;
+      sg_shader_function vertex_func;
+      sg_shader_function fragment_func;
+      sg_shader_vertex_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
+      sg_shader_uniform_block uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
+      sg_shader_storage_buffer storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
+      sg_shader_image images[SG_MAX_IMAGE_BINDSLOTS];
+      sg_shader_sampler samplers[SG_MAX_SAMPLER_BINDSLOTS];
+      sg_shader_image_sampler_pair image_sampler_pairs[SG_MAX_IMAGE_SAMPLER_PAIRS];
+      const char* label;
+      uint32_t _end_canary;
+  } sg_shader_desc;
+  ```
+
+Behaviour changes:
+
+- Resource bindings can now have gaps, and validation of `sg_apply_bindings()`
+  has been relaxed to allow bindslots in `sg_bindings` to be occupied even
+  if those bindings are not used by the current shader. This allows to use the
+  same `sg_bindings` struct for different but related shader variants.
+- Likewise, uniform block bindslots can now have gaps (but currently it's still
+  an error trying to apply uniform block data for a bindslot that's not used
+  by the current shader)
+- In debug mode, `sg_draw()` now checks that `sg_apply_bindings()` and/or
+  `sg_apply_uniforms()` has been called after `sg_apply_pipeline()` when required.
+- Lots of new validation checks for the new reflection information in `sg_shader_desc`.
+
+Drive by fixes:
+
+- the sokol_gfx.h WebGPU backend is now compatible again with the latest
+  Google Dawn library (Chrome's native WebGPU implementation)
+- the [fips-dawn glue repository](https://github.com/fips-libs/fips-dawn) has been fixed to work with the latest
+  Dawn build system changes (still only tested on macOS though)
+
 ### 24-Oct-2024
 
 - sokol_nuklear.h: Merged https://github.com/floooh/sokol/pull/1138 which
