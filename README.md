@@ -6,7 +6,7 @@
 
 # Sokol
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**17-Sep-2024** sokol_app.h: clipboard support for Linux)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**07-Nov-2024** sokol_gfx.h: the 'bindings cleanup' update
 
 [![Build](/../../actions/workflows/main.yml/badge.svg)](/../../actions/workflows/main.yml) [![Bindings](/../../actions/workflows/gen_bindings.yml/badge.svg)](/../../actions/workflows/gen_bindings.yml) [![build](https://github.com/floooh/sokol-zig/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-zig/actions/workflows/main.yml) [![build](https://github.com/floooh/sokol-nim/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-nim/actions/workflows/main.yml) [![Odin](https://github.com/floooh/sokol-odin/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-odin/actions/workflows/main.yml)[![Rust](https://github.com/floooh/sokol-rust/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-rust/actions/workflows/main.yml)[![Dlang](https://github.com/kassane/sokol-d/actions/workflows/build.yml/badge.svg)](https://github.com/kassane/sokol-d/actions/workflows/build.yml)
 
@@ -155,8 +155,8 @@ static void init(void) {
         .shader = sg_make_shader(triangle_shader_desc(sg_query_backend())),
         .layout = {
             .attrs = {
-                [ATTR_vs_position].format = SG_VERTEXFORMAT_FLOAT3,
-                [ATTR_vs_color0].format = SG_VERTEXFORMAT_FLOAT4
+                [ATTR_triangle_position].format = SG_VERTEXFORMAT_FLOAT3,
+                [ATTR_triangle_color0].format = SG_VERTEXFORMAT_FLOAT4
             }
         },
     });

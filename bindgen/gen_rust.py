@@ -58,7 +58,7 @@ overrides = {
     "type": "_type",
     "ref": "_ref",
 
-    "sg_apply_uniforms.ub_index": "uintptr_t",
+    "sg_apply_uniforms.ub_slot": "uintptr_t",
     "sg_draw.base_element": "uintptr_t",
     "sg_draw.num_elements": "uintptr_t",
     "sg_draw.num_instances": "uintptr_t",
@@ -83,13 +83,6 @@ overrides = {
     "sapp_keycode::SAPP_KEYCODE_7": "SAPP_KEYCODE_NUM7",
     "sapp_keycode::SAPP_KEYCODE_8": "SAPP_KEYCODE_NUM8",
     "sapp_keycode::SAPP_KEYCODE_9": "SAPP_KEYCODE_NUM9",
-
-    # "sgl_error": "sgl_get_error",  # 'error' is reserved in zig
-    # "sgl_deg": "sgl_as_degrees",
-    # "sgl_rad": "sgl_as_radians",
-    # "sg_context_desc.color_format": "int",
-    # "SGL_NO_ERROR": "SGL_ERROR_NO_ERROR",
-    # "sg_context_desc.depth_format": "int",
 }
 
 prim_types = {

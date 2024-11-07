@@ -57,9 +57,7 @@ overrides = {
     'sgl_error':                            'sgl_get_error',   # 'error' is reserved in Dlang
     'sgl_deg':                              'sgl_as_degrees',
     'sgl_rad':                              'sgl_as_radians',
-    'sg_context_desc.color_format':         'int',
-    'sg_context_desc.depth_format':         'int',
-    'sg_apply_uniforms.ub_index':           'uint32_t',
+    'sg_apply_uniforms.ub_slot':            'uint32_t',
     'sg_draw.base_element':                 'uint32_t',
     'sg_draw.num_elements':                 'uint32_t',
     'sg_draw.num_instances':                'uint32_t',
