@@ -3434,6 +3434,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_sampler_panel(sgimgui_t* ctx, sg_sampler smp) 
 
 _SOKOL_PRIVATE void _sgimgui_draw_shader_func(const char* title, const sg_shader_function* func) {
     SOKOL_ASSERT(func);
+    igPushID_Str(title);
     igText("%s", title);
     if (func->entry) {
         igText("  entry: %s", func->entry);
@@ -3452,6 +3453,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_func(const char* title, const sg_shader
             igTreePop();
         }
     }
+    igPopID();
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
