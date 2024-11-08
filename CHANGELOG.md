@@ -53,7 +53,7 @@ The detailed API changes in the sokol_gfx.h API:
   have been removed or renamed (those typically shouldn't show up
   in user code)
 - similar to the `sg_bindings` struct, the bindings reflection is no
-  longer split between shader stages:
+  longer split between shader stages in `sg_shader_desc`:
   ```c
   typedef struct sg_shader_desc {
       uint32_t _start_canary;
