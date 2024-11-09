@@ -3829,7 +3829,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_GLSL_BINDING_COLLISION, "storage buffer 'glsl_binding_n' must be unique across shader stages") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_WGSL_GROUP1_BINDING_OUT_OF_RANGE, "storage buffer 'wgsl_group1_binding_n' is out of range (must be 0..127)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_WGSL_GROUP1_BINDING_COLLISION, "storage buffer 'wgsl_group1_binding_n' must be unique across all images, samplers and storage buffers") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_READONLY, "shader stage storage buffers must be readonly (sg_shader_desc.vs|fs.storage_buffers[].readonly)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_READONLY, "shader stage storage buffers must be readonly (sg_shader_desc.storage_buffers[].readonly)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_METAL_TEXTURE_SLOT_OUT_OF_RANGE, "image 'msl_texture_n' is out of range (must be 0..15)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_METAL_TEXTURE_SLOT_COLLISION, "image 'msl_texture_n' must be unique in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_HLSL_REGISTER_T_OUT_OF_RANGE, "image 'hlsl_register_t_n' is out of range (must be 0..23)") \
@@ -3842,15 +3842,15 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_HLSL_REGISTER_S_COLLISION, "sampler 'hlsl_register_s_n' must be unique in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_WGSL_GROUP1_BINDING_OUT_OF_RANGE, "sampler 'wgsl_group1_binding_n' is out of range (must be 0..127)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_WGSL_GROUP1_BINDING_COLLISION, "sampler 'wgsl_group1_binding_n' must be unique across all images, samplers and storage buffers") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_IMAGE_SLOT_OUT_OF_RANGE, "image-sampler-pair image slot index is out of range (sg_shader_desc.vs|fs.image_sampler_pairs[].image_slot)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_SAMPLER_SLOT_OUT_OF_RANGE, "image-sampler-pair image slot index is out of range (sg_shader_desc.vs|fs.image_sampler_pairs[].sampler_slot)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_IMAGE_SLOT_OUT_OF_RANGE, "image-sampler-pair image slot index is out of range (sg_shader_desc.image_sampler_pairs[].image_slot)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_SAMPLER_SLOT_OUT_OF_RANGE, "image-sampler-pair sampler slot index is out of range (sg_shader_desc.image_sampler_pairs[].sampler_slot)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_IMAGE_STAGE_MISMATCH, "image-sampler-pair stage doesn't match referenced image stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_SAMPLER_STAGE_MISMATCH, "image-sampler-pair stage doesn't match referenced sampler stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_SAMPLER_PAIR_GLSL_NAME, "image-sampler-pair 'glsl_name' missing") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NONFILTERING_SAMPLER_REQUIRED, "image sample type UNFILTERABLE_FLOAT, UINT, SINT can only be used with NONFILTERING sampler") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_COMPARISON_SAMPLER_REQUIRED, "image sample type DEPTH can only be used with COMPARISON sampler") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_NOT_REFERENCED_BY_IMAGE_SAMPLER_PAIRS, "one or more images are note referenced by  (sg_shader_desc.vs|fs.image_sampler_pairs[].image_slot)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_NOT_REFERENCED_BY_IMAGE_SAMPLER_PAIRS, "one or more samplers are not referenced by image-sampler-pairs (sg_shader_desc.vs|fs.image_sampler_pairs[].sampler_slot)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_NOT_REFERENCED_BY_IMAGE_SAMPLER_PAIRS, "one or more images are not referenced by by image-sampler-pairs (sg_shader_desc.image_sampler_pairs[].image_slot)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_NOT_REFERENCED_BY_IMAGE_SAMPLER_PAIRS, "one or more samplers are not referenced by image-sampler-pairs (sg_shader_desc.image_sampler_pairs[].sampler_slot)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_ATTR_STRING_TOO_LONG, "vertex attribute name/semantic string too long (max len 16)") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_CANARY, "sg_pipeline_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_SHADER, "sg_pipeline_desc.shader missing or invalid") \
