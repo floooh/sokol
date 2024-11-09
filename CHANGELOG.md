@@ -1,5 +1,11 @@
 ## Updates
 
+### 09-Nov-2024
+
+Please be aware of this regression fix in sokol-shdc:
+
+https://github.com/floooh/sokol-tools/blob/master/CHANGELOG.md#09-nov-2024
+
 ### 07-Nov-2024
 
 The sokol-gfx 'bindings cleanup update'. This is a breaking change.
