@@ -66,6 +66,10 @@ jobs:
         with:
           repository: colinbellino/sokol-jai
           path: bindgen/sokol-jai
+      - uses: actions/checkout@main
+        with:
+          repository: floooh/sokol-c3
+          path: bindgen/sokol-c3
       - name: generate
         run: |
           cd bindgen
