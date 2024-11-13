@@ -2,7 +2,7 @@
 
 ### 13-Nov-2024
 
-- sokol_nuklear.h: merge PR #1150, this allows to connect the
+- sokol_nuklear.h: merge PR https://github.com/floooh/sokol/pull/1150, this allows to connect the
   Nuklear mouse cursor handling to the sokol_app.h mouse cursor functions
   via the new `snk_desc_t.enable_set_mouse_cursor` config flag. When setting
   this to true you'd also might want to hide the Nuklear software mouse
