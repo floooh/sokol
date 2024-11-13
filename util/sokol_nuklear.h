@@ -2868,6 +2868,7 @@ static void _snk_bind_image_sampler(sg_bindings* bindings, nk_handle h) {
 SOKOL_API_IMPL void snk_render(int width, int height) {
     SOKOL_ASSERT(_SNK_INIT_COOKIE == _snuklear.init_cookie);
 
+    #if !defined(SOKOL_NUKLEAR_NO_SOKOL_APP)
     if (_snuklear.desc.enable_set_mouse_cursor) {
         for (enum nk_style_cursor c = 0; c < NK_CURSOR_COUNT; ++c) {
             if (_snuklear.ctx.style.cursor_active == _snuklear.ctx.style.cursors[c]) {
@@ -2886,6 +2887,7 @@ SOKOL_API_IMPL void snk_render(int width, int height) {
             }
         }
     }
+    #endif
 
     static const struct nk_draw_vertex_layout_element vertex_layout[] = {
         {NK_VERTEX_POSITION, NK_FORMAT_FLOAT, NK_OFFSETOF(struct _snk_vertex_t, pos)},
