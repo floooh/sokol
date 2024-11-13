@@ -115,6 +115,12 @@
                 Set this to true if you don't want to use Nuklear's default
                 font. In this case you need to initialize the font
                 yourself after snk_setup() is called.
+            
+            bool enable_set_mouse_cursor
+                If true, sokol_nuklear.h will control the mouse cursor type
+                by calling sapp_set_mouse_cursor(). If using this, you should
+                probably also call nk_style_hide_cursor() to hide Nuklear's
+                custom cursor.
 
     --- At the start of a frame, call:
 
@@ -427,6 +433,7 @@ typedef struct snk_desc_t {
     int sample_count;
     float dpi_scale;
     bool no_default_font;
+    bool enable_set_mouse_cursor;
     snk_allocator_t allocator;          // optional memory allocation overrides (default: malloc/free)
     snk_logger_t logger;                // optional log function override
 } snk_desc_t;
@@ -3120,6 +3127,24 @@ SOKOL_API_IMPL bool snk_handle_event(const sapp_event* ev) {
             break;
         default:
             break;
+    }
+    if (_snuklear.desc.enable_set_mouse_cursor) {
+        for (enum nk_style_cursor c = 0; c < NK_CURSOR_COUNT; ++c) {
+            if (_snuklear.ctx.style.cursor_active == _snuklear.ctx.style.cursors[c]) {
+                sapp_mouse_cursor sapp_cur = SAPP_MOUSECURSOR_ARROW;
+                switch (c) {
+                    case NK_CURSOR_TEXT: sapp_cur = SAPP_MOUSECURSOR_IBEAM; break;
+                    case NK_CURSOR_MOVE: sapp_cur = SAPP_MOUSECURSOR_RESIZE_ALL; break;
+                    case NK_CURSOR_RESIZE_VERTICAL: sapp_cur = SAPP_MOUSECURSOR_RESIZE_NS; break;
+                    case NK_CURSOR_RESIZE_HORIZONTAL: sapp_cur = SAPP_MOUSECURSOR_RESIZE_EW; break;
+                    case NK_CURSOR_RESIZE_TOP_LEFT_DOWN_RIGHT: sapp_cur = SAPP_MOUSECURSOR_RESIZE_NESW; break;
+                    case NK_CURSOR_RESIZE_TOP_RIGHT_DOWN_LEFT: sapp_cur = SAPP_MOUSECURSOR_RESIZE_NWSE; break;
+                    default: break;
+                }
+                sapp_set_mouse_cursor(sapp_cur);
+                break;
+            }
+        }
     }
     return nk_item_is_any_active(&_snuklear.ctx);
 }
