@@ -1,5 +1,13 @@
 ## Updates
 
+### 13-Nov-2024
+
+- sokol_nuklear.h: merge PR #1150, this allows to connect the
+  Nuklear mouse cursor handling to the sokol_app.h mouse cursor functions
+  via the new `snk_desc_t.enable_set_mouse_cursor` config flag. When setting
+  this to true you'd also might want to hide the Nuklear software mouse
+  cursor via `nk_style_hide_cursor(ctx)`. Many thanks to @zeozeozeo for the PR!
+
 ### 09-Nov-2024
 
 Please be aware of this regression fix in sokol-shdc:
