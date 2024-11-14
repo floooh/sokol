@@ -16598,7 +16598,7 @@ typedef struct {
     uint64_t lo, hi;
 } _sg_u128_t;
 
-_sg_u128_t _sg_u128(void) {
+_SOKOL_PRIVATE _sg_u128_t _sg_u128(void) {
     _sg_u128_t res;
     _sg_clear(&res, sizeof(res));
     return res;
