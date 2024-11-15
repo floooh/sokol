@@ -7575,10 +7575,11 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     see: https://gamedev.net/forums/topic/672094-keeping-things-moving-during-win32-moveresize-events/5254386/
                 */
                 if (SendMessage(_sapp.win32.hwnd, WM_NCHITTEST, wParam, lParam) == HTCAPTION) {
-                    POINT point;
-                    GetCursorPos(&point);
-                    ScreenToClient(_sapp.win32.hwnd, &point);
-                    PostMessage(_sapp.win32.hwnd, WM_MOUSEMOVE, 0, ((uint32_t)point.x)|(((uint32_t)point.y) << 16));
+                    POINT point = { 0, 0 };
+                    if (GetCursorPos(&point)) {
+                        ScreenToClient(_sapp.win32.hwnd, &point);
+                        PostMessage(_sapp.win32.hwnd, WM_MOUSEMOVE, 0, ((uint32_t)point.x)|(((uint32_t)point.y) << 16));
+                    }
                 }
                 break;
             case WM_DROPFILES:
