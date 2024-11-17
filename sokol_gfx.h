@@ -7841,7 +7841,11 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
     _sg.features.mrt_independent_blend_state = false;
     _sg.features.mrt_independent_write_mask = true;
     _sg.features.storage_buffer = version >= 430;
+    #if defined(__APPLE__)
+    _sg.features.msaa_image_bindings = false;
+    #else
     _sg.features.msaa_image_bindings = true;
+    #endif
 
     // scan extensions
     bool has_s3tc = false;  // BC1..BC3
@@ -8465,9 +8469,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
     }
     const GLenum gl_internal_format = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
 
-    // GLES3/WebGL2 doesn't have support for multisampled textures, so create a render buffer object instead
-    // on GLES3, if this is a MSAA render target, a render buffer object will be created instead of a regular texture
-    // (since GLES3 has no multisampled texture objects)
+    // GLES3/WebGL2/macOS doesn't have support for multisampled textures, so create a render buffer object instead
     if (!_sg.features.msaa_image_bindings && img->cmn.render_target && msaa) {
         glGenRenderbuffers(1, &img->gl.msaa_render_buffer);
         glBindRenderbuffer(GL_RENDERBUFFER, img->gl.msaa_render_buffer);
@@ -8529,7 +8531,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                                     mip_width, mip_height, 0, data_size, data_ptr);
                             } else {
                                 const GLenum gl_type = _sg_gl_teximage_type(img->cmn.pixel_format);
-                                #if defined(SOKOL_GLCORE)
+                                #if defined(SOKOL_GLCORE) && !defined(__APPLE__)
                                     if (msaa) {
                                         glTexImage2DMultisample(gl_img_target, img->cmn.sample_count, gl_internal_format,
                                             mip_width, mip_height, GL_TRUE);
@@ -8555,7 +8557,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                                     mip_width, mip_height, mip_depth, 0, data_size, data_ptr);
                             } else {
                                 const GLenum gl_type = _sg_gl_teximage_type(img->cmn.pixel_format);
-                                #if defined(SOKOL_GLCORE)
+                                #if defined(SOKOL_GLCORE) && !defined(__APPLE__)
                                     if (msaa) {
                                         // NOTE: only for array textures, not actual 3D textures!
                                         glTexImage3DMultisample(gl_img_target, img->cmn.sample_count, gl_internal_format,
