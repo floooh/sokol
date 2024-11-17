@@ -1871,6 +1871,7 @@ typedef struct sg_features {
     bool mrt_independent_blend_state;   // multiple-render-target rendering can use per-render-target blend state
     bool mrt_independent_write_mask;    // multiple-render-target rendering can use per-render-target color write masks
     bool storage_buffer;                // storage buffers are supported
+    bool msaa_image_bindings;           // if true, multisampled images can be bound as texture resources
 } sg_features;
 
 /*
@@ -4928,6 +4929,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE 0x8D56
         #define GL_MAJOR_VERSION 0x821B
         #define GL_MINOR_VERSION 0x821C
+        #define GL_TEXTURE_2D_MULTISAMPLE 0x9100
+        #define GL_TEXTURE_2D_MULTISAMPLE_ARRAY 0x9102
     #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
@@ -7091,7 +7094,9 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     _SG_XMACRO(glSamplerParameterf,               void, (GLuint sampler, GLenum pname, GLfloat param)) \
     _SG_XMACRO(glSamplerParameterfv,              void, (GLuint sampler, GLenum pname, const GLfloat* params)) \
     _SG_XMACRO(glDeleteSamplers,                  void, (GLsizei n, const GLuint* samplers)) \
-    _SG_XMACRO(glBindBufferBase,                  void, (GLenum target, GLuint index, GLuint buffer))
+    _SG_XMACRO(glBindBufferBase,                  void, (GLenum target, GLuint index, GLuint buffer)) \
+    _SG_XMACRO(glTexImage2DMultisample,           void, (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations)) \
+    _SG_XMACRO(glTexImage3DMultisample,           void, (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations))
 
 // generate GL function pointer typedefs
 #define _SG_XMACRO(name, ret, args) typedef ret (GL_APIENTRY* PFN_ ## name) args;
@@ -7143,13 +7148,22 @@ _SOKOL_PRIVATE GLenum _sg_gl_buffer_target(sg_buffer_type t) {
     }
 }
 
-_SOKOL_PRIVATE GLenum _sg_gl_texture_target(sg_image_type t) {
-    switch (t) {
-        case SG_IMAGETYPE_2D:   return GL_TEXTURE_2D;
-        case SG_IMAGETYPE_CUBE: return GL_TEXTURE_CUBE_MAP;
-        case SG_IMAGETYPE_3D:       return GL_TEXTURE_3D;
-        case SG_IMAGETYPE_ARRAY:    return GL_TEXTURE_2D_ARRAY;
-        default: SOKOL_UNREACHABLE; return 0;
+_SOKOL_PRIVATE GLenum _sg_gl_texture_target(sg_image_type t, int sample_count) {
+    const bool msaa = sample_count > 1;
+    if (msaa) {
+        switch (t) {
+            case SG_IMAGETYPE_2D: return GL_TEXTURE_2D_MULTISAMPLE;
+            case SG_IMAGETYPE_ARRAY: return GL_TEXTURE_2D_MULTISAMPLE_ARRAY;
+            default: SOKOL_UNREACHABLE; return 0;
+        }
+    } else {
+        switch (t) {
+            case SG_IMAGETYPE_2D:   return GL_TEXTURE_2D;
+            case SG_IMAGETYPE_CUBE: return GL_TEXTURE_CUBE_MAP;
+            case SG_IMAGETYPE_3D:       return GL_TEXTURE_3D;
+            case SG_IMAGETYPE_ARRAY:    return GL_TEXTURE_2D_ARRAY;
+            default: SOKOL_UNREACHABLE; return 0;
+        }
     }
 }
 
@@ -7816,6 +7830,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
     _sg.features.mrt_independent_blend_state = false;
     _sg.features.mrt_independent_write_mask = true;
     _sg.features.storage_buffer = version >= 430;
+    _sg.features.msaa_image_bindings = true;
 
     // scan extensions
     bool has_s3tc = false;  // BC1..BC3
@@ -7889,6 +7904,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.features.mrt_independent_blend_state = false;
     _sg.features.mrt_independent_write_mask = false;
     _sg.features.storage_buffer = false;
+    _sg.features.msaa_image_bindings = false;
 
     bool has_s3tc = false;  // BC1..BC3
     bool has_rgtc = false;  // BC4 and BC5
@@ -8428,6 +8444,7 @@ _SOKOL_PRIVATE bool _sg_gl_supported_texture_format(sg_pixel_format fmt) {
 _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     _SG_GL_CHECK_ERROR();
+    const bool msaa = img->cmn.sample_count > 1;
     img->gl.injected = (0 != desc->gl_textures[0]);
 
     // check if texture format is support
@@ -8437,14 +8454,15 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
     }
     const GLenum gl_internal_format = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
 
-    // if this is a MSAA render target, a render buffer object will be created instead of a regulat texture
+    // GLES3/WebGL2 doesn't have support for multisampled textures, so create a render buffer object instead
+    // on GLES3, if this is a MSAA render target, a render buffer object will be created instead of a regular texture
     // (since GLES3 has no multisampled texture objects)
-    if (img->cmn.render_target && (img->cmn.sample_count > 1)) {
+    if (!_sg.features.msaa_image_bindings && img->cmn.render_target && msaa) {
         glGenRenderbuffers(1, &img->gl.msaa_render_buffer);
         glBindRenderbuffer(GL_RENDERBUFFER, img->gl.msaa_render_buffer);
         glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->cmn.sample_count, gl_internal_format, img->cmn.width, img->cmn.height);
     } else if (img->gl.injected) {
-        img->gl.target = _sg_gl_texture_target(img->cmn.type);
+        img->gl.target = _sg_gl_texture_target(img->cmn.type, img->cmn.sample_count);
         // inject externally GL textures
         for (int slot = 0; slot < img->cmn.num_slots; slot++) {
             SOKOL_ASSERT(desc->gl_textures[slot]);
@@ -8455,7 +8473,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
         }
     } else {
         // create our own GL texture(s)
-        img->gl.target = _sg_gl_texture_target(img->cmn.type);
+        img->gl.target = _sg_gl_texture_target(img->cmn.type, img->cmn.sample_count);
         const GLenum gl_format = _sg_gl_teximage_format(img->cmn.pixel_format);
         const bool is_compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
         for (int slot = 0; slot < img->cmn.num_slots; slot++) {
@@ -8471,6 +8489,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
             bool tex_storage_allocated = false;
             #if defined(__EMSCRIPTEN__)
                 if (desc->data.subimage[0][0].ptr == 0) {
+                    SOKOL_ASSERT(!msaa);
                     tex_storage_allocated = true;
                     if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
                         glTexStorage2D(img->gl.target, img->cmn.num_mipmaps, gl_internal_format, img->cmn.width, img->cmn.height);
@@ -8493,13 +8512,19 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                         const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
                         if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
                             if (is_compressed) {
+                                SOKOL_ASSERT(!msaa);
                                 const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
                                 glCompressedTexImage2D(gl_img_target, mip_index, gl_internal_format,
                                     mip_width, mip_height, 0, data_size, data_ptr);
                             } else {
                                 const GLenum gl_type = _sg_gl_teximage_type(img->cmn.pixel_format);
-                                glTexImage2D(gl_img_target, mip_index, (GLint)gl_internal_format,
-                                    mip_width, mip_height, 0, gl_format, gl_type, data_ptr);
+                                if (msaa) {
+                                    glTexImage2DMultisample(gl_img_target, img->cmn.sample_count, (GLint)gl_internal_format,
+                                        mip_width, mip_height, GL_TRUE);
+                                } else {
+                                    glTexImage2D(gl_img_target, mip_index, (GLint)gl_internal_format,
+                                        mip_width, mip_height, 0, gl_format, gl_type, data_ptr);
+                                }
                             }
                         } else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
                             int mip_depth = img->cmn.num_slices;
@@ -8507,13 +8532,20 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                                 mip_depth = _sg_miplevel_dim(mip_depth, mip_index);
                             }
                             if (is_compressed) {
+                                SOKOL_ASSERT(!msaa);
                                 const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
                                 glCompressedTexImage3D(gl_img_target, mip_index, gl_internal_format,
                                     mip_width, mip_height, mip_depth, 0, data_size, data_ptr);
                             } else {
                                 const GLenum gl_type = _sg_gl_teximage_type(img->cmn.pixel_format);
-                                glTexImage3D(gl_img_target, mip_index, (GLint)gl_internal_format,
-                                    mip_width, mip_height, mip_depth, 0, gl_format, gl_type, data_ptr);
+                                if (msaa) {
+                                    // NOTE: only for array textures, not actual 3D textures!
+                                    glTexImage3DMultisample(gl_img_target, img->cmn.sample_count, (GLint)gl_internal_format,
+                                        mip_width, mip_height, mip_depth, GL_TRUE);
+                                } else {
+                                    glTexImage3D(gl_img_target, mip_index, (GLint)gl_internal_format,
+                                        mip_width, mip_height, mip_depth, 0, gl_format, gl_type, data_ptr);
+                                }
                             }
                         }
                     }
@@ -10478,6 +10510,7 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.features.mrt_independent_blend_state = true;
     _sg.features.mrt_independent_write_mask = true;
     _sg.features.storage_buffer = true;
+    _sg.features.msaa_image_bindings = true;
 
     _sg.limits.max_image_size_2d = 16 * 1024;
     _sg.limits.max_image_size_cube = 16 * 1024;
@@ -12261,6 +12294,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.mrt_independent_blend_state = true;
     _sg.features.mrt_independent_write_mask = true;
     _sg.features.storage_buffer = true;
+    _sg.features.msaa_image_bindings = true;
 
     _sg.features.image_clamp_to_border = false;
     #if (MAC_OS_X_VERSION_MAX_ALLOWED >= 120000) || (__IPHONE_OS_VERSION_MAX_ALLOWED >= 140000)
@@ -17240,8 +17274,10 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                     _SG_VALIDATE(img != 0, VALIDATE_ABND_IMG_EXISTS);
                     if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
                         _SG_VALIDATE(img->cmn.type == shd->cmn.images[i].image_type, VALIDATE_ABND_IMAGE_TYPE_MISMATCH);
-//                        _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_ABND_IMAGE_MSAA);
-                        if (shd->cmn.images[0].multisampled) {
+                        if (!_sg.features.msaa_image_bindings) {
+                            _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_ABND_IMAGE_MSAA);
+                        }
+                        if (shd->cmn.images[i].multisampled) {
                             _SG_VALIDATE(img->cmn.sample_count > 1, VALIDATE_ABND_EXPECTED_MULTISAMPLED_IMAGE);
                         }
                         const _sg_pixelformat_info_t* info = &_sg.formats[img->cmn.pixel_format];
