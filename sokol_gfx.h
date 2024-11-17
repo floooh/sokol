@@ -7149,14 +7149,25 @@ _SOKOL_PRIVATE GLenum _sg_gl_buffer_target(sg_buffer_type t) {
 }
 
 _SOKOL_PRIVATE GLenum _sg_gl_texture_target(sg_image_type t, int sample_count) {
-    const bool msaa = sample_count > 1;
-    if (msaa) {
-        switch (t) {
-            case SG_IMAGETYPE_2D: return GL_TEXTURE_2D_MULTISAMPLE;
-            case SG_IMAGETYPE_ARRAY: return GL_TEXTURE_2D_MULTISAMPLE_ARRAY;
-            default: SOKOL_UNREACHABLE; return 0;
+    #if defined(SOKOL_GLCORE)
+        const bool msaa = sample_count > 1;
+        if (msaa) {
+            switch (t) {
+                case SG_IMAGETYPE_2D: return GL_TEXTURE_2D_MULTISAMPLE;
+                case SG_IMAGETYPE_ARRAY: return GL_TEXTURE_2D_MULTISAMPLE_ARRAY;
+                default: SOKOL_UNREACHABLE; return 0;
+            }
+        } else {
+            switch (t) {
+                case SG_IMAGETYPE_2D:   return GL_TEXTURE_2D;
+                case SG_IMAGETYPE_CUBE: return GL_TEXTURE_CUBE_MAP;
+                case SG_IMAGETYPE_3D:       return GL_TEXTURE_3D;
+                case SG_IMAGETYPE_ARRAY:    return GL_TEXTURE_2D_ARRAY;
+                default: SOKOL_UNREACHABLE; return 0;
+            }
         }
-    } else {
+    #else
+        SOKOL_ASSERT(sample_count == 1); _SOKOL_UNUSED(sample_count);
         switch (t) {
             case SG_IMAGETYPE_2D:   return GL_TEXTURE_2D;
             case SG_IMAGETYPE_CUBE: return GL_TEXTURE_CUBE_MAP;
@@ -7164,7 +7175,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_texture_target(sg_image_type t, int sample_count) {
             case SG_IMAGETYPE_ARRAY:    return GL_TEXTURE_2D_ARRAY;
             default: SOKOL_UNREACHABLE; return 0;
         }
-    }
+    #endif
 }
 
 _SOKOL_PRIVATE GLenum _sg_gl_usage(sg_usage u) {
@@ -8518,13 +8529,19 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                                     mip_width, mip_height, 0, data_size, data_ptr);
                             } else {
                                 const GLenum gl_type = _sg_gl_teximage_type(img->cmn.pixel_format);
-                                if (msaa) {
-                                    glTexImage2DMultisample(gl_img_target, img->cmn.sample_count, (GLint)gl_internal_format,
-                                        mip_width, mip_height, GL_TRUE);
-                                } else {
+                                #if defined(SOKOL_GLCORE)
+                                    if (msaa) {
+                                        glTexImage2DMultisample(gl_img_target, img->cmn.sample_count, (GLint)gl_internal_format,
+                                            mip_width, mip_height, GL_TRUE);
+                                    } else {
+                                        glTexImage2D(gl_img_target, mip_index, (GLint)gl_internal_format,
+                                            mip_width, mip_height, 0, gl_format, gl_type, data_ptr);
+                                    }
+                                #else
+                                    SOKOL_ASSERT(!msaa);
                                     glTexImage2D(gl_img_target, mip_index, (GLint)gl_internal_format,
                                         mip_width, mip_height, 0, gl_format, gl_type, data_ptr);
-                                }
+                                #endif
                             }
                         } else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
                             int mip_depth = img->cmn.num_slices;
@@ -8538,14 +8555,20 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                                     mip_width, mip_height, mip_depth, 0, data_size, data_ptr);
                             } else {
                                 const GLenum gl_type = _sg_gl_teximage_type(img->cmn.pixel_format);
-                                if (msaa) {
-                                    // NOTE: only for array textures, not actual 3D textures!
-                                    glTexImage3DMultisample(gl_img_target, img->cmn.sample_count, (GLint)gl_internal_format,
-                                        mip_width, mip_height, mip_depth, GL_TRUE);
-                                } else {
+                                #if defined(SOKOL_GLCORE)
+                                    if (msaa) {
+                                        // NOTE: only for array textures, not actual 3D textures!
+                                        glTexImage3DMultisample(gl_img_target, img->cmn.sample_count, (GLint)gl_internal_format,
+                                            mip_width, mip_height, mip_depth, GL_TRUE);
+                                    } else {
+                                        glTexImage3D(gl_img_target, mip_index, (GLint)gl_internal_format,
+                                            mip_width, mip_height, mip_depth, 0, gl_format, gl_type, data_ptr);
+                                    }
+                                #else
+                                    SOKOL_ASSERT(!msaa);
                                     glTexImage3D(gl_img_target, mip_index, (GLint)gl_internal_format,
                                         mip_width, mip_height, mip_depth, 0, gl_format, gl_type, data_ptr);
-                                }
+                                #endif
                             }
                         }
                     }
