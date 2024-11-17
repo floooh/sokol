@@ -8531,7 +8531,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                                 const GLenum gl_type = _sg_gl_teximage_type(img->cmn.pixel_format);
                                 #if defined(SOKOL_GLCORE)
                                     if (msaa) {
-                                        glTexImage2DMultisample(gl_img_target, img->cmn.sample_count, (GLint)gl_internal_format,
+                                        glTexImage2DMultisample(gl_img_target, img->cmn.sample_count, gl_internal_format,
                                             mip_width, mip_height, GL_TRUE);
                                     } else {
                                         glTexImage2D(gl_img_target, mip_index, (GLint)gl_internal_format,
@@ -8558,7 +8558,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                                 #if defined(SOKOL_GLCORE)
                                     if (msaa) {
                                         // NOTE: only for array textures, not actual 3D textures!
-                                        glTexImage3DMultisample(gl_img_target, img->cmn.sample_count, (GLint)gl_internal_format,
+                                        glTexImage3DMultisample(gl_img_target, img->cmn.sample_count, gl_internal_format,
                                             mip_width, mip_height, mip_depth, GL_TRUE);
                                     } else {
                                         glTexImage3D(gl_img_target, mip_index, (GLint)gl_internal_format,
