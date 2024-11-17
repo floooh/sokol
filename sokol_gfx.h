@@ -13707,9 +13707,9 @@ _SOKOL_PRIVATE WGPUTextureDimension _sg_wgpu_texture_dimension(sg_image_type t) 
     }
 }
 
-_SOKOL_PRIVATE WGPUTextureSampleType _sg_wgpu_texture_sample_type(sg_image_sample_type t) {
+_SOKOL_PRIVATE WGPUTextureSampleType _sg_wgpu_texture_sample_type(sg_image_sample_type t, bool msaa) {
     switch (t) {
-        case SG_IMAGESAMPLETYPE_FLOAT:  return WGPUTextureSampleType_Float;
+        case SG_IMAGESAMPLETYPE_FLOAT:  return msaa ? WGPUTextureSampleType_UnfilterableFloat : WGPUTextureSampleType_Float;
         case SG_IMAGESAMPLETYPE_DEPTH:  return WGPUTextureSampleType_Depth;
         case SG_IMAGESAMPLETYPE_SINT:   return WGPUTextureSampleType_Sint;
         case SG_IMAGESAMPLETYPE_UINT:   return WGPUTextureSampleType_Uint;
@@ -14021,6 +14021,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.mrt_independent_blend_state = true;
     _sg.features.mrt_independent_write_mask = true;
     _sg.features.storage_buffer = true;
+    _sg.features.msaa_image_bindings = true;
 
     wgpuDeviceGetLimits(_sg.wgpu.dev, &_sg.wgpu.limits);
 
@@ -15078,13 +15079,14 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
         if (shd->cmn.images[i].stage == SG_SHADERSTAGE_NONE) {
             continue;
         }
+        const bool msaa = shd->cmn.images[i].multisampled;
         shd->wgpu.img_grp1_bnd_n[i] = desc->images[i].wgsl_group1_binding_n;
         WGPUBindGroupLayoutEntry* bgl_entry = &bgl_entries[bgl_index];
         bgl_entry->binding = shd->wgpu.img_grp1_bnd_n[i];
         bgl_entry->visibility = _sg_wgpu_shader_stage(shd->cmn.images[i].stage);
         bgl_entry->texture.viewDimension = _sg_wgpu_texture_view_dimension(shd->cmn.images[i].image_type);
-        bgl_entry->texture.sampleType = _sg_wgpu_texture_sample_type(shd->cmn.images[i].sample_type);
-        bgl_entry->texture.multisampled = shd->cmn.images[i].multisampled;
+        bgl_entry->texture.sampleType = _sg_wgpu_texture_sample_type(shd->cmn.images[i].sample_type, msaa);
+        bgl_entry->texture.multisampled = msaa;
         bgl_index += 1;
     }
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
