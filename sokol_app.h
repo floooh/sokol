@@ -4930,10 +4930,9 @@ _SOKOL_PRIVATE void _sapp_emsc_set_clipboard_string(const char* str) {
     sapp_js_write_clipboard(str);
 }
 
-EM_JS(void, sapp_js_add_dragndrop_listeners, (const char* canvas_name_cstr), {
+EM_JS(void, sapp_js_add_dragndrop_listeners, (const char* canvas_selector_cstr), {
     Module.sokol_drop_files = [];
-    const canvas_name = UTF8ToString(canvas_name_cstr);
-    const canvas = document.getElementById(canvas_name);
+    const canvas = Module.canvas;
     Module.sokol_dragenter = (event) => {
         event.stopPropagation();
         event.preventDefault();
@@ -5005,24 +5004,31 @@ EM_JS(void, sapp_js_fetch_dropped_file, (int index, _sapp_html5_fetch_callback c
     reader.readAsArrayBuffer(files[index]);
 });
 
-EM_JS(void, sapp_js_remove_dragndrop_listeners, (const char* canvas_name_cstr), {
-    const canvas_name = UTF8ToString(canvas_name_cstr);
-    const canvas = document.getElementById(canvas_name);
+EM_JS(void, sapp_js_remove_dragndrop_listeners, (const char* canvas_selector_cstr), {
+    const canvas = Modules.canvas;
     canvas.removeEventListener('dragenter', Module.sokol_dragenter);
     canvas.removeEventListener('dragleave', Module.sokol_dragleave);
     canvas.removeEventListener('dragover',  Module.sokol_dragover);
     canvas.removeEventListener('drop',      Module.sokol_drop);
 });
 
-EM_JS(void, sapp_js_init, (const char* c_str_target), {
-    // lookup and store canvas object by name
-    const target_str = UTF8ToString(c_str_target);
-    Module.sapp_emsc_target = document.getElementById(target_str);
-    if (!Module.sapp_emsc_target) {
-        console.log("sokol_app.h: invalid target:" + target_str);
+// return true if the selector needs to be modified
+EM_JS(void, sapp_js_init, (const char* canvas_selector_cstr), {
+    if (Module.canvas) {
+        specialHTMLTargets["!canvas"] = Module.canvas;
+        stringToUTF8("!canvas", canvas_selector_cstr, 8);
+        return;
     }
-    if (!Module.sapp_emsc_target.requestPointerLock) {
-        console.log("sokol_app.h: target doesn't support requestPointerLock:" + target_str);
+    
+    // lookup and store canvas object by name
+    const canvas_selector = UTF8ToString(canvas_selector_cstr);
+    Module.canvas = document.querySelector(canvas_selector);
+
+    if (!Module.canvas) {
+        console.log("sokol_app.h: invalid target:" + canvas_selector);
+    }
+    if (!Module.canvas.requestPointerLock) {
+        console.log("sokol_app.h: target doesn't support requestPointerLock:" + canvas_selector);
     }
 });
 
@@ -5043,9 +5049,9 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_pointerlockerror_cb(int emsc_type, const void*
 }
 
 EM_JS(void, sapp_js_request_pointerlock, (void), {
-    if (Module.sapp_emsc_target) {
-        if (Module.sapp_emsc_target.requestPointerLock) {
-            Module.sapp_emsc_target.requestPointerLock();
+    if (Module.canvas) {
+        if (Module.canvas.requestPointerLock) {
+            Module.canvas.requestPointerLock();
         }
     }
 });
@@ -5080,7 +5086,7 @@ _SOKOL_PRIVATE void _sapp_emsc_update_mouse_lock_state(void) {
 
 // set mouse cursor type
 EM_JS(void, sapp_js_set_cursor, (int cursor_type, int shown), {
-    if (Module.sapp_emsc_target) {
+    if (Module.canvas) {
         let cursor;
         if (shown === 0) {
             cursor = "none";
@@ -5099,7 +5105,7 @@ EM_JS(void, sapp_js_set_cursor, (int cursor_type, int shown), {
             case 10: cursor = "not-allowed"; break; // SAPP_MOUSECURSOR_NOT_ALLOWED
             default: cursor = "auto"; break;
         }
-        Module.sapp_emsc_target.style.cursor = cursor;
+        Module.canvas.style.cursor = cursor;
     }
 });
 
@@ -5624,6 +5630,7 @@ _SOKOL_PRIVATE void _sapp_emsc_webgl_init(void) {
     attrs.preserveDrawingBuffer = _sapp.desc.html5_preserve_drawing_buffer;
     attrs.enableExtensionsByDefault = true;
     attrs.majorVersion = 2;
+
     EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx = emscripten_webgl_create_context(_sapp.html5_canvas_selector, &attrs);
     // FIXME: error message?
     emscripten_webgl_make_context_current(ctx);
@@ -5931,7 +5938,7 @@ _SOKOL_PRIVATE void _sapp_emsc_frame_main_loop(void) {
 
 _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
-    sapp_js_init(&_sapp.html5_canvas_selector[1]);
+    sapp_js_init(_sapp.html5_canvas_selector);
     double w, h;
     if (_sapp.desc.html5_canvas_resize) {
         w = (double) _sapp_def(_sapp.desc.width, _SAPP_FALLBACK_DEFAULT_WINDOW_WIDTH);
