@@ -1,5 +1,24 @@
 ## Updates
 
+### 19-Nov-2024
+
+- Merged PR https://github.com/floooh/sokol/pull/1155, this allows to use
+  MSAA textures as resource bindings to load individual MSAA samples in
+  shaders. This is an optional feature and isn't supported on the following
+  platform/backend combos:
+
+  - macOS+GL
+  - iOS+GLES3
+  - WebGL2
+  - Android
+
+  You can also check the new feature flag `sg_features.msaa_image_bindings`
+  for support at runtime.
+
+  There's also a new sample https://floooh.github.io/sokol-webgpu/customresolve-sapp.html
+  which demonstrates how to access multisampled textures and the MSAA coverage mask
+  (requires a browser with WebGPU support).
+
 ### 13-Nov-2024
 
 - sokol_nuklear.h: merge PR https://github.com/floooh/sokol/pull/1150, this allows to connect the
