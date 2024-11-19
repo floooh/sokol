@@ -1871,6 +1871,7 @@ typedef struct sg_features {
     bool mrt_independent_blend_state;   // multiple-render-target rendering can use per-render-target blend state
     bool mrt_independent_write_mask;    // multiple-render-target rendering can use per-render-target color write masks
     bool storage_buffer;                // storage buffers are supported
+    bool msaa_image_bindings;           // if true, multisampled images can be bound as texture resources
 } sg_features;
 
 /*
@@ -3795,6 +3796,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT, "MSAA not supported for this pixel format") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_MSAA_NUM_MIPMAPS, "MSAA images must have num_mipmaps == 1") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_MSAA_3D_IMAGE, "3D images cannot have a sample_count > 1") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_MSAA_CUBE_IMAGE, "cube images cannot have sample_count > 1") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DEPTH_3D_IMAGE, "3D images cannot have a depth/stencil image format") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_RT_IMMUTABLE, "render target images must be SG_USAGE_IMMUTABLE") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_RT_NO_DATA, "render target images cannot be initialized with data") \
@@ -3948,6 +3950,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_IMAGE_BINDING, "sg_apply_bindings: image binding is missing or the image handle is invalid") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_IMG_EXISTS, "sg_apply_bindings: bound image no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_IMAGE_TYPE_MISMATCH, "sg_apply_bindings: type of bound image doesn't match shader desc") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_MULTISAMPLED_IMAGE, "sg_apply_bindings: expected image with sample_count > 1") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_IMAGE_MSAA, "sg_apply_bindings: cannot bind image with sample_count>1") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_FILTERABLE_IMAGE, "sg_apply_bindings: filterable image expected") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_DEPTH_IMAGE, "sg_apply_bindings: depth image expected") \
@@ -4926,6 +4929,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE 0x8D56
         #define GL_MAJOR_VERSION 0x821B
         #define GL_MINOR_VERSION 0x821C
+        #define GL_TEXTURE_2D_MULTISAMPLE 0x9100
+        #define GL_TEXTURE_2D_MULTISAMPLE_ARRAY 0x9102
     #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
@@ -7089,7 +7094,9 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     _SG_XMACRO(glSamplerParameterf,               void, (GLuint sampler, GLenum pname, GLfloat param)) \
     _SG_XMACRO(glSamplerParameterfv,              void, (GLuint sampler, GLenum pname, const GLfloat* params)) \
     _SG_XMACRO(glDeleteSamplers,                  void, (GLsizei n, const GLuint* samplers)) \
-    _SG_XMACRO(glBindBufferBase,                  void, (GLenum target, GLuint index, GLuint buffer))
+    _SG_XMACRO(glBindBufferBase,                  void, (GLenum target, GLuint index, GLuint buffer)) \
+    _SG_XMACRO(glTexImage2DMultisample,           void, (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations)) \
+    _SG_XMACRO(glTexImage3DMultisample,           void, (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations))
 
 // generate GL function pointer typedefs
 #define _SG_XMACRO(name, ret, args) typedef ret (GL_APIENTRY* PFN_ ## name) args;
@@ -7141,14 +7148,34 @@ _SOKOL_PRIVATE GLenum _sg_gl_buffer_target(sg_buffer_type t) {
     }
 }
 
-_SOKOL_PRIVATE GLenum _sg_gl_texture_target(sg_image_type t) {
-    switch (t) {
-        case SG_IMAGETYPE_2D:   return GL_TEXTURE_2D;
-        case SG_IMAGETYPE_CUBE: return GL_TEXTURE_CUBE_MAP;
-        case SG_IMAGETYPE_3D:       return GL_TEXTURE_3D;
-        case SG_IMAGETYPE_ARRAY:    return GL_TEXTURE_2D_ARRAY;
-        default: SOKOL_UNREACHABLE; return 0;
-    }
+_SOKOL_PRIVATE GLenum _sg_gl_texture_target(sg_image_type t, int sample_count) {
+    #if defined(SOKOL_GLCORE)
+        const bool msaa = sample_count > 1;
+        if (msaa) {
+            switch (t) {
+                case SG_IMAGETYPE_2D: return GL_TEXTURE_2D_MULTISAMPLE;
+                case SG_IMAGETYPE_ARRAY: return GL_TEXTURE_2D_MULTISAMPLE_ARRAY;
+                default: SOKOL_UNREACHABLE; return 0;
+            }
+        } else {
+            switch (t) {
+                case SG_IMAGETYPE_2D:   return GL_TEXTURE_2D;
+                case SG_IMAGETYPE_CUBE: return GL_TEXTURE_CUBE_MAP;
+                case SG_IMAGETYPE_3D:       return GL_TEXTURE_3D;
+                case SG_IMAGETYPE_ARRAY:    return GL_TEXTURE_2D_ARRAY;
+                default: SOKOL_UNREACHABLE; return 0;
+            }
+        }
+    #else
+        SOKOL_ASSERT(sample_count == 1); _SOKOL_UNUSED(sample_count);
+        switch (t) {
+            case SG_IMAGETYPE_2D:   return GL_TEXTURE_2D;
+            case SG_IMAGETYPE_CUBE: return GL_TEXTURE_CUBE_MAP;
+            case SG_IMAGETYPE_3D:       return GL_TEXTURE_3D;
+            case SG_IMAGETYPE_ARRAY:    return GL_TEXTURE_2D_ARRAY;
+            default: SOKOL_UNREACHABLE; return 0;
+        }
+    #endif
 }
 
 _SOKOL_PRIVATE GLenum _sg_gl_usage(sg_usage u) {
@@ -7814,6 +7841,11 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
     _sg.features.mrt_independent_blend_state = false;
     _sg.features.mrt_independent_write_mask = true;
     _sg.features.storage_buffer = version >= 430;
+    #if defined(__APPLE__)
+    _sg.features.msaa_image_bindings = false;
+    #else
+    _sg.features.msaa_image_bindings = true;
+    #endif
 
     // scan extensions
     bool has_s3tc = false;  // BC1..BC3
@@ -7887,6 +7919,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.features.mrt_independent_blend_state = false;
     _sg.features.mrt_independent_write_mask = false;
     _sg.features.storage_buffer = false;
+    _sg.features.msaa_image_bindings = false;
 
     bool has_s3tc = false;  // BC1..BC3
     bool has_rgtc = false;  // BC4 and BC5
@@ -8426,6 +8459,7 @@ _SOKOL_PRIVATE bool _sg_gl_supported_texture_format(sg_pixel_format fmt) {
 _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     _SG_GL_CHECK_ERROR();
+    const bool msaa = img->cmn.sample_count > 1;
     img->gl.injected = (0 != desc->gl_textures[0]);
 
     // check if texture format is support
@@ -8435,14 +8469,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
     }
     const GLenum gl_internal_format = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
 
-    // if this is a MSAA render target, a render buffer object will be created instead of a regulat texture
-    // (since GLES3 has no multisampled texture objects)
-    if (img->cmn.render_target && (img->cmn.sample_count > 1)) {
+    // GLES3/WebGL2/macOS doesn't have support for multisampled textures, so create a render buffer object instead
+    if (!_sg.features.msaa_image_bindings && img->cmn.render_target && msaa) {
         glGenRenderbuffers(1, &img->gl.msaa_render_buffer);
         glBindRenderbuffer(GL_RENDERBUFFER, img->gl.msaa_render_buffer);
         glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->cmn.sample_count, gl_internal_format, img->cmn.width, img->cmn.height);
     } else if (img->gl.injected) {
-        img->gl.target = _sg_gl_texture_target(img->cmn.type);
+        img->gl.target = _sg_gl_texture_target(img->cmn.type, img->cmn.sample_count);
         // inject externally GL textures
         for (int slot = 0; slot < img->cmn.num_slots; slot++) {
             SOKOL_ASSERT(desc->gl_textures[slot]);
@@ -8453,7 +8486,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
         }
     } else {
         // create our own GL texture(s)
-        img->gl.target = _sg_gl_texture_target(img->cmn.type);
+        img->gl.target = _sg_gl_texture_target(img->cmn.type, img->cmn.sample_count);
         const GLenum gl_format = _sg_gl_teximage_format(img->cmn.pixel_format);
         const bool is_compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
         for (int slot = 0; slot < img->cmn.num_slots; slot++) {
@@ -8469,6 +8502,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
             bool tex_storage_allocated = false;
             #if defined(__EMSCRIPTEN__)
                 if (desc->data.subimage[0][0].ptr == 0) {
+                    SOKOL_ASSERT(!msaa);
                     tex_storage_allocated = true;
                     if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
                         glTexStorage2D(img->gl.target, img->cmn.num_mipmaps, gl_internal_format, img->cmn.width, img->cmn.height);
@@ -8491,13 +8525,25 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                         const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
                         if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
                             if (is_compressed) {
+                                SOKOL_ASSERT(!msaa);
                                 const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
                                 glCompressedTexImage2D(gl_img_target, mip_index, gl_internal_format,
                                     mip_width, mip_height, 0, data_size, data_ptr);
                             } else {
                                 const GLenum gl_type = _sg_gl_teximage_type(img->cmn.pixel_format);
-                                glTexImage2D(gl_img_target, mip_index, (GLint)gl_internal_format,
-                                    mip_width, mip_height, 0, gl_format, gl_type, data_ptr);
+                                #if defined(SOKOL_GLCORE) && !defined(__APPLE__)
+                                    if (msaa) {
+                                        glTexImage2DMultisample(gl_img_target, img->cmn.sample_count, gl_internal_format,
+                                            mip_width, mip_height, GL_TRUE);
+                                    } else {
+                                        glTexImage2D(gl_img_target, mip_index, (GLint)gl_internal_format,
+                                            mip_width, mip_height, 0, gl_format, gl_type, data_ptr);
+                                    }
+                                #else
+                                    SOKOL_ASSERT(!msaa);
+                                    glTexImage2D(gl_img_target, mip_index, (GLint)gl_internal_format,
+                                        mip_width, mip_height, 0, gl_format, gl_type, data_ptr);
+                                #endif
                             }
                         } else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
                             int mip_depth = img->cmn.num_slices;
@@ -8505,13 +8551,26 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                                 mip_depth = _sg_miplevel_dim(mip_depth, mip_index);
                             }
                             if (is_compressed) {
+                                SOKOL_ASSERT(!msaa);
                                 const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
                                 glCompressedTexImage3D(gl_img_target, mip_index, gl_internal_format,
                                     mip_width, mip_height, mip_depth, 0, data_size, data_ptr);
                             } else {
                                 const GLenum gl_type = _sg_gl_teximage_type(img->cmn.pixel_format);
-                                glTexImage3D(gl_img_target, mip_index, (GLint)gl_internal_format,
-                                    mip_width, mip_height, mip_depth, 0, gl_format, gl_type, data_ptr);
+                                #if defined(SOKOL_GLCORE) && !defined(__APPLE__)
+                                    if (msaa) {
+                                        // NOTE: only for array textures, not actual 3D textures!
+                                        glTexImage3DMultisample(gl_img_target, img->cmn.sample_count, gl_internal_format,
+                                            mip_width, mip_height, mip_depth, GL_TRUE);
+                                    } else {
+                                        glTexImage3D(gl_img_target, mip_index, (GLint)gl_internal_format,
+                                            mip_width, mip_height, mip_depth, 0, gl_format, gl_type, data_ptr);
+                                    }
+                                #else
+                                    SOKOL_ASSERT(!msaa);
+                                    glTexImage3D(gl_img_target, mip_index, (GLint)gl_internal_format,
+                                        mip_width, mip_height, mip_depth, 0, gl_format, gl_type, data_ptr);
+                                #endif
                             }
                         }
                     }
@@ -10476,6 +10535,7 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.features.mrt_independent_blend_state = true;
     _sg.features.mrt_independent_write_mask = true;
     _sg.features.storage_buffer = true;
+    _sg.features.msaa_image_bindings = true;
 
     _sg.limits.max_image_size_2d = 16 * 1024;
     _sg.limits.max_image_size_cube = 16 * 1024;
@@ -10624,6 +10684,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
 
     const bool injected = (0 != desc->d3d11_texture);
     const bool msaa = (img->cmn.sample_count > 1);
+    SOKOL_ASSERT(!(msaa && (img->cmn.type == SG_IMAGETYPE_CUBE)));
     img->d3d11.format = _sg_d3d11_texture_pixel_format(img->cmn.pixel_format);
     if (img->d3d11.format == DXGI_FORMAT_UNKNOWN) {
         _SG_ERROR(D3D11_CREATE_2D_TEXTURE_UNSUPPORTED_PIXEL_FORMAT);
@@ -10659,20 +10720,17 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 default:                    d3d11_tex_desc.ArraySize = 1; break;
             }
             d3d11_tex_desc.Format = img->d3d11.format;
+            d3d11_tex_desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
             if (img->cmn.render_target) {
                 d3d11_tex_desc.Usage = D3D11_USAGE_DEFAULT;
                 if (_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format)) {
-                    d3d11_tex_desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+                    d3d11_tex_desc.BindFlags |= D3D11_BIND_DEPTH_STENCIL;
                 } else {
-                    d3d11_tex_desc.BindFlags = D3D11_BIND_RENDER_TARGET;
-                }
-                if (!msaa) {
-                    d3d11_tex_desc.BindFlags |= D3D11_BIND_SHADER_RESOURCE;
+                    d3d11_tex_desc.BindFlags |= D3D11_BIND_RENDER_TARGET;
                 }
                 d3d11_tex_desc.CPUAccessFlags = 0;
             } else {
                 d3d11_tex_desc.Usage = _sg_d3d11_usage(img->cmn.usage);
-                d3d11_tex_desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
                 d3d11_tex_desc.CPUAccessFlags = _sg_d3d11_cpu_access_flags(img->cmn.usage);
             }
             d3d11_tex_desc.SampleDesc.Count = (UINT)img->cmn.sample_count;
@@ -10687,35 +10745,32 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
             _sg_d3d11_setlabel(img->d3d11.tex2d, desc->label);
 
             // create shader-resource-view for 2D texture
-            // FIXME: currently we don't support setting MSAA texture as shader resource
-            if (!msaa) {
-                D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
-                _sg_clear(&d3d11_srv_desc, sizeof(d3d11_srv_desc));
-                d3d11_srv_desc.Format = _sg_d3d11_srv_pixel_format(img->cmn.pixel_format);
-                switch (img->cmn.type) {
-                    case SG_IMAGETYPE_2D:
-                        d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-                        d3d11_srv_desc.Texture2D.MipLevels = (UINT)img->cmn.num_mipmaps;
-                        break;
-                    case SG_IMAGETYPE_CUBE:
-                        d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
-                        d3d11_srv_desc.TextureCube.MipLevels = (UINT)img->cmn.num_mipmaps;
-                        break;
-                    case SG_IMAGETYPE_ARRAY:
-                        d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
-                        d3d11_srv_desc.Texture2DArray.MipLevels = (UINT)img->cmn.num_mipmaps;
-                        d3d11_srv_desc.Texture2DArray.ArraySize = (UINT)img->cmn.num_slices;
-                        break;
-                    default:
-                        SOKOL_UNREACHABLE; break;
-                }
-                hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)img->d3d11.tex2d, &d3d11_srv_desc, &img->d3d11.srv);
-                if (!(SUCCEEDED(hr) && img->d3d11.srv)) {
-                    _SG_ERROR(D3D11_CREATE_2D_SRV_FAILED);
-                    return SG_RESOURCESTATE_FAILED;
-                }
-                _sg_d3d11_setlabel(img->d3d11.srv, desc->label);
+            D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
+            _sg_clear(&d3d11_srv_desc, sizeof(d3d11_srv_desc));
+            d3d11_srv_desc.Format = _sg_d3d11_srv_pixel_format(img->cmn.pixel_format);
+            switch (img->cmn.type) {
+                case SG_IMAGETYPE_2D:
+                    d3d11_srv_desc.ViewDimension = msaa ? D3D11_SRV_DIMENSION_TEXTURE2DMS : D3D11_SRV_DIMENSION_TEXTURE2D;
+                    d3d11_srv_desc.Texture2D.MipLevels = (UINT)img->cmn.num_mipmaps;
+                    break;
+                case SG_IMAGETYPE_CUBE:
+                    d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
+                    d3d11_srv_desc.TextureCube.MipLevels = (UINT)img->cmn.num_mipmaps;
+                    break;
+                case SG_IMAGETYPE_ARRAY:
+                    d3d11_srv_desc.ViewDimension = msaa ? D3D11_SRV_DIMENSION_TEXTURE2DMSARRAY : D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+                    d3d11_srv_desc.Texture2DArray.MipLevels = (UINT)img->cmn.num_mipmaps;
+                    d3d11_srv_desc.Texture2DArray.ArraySize = (UINT)img->cmn.num_slices;
+                    break;
+                default:
+                    SOKOL_UNREACHABLE; break;
             }
+            hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)img->d3d11.tex2d, &d3d11_srv_desc, &img->d3d11.srv);
+            if (!(SUCCEEDED(hr) && img->d3d11.srv)) {
+                _SG_ERROR(D3D11_CREATE_2D_SRV_FAILED);
+                return SG_RESOURCESTATE_FAILED;
+            }
+            _sg_d3d11_setlabel(img->d3d11.srv, desc->label);
         }
         SOKOL_ASSERT(img->d3d11.tex2d);
         img->d3d11.res = (ID3D11Resource*)img->d3d11.tex2d;
@@ -11541,6 +11596,7 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
         if (vb == 0) {
             continue;
         }
+        SOKOL_ASSERT(vb->d3d11.buf);
         d3d11_vbs[i] = vb->d3d11.buf;
         d3d11_vb_offsets[i] = (UINT)bnd->vb_offsets[i];
     }
@@ -11553,6 +11609,7 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
         SOKOL_ASSERT((stage == SG_SHADERSTAGE_VERTEX) || (stage == SG_SHADERSTAGE_FRAGMENT));
         const uint8_t d3d11_slot = shd->d3d11.img_register_t_n[i];
         SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_TEX_SBUF_BINDINGS);
+        SOKOL_ASSERT(img->d3d11.srv);
         if (stage == SG_SHADERSTAGE_VERTEX) {
             d3d11_vs_srvs[d3d11_slot] = img->d3d11.srv;
         } else {
@@ -11568,6 +11625,7 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
         SOKOL_ASSERT((stage == SG_SHADERSTAGE_VERTEX) || (stage == SG_SHADERSTAGE_FRAGMENT));
         const uint8_t d3d11_slot = shd->d3d11.sbuf_register_t_n[i];
         SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_TEX_SBUF_BINDINGS);
+        SOKOL_ASSERT(sbuf->d3d11.srv);
         if (stage == SG_SHADERSTAGE_VERTEX) {
             d3d11_vs_srvs[d3d11_slot] = sbuf->d3d11.srv;
         } else {
@@ -11583,6 +11641,7 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
         SOKOL_ASSERT((stage == SG_SHADERSTAGE_VERTEX) || (stage == SG_SHADERSTAGE_FRAGMENT));
         const uint8_t d3d11_slot = shd->d3d11.smp_register_s_n[i];
         SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_SMP_BINDINGS);
+        SOKOL_ASSERT(smp->d3d11.smp);
         if (stage == SG_SHADERSTAGE_VERTEX) {
             d3d11_vs_smps[d3d11_slot] = smp->d3d11.smp;
         } else {
@@ -12260,6 +12319,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.mrt_independent_blend_state = true;
     _sg.features.mrt_independent_write_mask = true;
     _sg.features.storage_buffer = true;
+    _sg.features.msaa_image_bindings = true;
 
     _sg.features.image_clamp_to_border = false;
     #if (MAC_OS_X_VERSION_MAX_ALLOWED >= 120000) || (__IPHONE_OS_VERSION_MAX_ALLOWED >= 140000)
@@ -12607,7 +12667,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt(MTLTextureDescriptor* mtl_desc, _sg_
 // initialize MTLTextureDescriptor with MSAA attributes
 _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt_msaa(MTLTextureDescriptor* mtl_desc, _sg_image_t* img) {
     SOKOL_ASSERT(img->cmn.sample_count > 1);
-    mtl_desc.usage = MTLTextureUsageRenderTarget;
+    mtl_desc.usage = MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
     mtl_desc.resourceOptions = MTLResourceStorageModePrivate;
     mtl_desc.textureType = MTLTextureType2DMultisample;
     mtl_desc.sampleCount = (NSUInteger)img->cmn.sample_count;
@@ -13649,9 +13709,9 @@ _SOKOL_PRIVATE WGPUTextureDimension _sg_wgpu_texture_dimension(sg_image_type t) 
     }
 }
 
-_SOKOL_PRIVATE WGPUTextureSampleType _sg_wgpu_texture_sample_type(sg_image_sample_type t) {
+_SOKOL_PRIVATE WGPUTextureSampleType _sg_wgpu_texture_sample_type(sg_image_sample_type t, bool msaa) {
     switch (t) {
-        case SG_IMAGESAMPLETYPE_FLOAT:  return WGPUTextureSampleType_Float;
+        case SG_IMAGESAMPLETYPE_FLOAT:  return msaa ? WGPUTextureSampleType_UnfilterableFloat : WGPUTextureSampleType_Float;
         case SG_IMAGESAMPLETYPE_DEPTH:  return WGPUTextureSampleType_Depth;
         case SG_IMAGESAMPLETYPE_SINT:   return WGPUTextureSampleType_Sint;
         case SG_IMAGESAMPLETYPE_UINT:   return WGPUTextureSampleType_Uint;
@@ -13963,6 +14023,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.mrt_independent_blend_state = true;
     _sg.features.mrt_independent_write_mask = true;
     _sg.features.storage_buffer = true;
+    _sg.features.msaa_image_bindings = true;
 
     wgpuDeviceGetLimits(_sg.wgpu.dev, &_sg.wgpu.limits);
 
@@ -15020,13 +15081,14 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
         if (shd->cmn.images[i].stage == SG_SHADERSTAGE_NONE) {
             continue;
         }
+        const bool msaa = shd->cmn.images[i].multisampled;
         shd->wgpu.img_grp1_bnd_n[i] = desc->images[i].wgsl_group1_binding_n;
         WGPUBindGroupLayoutEntry* bgl_entry = &bgl_entries[bgl_index];
         bgl_entry->binding = shd->wgpu.img_grp1_bnd_n[i];
         bgl_entry->visibility = _sg_wgpu_shader_stage(shd->cmn.images[i].stage);
         bgl_entry->texture.viewDimension = _sg_wgpu_texture_view_dimension(shd->cmn.images[i].image_type);
-        bgl_entry->texture.sampleType = _sg_wgpu_texture_sample_type(shd->cmn.images[i].sample_type);
-        bgl_entry->texture.multisampled = shd->cmn.images[i].multisampled;
+        bgl_entry->texture.sampleType = _sg_wgpu_texture_sample_type(shd->cmn.images[i].sample_type, msaa);
+        bgl_entry->texture.multisampled = msaa;
         bgl_index += 1;
     }
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
@@ -16531,6 +16593,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
                 _SG_VALIDATE(_sg.formats[fmt].msaa, VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT);
                 _SG_VALIDATE(desc->num_mipmaps == 1, VALIDATE_IMAGEDESC_MSAA_NUM_MIPMAPS);
                 _SG_VALIDATE(desc->type != SG_IMAGETYPE_3D, VALIDATE_IMAGEDESC_MSAA_3D_IMAGE);
+                _SG_VALIDATE(desc->type != SG_IMAGETYPE_CUBE, VALIDATE_IMAGEDESC_MSAA_CUBE_IMAGE);
             }
         } else {
             _SG_VALIDATE(desc->sample_count == 1, VALIDATE_IMAGEDESC_MSAA_BUT_NO_RT);
@@ -17238,7 +17301,12 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                     _SG_VALIDATE(img != 0, VALIDATE_ABND_IMG_EXISTS);
                     if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
                         _SG_VALIDATE(img->cmn.type == shd->cmn.images[i].image_type, VALIDATE_ABND_IMAGE_TYPE_MISMATCH);
-                        _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_ABND_IMAGE_MSAA);
+                        if (!_sg.features.msaa_image_bindings) {
+                            _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_ABND_IMAGE_MSAA);
+                        }
+                        if (shd->cmn.images[i].multisampled) {
+                            _SG_VALIDATE(img->cmn.sample_count > 1, VALIDATE_ABND_EXPECTED_MULTISAMPLED_IMAGE);
+                        }
                         const _sg_pixelformat_info_t* info = &_sg.formats[img->cmn.pixel_format];
                         switch (shd->cmn.images[i].sample_type) {
                             case SG_IMAGESAMPLETYPE_FLOAT:
