@@ -105,9 +105,9 @@ prim_types = {
     'uint64_t':     'u64',
     'float':        'f32',
     'double':       'f64',
-    'uintptr_t':    'u64',
-    'intptr_t':     'i64',
-    'size_t':       'u64'
+    'uintptr_t':    'c.uintptr_t',
+    'intptr_t':     'c.intptr_t',
+    'size_t':       'c.size_t'
 }
 
 prim_defaults = {
