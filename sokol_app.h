@@ -1717,7 +1717,7 @@ typedef struct sapp_desc {
     bool win32_console_utf8;            // if true, set the output console codepage to UTF-8
     bool win32_console_create;          // if true, attach stdout/stderr to a new console window
     bool win32_console_attach;          // if true, attach stdout/stderr to parent process
-    const char* html5_canvas_name;      // the name (id) of the HTML5 canvas element, default is "canvas"
+    const char* html5_canvas_selector;  // css selector of the HTML5 canvas element, default is "#canvas"
     bool html5_canvas_resize;           // if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked
     bool html5_preserve_drawing_buffer; // HTML5 only: whether to preserve default framebuffer content between frames
     bool html5_premultiplied_alpha;     // HTML5 only: whether the rendered pixels use premultiplied alpha convention
@@ -3115,7 +3115,7 @@ _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* desc) {
             res.gl_minor_version = 3;
         #endif
     }
-    res.html5_canvas_name = _sapp_def(res.html5_canvas_name, "canvas");
+    res.html5_canvas_selector = _sapp_def(res.html5_canvas_selector, "#canvas");
     res.clipboard_size = _sapp_def(res.clipboard_size, 8192);
     res.max_dropped_files = _sapp_def(res.max_dropped_files, 1);
     res.max_dropped_file_path_length = _sapp_def(res.max_dropped_file_path_length, 2048);
@@ -3142,9 +3142,8 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _sapp.framebuffer_height = _sapp.window_height;
     _sapp.sample_count = _sapp.desc.sample_count;
     _sapp.swap_interval = _sapp.desc.swap_interval;
-    _sapp.html5_canvas_selector[0] = '#';
-    _sapp_strcpy(_sapp.desc.html5_canvas_name, &_sapp.html5_canvas_selector[1], sizeof(_sapp.html5_canvas_selector) - 1);
-    _sapp.desc.html5_canvas_name = &_sapp.html5_canvas_selector[1];
+    _sapp_strcpy(_sapp.desc.html5_canvas_selector, _sapp.html5_canvas_selector, sizeof(_sapp.html5_canvas_selector));
+    _sapp.desc.html5_canvas_selector = _sapp.html5_canvas_selector;
     _sapp.html5_ask_leave_site = _sapp.desc.html5_ask_leave_site;
     _sapp.clipboard.enabled = _sapp.desc.enable_clipboard;
     if (_sapp.clipboard.enabled) {
@@ -4780,7 +4779,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 #if defined(_SAPP_EMSCRIPTEN)
 
 #if defined(EM_JS_DEPS)
-EM_JS_DEPS(sokol_app, "$withStackSave,$stringToUTF8OnStack");
+EM_JS_DEPS(sokol_app, "$withStackSave,$stringToUTF8OnStack,$findCanvasEventTarget");
 #endif
 
 #ifdef __cplusplus
@@ -4930,10 +4929,9 @@ _SOKOL_PRIVATE void _sapp_emsc_set_clipboard_string(const char* str) {
     sapp_js_write_clipboard(str);
 }
 
-EM_JS(void, sapp_js_add_dragndrop_listeners, (const char* canvas_name_cstr), {
+EM_JS(void, sapp_js_add_dragndrop_listeners, (void), {
     Module.sokol_drop_files = [];
-    const canvas_name = UTF8ToString(canvas_name_cstr);
-    const canvas = document.getElementById(canvas_name);
+    const canvas = Module.sapp_emsc_target;
     Module.sokol_dragenter = (event) => {
         event.stopPropagation();
         event.preventDefault();
@@ -5005,21 +5003,20 @@ EM_JS(void, sapp_js_fetch_dropped_file, (int index, _sapp_html5_fetch_callback c
     reader.readAsArrayBuffer(files[index]);
 });
 
-EM_JS(void, sapp_js_remove_dragndrop_listeners, (const char* canvas_name_cstr), {
-    const canvas_name = UTF8ToString(canvas_name_cstr);
-    const canvas = document.getElementById(canvas_name);
+EM_JS(void, sapp_js_remove_dragndrop_listeners, (void), {
+    const canvas = Module.sapp_emsc_target;
     canvas.removeEventListener('dragenter', Module.sokol_dragenter);
     canvas.removeEventListener('dragleave', Module.sokol_dragleave);
     canvas.removeEventListener('dragover',  Module.sokol_dragover);
     canvas.removeEventListener('drop',      Module.sokol_drop);
 });
 
-EM_JS(void, sapp_js_init, (const char* c_str_target), {
+EM_JS(void, sapp_js_init, (const char* c_str_target_selector), {
     // lookup and store canvas object by name
-    const target_str = UTF8ToString(c_str_target);
-    Module.sapp_emsc_target = document.getElementById(target_str);
+    const target_selector_str = UTF8ToString(c_str_target_selector);
+    Module.sapp_emsc_target = findCanvasEventTarget(target_selector_str);
     if (!Module.sapp_emsc_target) {
-        console.log("sokol_app.h: invalid target:" + target_str);
+        console.log("sokol_app.h: invalid target selector:" + target_str);
     }
     if (!Module.sapp_emsc_target.requestPointerLock) {
         console.log("sokol_app.h: target doesn't support requestPointerLock:" + target_str);
@@ -5853,7 +5850,7 @@ _SOKOL_PRIVATE void _sapp_emsc_register_eventhandlers(void) {
         sapp_js_add_clipboard_listener();
     }
     if (_sapp.drop.enabled) {
-        sapp_js_add_dragndrop_listeners(&_sapp.html5_canvas_selector[1]);
+        sapp_js_add_dragndrop_listeners();
     }
     #if defined(SOKOL_GLES3)
         emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_webgl_context_cb);
@@ -5887,7 +5884,7 @@ _SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers(void) {
         sapp_js_remove_clipboard_listener();
     }
     if (_sapp.drop.enabled) {
-        sapp_js_remove_dragndrop_listeners(&_sapp.html5_canvas_selector[1]);
+        sapp_js_remove_dragndrop_listeners();
     }
     #if defined(SOKOL_GLES3)
         emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_selector, 0, true, 0);
@@ -5931,7 +5928,7 @@ _SOKOL_PRIVATE void _sapp_emsc_frame_main_loop(void) {
 
 _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
-    sapp_js_init(&_sapp.html5_canvas_selector[1]);
+    sapp_js_init(_sapp.html5_canvas_selector);
     double w, h;
     if (_sapp.desc.html5_canvas_resize) {
         w = (double) _sapp_def(_sapp.desc.width, _SAPP_FALLBACK_DEFAULT_WINDOW_WIDTH);
