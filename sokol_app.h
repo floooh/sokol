@@ -4931,7 +4931,6 @@ _SOKOL_PRIVATE void _sapp_emsc_set_clipboard_string(const char* str) {
 
 EM_JS(void, sapp_js_add_dragndrop_listeners, (void), {
     Module.sokol_drop_files = [];
-    const canvas = Module.sapp_emsc_target;
     Module.sokol_dragenter = (event) => {
         event.stopPropagation();
         event.preventDefault();
@@ -4964,6 +4963,8 @@ EM_JS(void, sapp_js_add_dragndrop_listeners, (void), {
         // FIXME? see computation of targetX/targetY in emscripten via getClientBoundingRect
         __sapp_emsc_end_drop(event.clientX, event.clientY, mods);
     };
+    \x2F\x2A\x2A @suppress {missingProperties} \x2A\x2F
+    const canvas = Module.sapp_emsc_target;
     canvas.addEventListener('dragenter', Module.sokol_dragenter, false);
     canvas.addEventListener('dragleave', Module.sokol_dragleave, false);
     canvas.addEventListener('dragover',  Module.sokol_dragover, false);
@@ -5004,6 +5005,7 @@ EM_JS(void, sapp_js_fetch_dropped_file, (int index, _sapp_html5_fetch_callback c
 });
 
 EM_JS(void, sapp_js_remove_dragndrop_listeners, (void), {
+    \x2F\x2A\x2A @suppress {missingProperties} \x2A\x2F
     const canvas = Module.sapp_emsc_target;
     canvas.removeEventListener('dragenter', Module.sokol_dragenter);
     canvas.removeEventListener('dragleave', Module.sokol_dragleave);
@@ -5012,14 +5014,13 @@ EM_JS(void, sapp_js_remove_dragndrop_listeners, (void), {
 });
 
 EM_JS(void, sapp_js_init, (const char* c_str_target_selector), {
-    // lookup and store canvas object by name
     const target_selector_str = UTF8ToString(c_str_target_selector);
     Module.sapp_emsc_target = findCanvasEventTarget(target_selector_str);
     if (!Module.sapp_emsc_target) {
-        console.log("sokol_app.h: invalid target selector:" + target_str);
+        console.log("sokol_app.h: invalid target selector:" + target_selector_str);
     }
     if (!Module.sapp_emsc_target.requestPointerLock) {
-        console.log("sokol_app.h: target doesn't support requestPointerLock:" + target_str);
+        console.log("sokol_app.h: target doesn't support requestPointerLock:" + target_selector_str);
     }
 });
 
