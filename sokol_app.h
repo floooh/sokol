@@ -5015,6 +5015,12 @@ EM_JS(void, sapp_js_remove_dragndrop_listeners, (void), {
 
 EM_JS(void, sapp_js_init, (const char* c_str_target_selector), {
     const target_selector_str = UTF8ToString(c_str_target_selector);
+    // check if canvas is provided via Module['canvas'], if yes make it visible
+    // in specialHTMLTargets[], this is an additional way to inject a canvas into
+    // sokol_app.h when it can't be found via document.querySelector()
+    if (Module['canvas']) {
+        specialHTMLTargets[target_selector_str] = Module['canvas'];
+    }
     Module.sapp_emsc_target = findCanvasEventTarget(target_selector_str);
     if (!Module.sapp_emsc_target) {
         console.log("sokol_app.h: invalid target selector:" + target_selector_str);
