@@ -5,8 +5,7 @@
 - sokol_app.h html5: Merged PR https://github.com/floooh/sokol/pull/1159 (related
   issue https://github.com/floooh/sokol/issues/1154).
 
-  This cleans up code that is concerned about finding the HTML canvas to
-  render to by:
+  This cleans up code that is concerned about finding the WebGL/WebGPU HTML canvas by:
 
     - removing any leftover hacks from the time when Emscripten moved
       from `document.getElementById()` to `document.querySelector()` for
