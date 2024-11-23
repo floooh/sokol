@@ -24,6 +24,11 @@
   For more options to communicate the HTML canvas object to sokol_app.h,
   please read the new doc section `SETTING THE CANVAS OBJECT ON THE WEB PLATFORM` in sokol_app.h.
 
+  Additionally, please also note the simplified `shell.html` in the
+  sokol-samples repository (some outdated cruft has been removed):
+
+  https://github.com/floooh/sokol-samples/blob/master/webpage/shell.html
+
   Many thanks to @konsumer for kicking off the feature and the following
   discussion :)
 
