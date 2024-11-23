@@ -998,6 +998,87 @@
     To prevent individual events from bubbling, call sapp_consume_event() from within
     the sokol_app.h event callback when that specific event is reported.
 
+
+    SETTING THE CANVAS OBJECT ON THE WEB PLATFORM
+    =============================================
+    On the web, sokol_app.h and the Emscripten SDK functions need to find
+    the WebGL/WebGPU canvas intended for rendering and attaching event
+    handlers. This can happen in four ways:
+
+    1. do nothing and just set the id of the canvas object to 'canvas' (preferred)
+    2. via a CSS Selector string (preferred)
+    3. by setting the `Module.canvas` property to the canvas object
+    4. by adding the canvas object to the global variable `specialHTMLTargets[]`
+       (this is a special variable used by the Emscripten runtime to lookup
+       event target objects for which document.querySelector() cannot be used)
+
+    The easiest way is to just name your canvas object 'canvas':
+
+        <canvas id="canvas" ...></canvas>
+
+    This works because the default css selector string used by sokol_app.h
+    is '#canvas'.
+
+    If you name your canvas differently, you need to communicate that name to
+    sokol_app.h via `sapp_desc.html5_canvas_selector` as a regular css selector
+    string that's compatible with `document.querySelector()`. E.g. if your canvas
+    object looks like this:
+
+        <canvas id="bla" ...></canvas>
+
+    The `sapp_desc.html5_canvas_selector` string must be set to '#bla':
+
+        .html5_canvas_selector = "#bla"
+
+    If the canvas object cannot be looked up via `document.querySelector()` you
+    need to use one of the alternative methods, both involve the special
+    Emscripten runtime `Module` object which is usually setup in the index.html
+    like this before the WASM blob is loaded and instantiated:
+
+        <script type='text/javascript'>
+            var Module = {
+                // ...
+            };
+        </script>
+
+    The first option is to set the `Module.canvas` property to your canvas object:
+
+        <script type='text/javascript'>
+            var Module = {
+                canvas: my_canvas_object,
+            };
+        </script>
+
+    When sokol_app.h initializes, it will check the global Module object whether
+    a `Module.canvas` property exists and is an object. This method will add
+    a new entry to the `specialHTMLTargets[]` object
+
+    The other option is to add the canvas under a name chosen by you to the
+    special `specialHTMLTargets[]` map, which is used by the Emscripten runtime
+    to lookup 'event target objects' which are not visible to `document.querySelector()`.
+    Note that `specialHTMLTargets[]` must be updated after the Emscripten runtime
+    has started but before the WASM code is running. A good place for this is
+    the special `Module.preRun` array in index.html:
+
+        <script type='text/javascript'>
+            var Module = {
+                preRun: [
+                    () => {
+                        specialHTMLTargets['my_canvas'] = my_canvas_object;
+                    }
+                ],
+            };
+        </script>
+
+    In that case, pass the same string to sokol_app.h which is used as key
+    in the specialHTMLTargets[] map:
+
+        .html5_canvas_selector = "my_canvas"
+
+    If sokol_app.h can't find your canvas for some reason check for warning
+    messages on the browser console.
+
+
     OPTIONAL: DON'T HIJACK main() (#define SOKOL_NO_ENTRY)
     ======================================================
     NOTE: SOKOL_NO_ENTRY and sapp_run() is currently not supported on Android.
@@ -1146,7 +1227,6 @@
     If you don't want to provide your own custom logger it is highly recommended to use
     the standard logger in sokol_log.h instead, otherwise you won't see any warnings or
     errors.
-
 
     TEMP NOTE DUMP
     ==============
@@ -5015,18 +5095,21 @@ EM_JS(void, sapp_js_remove_dragndrop_listeners, (void), {
 
 EM_JS(void, sapp_js_init, (const char* c_str_target_selector), {
     const target_selector_str = UTF8ToString(c_str_target_selector);
-    // check if canvas is provided via Module['canvas'], if yes make it visible
-    // in specialHTMLTargets[], this is an additional way to inject a canvas into
-    // sokol_app.h when it can't be found via document.querySelector()
-    if (Module['canvas']) {
-        specialHTMLTargets[target_selector_str] = Module['canvas'];
+    // Special way to lookup the canvas by setting Module['canvas'] outside
+    // the WASM, this may be useful when the canvas can't be setup via document.querySelector()
+    if (Module['canvas'] !== undefined) {
+        if (typeof Module['canvas'] === 'object') {
+            specialHTMLTargets[target_selector_str] = Module['canvas'];
+        } else {
+            console.warn("sokol_app.h: Module['canvas'] is set but is not an object");
+        }
     }
     Module.sapp_emsc_target = findCanvasEventTarget(target_selector_str);
     if (!Module.sapp_emsc_target) {
-        console.log("sokol_app.h: invalid target selector:" + target_selector_str);
+        console.warn("sokol_app.h: can't find html5_canvas_selector ", target_selector_str);
     }
     if (!Module.sapp_emsc_target.requestPointerLock) {
-        console.log("sokol_app.h: target doesn't support requestPointerLock:" + target_selector_str);
+        console.warn("sokol_app.h: target doesn't support requestPointerLock: ", target_selector_str);
     }
 });
 
