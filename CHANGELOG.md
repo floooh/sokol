@@ -1,5 +1,33 @@
 ## Updates
 
+### 23-Nov-2024
+
+- sokol_app.h html5: Merged PR https://github.com/floooh/sokol/pull/1159 (related
+  issue https://github.com/floooh/sokol/issues/1154).
+
+  This cleans up code that is concerned about finding the HTML canvas to
+  render to by:
+
+    - removing any leftover hacks from the time when Emscripten moved
+      from `document.getElementById()` to `document.querySelector()` for
+      looking up the canvas object
+    - adding two options for canvas objects that can't be looked up via
+      `document.querySelector()`
+
+  If you don't provide a custom canvas name to sokol_app.h this change
+  is non-breaking. Otherwise:
+
+    - in sokol_main(): change `.html5_canvas_name` to `.html5_canvas_selector`
+    - change the canvas name string to a CSS selector string (e.g.
+    from `"my_canvas"` to `"#my_canvas"`)
+
+  For more options to communicate the HTML canvas object to sokol_app.h,
+  please read the new doc section `SETTING THE CANVAS OBJECT ON THE WEB PLATFORM` in sokol_app.h.
+
+  Many thanks to @konsumer for kicking off the feature and the following
+  discussion :)
+
+
 ### 19-Nov-2024
 
 - Merged PR https://github.com/floooh/sokol/pull/1155, this allows to use
