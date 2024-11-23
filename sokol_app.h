@@ -5095,8 +5095,6 @@ EM_JS(void, sapp_js_remove_dragndrop_listeners, (void), {
 
 EM_JS(void, sapp_js_init, (const char* c_str_target_selector), {
     const target_selector_str = UTF8ToString(c_str_target_selector);
-    // Special way to lookup the canvas by setting Module['canvas'] outside
-    // the WASM, this may be useful when the canvas can't be setup via document.querySelector()
     if (Module['canvas'] !== undefined) {
         if (typeof Module['canvas'] === 'object') {
             specialHTMLTargets[target_selector_str] = Module['canvas'];
