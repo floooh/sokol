@@ -2700,6 +2700,7 @@ typedef struct sg_swapchain {
 */
 typedef struct sg_pass {
     uint32_t _start_canary;
+    bool compute;
     sg_pass_action action;
     sg_attachments attachments;
     sg_swapchain swapchain;
@@ -3107,6 +3108,7 @@ typedef enum sg_shader_stage {
     SG_SHADERSTAGE_NONE,
     SG_SHADERSTAGE_VERTEX,
     SG_SHADERSTAGE_FRAGMENT,
+    SG_SHADERSTAGE_COMPUTE,
 } sg_shader_stage;
 
 typedef struct sg_shader_function {
@@ -3176,6 +3178,7 @@ typedef struct sg_shader_desc {
     uint32_t _start_canary;
     sg_shader_function vertex_func;
     sg_shader_function fragment_func;
+    sg_shader_function compute_func;
     sg_shader_vertex_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
     sg_shader_uniform_block uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
     sg_shader_storage_buffer storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
@@ -3315,6 +3318,7 @@ typedef struct sg_color_target_state {
 
 typedef struct sg_pipeline_desc {
     uint32_t _start_canary;
+    bool compute;
     sg_shader shader;
     sg_vertex_layout_state layout;
     sg_depth_state depth;
@@ -3806,9 +3810,13 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SAMPLERDESC_CANARY, "sg_sampler_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_SAMPLERDESC_ANISTROPIC_REQUIRES_LINEAR_FILTERING, "sg_sampler_desc.max_anisotropy > 1 requires min/mag/mipmap_filter to be SG_FILTER_LINEAR") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_CANARY, "sg_shader_desc not initialized") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SOURCE, "shader source code required") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_BYTECODE, "shader byte code required") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE, "shader source or byte code required") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VERTEX_SOURCE, "vertex shader source code expected") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_FRAGMENT_SOURCE, "fragment shader source code expected") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_COMPUTE_SOURCE, "compute shader source code expected") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VERTEX_SOURCE_OR_BYTECODE, "vertex shader source or byte code expected") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_FRAGMENT_SOURCE_OR_BYTECODE, "fragment shader source or byte code expected") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_COMPUTE_SOURCE_OR_BYTECODE, "compute shader source or byte code expected") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_INVALID_SHADER_COMBO, "cannot combine compute shaders with vertex or fragment shaders") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_BYTECODE_SIZE, "shader byte code length (in bytes) required") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_CONT_UB_MEMBERS, "uniform block members must occupy continuous slots") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_SIZE_IS_ZERO, "bound uniform block size cannot be zero") \
@@ -4210,6 +4218,7 @@ SOKOL_GFX_API_DECL void sg_apply_pipeline(sg_pipeline pip);
 SOKOL_GFX_API_DECL void sg_apply_bindings(const sg_bindings* bindings);
 SOKOL_GFX_API_DECL void sg_apply_uniforms(int ub_slot, const sg_range* data);
 SOKOL_GFX_API_DECL void sg_draw(int base_element, int num_elements, int num_instances);
+SOKOL_GFX_API_DECL void sg_dispatch(int num_groups_x, int num_groups_y, int num_groups_z);
 SOKOL_GFX_API_DECL void sg_end_pass(void);
 SOKOL_GFX_API_DECL void sg_commit(void);
 
@@ -16684,6 +16693,9 @@ _SOKOL_PRIVATE _sg_u128_t _sg_validate_set_slot_bit(_sg_u128_t bits, sg_shader_s
             SOKOL_ASSERT(slot < 64);
             bits.hi |= 1ULL << slot;
             break;
+        case SG_SHADERSTAGE_COMPUTE:
+            SOKOL_ASSERT(false); // FIXME
+            break;
     }
     return bits;
 }
@@ -16723,20 +16735,35 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             return true;
         }
         SOKOL_ASSERT(desc);
+        bool is_compute_shader = (desc->compute_func.source != 0) || (desc->compute_func.bytecode.ptr != 0);
         _sg_validate_begin();
         _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_SHADERDESC_CANARY);
         _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_SHADERDESC_CANARY);
         #if defined(SOKOL_GLCORE) || defined(SOKOL_GLES3) || defined(SOKOL_WGPU)
             // on GL or WebGPU, must provide shader source code
-            _SG_VALIDATE(0 != desc->vertex_func.source, VALIDATE_SHADERDESC_SOURCE);
-            _SG_VALIDATE(0 != desc->fragment_func.source, VALIDATE_SHADERDESC_SOURCE);
+            if (is_compute_shader) {
+                _SG_VALIDATE(0 != desc->compute_func.source, VALIDATE_SHADERDESC_COMPUTE_SOURCE);
+            } else {
+                _SG_VALIDATE(0 != desc->vertex_func.source, VALIDATE_SHADERDESC_VERTEX_SOURCE);
+                _SG_VALIDATE(0 != desc->fragment_func.source, VALIDATE_SHADERDESC_FRAGMENT_SOURCE);
+            }
         #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
             // on Metal or D3D11, must provide shader source code or byte code
-            _SG_VALIDATE((0 != desc->vertex_func.source)||(0 != desc->vertex_func.bytecode.ptr), VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
-            _SG_VALIDATE((0 != desc->fragment_func.source)||(0 != desc->fragment_func.bytecode.ptr), VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
+            if (is_compute_shader) {
+                _SG_VALIDATE((0 != desc->compute_func.source) || (0 != desc->compute_func.bytecode.ptr), VALIDATE_SHADERDESC_COMPUTE_SOURCE_OR_BYTECODE);
+            } else {
+                _SG_VALIDATE((0 != desc->vertex_func.source)|| (0 != desc->vertex_func.bytecode.ptr), VALIDATE_SHADERDESC_VERTEX_SOURCE_OR_BYTECODE);
+                _SG_VALIDATE((0 != desc->fragment_func.source) || (0 != desc->fragment_func.bytecode.ptr), VALIDATE_SHADERDESC_FRAGMENT_SOURCE_OR_BYTECODE);
+            }
         #else
             // Dummy Backend, don't require source or bytecode
         #endif
+        if (is_compute_shader) {
+            _SG_VALIDATE((0 == desc->vertex_func.source) && (0 == desc->vertex_func.bytecode.ptr), VALIDATE_SHADERDESC_INVALID_SHADER_COMBO);
+            _SG_VALIDATE((0 == desc->fragment_func.source) && (0 == desc->fragment_func.bytecode.ptr), VALIDATE_SHADERDESC_INVALID_SHADER_COMBO);
+        } else {
+            _SG_VALIDATE((0 == desc->compute_func.source) && (0 == desc->compute_func.bytecode.ptr), VALIDATE_SHADERDESC_INVALID_SHADER_COMBO);
+        }
         for (size_t i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
             if (desc->attrs[i].glsl_name) {
                 _SG_VALIDATE(strlen(desc->attrs[i].glsl_name) < _SG_STRING_SIZE, VALIDATE_SHADERDESC_ATTR_STRING_TOO_LONG);
