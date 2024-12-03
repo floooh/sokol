@@ -2886,7 +2886,7 @@ SOKOL_API_IMPL void simgui_create_fonts_texture(const simgui_font_tex_desc_t* de
     img_desc.image = _simgui.font_img;
     img_desc.sampler = _simgui.font_smp;
     _simgui.default_font = simgui_make_image(&img_desc);
-    io->Fonts->TexID = simgui_imtextureid(_simgui.default_font);
+    io->Fonts->TexID = (void*)simgui_imtextureid(_simgui.default_font);
 }
 
 SOKOL_API_IMPL void simgui_destroy_fonts_texture(void) {
