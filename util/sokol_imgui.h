@@ -574,7 +574,7 @@ inline void simgui_create_fonts_texture(const simgui_font_tex_desc_t& desc) { re
     #error "Please include imgui.h before the sokol_imgui.h implementation"
     #endif
 #else
-    #if !defined(CIMGUI_INCLUDED)
+    #if !defined(CIMGUI_API)
     #error "Please include cimgui.h before the sokol_imgui.h implementation"
     #endif
 #endif
