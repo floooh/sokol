@@ -333,7 +333,7 @@ def funcdecl_result_swift(decl, prefix):
 def gen_struct(decl, prefix):
     struct_name = check_override(decl['name'])
     swift_type = as_swift_struct_type(struct_name, prefix)
-    l(f"struct {swift_type} {{")
+    l(f"private struct {swift_type} {{")
     for field in decl['fields']:
         field_name = check_override(field['name'])
         field_type = check_override(f'{struct_name}.{field_name}', default=field['type'])
@@ -399,7 +399,6 @@ def gen_consts(decl, prefix):
 
 def gen_enum(decl, prefix):
     enum_name = check_override(decl['name'])
-    l('')
     l('@objc')
     l(f"enum {as_swift_enum_type(enum_name, prefix)} : CUnsignedInt {{")
     for item in decl['items']:
@@ -418,7 +417,7 @@ def gen_func_c(decl, prefix):
         l(f"func {decl['name']}({funcdecl_args_c(decl, prefix)}) -> {c_res_type}")
     else:
         l(f"func {decl['name']}({funcdecl_args_c(decl, prefix)})")
-    l('')
+
 
 def gen_func_swift(decl, prefix):
     c_func_name = decl['name']
@@ -429,9 +428,9 @@ def gen_func_swift(decl, prefix):
     else:
         swift_res_type = funcdecl_result_swift(decl, prefix)
         if funcdecl_result_c(decl, prefix) != 'void':
-            l(f"func {swift_func_name}({funcdecl_args_swift(decl, prefix)}) -> {swift_res_type} {{")
+            l(f"private func {swift_func_name}({funcdecl_args_swift(decl, prefix)}) -> {swift_res_type} {{")
         else:
-            l(f"func {swift_func_name}({funcdecl_args_swift(decl, prefix)}) {{")
+            l(f"private func {swift_func_name}({funcdecl_args_swift(decl, prefix)}) {{")
         if swift_res_type != 'void':
             s = f"    return {c_func_name}("
         else:
@@ -468,14 +467,16 @@ def pre_parse(inp):
                 enum_items[enum_name].append(as_enum_item_name(item['name']))
 
 def gen_imports(inp, dep_prefixes):
-    pass
+    for dep_prefix in dep_prefixes:
+        dep_module_name = module_names[dep_prefix].capitalize()
+        l(f'import {dep_module_name}')
+    l('')
 
 def gen_helpers(inp):
     pass
 
 def gen_module(inp, dep_prefixes):
     l('// machine generated, do not edit')
-    l('')
     gen_imports(inp, dep_prefixes)
     gen_helpers(inp)
     pre_parse(inp)
@@ -505,13 +506,13 @@ def gen(c_header_path, c_prefix, dep_c_prefixes):
     if not c_prefix in module_names:
         print(f' >> warning: skipping generation for {c_prefix} prefix...')
         return
-    module_name = module_names[c_prefix]
+    module_name = module_names[c_prefix].capitalize()
     c_source_path = c_source_paths[c_prefix]
     print(f'  {c_header_path} => {module_name}')
     reset_globals()
     shutil.copyfile(c_header_path, f'sokol-swift/Sources/sokol/c/{os.path.basename(c_header_path)}')
     ir = gen_ir.gen(c_header_path, c_source_path, module_name, c_prefix, dep_c_prefixes)
     gen_module(ir, dep_c_prefixes)
-    output_path = f"sokol-swift/Sources/sokol/{ir['module']}.swift"
+    output_path = f"sokol-swift/Sources/sokol/{ir['module']}.swiftinterface"
     with open(output_path, 'w', newline='\n') as f_outp:
         f_outp.write(out_lines)
