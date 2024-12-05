@@ -1,14 +1,14 @@
 # external dependencies
 
 # NOTE FetchContent is so frigging slow that we just run git directly
-set(cimgui_dir ${CMAKE_BINARY_DIR}/../_deps/cimgui)
+set(dcimgui_dir ${CMAKE_BINARY_DIR}/../_deps/dcimgui)
 set(spineruntimes_dir ${CMAKE_BINARY_DIR}/../_deps/spineruntimes)
 
-if (IS_DIRECTORY ${cimgui_dir})
-    message("### ${cimgui_dir} exists...")
+if (IS_DIRECTORY ${dcimgui_dir})
+    message("### ${dcimgui_dir} exists...")
 else()
-    message("### Fetching cimgui to ${cimgui_dir} (this may take a while...)")
-    execute_process(COMMAND git clone --depth=1 --recursive https://github.com/fips-libs/fips-cimgui ${cimgui_dir})
+    message("### Fetching dcimgui to ${dcimgui_dir} (this may take a while...)")
+    execute_process(COMMAND git clone --depth=1 --recursive https://github.com/floooh/dcimgui ${dcimgui_dir})
 endif()
 if (IS_DIRECTORY ${spineruntimes_dir})
     message("### ${spineruntimes_dir} exists...")
@@ -17,22 +17,14 @@ else()
     execute_process(COMMAND git clone --depth=1 --branch 4.1 --recursive https://github.com/EsotericSoftware/spine-runtimes ${spineruntimes_dir})
 endif()
 
-add_library(cimgui
-    ${cimgui_dir}/cimgui/cimgui.cpp
-    ${cimgui_dir}/cimgui/imgui/imgui.cpp
-    ${cimgui_dir}/cimgui/imgui/imgui_demo.cpp
-    ${cimgui_dir}/cimgui/imgui/imgui_draw.cpp
-    ${cimgui_dir}/cimgui/imgui/imgui_tables.cpp
-    ${cimgui_dir}/cimgui/imgui/imgui_widgets.cpp)
-target_include_directories(cimgui SYSTEM PUBLIC ${cimgui_dir})
-
 add_library(imgui
-    ${cimgui_dir}/cimgui/imgui/imgui.cpp
-    ${cimgui_dir}/cimgui/imgui/imgui_demo.cpp
-    ${cimgui_dir}/cimgui/imgui/imgui_draw.cpp
-    ${cimgui_dir}/cimgui/imgui/imgui_tables.cpp
-    ${cimgui_dir}/cimgui/imgui/imgui_widgets.cpp)
-target_include_directories(imgui SYSTEM PUBLIC ${cimgui_dir}/cimgui/imgui)
+    ${dcimgui_dir}/src/cimgui.cpp
+    ${dcimgui_dir}/src/imgui.cpp
+    ${dcimgui_dir}/src/imgui_demo.cpp
+    ${dcimgui_dir}/src/imgui_draw.cpp
+    ${dcimgui_dir}/src/imgui_tables.cpp
+    ${dcimgui_dir}/src/imgui_widgets.cpp)
+target_include_directories(imgui SYSTEM PUBLIC ${dcimgui_dir}/src)
 
 add_library(spine
     ${spineruntimes_dir}/spine-c/spine-c/src/spine/Animation.c
