@@ -1,5 +1,19 @@
 ## Updates
 
+### 07-Dec-2024
+
+- Changes in sokol_imgui.h and sokol_gfx_imgui.h for a switch of the Dear ImGui
+  C bindings from https://github.com/cimgui/cimgui to https://github.com/floooh/dcimgui
+  (this is a 'source distribution repository' with the Dear ImGui C binding generated through the
+  new 'official' dear_bindings code generation - see https://github.com/dearimgui/dear_bindings).
+
+  This is only a breaking change if you include the sokol_gfx_imgui.h implementation
+  into a C source file, in that case you need to switch from https://github.com/cimgui/cimgui
+  to https://github.com/floooh/dcimgui. All other scenarios should be backward
+  compatible.
+
+  For details see PR https://github.com/floooh/sokol/pull/1163
+
 ### 23-Nov-2024
 
 - sokol_app.h html5: Merged PR https://github.com/floooh/sokol/pull/1159 (related
