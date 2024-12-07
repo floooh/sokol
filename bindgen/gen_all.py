@@ -1,4 +1,4 @@
-import os, gen_nim, gen_zig, gen_odin, gen_rust, gen_d, gen_jai
+import os, gen_nim, gen_zig, gen_odin, gen_rust, gen_d, gen_jai, gen_swift
 
 tasks = [
     [ '../sokol_log.h',            'slog_',     [] ],
@@ -56,3 +56,9 @@ gen_rust.prepare()
 for task in tasks:
     [c_header_path, main_prefix, dep_prefixes] = task
     gen_rust.gen(c_header_path, main_prefix, dep_prefixes)
+
+# Swift
+gen_swift.prepare()
+for task in tasks:
+    [c_header_path, main_prefix, dep_prefixes] = task
+    gen_swift.gen(c_header_path, main_prefix, dep_prefixes)
