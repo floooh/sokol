@@ -68,6 +68,16 @@
     If the implementation is compiled as C:
         cimgui.h
 
+    When compiling as C, you can override the Dear ImGui C bindings prefix
+    via the define SOKOL_IMGUI_CPREFIX before including the sokol_imgui.h
+    implementation:
+
+        #define SOKOL_IMGUI_IMPL
+        #define SOKOL_IMGUI_CPREFIX ImGui_
+        #include "sokol_imgui.h"
+
+    Note that the default prefix is 'ig'.
+
 
     FEATURE OVERVIEW:
     =================
@@ -564,6 +574,13 @@ inline void simgui_create_fonts_texture(const simgui_font_tex_desc_t& desc) { re
 //-- IMPLEMENTATION ------------------------------------------------------------
 #ifdef SOKOL_IMGUI_IMPL
 #define SOKOL_IMGUI_IMPL_INCLUDED (1)
+
+#ifndef SOKOL_IMGUI_CPREFIX
+#define SOKOL_IMGUI_CPREFIX ig
+#endif
+#define _SIMGUI_CONCAT2(prefix, name) prefix ## name
+#define _SIMGUI_CONCAT(prefix, name) _SIMGUI_CONCAT2(prefix, name)
+#define _SIMGUI_CFUNC(name) _SIMGUI_CONCAT(SOKOL_IMGUI_CPREFIX, name)
 
 #if defined(SOKOL_MALLOC) || defined(SOKOL_CALLOC) || defined(SOKOL_FREE)
 #error "SOKOL_MALLOC/CALLOC/FREE macros are no longer supported, please use simgui_desc_t.allocator to override memory allocation functions"
@@ -2650,9 +2667,9 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
             io->Fonts->AddFontDefault();
         }
     #else
-        igCreateContext(NULL);
-        igStyleColorsDark(igGetStyle());
-        ImGuiIO* io = igGetIO();
+        _SIMGUI_CFUNC(CreateContext)(NULL);
+        _SIMGUI_CFUNC(StyleColorsDark)(_SIMGUI_CFUNC(GetStyle)());
+        ImGuiIO* io = _SIMGUI_CFUNC(GetIO)();
         if (!_simgui.desc.no_default_font) {
             ImFontAtlas_AddFontDefault(io->Fonts, NULL);
         }
@@ -2667,7 +2684,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         #if defined(__cplusplus)
             ImGuiPlatformIO* pio = &ImGui::GetPlatformIO();
         #else
-            ImGuiPlatformIO* pio = igGetPlatformIO();
+            ImGuiPlatformIO* pio = _SIMGUI_CFUNC(GetPlatformIO)();
         #endif
         pio->Platform_SetClipboardTextFn = _simgui_set_clipboard;
         pio->Platform_GetClipboardTextFn = _simgui_get_clipboard;
@@ -2850,7 +2867,7 @@ SOKOL_API_IMPL void simgui_create_fonts_texture(const simgui_font_tex_desc_t* de
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
     #else
-        ImGuiIO* io = igGetIO();
+        ImGuiIO* io = _SIMGUI_CFUNC(GetIO)();
     #endif
 
     // a default font sampler
@@ -2904,7 +2921,7 @@ SOKOL_API_IMPL void simgui_shutdown(void) {
     #if defined(__cplusplus)
         ImGui::DestroyContext();
     #else
-        igDestroyContext(0);
+        _SIMGUI_CFUNC(DestroyContext)(0);
     #endif
     // NOTE: it's valid to call the destroy funcs with SG_INVALID_ID
     sg_destroy_pipeline(_simgui.pip_unfilterable);
@@ -2980,7 +2997,7 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
     #else
-        ImGuiIO* io = igGetIO();
+        ImGuiIO* io = _SIMGUI_CFUNC(GetIO)();
     #endif
     if (!io->Fonts->TexReady) {
         simgui_destroy_fonts_texture();
@@ -3002,7 +3019,7 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
             #if defined(__cplusplus)
                 ImGuiMouseCursor imgui_cursor = ImGui::GetMouseCursor();
             #else
-                ImGuiMouseCursor imgui_cursor = igGetMouseCursor();
+                ImGuiMouseCursor imgui_cursor = _SIMGUI_CFUNC(GetMouseCursor)();
             #endif
             sapp_mouse_cursor cursor = sapp_get_mouse_cursor();
             switch (imgui_cursor) {
@@ -3023,7 +3040,7 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
     #if defined(__cplusplus)
         ImGui::NewFrame();
     #else
-        igNewFrame();
+        _SIMGUI_CFUNC(NewFrame)();
     #endif
 }
 
@@ -3054,9 +3071,9 @@ SOKOL_API_IMPL void simgui_render(void) {
         ImDrawData* draw_data = ImGui::GetDrawData();
         ImGuiIO* io = &ImGui::GetIO();
     #else
-        igRender();
-        ImDrawData* draw_data = igGetDrawData();
-        ImGuiIO* io = igGetIO();
+        _SIMGUI_CFUNC(Render)();
+        ImDrawData* draw_data = _SIMGUI_CFUNC(GetDrawData)();
+        ImGuiIO* io = _SIMGUI_CFUNC(GetIO)();
     #endif
     if (0 == draw_data) {
         return;
@@ -3207,7 +3224,7 @@ SOKOL_API_IMPL void simgui_add_focus_event(bool focus) {
         ImGuiIO* io = &ImGui::GetIO();
         io->AddFocusEvent(focus);
     #else
-        ImGuiIO* io = igGetIO();
+        ImGuiIO* io = _SIMGUI_CFUNC(GetIO)();
         ImGuiIO_AddFocusEvent(io, focus);
     #endif
 }
@@ -3216,15 +3233,11 @@ SOKOL_API_IMPL void simgui_add_mouse_pos_event(float x, float y) {
     SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
-        #if (IMGUI_VERSION_NUM >= 18950)
         io->AddMouseSourceEvent(ImGuiMouseSource_Mouse);
-        #endif
         io->AddMousePosEvent(x, y);
     #else
-        ImGuiIO* io = igGetIO();
-        #if (IMGUI_VERSION_NUM >= 18950)
+        ImGuiIO* io = _SIMGUI_CFUNC(GetIO)();
         ImGuiIO_AddMouseSourceEvent(io, ImGuiMouseSource_Mouse);
-        #endif
         ImGuiIO_AddMousePosEvent(io, x, y);
     #endif
 }
@@ -3233,15 +3246,11 @@ SOKOL_API_IMPL void simgui_add_touch_pos_event(float x, float y) {
     SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
-        #if (IMGUI_VERSION_NUM >= 18950)
         io->AddMouseSourceEvent(ImGuiMouseSource_TouchScreen);
-        #endif
         io->AddMousePosEvent(x, y);
     #else
-        ImGuiIO* io = igGetIO();
-        #if (IMGUI_VERSION_NUM >= 18950)
+        ImGuiIO* io = _SIMGUI_CFUNC(GetIO)();
         ImGuiIO_AddMouseSourceEvent(io, ImGuiMouseSource_TouchScreen);
-        #endif
         ImGuiIO_AddMousePosEvent(io, x, y);
     #endif
 }
@@ -3250,15 +3259,11 @@ SOKOL_API_IMPL void simgui_add_mouse_button_event(int mouse_button, bool down) {
     SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
-        #if (IMGUI_VERSION_NUM >= 18950)
         io->AddMouseSourceEvent(ImGuiMouseSource_Mouse);
-        #endif
         io->AddMouseButtonEvent(mouse_button, down);
     #else
-        ImGuiIO* io = igGetIO();
-        #if (IMGUI_VERSION_NUM >= 18950)
+        ImGuiIO* io = _SIMGUI_CFUNC(GetIO)();
         ImGuiIO_AddMouseSourceEvent(io, ImGuiMouseSource_Mouse);
-        #endif
         ImGuiIO_AddMouseButtonEvent(io, mouse_button, down);
     #endif
 }
@@ -3267,15 +3272,11 @@ SOKOL_API_IMPL void simgui_add_touch_button_event(int mouse_button, bool down) {
     SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
-        #if (IMGUI_VERSION_NUM >= 18950)
         io->AddMouseSourceEvent(ImGuiMouseSource_TouchScreen);
-        #endif
         io->AddMouseButtonEvent(mouse_button, down);
     #else
-        ImGuiIO* io = igGetIO();
-        #if (IMGUI_VERSION_NUM >= 18950)
+        ImGuiIO* io = _SIMGUI_CFUNC(GetIO)();
         ImGuiIO_AddMouseSourceEvent(io, ImGuiMouseSource_TouchScreen);
-        #endif
         ImGuiIO_AddMouseButtonEvent(io, mouse_button, down);
     #endif
 }
@@ -3284,15 +3285,11 @@ SOKOL_API_IMPL void simgui_add_mouse_wheel_event(float wheel_x, float wheel_y) {
     SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
-        #if (IMGUI_VERSION_NUM >= 18950)
         io->AddMouseSourceEvent(ImGuiMouseSource_Mouse);
-        #endif
         io->AddMouseWheelEvent(wheel_x, wheel_y);
     #else
-        ImGuiIO* io = igGetIO();
-        #if (IMGUI_VERSION_NUM >= 18950)
+        ImGuiIO* io = _SIMGUI_CFUNC(GetIO)();
         ImGuiIO_AddMouseSourceEvent(io, ImGuiMouseSource_Mouse);
-        #endif
         ImGuiIO_AddMouseWheelEvent(io, wheel_x, wheel_y);
     #endif
 }
@@ -3303,7 +3300,7 @@ SOKOL_API_IMPL void simgui_add_key_event(int imgui_key, bool down) {
         ImGuiIO* io = &ImGui::GetIO();
         io->AddKeyEvent((ImGuiKey)imgui_key, down);
     #else
-        ImGuiIO* io = igGetIO();
+        ImGuiIO* io = _SIMGUI_CFUNC(GetIO)();
         ImGuiIO_AddKeyEvent(io, (ImGuiKey)imgui_key, down);
     #endif
 }
@@ -3314,7 +3311,7 @@ SOKOL_API_IMPL void simgui_add_input_character(uint32_t c) {
         ImGuiIO* io = &ImGui::GetIO();
         io->AddInputCharacter(c);
     #else
-        ImGuiIO* io = igGetIO();
+        ImGuiIO* io = _SIMGUI_CFUNC(GetIO)();
         ImGuiIO_AddInputCharacter(io, c);
     #endif
 }
@@ -3325,7 +3322,7 @@ SOKOL_API_IMPL void simgui_add_input_characters_utf8(const char* c) {
         ImGuiIO* io = &ImGui::GetIO();
         io->AddInputCharactersUTF8(c);
     #else
-        ImGuiIO* io = igGetIO();
+        ImGuiIO* io = _SIMGUI_CFUNC(GetIO)();
         ImGuiIO_AddInputCharactersUTF8(io, c);
     #endif
 }
@@ -3490,7 +3487,7 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
     #else
-        ImGuiIO* io = igGetIO();
+        ImGuiIO* io = _SIMGUI_CFUNC(GetIO)();
     #endif
     switch (ev->type) {
         case SAPP_EVENTTYPE_FOCUSED:

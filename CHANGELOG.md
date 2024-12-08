@@ -1,5 +1,16 @@
 ## Updates
 
+### 08-Dec-2924
+
+- sokol_imgui.h: when compiling the implementation in C mode, it is now possible
+  to define an alternative function prefix via the define SOKOL_IMGUI_CPREFIX
+  (with `ig` being the default prefix), this allows sokol_imgui.h to be
+  used with the default dear_bindings prefix (which is `ImGui_`), the
+  traditional cimgui.h prefix (`ig`) and it is also possible to not use
+  a prefix at all, which might be useful for language bindings.
+
+  See PR https://github.com/floooh/sokol/pull/1166 for details.
+
 ### 07-Dec-2024
 
 - Changes in sokol_imgui.h and sokol_gfx_imgui.h for a switch of the Dear ImGui
