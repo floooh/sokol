@@ -27,13 +27,14 @@
 
     Optionally provide the following defines with your own implementations:
 
-        SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
-        SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
-        SOKOL_WIN32_FORCE_MAIN  - define this on Win32 to use a main() entry point instead of WinMain
-        SOKOL_NO_ENTRY      - define this if sokol_app.h shouldn't "hijack" the main() function
-        SOKOL_APP_API_DECL  - public function declaration prefix (default: extern)
-        SOKOL_API_DECL      - same as SOKOL_APP_API_DECL
-        SOKOL_API_IMPL      - public function implementation prefix (default: -)
+        SOKOL_ASSERT(c)             - your own assert macro (default: assert(c))
+        SOKOL_UNREACHABLE()         - a guard macro for unreachable code (default: assert(false))
+        SOKOL_WIN32_FORCE_MAIN      - define this on Win32 to add a main() entry point
+        SOKOL_WIN32_FORCE_WINMAIN   - define this on Win32 to add a WinMain() entry point (enabled by default unless SOKOL_WIN32_FORCE_MAIN or SOKOL_NO_ENTRY is defined)
+        SOKOL_NO_ENTRY              - define this if sokol_app.h shouldn't "hijack" the main() function
+        SOKOL_APP_API_DECL          - public function declaration prefix (default: extern)
+        SOKOL_API_DECL              - same as SOKOL_APP_API_DECL
+        SOKOL_API_IMPL              - public function implementation prefix (default: -)
 
     Optionally define the following to force debug checks and validations
     even in release mode:
@@ -47,6 +48,9 @@
 
     On Windows, SOKOL_DLL will define SOKOL_APP_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
+
+    if SOKOL_WIN32_FORCE_MAIN and SOKOL_WIN32_FORCE_WINMAIN are both defined,
+    it is up to the developer to define the desired subsystem.
 
     On Linux, SOKOL_GLCORE can use either GLX or EGL.
     GLX is default, set SOKOL_FORCE_EGL to override.
@@ -1999,14 +2003,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 
 #endif
 
-// this WinRT specific hack is required when wWinMain is in a static library
-#if defined(_MSC_VER) && defined(UNICODE)
-#include <winapifamily.h>
-#if defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
-#pragma comment(linker, "/include:wWinMain")
-#endif
-#endif
-
 #endif // SOKOL_APP_INCLUDED
 
 // ██ ███    ███ ██████  ██      ███████ ███    ███ ███████ ███    ██ ████████  █████  ████████ ██  ██████  ███    ██
@@ -2185,8 +2181,11 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <windows.h>
     #include <windowsx.h>
     #include <shellapi.h>
-    #if !defined(SOKOL_NO_ENTRY)    // if SOKOL_NO_ENTRY is defined, it's the applications' responsibility to use the right subsystem
-        #if defined(SOKOL_WIN32_FORCE_MAIN)
+    #if !defined(SOKOL_NO_ENTRY)    // if SOKOL_NO_ENTRY is defined, it's the application's responsibility to use the right subsystem
+
+        #if defined(SOKOL_WIN32_FORCE_MAIN) && defined(SOKOL_WIN32_FORCE_WINMAIN)
+            // If both are defined, it's the application's responsibility to use the right subsystem
+        #elif defined(SOKOL_WIN32_FORCE_MAIN)
             #pragma comment (linker, "/subsystem:console")
         #else
             #pragma comment (linker, "/subsystem:windows")
@@ -8155,7 +8154,8 @@ int main(int argc, char* argv[]) {
     _sapp_win32_run(&desc);
     return 0;
 }
-#else
+#endif /* SOKOL_WIN32_FORCE_MAIN */
+#if defined(SOKOL_WIN32_FORCE_WINMAIN) || !defined(SOKOL_WIN32_FORCE_MAIN)
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     _SOKOL_UNUSED(hInstance);
     _SOKOL_UNUSED(hPrevInstance);
@@ -8168,7 +8168,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     _sapp_free(argv_utf8);
     return 0;
 }
-#endif /* SOKOL_WIN32_FORCE_MAIN */
+#endif /* SOKOL_WIN32_FORCE_WINMAIN */
 #endif /* SOKOL_NO_ENTRY */
 
 #ifdef _MSC_VER
