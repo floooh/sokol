@@ -1,5 +1,18 @@
 ## Updates
 
+### 14-Dec-2024
+
+- sokol_app.h win32: merged PR https://github.com/floooh/sokol/pull/1167, this
+  adds a new config define `SOKOL_WIN32_FORCE_WINMAIN`. This allows to expose
+  both a `main()` and `WinMain()` entry point in the same link library by
+  defining both `SOKOL_WIN32_FORCE_MAIN` and `SOKOL_WIN32_FORCE_WINMAIN` before
+  including the sokol_app.h implementation.
+  In this case sokol_app.h will not automatically activate the right Windows subsystem
+  via `#pragma comment (linker) "/subsystem:X")` though, instead the build system
+  must take care of picking the correct subsystem.
+
+  Many thanks to @Querijn for the PR!
+
 ### 08-Dec-2924
 
 - sokol_imgui.h: when compiling the implementation in C mode, it is now possible
