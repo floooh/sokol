@@ -260,7 +260,6 @@ typedef struct sgimgui_image_t {
     float ui_scale;
     sgimgui_str_t label;
     sg_image_desc desc;
-    simgui_image_t simgui_img;
 } sgimgui_image_t;
 
 typedef struct sgimgui_sampler_t {
@@ -1577,18 +1576,12 @@ _SOKOL_PRIVATE void _sgimgui_image_created(sgimgui_t* ctx, sg_image res_id, int 
     img->desc = *desc;
     img->ui_scale = 1.0f;
     img->label = _sgimgui_make_str(desc->label);
-    simgui_image_desc_t simgui_img_desc;
-    _sgimgui_clear(&simgui_img_desc, sizeof(simgui_img_desc));
-    simgui_img_desc.image = res_id;
-    // keep sampler at default, which will use sokol_imgui.h's default nearest-filtering sampler
-    img->simgui_img = simgui_make_image(&simgui_img_desc);
 }
 
 _SOKOL_PRIVATE void _sgimgui_image_destroyed(sgimgui_t* ctx, int slot_index) {
     SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->image_window.num_slots));
     sgimgui_image_t* img = &ctx->image_window.slots[slot_index];
     img->res_id.id = SG_INVALID_ID;
-    simgui_destroy_image(img->simgui_img);
 }
 
 _SOKOL_PRIVATE void _sgimgui_sampler_created(sgimgui_t* ctx, sg_sampler res_id, int slot_index, const sg_sampler_desc* desc) {
@@ -3362,7 +3355,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_embedded_image(sgimgui_t* ctx, sg_image img, f
             igSliderFloatEx("Scale", scale, 0.125f, 8.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
             float w = (float)img_ui->desc.width * (*scale);
             float h = (float)img_ui->desc.height * (*scale);
-            igImage(simgui_imtextureid(img_ui->simgui_img), IMVEC2(w, h));
+            igImage(simgui_imtextureid(img_ui->res_id), IMVEC2(w, h));
             igPopID();
         } else {
             igText("Image not renderable.");
