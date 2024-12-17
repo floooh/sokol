@@ -1,5 +1,22 @@
 ## Updates
 
+### 17-Dec-2024
+
+- sokol_imgui.h (breaking change): user-provided images and samplers are now
+  stashed directly in a Dear ImGui ImTextureID handle instead of in a separate backing
+  object (this is possible now because ImTextureID is now guaranteed to be 64 bits,
+  so it can directly hold two 32-bit sokol-gfx handles). This change drastically
+  simplifies the sokol_imgui.h implementatation, but requires some breaking API
+  changes (please read the updated doc section `ON USER-PROVIDED IMAGES AND SAMPLERS`
+  in sokol_imgui.h)
+- sokol_gfx.h: a couple of new functions to get granular buffer and image properties
+  called `sg_query_buffer_[property]()` and `sg_query_image_[property]()`. Those are
+  cheaper than the similar `sg_query_buffer_desc()` and `sg_query_image_desc()`
+  functions if you only need to get one or few properties.
+- sokol_gfx_imgui.h: internal non-breaking fixes for the sokol_imgui.h API update.
+
+Associated PR: https://github.com/floooh/sokol/pull/1169
+
 ### 14-Dec-2024
 
 - sokol_app.h win32: merged PR https://github.com/floooh/sokol/pull/1167, this
