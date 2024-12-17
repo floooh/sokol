@@ -112,13 +112,9 @@
                 sokol-imgui will use this to compute the size of the vertex-
                 and index-buffers allocated via sokol_gfx.h
 
-            int image_pool_size
-                Number of simgui_image_t objects which can be alive at the same time.
-                The default is 256.
-
             sg_pixel_format color_format
                 The color pixel format of the render pass where the UI
-                will be rendered. The default (0) matches sokoL_gfx.h's
+                will be rendered. The default (0) matches sokol_gfx.h's
                 default pass.
 
             sg_pixel_format depth_format
@@ -236,49 +232,37 @@
 
     ON USER-PROVIDED IMAGES AND SAMPLERS
     ====================================
-    To render your own images via ImGui::Image(), first create an simgui_image_t
-    object from a sokol-gfx image and sampler object.
+    To render your own images via ImGui::Image() you need to create a Dear ImGui
+    compatible texture handle (ImTextureID) from a sokol-gfx image handle
+    or optionally an image handle and a compatible sampler handle.
 
-        // create a sokol-imgui image object which associates an sg_image with an sg_sampler
-        simgui_image_t simgui_img = simgui_make_image(&(simgui_image_desc_t){
-            .image = sg_make_image(...),
-            .sampler = sg_make_sampler(...),
-        });
+    To create a ImTextureID from a sokol-gfx image handle, call:
 
-        // convert the returned image handle into a ImTextureID handle
-        ImTextureID tex_id = simgui_imtextureid(simgui_img);
+        sg_image img= ...;
+        ImTextureID imtex_id = simgui_imtextureid(img);
 
-        // use the ImTextureID handle in Dear ImGui calls:
-        ImGui::Image(tex_id, ...);
+    Since no sampler is provided, such a texture handle will use a default
+    sampler with nearest filtering and clamp-to-edge.
 
-    simgui_image_t objects are small and cheap (literally just the image and sampler
-    handle).
+    If you need to render with a different sampler, do this instead:
 
-    You can omit the sampler handle in the simgui_make_image() call, in this case a
-    default sampler will be used with nearest-filtering and clamp-to-edge.
+        sg_image img = ...;
+        sg_sampler smp = ...;
+        ImTextureID imtex_id = simgui_imtextureid_with_sampler(img, smp);
 
-    Trying to render with an invalid simgui_image_t handle will render a small 8x8
-    white default texture instead.
+    You don't need to 'release' the ImTextureID handle, the ImTextureID
+    bits is simply a combination of the sg_image and sg_sampler bits.
 
-    To destroy a sokol-imgui image object, call
+    Once you have constructed an ImTextureID handle via simgui_imtextureid()
+    or simgui_imtextureid_with_sampler(), it used in the ImGui::Image()
+    call like this:
 
-        simgui_destroy_image(simgui_img);
+        ImGui::Image(imtex_id, ...);
 
-    But please be aware that the image object needs to be around until simgui_render() is called
-    in a frame (if this turns out to be too much of a hassle we could introduce some sort
-    of garbage collection where destroyed simgui_image_t objects are kept around until
-    the simgui_render() call).
+    To extract the sg_image and sg_sampler handle from an ImTextureID:
 
-    You can call:
-
-        simgui_image_desc_t desc = simgui_query_image_desc(img)
-
-    ...to get the original desc struct, useful if you need to get the sokol-gfx image
-    and sampler handle of the simgui_image_t object.
-
-    You can convert an ImTextureID back into an simgui_image_t handle:
-
-        simgui_image_t img = simgui_image_from_imtextureid(tex_id);
+        sg_image img = simgui_image_from_imtextureid(imtex_id);
+        sg_sampler smp = simgui_sampler_from_imtextureid(imtex_id);
 
 
     MEMORY ALLOCATION OVERRIDE
