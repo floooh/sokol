@@ -3299,6 +3299,17 @@ _SOKOL_PRIVATE void _sapp_frame(void) {
     if (_sapp.first_frame) {
         _sapp.first_frame = false;
         _sapp_call_init();
+
+        // Send an initial mouse move event so the app knows where the cursor is
+        // before the mouse is actually moved.
+        // NOTE: This must be done after calling the app's init callback, because
+        // the app might want to initialize whatever will recieve the sokol events
+        // (e.g. dearimgui) in init. It must be done before the first frame_cb call
+        // so there is no frame in which the app doesn't know the mouse position.
+        if (_sapp_events_enabled()) {
+            _sapp_init_event(SAPP_EVENTTYPE_MOUSE_MOVE);
+            _sapp_call_event(&_sapp.event);
+        }
     }
     _sapp_call_frame();
     _sapp.frame_count++;
@@ -4075,6 +4086,10 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         data1:0
         data2:0];
     [NSApp postEvent:focusevent atStart:YES];
+
+    // Update the mouse position so the app knows where the cursor is before the
+    // mouse is actually moved. An event is sent in _sapp_frame. 
+    _sapp_macos_mouse_update_from_nspoint([_sapp.macos.window mouseLocationOutsideOfEventStream], true);
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
