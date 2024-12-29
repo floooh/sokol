@@ -119,7 +119,9 @@ jobs:
       - uses: actions/checkout@main
         with:
           repository: floooh/sokol-zig
-      - uses: goto-bus-stop/setup-zig@default
+      - uses: mlugg/setup-zig@v1
+        with:
+          version: master
       - uses: actions/download-artifact@main
         with:
           name: ignore-me-zig
@@ -282,7 +284,9 @@ jobs:
       - uses: actions/checkout@main
         with:
           repository: kassane/sokol-d
-      - uses: goto-bus-stop/setup-zig@default
+      - uses: mlugg/setup-zig@v1
+        with:
+          version: 0.13.0
       - uses: dlang-community/setup-dlang@v1
         with:
           compiler: ldc-master
