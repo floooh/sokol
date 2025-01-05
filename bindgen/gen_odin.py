@@ -428,7 +428,7 @@ def gen_c_imports(inp, c_prefix, prefix):
             res_type = funcdecl_result_c(decl, prefix)
             res_str = '' if res_type == '' else f'-> {res_type}'
             if decl.get('comment'):
-                if decl.get('comment_multiline'):
+                if '\n' in decl["comment"]:
                     l("    /*")
                     l("    " + "    ".join(decl['comment'].splitlines(True)))
                     l("    */")
@@ -453,7 +453,7 @@ def gen_struct(decl, prefix):
     c_struct_name = check_override(decl['name'])
     struct_name = as_struct_or_enum_type(c_struct_name, prefix)
     if decl.get('comment'):
-        if decl.get('comment_multiline'):
+        if '\n' in decl["comment"]:
             l("/*")
             l(decl["comment"])
             l("*/")
@@ -474,7 +474,7 @@ def gen_struct(decl, prefix):
 def gen_enum(decl, prefix):
     enum_name = check_override(decl['name'])
     if decl.get('comment'):
-        if decl.get('comment_multiline'):
+        if '\n' in decl["comment"]:
             l("/*")
             l(decl["comment"])
             l("*/")

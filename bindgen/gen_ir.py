@@ -45,7 +45,6 @@ def parse_struct(decl, source):
     for item_decl in decl['inner']:
         if item_decl['kind'] == 'FullComment':
             outp['comment'] = extract_comment(item_decl, source)
-            outp['comment_multiline'] = '\n' in outp['comment']
             continue
         if item_decl['kind'] != 'FieldDecl':
             sys.exit(f"ERROR: Structs must only contain simple fields ({decl['name']})")
@@ -69,7 +68,6 @@ def parse_enum(decl, source):
     for item_decl in decl['inner']:
         if item_decl['kind'] == 'FullComment':
             outp['comment'] = extract_comment(item_decl, source)
-            outp['comment_multiline'] = '\n' in outp['comment']
             continue
         if item_decl['kind'] == 'EnumConstantDecl':
             item = {}
@@ -101,7 +99,6 @@ def parse_func(decl, source):
         for param in decl['inner']:
             if param['kind'] == 'FullComment':
                 outp['comment'] = extract_comment(param, source)
-                outp['comment_multiline'] = '\n' in outp['comment']
                 continue
             if param['kind'] != 'ParmVarDecl':
                 print(f"  >> warning: ignoring func {decl['name']} (unsupported parameter type)")
