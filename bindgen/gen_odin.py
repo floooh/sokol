@@ -149,6 +149,18 @@ def l(s):
     global out_lines
     out_lines += s + '\n'
 
+def c(s, indent=""):
+    if '\n' in s:
+        l(f'{indent}/*')
+        if indent:
+            # prefix all lines with indent
+            l(indent + indent.join(s.splitlines(True)))
+        else:
+            l(s)
+        l(f'{indent}*/')
+    else:
+        l(f'{indent}// {s.strip()}')
+
 def check_override(name, default=None):
     if name in overrides:
         return overrides[name]
@@ -428,12 +440,7 @@ def gen_c_imports(inp, c_prefix, prefix):
             res_type = funcdecl_result_c(decl, prefix)
             res_str = '' if res_type == '' else f'-> {res_type}'
             if decl.get('comment'):
-                if '\n' in decl["comment"]:
-                    l("    /*")
-                    l("    " + "    ".join(decl['comment'].splitlines(True)))
-                    l("    */")
-                else:
-                    l("    // " + decl['comment'].strip())
+                c(decl['comment'], indent="    ")
             # Need to special case sapp_sg to avoid Odin's context keyword
             if c_prefix == "sapp_sg":
                 l(f'    @(link_name="{decl["name"]}")')
@@ -453,12 +460,7 @@ def gen_struct(decl, prefix):
     c_struct_name = check_override(decl['name'])
     struct_name = as_struct_or_enum_type(c_struct_name, prefix)
     if decl.get('comment'):
-        if '\n' in decl["comment"]:
-            l("/*")
-            l(decl["comment"])
-            l("*/")
-        else:
-            l("// " + decl['comment'].strip())
+        c(decl['comment'])
     l(f'{struct_name} :: struct {{')
     for field in decl['fields']:
         field_name = check_override(field['name'])
@@ -474,12 +476,7 @@ def gen_struct(decl, prefix):
 def gen_enum(decl, prefix):
     enum_name = check_override(decl['name'])
     if decl.get('comment'):
-        if '\n' in decl["comment"]:
-            l("/*")
-            l(decl["comment"])
-            l("*/")
-        else:
-            l("// " + decl['comment'].strip())
+        c(decl['comment'])
     l(f'{as_struct_or_enum_type(enum_name, prefix)} :: enum i32 {{')
     for item in decl['items']:
         item_name = as_enum_item_name(check_override(item['name']))
