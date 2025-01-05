@@ -8,6 +8,7 @@
 #-------------------------------------------------------------------------------
 import gen_ir
 import os, shutil, sys
+import textwrap
 
 import gen_util as util
 
@@ -124,6 +125,12 @@ def reset_globals():
 def l(s):
     global out_lines
     out_lines += s + '\n'
+
+def c(s, indent=""):
+    if not s:
+        return
+    prefix = f"{indent}/// "
+    l(textwrap.indent(textwrap.dedent(s), prefix=prefix, predicate=lambda line: True))
 
 def as_zig_prim_type(s):
     return prim_types[s]
@@ -324,6 +331,7 @@ def funcdecl_result_zig(decl, prefix):
 def gen_struct(decl, prefix):
     struct_name = check_override(decl['name'])
     zig_type = as_zig_struct_type(struct_name, prefix)
+    c(decl.get('comment'))
     l(f"pub const {zig_type} = extern struct {{")
     for field in decl['fields']:
         field_name = check_override(field['name'])
@@ -382,14 +390,19 @@ def gen_struct(decl, prefix):
         else:
             sys.exit(f"ERROR gen_struct: {field_name}: {field_type};")
     l("};")
+    l("")
 
 def gen_consts(decl, prefix):
+    c(decl.get('comment'))
     for item in decl['items']:
         item_name = check_override(item['name'])
+        c(item.get('comment'))
         l(f"pub const {util.as_lower_snake_case(item_name, prefix)} = {item['value']};")
+    l("")
 
 def gen_enum(decl, prefix):
     enum_name = check_override(decl['name'])
+    c(decl.get('comment'))
     l(f"pub const {as_zig_enum_type(enum_name, prefix)} = enum(i32) {{")
     for item in decl['items']:
         item_name = as_enum_item_name(check_override(item['name']))
@@ -399,13 +412,17 @@ def gen_enum(decl, prefix):
             else:
                 l(f"    {item_name},")
     l("};")
+    l("")
 
 def gen_func_c(decl, prefix):
+    c(decl.get('comment'))
     l(f"pub extern fn {decl['name']}({funcdecl_args_c(decl, prefix)}) {funcdecl_result_c(decl, prefix)};")
+    l('')
 
 def gen_func_zig(decl, prefix):
     c_func_name = decl['name']
     zig_func_name = util.as_lower_camel_case(check_override(decl['name']), prefix)
+    c(decl.get('comment'))
     if c_func_name in c_callbacks:
         # a simple forwarded C callback function
         l(f"pub const {zig_func_name} = {c_func_name};")
@@ -435,6 +452,7 @@ def gen_func_zig(decl, prefix):
         s += ");"
         l(s)
         l("}")
+        l("")
 
 def pre_parse(inp):
     global struct_types
@@ -570,8 +588,8 @@ def gen(c_header_path, c_prefix, dep_c_prefixes):
     print(f'  {c_header_path} => {module_name}')
     reset_globals()
     shutil.copyfile(c_header_path, f'sokol-zig/src/sokol/c/{os.path.basename(c_header_path)}')
-    ir = gen_ir.gen(c_header_path, c_source_path, module_name, c_prefix, dep_c_prefixes)
-    gen_module(ir, dep_c_prefixes)
+    ir = gen_ir.gen(c_header_path, c_source_path, module_name, c_prefix, dep_c_prefixes, with_comments=True)
+    gen_module(ir, dep_c_prefixes,)
     output_path = f"sokol-zig/src/sokol/{ir['module']}.zig"
     with open(output_path, 'w', newline='\n') as f_outp:
         f_outp.write(out_lines)

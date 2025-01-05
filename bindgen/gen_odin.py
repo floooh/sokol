@@ -3,6 +3,7 @@
 #
 #   Generate Odin bindings.
 #-------------------------------------------------------------------------------
+import textwrap
 import gen_ir
 import gen_util as util
 import os, shutil, sys
@@ -150,13 +151,11 @@ def l(s):
     out_lines += s + '\n'
 
 def c(s, indent=""):
+    if not s:
+        return
     if '\n' in s:
         l(f'{indent}/*')
-        if indent:
-            # prefix all lines with indent
-            l(indent + indent.join(s.splitlines(True)))
-        else:
-            l(s)
+        l(textwrap.indent(textwrap.dedent(s), prefix=f"    {indent}", predicate=lambda line: True))
         l(f'{indent}*/')
     else:
         l(f'{indent}// {s.strip()}')
@@ -451,8 +450,10 @@ def gen_c_imports(inp, c_prefix, prefix):
     l('')
 
 def gen_consts(decl, prefix):
+    c(decl.get('comment'))
     for item in decl['items']:
         item_name = check_override(item['name'])
+        c(item.get('comment'))
         l(f"{as_snake_case(item_name, prefix)} :: {item['value']}")
     l('')
 
