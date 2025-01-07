@@ -126,10 +126,10 @@ def l(s):
     global out_lines
     out_lines += s + '\n'
 
-def c(s, indent=""):
+def c(s, indent="", comment="///"):
     if not s:
         return
-    prefix = f"{indent}///"
+    prefix = f"{indent}{comment}"
     for line in textwrap.dedent(s).splitlines():
         l(f"{prefix} {line}" if line else prefix )
 
@@ -554,6 +554,9 @@ def gen_helpers(inp):
 
 def gen_module(inp, dep_prefixes):
     l('// machine generated, do not edit')
+    if inp.get('comment'):
+        l('')
+        c(inp['comment'], comment="//")
     l('')
     gen_imports(inp, dep_prefixes)
     gen_helpers(inp)

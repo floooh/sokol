@@ -509,6 +509,9 @@ def gen_module(inp, c_prefix, dep_prefixes):
     l('// machine generated, do not edit')
     l('')
     l(f"package sokol_{inp['module']}")
+    if inp.get('comment'):
+        l('')
+        c(inp['comment'])
     gen_imports(dep_prefixes)
     gen_helpers(inp)
     prefix = inp['prefix']

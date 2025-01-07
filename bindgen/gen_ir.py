@@ -1,7 +1,7 @@
 #-------------------------------------------------------------------------------
 #   Generate an intermediate representation of a clang AST dump.
 #-------------------------------------------------------------------------------
-import json, sys, subprocess
+import re, json, sys, subprocess
 
 def is_api_decl(decl, prefix):
     if 'name' in decl:
@@ -136,6 +136,9 @@ def gen(header_path, source_path, module, main_prefix, dep_prefixes, with_commen
     outp['decls'] = []
     with open(header_path, 'r') as f:
         source = f.read()
+        first_comment = re.search(r"/\*(.*?)\*/", source, re.S).group(1)
+        if first_comment and "Project URL" in first_comment:
+            outp['comment'] = first_comment
         for decl in inp['inner']:
             is_dep = is_dep_decl(decl, dep_prefixes)
             if is_api_decl(decl, main_prefix) or is_dep:
