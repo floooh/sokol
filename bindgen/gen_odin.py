@@ -155,7 +155,7 @@ def c(s, indent=""):
         return
     if '\n' in s:
         l(f'{indent}/*')
-        l(textwrap.indent(textwrap.dedent(s), prefix=f"    {indent}", predicate=lambda line: True))
+        l(textwrap.indent(textwrap.dedent(s), prefix=f"    {indent}"))
         l(f'{indent}*/')
     else:
         l(f'{indent}// {s.strip()}')
