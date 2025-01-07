@@ -129,8 +129,9 @@ def l(s):
 def c(s, indent=""):
     if not s:
         return
-    prefix = f"{indent}/// "
-    l(textwrap.indent(textwrap.dedent(s), prefix=prefix, predicate=lambda line: True))
+    prefix = f"{indent}///"
+    for line in textwrap.dedent(s).splitlines():
+        l(f"{prefix} {line}" if line else prefix )
 
 def as_zig_prim_type(s):
     return prim_types[s]
