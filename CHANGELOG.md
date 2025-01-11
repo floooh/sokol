@@ -1,6 +1,6 @@
 ## Updates
 
-### 11-Jan-2024
+### 11-Jan-2025
 
 The language bindings code-generation can now extract comments from the C headers
 and include them into the language bindings. Currently this is supported in
