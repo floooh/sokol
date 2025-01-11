@@ -1,5 +1,16 @@
 ## Updates
 
+### 11-Jan-2024
+
+The language bindings code-generation can now extract comments from the C headers
+and include them into the language bindings. Currently this is supported in
+the Odin and Zig bindings, but adding comments to the other language bindings
+is fairly easy since the bulk of the work happens in the common `gen_ir.py` script
+which parses the C API declarations into a JSON tree.
+
+Related PR: https://github.com/floooh/sokol/pull/1176, many thanks to
+@AlexanderArvidsson!
+
 ### 17-Dec-2024
 
 - sokol_imgui.h (breaking change): user-provided images and samplers are now
