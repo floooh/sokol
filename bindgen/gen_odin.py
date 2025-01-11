@@ -3,6 +3,7 @@
 #
 #   Generate Odin bindings.
 #-------------------------------------------------------------------------------
+import textwrap
 import gen_ir
 import gen_util as util
 import os, shutil, sys
@@ -21,6 +22,7 @@ module_names = {
     'sdtx_':    'debugtext',
     'sshape_':  'shape',
     'sglue_':   'glue',
+    'simgui_':   'imgui',
 }
 
 system_libs = {
@@ -76,6 +78,7 @@ c_source_names = {
     'sdtx_':    'sokol_debugtext.c',
     'sshape_':  'sokol_shape.c',
     'sglue_':   'sokol_glue.c',
+    'simgui_':  'sokol_imgui.c',
 }
 
 ignores = [
@@ -146,6 +149,16 @@ def reset_globals():
 def l(s):
     global out_lines
     out_lines += s + '\n'
+
+def c(s, indent=""):
+    if not s:
+        return
+    if '\n' in s:
+        l(f'{indent}/*')
+        l(textwrap.indent(textwrap.dedent(s), prefix=f"    {indent}"))
+        l(f'{indent}*/')
+    else:
+        l(f'{indent}// {s.strip()}')
 
 def check_override(name, default=None):
     if name in overrides:
@@ -425,6 +438,8 @@ def gen_c_imports(inp, c_prefix, prefix):
             args = funcdecl_args_c(decl, prefix)
             res_type = funcdecl_result_c(decl, prefix)
             res_str = '' if res_type == '' else f'-> {res_type}'
+            if decl.get('comment'):
+                c(decl['comment'], indent="    ")
             # Need to special case sapp_sg to avoid Odin's context keyword
             if c_prefix == "sapp_sg":
                 l(f'    @(link_name="{decl["name"]}")')
@@ -435,14 +450,18 @@ def gen_c_imports(inp, c_prefix, prefix):
     l('')
 
 def gen_consts(decl, prefix):
+    c(decl.get('comment'))
     for item in decl['items']:
         item_name = check_override(item['name'])
+        c(item.get('comment'))
         l(f"{as_snake_case(item_name, prefix)} :: {item['value']}")
     l('')
 
 def gen_struct(decl, prefix):
     c_struct_name = check_override(decl['name'])
     struct_name = as_struct_or_enum_type(c_struct_name, prefix)
+    if decl.get('comment'):
+        c(decl['comment'])
     l(f'{struct_name} :: struct {{')
     for field in decl['fields']:
         field_name = check_override(field['name'])
@@ -457,6 +476,8 @@ def gen_struct(decl, prefix):
 
 def gen_enum(decl, prefix):
     enum_name = check_override(decl['name'])
+    if decl.get('comment'):
+        c(decl['comment'])
     l(f'{as_struct_or_enum_type(enum_name, prefix)} :: enum i32 {{')
     for item in decl['items']:
         item_name = as_enum_item_name(check_override(item['name']))
@@ -488,6 +509,9 @@ def gen_module(inp, c_prefix, dep_prefixes):
     l('// machine generated, do not edit')
     l('')
     l(f"package sokol_{inp['module']}")
+    if inp.get('comment'):
+        l('')
+        c(inp['comment'])
     gen_imports(dep_prefixes)
     gen_helpers(inp)
     prefix = inp['prefix']
@@ -534,7 +558,7 @@ def gen(c_header_path, c_prefix, dep_c_prefixes):
     shutil.copyfile(c_header_path, f'{c_root}/{os.path.basename(c_header_path)}')
     csource_path = get_csource_path(c_prefix)
     module_name = module_names[c_prefix]
-    ir = gen_ir.gen(c_header_path, csource_path, module_name, c_prefix, dep_c_prefixes)
+    ir = gen_ir.gen(c_header_path, csource_path, module_name, c_prefix, dep_c_prefixes, with_comments=True)
     gen_module(ir, c_prefix, dep_c_prefixes)
     with open(f"{module_root}/{ir['module']}/{ir['module']}.odin", 'w', newline='\n') as f_outp:
         f_outp.write(out_lines)
