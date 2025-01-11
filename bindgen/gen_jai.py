@@ -3,6 +3,7 @@
 #
 #   Generate Jai bindings.
 #-------------------------------------------------------------------------------
+import textwrap
 import gen_ir
 import gen_util as util
 import os, shutil, sys
@@ -144,6 +145,16 @@ def reset_globals():
 def l(s):
     global out_lines
     out_lines += s + '\n'
+
+def c(s, indent=""):
+    if not s:
+        return
+    if '\n' in s:
+        l(f'{indent}/*')
+        l(textwrap.indent(textwrap.dedent(s), prefix=f"    {indent}"))
+        l(f'{indent}*/')
+    else:
+        l(f'{indent}// {s.strip()}')
 
 def check_override(name, default=None):
     if name in overrides:
@@ -395,12 +406,15 @@ def gen_c_imports(inp, c_prefix, prefix):
             args = funcdecl_args_c(decl, prefix)
             res_type = funcdecl_result_c(decl, prefix)
             res_str = '-> void' if res_type == '' else f'-> {res_type}'
+            if decl.get('comment'):
+                c(decl['comment'])
             l(f"{decl['name']} :: ({args}) {res_str} #foreign {clib_import};")
     l('')
 
 def gen_consts(decl, prefix):
     for item in decl['items']:
         item_name = check_override(item['name'])
+        c(item.get('comment'))
         l(f"{as_snake_case(item_name, prefix)} :: {item['value']};")
     l('')
 
@@ -421,6 +435,8 @@ def gen_struct(decl, prefix):
 
 def gen_enum(decl, prefix):
     enum_name = check_override(decl['name'])
+    if decl.get('comment'):
+        c(decl['comment'])
     l(f'{as_struct_or_enum_type(enum_name, prefix)} :: enum u32 {{')
     for item in decl['items']:
         item_name = as_enum_item_name(check_override(item['name']))
@@ -449,6 +465,9 @@ def gen_helpers(inp):
 def gen_module(inp, c_prefix, dep_prefixes):
     pre_parse(inp)
     l('// machine generated, do not edit')
+    if inp.get('comment'):
+        l('')
+        c(inp['comment'])
     gen_imports(dep_prefixes)
     gen_helpers(inp)
     prefix = inp['prefix']
@@ -495,7 +514,7 @@ def gen(c_header_path, c_prefix, dep_c_prefixes):
     shutil.copyfile(c_header_path, f'{c_root}/{os.path.basename(c_header_path)}')
     csource_path = get_csource_path(c_prefix)
     module_name = module_names[c_prefix]
-    ir = gen_ir.gen(c_header_path, csource_path, module_name, c_prefix, dep_c_prefixes)
+    ir = gen_ir.gen(c_header_path, csource_path, module_name, c_prefix, dep_c_prefixes, with_comments=True)
     gen_module(ir, c_prefix, dep_c_prefixes)
     with open(f"{module_root}/{ir['module']}/module.jai", 'w', newline='\n') as f_outp:
         f_outp.write(out_lines)
