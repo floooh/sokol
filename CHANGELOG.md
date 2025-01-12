@@ -2,7 +2,7 @@
 
 ### 12-Jan-2025
 
-- The Jai and D langauge bindings now also have integrated comments
+- The Jai and D language bindings now also have integrated comments
   (see https://github.com/floooh/sokol/pull/1182 and https://github.com/floooh/sokol/pull/1183).
 - sokol_app.h html5: a new init flag `sapp_desc.html5_update_document_title` has been
   added. When this is set to true, sokol-app will overwrite the HTML `document.title` property with
