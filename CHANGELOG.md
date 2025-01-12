@@ -7,7 +7,7 @@
 - sokol_app.h html5: a new init flag `sapp_desc.html5_update_document_title` has been
   added. When this is set to true, sokol-app will overwrite the HTML `document.title` property with
   the `sapp_desc.window_title` string (also see issue https://github.com/floooh/sokol/issues/1132
-  and PR https://github.com/floooh/sokol/pull/1182).
+  and PR https://github.com/floooh/sokol/pull/1186)
 
 ### 11-Jan-2025
 
