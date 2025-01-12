@@ -1766,6 +1766,10 @@ typedef struct sapp_logger {
     void* user_data;
 } sapp_logger;
 
+/*
+    sokol-app initialization options, used as return value of sokol_main()
+    or sapp_run() argument.
+*/
 typedef struct sapp_desc {
     void (*init_cb)(void);                  // these are the user-provided callbacks without user data
     void (*frame_cb)(void);
@@ -1806,6 +1810,7 @@ typedef struct sapp_desc {
     bool html5_preserve_drawing_buffer; // HTML5 only: whether to preserve default framebuffer content between frames
     bool html5_premultiplied_alpha;     // HTML5 only: whether the rendered pixels use premultiplied alpha convention
     bool html5_ask_leave_site;          // initial state of the internal html5_ask_leave_site flag (see sapp_html5_ask_leave_site())
+    bool html5_update_document_title;   // if true, update the HTML document.title with sapp_desc.window_title
     bool html5_bubble_mouse_events;     // if true, mouse events will bubble up to the web page
     bool html5_bubble_touch_events;     // same for touch events
     bool html5_bubble_wheel_events;     // same for wheel events
@@ -3198,7 +3203,7 @@ _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* desc) {
     res.clipboard_size = _sapp_def(res.clipboard_size, 8192);
     res.max_dropped_files = _sapp_def(res.max_dropped_files, 1);
     res.max_dropped_file_path_length = _sapp_def(res.max_dropped_file_path_length, 2048);
-    res.window_title = _sapp_def(res.window_title, "sokol_app");
+    res.window_title = _sapp_def(res.window_title, "sokol");
     return res;
 }
 
@@ -5092,7 +5097,10 @@ EM_JS(void, sapp_js_remove_dragndrop_listeners, (void), {
     canvas.removeEventListener('drop',      Module.sokol_drop);
 });
 
-EM_JS(void, sapp_js_init, (const char* c_str_target_selector), {
+EM_JS(void, sapp_js_init, (const char* c_str_target_selector, const char* c_str_document_title), {
+    if (c_str_document_title !== 0) {
+        document.title = UTF8ToString(c_str_document_title);
+    }
     const target_selector_str = UTF8ToString(c_str_target_selector);
     if (Module['canvas'] !== undefined) {
         if (typeof Module['canvas'] === 'object') {
@@ -6015,7 +6023,8 @@ _SOKOL_PRIVATE void _sapp_emsc_frame_main_loop(void) {
 
 _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
-    sapp_js_init(_sapp.html5_canvas_selector);
+    const char* document_title = desc->html5_update_document_title ? _sapp.window_title : 0;
+    sapp_js_init(_sapp.html5_canvas_selector, document_title);
     double w, h;
     if (_sapp.desc.html5_canvas_resize) {
         w = (double) _sapp_def(_sapp.desc.width, _SAPP_FALLBACK_DEFAULT_WINDOW_WIDTH);
