@@ -93,7 +93,6 @@ prim_types = {
 prim_defaults = {
     'int':          '0',
     'bool':         'false',
-    'char':         '0',
     'int8_t':       '0',
     'uint8_t':      '0',
     'int16_t':      '0',
