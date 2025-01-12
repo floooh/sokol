@@ -26,6 +26,7 @@ module_names = {
     'sglue_':   'glue',
     'sfetch_':  'fetch',
     'simgui_':  'imgui',
+    'smemtrack_': 'memtrack',
 }
 
 c_source_paths = {
@@ -40,6 +41,7 @@ c_source_paths = {
     'sglue_':   'sokol-d/src/sokol/c/sokol_glue.c',
     'sfetch_':  'sokol-d/src/sokol/c/sokol_fetch.c',
     'simgui_':  'sokol-d/src/sokol/c/sokol_imgui.c',
+    'smemtrack_': 'sokol-d/src/sokol/c/sokol_memtrack.c',
 }
 
 ignores = [
@@ -91,6 +93,7 @@ prim_types = {
 prim_defaults = {
     'int':          '0',
     'bool':         'false',
+    'char':         '0',
     'int8_t':       '0',
     'uint8_t':      '0',
     'int16_t':      '0',

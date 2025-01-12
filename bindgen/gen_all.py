@@ -44,6 +44,8 @@ for task in zig_tasks:
 # D
 d_tasks = [
     *tasks,
+    [ '../sokol_fetch.h', 'sfetch_', [] ],
+    [ '../util/sokol_memtrack.h', 'smemtrack_', [] ],
     [ '../util/sokol_imgui.h', 'simgui_',   ['sg_', 'sapp_'] ],
 ]
 gen_d.prepare()
