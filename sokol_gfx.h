@@ -13822,8 +13822,7 @@ _SOKOL_PRIVATE WGPUVertexFormat _sg_wgpu_vertexformat(sg_vertex_format f) {
         case SG_VERTEXFORMAT_USHORT4N:      return WGPUVertexFormat_Unorm16x4;
         case SG_VERTEXFORMAT_HALF2:         return WGPUVertexFormat_Float16x2;
         case SG_VERTEXFORMAT_HALF4:         return WGPUVertexFormat_Float16x4;
-        // FIXME! UINT10_N2 (see https://github.com/gpuweb/gpuweb/issues/4275)
-        // case SG_VERTEXFORMAT_UINT10_N2:     return WGPUVertexFormat_Undefined;
+        case SG_VERTEXFORMAT_UINT10_N2:     return WGPUVertexFormat_Unorm10_10_10_2;
         default:
             SOKOL_UNREACHABLE;
             return WGPUVertexFormat_Force32;
