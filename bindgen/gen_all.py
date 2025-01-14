@@ -1,4 +1,4 @@
-import os, gen_nim, gen_zig, gen_odin, gen_rust, gen_d, gen_jai
+import os, gen_nim, gen_zig, gen_odin, gen_rust, gen_d, gen_jai, gen_c3
 
 tasks = [
     [ '../sokol_log.h',            'slog_',     [] ],
@@ -58,3 +58,9 @@ gen_rust.prepare()
 for task in tasks:
     [c_header_path, main_prefix, dep_prefixes] = task
     gen_rust.gen(c_header_path, main_prefix, dep_prefixes)
+
+# C3
+gen_c3.prepare()
+for task in tasks:
+    [c_header_path, main_prefix, dep_prefixes] = task
+    gen_c3.gen(c_header_path, main_prefix, dep_prefixes)
