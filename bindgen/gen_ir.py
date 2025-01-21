@@ -20,7 +20,7 @@ def strip_comments(items):
     return [i for i in items if i['kind'] != 'FullComment']
 
 def extract_comment(comment, source):
-    return source[comment['range']['begin']['offset']:comment['range']['end']['offset']]
+    return source[comment['range']['begin']['offset']:comment['range']['end']['offset']+1].rstrip()
 
 def is_dep_decl(decl, dep_prefixes):
     for prefix in dep_prefixes:
