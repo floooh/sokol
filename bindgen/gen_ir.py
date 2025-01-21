@@ -20,7 +20,7 @@ def strip_comments(items):
     return [i for i in items if i['kind'] != 'FullComment']
 
 def extract_comment(comment, source):
-    return source[comment['range']['begin']['offset']:comment['range']['end']['offset']]
+    return source[comment['range']['begin']['offset']:comment['range']['end']['offset']+1].rstrip()
 
 def is_dep_decl(decl, dep_prefixes):
     for prefix in dep_prefixes:
@@ -134,7 +134,11 @@ def gen(header_path, source_path, module, main_prefix, dep_prefixes, with_commen
     outp['prefix'] = main_prefix
     outp['dep_prefixes'] = dep_prefixes
     outp['decls'] = []
-    with open(header_path, 'r') as f:
+    # load string with original line endings (otherwise Clang's output ranges
+    # for comments are off)
+    # NOTE: that same problem might exist for non-ASCII characters,
+    # so don't use those in header files!
+    with open(header_path, mode='r', newline='') as f:
         source = f.read()
         first_comment = re.search(r"/\*(.*?)\*/", source, re.S).group(1)
         if first_comment and "Project URL" in first_comment:
