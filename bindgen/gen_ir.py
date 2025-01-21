@@ -134,7 +134,11 @@ def gen(header_path, source_path, module, main_prefix, dep_prefixes, with_commen
     outp['prefix'] = main_prefix
     outp['dep_prefixes'] = dep_prefixes
     outp['decls'] = []
-    with open(header_path, 'r') as f:
+    # load string with original line endings (otherwise Clang's output ranges
+    # for comments are off)
+    # NOTE: that same problem might exist for non-ASCII characters,
+    # so don't use those in header files!
+    with open(header_path, mode='r', newline='') as f:
         source = f.read()
         first_comment = re.search(r"/\*(.*?)\*/", source, re.S).group(1)
         if first_comment and "Project URL" in first_comment:
