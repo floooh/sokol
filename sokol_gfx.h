@@ -5566,7 +5566,7 @@ typedef struct {
     GLuint sampler;
 } _sg_gl_cache_texture_sampler_bind_slot;
 
-#define _SG_GL_MAX_SBUF_BINDINGS (2 * SG_MAX_STORAGEBUFFER_BINDSLOTS)
+#define _SG_GL_MAX_SBUF_BINDINGS (SG_MAX_STORAGEBUFFER_BINDSLOTS)
 #define _SG_GL_MAX_IMG_SMP_BINDINGS (SG_MAX_IMAGE_SAMPLER_PAIRS)
 typedef struct {
     sg_depth_state depth;
