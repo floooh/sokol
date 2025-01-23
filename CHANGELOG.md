@@ -1,5 +1,30 @@
 ## Updates
 
+### 23-Jan-2025
+
+A minor, potentially breaking update in the sokol-gfx GL backend when
+using storage buffers on the fragment shader stage:
+
+The GL backend will no longer use storage buffer bindslots in the
+range 8..15. This allows sokol-gfx to be used on GL drivers
+that only support the minimal number of storage buffer bindings.
+
+This may be a breaking change if you are using sokol-shdc with the glsl430
+output format which uses storage buffers on the fragment shader stage.
+
+Previously this would assign storage buffer bindings on the fragment stage
+to the bind slot range 8..15 which will now cause a validation layer error
+in debug mode, or a panic-level error in release mode (which won't have a lot
+of information in release mode, rebuild in debug to get much more useful
+error messages).
+
+To fix this problem, just recompile your shaders with the latest sokol-shdc.
+
+Also see issue https://github.com/floooh/sokol/issues/1193 and the PRs
+https://github.com/floooh/sokol/pull/1196 and https://github.com/floooh/sokol-tools/pull/170
+for details.
+
+
 ### 12-Jan-2025
 
 - The Jai and D language bindings now also have integrated comments
