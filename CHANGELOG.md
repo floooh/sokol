@@ -14,7 +14,9 @@ output format which uses storage buffers on the fragment shader stage.
 
 Previously this would assign storage buffer bindings on the fragment stage
 to the bind slot range 8..15 which will now cause a validation layer error
-in debug mode, or a panic-level error in release mode.
+in debug mode, or a panic-level error in release mode (which won't have a lot
+of information in release mode, rebuild in debug to get much more useful
+error messages).
 
 To fix this problem, just recompile your shaders with the latest sokol-shdc.
 
