@@ -6,7 +6,7 @@
 
 # Sokol
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**07-Nov-2024** sokol_gfx.h: the 'bindings cleanup' update
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**23-Jan-2025** sokol_gfx.h gl: fix GL storage buffer bindslot range (may be breaking))
 
 [![Build](/../../actions/workflows/main.yml/badge.svg)](/../../actions/workflows/main.yml) [![Bindings](/../../actions/workflows/gen_bindings.yml/badge.svg)](/../../actions/workflows/gen_bindings.yml) [![build](https://github.com/floooh/sokol-zig/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-zig/actions/workflows/main.yml) [![build](https://github.com/floooh/sokol-nim/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-nim/actions/workflows/main.yml) [![Odin](https://github.com/floooh/sokol-odin/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-odin/actions/workflows/main.yml)[![Rust](https://github.com/floooh/sokol-rust/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-rust/actions/workflows/main.yml)[![Dlang](https://github.com/kassane/sokol-d/actions/workflows/build.yml/badge.svg)](https://github.com/kassane/sokol-d/actions/workflows/build.yml)
 
