@@ -8710,13 +8710,15 @@ _SOKOL_PRIVATE GLuint _sg_gl_compile_shader(sg_shader_stage stage, const char* s
 }
 
 // NOTE: this is an out-of-range check for GLSL bindslots that's also active in release mode
-_SOKOL_PRIVATE void _sg_gl_ensure_glsl_bindslot_ranges(const sg_shader_desc* desc) {
+_SOKOL_PRIVATE bool _sg_gl_ensure_glsl_bindslot_ranges(const sg_shader_desc* desc) {
     SOKOL_ASSERT(desc);
     for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
         if (desc->storage_buffers[i].glsl_binding_n >= _SG_GL_MAX_SBUF_BINDINGS) {
-            _SG_PANIC(GL_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE);
+            _SG_ERROR(GL_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE);
+            return false;
         }
     }
+    return true;
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
@@ -8726,7 +8728,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
 
     // perform a fatal range-check on GLSL bindslots that's also active
     // in release mode to avoid potential out-of-bounds array accesses
-    _sg_gl_ensure_glsl_bindslot_ranges(desc);
+    if (!_sg_gl_ensure_glsl_bindslot_ranges(desc)) {
+        return SG_RESOURCESTATE_FAILED;
+    }
 
     // copy the optional vertex attribute names over
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
