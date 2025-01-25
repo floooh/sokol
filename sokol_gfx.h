@@ -3707,6 +3707,10 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(D3D11_CREATE_3D_SRV_FAILED, "CreateShaderResourceView() failed for 3d texture (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_MSAA_TEXTURE_FAILED, "CreateTexture2D() failed for MSAA render target texture (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_SAMPLER_STATE_FAILED, "CreateSamplerState() failed (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_UNIFORMBLOCK_HLSL_REGISTER_B_OUT_OF_RANGE, "uniform block 'hlsl_register_b_n' is out of range (must be 0..7)") \
+    _SG_LOGITEM_XMACRO(D3D11_STORAGEBUFFER_HLSL_REGISTER_T_OUT_OF_RANGE, "storage buffer 'hlsl_register_t_n' is out of range (must be 0..23)") \
+    _SG_LOGITEM_XMACRO(D3D11_IMAGE_HLSL_REGISTER_T_OUT_OF_RANGE, "image 'hlsl_register_t_n' is out of range (must be 0..23)") \
+    _SG_LOGITEM_XMACRO(D3D11_SAMPLER_HLSL_REGISTER_S_OUT_OF_RANGE, "sampler 'hlsl_register_s_n' is out of rang (must be 0..15)") \
     _SG_LOGITEM_XMACRO(D3D11_LOAD_D3DCOMPILER_47_DLL_FAILED, "loading d3dcompiler_47.dll failed (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_SHADER_COMPILATION_FAILED, "shader compilation failed (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_SHADER_COMPILATION_OUTPUT, "") \
@@ -3728,6 +3732,10 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(METAL_SHADER_CREATION_FAILED, "shader creation failed (metal)") \
     _SG_LOGITEM_XMACRO(METAL_SHADER_COMPILATION_OUTPUT, "") \
     _SG_LOGITEM_XMACRO(METAL_SHADER_ENTRY_NOT_FOUND, "shader entry function not found (metal)") \
+    _SG_LOGITEM_XMACRO(METAL_UNIFORMBLOCK_MSL_BUFFER_SLOT_OUT_OF_RANGE, "uniform block 'msl_buffer_n' is out of range (must be 0..7)") \
+    _SG_LOGITEM_XMACRO(METAL_STORAGEBUFFER_MSL_BUFFER_SLOT_OUT_OF_RANGE, "storage buffer 'msl_buffer_n' is out of range (must be 8..15)") \
+    _SG_LOGITEM_XMACRO(METAL_IMAGE_MSL_TEXTURE_SLOT_OUT_OF_RANGE, "image 'msl_texture_n' is out of range (must be 0..15)") \
+    _SG_LOGITEM_XMACRO(METAL_SAMPLER_MSL_SAMPLER_SLOT_OUT_OF_RANGE, "sampler 'msl_sampler_n' is out of range (must be 0..15)") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_FAILED, "failed to create render pipeline state (metal)") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_OUTPUT, "") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_DSS_FAILED, "failed to create depth stencil state (metal)") \
@@ -3741,6 +3749,10 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(WGPU_CREATE_SAMPLER_FAILED, "wgpuDeviceCreateSampler() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_SHADER_MODULE_FAILED, "wgpuDeviceCreateShaderModule() failed") \
     _SG_LOGITEM_XMACRO(WGPU_SHADER_CREATE_BINDGROUP_LAYOUT_FAILED, "wgpuDeviceCreateBindGroupLayout() for shader stage failed") \
+    _SG_LOGITEM_XMACRO(WGPU_UNIFORMBLOCK_WGSL_GROUP0_BINDING_OUT_OF_RANGE, "uniform block 'wgsl_group0_binding_n' is out of range (must be 0..15)") \
+    _SG_LOGITEM_XMACRO(WGPU_STORAGEBUFFER_WGSL_GROUP1_BINDING_OUT_OF_RANGE, "storage buffer 'wgsl_group1_binding_n' is out of range (must be 0..127)") \
+    _SG_LOGITEM_XMACRO(WGPU_IMAGE_WGSL_GROUP1_BINDING_OUT_OF_RANGE, "image 'wgsl_group1_binding_n' is out of range (must be 0..127)") \
+    _SG_LOGITEM_XMACRO(WGPU_SAMPLER_WGSL_GROUP1_BINDING_OUT_OF_RANGE, "sampler 'wgsl_group1_binding_n' is out of range (must be 0..127)") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_PIPELINE_LAYOUT_FAILED, "wgpuDeviceCreatePipelineLayout() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_RENDER_PIPELINE_FAILED, "wgpuDeviceCreateRenderPipeline() failed") \
     _SG_LOGITEM_XMACRO(WGPU_ATTACHMENTS_CREATE_TEXTURE_VIEW_FAILED, "wgpuTextureCreateView() failed in create attachments") \
@@ -3812,19 +3824,19 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_BYTECODE, "shader byte code required") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE, "shader source or byte code required") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_BYTECODE_SIZE, "shader byte code length (in bytes) required") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_CONT_UB_MEMBERS, "uniform block members must occupy continuous slots") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_SIZE_IS_ZERO, "bound uniform block size cannot be zero") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_METAL_BUFFER_SLOT_OUT_OF_RANGE, "uniform block 'msl_buffer_n' is out of range (must be 0..7)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_METAL_BUFFER_SLOT_COLLISION, "uniform block 'msl_buffer_n' must be unique across uniform blocks and storage buffers in same shader stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_HLSL_REGISTER_B_OUT_OF_RANGE, "uniform block 'hlsl_register_b_n' is out of range (must be 0..7)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_HLSL_REGISTER_B_COLLISION, "uniform block 'hlsl_register_b_n' must be unique across uniform blocks in same shader stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_WGSL_GROUP0_BINDING_OUT_OF_RANGE, "uniform block 'wgsl_group0_binding_n' is out of range (must be 0..15)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_WGSL_GROUP0_BINDING_COLLISION, "uniform block 'wgsl_group0_binding_n' must be unique across all uniform blocks") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_UB_MEMBERS, "GL backend requires uniform block member declarations") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_UNIFORM_GLSL_NAME, "uniform block member 'glsl_name' missing") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_SIZE_MISMATCH, "size of uniform block members doesn't match uniform block size") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_ARRAY_COUNT, "uniform array count must be >= 1") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UB_STD140_ARRAY_TYPE, "uniform arrays only allowed for FLOAT4, INT4, MAT4 in std140 layout") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_NO_CONT_MEMBERS, "uniform block members must occupy continuous slots") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_SIZE_IS_ZERO, "bound uniform block size cannot be zero") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_METAL_BUFFER_SLOT_OUT_OF_RANGE, "uniform block 'msl_buffer_n' is out of range (must be 0..7)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_METAL_BUFFER_SLOT_COLLISION, "uniform block 'msl_buffer_n' must be unique across uniform blocks and storage buffers in same shader stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_HLSL_REGISTER_B_OUT_OF_RANGE, "uniform block 'hlsl_register_b_n' is out of range (must be 0..7)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_HLSL_REGISTER_B_COLLISION, "uniform block 'hlsl_register_b_n' must be unique across uniform blocks in same shader stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_WGSL_GROUP0_BINDING_OUT_OF_RANGE, "uniform block 'wgsl_group0_binding_n' is out of range (must be 0..15)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_WGSL_GROUP0_BINDING_COLLISION, "uniform block 'wgsl_group0_binding_n' must be unique across all uniform blocks") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_NO_MEMBERS, "GL backend requires uniform block member declarations") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_UNIFORM_GLSL_NAME, "uniform block member 'glsl_name' missing") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_SIZE_MISMATCH, "size of uniform block members doesn't match uniform block size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_ARRAY_COUNT, "uniform array count must be >= 1") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_STD140_ARRAY_TYPE, "uniform arrays only allowed for FLOAT4, INT4, MAT4 in std140 layout") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_METAL_BUFFER_SLOT_OUT_OF_RANGE, "storage buffer 'msl_buffer_n' is out of range (must be 8..15)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_METAL_BUFFER_SLOT_COLLISION, "storage buffer 'msl_buffer_n' must be unique across uniform blocks and storage buffer in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_HLSL_REGISTER_T_OUT_OF_RANGE, "storage buffer 'hlsl_register_t_n' is out of range (must be 0..23)") \
@@ -3965,7 +3977,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_STORAGEBUFFER_EXISTS, "sg_apply_bindings: bound storage buffer no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_STORAGEBUFFER_BINDING_BUFFERTYPE, "sg_apply_bindings: buffer bound storage buffer slot is not of type storage buffer") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_NO_PIPELINE, "sg_apply_uniforms: must be called after sg_apply_pipeline()") \
-    _SG_LOGITEM_XMACRO(VALIDATE_AUB_NO_UB_AT_SLOT, "sg_apply_uniforms: no uniform block declaration at this shader stage UB slot") \
+    _SG_LOGITEM_XMACRO(VALIDATE_AUB_NO_UNIFORMBLOCK_AT_SLOT, "sg_apply_uniforms: no uniform block declaration at this shader stage UB slot") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_SIZE, "sg_apply_uniforms: data size doesn't match declared uniform block size") \
     _SG_LOGITEM_XMACRO(VALIDATE_UPDATEBUF_USAGE, "sg_update_buffer: cannot update immutable buffer") \
     _SG_LOGITEM_XMACRO(VALIDATE_UPDATEBUF_SIZE, "sg_update_buffer: update size is bigger than buffer size") \
@@ -8706,13 +8718,15 @@ _SOKOL_PRIVATE GLuint _sg_gl_compile_shader(sg_shader_stage stage, const char* s
 }
 
 // NOTE: this is an out-of-range check for GLSL bindslots that's also active in release mode
-_SOKOL_PRIVATE void _sg_gl_ensure_glsl_bindslot_ranges(const sg_shader_desc* desc) {
+_SOKOL_PRIVATE bool _sg_gl_ensure_glsl_bindslot_ranges(const sg_shader_desc* desc) {
     SOKOL_ASSERT(desc);
     for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
         if (desc->storage_buffers[i].glsl_binding_n >= _SG_GL_MAX_SBUF_BINDINGS) {
-            _SG_PANIC(GL_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE);
+            _SG_ERROR(GL_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE);
+            return false;
         }
     }
+    return true;
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
@@ -8722,7 +8736,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
 
     // perform a fatal range-check on GLSL bindslots that's also active
     // in release mode to avoid potential out-of-bounds array accesses
-    _sg_gl_ensure_glsl_bindslot_ranges(desc);
+    if (!_sg_gl_ensure_glsl_bindslot_ranges(desc)) {
+        return SG_RESOURCESTATE_FAILED;
+    }
 
     // copy the optional vertex attribute names over
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
@@ -10997,10 +11013,46 @@ _SOKOL_PRIVATE ID3DBlob* _sg_d3d11_compile_shader(const sg_shader_function* shd_
     return output;
 }
 
+// NOTE: this is an out-of-range check for HLSL bindslots that's also active in release mode
+_SOKOL_PRIVATE bool _sg_d3d11_ensure_hlsl_bindslot_ranges(const sg_shader_desc* desc) {
+    SOKOL_ASSERT(desc);
+    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
+        if (desc->uniform_blocks[i].hlsl_register_b_n >= _SG_D3D11_MAX_STAGE_UB_BINDINGS) {
+            _SG_ERROR(D3D11_UNIFORMBLOCK_HLSL_REGISTER_B_OUT_OF_RANGE);
+            return false;
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
+        if (desc->storage_buffers[i].hlsl_register_t_n >= _SG_D3D11_MAX_STAGE_TEX_SBUF_BINDINGS) {
+            _SG_ERROR(D3D11_STORAGEBUFFER_HLSL_REGISTER_T_OUT_OF_RANGE);
+            return false;
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_IMAGE_BINDSLOTS; i++) {
+        if (desc->images[i].hlsl_register_t_n >= _SG_D3D11_MAX_STAGE_TEX_SBUF_BINDINGS) {
+            _SG_ERROR(D3D11_IMAGE_HLSL_REGISTER_T_OUT_OF_RANGE);
+            return false;
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+        if (desc->samplers[i].hlsl_register_s_n >= _SG_D3D11_MAX_STAGE_SMP_BINDINGS) {
+            _SG_ERROR(D3D11_SAMPLER_HLSL_REGISTER_S_OUT_OF_RANGE);
+            return false;
+        }
+    }
+    return true;
+}
+
 _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(!shd->d3d11.vs && !shd->d3d11.fs && !shd->d3d11.vs_blob);
     HRESULT hr;
+
+    // perform a range-check on HLSL bindslots that's also active in release
+    // mode to avoid potential out-of-bounds array accesses
+    if (!_sg_d3d11_ensure_hlsl_bindslot_ranges(desc)) {
+        return SG_RESOURCESTATE_FAILED;
+    }
 
     // copy vertex attribute semantic names and indices
     for (size_t i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
@@ -12885,8 +12937,44 @@ _SOKOL_PRIVATE void _sg_mtl_discard_shader_func(const _sg_mtl_shader_func_t* fun
     _sg_mtl_release_resource(_sg.frame_index, func->mtl_lib);
 }
 
+// NOTE: this is an out-of-range check for MSL bindslots that's also active in release mode
+_SOKOL_PRIVATE bool _sg_mtl_ensure_msl_bindslot_ranges(const sg_shader_desc* desc) {
+    SOKOL_ASSERT(desc);
+    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
+        if (desc->uniform_blocks[i].msl_buffer_n >= _SG_MTL_MAX_STAGE_UB_BINDINGS) {
+            _SG_ERROR(METAL_UNIFORMBLOCK_MSL_BUFFER_SLOT_OUT_OF_RANGE);
+            return false;
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
+        if (desc->storage_buffers[i].msl_buffer_n >= _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS) {
+            _SG_ERROR(METAL_STORAGEBUFFER_MSL_BUFFER_SLOT_OUT_OF_RANGE);
+            return false;
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_IMAGE_BINDSLOTS; i++) {
+        if (desc->images[i].msl_texture_n >= _SG_MTL_MAX_STAGE_IMAGE_BINDINGS) {
+            _SG_ERROR(METAL_IMAGE_MSL_TEXTURE_SLOT_OUT_OF_RANGE);
+            return false;
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+        if (desc->samplers[i].msl_sampler_n >= _SG_MTL_MAX_STAGE_SAMPLER_BINDINGS) {
+            _SG_ERROR(METAL_SAMPLER_MSL_SAMPLER_SLOT_OUT_OF_RANGE);
+            return false;
+        }
+    }
+    return true;
+}
+
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
+
+    // do a MSL bindslot range check also in release mode, and if that fails,
+    // also fail shader creation
+    if (!_sg_mtl_ensure_msl_bindslot_ranges(desc)) {
+        return SG_RESOURCESTATE_FAILED;
+    }
 
     // copy resource bindslot mappings
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
@@ -15040,6 +15128,36 @@ _SOKOL_PRIVATE int _sg_wgpu_dynoffset_cmp(const void* a, const void* b) {
     return 0;
 }
 
+// NOTE: this is an out-of-range check for WGSL bindslots that's also active in release mode
+_SOKOL_PRIVATE bool _sg_wgpu_ensure_wgsl_bindslot_ranges(const sg_shader_desc* desc) {
+    SOKOL_ASSERT(desc);
+    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
+        if (desc->uniform_blocks[i].wgsl_group0_binding_n >= _SG_WGPU_MAX_UB_BINDGROUP_BIND_SLOTS) {
+            _SG_ERROR(WGPU_UNIFORMBLOCK_WGSL_GROUP0_BINDING_OUT_OF_RANGE);
+            return false;
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
+        if (desc->storage_buffers[i].wgsl_group1_binding_n >= _SG_WGPU_MAX_IMG_SMP_SBUF_BIND_SLOTS) {
+            _SG_ERROR(WGPU_STORAGEBUFFER_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
+            return false;
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_IMAGE_BINDSLOTS; i++) {
+        if (desc->images[i].wgsl_group1_binding_n >= _SG_WGPU_MAX_IMG_SMP_SBUF_BIND_SLOTS) {
+            _SG_ERROR(WGPU_IMAGE_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
+            return false;
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+        if (desc->samplers[i].wgsl_group1_binding_n >= _SG_WGPU_MAX_IMG_SMP_SBUF_BIND_SLOTS) {
+            _SG_ERROR(WGPU_SAMPLER_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
+            return false;
+        }
+    }
+    return true;
+}
+
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(desc->vertex_func.source && desc->fragment_func.source);
@@ -15048,6 +15166,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
     SOKOL_ASSERT(shd->wgpu.bgl_ub == 0);
     SOKOL_ASSERT(shd->wgpu.bg_ub == 0);
     SOKOL_ASSERT(shd->wgpu.bgl_img_smp_sbuf == 0);
+
+    // do a release-mode bounds-check on wgsl bindslots, even though out-of-range
+    // bindslots can't cause out-of-bounds accesses in the wgpu backend, this
+    // is done to be consistent with the other backends
+    if (!_sg_wgpu_ensure_wgsl_bindslot_ranges(desc)) {
+        return SG_RESOURCESTATE_FAILED;
+    }
 
     // build shader modules
     shd->wgpu.vertex_func = _sg_wgpu_create_shader_func(&desc->vertex_func, desc->label);
@@ -16808,18 +16933,18 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             if (ub_desc->stage == SG_SHADERSTAGE_NONE) {
                 continue;
             }
-            _SG_VALIDATE(ub_desc->size > 0, VALIDATE_SHADERDESC_UB_SIZE_IS_ZERO);
+            _SG_VALIDATE(ub_desc->size > 0, VALIDATE_SHADERDESC_UNIFORMBLOCK_SIZE_IS_ZERO);
             #if defined(SOKOL_METAL)
-            _SG_VALIDATE(ub_desc->msl_buffer_n < _SG_MTL_MAX_STAGE_UB_BINDINGS, VALIDATE_SHADERDESC_UB_METAL_BUFFER_SLOT_OUT_OF_RANGE);
-            _SG_VALIDATE(_sg_validate_slot_bits(msl_buf_bits, ub_desc->stage, ub_desc->msl_buffer_n), VALIDATE_SHADERDESC_UB_METAL_BUFFER_SLOT_COLLISION);
+            _SG_VALIDATE(ub_desc->msl_buffer_n < _SG_MTL_MAX_STAGE_UB_BINDINGS, VALIDATE_SHADERDESC_UNIFORMBLOCK_METAL_BUFFER_SLOT_OUT_OF_RANGE);
+            _SG_VALIDATE(_sg_validate_slot_bits(msl_buf_bits, ub_desc->stage, ub_desc->msl_buffer_n), VALIDATE_SHADERDESC_UNIFORMBLOCK_METAL_BUFFER_SLOT_COLLISION);
             msl_buf_bits = _sg_validate_set_slot_bit(msl_buf_bits, ub_desc->stage, ub_desc->msl_buffer_n);
             #elif defined(SOKOL_D3D11)
-            _SG_VALIDATE(ub_desc->hlsl_register_b_n < _SG_D3D11_MAX_STAGE_UB_BINDINGS, VALIDATE_SHADERDESC_UB_HLSL_REGISTER_B_OUT_OF_RANGE);
-            _SG_VALIDATE(_sg_validate_slot_bits(hlsl_buf_bits, ub_desc->stage, ub_desc->hlsl_register_b_n), VALIDATE_SHADERDESC_UB_HLSL_REGISTER_B_COLLISION);
+            _SG_VALIDATE(ub_desc->hlsl_register_b_n < _SG_D3D11_MAX_STAGE_UB_BINDINGS, VALIDATE_SHADERDESC_UNIFORMBLOCK_HLSL_REGISTER_B_OUT_OF_RANGE);
+            _SG_VALIDATE(_sg_validate_slot_bits(hlsl_buf_bits, ub_desc->stage, ub_desc->hlsl_register_b_n), VALIDATE_SHADERDESC_UNIFORMBLOCK_HLSL_REGISTER_B_COLLISION);
             hlsl_buf_bits = _sg_validate_set_slot_bit(hlsl_buf_bits, ub_desc->stage, ub_desc->hlsl_register_b_n);
             #elif defined(SOKOL_WGPU)
-            _SG_VALIDATE(ub_desc->wgsl_group0_binding_n < _SG_WGPU_MAX_UB_BINDGROUP_BIND_SLOTS, VALIDATE_SHADERDESC_UB_WGSL_GROUP0_BINDING_OUT_OF_RANGE);
-            _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group0_bits, SG_SHADERSTAGE_NONE, ub_desc->wgsl_group0_binding_n), VALIDATE_SHADERDESC_UB_WGSL_GROUP0_BINDING_COLLISION);
+            _SG_VALIDATE(ub_desc->wgsl_group0_binding_n < _SG_WGPU_MAX_UB_BINDGROUP_BIND_SLOTS, VALIDATE_SHADERDESC_UNIFORMBLOCK_WGSL_GROUP0_BINDING_OUT_OF_RANGE);
+            _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group0_bits, SG_SHADERSTAGE_NONE, ub_desc->wgsl_group0_binding_n), VALIDATE_SHADERDESC_UNIFORMBLOCK_WGSL_GROUP0_BINDING_COLLISION);
             wgsl_group0_bits = _sg_validate_set_slot_bit(wgsl_group0_bits, SG_SHADERSTAGE_NONE, ub_desc->wgsl_group0_binding_n);
             #endif
             #if defined(_SOKOL_ANY_GL)
@@ -16829,10 +16954,10 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             for (size_t u_index = 0; u_index < SG_MAX_UNIFORMBLOCK_MEMBERS; u_index++) {
                 const sg_glsl_shader_uniform* u_desc = &ub_desc->glsl_uniforms[u_index];
                 if (u_desc->type != SG_UNIFORMTYPE_INVALID) {
-                    _SG_VALIDATE(uniforms_continuous, VALIDATE_SHADERDESC_NO_CONT_UB_MEMBERS);
-                    _SG_VALIDATE(u_desc->glsl_name, VALIDATE_SHADERDESC_UB_UNIFORM_GLSL_NAME);
+                    _SG_VALIDATE(uniforms_continuous, VALIDATE_SHADERDESC_UNIFORMBLOCK_NO_CONT_MEMBERS);
+                    _SG_VALIDATE(u_desc->glsl_name, VALIDATE_SHADERDESC_UNIFORMBLOCK_UNIFORM_GLSL_NAME);
                     const int array_count = u_desc->array_count;
-                    _SG_VALIDATE(array_count > 0, VALIDATE_SHADERDESC_UB_ARRAY_COUNT);
+                    _SG_VALIDATE(array_count > 0, VALIDATE_SHADERDESC_UNIFORMBLOCK_ARRAY_COUNT);
                     const uint32_t u_align = _sg_uniform_alignment(u_desc->type, array_count, ub_desc->layout);
                     const uint32_t u_size  = _sg_uniform_size(u_desc->type, array_count, ub_desc->layout);
                     uniform_offset = _sg_align_u32(uniform_offset, u_align);
@@ -16841,7 +16966,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                     // with std140, arrays are only allowed for FLOAT4, INT4, MAT4
                     if (ub_desc->layout == SG_UNIFORMLAYOUT_STD140) {
                         if (array_count > 1) {
-                            _SG_VALIDATE((u_desc->type == SG_UNIFORMTYPE_FLOAT4) || (u_desc->type == SG_UNIFORMTYPE_INT4) || (u_desc->type == SG_UNIFORMTYPE_MAT4), VALIDATE_SHADERDESC_UB_STD140_ARRAY_TYPE);
+                            _SG_VALIDATE((u_desc->type == SG_UNIFORMTYPE_FLOAT4) || (u_desc->type == SG_UNIFORMTYPE_INT4) || (u_desc->type == SG_UNIFORMTYPE_MAT4), VALIDATE_SHADERDESC_UNIFORMBLOCK_STD140_ARRAY_TYPE);
                         }
                     }
                 } else {
@@ -16851,8 +16976,8 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             if (ub_desc->layout == SG_UNIFORMLAYOUT_STD140) {
                 uniform_offset = _sg_align_u32(uniform_offset, 16);
             }
-            _SG_VALIDATE((size_t)uniform_offset == ub_desc->size, VALIDATE_SHADERDESC_UB_SIZE_MISMATCH);
-            _SG_VALIDATE(num_uniforms > 0, VALIDATE_SHADERDESC_NO_UB_MEMBERS);
+            _SG_VALIDATE((size_t)uniform_offset == ub_desc->size, VALIDATE_SHADERDESC_UNIFORMBLOCK_SIZE_MISMATCH);
+            _SG_VALIDATE(num_uniforms > 0, VALIDATE_SHADERDESC_UNIFORMBLOCK_NO_MEMBERS);
             #endif
         }
 
@@ -17417,7 +17542,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_uniforms(int ub_slot, const sg_range* dat
         SOKOL_ASSERT(pip->shader && (pip->shader->slot.id == pip->cmn.shader_id.id));
 
         const _sg_shader_t* shd = pip->shader;
-        _SG_VALIDATE(shd->cmn.uniform_blocks[ub_slot].stage != SG_SHADERSTAGE_NONE, VALIDATE_AUB_NO_UB_AT_SLOT);
+        _SG_VALIDATE(shd->cmn.uniform_blocks[ub_slot].stage != SG_SHADERSTAGE_NONE, VALIDATE_AUB_NO_UNIFORMBLOCK_AT_SLOT);
         _SG_VALIDATE(data->size == shd->cmn.uniform_blocks[ub_slot].size, VALIDATE_AUB_SIZE);
 
         return _sg_validate_end();
@@ -18834,7 +18959,12 @@ SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
     _sg.cur_pipeline = pip_id;
     _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
     SOKOL_ASSERT(pip);
+
     _sg.next_draw_valid = (SG_RESOURCESTATE_VALID == pip->slot.state);
+    if (!_sg.next_draw_valid) {
+        return;
+    }
+
     SOKOL_ASSERT(pip->shader && (pip->shader->slot.id == pip->cmn.shader_id.id));
     _sg_apply_pipeline(pip);
 
@@ -18857,6 +18987,9 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
         return;
     }
     if (!_sg.cur_pass.valid) {
+        return;
+    }
+    if (!_sg.next_draw_valid) {
         return;
     }
 
