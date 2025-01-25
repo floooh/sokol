@@ -1,5 +1,27 @@
 ## Updates
 
+### 25-Jan-2025
+
+Some internal sokol_gfx.h cleanup in `sg_make_shader()`, no behaviour changes
+for code that passes the sokol_gfx.h validation layer checks:
+
+- All backends now do a range-check on the shading-language specific
+  bindslot declarations in `sg_shader_desc` when creating a shader, and
+  this range check is also active in release mode (e.g. when the validation
+  layer and SOKOL_ASSERT checks are deactivated). When this rangecheck
+  fails, shader creation fails and the shader object is in the
+  `SG_RESOURCESTATE_FAILED` state.
+- A related release-mode issue has been fixed which caused a zero-page
+  segfault when trying to render with a pipeline object in `SG_RESOURCESTATE_FAILED`
+  state (which in this case was triggered by creating a pipeline object with
+  a shader in `SG_RESOURCESTATE_FAILED` state).
+  The intended behaviour is that rendering should be skipped when any resource
+  objects are used that are not in the `SG_RESOURCESTATE_VALID` state
+  (in debug mode, that same situation already was caught by the validation layer).
+
+For details, see issue https://github.com/floooh/sokol/issues/1198 and
+PR https://github.com/floooh/sokol/pull/1199.
+
 ### 23-Jan-2025
 
 A minor, potentially breaking update in the sokol-gfx GL backend when
