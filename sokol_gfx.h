@@ -3749,6 +3749,10 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(WGPU_CREATE_SAMPLER_FAILED, "wgpuDeviceCreateSampler() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_SHADER_MODULE_FAILED, "wgpuDeviceCreateShaderModule() failed") \
     _SG_LOGITEM_XMACRO(WGPU_SHADER_CREATE_BINDGROUP_LAYOUT_FAILED, "wgpuDeviceCreateBindGroupLayout() for shader stage failed") \
+    _SG_LOGITEM_XMACRO(WGPU_UNIFORMBLOCK_WGSL_GROUP0_BINDING_OUT_OF_RANGE, "uniform block 'wgsl_group0_binding_n' is out of range (must be 0..15)") \
+    _SG_LOGITEM_XMACRO(WGPU_STORAGEBUFFER_WGSL_GROUP1_BINDING_OUT_OF_RANGE, "storage buffer 'wgsl_group1_binding_n' is out of range (must be 0..127)") \
+    _SG_LOGITEM_XMACRO(WGPU_IMAGE_WGSL_GROUP1_BINDING_OUT_OF_RANGE, "image 'wgsl_group1_binding_n' is out of range (must be 0..127)") \
+    _SG_LOGITEM_XMACRO(WGPU_SAMPLER_WGSL_GROUP1_BINDING_OUT_OF_RANGE, "sampler 'wgsl_group1_binding_n' is out of range (must be 0..127)") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_PIPELINE_LAYOUT_FAILED, "wgpuDeviceCreatePipelineLayout() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_RENDER_PIPELINE_FAILED, "wgpuDeviceCreateRenderPipeline() failed") \
     _SG_LOGITEM_XMACRO(WGPU_ATTACHMENTS_CREATE_TEXTURE_VIEW_FAILED, "wgpuTextureCreateView() failed in create attachments") \
@@ -15124,6 +15128,36 @@ _SOKOL_PRIVATE int _sg_wgpu_dynoffset_cmp(const void* a, const void* b) {
     return 0;
 }
 
+// NOTE: this is an out-of-range check for WGSL bindslots that's also active in release mode
+_SOKOL_PRIVATE bool _sg_wgpu_ensure_wgsl_bindslot_ranges(const sg_shader_desc* desc) {
+    SOKOL_ASSERT(desc);
+    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
+        if (desc->uniform_blocks[i].wgsl_group0_binding_n >= _SG_WGPU_MAX_UB_BINDGROUP_BIND_SLOTS) {
+            _SG_ERROR(WGPU_UNIFORMBLOCK_WGSL_GROUP0_BINDING_OUT_OF_RANGE);
+            return false;
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
+        if (desc->storage_buffers[i].wgsl_group1_binding_n >= _SG_WGPU_MAX_IMG_SMP_SBUF_BIND_SLOTS) {
+            _SG_ERROR(WGPU_STORAGEBUFFER_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
+            return false;
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_IMAGE_BINDSLOTS; i++) {
+        if (desc->images[i].wgsl_group1_binding_n >= _SG_WGPU_MAX_IMG_SMP_SBUF_BIND_SLOTS) {
+            _SG_ERROR(WGPU_IMAGE_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
+            return false;
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+        if (desc->samplers[i].wgsl_group1_binding_n >= _SG_WGPU_MAX_IMG_SMP_SBUF_BIND_SLOTS) {
+            _SG_ERROR(WGPU_SAMPLER_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
+            return false;
+        }
+    }
+    return true;
+}
+
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(desc->vertex_func.source && desc->fragment_func.source);
@@ -15132,6 +15166,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
     SOKOL_ASSERT(shd->wgpu.bgl_ub == 0);
     SOKOL_ASSERT(shd->wgpu.bg_ub == 0);
     SOKOL_ASSERT(shd->wgpu.bgl_img_smp_sbuf == 0);
+
+    // do a release-mode bounds-check on wgsl bindslots, even though out-of-range
+    // bindslots can't cause out-of-bounds accesses in the wgpu backend, this
+    // is done to be consistent with the other backends
+    if (!_sg_wgpu_ensure_wgsl_bindslot_ranges(desc)) {
+        return SG_RESOURCESTATE_FAILED;
+    }
 
     // build shader modules
     shd->wgpu.vertex_func = _sg_wgpu_create_shader_func(&desc->vertex_func, desc->label);
