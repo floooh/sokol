@@ -3740,6 +3740,8 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(METAL_STORAGEBUFFER_MSL_BUFFER_SLOT_OUT_OF_RANGE, "storage buffer 'msl_buffer_n' is out of range (must be 8..15)") \
     _SG_LOGITEM_XMACRO(METAL_IMAGE_MSL_TEXTURE_SLOT_OUT_OF_RANGE, "image 'msl_texture_n' is out of range (must be 0..15)") \
     _SG_LOGITEM_XMACRO(METAL_SAMPLER_MSL_SAMPLER_SLOT_OUT_OF_RANGE, "sampler 'msl_sampler_n' is out of range (must be 0..15)") \
+    _SG_LOGITEM_XMACRO(METAL_CREATE_CPS_FAILED, "failed to create compute pipeline state (metal)") \
+    _SG_LOGITEM_XMACRO(METAL_CREATE_CPS_OUTPUT, "") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_FAILED, "failed to create render pipeline state (metal)") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_OUTPUT, "") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_DSS_FAILED, "failed to create depth stencil state (metal)") \
@@ -3877,6 +3879,8 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_ATTR_STRING_TOO_LONG, "vertex attribute name/semantic string too long (max len 16)") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_CANARY, "sg_pipeline_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_SHADER, "sg_pipeline_desc.shader missing or invalid") \
+    _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_COMPUTE_SHADER_EXPECTED, "sg_pipeline_desc.shader must be a compute shader") \
+    _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_NO_COMPUTE_SHADER_EXPECTED, "sg_pipeline_desc.compute is false, but shader is a compute shader") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_NO_CONT_ATTRS, "sg_pipeline_desc.layout.attrs is not continuous") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4, "sg_pipeline_desc.layout.buffers[].stride must be multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_ATTR_SEMANTICS, "D3D11 missing vertex attribute semantics in shader") \
@@ -5270,6 +5274,7 @@ typedef struct {
 
 typedef struct {
     uint32_t required_bindings_and_uniforms;
+    bool is_compute;
     _sg_shader_uniform_block_t uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
     _sg_shader_storage_buffer_t storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
     _sg_shader_image_t images[SG_MAX_IMAGE_BINDSLOTS];
@@ -5278,6 +5283,7 @@ typedef struct {
 } _sg_shader_common_t;
 
 _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_shader_desc* desc) {
+    cmn->is_compute = desc->compute_func.source || desc->compute_func.bytecode.ptr;
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
         const sg_shader_uniform_block* src = &desc->uniform_blocks[i];
         _sg_shader_uniform_block_t* dst = &cmn->uniform_blocks[i];
@@ -5335,6 +5341,7 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
 typedef struct {
     bool vertex_buffer_layout_active[SG_MAX_VERTEXBUFFER_BINDSLOTS];
     bool use_instanced_draw;
+    bool is_compute;
     uint32_t required_bindings_and_uniforms;
     sg_shader shader_id;
     sg_vertex_layout_state layout;
@@ -5353,6 +5360,9 @@ typedef struct {
 
 _SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT((desc->color_count >= 0) && (desc->color_count <= SG_MAX_COLOR_ATTACHMENTS));
+
+    // FIXME: most of this isn't needed for compute pipelines
+
     const uint32_t required_bindings_flag = (1 << SG_MAX_UNIFORMBLOCK_BINDSLOTS);
     for (int i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
         const sg_vertex_attr_state* a_state = &desc->layout.attrs[i];
@@ -5362,6 +5372,7 @@ _SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const s
             cmn->required_bindings_and_uniforms |= required_bindings_flag;
         }
     }
+    cmn->is_compute = desc->compute;
     cmn->use_instanced_draw = false;
     cmn->shader_id = desc->shader;
     cmn->layout = desc->layout;
@@ -5834,8 +5845,9 @@ typedef struct {
         MTLCullMode cull_mode;
         MTLWinding winding;
         uint32_t stencil_ref;
-        int rps;
-        int dss;
+        int cps;    // MTLComputePipelineState
+        int rps;    // MTLRenderPipelineState
+        int dss;    // MTLDepthStencilState
     } mtl;
 } _sg_mtl_pipeline_t;
 typedef _sg_mtl_pipeline_t _sg_pipeline_t;
@@ -13033,130 +13045,147 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
 
     pip->shader = shd;
 
-    sg_primitive_type prim_type = desc->primitive_type;
-    pip->mtl.prim_type = _sg_mtl_primitive_type(prim_type);
-    pip->mtl.index_size = _sg_mtl_index_size(pip->cmn.index_type);
-    if (SG_INDEXTYPE_NONE != pip->cmn.index_type) {
-        pip->mtl.index_type = _sg_mtl_index_type(pip->cmn.index_type);
-    }
-    pip->mtl.cull_mode = _sg_mtl_cull_mode(desc->cull_mode);
-    pip->mtl.winding = _sg_mtl_winding(desc->face_winding);
-    pip->mtl.stencil_ref = desc->stencil.ref;
-
-    // create vertex-descriptor
-    MTLVertexDescriptor* vtx_desc = [MTLVertexDescriptor vertexDescriptor];
-    for (NSUInteger attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
-        const sg_vertex_attr_state* a_state = &desc->layout.attrs[attr_index];
-        if (a_state->format == SG_VERTEXFORMAT_INVALID) {
-            break;
+    if (pip->cmn.is_compute) {
+        NSError* err = NULL;
+        id<MTLComputePipelineState> mtl_cps = [_sg.mtl.device
+            newComputePipelineStateWithFunction:_sg_mtl_id(shd->mtl.compute_func.mtl_func)
+            error:&err];
+        if (nil == mtl_cps) {
+            SOKOL_ASSERT(err);
+            _SG_ERROR(METAL_CREATE_CPS_FAILED);
+            _SG_LOGMSG(METAL_CREATE_CPS_OUTPUT, [err.localizedDescription UTF8String]);
+            return SG_RESOURCESTATE_FAILED;
         }
-        SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
-        SOKOL_ASSERT(pip->cmn.vertex_buffer_layout_active[a_state->buffer_index]);
-        vtx_desc.attributes[attr_index].format = _sg_mtl_vertex_format(a_state->format);
-        vtx_desc.attributes[attr_index].offset = (NSUInteger)a_state->offset;
-        vtx_desc.attributes[attr_index].bufferIndex = (NSUInteger)(a_state->buffer_index + SG_MAX_UNIFORMBLOCK_BINDSLOTS + SG_MAX_STORAGEBUFFER_BINDSLOTS);
-    }
-    for (NSUInteger layout_index = 0; layout_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; layout_index++) {
-        if (pip->cmn.vertex_buffer_layout_active[layout_index]) {
-            const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[layout_index];
-            const NSUInteger mtl_vb_slot = layout_index + SG_MAX_UNIFORMBLOCK_BINDSLOTS + SG_MAX_STORAGEBUFFER_BINDSLOTS;
-            SOKOL_ASSERT(l_state->stride > 0);
-            vtx_desc.layouts[mtl_vb_slot].stride = (NSUInteger)l_state->stride;
-            vtx_desc.layouts[mtl_vb_slot].stepFunction = _sg_mtl_step_function(l_state->step_func);
-            vtx_desc.layouts[mtl_vb_slot].stepRate = (NSUInteger)l_state->step_rate;
-            if (SG_VERTEXSTEP_PER_INSTANCE == l_state->step_func) {
-                // NOTE: not actually used in _sg_mtl_draw()
-                pip->cmn.use_instanced_draw = true;
+        // NOTE: no easy way to set the label on a compute pipeline
+        pip->mtl.cps = _sg_mtl_add_resource(mtl_cps);
+        _SG_OBJC_RELEASE(mtl_cps);
+    } else {
+        sg_primitive_type prim_type = desc->primitive_type;
+        pip->mtl.prim_type = _sg_mtl_primitive_type(prim_type);
+        pip->mtl.index_size = _sg_mtl_index_size(pip->cmn.index_type);
+        if (SG_INDEXTYPE_NONE != pip->cmn.index_type) {
+            pip->mtl.index_type = _sg_mtl_index_type(pip->cmn.index_type);
+        }
+        pip->mtl.cull_mode = _sg_mtl_cull_mode(desc->cull_mode);
+        pip->mtl.winding = _sg_mtl_winding(desc->face_winding);
+        pip->mtl.stencil_ref = desc->stencil.ref;
+
+        // create vertex-descriptor
+        MTLVertexDescriptor* vtx_desc = [MTLVertexDescriptor vertexDescriptor];
+        for (NSUInteger attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+            const sg_vertex_attr_state* a_state = &desc->layout.attrs[attr_index];
+            if (a_state->format == SG_VERTEXFORMAT_INVALID) {
+                break;
+            }
+            SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
+            SOKOL_ASSERT(pip->cmn.vertex_buffer_layout_active[a_state->buffer_index]);
+            vtx_desc.attributes[attr_index].format = _sg_mtl_vertex_format(a_state->format);
+            vtx_desc.attributes[attr_index].offset = (NSUInteger)a_state->offset;
+            vtx_desc.attributes[attr_index].bufferIndex = (NSUInteger)(a_state->buffer_index + SG_MAX_UNIFORMBLOCK_BINDSLOTS + SG_MAX_STORAGEBUFFER_BINDSLOTS);
+        }
+        for (NSUInteger layout_index = 0; layout_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; layout_index++) {
+            if (pip->cmn.vertex_buffer_layout_active[layout_index]) {
+                const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[layout_index];
+                const NSUInteger mtl_vb_slot = layout_index + SG_MAX_UNIFORMBLOCK_BINDSLOTS + SG_MAX_STORAGEBUFFER_BINDSLOTS;
+                SOKOL_ASSERT(l_state->stride > 0);
+                vtx_desc.layouts[mtl_vb_slot].stride = (NSUInteger)l_state->stride;
+                vtx_desc.layouts[mtl_vb_slot].stepFunction = _sg_mtl_step_function(l_state->step_func);
+                vtx_desc.layouts[mtl_vb_slot].stepRate = (NSUInteger)l_state->step_rate;
+                if (SG_VERTEXSTEP_PER_INSTANCE == l_state->step_func) {
+                    // NOTE: not actually used in _sg_mtl_draw()
+                    pip->cmn.use_instanced_draw = true;
+                }
             }
         }
-    }
 
-    // render-pipeline descriptor
-    MTLRenderPipelineDescriptor* rp_desc = [[MTLRenderPipelineDescriptor alloc] init];
-    rp_desc.vertexDescriptor = vtx_desc;
-    SOKOL_ASSERT(shd->mtl.vertex_func.mtl_func != _SG_MTL_INVALID_SLOT_INDEX);
-    rp_desc.vertexFunction = _sg_mtl_id(shd->mtl.vertex_func.mtl_func);
-    SOKOL_ASSERT(shd->mtl.fragment_func.mtl_func != _SG_MTL_INVALID_SLOT_INDEX);
-    rp_desc.fragmentFunction = _sg_mtl_id(shd->mtl.fragment_func.mtl_func);
-    rp_desc.rasterSampleCount = (NSUInteger)desc->sample_count;
-    rp_desc.alphaToCoverageEnabled = desc->alpha_to_coverage_enabled;
-    rp_desc.alphaToOneEnabled = NO;
-    rp_desc.rasterizationEnabled = YES;
-    rp_desc.depthAttachmentPixelFormat = _sg_mtl_pixel_format(desc->depth.pixel_format);
-    if (desc->depth.pixel_format == SG_PIXELFORMAT_DEPTH_STENCIL) {
-        rp_desc.stencilAttachmentPixelFormat = _sg_mtl_pixel_format(desc->depth.pixel_format);
-    }
-    for (NSUInteger i = 0; i < (NSUInteger)desc->color_count; i++) {
-        SOKOL_ASSERT(i < SG_MAX_COLOR_ATTACHMENTS);
-        const sg_color_target_state* cs = &desc->colors[i];
-        rp_desc.colorAttachments[i].pixelFormat = _sg_mtl_pixel_format(cs->pixel_format);
-        rp_desc.colorAttachments[i].writeMask = _sg_mtl_color_write_mask(cs->write_mask);
-        rp_desc.colorAttachments[i].blendingEnabled = cs->blend.enabled;
-        rp_desc.colorAttachments[i].alphaBlendOperation = _sg_mtl_blend_op(cs->blend.op_alpha);
-        rp_desc.colorAttachments[i].rgbBlendOperation = _sg_mtl_blend_op(cs->blend.op_rgb);
-        rp_desc.colorAttachments[i].destinationAlphaBlendFactor = _sg_mtl_blend_factor(cs->blend.dst_factor_alpha);
-        rp_desc.colorAttachments[i].destinationRGBBlendFactor = _sg_mtl_blend_factor(cs->blend.dst_factor_rgb);
-        rp_desc.colorAttachments[i].sourceAlphaBlendFactor = _sg_mtl_blend_factor(cs->blend.src_factor_alpha);
-        rp_desc.colorAttachments[i].sourceRGBBlendFactor = _sg_mtl_blend_factor(cs->blend.src_factor_rgb);
-    }
-    #if defined(SOKOL_DEBUG)
-        if (desc->label) {
-            rp_desc.label = [NSString stringWithFormat:@"%s", desc->label];
+        // render-pipeline descriptor
+        MTLRenderPipelineDescriptor* rp_desc = [[MTLRenderPipelineDescriptor alloc] init];
+        rp_desc.vertexDescriptor = vtx_desc;
+        SOKOL_ASSERT(shd->mtl.vertex_func.mtl_func != _SG_MTL_INVALID_SLOT_INDEX);
+        rp_desc.vertexFunction = _sg_mtl_id(shd->mtl.vertex_func.mtl_func);
+        SOKOL_ASSERT(shd->mtl.fragment_func.mtl_func != _SG_MTL_INVALID_SLOT_INDEX);
+        rp_desc.fragmentFunction = _sg_mtl_id(shd->mtl.fragment_func.mtl_func);
+        rp_desc.rasterSampleCount = (NSUInteger)desc->sample_count;
+        rp_desc.alphaToCoverageEnabled = desc->alpha_to_coverage_enabled;
+        rp_desc.alphaToOneEnabled = NO;
+        rp_desc.rasterizationEnabled = YES;
+        rp_desc.depthAttachmentPixelFormat = _sg_mtl_pixel_format(desc->depth.pixel_format);
+        if (desc->depth.pixel_format == SG_PIXELFORMAT_DEPTH_STENCIL) {
+            rp_desc.stencilAttachmentPixelFormat = _sg_mtl_pixel_format(desc->depth.pixel_format);
         }
-    #endif
-    NSError* err = NULL;
-    id<MTLRenderPipelineState> mtl_rps = [_sg.mtl.device newRenderPipelineStateWithDescriptor:rp_desc error:&err];
-    _SG_OBJC_RELEASE(rp_desc);
-    if (nil == mtl_rps) {
-        SOKOL_ASSERT(err);
-        _SG_ERROR(METAL_CREATE_RPS_FAILED);
-        _SG_LOGMSG(METAL_CREATE_RPS_OUTPUT, [err.localizedDescription UTF8String]);
-        return SG_RESOURCESTATE_FAILED;
-    }
-    pip->mtl.rps = _sg_mtl_add_resource(mtl_rps);
-    _SG_OBJC_RELEASE(mtl_rps);
+        for (NSUInteger i = 0; i < (NSUInteger)desc->color_count; i++) {
+            SOKOL_ASSERT(i < SG_MAX_COLOR_ATTACHMENTS);
+            const sg_color_target_state* cs = &desc->colors[i];
+            rp_desc.colorAttachments[i].pixelFormat = _sg_mtl_pixel_format(cs->pixel_format);
+            rp_desc.colorAttachments[i].writeMask = _sg_mtl_color_write_mask(cs->write_mask);
+            rp_desc.colorAttachments[i].blendingEnabled = cs->blend.enabled;
+            rp_desc.colorAttachments[i].alphaBlendOperation = _sg_mtl_blend_op(cs->blend.op_alpha);
+            rp_desc.colorAttachments[i].rgbBlendOperation = _sg_mtl_blend_op(cs->blend.op_rgb);
+            rp_desc.colorAttachments[i].destinationAlphaBlendFactor = _sg_mtl_blend_factor(cs->blend.dst_factor_alpha);
+            rp_desc.colorAttachments[i].destinationRGBBlendFactor = _sg_mtl_blend_factor(cs->blend.dst_factor_rgb);
+            rp_desc.colorAttachments[i].sourceAlphaBlendFactor = _sg_mtl_blend_factor(cs->blend.src_factor_alpha);
+            rp_desc.colorAttachments[i].sourceRGBBlendFactor = _sg_mtl_blend_factor(cs->blend.src_factor_rgb);
+        }
+        #if defined(SOKOL_DEBUG)
+            if (desc->label) {
+                rp_desc.label = [NSString stringWithFormat:@"%s", desc->label];
+            }
+        #endif
+        NSError* err = NULL;
+        id<MTLRenderPipelineState> mtl_rps = [_sg.mtl.device newRenderPipelineStateWithDescriptor:rp_desc error:&err];
+        _SG_OBJC_RELEASE(rp_desc);
+        if (nil == mtl_rps) {
+            SOKOL_ASSERT(err);
+            _SG_ERROR(METAL_CREATE_RPS_FAILED);
+            _SG_LOGMSG(METAL_CREATE_RPS_OUTPUT, [err.localizedDescription UTF8String]);
+            return SG_RESOURCESTATE_FAILED;
+        }
+        pip->mtl.rps = _sg_mtl_add_resource(mtl_rps);
+        _SG_OBJC_RELEASE(mtl_rps);
 
-    // depth-stencil-state
-    MTLDepthStencilDescriptor* ds_desc = [[MTLDepthStencilDescriptor alloc] init];
-    ds_desc.depthCompareFunction = _sg_mtl_compare_func(desc->depth.compare);
-    ds_desc.depthWriteEnabled = desc->depth.write_enabled;
-    if (desc->stencil.enabled) {
-        const sg_stencil_face_state* sb = &desc->stencil.back;
-        ds_desc.backFaceStencil = [[MTLStencilDescriptor alloc] init];
-        ds_desc.backFaceStencil.stencilFailureOperation = _sg_mtl_stencil_op(sb->fail_op);
-        ds_desc.backFaceStencil.depthFailureOperation = _sg_mtl_stencil_op(sb->depth_fail_op);
-        ds_desc.backFaceStencil.depthStencilPassOperation = _sg_mtl_stencil_op(sb->pass_op);
-        ds_desc.backFaceStencil.stencilCompareFunction = _sg_mtl_compare_func(sb->compare);
-        ds_desc.backFaceStencil.readMask = desc->stencil.read_mask;
-        ds_desc.backFaceStencil.writeMask = desc->stencil.write_mask;
-        const sg_stencil_face_state* sf = &desc->stencil.front;
-        ds_desc.frontFaceStencil = [[MTLStencilDescriptor alloc] init];
-        ds_desc.frontFaceStencil.stencilFailureOperation = _sg_mtl_stencil_op(sf->fail_op);
-        ds_desc.frontFaceStencil.depthFailureOperation = _sg_mtl_stencil_op(sf->depth_fail_op);
-        ds_desc.frontFaceStencil.depthStencilPassOperation = _sg_mtl_stencil_op(sf->pass_op);
-        ds_desc.frontFaceStencil.stencilCompareFunction = _sg_mtl_compare_func(sf->compare);
-        ds_desc.frontFaceStencil.readMask = desc->stencil.read_mask;
-        ds_desc.frontFaceStencil.writeMask = desc->stencil.write_mask;
-    }
-    #if defined(SOKOL_DEBUG)
-        if (desc->label) {
-            ds_desc.label = [NSString stringWithFormat:@"%s.dss", desc->label];
+        // depth-stencil-state
+        MTLDepthStencilDescriptor* ds_desc = [[MTLDepthStencilDescriptor alloc] init];
+        ds_desc.depthCompareFunction = _sg_mtl_compare_func(desc->depth.compare);
+        ds_desc.depthWriteEnabled = desc->depth.write_enabled;
+        if (desc->stencil.enabled) {
+            const sg_stencil_face_state* sb = &desc->stencil.back;
+            ds_desc.backFaceStencil = [[MTLStencilDescriptor alloc] init];
+            ds_desc.backFaceStencil.stencilFailureOperation = _sg_mtl_stencil_op(sb->fail_op);
+            ds_desc.backFaceStencil.depthFailureOperation = _sg_mtl_stencil_op(sb->depth_fail_op);
+            ds_desc.backFaceStencil.depthStencilPassOperation = _sg_mtl_stencil_op(sb->pass_op);
+            ds_desc.backFaceStencil.stencilCompareFunction = _sg_mtl_compare_func(sb->compare);
+            ds_desc.backFaceStencil.readMask = desc->stencil.read_mask;
+            ds_desc.backFaceStencil.writeMask = desc->stencil.write_mask;
+            const sg_stencil_face_state* sf = &desc->stencil.front;
+            ds_desc.frontFaceStencil = [[MTLStencilDescriptor alloc] init];
+            ds_desc.frontFaceStencil.stencilFailureOperation = _sg_mtl_stencil_op(sf->fail_op);
+            ds_desc.frontFaceStencil.depthFailureOperation = _sg_mtl_stencil_op(sf->depth_fail_op);
+            ds_desc.frontFaceStencil.depthStencilPassOperation = _sg_mtl_stencil_op(sf->pass_op);
+            ds_desc.frontFaceStencil.stencilCompareFunction = _sg_mtl_compare_func(sf->compare);
+            ds_desc.frontFaceStencil.readMask = desc->stencil.read_mask;
+            ds_desc.frontFaceStencil.writeMask = desc->stencil.write_mask;
         }
-    #endif
-    id<MTLDepthStencilState> mtl_dss = [_sg.mtl.device newDepthStencilStateWithDescriptor:ds_desc];
-    _SG_OBJC_RELEASE(ds_desc);
-    if (nil == mtl_dss) {
-        _SG_ERROR(METAL_CREATE_DSS_FAILED);
-        return SG_RESOURCESTATE_FAILED;
+        #if defined(SOKOL_DEBUG)
+            if (desc->label) {
+                ds_desc.label = [NSString stringWithFormat:@"%s.dss", desc->label];
+            }
+        #endif
+        id<MTLDepthStencilState> mtl_dss = [_sg.mtl.device newDepthStencilStateWithDescriptor:ds_desc];
+        _SG_OBJC_RELEASE(ds_desc);
+        if (nil == mtl_dss) {
+            _SG_ERROR(METAL_CREATE_DSS_FAILED);
+            return SG_RESOURCESTATE_FAILED;
+        }
+        pip->mtl.dss = _sg_mtl_add_resource(mtl_dss);
+        _SG_OBJC_RELEASE(mtl_dss);
     }
-    pip->mtl.dss = _sg_mtl_add_resource(mtl_dss);
-    _SG_OBJC_RELEASE(mtl_dss);
     return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_mtl_discard_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     // it's valid to call release resource with a 'null resource'
+    _sg_mtl_release_resource(_sg.frame_index, pip->mtl.cps);
     _sg_mtl_release_resource(_sg.frame_index, pip->mtl.rps);
     _sg_mtl_release_resource(_sg.frame_index, pip->mtl.dss);
 }
@@ -17154,30 +17183,35 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
         _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_PIPELINEDESC_CANARY);
         _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_PIPELINEDESC_CANARY);
         _SG_VALIDATE(desc->shader.id != SG_INVALID_ID, VALIDATE_PIPELINEDESC_SHADER);
-        for (int buf_index = 0; buf_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; buf_index++) {
-            const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[buf_index];
-            if (l_state->stride == 0) {
-                continue;
-            }
-            _SG_VALIDATE(_sg_multiple_u64((uint64_t)l_state->stride, 4), VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4);
-        }
         const _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, desc->shader.id);
         _SG_VALIDATE(0 != shd, VALIDATE_PIPELINEDESC_SHADER);
         if (shd) {
             _SG_VALIDATE(shd->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_PIPELINEDESC_SHADER);
-            bool attrs_cont = true;
-            for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
-                const sg_vertex_attr_state* a_state = &desc->layout.attrs[attr_index];
-                if (a_state->format == SG_VERTEXFORMAT_INVALID) {
-                    attrs_cont = false;
+            if (desc->compute) {
+                _SG_VALIDATE(shd->cmn.is_compute, VALIDATE_PIPELINEDESC_COMPUTE_SHADER_EXPECTED);
+            } else {
+                _SG_VALIDATE(!shd->cmn.is_compute, VALIDATE_PIPELINEDESC_NO_COMPUTE_SHADER_EXPECTED);
+                bool attrs_cont = true;
+                for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+                    const sg_vertex_attr_state* a_state = &desc->layout.attrs[attr_index];
+                    if (a_state->format == SG_VERTEXFORMAT_INVALID) {
+                        attrs_cont = false;
+                        continue;
+                    }
+                    _SG_VALIDATE(attrs_cont, VALIDATE_PIPELINEDESC_NO_CONT_ATTRS);
+                    SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
+                    #if defined(SOKOL_D3D11)
+                    // on D3D11, semantic names (and semantic indices) must be provided
+                    _SG_VALIDATE(!_sg_strempty(&shd->d3d11.attrs[attr_index].sem_name), VALIDATE_PIPELINEDESC_ATTR_SEMANTICS);
+                    #endif
+                }
+            }
+            for (int buf_index = 0; buf_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; buf_index++) {
+                const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[buf_index];
+                if (l_state->stride == 0) {
                     continue;
                 }
-                _SG_VALIDATE(attrs_cont, VALIDATE_PIPELINEDESC_NO_CONT_ATTRS);
-                SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
-                #if defined(SOKOL_D3D11)
-                // on D3D11, semantic names (and semantic indices) must be provided
-                _SG_VALIDATE(!_sg_strempty(&shd->d3d11.attrs[attr_index].sem_name), VALIDATE_PIPELINEDESC_ATTR_SEMANTICS);
-                #endif
+                _SG_VALIDATE(_sg_multiple_u64((uint64_t)l_state->stride, 4), VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4);
             }
         }
         return _sg_validate_end();
@@ -17761,6 +17795,8 @@ _SOKOL_PRIVATE sg_shader_desc _sg_shader_desc_defaults(const sg_shader_desc* des
 
 _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_desc* desc) {
     sg_pipeline_desc def = *desc;
+
+    // FIXME: should we actually do all this stuff for a compute pipeline?
 
     def.primitive_type = _sg_def(def.primitive_type, SG_PRIMITIVETYPE_TRIANGLES);
     def.index_type = _sg_def(def.index_type, SG_INDEXTYPE_NONE);
