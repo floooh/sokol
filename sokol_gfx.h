@@ -3853,7 +3853,6 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_GLSL_BINDING_COLLISION, "storage buffer 'glsl_binding_n' must be unique across shader stages") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_WGSL_GROUP1_BINDING_OUT_OF_RANGE, "storage buffer 'wgsl_group1_binding_n' is out of range (must be 0..127)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_WGSL_GROUP1_BINDING_COLLISION, "storage buffer 'wgsl_group1_binding_n' must be unique across all images, samplers and storage buffers") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEBUFFER_READONLY, "shader stage storage buffers must be readonly (sg_shader_desc.storage_buffers[].readonly)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_METAL_TEXTURE_SLOT_OUT_OF_RANGE, "image 'msl_texture_n' is out of range (must be 0..15)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_METAL_TEXTURE_SLOT_COLLISION, "image 'msl_texture_n' must be unique in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_HLSL_REGISTER_T_OUT_OF_RANGE, "image 'hlsl_register_t_n' is out of range (must be 0..23)") \
@@ -5815,6 +5814,7 @@ typedef struct {
     struct {
         _sg_mtl_shader_func_t vertex_func;
         _sg_mtl_shader_func_t fragment_func;
+        _sg_mtl_shader_func_t compute_func;
         uint8_t ub_buffer_n[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
         uint8_t img_texture_n[SG_MAX_IMAGE_BINDSLOTS];
         uint8_t smp_sampler_n[SG_MAX_SAMPLER_BINDSLOTS];
@@ -13002,11 +13002,20 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const 
     }
 
     // create metal library and function objects
-    bool shd_valid = _sg_mtl_create_shader_func(&desc->vertex_func, desc->label, "vs", &shd->mtl.vertex_func);
-    shd_valid &= _sg_mtl_create_shader_func(&desc->fragment_func, desc->label, "fs", &shd->mtl.fragment_func);
+    bool shd_valid = true;
+    if (desc->vertex_func.source || desc->vertex_func.bytecode.ptr) {
+        shd_valid &= _sg_mtl_create_shader_func(&desc->vertex_func, desc->label, "vs", &shd->mtl.vertex_func);
+    }
+    if (desc->fragment_func.source || desc->fragment_func.bytecode.ptr) {
+        shd_valid &= _sg_mtl_create_shader_func(&desc->fragment_func, desc->label, "fs", &shd->mtl.fragment_func);
+    }
+    if (desc->compute_func.source || desc->compute_func.bytecode.ptr) {
+        shd_valid &= _sg_mtl_create_shader_func(&desc->compute_func, desc->label, "cs", &shd->mtl.compute_func);
+    }
     if (!shd_valid) {
         _sg_mtl_discard_shader_func(&shd->mtl.vertex_func);
         _sg_mtl_discard_shader_func(&shd->mtl.fragment_func);
+        _sg_mtl_discard_shader_func(&shd->mtl.compute_func);
     }
     return shd_valid ? SG_RESOURCESTATE_VALID : SG_RESOURCESTATE_FAILED;
 }
@@ -13015,6 +13024,7 @@ _SOKOL_PRIVATE void _sg_mtl_discard_shader(_sg_shader_t* shd) {
     SOKOL_ASSERT(shd);
     _sg_mtl_discard_shader_func(&shd->mtl.vertex_func);
     _sg_mtl_discard_shader_func(&shd->mtl.fragment_func);
+    _sg_mtl_discard_shader_func(&shd->mtl.compute_func);
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
@@ -16861,7 +16871,8 @@ _SOKOL_PRIVATE _sg_u128_t _sg_validate_set_slot_bit(_sg_u128_t bits, sg_shader_s
             bits.hi |= 1ULL << slot;
             break;
         case SG_SHADERSTAGE_COMPUTE:
-            SOKOL_ASSERT(false); // FIXME
+            SOKOL_ASSERT(slot < 64);
+            bits.lo |= 1ULL << slot;
             break;
     }
     return bits;
@@ -16885,6 +16896,10 @@ _SOKOL_PRIVATE bool _sg_validate_slot_bits(_sg_u128_t bits, sg_shader_stage stag
         case SG_SHADERSTAGE_FRAGMENT:
             SOKOL_ASSERT(slot < 64);
             mask.hi = 1ULL << slot;
+            break;
+        case SG_SHADERSTAGE_COMPUTE:
+            SOKOL_ASSERT(slot < 64);
+            mask.lo = 1ULL << slot;
             break;
         default:
             SOKOL_UNREACHABLE;
@@ -16945,6 +16960,9 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
         }
         if (0 != desc->fragment_func.bytecode.ptr) {
             _SG_VALIDATE(desc->fragment_func.bytecode.size > 0, VALIDATE_SHADERDESC_NO_BYTECODE_SIZE);
+        }
+        if (0 != desc->compute_func.bytecode.ptr) {
+            _SG_VALIDATE(desc->compute_func.bytecode.size > 0, VALIDATE_SHADERDESC_NO_BYTECODE_SIZE);
         }
 
         #if defined(SOKOL_METAL)
@@ -17019,7 +17037,6 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             if (sbuf_desc->stage == SG_SHADERSTAGE_NONE) {
                 continue;
             }
-            _SG_VALIDATE(sbuf_desc->readonly, VALIDATE_SHADERDESC_STORAGEBUFFER_READONLY);
             #if defined(SOKOL_METAL)
             _SG_VALIDATE((sbuf_desc->msl_buffer_n >= _SG_MTL_MAX_STAGE_UB_BINDINGS) && (sbuf_desc->msl_buffer_n < _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS), VALIDATE_SHADERDESC_STORAGEBUFFER_METAL_BUFFER_SLOT_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(msl_buf_bits, sbuf_desc->stage, sbuf_desc->msl_buffer_n), VALIDATE_SHADERDESC_STORAGEBUFFER_METAL_BUFFER_SLOT_COLLISION);
@@ -17696,9 +17713,11 @@ _SOKOL_PRIVATE sg_shader_desc _sg_shader_desc_defaults(const sg_shader_desc* des
     #if defined(SOKOL_METAL)
         def.vertex_func.entry = _sg_def(def.vertex_func.entry, "_main");
         def.fragment_func.entry = _sg_def(def.fragment_func.entry, "_main");
+        def.compute_func.entry = _sg_def(def.compute_func.entry, "_main");
     #else
         def.vertex_func.entry = _sg_def(def.vertex_func.entry, "main");
         def.fragment_func.entry = _sg_def(def.fragment_func.entry, "main");
+        def.compute_func.entry = _sg_def(def.compute_func.entry, "main");
     #endif
     #if defined(SOKOL_D3D11)
         if (def.vertex_func.source) {
@@ -17706,6 +17725,9 @@ _SOKOL_PRIVATE sg_shader_desc _sg_shader_desc_defaults(const sg_shader_desc* des
         }
         if (def.fragment_func.source) {
             def.fragment_func.d3d11_target = _sg_def(def.fragment_func.d3d11_target, "ps_4_0");
+        }
+        if (def.compute_func.source) {
+            def.fragment_func.d3d11_target = _sg_def(def.fragment_func.d3d11_target,"cs_5_0");
         }
     #endif
     for (size_t ub_index = 0; ub_index < SG_MAX_UNIFORMBLOCK_BINDSLOTS; ub_index++) {
