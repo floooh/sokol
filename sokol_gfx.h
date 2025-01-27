@@ -19451,7 +19451,9 @@ SOKOL_API_IMPL void sg_end_pass(void) {
     // NOTE: don't exit early if !_sg.cur_pass.valid
     _sg_end_pass();
     _sg.cur_pipeline.id = SG_INVALID_ID;
-    _sg_compute_on_endpass();
+    if (_sg.cur_pass.is_compute) {
+        _sg_compute_on_endpass();
+    }
     _sg_clear(&_sg.cur_pass, sizeof(_sg.cur_pass));
     _SG_TRACE_NOARGS(end_pass);
 }
