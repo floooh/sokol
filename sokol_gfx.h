@@ -3609,11 +3609,13 @@ typedef struct sg_frame_stats_metal_bindings {
     uint32_t num_set_fragment_buffer;
     uint32_t num_set_fragment_texture;
     uint32_t num_set_fragment_sampler_state;
+    uint32_t num_set_compute_buffer;
 } sg_frame_stats_metal_bindings;
 
 typedef struct sg_frame_stats_metal_uniforms {
     uint32_t num_set_vertex_buffer_offset;
     uint32_t num_set_fragment_buffer_offset;
+    uint32_t num_set_compute_buffer_offset;
 } sg_frame_stats_metal_uniforms;
 
 typedef struct sg_frame_stats_metal {
@@ -3886,6 +3888,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_NO_CONT_ATTRS, "sg_pipeline_desc.layout.attrs is not continuous") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4, "sg_pipeline_desc.layout.buffers[].stride must be multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_ATTR_SEMANTICS, "D3D11 missing vertex attribute semantics in shader") \
+    _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_SHADER_READONLY_STORAGEBUFFERS, "sg_pipeline_desc.shader: only readonly storage buffer bindings allowed in render pipelines") \
     _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_CANARY, "sg_attachments_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_NO_ATTACHMENTS, "sg_attachments_desc no color or depth-stencil attachments") \
     _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_NO_CONT_COLOR_ATTS, "color attachments must occupy continuous slots") \
@@ -3966,6 +3969,8 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE, "sg_apply_bindings: must be called after sg_apply_pipeline") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE_EXISTS, "sg_apply_bindings: currently applied pipeline object no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE_VALID, "sg_apply_bindings: currently applied pipeline object not in valid state") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_COMPUTE_EXPECTED_NO_VBS, "sg_apply_bindings: vertex buffer bindings not allowed in a compute pass") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_COMPUTE_EXPECTED_NO_IB, "sg_apply_bindings: index buffer binding not allowed in compute pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_VB, "sg_apply_bindings: vertex buffer binding is missing or buffer handle is invalid") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VB_EXISTS, "sg_apply_bindings: vertex buffer no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VB_TYPE, "sg_apply_bindings: buffer in vertex buffer slot is not a SG_BUFFERTYPE_VERTEXBUFFER") \
@@ -5907,6 +5912,7 @@ typedef struct {
     int cur_vs_buffer_offsets[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
     sg_buffer cur_vs_buffer_ids[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
     sg_buffer cur_fs_buffer_ids[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
+    sg_buffer cur_cs_buffer_ids[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
     sg_image cur_vs_image_ids[_SG_MTL_MAX_STAGE_IMAGE_BINDINGS];
     sg_image cur_fs_image_ids[_SG_MTL_MAX_STAGE_IMAGE_BINDINGS];
     sg_sampler cur_vs_sampler_ids[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
@@ -13278,14 +13284,19 @@ _SOKOL_PRIVATE _sg_image_t* _sg_mtl_attachments_ds_image(const _sg_attachments_t
 }
 
 _SOKOL_PRIVATE void _sg_mtl_bind_uniform_buffers(void) {
+    // In the Metal backend, uniform buffer bindings happen once in sg_begin_pass() and
+    // remain valid for the entire pass. Only binding offsets will be updated
+    // in sg_apply_uniforms()
     if (_sg.cur_pass.is_compute) {
         SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
-        // FIXME!
+        for (size_t slot = 0; slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS; slot++) {
+            [_sg.mtl.compute_cmd_encoder
+                setBuffer:_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index]
+                offset:0
+                atIndex:slot];
+        }
     } else {
         SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-        // On Metal, uniform buffer bindings happen once in sg_begin_pass() and
-        // remain valid for the entire pass. Only binding offsets will be updated
-        // in sg_apply_uniforms()
         for (size_t slot = 0; slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS; slot++) {
             [_sg.mtl.render_cmd_encoder
                 setVertexBuffer:_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index]
@@ -13301,46 +13312,34 @@ _SOKOL_PRIVATE void _sg_mtl_bind_uniform_buffers(void) {
 
 _SOKOL_PRIVATE void _sg_mtl_begin_compute_pass(const sg_pass* pass) {
     SOKOL_ASSERT(pass);
-    // FIXME: create MTLComputeCommandEncoder
+    SOKOL_ASSERT(nil != _sg.mtl.cmd_buffer);
+    SOKOL_ASSERT(nil == _sg.mtl.compute_cmd_encoder);
+    SOKOL_ASSERT(nil == _sg.mtl.render_cmd_encoder);
+
+    // NOTE: we actually want computeCommandEncoderWithDispatchType:MTLDispatchTypeConcurrent, but
+    // that requires bumping the macOS base version to 10.14
+    _sg.mtl.compute_cmd_encoder = [_sg.mtl.cmd_buffer computeCommandEncoder];
+    if (nil == _sg.mtl.compute_cmd_encoder) {
+        _sg.cur_pass.valid = false;
+        return;
+    }
+
+    #if defined(SOKOL_DEBUG)
+    if (pass->label) {
+        _sg.mtl.compute_cmd_encoder.label = [NSString stringWithUTF8String:pass->label];
+    }
+    #endif
 }
 
 _SOKOL_PRIVATE void _sg_mtl_begin_render_pass(const sg_pass* pass) {
     SOKOL_ASSERT(pass);
+    SOKOL_ASSERT(nil != _sg.mtl.cmd_buffer);
+    SOKOL_ASSERT(nil == _sg.mtl.render_cmd_encoder);
+    SOKOL_ASSERT(nil == _sg.mtl.compute_cmd_encoder);
+
     const _sg_attachments_t* atts = _sg.cur_pass.atts;
     const sg_swapchain* swapchain = &pass->swapchain;
     const sg_pass_action* action = &pass->action;
-
-    /*
-        if this is the first pass in the frame, create command buffers
-
-        NOTE: we're creating two command buffers here, one with unretained references
-        for storing the regular commands, and one with retained references for
-        storing the presentDrawable call (this needs to hold on the drawable until
-        presentation has happened - and the easiest way to do this is to let the
-        command buffer manage the lifetime of the drawable).
-
-        Also see: https://github.com/floooh/sokol/issues/762
-    */
-    if (nil == _sg.mtl.cmd_buffer) {
-        // block until the oldest frame in flight has finished
-        dispatch_semaphore_wait(_sg.mtl.sem, DISPATCH_TIME_FOREVER);
-        if (_sg.desc.mtl_use_command_buffer_with_retained_references) {
-            _sg.mtl.cmd_buffer = [_sg.mtl.cmd_queue commandBuffer];
-        } else {
-            _sg.mtl.cmd_buffer = [_sg.mtl.cmd_queue commandBufferWithUnretainedReferences];
-        }
-        [_sg.mtl.cmd_buffer enqueue];
-        [_sg.mtl.cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buf) {
-            // NOTE: this code is called on a different thread!
-            _SOKOL_UNUSED(cmd_buf);
-            dispatch_semaphore_signal(_sg.mtl.sem);
-        }];
-    }
-
-    // if this is first pass in frame, get uniform buffer base pointer
-    if (0 == _sg.mtl.cur_ub_base_ptr) {
-        _sg.mtl.cur_ub_base_ptr = (uint8_t*)[_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index] contents];
-    }
 
     MTLRenderPassDescriptor* pass_desc = [MTLRenderPassDescriptor renderPassDescriptor];
     SOKOL_ASSERT(pass_desc);
@@ -13502,6 +13501,29 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass* pass) {
     SOKOL_ASSERT(nil == _sg.mtl.render_cmd_encoder);
     SOKOL_ASSERT(nil == _sg.mtl.cur_drawable);
     _sg_mtl_clear_state_cache();
+
+    // if this is the first pass in the frame, create command buffers
+    if (nil == _sg.mtl.cmd_buffer) {
+        // block until the oldest frame in flight has finished
+        dispatch_semaphore_wait(_sg.mtl.sem, DISPATCH_TIME_FOREVER);
+        if (_sg.desc.mtl_use_command_buffer_with_retained_references) {
+            _sg.mtl.cmd_buffer = [_sg.mtl.cmd_queue commandBuffer];
+        } else {
+            _sg.mtl.cmd_buffer = [_sg.mtl.cmd_queue commandBufferWithUnretainedReferences];
+        }
+        [_sg.mtl.cmd_buffer enqueue];
+        [_sg.mtl.cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buf) {
+            // NOTE: this code is called on a different thread!
+            _SOKOL_UNUSED(cmd_buf);
+            dispatch_semaphore_signal(_sg.mtl.sem);
+        }];
+    }
+
+    // if this is first pass in frame, get uniform buffer base pointer
+    if (0 == _sg.mtl.cur_ub_base_ptr) {
+        _sg.mtl.cur_ub_base_ptr = (uint8_t*)[_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index] contents];
+    }
+
     if (pass->compute) {
         _sg_mtl_begin_compute_pass(pass);
     } else {
@@ -13519,6 +13541,11 @@ _SOKOL_PRIVATE void _sg_mtl_end_pass(void) {
         [_sg.mtl.render_cmd_encoder endEncoding];
         // NOTE: MTLRenderCommandEncoder is autoreleased
         _sg.mtl.render_cmd_encoder = nil;
+    }
+    if (nil != _sg.mtl.compute_cmd_encoder) {
+        [_sg.mtl.compute_cmd_encoder endEncoding];
+        // NOTE: MTLComputeCommandEncoder is autoreleased
+        _sg.mtl.compute_cmd_encoder = nil;
     }
     // if this is a swapchain pass, present the drawable
     if (nil != _sg.mtl.cur_drawable) {
@@ -13584,7 +13611,8 @@ _SOKOL_PRIVATE void _sg_mtl_apply_pipeline(_sg_pipeline_t* pip) {
         if (_sg.cur_pass.is_compute) {
             SOKOL_ASSERT(pip->cmn.is_compute);
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
-            // FIXME
+            SOKOL_ASSERT(pip->mtl.cps != _SG_MTL_INVALID_SLOT_INDEX);
+            [_sg.mtl.compute_cmd_encoder setComputePipelineState:_sg_mtl_id(pip->mtl.cps)];
         } else {
             SOKOL_ASSERT(!pip->cmn.is_compute);
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
@@ -13666,7 +13694,7 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
         }
         SOKOL_ASSERT(img->mtl.tex[img->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
         const sg_shader_stage stage = shd->cmn.images[i].stage;
-        SOKOL_ASSERT((stage == SG_SHADERSTAGE_VERTEX) || (stage == SG_SHADERSTAGE_FRAGMENT));
+        SOKOL_ASSERT((stage == SG_SHADERSTAGE_VERTEX) || (stage == SG_SHADERSTAGE_FRAGMENT) || (stage == SG_SHADERSTAGE_COMPUTE));
         const NSUInteger mtl_slot = shd->mtl.img_texture_n[i];
         SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_IMAGE_BINDINGS);
         if (stage == SG_SHADERSTAGE_VERTEX) {
@@ -13686,6 +13714,7 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
         } else if (stage == SG_SHADERSTAGE_COMPUTE) {
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
             // FIXME
+            SOKOL_ASSERT(false);
         }
     }
 
@@ -13696,7 +13725,7 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
             continue;
         }
         const sg_shader_stage stage = shd->cmn.samplers[i].stage;
-        SOKOL_ASSERT((stage == SG_SHADERSTAGE_VERTEX) || (stage == SG_SHADERSTAGE_FRAGMENT));
+        SOKOL_ASSERT((stage == SG_SHADERSTAGE_VERTEX) || (stage == SG_SHADERSTAGE_FRAGMENT) || (stage == SG_SHADERSTAGE_COMPUTE));
         const NSUInteger mtl_slot = shd->mtl.smp_sampler_n[i];
         SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_SAMPLER_BINDINGS);
         if (stage == SG_SHADERSTAGE_VERTEX) {
@@ -13718,6 +13747,7 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
         } else if (stage == SG_SHADERSTAGE_COMPUTE) {
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
             // FIXME
+            SOKOL_ASSERT(false);
         }
     }
 
@@ -13728,7 +13758,7 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
             continue;
         }
         const sg_shader_stage stage = shd->cmn.storage_buffers[i].stage;
-        SOKOL_ASSERT((stage == SG_SHADERSTAGE_VERTEX) || (stage == SG_SHADERSTAGE_FRAGMENT));
+        SOKOL_ASSERT((stage == SG_SHADERSTAGE_VERTEX) || (stage == SG_SHADERSTAGE_FRAGMENT) || (stage == SG_SHADERSTAGE_COMPUTE));
         const NSUInteger mtl_slot = shd->mtl.sbuf_buffer_n[i];
         SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS);
         if (stage == SG_SHADERSTAGE_VERTEX) {
@@ -13749,7 +13779,12 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
             }
         } else if (stage == SG_SHADERSTAGE_COMPUTE) {
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
-            // FIXME
+            if (_sg.mtl.state_cache.cur_cs_buffer_ids[mtl_slot].id != sbuf->slot.id) {
+                _sg.mtl.state_cache.cur_cs_buffer_ids[mtl_slot].id = sbuf->slot.id;
+                SOKOL_ASSERT(sbuf->mtl.buf[sbuf->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
+                [_sg.mtl.compute_cmd_encoder setBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:0 atIndex:mtl_slot];
+                _sg_stats_add(metal.bindings.num_set_compute_buffer, 1);
+            }
         }
     }
     return true;
@@ -13782,7 +13817,8 @@ _SOKOL_PRIVATE void _sg_mtl_apply_uniforms(int ub_slot, const sg_range* data) {
         _sg_stats_add(metal.uniforms.num_set_fragment_buffer_offset, 1);
     } else if (stage == SG_SHADERSTAGE_COMPUTE) {
         SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
-        // FIXME
+        [_sg.mtl.compute_cmd_encoder setBufferOffset:(NSUInteger)_sg.mtl.cur_ub_offset atIndex:mtl_slot];
+        _sg_stats_add(metal.uniforms.num_set_compute_buffer_offset, 1);
     } else {
         SOKOL_UNREACHABLE;
     }
@@ -16364,7 +16400,6 @@ static inline void _sg_dispatch(int num_groups_x, int num_groups_y, int num_grou
     #else
     #error("INVALID BACKEND");
     #endif
-
 }
 
 static inline void _sg_commit(void) {
@@ -17351,6 +17386,10 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
                     _SG_VALIDATE(!_sg_strempty(&shd->d3d11.attrs[attr_index].sem_name), VALIDATE_PIPELINEDESC_ATTR_SEMANTICS);
                     #endif
                 }
+                // must only use readonly storage buffer bindings in render pipelines
+                for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
+                    _SG_VALIDATE(shd->cmn.storage_buffers[i].readonly, VALIDATE_PIPELINEDESC_SHADER_READONLY_STORAGEBUFFERS);
+                }
             }
             for (int buf_index = 0; buf_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; buf_index++) {
                 const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[buf_index];
@@ -17604,33 +17643,36 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
         SOKOL_ASSERT(pip->shader);
         _SG_VALIDATE(pip->shader->slot.id == pip->cmn.shader_id.id, VALIDATE_APIP_SHADER_EXISTS);
         _SG_VALIDATE(pip->shader->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_SHADER_VALID);
-        // check that pipeline attributes match current pass attributes
-        if (_sg.cur_pass.atts_id.id != SG_INVALID_ID) {
-            // an offscreen pass
-            const _sg_attachments_t* atts = _sg.cur_pass.atts;
-            SOKOL_ASSERT(atts);
-            _SG_VALIDATE(atts->slot.id == _sg.cur_pass.atts_id.id, VALIDATE_APIP_CURPASS_ATTACHMENTS_EXISTS);
-            _SG_VALIDATE(atts->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_CURPASS_ATTACHMENTS_VALID);
+        if (!_sg.cur_pass.is_compute) {
+            // check that pipeline attributes match current pass attributes
+            if (_sg.cur_pass.atts_id.id != SG_INVALID_ID) {
+                // an offscreen pass
+                const _sg_attachments_t* atts = _sg.cur_pass.atts;
+                SOKOL_ASSERT(atts);
+                _SG_VALIDATE(atts->slot.id == _sg.cur_pass.atts_id.id, VALIDATE_APIP_CURPASS_ATTACHMENTS_EXISTS);
+                _SG_VALIDATE(atts->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_CURPASS_ATTACHMENTS_VALID);
 
-            _SG_VALIDATE(pip->cmn.color_count == atts->cmn.num_colors, VALIDATE_APIP_ATT_COUNT);
-            for (int i = 0; i < pip->cmn.color_count; i++) {
-                const _sg_image_t* att_img = _sg_attachments_color_image(atts, i);
-                _SG_VALIDATE(pip->cmn.colors[i].pixel_format == att_img->cmn.pixel_format, VALIDATE_APIP_COLOR_FORMAT);
-                _SG_VALIDATE(pip->cmn.sample_count == att_img->cmn.sample_count, VALIDATE_APIP_SAMPLE_COUNT);
-            }
-            const _sg_image_t* att_dsimg = _sg_attachments_ds_image(atts);
-            if (att_dsimg) {
-                _SG_VALIDATE(pip->cmn.depth.pixel_format == att_dsimg->cmn.pixel_format, VALIDATE_APIP_DEPTH_FORMAT);
+                _SG_VALIDATE(pip->cmn.color_count == atts->cmn.num_colors, VALIDATE_APIP_ATT_COUNT);
+                for (int i = 0; i < pip->cmn.color_count; i++) {
+                    const _sg_image_t* att_img = _sg_attachments_color_image(atts, i);
+                    _SG_VALIDATE(pip->cmn.colors[i].pixel_format == att_img->cmn.pixel_format, VALIDATE_APIP_COLOR_FORMAT);
+                    _SG_VALIDATE(pip->cmn.sample_count == att_img->cmn.sample_count, VALIDATE_APIP_SAMPLE_COUNT);
+                }
+                const _sg_image_t* att_dsimg = _sg_attachments_ds_image(atts);
+                if (att_dsimg) {
+                    _SG_VALIDATE(pip->cmn.depth.pixel_format == att_dsimg->cmn.pixel_format, VALIDATE_APIP_DEPTH_FORMAT);
+                } else {
+                    _SG_VALIDATE(pip->cmn.depth.pixel_format == SG_PIXELFORMAT_NONE, VALIDATE_APIP_DEPTH_FORMAT);
+                }
             } else {
-                _SG_VALIDATE(pip->cmn.depth.pixel_format == SG_PIXELFORMAT_NONE, VALIDATE_APIP_DEPTH_FORMAT);
+                // default pass
+                _SG_VALIDATE(pip->cmn.color_count == 1, VALIDATE_APIP_ATT_COUNT);
+                _SG_VALIDATE(pip->cmn.colors[0].pixel_format == _sg.cur_pass.swapchain.color_fmt, VALIDATE_APIP_COLOR_FORMAT);
+                _SG_VALIDATE(pip->cmn.depth.pixel_format == _sg.cur_pass.swapchain.depth_fmt, VALIDATE_APIP_DEPTH_FORMAT);
+                _SG_VALIDATE(pip->cmn.sample_count == _sg.cur_pass.swapchain.sample_count, VALIDATE_APIP_SAMPLE_COUNT);
             }
-        } else {
-            // default pass
-            _SG_VALIDATE(pip->cmn.color_count == 1, VALIDATE_APIP_ATT_COUNT);
-            _SG_VALIDATE(pip->cmn.colors[0].pixel_format == _sg.cur_pass.swapchain.color_fmt, VALIDATE_APIP_COLOR_FORMAT);
-            _SG_VALIDATE(pip->cmn.depth.pixel_format == _sg.cur_pass.swapchain.depth_fmt, VALIDATE_APIP_DEPTH_FORMAT);
-            _SG_VALIDATE(pip->cmn.sample_count == _sg.cur_pass.swapchain.sample_count, VALIDATE_APIP_SAMPLE_COUNT);
         }
+        // FIXME: do we validate anything else for compute pipelines?
         return _sg_validate_end();
     #endif
 }
@@ -17656,37 +17698,47 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         SOKOL_ASSERT(pip->shader && (pip->cmn.shader_id.id == pip->shader->slot.id));
         const _sg_shader_t* shd = pip->shader;
 
-        // has expected vertex buffers, and vertex buffers still exist
-        for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
-            if (pip->cmn.vertex_buffer_layout_active[i]) {
-                _SG_VALIDATE(bindings->vertex_buffers[i].id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_VB);
-                // buffers in vertex-buffer-slots must be of type SG_BUFFERTYPE_VERTEXBUFFER
-                if (bindings->vertex_buffers[i].id != SG_INVALID_ID) {
-                    const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, bindings->vertex_buffers[i].id);
-                    _SG_VALIDATE(buf != 0, VALIDATE_ABND_VB_EXISTS);
-                    if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
-                        _SG_VALIDATE(SG_BUFFERTYPE_VERTEXBUFFER == buf->cmn.type, VALIDATE_ABND_VB_TYPE);
-                        _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_VB_OVERFLOW);
+        if (_sg.cur_pass.is_compute) {
+            for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
+                _SG_VALIDATE(bindings->vertex_buffers[i].id == SG_INVALID_ID, VALIDATE_ABND_COMPUTE_EXPECTED_NO_VBS);
+            }
+        } else {
+            // has expected vertex buffers, and vertex buffers still exist
+            for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
+                if (pip->cmn.vertex_buffer_layout_active[i]) {
+                    _SG_VALIDATE(bindings->vertex_buffers[i].id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_VB);
+                    // buffers in vertex-buffer-slots must be of type SG_BUFFERTYPE_VERTEXBUFFER
+                    if (bindings->vertex_buffers[i].id != SG_INVALID_ID) {
+                        const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, bindings->vertex_buffers[i].id);
+                        _SG_VALIDATE(buf != 0, VALIDATE_ABND_VB_EXISTS);
+                        if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
+                            _SG_VALIDATE(SG_BUFFERTYPE_VERTEXBUFFER == buf->cmn.type, VALIDATE_ABND_VB_TYPE);
+                            _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_VB_OVERFLOW);
+                        }
                     }
                 }
             }
         }
 
-        // index buffer expected or not, and index buffer still exists
-        if (pip->cmn.index_type == SG_INDEXTYPE_NONE) {
-            // pipeline defines non-indexed rendering, but index buffer provided
-            _SG_VALIDATE(bindings->index_buffer.id == SG_INVALID_ID, VALIDATE_ABND_IB);
+        if (_sg.cur_pass.is_compute) {
+            _SG_VALIDATE(bindings->index_buffer.id == SG_INVALID_ID, VALIDATE_ABND_COMPUTE_EXPECTED_NO_IB);
         } else {
-            // pipeline defines indexed rendering, but no index buffer provided
-            _SG_VALIDATE(bindings->index_buffer.id != SG_INVALID_ID, VALIDATE_ABND_NO_IB);
-        }
-        if (bindings->index_buffer.id != SG_INVALID_ID) {
-            // buffer in index-buffer-slot must be of type SG_BUFFERTYPE_INDEXBUFFER
-            const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, bindings->index_buffer.id);
-            _SG_VALIDATE(buf != 0, VALIDATE_ABND_IB_EXISTS);
-            if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
-                _SG_VALIDATE(SG_BUFFERTYPE_INDEXBUFFER == buf->cmn.type, VALIDATE_ABND_IB_TYPE);
-                _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_IB_OVERFLOW);
+            // index buffer expected or not, and index buffer still exists
+            if (pip->cmn.index_type == SG_INDEXTYPE_NONE) {
+                // pipeline defines non-indexed rendering, but index buffer provided
+                _SG_VALIDATE(bindings->index_buffer.id == SG_INVALID_ID, VALIDATE_ABND_IB);
+            } else {
+                // pipeline defines indexed rendering, but no index buffer provided
+                _SG_VALIDATE(bindings->index_buffer.id != SG_INVALID_ID, VALIDATE_ABND_NO_IB);
+            }
+            if (bindings->index_buffer.id != SG_INVALID_ID) {
+                // buffer in index-buffer-slot must be of type SG_BUFFERTYPE_INDEXBUFFER
+                const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, bindings->index_buffer.id);
+                _SG_VALIDATE(buf != 0, VALIDATE_ABND_IB_EXISTS);
+                if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
+                    _SG_VALIDATE(SG_BUFFERTYPE_INDEXBUFFER == buf->cmn.type, VALIDATE_ABND_IB_TYPE);
+                    _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_IB_OVERFLOW);
+                }
             }
         }
 
@@ -19298,28 +19350,29 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
     SOKOL_ASSERT(bnd.pip->shader && (bnd.pip->cmn.shader_id.id == bnd.pip->shader->slot.id));
     const _sg_shader_t* shd = bnd.pip->shader;
 
-    for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
-        if (bnd.pip->cmn.vertex_buffer_layout_active[i]) {
-            SOKOL_ASSERT(bindings->vertex_buffers[i].id != SG_INVALID_ID);
-            bnd.vbs[i] = _sg_lookup_buffer(&_sg.pools, bindings->vertex_buffers[i].id);
-            bnd.vb_offsets[i] = bindings->vertex_buffer_offsets[i];
-            if (bnd.vbs[i]) {
-                _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == bnd.vbs[i]->slot.state);
-                _sg.next_draw_valid &= !bnd.vbs[i]->cmn.append_overflow;
+    if (!_sg.cur_pass.is_compute) {
+        for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
+            if (bnd.pip->cmn.vertex_buffer_layout_active[i]) {
+                SOKOL_ASSERT(bindings->vertex_buffers[i].id != SG_INVALID_ID);
+                bnd.vbs[i] = _sg_lookup_buffer(&_sg.pools, bindings->vertex_buffers[i].id);
+                bnd.vb_offsets[i] = bindings->vertex_buffer_offsets[i];
+                if (bnd.vbs[i]) {
+                    _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == bnd.vbs[i]->slot.state);
+                    _sg.next_draw_valid &= !bnd.vbs[i]->cmn.append_overflow;
+                } else {
+                    _sg.next_draw_valid = false;
+                }
+            }
+        }
+        if (bindings->index_buffer.id) {
+            bnd.ib = _sg_lookup_buffer(&_sg.pools, bindings->index_buffer.id);
+            bnd.ib_offset = bindings->index_buffer_offset;
+            if (bnd.ib) {
+                _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == bnd.ib->slot.state);
+                _sg.next_draw_valid &= !bnd.ib->cmn.append_overflow;
             } else {
                 _sg.next_draw_valid = false;
             }
-        }
-    }
-
-    if (bindings->index_buffer.id) {
-        bnd.ib = _sg_lookup_buffer(&_sg.pools, bindings->index_buffer.id);
-        bnd.ib_offset = bindings->index_buffer_offset;
-        if (bnd.ib) {
-            _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == bnd.ib->slot.state);
-            _sg.next_draw_valid &= !bnd.ib->cmn.append_overflow;
-        } else {
-            _sg.next_draw_valid = false;
         }
     }
 
