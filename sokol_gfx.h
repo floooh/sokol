@@ -5875,6 +5875,9 @@ typedef struct {
         MTLCullMode cull_mode;
         MTLWinding winding;
         uint32_t stencil_ref;
+        struct {
+            MTLSize max_threads_per_group;
+        } compute;
         int cps;    // MTLComputePipelineState
         int rps;    // MTLRenderPipelineState
         int dss;    // MTLDepthStencilState
@@ -13096,6 +13099,14 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
         }
         // NOTE: no easy way to set the label on a compute pipeline
         pip->mtl.cps = _sg_mtl_add_resource(mtl_cps);
+
+        // compute threads-per-thread-group dispatch arg
+        // (see: https://developer.apple.com/documentation/metal/calculating-threadgroup-and-grid-sizes?language=objc)
+        const NSUInteger w = mtl_cps.threadExecutionWidth;
+        SOKOL_ASSERT(w > 0);
+        const NSUInteger h = mtl_cps.maxTotalThreadsPerThreadgroup / w;
+        SOKOL_ASSERT(h > 0);
+        pip->mtl.compute.max_threads_per_group =  MTLSizeMake(w, h, 1);
         _SG_OBJC_RELEASE(mtl_cps);
     } else {
         sg_primitive_type prim_type = desc->primitive_type;
@@ -13847,6 +13858,22 @@ _SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_ins
             vertexCount:(NSUInteger)num_elements
             instanceCount:(NSUInteger)num_instances];
     }
+}
+
+_SOKOL_PRIVATE void _sg_mtl_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
+    SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
+    SOKOL_ASSERT(_sg.mtl.state_cache.cur_pipeline && (_sg.mtl.state_cache.cur_pipeline->slot.id == _sg.mtl.state_cache.cur_pipeline_id.id));
+    // NOTE: we assume the `Nonuniform threadgroup size` feature is supported (iPhone8 and later)
+    const _sg_pipeline_t* cur_pip = _sg.mtl.state_cache.cur_pipeline;
+    const NSUInteger ngx = (NSUInteger)num_groups_x;
+    const NSUInteger ngy = (NSUInteger)num_groups_y;
+    const NSUInteger ngz = (NSUInteger)num_groups_z;
+    const MTLSize threads = MTLSizeMake(ngx, ngy, ngz);
+    MTLSize tpg = cur_pip->mtl.compute.max_threads_per_group;
+    tpg.width = _sg_min(tpg.width, ngx);
+    tpg.height = _sg_min(tpg.height, ngy);
+    tpg.depth = _sg_min(tpg.depth, ngz);
+    [_sg.mtl.compute_cmd_encoder dispatchThreads:threads threadsPerThreadgroup:tpg];
 }
 
 _SOKOL_PRIVATE void _sg_mtl_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
@@ -16390,6 +16417,7 @@ static inline void _sg_dispatch(int num_groups_x, int num_groups_y, int num_grou
     #if defined(_SOKOL_ANY_GL)
     // FIXME
     #elif defined(SOKOL_METAL)
+    _sg_mtl_dispatch(num_groups_x, num_groups_y, num_groups_z);
     // FIXME
     #elif defined(SOKOL_D3D11)
     // FIMXE
@@ -17388,7 +17416,9 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
                 }
                 // must only use readonly storage buffer bindings in render pipelines
                 for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
-                    _SG_VALIDATE(shd->cmn.storage_buffers[i].readonly, VALIDATE_PIPELINEDESC_SHADER_READONLY_STORAGEBUFFERS);
+                    if (shd->cmn.storage_buffers[i].stage != SG_SHADERSTAGE_NONE) {
+                        _SG_VALIDATE(shd->cmn.storage_buffers[i].readonly, VALIDATE_PIPELINEDESC_SHADER_READONLY_STORAGEBUFFERS);
+                    }
                 }
             }
             for (int buf_index = 0; buf_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; buf_index++) {
@@ -19463,9 +19493,7 @@ SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instance
         return;
     }
     #endif
-    /* attempting to draw with zero elements or instances is not technically an
-       error, but might be handled as an error in the backend API (e.g. on Metal)
-    */
+    // skip no-op draws
     if ((0 == num_elements) || (0 == num_instances)) {
         return;
     }
@@ -19477,9 +19505,6 @@ SOKOL_API_IMPL void sg_dispatch(int num_groups_x, int num_groups_y, int num_grou
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(_sg.cur_pass.in_pass);
     SOKOL_ASSERT(_sg.cur_pass.is_compute);
-    SOKOL_ASSERT(num_groups_x > 0);
-    SOKOL_ASSERT(num_groups_y > 0);
-    SOKOL_ASSERT(num_groups_z > 0);
     _sg_stats_add(num_dispatch, 1);
     if (!_sg.cur_pass.valid) {
         return;
@@ -19493,6 +19518,10 @@ SOKOL_API_IMPL void sg_dispatch(int num_groups_x, int num_groups_y, int num_grou
         return;
     }
     #endif
+    // skip no-op dispatches
+    if ((0 == num_groups_x) || (0 == num_groups_y) || (0 == num_groups_z)) {
+        return;
+    }
     _sg_dispatch(num_groups_x, num_groups_y, num_groups_z);
     _SG_TRACE_ARGS(dispatch, num_groups_x, num_groups_y, num_groups_z);
 }
