@@ -4863,7 +4863,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 #if defined(_SAPP_EMSCRIPTEN)
 
 #if defined(EM_JS_DEPS)
-EM_JS_DEPS(sokol_app, "$withStackSave,$stringToUTF8OnStack,$findCanvasEventTarget");
+EM_JS_DEPS(sokol_app, "$withStackSave,$stringToUTF8OnStack,$findCanvasEventTarget")
 #endif
 
 #ifdef __cplusplus
@@ -4970,11 +4970,11 @@ EM_JS(void, sapp_js_add_beforeunload_listener, (void), {
         }
     };
     window.addEventListener('beforeunload', Module.sokol_beforeunload);
-});
+})
 
 EM_JS(void, sapp_js_remove_beforeunload_listener, (void), {
     window.removeEventListener('beforeunload', Module.sokol_beforeunload);
-});
+})
 
 EM_JS(void, sapp_js_add_clipboard_listener, (void), {
     Module.sokol_paste = (event) => {
@@ -4985,11 +4985,11 @@ EM_JS(void, sapp_js_add_clipboard_listener, (void), {
         });
     };
     window.addEventListener('paste', Module.sokol_paste);
-});
+})
 
 EM_JS(void, sapp_js_remove_clipboard_listener, (void), {
     window.removeEventListener('paste', Module.sokol_paste);
-});
+})
 
 EM_JS(void, sapp_js_write_clipboard, (const char* c_str), {
     const str = UTF8ToString(c_str);
@@ -5007,7 +5007,7 @@ EM_JS(void, sapp_js_write_clipboard, (const char* c_str), {
     ta.select();
     document.execCommand('copy');
     document.body.removeChild(ta);
-});
+})
 
 _SOKOL_PRIVATE void _sapp_emsc_set_clipboard_string(const char* str) {
     sapp_js_write_clipboard(str);
@@ -5053,7 +5053,7 @@ EM_JS(void, sapp_js_add_dragndrop_listeners, (void), {
     canvas.addEventListener('dragleave', Module.sokol_dragleave, false);
     canvas.addEventListener('dragover',  Module.sokol_dragover, false);
     canvas.addEventListener('drop',      Module.sokol_drop, false);
-});
+})
 
 EM_JS(uint32_t, sapp_js_dropped_file_size, (int index), {
     \x2F\x2A\x2A @suppress {missingProperties} \x2A\x2F
@@ -5064,7 +5064,7 @@ EM_JS(uint32_t, sapp_js_dropped_file_size, (int index), {
     else {
         return files[index].size;
     }
-});
+})
 
 EM_JS(void, sapp_js_fetch_dropped_file, (int index, _sapp_html5_fetch_callback callback, void* buf_ptr, uint32_t buf_size, void* user_data), {
     const reader = new FileReader();
@@ -5086,7 +5086,7 @@ EM_JS(void, sapp_js_fetch_dropped_file, (int index, _sapp_html5_fetch_callback c
     \x2F\x2A\x2A @suppress {missingProperties} \x2A\x2F
     const files = Module.sokol_dropped_files;
     reader.readAsArrayBuffer(files[index]);
-});
+})
 
 EM_JS(void, sapp_js_remove_dragndrop_listeners, (void), {
     \x2F\x2A\x2A @suppress {missingProperties} \x2A\x2F
@@ -5095,7 +5095,7 @@ EM_JS(void, sapp_js_remove_dragndrop_listeners, (void), {
     canvas.removeEventListener('dragleave', Module.sokol_dragleave);
     canvas.removeEventListener('dragover',  Module.sokol_dragover);
     canvas.removeEventListener('drop',      Module.sokol_drop);
-});
+})
 
 EM_JS(void, sapp_js_init, (const char* c_str_target_selector, const char* c_str_document_title), {
     if (c_str_document_title !== 0) {
@@ -5116,7 +5116,7 @@ EM_JS(void, sapp_js_init, (const char* c_str_target_selector, const char* c_str_
     if (!Module.sapp_emsc_target.requestPointerLock) {
         console.warn("sokol_app.h: target doesn't support requestPointerLock: ", target_selector_str);
     }
-});
+})
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_pointerlockchange_cb(int emsc_type, const EmscriptenPointerlockChangeEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(emsc_type);
@@ -5140,13 +5140,13 @@ EM_JS(void, sapp_js_request_pointerlock, (void), {
             Module.sapp_emsc_target.requestPointerLock();
         }
     }
-});
+})
 
 EM_JS(void, sapp_js_exit_pointerlock, (void), {
     if (document.exitPointerLock) {
         document.exitPointerLock();
     }
-});
+})
 
 _SOKOL_PRIVATE void _sapp_emsc_lock_mouse(bool lock) {
     if (lock) {
@@ -5193,7 +5193,7 @@ EM_JS(void, sapp_js_set_cursor, (int cursor_type, int shown), {
         }
         Module.sapp_emsc_target.style.cursor = cursor;
     }
-});
+})
 
 _SOKOL_PRIVATE void _sapp_emsc_update_cursor(sapp_mouse_cursor cursor, bool shown) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
@@ -5206,7 +5206,7 @@ EM_JS(void, sapp_js_clear_favicon, (void), {
     if (link) {
         document.head.removeChild(link);
     }
-});
+})
 
 EM_JS(void, sapp_js_set_favicon, (int w, int h, const uint8_t* pixels), {
     const canvas = document.createElement('canvas');
@@ -5221,7 +5221,7 @@ EM_JS(void, sapp_js_set_favicon, (int w, int h, const uint8_t* pixels), {
     new_link.rel = 'shortcut icon';
     new_link.href = canvas.toDataURL();
     document.head.appendChild(new_link);
-});
+})
 
 _SOKOL_PRIVATE void _sapp_emsc_set_icon(const sapp_icon_desc* icon_desc, int num_images) {
     SOKOL_ASSERT((num_images > 0) && (num_images <= SAPP_MAX_ICONIMAGES));

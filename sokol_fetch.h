@@ -2213,7 +2213,7 @@ EM_JS(void, sfetch_js_send_head_request, (uint32_t slot_id, const char* path_cst
         }
     };
     req.send();
-});
+})
 
 /* if bytes_to_read != 0, a range-request will be sent, otherwise a normal request */
 EM_JS(void, sfetch_js_send_get_request, (uint32_t slot_id, const char* path_cstr, uint32_t offset, uint32_t bytes_to_read, void* buf_ptr, uint32_t buf_size), {
@@ -2244,7 +2244,7 @@ EM_JS(void, sfetch_js_send_get_request, (uint32_t slot_id, const char* path_cstr
         }
     };
     req.send();
-});
+})
 
 /*=== emscripten specific C helper functions =================================*/
 #ifdef __cplusplus
