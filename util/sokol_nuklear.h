@@ -2215,7 +2215,7 @@ EM_JS(int, snk_js_is_osx, (void), {
     } else {
         return 0;
     }
-});
+})
 #endif
 
 static bool _snk_is_osx(void) {
