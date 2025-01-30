@@ -13322,7 +13322,7 @@ _SOKOL_PRIVATE void _sg_mtl_bind_uniform_buffers(void) {
 }
 
 _SOKOL_PRIVATE void _sg_mtl_begin_compute_pass(const sg_pass* pass) {
-    SOKOL_ASSERT(pass);
+    SOKOL_ASSERT(pass); (void)pass;
     SOKOL_ASSERT(nil != _sg.mtl.cmd_buffer);
     SOKOL_ASSERT(nil == _sg.mtl.compute_cmd_encoder);
     SOKOL_ASSERT(nil == _sg.mtl.render_cmd_encoder);
