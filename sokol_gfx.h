@@ -12323,6 +12323,10 @@ _SOKOL_PRIVATE MTLSamplerMipFilter _sg_mtl_mipmap_filter(sg_filter f) {
     }
 }
 
+_SOKOL_PRIVATE size_t _sg_mtl_vertexbuffer_bindslot(size_t sokol_bindslot) {
+    return sokol_bindslot + _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS;
+}
+
 //-- a pool for all Metal resource objects, with deferred release queue ---------
 _SOKOL_PRIVATE void _sg_mtl_init_pool(const sg_desc* desc) {
     _sg.mtl.idpool.num_slots = 2 *
@@ -13088,16 +13092,33 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
 
     if (pip->cmn.is_compute) {
         NSError* err = NULL;
+        MTLComputePipelineDescriptor* cp_desc = [[MTLComputePipelineDescriptor alloc] init];
+        cp_desc.computeFunction = _sg_mtl_id(shd->mtl.compute_func.mtl_func);
+        for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
+            const sg_shader_stage stage = shd->cmn.storage_buffers[i].stage;
+            SOKOL_ASSERT((stage != SG_SHADERSTAGE_VERTEX) && (stage != SG_SHADERSTAGE_FRAGMENT));
+            if ((stage == SG_SHADERSTAGE_COMPUTE) && shd->cmn.storage_buffers[i].readonly) {
+                const NSUInteger mtl_slot = shd->mtl.sbuf_buffer_n[i];
+                cp_desc.buffers[mtl_slot].mutability = MTLMutabilityImmutable;
+            }
+        }
+        #if defined(SOKOL_DEBUG)
+            if (desc->label) {
+                cp_desc.label = [NSString stringWithFormat:@"%s", desc->label];
+            }
+        #endif
         id<MTLComputePipelineState> mtl_cps = [_sg.mtl.device
-            newComputePipelineStateWithFunction:_sg_mtl_id(shd->mtl.compute_func.mtl_func)
+            newComputePipelineStateWithDescriptor:cp_desc
+            options:MTLPipelineOptionNone
+            reflection:nil
             error:&err];
+        _SG_OBJC_RELEASE(cp_desc);
         if (nil == mtl_cps) {
             SOKOL_ASSERT(err);
             _SG_ERROR(METAL_CREATE_CPS_FAILED);
             _SG_LOGMSG(METAL_CREATE_CPS_OUTPUT, [err.localizedDescription UTF8String]);
             return SG_RESOURCESTATE_FAILED;
         }
-        // NOTE: no easy way to set the label on a compute pipeline
         pip->mtl.cps = _sg_mtl_add_resource(mtl_cps);
 
         // compute threads-per-thread-group dispatch arg
@@ -13130,12 +13151,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
             SOKOL_ASSERT(pip->cmn.vertex_buffer_layout_active[a_state->buffer_index]);
             vtx_desc.attributes[attr_index].format = _sg_mtl_vertex_format(a_state->format);
             vtx_desc.attributes[attr_index].offset = (NSUInteger)a_state->offset;
-            vtx_desc.attributes[attr_index].bufferIndex = (NSUInteger)(a_state->buffer_index + SG_MAX_UNIFORMBLOCK_BINDSLOTS + SG_MAX_STORAGEBUFFER_BINDSLOTS);
+            vtx_desc.attributes[attr_index].bufferIndex = _sg_mtl_vertexbuffer_bindslot((size_t)a_state->buffer_index);
         }
         for (NSUInteger layout_index = 0; layout_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; layout_index++) {
             if (pip->cmn.vertex_buffer_layout_active[layout_index]) {
                 const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[layout_index];
-                const NSUInteger mtl_vb_slot = layout_index + SG_MAX_UNIFORMBLOCK_BINDSLOTS + SG_MAX_STORAGEBUFFER_BINDSLOTS;
+                const NSUInteger mtl_vb_slot = _sg_mtl_vertexbuffer_bindslot(layout_index);
                 SOKOL_ASSERT(l_state->stride > 0);
                 vtx_desc.layouts[mtl_vb_slot].stride = (NSUInteger)l_state->stride;
                 vtx_desc.layouts[mtl_vb_slot].stepFunction = _sg_mtl_step_function(l_state->step_func);
@@ -13174,6 +13195,25 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
             rp_desc.colorAttachments[i].destinationRGBBlendFactor = _sg_mtl_blend_factor(cs->blend.dst_factor_rgb);
             rp_desc.colorAttachments[i].sourceAlphaBlendFactor = _sg_mtl_blend_factor(cs->blend.src_factor_alpha);
             rp_desc.colorAttachments[i].sourceRGBBlendFactor = _sg_mtl_blend_factor(cs->blend.src_factor_rgb);
+        }
+        // set buffer mutability for all read-only buffers (vertex buffers and read-only storage buffers)
+        for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
+            if (pip->cmn.vertex_buffer_layout_active[i]) {
+                const NSUInteger mtl_slot = _sg_mtl_vertexbuffer_bindslot(i);
+                rp_desc.vertexBuffers[mtl_slot].mutability = MTLMutabilityImmutable;
+            }
+        }
+        for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
+            const NSUInteger mtl_slot = shd->mtl.sbuf_buffer_n[i];
+            const sg_shader_stage stage = shd->cmn.storage_buffers[i].stage;
+            SOKOL_ASSERT(stage != SG_SHADERSTAGE_COMPUTE);
+            if (stage == SG_SHADERSTAGE_VERTEX) {
+                SOKOL_ASSERT(shd->cmn.storage_buffers[i].readonly);
+                rp_desc.vertexBuffers[mtl_slot].mutability = MTLMutabilityImmutable;
+            } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
+                SOKOL_ASSERT(shd->cmn.storage_buffers[i].readonly);
+                rp_desc.fragmentBuffers[mtl_slot].mutability = MTLMutabilityImmutable;
+            }
         }
         #if defined(SOKOL_DEBUG)
             if (desc->label) {
@@ -13655,7 +13695,7 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
     SOKOL_ASSERT(bnd->pip->shader->slot.id == bnd->pip->cmn.shader_id.id);
     const _sg_shader_t* shd = bnd->pip->shader;
 
-    // vertex- and index-buffers only make sense in render passes
+    // don't set vertex- and index-buffers in compute passes
     if (!_sg.cur_pass.is_compute) {
         SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
         // store index buffer binding, this will be needed later in sg_draw()
@@ -13674,7 +13714,7 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
             if (vb == 0) {
                 continue;
             }
-            const NSUInteger mtl_slot = _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS + i;
+            const NSUInteger mtl_slot = _sg_mtl_vertexbuffer_bindslot(i);
             SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_BUFFER_BINDINGS);
             const int vb_offset = bnd->vb_offsets[i];
             if ((_sg.mtl.state_cache.cur_vs_buffer_ids[mtl_slot].id != vb->slot.id) ||
