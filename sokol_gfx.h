@@ -12699,7 +12699,7 @@ _SOKOL_PRIVATE void _sg_mtl_reset_state_cache(void) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
-    SOKOL_ASSERT(desc->size > 0);
+    SOKOL_ASSERT(buf->cmn.size > 0);
     const bool injected = (0 != desc->mtl_buffers[0]);
     MTLResourceOptions mtl_options = _sg_mtl_buffer_resource_options(buf->cmn.usage);
     for (int slot = 0; slot < buf->cmn.num_slots; slot++) {
@@ -15118,6 +15118,7 @@ _SOKOL_PRIVATE void _sg_wgpu_reset_state_cache(void) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
+    SOKOL_ASSERT(buf->cmn.size > 0);
     const bool injected = (0 != desc->wgpu_buffer);
     if (injected) {
         buf->wgpu.buf = (WGPUBuffer) desc->wgpu_buffer;
@@ -15126,7 +15127,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
         // buffer mapping size must be multiple of 4, so round up buffer size (only a problem
         // with index buffers containing odd number of indices)
         const uint64_t wgpu_buf_size = _sg_roundup_u64((uint64_t)buf->cmn.size, 4);
-        const bool map_at_creation = (SG_USAGE_IMMUTABLE == buf->cmn.usage);
+        const bool map_at_creation = (SG_USAGE_IMMUTABLE == buf->cmn.usage) && (desc->data.ptr);
 
         WGPUBufferDescriptor wgpu_buf_desc;
         _sg_clear(&wgpu_buf_desc, sizeof(wgpu_buf_desc));
@@ -15139,6 +15140,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
             _SG_ERROR(WGPU_CREATE_BUFFER_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
+        // NOTE: assume that WebGPU creates zero-initialized buffers
         if (map_at_creation) {
             SOKOL_ASSERT(desc->data.ptr && (desc->data.size > 0));
             SOKOL_ASSERT(desc->data.size <= (size_t)buf->cmn.size);
