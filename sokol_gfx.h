@@ -5136,6 +5136,11 @@ _SOKOL_PRIVATE void _sg_slot_reset(_sg_slot_t* slot);
 _SOKOL_PRIVATE uint32_t _sg_slot_alloc(_sg_pool_t* pool, _sg_slot_t* slot, int slot_index);
 _SOKOL_PRIVATE int _sg_slot_index(uint32_t id);
 
+// resource func forward decls
+struct _sg_pools_s;
+struct _sg_buffer_s;
+_SOKOL_PRIVATE struct _sg_buffer_s* _sg_lookup_buffer(const struct _sg_pools_s* p, uint32_t buf_id);
+
 // resource tracking (for keeping track of gpu-written storage resources
 typedef struct {
     uint32_t size;
@@ -5462,31 +5467,31 @@ _SOKOL_PRIVATE void _sg_attachments_common_init(_sg_attachments_common_t* cmn, c
 }
 
 #if defined(SOKOL_DUMMY_BACKEND)
-typedef struct {
+typedef struct _sg_buffer_s {
     _sg_slot_t slot;
     _sg_buffer_common_t cmn;
 } _sg_dummy_buffer_t;
 typedef _sg_dummy_buffer_t _sg_buffer_t;
 
-typedef struct {
+typedef struct _sg_image_s {
     _sg_slot_t slot;
     _sg_image_common_t cmn;
 } _sg_dummy_image_t;
 typedef _sg_dummy_image_t _sg_image_t;
 
-typedef struct {
+typedef struct _sg_sampler_s {
     _sg_slot_t slot;
     _sg_sampler_common_t cmn;
 } _sg_dummy_sampler_t;
 typedef _sg_dummy_sampler_t _sg_sampler_t;
 
-typedef struct {
+typedef struct _sg_sampler_s {
     _sg_slot_t slot;
     _sg_shader_common_t cmn;
 } _sg_dummy_shader_t;
-typedef _sg_dummy_shader_t _sg_shader_t;
+typedef _sg_dummy_shader_t _sg_sampler_t;
 
-typedef struct {
+typedef struct _sg_pipeline_s {
     _sg_slot_t slot;
     _sg_shader_t* shader;
     _sg_pipeline_common_t cmn;
@@ -5497,7 +5502,7 @@ typedef struct {
     _sg_image_t* image;
 } _sg_dummy_attachment_t;
 
-typedef struct {
+typedef struct _sg_attachments_s {
     _sg_slot_t slot;
     _sg_attachments_common_t cmn;
     struct {
@@ -5510,7 +5515,7 @@ typedef _sg_dummy_attachments_t _sg_attachments_t;
 
 #elif defined(_SOKOL_ANY_GL)
 
-typedef struct {
+typedef struct _sg_buffer_s {
     _sg_slot_t slot;
     _sg_buffer_common_t cmn;
     struct {
@@ -5520,7 +5525,7 @@ typedef struct {
 } _sg_gl_buffer_t;
 typedef _sg_gl_buffer_t _sg_buffer_t;
 
-typedef struct {
+typedef struct _sg_image_s {
     _sg_slot_t slot;
     _sg_image_common_t cmn;
     struct {
@@ -5532,7 +5537,7 @@ typedef struct {
 } _sg_gl_image_t;
 typedef _sg_gl_image_t _sg_image_t;
 
-typedef struct {
+typedef struct _sg_sampler_s {
     _sg_slot_t slot;
     _sg_sampler_common_t cmn;
     struct {
@@ -5558,7 +5563,7 @@ typedef struct {
     _sg_str_t name;
 } _sg_gl_shader_attr_t;
 
-typedef struct {
+typedef struct _sg_shader_s {
     _sg_slot_t slot;
     _sg_shader_common_t cmn;
     struct {
@@ -5581,7 +5586,7 @@ typedef struct {
     GLenum type;
 } _sg_gl_attr_t;
 
-typedef struct {
+typedef struct _sg_pipeline_s {
     _sg_slot_t slot;
     _sg_pipeline_common_t cmn;
     _sg_shader_t* shader;
@@ -5604,7 +5609,7 @@ typedef struct {
     _sg_image_t* image;
 } _sg_gl_attachment_t;
 
-typedef struct {
+typedef struct _sg_attachments_s {
     _sg_slot_t slot;
     _sg_attachments_common_t cmn;
     struct {
@@ -5676,7 +5681,7 @@ typedef struct {
 
 #elif defined(SOKOL_D3D11)
 
-typedef struct {
+typedef struct _sg_buffer_s {
     _sg_slot_t slot;
     _sg_buffer_common_t cmn;
     struct {
@@ -5686,7 +5691,7 @@ typedef struct {
 } _sg_d3d11_buffer_t;
 typedef _sg_d3d11_buffer_t _sg_buffer_t;
 
-typedef struct {
+typedef struct _sg_image_s {
     _sg_slot_t slot;
     _sg_image_common_t cmn;
     struct {
@@ -5699,7 +5704,7 @@ typedef struct {
 } _sg_d3d11_image_t;
 typedef _sg_d3d11_image_t _sg_image_t;
 
-typedef struct {
+typedef struct _sg_sampler_s {
     _sg_slot_t slot;
     _sg_sampler_common_t cmn;
     struct {
@@ -5717,7 +5722,7 @@ typedef struct {
 #define _SG_D3D11_MAX_STAGE_TEX_SBUF_BINDINGS (SG_MAX_IMAGE_BINDSLOTS + SG_MAX_STORAGEBUFFER_BINDSLOTS)
 #define _SG_D3D11_MAX_STAGE_SMP_BINDINGS (SG_MAX_SAMPLER_BINDSLOTS)
 
-typedef struct {
+typedef struct _sg_shader_s {
     _sg_slot_t slot;
     _sg_shader_common_t cmn;
     struct {
@@ -5737,7 +5742,7 @@ typedef struct {
 } _sg_d3d11_shader_t;
 typedef _sg_d3d11_shader_t _sg_shader_t;
 
-typedef struct {
+typedef struct _sg_pipeline_s {
     _sg_slot_t slot;
     _sg_pipeline_common_t cmn;
     _sg_shader_t* shader;
@@ -5762,7 +5767,7 @@ typedef struct {
     } view;
 } _sg_d3d11_attachment_t;
 
-typedef struct {
+typedef struct _sg_attachments_s {
     _sg_slot_t slot;
     _sg_attachments_common_t cmn;
     struct {
@@ -5817,7 +5822,7 @@ typedef struct {
     _sg_mtl_release_item_t* release_queue;
 } _sg_mtl_idpool_t;
 
-typedef struct {
+typedef struct _sg_buffer_s {
     _sg_slot_t slot;
     _sg_buffer_common_t cmn;
     struct {
@@ -5826,7 +5831,7 @@ typedef struct {
 } _sg_mtl_buffer_t;
 typedef _sg_mtl_buffer_t _sg_buffer_t;
 
-typedef struct {
+typedef struct _sg_image_s {
     _sg_slot_t slot;
     _sg_image_common_t cmn;
     struct {
@@ -5835,7 +5840,7 @@ typedef struct {
 } _sg_mtl_image_t;
 typedef _sg_mtl_image_t _sg_image_t;
 
-typedef struct {
+typedef struct _sg_sampler_s {
     _sg_slot_t slot;
     _sg_sampler_common_t cmn;
     struct {
@@ -5849,7 +5854,7 @@ typedef struct {
     int mtl_func;
 } _sg_mtl_shader_func_t;
 
-typedef struct {
+typedef struct _sg_shader_s {
     _sg_slot_t slot;
     _sg_shader_common_t cmn;
     struct {
@@ -5864,7 +5869,7 @@ typedef struct {
 } _sg_mtl_shader_t;
 typedef _sg_mtl_shader_t _sg_shader_t;
 
-typedef struct {
+typedef struct _sg_pipeline_s {
     _sg_slot_t slot;
     _sg_pipeline_common_t cmn;
     _sg_shader_t* shader;
@@ -5889,7 +5894,7 @@ typedef struct {
     _sg_image_t* image;
 } _sg_mtl_attachment_t;
 
-typedef struct {
+typedef struct _sg_attachments_s {
     _sg_slot_t slot;
     _sg_attachments_common_t cmn;
     struct {
@@ -5953,7 +5958,7 @@ typedef struct {
 #define _SG_WGPU_MAX_IMG_SMP_SBUF_BINDGROUP_ENTRIES (SG_MAX_IMAGE_BINDSLOTS + SG_MAX_SAMPLER_BINDSLOTS + SG_MAX_STORAGEBUFFER_BINDSLOTS)
 #define _SG_WGPU_MAX_IMG_SMP_SBUF_BIND_SLOTS (128)
 
-typedef struct {
+typedef struct _sg_buffer_s {
     _sg_slot_t slot;
     _sg_buffer_common_t cmn;
     struct {
@@ -5962,7 +5967,7 @@ typedef struct {
 } _sg_wgpu_buffer_t;
 typedef _sg_wgpu_buffer_t _sg_buffer_t;
 
-typedef struct {
+typedef struct _sg_image_s {
     _sg_slot_t slot;
     _sg_image_common_t cmn;
     struct {
@@ -5972,7 +5977,7 @@ typedef struct {
 } _sg_wgpu_image_t;
 typedef _sg_wgpu_image_t _sg_image_t;
 
-typedef struct {
+typedef struct _sg_sampler_s {
     _sg_slot_t slot;
     _sg_sampler_common_t cmn;
     struct {
@@ -5986,7 +5991,7 @@ typedef struct {
     _sg_str_t entry;
 } _sg_wgpu_shader_func_t;
 
-typedef struct {
+typedef struct _sg_shader_s {
     _sg_slot_t slot;
     _sg_shader_common_t cmn;
     struct {
@@ -6007,7 +6012,7 @@ typedef struct {
 } _sg_wgpu_shader_t;
 typedef _sg_wgpu_shader_t _sg_shader_t;
 
-typedef struct {
+typedef struct _sg_pipeline_s {
     _sg_slot_t slot;
     _sg_pipeline_common_t cmn;
     _sg_shader_t* shader;
@@ -6023,7 +6028,7 @@ typedef struct {
     WGPUTextureView view;
 } _sg_wgpu_attachment_t;
 
-typedef struct {
+typedef struct _sg_attachments_s {
     _sg_slot_t slot;
     _sg_attachments_common_t cmn;
     struct {
@@ -6121,7 +6126,7 @@ typedef struct {
 // this *MUST* remain 0
 #define _SG_INVALID_SLOT_INDEX (0)
 
-typedef struct {
+typedef struct _sg_pools_s {
     _sg_pool_t buffer_pool;
     _sg_pool_t image_pool;
     _sg_pool_t sampler_pool;
@@ -13553,7 +13558,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass* pass) {
     SOKOL_ASSERT(nil == _sg.mtl.cur_drawable);
     _sg_mtl_clear_state_cache();
 
-    // if this is the first pass in the frame, create command buffers
+    // if this is the first pass in the frame, create one command buffer and blit-cmd-encoder for the entire frame
     if (nil == _sg.mtl.cmd_buffer) {
         // block until the oldest frame in flight has finished
         dispatch_semaphore_wait(_sg.mtl.sem, DISPATCH_TIME_FOREVER);
@@ -13597,6 +13602,22 @@ _SOKOL_PRIVATE void _sg_mtl_end_pass(void) {
         [_sg.mtl.compute_cmd_encoder endEncoding];
         // NOTE: MTLComputeCommandEncoder is autoreleased
         _sg.mtl.compute_cmd_encoder = nil;
+
+        // synchronize any managed buffers written by the GPU
+        #if defined(_SG_TARGET_MACOS)
+        if (_sg_mtl_resource_options_storage_mode_managed_or_shared() == MTLResourceStorageModeManaged) {
+            if (_sg.compute.readwrite_sbufs.cur > 0) {
+                id<MTLBlitCommandEncoder> blit_cmd_encoder = [_sg.mtl.cmd_buffer blitCommandEncoder];
+                for (uint32_t i = 0; i < _sg.compute.readwrite_sbufs.cur; i++) {
+                    _sg_buffer_t* sbuf = _sg_lookup_buffer(&_sg.pools, _sg.compute.readwrite_sbufs.items[i]);
+                    if (sbuf) {
+                        [blit_cmd_encoder synchronizeResource:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot])];
+                    }
+                }
+                [blit_cmd_encoder endEncoding];
+            }
+        }
+        #endif
     }
     // if this is a swapchain pass, present the drawable
     if (nil != _sg.mtl.cur_drawable) {
