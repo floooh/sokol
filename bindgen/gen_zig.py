@@ -417,7 +417,7 @@ def gen_enum(decl, prefix):
 
 def gen_func_c(decl, prefix):
     c(decl.get('comment'))
-    l(f"pub extern fn {decl['name']}({funcdecl_args_c(decl, prefix)}) {funcdecl_result_c(decl, prefix)};")
+    l(f"extern fn {decl['name']}({funcdecl_args_c(decl, prefix)}) {funcdecl_result_c(decl, prefix)};")
     l('')
 
 def gen_func_zig(decl, prefix):
