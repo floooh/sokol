@@ -3476,7 +3476,7 @@ typedef struct sg_trace_hooks {
     sg_query_sampler_info()
     sg_query_shader_info()
     sg_query_pipeline_info()
-    sg_query_pass_info()
+    sg_query_attachments_info()
 */
 typedef struct sg_slot_info {
     sg_resource_state state;    // the current state of this resource slot
@@ -19995,6 +19995,7 @@ SOKOL_API_IMPL sg_pipeline_desc sg_query_pipeline_desc(sg_pipeline pip_id) {
     _sg_clear(&desc, sizeof(desc));
     const _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
     if (pip) {
+        desc.compute = pip->cmn.is_compute;
         desc.shader = pip->cmn.shader_id;
         desc.layout = pip->cmn.layout;
         desc.depth = pip->cmn.depth;
