@@ -3769,6 +3769,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(WGPU_SAMPLER_WGSL_GROUP1_BINDING_OUT_OF_RANGE, "sampler 'wgsl_group1_binding_n' is out of range (must be 0..127)") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_PIPELINE_LAYOUT_FAILED, "wgpuDeviceCreatePipelineLayout() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_RENDER_PIPELINE_FAILED, "wgpuDeviceCreateRenderPipeline() failed") \
+    _SG_LOGITEM_XMACRO(WGPU_CREATE_COMPUTE_PIPELINE_FAILED, "wgpuDeviceCreateComputePipeline() failed") \
     _SG_LOGITEM_XMACRO(WGPU_ATTACHMENTS_CREATE_TEXTURE_VIEW_FAILED, "wgpuTextureCreateView() failed in create attachments") \
     _SG_LOGITEM_XMACRO(DRAW_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING, "call to sg_apply_bindings() and/or sg_apply_uniforms() missing after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(IDENTICAL_COMMIT_LISTENER, "attempting to add identical commit listener") \
@@ -4426,7 +4427,8 @@ typedef struct sg_wgpu_shader_info {
 } sg_wgpu_shader_info;
 
 typedef struct sg_wgpu_pipeline_info {
-    const void* pip;      // WGPURenderPipeline
+    const void* render_pipeline;   // WGPURenderPipeline
+    const void* compute_pipeline;  // WGPUComputePipeline
 } sg_wgpu_pipeline_info;
 
 typedef struct sg_wgpu_attachments_info {
@@ -6025,7 +6027,8 @@ typedef struct _sg_pipeline_s {
     _sg_pipeline_common_t cmn;
     _sg_shader_t* shader;
     struct {
-        WGPURenderPipeline pip;
+        WGPURenderPipeline rpip;
+        WGPUComputePipeline cpip;
         WGPUColor blend_color;
     } wgpu;
 } _sg_wgpu_pipeline_t;
@@ -15625,103 +15628,118 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     }
     SOKOL_ASSERT(wgpu_pip_layout);
 
-    WGPUVertexBufferLayout wgpu_vb_layouts[SG_MAX_VERTEXBUFFER_BINDSLOTS];
-    _sg_clear(wgpu_vb_layouts, sizeof(wgpu_vb_layouts));
-    WGPUVertexAttribute wgpu_vtx_attrs[SG_MAX_VERTEXBUFFER_BINDSLOTS][SG_MAX_VERTEX_ATTRIBUTES];
-    _sg_clear(wgpu_vtx_attrs, sizeof(wgpu_vtx_attrs));
-    int wgpu_vb_num = 0;
-    for (int vb_idx = 0; vb_idx < SG_MAX_VERTEXBUFFER_BINDSLOTS; vb_idx++, wgpu_vb_num++) {
-        const sg_vertex_buffer_layout_state* vbl_state = &desc->layout.buffers[vb_idx];
-        if (0 == vbl_state->stride) {
-            break;
+    if (pip->cmn.is_compute) {
+        WGPUComputePipelineDescriptor wgpu_pip_desc;
+        _sg_clear(&wgpu_pip_desc, sizeof(wgpu_pip_desc));
+        wgpu_pip_desc.label = _sg_wgpu_stringview(desc->label);
+        wgpu_pip_desc.layout = wgpu_pip_layout;
+        wgpu_pip_desc.compute.module = shd->wgpu.compute_func.module;
+        wgpu_pip_desc.compute.entryPoint = shd->wgpu.compute_func.entry.buf;
+        pip->wgpu.cpip = wgpuDeviceCreateComputePipeline(_sg.wgpu.dev, &wgpu_pip_desc);
+        wgpuPipelineLayoutRelease(wgpu_pip_layout);
+        if (0 == pip->wgpu.cpip) {
+            _SG_ERROR(WGPU_CREATE_COMPUTE_PIPELINE_FAILED);
+            return SG_RESOURCESTATE_FAILED;
         }
-        wgpu_vb_layouts[vb_idx].arrayStride = (uint64_t)vbl_state->stride;
-        wgpu_vb_layouts[vb_idx].stepMode = _sg_wgpu_stepmode(vbl_state->step_func);
-        wgpu_vb_layouts[vb_idx].attributes = &wgpu_vtx_attrs[vb_idx][0];
-    }
-    for (int va_idx = 0; va_idx < SG_MAX_VERTEX_ATTRIBUTES; va_idx++) {
-        const sg_vertex_attr_state* va_state = &desc->layout.attrs[va_idx];
-        if (SG_VERTEXFORMAT_INVALID == va_state->format) {
-            break;
-        }
-        const int vb_idx = va_state->buffer_index;
-        SOKOL_ASSERT(vb_idx < SG_MAX_VERTEXBUFFER_BINDSLOTS);
-        SOKOL_ASSERT(pip->cmn.vertex_buffer_layout_active[vb_idx]);
-        const size_t wgpu_attr_idx = wgpu_vb_layouts[vb_idx].attributeCount;
-        wgpu_vb_layouts[vb_idx].attributeCount += 1;
-        wgpu_vtx_attrs[vb_idx][wgpu_attr_idx].format = _sg_wgpu_vertexformat(va_state->format);
-        wgpu_vtx_attrs[vb_idx][wgpu_attr_idx].offset = (uint64_t)va_state->offset;
-        wgpu_vtx_attrs[vb_idx][wgpu_attr_idx].shaderLocation = (uint32_t)va_idx;
-    }
-
-    WGPURenderPipelineDescriptor wgpu_pip_desc;
-    _sg_clear(&wgpu_pip_desc, sizeof(wgpu_pip_desc));
-    WGPUDepthStencilState wgpu_ds_state;
-    _sg_clear(&wgpu_ds_state, sizeof(wgpu_ds_state));
-    WGPUFragmentState wgpu_frag_state;
-    _sg_clear(&wgpu_frag_state, sizeof(wgpu_frag_state));
-    WGPUColorTargetState wgpu_ctgt_state[SG_MAX_COLOR_ATTACHMENTS];
-    _sg_clear(&wgpu_ctgt_state, sizeof(wgpu_ctgt_state));
-    WGPUBlendState wgpu_blend_state[SG_MAX_COLOR_ATTACHMENTS];
-    _sg_clear(&wgpu_blend_state, sizeof(wgpu_blend_state));
-    wgpu_pip_desc.label = _sg_wgpu_stringview(desc->label);
-    wgpu_pip_desc.layout = wgpu_pip_layout;
-    wgpu_pip_desc.vertex.module = shd->wgpu.vertex_func.module;
-    wgpu_pip_desc.vertex.entryPoint = shd->wgpu.vertex_func.entry.buf;
-    wgpu_pip_desc.vertex.bufferCount = (size_t)wgpu_vb_num;
-    wgpu_pip_desc.vertex.buffers = &wgpu_vb_layouts[0];
-    wgpu_pip_desc.primitive.topology = _sg_wgpu_topology(desc->primitive_type);
-    wgpu_pip_desc.primitive.stripIndexFormat = _sg_wgpu_stripindexformat(desc->primitive_type, desc->index_type);
-    wgpu_pip_desc.primitive.frontFace = _sg_wgpu_frontface(desc->face_winding);
-    wgpu_pip_desc.primitive.cullMode = _sg_wgpu_cullmode(desc->cull_mode);
-    if (SG_PIXELFORMAT_NONE != desc->depth.pixel_format) {
-        wgpu_ds_state.format = _sg_wgpu_textureformat(desc->depth.pixel_format);
-        wgpu_ds_state.depthWriteEnabled = _sg_wgpu_optional_bool(desc->depth.write_enabled);
-        wgpu_ds_state.depthCompare = _sg_wgpu_comparefunc(desc->depth.compare);
-        wgpu_ds_state.stencilFront.compare = _sg_wgpu_comparefunc(desc->stencil.front.compare);
-        wgpu_ds_state.stencilFront.failOp = _sg_wgpu_stencilop(desc->stencil.front.fail_op);
-        wgpu_ds_state.stencilFront.depthFailOp = _sg_wgpu_stencilop(desc->stencil.front.depth_fail_op);
-        wgpu_ds_state.stencilFront.passOp = _sg_wgpu_stencilop(desc->stencil.front.pass_op);
-        wgpu_ds_state.stencilBack.compare = _sg_wgpu_comparefunc(desc->stencil.back.compare);
-        wgpu_ds_state.stencilBack.failOp = _sg_wgpu_stencilop(desc->stencil.back.fail_op);
-        wgpu_ds_state.stencilBack.depthFailOp = _sg_wgpu_stencilop(desc->stencil.back.depth_fail_op);
-        wgpu_ds_state.stencilBack.passOp = _sg_wgpu_stencilop(desc->stencil.back.pass_op);
-        wgpu_ds_state.stencilReadMask = desc->stencil.read_mask;
-        wgpu_ds_state.stencilWriteMask = desc->stencil.write_mask;
-        wgpu_ds_state.depthBias = (int32_t)desc->depth.bias;
-        wgpu_ds_state.depthBiasSlopeScale = desc->depth.bias_slope_scale;
-        wgpu_ds_state.depthBiasClamp = desc->depth.bias_clamp;
-        wgpu_pip_desc.depthStencil = &wgpu_ds_state;
-    }
-    wgpu_pip_desc.multisample.count = (uint32_t)desc->sample_count;
-    wgpu_pip_desc.multisample.mask = 0xFFFFFFFF;
-    wgpu_pip_desc.multisample.alphaToCoverageEnabled = desc->alpha_to_coverage_enabled;
-    if (desc->color_count > 0) {
-        wgpu_frag_state.module = shd->wgpu.fragment_func.module;
-        wgpu_frag_state.entryPoint = shd->wgpu.fragment_func.entry.buf;
-        wgpu_frag_state.targetCount = (size_t)desc->color_count;
-        wgpu_frag_state.targets = &wgpu_ctgt_state[0];
-        for (int i = 0; i < desc->color_count; i++) {
-            SOKOL_ASSERT(i < SG_MAX_COLOR_ATTACHMENTS);
-            wgpu_ctgt_state[i].format = _sg_wgpu_textureformat(desc->colors[i].pixel_format);
-            wgpu_ctgt_state[i].writeMask = _sg_wgpu_colorwritemask(desc->colors[i].write_mask);
-            if (desc->colors[i].blend.enabled) {
-                wgpu_ctgt_state[i].blend = &wgpu_blend_state[i];
-                wgpu_blend_state[i].color.operation = _sg_wgpu_blendop(desc->colors[i].blend.op_rgb);
-                wgpu_blend_state[i].color.srcFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.src_factor_rgb);
-                wgpu_blend_state[i].color.dstFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.dst_factor_rgb);
-                wgpu_blend_state[i].alpha.operation = _sg_wgpu_blendop(desc->colors[i].blend.op_alpha);
-                wgpu_blend_state[i].alpha.srcFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.src_factor_alpha);
-                wgpu_blend_state[i].alpha.dstFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.dst_factor_alpha);
+    } else {
+        WGPUVertexBufferLayout wgpu_vb_layouts[SG_MAX_VERTEXBUFFER_BINDSLOTS];
+        _sg_clear(wgpu_vb_layouts, sizeof(wgpu_vb_layouts));
+        WGPUVertexAttribute wgpu_vtx_attrs[SG_MAX_VERTEXBUFFER_BINDSLOTS][SG_MAX_VERTEX_ATTRIBUTES];
+        _sg_clear(wgpu_vtx_attrs, sizeof(wgpu_vtx_attrs));
+        int wgpu_vb_num = 0;
+        for (int vb_idx = 0; vb_idx < SG_MAX_VERTEXBUFFER_BINDSLOTS; vb_idx++, wgpu_vb_num++) {
+            const sg_vertex_buffer_layout_state* vbl_state = &desc->layout.buffers[vb_idx];
+            if (0 == vbl_state->stride) {
+                break;
             }
+            wgpu_vb_layouts[vb_idx].arrayStride = (uint64_t)vbl_state->stride;
+            wgpu_vb_layouts[vb_idx].stepMode = _sg_wgpu_stepmode(vbl_state->step_func);
+            wgpu_vb_layouts[vb_idx].attributes = &wgpu_vtx_attrs[vb_idx][0];
         }
-        wgpu_pip_desc.fragment = &wgpu_frag_state;
-    }
-    pip->wgpu.pip = wgpuDeviceCreateRenderPipeline(_sg.wgpu.dev, &wgpu_pip_desc);
-    wgpuPipelineLayoutRelease(wgpu_pip_layout);
-    if (0 == pip->wgpu.pip) {
-        _SG_ERROR(WGPU_CREATE_RENDER_PIPELINE_FAILED);
-        return SG_RESOURCESTATE_FAILED;
+        for (int va_idx = 0; va_idx < SG_MAX_VERTEX_ATTRIBUTES; va_idx++) {
+            const sg_vertex_attr_state* va_state = &desc->layout.attrs[va_idx];
+            if (SG_VERTEXFORMAT_INVALID == va_state->format) {
+                break;
+            }
+            const int vb_idx = va_state->buffer_index;
+            SOKOL_ASSERT(vb_idx < SG_MAX_VERTEXBUFFER_BINDSLOTS);
+            SOKOL_ASSERT(pip->cmn.vertex_buffer_layout_active[vb_idx]);
+            const size_t wgpu_attr_idx = wgpu_vb_layouts[vb_idx].attributeCount;
+            wgpu_vb_layouts[vb_idx].attributeCount += 1;
+            wgpu_vtx_attrs[vb_idx][wgpu_attr_idx].format = _sg_wgpu_vertexformat(va_state->format);
+            wgpu_vtx_attrs[vb_idx][wgpu_attr_idx].offset = (uint64_t)va_state->offset;
+            wgpu_vtx_attrs[vb_idx][wgpu_attr_idx].shaderLocation = (uint32_t)va_idx;
+        }
+
+        WGPURenderPipelineDescriptor wgpu_pip_desc;
+        _sg_clear(&wgpu_pip_desc, sizeof(wgpu_pip_desc));
+        WGPUDepthStencilState wgpu_ds_state;
+        _sg_clear(&wgpu_ds_state, sizeof(wgpu_ds_state));
+        WGPUFragmentState wgpu_frag_state;
+        _sg_clear(&wgpu_frag_state, sizeof(wgpu_frag_state));
+        WGPUColorTargetState wgpu_ctgt_state[SG_MAX_COLOR_ATTACHMENTS];
+        _sg_clear(&wgpu_ctgt_state, sizeof(wgpu_ctgt_state));
+        WGPUBlendState wgpu_blend_state[SG_MAX_COLOR_ATTACHMENTS];
+        _sg_clear(&wgpu_blend_state, sizeof(wgpu_blend_state));
+        wgpu_pip_desc.label = _sg_wgpu_stringview(desc->label);
+        wgpu_pip_desc.layout = wgpu_pip_layout;
+        wgpu_pip_desc.vertex.module = shd->wgpu.vertex_func.module;
+        wgpu_pip_desc.vertex.entryPoint = shd->wgpu.vertex_func.entry.buf;
+        wgpu_pip_desc.vertex.bufferCount = (size_t)wgpu_vb_num;
+        wgpu_pip_desc.vertex.buffers = &wgpu_vb_layouts[0];
+        wgpu_pip_desc.primitive.topology = _sg_wgpu_topology(desc->primitive_type);
+        wgpu_pip_desc.primitive.stripIndexFormat = _sg_wgpu_stripindexformat(desc->primitive_type, desc->index_type);
+        wgpu_pip_desc.primitive.frontFace = _sg_wgpu_frontface(desc->face_winding);
+        wgpu_pip_desc.primitive.cullMode = _sg_wgpu_cullmode(desc->cull_mode);
+        if (SG_PIXELFORMAT_NONE != desc->depth.pixel_format) {
+            wgpu_ds_state.format = _sg_wgpu_textureformat(desc->depth.pixel_format);
+            wgpu_ds_state.depthWriteEnabled = _sg_wgpu_optional_bool(desc->depth.write_enabled);
+            wgpu_ds_state.depthCompare = _sg_wgpu_comparefunc(desc->depth.compare);
+            wgpu_ds_state.stencilFront.compare = _sg_wgpu_comparefunc(desc->stencil.front.compare);
+            wgpu_ds_state.stencilFront.failOp = _sg_wgpu_stencilop(desc->stencil.front.fail_op);
+            wgpu_ds_state.stencilFront.depthFailOp = _sg_wgpu_stencilop(desc->stencil.front.depth_fail_op);
+            wgpu_ds_state.stencilFront.passOp = _sg_wgpu_stencilop(desc->stencil.front.pass_op);
+            wgpu_ds_state.stencilBack.compare = _sg_wgpu_comparefunc(desc->stencil.back.compare);
+            wgpu_ds_state.stencilBack.failOp = _sg_wgpu_stencilop(desc->stencil.back.fail_op);
+            wgpu_ds_state.stencilBack.depthFailOp = _sg_wgpu_stencilop(desc->stencil.back.depth_fail_op);
+            wgpu_ds_state.stencilBack.passOp = _sg_wgpu_stencilop(desc->stencil.back.pass_op);
+            wgpu_ds_state.stencilReadMask = desc->stencil.read_mask;
+            wgpu_ds_state.stencilWriteMask = desc->stencil.write_mask;
+            wgpu_ds_state.depthBias = (int32_t)desc->depth.bias;
+            wgpu_ds_state.depthBiasSlopeScale = desc->depth.bias_slope_scale;
+            wgpu_ds_state.depthBiasClamp = desc->depth.bias_clamp;
+            wgpu_pip_desc.depthStencil = &wgpu_ds_state;
+        }
+        wgpu_pip_desc.multisample.count = (uint32_t)desc->sample_count;
+        wgpu_pip_desc.multisample.mask = 0xFFFFFFFF;
+        wgpu_pip_desc.multisample.alphaToCoverageEnabled = desc->alpha_to_coverage_enabled;
+        if (desc->color_count > 0) {
+            wgpu_frag_state.module = shd->wgpu.fragment_func.module;
+            wgpu_frag_state.entryPoint = shd->wgpu.fragment_func.entry.buf;
+            wgpu_frag_state.targetCount = (size_t)desc->color_count;
+            wgpu_frag_state.targets = &wgpu_ctgt_state[0];
+            for (int i = 0; i < desc->color_count; i++) {
+                SOKOL_ASSERT(i < SG_MAX_COLOR_ATTACHMENTS);
+                wgpu_ctgt_state[i].format = _sg_wgpu_textureformat(desc->colors[i].pixel_format);
+                wgpu_ctgt_state[i].writeMask = _sg_wgpu_colorwritemask(desc->colors[i].write_mask);
+                if (desc->colors[i].blend.enabled) {
+                    wgpu_ctgt_state[i].blend = &wgpu_blend_state[i];
+                    wgpu_blend_state[i].color.operation = _sg_wgpu_blendop(desc->colors[i].blend.op_rgb);
+                    wgpu_blend_state[i].color.srcFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.src_factor_rgb);
+                    wgpu_blend_state[i].color.dstFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.dst_factor_rgb);
+                    wgpu_blend_state[i].alpha.operation = _sg_wgpu_blendop(desc->colors[i].blend.op_alpha);
+                    wgpu_blend_state[i].alpha.srcFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.src_factor_alpha);
+                    wgpu_blend_state[i].alpha.dstFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.dst_factor_alpha);
+                }
+            }
+            wgpu_pip_desc.fragment = &wgpu_frag_state;
+        }
+        pip->wgpu.rpip = wgpuDeviceCreateRenderPipeline(_sg.wgpu.dev, &wgpu_pip_desc);
+        wgpuPipelineLayoutRelease(wgpu_pip_layout);
+        if (0 == pip->wgpu.rpip) {
+            _SG_ERROR(WGPU_CREATE_RENDER_PIPELINE_FAILED);
+            return SG_RESOURCESTATE_FAILED;
+        }
     }
     return SG_RESOURCESTATE_VALID;
 }
@@ -15733,9 +15751,13 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_pipeline(_sg_pipeline_t* pip) {
         _sg.wgpu.cur_pipeline = 0;
         _sg.wgpu.cur_pipeline_id.id = SG_INVALID_ID;
     }
-    if (pip->wgpu.pip) {
-        wgpuRenderPipelineRelease(pip->wgpu.pip);
-        pip->wgpu.pip = 0;
+    if (pip->wgpu.rpip) {
+        wgpuRenderPipelineRelease(pip->wgpu.rpip);
+        pip->wgpu.rpip = 0;
+    }
+    if (pip->wgpu.cpip) {
+        wgpuComputePipelineRelease(pip->wgpu.cpip);
+        pip->wgpu.cpip = 0;
     }
 }
 
@@ -16003,13 +16025,13 @@ _SOKOL_PRIVATE void _sg_wgpu_set_ub_bindgroup(const _sg_shader_t* shd) {
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
-    SOKOL_ASSERT(pip->wgpu.pip);
+    SOKOL_ASSERT(pip->wgpu.rpip);
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
     SOKOL_ASSERT(pip->shader && (pip->shader->slot.id == pip->cmn.shader_id.id));
     _sg.wgpu.use_indexed_draw = (pip->cmn.index_type != SG_INDEXTYPE_NONE);
     _sg.wgpu.cur_pipeline = pip;
     _sg.wgpu.cur_pipeline_id.id = pip->slot.id;
-    wgpuRenderPassEncoderSetPipeline(_sg.wgpu.pass_enc, pip->wgpu.pip);
+    wgpuRenderPassEncoderSetPipeline(_sg.wgpu.pass_enc, pip->wgpu.rpip);
     wgpuRenderPassEncoderSetBlendConstant(_sg.wgpu.pass_enc, &pip->wgpu.blend_color);
     wgpuRenderPassEncoderSetStencilReference(_sg.wgpu.pass_enc, pip->cmn.stencil.ref);
     // bind groups must be set because pipelines without uniform blocks or resource bindings
@@ -20521,7 +20543,8 @@ SOKOL_API_IMPL sg_wgpu_pipeline_info sg_wgpu_query_pipeline_info(sg_pipeline pip
     #if defined(SOKOL_WGPU)
         const _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
         if (pip) {
-            res.pip = (const void*) pip->wgpu.pip;
+            res.render_pipeline = (const void*) pip->wgpu.rpip;
+            res.compute_pipeline = (const void*) pip->wgpu.cpip;
         }
     #else
         _SOKOL_UNUSED(pip_id);
