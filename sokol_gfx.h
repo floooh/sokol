@@ -3118,6 +3118,10 @@ typedef struct sg_shader_function {
     const char* d3d11_target;   // default: "vs_4_0" or "ps_4_0"
 } sg_shader_function;
 
+typedef struct sg_shader_compute_workgroup_size {
+    int x, y, z;
+} sg_shader_compute_workgroup_size;
+
 typedef struct sg_shader_vertex_attr {
     const char* glsl_name;      // [optional] GLSL attribute name
     const char* hlsl_sem_name;  // HLSL semantic name
@@ -3179,6 +3183,7 @@ typedef struct sg_shader_desc {
     sg_shader_function vertex_func;
     sg_shader_function fragment_func;
     sg_shader_function compute_func;
+    sg_shader_compute_workgroup_size compute_workgroup_size;
     sg_shader_vertex_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
     sg_shader_uniform_block uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
     sg_shader_storage_buffer storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
@@ -5310,6 +5315,7 @@ typedef struct {
 typedef struct {
     uint32_t required_bindings_and_uniforms;
     bool is_compute;
+    sg_shader_compute_workgroup_size compute_workgroup_size;
     _sg_shader_uniform_block_t uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
     _sg_shader_storage_buffer_t storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
     _sg_shader_image_t images[SG_MAX_IMAGE_BINDSLOTS];
@@ -5319,6 +5325,7 @@ typedef struct {
 
 _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_shader_desc* desc) {
     cmn->is_compute = desc->compute_func.source || desc->compute_func.bytecode.ptr;
+    cmn->compute_workgroup_size = desc->compute_workgroup_size;
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
         const sg_shader_uniform_block* src = &desc->uniform_blocks[i];
         _sg_shader_uniform_block_t* dst = &cmn->uniform_blocks[i];
@@ -5997,6 +6004,7 @@ typedef struct _sg_shader_s {
     struct {
         _sg_wgpu_shader_func_t vertex_func;
         _sg_wgpu_shader_func_t fragment_func;
+        _sg_wgpu_shader_func_t compute_func;
         WGPUBindGroupLayout bgl_ub;
         WGPUBindGroup bg_ub;
         WGPUBindGroupLayout bgl_img_smp_sbuf;
@@ -14397,6 +14405,7 @@ _SOKOL_PRIVATE WGPUShaderStage _sg_wgpu_shader_stage(sg_shader_stage stage) {
     switch (stage) {
         case SG_SHADERSTAGE_VERTEX: return WGPUShaderStage_Vertex;
         case SG_SHADERSTAGE_FRAGMENT: return WGPUShaderStage_Fragment;
+        case SG_SHADERSTAGE_COMPUTE: return WGPUShaderStage_Compute;
         default: SOKOL_UNREACHABLE; return WGPUShaderStage_None;
     }
 }
@@ -15041,7 +15050,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_index_buffer(_sg_bindings_t* bnd) {
 }
 
 _SOKOL_PRIVATE bool _sg_wgpu_apply_vertex_buffers(_sg_bindings_t* bnd) {
-    for (size_t slot = 0; slot < SG_MAX_VERTEXBUFFER_BINDSLOTS; slot++) {
+    for (uint32_t slot = 0; slot < SG_MAX_VERTEXBUFFER_BINDSLOTS; slot++) {
         const _sg_buffer_t* vb = bnd->vbs[slot];
         const uint64_t offset = (uint64_t)bnd->vb_offsets[slot];
         if (_sg_wgpu_bindings_cache_vb_dirty(slot, vb, offset)) {
@@ -15367,6 +15376,9 @@ _SOKOL_PRIVATE _sg_wgpu_shader_func_t _sg_wgpu_create_shader_func(const sg_shade
     wgpu_shdmod_desc.nextInChain = &wgpu_shdmod_wgsl_desc.chain;
     wgpu_shdmod_desc.label = _sg_wgpu_stringview(label);
 
+    // NOTE: if compilation fails we won't actually find out in this call since
+    // it always returns a valid module handle, and the GetCompilationInfo() call
+    // is asynchronous
     res.module = wgpuDeviceCreateShaderModule(_sg.wgpu.dev, &wgpu_shdmod_desc);
     if (0 == res.module) {
         _SG_ERROR(WGPU_CREATE_SHADER_MODULE_FAILED);
@@ -15423,9 +15435,9 @@ _SOKOL_PRIVATE bool _sg_wgpu_ensure_wgsl_bindslot_ranges(const sg_shader_desc* d
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
-    SOKOL_ASSERT(desc->vertex_func.source && desc->fragment_func.source);
     SOKOL_ASSERT(shd->wgpu.vertex_func.module == 0);
     SOKOL_ASSERT(shd->wgpu.fragment_func.module == 0);
+    SOKOL_ASSERT(shd->wgpu.compute_func.module == 0);
     SOKOL_ASSERT(shd->wgpu.bgl_ub == 0);
     SOKOL_ASSERT(shd->wgpu.bg_ub == 0);
     SOKOL_ASSERT(shd->wgpu.bgl_img_smp_sbuf == 0);
@@ -15438,9 +15450,23 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
     }
 
     // build shader modules
-    shd->wgpu.vertex_func = _sg_wgpu_create_shader_func(&desc->vertex_func, desc->label);
-    shd->wgpu.fragment_func = _sg_wgpu_create_shader_func(&desc->fragment_func, desc->label);
-    if ((shd->wgpu.vertex_func.module == 0) || (shd->wgpu.fragment_func.module == 0)) {
+    bool shd_valid = true;
+    if (desc->vertex_func.source) {
+        shd->wgpu.vertex_func = _sg_wgpu_create_shader_func(&desc->vertex_func, desc->label);
+        shd_valid &= shd->wgpu.vertex_func.module != 0;
+    }
+    if (desc->fragment_func.source) {
+        shd->wgpu.fragment_func = _sg_wgpu_create_shader_func(&desc->fragment_func, desc->label);
+        shd_valid &= shd->wgpu.fragment_func.module != 0;
+    }
+    if (desc->compute_func.source) {
+        shd->wgpu.compute_func = _sg_wgpu_create_shader_func(&desc->compute_func, desc->label);
+        shd_valid &= shd->wgpu.compute_func.module != 0;
+    }
+    if (!shd_valid) {
+        _sg_wgpu_discard_shader_func(&shd->wgpu.vertex_func);
+        _sg_wgpu_discard_shader_func(&shd->wgpu.fragment_func);
+        _sg_wgpu_discard_shader_func(&shd->wgpu.compute_func);
         return SG_RESOURCESTATE_FAILED;
     }
 
@@ -15555,6 +15581,7 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_shader(_sg_shader_t* shd) {
     SOKOL_ASSERT(shd);
     _sg_wgpu_discard_shader_func(&shd->wgpu.vertex_func);
     _sg_wgpu_discard_shader_func(&shd->wgpu.fragment_func);
+    _sg_wgpu_discard_shader_func(&shd->wgpu.compute_func);
     if (shd->wgpu.bgl_ub) {
         wgpuBindGroupLayoutRelease(shd->wgpu.bgl_ub);
         shd->wgpu.bgl_ub = 0;
@@ -16934,7 +16961,7 @@ _SOKOL_PRIVATE void _sg_tracker_init(_sg_tracker_t* tracker, uint32_t num) {
     SOKOL_ASSERT(0 == tracker->cur);
     SOKOL_ASSERT(0 == tracker->items);
     tracker->size = (uint32_t)num;
-    tracker->items = _sg_malloc_clear(num * sizeof(uint32_t));
+    tracker->items = (uint32_t*)_sg_malloc_clear(num * sizeof(uint32_t));
 }
 
 _SOKOL_PRIVATE void _sg_tracker_discard(_sg_tracker_t* tracker) {
@@ -18062,6 +18089,9 @@ _SOKOL_PRIVATE sg_shader_desc _sg_shader_desc_defaults(const sg_shader_desc* des
             def.fragment_func.d3d11_target = _sg_def(def.fragment_func.d3d11_target,"cs_5_0");
         }
     #endif
+    def.compute_workgroup_size.x = _sg_def(desc->compute_workgroup_size.x, 1);
+    def.compute_workgroup_size.y = _sg_def(desc->compute_workgroup_size.y, 1);
+    def.compute_workgroup_size.z = _sg_def(desc->compute_workgroup_size.z, 1);
     for (size_t ub_index = 0; ub_index < SG_MAX_UNIFORMBLOCK_BINDSLOTS; ub_index++) {
         sg_shader_uniform_block* ub_desc = &def.uniform_blocks[ub_index];
         if (ub_desc->stage != SG_SHADERSTAGE_NONE) {
