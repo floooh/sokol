@@ -5892,7 +5892,7 @@ typedef struct _sg_pipeline_s {
         MTLWinding winding;
         uint32_t stencil_ref;
         struct {
-            MTLSize max_threads_per_group;
+            MTLSize threads_per_group;
         } compute;
         int cps;    // MTLComputePipelineState
         int rps;    // MTLRenderPipelineState
@@ -13113,6 +13113,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
         NSError* err = NULL;
         MTLComputePipelineDescriptor* cp_desc = [[MTLComputePipelineDescriptor alloc] init];
         cp_desc.computeFunction = _sg_mtl_id(shd->mtl.compute_func.mtl_func);
+        cp_desc.threadGroupSizeIsMultipleOfThreadExecutionWidth = true;
         for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
             const sg_shader_stage stage = shd->cmn.storage_buffers[i].stage;
             SOKOL_ASSERT((stage != SG_SHADERSTAGE_VERTEX) && (stage != SG_SHADERSTAGE_FRAGMENT));
@@ -13139,15 +13140,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
             return SG_RESOURCESTATE_FAILED;
         }
         pip->mtl.cps = _sg_mtl_add_resource(mtl_cps);
-
-        // compute threads-per-thread-group dispatch arg
-        // (see: https://developer.apple.com/documentation/metal/calculating-threadgroup-and-grid-sizes?language=objc)
-        const NSUInteger w = mtl_cps.threadExecutionWidth;
-        SOKOL_ASSERT(w > 0);
-        const NSUInteger h = mtl_cps.maxTotalThreadsPerThreadgroup / w;
-        SOKOL_ASSERT(h > 0);
-        pip->mtl.compute.max_threads_per_group =  MTLSizeMake(w, h, 1);
         _SG_OBJC_RELEASE(mtl_cps);
+        pip->mtl.compute.threads_per_group = MTLSizeMake(
+            (NSUInteger)shd->cmn.compute_workgroup_size.x,
+            (NSUInteger)shd->cmn.compute_workgroup_size.y,
+            (NSUInteger)shd->cmn.compute_workgroup_size.z);
     } else {
         sg_primitive_type prim_type = desc->primitive_type;
         pip->mtl.prim_type = _sg_mtl_primitive_type(prim_type);
@@ -13938,17 +13935,13 @@ _SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_ins
 _SOKOL_PRIVATE void _sg_mtl_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
     SOKOL_ASSERT(_sg.mtl.state_cache.cur_pipeline && (_sg.mtl.state_cache.cur_pipeline->slot.id == _sg.mtl.state_cache.cur_pipeline_id.id));
-    // NOTE: we assume the `Nonuniform threadgroup size` feature is supported (iPhone8 and later)
     const _sg_pipeline_t* cur_pip = _sg.mtl.state_cache.cur_pipeline;
-    const NSUInteger ngx = (NSUInteger)num_groups_x;
-    const NSUInteger ngy = (NSUInteger)num_groups_y;
-    const NSUInteger ngz = (NSUInteger)num_groups_z;
-    const MTLSize threads = MTLSizeMake(ngx, ngy, ngz);
-    MTLSize tpg = cur_pip->mtl.compute.max_threads_per_group;
-    tpg.width = _sg_min(tpg.width, ngx);
-    tpg.height = _sg_min(tpg.height, ngy);
-    tpg.depth = _sg_min(tpg.depth, ngz);
-    [_sg.mtl.compute_cmd_encoder dispatchThreads:threads threadsPerThreadgroup:tpg];
+    const MTLSize thread_groups = MTLSizeMake(
+        (NSUInteger)num_groups_x,
+        (NSUInteger)num_groups_y,
+        (NSUInteger)num_groups_z);
+    const MTLSize threads_per_group = cur_pip->mtl.compute.threads_per_group;
+    [_sg.mtl.compute_cmd_encoder dispatchThreadgroups:thread_groups threadsPerThreadgroup:threads_per_group];
 }
 
 _SOKOL_PRIVATE void _sg_mtl_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
