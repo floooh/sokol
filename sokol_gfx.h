@@ -3709,6 +3709,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_UNKNOWN, "framebuffer completeness check failed (unknown reason) (gl)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_BUFFER_FAILED, "CreateBuffer() failed (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_BUFFER_SRV_FAILED, "CreateShaderResourceView() failed for storage buffer (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_BUFFER_UAV_FAILED, "CreateUnorderedAccessView() failed for storage buffer (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_DEPTH_TEXTURE_UNSUPPORTED_PIXEL_FORMAT, "pixel format not supported for depth-stencil texture (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_DEPTH_TEXTURE_FAILED, "CreateTexture2D() failed for depth-stencil texture (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_2D_TEXTURE_UNSUPPORTED_PIXEL_FORMAT, "pixel format not supported for 2d-, cube- or array-texture (d3d11)") \
@@ -5698,6 +5699,7 @@ typedef struct _sg_buffer_s {
     struct {
         ID3D11Buffer* buf;
         ID3D11ShaderResourceView* srv;
+        ID3D11UnorderedAccessView* uav;
     } d3d11;
 } _sg_d3d11_buffer_t;
 typedef _sg_d3d11_buffer_t _sg_buffer_t;
@@ -10096,6 +10098,14 @@ static inline HRESULT _sg_d3d11_CreateShaderResourceView(ID3D11Device* self, ID3
     #endif
 }
 
+static inline HRESULT _sg_d3d11_CreateUnorderedAccessView(ID3D11Device* self, ID3D11Resource* pResource, const D3D11_UNORDERED_ACCESS_VIEW_DESC* pDesc, ID3D11UnorderedAccessView** ppUAVView) {
+    #if defined(__cplusplus)
+        return self->CreateUnorderedAccessView(pResource, pDesc, ppUAVView);
+    #else
+        return self->lpVtbl->CreateUnorderedAccessView(self, pResource, pDesc, ppUAVView);
+    #endif
+}
+
 static inline void _sg_d3d11_GetResource(ID3D11View* self, ID3D11Resource** ppResource) {
     #if defined(__cplusplus)
         self->GetResource(ppResource);
@@ -10326,6 +10336,23 @@ _SOKOL_PRIVATE D3D11_USAGE _sg_d3d11_usage(sg_usage usg) {
     }
 }
 
+_SOKOL_PRIVATE D3D11_USAGE _sg_d3d11_buffer_usage(sg_usage usg, sg_buffer_type type) {
+    switch (usg) {
+        case SG_USAGE_IMMUTABLE:
+            if (type == SG_BUFFERTYPE_STORAGEBUFFER) {
+                return D3D11_USAGE_DEFAULT;
+            } else {
+                return D3D11_USAGE_IMMUTABLE;
+            }
+        case SG_USAGE_DYNAMIC:
+        case SG_USAGE_STREAM:
+            return D3D11_USAGE_DYNAMIC;
+        default:
+            SOKOL_UNREACHABLE;
+            return (D3D11_USAGE) 0;
+    }
+}
+
 _SOKOL_PRIVATE UINT _sg_d3d11_buffer_bind_flags(sg_buffer_type t) {
     switch (t) {
         case SG_BUFFERTYPE_VERTEXBUFFER:
@@ -10333,8 +10360,7 @@ _SOKOL_PRIVATE UINT _sg_d3d11_buffer_bind_flags(sg_buffer_type t) {
         case SG_BUFFERTYPE_INDEXBUFFER:
             return D3D11_BIND_INDEX_BUFFER;
         case SG_BUFFERTYPE_STORAGEBUFFER:
-            // FIXME: for compute shaders we'd want UNORDERED_ACCESS?
-            return D3D11_BIND_SHADER_RESOURCE;
+            return D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
         default:
             SOKOL_UNREACHABLE;
             return 0;
@@ -10731,7 +10757,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, cons
         D3D11_BUFFER_DESC d3d11_buf_desc;
         _sg_clear(&d3d11_buf_desc, sizeof(d3d11_buf_desc));
         d3d11_buf_desc.ByteWidth = (UINT)buf->cmn.size;
-        d3d11_buf_desc.Usage = _sg_d3d11_usage(buf->cmn.usage);
+        d3d11_buf_desc.Usage = _sg_d3d11_buffer_usage(buf->cmn.usage, buf->cmn.type);
         d3d11_buf_desc.BindFlags = _sg_d3d11_buffer_bind_flags(buf->cmn.type);
         d3d11_buf_desc.CPUAccessFlags = _sg_d3d11_cpu_access_flags(buf->cmn.usage);
         d3d11_buf_desc.MiscFlags = _sg_d3d11_buffer_misc_flags(buf->cmn.type);
@@ -10739,20 +10765,28 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, cons
         D3D11_SUBRESOURCE_DATA init_data;
         _sg_clear(&init_data, sizeof(init_data));
         if (buf->cmn.usage == SG_USAGE_IMMUTABLE) {
-            SOKOL_ASSERT(desc->data.ptr);
-            init_data.pSysMem = desc->data.ptr;
+            // D3D11 doesn't allow creating immutable buffers without data, so need
+            // to explicitly provide a zero-initialized memory buffer
+            if (desc->data.ptr) {
+                init_data.pSysMem = desc->data.ptr;
+            } else {
+                init_data.pSysMem = (const void*)_sg_malloc_clear(buf->cmn.size);
+            }
             init_data_ptr = &init_data;
         }
         HRESULT hr = _sg_d3d11_CreateBuffer(_sg.d3d11.dev, &d3d11_buf_desc, init_data_ptr, &buf->d3d11.buf);
+        if (init_data.pSysMem && (desc->data.ptr == 0)) {
+            _sg_free((void*)init_data.pSysMem);
+        }
         if (!(SUCCEEDED(hr) && buf->d3d11.buf)) {
             _SG_ERROR(D3D11_CREATE_BUFFER_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
 
-        // for storage buffers need to create a view object
+        // for storage buffers need to create a shader-resource-view
+        // for read-only access, and an unordered-access-view for
+        // read-write access
         if (buf->cmn.type == SG_BUFFERTYPE_STORAGEBUFFER) {
-            // FIXME: currently only shader-resource-view, in future also UAV
-            // storage buffer size must be multiple of 4
             SOKOL_ASSERT(_sg_multiple_u64(buf->cmn.size, 4));
             D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
             _sg_clear(&d3d11_srv_desc, sizeof(d3d11_srv_desc));
@@ -10764,6 +10798,18 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, cons
             hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)buf->d3d11.buf, &d3d11_srv_desc, &buf->d3d11.srv);
             if (!(SUCCEEDED(hr) && buf->d3d11.srv)) {
                 _SG_ERROR(D3D11_CREATE_BUFFER_SRV_FAILED);
+                return SG_RESOURCESTATE_FAILED;
+            }
+            D3D11_UNORDERED_ACCESS_VIEW_DESC d3d11_uav_desc;
+            _sg_clear(&d3d11_uav_desc, sizeof(d3d11_uav_desc));
+            d3d11_uav_desc.Format = DXGI_FORMAT_R32_TYPELESS;
+            d3d11_uav_desc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+            d3d11_uav_desc.Buffer.FirstElement = 0;
+            d3d11_uav_desc.Buffer.NumElements = buf->cmn.size / 4;
+            d3d11_uav_desc.Buffer.Flags = D3D11_BUFFER_UAV_FLAG_RAW;
+            hr = _sg_d3d11_CreateUnorderedAccessView(_sg.d3d11.dev, (ID3D11Resource*)buf->d3d11.buf, &d3d11_uav_desc, &buf->d3d11.uav);
+            if (!(SUCCEEDED(hr) && buf->d3d11.uav)) {
+                _SG_ERROR(D3D11_CREATE_BUFFER_UAV_FAILED);
                 return SG_RESOURCESTATE_FAILED;
             }
         }
@@ -10779,6 +10825,9 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_buffer(_sg_buffer_t* buf) {
     }
     if (buf->d3d11.srv) {
         _sg_d3d11_Release(buf->d3d11.srv);
+    }
+    if (buf->d3d11.uav) {
+        _sg_d3d11_Release(buf->d3d11.uav);
     }
 }
 
