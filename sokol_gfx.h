@@ -2452,6 +2452,8 @@ typedef enum sg_blend_op {
     SG_BLENDOP_ADD,
     SG_BLENDOP_SUBTRACT,
     SG_BLENDOP_REVERSE_SUBTRACT,
+    SG_BLENDOP_MIN,
+    SG_BLENDOP_MAX,
     _SG_BLENDOP_NUM,
     _SG_BLENDOP_FORCE_U32 = 0x7FFFFFFF
 } sg_blend_op;
@@ -7364,6 +7366,8 @@ _SOKOL_PRIVATE GLenum _sg_gl_blend_op(sg_blend_op op) {
         case SG_BLENDOP_ADD:                return GL_FUNC_ADD;
         case SG_BLENDOP_SUBTRACT:           return GL_FUNC_SUBTRACT;
         case SG_BLENDOP_REVERSE_SUBTRACT:   return GL_FUNC_REVERSE_SUBTRACT;
+        case SG_BLENDOP_MIN:                return GL_MIN;
+        case SG_BLENDOP_MAX:                return GL_MAX;
         default: SOKOL_UNREACHABLE; return 0;
     }
 }
@@ -10541,6 +10545,8 @@ _SOKOL_PRIVATE D3D11_BLEND_OP _sg_d3d11_blend_op(sg_blend_op op) {
         case SG_BLENDOP_ADD:                return D3D11_BLEND_OP_ADD;
         case SG_BLENDOP_SUBTRACT:           return D3D11_BLEND_OP_SUBTRACT;
         case SG_BLENDOP_REVERSE_SUBTRACT:   return D3D11_BLEND_OP_REV_SUBTRACT;
+        case SG_BLENDOP_MIN:                return D3D11_BLEND_OP_MIN;
+        case SG_BLENDOP_MAX:                return D3D11_BLEND_OP_MAX;
         default: SOKOL_UNREACHABLE; return (D3D11_BLEND_OP) 0;
     }
 }
@@ -12099,6 +12105,8 @@ _SOKOL_PRIVATE MTLBlendOperation _sg_mtl_blend_op(sg_blend_op op) {
         case SG_BLENDOP_ADD:                return MTLBlendOperationAdd;
         case SG_BLENDOP_SUBTRACT:           return MTLBlendOperationSubtract;
         case SG_BLENDOP_REVERSE_SUBTRACT:   return MTLBlendOperationReverseSubtract;
+        case SG_BLENDOP_MIN:                return MTLBlendOperationMin;
+        case SG_BLENDOP_MAX:                return MTLBlendOperationMax;
         default: SOKOL_UNREACHABLE; return (MTLBlendOperation)0;
     }
 }
@@ -14084,6 +14092,8 @@ _SOKOL_PRIVATE WGPUBlendOperation _sg_wgpu_blendop(sg_blend_op op) {
         case SG_BLENDOP_ADD:                return WGPUBlendOperation_Add;
         case SG_BLENDOP_SUBTRACT:           return WGPUBlendOperation_Subtract;
         case SG_BLENDOP_REVERSE_SUBTRACT:   return WGPUBlendOperation_ReverseSubtract;
+        case SG_BLENDOP_MIN:                return WGPUBlendOperation_Min;
+        case SG_BLENDOP_MAX:                return WGPUBlendOperation_Max;
         default:
             SOKOL_UNREACHABLE;
             return WGPUBlendOperation_Force32;
