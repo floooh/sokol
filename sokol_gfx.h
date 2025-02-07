@@ -4959,6 +4959,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_MINOR_VERSION 0x821C
         #define GL_TEXTURE_2D_MULTISAMPLE 0x9100
         #define GL_TEXTURE_2D_MULTISAMPLE_ARRAY 0x9102
+        #define GL_MIN 0x8007
+        #define GL_MAX 0x8008
     #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
