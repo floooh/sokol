@@ -11378,10 +11378,18 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
     SOKOL_ASSERT(pip && shd && desc);
     SOKOL_ASSERT(desc->shader.id == shd->slot.id);
     SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_VALID);
+
+    pip->shader = shd;
+
+    // if this is a compute pipeline, we're done here
+    if (pip->cmn.is_compute) {
+        return SG_RESOURCESTATE_VALID;
+    }
+
+    // a render pipeline...
     SOKOL_ASSERT(shd->d3d11.vs_blob && shd->d3d11.vs_blob_length > 0);
     SOKOL_ASSERT(!pip->d3d11.il && !pip->d3d11.rs && !pip->d3d11.dss && !pip->d3d11.bs);
 
-    pip->shader = shd;
     pip->d3d11.index_format = _sg_d3d11_index_format(pip->cmn.index_type);
     pip->d3d11.topology = _sg_d3d11_primitive_topology(desc->primitive_type);
     pip->d3d11.stencil_ref = desc->stencil.ref;
@@ -11390,7 +11398,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
     HRESULT hr;
     D3D11_INPUT_ELEMENT_DESC d3d11_comps[SG_MAX_VERTEX_ATTRIBUTES];
     _sg_clear(d3d11_comps, sizeof(d3d11_comps));
-    int attr_index = 0;
+    size_t attr_index = 0;
     for (; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         const sg_vertex_attr_state* a_state = &desc->layout.attrs[attr_index];
         if (a_state->format == SG_VERTEXFORMAT_INVALID) {
@@ -11413,7 +11421,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
             pip->cmn.use_instanced_draw = true;
         }
     }
-    for (int layout_index = 0; layout_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; layout_index++) {
+    for (size_t layout_index = 0; layout_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; layout_index++) {
         if (pip->cmn.vertex_buffer_layout_active[layout_index]) {
             const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[layout_index];
             SOKOL_ASSERT(l_state->stride > 0);
@@ -11488,7 +11496,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
     bs_desc.AlphaToCoverageEnable = desc->alpha_to_coverage_enabled;
     bs_desc.IndependentBlendEnable = TRUE;
     {
-        int i = 0;
+        size_t i = 0;
         for (i = 0; i < desc->color_count; i++) {
             const sg_blend_state* src = &desc->colors[i].blend;
             D3D11_RENDER_TARGET_BLEND_DESC* dst = &bs_desc.RenderTarget[i];
@@ -11545,7 +11553,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
     SOKOL_ASSERT(_sg.d3d11.dev);
 
     // copy image pointers
-    for (int i = 0; i < atts->cmn.num_colors; i++) {
+    for (size_t i = 0; i < atts->cmn.num_colors; i++) {
         const sg_attachment_desc* color_desc = &desc->colors[i];
         _SOKOL_UNUSED(color_desc);
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
@@ -11571,7 +11579,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
     }
 
     // create render-target views
-    for (int i = 0; i < atts->cmn.num_colors; i++) {
+    for (size_t i = 0; i < atts->cmn.num_colors; i++) {
         const _sg_attachment_common_t* cmn_color_att = &atts->cmn.colors[i];
         const _sg_image_t* color_img = color_images[i];
         SOKOL_ASSERT(0 == atts->d3d11.colors[i].view.rtv);
@@ -11653,7 +11661,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
 
 _SOKOL_PRIVATE void _sg_d3d11_discard_attachments(_sg_attachments_t* atts) {
     SOKOL_ASSERT(atts);
-    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+    for (size_t i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
         if (atts->d3d11.colors[i].view.rtv) {
             _sg_d3d11_Release(atts->d3d11.colors[i].view.rtv);
         }
@@ -11695,7 +11703,7 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass* pass) {
     _sg.d3d11.cur_pass.resolve_view = 0;
     if (atts) {
         num_rtvs = atts->cmn.num_colors;
-        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        for (size_t i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
             rtvs[i] = atts->d3d11.colors[i].view.rtv;
         }
         dsv = atts->d3d11.depth_stencil.view.dsv;
@@ -11727,7 +11735,7 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass* pass) {
     _sg_d3d11_RSSetScissorRects(_sg.d3d11.ctx, 1, &rect);
 
     // perform clear action
-    for (int i = 0; i < num_rtvs; i++) {
+    for (size_t i = 0; i < num_rtvs; i++) {
         if (action->colors[i].load_action == SG_LOADACTION_CLEAR) {
             _sg_d3d11_ClearRenderTargetView(_sg.d3d11.ctx, rtvs[i], (float*)&action->colors[i].clear_value);
             _sg_stats_add(d3d11.pass.num_clear_render_target_view, 1);
@@ -11758,7 +11766,7 @@ _SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
     if (_sg.cur_pass.atts_id.id != SG_INVALID_ID) {
         // ...for offscreen pass...
         SOKOL_ASSERT(_sg.cur_pass.atts && _sg.cur_pass.atts->slot.id == _sg.cur_pass.atts_id.id);
-        for (int i = 0; i < _sg.cur_pass.atts->cmn.num_colors; i++) {
+        for (size_t i = 0; i < _sg.cur_pass.atts->cmn.num_colors; i++) {
             const _sg_image_t* resolve_img = _sg.cur_pass.atts->d3d11.resolves[i].image;
             if (resolve_img) {
                 const _sg_image_t* color_img = _sg.cur_pass.atts->d3d11.colors[i].image;
@@ -17717,13 +17725,13 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
                         _SG_VALIDATE(shd->cmn.storage_buffers[i].readonly, VALIDATE_PIPELINEDESC_SHADER_READONLY_STORAGEBUFFERS);
                     }
                 }
-            }
-            for (int buf_index = 0; buf_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; buf_index++) {
-                const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[buf_index];
-                if (l_state->stride == 0) {
-                    continue;
+                for (int buf_index = 0; buf_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; buf_index++) {
+                    const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[buf_index];
+                    if (l_state->stride == 0) {
+                        continue;
+                    }
+                    _SG_VALIDATE(_sg_multiple_u64((uint64_t)l_state->stride, 4), VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4);
                 }
-                _SG_VALIDATE(_sg_multiple_u64((uint64_t)l_state->stride, 4), VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4);
             }
         }
         return _sg_validate_end();
