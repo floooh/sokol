@@ -3560,15 +3560,20 @@ typedef struct sg_frame_stats_d3d11_pipeline {
     uint32_t num_vs_set_constant_buffers;
     uint32_t num_ps_set_shader;
     uint32_t num_ps_set_constant_buffers;
+    uint32_t num_cs_set_shader;
+    uint32_t num_cs_set_constant_buffers;
 } sg_frame_stats_d3d11_pipeline;
 
 typedef struct sg_frame_stats_d3d11_bindings {
     uint32_t num_ia_set_vertex_buffers;
     uint32_t num_ia_set_index_buffer;
     uint32_t num_vs_set_shader_resources;
-    uint32_t num_ps_set_shader_resources;
     uint32_t num_vs_set_samplers;
+    uint32_t num_ps_set_shader_resources;
     uint32_t num_ps_set_samplers;
+    uint32_t num_cs_set_shader_resources;
+    uint32_t num_cs_set_samplers;
+    uint32_t num_cs_set_unordered_access_views;
 } sg_frame_stats_d3d11_bindings;
 
 typedef struct sg_frame_stats_d3d11_uniforms {
@@ -10034,6 +10039,14 @@ static inline void _sg_d3d11_PSSetShader(ID3D11DeviceContext* self, ID3D11PixelS
     #endif
 }
 
+static inline void _sg_d3d11_CSSetShader(ID3D11DeviceContext* self, ID3D11ComputeShader* pComputeShader, ID3D11ClassInstance* const* ppClassInstances, UINT NumClassInstances) {
+    #if defined(__cplusplus)
+        self->CSSetShader(pComputeShader, ppClassInstances, NumClassInstances);
+    #else
+        self->lpVtbl->CSSetShader(self, pComputeShader, ppClassInstances, NumClassInstances);
+    #endif
+}
+
 static inline void _sg_d3d11_VSSetConstantBuffers(ID3D11DeviceContext* self, UINT StartSlot, UINT NumBuffers, ID3D11Buffer* const* ppConstantBuffers) {
     #if defined(__cplusplus)
         self->VSSetConstantBuffers(StartSlot, NumBuffers, ppConstantBuffers);
@@ -10047,6 +10060,14 @@ static inline void _sg_d3d11_PSSetConstantBuffers(ID3D11DeviceContext* self, UIN
         self->PSSetConstantBuffers(StartSlot, NumBuffers, ppConstantBuffers);
     #else
         self->lpVtbl->PSSetConstantBuffers(self, StartSlot, NumBuffers, ppConstantBuffers);
+    #endif
+}
+
+static inline void _sg_d3d11_CSSetConstantBuffers(ID3D11DeviceContext* self, UINT StartSlot, UINT NumBuffers, ID3D11Buffer* const* ppConstantBuffers) {
+    #if defined(__cplusplus)
+        self->CSSetConstantBuffers(StartSlot, NumBuffers, ppConstantBuffers);
+    #else
+        self->lpVtbl->CSSetConstantBuffers(self, StartSlot, NumBuffers, ppConstantBuffers);
     #endif
 }
 
@@ -10066,6 +10087,14 @@ static inline void _sg_d3d11_PSSetShaderResources(ID3D11DeviceContext* self, UIN
     #endif
 }
 
+static inline void _sg_d3d11_CSSetShaderResources(ID3D11DeviceContext* self, UINT StartSlot, UINT NumViews, ID3D11ShaderResourceView* const* ppShaderResourceViews) {
+    #if defined(__cplusplus)
+        self->CSSetShaderResources(StartSlot, NumViews, ppShaderResourceViews);
+    #else
+        self->lpVtbl->CSSetShaderResources(self, StartSlot, NumViews, ppShaderResourceViews);
+    #endif
+}
+
 static inline void _sg_d3d11_VSSetSamplers(ID3D11DeviceContext* self, UINT StartSlot, UINT NumSamplers, ID3D11SamplerState* const* ppSamplers) {
     #if defined(__cplusplus)
         self->VSSetSamplers(StartSlot, NumSamplers, ppSamplers);
@@ -10079,6 +10108,22 @@ static inline void _sg_d3d11_PSSetSamplers(ID3D11DeviceContext* self, UINT Start
         self->PSSetSamplers(StartSlot, NumSamplers, ppSamplers);
     #else
         self->lpVtbl->PSSetSamplers(self, StartSlot, NumSamplers, ppSamplers);
+    #endif
+}
+
+static inline void _sg_d3d11_CSSetSamplers(ID3D11DeviceContext* self, UINT StartSlot, UINT NumSamplers, ID3D11SamplerState* const* ppSamplers) {
+    #if defined(__cplusplus)
+        self->CSSetSamplers(StartSlot, NumSamplers, ppSamplers);
+    #else
+        self->lpVtbl->CSSetSamplers(self, StartSlot, NumSamplers, ppSamplers);
+    #endif
+}
+
+static inline void _sg_d3d11_CSSetUnorderedAccessViews(ID3D11DeviceContext* self, UINT StartSlot, UINT NumUAVs, ID3D11UnorderedAccessView* const* ppUnorderedAccessViews, const UINT* pUAVInitialCounts) {
+    #if defined(__cplusplus)
+        self->CSSetUnorderedAccessViews(StartSlot, StartSlot, ppUnorderedAccessViews, pUAVInitialCounts);
+    #else
+        self->lpVtbl->CSSetUnorderedAccessViews(self, StartSlot, NumUAVs, ppUnorderedAccessViews, pUAVInitialCounts);
     #endif
 }
 
@@ -10311,6 +10356,14 @@ static inline void _sg_d3d11_DrawInstanced(ID3D11DeviceContext* self, UINT Verte
         self->DrawInstanced(VertexCountPerInstance, InstanceCount, StartVertexLocation, StartInstanceLocation);
     #else
         self->lpVtbl->DrawInstanced(self, VertexCountPerInstance, InstanceCount, StartVertexLocation, StartInstanceLocation);
+    #endif
+}
+
+static inline void _sg_d3d11_Dispatch(ID3D11DeviceContext* self, UINT ThreadGroupCountX, UINT ThreadGroupCountY, UINT ThreadGroupCountZ) {
+    #if defined(__cplusplus)
+        self->Dispatch(ThreadGroupCountX, ThreadGroupCountY, ThreadGroupCountZ);
+    #else
+        self->lpVtbl->Dispatch(self, ThreadGroupCountX, ThreadGroupCountY, ThreadGroupCountZ);
     #endif
 }
 
@@ -11691,7 +11744,10 @@ _SOKOL_PRIVATE _sg_image_t* _sg_d3d11_attachments_ds_image(const _sg_attachments
 
 _SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass* pass) {
     SOKOL_ASSERT(pass);
-
+    if (_sg.cur_pass.is_compute) {
+        // nothing to do in compute passes
+        return;
+    }
     const _sg_attachments_t* atts = _sg.cur_pass.atts;
     const sg_swapchain* swapchain = &pass->swapchain;
     const sg_pass_action* action = &pass->action;
@@ -11762,54 +11818,56 @@ _SOKOL_PRIVATE UINT _sg_d3d11_calcsubresource(UINT mip_slice, UINT array_slice, 
 _SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
     SOKOL_ASSERT(_sg.d3d11.ctx);
 
-    // need to resolve MSAA render attachments into texture?
-    if (_sg.cur_pass.atts_id.id != SG_INVALID_ID) {
-        // ...for offscreen pass...
-        SOKOL_ASSERT(_sg.cur_pass.atts && _sg.cur_pass.atts->slot.id == _sg.cur_pass.atts_id.id);
-        for (size_t i = 0; i < _sg.cur_pass.atts->cmn.num_colors; i++) {
-            const _sg_image_t* resolve_img = _sg.cur_pass.atts->d3d11.resolves[i].image;
-            if (resolve_img) {
-                const _sg_image_t* color_img = _sg.cur_pass.atts->d3d11.colors[i].image;
-                const _sg_attachment_common_t* cmn_color_att = &_sg.cur_pass.atts->cmn.colors[i];
-                const _sg_attachment_common_t* cmn_resolve_att = &_sg.cur_pass.atts->cmn.resolves[i];
-                SOKOL_ASSERT(resolve_img->slot.id == cmn_resolve_att->image_id.id);
-                SOKOL_ASSERT(color_img && (color_img->slot.id == cmn_color_att->image_id.id));
-                SOKOL_ASSERT(color_img->cmn.sample_count > 1);
-                SOKOL_ASSERT(resolve_img->cmn.sample_count == 1);
-                const UINT src_subres = _sg_d3d11_calcsubresource(
-                    (UINT)cmn_color_att->mip_level,
-                    (UINT)cmn_color_att->slice,
-                    (UINT)color_img->cmn.num_mipmaps);
-                const UINT dst_subres = _sg_d3d11_calcsubresource(
-                    (UINT)cmn_resolve_att->mip_level,
-                    (UINT)cmn_resolve_att->slice,
-                    (UINT)resolve_img->cmn.num_mipmaps);
-                _sg_d3d11_ResolveSubresource(_sg.d3d11.ctx,
-                    resolve_img->d3d11.res,
-                    dst_subres,
-                    color_img->d3d11.res,
-                    src_subres,
-                    color_img->d3d11.format);
+    if (!_sg.cur_pass.is_compute) {
+        // need to resolve MSAA render attachments into texture?
+        if (_sg.cur_pass.atts_id.id != SG_INVALID_ID) {
+            // ...for offscreen pass...
+            SOKOL_ASSERT(_sg.cur_pass.atts && _sg.cur_pass.atts->slot.id == _sg.cur_pass.atts_id.id);
+            for (size_t i = 0; i < _sg.cur_pass.atts->cmn.num_colors; i++) {
+                const _sg_image_t* resolve_img = _sg.cur_pass.atts->d3d11.resolves[i].image;
+                if (resolve_img) {
+                    const _sg_image_t* color_img = _sg.cur_pass.atts->d3d11.colors[i].image;
+                    const _sg_attachment_common_t* cmn_color_att = &_sg.cur_pass.atts->cmn.colors[i];
+                    const _sg_attachment_common_t* cmn_resolve_att = &_sg.cur_pass.atts->cmn.resolves[i];
+                    SOKOL_ASSERT(resolve_img->slot.id == cmn_resolve_att->image_id.id);
+                    SOKOL_ASSERT(color_img && (color_img->slot.id == cmn_color_att->image_id.id));
+                    SOKOL_ASSERT(color_img->cmn.sample_count > 1);
+                    SOKOL_ASSERT(resolve_img->cmn.sample_count == 1);
+                    const UINT src_subres = _sg_d3d11_calcsubresource(
+                        (UINT)cmn_color_att->mip_level,
+                        (UINT)cmn_color_att->slice,
+                        (UINT)color_img->cmn.num_mipmaps);
+                    const UINT dst_subres = _sg_d3d11_calcsubresource(
+                        (UINT)cmn_resolve_att->mip_level,
+                        (UINT)cmn_resolve_att->slice,
+                        (UINT)resolve_img->cmn.num_mipmaps);
+                    _sg_d3d11_ResolveSubresource(_sg.d3d11.ctx,
+                        resolve_img->d3d11.res,
+                        dst_subres,
+                        color_img->d3d11.res,
+                        src_subres,
+                        color_img->d3d11.format);
+                    _sg_stats_add(d3d11.pass.num_resolve_subresource, 1);
+                }
+            }
+        } else {
+            // ...for swapchain pass...
+            if (_sg.d3d11.cur_pass.resolve_view) {
+                SOKOL_ASSERT(_sg.d3d11.cur_pass.render_view);
+                SOKOL_ASSERT(_sg.cur_pass.swapchain.sample_count > 1);
+                SOKOL_ASSERT(_sg.cur_pass.swapchain.color_fmt > SG_PIXELFORMAT_NONE);
+                ID3D11Resource* d3d11_render_res = 0;
+                ID3D11Resource* d3d11_resolve_res = 0;
+                _sg_d3d11_GetResource((ID3D11View*)_sg.d3d11.cur_pass.render_view, &d3d11_render_res);
+                _sg_d3d11_GetResource((ID3D11View*)_sg.d3d11.cur_pass.resolve_view, &d3d11_resolve_res);
+                SOKOL_ASSERT(d3d11_render_res);
+                SOKOL_ASSERT(d3d11_resolve_res);
+                const sg_pixel_format color_fmt = _sg.cur_pass.swapchain.color_fmt;
+                _sg_d3d11_ResolveSubresource(_sg.d3d11.ctx, d3d11_resolve_res, 0, d3d11_render_res, 0, _sg_d3d11_rtv_pixel_format(color_fmt));
+                _sg_d3d11_Release(d3d11_render_res);
+                _sg_d3d11_Release(d3d11_resolve_res);
                 _sg_stats_add(d3d11.pass.num_resolve_subresource, 1);
             }
-        }
-    } else {
-        // ...for swapchain pass...
-        if (_sg.d3d11.cur_pass.resolve_view) {
-            SOKOL_ASSERT(_sg.d3d11.cur_pass.render_view);
-            SOKOL_ASSERT(_sg.cur_pass.swapchain.sample_count > 1);
-            SOKOL_ASSERT(_sg.cur_pass.swapchain.color_fmt > SG_PIXELFORMAT_NONE);
-            ID3D11Resource* d3d11_render_res = 0;
-            ID3D11Resource* d3d11_resolve_res = 0;
-            _sg_d3d11_GetResource((ID3D11View*)_sg.d3d11.cur_pass.render_view, &d3d11_render_res);
-            _sg_d3d11_GetResource((ID3D11View*)_sg.d3d11.cur_pass.resolve_view, &d3d11_resolve_res);
-            SOKOL_ASSERT(d3d11_render_res);
-            SOKOL_ASSERT(d3d11_resolve_res);
-            const sg_pixel_format color_fmt = _sg.cur_pass.swapchain.color_fmt;
-            _sg_d3d11_ResolveSubresource(_sg.d3d11.ctx, d3d11_resolve_res, 0, d3d11_render_res, 0, _sg_d3d11_rtv_pixel_format(color_fmt));
-            _sg_d3d11_Release(d3d11_render_res);
-            _sg_d3d11_Release(d3d11_resolve_res);
-            _sg_stats_add(d3d11.pass.num_resolve_subresource, 1);
         }
     }
     _sg.d3d11.cur_pass.render_view = 0;
@@ -11845,31 +11903,45 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     SOKOL_ASSERT(pip->shader && (pip->cmn.shader_id.id == pip->shader->slot.id));
     SOKOL_ASSERT(_sg.d3d11.ctx);
-    SOKOL_ASSERT(pip->d3d11.rs && pip->d3d11.bs && pip->d3d11.dss);
 
     _sg.d3d11.cur_pipeline = pip;
     _sg.d3d11.cur_pipeline_id.id = pip->slot.id;
-    _sg.d3d11.use_indexed_draw = (pip->d3d11.index_format != DXGI_FORMAT_UNKNOWN);
-    _sg.d3d11.use_instanced_draw = pip->cmn.use_instanced_draw;
 
-    _sg_d3d11_RSSetState(_sg.d3d11.ctx, pip->d3d11.rs);
-    _sg_d3d11_OMSetDepthStencilState(_sg.d3d11.ctx, pip->d3d11.dss, pip->d3d11.stencil_ref);
-    _sg_d3d11_OMSetBlendState(_sg.d3d11.ctx, pip->d3d11.bs, (float*)&pip->cmn.blend_color, 0xFFFFFFFF);
-    _sg_d3d11_IASetPrimitiveTopology(_sg.d3d11.ctx, pip->d3d11.topology);
-    _sg_d3d11_IASetInputLayout(_sg.d3d11.ctx, pip->d3d11.il);
-    _sg_d3d11_VSSetShader(_sg.d3d11.ctx, pip->shader->d3d11.vs, NULL, 0);
-    _sg_d3d11_VSSetConstantBuffers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UB_BINDINGS, pip->shader->d3d11.vs_cbufs);
-    _sg_d3d11_PSSetShader(_sg.d3d11.ctx, pip->shader->d3d11.fs, NULL, 0);
-    _sg_d3d11_PSSetConstantBuffers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UB_BINDINGS, pip->shader->d3d11.fs_cbufs);
-    _sg_stats_add(d3d11.pipeline.num_rs_set_state, 1);
-    _sg_stats_add(d3d11.pipeline.num_om_set_depth_stencil_state, 1);
-    _sg_stats_add(d3d11.pipeline.num_om_set_blend_state, 1);
-    _sg_stats_add(d3d11.pipeline.num_ia_set_primitive_topology, 1);
-    _sg_stats_add(d3d11.pipeline.num_ia_set_input_layout, 1);
-    _sg_stats_add(d3d11.pipeline.num_vs_set_shader, 1);
-    _sg_stats_add(d3d11.pipeline.num_vs_set_constant_buffers, 1);
-    _sg_stats_add(d3d11.pipeline.num_ps_set_shader, 1);
-    _sg_stats_add(d3d11.pipeline.num_ps_set_constant_buffers, 1);
+    if (pip->cmn.is_compute) {
+        // a compute pipeline
+        SOKOL_ASSERT(pip->shader->d3d11.cs);
+        _sg_d3d11_CSSetShader(_sg.d3d11.ctx, pip->shader->d3d11.cs, NULL, 0);
+        _sg_d3d11_CSSetConstantBuffers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UB_BINDINGS, pip->shader->d3d11.cs_cbufs);
+        _sg_stats_add(d3d11.pipeline.num_cs_set_shader, 1);
+        _sg_stats_add(d3d11.pipeline.num_cs_set_constant_buffers, 1);
+    } else {
+        // a render pipeline
+        SOKOL_ASSERT(pip->d3d11.rs && pip->d3d11.bs && pip->d3d11.dss);
+        SOKOL_ASSERT(pip->shader->d3d11.vs);
+        SOKOL_ASSERT(pip->shader->d3d11.fs);
+
+        _sg.d3d11.use_indexed_draw = (pip->d3d11.index_format != DXGI_FORMAT_UNKNOWN);
+        _sg.d3d11.use_instanced_draw = pip->cmn.use_instanced_draw;
+
+        _sg_d3d11_RSSetState(_sg.d3d11.ctx, pip->d3d11.rs);
+        _sg_d3d11_OMSetDepthStencilState(_sg.d3d11.ctx, pip->d3d11.dss, pip->d3d11.stencil_ref);
+        _sg_d3d11_OMSetBlendState(_sg.d3d11.ctx, pip->d3d11.bs, (float*)&pip->cmn.blend_color, 0xFFFFFFFF);
+        _sg_d3d11_IASetPrimitiveTopology(_sg.d3d11.ctx, pip->d3d11.topology);
+        _sg_d3d11_IASetInputLayout(_sg.d3d11.ctx, pip->d3d11.il);
+        _sg_d3d11_VSSetShader(_sg.d3d11.ctx, pip->shader->d3d11.vs, NULL, 0);
+        _sg_d3d11_VSSetConstantBuffers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UB_BINDINGS, pip->shader->d3d11.vs_cbufs);
+        _sg_d3d11_PSSetShader(_sg.d3d11.ctx, pip->shader->d3d11.fs, NULL, 0);
+        _sg_d3d11_PSSetConstantBuffers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UB_BINDINGS, pip->shader->d3d11.fs_cbufs);
+        _sg_stats_add(d3d11.pipeline.num_rs_set_state, 1);
+        _sg_stats_add(d3d11.pipeline.num_om_set_depth_stencil_state, 1);
+        _sg_stats_add(d3d11.pipeline.num_om_set_blend_state, 1);
+        _sg_stats_add(d3d11.pipeline.num_ia_set_primitive_topology, 1);
+        _sg_stats_add(d3d11.pipeline.num_ia_set_input_layout, 1);
+        _sg_stats_add(d3d11.pipeline.num_vs_set_shader, 1);
+        _sg_stats_add(d3d11.pipeline.num_vs_set_constant_buffers, 1);
+        _sg_stats_add(d3d11.pipeline.num_ps_set_shader, 1);
+        _sg_stats_add(d3d11.pipeline.num_ps_set_constant_buffers, 1);
+    }
 }
 
 _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
@@ -11878,6 +11950,7 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
     SOKOL_ASSERT(bnd->pip->shader->slot.id == bnd->pip->cmn.shader_id.id);
     SOKOL_ASSERT(_sg.d3d11.ctx);
     const _sg_shader_t* shd = bnd->pip->shader;
+    const bool is_compute = bnd->pip->cmn.is_compute;
 
     // gather all the D3D11 resources into arrays
     ID3D11Buffer* d3d11_ib = bnd->ib ? bnd->ib->d3d11.buf : 0;
@@ -11885,16 +11958,22 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
     UINT d3d11_vb_offsets[SG_MAX_VERTEXBUFFER_BINDSLOTS] = {0};
     ID3D11ShaderResourceView* d3d11_vs_srvs[_SG_D3D11_MAX_STAGE_SRV_BINDINGS] = {0};
     ID3D11ShaderResourceView* d3d11_fs_srvs[_SG_D3D11_MAX_STAGE_SRV_BINDINGS] = {0};
+    ID3D11ShaderResourceView* d3d11_cs_srvs[_SG_D3D11_MAX_STAGE_SRV_BINDINGS] = {0};
     ID3D11SamplerState* d3d11_vs_smps[_SG_D3D11_MAX_STAGE_SMP_BINDINGS] = {0};
     ID3D11SamplerState* d3d11_fs_smps[_SG_D3D11_MAX_STAGE_SMP_BINDINGS] = {0};
-    for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
-        const _sg_buffer_t* vb = bnd->vbs[i];
-        if (vb == 0) {
-            continue;
+    ID3D11SamplerState* d3d11_cs_smps[_SG_D3D11_MAX_STAGE_SMP_BINDINGS] = {0};
+    ID3D11UnorderedAccessView* d3d11_cs_uavs[_SG_D3D11_MAX_STAGE_UAV_BINDINGS] = {0};
+
+    if (!is_compute) {
+        for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
+            const _sg_buffer_t* vb = bnd->vbs[i];
+            if (vb == 0) {
+                continue;
+            }
+            SOKOL_ASSERT(vb->d3d11.buf);
+            d3d11_vbs[i] = vb->d3d11.buf;
+            d3d11_vb_offsets[i] = (UINT)bnd->vb_offsets[i];
         }
-        SOKOL_ASSERT(vb->d3d11.buf);
-        d3d11_vbs[i] = vb->d3d11.buf;
-        d3d11_vb_offsets[i] = (UINT)bnd->vb_offsets[i];
     }
     for (size_t i = 0; i < SG_MAX_IMAGE_BINDSLOTS; i++) {
         const _sg_image_t* img = bnd->imgs[i];
@@ -11906,10 +11985,12 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
         const uint8_t d3d11_slot = shd->d3d11.img_register_t_n[i];
         SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_SRV_BINDINGS);
         SOKOL_ASSERT(img->d3d11.srv);
-        if (stage == SG_SHADERSTAGE_VERTEX) {
-            d3d11_vs_srvs[d3d11_slot] = img->d3d11.srv;
-        } else {
-            d3d11_fs_srvs[d3d11_slot] = img->d3d11.srv;
+        ID3D11ShaderResourceView* d3d11_srv = img->d3d11.srv;
+        switch (stage) {
+            SG_SHADERSTAGE_VERTEX: d3d11_vs_srvs[d3d11_slot] = d3d11_srv; break;
+            SG_SHADERSTAGE_FRAGMENT: d3d11_fs_srvs[d3d11_slot] = d3d11_srv; break;
+            SG_SHADERSTAGE_COMPUTE: d3d11_cs_srvs[d3d11_slot] = d3d11_srv; break;
+            default: SOKOL_UNREACHABLE;
         }
     }
     for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
@@ -11918,14 +11999,23 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
             continue;
         }
         const sg_shader_stage stage = shd->cmn.storage_buffers[i].stage;
-        SOKOL_ASSERT((stage == SG_SHADERSTAGE_VERTEX) || (stage == SG_SHADERSTAGE_FRAGMENT));
-        const uint8_t d3d11_slot = shd->d3d11.sbuf_register_t_n[i];
-        SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_SRV_BINDINGS);
-        SOKOL_ASSERT(sbuf->d3d11.srv);
-        if (stage == SG_SHADERSTAGE_VERTEX) {
-            d3d11_vs_srvs[d3d11_slot] = sbuf->d3d11.srv;
+        SOKOL_ASSERT(stage != SG_SHADERSTAGE_NONE);
+        SOKOL_ASSERT(sbuf->d3d11.srv && sbuf->d3d11.uav);
+        if (shd->cmn.storage_buffers[i].readonly) {
+            const uint8_t d3d11_slot = shd->d3d11.sbuf_register_t_n[i];
+            SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_SRV_BINDINGS);
+            ID3D11ShaderResourceView* d3d11_srv = sbuf->d3d11.srv;
+            switch (stage) {
+                case SG_SHADERSTAGE_VERTEX: d3d11_vs_srvs[d3d11_slot] = d3d11_srv; break;
+                case SG_SHADERSTAGE_FRAGMENT: d3d11_fs_srvs[d3d11_slot] = d3d11_srv; break;
+                case SG_SHADERSTAGE_COMPUTE: d3d11_cs_srvs[d3d11_slot] = d3d11_srv; break;
+                default: SOKOL_UNREACHABLE;
+            }
         } else {
-            d3d11_fs_srvs[d3d11_slot] = sbuf->d3d11.srv;
+            SOKOL_ASSERT(stage == SG_SHADERSTAGE_COMPUTE);
+            const uint8_t d3d11_slot = shd->d3d11.sbuf_register_u_n[i];
+            SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_UAV_BINDINGS);
+            d3d11_cs_uavs[d3d11_slot] = sbuf->d3d11.uav;
         }
     }
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
@@ -11938,24 +12028,35 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
         const uint8_t d3d11_slot = shd->d3d11.smp_register_s_n[i];
         SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_SMP_BINDINGS);
         SOKOL_ASSERT(smp->d3d11.smp);
-        if (stage == SG_SHADERSTAGE_VERTEX) {
-            d3d11_vs_smps[d3d11_slot] = smp->d3d11.smp;
-        } else {
-            d3d11_fs_smps[d3d11_slot] = smp->d3d11.smp;
+        ID3D11SamplerState* d3d11_smp = smp->d3d11.smp;
+        switch (stage) {
+            case SG_SHADERSTAGE_VERTEX: d3d11_vs_smps[d3d11_slot] = d3d11_smp; break;
+            case SG_SHADERSTAGE_FRAGMENT: d3d11_fs_smps[d3d11_slot] = d3d11_smp; break;
+            case SG_SHADERSTAGE_COMPUTE: d3d11_cs_smps[d3d11_slot] = d3d11_smp; break;
+            default: SOKOL_UNREACHABLE;
         }
     }
-    _sg_d3d11_IASetVertexBuffers(_sg.d3d11.ctx, 0, SG_MAX_VERTEXBUFFER_BINDSLOTS, d3d11_vbs, bnd->pip->d3d11.vb_strides, d3d11_vb_offsets);
-    _sg_d3d11_IASetIndexBuffer(_sg.d3d11.ctx, d3d11_ib, bnd->pip->d3d11.index_format, (UINT)bnd->ib_offset);
-    _sg_d3d11_VSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SRV_BINDINGS, d3d11_vs_srvs);
-    _sg_d3d11_PSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SRV_BINDINGS, d3d11_fs_srvs);
-    _sg_d3d11_VSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, d3d11_vs_smps);
-    _sg_d3d11_PSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, d3d11_fs_smps);
-    _sg_stats_add(d3d11.bindings.num_ia_set_vertex_buffers, 1);
-    _sg_stats_add(d3d11.bindings.num_ia_set_index_buffer, 1);
-    _sg_stats_add(d3d11.bindings.num_vs_set_shader_resources, 1);
-    _sg_stats_add(d3d11.bindings.num_ps_set_shader_resources, 1);
-    _sg_stats_add(d3d11.bindings.num_vs_set_samplers, 1);
-    _sg_stats_add(d3d11.bindings.num_ps_set_samplers, 1);
+    if (is_compute) {
+        _sg_d3d11_CSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SRV_BINDINGS, d3d11_cs_srvs);
+        _sg_d3d11_CSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, d3d11_cs_smps);
+        _sg_d3d11_CSSetUnorderedAccessViews(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UAV_BINDINGS, d3d11_cs_uavs, NULL);
+        _sg_stats_add(d3d11.bindings.num_cs_set_shader_resources, 1);
+        _sg_stats_add(d3d11.bindings.num_cs_set_samplers, 1);
+        _sg_stats_add(d3d11.bindings.num_cs_set_unordered_access_views, 1);
+    } else {
+        _sg_d3d11_IASetVertexBuffers(_sg.d3d11.ctx, 0, SG_MAX_VERTEXBUFFER_BINDSLOTS, d3d11_vbs, bnd->pip->d3d11.vb_strides, d3d11_vb_offsets);
+        _sg_d3d11_IASetIndexBuffer(_sg.d3d11.ctx, d3d11_ib, bnd->pip->d3d11.index_format, (UINT)bnd->ib_offset);
+        _sg_d3d11_VSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SRV_BINDINGS, d3d11_vs_srvs);
+        _sg_d3d11_PSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SRV_BINDINGS, d3d11_fs_srvs);
+        _sg_d3d11_VSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, d3d11_vs_smps);
+        _sg_d3d11_PSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, d3d11_fs_smps);
+        _sg_stats_add(d3d11.bindings.num_ia_set_vertex_buffers, 1);
+        _sg_stats_add(d3d11.bindings.num_ia_set_index_buffer, 1);
+        _sg_stats_add(d3d11.bindings.num_vs_set_shader_resources, 1);
+        _sg_stats_add(d3d11.bindings.num_ps_set_shader_resources, 1);
+        _sg_stats_add(d3d11.bindings.num_vs_set_samplers, 1);
+        _sg_stats_add(d3d11.bindings.num_ps_set_samplers, 1);
+    }
     return true;
 }
 
@@ -11992,6 +12093,10 @@ _SOKOL_PRIVATE void _sg_d3d11_draw(int base_element, int num_elements, int num_i
             _sg_stats_add(d3d11.draw.num_draw, 1);
         }
     }
+}
+
+_SOKOL_PRIVATE void _sg_d3d11_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
+    _sg_d3d11_Dispatch(_sg.d3d11.ctx, (UINT)num_groups_x, (UINT)num_groups_y, (UINT)num_groups_z);
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_commit(void) {
@@ -16721,6 +16826,7 @@ static inline void _sg_dispatch(int num_groups_x, int num_groups_y, int num_grou
     _sg_mtl_dispatch(num_groups_x, num_groups_y, num_groups_z);
     // FIXME
     #elif defined(SOKOL_D3D11)
+    _sg_d3d11_dispatch(num_groups_x, num_groups_y, num_groups_z);
     // FIMXE
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_dispatch(num_groups_x, num_groups_y, num_groups_z);
