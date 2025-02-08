@@ -11981,15 +11981,15 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
             continue;
         }
         const sg_shader_stage stage = shd->cmn.images[i].stage;
-        SOKOL_ASSERT((stage == SG_SHADERSTAGE_VERTEX) || (stage == SG_SHADERSTAGE_FRAGMENT));
+        SOKOL_ASSERT(stage != SG_SHADERSTAGE_NONE);
         const uint8_t d3d11_slot = shd->d3d11.img_register_t_n[i];
         SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_SRV_BINDINGS);
         SOKOL_ASSERT(img->d3d11.srv);
         ID3D11ShaderResourceView* d3d11_srv = img->d3d11.srv;
         switch (stage) {
-            SG_SHADERSTAGE_VERTEX: d3d11_vs_srvs[d3d11_slot] = d3d11_srv; break;
-            SG_SHADERSTAGE_FRAGMENT: d3d11_fs_srvs[d3d11_slot] = d3d11_srv; break;
-            SG_SHADERSTAGE_COMPUTE: d3d11_cs_srvs[d3d11_slot] = d3d11_srv; break;
+            case SG_SHADERSTAGE_VERTEX: d3d11_vs_srvs[d3d11_slot] = d3d11_srv; break;
+            case SG_SHADERSTAGE_FRAGMENT: d3d11_fs_srvs[d3d11_slot] = d3d11_srv; break;
+            case SG_SHADERSTAGE_COMPUTE: d3d11_cs_srvs[d3d11_slot] = d3d11_srv; break;
             default: SOKOL_UNREACHABLE;
         }
     }
@@ -12024,7 +12024,7 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_t* bnd) {
             continue;
         }
         const sg_shader_stage stage = shd->cmn.samplers[i].stage;
-        SOKOL_ASSERT((stage == SG_SHADERSTAGE_VERTEX) || (stage == SG_SHADERSTAGE_FRAGMENT));
+        SOKOL_ASSERT(stage != SG_SHADERSTAGE_NONE);
         const uint8_t d3d11_slot = shd->d3d11.smp_register_s_n[i];
         SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_SMP_BINDINGS);
         SOKOL_ASSERT(smp->d3d11.smp);
