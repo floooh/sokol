@@ -5720,10 +5720,6 @@ _SOKOL_PRIVATE void _sapp_emsc_webgl_init(void) {
     // FIXME: error message?
     emscripten_webgl_make_context_current(ctx);
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
-
-    // FIXME: remove PVRTC support here and in sokol-gfx at some point
-    // some WebGL extension are not enabled automatically by emscripten
-    emscripten_webgl_enable_extension(ctx, "WEBKIT_WEBGL_compressed_texture_pvrtc");
 }
 #endif
 

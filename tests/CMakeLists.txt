@@ -61,11 +61,6 @@ else()
         set(c_flags ${c_flags} -Wno-missing-field-initializers)
         set(cxx_flags ${cxx_flags} -Wno-missing-field-initializers)
     endif()
-    if (OSX_IOS)
-        # temp fix for PVRTC formats
-        set(c_flags ${c_flags} -Wno-deprecated-declarations)
-        set(cxx_flags ${cxx_flags} -Wno-deprecated-declarations)
-    endif()
     if (USE_ANALYZER)
         # FIXME: consider using clang-tidy via CMAKE_CXX_CLANG_TIDY: https://ortogonal.github.io/cmake-clang-tidy/
         # with the default settings this spams the output with irrelevant C++ coding style warnings in 3rd party libs though

@@ -8,6 +8,11 @@
 
   Many thanks to @jdah for bringing up the issue and providing the PR and sample code!
 
+- sokol_gfx.h: removed support for PRVTC compressed pixel formats (the latest iOS SDK started
+  to issue deprecation warnings, and this also removed quite a lot of hacky special-case code from
+  sokol_gfx.h). In the unlikely case that you were still using PVRTC textures, please switch
+  to the ETC2 or ASTC formats instead (associated ticket: https://github.com/floooh/sokol/issues/1206)
+
 ### 25-Jan-2025
 
 Some internal sokol_gfx.h cleanup in `sg_make_shader()`, no behaviour changes
