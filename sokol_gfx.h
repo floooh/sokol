@@ -1561,7 +1561,7 @@
       as soon as the vertex format shows up in webgpu.h, sokol_gfx.h will add support.
 
     - Likewise, the following sokol-gfx vertex formats are not supported in WebGPU:
-      R16, R16SN, RG16, RG16SN, RGBA16, RGBA16SN and all PVRTC compressed format.
+      R16, R16SN, RG16, RG16SN, RGBA16, RGBA16SN.
       Unlike unsupported vertex formats, unsupported pixel formats can be queried
       in cross-backend code via sg_query_pixel_format() though.
 
@@ -1827,10 +1827,6 @@ typedef enum sg_pixel_format {
     SG_PIXELFORMAT_BC6H_RGBUF,
     SG_PIXELFORMAT_BC7_RGBA,
     SG_PIXELFORMAT_BC7_SRGBA,
-    SG_PIXELFORMAT_PVRTC_RGB_2BPP,      // FIXME: deprecated
-    SG_PIXELFORMAT_PVRTC_RGB_4BPP,      // FIXME: deprecated
-    SG_PIXELFORMAT_PVRTC_RGBA_2BPP,     // FIXME: deprecated
-    SG_PIXELFORMAT_PVRTC_RGBA_4BPP,     // FIXME: deprecated
     SG_PIXELFORMAT_ETC2_RGB8,
     SG_PIXELFORMAT_ETC2_SRGB8,
     SG_PIXELFORMAT_ETC2_RGB8A1,
@@ -5014,18 +5010,6 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #ifndef GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_ARB
     #define GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_ARB 0x8E8F
     #endif
-    #ifndef GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG
-    #define GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG 0x8C01
-    #endif
-    #ifndef GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG
-    #define GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG 0x8C00
-    #endif
-    #ifndef GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG
-    #define GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG 0x8C03
-    #endif
-    #ifndef GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG
-    #define GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG 0x8C02
-    #endif
     #ifndef GL_COMPRESSED_RGB8_ETC2
     #define GL_COMPRESSED_RGB8_ETC2 0x9274
     #endif
@@ -6439,10 +6423,6 @@ _SOKOL_PRIVATE bool _sg_is_compressed_pixel_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_BC6H_RGBUF:
         case SG_PIXELFORMAT_BC7_RGBA:
         case SG_PIXELFORMAT_BC7_SRGBA:
-        case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
-        case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
-        case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:
-        case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:
         case SG_PIXELFORMAT_ETC2_RGB8:
         case SG_PIXELFORMAT_ETC2_SRGB8:
         case SG_PIXELFORMAT_ETC2_RGB8A1:
@@ -6556,19 +6536,6 @@ _SOKOL_PRIVATE bool _sg_multiple_u64(uint64_t val, uint64_t of) {
 /* return row pitch for an image
 
     see ComputePitch in https://github.com/microsoft/DirectXTex/blob/master/DirectXTex/DirectXTexUtil.cpp
-
-    For the special PVRTC pitch computation, see:
-    GL extension requirement (https://www.khronos.org/registry/OpenGL/extensions/IMG/IMG_texture_compression_pvrtc.txt)
-
-    Quote:
-
-    6) How is the imageSize argument calculated for the CompressedTexImage2D
-       and CompressedTexSubImage2D functions.
-
-       Resolution: For PVRTC 4BPP formats the imageSize is calculated as:
-          ( max(width, 8) * max(height, 8) * 4 + 7) / 8
-       For PVRTC 2BPP formats the imageSize is calculated as:
-          ( max(width, 16) * max(height, 8) * 2 + 7) / 8
 */
 _SOKOL_PRIVATE int _sg_row_pitch(sg_pixel_format fmt, int width, int row_align) {
     int pitch;
@@ -6601,14 +6568,6 @@ _SOKOL_PRIVATE int _sg_row_pitch(sg_pixel_format fmt, int width, int row_align) 
         case SG_PIXELFORMAT_ASTC_4x4_SRGBA:
             pitch = ((width + 3) / 4) * 16;
             pitch = pitch < 16 ? 16 : pitch;
-            break;
-        case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
-        case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:
-            pitch = (_sg_max(width, 8) * 4 + 7) / 8;
-            break;
-        case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
-        case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:
-            pitch = (_sg_max(width, 16) * 2 + 7) / 8;
             break;
         default:
             pitch = width * _sg_pixelformat_bytesize(fmt);
@@ -6646,18 +6605,6 @@ _SOKOL_PRIVATE int _sg_num_rows(sg_pixel_format fmt, int height) {
         case SG_PIXELFORMAT_ASTC_4x4_RGBA:
         case SG_PIXELFORMAT_ASTC_4x4_SRGBA:
             num_rows = ((height + 3) / 4);
-            break;
-        case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
-        case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:
-        case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
-        case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:
-            /* NOTE: this is most likely not correct because it ignores any
-                PVCRTC block size, but multiplied with _sg_row_pitch()
-                it gives the correct surface pitch.
-
-                See: https://www.khronos.org/registry/OpenGL/extensions/IMG/IMG_texture_compression_pvrtc.txt
-            */
-            num_rows = ((_sg_max(height, 8) + 7) / 8) * 8;
             break;
         default:
             num_rows = height;
@@ -7557,14 +7504,6 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
             return GL_COMPRESSED_RGBA_BPTC_UNORM_ARB;
         case SG_PIXELFORMAT_BC7_SRGBA:
             return GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM_ARB;
-        case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
-            return GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG;
-        case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
-            return GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG;
-        case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:
-            return GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG;
-        case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:
-            return GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG;
         case SG_PIXELFORMAT_ETC2_RGB8:
             return GL_COMPRESSED_RGB8_ETC2;
         case SG_PIXELFORMAT_ETC2_SRGB8:
@@ -7654,10 +7593,6 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_BC6H_RGBUF:         return GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_ARB;
         case SG_PIXELFORMAT_BC7_RGBA:           return GL_COMPRESSED_RGBA_BPTC_UNORM_ARB;
         case SG_PIXELFORMAT_BC7_SRGBA:          return GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM_ARB;
-        case SG_PIXELFORMAT_PVRTC_RGB_2BPP:     return GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG;
-        case SG_PIXELFORMAT_PVRTC_RGB_4BPP:     return GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG;
-        case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:    return GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG;
-        case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:    return GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG;
         case SG_PIXELFORMAT_ETC2_RGB8:          return GL_COMPRESSED_RGB8_ETC2;
         case SG_PIXELFORMAT_ETC2_SRGB8:         return GL_COMPRESSED_SRGB8_ETC2;
         case SG_PIXELFORMAT_ETC2_RGB8A1:        return GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2;
@@ -7801,13 +7736,6 @@ _SOKOL_PRIVATE void _sg_gl_init_pixelformats_bptc(void) {
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC7_SRGBA]);
 }
 
-_SOKOL_PRIVATE void _sg_gl_init_pixelformats_pvrtc(void) {
-    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGB_2BPP]);
-    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGB_4BPP]);
-    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGBA_2BPP]);
-    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGBA_4BPP]);
-}
-
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats_etc2(void) {
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8]);
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_SRGB8]);
@@ -7886,7 +7814,6 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
     bool has_s3tc = false;  // BC1..BC3
     bool has_rgtc = false;  // BC4 and BC5
     bool has_bptc = false;  // BC6H and BC7
-    bool has_pvrtc = false;
     bool has_etc2 = false;
     bool has_astc = false;
     GLint num_ext = 0;
@@ -7900,8 +7827,6 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
                 has_rgtc = true;
             } else if (strstr(ext, "_texture_compression_bptc")) {
                 has_bptc = true;
-            } else if (strstr(ext, "_texture_compression_pvrtc")) {
-                has_pvrtc = true;
             } else if (strstr(ext, "_ES3_compatibility")) {
                 has_etc2 = true;
             } else if (strstr(ext, "_texture_filter_anisotropic")) {
@@ -7933,9 +7858,6 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
     if (has_bptc) {
         _sg_gl_init_pixelformats_bptc();
     }
-    if (has_pvrtc) {
-        _sg_gl_init_pixelformats_pvrtc();
-    }
     if (has_etc2) {
         _sg_gl_init_pixelformats_etc2();
     }
@@ -7959,7 +7881,6 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     bool has_s3tc = false;  // BC1..BC3
     bool has_rgtc = false;  // BC4 and BC5
     bool has_bptc = false;  // BC6H and BC7
-    bool has_pvrtc = false;
     #if defined(__EMSCRIPTEN__)
         bool has_etc2 = false;
     #else
@@ -7983,10 +7904,6 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
                 has_rgtc = true;
             } else if (strstr(ext, "_texture_compression_bptc")) {
                 has_bptc = true;
-            } else if (strstr(ext, "_texture_compression_pvrtc")) {
-                has_pvrtc = true;
-            } else if (strstr(ext, "_compressed_texture_pvrtc")) {
-                has_pvrtc = true;
             } else if (strstr(ext, "_compressed_texture_etc")) {
                 has_etc2 = true;
             } else if (strstr(ext, "_compressed_texture_astc")) {
@@ -8030,9 +7947,6 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     }
     if (has_bptc) {
         _sg_gl_init_pixelformats_bptc();
-    }
-    if (has_pvrtc) {
-        _sg_gl_init_pixelformats_pvrtc();
     }
     if (has_etc2) {
         _sg_gl_init_pixelformats_etc2();
@@ -12068,10 +11982,6 @@ _SOKOL_PRIVATE MTLPixelFormat _sg_mtl_pixel_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_BC7_RGBA:               return MTLPixelFormatBC7_RGBAUnorm;
         case SG_PIXELFORMAT_BC7_SRGBA:              return MTLPixelFormatBC7_RGBAUnorm_sRGB;
         #else
-        case SG_PIXELFORMAT_PVRTC_RGB_2BPP:         return MTLPixelFormatPVRTC_RGB_2BPP;
-        case SG_PIXELFORMAT_PVRTC_RGB_4BPP:         return MTLPixelFormatPVRTC_RGB_4BPP;
-        case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:        return MTLPixelFormatPVRTC_RGBA_2BPP;
-        case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:        return MTLPixelFormatPVRTC_RGBA_4BPP;
         case SG_PIXELFORMAT_ETC2_RGB8:              return MTLPixelFormatETC2_RGB8;
         case SG_PIXELFORMAT_ETC2_SRGB8:             return MTLPixelFormatETC2_RGB8_sRGB;
         case SG_PIXELFORMAT_ETC2_RGB8A1:            return MTLPixelFormatETC2_RGB8A1;
@@ -12206,18 +12116,6 @@ _SOKOL_PRIVATE MTLTextureType _sg_mtl_texture_type(sg_image_type t) {
         case SG_IMAGETYPE_3D:       return MTLTextureType3D;
         case SG_IMAGETYPE_ARRAY:    return MTLTextureType2DArray;
         default: SOKOL_UNREACHABLE; return (MTLTextureType)0;
-    }
-}
-
-_SOKOL_PRIVATE bool _sg_mtl_is_pvrtc(sg_pixel_format fmt) {
-    switch (fmt) {
-        case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
-        case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
-        case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:
-        case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:
-            return true;
-        default:
-            return false;
     }
 }
 
@@ -12546,10 +12444,6 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC7_RGBA]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC7_SRGBA]);
     #else
-        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGB_2BPP]);
-        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGB_4BPP]);
-        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGBA_2BPP]);
-        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGBA_4BPP]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_SRGB8]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8A1]);
@@ -12689,13 +12583,8 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_data(const _sg_image_t* img, __unsafe_unr
             const uint8_t* data_ptr = (const uint8_t*)data->subimage[face_index][mip_index].ptr;
             const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
             const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
-            // special case PVRTC formats: bytePerRow and bytesPerImage must be 0
-            int bytes_per_row = 0;
-            int bytes_per_slice = 0;
-            if (!_sg_mtl_is_pvrtc(img->cmn.pixel_format)) {
-                bytes_per_row = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
-                bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
-            }
+            int bytes_per_row = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
+            int bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
             /* bytesPerImage special case: https://developer.apple.com/documentation/metal/mtltexture/1515679-replaceregion
 
                 "Supply a nonzero value only when you copy data to a MTLTextureType3D type texture"
@@ -14048,10 +13937,6 @@ _SOKOL_PRIVATE WGPUTextureFormat _sg_wgpu_textureformat(sg_pixel_format p) {
         case SG_PIXELFORMAT_RG16SN:
         case SG_PIXELFORMAT_RGBA16:
         case SG_PIXELFORMAT_RGBA16SN:
-        case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
-        case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
-        case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:
-        case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:
             return WGPUTextureFormat_Undefined;
 
         default:
