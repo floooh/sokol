@@ -1429,6 +1429,8 @@ _SOKOL_PRIVATE const char* _sgimgui_blendop_string(sg_blend_op op) {
         case SG_BLENDOP_ADD:                return "SG_BLENDOP_ADD";
         case SG_BLENDOP_SUBTRACT:           return "SG_BLENDOP_SUBTRACT";
         case SG_BLENDOP_REVERSE_SUBTRACT:   return "SG_BLENDOP_REVERSE_SUBTRACT";
+        case SG_BLENDOP_MIN:                return "SG_BLENDOP_MIN";
+        case SG_BLENDOP_MAX:                return "SG_BLENDOP_MAX";
         default:                            return "???";
     }
 }

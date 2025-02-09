@@ -2409,7 +2409,9 @@ typedef enum sg_stencil_op {
                 .dst_factor_alpha
 
     The default value is SG_BLENDFACTOR_ONE for source
-    factors, and SG_BLENDFACTOR_ZERO for destination factors.
+    factors, and for the destination SG_BLENDFACTOR_ZERO if the associated
+    blend-op is ADD, SUBTRACT or REVERSE_SUBTRACT or SG_BLENDFACTOR_ONE
+    if the associated blend-op is MIN or MAX.
 */
 typedef enum sg_blend_factor {
     _SG_BLENDFACTOR_DEFAULT,    // value 0 reserved for default-init
@@ -2452,6 +2454,8 @@ typedef enum sg_blend_op {
     SG_BLENDOP_ADD,
     SG_BLENDOP_SUBTRACT,
     SG_BLENDOP_REVERSE_SUBTRACT,
+    SG_BLENDOP_MIN,
+    SG_BLENDOP_MAX,
     _SG_BLENDOP_NUM,
     _SG_BLENDOP_FORCE_U32 = 0x7FFFFFFF
 } sg_blend_op;
@@ -3873,6 +3877,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_NO_CONT_ATTRS, "sg_pipeline_desc.layout.attrs is not continuous") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4, "sg_pipeline_desc.layout.buffers[].stride must be multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_ATTR_SEMANTICS, "D3D11 missing vertex attribute semantics in shader") \
+    _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_BLENDOP_MINMAX_REQUIRES_BLENDFACTOR_ONE, "SG_BLENDOP_MIN/MAX requires all blend factors to be SG_BLENDFACTOR_ONE") \
     _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_CANARY, "sg_attachments_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_NO_ATTACHMENTS, "sg_attachments_desc no color or depth-stencil attachments") \
     _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_NO_CONT_COLOR_ATTS, "color attachments must occupy continuous slots") \
@@ -4957,6 +4962,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_MINOR_VERSION 0x821C
         #define GL_TEXTURE_2D_MULTISAMPLE 0x9100
         #define GL_TEXTURE_2D_MULTISAMPLE_ARRAY 0x9102
+        #define GL_MIN 0x8007
+        #define GL_MAX 0x8008
     #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
@@ -7364,6 +7371,8 @@ _SOKOL_PRIVATE GLenum _sg_gl_blend_op(sg_blend_op op) {
         case SG_BLENDOP_ADD:                return GL_FUNC_ADD;
         case SG_BLENDOP_SUBTRACT:           return GL_FUNC_SUBTRACT;
         case SG_BLENDOP_REVERSE_SUBTRACT:   return GL_FUNC_REVERSE_SUBTRACT;
+        case SG_BLENDOP_MIN:                return GL_MIN;
+        case SG_BLENDOP_MAX:                return GL_MAX;
         default: SOKOL_UNREACHABLE; return 0;
     }
 }
@@ -10541,6 +10550,8 @@ _SOKOL_PRIVATE D3D11_BLEND_OP _sg_d3d11_blend_op(sg_blend_op op) {
         case SG_BLENDOP_ADD:                return D3D11_BLEND_OP_ADD;
         case SG_BLENDOP_SUBTRACT:           return D3D11_BLEND_OP_SUBTRACT;
         case SG_BLENDOP_REVERSE_SUBTRACT:   return D3D11_BLEND_OP_REV_SUBTRACT;
+        case SG_BLENDOP_MIN:                return D3D11_BLEND_OP_MIN;
+        case SG_BLENDOP_MAX:                return D3D11_BLEND_OP_MAX;
         default: SOKOL_UNREACHABLE; return (D3D11_BLEND_OP) 0;
     }
 }
@@ -12099,6 +12110,8 @@ _SOKOL_PRIVATE MTLBlendOperation _sg_mtl_blend_op(sg_blend_op op) {
         case SG_BLENDOP_ADD:                return MTLBlendOperationAdd;
         case SG_BLENDOP_SUBTRACT:           return MTLBlendOperationSubtract;
         case SG_BLENDOP_REVERSE_SUBTRACT:   return MTLBlendOperationReverseSubtract;
+        case SG_BLENDOP_MIN:                return MTLBlendOperationMin;
+        case SG_BLENDOP_MAX:                return MTLBlendOperationMax;
         default: SOKOL_UNREACHABLE; return (MTLBlendOperation)0;
     }
 }
@@ -14084,6 +14097,8 @@ _SOKOL_PRIVATE WGPUBlendOperation _sg_wgpu_blendop(sg_blend_op op) {
         case SG_BLENDOP_ADD:                return WGPUBlendOperation_Add;
         case SG_BLENDOP_SUBTRACT:           return WGPUBlendOperation_Subtract;
         case SG_BLENDOP_REVERSE_SUBTRACT:   return WGPUBlendOperation_ReverseSubtract;
+        case SG_BLENDOP_MIN:                return WGPUBlendOperation_Min;
+        case SG_BLENDOP_MAX:                return WGPUBlendOperation_Max;
         default:
             SOKOL_UNREACHABLE;
             return WGPUBlendOperation_Force32;
@@ -17104,7 +17119,7 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
         _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_PIPELINEDESC_CANARY);
         _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_PIPELINEDESC_CANARY);
         _SG_VALIDATE(desc->shader.id != SG_INVALID_ID, VALIDATE_PIPELINEDESC_SHADER);
-        for (int buf_index = 0; buf_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; buf_index++) {
+        for (size_t buf_index = 0; buf_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; buf_index++) {
             const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[buf_index];
             if (l_state->stride == 0) {
                 continue;
@@ -17116,7 +17131,7 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
         if (shd) {
             _SG_VALIDATE(shd->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_PIPELINEDESC_SHADER);
             bool attrs_cont = true;
-            for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+            for (size_t attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
                 const sg_vertex_attr_state* a_state = &desc->layout.attrs[attr_index];
                 if (a_state->format == SG_VERTEXFORMAT_INVALID) {
                     attrs_cont = false;
@@ -17128,6 +17143,15 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
                 // on D3D11, semantic names (and semantic indices) must be provided
                 _SG_VALIDATE(!_sg_strempty(&shd->d3d11.attrs[attr_index].sem_name), VALIDATE_PIPELINEDESC_ATTR_SEMANTICS);
                 #endif
+            }
+        }
+        for (size_t color_index = 0; color_index < (size_t)desc->color_count; color_index++) {
+            const sg_blend_state* bs = &desc->colors[color_index].blend;
+            if ((bs->op_rgb == SG_BLENDOP_MIN) || (bs->op_rgb == SG_BLENDOP_MAX)) {
+                _SG_VALIDATE((bs->src_factor_rgb == SG_BLENDFACTOR_ONE) && (bs->dst_factor_rgb == SG_BLENDFACTOR_ONE), VALIDATE_PIPELINEDESC_BLENDOP_MINMAX_REQUIRES_BLENDFACTOR_ONE);
+            }
+            if ((bs->op_alpha == SG_BLENDOP_MIN) || (bs->op_alpha == SG_BLENDOP_MAX)) {
+                _SG_VALIDATE((bs->src_factor_alpha == SG_BLENDFACTOR_ONE) && (bs->dst_factor_alpha == SG_BLENDFACTOR_ONE), VALIDATE_PIPELINEDESC_BLENDOP_MINMAX_REQUIRES_BLENDFACTOR_ONE);
             }
         }
         return _sg_validate_end();
@@ -17740,12 +17764,20 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
         cs->pixel_format = _sg_def(cs->pixel_format, _sg.desc.environment.defaults.color_format);
         cs->write_mask = _sg_def(cs->write_mask, SG_COLORMASK_RGBA);
         sg_blend_state* bs = &def.colors[i].blend;
-        bs->src_factor_rgb = _sg_def(bs->src_factor_rgb, SG_BLENDFACTOR_ONE);
-        bs->dst_factor_rgb = _sg_def(bs->dst_factor_rgb, SG_BLENDFACTOR_ZERO);
         bs->op_rgb = _sg_def(bs->op_rgb, SG_BLENDOP_ADD);
-        bs->src_factor_alpha = _sg_def(bs->src_factor_alpha, SG_BLENDFACTOR_ONE);
-        bs->dst_factor_alpha = _sg_def(bs->dst_factor_alpha, SG_BLENDFACTOR_ZERO);
+        bs->src_factor_rgb = _sg_def(bs->src_factor_rgb, SG_BLENDFACTOR_ONE);
+        if ((bs->op_rgb == SG_BLENDOP_MIN) || (bs->op_rgb == SG_BLENDOP_MAX)) {
+            bs->dst_factor_rgb = _sg_def(bs->dst_factor_rgb, SG_BLENDFACTOR_ONE);
+        } else {
+            bs->dst_factor_rgb = _sg_def(bs->dst_factor_rgb, SG_BLENDFACTOR_ZERO);
+        }
         bs->op_alpha = _sg_def(bs->op_alpha, SG_BLENDOP_ADD);
+        bs->src_factor_alpha = _sg_def(bs->src_factor_alpha, SG_BLENDFACTOR_ONE);
+        if ((bs->op_alpha == SG_BLENDOP_MIN) || (bs->op_alpha == SG_BLENDOP_MAX)) {
+            bs->dst_factor_alpha = _sg_def(bs->dst_factor_alpha, SG_BLENDFACTOR_ONE);
+        } else {
+            bs->dst_factor_alpha = _sg_def(bs->dst_factor_alpha, SG_BLENDFACTOR_ZERO);
+        }
     }
 
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
