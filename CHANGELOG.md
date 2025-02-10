@@ -1,5 +1,16 @@
 ## Updates
 
+### 10-Feb-2025
+
+The [sokol-c3](https://github.com/floooh/sokol-c3) bindings are now 'official'
+and properly integrated (e.g. they are updated automatically on commits to the
+sokol repo, and [sokol-shdc](https://github.com/floooh/sokol-tools) gained a
+C3 output format.
+
+Many thanks to @radekm for kicking this off and doing all the work :)
+
+Related pull request: https://github.com/floooh/sokol/pull/1148
+
 ### 09-Feb-2025
 
 - sokol_gfx.h: added the missing blend factors `SG_BLENDFACTOR_MIN` and `SG_BLENDFACTOR_MAX`
