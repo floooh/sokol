@@ -84,6 +84,7 @@ These are automatically updated on changes to the C headers:
 - [sokol-rust](https://github.com/floooh/sokol-rust)
 - [sokol-d](https://github.com/kassane/sokol-d)
 - [sokol-jai](https://github.com/colinbellino/sokol-jai)
+- [sokol-c3](https://github.com/floooh/sokol-c3)
 
 ## Notes
 
