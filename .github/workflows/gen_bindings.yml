@@ -500,3 +500,24 @@ jobs:
           git add -A
           git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
           git push
+
+  deploy-c3:
+    needs: test-c3
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@main
+        with:
+          repository: floooh/sokol-c3
+          ssh-key: ${{ secrets.GHACTIONS_C3_PUSH }}
+      - uses: actions/download-artifact@main
+        with:
+          name: ignore-me-c3
+          path: sokol.c3l
+      - name: "commit and push"
+        run: |
+          git config user.email "none"
+          git config user.name "GH Action"
+          git add -A
+          git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
+          git push
