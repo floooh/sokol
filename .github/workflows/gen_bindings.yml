@@ -66,6 +66,10 @@ jobs:
         with:
           repository: colinbellino/sokol-jai
           path: bindgen/sokol-jai
+      - uses: actions/checkout@main
+        with:
+          repository: floooh/sokol-c3
+          path: bindgen/sokol-c3
       - name: generate
         run: |
           cd bindgen
@@ -108,6 +112,12 @@ jobs:
           name: ignore-me-jai
           retention-days: 1
           path: bindgen/sokol-jai/sokol
+      - name: upload-c3-artifact
+        uses: actions/upload-artifact@main
+        with:
+          name: ignore-me-c3
+          retention-days: 1
+          path: bindgen/sokol-c3/sokol.c3l
 
   test-zig:
     needs: gen-bindings
@@ -322,6 +332,40 @@ jobs:
             sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev
       - name: build
         run: echo "run jai here"
+
+  test-c3:
+    needs: gen-bindings
+    strategy:
+      # Continue build even if some platforms fail.
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            arch: arm64
+          - os: ubuntu-latest
+            arch: x64
+          - os: windows-latest
+            arch: x64
+    runs-on: ${{matrix.os}}
+    steps:
+      - uses: actions/checkout@main
+        with:
+          repository: floooh/sokol-c3
+      - uses: radekm/setup-c3@v2
+        with:
+          version: v0.6.6
+      - uses: actions/download-artifact@main
+        with:
+          name: ignore-me-c3
+          path: sokol.c3l
+      - name: prepare
+        if: runner.os == 'Linux'
+        run: |
+            sudo apt-get update
+            sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+      - name: build
+        shell: bash
+        run: ./build-examples.sh
 
   # only deploy the bindings for commits on the main branch
   deploy-zig:
