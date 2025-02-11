@@ -1,7 +1,5 @@
 ## Language Binding Generation Scripts
 
-> REMINDER: we can pass `-fparse-all-comments` to the clang ast-dump command line which adds the following node types to the ast-dump.json: FullComment, ParagraphComment, TextComment. This might allow us to preserve comments in the language bindings (might be useful as part of a bigger change to make sokol header comments autodoc and Intellisense-friendly)
-
 ### Updating the bindings
 
 First make sure that clang and python3 are in the path:
