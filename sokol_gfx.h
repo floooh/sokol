@@ -8546,8 +8546,16 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_buffer(_sg_buffer_t* buf, const s
             _sg_gl_cache_bind_buffer(gl_target, gl_buf);
             glBufferData(gl_target, buf->cmn.size, 0, gl_usage);
             if (buf->cmn.usage == SG_USAGE_IMMUTABLE) {
-                SOKOL_ASSERT(desc->data.ptr);
-                glBufferSubData(gl_target, 0, buf->cmn.size, desc->data.ptr);
+                if (desc->data.ptr) {
+                    glBufferSubData(gl_target, 0, buf->cmn.size, desc->data.ptr);
+                } else {
+                    // setup a zero-initialized buffer (don't explicitly need to do this on WebGL)
+                    #if !defined(__EMSCRIPTEN__)
+                    void* ptr = _sg_malloc_clear(buf->cmn.size);
+                    glBufferSubData(gl_target, 0, buf->cmn.size, ptr);
+                    _sg_free(ptr);
+                    #endif
+                }
             }
             _sg_gl_cache_restore_buffer_binding(gl_target);
         }
