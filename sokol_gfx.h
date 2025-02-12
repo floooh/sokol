@@ -4846,6 +4846,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_TEXTURE_CUBE_MAP_POSITIVE_X 0x8515
         #define GL_DECR 0x1E03
         #define GL_FRAGMENT_SHADER 0x8B30
+        #define GL_COMPUTE_SHADER 0x91B9
         #define GL_FLOAT 0x1406
         #define GL_TEXTURE_MAX_LOD 0x813B
         #define GL_DEPTH_COMPONENT 0x1902
@@ -7312,6 +7313,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_shader_stage(sg_shader_stage stage) {
     switch (stage) {
         case SG_SHADERSTAGE_VERTEX:   return GL_VERTEX_SHADER;
         case SG_SHADERSTAGE_FRAGMENT: return GL_FRAGMENT_SHADER;
+        case SG_SHADERSTAGE_COMPUTE:  return GL_COMPUTE_SHADER;
         default: SOKOL_UNREACHABLE; return 0;
     }
 }
@@ -8848,19 +8850,37 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
         _sg_strcpy(&shd->gl.attrs[i].name, desc->attrs[i].glsl_name);
     }
 
-    GLuint gl_vs = _sg_gl_compile_shader(SG_SHADERSTAGE_VERTEX, desc->vertex_func.source);
-    GLuint gl_fs = _sg_gl_compile_shader(SG_SHADERSTAGE_FRAGMENT, desc->fragment_func.source);
-    if (!(gl_vs && gl_fs)) {
-        return SG_RESOURCESTATE_FAILED;
-    }
+    const bool has_vs = desc->vertex_func.source;
+    const bool has_fs = desc->fragment_func.source;
+    const bool has_cs = desc->compute_func.source;
+    SOKOL_ASSERT((has_vs && has_fs) || has_cs);
     GLuint gl_prog = glCreateProgram();
-    glAttachShader(gl_prog, gl_vs);
-    glAttachShader(gl_prog, gl_fs);
-    glLinkProgram(gl_prog);
-    glDeleteShader(gl_vs);
-    glDeleteShader(gl_fs);
-    _SG_GL_CHECK_ERROR();
-
+    if (has_vs && has_fs) {
+        GLuint gl_vs = _sg_gl_compile_shader(SG_SHADERSTAGE_VERTEX, desc->vertex_func.source);
+        GLuint gl_fs = _sg_gl_compile_shader(SG_SHADERSTAGE_FRAGMENT, desc->fragment_func.source);
+        if (!(gl_vs && gl_fs)) {
+            glDeleteProgram(gl_prog);
+            if (gl_vs) { glDeleteShader(gl_vs); }
+            if (gl_fs) { glDeleteShader(gl_fs); }
+            return SG_RESOURCESTATE_FAILED;
+        }
+        glAttachShader(gl_prog, gl_vs);
+        glAttachShader(gl_prog, gl_fs);
+        glLinkProgram(gl_prog);
+        glDeleteShader(gl_vs);
+        glDeleteShader(gl_fs);
+        _SG_GL_CHECK_ERROR();
+    } else {
+        GLuint gl_cs = _sg_gl_compile_shader(SG_SHADERSTAGE_COMPUTE, desc->compute_func.source);
+        if (!gl_cs) {
+            glDeleteProgram(gl_prog);
+            return SG_RESOURCESTATE_FAILED;
+        }
+        glAttachShader(gl_prog, gl_cs);
+        glLinkProgram(gl_prog);
+        glDeleteShader(gl_cs);
+        _SG_GL_CHECK_ERROR();
+    }
     GLint link_status;
     glGetProgramiv(gl_prog, GL_LINK_STATUS, &link_status);
     if (!link_status) {
