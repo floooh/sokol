@@ -5000,6 +5000,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_MINOR_VERSION 0x821C
         #define GL_TEXTURE_2D_MULTISAMPLE 0x9100
         #define GL_TEXTURE_2D_MULTISAMPLE_ARRAY 0x9102
+        #define GL_SHADER_STORAGE_BARRIER_BIT 0x2000
     #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
@@ -7219,7 +7220,8 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     _SG_XMACRO(glBindBufferBase,                  void, (GLenum target, GLuint index, GLuint buffer)) \
     _SG_XMACRO(glTexImage2DMultisample,           void, (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations)) \
     _SG_XMACRO(glTexImage3DMultisample,           void, (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations)) \
-    _SG_XMACRO(glDispatchCompute,                 void, (GLuint num_groups_x, GLuint num_groups_y, GLuint num_groups_z))
+    _SG_XMACRO(glDispatchCompute,                 void, (GLuint num_groups_x, GLuint num_groups_y, GLuint num_groups_z)) \
+    _SG_XMACRO(glMemoryBarrier,                   void, (GLbitfield barriers))
 
 // generate GL function pointer typedefs
 #define _SG_XMACRO(name, ret, args) typedef ret (GL_APIENTRY* PFN_ ## name) args;
