@@ -7218,7 +7218,8 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     _SG_XMACRO(glDeleteSamplers,                  void, (GLsizei n, const GLuint* samplers)) \
     _SG_XMACRO(glBindBufferBase,                  void, (GLenum target, GLuint index, GLuint buffer)) \
     _SG_XMACRO(glTexImage2DMultisample,           void, (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations)) \
-    _SG_XMACRO(glTexImage3DMultisample,           void, (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations))
+    _SG_XMACRO(glTexImage3DMultisample,           void, (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations)) \
+    _SG_XMACRO(glDispatchCompute,                 void, (GLuint num_groups_x, GLuint num_groups_y, GLuint num_groups_z))
 
 // generate GL function pointer typedefs
 #define _SG_XMACRO(name, ret, args) typedef ret (GL_APIENTRY* PFN_ ## name) args;
@@ -8993,6 +8994,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
     SOKOL_ASSERT(shd->gl.prog);
     SOKOL_ASSERT(_sg.limits.max_vertex_attrs <= SG_MAX_VERTEX_ATTRIBUTES);
     pip->shader = shd;
+    if (pip->cmn.is_compute) {
+        // shortcut for compute pipelines
+        return SG_RESOURCESTATE_VALID;
+    }
     pip->gl.primitive_type = desc->primitive_type;
     pip->gl.depth = desc->depth;
     pip->gl.stencil = desc->stencil;
@@ -9273,6 +9278,12 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass) {
     // unbind all currently bound textures in begin pass?
     SOKOL_ASSERT(pass);
     _SG_GL_CHECK_ERROR();
+
+    // early out if this a compute pass
+    if (pass->compute) {
+        return;
+    }
+
     const _sg_attachments_t* atts = _sg.cur_pass.atts;
     const sg_swapchain* swapchain = &pass->swapchain;
     const sg_pass_action* action = &pass->action;
@@ -9455,6 +9466,21 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
     if ((_sg.gl.cache.cur_pipeline != pip) || (_sg.gl.cache.cur_pipeline_id.id != pip->slot.id)) {
         _sg.gl.cache.cur_pipeline = pip;
         _sg.gl.cache.cur_pipeline_id.id = pip->slot.id;
+
+        // bind shader program
+        if (pip->shader->gl.prog != _sg.gl.cache.prog) {
+            _sg.gl.cache.prog = pip->shader->gl.prog;
+            glUseProgram(pip->shader->gl.prog);
+            _sg_stats_add(gl.num_use_program, 1);
+        }
+
+        // if this is a compute pass, can early-out here
+        if (pip->cmn.is_compute) {
+            _SG_GL_CHECK_ERROR();
+            return;
+        }
+
+        // update render pipeline state
         _sg.gl.cache.cur_primitive_type = _sg_gl_primitive_type(pip->gl.primitive_type);
         _sg.gl.cache.cur_index_type = _sg_gl_index_type(pip->cmn.index_type);
 
@@ -9663,12 +9689,6 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
         }
         #endif
 
-        // bind shader program
-        if (pip->shader->gl.prog != _sg.gl.cache.prog) {
-            _sg.gl.cache.prog = pip->shader->gl.prog;
-            glUseProgram(pip->shader->gl.prog);
-            _sg_stats_add(gl.num_use_program, 1);
-        }
     }
     _SG_GL_CHECK_ERROR();
 }
@@ -9712,6 +9732,12 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_t* bnd) {
         const uint8_t binding = shd->gl.sbuf_binding[sbuf_index];
         GLuint gl_sbuf = sbuf->gl.buf[sbuf->cmn.active_slot];
         _sg_gl_cache_bind_storage_buffer(binding, gl_sbuf);
+    }
+    _SG_GL_CHECK_ERROR();
+
+    // if compute-pipeline, early out here
+    if (bnd->pip->cmn.is_compute) {
+        return true;
     }
 
     // index buffer (can be 0)
@@ -9851,6 +9877,10 @@ _SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_inst
             glDrawArrays(p_type, base_element, num_elements);
         }
     }
+}
+
+_SOKOL_PRIVATE void _sg_gl_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
+    glDispatchCompute((GLuint)num_groups_x, (GLuint)num_groups_y, (GLuint)num_groups_z);
 }
 
 _SOKOL_PRIVATE void _sg_gl_commit(void) {
@@ -16849,13 +16879,11 @@ static inline void _sg_draw(int base_element, int num_elements, int num_instance
 
 static inline void _sg_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     #if defined(_SOKOL_ANY_GL)
-    // FIXME
+    _sg_gl_dispatch(num_groups_x, num_groups_y, num_groups_z);
     #elif defined(SOKOL_METAL)
     _sg_mtl_dispatch(num_groups_x, num_groups_y, num_groups_z);
-    // FIXME
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_dispatch(num_groups_x, num_groups_y, num_groups_z);
-    // FIMXE
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_dispatch(num_groups_x, num_groups_y, num_groups_z);
     #elif defined(SOKOL_DUMMY_BACKEND)
