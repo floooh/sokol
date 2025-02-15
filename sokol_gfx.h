@@ -5227,10 +5227,6 @@ typedef struct {
     int active_slot;
     sg_buffer_type type;
     sg_usage usage;
-    struct {
-        bool track_readwrite;
-        bool track_readonly;
-    } compute;
 } _sg_buffer_common_t;
 
 _SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_buffer_desc* desc) {
@@ -5243,8 +5239,6 @@ _SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_bu
     cmn->active_slot = 0;
     cmn->type = desc->type;
     cmn->usage = desc->usage;
-    cmn->compute.track_readwrite = false;
-    cmn->compute.track_readonly = false;
 }
 
 typedef struct {
@@ -6233,7 +6227,6 @@ typedef struct {
     #endif
     struct {
         _sg_tracker_t readwrite_sbufs;  // tracks read/write storage buffers used in compute pass
-        _sg_tracker_t readonly_sbufs;   // tracks readonly storage buffers in in compute pass
     } compute;
     _sg_pools_t pools;
     sg_backend backend;
@@ -18972,46 +18965,23 @@ _SOKOL_PRIVATE void _sg_setup_compute(const sg_desc* desc) {
     SOKOL_ASSERT(desc && (desc->max_dispatch_calls_per_pass > 0));
     const uint32_t max_tracked_sbufs = (uint32_t)desc->max_dispatch_calls_per_pass * SG_MAX_STORAGEBUFFER_BINDSLOTS;
     _sg_tracker_init(&_sg.compute.readwrite_sbufs, max_tracked_sbufs);
-    _sg_tracker_init(&_sg.compute.readonly_sbufs, max_tracked_sbufs);
 }
 
 _SOKOL_PRIVATE void _sg_discard_compute(void) {
     _sg_tracker_discard(&_sg.compute.readwrite_sbufs);
-    _sg_tracker_discard(&_sg.compute.readonly_sbufs);
 }
 
 _SOKOL_PRIVATE void _sg_compute_pass_track_storage_buffer(_sg_buffer_t* sbuf, bool readonly) {
     SOKOL_ASSERT(sbuf);
-    // FIXME: the per-buffer flags are actually only needed for validation?
-    if (readonly) {
-        _sg_tracker_add(&_sg.compute.readonly_sbufs, sbuf->slot.id);
-        sbuf->cmn.compute.track_readonly = true;
-    } else {
+    if (!readonly) {
         _sg_tracker_add(&_sg.compute.readwrite_sbufs, sbuf->slot.id);
-        sbuf->cmn.compute.track_readwrite = true;
     }
 }
 
 _SOKOL_PRIVATE void _sg_compute_on_endpass(void) {
     SOKOL_ASSERT(_sg.cur_pass.in_pass);
     SOKOL_ASSERT(_sg.cur_pass.is_compute);
-    // reset the per-buffer flags
-    // FIXME: those flags are actually only needed for validation?
-    for (uint32_t i = 0; i < _sg.compute.readwrite_sbufs.cur; i++) {
-        _sg_buffer_t* sbuf = _sg_lookup_buffer(&_sg.pools, _sg.compute.readwrite_sbufs.items[i]);
-        if (sbuf) {
-            sbuf->cmn.compute.track_readwrite = false;
-        }
-    }
-    for (uint32_t i = 0; i < _sg.compute.readonly_sbufs.cur; i++) {
-        _sg_buffer_t* sbuf = _sg_lookup_buffer(&_sg.pools, _sg.compute.readonly_sbufs.items[i]);
-        if (sbuf) {
-            sbuf->cmn.compute.track_readonly = false;
-        }
-    }
-    // reset the tracking pointers
     _sg_tracker_reset(&_sg.compute.readwrite_sbufs);
-    _sg_tracker_reset(&_sg.compute.readonly_sbufs);
 }
 
 _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
