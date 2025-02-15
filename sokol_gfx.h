@@ -1870,7 +1870,7 @@ typedef struct sg_features {
     bool image_clamp_to_border;         // border color and clamp-to-border uv-wrap mode is supported
     bool mrt_independent_blend_state;   // multiple-render-target rendering can use per-render-target blend state
     bool mrt_independent_write_mask;    // multiple-render-target rendering can use per-render-target color write masks
-    bool storage_buffer;                // storage buffers are supported
+    bool compute;                       // storage buffers and compute shaders are supported
     bool msaa_image_bindings;           // if true, multisampled images can be bound as texture resources
 } sg_features;
 
@@ -4722,6 +4722,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
                 #include <windows.h>
                 #define _SOKOL_USE_WIN32_GL_LOADER (1)
                 #pragma comment (lib, "kernel32")   // GetProcAddress()
+                #define _SOKOL_GL_HAS_COMPUTE (1)
             #endif
         #elif defined(__APPLE__)
             #include <TargetConditionals.h>
@@ -4742,6 +4743,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #if defined(SOKOL_GLCORE)
                 #define GL_GLEXT_PROTOTYPES
                 #include <GL/gl.h>
+                #define _SOKOL_GL_HAS_COMPUTE (1)
             #else
                 #include <GLES3/gl3.h>
                 #include <GLES3/gl3ext.h>
@@ -5108,6 +5110,9 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #endif
     #ifndef GL_LUMINANCE
     #define GL_LUMINANCE 0x1909
+    #endif
+    #ifndef GL_COMPUTE_SHADER
+    #define GL_COMPUTE_SHADER 0x91B9
     #endif
     #ifndef _SG_GL_CHECK_ERROR
     #define _SG_GL_CHECK_ERROR() { SOKOL_ASSERT(glGetError() == GL_NO_ERROR); }
@@ -7968,7 +7973,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
     _sg.features.image_clamp_to_border = true;
     _sg.features.mrt_independent_blend_state = false;
     _sg.features.mrt_independent_write_mask = true;
-    _sg.features.storage_buffer = version >= 430;
+    _sg.features.compute = version >= 430;
     #if defined(__APPLE__)
     _sg.features.msaa_image_bindings = false;
     #else
@@ -8046,7 +8051,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.features.image_clamp_to_border = false;
     _sg.features.mrt_independent_blend_state = false;
     _sg.features.mrt_independent_write_mask = false;
-    _sg.features.storage_buffer = false;
+    _sg.features.compute = false;
     _sg.features.msaa_image_bindings = false;
 
     bool has_s3tc = false;  // BC1..BC3
@@ -8149,7 +8154,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
         _sg_stats_add(gl.num_bind_buffer, 1);
     }
     if (force || (_sg.gl.cache.storage_buffer != 0)) {
-        if (_sg.features.storage_buffer) {
+        if (_sg.features.compute) {
             glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
         }
         _sg.gl.cache.storage_buffer = 0;
@@ -8157,7 +8162,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
     }
     for (size_t i = 0; i < _SG_GL_MAX_SBUF_BINDINGS; i++) {
         if (force || (_sg.gl.cache.storage_buffers[i] != 0)) {
-            if (_sg.features.storage_buffer) {
+            if (_sg.features.compute) {
                 glBindBufferBase(GL_SHADER_STORAGE_BUFFER, (GLuint)i, 0);
             }
             _sg.gl.cache.storage_buffers[i] = 0;
@@ -8183,7 +8188,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_buffer(GLenum target, GLuint buffer) {
     } else if (target == GL_SHADER_STORAGE_BUFFER) {
         if (_sg.gl.cache.storage_buffer != buffer) {
             _sg.gl.cache.storage_buffer = buffer;
-            if (_sg.features.storage_buffer) {
+            if (_sg.features.compute) {
                 glBindBuffer(target, buffer);
             }
             _sg_stats_add(gl.num_bind_buffer, 1);
@@ -8198,7 +8203,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_storage_buffer(uint8_t glsl_binding_n, GLu
     if (_sg.gl.cache.storage_buffers[glsl_binding_n] != buffer) {
         _sg.gl.cache.storage_buffers[glsl_binding_n] = buffer;
         _sg.gl.cache.storage_buffer = buffer; // not a bug
-        if (_sg.features.storage_buffer) {
+        if (_sg.features.compute) {
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, glsl_binding_n, buffer);
         }
         _sg_stats_add(gl.num_bind_buffer, 1);
@@ -8558,7 +8563,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_buffer(_sg_buffer_t* buf, const s
                 } else {
                     // setup a zero-initialized buffer (don't explicitly need to do this on WebGL)
                     #if !defined(__EMSCRIPTEN__)
-                    void* ptr = _sg_malloc_clear(buf->cmn.size);
+                    void* ptr = _sg_malloc_clear((size_t)buf->cmn.size);
                     glBufferSubData(gl_target, 0, buf->cmn.size, ptr);
                     _sg_free(ptr);
                     #endif
@@ -9697,6 +9702,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
     _SG_GL_CHECK_ERROR();
 }
 
+#if defined _SOKOL_GL_HAS_COMPUTE
 _SOKOL_PRIVATE void _sg_gl_handle_memory_barriers(const _sg_shader_t* shd, const _sg_bindings_t* bnd) {
     // NOTE: currently only storage buffers can be GPU-written, and storage
     // buffers cannot be bound as vertex- or index-buffers.
@@ -9721,6 +9727,7 @@ _SOKOL_PRIVATE void _sg_gl_handle_memory_barriers(const _sg_shader_t* shd, const
         _sg_stats_add(gl.num_memory_barriers, 1);
     }
 }
+#endif
 
 _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_t* bnd) {
     SOKOL_ASSERT(bnd);
@@ -9730,7 +9737,9 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_t* bnd) {
     const _sg_shader_t* shd = bnd->pip->shader;
 
     // take care of storage buffer memory barriers
+    #if defined(_SOKOL_GL_HAS_COMPUTE)
     _sg_gl_handle_memory_barriers(shd, bnd);
+    #endif
 
     // bind combined image-samplers
     _SG_GL_CHECK_ERROR();
@@ -9912,7 +9921,11 @@ _SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_inst
 }
 
 _SOKOL_PRIVATE void _sg_gl_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
+    #if defined(_SOKOL_GL_HAS_COMPUTE)
     glDispatchCompute((GLuint)num_groups_x, (GLuint)num_groups_y, (GLuint)num_groups_z);
+    #else
+    (void)num_groups_x; (void)num_groups_y; (void)num_groups_z;
+    #endif
 }
 
 _SOKOL_PRIVATE void _sg_gl_commit(void) {
@@ -10847,7 +10860,7 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.features.image_clamp_to_border = true;
     _sg.features.mrt_independent_blend_state = true;
     _sg.features.mrt_independent_write_mask = true;
-    _sg.features.storage_buffer = true;
+    _sg.features.compute = true;
     _sg.features.msaa_image_bindings = true;
 
     _sg.limits.max_image_size_2d = 16 * 1024;
@@ -12813,7 +12826,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.origin_top_left = true;
     _sg.features.mrt_independent_blend_state = true;
     _sg.features.mrt_independent_write_mask = true;
-    _sg.features.storage_buffer = true;
+    _sg.features.compute = true;
     _sg.features.msaa_image_bindings = true;
 
     _sg.features.image_clamp_to_border = false;
@@ -14737,7 +14750,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.image_clamp_to_border = false;
     _sg.features.mrt_independent_blend_state = true;
     _sg.features.mrt_independent_write_mask = true;
-    _sg.features.storage_buffer = true;
+    _sg.features.compute = true;
     _sg.features.msaa_image_bindings = true;
 
     wgpuDeviceGetLimits(_sg.wgpu.dev, &_sg.wgpu.limits);
@@ -17448,7 +17461,7 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
             _SG_VALIDATE(desc->data.size == 0, VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE);
         }
         if (desc->type == SG_BUFFERTYPE_STORAGEBUFFER) {
-            _SG_VALIDATE(_sg.features.storage_buffer, VALIDATE_BUFFERDESC_STORAGEBUFFER_SUPPORTED);
+            _SG_VALIDATE(_sg.features.compute, VALIDATE_BUFFERDESC_STORAGEBUFFER_SUPPORTED);
             _SG_VALIDATE(_sg_multiple_u64(desc->size, 4), VALIDATE_BUFFERDESC_STORAGEBUFFER_SIZE_MULTIPLE_4);
         }
         return _sg_validate_end();

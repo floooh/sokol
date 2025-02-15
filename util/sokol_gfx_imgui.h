@@ -4204,7 +4204,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
     igText("    image_clamp_to_border: %s", _sgimgui_bool_string(f.image_clamp_to_border));
     igText("    mrt_independent_blend_state: %s", _sgimgui_bool_string(f.mrt_independent_blend_state));
     igText("    mrt_independent_write_mask: %s", _sgimgui_bool_string(f.mrt_independent_write_mask));
-    igText("    storage_buffer: %s", _sgimgui_bool_string(f.storage_buffer));
+    igText("    compute: %s", _sgimgui_bool_string(f.compute));
     igText("    msaa_image_bindings: %s", _sgimgui_bool_string(f.msaa_image_bindings));
     sg_limits l = sg_query_limits();
     igText("\nLimits:\n");
@@ -4286,6 +4286,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(sgimgui_t* ctx) {
                 _sgimgui_frame_stats(gl.num_enable_vertex_attrib_array);
                 _sgimgui_frame_stats(gl.num_disable_vertex_attrib_array);
                 _sgimgui_frame_stats(gl.num_uniform);
+                _sgimgui_frame_stats(gl.num_memory_barriers);
                 break;
             case SG_BACKEND_WGPU:
                 _sgimgui_frame_stats(wgpu.uniforms.num_set_bindgroup);
