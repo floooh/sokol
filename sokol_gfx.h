@@ -3622,6 +3622,8 @@ typedef struct sg_frame_stats_metal_bindings {
     uint32_t num_set_fragment_texture;
     uint32_t num_set_fragment_sampler_state;
     uint32_t num_set_compute_buffer;
+    uint32_t num_set_compute_texture;
+    uint32_t num_set_compute_sampler_state;
 } sg_frame_stats_metal_bindings;
 
 typedef struct sg_frame_stats_metal_uniforms {
@@ -5952,8 +5954,10 @@ typedef struct {
     sg_buffer cur_cs_buffer_ids[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
     sg_image cur_vs_image_ids[_SG_MTL_MAX_STAGE_IMAGE_BINDINGS];
     sg_image cur_fs_image_ids[_SG_MTL_MAX_STAGE_IMAGE_BINDINGS];
+    sg_image cur_cs_image_ids[_SG_MTL_MAX_STAGE_IMAGE_BINDINGS];
     sg_sampler cur_vs_sampler_ids[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
     sg_sampler cur_fs_sampler_ids[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
+    sg_sampler cur_cs_sampler_ids[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
 } _sg_mtl_state_cache_t;
 
 typedef struct {
@@ -14124,8 +14128,11 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
             }
         } else if (stage == SG_SHADERSTAGE_COMPUTE) {
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
-            // FIXME
-            SOKOL_ASSERT(false);
+            if (_sg.mtl.state_cache.cur_cs_image_ids[mtl_slot].id != img->slot.id) {
+                _sg.mtl.state_cache.cur_cs_image_ids[mtl_slot].id = img->slot.id;
+                [_sg.mtl.compute_cmd_encoder setTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:mtl_slot];
+                _sg_stats_add(metal.bindings.num_set_compute_texture, 1);
+            }
         }
     }
 
@@ -14135,6 +14142,7 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
         if (smp == 0) {
             continue;
         }
+        SOKOL_ASSERT(smp->mtl.sampler_state != _SG_MTL_INVALID_SLOT_INDEX);
         const sg_shader_stage stage = shd->cmn.samplers[i].stage;
         SOKOL_ASSERT((stage == SG_SHADERSTAGE_VERTEX) || (stage == SG_SHADERSTAGE_FRAGMENT) || (stage == SG_SHADERSTAGE_COMPUTE));
         const NSUInteger mtl_slot = shd->mtl.smp_sampler_n[i];
@@ -14143,7 +14151,6 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
             if (_sg.mtl.state_cache.cur_vs_sampler_ids[mtl_slot].id != smp->slot.id) {
                 _sg.mtl.state_cache.cur_vs_sampler_ids[mtl_slot].id = smp->slot.id;
-                SOKOL_ASSERT(smp->mtl.sampler_state != _SG_MTL_INVALID_SLOT_INDEX);
                 [_sg.mtl.render_cmd_encoder setVertexSamplerState:_sg_mtl_id(smp->mtl.sampler_state) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_vertex_sampler_state, 1);
             }
@@ -14151,14 +14158,16 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
             if (_sg.mtl.state_cache.cur_fs_sampler_ids[mtl_slot].id != smp->slot.id) {
                 _sg.mtl.state_cache.cur_fs_sampler_ids[mtl_slot].id = smp->slot.id;
-                SOKOL_ASSERT(smp->mtl.sampler_state != _SG_MTL_INVALID_SLOT_INDEX);
                 [_sg.mtl.render_cmd_encoder setFragmentSamplerState:_sg_mtl_id(smp->mtl.sampler_state) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_fragment_sampler_state, 1);
             }
         } else if (stage == SG_SHADERSTAGE_COMPUTE) {
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
-            // FIXME
-            SOKOL_ASSERT(false);
+            if (_sg.mtl.state_cache.cur_cs_sampler_ids[mtl_slot].id != smp->slot.id) {
+                _sg.mtl.state_cache.cur_cs_sampler_ids[mtl_slot].id = smp->slot.id;
+                [_sg.mtl.compute_cmd_encoder setSamplerState:_sg_mtl_id(smp->mtl.sampler_state) atIndex:mtl_slot];
+                _sg_stats_add(metal.bindings.num_set_compute_sampler_state, 1);
+            }
         }
     }
 
@@ -14168,6 +14177,7 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
         if (sbuf == 0) {
             continue;
         }
+        SOKOL_ASSERT(sbuf->mtl.buf[sbuf->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
         const sg_shader_stage stage = shd->cmn.storage_buffers[i].stage;
         SOKOL_ASSERT((stage == SG_SHADERSTAGE_VERTEX) || (stage == SG_SHADERSTAGE_FRAGMENT) || (stage == SG_SHADERSTAGE_COMPUTE));
         const NSUInteger mtl_slot = shd->mtl.sbuf_buffer_n[i];
@@ -14176,7 +14186,6 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
             if (_sg.mtl.state_cache.cur_vs_buffer_ids[mtl_slot].id != sbuf->slot.id) {
                 _sg.mtl.state_cache.cur_vs_buffer_ids[mtl_slot].id = sbuf->slot.id;
-                SOKOL_ASSERT(sbuf->mtl.buf[sbuf->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
                 [_sg.mtl.render_cmd_encoder setVertexBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:0 atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_vertex_buffer, 1);
             }
@@ -14184,7 +14193,6 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
             if (_sg.mtl.state_cache.cur_fs_buffer_ids[mtl_slot].id != sbuf->slot.id) {
                 _sg.mtl.state_cache.cur_fs_buffer_ids[mtl_slot].id = sbuf->slot.id;
-                SOKOL_ASSERT(sbuf->mtl.buf[sbuf->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
                 [_sg.mtl.render_cmd_encoder setFragmentBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:0 atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_fragment_buffer, 1);
             }
@@ -14192,7 +14200,6 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_t* bnd) {
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
             if (_sg.mtl.state_cache.cur_cs_buffer_ids[mtl_slot].id != sbuf->slot.id) {
                 _sg.mtl.state_cache.cur_cs_buffer_ids[mtl_slot].id = sbuf->slot.id;
-                SOKOL_ASSERT(sbuf->mtl.buf[sbuf->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
                 [_sg.mtl.compute_cmd_encoder setBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:0 atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_compute_buffer, 1);
             }
