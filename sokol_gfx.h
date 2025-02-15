@@ -3541,6 +3541,7 @@ typedef struct sg_frame_stats_gl {
     uint32_t num_enable_vertex_attrib_array;
     uint32_t num_disable_vertex_attrib_array;
     uint32_t num_uniform;
+    uint32_t num_memory_barriers;
 } sg_frame_stats_gl;
 
 typedef struct sg_frame_stats_d3d11_pass {
@@ -5544,6 +5545,7 @@ typedef struct _sg_buffer_s {
     struct {
         GLuint buf[SG_NUM_INFLIGHT_FRAMES];
         bool injected;  // if true, external buffers were injected with sg_buffer_desc.gl_buffers
+        bool gpu_dirty; // true if modified by GPU shader but memory barrier hasn't been issued yet
     } gl;
 } _sg_gl_buffer_t;
 typedef _sg_gl_buffer_t _sg_buffer_t;
@@ -9695,12 +9697,40 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
     _SG_GL_CHECK_ERROR();
 }
 
+_SOKOL_PRIVATE void _sg_gl_handle_memory_barriers(const _sg_shader_t* shd, const _sg_bindings_t* bnd) {
+    // NOTE: currently only storage buffers can be GPU-written, and storage
+    // buffers cannot be bound as vertex- or index-buffers.
+    bool needs_barrier = false;
+    for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
+        if (shd->cmn.storage_buffers[i].stage == SG_SHADERSTAGE_NONE) {
+            continue;
+        }
+        _sg_buffer_t* buf = bnd->sbufs[i];
+        // if this buffer has pending GPU changes, issue a memory barrier
+        if (buf->gl.gpu_dirty) {
+            buf->gl.gpu_dirty = false;
+            needs_barrier = true;
+        }
+        // if this binding is going to be written by the GPU set the buffer to 'gpu_dirty'
+        if (!shd->cmn.storage_buffers[i].readonly) {
+            buf->gl.gpu_dirty = true;
+        }
+    }
+    if (needs_barrier) {
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        _sg_stats_add(gl.num_memory_barriers, 1);
+    }
+}
+
 _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_t* bnd) {
     SOKOL_ASSERT(bnd);
     SOKOL_ASSERT(bnd->pip && bnd->pip->shader);
     SOKOL_ASSERT(bnd->pip->shader->slot.id == bnd->pip->cmn.shader_id.id);
     _SG_GL_CHECK_ERROR();
     const _sg_shader_t* shd = bnd->pip->shader;
+
+    // take care of storage buffer memory barriers
+    _sg_gl_handle_memory_barriers(shd, bnd);
 
     // bind combined image-samplers
     _SG_GL_CHECK_ERROR();
