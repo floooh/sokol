@@ -3118,10 +3118,6 @@ typedef struct sg_shader_function {
     const char* d3d11_target;   // default: "vs_4_0" or "ps_4_0"
 } sg_shader_function;
 
-typedef struct sg_shader_compute_workgroup_size {
-    int x, y, z;
-} sg_shader_compute_workgroup_size;
-
 typedef struct sg_shader_vertex_attr {
     const char* glsl_name;      // [optional] GLSL attribute name
     const char* hlsl_sem_name;  // HLSL semantic name
@@ -3179,18 +3175,22 @@ typedef struct sg_shader_image_sampler_pair {
     const char* glsl_name;          // glsl name binding required because of GL 4.1 and WebGL2
 } sg_shader_image_sampler_pair;
 
+typedef struct sg_mtl_shader_threads_per_threadgroup {
+    int x, y, z;
+} sg_mtl_shader_threads_per_threadgroup;
+
 typedef struct sg_shader_desc {
     uint32_t _start_canary;
     sg_shader_function vertex_func;
     sg_shader_function fragment_func;
     sg_shader_function compute_func;
-    sg_shader_compute_workgroup_size compute_workgroup_size;
     sg_shader_vertex_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
     sg_shader_uniform_block uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
     sg_shader_storage_buffer storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
     sg_shader_image images[SG_MAX_IMAGE_BINDSLOTS];
     sg_shader_sampler samplers[SG_MAX_SAMPLER_BINDSLOTS];
     sg_shader_image_sampler_pair image_sampler_pairs[SG_MAX_IMAGE_SAMPLER_PAIRS];
+    sg_mtl_shader_threads_per_threadgroup mtl_threads_per_threadgroup;
     const char* label;
     uint32_t _end_canary;
 } sg_shader_desc;
@@ -5334,7 +5334,6 @@ typedef struct {
 typedef struct {
     uint32_t required_bindings_and_uniforms;
     bool is_compute;
-    sg_shader_compute_workgroup_size compute_workgroup_size;
     _sg_shader_uniform_block_t uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
     _sg_shader_storage_buffer_t storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
     _sg_shader_image_t images[SG_MAX_IMAGE_BINDSLOTS];
@@ -5344,7 +5343,6 @@ typedef struct {
 
 _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_shader_desc* desc) {
     cmn->is_compute = desc->compute_func.source || desc->compute_func.bytecode.ptr;
-    cmn->compute_workgroup_size = desc->compute_workgroup_size;
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
         const sg_shader_uniform_block* src = &desc->uniform_blocks[i];
         _sg_shader_uniform_block_t* dst = &cmn->uniform_blocks[i];
@@ -5893,6 +5891,7 @@ typedef struct _sg_shader_s {
         _sg_mtl_shader_func_t vertex_func;
         _sg_mtl_shader_func_t fragment_func;
         _sg_mtl_shader_func_t compute_func;
+        MTLSize threads_per_threadgroup;
         uint8_t ub_buffer_n[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
         uint8_t img_texture_n[SG_MAX_IMAGE_BINDSLOTS];
         uint8_t smp_sampler_n[SG_MAX_SAMPLER_BINDSLOTS];
@@ -5912,9 +5911,7 @@ typedef struct _sg_pipeline_s {
         MTLCullMode cull_mode;
         MTLWinding winding;
         uint32_t stencil_ref;
-        struct {
-            MTLSize threads_per_group;
-        } compute;
+        MTLSize threads_per_threadgroup;
         int cps;    // MTLComputePipelineState
         int rps;    // MTLRenderPipelineState
         int dss;    // MTLDepthStencilState
@@ -13396,6 +13393,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const 
         return SG_RESOURCESTATE_FAILED;
     }
 
+    shd->mtl.threads_per_threadgroup = MTLSizeMake(
+        (NSUInteger)desc->mtl_threads_per_threadgroup.x,
+        (NSUInteger)desc->mtl_threads_per_threadgroup.y,
+        (NSUInteger)desc->mtl_threads_per_threadgroup.z);
+
     // copy resource bindslot mappings
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
         shd->mtl.ub_buffer_n[i] = desc->uniform_blocks[i].msl_buffer_n;
@@ -13474,10 +13476,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
         }
         pip->mtl.cps = _sg_mtl_add_resource(mtl_cps);
         _SG_OBJC_RELEASE(mtl_cps);
-        pip->mtl.compute.threads_per_group = MTLSizeMake(
-            (NSUInteger)shd->cmn.compute_workgroup_size.x,
-            (NSUInteger)shd->cmn.compute_workgroup_size.y,
-            (NSUInteger)shd->cmn.compute_workgroup_size.z);
+        pip->mtl.threads_per_threadgroup = shd->mtl.threads_per_threadgroup;
     } else {
         sg_primitive_type prim_type = desc->primitive_type;
         pip->mtl.prim_type = _sg_mtl_primitive_type(prim_type);
@@ -14276,8 +14275,8 @@ _SOKOL_PRIVATE void _sg_mtl_dispatch(int num_groups_x, int num_groups_y, int num
         (NSUInteger)num_groups_x,
         (NSUInteger)num_groups_y,
         (NSUInteger)num_groups_z);
-    const MTLSize threads_per_group = cur_pip->mtl.compute.threads_per_group;
-    [_sg.mtl.compute_cmd_encoder dispatchThreadgroups:thread_groups threadsPerThreadgroup:threads_per_group];
+    const MTLSize threads_per_threadgroup = cur_pip->mtl.threads_per_threadgroup;
+    [_sg.mtl.compute_cmd_encoder dispatchThreadgroups:thread_groups threadsPerThreadgroup:threads_per_threadgroup];
 }
 
 _SOKOL_PRIVATE void _sg_mtl_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
@@ -18512,9 +18511,9 @@ _SOKOL_PRIVATE sg_shader_desc _sg_shader_desc_defaults(const sg_shader_desc* des
             def.compute_func.d3d11_target = _sg_def(def.fragment_func.d3d11_target,"cs_5_0");
         }
     #endif
-    def.compute_workgroup_size.x = _sg_def(desc->compute_workgroup_size.x, 1);
-    def.compute_workgroup_size.y = _sg_def(desc->compute_workgroup_size.y, 1);
-    def.compute_workgroup_size.z = _sg_def(desc->compute_workgroup_size.z, 1);
+    def.mtl_threads_per_threadgroup.x = _sg_def(desc->mtl_threads_per_threadgroup.x, 1);
+    def.mtl_threads_per_threadgroup.y = _sg_def(desc->mtl_threads_per_threadgroup.y, 1);
+    def.mtl_threads_per_threadgroup.z = _sg_def(desc->mtl_threads_per_threadgroup.z, 1);
     for (size_t ub_index = 0; ub_index < SG_MAX_UNIFORMBLOCK_BINDSLOTS; ub_index++) {
         sg_shader_uniform_block* ub_desc = &def.uniform_blocks[ub_index];
         if (ub_desc->stage != SG_SHADERSTAGE_NONE) {
