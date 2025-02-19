@@ -3783,7 +3783,6 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(WGPU_CREATE_RENDER_PIPELINE_FAILED, "wgpuDeviceCreateRenderPipeline() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_COMPUTE_PIPELINE_FAILED, "wgpuDeviceCreateComputePipeline() failed") \
     _SG_LOGITEM_XMACRO(WGPU_ATTACHMENTS_CREATE_TEXTURE_VIEW_FAILED, "wgpuTextureCreateView() failed in create attachments") \
-    _SG_LOGITEM_XMACRO(DRAW_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING, "call to sg_apply_bindings() and/or sg_apply_uniforms() missing after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(IDENTICAL_COMMIT_LISTENER, "attempting to add identical commit listener") \
     _SG_LOGITEM_XMACRO(COMMIT_LISTENER_ARRAY_FULL, "commit listener array full") \
     _SG_LOGITEM_XMACRO(TRACE_HOOKS_NOT_ENABLED, "sg_install_trace_hooks() called, but SOKOL_TRACE_HOOKS is not defined") \
@@ -4020,6 +4019,16 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_NO_PIPELINE, "sg_apply_uniforms: must be called after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_NO_UNIFORMBLOCK_AT_SLOT, "sg_apply_uniforms: no uniform block declaration at this shader stage UB slot") \
     _SG_LOGITEM_XMACRO(VALIDATE_AUB_SIZE, "sg_apply_uniforms: data size doesn't match declared uniform block size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_RENDERPASS_EXPECTED, "sg_draw: must be executed in a render pass") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_BASEELEMENT, "sg_draw: base_element cannot be < 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_NUMELEMENTS, "sg_draw: num_elements cannot be < 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_NUMINSTANCES, "sg_draw: num_instances cannot be < 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING, "sg_draw: call to sg_apply_bindings() and/or sg_apply_uniforms() missing after sg_apply_pipeline()") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_COMPUTEPASS_EXPECTED, "sg_dispatch: must be executed in a compute pass") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_NUMGROUPSX, "sg_dispatch: num_groups_x cannot be < 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_NUMGROUPSY, "sg_dispatch: num_groups_y cannot be < 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_NUMGROUPSZ, "sg_dispatch: num_groups_z cannot be < 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING, "sg_dispatch: call to sg_apply_bindings() and/or sg_apply_uniforms() missing after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_UPDATEBUF_USAGE, "sg_update_buffer: cannot update immutable buffer") \
     _SG_LOGITEM_XMACRO(VALIDATE_UPDATEBUF_SIZE, "sg_update_buffer: update size is bigger than buffer size") \
     _SG_LOGITEM_XMACRO(VALIDATE_UPDATEBUF_ONCE, "sg_update_buffer: only one update allowed per buffer and frame") \
@@ -18384,6 +18393,46 @@ _SOKOL_PRIVATE bool _sg_validate_apply_uniforms(int ub_slot, const sg_range* dat
     #endif
 }
 
+_SOKOL_PRIVATE bool _sg_validate_draw(int base_element, int num_elements, int num_instances) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(base_element);
+        _SOKOL_UNUSED(num_elements);
+        _SOKOL_UNUSED(num_instances);
+        return true;
+    #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
+        _sg_validate_begin();
+        _SG_VALIDATE(_sg.cur_pass.in_pass && !_sg.cur_pass.is_compute, VALIDATE_DRAW_RENDERPASS_EXPECTED);
+        _SG_VALIDATE(base_element >= 0, VALIDATE_DRAW_BASEELEMENT);
+        _SG_VALIDATE(num_elements >= 0, VALIDATE_DRAW_NUMELEMENTS);
+        _SG_VALIDATE(num_instances >= 0, VALIDATE_DRAW_NUMINSTANCES);
+        _SG_VALIDATE(_sg.required_bindings_and_uniforms == _sg.applied_bindings_and_uniforms, VALIDATE_DRAW_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
+        return _sg_validate_end();
+    #endif
+}
+
+_SOKOL_PRIVATE bool _sg_validate_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(num_groups_x);
+        _SOKOL_UNUSED(num_groups_y);
+        _SOKOL_UNUSED(num_groups_z);
+        return true;
+    #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
+        _sg_validate_begin();
+        _SG_VALIDATE(_sg.cur_pass.in_pass && _sg.cur_pass.is_compute, VALIDATE_DISPATCH_COMPUTEPASS_EXPECTED);
+        _SG_VALIDATE(num_groups_x >= 0, VALIDATE_DISPATCH_NUMGROUPSX);
+        _SG_VALIDATE(num_groups_y >= 0, VALIDATE_DISPATCH_NUMGROUPSY);
+        _SG_VALIDATE(num_groups_z >= 0, VALIDATE_DISPATCH_NUMGROUPSZ);
+        _SG_VALIDATE(_sg.required_bindings_and_uniforms == _sg.applied_bindings_and_uniforms, VALIDATE_DRAW_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
+        return _sg_validate_end();
+    #endif
+}
+
 _SOKOL_PRIVATE bool _sg_validate_update_buffer(const _sg_buffer_t* buf, const sg_range* data) {
     #if !defined(SOKOL_DEBUG)
         _SOKOL_UNUSED(buf);
@@ -19971,11 +20020,11 @@ SOKOL_API_IMPL void sg_apply_uniforms(int ub_slot, const sg_range* data) {
 
 SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instances) {
     SOKOL_ASSERT(_sg.valid);
-    SOKOL_ASSERT(_sg.cur_pass.in_pass);
-    SOKOL_ASSERT(!_sg.cur_pass.is_compute);
-    SOKOL_ASSERT(base_element >= 0);
-    SOKOL_ASSERT(num_elements >= 0);
-    SOKOL_ASSERT(num_instances >= 0);
+    #if defined(SOKOL_DEBUG)
+    if (!_sg_validate_draw(base_element, num_elements, num_instances)) {
+        return;
+    }
+    #endif
     _sg_stats_add(num_draw, 1);
     if (!_sg.cur_pass.valid) {
         return;
@@ -19983,12 +20032,6 @@ SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instance
     if (!_sg.next_draw_valid) {
         return;
     }
-    #if defined(SOKOL_DEBUG)
-    if (_sg.required_bindings_and_uniforms != _sg.applied_bindings_and_uniforms) {
-        _SG_ERROR(DRAW_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
-        return;
-    }
-    #endif
     // skip no-op draws
     if ((0 == num_elements) || (0 == num_instances)) {
         return;
@@ -19999,8 +20042,11 @@ SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instance
 
 SOKOL_API_IMPL void sg_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     SOKOL_ASSERT(_sg.valid);
-    SOKOL_ASSERT(_sg.cur_pass.in_pass);
-    SOKOL_ASSERT(_sg.cur_pass.is_compute);
+    #if defined(SOKOL_DEBUG)
+    if (!_sg_validate_dispatch(num_groups_x, num_groups_y, num_groups_z)) {
+        return;
+    }
+    #endif
     _sg_stats_add(num_dispatch, 1);
     if (!_sg.cur_pass.valid) {
         return;
@@ -20008,12 +20054,6 @@ SOKOL_API_IMPL void sg_dispatch(int num_groups_x, int num_groups_y, int num_grou
     if (!_sg.next_draw_valid) {
         return;
     }
-    #if defined(SOKOL_DEBUG)
-    if (_sg.required_bindings_and_uniforms != _sg.applied_bindings_and_uniforms) {
-        _SG_ERROR(DRAW_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
-        return;
-    }
-    #endif
     // skip no-op dispatches
     if ((0 == num_groups_x) || (0 == num_groups_y) || (0 == num_groups_z)) {
         return;
