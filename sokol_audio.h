@@ -1431,8 +1431,8 @@ _SOKOL_PRIVATE int _saudio_fifo_read(_saudio_fifo_t* fifo, uint8_t* ptr, int num
 _SOKOL_PRIVATE bool _saudio_dummy_backend_init(void) {
     _saudio.bytes_per_frame = _saudio.num_channels * (int)sizeof(float);
     return true;
-};
-_SOKOL_PRIVATE void _saudio_dummy_backend_shutdown(void) { };
+}
+_SOKOL_PRIVATE void _saudio_dummy_backend_shutdown(void) { }
 
 //  █████  ██      ███████  █████
 // ██   ██ ██      ██      ██   ██
@@ -1851,7 +1851,7 @@ EM_JS(int, saudio_js_init, (int sample_rate, int num_channels, int buffer_size),
     else {
         return 0;
     }
-});
+})
 
 /* shutdown the WebAudioContext and ScriptProcessorNode */
 EM_JS(void, saudio_js_shutdown, (void), {
@@ -1865,7 +1865,7 @@ EM_JS(void, saudio_js_shutdown, (void), {
         Module._saudio_context = null;
         Module._saudio_node = null;
     }
-});
+})
 
 /* get the actual sample rate back from the WebAudio context */
 EM_JS(int, saudio_js_sample_rate, (void), {
@@ -1875,7 +1875,7 @@ EM_JS(int, saudio_js_sample_rate, (void), {
     else {
         return 0;
     }
-});
+})
 
 /* get the actual buffer size in number of frames */
 EM_JS(int, saudio_js_buffer_frames, (void), {
@@ -1885,7 +1885,7 @@ EM_JS(int, saudio_js_buffer_frames, (void), {
     else {
         return 0;
     }
-});
+})
 
 /* return 1 if the WebAudio context is currently suspended, else 0 */
 EM_JS(int, saudio_js_suspended, (void), {
@@ -1897,7 +1897,7 @@ EM_JS(int, saudio_js_suspended, (void), {
             return 0;
         }
     }
-});
+})
 
 _SOKOL_PRIVATE bool _saudio_webaudio_backend_init(void) {
     if (saudio_js_init(_saudio.sample_rate, _saudio.num_channels, _saudio.buffer_frames)) {

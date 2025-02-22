@@ -2233,7 +2233,7 @@ EM_JS(int, simgui_js_is_osx, (void), {
     } else {
         return 0;
     }
-});
+})
 #endif
 
 // ██       ██████   ██████   ██████  ██ ███    ██  ██████

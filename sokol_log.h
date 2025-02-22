@@ -123,7 +123,7 @@ extern "C" {
 
 /*
     Plug this function into the 'logger.func' struct item when initializing any of the sokol
-    headers. For instance for sokol_audio.h it would loom like this:
+    headers. For instance for sokol_audio.h it would look like this:
 
     saudio_setup(&(saudio_desc){
         .logger = {
@@ -245,7 +245,7 @@ EM_JS(void, slog_js_log, (uint32_t level, const char* c_str), {
         case 2: console.warn(str); break;
         default: console.info(str); break;
     }
-});
+})
 #endif
 
 SOKOL_API_IMPL void slog_func(const char* tag, uint32_t log_level, uint32_t log_item, const char* message, uint32_t line_nr, const char* filename, void* user_data) {

@@ -1,5 +1,29 @@
 ## Updates
 
+### 10-Feb-2025
+
+The [sokol-c3](https://github.com/floooh/sokol-c3) bindings are now 'official'
+and properly integrated (e.g. they are updated automatically on commits to the
+sokol repo, and [sokol-shdc](https://github.com/floooh/sokol-tools) gained a
+C3 output format.
+
+Many thanks to @radekm for kicking this off and doing all the work :)
+
+Related pull request: https://github.com/floooh/sokol/pull/1148
+
+### 09-Feb-2025
+
+- sokol_gfx.h: added the missing blend factors `SG_BLENDFACTOR_MIN` and `SG_BLENDFACTOR_MAX`
+  See issue https://github.com/floooh/sokol/issues/1208 and PR https://github.com/floooh/sokol/pull/1209
+  for details, and the new sample [blend-op-sapp.c](https://floooh.github.io/sokol-html5/blend-op-sapp-ui.html).
+
+  Many thanks to @jdah for bringing up the issue and providing the PR and sample code!
+
+- sokol_gfx.h: removed support for PVRTC compressed pixel formats (the latest iOS SDK started
+  to issue deprecation warnings, and this also removed quite a lot of hacky special-case code from
+  sokol_gfx.h). In the unlikely case that you were still using PVRTC textures, please switch
+  to the ETC2 or ASTC formats instead (associated ticket: https://github.com/floooh/sokol/issues/1206)
+
 ### 25-Jan-2025
 
 Some internal sokol_gfx.h cleanup in `sg_make_shader()`, no behaviour changes
