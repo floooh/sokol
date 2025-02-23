@@ -364,6 +364,7 @@ typedef enum sgimgui_cmd_t {
     SGIMGUI_CMD_APPLY_BINDINGS,
     SGIMGUI_CMD_APPLY_UNIFORMS,
     SGIMGUI_CMD_DRAW,
+    SGIMGUI_CMD_DISPATCH,
     SGIMGUI_CMD_END_PASS,
     SGIMGUI_CMD_COMMIT,
     SGIMGUI_CMD_ALLOC_BUFFER,
@@ -497,6 +498,12 @@ typedef struct sgimgui_args_draw_t {
     int num_elements;
     int num_instances;
 } sgimgui_args_draw_t;
+
+typedef struct sgimgui_args_dispatch_t {
+    int num_groups_x;
+    int num_groups_y;
+    int num_groups_z;
+} sgimgui_args_dispatch_t;
 
 typedef struct sgimgui_args_alloc_buffer_t {
     sg_buffer result;
@@ -645,6 +652,7 @@ typedef union sgimgui_args_t {
     sgimgui_args_apply_bindings_t apply_bindings;
     sgimgui_args_apply_uniforms_t apply_uniforms;
     sgimgui_args_draw_t draw;
+    sgimgui_args_dispatch_t dispatch;
     sgimgui_args_alloc_buffer_t alloc_buffer;
     sgimgui_args_alloc_image_t alloc_image;
     sgimgui_args_alloc_sampler_t alloc_sampler;
@@ -1474,6 +1482,7 @@ _SOKOL_PRIVATE const char* _sgimgui_shaderstage_string(sg_shader_stage stage) {
     switch (stage) {
         case SG_SHADERSTAGE_VERTEX:     return "SG_SHADERSTAGE_VERTEX";
         case SG_SHADERSTAGE_FRAGMENT:   return "SG_SHADERSTAGE_FRAGMENT";
+        case SG_SHADERSTAGE_COMPUTE:    return "SG_SHADERSTAGE_COMPUTE";
         default:                        return "???";
     }
 }
@@ -1958,6 +1967,14 @@ _SOKOL_PRIVATE sgimgui_str_t _sgimgui_capture_item_string(sgimgui_t* ctx, int in
                 item->args.draw.base_element,
                 item->args.draw.num_elements,
                 item->args.draw.num_instances);
+            break;
+
+        case SGIMGUI_CMD_DISPATCH:
+            _sgimgui_snprintf(&str, "%d: sg_dispatch(num_groups_x=%d, num_groups_y=%d, num_groups_z=%d)",
+                index,
+                item->args.dispatch.num_groups_x,
+                item->args.dispatch.num_groups_y,
+                item->args.dispatch.num_groups_z);
             break;
 
         case SGIMGUI_CMD_END_PASS:
@@ -2570,6 +2587,22 @@ _SOKOL_PRIVATE void _sgimgui_draw(int base_element, int num_elements, int num_in
     }
     if (ctx->hooks.draw) {
         ctx->hooks.draw(base_element, num_elements, num_instances, ctx->hooks.user_data);
+    }
+}
+
+_SOKOL_PRIVATE void _sgimgui_dispatch(int num_groups_x, int num_groups_y, int num_groups_z, void* user_data) {
+    sgimgui_t* ctx = (sgimgui_t*) user_data;
+    SOKOL_ASSERT(ctx);
+    sgimgui_capture_item_t* item = _sgimgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SGIMGUI_CMD_DISPATCH;
+        item->color = _SGIMGUI_COLOR_DRAW;
+        item->args.dispatch.num_groups_x = num_groups_x;
+        item->args.dispatch.num_groups_y = num_groups_y;
+        item->args.dispatch.num_groups_z = num_groups_z;
+    }
+    if (ctx->hooks.dispatch) {
+        ctx->hooks.dispatch(num_groups_x, num_groups_y, num_groups_z, ctx->hooks.user_data);
     }
 }
 
@@ -3425,6 +3458,9 @@ _SOKOL_PRIVATE void _sgimgui_draw_sampler_panel(sgimgui_t* ctx, sg_sampler smp) 
 
 _SOKOL_PRIVATE void _sgimgui_draw_shader_func(const char* title, const sg_shader_function* func) {
     SOKOL_ASSERT(func);
+    if ((func->source == 0) && (func->bytecode.ptr == 0)) {
+        return;
+    }
     igPushID(title);
     igText("%s", title);
     if (func->entry) {
@@ -3538,7 +3574,11 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
                         igText("- slot: %d", i);
                         igText("  stage: %s", _sgimgui_shaderstage_string(sbuf->stage));
                         igText("  readonly: %s", sbuf->readonly ? "true" : "false");
-                        igText("  hlsl_register_t_n: %d", sbuf->hlsl_register_t_n);
+                        if (sbuf->readonly) {
+                            igText("  hlsl_register_t_n: %d", sbuf->hlsl_register_t_n);
+                        } else {
+                            igText("  hlsl_register_u_n: %d", sbuf->hlsl_register_u_n);
+                        }
                         igText("  msl_buffer_n: %d", sbuf->msl_buffer_n);
                         igText("  wgsl_group1_binding_n: %d", sbuf->wgsl_group1_binding_n);
                         igText("  glsl_binding_n: %d", sbuf->glsl_binding_n);
@@ -3600,6 +3640,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
             }
             _sgimgui_draw_shader_func("Vertex Function", &shd_ui->desc.vertex_func);
             _sgimgui_draw_shader_func("Fragment Function", &shd_ui->desc.fragment_func);
+            _sgimgui_draw_shader_func("Compute Function", &shd_ui->desc.compute_func);
         } else {
             igText("Shader 0x%08X not valid!", shd.id);
         }
@@ -3693,39 +3734,42 @@ _SOKOL_PRIVATE void _sgimgui_draw_pipeline_panel(sgimgui_t* ctx, sg_pipeline pip
             igText("Label: %s", pip_ui->label.buf[0] ? pip_ui->label.buf : "---");
             _sgimgui_draw_resource_slot(&info.slot);
             igSeparator();
-            igText("Shader:    "); igSameLine();
+            igText("Compute: %s", _sgimgui_bool_string(pip_ui->desc.compute));
+            igText("Shader: "); igSameLine();
             if (_sgimgui_draw_shader_link(ctx, pip_ui->desc.shader)) {
                 _sgimgui_show_shader(ctx, pip_ui->desc.shader);
             }
-            if (igTreeNode("Vertex Layout State")) {
-                _sgimgui_draw_vertex_layout_state(&pip_ui->desc.layout);
-                igTreePop();
-            }
-            if (igTreeNode("Depth State")) {
-                _sgimgui_draw_depth_state(&pip_ui->desc.depth);
-                igTreePop();
-            }
-            if (igTreeNode("Stencil State")) {
-                _sgimgui_draw_stencil_state(&pip_ui->desc.stencil);
-                igTreePop();
-            }
-            igText("Color Count: %d", pip_ui->desc.color_count);
-            for (int i = 0; i < pip_ui->desc.color_count; i++) {
-                sgimgui_str_t str;
-                _sgimgui_snprintf(&str, "Color Target %d", i);
-                if (igTreeNode(str.buf)) {
-                    _sgimgui_draw_color_target_state(&pip_ui->desc.colors[i]);
+            if (!pip_ui->desc.compute) {
+                if (igTreeNode("Vertex Layout State")) {
+                    _sgimgui_draw_vertex_layout_state(&pip_ui->desc.layout);
                     igTreePop();
                 }
+                if (igTreeNode("Depth State")) {
+                    _sgimgui_draw_depth_state(&pip_ui->desc.depth);
+                    igTreePop();
+                }
+                if (igTreeNode("Stencil State")) {
+                    _sgimgui_draw_stencil_state(&pip_ui->desc.stencil);
+                    igTreePop();
+                }
+                igText("Color Count: %d", pip_ui->desc.color_count);
+                for (int i = 0; i < pip_ui->desc.color_count; i++) {
+                    sgimgui_str_t str;
+                    _sgimgui_snprintf(&str, "Color Target %d", i);
+                    if (igTreeNode(str.buf)) {
+                        _sgimgui_draw_color_target_state(&pip_ui->desc.colors[i]);
+                        igTreePop();
+                    }
+                }
+                igText("Prim Type:      %s", _sgimgui_primitivetype_string(pip_ui->desc.primitive_type));
+                igText("Index Type:     %s", _sgimgui_indextype_string(pip_ui->desc.index_type));
+                igText("Cull Mode:      %s", _sgimgui_cullmode_string(pip_ui->desc.cull_mode));
+                igText("Face Winding:   %s", _sgimgui_facewinding_string(pip_ui->desc.face_winding));
+                igText("Sample Count:   %d", pip_ui->desc.sample_count);
+                sgimgui_str_t blend_color_str;
+                igText("Blend Color:    %s", _sgimgui_color_string(&blend_color_str, pip_ui->desc.blend_color));
+                igText("Alpha To Coverage: %s", _sgimgui_bool_string(pip_ui->desc.alpha_to_coverage_enabled));
             }
-            igText("Prim Type:      %s", _sgimgui_primitivetype_string(pip_ui->desc.primitive_type));
-            igText("Index Type:     %s", _sgimgui_indextype_string(pip_ui->desc.index_type));
-            igText("Cull Mode:      %s", _sgimgui_cullmode_string(pip_ui->desc.cull_mode));
-            igText("Face Winding:   %s", _sgimgui_facewinding_string(pip_ui->desc.face_winding));
-            igText("Sample Count:   %d", pip_ui->desc.sample_count);
-            sgimgui_str_t blend_color_str;
-            igText("Blend Color:    %s", _sgimgui_color_string(&blend_color_str, pip_ui->desc.blend_color));
-            igText("Alpha To Coverage: %s", _sgimgui_bool_string(pip_ui->desc.alpha_to_coverage_enabled));
         } else {
             igText("Pipeline 0x%08X not valid.", pip.id);
         }
@@ -4110,12 +4154,15 @@ _SOKOL_PRIVATE void _sgimgui_draw_capture_panel(sgimgui_t* ctx) {
             _sgimgui_draw_buffer_panel(ctx, item->args.update_buffer.buffer);
             break;
         case SGIMGUI_CMD_BEGIN_PASS:
-            _sgimgui_draw_passaction_panel(ctx, item->args.begin_pass.pass.attachments, &item->args.begin_pass.pass.action);
-            igSeparator();
-            if (item->args.begin_pass.pass.attachments.id != SG_INVALID_ID) {
-                _sgimgui_draw_attachments_panel(ctx, item->args.begin_pass.pass.attachments);
-            } else {
-                _sgimgui_draw_swapchain_panel(&item->args.begin_pass.pass.swapchain);
+            igText("Compute: %s", _sgimgui_bool_string(item->args.begin_pass.pass.compute));
+            if (!item->args.begin_pass.pass.compute) {
+                _sgimgui_draw_passaction_panel(ctx, item->args.begin_pass.pass.attachments, &item->args.begin_pass.pass.action);
+                igSeparator();
+                if (item->args.begin_pass.pass.attachments.id != SG_INVALID_ID) {
+                    _sgimgui_draw_attachments_panel(ctx, item->args.begin_pass.pass.attachments);
+                } else {
+                    _sgimgui_draw_swapchain_panel(&item->args.begin_pass.pass.swapchain);
+                }
             }
             break;
         case SGIMGUI_CMD_APPLY_VIEWPORT:
@@ -4131,6 +4178,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_capture_panel(sgimgui_t* ctx) {
             _sgimgui_draw_uniforms_panel(ctx, &item->args.apply_uniforms);
             break;
         case SGIMGUI_CMD_DRAW:
+        case SGIMGUI_CMD_DISPATCH:
         case SGIMGUI_CMD_END_PASS:
         case SGIMGUI_CMD_COMMIT:
             break;
@@ -4202,7 +4250,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
     igText("    image_clamp_to_border: %s", _sgimgui_bool_string(f.image_clamp_to_border));
     igText("    mrt_independent_blend_state: %s", _sgimgui_bool_string(f.mrt_independent_blend_state));
     igText("    mrt_independent_write_mask: %s", _sgimgui_bool_string(f.mrt_independent_write_mask));
-    igText("    storage_buffer: %s", _sgimgui_bool_string(f.storage_buffer));
+    igText("    compute: %s", _sgimgui_bool_string(f.compute));
     igText("    msaa_image_bindings: %s", _sgimgui_bool_string(f.msaa_image_bindings));
     sg_limits l = sg_query_limits();
     igText("\nLimits:\n");
@@ -4263,6 +4311,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(sgimgui_t* ctx) {
         _sgimgui_frame_stats(num_apply_bindings);
         _sgimgui_frame_stats(num_apply_uniforms);
         _sgimgui_frame_stats(num_draw);
+        _sgimgui_frame_stats(num_dispatch);
         _sgimgui_frame_stats(num_update_buffer);
         _sgimgui_frame_stats(num_append_buffer);
         _sgimgui_frame_stats(num_update_image);
@@ -4284,6 +4333,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(sgimgui_t* ctx) {
                 _sgimgui_frame_stats(gl.num_enable_vertex_attrib_array);
                 _sgimgui_frame_stats(gl.num_disable_vertex_attrib_array);
                 _sgimgui_frame_stats(gl.num_uniform);
+                _sgimgui_frame_stats(gl.num_memory_barriers);
                 break;
             case SG_BACKEND_WGPU:
                 _sgimgui_frame_stats(wgpu.uniforms.num_set_bindgroup);
@@ -4321,8 +4371,12 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(sgimgui_t* ctx) {
                 _sgimgui_frame_stats(metal.bindings.num_set_fragment_buffer);
                 _sgimgui_frame_stats(metal.bindings.num_set_fragment_texture);
                 _sgimgui_frame_stats(metal.bindings.num_set_fragment_sampler_state);
+                _sgimgui_frame_stats(metal.bindings.num_set_compute_buffer);
+                _sgimgui_frame_stats(metal.bindings.num_set_compute_texture);
+                _sgimgui_frame_stats(metal.bindings.num_set_compute_sampler_state);
                 _sgimgui_frame_stats(metal.uniforms.num_set_vertex_buffer_offset);
                 _sgimgui_frame_stats(metal.uniforms.num_set_fragment_buffer_offset);
+                _sgimgui_frame_stats(metal.uniforms.num_set_compute_buffer_offset);
                 break;
             case SG_BACKEND_D3D11:
                 _sgimgui_frame_stats(d3d11.pass.num_om_set_render_targets);
@@ -4338,12 +4392,17 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(sgimgui_t* ctx) {
                 _sgimgui_frame_stats(d3d11.pipeline.num_vs_set_constant_buffers);
                 _sgimgui_frame_stats(d3d11.pipeline.num_ps_set_shader);
                 _sgimgui_frame_stats(d3d11.pipeline.num_ps_set_constant_buffers);
+                _sgimgui_frame_stats(d3d11.pipeline.num_cs_set_shader);
+                _sgimgui_frame_stats(d3d11.pipeline.num_cs_set_constant_buffers);
                 _sgimgui_frame_stats(d3d11.bindings.num_ia_set_vertex_buffers);
                 _sgimgui_frame_stats(d3d11.bindings.num_ia_set_index_buffer);
                 _sgimgui_frame_stats(d3d11.bindings.num_vs_set_shader_resources);
                 _sgimgui_frame_stats(d3d11.bindings.num_ps_set_shader_resources);
+                _sgimgui_frame_stats(d3d11.bindings.num_cs_set_shader_resources);
                 _sgimgui_frame_stats(d3d11.bindings.num_vs_set_samplers);
                 _sgimgui_frame_stats(d3d11.bindings.num_ps_set_samplers);
+                _sgimgui_frame_stats(d3d11.bindings.num_cs_set_samplers);
+                _sgimgui_frame_stats(d3d11.bindings.num_cs_set_unordered_access_views);
                 _sgimgui_frame_stats(d3d11.uniforms.num_update_subresource);
                 _sgimgui_frame_stats(d3d11.draw.num_draw_indexed_instanced);
                 _sgimgui_frame_stats(d3d11.draw.num_draw_indexed);
@@ -4402,6 +4461,7 @@ SOKOL_API_IMPL void sgimgui_init(sgimgui_t* ctx, const sgimgui_desc_t* desc) {
     hooks.apply_bindings = _sgimgui_apply_bindings;
     hooks.apply_uniforms = _sgimgui_apply_uniforms;
     hooks.draw = _sgimgui_draw;
+    hooks.dispatch = _sgimgui_dispatch;
     hooks.end_pass = _sgimgui_end_pass;
     hooks.commit = _sgimgui_commit;
     hooks.alloc_buffer = _sgimgui_alloc_buffer;
