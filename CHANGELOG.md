@@ -97,7 +97,7 @@ Related PR: https://github.com/floooh/sokol/pull/1176, many thanks to
   stashed directly in a Dear ImGui ImTextureID handle instead of in a separate backing
   object (this is possible now because ImTextureID is now guaranteed to be 64 bits,
   so it can directly hold two 32-bit sokol-gfx handles). This change drastically
-  simplifies the sokol_imgui.h implementatation, but requires some breaking API
+  simplifies the sokol_imgui.h implementation, but requires some breaking API
   changes (please read the updated doc section `ON USER-PROVIDED IMAGES AND SAMPLERS`
   in sokol_imgui.h)
 - sokol_gfx.h: a couple of new functions to get granular buffer and image properties
@@ -341,7 +341,7 @@ Drive by fixes:
 ### 17-Sep-2024
 
 - The sokol_app.h Linux backend now has clipboard support. Many thanks to
-  @Dvad for the initial PR with most of the work and @qwx9 for the addtional
+  @Dvad for the initial PR with most of the work and @qwx9 for the additional
   updates. See PR https://github.com/floooh/sokol/pull/1108 for details (this
   isn't quite what ended up in sokol_app.h either, because I did a couple of code
   cleanup changes during the merge).
