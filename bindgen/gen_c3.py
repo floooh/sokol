@@ -11,7 +11,7 @@ bindings_root = 'sokol-c3'
 c_root = f'{bindings_root}/sokol.c3l/c'
 module_root = f'{bindings_root}/sokol.c3l'
 
-# TODO: Consider chaning module names to something shorter.
+# TODO: Consider changing module names to something shorter.
 #       For example we could C prefixes, for example `sg` instead of current `gfx`.
 module_names = {
     'slog_':    'slog',
