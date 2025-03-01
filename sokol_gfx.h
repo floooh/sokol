@@ -5517,11 +5517,11 @@ typedef struct _sg_sampler_s {
 } _sg_dummy_sampler_t;
 typedef _sg_dummy_sampler_t _sg_sampler_t;
 
-typedef struct _sg_sampler_s {
+typedef struct _sg_shader_s {
     _sg_slot_t slot;
     _sg_shader_common_t cmn;
 } _sg_dummy_shader_t;
-typedef _sg_dummy_shader_t _sg_sampler_t;
+typedef _sg_dummy_shader_t _sg_shader_t;
 
 typedef struct _sg_pipeline_s {
     _sg_slot_t slot;
@@ -7039,6 +7039,12 @@ _SOKOL_PRIVATE void _sg_dummy_draw(int base_element, int num_elements, int num_i
     _SOKOL_UNUSED(base_element);
     _SOKOL_UNUSED(num_elements);
     _SOKOL_UNUSED(num_instances);
+}
+
+_SOKOL_PRIVATE void _sg_dummy_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
+    _SOKOL_UNUSED(num_groups_x);
+    _SOKOL_UNUSED(num_groups_y);
+    _SOKOL_UNUSED(num_groups_z);
 }
 
 _SOKOL_PRIVATE void _sg_dummy_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
@@ -8815,7 +8821,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
         glDeleteShader(gl_vs);
         glDeleteShader(gl_fs);
         _SG_GL_CHECK_ERROR();
-    } else {
+    } else if (has_cs) {
         GLuint gl_cs = _sg_gl_compile_shader(SG_SHADERSTAGE_COMPUTE, desc->compute_func.source);
         if (!gl_cs) {
             glDeleteProgram(gl_prog);
@@ -8825,6 +8831,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
         glLinkProgram(gl_prog);
         glDeleteShader(gl_cs);
         _SG_GL_CHECK_ERROR();
+    } else {
+        SOKOL_UNREACHABLE;
     }
     GLint link_status;
     glGetProgramiv(gl_prog, GL_LINK_STATUS, &link_status);
@@ -16849,7 +16857,7 @@ static inline void _sg_dispatch(int num_groups_x, int num_groups_y, int num_grou
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_dispatch(num_groups_x, num_groups_y, num_groups_z);
     #elif defined(SOKOL_DUMMY_BACKEND)
-    // FIXME
+    _sg_dummy_dispatch(num_groups_x, num_groups_y, num_groups_z);
     #else
     #error("INVALID BACKEND");
     #endif
