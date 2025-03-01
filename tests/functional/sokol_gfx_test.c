@@ -1935,6 +1935,74 @@ UTEST(sokol_gfx, make_buffer_validate_data_ptr_but_no_size) {
     sg_shutdown();
 }
 
+UTEST(sokol_gfx, make_buffer_validate_data_ptr_but_no_data_size) {
+    setup(&(sg_desc){0});
+    const uint32_t data[16] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .size = sizeof(data),
+        .data.ptr = data,
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_MATCHING_DATA_SIZE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_validate_no_data_ptr_but_data_size) {
+    setup(&(sg_desc){0});
+    const uint32_t data[16] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .size = sizeof(data),
+        .data.size = sizeof(data),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_usage_dynamic_expect_no_data) {
+    setup(&(sg_desc){0});
+    const uint32_t data[16] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = SG_USAGE_DYNAMIC,
+        .data = SG_RANGE(data),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_NO_DATA);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_usage_stream_expect_no_data) {
+    setup(&(sg_desc){0});
+    const uint32_t data[16] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = SG_USAGE_STREAM,
+        .data = SG_RANGE(data),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_NO_DATA);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_storagebuffer_not_supported_and_size) {
+    setup(&(sg_desc){0});
+    const uint8_t data[10] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .type = SG_BUFFERTYPE_STORAGEBUFFER,
+        .data = SG_RANGE(data),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_STORAGEBUFFER_SUPPORTED);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_STORAGEBUFFER_SIZE_MULTIPLE_4);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
 UTEST(sokol_gfx, make_image_validate_start_canary) {
     setup(&(sg_desc){0});
     const uint32_t pixels[8][8] = {0};
