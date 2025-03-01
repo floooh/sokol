@@ -10167,7 +10167,7 @@ static inline void _sg_d3d11_CSSetSamplers(ID3D11DeviceContext* self, UINT Start
 
 static inline void _sg_d3d11_CSSetUnorderedAccessViews(ID3D11DeviceContext* self, UINT StartSlot, UINT NumUAVs, ID3D11UnorderedAccessView* const* ppUnorderedAccessViews, const UINT* pUAVInitialCounts) {
     #if defined(__cplusplus)
-        self->CSSetUnorderedAccessViews(StartSlot, StartSlot, ppUnorderedAccessViews, pUAVInitialCounts);
+        self->CSSetUnorderedAccessViews(StartSlot, NumUAVs, ppUnorderedAccessViews, pUAVInitialCounts);
     #else
         self->lpVtbl->CSSetUnorderedAccessViews(self, StartSlot, NumUAVs, ppUnorderedAccessViews, pUAVInitialCounts);
     #endif
