@@ -122,11 +122,11 @@
             sg_pipeline sg_make_pipeline(const sg_pipeline_desc*)
             sg_attachments sg_make_attachments(const sg_attachments_desc*)
 
-    --- start a render pass:
+    --- start a render- or compute-pass:
 
             sg_begin_pass(const sg_pass* pass);
 
-        Typically, passes render into an externally provided swapchain which
+        Typically, render passes render into an externally provided swapchain which
         presents the rendering result on the display. Such a 'swapchain pass'
         is started like this:
 
@@ -137,23 +137,29 @@
         a specific color), and .swapchain is an sg_swapchain
         struct all the required information to render into the swapchain's surfaces.
 
-        To start an 'offscreen pass' into sokol-gfx image objects, an sg_attachment
+        To start an 'offscreen render pass' into sokol-gfx image objects, an sg_attachment
         object handle is required instead of an sg_swapchain struct. An offscreen
         pass is started like this (assuming attachments is an sg_attachments handle):
 
             sg_begin_pass(&(sg_pass){ .action = { ... }, .attachments = attachments });
 
-    --- set the render pipeline state for the next draw call with:
+        To start a compute-pass, just set the .compute item to true:
+
+            sg_begin_pass(&(sg_pass){ .compute = true });
+
+    --- set the pipeline state for the next draw call with:
 
             sg_apply_pipeline(sg_pipeline pip)
 
     --- fill an sg_bindings struct with the resource bindings for the next
-        draw call (0..N vertex buffers, 0 or 1 index buffer, 0..N images,
+        draw- or dispatch-call (0..N vertex buffers, 0 or 1 index buffer, 0..N images,
         samplers and storage-buffers), and call:
 
             sg_apply_bindings(const sg_bindings* bindings)
 
-        to update the resource bindings
+        to update the resource bindings. Note that in a compute pass, no vertex-
+        or index-buffer bindings are allowed and will be rejected by the validation
+        layer.
 
     --- optionally update shader uniform data with:
 
@@ -176,7 +182,14 @@
         containing per-instance data must be bound, and the num_instances parameter
         must be > 1.
 
-    --- finish the current rendering pass with:
+    --- ...or kick of a dispatch call to invoke a compute shader workload:
+
+            sg_dispatch(int num_groups_x, int num_groups_y, int num_groups_z)
+
+        The dispatch args define the number of 'compute workgroups' processed
+        by the currently applied compute shader.
+
+    --- finish the current pass with:
 
             sg_end_pass()
 
@@ -197,7 +210,7 @@
             sg_destroy_pipeline(sg_pipeline pip)
             sg_destroy_attachments(sg_attachments atts)
 
-    --- to set a new viewport rectangle, call
+    --- to set a new viewport rectangle, call:
 
             sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left)
 
@@ -214,7 +227,7 @@
             sg_apply_scissor_rectf(float x, float y, float width, float height, bool origin_top_left)
 
         Both sg_apply_viewport() and sg_apply_scissor_rect() must be called
-        inside a rendering pass
+        inside a rendering pass (e.g. not in a compute pass, or outside a pass)
 
         Note that sg_begin_default_pass() and sg_begin_pass() will reset both the
         viewport and scissor rectangles to cover the entire framebuffer.
@@ -432,14 +445,18 @@
     passes as textures (it is invalid to use the same image both as render target
     and as texture in the same pass).
 
-    The following sokol-gfx functions must only be called inside a render pass:
+    The following sokol-gfx functions must only be called inside a render-pass:
 
-        sg_apply_viewport(f)
-        sg_apply_scissor_rect(f)
+        sg_apply_viewport[f]
+        sg_apply_scissor_rect[f]
+        sg_draw
+
+    The folling function may be called inside a render- or compute-pass, but
+    not outside a pass:
+
         sg_apply_pipeline
         sg_apply_bindings
         sg_apply_uniforms
-        sg_draw
 
     A frame must have at least one 'swapchain render pass' which renders into an
     externally provided swapchain provided as an sg_swapchain struct to the
@@ -618,8 +635,6 @@
     must be 'resolved' into a separate 'resolve image', before that image can
     be used as texture.
 
-    NOTE: currently multisample-images cannot be bound as textures.
-
     Creating a simple attachments object for multisampled rendering requires
     3 attachment images: the color attachment image which has a sample
     count > 1, a resolve attachment image of the same size and pixel format
@@ -683,13 +698,89 @@
     texture would result in a validation error).
 
 
+    ON COMPUTE PASSES
+    =================
+    Compute passes are used to update the content of storage resources
+    (currently only storage buffers) by running compute shader code on
+    the GPU. This will almost always be more efficient than computing
+    that same data on the CPU and uploading the data via `sg_update_buffer()`.
+
+    NOTE: compute passes are only supported on the following platforms and
+    backends:
+
+        - macOS and iOS with Metal
+        - Windows with D3D11 and OpenGL
+        - Linux with OpenGL
+        - web with WebGPU
+
+    ...this means compute shaders can't be used on the following platform/backend
+    combos (the same restrictions apply to using storage buffers without compute
+    shaders):
+
+        - macOS with GL
+        - iOS with GLES3
+        - Android
+        - web with WebGL2
+
+    A compute pass is started with:
+
+        sg_begin_pass(&(sg_pass){ .compute = true });
+
+    ...and finished with:
+
+        sg_end_pass();
+
+    Typically the following functions will be called inside a compute pass:
+
+        sg_apply_pipeline
+        sg_apply_bindings
+        sg_apply_uniforms
+        sg_dispatch
+
+    The following functions are disallowed inside a compute pass
+    and will cause validation layer errors:
+
+        sg_apply_viewport[f]
+        sg_apply_scissor_rect[f]
+        sg_draw
+
+    Only special 'compute shaders' and 'compute pipelines' can be used in
+    compute passes. A compute shader only has a compute-function instead
+    of a vertex- and fragment-function pair, and it doesn't accept vertex-
+    and index-buffers as input, only storage-buffers, textures and non-filtering
+    samplers (more details on compute shaders in the following section).
+
+    A compute pipeline is created by providing a compute shader object,
+    setting the .compute creation parameter to true and not defining any
+    'render state':
+
+        sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
+            .compute = true,
+            .shader = compute_shader,
+        });
+
+    The sg_apply_bindings and sg_apply_uniforms calls are the same as in
+    render passes, with the exception that no vertex- and index-buffers
+    can be bound in the sg_apply_bindings call.
+
+    Finally to kick off a compute workload, call sg_dispatch with the
+    number of workgroups in the x, y and z-dimension:
+
+        sg_dispatch(int num_groups_x, int num_groups_y, int num_groups_z)
+
+    Also see the following compute-shader samples:
+
+        - https://floooh.github.io/sokol-webgpu/instancing-compute-sapp.html
+        - https://floooh.github.io/sokol-webgpu/computeboids-sapp.html
+
+
     ON SHADER CREATION
     ==================
     sokol-gfx doesn't come with an integrated shader cross-compiler, instead
     backend-specific shader sources or binary blobs need to be provided when
-    creating a shader object, along with information about the shader resource
-    binding interface needed to bind sokol-gfx resources to the proper
-    shader inputs.
+    creating a shader object, along with reflection information about the
+    shader resource binding interface needed to bind sokol-gfx resources to the
+    proper shader inputs.
 
     The easiest way to provide all this shader creation data is to use the
     sokol-shdc shader compiler tool to compile shaders from a common
@@ -718,16 +809,17 @@
     To create shaders with backend-specific shader code or binary blobs,
     the sg_make_shader() function requires the following information:
 
-    - Shader code or shader binary blobs for the vertex- and fragment- shader-stage:
+    - Shader code or shader binary blobs for the vertex- and fragment-, or the
+      compute-shader-stage:
         - for the desktop GL backend, source code can be provided in '#version 410' or
-          '#version 430', version 430 is required for storage buffer support, but note
-          that this is not available on macOS
+          '#version 430', version 430 is required when using storage buffers and
+          compute shaders support, but note that this is not available on macOS
         - for the GLES3 backend, source code must be provided in '#version 300 es' syntax
-        - for the D3D11 backend, shaders can be provided as source or binary blobs, the
-          source code should be in HLSL4.0 (for best compatibility) or alternatively
-          in HLSL5.0 syntax (other versions may work but are not tested), NOTE: when
-          shader source code is provided for the D3D11 backend, sokol-gfx will dynamically
-          load 'd3dcompiler_47.dll'
+        - for the D3D11 backend, shaders can be provided as source or binary
+          blobs, the source code should be in HLSL4.0 (for compatibility with old
+          low-end GPUs) or preferrably in HLSL5.0 syntax, note that when
+          shader source code is provided for the D3D11 backend, sokol-gfx will
+          dynamically load 'd3dcompiler_47.dll'
         - for the Metal backends, shaders can be provided as source or binary blobs, the
           MSL version should be in 'metal-1.1' (other versions may work but are not tested)
         - for the WebGPU backend, shaders must be provided as WGSL source code
@@ -751,8 +843,22 @@
       NOTE that vertex attributes currently must not have gaps. This requirement
       may be relaxed in the future.
 
+    - Specifically for Metal compute shaders, the 'number of threads per threadgroup'
+      must be provided. Normally this is extracted by sokol-shdc from the GLSL
+      shader source code. For instance the following statement in the input
+      GLSL:
+
+        layout(local_size_x=64, local_size_y=1, local_size_z=1) in;
+
+      ...will be communicated to the sokol-gfx Metal backend in the
+      code-generated sg_shader_desc struct:
+
+        (sg_shader_desc){
+            .mtl_threads_per_threadgroup = { .x = 64, .y = 1, .z = 1 },
+        }
+
     - Information about each uniform block used in the shader:
-        - the shader stage of the uniform block (vertex or fragment)
+        - the shader stage of the uniform block (vertex, fragment or compute)
         - the size of the uniform block in number of bytes
         - a memory layout hint (currently 'native' or 'std140') where 'native' defines a
           backend-specific memory layout which shouldn't be used for cross-platform code.
@@ -769,11 +875,20 @@
 
     - A description of each storage buffer used in the shader:
         - the shader stage of the storage buffer
-        - a boolean 'readonly' flag, note that currently only
-          readonly storage buffers are supported
+        - a boolean 'readonly' flag, this is used for validation and hazard
+          tracking in some 3D backends. Note that in render passes, only
+          readonly storage buffer bindings are allowed. In compute passes, any
+          read/write storage buffer binding is assumbed to be written to by the
+          compute shader.
         - a backend-specific bind slot:
-            - D3D11/HLSL: the texture register N (`register(tN)`) where N is 0..23
-              (in HLSL, storage buffers and texture share the same bind space)
+            - D3D11/HLSL:
+                - for readonly storage buffer bindings: the texture register N
+                  (`register(tN)`) where N is 0..23 (in HLSL, readonly storage
+                  buffers and textures share the same bind space for
+                  'shader resource views')
+                - for read/write storage buffer buffer bindings: the UAV register N
+                  (`register(uN)`) where N is 0..7 (in HLSL, readwrite storage
+                  buffers use their own bind space for 'unordered access views')
             - Metal/MSL: the buffer bind slot N (`[[buffer(N)]]`) where N is 8..15
             - WebGPU/WGSL: the binding N in `@group(0) @binding(N)` where N is 0..127
             - GL/GLSL: the buffer binding N in `layout(binding=N)` where N is 0..7
@@ -781,7 +896,7 @@
           and platforms
 
     - A description of each texture/image used in the shader:
-        - the shader stage of the texture (vertex or fragment)
+        - the shader stage of the texture (vertex, fragment or compute)
         - the expected image type:
             - SG_IMAGETYPE_2D
             - SG_IMAGETYPE_CUBE
@@ -794,16 +909,14 @@
             - SG_IMAGESAMPLETYPE_UINT
             - SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT
         - a flag whether the texture is expected to be multisampled
-          (currently it's not supported to fetch data from multisampled
-          textures in shaders, but this is planned for a later time)
         - a backend-specific bind slot:
             - D3D11/HLSL: the texture register N (`register(tN)`) where N is 0..23
-              (in HLSL, storage buffers and texture share the same bind space)
+              (in HLSL, readonly storage buffers and texture share the same bind space)
             - Metal/MSL: the texture bind slot N (`[[texture(N)]]`) where N is 0..15
             - WebGPU/WGSL: the binding N in `@group(0) @binding(N)` where N is 0..127
 
     - A description of each sampler used in the shader:
-        - the shader stage of the sampler (vertex or fragment)
+        - the shader stage of the sampler (vertex, fragment or compute)
         - the expected sampler type:
             - SG_SAMPLERTYPE_FILTERING,
             - SG_SAMPLERTYPE_NONFILTERING,
@@ -835,7 +948,8 @@
         - D3D11/HLSL:
             - separate bindslot space per shader stage
             - uniform blocks (as cbuffer): `register(b0..b7)`
-            - textures and storage buffers: `register(t0..t23)`
+            - textures and readonly storage buffers: `register(t0..t23)`
+            - read/write storage buffers: `register(u0..u7)`
             - samplers: `register(s0..s15)`
         - Metal/MSL:
             - separate bindslot space per shader stage
@@ -1012,6 +1126,11 @@
 
     ON STORAGE BUFFERS
     ==================
+    The two main purpose of storage buffers are:
+
+        - to be populated by compute shaders with dynamically generated data
+        - for providing random-access data to all shader stages
+
     Storage buffers can be used to pass large amounts of random access structured
     data from the CPU side to the shaders. They are similar to data textures, but are
     more convenient to use both on the CPU and shader side since they can be accessed
@@ -1023,21 +1142,23 @@
     - all GLES3 platforms (WebGL2, iOS, Android - with the option that support on
       Android may be added at a later point)
 
-    Currently only 'readonly' storage buffers are supported (meaning it's not possible
-    to write to storage buffers from shaders).
-
     To use storage buffers, the following steps are required:
 
-        - write a shader which uses storage buffers (also see the example links below)
+        - write a shader which uses storage buffers (vertex- and fragment-shaders
+          can only read from storage buffers, while compute-shaders can both read
+          and write storage buffers)
         - create one or more storage buffers via sg_make_buffer() with the
           buffer type SG_BUFFERTYPE_STORAGEBUFFER
         - when creating a shader via sg_make_shader(), populate the sg_shader_desc
           struct with binding info (when using sokol-shdc, this step will be taken care
           of automatically)
-            - which storage buffer bind slots on the vertex- and fragment-stage
+            - which storage buffer bind slots on the vertex-, fragment- or compute-stage
               are occupied
-            - whether the storage buffer on that bind slot is readonly (this is currently required
-              to be true)
+            - whether the storage buffer on that bind slot is readonly (readonly
+              bindings are required for vertex- and fragment-shaders, and in compute
+              shaders the readonly flag is used to control hazard tracking in some
+              3D backends)
+
         - when calling sg_apply_bindings(), apply the matching bind slots with the previously
           created storage buffers
         - ...and that's it.
@@ -1056,6 +1177,12 @@
     - the Ozz animation sample rewritten to pull all rendering data from storage buffers:
         - C code: https://github.com/floooh/sokol-samples/blob/master/sapp/ozz-storagebuffer-sapp.cc
         - shader: https://github.com/floooh/sokol-samples/blob/master/sapp/ozz-storagebuffer-sapp.glsl
+    - the instancing sample modified to use compute shaders:
+        - C code: https://github.com/floooh/sokol-samples/blob/master/sapp/instancing-compute-sapp.c
+        - shader: https://github.com/floooh/sokol-samples/blob/master/sapp/instancing-compute-sapp.glsl
+    - the Compute Boids sample ported to sokol-gfx:
+        - C code: https://github.com/floooh/sokol-samples/blob/master/sapp/computeboids-sapp.c
+        - shader: https://github.com/floooh/sokol-samples/blob/master/sapp/computeboids-sapp.glsl
 
     ...also see the following backend-specific vertex pulling samples (those also don't use sokol-shdc):
 
@@ -1064,16 +1191,25 @@
     - Metal: https://github.com/floooh/sokol-samples/blob/master/metal/vertexpulling-metal.c
     - WebGPU: https://github.com/floooh/sokol-samples/blob/master/wgpu/vertexpulling-wgpu.c
 
+    ...and the backend specific compute shader samples:
+
+    - D3D11: https://github.com/floooh/sokol-samples/blob/master/d3d11/instancing-compute-d3d11.c
+    - desktop GL: https://github.com/floooh/sokol-samples/blob/master/glfw/instancing-compute-glfw.c
+    - Metal: https://github.com/floooh/sokol-samples/blob/master/metal/instancing-compute-metal.c
+    - WebGPU: https://github.com/floooh/sokol-samples/blob/master/wgpu/instancing-compute-wgpu.c
+
     Storage buffer shader authoring caveats when using sokol-shdc:
 
-        - declare a storage buffer interface block with `layout(binding=N) readonly buffer [name] { ... }`
+        - declare a read-only storage buffer interface block with `layout(binding=N) readonly buffer [name] { ... }`
           (where 'N' is the index in `sg_bindings.storage_buffers[N]`)
+        - ...or a read/write storage buffer interface block with `layout(binding=N) buffer [name] { ... }`
         - declare a struct which describes a single array item in the storage buffer interface block
         - only put a single flexible array member into the storage buffer interface block
 
-        E.g. a complete example in 'sokol-shdc GLSL':
+    E.g. a complete example in 'sokol-shdc GLSL':
 
         ```glsl
+        @vs
         // declare a struct:
         struct sb_vertex {
             vec3 pos;
@@ -1088,17 +1224,43 @@
             vec3 pos = vtx[gl_VertexIndex].pos;
             ...
         }
+        @end
         ```
+
+    In a compute shader you can read and write the same item in the same
+    storage buffer (but you'll have to be careful for random access since
+    many threads of the same compute function run in parallel):
+
+        @cs
+        struct sb_item {
+            vec3 pos;
+            vec3 vel;
+        }
+        layout(binding=0) buffer items_ssbo {
+            sb_item items[];
+        }
+        layout(local_size_x=64, local_size_y=1, local_size_z=1) in;
+        void main() {
+            uint idx = gl_GlobalInvocationID.x;
+            vec3 pos = items[idx].pos;
+            ...
+            items[idx].pos = pos;
+        }
+        @end
 
     Backend-specific storage-buffer caveats (not relevant when using sokol-shdc):
 
         D3D11:
             - storage buffers are created as 'raw' Byte Address Buffers
               (https://learn.microsoft.com/en-us/windows/win32/direct3d11/overviews-direct3d-11-resources-intro#raw-views-of-buffers)
-            - in HLSL, use a ByteAddressBuffer to access the buffer content
+            - in HLSL, use a ByteAddressBuffer for readonly access of the buffer content:
               (https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/sm5-object-byteaddressbuffer)
-            - in D3D11, storage buffers and textures share the same bind slots (declared as
-              `register(tN)` in HLSL), where N must be in the range 0..23)
+            - ...or RWByteAddressBuffer for read/write access:
+              (https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/sm5-object-rwbyteaddressbuffer)
+            - readonly-storage buffers and textures are both bound as 'shader-resource-view' and
+              share the same bind slots (declared as `register(tN)` in HLSL), where N must be in the range 0..23)
+            - read/write storage buffers are bound as 'unordered-access-view' (declared as `register(uN)` in HLSL
+              where N is in the range 0..7)
 
         Metal:
             - in Metal there is no internal difference between vertex-, uniform- and
