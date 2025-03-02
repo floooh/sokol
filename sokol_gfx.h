@@ -4256,15 +4256,16 @@ typedef enum sg_log_item {
 
     The default configuration is:
 
-    .buffer_pool_size       128
-    .image_pool_size        128
-    .sampler_pool_size      64
-    .shader_pool_size       32
-    .pipeline_pool_size     64
-    .pass_pool_size         16
-    .uniform_buffer_size    4 MB (4*1024*1024)
-    .max_commit_listeners   1024
-    .disable_validation     false
+    .buffer_pool_size               128
+    .image_pool_size                128
+    .sampler_pool_size              64
+    .shader_pool_size               32
+    .pipeline_pool_size             64
+    .attachments_pool_size          16
+    .uniform_buffer_size            4 MB (4*1024*1024)
+    .max_dispatch_calls_per_pass    1024
+    .max_commit_listeners           1024
+    .disable_validation             false
     .mtl_force_managed_storage_mode false
     .wgpu_disable_bindgroups_cache  false
     .wgpu_bindgroups_cache_size     1024
