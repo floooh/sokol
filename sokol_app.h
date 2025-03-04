@@ -4453,6 +4453,21 @@ static void _sapp_gl_make_current(void) {
         }
     }
 }
+- (void)magnifyWithEvent:(NSEvent*)event {
+    _sapp_gl_make_current();
+    _sapp_macos_mouse_update_from_nsevent(event, true);
+    if (_sapp_events_enabled()) {
+        float dy = (float) event.magnification;
+        float dx = 0.0f;
+        _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
+        _sapp.event.modifiers = _sapp_macos_mods(event);
+        _sapp.event.modifiers |= SAPP_MODIFIER_CTRL;
+        _sapp.event.scroll_x = dx;
+        _sapp.event.scroll_y = dy;
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
 - (void)keyDown:(NSEvent*)event {
     if (_sapp_events_enabled()) {
         _sapp_gl_make_current();
