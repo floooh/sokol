@@ -4467,7 +4467,6 @@ static void _sapp_gl_make_current(void) {
         _sapp_call_event(&_sapp.event);
     }
 }
-
 - (void)keyDown:(NSEvent*)event {
     if (_sapp_events_enabled()) {
         _sapp_gl_make_current();
