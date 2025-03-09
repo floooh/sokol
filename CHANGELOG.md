@@ -18,14 +18,17 @@ Both fixes are in this PR: https://github.com/floooh/sokol/pull/1219
 
 - sokol_app.h win32: Fix mouse locking behaviour in edge cases: an assert could
   be triggered on Win32 when the mouse is currently locked and the window focus
-  is stolen via Ctrl-Shift-Esc or Ctrl-Alt-Del (basically: opening the task manager),
-  also even without the assert, the mouse might remain stucked in 'mouse lock mode'
-  while the task manager is open. The behaviour has been worked around by two changes:
+  is stolen via Ctrl-Shift-Esc or Ctrl-Alt-Del (basically: opening the task manager).
+  Also, even without the assert, the mouse might remain stuck in 'mouse lock mode'
+  while the task manager is open. The behaviour has been worked around by the following
+  changes:
 
   - a return value `false` from GetCursorPos() will be handled instead of asserted
-  - a return value `false` from SetCursorPos() will be ignored
-  - trying to set lock the mouse while the application window isn't in the foreground
-    will be ignored
+  - a return value `false` from SetCursorPos() will be ignored, and SetCursorPos()
+    will only be called to restore the mouse position when the previous GetCursorPos()
+    had succeeded.
+  - trying to lock the mouse while the application window isn't in the foreground
+    is now ignored
   - the check whether a locked mouse must be unlocked now happens via polling
     the current foreground window instead of WM_KILLFOCUS
 
