@@ -14,6 +14,8 @@ unfortunately slipped through testing:
   or stream usage failing to be created in the D3D11 backend (because D3D11_USAGE_DYNAMIC
   is incompatible with D3D11_BIND_UNORDERED_ACCESS). Associated ticket: https://github.com/floooh/sokol/issues/1218
 
+Both fixes are in this PR: https://github.com/floooh/sokol/pull/1219
+
 ### 08-Mar-2025
 
 Initial compute shader support has been merged into sokol_gfx.h.
