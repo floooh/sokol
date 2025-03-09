@@ -1,5 +1,19 @@
 ## Updates
 
+### 09-Mar-2025
+
+A couple of D3D11 specific regression fixes in the compute shader update that
+unfortunately slipped through testing:
+
+- Misdetected HLSL bindslot collision errors in the validation layer when multiple
+  readonly storage buffers are bound (see: https://github.com/floooh/sokol/issues/1217),
+  many thanks to @cr1sth0fer for the bug report!
+- Storage buffers bound as read/writable must now have usage immutable, and this
+  is checked in the validation layer (e.g. an storage buffer can be either updated by
+  the CPU or by the GPU, but not both). The bug manifests as storage buffers with dynamic
+  or stream usage failing to be created in the D3D11 backend (because D3D11_USAGE_DYNAMIC
+  is incompatible with D3D11_BIND_UNORDERED_ACCESS). Associated ticket: https://github.com/floooh/sokol/issues/1218
+
 ### 08-Mar-2025
 
 Initial compute shader support has been merged into sokol_gfx.h.
