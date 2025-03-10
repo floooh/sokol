@@ -3317,7 +3317,7 @@ typedef struct sg_shader_function {
 } sg_shader_function;
 
 typedef enum sg_shader_attr_base_type {
-    _SG_SHADERATTRBASETYPE_DEFAULT = 0,   // default: FLOAT
+    _SG_SHADERATTRBASETYPE_DEFAULT, // default: FLOAT
     SG_SHADERATTRBASETYPE_FLOAT,
     SG_SHADERATTRBASETYPE_SINT,
     SG_SHADERATTRBASETYPE_UINT,
