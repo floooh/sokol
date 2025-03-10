@@ -2344,15 +2344,25 @@ typedef enum sg_vertex_format {
     SG_VERTEXFORMAT_FLOAT2,
     SG_VERTEXFORMAT_FLOAT3,
     SG_VERTEXFORMAT_FLOAT4,
+    SG_VERTEXFORMAT_INT,
+    SG_VERTEXFORMAT_INT2,
+    SG_VERTEXFORMAT_INT3,
+    SG_VERTEXFORMAT_INT4,
+    SG_VERTEXFORMAT_UINT,
+    SG_VERTEXFORMAT_UINT2,
+    SG_VERTEXFORMAT_UINT3,
+    SG_VERTEXFORMAT_UINT4,
     SG_VERTEXFORMAT_BYTE4,
     SG_VERTEXFORMAT_BYTE4N,
     SG_VERTEXFORMAT_UBYTE4,
     SG_VERTEXFORMAT_UBYTE4N,
     SG_VERTEXFORMAT_SHORT2,
     SG_VERTEXFORMAT_SHORT2N,
+    SG_VERTEXFORMAT_USHORT2,
     SG_VERTEXFORMAT_USHORT2N,
     SG_VERTEXFORMAT_SHORT4,
     SG_VERTEXFORMAT_SHORT4N,
+    SG_VERTEXFORMAT_USHORT4,
     SG_VERTEXFORMAT_USHORT4N,
     SG_VERTEXFORMAT_UINT10_N2,
     SG_VERTEXFORMAT_HALF2,
@@ -3193,8 +3203,10 @@ typedef struct sg_sampler_desc {
           (the default is "cs_5_0")
 
     - vertex attributes required by some backends (not for compute shaders):
-        - for the GL backend: optional vertex attribute names
-          used for name lookup
+        - the vertex attribute base type (float, signed int, unsigned int),
+          this is checked against the pipeline object's vertex formats
+          in the validation layer
+        - for the GL backend: optional vertex attribute names used for name lookup
         - for the D3D11 backend: semantic names and indices
 
     - only for compute shaders on the Metal backend:
@@ -3294,6 +3306,7 @@ typedef enum sg_shader_stage {
     SG_SHADERSTAGE_VERTEX,
     SG_SHADERSTAGE_FRAGMENT,
     SG_SHADERSTAGE_COMPUTE,
+    _SG_SHADERSTAGE_FORCE_U32 = 0x7FFFFFFF,
 } sg_shader_stage;
 
 typedef struct sg_shader_function {
@@ -3303,7 +3316,16 @@ typedef struct sg_shader_function {
     const char* d3d11_target;   // default: "vs_4_0" or "ps_4_0"
 } sg_shader_function;
 
+typedef enum sg_shader_attr_base_type {
+    _SG_SHADERATTRBASETYPE_DEFAULT, // default: FLOAT
+    SG_SHADERATTRBASETYPE_FLOAT,
+    SG_SHADERATTRBASETYPE_SINT,
+    SG_SHADERATTRBASETYPE_UINT,
+    _SG_SHADERATTRBASETYPE_FORCE_U32 = 0x7FFFFFFF,
+} sg_shader_attr_base_type;
+
 typedef struct sg_shader_vertex_attr {
+    sg_shader_attr_base_type base_type;  // default: FLOAT (only used for validation)
     const char* glsl_name;      // [optional] GLSL attribute name
     const char* hlsl_sem_name;  // HLSL semantic name
     uint8_t hlsl_sem_index;     // HLSL semantic index
@@ -4101,6 +4123,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_COMPUTE_SHADER_EXPECTED, "sg_pipeline_desc.shader must be a compute shader") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_NO_COMPUTE_SHADER_EXPECTED, "sg_pipeline_desc.compute is false, but shader is a compute shader") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_NO_CONT_ATTRS, "sg_pipeline_desc.layout.attrs is not continuous") \
+    _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_ATTR_BASETYPE_MISMATCH, "sg_pipeline_desc.layout.attrs[].format is incompatble with sg_shader_desc.attrs[].base_type") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4, "sg_pipeline_desc.layout.buffers[].stride must be multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_ATTR_SEMANTICS, "D3D11 missing vertex attribute semantics in shader") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_SHADER_READONLY_STORAGEBUFFERS, "sg_pipeline_desc.shader: only readonly storage buffer bindings allowed in render pipelines") \
@@ -5508,6 +5531,10 @@ _SOKOL_PRIVATE void _sg_sampler_common_init(_sg_sampler_common_t* cmn, const sg_
 }
 
 typedef struct {
+    sg_shader_attr_base_type base_type;
+} _sg_shader_attr_t;
+
+typedef struct {
     sg_shader_stage stage;
     uint32_t size;
 } _sg_shader_uniform_block_t;
@@ -5539,6 +5566,7 @@ typedef struct {
 typedef struct {
     uint32_t required_bindings_and_uniforms;
     bool is_compute;
+    _sg_shader_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
     _sg_shader_uniform_block_t uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
     _sg_shader_storage_buffer_t storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
     _sg_shader_image_t images[SG_MAX_IMAGE_BINDSLOTS];
@@ -5548,6 +5576,9 @@ typedef struct {
 
 _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_shader_desc* desc) {
     cmn->is_compute = desc->compute_func.source || desc->compute_func.bytecode.ptr;
+    for (size_t i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
+        cmn->attrs[i].base_type = desc->attrs[i].base_type;
+    }
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
         const sg_shader_uniform_block* src = &desc->uniform_blocks[i];
         _sg_shader_uniform_block_t* dst = &cmn->uniform_blocks[i];
@@ -6608,15 +6639,25 @@ _SOKOL_PRIVATE int _sg_vertexformat_bytesize(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_FLOAT2:    return 8;
         case SG_VERTEXFORMAT_FLOAT3:    return 12;
         case SG_VERTEXFORMAT_FLOAT4:    return 16;
+        case SG_VERTEXFORMAT_INT:       return 4;
+        case SG_VERTEXFORMAT_INT2:      return 8;
+        case SG_VERTEXFORMAT_INT3:      return 12;
+        case SG_VERTEXFORMAT_INT4:      return 16;
+        case SG_VERTEXFORMAT_UINT:      return 4;
+        case SG_VERTEXFORMAT_UINT2:     return 8;
+        case SG_VERTEXFORMAT_UINT3:     return 12;
+        case SG_VERTEXFORMAT_UINT4:     return 16;
         case SG_VERTEXFORMAT_BYTE4:     return 4;
         case SG_VERTEXFORMAT_BYTE4N:    return 4;
         case SG_VERTEXFORMAT_UBYTE4:    return 4;
         case SG_VERTEXFORMAT_UBYTE4N:   return 4;
         case SG_VERTEXFORMAT_SHORT2:    return 4;
         case SG_VERTEXFORMAT_SHORT2N:   return 4;
+        case SG_VERTEXFORMAT_USHORT2:   return 4;
         case SG_VERTEXFORMAT_USHORT2N:  return 4;
         case SG_VERTEXFORMAT_SHORT4:    return 8;
         case SG_VERTEXFORMAT_SHORT4N:   return 8;
+        case SG_VERTEXFORMAT_USHORT4:   return 8;
         case SG_VERTEXFORMAT_USHORT4N:  return 8;
         case SG_VERTEXFORMAT_UINT10_N2: return 4;
         case SG_VERTEXFORMAT_HALF2:     return 4;
@@ -6625,6 +6666,44 @@ _SOKOL_PRIVATE int _sg_vertexformat_bytesize(sg_vertex_format fmt) {
         default:
             SOKOL_UNREACHABLE;
             return -1;
+    }
+}
+
+_SOKOL_PRIVATE sg_shader_attr_base_type _sg_vertexformat_basetype(sg_vertex_format fmt) {
+    switch (fmt) {
+        case SG_VERTEXFORMAT_FLOAT:
+        case SG_VERTEXFORMAT_FLOAT2:
+        case SG_VERTEXFORMAT_FLOAT3:
+        case SG_VERTEXFORMAT_FLOAT4:
+        case SG_VERTEXFORMAT_HALF2:
+        case SG_VERTEXFORMAT_HALF4:
+        case SG_VERTEXFORMAT_BYTE4N:
+        case SG_VERTEXFORMAT_UBYTE4N:
+        case SG_VERTEXFORMAT_SHORT2N:
+        case SG_VERTEXFORMAT_USHORT2N:
+        case SG_VERTEXFORMAT_SHORT4N:
+        case SG_VERTEXFORMAT_USHORT4N:
+        case SG_VERTEXFORMAT_UINT10_N2:
+            return SG_SHADERATTRBASETYPE_FLOAT;
+        case SG_VERTEXFORMAT_INT:
+        case SG_VERTEXFORMAT_INT2:
+        case SG_VERTEXFORMAT_INT3:
+        case SG_VERTEXFORMAT_INT4:
+        case SG_VERTEXFORMAT_BYTE4:
+        case SG_VERTEXFORMAT_SHORT2:
+        case SG_VERTEXFORMAT_SHORT4:
+            return SG_SHADERATTRBASETYPE_SINT;
+        case SG_VERTEXFORMAT_UINT:
+        case SG_VERTEXFORMAT_UINT2:
+        case SG_VERTEXFORMAT_UINT3:
+        case SG_VERTEXFORMAT_UINT4:
+        case SG_VERTEXFORMAT_UBYTE4:
+        case SG_VERTEXFORMAT_USHORT2:
+        case SG_VERTEXFORMAT_USHORT4:
+            return SG_SHADERATTRBASETYPE_UINT;
+        default:
+            SOKOL_UNREACHABLE;
+            return SG_SHADERATTRBASETYPE_FLOAT;
     }
 }
 
@@ -7503,15 +7582,25 @@ _SOKOL_PRIVATE GLint _sg_gl_vertexformat_size(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_FLOAT2:    return 2;
         case SG_VERTEXFORMAT_FLOAT3:    return 3;
         case SG_VERTEXFORMAT_FLOAT4:    return 4;
+        case SG_VERTEXFORMAT_INT:       return 1;
+        case SG_VERTEXFORMAT_INT2:      return 2;
+        case SG_VERTEXFORMAT_INT3:      return 3;
+        case SG_VERTEXFORMAT_INT4:      return 4;
+        case SG_VERTEXFORMAT_UINT:      return 1;
+        case SG_VERTEXFORMAT_UINT2:     return 2;
+        case SG_VERTEXFORMAT_UINT3:     return 3;
+        case SG_VERTEXFORMAT_UINT4:     return 4;
         case SG_VERTEXFORMAT_BYTE4:     return 4;
         case SG_VERTEXFORMAT_BYTE4N:    return 4;
         case SG_VERTEXFORMAT_UBYTE4:    return 4;
         case SG_VERTEXFORMAT_UBYTE4N:   return 4;
         case SG_VERTEXFORMAT_SHORT2:    return 2;
         case SG_VERTEXFORMAT_SHORT2N:   return 2;
+        case SG_VERTEXFORMAT_USHORT2:   return 2;
         case SG_VERTEXFORMAT_USHORT2N:  return 2;
         case SG_VERTEXFORMAT_SHORT4:    return 4;
         case SG_VERTEXFORMAT_SHORT4N:   return 4;
+        case SG_VERTEXFORMAT_USHORT4:   return 4;
         case SG_VERTEXFORMAT_USHORT4N:  return 4;
         case SG_VERTEXFORMAT_UINT10_N2: return 4;
         case SG_VERTEXFORMAT_HALF2:     return 2;
@@ -7527,6 +7616,16 @@ _SOKOL_PRIVATE GLenum _sg_gl_vertexformat_type(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_FLOAT3:
         case SG_VERTEXFORMAT_FLOAT4:
             return GL_FLOAT;
+        case SG_VERTEXFORMAT_INT:
+        case SG_VERTEXFORMAT_INT2:
+        case SG_VERTEXFORMAT_INT3:
+        case SG_VERTEXFORMAT_INT4:
+            return GL_INT;
+        case SG_VERTEXFORMAT_UINT:
+        case SG_VERTEXFORMAT_UINT2:
+        case SG_VERTEXFORMAT_UINT3:
+        case SG_VERTEXFORMAT_UINT4:
+            return GL_UNSIGNED_INT;
         case SG_VERTEXFORMAT_BYTE4:
         case SG_VERTEXFORMAT_BYTE4N:
             return GL_BYTE;
@@ -7538,7 +7637,9 @@ _SOKOL_PRIVATE GLenum _sg_gl_vertexformat_type(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_SHORT4:
         case SG_VERTEXFORMAT_SHORT4N:
             return GL_SHORT;
+        case SG_VERTEXFORMAT_USHORT2:
         case SG_VERTEXFORMAT_USHORT2N:
+        case SG_VERTEXFORMAT_USHORT4:
         case SG_VERTEXFORMAT_USHORT4N:
             return GL_UNSIGNED_SHORT;
         case SG_VERTEXFORMAT_UINT10_N2:
@@ -10875,15 +10976,25 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_vertex_format(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_FLOAT2:    return DXGI_FORMAT_R32G32_FLOAT;
         case SG_VERTEXFORMAT_FLOAT3:    return DXGI_FORMAT_R32G32B32_FLOAT;
         case SG_VERTEXFORMAT_FLOAT4:    return DXGI_FORMAT_R32G32B32A32_FLOAT;
+        case SG_VERTEXFORMAT_INT:       return DXGI_FORMAT_R32_SINT;
+        case SG_VERTEXFORMAT_INT2:      return DXGI_FORMAT_R32G32_SINT;
+        case SG_VERTEXFORMAT_INT3:      return DXGI_FORMAT_R32G32B32_SINT;
+        case SG_VERTEXFORMAT_INT4:      return DXGI_FORMAT_R32G32B32A32_SINT;
+        case SG_VERTEXFORMAT_UINT:      return DXGI_FORMAT_R32_UINT;
+        case SG_VERTEXFORMAT_UINT2:     return DXGI_FORMAT_R32G32_UINT;
+        case SG_VERTEXFORMAT_UINT3:     return DXGI_FORMAT_R32G32B32_UINT;
+        case SG_VERTEXFORMAT_UINT4:     return DXGI_FORMAT_R32G32B32A32_UINT;
         case SG_VERTEXFORMAT_BYTE4:     return DXGI_FORMAT_R8G8B8A8_SINT;
         case SG_VERTEXFORMAT_BYTE4N:    return DXGI_FORMAT_R8G8B8A8_SNORM;
         case SG_VERTEXFORMAT_UBYTE4:    return DXGI_FORMAT_R8G8B8A8_UINT;
         case SG_VERTEXFORMAT_UBYTE4N:   return DXGI_FORMAT_R8G8B8A8_UNORM;
         case SG_VERTEXFORMAT_SHORT2:    return DXGI_FORMAT_R16G16_SINT;
         case SG_VERTEXFORMAT_SHORT2N:   return DXGI_FORMAT_R16G16_SNORM;
+        case SG_VERTEXFORMAT_USHORT2:   return DXGI_FORMAT_R16G16_UINT;
         case SG_VERTEXFORMAT_USHORT2N:  return DXGI_FORMAT_R16G16_UNORM;
         case SG_VERTEXFORMAT_SHORT4:    return DXGI_FORMAT_R16G16B16A16_SINT;
         case SG_VERTEXFORMAT_SHORT4N:   return DXGI_FORMAT_R16G16B16A16_SNORM;
+        case SG_VERTEXFORMAT_USHORT4:   return DXGI_FORMAT_R16G16B16A16_UINT;
         case SG_VERTEXFORMAT_USHORT4N:  return DXGI_FORMAT_R16G16B16A16_UNORM;
         case SG_VERTEXFORMAT_UINT10_N2: return DXGI_FORMAT_R10G10B10A2_UNORM;
         case SG_VERTEXFORMAT_HALF2:     return DXGI_FORMAT_R16G16_FLOAT;
@@ -12534,15 +12645,25 @@ _SOKOL_PRIVATE MTLVertexFormat _sg_mtl_vertex_format(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_FLOAT2:    return MTLVertexFormatFloat2;
         case SG_VERTEXFORMAT_FLOAT3:    return MTLVertexFormatFloat3;
         case SG_VERTEXFORMAT_FLOAT4:    return MTLVertexFormatFloat4;
+        case SG_VERTEXFORMAT_INT:       return MTLVertexFormatInt;
+        case SG_VERTEXFORMAT_INT2:      return MTLVertexFormatInt2;
+        case SG_VERTEXFORMAT_INT3:      return MTLVertexFormatInt3;
+        case SG_VERTEXFORMAT_INT4:      return MTLVertexFormatInt4;
+        case SG_VERTEXFORMAT_UINT:      return MTLVertexFormatUInt;
+        case SG_VERTEXFORMAT_UINT2:     return MTLVertexFormatUInt2;
+        case SG_VERTEXFORMAT_UINT3:     return MTLVertexFormatUInt3;
+        case SG_VERTEXFORMAT_UINT4:     return MTLVertexFormatUInt4;
         case SG_VERTEXFORMAT_BYTE4:     return MTLVertexFormatChar4;
         case SG_VERTEXFORMAT_BYTE4N:    return MTLVertexFormatChar4Normalized;
         case SG_VERTEXFORMAT_UBYTE4:    return MTLVertexFormatUChar4;
         case SG_VERTEXFORMAT_UBYTE4N:   return MTLVertexFormatUChar4Normalized;
         case SG_VERTEXFORMAT_SHORT2:    return MTLVertexFormatShort2;
         case SG_VERTEXFORMAT_SHORT2N:   return MTLVertexFormatShort2Normalized;
+        case SG_VERTEXFORMAT_USHORT2:   return MTLVertexFormatUShort2;
         case SG_VERTEXFORMAT_USHORT2N:  return MTLVertexFormatUShort2Normalized;
         case SG_VERTEXFORMAT_SHORT4:    return MTLVertexFormatShort4;
         case SG_VERTEXFORMAT_SHORT4N:   return MTLVertexFormatShort4Normalized;
+        case SG_VERTEXFORMAT_USHORT4:   return MTLVertexFormatUShort4;
         case SG_VERTEXFORMAT_USHORT4N:  return MTLVertexFormatUShort4Normalized;
         case SG_VERTEXFORMAT_UINT10_N2: return MTLVertexFormatUInt1010102Normalized;
         case SG_VERTEXFORMAT_HALF2:     return MTLVertexFormatHalf2;
@@ -14652,19 +14773,29 @@ _SOKOL_PRIVATE WGPUVertexFormat _sg_wgpu_vertexformat(sg_vertex_format f) {
         case SG_VERTEXFORMAT_FLOAT2:        return WGPUVertexFormat_Float32x2;
         case SG_VERTEXFORMAT_FLOAT3:        return WGPUVertexFormat_Float32x3;
         case SG_VERTEXFORMAT_FLOAT4:        return WGPUVertexFormat_Float32x4;
+        case SG_VERTEXFORMAT_INT:           return WGPUVertexFormat_Sint32;
+        case SG_VERTEXFORMAT_INT2:          return WGPUVertexFormat_Sint32x2;
+        case SG_VERTEXFORMAT_INT3:          return WGPUVertexFormat_Sint32x3;
+        case SG_VERTEXFORMAT_INT4:          return WGPUVertexFormat_Sint32x4;
+        case SG_VERTEXFORMAT_UINT:          return WGPUVertexFormat_Uint32;
+        case SG_VERTEXFORMAT_UINT2:         return WGPUVertexFormat_Uint32x2;
+        case SG_VERTEXFORMAT_UINT3:         return WGPUVertexFormat_Uint32x3;
+        case SG_VERTEXFORMAT_UINT4:         return WGPUVertexFormat_Uint32x4;
         case SG_VERTEXFORMAT_BYTE4:         return WGPUVertexFormat_Sint8x4;
         case SG_VERTEXFORMAT_BYTE4N:        return WGPUVertexFormat_Snorm8x4;
         case SG_VERTEXFORMAT_UBYTE4:        return WGPUVertexFormat_Uint8x4;
         case SG_VERTEXFORMAT_UBYTE4N:       return WGPUVertexFormat_Unorm8x4;
         case SG_VERTEXFORMAT_SHORT2:        return WGPUVertexFormat_Sint16x2;
         case SG_VERTEXFORMAT_SHORT2N:       return WGPUVertexFormat_Snorm16x2;
+        case SG_VERTEXFORMAT_USHORT2:       return WGPUVertexFormat_Uint16x2;
         case SG_VERTEXFORMAT_USHORT2N:      return WGPUVertexFormat_Unorm16x2;
         case SG_VERTEXFORMAT_SHORT4:        return WGPUVertexFormat_Sint16x4;
         case SG_VERTEXFORMAT_SHORT4N:       return WGPUVertexFormat_Snorm16x4;
+        case SG_VERTEXFORMAT_USHORT4:       return WGPUVertexFormat_Uint16x4;
         case SG_VERTEXFORMAT_USHORT4N:      return WGPUVertexFormat_Unorm16x4;
+        case SG_VERTEXFORMAT_UINT10_N2:     return WGPUVertexFormat_Unorm10_10_10_2;
         case SG_VERTEXFORMAT_HALF2:         return WGPUVertexFormat_Float16x2;
         case SG_VERTEXFORMAT_HALF4:         return WGPUVertexFormat_Float16x4;
-        case SG_VERTEXFORMAT_UINT10_N2:     return WGPUVertexFormat_Unorm10_10_10_2;
         default:
             SOKOL_UNREACHABLE;
             return WGPUVertexFormat_Force32;
@@ -17749,6 +17880,9 @@ _SOKOL_PRIVATE _sg_u128_t _sg_validate_set_slot_bit(_sg_u128_t bits, sg_shader_s
             SOKOL_ASSERT(slot < 64);
             bits.lo |= 1ULL << slot;
             break;
+        default:
+            SOKOL_UNREACHABLE;
+            break;
     }
     return bits;
 }
@@ -18052,7 +18186,7 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
             } else {
                 _SG_VALIDATE(!shd->cmn.is_compute, VALIDATE_PIPELINEDESC_NO_COMPUTE_SHADER_EXPECTED);
                 bool attrs_cont = true;
-                for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+                for (size_t attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
                     const sg_vertex_attr_state* a_state = &desc->layout.attrs[attr_index];
                     if (a_state->format == SG_VERTEXFORMAT_INVALID) {
                         attrs_cont = false;
@@ -18060,6 +18194,8 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
                     }
                     _SG_VALIDATE(attrs_cont, VALIDATE_PIPELINEDESC_NO_CONT_ATTRS);
                     SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
+                    // vertex format must match expected shader attribute base type
+                    _SG_VALIDATE(_sg_vertexformat_basetype(a_state->format) == shd->cmn.attrs[attr_index].base_type, VALIDATE_PIPELINEDESC_ATTR_BASETYPE_MISMATCH);
                     #if defined(SOKOL_D3D11)
                     // on D3D11, semantic names (and semantic indices) must be provided
                     _SG_VALIDATE(!_sg_strempty(&shd->d3d11.attrs[attr_index].sem_name), VALIDATE_PIPELINEDESC_ATTR_SEMANTICS);
@@ -18748,6 +18884,10 @@ _SOKOL_PRIVATE sg_shader_desc _sg_shader_desc_defaults(const sg_shader_desc* des
     #endif
     def.mtl_threads_per_threadgroup.y = _sg_def(desc->mtl_threads_per_threadgroup.y, 1);
     def.mtl_threads_per_threadgroup.z = _sg_def(desc->mtl_threads_per_threadgroup.z, 1);
+    for (size_t attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+        sg_shader_vertex_attr* attr = &def.attrs[attr_index];
+        attr->base_type = _sg_def(attr->base_type, SG_SHADERATTRBASETYPE_FLOAT);
+    }
     for (size_t ub_index = 0; ub_index < SG_MAX_UNIFORMBLOCK_BINDSLOTS; ub_index++) {
         sg_shader_uniform_block* ub_desc = &def.uniform_blocks[ub_index];
         if (ub_desc->stage != SG_SHADERSTAGE_NONE) {
