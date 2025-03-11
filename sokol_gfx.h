@@ -5845,6 +5845,7 @@ typedef struct {
     uint8_t normalized;
     int offset;
     GLenum type;
+    sg_shader_attr_base_type base_type;
 } _sg_gl_attr_t;
 
 typedef struct _sg_pipeline_s {
@@ -7432,6 +7433,7 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     _SG_XMACRO(glDrawArrays,                      void, (GLenum mode, GLint first, GLsizei count)) \
     _SG_XMACRO(glDrawElementsInstanced,           void, (GLenum mode, GLsizei count, GLenum type, const void * indices, GLsizei instancecount)) \
     _SG_XMACRO(glVertexAttribPointer,             void, (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void * pointer)) \
+    _SG_XMACRO(glVertexAttribIPointer,            void, (GLuint index, GLint size, GLenum type, GLsizei stride, const void * pointer)) \
     _SG_XMACRO(glUniform1i,                       void, (GLint location, GLint v0)) \
     _SG_XMACRO(glDisable,                         void, (GLenum cap)) \
     _SG_XMACRO(glColorMask,                       void, (GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha)) \
@@ -9302,6 +9304,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
             gl_attr->size = (uint8_t) _sg_gl_vertexformat_size(a_state->format);
             gl_attr->type = _sg_gl_vertexformat_type(a_state->format);
             gl_attr->normalized = _sg_gl_vertexformat_normalized(a_state->format);
+            gl_attr->base_type = _sg_vertexformat_basetype(a_state->format);
             pip->cmn.vertex_buffer_layout_active[a_state->buffer_index] = true;
         } else {
             _SG_WARN(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER);
@@ -9831,7 +9834,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
 
         if (pip->cmn.color_count > 0) {
             // update blend state
-            // FIXME: separate blend state per color attachment not support, needs GL4
+            // FIXME: separate blend state per color attachment
             const sg_blend_state* state_bs = &pip->gl.blend;
             sg_blend_state* cache_bs = &_sg.gl.cache.blend;
             if (state_bs->enabled != cache_bs->enabled) {
@@ -10045,12 +10048,17 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_t* bnd) {
                 (attr->size != cache_attr->gl_attr.size) ||
                 (attr->type != cache_attr->gl_attr.type) ||
                 (attr->normalized != cache_attr->gl_attr.normalized) ||
+                (attr->base_type != cache_attr->gl_attr.base_type) ||
                 (attr->stride != cache_attr->gl_attr.stride) ||
                 (vb_offset != cache_attr->gl_attr.offset) ||
                 (cache_attr->gl_attr.divisor != attr->divisor))
             {
                 _sg_gl_cache_bind_buffer(GL_ARRAY_BUFFER, gl_vb);
-                glVertexAttribPointer(attr_index, attr->size, attr->type, attr->normalized, attr->stride, (const GLvoid*)(GLintptr)vb_offset);
+                if (attr->base_type == SG_SHADERATTRBASETYPE_FLOAT) {
+                    glVertexAttribPointer(attr_index, attr->size, attr->type, attr->normalized, attr->stride, (const GLvoid*)(GLintptr)vb_offset);
+                } else {
+                    glVertexAttribIPointer(attr_index, attr->size, attr->type, attr->stride, (const GLvoid*)(GLintptr)vb_offset);
+                }
                 _sg_stats_add(gl.num_vertex_attrib_pointer, 1);
                 glVertexAttribDivisor(attr_index, (GLuint)attr->divisor);
                 _sg_stats_add(gl.num_vertex_attrib_divisor, 1);
