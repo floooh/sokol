@@ -326,15 +326,6 @@ SOKOL_API_IMPL void slog_func(const char* tag, uint32_t log_level, uint32_t log_
         __android_log_write(prio, "SOKOL", line_buf);
     #elif defined(_SLOG_EMSCRIPTEN)
         slog_js_log(log_level, line_buf);
-    #elif defined(_SLOG_LINUX) || defined(_SLOG_APPLE)
-        int prio;
-        switch (log_level) {
-            case 0: prio = LOG_CRIT; break;
-            case 1: prio = LOG_ERR; break;
-            case 2: prio = LOG_WARNING; break;
-            default: prio = LOG_INFO; break;
-        }
-        syslog(prio, "%s", line_buf);
     #endif
     if (0 == log_level) {
         abort();
