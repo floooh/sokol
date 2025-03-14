@@ -3317,7 +3317,7 @@ typedef struct sg_shader_function {
 } sg_shader_function;
 
 typedef enum sg_shader_attr_base_type {
-    _SG_SHADERATTRBASETYPE_DEFAULT, // default: FLOAT
+    SG_SHADERATTRBASETYPE_UNDEFINED,
     SG_SHADERATTRBASETYPE_FLOAT,
     SG_SHADERATTRBASETYPE_SINT,
     SG_SHADERATTRBASETYPE_UINT,
@@ -3325,7 +3325,7 @@ typedef enum sg_shader_attr_base_type {
 } sg_shader_attr_base_type;
 
 typedef struct sg_shader_vertex_attr {
-    sg_shader_attr_base_type base_type;  // default: FLOAT (only used for validation)
+    sg_shader_attr_base_type base_type;  // default: UNDEFINED (disables validation)
     const char* glsl_name;      // [optional] GLSL attribute name
     const char* hlsl_sem_name;  // HLSL semantic name
     uint8_t hlsl_sem_index;     // HLSL semantic index
@@ -6670,6 +6670,53 @@ _SOKOL_PRIVATE int _sg_vertexformat_bytesize(sg_vertex_format fmt) {
     }
 }
 
+_SOKOL_PRIVATE const char* _sg_vertexformat_to_string(sg_vertex_format fmt) {
+    switch (fmt) {
+        case SG_VERTEXFORMAT_FLOAT:     return "FLOAT";
+        case SG_VERTEXFORMAT_FLOAT2:    return "FLOAT2";
+        case SG_VERTEXFORMAT_FLOAT3:    return "FLOAT3";
+        case SG_VERTEXFORMAT_FLOAT4:    return "FLOAT4";
+        case SG_VERTEXFORMAT_INT:       return "INT";
+        case SG_VERTEXFORMAT_INT2:      return "INT2";
+        case SG_VERTEXFORMAT_INT3:      return "INT3";
+        case SG_VERTEXFORMAT_INT4:      return "INT4";
+        case SG_VERTEXFORMAT_UINT:      return "UINT";
+        case SG_VERTEXFORMAT_UINT2:     return "UINT2";
+        case SG_VERTEXFORMAT_UINT3:     return "UINT3";
+        case SG_VERTEXFORMAT_UINT4:     return "UINT4";
+        case SG_VERTEXFORMAT_BYTE4:     return "BYTE4";
+        case SG_VERTEXFORMAT_BYTE4N:    return "BYTE4N";
+        case SG_VERTEXFORMAT_UBYTE4:    return "UBYTE4";
+        case SG_VERTEXFORMAT_UBYTE4N:   return "UBYTE4N";
+        case SG_VERTEXFORMAT_SHORT2:    return "SHORT4";
+        case SG_VERTEXFORMAT_SHORT2N:   return "SHORT2N";
+        case SG_VERTEXFORMAT_USHORT2:   return "USHORT2";
+        case SG_VERTEXFORMAT_USHORT2N:  return "USHORT2N";
+        case SG_VERTEXFORMAT_SHORT4:    return "SHORT4";
+        case SG_VERTEXFORMAT_SHORT4N:   return "SHORT4N";
+        case SG_VERTEXFORMAT_USHORT4:   return "USHORT4";
+        case SG_VERTEXFORMAT_USHORT4N:  return "USHORT4N";
+        case SG_VERTEXFORMAT_UINT10_N2: return "UINT10_N2";
+        case SG_VERTEXFORMAT_HALF2:     return "HALF2";
+        case SG_VERTEXFORMAT_HALF4:     return "HALF4";
+        default:
+            SOKOL_UNREACHABLE;
+            return "INVALID";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_shaderattrbasetype_to_string(sg_shader_attr_base_type b) {
+    switch (b) {
+        case SG_SHADERATTRBASETYPE_UNDEFINED:   return "UNDEFINED";
+        case SG_SHADERATTRBASETYPE_FLOAT:       return "FLOAT";
+        case SG_SHADERATTRBASETYPE_SINT:        return "SINT";
+        case SG_SHADERATTRBASETYPE_UINT:        return "UINT";
+        default:
+            SOKOL_UNREACHABLE;
+            return "INVALID";
+    }
+}
+
 _SOKOL_PRIVATE sg_shader_attr_base_type _sg_vertexformat_basetype(sg_vertex_format fmt) {
     switch (fmt) {
         case SG_VERTEXFORMAT_FLOAT:
@@ -6704,7 +6751,7 @@ _SOKOL_PRIVATE sg_shader_attr_base_type _sg_vertexformat_basetype(sg_vertex_form
             return SG_SHADERATTRBASETYPE_UINT;
         default:
             SOKOL_UNREACHABLE;
-            return SG_SHADERATTRBASETYPE_FLOAT;
+            return SG_SHADERATTRBASETYPE_UNDEFINED;
     }
 }
 
@@ -18202,8 +18249,16 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
                     }
                     _SG_VALIDATE(attrs_cont, VALIDATE_PIPELINEDESC_NO_CONT_ATTRS);
                     SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
-                    // vertex format must match expected shader attribute base type
-                    _SG_VALIDATE(_sg_vertexformat_basetype(a_state->format) == shd->cmn.attrs[attr_index].base_type, VALIDATE_PIPELINEDESC_ATTR_BASETYPE_MISMATCH);
+                    // vertex format must match expected shader attribute base type (if provided)
+                    if (shd->cmn.attrs[attr_index].base_type != SG_SHADERATTRBASETYPE_UNDEFINED) {
+                        if (_sg_vertexformat_basetype(a_state->format) != shd->cmn.attrs[attr_index].base_type) {
+                            _SG_VALIDATE(false, VALIDATE_PIPELINEDESC_ATTR_BASETYPE_MISMATCH);
+                            _SG_LOGMSG(VALIDATE_PIPELINEDESC_ATTR_BASETYPE_MISMATCH, "attr format:");
+                            _SG_LOGMSG(VALIDATE_PIPELINEDESC_ATTR_BASETYPE_MISMATCH, _sg_vertexformat_to_string(a_state->format));
+                            _SG_LOGMSG(VALIDATE_PIPELINEDESC_ATTR_BASETYPE_MISMATCH, "shader attr base type:");
+                            _SG_LOGMSG(VALIDATE_PIPELINEDESC_ATTR_BASETYPE_MISMATCH, _sg_shaderattrbasetype_to_string(shd->cmn.attrs[attr_index].base_type));
+                        }
+                    }
                     #if defined(SOKOL_D3D11)
                     // on D3D11, semantic names (and semantic indices) must be provided
                     _SG_VALIDATE(!_sg_strempty(&shd->d3d11.attrs[attr_index].sem_name), VALIDATE_PIPELINEDESC_ATTR_SEMANTICS);
@@ -18892,10 +18947,6 @@ _SOKOL_PRIVATE sg_shader_desc _sg_shader_desc_defaults(const sg_shader_desc* des
     #endif
     def.mtl_threads_per_threadgroup.y = _sg_def(desc->mtl_threads_per_threadgroup.y, 1);
     def.mtl_threads_per_threadgroup.z = _sg_def(desc->mtl_threads_per_threadgroup.z, 1);
-    for (size_t attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
-        sg_shader_vertex_attr* attr = &def.attrs[attr_index];
-        attr->base_type = _sg_def(attr->base_type, SG_SHADERATTRBASETYPE_FLOAT);
-    }
     for (size_t ub_index = 0; ub_index < SG_MAX_UNIFORMBLOCK_BINDSLOTS; ub_index++) {
         sg_shader_uniform_block* ub_desc = &def.uniform_blocks[ub_index];
         if (ub_desc->stage != SG_SHADERSTAGE_NONE) {
