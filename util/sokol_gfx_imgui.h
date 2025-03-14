@@ -1499,6 +1499,16 @@ _SOKOL_PRIVATE const char* _sgimgui_shaderstage_string(sg_shader_stage stage) {
     }
 }
 
+_SOKOL_PRIVATE const char* _sgimgui_shaderattrbasetype_string(sg_shader_attr_base_type b) {
+    switch (b) {
+        case SG_SHADERATTRBASETYPE_UNDEFINED:   return "SG_SHADERATTRBASETYPE_UNDEFINED";
+        case SG_SHADERATTRBASETYPE_FLOAT:       return "SG_SHADERATTRBASETYPE_FLOAT";
+        case SG_SHADERATTRBASETYPE_SINT:        return "SG_SHADERATTRBASETYPE_SINT";
+        case SG_SHADERATTRBASETYPE_UINT:        return "SG_SHADERATTRBASETYPE_UINT";
+        default:                                return "???";
+    }
+}
+
 _SOKOL_PRIVATE const char* _sgimgui_bool_string(bool b) {
     return b ? "true" : "false";
 }
@@ -3507,11 +3517,18 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
             if (igTreeNode("Attrs")) {
                 for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
                     const sg_shader_vertex_attr* a_desc = &shd_ui->desc.attrs[i];
-                    if (a_desc->glsl_name || a_desc->hlsl_sem_name) {
+                    if ((a_desc->base_type != SG_SHADERATTRBASETYPE_UNDEFINED) || a_desc->glsl_name || a_desc->hlsl_sem_name) {
                         igText("#%d:", i);
-                        igText("  Name:         %s", a_desc->glsl_name ? a_desc->glsl_name : "---");
-                        igText("  Sem Name:     %s", a_desc->hlsl_sem_name ? a_desc->hlsl_sem_name : "---");
-                        igText("  Sem Index:    %d", a_desc->hlsl_sem_index);
+                        if (a_desc->base_type != SG_SHADERATTRBASETYPE_UNDEFINED) {
+                            igText("  Base Type: %s", _sgimgui_shaderattrbasetype_string(a_desc->base_type));
+                        }
+                        if (a_desc->glsl_name) {
+                            igText("  GLSL Name: %s", a_desc->glsl_name);
+                        }
+                        if (a_desc->hlsl_sem_name) {
+                            igText("  HLSL Sem Name:  %s", a_desc->hlsl_sem_name);
+                            igText("  HLSL Sem Index: %d", a_desc->hlsl_sem_index);
+                        }
                     }
                 }
                 igTreePop();
