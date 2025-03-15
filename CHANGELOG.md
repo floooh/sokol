@@ -65,6 +65,12 @@ Related PR: https://github.com/floooh/sokol/pull/1222
 
 Related sokol-shdc PR: https://github.com/floooh/sokol-tools/pull/176
 
+And a minor unrelated change:
+
+- sokol_log.h no longer does redundant syslog calls on Linux and macOS,
+  instead logging only happens to stderr. This removes 'double log entries'
+  in the debugger output in some IDEs (like XCode)
+
 ### 09-Mar-2025
 
 A couple of D3D11 specific regression fixes in the compute shader update that
