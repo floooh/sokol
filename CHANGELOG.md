@@ -63,6 +63,8 @@ Related tickets: https://github.com/floooh/sokol/issues/1213 and https://github.
 
 Related PR: https://github.com/floooh/sokol/pull/1222
 
+Related sokol-shdc PR: https://github.com/floooh/sokol-tools/pull/176
+
 ### 09-Mar-2025
 
 A couple of D3D11 specific regression fixes in the compute shader update that
