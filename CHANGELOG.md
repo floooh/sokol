@@ -13,8 +13,8 @@ of issues that were left-overs from the GLES2/WebGL1 removal:
 
 This completes the list of vertex formats to the same state as supported
 by WebGPU with the exception of formats where the size isn't a multiple of 4
-(those don't make a lot of sense since vertex components must be
-4-byte aligned anyway).
+(this simplifies the vertex component alignment rules by generally requiring
+a 4-byte alignment).
 
 The mapping of packed non-normalized vertex formats (e.g. UBYTE4) to shader
 input vertex attribute types is now consistent across all platforms and
