@@ -1344,17 +1344,29 @@ _SOKOL_PRIVATE const char* _sgimgui_vertexformat_string(sg_vertex_format f) {
         case SG_VERTEXFORMAT_FLOAT2:    return "SG_VERTEXFORMAT_FLOAT2";
         case SG_VERTEXFORMAT_FLOAT3:    return "SG_VERTEXFORMAT_FLOAT3";
         case SG_VERTEXFORMAT_FLOAT4:    return "SG_VERTEXFORMAT_FLOAT4";
+        case SG_VERTEXFORMAT_INT:       return "SG_VERTEXFORMAT_INT";
+        case SG_VERTEXFORMAT_INT2:      return "SG_VERTEXFORMAT_INT2";
+        case SG_VERTEXFORMAT_INT3:      return "SG_VERTEXFORMAT_INT3";
+        case SG_VERTEXFORMAT_INT4:      return "SG_VERTEXFORMAT_INT4";
+        case SG_VERTEXFORMAT_UINT:      return "SG_VERTEXFORMAT_UINT";
+        case SG_VERTEXFORMAT_UINT2:     return "SG_VERTEXFORMAT_UINT2";
+        case SG_VERTEXFORMAT_UINT3:     return "SG_VERTEXFORMAT_UINT3";
+        case SG_VERTEXFORMAT_UINT4:     return "SG_VERTEXFORMAT_UINT4";
         case SG_VERTEXFORMAT_BYTE4:     return "SG_VERTEXFORMAT_BYTE4";
         case SG_VERTEXFORMAT_BYTE4N:    return "SG_VERTEXFORMAT_BYTE4N";
         case SG_VERTEXFORMAT_UBYTE4:    return "SG_VERTEXFORMAT_UBYTE4";
         case SG_VERTEXFORMAT_UBYTE4N:   return "SG_VERTEXFORMAT_UBYTE4N";
         case SG_VERTEXFORMAT_SHORT2:    return "SG_VERTEXFORMAT_SHORT2";
         case SG_VERTEXFORMAT_SHORT2N:   return "SG_VERTEXFORMAT_SHORT2N";
+        case SG_VERTEXFORMAT_USHORT2:   return "SG_VERTEXFORMAT_USHORT2";
         case SG_VERTEXFORMAT_USHORT2N:  return "SG_VERTEXFORMAT_USHORT2N";
         case SG_VERTEXFORMAT_SHORT4:    return "SG_VERTEXFORMAT_SHORT4";
         case SG_VERTEXFORMAT_SHORT4N:   return "SG_VERTEXFORMAT_SHORT4N";
+        case SG_VERTEXFORMAT_USHORT4:   return "SG_VERTEXFORMAT_USHORT4";
         case SG_VERTEXFORMAT_USHORT4N:  return "SG_VERTEXFORMAT_USHORT4N";
         case SG_VERTEXFORMAT_UINT10_N2: return "SG_VERTEXFORMAT_UINT10_N2";
+        case SG_VERTEXFORMAT_HALF2:     return "SG_VERTEXFORMAT_HALF2";
+        case SG_VERTEXFORMAT_HALF4:     return "SG_VERTEXFORMAT_HALF4";
         default:                        return "???";
     }
 }
@@ -1484,6 +1496,16 @@ _SOKOL_PRIVATE const char* _sgimgui_shaderstage_string(sg_shader_stage stage) {
         case SG_SHADERSTAGE_FRAGMENT:   return "SG_SHADERSTAGE_FRAGMENT";
         case SG_SHADERSTAGE_COMPUTE:    return "SG_SHADERSTAGE_COMPUTE";
         default:                        return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sgimgui_shaderattrbasetype_string(sg_shader_attr_base_type b) {
+    switch (b) {
+        case SG_SHADERATTRBASETYPE_UNDEFINED:   return "SG_SHADERATTRBASETYPE_UNDEFINED";
+        case SG_SHADERATTRBASETYPE_FLOAT:       return "SG_SHADERATTRBASETYPE_FLOAT";
+        case SG_SHADERATTRBASETYPE_SINT:        return "SG_SHADERATTRBASETYPE_SINT";
+        case SG_SHADERATTRBASETYPE_UINT:        return "SG_SHADERATTRBASETYPE_UINT";
+        default:                                return "???";
     }
 }
 
@@ -3495,11 +3517,18 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
             if (igTreeNode("Attrs")) {
                 for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
                     const sg_shader_vertex_attr* a_desc = &shd_ui->desc.attrs[i];
-                    if (a_desc->glsl_name || a_desc->hlsl_sem_name) {
+                    if ((a_desc->base_type != SG_SHADERATTRBASETYPE_UNDEFINED) || a_desc->glsl_name || a_desc->hlsl_sem_name) {
                         igText("#%d:", i);
-                        igText("  Name:         %s", a_desc->glsl_name ? a_desc->glsl_name : "---");
-                        igText("  Sem Name:     %s", a_desc->hlsl_sem_name ? a_desc->hlsl_sem_name : "---");
-                        igText("  Sem Index:    %d", a_desc->hlsl_sem_index);
+                        if (a_desc->base_type != SG_SHADERATTRBASETYPE_UNDEFINED) {
+                            igText("  Base Type: %s", _sgimgui_shaderattrbasetype_string(a_desc->base_type));
+                        }
+                        if (a_desc->glsl_name) {
+                            igText("  GLSL Name: %s", a_desc->glsl_name);
+                        }
+                        if (a_desc->hlsl_sem_name) {
+                            igText("  HLSL Sem Name:  %s", a_desc->hlsl_sem_name);
+                            igText("  HLSL Sem Index: %d", a_desc->hlsl_sem_index);
+                        }
                     }
                 }
                 igTreePop();
