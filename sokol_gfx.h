@@ -89,10 +89,10 @@
             sg_setup(const sg_desc*)
 
         Depending on the selected 3D backend, sokol-gfx requires some
-        information, like a device pointer, default swapchain pixel formats
-        and so on. If you are using sokol_app.h for the window system
-        glue, you can use a helper function provided in the sokol_glue.h
-        header:
+        information about its runtime environment, like a GPU device pointer,
+        default swapchain pixel formats and so on. If you are using sokol_app.h
+        for the window system glue, you can use a helper function provided in
+        the sokol_glue.h header:
 
             #include "sokol_gfx.h"
             #include "sokol_app.h"
@@ -134,8 +134,8 @@
 
         ...where .action is an sg_pass_action struct containing actions to be performed
         at the start and end of a render pass (such as clearing the render surfaces to
-        a specific color), and .swapchain is an sg_swapchain
-        struct all the required information to render into the swapchain's surfaces.
+        a specific color), and .swapchain is an sg_swapchain struct with all the required
+        information to render into the swapchain's surfaces.
 
         To start an 'offscreen render pass' into sokol-gfx image objects, an sg_attachment
         object handle is required instead of an sg_swapchain struct. An offscreen
@@ -238,11 +238,11 @@
             sg_update_image(sg_image img, const sg_image_data* data)
 
         Buffers and images to be updated must have been created with
-        SG_USAGE_DYNAMIC or SG_USAGE_STREAM
+        SG_USAGE_DYNAMIC or SG_USAGE_STREAM.
 
         Only one update per frame is allowed for buffer and image resources when
         using the sg_update_*() functions. The rationale is to have a simple
-        countermeasure to avoid the CPU scribbling over data the GPU is currently
+        protection from the CPU scribbling over data the GPU is currently
         using, or the CPU having to wait for the GPU
 
         Buffer and image updates can be partial, as long as a rendering
@@ -416,6 +416,7 @@
                   per uniform update (this worst-case alignment is 256 bytes)
                 - the max size of all dynamic resource updates (sg_update_buffer,
                   sg_append_buffer and sg_update_image) per frame
+                - the max number of compute-dispatch calls in a compute pass
             Not all of those limit values are used by all backends, but it is
             good practice to provide them none-the-less.
 
@@ -827,11 +828,15 @@
             - an entry function name (only on D3D11 or Metal, but not OpenGL)
             - on D3D11 only, a compilation target (default is "vs_4_0" and "ps_4_0")
 
-    - Depending on backend, information about the input vertex attributes used by the
-      vertex shader:
-        - Metal: no information needed since vertex attributes are always bound
+    - Information about the input vertex attributes used by the vertex shader,
+      most of that backend-specific:
+        - An optional 'base type' (float, signed-/unsigned-int) for each vertex
+          attribute. When provided, this used by the validation layer to check
+          that the CPU-side input vertex format is compatible with the input
+          vertex declaration of the vertex shader.
+        - Metal: no location information needed since vertex attributes are always bound
           by their attribute location defined in the shader via '[[attribute(N)]]'
-        - WebGPU: no information needed since vertex attributes are always
+        - WebGPU: no location information needed since vertex attributes are always
           bound by their attribute location defined in the shader via `@location(N)`
         - GLSL: vertex attribute names can be optionally provided, in that case their
           location will be looked up by name, otherwise, the vertex attribute location
@@ -1016,6 +1021,46 @@
     sg_shader_desc struct.
 
 
+    ON VERTEX FORMATS
+    =================
+    Sokol-gfx implements the same strict mapping rules from CPU-side
+    vertex component formats to GPU-side vertex input data types:
+
+    - float and packed normalized CPU-side formats must be used as
+      floating point base type in the vertex shader
+    - packed signed-integer CPU-side formats must be used as signed
+      integer base type in the vertex shader
+    - packed unsigned-integer CPU-side formats must be used as unsigned
+      integer base type in the vertex shader
+
+    These mapping rules are enforced by the sokol-gfx validation layer,
+    but only when sufficient reflection information is provided in
+    `sg_shader_desc.attrs[].base_type`. This is the case when sokol-shdc
+    is used, otherwise the default base_type will be SG_SHADERATTRBASETYPE_UNDEFINED
+    which causes the sokol-gfx validation check to be skipped (of course you
+    can also provide the per-attribute base type information manually when
+    not using sokol-shdc).
+
+    The detailed mapping rules from SG_VERTEXFORMAT_* to GLSL data types
+    are as follows:
+
+    - FLOAT[*] => float, vec*
+    - BYTE4N => vec* (scaled to -1.0 .. +1.0)
+    - UBYTE4N => vec* (scaled to 0.0 .. +1.0)
+    - SHORT[*]N => vec* (scaled to -1.0 .. +1.0)
+    - USHORT[*]N => vec* (scaled to 0.0 .. +1.0)
+    - INT[*] => int, ivec*
+    - UINT[*] => uint, uvec*
+    - BYTE4 => int*
+    - UBYTE4 => uint*
+    - SHORT[*] => int*
+    - USHORT[*] => uint*
+
+    NOTE that sokol-gfx only provides vertex formats with sizes of a multiple
+    of 4 (e.g. BYTE4N but not BYTE2N). This is because vertex components must
+    be 4-byte aligned anyway.
+
+
     UNIFORM DATA LAYOUT:
     ====================
     NOTE: if you use the sokol-shdc shader compiler tool, you don't need to worry
@@ -1123,6 +1168,7 @@
 
     The by far easiest way to tackle the common uniform block layout problem is
     to use the sokol-shdc shader cross-compiler tool!
+
 
     ON STORAGE BUFFERS
     ==================
@@ -1287,6 +1333,7 @@
 
               `@group(1) @binding(0..127)
 
+
     TRACE HOOKS:
     ============
     sokol_gfx.h optionally allows to install "trace hook" callbacks for
@@ -1315,54 +1362,6 @@
     As an example of how trace hooks are used, have a look at the
     imgui/sokol_gfx_imgui.h header which implements a realtime
     debugging UI for sokol_gfx.h on top of Dear ImGui.
-
-
-    A NOTE ON PORTABLE PACKED VERTEX FORMATS:
-    =========================================
-    There are two things to consider when using packed
-    vertex formats like UBYTE4, SHORT2, etc which need to work
-    across all backends:
-
-    - D3D11 can only convert *normalized* vertex formats to
-      floating point during vertex fetch, normalized formats
-      have a trailing 'N', and are "normalized" to a range
-      -1.0..+1.0 (for the signed formats) or 0.0..1.0 (for the
-      unsigned formats):
-
-        - SG_VERTEXFORMAT_BYTE4N
-        - SG_VERTEXFORMAT_UBYTE4N
-        - SG_VERTEXFORMAT_SHORT2N
-        - SG_VERTEXFORMAT_USHORT2N
-        - SG_VERTEXFORMAT_SHORT4N
-        - SG_VERTEXFORMAT_USHORT4N
-
-      D3D11 will not convert *non-normalized* vertex formats to floating point
-      vertex shader inputs, those can only be uses with the *ivecn* vertex shader
-      input types when D3D11 is used as backend (GL and Metal can use both formats)
-
-        - SG_VERTEXFORMAT_BYTE4,
-        - SG_VERTEXFORMAT_UBYTE4
-        - SG_VERTEXFORMAT_SHORT2
-        - SG_VERTEXFORMAT_SHORT4
-
-    For a vertex input layout which works on all platforms, only use the following
-    vertex formats, and if needed "expand" the normalized vertex shader
-    inputs in the vertex shader by multiplying with 127.0, 255.0, 32767.0 or
-    65535.0:
-
-        - SG_VERTEXFORMAT_FLOAT,
-        - SG_VERTEXFORMAT_FLOAT2,
-        - SG_VERTEXFORMAT_FLOAT3,
-        - SG_VERTEXFORMAT_FLOAT4,
-        - SG_VERTEXFORMAT_BYTE4N,
-        - SG_VERTEXFORMAT_UBYTE4N,
-        - SG_VERTEXFORMAT_SHORT2N,
-        - SG_VERTEXFORMAT_USHORT2N
-        - SG_VERTEXFORMAT_SHORT4N,
-        - SG_VERTEXFORMAT_USHORT4N
-        - SG_VERTEXFORMAT_UINT10_N2
-        - SG_VERTEXFORMAT_HALF2
-        - SG_VERTEXFORMAT_HALF4
 
 
     MEMORY ALLOCATION OVERRIDE
@@ -1659,9 +1658,9 @@
       must be used:
 
       All uniform block structs must use `@group(0)` and bindings in the
-      range 0..127:
+      range 0..15
 
-        @group(0) @binding(0..7)
+        @group(0) @binding(0..15)
 
       All textures, samplers and storage buffers must use `@group(1)` and
       bindings must be in the range 0..127:
@@ -1712,17 +1711,14 @@
       workaround sokol_gfx.h will clip incoming viewport rectangles against
       the framebuffer, but this will distort the clipspace-to-screenspace mapping.
       There's no proper way to handle this inside sokol_gfx.h, this must be fixed
-      in a future WebGPU update.
+      in a future WebGPU update (see: https://github.com/gpuweb/gpuweb/issues/373
+      and https://github.com/gpuweb/gpuweb/pull/5025)
 
     - The sokol shader compiler generally adds `diagnostic(off, derivative_uniformity);`
       into the WGSL output. Currently only the Chrome WebGPU implementation seems
       to recognize this.
 
-    - The vertex format SG_VERTEXFORMAT_UINT10_N2 is currently not supported because
-      WebGPU lacks a matching vertex format (this is currently being worked on though,
-      as soon as the vertex format shows up in webgpu.h, sokol_gfx.h will add support.
-
-    - Likewise, the following sokol-gfx vertex formats are not supported in WebGPU:
+    - Likewise, the following sokol-gfx pixel formats are not supported in WebGPU:
       R16, R16SN, RG16, RG16SN, RGBA16, RGBA16SN.
       Unlike unsupported vertex formats, unsupported pixel formats can be queried
       in cross-backend code via sg_query_pixel_format() though.
@@ -2082,7 +2078,7 @@ typedef enum sg_resource_state {
     and images:
 
     SG_USAGE_IMMUTABLE:     the resource will never be updated with
-                            new data, instead the content of the
+                            new (CPU-side) data, instead the content of the
                             resource must be provided on creation
     SG_USAGE_DYNAMIC:       the resource will be updated infrequently
                             with new data (this could range from "once
@@ -2336,7 +2332,11 @@ typedef enum sg_border_color {
     sg_vertex_format
 
     The data type of a vertex component. This is used to describe
-    the layout of vertex data when creating a pipeline object.
+    the layout of input vertex data when creating a pipeline object.
+
+    NOTE that specific mapping rules exist from the CPU-side vertex
+    formats to the vertex attribute base type in the vertex shader code
+    (see doc header section 'ON VERTEX FORMATS').
 */
 typedef enum sg_vertex_format {
     SG_VERTEXFORMAT_INVALID,
@@ -3203,9 +3203,11 @@ typedef struct sg_sampler_desc {
           (the default is "cs_5_0")
 
     - vertex attributes required by some backends (not for compute shaders):
-        - the vertex attribute base type (float, signed int, unsigned int),
-          this is checked against the pipeline object's vertex formats
-          in the validation layer
+        - the vertex attribute base type (undefined, float, signed int, unsigned int),
+          this information is only used in the validation layer to check that the
+          pipeline object vertex formats are compatible with the input vertex attribute
+          type used in the vertex shader. NOTE that the default base type
+          'undefined' skips the validation layer check.
         - for the GL backend: optional vertex attribute names used for name lookup
         - for the D3D11 backend: semantic names and indices
 
@@ -4492,7 +4494,7 @@ SOKOL_GFX_API_DECL int sg_append_buffer(sg_buffer buf, const sg_range* data);
 SOKOL_GFX_API_DECL bool sg_query_buffer_overflow(sg_buffer buf);
 SOKOL_GFX_API_DECL bool sg_query_buffer_will_overflow(sg_buffer buf, size_t size);
 
-// rendering functions
+// render and compute functions
 SOKOL_GFX_API_DECL void sg_begin_pass(const sg_pass* pass);
 SOKOL_GFX_API_DECL void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left);
 SOKOL_GFX_API_DECL void sg_apply_viewportf(float x, float y, float width, float height, bool origin_top_left);
