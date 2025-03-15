@@ -6690,7 +6690,7 @@ _SOKOL_PRIVATE const char* _sg_vertexformat_to_string(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_BYTE4N:    return "BYTE4N";
         case SG_VERTEXFORMAT_UBYTE4:    return "UBYTE4";
         case SG_VERTEXFORMAT_UBYTE4N:   return "UBYTE4N";
-        case SG_VERTEXFORMAT_SHORT2:    return "SHORT4";
+        case SG_VERTEXFORMAT_SHORT2:    return "SHORT2";
         case SG_VERTEXFORMAT_SHORT2N:   return "SHORT2N";
         case SG_VERTEXFORMAT_USHORT2:   return "USHORT2";
         case SG_VERTEXFORMAT_USHORT2N:  return "USHORT2N";
