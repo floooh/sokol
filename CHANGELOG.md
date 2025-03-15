@@ -20,9 +20,9 @@ The mapping of packed non-normalized vertex formats (e.g. UBYTE4) to shader
 input vertex attribute types is now consistent across all platforms and
 matches WebGPU's strict vertex attribute type mapping rules:
 
-- unsigned integer vertex formats (UBYTE*, USHORT*, UINT*) must
+- non-normalized unsigned integer vertex formats (UBYTE*, USHORT*, UINT*) must
   be used as unsigned-integer types on the vertex shader side (uint, uvec*)
-- signed integer vertex formats (BYTE*, SHORT*, INT*) must be used as
+- non-normalized signed integer vertex formats (BYTE*, SHORT*, INT*) must be used as
   signed-integer types on the vertex shader side (int, ivec*)
 - ...all other types must be used as float types on the vertex shader side (float, vec*)
 
