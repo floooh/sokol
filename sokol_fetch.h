@@ -1403,8 +1403,7 @@ static void _sfetch_log(sfetch_log_item_t log_item, uint32_t log_level, uint32_t
             const char* message = 0;
         #endif
         _sfetch->desc.logger.func("sfetch", log_level, log_item, message, line_nr, filename, _sfetch->desc.logger.user_data);
-    }
-    else {
+    } else {
         // for log level PANIC it would be 'undefined behaviour' to continue
         if (log_level == 0) {
             abort();
@@ -1469,8 +1468,7 @@ _SOKOL_PRIVATE void _sfetch_path_copy(_sfetch_path_t* dst, const char* src) {
         strncpy(dst->buf, src, SFETCH_MAX_PATH);
         #endif
         dst->buf[SFETCH_MAX_PATH-1] = 0;
-    }
-    else {
+    } else {
         _sfetch_clear(dst->buf, SFETCH_MAX_PATH);
     }
 }
@@ -1514,8 +1512,7 @@ _SOKOL_PRIVATE bool _sfetch_ring_init(_sfetch_ring_t* rb, uint32_t num_slots) {
     rb->buf = (uint32_t*) _sfetch_malloc_clear(queue_size);
     if (rb->buf) {
         return true;
-    }
-    else {
+    } else {
         _sfetch_ring_discard(rb);
         return false;
     }
@@ -1536,8 +1533,7 @@ _SOKOL_PRIVATE uint32_t _sfetch_ring_count(const _sfetch_ring_t* rb) {
     uint32_t count;
     if (rb->head >= rb->tail) {
         count = rb->head - rb->tail;
-    }
-    else {
+    } else {
         count = (rb->head + rb->num) - rb->tail;
     }
     SOKOL_ASSERT(count < rb->num);
@@ -1659,8 +1655,7 @@ _SOKOL_PRIVATE bool _sfetch_pool_init(_sfetch_pool_t* pool, uint32_t num_items) 
             pool->free_slots[pool->free_top++] = i;
         }
         pool->valid = true;
-    }
-    else {
+    } else {
         /* allocation error */
         _sfetch_pool_discard(pool);
     }
@@ -1676,8 +1671,7 @@ _SOKOL_PRIVATE uint32_t _sfetch_pool_item_alloc(_sfetch_pool_t* pool, const sfet
         _sfetch_item_init(&pool->items[slot_index], slot_id, request);
         pool->items[slot_index].state = _SFETCH_STATE_ALLOCATED;
         return slot_id;
-    }
-    else {
+    } else {
         /* pool exhausted, return the 'invalid handle' */
         return _sfetch_make_id(0, 0);
     }
@@ -1898,8 +1892,7 @@ _SOKOL_PRIVATE bool _sfetch_win32_utf8_to_wide(const char* src, wchar_t* dst, in
     if ((dst_needed > 0) && (dst_needed < dst_chars)) {
         MultiByteToWideChar(CP_UTF8, 0, src, -1, dst, dst_chars);
         return true;
-    }
-    else {
+    } else {
         /* input string doesn't fit into destination buffer */
         return false;
     }
@@ -1942,8 +1935,7 @@ _SOKOL_PRIVATE bool _sfetch_file_read(_sfetch_file_handle_t h, uint32_t offset, 
         DWORD bytes_read = 0;
         BOOL read_res = ReadFile(h, ptr, (DWORD)num_bytes, &bytes_read, NULL);
         return read_res && (bytes_read == num_bytes);
-    }
-    else {
+    } else {
         return false;
     }
 }
@@ -2105,8 +2097,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
         if ((buffer->ptr == 0) || (buffer->size == 0)) {
             thread->error_code = SFETCH_ERROR_NO_BUFFER;
             thread->failed = true;
-        }
-        else {
+        } else {
             /* open file if not happened yet */
             if (!_sfetch_file_handle_valid(thread->file_handle)) {
                 SOKOL_ASSERT(path->buf[0]);
@@ -2115,8 +2106,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
                 thread->file_handle = _sfetch_file_open(path);
                 if (_sfetch_file_handle_valid(thread->file_handle)) {
                     thread->content_size = _sfetch_file_size(thread->file_handle);
-                }
-                else {
+                } else {
                     thread->error_code = SFETCH_ERROR_FILE_NOT_FOUND;
                     thread->failed = true;
                 }
@@ -2129,22 +2119,19 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
                     if (thread->content_size <= buffer->size) {
                         bytes_to_read = thread->content_size;
                         read_offset = 0;
-                    }
-                    else {
+                    } else {
                         /* provided buffer to small to fit entire file */
                         thread->error_code = SFETCH_ERROR_BUFFER_TOO_SMALL;
                         thread->failed = true;
                     }
-                }
-                else {
+                } else {
                     if (chunk_size <= buffer->size) {
                         bytes_to_read = chunk_size;
                         read_offset = thread->fetched_offset;
                         if ((read_offset + bytes_to_read) > thread->content_size) {
                             bytes_to_read = thread->content_size - read_offset;
                         }
-                    }
-                    else {
+                    } else {
                         /* provided buffer to small to fit next chunk */
                         thread->error_code = SFETCH_ERROR_BUFFER_TOO_SMALL;
                         thread->failed = true;
@@ -2154,8 +2141,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
                     if (_sfetch_file_read(thread->file_handle, read_offset, bytes_to_read, (void*)buffer->ptr)) {
                         thread->fetched_size = bytes_to_read;
                         thread->fetched_offset += bytes_to_read;
-                    }
-                    else {
+                    } else {
                         thread->error_code = SFETCH_ERROR_UNEXPECTED_EOF;
                         thread->failed = true;
                     }
@@ -2257,8 +2243,7 @@ void _sfetch_emsc_send_get_request(uint32_t slot_id, _sfetch_item_t* item) {
     if ((item->buffer.ptr == 0) || (item->buffer.size == 0)) {
         item->thread.error_code = SFETCH_ERROR_NO_BUFFER;
         item->thread.failed = true;
-    }
-    else {
+    } else {
         uint32_t offset = 0;
         uint32_t bytes_to_read = 0;
         if (item->chunk_size > 0) {
@@ -2300,8 +2285,7 @@ EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_get_response(uint32_t slot_id, uint32_t r
             item->thread.http_range_offset += range_fetched_size;
             if (item->chunk_size == 0) {
                 item->thread.finished = true;
-            }
-            else if (item->thread.http_range_offset >= item->thread.content_size) {
+            } else if (item->thread.http_range_offset >= item->thread.content_size) {
                 item->thread.finished = true;
             }
             _sfetch_ring_enqueue(&ctx->chn[item->channel].user_outgoing, slot_id);
@@ -2317,8 +2301,7 @@ EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_failed_http_status(uint32_t slot_id, uint
         if (item) {
             if (http_status == 404) {
                 item->thread.error_code = SFETCH_ERROR_FILE_NOT_FOUND;
-            }
-            else {
+            } else {
                 item->thread.error_code = SFETCH_ERROR_INVALID_HTTP_STATUS;
             }
             item->thread.failed = true;
@@ -2369,15 +2352,13 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
                yet, need to send a HEAD request first
              */
             sfetch_js_send_head_request(slot_id, item->path.buf);
-        }
-        else {
+        } else {
             /* otherwise, this is either a request to load the entire file, or
                to load the next streaming chunk
              */
             _sfetch_emsc_send_get_request(slot_id, item);
         }
-    }
-    else {
+    } else {
         /* just move all other items (e.g. paused or cancelled)
            into the outgoing queue, so they won't get lost
         */
@@ -2429,8 +2410,7 @@ _SOKOL_PRIVATE bool _sfetch_channel_init(_sfetch_channel_t* chn, _sfetch_t* ctx,
         _sfetch_thread_init(&chn->thread, _sfetch_channel_thread_func, chn);
         #endif
         return true;
-    }
-    else {
+    } else {
         _sfetch_channel_discard(chn);
         return false;
     }
@@ -2444,8 +2424,7 @@ _SOKOL_PRIVATE bool _sfetch_channel_send(_sfetch_channel_t* chn, uint32_t slot_i
     if (!_sfetch_ring_full(&chn->user_sent)) {
         _sfetch_ring_enqueue(&chn->user_sent, slot_id);
         return true;
-    }
-    else {
+    } else {
         _SFETCH_ERROR(SEND_QUEUE_FULL);
         return false;
     }
@@ -2570,8 +2549,7 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         item->user.fetched_size = item->thread.fetched_size;
         if (item->user.cancel) {
             _sfetch_cancel_item(item);
-        }
-        else {
+        } else {
             item->user.error_code = item->thread.error_code;
         }
         if (item->thread.finished) {
@@ -2580,8 +2558,7 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         /* state transition */
         if (item->thread.failed) {
             item->state = _SFETCH_STATE_FAILED;
-        }
-        else if (item->state == _SFETCH_STATE_FETCHING) {
+        } else if (item->state == _SFETCH_STATE_FETCHING) {
             item->state = _SFETCH_STATE_FETCHED;
         }
         _sfetch_invoke_response_callback(item);
@@ -2592,8 +2569,7 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         if (item->user.finished) {
             _sfetch_ring_enqueue(&chn->free_lanes, item->lane);
             _sfetch_pool_item_free(pool, slot_id);
-        }
-        else {
+        } else {
             _sfetch_ring_enqueue(&chn->user_incoming, slot_id);
         }
     }
@@ -2791,8 +2767,7 @@ SOKOL_API_IMPL void* sfetch_unbind_buffer(sfetch_handle_t h) {
         item->buffer.ptr = 0;
         item->buffer.size = 0;
         return prev_buf_ptr;
-    }
-    else {
+    } else {
         return 0;
     }
 }
