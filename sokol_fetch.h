@@ -229,7 +229,7 @@
             path or HTTP URL. The string will be copied into an internal data
             structure, and passed "as is" (apart from any required
             encoding-conversions) to fopen(), CreateFileW() or
-            XMLHttpRequest. The maximum length of the string is defined by
+            the html fetch API call. The maximum length of the string is defined by
             the SFETCH_MAX_PATH configuration define, the default is 1024 bytes
             including the 0-terminator byte.
 
@@ -316,7 +316,7 @@
 
         - requests dispatched to a channel are either forwarded into that
         channel's worker thread (on native platforms), or cause an HTTP
-        request to be sent via an asynchronous XMLHttpRequest (on the web
+        request to be sent via an asynchronous fetch() call (on the web
         platform)
 
         - for all requests which have finished their current IO operation a
@@ -1049,7 +1049,8 @@ typedef enum sfetch_error_t {
     SFETCH_ERROR_BUFFER_TOO_SMALL,
     SFETCH_ERROR_UNEXPECTED_EOF,
     SFETCH_ERROR_INVALID_HTTP_STATUS,
-    SFETCH_ERROR_CANCELLED
+    SFETCH_ERROR_CANCELLED,
+    SFETCH_ERROR_JS_OTHER,          // check browser console for detailed error info
 } sfetch_error_t;
 
 /* the response struct passed to the response callback */
@@ -2199,51 +2200,53 @@ _SOKOL_PRIVATE void* _sfetch_channel_thread_func(void* arg) {
 #if _SFETCH_PLATFORM_EMSCRIPTEN
 EM_JS(void, sfetch_js_send_head_request, (uint32_t slot_id, const char* path_cstr), {
     const path_str = UTF8ToString(path_cstr);
-    const req = new XMLHttpRequest();
-    req.open('HEAD', path_str);
-    req.onreadystatechange = function() {
-        if (req.readyState == XMLHttpRequest.DONE) {
-            if (req.status == 200) {
-                const content_length = req.getResponseHeader('Content-Length');
-                __sfetch_emsc_head_response(slot_id, content_length);
+    fetch(path_str, { method: 'HEAD' }).then((response) => {
+        if (response.ok) {
+            const content_length = response.headers.get('Content-Length');
+            if (content_length === null) {
+                console.warn(`sokol_fetch.h: HEAD ${path_str} response has no Content-Length`);
+                __sfetch_emsc_failed_other(slot_id);
+            } else {
+                __sfetch_emsc_head_response(slot_id, Number(content_length));
             }
-            else {
-                __sfetch_emsc_failed_http_status(slot_id, req.status);
-            }
+        } else {
+            __sfetch_emsc_failed_http_status(slot_id, response.status);
         }
-    };
-    req.send();
+    }).catch((err) => {
+        console.error(`sokol_fetch.h: HEAD ${path_str} failed with: `, err);
+        __sfetch_emsc_failed_other(slot_id);
+    });
 })
 
 /* if bytes_to_read != 0, a range-request will be sent, otherwise a normal request */
 EM_JS(void, sfetch_js_send_get_request, (uint32_t slot_id, const char* path_cstr, uint32_t offset, uint32_t bytes_to_read, void* buf_ptr, uint32_t buf_size), {
     const path_str = UTF8ToString(path_cstr);
-    const req = new XMLHttpRequest();
-    req.open('GET', path_str);
-    req.responseType = 'arraybuffer';
-    const need_range_request = (bytes_to_read > 0);
-    if (need_range_request) {
-        req.setRequestHeader('Range', 'bytes='+offset+'-'+(offset+bytes_to_read-1));
+    const headers = new Headers();
+    const range_request = bytes_to_read > 0;
+    if (range_request) {
+        headers.append('Range', `bytes=${offset}-${offset+bytes_to_read-1}`);
     }
-    req.onreadystatechange = function() {
-        if (req.readyState == XMLHttpRequest.DONE) {
-            if ((req.status == 206) || ((req.status == 200) && !need_range_request)) {
-                const u8_array = new Uint8Array(\x2F\x2A\x2A @type {!ArrayBuffer} \x2A\x2F (req.response));
-                const content_fetched_size = u8_array.length;
-                if (content_fetched_size <= buf_size) {
-                    HEAPU8.set(u8_array, buf_ptr);
-                    __sfetch_emsc_get_response(slot_id, bytes_to_read, content_fetched_size);
-                }
-                else {
+    fetch(path_str, { method: 'GET', headers }).then((response) => {
+        if (response.ok) {
+            response.arrayBuffer().then((data) => {
+                const u8_data = new Uint8Array(data);
+                if (u8_data.length <= buf_size) {
+                    HEAPU8.set(u8_data, buf_ptr);
+                    __sfetch_emsc_get_response(slot_id, bytes_to_read, u8_data.length);
+                } else {
                     __sfetch_emsc_failed_buffer_too_small(slot_id);
                 }
-            }
-            else {
-                __sfetch_emsc_failed_http_status(slot_id, req.status);
-            }
+            }).catch((err) => {
+                console.error(`sokol_fetch.h: GET ${path_str} failed with: `, err);
+                __sfetch_emsc_failed_other(slot_id);
+            });
+        } else {
+            __sfetch_emsc_failed_http_status(slot_id, response.status);
         }
-    };
-    req.send();
+    }).catch((err) => {
+        console.error(`sokol_fetch.h: GET ${path_str} failed with: `, err);
+        __sfetch_emsc_failed_other(slot_id);
+    });
 })
 
 /*=== emscripten specific C helper functions =================================*/
@@ -2331,6 +2334,19 @@ EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_failed_buffer_too_small(uint32_t slot_id)
         _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
         if (item) {
             item->thread.error_code = SFETCH_ERROR_BUFFER_TOO_SMALL;
+            item->thread.failed = true;
+            item->thread.finished = true;
+            _sfetch_ring_enqueue(&ctx->chn[item->channel].user_outgoing, slot_id);
+        }
+    }
+}
+
+EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_failed_other(uint32_t slot_id) {
+    _sfetch_t* ctx = _sfetch_ctx();
+    if (ctx && ctx->valid) {
+        _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
+        if (item) {
+            item->thread.error_code = SFETCH_ERROR_JS_OTHER;
             item->thread.failed = true;
             item->thread.finished = true;
             _sfetch_ring_enqueue(&ctx->chn[item->channel].user_outgoing, slot_id);
