@@ -1,5 +1,11 @@
 ## Updates
 
+### 17-Mar-2025
+
+- sokol_fetch.h web: replace XMLHttpRequest with the more modern fetch API,
+  and fix some inconsistencies when checking the HTTP status code: all status
+  codes in the 200 range via `response.ok` now count as success.
+
 ### 15-Mar-2025
 
 Some general cleanup around vertex formats in sokol_gfx.h which fixes a couple
