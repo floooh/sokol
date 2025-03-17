@@ -6,6 +6,8 @@
   and fix some inconsistencies when checking the HTTP status code: all status
   codes in the 200 range via `response.ok` now count as success.
 
+  PR: https://github.com/floooh/sokol/pull/1226
+
 ### 15-Mar-2025
 
 Some general cleanup around vertex formats in sokol_gfx.h which fixes a couple
