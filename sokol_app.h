@@ -4482,6 +4482,14 @@ static void _sapp_gl_make_current(void) {
         }
     }
 }
+
+- (BOOL)performKeyEquivalent:(NSEvent*)event {
+    // FIXME: need to forward only specific events here (like Ctrl-Tab)
+    // since performKeyEquivalent is called for *all* key combos with Ctrl or Cmd
+    [_sapp.macos.view keyDown:event];
+    return YES;
+}
+
 - (void)keyUp:(NSEvent*)event {
     _sapp_gl_make_current();
     _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_UP,
