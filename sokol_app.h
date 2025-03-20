@@ -4482,6 +4482,21 @@ static void _sapp_gl_make_current(void) {
         }
     }
 }
+
+- (BOOL)performKeyEquivalent:(NSEvent*)event {
+    // fixes Ctrl-Tab keydown not triggering a keyDown event
+    //
+    // NOTE: it seems that Ctrl-F1 cannot be intercepted the same way, but since
+    // this enabled critical accessibility features that's probably a good thing.
+    switch (_sapp_translate_key(event.keyCode)) {
+        case SAPP_KEYCODE_TAB:
+            [_sapp.macos.view keyDown:event];
+            return YES;
+        default:
+            return NO;
+    }
+}
+
 - (void)keyUp:(NSEvent*)event {
     _sapp_gl_make_current();
     _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_UP,
