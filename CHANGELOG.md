@@ -1,5 +1,19 @@
 ## Updates
 
+### 20-Mar-2025
+
+- sokol_app.h macOS: A small fix for Ctrl-Tab key down. So far this wasn't forwarded
+  as an SAPP_EVENTTYPE_KEY_DOWN, presumably because Ctrl-Tab is the macOS
+  system hotkey for switching between application windows. The workaround
+  hooks into the Cocoa `performKeyEquivalent` callback to catch
+  Ctrl-Tab key-down events and forward them to sokol-app. Note that there are some
+  other special key combinations which cannot be intercepted the same way
+  (for instance Ctrl-F1 - which probably is a good thing because it enables
+  some critical accessibility features).
+
+  Relates issue: https://github.com/floooh/sokol/issues/1227
+  ...and PR: https://github.com/floooh/sokol/pull/1228
+
 ### 17-Mar-2025
 
 - sokol_fetch.h web: replace XMLHttpRequest with the more modern fetch API,

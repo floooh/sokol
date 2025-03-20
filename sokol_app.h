@@ -4489,7 +4489,9 @@ static void _sapp_gl_make_current(void) {
     // not generally intercepting those because they may trigger important
     // macOS accessibility features. If Ctrl+Fx is desired for all function keys,
     // new options should be added to sapp_desc, similar to the HTML5 event bubbling
-    // options. It seems like Ctrl-F1 is always off-limits for applications(?)
+    // options.
+    // NOTE 2: it seems that Ctrl-F1 cannot be intercepted the same way, but since
+    // this enabled critical accessibility features that's probably a good thing.
     switch (_sapp_translate_key(event.keyCode)) {
         case SAPP_KEYCODE_TAB:
             [_sapp.macos.view keyDown:event];
