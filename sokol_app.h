@@ -4484,10 +4484,19 @@ static void _sapp_gl_make_current(void) {
 }
 
 - (BOOL)performKeyEquivalent:(NSEvent*)event {
-    // FIXME: need to forward only specific events here (like Ctrl-Tab)
-    // since performKeyEquivalent is called for *all* key combos with Ctrl or Cmd
-    [_sapp.macos.view keyDown:event];
-    return YES;
+    // fixes Ctrl-Tab keydown not triggering a keyDown event
+    // NOTE: some other (function-) keys have the same behaviour, but we're
+    // not generally intercepting those because they may trigger important
+    // macOS accessibility features. If Ctrl+Fx is desired for all function keys,
+    // new options should be added to sapp_desc, similar to the HTML5 event bubbling
+    // options. It seems like Ctrl-F1 is always off-limits for applications(?)
+    switch (_sapp_translate_key(event.keyCode)) {
+        case SAPP_KEYCODE_TAB:
+            [_sapp.macos.view keyDown:event];
+            return YES;
+        default:
+            return NO;
+    }
 }
 
 - (void)keyUp:(NSEvent*)event {
