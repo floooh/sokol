@@ -11,7 +11,7 @@
   (for instance Ctrl-F1 - which probably is a good thing because it enables
   some critical accessibility features).
 
-  Relates issue: https://github.com/floooh/sokol/issues/1227
+  Related issue: https://github.com/floooh/sokol/issues/1227
   ...and PR: https://github.com/floooh/sokol/pull/1228
 
 ### 17-Mar-2025
