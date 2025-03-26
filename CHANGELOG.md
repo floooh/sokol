@@ -1,5 +1,20 @@
 ## Updates
 
+### 26-Mar-2025
+
+- sokol_app.h win32: Mouse lock behaviour is now more robust in edge cases
+  (like stealing the window focus by opening the Windows task manager):
+  Calling sapp_lock_mouse() will now only set a flag with the new
+  intended mouse lock state instead of changing the mouse-lock state immediately.
+  Then once per frame the sokol_app.h win32 run-loop will check if the intended
+  state differs from the current state and will change the mouse lock state
+  accordingly.
+
+  Also note the updated `MOUSE LOCK` documentation section in sokol_app.h.
+
+  Related issue: https://github.com/floooh/sokol/issues/1221
+  Implemented in PR: https://github.com/floooh/sokol/pull/1230
+
 ### 20-Mar-2025
 
 - sokol_app.h macOS: A small fix for Ctrl-Tab key down. So far this wasn't forwarded
