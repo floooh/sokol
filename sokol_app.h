@@ -432,14 +432,15 @@
 
         if (sapp_mouse_locked()) { ... }
 
-    On native platforms, the sapp_lock_mouse() and sapp_mouse_locked()
-    functions work as expected (mouse lock is activated or deactivated
-    immediately when sapp_lock_mouse() is called, and sapp_mouse_locked()
-    also immediately returns the new state after sapp_lock_mouse()
-    is called.
+    Note that mouse-lock state may not change immediately after sapp_lock_mouse(true/false)
+    is called, instead on some platforms the actual state switch may be delayed
+    to the end of the current frame or even to a later frame.
 
-    On the web platform, sapp_lock_mouse() and sapp_mouse_locked() behave
-    differently, as dictated by the limitations of the HTML5 Pointer Lock API:
+    The mouse may also be unlocked automatically without calling sapp_lock_mouse(false),
+    most notably when the application window becomes inactive.
+
+    On the web platform there are further restrictions to be aware of, caused
+    by the limitations of the HTML5 Pointer Lock API:
 
         - sapp_lock_mouse(true) can be called at any time, but it will
           only take effect in a 'short-lived input event handler of a specific
@@ -489,6 +490,13 @@
                 default:
                     break;
             }
+        }
+
+    For a 'first person shooter mouse' the following code inside the sokol-app event handler
+    is recommended somewhere in your frame callback:
+
+        if (!sapp_mouse_locked()) {
+            sapp_lock_mouse(true);
         }
 
     CLIPBOARD SUPPORT
@@ -2631,18 +2639,24 @@ typedef struct {
     HICON small_icon;
     HCURSOR cursors[_SAPP_MOUSECURSOR_NUM];
     UINT orig_codepage;
-    LONG mouse_locked_x, mouse_locked_y;
-    bool mouse_locked_pos_valid;
     RECT stored_window_rect;    // used to restore window pos/size when toggling fullscreen => windowed
     bool is_win10_or_greater;
     bool in_create_window;
     bool iconified;
-    bool mouse_tracked;
-    uint8_t mouse_capture_mask;
     _sapp_win32_dpi_t dpi;
-    bool raw_input_mousepos_valid;
-    LONG raw_input_mousepos_x;
-    LONG raw_input_mousepos_y;
+    struct {
+        struct {
+            LONG pos_x, pos_y;
+            bool pos_valid;
+        } lock;
+        struct {
+            LONG pos_x, pos_y;
+            bool pos_valid;
+        } raw_input;
+        bool requested_lock;
+        bool tracked;
+        uint8_t capture_mask;
+    } mouse;
     uint8_t raw_input_data[256];
 } _sapp_win32_t;
 
@@ -7194,16 +7208,16 @@ _SOKOL_PRIVATE void _sapp_win32_update_cursor(sapp_mouse_cursor cursor, bool sho
 }
 
 _SOKOL_PRIVATE void _sapp_win32_capture_mouse(uint8_t btn_mask) {
-    if (0 == _sapp.win32.mouse_capture_mask) {
+    if (0 == _sapp.win32.mouse.capture_mask) {
         SetCapture(_sapp.win32.hwnd);
     }
-    _sapp.win32.mouse_capture_mask |= btn_mask;
+    _sapp.win32.mouse.capture_mask |= btn_mask;
 }
 
 _SOKOL_PRIVATE void _sapp_win32_release_mouse(uint8_t btn_mask) {
-    if (0 != _sapp.win32.mouse_capture_mask) {
-        _sapp.win32.mouse_capture_mask &= ~btn_mask;
-        if (0 == _sapp.win32.mouse_capture_mask) {
+    if (0 != _sapp.win32.mouse.capture_mask) {
+        _sapp.win32.mouse.capture_mask &= ~btn_mask;
+        if (0 == _sapp.win32.mouse.capture_mask) {
             ReleaseCapture();
         }
     }
@@ -7214,76 +7228,107 @@ _SOKOL_PRIVATE bool _sapp_win32_is_foreground_window(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_win32_lock_mouse(bool lock) {
-    if (lock == _sapp.mouse.locked) {
-        return;
-    }
+    _sapp.win32.mouse.requested_lock = lock;
+}
+
+_SOKOL_PRIVATE void _sapp_win32_do_lock_mouse(void) {
+    _sapp.mouse.locked = true;
+
+    // hide mouse cursor (NOTE: this maintains a hidden counter, but since
+    // only mouse-lock uses ShowCursor this doesn't matter)
+    ShowCursor(FALSE);
+
+    // reset dx/dy and release any active mouse capture
     _sapp.mouse.dx = 0.0f;
     _sapp.mouse.dy = 0.0f;
     _sapp_win32_release_mouse(0xFF);
-    if (lock) {
-        // don't allow locking the mouse unless we're the active window
-        if (!_sapp_win32_is_foreground_window()) {
-            return;
-        }
 
-        _sapp.mouse.locked = true;
-        /* store the current mouse position, so it can be restored when unlocked */
-        POINT pos;
-        BOOL res = GetCursorPos(&pos);
-        if (res) {
-            _sapp.win32.mouse_locked_x = pos.x;
-            _sapp.win32.mouse_locked_y = pos.y;
-            _sapp.win32.mouse_locked_pos_valid = true;
-
-            /* while the mouse is locked, make the mouse cursor invisible and
-               confine the mouse movement to a small rectangle inside our window
-               (so that we don't miss any mouse up events)
-            */
-            RECT client_rect = {
-                _sapp.win32.mouse_locked_x,
-                _sapp.win32.mouse_locked_y,
-                _sapp.win32.mouse_locked_x,
-                _sapp.win32.mouse_locked_y
-            };
-            ClipCursor(&client_rect);
-        } else {
-            _sapp.win32.mouse_locked_pos_valid = false;
-        }
-
-        /* make the mouse cursor invisible, this will stack with sapp_show_mouse() */
-        ShowCursor(FALSE);
-
-        /* enable raw input for mouse, starts sending WM_INPUT messages to WinProc (see GLFW) */
-        const RAWINPUTDEVICE rid = {
-            0x01,   // usUsagePage: HID_USAGE_PAGE_GENERIC
-            0x02,   // usUsage: HID_USAGE_GENERIC_MOUSE
-            0,      // dwFlags
-            _sapp.win32.hwnd    // hwndTarget
-        };
-        if (!RegisterRawInputDevices(&rid, 1, sizeof(rid))) {
-            _SAPP_ERROR(WIN32_REGISTER_RAW_INPUT_DEVICES_FAILED_MOUSE_LOCK);
-        }
-        /* in case the raw mouse device only supports absolute position reporting,
-           we need to skip the dx/dy compution for the first WM_INPUT event
-        */
-        _sapp.win32.raw_input_mousepos_valid = false;
+    // store current mouse position so that it can be restored when unlocked
+    POINT pos;
+    if (GetCursorPos(&pos)) {
+        _sapp.win32.mouse.lock.pos_valid = true;
+        _sapp.win32.mouse.lock.pos_x = pos.x;
+        _sapp.win32.mouse.lock.pos_y = pos.y;
     } else {
-        _sapp.mouse.locked = false;
-        /* disable raw input for mouse */
-        const RAWINPUTDEVICE rid = { 0x01, 0x02, RIDEV_REMOVE, NULL };
-        if (!RegisterRawInputDevices(&rid, 1, sizeof(rid))) {
-            _SAPP_ERROR(WIN32_REGISTER_RAW_INPUT_DEVICES_FAILED_MOUSE_UNLOCK);
-        }
+        _sapp.win32.mouse.lock.pos_valid = false;
+    }
 
-        /* let the mouse roam freely again */
-        ClipCursor(NULL);
-        ShowCursor(TRUE);
+    // while mouse is locked, restrict cursor movement to the client
+    // rectangle so that we don't loose any mouse movement events
+    RECT client_rect;
+    GetClientRect(_sapp.win32.hwnd, &client_rect);
+    POINT mid_point;
+    mid_point.x = (client_rect.right - client_rect.left) / 2;
+    mid_point.y = (client_rect.bottom - client_rect.top) / 2;
+    ClientToScreen(_sapp.win32.hwnd, &mid_point);
+    RECT clip_rect;
+    clip_rect.left = clip_rect.right = mid_point.x;
+    clip_rect.top = clip_rect.bottom = mid_point.y;
+    ClipCursor(&clip_rect);
 
-        /* restore the 'pre-locked' mouse position */
-        if (_sapp.win32.mouse_locked_pos_valid) {
-            SetCursorPos(_sapp.win32.mouse_locked_x, _sapp.win32.mouse_locked_y);
-            _sapp.win32.mouse_locked_pos_valid = false;
+    // enable raw input for mouse, starts sending WM_INPUT messages to WinProc (see GLFW)
+    const RAWINPUTDEVICE rid = {
+        0x01,   // usUsagePage: HID_USAGE_PAGE_GENERIC
+        0x02,   // usUsage: HID_USAGE_GENERIC_MOUSE
+        0,      // dwFlags
+        _sapp.win32.hwnd    // hwndTarget
+    };
+    if (!RegisterRawInputDevices(&rid, 1, sizeof(rid))) {
+        _SAPP_ERROR(WIN32_REGISTER_RAW_INPUT_DEVICES_FAILED_MOUSE_LOCK);
+    }
+    // in case the raw mouse device only supports absolute position reporting,
+    // we need to skip the dx/dy compution for the first WM_INPUT event
+    _sapp.win32.mouse.raw_input.pos_valid = false;
+}
+
+_SOKOL_PRIVATE void _sapp_win32_do_unlock_mouse(void) {
+    _sapp.mouse.locked = false;
+
+    // make mouse cursor visible
+    ShowCursor(TRUE);
+
+    // reset dx/dy and release any active mouse capture
+    _sapp.mouse.dx = 0.0f;
+    _sapp.mouse.dy = 0.0f;
+    _sapp_win32_release_mouse(0xFF);
+
+    // disable raw input for mouse
+    const RAWINPUTDEVICE rid = { 0x01, 0x02, RIDEV_REMOVE, NULL };
+    if (!RegisterRawInputDevices(&rid, 1, sizeof(rid))) {
+        _SAPP_ERROR(WIN32_REGISTER_RAW_INPUT_DEVICES_FAILED_MOUSE_UNLOCK);
+    }
+
+    // unrestrict mouse movement
+    ClipCursor(NULL);
+
+    // restore the 'pre-locked' mouse position
+    if (_sapp.win32.mouse.lock.pos_valid) {
+        SetCursorPos(_sapp.win32.mouse.lock.pos_x, _sapp.win32.mouse.lock.pos_y);
+        _sapp.win32.mouse.lock.pos_valid = false;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_win32_update_mouse_lock(void) {
+    // mouse lock can only be active when we're the active window
+    if (!_sapp_win32_is_foreground_window()) {
+        // unlock mouse if currently locked
+        if (_sapp.mouse.locked) {
+            _sapp_win32_do_unlock_mouse();
         }
+        return;
+    }
+
+    // nothing to do if requested lock state matches current lock state
+    const bool lock = _sapp.win32.mouse.requested_lock;
+    if (lock == _sapp.mouse.locked) {
+        return;
+    }
+
+    // otherwise change into desired state
+    if (lock) {
+        _sapp_win32_do_lock_mouse();
+    } else {
+        _sapp_win32_do_unlock_mouse();
     }
 }
 
@@ -7582,8 +7627,8 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
             case WM_MOUSEMOVE:
                 if (!_sapp.mouse.locked) {
                     _sapp_win32_mouse_update(lParam);
-                    if (!_sapp.win32.mouse_tracked) {
-                        _sapp.win32.mouse_tracked = true;
+                    if (!_sapp.win32.mouse.tracked) {
+                        _sapp.win32.mouse.tracked = true;
                         TRACKMOUSEEVENT tme;
                         _sapp_clear(&tme, sizeof(tme));
                         tme.cbSize = sizeof(tme);
@@ -7617,13 +7662,13 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                         */
                         LONG new_x = raw_mouse_data->data.mouse.lLastX;
                         LONG new_y = raw_mouse_data->data.mouse.lLastY;
-                        if (_sapp.win32.raw_input_mousepos_valid) {
-                            _sapp.mouse.dx = (float) (new_x - _sapp.win32.raw_input_mousepos_x);
-                            _sapp.mouse.dy = (float) (new_y - _sapp.win32.raw_input_mousepos_y);
+                        if (_sapp.win32.mouse.raw_input.pos_valid) {
+                            _sapp.mouse.dx = (float) (new_x - _sapp.win32.mouse.raw_input.pos_x);
+                            _sapp.mouse.dy = (float) (new_y - _sapp.win32.mouse.raw_input.pos_y);
                         }
-                        _sapp.win32.raw_input_mousepos_x = new_x;
-                        _sapp.win32.raw_input_mousepos_y = new_y;
-                        _sapp.win32.raw_input_mousepos_valid = true;
+                        _sapp.win32.mouse.raw_input.pos_x = new_x;
+                        _sapp.win32.mouse.raw_input.pos_y = new_y;
+                        _sapp.win32.mouse.raw_input.pos_valid = true;
                     }
                     else {
                         /* mouse reports movement delta (this seems to be the common case) */
@@ -7638,7 +7683,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 if (!_sapp.mouse.locked) {
                     _sapp.mouse.dx = 0.0f;
                     _sapp.mouse.dy = 0.0f;
-                    _sapp.win32.mouse_tracked = false;
+                    _sapp.win32.mouse.tracked = false;
                     _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID);
                 }
                 break;
@@ -8133,12 +8178,8 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         if (_sapp.quit_requested) {
             PostMessage(_sapp.win32.hwnd, WM_CLOSE, 0, 0);
         }
-        // unlock mouse if window doesn't have focus
-        if (_sapp.mouse.locked) {
-            if (!_sapp_win32_is_foreground_window()) {
-                _sapp_win32_lock_mouse(false);
-            }
-        }
+        // update mouse-lock state
+        _sapp_win32_update_mouse_lock();
     }
     _sapp_call_cleanup();
 
