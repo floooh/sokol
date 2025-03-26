@@ -7238,11 +7238,9 @@ _SOKOL_PRIVATE void _sapp_win32_do_lock_mouse(void) {
     // only mouse-lock uses ShowCursor this doesn't matter)
     ShowCursor(FALSE);
 
-    // reset dx/dy
+    // reset dx/dy and release any active mouse capture
     _sapp.mouse.dx = 0.0f;
     _sapp.mouse.dy = 0.0f;
-
-    // release mouse capture
     _sapp_win32_release_mouse(0xFF);
 
     // store current mouse position so that it can be restored when unlocked
@@ -7288,6 +7286,11 @@ _SOKOL_PRIVATE void _sapp_win32_do_unlock_mouse(void) {
 
     // make mouse cursor visible
     ShowCursor(TRUE);
+
+    // reset dx/dy and release any active mouse capture
+    _sapp.mouse.dx = 0.0f;
+    _sapp.mouse.dy = 0.0f;
+    _sapp_win32_release_mouse(0xFF);
 
     // disable raw input for mouse
     const RAWINPUTDEVICE rid = { 0x01, 0x02, RIDEV_REMOVE, NULL };
