@@ -7226,6 +7226,10 @@ _SOKOL_PRIVATE void _sapp_win32_lock_mouse(bool lock) {
 _SOKOL_PRIVATE void _sapp_win32_do_lock_mouse(void) {
     _sapp.mouse.locked = true;
 
+    // hide mouse cursor (NOTE: this maintains a hidden counter, but since
+    // only mouse-lock uses ShowCursor this doesn't matter)
+    ShowCursor(FALSE);
+
     // reset dx/dy
     _sapp.mouse.dx = 0.0f;
     _sapp.mouse.dy = 0.0f;
@@ -7273,6 +7277,9 @@ _SOKOL_PRIVATE void _sapp_win32_do_lock_mouse(void) {
 
 _SOKOL_PRIVATE void _sapp_win32_do_unlock_mouse(void) {
     _sapp.mouse.locked = false;
+
+    // make mouse cursor visible
+    ShowCursor(TRUE);
 
     // disable raw input for mouse
     const RAWINPUTDEVICE rid = { 0x01, 0x02, RIDEV_REMOVE, NULL };
