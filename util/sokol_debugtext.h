@@ -3996,7 +3996,7 @@ static void _sdtx_log(sdtx_log_item_t log_item, uint32_t log_level, uint32_t lin
             const char* filename = 0;
             const char* message = 0;
         #endif
-        _sdtx.desc.logger.func("sdtx", log_level, log_item, message, line_nr, filename, _sdtx.desc.logger.user_data);
+        _sdtx.desc.logger.func("sdtx", log_level, (uint32_t)log_item, message, line_nr, filename, _sdtx.desc.logger.user_data);
     } else {
         // for log level PANIC it would be 'undefined behaviour' to continue
         if (log_level == 0) {

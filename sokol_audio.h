@@ -1127,7 +1127,7 @@ static void _saudio_log(saudio_log_item log_item, uint32_t log_level, uint32_t l
             const char* filename = 0;
             const char* message = 0;
         #endif
-        _saudio.desc.logger.func("saudio", log_level, log_item, message, line_nr, filename, _saudio.desc.logger.user_data);
+        _saudio.desc.logger.func("saudio", log_level, (uint32_t)log_item, message, line_nr, filename, _saudio.desc.logger.user_data);
     }
     else {
         // for log level PANIC it would be 'undefined behaviour' to continue

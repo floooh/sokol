@@ -3049,7 +3049,7 @@ static void _sapp_log(sapp_log_item log_item, uint32_t log_level, const char* ms
                 msg = _sapp_log_messages[log_item];
             }
         #endif
-        _sapp.desc.logger.func("sapp", log_level, log_item, msg, line_nr, filename, _sapp.desc.logger.user_data);
+        _sapp.desc.logger.func("sapp", log_level, (uint32_t)log_item, msg, line_nr, filename, _sapp.desc.logger.user_data);
     }
     else {
         // for log level PANIC it would be 'undefined behaviour' to continue
@@ -6626,7 +6626,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
         //
         // ...just retry with the DEBUG flag switched off
         _SAPP_ERROR(WIN32_D3D11_CREATE_DEVICE_AND_SWAPCHAIN_WITH_DEBUG_FAILED);
-        create_flags &= ~D3D11_CREATE_DEVICE_DEBUG;
+        create_flags &= ~(UINT)D3D11_CREATE_DEVICE_DEBUG;
         hr = D3D11CreateDeviceAndSwapChain(
             NULL,                           /* pAdapter (use default) */
             D3D_DRIVER_TYPE_HARDWARE,       /* DriverType */
@@ -6686,7 +6686,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target(void) {
     SOKOL_ASSERT(0 == _sapp.d3d11.ds);
     SOKOL_ASSERT(0 == _sapp.d3d11.dsv);
 
-    HRESULT hr;
+    HRESULT hr; _SOKOL_UNUSED(hr);
 
     /* view for the swapchain-created framebuffer */
     hr = _sapp_dxgi_GetBuffer(_sapp.d3d11.swap_chain, 0, _sapp_win32_refiid(_sapp_IID_ID3D11Texture2D), (void**)&_sapp.d3d11.rt);

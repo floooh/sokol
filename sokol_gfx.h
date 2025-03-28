@@ -6524,7 +6524,7 @@ static void _sg_log(sg_log_item log_item, uint32_t log_level, const char* msg, u
                 msg = _sg_log_messages[log_item];
             }
         #endif
-        _sg.desc.logger.func("sg", log_level, log_item, msg, line_nr, filename, _sg.desc.logger.user_data);
+        _sg.desc.logger.func("sg", log_level, (uint32_t)log_item, msg, line_nr, filename, _sg.desc.logger.user_data);
     } else {
         // for log level PANIC it would be 'undefined behaviour' to continue
         if (log_level == 0) {
@@ -11256,7 +11256,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, cons
             if (desc->data.ptr) {
                 init_data.pSysMem = desc->data.ptr;
             } else {
-                init_data.pSysMem = (const void*)_sg_malloc_clear(buf->cmn.size);
+                init_data.pSysMem = (const void*)_sg_malloc_clear((size_t)buf->cmn.size);
             }
             init_data_ptr = &init_data;
         }
@@ -11273,13 +11273,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, cons
         // for read-only access, and an unordered-access-view for
         // read-write access
         if (buf->cmn.type == SG_BUFFERTYPE_STORAGEBUFFER) {
-            SOKOL_ASSERT(_sg_multiple_u64(buf->cmn.size, 4));
+            SOKOL_ASSERT(_sg_multiple_u64((uint64_t)buf->cmn.size, 4));
             D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
             _sg_clear(&d3d11_srv_desc, sizeof(d3d11_srv_desc));
             d3d11_srv_desc.Format = DXGI_FORMAT_R32_TYPELESS;
             d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_BUFFEREX;
             d3d11_srv_desc.BufferEx.FirstElement = 0;
-            d3d11_srv_desc.BufferEx.NumElements = buf->cmn.size / 4;
+            d3d11_srv_desc.BufferEx.NumElements = ((UINT)buf->cmn.size) / 4;
             d3d11_srv_desc.BufferEx.Flags = D3D11_BUFFEREX_SRV_FLAG_RAW;
             hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)buf->d3d11.buf, &d3d11_srv_desc, &buf->d3d11.srv);
             if (!(SUCCEEDED(hr) && buf->d3d11.srv)) {
@@ -11292,7 +11292,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, cons
                 d3d11_uav_desc.Format = DXGI_FORMAT_R32_TYPELESS;
                 d3d11_uav_desc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
                 d3d11_uav_desc.Buffer.FirstElement = 0;
-                d3d11_uav_desc.Buffer.NumElements = buf->cmn.size / 4;
+                d3d11_uav_desc.Buffer.NumElements = ((UINT)buf->cmn.size) / 4;
                 d3d11_uav_desc.Buffer.Flags = D3D11_BUFFER_UAV_FLAG_RAW;
                 hr = _sg_d3d11_CreateUnorderedAccessView(_sg.d3d11.dev, (ID3D11Resource*)buf->d3d11.buf, &d3d11_uav_desc, &buf->d3d11.uav);
                 if (!(SUCCEEDED(hr) && buf->d3d11.uav)) {
@@ -11969,7 +11969,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
     bs_desc.IndependentBlendEnable = TRUE;
     {
         size_t i = 0;
-        for (i = 0; i < desc->color_count; i++) {
+        for (i = 0; i < (size_t)desc->color_count; i++) {
             const sg_blend_state* src = &desc->colors[i].blend;
             D3D11_RENDER_TARGET_BLEND_DESC* dst = &bs_desc.RenderTarget[i];
             dst->BlendEnable = src->enabled;
@@ -12025,7 +12025,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
     SOKOL_ASSERT(_sg.d3d11.dev);
 
     // copy image pointers
-    for (size_t i = 0; i < atts->cmn.num_colors; i++) {
+    for (size_t i = 0; i < (size_t)atts->cmn.num_colors; i++) {
         const sg_attachment_desc* color_desc = &desc->colors[i];
         _SOKOL_UNUSED(color_desc);
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
@@ -12051,7 +12051,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
     }
 
     // create render-target views
-    for (size_t i = 0; i < atts->cmn.num_colors; i++) {
+    for (size_t i = 0; i < (size_t)atts->cmn.num_colors; i++) {
         const _sg_attachment_common_t* cmn_color_att = &atts->cmn.colors[i];
         const _sg_image_t* color_img = color_images[i];
         SOKOL_ASSERT(0 == atts->d3d11.colors[i].view.rtv);
@@ -12210,7 +12210,7 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass* pass) {
     _sg_d3d11_RSSetScissorRects(_sg.d3d11.ctx, 1, &rect);
 
     // perform clear action
-    for (size_t i = 0; i < num_rtvs; i++) {
+    for (size_t i = 0; i < (size_t)num_rtvs; i++) {
         if (action->colors[i].load_action == SG_LOADACTION_CLEAR) {
             _sg_d3d11_ClearRenderTargetView(_sg.d3d11.ctx, rtvs[i], (float*)&action->colors[i].clear_value);
             _sg_stats_add(d3d11.pass.num_clear_render_target_view, 1);
@@ -12242,7 +12242,7 @@ _SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
         if (_sg.cur_pass.atts_id.id != SG_INVALID_ID) {
             // ...for offscreen pass...
             SOKOL_ASSERT(_sg.cur_pass.atts && _sg.cur_pass.atts->slot.id == _sg.cur_pass.atts_id.id);
-            for (size_t i = 0; i < _sg.cur_pass.atts->cmn.num_colors; i++) {
+            for (size_t i = 0; i < (size_t)_sg.cur_pass.atts->cmn.num_colors; i++) {
                 const _sg_image_t* resolve_img = _sg.cur_pass.atts->d3d11.resolves[i].image;
                 if (resolve_img) {
                     const _sg_image_t* color_img = _sg.cur_pass.atts->d3d11.colors[i].image;
