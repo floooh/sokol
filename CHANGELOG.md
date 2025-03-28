@@ -1,5 +1,11 @@
 ## Updates
 
+### 28-Mar-2025
+
+- sokol_spine.h has been updated for the Spine C runtime version 4.2
+- all headers: fixed warning when building with Clang on Windows
+  (mostly -Wsign-conversion issues in the Windows-specific code paths)
+
 ### 26-Mar-2025
 
 - sokol_app.h win32: Mouse lock behaviour is now more robust in edge cases
