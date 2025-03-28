@@ -14,7 +14,7 @@ if (IS_DIRECTORY ${spineruntimes_dir})
     message("### ${spineruntimes_dir} exists...")
 else()
     message("### Fetching spine runtimes to ${spineruntimes_dir} (this may take a while...)")
-    execute_process(COMMAND git clone --depth=1 --branch 4.1 --recursive https://github.com/EsotericSoftware/spine-runtimes ${spineruntimes_dir})
+    execute_process(COMMAND git clone --depth=1 --branch 4.2 --recursive https://github.com/EsotericSoftware/spine-runtimes ${spineruntimes_dir})
 endif()
 
 add_library(imgui
@@ -51,6 +51,8 @@ add_library(spine
     ${spineruntimes_dir}/spine-c/spine-c/src/spine/PathAttachment.c
     ${spineruntimes_dir}/spine-c/spine-c/src/spine/PathConstraint.c
     ${spineruntimes_dir}/spine-c/spine-c/src/spine/PathConstraintData.c
+    ${spineruntimes_dir}/spine-c/spine-c/src/spine/PhysicsConstraint.c
+    ${spineruntimes_dir}/spine-c/spine-c/src/spine/PhysicsConstraintData.c
     ${spineruntimes_dir}/spine-c/spine-c/src/spine/PointAttachment.c
     ${spineruntimes_dir}/spine-c/spine-c/src/spine/RegionAttachment.c
     ${spineruntimes_dir}/spine-c/spine-c/src/spine/Sequence.c
