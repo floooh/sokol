@@ -12388,7 +12388,7 @@ SOKOL_API_IMPL int sapp_gl_get_minor_version(void) {
 }
 
 SOKOL_API_IMPL const void* sapp_x11_get_window(void) {
-    #if defined(_SAPP_LINUX)
+    #if defined(_SAPP_LINUX) && defined(_SAPP_GLX)
         return (void*)_sapp.x11.window;
     #else
         return 0;
@@ -12396,7 +12396,7 @@ SOKOL_API_IMPL const void* sapp_x11_get_window(void) {
 }
 
 SOKOL_API_IMPL const void* sapp_x11_get_display(void) {
-    #if defined(_SAPP_LINUX)
+    #if defined(_SAPP_LINUX) && defined(_SAPP_GLX)
         return (void*)_sapp.x11.display;
     #else
         return 0;
