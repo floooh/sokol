@@ -10,6 +10,8 @@
   for now I decided to turn this case into a validation layer error since it's
   almost certainly an oversight.
 
+  PR: https://github.com/floooh/sokol/pull/1236
+
 ### 28-Mar-2025
 
 - sokol_spine.h has been updated for the Spine C runtime version 4.2
