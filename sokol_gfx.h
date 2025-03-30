@@ -4213,6 +4213,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_DEPTH_FORMAT, "sg_apply_pipeline: pipeline depth pixel_format doesn't match pass depth attachment pixel format") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_SAMPLE_COUNT, "sg_apply_pipeline: pipeline MSAA sample count doesn't match render pass attachment sample count") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PASS_EXPECTED, "sg_apply_bindings: must be called in a pass") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_EMPTY_BINDINGS, "sg_apply_bindings: the provided sg_bindings struct is empty") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE, "sg_apply_bindings: must be called after sg_apply_pipeline") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE_EXISTS, "sg_apply_bindings: currently applied pipeline object no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE_VALID, "sg_apply_bindings: currently applied pipeline object not in valid state") \
@@ -18619,6 +18620,22 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
 
         // must be called in a pass
         _SG_VALIDATE(_sg.cur_pass.in_pass, VALIDATE_ABND_PASS_EXPECTED);
+
+        // bindings must not be empty
+        bool has_any_bindings = bindings->index_buffer.id != SG_INVALID_ID;
+        if (!has_any_bindings) for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
+            has_any_bindings |= bindings->vertex_buffers[i].id != SG_INVALID_ID;
+        }
+        if (!has_any_bindings) for (size_t i = 0; i < SG_MAX_IMAGE_BINDSLOTS; i++) {
+            has_any_bindings |= bindings->images[i].id != SG_INVALID_ID;
+        }
+        if (!has_any_bindings) for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+            has_any_bindings |= bindings->samplers[i].id != SG_INVALID_ID;
+        }
+        if (!has_any_bindings) for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
+            has_any_bindings |= bindings->storage_buffers[i].id != SG_INVALID_ID;
+        }
+        _SG_VALIDATE(has_any_bindings, VALIDATE_ABND_EMPTY_BINDINGS);
 
         // a pipeline object must have been applied
         _SG_VALIDATE(_sg.cur_pipeline.id != SG_INVALID_ID, VALIDATE_ABND_PIPELINE);

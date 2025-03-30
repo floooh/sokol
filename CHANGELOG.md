@@ -1,5 +1,15 @@
 ## Updates
 
+### 29-Mar-2025
+
+- sokol_gfx.h: A new validation check now protects from calling `sg_apply_bindings`
+  with an empty `sg_bindings` struct. This prevents a misleading validation error
+  further down the line (see https://github.com/floooh/sokol/issues/1235).
+  It is debatable whether calling `sg_apply_bindings()` without any bindings
+  should be valid for draw calls that do not require bindings, but at least
+  for now I decided to turn this case into a validation layer error since it's
+  almost certainly an oversight.
+
 ### 28-Mar-2025
 
 - sokol_spine.h has been updated for the Spine C runtime version 4.2
