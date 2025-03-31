@@ -2593,7 +2593,7 @@ SOKOL_API_IMPL void simgui_create_fonts_texture(const simgui_font_tex_desc_t* de
     font_img_desc.label = "sokol-imgui-font-image";
     _simgui.font_img = sg_make_image(&font_img_desc);
 
-    io->Fonts->TexID = simgui_imtextureid_with_sampler(_simgui.font_img, _simgui.font_smp);
+    io->Fonts->TexID = (void*)simgui_imtextureid_with_sampler(_simgui.font_img, _simgui.font_smp);
 }
 
 SOKOL_API_IMPL void simgui_destroy_fonts_texture(void) {
@@ -2708,8 +2708,8 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
 }
 
 static sg_pipeline _simgui_bind_image_sampler(sg_bindings* bindings, ImTextureID imtex_id) {
-    bindings->images[0] = simgui_image_from_imtextureid(imtex_id);
-    bindings->samplers[0] = simgui_sampler_from_imtextureid(imtex_id);
+    bindings->images[0] = simgui_image_from_imtextureid((uint64_t)imtex_id);
+    bindings->samplers[0] = simgui_sampler_from_imtextureid((uint64_t)imtex_id);
     if (sg_query_pixelformat(sg_query_image_pixelformat(bindings->images[0])).filter) {
         return _simgui.def_pip;
     } else {
