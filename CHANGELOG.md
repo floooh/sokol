@@ -1,5 +1,11 @@
 ## Updates
 
+### 31-Mar-2025
+
+- sokol_app.h linux: fix a drag-n-drop related memory leak
+  (see PR https://github.com/floooh/sokol/pull/1238).
+  Many thanks to @bullno1 for catching and fixing that issue!
+
 ### 29-Mar-2025
 
 - sokol_gfx.h: A new validation check now protects from calling `sg_apply_bindings`
