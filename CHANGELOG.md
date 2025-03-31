@@ -5,6 +5,9 @@
 - sokol_app.h linux: fix a drag-n-drop related memory leak
   (see PR https://github.com/floooh/sokol/pull/1238).
   Many thanks to @bullno1 for catching and fixing that issue!
+- sokol_app.h linux: two new functions to obtain the X11 window and
+  display handles: `sapp_x11_get_window()` and `sapp_x11_get_display()`.
+  Again, many thanks to @bullno1 for the PR (https://github.com/floooh/sokol/pull/1237)!
 
 ### 29-Mar-2025
 
