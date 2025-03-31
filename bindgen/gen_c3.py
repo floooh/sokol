@@ -111,7 +111,7 @@ aliases = {
         ("DataCb", "fn void(void*)"),
     "void *(*)(size_t, void *)":
         ("AllocCb", "fn void*(usz, void*)"),
-    "void (*)(void *, void *)": 
+    "void (*)(void *, void *)":
         ("FreeCb", "fn void*(usz, void*)"),
     "void (*)(const char *, uint32_t, uint32_t, const char *, uint32_t, const char *, void *)":
         ("LogCb", "fn void(ZString, uint, uint, ZString, uint, ZString, void*)"),
@@ -361,7 +361,7 @@ def gen_enum(decl, prefix):
     tpe = "int"
     if any(as_enum_item_name(check_override(item['name'])) == 'FORCE_U32' for item in decl['items']):
         tpe = "uint"
-    l(f'distinct {as_struct_or_enum_type(enum_name, prefix)} = {tpe};')
+    l(f'typedef {as_struct_or_enum_type(enum_name, prefix)} = {tpe};')
     # Constants are in submodule.
     l(f'module {as_module_name_for_enum_type(enum_name, prefix)};')
     value = "-1"
@@ -385,7 +385,7 @@ def gen_imports(dep_prefixes):
 def gen_function_pointer_aliases():
     for type in used_aliases:
         alias_name, right_hand_side = aliases[type]
-        l(f'def {alias_name} = {right_hand_side};')
+        l(f'alias {alias_name} = {right_hand_side};')
     l('')
 
 def gen_module(inp, c_prefix, dep_prefixes):
