@@ -11354,6 +11354,9 @@ _SOKOL_PRIVATE void _sapp_x11_on_selectionnotify(XEvent* event) {
             XSendEvent(_sapp.x11.display, _sapp.x11.xdnd.source, False, NoEventMask, &reply);
             XFlush(_sapp.x11.display);
         }
+        if (data) {
+            XFree(data);
+        }
     }
 }
 
