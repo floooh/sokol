@@ -10,6 +10,7 @@ import gen_ir
 import os
 import shutil
 import sys
+import textwrap
 
 import gen_util as util
 
@@ -25,6 +26,7 @@ module_names = {
     'sglue_':   'glue',
     'sfetch_':  'fetch',
     'simgui_':  'imgui',
+    'smemtrack_': 'memtrack',
 }
 
 c_source_paths = {
@@ -39,6 +41,7 @@ c_source_paths = {
     'sglue_':   'sokol-d/src/sokol/c/sokol_glue.c',
     'sfetch_':  'sokol-d/src/sokol/c/sokol_fetch.c',
     'simgui_':  'sokol-d/src/sokol/c/sokol_imgui.c',
+    'smemtrack_': 'sokol-d/src/sokol/c/sokol_memtrack.c',
 }
 
 ignores = [
@@ -61,6 +64,9 @@ overrides = {
     'sg_draw.base_element':                 'uint32_t',
     'sg_draw.num_elements':                 'uint32_t',
     'sg_draw.num_instances':                'uint32_t',
+    'sg_dispatch.num_groups_x':             'uint32_t',
+    'sg_dispatch.num_groups_y':             'uint32_t',
+    'sg_dispatch.num_groups_z':             'uint32_t',
     'sshape_element_range_t.base_element':  'uint32_t',
     'sshape_element_range_t.num_elements':  'uint32_t',
     'sdtx_font.font_index':                 'uint32_t',
@@ -123,6 +129,12 @@ def reset_globals():
 def l(s):
     global out_lines
     out_lines += s + '\n'
+
+def c(s, indent=""):
+    if not s:
+        return
+    prefix = f"{indent}/// "
+    l(textwrap.indent(textwrap.dedent(s), prefix=prefix, predicate=lambda line: True))
 
 def as_d_prim_type(s):
     return prim_types[s]
@@ -333,6 +345,7 @@ def funcdecl_result_d(decl, prefix):
 def gen_struct(decl, prefix):
     struct_name = check_override(decl['name'])
     d_type = as_d_struct_type(struct_name, prefix)
+    c(decl.get('comment'))
     l(f"extern(C)\nstruct {d_type} {{")
     for field in decl['fields']:
         field_name = check_override(field['name'])
@@ -399,12 +412,15 @@ def gen_struct(decl, prefix):
     l("}")
 
 def gen_consts(decl, prefix):
+    c(decl.get('comment'))
     for item in decl['items']:
         item_name = check_override(item['name'])
+        c(decl.get('comment'))
         l(f"enum {util.as_lower_snake_case(item_name, prefix)} = {item['value']};")
 
 def gen_enum(decl, prefix):
     enum_name = check_override(decl['name'])
+    c(decl.get('comment'))
     l(f"enum {as_d_enum_type(enum_name, prefix)} {{")
     for item in decl['items']:
         item_name = as_enum_item_name(check_override(item['name']))
@@ -416,11 +432,13 @@ def gen_enum(decl, prefix):
     l("}")
 
 def gen_func_c(decl, prefix):
+    c(decl.get('comment'))
     l(f"extern(C) {funcdecl_result_c(decl, prefix)} {decl['name']}({funcdecl_args_c(decl, prefix)}) @system @nogc nothrow;")
 
 def gen_func_d(decl, prefix):
     c_func_name = decl['name']
     d_func_name = util.as_lower_camel_case(check_override(decl['name']), prefix)
+    c(decl.get('comment'))
     if c_func_name in c_callbacks:
         # a simple forwarded C callback function
         l(f"alias {d_func_name} = {c_func_name};")
@@ -505,7 +523,7 @@ def gen(c_header_path, c_prefix, dep_c_prefixes):
     print(f'  {c_header_path} => {module_name}')
     reset_globals()
     shutil.copyfile(c_header_path, f'sokol-d/src/sokol/c/{os.path.basename(c_header_path)}')
-    ir = gen_ir.gen(c_header_path, c_source_path, module_name, c_prefix, dep_c_prefixes)
+    ir = gen_ir.gen(c_header_path, c_source_path, module_name, c_prefix, dep_c_prefixes, with_comments=True)
     gen_module(ir, dep_c_prefixes)
     output_path = f"sokol-d/src/sokol/{ir['module']}.d"
     with open(output_path, 'w', newline='\n') as f_outp:

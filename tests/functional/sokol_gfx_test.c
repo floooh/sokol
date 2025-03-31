@@ -918,6 +918,9 @@ UTEST(sokol_gfx, query_buffer_desc) {
     T(b0_desc.mtl_buffers[0] == 0);
     T(b0_desc.d3d11_buffer == 0);
     T(b0_desc.wgpu_buffer == 0);
+    T(sg_query_buffer_size(b0) == 32);
+    T(sg_query_buffer_type(b0) == SG_BUFFERTYPE_VERTEXBUFFER);
+    T(sg_query_buffer_usage(b0) == SG_USAGE_STREAM);
 
     float vtx_data[16];
     sg_buffer b1 = sg_make_buffer(&(sg_buffer_desc){
@@ -929,6 +932,9 @@ UTEST(sokol_gfx, query_buffer_desc) {
     T(b1_desc.usage == SG_USAGE_IMMUTABLE);
     T(b1_desc.data.ptr == 0);
     T(b1_desc.data.size == 0);
+    T(sg_query_buffer_size(b1) == sizeof(vtx_data));
+    T(sg_query_buffer_type(b1) == SG_BUFFERTYPE_VERTEXBUFFER);
+    T(sg_query_buffer_usage(b1) == SG_USAGE_IMMUTABLE);
 
     uint16_t idx_data[8];
     sg_buffer b2 = sg_make_buffer(&(sg_buffer_desc){
@@ -941,6 +947,9 @@ UTEST(sokol_gfx, query_buffer_desc) {
     T(b2_desc.usage == SG_USAGE_IMMUTABLE);
     T(b2_desc.data.ptr == 0);
     T(b2_desc.data.size == 0);
+    T(sg_query_buffer_size(b2) == sizeof(idx_data));
+    T(sg_query_buffer_type(b2) == SG_BUFFERTYPE_INDEXBUFFER);
+    T(sg_query_buffer_usage(b2) == SG_USAGE_IMMUTABLE);
 
     // invalid buffer (returns zeroed desc)
     sg_buffer b3 = sg_make_buffer(&(sg_buffer_desc){
@@ -953,6 +962,9 @@ UTEST(sokol_gfx, query_buffer_desc) {
     T(b3_desc.size == 0);
     T(b3_desc.type == 0);
     T(b3_desc.usage == 0);
+    T(sg_query_buffer_size(b3) == 0);
+    T(sg_query_buffer_type(b3) == _SG_BUFFERTYPE_DEFAULT);
+    T(sg_query_buffer_usage(b3) == _SG_USAGE_DEFAULT);
 
     sg_shutdown();
 }
@@ -984,6 +996,13 @@ UTEST(sokol_gfx, query_image_desc) {
     T(i0_desc.d3d11_texture == 0);
     T(i0_desc.d3d11_shader_resource_view == 0);
     T(i0_desc.wgpu_texture == 0);
+    T(sg_query_image_type(i0) == SG_IMAGETYPE_2D);
+    T(sg_query_image_width(i0) == 256);
+    T(sg_query_image_height(i0) == 512);
+    T(sg_query_image_num_slices(i0) == 1);
+    T(sg_query_image_num_mipmaps(i0) == 1);
+    T(sg_query_image_pixelformat(i0) == SG_PIXELFORMAT_R8);
+    T(sg_query_image_sample_count(i0) == 1);
 
     sg_destroy_image(i0);
     const sg_image_desc i0_desc_x = sg_query_image_desc(i0);
@@ -996,6 +1015,13 @@ UTEST(sokol_gfx, query_image_desc) {
     T(i0_desc_x.usage == 0);
     T(i0_desc_x.pixel_format == 0);
     T(i0_desc_x.sample_count == 0);
+    T(sg_query_image_type(i0) == _SG_IMAGETYPE_DEFAULT);
+    T(sg_query_image_width(i0) == 0);
+    T(sg_query_image_height(i0) == 0);
+    T(sg_query_image_num_slices(i0) == 0);
+    T(sg_query_image_num_mipmaps(i0) == 0);
+    T(sg_query_image_pixelformat(i0) == _SG_PIXELFORMAT_DEFAULT);
+    T(sg_query_image_sample_count(i0) == 0);
 
     sg_shutdown();
 }
@@ -1879,9 +1905,8 @@ UTEST(sokol_gfx, make_buffer_validate_immutable_nodata) {
     setup(&(sg_desc){0});
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ 0 });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_SIZE);
-    T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_DATA);
-    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_NONZERO_SIZE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
@@ -1893,7 +1918,7 @@ UTEST(sokol_gfx, make_buffer_validate_size_mismatch) {
         .data = SG_RANGE(data),
     });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_DATA_SIZE);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_MATCHING_DATA_SIZE);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
@@ -1905,8 +1930,75 @@ UTEST(sokol_gfx, make_buffer_validate_data_ptr_but_no_size) {
         .data.ptr = data,
     });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_SIZE);
-    T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_DATA);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_NONZERO_SIZE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_validate_data_ptr_but_no_data_size) {
+    setup(&(sg_desc){0});
+    const uint32_t data[16] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .size = sizeof(data),
+        .data.ptr = data,
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_MATCHING_DATA_SIZE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_validate_no_data_ptr_but_data_size) {
+    setup(&(sg_desc){0});
+    const uint32_t data[16] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .size = sizeof(data),
+        .data.size = sizeof(data),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_usage_dynamic_expect_no_data) {
+    setup(&(sg_desc){0});
+    const uint32_t data[16] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = SG_USAGE_DYNAMIC,
+        .data = SG_RANGE(data),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_NO_DATA);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_usage_stream_expect_no_data) {
+    setup(&(sg_desc){0});
+    const uint32_t data[16] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = SG_USAGE_STREAM,
+        .data = SG_RANGE(data),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_NO_DATA);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_storagebuffer_not_supported_and_size) {
+    setup(&(sg_desc){0});
+    const uint8_t data[10] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .type = SG_BUFFERTYPE_STORAGEBUFFER,
+        .data = SG_RANGE(data),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_STORAGEBUFFER_SUPPORTED);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_STORAGEBUFFER_SIZE_MULTIPLE_4);
     T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
@@ -2891,10 +2983,6 @@ UTEST(sokol_gfx, query_pixelformat_bytesperpixel) {
     T(sg_query_pixelformat(SG_PIXELFORMAT_BC6H_RGBF).bytes_per_pixel == 0);
     T(sg_query_pixelformat(SG_PIXELFORMAT_BC6H_RGBUF).bytes_per_pixel == 0);
     T(sg_query_pixelformat(SG_PIXELFORMAT_BC7_RGBA).bytes_per_pixel == 0);
-    T(sg_query_pixelformat(SG_PIXELFORMAT_PVRTC_RGB_2BPP).bytes_per_pixel == 0);
-    T(sg_query_pixelformat(SG_PIXELFORMAT_PVRTC_RGB_4BPP).bytes_per_pixel == 0);
-    T(sg_query_pixelformat(SG_PIXELFORMAT_PVRTC_RGBA_2BPP).bytes_per_pixel == 0);
-    T(sg_query_pixelformat(SG_PIXELFORMAT_PVRTC_RGBA_4BPP).bytes_per_pixel == 0);
     T(sg_query_pixelformat(SG_PIXELFORMAT_ETC2_RGB8).bytes_per_pixel == 0);
     T(sg_query_pixelformat(SG_PIXELFORMAT_ETC2_RGB8A1).bytes_per_pixel == 0);
     T(sg_query_pixelformat(SG_PIXELFORMAT_ETC2_RGBA8).bytes_per_pixel == 0);

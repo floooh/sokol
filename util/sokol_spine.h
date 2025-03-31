@@ -3474,7 +3474,7 @@ static void _sspine_log(sspine_log_item log_item, uint32_t log_level, uint32_t l
             const char* filename = 0;
             const char* message = 0;
         #endif
-        _sspine.desc.logger.func("sspine", log_level, log_item, message, line_nr, filename, _sspine.desc.logger.user_data);
+        _sspine.desc.logger.func("sspine", log_level, (uint32_t)log_item, message, line_nr, filename, _sspine.desc.logger.user_data);
     } else {
         // for log level PANIC it would be 'undefined behaviour' to continue
         if (log_level == 0) {
@@ -4590,7 +4590,8 @@ static sspine_resource_state _sspine_init_instance(_sspine_instance_t* instance,
     spSkeleton_setToSetupPose(instance->sp_skel);
     spAnimationState_update(instance->sp_anim_state, 0.0f);
     spAnimationState_apply(instance->sp_anim_state, instance->sp_skel);
-    spSkeleton_updateWorldTransform(instance->sp_skel);
+    spSkeleton_update(instance->sp_skel, 0.0f);
+    spSkeleton_updateWorldTransform(instance->sp_skel, SP_PHYSICS_UPDATE);
 
     return SSPINE_RESOURCESTATE_VALID;
 }
@@ -5379,7 +5380,8 @@ SOKOL_API_IMPL void sspine_update_instance(sspine_instance instance_id, float de
         _sspine_rewind_triggered_events(instance);
         spAnimationState_update(instance->sp_anim_state, delta_time);
         spAnimationState_apply(instance->sp_anim_state, instance->sp_skel);
-        spSkeleton_updateWorldTransform(instance->sp_skel);
+        spSkeleton_update(instance->sp_skel, delta_time);
+        spSkeleton_updateWorldTransform(instance->sp_skel, SP_PHYSICS_UPDATE);
     }
 }
 
