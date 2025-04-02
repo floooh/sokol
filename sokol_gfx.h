@@ -8346,11 +8346,16 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
 _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.backend = SG_BACKEND_GLES3;
 
+    GLint major_version = 0;
+    GLint minor_version = 0;
+    glGetIntegerv(GL_MAJOR_VERSION, &major_version);
+    glGetIntegerv(GL_MINOR_VERSION, &minor_version);
+    const int version = major_version * 100 + minor_version * 10;
     _sg.features.origin_top_left = false;
     _sg.features.image_clamp_to_border = false;
     _sg.features.mrt_independent_blend_state = false;
     _sg.features.mrt_independent_write_mask = false;
-    _sg.features.compute = false;
+    _sg.features.compute = version >= 310;
     _sg.features.msaa_image_bindings = false;
 
     bool has_s3tc = false;  // BC1..BC3
