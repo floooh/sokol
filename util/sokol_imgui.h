@@ -2380,7 +2380,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         #if defined(__cplusplus)
             ImGuiPlatformIO* pio = &ImGui::GetPlatformIO();
         #else
-            ImGuiPlatformIO* pio = _SIMGUI_CFUNC(GetPlatformIO)();
+            ImGuiPlatformIO* pio = _SIMGUI_CFUNC(GetPlatformIO_Nil)();
         #endif
         pio->Platform_SetClipboardTextFn = _simgui_set_clipboard;
         pio->Platform_GetClipboardTextFn = _simgui_get_clipboard;
