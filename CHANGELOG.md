@@ -4,11 +4,11 @@
 
 - sokol_imgui.h: a small compatibility hack for the 'traditional' [cimgui.h](https://github.com/cimgui/cimgui).
   It's a bit unfortunate that the cimgui.h bindings are starting to diverge from
-  the Dear Bindings API for basic functionality, but as long as it's only a handful
+  the Dear Bindings C API for basic functionality, but as long as it's only a handful
   differences it's ok to handle both in sokol_imgui.h. If the difference become
   bigger it might become too much hassle to support both C bindings flavours though.
 
-  This is not an issue of course when using the Dear ImGui C++ API of course.
+  This is not an issue when using the Dear ImGui C++ API of course.
 
   Note that it is recommended to use the code-generated C bindings from here:
 
