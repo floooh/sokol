@@ -711,8 +711,9 @@
 
         - macOS and iOS with Metal
         - Windows with D3D11 and OpenGL
-        - Linux with OpenGL
-        - web with WebGPU
+        - Linux with OpenGL or GLES3.1+
+        - Web with WebGPU
+        - Android with GLES3.1+
 
     ...this means compute shaders can't be used on the following platform/backend
     combos (the same restrictions apply to using storage buffers without compute
@@ -720,8 +721,7 @@
 
         - macOS with GL
         - iOS with GLES3
-        - Android
-        - web with WebGL2
+        - Web with WebGL2
 
     A compute pass is started with:
 
@@ -1185,8 +1185,7 @@
     Storage buffers are *NOT* supported on the following platform/backend combos:
 
     - macOS+GL (because storage buffers require GL 4.3, while macOS only goes up to GL 4.1)
-    - all GLES3 platforms (WebGL2, iOS, Android - with the option that support on
-      Android may be added at a later point)
+    - platforms which only support a GLES3.0 context (WebGL2 and iOS)
 
     To use storage buffers, the following steps are required:
 
@@ -4979,17 +4978,20 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
                 #include <OpenGLES/ES3/gl.h>
                 #include <OpenGLES/ES3/glext.h>
             #endif
-        #elif defined(__EMSCRIPTEN__) || defined(__ANDROID__)
+        #elif defined(__EMSCRIPTEN__)
             #if defined(SOKOL_GLES3)
                 #include <GLES3/gl3.h>
             #endif
+        #elif defined(__ANDROID__)
+            #define _SOKOL_GL_HAS_COMPUTE (1)
+            #include <GLES3/gl31.h>
         #elif defined(__linux__) || defined(__unix__)
+            #define _SOKOL_GL_HAS_COMPUTE (1)
             #if defined(SOKOL_GLCORE)
                 #define GL_GLEXT_PROTOTYPES
                 #include <GL/gl.h>
-                #define _SOKOL_GL_HAS_COMPUTE (1)
             #else
-                #include <GLES3/gl3.h>
+                #include <GLES3/gl31.h>
                 #include <GLES3/gl3ext.h>
             #endif
         #endif
@@ -8346,11 +8348,16 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
 _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.backend = SG_BACKEND_GLES3;
 
+    GLint major_version = 0;
+    GLint minor_version = 0;
+    glGetIntegerv(GL_MAJOR_VERSION, &major_version);
+    glGetIntegerv(GL_MINOR_VERSION, &minor_version);
+    const int version = major_version * 100 + minor_version * 10;
     _sg.features.origin_top_left = false;
     _sg.features.image_clamp_to_border = false;
     _sg.features.mrt_independent_blend_state = false;
     _sg.features.mrt_independent_write_mask = false;
-    _sg.features.compute = false;
+    _sg.features.compute = version >= 310;
     _sg.features.msaa_image_bindings = false;
 
     bool has_s3tc = false;  // BC1..BC3
@@ -9998,6 +10005,9 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
 
 #if defined _SOKOL_GL_HAS_COMPUTE
 _SOKOL_PRIVATE void _sg_gl_handle_memory_barriers(const _sg_shader_t* shd, const _sg_bindings_t* bnd) {
+    if (!_sg.features.compute) {
+        return;
+    }
     // NOTE: currently only storage buffers can be GPU-written, and storage
     // buffers cannot be bound as vertex- or index-buffers.
     bool needs_barrier = false;
@@ -10221,6 +10231,9 @@ _SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_inst
 
 _SOKOL_PRIVATE void _sg_gl_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     #if defined(_SOKOL_GL_HAS_COMPUTE)
+    if (!_sg.features.compute) {
+        return;
+    }
     glDispatchCompute((GLuint)num_groups_x, (GLuint)num_groups_y, (GLuint)num_groups_z);
     #else
     (void)num_groups_x; (void)num_groups_y; (void)num_groups_z;

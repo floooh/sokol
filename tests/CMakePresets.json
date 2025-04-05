@@ -418,7 +418,7 @@
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLES3",
                 "ANDROID_ABI": "armeabi-v7a",
-                "ANDROID_PLATFORM": "android-28",
+                "ANDROID_PLATFORM": "android-30",
                 "CMAKE_BUILD_TYPE": "Debug"
             }
         },
@@ -430,40 +430,8 @@
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLES3",
                 "ANDROID_ABI": "armeabi-v7a",
-                "ANDROID_PLATFORM": "android-28",
+                "ANDROID_PLATFORM": "android-30",
                 "CMAKE_BUILD_TYPE": "Release"
-            }
-        },
-        {
-            "name": "android_sles_debug",
-            "generator": "Ninja",
-            "binaryDir": "build/android_sles_debug",
-            "toolchainFile": "build/android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake",
-            "cacheVariables": {
-                "SOKOL_BACKEND": "SOKOL_GLES3",
-                "ANDROID_ABI": "armeabi-v7a",
-                "ANDROID_PLATFORM": "android-28",
-                "CMAKE_BUILD_TYPE": "Debug",
-                "SOKOL_FORCE_SLES": {
-                    "type": "BOOL",
-                    "value": "ON"
-                }
-            }
-        },
-        {
-            "name": "android_sles_release",
-            "generator": "Ninja",
-            "binaryDir": "build/android_sles_release",
-            "toolchainFile": "build/android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake",
-            "cacheVariables": {
-                "SOKOL_BACKEND": "SOKOL_GLES3",
-                "ANDROID_ABI": "armeabi-v7a",
-                "ANDROID_PLATFORM": "android-28",
-                "CMAKE_BUILD_TYPE": "Release",
-                "SOKOL_FORCE_SLES": {
-                    "type": "BOOL",
-                    "value": "ON"
-                }
             }
         },
         {
@@ -679,14 +647,6 @@
         {
             "name": "android_release",
             "configurePreset": "android_release"
-        },
-        {
-            "name": "android_sles_debug",
-            "configurePreset": "android_sles_debug"
-        },
-        {
-            "name": "android_sles_release",
-            "configurePreset": "android_sles_release"
         },
         {
             "name": "win_gl_debug",
