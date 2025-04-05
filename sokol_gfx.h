@@ -4979,17 +4979,20 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
                 #include <OpenGLES/ES3/gl.h>
                 #include <OpenGLES/ES3/glext.h>
             #endif
-        #elif defined(__EMSCRIPTEN__) || defined(__ANDROID__)
+        #elif defined(__EMSCRIPTEN__)
             #if defined(SOKOL_GLES3)
                 #include <GLES3/gl3.h>
             #endif
+        #elif defined(__ANDROID__)
+            #define _SOKOL_GL_HAS_COMPUTE (1)
+            #include <GLES3/gl31.h>
         #elif defined(__linux__) || defined(__unix__)
+            #define _SOKOL_GL_HAS_COMPUTE (1)
             #if defined(SOKOL_GLCORE)
                 #define GL_GLEXT_PROTOTYPES
                 #include <GL/gl.h>
-                #define _SOKOL_GL_HAS_COMPUTE (1)
             #else
-                #include <GLES3/gl3.h>
+                #include <GLES3/gl31.h>
                 #include <GLES3/gl3ext.h>
             #endif
         #endif
@@ -10003,6 +10006,9 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
 
 #if defined _SOKOL_GL_HAS_COMPUTE
 _SOKOL_PRIVATE void _sg_gl_handle_memory_barriers(const _sg_shader_t* shd, const _sg_bindings_t* bnd) {
+    if (!_sg.features.compute) {
+        return;
+    }
     // NOTE: currently only storage buffers can be GPU-written, and storage
     // buffers cannot be bound as vertex- or index-buffers.
     bool needs_barrier = false;
@@ -10226,6 +10232,9 @@ _SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_inst
 
 _SOKOL_PRIVATE void _sg_gl_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     #if defined(_SOKOL_GL_HAS_COMPUTE)
+    if (!_sg.features.compute) {
+        return;
+    }
     glDispatchCompute((GLuint)num_groups_x, (GLuint)num_groups_y, (GLuint)num_groups_z);
     #else
     (void)num_groups_x; (void)num_groups_y; (void)num_groups_z;
