@@ -2,7 +2,7 @@
 
 ### 05-Apr-2025
 
-Compute shaders are now supported in on platforms that support GLES3.1
+Compute shaders are now supported on platforms that support GLES3.1
 (e.g. Android and desktop Linux, but not WebGL2 or iOS):
 
 - sokol_app.h:
