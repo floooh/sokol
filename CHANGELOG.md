@@ -2,27 +2,33 @@
 
 ### 05-Apr-2025
 
-Compute shaders are now supported on platforms that support GLES3.1
+- Compute shaders are now supported on platforms that support GLES3.1
 (e.g. Android and desktop Linux, but not WebGL2 or iOS):
 
-- sokol_app.h:
-    - `sapp_desc.gl_major/minor_version` is now taken into account for GLES context
-      creation on platforms that support more recent GLES3 contexts than GLES3.0
-      (Android and desktop Linux)
-    - the functions `sapp_gl_get_major_version()` and `sapp_gl_get_minor_version()`
-      now return the requested GL context version also in 'GLES3 mode'
-    - a new function `sapp_gl_is_gles()` has been added which returns true in 'GLES3 mode'
-    - on Android and desktop-Linux in GLES3 mode, a GLES3.1 context will now be
-      created by default
-- sokol_gfx.h:
-    - the SOKOL_GLES3 code path now dynamically queries the GLES3 context version
-      to check for storage-buffer and compute-shader support (e.g. >= GLES3.1)
+    - sokol_app.h:
+        - `sapp_desc.gl_major/minor_version` is now taken into account for GLES context
+          creation on platforms that support more recent GLES3 contexts than GLES3.0
+          (Android and desktop Linux)
+        - the functions `sapp_gl_get_major_version()` and `sapp_gl_get_minor_version()`
+          now return the requested GL context version also in 'GLES3 mode'
+        - a new function `sapp_gl_is_gles()` has been added which returns true in 'GLES3 mode'
+        - on Android and desktop-Linux in GLES3 mode, a GLES3.1 context will now be
+          created by default
+    - sokol_gfx.h:
+        - the SOKOL_GLES3 code path now dynamically queries the GLES3 context version
+          to check for storage-buffer and compute-shader support (e.g. >= GLES3.1)
 
-Note that to get compute shader support on GLES3.1 capable platforms you'll also
-need to pass in matching GLSL shaders, e.g. with sokol-shdc, use the `glsl310es`
-output shader language instead of `glsl300es`.
+    Note that to get compute shader support on GLES3.1 capable platforms you'll also
+    need to pass in matching GLSL shaders, e.g. with sokol-shdc, use the `glsl310es`
+    output shader language instead of `glsl300es`.
 
-For details see PR https://github.com/floooh/sokol/pull/1241
+    For details see PR https://github.com/floooh/sokol/pull/1241
+
+- sokol_audio.h Android: the OpenSLES backend has been removed (the Android NDK has
+started to throw deprecation errors when switching to a more recent target platform version,
+so not much point in supporting SLES anymore).
+
+    PR: https://github.com/floooh/sokol/pull/1243
 
 ### 04-Apr-2025
 
