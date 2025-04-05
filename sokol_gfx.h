@@ -711,8 +711,9 @@
 
         - macOS and iOS with Metal
         - Windows with D3D11 and OpenGL
-        - Linux with OpenGL
-        - web with WebGPU
+        - Linux with OpenGL or GLES3.1+
+        - Web with WebGPU
+        - Android with GLES3.1+
 
     ...this means compute shaders can't be used on the following platform/backend
     combos (the same restrictions apply to using storage buffers without compute
@@ -720,8 +721,7 @@
 
         - macOS with GL
         - iOS with GLES3
-        - Android
-        - web with WebGL2
+        - Web with WebGL2
 
     A compute pass is started with:
 
@@ -1185,8 +1185,7 @@
     Storage buffers are *NOT* supported on the following platform/backend combos:
 
     - macOS+GL (because storage buffers require GL 4.3, while macOS only goes up to GL 4.1)
-    - all GLES3 platforms (WebGL2, iOS, Android - with the option that support on
-      Android may be added at a later point)
+    - platforms which only support a GLES3.0 context (WebGL2 and iOS)
 
     To use storage buffers, the following steps are required:
 
