@@ -418,7 +418,7 @@
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLES3",
                 "ANDROID_ABI": "armeabi-v7a",
-                "ANDROID_PLATFORM": "android-28",
+                "ANDROID_PLATFORM": "android-30",
                 "CMAKE_BUILD_TYPE": "Debug"
             }
         },
@@ -430,7 +430,7 @@
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLES3",
                 "ANDROID_ABI": "armeabi-v7a",
-                "ANDROID_PLATFORM": "android-28",
+                "ANDROID_PLATFORM": "android-30",
                 "CMAKE_BUILD_TYPE": "Release"
             }
         },
@@ -442,7 +442,7 @@
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLES3",
                 "ANDROID_ABI": "armeabi-v7a",
-                "ANDROID_PLATFORM": "android-28",
+                "ANDROID_PLATFORM": "android-30",
                 "CMAKE_BUILD_TYPE": "Debug",
                 "SOKOL_FORCE_SLES": {
                     "type": "BOOL",
@@ -458,7 +458,7 @@
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLES3",
                 "ANDROID_ABI": "armeabi-v7a",
-                "ANDROID_PLATFORM": "android-28",
+                "ANDROID_PLATFORM": "android-30",
                 "CMAKE_BUILD_TYPE": "Release",
                 "SOKOL_FORCE_SLES": {
                     "type": "BOOL",
