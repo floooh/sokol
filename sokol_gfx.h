@@ -2938,7 +2938,7 @@ typedef struct sg_buffer_usage {
     The default configuration is:
 
     .size:      0       (*must* be >0 for buffers without data)
-    .usage              .vertex = true, .immutable = true
+    .usage              .vertex_buffer = true, .immutable = true
     .data.ptr   0       (*must* be valid for immutable buffers)
     .data.size  0       (*must* be > 0 for immutable buffers)
     .label      0       (optional string label)
