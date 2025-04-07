@@ -14662,17 +14662,18 @@ _SOKOL_PRIVATE WGPUOptionalBool _sg_wgpu_optional_bool(bool b) {
 #define _sg_wgpu_optional_bool(b) (b)
 #endif
 
-_SOKOL_PRIVATE WGPUBufferUsage _sg_wgpu_buffer_usage(sg_buffer_type t, sg_usage u) {
-    // FIXME: change to WGPUBufferUsage once Emscripten and Dawn webgpu.h agree
+_SOKOL_PRIVATE WGPUBufferUsage _sg_wgpu_buffer_usage(const sg_buffer_usage* usg) {
     int res = 0;
-    if (SG_BUFFERTYPE_VERTEXBUFFER == t) {
-        res = WGPUBufferUsage_Vertex;
-    } else if (SG_BUFFERTYPE_STORAGEBUFFER == t) {
-        res = WGPUBufferUsage_Storage;
-    } else {
-        res = WGPUBufferUsage_Index;
+    if (usg->vertex_buffer) {
+        res |= WGPUBufferUsage_Vertex;
     }
-    if (SG_USAGE_IMMUTABLE != u) {
+    if (usg->index_buffer) {
+        res |= WGPUBufferUsage_Index;
+    }
+    if (usg->storage_buffer) {
+        res |= WGPUBufferUsage_Storage;
+    }
+    if (!usg->immutable) {
         res |= WGPUBufferUsage_CopyDst;
     }
     return (WGPUBufferUsage)res;
@@ -15780,11 +15781,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
         // buffer mapping size must be multiple of 4, so round up buffer size (only a problem
         // with index buffers containing odd number of indices)
         const uint64_t wgpu_buf_size = _sg_roundup_u64((uint64_t)buf->cmn.size, 4);
-        const bool map_at_creation = (SG_USAGE_IMMUTABLE == buf->cmn.usage) && (desc->data.ptr);
+        const bool map_at_creation = buf->cmn.usage.immutable && (desc->data.ptr);
 
         WGPUBufferDescriptor wgpu_buf_desc;
         _sg_clear(&wgpu_buf_desc, sizeof(wgpu_buf_desc));
-        wgpu_buf_desc.usage = _sg_wgpu_buffer_usage(buf->cmn.type, buf->cmn.usage);
+        wgpu_buf_desc.usage = _sg_wgpu_buffer_usage(&buf->cmn.usage);
         wgpu_buf_desc.size = wgpu_buf_size;
         wgpu_buf_desc.mappedAtCreation = map_at_creation;
         wgpu_buf_desc.label = _sg_wgpu_stringview(desc->label);
@@ -15809,7 +15810,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
-    if (buf->cmn.type == SG_BUFFERTYPE_STORAGEBUFFER) {
+    if (buf->cmn.usage.storage_buffer) {
         _sg_wgpu_bindgroups_cache_invalidate(_SG_WGPU_BINDGROUPSCACHEITEMTYPE_STORAGEBUFFER, buf->slot.id);
     }
     if (buf->wgpu.buf) {
@@ -15898,7 +15899,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
         _sg_clear(&wgpu_tex_desc, sizeof(wgpu_tex_desc));
         wgpu_tex_desc.label = _sg_wgpu_stringview(desc->label);
         wgpu_tex_desc.usage = WGPUTextureUsage_TextureBinding|WGPUTextureUsage_CopyDst;
-        if (desc->render_target) {
+        if (desc->usage.render_attachment) {
             wgpu_tex_desc.usage |= WGPUTextureUsage_RenderAttachment;
         }
         wgpu_tex_desc.dimension = _sg_wgpu_texture_dimension(img->cmn.type);
@@ -15917,7 +15918,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
             _SG_ERROR(WGPU_CREATE_TEXTURE_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
-        if ((img->cmn.usage == SG_USAGE_IMMUTABLE) && !img->cmn.render_target) {
+        // FIXME allow immutable images without data, and don't
+        // take attachment usage into account
+        if (img->cmn.usage.immutable && !img->cmn.usage.render_attachment) {
             _sg_wgpu_copy_image_data(img, img->wgpu.tex, &desc->data);
         }
         WGPUTextureViewDescriptor wgpu_texview_desc;
