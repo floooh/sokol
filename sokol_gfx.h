@@ -2069,68 +2069,6 @@ typedef enum sg_resource_state {
 } sg_resource_state;
 
 /*
-    sg_usage
-
-    A resource usage hint describing the update strategy of
-    buffers and images. This is used in the sg_buffer_desc.usage
-    and sg_image_desc.usage members when creating buffers
-    and images:
-
-    SG_USAGE_IMMUTABLE:     the resource will never be updated with
-                            new (CPU-side) data, instead the content of the
-                            resource must be provided on creation
-    SG_USAGE_DYNAMIC:       the resource will be updated infrequently
-                            with new data (this could range from "once
-                            after creation", to "quite often but not
-                            every frame")
-    SG_USAGE_STREAM:        the resource will be updated each frame
-                            with new content
-
-    The rendering backends use this hint to prevent that the
-    CPU needs to wait for the GPU when attempting to update
-    a resource that might be currently accessed by the GPU.
-
-    Resource content is updated with the functions sg_update_buffer() or
-    sg_append_buffer() for buffer objects, and sg_update_image() for image
-    objects. For the sg_update_*() functions, only one update is allowed per
-    frame and resource object, while sg_append_buffer() can be called
-    multiple times per frame on the same buffer. The application must update
-    all data required for rendering (this means that the update data can be
-    smaller than the resource size, if only a part of the overall resource
-    size is used for rendering, you only need to make sure that the data that
-    *is* used is valid).
-
-    The default usage is SG_USAGE_IMMUTABLE.
-*/
-typedef enum sg_usage {
-    _SG_USAGE_DEFAULT,      // value 0 reserved for default-init
-    SG_USAGE_IMMUTABLE,
-    SG_USAGE_DYNAMIC,
-    SG_USAGE_STREAM,
-    _SG_USAGE_NUM,
-    _SG_USAGE_FORCE_U32 = 0x7FFFFFFF
-} sg_usage;
-
-/*
-    sg_buffer_type
-
-    Indicates whether a buffer will be bound as vertex-,
-    index- or storage-buffer.
-
-    Used in the sg_buffer_desc.type member when creating a buffer.
-
-    The default value is SG_BUFFERTYPE_VERTEXBUFFER.
-*/
-typedef enum sg_buffer_type {
-    _SG_BUFFERTYPE_DEFAULT,         // value 0 reserved for default-init
-    SG_BUFFERTYPE_VERTEXBUFFER,
-    SG_BUFFERTYPE_INDEXBUFFER,
-    SG_BUFFERTYPE_STORAGEBUFFER,
-    _SG_BUFFERTYPE_NUM,
-    _SG_BUFFERTYPE_FORCE_U32 = 0x7FFFFFFF
-} sg_buffer_type;
-
-/*
     sg_index_type
 
     Indicates whether indexed rendering (fetching vertex-indices from an
@@ -2978,6 +2916,20 @@ typedef struct sg_bindings {
 } sg_bindings;
 
 /*
+    sg_buffer_usage
+
+    TODO
+*/
+typedef struct sg_buffer_usage {
+    bool vertex_buffer;
+    bool index_buffer;
+    bool storage_buffer;
+    bool immutable;
+    bool dynamic_update;
+    bool stream_update;
+} sg_buffer_usage;
+
+/*
     sg_buffer_desc
 
     Creation parameters for sg_buffer objects, used in the
@@ -2986,8 +2938,7 @@ typedef struct sg_bindings {
     The default configuration is:
 
     .size:      0       (*must* be >0 for buffers without data)
-    .type:      SG_BUFFERTYPE_VERTEXBUFFER
-    .usage:     SG_USAGE_IMMUTABLE
+    .usage              .vertex = true, .immutable = true
     .data.ptr   0       (*must* be valid for immutable buffers)
     .data.size  0       (*must* be > 0 for immutable buffers)
     .label      0       (optional string label)
@@ -3033,8 +2984,7 @@ typedef struct sg_bindings {
 typedef struct sg_buffer_desc {
     uint32_t _start_canary;
     size_t size;
-    sg_buffer_type type;
-    sg_usage usage;
+    sg_buffer_usage usage;
     sg_range data;
     const char* label;
     // optionally inject backend-specific resources
@@ -3044,6 +2994,19 @@ typedef struct sg_buffer_desc {
     const void* wgpu_buffer;
     uint32_t _end_canary;
 } sg_buffer_desc;
+
+/*
+    sg_image_usage
+
+    TODO
+*/
+typedef struct sg_image_usage {
+    bool render_attachment;
+    bool storage_attachment;
+    bool immutable;
+    bool dynamic_update;
+    bool stream_update;
+} sg_image_usage;
 
 /*
     sg_image_data
@@ -3063,15 +3026,15 @@ typedef struct sg_image_data {
 
     The default configuration is:
 
-    .type:              SG_IMAGETYPE_2D
-    .render_target:     false
+    .type               SG_IMAGETYPE_2D
+    .usage              .immutable = true
     .width              0 (must be set to >0)
     .height             0 (must be set to >0)
     .num_slices         1 (3D textures: depth; array textures: number of layers)
-    .num_mipmaps:       1
-    .usage:             SG_USAGE_IMMUTABLE
-    .pixel_format:      SG_PIXELFORMAT_RGBA8 for textures, or sg_desc.environment.defaults.color_format for render targets
-    .sample_count:      1 for textures, or sg_desc.environment.defaults.sample_count for render targets
+    .num_mipmaps        1
+    .usage              SG_USAGE_IMMUTABLE
+    .pixel_format       SG_PIXELFORMAT_RGBA8 for textures, or sg_desc.environment.defaults.color_format for render targets
+    .sample_count       1 for textures, or sg_desc.environment.defaults.sample_count for render targets
     .data               an sg_image_data struct to define the initial content
     .label              0 (optional string label for trace hooks)
 
@@ -3115,12 +3078,11 @@ typedef struct sg_image_data {
 typedef struct sg_image_desc {
     uint32_t _start_canary;
     sg_image_type type;
-    bool render_target;
+    sg_image_usage usage;
     int width;
     int height;
     int num_slices;
     int num_mipmaps;
-    sg_usage usage;
     sg_pixel_format pixel_format;
     int sample_count;
     sg_image_data data;
@@ -4057,10 +4019,10 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_MSAA_3D_IMAGE, "3D images cannot have a sample_count > 1") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_MSAA_CUBE_IMAGE, "cube images cannot have sample_count > 1") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DEPTH_3D_IMAGE, "3D images cannot have a depth/stencil image format") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_RT_IMMUTABLE, "render target images must be SG_USAGE_IMMUTABLE") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_RT_IMMUTABLE, "render target images must be sg_image_usage.immutable") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_RT_NO_DATA, "render target images cannot be initialized with data") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_INJECTED_NO_DATA, "images with injected textures cannot be initialized with data") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA, "dynamic/stream images cannot be initialized with data") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA, "dynamic/stream-update images cannot be initialized with data") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE, "compressed images must be immutable") \
     _SG_LOGITEM_XMACRO(VALIDATE_SAMPLERDESC_CANARY, "sg_sampler_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_SAMPLERDESC_ANISTROPIC_REQUIRES_LINEAR_FILTERING, "sg_sampler_desc.max_anisotropy > 1 requires min/mag/mipmap_filter to be SG_FILTER_LINEAR") \
@@ -4546,15 +4508,14 @@ SOKOL_GFX_API_DECL sg_pipeline_desc sg_query_pipeline_defaults(const sg_pipeline
 SOKOL_GFX_API_DECL sg_attachments_desc sg_query_attachments_defaults(const sg_attachments_desc* desc);
 // assorted query functions
 SOKOL_GFX_API_DECL size_t sg_query_buffer_size(sg_buffer buf);
-SOKOL_GFX_API_DECL sg_buffer_type sg_query_buffer_type(sg_buffer buf);
-SOKOL_GFX_API_DECL sg_usage sg_query_buffer_usage(sg_buffer buf);
+SOKOL_GFX_API_DECL sg_buffer_usage sg_query_buffer_usage(sg_buffer buf);
 SOKOL_GFX_API_DECL sg_image_type sg_query_image_type(sg_image img);
 SOKOL_GFX_API_DECL int sg_query_image_width(sg_image img);
 SOKOL_GFX_API_DECL int sg_query_image_height(sg_image img);
 SOKOL_GFX_API_DECL int sg_query_image_num_slices(sg_image img);
 SOKOL_GFX_API_DECL int sg_query_image_num_mipmaps(sg_image img);
 SOKOL_GFX_API_DECL sg_pixel_format sg_query_image_pixelformat(sg_image img);
-SOKOL_GFX_API_DECL sg_usage sg_query_image_usage(sg_image img);
+SOKOL_GFX_API_DECL sg_image_usage sg_query_image_usage(sg_image img);
 SOKOL_GFX_API_DECL int sg_query_image_sample_count(sg_image img);
 
 // separate resource allocation and initialization (for async setup)
@@ -5461,8 +5422,7 @@ typedef struct {
     uint32_t append_frame_index;
     int num_slots;
     int active_slot;
-    sg_buffer_type type;
-    sg_usage usage;
+    sg_buffer_usage usage;
 } _sg_buffer_common_t;
 
 _SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_buffer_desc* desc) {
@@ -5471,9 +5431,8 @@ _SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_bu
     cmn->append_overflow = false;
     cmn->update_frame_index = 0;
     cmn->append_frame_index = 0;
-    cmn->num_slots = (desc->usage == SG_USAGE_IMMUTABLE) ? 1 : SG_NUM_INFLIGHT_FRAMES;
+    cmn->num_slots = desc->usage.immutable ? 1 : SG_NUM_INFLIGHT_FRAMES;
     cmn->active_slot = 0;
-    cmn->type = desc->type;
     cmn->usage = desc->usage;
 }
 
@@ -5482,22 +5441,20 @@ typedef struct {
     int num_slots;
     int active_slot;
     sg_image_type type;
-    bool render_target;
     int width;
     int height;
     int num_slices;
     int num_mipmaps;
-    sg_usage usage;
+    sg_image_usage usage;
     sg_pixel_format pixel_format;
     int sample_count;
 } _sg_image_common_t;
 
 _SOKOL_PRIVATE void _sg_image_common_init(_sg_image_common_t* cmn, const sg_image_desc* desc) {
     cmn->upd_frame_index = 0;
-    cmn->num_slots = (desc->usage == SG_USAGE_IMMUTABLE) ? 1 : SG_NUM_INFLIGHT_FRAMES;
+    cmn->num_slots = desc->usage.immutable ? 1 : SG_NUM_INFLIGHT_FRAMES;
     cmn->active_slot = 0;
     cmn->type = desc->type;
-    cmn->render_target = desc->render_target;
     cmn->width = desc->width;
     cmn->height = desc->height;
     cmn->num_slices = desc->num_slices;
@@ -12689,16 +12646,11 @@ _SOKOL_PRIVATE MTLResourceOptions _sg_mtl_resource_options_storage_mode_managed_
     #endif
 }
 
-_SOKOL_PRIVATE MTLResourceOptions _sg_mtl_buffer_resource_options(sg_usage usg) {
-    switch (usg) {
-        case SG_USAGE_IMMUTABLE:
-            return _sg_mtl_resource_options_storage_mode_managed_or_shared();
-        case SG_USAGE_DYNAMIC:
-        case SG_USAGE_STREAM:
-            return MTLResourceCPUCacheModeWriteCombined | _sg_mtl_resource_options_storage_mode_managed_or_shared();
-        default:
-            SOKOL_UNREACHABLE;
-            return 0;
+_SOKOL_PRIVATE MTLResourceOptions _sg_mtl_buffer_resource_options(const sg_buffer_usage* usage) {
+    if (usage->immutable) {
+        return _sg_mtl_resource_options_storage_mode_managed_or_shared();
+    } else {
+        return MTLResourceCPUCacheModeWriteCombined | _sg_mtl_resource_options_storage_mode_managed_or_shared();
     }
 }
 
@@ -13373,7 +13325,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_buffer(_sg_buffer_t* buf, const 
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(buf->cmn.size > 0);
     const bool injected = (0 != desc->mtl_buffers[0]);
-    MTLResourceOptions mtl_options = _sg_mtl_buffer_resource_options(buf->cmn.usage);
+    MTLResourceOptions mtl_options = _sg_mtl_buffer_resource_options(&buf->cmn.usage);
     for (int slot = 0; slot < buf->cmn.num_slots; slot++) {
         id<MTLBuffer> mtl_buf;
         if (injected) {
@@ -13477,7 +13429,7 @@ _SOKOL_PRIVATE bool _sg_mtl_init_texdesc_common(MTLTextureDescriptor* mtl_desc, 
     }
     mtl_desc.usage = MTLTextureUsageShaderRead;
     MTLResourceOptions res_options = 0;
-    if (img->cmn.usage != SG_USAGE_IMMUTABLE) {
+    if (!img->cmn.usage.immutable) {
         res_options |= MTLResourceCPUCacheModeWriteCombined;
     }
     res_options |= _sg_mtl_resource_options_storage_mode_managed_or_shared();
@@ -13487,7 +13439,7 @@ _SOKOL_PRIVATE bool _sg_mtl_init_texdesc_common(MTLTextureDescriptor* mtl_desc, 
 
 // initialize MTLTextureDescriptor with rendertarget attributes
 _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt(MTLTextureDescriptor* mtl_desc, _sg_image_t* img) {
-    SOKOL_ASSERT(img->cmn.render_target);
+    SOKOL_ASSERT(img->cmn.usage.render_attachment);
     _SOKOL_UNUSED(img);
     mtl_desc.usage = MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
     mtl_desc.resourceOptions = MTLResourceStorageModePrivate;
@@ -13517,7 +13469,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg
         _SG_OBJC_RELEASE(mtl_desc);
         return SG_RESOURCESTATE_FAILED;
     }
-    if (img->cmn.render_target) {
+    if (img->cmn.usage.render_attachment) {
         if (img->cmn.sample_count > 1) {
             _sg_mtl_init_texdesc_rt_msaa(mtl_desc, img);
         } else {
@@ -13536,7 +13488,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg
                 _SG_ERROR(METAL_CREATE_TEXTURE_FAILED);
                 return SG_RESOURCESTATE_FAILED;
             }
-            if ((img->cmn.usage == SG_USAGE_IMMUTABLE) && !img->cmn.render_target) {
+            // FIXME: make initial image data optional for immutable textures
+            // and render usage shouldn't matter for this
+            if (img->cmn.usage.immutable && !img->cmn.usage.render_attachment) {
                 _sg_mtl_copy_image_data(img, mtl_tex, &desc->data);
             }
         }
@@ -17781,7 +17735,7 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
                         (0 != desc->mtl_buffers[0]) ||
                         (0 != desc->d3d11_buffer) ||
                         (0 != desc->wgpu_buffer);
-        if (!injected && (desc->usage == SG_USAGE_IMMUTABLE)) {
+        if (!injected && desc->usage.immutable) {
             if (desc->data.ptr) {
                 _SG_VALIDATE(desc->size == desc->data.size, VALIDATE_BUFFERDESC_EXPECT_MATCHING_DATA_SIZE);
             } else {
@@ -17791,7 +17745,7 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
             _SG_VALIDATE(0 == desc->data.ptr, VALIDATE_BUFFERDESC_EXPECT_NO_DATA);
             _SG_VALIDATE(desc->data.size == 0, VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE);
         }
-        if (desc->type == SG_BUFFERTYPE_STORAGEBUFFER) {
+        if (desc->usage.storage_buffer) {
             _SG_VALIDATE(_sg.features.compute, VALIDATE_BUFFERDESC_STORAGEBUFFER_SUPPORTED);
             _SG_VALIDATE(_sg_multiple_u64(desc->size, 4), VALIDATE_BUFFERDESC_STORAGEBUFFER_SIZE_MULTIPLE_4);
         }
@@ -17839,7 +17793,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         _SG_VALIDATE(desc->width > 0, VALIDATE_IMAGEDESC_WIDTH);
         _SG_VALIDATE(desc->height > 0, VALIDATE_IMAGEDESC_HEIGHT);
         const sg_pixel_format fmt = desc->pixel_format;
-        const sg_usage usage = desc->usage;
+        const sg_image_usage* usage = &desc->usage;
         const bool injected = (0 != desc->gl_textures[0]) ||
                               (0 != desc->mtl_textures[0]) ||
                               (0 != desc->d3d11_texture) ||
@@ -17847,10 +17801,10 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         if (_sg_is_depth_or_depth_stencil_format(fmt)) {
             _SG_VALIDATE(desc->type != SG_IMAGETYPE_3D, VALIDATE_IMAGEDESC_DEPTH_3D_IMAGE);
         }
-        if (desc->render_target) {
+        if (usage->render_attachment) {
             SOKOL_ASSERT(((int)fmt >= 0) && ((int)fmt < _SG_PIXELFORMAT_NUM));
             _SG_VALIDATE(_sg.formats[fmt].render, VALIDATE_IMAGEDESC_RT_PIXELFORMAT);
-            _SG_VALIDATE(usage == SG_USAGE_IMMUTABLE, VALIDATE_IMAGEDESC_RT_IMMUTABLE);
+            _SG_VALIDATE(usage->immutable, VALIDATE_IMAGEDESC_RT_IMMUTABLE);
             _SG_VALIDATE(desc->data.subimage[0][0].ptr==0, VALIDATE_IMAGEDESC_RT_NO_DATA);
             if (desc->sample_count > 1) {
                 _SG_VALIDATE(_sg.formats[fmt].msaa, VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT);
@@ -17863,11 +17817,10 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
             const bool valid_nonrt_fmt = !_sg_is_valid_rendertarget_depth_format(fmt);
             _SG_VALIDATE(valid_nonrt_fmt, VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT);
             const bool is_compressed = _sg_is_compressed_pixel_format(desc->pixel_format);
-            const bool is_immutable = (usage == SG_USAGE_IMMUTABLE);
             if (is_compressed) {
-                _SG_VALIDATE(is_immutable, VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE);
+                _SG_VALIDATE(usage->immutable, VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE);
             }
-            if (!injected && is_immutable) {
+            if (!injected && usage->immutable) {
                 // image desc must have valid data
                 _sg_validate_image_data(&desc->data,
                     desc->pixel_format,
@@ -17885,7 +17838,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
                         if (injected) {
                             _SG_VALIDATE(no_data && no_size, VALIDATE_IMAGEDESC_INJECTED_NO_DATA);
                         }
-                        if (!is_immutable) {
+                        if (!usage->immutable) {
                             _SG_VALIDATE(no_data && no_size, VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA);
                         }
                     }
@@ -18335,7 +18288,7 @@ _SOKOL_PRIVATE bool _sg_validate_attachments_desc(const sg_attachments_desc* des
             _SG_VALIDATE(img, VALIDATE_ATTACHMENTSDESC_IMAGE);
             if (0 != img) {
                 _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ATTACHMENTSDESC_IMAGE);
-                _SG_VALIDATE(img->cmn.render_target, VALIDATE_ATTACHMENTSDESC_IMAGE_NO_RT);
+                _SG_VALIDATE(img->cmn.usage.render_attachment, VALIDATE_ATTACHMENTSDESC_IMAGE_NO_RT);
                 _SG_VALIDATE(att->mip_level < img->cmn.num_mipmaps, VALIDATE_ATTACHMENTSDESC_MIPLEVEL);
                 if (img->cmn.type == SG_IMAGETYPE_CUBE) {
                     _SG_VALIDATE(att->slice < 6, VALIDATE_ATTACHMENTSDESC_FACE);
@@ -18364,11 +18317,11 @@ _SOKOL_PRIVATE bool _sg_validate_attachments_desc(const sg_attachments_desc* des
                     _SG_VALIDATE(res_img, VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE);
                     if (res_img != 0) {
                         _SG_VALIDATE(res_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE);
-                        _SG_VALIDATE(res_img->cmn.render_target, VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_NO_RT);
+                        _SG_VALIDATE(res_img->cmn.usage.render_attachment, VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_NO_RT);
                         _SG_VALIDATE(res_img->cmn.sample_count == 1, VALIDATE_ATTACHMENTSDESC_RESOLVE_SAMPLE_COUNT);
                         _SG_VALIDATE(res_att->mip_level < res_img->cmn.num_mipmaps, VALIDATE_ATTACHMENTSDESC_RESOLVE_MIPLEVEL);
                         if (res_img->cmn.type == SG_IMAGETYPE_CUBE) {
-                            _SG_VALIDATE(res_att->slice < 6, VALIDATE_ATTACHMENTSDESC_RESOLVE_FACE);
+                            _SG_VALIDATE(res_att->slice < SG_CUBEFACE_NUM, VALIDATE_ATTACHMENTSDESC_RESOLVE_FACE);
                         } else if (res_img->cmn.type == SG_IMAGETYPE_ARRAY) {
                             _SG_VALIDATE(res_att->slice < res_img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_RESOLVE_LAYER);
                         } else if (res_img->cmn.type == SG_IMAGETYPE_3D) {
@@ -18398,7 +18351,7 @@ _SOKOL_PRIVATE bool _sg_validate_attachments_desc(const sg_attachments_desc* des
                     // NOTE: this can't actually happen because of VALIDATE_IMAGEDESC_DEPTH_3D_IMAGE
                     _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_DEPTH_SLICE);
                 }
-                _SG_VALIDATE(img->cmn.render_target, VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_NO_RT);
+                _SG_VALIDATE(img->cmn.usage.render_attachment, VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_NO_RT);
                 _SG_VALIDATE((color_width == -1) || (color_width == _sg_miplevel_dim(img->cmn.width, att->mip_level)), VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SIZES);
                 _SG_VALIDATE((color_height == -1) || (color_height == _sg_miplevel_dim(img->cmn.height, att->mip_level)), VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SIZES);
                 _SG_VALIDATE((color_sample_count == -1) || (color_sample_count == img->cmn.sample_count), VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SAMPLE_COUNT);
@@ -18675,7 +18628,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                         const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, bindings->vertex_buffers[i].id);
                         _SG_VALIDATE(buf != 0, VALIDATE_ABND_VB_EXISTS);
                         if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
-                            _SG_VALIDATE(SG_BUFFERTYPE_VERTEXBUFFER == buf->cmn.type, VALIDATE_ABND_VB_TYPE);
+                            _SG_VALIDATE(buf->cmn.usage.vertex_buffer, VALIDATE_ABND_VB_TYPE);
                             _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_VB_OVERFLOW);
                         }
                     }
@@ -18699,7 +18652,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, bindings->index_buffer.id);
                 _SG_VALIDATE(buf != 0, VALIDATE_ABND_IB_EXISTS);
                 if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
-                    _SG_VALIDATE(SG_BUFFERTYPE_INDEXBUFFER == buf->cmn.type, VALIDATE_ABND_IB_TYPE);
+                    _SG_VALIDATE(buf->cmn.usage.index_buffer, VALIDATE_ABND_IB_TYPE);
                     _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_IB_OVERFLOW);
                 }
             }
@@ -18768,10 +18721,10 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                     const _sg_buffer_t* sbuf = _sg_lookup_buffer(&_sg.pools, bindings->storage_buffers[i].id);
                     _SG_VALIDATE(sbuf != 0, VALIDATE_ABND_STORAGEBUFFER_EXISTS);
                     if (sbuf) {
-                        _SG_VALIDATE(sbuf->cmn.type == SG_BUFFERTYPE_STORAGEBUFFER, VALIDATE_ABND_STORAGEBUFFER_BINDING_BUFFERTYPE);
+                        _SG_VALIDATE(sbuf->cmn.usage.storage_buffer, VALIDATE_ABND_STORAGEBUFFER_BINDING_BUFFERTYPE);
                         // read/write bindings are only allowed for immutable buffers
                         if (!shd->cmn.storage_buffers[i].readonly) {
-                            _SG_VALIDATE(sbuf->cmn.usage == SG_USAGE_IMMUTABLE, VALIDATE_ABND_STORAGEBUFFER_READWRITE_IMMUTABLE);
+                            _SG_VALIDATE(sbuf->cmn.usage.immutable, VALIDATE_ABND_STORAGEBUFFER_READWRITE_IMMUTABLE);
                         }
                     }
                 }
@@ -18857,7 +18810,7 @@ _SOKOL_PRIVATE bool _sg_validate_update_buffer(const _sg_buffer_t* buf, const sg
         }
         SOKOL_ASSERT(buf && data && data->ptr);
         _sg_validate_begin();
-        _SG_VALIDATE(buf->cmn.usage != SG_USAGE_IMMUTABLE, VALIDATE_UPDATEBUF_USAGE);
+        _SG_VALIDATE(!buf->cmn.usage.immutable, VALIDATE_UPDATEBUF_USAGE);
         _SG_VALIDATE(buf->cmn.size >= (int)data->size, VALIDATE_UPDATEBUF_SIZE);
         _SG_VALIDATE(buf->cmn.update_frame_index != _sg.frame_index, VALIDATE_UPDATEBUF_ONCE);
         _SG_VALIDATE(buf->cmn.append_frame_index != _sg.frame_index, VALIDATE_UPDATEBUF_APPEND);
@@ -18876,7 +18829,7 @@ _SOKOL_PRIVATE bool _sg_validate_append_buffer(const _sg_buffer_t* buf, const sg
         }
         SOKOL_ASSERT(buf && data && data->ptr);
         _sg_validate_begin();
-        _SG_VALIDATE(buf->cmn.usage != SG_USAGE_IMMUTABLE, VALIDATE_APPENDBUF_USAGE);
+        _SG_VALIDATE(!buf->cmn.usage.immutable, VALIDATE_APPENDBUF_USAGE);
         _SG_VALIDATE(buf->cmn.size >= (buf->cmn.append_pos + (int)data->size), VALIDATE_APPENDBUF_SIZE);
         _SG_VALIDATE(buf->cmn.update_frame_index != _sg.frame_index, VALIDATE_APPENDBUF_UPDATE);
         return _sg_validate_end();
@@ -18894,7 +18847,7 @@ _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image_t* img, const sg_i
         }
         SOKOL_ASSERT(img && data);
         _sg_validate_begin();
-        _SG_VALIDATE(img->cmn.usage != SG_USAGE_IMMUTABLE, VALIDATE_UPDIMG_USAGE);
+        _SG_VALIDATE(!img->cmn.usage.immutable, VALIDATE_UPDIMG_USAGE);
         _SG_VALIDATE(img->cmn.upd_frame_index != _sg.frame_index, VALIDATE_UPDIMG_ONCE);
         _sg_validate_image_data(data,
             img->cmn.pixel_format,
@@ -18914,12 +18867,31 @@ _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image_t* img, const sg_i
 // ██   ██ ███████ ███████  ██████   ██████  ██   ██  ██████ ███████ ███████
 //
 // >>resources
+_SOKOL_PRIVATE sg_buffer_usage _sg_buffer_usage_defaults(const sg_buffer_usage* usg) {
+    sg_buffer_usage def = *usg;
+    if (!(def.vertex_buffer || def.index_buffer || def.storage_buffer)) {
+        def.vertex_buffer = true;
+    }
+    if (!(def.immutable || def.stream_update || def.dynamic_update)) {
+        def.immutable = true;
+    }
+    return def;
+}
+
+
 _SOKOL_PRIVATE sg_buffer_desc _sg_buffer_desc_defaults(const sg_buffer_desc* desc) {
     sg_buffer_desc def = *desc;
-    def.type = _sg_def(def.type, SG_BUFFERTYPE_VERTEXBUFFER);
-    def.usage = _sg_def(def.usage, SG_USAGE_IMMUTABLE);
+    def.usage = _sg_buffer_usage_defaults(&def.usage);
     if (def.size == 0) {
         def.size = def.data.size;
+    }
+    return def;
+}
+
+_SOKOL_PRIVATE sg_image_usage _sg_image_usage_defaults(const sg_image_usage *usg) {
+    sg_image_usage def = *usg;
+    if (!(def.immutable || def.stream_update || def.dynamic_update)) {
+        def.immutable = true;
     }
     return def;
 }
@@ -18927,10 +18899,10 @@ _SOKOL_PRIVATE sg_buffer_desc _sg_buffer_desc_defaults(const sg_buffer_desc* des
 _SOKOL_PRIVATE sg_image_desc _sg_image_desc_defaults(const sg_image_desc* desc) {
     sg_image_desc def = *desc;
     def.type = _sg_def(def.type, SG_IMAGETYPE_2D);
+    def.usage = _sg_image_usage_defaults(&def.usage);
     def.num_slices = _sg_def(def.num_slices, 1);
     def.num_mipmaps = _sg_def(def.num_mipmaps, 1);
-    def.usage = _sg_def(def.usage, SG_USAGE_IMMUTABLE);
-    if (desc->render_target) {
+    if (def.usage.render_attachment) {
         def.pixel_format = _sg_def(def.pixel_format, _sg.desc.environment.defaults.color_format);
         def.sample_count = _sg_def(def.sample_count, _sg.desc.environment.defaults.sample_count);
     } else {
@@ -20761,7 +20733,6 @@ SOKOL_API_IMPL sg_buffer_desc sg_query_buffer_desc(sg_buffer buf_id) {
     const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
     if (buf) {
         desc.size = (size_t)buf->cmn.size;
-        desc.type = buf->cmn.type;
         desc.usage = buf->cmn.usage;
     }
     return desc;
@@ -20776,22 +20747,15 @@ SOKOL_API_IMPL size_t sg_query_buffer_size(sg_buffer buf_id) {
     return 0;
 }
 
-SOKOL_API_IMPL sg_buffer_type sg_query_buffer_type(sg_buffer buf_id) {
+SOKOL_API_IMPL sg_buffer_usage sg_query_buffer_usage(sg_buffer buf_id) {
     SOKOL_ASSERT(_sg.valid);
+    sg_buffer_usage usg;
+    _sg_clear(&usg, sizeof(usg));
     const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
     if (buf) {
-        return buf->cmn.type;
+        usg = buf->cmn.usage;
     }
-    return _SG_BUFFERTYPE_DEFAULT;
-}
-
-SOKOL_API_IMPL sg_usage sg_query_buffer_usage(sg_buffer buf_id) {
-    SOKOL_ASSERT(_sg.valid);
-    const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
-    if (buf) {
-        return buf->cmn.usage;
-    }
-    return _SG_USAGE_DEFAULT;
+    return usg;
 }
 
 SOKOL_API_IMPL sg_image_desc sg_query_image_desc(sg_image img_id) {
@@ -20801,7 +20765,6 @@ SOKOL_API_IMPL sg_image_desc sg_query_image_desc(sg_image img_id) {
     const _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
     if (img) {
         desc.type = img->cmn.type;
-        desc.render_target = img->cmn.render_target;
         desc.width = img->cmn.width;
         desc.height = img->cmn.height;
         desc.num_slices = img->cmn.num_slices;
@@ -20867,13 +20830,15 @@ SOKOL_API_IMPL sg_pixel_format sg_query_image_pixelformat(sg_image img_id) {
     return _SG_PIXELFORMAT_DEFAULT;
 }
 
-SOKOL_API_IMPL sg_usage sg_query_image_usage(sg_image img_id) {
+SOKOL_API_IMPL sg_image_usage sg_query_image_usage(sg_image img_id) {
     SOKOL_ASSERT(_sg.valid);
+    sg_image_usage usg;
+    _sg_clear(&usg, sizeof(usg));
     const _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
     if (img) {
-        return img->cmn.usage;
+        usg = img->cmn.usage;
     }
-    return _SG_USAGE_DEFAULT;
+    return usg;
 }
 
 SOKOL_API_IMPL int sg_query_image_sample_count(sg_image img_id) {
