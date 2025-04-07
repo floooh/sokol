@@ -7530,12 +7530,20 @@ _SOKOL_PRIVATE void _sg_gl_unload_opengl(void) {
 #endif // _SOKOL_USE_WIN32_GL_LOADER
 
 //-- type translation ----------------------------------------------------------
-_SOKOL_PRIVATE GLenum _sg_gl_buffer_target(sg_buffer_type t) {
-    switch (t) {
-        case SG_BUFFERTYPE_VERTEXBUFFER:    return GL_ARRAY_BUFFER;
-        case SG_BUFFERTYPE_INDEXBUFFER:     return GL_ELEMENT_ARRAY_BUFFER;
-        case SG_BUFFERTYPE_STORAGEBUFFER:   return GL_SHADER_STORAGE_BUFFER;
-        default: SOKOL_UNREACHABLE; return 0;
+_SOKOL_PRIVATE GLenum _sg_gl_buffer_target(const sg_buffer_usage* usg) {
+    // NOTE: the buffer target returned here is only used for the bind point
+    // to copy data into the buffer, expect for WebGL2, the bind point doesn't
+    // need to match the later usage of the buffer (but because of the WebGL2
+    // restriction we cannot simply select a random bind point, because in WebGL2
+    // a buffer cannot 'switch' bind points later.
+    if (usg->vertex_buffer) {
+        return GL_ARRAY_BUFFER;
+    } else if (usg->index_buffer) {
+        return GL_ELEMENT_ARRAY_BUFFER;
+    } else if (usg->storage_buffer) {
+        return GL_SHADER_STORAGE_BUFFER;
+    } else {
+        SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -7569,12 +7577,15 @@ _SOKOL_PRIVATE GLenum _sg_gl_texture_target(sg_image_type t, int sample_count) {
     #endif
 }
 
-_SOKOL_PRIVATE GLenum _sg_gl_usage(sg_usage u) {
-    switch (u) {
-        case SG_USAGE_IMMUTABLE:    return GL_STATIC_DRAW;
-        case SG_USAGE_DYNAMIC:      return GL_DYNAMIC_DRAW;
-        case SG_USAGE_STREAM:       return GL_STREAM_DRAW;
-        default: SOKOL_UNREACHABLE; return 0;
+_SOKOL_PRIVATE GLenum _sg_gl_buffer_usage(const sg_buffer_usage* usg) {
+    if (usg->immutable) {
+        return GL_STATIC_DRAW;
+    } else if (usg->dynamic_update) {
+        return GL_DYNAMIC_DRAW;
+    } else if (usg->stream_update) {
+        return GL_STREAM_DRAW;
+    } else {
+        SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -8799,8 +8810,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_buffer(_sg_buffer_t* buf, const s
     SOKOL_ASSERT(buf && desc);
     _SG_GL_CHECK_ERROR();
     buf->gl.injected = (0 != desc->gl_buffers[0]);
-    const GLenum gl_target = _sg_gl_buffer_target(buf->cmn.type);
-    const GLenum gl_usage  = _sg_gl_usage(buf->cmn.usage);
+    const GLenum gl_target = _sg_gl_buffer_target(&buf->cmn.usage);
+    const GLenum gl_usage  = _sg_gl_buffer_usage(&buf->cmn.usage);
     for (int slot = 0; slot < buf->cmn.num_slots; slot++) {
         GLuint gl_buf = 0;
         if (buf->gl.injected) {
@@ -8812,7 +8823,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_buffer(_sg_buffer_t* buf, const s
             _sg_gl_cache_store_buffer_binding(gl_target);
             _sg_gl_cache_bind_buffer(gl_target, gl_buf);
             glBufferData(gl_target, buf->cmn.size, 0, gl_usage);
-            if (buf->cmn.usage == SG_USAGE_IMMUTABLE) {
+            if (buf->cmn.usage.immutable) {
                 if (desc->data.ptr) {
                     glBufferSubData(gl_target, 0, buf->cmn.size, desc->data.ptr);
                 } else {
@@ -8866,7 +8877,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
     const GLenum gl_internal_format = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
 
     // GLES3/WebGL2/macOS doesn't have support for multisampled textures, so create a render buffer object instead
-    if (!_sg.features.msaa_image_bindings && img->cmn.render_target && msaa) {
+    if (!_sg.features.msaa_image_bindings && img->cmn.usage.render_attachment && msaa) {
         glGenRenderbuffers(1, &img->gl.msaa_render_buffer);
         glBindRenderbuffer(GL_RENDERBUFFER, img->gl.msaa_render_buffer);
         glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->cmn.sample_count, gl_internal_format, img->cmn.width, img->cmn.height);
@@ -10209,7 +10220,7 @@ _SOKOL_PRIVATE void _sg_gl_update_buffer(_sg_buffer_t* buf, const sg_range* data
     if (++buf->cmn.active_slot >= buf->cmn.num_slots) {
         buf->cmn.active_slot = 0;
     }
-    GLenum gl_tgt = _sg_gl_buffer_target(buf->cmn.type);
+    GLenum gl_tgt = _sg_gl_buffer_target(&buf->cmn.usage);
     SOKOL_ASSERT(buf->cmn.active_slot < SG_NUM_INFLIGHT_FRAMES);
     GLuint gl_buf = buf->gl.buf[buf->cmn.active_slot];
     SOKOL_ASSERT(gl_buf);
@@ -10228,7 +10239,7 @@ _SOKOL_PRIVATE void _sg_gl_append_buffer(_sg_buffer_t* buf, const sg_range* data
             buf->cmn.active_slot = 0;
         }
     }
-    GLenum gl_tgt = _sg_gl_buffer_target(buf->cmn.type);
+    GLenum gl_tgt = _sg_gl_buffer_target(&buf->cmn.usage);
     SOKOL_ASSERT(buf->cmn.active_slot < SG_NUM_INFLIGHT_FRAMES);
     GLuint gl_buf = buf->gl.buf[buf->cmn.active_slot];
     SOKOL_ASSERT(gl_buf);
