@@ -1159,24 +1159,6 @@ _SOKOL_PRIVATE const char* _sgimgui_backend_string(sg_backend b) {
     }
 }
 
-_SOKOL_PRIVATE const char* _sgimgui_buffertype_string(sg_buffer_type t) {
-    switch (t) {
-        case SG_BUFFERTYPE_VERTEXBUFFER:    return "SG_BUFFERTYPE_VERTEXBUFFER";
-        case SG_BUFFERTYPE_INDEXBUFFER:     return "SG_BUFFERTYPE_INDEXBUFFER";
-        case SG_BUFFERTYPE_STORAGEBUFFER:   return "SG_BUFFERTYPE_STORAGEBUFFER";
-        default:                            return "???";
-    }
-}
-
-_SOKOL_PRIVATE const char* _sgimgui_usage_string(sg_usage u) {
-    switch (u) {
-        case SG_USAGE_IMMUTABLE:    return "SG_USAGE_IMMUTABLE";
-        case SG_USAGE_DYNAMIC:      return "SG_USAGE_DYNAMIC";
-        case SG_USAGE_STREAM:       return "SG_USAGE_STREAM";
-        default:                    return "???";
-    }
-}
-
 _SOKOL_PRIVATE const char* _sgimgui_imagetype_string(sg_image_type t) {
     switch (t) {
         case SG_IMAGETYPE_2D:       return "SG_IMAGETYPE_2D";
@@ -3375,10 +3357,15 @@ _SOKOL_PRIVATE void _sgimgui_draw_buffer_panel(sgimgui_t* ctx, sg_buffer buf) {
             igText("Label: %s", buf_ui->label.buf[0] ? buf_ui->label.buf : "---");
             _sgimgui_draw_resource_slot(&info.slot);
             igSeparator();
-            igText("Type:  %s", _sgimgui_buffertype_string(buf_ui->desc.type));
-            igText("Usage: %s", _sgimgui_usage_string(buf_ui->desc.usage));
+            igText("Usage:\n");
+            igText("  vertex_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.vertex_buffer));
+            igText("  index_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.index_buffer));
+            igText("  storage_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.storage_buffer));
+            igText("  immutable: %s", _sgimgui_bool_string(buf_ui->desc.usage.immutable));
+            igText("  dynamic_update: %s", _sgimgui_bool_string(buf_ui->desc.usage.dynamic_update));
+            igText("  stream_update: %s", _sgimgui_bool_string(buf_ui->desc.usage.stream_update));
             igText("Size:  %d", (int)buf_ui->desc.size);
-            if (buf_ui->desc.usage != SG_USAGE_IMMUTABLE) {
+            if (!buf_ui->desc.usage.immutable) {
                 igSeparator();
                 igText("Num Slots:     %d", info.num_slots);
                 igText("Active Slot:   %d", info.active_slot);
@@ -3429,15 +3416,19 @@ _SOKOL_PRIVATE void _sgimgui_draw_image_panel(sgimgui_t* ctx, sg_image img) {
             _sgimgui_draw_embedded_image(ctx, img, &img_ui->ui_scale);
             igSeparator();
             igText("Type:           %s", _sgimgui_imagetype_string(desc->type));
-            igText("Usage:          %s", _sgimgui_usage_string(desc->usage));
-            igText("Render Target:  %s", _sgimgui_bool_string(desc->render_target));
+            igText("Usage:\n");
+            igText("  render_attachment: %s", _sgimgui_bool_string(desc->usage.render_attachment));
+            igText("  storage_attachment: %s", _sgimgui_bool_string(desc->usage.storage_attachment));
+            igText("  immutable: %s", _sgimgui_bool_string(desc->usage.immutable));
+            igText("  dynamic_update: %s", _sgimgui_bool_string(desc->usage.dynamic_update));
+            igText("  stream_update: %s", _sgimgui_bool_string(desc->usage.stream_update));
             igText("Width:          %d", desc->width);
             igText("Height:         %d", desc->height);
             igText("Num Slices:     %d", desc->num_slices);
             igText("Num Mipmaps:    %d", desc->num_mipmaps);
             igText("Pixel Format:   %s", _sgimgui_pixelformat_string(desc->pixel_format));
             igText("Sample Count:   %d", desc->sample_count);
-            if (desc->usage != SG_USAGE_IMMUTABLE) {
+            if (!desc->usage.immutable) {
                 igSeparator();
                 igText("Num Slots:     %d", info.num_slots);
                 igText("Active Slot:   %d", info.active_slot);
@@ -3602,7 +3593,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
                         }
                         igText("- slot: %d", i);
                         igText("  stage: %s", _sgimgui_shaderstage_string(sbuf->stage));
-                        igText("  readonly: %s", sbuf->readonly ? "true" : "false");
+                        igText("  readonly: %s", _sgimgui_bool_string(sbuf->readonly));
                         if (sbuf->readonly) {
                             igText("  hlsl_register_t_n: %d", sbuf->hlsl_register_t_n);
                         } else {
@@ -3626,7 +3617,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
                         igText("  stage: %s", _sgimgui_shaderstage_string(sid->stage));
                         igText("  image_type: %s", _sgimgui_imagetype_string(sid->image_type));
                         igText("  sample_type: %s", _sgimgui_imagesampletype_string(sid->sample_type));
-                        igText("  multisampled: %s", sid->multisampled ? "true" : "false");
+                        igText("  multisampled: %s", _sgimgui_bool_string(sid->multisampled));
                         igText("  hlsl_register_t_n: %d", sid->hlsl_register_t_n);
                         igText("  msl_texture_n: %d", sid->msl_texture_n);
                         igText("  wgsl_group1_binding_n: %d", sid->wgsl_group1_binding_n);
@@ -4281,6 +4272,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
     igText("    mrt_independent_write_mask: %s", _sgimgui_bool_string(f.mrt_independent_write_mask));
     igText("    compute: %s", _sgimgui_bool_string(f.compute));
     igText("    msaa_image_bindings: %s", _sgimgui_bool_string(f.msaa_image_bindings));
+    igText("    separate_buffer_types: %s", _sgimgui_bool_string(f.separate_buffer_types));
     sg_limits l = sg_query_limits();
     igText("\nLimits:\n");
     igText("    max_image_size_2d: %d", l.max_image_size_2d);
