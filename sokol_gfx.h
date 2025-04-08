@@ -2025,6 +2025,7 @@ typedef struct sg_features {
     bool mrt_independent_write_mask;    // multiple-render-target rendering can use per-render-target color write masks
     bool compute;                       // storage buffers and compute shaders are supported
     bool msaa_image_bindings;           // if true, multisampled images can be bound as texture resources
+    bool separate_buffer_types;         // cannot use the same buffer for vertex and indices (onlu WebGL2)
 } sg_features;
 
 /*
@@ -8327,6 +8328,11 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.features.mrt_independent_write_mask = false;
     _sg.features.compute = version >= 310;
     _sg.features.msaa_image_bindings = false;
+    #if defined(__EMSCRIPTEN__)
+    _sg.features.separate_buffer_types = true;
+    #else
+    _sg.features.separate_buffer_types = false
+    #endif
 
     bool has_s3tc = false;  // BC1..BC3
     bool has_rgtc = false;  // BC4 and BC5
