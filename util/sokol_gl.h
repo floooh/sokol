@@ -3148,7 +3148,7 @@ static void _sgl_init_pipeline(sgl_pipeline pip_id, const sg_pipeline_desc* in_d
     }
     desc.colors[0].pixel_format = ctx_desc->color_format;
     if (desc.colors[0].write_mask == _SG_COLORMASK_DEFAULT) {
-        desc.colors[0].write_mask = SG_COLORMASK_RGB;
+        desc.colors[0].write_mask = SG_COLORMASK_RGBA;
     }
 
     _sgl_pipeline_t* pip = _sgl_lookup_pipeline(pip_id.id);
