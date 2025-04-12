@@ -5742,13 +5742,20 @@ typedef _sg_dummy_attachments_t _sg_attachments_t;
 
 #elif defined(_SOKOL_ANY_GL)
 
+typedef enum {
+    _SG_GL_GPUDIRTY_VERTEXBUFFER = (1<<0),
+    _SG_GL_GPUDIRTY_INDEXBUFFER = (1<<1),
+    _SG_GL_GPUDIRTY_STORAGEBUFFER = (1<<2),
+    _SG_GL_GPUDIRTY_BUFFER_ALL = _SG_GL_GPUDIRTY_VERTEXBUFFER | _SG_GL_GPUDIRTY_INDEXBUFFER | _SG_GL_GPUDIRTY_STORAGEBUFFER,
+} _sg_gl_gpudirty_t;
+
 typedef struct _sg_buffer_s {
     _sg_slot_t slot;
     _sg_buffer_common_t cmn;
     struct {
         GLuint buf[SG_NUM_INFLIGHT_FRAMES];
         bool injected;  // if true, external buffers were injected with sg_buffer_desc.gl_buffers
-        bool gpu_dirty; // true if modified by GPU shader but memory barrier hasn't been issued yet
+        uint8_t gpu_dirty_flags; // combination of _sg_gl_gpudirty_t flags
     } gl;
 } _sg_gl_buffer_t;
 typedef _sg_gl_buffer_t _sg_buffer_t;
@@ -9986,26 +9993,53 @@ _SOKOL_PRIVATE void _sg_gl_handle_memory_barriers(const _sg_shader_t* shd, const
     if (!_sg.features.compute) {
         return;
     }
-    // NOTE: currently only storage buffers can be GPU-written, and storage
-    // buffers cannot be bound as vertex- or index-buffers.
-    bool needs_barrier = false;
-    for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
-        if (shd->cmn.storage_buffers[i].stage == SG_SHADERSTAGE_NONE) {
+    GLbitfield gl_barrier_bits = 0;
+
+    // if vertex-, index- or storage-buffer bindings have been written
+    // by a compute shader before, a barrier must be issued
+    for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
+        _sg_buffer_t* buf = bnd->vbs[i];
+        if (!buf) {
             continue;
         }
-        _sg_buffer_t* buf = bnd->sbufs[i];
-        // if this buffer has pending GPU changes, issue a memory barrier
-        if (buf->gl.gpu_dirty) {
-            buf->gl.gpu_dirty = false;
-            needs_barrier = true;
-        }
-        // if this binding is going to be written by the GPU set the buffer to 'gpu_dirty'
-        if (!shd->cmn.storage_buffers[i].readonly) {
-            buf->gl.gpu_dirty = true;
+        if (buf->gl.gpu_dirty_flags & _SG_GL_GPUDIRTY_VERTEXBUFFER) {
+            gl_barrier_bits |= GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT;
+            buf->gl.gpu_dirty_flags &= ~_SG_GL_GPUDIRTY_VERTEXBUFFER;
         }
     }
-    if (needs_barrier) {
-        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+    if (bnd->ib) {
+        _sg_buffer_t* buf = bnd->ib;
+        if (buf->gl.gpu_dirty_flags & _SG_GL_GPUDIRTY_INDEXBUFFER) {
+            gl_barrier_bits |= GL_ELEMENT_ARRAY_BARRIER_BIT;
+            buf->gl.gpu_dirty_flags &= ~_SG_GL_GPUDIRTY_INDEXBUFFER;
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
+        _sg_buffer_t* buf = bnd->sbufs[i];
+        if (!buf) {
+            continue;
+        }
+        SOKOL_ASSERT(shd->cmn.storage_buffers[i].stage != SG_SHADERSTAGE_NONE);
+        if (buf->gl.gpu_dirty_flags & _SG_GL_GPUDIRTY_STORAGEBUFFER) {
+            gl_barrier_bits |= GL_SHADER_STORAGE_BARRIER_BIT;
+            buf->gl.gpu_dirty_flags &= ~_SG_GL_GPUDIRTY_STORAGEBUFFER;
+        }
+    }
+
+    // mark storage buffers as dirty which will be written by compute shaders
+    // (don't merge this into the above loop, this would mess up the dirty
+    // dirty flags if the same buffer is bound multiple times)
+    for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
+        _sg_buffer_t* buf = bnd->sbufs[i];
+        if (!buf) {
+            continue;
+        }
+        if (!shd->cmn.storage_buffers[i].readonly) {
+            buf->gl.gpu_dirty_flags = _SG_GL_GPUDIRTY_BUFFER_ALL;
+        }
+    }
+    if (0 != gl_barrier_bits) {
+        glMemoryBarrier(gl_barrier_bits);
         _sg_stats_add(gl.num_memory_barriers, 1);
     }
 }
@@ -10017,11 +10051,6 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_t* bnd) {
     SOKOL_ASSERT(bnd->pip->shader->slot.id == bnd->pip->cmn.shader_id.id);
     _SG_GL_CHECK_ERROR();
     const _sg_shader_t* shd = bnd->pip->shader;
-
-    // take care of storage buffer memory barriers
-    #if defined(_SOKOL_GL_HAS_COMPUTE)
-    _sg_gl_handle_memory_barriers(shd, bnd);
-    #endif
 
     // bind combined image-samplers
     _SG_GL_CHECK_ERROR();
@@ -10122,6 +10151,12 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_t* bnd) {
         }
     }
     _SG_GL_CHECK_ERROR();
+
+    // take care of storage buffer memory barriers (this needs to happen after the bindings are set)
+    #if defined(_SOKOL_GL_HAS_COMPUTE)
+    _sg_gl_handle_memory_barriers(shd, bnd);
+    #endif
+
     return true;
 }
 
