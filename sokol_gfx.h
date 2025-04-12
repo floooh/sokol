@@ -5216,6 +5216,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_TEXTURE_2D_MULTISAMPLE 0x9100
         #define GL_TEXTURE_2D_MULTISAMPLE_ARRAY 0x9102
         #define GL_SHADER_STORAGE_BARRIER_BIT 0x2000
+        #define GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT 0x00000001
+        #define GL_ELEMENT_ARRAY_BARRIER_BIT 0x00000002
         #define GL_MIN 0x8007
         #define GL_MAX 0x8008
     #endif
@@ -10087,74 +10089,72 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_t* bnd) {
     }
     _SG_GL_CHECK_ERROR();
 
-    // if compute-pipeline, early out here
-    if (bnd->pip->cmn.is_compute) {
-        return true;
-    }
+    if (!bnd->pip->cmn.is_compute) {
+        // index buffer (can be 0)
+        const GLuint gl_ib = bnd->ib ? bnd->ib->gl.buf[bnd->ib->cmn.active_slot] : 0;
+        _sg_gl_cache_bind_buffer(GL_ELEMENT_ARRAY_BUFFER, gl_ib);
+        _sg.gl.cache.cur_ib_offset = bnd->ib_offset;
 
-    // index buffer (can be 0)
-    const GLuint gl_ib = bnd->ib ? bnd->ib->gl.buf[bnd->ib->cmn.active_slot] : 0;
-    _sg_gl_cache_bind_buffer(GL_ELEMENT_ARRAY_BUFFER, gl_ib);
-    _sg.gl.cache.cur_ib_offset = bnd->ib_offset;
-
-    // vertex attributes
-    for (GLuint attr_index = 0; attr_index < (GLuint)_sg.limits.max_vertex_attrs; attr_index++) {
-        _sg_gl_attr_t* attr = &bnd->pip->gl.attrs[attr_index];
-        _sg_gl_cache_attr_t* cache_attr = &_sg.gl.cache.attrs[attr_index];
-        bool cache_attr_dirty = false;
-        int vb_offset = 0;
-        GLuint gl_vb = 0;
-        if (attr->vb_index >= 0) {
-            // attribute is enabled
-            SOKOL_ASSERT(attr->vb_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
-            _sg_buffer_t* vb = bnd->vbs[attr->vb_index];
-            SOKOL_ASSERT(vb);
-            gl_vb = vb->gl.buf[vb->cmn.active_slot];
-            vb_offset = bnd->vb_offsets[attr->vb_index] + attr->offset;
-            if ((gl_vb != cache_attr->gl_vbuf) ||
-                (attr->size != cache_attr->gl_attr.size) ||
-                (attr->type != cache_attr->gl_attr.type) ||
-                (attr->normalized != cache_attr->gl_attr.normalized) ||
-                (attr->base_type != cache_attr->gl_attr.base_type) ||
-                (attr->stride != cache_attr->gl_attr.stride) ||
-                (vb_offset != cache_attr->gl_attr.offset) ||
-                (cache_attr->gl_attr.divisor != attr->divisor))
-            {
-                _sg_gl_cache_bind_buffer(GL_ARRAY_BUFFER, gl_vb);
-                if (attr->base_type == SG_SHADERATTRBASETYPE_FLOAT) {
-                    glVertexAttribPointer(attr_index, attr->size, attr->type, attr->normalized, attr->stride, (const GLvoid*)(GLintptr)vb_offset);
-                } else {
-                    glVertexAttribIPointer(attr_index, attr->size, attr->type, attr->stride, (const GLvoid*)(GLintptr)vb_offset);
+        // vertex attributes
+        for (GLuint attr_index = 0; attr_index < (GLuint)_sg.limits.max_vertex_attrs; attr_index++) {
+            _sg_gl_attr_t* attr = &bnd->pip->gl.attrs[attr_index];
+            _sg_gl_cache_attr_t* cache_attr = &_sg.gl.cache.attrs[attr_index];
+            bool cache_attr_dirty = false;
+            int vb_offset = 0;
+            GLuint gl_vb = 0;
+            if (attr->vb_index >= 0) {
+                // attribute is enabled
+                SOKOL_ASSERT(attr->vb_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
+                _sg_buffer_t* vb = bnd->vbs[attr->vb_index];
+                SOKOL_ASSERT(vb);
+                gl_vb = vb->gl.buf[vb->cmn.active_slot];
+                vb_offset = bnd->vb_offsets[attr->vb_index] + attr->offset;
+                if ((gl_vb != cache_attr->gl_vbuf) ||
+                    (attr->size != cache_attr->gl_attr.size) ||
+                    (attr->type != cache_attr->gl_attr.type) ||
+                    (attr->normalized != cache_attr->gl_attr.normalized) ||
+                    (attr->base_type != cache_attr->gl_attr.base_type) ||
+                    (attr->stride != cache_attr->gl_attr.stride) ||
+                    (vb_offset != cache_attr->gl_attr.offset) ||
+                    (cache_attr->gl_attr.divisor != attr->divisor))
+                {
+                    _sg_gl_cache_bind_buffer(GL_ARRAY_BUFFER, gl_vb);
+                    if (attr->base_type == SG_SHADERATTRBASETYPE_FLOAT) {
+                        glVertexAttribPointer(attr_index, attr->size, attr->type, attr->normalized, attr->stride, (const GLvoid*)(GLintptr)vb_offset);
+                    } else {
+                        glVertexAttribIPointer(attr_index, attr->size, attr->type, attr->stride, (const GLvoid*)(GLintptr)vb_offset);
+                    }
+                    _sg_stats_add(gl.num_vertex_attrib_pointer, 1);
+                    glVertexAttribDivisor(attr_index, (GLuint)attr->divisor);
+                    _sg_stats_add(gl.num_vertex_attrib_divisor, 1);
+                    cache_attr_dirty = true;
                 }
-                _sg_stats_add(gl.num_vertex_attrib_pointer, 1);
-                glVertexAttribDivisor(attr_index, (GLuint)attr->divisor);
-                _sg_stats_add(gl.num_vertex_attrib_divisor, 1);
-                cache_attr_dirty = true;
+                if (cache_attr->gl_attr.vb_index == -1) {
+                    glEnableVertexAttribArray(attr_index);
+                    _sg_stats_add(gl.num_enable_vertex_attrib_array, 1);
+                    cache_attr_dirty = true;
+                }
+            } else {
+                // attribute is disabled
+                if (cache_attr->gl_attr.vb_index != -1) {
+                    glDisableVertexAttribArray(attr_index);
+                    _sg_stats_add(gl.num_disable_vertex_attrib_array, 1);
+                    cache_attr_dirty = true;
+                }
             }
-            if (cache_attr->gl_attr.vb_index == -1) {
-                glEnableVertexAttribArray(attr_index);
-                _sg_stats_add(gl.num_enable_vertex_attrib_array, 1);
-                cache_attr_dirty = true;
-            }
-        } else {
-            // attribute is disabled
-            if (cache_attr->gl_attr.vb_index != -1) {
-                glDisableVertexAttribArray(attr_index);
-                _sg_stats_add(gl.num_disable_vertex_attrib_array, 1);
-                cache_attr_dirty = true;
+            if (cache_attr_dirty) {
+                cache_attr->gl_attr = *attr;
+                cache_attr->gl_attr.offset = vb_offset;
+                cache_attr->gl_vbuf = gl_vb;
             }
         }
-        if (cache_attr_dirty) {
-            cache_attr->gl_attr = *attr;
-            cache_attr->gl_attr.offset = vb_offset;
-            cache_attr->gl_vbuf = gl_vb;
-        }
+        _SG_GL_CHECK_ERROR();
     }
-    _SG_GL_CHECK_ERROR();
 
     // take care of storage buffer memory barriers (this needs to happen after the bindings are set)
     #if defined(_SOKOL_GL_HAS_COMPUTE)
     _sg_gl_handle_memory_barriers(shd, bnd);
+    _SG_GL_CHECK_ERROR();
     #endif
 
     return true;
