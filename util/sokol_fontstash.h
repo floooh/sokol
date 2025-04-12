@@ -2160,7 +2160,7 @@ static int _sfons_render_create(void* user_ptr, int width, int height) {
     _sfons_clear(&img_desc, sizeof(img_desc));
     img_desc.width = sfons->cur_width;
     img_desc.height = sfons->cur_height;
-    img_desc.usage = SG_USAGE_DYNAMIC;
+    img_desc.usage.dynamic_update = true;
     img_desc.pixel_format = SG_PIXELFORMAT_R8;
     sfons->img = sg_make_image(&img_desc);
     return 1;

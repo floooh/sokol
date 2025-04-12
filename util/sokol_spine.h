@@ -3817,8 +3817,8 @@ static sspine_resource_state _sspine_init_context(_sspine_context_t* ctx, const 
 
     sg_buffer_desc vbuf_desc;
     _sspine_clear(&vbuf_desc, sizeof(vbuf_desc));
-    vbuf_desc.type = SG_BUFFERTYPE_VERTEXBUFFER;
-    vbuf_desc.usage = SG_USAGE_STREAM;
+    vbuf_desc.usage.vertex_buffer = true;
+    vbuf_desc.usage.stream_update = true;
     vbuf_desc.size = vbuf_size;
     vbuf_desc.label = "sspine-vbuf";
     ctx->vbuf = sg_make_buffer(&vbuf_desc);
@@ -3826,8 +3826,8 @@ static sspine_resource_state _sspine_init_context(_sspine_context_t* ctx, const 
 
     sg_buffer_desc ibuf_desc;
     _sspine_clear(&ibuf_desc, sizeof(ibuf_desc));
-    ibuf_desc.type = SG_BUFFERTYPE_INDEXBUFFER;
-    ibuf_desc.usage = SG_USAGE_STREAM;
+    ibuf_desc.usage.index_buffer = true;
+    ibuf_desc.usage.stream_update = true;
     ibuf_desc.size = ibuf_size;
     ibuf_desc.label = "sspine-ibuf";
     ctx->ibuf = sg_make_buffer(&ibuf_desc);
