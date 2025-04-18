@@ -1839,6 +1839,7 @@ enum {
     SG_INVALID_ID = 0,
     SG_NUM_INFLIGHT_FRAMES = 2,
     SG_MAX_COLOR_ATTACHMENTS = 4,
+    SG_MAX_STORAGE_ATTACHMENTS = 4,
     SG_MAX_UNIFORMBLOCK_MEMBERS = 16,
     SG_MAX_VERTEX_ATTRIBUTES = 16,
     SG_MAX_MIPMAPS = 16,
@@ -3339,6 +3340,16 @@ typedef struct sg_shader_storage_buffer {
     uint8_t glsl_binding_n;         // GLSL layout(binding=n)
 } sg_shader_storage_buffer;
 
+typedef struct sg_shader_storage_image {
+    sg_shader_stage stage;          // must be NONE or COMPUTE
+    sg_pixel_format access_format;  // shader-access pixel format
+    bool writeonly;                 // false means read/write access
+    uint8_t hlsl_register_u_n;      // HLSL register(un) bind slot
+    uint8_t msl_texture_n;          // MSL [[texture(n)]] bind slot
+    uint8_t wgsl_group2_binding_n;  // WGSL @group(2) @binding(n) bind slot
+    uint8_t glsl_binding_n;         // GLSL layout(binding=n)
+} sg_shader_storage_image;
+
 typedef struct sg_shader_image_sampler_pair {
     sg_shader_stage stage;
     uint8_t image_slot;
@@ -3361,6 +3372,7 @@ typedef struct sg_shader_desc {
     sg_shader_image images[SG_MAX_IMAGE_BINDSLOTS];
     sg_shader_sampler samplers[SG_MAX_SAMPLER_BINDSLOTS];
     sg_shader_image_sampler_pair image_sampler_pairs[SG_MAX_IMAGE_SAMPLER_PAIRS];
+    sg_shader_storage_image storage_images[SG_MAX_STORAGE_ATTACHMENTS];
     sg_mtl_shader_threads_per_threadgroup mtl_threads_per_threadgroup;
     const char* label;
     uint32_t _end_canary;
@@ -3565,6 +3577,7 @@ typedef struct sg_attachments_desc {
     sg_attachment_desc colors[SG_MAX_COLOR_ATTACHMENTS];
     sg_attachment_desc resolves[SG_MAX_COLOR_ATTACHMENTS];
     sg_attachment_desc depth_stencil;
+    sg_attachment_desc storage_images[SG_MAX_STORAGE_ATTACHMENTS];
     const char* label;
     uint32_t _end_canary;
 } sg_attachments_desc;
