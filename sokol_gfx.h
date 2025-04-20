@@ -1720,7 +1720,7 @@
     - Likewise, the following sokol-gfx pixel formats are not supported in WebGPU:
       R16, R16SN, RG16, RG16SN, RGBA16, RGBA16SN.
       Unlike unsupported vertex formats, unsupported pixel formats can be queried
-      in cross-backend code via sg_query_pixel_format() though.
+      in cross-backend code via sg_query_pixelformat() though.
 
     - The Emscripten WebGPU shim currently doesn't support the Closure minification
       post-link-step (e.g. currently the emcc argument '--closure 1' or '--closure 2'
@@ -3342,6 +3342,7 @@ typedef struct sg_shader_storage_buffer {
 
 typedef struct sg_shader_storage_image {
     sg_shader_stage stage;          // must be NONE or COMPUTE
+    sg_image_type image_type;
     sg_pixel_format access_format;  // shader-access pixel format
     bool writeonly;                 // false means read/write access
     uint8_t hlsl_register_u_n;      // HLSL register(un) bind slot
