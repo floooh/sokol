@@ -3555,6 +3555,12 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
                     num_valid_storage_buffers++;
                 }
             }
+            int num_valid_storage_images = 0;
+            for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+                if (shd_ui->desc.storage_images[i].stage != SG_SHADERSTAGE_NONE) {
+                    num_valid_storage_images++;
+                }
+            }
             if (num_valid_ubs > 0) {
                 if (igTreeNode("Uniform Blocks")) {
                     for (int i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
@@ -3580,28 +3586,6 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
                                 }
                             }
                         }
-                    }
-                    igTreePop();
-                }
-            }
-            if (num_valid_storage_buffers > 0) {
-                if (igTreeNode("Storage Buffers")) {
-                    for (int i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
-                        const sg_shader_storage_buffer* sbuf = &shd_ui->desc.storage_buffers[i];
-                        if (sbuf->stage == SG_SHADERSTAGE_NONE) {
-                            continue;
-                        }
-                        igText("- slot: %d", i);
-                        igText("  stage: %s", _sgimgui_shaderstage_string(sbuf->stage));
-                        igText("  readonly: %s", _sgimgui_bool_string(sbuf->readonly));
-                        if (sbuf->readonly) {
-                            igText("  hlsl_register_t_n: %d", sbuf->hlsl_register_t_n);
-                        } else {
-                            igText("  hlsl_register_u_n: %d", sbuf->hlsl_register_u_n);
-                        }
-                        igText("  msl_buffer_n: %d", sbuf->msl_buffer_n);
-                        igText("  wgsl_group1_binding_n: %d", sbuf->wgsl_group1_binding_n);
-                        igText("  glsl_binding_n: %d", sbuf->glsl_binding_n);
                     }
                     igTreePop();
                 }
@@ -3654,6 +3638,48 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
                         igText("  image_slot: %d", sispd->image_slot);
                         igText("  sampler_slot: %d", sispd->sampler_slot);
                         igText("  glsl_name: %s", sispd->glsl_name ? sispd->glsl_name : "---");
+                    }
+                    igTreePop();
+                }
+            }
+            if (num_valid_storage_buffers > 0) {
+                if (igTreeNode("Storage Buffers")) {
+                    for (int i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
+                        const sg_shader_storage_buffer* sbuf = &shd_ui->desc.storage_buffers[i];
+                        if (sbuf->stage == SG_SHADERSTAGE_NONE) {
+                            continue;
+                        }
+                        igText("- slot: %d", i);
+                        igText("  stage: %s", _sgimgui_shaderstage_string(sbuf->stage));
+                        igText("  readonly: %s", _sgimgui_bool_string(sbuf->readonly));
+                        if (sbuf->readonly) {
+                            igText("  hlsl_register_t_n: %d", sbuf->hlsl_register_t_n);
+                        } else {
+                            igText("  hlsl_register_u_n: %d", sbuf->hlsl_register_u_n);
+                        }
+                        igText("  msl_buffer_n: %d", sbuf->msl_buffer_n);
+                        igText("  wgsl_group1_binding_n: %d", sbuf->wgsl_group1_binding_n);
+                        igText("  glsl_binding_n: %d", sbuf->glsl_binding_n);
+                    }
+                    igTreePop();
+                }
+            }
+            if (num_valid_storage_images > 0) {
+                if (igTreeNode("Storage Images")) {
+                    for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+                        const sg_shader_storage_image* simg = &shd_ui->desc.storage_images[i];
+                        if (simg->stage == SG_SHADERSTAGE_NONE) {
+                            continue;
+                        }
+                        igText("- slot: %d", i);
+                        igText("  stage: %s", _sgimgui_shaderstage_string(simg->stage));
+                        igText("  image_type: %s", _sgimgui_imagetype_string(simg->image_type));
+                        igText("  access_format: %s", _sgimgui_pixelformat_string(simg->access_format));
+                        igText("  writeonly: %s", _sgimgui_bool_string(simg->writeonly));
+                        igText("  hlsl_register_u_n: %d", simg->hlsl_register_u_n);
+                        igText("  msl_texture_n: %d", simg->msl_texture_n);
+                        igText("  wgsl_group2_binding_n: %d", simg->wgsl_group2_binding_n);
+                        igText("  glsl_binding_n: %d", simg->glsl_binding_n);
                     }
                     igTreePop();
                 }
