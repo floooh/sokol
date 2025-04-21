@@ -3580,7 +3580,7 @@ typedef struct sg_attachments_desc {
     sg_attachment_desc colors[SG_MAX_COLOR_ATTACHMENTS];
     sg_attachment_desc resolves[SG_MAX_COLOR_ATTACHMENTS];
     sg_attachment_desc depth_stencil;
-    sg_attachment_desc storage_images[SG_MAX_STORAGE_ATTACHMENTS];
+    sg_attachment_desc storages[SG_MAX_STORAGE_ATTACHMENTS];
     const char* label;
     uint32_t _end_canary;
 } sg_attachments_desc;
