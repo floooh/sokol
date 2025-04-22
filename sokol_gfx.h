@@ -4126,36 +4126,44 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_SHADER_READONLY_STORAGEBUFFERS, "sg_pipeline_desc.shader: only readonly storage buffer bindings allowed in render pipelines") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_BLENDOP_MINMAX_REQUIRES_BLENDFACTOR_ONE, "SG_BLENDOP_MIN/MAX requires all blend factors to be SG_BLENDFACTOR_ONE") \
     _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_CANARY, "sg_attachments_desc not initialized") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_NO_ATTACHMENTS, "sg_attachments_desc no color or depth-stencil attachments") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_NO_ATTACHMENTS, "sg_attachments_desc no color, depth-stencil or storage attachments") \
     _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_NO_CONT_COLOR_ATTS, "color attachments must occupy continuous slots") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_IMAGE, "pass attachment image is not valid") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_MIPLEVEL, "pass attachment mip level is bigger than image has mipmaps") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_FACE, "pass attachment image is cubemap, but face index is too big") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_LAYER, "pass attachment image is array texture, but layer index is too big") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_SLICE, "pass attachment image is 3d texture, but slice value is too big") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_IMAGE_NO_RT, "pass attachment image must be have render_target=true") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_COLOR_INV_PIXELFORMAT, "pass color-attachment images must be renderable color pixel format") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_INV_PIXELFORMAT, "pass depth-attachment image must be depth or depth-stencil pixel format") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_IMAGE_SIZES, "all pass attachments must have the same size") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_IMAGE_SAMPLE_COUNTS, "all pass attachments must have the same sample count") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_COLOR_IMAGE_MSAA, "pass resolve attachments must have a color attachment image with sample count > 1") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE, "pass resolve attachment image not valid") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_COLOR_IMAGE, "color attachment image is not valid") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_COLOR_MIPLEVEL, "color attachment mip level is bigger than image has mipmaps") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_COLOR_FACE, "color attachment image is cubemap, but face index is too big") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_COLOR_LAYER, "color attachment image is array texture, but layer index is too big") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_COLOR_SLICE, "color attachment image is 3d texture, but slice value is too big") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_COLOR_IMAGE_NO_RENDERATTACHMENT, "color attachment images must be sg_image_desc.usage.render_attachment=true") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_COLOR_INV_PIXELFORMAT, "color attachment images must be renderable color pixel format") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_IMAGE_SIZES, "all color and depth attachment images must have the same size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_IMAGE_SAMPLE_COUNTS, "all color and depth attachment images must have the same sample count") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_COLOR_IMAGE_MSAA, "resolve attachments must have a color attachment image with sample count > 1") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE, "resolve attachment image not valid") \
     _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_SAMPLE_COUNT, "pass resolve attachment image sample count must be 1") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_MIPLEVEL, "pass resolve attachment mip level is bigger than image has mipmaps") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_FACE, "pass resolve attachment is cubemap, but face index is too big") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_LAYER, "pass resolve attachment is array texture, but layer index is too big") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_SLICE, "pass resolve attachment is 3d texture, but slice value is too big") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_NO_RT, "pass resolve attachment image must have render_target=true") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_SIZES, "pass resolve attachment size must match color attachment image size") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_FORMAT, "pass resolve attachment pixel format must match color attachment pixel format") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE, "pass depth attachment image is not valid") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_MIPLEVEL, "pass depth attachment mip level is bigger than image has mipmaps") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_FACE, "pass depth attachment image is cubemap, but face index is too big") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_LAYER, "pass depth attachment image is array texture, but layer index is too big") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_SLICE, "pass depth attachment image is 3d texture, but slice value is too big") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_NO_RT, "pass depth attachment image must be have render_target=true") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SIZES, "pass depth attachment image size must match color attachment image size") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SAMPLE_COUNT, "pass depth attachment sample count must match color attachment sample count") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_MIPLEVEL, "resolve attachment mip level is bigger than image's number of mipmaps") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_FACE, "resolve attachment is cubemap, but face index is too big") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_LAYER, "resolve attachment is array texture, but layer index is too big") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_SLICE, "resolve attachment is 3d texture, but slice value is too big") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_NO_RT, "resolve attachment image must have render_target=true") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_SIZES, "resolve attachment size must match color attachment image size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_FORMAT, "resolve attachment pixel format must match color attachment pixel format") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_INV_PIXELFORMAT, "depth attachment image must be depth or depth-stencil pixel format") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE, "depth attachment image is not valid") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_MIPLEVEL, "depth attachment mip level is bigger than image has mipmaps") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_FACE, "depth attachment image is cubemap, but face index is too big") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_LAYER, "depth attachment image is array texture, but layer index is too big") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_SLICE, "depth attachment image is 3d texture, but slice value is too big") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_NO_RENDERATTACHMENT, "depth attachment image must be sg_image_desc.usage.render_attachemnt=true") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SIZES, "depth attachment image size must match color attachment image size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SAMPLE_COUNT, "depth attachment sample count must match color attachment sample count") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_STORAGE_IMAGE, "storage attachment image is not valid") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_STORAGE_MIPLEVEL, "storage attachment mip level is bigger than image has mipmaps") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_STORAGE_FACE, "storage attachment image is cubemap, but face index is too big") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_STORAGE_LAYER, "storage attachment image is array texture, but layer index is too big") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_STORAGE_SLICE, "storage attachment image is 3d texture, but slice value is too big") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_STORAGE_IMAGE_NO_STORAGEATTACHMENT, "storage attachment images must be sg_image_desc.usage.storage_attachment=true") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_STORAGE_INV_PIXELFORMAT, "storage attachment pixel format must have .compute_readwrite or .compute_writeonly capabilities") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RENDER_VS_STORAGE_ATTACHMENTS, "cannot use color/depth and storage attachment images on the same sg_attachments object") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_CANARY, "sg_begin_pass: pass struct not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_EXPECT_NO_ATTACHMENTS, "sg_begin_pass: compute passes cannot have attachments") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_ATTACHMENTS_EXISTS, "sg_begin_pass: attachments object no longer alive") \
@@ -6908,16 +6916,22 @@ _SOKOL_PRIVATE bool _sg_is_compressed_pixel_format(sg_pixel_format fmt) {
     }
 }
 
-_SOKOL_PRIVATE bool _sg_is_valid_rendertarget_color_format(sg_pixel_format fmt) {
+_SOKOL_PRIVATE bool _sg_is_valid_attachment_color_format(sg_pixel_format fmt) {
     const int fmt_index = (int) fmt;
     SOKOL_ASSERT((fmt_index >= 0) && (fmt_index < _SG_PIXELFORMAT_NUM));
     return _sg.formats[fmt_index].render && !_sg.formats[fmt_index].depth;
 }
 
-_SOKOL_PRIVATE bool _sg_is_valid_rendertarget_depth_format(sg_pixel_format fmt) {
+_SOKOL_PRIVATE bool _sg_is_valid_attachment_depth_format(sg_pixel_format fmt) {
     const int fmt_index = (int) fmt;
     SOKOL_ASSERT((fmt_index >= 0) && (fmt_index < _SG_PIXELFORMAT_NUM));
     return _sg.formats[fmt_index].render && _sg.formats[fmt_index].depth;
+}
+
+_SOKOL_PRIVATE bool _sg_is_valid_attachment_storage_format(sg_pixel_format fmt) {
+    const int fmt_index = (int) fmt;
+    SOKOL_ASSERT((fmt_index >= 0) && (fmt_index < _SG_PIXELFORMAT_NUM));
+    return _sg.formats[fmt_index].compute_readwrite || _sg.formats[fmt_index].compute_writeonly;
 }
 
 _SOKOL_PRIVATE bool _sg_is_depth_or_depth_stencil_format(sg_pixel_format fmt) {
@@ -7308,7 +7322,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_attachments(_sg_attachments_t*
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
         SOKOL_ASSERT(0 == atts->dmy.colors[i].image);
         SOKOL_ASSERT(color_images[i] && (color_images[i]->slot.id == color_desc->image.id));
-        SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(color_images[i]->cmn.pixel_format));
+        SOKOL_ASSERT(_sg_is_valid_attachment_color_format(color_images[i]->cmn.pixel_format));
         atts->dmy.colors[i].image = color_images[i];
 
         const sg_attachment_desc* resolve_desc = &desc->resolves[i];
@@ -7324,7 +7338,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_attachments(_sg_attachments_t*
     const sg_attachment_desc* ds_desc = &desc->depth_stencil;
     if (ds_desc->image.id != SG_INVALID_ID) {
         SOKOL_ASSERT(ds_img && (ds_img->slot.id == ds_desc->image.id));
-        SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(ds_img->cmn.pixel_format));
+        SOKOL_ASSERT(_sg_is_valid_attachment_depth_format(ds_img->cmn.pixel_format));
         atts->dmy.depth_stencil.image = ds_img;
     }
     return SG_RESOURCESTATE_VALID;
@@ -9485,7 +9499,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* at
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
         SOKOL_ASSERT(0 == atts->gl.colors[i].image);
         SOKOL_ASSERT(color_images[i] && (color_images[i]->slot.id == color_desc->image.id));
-        SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(color_images[i]->cmn.pixel_format));
+        SOKOL_ASSERT(_sg_is_valid_attachment_color_format(color_images[i]->cmn.pixel_format));
         atts->gl.colors[i].image = color_images[i];
 
         const sg_attachment_desc* resolve_desc = &desc->resolves[i];
@@ -9500,7 +9514,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* at
     const sg_attachment_desc* ds_desc = &desc->depth_stencil;
     if (ds_desc->image.id != SG_INVALID_ID) {
         SOKOL_ASSERT(ds_image && (ds_image->slot.id == ds_desc->image.id));
-        SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(ds_image->cmn.pixel_format));
+        SOKOL_ASSERT(_sg_is_valid_attachment_depth_format(ds_image->cmn.pixel_format));
         atts->gl.depth_stencil.image = ds_image;
     }
 
@@ -12096,7 +12110,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
         SOKOL_ASSERT(0 == atts->d3d11.colors[i].image);
         SOKOL_ASSERT(color_images[i] && (color_images[i]->slot.id == color_desc->image.id));
-        SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(color_images[i]->cmn.pixel_format));
+        SOKOL_ASSERT(_sg_is_valid_attachment_color_format(color_images[i]->cmn.pixel_format));
         atts->d3d11.colors[i].image = color_images[i];
 
         const sg_attachment_desc* resolve_desc = &desc->resolves[i];
@@ -12111,7 +12125,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
     const sg_attachment_desc* ds_desc = &desc->depth_stencil;
     if (ds_desc->image.id != SG_INVALID_ID) {
         SOKOL_ASSERT(ds_img && (ds_img->slot.id == ds_desc->image.id));
-        SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(ds_img->cmn.pixel_format));
+        SOKOL_ASSERT(_sg_is_valid_attachment_depth_format(ds_img->cmn.pixel_format));
         atts->d3d11.depth_stencil.image = ds_img;
     }
 
@@ -14024,7 +14038,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_attachments(_sg_attachments_t* a
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
         SOKOL_ASSERT(0 == atts->mtl.colors[i].image);
         SOKOL_ASSERT(color_images[i] && (color_images[i]->slot.id == color_desc->image.id));
-        SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(color_images[i]->cmn.pixel_format));
+        SOKOL_ASSERT(_sg_is_valid_attachment_color_format(color_images[i]->cmn.pixel_format));
         atts->mtl.colors[i].image = color_images[i];
 
         const sg_attachment_desc* resolve_desc = &desc->resolves[i];
@@ -14039,7 +14053,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_attachments(_sg_attachments_t* a
     const sg_attachment_desc* ds_desc = &desc->depth_stencil;
     if (ds_desc->image.id != SG_INVALID_ID) {
         SOKOL_ASSERT(ds_img && (ds_img->slot.id == ds_desc->image.id));
-        SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(ds_img->cmn.pixel_format));
+        SOKOL_ASSERT(_sg_is_valid_attachment_depth_format(ds_img->cmn.pixel_format));
         atts->mtl.depth_stencil.image = ds_img;
     }
     return SG_RESOURCESTATE_VALID;
@@ -16532,7 +16546,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_attachments(_sg_attachments_t* 
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
         SOKOL_ASSERT(0 == atts->wgpu.colors[i].image);
         SOKOL_ASSERT(color_images[i] && (color_images[i]->slot.id == color_desc->image.id));
-        SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(color_images[i]->cmn.pixel_format));
+        SOKOL_ASSERT(_sg_is_valid_attachment_color_format(color_images[i]->cmn.pixel_format));
         SOKOL_ASSERT(color_images[i]->wgpu.tex);
         atts->wgpu.colors[i].image = color_images[i];
 
@@ -16573,7 +16587,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_attachments(_sg_attachments_t* 
     const sg_attachment_desc* ds_desc = &desc->depth_stencil;
     if (ds_desc->image.id != SG_INVALID_ID) {
         SOKOL_ASSERT(ds_img && (ds_img->slot.id == ds_desc->image.id));
-        SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(ds_img->cmn.pixel_format));
+        SOKOL_ASSERT(_sg_is_valid_attachment_depth_format(ds_img->cmn.pixel_format));
         SOKOL_ASSERT(ds_img->wgpu.tex);
         atts->wgpu.depth_stencil.image = ds_img;
 
@@ -17958,14 +17972,13 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
                     _SG_VALIDATE(desc->type != SG_IMAGETYPE_CUBE, VALIDATE_IMAGEDESC_RENDERATTACHMENT_MSAA_CUBE_IMAGE);
                 }
             } else if (usage->storage_attachment) {
-                SOKOL_ASSERT(((int)fmt >= 0) && ((int)fmt < _SG_PIXELFORMAT_NUM));
-                _SG_VALIDATE(_sg.formats[fmt].compute_readwrite || _sg.formats[fmt].compute_writeonly, VALIDATE_IMAGEDESC_STORAGEATTACHMENT_PIXELFORMAT);
+                _SG_VALIDATE(_sg_is_valid_attachment_storage_format(fmt), VALIDATE_IMAGEDESC_STORAGEATTACHMENT_PIXELFORMAT);
                 // D3D11 doesn't allow multisampled UAVs (see: https://github.com/gpuweb/gpuweb/issues/513)
                 _SG_VALIDATE(desc->sample_count == 1, VALIDATE_IMAGEDESC_STORAGEATTACHMENT_EXPECT_NO_MSAA);
             }
         } else {
             _SG_VALIDATE(desc->sample_count == 1, VALIDATE_IMAGEDESC_MSAA_BUT_NO_ATTACHMENT);
-            const bool valid_nonrt_fmt = !_sg_is_valid_rendertarget_depth_format(fmt);
+            const bool valid_nonrt_fmt = !_sg_is_valid_attachment_depth_format(fmt);
             _SG_VALIDATE(valid_nonrt_fmt, VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT);
             const bool is_compressed = _sg_is_compressed_pixel_format(desc->pixel_format);
             if (is_compressed) {
@@ -18451,92 +18464,130 @@ _SOKOL_PRIVATE bool _sg_validate_attachments_desc(const sg_attachments_desc* des
         _sg_validate_begin();
         _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_ATTACHMENTSDESC_CANARY);
         _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_ATTACHMENTSDESC_CANARY);
-        bool atts_cont = true;
-        int color_width = -1, color_height = -1, color_sample_count = -1;
-        bool has_color_atts = false;
-        for (int att_index = 0; att_index < SG_MAX_COLOR_ATTACHMENTS; att_index++) {
-            const sg_attachment_desc* att = &desc->colors[att_index];
-            if (att->image.id == SG_INVALID_ID) {
-                atts_cont = false;
-                continue;
-            }
-            _SG_VALIDATE(atts_cont, VALIDATE_ATTACHMENTSDESC_NO_CONT_COLOR_ATTS);
-            has_color_atts = true;
-            const _sg_image_t* img = _sg_lookup_image(&_sg.pools, att->image.id);
-            _SG_VALIDATE(img, VALIDATE_ATTACHMENTSDESC_IMAGE);
-            if (0 != img) {
-                _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ATTACHMENTSDESC_IMAGE);
-                _SG_VALIDATE(img->cmn.usage.render_attachment, VALIDATE_ATTACHMENTSDESC_IMAGE_NO_RT);
-                _SG_VALIDATE(att->mip_level < img->cmn.num_mipmaps, VALIDATE_ATTACHMENTSDESC_MIPLEVEL);
-                if (img->cmn.type == SG_IMAGETYPE_CUBE) {
-                    _SG_VALIDATE(att->slice < 6, VALIDATE_ATTACHMENTSDESC_FACE);
-                } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
-                    _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_LAYER);
-                } else if (img->cmn.type == SG_IMAGETYPE_3D) {
-                    _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_SLICE);
-                }
-                if (att_index == 0) {
-                    color_width = _sg_miplevel_dim(img->cmn.width, att->mip_level);
-                    color_height = _sg_miplevel_dim(img->cmn.height, att->mip_level);
-                    color_sample_count = img->cmn.sample_count;
-                } else {
-                    _SG_VALIDATE(color_width == _sg_miplevel_dim(img->cmn.width, att->mip_level), VALIDATE_ATTACHMENTSDESC_IMAGE_SIZES);
-                    _SG_VALIDATE(color_height == _sg_miplevel_dim(img->cmn.height, att->mip_level), VALIDATE_ATTACHMENTSDESC_IMAGE_SIZES);
-                    _SG_VALIDATE(color_sample_count == img->cmn.sample_count, VALIDATE_ATTACHMENTSDESC_IMAGE_SAMPLE_COUNTS);
-                }
-                _SG_VALIDATE(_sg_is_valid_rendertarget_color_format(img->cmn.pixel_format), VALIDATE_ATTACHMENTSDESC_COLOR_INV_PIXELFORMAT);
 
-                // check resolve attachment
-                const sg_attachment_desc* res_att = &desc->resolves[att_index];
-                if (res_att->image.id != SG_INVALID_ID) {
-                    // associated color attachment must be MSAA
-                    _SG_VALIDATE(img->cmn.sample_count > 1, VALIDATE_ATTACHMENTSDESC_RESOLVE_COLOR_IMAGE_MSAA);
-                    const _sg_image_t* res_img = _sg_lookup_image(&_sg.pools, res_att->image.id);
-                    _SG_VALIDATE(res_img, VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE);
-                    if (res_img != 0) {
-                        _SG_VALIDATE(res_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE);
-                        _SG_VALIDATE(res_img->cmn.usage.render_attachment, VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_NO_RT);
-                        _SG_VALIDATE(res_img->cmn.sample_count == 1, VALIDATE_ATTACHMENTSDESC_RESOLVE_SAMPLE_COUNT);
-                        _SG_VALIDATE(res_att->mip_level < res_img->cmn.num_mipmaps, VALIDATE_ATTACHMENTSDESC_RESOLVE_MIPLEVEL);
-                        if (res_img->cmn.type == SG_IMAGETYPE_CUBE) {
-                            _SG_VALIDATE(res_att->slice < SG_CUBEFACE_NUM, VALIDATE_ATTACHMENTSDESC_RESOLVE_FACE);
-                        } else if (res_img->cmn.type == SG_IMAGETYPE_ARRAY) {
-                            _SG_VALIDATE(res_att->slice < res_img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_RESOLVE_LAYER);
-                        } else if (res_img->cmn.type == SG_IMAGETYPE_3D) {
-                            _SG_VALIDATE(res_att->slice < res_img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_RESOLVE_SLICE);
+        // check color attachments
+        bool has_color_atts = false;
+        bool has_depth_stencil_att = false;
+        {
+            bool atts_cont = true;
+            int color_width = -1, color_height = -1, color_sample_count = -1;
+            for (int att_index = 0; att_index < SG_MAX_COLOR_ATTACHMENTS; att_index++) {
+                const sg_attachment_desc* att = &desc->colors[att_index];
+                if (att->image.id == SG_INVALID_ID) {
+                    atts_cont = false;
+                    continue;
+                }
+                has_color_atts = true;
+                _SG_VALIDATE(atts_cont, VALIDATE_ATTACHMENTSDESC_NO_CONT_COLOR_ATTS);
+                const _sg_image_t* img = _sg_lookup_image(&_sg.pools, att->image.id);
+                _SG_VALIDATE(img, VALIDATE_ATTACHMENTSDESC_COLOR_IMAGE);
+                if (0 != img) {
+                    _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ATTACHMENTSDESC_COLOR_IMAGE);
+                    _SG_VALIDATE(img->cmn.usage.render_attachment, VALIDATE_ATTACHMENTSDESC_COLOR_IMAGE_NO_RENDERATTACHMENT);
+                    _SG_VALIDATE(att->mip_level < img->cmn.num_mipmaps, VALIDATE_ATTACHMENTSDESC_COLOR_MIPLEVEL);
+                    if (img->cmn.type == SG_IMAGETYPE_CUBE) {
+                        _SG_VALIDATE(att->slice < 6, VALIDATE_ATTACHMENTSDESC_COLOR_FACE);
+                    } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
+                        _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_COLOR_LAYER);
+                    } else if (img->cmn.type == SG_IMAGETYPE_3D) {
+                        _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_COLOR_SLICE);
+                    }
+                    if (att_index == 0) {
+                        color_width = _sg_miplevel_dim(img->cmn.width, att->mip_level);
+                        color_height = _sg_miplevel_dim(img->cmn.height, att->mip_level);
+                        color_sample_count = img->cmn.sample_count;
+                    } else {
+                        _SG_VALIDATE(color_width == _sg_miplevel_dim(img->cmn.width, att->mip_level), VALIDATE_ATTACHMENTSDESC_IMAGE_SIZES);
+                        _SG_VALIDATE(color_height == _sg_miplevel_dim(img->cmn.height, att->mip_level), VALIDATE_ATTACHMENTSDESC_IMAGE_SIZES);
+                        _SG_VALIDATE(color_sample_count == img->cmn.sample_count, VALIDATE_ATTACHMENTSDESC_IMAGE_SAMPLE_COUNTS);
+                    }
+                    _SG_VALIDATE(_sg_is_valid_attachment_color_format(img->cmn.pixel_format), VALIDATE_ATTACHMENTSDESC_COLOR_INV_PIXELFORMAT);
+
+                    // check resolve attachment
+                    const sg_attachment_desc* res_att = &desc->resolves[att_index];
+                    if (res_att->image.id != SG_INVALID_ID) {
+                        // associated color attachment must be MSAA
+                        _SG_VALIDATE(img->cmn.sample_count > 1, VALIDATE_ATTACHMENTSDESC_RESOLVE_COLOR_IMAGE_MSAA);
+                        const _sg_image_t* res_img = _sg_lookup_image(&_sg.pools, res_att->image.id);
+                        _SG_VALIDATE(res_img, VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE);
+                        if (res_img != 0) {
+                            _SG_VALIDATE(res_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE);
+                            _SG_VALIDATE(res_img->cmn.usage.render_attachment, VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_NO_RT);
+                            _SG_VALIDATE(res_img->cmn.sample_count == 1, VALIDATE_ATTACHMENTSDESC_RESOLVE_SAMPLE_COUNT);
+                            _SG_VALIDATE(res_att->mip_level < res_img->cmn.num_mipmaps, VALIDATE_ATTACHMENTSDESC_RESOLVE_MIPLEVEL);
+                            if (res_img->cmn.type == SG_IMAGETYPE_CUBE) {
+                                _SG_VALIDATE(res_att->slice < SG_CUBEFACE_NUM, VALIDATE_ATTACHMENTSDESC_RESOLVE_FACE);
+                            } else if (res_img->cmn.type == SG_IMAGETYPE_ARRAY) {
+                                _SG_VALIDATE(res_att->slice < res_img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_RESOLVE_LAYER);
+                            } else if (res_img->cmn.type == SG_IMAGETYPE_3D) {
+                                _SG_VALIDATE(res_att->slice < res_img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_RESOLVE_SLICE);
+                            }
+                            _SG_VALIDATE(img->cmn.pixel_format == res_img->cmn.pixel_format, VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_FORMAT);
+                            _SG_VALIDATE(color_width == _sg_miplevel_dim(res_img->cmn.width, res_att->mip_level), VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_SIZES);
+                            _SG_VALIDATE(color_height == _sg_miplevel_dim(res_img->cmn.height, res_att->mip_level), VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_SIZES);
                         }
-                        _SG_VALIDATE(img->cmn.pixel_format == res_img->cmn.pixel_format, VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_FORMAT);
-                        _SG_VALIDATE(color_width == _sg_miplevel_dim(res_img->cmn.width, res_att->mip_level), VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_SIZES);
-                        _SG_VALIDATE(color_height == _sg_miplevel_dim(res_img->cmn.height, res_att->mip_level), VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_SIZES);
                     }
                 }
             }
-        }
-        bool has_depth_stencil_att = false;
-        if (desc->depth_stencil.image.id != SG_INVALID_ID) {
-            const sg_attachment_desc* att = &desc->depth_stencil;
-            const _sg_image_t* img = _sg_lookup_image(&_sg.pools, att->image.id);
-            _SG_VALIDATE(img, VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE);
-            has_depth_stencil_att = true;
-            if (img) {
-                _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE);
-                _SG_VALIDATE(att->mip_level < img->cmn.num_mipmaps, VALIDATE_ATTACHMENTSDESC_DEPTH_MIPLEVEL);
-                if (img->cmn.type == SG_IMAGETYPE_CUBE) {
-                    _SG_VALIDATE(att->slice < 6, VALIDATE_ATTACHMENTSDESC_DEPTH_FACE);
-                } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
-                    _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_DEPTH_LAYER);
-                } else if (img->cmn.type == SG_IMAGETYPE_3D) {
-                    // NOTE: this can't actually happen because of VALIDATE_IMAGEDESC_DEPTH_3D_IMAGE
-                    _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_DEPTH_SLICE);
+            // check depth stencil attachments
+            if (desc->depth_stencil.image.id != SG_INVALID_ID) {
+                has_depth_stencil_att = true;
+                const sg_attachment_desc* att = &desc->depth_stencil;
+                const _sg_image_t* img = _sg_lookup_image(&_sg.pools, att->image.id);
+                _SG_VALIDATE(img, VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE);
+                if (img) {
+                    _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE);
+                    _SG_VALIDATE(att->mip_level < img->cmn.num_mipmaps, VALIDATE_ATTACHMENTSDESC_DEPTH_MIPLEVEL);
+                    if (img->cmn.type == SG_IMAGETYPE_CUBE) {
+                        _SG_VALIDATE(att->slice < 6, VALIDATE_ATTACHMENTSDESC_DEPTH_FACE);
+                    } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
+                        _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_DEPTH_LAYER);
+                    } else if (img->cmn.type == SG_IMAGETYPE_3D) {
+                        // NOTE: this can't actually happen because of VALIDATE_IMAGEDESC_DEPTH_3D_IMAGE
+                        _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_DEPTH_SLICE);
+                    }
+                    _SG_VALIDATE(img->cmn.usage.render_attachment, VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_NO_RENDERATTACHMENT);
+                    _SG_VALIDATE((color_width == -1) || (color_width == _sg_miplevel_dim(img->cmn.width, att->mip_level)), VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SIZES);
+                    _SG_VALIDATE((color_height == -1) || (color_height == _sg_miplevel_dim(img->cmn.height, att->mip_level)), VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SIZES);
+                    _SG_VALIDATE((color_sample_count == -1) || (color_sample_count == img->cmn.sample_count), VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SAMPLE_COUNT);
+                    _SG_VALIDATE(_sg_is_valid_attachment_depth_format(img->cmn.pixel_format), VALIDATE_ATTACHMENTSDESC_DEPTH_INV_PIXELFORMAT);
                 }
-                _SG_VALIDATE(img->cmn.usage.render_attachment, VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_NO_RT);
-                _SG_VALIDATE((color_width == -1) || (color_width == _sg_miplevel_dim(img->cmn.width, att->mip_level)), VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SIZES);
-                _SG_VALIDATE((color_height == -1) || (color_height == _sg_miplevel_dim(img->cmn.height, att->mip_level)), VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SIZES);
-                _SG_VALIDATE((color_sample_count == -1) || (color_sample_count == img->cmn.sample_count), VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SAMPLE_COUNT);
-                _SG_VALIDATE(_sg_is_valid_rendertarget_depth_format(img->cmn.pixel_format), VALIDATE_ATTACHMENTSDESC_DEPTH_INV_PIXELFORMAT);
             }
         }
-        _SG_VALIDATE(has_color_atts || has_depth_stencil_att, VALIDATE_ATTACHMENTSDESC_NO_ATTACHMENTS);
+
+        // check storage attachments (note: storage attachments don't need to continuous)
+        bool has_storage_atts = false;
+        {
+            for (int att_index = 0; att_index < SG_MAX_STORAGE_ATTACHMENTS; att_index++) {
+                const sg_attachment_desc* att = &desc->storages[att_index];
+                if (att->image.id == SG_INVALID_ID) {
+                    continue;
+                }
+                has_storage_atts = true;
+                const _sg_image_t* img = _sg_lookup_image(&_sg.pools, att->image.id);
+                _SG_VALIDATE(img, VALIDATE_ATTACHMENTSDESC_STORAGE_IMAGE);
+                if (0 != img) {
+                    _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ATTACHMENTSDESC_STORAGE_IMAGE);
+                    _SG_VALIDATE(img->cmn.usage.storage_attachment, VALIDATE_ATTACHMENTSDESC_STORAGE_IMAGE_NO_STORAGEATTACHMENT);
+                    _SG_VALIDATE(att->mip_level < img->cmn.num_mipmaps, VALIDATE_ATTACHMENTSDESC_STORAGE_MIPLEVEL);
+                    if (img->cmn.type == SG_IMAGETYPE_CUBE) {
+                        _SG_VALIDATE(att->slice < 6, VALIDATE_ATTACHMENTSDESC_STORAGE_FACE);
+                    } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
+                        _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_STORAGE_LAYER);
+                    } else if (img->cmn.type == SG_IMAGETYPE_3D) {
+                        _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_STORAGE_SLICE);
+                    }
+                    _SG_VALIDATE(_sg_is_valid_attachment_storage_format(img->cmn.pixel_format), VALIDATE_ATTACHMENTSDESC_STORAGE_INV_PIXELFORMAT);
+                }
+            }
+        }
+        _SG_VALIDATE(has_color_atts || has_depth_stencil_att || has_storage_atts, VALIDATE_ATTACHMENTSDESC_NO_ATTACHMENTS);
+        if (has_color_atts || has_depth_stencil_att) {
+            _SG_VALIDATE(!has_storage_atts, VALIDATE_ATTACHMENTSDESC_RENDER_VS_STORAGE_ATTACHMENTS);
+        }
+        if (has_storage_atts) {
+            _SG_VALIDATE(!(has_color_atts || has_depth_stencil_att), VALIDATE_ATTACHMENTSDESC_RENDER_VS_STORAGE_ATTACHMENTS);
+        }
         return _sg_validate_end();
     #endif
 }
