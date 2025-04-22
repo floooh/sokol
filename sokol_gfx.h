@@ -452,7 +452,7 @@
         sg_apply_scissor_rect[f]
         sg_draw
 
-    The folling function may be called inside a render- or compute-pass, but
+    The following function may be called inside a render- or compute-pass, but
     not outside a pass:
 
         sg_apply_pipeline
