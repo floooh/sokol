@@ -4165,12 +4165,14 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_STORAGE_INV_PIXELFORMAT, "storage attachment pixel format must have .compute_readwrite or .compute_writeonly capabilities") \
     _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RENDER_VS_STORAGE_ATTACHMENTS, "cannot use color/depth and storage attachment images on the same sg_attachments object") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_CANARY, "sg_begin_pass: pass struct not initialized") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_EXPECT_NO_ATTACHMENTS, "sg_begin_pass: compute passes cannot have attachments") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_ATTACHMENTS_EXISTS, "sg_begin_pass: attachments object no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_ATTACHMENTS_VALID, "sg_begin_pass: attachments object not in resource state VALID") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COMPUTEPASS_STORAGE_ATTACHMENTS_ONLY, "sg_begin_pass: only storage attachemnts allowed on compute pass") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RENDERPASS_RENDER_ATTACHMENTS_ONLY, "sg_begin_pass: a render pass cannot have storage attachments") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE, "sg_begin_pass: one or more color attachment images are not valid") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVE_ATTACHMENT_IMAGE, "sg_begin_pass: one or more resolve attachment images are not valid") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCIL_ATTACHMENT_IMAGE, "sg_begin_pass: one or more depth-stencil attachment images are not valid") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_STORAGE_ATTACHMENT_IMAGE, "sg_begin_pass: one or more storage attachment images are not valid") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_WIDTH, "sg_begin_pass: expected pass.swapchain.width > 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_WIDTH_NOTSET, "sg_begin_pass: expected pass.swapchain.width == 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_HEIGHT, "sg_begin_pass: expected pass.swapchain.height > 0") \
@@ -5724,6 +5726,8 @@ typedef struct {
     int height;
     int num_colors;
     int num_storages;
+    bool has_render_attachments;
+    bool has_storage_attachments;
     _sg_attachment_common_t colors[SG_MAX_COLOR_ATTACHMENTS];
     _sg_attachment_common_t resolves[SG_MAX_COLOR_ATTACHMENTS];
     _sg_attachment_common_t depth_stencil;
@@ -5745,14 +5749,17 @@ _SOKOL_PRIVATE void _sg_attachments_common_init(_sg_attachments_common_t* cmn, c
             cmn->num_colors++;
             _sg_attachment_common_init(&cmn->colors[i], &desc->colors[i]);
             _sg_attachment_common_init(&cmn->resolves[i], &desc->resolves[i]);
+            cmn->has_render_attachments = true;
         }
     }
     if (desc->depth_stencil.image.id != SG_INVALID_ID) {
         _sg_attachment_common_init(&cmn->depth_stencil, &desc->depth_stencil);
+        cmn->has_render_attachments = true;
     }
     for (size_t i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
         if (desc->storages[i].image.id != SG_INVALID_ID) {
             cmn->num_storages++;
+            cmn->has_storage_attachments = true;
             _sg_attachment_common_init(&cmn->storages[i], &desc->storages[i]);
         }
     }
@@ -6209,6 +6216,7 @@ typedef struct _sg_attachments_s {
         _sg_mtl_attachment_t resolves[SG_MAX_COLOR_ATTACHMENTS];
         _sg_mtl_attachment_t depth_stencil;
         _sg_mtl_attachment_t storages[SG_MAX_STORAGE_ATTACHMENTS];
+        int storage_views[SG_MAX_STORAGE_ATTACHMENTS];
     } mtl;
 } _sg_mtl_attachments_t;
 typedef _sg_mtl_attachments_t _sg_attachments_t;
@@ -14080,14 +14088,25 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_attachments(_sg_attachments_t* a
         atts->mtl.storages[i].image = atts_ptrs->storage_images[i];
     }
 
-    // FIXME: create texture views for storage attachments
-
+    // create texture views for storage attachments
+    for (int i = 0; i < atts->cmn.num_storages; i++) {
+        const _sg_image_t* img = atts->mtl.storages[i].image;
+        id<MTLTexture> mtl_tex_view = [_sg_mtl_id(img->mtl.tex[0])
+            newTextureViewWithPixelFormat: _sg_mtl_pixel_format(img->cmn.pixel_format)
+            textureType: _sg_mtl_texture_type(img->cmn.type, false)
+            levels: NSMakeRange((NSUInteger)atts->cmn.storages[i].mip_level, 1)
+            slices: NSMakeRange((NSUInteger)atts->cmn.storages[i].slice, 1)];
+        atts->mtl.storage_views[i] = _sg_mtl_add_resource(mtl_tex_view);
+    }
     return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_mtl_discard_attachments(_sg_attachments_t* atts) {
     SOKOL_ASSERT(atts);
     _SOKOL_UNUSED(atts);
+    for (int i = 0; i < atts->cmn.num_storages; i++) {
+        _sg_mtl_release_resource(_sg.frame_index, atts->mtl.storage_views[i]);
+    }
 }
 
 _SOKOL_PRIVATE _sg_image_t* _sg_mtl_attachments_color_image(const _sg_attachments_t* atts, int index) {
@@ -14106,6 +14125,12 @@ _SOKOL_PRIVATE _sg_image_t* _sg_mtl_attachments_ds_image(const _sg_attachments_t
     // NOTE: may return null
     SOKOL_ASSERT(atts);
     return atts->mtl.depth_stencil.image;
+}
+
+_SOKOL_PRIVATE _sg_image_t* _sg_mtl_attachments_storage_image(const _sg_attachments_t* atts, int index) {
+    // NOTE: may return null
+    SOKOL_ASSERT(atts && (index >= 0) && (index < SG_MAX_STORAGE_ATTACHMENTS));
+    return atts->mtl.storages[index].image;
 }
 
 _SOKOL_PRIVATE void _sg_mtl_bind_uniform_buffers(void) {
@@ -17249,6 +17274,22 @@ static inline _sg_image_t* _sg_attachments_ds_image(const _sg_attachments_t* att
     #endif
 }
 
+static inline _sg_image_t* _sg_attachments_storage_image(const _sg_attachments_t* atts, int index) {
+    #if defined(_SOKOL_ANY_GL)
+    return _sg_gl_attachments_storage_image(atts, index);
+    #elif defined(SOKOL_METAL)
+    return _sg_mtl_attachments_storage_image(atts, index);
+    #elif defined(SOKOL_D3D11)
+    return _sg_d3d11_attachments_storage_image(atts, index);
+    #elif defined(SOKOL_WGPU)
+    return _sg_wgpu_attachments_storage_image(atts, index);
+    #elif defined(SOKOL_DUMMY_BACKEND)
+    return _sg_dummy_attachments_storage_image(atts, index);
+    #else
+    #error("INVALID BACKEND");
+    #endif
+}
+
 static inline void _sg_begin_pass(const sg_pass* pass) {
     #if defined(_SOKOL_ANY_GL)
     _sg_gl_begin_pass(pass);
@@ -18633,8 +18674,24 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
         _SG_VALIDATE(pass->_start_canary == 0, VALIDATE_BEGINPASS_CANARY);
         _SG_VALIDATE(pass->_end_canary == 0, VALIDATE_BEGINPASS_CANARY);
         if (is_compute_pass) {
-            // this is a compute pass
-            _SG_VALIDATE(pass->attachments.id == SG_INVALID_ID, VALIDATE_BEGINPASS_EXPECT_NO_ATTACHMENTS);
+            // this is a compute pass with optional storage attachments
+            if (pass->attachments.id) {
+                const _sg_attachments_t* atts = _sg_lookup_attachments(&_sg.pools, pass->attachments.id);
+                if (atts) {
+                    _SG_VALIDATE(atts->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_ATTACHMENTS_VALID);
+                    _SG_VALIDATE(!atts->cmn.has_render_attachments, VALIDATE_BEGINPASS_COMPUTEPASS_STORAGE_ATTACHMENTS_ONLY);
+                    for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+                        const _sg_attachment_common_t* storage_att = &atts->cmn.storages[i];
+                        const _sg_image_t* storage_img = _sg_attachments_storage_image(atts, i);
+                        if (storage_img) {
+                            _SG_VALIDATE(storage_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_STORAGE_ATTACHMENT_IMAGE);
+                            _SG_VALIDATE(storage_img->slot.id == storage_att->image_id.id, VALIDATE_BEGINPASS_STORAGE_ATTACHMENT_IMAGE);
+                        }
+                    }
+                } else {
+                    _SG_VALIDATE(atts != 0, VALIDATE_BEGINPASS_ATTACHMENTS_EXISTS);
+                }
+            }
         } else if (is_swapchain_pass) {
             // this is a swapchain pass
             _SG_VALIDATE(pass->swapchain.width > 0, VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_WIDTH);
@@ -18685,6 +18742,7 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
             const _sg_attachments_t* atts = _sg_lookup_attachments(&_sg.pools, pass->attachments.id);
             if (atts) {
                 _SG_VALIDATE(atts->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_ATTACHMENTS_VALID);
+                _SG_VALIDATE(!atts->cmn.has_storage_attachments, VALIDATE_BEGINPASS_RENDERPASS_RENDER_ATTACHMENTS_ONLY);
                 for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
                     const _sg_attachment_common_t* color_att = &atts->cmn.colors[i];
                     const _sg_image_t* color_img = _sg_attachments_color_image(atts, i);
