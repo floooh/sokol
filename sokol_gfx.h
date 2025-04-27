@@ -4217,6 +4217,9 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_COLOR_FORMAT, "sg_apply_pipeline: pipeline color attachment pixel format doesn't match pass color attachment pixel format") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_DEPTH_FORMAT, "sg_apply_pipeline: pipeline depth pixel_format doesn't match pass depth attachment pixel format") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_SAMPLE_COUNT, "sg_apply_pipeline: pipeline MSAA sample count doesn't match render pass attachment sample count") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_EXPECTED_STORAGE_ATTACHMENT_IMAGE, "sg_apply_pipeline: shader expects storage image binding but compute pass doesn't have storage attachment image at expected bind slot") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_STORAGE_ATTACHMENT_IMAGE_EXISTS, "sg_apply_pipeline: a compute pass storage image attachment no longer exists") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_STORAGE_ATTACHMENT_IMAGE_VALID, "sg_apply_pipeline: a compute pass storage image attachment is not in valid state") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PASS_EXPECTED, "sg_apply_bindings: must be called in a pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EMPTY_BINDINGS, "sg_apply_bindings: the provided sg_bindings struct is empty") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE, "sg_apply_bindings: must be called after sg_apply_pipeline") \
@@ -6234,15 +6237,19 @@ typedef struct {
     sg_buffer cur_indexbuffer_id;
     int cur_indexbuffer_offset;
     int cur_vs_buffer_offsets[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
-    sg_buffer cur_vs_buffer_ids[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
-    sg_buffer cur_fs_buffer_ids[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
-    sg_buffer cur_cs_buffer_ids[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
-    sg_image cur_vs_image_ids[_SG_MTL_MAX_STAGE_TEXTURE_BINDINGS];
-    sg_image cur_fs_image_ids[_SG_MTL_MAX_STAGE_TEXTURE_BINDINGS];
-    sg_image cur_cs_image_ids[_SG_MTL_MAX_STAGE_TEXTURE_BINDINGS];
-    sg_sampler cur_vs_sampler_ids[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
-    sg_sampler cur_fs_sampler_ids[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
-    sg_sampler cur_cs_sampler_ids[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
+    uint32_t cur_vs_buffer_ids[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
+    uint32_t cur_fs_buffer_ids[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
+    uint32_t cur_cs_buffer_ids[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
+    uint32_t cur_vs_image_ids[_SG_MTL_MAX_STAGE_TEXTURE_BINDINGS];
+    uint32_t cur_fs_image_ids[_SG_MTL_MAX_STAGE_TEXTURE_BINDINGS];
+    uint32_t cur_vs_sampler_ids[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
+    uint32_t cur_fs_sampler_ids[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
+    uint32_t cur_cs_sampler_ids[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
+    // NOTE: special case: uint64_t for storage images, because we need
+    // to differentiate between storage pass attachments and regular
+    // textures bound to compute stages (but both binding types live
+    // in the texture bind space in Metal)
+    uint64_t cur_cs_image_ids[_SG_MTL_MAX_STAGE_TEXTURE_BINDINGS];
 } _sg_mtl_state_cache_t;
 
 typedef struct {
@@ -14166,8 +14173,6 @@ _SOKOL_PRIVATE void _sg_mtl_begin_compute_pass(const sg_pass* pass) {
     SOKOL_ASSERT(nil == _sg.mtl.compute_cmd_encoder);
     SOKOL_ASSERT(nil == _sg.mtl.render_cmd_encoder);
 
-    // NOTE: we actually want computeCommandEncoderWithDispatchType:MTLDispatchTypeConcurrent, but
-    // that requires bumping the macOS base version to 10.14
     _sg.mtl.compute_cmd_encoder = [_sg.mtl.cmd_buffer computeCommandEncoder];
     if (nil == _sg.mtl.compute_cmd_encoder) {
         _sg.cur_pass.valid = false;
@@ -14479,6 +14484,26 @@ _SOKOL_PRIVATE void _sg_mtl_apply_pipeline(_sg_pipeline_t* pip) {
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
             SOKOL_ASSERT(pip->mtl.cps != _SG_MTL_INVALID_SLOT_INDEX);
             [_sg.mtl.compute_cmd_encoder setComputePipelineState:_sg_mtl_id(pip->mtl.cps)];
+            // apply storage image bindings for writing
+            if (_sg.cur_pass.atts) {
+                const _sg_shader_t* shd = pip->shader;
+                const _sg_attachments_t* atts = _sg.cur_pass.atts;
+                for (size_t i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+                    const sg_shader_stage stage = shd->cmn.storage_images[i].stage;
+                    if (stage != SG_SHADERSTAGE_COMPUTE) {
+                        continue;
+                    }
+                    const NSUInteger mtl_slot = shd->mtl.simg_texture_n[i];
+                    SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS);
+                    const uint64_t cache_key = ((uint64_t)atts->cmn.storages[i].image_id.id) << 32;
+                    SOKOL_ASSERT(cache_key != 0);
+                    if (_sg.mtl.state_cache.cur_cs_image_ids[mtl_slot] != cache_key) {
+                        _sg.mtl.state_cache.cur_cs_image_ids[mtl_slot] = cache_key;
+                        [_sg.mtl.compute_cmd_encoder setTexture:_sg_mtl_id(atts->mtl.storage_views[i]) atIndex:mtl_slot];
+                        _sg_stats_add(metal.bindings.num_set_compute_texture, 1);
+                    }
+                }
+            }
         } else {
             SOKOL_ASSERT(!_sg.cur_pass.is_compute);
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
@@ -14532,13 +14557,13 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
             const NSUInteger mtl_slot = _sg_mtl_vertexbuffer_bindslot(i);
             SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_BUFFER_BINDINGS);
             const int vb_offset = bnd->vb_offsets[i];
-            if ((_sg.mtl.state_cache.cur_vs_buffer_ids[mtl_slot].id != vb->slot.id) ||
+            if ((_sg.mtl.state_cache.cur_vs_buffer_ids[mtl_slot] != vb->slot.id) ||
                 (_sg.mtl.state_cache.cur_vs_buffer_offsets[mtl_slot] != vb_offset))
             {
                 _sg.mtl.state_cache.cur_vs_buffer_offsets[mtl_slot] = vb_offset;
-                if (_sg.mtl.state_cache.cur_vs_buffer_ids[mtl_slot].id != vb->slot.id) {
+                if (_sg.mtl.state_cache.cur_vs_buffer_ids[mtl_slot] != vb->slot.id) {
                     // vertex buffer has changed
-                    _sg.mtl.state_cache.cur_vs_buffer_ids[mtl_slot].id = vb->slot.id;
+                    _sg.mtl.state_cache.cur_vs_buffer_ids[mtl_slot] = vb->slot.id;
                     SOKOL_ASSERT(vb->mtl.buf[vb->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
                     [_sg.mtl.render_cmd_encoder setVertexBuffer:_sg_mtl_id(vb->mtl.buf[vb->cmn.active_slot])
                         offset:(NSUInteger)vb_offset
@@ -14565,22 +14590,22 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS);
         if (stage == SG_SHADERSTAGE_VERTEX) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (_sg.mtl.state_cache.cur_vs_image_ids[mtl_slot].id != img->slot.id) {
-                _sg.mtl.state_cache.cur_vs_image_ids[mtl_slot].id = img->slot.id;
+            if (_sg.mtl.state_cache.cur_vs_image_ids[mtl_slot] != img->slot.id) {
+                _sg.mtl.state_cache.cur_vs_image_ids[mtl_slot] = img->slot.id;
                 [_sg.mtl.render_cmd_encoder setVertexTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_vertex_texture, 1);
             }
         } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (_sg.mtl.state_cache.cur_fs_image_ids[mtl_slot].id != img->slot.id) {
-                _sg.mtl.state_cache.cur_fs_image_ids[mtl_slot].id = img->slot.id;
+            if (_sg.mtl.state_cache.cur_fs_image_ids[mtl_slot] != img->slot.id) {
+                _sg.mtl.state_cache.cur_fs_image_ids[mtl_slot] = img->slot.id;
                 [_sg.mtl.render_cmd_encoder setFragmentTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_fragment_texture, 1);
             }
         } else if (stage == SG_SHADERSTAGE_COMPUTE) {
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
-            if (_sg.mtl.state_cache.cur_cs_image_ids[mtl_slot].id != img->slot.id) {
-                _sg.mtl.state_cache.cur_cs_image_ids[mtl_slot].id = img->slot.id;
+            if (_sg.mtl.state_cache.cur_cs_image_ids[mtl_slot] != img->slot.id) {
+                _sg.mtl.state_cache.cur_cs_image_ids[mtl_slot] = img->slot.id;
                 [_sg.mtl.compute_cmd_encoder setTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_compute_texture, 1);
             }
@@ -14600,22 +14625,22 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_SAMPLER_BINDINGS);
         if (stage == SG_SHADERSTAGE_VERTEX) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (_sg.mtl.state_cache.cur_vs_sampler_ids[mtl_slot].id != smp->slot.id) {
-                _sg.mtl.state_cache.cur_vs_sampler_ids[mtl_slot].id = smp->slot.id;
+            if (_sg.mtl.state_cache.cur_vs_sampler_ids[mtl_slot] != smp->slot.id) {
+                _sg.mtl.state_cache.cur_vs_sampler_ids[mtl_slot] = smp->slot.id;
                 [_sg.mtl.render_cmd_encoder setVertexSamplerState:_sg_mtl_id(smp->mtl.sampler_state) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_vertex_sampler_state, 1);
             }
         } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (_sg.mtl.state_cache.cur_fs_sampler_ids[mtl_slot].id != smp->slot.id) {
-                _sg.mtl.state_cache.cur_fs_sampler_ids[mtl_slot].id = smp->slot.id;
+            if (_sg.mtl.state_cache.cur_fs_sampler_ids[mtl_slot] != smp->slot.id) {
+                _sg.mtl.state_cache.cur_fs_sampler_ids[mtl_slot] = smp->slot.id;
                 [_sg.mtl.render_cmd_encoder setFragmentSamplerState:_sg_mtl_id(smp->mtl.sampler_state) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_fragment_sampler_state, 1);
             }
         } else if (stage == SG_SHADERSTAGE_COMPUTE) {
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
-            if (_sg.mtl.state_cache.cur_cs_sampler_ids[mtl_slot].id != smp->slot.id) {
-                _sg.mtl.state_cache.cur_cs_sampler_ids[mtl_slot].id = smp->slot.id;
+            if (_sg.mtl.state_cache.cur_cs_sampler_ids[mtl_slot] != smp->slot.id) {
+                _sg.mtl.state_cache.cur_cs_sampler_ids[mtl_slot] = smp->slot.id;
                 [_sg.mtl.compute_cmd_encoder setSamplerState:_sg_mtl_id(smp->mtl.sampler_state) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_compute_sampler_state, 1);
             }
@@ -14635,22 +14660,22 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS);
         if (stage == SG_SHADERSTAGE_VERTEX) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (_sg.mtl.state_cache.cur_vs_buffer_ids[mtl_slot].id != sbuf->slot.id) {
-                _sg.mtl.state_cache.cur_vs_buffer_ids[mtl_slot].id = sbuf->slot.id;
+            if (_sg.mtl.state_cache.cur_vs_buffer_ids[mtl_slot] != sbuf->slot.id) {
+                _sg.mtl.state_cache.cur_vs_buffer_ids[mtl_slot] = sbuf->slot.id;
                 [_sg.mtl.render_cmd_encoder setVertexBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:0 atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_vertex_buffer, 1);
             }
         } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (_sg.mtl.state_cache.cur_fs_buffer_ids[mtl_slot].id != sbuf->slot.id) {
-                _sg.mtl.state_cache.cur_fs_buffer_ids[mtl_slot].id = sbuf->slot.id;
+            if (_sg.mtl.state_cache.cur_fs_buffer_ids[mtl_slot] != sbuf->slot.id) {
+                _sg.mtl.state_cache.cur_fs_buffer_ids[mtl_slot] = sbuf->slot.id;
                 [_sg.mtl.render_cmd_encoder setFragmentBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:0 atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_fragment_buffer, 1);
             }
         } else if (stage == SG_SHADERSTAGE_COMPUTE) {
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
-            if (_sg.mtl.state_cache.cur_cs_buffer_ids[mtl_slot].id != sbuf->slot.id) {
-                _sg.mtl.state_cache.cur_cs_buffer_ids[mtl_slot].id = sbuf->slot.id;
+            if (_sg.mtl.state_cache.cur_cs_buffer_ids[mtl_slot] != sbuf->slot.id) {
+                _sg.mtl.state_cache.cur_cs_buffer_ids[mtl_slot] = sbuf->slot.id;
                 [_sg.mtl.compute_cmd_encoder setBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:0 atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_compute_buffer, 1);
             }
@@ -18848,24 +18873,47 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
         _SG_VALIDATE(pip->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_PIPELINE_VALID);
         // the pipeline's shader must be alive and valid
         SOKOL_ASSERT(pip->shader);
+        const _sg_shader_t* shd = pip->shader;
         _SG_VALIDATE(_sg.cur_pass.in_pass, VALIDATE_APIP_PASS_EXPECTED);
-        _SG_VALIDATE(pip->shader->slot.id == pip->cmn.shader_id.id, VALIDATE_APIP_SHADER_EXISTS);
-        _SG_VALIDATE(pip->shader->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_SHADER_VALID);
+        _SG_VALIDATE(shd->slot.id == pip->cmn.shader_id.id, VALIDATE_APIP_SHADER_EXISTS);
+        _SG_VALIDATE(shd->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_SHADER_VALID);
+
+        // if pass attachments exist, check that the attachment object is still valid
+        if (_sg.cur_pass.atts_id.id != SG_INVALID_ID) {
+            const _sg_attachments_t* atts = _sg.cur_pass.atts;
+            SOKOL_ASSERT(atts);
+            _SG_VALIDATE(atts->slot.id == _sg.cur_pass.atts_id.id, VALIDATE_APIP_CURPASS_ATTACHMENTS_EXISTS);
+            _SG_VALIDATE(atts->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_CURPASS_ATTACHMENTS_VALID);
+        }
         if (pip->cmn.is_compute) {
             _SG_VALIDATE(_sg.cur_pass.is_compute, VALIDATE_APIP_COMPUTEPASS_EXPECTED);
+            if (_sg.cur_pass.atts_id.id != SG_INVALID_ID) {
+                const _sg_attachments_t* atts = _sg.cur_pass.atts;
+                // a compute pass with storage attachments
+                // check that the pass storage attachments match the shader expectations
+                for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+                    if (shd->cmn.storage_images[i].stage != SG_SHADERSTAGE_NONE) {
+                        _SG_VALIDATE(atts->cmn.storages[i].image_id.id != SG_INVALID_ID, VALIDATE_APIP_EXPECTED_STORAGE_ATTACHMENT_IMAGE);
+                        if (atts->cmn.storages[i].image_id.id != SG_INVALID_ID) {
+                            const _sg_image_t* att_simg = _sg_lookup_image(&_sg.pools, atts->cmn.storages[i].image_id.id);
+                            _SG_VALIDATE(att_simg && att_simg == _sg_attachments_storage_image(atts, i), VALIDATE_APIP_STORAGE_ATTACHMENT_IMAGE_EXISTS);
+                            if (att_simg) {
+                                _SG_VALIDATE(att_simg->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_STORAGE_ATTACHMENT_IMAGE_VALID);
+                            }
+                        }
+                    }
+                }
+            }
         } else {
             _SG_VALIDATE(!_sg.cur_pass.is_compute, VALIDATE_APIP_RENDERPASS_EXPECTED);
             // check that pipeline attributes match current pass attributes
             if (_sg.cur_pass.atts_id.id != SG_INVALID_ID) {
-                // an offscreen pass
                 const _sg_attachments_t* atts = _sg.cur_pass.atts;
-                SOKOL_ASSERT(atts);
-                _SG_VALIDATE(atts->slot.id == _sg.cur_pass.atts_id.id, VALIDATE_APIP_CURPASS_ATTACHMENTS_EXISTS);
-                _SG_VALIDATE(atts->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_CURPASS_ATTACHMENTS_VALID);
-
+                // an offscreen pass
                 _SG_VALIDATE(pip->cmn.color_count == atts->cmn.num_colors, VALIDATE_APIP_ATT_COUNT);
                 for (int i = 0; i < pip->cmn.color_count; i++) {
                     const _sg_image_t* att_img = _sg_attachments_color_image(atts, i);
+                    SOKOL_ASSERT(att_img);
                     _SG_VALIDATE(pip->cmn.colors[i].pixel_format == att_img->cmn.pixel_format, VALIDATE_APIP_COLOR_FORMAT);
                     _SG_VALIDATE(pip->cmn.sample_count == att_img->cmn.sample_count, VALIDATE_APIP_SAMPLE_COUNT);
                 }
@@ -20520,36 +20568,33 @@ SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(!_sg.cur_pass.valid);
     SOKOL_ASSERT(!_sg.cur_pass.in_pass);
+    SOKOL_ASSERT(_sg.cur_pass.atts == 0);
     SOKOL_ASSERT(pass);
     SOKOL_ASSERT((pass->_start_canary == 0) && (pass->_end_canary == 0));
     const sg_pass pass_def = _sg_pass_defaults(pass);
     if (!_sg_validate_begin_pass(&pass_def)) {
         return;
     }
-    if (!pass_def.compute) {
-        if (pass_def.attachments.id != SG_INVALID_ID) {
-            // an offscreen pass
-            SOKOL_ASSERT(_sg.cur_pass.atts == 0);
-            _sg.cur_pass.atts = _sg_lookup_attachments(&_sg.pools, pass_def.attachments.id);
-            if (0 == _sg.cur_pass.atts) {
-                _SG_ERROR(BEGINPASS_ATTACHMENT_INVALID);
-                return;
-            }
-            _sg.cur_pass.atts_id = pass_def.attachments;
-            _sg.cur_pass.width = _sg.cur_pass.atts->cmn.width;
-            _sg.cur_pass.height = _sg.cur_pass.atts->cmn.height;
-        } else {
-            // a swapchain pass
-            SOKOL_ASSERT(pass_def.swapchain.width > 0);
-            SOKOL_ASSERT(pass_def.swapchain.height > 0);
-            SOKOL_ASSERT(pass_def.swapchain.color_format > SG_PIXELFORMAT_NONE);
-            SOKOL_ASSERT(pass_def.swapchain.sample_count > 0);
-            _sg.cur_pass.width = pass_def.swapchain.width;
-            _sg.cur_pass.height = pass_def.swapchain.height;
-            _sg.cur_pass.swapchain.color_fmt = pass_def.swapchain.color_format;
-            _sg.cur_pass.swapchain.depth_fmt = pass_def.swapchain.depth_format;
-            _sg.cur_pass.swapchain.sample_count = pass_def.swapchain.sample_count;
+    if (pass_def.attachments.id != SG_INVALID_ID) {
+        _sg.cur_pass.atts = _sg_lookup_attachments(&_sg.pools, pass_def.attachments.id);
+        if (0 == _sg.cur_pass.atts) {
+            _SG_ERROR(BEGINPASS_ATTACHMENT_INVALID);
+            return;
         }
+        _sg.cur_pass.atts_id = pass_def.attachments;
+        _sg.cur_pass.width = _sg.cur_pass.atts->cmn.width;
+        _sg.cur_pass.height = _sg.cur_pass.atts->cmn.height;
+    } else if (!pass_def.compute) {
+        // a swapchain pass
+        SOKOL_ASSERT(pass_def.swapchain.width > 0);
+        SOKOL_ASSERT(pass_def.swapchain.height > 0);
+        SOKOL_ASSERT(pass_def.swapchain.color_format > SG_PIXELFORMAT_NONE);
+        SOKOL_ASSERT(pass_def.swapchain.sample_count > 0);
+        _sg.cur_pass.width = pass_def.swapchain.width;
+        _sg.cur_pass.height = pass_def.swapchain.height;
+        _sg.cur_pass.swapchain.color_fmt = pass_def.swapchain.color_format;
+        _sg.cur_pass.swapchain.depth_fmt = pass_def.swapchain.depth_format;
+        _sg.cur_pass.swapchain.sample_count = pass_def.swapchain.sample_count;
     }
     _sg.cur_pass.valid = true;  // may be overruled by backend begin-pass functions
     _sg.cur_pass.in_pass = true;
