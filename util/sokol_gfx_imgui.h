@@ -294,6 +294,7 @@ typedef struct sgimgui_attachments_t {
     float color_image_scale[SG_MAX_COLOR_ATTACHMENTS];
     float resolve_image_scale[SG_MAX_COLOR_ATTACHMENTS];
     float ds_image_scale;
+    float storage_image_scale[SG_MAX_STORAGE_ATTACHMENTS];
     sg_attachments_desc desc;
 } sgimgui_attachments_t;
 
@@ -1717,6 +1718,9 @@ _SOKOL_PRIVATE void _sgimgui_attachments_created(sgimgui_t* ctx, sg_attachments 
         atts->resolve_image_scale[i] = 0.25f;
     }
     atts->ds_image_scale = 0.25f;
+    for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+        atts->storage_image_scale[i] = 0.25f;
+    }
     atts->label = _sgimgui_make_str(desc->label);
     atts->desc = *desc;
 }
@@ -3862,6 +3866,14 @@ _SOKOL_PRIVATE void _sgimgui_draw_attachments_panel(sgimgui_t* ctx, sg_attachmen
                 igText("Depth-Stencil Image:");
                 _sgimgui_draw_attachment(ctx, &atts_ui->desc.depth_stencil, &atts_ui->ds_image_scale);
             }
+            for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+                if (atts_ui->desc.storages[i].image.id == SG_INVALID_ID) {
+                    break;
+                }
+                igSeparator();
+                igText("Storage Image #%d:", i);
+                _sgimgui_draw_attachment(ctx, &atts_ui->desc.storages[i], &atts_ui->storage_image_scale[i]);
+            }
         } else {
             igText("Attachments 0x%08X not valid.", atts.id);
         }
@@ -4201,7 +4213,11 @@ _SOKOL_PRIVATE void _sgimgui_draw_capture_panel(sgimgui_t* ctx) {
             break;
         case SGIMGUI_CMD_BEGIN_PASS:
             igText("Compute: %s", _sgimgui_bool_string(item->args.begin_pass.pass.compute));
-            if (!item->args.begin_pass.pass.compute) {
+            if (item->args.begin_pass.pass.compute) {
+                if (item->args.begin_pass.pass.attachments.id != SG_INVALID_ID) {
+                    _sgimgui_draw_attachments_panel(ctx, item->args.begin_pass.pass.attachments);
+                }
+            } else {
                 _sgimgui_draw_passaction_panel(ctx, item->args.begin_pass.pass.attachments, &item->args.begin_pass.pass.action);
                 igSeparator();
                 if (item->args.begin_pass.pass.attachments.id != SG_INVALID_ID) {
@@ -4314,14 +4330,17 @@ _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
         sg_pixel_format fmt = (sg_pixel_format)i;
         sg_pixelformat_info info = sg_query_pixelformat(fmt);
         if (info.sample) {
-            igText("  %s: %s%s%s%s%s%s",
+            igText("  %s: %s%s%s%s%s%s%s%s%s",
                 _sgimgui_pixelformat_string(fmt),
                 info.sample ? "SAMPLE ":"",
                 info.filter ? "FILTER ":"",
                 info.blend ? "BLEND ":"",
                 info.render ? "RENDER ":"",
                 info.msaa ? "MSAA ":"",
-                info.depth ? "DEPTH ":"");
+                info.depth ? "DEPTH ":"",
+                info.compressed ? "COMPRESSED ":"",
+                info.compute_readwrite ? "READWRITE ":"",
+                info.compute_writeonly ? "WRITEONLY ":"");
         }
     }
 }
