@@ -5728,7 +5728,6 @@ typedef struct {
     int width;
     int height;
     int num_colors;
-    int num_storages;
     bool has_render_attachments;
     bool has_storage_attachments;
     _sg_attachment_common_t colors[SG_MAX_COLOR_ATTACHMENTS];
@@ -5759,9 +5758,10 @@ _SOKOL_PRIVATE void _sg_attachments_common_init(_sg_attachments_common_t* cmn, c
         _sg_attachment_common_init(&cmn->depth_stencil, &desc->depth_stencil);
         cmn->has_render_attachments = true;
     }
+    // NOTE: storage attachment slots may be non-continuous,
+    // so a 'num_storages' doesn't make sense
     for (size_t i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
         if (desc->storages[i].image.id != SG_INVALID_ID) {
-            cmn->num_storages++;
             cmn->has_storage_attachments = true;
             _sg_attachment_common_init(&cmn->storages[i], &desc->storages[i]);
         }
@@ -14086,24 +14086,27 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_attachments(_sg_attachments_t* a
         SOKOL_ASSERT(_sg_is_valid_attachment_depth_format(atts_ptrs->ds_image->cmn.pixel_format));
         atts->mtl.depth_stencil.image = atts_ptrs->ds_image;
     }
-    for (int i = 0; i < atts->cmn.num_storages; i++) {
+    for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
         const sg_attachment_desc* storage_desc = &desc->storages[i];
-        SOKOL_ASSERT(storage_desc->image.id != SG_INVALID_ID);
-        SOKOL_ASSERT(0 == atts->mtl.storages[i].image);
-        SOKOL_ASSERT(atts_ptrs->storage_images[i] && (atts_ptrs->storage_images[i]->slot.id == storage_desc->image.id));
-        SOKOL_ASSERT(_sg_is_valid_attachment_storage_format(atts_ptrs->storage_images[i]->cmn.pixel_format));
-        atts->mtl.storages[i].image = atts_ptrs->storage_images[i];
+        if (storage_desc->image.id != SG_INVALID_ID) {
+            SOKOL_ASSERT(0 == atts->mtl.storages[i].image);
+            SOKOL_ASSERT(atts_ptrs->storage_images[i] && (atts_ptrs->storage_images[i]->slot.id == storage_desc->image.id));
+            SOKOL_ASSERT(_sg_is_valid_attachment_storage_format(atts_ptrs->storage_images[i]->cmn.pixel_format));
+            atts->mtl.storages[i].image = atts_ptrs->storage_images[i];
+        }
     }
 
     // create texture views for storage attachments
-    for (int i = 0; i < atts->cmn.num_storages; i++) {
+    for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
         const _sg_image_t* img = atts->mtl.storages[i].image;
-        id<MTLTexture> mtl_tex_view = [_sg_mtl_id(img->mtl.tex[0])
-            newTextureViewWithPixelFormat: _sg_mtl_pixel_format(img->cmn.pixel_format)
-            textureType: _sg_mtl_texture_type(img->cmn.type, false)
-            levels: NSMakeRange((NSUInteger)atts->cmn.storages[i].mip_level, 1)
-            slices: NSMakeRange((NSUInteger)atts->cmn.storages[i].slice, 1)];
-        atts->mtl.storage_views[i] = _sg_mtl_add_resource(mtl_tex_view);
+        if (img) {
+            id<MTLTexture> mtl_tex_view = [_sg_mtl_id(img->mtl.tex[0])
+                newTextureViewWithPixelFormat: _sg_mtl_pixel_format(img->cmn.pixel_format)
+                textureType: _sg_mtl_texture_type(img->cmn.type, false)
+                levels: NSMakeRange((NSUInteger)atts->cmn.storages[i].mip_level, 1)
+                slices: NSMakeRange((NSUInteger)atts->cmn.storages[i].slice, 1)];
+            atts->mtl.storage_views[i] = _sg_mtl_add_resource(mtl_tex_view);
+        }
     }
     return SG_RESOURCESTATE_VALID;
 }
@@ -14111,7 +14114,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_attachments(_sg_attachments_t* a
 _SOKOL_PRIVATE void _sg_mtl_discard_attachments(_sg_attachments_t* atts) {
     SOKOL_ASSERT(atts);
     _SOKOL_UNUSED(atts);
-    for (int i = 0; i < atts->cmn.num_storages; i++) {
+    for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+        // it's valid to call _sg_mtl_release_resource with a null handle
         _sg_mtl_release_resource(_sg.frame_index, atts->mtl.storage_views[i]);
     }
 }
@@ -14402,10 +14406,12 @@ _SOKOL_PRIVATE void _sg_mtl_end_pass(void) {
         // NOTE: MTLComputeCommandEncoder is autoreleased
         _sg.mtl.compute_cmd_encoder = nil;
 
-        // synchronize any managed buffers written by the GPU
+        // synchronize any managed resources written by the GPU
+        // NOTE: storage attachment images are currently not managed and are not eligible for syncing
         #if defined(_SG_TARGET_MACOS)
         if (_sg_mtl_resource_options_storage_mode_managed_or_shared() == MTLResourceStorageModeManaged) {
-            if (_sg.compute.readwrite_sbufs.cur > 0) {
+            const bool needs_sync = _sg.compute.readwrite_sbufs.cur > 0;
+            if (needs_sync) {
                 id<MTLBlitCommandEncoder> blit_cmd_encoder = [_sg.mtl.cmd_buffer blitCommandEncoder];
                 for (uint32_t i = 0; i < _sg.compute.readwrite_sbufs.cur; i++) {
                     _sg_buffer_t* sbuf = _sg_lookup_buffer(&_sg.pools, _sg.compute.readwrite_sbufs.items[i]);
