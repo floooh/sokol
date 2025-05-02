@@ -16868,6 +16868,7 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_compute_pass(const sg_pass* pass) {
     // clear initial bindings
     wgpuComputePassEncoderSetBindGroup(_sg.wgpu.cpass_enc, _SG_WGPU_UB_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
     wgpuComputePassEncoderSetBindGroup(_sg.wgpu.cpass_enc, _SG_WGPU_IMG_SMP_SBUF_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
+    wgpuComputePassEncoderSetBindGroup(_sg.wgpu.cpass_enc, _SG_WGPU_SIMG_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
     _sg_stats_add(wgpu.bindings.num_set_bindgroup, 1);
 }
 
@@ -17068,6 +17069,9 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
             } else {
                 _SG_ERROR(WGPU_CREATEBINDGROUP_FAILED);
             }
+        } else {
+            // no storage attachment bindings, clear bindgroup slot
+            wgpuComputePassEncoderSetBindGroup(_sg.wgpu.cpass_enc, _SG_WGPU_SIMG_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
         }
     } else {
         SOKOL_ASSERT(!_sg.cur_pass.is_compute);
