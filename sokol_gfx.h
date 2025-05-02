@@ -4219,8 +4219,10 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_DEPTH_FORMAT, "sg_apply_pipeline: pipeline depth pixel_format doesn't match pass depth attachment pixel format") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_SAMPLE_COUNT, "sg_apply_pipeline: pipeline MSAA sample count doesn't match render pass attachment sample count") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_EXPECTED_STORAGE_ATTACHMENT_IMAGE, "sg_apply_pipeline: shader expects storage image binding but compute pass doesn't have storage attachment image at expected bind slot") \
-    _SG_LOGITEM_XMACRO(VALIDATE_APIP_STORAGE_ATTACHMENT_IMAGE_EXISTS, "sg_apply_pipeline: a compute pass storage image attachment no longer exists") \
-    _SG_LOGITEM_XMACRO(VALIDATE_APIP_STORAGE_ATTACHMENT_IMAGE_VALID, "sg_apply_pipeline: a compute pass storage image attachment is not in valid state") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_STORAGE_ATTACHMENT_IMAGE_EXISTS, "sg_apply_pipeline: compute pass storage image attachment no longer exists") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_STORAGE_ATTACHMENT_IMAGE_VALID, "sg_apply_pipeline: compute pass storage image attachment is not in valid state") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_STORAGE_ATTACHMENT_PIXELFORMAT, "sg_apply_pipeline: compute pass storage image attachment pixel format doesn't match sg_shader_desc.storage_images[].access_format") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_STORAGE_ATTACHMENT_IMAGE_TYPE, "sg_apply_pipeline: compute pass storage image attachment image type doesn't match sg_shader_desc.storage_images[].image_type") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PASS_EXPECTED, "sg_apply_bindings: must be called in a pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EMPTY_BINDINGS, "sg_apply_bindings: the provided sg_bindings struct is empty") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE, "sg_apply_bindings: must be called after sg_apply_pipeline") \
@@ -6280,9 +6282,10 @@ typedef struct {
 
 #define _SG_WGPU_ROWPITCH_ALIGN (256)
 #define _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE (1<<16) // also see WGPULimits.maxUniformBufferBindingSize
-#define _SG_WGPU_NUM_BINDGROUPS (2) // 0: uniforms, 1: images, samplers, storage buffers
+#define _SG_WGPU_MAX_BINDGROUPS (3) // 0: uniforms, 1: images, samplers, storage buffers, 2: storage images (only in compute passes)
 #define _SG_WGPU_UB_BINDGROUP_INDEX (0)
 #define _SG_WGPU_IMG_SMP_SBUF_BINDGROUP_INDEX (1)
+#define _SG_WGPU_SIMG_BINDGROUP_INDEX (2)
 #define _SG_WGPU_MAX_UB_BINDGROUP_ENTRIES (SG_MAX_UNIFORMBLOCK_BINDSLOTS)
 #define _SG_WGPU_MAX_UB_BINDGROUP_BIND_SLOTS (2 * SG_MAX_UNIFORMBLOCK_BINDSLOTS)
 #define _SG_WGPU_MAX_IMG_SMP_SBUF_BINDGROUP_ENTRIES (SG_MAX_IMAGE_BINDSLOTS + SG_MAX_SAMPLER_BINDSLOTS + SG_MAX_STORAGEBUFFER_BINDSLOTS)
@@ -6503,6 +6506,7 @@ typedef struct {
     _sg_image_t* imgs[SG_MAX_IMAGE_BINDSLOTS];
     _sg_sampler_t* smps[SG_MAX_SAMPLER_BINDSLOTS];
     _sg_buffer_t* sbufs[SG_MAX_STORAGEBUFFER_BINDSLOTS];
+    _sg_image_t* simgs[SG_MAX_STORAGE_ATTACHMENTS];
 } _sg_bindings_ptrs_t;
 
 typedef struct {
@@ -15815,7 +15819,7 @@ _SOKOL_PRIVATE void _sg_wgpu_bindings_cache_bg_update(const _sg_wgpu_bindgroup_t
     }
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_set_img_smp_sbuf_bindgroup(_sg_wgpu_bindgroup_t* bg) {
+_SOKOL_PRIVATE void _sg_wgpu_set_bindgroup(size_t bg_idx, _sg_wgpu_bindgroup_t* bg) {
     if (_sg_wgpu_bindings_cache_bg_dirty(bg)) {
         _sg_wgpu_bindings_cache_bg_update(bg);
         _sg_stats_add(wgpu.bindings.num_set_bindgroup, 1);
@@ -15824,18 +15828,18 @@ _SOKOL_PRIVATE void _sg_wgpu_set_img_smp_sbuf_bindgroup(_sg_wgpu_bindgroup_t* bg
             if (bg) {
                 SOKOL_ASSERT(bg->slot.state == SG_RESOURCESTATE_VALID);
                 SOKOL_ASSERT(bg->bindgroup);
-                wgpuComputePassEncoderSetBindGroup(_sg.wgpu.cpass_enc, _SG_WGPU_IMG_SMP_SBUF_BINDGROUP_INDEX, bg->bindgroup, 0, 0);
+                wgpuComputePassEncoderSetBindGroup(_sg.wgpu.cpass_enc, bg_idx, bg->bindgroup, 0, 0);
             } else {
-                wgpuComputePassEncoderSetBindGroup(_sg.wgpu.cpass_enc, _SG_WGPU_IMG_SMP_SBUF_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
+                wgpuComputePassEncoderSetBindGroup(_sg.wgpu.cpass_enc, bg_idx, _sg.wgpu.empty_bind_group, 0, 0);
             }
         } else {
             SOKOL_ASSERT(_sg.wgpu.rpass_enc);
             if (bg) {
                 SOKOL_ASSERT(bg->slot.state == SG_RESOURCESTATE_VALID);
                 SOKOL_ASSERT(bg->bindgroup);
-                wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.rpass_enc, _SG_WGPU_IMG_SMP_SBUF_BINDGROUP_INDEX, bg->bindgroup, 0, 0);
+                wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.rpass_enc, bg_idx, bg->bindgroup, 0, 0);
             } else {
-                wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.rpass_enc, _SG_WGPU_IMG_SMP_SBUF_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
+                wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.rpass_enc, bg_idx, _sg.wgpu.empty_bind_group, 0, 0);
             }
         }
     } else {
@@ -15843,7 +15847,7 @@ _SOKOL_PRIVATE void _sg_wgpu_set_img_smp_sbuf_bindgroup(_sg_wgpu_bindgroup_t* bg
     }
 }
 
-_SOKOL_PRIVATE bool _sg_wgpu_apply_bindgroup(_sg_bindings_ptrs_t* bnd) {
+_SOKOL_PRIVATE bool _sg_wgpu_apply_bindings_bindgroup(_sg_bindings_ptrs_t* bnd) {
     if (!_sg.desc.wgpu_disable_bindgroups_cache) {
         _sg_wgpu_bindgroup_t* bg = 0;
         _sg_wgpu_bindgroups_cache_key_t key;
@@ -15871,7 +15875,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindgroup(_sg_bindings_ptrs_t* bnd) {
             _sg_wgpu_bindgroups_cache_set(key.hash, bg->slot.id);
         }
         if (bg && bg->slot.state == SG_RESOURCESTATE_VALID) {
-            _sg_wgpu_set_img_smp_sbuf_bindgroup(bg);
+            _sg_wgpu_set_bindgroup(_SG_WGPU_IMG_SMP_SBUF_BINDGROUP_INDEX, bg);
         } else {
             return false;
         }
@@ -15880,7 +15884,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindgroup(_sg_bindings_ptrs_t* bnd) {
         _sg_wgpu_bindgroup_t* bg = _sg_wgpu_create_bindgroup(bnd);
         if (bg) {
             if (bg->slot.state == SG_RESOURCESTATE_VALID) {
-                _sg_wgpu_set_img_smp_sbuf_bindgroup(bg);
+                _sg_wgpu_set_bindgroup(_SG_WGPU_IMG_SMP_SBUF_BINDGROUP_INDEX, bg);
             }
             _sg_wgpu_discard_bindgroup(bg);
         } else {
@@ -16521,13 +16525,19 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
 
     // - @group(0) for uniform blocks
     // - @group(1) for all image, sampler and storagebuffer resources
-    WGPUBindGroupLayout wgpu_bgl[_SG_WGPU_NUM_BINDGROUPS];
+    // - @group(2) optional: storage image attachemnts in compute passes
+    size_t num_bgls = 2;
+    WGPUBindGroupLayout wgpu_bgl[_SG_WGPU_MAX_BINDGROUPS];
     _sg_clear(&wgpu_bgl, sizeof(wgpu_bgl));
     wgpu_bgl[_SG_WGPU_UB_BINDGROUP_INDEX ] = shd->wgpu.bgl_ub;
     wgpu_bgl[_SG_WGPU_IMG_SMP_SBUF_BINDGROUP_INDEX] = shd->wgpu.bgl_img_smp_sbuf;
+    if (shd->wgpu.bgl_simg) {
+        wgpu_bgl[_SG_WGPU_SIMG_BINDGROUP_INDEX] = shd->wgpu.bgl_simg;
+        num_bgls += 1;
+    }
     WGPUPipelineLayoutDescriptor wgpu_pl_desc;
     _sg_clear(&wgpu_pl_desc, sizeof(wgpu_pl_desc));
-    wgpu_pl_desc.bindGroupLayoutCount = _SG_WGPU_NUM_BINDGROUPS;
+    wgpu_pl_desc.bindGroupLayoutCount = num_bgls;
     wgpu_pl_desc.bindGroupLayouts = &wgpu_bgl[0];
     const WGPUPipelineLayout wgpu_pip_layout = wgpuDeviceCreatePipelineLayout(_sg.wgpu.dev, &wgpu_pl_desc);
     if (0 == wgpu_pip_layout) {
@@ -17021,6 +17031,44 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
         SOKOL_ASSERT(pip->wgpu.cpip);
         SOKOL_ASSERT(_sg.wgpu.cpass_enc);
         wgpuComputePassEncoderSetPipeline(_sg.wgpu.cpass_enc, pip->wgpu.cpip);
+
+        // adhoc-create a storage attachment bindgroup without going through the bindgroups cache
+        // FIXME: the 'resource view update' will get rid of this special case because then storage images
+        // will be regular resource bindings
+        if (pip->shader->wgpu.bgl_simg) {
+            _sg_stats_add(wgpu.bindings.num_create_bindgroup, 1);
+            _sg_shader_t* shd = pip->shader;
+            SOKOL_ASSERT(shd);
+            WGPUBindGroupLayout bgl = shd->wgpu.bgl_simg;
+            WGPUBindGroupEntry bg_entries[_SG_WGPU_MAX_SIMG_BINDGROUP_ENTRIES];
+            _sg_clear(&bg_entries, sizeof(bg_entries));
+            size_t bgl_index = 0;
+            for (size_t i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+                if (shd->cmn.storage_images[i].stage == SG_SHADERSTAGE_NONE) {
+                    continue;
+                }
+                SOKOL_ASSERT(_sg.cur_pass.atts);
+                _sg_attachments_t* atts = _sg.cur_pass.atts;
+                SOKOL_ASSERT(atts->wgpu.storages[i].view);
+                WGPUBindGroupEntry* bg_entry = &bg_entries[bgl_index];
+                bg_entry->binding = shd->wgpu.simg_grp2_bnd_n[i];
+                bg_entry->textureView = atts->wgpu.storages[i].view;
+                bgl_index++;
+            }
+            SOKOL_ASSERT(bgl_index > 0);
+            WGPUBindGroupDescriptor bg_desc;
+            _sg_clear(&bg_desc, sizeof(bg_desc));
+            bg_desc.layout = bgl;
+            bg_desc.entryCount = bgl_index;
+            bg_desc.entries = bg_entries;
+            WGPUBindGroup bg = wgpuDeviceCreateBindGroup(_sg.wgpu.dev, &bg_desc);
+            if (bg) {
+                wgpuComputePassEncoderSetBindGroup(_sg.wgpu.cpass_enc, _SG_WGPU_SIMG_BINDGROUP_INDEX, bg, 0, 0);
+                wgpuBindGroupRelease(bg);
+            } else {
+                _SG_ERROR(WGPU_CREATEBINDGROUP_FAILED);
+            }
+        }
     } else {
         SOKOL_ASSERT(!_sg.cur_pass.is_compute);
         SOKOL_ASSERT(pip->wgpu.rpip);
@@ -17033,7 +17081,7 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
     // bind groups must be set because pipelines without uniform blocks or resource bindings
     // will still create 'empty' BindGroupLayouts
     _sg_wgpu_set_ub_bindgroup(pip->shader);
-    _sg_wgpu_set_img_smp_sbuf_bindgroup(0); // this will set the 'empty bind group'
+    _sg_wgpu_set_bindgroup(_SG_WGPU_IMG_SMP_SBUF_BINDGROUP_INDEX, 0); // this will set the 'empty bind group'
 }
 
 _SOKOL_PRIVATE bool _sg_wgpu_apply_bindings(_sg_bindings_ptrs_t* bnd) {
@@ -17044,7 +17092,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         retval &= _sg_wgpu_apply_index_buffer(bnd);
         retval &= _sg_wgpu_apply_vertex_buffers(bnd);
     }
-    retval &= _sg_wgpu_apply_bindgroup(bnd);
+    retval &= _sg_wgpu_apply_bindings_bindgroup(bnd);
     return retval;
 }
 
@@ -19001,6 +19049,8 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
                             _SG_VALIDATE(att_simg && att_simg == _sg_attachments_storage_image(atts, i), VALIDATE_APIP_STORAGE_ATTACHMENT_IMAGE_EXISTS);
                             if (att_simg) {
                                 _SG_VALIDATE(att_simg->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_STORAGE_ATTACHMENT_IMAGE_VALID);
+                                _SG_VALIDATE(att_simg->cmn.pixel_format == shd->cmn.storage_images[i].access_format, VALIDATE_APIP_STORAGE_ATTACHMENT_PIXELFORMAT);
+                                _SG_VALIDATE(att_simg->cmn.type == shd->cmn.storage_images[i].image_type, VALIDATE_APIP_STORAGE_ATTACHMENT_IMAGE_TYPE);
                             }
                         }
                     }
