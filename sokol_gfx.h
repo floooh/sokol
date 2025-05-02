@@ -3977,6 +3977,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(WGPU_STORAGEBUFFER_WGSL_GROUP1_BINDING_OUT_OF_RANGE, "storage buffer 'wgsl_group1_binding_n' is out of range (must be 0..127)") \
     _SG_LOGITEM_XMACRO(WGPU_IMAGE_WGSL_GROUP1_BINDING_OUT_OF_RANGE, "image 'wgsl_group1_binding_n' is out of range (must be 0..127)") \
     _SG_LOGITEM_XMACRO(WGPU_SAMPLER_WGSL_GROUP1_BINDING_OUT_OF_RANGE, "sampler 'wgsl_group1_binding_n' is out of range (must be 0..127)") \
+    _SG_LOGITEM_XMACRO(WGPU_STORAGEIMAGE_WGSL_GROUP2_BINDING_OUT_OF_RANGE, "storage image 'wgsl_group2_binding_n' is out of range (must be 0..3)") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_PIPELINE_LAYOUT_FAILED, "wgpuDeviceCreatePipelineLayout() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_RENDER_PIPELINE_FAILED, "wgpuDeviceCreateRenderPipeline() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_COMPUTE_PIPELINE_FAILED, "wgpuDeviceCreateComputePipeline() failed") \
@@ -6287,6 +6288,7 @@ typedef struct {
 #define _SG_WGPU_MAX_IMG_SMP_SBUF_BINDGROUP_ENTRIES (SG_MAX_IMAGE_BINDSLOTS + SG_MAX_SAMPLER_BINDSLOTS + SG_MAX_STORAGEBUFFER_BINDSLOTS)
 #define _SG_WGPU_MAX_IMG_SMP_SBUF_BIND_SLOTS (128)
 #define _SG_WGPU_MAX_SIMG_BIND_SLOTS (SG_MAX_STORAGE_ATTACHMENTS)
+#define _SG_WGPU_MAX_SIMG_BINDGROUP_ENTRIES (SG_MAX_STORAGE_ATTACHMENTS)
 
 typedef struct _sg_buffer_s {
     _sg_slot_t slot;
@@ -6331,6 +6333,7 @@ typedef struct _sg_shader_s {
         WGPUBindGroupLayout bgl_ub;
         WGPUBindGroup bg_ub;
         WGPUBindGroupLayout bgl_img_smp_sbuf;
+        WGPUBindGroupLayout bgl_simg;
         // a mapping of sokol-gfx bind slots to setBindGroup dynamic-offset-array indices
         uint8_t ub_num_dynoffsets;
         uint8_t ub_dynoffsets[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
@@ -6339,6 +6342,7 @@ typedef struct _sg_shader_s {
         uint8_t img_grp1_bnd_n[SG_MAX_IMAGE_BINDSLOTS];
         uint8_t smp_grp1_bnd_n[SG_MAX_SAMPLER_BINDSLOTS];
         uint8_t sbuf_grp1_bnd_n[SG_MAX_STORAGEBUFFER_BINDSLOTS];
+        uint8_t simg_grp2_bnd_n[SG_MAX_STORAGE_ATTACHMENTS];
     } wgpu;
 } _sg_wgpu_shader_t;
 typedef _sg_wgpu_shader_t _sg_shader_t;
@@ -16295,6 +16299,11 @@ _SOKOL_PRIVATE bool _sg_wgpu_ensure_wgsl_bindslot_ranges(const sg_shader_desc* d
             return false;
         }
     }
+    for (size_t i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+        if (desc->storage_images[i].wgsl_group2_binding_n >= _SG_WGPU_MAX_SIMG_BIND_SLOTS) {
+            _SG_ERROR(WGPU_STORAGEIMAGE_WGSL_GROUP2_BINDING_OUT_OF_RANGE);
+        }
+    }
     return true;
 }
 
@@ -16339,6 +16348,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
     // NOTE also need to create a mapping of sokol ub bind slots to array indices
     // for the dynamic offsets array in the setBindGroup call
     SOKOL_ASSERT(_SG_WGPU_MAX_UB_BINDGROUP_ENTRIES <= _SG_WGPU_MAX_IMG_SMP_SBUF_BINDGROUP_ENTRIES);
+    SOKOL_ASSERT(_SG_WGPU_MAX_SIMG_BINDGROUP_ENTRIES <= _SG_WGPU_MAX_IMG_SMP_SBUF_BINDGROUP_ENTRIES);
     WGPUBindGroupLayoutEntry bgl_entries[_SG_WGPU_MAX_IMG_SMP_SBUF_BINDGROUP_ENTRIES];
     _sg_clear(bgl_entries, sizeof(bgl_entries));
     WGPUBindGroupLayoutDescriptor bgl_desc;
@@ -16439,6 +16449,38 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
         _SG_ERROR(WGPU_SHADER_CREATE_BINDGROUP_LAYOUT_FAILED);
         return SG_RESOURCESTATE_FAILED;
     }
+
+    // create optional bindgroup layout for storage images (separate bindgroup because
+    // those are not applied in sg_apply_bindings() but are defined as pass attachments)
+    _sg_clear(bgl_entries, sizeof(bgl_entries));
+    _sg_clear(&bgl_desc, sizeof(bgl_desc));
+    bgl_index = 0;
+    for (size_t i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+        if (shd->cmn.storage_images[i].stage == SG_SHADERSTAGE_NONE) {
+            continue;
+        }
+        shd->wgpu.simg_grp2_bnd_n[i] = desc->storage_images[i].wgsl_group2_binding_n;
+        WGPUBindGroupLayoutEntry* bgl_entry = &bgl_entries[bgl_index];
+        bgl_entry->binding = shd->wgpu.simg_grp2_bnd_n[i];
+        bgl_entry->visibility = _sg_wgpu_shader_stage(shd->cmn.storage_images[i].stage);
+        if (shd->cmn.storage_images[i].writeonly) {
+            bgl_entry->storageTexture.access = WGPUStorageTextureAccess_WriteOnly;
+        } else {
+            bgl_entry->storageTexture.access = WGPUStorageTextureAccess_ReadWrite;
+        }
+        bgl_entry->storageTexture.format = _sg_wgpu_textureformat(desc->storage_images[i].access_format);
+        bgl_entry->texture.viewDimension = _sg_wgpu_texture_view_dimension(shd->cmn.storage_images[i].image_type);
+        bgl_index += 1;
+    }
+    if (bgl_index > 0) {
+        bgl_desc.entryCount = bgl_index;
+        bgl_desc.entries = bgl_entries;
+        shd->wgpu.bgl_simg = wgpuDeviceCreateBindGroupLayout(_sg.wgpu.dev, &bgl_desc);
+        if (shd->wgpu.bgl_simg == 0) {
+            _SG_ERROR(WGPU_SHADER_CREATE_BINDGROUP_LAYOUT_FAILED);
+            return SG_RESOURCESTATE_FAILED;
+        }
+    }
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -16458,6 +16500,10 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_shader(_sg_shader_t* shd) {
     if (shd->wgpu.bgl_img_smp_sbuf) {
         wgpuBindGroupLayoutRelease(shd->wgpu.bgl_img_smp_sbuf);
         shd->wgpu.bgl_img_smp_sbuf = 0;
+    }
+    if (shd->wgpu.bgl_simg) {
+        wgpuBindGroupLayoutRelease(shd->wgpu.bgl_simg);
+        shd->wgpu.bgl_simg = 0;
     }
 }
 
