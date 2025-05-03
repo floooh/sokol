@@ -3942,6 +3942,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(D3D11_CREATE_BLEND_STATE_FAILED, "CreateBlendState() failed (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_RTV_FAILED, "CreateRenderTargetView() failed (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_DSV_FAILED, "CreateDepthStencilView() failed (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_CREATE_UAV_FAILED, "CreateUnorderedAccessView() failed (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_UPDATE_BUFFER_FAILED, "Map() failed when updating buffer (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_APPEND_BUFFER_FAILED, "Map() failed when appending to buffer (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_UPDATE_IMAGE_FAILED, "Map() failed when updating image (d3d11)") \
@@ -6088,6 +6089,7 @@ typedef struct {
     union {
         ID3D11RenderTargetView* rtv;
         ID3D11DepthStencilView* dsv;
+        ID3D11UnorderedAccessView* uav;
     } view;
 } _sg_d3d11_attachment_t;
 
@@ -12150,7 +12152,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
     SOKOL_ASSERT(_sg.d3d11.dev);
 
     // copy image pointers
-    for (size_t i = 0; i < (size_t)atts->cmn.num_colors; i++) {
+    for (int i = 0; i < atts->cmn.num_colors; i++) {
         const sg_attachment_desc* color_desc = &desc->colors[i];
         _SOKOL_UNUSED(color_desc);
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
@@ -12180,9 +12182,19 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
         SOKOL_ASSERT(_sg_is_valid_attachment_depth_format(ds_img->cmn.pixel_format));
         atts->d3d11.depth_stencil.image = ds_img;
     }
+    for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+        const sg_attachment_desc* storage_desc = &desc->storages[i];
+        if (storage_desc->image.id != SG_INVALID_ID) {
+            SOKOL_ASSERT(0 == atts->d3d11.storages[i].image);
+            SOKOL_ASSERT(atts_ptrs->storage_images[i]);
+            _sg_image_t* stg_img = atts_ptrs->storage_images[i];
+            SOKOL_ASSERT(stg_img->slot.id == storage_desc->image.id);
+            atts->d3d11.storages[i].image = stg_img;
+        }
+    }
 
     // create render-target views
-    for (size_t i = 0; i < (size_t)atts->cmn.num_colors; i++) {
+    for (int i = 0; i < atts->cmn.num_colors; i++) {
         const _sg_attachment_common_t* cmn_color_att = &atts->cmn.colors[i];
         const _sg_image_t* clr_img = atts_ptrs->color_images[i];
         SOKOL_ASSERT(0 == atts->d3d11.colors[i].view.rtv);
@@ -12190,31 +12202,36 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
         D3D11_RENDER_TARGET_VIEW_DESC d3d11_rtv_desc;
         _sg_clear(&d3d11_rtv_desc, sizeof(d3d11_rtv_desc));
         d3d11_rtv_desc.Format = _sg_d3d11_rtv_uav_pixel_format(clr_img->cmn.pixel_format);
-        if (clr_img->cmn.type == SG_IMAGETYPE_2D) {
-            if (msaa) {
-                d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DMS;
-            } else {
-                d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-                d3d11_rtv_desc.Texture2D.MipSlice = (UINT)cmn_color_att->mip_level;
-            }
-        } else if ((clr_img->cmn.type == SG_IMAGETYPE_CUBE) || (clr_img->cmn.type == SG_IMAGETYPE_ARRAY)) {
-            if (msaa) {
-                d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DMSARRAY;
-                d3d11_rtv_desc.Texture2DMSArray.FirstArraySlice = (UINT)cmn_color_att->slice;
-                d3d11_rtv_desc.Texture2DMSArray.ArraySize = 1;
-            } else {
-                d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
-                d3d11_rtv_desc.Texture2DArray.MipSlice = (UINT)cmn_color_att->mip_level;
-                d3d11_rtv_desc.Texture2DArray.FirstArraySlice = (UINT)cmn_color_att->slice;
-                d3d11_rtv_desc.Texture2DArray.ArraySize = 1;
-            }
-        } else {
-            SOKOL_ASSERT(clr_img->cmn.type == SG_IMAGETYPE_3D);
-            SOKOL_ASSERT(!msaa);
-            d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE3D;
-            d3d11_rtv_desc.Texture3D.MipSlice = (UINT)cmn_color_att->mip_level;
-            d3d11_rtv_desc.Texture3D.FirstWSlice = (UINT)cmn_color_att->slice;
-            d3d11_rtv_desc.Texture3D.WSize = 1;
+        switch (clr_img->cmn.type) {
+            case SG_IMAGETYPE_2D:
+                if (msaa) {
+                    d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DMS;
+                } else {
+                    d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+                    d3d11_rtv_desc.Texture2D.MipSlice = (UINT)cmn_color_att->mip_level;
+                }
+                break;
+            case SG_IMAGETYPE_CUBE:
+            case SG_IMAGETYPE_ARRAY:
+                if (msaa) {
+                    d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DMSARRAY;
+                    d3d11_rtv_desc.Texture2DMSArray.FirstArraySlice = (UINT)cmn_color_att->slice;
+                    d3d11_rtv_desc.Texture2DMSArray.ArraySize = 1;
+                } else {
+                    d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
+                    d3d11_rtv_desc.Texture2DArray.MipSlice = (UINT)cmn_color_att->mip_level;
+                    d3d11_rtv_desc.Texture2DArray.FirstArraySlice = (UINT)cmn_color_att->slice;
+                    d3d11_rtv_desc.Texture2DArray.ArraySize = 1;
+                }
+                break;
+            case SG_IMAGETYPE_3D:
+                SOKOL_ASSERT(!msaa);
+                d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE3D;
+                d3d11_rtv_desc.Texture3D.MipSlice = (UINT)cmn_color_att->mip_level;
+                d3d11_rtv_desc.Texture3D.FirstWSlice = (UINT)cmn_color_att->slice;
+                d3d11_rtv_desc.Texture3D.WSize = 1;
+                break;
+            default: SOKOL_UNREACHABLE; break;
         }
         SOKOL_ASSERT(clr_img->d3d11.res);
         HRESULT hr = _sg_d3d11_CreateRenderTargetView(_sg.d3d11.dev, clr_img->d3d11.res, &d3d11_rtv_desc, &atts->d3d11.colors[i].view.rtv);
@@ -12233,24 +12250,29 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
         _sg_clear(&d3d11_dsv_desc, sizeof(d3d11_dsv_desc));
         d3d11_dsv_desc.Format = _sg_d3d11_dsv_pixel_format(ds_img->cmn.pixel_format);
         SOKOL_ASSERT(ds_img && ds_img->cmn.type != SG_IMAGETYPE_3D);
-        if (ds_img->cmn.type == SG_IMAGETYPE_2D) {
-            if (msaa) {
-                d3d11_dsv_desc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2DMS;
-            } else {
-                d3d11_dsv_desc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
-                d3d11_dsv_desc.Texture2D.MipSlice = (UINT)cmn_ds_att->mip_level;
-            }
-        } else if ((ds_img->cmn.type == SG_IMAGETYPE_CUBE) || (ds_img->cmn.type == SG_IMAGETYPE_ARRAY)) {
-            if (msaa) {
-                d3d11_dsv_desc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2DMSARRAY;
-                d3d11_dsv_desc.Texture2DMSArray.FirstArraySlice = (UINT)cmn_ds_att->slice;
-                d3d11_dsv_desc.Texture2DMSArray.ArraySize = 1;
-            } else {
-                d3d11_dsv_desc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2DARRAY;
-                d3d11_dsv_desc.Texture2DArray.MipSlice = (UINT)cmn_ds_att->mip_level;
-                d3d11_dsv_desc.Texture2DArray.FirstArraySlice = (UINT)cmn_ds_att->slice;
-                d3d11_dsv_desc.Texture2DArray.ArraySize = 1;
-            }
+        switch(ds_img->cmn.type) {
+            case SG_IMAGETYPE_2D:
+                if (msaa) {
+                    d3d11_dsv_desc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2DMS;
+                } else {
+                    d3d11_dsv_desc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+                    d3d11_dsv_desc.Texture2D.MipSlice = (UINT)cmn_ds_att->mip_level;
+                }
+                break;
+            case SG_IMAGETYPE_CUBE:
+            case SG_IMAGETYPE_ARRAY:
+                if (msaa) {
+                    d3d11_dsv_desc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2DMSARRAY;
+                    d3d11_dsv_desc.Texture2DMSArray.FirstArraySlice = (UINT)cmn_ds_att->slice;
+                    d3d11_dsv_desc.Texture2DMSArray.ArraySize = 1;
+                } else {
+                    d3d11_dsv_desc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2DARRAY;
+                    d3d11_dsv_desc.Texture2DArray.MipSlice = (UINT)cmn_ds_att->mip_level;
+                    d3d11_dsv_desc.Texture2DArray.FirstArraySlice = (UINT)cmn_ds_att->slice;
+                    d3d11_dsv_desc.Texture2DArray.ArraySize = 1;
+                }
+                break;
+            default: SOKOL_UNREACHABLE; break;
         }
         SOKOL_ASSERT(ds_img->d3d11.res);
         HRESULT hr = _sg_d3d11_CreateDepthStencilView(_sg.d3d11.dev, ds_img->d3d11.res, &d3d11_dsv_desc, &atts->d3d11.depth_stencil.view.dsv);
@@ -12261,8 +12283,46 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
         _sg_d3d11_setlabel(atts->d3d11.depth_stencil.view.dsv, desc->label);
     }
 
-    // FIXME: create storage image UAVs
-
+    // create storage attachments unordered access views
+    for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+        const _sg_attachment_common_t* cmn_stg_att = &atts->cmn.storages[i];
+        const _sg_image_t* stg_img = atts_ptrs->storage_images[i];
+        if (!stg_img) {
+            continue;
+        }
+        SOKOL_ASSERT(stg_img->cmn.sample_count == 1);
+        SOKOL_ASSERT(0 == atts->d3d11.storages[i].view.uav);
+        D3D11_UNORDERED_ACCESS_VIEW_DESC d3d11_uav_desc;
+        _sg_clear(&d3d11_uav_desc, sizeof(d3d11_uav_desc));
+        d3d11_uav_desc.Format = _sg_d3d11_rtv_uav_pixel_format(stg_img->cmn.pixel_format);
+        switch (stg_img->cmn.type) {
+            case SG_IMAGETYPE_2D:
+                d3d11_uav_desc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
+                d3d11_uav_desc.Texture2D.MipSlice = (UINT)cmn_stg_att->mip_level;
+                break;
+            case SG_IMAGETYPE_CUBE:
+            case SG_IMAGETYPE_ARRAY:
+                d3d11_uav_desc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2DARRAY;
+                d3d11_uav_desc.Texture2DArray.MipSlice = (UINT)cmn_stg_att->mip_level;
+                d3d11_uav_desc.Texture2DArray.FirstArraySlice = (UINT)cmn_stg_att->slice;
+                d3d11_uav_desc.Texture2DArray.ArraySize = 1;
+                break;
+            case SG_IMAGETYPE_3D:
+                d3d11_uav_desc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE3D;
+                d3d11_uav_desc.Texture3D.MipSlice = (UINT)cmn_stg_att->mip_level;
+                d3d11_uav_desc.Texture3D.FirstWSlice = (UINT)cmn_stg_att->slice;
+                d3d11_uav_desc.Texture3D.WSize = 1;
+                break;
+            default: SOKOL_UNREACHABLE; break;
+        }
+        SOKOL_ASSERT(stg_img->d3d11.res);
+        HRESULT hr = _sg_d3d11_CreateUnorderedAccessView(_sg.d3d11.dev, stg_img->d3d11.res, &d3d11_uav_desc, &atts->d3d11.storages[i].view.uav);
+        if (!(SUCCEEDED(hr) && atts->d3d11.storages[i].view.uav)) {
+            _SG_ERROR(D3D11_CREATE_UAV_FAILED);
+            return SG_RESOURCESTATE_FAILED;
+        }
+        _sg_d3d11_setlabel(atts->d3d11.storages[i].view.uav, desc->label);
+    }
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -12278,6 +12338,11 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_attachments(_sg_attachments_t* atts) {
     }
     if (atts->d3d11.depth_stencil.view.dsv) {
         _sg_d3d11_Release(atts->d3d11.depth_stencil.view.dsv);
+    }
+    for (size_t i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+        if (atts->d3d11.storages[i].view.uav) {
+            _sg_d3d11_Release(atts->d3d11.storages[i].view.uav);
+        }
     }
 }
 

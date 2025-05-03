@@ -4339,8 +4339,8 @@ _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
                 info.msaa ? "MSAA ":"",
                 info.depth ? "DEPTH ":"",
                 info.compressed ? "COMPRESSED ":"",
-                info.compute_readwrite ? "READWRITE ":"",
-                info.compute_writeonly ? "WRITEONLY ":"");
+                info.read ? "READ ":"",
+                info.write ? "WRITE ":"");
         }
     }
 }
