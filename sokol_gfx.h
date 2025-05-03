@@ -3929,9 +3929,10 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(D3D11_CREATE_SAMPLER_STATE_FAILED, "CreateSamplerState() failed (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_UNIFORMBLOCK_HLSL_REGISTER_B_OUT_OF_RANGE, "uniform block 'hlsl_register_b_n' is out of range (must be 0..7)") \
     _SG_LOGITEM_XMACRO(D3D11_STORAGEBUFFER_HLSL_REGISTER_T_OUT_OF_RANGE, "storage buffer 'hlsl_register_t_n' is out of range (must be 0..23)") \
-    _SG_LOGITEM_XMACRO(D3D11_STORAGEBUFFER_HLSL_REGISTER_U_OUT_OF_RANGE, "storage buffer 'hlsl_register_u_n' is out of range (must be 0..7)") \
+    _SG_LOGITEM_XMACRO(D3D11_STORAGEBUFFER_HLSL_REGISTER_U_OUT_OF_RANGE, "storage buffer 'hlsl_register_u_n' is out of range (must be 0..11)") \
     _SG_LOGITEM_XMACRO(D3D11_IMAGE_HLSL_REGISTER_T_OUT_OF_RANGE, "image 'hlsl_register_t_n' is out of range (must be 0..23)") \
     _SG_LOGITEM_XMACRO(D3D11_SAMPLER_HLSL_REGISTER_S_OUT_OF_RANGE, "sampler 'hlsl_register_s_n' is out of rang (must be 0..15)") \
+    _SG_LOGITEM_XMACRO(D3D11_STORAGEIMAGE_HLSL_REGISTER_U_OUT_OF_RANGE, "storage image 'hlsl_register_u_n' is out of range (must be 0..11)") \
     _SG_LOGITEM_XMACRO(D3D11_LOAD_D3DCOMPILER_47_DLL_FAILED, "loading d3dcompiler_47.dll failed (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_SHADER_COMPILATION_FAILED, "shader compilation failed (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_SHADER_COMPILATION_OUTPUT, "") \
@@ -6059,6 +6060,7 @@ typedef struct _sg_shader_s {
         uint8_t smp_register_s_n[SG_MAX_SAMPLER_BINDSLOTS];
         uint8_t sbuf_register_t_n[SG_MAX_STORAGEBUFFER_BINDSLOTS];
         uint8_t sbuf_register_u_n[SG_MAX_STORAGEBUFFER_BINDSLOTS];
+        uint8_t simg_register_u_n[SG_MAX_STORAGE_ATTACHMENTS];
         ID3D11Buffer* all_cbufs[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
         ID3D11Buffer* vs_cbufs[_SG_D3D11_MAX_STAGE_UB_BINDINGS];
         ID3D11Buffer* fs_cbufs[_SG_D3D11_MAX_STAGE_UB_BINDINGS];
@@ -10962,7 +10964,37 @@ static inline void _sg_d3d11_ClearState(ID3D11DeviceContext* self) {
 
 //-- enum translation functions ------------------------------------------------
 _SOKOL_PRIVATE D3D11_USAGE _sg_d3d11_image_usage(const sg_image_usage* usg) {
-    return usg->immutable ? D3D11_USAGE_IMMUTABLE : D3D11_USAGE_DYNAMIC;
+    if (usg->immutable) {
+        if (usg->render_attachment || usg->storage_attachment) {
+            return D3D11_USAGE_DEFAULT;
+        } else {
+            return D3D11_USAGE_IMMUTABLE;
+        }
+    } else {
+        return D3D11_USAGE_DYNAMIC;
+    }
+}
+
+_SOKOL_PRIVATE UINT _sg_d3d11_image_bind_flags(const sg_image_usage* usg, sg_pixel_format fmt) {
+    UINT res = D3D11_BIND_SHADER_RESOURCE;
+    if (usg->render_attachment) {
+        if (_sg_is_depth_or_depth_stencil_format(fmt)) {
+            res |= D3D11_BIND_DEPTH_STENCIL;
+        } else {
+            res |= D3D11_BIND_RENDER_TARGET;
+        }
+    } else if (usg->storage_attachment) {
+        res |= D3D11_BIND_UNORDERED_ACCESS;
+    }
+    return res;
+}
+
+_SOKOL_PRIVATE UINT _sg_d3d11_image_cpu_access_flags(const sg_image_usage* usg) {
+    if (usg->render_attachment || usg->storage_attachment || usg->immutable) {
+        return 0;
+    } else {
+        return D3D11_CPU_ACCESS_WRITE;
+    }
 }
 
 _SOKOL_PRIVATE D3D11_USAGE _sg_d3d11_buffer_usage(const sg_buffer_usage* usg) {
@@ -10996,10 +11028,6 @@ _SOKOL_PRIVATE UINT _sg_d3d11_buffer_misc_flags(const sg_buffer_usage* usg) {
 }
 
 _SOKOL_PRIVATE UINT _sg_d3d11_buffer_cpu_access_flags(const sg_buffer_usage* usg) {
-    return usg->immutable ? 0 : D3D11_CPU_ACCESS_WRITE;
-}
-
-_SOKOL_PRIVATE UINT _sg_d3d11_image_cpu_access_flags(const sg_image_usage* usg) {
     return usg->immutable ? 0 : D3D11_CPU_ACCESS_WRITE;
 }
 
@@ -11490,8 +11518,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
 
     // prepare initial content pointers
     D3D11_SUBRESOURCE_DATA* init_data = 0;
-    // FIXME: allow immutable resources without data, and render-attachment shouldn't matter
-    if (!injected && img->cmn.usage.immutable && !img->cmn.usage.render_attachment) {
+    if (!injected && desc->data.subimage[0][0].ptr) {
         _sg_d3d11_fill_subres_data(img, &desc->data);
         init_data = _sg.d3d11.subres_data;
     }
@@ -11518,23 +11545,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 default:                    d3d11_tex_desc.ArraySize = 1; break;
             }
             d3d11_tex_desc.Format = img->d3d11.format;
-            d3d11_tex_desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-            if (img->cmn.usage.render_attachment) {
-                d3d11_tex_desc.Usage = D3D11_USAGE_DEFAULT;
-                if (_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format)) {
-                    d3d11_tex_desc.BindFlags |= D3D11_BIND_DEPTH_STENCIL;
-                } else {
-                    d3d11_tex_desc.BindFlags |= D3D11_BIND_RENDER_TARGET;
-                }
-                d3d11_tex_desc.CPUAccessFlags = 0;
-            } else {
-                d3d11_tex_desc.Usage = _sg_d3d11_image_usage(&img->cmn.usage);
-                d3d11_tex_desc.CPUAccessFlags = _sg_d3d11_image_cpu_access_flags(&img->cmn.usage);
-            }
+            d3d11_tex_desc.BindFlags = _sg_d3d11_image_bind_flags(&img->cmn.usage, img->cmn.pixel_format);
+            d3d11_tex_desc.Usage = _sg_d3d11_image_usage(&img->cmn.usage);
+            d3d11_tex_desc.CPUAccessFlags = _sg_d3d11_image_cpu_access_flags(&img->cmn.usage);
             d3d11_tex_desc.SampleDesc.Count = (UINT)img->cmn.sample_count;
             d3d11_tex_desc.SampleDesc.Quality = (UINT) (msaa ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0);
             d3d11_tex_desc.MiscFlags = (img->cmn.type == SG_IMAGETYPE_CUBE) ? D3D11_RESOURCE_MISC_TEXTURECUBE : 0;
-
             hr = _sg_d3d11_CreateTexture2D(_sg.d3d11.dev, &d3d11_tex_desc, init_data, &img->d3d11.tex2d);
             if (!(SUCCEEDED(hr) && img->d3d11.tex2d)) {
                 _SG_ERROR(D3D11_CREATE_2D_TEXTURE_FAILED);
@@ -11591,15 +11607,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
             d3d11_tex_desc.Depth = (UINT)img->cmn.num_slices;
             d3d11_tex_desc.MipLevels = (UINT)img->cmn.num_mipmaps;
             d3d11_tex_desc.Format = img->d3d11.format;
-            if (img->cmn.usage.render_attachment) {
-                d3d11_tex_desc.Usage = D3D11_USAGE_DEFAULT;
-                d3d11_tex_desc.BindFlags = D3D11_BIND_RENDER_TARGET;
-                d3d11_tex_desc.CPUAccessFlags = 0;
-            } else {
-                d3d11_tex_desc.Usage = _sg_d3d11_image_usage(&img->cmn.usage);
-                d3d11_tex_desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-                d3d11_tex_desc.CPUAccessFlags = _sg_d3d11_image_cpu_access_flags(&img->cmn.usage);
-            }
+            d3d11_tex_desc.BindFlags = _sg_d3d11_image_bind_flags(&img->cmn.usage, img->cmn.pixel_format);
+            d3d11_tex_desc.Usage = _sg_d3d11_image_usage(&img->cmn.usage);
+            d3d11_tex_desc.CPUAccessFlags = _sg_d3d11_image_cpu_access_flags(&img->cmn.usage);
             if (img->d3d11.format == DXGI_FORMAT_UNKNOWN) {
                 _SG_ERROR(D3D11_CREATE_3D_TEXTURE_UNSUPPORTED_PIXEL_FORMAT);
                 return SG_RESOURCESTATE_FAILED;
@@ -11789,6 +11799,12 @@ _SOKOL_PRIVATE bool _sg_d3d11_ensure_hlsl_bindslot_ranges(const sg_shader_desc* 
             return false;
         }
     }
+    for (size_t i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+        if (desc->storage_images[i].hlsl_register_u_n >= _SG_D3D11_MAX_STAGE_UAV_BINDINGS) {
+            _SG_ERROR(D3D11_STORAGEIMAGE_HLSL_REGISTER_U_OUT_OF_RANGE);
+            return false;
+        }
+    }
     return true;
 }
 
@@ -11822,6 +11838,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
     }
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
         shd->d3d11.smp_register_s_n[i] = desc->samplers[i].hlsl_register_s_n;
+    }
+    for (size_t i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+        shd->d3d11.simg_register_u_n[i] = desc->storage_images[i].hlsl_register_u_n;
     }
 
     // create a D3D constant buffer for each uniform block
