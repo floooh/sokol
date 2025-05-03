@@ -14209,8 +14209,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_attachments(_sg_attachments_t* a
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
         SOKOL_ASSERT(0 == atts->mtl.colors[i].image);
         SOKOL_ASSERT(atts_ptrs->color_images[i]);
-        _sg_image_t* clr_img = atts_ptrs->color_images[i]);
-        SOKOL_ASSERT(clr_img->slot.id == color_desc->image.id));
+        _sg_image_t* clr_img = atts_ptrs->color_images[i];
+        SOKOL_ASSERT(clr_img->slot.id == color_desc->image.id);
         SOKOL_ASSERT(_sg_is_valid_attachment_color_format(clr_img->cmn.pixel_format));
         atts->mtl.colors[i].image = clr_img;
         const sg_attachment_desc* resolve_desc = &desc->resolves[i];
@@ -14218,17 +14218,17 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_attachments(_sg_attachments_t* a
             SOKOL_ASSERT(0 == atts->mtl.resolves[i].image);
             SOKOL_ASSERT(atts_ptrs->resolve_images[i]);
             _sg_image_t* rsv_img = atts_ptrs->resolve_images[i];
-            SOKOL_ASSERT(rsv_img->slot.id == resolve_desc->image.id));
-            SOKOL_ASSERT(clr_img->cmn.pixel_format == rsv_img->cmn.pixel_format));
+            SOKOL_ASSERT(rsv_img->slot.id == resolve_desc->image.id);
+            SOKOL_ASSERT(clr_img->cmn.pixel_format == rsv_img->cmn.pixel_format);
             atts->mtl.resolves[i].image = rsv_img;
         }
     }
     SOKOL_ASSERT(0 == atts->mtl.depth_stencil.image);
     const sg_attachment_desc* ds_desc = &desc->depth_stencil;
     if (ds_desc->image.id != SG_INVALID_ID) {
-        SOKOL_ASSERT(atts_ptrs->ds_image)
+        SOKOL_ASSERT(atts_ptrs->ds_image);
         _sg_image_t* ds_img = atts_ptrs->ds_image;
-        SOKOL_ASSERT(ds_img->slot.id == ds_desc->image.id));
+        SOKOL_ASSERT(ds_img->slot.id == ds_desc->image.id);
         SOKOL_ASSERT(_sg_is_valid_attachment_depth_format(ds_img->cmn.pixel_format));
         atts->mtl.depth_stencil.image = ds_img;
     }
@@ -14237,8 +14237,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_attachments(_sg_attachments_t* a
         if (storage_desc->image.id != SG_INVALID_ID) {
             SOKOL_ASSERT(0 == atts->mtl.storages[i].image);
             SOKOL_ASSERT(atts_ptrs->storage_images[i]);
-            _sg_image_t* stg_image = atts_ptrs->storage_images[i];
-            SOKOL_ASSERT(stg_img->slot.id == storage_desc->image.id));
+            _sg_image_t* stg_img = atts_ptrs->storage_images[i];
+            SOKOL_ASSERT(stg_img->slot.id == storage_desc->image.id);
             SOKOL_ASSERT(_sg_is_valid_attachment_storage_format(stg_img->cmn.pixel_format));
             atts->mtl.storages[i].image = stg_img;
         }
@@ -16848,7 +16848,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_attachments(_sg_attachments_t* 
             SOKOL_ASSERT(atts_ptrs->resolve_images[i]);
             _sg_image_t* rsv_img = atts_ptrs->resolve_images[i];
             SOKOL_ASSERT(rsv_img->slot.id == resolve_desc->image.id);
-            SOKOL_ASSERT(clr_img->cmn.pixel_format == rsv_img->cmn.pixel_format));
+            SOKOL_ASSERT(clr_img->cmn.pixel_format == rsv_img->cmn.pixel_format);
             SOKOL_ASSERT(rsv_img->wgpu.tex);
             atts->wgpu.resolves[i].image = rsv_img;
 
