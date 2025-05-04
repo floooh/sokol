@@ -5272,6 +5272,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_SHADER_STORAGE_BARRIER_BIT 0x2000
         #define GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT 0x00000001
         #define GL_ELEMENT_ARRAY_BARRIER_BIT 0x00000002
+        #define GL_TEXTURE_FETCH_BARRIER_BIT 0x00000008
+        #define GL_SHADER_IMAGE_ACCESS_BARRIER_BIT 0x00000020
         #define GL_MIN 0x8007
         #define GL_MAX 0x8008
         #define GL_WRITE_ONLY 0x88B9
@@ -9566,9 +9568,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* at
     SOKOL_ASSERT(atts && atts_ptrs && desc);
     _SG_GL_CHECK_ERROR();
 
-    bool has_render_attachments = false;
-    bool has_storage_attachments = false;
-
     // copy image pointers
     for (int i = 0; i < atts->cmn.num_colors; i++) {
         const sg_attachment_desc* color_desc = &desc->colors[i];
@@ -9580,7 +9579,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* at
         SOKOL_ASSERT(clr_img->slot.id == color_desc->image.id);
         SOKOL_ASSERT(_sg_is_valid_attachment_color_format(clr_img->cmn.pixel_format));
         atts->gl.colors[i].image = clr_img;
-        has_render_attachments = true;
 
         const sg_attachment_desc* resolve_desc = &desc->resolves[i];
         if (resolve_desc->image.id != SG_INVALID_ID) {
@@ -9600,7 +9598,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* at
         SOKOL_ASSERT(ds_img->slot.id == ds_desc->image.id);
         SOKOL_ASSERT(_sg_is_valid_attachment_depth_format(ds_img->cmn.pixel_format));
         atts->gl.depth_stencil.image = ds_img;
-        has_render_attachments = true;
     }
     for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
         const sg_attachment_desc* storage_desc = &desc->storages[i];
@@ -9610,13 +9607,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* at
             _sg_image_t* stg_img = atts_ptrs->storage_images[i];
             SOKOL_ASSERT(stg_img->slot.id == storage_desc->image.id);
             atts->gl.storages[i].image = stg_img;
-            has_storage_attachments = true;
         }
     }
 
     // if this is a compute pass attachment we're done here
-    if (has_storage_attachments) {
-        SOKOL_ASSERT(!has_render_attachments);
+    if (atts->cmn.has_storage_attachments) {
+        SOKOL_ASSERT(!atts->cmn.has_render_attachments);
         return SG_RESOURCESTATE_VALID;
     }
 
@@ -9891,9 +9887,7 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass) {
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE void _sg_gl_end_pass(void) {
-    _SG_GL_CHECK_ERROR();
-
+_SOKOL_PRIVATE void _sg_gl_end_render_pass(void) {
     if (_sg.cur_pass.atts) {
         const _sg_attachments_t* atts = _sg.cur_pass.atts;
         SOKOL_ASSERT(atts->slot.id == _sg.cur_pass.atts_id.id);
@@ -9941,6 +9935,21 @@ _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
             glInvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, att_index, invalidate_atts);
         }
         #endif
+    }
+}
+
+_SOKOL_PRIVATE void _sg_gl_end_compute_pass(void) {
+    if (_sg.cur_pass.atts && _sg.cur_pass.atts->cmn.has_storage_attachments) {
+        glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT|GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+    }
+}
+
+_SOKOL_PRIVATE void _sg_gl_end_pass(void) {
+    _SG_GL_CHECK_ERROR();
+    if (_sg.cur_pass.is_compute) {
+        _sg_gl_end_compute_pass();
+    } else {
+        _sg_gl_end_render_pass();
     }
     _SG_GL_CHECK_ERROR();
 }
