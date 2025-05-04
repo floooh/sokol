@@ -9773,6 +9773,11 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass) {
 
     // early out if this a compute pass
     if (pass->compute) {
+        // first pipeline in pass needs to re-apply storage attachments
+        if (_sg.cur_pass.atts && _sg.cur_pass.atts->cmn.has_storage_attachments) {
+            _sg.gl.cache.cur_pipeline = 0;
+            _sg.gl.cache.cur_pipeline_id.id = SG_INVALID_ID;
+        }
         return;
     }
 
