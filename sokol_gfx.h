@@ -4094,6 +4094,8 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEIMAGE_METAL_TEXTURE_SLOT_COLLISION, "storage image 'msl_texture_n' must be unique across images and storage images in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEIMAGE_HLSL_REGISTER_U_OUT_OF_RANGE, "storage image 'hlsl_register_u_n' is out of range (must be 0..11)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEIMAGE_HLSL_REGISTER_U_COLLISION, "storage image 'hlsl_register_u_n' must be unique across storage images and read/write storage buffers in same shader stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEIMAGE_GLSL_BINDING_OUT_OF_RANGE, "storage image 'glsl_binding_n' is out of range (must be 0..4)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEIMAGE_GLSL_BINDING_COLLISION, "stoage image 'glsl_binding_n' must be unique across shader stages") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEIMAGE_WGSL_GROUP2_BINDING_OUT_OF_RANGE, "storage image 'wgsl_group2_binding_n' is out of range (must be 0..7)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_STORAGEIMAGE_WGSL_GROUP2_BINDING_COLLISION, "storage image 'wgsl_group2_binding_n' must be unique in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_IMAGE_METAL_TEXTURE_SLOT_OUT_OF_RANGE, "image 'msl_texture_n' is out of range (must be 0..19)") \
@@ -5937,7 +5939,9 @@ typedef struct _sg_attachments_s {
         _sg_gl_attachment_t colors[SG_MAX_COLOR_ATTACHMENTS];
         _sg_gl_attachment_t resolves[SG_MAX_COLOR_ATTACHMENTS];
         _sg_gl_attachment_t depth_stencil;
+        _sg_gl_attachment_t storages[SG_MAX_STORAGE_ATTACHMENTS];
         GLuint msaa_resolve_framebuffer[SG_MAX_COLOR_ATTACHMENTS];
+        GLuint storage_texview;
     } gl;
 } _sg_gl_attachments_t;
 typedef _sg_gl_attachments_t _sg_attachments_t;
@@ -9538,9 +9542,8 @@ _SOKOL_PRIVATE GLenum _sg_gl_depth_stencil_attachment_type(const _sg_gl_attachme
     }
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* atts, _sg_image_t** color_images, _sg_image_t** resolve_images, _sg_image_t* ds_image, const sg_attachments_desc* desc) {
-    SOKOL_ASSERT(atts && desc);
-    SOKOL_ASSERT(color_images && resolve_images);
+_SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* atts, const _sg_attachments_ptrs_t* atts_ptrs, const sg_attachments_desc* desc) {
+    SOKOL_ASSERT(atts && atts_ptrs && desc);
     _SG_GL_CHECK_ERROR();
 
     // copy image pointers
@@ -9549,24 +9552,40 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* at
         _SOKOL_UNUSED(color_desc);
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
         SOKOL_ASSERT(0 == atts->gl.colors[i].image);
-        SOKOL_ASSERT(color_images[i] && (color_images[i]->slot.id == color_desc->image.id));
-        SOKOL_ASSERT(_sg_is_valid_attachment_color_format(color_images[i]->cmn.pixel_format));
-        atts->gl.colors[i].image = color_images[i];
+        SOKOL_ASSERT(atts_ptrs->color_images[i]);\
+        _sg_image_t* clr_img = atts_ptrs->color_images[i];
+        SOKOL_ASSERT(clr_img->slot.id == color_desc->image.id);
+        SOKOL_ASSERT(_sg_is_valid_attachment_color_format(clr_img->cmn.pixel_format));
+        atts->gl.colors[i].image = clr_img;
 
         const sg_attachment_desc* resolve_desc = &desc->resolves[i];
         if (resolve_desc->image.id != SG_INVALID_ID) {
             SOKOL_ASSERT(0 == atts->gl.resolves[i].image);
-            SOKOL_ASSERT(resolve_images[i] && (resolve_images[i]->slot.id == resolve_desc->image.id));
-            SOKOL_ASSERT(color_images[i] && (color_images[i]->cmn.pixel_format == resolve_images[i]->cmn.pixel_format));
-            atts->gl.resolves[i].image = resolve_images[i];
+            SOKOL_ASSERT(atts_ptrs->resolve_images[i]);
+            _sg_image_t* rsv_img = atts_ptrs->resolve_images[i];
+            SOKOL_ASSERT(rsv_img->slot.id == resolve_desc->image.id);
+            SOKOL_ASSERT(clr_img && (clr_img->cmn.pixel_format == rsv_img->cmn.pixel_format));
+            atts->gl.resolves[i].image = rsv_img;
         }
     }
     SOKOL_ASSERT(0 == atts->gl.depth_stencil.image);
     const sg_attachment_desc* ds_desc = &desc->depth_stencil;
     if (ds_desc->image.id != SG_INVALID_ID) {
-        SOKOL_ASSERT(ds_image && (ds_image->slot.id == ds_desc->image.id));
-        SOKOL_ASSERT(_sg_is_valid_attachment_depth_format(ds_image->cmn.pixel_format));
-        atts->gl.depth_stencil.image = ds_image;
+        SOKOL_ASSERT(atts_ptrs->ds_image);
+        _sg_image_t* ds_img = atts_ptrs->ds_image;
+        SOKOL_ASSERT(ds_img->slot.id == ds_desc->image.id);
+        SOKOL_ASSERT(_sg_is_valid_attachment_depth_format(ds_img->cmn.pixel_format));
+        atts->gl.depth_stencil.image = ds_img;
+    }
+    for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+        const sg_attachment_desc* storage_desc = &desc->storages[i];
+        if (storage_desc->image.id != SG_INVALID_ID) {
+            SOKOL_ASSERT(0 == atts->gl.storages[i].image);
+            SOKOL_ASSERT(atts_ptrs->storage_images[i]);
+            _sg_image_t* stg_img = atts_ptrs->storage_images[i];
+            SOKOL_ASSERT(stg_img->slot.id == storage_desc->image.id);
+            atts->gl.storages[i].image = stg_img;
+        }
     }
 
     // store current framebuffer binding (restored at end of function)
@@ -9681,6 +9700,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* at
     // restore original framebuffer binding
     glBindFramebuffer(GL_FRAMEBUFFER, gl_orig_fb);
     _SG_GL_CHECK_ERROR();
+
+    // FIXME: create storage attachment texture views
+
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -9711,6 +9733,11 @@ _SOKOL_PRIVATE _sg_image_t* _sg_gl_attachments_resolve_image(const _sg_attachmen
 _SOKOL_PRIVATE _sg_image_t* _sg_gl_attachments_ds_image(const _sg_attachments_t* atts) {
     SOKOL_ASSERT(atts);
     return atts->gl.depth_stencil.image;
+}
+
+_SOKOL_PRIVATE _sg_image_t* _sg_gl_attachments_storage_image(const _sg_attachments_t* atts, int index) {
+    SOKOL_ASSERT(atts && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
+    return atts->gl.storages[index].image;
 }
 
 _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass) {
