@@ -8503,7 +8503,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     #if defined(__EMSCRIPTEN__)
     _sg.features.separate_buffer_types = true;
     #else
-    _sg.features.separate_buffer_types = false
+    _sg.features.separate_buffer_types = false;
     #endif
 
     bool has_s3tc = false;  // BC1..BC3
