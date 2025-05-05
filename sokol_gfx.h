@@ -10186,9 +10186,10 @@ _SOKOL_PRIVATE void _sg_gl_apply_compute_pipeline_state(_sg_pipeline_t* pip) {
         const _sg_attachments_t* atts = _sg.cur_pass.atts;
         const _sg_shader_t* shd = pip->shader;
         for (size_t i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
-            if (shd->cmn.storage_images[i].stage != SG_SHADERSTAGE_COMPUTE) {
+            if (shd->cmn.storage_images[i].stage == SG_SHADERSTAGE_NONE) {
                 continue;
             }
+            SOKOL_ASSERT(shd->cmn.storage_images[i].stage == SG_SHADERSTAGE_COMPUTE);
             SOKOL_ASSERT(shd->gl.simg_binding[i] < _SG_GL_MAX_SIMG_BINDINGS);
             SOKOL_ASSERT(atts->gl.storages[i].image);
             _sg_image_t* img = atts->gl.storages[i].image;
