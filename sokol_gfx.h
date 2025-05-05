@@ -9944,9 +9944,11 @@ _SOKOL_PRIVATE void _sg_gl_end_render_pass(void) {
 }
 
 _SOKOL_PRIVATE void _sg_gl_end_compute_pass(void) {
+    #if defined(_SOKOL_GL_HAS_COMPUTE)
     if (_sg.cur_pass.atts && _sg.cur_pass.atts->cmn.has_storage_attachments) {
         glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT|GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
     }
+    #endif
 }
 
 _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
@@ -10181,6 +10183,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_render_pipeline_state(_sg_pipeline_t* pip) {
 }
 
 _SOKOL_PRIVATE void _sg_gl_apply_compute_pipeline_state(_sg_pipeline_t* pip) {
+    #if defined(_SOKOL_GL_HAS_COMPUTE)
     // apply storage attachment images (if any)
     if (_sg.cur_pass.atts) {
         const _sg_attachments_t* atts = _sg.cur_pass.atts;
@@ -10205,6 +10208,9 @@ _SOKOL_PRIVATE void _sg_gl_apply_compute_pipeline_state(_sg_pipeline_t* pip) {
             _SG_GL_CHECK_ERROR();
         }
     }
+    #else
+    _SOKOL_UNUSED(pip);
+    #endif
 }
 
 _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
@@ -10231,7 +10237,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
     _SG_GL_CHECK_ERROR();
 }
 
-#if defined _SOKOL_GL_HAS_COMPUTE
+#if defined(_SOKOL_GL_HAS_COMPUTE)
 _SOKOL_PRIVATE void _sg_gl_handle_memory_barriers(const _sg_shader_t* shd, const _sg_bindings_ptrs_t* bnd) {
     if (!_sg.features.compute) {
         return;
