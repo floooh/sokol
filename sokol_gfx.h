@@ -10253,14 +10253,14 @@ _SOKOL_PRIVATE void _sg_gl_handle_memory_barriers(const _sg_shader_t* shd, const
         }
         if (buf->gl.gpu_dirty_flags & _SG_GL_GPUDIRTY_VERTEXBUFFER) {
             gl_barrier_bits |= GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT;
-            buf->gl.gpu_dirty_flags &= ~_SG_GL_GPUDIRTY_VERTEXBUFFER;
+            buf->gl.gpu_dirty_flags &= (uint8_t)~_SG_GL_GPUDIRTY_VERTEXBUFFER;
         }
     }
     if (bnd->ib) {
         _sg_buffer_t* buf = bnd->ib;
         if (buf->gl.gpu_dirty_flags & _SG_GL_GPUDIRTY_INDEXBUFFER) {
             gl_barrier_bits |= GL_ELEMENT_ARRAY_BARRIER_BIT;
-            buf->gl.gpu_dirty_flags &= ~_SG_GL_GPUDIRTY_INDEXBUFFER;
+            buf->gl.gpu_dirty_flags &= (uint8_t)~_SG_GL_GPUDIRTY_INDEXBUFFER;
         }
     }
     for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
@@ -10271,7 +10271,7 @@ _SOKOL_PRIVATE void _sg_gl_handle_memory_barriers(const _sg_shader_t* shd, const
         SOKOL_ASSERT(shd->cmn.storage_buffers[i].stage != SG_SHADERSTAGE_NONE);
         if (buf->gl.gpu_dirty_flags & _SG_GL_GPUDIRTY_STORAGEBUFFER) {
             gl_barrier_bits |= GL_SHADER_STORAGE_BARRIER_BIT;
-            buf->gl.gpu_dirty_flags &= ~_SG_GL_GPUDIRTY_STORAGEBUFFER;
+            buf->gl.gpu_dirty_flags &= (uint8_t)~_SG_GL_GPUDIRTY_STORAGEBUFFER;
         }
     }
 
