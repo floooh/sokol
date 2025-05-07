@@ -2053,7 +2053,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #include <stdlib.h> // malloc, free
 #include <string.h> // memset, strncmp
 #include <stddef.h> // size_t
-#include <stdalign.h> //alignas
 #include <math.h>   // roundf
 
 // helper macros
