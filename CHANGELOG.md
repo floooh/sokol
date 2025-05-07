@@ -1,5 +1,24 @@
 ## Updates
 
+### 07-May-2025
+
+A memory alignment fix for raw mouse input on Windows via `GetRawInputData()`.
+Raw mouse input is used for 'mouse-lock mode', not for regular mouse input.
+`GetRawInputData()` requires the output buffer to be 8-byte aligned, but
+sokol_app.h didn't guarantee this (and in reality it doesn't really seem to
+matter, the problem only showed up when running under ASAN - props to Zig). The
+new solution works the same as GLFW: first a dummy `GetRawInputData()` is
+performed to query the required buffer size, then a buffer is allocated on
+demand (which typically only happens once), then the actual `GetRawInputData()`
+call is performed. This depends on `malloc()` returning memory that's at least
+8-byte aligned (malloc on 64-bit Windows guarantees 16-byte alignment).
+
+Many thanks to @roig for noticing the issue and providing an initial fix
+via PR https://github.com/floooh/sokol/pull/1262 (which I merged but then replaced
+with the above heap-allocation solution - this is safe for any data size returned
+by `GetRawInputData()` - which I'm not sure actually happens in real-world-scenarios
+though.
+
 ### 05-Apr-2025
 
 - Compute shaders are now supported on platforms that support GLES3.1
