@@ -2675,7 +2675,7 @@ typedef struct {
         bool tracked;
         uint8_t capture_mask;
     } mouse;
-    uint8_t raw_input_data[256];
+    RAWINPUT raw_input_data;
 } _sapp_win32_t;
 
 #if defined(SOKOL_GLCORE)
@@ -7674,7 +7674,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                         _SAPP_ERROR(WIN32_GET_RAW_INPUT_DATA_FAILED);
                         break;
                     }
-                    const RAWINPUT* raw_mouse_data = (const RAWINPUT*) &_sapp.win32.raw_input_data;
+                    const RAWINPUT* raw_mouse_data = &_sapp.win32.raw_input_data;
                     if (raw_mouse_data->data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE) {
                         /* mouse only reports absolute position
                            NOTE: This code is untested and will most likely behave wrong in Remote Desktop sessions.
