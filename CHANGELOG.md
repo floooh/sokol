@@ -16,8 +16,8 @@ call is performed. This depends on `malloc()` returning memory that's at least
 Many thanks to @roig for noticing the issue and providing an initial fix
 via PR https://github.com/floooh/sokol/pull/1262 (which I merged but then replaced
 with the above heap-allocation solution - this is safe for any data size returned
-by `GetRawInputData()` - which I'm not sure actually happens in real-world-scenarios
-though.
+by `GetRawInputData()` - I'm not actually sure though if anything greater than
+`sizeof(RAWINPUTDATA)` is ever returned.
 
 ### 05-Apr-2025
 
