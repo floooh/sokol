@@ -2675,7 +2675,10 @@ typedef struct {
         bool tracked;
         uint8_t capture_mask;
     } mouse;
-    uint8_t raw_input_data[256];
+    struct {
+        size_t size;
+        void* ptr;
+    } raw_input_data;
 } _sapp_win32_t;
 
 #if defined(SOKOL_GLCORE)
@@ -7254,6 +7257,32 @@ _SOKOL_PRIVATE void _sapp_win32_lock_mouse(bool lock) {
     _sapp.win32.mouse.requested_lock = lock;
 }
 
+_SOKOL_PRIVATE void _sapp_win32_free_raw_input_data(void) {
+    if (_sapp.win32.raw_input_data.ptr) {
+        _sapp_free(_sapp.win32.raw_input_data.ptr);
+        _sapp.win32.raw_input_data.ptr = 0;
+        _sapp.win32.raw_input_data.size = 0;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_win32_alloc_raw_input_data(size_t size) {
+    SOKOL_ASSERT(!_sapp.win32.raw_input_data.ptr);
+    SOKOL_ASSERT(size > 0);
+    _sapp.win32.raw_input_data.ptr = _sapp_malloc(size);
+    _sapp.win32.raw_input_data.size = size;
+    SOKOL_ASSERT(_sapp.win32.raw_input_data.ptr);
+}
+
+_SOKOL_PRIVATE void* _sapp_win32_ensure_raw_input_data(size_t required_size) {
+    if (required_size > _sapp.win32.raw_input_data.size) {
+        _sapp_win32_free_raw_input_data();
+        _sapp_win32_alloc_raw_input_data(required_size);
+    }
+    // we expect that malloc() returns at least 8-byte aligned memory
+    SOKOL_ASSERT((((uintptr_t)_sapp.win32.raw_input_data.ptr) & 7) == 0);
+    return _sapp.win32.raw_input_data.ptr;
+}
+
 _SOKOL_PRIVATE void _sapp_win32_do_lock_mouse(void) {
     _sapp.mouse.locked = true;
 
@@ -7669,13 +7698,18 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 /* raw mouse input during mouse-lock */
                 if (_sapp.mouse.locked) {
                     HRAWINPUT ri = (HRAWINPUT) lParam;
-                    UINT size = sizeof(_sapp.win32.raw_input_data);
                     // see: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getrawinputdata
-                    if ((UINT)-1 == GetRawInputData(ri, RID_INPUT, &_sapp.win32.raw_input_data, &size, sizeof(RAWINPUTHEADER))) {
+                    // also see: https://github.com/glfw/glfw/blob/e7ea71be039836da3a98cea55ae5569cb5eb885c/src/win32_window.c#L912-L924
+
+                    // first poll for required size to alloc/grow input buffer, then get the actual data
+                    UINT size = 0;
+                    GetRawInputData(ri, RID_INPUT, NULL, &size, sizeof(RAWINPUTHEADER));
+                    void* raw_input_data_ptr = _sapp_win32_ensure_raw_input_data(size);
+                    if ((UINT)-1 == GetRawInputData(ri, RID_INPUT, raw_input_data_ptr, &size, sizeof(RAWINPUTHEADER))) {
                         _SAPP_ERROR(WIN32_GET_RAW_INPUT_DATA_FAILED);
                         break;
                     }
-                    const RAWINPUT* raw_mouse_data = (const RAWINPUT*) &_sapp.win32.raw_input_data;
+                    const RAWINPUT* raw_mouse_data = (const RAWINPUT*) raw_input_data_ptr;
                     if (raw_mouse_data->data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE) {
                         /* mouse only reports absolute position
                            NOTE: This code is untested and will most likely behave wrong in Remote Desktop sessions.
@@ -8216,6 +8250,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     _sapp_win32_destroy_window();
     _sapp_win32_destroy_icons();
     _sapp_win32_restore_console();
+    _sapp_win32_free_raw_input_data();
     _sapp_discard_state();
 }
 
