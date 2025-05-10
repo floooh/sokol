@@ -4027,7 +4027,6 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_EXPECT_NONZERO_SIZE, "sg_buffer_desc.size must be greater zero") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_EXPECT_MATCHING_DATA_SIZE, "sg_buffer_desc.size and .data.size must be equal") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE, "sg_buffer_desc.data.size expected to be zero") \
-    _SG_LOGITEM_XMACRO(VALIATE_EXPECT_DATA, "sg_buffer_desc: initial data expected for immutable buffers without storage buffer usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_EXPECT_NO_DATA, "sg_buffer_desc.data.ptr must be null for dynamic/stream buffers") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_EXPECT_DATA, "sg_buffer_desc: initial data must be provided for immutable buffers without storage buffer usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STORAGEBUFFER_SUPPORTED, "storage buffers not supported by the backend 3D API (requires OpenGL >= 4.3)") \
@@ -5827,6 +5826,7 @@ typedef struct _sg_attachments_s {
         _sg_dummy_attachment_t colors[SG_MAX_COLOR_ATTACHMENTS];
         _sg_dummy_attachment_t resolves[SG_MAX_COLOR_ATTACHMENTS];
         _sg_dummy_attachment_t depth_stencil;
+        _sg_dummy_attachment_t storages[SG_MAX_STORAGE_ATTACHMENTS];
     } dmy;
 } _sg_dummy_attachments_t;
 typedef _sg_dummy_attachments_t _sg_attachments_t;
@@ -7372,32 +7372,35 @@ _SOKOL_PRIVATE void _sg_dummy_discard_pipeline(_sg_pipeline_t* pip) {
     _SOKOL_UNUSED(pip);
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_dummy_create_attachments(_sg_attachments_t* atts, _sg_image_t** color_images, _sg_image_t** resolve_images, _sg_image_t* ds_img, const sg_attachments_desc* desc) {
-    SOKOL_ASSERT(atts && desc);
-    SOKOL_ASSERT(color_images && resolve_images);
+_SOKOL_PRIVATE sg_resource_state _sg_dummy_create_attachments(_sg_attachments_t* atts, const _sg_attachments_ptrs_t* atts_ptrs, const sg_attachments_desc* desc) {
+    SOKOL_ASSERT(atts && atts_ptrs && desc);
 
     for (int i = 0; i < atts->cmn.num_colors; i++) {
         const sg_attachment_desc* color_desc = &desc->colors[i];
         _SOKOL_UNUSED(color_desc);
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
         SOKOL_ASSERT(0 == atts->dmy.colors[i].image);
-        SOKOL_ASSERT(color_images[i] && (color_images[i]->slot.id == color_desc->image.id));
-        SOKOL_ASSERT(_sg_is_valid_attachment_color_format(color_images[i]->cmn.pixel_format));
-        atts->dmy.colors[i].image = color_images[i];
-
+        SOKOL_ASSERT(atts_ptrs->color_images[i]);
+        _sg_image_t* clr_img = atts_ptrs->color_images[i];
+        SOKOL_ASSERT(clr_img->slot.id == color_desc->image.id);
+        SOKOL_ASSERT(_sg_is_valid_attachment_color_format(clr_img->cmn.pixel_format));
+        atts->dmy.colors[i].image = clr_img;
         const sg_attachment_desc* resolve_desc = &desc->resolves[i];
         if (resolve_desc->image.id != SG_INVALID_ID) {
             SOKOL_ASSERT(0 == atts->dmy.resolves[i].image);
-            SOKOL_ASSERT(resolve_images[i] && (resolve_images[i]->slot.id == resolve_desc->image.id));
-            SOKOL_ASSERT(color_images[i] && (color_images[i]->cmn.pixel_format == resolve_images[i]->cmn.pixel_format));
-            atts->dmy.resolves[i].image = resolve_images[i];
+            SOKOL_ASSERT(atts_ptrs->resolve_images[i]);
+            _sg_image_t* rsv_img = atts_ptrs->resolve_images[i];
+            SOKOL_ASSERT(rsv_img->slot.id == resolve_desc->image.id);
+            SOKOL_ASSERT(clr_img->cmn.pixel_format == rsv_img->cmn.pixel_format);
+            atts->dmy.resolves[i].image = rsv_img;
         }
     }
-
     SOKOL_ASSERT(0 == atts->dmy.depth_stencil.image);
     const sg_attachment_desc* ds_desc = &desc->depth_stencil;
     if (ds_desc->image.id != SG_INVALID_ID) {
-        SOKOL_ASSERT(ds_img && (ds_img->slot.id == ds_desc->image.id));
+        SOKOL_ASSERT(atts_ptrs->ds_image);
+        _sg_image_t* ds_img = atts_ptrs->ds_image;
+        SOKOL_ASSERT(ds_img->slot.id == ds_desc->image.id);
         SOKOL_ASSERT(_sg_is_valid_attachment_depth_format(ds_img->cmn.pixel_format));
         atts->dmy.depth_stencil.image = ds_img;
     }
@@ -7422,6 +7425,11 @@ _SOKOL_PRIVATE _sg_image_t* _sg_dummy_attachments_resolve_image(const _sg_attach
 _SOKOL_PRIVATE _sg_image_t* _sg_dummy_attachments_ds_image(const _sg_attachments_t* atts) {
     SOKOL_ASSERT(atts);
     return atts->dmy.depth_stencil.image;
+}
+
+_SOKOL_PRIVATE _sg_image_t* _sg_dummy_attachments_storage_image(const _sg_attachments_t* atts, int index) {
+    SOKOL_ASSERT(atts && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
+    return atts->dmy.storages[index].image;
 }
 
 _SOKOL_PRIVATE void _sg_dummy_begin_pass(const sg_pass* pass) {
@@ -9574,7 +9582,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* at
         _SOKOL_UNUSED(color_desc);
         SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
         SOKOL_ASSERT(0 == atts->gl.colors[i].image);
-        SOKOL_ASSERT(atts_ptrs->color_images[i]);\
+        SOKOL_ASSERT(atts_ptrs->color_images[i]);
         _sg_image_t* clr_img = atts_ptrs->color_images[i];
         SOKOL_ASSERT(clr_img->slot.id == color_desc->image.id);
         SOKOL_ASSERT(_sg_is_valid_attachment_color_format(clr_img->cmn.pixel_format));
