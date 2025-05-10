@@ -9083,11 +9083,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
             _sg_gl_cache_bind_texture_sampler(0, img->gl.target, img->gl.tex[slot], 0);
             glTexParameteri(img->gl.target, GL_TEXTURE_MAX_LEVEL, img->cmn.num_mipmaps - 1);
 
-            // NOTE: workaround for https://issues.chromium.org/issues/355605685
-            // FIXME: on GLES3 and GL 4.3 (e.g. not macOS) the texture initialization
-            // should be rewritten to use glTexStorage + glTexSubImage
+            // NOTE: initially a workaround for https://issues.chromium.org/issues/355605685
+            // Now also needed for storage images on GLES 3.1.
+            // See for the 'non-hacky' solution: https://github.com/floooh/sokol/issues/1263
             bool tex_storage_allocated = false;
-            #if defined(__EMSCRIPTEN__)
+            #if defined(SOKOL_GLES3)
                 if (desc->data.subimage[0][0].ptr == 0) {
                     SOKOL_ASSERT(!msaa);
                     tex_storage_allocated = true;
