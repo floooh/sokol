@@ -294,6 +294,7 @@ typedef struct sgimgui_attachments_t {
     float color_image_scale[SG_MAX_COLOR_ATTACHMENTS];
     float resolve_image_scale[SG_MAX_COLOR_ATTACHMENTS];
     float ds_image_scale;
+    float storage_image_scale[SG_MAX_STORAGE_ATTACHMENTS];
     sg_attachments_desc desc;
 } sgimgui_attachments_t;
 
@@ -1159,24 +1160,6 @@ _SOKOL_PRIVATE const char* _sgimgui_backend_string(sg_backend b) {
     }
 }
 
-_SOKOL_PRIVATE const char* _sgimgui_buffertype_string(sg_buffer_type t) {
-    switch (t) {
-        case SG_BUFFERTYPE_VERTEXBUFFER:    return "SG_BUFFERTYPE_VERTEXBUFFER";
-        case SG_BUFFERTYPE_INDEXBUFFER:     return "SG_BUFFERTYPE_INDEXBUFFER";
-        case SG_BUFFERTYPE_STORAGEBUFFER:   return "SG_BUFFERTYPE_STORAGEBUFFER";
-        default:                            return "???";
-    }
-}
-
-_SOKOL_PRIVATE const char* _sgimgui_usage_string(sg_usage u) {
-    switch (u) {
-        case SG_USAGE_IMMUTABLE:    return "SG_USAGE_IMMUTABLE";
-        case SG_USAGE_DYNAMIC:      return "SG_USAGE_DYNAMIC";
-        case SG_USAGE_STREAM:       return "SG_USAGE_STREAM";
-        default:                    return "???";
-    }
-}
-
 _SOKOL_PRIVATE const char* _sgimgui_imagetype_string(sg_image_type t) {
     switch (t) {
         case SG_IMAGETYPE_2D:       return "SG_IMAGETYPE_2D";
@@ -1735,6 +1718,9 @@ _SOKOL_PRIVATE void _sgimgui_attachments_created(sgimgui_t* ctx, sg_attachments 
         atts->resolve_image_scale[i] = 0.25f;
     }
     atts->ds_image_scale = 0.25f;
+    for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+        atts->storage_image_scale[i] = 0.25f;
+    }
     atts->label = _sgimgui_make_str(desc->label);
     atts->desc = *desc;
 }
@@ -3375,10 +3361,15 @@ _SOKOL_PRIVATE void _sgimgui_draw_buffer_panel(sgimgui_t* ctx, sg_buffer buf) {
             igText("Label: %s", buf_ui->label.buf[0] ? buf_ui->label.buf : "---");
             _sgimgui_draw_resource_slot(&info.slot);
             igSeparator();
-            igText("Type:  %s", _sgimgui_buffertype_string(buf_ui->desc.type));
-            igText("Usage: %s", _sgimgui_usage_string(buf_ui->desc.usage));
+            igText("Usage:\n");
+            igText("  vertex_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.vertex_buffer));
+            igText("  index_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.index_buffer));
+            igText("  storage_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.storage_buffer));
+            igText("  immutable: %s", _sgimgui_bool_string(buf_ui->desc.usage.immutable));
+            igText("  dynamic_update: %s", _sgimgui_bool_string(buf_ui->desc.usage.dynamic_update));
+            igText("  stream_update: %s", _sgimgui_bool_string(buf_ui->desc.usage.stream_update));
             igText("Size:  %d", (int)buf_ui->desc.size);
-            if (buf_ui->desc.usage != SG_USAGE_IMMUTABLE) {
+            if (!buf_ui->desc.usage.immutable) {
                 igSeparator();
                 igText("Num Slots:     %d", info.num_slots);
                 igText("Active Slot:   %d", info.active_slot);
@@ -3429,15 +3420,19 @@ _SOKOL_PRIVATE void _sgimgui_draw_image_panel(sgimgui_t* ctx, sg_image img) {
             _sgimgui_draw_embedded_image(ctx, img, &img_ui->ui_scale);
             igSeparator();
             igText("Type:           %s", _sgimgui_imagetype_string(desc->type));
-            igText("Usage:          %s", _sgimgui_usage_string(desc->usage));
-            igText("Render Target:  %s", _sgimgui_bool_string(desc->render_target));
+            igText("Usage:\n");
+            igText("  render_attachment: %s", _sgimgui_bool_string(desc->usage.render_attachment));
+            igText("  storage_attachment: %s", _sgimgui_bool_string(desc->usage.storage_attachment));
+            igText("  immutable: %s", _sgimgui_bool_string(desc->usage.immutable));
+            igText("  dynamic_update: %s", _sgimgui_bool_string(desc->usage.dynamic_update));
+            igText("  stream_update: %s", _sgimgui_bool_string(desc->usage.stream_update));
             igText("Width:          %d", desc->width);
             igText("Height:         %d", desc->height);
             igText("Num Slices:     %d", desc->num_slices);
             igText("Num Mipmaps:    %d", desc->num_mipmaps);
             igText("Pixel Format:   %s", _sgimgui_pixelformat_string(desc->pixel_format));
             igText("Sample Count:   %d", desc->sample_count);
-            if (desc->usage != SG_USAGE_IMMUTABLE) {
+            if (!desc->usage.immutable) {
                 igSeparator();
                 igText("Num Slots:     %d", info.num_slots);
                 igText("Active Slot:   %d", info.active_slot);
@@ -3564,6 +3559,12 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
                     num_valid_storage_buffers++;
                 }
             }
+            int num_valid_storage_images = 0;
+            for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+                if (shd_ui->desc.storage_images[i].stage != SG_SHADERSTAGE_NONE) {
+                    num_valid_storage_images++;
+                }
+            }
             if (num_valid_ubs > 0) {
                 if (igTreeNode("Uniform Blocks")) {
                     for (int i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
@@ -3593,28 +3594,6 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
                     igTreePop();
                 }
             }
-            if (num_valid_storage_buffers > 0) {
-                if (igTreeNode("Storage Buffers")) {
-                    for (int i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
-                        const sg_shader_storage_buffer* sbuf = &shd_ui->desc.storage_buffers[i];
-                        if (sbuf->stage == SG_SHADERSTAGE_NONE) {
-                            continue;
-                        }
-                        igText("- slot: %d", i);
-                        igText("  stage: %s", _sgimgui_shaderstage_string(sbuf->stage));
-                        igText("  readonly: %s", sbuf->readonly ? "true" : "false");
-                        if (sbuf->readonly) {
-                            igText("  hlsl_register_t_n: %d", sbuf->hlsl_register_t_n);
-                        } else {
-                            igText("  hlsl_register_u_n: %d", sbuf->hlsl_register_u_n);
-                        }
-                        igText("  msl_buffer_n: %d", sbuf->msl_buffer_n);
-                        igText("  wgsl_group1_binding_n: %d", sbuf->wgsl_group1_binding_n);
-                        igText("  glsl_binding_n: %d", sbuf->glsl_binding_n);
-                    }
-                    igTreePop();
-                }
-            }
             if (num_valid_images > 0) {
                 if (igTreeNode("Images")) {
                     for (int i = 0; i < SG_MAX_IMAGE_BINDSLOTS; i++) {
@@ -3626,7 +3605,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
                         igText("  stage: %s", _sgimgui_shaderstage_string(sid->stage));
                         igText("  image_type: %s", _sgimgui_imagetype_string(sid->image_type));
                         igText("  sample_type: %s", _sgimgui_imagesampletype_string(sid->sample_type));
-                        igText("  multisampled: %s", sid->multisampled ? "true" : "false");
+                        igText("  multisampled: %s", _sgimgui_bool_string(sid->multisampled));
                         igText("  hlsl_register_t_n: %d", sid->hlsl_register_t_n);
                         igText("  msl_texture_n: %d", sid->msl_texture_n);
                         igText("  wgsl_group1_binding_n: %d", sid->wgsl_group1_binding_n);
@@ -3663,6 +3642,48 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
                         igText("  image_slot: %d", sispd->image_slot);
                         igText("  sampler_slot: %d", sispd->sampler_slot);
                         igText("  glsl_name: %s", sispd->glsl_name ? sispd->glsl_name : "---");
+                    }
+                    igTreePop();
+                }
+            }
+            if (num_valid_storage_buffers > 0) {
+                if (igTreeNode("Storage Buffers")) {
+                    for (int i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
+                        const sg_shader_storage_buffer* sbuf = &shd_ui->desc.storage_buffers[i];
+                        if (sbuf->stage == SG_SHADERSTAGE_NONE) {
+                            continue;
+                        }
+                        igText("- slot: %d", i);
+                        igText("  stage: %s", _sgimgui_shaderstage_string(sbuf->stage));
+                        igText("  readonly: %s", _sgimgui_bool_string(sbuf->readonly));
+                        if (sbuf->readonly) {
+                            igText("  hlsl_register_t_n: %d", sbuf->hlsl_register_t_n);
+                        } else {
+                            igText("  hlsl_register_u_n: %d", sbuf->hlsl_register_u_n);
+                        }
+                        igText("  msl_buffer_n: %d", sbuf->msl_buffer_n);
+                        igText("  wgsl_group1_binding_n: %d", sbuf->wgsl_group1_binding_n);
+                        igText("  glsl_binding_n: %d", sbuf->glsl_binding_n);
+                    }
+                    igTreePop();
+                }
+            }
+            if (num_valid_storage_images > 0) {
+                if (igTreeNode("Storage Images")) {
+                    for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+                        const sg_shader_storage_image* simg = &shd_ui->desc.storage_images[i];
+                        if (simg->stage == SG_SHADERSTAGE_NONE) {
+                            continue;
+                        }
+                        igText("- slot: %d", i);
+                        igText("  stage: %s", _sgimgui_shaderstage_string(simg->stage));
+                        igText("  image_type: %s", _sgimgui_imagetype_string(simg->image_type));
+                        igText("  access_format: %s", _sgimgui_pixelformat_string(simg->access_format));
+                        igText("  writeonly: %s", _sgimgui_bool_string(simg->writeonly));
+                        igText("  hlsl_register_u_n: %d", simg->hlsl_register_u_n);
+                        igText("  msl_texture_n: %d", simg->msl_texture_n);
+                        igText("  wgsl_group2_binding_n: %d", simg->wgsl_group2_binding_n);
+                        igText("  glsl_binding_n: %d", simg->glsl_binding_n);
                     }
                     igTreePop();
                 }
@@ -3844,6 +3865,14 @@ _SOKOL_PRIVATE void _sgimgui_draw_attachments_panel(sgimgui_t* ctx, sg_attachmen
                 igSeparator();
                 igText("Depth-Stencil Image:");
                 _sgimgui_draw_attachment(ctx, &atts_ui->desc.depth_stencil, &atts_ui->ds_image_scale);
+            }
+            for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+                if (atts_ui->desc.storages[i].image.id == SG_INVALID_ID) {
+                    break;
+                }
+                igSeparator();
+                igText("Storage Image #%d:", i);
+                _sgimgui_draw_attachment(ctx, &atts_ui->desc.storages[i], &atts_ui->storage_image_scale[i]);
             }
         } else {
             igText("Attachments 0x%08X not valid.", atts.id);
@@ -4184,7 +4213,11 @@ _SOKOL_PRIVATE void _sgimgui_draw_capture_panel(sgimgui_t* ctx) {
             break;
         case SGIMGUI_CMD_BEGIN_PASS:
             igText("Compute: %s", _sgimgui_bool_string(item->args.begin_pass.pass.compute));
-            if (!item->args.begin_pass.pass.compute) {
+            if (item->args.begin_pass.pass.compute) {
+                if (item->args.begin_pass.pass.attachments.id != SG_INVALID_ID) {
+                    _sgimgui_draw_attachments_panel(ctx, item->args.begin_pass.pass.attachments);
+                }
+            } else {
                 _sgimgui_draw_passaction_panel(ctx, item->args.begin_pass.pass.attachments, &item->args.begin_pass.pass.action);
                 igSeparator();
                 if (item->args.begin_pass.pass.attachments.id != SG_INVALID_ID) {
@@ -4281,6 +4314,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
     igText("    mrt_independent_write_mask: %s", _sgimgui_bool_string(f.mrt_independent_write_mask));
     igText("    compute: %s", _sgimgui_bool_string(f.compute));
     igText("    msaa_image_bindings: %s", _sgimgui_bool_string(f.msaa_image_bindings));
+    igText("    separate_buffer_types: %s", _sgimgui_bool_string(f.separate_buffer_types));
     sg_limits l = sg_query_limits();
     igText("\nLimits:\n");
     igText("    max_image_size_2d: %d", l.max_image_size_2d);
@@ -4296,14 +4330,17 @@ _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
         sg_pixel_format fmt = (sg_pixel_format)i;
         sg_pixelformat_info info = sg_query_pixelformat(fmt);
         if (info.sample) {
-            igText("  %s: %s%s%s%s%s%s",
+            igText("  %s: %s%s%s%s%s%s%s%s%s",
                 _sgimgui_pixelformat_string(fmt),
                 info.sample ? "SAMPLE ":"",
                 info.filter ? "FILTER ":"",
                 info.blend ? "BLEND ":"",
                 info.render ? "RENDER ":"",
                 info.msaa ? "MSAA ":"",
-                info.depth ? "DEPTH ":"");
+                info.depth ? "DEPTH ":"",
+                info.compressed ? "COMPRESSED ":"",
+                info.read ? "READ ":"",
+                info.write ? "WRITE ":"");
         }
     }
 }

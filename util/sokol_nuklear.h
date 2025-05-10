@@ -2547,7 +2547,10 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
     // vertex buffer
     _snuklear.vertex_buffer_size = (size_t)_snuklear.desc.max_vertices * sizeof(_snk_vertex_t);
     _snuklear.vbuf = sg_make_buffer(&(sg_buffer_desc){
-        .usage = SG_USAGE_STREAM,
+        .usage = {
+            .vertex_buffer = true,
+            .stream_update = true,
+        },
         .size = _snuklear.vertex_buffer_size,
         .label = "sokol-nuklear-vertices"
     });
@@ -2555,8 +2558,10 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
     // index buffer
     _snuklear.index_buffer_size = (size_t)_snuklear.desc.max_vertices * 3 * sizeof(uint16_t);
     _snuklear.ibuf = sg_make_buffer(&(sg_buffer_desc){
-        .type = SG_BUFFERTYPE_INDEXBUFFER,
-        .usage = SG_USAGE_STREAM,
+        .usage = {
+            .index_buffer = true,
+            .stream_update = true,
+        },
         .size = _snuklear.index_buffer_size,
         .label = "sokol-nuklear-indices"
     });
