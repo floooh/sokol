@@ -113,7 +113,7 @@
             });
 
     --- create resource objects (at least buffers, shaders and pipelines,
-        and optionally images, samplers and render-pass-attachments):
+        and optionally images, samplers and render/compute-pass-attachments):
 
             sg_buffer sg_make_buffer(const sg_buffer_desc*)
             sg_image sg_make_image(const sg_image_desc*)
@@ -147,17 +147,22 @@
 
             sg_begin_pass(&(sg_pass){ .compute = true });
 
+        If the compute pass writes into storage images, provide those as
+        'storage attachments' via an sg_attachments object:
+
+            sg_begin_pass(&(sg_pass){ .compute = true, .attachments = attattachments });
+
     --- set the pipeline state for the next draw call with:
 
             sg_apply_pipeline(sg_pipeline pip)
 
     --- fill an sg_bindings struct with the resource bindings for the next
         draw- or dispatch-call (0..N vertex buffers, 0 or 1 index buffer, 0..N images,
-        samplers and storage-buffers), and call:
+        samplers and storage-buffers), and call
 
             sg_apply_bindings(const sg_bindings* bindings)
 
-        to update the resource bindings. Note that in a compute pass, no vertex-
+        ...to update the resource bindings. Note that in a compute pass, no vertex-
         or index-buffer bindings are allowed and will be rejected by the validation
         layer.
 
@@ -21686,6 +21691,14 @@ SOKOL_API_IMPL sg_shader_desc sg_query_shader_desc(sg_shader shd_id) {
             const _sg_shader_storage_buffer_t* sbuf = &shd->cmn.storage_buffers[sbuf_idx];
             sbuf_desc->stage = sbuf->stage;
             sbuf_desc->readonly = sbuf->readonly;
+        }
+        for (size_t simg_idx = 0; simg_idx < SG_MAX_STORAGE_ATTACHMENTS; simg_idx++) {
+            sg_shader_storage_image* simg_desc = &desc.storage_images[simg_idx];
+            const _sg_shader_storage_image_t* simg = &shd->cmn.storage_images[simg_idx];
+            simg_desc->stage = simg->stage;
+            simg_desc->access_format = simg->access_format;
+            simg_desc->image_type = simg->image_type;
+            simg_desc->writeonly = simg->writeonly;
         }
         for (size_t img_idx = 0; img_idx < SG_MAX_IMAGE_BINDSLOTS; img_idx++) {
             sg_shader_image* img_desc = &desc.images[img_idx];
