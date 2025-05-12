@@ -57,6 +57,7 @@ c_callbacks = [
 # NOTE: syntax for function results: "func_name.RESULT"
 overrides = {
     'ref':                                  '_ref',
+    'immutable':                            '_immutable',
     'sgl_error':                            'sgl_get_error',   # 'error' is reserved in Dlang
     'sgl_deg':                              'sgl_as_degrees',
     'sgl_rad':                              'sgl_as_radians',

@@ -4251,8 +4251,8 @@ static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* i
     sg_buffer_desc vbuf_desc;
     _sdtx_clear(&vbuf_desc, sizeof(vbuf_desc));
     vbuf_desc.size = vbuf_size;
-    vbuf_desc.type = SG_BUFFERTYPE_VERTEXBUFFER;
-    vbuf_desc.usage = SG_USAGE_STREAM;
+    vbuf_desc.usage.vertex_buffer = true;
+    vbuf_desc.usage.stream_update = true;
     vbuf_desc.label = "sdtx-vbuf";
     ctx->vbuf = sg_make_buffer(&vbuf_desc);
     SOKOL_ASSERT(SG_INVALID_ID != ctx->vbuf.id);
