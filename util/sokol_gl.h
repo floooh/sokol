@@ -3331,6 +3331,9 @@ static void _sgl_init_context(sgl_context ctx_id, const sgl_context_desc_t* in_d
     sg_pipeline_desc def_pip_desc;
     _sgl_clear(&def_pip_desc, sizeof(def_pip_desc));
     def_pip_desc.depth.write_enabled = true;
+    def_pip_desc.colors[0].blend.enabled = true;
+    def_pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+    def_pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     ctx->def_pip = _sgl_make_pipeline(&def_pip_desc, &ctx->desc);
     if (!sg_add_commit_listener(_sgl_make_commit_listener(ctx))) {
         _SGL_ERROR(ADD_COMMIT_LISTENER_FAILED);
