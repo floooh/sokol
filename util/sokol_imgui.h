@@ -489,6 +489,8 @@ typedef struct simgui_font_tex_desc_t {
     sg_filter mag_filter;
 } simgui_font_tex_desc_t;
 
+static sg_sampler simgui_default_sampler { SG_INVALID_ID };
+
 SOKOL_IMGUI_API_DECL void simgui_setup(const simgui_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_new_frame(const simgui_frame_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_render(void);
@@ -2484,6 +2486,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     pip_desc.index_type = SG_INDEXTYPE_UINT16;
     pip_desc.sample_count = _simgui.desc.sample_count;
     pip_desc.depth.pixel_format = _simgui.desc.depth_format;
+    std::cout << "Pixel depth format: " << (uint32_t)pip_desc.depth.pixel_format << "\n";
     pip_desc.colors[0].pixel_format = _simgui.desc.color_format;
     pip_desc.colors[0].write_mask = _simgui.desc.write_alpha_channel ? SG_COLORMASK_RGBA : SG_COLORMASK_RGB;
     pip_desc.colors[0].blend.enabled = true;
@@ -2593,7 +2596,9 @@ SOKOL_API_IMPL void simgui_create_fonts_texture(const simgui_font_tex_desc_t* de
     font_img_desc.label = "sokol-imgui-font-image";
     _simgui.font_img = sg_make_image(&font_img_desc);
 
-    io->Fonts->TexID = simgui_imtextureid_with_sampler(_simgui.font_img, _simgui.font_smp);
+    simgui_default_sampler = _simgui.font_smp;
+    io->Fonts->TexID = (ImTextureID)simgui_imtextureid_with_sampler(_simgui.font_img, _simgui.font_smp);    
+    std::cout << "simgui_create_fonts_texture: Created TexID " << (uint64_t)io->Fonts->TexID << " sizeof(ImTextureID): " << sizeof(ImTextureID) << " sizeof(uint64_t): " << sizeof(uint64_t) << "\n";
 }
 
 SOKOL_API_IMPL void simgui_destroy_fonts_texture(void) {
@@ -2708,8 +2713,8 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
 }
 
 static sg_pipeline _simgui_bind_image_sampler(sg_bindings* bindings, ImTextureID imtex_id) {
-    bindings->images[0] = simgui_image_from_imtextureid(imtex_id);
-    bindings->samplers[0] = simgui_sampler_from_imtextureid(imtex_id);
+    bindings->images[0] = simgui_image_from_imtextureid((uint64_t)imtex_id);
+    bindings->samplers[0] = simgui_default_sampler;
     if (sg_query_pixelformat(sg_query_image_pixelformat(bindings->images[0])).filter) {
         return _simgui.def_pip;
     } else {
