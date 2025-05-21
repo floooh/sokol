@@ -1,5 +1,15 @@
 ## Updates
 
+### 21-May-2025
+
+sokol_app.h macos: Merged PR https://github.com/floooh/sokol/pull/1265 which fixes
+the problem that starting an app in fullscreen mode via `sapp_desc.fullscreen`
+didn't work when the app isn't compiled as a macOS app bundle (see the PR
+for details).
+
+Many thanks to @danielchasehooper for identifying the root cause of the issue
+and providing the PR!
+
 ### 07-May-2025
 
 A memory alignment fix for raw mouse input on Windows via `GetRawInputData()`.
