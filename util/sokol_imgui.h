@@ -2328,6 +2328,7 @@ static simgui_desc_t _simgui_desc_defaults(const simgui_desc_t* desc) {
     return res;
 }
 
+#if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
 static ImGuiPlatformIO* _simgui_get_platform_io(void) {
     #if defined(__cplusplus)
         return &ImGui::GetPlatformIO();
@@ -2341,6 +2342,7 @@ static ImGuiPlatformIO* _simgui_get_platform_io(void) {
         #endif
     #endif
 }
+#endif
 
 static ImGuiIO* _simgui_get_io(void) {
     #if defined(__cplusplus)
