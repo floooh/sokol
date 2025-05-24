@@ -5,8 +5,8 @@
 The sokol-gfx 'compute milestone 2' update, this fills some feature-gaps
 of the previous compute shader update:
 
-- Compute shaders can now read and write image data, with the image
-  objects provided as 'compute pass attachments'.
+- Compute shaders can now write image data (as read/write or write-only access),
+  with the image objects provided as 'compute pass attachments'.
 - Buffers are now 'multi-purpose', e.g. the same buffer can be bound
   as vertex-, index- or storage-buffer (this allows things like stashing
   vertex- and index-data into the same buffer, or populating a buffer
