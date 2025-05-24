@@ -3321,8 +3321,8 @@ static void _sgl_init_context(sgl_context ctx_id, const sgl_context_desc_t* in_d
     sg_buffer_desc vbuf_desc;
     _sgl_clear(&vbuf_desc, sizeof(vbuf_desc));
     vbuf_desc.size = (size_t)ctx->vertices.cap * sizeof(_sgl_vertex_t);
-    vbuf_desc.type = SG_BUFFERTYPE_VERTEXBUFFER;
-    vbuf_desc.usage = SG_USAGE_STREAM;
+    vbuf_desc.usage.vertex_buffer = true;
+    vbuf_desc.usage.stream_update = true;
     vbuf_desc.label = "sgl-vertex-buffer";
     ctx->vbuf = sg_make_buffer(&vbuf_desc);
     SOKOL_ASSERT(SG_INVALID_ID != ctx->vbuf.id);

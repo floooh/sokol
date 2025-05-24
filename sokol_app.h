@@ -6624,19 +6624,20 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     #if defined(SOKOL_DEBUG)
         create_flags |= D3D11_CREATE_DEVICE_DEBUG;
     #endif
-    D3D_FEATURE_LEVEL feature_level;
+    D3D_FEATURE_LEVEL requested_feature_levels[] = { D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0 };
+    D3D_FEATURE_LEVEL result_feature_level;
     HRESULT hr = D3D11CreateDeviceAndSwapChain(
         NULL,                           /* pAdapter (use default) */
         D3D_DRIVER_TYPE_HARDWARE,       /* DriverType */
         NULL,                           /* Software */
         create_flags,                   /* Flags */
-        NULL,                           /* pFeatureLevels */
-        0,                              /* FeatureLevels */
+        requested_feature_levels,       /* pFeatureLevels */
+        2,                              /* FeatureLevels */
         D3D11_SDK_VERSION,              /* SDKVersion */
         sc_desc,                        /* pSwapChainDesc */
         &_sapp.d3d11.swap_chain,        /* ppSwapChain */
         &_sapp.d3d11.device,            /* ppDevice */
-        &feature_level,                 /* pFeatureLevel */
+        &result_feature_level,          /* pFeatureLevel */
         &_sapp.d3d11.device_context);   /* ppImmediateContext */
     _SOKOL_UNUSED(hr);
     #if defined(SOKOL_DEBUG)
@@ -6657,13 +6658,13 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
             D3D_DRIVER_TYPE_HARDWARE,       /* DriverType */
             NULL,                           /* Software */
             create_flags,                   /* Flags */
-            NULL,                           /* pFeatureLevels */
-            0,                              /* FeatureLevels */
+            requested_feature_levels,       /* pFeatureLevels */
+            2,                              /* FeatureLevels */
             D3D11_SDK_VERSION,              /* SDKVersion */
             sc_desc,                        /* pSwapChainDesc */
             &_sapp.d3d11.swap_chain,        /* ppSwapChain */
             &_sapp.d3d11.device,            /* ppDevice */
-            &feature_level,                 /* pFeatureLevel */
+            &result_feature_level,          /* pFeatureLevel */
             &_sapp.d3d11.device_context);   /* ppImmediateContext */
     }
     #endif

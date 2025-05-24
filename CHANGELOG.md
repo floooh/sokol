@@ -1,5 +1,55 @@
 ## Updates
 
+### 24-May-2025
+
+The sokol-gfx 'compute milestone 2' update, this fills some feature-gaps
+of the previous compute shader update:
+
+- Compute shaders can now read and write image data, with the image
+  objects provided as 'compute pass attachments'.
+- Buffers are now 'multi-purpose', e.g. the same buffer can be bound
+  as vertex-, index- or storage-buffer (this allows things like stashing
+  vertex- and index-data into the same buffer, or populating a buffer
+  with a compute shader and then binding it as vertex- and/or index-buffer)
+  Note though that WebGL2 explicitly disallows using the same buffer
+  for index- and vertex-data.
+
+This is a slightly breaking update (you'll need to touch the `sg_make_buffer()`
+and some `sg_make_image()` calls.
+
+Also update to the latest [sokol-shdc](https://github.com/floooh/sokol-tools)
+version which allows storage image access in compute shaders and exports
+additional reflection information in `sg_shader_desc`.
+
+New samples (only available for WebGPU):
+
+- [combined vertex/index buffers](https://floooh.github.io/sokol-webgpu/vertexindexbuffer-sapp.html)
+- [simple compute shader image access](https://floooh.github.io/sokol-webgpu/write-storageimage-sapp.html)
+- [image blur sample ported from WebGPU](https://floooh.github.io/sokol-webgpu/imageblur-sapp.html)
+
+See this blog post for many more details and porting instructions:
+
+https://floooh.github.io/2025/05/19/sokol-gfx-compute-ms2.html
+
+The related PR: https://github.com/floooh/sokol/pull/1245
+
+The `compute-ms2` update will be followed by a `resource view` update
+which will make resource binding slightly more flexible (e.g. allow to
+bind storage buffers with offsets), and also change storage image bindings
+from compute pass attachments to regular bindings via `sg_apply_bindings()`.
+
+Related changes:
+
+- sokol_app.h: the D3D11/DXGI backend now creates a feature level D3D11.1 device
+  (with fallback to feature level D3D11.0).
+
+Known issues:
+
+- The new imageblur-sapp sample currently doesn't work on Android with GLES3.1
+  (it works on Linux with a GLES3.1 context though). Since debugging on Android
+  is such a royal PITA (even when it works, which currently it doesn't on my
+  Pixel4a) I haven't investigated yet.
+
 ### 22-May-2025
 
 sokol_imgui.h: another minor cimgui vs Dear Bindings compatibility fix which

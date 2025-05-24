@@ -2534,15 +2534,15 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     // NOTE: since we're in C++ mode here we can't use C99 designated init
     sg_buffer_desc vb_desc;
     _simgui_clear(&vb_desc, sizeof(vb_desc));
-    vb_desc.usage = SG_USAGE_STREAM;
+    vb_desc.usage.stream_update = true;
     vb_desc.size = _simgui.vertices.size;
     vb_desc.label = "sokol-imgui-vertices";
     _simgui.vbuf = sg_make_buffer(&vb_desc);
 
     sg_buffer_desc ib_desc;
     _simgui_clear(&ib_desc, sizeof(ib_desc));
-    ib_desc.type = SG_BUFFERTYPE_INDEXBUFFER;
-    ib_desc.usage = SG_USAGE_STREAM;
+    ib_desc.usage.index_buffer = true;
+    ib_desc.usage.stream_update = true;
     ib_desc.size = _simgui.indices.size;
     ib_desc.label = "sokol-imgui-indices";
     _simgui.ibuf = sg_make_buffer(&ib_desc);
