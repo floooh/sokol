@@ -1,5 +1,24 @@
 ## Updates
 
+### 22-May-2025
+
+sokol_imgui.h: another minor cimgui vs Dear Bindings compatibility fix which
+transparently handles `igGetIO()` (Dear Bindings with `ig` prefix) vs
+`igGetIO_Nil()` (cimgui). Not sure how much longer it makes sense to support
+both C binding flavours. In general it is recommended to use sokol_imgui.h with
+the C bindings which are generated via https://github.com/floooh/dcimgui (or of
+course just use the Dear ImGui C++ API - sokol_imgui.h supports both).
+
+### 21-May-2025
+
+sokol_app.h macos: Merged PR https://github.com/floooh/sokol/pull/1265 which fixes
+the problem that starting an app in fullscreen mode via `sapp_desc.fullscreen`
+didn't work when the app isn't compiled as a macOS app bundle (see the PR
+for details).
+
+Many thanks to @danielchasehooper for identifying the root cause of the issue
+and providing the PR!
+
 ### 07-May-2025
 
 A memory alignment fix for raw mouse input on Windows via `GetRawInputData()`.
