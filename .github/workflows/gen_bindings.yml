@@ -293,6 +293,8 @@ jobs:
         with:
           repository: kassane/sokol-d
       - uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.14.0
       - uses: dlang-community/setup-dlang@v1
         with:
           compiler: ldc-master
