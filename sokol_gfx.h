@@ -9289,6 +9289,7 @@ _SOKOL_PRIVATE void _sg_gl_teximage(const _sg_image_t* img, GLenum tgt, int mip_
         }
     #else
         const GLenum ifmt = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
+        const bool msaa = img->cmn.sample_count > 1;
         if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
             if (compressed) {
                 SOKOL_ASSERT(!msaa);
@@ -9298,7 +9299,7 @@ _SOKOL_PRIVATE void _sg_gl_teximage(const _sg_image_t* img, GLenum tgt, int mip_
                 const GLenum fmt = _sg_gl_teximage_format(img->cmn.pixel_format);
                 #if defined(SOKOL_GLCORE)
                     if (msaa) {
-                        glTexImage2DMultisample(tgt, img->cmn.sample_count, ifmt, w, h, GL_TRUE);
+                        glTexImage2DMultisample(tgt, img->cmn.sample_count, (GLint)ifmt, w, h, GL_TRUE);
                     } else {
                         glTexImage2D(tgt, mip_index, (GLint)ifmt, w, h, 0, fmt, type, data_ptr);
                     }
@@ -9317,7 +9318,7 @@ _SOKOL_PRIVATE void _sg_gl_teximage(const _sg_image_t* img, GLenum tgt, int mip_
                 #if defined(SOKOL_GLCORE)
                     if (msaa) {
                         // NOTE: MSAA works only for array textures, not 3D textures
-                        glTexImage3DMultisample(tgt, img->cmn.sample_count, ifmt, w, h, depth, GL_TRUE);
+                        glTexImage3DMultisample(tgt, img->cmn.sample_count, (GLint)ifmt, w, h, depth, GL_TRUE);
                     } else {
                         glTexImage3D(tgt, mip_index, (GLint)ifmt, w, h, depth, 0, fmt, type, data_ptr);
                     }
@@ -9376,7 +9377,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                         gl_img_target = _sg_gl_cubeface_target(face_index);
                     }
                     const GLvoid* data_ptr = desc->data.subimage[face_index][mip_index].ptr;
-                    const GLsizei data_size = desc->data.subimage[face_index][mip_index].size;
+                    const GLsizei data_size = (GLsizei)desc->data.subimage[face_index][mip_index].size;
                     const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
                     const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
                     const int mip_depth = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
