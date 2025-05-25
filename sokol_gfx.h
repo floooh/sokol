@@ -9258,15 +9258,37 @@ _SOKOL_PRIVATE void _sg_gl_texstorage(const _sg_image_t* img) {
     #else
         glTexParameteri(tgt, GL_TEXTURE_MAX_LEVEL, num_mips - 1);
     #endif
+    _SG_GL_CHECK_ERROR();
 }
 
 _SOKOL_PRIVATE void _sg_gl_teximage(const _sg_image_t* img, GLenum tgt, int mip_index, int w, int h, int depth, const GLvoid* data_ptr, GLsizei data_size) {
     const bool compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
-    const bool msaa = img->cmn.sample_count > 1;
-    const GLenum ifmt = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
     #if defined(_SOKOL_GL_HAS_TEXSTORAGE)
-    #error "FIXME"
+        if (data_ptr == 0) {
+            return;
+        }
+        SOKOL_ASSERT(img->cmn.sample_count == 1);
+        if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
+            if (compressed) {
+                const GLenum ifmt = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
+                glCompressedTexSubImage2D(tgt, mip_index, 0, 0, w, h, ifmt, data_size, data_ptr);
+            } else {
+                const GLenum type = _sg_gl_teximage_type(img->cmn.pixel_format);
+                const GLenum fmt = _sg_gl_teximage_format(img->cmn.pixel_format);
+                glTexSubImage2D(tgt, mip_index, 0, 0, w, h, fmt, type, data_ptr);
+            }
+        } else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
+            if (compressed) {
+                const GLenum ifmt = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
+                glCompressedTexSubImage3D(tgt, mip_index, 0, 0, 0, w, h, depth, ifmt, data_size, data_ptr);
+            } else {
+                const GLenum type = _sg_gl_teximage_type(img->cmn.pixel_format);
+                const GLenum fmt = _sg_gl_teximage_format(img->cmn.pixel_format);
+                glTexSubImage3D(tgt, mip_index, 0, 0, 0, w, h, depth, fmt, type, data_ptr);
+            }
+        }
     #else
+        const GLenum ifmt = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
         if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
             if (compressed) {
                 SOKOL_ASSERT(!msaa);
@@ -9306,6 +9328,7 @@ _SOKOL_PRIVATE void _sg_gl_teximage(const _sg_image_t* img, GLenum tgt, int mip_
             }
         }
     #endif
+    _SG_GL_CHECK_ERROR();
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_image_desc* desc) {
