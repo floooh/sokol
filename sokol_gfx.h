@@ -9238,7 +9238,7 @@ _SOKOL_PRIVATE void _sg_gl_texstorage(const _sg_image_t* img) {
                     glTexStorage2D(tgt, num_mips, ifmt, w, h);
                 }
             #else
-                SOKOL_ASSERT(!msaa);
+                SOKOL_ASSERT(!msaa); _SOKOL_UNUSED(msaa);
                 glTexStorage2D(tgt, num_mips, ifmt, w, h);
             #endif
         } else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
@@ -9251,7 +9251,7 @@ _SOKOL_PRIVATE void _sg_gl_texstorage(const _sg_image_t* img) {
                     glTexStorage3D(tgt, num_mips, ifmt, w, h, depth);
                 }
             #else
-                SOKOL_ASSERT(!msaa);
+                SOKOL_ASSERT(!msaa); _SOKOL_UNUSED(msaa);
                 glTexStorage3D(tgt, num_mips, ifmt, w, h, depth);
             #endif
         }
@@ -9292,7 +9292,7 @@ _SOKOL_PRIVATE void _sg_gl_teximage(const _sg_image_t* img, GLenum tgt, int mip_
         const bool msaa = img->cmn.sample_count > 1;
         if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
             if (compressed) {
-                SOKOL_ASSERT(!msaa);
+                SOKOL_ASSERT(!msaa); _SOKOL_UNUSED(msaa);
                 glCompressedTexImage2D(tgt, mip_index, ifmt, w, h, 0, data_size, data_ptr);
             } else {
                 const GLenum type = _sg_gl_teximage_type(img->cmn.pixel_format);
@@ -9304,13 +9304,13 @@ _SOKOL_PRIVATE void _sg_gl_teximage(const _sg_image_t* img, GLenum tgt, int mip_
                         glTexImage2D(tgt, mip_index, (GLint)ifmt, w, h, 0, fmt, type, data_ptr);
                     }
                 #else
-                    SOKOL_ASSERT(!msaa);
+                    SOKOL_ASSERT(!msaa); _SOKOL_UNUSED(msaa);
                     glTexImage2D(tgt, mip_index, (GLint)ifmt, w, h, 0, fmt, type, data_ptr);
                 #endif
             }
         } else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
             if (compressed) {
-                SOKOL_ASSERT(!msaa);
+                SOKOL_ASSERT(!msaa); _SOKOL_UNUSED(msaa);
                 glCompressedTexImage3D(tgt, mip_index, ifmt, w, h, depth, 0, data_size, data_ptr);
             } else {
                 const GLenum type = _sg_gl_teximage_type(img->cmn.pixel_format);
@@ -9323,7 +9323,7 @@ _SOKOL_PRIVATE void _sg_gl_teximage(const _sg_image_t* img, GLenum tgt, int mip_
                         glTexImage3D(tgt, mip_index, (GLint)ifmt, w, h, depth, 0, fmt, type, data_ptr);
                     }
                 #else
-                    SOKOL_ASSERT(!msaa);
+                    SOKOL_ASSERT(!msaa); _SOKOL_UNUSED(msaa);
                     glTexImage3D(tgt, mip_index, (GLint)ifmt, w, h, depth, 0, fmt, type, data_ptr);
                 #endif
             }
