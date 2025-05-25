@@ -1,5 +1,17 @@
 ## Updates
 
+### 25-May-2025
+
+The texture creation code in the sokol-gfx GL backend has been cleaned up
+to generally use glTexStorage + glTexSubImage (except on macOS where the
+the glTexImage functions are still used). The new code cleanly separates
+the two ways to create GL textures, while the old code was a bit of a messy
+mix of both. This is purely a code cleanup update, no behaviour changes
+should be observable.
+
+Ticket: https://github.com/floooh/sokol/issues/1263
+PR: https://github.com/floooh/sokol/pull/1270
+
 ### 24-May-2025
 
 The sokol-gfx 'compute milestone 2' update, this fills some feature-gaps
