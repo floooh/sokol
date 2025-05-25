@@ -5148,7 +5148,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     // include platform specific GL headers (or on Win32: use an embedded GL loader)
     #if !defined(SOKOL_EXTERNAL_GL_LOADER)
         #if defined(_WIN32)
-            #if defined(SOKOL_GLCORE) && !defined(SOKOL_EXTERNAL_GL_LOADER)
+            #if defined(SOKOL_GLCORE)
+                #define _SOKOL_USE_WIN32_GL_LOADER (1)
                 #ifndef WIN32_LEAN_AND_MEAN
                 #define WIN32_LEAN_AND_MEAN
                 #endif
@@ -5156,9 +5157,9 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
                 #define NOMINMAX
                 #endif
                 #include <windows.h>
-                #define _SOKOL_USE_WIN32_GL_LOADER (1)
                 #pragma comment (lib, "kernel32")   // GetProcAddress()
                 #define _SOKOL_GL_HAS_COMPUTE (1)
+                #define _SOKOL_GL_HAS_TEXSTORAGE (1)
             #endif
         #elif defined(__APPLE__)
             #include <TargetConditionals.h>
@@ -5170,16 +5171,18 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #else
                 #include <OpenGLES/ES3/gl.h>
                 #include <OpenGLES/ES3/glext.h>
+                #define _SOKOL_GL_HAS_TEXSTORAGE (1)
             #endif
         #elif defined(__EMSCRIPTEN__)
             #if defined(SOKOL_GLES3)
                 #include <GLES3/gl3.h>
+                #define _SOKOL_GL_HAS_TEXSTORAGE (1)
             #endif
         #elif defined(__ANDROID__)
-            #define _SOKOL_GL_HAS_COMPUTE (1)
             #include <GLES3/gl31.h>
-        #elif defined(__linux__) || defined(__unix__)
             #define _SOKOL_GL_HAS_COMPUTE (1)
+            #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+        #elif defined(__linux__) || defined(__unix__)
             #if defined(SOKOL_GLCORE)
                 #define GL_GLEXT_PROTOTYPES
                 #include <GL/gl.h>
@@ -5187,6 +5190,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
                 #include <GLES3/gl31.h>
                 #include <GLES3/gl3ext.h>
             #endif
+            #define _SOKOL_GL_HAS_COMPUTE (1)
+            #define _SOKOL_GL_HAS_TEXSTORAGE (1)
         #endif
     #endif
 
@@ -7819,7 +7824,13 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     _SG_XMACRO(glTexImage3DMultisample,           void, (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations)) \
     _SG_XMACRO(glDispatchCompute,                 void, (GLuint num_groups_x, GLuint num_groups_y, GLuint num_groups_z)) \
     _SG_XMACRO(glMemoryBarrier,                   void, (GLbitfield barriers)) \
-    _SG_XMACRO(glBindImageTexture,                void, (GLuint unit, GLuint texture, GLint level, GLboolean layered, GLint layer, GLenum access, GLenum format))
+    _SG_XMACRO(glBindImageTexture,                void, (GLuint unit, GLuint texture, GLint level, GLboolean layered, GLint layer, GLenum access, GLenum format)) \
+    _SG_XMACRO(glTexStorage2DMultisample,         void, (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations)) \
+    _SG_XMACRO(glTexStorage2D,                    void, (GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height)) \
+    _SG_XMACRO(glTexStorage3DMultisample,         void, (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations)) \
+    _SG_XMACRO(glTexStorage3D,                    void, (GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth)) \
+    _SG_XMACRO(glCompressedTexSubImage2D,         void, (GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const void *data)) \
+    _SG_XMACRO(glCompressedTexSubImage3D,         void, (GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const void *data))
 
 // generate GL function pointer typedefs
 #define _SG_XMACRO(name, ret, args) typedef ret (GL_APIENTRY* PFN_ ## name) args;
@@ -9217,10 +9228,119 @@ _SOKOL_PRIVATE bool _sg_gl_supported_texture_format(sg_pixel_format fmt) {
     return _sg.formats[fmt_index].sample;
 }
 
+_SOKOL_PRIVATE void _sg_gl_texstorage(const _sg_image_t* img) {
+    const GLenum tgt = img->gl.target;
+    const int num_mips = img->cmn.num_mipmaps;
+    #if defined(_SOKOL_GL_HAS_TEXSTORAGE)
+        const GLenum ifmt = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
+        const bool msaa = img->cmn.sample_count > 1;
+        const int w = img->cmn.width;
+        const int h = img->cmn.height;
+        if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
+            #if defined(SOKOL_GLCORE)
+                if (msaa) {
+                    glTexStorage2DMultisample(tgt, img->cmn.sample_count, ifmt, w, h, GL_TRUE);
+                } else {
+                    glTexStorage2D(tgt, num_mips, ifmt, w, h);
+                }
+            #else
+                SOKOL_ASSERT(!msaa); _SOKOL_UNUSED(msaa);
+                glTexStorage2D(tgt, num_mips, ifmt, w, h);
+            #endif
+        } else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
+            const int depth = img->cmn.num_slices;
+            #if defined(SOKOL_GLCORE)
+                if (msaa) {
+                    // NOTE: MSAA works only for array textures, not 3D textures
+                    glTexStorage3DMultisample(tgt, img->cmn.sample_count, ifmt, w, h, depth, GL_TRUE);
+                } else {
+                    glTexStorage3D(tgt, num_mips, ifmt, w, h, depth);
+                }
+            #else
+                SOKOL_ASSERT(!msaa); _SOKOL_UNUSED(msaa);
+                glTexStorage3D(tgt, num_mips, ifmt, w, h, depth);
+            #endif
+        }
+    #else
+        glTexParameteri(tgt, GL_TEXTURE_MAX_LEVEL, num_mips - 1);
+    #endif
+    _SG_GL_CHECK_ERROR();
+}
+
+_SOKOL_PRIVATE void _sg_gl_teximage(const _sg_image_t* img, GLenum tgt, int mip_index, int w, int h, int depth, const GLvoid* data_ptr, GLsizei data_size) {
+    const bool compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
+    #if defined(_SOKOL_GL_HAS_TEXSTORAGE)
+        if (data_ptr == 0) {
+            return;
+        }
+        SOKOL_ASSERT(img->cmn.sample_count == 1);
+        if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
+            if (compressed) {
+                const GLenum ifmt = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
+                glCompressedTexSubImage2D(tgt, mip_index, 0, 0, w, h, ifmt, data_size, data_ptr);
+            } else {
+                const GLenum type = _sg_gl_teximage_type(img->cmn.pixel_format);
+                const GLenum fmt = _sg_gl_teximage_format(img->cmn.pixel_format);
+                glTexSubImage2D(tgt, mip_index, 0, 0, w, h, fmt, type, data_ptr);
+            }
+        } else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
+            if (compressed) {
+                const GLenum ifmt = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
+                glCompressedTexSubImage3D(tgt, mip_index, 0, 0, 0, w, h, depth, ifmt, data_size, data_ptr);
+            } else {
+                const GLenum type = _sg_gl_teximage_type(img->cmn.pixel_format);
+                const GLenum fmt = _sg_gl_teximage_format(img->cmn.pixel_format);
+                glTexSubImage3D(tgt, mip_index, 0, 0, 0, w, h, depth, fmt, type, data_ptr);
+            }
+        }
+    #else
+        const GLenum ifmt = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
+        const bool msaa = img->cmn.sample_count > 1;
+        if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
+            if (compressed) {
+                SOKOL_ASSERT(!msaa); _SOKOL_UNUSED(msaa);
+                glCompressedTexImage2D(tgt, mip_index, ifmt, w, h, 0, data_size, data_ptr);
+            } else {
+                const GLenum type = _sg_gl_teximage_type(img->cmn.pixel_format);
+                const GLenum fmt = _sg_gl_teximage_format(img->cmn.pixel_format);
+                #if defined(SOKOL_GLCORE)
+                    if (msaa) {
+                        glTexImage2DMultisample(tgt, img->cmn.sample_count, (GLint)ifmt, w, h, GL_TRUE);
+                    } else {
+                        glTexImage2D(tgt, mip_index, (GLint)ifmt, w, h, 0, fmt, type, data_ptr);
+                    }
+                #else
+                    SOKOL_ASSERT(!msaa); _SOKOL_UNUSED(msaa);
+                    glTexImage2D(tgt, mip_index, (GLint)ifmt, w, h, 0, fmt, type, data_ptr);
+                #endif
+            }
+        } else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
+            if (compressed) {
+                SOKOL_ASSERT(!msaa); _SOKOL_UNUSED(msaa);
+                glCompressedTexImage3D(tgt, mip_index, ifmt, w, h, depth, 0, data_size, data_ptr);
+            } else {
+                const GLenum type = _sg_gl_teximage_type(img->cmn.pixel_format);
+                const GLenum fmt = _sg_gl_teximage_format(img->cmn.pixel_format);
+                #if defined(SOKOL_GLCORE)
+                    if (msaa) {
+                        // NOTE: MSAA works only for array textures, not 3D textures
+                        glTexImage3DMultisample(tgt, img->cmn.sample_count, (GLint)ifmt, w, h, depth, GL_TRUE);
+                    } else {
+                        glTexImage3D(tgt, mip_index, (GLint)ifmt, w, h, depth, 0, fmt, type, data_ptr);
+                    }
+                #else
+                    SOKOL_ASSERT(!msaa); _SOKOL_UNUSED(msaa);
+                    glTexImage3D(tgt, mip_index, (GLint)ifmt, w, h, depth, 0, fmt, type, data_ptr);
+                #endif
+            }
+        }
+    #endif
+    _SG_GL_CHECK_ERROR();
+}
+
 _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     _SG_GL_CHECK_ERROR();
-    const bool msaa = img->cmn.sample_count > 1;
     img->gl.injected = (0 != desc->gl_textures[0]);
 
     // check if texture format is support
@@ -9228,10 +9348,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
         _SG_ERROR(GL_TEXTURE_FORMAT_NOT_SUPPORTED);
         return SG_RESOURCESTATE_FAILED;
     }
-    const GLenum gl_internal_format = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
 
     // GLES3/WebGL2/macOS doesn't have support for multisampled textures, so create a render buffer object instead
+    const bool msaa = img->cmn.sample_count > 1;
     if (!_sg.features.msaa_image_bindings && img->cmn.usage.render_attachment && msaa) {
+        const GLenum gl_internal_format = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
         glGenRenderbuffers(1, &img->gl.msaa_render_buffer);
         glBindRenderbuffer(GL_RENDERBUFFER, img->gl.msaa_render_buffer);
         glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->cmn.sample_count, gl_internal_format, img->cmn.width, img->cmn.height);
@@ -9248,93 +9369,25 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
     } else {
         // create our own GL texture(s)
         img->gl.target = _sg_gl_texture_target(img->cmn.type, img->cmn.sample_count);
-        const GLenum gl_format = _sg_gl_teximage_format(img->cmn.pixel_format);
-        const bool is_compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
         for (int slot = 0; slot < img->cmn.num_slots; slot++) {
             glGenTextures(1, &img->gl.tex[slot]);
             SOKOL_ASSERT(img->gl.tex[slot]);
             _sg_gl_cache_store_texture_sampler_binding(0);
             _sg_gl_cache_bind_texture_sampler(0, img->gl.target, img->gl.tex[slot], 0);
-            glTexParameteri(img->gl.target, GL_TEXTURE_MAX_LEVEL, img->cmn.num_mipmaps - 1);
-
-            // NOTE: initially a workaround for https://issues.chromium.org/issues/355605685
-            // Now also needed for storage images on GLES 3.1.
-            // See for the 'non-hacky' solution: https://github.com/floooh/sokol/issues/1263
-            bool tex_storage_allocated = false;
-            #if defined(SOKOL_GLES3)
-                if (desc->data.subimage[0][0].ptr == 0) {
-                    SOKOL_ASSERT(!msaa);
-                    tex_storage_allocated = true;
-                    if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
-                        glTexStorage2D(img->gl.target, img->cmn.num_mipmaps, gl_internal_format, img->cmn.width, img->cmn.height);
-                    } else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
-                        glTexStorage3D(img->gl.target, img->cmn.num_mipmaps, gl_internal_format, img->cmn.width, img->cmn.height, img->cmn.num_slices);
+            _sg_gl_texstorage(img);
+            const int num_faces = img->cmn.type == SG_IMAGETYPE_CUBE ? 6 : 1;
+            for (int face_index = 0; face_index < num_faces; face_index++) {
+                for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
+                    GLenum gl_img_target = img->gl.target;
+                    if (SG_IMAGETYPE_CUBE == img->cmn.type) {
+                        gl_img_target = _sg_gl_cubeface_target(face_index);
                     }
-                }
-            #endif
-            if (!tex_storage_allocated) {
-                const int num_faces = img->cmn.type == SG_IMAGETYPE_CUBE ? 6 : 1;
-                int data_index = 0;
-                for (int face_index = 0; face_index < num_faces; face_index++) {
-                    for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++, data_index++) {
-                        GLenum gl_img_target = img->gl.target;
-                        if (SG_IMAGETYPE_CUBE == img->cmn.type) {
-                            gl_img_target = _sg_gl_cubeface_target(face_index);
-                        }
-                        const GLvoid* data_ptr = desc->data.subimage[face_index][mip_index].ptr;
-                        const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
-                        const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
-                        if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
-                            if (is_compressed) {
-                                SOKOL_ASSERT(!msaa);
-                                const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
-                                glCompressedTexImage2D(gl_img_target, mip_index, gl_internal_format,
-                                    mip_width, mip_height, 0, data_size, data_ptr);
-                            } else {
-                                const GLenum gl_type = _sg_gl_teximage_type(img->cmn.pixel_format);
-                                #if defined(SOKOL_GLCORE) && !defined(__APPLE__)
-                                    if (msaa) {
-                                        glTexImage2DMultisample(gl_img_target, img->cmn.sample_count, gl_internal_format,
-                                            mip_width, mip_height, GL_TRUE);
-                                    } else {
-                                        glTexImage2D(gl_img_target, mip_index, (GLint)gl_internal_format,
-                                            mip_width, mip_height, 0, gl_format, gl_type, data_ptr);
-                                    }
-                                #else
-                                    SOKOL_ASSERT(!msaa);
-                                    glTexImage2D(gl_img_target, mip_index, (GLint)gl_internal_format,
-                                        mip_width, mip_height, 0, gl_format, gl_type, data_ptr);
-                                #endif
-                            }
-                        } else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
-                            int mip_depth = img->cmn.num_slices;
-                            if (SG_IMAGETYPE_3D == img->cmn.type) {
-                                mip_depth = _sg_miplevel_dim(mip_depth, mip_index);
-                            }
-                            if (is_compressed) {
-                                SOKOL_ASSERT(!msaa);
-                                const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
-                                glCompressedTexImage3D(gl_img_target, mip_index, gl_internal_format,
-                                    mip_width, mip_height, mip_depth, 0, data_size, data_ptr);
-                            } else {
-                                const GLenum gl_type = _sg_gl_teximage_type(img->cmn.pixel_format);
-                                #if defined(SOKOL_GLCORE) && !defined(__APPLE__)
-                                    if (msaa) {
-                                        // NOTE: only for array textures, not actual 3D textures!
-                                        glTexImage3DMultisample(gl_img_target, img->cmn.sample_count, gl_internal_format,
-                                            mip_width, mip_height, mip_depth, GL_TRUE);
-                                    } else {
-                                        glTexImage3D(gl_img_target, mip_index, (GLint)gl_internal_format,
-                                            mip_width, mip_height, mip_depth, 0, gl_format, gl_type, data_ptr);
-                                    }
-                                #else
-                                    SOKOL_ASSERT(!msaa);
-                                    glTexImage3D(gl_img_target, mip_index, (GLint)gl_internal_format,
-                                        mip_width, mip_height, mip_depth, 0, gl_format, gl_type, data_ptr);
-                                #endif
-                            }
-                        }
-                    }
+                    const GLvoid* data_ptr = desc->data.subimage[face_index][mip_index].ptr;
+                    const GLsizei data_size = (GLsizei)desc->data.subimage[face_index][mip_index].size;
+                    const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
+                    const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
+                    const int mip_depth = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
+                    _sg_gl_teximage(img, gl_img_target, mip_index, mip_width, mip_height, mip_depth, data_ptr, data_size);
                 }
             }
             _sg_gl_cache_restore_texture_sampler_binding(0);
