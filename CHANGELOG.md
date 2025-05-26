@@ -1,5 +1,26 @@
 ## Updates
 
+### 26-May-2025
+
+Two changes in sokol_app.h's X11 backend:
+
+- sokol_app.h will now generally let the window manager pick the window
+  position, with a hint to center the window (via `XSizeHints.win_gravity`).
+  This will hopefully fix various known window positioning problems in multi-monitor
+  configurations.
+- The window size is now multiplied by the `dpi_scale` factor (which is computed
+  as the queried display dpi divided by 96.0). This fixes the problem of tiny
+  windows on high-dpi monitors. Please be aware though that GLX does not allow to
+  define a framebuffer resolution that's different from the window client area
+  size, so the swapchain framebuffer size will also be affected by the dpi-scale
+  factor (I'm starting to consider getting rid of the `sapp_desc.high_dpi` flag
+  and the associated special behaviour since it was designed for a time when
+  high-dpi monitors were still kind of an exception - it might be better to
+  replace this with a `sapp_desc.swapchain_scale` hint which would be ignored on
+  backends which don't allow to define an explicit swapchain framebuffer size).
+
+PR: https://github.com/floooh/sokol/pull/1271
+
 ### 25-May-2025
 
 The texture creation code in the sokol-gfx GL backend has been cleaned up
