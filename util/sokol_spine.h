@@ -373,7 +373,7 @@
 
     - It's important to note that no actual sokol-gfx rendering happens in
       sspine_draw_instance_in_layer(), instead only vertices, indices and
-      draw commands are recorded into internal memory buffes.
+      draw commands are recorded into internal memory buffers.
 
     - The only sokol-spine function which *must* (and should) be called inside
       a sokol-gfx rendering pass is sspine_draw_layer().
@@ -479,7 +479,7 @@
 
     If possible, batching will be performed by merging a new draw command with
     the previously recorded draw command. For two draw commands to be merged,
-    the following conditions must be tru:
+    the following conditions must be true:
 
         - rendering needs to go into the same layer
         - the same atlas texture must be used
