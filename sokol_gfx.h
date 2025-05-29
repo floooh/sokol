@@ -18517,7 +18517,7 @@ _SOKOL_PRIVATE _sg_attachments_t* _sg_lookup_attachments(uint32_t atts_id) {
     return 0;
 }
 
-_SOKOL_PRIVATE void _sg_discard_all_resources(_sg_pools_t* p) {
+_SOKOL_PRIVATE void _sg_discard_all_resources(void) {
     /*  this is a bit dumb since it loops over all pool slots to
         find the occupied slots, on the other hand it is only ever
         executed at shutdown
@@ -18525,40 +18525,40 @@ _SOKOL_PRIVATE void _sg_discard_all_resources(_sg_pools_t* p) {
               ...because the free queues will not be reset
               and the resource slots not be cleared!
     */
-    for (int i = 1; i < p->buffer_pool.size; i++) {
-        sg_resource_state state = p->buffers[i].slot.state;
+    for (int i = 1; i < _sg.pools.buffer_pool.size; i++) {
+        sg_resource_state state = _sg.pools.buffers[i].slot.state;
         if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
-            _sg_discard_buffer(&p->buffers[i]);
+            _sg_discard_buffer(&_sg.pools.buffers[i]);
         }
     }
-    for (int i = 1; i < p->image_pool.size; i++) {
-        sg_resource_state state = p->images[i].slot.state;
+    for (int i = 1; i < _sg.pools.image_pool.size; i++) {
+        sg_resource_state state = _sg.pools.images[i].slot.state;
         if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
-            _sg_discard_image(&p->images[i]);
+            _sg_discard_image(&_sg.pools.images[i]);
         }
     }
-    for (int i = 1; i < p->sampler_pool.size; i++) {
-        sg_resource_state state = p->samplers[i].slot.state;
+    for (int i = 1; i < _sg.pools.sampler_pool.size; i++) {
+        sg_resource_state state = _sg.pools.samplers[i].slot.state;
         if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
-            _sg_discard_sampler(&p->samplers[i]);
+            _sg_discard_sampler(&_sg.pools.samplers[i]);
         }
     }
-    for (int i = 1; i < p->shader_pool.size; i++) {
-        sg_resource_state state = p->shaders[i].slot.state;
+    for (int i = 1; i < _sg.pools.shader_pool.size; i++) {
+        sg_resource_state state = _sg.pools.shaders[i].slot.state;
         if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
-            _sg_discard_shader(&p->shaders[i]);
+            _sg_discard_shader(&_sg.pools.shaders[i]);
         }
     }
-    for (int i = 1; i < p->pipeline_pool.size; i++) {
-        sg_resource_state state = p->pipelines[i].slot.state;
+    for (int i = 1; i < _sg.pools.pipeline_pool.size; i++) {
+        sg_resource_state state = _sg.pools.pipelines[i].slot.state;
         if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
-            _sg_discard_pipeline(&p->pipelines[i]);
+            _sg_discard_pipeline(&_sg.pools.pipelines[i]);
         }
     }
-    for (int i = 1; i < p->attachments_pool.size; i++) {
-        sg_resource_state state = p->attachments[i].slot.state;
+    for (int i = 1; i < _sg.pools.attachments_pool.size; i++) {
+        sg_resource_state state = _sg.pools.attachments[i].slot.state;
         if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
-            _sg_discard_attachments(&p->attachments[i]);
+            _sg_discard_attachments(&_sg.pools.attachments[i]);
         }
     }
 }
@@ -20695,7 +20695,7 @@ SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
 }
 
 SOKOL_API_IMPL void sg_shutdown(void) {
-    _sg_discard_all_resources(&_sg.pools);
+    _sg_discard_all_resources();
     _sg_discard_backend();
     _sg_discard_commit_listeners();
     _sg_discard_compute();
