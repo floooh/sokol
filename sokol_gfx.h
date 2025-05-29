@@ -5609,6 +5609,7 @@ _SOKOL_PRIVATE int _sg_slot_index(uint32_t id);
 struct _sg_pools_s;
 struct _sg_buffer_s;
 struct _sg_image_s;
+struct _sg_sampler_s;
 struct _sg_shader_s;
 struct _sg_pipeline_s;
 struct _sg_attachments_s;
@@ -5632,6 +5633,15 @@ _SOKOL_PRIVATE _sg_image_ref_t _sg_image_ref(const struct _sg_image_s* img);
 _SOKOL_PRIVATE _sg_image_ref_t _sg_image_ref_null(void);
 _SOKOL_PRIVATE bool _sg_image_ref_eql(const _sg_image_ref_t* ref, const struct _sg_image_s* img);
 _SOKOL_PRIVATE struct _sg_image_s* _sg_image_ref_ptr(const _sg_image_ref_t* ref);
+
+typedef struct _sg_sampler_ref_t {
+    uint32_t id;
+    uint32_t uninit_count;
+} _sg_sampler_ref_t;
+_SOKOL_PRIVATE _sg_sampler_ref_t _sg_sampler_ref(const struct _sg_sampler_s* smp);
+_SOKOL_PRIVATE _sg_sampler_ref_t _sg_sampler_ref_null(void);
+_SOKOL_PRIVATE bool _sg_sampler_ref_eql(const _sg_sampler_ref_t* ref, const struct _sg_sampler_s* smp);
+_SOKOL_PRIVATE struct _sg_sampler_s* _sg_sampler_ref_ptr(const _sg_sampler_ref_t* ref);
 
 typedef struct _sg_shader_ref_s {
     uint32_t id;
@@ -6478,18 +6488,19 @@ typedef struct {
     _sg_buffer_ref_t cur_ibuf;
     int cur_ibuf_offset;
     int cur_vs_buffer_offsets[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
-    uint32_t cur_vs_buffer_ids[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
-    uint32_t cur_fs_buffer_ids[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
-    uint32_t cur_cs_buffer_ids[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
-    uint32_t cur_vs_image_ids[_SG_MTL_MAX_STAGE_TEXTURE_BINDINGS];
-    uint32_t cur_fs_image_ids[_SG_MTL_MAX_STAGE_TEXTURE_BINDINGS];
-    uint32_t cur_vs_sampler_ids[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
-    uint32_t cur_fs_sampler_ids[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
-    uint32_t cur_cs_sampler_ids[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
+    _sg_buffer_ref_t cur_vsbufs[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
+    _sg_buffer_ref_t cur_fsbufs[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
+    _sg_buffer_ref_t cur_csbufs[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
+    _sg_image_ref_t cur_vsimgs[_SG_MTL_MAX_STAGE_TEXTURE_BINDINGS];
+    _sg_image_ref_t cur_fsimgs[_SG_MTL_MAX_STAGE_TEXTURE_BINDINGS];
+    _sg_sampler_ref_t cur_vssmps[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
+    _sg_sampler_ref_t cur_fssmps[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
+    _sg_sampler_ref_t cur_cssmps[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
     // NOTE: special case: uint64_t for storage images, because we need
     // to differentiate between storage pass attachments and regular
     // textures bound to compute stages (but both binding types live
     // in the texture bind space in Metal)
+    // This special case will be removed in the view update!
     uint64_t cur_cs_image_ids[_SG_MTL_MAX_STAGE_TEXTURE_BINDINGS];
 } _sg_mtl_state_cache_t;
 
@@ -15087,13 +15098,12 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
             const NSUInteger mtl_slot = _sg_mtl_vertexbuffer_bindslot(i);
             SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_BUFFER_BINDINGS);
             const int vb_offset = bnd->vb_offsets[i];
-            if ((_sg.mtl.state_cache.cur_vs_buffer_ids[mtl_slot] != vb->slot.id) ||
-                (_sg.mtl.state_cache.cur_vs_buffer_offsets[mtl_slot] != vb_offset))
-            {
+            const bool ref_eql = _sg_buffer_ref_eql(&_sg.mtl.state_cache.cur_vsbufs[mtl_slot], vb);
+            if (!ref_eql || (_sg.mtl.state_cache.cur_vs_buffer_offsets[mtl_slot] != vb_offset)) {
                 _sg.mtl.state_cache.cur_vs_buffer_offsets[mtl_slot] = vb_offset;
-                if (_sg.mtl.state_cache.cur_vs_buffer_ids[mtl_slot] != vb->slot.id) {
+                if (!ref_eql) {
                     // vertex buffer has changed
-                    _sg.mtl.state_cache.cur_vs_buffer_ids[mtl_slot] = vb->slot.id;
+                    _sg.mtl.state_cache.cur_vsbufs[mtl_slot] = _sg_buffer_ref(vb);
                     SOKOL_ASSERT(vb->mtl.buf[vb->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
                     [_sg.mtl.render_cmd_encoder setVertexBuffer:_sg_mtl_id(vb->mtl.buf[vb->cmn.active_slot])
                         offset:(NSUInteger)vb_offset
@@ -15120,15 +15130,15 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS);
         if (stage == SG_SHADERSTAGE_VERTEX) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (_sg.mtl.state_cache.cur_vs_image_ids[mtl_slot] != img->slot.id) {
-                _sg.mtl.state_cache.cur_vs_image_ids[mtl_slot] = img->slot.id;
+            if (!_sg_image_ref_eql(&_sg.mtl.state_cache.cur_vsimgs[mtl_slot], img)) {
+                _sg.mtl.state_cache.cur_vsimgs[mtl_slot] = _sg_image_ref(img);
                 [_sg.mtl.render_cmd_encoder setVertexTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_vertex_texture, 1);
             }
         } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (_sg.mtl.state_cache.cur_fs_image_ids[mtl_slot] != img->slot.id) {
-                _sg.mtl.state_cache.cur_fs_image_ids[mtl_slot] = img->slot.id;
+            if (!_sg_image_ref_eql(&_sg.mtl.state_cache.cur_fsimgs[mtl_slot], img)) {
+                _sg.mtl.state_cache.cur_fsimgs[mtl_slot] = _sg_image_ref(img);
                 [_sg.mtl.render_cmd_encoder setFragmentTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_fragment_texture, 1);
             }
@@ -15155,22 +15165,22 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_SAMPLER_BINDINGS);
         if (stage == SG_SHADERSTAGE_VERTEX) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (_sg.mtl.state_cache.cur_vs_sampler_ids[mtl_slot] != smp->slot.id) {
-                _sg.mtl.state_cache.cur_vs_sampler_ids[mtl_slot] = smp->slot.id;
+            if (!_sg_sampler_ref_eql(&_sg.mtl.state_cache.cur_vssmps[mtl_slot], smp)) {
+                _sg.mtl.state_cache.cur_vssmps[mtl_slot] = _sg_sampler_ref(smp);
                 [_sg.mtl.render_cmd_encoder setVertexSamplerState:_sg_mtl_id(smp->mtl.sampler_state) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_vertex_sampler_state, 1);
             }
         } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (_sg.mtl.state_cache.cur_fs_sampler_ids[mtl_slot] != smp->slot.id) {
-                _sg.mtl.state_cache.cur_fs_sampler_ids[mtl_slot] = smp->slot.id;
+            if (!_sg_sampler_ref_eql(&_sg.mtl.state_cache.cur_fssmps[mtl_slot], smp)) {
+                _sg.mtl.state_cache.cur_fssmps[mtl_slot] = _sg_sampler_ref(smp);
                 [_sg.mtl.render_cmd_encoder setFragmentSamplerState:_sg_mtl_id(smp->mtl.sampler_state) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_fragment_sampler_state, 1);
             }
         } else if (stage == SG_SHADERSTAGE_COMPUTE) {
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
-            if (_sg.mtl.state_cache.cur_cs_sampler_ids[mtl_slot] != smp->slot.id) {
-                _sg.mtl.state_cache.cur_cs_sampler_ids[mtl_slot] = smp->slot.id;
+            if (!_sg_sampler_ref_eql(&_sg.mtl.state_cache.cur_cssmps[mtl_slot], smp)) {
+                _sg.mtl.state_cache.cur_cssmps[mtl_slot] = _sg_sampler_ref(smp);
                 [_sg.mtl.compute_cmd_encoder setSamplerState:_sg_mtl_id(smp->mtl.sampler_state) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_compute_sampler_state, 1);
             }
@@ -15190,22 +15200,22 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS);
         if (stage == SG_SHADERSTAGE_VERTEX) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (_sg.mtl.state_cache.cur_vs_buffer_ids[mtl_slot] != sbuf->slot.id) {
-                _sg.mtl.state_cache.cur_vs_buffer_ids[mtl_slot] = sbuf->slot.id;
+            if (!_sg_buffer_ref_eql(&_sg.mtl.state_cache.cur_vsbufs[mtl_slot], sbuf)) {
+                _sg.mtl.state_cache.cur_vsbufs[mtl_slot] = _sg_buffer_ref(sbuf);
                 [_sg.mtl.render_cmd_encoder setVertexBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:0 atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_vertex_buffer, 1);
             }
         } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (_sg.mtl.state_cache.cur_fs_buffer_ids[mtl_slot] != sbuf->slot.id) {
-                _sg.mtl.state_cache.cur_fs_buffer_ids[mtl_slot] = sbuf->slot.id;
+            if (!_sg_buffer_ref_eql(&_sg.mtl.state_cache.cur_fsbufs[mtl_slot], sbuf)) {
+                _sg.mtl.state_cache.cur_fsbufs[mtl_slot] = _sg_buffer_ref(sbuf);
                 [_sg.mtl.render_cmd_encoder setFragmentBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:0 atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_fragment_buffer, 1);
             }
         } else if (stage == SG_SHADERSTAGE_COMPUTE) {
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
-            if (_sg.mtl.state_cache.cur_cs_buffer_ids[mtl_slot] != sbuf->slot.id) {
-                _sg.mtl.state_cache.cur_cs_buffer_ids[mtl_slot] = sbuf->slot.id;
+            if (!_sg_buffer_ref_eql(&_sg.mtl.state_cache.cur_csbufs[mtl_slot], sbuf)) {
+                _sg.mtl.state_cache.cur_csbufs[mtl_slot] = _sg_buffer_ref(sbuf);
                 [_sg.mtl.compute_cmd_encoder setBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:0 atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_compute_buffer, 1);
             }
@@ -18572,6 +18582,14 @@ _SOKOL_PRIVATE _sg_image_ref_t _sg_image_ref(const _sg_image_t* img) {
     return ref;
 }
 
+_SOKOL_PRIVATE _sg_sampler_ref_t _sg_sampler_ref(const _sg_sampler_t* smp) {
+    SOKOL_ASSERT(smp && (smp->slot.id != SG_INVALID_ID));
+    _sg_sampler_ref_t ref; _sg_clear(&ref, sizeof(ref));
+    ref.id = smp->slot.id;
+    ref.uninit_count = smp->slot.uninit_count;
+    return ref;
+}
+
 _SOKOL_PRIVATE _sg_shader_ref_t _sg_shader_ref(const _sg_shader_t* shd) {
     SOKOL_ASSERT(shd && (shd->slot.id != SG_INVALID_ID));
     _sg_shader_ref_t ref; _sg_clear(&ref, sizeof(ref));
@@ -18598,6 +18616,11 @@ _SOKOL_PRIVATE _sg_image_ref_t _sg_image_ref_null(void) {
     return ref;
 }
 
+_SOKOL_PRIVATE _sg_sampler_ref_t _sg_sampler_ref_null(void) {
+    _sg_sampler_ref_t ref; _sg_clear(&ref, sizeof(ref));
+    return ref;
+}
+
 _SOKOL_PRIVATE _sg_shader_ref_t _sg_shader_ref_null(void) {
     _sg_shader_ref_t ref; _sg_clear(&ref, sizeof(ref));
     return ref;
@@ -18616,6 +18639,11 @@ _SOKOL_PRIVATE bool _sg_buffer_ref_eql(const _sg_buffer_ref_t* ref, const _sg_bu
 _SOKOL_PRIVATE bool _sg_image_ref_eql(const _sg_image_ref_t* ref, const _sg_image_t* img) {
     SOKOL_ASSERT(ref && img);
     return (ref->id == img->slot.id) && (ref->uninit_count == img->slot.uninit_count);
+}
+
+_SOKOL_PRIVATE bool _sg_sampler_ref_eql(const _sg_sampler_ref_t* ref, const _sg_sampler_t* smp) {
+    SOKOL_ASSERT(ref && smp);
+    return (ref->id == smp->slot.id) && (ref->uninit_count == smp->slot.uninit_count);
 }
 
 _SOKOL_PRIVATE bool _sg_shader_ref_eql(const _sg_shader_ref_t* ref, const _sg_shader_t* shd) {
@@ -18637,6 +18665,12 @@ _SOKOL_PRIVATE _sg_buffer_t* _sg_buffer_ref_ptr(const _sg_buffer_ref_t* ref) {
 _SOKOL_PRIVATE _sg_image_t* _sg_image_ref_ptr(const _sg_image_ref_t* ref) {
     SOKOL_ASSERT(ref);
     _sg_image_t* ptr = _sg_lookup_image(&_sg.pools, ref->id);
+    return (ptr && ptr->slot.uninit_count == ref->uninit_count) ? ptr : 0;
+}
+
+_SOKOL_PRIVATE _sg_sampler_t* _sg_sampler_ref_ptr(const _sg_sampler_ref_t* ref) {
+    SOKOL_ASSERT(ref);
+    _sg_sampler_t* ptr = _sg_lookup_sampler(&_sg.pools, ref->id);
     return (ptr && ptr->slot.uninit_count == ref->uninit_count) ? ptr : 0;
 }
 
