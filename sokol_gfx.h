@@ -5620,7 +5620,7 @@ typedef struct _sg_buffer_ref_s {
     uint32_t uninit_count;
 } _sg_buffer_ref_t;
 _SOKOL_PRIVATE _sg_buffer_ref_t _sg_buffer_ref(const struct _sg_buffer_s* buf);
-_SOKOL_PRIVATE void _sg_buffer_ref_clr(_sg_buffer_ref_t* ref);
+_SOKOL_PRIVATE _sg_buffer_ref_t _sg_buffer_ref_null(void);
 _SOKOL_PRIVATE bool _sg_buffer_ref_eql(const _sg_buffer_ref_t* ref, const struct _sg_buffer_s* buf);
 _SOKOL_PRIVATE struct _sg_buffer_s* _sg_buffer_ref_ptr(const _sg_buffer_ref_t* ref);
 
@@ -5629,7 +5629,7 @@ typedef struct _sg_image_ref_s {
     uint32_t uninit_count;
 } _sg_image_ref_t;
 _SOKOL_PRIVATE _sg_image_ref_t _sg_image_ref(const struct _sg_image_s* img);
-_SOKOL_PRIVATE void _sg_image_ref_clr(_sg_image_ref_t* ref);
+_SOKOL_PRIVATE _sg_image_ref_t _sg_image_ref_null(void);
 _SOKOL_PRIVATE bool _sg_image_ref_eql(const _sg_image_ref_t* ref, const struct _sg_image_s* img);
 _SOKOL_PRIVATE struct _sg_image_s* _sg_image_ref_ptr(const _sg_image_ref_t* ref);
 
@@ -5638,7 +5638,7 @@ typedef struct _sg_shader_ref_s {
     uint32_t uninit_count;
 } _sg_shader_ref_t;
 _SOKOL_PRIVATE _sg_shader_ref_t _sg_shader_ref(const struct _sg_shader_s* shd);
-_SOKOL_PRIVATE void _sg_shader_ref_clr(_sg_shader_ref_t* ref);
+_SOKOL_PRIVATE _sg_shader_ref_t _sg_shader_ref_null(void);
 _SOKOL_PRIVATE bool _sg_shader_ref_eql(const _sg_shader_ref_t* ref, const struct _sg_shader_s* shd);
 _SOKOL_PRIVATE struct _sg_shader_s* _sg_shader_ref_ptr(const _sg_shader_ref_t* ref);
 
@@ -5647,7 +5647,7 @@ typedef struct _sg_pipeline_ref_s {
     uint32_t uninit_count;
 } _sg_pipeline_ref_t;
 _SOKOL_PRIVATE _sg_pipeline_ref_t _sg_pipeline_ref(const struct _sg_pipeline_s* pip);
-_SOKOL_PRIVATE void _sg_pipeline_ref_clr(_sg_pipeline_ref_t* ref);
+_SOKOL_PRIVATE _sg_pipeline_ref_t _sg_pipeline_ref_null(void);
 _SOKOL_PRIVATE bool _sg_pipeline_ref_eql(const _sg_pipeline_ref_t* ref, const struct _sg_pipeline_s* pip);
 _SOKOL_PRIVATE struct _sg_pipeline_s* _sg_pipeline_ref_ptr(const _sg_pipeline_ref_t* ref);
 
@@ -6474,11 +6474,9 @@ typedef _sg_mtl_attachments_t _sg_attachments_t;
 #define _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS (SG_MAX_IMAGE_BINDSLOTS + SG_MAX_STORAGE_ATTACHMENTS)
 #define _SG_MTL_MAX_STAGE_SAMPLER_BINDINGS (SG_MAX_SAMPLER_BINDSLOTS)
 typedef struct {
-    const _sg_pipeline_t* cur_pipeline;
-    sg_pipeline cur_pipeline_id;
-    const _sg_buffer_t* cur_indexbuffer;
-    sg_buffer cur_indexbuffer_id;
-    int cur_indexbuffer_offset;
+    _sg_pipeline_ref_t cur_pip;
+    _sg_buffer_ref_t cur_ibuf;
+    int cur_ibuf_offset;
     int cur_vs_buffer_offsets[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
     uint32_t cur_vs_buffer_ids[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
     uint32_t cur_fs_buffer_ids[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
@@ -15010,9 +15008,8 @@ _SOKOL_PRIVATE void _sg_mtl_apply_scissor_rect(int x, int y, int w, int h, bool 
 _SOKOL_PRIVATE void _sg_mtl_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     SOKOL_ASSERT(pip->shader && (pip->cmn.shader_id.id == pip->shader->slot.id));
-    if (_sg.mtl.state_cache.cur_pipeline_id.id != pip->slot.id) {
-        _sg.mtl.state_cache.cur_pipeline = pip;
-        _sg.mtl.state_cache.cur_pipeline_id.id = pip->slot.id;
+    if (!_sg_pipeline_ref_eql(&_sg.mtl.state_cache.cur_pip, pip)) {
+        _sg.mtl.state_cache.cur_pip = _sg_pipeline_ref(pip);
         if (pip->cmn.is_compute) {
             SOKOL_ASSERT(_sg.cur_pass.is_compute);
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
@@ -15073,15 +15070,14 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
     if (!_sg.cur_pass.is_compute) {
         SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
         // store index buffer binding, this will be needed later in sg_draw()
-        _sg.mtl.state_cache.cur_indexbuffer = bnd->ib;
-        _sg.mtl.state_cache.cur_indexbuffer_offset = bnd->ib_offset;
         if (bnd->ib) {
             SOKOL_ASSERT(bnd->pip->cmn.index_type != SG_INDEXTYPE_NONE);
-            _sg.mtl.state_cache.cur_indexbuffer_id.id = bnd->ib->slot.id;
+            _sg.mtl.state_cache.cur_ibuf = _sg_buffer_ref(bnd->ib);
         } else {
             SOKOL_ASSERT(bnd->pip->cmn.index_type == SG_INDEXTYPE_NONE);
-            _sg.mtl.state_cache.cur_indexbuffer_id.id = SG_INVALID_ID;
+            _sg.mtl.state_cache.cur_ibuf = _sg_buffer_ref_null();
         }
+        _sg.mtl.state_cache.cur_ibuf_offset = bnd->ib_offset;
         // apply vertex buffers
         for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
             const _sg_buffer_t* vb = bnd->vbs[i];
@@ -15222,9 +15218,8 @@ _SOKOL_PRIVATE void _sg_mtl_apply_uniforms(int ub_slot, const sg_range* data) {
     SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
     SOKOL_ASSERT(((size_t)_sg.mtl.cur_ub_offset + data->size) <= (size_t)_sg.mtl.ub_size);
     SOKOL_ASSERT((_sg.mtl.cur_ub_offset & (_SG_MTL_UB_ALIGN-1)) == 0);
-    const _sg_pipeline_t* pip = _sg.mtl.state_cache.cur_pipeline;
+    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.mtl.state_cache.cur_pip);
     SOKOL_ASSERT(pip && pip->shader);
-    SOKOL_ASSERT(pip->slot.id == _sg.mtl.state_cache.cur_pipeline_id.id);
     const _sg_shader_t* shd = pip->shader;
     SOKOL_ASSERT(shd->slot.id == pip->cmn.shader_id.id);
     SOKOL_ASSERT(data->size == shd->cmn.uniform_blocks[ub_slot].size);
@@ -15255,22 +15250,22 @@ _SOKOL_PRIVATE void _sg_mtl_apply_uniforms(int ub_slot, const sg_range* data) {
 
 _SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_instances) {
     SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-    SOKOL_ASSERT(_sg.mtl.state_cache.cur_pipeline && (_sg.mtl.state_cache.cur_pipeline->slot.id == _sg.mtl.state_cache.cur_pipeline_id.id));
-    if (SG_INDEXTYPE_NONE != _sg.mtl.state_cache.cur_pipeline->cmn.index_type) {
+    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.mtl.state_cache.cur_pip);
+    SOKOL_ASSERT(pip);
+    if (SG_INDEXTYPE_NONE != pip->cmn.index_type) {
         // indexed rendering
-        SOKOL_ASSERT(_sg.mtl.state_cache.cur_indexbuffer && (_sg.mtl.state_cache.cur_indexbuffer->slot.id == _sg.mtl.state_cache.cur_indexbuffer_id.id));
-        const _sg_buffer_t* ib = _sg.mtl.state_cache.cur_indexbuffer;
-        SOKOL_ASSERT(ib->mtl.buf[ib->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
-        const NSUInteger index_buffer_offset = (NSUInteger) (_sg.mtl.state_cache.cur_indexbuffer_offset + base_element * _sg.mtl.state_cache.cur_pipeline->mtl.index_size);
-        [_sg.mtl.render_cmd_encoder drawIndexedPrimitives:_sg.mtl.state_cache.cur_pipeline->mtl.prim_type
+        const _sg_buffer_t* ib = _sg_buffer_ref_ptr(&_sg.mtl.state_cache.cur_ibuf);
+        SOKOL_ASSERT(ib && (ib->mtl.buf[ib->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX));
+        const NSUInteger index_buffer_offset = (NSUInteger) (_sg.mtl.state_cache.cur_ibuf_offset + base_element * pip->mtl.index_size);
+        [_sg.mtl.render_cmd_encoder drawIndexedPrimitives:pip->mtl.prim_type
             indexCount:(NSUInteger)num_elements
-            indexType:_sg.mtl.state_cache.cur_pipeline->mtl.index_type
+            indexType:pip->mtl.index_type
             indexBuffer:_sg_mtl_id(ib->mtl.buf[ib->cmn.active_slot])
             indexBufferOffset:index_buffer_offset
             instanceCount:(NSUInteger)num_instances];
     } else {
         // non-indexed rendering
-        [_sg.mtl.render_cmd_encoder drawPrimitives:_sg.mtl.state_cache.cur_pipeline->mtl.prim_type
+        [_sg.mtl.render_cmd_encoder drawPrimitives:pip->mtl.prim_type
             vertexStart:(NSUInteger)base_element
             vertexCount:(NSUInteger)num_elements
             instanceCount:(NSUInteger)num_instances];
@@ -15279,13 +15274,13 @@ _SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_ins
 
 _SOKOL_PRIVATE void _sg_mtl_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
-    SOKOL_ASSERT(_sg.mtl.state_cache.cur_pipeline && (_sg.mtl.state_cache.cur_pipeline->slot.id == _sg.mtl.state_cache.cur_pipeline_id.id));
-    const _sg_pipeline_t* cur_pip = _sg.mtl.state_cache.cur_pipeline;
+    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.mtl.state_cache.cur_pip);
+    SOKOL_ASSERT(pip);
     const MTLSize thread_groups = MTLSizeMake(
         (NSUInteger)num_groups_x,
         (NSUInteger)num_groups_y,
         (NSUInteger)num_groups_z);
-    const MTLSize threads_per_threadgroup = cur_pip->mtl.threads_per_threadgroup;
+    const MTLSize threads_per_threadgroup = pip->mtl.threads_per_threadgroup;
     [_sg.mtl.compute_cmd_encoder dispatchThreadgroups:thread_groups threadsPerThreadgroup:threads_per_threadgroup];
 }
 
@@ -18593,42 +18588,42 @@ _SOKOL_PRIVATE _sg_pipeline_ref_t _sg_pipeline_ref(const _sg_pipeline_t* pip) {
     return ref;
 }
 
-_SOKOL_PRIVATE void _sg_buffer_ref_clr(_sg_buffer_ref_t* ref) {
-    SOKOL_ASSERT(ref);
-    _sg_clear(ref, sizeof(_sg_buffer_ref_t));
+_SOKOL_PRIVATE _sg_buffer_ref_t _sg_buffer_ref_null(void) {
+    _sg_buffer_ref_t ref; _sg_clear(&ref, sizeof(ref));
+    return ref;
 }
 
-_SOKOL_PRIVATE void _sg_image_ref_clr(_sg_image_ref_t* ref) {
-    SOKOL_ASSERT(ref);
-    _sg_clear(ref, sizeof(_sg_image_ref_t));
+_SOKOL_PRIVATE _sg_image_ref_t _sg_image_ref_null(void) {
+    _sg_image_ref_t ref; _sg_clear(&ref, sizeof(ref));
+    return ref;
 }
 
-_SOKOL_PRIVATE void _sg_shader_ref_clr(_sg_shader_ref_t* ref) {
-    SOKOL_ASSERT(ref);
-    _sg_clear(ref, sizeof(_sg_shader_ref_t));
+_SOKOL_PRIVATE _sg_shader_ref_t _sg_shader_ref_null(void) {
+    _sg_shader_ref_t ref; _sg_clear(&ref, sizeof(ref));
+    return ref;
 }
 
-_SOKOL_PRIVATE void _sg_pipeline_ref_clr(_sg_pipeline_ref_t* ref) {
-    SOKOL_ASSERT(ref);
-    _sg_clear(ref, sizeof(_sg_pipeline_ref_t));
+_SOKOL_PRIVATE _sg_pipeline_ref_t _sg_pipeline_ref_null(void) {
+    _sg_pipeline_ref_t ref; _sg_clear(&ref, sizeof(ref));
+    return ref;
 }
 
-_SOKOL_PRIVATE bool _sg_buffer_ref_cmp(const _sg_buffer_ref_t* ref, const _sg_buffer_t* buf) {
+_SOKOL_PRIVATE bool _sg_buffer_ref_eql(const _sg_buffer_ref_t* ref, const _sg_buffer_t* buf) {
     SOKOL_ASSERT(ref && buf);
     return (ref->id == buf->slot.id) && (ref->uninit_count == buf->slot.uninit_count);
 }
 
-_SOKOL_PRIVATE bool _sg_image_ref_cmp(const _sg_image_ref_t* ref, const _sg_image_t* img) {
+_SOKOL_PRIVATE bool _sg_image_ref_eql(const _sg_image_ref_t* ref, const _sg_image_t* img) {
     SOKOL_ASSERT(ref && img);
     return (ref->id == img->slot.id) && (ref->uninit_count == img->slot.uninit_count);
 }
 
-_SOKOL_PRIVATE bool _sg_shader_ref_cmp(const _sg_shader_ref_t* ref, const _sg_shader_t* shd) {
+_SOKOL_PRIVATE bool _sg_shader_ref_eql(const _sg_shader_ref_t* ref, const _sg_shader_t* shd) {
     SOKOL_ASSERT(ref && shd);
     return (ref->id == shd->slot.id) && (ref->uninit_count == shd->slot.uninit_count);
 }
 
-_SOKOL_PRIVATE bool _sg_pipeline_ref_cmp(const _sg_pipeline_ref_t* ref, const _sg_pipeline_t* pip) {
+_SOKOL_PRIVATE bool _sg_pipeline_ref_eql(const _sg_pipeline_ref_t* ref, const _sg_pipeline_t* pip) {
     SOKOL_ASSERT(ref && pip);
     return (ref->id == pip->slot.id) && (ref->uninit_count == pip->slot.uninit_count);
 }
