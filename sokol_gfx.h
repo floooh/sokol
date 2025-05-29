@@ -5620,32 +5620,36 @@ typedef struct _sg_buffer_ref_s {
     uint32_t uninit_count;
 } _sg_buffer_ref_t;
 _SOKOL_PRIVATE _sg_buffer_ref_t _sg_buffer_ref(const struct _sg_buffer_s* buf);
-_SOKOL_PRIVATE void _sg_buffer_ref_clear(_sg_buffer_ref_t* ref);
-_SOKOL_PRIVATE struct _sg_buffer_s* _sg_buffer_ref_lookup(const _sg_buffer_ref_t* ref);
+_SOKOL_PRIVATE void _sg_buffer_ref_clr(_sg_buffer_ref_t* ref);
+_SOKOL_PRIVATE bool _sg_buffer_ref_eql(const _sg_buffer_ref_t* ref, const struct _sg_buffer_s* buf);
+_SOKOL_PRIVATE struct _sg_buffer_s* _sg_buffer_ref_ptr(const _sg_buffer_ref_t* ref);
 
 typedef struct _sg_image_ref_s {
     uint32_t id;
     uint32_t uninit_count;
 } _sg_image_ref_t;
 _SOKOL_PRIVATE _sg_image_ref_t _sg_image_ref(const struct _sg_image_s* img);
-_SOKOL_PRIVATE void _sg_image_ref_clear(_sg_image_ref_t* ref);
-_SOKOL_PRIVATE struct _sg_image_s* _sg_image_ref_lookup(const _sg_image_ref_t* ref);
+_SOKOL_PRIVATE void _sg_image_ref_clr(_sg_image_ref_t* ref);
+_SOKOL_PRIVATE bool _sg_image_ref_eql(const _sg_image_ref_t* ref, const struct _sg_image_s* img);
+_SOKOL_PRIVATE struct _sg_image_s* _sg_image_ref_ptr(const _sg_image_ref_t* ref);
 
 typedef struct _sg_shader_ref_s {
     uint32_t id;
     uint32_t uninit_count;
 } _sg_shader_ref_t;
 _SOKOL_PRIVATE _sg_shader_ref_t _sg_shader_ref(const struct _sg_shader_s* shd);
-_SOKOL_PRIVATE void _sg_shader_ref_clear(_sg_shader_ref_t* ref);
-_SOKOL_PRIVATE struct _sg_shader_s* _sg_shader_ref_lookup(const _sg_shader_ref_t* ref);
+_SOKOL_PRIVATE void _sg_shader_ref_clr(_sg_shader_ref_t* ref);
+_SOKOL_PRIVATE bool _sg_shader_ref_eql(const _sg_shader_ref_t* ref, const struct _sg_shader_s* shd);
+_SOKOL_PRIVATE struct _sg_shader_s* _sg_shader_ref_ptr(const _sg_shader_ref_t* ref);
 
 typedef struct _sg_pipeline_ref_s {
     uint32_t id;
     uint32_t uninit_count;
 } _sg_pipeline_ref_t;
 _SOKOL_PRIVATE _sg_pipeline_ref_t _sg_pipeline_ref(const struct _sg_pipeline_s* pip);
-_SOKOL_PRIVATE void _sg_pipeline_ref_clear(_sg_pipeline_ref_t* ref);
-_SOKOL_PRIVATE struct _sg_pipeline_s* _sg_pipeline_ref_lookup(const _sg_pipeline_ref_t* ref);
+_SOKOL_PRIVATE void _sg_pipeline_ref_clr(_sg_pipeline_ref_t* ref);
+_SOKOL_PRIVATE bool _sg_pipeline_ref_eql(const _sg_pipeline_ref_t* ref, const struct _sg_pipeline_s* pip);
+_SOKOL_PRIVATE struct _sg_pipeline_s* _sg_pipeline_ref_ptr(const _sg_pipeline_ref_t* ref);
 
 // resource tracking (for keeping track of gpu-written storage resources
 typedef struct {
@@ -18589,45 +18593,65 @@ _SOKOL_PRIVATE _sg_pipeline_ref_t _sg_pipeline_ref(const _sg_pipeline_t* pip) {
     return ref;
 }
 
-_SOKOL_PRIVATE void _sg_buffer_ref_clear(_sg_buffer_ref_t* ref) {
+_SOKOL_PRIVATE void _sg_buffer_ref_clr(_sg_buffer_ref_t* ref) {
     SOKOL_ASSERT(ref);
     _sg_clear(ref, sizeof(_sg_buffer_ref_t));
 }
 
-_SOKOL_PRIVATE void _sg_image_ref_clear(_sg_image_ref_t* ref) {
+_SOKOL_PRIVATE void _sg_image_ref_clr(_sg_image_ref_t* ref) {
     SOKOL_ASSERT(ref);
     _sg_clear(ref, sizeof(_sg_image_ref_t));
 }
 
-_SOKOL_PRIVATE void _sg_shader_ref_clear(_sg_shader_ref_t* ref) {
+_SOKOL_PRIVATE void _sg_shader_ref_clr(_sg_shader_ref_t* ref) {
     SOKOL_ASSERT(ref);
     _sg_clear(ref, sizeof(_sg_shader_ref_t));
 }
 
-_SOKOL_PRIVATE void _sg_pipeline_ref_clear(_sg_pipeline_ref_t* ref) {
+_SOKOL_PRIVATE void _sg_pipeline_ref_clr(_sg_pipeline_ref_t* ref) {
     SOKOL_ASSERT(ref);
     _sg_clear(ref, sizeof(_sg_pipeline_ref_t));
 }
 
-_SOKOL_PRIVATE _sg_buffer_t* _sg_buffer_ref_lookup(const _sg_buffer_ref_t* ref) {
+_SOKOL_PRIVATE bool _sg_buffer_ref_cmp(const _sg_buffer_ref_t* ref, const _sg_buffer_t* buf) {
+    SOKOL_ASSERT(ref && buf);
+    return (ref->id == buf->slot.id) && (ref->uninit_count == buf->slot.uninit_count);
+}
+
+_SOKOL_PRIVATE bool _sg_image_ref_cmp(const _sg_image_ref_t* ref, const _sg_image_t* img) {
+    SOKOL_ASSERT(ref && img);
+    return (ref->id == img->slot.id) && (ref->uninit_count == img->slot.uninit_count);
+}
+
+_SOKOL_PRIVATE bool _sg_shader_ref_cmp(const _sg_shader_ref_t* ref, const _sg_shader_t* shd) {
+    SOKOL_ASSERT(ref && shd);
+    return (ref->id == shd->slot.id) && (ref->uninit_count == shd->slot.uninit_count);
+}
+
+_SOKOL_PRIVATE bool _sg_pipeline_ref_cmp(const _sg_pipeline_ref_t* ref, const _sg_pipeline_t* pip) {
+    SOKOL_ASSERT(ref && pip);
+    return (ref->id == pip->slot.id) && (ref->uninit_count == pip->slot.uninit_count);
+}
+
+_SOKOL_PRIVATE _sg_buffer_t* _sg_buffer_ref_ptr(const _sg_buffer_ref_t* ref) {
     SOKOL_ASSERT(ref);
     _sg_buffer_t* ptr = _sg_lookup_buffer(&_sg.pools, ref->id);
     return (ptr && ptr->slot.uninit_count == ref->uninit_count) ? ptr : 0;
 }
 
-_SOKOL_PRIVATE _sg_image_t* _sg_image_ref_lookup(const _sg_image_ref_t* ref) {
+_SOKOL_PRIVATE _sg_image_t* _sg_image_ref_ptr(const _sg_image_ref_t* ref) {
     SOKOL_ASSERT(ref);
     _sg_image_t* ptr = _sg_lookup_image(&_sg.pools, ref->id);
     return (ptr && ptr->slot.uninit_count == ref->uninit_count) ? ptr : 0;
 }
 
-_SOKOL_PRIVATE _sg_shader_t* _sg_shader_ref_lookup(const _sg_shader_ref_t* ref) {
+_SOKOL_PRIVATE _sg_shader_t* _sg_shader_ref_ptr(const _sg_shader_ref_t* ref) {
     SOKOL_ASSERT(ref);
     _sg_shader_t* ptr = _sg_lookup_shader(&_sg.pools, ref->id);
     return (ptr && ptr->slot.uninit_count == ref->uninit_count) ? ptr : 0;
 }
 
-_SOKOL_PRIVATE _sg_pipeline_t* _sg_pipeline_ref_lookup(const _sg_pipeline_ref_t* ref) {
+_SOKOL_PRIVATE _sg_pipeline_t* _sg_pipeline_ref_ptr(const _sg_pipeline_ref_t* ref) {
     SOKOL_ASSERT(ref);
     _sg_pipeline_t* ptr = _sg_lookup_pipeline(&_sg.pools, ref->id);
     return (ptr && ptr->slot.uninit_count == ref->uninit_count) ? ptr : 0;
