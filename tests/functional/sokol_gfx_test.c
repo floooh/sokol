@@ -1341,6 +1341,95 @@ UTEST(sokol_gfx, attachments_resource_states) {
     sg_shutdown();
 }
 
+UTEST(sokol_gfx, buffer_uninit_count) {
+    setup(&(sg_desc){0});
+    const sg_buffer_desc desc = { .usage.stream_update = true, .size = 128 };
+    sg_buffer buf = sg_make_buffer(&desc);
+    T(sg_query_buffer_info(buf).slot.uninit_count == 0);
+    sg_uninit_buffer(buf);
+    T(sg_query_buffer_info(buf).slot.uninit_count == 1);
+    sg_init_buffer(buf, &desc);
+    T(sg_query_buffer_info(buf).slot.uninit_count == 1);
+    sg_uninit_buffer(buf);
+    T(sg_query_buffer_info(buf).slot.uninit_count == 2);
+    sg_dealloc_buffer(buf);
+    T(sg_query_buffer_info(buf).slot.uninit_count == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, image_uninit_count) {
+    setup(&(sg_desc){0});
+    const sg_image_desc desc = { .usage.render_attachment = true, .width = 128, .height = 128 };
+    sg_image img = sg_make_image(&desc);
+    T(sg_query_image_info(img).slot.uninit_count == 0);
+    sg_uninit_image(img);
+    T(sg_query_image_info(img).slot.uninit_count == 1);
+    sg_init_image(img, &desc);
+    T(sg_query_image_info(img).slot.uninit_count == 1);
+    sg_uninit_image(img);
+    T(sg_query_image_info(img).slot.uninit_count == 2);
+    sg_dealloc_image(img);
+    T(sg_query_image_info(img).slot.uninit_count == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, shader_uninit_count) {
+    setup(&(sg_desc){0});
+    const sg_shader_desc desc = {0};
+    sg_shader shd = sg_make_shader(&desc);
+    T(sg_query_shader_info(shd).slot.uninit_count == 0);
+    sg_uninit_shader(shd);
+    T(sg_query_shader_info(shd).slot.uninit_count == 1);
+    sg_init_shader(shd, &desc);
+    T(sg_query_shader_info(shd).slot.uninit_count == 1);
+    sg_uninit_shader(shd);
+    T(sg_query_shader_info(shd).slot.uninit_count == 2);
+    sg_dealloc_shader(shd);
+    T(sg_query_shader_info(shd).slot.uninit_count == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, pipeline_uninit_count) {
+    setup(&(sg_desc){0});
+    const sg_pipeline_desc desc = { .shader = sg_make_shader(&(sg_shader_desc){0}) };
+    sg_pipeline pip = sg_make_pipeline(&desc);
+    T(sg_query_pipeline_info(pip).slot.uninit_count == 0);
+    sg_uninit_pipeline(pip);
+    T(sg_query_pipeline_info(pip).slot.uninit_count == 1);
+    sg_init_pipeline(pip, &desc);
+    T(sg_query_pipeline_info(pip).slot.uninit_count == 1);
+    sg_uninit_pipeline(pip);
+    T(sg_query_pipeline_info(pip).slot.uninit_count == 2);
+    sg_dealloc_pipeline(pip);
+    T(sg_query_pipeline_info(pip).slot.uninit_count == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, atachments_uninit_count) {
+    setup(&(sg_desc){0});
+    const sg_image_desc img_desc = {
+        .usage.render_attachment = true,
+        .width = 128,
+        .height = 128,
+    };
+    const sg_attachments_desc desc = {
+        .colors = {
+            [0].image = sg_make_image(&img_desc),
+        }
+    };
+    sg_attachments atts = sg_make_attachments(&desc);
+    T(sg_query_attachments_info(atts).slot.uninit_count == 0);
+    sg_uninit_attachments(atts);
+    T(sg_query_attachments_info(atts).slot.uninit_count == 1);
+    sg_init_attachments(atts, &desc);
+    T(sg_query_attachments_info(atts).slot.uninit_count == 1);
+    sg_uninit_attachments(atts);
+    T(sg_query_attachments_info(atts).slot.uninit_count == 2);
+    sg_dealloc_attachments(atts);
+    T(sg_query_attachments_info(atts).slot.uninit_count == 0);
+    sg_shutdown();
+}
+
 UTEST(sokol_gfx, query_buffer_will_overflow) {
     setup(&(sg_desc){0});
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){

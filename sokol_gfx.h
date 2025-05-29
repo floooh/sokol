@@ -3859,6 +3859,7 @@ typedef struct sg_trace_hooks {
 typedef struct sg_slot_info {
     sg_resource_state state;    // the current state of this resource slot
     uint32_t res_id;            // type-neutral resource if (e.g. sg_buffer.id)
+    uint32_t uninit_count;
 } sg_slot_info;
 
 typedef struct sg_buffer_info {
@@ -5584,6 +5585,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
 // resource pool slots
 typedef struct {
     uint32_t id;
+    uint32_t uninit_count;
     sg_resource_state state;
 } _sg_slot_t;
 
@@ -5606,7 +5608,44 @@ _SOKOL_PRIVATE int _sg_slot_index(uint32_t id);
 // resource func forward decls
 struct _sg_pools_s;
 struct _sg_buffer_s;
+struct _sg_image_s;
+struct _sg_shader_s;
+struct _sg_pipeline_s;
+struct _sg_attachments_s;
 _SOKOL_PRIVATE struct _sg_buffer_s* _sg_lookup_buffer(const struct _sg_pools_s* p, uint32_t buf_id);
+
+// safe references to resource objects
+typedef struct _sg_buffer_ref_s {
+    uint32_t id;
+    uint32_t uninit_count;
+} _sg_buffer_ref_t;
+_SOKOL_PRIVATE _sg_buffer_ref_t _sg_buffer_ref(const struct _sg_buffer_s* buf);
+_SOKOL_PRIVATE void _sg_buffer_ref_clear(_sg_buffer_ref_t* ref);
+_SOKOL_PRIVATE struct _sg_buffer_s* _sg_buffer_ref_lookup(const _sg_buffer_ref_t* ref);
+
+typedef struct _sg_image_ref_s {
+    uint32_t id;
+    uint32_t uninit_count;
+} _sg_image_ref_t;
+_SOKOL_PRIVATE _sg_image_ref_t _sg_image_ref(const struct _sg_image_s* img);
+_SOKOL_PRIVATE void _sg_image_ref_clear(_sg_image_ref_t* ref);
+_SOKOL_PRIVATE struct _sg_image_s* _sg_image_ref_lookup(const _sg_image_ref_t* ref);
+
+typedef struct _sg_shader_ref_s {
+    uint32_t id;
+    uint32_t uninit_count;
+} _sg_shader_ref_t;
+_SOKOL_PRIVATE _sg_shader_ref_t _sg_shader_ref(const struct _sg_shader_s* shd);
+_SOKOL_PRIVATE void _sg_shader_ref_clear(_sg_shader_ref_t* ref);
+_SOKOL_PRIVATE struct _sg_shader_s* _sg_shader_ref_lookup(const _sg_shader_ref_t* ref);
+
+typedef struct _sg_pipeline_ref_s {
+    uint32_t id;
+    uint32_t uninit_count;
+} _sg_pipeline_ref_t;
+_SOKOL_PRIVATE _sg_pipeline_ref_t _sg_pipeline_ref(const struct _sg_pipeline_s* pip);
+_SOKOL_PRIVATE void _sg_pipeline_ref_clear(_sg_pipeline_ref_t* ref);
+_SOKOL_PRIVATE struct _sg_pipeline_s* _sg_pipeline_ref_lookup(const _sg_pipeline_ref_t* ref);
 
 // resource tracking (for keeping track of gpu-written storage resources
 typedef struct {
@@ -6654,8 +6693,6 @@ typedef struct {
     _sg_wgpu_bindgroups_pool_t bindgroups_pool;
 } _sg_wgpu_backend_t;
 #endif
-
-// POOL STRUCTS
 
 // this *MUST* remain 0
 #define _SG_INVALID_SLOT_INDEX (0)
@@ -18238,6 +18275,7 @@ _SOKOL_PRIVATE void _sg_reset_buffer_to_alloc_state(_sg_buffer_t* buf) {
     _sg_slot_t slot = buf->slot;
     _sg_clear(buf, sizeof(*buf));
     buf->slot = slot;
+    buf->slot.uninit_count += 1;
     buf->slot.state = SG_RESOURCESTATE_ALLOC;
 }
 
@@ -18246,6 +18284,7 @@ _SOKOL_PRIVATE void _sg_reset_image_to_alloc_state(_sg_image_t* img) {
     _sg_slot_t slot = img->slot;
     _sg_clear(img, sizeof(*img));
     img->slot = slot;
+    img->slot.uninit_count += 1;
     img->slot.state = SG_RESOURCESTATE_ALLOC;
 }
 
@@ -18254,6 +18293,7 @@ _SOKOL_PRIVATE void _sg_reset_sampler_to_alloc_state(_sg_sampler_t* smp) {
     _sg_slot_t slot = smp->slot;
     _sg_clear(smp, sizeof(*smp));
     smp->slot = slot;
+    smp->slot.uninit_count += 1;
     smp->slot.state = SG_RESOURCESTATE_ALLOC;
 }
 
@@ -18262,6 +18302,7 @@ _SOKOL_PRIVATE void _sg_reset_shader_to_alloc_state(_sg_shader_t* shd) {
     _sg_slot_t slot = shd->slot;
     _sg_clear(shd, sizeof(*shd));
     shd->slot = slot;
+    shd->slot.uninit_count += 1;
     shd->slot.state = SG_RESOURCESTATE_ALLOC;
 }
 
@@ -18270,6 +18311,7 @@ _SOKOL_PRIVATE void _sg_reset_pipeline_to_alloc_state(_sg_pipeline_t* pip) {
     _sg_slot_t slot = pip->slot;
     _sg_clear(pip, sizeof(*pip));
     pip->slot = slot;
+    pip->slot.uninit_count += 1;
     pip->slot.state = SG_RESOURCESTATE_ALLOC;
 }
 
@@ -18278,6 +18320,7 @@ _SOKOL_PRIVATE void _sg_reset_attachments_to_alloc_state(_sg_attachments_t* atts
     _sg_slot_t slot = atts->slot;
     _sg_clear(atts, sizeof(*atts));
     atts->slot = slot;
+    atts->slot.uninit_count += 1;
     atts->slot.state = SG_RESOURCESTATE_ALLOC;
 }
 
@@ -18512,6 +18555,82 @@ _SOKOL_PRIVATE void _sg_discard_all_resources(_sg_pools_t* p) {
             _sg_discard_attachments(&p->attachments[i]);
         }
     }
+}
+
+_SOKOL_PRIVATE _sg_buffer_ref_t _sg_buffer_ref(const _sg_buffer_t* buf) {
+    SOKOL_ASSERT(buf && (buf->slot.id != SG_INVALID_ID));
+    _sg_buffer_ref_t ref; _sg_clear(&ref, sizeof(ref));
+    ref.id = buf->slot.id;
+    ref.uninit_count = buf->slot.uninit_count;
+    return ref;
+}
+
+_SOKOL_PRIVATE _sg_image_ref_t _sg_image_ref(const _sg_image_t* img) {
+    SOKOL_ASSERT(img && (img->slot.id != SG_INVALID_ID));
+    _sg_image_ref_t ref; _sg_clear(&ref, sizeof(ref));
+    ref.id = img->slot.id;
+    ref.uninit_count = img->slot.uninit_count;
+    return ref;
+}
+
+_SOKOL_PRIVATE _sg_shader_ref_t _sg_shader_ref(const _sg_shader_t* shd) {
+    SOKOL_ASSERT(shd && (shd->slot.id != SG_INVALID_ID));
+    _sg_shader_ref_t ref; _sg_clear(&ref, sizeof(ref));
+    ref.id = shd->slot.id;
+    ref.uninit_count = shd->slot.uninit_count;
+    return ref;
+}
+
+_SOKOL_PRIVATE _sg_pipeline_ref_t _sg_pipeline_ref(const _sg_pipeline_t* pip) {
+    SOKOL_ASSERT(pip && (pip->slot.id != SG_INVALID_ID));
+    _sg_pipeline_ref_t ref; _sg_clear(&ref, sizeof(ref));
+    ref.id = pip->slot.id;
+    ref.uninit_count = pip->slot.uninit_count;
+    return ref;
+}
+
+_SOKOL_PRIVATE void _sg_buffer_ref_clear(_sg_buffer_ref_t* ref) {
+    SOKOL_ASSERT(ref);
+    _sg_clear(ref, sizeof(_sg_buffer_ref_t));
+}
+
+_SOKOL_PRIVATE void _sg_image_ref_clear(_sg_image_ref_t* ref) {
+    SOKOL_ASSERT(ref);
+    _sg_clear(ref, sizeof(_sg_image_ref_t));
+}
+
+_SOKOL_PRIVATE void _sg_shader_ref_clear(_sg_shader_ref_t* ref) {
+    SOKOL_ASSERT(ref);
+    _sg_clear(ref, sizeof(_sg_shader_ref_t));
+}
+
+_SOKOL_PRIVATE void _sg_pipeline_ref_clear(_sg_pipeline_ref_t* ref) {
+    SOKOL_ASSERT(ref);
+    _sg_clear(ref, sizeof(_sg_pipeline_ref_t));
+}
+
+_SOKOL_PRIVATE _sg_buffer_t* _sg_buffer_ref_lookup(const _sg_buffer_ref_t* ref) {
+    SOKOL_ASSERT(ref);
+    _sg_buffer_t* ptr = _sg_lookup_buffer(&_sg.pools, ref->id);
+    return (ptr && ptr->slot.uninit_count == ref->uninit_count) ? ptr : 0;
+}
+
+_SOKOL_PRIVATE _sg_image_t* _sg_image_ref_lookup(const _sg_image_ref_t* ref) {
+    SOKOL_ASSERT(ref);
+    _sg_image_t* ptr = _sg_lookup_image(&_sg.pools, ref->id);
+    return (ptr && ptr->slot.uninit_count == ref->uninit_count) ? ptr : 0;
+}
+
+_SOKOL_PRIVATE _sg_shader_t* _sg_shader_ref_lookup(const _sg_shader_ref_t* ref) {
+    SOKOL_ASSERT(ref);
+    _sg_shader_t* ptr = _sg_lookup_shader(&_sg.pools, ref->id);
+    return (ptr && ptr->slot.uninit_count == ref->uninit_count) ? ptr : 0;
+}
+
+_SOKOL_PRIVATE _sg_pipeline_t* _sg_pipeline_ref_lookup(const _sg_pipeline_ref_t* ref) {
+    SOKOL_ASSERT(ref);
+    _sg_pipeline_t* ptr = _sg_lookup_pipeline(&_sg.pools, ref->id);
+    return (ptr && ptr->slot.uninit_count == ref->uninit_count) ? ptr : 0;
 }
 
 // ████████ ██████   █████   ██████ ██   ██ ███████ ██████
@@ -21667,6 +21786,7 @@ SOKOL_API_IMPL sg_buffer_info sg_query_buffer_info(sg_buffer buf_id) {
     if (buf) {
         info.slot.state = buf->slot.state;
         info.slot.res_id = buf->slot.id;
+        info.slot.uninit_count = buf->slot.uninit_count;
         info.update_frame_index = buf->cmn.update_frame_index;
         info.append_frame_index = buf->cmn.append_frame_index;
         info.append_pos = buf->cmn.append_pos;
@@ -21690,6 +21810,7 @@ SOKOL_API_IMPL sg_image_info sg_query_image_info(sg_image img_id) {
     if (img) {
         info.slot.state = img->slot.state;
         info.slot.res_id = img->slot.id;
+        info.slot.uninit_count = img->slot.uninit_count;
         info.upd_frame_index = img->cmn.upd_frame_index;
         #if defined(SOKOL_D3D11)
         info.num_slots = 1;
@@ -21710,6 +21831,7 @@ SOKOL_API_IMPL sg_sampler_info sg_query_sampler_info(sg_sampler smp_id) {
     if (smp) {
         info.slot.state = smp->slot.state;
         info.slot.res_id = smp->slot.id;
+        info.slot.uninit_count = smp->slot.uninit_count;
     }
     return info;
 }
@@ -21722,6 +21844,7 @@ SOKOL_API_IMPL sg_shader_info sg_query_shader_info(sg_shader shd_id) {
     if (shd) {
         info.slot.state = shd->slot.state;
         info.slot.res_id = shd->slot.id;
+        info.slot.uninit_count = shd->slot.uninit_count;
     }
     return info;
 }
@@ -21734,6 +21857,7 @@ SOKOL_API_IMPL sg_pipeline_info sg_query_pipeline_info(sg_pipeline pip_id) {
     if (pip) {
         info.slot.state = pip->slot.state;
         info.slot.res_id = pip->slot.id;
+        info.slot.uninit_count = pip->slot.uninit_count;
     }
     return info;
 }
@@ -21746,6 +21870,7 @@ SOKOL_API_IMPL sg_attachments_info sg_query_attachments_info(sg_attachments atts
     if (atts) {
         info.slot.state = atts->slot.state;
         info.slot.res_id = atts->slot.id;
+        info.slot.uninit_count = atts->slot.uninit_count;
     }
     return info;
 }

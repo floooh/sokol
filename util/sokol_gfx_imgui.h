@@ -1144,6 +1144,7 @@ _SOKOL_PRIVATE const char* _sgimgui_resourcestate_string(sg_resource_state s) {
 _SOKOL_PRIVATE void _sgimgui_draw_resource_slot(const sg_slot_info* slot) {
     igText("ResId: %08X", slot->res_id);
     igText("State: %s", _sgimgui_resourcestate_string(slot->state));
+    igText("Uninit Count: %d", slot->uninit_count);
 }
 
 _SOKOL_PRIVATE const char* _sgimgui_backend_string(sg_backend b) {
