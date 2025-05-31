@@ -94,7 +94,7 @@ prim_types = {
     "float":        "float",
     "double":       "double",
     "uintptr_t":    "ulong",
-    "intptr_t":      "long",
+    "intptr_t":     "long",
     "size_t":       "size_t",
 }
 
@@ -112,7 +112,7 @@ prim_defaults = {
     'float':        '0.0f',
     'double':       '0.0',
     'uintptr_t':    '0',
-    'intptr_t':      '0',
+    'intptr_t':     '0',
     'size_t':       '0'
 }
 
@@ -279,8 +279,7 @@ def gen_struct(decl, type_converter):
     used_field_names = set()
     for field in decl['fields']:
         field_key = f"{struct_name}.{field['name']}"
-        field_name = overrides.get(field_key, field['name'])
-        field_name = overrides.get(field_name, field_name)
+        field_name = overrides.get(field['name'], field['name'])
         field_type = overrides.get(field_key, field['type'])
 
         if field_name in used_field_names or field_name in prim_types.values():
