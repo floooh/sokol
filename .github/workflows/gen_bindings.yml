@@ -292,10 +292,9 @@ jobs:
       - uses: actions/checkout@main
         with:
           repository: kassane/sokol-d
-      - uses: goto-bus-stop/setup-zig@v2
-        with:
-          version: 0.14.0
-      - uses: dlang-community/setup-dlang@v1
+          ref: builder # remove after https://github.com/kassane/sokol-d/pull/70 is merged
+      - uses: egor-tensin/vs-shell@v2
+      - uses: dlang-community/setup-dlang@v2
         with:
           compiler: ldc-master
       - uses: actions/download-artifact@main
@@ -308,7 +307,7 @@ jobs:
             sudo apt-get update
             sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev
       - name: build
-        run: zig build --summary all
+        run: dub build -v
   test-jai:
     needs: gen-bindings
     strategy:
