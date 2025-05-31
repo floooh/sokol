@@ -5597,6 +5597,13 @@ typedef struct {
     int* free_queue;
 } _sg_pool_t;
 
+// resource func forward decls
+struct _sg_buffer_s;
+struct _sg_image_s;
+struct _sg_sampler_s;
+struct _sg_shader_s;
+struct _sg_pipeline_s;
+struct _sg_attachments_s;
 _SOKOL_PRIVATE void _sg_pool_init(_sg_pool_t* pool, int num);
 _SOKOL_PRIVATE void _sg_pool_discard(_sg_pool_t* pool);
 _SOKOL_PRIVATE int _sg_pool_alloc_index(_sg_pool_t* pool);
@@ -5604,61 +5611,84 @@ _SOKOL_PRIVATE void _sg_pool_free_index(_sg_pool_t* pool, int slot_index);
 _SOKOL_PRIVATE void _sg_slot_reset(_sg_slot_t* slot);
 _SOKOL_PRIVATE uint32_t _sg_slot_alloc(_sg_pool_t* pool, _sg_slot_t* slot, int slot_index);
 _SOKOL_PRIVATE int _sg_slot_index(uint32_t id);
-
-// resource func forward decls
-struct _sg_pools_s;
-struct _sg_buffer_s;
-struct _sg_image_s;
-struct _sg_sampler_s;
-struct _sg_shader_s;
-struct _sg_pipeline_s;
-struct _sg_attachments_s;
+_SOKOL_PRIVATE void* _sg_malloc_clear(size_t size);
+_SOKOL_PRIVATE void _sg_free(void* ptr);
+_SOKOL_PRIVATE void _sg_clear(void* ptr, size_t size);
 _SOKOL_PRIVATE struct _sg_buffer_s* _sg_lookup_buffer(uint32_t buf_id);
 
-// safe references to resource objects
-typedef struct _sg_buffer_ref_s {
+// a general resource slot reference useful for caches
+typedef struct _sg_sref_s {
     uint32_t id;
     uint32_t uninit_count;
+} _sg_sref_t;
+
+_SOKOL_PRIVATE _sg_sref_t _sg_sref(const _sg_slot_t* slot) {
+    SOKOL_ASSERT(slot);
+    _sg_sref_t sref;
+    sref.id = slot->id;
+    sref.uninit_count = slot->uninit_count;
+    return sref;
+}
+
+_SOKOL_PRIVATE _sg_sref_t _sg_sref_null(void) {
+    _sg_sref_t ref; _sg_clear(&ref, sizeof(ref));
+    return ref;
+}
+
+_SOKOL_PRIVATE bool _sg_sref_eql(const _sg_sref_t* sref, const _sg_slot_t* slot) {
+    SOKOL_ASSERT(sref && slot);
+    return (sref->id == slot->id) && (sref->uninit_count == slot->uninit_count);
+}
+
+// safe (in debug mode) internal resource references
+typedef struct _sg_buffer_ref_s {
+    struct _sg_buffer_s* ptr;
+    _sg_sref_t sref;
 } _sg_buffer_ref_t;
-_SOKOL_PRIVATE _sg_buffer_ref_t _sg_buffer_ref(const struct _sg_buffer_s* buf);
+_SOKOL_PRIVATE _sg_buffer_ref_t _sg_buffer_ref(struct _sg_buffer_s* buf);
 _SOKOL_PRIVATE _sg_buffer_ref_t _sg_buffer_ref_null(void);
 _SOKOL_PRIVATE bool _sg_buffer_ref_eql(const _sg_buffer_ref_t* ref, const struct _sg_buffer_s* buf);
+_SOKOL_PRIVATE bool _sg_buffer_ref_valid(const _sg_buffer_ref_t* ref);
 _SOKOL_PRIVATE struct _sg_buffer_s* _sg_buffer_ref_ptr(const _sg_buffer_ref_t* ref);
 
 typedef struct _sg_image_ref_s {
-    uint32_t id;
-    uint32_t uninit_count;
+    struct _sg_image_s* ptr;
+    _sg_sref_t sref;
 } _sg_image_ref_t;
-_SOKOL_PRIVATE _sg_image_ref_t _sg_image_ref(const struct _sg_image_s* img);
+_SOKOL_PRIVATE _sg_image_ref_t _sg_image_ref(struct _sg_image_s* img);
 _SOKOL_PRIVATE _sg_image_ref_t _sg_image_ref_null(void);
 _SOKOL_PRIVATE bool _sg_image_ref_eql(const _sg_image_ref_t* ref, const struct _sg_image_s* img);
+_SOKOL_PRIVATE bool _sg_image_ref_valid(const _sg_image_ref_t* ref);
 _SOKOL_PRIVATE struct _sg_image_s* _sg_image_ref_ptr(const _sg_image_ref_t* ref);
 
 typedef struct _sg_sampler_ref_t {
-    uint32_t id;
-    uint32_t uninit_count;
+    struct _sg_sampler_s* ptr;
+    _sg_sref_t sref;
 } _sg_sampler_ref_t;
-_SOKOL_PRIVATE _sg_sampler_ref_t _sg_sampler_ref(const struct _sg_sampler_s* smp);
+_SOKOL_PRIVATE _sg_sampler_ref_t _sg_sampler_ref(struct _sg_sampler_s* smp);
 _SOKOL_PRIVATE _sg_sampler_ref_t _sg_sampler_ref_null(void);
 _SOKOL_PRIVATE bool _sg_sampler_ref_eql(const _sg_sampler_ref_t* ref, const struct _sg_sampler_s* smp);
+_SOKOL_PRIVATE bool _sg_sampler_ref_valid(const _sg_sampler_ref_t* ref);
 _SOKOL_PRIVATE struct _sg_sampler_s* _sg_sampler_ref_ptr(const _sg_sampler_ref_t* ref);
 
 typedef struct _sg_shader_ref_s {
-    uint32_t id;
-    uint32_t uninit_count;
+    struct _sg_shader_s* ptr;
+    _sg_sref_t sref;
 } _sg_shader_ref_t;
-_SOKOL_PRIVATE _sg_shader_ref_t _sg_shader_ref(const struct _sg_shader_s* shd);
+_SOKOL_PRIVATE _sg_shader_ref_t _sg_shader_ref(struct _sg_shader_s* shd);
 _SOKOL_PRIVATE _sg_shader_ref_t _sg_shader_ref_null(void);
 _SOKOL_PRIVATE bool _sg_shader_ref_eql(const _sg_shader_ref_t* ref, const struct _sg_shader_s* shd);
+_SOKOL_PRIVATE bool _sg_shader_ref_valid(const _sg_shader_ref_t* ref);
 _SOKOL_PRIVATE struct _sg_shader_s* _sg_shader_ref_ptr(const _sg_shader_ref_t* ref);
 
 typedef struct _sg_pipeline_ref_s {
-    uint32_t id;
-    uint32_t uninit_count;
+    struct _sg_pipeline_s* ptr;
+    _sg_sref_t sref;
 } _sg_pipeline_ref_t;
-_SOKOL_PRIVATE _sg_pipeline_ref_t _sg_pipeline_ref(const struct _sg_pipeline_s* pip);
+_SOKOL_PRIVATE _sg_pipeline_ref_t _sg_pipeline_ref(struct _sg_pipeline_s* pip);
 _SOKOL_PRIVATE _sg_pipeline_ref_t _sg_pipeline_ref_null(void);
 _SOKOL_PRIVATE bool _sg_pipeline_ref_eql(const _sg_pipeline_ref_t* ref, const struct _sg_pipeline_s* pip);
+_SOKOL_PRIVATE bool _sg_pipeline_ref_valid(const _sg_pipeline_ref_t* ref);
 _SOKOL_PRIVATE struct _sg_pipeline_s* _sg_pipeline_ref_ptr(const _sg_pipeline_ref_t* ref);
 
 // resource tracking (for keeping track of gpu-written storage resources
@@ -5705,10 +5735,6 @@ typedef struct {
 #define _sg_fequal(val,cmp,delta) ((((val)-(cmp))> -(delta))&&(((val)-(cmp))<(delta)))
 #define _sg_ispow2(val) ((val&(val-1))==0)
 #define _sg_stats_add(key,val) {if(_sg.stats_enabled){ _sg.stats.key+=val;}}
-
-_SOKOL_PRIVATE void* _sg_malloc_clear(size_t size);
-_SOKOL_PRIVATE void _sg_free(void* ptr);
-_SOKOL_PRIVATE void _sg_clear(void* ptr, size_t size);
 
 typedef struct {
     int size;
@@ -6488,14 +6514,14 @@ typedef struct {
     _sg_buffer_ref_t cur_ibuf;
     int cur_ibuf_offset;
     int cur_vs_buffer_offsets[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
-    _sg_buffer_ref_t cur_vsbufs[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
-    _sg_buffer_ref_t cur_fsbufs[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
-    _sg_buffer_ref_t cur_csbufs[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
-    _sg_image_ref_t cur_vsimgs[_SG_MTL_MAX_STAGE_TEXTURE_BINDINGS];
-    _sg_image_ref_t cur_fsimgs[_SG_MTL_MAX_STAGE_TEXTURE_BINDINGS];
-    _sg_sampler_ref_t cur_vssmps[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
-    _sg_sampler_ref_t cur_fssmps[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
-    _sg_sampler_ref_t cur_cssmps[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
+    _sg_sref_t cur_vsbufs[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
+    _sg_sref_t cur_fsbufs[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
+    _sg_sref_t cur_csbufs[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
+    _sg_sref_t cur_vsimgs[_SG_MTL_MAX_STAGE_TEXTURE_BINDINGS];
+    _sg_sref_t cur_fsimgs[_SG_MTL_MAX_STAGE_TEXTURE_BINDINGS];
+    _sg_sref_t cur_vssmps[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
+    _sg_sref_t cur_fssmps[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
+    _sg_sref_t cur_cssmps[_SG_MTL_MAX_STAGE_SAMPLER_BINDINGS];
     // NOTE: special case: uint64_t for storage images, because we need
     // to differentiate between storage pass attachments and regular
     // textures bound to compute stages (but both binding types live
@@ -15098,12 +15124,12 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
             const NSUInteger mtl_slot = _sg_mtl_vertexbuffer_bindslot(i);
             SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_BUFFER_BINDINGS);
             const int vb_offset = bnd->vb_offsets[i];
-            const bool ref_eql = _sg_buffer_ref_eql(&_sg.mtl.state_cache.cur_vsbufs[mtl_slot], vb);
+            const bool ref_eql = _sg_sref_eql(&_sg.mtl.state_cache.cur_vsbufs[mtl_slot], &vb->slot);
             if (!ref_eql || (_sg.mtl.state_cache.cur_vs_buffer_offsets[mtl_slot] != vb_offset)) {
                 _sg.mtl.state_cache.cur_vs_buffer_offsets[mtl_slot] = vb_offset;
                 if (!ref_eql) {
                     // vertex buffer has changed
-                    _sg.mtl.state_cache.cur_vsbufs[mtl_slot] = _sg_buffer_ref(vb);
+                    _sg.mtl.state_cache.cur_vsbufs[mtl_slot] = _sg_sref(&vb->slot);
                     SOKOL_ASSERT(vb->mtl.buf[vb->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
                     [_sg.mtl.render_cmd_encoder setVertexBuffer:_sg_mtl_id(vb->mtl.buf[vb->cmn.active_slot])
                         offset:(NSUInteger)vb_offset
@@ -15130,15 +15156,15 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS);
         if (stage == SG_SHADERSTAGE_VERTEX) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (!_sg_image_ref_eql(&_sg.mtl.state_cache.cur_vsimgs[mtl_slot], img)) {
-                _sg.mtl.state_cache.cur_vsimgs[mtl_slot] = _sg_image_ref(img);
+            if (!_sg_sref_eql(&_sg.mtl.state_cache.cur_vsimgs[mtl_slot], &img->slot)) {
+                _sg.mtl.state_cache.cur_vsimgs[mtl_slot] = _sg_sref(&img->slot);
                 [_sg.mtl.render_cmd_encoder setVertexTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_vertex_texture, 1);
             }
         } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (!_sg_image_ref_eql(&_sg.mtl.state_cache.cur_fsimgs[mtl_slot], img)) {
-                _sg.mtl.state_cache.cur_fsimgs[mtl_slot] = _sg_image_ref(img);
+            if (!_sg_sref_eql(&_sg.mtl.state_cache.cur_fsimgs[mtl_slot], &img->slot)) {
+                _sg.mtl.state_cache.cur_fsimgs[mtl_slot] = _sg_sref(&img->slot);
                 [_sg.mtl.render_cmd_encoder setFragmentTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_fragment_texture, 1);
             }
@@ -15165,22 +15191,22 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_SAMPLER_BINDINGS);
         if (stage == SG_SHADERSTAGE_VERTEX) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (!_sg_sampler_ref_eql(&_sg.mtl.state_cache.cur_vssmps[mtl_slot], smp)) {
-                _sg.mtl.state_cache.cur_vssmps[mtl_slot] = _sg_sampler_ref(smp);
+            if (!_sg_sref_eql(&_sg.mtl.state_cache.cur_vssmps[mtl_slot], &smp->slot)) {
+                _sg.mtl.state_cache.cur_vssmps[mtl_slot] = _sg_sref(&smp->slot);
                 [_sg.mtl.render_cmd_encoder setVertexSamplerState:_sg_mtl_id(smp->mtl.sampler_state) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_vertex_sampler_state, 1);
             }
         } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (!_sg_sampler_ref_eql(&_sg.mtl.state_cache.cur_fssmps[mtl_slot], smp)) {
-                _sg.mtl.state_cache.cur_fssmps[mtl_slot] = _sg_sampler_ref(smp);
+            if (!_sg_sref_eql(&_sg.mtl.state_cache.cur_fssmps[mtl_slot], &smp->slot)) {
+                _sg.mtl.state_cache.cur_fssmps[mtl_slot] = _sg_sref(&smp->slot);
                 [_sg.mtl.render_cmd_encoder setFragmentSamplerState:_sg_mtl_id(smp->mtl.sampler_state) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_fragment_sampler_state, 1);
             }
         } else if (stage == SG_SHADERSTAGE_COMPUTE) {
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
-            if (!_sg_sampler_ref_eql(&_sg.mtl.state_cache.cur_cssmps[mtl_slot], smp)) {
-                _sg.mtl.state_cache.cur_cssmps[mtl_slot] = _sg_sampler_ref(smp);
+            if (!_sg_sref_eql(&_sg.mtl.state_cache.cur_cssmps[mtl_slot], &smp->slot)) {
+                _sg.mtl.state_cache.cur_cssmps[mtl_slot] = _sg_sref(&smp->slot);
                 [_sg.mtl.compute_cmd_encoder setSamplerState:_sg_mtl_id(smp->mtl.sampler_state) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_compute_sampler_state, 1);
             }
@@ -15200,22 +15226,22 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS);
         if (stage == SG_SHADERSTAGE_VERTEX) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (!_sg_buffer_ref_eql(&_sg.mtl.state_cache.cur_vsbufs[mtl_slot], sbuf)) {
-                _sg.mtl.state_cache.cur_vsbufs[mtl_slot] = _sg_buffer_ref(sbuf);
+            if (!_sg_sref_eql(&_sg.mtl.state_cache.cur_vsbufs[mtl_slot], &sbuf->slot)) {
+                _sg.mtl.state_cache.cur_vsbufs[mtl_slot] = _sg_sref(&sbuf->slot);
                 [_sg.mtl.render_cmd_encoder setVertexBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:0 atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_vertex_buffer, 1);
             }
         } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (!_sg_buffer_ref_eql(&_sg.mtl.state_cache.cur_fsbufs[mtl_slot], sbuf)) {
-                _sg.mtl.state_cache.cur_fsbufs[mtl_slot] = _sg_buffer_ref(sbuf);
+            if (!_sg_sref_eql(&_sg.mtl.state_cache.cur_fsbufs[mtl_slot], &sbuf->slot)) {
+                _sg.mtl.state_cache.cur_fsbufs[mtl_slot] = _sg_sref(&sbuf->slot);
                 [_sg.mtl.render_cmd_encoder setFragmentBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:0 atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_fragment_buffer, 1);
             }
         } else if (stage == SG_SHADERSTAGE_COMPUTE) {
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
-            if (!_sg_buffer_ref_eql(&_sg.mtl.state_cache.cur_csbufs[mtl_slot], sbuf)) {
-                _sg.mtl.state_cache.cur_csbufs[mtl_slot] = _sg_buffer_ref(sbuf);
+            if (!_sg_sref_eql(&_sg.mtl.state_cache.cur_csbufs[mtl_slot], &sbuf->slot)) {
+                _sg.mtl.state_cache.cur_csbufs[mtl_slot] = _sg_sref(&sbuf->slot);
                 [_sg.mtl.compute_cmd_encoder setBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:0 atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_compute_buffer, 1);
             }
@@ -18563,43 +18589,43 @@ _SOKOL_PRIVATE void _sg_discard_all_resources(void) {
     }
 }
 
-_SOKOL_PRIVATE _sg_buffer_ref_t _sg_buffer_ref(const _sg_buffer_t* buf) {
+_SOKOL_PRIVATE _sg_buffer_ref_t _sg_buffer_ref(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf && (buf->slot.id != SG_INVALID_ID));
-    _sg_buffer_ref_t ref; _sg_clear(&ref, sizeof(ref));
-    ref.id = buf->slot.id;
-    ref.uninit_count = buf->slot.uninit_count;
+    _sg_buffer_ref_t ref;
+    ref.ptr = (_sg_buffer_t*)buf;
+    ref.sref = _sg_sref(&buf->slot);
     return ref;
 }
 
-_SOKOL_PRIVATE _sg_image_ref_t _sg_image_ref(const _sg_image_t* img) {
+_SOKOL_PRIVATE _sg_image_ref_t _sg_image_ref(_sg_image_t* img) {
     SOKOL_ASSERT(img && (img->slot.id != SG_INVALID_ID));
-    _sg_image_ref_t ref; _sg_clear(&ref, sizeof(ref));
-    ref.id = img->slot.id;
-    ref.uninit_count = img->slot.uninit_count;
+    _sg_image_ref_t ref;
+    ref.ptr = img;
+    ref.sref = _sg_sref(&img->slot);
     return ref;
 }
 
-_SOKOL_PRIVATE _sg_sampler_ref_t _sg_sampler_ref(const _sg_sampler_t* smp) {
+_SOKOL_PRIVATE _sg_sampler_ref_t _sg_sampler_ref(_sg_sampler_t* smp) {
     SOKOL_ASSERT(smp && (smp->slot.id != SG_INVALID_ID));
-    _sg_sampler_ref_t ref; _sg_clear(&ref, sizeof(ref));
-    ref.id = smp->slot.id;
-    ref.uninit_count = smp->slot.uninit_count;
+    _sg_sampler_ref_t ref;
+    ref.ptr = smp;
+    ref.sref = _sg_sref(&smp->slot);
     return ref;
 }
 
-_SOKOL_PRIVATE _sg_shader_ref_t _sg_shader_ref(const _sg_shader_t* shd) {
+_SOKOL_PRIVATE _sg_shader_ref_t _sg_shader_ref(_sg_shader_t* shd) {
     SOKOL_ASSERT(shd && (shd->slot.id != SG_INVALID_ID));
-    _sg_shader_ref_t ref; _sg_clear(&ref, sizeof(ref));
-    ref.id = shd->slot.id;
-    ref.uninit_count = shd->slot.uninit_count;
+    _sg_shader_ref_t ref;
+    ref.ptr = shd;
+    ref.sref = _sg_sref(&shd->slot);
     return ref;
 }
 
-_SOKOL_PRIVATE _sg_pipeline_ref_t _sg_pipeline_ref(const _sg_pipeline_t* pip) {
+_SOKOL_PRIVATE _sg_pipeline_ref_t _sg_pipeline_ref(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip && (pip->slot.id != SG_INVALID_ID));
-    _sg_pipeline_ref_t ref; _sg_clear(&ref, sizeof(ref));
-    ref.id = pip->slot.id;
-    ref.uninit_count = pip->slot.uninit_count;
+    _sg_pipeline_ref_t ref;
+    ref.ptr = pip;
+    ref.sref = _sg_sref(&pip->slot);
     return ref;
 }
 
@@ -18630,57 +18656,77 @@ _SOKOL_PRIVATE _sg_pipeline_ref_t _sg_pipeline_ref_null(void) {
 
 _SOKOL_PRIVATE bool _sg_buffer_ref_eql(const _sg_buffer_ref_t* ref, const _sg_buffer_t* buf) {
     SOKOL_ASSERT(ref && buf);
-    return (ref->id == buf->slot.id) && (ref->uninit_count == buf->slot.uninit_count);
+    return _sg_sref_eql(&ref->sref, &buf->slot);
 }
 
 _SOKOL_PRIVATE bool _sg_image_ref_eql(const _sg_image_ref_t* ref, const _sg_image_t* img) {
     SOKOL_ASSERT(ref && img);
-    return (ref->id == img->slot.id) && (ref->uninit_count == img->slot.uninit_count);
+    return _sg_sref_eql(&ref->sref, &img->slot);
 }
 
 _SOKOL_PRIVATE bool _sg_sampler_ref_eql(const _sg_sampler_ref_t* ref, const _sg_sampler_t* smp) {
     SOKOL_ASSERT(ref && smp);
-    return (ref->id == smp->slot.id) && (ref->uninit_count == smp->slot.uninit_count);
+    return _sg_sref_eql(&ref->sref, &smp->slot);
 }
 
 _SOKOL_PRIVATE bool _sg_shader_ref_eql(const _sg_shader_ref_t* ref, const _sg_shader_t* shd) {
     SOKOL_ASSERT(ref && shd);
-    return (ref->id == shd->slot.id) && (ref->uninit_count == shd->slot.uninit_count);
+    return _sg_sref_eql(&ref->sref, &shd->slot);
 }
 
 _SOKOL_PRIVATE bool _sg_pipeline_ref_eql(const _sg_pipeline_ref_t* ref, const _sg_pipeline_t* pip) {
     SOKOL_ASSERT(ref && pip);
-    return (ref->id == pip->slot.id) && (ref->uninit_count == pip->slot.uninit_count);
+    return _sg_sref_eql(&ref->sref, &pip->slot);
+}
+
+_SOKOL_PRIVATE bool _sg_buffer_ref_valid(const _sg_buffer_ref_t* ref) {
+    SOKOL_ASSERT(ref);
+    return ref->ptr && _sg_sref_eql(&ref->sref, &ref->ptr->slot);
+}
+
+_SOKOL_PRIVATE bool _sg_image_ref_valid(const _sg_image_ref_t* ref) {
+    SOKOL_ASSERT(ref);
+    return ref->ptr && _sg_sref_eql(&ref->sref, &ref->ptr->slot);
+}
+
+_SOKOL_PRIVATE bool _sg_sampler_ref_valid(const _sg_sampler_ref_t* ref) {
+    SOKOL_ASSERT(ref);
+    return ref->ptr && _sg_sref_eql(&ref->sref, &ref->ptr->slot);
+}
+
+_SOKOL_PRIVATE bool _sg_shader_ref_valid(const _sg_shader_ref_t* ref) {
+    SOKOL_ASSERT(ref);
+    return ref->ptr && _sg_sref_eql(&ref->sref, &ref->ptr->slot);
+}
+
+_SOKOL_PRIVATE bool _sg_pipeline_ref_valid(const _sg_pipeline_ref_t* ref) {
+    SOKOL_ASSERT(ref);
+    return ref->ptr && _sg_sref_eql(&ref->sref, &ref->ptr->slot);
 }
 
 _SOKOL_PRIVATE _sg_buffer_t* _sg_buffer_ref_ptr(const _sg_buffer_ref_t* ref) {
-    SOKOL_ASSERT(ref);
-    _sg_buffer_t* ptr = _sg_lookup_buffer(ref->id);
-    return (ptr && ptr->slot.uninit_count == ref->uninit_count) ? ptr : 0;
+    SOKOL_ASSERT(ref && _sg_buffer_ref_valid(ref));
+    return ref->ptr;
 }
 
 _SOKOL_PRIVATE _sg_image_t* _sg_image_ref_ptr(const _sg_image_ref_t* ref) {
-    SOKOL_ASSERT(ref);
-    _sg_image_t* ptr = _sg_lookup_image(ref->id);
-    return (ptr && ptr->slot.uninit_count == ref->uninit_count) ? ptr : 0;
+    SOKOL_ASSERT(ref && _sg_image_ref_valid(ref));
+    return ref->ptr;
 }
 
 _SOKOL_PRIVATE _sg_sampler_t* _sg_sampler_ref_ptr(const _sg_sampler_ref_t* ref) {
-    SOKOL_ASSERT(ref);
-    _sg_sampler_t* ptr = _sg_lookup_sampler(ref->id);
-    return (ptr && ptr->slot.uninit_count == ref->uninit_count) ? ptr : 0;
+    SOKOL_ASSERT(ref && _sg_sampler_ref_valid(ref));
+    return ref->ptr;
 }
 
 _SOKOL_PRIVATE _sg_shader_t* _sg_shader_ref_ptr(const _sg_shader_ref_t* ref) {
-    SOKOL_ASSERT(ref);
-    _sg_shader_t* ptr = _sg_lookup_shader(ref->id);
-    return (ptr && ptr->slot.uninit_count == ref->uninit_count) ? ptr : 0;
+    SOKOL_ASSERT(ref && _sg_shader_ref_valid(ref));
+    return ref->ptr;
 }
 
 _SOKOL_PRIVATE _sg_pipeline_t* _sg_pipeline_ref_ptr(const _sg_pipeline_ref_t* ref) {
-    SOKOL_ASSERT(ref);
-    _sg_pipeline_t* ptr = _sg_lookup_pipeline(ref->id);
-    return (ptr && ptr->slot.uninit_count == ref->uninit_count) ? ptr : 0;
+    SOKOL_ASSERT(ref && _sg_pipeline_ref_valid(ref));
+    return ref->ptr;
 }
 
 // ████████ ██████   █████   ██████ ██   ██ ███████ ██████
