@@ -1,18 +1,24 @@
 #-------------------------------------------------------------------------------
-#   Generate D bindings.
+#   Generate D bindings for Sokol library.
 #
 #   D coding style:
-#   - types are PascalCase
-#   - functions are camelCase
-#   - otherwise snake_case
+#   - Types: PascalCase
+#   - Functions: camelCase
+#   - Variables: snake_case
+#   - Doc-comments: /++ ... +/ for declarations, /// for fields, with proper wrapping
 #-------------------------------------------------------------------------------
 import gen_ir
 import os
 import shutil
 import sys
 import textwrap
+import logging
+from datetime import datetime
 
 import gen_util as util
+
+# Configure logging for debugging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 module_names = {
     'slog_':    'log',
@@ -49,16 +55,14 @@ ignores = [
     'sdtx_vprintf',
 ]
 
-# functions that need to be exposed as 'raw' C callbacks without a Dlang wrapper function
 c_callbacks = [
     'slog_func'
 ]
 
-# NOTE: syntax for function results: "func_name.RESULT"
 overrides = {
     'ref':                                  '_ref',
     'immutable':                            '_immutable',
-    'sgl_error':                            'sgl_get_error',   # 'error' is reserved in Dlang
+    'sgl_error':                            'sgl_get_error',
     'sgl_deg':                              'sgl_as_degrees',
     'sgl_rad':                              'sgl_as_radians',
     'sg_apply_uniforms.ub_slot':            'uint32_t',
@@ -72,7 +76,7 @@ overrides = {
     'sshape_element_range_t.num_elements':  'uint32_t',
     'sdtx_font.font_index':                 'uint32_t',
     'SGL_NO_ERROR':                         'SGL_ERROR_NO_ERROR',
-    'sfetch_continue':                      'continue_fetching',  # 'continue' is reserved in D
+    'sfetch_continue':                      'continue_fetching',
 }
 
 prim_types = {
@@ -90,7 +94,7 @@ prim_types = {
     "float":        "float",
     "double":       "double",
     "uintptr_t":    "ulong",
-    "intptr_t":     "long",
+    "intptr_t":      "long",
     "size_t":       "size_t",
 }
 
@@ -100,28 +104,136 @@ prim_defaults = {
     'int8_t':       '0',
     'uint8_t':      '0',
     'int16_t':      '0',
-    'uint16_t':     '0',
+    'uint16_t':      '0',
     'int32_t':      '0',
-    'uint32_t':     '0',
+    'uint32_t':      '0',
     'int64_t':      '0',
-    'uint64_t':     '0',
+    'uint64_t':      '0',
     'float':        '0.0f',
     'double':       '0.0',
     'uintptr_t':    '0',
-    'intptr_t':     '0',
+    'intptr_t':      '0',
     'size_t':       '0'
 }
 
+class TypeConverter:
+    def __init__(self, prefix, struct_types, enum_types):
+        self.prefix = prefix
+        self.struct_types = struct_types
+        self.enum_types = enum_types
+
+    def as_d_type(self, c_type, is_param=False, decl_name=None):
+        d_to_c_types = {v: k for k, v in prim_types.items()}
+        if c_type in d_to_c_types:
+            c_type = d_to_c_types[c_type]
+
+        if util.is_func_ptr(c_type):
+            return self.as_func_ptr_type(c_type, decl_name)
+        
+        if c_type == "void":
+            return "" if is_param else "void"
+        
+        if c_type in prim_types:
+            return prim_types[c_type]
+        
+        if c_type in self.struct_types:
+            return self.as_d_struct_type(c_type)
+        
+        if c_type in self.enum_types:
+            return self.as_d_enum_type(c_type)
+        
+        if util.is_void_ptr(c_type):
+            return "void*"
+        
+        if util.is_const_void_ptr(c_type):
+            return "const(void)*"
+        
+        if util.is_string_ptr(c_type):
+            return "const(char)*"
+        
+        if self.is_struct_ptr(c_type) or self.is_const_struct_ptr(c_type):
+            struct_type = util.extract_ptr_type(c_type.strip())
+            d_type = self.as_d_struct_type(struct_type)
+            return f"const {d_type}*" if is_param else f"{d_type}*"
+        
+        if self.is_prim_ptr(c_type):
+            prim_type = util.extract_ptr_type(c_type.strip())
+            return f"{prim_types[prim_type]}*"
+        
+        if self.is_const_prim_ptr(c_type):
+            prim_type = util.extract_ptr_type(c_type.strip())
+            return f"const {prim_types[prim_type]}*"
+        
+        if util.is_array_type(c_type):
+            return self.as_array_type(c_type)
+        
+        raise ValueError(f"Unsupported C type: {c_type} in declaration: {decl_name or 'unknown'}")
+
+    def as_d_struct_type(self, s):
+        parts = s.lower().split('_')
+        outp = '' if s.startswith(self.prefix) else f'{parts[0]}.'
+        return outp + ''.join(part.capitalize() for part in parts[1:] if part != 't')
+
+    def as_d_enum_type(self, s):
+        return self.as_d_struct_type(s)
+
+    def parse_func_ptr_signature(self, c_type, decl, decl_name):
+        if '(*)' in c_type:
+            return_type = c_type[:c_type.index('(*)')].strip()
+            params_str = c_type[c_type.index('(*)')+4:-1].strip()
+            params = [p.strip() for p in params_str.split(',')] if params_str else []
+        else:
+            return_type = decl.get('return_type', 'void')
+            params = [param['type'] for param in decl.get('params', [])]
+        return return_type, params
+
+    def as_func_ptr_type(self, c_type, decl_name, decl=None):
+        return_type, params = self.parse_func_ptr_signature(c_type, decl or {}, decl_name)
+        d_return_type = self.as_d_type(return_type, decl_name=decl_name)
+        arg_types = []
+        for param_type in params:
+            if param_type and param_type != "void":
+                try:
+                    arg_types.append(self.as_d_type(param_type, is_param=True, decl_name=decl_name))
+                except ValueError as e:
+                    raise ValueError(f"Unsupported function pointer parameter type: {param_type} in {c_type} for declaration: {decl_name or 'unknown'}")
+        args_str = ", ".join(arg_types) if arg_types else ""
+        return f"extern(C) {d_return_type} function({args_str})"
+
+    def as_array_type(self, c_type):
+        array_type = util.extract_array_type(c_type)
+        array_sizes = util.extract_array_sizes(c_type)
+        base_type = self.as_d_type(array_type)
+        dims = ''.join(f"[{size}]" for size in array_sizes)
+        return f"{base_type}{dims}"
+
+    def default_value(self, c_type):
+        return prim_defaults.get(c_type, "")
+
+    def is_struct_ptr(self, s):
+        s = s.strip()
+        return any(s == f"{struct_type} *" for struct_type in self.struct_types)
+
+    def is_const_struct_ptr(self, s):
+        s = s.strip()
+        return any(s == f"const {struct_type} *" for struct_type in self.struct_types)
+
+    def is_prim_ptr(self, s):
+        s = s.strip()
+        return any(s == f"{prim_type} *" for prim_type in prim_types)
+
+    def is_const_prim_ptr(self, s):
+        s = s.strip()
+        return any(s == f"const {prim_type} *" for prim_type in prim_types)
+
+# Global state
 struct_types = []
 enum_types = []
 enum_items = {}
 out_lines = ''
 
 def reset_globals():
-    global struct_types
-    global enum_types
-    global enum_items
-    global out_lines
+    global struct_types, enum_types, enum_items, out_lines
     struct_types = []
     enum_types = []
     enum_items = {}
@@ -131,401 +243,207 @@ def l(s):
     global out_lines
     out_lines += s + '\n'
 
-def c(s, indent=""):
-    if not s:
+def format_comment(comment, indent="", multiline=False):
+    if not comment:
         return
-    prefix = f"{indent}/// "
-    l(textwrap.indent(textwrap.dedent(s), prefix=prefix, predicate=lambda line: True))
-
-def as_d_prim_type(s):
-    return prim_types[s]
-
-# prefix_bla_blub(_t) => (dep.)BlaBlub
-def as_d_struct_type(s, prefix):
-    parts = s.lower().split('_')
-    outp = '' if s.startswith(prefix) else f'{parts[0]}.'
-    for part in parts[1:]:
-        # ignore '_t' type postfix
-        if (part != 't'):
-            outp += part.capitalize()
-    return outp
-
-# prefix_bla_blub(_t) => (dep.)BlaBlub
-def as_d_enum_type(s, prefix):
-    parts = s.lower().split('_')
-    outp = '' if s.startswith(prefix) else f'{parts[0]}.'
-    for part in parts[1:]:
-        if (part != 't'):
-            outp += part.capitalize()
-    return outp
-
-def check_override(name, default=None):
-    if name in overrides:
-        return overrides[name]
-    elif default is None:
-        return name
+    comment = comment.strip()
+    if multiline:
+        lines = textwrap.wrap(comment, width=80, subsequent_indent=indent + " * ")
+        l(f"{indent}/++")
+        for line in lines:
+            l(f"{indent} * {line}")
+        l(f"{indent} +/")
     else:
-        return default
+        for line in comment.split('\n'):
+            l(f"{indent}/// {line.strip()}")
 
-def check_ignore(name):
-    return name in ignores
-
-# PREFIX_ENUM_BLA => Bla, _PREFIX_ENUM_BLA => Bla
 def as_enum_item_name(s):
-    outp = s.lstrip('_')
-    parts = outp.split('_')[2:]
-    outp = '_'.join(parts)
-    outp = outp.capitalize()
-    if outp[0].isdigit():
-        outp = '_' + outp.capitalize()
-    return outp
+    outp = s.lstrip('_').split('_', 2)[-1].capitalize()
+    return '_' + outp if outp[0].isdigit() else outp
 
-def enum_default_item(enum_name):
-    return enum_items[enum_name][0]
+def pre_parse(inp):
+    global struct_types, enum_types, enum_items
+    for decl in inp['decls']:
+        if decl['kind'] == 'struct':
+            struct_types.append(decl['name'])
+        elif decl['kind'] == 'enum':
+            enum_name = decl['name']
+            enum_types.append(enum_name)
+            enum_items[enum_name] = [as_enum_item_name(item['name']) for item in decl['items']]
 
-def is_prim_type(s):
-    return s in prim_types
-
-def is_struct_type(s):
-    return s in struct_types
-
-def is_enum_type(s):
-    return s in enum_types
-
-def is_const_prim_ptr(s):
-    for prim_type in prim_types:
-        if s == f"const {prim_type} *":
-            return True
-    return False
-
-def is_prim_ptr(s):
-    for prim_type in prim_types:
-        if s == f"{prim_type} *":
-            return True
-    return False
-
-def is_const_struct_ptr(s):
-    for struct_type in struct_types:
-        if s == f"const {struct_type} *":
-            return True
-    return False
-
-def is_struct_ptr(s):
-    for struct_type in struct_types:
-        if s == f"{struct_type} *":
-            return True
-    return False
-
-def type_default_value(s):
-    return prim_defaults[s]
-
-def as_c_arg_type(arg_type, prefix):
-    if arg_type == "void":
-        return "void"
-    elif is_prim_type(arg_type):
-        return as_d_prim_type(arg_type)
-    elif is_struct_type(arg_type):
-        return as_d_struct_type(arg_type, prefix)
-    elif is_enum_type(arg_type):
-        return as_d_enum_type(arg_type, prefix)
-    elif util.is_void_ptr(arg_type):
-        return "void*"
-    elif util.is_const_void_ptr(arg_type):
-        return "const(void)*"
-    elif util.is_string_ptr(arg_type):
-        return "const(char)*"
-    elif is_const_struct_ptr(arg_type):
-        return f"const {as_d_struct_type(util.extract_ptr_type(arg_type), prefix)} *"
-    elif is_prim_ptr(arg_type):
-        return f"{as_d_prim_type(util.extract_ptr_type(arg_type))} *"
-    elif is_const_prim_ptr(arg_type):
-        return f"const {as_d_prim_type(util.extract_ptr_type(arg_type))} *"
-    else:
-        sys.exit(f"Error as_c_arg_type(): {arg_type}")
-
-def as_d_arg_type(arg_prefix, arg_type, prefix):
-    # NOTE: if arg_prefix is None, the result is used as return value
-    pre = "" if arg_prefix is None else arg_prefix
-    if arg_type == "void":
-        if arg_prefix is None:
-            return "void"
-        else:
-            return ""
-    elif is_prim_type(arg_type):
-        return as_d_prim_type(arg_type) + pre
-    elif is_struct_type(arg_type):
-        return as_d_struct_type(arg_type, prefix) + pre
-    elif is_enum_type(arg_type):
-        return as_d_enum_type(arg_type, prefix) + pre
-    elif util.is_void_ptr(arg_type):
-        return "scope void*" + pre
-    elif util.is_const_void_ptr(arg_type):
-        return "scope const(void)*" + pre
-    elif util.is_string_ptr(arg_type):
-        return "scope const(char)*" + pre
-    elif is_struct_ptr(arg_type):
-        return f"scope ref {as_d_struct_type(util.extract_ptr_type(arg_type), prefix)}" + pre
-    elif is_const_struct_ptr(arg_type):
-        return f"scope ref {as_d_struct_type(util.extract_ptr_type(arg_type), prefix)}" + pre
-    elif is_prim_ptr(arg_type):
-        return f"scope {as_d_prim_type(util.extract_ptr_type(arg_type))} *" + pre
-    elif is_const_prim_ptr(arg_type):
-        return f"scope const {as_d_prim_type(util.extract_ptr_type(arg_type))} *" + pre
-    else:
-        sys.exit(f"ERROR as_d_arg_type(): {arg_type}")
-
-def is_d_string(d_type):
-    return d_type == "string"
-
-# get C-style arguments of a function pointer as string
-def funcptr_args_c(field_type, prefix):
-    tokens = field_type[field_type.index('(*)')+4:-1].split(',')
-    s = ""
-    for token in tokens:
-        arg_type = token.strip()
-        if s != "":
-            s += ", "
-        c_arg = as_c_arg_type(arg_type, prefix)
-        if c_arg == "void":
-            return ""
-        else:
-            s += c_arg
-    return s
-
-# get C-style result of a function pointer as string
-def funcptr_result_c(field_type):
-    res_type = field_type[:field_type.index('(*)')].strip()
-    if res_type == 'void':
-        return 'void'
-    elif is_prim_type(res_type):
-        return as_d_prim_type(res_type)
-    elif util.is_const_void_ptr(res_type):
-        return 'const(void)*'
-    elif util.is_void_ptr(res_type):
-        return 'void*'
-    else:
-        sys.exit(f"ERROR funcptr_result_c(): {field_type}")
-
-def funcdecl_args_c(decl, prefix):
-    s = ""
-    func_name = decl['name']
-    for param_decl in decl['params']:
-        if s != "":
-            s += ", "
-        param_name = param_decl['name']
-        param_type = check_override(f'{func_name}.{param_name}', default=param_decl['type'])
-        s += as_c_arg_type(param_type, prefix)
-    return s
-
-def funcdecl_args_d(decl, prefix):
-    s = ""
-    func_name = decl['name']
-    for param_decl in decl['params']:
-        if s != "":
-            s += ", "
-        param_name = param_decl['name']
-        param_type = check_override(f'{func_name}.{param_name}', default=param_decl['type'])
-        s += f"{as_d_arg_type(f' {param_name}', param_type, prefix)}"
-    return s
-
-def funcdecl_result_c(decl, prefix):
-    func_name = decl['name']
-    decl_type = decl['type']
-    result_type = check_override(f'{func_name}.RESULT', default=decl_type[:decl_type.index('(')].strip())
-    return as_c_arg_type(result_type, prefix)
-
-def funcdecl_result_d(decl, prefix):
-    func_name = decl['name']
-    decl_type = decl['type']
-    result_type = check_override(f'{func_name}.RESULT', default=decl_type[:decl_type.index('(')].strip())
-    d_res_type = as_d_arg_type(None, result_type, prefix)
-    if is_d_string(d_res_type):
-        d_res_type = "string"
-    return d_res_type
-
-def gen_struct(decl, prefix):
-    struct_name = check_override(decl['name'])
-    d_type = as_d_struct_type(struct_name, prefix)
-    c(decl.get('comment'))
-    l(f"extern(C)\nstruct {d_type} {{")
+def gen_struct(decl, type_converter):
+    struct_name = overrides.get(decl['name'], decl['name'])
+    d_type = type_converter.as_d_struct_type(struct_name)
+    format_comment(decl.get('comment', ''), multiline=True)
+    l(f"extern(C) struct {d_type} {{")
+    used_field_names = set()
     for field in decl['fields']:
-        field_name = check_override(field['name'])
-        field_type = check_override(f'{struct_name}.{field_name}', default=field['type'])
-        if is_prim_type(field_type):
-            l(f"    {as_d_prim_type(field_type)} {field_name} = {type_default_value(field_type)};")
-        elif is_struct_type(field_type):
-            l(f"    {as_d_struct_type(field_type, prefix)} {field_name};")
-        elif is_enum_type(field_type):
-            l(f"    {as_d_enum_type(field_type, prefix)} {field_name};")
-        elif util.is_string_ptr(field_type):
-            l(f"    const(char)* {field_name} = null;")
-        elif util.is_const_void_ptr(field_type):
-            l(f"    const(void)* {field_name} = null;")
-        elif util.is_void_ptr(field_type):
-            l(f"    void* {field_name} = null;")
-        elif is_const_prim_ptr(field_type):
-            l(f"    const {as_d_prim_type(util.extract_ptr_type(field_type))} = null;")
+        field_key = f"{struct_name}.{field['name']}"
+        field_name = overrides.get(field_key, field['name'])
+        field_name = overrides.get(field_name, field_name)
+        field_type = overrides.get(field_key, field['type'])
+
+        if field_name in used_field_names or field_name in prim_types.values():
+            field_name = f"{field_name}_field"
+        used_field_names.add(field_name)
+
+        d_type_str = type_converter.as_d_type(field_type, decl_name=field_key)
+        default = type_converter.default_value(field_type)
+        
+        if default:
+            default_value = f" = {default}"
         elif util.is_func_ptr(field_type):
-            l(f"    extern(C) {funcptr_result_c(field_type)} function({funcptr_args_c(field_type, prefix)}) {field_name} = null;")
-        elif util.is_1d_array_type(field_type):
+            default_value = " = null"
+        elif type_converter.is_struct_ptr(field_type) or type_converter.is_const_struct_ptr(field_type):
+            default_value = " = null"
+        elif util.is_void_ptr(field_type) or util.is_const_void_ptr(field_type) or util.is_string_ptr(field_type):
+            default_value = " = null"
+        elif field_type in type_converter.struct_types:
+            default_value = " = {}"
+        elif field_type in type_converter.enum_types:
+            enum_name = field_type
+            if enum_name in enum_items and enum_items[enum_name]:
+                default_value = f" = {type_converter.as_d_enum_type(enum_name)}.{enum_items[enum_name][0]}"
+            else:
+                default_value = " = 0"
+        elif util.is_array_type(field_type):
             array_type = util.extract_array_type(field_type)
             array_sizes = util.extract_array_sizes(field_type)
-            if is_prim_type(array_type) or is_struct_type(array_type):
-                if is_prim_type(array_type):
-                    d_type = as_d_prim_type(array_type)
-                    def_val = type_default_value(array_type)
-                elif is_struct_type(array_type):
-                    d_type = as_d_struct_type(array_type, prefix)
-                    def_val = ''
-                elif is_enum_type(array_type):
-                    d_type = as_d_enum_type(array_type, prefix)
-                    def_val = ''
-                else:
-                    sys.exit(f"ERROR gen_struct is_1d_array_type: {array_type}")
-                t0 = f"{d_type}[{array_sizes[0]}]"
-                t1 = f"{d_type}[]"
-                if def_val != '':
-                    l(f"    {t0} {field_name} = {def_val};")
-                else:
-                    l(f"    {t0} {field_name};")
-            elif util.is_const_void_ptr(array_type):
-                l(f"    const(void)*[{array_sizes[0]}] {field_name} = null;")
+            if array_type in prim_types and array_sizes and len(array_sizes) == 1:
+                default_value = f" = [{', '.join([prim_defaults[array_type]] * int(array_sizes[0]))}]"
+            elif array_type in type_converter.struct_types or array_type in type_converter.enum_types or len(array_sizes) > 1:
+                default_value = " = []"
             else:
-                sys.exit(f"ERROR gen_struct: array {field_name}: {field_type} => {array_type} [{array_sizes[0]}]")
-        elif util.is_2d_array_type(field_type):
-            array_type = util.extract_array_type(field_type)
-            array_sizes = util.extract_array_sizes(field_type)
-            if is_prim_type(array_type):
-                d_type = as_d_prim_type(array_type)
-                def_val = type_default_value(array_type)
-            elif is_struct_type(array_type):
-                d_type = as_d_struct_type(array_type, prefix)
-                def_val = ''
-            else:
-                sys.exit(f"ERROR gen_struct is_2d_array_type: {array_type}")
-            t0 = f"{d_type}[{array_sizes[0]}][{array_sizes[1]}]"
-            if def_val != '':
-                l(f"    {t0} {field_name} = {def_val};")
-            else:
-                l(f"    {t0} {field_name};")
+                default_value = " = null"
         else:
-            sys.exit(f"ERROR gen_struct: {field_type} {field_name};")
+            default_value = ""
+
+        format_comment(field.get('comment', ''), "    ")
+        l(f"    {d_type_str} {field_name}{default_value};")
     l("}")
 
 def gen_consts(decl, prefix):
-    c(decl.get('comment'))
+    format_comment(decl.get('comment', ''), multiline=True)
     for item in decl['items']:
-        item_name = check_override(item['name'])
-        c(decl.get('comment'))
+        item_name = overrides.get(item['name'], item['name'])
+        format_comment(item.get('comment', ''))
         l(f"enum {util.as_lower_snake_case(item_name, prefix)} = {item['value']};")
 
-def gen_enum(decl, prefix):
-    enum_name = check_override(decl['name'])
-    c(decl.get('comment'))
-    l(f"enum {as_d_enum_type(enum_name, prefix)} {{")
+def gen_enum(decl, type_converter):
+    enum_name = overrides.get(decl['name'], decl['name'])
+    format_comment(decl.get('comment', ''), multiline=True)
+    l(f"enum {type_converter.as_d_enum_type(enum_name)} {{")
     for item in decl['items']:
-        item_name = as_enum_item_name(check_override(item['name']))
+        item_name = as_enum_item_name(overrides.get(item['name'], item['name']))
         if item_name != "Force_u32":
-            if 'value' in item:
-                l(f"    {item_name} = {item['value']},")
-            else:
-                l(f"    {item_name},")
+            format_comment(item.get('comment', ''))
+            l(f"    {item_name}{f' = {item['value']}' if 'value' in item else ''},")
     l("}")
 
-def gen_func_c(decl, prefix):
-    c(decl.get('comment'))
-    l(f"extern(C) {funcdecl_result_c(decl, prefix)} {decl['name']}({funcdecl_args_c(decl, prefix)}) @system @nogc nothrow;")
-
-def gen_func_d(decl, prefix):
+def gen_func(decl, type_converter, prefix):
     c_func_name = decl['name']
-    d_func_name = util.as_lower_camel_case(check_override(decl['name']), prefix)
-    c(decl.get('comment'))
-    if c_func_name in c_callbacks:
-        # a simple forwarded C callback function
-        l(f"alias {d_func_name} = {c_func_name};")
-    else:
-        d_res_type = funcdecl_result_d(decl, prefix)
-        l(f"{d_res_type} {d_func_name}({funcdecl_args_d(decl, prefix)}) @trusted @nogc nothrow {{")
-        if d_res_type != 'void':
-            s = f"    return {c_func_name}("
-        else:
-            s = f"    {c_func_name}("
-        for i, param_decl in enumerate(decl['params']):
-            if i > 0:
-                s += ", "
-            arg_name = param_decl['name']
-            arg_type = param_decl['type']
-            if is_const_struct_ptr(arg_type):
-                s += f"&{arg_name}"
-            elif util.is_string_ptr(arg_type):
-                s += f"{arg_name}"
-            else:
-                s += arg_name
-        if is_d_string(d_res_type):
-            s += ")"
-        s += ");"
-        l(s)
-        l("}")
+    d_func_name = util.as_lower_camel_case(overrides.get(c_func_name, c_func_name), prefix)
+    format_comment(decl.get('comment', ''), multiline=True)
 
-def pre_parse(inp):
-    global struct_types
-    global enum_types
-    for decl in inp['decls']:
-        kind = decl['kind']
-        if kind == 'struct':
-            struct_types.append(decl['name'])
-        elif kind == 'enum':
-            enum_name = decl['name']
-            enum_types.append(enum_name)
-            enum_items[enum_name] = []
-            for item in decl['items']:
-                enum_items[enum_name].append(as_enum_item_name(item['name']))
+    if c_func_name == 'slog_func':
+        params = []
+        for param in decl['params']:
+            param_name = param['name']
+            param_key = f"{c_func_name}.{param_name}"
+            param_type = overrides.get(param_key, param['type'])
+            param_d_type = type_converter.as_d_type(param_type, is_param=True, decl_name=param_key)
+            params.append(f"{param_d_type} {param_name}")
+        params_str = ", ".join(params) if params else ""
+        result_type = type_converter.as_d_type(decl['type'][:decl['type'].index('(')].strip(), decl_name=c_func_name)
+        l(f"extern(C) {result_type} {c_func_name}({params_str}) @system @nogc nothrow pure;")
+        format_comment(decl.get('comment', ''), multiline=True)
+        l(f"alias func = {c_func_name};")
+        return
+
+    if c_func_name in c_callbacks:
+        l(f"alias {d_func_name} = {type_converter.as_func_ptr_type(decl['type'], c_func_name, decl)};")
+        return
+
+    params = []
+    wrapper_params = []
+    call_args = []
+    for param in decl['params']:
+        param_name = param['name']
+        param_key = f"{c_func_name}.{param_name}"
+        param_type = overrides.get(param_key, param['type'])
+        param_d_type = type_converter.as_d_type(param_type, is_param=True, decl_name=param_key)
+        wrapper_d_type = param_d_type
+        if type_converter.is_struct_ptr(param_type) or type_converter.is_const_struct_ptr(param_type):
+            wrapper_d_type = f"scope ref {type_converter.as_d_struct_type(util.extract_ptr_type(param_type.strip()))}"
+        params.append(f"{param_d_type} {param_name}")
+        wrapper_params.append(f"{wrapper_d_type} {param_name}")
+        if 'scope ref' in wrapper_d_type:
+            call_args.append(f"&{param_name}")
+        else:
+            call_args.append(param_name)
+
+    result_type = type_converter.as_d_type(decl['type'][:decl['type'].index('(')].strip(), decl_name=c_func_name)
+    params_str = ", ".join(params) if params else ""
+    wrapper_params_str = ", ".join(wrapper_params) if wrapper_params else ""
+    call_args_str = ", ".join(call_args) if call_args else ""
+
+    l(f"extern(C) {result_type} {c_func_name}({params_str}) @system @nogc nothrow pure;")
+    l(f"{result_type} {d_func_name}({wrapper_params_str}) @trusted @nogc nothrow pure {{")
+    l(f"    {'return ' if result_type != 'void' else ''}{c_func_name}({call_args_str});")
+    l("}")
 
 def gen_imports(inp, dep_prefixes):
     for dep_prefix in dep_prefixes:
-        dep_module_name = module_names[dep_prefix]
-        l(f'import {dep_prefix[:-1]} = sokol.{dep_module_name};')
+        if dep_prefix in module_names:
+            l(f'import {dep_prefix[:-1]} = sokol.{module_names[dep_prefix]};')
     l('')
 
-def gen_module(inp, dep_prefixes):
-    l('// machine generated, do not edit')
-    l('')
+def gen_module(inp, dep_prefixes, c_header_path):
+    reset_globals()
+    header_comment = f"""
+    Machine generated D bindings for Sokol library.
+    Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+    Source header: {os.path.basename(c_header_path)}
+    Module: sokol.{inp['module']}
+    Do not edit manually; regenerate using gen_d.py.
+    """
+    format_comment(header_comment, multiline=True)
     l(f'module sokol.{inp["module"]};')
+    logging.info(f"Generating imports for module {inp['module']}")
     gen_imports(inp, dep_prefixes)
     pre_parse(inp)
-    prefix = inp['prefix']
+    type_converter = TypeConverter(inp['prefix'], struct_types, enum_types)
     for decl in inp['decls']:
-        if not decl['is_dep']:
-            kind = decl['kind']
-            if kind == 'consts':
-                gen_consts(decl, prefix)
-            elif not check_ignore(decl['name']):
-                if kind == 'struct':
-                    gen_struct(decl, prefix)
-                elif kind == 'enum':
-                    gen_enum(decl, prefix)
-                elif kind == 'func':
-                    gen_func_c(decl, prefix)
-                    gen_func_d(decl, prefix)
+        if not decl.get('is_dep', False) and (decl.get('kind', '') != 'func' or decl['name'] not in ignores):
+            if decl['kind'] == 'consts':
+                gen_consts(decl, inp['prefix'])
+            elif decl['kind'] == 'struct':
+                gen_struct(decl, type_converter)
+            elif decl['kind'] == 'enum':
+                gen_enum(decl, type_converter)
+            elif decl['kind'] == 'func':
+                gen_func(decl, type_converter, inp['prefix'])
 
 def prepare():
-    print('=== Generating d bindings:')
-    if not os.path.isdir('sokol-d/src/sokol'):
-        os.makedirs('sokol-d/src/sokol')
-    if not os.path.isdir('sokol-d/src/sokol/c'):
-        os.makedirs('sokol-d/src/sokol/c')
+    logging.info("Preparing directories for D bindings generation")
+    print('=== Generating D bindings:')
+    os.makedirs('sokol-d/src/sokol/c', exist_ok=True)
 
 def gen(c_header_path, c_prefix, dep_c_prefixes):
-    if not c_prefix in module_names:
+    if not os.path.isfile(c_header_path):
+        raise FileNotFoundError(f"Header file not found: {c_header_path}")
+    if c_prefix not in module_names:
+        logging.warning(f"Skipping generation for prefix {c_prefix}")
         print(f' >> warning: skipping generation for {c_prefix} prefix...')
         return
     module_name = module_names[c_prefix]
     c_source_path = c_source_paths[c_prefix]
+    logging.info(f"Generating bindings for {c_header_path} => {module_name}")
     print(f'  {c_header_path} => {module_name}')
     reset_globals()
     shutil.copyfile(c_header_path, f'sokol-d/src/sokol/c/{os.path.basename(c_header_path)}')
     ir = gen_ir.gen(c_header_path, c_source_path, module_name, c_prefix, dep_c_prefixes, with_comments=True)
-    gen_module(ir, dep_c_prefixes)
+    gen_module(ir, dep_c_prefixes, c_header_path)
     output_path = f"sokol-d/src/sokol/{ir['module']}.d"
     with open(output_path, 'w', newline='\n') as f_outp:
         f_outp.write(out_lines)
