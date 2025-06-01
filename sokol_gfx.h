@@ -6512,7 +6512,7 @@ typedef _sg_mtl_attachments_t _sg_attachments_t;
 #define _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS (SG_MAX_IMAGE_BINDSLOTS + SG_MAX_STORAGE_ATTACHMENTS)
 #define _SG_MTL_MAX_STAGE_SAMPLER_BINDINGS (SG_MAX_SAMPLER_BINDSLOTS)
 typedef struct {
-    _sg_pipeline_ref_t cur_pip;
+    _sg_sref_t cur_pip;
     _sg_buffer_ref_t cur_ibuf;
     int cur_ibuf_offset;
     int cur_vs_buffer_offsets[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
@@ -15042,8 +15042,8 @@ _SOKOL_PRIVATE void _sg_mtl_apply_scissor_rect(int x, int y, int w, int h, bool 
 
 _SOKOL_PRIVATE void _sg_mtl_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
-    if (!_sg_pipeline_ref_eql(&_sg.mtl.state_cache.cur_pip, pip)) {
-        _sg.mtl.state_cache.cur_pip = _sg_pipeline_ref(pip);
+    if (!_sg_sref_eql(&_sg.mtl.state_cache.cur_pip, &pip->slot)) {
+        _sg.mtl.state_cache.cur_pip = _sg_sref(&pip->slot);
         if (pip->cmn.is_compute) {
             SOKOL_ASSERT(_sg.cur_pass.is_compute);
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
@@ -15249,7 +15249,7 @@ _SOKOL_PRIVATE void _sg_mtl_apply_uniforms(int ub_slot, const sg_range* data) {
     SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
     SOKOL_ASSERT(((size_t)_sg.mtl.cur_ub_offset + data->size) <= (size_t)_sg.mtl.ub_size);
     SOKOL_ASSERT((_sg.mtl.cur_ub_offset & (_SG_MTL_UB_ALIGN-1)) == 0);
-    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.mtl.state_cache.cur_pip);
+    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
     SOKOL_ASSERT(pip);
     const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
     SOKOL_ASSERT(data->size == shd->cmn.uniform_blocks[ub_slot].size);
@@ -15280,7 +15280,7 @@ _SOKOL_PRIVATE void _sg_mtl_apply_uniforms(int ub_slot, const sg_range* data) {
 
 _SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_instances) {
     SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.mtl.state_cache.cur_pip);
+    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
     SOKOL_ASSERT(pip);
     if (SG_INDEXTYPE_NONE != pip->cmn.index_type) {
         // indexed rendering
@@ -15304,7 +15304,7 @@ _SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_ins
 
 _SOKOL_PRIVATE void _sg_mtl_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
-    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.mtl.state_cache.cur_pip);
+    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
     SOKOL_ASSERT(pip);
     const MTLSize thread_groups = MTLSizeMake(
         (NSUInteger)num_groups_x,
