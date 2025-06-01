@@ -250,7 +250,8 @@ def format_comment(comment, indent="", multiline=False):
     # Escape nested comment delimiters to ensure valid D code
     comment = comment.replace('/++', '/+ /').replace('+/', '/ +/')
     if multiline:
-        lines = textwrap.wrap(comment, width=80, subsequent_indent=indent)
+        # Split by newlines to preserve empty lines
+        lines = [line.rstrip() for line in comment.split('\n')]
         l(f"{indent}/++")
         for line in lines:
             l(f"{indent}+ {line}")
@@ -403,9 +404,12 @@ def gen_module(inp, dep_prefixes, c_header_path):
     reset_globals()
     header_comment = f"""
     Machine generated D bindings for Sokol library.
+    
     Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+    
     Source header: {os.path.basename(c_header_path)}
     Module: sokol.{inp['module']}
+    
     Do not edit manually; regenerate using gen_d.py.
     """
     format_comment(header_comment, multiline=True)
