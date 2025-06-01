@@ -4404,7 +4404,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_STORAGE_ATTACHMENT_IMAGE_TYPE, "sg_apply_pipeline: compute pass storage image attachment image type doesn't match sg_shader_desc.storage_images[].image_type") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PASS_EXPECTED, "sg_apply_bindings: must be called in a pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EMPTY_BINDINGS, "sg_apply_bindings: the provided sg_bindings struct is empty") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE, "sg_apply_bindings: must be called after sg_apply_pipeline") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_NO_PIPELINE, "sg_apply_bindings: must be called after sg_apply_pipeline") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE_EXISTS, "sg_apply_bindings: currently applied pipeline object no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE_VALID, "sg_apply_bindings: currently applied pipeline object not in valid state") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE_SHADER_EXISTS, "sg_apply_bindings: shader associated with currently applied pipeline is no longer alive") \
@@ -4442,6 +4442,8 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_IMAGE_BINDING_VS_STORAGE_ATTACHMENT, "sg_apply_bindings: cannot bind image in the same pass it is used as storage attachment") \
     _SG_LOGITEM_XMACRO(VALIDATE_AU_PASS_EXPECTED, "sg_apply_uniforms: must be called in a pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_AU_NO_PIPELINE, "sg_apply_uniforms: must be called after sg_apply_pipeline()") \
+    _SG_LOGITEM_XMACRO(VALIDATE_AU_PIPELINE_EXISTS, "sg_apply_uniforms: currently applied pipeline object no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_AU_PIPELINE_VALID, "sg_apply_uniforms: currently applied pipeline object not in valid state") \
     _SG_LOGITEM_XMACRO(VALIDATE_AU_PIPELINE_SHADER_EXISTS, "sg_apply_uniforms: shader associated with currently applied pipeline is no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_AU_PIPELINE_SHADER_VALID, "sg_apply_uniforms: shader associated with currently applied pipeline is not in valid state") \
     _SG_LOGITEM_XMACRO(VALIDATE_AU_NO_UNIFORMBLOCK_AT_SLOT, "sg_apply_uniforms: no uniform block declaration at this shader stage UB slot") \
@@ -6806,7 +6808,7 @@ typedef struct {
             int sample_count;
         } swapchain;
     } cur_pass;
-    sg_pipeline cur_pipeline;
+    _sg_pipeline_ref_t cur_pip;
     bool next_draw_valid;
     uint32_t required_bindings_and_uniforms;    // used to check that bindings and uniforms are applied after applying pipeline
     uint32_t applied_bindings_and_uniforms;     // bits 0..7: uniform blocks, bit 8: bindings
@@ -19801,12 +19803,13 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         _SG_VALIDATE(has_any_bindings, VALIDATE_ABND_EMPTY_BINDINGS);
 
         // a pipeline object must have been applied
-        _SG_VALIDATE(_sg.cur_pipeline.id != SG_INVALID_ID, VALIDATE_ABND_PIPELINE);
-        const _sg_pipeline_t* pip = _sg_lookup_pipeline(_sg.cur_pipeline.id);
-        _SG_VALIDATE(pip != 0, VALIDATE_ABND_PIPELINE_EXISTS);
-        if (!pip) {
+        _SG_VALIDATE(_sg.cur_pip.sref.id != SG_INVALID_ID, VALIDATE_ABND_NO_PIPELINE);
+        const bool pip_valid = _sg_pipeline_ref_valid(&_sg.cur_pip);
+        _SG_VALIDATE(pip_valid, VALIDATE_ABND_PIPELINE_EXISTS);
+        if (!pip_valid) {
             return _sg_validate_end();
         }
+        const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
         _SG_VALIDATE(pip->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ABND_PIPELINE_VALID);
         _SG_VALIDATE(_sg_shader_ref_valid(&pip->cmn.shader), VALIDATE_ABND_PIPELINE_SHADER_EXISTS);
         const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
@@ -19965,9 +19968,10 @@ _SOKOL_PRIVATE bool _sg_validate_apply_uniforms(int ub_slot, const sg_range* dat
         SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
         _sg_validate_begin();
         _SG_VALIDATE(_sg.cur_pass.in_pass, VALIDATE_AU_PASS_EXPECTED);
-        _SG_VALIDATE(_sg.cur_pipeline.id != SG_INVALID_ID, VALIDATE_AU_NO_PIPELINE);
-        const _sg_pipeline_t* pip = _sg_lookup_pipeline(_sg.cur_pipeline.id);
-        SOKOL_ASSERT(pip && (pip->slot.id == _sg.cur_pipeline.id));
+        _SG_VALIDATE(_sg.cur_pip.sref.id != SG_INVALID_ID, VALIDATE_AU_NO_PIPELINE);
+        _SG_VALIDATE(_sg_pipeline_ref_valid(&_sg.cur_pip), VALIDATE_AU_PIPELINE_EXISTS);
+        const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
+        _SG_VALIDATE(pip->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_AU_PIPELINE_VALID);
         _SG_VALIDATE(_sg_shader_ref_valid(&pip->cmn.shader), VALIDATE_AU_PIPELINE_SHADER_EXISTS);
         const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
         _SG_VALIDATE(shd->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_AU_PIPELINE_SHADER_VALID);
@@ -21509,9 +21513,9 @@ SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
     if (!_sg.cur_pass.valid) {
         return;
     }
-    _sg.cur_pipeline = pip_id;
     _sg_pipeline_t* pip = _sg_lookup_pipeline(pip_id.id);
     SOKOL_ASSERT(pip);
+    _sg.cur_pip = _sg_pipeline_ref(pip);
 
     _sg.next_draw_valid = (SG_RESOURCESTATE_VALID == pip->slot.state);
     if (!_sg.next_draw_valid) {
@@ -21537,7 +21541,9 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
     _sg.applied_bindings_and_uniforms |= (1 << SG_MAX_UNIFORMBLOCK_BINDSLOTS);
     if (!_sg_validate_apply_bindings(bindings)) {
         _sg.next_draw_valid = false;
-        return;
+    }
+    if (!_sg_pipeline_ref_valid(&_sg.cur_pip)) {
+        _sg.next_draw_valid = false;
     }
     if (!_sg.cur_pass.valid) {
         return;
@@ -21548,10 +21554,7 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
 
     _sg_bindings_ptrs_t bnd;
     _sg_clear(&bnd, sizeof(bnd));
-    bnd.pip = _sg_lookup_pipeline(_sg.cur_pipeline.id);
-    if (0 == bnd.pip) {
-        _sg.next_draw_valid = false;
-    }
+    bnd.pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
     const _sg_shader_t* shd = _sg_shader_ref_ptr(&bnd.pip->cmn.shader);
     if (!_sg.cur_pass.is_compute) {
         for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
@@ -21695,7 +21698,7 @@ SOKOL_API_IMPL void sg_end_pass(void) {
     _sg_stats_add(num_passes, 1);
     // NOTE: don't exit early if !_sg.cur_pass.valid
     _sg_end_pass();
-    _sg.cur_pipeline.id = SG_INVALID_ID;
+    _sg.cur_pip = _sg_pipeline_ref_null();
     if (_sg.cur_pass.is_compute) {
         _sg_compute_on_endpass();
     }
