@@ -5651,29 +5651,29 @@ typedef struct _sg_buffer_ref_s {
     struct _sg_buffer_s* ptr;
     _sg_sref_t sref;
 } _sg_buffer_ref_t;
-_SOKOL_PRIVATE _sg_buffer_ref_t _sg_buffer_ref(struct _sg_buffer_s* buf);
-_SOKOL_PRIVATE _sg_buffer_ref_t _sg_buffer_ref_null(void);
+_SOKOL_PRIVATE _sg_buffer_ref_t _sg_buffer_ref(struct _sg_buffer_s* buf_or_null);
 _SOKOL_PRIVATE bool _sg_buffer_ref_eql(const _sg_buffer_ref_t* ref, const struct _sg_buffer_s* buf);
 _SOKOL_PRIVATE bool _sg_buffer_ref_valid(const _sg_buffer_ref_t* ref);
+_SOKOL_PRIVATE bool _sg_buffer_ref_null(const _sg_buffer_ref_t* ref);
 _SOKOL_PRIVATE struct _sg_buffer_s* _sg_buffer_ref_ptr(const _sg_buffer_ref_t* ref);
 
 typedef struct _sg_image_ref_s {
     struct _sg_image_s* ptr;
     _sg_sref_t sref;
 } _sg_image_ref_t;
-_SOKOL_PRIVATE _sg_image_ref_t _sg_image_ref(struct _sg_image_s* img);
-_SOKOL_PRIVATE _sg_image_ref_t _sg_image_ref_null(void);
+_SOKOL_PRIVATE _sg_image_ref_t _sg_image_ref(struct _sg_image_s* img_or_null);
 _SOKOL_PRIVATE bool _sg_image_ref_eql(const _sg_image_ref_t* ref, const struct _sg_image_s* img);
 _SOKOL_PRIVATE bool _sg_image_ref_valid(const _sg_image_ref_t* ref);
+_SOKOL_PRIVATE bool _sg_image_ref_null(const _sg_image_ref_t* ref);
 _SOKOL_PRIVATE struct _sg_image_s* _sg_image_ref_ptr(const _sg_image_ref_t* ref);
 
 typedef struct _sg_sampler_ref_t {
     struct _sg_sampler_s* ptr;
     _sg_sref_t sref;
 } _sg_sampler_ref_t;
-_SOKOL_PRIVATE _sg_sampler_ref_t _sg_sampler_ref(struct _sg_sampler_s* smp);
-_SOKOL_PRIVATE _sg_sampler_ref_t _sg_sampler_ref_null(void);
+_SOKOL_PRIVATE _sg_sampler_ref_t _sg_sampler_ref(struct _sg_sampler_s* smp_or_null);
 _SOKOL_PRIVATE bool _sg_sampler_ref_eql(const _sg_sampler_ref_t* ref, const struct _sg_sampler_s* smp);
+_SOKOL_PRIVATE bool _sg_sampler_ref_null(const _sg_sampler_ref_t* ref);
 _SOKOL_PRIVATE bool _sg_sampler_ref_valid(const _sg_sampler_ref_t* ref);
 _SOKOL_PRIVATE struct _sg_sampler_s* _sg_sampler_ref_ptr(const _sg_sampler_ref_t* ref);
 
@@ -5681,9 +5681,9 @@ typedef struct _sg_shader_ref_s {
     struct _sg_shader_s* ptr;
     _sg_sref_t sref;
 } _sg_shader_ref_t;
-_SOKOL_PRIVATE _sg_shader_ref_t _sg_shader_ref(struct _sg_shader_s* shd);
-_SOKOL_PRIVATE _sg_shader_ref_t _sg_shader_ref_null(void);
+_SOKOL_PRIVATE _sg_shader_ref_t _sg_shader_ref(struct _sg_shader_s* shd_or_null);
 _SOKOL_PRIVATE bool _sg_shader_ref_eql(const _sg_shader_ref_t* ref, const struct _sg_shader_s* shd);
+_SOKOL_PRIVATE bool _sg_shader_ref_null(const _sg_shader_ref_t* ref);
 _SOKOL_PRIVATE bool _sg_shader_ref_valid(const _sg_shader_ref_t* ref);
 _SOKOL_PRIVATE struct _sg_shader_s* _sg_shader_ref_ptr(const _sg_shader_ref_t* ref);
 
@@ -5691,11 +5691,22 @@ typedef struct _sg_pipeline_ref_s {
     struct _sg_pipeline_s* ptr;
     _sg_sref_t sref;
 } _sg_pipeline_ref_t;
-_SOKOL_PRIVATE _sg_pipeline_ref_t _sg_pipeline_ref(struct _sg_pipeline_s* pip);
-_SOKOL_PRIVATE _sg_pipeline_ref_t _sg_pipeline_ref_null(void);
+_SOKOL_PRIVATE _sg_pipeline_ref_t _sg_pipeline_ref(struct _sg_pipeline_s* pip_or_null);
 _SOKOL_PRIVATE bool _sg_pipeline_ref_eql(const _sg_pipeline_ref_t* ref, const struct _sg_pipeline_s* pip);
+_SOKOL_PRIVATE bool _sg_pipeline_ref_null(const _sg_pipeline_ref_t* ref);
 _SOKOL_PRIVATE bool _sg_pipeline_ref_valid(const _sg_pipeline_ref_t* ref);
 _SOKOL_PRIVATE struct _sg_pipeline_s* _sg_pipeline_ref_ptr(const _sg_pipeline_ref_t* ref);
+
+typedef struct _sg_attachments_ref_s {
+    struct _sg_attachments_s* ptr;
+    _sg_sref_t sref;
+
+} _sg_attachments_ref_t;
+_SOKOL_PRIVATE _sg_attachments_ref_t _sg_attachments_ref(struct _sg_attachments_s* atts_or_null);
+_SOKOL_PRIVATE bool _sg_attachments_ref_eql(const _sg_attachments_ref_t* ref, const struct _sg_attachments_s* atts);
+_SOKOL_PRIVATE bool _sg_attachments_ref_null(const _sg_attachments_ref_t* ref);
+_SOKOL_PRIVATE bool _sg_attachments_ref_valid(const _sg_attachments_ref_t* ref);
+_SOKOL_PRIVATE struct _sg_attachments_s* _sg_attachments_ref_ptr(const _sg_attachments_ref_t* ref);
 
 // resource tracking (for keeping track of gpu-written storage resources
 typedef struct {
@@ -6798,8 +6809,7 @@ typedef struct {
         bool valid;
         bool in_pass;
         bool is_compute;
-        sg_attachments atts_id;     // SG_INVALID_ID in a swapchain pass
-        _sg_attachments_t* atts;    // 0 in a swapchain pass
+        _sg_attachments_ref_t atts; // null in a swapchain pass
         int width;
         int height;
         struct {
@@ -14757,14 +14767,14 @@ _SOKOL_PRIVATE void _sg_mtl_begin_render_pass(const sg_pass* pass) {
     SOKOL_ASSERT(nil == _sg.mtl.render_cmd_encoder);
     SOKOL_ASSERT(nil == _sg.mtl.compute_cmd_encoder);
 
-    const _sg_attachments_t* atts = _sg.cur_pass.atts;
     const sg_swapchain* swapchain = &pass->swapchain;
     const sg_pass_action* action = &pass->action;
 
     MTLRenderPassDescriptor* pass_desc = [MTLRenderPassDescriptor renderPassDescriptor];
     SOKOL_ASSERT(pass_desc);
-    if (atts) {
+    if (!_sg_attachments_ref_null(&_sg.cur_pass.atts)) {
         // setup pass descriptor for offscreen rendering
+        const _sg_attachments_t* atts = _sg_attachments_ref_ptr(&_sg.cur_pass.atts);
         SOKOL_ASSERT(atts->slot.state == SG_RESOURCESTATE_VALID);
         for (NSUInteger i = 0; i < (NSUInteger)atts->cmn.num_colors; i++) {
             const _sg_attachment_common_t* cmn_color_att = &atts->cmn.colors[i];
@@ -15050,9 +15060,9 @@ _SOKOL_PRIVATE void _sg_mtl_apply_pipeline(_sg_pipeline_t* pip) {
             SOKOL_ASSERT(pip->mtl.cps != _SG_MTL_INVALID_SLOT_INDEX);
             [_sg.mtl.compute_cmd_encoder setComputePipelineState:_sg_mtl_id(pip->mtl.cps)];
             // apply storage image bindings for writing
-            if (_sg.cur_pass.atts) {
+            if (_sg_attachments_ref_valid(&_sg.cur_pass.atts)) {
+                const _sg_attachments_t* atts = _sg_attachments_ref_ptr(&_sg.cur_pass.atts);
                 const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
-                const _sg_attachments_t* atts = _sg.cur_pass.atts;
                 for (size_t i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
                     const sg_shader_stage stage = shd->cmn.storage_images[i].stage;
                     if (stage != SG_SHADERSTAGE_COMPUTE) {
@@ -15102,12 +15112,11 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
     if (!_sg.cur_pass.is_compute) {
         SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
         // store index buffer binding, this will be needed later in sg_draw()
+        _sg.mtl.state_cache.cur_ibuf = _sg_buffer_ref(bnd->ib);
         if (bnd->ib) {
             SOKOL_ASSERT(bnd->pip->cmn.index_type != SG_INDEXTYPE_NONE);
-            _sg.mtl.state_cache.cur_ibuf = _sg_buffer_ref(bnd->ib);
         } else {
             SOKOL_ASSERT(bnd->pip->cmn.index_type == SG_INDEXTYPE_NONE);
-            _sg.mtl.state_cache.cur_ibuf = _sg_buffer_ref_null();
         }
         _sg.mtl.state_cache.cur_ibuf_offset = bnd->ib_offset;
         // apply vertex buffers
@@ -18583,68 +18592,69 @@ _SOKOL_PRIVATE void _sg_discard_all_resources(void) {
     }
 }
 
-_SOKOL_PRIVATE _sg_buffer_ref_t _sg_buffer_ref(_sg_buffer_t* buf) {
-    SOKOL_ASSERT(buf && (buf->slot.id != SG_INVALID_ID));
-    _sg_buffer_ref_t ref;
-    ref.ptr = (_sg_buffer_t*)buf;
-    ref.sref = _sg_sref(&buf->slot);
-    return ref;
-}
-
-_SOKOL_PRIVATE _sg_image_ref_t _sg_image_ref(_sg_image_t* img) {
-    SOKOL_ASSERT(img && (img->slot.id != SG_INVALID_ID));
-    _sg_image_ref_t ref;
-    ref.ptr = img;
-    ref.sref = _sg_sref(&img->slot);
-    return ref;
-}
-
-_SOKOL_PRIVATE _sg_sampler_ref_t _sg_sampler_ref(_sg_sampler_t* smp) {
-    SOKOL_ASSERT(smp && (smp->slot.id != SG_INVALID_ID));
-    _sg_sampler_ref_t ref;
-    ref.ptr = smp;
-    ref.sref = _sg_sref(&smp->slot);
-    return ref;
-}
-
-_SOKOL_PRIVATE _sg_shader_ref_t _sg_shader_ref(_sg_shader_t* shd) {
-    SOKOL_ASSERT(shd && (shd->slot.id != SG_INVALID_ID));
-    _sg_shader_ref_t ref;
-    ref.ptr = shd;
-    ref.sref = _sg_sref(&shd->slot);
-    return ref;
-}
-
-_SOKOL_PRIVATE _sg_pipeline_ref_t _sg_pipeline_ref(_sg_pipeline_t* pip) {
-    SOKOL_ASSERT(pip && (pip->slot.id != SG_INVALID_ID));
-    _sg_pipeline_ref_t ref;
-    ref.ptr = pip;
-    ref.sref = _sg_sref(&pip->slot);
-    return ref;
-}
-
-_SOKOL_PRIVATE _sg_buffer_ref_t _sg_buffer_ref_null(void) {
+_SOKOL_PRIVATE _sg_buffer_ref_t _sg_buffer_ref(_sg_buffer_t* buf_or_null) {
     _sg_buffer_ref_t ref; _sg_clear(&ref, sizeof(ref));
+    if (buf_or_null) {
+        _sg_buffer_t* buf = buf_or_null;
+        SOKOL_ASSERT(buf->slot.id != SG_INVALID_ID);
+        ref.ptr = buf;
+        ref.sref = _sg_sref(&buf->slot);
+    }
     return ref;
 }
 
-_SOKOL_PRIVATE _sg_image_ref_t _sg_image_ref_null(void) {
+_SOKOL_PRIVATE _sg_image_ref_t _sg_image_ref(_sg_image_t* img_or_null) {
     _sg_image_ref_t ref; _sg_clear(&ref, sizeof(ref));
+    if (img_or_null) {
+        _sg_image_t* img = img_or_null;
+        SOKOL_ASSERT(img->slot.id != SG_INVALID_ID);
+        ref.ptr = img;
+        ref.sref = _sg_sref(&img->slot);
+    }
     return ref;
 }
 
-_SOKOL_PRIVATE _sg_sampler_ref_t _sg_sampler_ref_null(void) {
+_SOKOL_PRIVATE _sg_sampler_ref_t _sg_sampler_ref(_sg_sampler_t* smp_or_null) {
     _sg_sampler_ref_t ref; _sg_clear(&ref, sizeof(ref));
+    if (smp_or_null) {
+        _sg_sampler_t* smp = smp_or_null;
+        SOKOL_ASSERT(smp->slot.id != SG_INVALID_ID);
+        ref.ptr = smp;
+        ref.sref = _sg_sref(&smp->slot);
+    }
     return ref;
 }
 
-_SOKOL_PRIVATE _sg_shader_ref_t _sg_shader_ref_null(void) {
+_SOKOL_PRIVATE _sg_shader_ref_t _sg_shader_ref(_sg_shader_t* shd_or_null) {
     _sg_shader_ref_t ref; _sg_clear(&ref, sizeof(ref));
+    if (shd_or_null) {
+        _sg_shader_t* shd = shd_or_null;
+        SOKOL_ASSERT(shd->slot.id != SG_INVALID_ID);
+        ref.ptr = shd;
+        ref.sref = _sg_sref(&shd->slot);
+    }
     return ref;
 }
 
-_SOKOL_PRIVATE _sg_pipeline_ref_t _sg_pipeline_ref_null(void) {
+_SOKOL_PRIVATE _sg_pipeline_ref_t _sg_pipeline_ref(_sg_pipeline_t* pip_or_null) {
     _sg_pipeline_ref_t ref; _sg_clear(&ref, sizeof(ref));
+    if (pip_or_null) {
+        _sg_pipeline_t* pip = pip_or_null;
+        SOKOL_ASSERT(pip->slot.id != SG_INVALID_ID);
+        ref.ptr = pip;
+        ref.sref = _sg_sref(&pip->slot);
+    }
+    return ref;
+}
+
+_SOKOL_PRIVATE _sg_attachments_ref_t _sg_attachments_ref(_sg_attachments_t* atts_or_null) {
+    _sg_attachments_ref_t ref; _sg_clear(&ref, sizeof(ref));
+    if (atts_or_null) {
+        _sg_attachments_t* atts = atts_or_null;
+        SOKOL_ASSERT(atts->slot.id != SG_INVALID_ID);
+        ref.ptr = atts;
+        ref.sref = _sg_sref(&atts->slot);
+    }
     return ref;
 }
 
@@ -18673,6 +18683,11 @@ _SOKOL_PRIVATE bool _sg_pipeline_ref_eql(const _sg_pipeline_ref_t* ref, const _s
     return _sg_sref_eql(&ref->sref, &pip->slot);
 }
 
+_SOKOL_PRIVATE bool _sg_attachments_ref_eql(const _sg_attachments_ref_t* ref, const _sg_attachments_t* atts) {
+    SOKOL_ASSERT(ref && atts);
+    return _sg_sref_eql(&ref->sref, &atts->slot);
+}
+
 _SOKOL_PRIVATE bool _sg_buffer_ref_valid(const _sg_buffer_ref_t* ref) {
     SOKOL_ASSERT(ref);
     return ref->ptr && _sg_sref_eql(&ref->sref, &ref->ptr->slot);
@@ -18698,6 +18713,41 @@ _SOKOL_PRIVATE bool _sg_pipeline_ref_valid(const _sg_pipeline_ref_t* ref) {
     return ref->ptr && _sg_sref_eql(&ref->sref, &ref->ptr->slot);
 }
 
+_SOKOL_PRIVATE bool _sg_attachments_ref_valid(const _sg_attachments_ref_t* ref) {
+    SOKOL_ASSERT(ref);
+    return ref->ptr && _sg_sref_eql(&ref->sref, &ref->ptr->slot);
+}
+
+_SOKOL_PRIVATE bool _sg_buffer_ref_null(const _sg_buffer_ref_t* ref) {
+    SOKOL_ASSERT(ref);
+    return SG_INVALID_ID == ref->sref.id;
+}
+
+_SOKOL_PRIVATE bool _sg_image_ref_null(const _sg_image_ref_t* ref) {
+    SOKOL_ASSERT(ref);
+    return SG_INVALID_ID == ref->sref.id;
+}
+
+_SOKOL_PRIVATE bool _sg_sampler_ref_null(const _sg_sampler_ref_t* ref) {
+    SOKOL_ASSERT(ref);
+    return SG_INVALID_ID == ref->sref.id;
+}
+
+_SOKOL_PRIVATE bool _sg_shader_ref_null(const _sg_shader_ref_t* ref) {
+    SOKOL_ASSERT(ref);
+    return SG_INVALID_ID == ref->sref.id;
+}
+
+_SOKOL_PRIVATE bool _sg_pipeline_ref_null(const _sg_pipeline_ref_t* ref) {
+    SOKOL_ASSERT(ref);
+    return SG_INVALID_ID == ref->sref.id;
+}
+
+_SOKOL_PRIVATE bool _sg_attachments_ref_null(const _sg_attachments_ref_t* ref) {
+    SOKOL_ASSERT(ref);
+    return SG_INVALID_ID == ref->sref.id;
+}
+
 _SOKOL_PRIVATE _sg_buffer_t* _sg_buffer_ref_ptr(const _sg_buffer_ref_t* ref) {
     SOKOL_ASSERT(ref && _sg_buffer_ref_valid(ref));
     return ref->ptr;
@@ -18720,6 +18770,11 @@ _SOKOL_PRIVATE _sg_shader_t* _sg_shader_ref_ptr(const _sg_shader_ref_t* ref) {
 
 _SOKOL_PRIVATE _sg_pipeline_t* _sg_pipeline_ref_ptr(const _sg_pipeline_ref_t* ref) {
     SOKOL_ASSERT(ref && _sg_pipeline_ref_valid(ref));
+    return ref->ptr;
+}
+
+_SOKOL_PRIVATE _sg_attachments_t* _sg_attachments_ref_ptr(const _sg_attachments_ref_t* ref) {
+    SOKOL_ASSERT(ref && _sg_attachments_ref_valid(ref));
     return ref->ptr;
 }
 
@@ -19715,16 +19770,16 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
         _SG_VALIDATE(shd->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_PIPELINE_SHADER_VALID);
 
         // if pass attachments exist, check that the attachment object is still valid
-        if (_sg.cur_pass.atts_id.id != SG_INVALID_ID) {
-            const _sg_attachments_t* atts = _sg.cur_pass.atts;
-            SOKOL_ASSERT(atts);
-            _SG_VALIDATE(atts->slot.id == _sg.cur_pass.atts_id.id, VALIDATE_APIP_CURPASS_ATTACHMENTS_EXISTS);
+        bool has_attachments = !_sg_attachments_ref_null(&_sg.cur_pass.atts);
+        if (has_attachments) {
+            _SG_VALIDATE(_sg_attachments_ref_valid(&_sg.cur_pass.atts), VALIDATE_APIP_CURPASS_ATTACHMENTS_EXISTS);
+            const _sg_attachments_t* atts = _sg_attachments_ref_ptr(&_sg.cur_pass.atts);
             _SG_VALIDATE(atts->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_CURPASS_ATTACHMENTS_VALID);
         }
         if (pip->cmn.is_compute) {
             _SG_VALIDATE(_sg.cur_pass.is_compute, VALIDATE_APIP_COMPUTEPASS_EXPECTED);
-            if (_sg.cur_pass.atts_id.id != SG_INVALID_ID) {
-                const _sg_attachments_t* atts = _sg.cur_pass.atts;
+            if (has_attachments) {
+                const _sg_attachments_t* atts = _sg_attachments_ref_ptr(&_sg.cur_pass.atts);
                 // a compute pass with storage attachments
                 // check that the pass storage attachments match the shader expectations
                 for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
@@ -19745,8 +19800,8 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
         } else {
             _SG_VALIDATE(!_sg.cur_pass.is_compute, VALIDATE_APIP_RENDERPASS_EXPECTED);
             // check that pipeline attributes match current pass attributes
-            if (_sg.cur_pass.atts_id.id != SG_INVALID_ID) {
-                const _sg_attachments_t* atts = _sg.cur_pass.atts;
+            if (has_attachments) {
+                const _sg_attachments_t* atts = _sg_attachments_ref_ptr(&_sg.cur_pass.atts);
                 // an offscreen pass
                 _SG_VALIDATE(pip->cmn.color_count == atts->cmn.num_colors, VALIDATE_APIP_ATT_COUNT);
                 for (int i = 0; i < pip->cmn.color_count; i++) {
@@ -19803,7 +19858,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         _SG_VALIDATE(has_any_bindings, VALIDATE_ABND_EMPTY_BINDINGS);
 
         // a pipeline object must have been applied
-        _SG_VALIDATE(_sg.cur_pip.sref.id != SG_INVALID_ID, VALIDATE_ABND_NO_PIPELINE);
+        _SG_VALIDATE(!_sg_pipeline_ref_null(&_sg.cur_pip), VALIDATE_ABND_NO_PIPELINE);
         const bool pip_valid = _sg_pipeline_ref_valid(&_sg.cur_pip);
         _SG_VALIDATE(pip_valid, VALIDATE_ABND_PIPELINE_EXISTS);
         if (!pip_valid) {
@@ -19933,20 +19988,21 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         }
 
         // the same image cannot be bound as texture and pass attachment
-        if (_sg.cur_pass.atts) {
+        if (_sg_attachments_ref_valid(&_sg.cur_pass.atts)) {
+            const _sg_attachments_t* atts = _sg_attachments_ref_ptr(&_sg.cur_pass.atts);
             for (size_t img_idx = 0; img_idx < SG_MAX_IMAGE_BINDSLOTS; img_idx++) {
                 if (shd->cmn.images[img_idx].stage != SG_SHADERSTAGE_NONE) {
                     const uint32_t img_id = bindings->images[img_idx].id;
                     if (img_id == SG_INVALID_ID) {
                         continue;
                     }
-                    _SG_VALIDATE(img_id != _sg.cur_pass.atts->cmn.depth_stencil.image_id.id, VALIDATE_ABND_IMAGE_BINDING_VS_DEPTHSTENCIL_ATTACHMENT);
+                    _SG_VALIDATE(img_id != atts->cmn.depth_stencil.image_id.id, VALIDATE_ABND_IMAGE_BINDING_VS_DEPTHSTENCIL_ATTACHMENT);
                     for (size_t att_idx = 0; att_idx < SG_MAX_COLOR_ATTACHMENTS; att_idx++) {
-                        _SG_VALIDATE(img_id != _sg.cur_pass.atts->cmn.colors[att_idx].image_id.id, VALIDATE_ABND_IMAGE_BINDING_VS_COLOR_ATTACHMENT);
-                        _SG_VALIDATE(img_id != _sg.cur_pass.atts->cmn.resolves[att_idx].image_id.id, VALIDATE_ABND_IMAGE_BINDING_VS_RESOLVE_ATTACHMENT);
+                        _SG_VALIDATE(img_id != atts->cmn.colors[att_idx].image_id.id, VALIDATE_ABND_IMAGE_BINDING_VS_COLOR_ATTACHMENT);
+                        _SG_VALIDATE(img_id != atts->cmn.resolves[att_idx].image_id.id, VALIDATE_ABND_IMAGE_BINDING_VS_RESOLVE_ATTACHMENT);
                     }
                     for (size_t att_idx = 0; att_idx < SG_MAX_STORAGE_ATTACHMENTS; att_idx++) {
-                        _SG_VALIDATE(img_id != _sg.cur_pass.atts->cmn.storages[att_idx].image_id.id, VALIDATE_ABND_IMAGE_BINDING_VS_STORAGE_ATTACHMENT);
+                        _SG_VALIDATE(img_id != atts->cmn.storages[att_idx].image_id.id, VALIDATE_ABND_IMAGE_BINDING_VS_STORAGE_ATTACHMENT);
                     }
                 }
             }
@@ -19968,7 +20024,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_uniforms(int ub_slot, const sg_range* dat
         SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
         _sg_validate_begin();
         _SG_VALIDATE(_sg.cur_pass.in_pass, VALIDATE_AU_PASS_EXPECTED);
-        _SG_VALIDATE(_sg.cur_pip.sref.id != SG_INVALID_ID, VALIDATE_AU_NO_PIPELINE);
+        _SG_VALIDATE(!_sg_pipeline_ref_null(&_sg.cur_pip), VALIDATE_AU_NO_PIPELINE);
         _SG_VALIDATE(_sg_pipeline_ref_valid(&_sg.cur_pip), VALIDATE_AU_PIPELINE_EXISTS);
         const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
         _SG_VALIDATE(pip->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_AU_PIPELINE_VALID);
@@ -21430,22 +21486,24 @@ SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(!_sg.cur_pass.valid);
     SOKOL_ASSERT(!_sg.cur_pass.in_pass);
-    SOKOL_ASSERT(_sg.cur_pass.atts == 0);
+    SOKOL_ASSERT(_sg_attachments_ref_null(&_sg.cur_pass.atts));
     SOKOL_ASSERT(pass);
     SOKOL_ASSERT((pass->_start_canary == 0) && (pass->_end_canary == 0));
     const sg_pass pass_def = _sg_pass_defaults(pass);
     if (!_sg_validate_begin_pass(&pass_def)) {
         return;
     }
+    _sg.cur_pass.atts = _sg_attachments_ref(0);
     if (pass_def.attachments.id != SG_INVALID_ID) {
-        _sg.cur_pass.atts = _sg_lookup_attachments(pass_def.attachments.id);
-        if (0 == _sg.cur_pass.atts) {
+        _sg_attachments_t* atts = _sg_lookup_attachments(pass_def.attachments.id);
+        if (0 == atts) {
             _SG_ERROR(BEGINPASS_ATTACHMENT_INVALID);
             return;
         }
-        _sg.cur_pass.atts_id = pass_def.attachments;
-        _sg.cur_pass.width = _sg.cur_pass.atts->cmn.width;
-        _sg.cur_pass.height = _sg.cur_pass.atts->cmn.height;
+        SOKOL_ASSERT(atts);
+        _sg.cur_pass.atts = _sg_attachments_ref(atts);
+        _sg.cur_pass.width = atts->cmn.width;
+        _sg.cur_pass.height = atts->cmn.height;
     } else if (!pass_def.compute) {
         // a swapchain pass
         SOKOL_ASSERT(pass_def.swapchain.width > 0);
@@ -21698,7 +21756,7 @@ SOKOL_API_IMPL void sg_end_pass(void) {
     _sg_stats_add(num_passes, 1);
     // NOTE: don't exit early if !_sg.cur_pass.valid
     _sg_end_pass();
-    _sg.cur_pip = _sg_pipeline_ref_null();
+    _sg.cur_pip = _sg_pipeline_ref(0);
     if (_sg.cur_pass.is_compute) {
         _sg_compute_on_endpass();
     }
