@@ -247,12 +247,14 @@ def format_comment(comment, indent="", multiline=False):
     if not comment:
         return
     comment = comment.strip()
+    # Escape nested comment delimiters to ensure valid D code
+    comment = comment.replace('/++', '/+ /').replace('+/', '/ +/')
     if multiline:
-        lines = textwrap.wrap(comment, width=80, subsequent_indent=indent + " * ")
+        lines = textwrap.wrap(comment, width=80, subsequent_indent=indent)
         l(f"{indent}/++")
         for line in lines:
-            l(f"{indent} * {line}")
-        l(f"{indent} +/")
+            l(f"{indent}+ {line}")
+        l(f"{indent}+/")
     else:
         for line in comment.split('\n'):
             l(f"{indent}/// {line.strip()}")
