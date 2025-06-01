@@ -6200,8 +6200,7 @@ typedef struct {
     GLenum cur_primitive_type;
     GLenum cur_index_type;
     GLenum cur_active_texture;
-    _sg_pipeline_t* cur_pipeline;
-    sg_pipeline cur_pipeline_id;
+    _sg_sref_t cur_pip;
 } _sg_gl_state_cache_t;
 
 typedef struct {
@@ -7216,7 +7215,6 @@ _SOKOL_PRIVATE _sg_attachments_t* _sg_lookup_attachments(uint32_t atts_id) {
 //
 // >>refs
 _SOKOL_PRIVATE _sg_sref_t _sg_sref(const _sg_slot_t* slot) {
-    SOKOL_ASSERT(slot);
     _sg_sref_t sref; _sg_clear(&sref, sizeof(sref));
     if (slot) {
         sref.id = slot->id;
@@ -9541,9 +9539,8 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_program(GLuint prog) {
 
 // called from _sg_gl_discard_pipeline()
 _SOKOL_PRIVATE void _sg_gl_cache_invalidate_pipeline(_sg_pipeline_t* pip) {
-    if (pip == _sg.gl.cache.cur_pipeline) {
-        _sg.gl.cache.cur_pipeline = 0;
-        _sg.gl.cache.cur_pipeline_id.id = SG_INVALID_ID;
+    if (_sg_sref_eql(&_sg.gl.cache.cur_pip, &pip->slot)) {
+        _sg.gl.cache.cur_pip = _sg_sref(0);
     }
 }
 
@@ -10178,13 +10175,9 @@ _SOKOL_PRIVATE void _sg_gl_discard_shader(_sg_shader_t* shd) {
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
-    SOKOL_ASSERT(pip && shd && desc);
-    SOKOL_ASSERT((pip->shader == 0) && (pip->cmn.shader_id.id != SG_INVALID_ID));
-    SOKOL_ASSERT(desc->shader.id == shd->slot.id);
-    SOKOL_ASSERT(shd->gl.prog);
+_SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, const sg_pipeline_desc* desc) {
+    SOKOL_ASSERT(pip && desc);
     SOKOL_ASSERT(_sg.limits.max_vertex_attrs <= SG_MAX_VERTEX_ATTRIBUTES);
-    pip->shader = shd;
     if (pip->cmn.is_compute) {
         // shortcut for compute pipelines
         return SG_RESOURCESTATE_VALID;
@@ -10210,6 +10203,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
     }
 
     // resolve vertex attributes
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
+    SOKOL_ASSERT(shd->gl.prog);
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         pip->gl.attrs[attr_index].vb_index = -1;
     }
@@ -10224,7 +10219,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
         const int step_rate = l_state->step_rate;
         GLint attr_loc = attr_index;
         if (!_sg_strempty(&shd->gl.attrs[attr_index].name)) {
-            attr_loc = glGetAttribLocation(pip->shader->gl.prog, _sg_strptr(&shd->gl.attrs[attr_index].name));
+            attr_loc = glGetAttribLocation(shd->gl.prog, _sg_strptr(&shd->gl.attrs[attr_index].name));
         }
         if (attr_loc != -1) {
             SOKOL_ASSERT(attr_loc < (GLint)_sg.limits.max_vertex_attrs);
@@ -10496,18 +10491,20 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass) {
     // unbind all currently bound textures in begin pass?
     SOKOL_ASSERT(pass);
     _SG_GL_CHECK_ERROR();
+    const _sg_attachments_t* atts = 0;
+    if (!_sg_attachments_ref_null(&_sg.cur_pass.atts)) {
+        atts = _sg_attachments_ref_ptr(&_sg.cur_pass.atts);
+    }
 
     // early out if this a compute pass
     if (pass->compute) {
         // first pipeline in pass needs to re-apply storage attachments
-        if (_sg.cur_pass.atts && _sg.cur_pass.atts->cmn.has_storage_attachments) {
-            _sg.gl.cache.cur_pipeline = 0;
-            _sg.gl.cache.cur_pipeline_id.id = SG_INVALID_ID;
+        if (atts && atts->cmn.has_storage_attachments) {
+            _sg.gl.cache.cur_pip = _sg_sref(0);
         }
         return;
     }
 
-    const _sg_attachments_t* atts = _sg.cur_pass.atts;
     const sg_swapchain* swapchain = &pass->swapchain;
     const sg_pass_action* action = &pass->action;
 
@@ -10590,8 +10587,7 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass) {
     if (need_pip_cache_flush) {
         // we messed with the state cache directly, need to clear cached
         // pipeline to force re-evaluation in next sg_apply_pipeline()
-        _sg.gl.cache.cur_pipeline = 0;
-        _sg.gl.cache.cur_pipeline_id.id = SG_INVALID_ID;
+        _sg.gl.cache.cur_pip = _sg_sref(0);
     }
     for (int i = 0; i < num_color_atts; i++) {
         if (action->colors[i].load_action == SG_LOADACTION_CLEAR) {
@@ -10619,9 +10615,8 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass) {
 }
 
 _SOKOL_PRIVATE void _sg_gl_end_render_pass(void) {
-    if (_sg.cur_pass.atts) {
-        const _sg_attachments_t* atts = _sg.cur_pass.atts;
-        SOKOL_ASSERT(atts->slot.id == _sg.cur_pass.atts_id.id);
+    if (!_sg_attachments_ref_null(&_sg.cur_pass.atts)) {
+        const _sg_attachments_t* atts = _sg_attachments_ref_ptr(&_sg.cur_pass.atts);
         bool fb_read_bound = false;
         bool fb_draw_bound = false;
         const int num_color_atts = atts->cmn.num_colors;
@@ -10941,16 +10936,15 @@ _SOKOL_PRIVATE void _sg_gl_apply_compute_pipeline_state(_sg_pipeline_t* pip) {
 
 _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
-    SOKOL_ASSERT(pip->shader && (pip->cmn.shader_id.id == pip->shader->slot.id));
     _SG_GL_CHECK_ERROR();
-    if ((_sg.gl.cache.cur_pipeline != pip) || (_sg.gl.cache.cur_pipeline_id.id != pip->slot.id)) {
-        _sg.gl.cache.cur_pipeline = pip;
-        _sg.gl.cache.cur_pipeline_id.id = pip->slot.id;
+    if (!_sg_sref_eql(&_sg.gl.cache.cur_pip, &pip->slot)) {
+        _sg.gl.cache.cur_pip = _sg_sref(&pip->slot);
 
         // bind shader program
-        if (pip->shader->gl.prog != _sg.gl.cache.prog) {
-            _sg.gl.cache.prog = pip->shader->gl.prog;
-            glUseProgram(pip->shader->gl.prog);
+        const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
+        if (shd->gl.prog != _sg.gl.cache.prog) {
+            _sg.gl.cache.prog = shd->gl.prog;
+            glUseProgram(shd->gl.prog);
             _sg_stats_add(gl.num_use_program, 1);
         }
 
@@ -11022,10 +11016,9 @@ _SOKOL_PRIVATE void _sg_gl_handle_memory_barriers(const _sg_shader_t* shd, const
 
 _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
     SOKOL_ASSERT(bnd);
-    SOKOL_ASSERT(bnd->pip && bnd->pip->shader);
-    SOKOL_ASSERT(bnd->pip->shader->slot.id == bnd->pip->cmn.shader_id.id);
+    SOKOL_ASSERT(bnd->pip);
     _SG_GL_CHECK_ERROR();
-    const _sg_shader_t* shd = bnd->pip->shader;
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&bnd->pip->cmn.shader);
 
     // bind combined image-samplers
     _SG_GL_CHECK_ERROR();
@@ -11134,13 +11127,9 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
 }
 
 _SOKOL_PRIVATE void _sg_gl_apply_uniforms(int ub_slot, const sg_range* data) {
-    SOKOL_ASSERT(_sg.gl.cache.cur_pipeline);
     SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
-    const _sg_pipeline_t* pip = _sg.gl.cache.cur_pipeline;
-    SOKOL_ASSERT(pip && pip->shader);
-    SOKOL_ASSERT(pip->slot.id == _sg.gl.cache.cur_pipeline_id.id);
-    const _sg_shader_t* shd = pip->shader;
-    SOKOL_ASSERT(shd->slot.id == pip->cmn.shader_id.id);
+    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
     SOKOL_ASSERT(SG_SHADERSTAGE_NONE != shd->cmn.uniform_blocks[ub_slot].stage);
     SOKOL_ASSERT(data->size == shd->cmn.uniform_blocks[ub_slot].size);
     const _sg_gl_uniform_block_t* gl_ub = &shd->gl.uniform_blocks[ub_slot];
@@ -11191,10 +11180,9 @@ _SOKOL_PRIVATE void _sg_gl_apply_uniforms(int ub_slot, const sg_range* data) {
 }
 
 _SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_instances) {
-    SOKOL_ASSERT(_sg.gl.cache.cur_pipeline);
     const GLenum i_type = _sg.gl.cache.cur_index_type;
     const GLenum p_type = _sg.gl.cache.cur_primitive_type;
-    const bool use_instanced_draw = (num_instances > 1) || (_sg.gl.cache.cur_pipeline->cmn.use_instanced_draw);
+    const bool use_instanced_draw = (num_instances > 1) || _sg_pipeline_ref_ptr(&_sg.cur_pip)->cmn.use_instanced_draw;
     if (0 != i_type) {
         // indexed rendering
         const int i_size = (i_type == GL_UNSIGNED_SHORT) ? 2 : 4;
