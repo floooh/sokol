@@ -10212,15 +10212,14 @@ _SOKOL_PRIVATE void _sg_gl_discard_pipeline(_sg_pipeline_t* pip) {
     _sg_gl_cache_invalidate_pipeline(pip);
 }
 
-_SOKOL_PRIVATE void _sg_gl_fb_attach_texture(const _sg_gl_attachment_t* gl_att, const _sg_attachment_common_t* cmn_att, GLenum gl_att_type) {
-    const _sg_image_t* img = gl_att->image;
-    SOKOL_ASSERT(img);
+_SOKOL_PRIVATE void _sg_gl_fb_attach_texture(const _sg_attachment_common_t* att, GLenum gl_att_type) {
+    const _sg_image_t* img = _sg_image_ref_ptr(&att->image);
     const GLuint gl_tex = img->gl.tex[0];
     SOKOL_ASSERT(gl_tex);
     const GLuint gl_target = img->gl.target;
     SOKOL_ASSERT(gl_target);
-    const int mip_level = cmn_att->mip_level;
-    const int slice = cmn_att->slice;
+    const int mip_level = att->mip_level;
+    const int slice = att->slice;
     switch (img->cmn.type) {
         case SG_IMAGETYPE_2D:
             glFramebufferTexture2D(GL_FRAMEBUFFER, gl_att_type, gl_target, gl_tex, mip_level);
@@ -10234,61 +10233,17 @@ _SOKOL_PRIVATE void _sg_gl_fb_attach_texture(const _sg_gl_attachment_t* gl_att, 
     }
 }
 
-_SOKOL_PRIVATE GLenum _sg_gl_depth_stencil_attachment_type(const _sg_gl_attachment_t* ds_att) {
-    const _sg_image_t* img = ds_att->image;
-    SOKOL_ASSERT(img);
-    if (_sg_is_depth_stencil_format(img->cmn.pixel_format)) {
+_SOKOL_PRIVATE GLenum _sg_gl_depth_stencil_attachment_type(const _sg_image_t* ds_img) {
+    if (_sg_is_depth_stencil_format(ds_img->cmn.pixel_format)) {
         return GL_DEPTH_STENCIL_ATTACHMENT;
     } else {
         return GL_DEPTH_ATTACHMENT;
     }
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* atts, const _sg_attachments_ptrs_t* atts_ptrs, const sg_attachments_desc* desc) {
-    SOKOL_ASSERT(atts && atts_ptrs && desc);
+_SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* atts, const sg_attachments_desc* desc) {
+    SOKOL_ASSERT(atts && desc);
     _SG_GL_CHECK_ERROR();
-
-    // copy image pointers
-    for (int i = 0; i < atts->cmn.num_colors; i++) {
-        const sg_attachment_desc* color_desc = &desc->colors[i];
-        _SOKOL_UNUSED(color_desc);
-        SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
-        SOKOL_ASSERT(0 == atts->gl.colors[i].image);
-        SOKOL_ASSERT(atts_ptrs->color_images[i]);
-        _sg_image_t* clr_img = atts_ptrs->color_images[i];
-        SOKOL_ASSERT(clr_img->slot.id == color_desc->image.id);
-        SOKOL_ASSERT(_sg_is_valid_attachment_color_format(clr_img->cmn.pixel_format));
-        atts->gl.colors[i].image = clr_img;
-
-        const sg_attachment_desc* resolve_desc = &desc->resolves[i];
-        if (resolve_desc->image.id != SG_INVALID_ID) {
-            SOKOL_ASSERT(0 == atts->gl.resolves[i].image);
-            SOKOL_ASSERT(atts_ptrs->resolve_images[i]);
-            _sg_image_t* rsv_img = atts_ptrs->resolve_images[i];
-            SOKOL_ASSERT(rsv_img->slot.id == resolve_desc->image.id);
-            SOKOL_ASSERT(clr_img && (clr_img->cmn.pixel_format == rsv_img->cmn.pixel_format));
-            atts->gl.resolves[i].image = rsv_img;
-        }
-    }
-    SOKOL_ASSERT(0 == atts->gl.depth_stencil.image);
-    const sg_attachment_desc* ds_desc = &desc->depth_stencil;
-    if (ds_desc->image.id != SG_INVALID_ID) {
-        SOKOL_ASSERT(atts_ptrs->ds_image);
-        _sg_image_t* ds_img = atts_ptrs->ds_image;
-        SOKOL_ASSERT(ds_img->slot.id == ds_desc->image.id);
-        SOKOL_ASSERT(_sg_is_valid_attachment_depth_format(ds_img->cmn.pixel_format));
-        atts->gl.depth_stencil.image = ds_img;
-    }
-    for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
-        const sg_attachment_desc* storage_desc = &desc->storages[i];
-        if (storage_desc->image.id != SG_INVALID_ID) {
-            SOKOL_ASSERT(0 == atts->gl.storages[i].image);
-            SOKOL_ASSERT(atts_ptrs->storage_images[i]);
-            _sg_image_t* stg_img = atts_ptrs->storage_images[i];
-            SOKOL_ASSERT(stg_img->slot.id == storage_desc->image.id);
-            atts->gl.storages[i].image = stg_img;
-        }
-    }
 
     // if this is a compute pass attachment we're done here
     if (atts->cmn.has_storage_attachments) {
@@ -10306,26 +10261,24 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* at
 
     // attach color attachments to framebuffer
     for (int i = 0; i < atts->cmn.num_colors; i++) {
-        const _sg_image_t* color_img = atts->gl.colors[i].image;
-        SOKOL_ASSERT(color_img);
+        const _sg_image_t* color_img = _sg_image_ref_ptr(&atts->cmn.colors[i].image);
         const GLuint gl_msaa_render_buffer = color_img->gl.msaa_render_buffer;
         if (gl_msaa_render_buffer) {
             glFramebufferRenderbuffer(GL_FRAMEBUFFER, (GLenum)(GL_COLOR_ATTACHMENT0+i), GL_RENDERBUFFER, gl_msaa_render_buffer);
         } else {
             const GLenum gl_att_type = (GLenum)(GL_COLOR_ATTACHMENT0 + i);
-            _sg_gl_fb_attach_texture(&atts->gl.colors[i], &atts->cmn.colors[i], gl_att_type);
+            _sg_gl_fb_attach_texture(&atts->cmn.colors[i], gl_att_type);
         }
     }
     // attach depth-stencil attachment
-    if (atts->gl.depth_stencil.image) {
-        const GLenum gl_att = _sg_gl_depth_stencil_attachment_type(&atts->gl.depth_stencil);
-        const _sg_image_t* ds_img = atts->gl.depth_stencil.image;
+    if (!_sg_image_ref_null(&atts->cmn.depth_stencil.image)) {
+        const _sg_image_t* ds_img = _sg_image_ref_ptr(&atts->cmn.depth_stencil.image);
+        const GLenum gl_att_type = _sg_gl_depth_stencil_attachment_type(ds_img);
         const GLuint gl_msaa_render_buffer = ds_img->gl.msaa_render_buffer;
         if (gl_msaa_render_buffer) {
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, gl_att, GL_RENDERBUFFER, gl_msaa_render_buffer);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, gl_att_type, GL_RENDERBUFFER, gl_msaa_render_buffer);
         } else {
-            const GLenum gl_att_type = _sg_gl_depth_stencil_attachment_type(&atts->gl.depth_stencil);
-            _sg_gl_fb_attach_texture(&atts->gl.depth_stencil, &atts->cmn.depth_stencil, gl_att_type);
+            _sg_gl_fb_attach_texture(&atts->cmn.depth_stencil, gl_att_type);
         }
     }
 
@@ -10368,13 +10321,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* at
 
     // create MSAA resolve framebuffers if necessary
     for (int i = 0; i < atts->cmn.num_colors; i++) {
-        _sg_gl_attachment_t* gl_resolve_att = &atts->gl.resolves[i];
-        if (gl_resolve_att->image) {
-            _sg_attachment_common_t* cmn_resolve_att = &atts->cmn.resolves[i];
+        _sg_attachment_common_t* cmn_resolve_att = &atts->cmn.resolves[i];
+        if (!_sg_image_ref_null(&cmn_resolve_att->image)) {
             SOKOL_ASSERT(0 == atts->gl.msaa_resolve_framebuffer[i]);
             glGenFramebuffers(1, &atts->gl.msaa_resolve_framebuffer[i]);
             glBindFramebuffer(GL_FRAMEBUFFER, atts->gl.msaa_resolve_framebuffer[i]);
-            _sg_gl_fb_attach_texture(gl_resolve_att, cmn_resolve_att, GL_COLOR_ATTACHMENT0);
+            _sg_gl_fb_attach_texture(cmn_resolve_att, GL_COLOR_ATTACHMENT0);
             // check if framebuffer is complete
             const GLenum fb_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
             if (fb_status != GL_FRAMEBUFFER_COMPLETE) {
@@ -10530,7 +10482,7 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass) {
             glClearBufferfv(GL_COLOR, i, &action->colors[i].clear_value.r);
         }
     }
-    if ((atts == 0) || (atts->gl.depth_stencil.image)) {
+    if ((atts == 0) || !_sg_image_ref_null(&atts->cmn.depth_stencil.image)) {
         if (clear_depth && clear_stencil) {
             glClearBufferfi(GL_DEPTH_STENCIL, 0, action->depth.clear_value, action->stencil.clear_value);
         } else if (clear_depth) {
@@ -10564,8 +10516,9 @@ _SOKOL_PRIVATE void _sg_gl_end_render_pass(void) {
                     glBindFramebuffer(GL_READ_FRAMEBUFFER, atts->gl.fb);
                     fb_read_bound = true;
                 }
-                const int w = atts->gl.colors[i].image->cmn.width;
-                const int h = atts->gl.colors[i].image->cmn.height;
+                const _sg_image_t* img = _sg_image_ref_ptr(&atts->cmn.colors[i].image);
+                const int w = img->cmn.width;
+                const int h = img->cmn.height;
                 glBindFramebuffer(GL_DRAW_FRAMEBUFFER, atts->gl.msaa_resolve_framebuffer[i]);
                 glReadBuffer((GLenum)(GL_COLOR_ATTACHMENT0 + i));
                 glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
