@@ -10805,8 +10805,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_compute_pipeline_state(_sg_pipeline_t* pip) {
             }
             SOKOL_ASSERT(shd->cmn.storage_images[i].stage == SG_SHADERSTAGE_COMPUTE);
             SOKOL_ASSERT(shd->gl.simg_binding[i] < _SG_GL_MAX_SIMG_BINDINGS);
-            SOKOL_ASSERT(atts->gl.storages[i].image);
-            _sg_image_t* img = atts->gl.storages[i].image;
+            _sg_image_t* img = _sg_image_ref_ptr(&atts->cmn.storages[i].image);
             GLuint gl_unit = shd->gl.simg_binding[i];
             GLuint gl_tex = img->gl.tex[img->cmn.active_slot];
             GLint level = atts->cmn.storages[i].mip_level;
