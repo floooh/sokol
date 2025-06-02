@@ -511,8 +511,7 @@ UTEST(sokol_gfx, make_destroy_pipelines) {
         T(pipptr);
         T(pipptr->slot.id == pip[i].id);
         T(pipptr->slot.state == SG_RESOURCESTATE_VALID);
-        T(pipptr->shader == _sg_lookup_shader(desc.shader.id));
-        T(pipptr->cmn.shader_id.id == desc.shader.id);
+        T(pipptr->cmn.shader.sref.id == desc.shader.id);
         T(pipptr->cmn.color_count == 1);
         T(pipptr->cmn.colors[0].pixel_format == SG_PIXELFORMAT_RGBA8);
         T(pipptr->cmn.depth.pixel_format == SG_PIXELFORMAT_DEPTH_STENCIL);
@@ -563,9 +562,9 @@ UTEST(sokol_gfx, make_destroy_attachments) {
         T(attsptr->slot.state == SG_RESOURCESTATE_VALID);
         T(attsptr->cmn.num_colors == 3);
         for (int ai = 0; ai < 3; ai++) {
-            const _sg_image_t* img = _sg_attachments_color_image(attsptr, ai);
+            const _sg_image_t* img = _sg_image_ref_ptr(&attsptr->cmn.colors[ai].image);
             T(img == _sg_lookup_image(atts_desc.colors[ai].image.id));
-            T(attsptr->cmn.colors[ai].image_id.id == atts_desc.colors[ai].image.id);
+            T(attsptr->cmn.colors[ai].image.sref.id == atts_desc.colors[ai].image.id);
         }
     }
     /* trying to create another one fails because pool is exhausted */

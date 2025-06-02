@@ -8007,10 +8007,10 @@ _SOKOL_PRIVATE void _sg_dummy_discard_shader(_sg_shader_t* shd) {
     _SOKOL_UNUSED(shd);
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_dummy_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_dummy_create_pipeline(_sg_pipeline_t* pip, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && desc);
+    _SOKOL_UNUSED(pip);
     _SOKOL_UNUSED(desc);
-    pip->shader = shd;
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -8019,38 +8019,10 @@ _SOKOL_PRIVATE void _sg_dummy_discard_pipeline(_sg_pipeline_t* pip) {
     _SOKOL_UNUSED(pip);
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_dummy_create_attachments(_sg_attachments_t* atts, const _sg_attachments_ptrs_t* atts_ptrs, const sg_attachments_desc* desc) {
-    SOKOL_ASSERT(atts && atts_ptrs && desc);
-
-    for (int i = 0; i < atts->cmn.num_colors; i++) {
-        const sg_attachment_desc* color_desc = &desc->colors[i];
-        _SOKOL_UNUSED(color_desc);
-        SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
-        SOKOL_ASSERT(0 == atts->dmy.colors[i].image);
-        SOKOL_ASSERT(atts_ptrs->color_images[i]);
-        _sg_image_t* clr_img = atts_ptrs->color_images[i];
-        SOKOL_ASSERT(clr_img->slot.id == color_desc->image.id);
-        SOKOL_ASSERT(_sg_is_valid_attachment_color_format(clr_img->cmn.pixel_format));
-        atts->dmy.colors[i].image = clr_img;
-        const sg_attachment_desc* resolve_desc = &desc->resolves[i];
-        if (resolve_desc->image.id != SG_INVALID_ID) {
-            SOKOL_ASSERT(0 == atts->dmy.resolves[i].image);
-            SOKOL_ASSERT(atts_ptrs->resolve_images[i]);
-            _sg_image_t* rsv_img = atts_ptrs->resolve_images[i];
-            SOKOL_ASSERT(rsv_img->slot.id == resolve_desc->image.id);
-            SOKOL_ASSERT(clr_img->cmn.pixel_format == rsv_img->cmn.pixel_format);
-            atts->dmy.resolves[i].image = rsv_img;
-        }
-    }
-    SOKOL_ASSERT(0 == atts->dmy.depth_stencil.image);
-    const sg_attachment_desc* ds_desc = &desc->depth_stencil;
-    if (ds_desc->image.id != SG_INVALID_ID) {
-        SOKOL_ASSERT(atts_ptrs->ds_image);
-        _sg_image_t* ds_img = atts_ptrs->ds_image;
-        SOKOL_ASSERT(ds_img->slot.id == ds_desc->image.id);
-        SOKOL_ASSERT(_sg_is_valid_attachment_depth_format(ds_img->cmn.pixel_format));
-        atts->dmy.depth_stencil.image = ds_img;
-    }
+_SOKOL_PRIVATE sg_resource_state _sg_dummy_create_attachments(_sg_attachments_t* atts, const sg_attachments_desc* desc) {
+    SOKOL_ASSERT(atts && desc);
+    _SOKOL_UNUSED(atts);
+    _SOKOL_UNUSED(desc);
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -10243,6 +10215,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_depth_stencil_attachment_type(const _sg_image_t* ds
 
 _SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* atts, const sg_attachments_desc* desc) {
     SOKOL_ASSERT(atts && desc);
+    _SOKOL_UNUSED(desc);
     _SG_GL_CHECK_ERROR();
 
     // if this is a compute pass attachment we're done here
@@ -14885,6 +14858,7 @@ _SOKOL_PRIVATE void _sg_mtl_discard_pipeline(_sg_pipeline_t* pip) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_attachments(_sg_attachments_t* atts, const sg_attachments_desc* desc) {
     SOKOL_ASSERT(atts && desc);
+    _SOKOL_UNUSED(desc);
 
     // create texture views for storage attachments
     for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
