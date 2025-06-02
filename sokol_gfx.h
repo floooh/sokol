@@ -5609,7 +5609,6 @@ struct _sg_sampler_s;
 struct _sg_shader_s;
 struct _sg_pipeline_s;
 struct _sg_attachments_s;
-_SOKOL_PRIVATE void _sg_clear(void* ptr, size_t size);
 
 // a general resource slot reference useful for caches
 typedef struct _sg_sref_s {
@@ -5679,16 +5678,6 @@ typedef struct {
     char buf[_SG_STRING_SIZE];
 } _sg_str_t;
 
-// helper macros
-#define _sg_def(val, def) (((val) == 0) ? (def) : (val))
-#define _sg_def_flt(val, def) (((val) == 0.0f) ? (def) : (val))
-#define _sg_min(a,b) (((a)<(b))?(a):(b))
-#define _sg_max(a,b) (((a)>(b))?(a):(b))
-#define _sg_clamp(v,v0,v1) (((v)<(v0))?(v0):(((v)>(v1))?(v1):(v)))
-#define _sg_fequal(val,cmp,delta) ((((val)-(cmp))> -(delta))&&(((val)-(cmp))<(delta)))
-#define _sg_ispow2(val) ((val&(val-1))==0)
-#define _sg_stats_add(key,val) {if(_sg.stats_enabled){ _sg.stats.key+=val;}}
-
 typedef struct {
     int size;
     int append_pos;
@@ -5699,17 +5688,6 @@ typedef struct {
     int active_slot;
     sg_buffer_usage usage;
 } _sg_buffer_common_t;
-
-_SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_buffer_desc* desc) {
-    cmn->size = (int)desc->size;
-    cmn->append_pos = 0;
-    cmn->append_overflow = false;
-    cmn->update_frame_index = 0;
-    cmn->append_frame_index = 0;
-    cmn->num_slots = desc->usage.immutable ? 1 : SG_NUM_INFLIGHT_FRAMES;
-    cmn->active_slot = 0;
-    cmn->usage = desc->usage;
-}
 
 typedef struct {
     uint32_t upd_frame_index;
@@ -5725,20 +5703,6 @@ typedef struct {
     int sample_count;
 } _sg_image_common_t;
 
-_SOKOL_PRIVATE void _sg_image_common_init(_sg_image_common_t* cmn, const sg_image_desc* desc) {
-    cmn->upd_frame_index = 0;
-    cmn->num_slots = desc->usage.immutable ? 1 : SG_NUM_INFLIGHT_FRAMES;
-    cmn->active_slot = 0;
-    cmn->type = desc->type;
-    cmn->width = desc->width;
-    cmn->height = desc->height;
-    cmn->num_slices = desc->num_slices;
-    cmn->num_mipmaps = desc->num_mipmaps;
-    cmn->usage = desc->usage;
-    cmn->pixel_format = desc->pixel_format;
-    cmn->sample_count = desc->sample_count;
-}
-
 typedef struct {
     sg_filter min_filter;
     sg_filter mag_filter;
@@ -5752,20 +5716,6 @@ typedef struct {
     sg_compare_func compare;
     uint32_t max_anisotropy;
 } _sg_sampler_common_t;
-
-_SOKOL_PRIVATE void _sg_sampler_common_init(_sg_sampler_common_t* cmn, const sg_sampler_desc* desc) {
-    cmn->min_filter = desc->min_filter;
-    cmn->mag_filter = desc->mag_filter;
-    cmn->mipmap_filter = desc->mipmap_filter;
-    cmn->wrap_u = desc->wrap_u;
-    cmn->wrap_v = desc->wrap_v;
-    cmn->wrap_w = desc->wrap_w;
-    cmn->min_lod = desc->min_lod;
-    cmn->max_lod = desc->max_lod;
-    cmn->border_color = desc->border_color;
-    cmn->compare = desc->compare;
-    cmn->max_anisotropy = desc->max_anisotropy;
-}
 
 typedef struct {
     sg_shader_attr_base_type base_type;
@@ -5800,7 +5750,6 @@ typedef struct {
     sg_sampler_type sampler_type;
 } _sg_shader_sampler_t;
 
-// combined image sampler mappings, only needed on GL
 typedef struct {
     sg_shader_stage stage;
     uint8_t image_slot;
@@ -5818,75 +5767,6 @@ typedef struct {
     _sg_shader_image_sampler_t image_samplers[SG_MAX_IMAGE_SAMPLER_PAIRS];
     _sg_shader_storage_image_t storage_images[SG_MAX_STORAGE_ATTACHMENTS];
 } _sg_shader_common_t;
-
-_SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_shader_desc* desc) {
-    cmn->is_compute = desc->compute_func.source || desc->compute_func.bytecode.ptr;
-    for (size_t i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-        cmn->attrs[i].base_type = desc->attrs[i].base_type;
-    }
-    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
-        const sg_shader_uniform_block* src = &desc->uniform_blocks[i];
-        _sg_shader_uniform_block_t* dst = &cmn->uniform_blocks[i];
-        if (src->stage != SG_SHADERSTAGE_NONE) {
-            cmn->required_bindings_and_uniforms |= (1 << i);
-            dst->stage = src->stage;
-            dst->size = src->size;
-        }
-    }
-    const uint32_t required_bindings_flag = (1 << SG_MAX_UNIFORMBLOCK_BINDSLOTS);
-    for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
-        const sg_shader_storage_buffer* src = &desc->storage_buffers[i];
-        _sg_shader_storage_buffer_t* dst = &cmn->storage_buffers[i];
-        if (src->stage != SG_SHADERSTAGE_NONE) {
-            cmn->required_bindings_and_uniforms |= required_bindings_flag;
-            dst->stage = src->stage;
-            dst->readonly = src->readonly;
-        }
-    }
-    for (size_t i = 0; i < SG_MAX_IMAGE_BINDSLOTS; i++) {
-        const sg_shader_image* src = &desc->images[i];
-        _sg_shader_image_t* dst = &cmn->images[i];
-        if (src->stage != SG_SHADERSTAGE_NONE) {
-            cmn->required_bindings_and_uniforms |= required_bindings_flag;
-            dst->stage = src->stage;
-            dst->image_type = src->image_type;
-            dst->sample_type = src->sample_type;
-            dst->multisampled = src->multisampled;
-        }
-    }
-    for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
-        const sg_shader_sampler* src = &desc->samplers[i];
-        _sg_shader_sampler_t* dst = &cmn->samplers[i];
-        if (src->stage != SG_SHADERSTAGE_NONE) {
-            cmn->required_bindings_and_uniforms |= required_bindings_flag;
-            dst->stage = src->stage;
-            dst->sampler_type = src->sampler_type;
-        }
-    }
-    for (size_t i = 0; i < SG_MAX_IMAGE_SAMPLER_PAIRS; i++) {
-        const sg_shader_image_sampler_pair* src = &desc->image_sampler_pairs[i];
-        _sg_shader_image_sampler_t* dst = &cmn->image_samplers[i];
-        if (src->stage != SG_SHADERSTAGE_NONE) {
-            dst->stage = src->stage;
-            SOKOL_ASSERT((src->image_slot >= 0) && (src->image_slot < SG_MAX_IMAGE_BINDSLOTS));
-            SOKOL_ASSERT(desc->images[src->image_slot].stage == src->stage);
-            dst->image_slot = src->image_slot;
-            SOKOL_ASSERT((src->sampler_slot >= 0) && (src->sampler_slot < SG_MAX_SAMPLER_BINDSLOTS));
-            SOKOL_ASSERT(desc->samplers[src->sampler_slot].stage == src->stage);
-            dst->sampler_slot = src->sampler_slot;
-        }
-    }
-    for (size_t i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
-        const sg_shader_storage_image* src = &desc->storage_images[i];
-        _sg_shader_storage_image_t* dst = &cmn->storage_images[i];
-        if (src->stage != SG_SHADERSTAGE_NONE) {
-            dst->stage = src->stage;
-            dst->image_type = src->image_type;
-            dst->access_format = src->access_format;
-            dst->writeonly = src->writeonly;
-        }
-    }
-}
 
 typedef struct {
     bool vertex_buffer_layout_active[SG_MAX_VERTEXBUFFER_BINDSLOTS];
@@ -5908,42 +5788,6 @@ typedef struct {
     bool alpha_to_coverage_enabled;
 } _sg_pipeline_common_t;
 
-_SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const sg_pipeline_desc* desc, _sg_shader_ref_t shd_ref) {
-    SOKOL_ASSERT((desc->color_count >= 0) && (desc->color_count <= SG_MAX_COLOR_ATTACHMENTS));
-
-    // FIXME: most of this isn't needed for compute pipelines
-
-    const uint32_t required_bindings_flag = (1 << SG_MAX_UNIFORMBLOCK_BINDSLOTS);
-    for (int i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
-        const sg_vertex_attr_state* a_state = &desc->layout.attrs[i];
-        if (a_state->format != SG_VERTEXFORMAT_INVALID) {
-            SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
-            cmn->vertex_buffer_layout_active[a_state->buffer_index] = true;
-            cmn->required_bindings_and_uniforms |= required_bindings_flag;
-        }
-    }
-    cmn->is_compute = desc->compute;
-    cmn->use_instanced_draw = false;
-    cmn->shader = shd_ref;
-    cmn->layout = desc->layout;
-    cmn->depth = desc->depth;
-    cmn->stencil = desc->stencil;
-    cmn->color_count = desc->color_count;
-    for (int i = 0; i < desc->color_count; i++) {
-        cmn->colors[i] = desc->colors[i];
-    }
-    cmn->primitive_type = desc->primitive_type;
-    cmn->index_type = desc->index_type;
-    if (cmn->index_type != SG_INDEXTYPE_NONE) {
-        cmn->required_bindings_and_uniforms |= required_bindings_flag;
-    }
-    cmn->cull_mode = desc->cull_mode;
-    cmn->face_winding = desc->face_winding;
-    cmn->sample_count = desc->sample_count;
-    cmn->blend_color = desc->blend_color;
-    cmn->alpha_to_coverage_enabled = desc->alpha_to_coverage_enabled;
-}
-
 typedef struct {
     sg_image image_id;
     int mip_level;
@@ -5961,38 +5805,6 @@ typedef struct {
     _sg_attachment_common_t depth_stencil;
     _sg_attachment_common_t storages[SG_MAX_STORAGE_ATTACHMENTS];
 } _sg_attachments_common_t;
-
-_SOKOL_PRIVATE void _sg_attachment_common_init(_sg_attachment_common_t* cmn, const sg_attachment_desc* desc) {
-    cmn->image_id = desc->image;
-    cmn->mip_level = desc->mip_level;
-    cmn->slice = desc->slice;
-}
-
-_SOKOL_PRIVATE void _sg_attachments_common_init(_sg_attachments_common_t* cmn, const sg_attachments_desc* desc, int width, int height) {
-    // NOTE: width/height will be 0 for storage image attachments
-    cmn->width = width;
-    cmn->height = height;
-    for (size_t i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-        if (desc->colors[i].image.id != SG_INVALID_ID) {
-            cmn->num_colors++;
-            _sg_attachment_common_init(&cmn->colors[i], &desc->colors[i]);
-            _sg_attachment_common_init(&cmn->resolves[i], &desc->resolves[i]);
-            cmn->has_render_attachments = true;
-        }
-    }
-    if (desc->depth_stencil.image.id != SG_INVALID_ID) {
-        _sg_attachment_common_init(&cmn->depth_stencil, &desc->depth_stencil);
-        cmn->has_render_attachments = true;
-    }
-    // NOTE: storage attachment slots may be non-continuous,
-    // so a 'num_storages' doesn't make sense
-    for (size_t i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
-        if (desc->storages[i].image.id != SG_INVALID_ID) {
-            cmn->has_storage_attachments = true;
-            _sg_attachment_common_init(&cmn->storages[i], &desc->storages[i]);
-        }
-    }
-}
 
 #if defined(SOKOL_DUMMY_BACKEND)
 typedef struct _sg_buffer_s {
@@ -7375,6 +7187,17 @@ _SOKOL_PRIVATE bool _sg_tracker_add(_sg_tracker_t* tracker, uint32_t res_id) {
 // ██   ██ ███████ ███████ ██      ███████ ██   ██ ███████
 //
 // >>helpers
+
+// helper macros
+#define _sg_def(val, def) (((val) == 0) ? (def) : (val))
+#define _sg_def_flt(val, def) (((val) == 0.0f) ? (def) : (val))
+#define _sg_min(a,b) (((a)<(b))?(a):(b))
+#define _sg_max(a,b) (((a)>(b))?(a):(b))
+#define _sg_clamp(v,v0,v1) (((v)<(v0))?(v0):(((v)>(v1))?(v1):(v)))
+#define _sg_fequal(val,cmp,delta) ((((val)-(cmp))> -(delta))&&(((val)-(cmp))<(delta)))
+#define _sg_ispow2(val) ((val&(val-1))==0)
+#define _sg_stats_add(key,val) {if(_sg.stats_enabled){ _sg.stats.key+=val;}}
+
 _SOKOL_PRIVATE uint32_t _sg_align_u32(uint32_t val, uint32_t align) {
     SOKOL_ASSERT((align > 0) && ((align & (align - 1)) == 0));
     return (val + (align - 1)) & ~(align - 1);
@@ -7395,6 +7218,182 @@ _SOKOL_PRIVATE _sg_recti_t _sg_clipi(int x, int y, int w, int h, int clip_width,
     h = _sg_max(h, 1);
     const _sg_recti_t res = { x, y, w, h };
     return res;
+}
+
+_SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_buffer_desc* desc) {
+    cmn->size = (int)desc->size;
+    cmn->append_pos = 0;
+    cmn->append_overflow = false;
+    cmn->update_frame_index = 0;
+    cmn->append_frame_index = 0;
+    cmn->num_slots = desc->usage.immutable ? 1 : SG_NUM_INFLIGHT_FRAMES;
+    cmn->active_slot = 0;
+    cmn->usage = desc->usage;
+}
+
+_SOKOL_PRIVATE void _sg_image_common_init(_sg_image_common_t* cmn, const sg_image_desc* desc) {
+    cmn->upd_frame_index = 0;
+    cmn->num_slots = desc->usage.immutable ? 1 : SG_NUM_INFLIGHT_FRAMES;
+    cmn->active_slot = 0;
+    cmn->type = desc->type;
+    cmn->width = desc->width;
+    cmn->height = desc->height;
+    cmn->num_slices = desc->num_slices;
+    cmn->num_mipmaps = desc->num_mipmaps;
+    cmn->usage = desc->usage;
+    cmn->pixel_format = desc->pixel_format;
+    cmn->sample_count = desc->sample_count;
+}
+
+_SOKOL_PRIVATE void _sg_sampler_common_init(_sg_sampler_common_t* cmn, const sg_sampler_desc* desc) {
+    cmn->min_filter = desc->min_filter;
+    cmn->mag_filter = desc->mag_filter;
+    cmn->mipmap_filter = desc->mipmap_filter;
+    cmn->wrap_u = desc->wrap_u;
+    cmn->wrap_v = desc->wrap_v;
+    cmn->wrap_w = desc->wrap_w;
+    cmn->min_lod = desc->min_lod;
+    cmn->max_lod = desc->max_lod;
+    cmn->border_color = desc->border_color;
+    cmn->compare = desc->compare;
+    cmn->max_anisotropy = desc->max_anisotropy;
+}
+
+_SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_shader_desc* desc) {
+    cmn->is_compute = desc->compute_func.source || desc->compute_func.bytecode.ptr;
+    for (size_t i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
+        cmn->attrs[i].base_type = desc->attrs[i].base_type;
+    }
+    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
+        const sg_shader_uniform_block* src = &desc->uniform_blocks[i];
+        _sg_shader_uniform_block_t* dst = &cmn->uniform_blocks[i];
+        if (src->stage != SG_SHADERSTAGE_NONE) {
+            cmn->required_bindings_and_uniforms |= (1 << i);
+            dst->stage = src->stage;
+            dst->size = src->size;
+        }
+    }
+    const uint32_t required_bindings_flag = (1 << SG_MAX_UNIFORMBLOCK_BINDSLOTS);
+    for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
+        const sg_shader_storage_buffer* src = &desc->storage_buffers[i];
+        _sg_shader_storage_buffer_t* dst = &cmn->storage_buffers[i];
+        if (src->stage != SG_SHADERSTAGE_NONE) {
+            cmn->required_bindings_and_uniforms |= required_bindings_flag;
+            dst->stage = src->stage;
+            dst->readonly = src->readonly;
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_IMAGE_BINDSLOTS; i++) {
+        const sg_shader_image* src = &desc->images[i];
+        _sg_shader_image_t* dst = &cmn->images[i];
+        if (src->stage != SG_SHADERSTAGE_NONE) {
+            cmn->required_bindings_and_uniforms |= required_bindings_flag;
+            dst->stage = src->stage;
+            dst->image_type = src->image_type;
+            dst->sample_type = src->sample_type;
+            dst->multisampled = src->multisampled;
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+        const sg_shader_sampler* src = &desc->samplers[i];
+        _sg_shader_sampler_t* dst = &cmn->samplers[i];
+        if (src->stage != SG_SHADERSTAGE_NONE) {
+            cmn->required_bindings_and_uniforms |= required_bindings_flag;
+            dst->stage = src->stage;
+            dst->sampler_type = src->sampler_type;
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_IMAGE_SAMPLER_PAIRS; i++) {
+        const sg_shader_image_sampler_pair* src = &desc->image_sampler_pairs[i];
+        _sg_shader_image_sampler_t* dst = &cmn->image_samplers[i];
+        if (src->stage != SG_SHADERSTAGE_NONE) {
+            dst->stage = src->stage;
+            SOKOL_ASSERT((src->image_slot >= 0) && (src->image_slot < SG_MAX_IMAGE_BINDSLOTS));
+            SOKOL_ASSERT(desc->images[src->image_slot].stage == src->stage);
+            dst->image_slot = src->image_slot;
+            SOKOL_ASSERT((src->sampler_slot >= 0) && (src->sampler_slot < SG_MAX_SAMPLER_BINDSLOTS));
+            SOKOL_ASSERT(desc->samplers[src->sampler_slot].stage == src->stage);
+            dst->sampler_slot = src->sampler_slot;
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+        const sg_shader_storage_image* src = &desc->storage_images[i];
+        _sg_shader_storage_image_t* dst = &cmn->storage_images[i];
+        if (src->stage != SG_SHADERSTAGE_NONE) {
+            dst->stage = src->stage;
+            dst->image_type = src->image_type;
+            dst->access_format = src->access_format;
+            dst->writeonly = src->writeonly;
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const sg_pipeline_desc* desc, _sg_shader_t* shd) {
+    SOKOL_ASSERT((desc->color_count >= 0) && (desc->color_count <= SG_MAX_COLOR_ATTACHMENTS));
+
+    // FIXME: most of this isn't needed for compute pipelines
+
+    const uint32_t required_bindings_flag = (1 << SG_MAX_UNIFORMBLOCK_BINDSLOTS);
+    for (int i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
+        const sg_vertex_attr_state* a_state = &desc->layout.attrs[i];
+        if (a_state->format != SG_VERTEXFORMAT_INVALID) {
+            SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
+            cmn->vertex_buffer_layout_active[a_state->buffer_index] = true;
+            cmn->required_bindings_and_uniforms |= required_bindings_flag;
+        }
+    }
+    cmn->is_compute = desc->compute;
+    cmn->use_instanced_draw = false;
+    cmn->shader = _sg_shader_ref(shd);
+    cmn->layout = desc->layout;
+    cmn->depth = desc->depth;
+    cmn->stencil = desc->stencil;
+    cmn->color_count = desc->color_count;
+    for (int i = 0; i < desc->color_count; i++) {
+        cmn->colors[i] = desc->colors[i];
+    }
+    cmn->primitive_type = desc->primitive_type;
+    cmn->index_type = desc->index_type;
+    if (cmn->index_type != SG_INDEXTYPE_NONE) {
+        cmn->required_bindings_and_uniforms |= required_bindings_flag;
+    }
+    cmn->cull_mode = desc->cull_mode;
+    cmn->face_winding = desc->face_winding;
+    cmn->sample_count = desc->sample_count;
+    cmn->blend_color = desc->blend_color;
+    cmn->alpha_to_coverage_enabled = desc->alpha_to_coverage_enabled;
+}
+
+_SOKOL_PRIVATE void _sg_attachment_common_init(_sg_attachment_common_t* cmn, const sg_attachment_desc* desc) {
+    cmn->image_id = desc->image;
+    cmn->mip_level = desc->mip_level;
+    cmn->slice = desc->slice;
+}
+
+_SOKOL_PRIVATE void _sg_attachments_common_init(_sg_attachments_common_t* cmn, const sg_attachments_desc* desc, int width, int height) {
+    // NOTE: width/height will be 0 for storage image attachments
+    cmn->width = width;
+    cmn->height = height;
+    for (size_t i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        if (desc->colors[i].image.id != SG_INVALID_ID) {
+            cmn->num_colors++;
+            _sg_attachment_common_init(&cmn->colors[i], &desc->colors[i]);
+            _sg_attachment_common_init(&cmn->resolves[i], &desc->resolves[i]);
+            cmn->has_render_attachments = true;
+        }
+    }
+    if (desc->depth_stencil.image.id != SG_INVALID_ID) {
+        _sg_attachment_common_init(&cmn->depth_stencil, &desc->depth_stencil);
+        cmn->has_render_attachments = true;
+    }
+    // NOTE: storage attachment slots may be non-continuous,
+    // so a 'num_storages' doesn't make sense
+    for (size_t i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+        if (desc->storages[i].image.id != SG_INVALID_ID) {
+            cmn->has_storage_attachments = true;
+            _sg_attachment_common_init(&cmn->storages[i], &desc->storages[i]);
+        }
+    }
 }
 
 _SOKOL_PRIVATE int _sg_vertexformat_bytesize(sg_vertex_format fmt) {
@@ -20333,7 +20332,7 @@ _SOKOL_PRIVATE void _sg_init_pipeline(_sg_pipeline_t* pip, const sg_pipeline_des
     if (_sg_validate_pipeline_desc(desc)) {
         _sg_shader_t* shd = _sg_lookup_shader(desc->shader.id);
         if (shd && (shd->slot.state == SG_RESOURCESTATE_VALID)) {
-            _sg_pipeline_common_init(&pip->cmn, desc, _sg_shader_ref(shd));
+            _sg_pipeline_common_init(&pip->cmn, desc, shd);
             pip->slot.state = _sg_create_pipeline(pip, desc);
         } else {
             pip->slot.state = SG_RESOURCESTATE_FAILED;
