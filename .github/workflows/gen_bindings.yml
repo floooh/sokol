@@ -307,7 +307,29 @@ jobs:
             sudo apt-get update
             sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev
       - name: build
-        run: dub build -v
+        working-directory: examples
+        run: |
+          dub build :blend
+          dub build :bufferoffsets
+          dub build :clear
+          dub build :cube
+          dub build :debugtext
+          dub build :droptest
+          dub build :imgui
+          dub build :instancing
+          dub build :instancingcompute
+          dub build :mrt
+          dub build :noninterleaved
+          dub build :offscreen
+          dub build :quad
+          dub build :shapes
+          dub build :saudio
+          dub build :sglcontext
+          dub build :sglpoints
+          dub build :triangle
+          dub build :texcube
+          dub build :userdata
+          dub build :vertexpull
   test-jai:
     needs: gen-bindings
     strategy:
