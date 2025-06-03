@@ -311,9 +311,10 @@ def gen_struct(decl, type_converter):
         elif util.is_array_type(field_type):
             array_type = util.extract_array_type(field_type)
             array_sizes = util.extract_array_sizes(field_type)
-            if array_type in prim_types and array_sizes and len(array_sizes) == 1:
+            if array_type in prim_types and array_sizes:
+                # Handle all primitive arrays with proper defaults
                 default_value = f" = [{', '.join([prim_defaults[array_type]] * int(array_sizes[0]))}]"
-            elif array_type in type_converter.struct_types or array_type in type_converter.enum_types or len(array_sizes) > 1:
+            elif array_type in type_converter.struct_types or array_type in type_converter.enum_types:
                 default_value = " = []"
             else:
                 default_value = " = null"
