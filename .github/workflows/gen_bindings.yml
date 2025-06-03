@@ -292,8 +292,7 @@ jobs:
       - uses: actions/checkout@main
         with:
           repository: kassane/sokol-d
-          ref: builder # remove after https://github.com/kassane/sokol-d/pull/70 is merged
-      - uses: egor-tensin/vs-shell@v2
+      - uses: egor-tensin/vs-shell@v2 # get cl.exe (default for Windows)
       - uses: dlang-community/setup-dlang@v2
         with:
           compiler: ldc-master
