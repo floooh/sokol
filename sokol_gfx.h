@@ -6122,8 +6122,6 @@ typedef struct {
     ID3D11DeviceContext* ctx;
     bool use_indexed_draw;
     bool use_instanced_draw;
-    _sg_pipeline_t* cur_pipeline;
-    sg_pipeline cur_pipeline_id;
     struct {
         ID3D11RenderTargetView* render_view;
         ID3D11RenderTargetView* resolve_view;
@@ -12673,12 +12671,9 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_shader(_sg_shader_t* shd) {
     }
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
-    SOKOL_ASSERT(pip && shd && desc);
-    SOKOL_ASSERT(desc->shader.id == shd->slot.id);
-    SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_VALID);
-
-    pip->shader = shd;
+_SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, const sg_pipeline_desc* desc) {
+    SOKOL_ASSERT(pip && desc);
+    _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
 
     // if this is a compute pipeline, we're done here
     if (pip->cmn.is_compute) {
@@ -12828,10 +12823,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
 
 _SOKOL_PRIVATE void _sg_d3d11_discard_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
-    if (pip == _sg.d3d11.cur_pipeline) {
-        _sg.d3d11.cur_pipeline = 0;
-        _sg.d3d11.cur_pipeline_id.id = SG_INVALID_ID;
-    }
     if (pip->d3d11.il) {
         _sg_d3d11_Release(pip->d3d11.il);
     }
@@ -12846,56 +12837,14 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_pipeline(_sg_pipeline_t* pip) {
     }
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t* atts, const _sg_attachments_ptrs_t* atts_ptrs, const sg_attachments_desc* desc) {
-    SOKOL_ASSERT(atts && atts_ptrs && desc);
+_SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t* atts, const sg_attachments_desc* desc) {
+    SOKOL_ASSERT(atts && desc);
     SOKOL_ASSERT(_sg.d3d11.dev);
-
-    // copy image pointers
-    for (int i = 0; i < atts->cmn.num_colors; i++) {
-        const sg_attachment_desc* color_desc = &desc->colors[i];
-        _SOKOL_UNUSED(color_desc);
-        SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
-        SOKOL_ASSERT(0 == atts->d3d11.colors[i].image);
-        SOKOL_ASSERT(atts_ptrs->color_images[i]);
-        _sg_image_t* clr_img = atts_ptrs->color_images[i];
-        SOKOL_ASSERT(clr_img->slot.id == color_desc->image.id);
-        SOKOL_ASSERT(_sg_is_valid_attachment_color_format(clr_img->cmn.pixel_format));
-        atts->d3d11.colors[i].image = clr_img;
-
-        const sg_attachment_desc* resolve_desc = &desc->resolves[i];
-        if (resolve_desc->image.id != SG_INVALID_ID) {
-            SOKOL_ASSERT(0 == atts->d3d11.resolves[i].image);
-            SOKOL_ASSERT(atts_ptrs->resolve_images[i]);
-            _sg_image_t* rsv_img = atts_ptrs->resolve_images[i];
-            SOKOL_ASSERT(rsv_img->slot.id == resolve_desc->image.id);
-            SOKOL_ASSERT(clr_img->cmn.pixel_format == rsv_img->cmn.pixel_format);
-            atts->d3d11.resolves[i].image = rsv_img;
-        }
-    }
-    SOKOL_ASSERT(0 == atts->d3d11.depth_stencil.image);
-    const sg_attachment_desc* ds_desc = &desc->depth_stencil;
-    if (ds_desc->image.id != SG_INVALID_ID) {
-        SOKOL_ASSERT(atts_ptrs->ds_image);
-        _sg_image_t* ds_img = atts_ptrs->ds_image;
-        SOKOL_ASSERT(ds_img->slot.id == ds_desc->image.id);
-        SOKOL_ASSERT(_sg_is_valid_attachment_depth_format(ds_img->cmn.pixel_format));
-        atts->d3d11.depth_stencil.image = ds_img;
-    }
-    for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
-        const sg_attachment_desc* storage_desc = &desc->storages[i];
-        if (storage_desc->image.id != SG_INVALID_ID) {
-            SOKOL_ASSERT(0 == atts->d3d11.storages[i].image);
-            SOKOL_ASSERT(atts_ptrs->storage_images[i]);
-            _sg_image_t* stg_img = atts_ptrs->storage_images[i];
-            SOKOL_ASSERT(stg_img->slot.id == storage_desc->image.id);
-            atts->d3d11.storages[i].image = stg_img;
-        }
-    }
 
     // create render-target views
     for (int i = 0; i < atts->cmn.num_colors; i++) {
         const _sg_attachment_common_t* cmn_color_att = &atts->cmn.colors[i];
-        const _sg_image_t* clr_img = atts_ptrs->color_images[i];
+        const _sg_image_t* clr_img = _sg_image_ref_ptr(&atts->cmn.colors[i].image);
         SOKOL_ASSERT(0 == atts->d3d11.colors[i].view.rtv);
         const bool msaa = clr_img->cmn.sample_count > 1;
         D3D11_RENDER_TARGET_VIEW_DESC d3d11_rtv_desc;
@@ -12941,9 +12890,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
         _sg_d3d11_setlabel(atts->d3d11.colors[i].view.rtv, desc->label);
     }
     SOKOL_ASSERT(0 == atts->d3d11.depth_stencil.view.dsv);
-    if (ds_desc->image.id != SG_INVALID_ID) {
+    if (!_sg_image_ref_null(&atts->cmn.depth_stencil.image)) {
         const _sg_attachment_common_t* cmn_ds_att = &atts->cmn.depth_stencil;
-        _sg_image_t* ds_img = atts_ptrs->ds_image;
+        const _sg_image_t* ds_img = _sg_image_ref_ptr(&atts->cmn.depth_stencil.image);
         const bool msaa = ds_img->cmn.sample_count > 1;
         D3D11_DEPTH_STENCIL_VIEW_DESC d3d11_dsv_desc;
         _sg_clear(&d3d11_dsv_desc, sizeof(d3d11_dsv_desc));
@@ -12985,7 +12934,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t*
     // create storage attachments unordered access views
     for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
         const _sg_attachment_common_t* cmn_stg_att = &atts->cmn.storages[i];
-        const _sg_image_t* stg_img = atts_ptrs->storage_images[i];
+        const _sg_image_t* stg_img = _sg_image_ref_ptr_or_null(&atts->cmn.storages[i].image);
         if (!stg_img) {
             continue;
         }
@@ -13051,7 +13000,7 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass* pass) {
         // nothing to do in compute passes
         return;
     }
-    const _sg_attachments_t* atts = _sg.cur_pass.atts;
+    const _sg_attachments_t* atts = _sg_attachments_ref_ptr_or_null(&_sg.cur_pass.atts);
     const sg_swapchain* swapchain = &pass->swapchain;
     const sg_pass_action* action = &pass->action;
 
@@ -13120,20 +13069,18 @@ _SOKOL_PRIVATE UINT _sg_d3d11_calcsubresource(UINT mip_slice, UINT array_slice, 
 
 _SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
     SOKOL_ASSERT(_sg.d3d11.ctx);
+    const _sg_attachments_t* atts = _sg_attachments_ref_ptr_or_null(&_sg.cur_pass.atts);
 
     if (!_sg.cur_pass.is_compute) {
         // need to resolve MSAA render attachments into texture?
-        if (_sg.cur_pass.atts_id.id != SG_INVALID_ID) {
+        if (atts) {
             // ...for offscreen pass...
-            SOKOL_ASSERT(_sg.cur_pass.atts && _sg.cur_pass.atts->slot.id == _sg.cur_pass.atts_id.id);
-            for (size_t i = 0; i < (size_t)_sg.cur_pass.atts->cmn.num_colors; i++) {
-                const _sg_image_t* resolve_img = _sg.cur_pass.atts->d3d11.resolves[i].image;
+            for (size_t i = 0; i < (size_t)atts->cmn.num_colors; i++) {
+                const _sg_image_t* resolve_img = _sg_image_ref_ptr_or_null(&atts->cmn.resolves[i].image);
                 if (resolve_img) {
-                    const _sg_image_t* color_img = _sg.cur_pass.atts->d3d11.colors[i].image;
-                    const _sg_attachment_common_t* cmn_color_att = &_sg.cur_pass.atts->cmn.colors[i];
-                    const _sg_attachment_common_t* cmn_resolve_att = &_sg.cur_pass.atts->cmn.resolves[i];
-                    SOKOL_ASSERT(resolve_img->slot.id == cmn_resolve_att->image_id.id);
-                    SOKOL_ASSERT(color_img && (color_img->slot.id == cmn_color_att->image_id.id));
+                    const _sg_image_t* color_img = _sg_image_ref_ptr(&atts->cmn.colors[i].image);
+                    const _sg_attachment_common_t* cmn_color_att = &atts->cmn.colors[i];
+                    const _sg_attachment_common_t* cmn_resolve_att = &atts->cmn.resolves[i];
                     SOKOL_ASSERT(color_img->cmn.sample_count > 1);
                     SOKOL_ASSERT(resolve_img->cmn.sample_count == 1);
                     const UINT src_subres = _sg_d3d11_calcsubresource(
@@ -13175,8 +13122,6 @@ _SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
     }
     _sg.d3d11.cur_pass.render_view = 0;
     _sg.d3d11.cur_pass.resolve_view = 0;
-    _sg.d3d11.cur_pipeline = 0;
-    _sg.d3d11.cur_pipeline_id.id = SG_INVALID_ID;
     _sg_d3d11_clear_state();
 }
 
@@ -13203,9 +13148,8 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_scissor_rect(int x, int y, int w, int h, boo
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_populate_storage_attachment_uavs(_sg_pipeline_t* pip, ID3D11UnorderedAccessView** d3d11_cs_uavs) {
-    const _sg_attachments_t* atts = _sg.cur_pass.atts;
-    SOKOL_ASSERT(atts);
-    const _sg_shader_t* shd = pip->shader;
+    const _sg_attachments_t* atts = _sg_attachments_ref_ptr(&_sg.cur_pass.atts);
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
     for (size_t i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
         if (shd->cmn.storage_images[i].stage != SG_SHADERSTAGE_COMPUTE) {
             continue;
@@ -13219,22 +13163,19 @@ _SOKOL_PRIVATE void _sg_d3d11_populate_storage_attachment_uavs(_sg_pipeline_t* p
 
 _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
-    SOKOL_ASSERT(pip->shader && (pip->cmn.shader_id.id == pip->shader->slot.id));
     SOKOL_ASSERT(_sg.d3d11.ctx);
 
-    _sg.d3d11.cur_pipeline = pip;
-    _sg.d3d11.cur_pipeline_id.id = pip->slot.id;
-
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
     if (pip->cmn.is_compute) {
         // a compute pipeline
-        SOKOL_ASSERT(pip->shader->d3d11.cs);
-        _sg_d3d11_CSSetShader(_sg.d3d11.ctx, pip->shader->d3d11.cs, NULL, 0);
-        _sg_d3d11_CSSetConstantBuffers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UB_BINDINGS, pip->shader->d3d11.cs_cbufs);
+        SOKOL_ASSERT(shd->d3d11.cs);
+        _sg_d3d11_CSSetShader(_sg.d3d11.ctx, shd->d3d11.cs, NULL, 0);
+        _sg_d3d11_CSSetConstantBuffers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UB_BINDINGS, shd->d3d11.cs_cbufs);
         _sg_stats_add(d3d11.pipeline.num_cs_set_shader, 1);
         _sg_stats_add(d3d11.pipeline.num_cs_set_constant_buffers, 1);
 
         // bind storage attachment UAVs
-        if (_sg.cur_pass.atts) {
+        if (!_sg_attachments_ref_null(&_sg.cur_pass.atts)) {
             ID3D11UnorderedAccessView* d3d11_cs_uavs[_SG_D3D11_MAX_STAGE_UAV_BINDINGS] = {0};
             _sg_d3d11_populate_storage_attachment_uavs(pip, d3d11_cs_uavs);
             _sg_d3d11_CSSetUnorderedAccessViews(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UAV_BINDINGS, d3d11_cs_uavs, NULL);
@@ -13243,8 +13184,8 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
     } else {
         // a render pipeline
         SOKOL_ASSERT(pip->d3d11.rs && pip->d3d11.bs && pip->d3d11.dss);
-        SOKOL_ASSERT(pip->shader->d3d11.vs);
-        SOKOL_ASSERT(pip->shader->d3d11.fs);
+        SOKOL_ASSERT(shd->d3d11.vs);
+        SOKOL_ASSERT(shd->d3d11.fs);
 
         _sg.d3d11.use_indexed_draw = (pip->d3d11.index_format != DXGI_FORMAT_UNKNOWN);
         _sg.d3d11.use_instanced_draw = pip->cmn.use_instanced_draw;
@@ -13254,10 +13195,10 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
         _sg_d3d11_OMSetBlendState(_sg.d3d11.ctx, pip->d3d11.bs, (float*)&pip->cmn.blend_color, 0xFFFFFFFF);
         _sg_d3d11_IASetPrimitiveTopology(_sg.d3d11.ctx, pip->d3d11.topology);
         _sg_d3d11_IASetInputLayout(_sg.d3d11.ctx, pip->d3d11.il);
-        _sg_d3d11_VSSetShader(_sg.d3d11.ctx, pip->shader->d3d11.vs, NULL, 0);
-        _sg_d3d11_VSSetConstantBuffers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UB_BINDINGS, pip->shader->d3d11.vs_cbufs);
-        _sg_d3d11_PSSetShader(_sg.d3d11.ctx, pip->shader->d3d11.fs, NULL, 0);
-        _sg_d3d11_PSSetConstantBuffers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UB_BINDINGS, pip->shader->d3d11.fs_cbufs);
+        _sg_d3d11_VSSetShader(_sg.d3d11.ctx, shd->d3d11.vs, NULL, 0);
+        _sg_d3d11_VSSetConstantBuffers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UB_BINDINGS, shd->d3d11.vs_cbufs);
+        _sg_d3d11_PSSetShader(_sg.d3d11.ctx, shd->d3d11.fs, NULL, 0);
+        _sg_d3d11_PSSetConstantBuffers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UB_BINDINGS, shd->d3d11.fs_cbufs);
         _sg_stats_add(d3d11.pipeline.num_rs_set_state, 1);
         _sg_stats_add(d3d11.pipeline.num_om_set_depth_stencil_state, 1);
         _sg_stats_add(d3d11.pipeline.num_om_set_blend_state, 1);
@@ -13272,10 +13213,9 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
 
 _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
     SOKOL_ASSERT(bnd);
-    SOKOL_ASSERT(bnd->pip && bnd->pip->shader);
-    SOKOL_ASSERT(bnd->pip->shader->slot.id == bnd->pip->cmn.shader_id.id);
+    SOKOL_ASSERT(bnd->pip);
     SOKOL_ASSERT(_sg.d3d11.ctx);
-    const _sg_shader_t* shd = bnd->pip->shader;
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&bnd->pip->cmn.shader);
     const bool is_compute = bnd->pip->cmn.is_compute;
 
     // gather all the D3D11 resources into arrays
@@ -13365,7 +13305,7 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
     }
     if (is_compute) {
         // in a compute pass with storage attachments, also need to rebind the storage attachments
-        if (_sg.cur_pass.atts) {
+        if (!_sg_attachments_ref_null(&_sg.cur_pass.atts)) {
             _sg_d3d11_populate_storage_attachment_uavs(bnd->pip, d3d11_cs_uavs);
         }
         _sg_d3d11_CSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SRV_BINDINGS, d3d11_cs_srvs);
@@ -13394,9 +13334,8 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
 _SOKOL_PRIVATE void _sg_d3d11_apply_uniforms(int ub_slot, const sg_range* data) {
     SOKOL_ASSERT(_sg.d3d11.ctx);
     SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
-    SOKOL_ASSERT(_sg.d3d11.cur_pipeline && _sg.d3d11.cur_pipeline->slot.id == _sg.d3d11.cur_pipeline_id.id);
-    const _sg_shader_t* shd = _sg.d3d11.cur_pipeline->shader;
-    SOKOL_ASSERT(shd && (shd->slot.id == _sg.d3d11.cur_pipeline->cmn.shader_id.id));
+    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
     SOKOL_ASSERT(data->size == shd->cmn.uniform_blocks[ub_slot].size);
 
     ID3D11Buffer* cbuf = shd->d3d11.all_cbufs[ub_slot];
