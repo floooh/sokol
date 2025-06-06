@@ -4831,7 +4831,6 @@ typedef struct sg_d3d11_pipeline_info {
 
 typedef struct sg_d3d11_attachments_info {
     const void* color_rtv[SG_MAX_COLOR_ATTACHMENTS];      // ID3D11RenderTargetView
-    const void* resolve_rtv[SG_MAX_COLOR_ATTACHMENTS];    // ID3D11RenderTargetView
     const void* dsv;  // ID3D11DepthStencilView
 } sg_d3d11_attachments_info;
 
@@ -6109,7 +6108,6 @@ typedef struct _sg_attachments_s {
     _sg_attachments_common_t cmn;
     struct {
         _sg_d3d11_attachment_t colors[SG_MAX_COLOR_ATTACHMENTS];
-        _sg_d3d11_attachment_t resolves[SG_MAX_COLOR_ATTACHMENTS];
         _sg_d3d11_attachment_t depth_stencil;
         _sg_d3d11_attachment_t storages[SG_MAX_STORAGE_ATTACHMENTS];
     } d3d11;
@@ -12979,9 +12977,6 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_attachments(_sg_attachments_t* atts) {
     for (size_t i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
         if (atts->d3d11.colors[i].view.rtv) {
             _sg_d3d11_Release(atts->d3d11.colors[i].view.rtv);
-        }
-        if (atts->d3d11.resolves[i].view.rtv) {
-            _sg_d3d11_Release(atts->d3d11.resolves[i].view.rtv);
         }
     }
     if (atts->d3d11.depth_stencil.view.dsv) {
@@ -21880,7 +21875,6 @@ SOKOL_API_IMPL sg_d3d11_attachments_info sg_d3d11_query_attachments_info(sg_atta
         if (atts) {
             for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
                 res.color_rtv[i] = (const void*) atts->d3d11.colors[i].view.rtv;
-                res.resolve_rtv[i] = (const void*) atts->d3d11.resolves[i].view.rtv;
             }
             res.dsv = (const void*) atts->d3d11.depth_stencil.view.dsv;
         }
