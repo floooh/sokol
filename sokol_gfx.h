@@ -6451,8 +6451,6 @@ typedef struct {
     WGPURenderPassEncoder rpass_enc;
     WGPUComputePassEncoder cpass_enc;
     WGPUBindGroup empty_bind_group;
-    const _sg_pipeline_t* cur_pipeline;
-    sg_pipeline cur_pipeline_id;
     _sg_wgpu_uniform_buffer_t uniform;
     _sg_wgpu_bindings_cache_t bindings_cache;
     _sg_wgpu_bindgroups_cache_t bindgroups_cache;
@@ -16184,8 +16182,7 @@ _SOKOL_PRIVATE uint64_t _sg_wgpu_bindgroups_cache_sbuf_item(uint8_t wgpu_binding
 _SOKOL_PRIVATE void _sg_wgpu_init_bindgroups_cache_key(_sg_wgpu_bindgroups_cache_key_t* key, const _sg_bindings_ptrs_t* bnd) {
     SOKOL_ASSERT(bnd);
     SOKOL_ASSERT(bnd->pip);
-    const _sg_shader_t* shd = bnd->pip->shader;
-    SOKOL_ASSERT(shd && shd->slot.id == bnd->pip->cmn.shader_id.id);
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&bnd->pip->cmn.shader);
 
     _sg_clear(key->items, sizeof(key->items));
     key->items[0] = _sg_wgpu_bindgroups_cache_pip_item(bnd->pip->slot.id);
@@ -16243,8 +16240,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_compare_bindgroups_cache_key(_sg_wgpu_bindgroups_ca
 _SOKOL_PRIVATE _sg_wgpu_bindgroup_t* _sg_wgpu_create_bindgroup(_sg_bindings_ptrs_t* bnd) {
     SOKOL_ASSERT(_sg.wgpu.dev);
     SOKOL_ASSERT(bnd->pip);
-    const _sg_shader_t* shd = bnd->pip->shader;
-    SOKOL_ASSERT(shd && (shd->slot.id == bnd->pip->cmn.shader_id.id));
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&bnd->pip->cmn.shader);
     _sg_stats_add(wgpu.bindings.num_create_bindgroup, 1);
     _sg_wgpu_bindgroup_handle_t bg_id = _sg_wgpu_alloc_bindgroup();
     if (bg_id.id == SG_INVALID_ID) {
@@ -16254,7 +16250,7 @@ _SOKOL_PRIVATE _sg_wgpu_bindgroup_t* _sg_wgpu_create_bindgroup(_sg_bindings_ptrs
     SOKOL_ASSERT(bg && (bg->slot.state == SG_RESOURCESTATE_ALLOC));
 
     // create wgpu bindgroup object (also see _sg_wgpu_create_shader())
-    WGPUBindGroupLayout bgl = bnd->pip->shader->wgpu.bgl_img_smp_sbuf;
+    WGPUBindGroupLayout bgl = shd->wgpu.bgl_img_smp_sbuf;
     SOKOL_ASSERT(bgl);
     WGPUBindGroupEntry bg_entries[_SG_WGPU_MAX_IMG_SMP_SBUF_BINDGROUP_ENTRIES];
     _sg_clear(&bg_entries, sizeof(bg_entries));
@@ -17157,12 +17153,12 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_shader(_sg_shader_t* shd) {
     }
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
-    SOKOL_ASSERT(pip && shd && desc);
-    SOKOL_ASSERT(desc->shader.id == shd->slot.id);
+_SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, const sg_pipeline_desc* desc) {
+    SOKOL_ASSERT(pip && desc);
+
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
     SOKOL_ASSERT(shd->wgpu.bgl_ub);
     SOKOL_ASSERT(shd->wgpu.bgl_img_smp_sbuf);
-    pip->shader = shd;
 
     pip->wgpu.blend_color.r = (double) desc->blend_color.r;
     pip->wgpu.blend_color.g = (double) desc->blend_color.g;
@@ -17311,10 +17307,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
 _SOKOL_PRIVATE void _sg_wgpu_discard_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     _sg_wgpu_bindgroups_cache_invalidate(_SG_WGPU_BINDGROUPSCACHEITEMTYPE_PIPELINE, pip->slot.id);
-    if (pip == _sg.wgpu.cur_pipeline) {
-        _sg.wgpu.cur_pipeline = 0;
-        _sg.wgpu.cur_pipeline_id.id = SG_INVALID_ID;
-    }
     if (pip->wgpu.rpip) {
         wgpuRenderPipelineRelease(pip->wgpu.rpip);
         pip->wgpu.rpip = 0;
@@ -17325,21 +17317,15 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_pipeline(_sg_pipeline_t* pip) {
     }
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_attachments(_sg_attachments_t* atts, const _sg_attachments_ptrs_t* atts_ptrs, const sg_attachments_desc* desc) {
-    SOKOL_ASSERT(atts && atts_ptrs && desc);
+_SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_attachments(_sg_attachments_t* atts, const sg_attachments_desc* desc) {
+    SOKOL_ASSERT(atts && desc);
 
-    // copy image pointers and create renderable wgpu texture views
+    // create texture views
     for (int i = 0; i < atts->cmn.num_colors; i++) {
         const sg_attachment_desc* color_desc = &desc->colors[i];
-        _SOKOL_UNUSED(color_desc);
-        SOKOL_ASSERT(color_desc->image.id != SG_INVALID_ID);
-        SOKOL_ASSERT(0 == atts->wgpu.colors[i].image);
-        SOKOL_ASSERT(atts_ptrs->color_images[i]);
-        _sg_image_t* clr_img = atts_ptrs->color_images[i];
-        SOKOL_ASSERT(clr_img->slot.id == color_desc->image.id);
+        _sg_image_t* clr_img = _sg_image_ref_ptr(&atts->cmn.colors[i].image);
         SOKOL_ASSERT(_sg_is_valid_attachment_color_format(clr_img->cmn.pixel_format));
         SOKOL_ASSERT(clr_img->wgpu.tex);
-        atts->wgpu.colors[i].image = clr_img;
 
         WGPUTextureViewDescriptor wgpu_color_view_desc;
         _sg_clear(&wgpu_color_view_desc, sizeof(wgpu_color_view_desc));
@@ -17355,13 +17341,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_attachments(_sg_attachments_t* 
 
         const sg_attachment_desc* resolve_desc = &desc->resolves[i];
         if (resolve_desc->image.id != SG_INVALID_ID) {
-            SOKOL_ASSERT(0 == atts->wgpu.resolves[i].image);
-            SOKOL_ASSERT(atts_ptrs->resolve_images[i]);
-            _sg_image_t* rsv_img = atts_ptrs->resolve_images[i];
-            SOKOL_ASSERT(rsv_img->slot.id == resolve_desc->image.id);
+            _sg_image_t* rsv_img = _sg_image_ref_ptr(&atts->cmn.resolves[i].image);
             SOKOL_ASSERT(clr_img->cmn.pixel_format == rsv_img->cmn.pixel_format);
             SOKOL_ASSERT(rsv_img->wgpu.tex);
-            atts->wgpu.resolves[i].image = rsv_img;
 
             WGPUTextureViewDescriptor wgpu_resolve_view_desc;
             _sg_clear(&wgpu_resolve_view_desc, sizeof(wgpu_resolve_view_desc));
@@ -17376,15 +17358,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_attachments(_sg_attachments_t* 
             }
         }
     }
-    SOKOL_ASSERT(0 == atts->wgpu.depth_stencil.image);
     const sg_attachment_desc* ds_desc = &desc->depth_stencil;
     if (ds_desc->image.id != SG_INVALID_ID) {
-        SOKOL_ASSERT(atts_ptrs->ds_image);
-        _sg_image_t* ds_img =atts_ptrs->ds_image;
-        SOKOL_ASSERT(ds_img->slot.id == ds_desc->image.id);
+        _sg_image_t* ds_img = _sg_image_ref_ptr(&atts->cmn.depth_stencil.image);
         SOKOL_ASSERT(_sg_is_valid_attachment_depth_format(ds_img->cmn.pixel_format));
         SOKOL_ASSERT(ds_img->wgpu.tex);
-        atts->wgpu.depth_stencil.image = ds_img;
 
         WGPUTextureViewDescriptor wgpu_ds_view_desc;
         _sg_clear(&wgpu_ds_view_desc, sizeof(wgpu_ds_view_desc));
@@ -17401,12 +17379,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_attachments(_sg_attachments_t* 
     for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
         const sg_attachment_desc* storage_desc = &desc->storages[i];
         if (storage_desc->image.id != SG_INVALID_ID) {
-            SOKOL_ASSERT(0 == atts->wgpu.storages[i].image);
-            SOKOL_ASSERT(atts_ptrs->storage_images[i]);
-            _sg_image_t* stg_img = atts_ptrs->storage_images[i];
-            SOKOL_ASSERT(stg_img->slot.id == storage_desc->image.id);
+            _sg_image_t* stg_img = _sg_image_ref_ptr(&atts->cmn.storages[i].image);
             SOKOL_ASSERT(_sg_is_valid_attachment_storage_format(stg_img->cmn.pixel_format));
-            atts->wgpu.storages[i].image = stg_img;
 
             WGPUTextureViewDescriptor wgpu_storage_view_desc;
             _sg_clear(&wgpu_storage_view_desc, sizeof(wgpu_storage_view_desc));
@@ -17496,9 +17470,9 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_compute_pass(const sg_pass* pass) {
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_begin_render_pass(const sg_pass* pass) {
-    const _sg_attachments_t* atts = _sg.cur_pass.atts;
     const sg_swapchain* swapchain = &pass->swapchain;
     const sg_pass_action* action = &pass->action;
+    const _sg_attachments_t* atts = _sg_attachments_ref_ptr_or_null(&_sg.cur_pass.atts);
 
     WGPURenderPassDescriptor wgpu_pass_desc;
     WGPURenderPassColorAttachment wgpu_color_att[SG_MAX_COLOR_ATTACHMENTS];
@@ -17514,8 +17488,9 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_render_pass(const sg_pass* pass) {
         }
         wgpu_pass_desc.colorAttachmentCount = (size_t)atts->cmn.num_colors;
         wgpu_pass_desc.colorAttachments = &wgpu_color_att[0];
-        if (atts->wgpu.depth_stencil.image) {
-            _sg_wgpu_init_ds_att(&wgpu_ds_att, action, atts->wgpu.depth_stencil.image->cmn.pixel_format, atts->wgpu.depth_stencil.view);
+        const _sg_image_t* ds_img = _sg_image_ref_ptr_or_null(&atts->cmn.depth_stencil.image);
+        if (ds_img) {
+            _sg_wgpu_init_ds_att(&wgpu_ds_att, action, ds_img->cmn.pixel_format, atts->wgpu.depth_stencil.view);
             wgpu_pass_desc.depthStencilAttachment = &wgpu_ds_att;
         }
     } else {
@@ -17546,10 +17521,7 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(const sg_pass* pass) {
     SOKOL_ASSERT(0 == _sg.wgpu.rpass_enc);
     SOKOL_ASSERT(0 == _sg.wgpu.cpass_enc);
 
-    _sg.wgpu.cur_pipeline = 0;
-    _sg.wgpu.cur_pipeline_id.id = SG_INVALID_ID;
     _sg_wgpu_bindings_cache_clear();
-
     if (pass->compute) {
         _sg_wgpu_begin_compute_pass(pass);
     } else {
@@ -17647,9 +17619,7 @@ _SOKOL_PRIVATE void _sg_wgpu_set_ub_bindgroup(const _sg_shader_t* shd) {
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
-    SOKOL_ASSERT(pip->shader && (pip->shader->slot.id == pip->cmn.shader_id.id));
-    _sg.wgpu.cur_pipeline = pip;
-    _sg.wgpu.cur_pipeline_id.id = pip->slot.id;
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
     if (pip->cmn.is_compute) {
         SOKOL_ASSERT(_sg.cur_pass.is_compute);
         SOKOL_ASSERT(pip->wgpu.cpip);
@@ -17659,9 +17629,8 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
         // adhoc-create a storage attachment bindgroup without going through the bindgroups cache
         // FIXME: the 'resource view update' will get rid of this special case because then storage images
         // will be regular resource bindings
-        if (pip->shader->wgpu.bgl_simg) {
+        if (shd->wgpu.bgl_simg) {
             _sg_stats_add(wgpu.bindings.num_create_bindgroup, 1);
-            _sg_shader_t* shd = pip->shader;
             SOKOL_ASSERT(shd);
             WGPUBindGroupLayout bgl = shd->wgpu.bgl_simg;
             WGPUBindGroupEntry bg_entries[_SG_WGPU_MAX_SIMG_BINDGROUP_ENTRIES];
@@ -17671,8 +17640,7 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
                 if (shd->cmn.storage_images[i].stage == SG_SHADERSTAGE_NONE) {
                     continue;
                 }
-                SOKOL_ASSERT(_sg.cur_pass.atts);
-                _sg_attachments_t* atts = _sg.cur_pass.atts;
+                _sg_attachments_t* atts = _sg_attachments_ref_ptr(&_sg.cur_pass.atts);
                 SOKOL_ASSERT(atts->wgpu.storages[i].view);
                 WGPUBindGroupEntry* bg_entry = &bg_entries[bgl_index];
                 bg_entry->binding = shd->wgpu.simg_grp2_bnd_n[i];
@@ -17707,13 +17675,12 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
     }
     // bind groups must be set because pipelines without uniform blocks or resource bindings
     // will still create 'empty' BindGroupLayouts
-    _sg_wgpu_set_ub_bindgroup(pip->shader);
+    _sg_wgpu_set_ub_bindgroup(shd);
     _sg_wgpu_set_bindgroup(_SG_WGPU_IMG_SMP_SBUF_BINDGROUP_INDEX, 0); // this will set the 'empty bind group'
 }
 
 _SOKOL_PRIVATE bool _sg_wgpu_apply_bindings(_sg_bindings_ptrs_t* bnd) {
     SOKOL_ASSERT(bnd);
-    SOKOL_ASSERT(bnd->pip->shader && (bnd->pip->cmn.shader_id.id == bnd->pip->shader->slot.id));
     bool retval = true;
     if (!_sg.cur_pass.is_compute) {
         retval &= _sg_wgpu_apply_index_buffer(bnd);
@@ -17729,11 +17696,8 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(int ub_slot, const sg_range* data) {
     SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
     SOKOL_ASSERT((_sg.wgpu.uniform.offset + data->size) <= _sg.wgpu.uniform.num_bytes);
     SOKOL_ASSERT((_sg.wgpu.uniform.offset & (alignment - 1)) == 0);
-    const _sg_pipeline_t* pip = _sg.wgpu.cur_pipeline;
-    SOKOL_ASSERT(pip && pip->shader);
-    SOKOL_ASSERT(pip->slot.id == _sg.wgpu.cur_pipeline_id.id);
-    const _sg_shader_t* shd = pip->shader;
-    SOKOL_ASSERT(shd->slot.id == pip->cmn.shader_id.id);
+    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
     SOKOL_ASSERT(data->size == shd->cmn.uniform_blocks[ub_slot].size);
     SOKOL_ASSERT(data->size <= _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE);
 
@@ -17747,8 +17711,8 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(int ub_slot, const sg_range* data) {
 
 _SOKOL_PRIVATE void _sg_wgpu_draw(int base_element, int num_elements, int num_instances) {
     SOKOL_ASSERT(_sg.wgpu.rpass_enc);
-    SOKOL_ASSERT(_sg.wgpu.cur_pipeline && (_sg.wgpu.cur_pipeline->slot.id == _sg.wgpu.cur_pipeline_id.id));
-    if (SG_INDEXTYPE_NONE != _sg.wgpu.cur_pipeline->cmn.index_type) {
+    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
+    if (SG_INDEXTYPE_NONE != pip->cmn.index_type) {
         wgpuRenderPassEncoderDrawIndexed(_sg.wgpu.rpass_enc, (uint32_t)num_elements, (uint32_t)num_instances, (uint32_t)base_element, 0, 0);
     } else {
         wgpuRenderPassEncoderDraw(_sg.wgpu.rpass_enc, (uint32_t)num_elements, (uint32_t)num_instances, (uint32_t)base_element, 0);
