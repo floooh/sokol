@@ -338,7 +338,7 @@ UTEST(sokol_gfx, make_destroy_buffers) {
         T(buf[i].id != SG_INVALID_ID);
         T((2-i) == _sg.pools.buffer_pool.queue_top);
         T(sg_query_buffer_state(buf[i]) == SG_RESOURCESTATE_VALID);
-        const _sg_buffer_t* bufptr = _sg_lookup_buffer(&_sg.pools, buf[i].id);
+        const _sg_buffer_t* bufptr = _sg_lookup_buffer(buf[i].id);
         T(bufptr);
         T(bufptr->slot.id == buf[i].id);
         T(bufptr->slot.state == SG_RESOURCESTATE_VALID);
@@ -382,7 +382,7 @@ UTEST(sokol_gfx, make_destroy_images) {
         T(img[i].id != SG_INVALID_ID);
         T((2-i) == _sg.pools.image_pool.queue_top);
         T(sg_query_image_state(img[i]) == SG_RESOURCESTATE_VALID);
-        const _sg_image_t* imgptr = _sg_lookup_image(&_sg.pools, img[i].id);
+        const _sg_image_t* imgptr = _sg_lookup_image(img[i].id);
         T(imgptr);
         T(imgptr->slot.id == img[i].id);
         T(imgptr->slot.state == SG_RESOURCESTATE_VALID);
@@ -423,7 +423,7 @@ UTEST(sokol_gfx, make_destroy_samplers) {
         T(smp[i].id != SG_INVALID_ID);
         T((2-i) == _sg.pools.sampler_pool.queue_top);
         T(sg_query_sampler_state(smp[i]) == SG_RESOURCESTATE_VALID);
-        const _sg_sampler_t* smpptr = _sg_lookup_sampler(&_sg.pools, smp[i].id);
+        const _sg_sampler_t* smpptr = _sg_lookup_sampler(smp[i].id);
         T(smpptr);
         T(smpptr->slot.id == smp[i].id);
         T(smpptr->slot.state == SG_RESOURCESTATE_VALID);
@@ -468,7 +468,7 @@ UTEST(sokol_gfx, make_destroy_shaders) {
         T(shd[i].id != SG_INVALID_ID);
         T((2-i) == _sg.pools.shader_pool.queue_top);
         T(sg_query_shader_state(shd[i]) == SG_RESOURCESTATE_VALID);
-        const _sg_shader_t* shdptr = _sg_lookup_shader(&_sg.pools, shd[i].id);
+        const _sg_shader_t* shdptr = _sg_lookup_shader(shd[i].id);
         T(shdptr);
         T(shdptr->slot.id == shd[i].id);
         T(shdptr->slot.state == SG_RESOURCESTATE_VALID);
@@ -507,12 +507,11 @@ UTEST(sokol_gfx, make_destroy_pipelines) {
         T(pip[i].id != SG_INVALID_ID);
         T((2-i) == _sg.pools.pipeline_pool.queue_top);
         T(sg_query_pipeline_state(pip[i]) == SG_RESOURCESTATE_VALID);
-        const _sg_pipeline_t* pipptr = _sg_lookup_pipeline(&_sg.pools, pip[i].id);
+        const _sg_pipeline_t* pipptr = _sg_lookup_pipeline(pip[i].id);
         T(pipptr);
         T(pipptr->slot.id == pip[i].id);
         T(pipptr->slot.state == SG_RESOURCESTATE_VALID);
-        T(pipptr->shader == _sg_lookup_shader(&_sg.pools, desc.shader.id));
-        T(pipptr->cmn.shader_id.id == desc.shader.id);
+        T(pipptr->cmn.shader.sref.id == desc.shader.id);
         T(pipptr->cmn.color_count == 1);
         T(pipptr->cmn.colors[0].pixel_format == SG_PIXELFORMAT_RGBA8);
         T(pipptr->cmn.depth.pixel_format == SG_PIXELFORMAT_DEPTH_STENCIL);
@@ -557,15 +556,15 @@ UTEST(sokol_gfx, make_destroy_attachments) {
         T(atts[i].id != SG_INVALID_ID);
         T((2-i) == _sg.pools.attachments_pool.queue_top);
         T(sg_query_attachments_state(atts[i]) == SG_RESOURCESTATE_VALID);
-        const _sg_attachments_t* attsptr = _sg_lookup_attachments(&_sg.pools, atts[i].id);
+        const _sg_attachments_t* attsptr = _sg_lookup_attachments(atts[i].id);
         T(attsptr);
         T(attsptr->slot.id == atts[i].id);
         T(attsptr->slot.state == SG_RESOURCESTATE_VALID);
         T(attsptr->cmn.num_colors == 3);
         for (int ai = 0; ai < 3; ai++) {
-            const _sg_image_t* img = _sg_attachments_color_image(attsptr, ai);
-            T(img == _sg_lookup_image(&_sg.pools, atts_desc.colors[ai].image.id));
-            T(attsptr->cmn.colors[ai].image_id.id == atts_desc.colors[ai].image.id);
+            const _sg_image_t* img = _sg_image_ref_ptr(&attsptr->cmn.colors[ai].image);
+            T(img == _sg_lookup_image(atts_desc.colors[ai].image.id));
+            T(attsptr->cmn.colors[ai].image.sref.id == atts_desc.colors[ai].image.id);
         }
     }
     /* trying to create another one fails because pool is exhausted */
@@ -1338,6 +1337,95 @@ UTEST(sokol_gfx, attachments_resource_states) {
     T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_ALLOC);
     sg_dealloc_attachments(atts);
     T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_INVALID);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, buffer_uninit_count) {
+    setup(&(sg_desc){0});
+    const sg_buffer_desc desc = { .usage.stream_update = true, .size = 128 };
+    sg_buffer buf = sg_make_buffer(&desc);
+    T(sg_query_buffer_info(buf).slot.uninit_count == 0);
+    sg_uninit_buffer(buf);
+    T(sg_query_buffer_info(buf).slot.uninit_count == 1);
+    sg_init_buffer(buf, &desc);
+    T(sg_query_buffer_info(buf).slot.uninit_count == 1);
+    sg_uninit_buffer(buf);
+    T(sg_query_buffer_info(buf).slot.uninit_count == 2);
+    sg_dealloc_buffer(buf);
+    T(sg_query_buffer_info(buf).slot.uninit_count == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, image_uninit_count) {
+    setup(&(sg_desc){0});
+    const sg_image_desc desc = { .usage.render_attachment = true, .width = 128, .height = 128 };
+    sg_image img = sg_make_image(&desc);
+    T(sg_query_image_info(img).slot.uninit_count == 0);
+    sg_uninit_image(img);
+    T(sg_query_image_info(img).slot.uninit_count == 1);
+    sg_init_image(img, &desc);
+    T(sg_query_image_info(img).slot.uninit_count == 1);
+    sg_uninit_image(img);
+    T(sg_query_image_info(img).slot.uninit_count == 2);
+    sg_dealloc_image(img);
+    T(sg_query_image_info(img).slot.uninit_count == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, shader_uninit_count) {
+    setup(&(sg_desc){0});
+    const sg_shader_desc desc = {0};
+    sg_shader shd = sg_make_shader(&desc);
+    T(sg_query_shader_info(shd).slot.uninit_count == 0);
+    sg_uninit_shader(shd);
+    T(sg_query_shader_info(shd).slot.uninit_count == 1);
+    sg_init_shader(shd, &desc);
+    T(sg_query_shader_info(shd).slot.uninit_count == 1);
+    sg_uninit_shader(shd);
+    T(sg_query_shader_info(shd).slot.uninit_count == 2);
+    sg_dealloc_shader(shd);
+    T(sg_query_shader_info(shd).slot.uninit_count == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, pipeline_uninit_count) {
+    setup(&(sg_desc){0});
+    const sg_pipeline_desc desc = { .shader = sg_make_shader(&(sg_shader_desc){0}) };
+    sg_pipeline pip = sg_make_pipeline(&desc);
+    T(sg_query_pipeline_info(pip).slot.uninit_count == 0);
+    sg_uninit_pipeline(pip);
+    T(sg_query_pipeline_info(pip).slot.uninit_count == 1);
+    sg_init_pipeline(pip, &desc);
+    T(sg_query_pipeline_info(pip).slot.uninit_count == 1);
+    sg_uninit_pipeline(pip);
+    T(sg_query_pipeline_info(pip).slot.uninit_count == 2);
+    sg_dealloc_pipeline(pip);
+    T(sg_query_pipeline_info(pip).slot.uninit_count == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, atachments_uninit_count) {
+    setup(&(sg_desc){0});
+    const sg_image_desc img_desc = {
+        .usage.render_attachment = true,
+        .width = 128,
+        .height = 128,
+    };
+    const sg_attachments_desc desc = {
+        .colors = {
+            [0].image = sg_make_image(&img_desc),
+        }
+    };
+    sg_attachments atts = sg_make_attachments(&desc);
+    T(sg_query_attachments_info(atts).slot.uninit_count == 0);
+    sg_uninit_attachments(atts);
+    T(sg_query_attachments_info(atts).slot.uninit_count == 1);
+    sg_init_attachments(atts, &desc);
+    T(sg_query_attachments_info(atts).slot.uninit_count == 1);
+    sg_uninit_attachments(atts);
+    T(sg_query_attachments_info(atts).slot.uninit_count == 2);
+    sg_dealloc_attachments(atts);
+    T(sg_query_attachments_info(atts).slot.uninit_count == 0);
     sg_shutdown();
 }
 
