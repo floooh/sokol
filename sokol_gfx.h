@@ -12839,6 +12839,7 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_pipeline(_sg_pipeline_t* pip) {
 _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_attachments(_sg_attachments_t* atts, const sg_attachments_desc* desc) {
     SOKOL_ASSERT(atts && desc);
     SOKOL_ASSERT(_sg.d3d11.dev);
+    _SOKOL_UNUSED(desc);
 
     // create render-target views
     for (int i = 0; i < atts->cmn.num_colors; i++) {
