@@ -10508,11 +10508,13 @@ _SOKOL_PRIVATE void _sg_gl_end_render_pass(void) {
                 invalidate_atts[att_index++] = (GLenum)(GL_COLOR_ATTACHMENT0 + i);
             }
         }
-        if ((_sg.gl.depth_store_action == SG_STOREACTION_DONTCARE) && (_sg.cur_pass.atts->cmn.depth_stencil.image_id.id != SG_INVALID_ID)) {
-            invalidate_atts[att_index++] = GL_DEPTH_ATTACHMENT;
-        }
-        if ((_sg.gl.stencil_store_action == SG_STOREACTION_DONTCARE) && (_sg.cur_pass.atts->cmn.depth_stencil.image_id.id != SG_INVALID_ID)) {
-            invalidate_atts[att_index++] = GL_STENCIL_ATTACHMENT;
+        if (!_sg_image_ref_null(&atts->cmn.depth_stencil.image)) {
+            if (_sg.gl.depth_store_action == SG_STOREACTION_DONTCARE) {
+                invalidate_atts[att_index++] = GL_DEPTH_ATTACHMENT;
+            }
+            if (_sg.gl.stencil_store_action == SG_STOREACTION_DONTCARE) {
+                invalidate_atts[att_index++] = GL_STENCIL_ATTACHMENT;
+            }
         }
         if (att_index > 0) {
             glInvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, att_index, invalidate_atts);
