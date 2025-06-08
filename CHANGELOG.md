@@ -36,7 +36,7 @@ This loophole has now been closed:
 Additionally:
 
 - code has been moved around to reduce forward references, unfortunately the
-  result is that the PR diff looks bugger and messier than the change actually is
+  result is that the PR diff looks bigger and messier than the change actually is
 - validation layer behaviour concerning internal references has been cleaned
   up and unified
 
