@@ -4349,10 +4349,14 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_ATTACHMENTS_VALID, "sg_begin_pass: attachments object not in resource state VALID") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COMPUTEPASS_STORAGE_ATTACHMENTS_ONLY, "sg_begin_pass: only storage attachments allowed on compute pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RENDERPASS_RENDER_ATTACHMENTS_ONLY, "sg_begin_pass: a render pass cannot have storage attachments") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE, "sg_begin_pass: one or more color attachment images are not valid") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVE_ATTACHMENT_IMAGE, "sg_begin_pass: one or more resolve attachment images are not valid") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCIL_ATTACHMENT_IMAGE, "sg_begin_pass: one or more depth-stencil attachment images are not valid") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_STORAGE_ATTACHMENT_IMAGE, "sg_begin_pass: one or more storage attachment images are not valid") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE_ALIVE, "sg_begin_pass: one or more color attachment images are no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE_VALID, "sg_begin_pass: one or more color attachment images are not in valid state") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVE_ATTACHMENT_IMAGE_ALIVE, "sg_begin_pass: one or more resolve attachment images are no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVE_ATTACHMENT_IMAGE_VALID, "sg_begin_pass: one or more resolve attachment images are not in valid state") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCIL_ATTACHMENT_IMAGE_ALIVE, "sg_begin_pass: one or more depth-stencil attachment images are no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCIL_ATTACHMENT_IMAGE_VALID, "sg_begin_pass: one or more depth-stencil attachment images are not in valid state") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_STORAGE_ATTACHMENT_IMAGE_ALIVE, "sg_begin_pass: one or more storage attachment images is no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_STORAGE_ATTACHMENT_IMAGE_VALID, "sg_begin_pass: one or more storage attachment images is not in valid state") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_WIDTH, "sg_begin_pass: expected pass.swapchain.width > 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_WIDTH_NOTSET, "sg_begin_pass: expected pass.swapchain.width == 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_HEIGHT, "sg_begin_pass: expected pass.swapchain.height > 0") \
@@ -4394,6 +4398,10 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_CURPASS_ATTACHMENTS_ALIVE, "sg_apply_pipeline: current pass attachments no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_CURPASS_ATTACHMENTS_VALID, "sg_apply_pipeline: current pass attachments not in valid state") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_ATT_COUNT, "sg_apply_pipeline: number of pipeline color attachments doesn't match number of pass color attachments") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_COLOR_ATTACHMENT_IMAGE_ALIVE, "sg_apply_pipeline: one or more pass color attachments images are no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_COLOR_ATTACHMENT_IMAGE_VALID, "sg_apply_pipeline: one or more pass color attachments images are not in valid state") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_DEPTHSTENCIL_ATTACHMENT_IMAGE_ALIVE, "sg_apply_pipeline: pass depth-stencil attachment image no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_DEPTHSTENCIL_ATTACHMENT_IMAGE_VALID, "sg_apply_pipeline: pass depth-stencil attachment image not in valid state") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_COLOR_FORMAT, "sg_apply_pipeline: pipeline color attachment pixel format doesn't match pass color attachment pixel format") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_DEPTH_FORMAT, "sg_apply_pipeline: pipeline depth pixel_format doesn't match pass depth attachment pixel format") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_SAMPLE_COUNT, "sg_apply_pipeline: pipeline MSAA sample count doesn't match render pass attachment sample count") \
@@ -4432,6 +4440,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_SAMPLER_COMPARE_NEVER, "sg_apply_bindings: shader expects SG_SAMPLERTYPE_FILTERING or SG_SAMPLERTYPE_NONFILTERING but sampler doesn't have SG_COMPAREFUNC_NEVER") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_NONFILTERING_SAMPLER, "sg_apply_bindings: shader expected SG_SAMPLERTYPE_NONFILTERING, but sampler has SG_FILTER_LINEAR filters") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SMP_ALIVE, "sg_apply_bindings: bound sampler no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SMP_VALID, "sg_apply_bindings: bound sampler not in valid state") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_STORAGEBUFFER_BINDING, "sg_apply_bindings: storage buffer binding is missing or the buffer handle is invalid") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_STORAGEBUFFER_ALIVE, "sg_apply_bindings: bound storage buffer no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_STORAGEBUFFER_BINDING_BUFFERTYPE, "sg_apply_bindings: buffer bound to storage buffer slot doesn't have storage buffer usage (sg_buffer_desc.usage.storage_buffer)") \
@@ -18860,7 +18869,7 @@ _SOKOL_PRIVATE bool _sg_validate_attachments_desc(const sg_attachments_desc* des
                 _SG_VALIDATE(atts_cont, VALIDATE_ATTACHMENTSDESC_NO_CONT_COLOR_ATTS);
                 const _sg_image_t* img = _sg_lookup_image(att->image.id);
                 _SG_VALIDATE(img, VALIDATE_ATTACHMENTSDESC_COLOR_IMAGE);
-                if (0 != img) {
+                if (img) {
                     _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ATTACHMENTSDESC_COLOR_IMAGE);
                     _SG_VALIDATE(img->cmn.usage.render_attachment, VALIDATE_ATTACHMENTSDESC_COLOR_IMAGE_NO_RENDERATTACHMENT);
                     _SG_VALIDATE(att->mip_level < img->cmn.num_mipmaps, VALIDATE_ATTACHMENTSDESC_COLOR_MIPLEVEL);
@@ -18889,7 +18898,7 @@ _SOKOL_PRIVATE bool _sg_validate_attachments_desc(const sg_attachments_desc* des
                         _SG_VALIDATE(img->cmn.sample_count > 1, VALIDATE_ATTACHMENTSDESC_RESOLVE_COLOR_IMAGE_MSAA);
                         const _sg_image_t* res_img = _sg_lookup_image(res_att->image.id);
                         _SG_VALIDATE(res_img, VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE);
-                        if (res_img != 0) {
+                        if (res_img) {
                             _SG_VALIDATE(res_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE);
                             _SG_VALIDATE(res_img->cmn.usage.render_attachment, VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_NO_RT);
                             _SG_VALIDATE(res_img->cmn.sample_count == 1, VALIDATE_ATTACHMENTSDESC_RESOLVE_SAMPLE_COUNT);
@@ -18945,7 +18954,7 @@ _SOKOL_PRIVATE bool _sg_validate_attachments_desc(const sg_attachments_desc* des
                 has_storage_atts = true;
                 const _sg_image_t* img = _sg_lookup_image(att->image.id);
                 _SG_VALIDATE(img, VALIDATE_ATTACHMENTSDESC_STORAGE_IMAGE);
-                if (0 != img) {
+                if (img) {
                     _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ATTACHMENTSDESC_STORAGE_IMAGE);
                     _SG_VALIDATE(img->cmn.usage.storage_attachment, VALIDATE_ATTACHMENTSDESC_STORAGE_IMAGE_NO_STORAGEATTACHMENT);
                     _SG_VALIDATE(att->mip_level < img->cmn.num_mipmaps, VALIDATE_ATTACHMENTSDESC_STORAGE_MIPLEVEL);
@@ -18987,16 +18996,20 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
         _SG_VALIDATE(pass->_end_canary == 0, VALIDATE_BEGINPASS_CANARY);
         if (is_compute_pass) {
             // this is a compute pass with optional storage attachments
-            if (pass->attachments.id) {
+            if (pass->attachments.id != SG_INVALID_ID) {
                 const _sg_attachments_t* atts = _sg_lookup_attachments(pass->attachments.id);
                 if (atts) {
                     _SG_VALIDATE(atts->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_ATTACHMENTS_VALID);
                     _SG_VALIDATE(!atts->cmn.has_render_attachments, VALIDATE_BEGINPASS_COMPUTEPASS_STORAGE_ATTACHMENTS_ONLY);
                     for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
-                        const _sg_image_ref_t* storage_img_ref = &atts->cmn.storages[i].image;
-                        if (!_sg_image_ref_null(storage_img_ref)) {
-                            _SG_VALIDATE(_sg_image_ref_alive(storage_img_ref), VALIDATE_BEGINPASS_STORAGE_ATTACHMENT_IMAGE);
-                            _SG_VALIDATE(_sg_image_ref_ptr(storage_img_ref)->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_STORAGE_ATTACHMENT_IMAGE);
+                        const _sg_image_ref_t* img_ref = &atts->cmn.storages[i].image;
+                        const bool img_null = _sg_image_ref_null(img_ref);
+                        const bool img_alive = _sg_image_ref_alive(img_ref);
+                        if (!img_null) {
+                            _SG_VALIDATE(img_alive, VALIDATE_BEGINPASS_STORAGE_ATTACHMENT_IMAGE_ALIVE);
+                            if (img_alive) {
+                                _SG_VALIDATE(_sg_image_ref_ptr(img_ref)->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_STORAGE_ATTACHMENT_IMAGE_VALID);
+                            }
                         }
                     }
                 } else {
@@ -19055,21 +19068,39 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
                 _SG_VALIDATE(atts->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_ATTACHMENTS_VALID);
                 _SG_VALIDATE(!atts->cmn.has_storage_attachments, VALIDATE_BEGINPASS_RENDERPASS_RENDER_ATTACHMENTS_ONLY);
                 for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-                    const _sg_image_ref_t* color_img_ref = &atts->cmn.colors[i].image;
-                    if (!_sg_image_ref_null(color_img_ref)) {
-                        _SG_VALIDATE(_sg_image_ref_alive(color_img_ref), VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE);
-                        _SG_VALIDATE(_sg_image_ref_ptr(color_img_ref)->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE);
+                    {
+                        const _sg_image_ref_t* img_ref = &atts->cmn.colors[i].image;
+                        const bool img_null = _sg_image_ref_null(img_ref);
+                        const bool img_alive = _sg_image_ref_alive(img_ref);
+                        if (!img_null) {
+                            _SG_VALIDATE(img_alive, VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE_ALIVE);
+                            if (img_alive) {
+                                _SG_VALIDATE(_sg_image_ref_ptr(img_ref)->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE_VALID);
+                            }
+                        }
                     }
-                    const _sg_image_ref_t* resolve_img_ref = &atts->cmn.resolves[i].image;
-                    if (!_sg_image_ref_null(resolve_img_ref)) {
-                        _SG_VALIDATE(_sg_image_ref_alive(resolve_img_ref), VALIDATE_BEGINPASS_RESOLVE_ATTACHMENT_IMAGE);
-                        _SG_VALIDATE(_sg_image_ref_ptr(resolve_img_ref)->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_RESOLVE_ATTACHMENT_IMAGE);
+                    {
+                        const _sg_image_ref_t* img_ref = &atts->cmn.resolves[i].image;
+                        const bool img_null = _sg_image_ref_null(img_ref);
+                        const bool img_alive = _sg_image_ref_alive(img_ref);
+                        if (!img_null) {
+                            _SG_VALIDATE(img_alive, VALIDATE_BEGINPASS_RESOLVE_ATTACHMENT_IMAGE_ALIVE);
+                            if (img_alive) {
+                                _SG_VALIDATE(_sg_image_ref_ptr(img_ref)->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_RESOLVE_ATTACHMENT_IMAGE_VALID);
+                            }
+                        }
                     }
                 }
-                const _sg_image_ref_t* ds_img_ref = &atts->cmn.depth_stencil.image;
-                if (!_sg_image_ref_null(ds_img_ref)) {
-                    _SG_VALIDATE(_sg_image_ref_alive(ds_img_ref), VALIDATE_BEGINPASS_DEPTHSTENCIL_ATTACHMENT_IMAGE);
-                    _SG_VALIDATE(_sg_image_ref_ptr(ds_img_ref)->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_DEPTHSTENCIL_ATTACHMENT_IMAGE);
+                {
+                    const _sg_image_ref_t* img_ref = &atts->cmn.depth_stencil.image;
+                    const bool img_null = _sg_image_ref_null(img_ref);
+                    const bool img_alive = _sg_image_ref_alive(img_ref);
+                    if (!img_null) {
+                        _SG_VALIDATE(img_alive, VALIDATE_BEGINPASS_DEPTHSTENCIL_ATTACHMENT_IMAGE_ALIVE);
+                        if (img_alive) {
+                            _SG_VALIDATE(_sg_image_ref_ptr(img_ref)->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_DEPTHSTENCIL_ATTACHMENT_IMAGE_VALID);
+                        }
+                    }
                 }
             } else {
                 _SG_VALIDATE(atts != 0, VALIDATE_BEGINPASS_ATTACHMENTS_EXISTS);
@@ -19154,30 +19185,38 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
             return _sg_validate_end();
         }
         _SG_VALIDATE(pip->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_PIPELINE_VALID);
+
         // the pipeline's shader must be alive and valid
         _SG_VALIDATE(_sg.cur_pass.in_pass, VALIDATE_APIP_PASS_EXPECTED);
-        _SG_VALIDATE(_sg_shader_ref_alive(&pip->cmn.shader), VALIDATE_APIP_PIPELINE_SHADER_ALIVE);
-        const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
-        _SG_VALIDATE(shd->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_PIPELINE_SHADER_VALID);
+        const bool shd_alive = _sg_shader_ref_alive(&pip->cmn.shader);
+        const _sg_shader_t* shd = shd_alive ? _sg_shader_ref_ptr(&pip->cmn.shader) : 0;
+        _SG_VALIDATE(shd_alive, VALIDATE_APIP_PIPELINE_SHADER_ALIVE);
+        if (shd_alive) {
+            _SG_VALIDATE(shd->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_PIPELINE_SHADER_VALID);
+        } else {
+            return _sg_validate_end();
+        }
 
         // if pass attachments exist, check that the attachment object is still valid
-        bool has_attachments = !_sg_attachments_ref_null(&_sg.cur_pass.atts);
-        if (has_attachments) {
-            _SG_VALIDATE(_sg_attachments_ref_alive(&_sg.cur_pass.atts), VALIDATE_APIP_CURPASS_ATTACHMENTS_ALIVE);
-            const _sg_attachments_t* atts = _sg_attachments_ref_ptr(&_sg.cur_pass.atts);
-            _SG_VALIDATE(atts->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_CURPASS_ATTACHMENTS_VALID);
+        bool atts_null = _sg_attachments_ref_null(&_sg.cur_pass.atts);
+        bool atts_alive = _sg_attachments_ref_alive(&_sg.cur_pass.atts);
+        const _sg_attachments_t* atts = atts_alive ? _sg_attachments_ref_ptr(&_sg.cur_pass.atts) : 0;
+        if (!atts_null) {
+            _SG_VALIDATE(atts_alive, VALIDATE_APIP_CURPASS_ATTACHMENTS_ALIVE);
+            if (atts) {
+                _SG_VALIDATE(atts->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_CURPASS_ATTACHMENTS_VALID);
+            }
         }
         if (pip->cmn.is_compute) {
             _SG_VALIDATE(_sg.cur_pass.is_compute, VALIDATE_APIP_COMPUTEPASS_EXPECTED);
-            if (has_attachments) {
-                const _sg_attachments_t* atts = _sg_attachments_ref_ptr(&_sg.cur_pass.atts);
+            if (atts) {
                 // a compute pass with storage attachments
                 // check that the pass storage attachments match the shader expectations
-                for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+                for (size_t i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
                     if (shd->cmn.storage_images[i].stage != SG_SHADERSTAGE_NONE) {
                         const _sg_image_ref_t* img_ref = &atts->cmn.storages[i].image;
-                        bool img_null = _sg_image_ref_null(img_ref);
-                        bool img_alive = _sg_image_ref_alive(img_ref);
+                        const bool img_null = _sg_image_ref_null(img_ref);
+                        const bool img_alive = _sg_image_ref_alive(img_ref);
                         _SG_VALIDATE(!img_null, VALIDATE_APIP_EXPECTED_STORAGE_ATTACHMENT_IMAGE);
                         if (!img_null) {
                             _SG_VALIDATE(img_alive, VALIDATE_APIP_STORAGE_ATTACHMENT_IMAGE_ALIVE);
@@ -19194,19 +19233,39 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
         } else {
             _SG_VALIDATE(!_sg.cur_pass.is_compute, VALIDATE_APIP_RENDERPASS_EXPECTED);
             // check that pipeline attributes match current pass attributes
-            if (has_attachments) {
-                const _sg_attachments_t* atts = _sg_attachments_ref_ptr(&_sg.cur_pass.atts);
-                // an offscreen pass
-                _SG_VALIDATE(pip->cmn.color_count == atts->cmn.num_colors, VALIDATE_APIP_ATT_COUNT);
-                for (int i = 0; i < pip->cmn.color_count; i++) {
-                    const _sg_image_t* att_img = _sg_image_ref_ptr(&atts->cmn.colors[i].image);
-                    _SG_VALIDATE(pip->cmn.colors[i].pixel_format == att_img->cmn.pixel_format, VALIDATE_APIP_COLOR_FORMAT);
-                    _SG_VALIDATE(pip->cmn.sample_count == att_img->cmn.sample_count, VALIDATE_APIP_SAMPLE_COUNT);
-                }
-                if (!_sg_image_ref_null(&atts->cmn.depth_stencil.image)) {
-                    _SG_VALIDATE(pip->cmn.depth.pixel_format == _sg_image_ref_ptr(&atts->cmn.depth_stencil.image)->cmn.pixel_format, VALIDATE_APIP_DEPTH_FORMAT);
-                } else {
-                    _SG_VALIDATE(pip->cmn.depth.pixel_format == SG_PIXELFORMAT_NONE, VALIDATE_APIP_DEPTH_FORMAT);
+            if (!atts_null) {
+                if (atts) {
+                    // an offscreen pass
+                    _SG_VALIDATE(pip->cmn.color_count == atts->cmn.num_colors, VALIDATE_APIP_ATT_COUNT);
+                    for (int i = 0; i < pip->cmn.color_count; i++) {
+                        const _sg_image_ref_t* img_ref = &atts->cmn.colors[i].image;
+                        const bool img_null = _sg_image_ref_null(img_ref);
+                        const bool img_alive = _sg_image_ref_alive(img_ref);
+                        if (!img_null) {
+                            _SG_VALIDATE(img_alive, VALIDATE_APIP_COLOR_ATTACHMENT_IMAGE_ALIVE);
+                            if (img_alive) {
+                                const _sg_image_t* img = _sg_image_ref_ptr(img_ref);
+                                _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_COLOR_ATTACHMENT_IMAGE_VALID);
+                                _SG_VALIDATE(pip->cmn.colors[i].pixel_format == img->cmn.pixel_format, VALIDATE_APIP_COLOR_FORMAT);
+                                _SG_VALIDATE(pip->cmn.sample_count == img->cmn.sample_count, VALIDATE_APIP_SAMPLE_COUNT);
+                            }
+                        }
+                    }
+                    {
+                        const _sg_image_ref_t* img_ref = &atts->cmn.depth_stencil.image;
+                        const bool img_null = _sg_image_ref_null(img_ref);
+                        const bool img_alive = _sg_image_ref_alive(img_ref);
+                        if (!img_null) {
+                            _SG_VALIDATE(img_alive, VALIDATE_APIP_DEPTHSTENCIL_ATTACHMENT_IMAGE_ALIVE);
+                            if (img_alive) {
+                                const _sg_image_t* img = _sg_image_ref_ptr(img_ref);
+                                _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_DEPTHSTENCIL_ATTACHMENT_IMAGE_VALID);
+                                _SG_VALIDATE(pip->cmn.depth.pixel_format == img->cmn.pixel_format, VALIDATE_APIP_DEPTH_FORMAT);
+                            }
+                        } else {
+                            _SG_VALIDATE(pip->cmn.depth.pixel_format == SG_PIXELFORMAT_NONE, VALIDATE_APIP_DEPTH_FORMAT);
+                        }
+                    }
                 }
             } else {
                 // default pass
@@ -19250,15 +19309,21 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         _SG_VALIDATE(has_any_bindings, VALIDATE_ABND_EMPTY_BINDINGS);
 
         // a pipeline object must have been applied
-        _SG_VALIDATE(!_sg_pipeline_ref_null(&_sg.cur_pip), VALIDATE_ABND_NO_PIPELINE);
+        const bool pip_null = _sg_pipeline_ref_null(&_sg.cur_pip);
         const bool pip_alive = _sg_pipeline_ref_alive(&_sg.cur_pip);
+        _SG_VALIDATE(!pip_null, VALIDATE_ABND_NO_PIPELINE);
         _SG_VALIDATE(pip_alive, VALIDATE_ABND_PIPELINE_ALIVE);
         if (!pip_alive) {
             return _sg_validate_end();
         }
         const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
         _SG_VALIDATE(pip->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ABND_PIPELINE_VALID);
-        _SG_VALIDATE(_sg_shader_ref_alive(&pip->cmn.shader), VALIDATE_ABND_PIPELINE_SHADER_ALIVE);
+
+        const bool shd_alive = _sg_shader_ref_alive(&pip->cmn.shader);
+        _SG_VALIDATE(shd_alive, VALIDATE_ABND_PIPELINE_SHADER_ALIVE);
+        if (!shd_alive) {
+            return _sg_validate_end();
+        }
         const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
         _SG_VALIDATE(shd->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ABND_PIPELINE_SHADER_VALID);
 
@@ -19275,6 +19340,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                     if (bindings->vertex_buffers[i].id != SG_INVALID_ID) {
                         const _sg_buffer_t* buf = _sg_lookup_buffer(bindings->vertex_buffers[i].id);
                         _SG_VALIDATE(buf != 0, VALIDATE_ABND_VB_ALIVE);
+                        // NOTE: state != VALID is legal and skips rendering!
                         if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
                             _SG_VALIDATE(buf->cmn.usage.vertex_buffer, VALIDATE_ABND_VB_TYPE);
                             _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_VB_OVERFLOW);
@@ -19299,6 +19365,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 // buffer in index-buffer-slot must have index buffer usage
                 const _sg_buffer_t* buf = _sg_lookup_buffer(bindings->index_buffer.id);
                 _SG_VALIDATE(buf != 0, VALIDATE_ABND_IB_ALIVE);
+                // NOTE: state != VALID is legal and skips rendering!
                 if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
                     _SG_VALIDATE(buf->cmn.usage.index_buffer, VALIDATE_ABND_IB_TYPE);
                     _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_IB_OVERFLOW);
@@ -19313,6 +19380,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 if (bindings->images[i].id != SG_INVALID_ID) {
                     const _sg_image_t* img = _sg_lookup_image(bindings->images[i].id);
                     _SG_VALIDATE(img != 0, VALIDATE_ABND_IMG_ALIVE);
+                    // NOTE: state != VALID is legal and skips rendering!
                     if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
                         _SG_VALIDATE(img->cmn.type == shd->cmn.images[i].image_type, VALIDATE_ABND_IMAGE_TYPE_MISMATCH);
                         if (!_sg.features.msaa_image_bindings) {
@@ -19345,6 +19413,10 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                     const _sg_sampler_t* smp = _sg_lookup_sampler(bindings->samplers[i].id);
                     _SG_VALIDATE(smp != 0, VALIDATE_ABND_SMP_ALIVE);
                     if (smp) {
+                        // NOTE: for samplers we're specifically checking that they are in valid state
+                        // (technically an invalid sample skips rendering, but an invalid sampler is
+                        // most likely an oversight)
+                        _SG_VALIDATE(smp->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ABND_SMP_VALID);
                         if (shd->cmn.samplers[i].sampler_type == SG_SAMPLERTYPE_COMPARISON) {
                             _SG_VALIDATE(smp->cmn.compare != SG_COMPAREFUNC_NEVER, VALIDATE_ABND_UNEXPECTED_SAMPLER_COMPARE_NEVER);
                         } else {
@@ -19368,7 +19440,8 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 if (bindings->storage_buffers[i].id != SG_INVALID_ID) {
                     const _sg_buffer_t* sbuf = _sg_lookup_buffer(bindings->storage_buffers[i].id);
                     _SG_VALIDATE(sbuf != 0, VALIDATE_ABND_STORAGEBUFFER_ALIVE);
-                    if (sbuf) {
+                    // NOTE: state != VALID is legal and skips rendering!
+                    if (sbuf && sbuf->slot.state == SG_RESOURCESTATE_VALID) {
                         _SG_VALIDATE(sbuf->cmn.usage.storage_buffer, VALIDATE_ABND_STORAGEBUFFER_BINDING_BUFFERTYPE);
                         // read/write bindings are only allowed for immutable buffers
                         if (!shd->cmn.storage_buffers[i].readonly) {
@@ -19415,16 +19488,24 @@ _SOKOL_PRIVATE bool _sg_validate_apply_uniforms(int ub_slot, const sg_range* dat
         SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
         _sg_validate_begin();
         _SG_VALIDATE(_sg.cur_pass.in_pass, VALIDATE_AU_PASS_EXPECTED);
-        _SG_VALIDATE(!_sg_pipeline_ref_null(&_sg.cur_pip), VALIDATE_AU_NO_PIPELINE);
-        _SG_VALIDATE(_sg_pipeline_ref_alive(&_sg.cur_pip), VALIDATE_AU_PIPELINE_ALIVE);
-        const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
-        _SG_VALIDATE(pip->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_AU_PIPELINE_VALID);
-        _SG_VALIDATE(_sg_shader_ref_alive(&pip->cmn.shader), VALIDATE_AU_PIPELINE_SHADER_ALIVE);
-        const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
-        _SG_VALIDATE(shd->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_AU_PIPELINE_SHADER_VALID);
-        _SG_VALIDATE(shd->cmn.uniform_blocks[ub_slot].stage != SG_SHADERSTAGE_NONE, VALIDATE_AU_NO_UNIFORMBLOCK_AT_SLOT);
-        _SG_VALIDATE(data->size == shd->cmn.uniform_blocks[ub_slot].size, VALIDATE_AU_SIZE);
-
+        const _sg_pipeline_ref_t* pip_ref = &_sg.cur_pip;
+        const bool pip_null = _sg_pipeline_ref_null(pip_ref);
+        const bool pip_alive = _sg_pipeline_ref_alive(pip_ref);
+        _SG_VALIDATE(!pip_null, VALIDATE_AU_NO_PIPELINE);
+        _SG_VALIDATE(pip_alive, VALIDATE_AU_PIPELINE_ALIVE);
+        if (pip_alive) {
+            const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(pip_ref);
+            _SG_VALIDATE(pip->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_AU_PIPELINE_VALID);
+            const _sg_shader_ref_t* shd_ref = &pip->cmn.shader;
+            const bool shd_alive = _sg_shader_ref_alive(shd_ref);
+            _SG_VALIDATE(shd_alive, VALIDATE_AU_PIPELINE_SHADER_ALIVE);
+            if (shd_alive) {
+                const _sg_shader_t* shd = _sg_shader_ref_ptr(shd_ref);
+                _SG_VALIDATE(shd->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_AU_PIPELINE_SHADER_VALID);
+                _SG_VALIDATE(shd->cmn.uniform_blocks[ub_slot].stage != SG_SHADERSTAGE_NONE, VALIDATE_AU_NO_UNIFORMBLOCK_AT_SLOT);
+                _SG_VALIDATE(data->size == shd->cmn.uniform_blocks[ub_slot].size, VALIDATE_AU_SIZE);
+            }
+        }
         return _sg_validate_end();
     #endif
 }
