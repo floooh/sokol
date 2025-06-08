@@ -1,5 +1,56 @@
 ## Updates
 
+### 08-Jun-2025
+
+A code cleanup in sokol_gfx.h for internal object references. No change in behaviour
+should be observable from the outside for valid code, however some
+validation layer checks have been tightened.
+
+Why: sokol_gfx.h needs to manage some inter-object relationships in the implementation,
+for instance:
+
+- pipeline objects store a reference to a shader object
+- attachment objects store references to image objects
+- the currently active pipeline object needs to be tracked inside begin/end pass
+- various internal caches to reduce pressure on the underlying 3D APIs
+
+So far such internal references were not standardized, instead either only
+the 32-bit handle was stored (requiring a lookup to convert the handle
+into a pointer), or a combination of a direct pointer and a handle (which
+allows a quick 'liveness check' in the validation layer, and a direct pointer
+access instead of looking up the pointer from a handle).
+
+This implementation allowed a 'loophole' though: if a resource object went
+through an uninit/init cycle (which keeps the handle intact but replaces
+the backend API objects), such internal references would not be invalidated.
+
+This loophole has now been closed:
+
+- all resource objects now track an internal 32-bit 'uninit count' which is bumped
+  on uninit (and cleared on destroy)
+- internal references now store both the public handle (which detects destroy/make
+  cycles) and the uninit-count (which detectes uninit/init cycles)
+- ...and all this stuff has now been centralized in private structs and a handful
+  helper functions
+
+Additionally:
+
+- code has been moved around to reduce forward references, unfortunately the
+  result is that the PR diff looks bigger and messier than the change actually is
+- validation layer behaviour concerning internal references has been cleaned
+  up and unified
+
+This update is also a preparation for the upcoming 'resource view update', since
+those new resource view objects require watertight tracking of their 'root object'.
+
+Planning ticket: https://github.com/floooh/sokol/issues/1260
+PR: https://github.com/floooh/sokol/pull/1275
+
+Please don't hesitate to write tickets if your existing code triggers new
+validation layer errors or otherwise behaves differently - I did test the changes
+extensively, but at the same time I might have missed some esoteric but valid
+usage scenarios.
+
 ### 26-May-2025
 
 Two changes in sokol_app.h's X11 backend:
