@@ -15500,12 +15500,6 @@ _SOKOL_PRIVATE void _sg_mtl_pop_debug_group(void) {
 // >>wgpu
 #elif defined(SOKOL_WGPU)
 
-#if !defined(__EMSCRIPTEN__)
-// FIXME: webgpu.h differences between Dawn and Emscripten webgpu.h
-#define wgpuBufferReference wgpuBufferAddRef
-#define wgpuTextureReference wgpuTextureAddRef
-#define wgpuTextureViewReference wgpuTextureViewAddRef
-#define wgpuSamplerReference wgpuSamplerAddRef
 #define WGPUSType_ShaderModuleWGSLDescriptor WGPUSType_ShaderSourceWGSL
 _SOKOL_PRIVATE WGPUStringView _sg_wgpu_stringview(const char* str) {
     WGPUStringView res;
@@ -15521,10 +15515,6 @@ _SOKOL_PRIVATE WGPUStringView _sg_wgpu_stringview(const char* str) {
 _SOKOL_PRIVATE WGPUOptionalBool _sg_wgpu_optional_bool(bool b) {
     return b ? WGPUOptionalBool_True : WGPUOptionalBool_False;
 }
-#else
-#define _sg_wgpu_stringview(str) str
-#define _sg_wgpu_optional_bool(b) (b)
-#endif
 
 _SOKOL_PRIVATE WGPUBufferUsage _sg_wgpu_buffer_usage(const sg_buffer_usage* usg) {
     int res = 0;
@@ -16653,7 +16643,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
     const bool injected = (0 != desc->wgpu_buffer);
     if (injected) {
         buf->wgpu.buf = (WGPUBuffer) desc->wgpu_buffer;
-        wgpuBufferReference(buf->wgpu.buf);
+        wgpuBufferAddRef(buf->wgpu.buf);
     } else {
         // buffer mapping size must be multiple of 4, so round up buffer size (only a problem
         // with index buffers containing odd number of indices)
@@ -16766,10 +16756,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
     const bool injected = (0 != desc->wgpu_texture);
     if (injected) {
         img->wgpu.tex = (WGPUTexture)desc->wgpu_texture;
-        wgpuTextureReference(img->wgpu.tex);
+        wgpuTextureAddRef(img->wgpu.tex);
         img->wgpu.view = (WGPUTextureView)desc->wgpu_texture_view;
         if (img->wgpu.view) {
-            wgpuTextureViewReference(img->wgpu.view);
+            wgpuTextureViewAddRef(img->wgpu.view);
         }
     } else {
         WGPUTextureDescriptor wgpu_tex_desc;
@@ -16846,7 +16836,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_sampler(_sg_sampler_t* smp, con
     const bool injected = (0 != desc->wgpu_sampler);
     if (injected) {
         smp->wgpu.smp = (WGPUSampler) desc->wgpu_sampler;
-        wgpuSamplerReference(smp->wgpu.smp);
+        wgpuSamplerAddRef(smp->wgpu.smp);
     } else {
         WGPUSamplerDescriptor wgpu_desc;
         _sg_clear(&wgpu_desc, sizeof(wgpu_desc));
@@ -16893,7 +16883,7 @@ _SOKOL_PRIVATE _sg_wgpu_shader_func_t _sg_wgpu_create_shader_func(const sg_shade
 
     WGPUShaderModuleWGSLDescriptor wgpu_shdmod_wgsl_desc;
     _sg_clear(&wgpu_shdmod_wgsl_desc, sizeof(wgpu_shdmod_wgsl_desc));
-    wgpu_shdmod_wgsl_desc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
+    wgpu_shdmod_wgsl_desc.chain.sType = WGPUSType_ShaderSourceWGSL;
     wgpu_shdmod_wgsl_desc.code = _sg_wgpu_stringview(func->source);
 
     WGPUShaderModuleDescriptor wgpu_shdmod_desc;
