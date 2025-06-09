@@ -2112,6 +2112,14 @@ typedef enum sg_usage {
     _SG_USAGE_FORCE_U32 = 0x7FFFFFFF
 } sg_usage;
 
+typedef enum sg_usage_type {
+    _SG_USAGE_TYPE_DEFAULT,      // value 0 reserved for default-init
+    SG_USAGE_TYPE_READ,
+    SG_USAGE_TYPE_WRITE,
+    _SG_USAGE_TYPE_NUM,
+    _SG_USAGE_TYPE_FORCE_U32 = 0x7FFFFFFF
+} sg_usage_type;
+
 /*
     sg_buffer_type
 
@@ -3036,6 +3044,7 @@ typedef struct sg_buffer_desc {
     size_t size;
     sg_buffer_type type;
     sg_usage usage;
+    sg_usage_type usage_type;
     sg_range data;
     const char* label;
     // optionally inject backend-specific resources
@@ -5461,6 +5470,7 @@ typedef struct {
     int active_slot;
     sg_buffer_type type;
     sg_usage usage;
+    sg_usage_type usage_type;
 } _sg_buffer_common_t;
 
 _SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_buffer_desc* desc) {
@@ -5473,6 +5483,7 @@ _SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_bu
     cmn->active_slot = 0;
     cmn->type = desc->type;
     cmn->usage = desc->usage;
+    cmn->usage_type = desc->usage_type;
 }
 
 typedef struct {
@@ -14684,19 +14695,34 @@ _SOKOL_PRIVATE WGPUOptionalBool _sg_wgpu_optional_bool(bool b) {
 #define _sg_wgpu_optional_bool(b) (b)
 #endif
 
-_SOKOL_PRIVATE WGPUBufferUsage _sg_wgpu_buffer_usage(sg_buffer_type t, sg_usage u) {
+_SOKOL_PRIVATE WGPUBufferUsage _sg_wgpu_buffer_usage(sg_buffer_type t, sg_usage u, sg_usage_type ut) {
     // FIXME: change to WGPUBufferUsage once Emscripten and Dawn webgpu.h agree
     int res = 0;
-    if (SG_BUFFERTYPE_VERTEXBUFFER == t) {
+    if (SG_BUFFERTYPE_VERTEXBUFFER == t)
+    {
         res = WGPUBufferUsage_Vertex;
-    } else if (SG_BUFFERTYPE_STORAGEBUFFER == t) {
+    }
+    else if (SG_BUFFERTYPE_STORAGEBUFFER == t)
+    {
         res = WGPUBufferUsage_Storage;
-    } else {
+    }
+    else
+    {
         res = WGPUBufferUsage_Index;
     }
-    if (SG_USAGE_IMMUTABLE != u) {
+    
+    if (SG_USAGE_IMMUTABLE != u)
+    {
         res |= WGPUBufferUsage_CopyDst;
     }
+    else
+    {
+        if (SG_BUFFERTYPE_STORAGEBUFFER == t)
+        {
+            res |= WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst;
+        }
+    }
+
     return (WGPUBufferUsage)res;
 }
 
@@ -15806,7 +15832,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
 
         WGPUBufferDescriptor wgpu_buf_desc;
         _sg_clear(&wgpu_buf_desc, sizeof(wgpu_buf_desc));
-        wgpu_buf_desc.usage = _sg_wgpu_buffer_usage(buf->cmn.type, buf->cmn.usage);
+        wgpu_buf_desc.usage = _sg_wgpu_buffer_usage(buf->cmn.type, buf->cmn.usage, buf->cmn.usage_type);
         wgpu_buf_desc.size = wgpu_buf_size;
         wgpu_buf_desc.mappedAtCreation = map_at_creation;
         wgpu_buf_desc.label = _sg_wgpu_stringview(desc->label);
