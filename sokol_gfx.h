@@ -6455,7 +6455,7 @@ typedef struct {
     bool valid;
     bool use_indexed_draw;
     WGPUDevice dev;
-    WGPUSupportedLimits limits;
+    WGPULimits limits;
     WGPUQueue queue;
     WGPUCommandEncoder cmd_enc;
     WGPURenderPassEncoder rpass_enc;
@@ -15500,12 +15500,6 @@ _SOKOL_PRIVATE void _sg_mtl_pop_debug_group(void) {
 // >>wgpu
 #elif defined(SOKOL_WGPU)
 
-#if !defined(__EMSCRIPTEN__)
-// FIXME: webgpu.h differences between Dawn and Emscripten webgpu.h
-#define wgpuBufferReference wgpuBufferAddRef
-#define wgpuTextureReference wgpuTextureAddRef
-#define wgpuTextureViewReference wgpuTextureViewAddRef
-#define wgpuSamplerReference wgpuSamplerAddRef
 #define WGPUSType_ShaderModuleWGSLDescriptor WGPUSType_ShaderSourceWGSL
 _SOKOL_PRIVATE WGPUStringView _sg_wgpu_stringview(const char* str) {
     WGPUStringView res;
@@ -15521,10 +15515,6 @@ _SOKOL_PRIVATE WGPUStringView _sg_wgpu_stringview(const char* str) {
 _SOKOL_PRIVATE WGPUOptionalBool _sg_wgpu_optional_bool(bool b) {
     return b ? WGPUOptionalBool_True : WGPUOptionalBool_False;
 }
-#else
-#define _sg_wgpu_stringview(str) str
-#define _sg_wgpu_optional_bool(b) (b)
-#endif
 
 _SOKOL_PRIVATE WGPUBufferUsage _sg_wgpu_buffer_usage(const sg_buffer_usage* usg) {
     int res = 0;
@@ -15916,7 +15906,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
 
     wgpuDeviceGetLimits(_sg.wgpu.dev, &_sg.wgpu.limits);
 
-    const WGPULimits* l = &_sg.wgpu.limits.limits;
+    const WGPULimits* l = &_sg.wgpu.limits;
     _sg.limits.max_image_size_2d = (int) l->maxTextureDimension2D;
     _sg.limits.max_image_size_cube = (int) l->maxTextureDimension2D; // not a bug, see: https://github.com/gpuweb/gpuweb/issues/1327
     _sg.limits.max_image_size_3d = (int) l->maxTextureDimension3D;
@@ -16653,7 +16643,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
     const bool injected = (0 != desc->wgpu_buffer);
     if (injected) {
         buf->wgpu.buf = (WGPUBuffer) desc->wgpu_buffer;
-        wgpuBufferReference(buf->wgpu.buf);
+        wgpuBufferAddRef(buf->wgpu.buf);
     } else {
         // buffer mapping size must be multiple of 4, so round up buffer size (only a problem
         // with index buffers containing odd number of indices)
@@ -16716,9 +16706,9 @@ _SOKOL_PRIVATE void _sg_wgpu_copy_buffer_data(const _sg_buffer_t* buf, uint64_t 
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_copy_image_data(const _sg_image_t* img, WGPUTexture wgpu_tex, const sg_image_data* data) {
-    WGPUTextureDataLayout wgpu_layout;
+    WGPUTexelCopyBufferLayout wgpu_layout;
     _sg_clear(&wgpu_layout, sizeof(wgpu_layout));
-    WGPUImageCopyTexture wgpu_copy_tex;
+    WGPUTexelCopyTextureInfo wgpu_copy_tex;
     _sg_clear(&wgpu_copy_tex, sizeof(wgpu_copy_tex));
     wgpu_copy_tex.texture = wgpu_tex;
     wgpu_copy_tex.aspect = WGPUTextureAspect_All;
@@ -16766,10 +16756,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
     const bool injected = (0 != desc->wgpu_texture);
     if (injected) {
         img->wgpu.tex = (WGPUTexture)desc->wgpu_texture;
-        wgpuTextureReference(img->wgpu.tex);
+        wgpuTextureAddRef(img->wgpu.tex);
         img->wgpu.view = (WGPUTextureView)desc->wgpu_texture_view;
         if (img->wgpu.view) {
-            wgpuTextureViewReference(img->wgpu.view);
+            wgpuTextureViewAddRef(img->wgpu.view);
         }
     } else {
         WGPUTextureDescriptor wgpu_tex_desc;
@@ -16846,7 +16836,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_sampler(_sg_sampler_t* smp, con
     const bool injected = (0 != desc->wgpu_sampler);
     if (injected) {
         smp->wgpu.smp = (WGPUSampler) desc->wgpu_sampler;
-        wgpuSamplerReference(smp->wgpu.smp);
+        wgpuSamplerAddRef(smp->wgpu.smp);
     } else {
         WGPUSamplerDescriptor wgpu_desc;
         _sg_clear(&wgpu_desc, sizeof(wgpu_desc));
@@ -16893,7 +16883,7 @@ _SOKOL_PRIVATE _sg_wgpu_shader_func_t _sg_wgpu_create_shader_func(const sg_shade
 
     WGPUShaderModuleWGSLDescriptor wgpu_shdmod_wgsl_desc;
     _sg_clear(&wgpu_shdmod_wgsl_desc, sizeof(wgpu_shdmod_wgsl_desc));
-    wgpu_shdmod_wgsl_desc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
+    wgpu_shdmod_wgsl_desc.chain.sType = WGPUSType_ShaderSourceWGSL;
     wgpu_shdmod_wgsl_desc.code = _sg_wgpu_stringview(func->source);
 
     WGPUShaderModuleDescriptor wgpu_shdmod_desc;
@@ -17204,7 +17194,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, c
         wgpu_pip_desc.label = _sg_wgpu_stringview(desc->label);
         wgpu_pip_desc.layout = wgpu_pip_layout;
         wgpu_pip_desc.compute.module = shd->wgpu.compute_func.module;
-        wgpu_pip_desc.compute.entryPoint = shd->wgpu.compute_func.entry.buf;
+        wgpu_pip_desc.compute.entryPoint = _sg_wgpu_stringview(shd->wgpu.compute_func.entry.buf);
         pip->wgpu.cpip = wgpuDeviceCreateComputePipeline(_sg.wgpu.dev, &wgpu_pip_desc);
         wgpuPipelineLayoutRelease(wgpu_pip_layout);
         if (0 == pip->wgpu.cpip) {
@@ -17254,7 +17244,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, c
         wgpu_pip_desc.label = _sg_wgpu_stringview(desc->label);
         wgpu_pip_desc.layout = wgpu_pip_layout;
         wgpu_pip_desc.vertex.module = shd->wgpu.vertex_func.module;
-        wgpu_pip_desc.vertex.entryPoint = shd->wgpu.vertex_func.entry.buf;
+        wgpu_pip_desc.vertex.entryPoint = _sg_wgpu_stringview(shd->wgpu.vertex_func.entry.buf);
         wgpu_pip_desc.vertex.bufferCount = (size_t)wgpu_vb_num;
         wgpu_pip_desc.vertex.buffers = &wgpu_vb_layouts[0];
         wgpu_pip_desc.primitive.topology = _sg_wgpu_topology(desc->primitive_type);
@@ -17285,7 +17275,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, c
         wgpu_pip_desc.multisample.alphaToCoverageEnabled = desc->alpha_to_coverage_enabled;
         if (desc->color_count > 0) {
             wgpu_frag_state.module = shd->wgpu.fragment_func.module;
-            wgpu_frag_state.entryPoint = shd->wgpu.fragment_func.entry.buf;
+            wgpu_frag_state.entryPoint = _sg_wgpu_stringview(shd->wgpu.fragment_func.entry.buf);
             wgpu_frag_state.targetCount = (size_t)desc->color_count;
             wgpu_frag_state.targets = &wgpu_ctgt_state[0];
             for (int i = 0; i < desc->color_count; i++) {
@@ -17701,7 +17691,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindings(_sg_bindings_ptrs_t* bnd) {
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(int ub_slot, const sg_range* data) {
-    const uint32_t alignment = _sg.wgpu.limits.limits.minUniformBufferOffsetAlignment;
+    const uint32_t alignment = _sg.wgpu.limits.minUniformBufferOffsetAlignment;
     SOKOL_ASSERT(_sg.wgpu.uniform.staging);
     SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
     SOKOL_ASSERT((_sg.wgpu.uniform.offset + data->size) <= _sg.wgpu.uniform.num_bytes);
