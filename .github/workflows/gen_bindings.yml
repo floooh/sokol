@@ -371,7 +371,7 @@ jobs:
           repository: floooh/sokol-c3
       - uses: radekm/setup-c3@v2
         with:
-          version: v0.6.6
+          version: v0.7.2
       - uses: actions/download-artifact@main
         with:
           name: ignore-me-c3
