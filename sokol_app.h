@@ -30,7 +30,8 @@
         SOKOL_ASSERT(c)             - your own assert macro (default: assert(c))
         SOKOL_UNREACHABLE()         - a guard macro for unreachable code (default: assert(false))
         SOKOL_WIN32_FORCE_MAIN      - define this on Win32 to add a main() entry point
-        SOKOL_WIN32_FORCE_WINMAIN   - define this on Win32 to add a WinMain() entry point (enabled by default unless SOKOL_WIN32_FORCE_MAIN or SOKOL_NO_ENTRY is defined)
+        SOKOL_WIN32_FORCE_WINMAIN   - define this on Win32 to add a WinMain() entry point (enabled by default unless
+                                      SOKOL_WIN32_FORCE_MAIN or SOKOL_NO_ENTRY is defined)
         SOKOL_NO_ENTRY              - define this if sokol_app.h shouldn't "hijack" the main() function
         SOKOL_APP_API_DECL          - public function declaration prefix (default: extern)
         SOKOL_API_DECL              - same as SOKOL_APP_API_DECL
@@ -81,6 +82,11 @@
     things will happen, see here for details: https://github.com/floooh/sokol/issues/376
 
     On macOS and iOS, the implementation must be compiled as Objective-C.
+
+    On Emscripten:
+        - for WebGL2: add the linker option `-s USE_WEBGL2=1`
+        - for WebGPU: compile and link with `--use-port=emdawnwebgpu`
+          (for more exotic situations, read: https://dawn.googlesource.com/dawn/+/refs/heads/main/src/emdawnwebgpu/pkg/README.md)
 
     FEATURE OVERVIEW
     ================
