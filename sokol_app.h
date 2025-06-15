@@ -3583,12 +3583,13 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
     surf_conf.usage = WGPUTextureUsage_RenderAttachment;
     surf_conf.width = (uint32_t)_sapp.framebuffer_width;
     surf_conf.height = (uint32_t)_sapp.framebuffer_height;
-    // FIXME: make this further configurable?
-    if (_sapp.desc.html5_premultiplied_alpha) {
-        surf_conf.alphaMode = WGPUCompositeAlphaMode_Premultiplied;
-    } else {
-        surf_conf.alphaMode = WGPUCompositeAlphaMode_Opaque;
-    }
+    surf_conf.alphaMode = WGPUCompositeAlphaMode_Opaque;
+    #if defined(_SAPP_EMSCRIPTEN)
+        // FIXME: make this further configurable?
+        if (_sapp.desc.html5_premultiplied_alpha) {
+            surf_conf.alphaMode = WGPUCompositeAlphaMode_Premultiplied;
+        }
+    #endif
     surf_conf.presentMode = WGPUPresentMode_Fifo;
     wgpuSurfaceConfigure(_sapp.wgpu.surface, &surf_conf);
 
