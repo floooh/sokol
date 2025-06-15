@@ -1,5 +1,46 @@
 ## Updates
 
+### 15-Jun-2025
+
+The sokol_app.h and sokol_gfx.h WebGPU backends have been updated for the new
+`emdawnwebgpu` Emscripten Port. The directly integrated WebGPU support in the
+Emscripten SDK has been outdated for quite a while now and the Emscripten SDK
+now prints a deprecation warning for the old WebGPU shim.
+
+**NOTE:** this change requires to change your Emscripten build process:
+
+- remove the linker option `-s USE_WEBGPU=1`
+- instead add `--use-port=emdawnwebgpu` both to compile and link steps
+
+You'll also need to be on the most recent Emscripten SDK (>= 4.0.10).
+
+The WebGPU specific code in sokol_app.h has been moved out of the Emscripten
+`#ifdef/#endif` blocks to prepare for using the WebGPU backend in native
+scenarios outside web browsers (which requires much more work in the various
+sokol_app.h platform backends though).
+
+I'm not entirely happy with how the new `emdawnwebgpu` JS shim turned out since it
+adds its own event loop for async operations, and quite a bit of bloat (10..20
+KBytes uncompressed) over the older and simpler WebGPU shim, but currently
+that's the price to pay for source code compatibility with the native WebGPU
+implementation in Google's Dawn library. The latest `webgpu/webgpu.h` API
+also made some questionable design choices which don't quite fit the C language
+(`WGPUStringView` and `WGPUFuture`), these may be useful when using the C API
+from other languages but are overkill both for usage from C and WASM.
+
+At a later point I might implement my own WebGPU JS shim as alternative to
+`emdawnwebgpu` which would do some things more efficiently and with less code,
+but the cost of `<webgpu/webgpu.h>` compatibility, but currently that's not a
+high priority.
+
+PR: https://github.com/floooh/sokol/pull/1283
+
+Also note this bug report which currently prevents using the Emscripten Closure
+pass (this isn't a new thing though, the old WebGPU JS shim also didn't work
+with Closure):
+
+https://issues.chromium.org/issues/424836759
+
 ### 08-Jun-2025
 
 A code cleanup in sokol_gfx.h for internal object references. No change in behaviour
