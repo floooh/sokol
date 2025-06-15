@@ -30,7 +30,7 @@ from other languages but are overkill both for usage from C and WASM.
 
 At a later point I might implement my own WebGPU JS shim as alternative to
 `emdawnwebgpu` which would do some things more efficiently and with less code,
-but the cost of `<webgpu/webgpu.h>` compatibility, but currently that's not a
+but at the cost of `<webgpu/webgpu.h>` compatibility, but currently that's not a
 high priority.
 
 PR: https://github.com/floooh/sokol/pull/1283
