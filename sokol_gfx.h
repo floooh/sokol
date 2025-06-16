@@ -1915,7 +1915,7 @@ extern "C" {
     sg_sampler      sampler objects describing how a texture is sampled in a shader
     sg_shader:      vertex- and fragment-shaders and shader interface information
     sg_pipeline:    associated shader and vertex-layouts, and render states
-    sg_attachments: a baked collection of render pass attachment images
+    sg_view:        a resource view object used for bindings and render-pass attachments
 
     Instead of pointers, resource creation functions return a 32-bit
     handle which uniquely identifies the resource object.
@@ -1934,7 +1934,7 @@ typedef struct sg_image         { uint32_t id; } sg_image;
 typedef struct sg_sampler       { uint32_t id; } sg_sampler;
 typedef struct sg_shader        { uint32_t id; } sg_shader;
 typedef struct sg_pipeline      { uint32_t id; } sg_pipeline;
-typedef struct sg_attachments   { uint32_t id; } sg_attachments;
+typedef struct sg_view          { uint32_t id; } sg_view;
 
 /*
     sg_range is a pointer-size-pair struct used to pass memory blobs into
@@ -1965,18 +1965,18 @@ typedef struct sg_range {
 enum {
     SG_INVALID_ID = 0,
     SG_NUM_INFLIGHT_FRAMES = 2,
-    SG_MAX_COLOR_ATTACHMENTS = 4,
-    SG_MAX_STORAGE_ATTACHMENTS = 4,
+    SG_MAX_PASS_ATTACHMENTS = 4,
     SG_MAX_UNIFORMBLOCK_MEMBERS = 16,
     SG_MAX_VERTEX_ATTRIBUTES = 16,
     SG_MAX_MIPMAPS = 16,
     SG_MAX_TEXTUREARRAY_LAYERS = 128,
     SG_MAX_UNIFORMBLOCK_BINDSLOTS = 8,
     SG_MAX_VERTEXBUFFER_BINDSLOTS = 8,
-    SG_MAX_IMAGE_BINDSLOTS = 16,
+    SG_MAX_TEXTURE_BINDSLOTS = 16,
     SG_MAX_SAMPLER_BINDSLOTS = 16,
     SG_MAX_STORAGEBUFFER_BINDSLOTS = 8,
-    SG_MAX_IMAGE_SAMPLER_PAIRS = 16,
+    SG_MAX_STORAGEIMAGE_BINDSLOTS = 4,
+    SG_MAX_TEXTURE_SAMPLER_PAIRS = 16,
 };
 
 /*
@@ -2803,7 +2803,7 @@ typedef struct sg_stencil_attachment_action {
 } sg_stencil_attachment_action;
 
 typedef struct sg_pass_action {
-    sg_color_attachment_action colors[SG_MAX_COLOR_ATTACHMENTS];
+    sg_color_attachment_action colors[SG_MAX_PASS_ATTACHMENTS];
     sg_depth_attachment_action depth;
     sg_stencil_attachment_action stencil;
 } sg_pass_action;
@@ -2908,6 +2908,17 @@ typedef struct sg_swapchain {
 } sg_swapchain;
 
 /*
+    sg_attachments
+
+    TODO
+*/
+typedef struct sg_attachments {
+    sg_view colors[SG_MAX_PASS_ATTACHMENTS];
+    sg_view resolves[SG_MAX_PASS_ATTACHMENTS];
+    sg_view depth_stencil;
+} sg_attachments;
+
+/*
     sg_pass
 
     The sg_pass structure is passed as argument into the sg_begin_pass()
@@ -2922,12 +2933,16 @@ typedef struct sg_swapchain {
             .swapchain = sglue_swapchain(),
         });
 
-    For an offscreen render pass, provide an sg_pass_action struct and
-    an sg_attachments handle:
+    For an offscreen render pass, provide an sg_pass_action struct with
+    attachments:
 
         sg_begin_pass(&(sg_pass){
             .action = { ... },
-            .attachments = attachments,
+            .attachments = {
+                .colors = { ... },
+                .resolves = { ... },
+                .depth_stencil = ...,
+            },
         });
 
     You can also omit the .action object to get default pass action behaviour
@@ -2961,20 +2976,20 @@ typedef struct sg_pass {
 
     A resource binding struct contains:
 
-    - 1..N vertex buffers
-    - 0..N vertex buffer offsets
-    - 0..1 index buffers
-    - 0..1 index buffer offsets
-    - 0..N images
+    - 1..N vertex buffer views
+    - 0..1 index buffer views
+    - 0..N storage buffer views
+    - 0..N storage image views
+    - 0..N texture views
     - 0..N samplers
-    - 0..N storage buffers
 
     Where 'N' is defined in the following constants:
 
     - SG_MAX_VERTEXBUFFER_BINDSLOTS
-    - SG_MAX_IMAGE_BINDLOTS
-    - SG_MAX_SAMPLER_BINDSLOTS
     - SG_MAX_STORAGEBUFFER_BINDGLOTS
+    - SG_MAX_STORAGEIMAGE_BINDSLOTS
+    - SG_MAX_TEXTURE_BINDLOTS
+    - SG_MAX_SAMPLER_BINDSLOTS
 
     Note that inside compute passes vertex- and index-buffer-bindings are
     disallowed.
@@ -3036,13 +3051,12 @@ typedef struct sg_pass {
 */
 typedef struct sg_bindings {
     uint32_t _start_canary;
-    sg_buffer vertex_buffers[SG_MAX_VERTEXBUFFER_BINDSLOTS];
-    int vertex_buffer_offsets[SG_MAX_VERTEXBUFFER_BINDSLOTS];
-    sg_buffer index_buffer;
-    int index_buffer_offset;
-    sg_image images[SG_MAX_IMAGE_BINDSLOTS];
+    sg_view vertex_buffers[SG_MAX_VERTEXBUFFER_BINDSLOTS];
+    sg_view index_buffer;
+    sg_view textures[SG_MAX_TEXTURE_BINDSLOTS];
+    sg_view storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
+    sg_view storage_images[SG_MAX_STORAGEIMAGE_BINDSLOTS];
     sg_sampler samplers[SG_MAX_SAMPLER_BINDSLOTS];
-    sg_buffer storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
     uint32_t _end_canary;
 } sg_bindings;
 
@@ -3148,12 +3162,15 @@ typedef struct sg_buffer_desc {
 
     Describes how the image object is going to be used:
 
-    .render_attachment (default: false)
+    .texture (default: true)
+        the image object is used as a texture-binding in
+        a render- or compute-pass
+    .storage_image (default: false)
+        the image object is used as storage-image-binding in a
+        compute pass (to be written to by compute shaders)
+    .attachment (default: false)
         the image object is used as color-, resolve- or depth-stencil-
         attachment in a render pass
-    .storage_attachment (default: false)
-        the image object is used as storage-attachment in a
-        compute pass (to be written to by compute shaders)
     .immutable (default: true)
         the image content cannot be updated from the CPU side
         (but may be updated by the GPU in a render- or compute-pass)
@@ -3165,8 +3182,9 @@ typedef struct sg_buffer_desc {
     Note that the usage as texture binding is implicit and always allowed.
 */
 typedef struct sg_image_usage {
-    bool render_attachment;
-    bool storage_attachment;
+    bool texture;
+    bool storage_image;
+    bool attachment;
     bool immutable;
     bool dynamic_update;
     bool stream_update;
@@ -3212,12 +3230,13 @@ typedef struct sg_image_data {
 
     NOTE:
 
-    Regular (non-attachment) images with usage.immutable must be fully initialized by
-    providing a valid .data member which points to initialization data.
+    Regular images used as texture binding with usage.immutable must be fully
+    initialized by providing a valid .data member which points to initialization
+    data.
 
-    Images with usage.render_attachment or usage.storage_attachment must
+    Images with usage.attachment or usage.storage_image must
     *not* be created with initial content. Be aware that the initial
-    content of render- and storage-attachment images is undefined.
+    content of render-attachment and storage-attachment images is undefined.
 
     ADVANCED TOPIC: Injecting native 3D-API textures:
 
@@ -3493,7 +3512,7 @@ typedef struct sg_shader_uniform_block {
     sg_glsl_shader_uniform glsl_uniforms[SG_MAX_UNIFORMBLOCK_MEMBERS];
 } sg_shader_uniform_block;
 
-typedef struct sg_shader_image {
+typedef struct sg_shader_texture {
     sg_shader_stage stage;
     sg_image_type image_type;
     sg_image_sample_type sample_type;
@@ -3501,7 +3520,7 @@ typedef struct sg_shader_image {
     uint8_t hlsl_register_t_n;      // HLSL register(tn) bind slot
     uint8_t msl_texture_n;          // MSL [[texture(n)]] bind slot
     uint8_t wgsl_group1_binding_n;  // WGSL @group(1) @binding(n) bind slot
-} sg_shader_image;
+} sg_shader_texture;
 
 typedef struct sg_shader_sampler {
     sg_shader_stage stage;
@@ -3532,12 +3551,12 @@ typedef struct sg_shader_storage_image {
     uint8_t glsl_binding_n;         // GLSL layout(binding=n)
 } sg_shader_storage_image;
 
-typedef struct sg_shader_image_sampler_pair {
+typedef struct sg_shader_texture_sampler_pair {
     sg_shader_stage stage;
-    uint8_t image_slot;
+    uint8_t texture_slot;
     uint8_t sampler_slot;
     const char* glsl_name;          // glsl name binding required because of GL 4.1 and WebGL2
-} sg_shader_image_sampler_pair;
+} sg_shader_texture_sampler_pair;
 
 typedef struct sg_mtl_shader_threads_per_threadgroup {
     int x, y, z;
@@ -3551,10 +3570,10 @@ typedef struct sg_shader_desc {
     sg_shader_vertex_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
     sg_shader_uniform_block uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
     sg_shader_storage_buffer storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
-    sg_shader_image images[SG_MAX_IMAGE_BINDSLOTS];
+    sg_shader_texture textures[SG_MAX_TEXTURE_BINDSLOTS];
     sg_shader_sampler samplers[SG_MAX_SAMPLER_BINDSLOTS];
-    sg_shader_image_sampler_pair image_sampler_pairs[SG_MAX_IMAGE_SAMPLER_PAIRS];
-    sg_shader_storage_image storage_images[SG_MAX_STORAGE_ATTACHMENTS];
+    sg_shader_storage_image storage_images[SG_MAX_STORAGEIMAGE_BINDSLOTS];
+    sg_shader_texture_sampler_pair texture_sampler_pairs[SG_MAX_IMAGE_SAMPLER_PAIRS];
     sg_mtl_shader_threads_per_threadgroup mtl_threads_per_threadgroup;
     const char* label;
     uint32_t _end_canary;
@@ -3722,65 +3741,43 @@ typedef struct sg_pipeline_desc {
 } sg_pipeline_desc;
 
 /*
-    sg_attachments_desc
+    sg_view_desc
 
-    Creation parameters for an sg_attachments object, used as argument to the
-    sg_make_attachments() function.
-
-    An attachments object bundles either bundles 'render attachments' for
-    a render pass, or 'storage attachments' for a compute pass which writes
-    to storage images.
-
-    Render attachments are:
-
-        - 0..4 color attachment images
-        - 0..4 msaa-resolve attachment images
-        - 0 or one depth-stencil attachment image
-
-    Note that all types of render attachment images must be created with
-    `sg_image_desc.usage.render_attachment = true`. At least one color-attachment
-    or depth-stencil-attachment image must be provided in a render pass
-    (only providing a depth-stencil-attachment is useful for depth-only passes).
-
-    Alternatively provide 1..4 storage attachment images which must be created
-    with `sg_image_desc.usage.storage_attachment = true`.
-
-    An sg_attachments object cannot have both render- and storage-attachments.
-
-    Each attachment definition consists of an image object, and two additional indices
-    describing which subimage the pass will render into: one mipmap index, and if the image
-    is a cubemap, array-texture or 3D-texture, the face-index, array-layer or
-    depth-slice.
-
-    All attachments must have the same width and height.
-
-    All color attachments and the depth-stencil attachment must have the
-    same sample count.
-
-    If a resolve attachment is set, an MSAA-resolve operation from the
-    associated color attachment image into the resolve attachment image will take
-    place in the sg_end_pass() function. In this case, the color attachment
-    must have a (sample_count>1), and the resolve attachment a
-    (sample_count==1). The resolve attachment also must have the same pixel
-    format as the color attachment.
-
-    NOTE that MSAA depth-stencil attachments cannot be msaa-resolved!
+    TODO
 */
-typedef struct sg_attachment_desc {
+typedef struct sg_buffer_view_desc {
+    sg_buffer buffer;
+    int offset;
+} sg_buffer_view_desc;
+
+typedef struct sg_image_view_desc {
     sg_image image;
     int mip_level;
     int slice;      // cube texture: face; array texture: layer; 3D texture: slice
-} sg_attachment_desc;
+} sg_image_view_desc;
 
-typedef struct sg_attachments_desc {
+typedef struct sg_texture_view_desc {
+    sg_image image;
+    int base_mip_level;
+    int mip_level_count;
+    int base_slice;
+    int slice_count;
+    // FIXME: re-interpret items: format, type
+} sg_texture_view_desc;
+
+typedef struct sg_view_desc {
     uint32_t _start_canary;
-    sg_attachment_desc colors[SG_MAX_COLOR_ATTACHMENTS];
-    sg_attachment_desc resolves[SG_MAX_COLOR_ATTACHMENTS];
-    sg_attachment_desc depth_stencil;
-    sg_attachment_desc storages[SG_MAX_STORAGE_ATTACHMENTS];
+    sg_buffer_view_desc vertex_buffer_binding;
+    sg_buffer_view_desc index_buffer_binding;
+    sg_texture_view_desc texture_binding;
+    sg_buffer_view_desc storage_buffer_binding;
+    sg_image_view_desc storage_image_binding;
+    sg_image_view_desc color_attachment;
+    sg_image_view_desc resolve_attachment;
+    sg_image_view_desc depth_stencil_attachment;
     const char* label;
     uint32_t _end_canary;
-} sg_attachments_desc;
+} sg_view_desc;
 
 /*
     sg_trace_hooks
@@ -3802,13 +3799,13 @@ typedef struct sg_trace_hooks {
     void (*make_sampler)(const sg_sampler_desc* desc, sg_sampler result, void* user_data);
     void (*make_shader)(const sg_shader_desc* desc, sg_shader result, void* user_data);
     void (*make_pipeline)(const sg_pipeline_desc* desc, sg_pipeline result, void* user_data);
-    void (*make_attachments)(const sg_attachments_desc* desc, sg_attachments result, void* user_data);
+    void (*make_view)(const sg_view_desc* desc, sg_view result, void* user_data);
     void (*destroy_buffer)(sg_buffer buf, void* user_data);
     void (*destroy_image)(sg_image img, void* user_data);
     void (*destroy_sampler)(sg_sampler smp, void* user_data);
     void (*destroy_shader)(sg_shader shd, void* user_data);
     void (*destroy_pipeline)(sg_pipeline pip, void* user_data);
-    void (*destroy_attachments)(sg_attachments atts, void* user_data);
+    void (*destroy_view)(sg_view view, void* user_data);
     void (*update_buffer)(sg_buffer buf, const sg_range* data, void* user_data);
     void (*update_image)(sg_image img, const sg_image_data* data, void* user_data);
     void (*append_buffer)(sg_buffer buf, const sg_range* data, int result, void* user_data);
@@ -3827,31 +3824,31 @@ typedef struct sg_trace_hooks {
     void (*alloc_sampler)(sg_sampler result, void* user_data);
     void (*alloc_shader)(sg_shader result, void* user_data);
     void (*alloc_pipeline)(sg_pipeline result, void* user_data);
-    void (*alloc_attachments)(sg_attachments result, void* user_data);
+    void (*alloc_view)(sg_view result, void* user_data);
     void (*dealloc_buffer)(sg_buffer buf_id, void* user_data);
     void (*dealloc_image)(sg_image img_id, void* user_data);
     void (*dealloc_sampler)(sg_sampler smp_id, void* user_data);
     void (*dealloc_shader)(sg_shader shd_id, void* user_data);
     void (*dealloc_pipeline)(sg_pipeline pip_id, void* user_data);
-    void (*dealloc_attachments)(sg_attachments atts_id, void* user_data);
+    void (*dealloc_view)(sg_view view_id, void* user_data);
     void (*init_buffer)(sg_buffer buf_id, const sg_buffer_desc* desc, void* user_data);
     void (*init_image)(sg_image img_id, const sg_image_desc* desc, void* user_data);
     void (*init_sampler)(sg_sampler smp_id, const sg_sampler_desc* desc, void* user_data);
     void (*init_shader)(sg_shader shd_id, const sg_shader_desc* desc, void* user_data);
     void (*init_pipeline)(sg_pipeline pip_id, const sg_pipeline_desc* desc, void* user_data);
-    void (*init_attachments)(sg_attachments atts_id, const sg_attachments_desc* desc, void* user_data);
+    void (*init_view)(sg_view view_id, const sg_view_desc* desc, void* user_data);
     void (*uninit_buffer)(sg_buffer buf_id, void* user_data);
     void (*uninit_image)(sg_image img_id, void* user_data);
     void (*uninit_sampler)(sg_sampler smp_id, void* user_data);
     void (*uninit_shader)(sg_shader shd_id, void* user_data);
     void (*uninit_pipeline)(sg_pipeline pip_id, void* user_data);
-    void (*uninit_attachments)(sg_attachments atts_id, void* user_data);
+    void (*uninit_view)(sg_view view_id, void* user_data);
     void (*fail_buffer)(sg_buffer buf_id, void* user_data);
     void (*fail_image)(sg_image img_id, void* user_data);
     void (*fail_sampler)(sg_sampler smp_id, void* user_data);
     void (*fail_shader)(sg_shader shd_id, void* user_data);
     void (*fail_pipeline)(sg_pipeline pip_id, void* user_data);
-    void (*fail_attachments)(sg_attachments atts_id, void* user_data);
+    void (*fail_view)(sg_view view_id, void* user_data);
     void (*push_debug_group)(const char* name, void* user_data);
     void (*pop_debug_group)(void* user_data);
 } sg_trace_hooks;
@@ -3862,7 +3859,7 @@ typedef struct sg_trace_hooks {
     sg_sampler_info
     sg_shader_info
     sg_pipeline_info
-    sg_attachments_info
+    sg_view_info
 
     These structs contain various internal resource attributes which
     might be useful for debug-inspection. Please don't rely on the
@@ -3877,7 +3874,7 @@ typedef struct sg_trace_hooks {
     sg_query_sampler_info()
     sg_query_shader_info()
     sg_query_pipeline_info()
-    sg_query_attachments_info()
+    sg_query_view_info()
 */
 typedef struct sg_slot_info {
     sg_resource_state state;    // the current state of this resource slot
@@ -3914,9 +3911,9 @@ typedef struct sg_pipeline_info {
     sg_slot_info slot;              // resource pool slot info
 } sg_pipeline_info;
 
-typedef struct sg_attachments_info {
+typedef struct sg_view_info {
     sg_slot_info slot;              // resource pool slot info
-} sg_attachments_info;
+} sg_view_info;
 
 /*
     sg_frame_stats
@@ -4520,7 +4517,7 @@ typedef enum sg_log_item {
     .sampler_pool_size              64
     .shader_pool_size               32
     .pipeline_pool_size             64
-    .attachments_pool_size          16
+    .view_pool_size                 256
     .uniform_buffer_size            4 MB (4*1024*1024)
     .max_dispatch_calls_per_pass    1024
     .max_commit_listeners           1024
@@ -4681,7 +4678,7 @@ typedef struct sg_desc {
     int sampler_pool_size;
     int shader_pool_size;
     int pipeline_pool_size;
-    int attachments_pool_size;
+    int view_pool_size;
     int uniform_buffer_size;
     int max_dispatch_calls_per_pass;    // max expected number of dispatch calls per pass (default: 1024)
     int max_commit_listeners;
@@ -4714,13 +4711,13 @@ SOKOL_GFX_API_DECL sg_image sg_make_image(const sg_image_desc* desc);
 SOKOL_GFX_API_DECL sg_sampler sg_make_sampler(const sg_sampler_desc* desc);
 SOKOL_GFX_API_DECL sg_shader sg_make_shader(const sg_shader_desc* desc);
 SOKOL_GFX_API_DECL sg_pipeline sg_make_pipeline(const sg_pipeline_desc* desc);
-SOKOL_GFX_API_DECL sg_attachments sg_make_attachments(const sg_attachments_desc* desc);
+SOKOL_GFX_API_DECL sg_view sg_make_view(const sg_view_desc* desc);
 SOKOL_GFX_API_DECL void sg_destroy_buffer(sg_buffer buf);
 SOKOL_GFX_API_DECL void sg_destroy_image(sg_image img);
 SOKOL_GFX_API_DECL void sg_destroy_sampler(sg_sampler smp);
 SOKOL_GFX_API_DECL void sg_destroy_shader(sg_shader shd);
 SOKOL_GFX_API_DECL void sg_destroy_pipeline(sg_pipeline pip);
-SOKOL_GFX_API_DECL void sg_destroy_attachments(sg_attachments atts);
+SOKOL_GFX_API_DECL void sg_destroy_view(sg_view view);
 SOKOL_GFX_API_DECL void sg_update_buffer(sg_buffer buf, const sg_range* data);
 SOKOL_GFX_API_DECL void sg_update_image(sg_image img, const sg_image_data* data);
 SOKOL_GFX_API_DECL int sg_append_buffer(sg_buffer buf, const sg_range* data);
@@ -4755,28 +4752,28 @@ SOKOL_GFX_API_DECL sg_resource_state sg_query_image_state(sg_image img);
 SOKOL_GFX_API_DECL sg_resource_state sg_query_sampler_state(sg_sampler smp);
 SOKOL_GFX_API_DECL sg_resource_state sg_query_shader_state(sg_shader shd);
 SOKOL_GFX_API_DECL sg_resource_state sg_query_pipeline_state(sg_pipeline pip);
-SOKOL_GFX_API_DECL sg_resource_state sg_query_attachments_state(sg_attachments atts);
+SOKOL_GFX_API_DECL sg_resource_state sg_query_view_state(sg_view view);
 // get runtime information about a resource
 SOKOL_GFX_API_DECL sg_buffer_info sg_query_buffer_info(sg_buffer buf);
 SOKOL_GFX_API_DECL sg_image_info sg_query_image_info(sg_image img);
 SOKOL_GFX_API_DECL sg_sampler_info sg_query_sampler_info(sg_sampler smp);
 SOKOL_GFX_API_DECL sg_shader_info sg_query_shader_info(sg_shader shd);
 SOKOL_GFX_API_DECL sg_pipeline_info sg_query_pipeline_info(sg_pipeline pip);
-SOKOL_GFX_API_DECL sg_attachments_info sg_query_attachments_info(sg_attachments atts);
+SOKOL_GFX_API_DECL sg_view_info sg_query_view_info(sg_view view);
 // get desc structs matching a specific resource (NOTE that not all creation attributes may be provided)
 SOKOL_GFX_API_DECL sg_buffer_desc sg_query_buffer_desc(sg_buffer buf);
 SOKOL_GFX_API_DECL sg_image_desc sg_query_image_desc(sg_image img);
 SOKOL_GFX_API_DECL sg_sampler_desc sg_query_sampler_desc(sg_sampler smp);
 SOKOL_GFX_API_DECL sg_shader_desc sg_query_shader_desc(sg_shader shd);
 SOKOL_GFX_API_DECL sg_pipeline_desc sg_query_pipeline_desc(sg_pipeline pip);
-SOKOL_GFX_API_DECL sg_attachments_desc sg_query_attachments_desc(sg_attachments atts);
+SOKOL_GFX_API_DECL sg_view_desc sg_query_view_desc(sg_view view);
 // get resource creation desc struct with their default values replaced
 SOKOL_GFX_API_DECL sg_buffer_desc sg_query_buffer_defaults(const sg_buffer_desc* desc);
 SOKOL_GFX_API_DECL sg_image_desc sg_query_image_defaults(const sg_image_desc* desc);
 SOKOL_GFX_API_DECL sg_sampler_desc sg_query_sampler_defaults(const sg_sampler_desc* desc);
 SOKOL_GFX_API_DECL sg_shader_desc sg_query_shader_defaults(const sg_shader_desc* desc);
 SOKOL_GFX_API_DECL sg_pipeline_desc sg_query_pipeline_defaults(const sg_pipeline_desc* desc);
-SOKOL_GFX_API_DECL sg_attachments_desc sg_query_attachments_defaults(const sg_attachments_desc* desc);
+SOKOL_GFX_API_DECL sg_view_desc sg_query_view_defaults(const sg_view_desc* desc);
 // assorted query functions
 SOKOL_GFX_API_DECL size_t sg_query_buffer_size(sg_buffer buf);
 SOKOL_GFX_API_DECL sg_buffer_usage sg_query_buffer_usage(sg_buffer buf);
@@ -4795,31 +4792,31 @@ SOKOL_GFX_API_DECL sg_image sg_alloc_image(void);
 SOKOL_GFX_API_DECL sg_sampler sg_alloc_sampler(void);
 SOKOL_GFX_API_DECL sg_shader sg_alloc_shader(void);
 SOKOL_GFX_API_DECL sg_pipeline sg_alloc_pipeline(void);
-SOKOL_GFX_API_DECL sg_attachments sg_alloc_attachments(void);
+SOKOL_GFX_API_DECL sg_view sg_alloc_view(void);
 SOKOL_GFX_API_DECL void sg_dealloc_buffer(sg_buffer buf);
 SOKOL_GFX_API_DECL void sg_dealloc_image(sg_image img);
 SOKOL_GFX_API_DECL void sg_dealloc_sampler(sg_sampler smp);
 SOKOL_GFX_API_DECL void sg_dealloc_shader(sg_shader shd);
 SOKOL_GFX_API_DECL void sg_dealloc_pipeline(sg_pipeline pip);
-SOKOL_GFX_API_DECL void sg_dealloc_attachments(sg_attachments attachments);
+SOKOL_GFX_API_DECL void sg_dealloc_view(sg_view view);
 SOKOL_GFX_API_DECL void sg_init_buffer(sg_buffer buf, const sg_buffer_desc* desc);
 SOKOL_GFX_API_DECL void sg_init_image(sg_image img, const sg_image_desc* desc);
 SOKOL_GFX_API_DECL void sg_init_sampler(sg_sampler smg, const sg_sampler_desc* desc);
 SOKOL_GFX_API_DECL void sg_init_shader(sg_shader shd, const sg_shader_desc* desc);
 SOKOL_GFX_API_DECL void sg_init_pipeline(sg_pipeline pip, const sg_pipeline_desc* desc);
-SOKOL_GFX_API_DECL void sg_init_attachments(sg_attachments attachments, const sg_attachments_desc* desc);
+SOKOL_GFX_API_DECL void sg_init_view(sg_view view, const sg_view_desc* desc);
 SOKOL_GFX_API_DECL void sg_uninit_buffer(sg_buffer buf);
 SOKOL_GFX_API_DECL void sg_uninit_image(sg_image img);
 SOKOL_GFX_API_DECL void sg_uninit_sampler(sg_sampler smp);
 SOKOL_GFX_API_DECL void sg_uninit_shader(sg_shader shd);
 SOKOL_GFX_API_DECL void sg_uninit_pipeline(sg_pipeline pip);
-SOKOL_GFX_API_DECL void sg_uninit_attachments(sg_attachments atts);
+SOKOL_GFX_API_DECL void sg_uninit_view(sg_view view);
 SOKOL_GFX_API_DECL void sg_fail_buffer(sg_buffer buf);
 SOKOL_GFX_API_DECL void sg_fail_image(sg_image img);
 SOKOL_GFX_API_DECL void sg_fail_sampler(sg_sampler smp);
 SOKOL_GFX_API_DECL void sg_fail_shader(sg_shader shd);
 SOKOL_GFX_API_DECL void sg_fail_pipeline(sg_pipeline pip);
-SOKOL_GFX_API_DECL void sg_fail_attachments(sg_attachments atts);
+SOKOL_GFX_API_DECL void sg_fail_view(sg_view view);
 
 // frame stats
 SOKOL_GFX_API_DECL void sg_enable_frame_stats(void);
@@ -4841,7 +4838,6 @@ typedef struct sg_d3d11_image_info {
     const void* tex2d;    // ID3D11Texture2D*
     const void* tex3d;    // ID3D11Texture3D*
     const void* res;      // ID3D11Resource* (either tex2d or tex3d)
-    const void* srv;      // ID3D11ShaderResourceView*
 } sg_d3d11_image_info;
 
 typedef struct sg_d3d11_sampler_info {
@@ -4861,10 +4857,12 @@ typedef struct sg_d3d11_pipeline_info {
     const void* bs;   // ID3D11BlendState*
 } sg_d3d11_pipeline_info;
 
-typedef struct sg_d3d11_attachments_info {
-    const void* color_rtv[SG_MAX_COLOR_ATTACHMENTS];      // ID3D11RenderTargetView
-    const void* dsv;  // ID3D11DepthStencilView
-} sg_d3d11_attachments_info;
+typedef struct sg_d3d11_view_info {
+    const void* srv;    // ID3D11ShaderResourceView
+    const void* uav;    // ID3D11UnorderedAccessView
+    const void* rtv;    // ID3D11RenderTargetView
+    const void* dsv;    // ID3D11DepthStencilView
+} sg_d3d11_view_info;
 
 typedef struct sg_mtl_buffer_info {
     const void* buf[SG_NUM_INFLIGHT_FRAMES];  // id<MTLBuffer>
@@ -4898,7 +4896,6 @@ typedef struct sg_wgpu_buffer_info {
 
 typedef struct sg_wgpu_image_info {
     const void* tex;  // WGPUTexture
-    const void* view; // WGPUTextureView
 } sg_wgpu_image_info;
 
 typedef struct sg_wgpu_sampler_info {
@@ -4916,11 +4913,9 @@ typedef struct sg_wgpu_pipeline_info {
     const void* compute_pipeline;  // WGPUComputePipeline
 } sg_wgpu_pipeline_info;
 
-typedef struct sg_wgpu_attachments_info {
-    const void* color_view[SG_MAX_COLOR_ATTACHMENTS];     // WGPUTextureView
-    const void* resolve_view[SG_MAX_COLOR_ATTACHMENTS];    // WGPUTextureView
-    const void* ds_view;  // WGPUTextureView
-} sg_wgpu_attachments_info;
+typedef struct sg_wgpu_view_info {
+    const void* view; // WGPUTextureView
+} sg_wgpu_view_info;
 
 typedef struct sg_gl_buffer_info {
     uint32_t buf[SG_NUM_INFLIGHT_FRAMES];
@@ -4942,10 +4937,9 @@ typedef struct sg_gl_shader_info {
     uint32_t prog;
 } sg_gl_shader_info;
 
-typedef struct sg_gl_attachments_info {
-    uint32_t framebuffer;
-    uint32_t msaa_resolve_framebuffer[SG_MAX_COLOR_ATTACHMENTS];
-} sg_gl_attachments_info;
+typedef struct sg_gl_view_info {
+    uint32_t msaa_resolve_framebuffer;
+} sg_gl_view_info;
 
 // D3D11: return ID3D11Device
 SOKOL_GFX_API_DECL const void* sg_d3d11_device(void);
@@ -4961,8 +4955,8 @@ SOKOL_GFX_API_DECL sg_d3d11_sampler_info sg_d3d11_query_sampler_info(sg_sampler 
 SOKOL_GFX_API_DECL sg_d3d11_shader_info sg_d3d11_query_shader_info(sg_shader shd);
 // D3D11: get internal pipeline resource objects
 SOKOL_GFX_API_DECL sg_d3d11_pipeline_info sg_d3d11_query_pipeline_info(sg_pipeline pip);
-// D3D11: get internal pass resource objects
-SOKOL_GFX_API_DECL sg_d3d11_attachments_info sg_d3d11_query_attachments_info(sg_attachments atts);
+// D3D11: get internal view resource objects
+SOKOL_GFX_API_DECL sg_d3d11_view_info sg_d3d11_query_view_info(sg_view view);
 
 // Metal: return __bridge-casted MTLDevice
 SOKOL_GFX_API_DECL const void* sg_mtl_device(void);
@@ -5001,8 +4995,8 @@ SOKOL_GFX_API_DECL sg_wgpu_sampler_info sg_wgpu_query_sampler_info(sg_sampler sm
 SOKOL_GFX_API_DECL sg_wgpu_shader_info sg_wgpu_query_shader_info(sg_shader shd);
 // WebGPU: get internal pipeline resource objects
 SOKOL_GFX_API_DECL sg_wgpu_pipeline_info sg_wgpu_query_pipeline_info(sg_pipeline pip);
-// WebGPU: get internal pass resource objects
-SOKOL_GFX_API_DECL sg_wgpu_attachments_info sg_wgpu_query_attachments_info(sg_attachments atts);
+// WebGPU: get internal view resource objects
+SOKOL_GFX_API_DECL sg_wgpu_view_info sg_wgpu_query_view_info(sg_view view);
 
 // GL: get internal buffer resource objects
 SOKOL_GFX_API_DECL sg_gl_buffer_info sg_gl_query_buffer_info(sg_buffer buf);
@@ -5012,8 +5006,8 @@ SOKOL_GFX_API_DECL sg_gl_image_info sg_gl_query_image_info(sg_image img);
 SOKOL_GFX_API_DECL sg_gl_sampler_info sg_gl_query_sampler_info(sg_sampler smp);
 // GL: get internal shader resource objects
 SOKOL_GFX_API_DECL sg_gl_shader_info sg_gl_query_shader_info(sg_shader shd);
-// GL: get internal pass resource objects
-SOKOL_GFX_API_DECL sg_gl_attachments_info sg_gl_query_attachments_info(sg_attachments atts);
+// GL: get internal view resource objects
+SOKOL_GFX_API_DECL sg_gl_view_info sg_gl_query_view_info(sg_view view);
 
 #ifdef __cplusplus
 } // extern "C"
@@ -5026,7 +5020,7 @@ inline sg_image sg_make_image(const sg_image_desc& desc) { return sg_make_image(
 inline sg_sampler sg_make_sampler(const sg_sampler_desc& desc) { return sg_make_sampler(&desc); }
 inline sg_shader sg_make_shader(const sg_shader_desc& desc) { return sg_make_shader(&desc); }
 inline sg_pipeline sg_make_pipeline(const sg_pipeline_desc& desc) { return sg_make_pipeline(&desc); }
-inline sg_attachments sg_make_attachments(const sg_attachments_desc& desc) { return sg_make_attachments(&desc); }
+inline sg_view sg_make_view(const sg_view_desc& desc) { return sg_make_view(&desc); }
 inline void sg_update_image(sg_image img, const sg_image_data& data) { return sg_update_image(img, &data); }
 
 inline void sg_begin_pass(const sg_pass& pass) { return sg_begin_pass(&pass); }
@@ -5038,14 +5032,14 @@ inline sg_image_desc sg_query_image_defaults(const sg_image_desc& desc) { return
 inline sg_sampler_desc sg_query_sampler_defaults(const sg_sampler_desc& desc) { return sg_query_sampler_defaults(&desc); }
 inline sg_shader_desc sg_query_shader_defaults(const sg_shader_desc& desc) { return sg_query_shader_defaults(&desc); }
 inline sg_pipeline_desc sg_query_pipeline_defaults(const sg_pipeline_desc& desc) { return sg_query_pipeline_defaults(&desc); }
-inline sg_attachments_desc sg_query_attachments_defaults(const sg_attachments_desc& desc) { return sg_query_attachments_defaults(&desc); }
+inline sg_view_desc sg_query_view_defaults(const sg_view_desc& desc) { return sg_query_view_defaults(&desc); }
 
 inline void sg_init_buffer(sg_buffer buf, const sg_buffer_desc& desc) { return sg_init_buffer(buf, &desc); }
 inline void sg_init_image(sg_image img, const sg_image_desc& desc) { return sg_init_image(img, &desc); }
 inline void sg_init_sampler(sg_sampler smp, const sg_sampler_desc& desc) { return sg_init_sampler(smp, &desc); }
 inline void sg_init_shader(sg_shader shd, const sg_shader_desc& desc) { return sg_init_shader(shd, &desc); }
 inline void sg_init_pipeline(sg_pipeline pip, const sg_pipeline_desc& desc) { return sg_init_pipeline(pip, &desc); }
-inline void sg_init_attachments(sg_attachments atts, const sg_attachments_desc& desc) { return sg_init_attachments(atts, &desc); }
+inline void sg_init_view(sg_view view, const sg_view_desc& desc) { return sg_init_view(view, &desc); }
 
 inline void sg_update_buffer(sg_buffer buf_id, const sg_range& data) { return sg_update_buffer(buf_id, &data); }
 inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_append_buffer(buf_id, &data); }
@@ -5639,7 +5633,7 @@ struct _sg_image_s;
 struct _sg_sampler_s;
 struct _sg_shader_s;
 struct _sg_pipeline_s;
-struct _sg_attachments_s;
+struct _sg_view_s;
 
 // a general resource slot reference useful for caches
 typedef struct _sg_sref_s {
@@ -5673,11 +5667,10 @@ typedef struct _sg_pipeline_ref_s {
     _sg_sref_t sref;
 } _sg_pipeline_ref_t;
 
-typedef struct _sg_attachments_ref_s {
-    struct _sg_attachments_s* ptr;
+typedef struct _sg_view_ref_s {
+    struct _sg_view_s* ptr;
     _sg_sref_t sref;
-
-} _sg_attachments_ref_t;
+} _sg_view_ref_t;
 
 // resource tracking (for keeping track of gpu-written storage resources
 typedef struct {
@@ -5697,7 +5690,7 @@ enum {
     _SG_DEFAULT_SAMPLER_POOL_SIZE = 64,
     _SG_DEFAULT_SHADER_POOL_SIZE = 32,
     _SG_DEFAULT_PIPELINE_POOL_SIZE = 64,
-    _SG_DEFAULT_ATTACHMENTS_POOL_SIZE = 16,
+    _SG_DEFAULT_VIEW_POOL_SIZE = 256,
     _SG_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
     _SG_DEFAULT_MAX_DISPATCH_CALLS_PER_PASS = 1024,
     _SG_DEFAULT_MAX_COMMIT_LISTENERS = 1024,
@@ -5774,7 +5767,7 @@ typedef struct {
     sg_image_type image_type;
     sg_image_sample_type sample_type;
     bool multisampled;
-} _sg_shader_image_t;
+} _sg_shader_texture_t;
 
 typedef struct {
     sg_shader_stage stage;
@@ -5783,9 +5776,9 @@ typedef struct {
 
 typedef struct {
     sg_shader_stage stage;
-    uint8_t image_slot;
+    uint8_t texture_slot;
     uint8_t sampler_slot;
-} _sg_shader_image_sampler_t;
+} _sg_shader_texture_sampler_t;
 
 typedef struct {
     uint32_t required_bindings_and_uniforms;
@@ -5793,10 +5786,10 @@ typedef struct {
     _sg_shader_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
     _sg_shader_uniform_block_t uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
     _sg_shader_storage_buffer_t storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
-    _sg_shader_image_t images[SG_MAX_IMAGE_BINDSLOTS];
+    _sg_shader_storage_image_t storage_images[SG_MAX_STORAGEIMAGE_BINDSLOTS];
+    _sg_shader_texture_t textures[SG_MAX_TEXTURE_BINDSLOTS];
     _sg_shader_sampler_t samplers[SG_MAX_SAMPLER_BINDSLOTS];
-    _sg_shader_image_sampler_t image_samplers[SG_MAX_IMAGE_SAMPLER_PAIRS];
-    _sg_shader_storage_image_t storage_images[SG_MAX_STORAGE_ATTACHMENTS];
+    _sg_shader_texture_sampler_t texture_samplers[SG_MAX_TEXTURE_SAMPLER_PAIRS];
 } _sg_shader_common_t;
 
 typedef struct {
@@ -5809,7 +5802,7 @@ typedef struct {
     sg_depth_state depth;
     sg_stencil_state stencil;
     int color_count;
-    sg_color_target_state colors[SG_MAX_COLOR_ATTACHMENTS];
+    sg_color_target_state colors[SG_MAX_PASS_ATTACHMENTS];
     sg_primitive_type primitive_type;
     sg_index_type index_type;
     sg_cull_mode cull_mode;
@@ -5819,23 +5812,36 @@ typedef struct {
     bool alpha_to_coverage_enabled;
 } _sg_pipeline_common_t;
 
-typedef struct {
-    _sg_image_ref_t image;
-    int mip_level;
-    int slice;
-} _sg_attachment_common_t;
+typedef enum {
+    SG_VIEWTYPE_INVALID,
+    SG_VIEWTYPE_VERTEXBUFFER,
+    SG_VIEWTYPE_INDEXBUFFER,
+    SG_VIEWTYPE_STORAGEBUFFER,
+    SG_VIEWTYPE_STORAGEIMAGE,
+    SG_VIEWTYPE_TEXTURE,
+    SG_VIEWTYPE_COLORATTACHMENT,
+    SG_VIEWTYPE_RESOLVEATTACHMENT,
+    SG_VIEWTYPE_DEPTHSTENCILATTACHMENT,
+} _sg_view_type_t;
 
 typedef struct {
-    int width;
-    int height;
-    int num_colors;
-    bool has_render_attachments;
-    bool has_storage_attachments;
-    _sg_attachment_common_t colors[SG_MAX_COLOR_ATTACHMENTS];
-    _sg_attachment_common_t resolves[SG_MAX_COLOR_ATTACHMENTS];
-    _sg_attachment_common_t depth_stencil;
-    _sg_attachment_common_t storages[SG_MAX_STORAGE_ATTACHMENTS];
-} _sg_attachments_common_t;
+    _sg_buffer_ref ref;
+    int offset;
+} _sg_buffer_view_common_t;
+
+typedef struct {
+    _sg_image_ref ref;
+    int base_mip_level;
+    int mip_level_count;
+    int base_slice;
+    int slice_count;
+} _sg_image_view_common_t;
+
+typedef struct {
+    _sg_view_type type;
+    _sg_buffer_view_common_t buf;
+    _sg_image_view_commont_t img;
+} _sg_view_common_t;
 
 #if defined(SOKOL_DUMMY_BACKEND)
 typedef struct _sg_buffer_s {
@@ -5868,11 +5874,11 @@ typedef struct _sg_pipeline_s {
 } _sg_dummy_pipeline_t;
 typedef _sg_dummy_pipeline_t _sg_pipeline_t;
 
-typedef struct _sg_attachments_s {
+typedef struct _sg_view_s {
     _sg_slot_t slot;
-    _sg_attachments_common_t cmn;
-} _sg_dummy_attachments_t;
-typedef _sg_dummy_attachments_t _sg_attachments_t;
+    _sg_view_common_t cmn;
+} _sg_dummy_view_t;
+typedef _sg_dummy_view_t _sg_view_t;
 
 #elif defined(_SOKOL_ANY_GL)
 
