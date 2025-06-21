@@ -4185,32 +4185,32 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(DEALLOC_SAMPLER_INVALID_STATE, "sg_dealloc_sampler(): sampler must be in alloc state") \
     _SG_LOGITEM_XMACRO(DEALLOC_SHADER_INVALID_STATE, "sg_dealloc_shader(): shader must be in ALLOC state") \
     _SG_LOGITEM_XMACRO(DEALLOC_PIPELINE_INVALID_STATE, "sg_dealloc_pipeline(): pipeline must be in ALLOC state") \
-    _SG_LOGITEM_XMACRO(DEALLOC_ATTACHMENTS_INVALID_STATE, "sg_dealloc_attachments(): attachments must be in ALLOC state") \
+    _SG_LOGITEM_XMACRO(DEALLOC_VIEW_INVALID_STATE, "sg_dealloc_view(): view must be in ALLOC state") \
     _SG_LOGITEM_XMACRO(INIT_BUFFER_INVALID_STATE, "sg_init_buffer(): buffer must be in ALLOC state") \
     _SG_LOGITEM_XMACRO(INIT_IMAGE_INVALID_STATE, "sg_init_image(): image must be in ALLOC state") \
     _SG_LOGITEM_XMACRO(INIT_SAMPLER_INVALID_STATE, "sg_init_sampler(): sampler must be in ALLOC state") \
     _SG_LOGITEM_XMACRO(INIT_SHADER_INVALID_STATE, "sg_init_shader(): shader must be in ALLOC state") \
     _SG_LOGITEM_XMACRO(INIT_PIPELINE_INVALID_STATE, "sg_init_pipeline(): pipeline must be in ALLOC state") \
-    _SG_LOGITEM_XMACRO(INIT_ATTACHMENTS_INVALID_STATE, "sg_init_attachments(): pass must be in ALLOC state") \
+    _SG_LOGITEM_XMACRO(INIT_VIEW_INVALID_STATE, "sg_init_view(): view must be in ALLOC state") \
     _SG_LOGITEM_XMACRO(UNINIT_BUFFER_INVALID_STATE, "sg_uninit_buffer(): buffer must be in VALID or FAILED state") \
     _SG_LOGITEM_XMACRO(UNINIT_IMAGE_INVALID_STATE, "sg_uninit_image(): image must be in VALID or FAILED state") \
     _SG_LOGITEM_XMACRO(UNINIT_SAMPLER_INVALID_STATE, "sg_uninit_sampler(): sampler must be in VALID or FAILED state") \
     _SG_LOGITEM_XMACRO(UNINIT_SHADER_INVALID_STATE, "sg_uninit_shader(): shader must be in VALID or FAILED state") \
     _SG_LOGITEM_XMACRO(UNINIT_PIPELINE_INVALID_STATE, "sg_uninit_pipeline(): pipeline must be in VALID or FAILED state") \
-    _SG_LOGITEM_XMACRO(UNINIT_ATTACHMENTS_INVALID_STATE, "sg_uninit_attachments(): attachments must be in VALID or FAILED state") \
+    _SG_LOGITEM_XMACRO(UNINIT_VIEW_INVALID_STATE, "sg_uninit_view(): view must be in VALID or FAILED state") \
     _SG_LOGITEM_XMACRO(FAIL_BUFFER_INVALID_STATE, "sg_fail_buffer(): buffer must be in ALLOC state") \
     _SG_LOGITEM_XMACRO(FAIL_IMAGE_INVALID_STATE, "sg_fail_image(): image must be in ALLOC state") \
     _SG_LOGITEM_XMACRO(FAIL_SAMPLER_INVALID_STATE, "sg_fail_sampler(): sampler must be in ALLOC state") \
     _SG_LOGITEM_XMACRO(FAIL_SHADER_INVALID_STATE, "sg_fail_shader(): shader must be in ALLOC state") \
     _SG_LOGITEM_XMACRO(FAIL_PIPELINE_INVALID_STATE, "sg_fail_pipeline(): pipeline must be in ALLOC state") \
-    _SG_LOGITEM_XMACRO(FAIL_ATTACHMENTS_INVALID_STATE, "sg_fail_attachments(): attachments must be in ALLOC state") \
+    _SG_LOGITEM_XMACRO(FAIL_VIEW_INVALID_STATE, "sg_fail_view(): view must be in ALLOC state") \
     _SG_LOGITEM_XMACRO(BUFFER_POOL_EXHAUSTED, "buffer pool exhausted") \
     _SG_LOGITEM_XMACRO(IMAGE_POOL_EXHAUSTED, "image pool exhausted") \
     _SG_LOGITEM_XMACRO(SAMPLER_POOL_EXHAUSTED, "sampler pool exhausted") \
     _SG_LOGITEM_XMACRO(SHADER_POOL_EXHAUSTED, "shader pool exhausted") \
     _SG_LOGITEM_XMACRO(PIPELINE_POOL_EXHAUSTED, "pipeline pool exhausted") \
-    _SG_LOGITEM_XMACRO(PASS_POOL_EXHAUSTED, "pass pool exhausted") \
-    _SG_LOGITEM_XMACRO(BEGINPASS_ATTACHMENT_INVALID, "sg_begin_pass: an attachment was provided that no longer exists") \
+    _SG_LOGITEM_XMACRO(VIEW_POOL_EXHAUSTED, "view pool exhausted") \
+    _SG_LOGITEM_XMACRO(BEGINPASS_ATTACHMENTS_ALIVE, "sg_begin_pass: an attachment was provided that no longer exists") \
     _SG_LOGITEM_XMACRO(APPLY_BINDINGS_STORAGE_BUFFER_TRACKER_EXHAUSTED, "sg_apply_bindings: too many read/write storage buffers in pass (bump sg_desc.max_dispatch_calls_per_pass") \
     _SG_LOGITEM_XMACRO(DRAW_WITHOUT_BINDINGS, "attempting to draw without resource bindings") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_CANARY, "sg_buffer_desc not initialized") \
@@ -5603,6 +5603,10 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
 // ███████    ██    ██   ██  ██████   ██████    ██    ███████
 //
 // >>structs
+
+typedef struct { int x, y, w, h; } _sg_recti_t;
+typedef struct { int width, height; } _sg_dimi_t;
+
 // resource pool slots
 typedef struct {
     uint32_t id;
@@ -6507,7 +6511,10 @@ typedef struct {
 
 // resolved pass attachments struct
 typedef struct {
-    int num;
+    bool empty;
+    bool alive;
+    _sg_dimi_t dim;
+    int num_color_views;
     _sg_view_t* color_views[SG_MAX_COLOR_ATTACHMENTS];
     _sg_view_t* resolve_views[SG_MAX_COLOR_ATTACHMENTS];
     _sg_view_t* ds_view;
@@ -6545,8 +6552,8 @@ typedef struct {
         bool valid;
         bool in_pass;
         bool is_compute;
-        int width;
-        int height;
+        _sg_dimi_t dim;
+        sg_attachments atts;
         struct {
             sg_pixel_format color_fmt;
             sg_pixel_format depth_fmt;
@@ -7199,8 +7206,6 @@ _SOKOL_PRIVATE uint32_t _sg_align_u32(uint32_t val, uint32_t align) {
     return (val + (align - 1)) & ~(align - 1);
 }
 
-typedef struct { int x, y, w, h; } _sg_recti_t;
-
 _SOKOL_PRIVATE _sg_recti_t _sg_clipi(int x, int y, int w, int h, int clip_width, int clip_height) {
     x = _sg_min(_sg_max(0, x), clip_width-1);
     y = _sg_min(_sg_max(0, y), clip_height-1);
@@ -7213,6 +7218,84 @@ _SOKOL_PRIVATE _sg_recti_t _sg_clipi(int x, int y, int w, int h, int clip_width,
     w = _sg_max(w, 1);
     h = _sg_max(h, 1);
     const _sg_recti_t res = { x, y, w, h };
+    return res;
+}
+
+_SOKOL_PRIVATE bool _sg_image_view_alive(const _sg_view_t* view) {
+    return view && _sg_image_ref_alive(&view->cmn.img.ref);
+}
+
+_SOKOL_PRIVATE _sg_dimi_t _sg_image_view_dim(const _sg_view_t* view) {
+    SOKOL_ASSERT(view);
+    const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+    SOKOL_ASSERT((img->cmn.width > 0) && (img->cmn.height > 0));
+    const _sg_dimi_t res = { img->cmn.width, img->cmn.height };
+    return res;
+}
+
+_SOKOL_PRIVATE bool _sg_attachments_empty(const sg_attachments* atts) {
+    SOKOL_ASSERT(atts);
+    for (size_t i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        if (atts->colors[i].id != SG_INVALID_ID) {
+            return false;
+        }
+        if (atts->resolves[i].id != SG_INVALID_ID) {
+            return false;
+        }
+    }
+    if (atts->depth_stencil.id != SG_INVALID_ID) {
+        return false;
+    }
+    return true;
+}
+
+_SOKOL_PRIVATE _sg_attachments_ptrs_t _sg_attachments_ptrs(const sg_attachments* atts) {
+    SOKOL_ASSERT(atts);
+    _sg_attachments_ptrs_t res;
+    _sg_clear(&res, sizeof(res));
+    res.alive = true;
+    res.empty = true;
+    for (size_t i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        if (atts->colors[i].id != SG_INVALID_ID) {
+            res.empty = false;
+            _sg_view_t* view = _sg_lookup_view(atts->colors[i].id);
+            res.color_views[i] = view;
+            if (_sg_image_view_alive(view)) {
+                res.num_color_views += 1;
+                const _sg_dimi_t dim = _sg_image_view_dim(view);
+                if (res.dim.width == 0) {
+                    res.dim = dim;
+                }
+                SOKOL_ASSERT((res.dim.width == dim.width) && (res.dim.height == dim.height));
+            } else {
+                res.alive = false;
+            }
+        }
+        if (atts->resolves[i].id != SG_INVALID_ID) {
+            SOKOL_ASSERT(atts->colors[i].id != SG_INVALID_ID);
+            res.empty = false;
+            _sg_view_t* view = _sg_lookup_view(atts->resolves[i].id);
+            res.resolve_views[i] = view;
+            if (_sg_image_view_alive(view)) {
+                const _sg_dimi_t dim = _sg_image_view_dim(view);
+                SOKOL_ASSERT((res.dim.width == dim.width) && (res.dim.height == dim.height));
+            }
+        }
+    }
+    if (atts->depth_stencil.id != SG_INVALID_ID) {
+        res.empty = false;
+        _sg_view_t* view = _sg_lookup_view(atts->depth_stencil.id);
+        res.ds_view = view;
+        if (_sg_image_view_alive(view)) {
+            const _sg_dimi_t dim = _sg_image_view_dim(view);
+            if (res.dim.width == 0) {
+                res.dim = dim;
+            }
+            SOKOL_ASSERT((res.dim.width == dim.width) && (res.dim.height == dim.height));
+        } else {
+            res.alive = false;
+        }
+    }
     return res;
 }
 
@@ -14828,9 +14911,8 @@ _SOKOL_PRIVATE void _sg_mtl_discard_pipeline(_sg_pipeline_t* pip) {
     _sg_mtl_release_resource(_sg.frame_index, pip->mtl.dss);
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_mtl_create_view(_sg_view_t* view, const sg_view_desc* desc) {
-    SOKOL_ASSERT(view && desc);
-    _SOKOL_UNUSED(desc);
+_SOKOL_PRIVATE sg_resource_state _sg_mtl_create_view(_sg_view_t* view) {
+    SOKOL_ASSERT(view);
     if (view->cmn.type == _SG_VIEWTYPE_STORAGEIMAGE) {
         const _sg_image_view_common_t* cmn = &view->cmn.img;
         const _sg_image_t* img = _sg_image_ref_ptr(&cmn->ref);
@@ -14844,7 +14926,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_view(_sg_view_t* view, const sg_
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_mtl_discard_attachments(_sg_view_t* view) {
+_SOKOL_PRIVATE void _sg_mtl_discard_view(_sg_view_t* view) {
     SOKOL_ASSERT(view);
     // it's valid to call _sg_mtl_release_resource with a null handle
     _sg_mtl_release_resource(_sg.frame_index, view->mtl.tex_view);
@@ -14909,7 +14991,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_render_pass(const sg_pass* pass, const _sg_att
     SOKOL_ASSERT(pass_desc);
     if (atts) {
         // setup pass descriptor for offscreen rendering
-        for (NSUInteger i = 0; i < (NSUInteger)atts->num; i++) {
+        for (NSUInteger i = 0; i < (NSUInteger)atts->num_color_views; i++) {
             const _sg_view_t* color_view = atts->color_views[i];
             SOKOL_ASSERT(color_view);
             const _sg_view_t* resolve_view = atts->resolve_views[i];
@@ -15157,10 +15239,10 @@ _SOKOL_PRIVATE void _sg_mtl_commit(void) {
 
 _SOKOL_PRIVATE void _sg_mtl_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-    SOKOL_ASSERT(_sg.cur_pass.height > 0);
+    SOKOL_ASSERT(_sg.cur_pass.dim.height > 0);
     MTLViewport vp;
     vp.originX = (double) x;
-    vp.originY = (double) (origin_top_left ? y : (_sg.cur_pass.height - (y + h)));
+    vp.originY = (double) (origin_top_left ? y : (_sg.cur_pass.dim.height - (y + h)));
     vp.width   = (double) w;
     vp.height  = (double) h;
     vp.znear   = 0.0;
@@ -15170,13 +15252,13 @@ _SOKOL_PRIVATE void _sg_mtl_apply_viewport(int x, int y, int w, int h, bool orig
 
 _SOKOL_PRIVATE void _sg_mtl_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-    SOKOL_ASSERT(_sg.cur_pass.width > 0);
-    SOKOL_ASSERT(_sg.cur_pass.height > 0);
+    SOKOL_ASSERT(_sg.cur_pass.dim.width > 0);
+    SOKOL_ASSERT(_sg.cur_pass.dim.height > 0);
     // clip against framebuffer rect
-    const _sg_recti_t clip = _sg_clipi(x, y, w, h, _sg.cur_pass.width, _sg.cur_pass.height);
+    const _sg_recti_t clip = _sg_clipi(x, y, w, h, _sg.cur_pass.dim.width, _sg.cur_pass.dim.height);
     MTLScissorRect r;
     r.x = (NSUInteger)clip.x;
-    r.y = (NSUInteger) (origin_top_left ? clip.y : (_sg.cur_pass.height - (clip.y + clip.h)));
+    r.y = (NSUInteger) (origin_top_left ? clip.y : (_sg.cur_pass.dim.height - (clip.y + clip.h)));
     r.width = (NSUInteger)clip.w;
     r.height = (NSUInteger)clip.h;
     [_sg.mtl.render_cmd_encoder setScissorRect:r];
@@ -17967,6 +18049,38 @@ static inline void _sg_discard_pipeline(_sg_pipeline_t* pip) {
     #endif
 }
 
+static inline sg_resource_state _sg_create_view(_sg_view_t* view) {
+    #if defined(_SOKOL_ANY_GL)
+    return _sg_gl_create_view(view);
+    #elif defined(SOKOL_METAL)
+    return _sg_mtl_create_view(view);
+    #elif defined(SOKOL_D3D11)
+    return _sg_d3d11_create_view(view);
+    #elif defined(SOKOL_WGPU)
+    return _sg_wgpu_create_view(view);
+    #elif defined(SOKOL_DUMMY_BACKEND)
+    return _sg_dummy_create_view(view);
+    #else
+    #error("INVALID BACKEND");
+    #endif
+}
+
+static inline void _sg_discard_view(_sg_view_t* view) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_discard_view(view);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_discard_view(view);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_discard_view(view);
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_discard_view(view);
+    #elif defined(SOKOL_DUMMY_BACKEND)
+    _sg_dummy_discard_view(view);
+    #else
+    #error("INVALID BACKEND");
+    #endif
+}
+
 static inline void _sg_begin_pass(const sg_pass* pass, const _sg_attachments_ptrs_t* atts) {
     #if defined(_SOKOL_ANY_GL)
     _sg_gl_begin_pass(pass, atts);
@@ -19771,6 +19885,11 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
     return def;
 }
 
+_SOKOL_PRIVATE sg_view_desc _sg_view_desc_defaults(const sg_view_desc* desc) {
+    sg_view_desc def = *desc;
+    return def;
+}
+
 _SOKOL_PRIVATE sg_buffer _sg_alloc_buffer(void) {
     sg_buffer res;
     int slot_index = _sg_pool_alloc_index(&_sg.pools.buffer_pool);
@@ -19838,7 +19957,7 @@ _SOKOL_PRIVATE sg_view _sg_alloc_view(void) {
         res.id = _sg_slot_alloc(&_sg.pools.view_pool, &_sg.pools.views[slot_index].slot, slot_index);
     } else {
         res.id = SG_INVALID_ID;
-        _SG_ERROR(PASS_POOL_EXHAUSTED);
+        _SG_ERROR(VIEW_POOL_EXHAUSTED);
     }
     return res;
 }
@@ -20126,7 +20245,7 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
 _SOKOL_PRIVATE sg_pass _sg_pass_defaults(const sg_pass* pass) {
     sg_pass res = *pass;
     if (!res.compute) {
-        if (res.attachments.id == SG_INVALID_ID) {
+        if (_sg_attachments_empty(&pass->attachments)) {
             // this is a swapchain-pass
             res.swapchain.sample_count = _sg_def(res.swapchain.sample_count, _sg.desc.environment.defaults.sample_count);
             res.swapchain.color_format = _sg_def(res.swapchain.color_format, _sg.desc.environment.defaults.color_format);
@@ -20175,10 +20294,10 @@ _SOKOL_PRIVATE void _sg_discard_all_resources(void) {
             _sg_discard_pipeline(&_sg.pools.pipelines[i]);
         }
     }
-    for (int i = 1; i < _sg.pools.attachments_pool.size; i++) {
-        sg_resource_state state = _sg.pools.attachments[i].slot.state;
+    for (int i = 1; i < _sg.pools.view_pool.size; i++) {
+        sg_resource_state state = _sg.pools.views[i].slot.state;
         if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
-            _sg_discard_attachments(&_sg.pools.attachments[i]);
+            _sg_discard_view(&_sg.pools.views[i]);
         }
     }
 }
@@ -20330,10 +20449,10 @@ SOKOL_API_IMPL sg_pipeline sg_alloc_pipeline(void) {
     return res;
 }
 
-SOKOL_API_IMPL sg_attachments sg_alloc_attachments(void) {
+SOKOL_API_IMPL sg_view sg_alloc_view(void) {
     SOKOL_ASSERT(_sg.valid);
-    sg_attachments res = _sg_alloc_attachments();
-    _SG_TRACE_ARGS(alloc_attachments, res);
+    sg_view res = _sg_alloc_view();
+    _SG_TRACE_ARGS(alloc_view, res);
     return res;
 }
 
@@ -20402,17 +20521,17 @@ SOKOL_API_IMPL void sg_dealloc_pipeline(sg_pipeline pip_id) {
     _SG_TRACE_ARGS(dealloc_pipeline, pip_id);
 }
 
-SOKOL_API_IMPL void sg_dealloc_attachments(sg_attachments atts_id) {
+SOKOL_API_IMPL void sg_dealloc_view(sg_view view_id) {
     SOKOL_ASSERT(_sg.valid);
-    _sg_attachments_t* atts = _sg_lookup_attachments(atts_id.id);
-    if (atts) {
-        if (atts->slot.state == SG_RESOURCESTATE_ALLOC) {
-            _sg_dealloc_attachments(atts);
+    _sg_view_t* view = _sg_lookup_view(view_id.id);
+    if (view) {
+        if (view->slot.state == SG_RESOURCESTATE_ALLOC) {
+            _sg_dealloc_view(view);
         } else {
-            _SG_ERROR(DEALLOC_ATTACHMENTS_INVALID_STATE);
+            _SG_ERROR(DEALLOC_VIEW_INVALID_STATE);
         }
     }
-    _SG_TRACE_ARGS(dealloc_attachments, atts_id);
+    _SG_TRACE_ARGS(dealloc_view, view_id);
 }
 
 SOKOL_API_IMPL void sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc) {
@@ -20490,19 +20609,19 @@ SOKOL_API_IMPL void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc*
     _SG_TRACE_ARGS(init_pipeline, pip_id, &desc_def);
 }
 
-SOKOL_API_IMPL void sg_init_attachments(sg_attachments atts_id, const sg_attachments_desc* desc) {
+SOKOL_API_IMPL void sg_init_view(sg_view view_id, const sg_view_desc* desc) {
     SOKOL_ASSERT(_sg.valid);
-    sg_attachments_desc desc_def = _sg_attachments_desc_defaults(desc);
-    _sg_attachments_t* atts = _sg_lookup_attachments(atts_id.id);
-    if (atts) {
-        if (atts->slot.state == SG_RESOURCESTATE_ALLOC) {
-            _sg_init_attachments(atts, &desc_def);
-            SOKOL_ASSERT((atts->slot.state == SG_RESOURCESTATE_VALID) || (atts->slot.state == SG_RESOURCESTATE_FAILED));
+    sg_view_desc desc_def = _sg_view_desc_defaults(desc);
+    _sg_view_t* view = _sg_lookup_view(view_id.id);
+    if (view) {
+        if (view->slot.state == SG_RESOURCESTATE_ALLOC) {
+            _sg_init_view(view, &desc_def);
+            SOKOL_ASSERT((view->slot.state == SG_RESOURCESTATE_VALID) || (view->slot.state == SG_RESOURCESTATE_FAILED));
         } else {
-            _SG_ERROR(INIT_ATTACHMENTS_INVALID_STATE);
+            _SG_ERROR(INIT_VIEW_INVALID_STATE);
         }
     }
-    _SG_TRACE_ARGS(init_attachments, atts_id, &desc_def);
+    _SG_TRACE_ARGS(init_view, view_id, &desc_def);
 }
 
 SOKOL_API_IMPL void sg_uninit_buffer(sg_buffer buf_id) {
@@ -20575,18 +20694,18 @@ SOKOL_API_IMPL void sg_uninit_pipeline(sg_pipeline pip_id) {
     _SG_TRACE_ARGS(uninit_pipeline, pip_id);
 }
 
-SOKOL_API_IMPL void sg_uninit_attachments(sg_attachments atts_id) {
+SOKOL_API_IMPL void sg_uninit_view(sg_view view_id) {
     SOKOL_ASSERT(_sg.valid);
-    _sg_attachments_t* atts = _sg_lookup_attachments(atts_id.id);
-    if (atts) {
-        if ((atts->slot.state == SG_RESOURCESTATE_VALID) || (atts->slot.state == SG_RESOURCESTATE_FAILED)) {
-            _sg_uninit_attachments(atts);
-            SOKOL_ASSERT(atts->slot.state == SG_RESOURCESTATE_ALLOC);
+    _sg_view_t* view = _sg_lookup_view(view_id.id);
+    if (view) {
+        if ((view->slot.state == SG_RESOURCESTATE_VALID) || (view->slot.state == SG_RESOURCESTATE_FAILED)) {
+            _sg_uninit_view(view);
+            SOKOL_ASSERT(view->slot.state == SG_RESOURCESTATE_ALLOC);
         } else {
-            _SG_ERROR(UNINIT_ATTACHMENTS_INVALID_STATE);
+            _SG_ERROR(UNINIT_VIEW_INVALID_STATE);
         }
     }
-    _SG_TRACE_ARGS(uninit_attachments, atts_id);
+    _SG_TRACE_ARGS(uninit_view, view_id);
 }
 
 SOKOL_API_IMPL void sg_fail_buffer(sg_buffer buf_id) {
@@ -20654,17 +20773,17 @@ SOKOL_API_IMPL void sg_fail_pipeline(sg_pipeline pip_id) {
     _SG_TRACE_ARGS(fail_pipeline, pip_id);
 }
 
-SOKOL_API_IMPL void sg_fail_attachments(sg_attachments atts_id) {
+SOKOL_API_IMPL void sg_fail_view(sg_view view_id) {
     SOKOL_ASSERT(_sg.valid);
-    _sg_attachments_t* atts = _sg_lookup_attachments(atts_id.id);
-    if (atts) {
-        if (atts->slot.state == SG_RESOURCESTATE_ALLOC) {
-            atts->slot.state = SG_RESOURCESTATE_FAILED;
+    _sg_view_t* view = _sg_lookup_view(view_id.id);
+    if (view) {
+        if (view->slot.state == SG_RESOURCESTATE_ALLOC) {
+            view->slot.state = SG_RESOURCESTATE_FAILED;
         } else {
-            _SG_ERROR(FAIL_ATTACHMENTS_INVALID_STATE);
+            _SG_ERROR(FAIL_VIEW_INVALID_STATE);
         }
     }
-    _SG_TRACE_ARGS(fail_attachments, atts_id);
+    _SG_TRACE_ARGS(fail_view, view_id);
 }
 
 SOKOL_API_IMPL sg_resource_state sg_query_buffer_state(sg_buffer buf_id) {
@@ -20702,10 +20821,10 @@ SOKOL_API_IMPL sg_resource_state sg_query_pipeline_state(sg_pipeline pip_id) {
     return res;
 }
 
-SOKOL_API_IMPL sg_resource_state sg_query_attachments_state(sg_attachments atts_id) {
+SOKOL_API_IMPL sg_resource_state sg_query_view_state(sg_view view_id) {
     SOKOL_ASSERT(_sg.valid);
-    _sg_attachments_t* atts = _sg_lookup_attachments(atts_id.id);
-    sg_resource_state res = atts ? atts->slot.state : SG_RESOURCESTATE_INVALID;
+    _sg_view_t* view = _sg_lookup_view(view_id.id);
+    sg_resource_state res = view ? view->slot.state : SG_RESOURCESTATE_INVALID;
     return res;
 }
 
@@ -20784,19 +20903,19 @@ SOKOL_API_IMPL sg_pipeline sg_make_pipeline(const sg_pipeline_desc* desc) {
     return pip_id;
 }
 
-SOKOL_API_IMPL sg_attachments sg_make_attachments(const sg_attachments_desc* desc) {
+SOKOL_API_IMPL sg_view sg_make_view(const sg_view_desc* desc) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(desc);
-    sg_attachments_desc desc_def = _sg_attachments_desc_defaults(desc);
-    sg_attachments atts_id = _sg_alloc_attachments();
-    if (atts_id.id != SG_INVALID_ID) {
-        _sg_attachments_t* atts = _sg_attachments_at(atts_id.id);
-        SOKOL_ASSERT(atts && (atts->slot.state == SG_RESOURCESTATE_ALLOC));
-        _sg_init_attachments(atts, &desc_def);
-        SOKOL_ASSERT((atts->slot.state == SG_RESOURCESTATE_VALID) || (atts->slot.state == SG_RESOURCESTATE_FAILED));
+    sg_view_desc desc_def = _sg_view_desc_defaults(desc);
+    sg_view view_id = _sg_alloc_view();
+    if (view_id.id != SG_INVALID_ID) {
+        _sg_view_t* view = _sg_view_at(view_id.id);
+        SOKOL_ASSERT(view && (view->slot.state == SG_RESOURCESTATE_ALLOC));
+        _sg_init_view(view, &desc_def);
+        SOKOL_ASSERT((view->slot.state == SG_RESOURCESTATE_VALID) || (view->slot.state == SG_RESOURCESTATE_FAILED));
     }
-    _SG_TRACE_ARGS(make_attachments, &desc_def, atts_id);
-    return atts_id;
+    _SG_TRACE_ARGS(make_view, &desc_def, view_id);
+    return view_id;
 }
 
 SOKOL_API_IMPL void sg_destroy_buffer(sg_buffer buf_id) {
@@ -20879,18 +20998,18 @@ SOKOL_API_IMPL void sg_destroy_pipeline(sg_pipeline pip_id) {
     }
 }
 
-SOKOL_API_IMPL void sg_destroy_attachments(sg_attachments atts_id) {
+SOKOL_API_IMPL void sg_destroy_view(sg_view view_id) {
     SOKOL_ASSERT(_sg.valid);
-    _SG_TRACE_ARGS(destroy_attachments, atts_id);
-    _sg_attachments_t* atts = _sg_lookup_attachments(atts_id.id);
-    if (atts) {
-        if ((atts->slot.state == SG_RESOURCESTATE_VALID) || (atts->slot.state == SG_RESOURCESTATE_FAILED)) {
-            _sg_uninit_attachments(atts);
-            SOKOL_ASSERT(atts->slot.state == SG_RESOURCESTATE_ALLOC);
+    _SG_TRACE_ARGS(destroy_view, view_id);
+    _sg_view_t* view = _sg_lookup_view(view_id.id);
+    if (view) {
+        if ((view->slot.state == SG_RESOURCESTATE_VALID) || (view->slot.state == SG_RESOURCESTATE_FAILED)) {
+            _sg_uninit_view(view);
+            SOKOL_ASSERT(view->slot.state == SG_RESOURCESTATE_ALLOC);
         }
-        if (atts->slot.state == SG_RESOURCESTATE_ALLOC) {
-            _sg_dealloc_attachments(atts);
-            SOKOL_ASSERT(atts->slot.state == SG_RESOURCESTATE_INITIAL);
+        if (view->slot.state == SG_RESOURCESTATE_ALLOC) {
+            _sg_dealloc_view(view);
+            SOKOL_ASSERT(view->slot.state == SG_RESOURCESTATE_INITIAL);
         }
     }
 }
@@ -20899,32 +21018,29 @@ SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(!_sg.cur_pass.valid);
     SOKOL_ASSERT(!_sg.cur_pass.in_pass);
-    SOKOL_ASSERT(_sg_attachments_ref_null(&_sg.cur_pass.atts));
+    SOKOL_ASSERT(_sg_attachments_empty(&_sg.cur_pass.atts));
     SOKOL_ASSERT(pass);
     SOKOL_ASSERT((pass->_start_canary == 0) && (pass->_end_canary == 0));
     const sg_pass pass_def = _sg_pass_defaults(pass);
+    const _sg_attachments_ptrs_t atts_ptrs = _sg_attachments_ptrs(&pass->attachments);
     if (!_sg_validate_begin_pass(&pass_def)) {
         return;
     }
-    _sg.cur_pass.atts = _sg_attachments_ref(0);
-    if (pass_def.attachments.id != SG_INVALID_ID) {
-        _sg_attachments_t* atts = _sg_lookup_attachments(pass_def.attachments.id);
-        if (0 == atts) {
-            _SG_ERROR(BEGINPASS_ATTACHMENT_INVALID);
+    if (!atts_ptrs.empty) {
+        if (!atts_ptrs.alive) {
+            _SG_ERROR(BEGINPASS_ATTACHMENTS_ALIVE);
             return;
         }
-        SOKOL_ASSERT(atts);
-        _sg.cur_pass.atts = _sg_attachments_ref(atts);
-        _sg.cur_pass.width = atts->cmn.width;
-        _sg.cur_pass.height = atts->cmn.height;
+        _sg.cur_pass.atts = pass->attachments;
+        _sg.cur_pass.dim = atts_ptrs.dim;
     } else if (!pass_def.compute) {
         // a swapchain pass
         SOKOL_ASSERT(pass_def.swapchain.width > 0);
         SOKOL_ASSERT(pass_def.swapchain.height > 0);
         SOKOL_ASSERT(pass_def.swapchain.color_format > SG_PIXELFORMAT_NONE);
         SOKOL_ASSERT(pass_def.swapchain.sample_count > 0);
-        _sg.cur_pass.width = pass_def.swapchain.width;
-        _sg.cur_pass.height = pass_def.swapchain.height;
+        _sg.cur_pass.dim.width = pass_def.swapchain.width;
+        _sg.cur_pass.dim.height = pass_def.swapchain.height;
         _sg.cur_pass.swapchain.color_fmt = pass_def.swapchain.color_format;
         _sg.cur_pass.swapchain.depth_fmt = pass_def.swapchain.depth_format;
         _sg.cur_pass.swapchain.sample_count = pass_def.swapchain.sample_count;
@@ -20932,7 +21048,7 @@ SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
     _sg.cur_pass.valid = true;  // may be overruled by backend begin-pass functions
     _sg.cur_pass.in_pass = true;
     _sg.cur_pass.is_compute = pass_def.compute;
-    _sg_begin_pass(&pass_def);
+    _sg_begin_pass(&pass_def, &atts_ptrs);
     _SG_TRACE_ARGS(begin_pass, &pass_def);
 }
 
