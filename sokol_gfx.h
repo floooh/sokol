@@ -14982,7 +14982,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_compute_pass(const sg_pass* pass) {
 }
 
 _SOKOL_PRIVATE void _sg_mtl_begin_render_pass(const sg_pass* pass, const _sg_attachments_ptrs_t* atts) {
-    SOKOL_ASSERT(pass);
+    SOKOL_ASSERT(pass && atts);
     SOKOL_ASSERT(nil != _sg.mtl.cmd_buffer);
     SOKOL_ASSERT(nil == _sg.mtl.render_cmd_encoder);
     SOKOL_ASSERT(nil == _sg.mtl.compute_cmd_encoder);
@@ -14992,7 +14992,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_render_pass(const sg_pass* pass, const _sg_att
 
     MTLRenderPassDescriptor* pass_desc = [MTLRenderPassDescriptor renderPassDescriptor];
     SOKOL_ASSERT(pass_desc);
-    if (atts) {
+    if (!atts->empty) {
         // setup pass descriptor for offscreen rendering
         for (NSUInteger i = 0; i < (NSUInteger)atts->num_color_views; i++) {
             const _sg_view_t* color_view = atts->color_views[i];
@@ -19082,12 +19082,8 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
         if (_sg.desc.disable_validation) {
             return true;
         }
-        SOKOL_ASSERT(false);
-        /*
-            FIXME FIXME FIXME
-
         const bool is_compute_pass = pass->compute;
-        const bool is_swapchain_pass = !is_compute_pass && (pass->attachments.id == SG_INVALID_ID);
+        const bool is_swapchain_pass = !is_compute_pass && _sg_attachments_empty(&pass->attachments);
         const bool is_offscreen_pass = !(is_compute_pass || is_swapchain_pass);
         _sg_validate_begin();
         _SG_VALIDATE(pass->_start_canary == 0, VALIDATE_BEGINPASS_CANARY);
@@ -19141,6 +19137,8 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
             #endif
         } else {
             // this is an 'offscreen pass'
+            /*
+                FIXME FIXME FIXME
             const _sg_attachments_t* atts = _sg_lookup_attachments(pass->attachments.id);
             if (atts) {
                 _SG_VALIDATE(atts->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_ATTACHMENTS_VALID);
@@ -19183,6 +19181,7 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
             } else {
                 _SG_VALIDATE(atts != 0, VALIDATE_BEGINPASS_ATTACHMENTS_EXISTS);
             }
+            */
         }
         if (is_compute_pass || is_offscreen_pass) {
             _SG_VALIDATE(pass->swapchain.width == 0, VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_WIDTH_NOTSET);
@@ -19206,7 +19205,6 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
                 _SG_VALIDATE(pass->swapchain.gl.framebuffer == 0, VALIDATE_BEGINPASS_SWAPCHAIN_GL_EXPECT_FRAMEBUFFER_NOTSET);
             #endif
         }
-        */
         return _sg_validate_end();
     #endif
 }
