@@ -4322,6 +4322,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_ATTR_SEMANTICS, "D3D11 missing vertex attribute semantics in shader") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_SHADER_READONLY_STORAGEBUFFERS, "sg_pipeline_desc.shader: only readonly storage buffer bindings allowed in render pipelines") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_BLENDOP_MINMAX_REQUIRES_BLENDFACTOR_ONE, "SG_BLENDOP_MIN/MAX requires all blend factors to be SG_BLENDFACTOR_ONE") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_CANARY, "sg_view_desc not initialized") \
     /* FIXME FIXME FIXME => view validation
     _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_CANARY, "sg_attachments_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_NO_ATTACHMENTS, "sg_attachments_desc no color, depth-stencil or storage attachments") \
@@ -4429,10 +4430,10 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE_SHADER_VALID, "sg_apply_bindings: shader associated with currently applied pipeline is not in valid state") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_COMPUTE_EXPECTED_NO_VBS, "sg_apply_bindings: vertex buffer bindings not allowed in a compute pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_COMPUTE_EXPECTED_NO_IB, "sg_apply_bindings: index buffer binding not allowed in compute pass") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_VB, "sg_apply_bindings: vertex buffer binding is missing or buffer handle is invalid") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VB_ALIVE, "sg_apply_bindings: vertex buffer no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VB_TYPE, "sg_apply_bindings: buffer in vertex buffer slot doesn't have vertex buffer usage (sg_buffer_desc.usage.storage_buffer)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VB_OVERFLOW, "sg_apply_bindings: buffer in vertex buffer slot is overflown") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_VBVIEW, "sg_apply_bindings: vertex buffer binding is missing or view handle is invalid") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBVIEW_ALIVE, "sg_apply_bindings: vertex buffer view no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBVIEW_TYPE, "sg_apply_bindings: view in vertex bind slot is not a vertex buffer view") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBVIEW_VBUF_OVERFLOW, "sg_apply_bindings: buffer in vertex buffer slot is overflown") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_NO_IB, "sg_apply_bindings: pipeline object defines indexed rendering, but no index buffer provided") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_IB, "sg_apply_bindings: pipeline object defines non-indexed rendering, but index buffer provided") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_IB_ALIVE, "sg_apply_bindings: index buffer no longer alive") \
@@ -7463,30 +7464,46 @@ _SOKOL_PRIVATE void _sg_image_view_common_init(_sg_image_view_common_t* cmn, con
     cmn->slice = desc->slice;
 }
 
-_SOKOL_PRIVATE void _sg_view_common_init(_sg_view_common_t* cmn, const sg_view_desc* desc, _sg_buffer_t* buf, _sg_image_t* img) {
+_SOKOL_PRIVATE void _sg_view_common_init(_sg_view_common_t* cmn, const sg_view_desc* desc) {
     if (desc->vertex_buffer_binding.buffer.id != SG_INVALID_ID) {
         cmn->type = _SG_VIEWTYPE_VERTEXBUFFER;
+        _sg_buffer_t* buf = _sg_lookup_buffer(desc->vertex_buffer_binding.buffer.id);
+        SOKOL_ASSERT(buf);
         _sg_buffer_view_common_init(&cmn->buf, &desc->vertex_buffer_binding, buf);
     } else if (desc->index_buffer_binding.buffer.id != SG_INVALID_ID) {
         cmn->type = _SG_VIEWTYPE_INDEXBUFFER;
+        _sg_buffer_t* buf = _sg_lookup_buffer(desc->index_buffer_binding.buffer.id);
+        SOKOL_ASSERT(buf);
         _sg_buffer_view_common_init(&cmn->buf, &desc->index_buffer_binding, buf);
     } else if (desc->texture_binding.image.id != SG_INVALID_ID) {
         cmn->type = _SG_VIEWTYPE_TEXTURE;
+        _sg_image_t* img = _sg_lookup_image(desc->texture_binding.image.id);
+        SOKOL_ASSERT(img);
         _sg_texture_view_common_init(&cmn->img, img);
     } else if (desc->storage_buffer_binding.buffer.id != SG_INVALID_ID) {
         cmn->type = _SG_VIEWTYPE_STORAGEBUFFER;
+        _sg_buffer_t* buf = _sg_lookup_buffer(desc->storage_buffer_binding.buffer.id);
+        SOKOL_ASSERT(buf);
         _sg_buffer_view_common_init(&cmn->buf, &desc->storage_buffer_binding, buf);
     } else if (desc->storage_image_binding.image.id != SG_INVALID_ID) {
         cmn->type = _SG_VIEWTYPE_STORAGEIMAGE;
+        _sg_image_t* img = _sg_lookup_image(desc->storage_image_binding.image.id);
+        SOKOL_ASSERT(img);
         _sg_image_view_common_init(&cmn->img, &desc->storage_image_binding, img);
     } else if (desc->color_attachment.image.id != SG_INVALID_ID) {
         cmn->type = _SG_VIEWTYPE_COLORATTACHMENT;
+        _sg_image_t* img = _sg_lookup_image(desc->color_attachment.image.id);
+        SOKOL_ASSERT(img);
         _sg_image_view_common_init(&cmn->img, &desc->color_attachment, img);
     } else if (desc->resolve_attachment.image.id != SG_INVALID_ID) {
         cmn->type = _SG_VIEWTYPE_RESOLVEATTACHMENT;
+        _sg_image_t* img = _sg_lookup_image(desc->resolve_attachment.image.id);
+        SOKOL_ASSERT(img);
         _sg_image_view_common_init(&cmn->img, &desc->resolve_attachment, img);
     } else if (desc->depth_stencil_attachment.image.id != SG_INVALID_ID) {
         cmn->type = _SG_VIEWTYPE_DEPTHSTENCIL_ATTACHMENT;
+        _sg_image_t* img = _sg_lookup_image(desc->depth_stencil_attachment.image.id);
+        SOKOL_ASSERT(img);
         _sg_image_view_common_init(&cmn->img, &desc->depth_stencil_attachment, img);
     } else {
         SOKOL_UNREACHABLE;
@@ -18932,6 +18949,25 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
     #endif
 }
 
+_SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(desc);
+        return true;
+    #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
+        SOKOL_ASSERT(desc);
+        _sg_validate_begin();
+        _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_VIEWDESC_CANARY);
+        _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_VIEWDESC_CANARY);
+
+        // FIXME FIXME FIXME
+
+        return _sg_validate_end();
+    #endif
+}
+
 /* FIXME FIXME FIXME: view validation
 _SOKOL_PRIVATE bool _sg_validate_attachments_desc(const sg_attachments_desc* desc) {
     #if !defined(SOKOL_DEBUG)
@@ -19278,53 +19314,49 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
             _SG_VALIDATE(_sg.cur_pass.is_compute, VALIDATE_APIP_COMPUTEPASS_EXPECTED);
         } else {
             _SG_VALIDATE(!_sg.cur_pass.is_compute, VALIDATE_APIP_RENDERPASS_EXPECTED);
-            // check that pipeline attributes match current pass attributes
-            SOKOL_ASSERT(false);
-            /*
-                FIXME FIXME FIXME
-            if (!atts_null) {
-                if (atts) {
-                    // an offscreen pass
-                    _SG_VALIDATE(pip->cmn.color_count == atts->cmn.num_colors, VALIDATE_APIP_ATT_COUNT);
-                    for (int i = 0; i < pip->cmn.color_count; i++) {
-                        const _sg_image_ref_t* img_ref = &atts->cmn.colors[i].image;
-                        const bool img_null = _sg_image_ref_null(img_ref);
-                        const bool img_alive = _sg_image_ref_alive(img_ref);
-                        if (!img_null) {
-                            _SG_VALIDATE(img_alive, VALIDATE_APIP_COLOR_ATTACHMENT_IMAGE_ALIVE);
-                            if (img_alive) {
-                                const _sg_image_t* img = _sg_image_ref_ptr(img_ref);
-                                _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_COLOR_ATTACHMENT_IMAGE_VALID);
-                                _SG_VALIDATE(pip->cmn.colors[i].pixel_format == img->cmn.pixel_format, VALIDATE_APIP_COLOR_FORMAT);
-                                _SG_VALIDATE(pip->cmn.sample_count == img->cmn.sample_count, VALIDATE_APIP_SAMPLE_COUNT);
-                            }
-                        }
-                    }
-                    {
-                        const _sg_image_ref_t* img_ref = &atts->cmn.depth_stencil.image;
-                        const bool img_null = _sg_image_ref_null(img_ref);
-                        const bool img_alive = _sg_image_ref_alive(img_ref);
-                        if (!img_null) {
-                            _SG_VALIDATE(img_alive, VALIDATE_APIP_DEPTHSTENCIL_ATTACHMENT_IMAGE_ALIVE);
-                            if (img_alive) {
-                                const _sg_image_t* img = _sg_image_ref_ptr(img_ref);
-                                _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_DEPTHSTENCIL_ATTACHMENT_IMAGE_VALID);
-                                _SG_VALIDATE(pip->cmn.depth.pixel_format == img->cmn.pixel_format, VALIDATE_APIP_DEPTH_FORMAT);
-                            }
-                        } else {
-                            _SG_VALIDATE(pip->cmn.depth.pixel_format == SG_PIXELFORMAT_NONE, VALIDATE_APIP_DEPTH_FORMAT);
-                        }
-                    }
-                }
-
-            } else {
-            */
-                // default pass
+            if (_sg_attachments_empty(&_sg.cur_pass.atts)) {
+                // a swapchain pass
                 _SG_VALIDATE(pip->cmn.color_count == 1, VALIDATE_APIP_ATT_COUNT);
                 _SG_VALIDATE(pip->cmn.colors[0].pixel_format == _sg.cur_pass.swapchain.color_fmt, VALIDATE_APIP_COLOR_FORMAT);
                 _SG_VALIDATE(pip->cmn.depth.pixel_format == _sg.cur_pass.swapchain.depth_fmt, VALIDATE_APIP_DEPTH_FORMAT);
                 _SG_VALIDATE(pip->cmn.sample_count == _sg.cur_pass.swapchain.sample_count, VALIDATE_APIP_SAMPLE_COUNT);
-            //}
+            } else {
+                // an offscreen render pass check that pipeline attributes match current pass attributes
+                /*
+                    FIXME FIXME FIXME
+                // an offscreen pass
+                _SG_VALIDATE(pip->cmn.color_count == atts->cmn.num_colors, VALIDATE_APIP_ATT_COUNT);
+                for (int i = 0; i < pip->cmn.color_count; i++) {
+                    const _sg_image_ref_t* img_ref = &atts->cmn.colors[i].image;
+                    const bool img_null = _sg_image_ref_null(img_ref);
+                    const bool img_alive = _sg_image_ref_alive(img_ref);
+                    if (!img_null) {
+                        _SG_VALIDATE(img_alive, VALIDATE_APIP_COLOR_ATTACHMENT_IMAGE_ALIVE);
+                        if (img_alive) {
+                            const _sg_image_t* img = _sg_image_ref_ptr(img_ref);
+                            _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_COLOR_ATTACHMENT_IMAGE_VALID);
+                            _SG_VALIDATE(pip->cmn.colors[i].pixel_format == img->cmn.pixel_format, VALIDATE_APIP_COLOR_FORMAT);
+                            _SG_VALIDATE(pip->cmn.sample_count == img->cmn.sample_count, VALIDATE_APIP_SAMPLE_COUNT);
+                        }
+                    }
+                }
+                {
+                    const _sg_image_ref_t* img_ref = &atts->cmn.depth_stencil.image;
+                    const bool img_null = _sg_image_ref_null(img_ref);
+                    const bool img_alive = _sg_image_ref_alive(img_ref);
+                    if (!img_null) {
+                        _SG_VALIDATE(img_alive, VALIDATE_APIP_DEPTHSTENCIL_ATTACHMENT_IMAGE_ALIVE);
+                        if (img_alive) {
+                            const _sg_image_t* img = _sg_image_ref_ptr(img_ref);
+                            _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_DEPTHSTENCIL_ATTACHMENT_IMAGE_VALID);
+                            _SG_VALIDATE(pip->cmn.depth.pixel_format == img->cmn.pixel_format, VALIDATE_APIP_DEPTH_FORMAT);
+                        }
+                    } else {
+                        _SG_VALIDATE(pip->cmn.depth.pixel_format == SG_PIXELFORMAT_NONE, VALIDATE_APIP_DEPTH_FORMAT);
+                    }
+                }
+                */
+            }
         }
         return _sg_validate_end();
     #endif
@@ -19386,18 +19418,17 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 _SG_VALIDATE(bindings->vertex_buffers[i].id == SG_INVALID_ID, VALIDATE_ABND_COMPUTE_EXPECTED_NO_VBS);
             }
         } else {
-            // has expected vertex buffers, and vertex buffers still exist
             for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
                 if (pip->cmn.vertex_buffer_layout_active[i]) {
-                    _SG_VALIDATE(bindings->vertex_buffers[i].id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_VB);
-                    // buffers in vertex-buffer-slots must have vertex buffer usage
+                    _SG_VALIDATE(bindings->vertex_buffers[i].id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_VBUF);
                     if (bindings->vertex_buffers[i].id != SG_INVALID_ID) {
+                        SOKOL_ASSERT(false);
                         const _sg_buffer_t* buf = _sg_lookup_buffer(bindings->vertex_buffers[i].id);
                         _SG_VALIDATE(buf != 0, VALIDATE_ABND_VB_ALIVE);
                         // NOTE: state != VALID is legal and skips rendering!
                         if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
-                            _SG_VALIDATE(buf->cmn.usage.vertex_buffer, VALIDATE_ABND_VB_TYPE);
-                            _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_VB_OVERFLOW);
+                            _SG_VALIDATE(buf->cmn.usage.vertex_buffer, VALIDATE_ABND_VBVIEW_TYPE);
+                            _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_VBVIEW_BUFFER_OVERFLOW);
                         }
                     }
                 }
@@ -19410,19 +19441,20 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
             // index buffer expected or not, and index buffer still exists
             if (pip->cmn.index_type == SG_INDEXTYPE_NONE) {
                 // pipeline defines non-indexed rendering, but index buffer provided
-                _SG_VALIDATE(bindings->index_buffer.id == SG_INVALID_ID, VALIDATE_ABND_IB);
+                _SG_VALIDATE(bindings->index_buffer.id == SG_INVALID_ID, VALIDATE_ABND_IBVIEW);
             } else {
                 // pipeline defines indexed rendering, but no index buffer provided
-                _SG_VALIDATE(bindings->index_buffer.id != SG_INVALID_ID, VALIDATE_ABND_NO_IB);
+                _SG_VALIDATE(bindings->index_buffer.id != SG_INVALID_ID, VALIDATE_ABND_NO_IBVIEW);
             }
             if (bindings->index_buffer.id != SG_INVALID_ID) {
                 // buffer in index-buffer-slot must have index buffer usage
+                SOKOL_ASSERT(false);
                 const _sg_buffer_t* buf = _sg_lookup_buffer(bindings->index_buffer.id);
-                _SG_VALIDATE(buf != 0, VALIDATE_ABND_IB_ALIVE);
+                _SG_VALIDATE(buf != 0, VALIDATE_ABND_IBVIEW_ALIVE);
                 // NOTE: state != VALID is legal and skips rendering!
                 if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
-                    _SG_VALIDATE(buf->cmn.usage.index_buffer, VALIDATE_ABND_IB_TYPE);
-                    _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_IB_OVERFLOW);
+                    _SG_VALIDATE(buf->cmn.usage.index_buffer, VALIDATE_ABND_IBVIEW_TYPE);
+                    _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_IBVIEW_BUFFER_OVERFLOW);
                 }
             }
         }
@@ -20077,16 +20109,13 @@ _SOKOL_PRIVATE void _sg_init_pipeline(_sg_pipeline_t* pip, const sg_pipeline_des
 _SOKOL_PRIVATE void _sg_init_view(_sg_view_t* view, const sg_view_desc* desc) {
     SOKOL_ASSERT(view && view->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(desc);
-    /*
-        FIXME FIXME FIXME
     if (_sg_validate_view_desc(desc)) {
-        _sg_view_common_init(&view->cmn, buf, img);
-        view->slot.state = _sg_create_view(view, desc);
+        _sg_view_common_init(&view->cmn, desc);
+        view->slot.state = _sg_create_view(view);
     } else {
        view->slot.state = SG_RESOURCESTATE_FAILED;
     }
     SOKOL_ASSERT((view->slot.state == SG_RESOURCESTATE_VALID)||(view->slot.state == SG_RESOURCESTATE_FAILED));
-    */
 }
 
 _SOKOL_PRIVATE void _sg_uninit_buffer(_sg_buffer_t* buf) {
