@@ -2098,6 +2098,10 @@ typedef enum sg_pixel_format {
     // NOTE: when adding/removing pixel formats before DEPTH, also update sokol_app.h/_SAPP_PIXELFORMAT_*
     SG_PIXELFORMAT_DEPTH,
     SG_PIXELFORMAT_DEPTH_STENCIL,
+    SG_PIXELFORMAT_DEPTH24PLUS,
+    SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8,
+    SG_PIXELFORMAT_DEPTH32F,
+    SG_PIXELFORMAT_DEPTH32F_STENCIL8,
 
     // NOTE: don't put any new compressed format in front of here
     SG_PIXELFORMAT_BC1_RGBA,
@@ -5378,6 +5382,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_LEQUAL 0x0203
         #define GL_STENCIL_TEST 0x0B90
         #define GL_DITHER 0x0BD0
+        #define GL_DEPTH_COMPONENT24 0x81A6
         #define GL_DEPTH_COMPONENT32F 0x8CAC
         #define GL_EQUAL 0x0202
         #define GL_FRAMEBUFFER 0x8D40
@@ -5499,6 +5504,9 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #ifndef GL_UNSIGNED_INT_24_8
     #define GL_UNSIGNED_INT_24_8 0x84FA
     #endif
+    #ifndef GL_FLOAT_32_UNSIGNED_INT_24_8_REV
+    #define GL_FLOAT_32_UNSIGNED_INT_24_8_REV 0x8DAD
+    #endif
     #ifndef GL_TEXTURE_MAX_ANISOTROPY_EXT
     #define GL_TEXTURE_MAX_ANISOTROPY_EXT 0x84FE
     #endif
@@ -5576,6 +5584,9 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #endif
     #ifndef GL_DEPTH24_STENCIL8
     #define GL_DEPTH24_STENCIL8 0x88F0
+    #endif
+    #ifndef GL_DEPTH32F_STENCIL8
+    #define GL_DEPTH32F_STENCIL8 0x8CAD
     #endif
     #ifndef GL_HALF_FLOAT
     #define GL_HALF_FLOAT 0x140B
@@ -7665,11 +7676,28 @@ _SOKOL_PRIVATE bool _sg_is_valid_attachment_storage_format(sg_pixel_format fmt) 
 }
 
 _SOKOL_PRIVATE bool _sg_is_depth_or_depth_stencil_format(sg_pixel_format fmt) {
-    return (SG_PIXELFORMAT_DEPTH == fmt) || (SG_PIXELFORMAT_DEPTH_STENCIL == fmt);
+    switch (fmt) {
+        case SG_PIXELFORMAT_DEPTH:
+        case SG_PIXELFORMAT_DEPTH_STENCIL:
+        case SG_PIXELFORMAT_DEPTH24PLUS:
+        case SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8:
+        case SG_PIXELFORMAT_DEPTH32F:
+        case SG_PIXELFORMAT_DEPTH32F_STENCIL8:
+            return true;
+        default:
+            return false;
+    }
 }
 
 _SOKOL_PRIVATE bool _sg_is_depth_stencil_format(sg_pixel_format fmt) {
-    return (SG_PIXELFORMAT_DEPTH_STENCIL == fmt);
+    switch (fmt) {
+        case SG_PIXELFORMAT_DEPTH_STENCIL:
+        case SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8:
+        case SG_PIXELFORMAT_DEPTH32F_STENCIL8:
+            return true;
+        default:
+            return false;
+    }
 }
 
 _SOKOL_PRIVATE int _sg_pixelformat_bytesize(sg_pixel_format fmt) {
@@ -7715,6 +7743,7 @@ _SOKOL_PRIVATE int _sg_pixelformat_bytesize(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RGBA16UI:
         case SG_PIXELFORMAT_RGBA16SI:
         case SG_PIXELFORMAT_RGBA16F:
+        case SG_PIXELFORMAT_DEPTH32F_STENCIL8:
             return 8;
         case SG_PIXELFORMAT_RGBA32UI:
         case SG_PIXELFORMAT_RGBA32SI:
@@ -7722,6 +7751,9 @@ _SOKOL_PRIVATE int _sg_pixelformat_bytesize(sg_pixel_format fmt) {
             return 16;
         case SG_PIXELFORMAT_DEPTH:
         case SG_PIXELFORMAT_DEPTH_STENCIL:
+        case SG_PIXELFORMAT_DEPTH24PLUS:
+        case SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8:
+        case SG_PIXELFORMAT_DEPTH32F:
             return 4;
         default:
             SOKOL_UNREACHABLE;
@@ -7973,6 +8005,10 @@ _SOKOL_PRIVATE void _sg_dummy_setup_backend(const sg_desc* desc) {
     }
     _sg.formats[SG_PIXELFORMAT_DEPTH].depth = true;
     _sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL].depth = true;
+    _sg.formats[SG_PIXELFORMAT_DEPTH24PLUS].depth = true;
+    _sg.formats[SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8].depth = true;
+    _sg.formats[SG_PIXELFORMAT_DEPTH32F].depth = true;
+    _sg.formats[SG_PIXELFORMAT_DEPTH32F_STENCIL8].depth = true;
 }
 
 _SOKOL_PRIVATE void _sg_dummy_discard_backend(void) {
@@ -8635,6 +8671,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_type(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_R32UI:
         case SG_PIXELFORMAT_RG32UI:
         case SG_PIXELFORMAT_RGBA32UI:
+        case SG_PIXELFORMAT_DEPTH24PLUS:
             return GL_UNSIGNED_INT;
         case SG_PIXELFORMAT_R32SI:
         case SG_PIXELFORMAT_RG32SI:
@@ -8651,9 +8688,13 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_type(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RGB9E5:
             return GL_UNSIGNED_INT_5_9_9_9_REV;
         case SG_PIXELFORMAT_DEPTH:
+        case SG_PIXELFORMAT_DEPTH32F:
             return GL_FLOAT;
         case SG_PIXELFORMAT_DEPTH_STENCIL:
+        case SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8:
             return GL_UNSIGNED_INT_24_8;
+        case SG_PIXELFORMAT_DEPTH32F_STENCIL8:
+            return GL_FLOAT_32_UNSIGNED_INT_24_8_REV;
         default:
             SOKOL_UNREACHABLE; return 0;
     }
@@ -8709,8 +8750,12 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RGB9E5:
             return GL_RGB;
         case SG_PIXELFORMAT_DEPTH:
+        case SG_PIXELFORMAT_DEPTH24PLUS:
+        case SG_PIXELFORMAT_DEPTH32F:
             return GL_DEPTH_COMPONENT;
         case SG_PIXELFORMAT_DEPTH_STENCIL:
+        case SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8:
+        case SG_PIXELFORMAT_DEPTH32F_STENCIL8:
             return GL_DEPTH_STENCIL;
         case SG_PIXELFORMAT_BC1_RGBA:
             return GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
@@ -8812,30 +8857,34 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RGBA32SI:   return GL_RGBA32I;
         case SG_PIXELFORMAT_RGBA32F:    return GL_RGBA32F;
         case SG_PIXELFORMAT_DEPTH:      return GL_DEPTH_COMPONENT32F;
-        case SG_PIXELFORMAT_DEPTH_STENCIL:      return GL_DEPTH24_STENCIL8;
-        case SG_PIXELFORMAT_BC1_RGBA:           return GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
-        case SG_PIXELFORMAT_BC2_RGBA:           return GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
-        case SG_PIXELFORMAT_BC3_RGBA:           return GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
-        case SG_PIXELFORMAT_BC3_SRGBA:          return GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT;
-        case SG_PIXELFORMAT_BC4_R:              return GL_COMPRESSED_RED_RGTC1;
-        case SG_PIXELFORMAT_BC4_RSN:            return GL_COMPRESSED_SIGNED_RED_RGTC1;
-        case SG_PIXELFORMAT_BC5_RG:             return GL_COMPRESSED_RED_GREEN_RGTC2;
-        case SG_PIXELFORMAT_BC5_RGSN:           return GL_COMPRESSED_SIGNED_RED_GREEN_RGTC2;
-        case SG_PIXELFORMAT_BC6H_RGBF:          return GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT_ARB;
-        case SG_PIXELFORMAT_BC6H_RGBUF:         return GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_ARB;
-        case SG_PIXELFORMAT_BC7_RGBA:           return GL_COMPRESSED_RGBA_BPTC_UNORM_ARB;
-        case SG_PIXELFORMAT_BC7_SRGBA:          return GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM_ARB;
-        case SG_PIXELFORMAT_ETC2_RGB8:          return GL_COMPRESSED_RGB8_ETC2;
-        case SG_PIXELFORMAT_ETC2_SRGB8:         return GL_COMPRESSED_SRGB8_ETC2;
-        case SG_PIXELFORMAT_ETC2_RGB8A1:        return GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2;
-        case SG_PIXELFORMAT_ETC2_RGBA8:         return GL_COMPRESSED_RGBA8_ETC2_EAC;
-        case SG_PIXELFORMAT_ETC2_SRGB8A8:       return GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC;
-        case SG_PIXELFORMAT_EAC_R11:            return GL_COMPRESSED_R11_EAC;
-        case SG_PIXELFORMAT_EAC_R11SN:          return GL_COMPRESSED_SIGNED_R11_EAC;
-        case SG_PIXELFORMAT_EAC_RG11:           return GL_COMPRESSED_RG11_EAC;
-        case SG_PIXELFORMAT_EAC_RG11SN:         return GL_COMPRESSED_SIGNED_RG11_EAC;
-        case SG_PIXELFORMAT_ASTC_4x4_RGBA:      return GL_COMPRESSED_RGBA_ASTC_4x4_KHR;
-        case SG_PIXELFORMAT_ASTC_4x4_SRGBA:     return GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR;
+        case SG_PIXELFORMAT_DEPTH_STENCIL:        return GL_DEPTH24_STENCIL8;
+        case SG_PIXELFORMAT_DEPTH24PLUS:          return GL_DEPTH_COMPONENT24;
+        case SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8: return GL_DEPTH24_STENCIL8;
+        case SG_PIXELFORMAT_DEPTH32F:             return GL_DEPTH_COMPONENT32F;
+        case SG_PIXELFORMAT_DEPTH32F_STENCIL8:    return GL_DEPTH32F_STENCIL8;
+        case SG_PIXELFORMAT_BC1_RGBA:             return GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
+        case SG_PIXELFORMAT_BC2_RGBA:             return GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
+        case SG_PIXELFORMAT_BC3_RGBA:             return GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+        case SG_PIXELFORMAT_BC3_SRGBA:            return GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT;
+        case SG_PIXELFORMAT_BC4_R:                return GL_COMPRESSED_RED_RGTC1;
+        case SG_PIXELFORMAT_BC4_RSN:              return GL_COMPRESSED_SIGNED_RED_RGTC1;
+        case SG_PIXELFORMAT_BC5_RG:               return GL_COMPRESSED_RED_GREEN_RGTC2;
+        case SG_PIXELFORMAT_BC5_RGSN:             return GL_COMPRESSED_SIGNED_RED_GREEN_RGTC2;
+        case SG_PIXELFORMAT_BC6H_RGBF:            return GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT_ARB;
+        case SG_PIXELFORMAT_BC6H_RGBUF:           return GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_ARB;
+        case SG_PIXELFORMAT_BC7_RGBA:             return GL_COMPRESSED_RGBA_BPTC_UNORM_ARB;
+        case SG_PIXELFORMAT_BC7_SRGBA:            return GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM_ARB;
+        case SG_PIXELFORMAT_ETC2_RGB8:            return GL_COMPRESSED_RGB8_ETC2;
+        case SG_PIXELFORMAT_ETC2_SRGB8:           return GL_COMPRESSED_SRGB8_ETC2;
+        case SG_PIXELFORMAT_ETC2_RGB8A1:          return GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2;
+        case SG_PIXELFORMAT_ETC2_RGBA8:           return GL_COMPRESSED_RGBA8_ETC2_EAC;
+        case SG_PIXELFORMAT_ETC2_SRGB8A8:         return GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC;
+        case SG_PIXELFORMAT_EAC_R11:              return GL_COMPRESSED_R11_EAC;
+        case SG_PIXELFORMAT_EAC_R11SN:            return GL_COMPRESSED_SIGNED_R11_EAC;
+        case SG_PIXELFORMAT_EAC_RG11:             return GL_COMPRESSED_RG11_EAC;
+        case SG_PIXELFORMAT_EAC_RG11SN:           return GL_COMPRESSED_SIGNED_RG11_EAC;
+        case SG_PIXELFORMAT_ASTC_4x4_RGBA:        return GL_COMPRESSED_RGBA_ASTC_4x4_KHR;
+        case SG_PIXELFORMAT_ASTC_4x4_SRGBA:       return GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR;
         default: SOKOL_UNREACHABLE; return 0;
     }
 }
@@ -8898,6 +8947,10 @@ _SOKOL_PRIVATE void _sg_gl_init_pixelformats(bool has_bgra) {
     _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA32SI]);
     _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH]);
     _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL]);
+    _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH24PLUS]);
+    _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8]);
+    _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH32F]);
+    _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH32F_STENCIL8]);
 }
 
 // FIXME: OES_half_float_blend
@@ -11739,92 +11792,114 @@ _SOKOL_PRIVATE UINT _sg_d3d11_buffer_cpu_access_flags(const sg_buffer_usage* usg
 
 _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_texture_pixel_format(sg_pixel_format fmt) {
     switch (fmt) {
-        case SG_PIXELFORMAT_R8:             return DXGI_FORMAT_R8_UNORM;
-        case SG_PIXELFORMAT_R8SN:           return DXGI_FORMAT_R8_SNORM;
-        case SG_PIXELFORMAT_R8UI:           return DXGI_FORMAT_R8_UINT;
-        case SG_PIXELFORMAT_R8SI:           return DXGI_FORMAT_R8_SINT;
-        case SG_PIXELFORMAT_R16:            return DXGI_FORMAT_R16_UNORM;
-        case SG_PIXELFORMAT_R16SN:          return DXGI_FORMAT_R16_SNORM;
-        case SG_PIXELFORMAT_R16UI:          return DXGI_FORMAT_R16_UINT;
-        case SG_PIXELFORMAT_R16SI:          return DXGI_FORMAT_R16_SINT;
-        case SG_PIXELFORMAT_R16F:           return DXGI_FORMAT_R16_FLOAT;
-        case SG_PIXELFORMAT_RG8:            return DXGI_FORMAT_R8G8_UNORM;
-        case SG_PIXELFORMAT_RG8SN:          return DXGI_FORMAT_R8G8_SNORM;
-        case SG_PIXELFORMAT_RG8UI:          return DXGI_FORMAT_R8G8_UINT;
-        case SG_PIXELFORMAT_RG8SI:          return DXGI_FORMAT_R8G8_SINT;
-        case SG_PIXELFORMAT_R32UI:          return DXGI_FORMAT_R32_UINT;
-        case SG_PIXELFORMAT_R32SI:          return DXGI_FORMAT_R32_SINT;
-        case SG_PIXELFORMAT_R32F:           return DXGI_FORMAT_R32_FLOAT;
-        case SG_PIXELFORMAT_RG16:           return DXGI_FORMAT_R16G16_UNORM;
-        case SG_PIXELFORMAT_RG16SN:         return DXGI_FORMAT_R16G16_SNORM;
-        case SG_PIXELFORMAT_RG16UI:         return DXGI_FORMAT_R16G16_UINT;
-        case SG_PIXELFORMAT_RG16SI:         return DXGI_FORMAT_R16G16_SINT;
-        case SG_PIXELFORMAT_RG16F:          return DXGI_FORMAT_R16G16_FLOAT;
-        case SG_PIXELFORMAT_RGBA8:          return DXGI_FORMAT_R8G8B8A8_UNORM;
-        case SG_PIXELFORMAT_SRGB8A8:        return DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-        case SG_PIXELFORMAT_RGBA8SN:        return DXGI_FORMAT_R8G8B8A8_SNORM;
-        case SG_PIXELFORMAT_RGBA8UI:        return DXGI_FORMAT_R8G8B8A8_UINT;
-        case SG_PIXELFORMAT_RGBA8SI:        return DXGI_FORMAT_R8G8B8A8_SINT;
-        case SG_PIXELFORMAT_BGRA8:          return DXGI_FORMAT_B8G8R8A8_UNORM;
-        case SG_PIXELFORMAT_RGB10A2:        return DXGI_FORMAT_R10G10B10A2_UNORM;
-        case SG_PIXELFORMAT_RG11B10F:       return DXGI_FORMAT_R11G11B10_FLOAT;
-        case SG_PIXELFORMAT_RGB9E5:         return DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
-        case SG_PIXELFORMAT_RG32UI:         return DXGI_FORMAT_R32G32_UINT;
-        case SG_PIXELFORMAT_RG32SI:         return DXGI_FORMAT_R32G32_SINT;
-        case SG_PIXELFORMAT_RG32F:          return DXGI_FORMAT_R32G32_FLOAT;
-        case SG_PIXELFORMAT_RGBA16:         return DXGI_FORMAT_R16G16B16A16_UNORM;
-        case SG_PIXELFORMAT_RGBA16SN:       return DXGI_FORMAT_R16G16B16A16_SNORM;
-        case SG_PIXELFORMAT_RGBA16UI:       return DXGI_FORMAT_R16G16B16A16_UINT;
-        case SG_PIXELFORMAT_RGBA16SI:       return DXGI_FORMAT_R16G16B16A16_SINT;
-        case SG_PIXELFORMAT_RGBA16F:        return DXGI_FORMAT_R16G16B16A16_FLOAT;
-        case SG_PIXELFORMAT_RGBA32UI:       return DXGI_FORMAT_R32G32B32A32_UINT;
-        case SG_PIXELFORMAT_RGBA32SI:       return DXGI_FORMAT_R32G32B32A32_SINT;
-        case SG_PIXELFORMAT_RGBA32F:        return DXGI_FORMAT_R32G32B32A32_FLOAT;
-        case SG_PIXELFORMAT_DEPTH:          return DXGI_FORMAT_R32_TYPELESS;
-        case SG_PIXELFORMAT_DEPTH_STENCIL:  return DXGI_FORMAT_R24G8_TYPELESS;
-        case SG_PIXELFORMAT_BC1_RGBA:       return DXGI_FORMAT_BC1_UNORM;
-        case SG_PIXELFORMAT_BC2_RGBA:       return DXGI_FORMAT_BC2_UNORM;
-        case SG_PIXELFORMAT_BC3_RGBA:       return DXGI_FORMAT_BC3_UNORM;
-        case SG_PIXELFORMAT_BC3_SRGBA:      return DXGI_FORMAT_BC3_UNORM_SRGB;
-        case SG_PIXELFORMAT_BC4_R:          return DXGI_FORMAT_BC4_UNORM;
-        case SG_PIXELFORMAT_BC4_RSN:        return DXGI_FORMAT_BC4_SNORM;
-        case SG_PIXELFORMAT_BC5_RG:         return DXGI_FORMAT_BC5_UNORM;
-        case SG_PIXELFORMAT_BC5_RGSN:       return DXGI_FORMAT_BC5_SNORM;
-        case SG_PIXELFORMAT_BC6H_RGBF:      return DXGI_FORMAT_BC6H_SF16;
-        case SG_PIXELFORMAT_BC6H_RGBUF:     return DXGI_FORMAT_BC6H_UF16;
-        case SG_PIXELFORMAT_BC7_RGBA:       return DXGI_FORMAT_BC7_UNORM;
-        case SG_PIXELFORMAT_BC7_SRGBA:      return DXGI_FORMAT_BC7_UNORM_SRGB;
-        default:                            return DXGI_FORMAT_UNKNOWN;
+        case SG_PIXELFORMAT_R8:                   return DXGI_FORMAT_R8_UNORM;
+        case SG_PIXELFORMAT_R8SN:                 return DXGI_FORMAT_R8_SNORM;
+        case SG_PIXELFORMAT_R8UI:                 return DXGI_FORMAT_R8_UINT;
+        case SG_PIXELFORMAT_R8SI:                 return DXGI_FORMAT_R8_SINT;
+        case SG_PIXELFORMAT_R16:                  return DXGI_FORMAT_R16_UNORM;
+        case SG_PIXELFORMAT_R16SN:                return DXGI_FORMAT_R16_SNORM;
+        case SG_PIXELFORMAT_R16UI:                return DXGI_FORMAT_R16_UINT;
+        case SG_PIXELFORMAT_R16SI:                return DXGI_FORMAT_R16_SINT;
+        case SG_PIXELFORMAT_R16F:                 return DXGI_FORMAT_R16_FLOAT;
+        case SG_PIXELFORMAT_RG8:                  return DXGI_FORMAT_R8G8_UNORM;
+        case SG_PIXELFORMAT_RG8SN:                return DXGI_FORMAT_R8G8_SNORM;
+        case SG_PIXELFORMAT_RG8UI:                return DXGI_FORMAT_R8G8_UINT;
+        case SG_PIXELFORMAT_RG8SI:                return DXGI_FORMAT_R8G8_SINT;
+        case SG_PIXELFORMAT_R32UI:                return DXGI_FORMAT_R32_UINT;
+        case SG_PIXELFORMAT_R32SI:                return DXGI_FORMAT_R32_SINT;
+        case SG_PIXELFORMAT_R32F:                 return DXGI_FORMAT_R32_FLOAT;
+        case SG_PIXELFORMAT_RG16:                 return DXGI_FORMAT_R16G16_UNORM;
+        case SG_PIXELFORMAT_RG16SN:               return DXGI_FORMAT_R16G16_SNORM;
+        case SG_PIXELFORMAT_RG16UI:               return DXGI_FORMAT_R16G16_UINT;
+        case SG_PIXELFORMAT_RG16SI:               return DXGI_FORMAT_R16G16_SINT;
+        case SG_PIXELFORMAT_RG16F:                return DXGI_FORMAT_R16G16_FLOAT;
+        case SG_PIXELFORMAT_RGBA8:                return DXGI_FORMAT_R8G8B8A8_UNORM;
+        case SG_PIXELFORMAT_SRGB8A8:              return DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+        case SG_PIXELFORMAT_RGBA8SN:              return DXGI_FORMAT_R8G8B8A8_SNORM;
+        case SG_PIXELFORMAT_RGBA8UI:              return DXGI_FORMAT_R8G8B8A8_UINT;
+        case SG_PIXELFORMAT_RGBA8SI:              return DXGI_FORMAT_R8G8B8A8_SINT;
+        case SG_PIXELFORMAT_BGRA8:                return DXGI_FORMAT_B8G8R8A8_UNORM;
+        case SG_PIXELFORMAT_RGB10A2:              return DXGI_FORMAT_R10G10B10A2_UNORM;
+        case SG_PIXELFORMAT_RG11B10F:             return DXGI_FORMAT_R11G11B10_FLOAT;
+        case SG_PIXELFORMAT_RGB9E5:               return DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
+        case SG_PIXELFORMAT_RG32UI:               return DXGI_FORMAT_R32G32_UINT;
+        case SG_PIXELFORMAT_RG32SI:               return DXGI_FORMAT_R32G32_SINT;
+        case SG_PIXELFORMAT_RG32F:                return DXGI_FORMAT_R32G32_FLOAT;
+        case SG_PIXELFORMAT_RGBA16:               return DXGI_FORMAT_R16G16B16A16_UNORM;
+        case SG_PIXELFORMAT_RGBA16SN:             return DXGI_FORMAT_R16G16B16A16_SNORM;
+        case SG_PIXELFORMAT_RGBA16UI:             return DXGI_FORMAT_R16G16B16A16_UINT;
+        case SG_PIXELFORMAT_RGBA16SI:             return DXGI_FORMAT_R16G16B16A16_SINT;
+        case SG_PIXELFORMAT_RGBA16F:              return DXGI_FORMAT_R16G16B16A16_FLOAT;
+        case SG_PIXELFORMAT_RGBA32UI:             return DXGI_FORMAT_R32G32B32A32_UINT;
+        case SG_PIXELFORMAT_RGBA32SI:             return DXGI_FORMAT_R32G32B32A32_SINT;
+        case SG_PIXELFORMAT_RGBA32F:              return DXGI_FORMAT_R32G32B32A32_FLOAT;
+        case SG_PIXELFORMAT_DEPTH:                return DXGI_FORMAT_R32_TYPELESS;
+        case SG_PIXELFORMAT_DEPTH_STENCIL:        return DXGI_FORMAT_R24G8_TYPELESS;
+        case SG_PIXELFORMAT_DEPTH24PLUS:          return DXGI_FORMAT_R24G8_TYPELESS;
+        case SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8: return DXGI_FORMAT_R24G8_TYPELESS;
+        case SG_PIXELFORMAT_DEPTH32F:             return DXGI_FORMAT_R32_TYPELESS;
+        case SG_PIXELFORMAT_DEPTH32F_STENCIL8:    return DXGI_FORMAT_R32G8X24_TYPELESS;
+        case SG_PIXELFORMAT_BC1_RGBA:             return DXGI_FORMAT_BC1_UNORM;
+        case SG_PIXELFORMAT_BC2_RGBA:             return DXGI_FORMAT_BC2_UNORM;
+        case SG_PIXELFORMAT_BC3_RGBA:             return DXGI_FORMAT_BC3_UNORM;
+        case SG_PIXELFORMAT_BC3_SRGBA:            return DXGI_FORMAT_BC3_UNORM_SRGB;
+        case SG_PIXELFORMAT_BC4_R:                return DXGI_FORMAT_BC4_UNORM;
+        case SG_PIXELFORMAT_BC4_RSN:              return DXGI_FORMAT_BC4_SNORM;
+        case SG_PIXELFORMAT_BC5_RG:               return DXGI_FORMAT_BC5_UNORM;
+        case SG_PIXELFORMAT_BC5_RGSN:             return DXGI_FORMAT_BC5_SNORM;
+        case SG_PIXELFORMAT_BC6H_RGBF:            return DXGI_FORMAT_BC6H_SF16;
+        case SG_PIXELFORMAT_BC6H_RGBUF:           return DXGI_FORMAT_BC6H_UF16;
+        case SG_PIXELFORMAT_BC7_RGBA:             return DXGI_FORMAT_BC7_UNORM;
+        case SG_PIXELFORMAT_BC7_SRGBA:            return DXGI_FORMAT_BC7_UNORM_SRGB;
+        default:                                  return DXGI_FORMAT_UNKNOWN;
     };
 }
 
 _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_srv_pixel_format(sg_pixel_format fmt) {
-    if (fmt == SG_PIXELFORMAT_DEPTH) {
-        return DXGI_FORMAT_R32_FLOAT;
-    } else if (fmt == SG_PIXELFORMAT_DEPTH_STENCIL) {
-        return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
-    } else {
-        return _sg_d3d11_texture_pixel_format(fmt);
+    switch (fmt) {
+        case SG_PIXELFORMAT_DEPTH:
+        case SG_PIXELFORMAT_DEPTH32F:
+            return DXGI_FORMAT_R32_FLOAT;
+        case SG_PIXELFORMAT_DEPTH_STENCIL:
+        case SG_PIXELFORMAT_DEPTH24PLUS:
+        case SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8:
+            return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+        case SG_PIXELFORMAT_DEPTH32F_STENCIL8:
+            return DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
+        default:
+            return _sg_d3d11_texture_pixel_format(fmt);
     }
 }
 
 _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_dsv_pixel_format(sg_pixel_format fmt) {
-    if (fmt == SG_PIXELFORMAT_DEPTH) {
-        return DXGI_FORMAT_D32_FLOAT;
-    } else if (fmt == SG_PIXELFORMAT_DEPTH_STENCIL) {
-        return DXGI_FORMAT_D24_UNORM_S8_UINT;
-    } else {
-        return _sg_d3d11_texture_pixel_format(fmt);
+    switch (fmt) {
+        case SG_PIXELFORMAT_DEPTH:
+        case SG_PIXELFORMAT_DEPTH32F:
+            return DXGI_FORMAT_D32_FLOAT;
+        case SG_PIXELFORMAT_DEPTH_STENCIL:
+        case SG_PIXELFORMAT_DEPTH24PLUS:
+        case SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8:
+            return DXGI_FORMAT_D24_UNORM_S8_UINT;
+        case SG_PIXELFORMAT_DEPTH32F_STENCIL8:
+            return DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+        default:
+            return _sg_d3d11_texture_pixel_format(fmt);
     }
 }
 
 _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_rtv_uav_pixel_format(sg_pixel_format fmt) {
-    if (fmt == SG_PIXELFORMAT_DEPTH) {
-        return DXGI_FORMAT_R32_FLOAT;
-    } else if (fmt == SG_PIXELFORMAT_DEPTH_STENCIL) {
-        return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
-    } else {
-        return _sg_d3d11_texture_pixel_format(fmt);
+    switch (fmt) {
+        case SG_PIXELFORMAT_DEPTH:
+        case SG_PIXELFORMAT_DEPTH32F:
+            return DXGI_FORMAT_R32_FLOAT;
+        case SG_PIXELFORMAT_DEPTH_STENCIL:
+        case SG_PIXELFORMAT_DEPTH24PLUS:
+        case SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8:
+            return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+        case SG_PIXELFORMAT_DEPTH32F_STENCIL8:
+            return DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
+        default:
+            return _sg_d3d11_texture_pixel_format(fmt);
     }
 }
 
@@ -13656,6 +13731,12 @@ _SOKOL_PRIVATE MTLPixelFormat _sg_mtl_pixel_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RGBA32F:                return MTLPixelFormatRGBA32Float;
         case SG_PIXELFORMAT_DEPTH:                  return MTLPixelFormatDepth32Float;
         case SG_PIXELFORMAT_DEPTH_STENCIL:          return MTLPixelFormatDepth32Float_Stencil8;
+        #if !defined(_SG_TARGET_IOS)
+        case SG_PIXELFORMAT_DEPTH24PLUS:            return MTLPixelFormatDepth24Unorm_Stencil8;
+        case SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8:   return MTLPixelFormatDepth24Unorm_Stencil8;
+        #endif
+        case SG_PIXELFORMAT_DEPTH32F:               return MTLPixelFormatDepth32Float;
+        case SG_PIXELFORMAT_DEPTH32F_STENCIL8:      return MTLPixelFormatDepth32Float_Stencil8;
         #if defined(_SG_TARGET_MACOS)
         case SG_PIXELFORMAT_BC1_RGBA:               return MTLPixelFormatBC1_RGBA;
         case SG_PIXELFORMAT_BC2_RGBA:               return MTLPixelFormatBC2_RGBA;
@@ -14123,6 +14204,10 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     #endif
     _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH]);
     _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL]);
+    _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH24PLUS]);
+    _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8]);
+    _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH32F]);
+    _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH32F_STENCIL8]);
     #if defined(_SG_TARGET_MACOS)
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC1_RGBA]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC2_RGBA]);
@@ -14722,7 +14807,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, co
         rp_desc.alphaToOneEnabled = NO;
         rp_desc.rasterizationEnabled = YES;
         rp_desc.depthAttachmentPixelFormat = _sg_mtl_pixel_format(desc->depth.pixel_format);
-        if (desc->depth.pixel_format == SG_PIXELFORMAT_DEPTH_STENCIL) {
+        if (_sg_is_depth_stencil_format(desc->depth.pixel_format)) {
             rp_desc.stencilAttachmentPixelFormat = _sg_mtl_pixel_format(desc->depth.pixel_format);
         }
         for (NSUInteger i = 0; i < (NSUInteger)desc->color_count; i++) {
@@ -15743,67 +15828,71 @@ _SOKOL_PRIVATE WGPUCullMode _sg_wgpu_cullmode(sg_cull_mode cm) {
 
 _SOKOL_PRIVATE WGPUTextureFormat _sg_wgpu_textureformat(sg_pixel_format p) {
     switch (p) {
-        case SG_PIXELFORMAT_NONE:           return WGPUTextureFormat_Undefined;
-        case SG_PIXELFORMAT_R8:             return WGPUTextureFormat_R8Unorm;
-        case SG_PIXELFORMAT_R8SN:           return WGPUTextureFormat_R8Snorm;
-        case SG_PIXELFORMAT_R8UI:           return WGPUTextureFormat_R8Uint;
-        case SG_PIXELFORMAT_R8SI:           return WGPUTextureFormat_R8Sint;
-        case SG_PIXELFORMAT_R16UI:          return WGPUTextureFormat_R16Uint;
-        case SG_PIXELFORMAT_R16SI:          return WGPUTextureFormat_R16Sint;
-        case SG_PIXELFORMAT_R16F:           return WGPUTextureFormat_R16Float;
-        case SG_PIXELFORMAT_RG8:            return WGPUTextureFormat_RG8Unorm;
-        case SG_PIXELFORMAT_RG8SN:          return WGPUTextureFormat_RG8Snorm;
-        case SG_PIXELFORMAT_RG8UI:          return WGPUTextureFormat_RG8Uint;
-        case SG_PIXELFORMAT_RG8SI:          return WGPUTextureFormat_RG8Sint;
-        case SG_PIXELFORMAT_R32UI:          return WGPUTextureFormat_R32Uint;
-        case SG_PIXELFORMAT_R32SI:          return WGPUTextureFormat_R32Sint;
-        case SG_PIXELFORMAT_R32F:           return WGPUTextureFormat_R32Float;
-        case SG_PIXELFORMAT_RG16UI:         return WGPUTextureFormat_RG16Uint;
-        case SG_PIXELFORMAT_RG16SI:         return WGPUTextureFormat_RG16Sint;
-        case SG_PIXELFORMAT_RG16F:          return WGPUTextureFormat_RG16Float;
-        case SG_PIXELFORMAT_RGBA8:          return WGPUTextureFormat_RGBA8Unorm;
-        case SG_PIXELFORMAT_SRGB8A8:        return WGPUTextureFormat_RGBA8UnormSrgb;
-        case SG_PIXELFORMAT_RGBA8SN:        return WGPUTextureFormat_RGBA8Snorm;
-        case SG_PIXELFORMAT_RGBA8UI:        return WGPUTextureFormat_RGBA8Uint;
-        case SG_PIXELFORMAT_RGBA8SI:        return WGPUTextureFormat_RGBA8Sint;
-        case SG_PIXELFORMAT_BGRA8:          return WGPUTextureFormat_BGRA8Unorm;
-        case SG_PIXELFORMAT_RGB10A2:        return WGPUTextureFormat_RGB10A2Unorm;
-        case SG_PIXELFORMAT_RG11B10F:       return WGPUTextureFormat_RG11B10Ufloat;
-        case SG_PIXELFORMAT_RG32UI:         return WGPUTextureFormat_RG32Uint;
-        case SG_PIXELFORMAT_RG32SI:         return WGPUTextureFormat_RG32Sint;
-        case SG_PIXELFORMAT_RG32F:          return WGPUTextureFormat_RG32Float;
-        case SG_PIXELFORMAT_RGBA16UI:       return WGPUTextureFormat_RGBA16Uint;
-        case SG_PIXELFORMAT_RGBA16SI:       return WGPUTextureFormat_RGBA16Sint;
-        case SG_PIXELFORMAT_RGBA16F:        return WGPUTextureFormat_RGBA16Float;
-        case SG_PIXELFORMAT_RGBA32UI:       return WGPUTextureFormat_RGBA32Uint;
-        case SG_PIXELFORMAT_RGBA32SI:       return WGPUTextureFormat_RGBA32Sint;
-        case SG_PIXELFORMAT_RGBA32F:        return WGPUTextureFormat_RGBA32Float;
-        case SG_PIXELFORMAT_DEPTH:          return WGPUTextureFormat_Depth32Float;
-        case SG_PIXELFORMAT_DEPTH_STENCIL:  return WGPUTextureFormat_Depth32FloatStencil8;
-        case SG_PIXELFORMAT_BC1_RGBA:       return WGPUTextureFormat_BC1RGBAUnorm;
-        case SG_PIXELFORMAT_BC2_RGBA:       return WGPUTextureFormat_BC2RGBAUnorm;
-        case SG_PIXELFORMAT_BC3_RGBA:       return WGPUTextureFormat_BC3RGBAUnorm;
-        case SG_PIXELFORMAT_BC3_SRGBA:      return WGPUTextureFormat_BC3RGBAUnormSrgb;
-        case SG_PIXELFORMAT_BC4_R:          return WGPUTextureFormat_BC4RUnorm;
-        case SG_PIXELFORMAT_BC4_RSN:        return WGPUTextureFormat_BC4RSnorm;
-        case SG_PIXELFORMAT_BC5_RG:         return WGPUTextureFormat_BC5RGUnorm;
-        case SG_PIXELFORMAT_BC5_RGSN:       return WGPUTextureFormat_BC5RGSnorm;
-        case SG_PIXELFORMAT_BC6H_RGBF:      return WGPUTextureFormat_BC6HRGBFloat;
-        case SG_PIXELFORMAT_BC6H_RGBUF:     return WGPUTextureFormat_BC6HRGBUfloat;
-        case SG_PIXELFORMAT_BC7_RGBA:       return WGPUTextureFormat_BC7RGBAUnorm;
-        case SG_PIXELFORMAT_BC7_SRGBA:      return WGPUTextureFormat_BC7RGBAUnormSrgb;
-        case SG_PIXELFORMAT_ETC2_RGB8:      return WGPUTextureFormat_ETC2RGB8Unorm;
-        case SG_PIXELFORMAT_ETC2_RGB8A1:    return WGPUTextureFormat_ETC2RGB8A1Unorm;
-        case SG_PIXELFORMAT_ETC2_RGBA8:     return WGPUTextureFormat_ETC2RGBA8Unorm;
-        case SG_PIXELFORMAT_ETC2_SRGB8:     return WGPUTextureFormat_ETC2RGB8UnormSrgb;
-        case SG_PIXELFORMAT_ETC2_SRGB8A8:   return WGPUTextureFormat_ETC2RGBA8UnormSrgb;
-        case SG_PIXELFORMAT_EAC_R11:        return WGPUTextureFormat_EACR11Unorm;
-        case SG_PIXELFORMAT_EAC_R11SN:      return WGPUTextureFormat_EACR11Snorm;
-        case SG_PIXELFORMAT_EAC_RG11:       return WGPUTextureFormat_EACRG11Unorm;
-        case SG_PIXELFORMAT_EAC_RG11SN:     return WGPUTextureFormat_EACRG11Snorm;
-        case SG_PIXELFORMAT_RGB9E5:         return WGPUTextureFormat_RGB9E5Ufloat;
-        case SG_PIXELFORMAT_ASTC_4x4_RGBA:  return WGPUTextureFormat_ASTC4x4Unorm;
-        case SG_PIXELFORMAT_ASTC_4x4_SRGBA: return WGPUTextureFormat_ASTC4x4UnormSrgb;
+        case SG_PIXELFORMAT_NONE:                 return WGPUTextureFormat_Undefined;
+        case SG_PIXELFORMAT_R8:                   return WGPUTextureFormat_R8Unorm;
+        case SG_PIXELFORMAT_R8SN:                 return WGPUTextureFormat_R8Snorm;
+        case SG_PIXELFORMAT_R8UI:                 return WGPUTextureFormat_R8Uint;
+        case SG_PIXELFORMAT_R8SI:                 return WGPUTextureFormat_R8Sint;
+        case SG_PIXELFORMAT_R16UI:                return WGPUTextureFormat_R16Uint;
+        case SG_PIXELFORMAT_R16SI:                return WGPUTextureFormat_R16Sint;
+        case SG_PIXELFORMAT_R16F:                 return WGPUTextureFormat_R16Float;
+        case SG_PIXELFORMAT_RG8:                  return WGPUTextureFormat_RG8Unorm;
+        case SG_PIXELFORMAT_RG8SN:                return WGPUTextureFormat_RG8Snorm;
+        case SG_PIXELFORMAT_RG8UI:                return WGPUTextureFormat_RG8Uint;
+        case SG_PIXELFORMAT_RG8SI:                return WGPUTextureFormat_RG8Sint;
+        case SG_PIXELFORMAT_R32UI:                return WGPUTextureFormat_R32Uint;
+        case SG_PIXELFORMAT_R32SI:                return WGPUTextureFormat_R32Sint;
+        case SG_PIXELFORMAT_R32F:                 return WGPUTextureFormat_R32Float;
+        case SG_PIXELFORMAT_RG16UI:               return WGPUTextureFormat_RG16Uint;
+        case SG_PIXELFORMAT_RG16SI:               return WGPUTextureFormat_RG16Sint;
+        case SG_PIXELFORMAT_RG16F:                return WGPUTextureFormat_RG16Float;
+        case SG_PIXELFORMAT_RGBA8:                return WGPUTextureFormat_RGBA8Unorm;
+        case SG_PIXELFORMAT_SRGB8A8:              return WGPUTextureFormat_RGBA8UnormSrgb;
+        case SG_PIXELFORMAT_RGBA8SN:              return WGPUTextureFormat_RGBA8Snorm;
+        case SG_PIXELFORMAT_RGBA8UI:              return WGPUTextureFormat_RGBA8Uint;
+        case SG_PIXELFORMAT_RGBA8SI:              return WGPUTextureFormat_RGBA8Sint;
+        case SG_PIXELFORMAT_BGRA8:                return WGPUTextureFormat_BGRA8Unorm;
+        case SG_PIXELFORMAT_RGB10A2:              return WGPUTextureFormat_RGB10A2Unorm;
+        case SG_PIXELFORMAT_RG11B10F:             return WGPUTextureFormat_RG11B10Ufloat;
+        case SG_PIXELFORMAT_RG32UI:               return WGPUTextureFormat_RG32Uint;
+        case SG_PIXELFORMAT_RG32SI:               return WGPUTextureFormat_RG32Sint;
+        case SG_PIXELFORMAT_RG32F:                return WGPUTextureFormat_RG32Float;
+        case SG_PIXELFORMAT_RGBA16UI:             return WGPUTextureFormat_RGBA16Uint;
+        case SG_PIXELFORMAT_RGBA16SI:             return WGPUTextureFormat_RGBA16Sint;
+        case SG_PIXELFORMAT_RGBA16F:              return WGPUTextureFormat_RGBA16Float;
+        case SG_PIXELFORMAT_RGBA32UI:             return WGPUTextureFormat_RGBA32Uint;
+        case SG_PIXELFORMAT_RGBA32SI:             return WGPUTextureFormat_RGBA32Sint;
+        case SG_PIXELFORMAT_RGBA32F:              return WGPUTextureFormat_RGBA32Float;
+        case SG_PIXELFORMAT_DEPTH:                return WGPUTextureFormat_Depth32Float;
+        case SG_PIXELFORMAT_DEPTH_STENCIL:        return WGPUTextureFormat_Depth32FloatStencil8;
+        case SG_PIXELFORMAT_DEPTH24PLUS:          return WGPUTextureFormat_Depth24Plus;
+        case SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8: return WGPUTextureFormat_Depth24PlusStencil8;
+        case SG_PIXELFORMAT_DEPTH32F:             return WGPUTextureFormat_Depth32Float;
+        case SG_PIXELFORMAT_DEPTH32F_STENCIL8:    return WGPUTextureFormat_Depth32FloatStencil8;
+        case SG_PIXELFORMAT_BC1_RGBA:             return WGPUTextureFormat_BC1RGBAUnorm;
+        case SG_PIXELFORMAT_BC2_RGBA:             return WGPUTextureFormat_BC2RGBAUnorm;
+        case SG_PIXELFORMAT_BC3_RGBA:             return WGPUTextureFormat_BC3RGBAUnorm;
+        case SG_PIXELFORMAT_BC3_SRGBA:            return WGPUTextureFormat_BC3RGBAUnormSrgb;
+        case SG_PIXELFORMAT_BC4_R:                return WGPUTextureFormat_BC4RUnorm;
+        case SG_PIXELFORMAT_BC4_RSN:              return WGPUTextureFormat_BC4RSnorm;
+        case SG_PIXELFORMAT_BC5_RG:               return WGPUTextureFormat_BC5RGUnorm;
+        case SG_PIXELFORMAT_BC5_RGSN:             return WGPUTextureFormat_BC5RGSnorm;
+        case SG_PIXELFORMAT_BC6H_RGBF:            return WGPUTextureFormat_BC6HRGBFloat;
+        case SG_PIXELFORMAT_BC6H_RGBUF:           return WGPUTextureFormat_BC6HRGBUfloat;
+        case SG_PIXELFORMAT_BC7_RGBA:             return WGPUTextureFormat_BC7RGBAUnorm;
+        case SG_PIXELFORMAT_BC7_SRGBA:            return WGPUTextureFormat_BC7RGBAUnormSrgb;
+        case SG_PIXELFORMAT_ETC2_RGB8:            return WGPUTextureFormat_ETC2RGB8Unorm;
+        case SG_PIXELFORMAT_ETC2_RGB8A1:          return WGPUTextureFormat_ETC2RGB8A1Unorm;
+        case SG_PIXELFORMAT_ETC2_RGBA8:           return WGPUTextureFormat_ETC2RGBA8Unorm;
+        case SG_PIXELFORMAT_ETC2_SRGB8:           return WGPUTextureFormat_ETC2RGB8UnormSrgb;
+        case SG_PIXELFORMAT_ETC2_SRGB8A8:         return WGPUTextureFormat_ETC2RGBA8UnormSrgb;
+        case SG_PIXELFORMAT_EAC_R11:              return WGPUTextureFormat_EACR11Unorm;
+        case SG_PIXELFORMAT_EAC_R11SN:            return WGPUTextureFormat_EACR11Snorm;
+        case SG_PIXELFORMAT_EAC_RG11:             return WGPUTextureFormat_EACRG11Unorm;
+        case SG_PIXELFORMAT_EAC_RG11SN:           return WGPUTextureFormat_EACRG11Snorm;
+        case SG_PIXELFORMAT_RGB9E5:               return WGPUTextureFormat_RGB9E5Ufloat;
+        case SG_PIXELFORMAT_ASTC_4x4_RGBA:        return WGPUTextureFormat_ASTC4x4Unorm;
+        case SG_PIXELFORMAT_ASTC_4x4_SRGBA:       return WGPUTextureFormat_ASTC4x4UnormSrgb;
         // NOT SUPPORTED
         case SG_PIXELFORMAT_R16:
         case SG_PIXELFORMAT_R16SN:
@@ -15985,6 +16074,10 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
 
     _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH]);
     _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL]);
+    _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH24PLUS]);
+    _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8]);
+    _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH32F]);
+    _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH32F_STENCIL8]);
 
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGB9E5]);
 
