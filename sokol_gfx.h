@@ -21863,9 +21863,9 @@ SOKOL_API_IMPL sg_pipeline_desc sg_query_pipeline_defaults(const sg_pipeline_des
     return _sg_pipeline_desc_defaults(desc);
 }
 
-SOKOL_API_IMPL sg_attachments_desc sg_query_attachments_defaults(const sg_attachments_desc* desc) {
+SOKOL_API_IMPL sg_view_desc sg_query_view_defaults(const sg_view_desc* desc) {
     SOKOL_ASSERT(_sg.valid && desc);
-    return _sg_attachments_desc_defaults(desc);
+    return _sg_view_desc_defaults(desc);
 }
 
 SOKOL_API_IMPL const void* sg_d3d11_device(void) {
@@ -21969,20 +21969,14 @@ SOKOL_API_IMPL sg_d3d11_pipeline_info sg_d3d11_query_pipeline_info(sg_pipeline p
     return res;
 }
 
-SOKOL_API_IMPL sg_d3d11_attachments_info sg_d3d11_query_attachments_info(sg_attachments atts_id) {
+SOKOL_API_IMPL sg_d3d11_view_info sg_d3d11_query_attachments_info(sg_view view_id) {
     SOKOL_ASSERT(_sg.valid);
-    sg_d3d11_attachments_info res;
+    sg_d3d11_view_info res;
     _sg_clear(&res, sizeof(res));
     #if defined(SOKOL_D3D11)
-        const _sg_attachments_t* atts = _sg_lookup_attachments(atts_id.id);
-        if (atts) {
-            for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-                res.color_rtv[i] = (const void*) atts->d3d11.colors[i].view.rtv;
-            }
-            res.dsv = (const void*) atts->d3d11.depth_stencil.view.dsv;
-        }
+        #error "FIXME FIXME FIXME"
     #else
-        _SOKOL_UNUSED(atts_id);
+        _SOKOL_UNUSED(view_id);
     #endif
     return res;
 }
@@ -22249,21 +22243,14 @@ SOKOL_API_IMPL sg_wgpu_pipeline_info sg_wgpu_query_pipeline_info(sg_pipeline pip
     return res;
 }
 
-SOKOL_API_IMPL sg_wgpu_attachments_info sg_wgpu_query_attachments_info(sg_attachments atts_id) {
+SOKOL_API_IMPL sg_wgpu_view_info sg_wgpu_query_view_info(sg_view view_id) {
     SOKOL_ASSERT(_sg.valid);
-    sg_wgpu_attachments_info res;
+    sg_wgpu_view_info res;
     _sg_clear(&res, sizeof(res));
     #if defined(SOKOL_WGPU)
-        const _sg_attachments_t* atts = _sg_lookup_attachments(atts_id.id);
-        if (atts) {
-            for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-                res.color_view[i] = (const void*) atts->wgpu.colors[i].view;
-                res.resolve_view[i] = (const void*) atts->wgpu.resolves[i].view;
-            }
-            res.ds_view = (const void*) atts->wgpu.depth_stencil.view;
-        }
+        #error "FIXME FIXME FIXME"
     #else
-        _SOKOL_UNUSED(atts_id);
+        _SOKOL_UNUSED(view_id);
     #endif
     return res;
 }
@@ -22336,20 +22323,14 @@ SOKOL_API_IMPL sg_gl_shader_info sg_gl_query_shader_info(sg_shader shd_id) {
     return res;
 }
 
-SOKOL_API_IMPL sg_gl_attachments_info sg_gl_query_attachments_info(sg_attachments atts_id) {
+SOKOL_API_IMPL sg_gl_view_info sg_gl_query_view_info(sg_view view_id) {
     SOKOL_ASSERT(_sg.valid);
-    sg_gl_attachments_info res;
+    sg_gl_view_info res;
     _sg_clear(&res, sizeof(res));
     #if defined(_SOKOL_ANY_GL)
-        const _sg_attachments_t* atts = _sg_lookup_attachments(atts_id.id);
-        if (atts) {
-            res.framebuffer = atts->gl.fb;
-            for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-                res.msaa_resolve_framebuffer[i] = atts->gl.msaa_resolve_framebuffer[i];
-            }
-        }
+        #error "FIXME FIXME FIXME"
     #else
-        _SOKOL_UNUSED(atts_id);
+        _SOKOL_UNUSED(view_id);
     #endif
     return res;
 }
