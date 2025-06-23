@@ -15356,15 +15356,15 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
             }
             const NSUInteger mtl_slot = _sg_mtl_vertexbuffer_bindslot(i);
             SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_BUFFER_BINDINGS);
-            const _sg_buffer_ref_t vb_ref = vb_view->cmn.buf.ref;
+            const _sg_buffer_ref_t* vb_ref = &vb_view->cmn.buf.ref;
             const int vb_offset = (NSUInteger)vb_view->cmn.buf.offset;
-            const bool ref_eql = _sg_sref_sref_eql(&_sg.mtl.state_cache.cur_vsbufs[mtl_slot], &vb_ref.sref);
+            const bool ref_eql = _sg_sref_sref_eql(&_sg.mtl.state_cache.cur_vsbufs[mtl_slot], &vb_ref->sref);
             if (!ref_eql || (_sg.mtl.state_cache.cur_vs_buffer_offsets[mtl_slot] != vb_offset)) {
                 _sg.mtl.state_cache.cur_vs_buffer_offsets[mtl_slot] = vb_offset;
                 if (!ref_eql) {
                     // vertex buffer has changed
-                    _sg.mtl.state_cache.cur_vsbufs[mtl_slot] = vb_ref.sref;
-                    const _sg_buffer_t* vb = _sg_buffer_ref_ptr(&vb_ref);
+                    _sg.mtl.state_cache.cur_vsbufs[mtl_slot] = vb_ref->sref;
+                    const _sg_buffer_t* vb = _sg_buffer_ref_ptr(vb_ref);
                     SOKOL_ASSERT(vb->mtl.buf[vb->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
                     [_sg.mtl.render_cmd_encoder setVertexBuffer:_sg_mtl_id(vb->mtl.buf[vb->cmn.active_slot])
                         offset:(NSUInteger)vb_offset
@@ -15378,7 +15378,7 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         }
     }
 
-    // apply image bindings
+    // apply texture bindings
     for (size_t i = 0; i < SG_MAX_TEXTURE_BINDSLOTS; i++) {
         const _sg_view_t* img_view = bnd->tex_views[i];
         if (img_view == 0) {
@@ -15388,27 +15388,27 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         SOKOL_ASSERT((stage == SG_SHADERSTAGE_VERTEX) || (stage == SG_SHADERSTAGE_FRAGMENT) || (stage == SG_SHADERSTAGE_COMPUTE));
         const NSUInteger mtl_slot = shd->mtl.tex_texture_n[i];
         SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS);
-        const _sg_image_ref_t img_ref = img_view->cmn.img.ref;
-        const _sg_image_t* img = _sg_image_ref_ptr(&img_ref);
+        const _sg_image_ref_t* img_ref = &img_view->cmn.img.ref;
+        const _sg_image_t* img = _sg_image_ref_ptr(img_ref);
         SOKOL_ASSERT(img->mtl.tex[img->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
         if (stage == SG_SHADERSTAGE_VERTEX) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (!_sg_sref_sref_eql(&_sg.mtl.state_cache.cur_vstexs[mtl_slot], &img_ref.sref)) {
-                _sg.mtl.state_cache.cur_vstexs[mtl_slot] = img_ref.sref;
+            if (!_sg_sref_sref_eql(&_sg.mtl.state_cache.cur_vstexs[mtl_slot], &img_ref->sref)) {
+                _sg.mtl.state_cache.cur_vstexs[mtl_slot] = img_ref->sref;
                 [_sg.mtl.render_cmd_encoder setVertexTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_vertex_texture, 1);
             }
         } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (!_sg_sref_sref_eql(&_sg.mtl.state_cache.cur_fstexs[mtl_slot], &img_ref.sref)) {
-                _sg.mtl.state_cache.cur_fstexs[mtl_slot] = img_ref.sref;
+            if (!_sg_sref_sref_eql(&_sg.mtl.state_cache.cur_fstexs[mtl_slot], &img_ref->sref)) {
+                _sg.mtl.state_cache.cur_fstexs[mtl_slot] = img_ref->sref;
                 [_sg.mtl.render_cmd_encoder setFragmentTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_fragment_texture, 1);
             }
         } else if (stage == SG_SHADERSTAGE_COMPUTE) {
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
-            if (!_sg_sref_sref_eql(&_sg.mtl.state_cache.cur_cstexs[mtl_slot], &img_ref.sref)) {
-                _sg.mtl.state_cache.cur_cstexs[mtl_slot] = img_ref.sref;
+            if (!_sg_sref_sref_eql(&_sg.mtl.state_cache.cur_cstexs[mtl_slot], &img_ref->sref)) {
+                _sg.mtl.state_cache.cur_cstexs[mtl_slot] = img_ref->sref;
                 [_sg.mtl.compute_cmd_encoder setTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_compute_texture, 1);
             }
@@ -15460,29 +15460,29 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         SOKOL_ASSERT((stage == SG_SHADERSTAGE_VERTEX) || (stage == SG_SHADERSTAGE_FRAGMENT) || (stage == SG_SHADERSTAGE_COMPUTE));
         const NSUInteger mtl_slot = shd->mtl.sbuf_buffer_n[i];
         SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS);
-        const _sg_buffer_ref_t sbuf_ref = sbuf_view->cmn.buf.ref;
-        const _sg_buffer_t* sbuf = _sg_buffer_ref_ptr(&sbuf_ref);
+        const _sg_buffer_ref_t* sbuf_ref = &sbuf_view->cmn.buf.ref;
+        const _sg_buffer_t* sbuf = _sg_buffer_ref_ptr(sbuf_ref);
         SOKOL_ASSERT(sbuf->mtl.buf[sbuf->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
         // FIXME: same buffer offset caching as with vertex buffers!
         const NSUInteger sbuf_offset = (NSUInteger)sbuf_view->cmn.buf.offset;
         if (stage == SG_SHADERSTAGE_VERTEX) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (!_sg_sref_sref_eql(&_sg.mtl.state_cache.cur_vsbufs[mtl_slot], &sbuf_ref.sref)) {
-                _sg.mtl.state_cache.cur_vsbufs[mtl_slot] = sbuf_ref.sref;
+            if (!_sg_sref_sref_eql(&_sg.mtl.state_cache.cur_vsbufs[mtl_slot], &sbuf_ref->sref)) {
+                _sg.mtl.state_cache.cur_vsbufs[mtl_slot] = sbuf_ref->sref;
                 [_sg.mtl.render_cmd_encoder setVertexBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:sbuf_offset atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_vertex_buffer, 1);
             }
         } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (!_sg_sref_sref_eql(&_sg.mtl.state_cache.cur_fsbufs[mtl_slot], &sbuf_ref.sref)) {
-                _sg.mtl.state_cache.cur_fsbufs[mtl_slot] = sbuf_ref.sref;
+            if (!_sg_sref_sref_eql(&_sg.mtl.state_cache.cur_fsbufs[mtl_slot], &sbuf_ref->sref)) {
+                _sg.mtl.state_cache.cur_fsbufs[mtl_slot] = sbuf_ref->sref;
                 [_sg.mtl.render_cmd_encoder setFragmentBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:sbuf_offset atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_fragment_buffer, 1);
             }
         } else if (stage == SG_SHADERSTAGE_COMPUTE) {
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
-            if (!_sg_sref_sref_eql(&_sg.mtl.state_cache.cur_csbufs[mtl_slot], &sbuf_ref.sref)) {
-                _sg.mtl.state_cache.cur_csbufs[mtl_slot] = sbuf_ref.sref;
+            if (!_sg_sref_sref_eql(&_sg.mtl.state_cache.cur_csbufs[mtl_slot], &sbuf_ref->sref)) {
+                _sg.mtl.state_cache.cur_csbufs[mtl_slot] = sbuf_ref->sref;
                 [_sg.mtl.compute_cmd_encoder setBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:sbuf_offset atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_compute_buffer, 1);
             }
@@ -19186,6 +19186,7 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
             #endif
         } else {
             // this is an 'offscreen pass'
+            SOKOL_ASSERT(false);
             /*
                 FIXME FIXME FIXME
             const _sg_attachments_t* atts = _sg_lookup_attachments(pass->attachments.id);
@@ -19533,9 +19534,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                     const _sg_sampler_t* smp = _sg_lookup_sampler(bindings->samplers[i].id);
                     _SG_VALIDATE(smp != 0, VALIDATE_ABND_SAMPLER_ALIVE);
                     if (smp) {
-                        // NOTE: for samplers we're specifically checking that they are in valid state
-                        // (technically an invalid sample skips rendering, but an invalid sampler is
-                        // most likely an oversight)
+                        // NOTE: for invalid samplers don't skip rendering, but are actually an error
                         _SG_VALIDATE(smp->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ABND_SAMPLER_VALID);
                         if (shd->cmn.samplers[i].sampler_type == SG_SAMPLERTYPE_COMPARISON) {
                             _SG_VALIDATE(smp->cmn.compare != SG_COMPAREFUNC_NEVER, VALIDATE_ABND_UNEXPECTED_SAMPLER_COMPARE_NEVER);
@@ -21193,12 +21192,12 @@ SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
 SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(bindings);
-    SOKOL_ASSERT((bindings->_start_canary == 0) && (bindings->_end_canary==0));
     _sg_stats_add(num_apply_bindings, 1);
     _sg.applied_bindings_and_uniforms |= (1 << SG_MAX_UNIFORMBLOCK_BINDSLOTS);
     if (!_sg_validate_apply_bindings(bindings)) {
         _sg.next_draw_valid = false;
     }
+    SOKOL_ASSERT((bindings->_start_canary == 0) && (bindings->_end_canary==0));
     if (!_sg_pipeline_ref_alive(&_sg.cur_pip)) {
         _sg.next_draw_valid = false;
     }
@@ -21218,24 +21217,14 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
             if (bnd.pip->cmn.vertex_buffer_layout_active[i]) {
                 SOKOL_ASSERT(bindings->vertex_buffers[i].id != SG_INVALID_ID);
                 bnd.vb_views[i] = _sg_lookup_view(bindings->vertex_buffers[i].id);
-                if (bnd.vb_views[i]) {
-                    _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == bnd.vb_views[i]->slot.state);
-                    // FIXME: this should go into the view's VALID state?
-                    _sg.next_draw_valid &= !_sg_buffer_ref_ptr(&bnd.vb_views[i]->cmn.buf.ref)->cmn.append_overflow;
-                } else {
-                    _sg.next_draw_valid = false;
-                }
+                SOKOL_ASSERT(bnd.vb_views[i]);
+                _sg.next_draw_valid &= _sg_buffer_ref_valid(&bnd.vb_views[i]->cmn.buf.ref);
             }
         }
         if (bindings->index_buffer.id) {
             bnd.ib_view = _sg_lookup_view(bindings->index_buffer.id);
-            if (bnd.ib_view) {
-                _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == bnd.ib_view->slot.state);
-                // FIXME: this should go into the view's VALID state?
-                _sg.next_draw_valid &= !_sg_buffer_ref_ptr(&bnd.ib_view->cmn.buf.ref)->cmn.append_overflow;
-            } else {
-                _sg.next_draw_valid = false;
-            }
+            SOKOL_ASSERT(bnd.ib_view);
+            _sg.next_draw_valid &= _sg_buffer_ref_valid(&bnd.ib_view->cmn.buf.ref);
         }
     }
 
@@ -21243,11 +21232,8 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
         if (shd->cmn.textures[i].stage != SG_SHADERSTAGE_NONE) {
             SOKOL_ASSERT(bindings->textures[i].id != SG_INVALID_ID);
             bnd.tex_views[i] = _sg_lookup_view(bindings->textures[i].id);
-            if (bnd.tex_views[i]) {
-                _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == bnd.tex_views[i]->slot.state);
-            } else {
-                _sg.next_draw_valid = false;
-            }
+            SOKOL_ASSERT(bnd.tex_views[i]);
+            _sg.next_draw_valid &= _sg_image_ref_valid(&bnd.tex_views[i]->cmn.img.ref);
         }
     }
 
@@ -21255,11 +21241,7 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
         if (shd->cmn.samplers[i].stage != SG_SHADERSTAGE_NONE) {
             SOKOL_ASSERT(bindings->samplers[i].id != SG_INVALID_ID);
             bnd.smps[i] = _sg_lookup_sampler(bindings->samplers[i].id);
-            if (bnd.smps[i]) {
-                _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == bnd.smps[i]->slot.state);
-            } else {
-                _sg.next_draw_valid = false;
-            }
+            SOKOL_ASSERT(bnd.smps[i]);
         }
     }
 
@@ -21267,13 +21249,10 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
         if (shd->cmn.storage_buffers[i].stage != SG_SHADERSTAGE_NONE) {
             SOKOL_ASSERT(bindings->storage_buffers[i].id != SG_INVALID_ID);
             bnd.sbuf_views[i] = _sg_lookup_view(bindings->storage_buffers[i].id);
-            if (bnd.sbuf_views[i]) {
-                _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == bnd.sbuf_views[i]->slot.state);
-                if (_sg.cur_pass.is_compute) {
-                    _sg_compute_pass_track_storage_buffer(&bnd.sbuf_views[i]->cmn.buf.ref, shd->cmn.storage_buffers[i].readonly);
-                }
-            } else {
-                _sg.next_draw_valid = false;
+            SOKOL_ASSERT(bnd.sbuf_views[i]);
+            _sg.next_draw_valid &= _sg_buffer_ref_valid(&bnd.sbuf_views[i]->cmn.buf.ref);
+            if (_sg.cur_pass.is_compute) {
+                _sg_compute_pass_track_storage_buffer(&bnd.sbuf_views[i]->cmn.buf.ref, shd->cmn.storage_buffers[i].readonly);
             }
         }
     }
