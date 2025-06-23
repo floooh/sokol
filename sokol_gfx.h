@@ -4428,39 +4428,44 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE_VALID, "sg_apply_bindings: currently applied pipeline object not in valid state") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE_SHADER_ALIVE, "sg_apply_bindings: shader associated with currently applied pipeline is no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE_SHADER_VALID, "sg_apply_bindings: shader associated with currently applied pipeline is not in valid state") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_COMPUTE_EXPECTED_NO_VBS, "sg_apply_bindings: vertex buffer bindings not allowed in a compute pass") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_COMPUTE_EXPECTED_NO_IB, "sg_apply_bindings: index buffer binding not allowed in compute pass") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_COMPUTE_EXPECTED_NO_VBVIEWS, "sg_apply_bindings: vertex buffer bindings not allowed in a compute pass") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_COMPUTE_EXPECTED_NO_IBVIEW, "sg_apply_bindings: index buffer binding not allowed in compute pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_VBVIEW, "sg_apply_bindings: vertex buffer binding is missing or view handle is invalid") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBVIEW_ALIVE, "sg_apply_bindings: vertex buffer view no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBVIEW_TYPE, "sg_apply_bindings: view in vertex bind slot is not a vertex buffer view") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBVIEW_VBUF_OVERFLOW, "sg_apply_bindings: buffer in vertex buffer slot is overflown") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_NO_IB, "sg_apply_bindings: pipeline object defines indexed rendering, but no index buffer provided") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_IB, "sg_apply_bindings: pipeline object defines non-indexed rendering, but index buffer provided") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_IB_ALIVE, "sg_apply_bindings: index buffer no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_IB_TYPE, "sg_apply_bindings: buffer in index buffer slot doesn't have index buffer usage (sg_buffer_desc.usage.index_buffer)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_IB_OVERFLOW, "sg_apply_bindings: buffer in index buffer slot is overflown") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_TEXTURE_BINDING, "sg_apply_bindings: texture binding is missing or the image view handle is invalid") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_ALIVE, "sg_apply_bindings: image as texture no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_TYPE_MISMATCH, "sg_apply_bindings: type of image bound as texture doesn't match shader desc") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_EXPECTED_MULTISAMPLED_IMAGE, "sg_apply_bindings: texture bindings expects image with sample_count > 1") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_MSAA_IMAGE, "sg_apply_bindings: cannot bind image as texture with sample_count>1") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_EXPECTED_FILTERABLE_IMAGE, "sg_apply_bindings: filterable image expected") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_EXPECTED_DEPTH_IMAGE, "sg_apply_bindings: depth image expected") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBVIEW_VALID, "sg_apply_bindings: vertex buffer view is not in valid state") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBVIEW_TYPE, "sg_apply_bindings: view in vertex buffer bind slot is not a vertex buffer view") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBVIEW_BUFFER_OVERFLOW, "sg_apply_bindings: buffer in vertex buffer slot is overflown") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_IBVIEW, "sg_apply_bindings: pipeline object defines indexed rendering, but no index buffer binding provided") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_NO_IBVIEW, "sg_apply_bindings: pipeline object defines non-indexed rendering, but index buffer binding provided") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_IBVIEW_ALIVE, "sg_apply_bindings: index buffer view no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_IBVIEW_TYPE, "sg_apply_bindings: view in index buffer bind slot is not an index buffer view") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_IBVIEW_VALID, "sg_apply_bindings: index buffer view is not in valid state") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_IBVIEW_BUFFER_OVERFLOW, "sg_apply_bindings: buffer in index buffer slot is overflown") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_TEXTURE_BINDING, "sg_apply_bindings: texture binding is missing or the texture view handle is invalid") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_ALIVE, "sg_apply_bindings: texture view no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_TYPE, "sg_apply_bindings: view in texture bind slot is not a texture view") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_VALID, "sg_apply_bindings: texture view is not in valid state") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_IMAGETYPE_MISMATCH, "sg_apply_bindings: image type of bound texture doesn't match shader desc") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_MSAA, "sg_apply_bindings: cannot bind image as texture with sample_count>1 (sg_features.msaa_image_bindings is false)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_EXPECTED_MULTISAMPLED_IMAGE, "sg_apply_bindings: texture bindings expects image with sample_count > 1") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_EXPECTED_FILTERABLE_IMAGE, "sg_apply_bindings: filterable image expected") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_EXPECTED_DEPTH_IMAGE, "sg_apply_bindings: depth image expected") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_SAMPLER_BINDING, "sg_apply_bindings: sampler binding is missing or the sampler handle is invalid") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_UNEXPECTED_SAMPLER_COMPARE_NEVER, "sg_apply_bindings: shader expects SG_SAMPLERTYPE_COMPARISON but sampler has SG_COMPAREFUNC_NEVER") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_SAMPLER_COMPARE_NEVER, "sg_apply_bindings: shader expects SG_SAMPLERTYPE_FILTERING or SG_SAMPLERTYPE_NONFILTERING but sampler doesn't have SG_COMPAREFUNC_NEVER") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_NONFILTERING_SAMPLER, "sg_apply_bindings: shader expected SG_SAMPLERTYPE_NONFILTERING, but sampler has SG_FILTER_LINEAR filters") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SAMPLER_ALIVE, "sg_apply_bindings: bound sampler no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SAMPLER_VALID, "sg_apply_bindings: bound sampler not in valid state") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_STORAGEBUFFER_BINDING, "sg_apply_bindings: storage buffer binding is missing or the buffer view handle is invalid") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_STORAGEBUFFER_ALIVE, "sg_apply_bindings: bound storage buffer no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_STORAGEBUFFER_BINDING_BUFFERTYPE, "sg_apply_bindings: buffer bound to storage buffer slot doesn't have storage buffer usage (sg_buffer_desc.usage.storage_buffer)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_STORAGEBUFFER_READWRITE_IMMUTABLE, "sg_apply_bindings: storage buffers bound as read/write must have usage immutable") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_STORAGEIMAGE_BINDING, "sg_apply_binings: storage image binding is missing or the image view handle is invalid") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_BINDING_VS_DEPTHSTENCIL_ATTACHMENT, "sg_apply_bindings: cannot bind image in the same pass it is used as depth-stencil attachment") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_BINDING_VS_COLOR_ATTACHMENT, "sg_apply_bindings: cannot bind image in the same pass it is used as color attachment") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_BINDING_VS_RESOLVE_ATTACHMENT, "sg_apply_bindings: cannot bind image in the same pass it is used as resolve attachment") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_BINDING_VS_STORAGE_ATTACHMENT, "sg_apply_bindings: cannot bind image in the same pass it is used as storage attachment") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_SBVIEW, "sg_apply_bindings: storage buffer binding is missing or the buffer view handle is invalid") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_VALID, "sg_apply_bindings: storage buffer view not in valid state") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_ALIVE, "sg_apply_bindings: storage buffer view no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_TYPE, "sg_apply_bindings: view in storage buffer bind slot is not a storage buffer view") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_READWRITE_IMMUTABLE, "sg_apply_bindings: storage buffers bound as read/write must have usage immutable") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_SIMGVIEW, "sg_apply_binings: storage image binding is missing or the image view handle is invalid") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_BINDING_VS_DEPTHSTENCIL_ATTACHMENT, "sg_apply_bindings: cannot bind texture in the same pass it is used as depth-stencil attachment") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_BINDING_VS_COLOR_ATTACHMENT, "sg_apply_bindings: cannot bind texture in the same pass it is used as color attachment") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_BINDING_VS_RESOLVE_ATTACHMENT, "sg_apply_bindings: cannot bind texture in the same pass it is used as resolve attachment") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_BINDING_VS_STORAGE_ATTACHMENT, "sg_apply_bindings: cannot bind texture in the same pass it is used as storage attachment") \
     _SG_LOGITEM_XMACRO(VALIDATE_AU_PASS_EXPECTED, "sg_apply_uniforms: must be called in a pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_AU_NO_PIPELINE, "sg_apply_uniforms: must be called after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_AU_PIPELINE_ALIVE, "sg_apply_uniforms: currently applied pipeline object no longer alive") \
@@ -7128,6 +7133,14 @@ _SG_IMPL_RES_ALIVE(_sg_sampler_ref_alive, _sg_sampler_ref_t)
 _SG_IMPL_RES_ALIVE(_sg_shader_ref_alive, _sg_shader_ref_t)
 _SG_IMPL_RES_ALIVE(_sg_pipeline_ref_alive, _sg_pipeline_ref_t)
 _SG_IMPL_RES_ALIVE(_sg_view_ref_alive, _sg_view_ref_t)
+
+#define _SG_IMPL_RES_VALID(NAME,REF) _SOKOL_PRIVATE bool NAME(const REF* ref) { SOKOL_ASSERT(ref); return ref->ptr && _sg_sref_slot_eql(&ref->sref, &ref->ptr->slot) && (ref->ptr->slot.state == SG_RESOURCESTATE_VALID); }
+_SG_IMPL_RES_VALID(_sg_buffer_ref_valid, _sg_buffer_ref_t)
+_SG_IMPL_RES_VALID(_sg_image_ref_valid, _sg_image_ref_t)
+_SG_IMPL_RES_VALID(_sg_sampler_ref_valid, _sg_sampler_ref_t)
+_SG_IMPL_RES_VALID(_sg_shader_ref_valid, _sg_shader_ref_t)
+_SG_IMPL_RES_VALID(_sg_pipeline_ref_valid, _sg_pipeline_ref_t)
+_SG_IMPL_RES_VALID(_sg_view_ref_valid, _sg_view_ref_t)
 
 #define _SG_IMPL_RES_PTR(NAME,REF,RES) _SOKOL_PRIVATE RES* NAME(const REF* ref) { SOKOL_ASSERT(ref && ref->ptr && _sg_sref_slot_eql(&ref->sref, &ref->ptr->slot)); return ref->ptr; }
 _SG_IMPL_RES_PTR(_sg_buffer_ref_ptr, _sg_buffer_ref_t, _sg_buffer_t)
@@ -19415,20 +19428,27 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
 
         if (_sg.cur_pass.is_compute) {
             for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
-                _SG_VALIDATE(bindings->vertex_buffers[i].id == SG_INVALID_ID, VALIDATE_ABND_COMPUTE_EXPECTED_NO_VBS);
+                _SG_VALIDATE(bindings->vertex_buffers[i].id == SG_INVALID_ID, VALIDATE_ABND_COMPUTE_EXPECTED_NO_VBVIEWS);
             }
         } else {
             for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
                 if (pip->cmn.vertex_buffer_layout_active[i]) {
-                    _SG_VALIDATE(bindings->vertex_buffers[i].id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_VBUF);
+                    _SG_VALIDATE(bindings->vertex_buffers[i].id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_VBVIEW);
                     if (bindings->vertex_buffers[i].id != SG_INVALID_ID) {
-                        SOKOL_ASSERT(false);
-                        const _sg_buffer_t* buf = _sg_lookup_buffer(bindings->vertex_buffers[i].id);
-                        _SG_VALIDATE(buf != 0, VALIDATE_ABND_VB_ALIVE);
-                        // NOTE: state != VALID is legal and skips rendering!
-                        if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
-                            _SG_VALIDATE(buf->cmn.usage.vertex_buffer, VALIDATE_ABND_VBVIEW_TYPE);
-                            _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_VBVIEW_BUFFER_OVERFLOW);
+                        const _sg_view_t* view = _sg_lookup_view(bindings->vertex_buffers[i].id);
+                        // view object must be alive
+                        _SG_VALIDATE(view != 0, VALIDATE_ABND_VBVIEW_ALIVE);
+                        if (view) {
+                            // the view object must be a vertex buffer view
+                            _SG_VALIDATE(view->cmn.type == _SG_VIEWTYPE_VERTEXBUFFER, VALIDATE_ABND_VBVIEW_TYPE);
+                            // the view object itself must be in valid state
+                            _SG_VALIDATE(view->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ABND_VBVIEW_VALID);
+                            // NOTE: an invalid buffer ref is allowed and skips rendering
+                            if (_sg_buffer_ref_valid(&view->cmn.buf.ref)) {
+                                const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
+                                // buffer must not be in overflow state
+                                _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_VBVIEW_BUFFER_OVERFLOW);
+                            }
                         }
                     }
                 }
@@ -19436,25 +19456,31 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         }
 
         if (_sg.cur_pass.is_compute) {
-            _SG_VALIDATE(bindings->index_buffer.id == SG_INVALID_ID, VALIDATE_ABND_COMPUTE_EXPECTED_NO_IB);
+            _SG_VALIDATE(bindings->index_buffer.id == SG_INVALID_ID, VALIDATE_ABND_COMPUTE_EXPECTED_NO_IBVIEW);
         } else {
             // index buffer expected or not, and index buffer still exists
             if (pip->cmn.index_type == SG_INDEXTYPE_NONE) {
                 // pipeline defines non-indexed rendering, but index buffer provided
-                _SG_VALIDATE(bindings->index_buffer.id == SG_INVALID_ID, VALIDATE_ABND_IBVIEW);
+                _SG_VALIDATE(bindings->index_buffer.id == SG_INVALID_ID, VALIDATE_ABND_EXPECTED_NO_IBVIEW);
             } else {
                 // pipeline defines indexed rendering, but no index buffer provided
-                _SG_VALIDATE(bindings->index_buffer.id != SG_INVALID_ID, VALIDATE_ABND_NO_IBVIEW);
+                _SG_VALIDATE(bindings->index_buffer.id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_IBVIEW);
             }
             if (bindings->index_buffer.id != SG_INVALID_ID) {
-                // buffer in index-buffer-slot must have index buffer usage
-                SOKOL_ASSERT(false);
-                const _sg_buffer_t* buf = _sg_lookup_buffer(bindings->index_buffer.id);
-                _SG_VALIDATE(buf != 0, VALIDATE_ABND_IBVIEW_ALIVE);
-                // NOTE: state != VALID is legal and skips rendering!
-                if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
-                    _SG_VALIDATE(buf->cmn.usage.index_buffer, VALIDATE_ABND_IBVIEW_TYPE);
-                    _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_IBVIEW_BUFFER_OVERFLOW);
+                const _sg_view_t* view = _sg_lookup_view(bindings->index_buffer.id);
+                // the view object must be alive
+                _SG_VALIDATE(view != 0, VALIDATE_ABND_VBVIEW_ALIVE);
+                if (view) {
+                    // the view object must be an index buffer view
+                    _SG_VALIDATE(view->cmn.type == _SG_VIEWTYPE_INDEXBUFFER, VALIDATE_ABND_IBVIEW_TYPE);
+                    // the view object itself must be in valid state
+                    _SG_VALIDATE(view->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ABND_IBVIEW_VALID);
+                    // NOTE: an invalid buffer ref is allowed and skips rendering
+                    if (_sg_buffer_ref_valid(&view->cmn.buf.ref)) {
+                        const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
+                        // buffer must not be in overflow state
+                        _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_IBVIEW_BUFFER_OVERFLOW);
+                    }
                 }
             }
         }
@@ -19464,32 +19490,37 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
             if (shd->cmn.textures[i].stage != SG_SHADERSTAGE_NONE) {
                 _SG_VALIDATE(bindings->textures[i].id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_TEXTURE_BINDING);
                 if (bindings->textures[i].id != SG_INVALID_ID) {
-                    /*
-                        FIXME FIXME FIXME
-                    const _sg_image_t* img = _sg_lookup_image(bindings->images[i].id);
-                    _SG_VALIDATE(img != 0, VALIDATE_ABND_IMG_ALIVE);
-                    // NOTE: state != VALID is legal and skips rendering!
-                    if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
-                        _SG_VALIDATE(img->cmn.type == shd->cmn.images[i].image_type, VALIDATE_ABND_IMAGE_TYPE_MISMATCH);
-                        if (!_sg.features.msaa_image_bindings) {
-                            _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_ABND_IMAGE_MSAA);
-                        }
-                        if (shd->cmn.images[i].multisampled) {
-                            _SG_VALIDATE(img->cmn.sample_count > 1, VALIDATE_ABND_EXPECTED_MULTISAMPLED_IMAGE);
-                        }
-                        const _sg_pixelformat_info_t* info = &_sg.formats[img->cmn.pixel_format];
-                        switch (shd->cmn.images[i].sample_type) {
-                            case SG_IMAGESAMPLETYPE_FLOAT:
-                                _SG_VALIDATE(info->filter, VALIDATE_ABND_EXPECTED_FILTERABLE_IMAGE);
-                                break;
-                            case SG_IMAGESAMPLETYPE_DEPTH:
-                                _SG_VALIDATE(info->depth, VALIDATE_ABND_EXPECTED_DEPTH_IMAGE);
-                                break;
-                            default:
-                                break;
+                    const _sg_view_t* view = _sg_lookup_view(bindings->textures[i].id);
+                    // the view object must be alive
+                    _SG_VALIDATE(view != 0, VALIDATE_ABND_TEXVIEW_ALIVE);
+                    if (view) {
+                        // the view object must be a texture view
+                        _SG_VALIDATE(view->cmn.type == _SG_VIEWTYPE_TEXTURE, VALIDATE_ABND_TEXVIEW_TYPE);
+                        // the view object itself must be in valid state
+                        _SG_VALIDATE(view->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ABND_TEXVIEW_VALID);
+                        // NOTE: an invalid texture ref is allowed and skips rendering
+                        if (_sg_image_ref_valid(&view->cmn.img.ref)) {
+                            const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+                            _SG_VALIDATE(img->cmn.type == shd->cmn.textures[i].image_type, VALIDATE_ABND_TEXVIEW_IMAGETYPE_MISMATCH);
+                            if (!_sg.features.msaa_image_bindings) {
+                                _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_ABND_TEXVIEW_MSAA);
+                            }
+                            if (shd->cmn.textures[i].multisampled) {
+                                _SG_VALIDATE(img->cmn.sample_count > 1, VALIDATE_ABND_TEXVIEW_EXPECTED_MULTISAMPLED_IMAGE);
+                            }
+                            const _sg_pixelformat_info_t* info = &_sg.formats[img->cmn.pixel_format];
+                            switch (shd->cmn.textures[i].sample_type) {
+                                case SG_IMAGESAMPLETYPE_FLOAT:
+                                    _SG_VALIDATE(info->filter, VALIDATE_ABND_TEXVIEW_EXPECTED_FILTERABLE_IMAGE);
+                                    break;
+                                case SG_IMAGESAMPLETYPE_DEPTH:
+                                    _SG_VALIDATE(info->depth, VALIDATE_ABND_TEXVIEW_EXPECTED_DEPTH_IMAGE);
+                                    break;
+                                default:
+                                    break;
+                            }
                         }
                     }
-                    */
                 }
             }
         }
@@ -19525,21 +19556,24 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         // has expected storage buffers
         for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
             if (shd->cmn.storage_buffers[i].stage != SG_SHADERSTAGE_NONE) {
-                _SG_VALIDATE(bindings->storage_buffers[i].id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_STORAGEBUFFER_BINDING);
+                _SG_VALIDATE(bindings->storage_buffers[i].id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_SBVIEW);
                 if (bindings->storage_buffers[i].id != SG_INVALID_ID) {
-                    /*
-                        FIXME FIXME FIXME
-                    const _sg_buffer_t* sbuf = _sg_lookup_buffer(bindings->storage_buffers[i].id);
-                    _SG_VALIDATE(sbuf != 0, VALIDATE_ABND_STORAGEBUFFER_ALIVE);
-                    // NOTE: state != VALID is legal and skips rendering!
-                    if (sbuf && sbuf->slot.state == SG_RESOURCESTATE_VALID) {
-                        _SG_VALIDATE(sbuf->cmn.usage.storage_buffer, VALIDATE_ABND_STORAGEBUFFER_BINDING_BUFFERTYPE);
-                        // read/write bindings are only allowed for immutable buffers
-                        if (!shd->cmn.storage_buffers[i].readonly) {
-                            _SG_VALIDATE(sbuf->cmn.usage.immutable, VALIDATE_ABND_STORAGEBUFFER_READWRITE_IMMUTABLE);
+                    const _sg_view_t* view = _sg_lookup_view(bindings->storage_buffers[i].id);
+                    // view object must be alive
+                    _SG_VALIDATE(view != 0, VALIDATE_ABND_SBVIEW_ALIVE);
+                    if (view) {
+                        // the view object must be a storage buffer view
+                        _SG_VALIDATE(view->cmn.type == _SG_VIEWTYPE_STORAGEBUFFER, VALIDATE_ABND_SBVIEW_TYPE);
+                        // the view object must be in valid state
+                        _SG_VALIDATE(view->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ABND_SBVIEW_VALID);
+                        // NOTE: an invalid buffer ref is allowed and skips rendering
+                        if (_sg_buffer_ref_valid(&view->cmn.buf.ref)) {
+                            const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
+                            if (!shd->cmn.storage_buffers[i].readonly) {
+                                _SG_VALIDATE(buf->cmn.usage.immutable, VALIDATE_ABND_SBVIEW_READWRITE_IMMUTABLE);
+                            }
                         }
                     }
-                    */
                 }
             }
         }
@@ -19547,33 +19581,30 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         // has expected storage images
         for (size_t i = 0; i < SG_MAX_STORAGEIMAGE_BINDSLOTS; i++) {
             if (shd->cmn.storage_images[i].stage != SG_SHADERSTAGE_NONE) {
-                _SG_VALIDATE(bindings->storage_images[i].id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_STORAGEIMAGE_BINDING);
+                _SG_VALIDATE(bindings->storage_images[i].id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_SIMGVIEW);
                 // FIXME FIXME FIXME
             }
         }
 
         // the same image cannot be bound as texture and pass attachment
-        /*
-        if (!_sg_attachments_ref_null(&_sg.cur_pass.atts)) {
-            const _sg_attachments_t* atts = _sg_attachments_ref_ptr(&_sg.cur_pass.atts);
-            for (size_t img_idx = 0; img_idx < SG_MAX_IMAGE_BINDSLOTS; img_idx++) {
-                if (shd->cmn.images[img_idx].stage != SG_SHADERSTAGE_NONE) {
-                    const uint32_t img_id = bindings->images[img_idx].id;
-                    if (img_id == SG_INVALID_ID) {
+        if (!_sg_attachments_empty(&_sg.cur_pass.atts)) {
+            for (size_t tex_idx = 0; tex_idx < SG_MAX_TEXTURE_BINDSLOTS; tex_idx++) {
+                if (shd->cmn.textures[tex_idx].stage != SG_SHADERSTAGE_NONE) {
+                    if (bindings->textures[tex_idx].id == SG_INVALID_ID) {
                         continue;
                     }
-                    _SG_VALIDATE(img_id != atts->cmn.depth_stencil.image.sref.id, VALIDATE_ABND_IMAGE_BINDING_VS_DEPTHSTENCIL_ATTACHMENT);
-                    for (size_t att_idx = 0; att_idx < SG_MAX_COLOR_ATTACHMENTS; att_idx++) {
-                        _SG_VALIDATE(img_id != atts->cmn.colors[att_idx].image.sref.id, VALIDATE_ABND_IMAGE_BINDING_VS_COLOR_ATTACHMENT);
-                        _SG_VALIDATE(img_id != atts->cmn.resolves[att_idx].image.sref.id, VALIDATE_ABND_IMAGE_BINDING_VS_RESOLVE_ATTACHMENT);
-                    }
-                    for (size_t att_idx = 0; att_idx < SG_MAX_STORAGE_ATTACHMENTS; att_idx++) {
-                        _SG_VALIDATE(img_id != atts->cmn.storages[att_idx].image.sref.id, VALIDATE_ABND_IMAGE_BINDING_VS_STORAGE_ATTACHMENT);
+                    const _sg_view_t* view = _sg_lookup_view(bindings->textures[tex_idx].id);
+                    if (view) {
+                        const uint32_t img_id = view->cmn.img.ref.sref.id;
+                        _SG_VALIDATE(img_id != _sg.cur_pass.atts.depth_stencil.id, VALIDATE_ABND_TEXTURE_BINDING_VS_DEPTHSTENCIL_ATTACHMENT);
+                        for (size_t att_idx = 0; att_idx < SG_MAX_COLOR_ATTACHMENTS; att_idx++) {
+                            _SG_VALIDATE(img_id != _sg.cur_pass.atts.colors[att_idx].id, VALIDATE_ABND_TEXTURE_BINDING_VS_COLOR_ATTACHMENT);
+                            _SG_VALIDATE(img_id != _sg.cur_pass.atts.resolves[att_idx].id, VALIDATE_ABND_TEXTURE_BINDING_VS_RESOLVE_ATTACHMENT);
+                        }
                     }
                 }
             }
         }
-        */
         return _sg_validate_end();
     #endif
 }
