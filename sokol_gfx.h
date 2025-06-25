@@ -21787,6 +21787,13 @@ SOKOL_API_IMPL sg_attachments_desc sg_query_attachments_desc(sg_attachments atts
         desc.depth_stencil.image.id = atts->cmn.depth_stencil.image.sref.id;
         desc.depth_stencil.mip_level = atts->cmn.depth_stencil.mip_level;
         desc.depth_stencil.slice = atts->cmn.depth_stencil.slice;
+        if (atts->cmn.has_storage_attachments) {
+            for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
+                desc.storages[i].image.id = atts->cmn.storages[i].image.sref.id;
+                desc.storages[i].mip_level = atts->cmn.storages[i].mip_level;
+                desc.storages[i].slice = atts->cmn.storages[i].slice;
+            }
+        }
     }
     return desc;
 }
