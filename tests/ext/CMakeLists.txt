@@ -89,3 +89,7 @@ file(COPY ${spineruntimes_dir}/examples/spineboy/export/spineboy.atlas DESTINATI
 file(COPY ${spineruntimes_dir}/examples/spineboy/export/spineboy.png DESTINATION ${CMAKE_BINARY_DIR}/Debug)
 
 add_library(nuklear nuklear.c)
+if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    # NOTE: must propagate to upstream includers
+    target_compile_options(nuklear PUBLIC /wd5287)
+endif()

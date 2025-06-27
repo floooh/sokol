@@ -26,6 +26,7 @@
 #pragma warning(disable:4127)   // conditional expression is constant
 #pragma warning(disable:4100)   // unreferenced formal parameter
 #pragma warning(disable:4701)   // potentially uninitialized local variable used
+#pragma warning(disable:4116)   // unnamed type definition in parentheses`
 #endif
 #include "nuklear.h"
 #if defined(_MSC_VER)
