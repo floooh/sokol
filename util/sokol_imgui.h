@@ -2355,6 +2355,14 @@ static ImGuiIO* _simgui_get_io(void) {
     #endif
 }
 
+static void _simgui_newframe(void) {
+    #if defined(__cplusplus)
+        ImGui::NewFrame();
+    #else
+        _SIMGUI_CFUNC(NewFrame)();
+    #endif
+}
+
 static void _simgui_destroy_context(void) {
     #if defined(__cplusplus)
         ImGui::DestroyContext();
@@ -2363,14 +2371,62 @@ static void _simgui_destroy_context(void) {
     #endif
 }
 
+static ImTextureID _simgui_imtexturedata_gettexid(ImTextureData* tex) {
+    #if defined(__cplusplus)
+        return tex->GetTexID();
+    #else
+        return ImTextureData_GetTexID(tex);
+    #endif
+}
+
+static void _simgui_imtexturedata_settexid(ImTextureData* tex, ImTextureID tex_id) {
+    #if defined(__cplusplus)
+        tex->SetTexID(tex_id);
+    #else
+        ImTextureData_SetTexID(tex, tex_id);
+    #endif
+}
+
+static void _simgui_imtexturedata_setstatus(ImTextureData* tex, ImTextureStatus status) {
+    #if defined(__cplusplus)
+        tex->SetStatus(status);
+    #else
+        ImTextureData_SetStatus(tex, status);
+    #endif
+}
+
+static void* _simgui_imtexturedata_getpixels(ImTextureData* tex) {
+    #if defined(__cplusplus)
+        return tex->GetPixels();
+    #else
+        return ImTextureData_GetPixels(tex);
+    #endif
+}
+
+static int _simgui_imtexturedata_getsizeinbytes(ImTextureData* tex) {
+    #if defined(__cplusplus)
+        return tex->GetSizeInBytes();
+    #else
+        return ImTextureData_GetSizeInBytes(tex);
+    #endif
+}
+
+static ImTextureID _simgui_imdrawcmd_gettexid(ImDrawCmd* cmd) {
+    #if defined(__cplusplus)
+        return cmd->GetTexID();
+    #else
+        return ImDrawCmd_GetTexID(cmd);
+    #endif
+}
+
 static void _simgui_destroy_texture(ImTextureData* tex) {
     SOKOL_ASSERT(tex);
-    const sg_image img = simgui_image_from_imtextureid(tex->GetTexID());
-    const sg_sampler smp = simgui_sampler_from_imtextureid(tex->GetTexID());
+    const sg_image img = simgui_image_from_imtextureid(_simgui_imtexturedata_gettexid(tex));
+    const sg_sampler smp = simgui_sampler_from_imtextureid(_simgui_imtexturedata_gettexid(tex));
     sg_destroy_image(img);
     sg_destroy_sampler(smp);
-    tex->SetTexID(ImTextureID_Invalid);
-    tex->SetStatus(ImTextureStatus_Destroyed);
+    _simgui_imtexturedata_settexid(tex, ImTextureID_Invalid);
+    _simgui_imtexturedata_setstatus(tex, ImTextureStatus_Destroyed);
 }
 
 static void _simgui_update_texture(ImTextureData* tex) {
@@ -2397,17 +2453,17 @@ static void _simgui_update_texture(ImTextureData* tex) {
         smp_desc.label = "sokol-imgui-sampler";
         sg_sampler smp = sg_make_sampler(&smp_desc);
 
-        tex->SetTexID(simgui_imtextureid_with_sampler(img, smp));
+        _simgui_imtexturedata_settexid(tex, simgui_imtextureid_with_sampler(img, smp));
     }
     if ((tex->Status == ImTextureStatus_WantCreate) || (tex->Status == ImTextureStatus_WantUpdates)) {
         SOKOL_ASSERT(tex->TexID != 0);
-        const sg_image img = simgui_image_from_imtextureid(tex->GetTexID());
+        const sg_image img = simgui_image_from_imtextureid(_simgui_imtexturedata_gettexid(tex));
         sg_image_data img_data;
         _simgui_clear(&img_data, sizeof(img_data));
-        img_data.subimage[0][0].ptr = tex->GetPixels();
-        img_data.subimage[0][0].size = tex->GetSizeInBytes();
+        img_data.subimage[0][0].ptr = _simgui_imtexturedata_getpixels(tex);
+        img_data.subimage[0][0].size = (size_t)_simgui_imtexturedata_getsizeinbytes(tex);
         sg_update_image(img, &img_data);
-        tex->SetStatus(ImTextureStatus_OK);
+        _simgui_imtexturedata_setstatus(tex, ImTextureStatus_OK);
     }
     if ((tex->Status == ImTextureStatus_WantDestroy) && (tex->UnusedFrames > 0)) {
         SOKOL_ASSERT(tex->TexID != 0);
@@ -2764,11 +2820,7 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
             sapp_set_mouse_cursor(cursor);
         }
     #endif
-    #if defined(__cplusplus)
-        ImGui::NewFrame();
-    #else
-        _SIMGUI_CFUNC(NewFrame)();
-    #endif
+    _simgui_newframe();
 }
 
 static sg_pipeline _simgui_bind_image_sampler(sg_bindings* bindings, ImTextureID imtex_id) {
@@ -2918,7 +2970,7 @@ SOKOL_API_IMPL void simgui_render(void) {
                     sg_apply_bindings(&bind);
                 }
             } else {
-                ImTextureID cmd_tex_id = pcmd->GetTexID();
+                ImTextureID cmd_tex_id = _simgui_imdrawcmd_gettexid(pcmd);
                 if ((tex_id != cmd_tex_id) || (vtx_offset != pcmd->VtxOffset)) {
                     tex_id = cmd_tex_id;
                     vtx_offset = pcmd->VtxOffset;
