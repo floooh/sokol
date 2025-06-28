@@ -592,9 +592,6 @@ typedef struct {
     float cur_dpi_scale;
     sg_buffer vbuf;
     sg_buffer ibuf;
-    sg_image font_img;
-    sg_sampler font_smp;
-    sg_image def_img;       // used as default image for user images
     sg_sampler def_smp;     // used as default sampler for user images
     sg_shader def_shd;
     sg_pipeline def_pip;
@@ -2358,6 +2355,66 @@ static ImGuiIO* _simgui_get_io(void) {
     #endif
 }
 
+static void _simgui_destroy_context(void) {
+    #if defined(__cplusplus)
+        ImGui::DestroyContext();
+    #else
+        _SIMGUI_CFUNC(DestroyContext)(0);
+    #endif
+}
+
+static void _simgui_destroy_texture(ImTextureData* tex) {
+    SOKOL_ASSERT(tex);
+    const sg_image img = simgui_image_from_imtextureid(tex->GetTexID());
+    const sg_sampler smp = simgui_sampler_from_imtextureid(tex->GetTexID());
+    sg_destroy_image(img);
+    sg_destroy_sampler(smp);
+    tex->SetTexID(ImTextureID_Invalid);
+    tex->SetStatus(ImTextureStatus_Destroyed);
+}
+
+static void _simgui_update_texture(ImTextureData* tex) {
+    SOKOL_ASSERT(tex);
+    SOKOL_ASSERT(tex->Format == ImTextureFormat_RGBA32);
+    if (tex->Status == ImTextureStatus_WantCreate) {
+        // create new sokol-gfx texture
+        SOKOL_ASSERT(tex->TexID == 0);
+        sg_image_desc img_desc;
+        _simgui_clear(&img_desc, sizeof(img_desc));
+        img_desc.usage.dynamic_update = true;
+        img_desc.width = tex->Width;
+        img_desc.height = tex->Height;
+        img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+        img_desc.label = "sokol-imgui-texture";
+        sg_image img = sg_make_image(&img_desc);
+
+        sg_sampler_desc smp_desc;
+        _simgui_clear(&smp_desc, sizeof(smp_desc));
+        smp_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
+        smp_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
+        smp_desc.min_filter = SG_FILTER_LINEAR;
+        smp_desc.mag_filter = SG_FILTER_LINEAR;
+        smp_desc.label = "sokol-imgui-sampler";
+        sg_sampler smp = sg_make_sampler(&smp_desc);
+
+        tex->SetTexID(simgui_imtextureid_with_sampler(img, smp));
+    }
+    if ((tex->Status == ImTextureStatus_WantCreate) || (tex->Status == ImTextureStatus_WantUpdates)) {
+        SOKOL_ASSERT(tex->TexID != 0);
+        const sg_image img = simgui_image_from_imtextureid(tex->GetTexID());
+        sg_image_data img_data;
+        _simgui_clear(&img_data, sizeof(img_data));
+        img_data.subimage[0][0].ptr = tex->GetPixels();
+        img_data.subimage[0][0].size = tex->GetSizeInBytes();
+        sg_update_image(img, &img_data);
+        tex->SetStatus(ImTextureStatus_OK);
+    }
+    if ((tex->Status == ImTextureStatus_WantDestroy) && (tex->UnusedFrames > 0)) {
+        SOKOL_ASSERT(tex->TexID != 0);
+        _simgui_destroy_texture(tex);
+    }
+}
+
 // ██████  ██    ██ ██████  ██      ██  ██████
 // ██   ██ ██    ██ ██   ██ ██      ██ ██
 // ██████  ██    ██ ██████  ██      ██ ██
@@ -2402,7 +2459,8 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     #endif
     io->IniFilename = _simgui.desc.ini_filename;
     io->ConfigMacOSXBehaviors = _simgui_is_osx();
-    io->BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
+    io->BackendRendererName = "sokol-imgui";
+    io->BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset | ImGuiBackendFlags_RendererHasTextures;
     #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
         if (!_simgui.desc.disable_set_mouse_cursor) {
             io->BackendFlags |= ImGuiBackendFlags_HasMouseCursors;
@@ -2557,30 +2615,20 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     def_sampler_desc.label = "sokol-imgui-default-sampler";
     _simgui.def_smp = sg_make_sampler(&def_sampler_desc);
 
-    // a default user image
-    static uint32_t def_pixels[64];
-    memset(def_pixels, 0xFF, sizeof(def_pixels));
-    sg_image_desc def_image_desc;
-    _simgui_clear(&def_image_desc, sizeof(def_image_desc));
-    def_image_desc.width = 8;
-    def_image_desc.height = 8;
-    def_image_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
-    def_image_desc.data.subimage[0][0].ptr = def_pixels;
-    def_image_desc.data.subimage[0][0].size = sizeof(def_pixels);
-    def_image_desc.label = "sokol-imgui-default-image";
-    _simgui.def_img = sg_make_image(&def_image_desc);
-
     // default font texture
+    /*
     if (!_simgui.desc.no_default_font) {
         simgui_font_tex_desc_t simgui_font_smp_desc;
         _simgui_clear(&simgui_font_smp_desc, sizeof(simgui_font_smp_desc));
         simgui_create_fonts_texture(&simgui_font_smp_desc);
     }
-
+    */
     sg_pop_debug_group();
 }
 
 SOKOL_API_IMPL void simgui_create_fonts_texture(const simgui_font_tex_desc_t* desc) {
+    (void)desc;
+/*
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(SG_INVALID_ID == _simgui.font_smp.id);
     SOKOL_ASSERT(SG_INVALID_ID == _simgui.font_img.id);
@@ -2615,32 +2663,37 @@ SOKOL_API_IMPL void simgui_create_fonts_texture(const simgui_font_tex_desc_t* de
     _simgui.font_img = sg_make_image(&font_img_desc);
 
     io->Fonts->TexID = simgui_imtextureid_with_sampler(_simgui.font_img, _simgui.font_smp);
+*/
 }
 
 SOKOL_API_IMPL void simgui_destroy_fonts_texture(void) {
+/*
     // NOTE: it's valid to call the destroy funcs with SG_INVALID_ID
     sg_destroy_sampler(_simgui.font_smp);
     sg_destroy_image(_simgui.font_img);
     _simgui.font_smp.id = SG_INVALID_ID;
     _simgui.font_img.id = SG_INVALID_ID;
+*/
 }
 
 SOKOL_API_IMPL void simgui_shutdown(void) {
     SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
-    #if defined(__cplusplus)
-        ImGui::DestroyContext();
-    #else
-        _SIMGUI_CFUNC(DestroyContext)(0);
-    #endif
+
+    const ImGuiPlatformIO* pio = _simgui_get_platform_io();
+    for (size_t i = 0; i < (size_t)pio->Textures.Size; i++) {
+        ImTextureData* tex = pio->Textures.Data[i];
+        if (tex->RefCount == 1) {
+            _simgui_destroy_texture(tex);
+        }
+    }
+    _simgui_destroy_context();
+
     // NOTE: it's valid to call the destroy funcs with SG_INVALID_ID
     sg_destroy_pipeline(_simgui.pip_unfilterable);
     sg_destroy_shader(_simgui.shd_unfilterable);
     sg_destroy_pipeline(_simgui.def_pip);
     sg_destroy_shader(_simgui.def_shd);
-    sg_destroy_sampler(_simgui.font_smp);
-    sg_destroy_image(_simgui.font_img);
     sg_destroy_sampler(_simgui.def_smp);
-    sg_destroy_image(_simgui.def_img);
     sg_destroy_buffer(_simgui.ibuf);
     sg_destroy_buffer(_simgui.vbuf);
     sg_pop_debug_group();
@@ -2679,12 +2732,6 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
     SOKOL_ASSERT(desc->height > 0);
     _simgui.cur_dpi_scale = _simgui_def(desc->dpi_scale, 1.0f);
     ImGuiIO* io = _simgui_get_io();
-    if (!io->Fonts->TexReady) {
-        simgui_destroy_fonts_texture();
-        simgui_font_tex_desc_t simgui_font_smp_desc;
-        _simgui_clear(&simgui_font_smp_desc, sizeof(simgui_font_smp_desc));
-        simgui_create_fonts_texture(&simgui_font_smp_desc);
-    }
     io->DisplaySize.x = ((float)desc->width) / _simgui.cur_dpi_scale;
     io->DisplaySize.y = ((float)desc->height) / _simgui.cur_dpi_scale;
     io->DeltaTime = (float)desc->delta_time;
@@ -2758,6 +2805,17 @@ SOKOL_API_IMPL void simgui_render(void) {
     if (draw_data->CmdListsCount == 0) {
         return;
     }
+
+    // catch up with texture updates
+    if (draw_data->Textures) {
+        for (size_t i = 0; i < (size_t)draw_data->Textures->Size; i++) {
+            ImTextureData* tex = draw_data->Textures->Data[i];
+            if (tex->Status != ImTextureStatus_OK) {
+                _simgui_update_texture(tex);
+            }
+        }
+    }
+
     /* copy vertices and indices into an intermediate buffer so that
        they can be updated with a single sg_update_buffer() call each
        (sg_append_buffer() has performance problems on some GL platforms),
@@ -2827,8 +2885,7 @@ SOKOL_API_IMPL void simgui_render(void) {
     _simgui_clear((void*)&bind, sizeof(bind));
     bind.vertex_buffers[0] = _simgui.vbuf;
     bind.index_buffer = _simgui.ibuf;
-    ImTextureID tex_id = io->Fonts->TexID;
-    _simgui_bind_image_sampler(&bind, tex_id);
+    ImTextureID tex_id = 0;
     int vb_offset = 0;
     int ib_offset = 0;
     for (int cl_index = 0; cl_index < cmd_list_count; cl_index++) {
@@ -2836,7 +2893,9 @@ SOKOL_API_IMPL void simgui_render(void) {
 
         bind.vertex_buffer_offsets[0] = vb_offset;
         bind.index_buffer_offset = ib_offset;
-        sg_apply_bindings(&bind);
+        if (tex_id != 0) {
+            sg_apply_bindings(&bind);
+        }
 
         #if defined(__cplusplus)
             const int num_cmds = cl->CmdBuffer.size();
@@ -2859,8 +2918,9 @@ SOKOL_API_IMPL void simgui_render(void) {
                     sg_apply_bindings(&bind);
                 }
             } else {
-                if ((tex_id != pcmd->TextureId) || (vtx_offset != pcmd->VtxOffset)) {
-                    tex_id = pcmd->TextureId;
+                ImTextureID cmd_tex_id = pcmd->GetTexID();
+                if ((tex_id != cmd_tex_id) || (vtx_offset != pcmd->VtxOffset)) {
+                    tex_id = cmd_tex_id;
                     vtx_offset = pcmd->VtxOffset;
                     sg_pipeline pip = _simgui_bind_image_sampler(&bind, tex_id);
                     sg_apply_pipeline(pip);
