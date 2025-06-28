@@ -3443,6 +3443,8 @@ typedef struct sg_sampler_desc {
     source code, you can provide an optional target string via
     sg_shader_stage_desc.d3d11_target, the default target is "vs_4_0" for the
     vertex shader stage and "ps_4_0" for the pixel shader stage.
+    You may optionally provide the file path to enable the default #include handler
+    behavior when compiling source code.
 */
 typedef enum sg_shader_stage {
     SG_SHADERSTAGE_NONE,
@@ -3457,6 +3459,7 @@ typedef struct sg_shader_function {
     sg_range bytecode;
     const char* entry;
     const char* d3d11_target;   // default: "vs_4_0" or "ps_4_0"
+    const char* d3d11_filepath;
 } sg_shader_function;
 
 typedef enum sg_shader_attr_base_type {
@@ -12445,13 +12448,13 @@ _SOKOL_PRIVATE ID3DBlob* _sg_d3d11_compile_shader(const sg_shader_function* shd_
     ID3DBlob* output = NULL;
     ID3DBlob* errors_or_warnings = NULL;
     HRESULT hr = _sg.d3d11.D3DCompile_func(
-        shd_func->source,               // pSrcData
-        strlen(shd_func->source),       // SrcDataSize
-        NULL,                           // pSourceName
-        NULL,                           // pDefines
-        NULL,                           // pInclude
+        shd_func->source,                  // pSrcData
+        strlen(shd_func->source),          // SrcDataSize
+        shd_func->d3d11_filepath,          // pSourceName
+        NULL,                              // pDefines
+        D3D_COMPILE_STANDARD_FILE_INCLUDE, // pInclude
         shd_func->entry ? shd_func->entry : "main", // pEntryPoint
-        shd_func->d3d11_target,         // pTarget
+        shd_func->d3d11_target,            // pTarget
         flags1,     // Flags1
         0,          // Flags2
         &output,    // ppCode
