@@ -1,5 +1,11 @@
 ## Updates
 
+### 28-Jun-2025
+
+sokol_gfx.h d3d11: `#include` statements are now supported when directly passing HLSL
+shader source code into `sg_make_shader()`. See PR https://github.com/floooh/sokol/pull/1293
+for details. Many thanks to @rdunnington for the PR!
+
 ### 15-Jun-2025
 
 The sokol_app.h and sokol_gfx.h WebGPU backends have been updated for the new
