@@ -912,9 +912,6 @@ _SOKOL_PRIVATE void igSetTooltip(const char* fmt,...) {
 _SOKOL_PRIVATE bool igSliderFloatEx(const char* label,float* v,float v_min,float v_max,const char* format,ImGuiSliderFlags flags) {
     return ImGui::SliderFloat(label,v,v_min,v_max,format,flags);
 }
-_SOKOL_PRIVATE void igImage(ImTextureID user_texture_id,const ImVec2 size) {
-    return ImGui::Image(user_texture_id,size);
-}
 _SOKOL_PRIVATE void igSetNextWindowSize(const ImVec2 size,ImGuiCond cond) {
     return ImGui::SetNextWindowSize(size,cond);
 }
@@ -961,6 +958,17 @@ _SOKOL_PRIVATE bool igCheckbox(const char* label, bool* v) {
 #define IMVEC2(x,y) (ImVec2){x,y}
 #define IMVEC4(x,y,z,w) (ImVec4){x,y,z,w}
 #endif
+
+void _sgimgui_igimage(ImTextureID user_texture_id, const ImVec2 size) {
+    #if defined(__cplusplus)
+        ImGui::Image(ImTextureRef(user_texture_id), size);
+    #else
+        // FIXME: Dear Bindings is currently missing a constructor wrapper for ImTextureRef
+        ImTextureRef tex_ref = {0};
+        tex_ref._TexID = user_texture_id;
+        igImage(tex_ref, size);
+    #endif
+}
 
 /*--- UTILS ------------------------------------------------------------------*/
 _SOKOL_PRIVATE void _sgimgui_clear(void* ptr, size_t size) {
@@ -3400,7 +3408,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_embedded_image(sgimgui_t* ctx, sg_image img, f
             igSliderFloatEx("Scale", scale, 0.125f, 8.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
             float w = (float)img_ui->desc.width * (*scale);
             float h = (float)img_ui->desc.height * (*scale);
-            igImage(simgui_imtextureid(img_ui->res_id), IMVEC2(w, h));
+            _sgimgui_igimage(simgui_imtextureid(img_ui->res_id), IMVEC2(w, h));
             igPopID();
         } else {
             igText("Image not renderable.");
