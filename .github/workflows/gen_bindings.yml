@@ -129,7 +129,10 @@ jobs:
       - uses: actions/checkout@main
         with:
           repository: floooh/sokol-zig
-      - uses: goto-bus-stop/setup-zig@v2
+      - uses: mlugg/setup-zig@v2
+        with:
+          # NOTE: version can also come from build.zig.zon
+          version: master
       - uses: actions/download-artifact@main
         with:
           name: ignore-me-zig
