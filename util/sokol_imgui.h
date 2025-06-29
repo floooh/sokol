@@ -229,6 +229,21 @@
 
         simgui_shutdown()
 
+    ON ATTACHING YOUR OWN FONTS
+    ===========================
+    Since Dear ImGui 1.92.0, using using non-default fonts has been greatly simplified:
+
+    First, call `simgui_setup()` with the `.no_default_font` so that
+    sokol_imgui.h skips adding the default font.
+
+    ...then simply call `AddFontDefault()` or `AddFontFromMemoryTTF()` on
+    the Dear ImGui IO object.
+
+    Do *NOT*:
+        - call the deprecated `GetTexDataAsRGBA32()` function
+        - create a sokol-gfx image object for the font
+        - set the `Font->TexID` on the ImGui IO object
+
 
     ON USER-PROVIDED IMAGES AND SAMPLERS
     ====================================
@@ -263,6 +278,21 @@
 
         sg_image img = simgui_image_from_imtextureid(imtex_id);
         sg_sampler smp = simgui_sampler_from_imtextureid(imtex_id);
+
+    NOTE on C bindings since 1.92.0:
+
+        Since Dear ImGui v1.92.0 the ImGui::Image function takes an
+        ImTextureRef object instead of ImTextureID. In C++ this doesn't
+        require a code change since the ImTextureRef is automatically constructed
+        from the ImTextureID.
+
+        In C this doesn't work and you need to explicitly create an
+        ImTextureRef struct, for instance:
+
+            igImage((ImTextureRef){ ._TexID = my_tex_id }, ...);
+
+        Currently Dear Bindings is missing a wrapper function for this,
+        also see: https://github.com/dearimgui/dear_bindings/issues/99
 
 
     MEMORY ALLOCATION OVERRIDE
@@ -492,10 +522,12 @@ typedef struct simgui_font_tex_desc_t {
 SOKOL_IMGUI_API_DECL void simgui_setup(const simgui_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_new_frame(const simgui_frame_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_render(void);
+
 SOKOL_IMGUI_API_DECL uint64_t simgui_imtextureid(sg_image img);
 SOKOL_IMGUI_API_DECL uint64_t simgui_imtextureid_with_sampler(sg_image img, sg_sampler smp);
 SOKOL_IMGUI_API_DECL sg_image simgui_image_from_imtextureid(uint64_t imtex_id);
 SOKOL_IMGUI_API_DECL sg_sampler simgui_sampler_from_imtextureid(uint64_t imtex_id);
+
 SOKOL_IMGUI_API_DECL void simgui_add_focus_event(bool focus);
 SOKOL_IMGUI_API_DECL void simgui_add_mouse_pos_event(float x, float y);
 SOKOL_IMGUI_API_DECL void simgui_add_touch_pos_event(float x, float y);
@@ -505,6 +537,7 @@ SOKOL_IMGUI_API_DECL void simgui_add_key_event(int imgui_key, bool down);
 SOKOL_IMGUI_API_DECL void simgui_add_input_character(uint32_t c);
 SOKOL_IMGUI_API_DECL void simgui_add_input_characters_utf8(const char* c);
 SOKOL_IMGUI_API_DECL void simgui_add_touch_button_event(int mouse_button, bool down);
+
 #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
 SOKOL_IMGUI_API_DECL bool simgui_handle_event(const sapp_event* ev);
 SOKOL_IMGUI_API_DECL int simgui_map_keycode(sapp_keycode keycode);  // returns ImGuiKey_*
