@@ -847,14 +847,14 @@ SOKOL_GFX_IMGUI_API_DECL void sgimgui_draw_frame_stats_window(sgimgui_t* ctx);
 
 /*--- C => C++ layer ---------------------------------------------------------*/
 
-#define _SGIMGUI_CONCAT2(prefix, name) prefix ## name
-#define _SGIMGUI_CONCAT(prefix, name) _SGIMGUI_CONCAT2(prefix, name)
 #if defined(__cplusplus)
-#define _SGIMGUI_IMGUI_FUNC(name) _SGIMGUI_CONCAT(ImGui::, name)
+#define _SGIMGUI_IMGUI_FUNC(name) ImGui::name
 #else
 #ifndef SOKOL_GFX_IMGUI_CPREFIX
 #define SOKOL_GFX_IMGUI_CPREFIX ig
 #endif
+#define _SGIMGUI_CONCAT2(prefix, name) prefix ## name
+#define _SGIMGUI_CONCAT(prefix, name) _SGIMGUI_CONCAT2(prefix, name)
 #define _SGIMGUI_IMGUI_FUNC(name) _SGIMGUI_CONCAT(SOKOL_GFX_IMGUI_CPREFIX, name)
 #endif
 
