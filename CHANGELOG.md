@@ -1,5 +1,52 @@
 ## Updates
 
+### 29-Jun-2025
+
+The Dear ImGui backend in sokol_imgui.h has been updated for Dear ImGui 1.92.0.
+
+This may be a breaking change if:
+
+- you are attaching your own fonts to Dear ImGui
+- you use the C bindings and render images in the UI
+- you were calling the sokol_imgui.h functions `simgui_create_fonts_texture()`
+  and `simgui_destroy_fonts_texture()` (those are no longer necessary and have
+  been removed)
+
+If you had been attaching your own fonts to Dear ImGui, remove any code which
+explicitly creates a sokol-gfx font texture image object. Specifically:
+
+- do not call the Dear ImGui `GetTexDataAsRGBA32()` method
+- do not call `sg_make_image()` with the receiced data
+- do not set `Fonts->TexID` on the Dear ImGui IO object
+
+If you are using Dear ImGui C bindings, you'll need to fix the places where
+the `igImage()` function is called. This now takes an `ImTextureRef` struct
+instead of an `ImTextureID` (in C++ this is not a problem since the ImTextureRef
+is automatically constructed on the fly from the ImTextureID, but in C you'll
+need to do this by hand, e.g. change:
+
+```c
+igImage(my_tex_id, ...);
+```
+...to:
+```c
+igImage((ImTextureRef){ ._TexID=my_tex_id}, ...);
+```
+Dear Bindings is currently missing a helper function for this conversion, also
+see: https://github.com/dearimgui/dear_bindings/issues/99
+
+...and a drive-by update in `sokol_gfx_imgui.h`: when used from C, the function
+prefix of the C bindings can now be configured via the macro `SOKOL_GFX_IMGUI_CPREFIX`.
+The default prefix is `ig` which makes it compatible with the bindings from
+https://github.com/floooh/dcimgui (which are the recommended C bindings for use
+with the sokol headers).
+
+Related PRs:
+
+- the actual changes: https://github.com/floooh/sokol/pull/1294
+- fixes in the v6502r project (custom fonts): https://github.com/floooh/v6502r/pull/33
+- various fixes in the sokol-samples: https://github.com/floooh/sokol-samples/pull/173
+
 ### 28-Jun-2025
 
 sokol_gfx.h d3d11: `#include` statements are now supported when directly passing HLSL
