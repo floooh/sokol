@@ -2487,6 +2487,7 @@ static void _simgui_io_add_input_characters_utf8(ImGuiIO* io, const char* c) {
     #endif
 }
 
+#if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
 static ImGuiMouseCursor _simgui_imgui_get_mouse_cursor(void) {
     #if defined(__cplusplus)
         return ImGui::GetMouseCursor();
@@ -2494,6 +2495,7 @@ static ImGuiMouseCursor _simgui_imgui_get_mouse_cursor(void) {
         return _SIMGUI_CFUNC(GetMouseCursor)();
     #endif
 }
+#endif
 
 static ImDrawList* _simgui_imdrawlist_at(ImDrawData* draw_data, int cl_index) {
     #if defined(__cplusplus)
