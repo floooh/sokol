@@ -45,7 +45,8 @@
         SOKOL_ASSERT(c)     -- your own assert macro, default: assert(c)
         SOKOL_UNREACHABLE   -- your own macro to annotate unreachable code,
                                default: SOKOL_ASSERT(false)
-        SOKOL_GFX_IMGUI_API_DECL      - public function declaration prefix (default: extern)
+        SOKOL_GFX_IMGUI_API_DECL    - public function declaration prefix (default: extern)
+        SOKOL_GFX_IMGUI_CPREFIX     - defines the function prefix for the Dear ImGui C bindings (default: ig)
         SOKOL_API_DECL      - same as SOKOL_GFX_IMGUI_API_DECL
         SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
@@ -845,122 +846,190 @@ SOKOL_GFX_IMGUI_API_DECL void sgimgui_draw_frame_stats_window(sgimgui_t* ctx);
 #define _SGIMGUI_COLOR_ERR 0xFF8888FF
 
 /*--- C => C++ layer ---------------------------------------------------------*/
+
+#if defined(__cplusplus)
+#define _SGIMGUI_IMGUI_FUNC(name) ImGui::name
+#else
+#ifndef SOKOL_GFX_IMGUI_CPREFIX
+#define SOKOL_GFX_IMGUI_CPREFIX ig
+#endif
+#define _SGIMGUI_CONCAT2(prefix, name) prefix ## name
+#define _SGIMGUI_CONCAT(prefix, name) _SGIMGUI_CONCAT2(prefix, name)
+#define _SGIMGUI_IMGUI_FUNC(name) _SGIMGUI_CONCAT(SOKOL_GFX_IMGUI_CPREFIX, name)
+#endif
+
 #if defined(__cplusplus)
 #define IMVEC2(x,y) ImVec2(x,y)
 #define IMVEC4(x,y,z,w) ImVec4(x,y,z,w)
-_SOKOL_PRIVATE void igText(const char* fmt,...) {
-    va_list args;
-    va_start(args, fmt);
-    ImGui::TextV(fmt, args);
-    va_end(args);
-}
-_SOKOL_PRIVATE void igSeparator(void) {
-    return ImGui::Separator();
-}
-_SOKOL_PRIVATE void igSameLine(void) {
-    return ImGui::SameLine();
-}
-_SOKOL_PRIVATE void igPushIDInt(int int_id) {
-    return ImGui::PushID(int_id);
-}
-_SOKOL_PRIVATE void igPushID(const char* str_id) {
-    return ImGui::PushID(str_id);
-}
-_SOKOL_PRIVATE void igPopID() {
-    return ImGui::PopID();
-}
-_SOKOL_PRIVATE bool igSelectableEx(const char* label,bool selected,ImGuiSelectableFlags flags,const ImVec2 size) {
-    return ImGui::Selectable(label,selected,flags,size);
-}
-_SOKOL_PRIVATE bool igSmallButton(const char* label) {
-    return ImGui::SmallButton(label);
-}
-_SOKOL_PRIVATE bool igBeginChild(const char* str_id,const ImVec2 size,bool border,ImGuiWindowFlags flags) {
-    return ImGui::BeginChild(str_id,size,border,flags);
-}
-_SOKOL_PRIVATE void igEndChild() {
-    return ImGui::EndChild();
-}
-_SOKOL_PRIVATE void igPushStyleColor(ImGuiCol idx, ImU32 col) {
-    return ImGui::PushStyleColor(idx,col);
-}
-_SOKOL_PRIVATE void igPopStyleColor() {
-    return ImGui::PopStyleColor();
-}
-_SOKOL_PRIVATE bool igTreeNodeStr(const char* str_id,const char* fmt,...) {
-    va_list args;
-    va_start(args, fmt);
-    bool ret = ImGui::TreeNodeV(str_id,fmt,args);
-    va_end(args);
-    return ret;
-}
-_SOKOL_PRIVATE bool igTreeNode(const char* label) {
-    return ImGui::TreeNode(label);
-}
-_SOKOL_PRIVATE void igTreePop() {
-    return ImGui::TreePop();
-}
-_SOKOL_PRIVATE bool igIsItemHovered(ImGuiHoveredFlags flags) {
-    return ImGui::IsItemHovered(flags);
-}
-_SOKOL_PRIVATE void igSetTooltip(const char* fmt,...) {
-    va_list args;
-    va_start(args, fmt);
-    ImGui::SetTooltipV(fmt,args);
-    va_end(args);
-}
-_SOKOL_PRIVATE bool igSliderFloatEx(const char* label,float* v,float v_min,float v_max,const char* format,ImGuiSliderFlags flags) {
-    return ImGui::SliderFloat(label,v,v_min,v_max,format,flags);
-}
-_SOKOL_PRIVATE void igImage(ImTextureID user_texture_id,const ImVec2 size) {
-    return ImGui::Image(user_texture_id,size);
-}
-_SOKOL_PRIVATE void igSetNextWindowSize(const ImVec2 size,ImGuiCond cond) {
-    return ImGui::SetNextWindowSize(size,cond);
-}
-_SOKOL_PRIVATE bool igBegin(const char* name,bool* p_open,ImGuiWindowFlags flags) {
-    return ImGui::Begin(name,p_open,flags);
-}
-_SOKOL_PRIVATE void igEnd() {
-    return ImGui::End();
-}
-_SOKOL_PRIVATE bool igBeginMenu(const char* label) {
-    return ImGui::BeginMenu(label);
-}
-_SOKOL_PRIVATE void igEndMenu(void) {
-    ImGui::EndMenu();
-}
-_SOKOL_PRIVATE bool igMenuItemBoolPtr(const char* label, const char* shortcut, bool* p_selected, bool enabled) {
-    return ImGui::MenuItem(label, shortcut, p_selected, enabled);
-}
-_SOKOL_PRIVATE bool igBeginTable(const char* str_id, int column, ImGuiTableFlags flags) {
-    return ImGui::BeginTable(str_id, column, flags);
-}
-_SOKOL_PRIVATE void igEndTable(void) {
-    ImGui::EndTable();
-}
-_SOKOL_PRIVATE void igTableSetupScrollFreeze(int cols, int rows) {
-    ImGui::TableSetupScrollFreeze(cols, rows);
-}
-_SOKOL_PRIVATE void igTableSetupColumn(const char* label, ImGuiTableColumnFlags flags) {
-    ImGui::TableSetupColumn(label, flags);
-}
-_SOKOL_PRIVATE void igTableHeadersRow(void) {
-    ImGui::TableHeadersRow();
-}
-_SOKOL_PRIVATE void igTableNextRow(void) {
-    ImGui::TableNextRow();
-}
-_SOKOL_PRIVATE bool igTableSetColumnIndex(int column_n) {
-    return ImGui::TableSetColumnIndex(column_n);
-}
-_SOKOL_PRIVATE bool igCheckbox(const char* label, bool* v) {
-    return ImGui::Checkbox(label, v);
-}
 #else
 #define IMVEC2(x,y) (ImVec2){x,y}
 #define IMVEC4(x,y,z,w) (ImVec4){x,y,z,w}
 #endif
+
+_SOKOL_PRIVATE void _sgimgui_igtext(const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    _SGIMGUI_IMGUI_FUNC(TextV)(fmt, args);
+    va_end(args);
+}
+
+_SOKOL_PRIVATE void _sgimgui_igseparator(void) {
+    _SGIMGUI_IMGUI_FUNC(Separator)();
+}
+
+_SOKOL_PRIVATE void _sgimgui_igsameline(void) {
+    _SGIMGUI_IMGUI_FUNC(SameLine)();
+}
+
+_SOKOL_PRIVATE void _sgimgui_igpushidint(int int_id) {
+    #if defined(__cplusplus)
+        ImGui::PushID(int_id);
+    #else
+        _SGIMGUI_IMGUI_FUNC(PushIDInt)(int_id);
+    #endif
+}
+
+_SOKOL_PRIVATE void _sgimgui_igpushid(const char* str_id) {
+    _SGIMGUI_IMGUI_FUNC(PushID)(str_id);
+}
+
+_SOKOL_PRIVATE void _sgimgui_igpopid(void) {
+    _SGIMGUI_IMGUI_FUNC(PopID)();
+}
+
+_SOKOL_PRIVATE bool _sgimgui_igselectableex(const char* label, bool selected, ImGuiSelectableFlags flags, const ImVec2 size) {
+    #if defined(__cplusplus)
+        return ImGui::Selectable(label, selected, flags, size);
+    #else
+        return _SGIMGUI_IMGUI_FUNC(SelectableEx)(label, selected, flags, size);
+    #endif
+}
+
+_SOKOL_PRIVATE bool _sgimgui_igsmallbutton(const char* label) {
+    return _SGIMGUI_IMGUI_FUNC(SmallButton)(label);
+}
+
+_SOKOL_PRIVATE bool _sgimgui_igbeginchild(const char* str_id, const ImVec2 size, bool border, ImGuiWindowFlags flags) {
+    return _SGIMGUI_IMGUI_FUNC(BeginChild)(str_id, size, border, flags);
+}
+
+_SOKOL_PRIVATE void _sgimgui_igendchild(void) {
+    _SGIMGUI_IMGUI_FUNC(EndChild)();
+}
+
+_SOKOL_PRIVATE void _sgimgui_igpushstylecolor(ImGuiCol idx, ImU32 col) {
+    _SGIMGUI_IMGUI_FUNC(PushStyleColor)(idx, col);
+}
+
+_SOKOL_PRIVATE void _sgimgui_igpopstylecolor(void) {
+    _SGIMGUI_IMGUI_FUNC(PopStyleColor)();
+}
+
+_SOKOL_PRIVATE bool _sgimgui_igtreenodestr(const char* str_id, const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    bool ret = _SGIMGUI_IMGUI_FUNC(TreeNodeV)(str_id, fmt, args);
+    va_end(args);
+    return ret;
+}
+
+_SOKOL_PRIVATE bool _sgimgui_igtreenode(const char* label) {
+    return _SGIMGUI_IMGUI_FUNC(TreeNode)(label);
+}
+
+_SOKOL_PRIVATE void _sgimgui_igtreepop(void) {
+    _SGIMGUI_IMGUI_FUNC(TreePop)();
+}
+
+_SOKOL_PRIVATE bool _sgimgui_igisitemhovered(ImGuiHoveredFlags flags) {
+    return _SGIMGUI_IMGUI_FUNC(IsItemHovered)(flags);
+}
+
+_SOKOL_PRIVATE void _sgimgui_igsettooltip(const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    _SGIMGUI_IMGUI_FUNC(SetTooltipV)(fmt, args);
+    va_end(args);
+}
+
+_SOKOL_PRIVATE bool _sgimgui_igsliderfloatex(const char* label, float* v, float v_min, float v_max, const char* format, ImGuiSliderFlags flags) {
+    #if defined(__cplusplus)
+        return ImGui::SliderFloat(label, v, v_min, v_max, format, flags);
+    #else
+        return _SGIMGUI_IMGUI_FUNC(SliderFloatEx)(label, v, v_min, v_max, format, flags);
+    #endif
+}
+
+_SOKOL_PRIVATE void _sgimgui_igsetnextwindowsize(const ImVec2 size, ImGuiCond cond) {
+    _SGIMGUI_IMGUI_FUNC(SetNextWindowSize)(size, cond);
+}
+
+_SOKOL_PRIVATE bool _sgimgui_igbegin(const char* name, bool* p_open, ImGuiWindowFlags flags) {
+    return _SGIMGUI_IMGUI_FUNC(Begin)(name, p_open, flags);
+}
+
+_SOKOL_PRIVATE void _sgimgui_igend(void) {
+    _SGIMGUI_IMGUI_FUNC(End)();
+}
+
+_SOKOL_PRIVATE bool _sgimgui_igbeginmenu(const char* label) {
+    return _SGIMGUI_IMGUI_FUNC(BeginMenu)(label);
+}
+
+_SOKOL_PRIVATE void _sgimgui_igendmenu(void) {
+    _SGIMGUI_IMGUI_FUNC(EndMenu)();
+}
+
+_SOKOL_PRIVATE bool _sgimgui_igmenuitemboolptr(const char* label, const char* shortcut, bool* p_selected, bool enabled) {
+    #if defined(__cplusplus)
+        return ImGui::MenuItem(label, shortcut, p_selected, enabled);
+    #else
+        return _SGIMGUI_IMGUI_FUNC(MenuItemBoolPtr)(label, shortcut, p_selected, enabled);
+    #endif
+}
+
+_SOKOL_PRIVATE bool _sgimgui_igbegintable(const char* str_id, int column, ImGuiTableFlags flags) {
+    return _SGIMGUI_IMGUI_FUNC(BeginTable)(str_id, column, flags);
+}
+
+_SOKOL_PRIVATE void _sgimgui_igendtable(void) {
+    _SGIMGUI_IMGUI_FUNC(EndTable)();
+}
+
+_SOKOL_PRIVATE void _sgimgui_igtablesetupscrollfreeze(int cols, int rows) {
+    _SGIMGUI_IMGUI_FUNC(TableSetupScrollFreeze)(cols, rows);
+}
+
+_SOKOL_PRIVATE void _sgimgui_igtablesetupcolumn(const char* label, ImGuiTableColumnFlags flags) {
+    _SGIMGUI_IMGUI_FUNC(TableSetupColumn)(label, flags);
+}
+
+_SOKOL_PRIVATE void _sgimgui_igtableheadersrow(void) {
+    _SGIMGUI_IMGUI_FUNC(TableHeadersRow)();
+}
+
+_SOKOL_PRIVATE void _sgimgui_igtablenextrow(void) {
+    _SGIMGUI_IMGUI_FUNC(TableNextRow)();
+}
+
+_SOKOL_PRIVATE bool _sgimgui_igtablesetcolumnindex(int column_n) {
+    return _SGIMGUI_IMGUI_FUNC(TableSetColumnIndex)(column_n);
+}
+
+_SOKOL_PRIVATE bool _sgimgui_igcheckbox(const char* label, bool* v) {
+    return _SGIMGUI_IMGUI_FUNC(Checkbox)(label, v);
+}
+
+_SOKOL_PRIVATE void _sgimgui_igimage(ImTextureID user_texture_id, const ImVec2 size) {
+    #if defined(__cplusplus)
+        ImGui::Image(ImTextureRef(user_texture_id), size);
+    #else
+        // FIXME: Dear Bindings is currently missing a constructor wrapper for ImTextureRef
+        ImTextureRef tex_ref = {0};
+        tex_ref._TexID = user_texture_id;
+        _SGIMGUI_IMGUI_FUNC(Image)(tex_ref, size);
+    #endif
+}
 
 /*--- UTILS ------------------------------------------------------------------*/
 _SOKOL_PRIVATE void _sgimgui_clear(void* ptr, size_t size) {
@@ -1142,9 +1211,9 @@ _SOKOL_PRIVATE const char* _sgimgui_resourcestate_string(sg_resource_state s) {
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_resource_slot(const sg_slot_info* slot) {
-    igText("ResId: %08X", slot->res_id);
-    igText("State: %s", _sgimgui_resourcestate_string(slot->state));
-    igText("Uninit Count: %d", slot->uninit_count);
+    _sgimgui_igtext("ResId: %08X", slot->res_id);
+    _sgimgui_igtext("State: %s", _sgimgui_resourcestate_string(slot->state));
+    _sgimgui_igtext("Uninit Count: %d", slot->uninit_count);
 }
 
 _SOKOL_PRIVATE const char* _sgimgui_backend_string(sg_backend b) {
@@ -3140,16 +3209,16 @@ _SOKOL_PRIVATE void _sgimgui_pop_debug_group(void* user_data) {
 
 /*--- IMGUI HELPERS ----------------------------------------------------------*/
 _SOKOL_PRIVATE bool _sgimgui_draw_resid_list_item(uint32_t res_id, const char* label, bool selected) {
-    igPushIDInt((int)res_id);
+    _sgimgui_igpushidint((int)res_id);
     bool res;
     if (label[0]) {
-        res = igSelectableEx(label, selected, 0, IMVEC2(0,0));
+        res = _sgimgui_igselectableex(label, selected, 0, IMVEC2(0,0));
     } else {
         sgimgui_str_t str;
         _sgimgui_snprintf(&str, "0x%08X", res_id);
-        res = igSelectableEx(str.buf, selected, 0, IMVEC2(0,0));
+        res = _sgimgui_igselectableex(str.buf, selected, 0, IMVEC2(0,0));
     }
-    igPopID();
+    _sgimgui_igpopid();
     return res;
 }
 
@@ -3163,9 +3232,9 @@ _SOKOL_PRIVATE bool _sgimgui_draw_resid_link(uint32_t res_type, uint32_t res_id,
         _sgimgui_snprintf(&str_buf, "0x%08X", res_id);
         str = str_buf.buf;
     }
-    igPushIDInt((int)((res_type<<24)|res_id));
-    bool res = igSmallButton(str);
-    igPopID();
+    _sgimgui_igpushidint((int)((res_type<<24)|res_id));
+    bool res = _sgimgui_igsmallbutton(str);
+    _sgimgui_igpopid();
     return res;
 }
 
@@ -3226,7 +3295,7 @@ _SOKOL_PRIVATE void _sgimgui_show_shader(sgimgui_t* ctx, sg_shader shd) {
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_buffer_list(sgimgui_t* ctx) {
-    igBeginChild("buffer_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), true, 0);
+    _sgimgui_igbeginchild("buffer_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), true, 0);
     for (int i = 0; i < ctx->buffer_window.num_slots; i++) {
         sg_buffer buf = ctx->buffer_window.slots[i].res_id;
         sg_resource_state state = sg_query_buffer_state(buf);
@@ -3237,11 +3306,11 @@ _SOKOL_PRIVATE void _sgimgui_draw_buffer_list(sgimgui_t* ctx) {
             }
         }
     }
-    igEndChild();
+    _sgimgui_igendchild();
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_image_list(sgimgui_t* ctx) {
-    igBeginChild("image_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), true, 0);
+    _sgimgui_igbeginchild("image_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), true, 0);
     for (int i = 0; i < ctx->image_window.num_slots; i++) {
         sg_image img = ctx->image_window.slots[i].res_id;
         sg_resource_state state = sg_query_image_state(img);
@@ -3252,11 +3321,11 @@ _SOKOL_PRIVATE void _sgimgui_draw_image_list(sgimgui_t* ctx) {
             }
         }
     }
-    igEndChild();
+    _sgimgui_igendchild();
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_sampler_list(sgimgui_t* ctx) {
-    igBeginChild("sampler_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), true, 0);
+    _sgimgui_igbeginchild("sampler_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), true, 0);
     for (int i = 0; i < ctx->sampler_window.num_slots; i++) {
         sg_sampler smp = ctx->sampler_window.slots[i].res_id;
         sg_resource_state state = sg_query_sampler_state(smp);
@@ -3267,11 +3336,11 @@ _SOKOL_PRIVATE void _sgimgui_draw_sampler_list(sgimgui_t* ctx) {
             }
         }
     }
-    igEndChild();
+    _sgimgui_igendchild();
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_shader_list(sgimgui_t* ctx) {
-    igBeginChild("shader_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), true, 0);
+    _sgimgui_igbeginchild("shader_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), true, 0);
     for (int i = 0; i < ctx->shader_window.num_slots; i++) {
         sg_shader shd = ctx->shader_window.slots[i].res_id;
         sg_resource_state state = sg_query_shader_state(shd);
@@ -3282,11 +3351,11 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_list(sgimgui_t* ctx) {
             }
         }
     }
-    igEndChild();
+    _sgimgui_igendchild();
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_pipeline_list(sgimgui_t* ctx) {
-    igBeginChild("pipeline_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), true, 0);
+    _sgimgui_igbeginchild("pipeline_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), true, 0);
     for (int i = 1; i < ctx->pipeline_window.num_slots; i++) {
         sg_pipeline pip = ctx->pipeline_window.slots[i].res_id;
         sg_resource_state state = sg_query_pipeline_state(pip);
@@ -3297,11 +3366,11 @@ _SOKOL_PRIVATE void _sgimgui_draw_pipeline_list(sgimgui_t* ctx) {
             }
         }
     }
-    igEndChild();
+    _sgimgui_igendchild();
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_attachments_list(sgimgui_t* ctx) {
-    igBeginChild("pass_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), true, 0);
+    _sgimgui_igbeginchild("pass_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), true, 0);
     for (int i = 1; i < ctx->attachments_window.num_slots; i++) {
         sg_attachments atts = ctx->attachments_window.slots[i].res_id;
         sg_resource_state state = sg_query_attachments_state(atts);
@@ -3312,23 +3381,23 @@ _SOKOL_PRIVATE void _sgimgui_draw_attachments_list(sgimgui_t* ctx) {
             }
         }
     }
-    igEndChild();
+    _sgimgui_igendchild();
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_capture_list(sgimgui_t* ctx) {
-    igBeginChild("capture_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), true, 0);
+    _sgimgui_igbeginchild("capture_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), true, 0);
     const int num_items = _sgimgui_capture_num_read_items(ctx);
     uint64_t group_stack = 1;   /* bit set: group unfolded, cleared: folded */
     for (int i = 0; i < num_items; i++) {
         const sgimgui_capture_item_t* item = _sgimgui_capture_read_item_at(ctx, i);
         sgimgui_str_t item_string = _sgimgui_capture_item_string(ctx, i, item);
-        igPushStyleColor(ImGuiCol_Text, item->color);
-        igPushIDInt(i);
+        _sgimgui_igpushstylecolor(ImGuiCol_Text, item->color);
+        _sgimgui_igpushidint(i);
         if (item->cmd == SGIMGUI_CMD_PUSH_DEBUG_GROUP) {
             if (group_stack & 1) {
                 group_stack <<= 1;
                 const char* group_name = item->args.push_debug_group.name.buf;
-                if (igTreeNodeStr(group_name, "Group: %s", group_name)) {
+                if (_sgimgui_igtreenodestr(group_name, "Group: %s", group_name)) {
                     group_stack |= 1;
                 }
             } else {
@@ -3336,53 +3405,53 @@ _SOKOL_PRIVATE void _sgimgui_draw_capture_list(sgimgui_t* ctx) {
             }
         } else if (item->cmd == SGIMGUI_CMD_POP_DEBUG_GROUP) {
             if (group_stack & 1) {
-                igTreePop();
+                _sgimgui_igtreepop();
             }
             group_stack >>= 1;
         } else if (group_stack & 1) {
-            if (igSelectableEx(item_string.buf, ctx->capture_window.sel_item == i, 0, IMVEC2(0,0))) {
+            if (_sgimgui_igselectableex(item_string.buf, ctx->capture_window.sel_item == i, 0, IMVEC2(0,0))) {
                 ctx->capture_window.sel_item = i;
             }
-            if (igIsItemHovered(0)) {
-                igSetTooltip("%s", item_string.buf);
+            if (_sgimgui_igisitemhovered(0)) {
+                _sgimgui_igsettooltip("%s", item_string.buf);
             }
         }
-        igPopID();
-        igPopStyleColor();
+        _sgimgui_igpopid();
+        _sgimgui_igpopstylecolor();
     }
-    igEndChild();
+    _sgimgui_igendchild();
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_buffer_panel(sgimgui_t* ctx, sg_buffer buf) {
     if (buf.id != SG_INVALID_ID) {
-        igBeginChild("buffer", IMVEC2(0,0), false, 0);
+        _sgimgui_igbeginchild("buffer", IMVEC2(0,0), false, 0);
         sg_buffer_info info = sg_query_buffer_info(buf);
         if (info.slot.state == SG_RESOURCESTATE_VALID) {
             const sgimgui_buffer_t* buf_ui = &ctx->buffer_window.slots[_sgimgui_slot_index(buf.id)];
-            igText("Label: %s", buf_ui->label.buf[0] ? buf_ui->label.buf : "---");
+            _sgimgui_igtext("Label: %s", buf_ui->label.buf[0] ? buf_ui->label.buf : "---");
             _sgimgui_draw_resource_slot(&info.slot);
-            igSeparator();
-            igText("Usage:\n");
-            igText("  vertex_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.vertex_buffer));
-            igText("  index_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.index_buffer));
-            igText("  storage_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.storage_buffer));
-            igText("  immutable: %s", _sgimgui_bool_string(buf_ui->desc.usage.immutable));
-            igText("  dynamic_update: %s", _sgimgui_bool_string(buf_ui->desc.usage.dynamic_update));
-            igText("  stream_update: %s", _sgimgui_bool_string(buf_ui->desc.usage.stream_update));
-            igText("Size:  %d", (int)buf_ui->desc.size);
+            _sgimgui_igseparator();
+            _sgimgui_igtext("Usage:\n");
+            _sgimgui_igtext("  vertex_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.vertex_buffer));
+            _sgimgui_igtext("  index_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.index_buffer));
+            _sgimgui_igtext("  storage_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.storage_buffer));
+            _sgimgui_igtext("  immutable: %s", _sgimgui_bool_string(buf_ui->desc.usage.immutable));
+            _sgimgui_igtext("  dynamic_update: %s", _sgimgui_bool_string(buf_ui->desc.usage.dynamic_update));
+            _sgimgui_igtext("  stream_update: %s", _sgimgui_bool_string(buf_ui->desc.usage.stream_update));
+            _sgimgui_igtext("Size:  %d", (int)buf_ui->desc.size);
             if (!buf_ui->desc.usage.immutable) {
-                igSeparator();
-                igText("Num Slots:     %d", info.num_slots);
-                igText("Active Slot:   %d", info.active_slot);
-                igText("Update Frame Index: %d", info.update_frame_index);
-                igText("Append Frame Index: %d", info.append_frame_index);
-                igText("Append Pos:         %d", info.append_pos);
-                igText("Append Overflow:    %s", _sgimgui_bool_string(info.append_overflow));
+                _sgimgui_igseparator();
+                _sgimgui_igtext("Num Slots:     %d", info.num_slots);
+                _sgimgui_igtext("Active Slot:   %d", info.active_slot);
+                _sgimgui_igtext("Update Frame Index: %d", info.update_frame_index);
+                _sgimgui_igtext("Append Frame Index: %d", info.append_frame_index);
+                _sgimgui_igtext("Append Pos:         %d", info.append_pos);
+                _sgimgui_igtext("Append Overflow:    %s", _sgimgui_bool_string(info.append_overflow));
             }
         } else {
-            igText("Buffer 0x%08X not valid.", buf.id);
+            _sgimgui_igtext("Buffer 0x%08X not valid.", buf.id);
         }
-        igEndChild();
+        _sgimgui_igendchild();
     }
 }
 
@@ -3396,81 +3465,81 @@ _SOKOL_PRIVATE void _sgimgui_draw_embedded_image(sgimgui_t* ctx, sg_image img, f
     if (sg_query_image_state(img) == SG_RESOURCESTATE_VALID) {
         sgimgui_image_t* img_ui = &ctx->image_window.slots[_sgimgui_slot_index(img.id)];
         if (_sgimgui_image_renderable(img_ui->desc.type, img_ui->desc.pixel_format, img_ui->desc.sample_count)) {
-            igPushIDInt((int)img.id);
-            igSliderFloatEx("Scale", scale, 0.125f, 8.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
+            _sgimgui_igpushidint((int)img.id);
+            _sgimgui_igsliderfloatex("Scale", scale, 0.125f, 8.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
             float w = (float)img_ui->desc.width * (*scale);
             float h = (float)img_ui->desc.height * (*scale);
-            igImage(simgui_imtextureid(img_ui->res_id), IMVEC2(w, h));
-            igPopID();
+            _sgimgui_igimage(simgui_imtextureid(img_ui->res_id), IMVEC2(w, h));
+            _sgimgui_igpopid();
         } else {
-            igText("Image not renderable.");
+            _sgimgui_igtext("Image not renderable.");
         }
     }
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_image_panel(sgimgui_t* ctx, sg_image img) {
     if (img.id != SG_INVALID_ID) {
-        igBeginChild("image", IMVEC2(0,0), false, 0);
+        _sgimgui_igbeginchild("image", IMVEC2(0,0), false, 0);
         sg_image_info info = sg_query_image_info(img);
         if (info.slot.state == SG_RESOURCESTATE_VALID) {
             sgimgui_image_t* img_ui = &ctx->image_window.slots[_sgimgui_slot_index(img.id)];
             const sg_image_desc* desc = &img_ui->desc;
-            igText("Label: %s", img_ui->label.buf[0] ? img_ui->label.buf : "---");
+            _sgimgui_igtext("Label: %s", img_ui->label.buf[0] ? img_ui->label.buf : "---");
             _sgimgui_draw_resource_slot(&info.slot);
-            igSeparator();
+            _sgimgui_igseparator();
             _sgimgui_draw_embedded_image(ctx, img, &img_ui->ui_scale);
-            igSeparator();
-            igText("Type:           %s", _sgimgui_imagetype_string(desc->type));
-            igText("Usage:\n");
-            igText("  render_attachment: %s", _sgimgui_bool_string(desc->usage.render_attachment));
-            igText("  storage_attachment: %s", _sgimgui_bool_string(desc->usage.storage_attachment));
-            igText("  immutable: %s", _sgimgui_bool_string(desc->usage.immutable));
-            igText("  dynamic_update: %s", _sgimgui_bool_string(desc->usage.dynamic_update));
-            igText("  stream_update: %s", _sgimgui_bool_string(desc->usage.stream_update));
-            igText("Width:          %d", desc->width);
-            igText("Height:         %d", desc->height);
-            igText("Num Slices:     %d", desc->num_slices);
-            igText("Num Mipmaps:    %d", desc->num_mipmaps);
-            igText("Pixel Format:   %s", _sgimgui_pixelformat_string(desc->pixel_format));
-            igText("Sample Count:   %d", desc->sample_count);
+            _sgimgui_igseparator();
+            _sgimgui_igtext("Type:           %s", _sgimgui_imagetype_string(desc->type));
+            _sgimgui_igtext("Usage:\n");
+            _sgimgui_igtext("  render_attachment: %s", _sgimgui_bool_string(desc->usage.render_attachment));
+            _sgimgui_igtext("  storage_attachment: %s", _sgimgui_bool_string(desc->usage.storage_attachment));
+            _sgimgui_igtext("  immutable: %s", _sgimgui_bool_string(desc->usage.immutable));
+            _sgimgui_igtext("  dynamic_update: %s", _sgimgui_bool_string(desc->usage.dynamic_update));
+            _sgimgui_igtext("  stream_update: %s", _sgimgui_bool_string(desc->usage.stream_update));
+            _sgimgui_igtext("Width:          %d", desc->width);
+            _sgimgui_igtext("Height:         %d", desc->height);
+            _sgimgui_igtext("Num Slices:     %d", desc->num_slices);
+            _sgimgui_igtext("Num Mipmaps:    %d", desc->num_mipmaps);
+            _sgimgui_igtext("Pixel Format:   %s", _sgimgui_pixelformat_string(desc->pixel_format));
+            _sgimgui_igtext("Sample Count:   %d", desc->sample_count);
             if (!desc->usage.immutable) {
-                igSeparator();
-                igText("Num Slots:     %d", info.num_slots);
-                igText("Active Slot:   %d", info.active_slot);
-                igText("Update Frame Index: %d", info.upd_frame_index);
+                _sgimgui_igseparator();
+                _sgimgui_igtext("Num Slots:     %d", info.num_slots);
+                _sgimgui_igtext("Active Slot:   %d", info.active_slot);
+                _sgimgui_igtext("Update Frame Index: %d", info.upd_frame_index);
             }
         } else {
-            igText("Image 0x%08X not valid.", img.id);
+            _sgimgui_igtext("Image 0x%08X not valid.", img.id);
         }
-        igEndChild();
+        _sgimgui_igendchild();
     }
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_sampler_panel(sgimgui_t* ctx, sg_sampler smp) {
     if (smp.id != SG_INVALID_ID) {
-        igBeginChild("sampler", IMVEC2(0,0), false, 0);
+        _sgimgui_igbeginchild("sampler", IMVEC2(0,0), false, 0);
         sg_sampler_info info = sg_query_sampler_info(smp);
         if (info.slot.state == SG_RESOURCESTATE_VALID) {
             sgimgui_sampler_t* smp_ui = &ctx->sampler_window.slots[_sgimgui_slot_index(smp.id)];
             const sg_sampler_desc* desc = &smp_ui->desc;
-            igText("Label: %s", smp_ui->label.buf[0] ? smp_ui->label.buf : "---");
+            _sgimgui_igtext("Label: %s", smp_ui->label.buf[0] ? smp_ui->label.buf : "---");
             _sgimgui_draw_resource_slot(&info.slot);
-            igSeparator();
-            igText("Min Filter:     %s", _sgimgui_filter_string(desc->min_filter));
-            igText("Mag Filter:     %s", _sgimgui_filter_string(desc->mag_filter));
-            igText("Mipmap Filter:  %s", _sgimgui_filter_string(desc->mipmap_filter));
-            igText("Wrap U:         %s", _sgimgui_wrap_string(desc->wrap_u));
-            igText("Wrap V:         %s", _sgimgui_wrap_string(desc->wrap_v));
-            igText("Wrap W:         %s", _sgimgui_wrap_string(desc->wrap_w));
-            igText("Min LOD:        %.3f", desc->min_lod);
-            igText("Max LOD:        %.3f", desc->max_lod);
-            igText("Border Color:   %s", _sgimgui_bordercolor_string(desc->border_color));
-            igText("Compare:        %s", _sgimgui_comparefunc_string(desc->compare));
-            igText("Max Anisotropy: %d", desc->max_anisotropy);
+            _sgimgui_igseparator();
+            _sgimgui_igtext("Min Filter:     %s", _sgimgui_filter_string(desc->min_filter));
+            _sgimgui_igtext("Mag Filter:     %s", _sgimgui_filter_string(desc->mag_filter));
+            _sgimgui_igtext("Mipmap Filter:  %s", _sgimgui_filter_string(desc->mipmap_filter));
+            _sgimgui_igtext("Wrap U:         %s", _sgimgui_wrap_string(desc->wrap_u));
+            _sgimgui_igtext("Wrap V:         %s", _sgimgui_wrap_string(desc->wrap_v));
+            _sgimgui_igtext("Wrap W:         %s", _sgimgui_wrap_string(desc->wrap_w));
+            _sgimgui_igtext("Min LOD:        %.3f", desc->min_lod);
+            _sgimgui_igtext("Max LOD:        %.3f", desc->max_lod);
+            _sgimgui_igtext("Border Color:   %s", _sgimgui_bordercolor_string(desc->border_color));
+            _sgimgui_igtext("Compare:        %s", _sgimgui_comparefunc_string(desc->compare));
+            _sgimgui_igtext("Max Anisotropy: %d", desc->max_anisotropy);
         } else {
-            igText("Sampler 0x%08X not valid.", smp.id);
+            _sgimgui_igtext("Sampler 0x%08X not valid.", smp.id);
         }
-        igEndChild();
+        _sgimgui_igendchild();
     }
 }
 
@@ -3479,55 +3548,55 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_func(const char* title, const sg_shader
     if ((func->source == 0) && (func->bytecode.ptr == 0)) {
         return;
     }
-    igPushID(title);
-    igText("%s", title);
+    _sgimgui_igpushid(title);
+    _sgimgui_igtext("%s", title);
     if (func->entry) {
-        igText("  entry: %s", func->entry);
+        _sgimgui_igtext("  entry: %s", func->entry);
     }
     if (func->d3d11_target) {
-        igText("  d3d11_target: %s", func->d3d11_target);
+        _sgimgui_igtext("  d3d11_target: %s", func->d3d11_target);
     }
     if (func->source) {
-        if (igTreeNode("source:")) {
-            igText("%s", func->source);
-            igTreePop();
+        if (_sgimgui_igtreenode("source:")) {
+            _sgimgui_igtext("%s", func->source);
+            _sgimgui_igtreepop();
         }
     } else if (func->bytecode.ptr) {
-        if (igTreeNode("bytecode")) {
-            igText("Byte-code display currently not supported.");
-            igTreePop();
+        if (_sgimgui_igtreenode("bytecode")) {
+            _sgimgui_igtext("Byte-code display currently not supported.");
+            _sgimgui_igtreepop();
         }
     }
-    igPopID();
+    _sgimgui_igpopid();
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
     if (shd.id != SG_INVALID_ID) {
-        igBeginChild("shader", IMVEC2(0,0), false, ImGuiWindowFlags_HorizontalScrollbar);
+        _sgimgui_igbeginchild("shader", IMVEC2(0,0), false, ImGuiWindowFlags_HorizontalScrollbar);
         sg_shader_info info = sg_query_shader_info(shd);
         if (info.slot.state == SG_RESOURCESTATE_VALID) {
             const sgimgui_shader_t* shd_ui = &ctx->shader_window.slots[_sgimgui_slot_index(shd.id)];
-            igText("Label: %s", shd_ui->label.buf[0] ? shd_ui->label.buf : "---");
+            _sgimgui_igtext("Label: %s", shd_ui->label.buf[0] ? shd_ui->label.buf : "---");
             _sgimgui_draw_resource_slot(&info.slot);
-            igSeparator();
-            if (igTreeNode("Attrs")) {
+            _sgimgui_igseparator();
+            if (_sgimgui_igtreenode("Attrs")) {
                 for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
                     const sg_shader_vertex_attr* a_desc = &shd_ui->desc.attrs[i];
                     if ((a_desc->base_type != SG_SHADERATTRBASETYPE_UNDEFINED) || a_desc->glsl_name || a_desc->hlsl_sem_name) {
-                        igText("#%d:", i);
+                        _sgimgui_igtext("#%d:", i);
                         if (a_desc->base_type != SG_SHADERATTRBASETYPE_UNDEFINED) {
-                            igText("  Base Type: %s", _sgimgui_shaderattrbasetype_string(a_desc->base_type));
+                            _sgimgui_igtext("  Base Type: %s", _sgimgui_shaderattrbasetype_string(a_desc->base_type));
                         }
                         if (a_desc->glsl_name) {
-                            igText("  GLSL Name: %s", a_desc->glsl_name);
+                            _sgimgui_igtext("  GLSL Name: %s", a_desc->glsl_name);
                         }
                         if (a_desc->hlsl_sem_name) {
-                            igText("  HLSL Sem Name:  %s", a_desc->hlsl_sem_name);
-                            igText("  HLSL Sem Index: %d", a_desc->hlsl_sem_index);
+                            _sgimgui_igtext("  HLSL Sem Name:  %s", a_desc->hlsl_sem_name);
+                            _sgimgui_igtext("  HLSL Sem Index: %d", a_desc->hlsl_sem_index);
                         }
                     }
                 }
-                igTreePop();
+                _sgimgui_igtreepop();
             }
             int num_valid_ubs = 0;
             for (int i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
@@ -3567,389 +3636,389 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
                 }
             }
             if (num_valid_ubs > 0) {
-                if (igTreeNode("Uniform Blocks")) {
+                if (_sgimgui_igtreenode("Uniform Blocks")) {
                     for (int i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
                         const sg_shader_uniform_block* ub = &shd_ui->desc.uniform_blocks[i];
                         if (ub->stage == SG_SHADERSTAGE_NONE) {
                             continue;
                         }
-                        igText("- slot: %d", i);
-                        igText("  stage: %s", _sgimgui_shaderstage_string(ub->stage));
-                        igText("  size: %d", ub->size);
-                        igText("  layout: %s", _sgimgui_uniformlayout_string(ub->layout));
-                        igText("  hlsl_register_b_n: %d", ub->hlsl_register_b_n);
-                        igText("  msl_buffer_n: %d", ub->msl_buffer_n);
-                        igText("  wgsl_group0_binding_n: %d", ub->wgsl_group0_binding_n);
-                        igText("  glsl_uniforms:");
+                        _sgimgui_igtext("- slot: %d", i);
+                        _sgimgui_igtext("  stage: %s", _sgimgui_shaderstage_string(ub->stage));
+                        _sgimgui_igtext("  size: %d", ub->size);
+                        _sgimgui_igtext("  layout: %s", _sgimgui_uniformlayout_string(ub->layout));
+                        _sgimgui_igtext("  hlsl_register_b_n: %d", ub->hlsl_register_b_n);
+                        _sgimgui_igtext("  msl_buffer_n: %d", ub->msl_buffer_n);
+                        _sgimgui_igtext("  wgsl_group0_binding_n: %d", ub->wgsl_group0_binding_n);
+                        _sgimgui_igtext("  glsl_uniforms:");
                         for (int j = 0; j < SG_MAX_UNIFORMBLOCK_MEMBERS; j++) {
                             const sg_glsl_shader_uniform* u = &ub->glsl_uniforms[j];
                             if (SG_UNIFORMTYPE_INVALID != u->type) {
                                 if (u->array_count <= 1) {
-                                    igText("    %s %s", _sgimgui_uniformtype_string(u->type), u->glsl_name ? u->glsl_name : "");
+                                    _sgimgui_igtext("    %s %s", _sgimgui_uniformtype_string(u->type), u->glsl_name ? u->glsl_name : "");
                                 } else {
-                                    igText("    %s[%d] %s", _sgimgui_uniformtype_string(u->type), u->array_count, u->glsl_name ? u->glsl_name : "");
+                                    _sgimgui_igtext("    %s[%d] %s", _sgimgui_uniformtype_string(u->type), u->array_count, u->glsl_name ? u->glsl_name : "");
                                 }
                             }
                         }
                     }
-                    igTreePop();
+                    _sgimgui_igtreepop();
                 }
             }
             if (num_valid_images > 0) {
-                if (igTreeNode("Images")) {
+                if (_sgimgui_igtreenode("Images")) {
                     for (int i = 0; i < SG_MAX_IMAGE_BINDSLOTS; i++) {
                         const sg_shader_image* sid = &shd_ui->desc.images[i];
                         if (sid->stage == SG_SHADERSTAGE_NONE) {
                             continue;
                         }
-                        igText("- slot: %d", i);
-                        igText("  stage: %s", _sgimgui_shaderstage_string(sid->stage));
-                        igText("  image_type: %s", _sgimgui_imagetype_string(sid->image_type));
-                        igText("  sample_type: %s", _sgimgui_imagesampletype_string(sid->sample_type));
-                        igText("  multisampled: %s", _sgimgui_bool_string(sid->multisampled));
-                        igText("  hlsl_register_t_n: %d", sid->hlsl_register_t_n);
-                        igText("  msl_texture_n: %d", sid->msl_texture_n);
-                        igText("  wgsl_group1_binding_n: %d", sid->wgsl_group1_binding_n);
+                        _sgimgui_igtext("- slot: %d", i);
+                        _sgimgui_igtext("  stage: %s", _sgimgui_shaderstage_string(sid->stage));
+                        _sgimgui_igtext("  image_type: %s", _sgimgui_imagetype_string(sid->image_type));
+                        _sgimgui_igtext("  sample_type: %s", _sgimgui_imagesampletype_string(sid->sample_type));
+                        _sgimgui_igtext("  multisampled: %s", _sgimgui_bool_string(sid->multisampled));
+                        _sgimgui_igtext("  hlsl_register_t_n: %d", sid->hlsl_register_t_n);
+                        _sgimgui_igtext("  msl_texture_n: %d", sid->msl_texture_n);
+                        _sgimgui_igtext("  wgsl_group1_binding_n: %d", sid->wgsl_group1_binding_n);
                     }
-                    igTreePop();
+                    _sgimgui_igtreepop();
                 }
             }
             if (num_valid_samplers > 0) {
-                if (igTreeNode("Samplers")) {
+                if (_sgimgui_igtreenode("Samplers")) {
                     for (int i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
                         const sg_shader_sampler* ssd = &shd_ui->desc.samplers[i];
                         if (ssd->stage == SG_SHADERSTAGE_NONE) {
                             continue;
                         }
-                        igText("- slot: %d", i);
-                        igText("  stage: %s", _sgimgui_shaderstage_string(ssd->stage));
-                        igText("  sampler_type: %s", _sgimgui_samplertype_string(ssd->sampler_type));
-                        igText("  hlsl_register_s_n: %d", ssd->hlsl_register_s_n);
-                        igText("  msl_sampler_n: %d", ssd->msl_sampler_n);
-                        igText("  wgsl_group1_binding_n: %d", ssd->wgsl_group1_binding_n);
+                        _sgimgui_igtext("- slot: %d", i);
+                        _sgimgui_igtext("  stage: %s", _sgimgui_shaderstage_string(ssd->stage));
+                        _sgimgui_igtext("  sampler_type: %s", _sgimgui_samplertype_string(ssd->sampler_type));
+                        _sgimgui_igtext("  hlsl_register_s_n: %d", ssd->hlsl_register_s_n);
+                        _sgimgui_igtext("  msl_sampler_n: %d", ssd->msl_sampler_n);
+                        _sgimgui_igtext("  wgsl_group1_binding_n: %d", ssd->wgsl_group1_binding_n);
                     }
-                    igTreePop();
+                    _sgimgui_igtreepop();
                 }
             }
             if (num_valid_image_sampler_pairs > 0) {
-                if (igTreeNode("Image Sampler Pairs")) {
+                if (_sgimgui_igtreenode("Image Sampler Pairs")) {
                     for (int i = 0; i < SG_MAX_IMAGE_SAMPLER_PAIRS; i++) {
                         const sg_shader_image_sampler_pair* sispd = &shd_ui->desc.image_sampler_pairs[i];
                         if (sispd->stage == SG_SHADERSTAGE_NONE) {
                             continue;
                         }
-                        igText("- slot: %d", i);
-                        igText("  stage: %s", _sgimgui_shaderstage_string(sispd->stage));
-                        igText("  image_slot: %d", sispd->image_slot);
-                        igText("  sampler_slot: %d", sispd->sampler_slot);
-                        igText("  glsl_name: %s", sispd->glsl_name ? sispd->glsl_name : "---");
+                        _sgimgui_igtext("- slot: %d", i);
+                        _sgimgui_igtext("  stage: %s", _sgimgui_shaderstage_string(sispd->stage));
+                        _sgimgui_igtext("  image_slot: %d", sispd->image_slot);
+                        _sgimgui_igtext("  sampler_slot: %d", sispd->sampler_slot);
+                        _sgimgui_igtext("  glsl_name: %s", sispd->glsl_name ? sispd->glsl_name : "---");
                     }
-                    igTreePop();
+                    _sgimgui_igtreepop();
                 }
             }
             if (num_valid_storage_buffers > 0) {
-                if (igTreeNode("Storage Buffers")) {
+                if (_sgimgui_igtreenode("Storage Buffers")) {
                     for (int i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
                         const sg_shader_storage_buffer* sbuf = &shd_ui->desc.storage_buffers[i];
                         if (sbuf->stage == SG_SHADERSTAGE_NONE) {
                             continue;
                         }
-                        igText("- slot: %d", i);
-                        igText("  stage: %s", _sgimgui_shaderstage_string(sbuf->stage));
-                        igText("  readonly: %s", _sgimgui_bool_string(sbuf->readonly));
+                        _sgimgui_igtext("- slot: %d", i);
+                        _sgimgui_igtext("  stage: %s", _sgimgui_shaderstage_string(sbuf->stage));
+                        _sgimgui_igtext("  readonly: %s", _sgimgui_bool_string(sbuf->readonly));
                         if (sbuf->readonly) {
-                            igText("  hlsl_register_t_n: %d", sbuf->hlsl_register_t_n);
+                            _sgimgui_igtext("  hlsl_register_t_n: %d", sbuf->hlsl_register_t_n);
                         } else {
-                            igText("  hlsl_register_u_n: %d", sbuf->hlsl_register_u_n);
+                            _sgimgui_igtext("  hlsl_register_u_n: %d", sbuf->hlsl_register_u_n);
                         }
-                        igText("  msl_buffer_n: %d", sbuf->msl_buffer_n);
-                        igText("  wgsl_group1_binding_n: %d", sbuf->wgsl_group1_binding_n);
-                        igText("  glsl_binding_n: %d", sbuf->glsl_binding_n);
+                        _sgimgui_igtext("  msl_buffer_n: %d", sbuf->msl_buffer_n);
+                        _sgimgui_igtext("  wgsl_group1_binding_n: %d", sbuf->wgsl_group1_binding_n);
+                        _sgimgui_igtext("  glsl_binding_n: %d", sbuf->glsl_binding_n);
                     }
-                    igTreePop();
+                    _sgimgui_igtreepop();
                 }
             }
             if (num_valid_storage_images > 0) {
-                if (igTreeNode("Storage Images")) {
+                if (_sgimgui_igtreenode("Storage Images")) {
                     for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
                         const sg_shader_storage_image* simg = &shd_ui->desc.storage_images[i];
                         if (simg->stage == SG_SHADERSTAGE_NONE) {
                             continue;
                         }
-                        igText("- slot: %d", i);
-                        igText("  stage: %s", _sgimgui_shaderstage_string(simg->stage));
-                        igText("  image_type: %s", _sgimgui_imagetype_string(simg->image_type));
-                        igText("  access_format: %s", _sgimgui_pixelformat_string(simg->access_format));
-                        igText("  writeonly: %s", _sgimgui_bool_string(simg->writeonly));
-                        igText("  hlsl_register_u_n: %d", simg->hlsl_register_u_n);
-                        igText("  msl_texture_n: %d", simg->msl_texture_n);
-                        igText("  wgsl_group2_binding_n: %d", simg->wgsl_group2_binding_n);
-                        igText("  glsl_binding_n: %d", simg->glsl_binding_n);
+                        _sgimgui_igtext("- slot: %d", i);
+                        _sgimgui_igtext("  stage: %s", _sgimgui_shaderstage_string(simg->stage));
+                        _sgimgui_igtext("  image_type: %s", _sgimgui_imagetype_string(simg->image_type));
+                        _sgimgui_igtext("  access_format: %s", _sgimgui_pixelformat_string(simg->access_format));
+                        _sgimgui_igtext("  writeonly: %s", _sgimgui_bool_string(simg->writeonly));
+                        _sgimgui_igtext("  hlsl_register_u_n: %d", simg->hlsl_register_u_n);
+                        _sgimgui_igtext("  msl_texture_n: %d", simg->msl_texture_n);
+                        _sgimgui_igtext("  wgsl_group2_binding_n: %d", simg->wgsl_group2_binding_n);
+                        _sgimgui_igtext("  glsl_binding_n: %d", simg->glsl_binding_n);
                     }
-                    igTreePop();
+                    _sgimgui_igtreepop();
                 }
             }
             _sgimgui_draw_shader_func("Vertex Function", &shd_ui->desc.vertex_func);
             _sgimgui_draw_shader_func("Fragment Function", &shd_ui->desc.fragment_func);
             _sgimgui_draw_shader_func("Compute Function", &shd_ui->desc.compute_func);
         } else {
-            igText("Shader 0x%08X not valid!", shd.id);
+            _sgimgui_igtext("Shader 0x%08X not valid!", shd.id);
         }
-        igEndChild();
+        _sgimgui_igendchild();
     }
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_vertex_layout_state(const sg_vertex_layout_state* layout) {
-    if (igTreeNode("Buffers")) {
+    if (_sgimgui_igtreenode("Buffers")) {
         for (int i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
             const sg_vertex_buffer_layout_state* l_state = &layout->buffers[i];
             if (l_state->stride > 0) {
-                igText("#%d:", i);
-                igText("  Stride:    %d", l_state->stride);
-                igText("  Step Func: %s", _sgimgui_vertexstep_string(l_state->step_func));
-                igText("  Step Rate: %d", l_state->step_rate);
+                _sgimgui_igtext("#%d:", i);
+                _sgimgui_igtext("  Stride:    %d", l_state->stride);
+                _sgimgui_igtext("  Step Func: %s", _sgimgui_vertexstep_string(l_state->step_func));
+                _sgimgui_igtext("  Step Rate: %d", l_state->step_rate);
             }
         }
-        igTreePop();
+        _sgimgui_igtreepop();
     }
-    if (igTreeNode("Attrs")) {
+    if (_sgimgui_igtreenode("Attrs")) {
         for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
             const sg_vertex_attr_state* a_state = &layout->attrs[i];
             if (a_state->format != SG_VERTEXFORMAT_INVALID) {
-                igText("#%d:", i);
-                igText("  Format:       %s", _sgimgui_vertexformat_string(a_state->format));
-                igText("  Offset:       %d", a_state->offset);
-                igText("  Buffer Index: %d", a_state->buffer_index);
+                _sgimgui_igtext("#%d:", i);
+                _sgimgui_igtext("  Format:       %s", _sgimgui_vertexformat_string(a_state->format));
+                _sgimgui_igtext("  Offset:       %d", a_state->offset);
+                _sgimgui_igtext("  Buffer Index: %d", a_state->buffer_index);
             }
         }
-        igTreePop();
+        _sgimgui_igtreepop();
     }
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_stencil_face_state(const sg_stencil_face_state* sfs) {
-    igText("Fail Op:       %s", _sgimgui_stencilop_string(sfs->fail_op));
-    igText("Depth Fail Op: %s", _sgimgui_stencilop_string(sfs->depth_fail_op));
-    igText("Pass Op:       %s", _sgimgui_stencilop_string(sfs->pass_op));
-    igText("Compare:       %s", _sgimgui_comparefunc_string(sfs->compare));
+    _sgimgui_igtext("Fail Op:       %s", _sgimgui_stencilop_string(sfs->fail_op));
+    _sgimgui_igtext("Depth Fail Op: %s", _sgimgui_stencilop_string(sfs->depth_fail_op));
+    _sgimgui_igtext("Pass Op:       %s", _sgimgui_stencilop_string(sfs->pass_op));
+    _sgimgui_igtext("Compare:       %s", _sgimgui_comparefunc_string(sfs->compare));
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_stencil_state(const sg_stencil_state* ss) {
-    igText("Enabled:    %s", _sgimgui_bool_string(ss->enabled));
-    igText("Read Mask:  0x%02X", ss->read_mask);
-    igText("Write Mask: 0x%02X", ss->write_mask);
-    igText("Ref:        0x%02X", ss->ref);
-    if (igTreeNode("Front")) {
+    _sgimgui_igtext("Enabled:    %s", _sgimgui_bool_string(ss->enabled));
+    _sgimgui_igtext("Read Mask:  0x%02X", ss->read_mask);
+    _sgimgui_igtext("Write Mask: 0x%02X", ss->write_mask);
+    _sgimgui_igtext("Ref:        0x%02X", ss->ref);
+    if (_sgimgui_igtreenode("Front")) {
         _sgimgui_draw_stencil_face_state(&ss->front);
-        igTreePop();
+        _sgimgui_igtreepop();
     }
-    if (igTreeNode("Back")) {
+    if (_sgimgui_igtreenode("Back")) {
         _sgimgui_draw_stencil_face_state(&ss->back);
-        igTreePop();
+        _sgimgui_igtreepop();
     }
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_depth_state(const sg_depth_state* ds) {
-    igText("Pixel Format:  %s", _sgimgui_pixelformat_string(ds->pixel_format));
-    igText("Compare:       %s", _sgimgui_comparefunc_string(ds->compare));
-    igText("Write Enabled: %s", _sgimgui_bool_string(ds->write_enabled));
-    igText("Bias:          %f", ds->bias);
-    igText("Bias Slope:    %f", ds->bias_slope_scale);
-    igText("Bias Clamp:    %f", ds->bias_clamp);
+    _sgimgui_igtext("Pixel Format:  %s", _sgimgui_pixelformat_string(ds->pixel_format));
+    _sgimgui_igtext("Compare:       %s", _sgimgui_comparefunc_string(ds->compare));
+    _sgimgui_igtext("Write Enabled: %s", _sgimgui_bool_string(ds->write_enabled));
+    _sgimgui_igtext("Bias:          %f", ds->bias);
+    _sgimgui_igtext("Bias Slope:    %f", ds->bias_slope_scale);
+    _sgimgui_igtext("Bias Clamp:    %f", ds->bias_clamp);
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_blend_state(const sg_blend_state* bs) {
-    igText("Blend Enabled:    %s", _sgimgui_bool_string(bs->enabled));
-    igText("Src Factor RGB:   %s", _sgimgui_blendfactor_string(bs->src_factor_rgb));
-    igText("Dst Factor RGB:   %s", _sgimgui_blendfactor_string(bs->dst_factor_rgb));
-    igText("Op RGB:           %s", _sgimgui_blendop_string(bs->op_rgb));
-    igText("Src Factor Alpha: %s", _sgimgui_blendfactor_string(bs->src_factor_alpha));
-    igText("Dst Factor Alpha: %s", _sgimgui_blendfactor_string(bs->dst_factor_alpha));
-    igText("Op Alpha:         %s", _sgimgui_blendop_string(bs->op_alpha));
+    _sgimgui_igtext("Blend Enabled:    %s", _sgimgui_bool_string(bs->enabled));
+    _sgimgui_igtext("Src Factor RGB:   %s", _sgimgui_blendfactor_string(bs->src_factor_rgb));
+    _sgimgui_igtext("Dst Factor RGB:   %s", _sgimgui_blendfactor_string(bs->dst_factor_rgb));
+    _sgimgui_igtext("Op RGB:           %s", _sgimgui_blendop_string(bs->op_rgb));
+    _sgimgui_igtext("Src Factor Alpha: %s", _sgimgui_blendfactor_string(bs->src_factor_alpha));
+    _sgimgui_igtext("Dst Factor Alpha: %s", _sgimgui_blendfactor_string(bs->dst_factor_alpha));
+    _sgimgui_igtext("Op Alpha:         %s", _sgimgui_blendop_string(bs->op_alpha));
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_color_target_state(const sg_color_target_state* cs) {
-    igText("Pixel Format:     %s", _sgimgui_pixelformat_string(cs->pixel_format));
-    igText("Write Mask:       %s", _sgimgui_colormask_string(cs->write_mask));
-    if (igTreeNode("Blend State:")) {
+    _sgimgui_igtext("Pixel Format:     %s", _sgimgui_pixelformat_string(cs->pixel_format));
+    _sgimgui_igtext("Write Mask:       %s", _sgimgui_colormask_string(cs->write_mask));
+    if (_sgimgui_igtreenode("Blend State:")) {
         _sgimgui_draw_blend_state(&cs->blend);
-        igTreePop();
+        _sgimgui_igtreepop();
     }
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_pipeline_panel(sgimgui_t* ctx, sg_pipeline pip) {
     if (pip.id != SG_INVALID_ID) {
-        igBeginChild("pipeline", IMVEC2(0,0), false, 0);
+        _sgimgui_igbeginchild("pipeline", IMVEC2(0,0), false, 0);
         sg_pipeline_info info = sg_query_pipeline_info(pip);
         if (info.slot.state == SG_RESOURCESTATE_VALID) {
             const sgimgui_pipeline_t* pip_ui = &ctx->pipeline_window.slots[_sgimgui_slot_index(pip.id)];
-            igText("Label: %s", pip_ui->label.buf[0] ? pip_ui->label.buf : "---");
+            _sgimgui_igtext("Label: %s", pip_ui->label.buf[0] ? pip_ui->label.buf : "---");
             _sgimgui_draw_resource_slot(&info.slot);
-            igSeparator();
-            igText("Compute: %s", _sgimgui_bool_string(pip_ui->desc.compute));
-            igText("Shader: "); igSameLine();
+            _sgimgui_igseparator();
+            _sgimgui_igtext("Compute: %s", _sgimgui_bool_string(pip_ui->desc.compute));
+            _sgimgui_igtext("Shader: "); _sgimgui_igsameline();
             if (_sgimgui_draw_shader_link(ctx, pip_ui->desc.shader)) {
                 _sgimgui_show_shader(ctx, pip_ui->desc.shader);
             }
             if (!pip_ui->desc.compute) {
-                if (igTreeNode("Vertex Layout State")) {
+                if (_sgimgui_igtreenode("Vertex Layout State")) {
                     _sgimgui_draw_vertex_layout_state(&pip_ui->desc.layout);
-                    igTreePop();
+                    _sgimgui_igtreepop();
                 }
-                if (igTreeNode("Depth State")) {
+                if (_sgimgui_igtreenode("Depth State")) {
                     _sgimgui_draw_depth_state(&pip_ui->desc.depth);
-                    igTreePop();
+                    _sgimgui_igtreepop();
                 }
-                if (igTreeNode("Stencil State")) {
+                if (_sgimgui_igtreenode("Stencil State")) {
                     _sgimgui_draw_stencil_state(&pip_ui->desc.stencil);
-                    igTreePop();
+                    _sgimgui_igtreepop();
                 }
-                igText("Color Count: %d", pip_ui->desc.color_count);
+                _sgimgui_igtext("Color Count: %d", pip_ui->desc.color_count);
                 for (int i = 0; i < pip_ui->desc.color_count; i++) {
                     sgimgui_str_t str;
                     _sgimgui_snprintf(&str, "Color Target %d", i);
-                    if (igTreeNode(str.buf)) {
+                    if (_sgimgui_igtreenode(str.buf)) {
                         _sgimgui_draw_color_target_state(&pip_ui->desc.colors[i]);
-                        igTreePop();
+                        _sgimgui_igtreepop();
                     }
                 }
-                igText("Prim Type:      %s", _sgimgui_primitivetype_string(pip_ui->desc.primitive_type));
-                igText("Index Type:     %s", _sgimgui_indextype_string(pip_ui->desc.index_type));
-                igText("Cull Mode:      %s", _sgimgui_cullmode_string(pip_ui->desc.cull_mode));
-                igText("Face Winding:   %s", _sgimgui_facewinding_string(pip_ui->desc.face_winding));
-                igText("Sample Count:   %d", pip_ui->desc.sample_count);
+                _sgimgui_igtext("Prim Type:      %s", _sgimgui_primitivetype_string(pip_ui->desc.primitive_type));
+                _sgimgui_igtext("Index Type:     %s", _sgimgui_indextype_string(pip_ui->desc.index_type));
+                _sgimgui_igtext("Cull Mode:      %s", _sgimgui_cullmode_string(pip_ui->desc.cull_mode));
+                _sgimgui_igtext("Face Winding:   %s", _sgimgui_facewinding_string(pip_ui->desc.face_winding));
+                _sgimgui_igtext("Sample Count:   %d", pip_ui->desc.sample_count);
                 sgimgui_str_t blend_color_str;
-                igText("Blend Color:    %s", _sgimgui_color_string(&blend_color_str, pip_ui->desc.blend_color));
-                igText("Alpha To Coverage: %s", _sgimgui_bool_string(pip_ui->desc.alpha_to_coverage_enabled));
+                _sgimgui_igtext("Blend Color:    %s", _sgimgui_color_string(&blend_color_str, pip_ui->desc.blend_color));
+                _sgimgui_igtext("Alpha To Coverage: %s", _sgimgui_bool_string(pip_ui->desc.alpha_to_coverage_enabled));
             }
         } else {
-            igText("Pipeline 0x%08X not valid.", pip.id);
+            _sgimgui_igtext("Pipeline 0x%08X not valid.", pip.id);
         }
-        igEndChild();
+        _sgimgui_igendchild();
     }
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_attachment(sgimgui_t* ctx, const sg_attachment_desc* att, float* img_scale) {
-    igText("  Image: "); igSameLine();
+    _sgimgui_igtext("  Image: "); _sgimgui_igsameline();
     if (_sgimgui_draw_image_link(ctx, att->image)) {
         _sgimgui_show_image(ctx, att->image);
     }
-    igText("  Mip Level: %d", att->mip_level);
-    igText("  Slice: %d", att->slice);
+    _sgimgui_igtext("  Mip Level: %d", att->mip_level);
+    _sgimgui_igtext("  Slice: %d", att->slice);
     _sgimgui_draw_embedded_image(ctx, att->image, img_scale);
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_attachments_panel(sgimgui_t* ctx, sg_attachments atts) {
     if (atts.id != SG_INVALID_ID) {
-        igBeginChild("attachments", IMVEC2(0,0), false, 0);
+        _sgimgui_igbeginchild("attachments", IMVEC2(0,0), false, 0);
         sg_attachments_info info = sg_query_attachments_info(atts);
         if (info.slot.state == SG_RESOURCESTATE_VALID) {
             sgimgui_attachments_t* atts_ui = &ctx->attachments_window.slots[_sgimgui_slot_index(atts.id)];
-            igText("Label: %s", atts_ui->label.buf[0] ? atts_ui->label.buf : "---");
+            _sgimgui_igtext("Label: %s", atts_ui->label.buf[0] ? atts_ui->label.buf : "---");
             _sgimgui_draw_resource_slot(&info.slot);
             for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
                 if (atts_ui->desc.colors[i].image.id == SG_INVALID_ID) {
                     break;
                 }
-                igSeparator();
-                igText("Color Image #%d:", i);
+                _sgimgui_igseparator();
+                _sgimgui_igtext("Color Image #%d:", i);
                 _sgimgui_draw_attachment(ctx, &atts_ui->desc.colors[i], &atts_ui->color_image_scale[i]);
             }
             for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
                 if (atts_ui->desc.resolves[i].image.id == SG_INVALID_ID) {
                     break;
                 }
-                igSeparator();
-                igText("Resolve Image #%d:", i);
+                _sgimgui_igseparator();
+                _sgimgui_igtext("Resolve Image #%d:", i);
                 _sgimgui_draw_attachment(ctx, &atts_ui->desc.resolves[i], &atts_ui->resolve_image_scale[i]);
             }
             if (atts_ui->desc.depth_stencil.image.id != SG_INVALID_ID) {
-                igSeparator();
-                igText("Depth-Stencil Image:");
+                _sgimgui_igseparator();
+                _sgimgui_igtext("Depth-Stencil Image:");
                 _sgimgui_draw_attachment(ctx, &atts_ui->desc.depth_stencil, &atts_ui->ds_image_scale);
             }
             for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
                 if (atts_ui->desc.storages[i].image.id == SG_INVALID_ID) {
                     break;
                 }
-                igSeparator();
-                igText("Storage Image #%d:", i);
+                _sgimgui_igseparator();
+                _sgimgui_igtext("Storage Image #%d:", i);
                 _sgimgui_draw_attachment(ctx, &atts_ui->desc.storages[i], &atts_ui->storage_image_scale[i]);
             }
         } else {
-            igText("Attachments 0x%08X not valid.", atts.id);
+            _sgimgui_igtext("Attachments 0x%08X not valid.", atts.id);
         }
-        igEndChild();
+        _sgimgui_igendchild();
     }
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_bindings_panel(sgimgui_t* ctx, const sg_bindings* bnd) {
-    igPushID("bnd_vbufs");
+    _sgimgui_igpushid("bnd_vbufs");
     for (int i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
         sg_buffer buf = bnd->vertex_buffers[i];
         if (buf.id != SG_INVALID_ID) {
-            igSeparator();
-            igText("Vertex Buffer Slot #%d:", i);
-            igText("  Buffer: "); igSameLine();
+            _sgimgui_igseparator();
+            _sgimgui_igtext("Vertex Buffer Slot #%d:", i);
+            _sgimgui_igtext("  Buffer: "); _sgimgui_igsameline();
             if (_sgimgui_draw_buffer_link(ctx, buf)) {
                 _sgimgui_show_buffer(ctx, buf);
             }
-            igText("  Offset: %d", bnd->vertex_buffer_offsets[i]);
+            _sgimgui_igtext("  Offset: %d", bnd->vertex_buffer_offsets[i]);
         }
     }
-    igPopID();
-    igPushID("bnd_ibuf");
+    _sgimgui_igpopid();
+    _sgimgui_igpushid("bnd_ibuf");
     if (bnd->index_buffer.id != SG_INVALID_ID) {
         sg_buffer buf = bnd->index_buffer;
         if (buf.id != SG_INVALID_ID) {
-            igSeparator();
-            igText("Index Buffer Slot:");
-            igText("  Buffer: "); igSameLine();
+            _sgimgui_igseparator();
+            _sgimgui_igtext("Index Buffer Slot:");
+            _sgimgui_igtext("  Buffer: "); _sgimgui_igsameline();
             if (_sgimgui_draw_buffer_link(ctx, buf)) {
                 _sgimgui_show_buffer(ctx, buf);
             }
-            igText("  Offset: %d", bnd->index_buffer_offset);
+            _sgimgui_igtext("  Offset: %d", bnd->index_buffer_offset);
         }
     }
-    igPopID();
-    igPushID("bnd_sbufs");
+    _sgimgui_igpopid();
+    _sgimgui_igpushid("bnd_sbufs");
     for (int i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
         sg_buffer buf = bnd->storage_buffers[i];
         if (buf.id != SG_INVALID_ID) {
-            igSeparator();
-            igText("Storage Buffer Slot #%d:", i);
-            igText("  Buffer: "); igSameLine();
+            _sgimgui_igseparator();
+            _sgimgui_igtext("Storage Buffer Slot #%d:", i);
+            _sgimgui_igtext("  Buffer: "); _sgimgui_igsameline();
             if (_sgimgui_draw_buffer_link(ctx, buf)) {
                 _sgimgui_show_buffer(ctx, buf);
             }
         }
     }
-    igPopID();
-    igPushID("bnd_imgs");
+    _sgimgui_igpopid();
+    _sgimgui_igpushid("bnd_imgs");
     for (int i = 0; i < SG_MAX_IMAGE_BINDSLOTS; i++) {
         sg_image img = bnd->images[i];
         if (img.id != SG_INVALID_ID) {
-            igSeparator();
-            igText("Image Slot #%d:", i);
-            igText("  Image: "); igSameLine();
+            _sgimgui_igseparator();
+            _sgimgui_igtext("Image Slot #%d:", i);
+            _sgimgui_igtext("  Image: "); _sgimgui_igsameline();
             if (_sgimgui_draw_image_link(ctx, img)) {
                 _sgimgui_show_image(ctx, img);
             }
         }
     }
-    igPopID();
-    igPushID("bnd_smps");
+    _sgimgui_igpopid();
+    _sgimgui_igpushid("bnd_smps");
     for (int i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
         sg_sampler smp = bnd->samplers[i];
         if (smp.id != SG_INVALID_ID) {
-            igSeparator();
-            igText("Sampler Slot #%d:", i);
-            igText("  Sampler: "); igSameLine();
+            _sgimgui_igseparator();
+            _sgimgui_igtext("Sampler Slot #%d:", i);
+            _sgimgui_igtext("  Sampler: "); _sgimgui_igsameline();
             if (_sgimgui_draw_sampler_link(ctx, smp)) {
                 _sgimgui_show_sampler(ctx, smp);
             }
         }
     }
-    igPopID();
+    _sgimgui_igpopid();
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_uniforms_panel(sgimgui_t* ctx, const sgimgui_args_apply_uniforms_t* args) {
@@ -3959,12 +4028,12 @@ _SOKOL_PRIVATE void _sgimgui_draw_uniforms_panel(sgimgui_t* ctx, const sgimgui_a
         is available, otherwise just render a generic hexdump
     */
    if (sg_query_pipeline_state(args->pipeline) != SG_RESOURCESTATE_VALID) {
-        igText("Pipeline object not valid!");
+        _sgimgui_igtext("Pipeline object not valid!");
         return;
    }
     sgimgui_pipeline_t* pip_ui = &ctx->pipeline_window.slots[_sgimgui_slot_index(args->pipeline.id)];
     if (sg_query_shader_state(pip_ui->desc.shader) != SG_RESOURCESTATE_VALID) {
-        igText("Shader object not valid!");
+        _sgimgui_igtext("Shader object not valid!");
         return;
     }
     sgimgui_shader_t* shd_ui = &ctx->shader_window.slots[_sgimgui_slot_index(pip_ui->desc.shader.id)];
@@ -3989,9 +4058,9 @@ _SOKOL_PRIVATE void _sgimgui_draw_uniforms_panel(sgimgui_t* ctx, const sgimgui_a
             }
             int num_items = (ud->array_count > 1) ? ud->array_count : 1;
             if (num_items > 1) {
-                igText("%d: %s %s[%d] =", i, _sgimgui_uniformtype_string(ud->type), ud->glsl_name?ud->glsl_name:"", ud->array_count);
+                _sgimgui_igtext("%d: %s %s[%d] =", i, _sgimgui_uniformtype_string(ud->type), ud->glsl_name?ud->glsl_name:"", ud->array_count);
             } else {
-                igText("%d: %s %s =", i, _sgimgui_uniformtype_string(ud->type), ud->glsl_name?ud->glsl_name:"");
+                _sgimgui_igtext("%d: %s %s =", i, _sgimgui_uniformtype_string(ud->type), ud->glsl_name?ud->glsl_name:"");
             }
             for (int item_index = 0; item_index < num_items; item_index++) {
                 const uint32_t u_size = _sgimgui_std140_uniform_size(ud->type, ud->array_count) / 4;
@@ -3999,31 +4068,31 @@ _SOKOL_PRIVATE void _sgimgui_draw_uniforms_panel(sgimgui_t* ctx, const sgimgui_a
                 u_off = _sgimgui_align_u32(u_off, u_align);
                 switch (ud->type) {
                     case SG_UNIFORMTYPE_FLOAT:
-                        igText("    %.3f", uptrf[u_off]);
+                        _sgimgui_igtext("    %.3f", uptrf[u_off]);
                         break;
                     case SG_UNIFORMTYPE_INT:
-                        igText("    %d", uptri32[u_off]);
+                        _sgimgui_igtext("    %d", uptri32[u_off]);
                         break;
                     case SG_UNIFORMTYPE_FLOAT2:
-                        igText("    %.3f, %.3f", uptrf[u_off], uptrf[u_off+1]);
+                        _sgimgui_igtext("    %.3f, %.3f", uptrf[u_off], uptrf[u_off+1]);
                         break;
                     case SG_UNIFORMTYPE_INT2:
-                        igText("    %d, %d", uptri32[u_off], uptri32[u_off+1]);
+                        _sgimgui_igtext("    %d, %d", uptri32[u_off], uptri32[u_off+1]);
                         break;
                     case SG_UNIFORMTYPE_FLOAT3:
-                        igText("    %.3f, %.3f, %.3f", uptrf[u_off], uptrf[u_off+1], uptrf[u_off+2]);
+                        _sgimgui_igtext("    %.3f, %.3f, %.3f", uptrf[u_off], uptrf[u_off+1], uptrf[u_off+2]);
                         break;
                     case SG_UNIFORMTYPE_INT3:
-                        igText("    %d, %d, %d", uptri32[u_off], uptri32[u_off+1], uptri32[u_off+2]);
+                        _sgimgui_igtext("    %d, %d, %d", uptri32[u_off], uptri32[u_off+1], uptri32[u_off+2]);
                         break;
                     case SG_UNIFORMTYPE_FLOAT4:
-                        igText("    %.3f, %.3f, %.3f, %.3f", uptrf[u_off], uptrf[u_off+1], uptrf[u_off+2], uptrf[u_off+3]);
+                        _sgimgui_igtext("    %.3f, %.3f, %.3f, %.3f", uptrf[u_off], uptrf[u_off+1], uptrf[u_off+2], uptrf[u_off+3]);
                         break;
                     case SG_UNIFORMTYPE_INT4:
-                        igText("    %d, %d, %d, %d", uptri32[u_off], uptri32[u_off+1], uptri32[u_off+2], uptri32[u_off+3]);
+                        _sgimgui_igtext("    %d, %d, %d, %d", uptri32[u_off], uptri32[u_off+1], uptri32[u_off+2], uptri32[u_off+3]);
                         break;
                     case SG_UNIFORMTYPE_MAT4:
-                        igText("    %.3f, %.3f, %.3f, %.3f\n"
+                        _sgimgui_igtext("    %.3f, %.3f, %.3f, %.3f\n"
                                "    %.3f, %.3f, %.3f, %.3f\n"
                                "    %.3f, %.3f, %.3f, %.3f\n"
                                "    %.3f, %.3f, %.3f, %.3f",
@@ -4033,7 +4102,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_uniforms_panel(sgimgui_t* ctx, const sgimgui_a
                             uptrf[u_off+12], uptrf[u_off+13], uptrf[u_off+14], uptrf[u_off+15]);
                         break;
                     default:
-                        igText("???");
+                        _sgimgui_igtext("???");
                         break;
                 }
                 u_off += u_size;
@@ -4043,9 +4112,9 @@ _SOKOL_PRIVATE void _sgimgui_draw_uniforms_panel(sgimgui_t* ctx, const sgimgui_a
         // FIXME: float vs int
         const size_t num_floats = ub_desc->size / sizeof(float);
         for (uint32_t i = 0; i < num_floats; i++) {
-            igText("%.3f, ", uptrf[i]);
+            _sgimgui_igtext("%.3f, ", uptrf[i]);
             if (((i + 1) % 4) != 0) {
-                igSameLine();
+                _sgimgui_igsameline();
             }
         }
     }
@@ -4066,89 +4135,89 @@ _SOKOL_PRIVATE void _sgimgui_draw_passaction_panel(sgimgui_t* ctx, sg_attachment
         }
     }
 
-    igText("Pass Action: ");
+    _sgimgui_igtext("Pass Action: ");
     for (int i = 0; i < num_color_atts; i++) {
         const sg_color_attachment_action* c_att = &action->colors[i];
-        igText("  Color Attachment %d:", i);
+        _sgimgui_igtext("  Color Attachment %d:", i);
         sgimgui_str_t color_str;
         switch (c_att->load_action) {
-            case SG_LOADACTION_LOAD: igText("    SG_LOADACTION_LOAD"); break;
-            case SG_LOADACTION_DONTCARE: igText("    SG_LOADACTION_DONTCARE"); break;
+            case SG_LOADACTION_LOAD: _sgimgui_igtext("    SG_LOADACTION_LOAD"); break;
+            case SG_LOADACTION_DONTCARE: _sgimgui_igtext("    SG_LOADACTION_DONTCARE"); break;
             case SG_LOADACTION_CLEAR:
-                igText("    SG_LOADACTION_CLEAR: %s", _sgimgui_color_string(&color_str, c_att->clear_value));
+                _sgimgui_igtext("    SG_LOADACTION_CLEAR: %s", _sgimgui_color_string(&color_str, c_att->clear_value));
                 break;
-            default: igText("    ???"); break;
+            default: _sgimgui_igtext("    ???"); break;
         }
         switch (c_att->store_action) {
-            case SG_STOREACTION_STORE: igText("    SG_STOREACTION_STORE"); break;
-            case SG_STOREACTION_DONTCARE: igText("    SG_STOREACTION_DONTCARE"); break;
-            default: igText("    ???"); break;
+            case SG_STOREACTION_STORE: _sgimgui_igtext("    SG_STOREACTION_STORE"); break;
+            case SG_STOREACTION_DONTCARE: _sgimgui_igtext("    SG_STOREACTION_DONTCARE"); break;
+            default: _sgimgui_igtext("    ???"); break;
         }
     }
     const sg_depth_attachment_action* d_att = &action->depth;
-    igText("  Depth Attachment:");
+    _sgimgui_igtext("  Depth Attachment:");
     switch (d_att->load_action) {
-        case SG_LOADACTION_LOAD: igText("    SG_LOADACTION_LOAD"); break;
-        case SG_LOADACTION_DONTCARE: igText("    SG_LOADACTION_DONTCARE"); break;
-        case SG_LOADACTION_CLEAR: igText("    SG_LOADACTION_CLEAR: %.3f", d_att->clear_value); break;
-        default: igText("    ???"); break;
+        case SG_LOADACTION_LOAD: _sgimgui_igtext("    SG_LOADACTION_LOAD"); break;
+        case SG_LOADACTION_DONTCARE: _sgimgui_igtext("    SG_LOADACTION_DONTCARE"); break;
+        case SG_LOADACTION_CLEAR: _sgimgui_igtext("    SG_LOADACTION_CLEAR: %.3f", d_att->clear_value); break;
+        default: _sgimgui_igtext("    ???"); break;
     }
     switch (d_att->store_action) {
-        case SG_STOREACTION_STORE: igText("    SG_STOREACTION_STORE"); break;
-        case SG_STOREACTION_DONTCARE: igText("    SG_STOREACTION_DONTCARE"); break;
-        default: igText("    ???"); break;
+        case SG_STOREACTION_STORE: _sgimgui_igtext("    SG_STOREACTION_STORE"); break;
+        case SG_STOREACTION_DONTCARE: _sgimgui_igtext("    SG_STOREACTION_DONTCARE"); break;
+        default: _sgimgui_igtext("    ???"); break;
     }
     const sg_stencil_attachment_action* s_att = &action->stencil;
-    igText("  Stencil Attachment");
+    _sgimgui_igtext("  Stencil Attachment");
     switch (s_att->load_action) {
-        case SG_LOADACTION_LOAD: igText("    SG_LOADACTION_LOAD"); break;
-        case SG_LOADACTION_DONTCARE: igText("    SG_LOADACTION_DONTCARE"); break;
-        case SG_LOADACTION_CLEAR: igText("    SG_LOADACTION_CLEAR: 0x%02X", s_att->clear_value); break;
-        default: igText("    ???"); break;
+        case SG_LOADACTION_LOAD: _sgimgui_igtext("    SG_LOADACTION_LOAD"); break;
+        case SG_LOADACTION_DONTCARE: _sgimgui_igtext("    SG_LOADACTION_DONTCARE"); break;
+        case SG_LOADACTION_CLEAR: _sgimgui_igtext("    SG_LOADACTION_CLEAR: 0x%02X", s_att->clear_value); break;
+        default: _sgimgui_igtext("    ???"); break;
     }
     switch (d_att->store_action) {
-        case SG_STOREACTION_STORE: igText("    SG_STOREACTION_STORE"); break;
-        case SG_STOREACTION_DONTCARE: igText("    SG_STOREACTION_DONTCARE"); break;
-        default: igText("    ???"); break;
+        case SG_STOREACTION_STORE: _sgimgui_igtext("    SG_STOREACTION_STORE"); break;
+        case SG_STOREACTION_DONTCARE: _sgimgui_igtext("    SG_STOREACTION_DONTCARE"); break;
+        default: _sgimgui_igtext("    ???"); break;
     }
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_swapchain_panel(sg_swapchain* swapchain) {
-    igText("Swapchain");
-    igText("  Width: %d", swapchain->width);
-    igText("  Height: %d", swapchain->height);
-    igText("  Sample Count: %d", swapchain->sample_count);
-    igText("  Color Format: %s", _sgimgui_pixelformat_string(swapchain->color_format));
-    igText("  Depth Format: %s", _sgimgui_pixelformat_string(swapchain->depth_format));
-    igSeparator();
+    _sgimgui_igtext("Swapchain");
+    _sgimgui_igtext("  Width: %d", swapchain->width);
+    _sgimgui_igtext("  Height: %d", swapchain->height);
+    _sgimgui_igtext("  Sample Count: %d", swapchain->sample_count);
+    _sgimgui_igtext("  Color Format: %s", _sgimgui_pixelformat_string(swapchain->color_format));
+    _sgimgui_igtext("  Depth Format: %s", _sgimgui_pixelformat_string(swapchain->depth_format));
+    _sgimgui_igseparator();
     switch (sg_query_backend()) {
         case SG_BACKEND_D3D11:
-            igText("D3D11 Objects:");
-            igText("  Render View: %p", swapchain->d3d11.render_view);
-            igText("  Resolve View: %p", swapchain->d3d11.resolve_view);
-            igText("  Depth Stencil View: %p", swapchain->d3d11.depth_stencil_view);
+            _sgimgui_igtext("D3D11 Objects:");
+            _sgimgui_igtext("  Render View: %p", swapchain->d3d11.render_view);
+            _sgimgui_igtext("  Resolve View: %p", swapchain->d3d11.resolve_view);
+            _sgimgui_igtext("  Depth Stencil View: %p", swapchain->d3d11.depth_stencil_view);
             break;
         case SG_BACKEND_WGPU:
-            igText("WGPU Objects:");
-            igText("  Render View: %p", swapchain->wgpu.render_view);
-            igText("  Resolve View: %p", swapchain->wgpu.resolve_view);
-            igText("  Depth Stencil View: %p", swapchain->wgpu.depth_stencil_view);
+            _sgimgui_igtext("WGPU Objects:");
+            _sgimgui_igtext("  Render View: %p", swapchain->wgpu.render_view);
+            _sgimgui_igtext("  Resolve View: %p", swapchain->wgpu.resolve_view);
+            _sgimgui_igtext("  Depth Stencil View: %p", swapchain->wgpu.depth_stencil_view);
             break;
         case SG_BACKEND_METAL_MACOS:
         case SG_BACKEND_METAL_IOS:
         case SG_BACKEND_METAL_SIMULATOR:
-            igText("Metal Objects:");
-            igText("  Current Drawable: %p", swapchain->metal.current_drawable);
-            igText("  Depth Stencil Texture: %p", swapchain->metal.depth_stencil_texture);
-            igText("  MSAA Color Texture: %p", swapchain->metal.msaa_color_texture);
+            _sgimgui_igtext("Metal Objects:");
+            _sgimgui_igtext("  Current Drawable: %p", swapchain->metal.current_drawable);
+            _sgimgui_igtext("  Depth Stencil Texture: %p", swapchain->metal.depth_stencil_texture);
+            _sgimgui_igtext("  MSAA Color Texture: %p", swapchain->metal.msaa_color_texture);
             break;
         case SG_BACKEND_GLCORE:
         case SG_BACKEND_GLES3:
-            igText("GL Objects:");
-            igText("  Framebuffer: %d", swapchain->gl.framebuffer);
+            _sgimgui_igtext("GL Objects:");
+            _sgimgui_igtext("  Framebuffer: %d", swapchain->gl.framebuffer);
             break;
         default:
-            igText("  UNKNOWN BACKEND!");
+            _sgimgui_igtext("  UNKNOWN BACKEND!");
             break;
     }
 }
@@ -4159,11 +4228,11 @@ _SOKOL_PRIVATE void _sgimgui_draw_capture_panel(sgimgui_t* ctx) {
         return;
     }
     sgimgui_capture_item_t* item = _sgimgui_capture_read_item_at(ctx, sel_item_index);
-    igBeginChild("capture_item", IMVEC2(0, 0), false, 0);
-    igPushStyleColor(ImGuiCol_Text, item->color);
-    igText("%s", _sgimgui_capture_item_string(ctx, sel_item_index, item).buf);
-    igPopStyleColor();
-    igSeparator();
+    _sgimgui_igbeginchild("capture_item", IMVEC2(0, 0), false, 0);
+    _sgimgui_igpushstylecolor(ImGuiCol_Text, item->color);
+    _sgimgui_igtext("%s", _sgimgui_capture_item_string(ctx, sel_item_index, item).buf);
+    _sgimgui_igpopstylecolor();
+    _sgimgui_igseparator();
     switch (item->cmd) {
         case SGIMGUI_CMD_RESET_STATE_CACHE:
             break;
@@ -4213,14 +4282,14 @@ _SOKOL_PRIVATE void _sgimgui_draw_capture_panel(sgimgui_t* ctx) {
             _sgimgui_draw_buffer_panel(ctx, item->args.update_buffer.buffer);
             break;
         case SGIMGUI_CMD_BEGIN_PASS:
-            igText("Compute: %s", _sgimgui_bool_string(item->args.begin_pass.pass.compute));
+            _sgimgui_igtext("Compute: %s", _sgimgui_bool_string(item->args.begin_pass.pass.compute));
             if (item->args.begin_pass.pass.compute) {
                 if (item->args.begin_pass.pass.attachments.id != SG_INVALID_ID) {
                     _sgimgui_draw_attachments_panel(ctx, item->args.begin_pass.pass.attachments);
                 }
             } else {
                 _sgimgui_draw_passaction_panel(ctx, item->args.begin_pass.pass.attachments, &item->args.begin_pass.pass.action);
-                igSeparator();
+                _sgimgui_igseparator();
                 if (item->args.begin_pass.pass.attachments.id != SG_INVALID_ID) {
                     _sgimgui_draw_attachments_panel(ctx, item->args.begin_pass.pass.attachments);
                 } else {
@@ -4302,36 +4371,36 @@ _SOKOL_PRIVATE void _sgimgui_draw_capture_panel(sgimgui_t* ctx) {
         default:
             break;
     }
-    igEndChild();
+    _sgimgui_igendchild();
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
-    igText("Backend: %s\n\n", _sgimgui_backend_string(sg_query_backend()));
+    _sgimgui_igtext("Backend: %s\n\n", _sgimgui_backend_string(sg_query_backend()));
     sg_features f = sg_query_features();
-    igText("Features:");
-    igText("    origin_top_left: %s", _sgimgui_bool_string(f.origin_top_left));
-    igText("    image_clamp_to_border: %s", _sgimgui_bool_string(f.image_clamp_to_border));
-    igText("    mrt_independent_blend_state: %s", _sgimgui_bool_string(f.mrt_independent_blend_state));
-    igText("    mrt_independent_write_mask: %s", _sgimgui_bool_string(f.mrt_independent_write_mask));
-    igText("    compute: %s", _sgimgui_bool_string(f.compute));
-    igText("    msaa_image_bindings: %s", _sgimgui_bool_string(f.msaa_image_bindings));
-    igText("    separate_buffer_types: %s", _sgimgui_bool_string(f.separate_buffer_types));
+    _sgimgui_igtext("Features:");
+    _sgimgui_igtext("    origin_top_left: %s", _sgimgui_bool_string(f.origin_top_left));
+    _sgimgui_igtext("    image_clamp_to_border: %s", _sgimgui_bool_string(f.image_clamp_to_border));
+    _sgimgui_igtext("    mrt_independent_blend_state: %s", _sgimgui_bool_string(f.mrt_independent_blend_state));
+    _sgimgui_igtext("    mrt_independent_write_mask: %s", _sgimgui_bool_string(f.mrt_independent_write_mask));
+    _sgimgui_igtext("    compute: %s", _sgimgui_bool_string(f.compute));
+    _sgimgui_igtext("    msaa_image_bindings: %s", _sgimgui_bool_string(f.msaa_image_bindings));
+    _sgimgui_igtext("    separate_buffer_types: %s", _sgimgui_bool_string(f.separate_buffer_types));
     sg_limits l = sg_query_limits();
-    igText("\nLimits:\n");
-    igText("    max_image_size_2d: %d", l.max_image_size_2d);
-    igText("    max_image_size_cube: %d", l.max_image_size_cube);
-    igText("    max_image_size_3d: %d", l.max_image_size_3d);
-    igText("    max_image_size_array: %d", l.max_image_size_array);
-    igText("    max_image_array_layers: %d", l.max_image_array_layers);
-    igText("    max_vertex_attrs: %d", l.max_vertex_attrs);
-    igText("    gl_max_vertex_uniform_components: %d", l.gl_max_vertex_uniform_components);
-    igText("    gl_max_combined_texture_image_units: %d", l.gl_max_combined_texture_image_units);
-    igText("\nUsable Pixelformats:");
+    _sgimgui_igtext("\nLimits:\n");
+    _sgimgui_igtext("    max_image_size_2d: %d", l.max_image_size_2d);
+    _sgimgui_igtext("    max_image_size_cube: %d", l.max_image_size_cube);
+    _sgimgui_igtext("    max_image_size_3d: %d", l.max_image_size_3d);
+    _sgimgui_igtext("    max_image_size_array: %d", l.max_image_size_array);
+    _sgimgui_igtext("    max_image_array_layers: %d", l.max_image_array_layers);
+    _sgimgui_igtext("    max_vertex_attrs: %d", l.max_vertex_attrs);
+    _sgimgui_igtext("    gl_max_vertex_uniform_components: %d", l.gl_max_vertex_uniform_components);
+    _sgimgui_igtext("    gl_max_combined_texture_image_units: %d", l.gl_max_combined_texture_image_units);
+    _sgimgui_igtext("\nUsable Pixelformats:");
     for (int i = (int)(SG_PIXELFORMAT_NONE+1); i < (int)_SG_PIXELFORMAT_NUM; i++) {
         sg_pixel_format fmt = (sg_pixel_format)i;
         sg_pixelformat_info info = sg_query_pixelformat(fmt);
         if (info.sample) {
-            igText("  %s: %s%s%s%s%s%s%s%s%s",
+            _sgimgui_igtext("  %s: %s%s%s%s%s%s%s%s%s",
                 _sgimgui_pixelformat_string(fmt),
                 info.sample ? "SAMPLE ":"",
                 info.filter ? "FILTER ":"",
@@ -4347,29 +4416,29 @@ _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
 }
 
 _SOKOL_PRIVATE void _sgimgui_frame_add_stats_row(const char* key, uint32_t value) {
-    igTableNextRow();
-    igTableSetColumnIndex(0);
-    igText("%s", key);
-    igTableSetColumnIndex(1);
-    igText("%d", value);
+    _sgimgui_igtablenextrow();
+    _sgimgui_igtablesetcolumnindex(0);
+    _sgimgui_igtext("%s", key);
+    _sgimgui_igtablesetcolumnindex(1);
+    _sgimgui_igtext("%d", value);
 }
 
 #define _sgimgui_frame_stats(key) _sgimgui_frame_add_stats_row(#key, stats->key)
 
 _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(sgimgui_t* ctx) {
     _SOKOL_UNUSED(ctx);
-    igCheckbox("Ignore sokol_imgui.h", &ctx->frame_stats_window.disable_sokol_imgui_stats);
+    _sgimgui_igcheckbox("Ignore sokol_imgui.h", &ctx->frame_stats_window.disable_sokol_imgui_stats);
     const sg_frame_stats* stats = &ctx->frame_stats_window.stats;
     const ImGuiTableFlags flags =
         ImGuiTableFlags_Resizable |
         ImGuiTableFlags_ScrollY |
         ImGuiTableFlags_SizingFixedFit |
         ImGuiTableFlags_Borders;
-    if (igBeginTable("##frame_stats_table", 2, flags)) {
-        igTableSetupScrollFreeze(0, 1);
-        igTableSetupColumn("key", ImGuiTableColumnFlags_None);
-        igTableSetupColumn("value", ImGuiTableColumnFlags_None);
-        igTableHeadersRow();
+    if (_sgimgui_igbegintable("##frame_stats_table", 2, flags)) {
+        _sgimgui_igtablesetupscrollfreeze(0, 1);
+        _sgimgui_igtablesetupcolumn("key", ImGuiTableColumnFlags_None);
+        _sgimgui_igtablesetupcolumn("value", ImGuiTableColumnFlags_None);
+        _sgimgui_igtableheadersrow();
         _sgimgui_frame_stats(frame_index);
         _sgimgui_frame_stats(num_passes);
         _sgimgui_frame_stats(num_apply_viewport);
@@ -4480,7 +4549,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(sgimgui_t* ctx) {
                 break;
             default: break;
         }
-        igEndTable();
+        _sgimgui_igendtable();
     }
 }
 
@@ -4671,17 +4740,17 @@ SOKOL_API_IMPL void sgimgui_draw(sgimgui_t* ctx) {
 SOKOL_API_IMPL void sgimgui_draw_menu(sgimgui_t* ctx, const char* title) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     SOKOL_ASSERT(title);
-    if (igBeginMenu(title)) {
-        igMenuItemBoolPtr("Capabilities", 0, &ctx->caps_window.open, true);
-        igMenuItemBoolPtr("Frame Stats", 0, &ctx->frame_stats_window.open, true);
-        igMenuItemBoolPtr("Buffers", 0, &ctx->buffer_window.open, true);
-        igMenuItemBoolPtr("Images", 0, &ctx->image_window.open, true);
-        igMenuItemBoolPtr("Samplers", 0, &ctx->sampler_window.open, true);
-        igMenuItemBoolPtr("Shaders", 0, &ctx->shader_window.open, true);
-        igMenuItemBoolPtr("Pipelines", 0, &ctx->pipeline_window.open, true);
-        igMenuItemBoolPtr("Attachments", 0, &ctx->attachments_window.open, true);
-        igMenuItemBoolPtr("Calls", 0, &ctx->capture_window.open, true);
-        igEndMenu();
+    if (_sgimgui_igbeginmenu(title)) {
+        _sgimgui_igmenuitemboolptr("Capabilities", 0, &ctx->caps_window.open, true);
+        _sgimgui_igmenuitemboolptr("Frame Stats", 0, &ctx->frame_stats_window.open, true);
+        _sgimgui_igmenuitemboolptr("Buffers", 0, &ctx->buffer_window.open, true);
+        _sgimgui_igmenuitemboolptr("Images", 0, &ctx->image_window.open, true);
+        _sgimgui_igmenuitemboolptr("Samplers", 0, &ctx->sampler_window.open, true);
+        _sgimgui_igmenuitemboolptr("Shaders", 0, &ctx->shader_window.open, true);
+        _sgimgui_igmenuitemboolptr("Pipelines", 0, &ctx->pipeline_window.open, true);
+        _sgimgui_igmenuitemboolptr("Attachments", 0, &ctx->attachments_window.open, true);
+        _sgimgui_igmenuitemboolptr("Calls", 0, &ctx->capture_window.open, true);
+        _sgimgui_igendmenu();
     }
 }
 
@@ -4690,11 +4759,11 @@ SOKOL_API_IMPL void sgimgui_draw_buffer_window(sgimgui_t* ctx) {
     if (!ctx->buffer_window.open) {
         return;
     }
-    igSetNextWindowSize(IMVEC2(440, 280), ImGuiCond_Once);
-    if (igBegin("Buffers", &ctx->buffer_window.open, 0)) {
+    _sgimgui_igsetnextwindowsize(IMVEC2(440, 280), ImGuiCond_Once);
+    if (_sgimgui_igbegin("Buffers", &ctx->buffer_window.open, 0)) {
         sgimgui_draw_buffer_window_content(ctx);
     }
-    igEnd();
+    _sgimgui_igend();
 }
 
 SOKOL_API_IMPL void sgimgui_draw_image_window(sgimgui_t* ctx) {
@@ -4702,11 +4771,11 @@ SOKOL_API_IMPL void sgimgui_draw_image_window(sgimgui_t* ctx) {
     if (!ctx->image_window.open) {
         return;
     }
-    igSetNextWindowSize(IMVEC2(440, 400), ImGuiCond_Once);
-    if (igBegin("Images", &ctx->image_window.open, 0)) {
+    _sgimgui_igsetnextwindowsize(IMVEC2(440, 400), ImGuiCond_Once);
+    if (_sgimgui_igbegin("Images", &ctx->image_window.open, 0)) {
         sgimgui_draw_image_window_content(ctx);
     }
-    igEnd();
+    _sgimgui_igend();
 }
 
 SOKOL_API_IMPL void sgimgui_draw_sampler_window(sgimgui_t* ctx) {
@@ -4714,11 +4783,11 @@ SOKOL_API_IMPL void sgimgui_draw_sampler_window(sgimgui_t* ctx) {
     if (!ctx->sampler_window.open) {
         return;
     }
-    igSetNextWindowSize(IMVEC2(440, 400), ImGuiCond_Once);
-    if (igBegin("Samplers", &ctx->sampler_window.open, 0)) {
+    _sgimgui_igsetnextwindowsize(IMVEC2(440, 400), ImGuiCond_Once);
+    if (_sgimgui_igbegin("Samplers", &ctx->sampler_window.open, 0)) {
         sgimgui_draw_sampler_window_content(ctx);
     }
-    igEnd();
+    _sgimgui_igend();
 }
 
 SOKOL_API_IMPL void sgimgui_draw_shader_window(sgimgui_t* ctx) {
@@ -4726,11 +4795,11 @@ SOKOL_API_IMPL void sgimgui_draw_shader_window(sgimgui_t* ctx) {
     if (!ctx->shader_window.open) {
         return;
     }
-    igSetNextWindowSize(IMVEC2(440, 400), ImGuiCond_Once);
-    if (igBegin("Shaders", &ctx->shader_window.open, 0)) {
+    _sgimgui_igsetnextwindowsize(IMVEC2(440, 400), ImGuiCond_Once);
+    if (_sgimgui_igbegin("Shaders", &ctx->shader_window.open, 0)) {
         sgimgui_draw_shader_window_content(ctx);
     }
-    igEnd();
+    _sgimgui_igend();
 }
 
 SOKOL_API_IMPL void sgimgui_draw_pipeline_window(sgimgui_t* ctx) {
@@ -4738,11 +4807,11 @@ SOKOL_API_IMPL void sgimgui_draw_pipeline_window(sgimgui_t* ctx) {
     if (!ctx->pipeline_window.open) {
         return;
     }
-    igSetNextWindowSize(IMVEC2(540, 400), ImGuiCond_Once);
-    if (igBegin("Pipelines", &ctx->pipeline_window.open, 0)) {
+    _sgimgui_igsetnextwindowsize(IMVEC2(540, 400), ImGuiCond_Once);
+    if (_sgimgui_igbegin("Pipelines", &ctx->pipeline_window.open, 0)) {
         sgimgui_draw_pipeline_window_content(ctx);
     }
-    igEnd();
+    _sgimgui_igend();
 }
 
 SOKOL_API_IMPL void sgimgui_draw_attachments_window(sgimgui_t* ctx) {
@@ -4750,11 +4819,11 @@ SOKOL_API_IMPL void sgimgui_draw_attachments_window(sgimgui_t* ctx) {
     if (!ctx->attachments_window.open) {
         return;
     }
-    igSetNextWindowSize(IMVEC2(440, 400), ImGuiCond_Once);
-    if (igBegin("Attachments", &ctx->attachments_window.open, 0)) {
+    _sgimgui_igsetnextwindowsize(IMVEC2(440, 400), ImGuiCond_Once);
+    if (_sgimgui_igbegin("Attachments", &ctx->attachments_window.open, 0)) {
         sgimgui_draw_attachments_window_content(ctx);
     }
-    igEnd();
+    _sgimgui_igend();
 }
 
 SOKOL_API_IMPL void sgimgui_draw_capture_window(sgimgui_t* ctx) {
@@ -4762,11 +4831,11 @@ SOKOL_API_IMPL void sgimgui_draw_capture_window(sgimgui_t* ctx) {
     if (!ctx->capture_window.open) {
         return;
     }
-    igSetNextWindowSize(IMVEC2(640, 400), ImGuiCond_Once);
-    if (igBegin("Frame Capture", &ctx->capture_window.open, 0)) {
+    _sgimgui_igsetnextwindowsize(IMVEC2(640, 400), ImGuiCond_Once);
+    if (_sgimgui_igbegin("Frame Capture", &ctx->capture_window.open, 0)) {
         sgimgui_draw_capture_window_content(ctx);
     }
-    igEnd();
+    _sgimgui_igend();
 }
 
 SOKOL_API_IMPL void sgimgui_draw_capabilities_window(sgimgui_t* ctx) {
@@ -4774,11 +4843,11 @@ SOKOL_API_IMPL void sgimgui_draw_capabilities_window(sgimgui_t* ctx) {
     if (!ctx->caps_window.open) {
         return;
     }
-    igSetNextWindowSize(IMVEC2(440, 400), ImGuiCond_Once);
-    if (igBegin("Capabilities", &ctx->caps_window.open, 0)) {
+    _sgimgui_igsetnextwindowsize(IMVEC2(440, 400), ImGuiCond_Once);
+    if (_sgimgui_igbegin("Capabilities", &ctx->caps_window.open, 0)) {
         sgimgui_draw_capabilities_window_content(ctx);
     }
-    igEnd();
+    _sgimgui_igend();
 }
 
 SOKOL_API_IMPL void sgimgui_draw_frame_stats_window(sgimgui_t* ctx) {
@@ -4786,59 +4855,59 @@ SOKOL_API_IMPL void sgimgui_draw_frame_stats_window(sgimgui_t* ctx) {
     if (!ctx->frame_stats_window.open) {
         return;
     }
-    igSetNextWindowSize(IMVEC2(512, 400), ImGuiCond_Once);
-    if (igBegin("Frame Stats", &ctx->frame_stats_window.open, 0)) {
+    _sgimgui_igsetnextwindowsize(IMVEC2(512, 400), ImGuiCond_Once);
+    if (_sgimgui_igbegin("Frame Stats", &ctx->frame_stats_window.open, 0)) {
         sgimgui_draw_frame_stats_window_content(ctx);
     }
-    igEnd();
+    _sgimgui_igend();
 }
 
 SOKOL_API_IMPL void sgimgui_draw_buffer_window_content(sgimgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     _sgimgui_draw_buffer_list(ctx);
-    igSameLine();
+    _sgimgui_igsameline();
     _sgimgui_draw_buffer_panel(ctx, ctx->buffer_window.sel_buf);
 }
 
 SOKOL_API_IMPL void sgimgui_draw_image_window_content(sgimgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     _sgimgui_draw_image_list(ctx);
-    igSameLine();
+    _sgimgui_igsameline();
     _sgimgui_draw_image_panel(ctx, ctx->image_window.sel_img);
 }
 
 SOKOL_API_IMPL void sgimgui_draw_sampler_window_content(sgimgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     _sgimgui_draw_sampler_list(ctx);
-    igSameLine();
+    _sgimgui_igsameline();
     _sgimgui_draw_sampler_panel(ctx, ctx->sampler_window.sel_smp);
 }
 
 SOKOL_API_IMPL void sgimgui_draw_shader_window_content(sgimgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     _sgimgui_draw_shader_list(ctx);
-    igSameLine();
+    _sgimgui_igsameline();
     _sgimgui_draw_shader_panel(ctx, ctx->shader_window.sel_shd);
 }
 
 SOKOL_API_IMPL void sgimgui_draw_pipeline_window_content(sgimgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     _sgimgui_draw_pipeline_list(ctx);
-    igSameLine();
+    _sgimgui_igsameline();
     _sgimgui_draw_pipeline_panel(ctx, ctx->pipeline_window.sel_pip);
 }
 
 SOKOL_API_IMPL void sgimgui_draw_attachments_window_content(sgimgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     _sgimgui_draw_attachments_list(ctx);
-    igSameLine();
+    _sgimgui_igsameline();
     _sgimgui_draw_attachments_panel(ctx, ctx->attachments_window.sel_atts);
 }
 
 SOKOL_API_IMPL void sgimgui_draw_capture_window_content(sgimgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     _sgimgui_draw_capture_list(ctx);
-    igSameLine();
+    _sgimgui_igsameline();
     _sgimgui_draw_capture_panel(ctx);
 }
 
