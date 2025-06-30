@@ -2967,8 +2967,9 @@ typedef struct sg_pass {
 /*
     sg_bindings
 
-    The sg_bindings structure defines the buffers, images and
-    samplers resource bindings for the next draw call.
+
+    The sg_bindings structure defines the resource bindings for
+    the next draw call.
 
     To update the resource bindings, call sg_apply_bindings() with
     a pointer to a populated sg_bindings struct. Note that
@@ -2978,8 +2979,10 @@ typedef struct sg_pass {
 
     A resource binding struct contains:
 
-    - 1..N vertex buffer views
-    - 0..1 index buffer views
+    - 1..N vertex buffers
+    - 1..N vertex buffer offsets
+    - 0..1 index buffer
+    - 0..1 index buffer offset
     - 0..N storage buffer views
     - 0..N storage image views
     - 0..N texture views
@@ -3020,8 +3023,8 @@ typedef struct sg_pass {
 
         const sg_bindings bnd = {
             .vertex_buffers[0] = ...,
-            .images[0] = vs_tex,
-            .images[1] = fs_tex,
+            .textures[0] = vs_tex,
+            .textures[1] = fs_tex,
             .samplers[0] = vs_smp,
             .samplers[1] = fs_smp,
             .storage_buffers[0] = ssbo,
@@ -3031,8 +3034,8 @@ typedef struct sg_pass {
 
         const sg_bindings bnd = {
             .vertex_buffers[0] = ...,
-            .images[IMG_vs_tex] = vs_tex,
-            .images[IMG_fs_tex] = fs_tex,
+            .textures[TEX_vs_tex] = vs_tex,
+            .textures[TEX_fs_tex] = fs_tex,
             .samplers[SMP_vs_smp] = vs_smp,
             .samplers[SMP_fs_smp] = fs_smp,
             .storage_buffers[SBUF_ssbo] = ssbo,
@@ -3053,8 +3056,10 @@ typedef struct sg_pass {
 */
 typedef struct sg_bindings {
     uint32_t _start_canary;
-    sg_view vertex_buffers[SG_MAX_VERTEXBUFFER_BINDSLOTS];
-    sg_view index_buffer;
+    sg_buffer vertex_buffers[SG_MAX_VERTEXBUFFER_BINDSLOTS];
+    int vertex_buffer_offsets[SG_MAX_VERTEXBUFFER_BINDSLOTS];
+    sg_buffer index_buffer;
+    int index_buffer_offset;
     sg_view textures[SG_MAX_TEXTURE_BINDSLOTS];
     sg_view storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
     sg_view storage_images[SG_MAX_STORAGEIMAGE_BINDSLOTS];
@@ -3754,18 +3759,22 @@ typedef struct sg_buffer_view_desc {
 typedef struct sg_image_view_desc {
     sg_image image;
     int mip_level;
-    int slice;      // cube texture: face; array texture: layer; 3D texture: slice
+    int slice;      // cube texture: face; array texture: layer; 3D texture: depth-slice
 } sg_image_view_desc;
+
+typedef struct sg_texture_view_range {
+    int base;
+    int count;
+} sg_texture_view_range;
 
 typedef struct sg_texture_view_desc {
     sg_image image;
-    // FIXME: allow to select mip/slice range, format, type (not on GLES3/WebGL2)
+    sg_texture_view_range mip_levels;
+    sg_texture_view_range slices;   // cube texture: face; array texture: layer; 3D texture: depth-slice
 } sg_texture_view_desc;
 
 typedef struct sg_view_desc {
     uint32_t _start_canary;
-    sg_buffer_view_desc vertex_buffer_binding;
-    sg_buffer_view_desc index_buffer_binding;
     sg_texture_view_desc texture_binding;
     sg_buffer_view_desc storage_buffer_binding;
     sg_image_view_desc storage_image_binding;
@@ -4328,8 +4337,6 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_RESOURCE_ALIVE, "sg_view_desc: resource object is no longer alive (.buffer or .image)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_RESOURCE_FAILED, "sg_view_desc: resource object cannot be in FAILED state (.buffer or .image)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_VIEW_OFFSET_VS_BUFFER_SIZE, "sg_view_desc: offset in view desc is >= buffer size") \
-    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_VERTEXBUFFER_USAGE, "sg_view_desc.vertex_buffer_binding.buffer must have been created with sg_buffer_desc.usage.vertex_buffer = true") \
-    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_INDEXBUFFER_USAGE, "sg_view_desc.index_buffer_binding.buffer must have been created with sg_buffer_desc.usage.index_buffer = true") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_STORAGEBUFFER_USAGE, "sg_view_desc.storage_buffer_binding.buffer must have been created with sg_buffer_desc.usage.storage_buffer = true") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_STORAGEIMAGE_USAGE, "sg_view_desc.storage_image_binding.image must have been created with sg_image_desc.usage.storage_image = true") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_COLORATTACHMENT_USAGE, "sg_view_desc.color_attachment.image must have been created with sg_image_desc.usage.attachment = true") \
@@ -4420,19 +4427,17 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE_VALID, "sg_apply_bindings: currently applied pipeline object not in valid state") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE_SHADER_ALIVE, "sg_apply_bindings: shader associated with currently applied pipeline is no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PIPELINE_SHADER_VALID, "sg_apply_bindings: shader associated with currently applied pipeline is not in valid state") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_COMPUTE_EXPECTED_NO_VBVIEWS, "sg_apply_bindings: vertex buffer bindings not allowed in a compute pass") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_COMPUTE_EXPECTED_NO_IBVIEW, "sg_apply_bindings: index buffer binding not allowed in compute pass") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_VBVIEW, "sg_apply_bindings: vertex buffer binding is missing or view handle is invalid") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBVIEW_ALIVE, "sg_apply_bindings: vertex buffer view no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBVIEW_VALID, "sg_apply_bindings: vertex buffer view is not in valid state") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBVIEW_TYPE, "sg_apply_bindings: view in vertex buffer bind slot is not a vertex buffer view") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBVIEW_BUFFER_OVERFLOW, "sg_apply_bindings: buffer in vertex buffer slot is overflown") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_IBVIEW, "sg_apply_bindings: pipeline object defines indexed rendering, but no index buffer binding provided") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_NO_IBVIEW, "sg_apply_bindings: pipeline object defines non-indexed rendering, but index buffer binding provided") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_IBVIEW_ALIVE, "sg_apply_bindings: index buffer view no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_IBVIEW_TYPE, "sg_apply_bindings: view in index buffer bind slot is not an index buffer view") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_IBVIEW_VALID, "sg_apply_bindings: index buffer view is not in valid state") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_IBVIEW_BUFFER_OVERFLOW, "sg_apply_bindings: buffer in index buffer slot is overflown") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_COMPUTE_EXPECTED_NO_VBUFS, "sg_apply_bindings: vertex buffer bindings not allowed in a compute pass") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_COMPUTE_EXPECTED_NO_IBUF, "sg_apply_bindings: index buffer binding not allowed in compute pass") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_VBUF, "sg_apply_bindings: vertex buffer binding is missing or buffer handle is invalid") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBUF_ALIVE, "sg_apply_bindings: vertex buffer no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBUF_USAGE, "sg_apply_bindings: buffer in vertex buffer bind slot must have usage.vertex_buffer") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBUF_OVERFLOW, "sg_apply_bindings: buffer in vertex buffer bind slot is overflown") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_NO_IBUF, "sg_apply_bindings: pipeline object defines non-indexed rendering, but index buffer binding provided") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_IBUF, "sg_apply_bindings: pipeline object defines indexed rendering, but no index buffer binding provided") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_IBUF_ALIVE, "sg_apply_bindings: index buffer no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_IBUF_USAGE, "sg_apply_bindings: buffer in index buffer bind slot must have usage.index_buffer") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_IBUF_OVERFLOW, "sg_apply_bindings: buffer in index buffer slot is overflown") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_TEXTURE_BINDING, "sg_apply_bindings: texture binding is missing or the texture view handle is invalid") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_ALIVE, "sg_apply_bindings: texture view no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_TYPE, "sg_apply_bindings: view in texture bind slot is not a texture view") \
@@ -5807,8 +5812,6 @@ typedef struct {
 
 typedef enum {
     _SG_VIEWTYPE_INVALID,
-    _SG_VIEWTYPE_VERTEXBUFFER,
-    _SG_VIEWTYPE_INDEXBUFFER,
     _SG_VIEWTYPE_STORAGEBUFFER,
     _SG_VIEWTYPE_STORAGEIMAGE,
     _SG_VIEWTYPE_TEXTURE,
@@ -5826,6 +5829,8 @@ typedef struct {
     _sg_image_ref_t ref;
     int mip_level;
     int slice;
+    int mip_level_count;
+    int slice_count;
 } _sg_image_view_common_t;
 
 typedef struct {
@@ -6521,8 +6526,10 @@ typedef struct {
 // resolved resource bindings struct
 typedef struct {
     _sg_pipeline_t* pip;
-    _sg_view_t* vb_views[SG_MAX_VERTEXBUFFER_BINDSLOTS];
-    _sg_view_t* ib_view;
+    int vb_offsets[SG_MAX_VERTEXBUFFER_BINDSLOTS];
+    int ib_offset;
+    _sg_buffer_t* vbs[SG_MAX_VERTEXBUFFER_BINDSLOTS];
+    _sg_buffer_t* ib;
     _sg_view_t* tex_views[SG_MAX_TEXTURE_BINDSLOTS];
     _sg_view_t* sbuf_views[SG_MAX_STORAGEBUFFER_BINDSLOTS];
     _sg_view_t* simg_views[SG_MAX_STORAGEIMAGE_BINDSLOTS];
@@ -7467,34 +7474,30 @@ _SOKOL_PRIVATE void _sg_buffer_view_common_init(_sg_buffer_view_common_t* cmn, c
     cmn->offset = desc->offset;
 }
 
-_SOKOL_PRIVATE void _sg_texture_view_common_init(_sg_image_view_common_t* cmn, _sg_image_t* img) {
+_SOKOL_PRIVATE void _sg_texture_view_common_init(_sg_image_view_common_t* cmn, const sg_texture_view_desc* desc, _sg_image_t* img) {
     cmn->ref = _sg_image_ref(img);
-    cmn->mip_level = 0;
-    cmn->slice = 0;
+    cmn->mip_level = desc->mip_levels.base;
+    cmn->mip_level_count = _sg_def(desc->mip_levels.count, img->cmn.num_mipmaps - cmn->mip_level);
+    SOKOL_ASSERT(cmn->mip_level_count > 0);
+    cmn->slice = desc->slices.base;
+    cmn->slice_count = _sg_def(desc->slices.count, img->cmn.num_slices - cmn->slice);
+    SOKOL_ASSERT(cmn->slice_count > 0);
 }
 
 _SOKOL_PRIVATE void _sg_image_view_common_init(_sg_image_view_common_t* cmn, const sg_image_view_desc* desc, _sg_image_t* img) {
     cmn->ref = _sg_image_ref(img);
     cmn->mip_level = desc->mip_level;
+    cmn->mip_level_count = 1;
     cmn->slice = desc->slice;
+    cmn->slice_count = 1;
 }
 
 _SOKOL_PRIVATE void _sg_view_common_init(_sg_view_common_t* cmn, const sg_view_desc* desc) {
-    if (desc->vertex_buffer_binding.buffer.id != SG_INVALID_ID) {
-        cmn->type = _SG_VIEWTYPE_VERTEXBUFFER;
-        _sg_buffer_t* buf = _sg_lookup_buffer(desc->vertex_buffer_binding.buffer.id);
-        SOKOL_ASSERT(buf);
-        _sg_buffer_view_common_init(&cmn->buf, &desc->vertex_buffer_binding, buf);
-    } else if (desc->index_buffer_binding.buffer.id != SG_INVALID_ID) {
-        cmn->type = _SG_VIEWTYPE_INDEXBUFFER;
-        _sg_buffer_t* buf = _sg_lookup_buffer(desc->index_buffer_binding.buffer.id);
-        SOKOL_ASSERT(buf);
-        _sg_buffer_view_common_init(&cmn->buf, &desc->index_buffer_binding, buf);
-    } else if (desc->texture_binding.image.id != SG_INVALID_ID) {
+    if (desc->texture_binding.image.id != SG_INVALID_ID) {
         cmn->type = _SG_VIEWTYPE_TEXTURE;
         _sg_image_t* img = _sg_lookup_image(desc->texture_binding.image.id);
         SOKOL_ASSERT(img);
-        _sg_texture_view_common_init(&cmn->img, img);
+        _sg_texture_view_common_init(&cmn->img, &desc->texture_binding, img);
     } else if (desc->storage_buffer_binding.buffer.id != SG_INVALID_ID) {
         cmn->type = _SG_VIEWTYPE_STORAGEBUFFER;
         _sg_buffer_t* buf = _sg_lookup_buffer(desc->storage_buffer_binding.buffer.id);
@@ -15341,32 +15344,28 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
     if (!_sg.cur_pass.is_compute) {
         SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
         // store index buffer binding, this will be needed later in sg_draw()
-        if (bnd->ib_view) {
+        _sg.mtl.state_cache.cur_ibuf = _sg_buffer_ref(bnd->ib);
+        _sg.mtl.state_cache.cur_ibuf_offset = (NSUInteger)bnd->ib_offset;
+        if (bnd->ib) {
             SOKOL_ASSERT(bnd->pip->cmn.index_type != SG_INDEXTYPE_NONE);
-            _sg.mtl.state_cache.cur_ibuf = bnd->ib_view->cmn.buf.ref;
-            _sg.mtl.state_cache.cur_ibuf_offset = (NSUInteger)bnd->ib_view->cmn.buf.offset;
         } else {
             SOKOL_ASSERT(bnd->pip->cmn.index_type == SG_INDEXTYPE_NONE);
-            _sg.mtl.state_cache.cur_ibuf = _sg_buffer_ref(0);
-            _sg.mtl.state_cache.cur_ibuf_offset = 0;
         }
         // apply vertex buffers
         for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
-            const _sg_view_t* vb_view = bnd->vb_views[i];
-            if (vb_view == 0) {
+            const _sg_buffer_t* vb = bnd->vbs[i];
+            if (vb == 0) {
                 continue;
             }
             const NSUInteger mtl_slot = _sg_mtl_vertexbuffer_bindslot(i);
             SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_BUFFER_BINDINGS);
-            const _sg_buffer_ref_t* vb_ref = &vb_view->cmn.buf.ref;
-            const int vb_offset = (NSUInteger)vb_view->cmn.buf.offset;
-            const bool ref_eql = _sg_sref_sref_eql(&_sg.mtl.state_cache.cur_vsbufs[mtl_slot], &vb_ref->sref);
+            const int vb_offset = bnd->vb_offsets[i];
+            const bool ref_eql = _sg_sref_slot_eql(&_sg.mtl.state_cache.cur_vsbufs[mtl_slot], &vb->slot);
             if (!ref_eql || (_sg.mtl.state_cache.cur_vs_buffer_offsets[mtl_slot] != vb_offset)) {
                 _sg.mtl.state_cache.cur_vs_buffer_offsets[mtl_slot] = vb_offset;
                 if (!ref_eql) {
                     // vertex buffer has changed
-                    _sg.mtl.state_cache.cur_vsbufs[mtl_slot] = vb_ref->sref;
-                    const _sg_buffer_t* vb = _sg_buffer_ref_ptr(vb_ref);
+                    _sg.mtl.state_cache.cur_vsbufs[mtl_slot] = _sg_sref(&vb->slot);
                     SOKOL_ASSERT(vb->mtl.buf[vb->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
                     [_sg.mtl.render_cmd_encoder setVertexBuffer:_sg_mtl_id(vb->mtl.buf[vb->cmn.active_slot])
                         offset:(NSUInteger)vb_offset
@@ -18982,15 +18981,6 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
         const sg_image_view_desc* img_desc = 0;
         const sg_texture_view_desc* tex_desc = 0;
         const sg_buffer_view_desc* buf_desc = 0;
-        if (desc->vertex_buffer_binding.buffer.id != SG_INVALID_ID) {
-            view_type = _SG_VIEWTYPE_VERTEXBUFFER;
-            buf_desc = &desc->vertex_buffer_binding;
-        }
-        if (desc->index_buffer_binding.buffer.id != SG_INVALID_ID) {
-            _SG_VALIDATE(_SG_VIEWTYPE_INVALID == view_type, VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE);
-            view_type = _SG_VIEWTYPE_INDEXBUFFER;
-            buf_desc = &desc->index_buffer_binding;
-        }
         if (desc->texture_binding.image.id != SG_INVALID_ID) {
             _SG_VALIDATE(_SG_VIEWTYPE_INVALID == view_type, VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE);
             view_type = _SG_VIEWTYPE_TEXTURE;
@@ -19054,14 +19044,6 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
         if (res_valid) {
             // check usage flags
             switch (view_type) {
-                case _SG_VIEWTYPE_VERTEXBUFFER:
-                    SOKOL_ASSERT(buf);
-                    _SG_VALIDATE(buf->cmn.usage.vertex_buffer, VALIDATE_VIEWDESC_VERTEXBUFFER_USAGE);
-                    break;
-                case _SG_VIEWTYPE_INDEXBUFFER:
-                    SOKOL_ASSERT(buf);
-                    _SG_VALIDATE(buf->cmn.usage.index_buffer, VALIDATE_VIEWDESC_INDEXBUFFER_USAGE);
-                    break;
                 case _SG_VIEWTYPE_STORAGEBUFFER:
                     SOKOL_ASSERT(buf);
                     _SG_VALIDATE(buf->cmn.usage.storage_buffer, VALIDATE_VIEWDESC_STORAGEBUFFER_USAGE);
@@ -19105,6 +19087,19 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
                     _SG_VALIDATE((img_desc->slice >= 0) && (img_desc->slice < img->cmn.num_slices), VALIDATE_VIEWDESC_IMAGE_LAYER);
                 } else if (img->cmn.type == SG_IMAGETYPE_3D) {
                     _SG_VALIDATE((img_desc->slice >= 0) && (img_desc->slice < img->cmn.num_slices), VALIDATE_VIEWDESC_IMAGE_SLICE);
+                }
+            } else if (tex_desc) {
+                SOKOL_ASSERT(img);
+                // NOTE: it doesn't matter here if the mip/slice count is default-zero!
+                int max_mip_level = tex_desc->mip_levels.base + tex_desc->mip_levels.count;
+                int max_slice = tex_desc->slices.base + tex_desc->slices.count;
+                _SG_VALIDATE((img_desc->mip_level >= 0) && (max_mip_level <= img->cmn.num_mipmaps), VALIDATE_VIEWDESC_IMAGE_MIPLEVEL);
+                if (img->cmn.type == SG_IMAGETYPE_CUBE) {
+                    _SG_VALIDATE((img_desc->slice >= 0) && (max_slice <= 6), VALIDATE_VIEWDESC_IMAGE_CUBEFACE);
+                } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
+                    _SG_VALIDATE((img_desc->slice >= 0) && (max_slice <= img->cmn.num_slices), VALIDATE_VIEWDESC_IMAGE_LAYER);
+                } else if (img->cmn.type == SG_IMAGETYPE_3D) {
+                    _SG_VALIDATE((img_desc->slice >= 0) && (max_slice <= img->cmn.num_slices), VALIDATE_VIEWDESC_IMAGE_SLICE);
                 }
             }
         }
@@ -19560,27 +19555,19 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
 
         if (_sg.cur_pass.is_compute) {
             for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
-                _SG_VALIDATE(bindings->vertex_buffers[i].id == SG_INVALID_ID, VALIDATE_ABND_COMPUTE_EXPECTED_NO_VBVIEWS);
+                _SG_VALIDATE(bindings->vertex_buffers[i].id == SG_INVALID_ID, VALIDATE_ABND_COMPUTE_EXPECTED_NO_VBUFS);
             }
         } else {
             for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
                 if (pip->cmn.vertex_buffer_layout_active[i]) {
-                    _SG_VALIDATE(bindings->vertex_buffers[i].id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_VBVIEW);
+                    _SG_VALIDATE(bindings->vertex_buffers[i].id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_VBUF);
                     if (bindings->vertex_buffers[i].id != SG_INVALID_ID) {
-                        const _sg_view_t* view = _sg_lookup_view(bindings->vertex_buffers[i].id);
-                        // view object must be alive
-                        _SG_VALIDATE(view != 0, VALIDATE_ABND_VBVIEW_ALIVE);
-                        if (view) {
-                            // the view object must be a vertex buffer view
-                            _SG_VALIDATE(view->cmn.type == _SG_VIEWTYPE_VERTEXBUFFER, VALIDATE_ABND_VBVIEW_TYPE);
-                            // the view object itself must be in valid state
-                            _SG_VALIDATE(view->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ABND_VBVIEW_VALID);
-                            // NOTE: an invalid buffer ref is allowed and skips rendering
-                            if (_sg_buffer_ref_valid(&view->cmn.buf.ref)) {
-                                const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
-                                // buffer must not be in overflow state
-                                _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_VBVIEW_BUFFER_OVERFLOW);
-                            }
+                        const _sg_buffer_t* buf = _sg_lookup_buffer(bindings->vertex_buffers[i].id);
+                        _SG_VALIDATE(buf != 0, VALIDATE_ABND_VBUF_ALIVE);
+                        // NOTE: state != VALID is legal and skips rendering!
+                        if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
+                            _SG_VALIDATE(buf->cmn.usage.vertex_buffer, VALIDATE_ABND_VBUF_USAGE);
+                            _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_VBUF_OVERFLOW);
                         }
                     }
                 }
@@ -19588,31 +19575,24 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         }
 
         if (_sg.cur_pass.is_compute) {
-            _SG_VALIDATE(bindings->index_buffer.id == SG_INVALID_ID, VALIDATE_ABND_COMPUTE_EXPECTED_NO_IBVIEW);
+            _SG_VALIDATE(bindings->index_buffer.id == SG_INVALID_ID, VALIDATE_ABND_COMPUTE_EXPECTED_NO_IBUF);
         } else {
             // index buffer expected or not, and index buffer still exists
             if (pip->cmn.index_type == SG_INDEXTYPE_NONE) {
                 // pipeline defines non-indexed rendering, but index buffer provided
-                _SG_VALIDATE(bindings->index_buffer.id == SG_INVALID_ID, VALIDATE_ABND_EXPECTED_NO_IBVIEW);
+                _SG_VALIDATE(bindings->index_buffer.id == SG_INVALID_ID, VALIDATE_ABND_EXPECTED_NO_IBUF);
             } else {
                 // pipeline defines indexed rendering, but no index buffer provided
-                _SG_VALIDATE(bindings->index_buffer.id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_IBVIEW);
+                _SG_VALIDATE(bindings->index_buffer.id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_IBUF);
             }
             if (bindings->index_buffer.id != SG_INVALID_ID) {
-                const _sg_view_t* view = _sg_lookup_view(bindings->index_buffer.id);
-                // the view object must be alive
-                _SG_VALIDATE(view != 0, VALIDATE_ABND_VBVIEW_ALIVE);
-                if (view) {
-                    // the view object must be an index buffer view
-                    _SG_VALIDATE(view->cmn.type == _SG_VIEWTYPE_INDEXBUFFER, VALIDATE_ABND_IBVIEW_TYPE);
-                    // the view object itself must be in valid state
-                    _SG_VALIDATE(view->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ABND_IBVIEW_VALID);
-                    // NOTE: an invalid buffer ref is allowed and skips rendering
-                    if (_sg_buffer_ref_valid(&view->cmn.buf.ref)) {
-                        const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
-                        // buffer must not be in overflow state
-                        _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_IBVIEW_BUFFER_OVERFLOW);
-                    }
+                // buffer in index-buffer-slot must have index buffer usage
+                const _sg_buffer_t* buf = _sg_lookup_buffer(bindings->index_buffer.id);
+                _SG_VALIDATE(buf != 0, VALIDATE_ABND_IBUF_ALIVE);
+                // NOTE: state != VALID is legal and skips rendering!
+                if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
+                    _SG_VALIDATE(buf->cmn.usage.index_buffer, VALIDATE_ABND_IBUF_USAGE);
+                    _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_IBUF_OVERFLOW);
                 }
             }
         }
@@ -21355,15 +21335,15 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
         for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
             if (bnd.pip->cmn.vertex_buffer_layout_active[i]) {
                 SOKOL_ASSERT(bindings->vertex_buffers[i].id != SG_INVALID_ID);
-                bnd.vb_views[i] = _sg_lookup_view(bindings->vertex_buffers[i].id);
-                SOKOL_ASSERT(bnd.vb_views[i]);
-                _sg.next_draw_valid &= _sg_buffer_ref_valid(&bnd.vb_views[i]->cmn.buf.ref);
+                bnd.vbs[i] = _sg_lookup_buffer(bindings->vertex_buffers[i].id);
+                bnd.vb_offsets[i] = bindings->vertex_buffer_offsets[i];
+                _sg.next_draw_valid &= bnd.vbs[i] && (SG_RESOURCESTATE_VALID == bnd.vbs[i]->slot.state);
             }
         }
         if (bindings->index_buffer.id) {
-            bnd.ib_view = _sg_lookup_view(bindings->index_buffer.id);
-            SOKOL_ASSERT(bnd.ib_view);
-            _sg.next_draw_valid &= _sg_buffer_ref_valid(&bnd.ib_view->cmn.buf.ref);
+            bnd.ib = _sg_lookup_buffer(bindings->index_buffer.id);
+            bnd.ib_offset = bindings->index_buffer_offset;
+            _sg.next_draw_valid &= bnd.ib && (SG_RESOURCESTATE_VALID == bnd.ib->slot.state);
         }
     }
 
@@ -21972,14 +21952,6 @@ SOKOL_API_IMPL sg_view_desc sg_query_view_desc(sg_view view_id) {
     const _sg_view_t* view = _sg_lookup_view(view_id.id);
     if (view) {
         switch (view->cmn.type) {
-            case _SG_VIEWTYPE_VERTEXBUFFER:
-                desc.vertex_buffer_binding.buffer.id = view->cmn.buf.ref.sref.id;
-                desc.vertex_buffer_binding.offset = view->cmn.buf.offset;
-                break;
-            case _SG_VIEWTYPE_INDEXBUFFER:
-                desc.index_buffer_binding.buffer.id = view->cmn.buf.ref.sref.id;
-                desc.index_buffer_binding.offset = view->cmn.buf.offset;
-                break;
             case _SG_VIEWTYPE_STORAGEBUFFER:
                 desc.storage_buffer_binding.buffer.id = view->cmn.buf.ref.sref.id;
                 desc.storage_buffer_binding.offset = view->cmn.buf.offset;
@@ -21991,6 +21963,10 @@ SOKOL_API_IMPL sg_view_desc sg_query_view_desc(sg_view view_id) {
                 break;
             case _SG_VIEWTYPE_TEXTURE:
                 desc.texture_binding.image.id = view->cmn.img.ref.sref.id;
+                desc.texture_binding.mip_levels.base = view->cmn.img.mip_level;
+                desc.texture_binding.mip_levels.count = view->cmn.img.mip_level_count;
+                desc.texture_binding.slices.base = view->cmn.img.slice;
+                desc.texture_binding.slices.count = view->cmn.img.slice_count;
                 break;
             case _SG_VIEWTYPE_COLORATTACHMENT:
                 desc.color_attachment.image.id = view->cmn.img.ref.sref.id;
