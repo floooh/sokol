@@ -57,7 +57,6 @@ d_tasks = [
 if os.path.exists('../tests/ext/nuklear.h'):
     d_tasks.append([ '../util/sokol_nuklear.h', 'snk_',   ['sg_', 'sapp_'] ])
     if os.path.exists('sokol-d'):
-        os.makedirs('sokol-d/src/sokol/c', exist_ok=True)
         shutil.copy('../tests/ext/nuklear.h', 'sokol-d/src/sokol/c/nuklear.h')
 gen_d.prepare()
 for task in d_tasks:

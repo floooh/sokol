@@ -61,6 +61,7 @@ jobs:
       - uses: actions/checkout@main
         with:
           repository: kassane/sokol-d
+          ref: nuklear-example
           path: bindgen/sokol-d
       - uses: actions/checkout@main
         with:
