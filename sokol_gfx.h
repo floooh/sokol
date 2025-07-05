@@ -4342,10 +4342,14 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_COLORATTACHMENT_USAGE, "sg_view_desc.color_attachment.image must have been created with sg_image_desc.usage.attachment = true") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_RESOLVEATTACHMENT_USAGE, "sg_view_desc.resolve_attachment.image must have been created with sg_image_desc.usage.attachment = true") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_DEPTHSTENCILATTACHMENT_USAGE, "sg_view_desc.depth_stencil_attachment.image must have been created with sg_image_desc.usage.attachment = true") \
-    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_MIPLEVEL, "sg_view_desc: view mip level is out of range (<0 or >= image.num_miplevels)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_CUBEFACE, "sg_view_desc: view slice is out of range for cubemap image (<0 or >= 6)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_LAYER, "sg_view_desc: view slice is out of range for 2D array image (<0 or >= image.num_slices") \
-    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_SLICE, "sg_view_desc: view slice is out of range for 3D image (<0 or >= image.num_slices)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_MIPLEVEL, "sg_view_desc: image/attachment view mip level is out of range (must be >=0 and <image.num_miplevels)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_CUBEFACE, "sg_view_desc: image/attachment view slice is out of range for cubemap image (must be >=0 and <6)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_ARRAYLAYER, "sg_view_desc: image/attachment view slice is out of range for 2D array image (must be >=0 and <image.num_slices") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_3DSLICE, "sg_view_desc: image/attachment view slice is out of range for 3D image (must be 0)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_MIPLEVELS, "sg_view_desc: texture view mip levels are out of range (must be >=0 and <image.num_miplevels)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_CUBEFACES, "sg_view_desc: texture view slices are out of range for for cubemap image (must be 0)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_ARRAYLAYERS, "sg_view_desc: texture view slices are out of range for 2D array image (must be >=0 and <image.num_slices") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_3DSLICES, "sg_view_desc: texture view slices are out of range for 3D image (must be 0)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_STORAGEIMAGE_PIXELFORMAT, "sg_view_desc.storage_image_binding: image pixel format must be GPU readable or writable (sg_pixelformat_info.read/write)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_COLORATTACHMENT_PIXELFORMAT, "sg_view_desc.color_attachment: pixel format of image must be renderable (sg_pixelformat_info.render)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_DEPTHSTENCILATTACHMENT_PIXELFORMAT, "sg_view_desc.depth_stencil_attachment: pixel format of image must be a depth or depth-stencil format (sg_pixelformat_info.depth)") \
@@ -7480,7 +7484,15 @@ _SOKOL_PRIVATE void _sg_texture_view_common_init(_sg_image_view_common_t* cmn, c
     cmn->mip_level_count = _sg_def(desc->mip_levels.count, img->cmn.num_mipmaps - cmn->mip_level);
     SOKOL_ASSERT(cmn->mip_level_count > 0);
     cmn->slice = desc->slices.base;
-    cmn->slice_count = _sg_def(desc->slices.count, img->cmn.num_slices - cmn->slice);
+    switch (img->cmn.type) {
+        case SG_IMAGETYPE_CUBE:
+        case SG_IMAGETYPE_3D:
+            cmn->slice_count = _sg_def(desc->slices.count, 1);
+            break;
+        default:
+            cmn->slice_count = _sg_def(desc->slices.count, img->cmn.num_slices - cmn->slice);
+            break;
+    }
     SOKOL_ASSERT(cmn->slice_count > 0);
 }
 
@@ -19091,22 +19103,22 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
                 if (img->cmn.type == SG_IMAGETYPE_CUBE) {
                     _SG_VALIDATE((img_desc->slice >= 0) && (img_desc->slice < 6), VALIDATE_VIEWDESC_IMAGE_CUBEFACE);
                 } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
-                    _SG_VALIDATE((img_desc->slice >= 0) && (img_desc->slice < img->cmn.num_slices), VALIDATE_VIEWDESC_IMAGE_LAYER);
+                    _SG_VALIDATE((img_desc->slice >= 0) && (img_desc->slice < img->cmn.num_slices), VALIDATE_VIEWDESC_IMAGE_ARRAYLAYER);
                 } else if (img->cmn.type == SG_IMAGETYPE_3D) {
-                    _SG_VALIDATE((img_desc->slice >= 0) && (img_desc->slice < img->cmn.num_slices), VALIDATE_VIEWDESC_IMAGE_SLICE);
+                    _SG_VALIDATE(img_desc->slice == 0, VALIDATE_VIEWDESC_IMAGE_3DSLICE);
                 }
             } else if (tex_desc) {
                 SOKOL_ASSERT(img);
                 // NOTE: it doesn't matter here if the mip/slice count is default-zero!
                 int max_mip_level = tex_desc->mip_levels.base + tex_desc->mip_levels.count;
                 int max_slice = tex_desc->slices.base + tex_desc->slices.count;
-                _SG_VALIDATE((tex_desc->mip_levels.base >= 0) && (max_mip_level <= img->cmn.num_mipmaps), VALIDATE_VIEWDESC_IMAGE_MIPLEVEL);
+                _SG_VALIDATE((tex_desc->mip_levels.base >= 0) && (max_mip_level <= img->cmn.num_mipmaps), VALIDATE_VIEWDESC_TEXTURE_MIPLEVELS);
                 if (img->cmn.type == SG_IMAGETYPE_CUBE) {
-                    _SG_VALIDATE((tex_desc->slices.base >= 0) && (max_slice <= 6), VALIDATE_VIEWDESC_IMAGE_CUBEFACE);
+                    _SG_VALIDATE((tex_desc->slices.base == 0) && (max_slice <= 1), VALIDATE_VIEWDESC_TEXTURE_CUBEFACES);
                 } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
-                    _SG_VALIDATE((tex_desc->slices.base >= 0) && (max_slice <= img->cmn.num_slices), VALIDATE_VIEWDESC_IMAGE_LAYER);
+                    _SG_VALIDATE((tex_desc->slices.base >= 0) && (max_slice <= img->cmn.num_slices), VALIDATE_VIEWDESC_TEXTURE_ARRAYLAYERS);
                 } else if (img->cmn.type == SG_IMAGETYPE_3D) {
-                    _SG_VALIDATE((tex_desc->slices.base >= 0) && (max_slice <= img->cmn.num_slices), VALIDATE_VIEWDESC_IMAGE_SLICE);
+                    _SG_VALIDATE((tex_desc->slices.base == 0) && (max_slice <= 1), VALIDATE_VIEWDESC_TEXTURE_3DSLICES);
                 }
             }
         }
