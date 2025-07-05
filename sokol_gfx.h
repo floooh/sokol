@@ -6261,7 +6261,7 @@ typedef struct _sg_view_s {
     _sg_slot_t slot;
     _sg_view_common_t cmn;
     struct {
-        int tex_view;
+        int tex_view[SG_NUM_INFLIGHT_FRAMES];
     } mtl;
 } _sg_mtl_view_t;
 typedef _sg_mtl_view_t _sg_view_t;
@@ -14951,23 +14951,32 @@ _SOKOL_PRIVATE void _sg_mtl_discard_pipeline(_sg_pipeline_t* pip) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_view(_sg_view_t* view) {
     SOKOL_ASSERT(view);
-    if (view->cmn.type == _SG_VIEWTYPE_STORAGEIMAGE) {
+    if ((view->cmn.type == _SG_VIEWTYPE_TEXTURE) || (view->cmn.type == _SG_VIEWTYPE_STORAGEIMAGE)) {
         const _sg_image_view_common_t* cmn = &view->cmn.img;
+        SOKOL_ASSERT(cmn->mip_level_count >= 1);
+        SOKOL_ASSERT(cmn->slice_count >= 1);
         const _sg_image_t* img = _sg_image_ref_ptr(&cmn->ref);
-        id<MTLTexture> mtl_tex_view = [_sg_mtl_id(img->mtl.tex[0])
-            newTextureViewWithPixelFormat: _sg_mtl_pixel_format(img->cmn.pixel_format)
-            textureType: _sg_mtl_texture_type(img->cmn.type, false)
-            levels: NSMakeRange((NSUInteger)cmn->mip_level, 1)
-            slices: NSMakeRange((NSUInteger)cmn->slice, 1)];
-        view->mtl.tex_view = _sg_mtl_add_resource(mtl_tex_view);
+        for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+            if (img->mtl.tex[i] == _SG_MTL_INVALID_SLOT_INDEX) {
+                continue;
+            }
+            id<MTLTexture> mtl_tex_view = [_sg_mtl_id(img->mtl.tex[i])
+                newTextureViewWithPixelFormat: _sg_mtl_pixel_format(img->cmn.pixel_format)
+                textureType: _sg_mtl_texture_type(img->cmn.type, false)
+                levels: NSMakeRange((NSUInteger)cmn->mip_level, (NSUInteger)cmn->mip_level_count)
+                slices: NSMakeRange((NSUInteger)cmn->slice, (NSUInteger)cmn->slice_count)];
+            view->mtl.tex_view[i] = _sg_mtl_add_resource(mtl_tex_view);
+        }
     }
     return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_mtl_discard_view(_sg_view_t* view) {
     SOKOL_ASSERT(view);
-    // it's valid to call _sg_mtl_release_resource with a null handle
-    _sg_mtl_release_resource(_sg.frame_index, view->mtl.tex_view);
+    for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+        // it's valid to call _sg_mtl_release_resource with a null handle
+        _sg_mtl_release_resource(_sg.frame_index, view->mtl.tex_view[i]);
+    }
 }
 
 _SOKOL_PRIVATE void _sg_mtl_bind_uniform_buffers(void) {
@@ -15381,36 +15390,35 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
 
     // apply texture bindings
     for (size_t i = 0; i < SG_MAX_TEXTURE_BINDSLOTS; i++) {
-        const _sg_view_t* img_view = bnd->tex_views[i];
-        if (img_view == 0) {
+        const _sg_view_t* view = bnd->tex_views[i];
+        if (view == 0) {
             continue;
         }
         const sg_shader_stage stage = shd->cmn.textures[i].stage;
         SOKOL_ASSERT((stage == SG_SHADERSTAGE_VERTEX) || (stage == SG_SHADERSTAGE_FRAGMENT) || (stage == SG_SHADERSTAGE_COMPUTE));
         const NSUInteger mtl_slot = shd->mtl.tex_texture_n[i];
         SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS);
-        const _sg_image_ref_t* img_ref = &img_view->cmn.img.ref;
-        const _sg_image_t* img = _sg_image_ref_ptr(img_ref);
-        SOKOL_ASSERT(img->mtl.tex[img->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
+        const int active_slot = _sg_image_ref_ptr(&view->cmn.img.ref)->cmn.active_slot;
+        SOKOL_ASSERT(view->mtl.tex_view[active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
         if (stage == SG_SHADERSTAGE_VERTEX) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (!_sg_sref_sref_eql(&_sg.mtl.state_cache.cur_vstexs[mtl_slot], &img_ref->sref)) {
-                _sg.mtl.state_cache.cur_vstexs[mtl_slot] = img_ref->sref;
-                [_sg.mtl.render_cmd_encoder setVertexTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:mtl_slot];
+            if (!_sg_sref_slot_eql(&_sg.mtl.state_cache.cur_vstexs[mtl_slot], &view->slot)) {
+                _sg.mtl.state_cache.cur_vstexs[mtl_slot] = _sg_sref(&view->slot);
+                [_sg.mtl.render_cmd_encoder setVertexTexture:_sg_mtl_id(view->mtl.tex_view[active_slot]) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_vertex_texture, 1);
             }
         } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (!_sg_sref_sref_eql(&_sg.mtl.state_cache.cur_fstexs[mtl_slot], &img_ref->sref)) {
-                _sg.mtl.state_cache.cur_fstexs[mtl_slot] = img_ref->sref;
-                [_sg.mtl.render_cmd_encoder setFragmentTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:mtl_slot];
+            if (!_sg_sref_slot_eql(&_sg.mtl.state_cache.cur_fstexs[mtl_slot], &view->slot)) {
+                _sg.mtl.state_cache.cur_fstexs[mtl_slot] = _sg_sref(&view->slot);
+                [_sg.mtl.render_cmd_encoder setFragmentTexture:_sg_mtl_id(view->mtl.tex_view[active_slot]) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_fragment_texture, 1);
             }
         } else if (stage == SG_SHADERSTAGE_COMPUTE) {
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
-            if (!_sg_sref_sref_eql(&_sg.mtl.state_cache.cur_cstexs[mtl_slot], &img_ref->sref)) {
-                _sg.mtl.state_cache.cur_cstexs[mtl_slot] = img_ref->sref;
-                [_sg.mtl.compute_cmd_encoder setTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:mtl_slot];
+            if (!_sg_sref_slot_eql(&_sg.mtl.state_cache.cur_cstexs[mtl_slot], &view->slot)) {
+                _sg.mtl.state_cache.cur_cstexs[mtl_slot] = _sg_sref(&view->slot);
+                [_sg.mtl.compute_cmd_encoder setTexture:_sg_mtl_id(view->mtl.tex_view[active_slot]) atIndex:mtl_slot];
                 _sg_stats_add(metal.bindings.num_set_compute_texture, 1);
             }
         }
@@ -18982,7 +18990,6 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
         const sg_texture_view_desc* tex_desc = 0;
         const sg_buffer_view_desc* buf_desc = 0;
         if (desc->texture_binding.image.id != SG_INVALID_ID) {
-            _SG_VALIDATE(_SG_VIEWTYPE_INVALID == view_type, VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE);
             view_type = _SG_VIEWTYPE_TEXTURE;
             tex_desc = &desc->texture_binding;
         }
@@ -19034,7 +19041,7 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
             }
         } else {
             SOKOL_ASSERT(tex_desc && (img_desc == 0) && (buf_desc == 0));
-            img = _sg_lookup_image(img_desc->image.id);
+            img = _sg_lookup_image(tex_desc->image.id);
             _SG_VALIDATE(img, VALIDATE_VIEWDESC_RESOURCE_ALIVE);
             if (img) {
                 _SG_VALIDATE(img->slot.state != SG_RESOURCESTATE_FAILED, VALIDATE_VIEWDESC_RESOURCE_FAILED);
@@ -19093,13 +19100,13 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
                 // NOTE: it doesn't matter here if the mip/slice count is default-zero!
                 int max_mip_level = tex_desc->mip_levels.base + tex_desc->mip_levels.count;
                 int max_slice = tex_desc->slices.base + tex_desc->slices.count;
-                _SG_VALIDATE((img_desc->mip_level >= 0) && (max_mip_level <= img->cmn.num_mipmaps), VALIDATE_VIEWDESC_IMAGE_MIPLEVEL);
+                _SG_VALIDATE((tex_desc->mip_levels.base >= 0) && (max_mip_level <= img->cmn.num_mipmaps), VALIDATE_VIEWDESC_IMAGE_MIPLEVEL);
                 if (img->cmn.type == SG_IMAGETYPE_CUBE) {
-                    _SG_VALIDATE((img_desc->slice >= 0) && (max_slice <= 6), VALIDATE_VIEWDESC_IMAGE_CUBEFACE);
+                    _SG_VALIDATE((tex_desc->slices.base >= 0) && (max_slice <= 6), VALIDATE_VIEWDESC_IMAGE_CUBEFACE);
                 } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
-                    _SG_VALIDATE((img_desc->slice >= 0) && (max_slice <= img->cmn.num_slices), VALIDATE_VIEWDESC_IMAGE_LAYER);
+                    _SG_VALIDATE((tex_desc->slices.base >= 0) && (max_slice <= img->cmn.num_slices), VALIDATE_VIEWDESC_IMAGE_LAYER);
                 } else if (img->cmn.type == SG_IMAGETYPE_3D) {
-                    _SG_VALIDATE((img_desc->slice >= 0) && (max_slice <= img->cmn.num_slices), VALIDATE_VIEWDESC_IMAGE_SLICE);
+                    _SG_VALIDATE((tex_desc->slices.base >= 0) && (max_slice <= img->cmn.num_slices), VALIDATE_VIEWDESC_IMAGE_SLICE);
                 }
             }
         }
