@@ -15354,7 +15354,7 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
         // store index buffer binding, this will be needed later in sg_draw()
         _sg.mtl.state_cache.cur_ibuf = _sg_buffer_ref(bnd->ib);
-        _sg.mtl.state_cache.cur_ibuf_offset = (NSUInteger)bnd->ib_offset;
+        _sg.mtl.state_cache.cur_ibuf_offset = bnd->ib_offset;
         if (bnd->ib) {
             SOKOL_ASSERT(bnd->pip->cmn.index_type != SG_INDEXTYPE_NONE);
         } else {
