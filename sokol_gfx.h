@@ -4343,13 +4343,15 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_RESOLVEATTACHMENT_USAGE, "sg_view_desc.resolve_attachment.image must have been created with sg_image_desc.usage.attachment = true") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_DEPTHSTENCILATTACHMENT_USAGE, "sg_view_desc.depth_stencil_attachment.image must have been created with sg_image_desc.usage.attachment = true") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_MIPLEVEL, "sg_view_desc: image/attachment view mip level is out of range (must be >=0 and <image.num_miplevels)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_CUBEFACE, "sg_view_desc: image/attachment view slice is out of range for cubemap image (must be >=0 and <6)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_ARRAYLAYER, "sg_view_desc: image/attachment view slice is out of range for 2D array image (must be >=0 and <image.num_slices") \
-    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_3DSLICE, "sg_view_desc: image/attachment view slice is out of range for 3D image (must be 0)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_2D_SLICE, "sg_view_desc: image/attachment view slice is out of range for 2D image (must be 0)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_CUBEMAP_SLICE, "sg_view_desc: image/attachment view slice is out of range for cubemap image (must be >=0 and <6)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_ARRAY_SLICE, "sg_view_desc: image/attachment view slice is out of range for 2D array image (must be >=0 and <image.num_slices") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_3D_SLICE, "sg_view_desc: image/attachment view slice is out of range for 3D image (must be 0)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_MIPLEVELS, "sg_view_desc: texture view mip levels are out of range (must be >=0 and <image.num_miplevels)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_CUBEFACES, "sg_view_desc: texture view slices are out of range for for cubemap image (must be 0)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_ARRAYLAYERS, "sg_view_desc: texture view slices are out of range for 2D array image (must be >=0 and <image.num_slices") \
-    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_3DSLICES, "sg_view_desc: texture view slices are out of range for 3D image (must be 0)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_2D_SLICES, "sg_view_desc: texture view slices are out of range for 2D image (must be 0)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_CUBEMAP_SLICES, "sg_view_desc: texture view slices are out of range for cubemap image (must be 0)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_ARRAY_SLICES, "sg_view_desc: texture view slices are out of range for 2D array image (must be >=0 and <image.num_slices") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_3D_SLICES, "sg_view_desc: texture view slices are out of range for 3D image (must be 0)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_STORAGEIMAGE_PIXELFORMAT, "sg_view_desc.storage_image_binding: image pixel format must be GPU readable or writable (sg_pixelformat_info.read/write)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_COLORATTACHMENT_PIXELFORMAT, "sg_view_desc.color_attachment: pixel format of image must be renderable (sg_pixelformat_info.render)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_DEPTHSTENCILATTACHMENT_PIXELFORMAT, "sg_view_desc.depth_stencil_attachment: pixel format of image must be a depth or depth-stencil format (sg_pixelformat_info.depth)") \
@@ -4368,16 +4370,6 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RENDER_VS_STORAGE_ATTACHMENTS, "cannot use color/depth and storage attachment images on the same sg_attachments object") \
     */ \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_CANARY, "sg_begin_pass: pass struct not initialized") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_ATTACHMENTS_EXISTS, "sg_begin_pass: attachments object no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_ATTACHMENTS_VALID, "sg_begin_pass: attachments object not in resource state VALID") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE_ALIVE, "sg_begin_pass: one or more color attachment images are no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE_VALID, "sg_begin_pass: one or more color attachment images are not in valid state") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVE_ATTACHMENT_IMAGE_ALIVE, "sg_begin_pass: one or more resolve attachment images are no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVE_ATTACHMENT_IMAGE_VALID, "sg_begin_pass: one or more resolve attachment images are not in valid state") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCIL_ATTACHMENT_IMAGE_ALIVE, "sg_begin_pass: one or more depth-stencil attachment images are no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCIL_ATTACHMENT_IMAGE_VALID, "sg_begin_pass: one or more depth-stencil attachment images are not in valid state") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_STORAGE_ATTACHMENT_IMAGE_ALIVE, "sg_begin_pass: one or more storage attachment images is no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_STORAGE_ATTACHMENT_IMAGE_VALID, "sg_begin_pass: one or more storage attachment images is not in valid state") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_WIDTH, "sg_begin_pass: expected pass.swapchain.width > 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_WIDTH_NOTSET, "sg_begin_pass: expected pass.swapchain.width == 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_HEIGHT, "sg_begin_pass: expected pass.swapchain.height > 0") \
@@ -4406,11 +4398,35 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_DEPTHSTENCILVIEW, "sg_begin_pass: expected pass.swapchain.wgpu.depth_stencil_view != 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_DEPTHSTENCILVIEW_NOTSET, "sg_begin_pass: expected pass.swapchain.wgpu.depth_stencil_view == 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_GL_EXPECT_FRAMEBUFFER_NOTSET, "sg_begin_pass: expected pass.swapchain.gl.framebuffer == 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEWS_CONTINUOUS, "sg_begin_pass: color attachment view array must be continuous") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_ALIVE, "sg_begin_pass: color attachment view no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_VALID, "sg_begin_pass: color attachment view not in valid state (SG_RESOURCESTATE_VALID)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_TYPE, "sg_begin_pass: color attachment views has wrong type (must be sg_view_desc.color_attachment)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_IMAGE_ALIVE, "sg_begin_pass: color attachment view's image object no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_IMAGE_VALID, "sg_begin_pass: color attachment view's image is not in valid state (SG_RESOURCESTATE_VALID)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_SIZES, "sg_begin_pass: all color attachments must have the same width and height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_SAMPLECOUNTS, "sg_begin_pass: all color attachments must have the same sample count") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_NO_COLORATTACHMENTVIEW, "sg_begin_pass: a resolve attachment view must have an associated color attachment view at the same index") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_ALIVE, "sg_begin_pass: resolve attachment view no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_VALID, "sg_begin_pass: resolve attachment view not in valid state (SG_RESOURCESTATE_VALID)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_TYPE, "sg_begin_pass: resolve attachment views has wrong type (must be sg_view_desc.resolve_attachment)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_IMAGE_ALIVE, "sg_begin_pass: resolve attachment view's image object no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_IMAGE_VALID, "sg_begin_pass: resolve attachment view's image is not in valid state (SG_RESOURCESTATE_VALID)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_SIZES, "sg_begin_pass: all attachments must have the same width and height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEWS_CONTINUOUS, "sg_begin_pass: color attachment view array must be continuous") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_ALIVE, "sg_begin_pass: depth-stencil attachment view no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_VALID, "sg_begin_pass: depth-stencil attachment view not in valid state (SG_RESOURCESTATE_VALID)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_TYPE, "sg_begin_pass: depth-stencil attachment views has wrong type (must be sg_view_desc.depth_stencil_attachment)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_IMAGE_ALIVE, "sg_begin_pass: depth-stencil attachment view's image object no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_IMAGE_VALID, "sg_begin_pass: depth-stencil attachment view's image is not in valid state (SG_RESOURCESTATE_VALID)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_SIZES, "sg_begin_pass: attachments must have the same width and height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_SAMPLECOUNT, "sg_begin_pass: all color attachments must have the same sample count") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_ATTACHMENTS_EXPECTED, "sg_begin_pass: offscreen render passes must have at least one color- or depth-stencil attachment") \
     _SG_LOGITEM_XMACRO(VALIDATE_AVP_RENDERPASS_EXPECTED, "sg_apply_viewport: must be called in a render pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_ASR_RENDERPASS_EXPECTED, "sg_apply_scissor_rect: must be called in a render pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_PIPELINE_VALID_ID, "sg_apply_pipeline: invalid pipeline id provided") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_PIPELINE_EXISTS, "sg_apply_pipeline: pipeline object no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_APIP_PIPELINE_VALID, "sg_apply_pipeline: pipeline object not in valid state") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_PIPELINE_VALID, "sg_apply_pipeline: pipeline object not in valid state (SG_RESOURCESTATE_VALID)") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_PASS_EXPECTED, "sg_apply_pipeline: must be called in a pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_PIPELINE_SHADER_ALIVE, "sg_apply_pipeline: shader object associated with pipeline no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_PIPELINE_SHADER_VALID, "sg_apply_pipeline: shader object associated with pipeline not in valid state") \
@@ -7241,6 +7257,11 @@ _SOKOL_PRIVATE _sg_recti_t _sg_clipi(int x, int y, int w, int h, int clip_width,
     return res;
 }
 
+// return size of a mipmap level
+_SOKOL_PRIVATE int _sg_miplevel_dim(int base_dim, int mip_level) {
+    return _sg_max(base_dim >> mip_level, 1);
+}
+
 _SOKOL_PRIVATE sg_resource_state _sg_view_resource_state(const _sg_view_t* view) {
     if (_sg_buffer_ref_alive(&view->cmn.buf.ref)) {
         return _sg_buffer_ref_ptr(&view->cmn.buf.ref)->slot.state;
@@ -7259,7 +7280,9 @@ _SOKOL_PRIVATE _sg_dimi_t _sg_image_view_dim(const _sg_view_t* view) {
     SOKOL_ASSERT(view);
     const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
     SOKOL_ASSERT((img->cmn.width > 0) && (img->cmn.height > 0));
-    const _sg_dimi_t res = { img->cmn.width, img->cmn.height };
+    _sg_dimi_t res; _sg_clear(&res, sizeof(res));
+    res.width = _sg_miplevel_dim(img->cmn.width, view->cmn.img.mip_level);
+    res.height = _sg_miplevel_dim(img->cmn.height, view->cmn.img.mip_level);
     return res;
 }
 
@@ -7966,11 +7989,6 @@ _SOKOL_PRIVATE int _sg_num_rows(sg_pixel_format fmt, int height) {
         num_rows = 1;
     }
     return num_rows;
-}
-
-// return size of a mipmap level
-_SOKOL_PRIVATE int _sg_miplevel_dim(int base_dim, int mip_level) {
-    return _sg_max(base_dim >> mip_level, 1);
 }
 
 /* return pitch of a 2D subimage / texture slice
@@ -19100,12 +19118,14 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
             } else if (img_desc) {
                 SOKOL_ASSERT(img);
                 _SG_VALIDATE((img_desc->mip_level >= 0) && (img_desc->mip_level < img->cmn.num_mipmaps), VALIDATE_VIEWDESC_IMAGE_MIPLEVEL);
-                if (img->cmn.type == SG_IMAGETYPE_CUBE) {
-                    _SG_VALIDATE((img_desc->slice >= 0) && (img_desc->slice < 6), VALIDATE_VIEWDESC_IMAGE_CUBEFACE);
+                if (img->cmn.type == SG_IMAGETYPE_2D) {
+                    _SG_VALIDATE(img_desc->slice == 0, VALIDATE_VIEWDESC_IMAGE_2D_SLICE);
+                } else if (img->cmn.type == SG_IMAGETYPE_CUBE) {
+                    _SG_VALIDATE((img_desc->slice >= 0) && (img_desc->slice < 6), VALIDATE_VIEWDESC_IMAGE_CUBEMAP_SLICE);
                 } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
-                    _SG_VALIDATE((img_desc->slice >= 0) && (img_desc->slice < img->cmn.num_slices), VALIDATE_VIEWDESC_IMAGE_ARRAYLAYER);
+                    _SG_VALIDATE((img_desc->slice >= 0) && (img_desc->slice < img->cmn.num_slices), VALIDATE_VIEWDESC_IMAGE_ARRAY_SLICE);
                 } else if (img->cmn.type == SG_IMAGETYPE_3D) {
-                    _SG_VALIDATE(img_desc->slice == 0, VALIDATE_VIEWDESC_IMAGE_3DSLICE);
+                    _SG_VALIDATE(img_desc->slice == 0, VALIDATE_VIEWDESC_IMAGE_3D_SLICE);
                 }
             } else if (tex_desc) {
                 SOKOL_ASSERT(img);
@@ -19113,160 +19133,20 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
                 int max_mip_level = tex_desc->mip_levels.base + tex_desc->mip_levels.count;
                 int max_slice = tex_desc->slices.base + tex_desc->slices.count;
                 _SG_VALIDATE((tex_desc->mip_levels.base >= 0) && (max_mip_level <= img->cmn.num_mipmaps), VALIDATE_VIEWDESC_TEXTURE_MIPLEVELS);
-                if (img->cmn.type == SG_IMAGETYPE_CUBE) {
-                    _SG_VALIDATE((tex_desc->slices.base == 0) && (max_slice <= 1), VALIDATE_VIEWDESC_TEXTURE_CUBEFACES);
+                if (img->cmn.type == SG_IMAGETYPE_2D) {
+                    _SG_VALIDATE((tex_desc->slices.base == 0) && (max_slice <= 1), VALIDATE_VIEWDESC_TEXTURE_2D_SLICES);
+                } else if (img->cmn.type == SG_IMAGETYPE_CUBE) {
+                    _SG_VALIDATE((tex_desc->slices.base == 0) && (max_slice <= 1), VALIDATE_VIEWDESC_TEXTURE_CUBEMAP_SLICES);
                 } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
-                    _SG_VALIDATE((tex_desc->slices.base >= 0) && (max_slice <= img->cmn.num_slices), VALIDATE_VIEWDESC_TEXTURE_ARRAYLAYERS);
+                    _SG_VALIDATE((tex_desc->slices.base >= 0) && (max_slice <= img->cmn.num_slices), VALIDATE_VIEWDESC_TEXTURE_ARRAY_SLICES);
                 } else if (img->cmn.type == SG_IMAGETYPE_3D) {
-                    _SG_VALIDATE((tex_desc->slices.base == 0) && (max_slice <= 1), VALIDATE_VIEWDESC_TEXTURE_3DSLICES);
+                    _SG_VALIDATE((tex_desc->slices.base == 0) && (max_slice <= 1), VALIDATE_VIEWDESC_TEXTURE_3D_SLICES);
                 }
             }
         }
         return _sg_validate_end();
     #endif
 }
-
-/* FIXME FIXME FIXME: view validation
-_SOKOL_PRIVATE bool _sg_validate_attachments_desc(const sg_attachments_desc* desc) {
-    #if !defined(SOKOL_DEBUG)
-        _SOKOL_UNUSED(desc);
-        return true;
-    #else
-        if (_sg.desc.disable_validation) {
-            return true;
-        }
-        SOKOL_ASSERT(desc);
-        _sg_validate_begin();
-        _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_ATTACHMENTSDESC_CANARY);
-        _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_ATTACHMENTSDESC_CANARY);
-
-        // check color attachments
-        bool has_color_atts = false;
-        bool has_depth_stencil_att = false;
-        {
-            bool atts_cont = true;
-            int color_width = -1, color_height = -1, color_sample_count = -1;
-            for (int att_index = 0; att_index < SG_MAX_COLOR_ATTACHMENTS; att_index++) {
-                const sg_attachment_desc* att = &desc->colors[att_index];
-                if (att->image.id == SG_INVALID_ID) {
-                    atts_cont = false;
-                    continue;
-                }
-                has_color_atts = true;
-                _SG_VALIDATE(atts_cont, VALIDATE_ATTACHMENTSDESC_NO_CONT_COLOR_ATTS);
-                const _sg_image_t* img = _sg_lookup_image(att->image.id);
-                _SG_VALIDATE(img, VALIDATE_ATTACHMENTSDESC_COLOR_IMAGE);
-                if (img) {
-                    _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ATTACHMENTSDESC_COLOR_IMAGE);
-                    _SG_VALIDATE(img->cmn.usage.render_attachment, VALIDATE_ATTACHMENTSDESC_COLOR_IMAGE_NO_RENDERATTACHMENT);
-                    _SG_VALIDATE(att->mip_level < img->cmn.num_mipmaps, VALIDATE_ATTACHMENTSDESC_COLOR_MIPLEVEL);
-                    if (img->cmn.type == SG_IMAGETYPE_CUBE) {
-                        _SG_VALIDATE(att->slice < 6, VALIDATE_ATTACHMENTSDESC_COLOR_FACE);
-                    } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
-                        _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_COLOR_LAYER);
-                    } else if (img->cmn.type == SG_IMAGETYPE_3D) {
-                        _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_COLOR_SLICE);
-                    }
-                    if (att_index == 0) {
-                        color_width = _sg_miplevel_dim(img->cmn.width, att->mip_level);
-                        color_height = _sg_miplevel_dim(img->cmn.height, att->mip_level);
-                        color_sample_count = img->cmn.sample_count;
-                    } else {
-                        _SG_VALIDATE(color_width == _sg_miplevel_dim(img->cmn.width, att->mip_level), VALIDATE_ATTACHMENTSDESC_IMAGE_SIZES);
-                        _SG_VALIDATE(color_height == _sg_miplevel_dim(img->cmn.height, att->mip_level), VALIDATE_ATTACHMENTSDESC_IMAGE_SIZES);
-                        _SG_VALIDATE(color_sample_count == img->cmn.sample_count, VALIDATE_ATTACHMENTSDESC_IMAGE_SAMPLE_COUNTS);
-                    }
-                    _SG_VALIDATE(_sg_is_valid_attachment_color_format(img->cmn.pixel_format), VALIDATE_ATTACHMENTSDESC_COLOR_INV_PIXELFORMAT);
-
-                    // check resolve attachment
-                    const sg_attachment_desc* res_att = &desc->resolves[att_index];
-                    if (res_att->image.id != SG_INVALID_ID) {
-                        // associated color attachment must be MSAA
-                        _SG_VALIDATE(img->cmn.sample_count > 1, VALIDATE_ATTACHMENTSDESC_RESOLVE_COLOR_IMAGE_MSAA);
-                        const _sg_image_t* res_img = _sg_lookup_image(res_att->image.id);
-                        _SG_VALIDATE(res_img, VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE);
-                        if (res_img) {
-                            _SG_VALIDATE(res_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE);
-                            _SG_VALIDATE(res_img->cmn.usage.render_attachment, VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_NO_RT);
-                            _SG_VALIDATE(res_img->cmn.sample_count == 1, VALIDATE_ATTACHMENTSDESC_RESOLVE_SAMPLE_COUNT);
-                            _SG_VALIDATE(res_att->mip_level < res_img->cmn.num_mipmaps, VALIDATE_ATTACHMENTSDESC_RESOLVE_MIPLEVEL);
-                            if (res_img->cmn.type == SG_IMAGETYPE_CUBE) {
-                                _SG_VALIDATE(res_att->slice < SG_CUBEFACE_NUM, VALIDATE_ATTACHMENTSDESC_RESOLVE_FACE);
-                            } else if (res_img->cmn.type == SG_IMAGETYPE_ARRAY) {
-                                _SG_VALIDATE(res_att->slice < res_img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_RESOLVE_LAYER);
-                            } else if (res_img->cmn.type == SG_IMAGETYPE_3D) {
-                                _SG_VALIDATE(res_att->slice < res_img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_RESOLVE_SLICE);
-                            }
-                            _SG_VALIDATE(img->cmn.pixel_format == res_img->cmn.pixel_format, VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_FORMAT);
-                            _SG_VALIDATE(color_width == _sg_miplevel_dim(res_img->cmn.width, res_att->mip_level), VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_SIZES);
-                            _SG_VALIDATE(color_height == _sg_miplevel_dim(res_img->cmn.height, res_att->mip_level), VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_SIZES);
-                        }
-                    }
-                }
-            }
-            // check depth stencil attachments
-            if (desc->depth_stencil.image.id != SG_INVALID_ID) {
-                has_depth_stencil_att = true;
-                const sg_attachment_desc* att = &desc->depth_stencil;
-                const _sg_image_t* img = _sg_lookup_image(att->image.id);
-                _SG_VALIDATE(img, VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE);
-                if (img) {
-                    _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE);
-                    _SG_VALIDATE(att->mip_level < img->cmn.num_mipmaps, VALIDATE_ATTACHMENTSDESC_DEPTH_MIPLEVEL);
-                    if (img->cmn.type == SG_IMAGETYPE_CUBE) {
-                        _SG_VALIDATE(att->slice < 6, VALIDATE_ATTACHMENTSDESC_DEPTH_FACE);
-                    } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
-                        _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_DEPTH_LAYER);
-                    } else if (img->cmn.type == SG_IMAGETYPE_3D) {
-                        // NOTE: this can't actually happen because of VALIDATE_IMAGEDESC_DEPTH_3D_IMAGE
-                        _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_DEPTH_SLICE);
-                    }
-                    _SG_VALIDATE(img->cmn.usage.render_attachment, VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_NO_RENDERATTACHMENT);
-                    _SG_VALIDATE((color_width == -1) || (color_width == _sg_miplevel_dim(img->cmn.width, att->mip_level)), VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SIZES);
-                    _SG_VALIDATE((color_height == -1) || (color_height == _sg_miplevel_dim(img->cmn.height, att->mip_level)), VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SIZES);
-                    _SG_VALIDATE((color_sample_count == -1) || (color_sample_count == img->cmn.sample_count), VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SAMPLE_COUNT);
-                    _SG_VALIDATE(_sg_is_valid_attachment_depth_format(img->cmn.pixel_format), VALIDATE_ATTACHMENTSDESC_DEPTH_INV_PIXELFORMAT);
-                }
-            }
-        }
-
-        // check storage attachments (note: storage attachments don't need to continuous)
-        bool has_storage_atts = false;
-        {
-            for (int att_index = 0; att_index < SG_MAX_STORAGE_ATTACHMENTS; att_index++) {
-                const sg_attachment_desc* att = &desc->storages[att_index];
-                if (att->image.id == SG_INVALID_ID) {
-                    continue;
-                }
-                has_storage_atts = true;
-                const _sg_image_t* img = _sg_lookup_image(att->image.id);
-                _SG_VALIDATE(img, VALIDATE_ATTACHMENTSDESC_STORAGE_IMAGE);
-                if (img) {
-                    _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ATTACHMENTSDESC_STORAGE_IMAGE);
-                    _SG_VALIDATE(img->cmn.usage.storage_attachment, VALIDATE_ATTACHMENTSDESC_STORAGE_IMAGE_NO_STORAGEATTACHMENT);
-                    _SG_VALIDATE(att->mip_level < img->cmn.num_mipmaps, VALIDATE_ATTACHMENTSDESC_STORAGE_MIPLEVEL);
-                    if (img->cmn.type == SG_IMAGETYPE_CUBE) {
-                        _SG_VALIDATE(att->slice < 6, VALIDATE_ATTACHMENTSDESC_STORAGE_FACE);
-                    } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
-                        _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_STORAGE_LAYER);
-                    } else if (img->cmn.type == SG_IMAGETYPE_3D) {
-                        _SG_VALIDATE(att->slice < img->cmn.num_slices, VALIDATE_ATTACHMENTSDESC_STORAGE_SLICE);
-                    }
-                    _SG_VALIDATE(_sg_is_valid_attachment_storage_format(img->cmn.pixel_format), VALIDATE_ATTACHMENTSDESC_STORAGE_INV_PIXELFORMAT);
-                }
-            }
-        }
-        _SG_VALIDATE(has_color_atts || has_depth_stencil_att || has_storage_atts, VALIDATE_ATTACHMENTSDESC_NO_ATTACHMENTS);
-        if (has_color_atts || has_depth_stencil_att) {
-            _SG_VALIDATE(!has_storage_atts, VALIDATE_ATTACHMENTSDESC_RENDER_VS_STORAGE_ATTACHMENTS);
-        }
-        if (has_storage_atts) {
-            _SG_VALIDATE(!(has_color_atts || has_depth_stencil_att), VALIDATE_ATTACHMENTSDESC_RENDER_VS_STORAGE_ATTACHMENTS);
-        }
-        return _sg_validate_end();
-    #endif
-}
-*/
 
 _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
     #if !defined(SOKOL_DEBUG)
@@ -19331,52 +19211,91 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
             #endif
         } else {
             // this is an 'offscreen pass'
-            SOKOL_ASSERT(false);
-            /*
-                FIXME FIXME FIXME
-            const _sg_attachments_t* atts = _sg_lookup_attachments(pass->attachments.id);
-            if (atts) {
-                _SG_VALIDATE(atts->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_ATTACHMENTS_VALID);
-                _SG_VALIDATE(!atts->cmn.has_storage_attachments, VALIDATE_BEGINPASS_RENDERPASS_RENDER_ATTACHMENTS_ONLY);
-                for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-                    {
-                        const _sg_image_ref_t* img_ref = &atts->cmn.colors[i].image;
-                        const bool img_null = _sg_image_ref_null(img_ref);
-                        const bool img_alive = _sg_image_ref_alive(img_ref);
-                        if (!img_null) {
-                            _SG_VALIDATE(img_alive, VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE_ALIVE);
-                            if (img_alive) {
-                                _SG_VALIDATE(_sg_image_ref_ptr(img_ref)->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_COLOR_ATTACHMENT_IMAGE_VALID);
-                            }
-                        }
-                    }
-                    {
-                        const _sg_image_ref_t* img_ref = &atts->cmn.resolves[i].image;
-                        const bool img_null = _sg_image_ref_null(img_ref);
-                        const bool img_alive = _sg_image_ref_alive(img_ref);
-                        if (!img_null) {
-                            _SG_VALIDATE(img_alive, VALIDATE_BEGINPASS_RESOLVE_ATTACHMENT_IMAGE_ALIVE);
-                            if (img_alive) {
-                                _SG_VALIDATE(_sg_image_ref_ptr(img_ref)->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_RESOLVE_ATTACHMENT_IMAGE_VALID);
-                            }
+            bool has_color_atts = false;
+            bool has_depth_stencil_atts = false;
+            bool atts_cont = true;
+            int color_width = -1, color_height = -1, color_sample_count = -1;
+            for (int att_index = 0; att_index < SG_MAX_COLOR_ATTACHMENTS; att_index++) {
+                if (pass->attachments.colors[att_index].id == SG_INVALID_ID) {
+                    atts_cont = false;
+                    continue;
+                }
+                has_color_atts = true;
+                _SG_VALIDATE(atts_cont, VALIDATE_BEGINPASS_COLORATTACHMENTVIEWS_CONTINUOUS);
+                const _sg_view_t* view = _sg_lookup_view(pass->attachments.colors[att_index].id);
+                // the view object must be alive
+                _SG_VALIDATE(view != 0, VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_ALIVE);
+                if (view) {
+                    // the view object must be in valid state
+                    _SG_VALIDATE(view->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_VALID);
+                    // the view object must be a color attachment view
+                    _SG_VALIDATE(view->cmn.type == _SG_VIEWTYPE_COLORATTACHMENT, VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_TYPE);
+                    // the view's image object must be alive and valid
+                    const _sg_image_t* img = _sg_image_ref_ptr_or_null(&view->cmn.img.ref);
+                    _SG_VALIDATE(img, VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_IMAGE_ALIVE);
+                    if (img) {
+                        _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_IMAGE_VALID);
+                        if (att_index == 0) {
+                            color_width = _sg_image_view_dim(view).width;
+                            color_height = _sg_image_view_dim(view).height;
+                            color_sample_count = img->cmn.sample_count;
+                        } else {
+                            _SG_VALIDATE(color_width == _sg_image_view_dim(view).width, VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_SIZES);
+                            _SG_VALIDATE(color_height == _sg_image_view_dim(view).height, VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_SIZES);
+                            _SG_VALIDATE(color_sample_count == img->cmn.sample_count, VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_SAMPLECOUNTS);
                         }
                     }
                 }
-                {
-                    const _sg_image_ref_t* img_ref = &atts->cmn.depth_stencil.image;
-                    const bool img_null = _sg_image_ref_null(img_ref);
-                    const bool img_alive = _sg_image_ref_alive(img_ref);
-                    if (!img_null) {
-                        _SG_VALIDATE(img_alive, VALIDATE_BEGINPASS_DEPTHSTENCIL_ATTACHMENT_IMAGE_ALIVE);
-                        if (img_alive) {
-                            _SG_VALIDATE(_sg_image_ref_ptr(img_ref)->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_DEPTHSTENCIL_ATTACHMENT_IMAGE_VALID);
-                        }
-                    }
-                }
-            } else {
-                _SG_VALIDATE(atts != 0, VALIDATE_BEGINPASS_ATTACHMENTS_EXISTS);
             }
-            */
+            // check resolve views
+            for (int att_index = 0; att_index < SG_MAX_COLOR_ATTACHMENTS; att_index++) {
+                if (pass->attachments.resolves[att_index].id == SG_INVALID_ID) {
+                    continue;
+                }
+                _SG_VALIDATE(pass->attachments.colors[att_index].id != SG_INVALID_ID, VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_NO_COLORATTACHMENTVIEW);
+                const _sg_view_t* view = _sg_lookup_view(pass->attachments.resolves[att_index].id);
+                // the view object must be alive
+                _SG_VALIDATE(view != 0, VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_ALIVE);
+                if (view) {
+                    // the view object must be in valid state
+                    _SG_VALIDATE(view->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_VALID);
+                    // the view object must be a resolve attachment view
+                    _SG_VALIDATE(view->cmn.type == _SG_VIEWTYPE_RESOLVEATTACHMENT, VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_TYPE);
+                    // the view's image object must be alive and valid
+                    const _sg_image_t* img = _sg_image_ref_ptr_or_null(&view->cmn.img.ref);
+                    _SG_VALIDATE(img, VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_IMAGE_ALIVE);
+                    if (img) {
+                        _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_IMAGE_VALID);
+                        _SG_VALIDATE(color_width == _sg_image_view_dim(view).width, VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_SIZES);
+                        _SG_VALIDATE(color_height == _sg_image_view_dim(view).height, VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_SIZES);
+                    }
+
+                }
+            }
+            // check depth-stencil view
+            if (pass->attachments.depth_stencil.id != SG_INVALID_ID) {
+                has_depth_stencil_atts = true;
+                const _sg_view_t* view = _sg_lookup_view(pass->attachments.depth_stencil.id);
+                // the view object must be valid
+                _SG_VALIDATE(view != 0, VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_ALIVE);
+                if (view) {
+                    // the view object must be in valid state
+                    _SG_VALIDATE(view->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_VALID);
+                    // the view object must be a depth stencil attachment view
+                    _SG_VALIDATE(view->cmn.type == _SG_VIEWTYPE_DEPTHSTENCILATTACHMENT, VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_TYPE);
+                    // the view's image object must be alive and valid
+                    const _sg_image_t* img = _sg_image_ref_ptr_or_null(&view->cmn.img.ref);
+                    _SG_VALIDATE(img, VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_IMAGE_ALIVE);
+                    if (img) {
+                        _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_IMAGE_VALID);
+                        _SG_VALIDATE(color_width == _sg_image_view_dim(view).width, VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_SIZES);
+                        _SG_VALIDATE(color_height == _sg_image_view_dim(view).width, VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_SIZES);
+                        _SG_VALIDATE(color_sample_count == img->cmn.sample_count, VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_SAMPLECOUNT);
+                    }
+                }
+            }
+            // must have at least color- or depth-stencil-attachments
+            _SG_VALIDATE(has_color_atts || has_depth_stencil_atts, VALIDATE_BEGINPASS_ATTACHMENTS_EXPECTED);
         }
         if (is_compute_pass || is_offscreen_pass) {
             _SG_VALIDATE(pass->swapchain.width == 0, VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_WIDTH_NOTSET);
