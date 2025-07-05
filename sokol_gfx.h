@@ -4356,19 +4356,6 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_COLORATTACHMENT_PIXELFORMAT, "sg_view_desc.color_attachment: pixel format of image must be renderable (sg_pixelformat_info.render)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_DEPTHSTENCILATTACHMENT_PIXELFORMAT, "sg_view_desc.depth_stencil_attachment: pixel format of image must be a depth or depth-stencil format (sg_pixelformat_info.depth)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_RESOLVEATTACHMENT_SAMPLECOUNT, "sg_view_desc.resolve_attachment: image cannot be multisampled") \
-    /* FIXME FIXME FIXME => view validation
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_CANARY, "sg_attachments_desc not initialized") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_NO_ATTACHMENTS, "sg_attachments_desc no color, depth-stencil or storage attachments") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_NO_CONT_COLOR_ATTS, "color attachments must occupy continuous slots") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_IMAGE_SIZES, "all color and depth attachment images must have the same size") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_IMAGE_SAMPLE_COUNTS, "all color and depth attachment images must have the same sample count") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_COLOR_IMAGE_MSAA, "resolve attachments must have a color attachment image with sample count > 1") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_SIZES, "resolve attachment size must match color attachment image size") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_FORMAT, "resolve attachment pixel format must match color attachment pixel format") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SIZES, "depth attachment image size must match color attachment image size") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SAMPLE_COUNT, "depth attachment sample count must match color attachment sample count") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ATTACHMENTSDESC_RENDER_VS_STORAGE_ATTACHMENTS, "cannot use color/depth and storage attachment images on the same sg_attachments object") \
-    */ \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_CANARY, "sg_begin_pass: pass struct not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_WIDTH, "sg_begin_pass: expected pass.swapchain.width > 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_WIDTH_NOTSET, "sg_begin_pass: expected pass.swapchain.width == 0") \
@@ -4432,14 +4419,19 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_PIPELINE_SHADER_VALID, "sg_apply_pipeline: shader object associated with pipeline not in valid state") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_COMPUTEPASS_EXPECTED, "sg_apply_pipeline: trying to apply compute pipeline in render pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_APIP_RENDERPASS_EXPECTED, "sg_apply_pipeline: trying to apply render pipeline in compute pass") \
-    _SG_LOGITEM_XMACRO(VALIDATE_APIP_ATT_COUNT, "sg_apply_pipeline: number of pipeline color attachments doesn't match number of pass color attachments") \
-    _SG_LOGITEM_XMACRO(VALIDATE_APIP_COLOR_ATTACHMENT_IMAGE_ALIVE, "sg_apply_pipeline: one or more pass color attachments images are no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_APIP_COLOR_ATTACHMENT_IMAGE_VALID, "sg_apply_pipeline: one or more pass color attachments images are not in valid state") \
-    _SG_LOGITEM_XMACRO(VALIDATE_APIP_DEPTHSTENCIL_ATTACHMENT_IMAGE_ALIVE, "sg_apply_pipeline: pass depth-stencil attachment image no longer alive") \
-    _SG_LOGITEM_XMACRO(VALIDATE_APIP_DEPTHSTENCIL_ATTACHMENT_IMAGE_VALID, "sg_apply_pipeline: pass depth-stencil attachment image not in valid state") \
-    _SG_LOGITEM_XMACRO(VALIDATE_APIP_COLOR_FORMAT, "sg_apply_pipeline: pipeline color attachment pixel format doesn't match pass color attachment pixel format") \
-    _SG_LOGITEM_XMACRO(VALIDATE_APIP_DEPTH_FORMAT, "sg_apply_pipeline: pipeline depth pixel_format doesn't match pass depth attachment pixel format") \
-    _SG_LOGITEM_XMACRO(VALIDATE_APIP_SAMPLE_COUNT, "sg_apply_pipeline: pipeline MSAA sample count doesn't match render pass attachment sample count") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_SWAPCHAIN_COLOR_COUNT, "sg_apply_pipeline: the pipeline .color_count must be 1 in swapchain render passes") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_SWAPCHAIN_COLOR_FORMAT, "sg_apply_pipeline: the pipeline .colors[0].pixel_format doesn't match the sg_pass.swapchain.color_format") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_SWAPCHAIN_DEPTH_FORMAT, "sg_apply_pipeline: the pipeline .depth.pixel_format doesn't match the sg_pass.swapchain.depth_format") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_SWAPCHAIN_SAMPLE_COUNT, "sg_apply_pipeline: the pipeline .sample_count doesn't match the sg_pass.swapchain.sample_count") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_ATTACHMENTS_ALIVE, "sg_apply_pipeline: at least one pass attachment view or base image object is no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_COLORATTACHMENTS_COUNT, "sg_apply_pipeline: the pipeline .color_count doesn't match the number of render pass color attachments") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_COLORATTACHMENTS_VIEW_VALID, "sg_apply_pipeline: a pass color attachment view is not in valid state (SG_RESOURCESTATE_VALID)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_COLORATTACHMENTS_IMAGE_VALID, "sg_apply_pipeline: a pass color attachment view's image object is not in valid state (SG_RESOURCESTATE_VALID)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_COLORATTACHMENTS_FORMAT, "sg_apply_pipeline: a pipeline .colors[n].pixel_format doesn't match sg_pass.attachments.colors[n] image pixel format") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_DEPTHSTENCILATTACHMENT_VIEW_VALID, "sg_apply_pipeline: the pass depth-stencil attachment view is not in valid state (SG_RESOURCESTATE_VALID)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_DEPTHSTENCILATTACHMENT_IMAGE_VALID, "sg_apply_pipeline: the pass depth-stencil attachment view's image object is not in valid state (SG_RESOURCESTATE_VALID)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_DEPTHSTENCILATTACHMENT_FORMAT, "sg_apply_pipeline: pipeline .depth.pixel_format doesn't match sg_pass.attachments.depth_stencil image pixel format") \
+    _SG_LOGITEM_XMACRO(VALIDATE_APIP_ATTACHMENT_SAMPLE_COUNT, "sg_apply_pipeline: pipeline MSAA sample count doesn't match pass attachment sample count") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_PASS_EXPECTED, "sg_apply_bindings: must be called in a pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EMPTY_BINDINGS, "sg_apply_bindings: the provided sg_bindings struct is empty") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_NO_PIPELINE, "sg_apply_bindings: must be called after sg_apply_pipeline") \
@@ -19394,46 +19386,38 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
             _SG_VALIDATE(!_sg.cur_pass.is_compute, VALIDATE_APIP_RENDERPASS_EXPECTED);
             if (_sg_attachments_empty(&_sg.cur_pass.atts)) {
                 // a swapchain pass
-                _SG_VALIDATE(pip->cmn.color_count == 1, VALIDATE_APIP_ATT_COUNT);
-                _SG_VALIDATE(pip->cmn.colors[0].pixel_format == _sg.cur_pass.swapchain.color_fmt, VALIDATE_APIP_COLOR_FORMAT);
-                _SG_VALIDATE(pip->cmn.depth.pixel_format == _sg.cur_pass.swapchain.depth_fmt, VALIDATE_APIP_DEPTH_FORMAT);
-                _SG_VALIDATE(pip->cmn.sample_count == _sg.cur_pass.swapchain.sample_count, VALIDATE_APIP_SAMPLE_COUNT);
+                _SG_VALIDATE(pip->cmn.color_count == 1, VALIDATE_APIP_SWAPCHAIN_COLOR_COUNT);
+                _SG_VALIDATE(pip->cmn.colors[0].pixel_format == _sg.cur_pass.swapchain.color_fmt, VALIDATE_APIP_SWAPCHAIN_COLOR_FORMAT);
+                _SG_VALIDATE(pip->cmn.depth.pixel_format == _sg.cur_pass.swapchain.depth_fmt, VALIDATE_APIP_SWAPCHAIN_DEPTH_FORMAT);
+                _SG_VALIDATE(pip->cmn.sample_count == _sg.cur_pass.swapchain.sample_count, VALIDATE_APIP_SWAPCHAIN_SAMPLE_COUNT);
             } else {
-                // an offscreen render pass check that pipeline attributes match current pass attributes
-                /*
-                    FIXME FIXME FIXME
-                // an offscreen pass
-                _SG_VALIDATE(pip->cmn.color_count == atts->cmn.num_colors, VALIDATE_APIP_ATT_COUNT);
-                for (int i = 0; i < pip->cmn.color_count; i++) {
-                    const _sg_image_ref_t* img_ref = &atts->cmn.colors[i].image;
-                    const bool img_null = _sg_image_ref_null(img_ref);
-                    const bool img_alive = _sg_image_ref_alive(img_ref);
-                    if (!img_null) {
-                        _SG_VALIDATE(img_alive, VALIDATE_APIP_COLOR_ATTACHMENT_IMAGE_ALIVE);
-                        if (img_alive) {
-                            const _sg_image_t* img = _sg_image_ref_ptr(img_ref);
-                            _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_COLOR_ATTACHMENT_IMAGE_VALID);
-                            _SG_VALIDATE(pip->cmn.colors[i].pixel_format == img->cmn.pixel_format, VALIDATE_APIP_COLOR_FORMAT);
-                            _SG_VALIDATE(pip->cmn.sample_count == img->cmn.sample_count, VALIDATE_APIP_SAMPLE_COUNT);
-                        }
+                // an offscreen render pass check that pipeline attributes match current pass attachment attributes
+                const _sg_attachments_ptrs_t atts_ptrs = _sg_attachments_ptrs(&_sg.cur_pass.atts);
+                _SG_VALIDATE(atts_ptrs.alive, VALIDATE_APIP_ATTACHMENTS_ALIVE);
+                if (atts_ptrs.alive) {
+                    _SG_VALIDATE(pip->cmn.color_count == atts_ptrs.num_color_views, VALIDATE_APIP_COLORATTACHMENTS_COUNT);
+                    for (int i = 0; i < pip->cmn.color_count; i++) {
+                        const _sg_view_t* clr_view = atts_ptrs.color_views[i];
+                        SOKOL_ASSERT(clr_view);
+                        _SG_VALIDATE(clr_view->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_COLORATTACHMENTS_VIEW_VALID);
+                        const _sg_image_t* clr_img = _sg_image_ref_ptr(&clr_view->cmn.img.ref);
+                        SOKOL_ASSERT(clr_img);
+                        _SG_VALIDATE(clr_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_COLORATTACHMENTS_IMAGE_VALID);
+                        _SG_VALIDATE(pip->cmn.colors[i].pixel_format == clr_img->cmn.pixel_format, VALIDATE_APIP_COLORATTACHMENTS_FORMAT);
+                        _SG_VALIDATE(pip->cmn.sample_count == clr_img->cmn.sample_count, VALIDATE_APIP_ATTACHMENT_SAMPLE_COUNT);
                     }
-                }
-                {
-                    const _sg_image_ref_t* img_ref = &atts->cmn.depth_stencil.image;
-                    const bool img_null = _sg_image_ref_null(img_ref);
-                    const bool img_alive = _sg_image_ref_alive(img_ref);
-                    if (!img_null) {
-                        _SG_VALIDATE(img_alive, VALIDATE_APIP_DEPTHSTENCIL_ATTACHMENT_IMAGE_ALIVE);
-                        if (img_alive) {
-                            const _sg_image_t* img = _sg_image_ref_ptr(img_ref);
-                            _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_DEPTHSTENCIL_ATTACHMENT_IMAGE_VALID);
-                            _SG_VALIDATE(pip->cmn.depth.pixel_format == img->cmn.pixel_format, VALIDATE_APIP_DEPTH_FORMAT);
-                        }
+                    const _sg_view_t* ds_view = atts_ptrs.ds_view;
+                    if (ds_view) {
+                        _SG_VALIDATE(ds_view->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_DEPTHSTENCILATTACHMENT_VIEW_VALID);
+                        const _sg_image_t* ds_img = _sg_image_ref_ptr(&ds_view->cmn.img.ref);
+                        SOKOL_ASSERT(ds_img);
+                        _SG_VALIDATE(ds_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_APIP_DEPTHSTENCILATTACHMENT_IMAGE_VALID);
+                        _SG_VALIDATE(pip->cmn.depth.pixel_format == ds_img->cmn.pixel_format, VALIDATE_APIP_DEPTHSTENCILATTACHMENT_FORMAT);
+                        _SG_VALIDATE(pip->cmn.sample_count == ds_img->cmn.sample_count, VALIDATE_APIP_ATTACHMENT_SAMPLE_COUNT);
                     } else {
-                        _SG_VALIDATE(pip->cmn.depth.pixel_format == SG_PIXELFORMAT_NONE, VALIDATE_APIP_DEPTH_FORMAT);
+                        _SG_VALIDATE(pip->cmn.depth.pixel_format == SG_PIXELFORMAT_NONE, VALIDATE_APIP_DEPTHSTENCILATTACHMENT_FORMAT);
                     }
                 }
-                */
             }
         }
         return _sg_validate_end();
@@ -21149,10 +21133,10 @@ SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
     SOKOL_ASSERT(pass);
     SOKOL_ASSERT((pass->_start_canary == 0) && (pass->_end_canary == 0));
     const sg_pass pass_def = _sg_pass_defaults(pass);
-    const _sg_attachments_ptrs_t atts_ptrs = _sg_attachments_ptrs(&pass->attachments);
     if (!_sg_validate_begin_pass(&pass_def)) {
         return;
     }
+    const _sg_attachments_ptrs_t atts_ptrs = _sg_attachments_ptrs(&pass->attachments);
     if (!atts_ptrs.empty) {
         if (!atts_ptrs.alive) {
             _SG_ERROR(BEGINPASS_ATTACHMENTS_ALIVE);
