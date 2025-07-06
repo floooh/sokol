@@ -4201,12 +4201,12 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(INIT_SHADER_INVALID_STATE, "sg_init_shader(): shader must be in ALLOC state") \
     _SG_LOGITEM_XMACRO(INIT_PIPELINE_INVALID_STATE, "sg_init_pipeline(): pipeline must be in ALLOC state") \
     _SG_LOGITEM_XMACRO(INIT_VIEW_INVALID_STATE, "sg_init_view(): view must be in ALLOC state") \
-    _SG_LOGITEM_XMACRO(UNINIT_BUFFER_INVALID_STATE, "sg_uninit_buffer(): buffer must be in VALID or FAILED state") \
-    _SG_LOGITEM_XMACRO(UNINIT_IMAGE_INVALID_STATE, "sg_uninit_image(): image must be in VALID or FAILED state") \
-    _SG_LOGITEM_XMACRO(UNINIT_SAMPLER_INVALID_STATE, "sg_uninit_sampler(): sampler must be in VALID or FAILED state") \
-    _SG_LOGITEM_XMACRO(UNINIT_SHADER_INVALID_STATE, "sg_uninit_shader(): shader must be in VALID or FAILED state") \
-    _SG_LOGITEM_XMACRO(UNINIT_PIPELINE_INVALID_STATE, "sg_uninit_pipeline(): pipeline must be in VALID or FAILED state") \
-    _SG_LOGITEM_XMACRO(UNINIT_VIEW_INVALID_STATE, "sg_uninit_view(): view must be in VALID or FAILED state") \
+    _SG_LOGITEM_XMACRO(UNINIT_BUFFER_INVALID_STATE, "sg_uninit_buffer(): buffer must be in VALID, FAILED or ALLOC state") \
+    _SG_LOGITEM_XMACRO(UNINIT_IMAGE_INVALID_STATE, "sg_uninit_image(): image must be in VALID, FAILED or ALLOC state") \
+    _SG_LOGITEM_XMACRO(UNINIT_SAMPLER_INVALID_STATE, "sg_uninit_sampler(): sampler must be in VALID, FAILED or ALLOC state") \
+    _SG_LOGITEM_XMACRO(UNINIT_SHADER_INVALID_STATE, "sg_uninit_shader(): shader must be in VALID, FAILED or ALLOC state") \
+    _SG_LOGITEM_XMACRO(UNINIT_PIPELINE_INVALID_STATE, "sg_uninit_pipeline(): pipeline must be in VALID, FAILED or ALLOC state") \
+    _SG_LOGITEM_XMACRO(UNINIT_VIEW_INVALID_STATE, "sg_uninit_view(): view must be in VALID, FAILED or ALLOC state") \
     _SG_LOGITEM_XMACRO(FAIL_BUFFER_INVALID_STATE, "sg_fail_buffer(): buffer must be in ALLOC state") \
     _SG_LOGITEM_XMACRO(FAIL_IMAGE_INVALID_STATE, "sg_fail_image(): image must be in ALLOC state") \
     _SG_LOGITEM_XMACRO(FAIL_SAMPLER_INVALID_STATE, "sg_fail_sampler(): sampler must be in ALLOC state") \
@@ -7489,15 +7489,17 @@ _SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const s
 }
 
 _SOKOL_PRIVATE void _sg_buffer_view_common_init(_sg_buffer_view_common_t* cmn, const sg_buffer_view_desc* desc, _sg_buffer_t* buf) {
+    // NOTE: we cannot actually access any buffer properties here since it may not yet be initialized
     cmn->ref = _sg_buffer_ref(buf);
     cmn->offset = desc->offset;
 }
 
 _SOKOL_PRIVATE void _sg_texture_view_common_init(_sg_image_view_common_t* cmn, const sg_texture_view_desc* desc, _sg_image_t* img) {
+    // NOTE: we cannot actually access any image properties here since it may not yet be initialized,
+    // specifically the slice_count cannot be default-initialized from the image's number of mipmaps or slices,
+    // so this needs to be handled in the backends!
     cmn->ref = _sg_image_ref(img);
     cmn->mip_level = desc->mip_levels.base;
-    cmn->mip_level_count = _sg_def(desc->mip_levels.count, img->cmn.num_mipmaps - cmn->mip_level);
-    SOKOL_ASSERT(cmn->mip_level_count > 0);
     cmn->slice = desc->slices.base;
     switch (img->cmn.type) {
         case SG_IMAGETYPE_CUBE:
@@ -7505,10 +7507,8 @@ _SOKOL_PRIVATE void _sg_texture_view_common_init(_sg_image_view_common_t* cmn, c
             cmn->slice_count = _sg_def(desc->slices.count, 1);
             break;
         default:
-            cmn->slice_count = _sg_def(desc->slices.count, img->cmn.num_slices - cmn->slice);
             break;
     }
-    SOKOL_ASSERT(cmn->slice_count > 0);
 }
 
 _SOKOL_PRIVATE void _sg_image_view_common_init(_sg_image_view_common_t* cmn, const sg_image_view_desc* desc, _sg_image_t* img) {
@@ -14975,9 +14975,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_view(_sg_view_t* view) {
     SOKOL_ASSERT(view);
     if ((view->cmn.type == _SG_VIEWTYPE_TEXTURE) || (view->cmn.type == _SG_VIEWTYPE_STORAGEIMAGE)) {
         const _sg_image_view_common_t* cmn = &view->cmn.img;
-        SOKOL_ASSERT(cmn->mip_level_count >= 1);
-        SOKOL_ASSERT(cmn->slice_count >= 1);
         const _sg_image_t* img = _sg_image_ref_ptr(&cmn->ref);
+        const int mip_level_count = _sg_def(cmn->mip_level_count, img->cmn.num_mipmaps - cmn->mip_level);
+        const int slice_count = _sg_def(cmn->slice_count, img->cmn.num_slices - cmn->slice);
+        SOKOL_ASSERT(mip_level_count >= 1);
+        SOKOL_ASSERT(slice_count >= 1);
         for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
             if (img->mtl.tex[i] == _SG_MTL_INVALID_SLOT_INDEX) {
                 continue;
@@ -14985,8 +14987,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_view(_sg_view_t* view) {
             id<MTLTexture> mtl_tex_view = [_sg_mtl_id(img->mtl.tex[i])
                 newTextureViewWithPixelFormat: _sg_mtl_pixel_format(img->cmn.pixel_format)
                 textureType: _sg_mtl_texture_type(img->cmn.type, false)
-                levels: NSMakeRange((NSUInteger)cmn->mip_level, (NSUInteger)cmn->mip_level_count)
-                slices: NSMakeRange((NSUInteger)cmn->slice, (NSUInteger)cmn->slice_count)];
+                levels: NSMakeRange((NSUInteger)cmn->mip_level, (NSUInteger)mip_level_count)
+                slices: NSMakeRange((NSUInteger)cmn->slice, (NSUInteger)slice_count)];
             view->mtl.tex_view[i] = _sg_mtl_add_resource(mtl_tex_view);
         }
     }
@@ -20740,7 +20742,7 @@ SOKOL_API_IMPL void sg_uninit_buffer(sg_buffer buf_id) {
         if ((buf->slot.state == SG_RESOURCESTATE_VALID) || (buf->slot.state == SG_RESOURCESTATE_FAILED)) {
             _sg_uninit_buffer(buf);
             SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
-        } else {
+        } else if (buf->slot.state != SG_RESOURCESTATE_ALLOC) {
             _SG_ERROR(UNINIT_BUFFER_INVALID_STATE);
         }
     }
@@ -20754,7 +20756,7 @@ SOKOL_API_IMPL void sg_uninit_image(sg_image img_id) {
         if ((img->slot.state == SG_RESOURCESTATE_VALID) || (img->slot.state == SG_RESOURCESTATE_FAILED)) {
             _sg_uninit_image(img);
             SOKOL_ASSERT(img->slot.state == SG_RESOURCESTATE_ALLOC);
-        } else {
+        } else if (img->slot.state != SG_RESOURCESTATE_ALLOC) {
             _SG_ERROR(UNINIT_IMAGE_INVALID_STATE);
         }
     }
@@ -20768,7 +20770,7 @@ SOKOL_API_IMPL void sg_uninit_sampler(sg_sampler smp_id) {
         if ((smp->slot.state == SG_RESOURCESTATE_VALID) || (smp->slot.state == SG_RESOURCESTATE_FAILED)) {
             _sg_uninit_sampler(smp);
             SOKOL_ASSERT(smp->slot.state == SG_RESOURCESTATE_ALLOC);
-        } else {
+        } else if (smp->slot.state != SG_RESOURCESTATE_ALLOC) {
             _SG_ERROR(UNINIT_SAMPLER_INVALID_STATE);
         }
     }
@@ -20782,7 +20784,7 @@ SOKOL_API_IMPL void sg_uninit_shader(sg_shader shd_id) {
         if ((shd->slot.state == SG_RESOURCESTATE_VALID) || (shd->slot.state == SG_RESOURCESTATE_FAILED)) {
             _sg_uninit_shader(shd);
             SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_ALLOC);
-        } else {
+        } else if (shd->slot.state != SG_RESOURCESTATE_ALLOC) {
             _SG_ERROR(UNINIT_SHADER_INVALID_STATE);
         }
     }
@@ -20796,7 +20798,7 @@ SOKOL_API_IMPL void sg_uninit_pipeline(sg_pipeline pip_id) {
         if ((pip->slot.state == SG_RESOURCESTATE_VALID) || (pip->slot.state == SG_RESOURCESTATE_FAILED)) {
             _sg_uninit_pipeline(pip);
             SOKOL_ASSERT(pip->slot.state == SG_RESOURCESTATE_ALLOC);
-        } else {
+        } else if (pip->slot.state != SG_RESOURCESTATE_ALLOC) {
             _SG_ERROR(UNINIT_PIPELINE_INVALID_STATE);
         }
     }
@@ -20810,7 +20812,7 @@ SOKOL_API_IMPL void sg_uninit_view(sg_view view_id) {
         if ((view->slot.state == SG_RESOURCESTATE_VALID) || (view->slot.state == SG_RESOURCESTATE_FAILED)) {
             _sg_uninit_view(view);
             SOKOL_ASSERT(view->slot.state == SG_RESOURCESTATE_ALLOC);
-        } else {
+        } else if (view->slot.state != SG_RESOURCESTATE_ALLOC) {
             _SG_ERROR(UNINIT_VIEW_INVALID_STATE);
         }
     }
