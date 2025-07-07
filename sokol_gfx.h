@@ -14986,6 +14986,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_view(_sg_view_t* view) {
                 levels: NSMakeRange((NSUInteger)cmn->mip_level, (NSUInteger)mip_level_count)
                 slices: NSMakeRange((NSUInteger)cmn->slice, (NSUInteger)slice_count)];
             view->mtl.tex_view[i] = _sg_mtl_add_resource(mtl_tex_view);
+            _SG_OBJC_RELEASE(mtl_tex_view);
         }
     }
     return SG_RESOURCESTATE_VALID;
