@@ -6527,8 +6527,6 @@ typedef struct {
 // resolved pass attachments struct
 typedef struct {
     bool empty;
-    bool alive;
-    _sg_dimi_t dim;
     int num_color_views;
     _sg_view_t* color_views[SG_MAX_COLOR_ATTACHMENTS];
     _sg_view_t* resolve_views[SG_MAX_COLOR_ATTACHMENTS];
@@ -7298,50 +7296,48 @@ _SOKOL_PRIVATE _sg_attachments_ptrs_t _sg_attachments_ptrs(const sg_attachments*
     SOKOL_ASSERT(atts);
     _sg_attachments_ptrs_t res;
     _sg_clear(&res, sizeof(res));
-    res.alive = true;
     res.empty = true;
-    for (size_t i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
         if (atts->colors[i].id != SG_INVALID_ID) {
             res.empty = false;
-            _sg_view_t* view = _sg_lookup_view(atts->colors[i].id);
-            res.color_views[i] = view;
-            if (_sg_image_view_alive(view)) {
-                res.num_color_views += 1;
-                const _sg_dimi_t dim = _sg_image_view_dim(view);
-                if (res.dim.width == 0) {
-                    res.dim = dim;
-                }
-                SOKOL_ASSERT((res.dim.width == dim.width) && (res.dim.height == dim.height));
-            } else {
-                res.alive = false;
-            }
+            res.num_color_views += 1;
+            res.color_views[i] = _sg_lookup_view(atts->colors[i].id);
         }
         if (atts->resolves[i].id != SG_INVALID_ID) {
             SOKOL_ASSERT(atts->colors[i].id != SG_INVALID_ID);
             res.empty = false;
-            _sg_view_t* view = _sg_lookup_view(atts->resolves[i].id);
-            res.resolve_views[i] = view;
-            if (_sg_image_view_alive(view)) {
-                const _sg_dimi_t dim = _sg_image_view_dim(view);
-                SOKOL_ASSERT((res.dim.width == dim.width) && (res.dim.height == dim.height));
-            }
+            res.resolve_views[i] = _sg_lookup_view(atts->resolves[i].id);
         }
     }
     if (atts->depth_stencil.id != SG_INVALID_ID) {
         res.empty = false;
-        _sg_view_t* view = _sg_lookup_view(atts->depth_stencil.id);
-        res.ds_view = view;
-        if (_sg_image_view_alive(view)) {
-            const _sg_dimi_t dim = _sg_image_view_dim(view);
-            if (res.dim.width == 0) {
-                res.dim = dim;
-            }
-            SOKOL_ASSERT((res.dim.width == dim.width) && (res.dim.height == dim.height));
-        } else {
-            res.alive = false;
-        }
+        res.ds_view = _sg_lookup_view(atts->depth_stencil.id);
     }
     return res;
+}
+
+_SOKOL_PRIVATE _sg_dimi_t _sg_attachments_dim(const _sg_attachments_ptrs_t* atts_ptrs) {
+    if (atts_ptrs->ds_view) {
+        return _sg_image_view_dim(atts_ptrs->ds_view);
+    } else {
+        SOKOL_ASSERT(atts_ptrs->color_views[0]);
+        return _sg_image_view_dim(atts_ptrs->color_views[0]);
+    }
+}
+
+_SOKOL_PRIVATE bool _sg_attachments_alive(const _sg_attachments_ptrs_t* atts_ptrs) {
+    for (int i = 0; i < atts_ptrs->num_color_views; i++) {
+        if (!_sg_image_view_alive(atts_ptrs->color_views[i])) {
+            return false;
+        }
+        if (atts_ptrs->resolve_views[i] && !_sg_image_view_alive(atts_ptrs->resolve_views[i])) {
+            return false;
+        }
+    }
+    if (atts_ptrs->ds_view && !_sg_image_view_alive(atts_ptrs->ds_view)) {
+        return false;
+    }
+    return true;
 }
 
 _SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_buffer_desc* desc) {
@@ -19263,7 +19259,6 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
                         _SG_VALIDATE(color_width == _sg_image_view_dim(view).width, VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_SIZES);
                         _SG_VALIDATE(color_height == _sg_image_view_dim(view).height, VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_SIZES);
                     }
-
                 }
             }
             // check depth-stencil view
@@ -19283,7 +19278,7 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
                     if (img) {
                         _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_IMAGE_VALID);
                         _SG_VALIDATE(color_width == _sg_image_view_dim(view).width, VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_SIZES);
-                        _SG_VALIDATE(color_height == _sg_image_view_dim(view).width, VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_SIZES);
+                        _SG_VALIDATE(color_height == _sg_image_view_dim(view).height, VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_SIZES);
                         _SG_VALIDATE(color_sample_count == img->cmn.sample_count, VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_SAMPLECOUNT);
                     }
                 }
@@ -19395,8 +19390,9 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
             } else {
                 // an offscreen render pass check that pipeline attributes match current pass attachment attributes
                 const _sg_attachments_ptrs_t atts_ptrs = _sg_attachments_ptrs(&_sg.cur_pass.atts);
-                _SG_VALIDATE(atts_ptrs.alive, VALIDATE_APIP_ATTACHMENTS_ALIVE);
-                if (atts_ptrs.alive) {
+                const bool alive = _sg_attachments_alive(&atts_ptrs);
+                _SG_VALIDATE(alive, VALIDATE_APIP_ATTACHMENTS_ALIVE);
+                if (alive) {
                     _SG_VALIDATE(pip->cmn.color_count == atts_ptrs.num_color_views, VALIDATE_APIP_COLORATTACHMENTS_COUNT);
                     for (int i = 0; i < pip->cmn.color_count; i++) {
                         const _sg_view_t* clr_view = atts_ptrs.color_views[i];
@@ -19521,7 +19517,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
             }
         }
 
-        // has expected images
+        // has expected texture bindings
         for (size_t i = 0; i < SG_MAX_TEXTURE_BINDSLOTS; i++) {
             if (shd->cmn.textures[i].stage != SG_SHADERSTAGE_NONE) {
                 _SG_VALIDATE(bindings->textures[i].id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_TEXTURE_BINDING);
@@ -19587,7 +19583,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
             }
         }
 
-        // has expected storage buffers
+        // has expected storage buffer bindings
         for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
             if (shd->cmn.storage_buffers[i].stage != SG_SHADERSTAGE_NONE) {
                 _SG_VALIDATE(bindings->storage_buffers[i].id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_SBVIEW);
@@ -20176,8 +20172,11 @@ _SOKOL_PRIVATE void _sg_init_view(_sg_view_t* view, const sg_view_desc* desc) {
     SOKOL_ASSERT(desc);
     if (_sg_validate_view_desc(desc)) {
         _sg_view_common_init(&view->cmn, desc);
-        if (_sg_view_resource_state(view) == SG_RESOURCESTATE_VALID) {
+        sg_resource_state res_state = _sg_view_resource_state(view);
+        if (res_state == SG_RESOURCESTATE_VALID) {
             view->slot.state = _sg_create_view(view);
+        } else {
+            view->slot.state = SG_RESOURCESTATE_FAILED;
         }
     } else {
        view->slot.state = SG_RESOURCESTATE_FAILED;
@@ -20219,8 +20218,7 @@ _SOKOL_PRIVATE void _sg_uninit_pipeline(_sg_pipeline_t* pip) {
 
 _SOKOL_PRIVATE void _sg_uninit_view(_sg_view_t* view) {
     SOKOL_ASSERT(view && ((view->slot.state == SG_RESOURCESTATE_VALID) || (view->slot.state == SG_RESOURCESTATE_FAILED)));
-    // FIXME FIXME FIXME
-    // _sg_discard_view(view);
+    _sg_discard_view(view);
     _sg_reset_view_to_alloc_state(view);
 }
 
@@ -21138,14 +21136,14 @@ SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
     if (!_sg_validate_begin_pass(&pass_def)) {
         return;
     }
-    const _sg_attachments_ptrs_t atts_ptrs = _sg_attachments_ptrs(&pass->attachments);
+    const _sg_attachments_ptrs_t atts_ptrs = _sg_attachments_ptrs(&pass_def.attachments);
     if (!atts_ptrs.empty) {
-        if (!atts_ptrs.alive) {
+        if (!_sg_attachments_alive(&atts_ptrs)) {
             _SG_ERROR(BEGINPASS_ATTACHMENTS_ALIVE);
             return;
         }
         _sg.cur_pass.atts = pass->attachments;
-        _sg.cur_pass.dim = atts_ptrs.dim;
+        _sg.cur_pass.dim = _sg_attachments_dim(&atts_ptrs);
     } else if (!pass_def.compute) {
         // a swapchain pass
         SOKOL_ASSERT(pass_def.swapchain.width > 0);
