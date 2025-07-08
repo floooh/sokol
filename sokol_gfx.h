@@ -6288,7 +6288,9 @@ typedef struct {
     _sg_sref_t cur_pip;
     _sg_buffer_ref_t cur_ibuf;
     int cur_ibuf_offset;
-    int cur_vs_buffer_offsets[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
+    int cur_vsbuf_offsets[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
+    int cur_fsbuf_offsets[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
+    int cur_csbuf_offsets[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
     _sg_sref_t cur_vsbufs[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
     _sg_sref_t cur_fsbufs[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
     _sg_sref_t cur_csbufs[_SG_MTL_MAX_STAGE_BUFFER_BINDINGS];
@@ -15389,20 +15391,19 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
             }
             const NSUInteger mtl_slot = _sg_mtl_vertexbuffer_bindslot(i);
             SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_BUFFER_BINDINGS);
-            const int vb_offset = bnd->vb_offsets[i];
-            const bool ref_eql = _sg_sref_slot_eql(&_sg.mtl.state_cache.cur_vsbufs[mtl_slot], &vb->slot);
-            if (!ref_eql || (_sg.mtl.state_cache.cur_vs_buffer_offsets[mtl_slot] != vb_offset)) {
-                _sg.mtl.state_cache.cur_vs_buffer_offsets[mtl_slot] = vb_offset;
-                if (!ref_eql) {
+            const int offset = bnd->vb_offsets[i];
+            const bool ref_neql = !_sg_sref_slot_eql(&_sg.mtl.state_cache.cur_vsbufs[mtl_slot], &vb->slot);
+            const bool off_neql = _sg.mtl.state_cache.cur_vsbuf_offsets[mtl_slot] != offset;
+            if (ref_neql || off_neql) {
+                _sg.mtl.state_cache.cur_vsbuf_offsets[mtl_slot] = offset;
+                if (ref_neql) {
                     // vertex buffer has changed
                     _sg.mtl.state_cache.cur_vsbufs[mtl_slot] = _sg_sref(&vb->slot);
                     SOKOL_ASSERT(vb->mtl.buf[vb->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
-                    [_sg.mtl.render_cmd_encoder setVertexBuffer:_sg_mtl_id(vb->mtl.buf[vb->cmn.active_slot])
-                        offset:(NSUInteger)vb_offset
-                        atIndex:mtl_slot];
+                    [_sg.mtl.render_cmd_encoder setVertexBuffer:_sg_mtl_id(vb->mtl.buf[vb->cmn.active_slot]) offset:(NSUInteger)offset atIndex:mtl_slot];
                 } else {
                     // only vertex buffer offset has changed
-                    [_sg.mtl.render_cmd_encoder setVertexBufferOffset:(NSUInteger)vb_offset atIndex:mtl_slot];
+                    [_sg.mtl.render_cmd_encoder setVertexBufferOffset:(NSUInteger)offset atIndex:mtl_slot];
                 }
                 _sg_stats_add(metal.bindings.num_set_vertex_buffer, 1);
             }
@@ -15493,27 +15494,47 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         const _sg_buffer_ref_t* sbuf_ref = &sbuf_view->cmn.buf.ref;
         const _sg_buffer_t* sbuf = _sg_buffer_ref_ptr(sbuf_ref);
         SOKOL_ASSERT(sbuf->mtl.buf[sbuf->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
-        // FIXME: same buffer offset caching as with vertex buffers!
-        const NSUInteger sbuf_offset = (NSUInteger)sbuf_view->cmn.buf.offset;
+        const int offset = sbuf_view->cmn.buf.offset;
         if (stage == SG_SHADERSTAGE_VERTEX) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (!_sg_sref_sref_eql(&_sg.mtl.state_cache.cur_vsbufs[mtl_slot], &sbuf_ref->sref)) {
-                _sg.mtl.state_cache.cur_vsbufs[mtl_slot] = sbuf_ref->sref;
-                [_sg.mtl.render_cmd_encoder setVertexBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:sbuf_offset atIndex:mtl_slot];
-                _sg_stats_add(metal.bindings.num_set_vertex_buffer, 1);
+            const bool ref_neql = !_sg_sref_sref_eql(&_sg.mtl.state_cache.cur_vsbufs[mtl_slot], &sbuf_ref->sref);
+            const bool off_neql = _sg.mtl.state_cache.cur_vsbuf_offsets[mtl_slot] != offset;
+            if (ref_neql || off_neql) {
+                _sg.mtl.state_cache.cur_vsbuf_offsets[mtl_slot] = offset;
+                if (ref_neql) {
+                    _sg.mtl.state_cache.cur_vsbufs[mtl_slot] = sbuf_ref->sref;
+                    [_sg.mtl.render_cmd_encoder setVertexBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:(NSUInteger)offset atIndex:mtl_slot];
+                } else {
+                    [_sg.mtl.render_cmd_encoder setVertexBufferOffset:(NSUInteger)offset atIndex:mtl_slot];
+                }
             }
+            _sg_stats_add(metal.bindings.num_set_vertex_buffer, 1);
         } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-            if (!_sg_sref_sref_eql(&_sg.mtl.state_cache.cur_fsbufs[mtl_slot], &sbuf_ref->sref)) {
-                _sg.mtl.state_cache.cur_fsbufs[mtl_slot] = sbuf_ref->sref;
-                [_sg.mtl.render_cmd_encoder setFragmentBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:sbuf_offset atIndex:mtl_slot];
+            const bool ref_neql = !_sg_sref_sref_eql(&_sg.mtl.state_cache.cur_fsbufs[mtl_slot], &sbuf_ref->sref);
+            const bool off_neql = _sg.mtl.state_cache.cur_fsbuf_offsets[mtl_slot] != offset;
+            if (ref_neql || off_neql) {
+                _sg.mtl.state_cache.cur_fsbuf_offsets[mtl_slot] = offset;
+                if (ref_neql) {
+                    _sg.mtl.state_cache.cur_fsbufs[mtl_slot] = sbuf_ref->sref;
+                    [_sg.mtl.render_cmd_encoder setFragmentBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:(NSUInteger)offset atIndex:mtl_slot];
+                } else {
+                    [_sg.mtl.render_cmd_encoder setFragmentBufferOffset:(NSUInteger)offset atIndex:mtl_slot];
+                }
                 _sg_stats_add(metal.bindings.num_set_fragment_buffer, 1);
             }
         } else if (stage == SG_SHADERSTAGE_COMPUTE) {
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
-            if (!_sg_sref_sref_eql(&_sg.mtl.state_cache.cur_csbufs[mtl_slot], &sbuf_ref->sref)) {
-                _sg.mtl.state_cache.cur_csbufs[mtl_slot] = sbuf_ref->sref;
-                [_sg.mtl.compute_cmd_encoder setBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:sbuf_offset atIndex:mtl_slot];
+            const bool ref_neql = !_sg_sref_sref_eql(&_sg.mtl.state_cache.cur_csbufs[mtl_slot], &sbuf_ref->sref);
+            const bool off_neql = _sg.mtl.state_cache.cur_csbuf_offsets[mtl_slot] != offset;
+            if (ref_neql || off_neql) {
+                _sg.mtl.state_cache.cur_csbuf_offsets[mtl_slot] = offset;
+                if (ref_neql) {
+                    _sg.mtl.state_cache.cur_csbufs[mtl_slot] = sbuf_ref->sref;
+                    [_sg.mtl.compute_cmd_encoder setBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:(NSUInteger)offset atIndex:mtl_slot];
+                } else {
+                    [_sg.mtl.compute_cmd_encoder setBufferOffset:(NSUInteger)offset atIndex:mtl_slot];
+                }
                 _sg_stats_add(metal.bindings.num_set_compute_buffer, 1);
             }
         }
@@ -21294,8 +21315,11 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
         if (shd->cmn.textures[i].stage != SG_SHADERSTAGE_NONE) {
             SOKOL_ASSERT(bindings->textures[i].id != SG_INVALID_ID);
             bnd.tex_views[i] = _sg_lookup_view(bindings->textures[i].id);
-            SOKOL_ASSERT(bnd.tex_views[i]);
-            _sg.next_draw_valid &= _sg_image_ref_valid(&bnd.tex_views[i]->cmn.img.ref);
+            if (bnd.tex_views[i]) {
+                _sg.next_draw_valid &= _sg_image_ref_valid(&bnd.tex_views[i]->cmn.img.ref);
+            } else {
+                _sg.next_draw_valid = false;
+            }
         }
     }
 
@@ -21311,10 +21335,13 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
         if (shd->cmn.storage_buffers[i].stage != SG_SHADERSTAGE_NONE) {
             SOKOL_ASSERT(bindings->storage_buffers[i].id != SG_INVALID_ID);
             bnd.sbuf_views[i] = _sg_lookup_view(bindings->storage_buffers[i].id);
-            SOKOL_ASSERT(bnd.sbuf_views[i]);
-            _sg.next_draw_valid &= _sg_buffer_ref_valid(&bnd.sbuf_views[i]->cmn.buf.ref);
-            if (_sg.cur_pass.is_compute) {
-                _sg_compute_pass_track_storage_buffer(&bnd.sbuf_views[i]->cmn.buf.ref, shd->cmn.storage_buffers[i].readonly);
+            if (bnd.sbuf_views[i]) {
+                _sg.next_draw_valid &= _sg_buffer_ref_valid(&bnd.sbuf_views[i]->cmn.buf.ref);
+                if (_sg.cur_pass.is_compute) {
+                    _sg_compute_pass_track_storage_buffer(&bnd.sbuf_views[i]->cmn.buf.ref, shd->cmn.storage_buffers[i].readonly);
+                }
+            } else {
+                _sg.next_draw_valid = false;
             }
         }
     }
