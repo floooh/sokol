@@ -3955,6 +3955,7 @@ typedef struct {
     uint32_t init_cookie;
     sdtx_desc_t desc;
     sg_image font_img;
+    sg_view font_view;
     sg_sampler font_smp;
     sg_shader shader;
     uint32_t fmt_buf_size;
@@ -4365,21 +4366,21 @@ static void _sdtx_setup_common(void) {
     shd_desc.attrs[1].hlsl_sem_index = 1;
     shd_desc.attrs[2].hlsl_sem_name = "TEXCOORD";
     shd_desc.attrs[2].hlsl_sem_index = 2;
-    shd_desc.images[0].stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.images[0].image_type = SG_IMAGETYPE_2D;
-    shd_desc.images[0].sample_type = SG_IMAGESAMPLETYPE_FLOAT;
-    shd_desc.images[0].hlsl_register_t_n = 0;
-    shd_desc.images[0].msl_texture_n = 0;
-    shd_desc.images[0].wgsl_group1_binding_n = 64;
+    shd_desc.textures[0].stage = SG_SHADERSTAGE_FRAGMENT;
+    shd_desc.textures[0].image_type = SG_IMAGETYPE_2D;
+    shd_desc.textures[0].sample_type = SG_IMAGESAMPLETYPE_FLOAT;
+    shd_desc.textures[0].hlsl_register_t_n = 0;
+    shd_desc.textures[0].msl_texture_n = 0;
+    shd_desc.textures[0].wgsl_group1_binding_n = 64;
     shd_desc.samplers[0].stage = SG_SHADERSTAGE_FRAGMENT;
     shd_desc.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
     shd_desc.samplers[0].hlsl_register_s_n = 0;
     shd_desc.samplers[0].msl_sampler_n = 0;
     shd_desc.samplers[0].wgsl_group1_binding_n = 80;
-    shd_desc.image_sampler_pairs[0].stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.image_sampler_pairs[0].image_slot = 0;
-    shd_desc.image_sampler_pairs[0].sampler_slot = 0;
-    shd_desc.image_sampler_pairs[0].glsl_name = "tex_smp";
+    shd_desc.texture_sampler_pairs[0].stage = SG_SHADERSTAGE_FRAGMENT;
+    shd_desc.texture_sampler_pairs[0].texture_slot = 0;
+    shd_desc.texture_sampler_pairs[0].sampler_slot = 0;
+    shd_desc.texture_sampler_pairs[0].glsl_name = "tex_smp";
     #if defined(SOKOL_GLCORE)
         shd_desc.vertex_func.source = (const char*)_sdtx_vs_source_glsl410;
         shd_desc.fragment_func.source = (const char*)_sdtx_fs_source_glsl410;
@@ -4425,7 +4426,7 @@ static void _sdtx_setup_common(void) {
         }
     }
 
-    // create font texture and sampler
+    // create font image, texture view and sampler
     sg_image_desc img_desc;
     _sdtx_clear(&img_desc, sizeof(img_desc));
     img_desc.width = 256 * 8;
@@ -4435,6 +4436,12 @@ static void _sdtx_setup_common(void) {
     img_desc.label = "sdtx-font-texture";
     _sdtx.font_img = sg_make_image(&img_desc);
     SOKOL_ASSERT(SG_INVALID_ID != _sdtx.font_img.id);
+
+    sg_view_desc view_desc;
+    _sdtx_clear(&view_desc, sizeof(view_desc));
+    view_desc.texture_binding.image = _sdtx.font_img;
+    _sdtx.font_view = sg_make_view(&view_desc);
+    SOKOL_ASSERT(SG_INVALID_ID != _sdtx.font_view.id);
 
     sg_sampler_desc smp_desc;
     _sdtx_clear(&smp_desc, sizeof(smp_desc));
@@ -4452,6 +4459,7 @@ static void _sdtx_setup_common(void) {
 static void _sdtx_discard_common(void) {
     sg_push_debug_group("sokol-debugtext");
     sg_destroy_sampler(_sdtx.font_smp);
+    sg_destroy_view(_sdtx.font_view);
     sg_destroy_image(_sdtx.font_img);
     sg_destroy_shader(_sdtx.shader);
     if (_sdtx.fmt_buf) {
@@ -4610,7 +4618,7 @@ SOKOL_API_IMPL void _sdtx_draw_layer(_sdtx_context_t* ctx, int layer_id) {
         sg_bindings bindings;
         _sdtx_clear(&bindings, sizeof(bindings));
         bindings.vertex_buffers[0] = ctx->vbuf;
-        bindings.images[0] = _sdtx.font_img;
+        bindings.textures[0] = _sdtx.font_view;
         bindings.samplers[0] = _sdtx.font_smp;
         sg_apply_bindings(&bindings);
         for (int cmd_index = 0; cmd_index < ctx->commands.next; cmd_index++) {
