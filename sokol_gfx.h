@@ -4453,7 +4453,6 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_TEXTURE_BINDING, "sg_apply_bindings: texture binding is missing or the texture view handle is invalid") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_ALIVE, "sg_apply_bindings: texture view no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_TYPE, "sg_apply_bindings: view in texture bind slot is not a texture view") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_VALID, "sg_apply_bindings: texture view is not in valid state") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_IMAGETYPE_MISMATCH, "sg_apply_bindings: image type of bound texture doesn't match shader desc") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_MSAA, "sg_apply_bindings: cannot bind image as texture with sample_count>1 (sg_features.msaa_image_bindings is false)") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_EXPECTED_MULTISAMPLED_IMAGE, "sg_apply_bindings: texture bindings expects image with sample_count > 1") \
@@ -4466,7 +4465,6 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SAMPLER_ALIVE, "sg_apply_bindings: bound sampler no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SAMPLER_VALID, "sg_apply_bindings: bound sampler not in valid state") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_SBVIEW, "sg_apply_bindings: storage buffer binding is missing or the buffer view handle is invalid") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_VALID, "sg_apply_bindings: storage buffer view not in valid state") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_ALIVE, "sg_apply_bindings: storage buffer view no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_TYPE, "sg_apply_bindings: view in storage buffer bind slot is not a storage buffer view") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_READWRITE_IMMUTABLE, "sg_apply_bindings: storage buffers bound as read/write must have usage immutable") \
@@ -14975,7 +14973,24 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_view(_sg_view_t* view) {
         const _sg_image_view_common_t* cmn = &view->cmn.img;
         const _sg_image_t* img = _sg_image_ref_ptr(&cmn->ref);
         const int mip_level_count = _sg_def(cmn->mip_level_count, img->cmn.num_mipmaps - cmn->mip_level);
-        const int slice_count = _sg_def(cmn->slice_count, img->cmn.num_slices - cmn->slice);
+        // FIXME: once cubemap faces and slices are unified, just use the image num_slices as default!
+        int slice_count;
+        switch (img->cmn.type) {
+            case SG_IMAGETYPE_2D:
+                slice_count = 1;
+                break;
+            case SG_IMAGETYPE_CUBE:
+                slice_count = 6;
+                break;
+            case SG_IMAGETYPE_3D:
+                slice_count = 1;
+                break;
+            case SG_IMAGETYPE_ARRAY:
+                slice_count = _sg_def(cmn->slice_count, img->cmn.num_slices - cmn->slice);
+                break;
+            default:
+                SOKOL_UNREACHABLE;
+        }
         SOKOL_ASSERT(mip_level_count >= 1);
         SOKOL_ASSERT(slice_count >= 1);
         for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
@@ -19564,8 +19579,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                     // the view object must be alive
                     _SG_VALIDATE(view != 0, VALIDATE_ABND_TEXVIEW_ALIVE);
                     if (view) {
-                        // the view object itself must be in valid state
-                        _SG_VALIDATE(view->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ABND_TEXVIEW_VALID);
+                        // NOTE: an invalid view state is allowed and skips rendering
                         if (view->slot.state == SG_RESOURCESTATE_VALID) {
                             // the view object must be a texture view
                             _SG_VALIDATE(view->cmn.type == _SG_VIEWTYPE_TEXTURE, VALIDATE_ABND_TEXVIEW_TYPE);
@@ -19632,8 +19646,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                     // view object must be alive
                     _SG_VALIDATE(view != 0, VALIDATE_ABND_SBVIEW_ALIVE);
                     if (view) {
-                        // the view object must be in valid state
-                        _SG_VALIDATE(view->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_ABND_SBVIEW_VALID);
+                        // NOTE: an invalid view state is allowed and skips rendering
                         if (view->slot.state == SG_RESOURCESTATE_VALID) {
                             // the view object must be a storage buffer view
                             _SG_VALIDATE(view->cmn.type == _SG_VIEWTYPE_STORAGEBUFFER, VALIDATE_ABND_SBVIEW_TYPE);
