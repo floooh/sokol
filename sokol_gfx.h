@@ -3197,6 +3197,22 @@ typedef struct sg_image_usage {
 } sg_image_usage;
 
 /*
+    sg_view_type
+
+    Allows to query the type of a view via the function sg_query_view_type()
+
+*/
+typedef enum sg_view_type {
+    SG_VIEWTYPE_INVALID,
+    SG_VIEWTYPE_STORAGEBUFFER,
+    SG_VIEWTYPE_STORAGEIMAGE,
+    SG_VIEWTYPE_TEXTURE,
+    SG_VIEWTYPE_COLORATTACHMENT,
+    SG_VIEWTYPE_RESOLVEATTACHMENT,
+    SG_VIEWTYPE_DEPTHSTENCILATTACHMENT,
+} sg_view_type;
+
+/*
     sg_image_data
 
     Defines the content of an image through a 2D array of sg_range structs.
@@ -4388,7 +4404,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEWS_CONTINUOUS, "sg_begin_pass: color attachment view array must be continuous") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_ALIVE, "sg_begin_pass: color attachment view no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_VALID, "sg_begin_pass: color attachment view not in valid state (SG_RESOURCESTATE_VALID)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_TYPE, "sg_begin_pass: color attachment views has wrong type (must be sg_view_desc.color_attachment)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_TYPE, "sg_begin_pass: color attachment view has wrong type (must be sg_view_desc.color_attachment)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_IMAGE_ALIVE, "sg_begin_pass: color attachment view's image object is uninitialized or no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_IMAGE_VALID, "sg_begin_pass: color attachment view's image is not in valid state (SG_RESOURCESTATE_VALID)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_SIZES, "sg_begin_pass: all color attachments must have the same width and height") \
@@ -4396,14 +4412,14 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_NO_COLORATTACHMENTVIEW, "sg_begin_pass: a resolve attachment view must have an associated color attachment view at the same index") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_ALIVE, "sg_begin_pass: resolve attachment view no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_VALID, "sg_begin_pass: resolve attachment view not in valid state (SG_RESOURCESTATE_VALID)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_TYPE, "sg_begin_pass: resolve attachment views has wrong type (must be sg_view_desc.resolve_attachment)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_TYPE, "sg_begin_pass: resolve attachment view has wrong type (must be sg_view_desc.resolve_attachment)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_IMAGE_ALIVE, "sg_begin_pass: resolve attachment view's image object is uninitialized or no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_IMAGE_VALID, "sg_begin_pass: resolve attachment view's image is not in valid state (SG_RESOURCESTATE_VALID)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_SIZES, "sg_begin_pass: all attachments must have the same width and height") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEWS_CONTINUOUS, "sg_begin_pass: color attachment view array must be continuous") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_ALIVE, "sg_begin_pass: depth-stencil attachment view no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_VALID, "sg_begin_pass: depth-stencil attachment view not in valid state (SG_RESOURCESTATE_VALID)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_TYPE, "sg_begin_pass: depth-stencil attachment views has wrong type (must be sg_view_desc.depth_stencil_attachment)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_TYPE, "sg_begin_pass: depth-stencil attachment view has wrong type (must be sg_view_desc.depth_stencil_attachment)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_IMAGE_ALIVE, "sg_begin_pass: depth-stencil attachment view's image object is uninitialized or no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_IMAGE_VALID, "sg_begin_pass: depth-stencil attachment view's image is not in valid state (SG_RESOURCESTATE_VALID)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_SIZES, "sg_begin_pass: attachments must have the same width and height") \
@@ -4789,6 +4805,7 @@ SOKOL_GFX_API_DECL int sg_query_image_num_mipmaps(sg_image img);
 SOKOL_GFX_API_DECL sg_pixel_format sg_query_image_pixelformat(sg_image img);
 SOKOL_GFX_API_DECL sg_image_usage sg_query_image_usage(sg_image img);
 SOKOL_GFX_API_DECL int sg_query_image_sample_count(sg_image img);
+SOKOL_GFX_API_DECL sg_view_type sg_query_view_type(sg_view view);
 SOKOL_GFX_API_DECL sg_image sg_query_view_image(sg_view view);
 SOKOL_GFX_API_DECL sg_buffer sg_query_view_buffer(sg_view view);
 
@@ -5822,16 +5839,6 @@ typedef struct {
     bool alpha_to_coverage_enabled;
 } _sg_pipeline_common_t;
 
-typedef enum {
-    _SG_VIEWTYPE_INVALID,
-    _SG_VIEWTYPE_STORAGEBUFFER,
-    _SG_VIEWTYPE_STORAGEIMAGE,
-    _SG_VIEWTYPE_TEXTURE,
-    _SG_VIEWTYPE_COLORATTACHMENT,
-    _SG_VIEWTYPE_RESOLVEATTACHMENT,
-    _SG_VIEWTYPE_DEPTHSTENCILATTACHMENT,
-} _sg_view_type_t;
-
 typedef struct {
     _sg_buffer_ref_t ref;
     int offset;
@@ -5846,7 +5853,7 @@ typedef struct {
 } _sg_image_view_common_t;
 
 typedef struct {
-    _sg_view_type_t type;
+    sg_view_type type;
     _sg_buffer_view_common_t buf;
     _sg_image_view_common_t img;
 } _sg_view_common_t;
@@ -7519,32 +7526,32 @@ _SOKOL_PRIVATE void _sg_image_view_common_init(_sg_image_view_common_t* cmn, con
 
 _SOKOL_PRIVATE void _sg_view_common_init(_sg_view_common_t* cmn, const sg_view_desc* desc) {
     if (desc->texture_binding.image.id != SG_INVALID_ID) {
-        cmn->type = _SG_VIEWTYPE_TEXTURE;
+        cmn->type = SG_VIEWTYPE_TEXTURE;
         _sg_image_t* img = _sg_lookup_image(desc->texture_binding.image.id);
         SOKOL_ASSERT(img);
         _sg_texture_view_common_init(&cmn->img, &desc->texture_binding, img);
     } else if (desc->storage_buffer_binding.buffer.id != SG_INVALID_ID) {
-        cmn->type = _SG_VIEWTYPE_STORAGEBUFFER;
+        cmn->type = SG_VIEWTYPE_STORAGEBUFFER;
         _sg_buffer_t* buf = _sg_lookup_buffer(desc->storage_buffer_binding.buffer.id);
         SOKOL_ASSERT(buf);
         _sg_buffer_view_common_init(&cmn->buf, &desc->storage_buffer_binding, buf);
     } else if (desc->storage_image_binding.image.id != SG_INVALID_ID) {
-        cmn->type = _SG_VIEWTYPE_STORAGEIMAGE;
+        cmn->type = SG_VIEWTYPE_STORAGEIMAGE;
         _sg_image_t* img = _sg_lookup_image(desc->storage_image_binding.image.id);
         SOKOL_ASSERT(img);
         _sg_image_view_common_init(&cmn->img, &desc->storage_image_binding, img);
     } else if (desc->color_attachment.image.id != SG_INVALID_ID) {
-        cmn->type = _SG_VIEWTYPE_COLORATTACHMENT;
+        cmn->type = SG_VIEWTYPE_COLORATTACHMENT;
         _sg_image_t* img = _sg_lookup_image(desc->color_attachment.image.id);
         SOKOL_ASSERT(img);
         _sg_image_view_common_init(&cmn->img, &desc->color_attachment, img);
     } else if (desc->resolve_attachment.image.id != SG_INVALID_ID) {
-        cmn->type = _SG_VIEWTYPE_RESOLVEATTACHMENT;
+        cmn->type = SG_VIEWTYPE_RESOLVEATTACHMENT;
         _sg_image_t* img = _sg_lookup_image(desc->resolve_attachment.image.id);
         SOKOL_ASSERT(img);
         _sg_image_view_common_init(&cmn->img, &desc->resolve_attachment, img);
     } else if (desc->depth_stencil_attachment.image.id != SG_INVALID_ID) {
-        cmn->type = _SG_VIEWTYPE_DEPTHSTENCILATTACHMENT;
+        cmn->type = SG_VIEWTYPE_DEPTHSTENCILATTACHMENT;
         _sg_image_t* img = _sg_lookup_image(desc->depth_stencil_attachment.image.id);
         SOKOL_ASSERT(img);
         _sg_image_view_common_init(&cmn->img, &desc->depth_stencil_attachment, img);
@@ -14971,7 +14978,7 @@ _SOKOL_PRIVATE void _sg_mtl_discard_pipeline(_sg_pipeline_t* pip) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_view(_sg_view_t* view) {
     SOKOL_ASSERT(view);
-    if ((view->cmn.type == _SG_VIEWTYPE_TEXTURE) || (view->cmn.type == _SG_VIEWTYPE_STORAGEIMAGE)) {
+    if ((view->cmn.type == SG_VIEWTYPE_TEXTURE) || (view->cmn.type == SG_VIEWTYPE_STORAGEIMAGE)) {
         const _sg_image_view_common_t* cmn = &view->cmn.img;
         const _sg_image_t* img = _sg_image_ref_ptr(&cmn->ref);
         const int mip_level_count = _sg_def(cmn->mip_level_count, img->cmn.num_mipmaps - cmn->mip_level);
@@ -19044,40 +19051,40 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
         _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_VIEWDESC_CANARY);
 
         // only one view type can be define
-        _sg_view_type_t view_type = _SG_VIEWTYPE_INVALID;
+        sg_view_type view_type = SG_VIEWTYPE_INVALID;
         const sg_image_view_desc* img_desc = 0;
         const sg_texture_view_desc* tex_desc = 0;
         const sg_buffer_view_desc* buf_desc = 0;
         if (desc->texture_binding.image.id != SG_INVALID_ID) {
-            view_type = _SG_VIEWTYPE_TEXTURE;
+            view_type = SG_VIEWTYPE_TEXTURE;
             tex_desc = &desc->texture_binding;
         }
         if (desc->storage_buffer_binding.buffer.id != SG_INVALID_ID) {
-            _SG_VALIDATE(_SG_VIEWTYPE_INVALID == view_type, VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE);
-            view_type = _SG_VIEWTYPE_STORAGEBUFFER;
+            _SG_VALIDATE(SG_VIEWTYPE_INVALID == view_type, VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE);
+            view_type = SG_VIEWTYPE_STORAGEBUFFER;
             buf_desc = &desc->storage_buffer_binding;
         }
         if (desc->storage_image_binding.image.id != SG_INVALID_ID) {
-            _SG_VALIDATE(_SG_VIEWTYPE_INVALID == view_type, VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE);
-            view_type = _SG_VIEWTYPE_STORAGEIMAGE;
+            _SG_VALIDATE(SG_VIEWTYPE_INVALID == view_type, VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE);
+            view_type = SG_VIEWTYPE_STORAGEIMAGE;
             img_desc = &desc->storage_image_binding;
         }
         if (desc->color_attachment.image.id != SG_INVALID_ID) {
-            _SG_VALIDATE(_SG_VIEWTYPE_INVALID == view_type, VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE);
-            view_type = _SG_VIEWTYPE_COLORATTACHMENT;
+            _SG_VALIDATE(SG_VIEWTYPE_INVALID == view_type, VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE);
+            view_type = SG_VIEWTYPE_COLORATTACHMENT;
             img_desc = &desc->color_attachment;
         }
         if (desc->resolve_attachment.image.id != SG_INVALID_ID) {
-            _SG_VALIDATE(_SG_VIEWTYPE_INVALID == view_type, VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE);
-            view_type = _SG_VIEWTYPE_RESOLVEATTACHMENT;
+            _SG_VALIDATE(SG_VIEWTYPE_INVALID == view_type, VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE);
+            view_type = SG_VIEWTYPE_RESOLVEATTACHMENT;
             img_desc = &desc->resolve_attachment;
         }
         if (desc->depth_stencil_attachment.image.id != SG_INVALID_ID) {
-            _SG_VALIDATE(_SG_VIEWTYPE_INVALID == view_type, VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE);
-            view_type = _SG_VIEWTYPE_DEPTHSTENCILATTACHMENT;
+            _SG_VALIDATE(SG_VIEWTYPE_INVALID == view_type, VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE);
+            view_type = SG_VIEWTYPE_DEPTHSTENCILATTACHMENT;
             img_desc = &desc->depth_stencil_attachment;
         }
-        _SG_VALIDATE(_SG_VIEWTYPE_INVALID != view_type, VALIDATE_VIEWDESC_ANY_VIEWTYPE);
+        _SG_VALIDATE(SG_VIEWTYPE_INVALID != view_type, VALIDATE_VIEWDESC_ANY_VIEWTYPE);
 
         const _sg_buffer_t* buf = 0;
         const _sg_image_t* img = 0;
@@ -19110,34 +19117,34 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
         if (res_valid) {
             // check usage flags
             switch (view_type) {
-                case _SG_VIEWTYPE_STORAGEBUFFER:
+                case SG_VIEWTYPE_STORAGEBUFFER:
                     SOKOL_ASSERT(buf);
                     _SG_VALIDATE(buf->cmn.usage.storage_buffer, VALIDATE_VIEWDESC_STORAGEBUFFER_USAGE);
                     break;
-                case _SG_VIEWTYPE_STORAGEIMAGE:
+                case SG_VIEWTYPE_STORAGEIMAGE:
                     SOKOL_ASSERT(img);
                     _SG_VALIDATE(img->cmn.usage.storage_image, VALIDATE_VIEWDESC_STORAGEIMAGE_USAGE);
                     _SG_VALIDATE(_sg_is_valid_storage_image_format(img->cmn.pixel_format), VALIDATE_VIEWDESC_STORAGEIMAGE_PIXELFORMAT);
                     break;
-                case _SG_VIEWTYPE_TEXTURE:
+                case SG_VIEWTYPE_TEXTURE:
                     // nothing to validate?
                     break;
-                case _SG_VIEWTYPE_COLORATTACHMENT:
+                case SG_VIEWTYPE_COLORATTACHMENT:
                     SOKOL_ASSERT(img);
                     _SG_VALIDATE(img->cmn.usage.attachment, VALIDATE_VIEWDESC_COLORATTACHMENT_USAGE);
                     _SG_VALIDATE(_sg_is_valid_attachment_color_format(img->cmn.pixel_format), VALIDATE_VIEWDESC_COLORATTACHMENT_PIXELFORMAT);
                     break;
-                case _SG_VIEWTYPE_RESOLVEATTACHMENT:
+                case SG_VIEWTYPE_RESOLVEATTACHMENT:
                     SOKOL_ASSERT(img);
                     _SG_VALIDATE(img->cmn.usage.attachment, VALIDATE_VIEWDESC_RESOLVEATTACHMENT_USAGE);
                     _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_VIEWDESC_RESOLVEATTACHMENT_SAMPLECOUNT);
                     break;
-                case _SG_VIEWTYPE_DEPTHSTENCILATTACHMENT:
+                case SG_VIEWTYPE_DEPTHSTENCILATTACHMENT:
                     SOKOL_ASSERT(img);
                     _SG_VALIDATE(img->cmn.usage.attachment, VALIDATE_VIEWDESC_DEPTHSTENCILATTACHMENT_USAGE);
                     _SG_VALIDATE(_sg_is_valid_attachment_depth_format(img->cmn.pixel_format), VALIDATE_VIEWDESC_DEPTHSTENCILATTACHMENT_PIXELFORMAT);
                     break;
-                case _SG_VIEWTYPE_INVALID:
+                case SG_VIEWTYPE_INVALID:
                     SOKOL_UNREACHABLE;
                     break;
             }
@@ -19259,7 +19266,7 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
                     _SG_VALIDATE(view->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_VALID);
                     if (view->slot.state == SG_RESOURCESTATE_VALID) {
                         // the view object must be a color attachment view
-                        _SG_VALIDATE(view->cmn.type == _SG_VIEWTYPE_COLORATTACHMENT, VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_TYPE);
+                        _SG_VALIDATE(view->cmn.type == SG_VIEWTYPE_COLORATTACHMENT, VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_TYPE);
                         // the view's image object must be alive and valid
                         const _sg_image_t* img = _sg_image_ref_ptr_or_null(&view->cmn.img.ref);
                         _SG_VALIDATE(img, VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_IMAGE_ALIVE);
@@ -19294,7 +19301,7 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
                     _SG_VALIDATE(view->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_VALID);
                     if (view->slot.state == SG_RESOURCESTATE_VALID) {
                         // the view object must be a resolve attachment view
-                        _SG_VALIDATE(view->cmn.type == _SG_VIEWTYPE_RESOLVEATTACHMENT, VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_TYPE);
+                        _SG_VALIDATE(view->cmn.type == SG_VIEWTYPE_RESOLVEATTACHMENT, VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_TYPE);
                         // the view's image object must be alive and valid
                         const _sg_image_t* img = _sg_image_ref_ptr_or_null(&view->cmn.img.ref);
                         _SG_VALIDATE(img, VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_IMAGE_ALIVE);
@@ -19321,7 +19328,7 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
                     _SG_VALIDATE(view->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_VALID);
                     if (view->slot.state == SG_RESOURCESTATE_VALID) {
                         // the view object must be a depth stencil attachment view
-                        _SG_VALIDATE(view->cmn.type == _SG_VIEWTYPE_DEPTHSTENCILATTACHMENT, VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_TYPE);
+                        _SG_VALIDATE(view->cmn.type == SG_VIEWTYPE_DEPTHSTENCILATTACHMENT, VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_TYPE);
                         // the view's image object must be alive and valid
                         const _sg_image_t* img = _sg_image_ref_ptr_or_null(&view->cmn.img.ref);
                         _SG_VALIDATE(img, VALIDATE_BEGINPASS_DEPTHSTENCILATTACHMENTVIEW_IMAGE_ALIVE);
@@ -19584,7 +19591,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                         // NOTE: an invalid view state is allowed and skips rendering
                         if (view->slot.state == SG_RESOURCESTATE_VALID) {
                             // the view object must be a texture view
-                            _SG_VALIDATE(view->cmn.type == _SG_VIEWTYPE_TEXTURE, VALIDATE_ABND_TEXVIEW_TYPE);
+                            _SG_VALIDATE(view->cmn.type == SG_VIEWTYPE_TEXTURE, VALIDATE_ABND_TEXVIEW_TYPE);
                             // NOTE: an invalid texture ref is allowed and skips rendering
                             if (_sg_image_ref_valid(&view->cmn.img.ref)) {
                                 const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
@@ -19651,7 +19658,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                         // NOTE: an invalid view state is allowed and skips rendering
                         if (view->slot.state == SG_RESOURCESTATE_VALID) {
                             // the view object must be a storage buffer view
-                            _SG_VALIDATE(view->cmn.type == _SG_VIEWTYPE_STORAGEBUFFER, VALIDATE_ABND_SBVIEW_TYPE);
+                            _SG_VALIDATE(view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER, VALIDATE_ABND_SBVIEW_TYPE);
                             // NOTE: an invalid buffer ref is allowed and skips rendering
                             if (_sg_buffer_ref_valid(&view->cmn.buf.ref)) {
                                 const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
@@ -21831,6 +21838,16 @@ SOKOL_API_IMPL int sg_query_image_sample_count(sg_image img_id) {
     return 0;
 }
 
+SOKOL_API_IMPL sg_view_type sg_query_view_type(sg_view view_id) {
+    SOKOL_ASSERT(_sg.valid);
+    const _sg_view_t* view = _sg_lookup_view(view_id.id);
+    if (view) {
+        return view->cmn.type;
+    } else {
+        return SG_VIEWTYPE_INVALID;
+    }
+}
+
 // NOTE: may return SG_INVALID_ID if view invalid or view not an image view
 SOKOL_API_IMPL sg_image sg_query_view_image(sg_view view_id) {
     SOKOL_ASSERT(_sg.valid);
@@ -21958,33 +21975,33 @@ SOKOL_API_IMPL sg_view_desc sg_query_view_desc(sg_view view_id) {
     const _sg_view_t* view = _sg_lookup_view(view_id.id);
     if (view) {
         switch (view->cmn.type) {
-            case _SG_VIEWTYPE_STORAGEBUFFER:
+            case SG_VIEWTYPE_STORAGEBUFFER:
                 desc.storage_buffer_binding.buffer.id = view->cmn.buf.ref.sref.id;
                 desc.storage_buffer_binding.offset = view->cmn.buf.offset;
                 break;
-            case _SG_VIEWTYPE_STORAGEIMAGE:
+            case SG_VIEWTYPE_STORAGEIMAGE:
                 desc.storage_image_binding.image.id = view->cmn.img.ref.sref.id;
                 desc.storage_image_binding.mip_level = view->cmn.img.mip_level;
                 desc.storage_image_binding.slice = view->cmn.img.slice;
                 break;
-            case _SG_VIEWTYPE_TEXTURE:
+            case SG_VIEWTYPE_TEXTURE:
                 desc.texture_binding.image.id = view->cmn.img.ref.sref.id;
                 desc.texture_binding.mip_levels.base = view->cmn.img.mip_level;
                 desc.texture_binding.mip_levels.count = view->cmn.img.mip_level_count;
                 desc.texture_binding.slices.base = view->cmn.img.slice;
                 desc.texture_binding.slices.count = view->cmn.img.slice_count;
                 break;
-            case _SG_VIEWTYPE_COLORATTACHMENT:
+            case SG_VIEWTYPE_COLORATTACHMENT:
                 desc.color_attachment.image.id = view->cmn.img.ref.sref.id;
                 desc.color_attachment.mip_level = view->cmn.img.mip_level;
                 desc.color_attachment.slice = view->cmn.img.slice;
                 break;
-            case _SG_VIEWTYPE_RESOLVEATTACHMENT:
+            case SG_VIEWTYPE_RESOLVEATTACHMENT:
                 desc.resolve_attachment.image.id = view->cmn.img.ref.sref.id;
                 desc.resolve_attachment.mip_level = view->cmn.img.mip_level;
                 desc.resolve_attachment.slice = view->cmn.img.slice;
                 break;
-            case _SG_VIEWTYPE_DEPTHSTENCILATTACHMENT:
+            case SG_VIEWTYPE_DEPTHSTENCILATTACHMENT:
                 desc.depth_stencil_attachment.image.id = view->cmn.img.ref.sref.id;
                 desc.depth_stencil_attachment.mip_level = view->cmn.img.mip_level;
                 desc.depth_stencil_attachment.slice = view->cmn.img.slice;
