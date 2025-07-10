@@ -4789,6 +4789,8 @@ SOKOL_GFX_API_DECL int sg_query_image_num_mipmaps(sg_image img);
 SOKOL_GFX_API_DECL sg_pixel_format sg_query_image_pixelformat(sg_image img);
 SOKOL_GFX_API_DECL sg_image_usage sg_query_image_usage(sg_image img);
 SOKOL_GFX_API_DECL int sg_query_image_sample_count(sg_image img);
+SOKOL_GFX_API_DECL sg_image sg_query_view_image(sg_view view);
+SOKOL_GFX_API_DECL sg_buffer sg_query_view_buffer(sg_view view);
 
 // separate resource allocation and initialization (for async setup)
 SOKOL_GFX_API_DECL sg_buffer sg_alloc_buffer(void);
@@ -21822,12 +21824,33 @@ SOKOL_API_IMPL sg_image_usage sg_query_image_usage(sg_image img_id) {
 
 SOKOL_API_IMPL int sg_query_image_sample_count(sg_image img_id) {
     SOKOL_ASSERT(_sg.valid);
-    SOKOL_ASSERT(_sg.valid);
     const _sg_image_t* img = _sg_lookup_image(img_id.id);
     if (img) {
         return img->cmn.sample_count;
     }
     return 0;
+}
+
+// NOTE: may return SG_INVALID_ID if view invalid or view not an image view
+SOKOL_API_IMPL sg_image sg_query_view_image(sg_view view_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_image img; _sg_clear(&img, sizeof(img));
+    const _sg_view_t* view = _sg_lookup_view(view_id.id);
+    if (view) {
+        img.id = view->cmn.img.ref.sref.id;
+    }
+    return img;
+}
+
+// NOTE: may return SG_INVALID_ID if view invalid or view not a buffer view
+SOKOL_API_IMPL sg_buffer sg_query_view_buffer(sg_view view_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_buffer buf; _sg_clear(&buf, sizeof(buf));
+    const _sg_view_t* view = _sg_lookup_view(view_id.id);
+    if (view) {
+        buf.id = view->cmn.buf.ref.sref.id;
+    }
+    return buf;
 }
 
 SOKOL_API_IMPL sg_sampler_desc sg_query_sampler_desc(sg_sampler smp_id) {
