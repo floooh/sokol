@@ -3076,7 +3076,7 @@ typedef struct sg_bindings {
         the buffer will bound as vertex buffer via sg_bindings.vertex_buffers[]
     .index_buffer (default: false)
         the buffer will bound as index buffer via sg_bindings.index_buffer
-    .storage_buffer (default: false)
+    .storage_buffer_binding (default: false)
         the buffer will bound as storage buffer via sg_bindings.storage_buffers[]
     .immutable (default: true)
         the buffer content will never be updated from the CPU side (but
@@ -3089,7 +3089,7 @@ typedef struct sg_bindings {
 typedef struct sg_buffer_usage {
     bool vertex_buffer;
     bool index_buffer;
-    bool storage_buffer;
+    bool storage_buffer_binding;
     bool immutable;
     bool dynamic_update;
     bool stream_update;
@@ -3169,15 +3169,15 @@ typedef struct sg_buffer_desc {
 
     Describes how the image object is going to be used:
 
-    .texture (default: true)
-        the image object is used as a texture-binding in
-        a render- or compute-pass
-    .storage_image (default: false)
+    .storage_image_binding (default: false)
         the image object is used as storage-image-binding in a
         compute pass (to be written to by compute shaders)
-    .attachment (default: false)
-        the image object is used as color-, resolve- or depth-stencil-
-        attachment in a render pass
+    .color_attachment (default: false)
+        the image object is used as a color-attachemnt in a render pass
+    .resolve_attachment (default: false)
+        the image object is used as a resolve-attachment in a render pass
+    .depth_stencil_attachment (default: false)
+        the image object is used as a depth-stencil-attachment in a render pass
     .immutable (default: true)
         the image content cannot be updated from the CPU side
         (but may be updated by the GPU in a render- or compute-pass)
@@ -3189,7 +3189,10 @@ typedef struct sg_buffer_desc {
     Note that the usage as texture binding is implicit and always allowed.
 */
 typedef struct sg_image_usage {
-    bool attachment;
+    bool storage_image_binding;
+    bool color_attachment;
+    bool resolve_attachment;
+    bool depth_stencil_attachment;
     bool storage_image;
     bool immutable;
     bool dynamic_update;
@@ -4252,7 +4255,6 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDATA_DATA_SIZE, "sg_image_data: data size doesn't match expected surface size") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_CANARY, "sg_image_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMMUTABLE_DYNAMIC_STREAM, "sg_image_desc.usage: only one of .immutable, .dynamic_update, .stream_update can be true") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_VS_STORAGE_IMAGE, "sg_image_desc.usage: only one of .attachment or .storage_image can be true") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WIDTH, "sg_image_desc.width must be > 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_HEIGHT, "sg_image_desc.height must be > 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT, "invalid pixel format for non-render-target image") \
@@ -4260,12 +4262,13 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DEPTH_3D_IMAGE, "3D images cannot have a depth/stencil image format") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_EXPECT_IMMUTABLE, "render/storage attachment images must be sg_image_usage.immutable") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_EXPECT_NO_DATA, "render/storage attachment images cannot be initialized with data") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_RENDERATTACHMENT_NO_MSAA_SUPPORT, "multisampling not supported for this pixel format") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_RENDERATTACHMENT_MSAA_NUM_MIPMAPS, "multisample images must have num_mipmaps == 1") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_RENDERATTACHMENT_MSAA_3D_IMAGE, "3D images cannot have a sample_count > 1") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_RENDERATTACHMENT_MSAA_CUBE_IMAGE, "cube images cannot have sample_count > 1") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_RENDERATTACHMENT_MSAA_ARRAY_IMAGE, "array images cannot have sample_count > 1") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_RENDERATTACHMENT_PIXELFORMAT, "invalid pixel format for render attachment image") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_PIXELFORMAT, "invalid pixel format for render attachment image") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_RESOLVE_EXPECT_NO_MSAA, "resolve attachment images cannot be multisampled") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_NO_MSAA_SUPPORT, "multisampling not supported for this pixel format") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_NUM_MIPMAPS, "multisample images must have num_mipmaps == 1") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_3D_IMAGE, "3D images cannot have a sample_count > 1") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE, "cube images cannot have sample_count > 1") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_ARRAY_IMAGE, "array images cannot have sample_count > 1") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_STORAGEIMAGE_PIXELFORMAT, "invalid pixel format for storage image") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_STORAGEIMAGE_EXPECT_NO_MSAA, "storage images cannot be multisampled") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_INJECTED_NO_DATA, "images with injected textures cannot be initialized with data") \
@@ -14507,16 +14510,19 @@ _SOKOL_PRIVATE bool _sg_mtl_init_texdesc(MTLTextureDescriptor* mtl_desc, _sg_ima
     }
     mtl_desc.sampleCount = (NSUInteger)img->cmn.sample_count;
 
+    const sg_image_usage* usg = &img->cmn.usage;
+    const bool any_attachment = usg->color_attachment || usg->resolve_attachment || usg->depth_stencil_attachment;
     MTLTextureUsage mtl_tex_usage = MTLTextureUsageShaderRead;
-    if (img->cmn.usage.attachment) {
+    if (any_attachment) {
         mtl_tex_usage |= MTLTextureUsageRenderTarget;
-    } else if (img->cmn.usage.storage_image) {
+    }
+    if (img->cmn.usage.storage_image_binding) {
         mtl_tex_usage |= MTLTextureUsageShaderWrite;
     }
     mtl_desc.usage = mtl_tex_usage;
 
     MTLResourceOptions mtl_res_options = 0;
-    if (img->cmn.usage.attachment || img->cmn.usage.storage_image) {
+    if (any_attachment || img->cmn.usage.storage_image_binding) {
         mtl_res_options |= MTLResourceStorageModePrivate;
     } else {
         mtl_res_options |= _sg_mtl_resource_options_storage_mode_managed_or_shared();
@@ -14525,7 +14531,6 @@ _SOKOL_PRIVATE bool _sg_mtl_init_texdesc(MTLTextureDescriptor* mtl_desc, _sg_ima
         }
     }
     mtl_desc.resourceOptions = mtl_res_options;
-
     return true;
 }
 
@@ -18466,7 +18471,7 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
         _SG_VALIDATE(desc->size > 0, VALIDATE_BUFFERDESC_EXPECT_NONZERO_SIZE);
         _SG_VALIDATE(_sg_one(desc->usage.immutable, desc->usage.dynamic_update, desc->usage.stream_update), VALIDATE_BUFFERDESC_IMMUTABLE_DYNAMIC_STREAM);
         if (_sg.features.separate_buffer_types) {
-            _SG_VALIDATE(_sg_one(desc->usage.vertex_buffer, desc->usage.index_buffer, desc->usage.storage_buffer), VALIDATE_BUFFERDESC_SEPARATE_BUFFER_TYPES);
+            _SG_VALIDATE(_sg_one(desc->usage.vertex_buffer, desc->usage.index_buffer, desc->usage.storage_buffer_binding), VALIDATE_BUFFERDESC_SEPARATE_BUFFER_TYPES);
         }
         bool injected = (0 != desc->gl_buffers[0]) ||
                         (0 != desc->mtl_buffers[0]) ||
@@ -18476,14 +18481,14 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
             if (desc->data.ptr) {
                 _SG_VALIDATE(desc->size == desc->data.size, VALIDATE_BUFFERDESC_EXPECT_MATCHING_DATA_SIZE);
             } else {
-                _SG_VALIDATE(desc->usage.storage_buffer, VALIDATE_BUFFERDESC_EXPECT_DATA);
+                _SG_VALIDATE(desc->usage.storage_buffer_binding, VALIDATE_BUFFERDESC_EXPECT_DATA);
                 _SG_VALIDATE(desc->data.size == 0, VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE);
             }
         } else {
             _SG_VALIDATE(0 == desc->data.ptr, VALIDATE_BUFFERDESC_EXPECT_NO_DATA);
             _SG_VALIDATE(desc->data.size == 0, VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE);
         }
-        if (desc->usage.storage_buffer) {
+        if (desc->usage.storage_buffer_binding) {
             _SG_VALIDATE(_sg.features.compute, VALIDATE_BUFFERDESC_STORAGEBUFFER_SUPPORTED);
             _SG_VALIDATE(_sg_multiple_u64(desc->size, 4), VALIDATE_BUFFERDESC_STORAGEBUFFER_SIZE_MULTIPLE_4);
         }
@@ -18524,18 +18529,16 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         if (_sg.desc.disable_validation) {
             return true;
         }
+        const sg_image_usage* usg = &desc->usage;
+        const bool any_attachment = usg->color_attachment || usg->resolve_attachment || usg->depth_stencil_attachment;
         SOKOL_ASSERT(desc);
         _sg_validate_begin();
         _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_IMAGEDESC_CANARY);
         _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_IMAGEDESC_CANARY);
-        _SG_VALIDATE(_sg_one(desc->usage.immutable, desc->usage.dynamic_update, desc->usage.stream_update), VALIDATE_IMAGEDESC_IMMUTABLE_DYNAMIC_STREAM);
-        if (desc->usage.attachment || desc->usage.storage_image) {
-            _SG_VALIDATE(_sg_one(desc->usage.attachment, desc->usage.storage_image, false), VALIDATE_IMAGEDESC_ATTACHMENT_VS_STORAGE_IMAGE);
-        }
+        _SG_VALIDATE(_sg_one(usg->immutable, usg->dynamic_update, usg->stream_update), VALIDATE_IMAGEDESC_IMMUTABLE_DYNAMIC_STREAM);
         _SG_VALIDATE(desc->width > 0, VALIDATE_IMAGEDESC_WIDTH);
         _SG_VALIDATE(desc->height > 0, VALIDATE_IMAGEDESC_HEIGHT);
         const sg_pixel_format fmt = desc->pixel_format;
-        const sg_image_usage* usage = &desc->usage;
         const bool injected = (0 != desc->gl_textures[0]) ||
                               (0 != desc->mtl_textures[0]) ||
                               (0 != desc->d3d11_texture) ||
@@ -18543,20 +18546,23 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         if (_sg_is_depth_or_depth_stencil_format(fmt)) {
             _SG_VALIDATE(desc->type != SG_IMAGETYPE_3D, VALIDATE_IMAGEDESC_DEPTH_3D_IMAGE);
         }
-        if (usage->attachment || usage->storage_image) {
+        if (any_attachment || usg->storage_image_binding) {
             SOKOL_ASSERT(((int)fmt >= 0) && ((int)fmt < _SG_PIXELFORMAT_NUM));
-            _SG_VALIDATE(usage->immutable, VALIDATE_IMAGEDESC_ATTACHMENT_EXPECT_IMMUTABLE);
+            _SG_VALIDATE(usg->immutable, VALIDATE_IMAGEDESC_ATTACHMENT_EXPECT_IMMUTABLE);
             _SG_VALIDATE(desc->data.subimage[0][0].ptr==0, VALIDATE_IMAGEDESC_ATTACHMENT_EXPECT_NO_DATA);
-            if (usage->attachment) {
-                _SG_VALIDATE(_sg.formats[fmt].render, VALIDATE_IMAGEDESC_RENDERATTACHMENT_PIXELFORMAT);
-                if (desc->sample_count > 1) {
-                    _SG_VALIDATE(_sg.formats[fmt].msaa, VALIDATE_IMAGEDESC_RENDERATTACHMENT_NO_MSAA_SUPPORT);
-                    _SG_VALIDATE(desc->num_mipmaps == 1, VALIDATE_IMAGEDESC_RENDERATTACHMENT_MSAA_NUM_MIPMAPS);
-                    _SG_VALIDATE(desc->type != SG_IMAGETYPE_ARRAY, VALIDATE_IMAGEDESC_RENDERATTACHMENT_MSAA_ARRAY_IMAGE);
-                    _SG_VALIDATE(desc->type != SG_IMAGETYPE_3D, VALIDATE_IMAGEDESC_RENDERATTACHMENT_MSAA_3D_IMAGE);
-                    _SG_VALIDATE(desc->type != SG_IMAGETYPE_CUBE, VALIDATE_IMAGEDESC_RENDERATTACHMENT_MSAA_CUBE_IMAGE);
+            if (any_attachment) {
+                _SG_VALIDATE(_sg.formats[fmt].render, VALIDATE_IMAGEDESC_ATTACHMENT_PIXELFORMAT);
+                if (usg->resolve_attachment) {
+                    _SG_VALIDATE(desc->sample_count == 1, VALIDATE_IMAGEDESC_ATTACHMENT_RESOLVE_EXPECT_NO_MSAA);
                 }
-            } else if (usage->storage_image) {
+                if (desc->sample_count > 1) {
+                    _SG_VALIDATE(_sg.formats[fmt].msaa, VALIDATE_IMAGEDESC_ATTACHMENT_NO_MSAA_SUPPORT);
+                    _SG_VALIDATE(desc->num_mipmaps == 1, VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_NUM_MIPMAPS);
+                    _SG_VALIDATE(desc->type != SG_IMAGETYPE_ARRAY, VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_ARRAY_IMAGE);
+                    _SG_VALIDATE(desc->type != SG_IMAGETYPE_3D, VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_3D_IMAGE);
+                    _SG_VALIDATE(desc->type != SG_IMAGETYPE_CUBE, VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE);
+                }
+            } else if (usg->storage_image) {
                 _SG_VALIDATE(_sg_is_valid_storage_image_format(fmt), VALIDATE_IMAGEDESC_STORAGEIMAGE_PIXELFORMAT);
                 // D3D11 doesn't allow multisampled UAVs (see: https://github.com/gpuweb/gpuweb/issues/513)
                 _SG_VALIDATE(desc->sample_count == 1, VALIDATE_IMAGEDESC_STORAGEIMAGE_EXPECT_NO_MSAA);
@@ -18567,9 +18573,9 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
             _SG_VALIDATE(valid_nonrt_fmt, VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT);
             const bool is_compressed = _sg_is_compressed_pixel_format(desc->pixel_format);
             if (is_compressed) {
-                _SG_VALIDATE(usage->immutable, VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE);
+                _SG_VALIDATE(usg->immutable, VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE);
             }
-            if (!injected && usage->immutable) {
+            if (!injected && usg->immutable) {
                 // image desc must have valid data
                 _sg_validate_image_data(&desc->data,
                     desc->pixel_format,
@@ -18587,7 +18593,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
                         if (injected) {
                             _SG_VALIDATE(no_data && no_size, VALIDATE_IMAGEDESC_INJECTED_NO_DATA);
                         }
-                        if (!usage->immutable) {
+                        if (!usg->immutable) {
                             _SG_VALIDATE(no_data && no_size, VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA);
                         }
                     }
@@ -19119,11 +19125,11 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
             switch (view_type) {
                 case SG_VIEWTYPE_STORAGEBUFFER:
                     SOKOL_ASSERT(buf);
-                    _SG_VALIDATE(buf->cmn.usage.storage_buffer, VALIDATE_VIEWDESC_STORAGEBUFFER_USAGE);
+                    _SG_VALIDATE(buf->cmn.usage.storage_buffer_binding, VALIDATE_VIEWDESC_STORAGEBUFFER_USAGE);
                     break;
                 case SG_VIEWTYPE_STORAGEIMAGE:
                     SOKOL_ASSERT(img);
-                    _SG_VALIDATE(img->cmn.usage.storage_image, VALIDATE_VIEWDESC_STORAGEIMAGE_USAGE);
+                    _SG_VALIDATE(img->cmn.usage.storage_image_binding, VALIDATE_VIEWDESC_STORAGEIMAGE_USAGE);
                     _SG_VALIDATE(_sg_is_valid_storage_image_format(img->cmn.pixel_format), VALIDATE_VIEWDESC_STORAGEIMAGE_PIXELFORMAT);
                     break;
                 case SG_VIEWTYPE_TEXTURE:
@@ -19131,17 +19137,17 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
                     break;
                 case SG_VIEWTYPE_COLORATTACHMENT:
                     SOKOL_ASSERT(img);
-                    _SG_VALIDATE(img->cmn.usage.attachment, VALIDATE_VIEWDESC_COLORATTACHMENT_USAGE);
+                    _SG_VALIDATE(img->cmn.usage.color_attachment, VALIDATE_VIEWDESC_COLORATTACHMENT_USAGE);
                     _SG_VALIDATE(_sg_is_valid_attachment_color_format(img->cmn.pixel_format), VALIDATE_VIEWDESC_COLORATTACHMENT_PIXELFORMAT);
                     break;
                 case SG_VIEWTYPE_RESOLVEATTACHMENT:
                     SOKOL_ASSERT(img);
-                    _SG_VALIDATE(img->cmn.usage.attachment, VALIDATE_VIEWDESC_RESOLVEATTACHMENT_USAGE);
+                    _SG_VALIDATE(img->cmn.usage.resolve_attachment, VALIDATE_VIEWDESC_RESOLVEATTACHMENT_USAGE);
                     _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_VIEWDESC_RESOLVEATTACHMENT_SAMPLECOUNT);
                     break;
                 case SG_VIEWTYPE_DEPTHSTENCILATTACHMENT:
                     SOKOL_ASSERT(img);
-                    _SG_VALIDATE(img->cmn.usage.attachment, VALIDATE_VIEWDESC_DEPTHSTENCILATTACHMENT_USAGE);
+                    _SG_VALIDATE(img->cmn.usage.depth_stencil_attachment, VALIDATE_VIEWDESC_DEPTHSTENCILATTACHMENT_USAGE);
                     _SG_VALIDATE(_sg_is_valid_attachment_depth_format(img->cmn.pixel_format), VALIDATE_VIEWDESC_DEPTHSTENCILATTACHMENT_PIXELFORMAT);
                     break;
                 case SG_VIEWTYPE_INVALID:
@@ -19847,7 +19853,7 @@ _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image_t* img, const sg_i
 // >>resources
 _SOKOL_PRIVATE sg_buffer_usage _sg_buffer_usage_defaults(const sg_buffer_usage* usg) {
     sg_buffer_usage def = *usg;
-    if (!(def.vertex_buffer || def.index_buffer || def.storage_buffer)) {
+    if (!(def.vertex_buffer || def.index_buffer || def.storage_buffer_binding)) {
         def.vertex_buffer = true;
     }
     if (!(def.immutable || def.stream_update || def.dynamic_update)) {
@@ -19880,8 +19886,11 @@ _SOKOL_PRIVATE sg_image_desc _sg_image_desc_defaults(const sg_image_desc* desc) 
     def.usage = _sg_image_usage_defaults(&def.usage);
     def.num_slices = _sg_def(def.num_slices, 1);
     def.num_mipmaps = _sg_def(def.num_mipmaps, 1);
-    if (def.usage.attachment) {
+    if (def.usage.color_attachment || def.usage.resolve_attachment) {
         def.pixel_format = _sg_def(def.pixel_format, _sg.desc.environment.defaults.color_format);
+        def.sample_count = _sg_def(def.sample_count, _sg.desc.environment.defaults.sample_count);
+    } else if (def.usage.depth_stencil_attachment) {
+        def.pixel_format = _sg_def(def.pixel_format, _sg.desc.environment.defaults.depth_format);
         def.sample_count = _sg_def(def.sample_count, _sg.desc.environment.defaults.sample_count);
     } else {
         def.pixel_format = _sg_def(def.pixel_format, SG_PIXELFORMAT_RGBA8);
