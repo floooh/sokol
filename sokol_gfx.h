@@ -3193,7 +3193,6 @@ typedef struct sg_image_usage {
     bool color_attachment;
     bool resolve_attachment;
     bool depth_stencil_attachment;
-    bool storage_image;
     bool immutable;
     bool dynamic_update;
     bool stream_update;
@@ -7264,16 +7263,6 @@ _SOKOL_PRIVATE int _sg_miplevel_dim(int base_dim, int mip_level) {
     return _sg_max(base_dim >> mip_level, 1);
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_view_resource_state(const _sg_view_t* view) {
-    if (_sg_buffer_ref_alive(&view->cmn.buf.ref)) {
-        return _sg_buffer_ref_ptr(&view->cmn.buf.ref)->slot.state;
-    } else if (_sg_image_ref_alive(&view->cmn.img.ref)) {
-        return _sg_image_ref_ptr(&view->cmn.img.ref)->slot.state;
-    } else {
-        return SG_RESOURCESTATE_INVALID;
-    }
-}
-
 _SOKOL_PRIVATE bool _sg_image_view_alive(const _sg_view_t* view) {
     return view && _sg_image_ref_alive(&view->cmn.img.ref);
 }
@@ -7497,29 +7486,37 @@ _SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const s
 }
 
 _SOKOL_PRIVATE void _sg_buffer_view_common_init(_sg_buffer_view_common_t* cmn, const sg_buffer_view_desc* desc, _sg_buffer_t* buf) {
-    // NOTE: we cannot actually access any buffer properties here since it may not yet be initialized
+    SOKOL_ASSERT(SG_RESOURCESTATE_VALID == buf->slot.state);
     cmn->ref = _sg_buffer_ref(buf);
     cmn->offset = desc->offset;
 }
 
 _SOKOL_PRIVATE void _sg_texture_view_common_init(_sg_image_view_common_t* cmn, const sg_texture_view_desc* desc, _sg_image_t* img) {
-    // NOTE: we cannot actually access any image properties here since it may not yet be initialized,
-    // specifically the slice_count cannot be default-initialized from the image's number of mipmaps or slices,
-    // so this needs to be handled in the backends!
+    SOKOL_ASSERT(SG_RESOURCESTATE_VALID == img->slot.state);
     cmn->ref = _sg_image_ref(img);
     cmn->mip_level = desc->mip_levels.base;
+    cmn->mip_level_count = _sg_def(desc->mip_levels.count, img->cmn.num_mipmaps - cmn->mip_level);
     cmn->slice = desc->slices.base;
     switch (img->cmn.type) {
+        case SG_IMAGETYPE_2D:
+            cmn->slice_count = 1;
+            break;
         case SG_IMAGETYPE_CUBE:
+            cmn->slice_count = 6;
+            break;
         case SG_IMAGETYPE_3D:
-            cmn->slice_count = _sg_def(desc->slices.count, 1);
+            cmn->slice_count = 1;
+            break;
+        case SG_IMAGETYPE_ARRAY:
+            cmn->slice_count = _sg_def(desc->slices.count, img->cmn.num_slices - cmn->slice);
             break;
         default:
-            break;
+            SOKOL_UNREACHABLE;
     }
 }
 
 _SOKOL_PRIVATE void _sg_image_view_common_init(_sg_image_view_common_t* cmn, const sg_image_view_desc* desc, _sg_image_t* img) {
+    SOKOL_ASSERT(SG_RESOURCESTATE_VALID == img->slot.state);
     cmn->ref = _sg_image_ref(img);
     cmn->mip_level = desc->mip_level;
     cmn->mip_level_count = 1;
@@ -7527,36 +7524,30 @@ _SOKOL_PRIVATE void _sg_image_view_common_init(_sg_image_view_common_t* cmn, con
     cmn->slice_count = 1;
 }
 
-_SOKOL_PRIVATE void _sg_view_common_init(_sg_view_common_t* cmn, const sg_view_desc* desc) {
+_SOKOL_PRIVATE void _sg_view_common_init(_sg_view_common_t* cmn, const sg_view_desc* desc, _sg_buffer_t* buf, _sg_image_t* img) {
     if (desc->texture_binding.image.id != SG_INVALID_ID) {
-        cmn->type = SG_VIEWTYPE_TEXTURE;
-        _sg_image_t* img = _sg_lookup_image(desc->texture_binding.image.id);
         SOKOL_ASSERT(img);
+        cmn->type = SG_VIEWTYPE_TEXTURE;
         _sg_texture_view_common_init(&cmn->img, &desc->texture_binding, img);
     } else if (desc->storage_buffer_binding.buffer.id != SG_INVALID_ID) {
-        cmn->type = SG_VIEWTYPE_STORAGEBUFFER;
-        _sg_buffer_t* buf = _sg_lookup_buffer(desc->storage_buffer_binding.buffer.id);
         SOKOL_ASSERT(buf);
+        cmn->type = SG_VIEWTYPE_STORAGEBUFFER;
         _sg_buffer_view_common_init(&cmn->buf, &desc->storage_buffer_binding, buf);
     } else if (desc->storage_image_binding.image.id != SG_INVALID_ID) {
-        cmn->type = SG_VIEWTYPE_STORAGEIMAGE;
-        _sg_image_t* img = _sg_lookup_image(desc->storage_image_binding.image.id);
         SOKOL_ASSERT(img);
+        cmn->type = SG_VIEWTYPE_STORAGEIMAGE;
         _sg_image_view_common_init(&cmn->img, &desc->storage_image_binding, img);
     } else if (desc->color_attachment.image.id != SG_INVALID_ID) {
-        cmn->type = SG_VIEWTYPE_COLORATTACHMENT;
-        _sg_image_t* img = _sg_lookup_image(desc->color_attachment.image.id);
         SOKOL_ASSERT(img);
+        cmn->type = SG_VIEWTYPE_COLORATTACHMENT;
         _sg_image_view_common_init(&cmn->img, &desc->color_attachment, img);
     } else if (desc->resolve_attachment.image.id != SG_INVALID_ID) {
-        cmn->type = SG_VIEWTYPE_RESOLVEATTACHMENT;
-        _sg_image_t* img = _sg_lookup_image(desc->resolve_attachment.image.id);
         SOKOL_ASSERT(img);
+        cmn->type = SG_VIEWTYPE_RESOLVEATTACHMENT;
         _sg_image_view_common_init(&cmn->img, &desc->resolve_attachment, img);
     } else if (desc->depth_stencil_attachment.image.id != SG_INVALID_ID) {
-        cmn->type = SG_VIEWTYPE_DEPTHSTENCILATTACHMENT;
-        _sg_image_t* img = _sg_lookup_image(desc->depth_stencil_attachment.image.id);
         SOKOL_ASSERT(img);
+        cmn->type = SG_VIEWTYPE_DEPTHSTENCILATTACHMENT;
         _sg_image_view_common_init(&cmn->img, &desc->depth_stencil_attachment, img);
     } else {
         SOKOL_UNREACHABLE;
@@ -14983,30 +14974,11 @@ _SOKOL_PRIVATE void _sg_mtl_discard_pipeline(_sg_pipeline_t* pip) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_view(_sg_view_t* view) {
     SOKOL_ASSERT(view);
-    if ((view->cmn.type == SG_VIEWTYPE_TEXTURE) || (view->cmn.type == SG_VIEWTYPE_STORAGEIMAGE)) {
+    if ((SG_VIEWTYPE_TEXTURE == view->cmn.type) || (SG_VIEWTYPE_STORAGEIMAGE == view->cmn.type)) {
         const _sg_image_view_common_t* cmn = &view->cmn.img;
         const _sg_image_t* img = _sg_image_ref_ptr(&cmn->ref);
-        const int mip_level_count = _sg_def(cmn->mip_level_count, img->cmn.num_mipmaps - cmn->mip_level);
-        // FIXME: once cubemap faces and slices are unified, just use the image num_slices as default!
-        int slice_count;
-        switch (img->cmn.type) {
-            case SG_IMAGETYPE_2D:
-                slice_count = 1;
-                break;
-            case SG_IMAGETYPE_CUBE:
-                slice_count = 6;
-                break;
-            case SG_IMAGETYPE_3D:
-                slice_count = 1;
-                break;
-            case SG_IMAGETYPE_ARRAY:
-                slice_count = _sg_def(cmn->slice_count, img->cmn.num_slices - cmn->slice);
-                break;
-            default:
-                SOKOL_UNREACHABLE;
-        }
-        SOKOL_ASSERT(mip_level_count >= 1);
-        SOKOL_ASSERT(slice_count >= 1);
+        SOKOL_ASSERT(cmn->mip_level_count >= 1);
+        SOKOL_ASSERT(cmn->slice_count >= 1);
         for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
             if (img->mtl.tex[i] == _SG_MTL_INVALID_SLOT_INDEX) {
                 continue;
@@ -15014,8 +14986,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_view(_sg_view_t* view) {
             id<MTLTexture> mtl_tex_view = [_sg_mtl_id(img->mtl.tex[i])
                 newTextureViewWithPixelFormat: _sg_mtl_pixel_format(img->cmn.pixel_format)
                 textureType: _sg_mtl_texture_type(img->cmn.type, false)
-                levels: NSMakeRange((NSUInteger)cmn->mip_level, (NSUInteger)mip_level_count)
-                slices: NSMakeRange((NSUInteger)cmn->slice, (NSUInteger)slice_count)];
+                levels: NSMakeRange((NSUInteger)cmn->mip_level, (NSUInteger)cmn->mip_level_count)
+                slices: NSMakeRange((NSUInteger)cmn->slice, (NSUInteger)cmn->slice_count)];
             view->mtl.tex_view[i] = _sg_mtl_add_resource(mtl_tex_view);
             _SG_OBJC_RELEASE(mtl_tex_view);
         }
@@ -18562,7 +18534,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
                     _SG_VALIDATE(desc->type != SG_IMAGETYPE_3D, VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_3D_IMAGE);
                     _SG_VALIDATE(desc->type != SG_IMAGETYPE_CUBE, VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE);
                 }
-            } else if (usg->storage_image) {
+            } else if (usg->storage_image_binding) {
                 _SG_VALIDATE(_sg_is_valid_storage_image_format(fmt), VALIDATE_IMAGEDESC_STORAGEIMAGE_PIXELFORMAT);
                 // D3D11 doesn't allow multisampled UAVs (see: https://github.com/gpuweb/gpuweb/issues/513)
                 _SG_VALIDATE(desc->sample_count == 1, VALIDATE_IMAGEDESC_STORAGEIMAGE_EXPECT_NO_MSAA);
@@ -19100,7 +19072,7 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
             buf = _sg_lookup_buffer(buf_desc->buffer.id);
             _SG_VALIDATE(buf, VALIDATE_VIEWDESC_RESOURCE_ALIVE);
             if (buf) {
-                _SG_VALIDATE(buf->slot.state != SG_RESOURCESTATE_FAILED, VALIDATE_VIEWDESC_RESOURCE_FAILED);
+                _SG_VALIDATE(buf->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_VIEWDESC_RESOURCE_FAILED);
                 res_valid = buf->slot.state == SG_RESOURCESTATE_VALID;
             }
         } else if (img_desc) {
@@ -19108,7 +19080,7 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
             img = _sg_lookup_image(img_desc->image.id);
             _SG_VALIDATE(img, VALIDATE_VIEWDESC_RESOURCE_ALIVE);
             if (img) {
-                _SG_VALIDATE(img->slot.state != SG_RESOURCESTATE_FAILED, VALIDATE_VIEWDESC_RESOURCE_FAILED);
+                _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_VIEWDESC_RESOURCE_FAILED);
                 res_valid = img->slot.state == SG_RESOURCESTATE_VALID;
             }
         } else {
@@ -19116,7 +19088,7 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
             img = _sg_lookup_image(tex_desc->image.id);
             _SG_VALIDATE(img, VALIDATE_VIEWDESC_RESOURCE_ALIVE);
             if (img) {
-                _SG_VALIDATE(img->slot.state != SG_RESOURCESTATE_FAILED, VALIDATE_VIEWDESC_RESOURCE_FAILED);
+                _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_VIEWDESC_RESOURCE_FAILED);
                 res_valid = img->slot.state == SG_RESOURCESTATE_VALID;
             }
         }
@@ -20244,9 +20216,24 @@ _SOKOL_PRIVATE void _sg_init_view(_sg_view_t* view, const sg_view_desc* desc) {
     SOKOL_ASSERT(view && view->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(desc);
     if (_sg_validate_view_desc(desc)) {
-        _sg_view_common_init(&view->cmn, desc);
-        sg_resource_state res_state = _sg_view_resource_state(view);
+        uint32_t buf_id = desc->storage_buffer_binding.buffer.id;
+        uint32_t img_id = desc->texture_binding.image.id;
+        img_id = img_id ? img_id : desc->storage_image_binding.image.id;
+        img_id = img_id ? img_id : desc->color_attachment.image.id;
+        img_id = img_id ? img_id : desc->resolve_attachment.image.id;
+        img_id = img_id ? img_id : desc->depth_stencil_attachment.image.id;
+        _sg_buffer_t* buf = buf_id ? _sg_lookup_buffer(buf_id) : 0;
+        _sg_image_t* img = img_id ? _sg_lookup_image(img_id) : 0;
+        sg_resource_state res_state = SG_RESOURCESTATE_INVALID;
+        if (buf) {
+            res_state = buf->slot.state;
+        }
+        if (img) {
+            SOKOL_ASSERT(!buf);
+            res_state = img->slot.state;
+        }
         if (res_state == SG_RESOURCESTATE_VALID) {
+            _sg_view_common_init(&view->cmn, desc, buf, img);
             view->slot.state = _sg_create_view(view);
         } else {
             view->slot.state = SG_RESOURCESTATE_FAILED;
@@ -20254,9 +20241,7 @@ _SOKOL_PRIVATE void _sg_init_view(_sg_view_t* view, const sg_view_desc* desc) {
     } else {
        view->slot.state = SG_RESOURCESTATE_FAILED;
     }
-    SOKOL_ASSERT((view->slot.state == SG_RESOURCESTATE_VALID)
-        || (view->slot.state == SG_RESOURCESTATE_FAILED)
-        || (view->slot.state == SG_RESOURCESTATE_ALLOC));
+    SOKOL_ASSERT((view->slot.state == SG_RESOURCESTATE_VALID) || (view->slot.state == SG_RESOURCESTATE_FAILED));
 }
 
 _SOKOL_PRIVATE void _sg_uninit_buffer(_sg_buffer_t* buf) {
@@ -21094,9 +21079,7 @@ SOKOL_API_IMPL sg_view sg_make_view(const sg_view_desc* desc) {
         _sg_view_t* view = _sg_view_at(view_id.id);
         SOKOL_ASSERT(view && (view->slot.state == SG_RESOURCESTATE_ALLOC));
         _sg_init_view(view, &desc_def);
-        SOKOL_ASSERT((view->slot.state == SG_RESOURCESTATE_VALID)
-            || (view->slot.state == SG_RESOURCESTATE_FAILED)
-            || (view->slot.state == SG_RESOURCESTATE_ALLOC));
+        SOKOL_ASSERT((view->slot.state == SG_RESOURCESTATE_VALID) || (view->slot.state == SG_RESOURCESTATE_FAILED));
     }
     _SG_TRACE_ARGS(make_view, &desc_def, view_id);
     return view_id;
