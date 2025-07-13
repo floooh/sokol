@@ -2154,7 +2154,7 @@ typedef struct sg_features {
     bool mrt_independent_blend_state;   // multiple-render-target rendering can use per-render-target blend state
     bool mrt_independent_write_mask;    // multiple-render-target rendering can use per-render-target color write masks
     bool compute;                       // storage buffers and compute shaders are supported
-    bool msaa_image_bindings;           // if true, multisampled images can be bound as texture resources
+    bool msaa_texture_bindings;         // if true, multisampled images can be bound as textures
     bool separate_buffer_types;         // cannot use the same buffer for vertex and indices (onlu WebGL2)
 } sg_features;
 
@@ -4365,6 +4365,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_CUBEMAP_SLICE, "sg_view_desc: image/attachment view slice is out of range for cubemap image (must be >=0 and <6)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_ARRAY_SLICE, "sg_view_desc: image/attachment view slice is out of range for 2D array image (must be >=0 and <image.num_slices") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_3D_SLICE, "sg_view_desc: image/attachment view slice is out of range for 3D image (must be 0)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_EXPECT_NO_MSAA, "sg_view_desc: MSAA texture bindings not allowed on this backend (sg_features.msaa_texture_bindings)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_MIPLEVELS, "sg_view_desc: texture view mip levels are out of range (must be >=0 and <image.num_miplevels)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_2D_SLICES, "sg_view_desc: texture view slices are out of range for 2D image (must be 0)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_CUBEMAP_SLICES, "sg_view_desc: texture view slices are out of range for cubemap image (must be 0)") \
@@ -4375,6 +4376,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_DEPTHSTENCILATTACHMENT_PIXELFORMAT, "sg_view_desc.depth_stencil_attachment: pixel format of image must be a depth or depth-stencil format (sg_pixelformat_info.depth)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_RESOLVEATTACHMENT_SAMPLECOUNT, "sg_view_desc.resolve_attachment: image cannot be multisampled") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_CANARY, "sg_begin_pass: pass struct not initialized") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COMPUTEPASS_EXPECT_NO_ATTACHMENTS, "sg_begin_pass: compute passes cannot have attachments") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_WIDTH, "sg_begin_pass: expected pass.swapchain.width > 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_WIDTH_NOTSET, "sg_begin_pass: expected pass.swapchain.width == 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_HEIGHT, "sg_begin_pass: expected pass.swapchain.height > 0") \
@@ -4472,7 +4474,6 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_ALIVE, "sg_apply_bindings: texture view no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_TYPE, "sg_apply_bindings: view in texture bind slot is not a texture view") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_IMAGETYPE_MISMATCH, "sg_apply_bindings: image type of bound texture doesn't match shader desc") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_MSAA, "sg_apply_bindings: cannot bind image as texture with sample_count>1 (sg_features.msaa_image_bindings is false)") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_EXPECTED_MULTISAMPLED_IMAGE, "sg_apply_bindings: texture bindings expects image with sample_count > 1") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_EXPECTED_FILTERABLE_IMAGE, "sg_apply_bindings: filterable image expected") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_EXPECTED_DEPTH_IMAGE, "sg_apply_bindings: depth image expected") \
@@ -4487,6 +4488,11 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_TYPE, "sg_apply_bindings: view in storage buffer bind slot is not a storage buffer view") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_READWRITE_IMMUTABLE, "sg_apply_bindings: storage buffers bound as read/write must have usage immutable") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_SIMGVIEW, "sg_apply_binings: storage image binding is missing or the image view handle is invalid") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_NO_SIMGVIEW, "sg_apply_bindings: storage image bindings are only allowed in compute passes") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SIMGVIEW_ALIVE, "sg_apply_bindings: storage image view no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SIMGVIEW_TYPE, "sg_apply_bindings: view in storage image bindslot is not a storage image view") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SIMGVIEW_IMAGETYPE_MISMATCH, "sg_apply_bindings: image type of bound storage image doesn't match shader desc") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SIMGVIEW_ACCESSFORMAT, "sg_apply_bindings: pixel format of storage image view doesn't match access format in shader desc") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_BINDING_VS_DEPTHSTENCIL_ATTACHMENT, "sg_apply_bindings: cannot bind texture in the same pass it is used as depth-stencil attachment") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_BINDING_VS_COLOR_ATTACHMENT, "sg_apply_bindings: cannot bind texture in the same pass it is used as color attachment") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_BINDING_VS_RESOLVE_ATTACHMENT, "sg_apply_bindings: cannot bind texture in the same pass it is used as resolve attachment") \
@@ -9206,9 +9212,9 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
     _sg.features.mrt_independent_write_mask = true;
     _sg.features.compute = version >= 430;
     #if defined(__APPLE__)
-    _sg.features.msaa_image_bindings = false;
+    _sg.features.msaa_texture_bindings = false;
     #else
-    _sg.features.msaa_image_bindings = true;
+    _sg.features.msaa_texture_bindings = true;
     #endif
 
     // scan extensions
@@ -9285,7 +9291,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.features.mrt_independent_blend_state = false;
     _sg.features.mrt_independent_write_mask = false;
     _sg.features.compute = version >= 310;
-    _sg.features.msaa_image_bindings = false;
+    _sg.features.msaa_texture_bindings = false;
     #if defined(__EMSCRIPTEN__)
     _sg.features.separate_buffer_types = true;
     #else
@@ -9943,7 +9949,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
 
     // GLES3/WebGL2/macOS doesn't have support for multisampled textures, so create a render buffer object instead
     const bool msaa = img->cmn.sample_count > 1;
-    if (!_sg.features.msaa_image_bindings && img->cmn.usage.render_attachment && msaa) {
+    if (!_sg.features.msaa_texture_bindings && img->cmn.usage.render_attachment && msaa) {
         const GLenum gl_internal_format = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
         glGenRenderbuffers(1, &img->gl.msaa_render_buffer);
         glBindRenderbuffer(GL_RENDERBUFFER, img->gl.msaa_render_buffer);
@@ -12194,7 +12200,7 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.features.mrt_independent_blend_state = true;
     _sg.features.mrt_independent_write_mask = true;
     _sg.features.compute = true;
-    _sg.features.msaa_image_bindings = true;
+    _sg.features.msaa_texture_bindings = true;
 
     _sg.limits.max_image_size_2d = 16 * 1024;
     _sg.limits.max_image_size_cube = 16 * 1024;
@@ -14161,7 +14167,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.mrt_independent_blend_state = true;
     _sg.features.mrt_independent_write_mask = true;
     _sg.features.compute = true;
-    _sg.features.msaa_image_bindings = true;
+    _sg.features.msaa_texture_bindings = true;
 
     _sg.features.image_clamp_to_border = false;
     #if (MAC_OS_X_VERSION_MAX_ALLOWED >= 120000) || (__IPHONE_OS_VERSION_MAX_ALLOWED >= 140000)
@@ -16086,7 +16092,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.mrt_independent_blend_state = true;
     _sg.features.mrt_independent_write_mask = true;
     _sg.features.compute = true;
-    _sg.features.msaa_image_bindings = true;
+    _sg.features.msaa_texture_bindings = true;
 
     wgpuDeviceGetLimits(_sg.wgpu.dev, &_sg.wgpu.limits);
 
@@ -19105,7 +19111,9 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
                     _SG_VALIDATE(_sg_is_valid_storage_image_format(img->cmn.pixel_format), VALIDATE_VIEWDESC_STORAGEIMAGE_PIXELFORMAT);
                     break;
                 case SG_VIEWTYPE_TEXTURE:
-                    // nothing to validate?
+                    if (!_sg.features.msaa_texture_bindings) {
+                        _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_VIEWDESC_TEXTURE_EXPECT_NO_MSAA);
+                    }
                     break;
                 case SG_VIEWTYPE_COLORATTACHMENT:
                     SOKOL_ASSERT(img);
@@ -19177,7 +19185,7 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
         _SG_VALIDATE(pass->_start_canary == 0, VALIDATE_BEGINPASS_CANARY);
         _SG_VALIDATE(pass->_end_canary == 0, VALIDATE_BEGINPASS_CANARY);
         if (is_compute_pass) {
-            // FIXME: validate that attachments are empty
+            _SG_VALIDATE(_sg_attachments_empty(&pass->attachments), VALIDATE_BEGINPASS_COMPUTEPASS_EXPECT_NO_ATTACHMENTS);
         } else if (is_swapchain_pass) {
             // this is a swapchain pass
             _SG_VALIDATE(pass->swapchain.width > 0, VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_WIDTH);
@@ -19570,13 +19578,10 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                         if (view->slot.state == SG_RESOURCESTATE_VALID) {
                             // the view object must be a texture view
                             _SG_VALIDATE(view->cmn.type == SG_VIEWTYPE_TEXTURE, VALIDATE_ABND_TEXVIEW_TYPE);
-                            // NOTE: an invalid texture ref is allowed and skips rendering
+                            // NOTE: an invalid image ref is allowed and skips rendering
                             if (_sg_image_ref_valid(&view->cmn.img.ref)) {
                                 const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
                                 _SG_VALIDATE(img->cmn.type == shd->cmn.textures[i].image_type, VALIDATE_ABND_TEXVIEW_IMAGETYPE_MISMATCH);
-                                if (!_sg.features.msaa_image_bindings) {
-                                    _SG_VALIDATE(img->cmn.sample_count == 1, VALIDATE_ABND_TEXVIEW_MSAA);
-                                }
                                 if (shd->cmn.textures[i].multisampled) {
                                     _SG_VALIDATE(img->cmn.sample_count > 1, VALIDATE_ABND_TEXVIEW_EXPECTED_MULTISAMPLED_IMAGE);
                                 }
@@ -19650,15 +19655,38 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
             }
         }
 
-        // has expected storage images
-        for (size_t i = 0; i < SG_MAX_STORAGEIMAGE_BINDSLOTS; i++) {
-            if (shd->cmn.storage_images[i].stage != SG_SHADERSTAGE_NONE) {
-                _SG_VALIDATE(bindings->storage_images[i].id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_SIMGVIEW);
-                // FIXME FIXME FIXME
+        // has expected storage images (only allowed in compute passes)
+        if (_sg.cur_pass.is_compute) {
+            for (size_t i = 0; i < SG_MAX_STORAGEIMAGE_BINDSLOTS; i++) {
+                if (shd->cmn.storage_images[i].stage != SG_SHADERSTAGE_NONE) {
+                    _SG_VALIDATE(bindings->storage_images[i].id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_SIMGVIEW);
+                    if (bindings->storage_images[i].id != SG_INVALID_ID) {
+                        const _sg_view_t* view = _sg_lookup_view(bindings->storage_images[i].id);
+                        // the view object must be alive
+                        _SG_VALIDATE(view != 0, VALIDATE_ABND_SIMGVIEW_ALIVE);
+                        if (view) {
+                            // NOTE: an invalid view state is allowed and skips rendering
+                            if (view->slot.state == SG_RESOURCESTATE_VALID) {
+                                // the view object must be a storage-image-view
+                                _SG_VALIDATE(view->cmn.type == SG_VIEWTYPE_STORAGEIMAGE, VALIDATE_ABND_SIMGVIEW_TYPE);
+                                // NOTE: an invalid image ref is allowed and skips rendering
+                                if (_sg_image_ref_valid(&view->cmn.img.ref)) {
+                                    const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+                                    _SG_VALIDATE(img->cmn.type == shd->cmn.storage_images[i].image_type, VALIDATE_ABND_SIMGVIEW_IMAGETYPE_MISMATCH);
+                                    _SG_VALIDATE(img->cmn.pixel_format == shd->cmn.storage_images[i].access_format, VALIDATE_ABND_SIMGVIEW_ACCESSFORMAT);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            for (size_t i = 0; i < SG_MAX_STORAGEIMAGE_BINDSLOTS; i++) {
+                _SG_VALIDATE(bindings->storage_images[i].id == SG_INVALID_ID, VALIDATE_ABND_EXPECTED_NO_SIMGVIEW);
             }
         }
 
-        // the same image cannot be bound as texture and pass attachment
+        // the same image cannot be used as texture binding and pass attachment
         if (!_sg_attachments_empty(&_sg.cur_pass.atts)) {
             for (size_t tex_idx = 0; tex_idx < SG_MAX_TEXTURE_BINDSLOTS; tex_idx++) {
                 if (shd->cmn.textures[tex_idx].stage != SG_SHADERSTAGE_NONE) {
@@ -19677,6 +19705,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 }
             }
         }
+
         return _sg_validate_end();
     #endif
 }
