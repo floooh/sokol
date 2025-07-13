@@ -20382,7 +20382,7 @@ _SOKOL_PRIVATE void _sg_discard_compute(void) {
 }
 
 _SOKOL_PRIVATE void _sg_compute_pass_track_storage_buffer(const _sg_buffer_ref_t* ref, bool readonly) {
-    SOKOL_ASSERT(!_sg_buffer_ref_alive(ref));
+    SOKOL_ASSERT(_sg_buffer_ref_alive(ref));
     if (!readonly) {
         _sg_tracker_add(&_sg.compute.readwrite_sbufs, ref->sref.id);
     }
