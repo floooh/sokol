@@ -948,6 +948,14 @@ _SOKOL_PRIVATE void _sgimgui_igsettooltip(const char* fmt, ...) {
     va_end(args);
 }
 
+_SOKOL_PRIVATE bool _sgimgui_igbegintooltip(void) {
+    return _SGIMGUI_IMGUI_FUNC(BeginTooltip)();
+}
+
+_SOKOL_PRIVATE void _sgimgui_igendtooltip(void) {
+    _SGIMGUI_IMGUI_FUNC(EndTooltip)();
+}
+
 _SOKOL_PRIVATE bool _sgimgui_igsliderfloatex(const char* label, float* v, float v_min, float v_max, const char* format, ImGuiSliderFlags flags) {
     #if defined(__cplusplus)
         return ImGui::SliderFloat(label, v, v_min, v_max, format, flags);
@@ -3209,6 +3217,43 @@ _SOKOL_PRIVATE void _sgimgui_pop_debug_group(void* user_data) {
 }
 
 /*--- IMGUI HELPERS ----------------------------------------------------------*/
+_SOKOL_PRIVATE void _sgimgui_draw_image(sgimgui_t* ctx, sg_image img, float* opt_scale_ptr, float max_width) {
+    if (sg_query_image_state(img) != SG_RESOURCESTATE_VALID) {
+        _sgimgui_igtext("Image not in valid state.");
+        return;
+    }
+    // try to find a texture view for the image
+    sg_view view = {SG_INVALID_ID};
+    for (int i = 0; i < ctx->view_window.num_slots; i++) {
+        const sgimgui_view_t* view_ui = &ctx->view_window.slots[i];
+        view = view_ui->res_id;
+        if (sg_query_view_type(view) == SG_VIEWTYPE_TEXTURE) {
+            sg_image view_img = sg_query_view_image(view);
+            if (view_img.id == img.id) {
+                break;
+            }
+        }
+    }
+    if (view.id != SG_INVALID_ID) {
+        _sgimgui_igpushidint((int)view.id);
+        float scale = 1.0f;
+        if (opt_scale_ptr) {
+            _sgimgui_igsliderfloatex("Scale", opt_scale_ptr, 0.125f, 8.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
+            scale = *opt_scale_ptr;
+        }
+        float w = (float)sg_query_image_width(img) * scale;
+        float h = (float)sg_query_image_height(img) * scale;
+        if ((max_width > 1.0f) && (w > max_width)) {
+            h *= max_width / w;
+            w = max_width;
+        }
+        _sgimgui_igimage(simgui_imtextureid(view), IMVEC2(w, h));
+        _sgimgui_igpopid();
+    } else {
+        _sgimgui_igtext("Image has no texture view.", img.id);
+    }
+}
+
 _SOKOL_PRIVATE bool _sgimgui_draw_resid_list_item(uint32_t res_id, const char* label, bool selected) {
     _sgimgui_igpushidint((int)res_id);
     bool res;
@@ -3280,6 +3325,15 @@ _SOKOL_PRIVATE bool _sgimgui_draw_view_link(sgimgui_t* ctx, sg_view view) {
     if (view.id != SG_INVALID_ID) {
         const sgimgui_view_t* view_ui = &ctx->view_window.slots[_sgimgui_slot_index(view.id)];
         retval = _sgimgui_draw_resid_link(5, view.id, view_ui->label.buf);
+        if (_sgimgui_igisitemhovered(0)) {
+            sg_image img = sg_query_view_image(view);
+            if (img.id != SG_INVALID_ID) {
+                if (_sgimgui_igbegintooltip()) {
+                    _sgimgui_draw_image(ctx, img, 0, 128.0f);
+                    _sgimgui_igendtooltip();
+                }
+            }
+        }
     }
     return retval;
 }
@@ -3470,35 +3524,6 @@ _SOKOL_PRIVATE void _sgimgui_draw_buffer_panel(sgimgui_t* ctx, sg_buffer buf) {
     }
 }
 
-_SOKOL_PRIVATE void _sgimgui_draw_image(sgimgui_t* ctx, sg_image img, float* scale) {
-    if (sg_query_image_state(img) != SG_RESOURCESTATE_VALID) {
-        _sgimgui_igtext("Image not in valid state.");
-        return;
-    }
-    // try to find a texture view for the image
-    sg_view view = {SG_INVALID_ID};
-    for (int i = 0; i < ctx->view_window.num_slots; i++) {
-        const sgimgui_view_t* view_ui = &ctx->view_window.slots[i];
-        view = view_ui->res_id;
-        if (sg_query_view_type(view) == SG_VIEWTYPE_TEXTURE) {
-            sg_image view_img = sg_query_view_image(view);
-            if (view_img.id == img.id) {
-                break;
-            }
-        }
-    }
-    if (view.id != SG_INVALID_ID) {
-        _sgimgui_igpushidint((int)view.id);
-        _sgimgui_igsliderfloatex("Scale", scale, 0.125f, 8.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
-        float w = (float)sg_query_image_width(img) * (*scale);
-        float h = (float)sg_query_image_height(img) * (*scale);
-        _sgimgui_igimage(simgui_imtextureid(view), IMVEC2(w, h));
-        _sgimgui_igpopid();
-    } else {
-        _sgimgui_igtext("No valid texture view found for image 0x08X", img.id);
-    }
-}
-
 _SOKOL_PRIVATE void _sgimgui_draw_image_panel(sgimgui_t* ctx, sg_image img) {
     if (img.id != SG_INVALID_ID) {
         _sgimgui_igbeginchild("image", IMVEC2(0,0), false, 0);
@@ -3509,7 +3534,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_image_panel(sgimgui_t* ctx, sg_image img) {
             _sgimgui_igtext("Label: %s", img_ui->label.buf[0] ? img_ui->label.buf : "---");
             _sgimgui_draw_resource_slot(&info.slot);
             _sgimgui_igseparator();
-            _sgimgui_draw_image(ctx, img, &img_ui->ui_scale);
+            _sgimgui_draw_image(ctx, img, &img_ui->ui_scale, 4096.0f);
             _sgimgui_igseparator();
             _sgimgui_igtext("Type:           %s", _sgimgui_imagetype_string(desc->type));
             _sgimgui_igtext("Usage:\n");
@@ -3940,7 +3965,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_image_view(sgimgui_t* ctx, const char* title, 
     _sgimgui_igtext("  Slice: %d", desc->slice);
     _sgimgui_igseparator();
     sgimgui_view_t* view_ui = &ctx->view_window.slots[_sgimgui_slot_index(view.id)];
-    _sgimgui_draw_image(ctx, desc->image, &view_ui->ui_scale);
+    _sgimgui_draw_image(ctx, desc->image, &view_ui->ui_scale, 4096.0f);
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_texture_view(sgimgui_t* ctx, const char* title, sg_view view, const sg_texture_view_desc* desc) {
@@ -3955,7 +3980,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_texture_view(sgimgui_t* ctx, const char* title
     _sgimgui_igtext("  Slices Count: %d", desc->slices.count);
     _sgimgui_igseparator();
     sgimgui_view_t* view_ui = &ctx->view_window.slots[_sgimgui_slot_index(view.id)];
-    _sgimgui_draw_image(ctx, desc->image, &view_ui->ui_scale);
+    _sgimgui_draw_image(ctx, desc->image, &view_ui->ui_scale, 4096.0f);
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_view_panel(sgimgui_t* ctx, sg_view view) {
@@ -4003,13 +4028,12 @@ _SOKOL_PRIVATE void _sgimgui_draw_bindings_panel(sgimgui_t* ctx, const sg_bindin
     for (int i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
         sg_buffer buf = bnd->vertex_buffers[i];
         if (buf.id != SG_INVALID_ID) {
-            _sgimgui_igseparator();
-            _sgimgui_igtext("Vertex Buffer Slot #%d:", i);
-            _sgimgui_igtext("  Buffer: "); _sgimgui_igsameline();
+            _sgimgui_igtext("Vertex Buffer #%d:", i); _sgimgui_igsameline();
             if (_sgimgui_draw_buffer_link(ctx, buf)) {
                 _sgimgui_show_buffer(ctx, buf);
             }
-            _sgimgui_igtext("  Offset: %d", bnd->vertex_buffer_offsets[i]);
+            _sgimgui_igsameline();
+            _sgimgui_igtext("offset: %d", bnd->vertex_buffer_offsets[i]);
         }
     }
     _sgimgui_igpopid();
@@ -4017,13 +4041,12 @@ _SOKOL_PRIVATE void _sgimgui_draw_bindings_panel(sgimgui_t* ctx, const sg_bindin
     if (bnd->index_buffer.id != SG_INVALID_ID) {
         sg_buffer buf = bnd->index_buffer;
         if (buf.id != SG_INVALID_ID) {
-            _sgimgui_igseparator();
-            _sgimgui_igtext("Index Buffer Slot:");
-            _sgimgui_igtext("  Buffer: "); _sgimgui_igsameline();
+            _sgimgui_igtext("Index Buffer:"); _sgimgui_igsameline();
             if (_sgimgui_draw_buffer_link(ctx, buf)) {
                 _sgimgui_show_buffer(ctx, buf);
             }
-            _sgimgui_igtext("  Offset: %d", bnd->index_buffer_offset);
+            _sgimgui_igsameline();
+            _sgimgui_igtext("offset: %d", bnd->index_buffer_offset);
         }
     }
     _sgimgui_igpopid();
@@ -4031,9 +4054,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_bindings_panel(sgimgui_t* ctx, const sg_bindin
     for (int i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
         sg_view view = bnd->storage_buffers[i];
         if (view.id != SG_INVALID_ID) {
-            _sgimgui_igseparator();
-            _sgimgui_igtext("Storage Buffer Slot #%d:", i);
-            _sgimgui_igtext("  View: "); _sgimgui_igsameline();
+            _sgimgui_igtext("Storage Buffer #%d:", i); _sgimgui_igsameline();
             if (_sgimgui_draw_view_link(ctx, view)) {
                 _sgimgui_show_view(ctx, view);
             }
@@ -4044,9 +4065,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_bindings_panel(sgimgui_t* ctx, const sg_bindin
     for (int i = 0; i < SG_MAX_TEXTURE_BINDSLOTS; i++) {
         sg_view view = bnd->textures[i];
         if (view.id != SG_INVALID_ID) {
-            _sgimgui_igseparator();
-            _sgimgui_igtext("Texture Slot #%d:", i);
-            _sgimgui_igtext("  View: "); _sgimgui_igsameline();
+            _sgimgui_igtext("Texture Slot %d:", i); _sgimgui_igsameline();
             if (_sgimgui_draw_view_link(ctx, view)) {
                 _sgimgui_show_view(ctx, view);
             }
@@ -4057,9 +4076,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_bindings_panel(sgimgui_t* ctx, const sg_bindin
     for (int i = 0; i < SG_MAX_STORAGEIMAGE_BINDSLOTS; i++) {
         sg_view view = bnd->storage_images[i];
         if (view.id != SG_INVALID_ID) {
-            _sgimgui_igseparator();
-            _sgimgui_igtext("Storage Image Slot #%d:", i);
-            _sgimgui_igtext("  View: "); _sgimgui_igsameline();
+            _sgimgui_igtext("Storage Image #%d:", i); _sgimgui_igsameline();
             if (_sgimgui_draw_view_link(ctx, view)) {
                 _sgimgui_show_view(ctx, view);
             }
@@ -4070,9 +4087,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_bindings_panel(sgimgui_t* ctx, const sg_bindin
     for (int i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
         sg_sampler smp = bnd->samplers[i];
         if (smp.id != SG_INVALID_ID) {
-            _sgimgui_igseparator();
-            _sgimgui_igtext("Sampler Slot #%d:", i);
-            _sgimgui_igtext("  Sampler: "); _sgimgui_igsameline();
+            _sgimgui_igtext("Sampler Slot #%d:", i); _sgimgui_igsameline();
             if (_sgimgui_draw_sampler_link(ctx, smp)) {
                 _sgimgui_show_sampler(ctx, smp);
             }
@@ -4181,7 +4196,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_uniforms_panel(sgimgui_t* ctx, const sgimgui_a
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_passaction_panel(const sg_pass_action* action, int num_color_atts) {
-    _sgimgui_igtext("Pass Action: ");
+    _sgimgui_igtext("Pass Action:");
     for (int i = 0; i < num_color_atts; i++) {
         const sg_color_attachment_action* c_att = &action->colors[i];
         _sgimgui_igtext("  Color Attachment %d:", i);
@@ -4228,13 +4243,37 @@ _SOKOL_PRIVATE void _sgimgui_draw_passaction_panel(const sg_pass_action* action,
     }
 }
 
-_SOKOL_PRIVATE void _sgimgui_draw_attachments_panel(sgimgui_t* ctx, const sg_attachments* atts) {
-    (void)ctx; (void)atts;
-    _sgimgui_igtext("FIXME FIXME FIXME!");
+_SOKOL_PRIVATE void _sgimgui_draw_attachments_panel(sgimgui_t* ctx, const sg_attachments* atts, int num_color_atts) {
+    _sgimgui_igtext("Attachments:");
+    for (int i = 0; i < num_color_atts; i++) {
+        if (atts->colors[i].id!= SG_INVALID_ID) {
+            sg_view view = atts->colors[i];
+            _sgimgui_igtext("  Color Attachment #%d:", i); _sgimgui_igsameline();
+            if (_sgimgui_draw_view_link(ctx, view)) {
+                _sgimgui_show_view(ctx, view);
+            }
+        }
+    }
+    for (int i = 0; i < num_color_atts; i++) {
+        if (atts->resolves[i].id != SG_INVALID_ID) {
+            sg_view view = atts->resolves[i];
+            _sgimgui_igtext("  Resolve Attachment #%d:", i); _sgimgui_igsameline();
+            if (_sgimgui_draw_view_link(ctx, view)) {
+                _sgimgui_show_view(ctx, view);
+            }
+        }
+    }
+    if (atts->depth_stencil.id != SG_INVALID_ID) {
+        sg_view view = atts->depth_stencil;
+        _sgimgui_igtext("  Depth Stencil Attachment:"); _sgimgui_igsameline();
+        if (_sgimgui_draw_view_link(ctx, view)) {
+            _sgimgui_show_view(ctx, view);
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_swapchain_panel(sg_swapchain* swapchain) {
-    _sgimgui_igtext("Swapchain");
+    _sgimgui_igtext("Swapchain:");
     _sgimgui_igtext("  Width: %d", swapchain->width);
     _sgimgui_igtext("  Height: %d", swapchain->height);
     _sgimgui_igtext("  Sample Count: %d", swapchain->sample_count);
@@ -4274,7 +4313,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_swapchain_panel(sg_swapchain* swapchain) {
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_pass_panel(sgimgui_t* ctx, sg_pass* pass) {
-    bool is_compute_pass = false;
+    bool is_compute_pass = pass->compute;
     bool is_attachments_pass = false;
     bool is_swapchain_pass = false;
     int num_color_atts = 0;
@@ -4285,17 +4324,21 @@ _SOKOL_PRIVATE void _sgimgui_draw_pass_panel(sgimgui_t* ctx, sg_pass* pass) {
                 is_attachments_pass = true;
             }
         }
-        if (num_color_atts == 0) {
+        if (pass->attachments.depth_stencil.id != SG_INVALID_ID) {
+            is_attachments_pass = true;
+        }
+        if (!is_attachments_pass) {
             num_color_atts = 1;
             is_swapchain_pass = true;
         }
     }
-    _sgimgui_igtext("Compute: %s", _sgimgui_bool_string(pass->compute));
+    _sgimgui_igtext("Compute: %s", _sgimgui_bool_string(is_compute_pass));
+    _sgimgui_igseparator();
     if (!is_compute_pass) {
         _sgimgui_draw_passaction_panel(&pass->action, num_color_atts);
         _sgimgui_igseparator();
         if (is_attachments_pass) {
-            _sgimgui_draw_attachments_panel(ctx, &pass->attachments);
+            _sgimgui_draw_attachments_panel(ctx, &pass->attachments, num_color_atts);
         } else if (is_swapchain_pass) {
             _sgimgui_draw_swapchain_panel(&pass->swapchain);
         }
