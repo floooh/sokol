@@ -4259,7 +4259,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT, "invalid pixel format for non-render-target image") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_MSAA_BUT_NO_ATTACHMENT, "non-attachment images cannot be multisampled") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DEPTH_3D_IMAGE, "3D images cannot have a depth/stencil image format") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_EXPECT_IMMUTABLE, "render/storage attachment images must be sg_image_usage.immutable") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_EXPECT_IMMUTABLE, "attachment and storage images must be sg_image_usage.immutable") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_EXPECT_NO_DATA, "render/storage attachment images cannot be initialized with data") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_PIXELFORMAT, "invalid pixel format for render attachment image") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_RESOLVE_EXPECT_NO_MSAA, "resolve attachment images cannot be multisampled") \
@@ -7414,6 +7414,7 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
         const sg_shader_storage_image* src = &desc->storage_images[i];
         _sg_shader_storage_image_t* dst = &cmn->storage_images[i];
         if (src->stage != SG_SHADERSTAGE_NONE) {
+            cmn->required_bindings_and_uniforms |= required_bindings_flag;
             dst->stage = src->stage;
             dst->image_type = src->image_type;
             dst->access_format = src->access_format;
@@ -15547,7 +15548,26 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         }
     }
 
-    // FIXME: apply storage texture bindings
+    // apply storage images (only allowed in compute passes)
+    if (_sg.cur_pass.is_compute) {
+        for (size_t i = 0; i < SG_MAX_STORAGEIMAGE_BINDSLOTS; i++) {
+            const _sg_view_t* simg_view = bnd->simg_views[i];
+            if (simg_view == 0) {
+                continue;
+            }
+            const sg_shader_stage stage = shd->cmn.storage_images[i].stage;
+            SOKOL_ASSERT(stage == SG_SHADERSTAGE_COMPUTE);
+            const NSUInteger mtl_slot = shd->mtl.simg_texture_n[i];
+            SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS);
+            SOKOL_ASSERT(0 == _sg_image_ref_ptr(&simg_view->cmn.img.ref)->cmn.active_slot);
+            SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
+            if (!_sg_sref_slot_eql(&_sg.mtl.state_cache.cur_cstexs[mtl_slot], &simg_view->slot)) {
+                _sg.mtl.state_cache.cur_cstexs[mtl_slot] = _sg_sref(&simg_view->slot);
+                [_sg.mtl.compute_cmd_encoder setTexture:_sg_mtl_id(simg_view->mtl.tex_view[0]) atIndex:mtl_slot];
+                _sg_stats_add(metal.bindings.num_set_compute_texture, 1);
+            }
+        }
+    }
 
     return true;
 }
@@ -21389,7 +21409,17 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
         }
     }
 
-    // FIXME: storage images
+    for (size_t i = 0; i < SG_MAX_STORAGEIMAGE_BINDSLOTS; i++) {
+        if (shd->cmn.storage_images[i].stage != SG_SHADERSTAGE_NONE) {
+            SOKOL_ASSERT(bindings->storage_images[i].id != SG_INVALID_ID);
+            bnd.simg_views[i] = _sg_lookup_view(bindings->storage_images[i].id);
+            if (bnd.simg_views[i]) {
+                _sg.next_draw_valid &= _sg_image_ref_valid(&bnd.simg_views[i]->cmn.img.ref);
+            } else {
+                _sg.next_draw_valid = false;
+            }
+        }
+    }
 
     if (_sg.next_draw_valid) {
         _sg.next_draw_valid &= _sg_apply_bindings(&bnd);
