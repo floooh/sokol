@@ -290,6 +290,7 @@ typedef struct sgimgui_pipeline_t {
 
 typedef struct sgimgui_view_t {
     sg_view res_id;
+    float ui_scale;
     sgimgui_str_t label;
     sg_view_desc desc;
 } sgimgui_view_t;
@@ -1790,6 +1791,7 @@ _SOKOL_PRIVATE void _sgimgui_view_created(sgimgui_t* ctx, sg_view res_id, int sl
     SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->view_window.num_slots));
     sgimgui_view_t* view = &ctx->view_window.slots[slot_index];
     view->res_id = res_id;
+    view->ui_scale = 1.0f;
     view->label = _sgimgui_make_str(desc->label);
     view->desc = *desc;
 }
@@ -3468,28 +3470,33 @@ _SOKOL_PRIVATE void _sgimgui_draw_buffer_panel(sgimgui_t* ctx, sg_buffer buf) {
     }
 }
 
-_SOKOL_PRIVATE bool _sgimgui_image_renderable(sg_image_type type, sg_pixel_format fmt, int sample_count) {
-    return (type == SG_IMAGETYPE_2D)
-        && sg_query_pixelformat(fmt).sample
-        && sample_count == 1;
-}
-
-_SOKOL_PRIVATE void _sgimgui_draw_texture_view(sg_view view, float* scale) {
-    if (sg_query_view_state(view) != SG_RESOURCESTATE_VALID) {
-        _sgimgui_igtext("View not in valid state.");
+_SOKOL_PRIVATE void _sgimgui_draw_image(sgimgui_t* ctx, sg_image img, float* scale) {
+    if (sg_query_image_state(img) != SG_RESOURCESTATE_VALID) {
+        _sgimgui_igtext("Image not in valid state.");
         return;
     }
-    if (sg_query_view_type(view) != SG_VIEWTYPE_TEXTURE) {
-        _sgimgui_igtext("View not a texture view.");
-        return;
+    // try to find a texture view for the image
+    sg_view view = {SG_INVALID_ID};
+    for (int i = 0; i < ctx->view_window.num_slots; i++) {
+        const sgimgui_view_t* view_ui = &ctx->view_window.slots[i];
+        view = view_ui->res_id;
+        if (sg_query_view_type(view) == SG_VIEWTYPE_TEXTURE) {
+            sg_image view_img = sg_query_view_image(view);
+            if (view_img.id == img.id) {
+                break;
+            }
+        }
     }
-    _sgimgui_igpushidint((int)view.id);
-    _sgimgui_igsliderfloatex("Scale", scale, 0.125f, 8.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
-    sg_image img = sg_query_view_image(view);
-    float w = (float)sg_query_image_width(img) * (*scale);
-    float h = (float)sg_query_image_height(img) * (*scale);
-    _sgimgui_igimage(simgui_imtextureid(view), IMVEC2(w, h));
-    _sgimgui_igpopid();
+    if (view.id != SG_INVALID_ID) {
+        _sgimgui_igpushidint((int)view.id);
+        _sgimgui_igsliderfloatex("Scale", scale, 0.125f, 8.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
+        float w = (float)sg_query_image_width(img) * (*scale);
+        float h = (float)sg_query_image_height(img) * (*scale);
+        _sgimgui_igimage(simgui_imtextureid(view), IMVEC2(w, h));
+        _sgimgui_igpopid();
+    } else {
+        _sgimgui_igtext("No valid texture view found for image 0x08X", img.id);
+    }
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_image_panel(sgimgui_t* ctx, sg_image img) {
@@ -3502,8 +3509,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_image_panel(sgimgui_t* ctx, sg_image img) {
             _sgimgui_igtext("Label: %s", img_ui->label.buf[0] ? img_ui->label.buf : "---");
             _sgimgui_draw_resource_slot(&info.slot);
             _sgimgui_igseparator();
-            // FIXME: can't render an image without a texture view, hmmm...
-            //_sgimgui_draw_embedded_image(ctx, img, &img_ui->ui_scale);
+            _sgimgui_draw_image(ctx, img, &img_ui->ui_scale);
             _sgimgui_igseparator();
             _sgimgui_igtext("Type:           %s", _sgimgui_imagetype_string(desc->type));
             _sgimgui_igtext("Usage:\n");
@@ -3916,7 +3922,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_pipeline_panel(sgimgui_t* ctx, sg_pipeline pip
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_buffer_view(sgimgui_t* ctx, const char* title, const sg_buffer_view_desc* desc) {
-    _sgimgui_igtext("%s:", title);
+    _sgimgui_igtext("%s: ", title);
     _sgimgui_igtext("  Buffer: "); _sgimgui_igsameline();
     if (_sgimgui_draw_buffer_link(ctx, desc->buffer)) {
         _sgimgui_show_buffer(ctx, desc->buffer);
@@ -3924,12 +3930,32 @@ _SOKOL_PRIVATE void _sgimgui_draw_buffer_view(sgimgui_t* ctx, const char* title,
     _sgimgui_igtext("  Offset: %d", desc->offset);
 }
 
-_SOKOL_PRIVATE void _sgimgui_draw_image_view(sgimgui_t* ctx, const sg_image_view_desc* desc) {
-
+_SOKOL_PRIVATE void _sgimgui_draw_image_view(sgimgui_t* ctx, const char* title, sg_view view, const sg_image_view_desc* desc) {
+    _sgimgui_igtext("%s: ", title);
+    _sgimgui_igtext("  Image: "); _sgimgui_igsameline();
+    if (_sgimgui_draw_image_link(ctx, desc->image)) {
+        _sgimgui_show_image(ctx, desc->image);
+    }
+    _sgimgui_igtext("  Mip Level: %d", desc->mip_level);
+    _sgimgui_igtext("  Slice: %d", desc->slice);
+    _sgimgui_igseparator();
+    sgimgui_view_t* view_ui = &ctx->view_window.slots[_sgimgui_slot_index(view.id)];
+    _sgimgui_draw_image(ctx, desc->image, &view_ui->ui_scale);
 }
 
-_SOKOL_PRIVATE void _sgimgui_draw_texture_view(sgimgui_t* ctx, const sg_texture_view_desc* desc) {
-
+_SOKOL_PRIVATE void _sgimgui_draw_texture_view(sgimgui_t* ctx, const char* title, sg_view view, const sg_texture_view_desc* desc) {
+    _sgimgui_igtext("%s: ", title);
+    _sgimgui_igtext("  Image: "); _sgimgui_igsameline();
+    if (_sgimgui_draw_image_link(ctx, desc->image)) {
+        _sgimgui_show_image(ctx, desc->image);
+    }
+    _sgimgui_igtext("  Mip Levels Base:  %d", desc->mip_levels.base);
+    _sgimgui_igtext("  Mip Levels Count: %d", desc->mip_levels.count);
+    _sgimgui_igtext("  Slices Base: %d", desc->slices.base);
+    _sgimgui_igtext("  Slices Count: %d", desc->slices.count);
+    _sgimgui_igseparator();
+    sgimgui_view_t* view_ui = &ctx->view_window.slots[_sgimgui_slot_index(view.id)];
+    _sgimgui_draw_image(ctx, desc->image, &view_ui->ui_scale);
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_view_panel(sgimgui_t* ctx, sg_view view) {
@@ -3948,19 +3974,19 @@ _SOKOL_PRIVATE void _sgimgui_draw_view_panel(sgimgui_t* ctx, sg_view view) {
                     _sgimgui_draw_buffer_view(ctx, "Storage Buffer Binding", &desc.storage_buffer_binding);
                     break;
                 case SG_VIEWTYPE_STORAGEIMAGE:
-                    _sgimgui_draw_image_view(ctx, &desc.storage_image_binding);
+                    _sgimgui_draw_image_view(ctx, "Storage Image Binding", view, &desc.storage_image_binding);
                     break;
                 case SG_VIEWTYPE_TEXTURE:
-                    _sgimgui_draw_texture_view(ctx, &desc.texture_binding);
+                    _sgimgui_draw_texture_view(ctx, "Texture Binding", view, &desc.texture_binding);
                     break;
                 case SG_VIEWTYPE_COLORATTACHMENT:
-                    _sgimgui_draw_image_view(ctx, &desc.color_attachment);
+                    _sgimgui_draw_image_view(ctx, "Color Attachment", view, &desc.color_attachment);
                     break;
                 case SG_VIEWTYPE_RESOLVEATTACHMENT:
-                    _sgimgui_draw_image_view(ctx, &desc.resolve_attachment);
+                    _sgimgui_draw_image_view(ctx, "Resolve Attachment", view, &desc.resolve_attachment);
                     break;
                 case SG_VIEWTYPE_DEPTHSTENCILATTACHMENT:
-                    _sgimgui_draw_image_view(ctx, &desc.depth_stencil_attachment);
+                    _sgimgui_draw_image_view(ctx, "Depth Stencil Attachment", view, &desc.depth_stencil_attachment);
                     break;
                 default:
                     break;
@@ -3968,45 +3994,6 @@ _SOKOL_PRIVATE void _sgimgui_draw_view_panel(sgimgui_t* ctx, sg_view view) {
         } else {
             _sgimgui_igtext("View 0x%08X not valid.", view.id);
         }
-        /*
-        sg_attachments_info info = sg_query_attachments_info(atts);
-        if (info.slot.state == SG_RESOURCESTATE_VALID) {
-            sgimgui_attachments_t* atts_ui = &ctx->attachments_window.slots[_sgimgui_slot_index(atts.id)];
-            _sgimgui_igtext("Label: %s", atts_ui->label.buf[0] ? atts_ui->label.buf : "---");
-            _sgimgui_draw_resource_slot(&info.slot);
-            for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-                if (atts_ui->desc.colors[i].image.id == SG_INVALID_ID) {
-                    break;
-                }
-                _sgimgui_igseparator();
-                _sgimgui_igtext("Color Image #%d:", i);
-                _sgimgui_draw_attachment(ctx, &atts_ui->desc.colors[i], &atts_ui->color_image_scale[i]);
-            }
-            for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-                if (atts_ui->desc.resolves[i].image.id == SG_INVALID_ID) {
-                    break;
-                }
-                _sgimgui_igseparator();
-                _sgimgui_igtext("Resolve Image #%d:", i);
-                _sgimgui_draw_attachment(ctx, &atts_ui->desc.resolves[i], &atts_ui->resolve_image_scale[i]);
-            }
-            if (atts_ui->desc.depth_stencil.image.id != SG_INVALID_ID) {
-                _sgimgui_igseparator();
-                _sgimgui_igtext("Depth-Stencil Image:");
-                _sgimgui_draw_attachment(ctx, &atts_ui->desc.depth_stencil, &atts_ui->ds_image_scale);
-            }
-            for (int i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
-                if (atts_ui->desc.storages[i].image.id == SG_INVALID_ID) {
-                    break;
-                }
-                _sgimgui_igseparator();
-                _sgimgui_igtext("Storage Image #%d:", i);
-                _sgimgui_draw_attachment(ctx, &atts_ui->desc.storages[i], &atts_ui->storage_image_scale[i]);
-            }
-        } else {
-            _sgimgui_igtext("Attachments 0x%08X not valid.", atts.id);
-        }
-        */
         _sgimgui_igendchild();
     }
 }
