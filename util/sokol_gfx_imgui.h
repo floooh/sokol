@@ -1557,6 +1557,18 @@ _SOKOL_PRIVATE const char* _sgimgui_shaderattrbasetype_string(sg_shader_attr_bas
     }
 }
 
+_SOKOL_PRIVATE const char* _sgimgui_viewtype_string(sg_view_type t) {
+    switch (t) {
+        case SG_VIEWTYPE_STORAGEBUFFER:             return "SG_VIEWTYPE_STORAGEBUFFER";
+        case SG_VIEWTYPE_STORAGEIMAGE:              return "SG_VIEWTYPE_STORAGEIMAGE";
+        case SG_VIEWTYPE_TEXTURE:                   return "SG_VIEWTYPE_TEXTURE";
+        case SG_VIEWTYPE_COLORATTACHMENT:           return "SG_VIEWTYPE_COLORATTACHMENT";
+        case SG_VIEWTYPE_RESOLVEATTACHMENT:         return "SG_VIEWTYPE_RESOLVEATTACHMENT";
+        case SG_VIEWTYPE_DEPTHSTENCILATTACHMENT:    return "SG_VIEWTYPE_DEPTHSTENCILATTACHMENT";
+        default:                                    return "???";
+    }
+}
+
 _SOKOL_PRIVATE const char* _sgimgui_bool_string(bool b) {
     return b ? "true" : "false";
 }
@@ -3462,24 +3474,22 @@ _SOKOL_PRIVATE bool _sgimgui_image_renderable(sg_image_type type, sg_pixel_forma
         && sample_count == 1;
 }
 
-_SOKOL_PRIVATE void _sgimgui_draw_texture_view(sgimgui_t* ctx, sg_view view, float* scale) {
-    (void)ctx; (void)view; (void)scale;
-    _sgimgui_igtext("FIXME: render texture view");
-    /* FIXME FIXME FIXME
-    if (sg_query_image_state(img) == SG_RESOURCESTATE_VALID) {
-        sgimgui_image_t* img_ui = &ctx->image_window.slots[_sgimgui_slot_index(img.id)];
-        if (_sgimgui_image_renderable(img_ui->desc.type, img_ui->desc.pixel_format, img_ui->desc.sample_count)) {
-            _sgimgui_igpushidint((int)img.id);
-            _sgimgui_igsliderfloatex("Scale", scale, 0.125f, 8.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
-            float w = (float)img_ui->desc.width * (*scale);
-            float h = (float)img_ui->desc.height * (*scale);
-            _sgimgui_igimage(simgui_imtextureid(img_ui->res_id), IMVEC2(w, h));
-            _sgimgui_igpopid();
-        } else {
-            _sgimgui_igtext("Image not renderable.");
-        }
+_SOKOL_PRIVATE void _sgimgui_draw_texture_view(sg_view view, float* scale) {
+    if (sg_query_view_state(view) != SG_RESOURCESTATE_VALID) {
+        _sgimgui_igtext("View not in valid state.");
+        return;
     }
-    */
+    if (sg_query_view_type(view) != SG_VIEWTYPE_TEXTURE) {
+        _sgimgui_igtext("View not a texture view.");
+        return;
+    }
+    _sgimgui_igpushidint((int)view.id);
+    _sgimgui_igsliderfloatex("Scale", scale, 0.125f, 8.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
+    sg_image img = sg_query_view_image(view);
+    float w = (float)sg_query_image_width(img) * (*scale);
+    float h = (float)sg_query_image_height(img) * (*scale);
+    _sgimgui_igimage(simgui_imtextureid(view), IMVEC2(w, h));
+    _sgimgui_igpopid();
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_image_panel(sgimgui_t* ctx, sg_image img) {
@@ -3905,10 +3915,59 @@ _SOKOL_PRIVATE void _sgimgui_draw_pipeline_panel(sgimgui_t* ctx, sg_pipeline pip
     }
 }
 
+_SOKOL_PRIVATE void _sgimgui_draw_buffer_view(sgimgui_t* ctx, const char* title, const sg_buffer_view_desc* desc) {
+    _sgimgui_igtext("%s:", title);
+    _sgimgui_igtext("  Buffer: "); _sgimgui_igsameline();
+    if (_sgimgui_draw_buffer_link(ctx, desc->buffer)) {
+        _sgimgui_show_buffer(ctx, desc->buffer);
+    }
+    _sgimgui_igtext("  Offset: %d", desc->offset);
+}
+
+_SOKOL_PRIVATE void _sgimgui_draw_image_view(sgimgui_t* ctx, const sg_image_view_desc* desc) {
+
+}
+
+_SOKOL_PRIVATE void _sgimgui_draw_texture_view(sgimgui_t* ctx, const sg_texture_view_desc* desc) {
+
+}
+
 _SOKOL_PRIVATE void _sgimgui_draw_view_panel(sgimgui_t* ctx, sg_view view) {
     if (view.id != SG_INVALID_ID) {
-        _sgimgui_igbeginchild("views", IMVEC2(0,0), false, 0);
-        _sgimgui_igtext("FIXME FIXME FIXME"); (void)ctx;
+        _sgimgui_igbeginchild("view", IMVEC2(0,0), false, 0);
+        sg_view_info info = sg_query_view_info(view);
+        if (info.slot.state == SG_RESOURCESTATE_VALID) {
+            sgimgui_view_t* view_ui = &ctx->view_window.slots[_sgimgui_slot_index(view.id)];
+            _sgimgui_igtext("Label: %s", view_ui->label.buf[0] ? view_ui->label.buf : "---");
+            _sgimgui_draw_resource_slot(&info.slot);
+            _sgimgui_igseparator();
+            const sg_view_desc desc = sg_query_view_desc(view);
+            const sg_view_type type = sg_query_view_type(view);
+            switch (type) {
+                case SG_VIEWTYPE_STORAGEBUFFER:
+                    _sgimgui_draw_buffer_view(ctx, "Storage Buffer Binding", &desc.storage_buffer_binding);
+                    break;
+                case SG_VIEWTYPE_STORAGEIMAGE:
+                    _sgimgui_draw_image_view(ctx, &desc.storage_image_binding);
+                    break;
+                case SG_VIEWTYPE_TEXTURE:
+                    _sgimgui_draw_texture_view(ctx, &desc.texture_binding);
+                    break;
+                case SG_VIEWTYPE_COLORATTACHMENT:
+                    _sgimgui_draw_image_view(ctx, &desc.color_attachment);
+                    break;
+                case SG_VIEWTYPE_RESOLVEATTACHMENT:
+                    _sgimgui_draw_image_view(ctx, &desc.resolve_attachment);
+                    break;
+                case SG_VIEWTYPE_DEPTHSTENCILATTACHMENT:
+                    _sgimgui_draw_image_view(ctx, &desc.depth_stencil_attachment);
+                    break;
+                default:
+                    break;
+            }
+        } else {
+            _sgimgui_igtext("View 0x%08X not valid.", view.id);
+        }
         /*
         sg_attachments_info info = sg_query_attachments_info(atts);
         if (info.slot.state == SG_RESOURCESTATE_VALID) {
@@ -4766,10 +4825,10 @@ SOKOL_API_IMPL void sgimgui_draw_menu(sgimgui_t* ctx, const char* title) {
         _sgimgui_igmenuitemboolptr("Frame Stats", 0, &ctx->frame_stats_window.open, true);
         _sgimgui_igmenuitemboolptr("Buffers", 0, &ctx->buffer_window.open, true);
         _sgimgui_igmenuitemboolptr("Images", 0, &ctx->image_window.open, true);
+        _sgimgui_igmenuitemboolptr("Views", 0, &ctx->view_window.open, true);
         _sgimgui_igmenuitemboolptr("Samplers", 0, &ctx->sampler_window.open, true);
         _sgimgui_igmenuitemboolptr("Shaders", 0, &ctx->shader_window.open, true);
         _sgimgui_igmenuitemboolptr("Pipelines", 0, &ctx->pipeline_window.open, true);
-        _sgimgui_igmenuitemboolptr("Views", 0, &ctx->view_window.open, true);
         _sgimgui_igmenuitemboolptr("Calls", 0, &ctx->capture_window.open, true);
         _sgimgui_igendmenu();
     }

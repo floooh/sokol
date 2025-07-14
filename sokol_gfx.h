@@ -3212,6 +3212,7 @@ typedef enum sg_view_type {
     SG_VIEWTYPE_COLORATTACHMENT,
     SG_VIEWTYPE_RESOLVEATTACHMENT,
     SG_VIEWTYPE_DEPTHSTENCILATTACHMENT,
+    _SG_VIEWTYPE_FORCE_U32 = 0x7FFFFFFF
 } sg_view_type;
 
 /*
@@ -19150,7 +19151,7 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
                     _SG_VALIDATE(img->cmn.usage.depth_stencil_attachment, VALIDATE_VIEWDESC_DEPTHSTENCILATTACHMENT_USAGE);
                     _SG_VALIDATE(_sg_is_valid_attachment_depth_format(img->cmn.pixel_format), VALIDATE_VIEWDESC_DEPTHSTENCILATTACHMENT_PIXELFORMAT);
                     break;
-                case SG_VIEWTYPE_INVALID:
+                default:
                     SOKOL_UNREACHABLE;
                     break;
             }
