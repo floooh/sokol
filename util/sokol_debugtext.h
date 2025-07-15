@@ -753,6 +753,9 @@ SOKOL_DEBUGTEXT_API_DECL void sdtx_putr(const char* str, int len);    // 'put ra
 SOKOL_DEBUGTEXT_API_DECL int sdtx_printf(const char* fmt, ...) SOKOL_DEBUGTEXT_PRINTF_ATTR;
 SOKOL_DEBUGTEXT_API_DECL int sdtx_vprintf(const char* fmt, va_list args);
 
+/* language bindings helper: get the internal printf format buffer */
+SOKOL_DEBUGTEXT_API_DECL sdtx_range sdtx_get_cleared_fmt_buffer(void);
+
 #ifdef __cplusplus
 } /* extern "C" */
 /* C++ const-ref wrappers */
@@ -4952,6 +4955,16 @@ SOKOL_DEBUGTEXT_API_DECL int sdtx_printf(const char* fmt, ...) {
     // make sure we're 0-terminated in case we're on an old MSVC
     _sdtx.fmt_buf[_sdtx.fmt_buf_size-1] = 0;
     sdtx_puts(_sdtx.fmt_buf);
+    return res;
+}
+
+SOKOL_DEBUGTEXT_API_DECL sdtx_range sdtx_get_cleared_fmt_buffer(void) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    SOKOL_ASSERT(_sdtx.fmt_buf && (_sdtx.fmt_buf_size >= 2));
+    memset(_sdtx.fmt_buf, 0, _sdtx.fmt_buf_size);
+    sdtx_range res; _sdtx_clear(&res, sizeof(res));
+    res.ptr = _sdtx.fmt_buf;
+    res.size = _sdtx.fmt_buf_size - 1;
     return res;
 }
 
