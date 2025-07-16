@@ -1970,12 +1970,10 @@ enum {
     SG_MAX_VERTEX_ATTRIBUTES = 16,
     SG_MAX_MIPMAPS = 16,
     SG_MAX_TEXTUREARRAY_LAYERS = 128,
-    SG_MAX_UNIFORMBLOCK_BINDSLOTS = 8,
     SG_MAX_VERTEXBUFFER_BINDSLOTS = 8,
-    SG_MAX_TEXTURE_BINDSLOTS = 16,
+    SG_MAX_UNIFORMBLOCK_BINDSLOTS = 8,
+    SG_MAX_VIEW_BINDSLOTS = 32,
     SG_MAX_SAMPLER_BINDSLOTS = 16,
-    SG_MAX_STORAGEBUFFER_BINDSLOTS = 8,
-    SG_MAX_STORAGEIMAGE_BINDSLOTS = 4,
     SG_MAX_TEXTURE_SAMPLER_PAIRS = 16,
 };
 
@@ -2168,6 +2166,10 @@ typedef struct sg_limits {
     int max_image_size_array;       // max width/height of SG_IMAGETYPE_ARRAY images
     int max_image_array_layers;     // max number of layers in SG_IMAGETYPE_ARRAY images
     int max_vertex_attrs;           // max number of vertex attributes, clamped to SG_MAX_VERTEX_ATTRIBUTES
+    int max_sampled_textures_per_shader_stage; // FIXME! (min 16)
+    int max_samplers_per_shader_stage;         // FIXME! (min 16)
+    int max_storage_buffers_per_shader_stage;  // FIXME! (min 8)
+    int max_storage_images_per_shader_stage;   // FIXME! (min 4)
     int gl_max_vertex_uniform_components;    // <= GL_MAX_VERTEX_UNIFORM_COMPONENTS (only on GL backends)
     int gl_max_combined_texture_image_units; // <= GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS (only on GL backends)
 } sg_limits;
@@ -3007,14 +3009,14 @@ typedef struct sg_pass {
         @vs vs
         layout(binding=0) uniform vs_params { ... };
         layout(binding=0) readonly buffer ssbo { ... };
-        layout(binding=0) uniform texture2D vs_tex;
+        layout(binding=1) uniform texture2D vs_tex;
         layout(binding=0) uniform sampler vs_smp;
         ...
         @end
 
         @fs fs
         layout(binding=1) uniform fs_params { ... };
-        layout(binding=1) uniform texture2D fs_tex;
+        layout(binding=2) uniform texture2D fs_tex;
         layout(binding=1) uniform sampler fs_smp;
         ...
         @end
@@ -3023,22 +3025,22 @@ typedef struct sg_pass {
 
         const sg_bindings bnd = {
             .vertex_buffers[0] = ...,
-            .textures[0] = vs_tex,
-            .textures[1] = fs_tex,
+            .views[0] = ssbo_view,
+            .views[0] = vs_tex_view,
+            .views[2] = fs_tex_view,
             .samplers[0] = vs_smp,
             .samplers[1] = fs_smp,
-            .storage_buffers[0] = ssbo,
         };
 
     ...alternatively you can use code-generated slot indices:
 
         const sg_bindings bnd = {
             .vertex_buffers[0] = ...,
-            .textures[TEX_vs_tex] = vs_tex,
-            .textures[TEX_fs_tex] = fs_tex,
+            .views[SBUF_ssbo] = ssbo_view,
+            .views[TEX_vs_tex] = vs_tex_view,
+            .views[TEX_fs_tex] = fs_tex_view,
             .samplers[SMP_vs_smp] = vs_smp,
             .samplers[SMP_fs_smp] = fs_smp,
-            .storage_buffers[SBUF_ssbo] = ssbo,
         };
 
     Resource bindslots for a specific shader/pipeline may have gaps, and an
@@ -3060,9 +3062,7 @@ typedef struct sg_bindings {
     int vertex_buffer_offsets[SG_MAX_VERTEXBUFFER_BINDSLOTS];
     sg_buffer index_buffer;
     int index_buffer_offset;
-    sg_view textures[SG_MAX_TEXTURE_BINDSLOTS];
-    sg_view storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
-    sg_view storage_images[SG_MAX_STORAGEIMAGE_BINDSLOTS];
+    sg_view views[SG_MAX_VIEW_BINDSLOTS];
     sg_sampler samplers[SG_MAX_SAMPLER_BINDSLOTS];
     uint32_t _end_canary;
 } sg_bindings;
@@ -3537,15 +3537,41 @@ typedef struct sg_shader_uniform_block {
     sg_glsl_shader_uniform glsl_uniforms[SG_MAX_UNIFORMBLOCK_MEMBERS];
 } sg_shader_uniform_block;
 
-typedef struct sg_shader_texture {
-    sg_shader_stage stage;
+typedef struct sg_shader_texture_view {
     sg_image_type image_type;
     sg_image_sample_type sample_type;
     bool multisampled;
     uint8_t hlsl_register_t_n;      // HLSL register(tn) bind slot
     uint8_t msl_texture_n;          // MSL [[texture(n)]] bind slot
     uint8_t wgsl_group1_binding_n;  // WGSL @group(1) @binding(n) bind slot
-} sg_shader_texture;
+} sg_shader_texture_view;
+
+typedef struct sg_shader_storage_buffer_view {
+    bool readonly;
+    uint8_t hlsl_register_t_n;      // HLSL register(tn) bind slot (for readonly access)
+    uint8_t hlsl_register_u_n;      // HLSL register(un) bind slot (for read/write access)
+    uint8_t msl_buffer_n;           // MSL [[buffer(n)]] bind slot
+    uint8_t wgsl_group1_binding_n;  // WGSL @group(1) @binding(n) bind slot
+    uint8_t glsl_binding_n;         // GLSL layout(binding=n)
+} sg_shader_storage_buffer_view;
+
+typedef struct sg_shader_storage_image_view {
+    sg_image_type image_type;
+    sg_pixel_format access_format;  // shader-access pixel format
+    bool writeonly;                 // false means read/write access
+    uint8_t hlsl_register_u_n;      // HLSL register(un) bind slot
+    uint8_t msl_texture_n;          // MSL [[texture(n)]] bind slot
+    uint8_t wgsl_group1_binding_n;  // WGSL @group(2) @binding(n) bind slot
+    uint8_t glsl_binding_n;         // GLSL layout(binding=n)
+} sg_shader_storage_image_view;
+
+typedef struct sg_shader_view {
+    sg_shader_stage stage;
+    sg_view_type view_type; // STORAGEBUFFER, STORAGEIMAGE or TEXTURE
+    sg_shader_texture_view texture;
+    sg_shader_storage_buffer_view storage_buffer;
+    sg_shader_storage_image_view storage_image;
+} sg_shader_view;
 
 typedef struct sg_shader_sampler {
     sg_shader_stage stage;
@@ -3555,30 +3581,9 @@ typedef struct sg_shader_sampler {
     uint8_t wgsl_group1_binding_n;  // WGSL @group(1) @binding(n) bind slot
 } sg_shader_sampler;
 
-typedef struct sg_shader_storage_buffer {
-    sg_shader_stage stage;
-    bool readonly;
-    uint8_t hlsl_register_t_n;      // HLSL register(tn) bind slot (for readonly access)
-    uint8_t hlsl_register_u_n;      // HLSL register(un) bind slot (for read/write access)
-    uint8_t msl_buffer_n;           // MSL [[buffer(n)]] bind slot
-    uint8_t wgsl_group1_binding_n;  // WGSL @group(1) @binding(n) bind slot
-    uint8_t glsl_binding_n;         // GLSL layout(binding=n)
-} sg_shader_storage_buffer;
-
-typedef struct sg_shader_storage_image {
-    sg_shader_stage stage;          // must be NONE or COMPUTE
-    sg_image_type image_type;
-    sg_pixel_format access_format;  // shader-access pixel format
-    bool writeonly;                 // false means read/write access
-    uint8_t hlsl_register_u_n;      // HLSL register(un) bind slot
-    uint8_t msl_texture_n;          // MSL [[texture(n)]] bind slot
-    uint8_t wgsl_group2_binding_n;  // WGSL @group(2) @binding(n) bind slot
-    uint8_t glsl_binding_n;         // GLSL layout(binding=n)
-} sg_shader_storage_image;
-
 typedef struct sg_shader_texture_sampler_pair {
     sg_shader_stage stage;
-    uint8_t texture_slot;
+    uint8_t view_slot;              // must be SG_VIEWTYPE_TEXTURE
     uint8_t sampler_slot;
     const char* glsl_name;          // glsl name binding required because of GL 4.1 and WebGL2
 } sg_shader_texture_sampler_pair;
@@ -3594,9 +3599,7 @@ typedef struct sg_shader_desc {
     sg_shader_function compute_func;
     sg_shader_vertex_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
     sg_shader_uniform_block uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
-    sg_shader_storage_buffer storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
-    sg_shader_storage_image storage_images[SG_MAX_STORAGEIMAGE_BINDSLOTS];
-    sg_shader_texture textures[SG_MAX_TEXTURE_BINDSLOTS];
+    sg_shader_view views[SG_MAX_VIEW_BINDSLOTS];
     sg_shader_sampler samplers[SG_MAX_SAMPLER_BINDSLOTS];
     sg_shader_texture_sampler_pair texture_sampler_pairs[SG_MAX_TEXTURE_SAMPLER_PAIRS];
     sg_mtl_shader_threads_per_threadgroup mtl_threads_per_threadgroup;
@@ -5788,22 +5791,13 @@ typedef struct {
 
 typedef struct {
     sg_shader_stage stage;
-    bool readonly;
-} _sg_shader_storage_buffer_t;
-
-typedef struct {
-    sg_shader_stage stage;
+    bool sbuf_readonly;
+    bool simg_writeonly;
+    bool multisampled;
     sg_image_type image_type;
     sg_pixel_format access_format;
-    bool writeonly;
-} _sg_shader_storage_image_t;
-
-typedef struct {
-    sg_shader_stage stage;
-    sg_image_type image_type;
     sg_image_sample_type sample_type;
-    bool multisampled;
-} _sg_shader_texture_t;
+} _sg_shader_view_t;
 
 typedef struct {
     sg_shader_stage stage;
@@ -5821,9 +5815,7 @@ typedef struct {
     bool is_compute;
     _sg_shader_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
     _sg_shader_uniform_block_t uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
-    _sg_shader_storage_buffer_t storage_buffers[SG_MAX_STORAGEBUFFER_BINDSLOTS];
-    _sg_shader_storage_image_t storage_images[SG_MAX_STORAGEIMAGE_BINDSLOTS];
-    _sg_shader_texture_t textures[SG_MAX_TEXTURE_BINDSLOTS];
+    _sg_shader_view_t views[SG_MAX_VIEW_BINDSLOTS];
     _sg_shader_sampler_t samplers[SG_MAX_SAMPLER_BINDSLOTS];
     _sg_shader_texture_sampler_t texture_samplers[SG_MAX_TEXTURE_SAMPLER_PAIRS];
 } _sg_shader_common_t;
@@ -6259,9 +6251,9 @@ typedef struct _sg_shader_s {
         _sg_mtl_shader_func_t compute_func;
         MTLSize threads_per_threadgroup;
         uint8_t ub_buffer_n[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
-        uint8_t sbuf_buffer_n[SG_MAX_STORAGEBUFFER_BINDSLOTS];
-        uint8_t simg_texture_n[SG_MAX_STORAGEIMAGE_BINDSLOTS];
-        uint8_t tex_texture_n[SG_MAX_TEXTURE_BINDSLOTS];
+        uint8_t sbuf_buffer_n[SG_MAX_VIEW_BINDSLOTS];
+        uint8_t simg_texture_n[SG_MAX_VIEW_BINDSLOTS];
+        uint8_t tex_texture_n[SG_MAX_VIEW_BINDSLOTS];
         uint8_t smp_sampler_n[SG_MAX_SAMPLER_BINDSLOTS];
     } mtl;
 } _sg_mtl_shader_t;
@@ -6296,9 +6288,9 @@ typedef _sg_mtl_view_t _sg_view_t;
 
 // resource binding state cache
 #define _SG_MTL_MAX_STAGE_UB_BINDINGS (SG_MAX_UNIFORMBLOCK_BINDSLOTS)
-#define _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS (_SG_MTL_MAX_STAGE_UB_BINDINGS + SG_MAX_STORAGEBUFFER_BINDSLOTS)
+#define _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS (_SG_MTL_MAX_STAGE_UB_BINDINGS + SG_MAX_VIEW_BINDSLOTS)
 #define _SG_MTL_MAX_STAGE_BUFFER_BINDINGS (_SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS + SG_MAX_VERTEXBUFFER_BINDSLOTS)
-#define _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS (SG_MAX_TEXTURE_BINDSLOTS + SG_MAX_STORAGEIMAGE_BINDSLOTS)
+#define _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS (SG_MAX_VIEW_BINDSLOTS)
 #define _SG_MTL_MAX_STAGE_SAMPLER_BINDINGS (SG_MAX_SAMPLER_BINDSLOTS)
 typedef struct {
     _sg_sref_t cur_pip;
@@ -6558,9 +6550,7 @@ typedef struct {
     int ib_offset;
     _sg_buffer_t* vbs[SG_MAX_VERTEXBUFFER_BINDSLOTS];
     _sg_buffer_t* ib;
-    _sg_view_t* tex_views[SG_MAX_TEXTURE_BINDSLOTS];
-    _sg_view_t* sbuf_views[SG_MAX_STORAGEBUFFER_BINDSLOTS];
-    _sg_view_t* simg_views[SG_MAX_STORAGEIMAGE_BINDSLOTS];
+    _sg_view_t* views[SG_MAX_VIEW_BINDSLOTS];
     _sg_sampler_t* smps[SG_MAX_SAMPLER_BINDSLOTS];
 } _sg_bindings_ptrs_t;
 
