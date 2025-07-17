@@ -1972,7 +1972,7 @@ enum {
     SG_MAX_TEXTUREARRAY_LAYERS = 128,
     SG_MAX_VERTEXBUFFER_BINDSLOTS = 8,
     SG_MAX_UNIFORMBLOCK_BINDSLOTS = 8,
-    SG_MAX_VIEW_BINDSLOTS = 32,
+    SG_MAX_VIEW_BINDSLOTS = 28,
     SG_MAX_SAMPLER_BINDSLOTS = 16,
     SG_MAX_TEXTURE_SAMPLER_PAIRS = 16,
 };
@@ -3538,6 +3538,7 @@ typedef struct sg_shader_uniform_block {
 } sg_shader_uniform_block;
 
 typedef struct sg_shader_texture_view {
+    sg_shader_stage stage;
     sg_image_type image_type;
     sg_image_sample_type sample_type;
     bool multisampled;
@@ -3547,6 +3548,7 @@ typedef struct sg_shader_texture_view {
 } sg_shader_texture_view;
 
 typedef struct sg_shader_storage_buffer_view {
+    sg_shader_stage stage;
     bool readonly;
     uint8_t hlsl_register_t_n;      // HLSL register(tn) bind slot (for readonly access)
     uint8_t hlsl_register_u_n;      // HLSL register(un) bind slot (for read/write access)
@@ -3556,6 +3558,7 @@ typedef struct sg_shader_storage_buffer_view {
 } sg_shader_storage_buffer_view;
 
 typedef struct sg_shader_storage_image_view {
+    sg_shader_stage stage;
     sg_image_type image_type;
     sg_pixel_format access_format;  // shader-access pixel format
     bool writeonly;                 // false means read/write access
@@ -3566,8 +3569,6 @@ typedef struct sg_shader_storage_image_view {
 } sg_shader_storage_image_view;
 
 typedef struct sg_shader_view {
-    sg_shader_stage stage;
-    sg_view_type view_type; // STORAGEBUFFER, STORAGEIMAGE or TEXTURE
     sg_shader_texture_view texture;
     sg_shader_storage_buffer_view storage_buffer;
     sg_shader_storage_image_view storage_image;
@@ -5791,12 +5792,13 @@ typedef struct {
 
 typedef struct {
     sg_shader_stage stage;
-    bool sbuf_readonly;
-    bool simg_writeonly;
-    bool multisampled;
+    sg_view_type view_type;
     sg_image_type image_type;
     sg_pixel_format access_format;
     sg_image_sample_type sample_type;
+    bool sbuf_readonly;
+    bool simg_writeonly;
+    bool multisampled;
 } _sg_shader_view_t;
 
 typedef struct {
@@ -5806,7 +5808,7 @@ typedef struct {
 
 typedef struct {
     sg_shader_stage stage;
-    uint8_t texture_slot;
+    uint8_t view_slot;
     uint8_t sampler_slot;
 } _sg_shader_texture_sampler_t;
 
@@ -6251,9 +6253,7 @@ typedef struct _sg_shader_s {
         _sg_mtl_shader_func_t compute_func;
         MTLSize threads_per_threadgroup;
         uint8_t ub_buffer_n[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
-        uint8_t sbuf_buffer_n[SG_MAX_VIEW_BINDSLOTS];
-        uint8_t simg_texture_n[SG_MAX_VIEW_BINDSLOTS];
-        uint8_t tex_texture_n[SG_MAX_VIEW_BINDSLOTS];
+        uint8_t view_buffer_texture_n[SG_MAX_VIEW_BINDSLOTS];
         uint8_t smp_sampler_n[SG_MAX_SAMPLER_BINDSLOTS];
     } mtl;
 } _sg_mtl_shader_t;
@@ -7392,35 +7392,29 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
         }
     }
     const uint32_t required_bindings_flag = (1 << SG_MAX_UNIFORMBLOCK_BINDSLOTS);
-    for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
-        const sg_shader_storage_buffer* src = &desc->storage_buffers[i];
-        _sg_shader_storage_buffer_t* dst = &cmn->storage_buffers[i];
-        if (src->stage != SG_SHADERSTAGE_NONE) {
-            cmn->required_bindings_and_uniforms |= required_bindings_flag;
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        _sg_shader_view_t* dst = &cmn->views[i];
+        if (desc->views[i].texture.stage != SG_SHADERSTAGE_NONE) {
+            const sg_shader_texture_view* src = &desc->views[i].texture;
             dst->stage = src->stage;
-            dst->readonly = src->readonly;
-        }
-    }
-    for (size_t i = 0; i < SG_MAX_STORAGEIMAGE_BINDSLOTS; i++) {
-        const sg_shader_storage_image* src = &desc->storage_images[i];
-        _sg_shader_storage_image_t* dst = &cmn->storage_images[i];
-        if (src->stage != SG_SHADERSTAGE_NONE) {
-            cmn->required_bindings_and_uniforms |= required_bindings_flag;
-            dst->stage = src->stage;
-            dst->image_type = src->image_type;
-            dst->access_format = src->access_format;
-            dst->writeonly = src->writeonly;
-        }
-    }
-    for (size_t i = 0; i < SG_MAX_TEXTURE_BINDSLOTS; i++) {
-        const sg_shader_texture* src = &desc->textures[i];
-        _sg_shader_texture_t* dst = &cmn->textures[i];
-        if (src->stage != SG_SHADERSTAGE_NONE) {
-            cmn->required_bindings_and_uniforms |= required_bindings_flag;
-            dst->stage = src->stage;
+            dst->view_type = SG_VIEWTYPE_TEXTURE;
             dst->image_type = src->image_type;
             dst->sample_type = src->sample_type;
             dst->multisampled = src->multisampled;
+        } else if (desc->views[i].storage_buffer.stage != SG_SHADERSTAGE_NONE) {
+            const sg_shader_storage_buffer_view* src = &desc->views[i].storage_buffer;
+            cmn->required_bindings_and_uniforms |= required_bindings_flag;
+            dst->stage = src->stage;
+            dst->view_type = SG_VIEWTYPE_STORAGEBUFFER;
+            dst->sbuf_readonly = src->readonly;
+        } else if (desc->views[i].storage_image.stage != SG_SHADERSTAGE_NONE) {
+            const sg_shader_storage_image_view* src = &desc->views[i].storage_image;
+            cmn->required_bindings_and_uniforms |= required_bindings_flag;
+            dst->stage = src->stage;
+            dst->view_type = SG_VIEWTYPE_STORAGEIMAGE;
+            dst->image_type = src->image_type;
+            dst->access_format = src->access_format;
+            dst->simg_writeonly = src->writeonly;
         }
     }
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
@@ -7437,9 +7431,10 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
         _sg_shader_texture_sampler_t* dst = &cmn->texture_samplers[i];
         if (src->stage != SG_SHADERSTAGE_NONE) {
             dst->stage = src->stage;
-            SOKOL_ASSERT((src->texture_slot >= 0) && (src->texture_slot < SG_MAX_TEXTURE_BINDSLOTS));
-            SOKOL_ASSERT(desc->textures[src->texture_slot].stage == src->stage);
-            dst->texture_slot = src->texture_slot;
+            SOKOL_ASSERT((src->view_slot >= 0) && (src->view_slot < SG_MAX_VIEW_BINDSLOTS));
+            SOKOL_ASSERT(cmn->views[src->view_slot].view_type == SG_VIEWTYPE_TEXTURE);
+            SOKOL_ASSERT(cmn->views[src->view_slot].stage == src->stage);
+            dst->view_slot = src->view_slot;
             SOKOL_ASSERT((src->sampler_slot >= 0) && (src->sampler_slot < SG_MAX_SAMPLER_BINDSLOTS));
             SOKOL_ASSERT(desc->samplers[src->sampler_slot].stage == src->stage);
             dst->sampler_slot = src->sampler_slot;
@@ -14700,21 +14695,17 @@ _SOKOL_PRIVATE bool _sg_mtl_ensure_msl_bindslot_ranges(const sg_shader_desc* des
             return false;
         }
     }
-    for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
-        if (desc->storage_buffers[i].msl_buffer_n >= _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS) {
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        if (desc->views[i].texture.msl_texture_n >= _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS) {
+            _SG_ERROR(METAL_IMAGE_MSL_TEXTURE_SLOT_OUT_OF_RANGE);
+            return false;
+        }
+        if (desc->views[i].storage_buffer.msl_buffer_n >= _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS) {
             _SG_ERROR(METAL_STORAGEBUFFER_MSL_BUFFER_SLOT_OUT_OF_RANGE);
             return false;
         }
-    }
-    for (size_t i = 0; i < SG_MAX_STORAGEIMAGE_BINDSLOTS; i++) {
-        if (desc->storage_images[i].msl_texture_n >= _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS) {
+        if (desc->views[i].storage_image.msl_texture_n >= _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS) {
             _SG_ERROR(METAL_STORAGEIMAGE_MSL_TEXTURE_SLOT_OUT_OF_RANGE);
-            return false;
-        }
-    }
-    for (size_t i = 0; i < SG_MAX_TEXTURE_BINDSLOTS; i++) {
-        if (desc->textures[i].msl_texture_n >= _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS) {
-            _SG_ERROR(METAL_IMAGE_MSL_TEXTURE_SLOT_OUT_OF_RANGE);
             return false;
         }
     }
@@ -14745,14 +14736,16 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const 
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
         shd->mtl.ub_buffer_n[i] = desc->uniform_blocks[i].msl_buffer_n;
     }
-    for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
-        shd->mtl.sbuf_buffer_n[i] = desc->storage_buffers[i].msl_buffer_n;
-    }
-    for (size_t i = 0; i < SG_MAX_STORAGEIMAGE_BINDSLOTS; i++) {
-        shd->mtl.simg_texture_n[i] = desc->storage_images[i].msl_texture_n;
-    }
-    for (size_t i = 0; i < SG_MAX_TEXTURE_BINDSLOTS; i++) {
-        shd->mtl.tex_texture_n[i] = desc->textures[i].msl_texture_n;
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        const sg_shader_view* view = &desc->views[i];
+        SOKOL_ASSERT(0 == shd->mtl.view_buffer_texture_n[i]);
+        if (view->storage_buffer.stage != SG_SHADERSTAGE_NONE) {
+            shd->mtl.view_buffer_texture_n[i] = view->storage_buffer.msl_buffer_n;
+        } else if (view->texture.stage != SG_SHADERSTAGE_NONE) {
+            shd->mtl.view_buffer_texture_n[i] = view->texture.msl_texture_n;
+        } else if (view->storage_image.stage != SG_SHADERSTAGE_NONE) {
+            shd->mtl.view_buffer_texture_n[i] = view->storage_image.msl_texture_n;
+        }
     }
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
         shd->mtl.smp_sampler_n[i] = desc->samplers[i].msl_sampler_n;
@@ -14792,13 +14785,18 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, co
         MTLComputePipelineDescriptor* cp_desc = [[MTLComputePipelineDescriptor alloc] init];
         cp_desc.computeFunction = _sg_mtl_id(shd->mtl.compute_func.mtl_func);
         cp_desc.threadGroupSizeIsMultipleOfThreadExecutionWidth = true;
-        for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
-            const sg_shader_stage stage = shd->cmn.storage_buffers[i].stage;
-            SOKOL_ASSERT((stage != SG_SHADERSTAGE_VERTEX) && (stage != SG_SHADERSTAGE_FRAGMENT));
-            if ((stage == SG_SHADERSTAGE_COMPUTE) && shd->cmn.storage_buffers[i].readonly) {
-                const NSUInteger mtl_slot = shd->mtl.sbuf_buffer_n[i];
-                cp_desc.buffers[mtl_slot].mutability = MTLMutabilityImmutable;
+        for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+            const _sg_shader_view_t* view = &shd->cmn.views[i];
+            if (view->view_type != SG_VIEWTYPE_STORAGEBUFFER) {
+                continue;
             }
+            if (!view->sbuf_readonly) {
+                continue;
+            }
+            SOKOL_ASSERT(view->stage == SG_SHADERSTAGE_COMPUTE);
+            const NSUInteger mtl_slot = shd->mtl.view_buffer_texture_n[i];
+            SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_BUFFER_BINDINGS);
+            cp_desc.buffers[mtl_slot].mutability = MTLMutabilityImmutable;
         }
         #if defined(SOKOL_DEBUG)
             if (desc->label) {
@@ -14887,22 +14885,31 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, co
             rp_desc.colorAttachments[i].sourceAlphaBlendFactor = _sg_mtl_blend_factor(cs->blend.src_factor_alpha);
             rp_desc.colorAttachments[i].sourceRGBBlendFactor = _sg_mtl_blend_factor(cs->blend.src_factor_rgb);
         }
-        // set buffer mutability for all read-only buffers (vertex buffers and read-only storage buffers)
+        // Set buffer mutability for all buffers (vertex buffers and storage buffers).
+        // For vertex buffer it is guaranteed that neither the GPU nor CPU will update their content
+        // as long as it is in flight (since dynamic buffers are double-buffered, and vertex-buffers
+        // are not updated by the GPU).
+        // For storage buffer the same double-buffering applies, and if they are applied
+        // to the vertex- or fragment-stage must be declared as readonly in the shader.
         for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
             if (pip->cmn.vertex_buffer_layout_active[i]) {
                 const NSUInteger mtl_slot = _sg_mtl_vertexbuffer_bindslot(i);
                 rp_desc.vertexBuffers[mtl_slot].mutability = MTLMutabilityImmutable;
             }
         }
-        for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
-            const NSUInteger mtl_slot = shd->mtl.sbuf_buffer_n[i];
-            const sg_shader_stage stage = shd->cmn.storage_buffers[i].stage;
-            SOKOL_ASSERT(stage != SG_SHADERSTAGE_COMPUTE);
+        for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+            const _sg_shader_view_t* view = &shd->cmn.views[i];
+            if (view->view_type != SG_VIEWTYPE_STORAGEBUFFER) {
+                continue;
+            }
+            const sg_shader_stage stage = view->stage;
+            SOKOL_ASSERT(view->stage != SG_SHADERSTAGE_COMPUTE);
+            SOKOL_ASSERT(view->sbuf_readonly);
+            const NSUInteger mtl_slot = shd->mtl.view_buffer_texture_n[i];
+            SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_BUFFER_BINDINGS);
             if (stage == SG_SHADERSTAGE_VERTEX) {
-                SOKOL_ASSERT(shd->cmn.storage_buffers[i].readonly);
                 rp_desc.vertexBuffers[mtl_slot].mutability = MTLMutabilityImmutable;
             } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
-                SOKOL_ASSERT(shd->cmn.storage_buffers[i].readonly);
                 rp_desc.fragmentBuffers[mtl_slot].mutability = MTLMutabilityImmutable;
             }
         }
