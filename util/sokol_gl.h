@@ -3759,7 +3759,7 @@ static void _sgl_setup_common(void) {
 
     sg_view_desc view_desc;
     _sgl_clear(&view_desc, sizeof(view_desc));
-    view_desc.texture_binding.image = _sgl.def_img;
+    view_desc.texture.image = _sgl.def_img;
     view_desc.label = "sgl-default-texture-view";
     _sgl.def_view = sg_make_view(&view_desc);
     SOKOL_ASSERT(SG_INVALID_ID != _sgl.def_view.id);
@@ -3794,19 +3794,19 @@ static void _sgl_setup_common(void) {
     shd_desc.uniform_blocks[0].glsl_uniforms[0].glsl_name = "vs_params";
     shd_desc.uniform_blocks[0].glsl_uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
     shd_desc.uniform_blocks[0].glsl_uniforms[0].array_count = 8;
-    shd_desc.textures[0].stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.textures[0].image_type = SG_IMAGETYPE_2D;
-    shd_desc.textures[0].sample_type = SG_IMAGESAMPLETYPE_FLOAT;
-    shd_desc.textures[0].hlsl_register_t_n = 0;
-    shd_desc.textures[0].msl_texture_n = 0;
-    shd_desc.textures[0].wgsl_group1_binding_n = 64;
+    shd_desc.views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT;
+    shd_desc.views[0].texture.image_type = SG_IMAGETYPE_2D;
+    shd_desc.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
+    shd_desc.views[0].texture.hlsl_register_t_n = 0;
+    shd_desc.views[0].texture.msl_texture_n = 0;
+    shd_desc.views[0].texture.wgsl_group1_binding_n = 64;
     shd_desc.samplers[0].stage = SG_SHADERSTAGE_FRAGMENT;
     shd_desc.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
     shd_desc.samplers[0].hlsl_register_s_n = 0;
     shd_desc.samplers[0].msl_sampler_n = 0;
     shd_desc.samplers[0].wgsl_group1_binding_n = 80;
     shd_desc.texture_sampler_pairs[0].stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.texture_sampler_pairs[0].texture_slot = 0;
+    shd_desc.texture_sampler_pairs[0].view_slot = 0;
     shd_desc.texture_sampler_pairs[0].sampler_slot = 0;
     shd_desc.texture_sampler_pairs[0].glsl_name = "tex_smp";
     shd_desc.label = "sgl-shader";
@@ -3910,7 +3910,7 @@ static void _sgl_draw(_sgl_context_t* ctx, int layer_id) {
                             cur_uniform_index = -1;
                         }
                         if ((cur_tex_id != args->view.id) || (cur_smp_id != args->smp.id)) {
-                            ctx->bind.textures[0] = args->view;
+                            ctx->bind.views[0] = args->view;
                             ctx->bind.samplers[0] = args->smp;
                             sg_apply_bindings(&ctx->bind);
                             cur_tex_id = args->view.id;
