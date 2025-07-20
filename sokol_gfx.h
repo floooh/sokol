@@ -3798,9 +3798,9 @@ typedef struct sg_texture_view_desc {
 
 typedef struct sg_view_desc {
     uint32_t _start_canary;
-    sg_texture_view_desc texture_binding;
-    sg_buffer_view_desc storage_buffer_binding;
-    sg_image_view_desc storage_image_binding;
+    sg_texture_view_desc texture;
+    sg_buffer_view_desc storage_buffer;
+    sg_image_view_desc storage_image;
     sg_image_view_desc color_attachment;
     sg_image_view_desc resolve_attachment;
     sg_image_view_desc depth_stencil_attachment;
@@ -7515,18 +7515,18 @@ _SOKOL_PRIVATE void _sg_image_view_common_init(_sg_image_view_common_t* cmn, con
 }
 
 _SOKOL_PRIVATE void _sg_view_common_init(_sg_view_common_t* cmn, const sg_view_desc* desc, _sg_buffer_t* buf, _sg_image_t* img) {
-    if (desc->texture_binding.image.id != SG_INVALID_ID) {
+    if (desc->texture.image.id != SG_INVALID_ID) {
         SOKOL_ASSERT(img);
         cmn->type = SG_VIEWTYPE_TEXTURE;
-        _sg_texture_view_common_init(&cmn->img, &desc->texture_binding, img);
-    } else if (desc->storage_buffer_binding.buffer.id != SG_INVALID_ID) {
+        _sg_texture_view_common_init(&cmn->img, &desc->texture, img);
+    } else if (desc->storage_buffer.buffer.id != SG_INVALID_ID) {
         SOKOL_ASSERT(buf);
         cmn->type = SG_VIEWTYPE_STORAGEBUFFER;
-        _sg_buffer_view_common_init(&cmn->buf, &desc->storage_buffer_binding, buf);
-    } else if (desc->storage_image_binding.image.id != SG_INVALID_ID) {
+        _sg_buffer_view_common_init(&cmn->buf, &desc->storage_buffer, buf);
+    } else if (desc->storage_image.image.id != SG_INVALID_ID) {
         SOKOL_ASSERT(img);
         cmn->type = SG_VIEWTYPE_STORAGEIMAGE;
-        _sg_image_view_common_init(&cmn->img, &desc->storage_image_binding, img);
+        _sg_image_view_common_init(&cmn->img, &desc->storage_image, img);
     } else if (desc->color_attachment.image.id != SG_INVALID_ID) {
         SOKOL_ASSERT(img);
         cmn->type = SG_VIEWTYPE_COLORATTACHMENT;
@@ -19023,19 +19023,19 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
         const sg_image_view_desc* img_desc = 0;
         const sg_texture_view_desc* tex_desc = 0;
         const sg_buffer_view_desc* buf_desc = 0;
-        if (desc->texture_binding.image.id != SG_INVALID_ID) {
+        if (desc->texture.image.id != SG_INVALID_ID) {
             view_type = SG_VIEWTYPE_TEXTURE;
-            tex_desc = &desc->texture_binding;
+            tex_desc = &desc->texture;
         }
-        if (desc->storage_buffer_binding.buffer.id != SG_INVALID_ID) {
+        if (desc->storage_buffer.buffer.id != SG_INVALID_ID) {
             _SG_VALIDATE(SG_VIEWTYPE_INVALID == view_type, VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE);
             view_type = SG_VIEWTYPE_STORAGEBUFFER;
-            buf_desc = &desc->storage_buffer_binding;
+            buf_desc = &desc->storage_buffer;
         }
-        if (desc->storage_image_binding.image.id != SG_INVALID_ID) {
+        if (desc->storage_image.image.id != SG_INVALID_ID) {
             _SG_VALIDATE(SG_VIEWTYPE_INVALID == view_type, VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE);
             view_type = SG_VIEWTYPE_STORAGEIMAGE;
-            img_desc = &desc->storage_image_binding;
+            img_desc = &desc->storage_image;
         }
         if (desc->color_attachment.image.id != SG_INVALID_ID) {
             _SG_VALIDATE(SG_VIEWTYPE_INVALID == view_type, VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE);
@@ -20191,9 +20191,9 @@ _SOKOL_PRIVATE void _sg_init_view(_sg_view_t* view, const sg_view_desc* desc) {
     SOKOL_ASSERT(view && view->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(desc);
     if (_sg_validate_view_desc(desc)) {
-        uint32_t buf_id = desc->storage_buffer_binding.buffer.id;
-        uint32_t img_id = desc->texture_binding.image.id;
-        img_id = img_id ? img_id : desc->storage_image_binding.image.id;
+        uint32_t buf_id = desc->storage_buffer.buffer.id;
+        uint32_t img_id = desc->texture.image.id;
+        img_id = img_id ? img_id : desc->storage_image.image.id;
         img_id = img_id ? img_id : desc->color_attachment.image.id;
         img_id = img_id ? img_id : desc->resolve_attachment.image.id;
         img_id = img_id ? img_id : desc->depth_stencil_attachment.image.id;
@@ -21931,20 +21931,20 @@ SOKOL_API_IMPL sg_view_desc sg_query_view_desc(sg_view view_id) {
     if (view) {
         switch (view->cmn.type) {
             case SG_VIEWTYPE_STORAGEBUFFER:
-                desc.storage_buffer_binding.buffer.id = view->cmn.buf.ref.sref.id;
-                desc.storage_buffer_binding.offset = view->cmn.buf.offset;
+                desc.storage_buffer.buffer.id = view->cmn.buf.ref.sref.id;
+                desc.storage_buffer.offset = view->cmn.buf.offset;
                 break;
             case SG_VIEWTYPE_STORAGEIMAGE:
-                desc.storage_image_binding.image.id = view->cmn.img.ref.sref.id;
-                desc.storage_image_binding.mip_level = view->cmn.img.mip_level;
-                desc.storage_image_binding.slice = view->cmn.img.slice;
+                desc.storage_image.image.id = view->cmn.img.ref.sref.id;
+                desc.storage_image.mip_level = view->cmn.img.mip_level;
+                desc.storage_image.slice = view->cmn.img.slice;
                 break;
             case SG_VIEWTYPE_TEXTURE:
-                desc.texture_binding.image.id = view->cmn.img.ref.sref.id;
-                desc.texture_binding.mip_levels.base = view->cmn.img.mip_level;
-                desc.texture_binding.mip_levels.count = view->cmn.img.mip_level_count;
-                desc.texture_binding.slices.base = view->cmn.img.slice;
-                desc.texture_binding.slices.count = view->cmn.img.slice_count;
+                desc.texture.image.id = view->cmn.img.ref.sref.id;
+                desc.texture.mip_levels.base = view->cmn.img.mip_level;
+                desc.texture.mip_levels.count = view->cmn.img.mip_level_count;
+                desc.texture.slices.base = view->cmn.img.slice;
+                desc.texture.slices.count = view->cmn.img.slice_count;
                 break;
             case SG_VIEWTYPE_COLORATTACHMENT:
                 desc.color_attachment.image.id = view->cmn.img.ref.sref.id;
