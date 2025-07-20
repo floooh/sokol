@@ -1970,6 +1970,10 @@ enum {
     SG_MAX_VERTEX_ATTRIBUTES = 16,
     SG_MAX_MIPMAPS = 16,
     SG_MAX_TEXTUREARRAY_LAYERS = 128,
+    SG_MAX_STORAGEBUFFER_BINDINGS_PER_STAGE = 8,
+    SG_MAX_STORAGEIMAGE_BINDINGS_PER_STAGE = 4,
+    SG_MAX_TEXTURE_BINDINGS_PER_STAGE = 16,
+    SG_MAX_UNIFORMBLOCK_BINDINGS_PER_STAGE = 8,
     SG_MAX_VERTEXBUFFER_BINDSLOTS = 8,
     SG_MAX_UNIFORMBLOCK_BINDSLOTS = 8,
     SG_MAX_VIEW_BINDSLOTS = 28,
@@ -2166,10 +2170,6 @@ typedef struct sg_limits {
     int max_image_size_array;       // max width/height of SG_IMAGETYPE_ARRAY images
     int max_image_array_layers;     // max number of layers in SG_IMAGETYPE_ARRAY images
     int max_vertex_attrs;           // max number of vertex attributes, clamped to SG_MAX_VERTEX_ATTRIBUTES
-    int max_sampled_textures_per_shader_stage; // FIXME! (min 16)
-    int max_samplers_per_shader_stage;         // FIXME! (min 16)
-    int max_storage_buffers_per_shader_stage;  // FIXME! (min 8)
-    int max_storage_images_per_shader_stage;   // FIXME! (min 4)
     int gl_max_vertex_uniform_components;    // <= GL_MAX_VERTEX_UNIFORM_COMPONENTS (only on GL backends)
     int gl_max_combined_texture_image_units; // <= GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS (only on GL backends)
 } sg_limits;
@@ -6103,7 +6103,7 @@ typedef struct {
     int sem_index;
 } _sg_d3d11_shader_attr_t;
 
-#define _SG_D3D11_MAX_STAGE_UB_BINDINGS (SG_MAX_UNIFORMBLOCK_BINDSLOTS)
+#define _SG_D3D11_MAX_STAGE_UB_BINDINGS (SG_MAX_UNIFORMBLOCK_BINDINGS_PER_STAGE)
 #define _SG_D3D11_MAX_STAGE_SRV_BINDINGS (SG_MAX_IMAGE_BINDSLOTS + SG_MAX_STORAGEBUFFER_BINDSLOTS)
 #define _SG_D3D11_MAX_STAGE_UAV_BINDINGS (SG_MAX_STORAGEBUFFER_BINDSLOTS + SG_MAX_STORAGE_ATTACHMENTS)
 #define _SG_D3D11_MAX_STAGE_SMP_BINDINGS (SG_MAX_SAMPLER_BINDSLOTS)
@@ -6284,10 +6284,10 @@ typedef struct _sg_view_s {
 typedef _sg_mtl_view_t _sg_view_t;
 
 // resource binding state cache
-#define _SG_MTL_MAX_STAGE_UB_BINDINGS (SG_MAX_UNIFORMBLOCK_BINDSLOTS)
-#define _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS (_SG_MTL_MAX_STAGE_UB_BINDINGS + SG_MAX_VIEW_BINDSLOTS)
+#define _SG_MTL_MAX_STAGE_UB_BINDINGS (SG_MAX_UNIFORMBLOCK_BINDINGS_PER_STAGE)
+#define _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS (_SG_MTL_MAX_STAGE_UB_BINDINGS + SG_MAX_STORAGEBUFFER_BINDINGS_PER_STAGE)
 #define _SG_MTL_MAX_STAGE_BUFFER_BINDINGS (_SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS + SG_MAX_VERTEXBUFFER_BINDSLOTS)
-#define _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS (SG_MAX_VIEW_BINDSLOTS)
+#define _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS (SG_MAX_TEXTURE_BINDINGS_PER_STAGE + SG_MAX_STORAGEIMAGE_BINDINGS_PER_STAGE)
 #define _SG_MTL_MAX_STAGE_SAMPLER_BINDINGS (SG_MAX_SAMPLER_BINDSLOTS)
 typedef struct {
     _sg_sref_t cur_pip;
