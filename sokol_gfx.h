@@ -21300,12 +21300,19 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
         }
     }
 
-    for (int i = 0; i < SG_MAX_TEXTURE_BINDSLOTS; i++) {
-        if (shd->cmn.textures[i].stage != SG_SHADERSTAGE_NONE) {
-            SOKOL_ASSERT(bindings->textures[i].id != SG_INVALID_ID);
-            bnd.tex_views[i] = _sg_lookup_view(bindings->textures[i].id);
-            if (bnd.tex_views[i]) {
-                _sg.next_draw_valid &= _sg_image_ref_valid(&bnd.tex_views[i]->cmn.img.ref);
+    for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        if (shd->cmn.views[i].view_type != SG_VIEWTYPE_INVALID) {
+            SOKOL_ASSERT(bindings->views[i].id != SG_INVALID_ID);
+            bnd.views[i] = _sg_lookup_view(bindings->views[i].id);
+            if (bnd.views[i]) {
+                if (bnd.views[i]->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
+                    _sg.next_draw_valid &= _sg_buffer_ref_valid(&bnd.views[i]->cmn.buf.ref);
+                    if (_sg.cur_pass.is_compute) {
+                        _sg_compute_pass_track_storage_buffer(&bnd.views[i]->cmn.buf.ref, shd->cmn.views[i].sbuf_readonly);
+                    }
+                } else {
+                    _sg.next_draw_valid &= _sg_image_ref_valid(&bnd.views[i]->cmn.img.ref);
+                }
             } else {
                 _sg.next_draw_valid = false;
             }
@@ -21317,33 +21324,6 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
             SOKOL_ASSERT(bindings->samplers[i].id != SG_INVALID_ID);
             bnd.smps[i] = _sg_lookup_sampler(bindings->samplers[i].id);
             SOKOL_ASSERT(bnd.smps[i]);
-        }
-    }
-
-    for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
-        if (shd->cmn.storage_buffers[i].stage != SG_SHADERSTAGE_NONE) {
-            SOKOL_ASSERT(bindings->storage_buffers[i].id != SG_INVALID_ID);
-            bnd.sbuf_views[i] = _sg_lookup_view(bindings->storage_buffers[i].id);
-            if (bnd.sbuf_views[i]) {
-                _sg.next_draw_valid &= _sg_buffer_ref_valid(&bnd.sbuf_views[i]->cmn.buf.ref);
-                if (_sg.cur_pass.is_compute) {
-                    _sg_compute_pass_track_storage_buffer(&bnd.sbuf_views[i]->cmn.buf.ref, shd->cmn.storage_buffers[i].readonly);
-                }
-            } else {
-                _sg.next_draw_valid = false;
-            }
-        }
-    }
-
-    for (size_t i = 0; i < SG_MAX_STORAGEIMAGE_BINDSLOTS; i++) {
-        if (shd->cmn.storage_images[i].stage != SG_SHADERSTAGE_NONE) {
-            SOKOL_ASSERT(bindings->storage_images[i].id != SG_INVALID_ID);
-            bnd.simg_views[i] = _sg_lookup_view(bindings->storage_images[i].id);
-            if (bnd.simg_views[i]) {
-                _sg.next_draw_valid &= _sg_image_ref_valid(&bnd.simg_views[i]->cmn.img.ref);
-            } else {
-                _sg.next_draw_valid = false;
-            }
         }
     }
 
@@ -21880,27 +21860,25 @@ SOKOL_API_IMPL sg_shader_desc sg_query_shader_desc(sg_shader shd_id) {
             ub_desc->stage = ub->stage;
             ub_desc->size = ub->size;
         }
-        for (size_t sbuf_idx = 0; sbuf_idx < SG_MAX_STORAGEBUFFER_BINDSLOTS; sbuf_idx++) {
-            sg_shader_storage_buffer* sbuf_desc = &desc.storage_buffers[sbuf_idx];
-            const _sg_shader_storage_buffer_t* sbuf = &shd->cmn.storage_buffers[sbuf_idx];
-            sbuf_desc->stage = sbuf->stage;
-            sbuf_desc->readonly = sbuf->readonly;
-        }
-        for (size_t simg_idx = 0; simg_idx < SG_MAX_STORAGEIMAGE_BINDSLOTS; simg_idx++) {
-            sg_shader_storage_image* simg_desc = &desc.storage_images[simg_idx];
-            const _sg_shader_storage_image_t* simg = &shd->cmn.storage_images[simg_idx];
-            simg_desc->stage = simg->stage;
-            simg_desc->access_format = simg->access_format;
-            simg_desc->image_type = simg->image_type;
-            simg_desc->writeonly = simg->writeonly;
-        }
-        for (size_t tex_idx = 0; tex_idx < SG_MAX_TEXTURE_BINDSLOTS; tex_idx++) {
-            sg_shader_texture* tex_desc = &desc.textures[tex_idx];
-            const _sg_shader_texture_t* tex = &shd->cmn.textures[tex_idx];
-            tex_desc->stage = tex->stage;
-            tex_desc->image_type = tex->image_type;
-            tex_desc->sample_type = tex->sample_type;
-            tex_desc->multisampled = tex->multisampled;
+        for (size_t view_idx = 0; view_idx < SG_MAX_VIEW_BINDSLOTS; view_idx++) {
+            const _sg_shader_view_t* view = &shd->cmn.views[view_idx];
+            if (view->view_type == SG_VIEWTYPE_TEXTURE) {
+                sg_shader_texture_view* tex_desc = &desc.views[view_idx].texture;
+                tex_desc->stage = view->stage;
+                tex_desc->image_type = view->image_type;
+                tex_desc->sample_type = view->sample_type;
+                tex_desc->multisampled = view->multisampled;
+            } else if (shd->cmn.views[view_idx].view_type == SG_VIEWTYPE_STORAGEBUFFER) {
+                sg_shader_storage_buffer_view* sbuf_desc = &desc.views[view_idx].storage_buffer;
+                sbuf_desc->stage = view->stage;
+                sbuf_desc->readonly = view->sbuf_readonly;
+            } else if (shd->cmn.views[view_idx].view_type == SG_VIEWTYPE_STORAGEIMAGE) {
+                sg_shader_storage_image_view* simg_desc = &desc.views[view_idx].storage_image;
+                simg_desc->stage = view->stage;
+                simg_desc->access_format = view->access_format;
+                simg_desc->image_type = view->image_type;
+                simg_desc->writeonly = view->simg_writeonly;
+            }
         }
         for (size_t smp_idx = 0; smp_idx < SG_MAX_SAMPLER_BINDSLOTS; smp_idx++) {
             sg_shader_sampler* smp_desc = &desc.samplers[smp_idx];
@@ -21912,7 +21890,7 @@ SOKOL_API_IMPL sg_shader_desc sg_query_shader_desc(sg_shader shd_id) {
             sg_shader_texture_sampler_pair* tex_smp_desc = &desc.texture_sampler_pairs[tex_smp_idx];
             const _sg_shader_texture_sampler_t* tex_smp = &shd->cmn.texture_samplers[tex_smp_idx];
             tex_smp_desc->stage = tex_smp->stage;
-            tex_smp_desc->texture_slot = tex_smp->texture_slot;
+            tex_smp_desc->view_slot = tex_smp->view_slot;
             tex_smp_desc->sampler_slot = tex_smp->sampler_slot;
         }
     }
