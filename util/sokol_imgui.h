@@ -2628,7 +2628,7 @@ static void _simgui_update_texture(ImTextureData* tex) {
 
         sg_view_desc view_desc;
         _simgui_clear(&view_desc, sizeof(view_desc));
-        view_desc.texture_binding.image = img;
+        view_desc.texture.image = img;
         view_desc.label = "sokol-imgui-texture-view";
         sg_view view = sg_make_view(&view_desc);
 
@@ -2731,19 +2731,19 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     shd_desc.uniform_blocks[0].glsl_uniforms[0].glsl_name = "vs_params";
     shd_desc.uniform_blocks[0].glsl_uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
     shd_desc.uniform_blocks[0].glsl_uniforms[0].array_count = 1;
-    shd_desc.textures[0].stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.textures[0].image_type = SG_IMAGETYPE_2D;
-    shd_desc.textures[0].sample_type = SG_IMAGESAMPLETYPE_FLOAT;
-    shd_desc.textures[0].hlsl_register_t_n = 0;
-    shd_desc.textures[0].msl_texture_n = 0;
-    shd_desc.textures[0].wgsl_group1_binding_n = 64;
+    shd_desc.views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT;
+    shd_desc.views[0].texture.image_type = SG_IMAGETYPE_2D;
+    shd_desc.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
+    shd_desc.views[0].texture.hlsl_register_t_n = 0;
+    shd_desc.views[0].texture.msl_texture_n = 0;
+    shd_desc.views[0].texture.wgsl_group1_binding_n = 64;
     shd_desc.samplers[0].stage = SG_SHADERSTAGE_FRAGMENT;
     shd_desc.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
     shd_desc.samplers[0].hlsl_register_s_n = 0;
     shd_desc.samplers[0].msl_sampler_n = 0;
     shd_desc.samplers[0].wgsl_group1_binding_n = 80;
     shd_desc.texture_sampler_pairs[0].stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.texture_sampler_pairs[0].texture_slot = 0;
+    shd_desc.texture_sampler_pairs[0].view_slot = 0;
     shd_desc.texture_sampler_pairs[0].sampler_slot = 0;
     shd_desc.texture_sampler_pairs[0].glsl_name = "tex_smp";
     shd_desc.label = "sokol-imgui-shader";
@@ -2818,7 +2818,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     _simgui.def_pip = sg_make_pipeline(&pip_desc);
 
     // create unfilterable/nonfiltering variants of the shader and pipeline
-    shd_desc.textures[0].sample_type = SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT;
+    shd_desc.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT;
     shd_desc.samplers[0].sampler_type = SG_SAMPLERTYPE_NONFILTERING;
     shd_desc.label = "sokol-imgui-shader-unfilterable";
     _simgui.shd_unfilterable = sg_make_shader(&shd_desc);
@@ -2945,7 +2945,7 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
 static sg_pipeline _simgui_bind_texture_sampler(sg_bindings* bindings, ImTextureID imtex_id) {
     const sg_view tex_view = simgui_texture_view_from_imtextureid(imtex_id);
     const sg_image img = sg_query_view_image(tex_view);
-    bindings->textures[0] = tex_view;
+    bindings->views[0] = tex_view;
     bindings->samplers[0] = simgui_sampler_from_imtextureid(imtex_id);
     if (sg_query_pixelformat(sg_query_image_pixelformat(img)).filter) {
         return _simgui.def_pip;
