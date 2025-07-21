@@ -3654,10 +3654,14 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
                     num_valid_ubs++;
                 }
             }
-            int num_valid_textures = 0;
-            for (int i = 0; i < SG_MAX_TEXTURE_BINDSLOTS; i++) {
-                if (shd_ui->desc.textures[i].stage != SG_SHADERSTAGE_NONE) {
-                    num_valid_textures++;
+            int num_valid_views = 0;
+            for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+                const sg_shader_view* view = &shd_ui->desc.views[i];
+                if ((view->texture.stage != SG_SHADERSTAGE_NONE) ||
+                    (view->storage_buffer.stage != SG_SHADERSTAGE_NONE) ||
+                    (view->storage_image.stage != SG_SHADERSTAGE_NONE))
+                {
+                    num_valid_views++;
                 }
             }
             int num_valid_samplers = 0;
@@ -3670,18 +3674,6 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
             for (int i = 0; i < SG_MAX_TEXTURE_SAMPLER_PAIRS; i++) {
                 if (shd_ui->desc.texture_sampler_pairs[i].stage != SG_SHADERSTAGE_NONE) {
                     num_valid_texture_sampler_pairs++;
-                }
-            }
-            int num_valid_storage_buffers = 0;
-            for (int i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
-                if (shd_ui->desc.storage_buffers[i].stage != SG_SHADERSTAGE_NONE) {
-                    num_valid_storage_buffers++;
-                }
-            }
-            int num_valid_storage_images = 0;
-            for (int i = 0; i < SG_MAX_STORAGEIMAGE_BINDSLOTS; i++) {
-                if (shd_ui->desc.storage_images[i].stage != SG_SHADERSTAGE_NONE) {
-                    num_valid_storage_images++;
                 }
             }
             if (num_valid_ubs > 0) {
@@ -3713,21 +3705,48 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
                     _sgimgui_igtreepop();
                 }
             }
-            if (num_valid_textures > 0) {
-                if (_sgimgui_igtreenode("Textures")) {
-                    for (int i = 0; i < SG_MAX_TEXTURE_BINDSLOTS; i++) {
-                        const sg_shader_texture* std = &shd_ui->desc.textures[i];
-                        if (std->stage == SG_SHADERSTAGE_NONE) {
-                            continue;
+            if (num_valid_views > 0) {
+                if (_sgimgui_igtreenode("Views")) {
+                    for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+                        const sg_shader_view* view = &shd_ui->desc.views[i];
+                        if (view->texture.stage != SG_SHADERSTAGE_NONE) {
+                            const sg_shader_texture_view* tex = &view->texture;
+                            _sgimgui_igtext("- slot: %d", i);
+                            _sgimgui_igtext("  stage: %s", _sgimgui_shaderstage_string(tex->stage));
+                            _sgimgui_igtext("  type: SG_VIEWTYPE_TEXTURE");
+                            _sgimgui_igtext("  image_type: %s", _sgimgui_imagetype_string(tex->image_type));
+                            _sgimgui_igtext("  sample_type: %s", _sgimgui_imagesampletype_string(tex->sample_type));
+                            _sgimgui_igtext("  multisampled: %s", _sgimgui_bool_string(tex->multisampled));
+                            _sgimgui_igtext("  hlsl_register_t_n: %d", tex->hlsl_register_t_n);
+                            _sgimgui_igtext("  msl_texture_n: %d", tex->msl_texture_n);
+                            _sgimgui_igtext("  wgsl_group1_binding_n: %d", tex->wgsl_group1_binding_n);
+                        } else if (view->storage_buffer.stage != SG_SHADERSTAGE_NONE) {
+                            const sg_shader_storage_buffer_view* sbuf = &view->storage_buffer;
+                            _sgimgui_igtext("- slot: %d", i);
+                            _sgimgui_igtext("  stage: %s", _sgimgui_shaderstage_string(sbuf->stage));
+                            _sgimgui_igtext("  type: SG_VIEWTYPE_STORAGEBUFFER");
+                            _sgimgui_igtext("  readonly: %s", _sgimgui_bool_string(sbuf->readonly));
+                            if (sbuf->readonly) {
+                                _sgimgui_igtext("  hlsl_register_t_n: %d", sbuf->hlsl_register_t_n);
+                            } else {
+                                _sgimgui_igtext("  hlsl_register_u_n: %d", sbuf->hlsl_register_u_n);
+                            }
+                            _sgimgui_igtext("  msl_buffer_n: %d", sbuf->msl_buffer_n);
+                            _sgimgui_igtext("  wgsl_group1_binding_n: %d", sbuf->wgsl_group1_binding_n);
+                            _sgimgui_igtext("  glsl_binding_n: %d", sbuf->glsl_binding_n);
+                        } else if (view->storage_image.stage != SG_SHADERSTAGE_NONE) {
+                            const sg_shader_storage_image_view* simg = &view->storage_image;
+                            _sgimgui_igtext("- slot: %d", i);
+                            _sgimgui_igtext("  stage: %s", _sgimgui_shaderstage_string(simg->stage));
+                            _sgimgui_igtext("  type: SG_VIEWTYPE_STORAGEIMAGE");
+                            _sgimgui_igtext("  image_type: %s", _sgimgui_imagetype_string(simg->image_type));
+                            _sgimgui_igtext("  access_format: %s", _sgimgui_pixelformat_string(simg->access_format));
+                            _sgimgui_igtext("  writeonly: %s", _sgimgui_bool_string(simg->writeonly));
+                            _sgimgui_igtext("  hlsl_register_u_n: %d", simg->hlsl_register_u_n);
+                            _sgimgui_igtext("  msl_texture_n: %d", simg->msl_texture_n);
+                            _sgimgui_igtext("  wgsl_group2_binding_n: %d", simg->wgsl_group1_binding_n);
+                            _sgimgui_igtext("  glsl_binding_n: %d", simg->glsl_binding_n);
                         }
-                        _sgimgui_igtext("- slot: %d", i);
-                        _sgimgui_igtext("  stage: %s", _sgimgui_shaderstage_string(std->stage));
-                        _sgimgui_igtext("  image_type: %s", _sgimgui_imagetype_string(std->image_type));
-                        _sgimgui_igtext("  sample_type: %s", _sgimgui_imagesampletype_string(std->sample_type));
-                        _sgimgui_igtext("  multisampled: %s", _sgimgui_bool_string(std->multisampled));
-                        _sgimgui_igtext("  hlsl_register_t_n: %d", std->hlsl_register_t_n);
-                        _sgimgui_igtext("  msl_texture_n: %d", std->msl_texture_n);
-                        _sgimgui_igtext("  wgsl_group1_binding_n: %d", std->wgsl_group1_binding_n);
                     }
                     _sgimgui_igtreepop();
                 }
@@ -3758,51 +3777,9 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
                         }
                         _sgimgui_igtext("- slot: %d", i);
                         _sgimgui_igtext("  stage: %s", _sgimgui_shaderstage_string(stspd->stage));
-                        _sgimgui_igtext("  texture_slot: %d", stspd->texture_slot);
+                        _sgimgui_igtext("  view_slot: %d", stspd->view_slot);
                         _sgimgui_igtext("  sampler_slot: %d", stspd->sampler_slot);
                         _sgimgui_igtext("  glsl_name: %s", stspd->glsl_name ? stspd->glsl_name : "---");
-                    }
-                    _sgimgui_igtreepop();
-                }
-            }
-            if (num_valid_storage_buffers > 0) {
-                if (_sgimgui_igtreenode("Storage Buffers")) {
-                    for (int i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
-                        const sg_shader_storage_buffer* sbuf = &shd_ui->desc.storage_buffers[i];
-                        if (sbuf->stage == SG_SHADERSTAGE_NONE) {
-                            continue;
-                        }
-                        _sgimgui_igtext("- slot: %d", i);
-                        _sgimgui_igtext("  stage: %s", _sgimgui_shaderstage_string(sbuf->stage));
-                        _sgimgui_igtext("  readonly: %s", _sgimgui_bool_string(sbuf->readonly));
-                        if (sbuf->readonly) {
-                            _sgimgui_igtext("  hlsl_register_t_n: %d", sbuf->hlsl_register_t_n);
-                        } else {
-                            _sgimgui_igtext("  hlsl_register_u_n: %d", sbuf->hlsl_register_u_n);
-                        }
-                        _sgimgui_igtext("  msl_buffer_n: %d", sbuf->msl_buffer_n);
-                        _sgimgui_igtext("  wgsl_group1_binding_n: %d", sbuf->wgsl_group1_binding_n);
-                        _sgimgui_igtext("  glsl_binding_n: %d", sbuf->glsl_binding_n);
-                    }
-                    _sgimgui_igtreepop();
-                }
-            }
-            if (num_valid_storage_images > 0) {
-                if (_sgimgui_igtreenode("Storage Images")) {
-                    for (int i = 0; i < SG_MAX_STORAGEIMAGE_BINDSLOTS; i++) {
-                        const sg_shader_storage_image* simg = &shd_ui->desc.storage_images[i];
-                        if (simg->stage == SG_SHADERSTAGE_NONE) {
-                            continue;
-                        }
-                        _sgimgui_igtext("- slot: %d", i);
-                        _sgimgui_igtext("  stage: %s", _sgimgui_shaderstage_string(simg->stage));
-                        _sgimgui_igtext("  image_type: %s", _sgimgui_imagetype_string(simg->image_type));
-                        _sgimgui_igtext("  access_format: %s", _sgimgui_pixelformat_string(simg->access_format));
-                        _sgimgui_igtext("  writeonly: %s", _sgimgui_bool_string(simg->writeonly));
-                        _sgimgui_igtext("  hlsl_register_u_n: %d", simg->hlsl_register_u_n);
-                        _sgimgui_igtext("  msl_texture_n: %d", simg->msl_texture_n);
-                        _sgimgui_igtext("  wgsl_group2_binding_n: %d", simg->wgsl_group2_binding_n);
-                        _sgimgui_igtext("  glsl_binding_n: %d", simg->glsl_binding_n);
                     }
                     _sgimgui_igtreepop();
                 }
@@ -3996,13 +3973,13 @@ _SOKOL_PRIVATE void _sgimgui_draw_view_panel(sgimgui_t* ctx, sg_view view) {
             const sg_view_type type = sg_query_view_type(view);
             switch (type) {
                 case SG_VIEWTYPE_STORAGEBUFFER:
-                    _sgimgui_draw_buffer_view(ctx, "Storage Buffer Binding", &desc.storage_buffer_binding);
+                    _sgimgui_draw_buffer_view(ctx, "Storage Buffer", &desc.storage_buffer);
                     break;
                 case SG_VIEWTYPE_STORAGEIMAGE:
-                    _sgimgui_draw_image_view(ctx, "Storage Image Binding", view, &desc.storage_image_binding);
+                    _sgimgui_draw_image_view(ctx, "Storage Image", view, &desc.storage_image);
                     break;
                 case SG_VIEWTYPE_TEXTURE:
-                    _sgimgui_draw_texture_view(ctx, "Texture Binding", view, &desc.texture_binding);
+                    _sgimgui_draw_texture_view(ctx, "Texture", view, &desc.texture);
                     break;
                 case SG_VIEWTYPE_COLORATTACHMENT:
                     _sgimgui_draw_image_view(ctx, "Color Attachment", view, &desc.color_attachment);
@@ -4050,33 +4027,11 @@ _SOKOL_PRIVATE void _sgimgui_draw_bindings_panel(sgimgui_t* ctx, const sg_bindin
         }
     }
     _sgimgui_igpopid();
-    _sgimgui_igpushid("bnd_sbufs");
-    for (int i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
-        sg_view view = bnd->storage_buffers[i];
+    _sgimgui_igpushid("bnd_views");
+    for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        sg_view view = bnd->views[i];
         if (view.id != SG_INVALID_ID) {
-            _sgimgui_igtext("Storage Buffer #%d:", i); _sgimgui_igsameline();
-            if (_sgimgui_draw_view_link(ctx, view)) {
-                _sgimgui_show_view(ctx, view);
-            }
-        }
-    }
-    _sgimgui_igpopid();
-    _sgimgui_igpushid("bnd_texs");
-    for (int i = 0; i < SG_MAX_TEXTURE_BINDSLOTS; i++) {
-        sg_view view = bnd->textures[i];
-        if (view.id != SG_INVALID_ID) {
-            _sgimgui_igtext("Texture Slot %d:", i); _sgimgui_igsameline();
-            if (_sgimgui_draw_view_link(ctx, view)) {
-                _sgimgui_show_view(ctx, view);
-            }
-        }
-    }
-    _sgimgui_igpopid();
-    _sgimgui_igpushid("bnd_simgs");
-    for (int i = 0; i < SG_MAX_STORAGEIMAGE_BINDSLOTS; i++) {
-        sg_view view = bnd->storage_images[i];
-        if (view.id != SG_INVALID_ID) {
-            _sgimgui_igtext("Storage Image #%d:", i); _sgimgui_igsameline();
+            _sgimgui_igtext("View #%d:", i); _sgimgui_igsameline();
             if (_sgimgui_draw_view_link(ctx, view)) {
                 _sgimgui_show_view(ctx, view);
             }
