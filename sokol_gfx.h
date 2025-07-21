@@ -3303,9 +3303,7 @@ typedef struct sg_image_desc {
     uint32_t gl_texture_target;
     const void* mtl_textures[SG_NUM_INFLIGHT_FRAMES];
     const void* d3d11_texture;
-    const void* d3d11_shader_resource_view;
     const void* wgpu_texture;
-    const void* wgpu_texture_view;
     uint32_t _end_canary;
 } sg_image_desc;
 
@@ -6071,8 +6069,6 @@ typedef struct _sg_buffer_s {
     _sg_buffer_common_t cmn;
     struct {
         ID3D11Buffer* buf;
-        ID3D11ShaderResourceView* srv;
-        ID3D11UnorderedAccessView* uav;
     } d3d11;
 } _sg_d3d11_buffer_t;
 typedef _sg_d3d11_buffer_t _sg_buffer_t;
@@ -6085,7 +6081,6 @@ typedef struct _sg_image_s {
         ID3D11Texture2D* tex2d;
         ID3D11Texture3D* tex3d;
         ID3D11Resource* res;    // either tex2d or tex3d
-        ID3D11ShaderResourceView* srv;
     } d3d11;
 } _sg_d3d11_image_t;
 typedef _sg_d3d11_image_t _sg_image_t;
@@ -6105,8 +6100,8 @@ typedef struct {
 } _sg_d3d11_shader_attr_t;
 
 #define _SG_D3D11_MAX_STAGE_UB_BINDINGS (SG_MAX_UNIFORMBLOCK_BINDINGS_PER_STAGE)
-#define _SG_D3D11_MAX_STAGE_SRV_BINDINGS (SG_MAX_IMAGE_BINDSLOTS + SG_MAX_STORAGEBUFFER_BINDSLOTS)
-#define _SG_D3D11_MAX_STAGE_UAV_BINDINGS (SG_MAX_STORAGEBUFFER_BINDSLOTS + SG_MAX_STORAGE_ATTACHMENTS)
+#define _SG_D3D11_MAX_STAGE_SRV_BINDINGS (SG_MAX_TEXTURE_BINDINGS_PER_STAGE + SG_MAX_STORAGEBUFFER_BINDINGS_PER_STAGE)
+#define _SG_D3D11_MAX_STAGE_UAV_BINDINGS (SG_MAX_STORAGEBUFFER_BINDINGS_PER_STAGE + SG_MAX_STORAGEIMAGE_BINDINGS_PER_STAGE)
 #define _SG_D3D11_MAX_STAGE_SMP_BINDINGS (SG_MAX_SAMPLER_BINDSLOTS)
 
 typedef struct _sg_shader_s {
@@ -6120,11 +6115,9 @@ typedef struct _sg_shader_s {
         void* vs_blob;
         size_t vs_blob_length;
         uint8_t ub_register_b_n[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
-        uint8_t img_register_t_n[SG_MAX_IMAGE_BINDSLOTS];
+        uint8_t view_register_t_n[SG_MAX_VIEW_BINDSLOTS];
+        uint8_t view_register_u_n[SG_MAX_VIEW_BINDSLOTS];
         uint8_t smp_register_s_n[SG_MAX_SAMPLER_BINDSLOTS];
-        uint8_t sbuf_register_t_n[SG_MAX_STORAGEBUFFER_BINDSLOTS];
-        uint8_t sbuf_register_u_n[SG_MAX_STORAGEBUFFER_BINDSLOTS];
-        uint8_t simg_register_u_n[SG_MAX_STORAGE_ATTACHMENTS];
         ID3D11Buffer* all_cbufs[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
         ID3D11Buffer* vs_cbufs[_SG_D3D11_MAX_STAGE_UB_BINDINGS];
         ID3D11Buffer* fs_cbufs[_SG_D3D11_MAX_STAGE_UB_BINDINGS];
@@ -6149,24 +6142,17 @@ typedef struct _sg_pipeline_s {
 } _sg_d3d11_pipeline_t;
 typedef _sg_d3d11_pipeline_t _sg_pipeline_t;
 
-typedef struct {
-    union {
+typedef struct _sg_view_s {
+    _sg_slot_t slot;
+    _sg_view_common_t cmn;
+    struct {
+        ID3D11ShaderResourceView* srv;
+        ID3D11UnorderedAccessView* uav;
         ID3D11RenderTargetView* rtv;
         ID3D11DepthStencilView* dsv;
-        ID3D11UnorderedAccessView* uav;
-    } view;
-} _sg_d3d11_attachment_t;
-
-typedef struct _sg_attachments_s {
-    _sg_slot_t slot;
-    _sg_attachments_common_t cmn;
-    struct {
-        _sg_d3d11_attachment_t colors[SG_MAX_COLOR_ATTACHMENTS];
-        _sg_d3d11_attachment_t depth_stencil;
-        _sg_d3d11_attachment_t storages[SG_MAX_STORAGE_ATTACHMENTS];
     } d3d11;
-} _sg_d3d11_attachments_t;
-typedef _sg_d3d11_attachments_t _sg_attachments_t;
+} _sg_d3d11_view_t;
+typedef _sg_d3d11_view_t _sg_view_t;
 
 typedef struct {
     bool valid;
@@ -6177,7 +6163,7 @@ typedef struct {
     struct {
         ID3D11RenderTargetView* render_view;
         ID3D11RenderTargetView* resolve_view;
-    } cur_pass;
+    } cur_swapchain;
     // on-demand loaded d3dcompiler_47.dll handles
     HINSTANCE d3dcompiler_dll;
     bool d3dcompiler_dll_load_failed;
@@ -11811,7 +11797,11 @@ static inline void _sg_d3d11_ClearState(ID3D11DeviceContext* self) {
 //-- enum translation functions ------------------------------------------------
 _SOKOL_PRIVATE D3D11_USAGE _sg_d3d11_image_usage(const sg_image_usage* usg) {
     if (usg->immutable) {
-        if (usg->render_attachment || usg->storage_attachment) {
+        if (usg->color_attachment ||
+            usg->resolve_attachment ||
+            usg->depth_stencil_attachment ||
+            usg->storage_image)
+        {
             return D3D11_USAGE_DEFAULT;
         } else {
             return D3D11_USAGE_IMMUTABLE;
@@ -11821,22 +11811,27 @@ _SOKOL_PRIVATE D3D11_USAGE _sg_d3d11_image_usage(const sg_image_usage* usg) {
     }
 }
 
-_SOKOL_PRIVATE UINT _sg_d3d11_image_bind_flags(const sg_image_usage* usg, sg_pixel_format fmt) {
+_SOKOL_PRIVATE UINT _sg_d3d11_image_bind_flags(const sg_image_usage* usg) {
     UINT res = D3D11_BIND_SHADER_RESOURCE;
-    if (usg->render_attachment) {
-        if (_sg_is_depth_or_depth_stencil_format(fmt)) {
-            res |= D3D11_BIND_DEPTH_STENCIL;
-        } else {
-            res |= D3D11_BIND_RENDER_TARGET;
-        }
-    } else if (usg->storage_attachment) {
+    if (usg->color_attachment) {
+        res |= D3D11_BIND_RENDER_TARGET;
+    }
+    if (usg->depth_stencil_attachment) {
+        res |= D3D11_BIND_DEPTH_STENCIL;
+    }
+    if (usg->storage_image) {
         res |= D3D11_BIND_UNORDERED_ACCESS;
     }
     return res;
 }
 
 _SOKOL_PRIVATE UINT _sg_d3d11_image_cpu_access_flags(const sg_image_usage* usg) {
-    if (usg->render_attachment || usg->storage_attachment || usg->immutable) {
+    if (usg->color_attachment ||
+        usg->resolve_attachment ||
+        usg->depth_stencil_attachment ||
+        usg->storage_image ||
+        usg->immutable)
+    {
         return 0;
     } else {
         return D3D11_CPU_ACCESS_WRITE;
@@ -11860,10 +11855,9 @@ _SOKOL_PRIVATE UINT _sg_d3d11_buffer_bind_flags(const sg_buffer_usage* usg) {
         res |= D3D11_BIND_INDEX_BUFFER;
     }
     if (usg->storage_buffer) {
+        res |= D3D11_BIND_SHADER_RESOURCE;
         if (usg->immutable) {
-            res |= D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-        } else {
-            res |= D3D11_BIND_SHADER_RESOURCE;
+            res |= D3D11_BIND_UNORDERED_ACCESS;
         }
     }
     return res;
@@ -12270,9 +12264,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, cons
             return SG_RESOURCESTATE_FAILED;
         }
 
+        // FIXME: move the _sg_d3d11_create_view
         // for storage buffers need to create a shader-resource-view
         // for read-only access, and an unordered-access-view for
         // read-write access
+        /*
         if (buf->cmn.usage.storage_buffer) {
             SOKOL_ASSERT(_sg_multiple_u64((uint64_t)buf->cmn.size, 4));
             D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
@@ -12302,6 +12298,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, cons
                 }
             }
         }
+        */
         _sg_d3d11_setlabel(buf->d3d11.buf, desc->label);
     }
     return SG_RESOURCESTATE_VALID;
@@ -12311,12 +12308,6 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
     if (buf->d3d11.buf) {
         _sg_d3d11_Release(buf->d3d11.buf);
-    }
-    if (buf->d3d11.srv) {
-        _sg_d3d11_Release(buf->d3d11.srv);
-    }
-    if (buf->d3d11.uav) {
-        _sg_d3d11_Release(buf->d3d11.uav);
     }
 }
 
@@ -12350,7 +12341,7 @@ _SOKOL_PRIVATE void _sg_d3d11_fill_subres_data(const _sg_image_t* img, const sg_
 
 _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
-    SOKOL_ASSERT((0 == img->d3d11.tex2d) && (0 == img->d3d11.tex3d) && (0 == img->d3d11.res) && (0 == img->d3d11.srv));
+    SOKOL_ASSERT((0 == img->d3d11.tex2d) && (0 == img->d3d11.tex3d) && (0 == img->d3d11.res));
     HRESULT hr;
 
     const bool injected = (0 != desc->d3d11_texture);
@@ -12374,10 +12365,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
         if (injected) {
             img->d3d11.tex2d = (ID3D11Texture2D*) desc->d3d11_texture;
             _sg_d3d11_AddRef(img->d3d11.tex2d);
-            img->d3d11.srv = (ID3D11ShaderResourceView*) desc->d3d11_shader_resource_view;
-            if (img->d3d11.srv) {
-                _sg_d3d11_AddRef(img->d3d11.srv);
-            }
         } else {
             // if not injected, create 2D texture
             D3D11_TEXTURE2D_DESC d3d11_tex_desc;
@@ -12391,7 +12378,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 default:                    d3d11_tex_desc.ArraySize = 1; break;
             }
             d3d11_tex_desc.Format = img->d3d11.format;
-            d3d11_tex_desc.BindFlags = _sg_d3d11_image_bind_flags(&img->cmn.usage, img->cmn.pixel_format);
+            d3d11_tex_desc.BindFlags = _sg_d3d11_image_bind_flags(&img->cmn.usage);
             d3d11_tex_desc.Usage = _sg_d3d11_image_usage(&img->cmn.usage);
             d3d11_tex_desc.CPUAccessFlags = _sg_d3d11_image_cpu_access_flags(&img->cmn.usage);
             d3d11_tex_desc.SampleDesc.Count = (UINT)img->cmn.sample_count;
@@ -12405,6 +12392,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
             _sg_d3d11_setlabel(img->d3d11.tex2d, desc->label);
 
             // create shader-resource-view for 2D texture
+            /*
+                FIXME FIXME FIXME: move to _sg_d3d11_create_view()
             D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
             _sg_clear(&d3d11_srv_desc, sizeof(d3d11_srv_desc));
             d3d11_srv_desc.Format = _sg_d3d11_srv_pixel_format(img->cmn.pixel_format);
@@ -12431,6 +12420,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 return SG_RESOURCESTATE_FAILED;
             }
             _sg_d3d11_setlabel(img->d3d11.srv, desc->label);
+            */
         }
         SOKOL_ASSERT(img->d3d11.tex2d);
         img->d3d11.res = (ID3D11Resource*)img->d3d11.tex2d;
@@ -12440,10 +12430,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
         if (injected) {
             img->d3d11.tex3d = (ID3D11Texture3D*) desc->d3d11_texture;
             _sg_d3d11_AddRef(img->d3d11.tex3d);
-            img->d3d11.srv = (ID3D11ShaderResourceView*) desc->d3d11_shader_resource_view;
-            if (img->d3d11.srv) {
-                _sg_d3d11_AddRef(img->d3d11.srv);
-            }
         } else {
             // not injected, create 3d texture
             D3D11_TEXTURE3D_DESC d3d11_tex_desc;
@@ -12453,7 +12439,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
             d3d11_tex_desc.Depth = (UINT)img->cmn.num_slices;
             d3d11_tex_desc.MipLevels = (UINT)img->cmn.num_mipmaps;
             d3d11_tex_desc.Format = img->d3d11.format;
-            d3d11_tex_desc.BindFlags = _sg_d3d11_image_bind_flags(&img->cmn.usage, img->cmn.pixel_format);
+            d3d11_tex_desc.BindFlags = _sg_d3d11_image_bind_flags(&img->cmn.usage);
             d3d11_tex_desc.Usage = _sg_d3d11_image_usage(&img->cmn.usage);
             d3d11_tex_desc.CPUAccessFlags = _sg_d3d11_image_cpu_access_flags(&img->cmn.usage);
             if (img->d3d11.format == DXGI_FORMAT_UNKNOWN) {
@@ -12468,6 +12454,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
             _sg_d3d11_setlabel(img->d3d11.tex3d, desc->label);
 
             // create shader-resource-view for 3D texture
+            /*
+                FIXME FIXME FIXME: move to _sg_d3d11_create_view()
             if (!msaa) {
                 D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
                 _sg_clear(&d3d11_srv_desc, sizeof(d3d11_srv_desc));
@@ -12481,6 +12469,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 }
                 _sg_d3d11_setlabel(img->d3d11.srv, desc->label);
             }
+            */
         }
         SOKOL_ASSERT(img->d3d11.tex3d);
         img->d3d11.res = (ID3D11Resource*)img->d3d11.tex3d;
@@ -12499,9 +12488,6 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_image(_sg_image_t* img) {
     }
     if (img->d3d11.res) {
         _sg_d3d11_Release(img->d3d11.res);
-    }
-    if (img->d3d11.srv) {
-        _sg_d3d11_Release(img->d3d11.srv);
     }
 }
 
@@ -13173,8 +13159,8 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass* pass) {
     int num_rtvs = 0;
     ID3D11RenderTargetView* rtvs[SG_MAX_COLOR_ATTACHMENTS] = { 0 };
     ID3D11DepthStencilView* dsv = 0;
-    _sg.d3d11.cur_pass.render_view = 0;
-    _sg.d3d11.cur_pass.resolve_view = 0;
+    _sg.d3d11.cur_swapchain.render_view = 0;
+    _sg.d3d11.cur_swapchain.resolve_view = 0;
     if (atts) {
         num_rtvs = atts->cmn.num_colors;
         for (size_t i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
@@ -13187,8 +13173,8 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass* pass) {
         num_rtvs = 1;
         rtvs[0] = (ID3D11RenderTargetView*) swapchain->d3d11.render_view;
         dsv = (ID3D11DepthStencilView*) swapchain->d3d11.depth_stencil_view;
-        _sg.d3d11.cur_pass.render_view = (ID3D11RenderTargetView*) swapchain->d3d11.render_view;
-        _sg.d3d11.cur_pass.resolve_view = (ID3D11RenderTargetView*) swapchain->d3d11.resolve_view;
+        _sg.d3d11.cur_swapchain.render_view = (ID3D11RenderTargetView*) swapchain->d3d11.render_view;
+        _sg.d3d11.cur_swapchain.resolve_view = (ID3D11RenderTargetView*) swapchain->d3d11.resolve_view;
     }
     // apply the render-target- and depth-stencil-views
     _sg_d3d11_OMSetRenderTargets(_sg.d3d11.ctx, SG_MAX_COLOR_ATTACHMENTS, rtvs, dsv);
@@ -13268,14 +13254,14 @@ _SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
             }
         } else {
             // ...for swapchain pass...
-            if (_sg.d3d11.cur_pass.resolve_view) {
-                SOKOL_ASSERT(_sg.d3d11.cur_pass.render_view);
+            if (_sg.d3d11.cur_swapchain.resolve_view) {
+                SOKOL_ASSERT(_sg.d3d11.cur_swapchain.render_view);
                 SOKOL_ASSERT(_sg.cur_pass.swapchain.sample_count > 1);
                 SOKOL_ASSERT(_sg.cur_pass.swapchain.color_fmt > SG_PIXELFORMAT_NONE);
                 ID3D11Resource* d3d11_render_res = 0;
                 ID3D11Resource* d3d11_resolve_res = 0;
-                _sg_d3d11_GetResource((ID3D11View*)_sg.d3d11.cur_pass.render_view, &d3d11_render_res);
-                _sg_d3d11_GetResource((ID3D11View*)_sg.d3d11.cur_pass.resolve_view, &d3d11_resolve_res);
+                _sg_d3d11_GetResource((ID3D11View*)_sg.d3d11.cur_swapchain.render_view, &d3d11_render_res);
+                _sg_d3d11_GetResource((ID3D11View*)_sg.d3d11.cur_swapchain.resolve_view, &d3d11_resolve_res);
                 SOKOL_ASSERT(d3d11_render_res);
                 SOKOL_ASSERT(d3d11_resolve_res);
                 const sg_pixel_format color_fmt = _sg.cur_pass.swapchain.color_fmt;
@@ -13286,8 +13272,8 @@ _SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
             }
         }
     }
-    _sg.d3d11.cur_pass.render_view = 0;
-    _sg.d3d11.cur_pass.resolve_view = 0;
+    _sg.d3d11.cur_swapchain.render_view = 0;
+    _sg.d3d11.cur_swapchain.resolve_view = 0;
     _sg_d3d11_clear_state();
 }
 
