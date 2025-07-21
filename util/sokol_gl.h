@@ -3768,6 +3768,7 @@ static void _sgl_setup_common(void) {
     _sgl_clear(&smp_desc, sizeof(smp_desc));
     smp_desc.min_filter = SG_FILTER_NEAREST;
     smp_desc.mag_filter = SG_FILTER_NEAREST;
+    smp_desc.label = "sgl-default-sampler";
     _sgl.def_smp = sg_make_sampler(&smp_desc);
     SOKOL_ASSERT(SG_INVALID_ID != _sgl.def_smp.id);
 
