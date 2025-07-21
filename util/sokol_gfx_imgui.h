@@ -3507,7 +3507,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_buffer_panel(sgimgui_t* ctx, sg_buffer buf) {
             _sgimgui_igtext("Usage:\n");
             _sgimgui_igtext("  vertex_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.vertex_buffer));
             _sgimgui_igtext("  index_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.index_buffer));
-            _sgimgui_igtext("  storage_buffer_binding: %s", _sgimgui_bool_string(buf_ui->desc.usage.storage_buffer_binding));
+            _sgimgui_igtext("  storage_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.storage_buffer));
             _sgimgui_igtext("  immutable: %s", _sgimgui_bool_string(buf_ui->desc.usage.immutable));
             _sgimgui_igtext("  dynamic_update: %s", _sgimgui_bool_string(buf_ui->desc.usage.dynamic_update));
             _sgimgui_igtext("  stream_update: %s", _sgimgui_bool_string(buf_ui->desc.usage.stream_update));
@@ -3542,7 +3542,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_image_panel(sgimgui_t* ctx, sg_image img) {
             _sgimgui_igseparator();
             _sgimgui_igtext("Type:           %s", _sgimgui_imagetype_string(desc->type));
             _sgimgui_igtext("Usage:\n");
-            _sgimgui_igtext("  storage_image_binding: %s", _sgimgui_bool_string(desc->usage.storage_image_binding));
+            _sgimgui_igtext("  storage_image: %s", _sgimgui_bool_string(desc->usage.storage_image));
             _sgimgui_igtext("  color_attachment: %s", _sgimgui_bool_string(desc->usage.color_attachment));
             _sgimgui_igtext("  resolve_attachment: %s", _sgimgui_bool_string(desc->usage.resolve_attachment));
             _sgimgui_igtext("  depth_stencil_attachment: %s", _sgimgui_bool_string(desc->usage.depth_stencil_attachment));

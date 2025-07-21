@@ -3089,7 +3089,7 @@ typedef struct sg_bindings {
 typedef struct sg_buffer_usage {
     bool vertex_buffer;
     bool index_buffer;
-    bool storage_buffer_binding;
+    bool storage_buffer;
     bool immutable;
     bool dynamic_update;
     bool stream_update;
@@ -3189,7 +3189,7 @@ typedef struct sg_buffer_desc {
     Note that the usage as texture binding is implicit and always allowed.
 */
 typedef struct sg_image_usage {
-    bool storage_image_binding;
+    bool storage_image;
     bool color_attachment;
     bool resolve_attachment;
     bool depth_stencil_attachment;
@@ -14498,13 +14498,13 @@ _SOKOL_PRIVATE bool _sg_mtl_init_texdesc(MTLTextureDescriptor* mtl_desc, _sg_ima
     if (any_attachment) {
         mtl_tex_usage |= MTLTextureUsageRenderTarget;
     }
-    if (img->cmn.usage.storage_image_binding) {
+    if (img->cmn.usage.storage_image) {
         mtl_tex_usage |= MTLTextureUsageShaderWrite;
     }
     mtl_desc.usage = mtl_tex_usage;
 
     MTLResourceOptions mtl_res_options = 0;
-    if (any_attachment || img->cmn.usage.storage_image_binding) {
+    if (any_attachment || img->cmn.usage.storage_image) {
         mtl_res_options |= MTLResourceStorageModePrivate;
     } else {
         mtl_res_options |= _sg_mtl_resource_options_storage_mode_managed_or_shared();
@@ -18443,7 +18443,7 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
         _SG_VALIDATE(desc->size > 0, VALIDATE_BUFFERDESC_EXPECT_NONZERO_SIZE);
         _SG_VALIDATE(_sg_one(desc->usage.immutable, desc->usage.dynamic_update, desc->usage.stream_update), VALIDATE_BUFFERDESC_IMMUTABLE_DYNAMIC_STREAM);
         if (_sg.features.separate_buffer_types) {
-            _SG_VALIDATE(_sg_one(desc->usage.vertex_buffer, desc->usage.index_buffer, desc->usage.storage_buffer_binding), VALIDATE_BUFFERDESC_SEPARATE_BUFFER_TYPES);
+            _SG_VALIDATE(_sg_one(desc->usage.vertex_buffer, desc->usage.index_buffer, desc->usage.storage_buffer), VALIDATE_BUFFERDESC_SEPARATE_BUFFER_TYPES);
         }
         bool injected = (0 != desc->gl_buffers[0]) ||
                         (0 != desc->mtl_buffers[0]) ||
@@ -18453,14 +18453,14 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
             if (desc->data.ptr) {
                 _SG_VALIDATE(desc->size == desc->data.size, VALIDATE_BUFFERDESC_EXPECT_MATCHING_DATA_SIZE);
             } else {
-                _SG_VALIDATE(desc->usage.storage_buffer_binding, VALIDATE_BUFFERDESC_EXPECT_DATA);
+                _SG_VALIDATE(desc->usage.storage_buffer, VALIDATE_BUFFERDESC_EXPECT_DATA);
                 _SG_VALIDATE(desc->data.size == 0, VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE);
             }
         } else {
             _SG_VALIDATE(0 == desc->data.ptr, VALIDATE_BUFFERDESC_EXPECT_NO_DATA);
             _SG_VALIDATE(desc->data.size == 0, VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE);
         }
-        if (desc->usage.storage_buffer_binding) {
+        if (desc->usage.storage_buffer) {
             _SG_VALIDATE(_sg.features.compute, VALIDATE_BUFFERDESC_STORAGEBUFFER_SUPPORTED);
             _SG_VALIDATE(_sg_multiple_u64(desc->size, 4), VALIDATE_BUFFERDESC_STORAGEBUFFER_SIZE_MULTIPLE_4);
         }
@@ -18518,7 +18518,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         if (_sg_is_depth_or_depth_stencil_format(fmt)) {
             _SG_VALIDATE(desc->type != SG_IMAGETYPE_3D, VALIDATE_IMAGEDESC_DEPTH_3D_IMAGE);
         }
-        if (any_attachment || usg->storage_image_binding) {
+        if (any_attachment || usg->storage_image) {
             SOKOL_ASSERT(((int)fmt >= 0) && ((int)fmt < _SG_PIXELFORMAT_NUM));
             _SG_VALIDATE(usg->immutable, VALIDATE_IMAGEDESC_ATTACHMENT_EXPECT_IMMUTABLE);
             _SG_VALIDATE(desc->data.subimage[0][0].ptr==0, VALIDATE_IMAGEDESC_ATTACHMENT_EXPECT_NO_DATA);
@@ -18534,7 +18534,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
                     _SG_VALIDATE(desc->type != SG_IMAGETYPE_3D, VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_3D_IMAGE);
                     _SG_VALIDATE(desc->type != SG_IMAGETYPE_CUBE, VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE);
                 }
-            } else if (usg->storage_image_binding) {
+            } else if (usg->storage_image) {
                 _SG_VALIDATE(_sg_is_valid_storage_image_format(fmt), VALIDATE_IMAGEDESC_STORAGEIMAGE_PIXELFORMAT);
                 // D3D11 doesn't allow multisampled UAVs (see: https://github.com/gpuweb/gpuweb/issues/513)
                 _SG_VALIDATE(desc->sample_count == 1, VALIDATE_IMAGEDESC_STORAGEIMAGE_EXPECT_NO_MSAA);
@@ -19088,11 +19088,11 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
             switch (view_type) {
                 case SG_VIEWTYPE_STORAGEBUFFER:
                     SOKOL_ASSERT(buf);
-                    _SG_VALIDATE(buf->cmn.usage.storage_buffer_binding, VALIDATE_VIEWDESC_STORAGEBUFFER_USAGE);
+                    _SG_VALIDATE(buf->cmn.usage.storage_buffer, VALIDATE_VIEWDESC_STORAGEBUFFER_USAGE);
                     break;
                 case SG_VIEWTYPE_STORAGEIMAGE:
                     SOKOL_ASSERT(img);
-                    _SG_VALIDATE(img->cmn.usage.storage_image_binding, VALIDATE_VIEWDESC_STORAGEIMAGE_USAGE);
+                    _SG_VALIDATE(img->cmn.usage.storage_image, VALIDATE_VIEWDESC_STORAGEIMAGE_USAGE);
                     _SG_VALIDATE(_sg_is_valid_storage_image_format(img->cmn.pixel_format), VALIDATE_VIEWDESC_STORAGEIMAGE_PIXELFORMAT);
                     break;
                 case SG_VIEWTYPE_TEXTURE:
@@ -19801,7 +19801,7 @@ _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image_t* img, const sg_i
 // >>resources
 _SOKOL_PRIVATE sg_buffer_usage _sg_buffer_usage_defaults(const sg_buffer_usage* usg) {
     sg_buffer_usage def = *usg;
-    if (!(def.vertex_buffer || def.index_buffer || def.storage_buffer_binding)) {
+    if (!(def.vertex_buffer || def.index_buffer || def.storage_buffer)) {
         def.vertex_buffer = true;
     }
     if (!(def.immutable || def.stream_update || def.dynamic_update)) {
