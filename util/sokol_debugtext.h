@@ -4440,6 +4440,7 @@ static void _sdtx_setup_common(void) {
     sg_view_desc view_desc;
     _sdtx_clear(&view_desc, sizeof(view_desc));
     view_desc.texture.image = _sdtx.font_img;
+    view_desc.label = "sdtx-font-texture-view";
     _sdtx.font_view = sg_make_view(&view_desc);
     SOKOL_ASSERT(SG_INVALID_ID != _sdtx.font_view.id);
 
