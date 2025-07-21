@@ -3230,9 +3230,9 @@ _SOKOL_PRIVATE void _sgimgui_draw_image(sgimgui_t* ctx, sg_image img, float* opt
         if (sg_query_view_type(view) == SG_VIEWTYPE_TEXTURE) {
             sg_image view_img = sg_query_view_image(view);
             if (view_img.id == img.id) {
-                // FIXME: once texture views can have a separate image type,
-                // check this instead
-                if (sg_query_image_type(view_img) == SG_IMAGETYPE_2D) {
+                // FIXME: once texture views can have a separate image type, check this instead
+                const bool image_renderable = (sg_query_image_type(view_img) == SG_IMAGETYPE_2D) && (sg_query_image_sample_count(view_img) == 1);
+                if (image_renderable) {
                     break;
                 }
             }
