@@ -3230,7 +3230,11 @@ _SOKOL_PRIVATE void _sgimgui_draw_image(sgimgui_t* ctx, sg_image img, float* opt
         if (sg_query_view_type(view) == SG_VIEWTYPE_TEXTURE) {
             sg_image view_img = sg_query_view_image(view);
             if (view_img.id == img.id) {
-                break;
+                // FIXME: once texture views can have a separate image type,
+                // check this instead
+                if (sg_query_image_type(view_img) == SG_IMAGETYPE_2D) {
+                    break;
+                }
             }
         }
     }
@@ -3250,7 +3254,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_image(sgimgui_t* ctx, sg_image img, float* opt
         _sgimgui_igimage(simgui_imtextureid(view), IMVEC2(w, h));
         _sgimgui_igpopid();
     } else {
-        _sgimgui_igtext("Image has no texture view.", img.id);
+        _sgimgui_igtext("Image has no renderable texture view.", img.id);
     }
 }
 
