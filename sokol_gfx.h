@@ -4150,12 +4150,12 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(D3D11_CREATE_3D_SRV_FAILED, "CreateShaderResourceView() failed for 3d texture (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_MSAA_TEXTURE_FAILED, "CreateTexture2D() failed for MSAA render target texture (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_SAMPLER_STATE_FAILED, "CreateSamplerState() failed (d3d11)") \
-    _SG_LOGITEM_XMACRO(D3D11_UNIFORMBLOCK_HLSL_REGISTER_B_OUT_OF_RANGE, "uniform block 'hlsl_register_b_n' is out of range (must be 0..7)") \
-    _SG_LOGITEM_XMACRO(D3D11_STORAGEBUFFER_HLSL_REGISTER_T_OUT_OF_RANGE, "storage buffer 'hlsl_register_t_n' is out of range (must be 0..23)") \
-    _SG_LOGITEM_XMACRO(D3D11_STORAGEBUFFER_HLSL_REGISTER_U_OUT_OF_RANGE, "storage buffer 'hlsl_register_u_n' is out of range (must be 0..11)") \
-    _SG_LOGITEM_XMACRO(D3D11_IMAGE_HLSL_REGISTER_T_OUT_OF_RANGE, "image 'hlsl_register_t_n' is out of range (must be 0..23)") \
+    _SG_LOGITEM_XMACRO(D3D11_UNIFORMBLOCK_HLSL_REGISTER_B_OUT_OF_RANGE, "sg_shader_desc.uniform_blocks[].hlsl_register_b_n is out of range (must be 0..7)") \
+    _SG_LOGITEM_XMACRO(D3D11_STORAGEBUFFER_HLSL_REGISTER_T_OUT_OF_RANGE, "sg_shader_desc.views[].storage_buffer.hlsl_register_t_n is out of range (must be 0..23)") \
+    _SG_LOGITEM_XMACRO(D3D11_STORAGEBUFFER_HLSL_REGISTER_U_OUT_OF_RANGE, "sg_shader_desc.views[].storage_buffer.hlsl_register_u_n is out of range (must be 0..11)") \
+    _SG_LOGITEM_XMACRO(D3D11_IMAGE_HLSL_REGISTER_T_OUT_OF_RANGE, "sg_shader_desc.views[].texture.hlsl_register_t_n is out of range (must be 0..23)") \
+    _SG_LOGITEM_XMACRO(D3D11_STORAGEIMAGE_HLSL_REGISTER_U_OUT_OF_RANGE, "sg_shader_desc.views[].storage_image.hlsl_register_u_n is out of range (must be 0..11)") \
     _SG_LOGITEM_XMACRO(D3D11_SAMPLER_HLSL_REGISTER_S_OUT_OF_RANGE, "sampler 'hlsl_register_s_n' is out of rang (must be 0..15)") \
-    _SG_LOGITEM_XMACRO(D3D11_STORAGEIMAGE_HLSL_REGISTER_U_OUT_OF_RANGE, "storage image 'hlsl_register_u_n' is out of range (must be 0..11)") \
     _SG_LOGITEM_XMACRO(D3D11_LOAD_D3DCOMPILER_47_DLL_FAILED, "loading d3dcompiler_47.dll failed (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_SHADER_COMPILATION_FAILED, "shader compilation failed (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_SHADER_COMPILATION_OUTPUT, "") \
@@ -12609,31 +12609,27 @@ _SOKOL_PRIVATE bool _sg_d3d11_ensure_hlsl_bindslot_ranges(const sg_shader_desc* 
             return false;
         }
     }
-    for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
-        if (desc->storage_buffers[i].hlsl_register_t_n >= _SG_D3D11_MAX_STAGE_SRV_BINDINGS) {
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        if (desc->views[i].texture.hlsl_register_t_n >= _SG_D3D11_MAX_STAGE_SRV_BINDINGS) {
+            _SG_ERROR(D3D11_IMAGE_HLSL_REGISTER_T_OUT_OF_RANGE);
+            return false;
+        }
+        if (desc->views[i].storage_buffer.hlsl_register_t_n >= _SG_D3D11_MAX_STAGE_SRV_BINDINGS) {
             _SG_ERROR(D3D11_STORAGEBUFFER_HLSL_REGISTER_T_OUT_OF_RANGE);
             return false;
         }
-        if (desc->storage_buffers[i].hlsl_register_u_n >= _SG_D3D11_MAX_STAGE_UAV_BINDINGS) {
+        if (desc->views[i].storage_buffer.hlsl_register_u_n >= _SG_D3D11_MAX_STAGE_UAV_BINDINGS) {
             _SG_ERROR(D3D11_STORAGEBUFFER_HLSL_REGISTER_U_OUT_OF_RANGE);
             return false;
         }
-    }
-    for (size_t i = 0; i < SG_MAX_IMAGE_BINDSLOTS; i++) {
-        if (desc->images[i].hlsl_register_t_n >= _SG_D3D11_MAX_STAGE_SRV_BINDINGS) {
-            _SG_ERROR(D3D11_IMAGE_HLSL_REGISTER_T_OUT_OF_RANGE);
+        if (desc->views[i].storage_image.hlsl_register_u_n >= _SG_D3D11_MAX_STAGE_UAV_BINDINGS) {
+            _SG_ERROR(D3D11_STORAGEIMAGE_HLSL_REGISTER_U_OUT_OF_RANGE);
             return false;
         }
     }
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
         if (desc->samplers[i].hlsl_register_s_n >= _SG_D3D11_MAX_STAGE_SMP_BINDINGS) {
             _SG_ERROR(D3D11_SAMPLER_HLSL_REGISTER_S_OUT_OF_RANGE);
-            return false;
-        }
-    }
-    for (size_t i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
-        if (desc->storage_images[i].hlsl_register_u_n >= _SG_D3D11_MAX_STAGE_UAV_BINDINGS) {
-            _SG_ERROR(D3D11_STORAGEIMAGE_HLSL_REGISTER_U_OUT_OF_RANGE);
             return false;
         }
     }
@@ -12661,18 +12657,20 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
         shd->d3d11.ub_register_b_n[i] = desc->uniform_blocks[i].hlsl_register_b_n;
     }
-    for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
-        shd->d3d11.sbuf_register_t_n[i] = desc->storage_buffers[i].hlsl_register_t_n;
-        shd->d3d11.sbuf_register_u_n[i] = desc->storage_buffers[i].hlsl_register_u_n;
-    }
-    for (size_t i = 0; i < SG_MAX_IMAGE_BINDSLOTS; i++) {
-        shd->d3d11.img_register_t_n[i] = desc->images[i].hlsl_register_t_n;
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        const sg_shader_view* view = &desc->views[i];
+        SOKOL_ASSERT((0 == shd->d3d11.view_register_t_n) && (0 == shd->d3d11.view_register_u_n));
+        if (view->storage_buffer.stage != SG_SHADERSTAGE_NONE) {
+            shd->d3d11.view_register_t_n[i] = view->storage_buffer.hlsl_register_t_n;
+            shd->d3d11.view_register_u_n[i] = view->storage_buffer.hlsl_register_u_n;
+        } else if (view->texture.stage != SG_SHADERSTAGE_NONE) {
+            shd->d3d11.view_register_t_n[i] = view->texture.hlsl_register_t_n;
+        } else if (view->storage_image.stage != SG_SHADERSTAGE_NONE) {
+            shd->d3d11.view_register_u_n[i] = view->storage_image.hlsl_register_u_n;
+        }
     }
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
         shd->d3d11.smp_register_s_n[i] = desc->samplers[i].hlsl_register_s_n;
-    }
-    for (size_t i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
-        shd->d3d11.simg_register_u_n[i] = desc->storage_images[i].hlsl_register_u_n;
     }
 
     // create a D3D constant buffer for each uniform block
