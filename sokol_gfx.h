@@ -4358,9 +4358,10 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_ANY_VIEWTYPE, "sg_view_desc: exactly one view type must be active") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_RESOURCE_ALIVE, "sg_view_desc: resource object is no longer alive (.buffer or .image)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_RESOURCE_FAILED, "sg_view_desc: resource object cannot be in FAILED state (.buffer or .image)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_VIEW_OFFSET_VS_BUFFER_SIZE, "sg_view_desc: offset in view desc is >= buffer size") \
-    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_STORAGEBUFFER_USAGE, "sg_view_desc.storage_buffer_binding.buffer must have been created with sg_buffer_desc.usage.storage_buffer = true") \
-    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_STORAGEIMAGE_USAGE, "sg_view_desc.storage_image_binding.image must have been created with sg_image_desc.usage.storage_image = true") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_STORAGEBUFFER_OFFSET_VS_BUFFER_SIZE, "sg_view_desc.storage_buffer.offset is >= buffer size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_STORAGEBUFFER_OFFSET_MULTIPLE_4, "sg_view_desc.storage_buffer.offset must be a multiple of 4") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_STORAGEBUFFER_USAGE, "sg_view_desc.storage_buffer.buffer must have been created with sg_buffer_desc.usage.storage_buffer = true") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_STORAGEIMAGE_USAGE, "sg_view_desc.storage_image.image must have been created with sg_image_desc.usage.storage_image = true") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_COLORATTACHMENT_USAGE, "sg_view_desc.color_attachment.image must have been created with sg_image_desc.usage.color_attachment = true") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_RESOLVEATTACHMENT_USAGE, "sg_view_desc.resolve_attachment.image must have been created with sg_image_desc.usage.resolve_attachment = true") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_DEPTHSTENCILATTACHMENT_USAGE, "sg_view_desc.depth_stencil_attachment.image must have been created with sg_image_desc.usage.depth_stencil_attachment = true") \
@@ -12263,42 +12264,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, cons
             _SG_ERROR(D3D11_CREATE_BUFFER_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
-
-        // FIXME: move the _sg_d3d11_create_view
-        // for storage buffers need to create a shader-resource-view
-        // for read-only access, and an unordered-access-view for
-        // read-write access
-        /*
-        if (buf->cmn.usage.storage_buffer) {
-            SOKOL_ASSERT(_sg_multiple_u64((uint64_t)buf->cmn.size, 4));
-            D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
-            _sg_clear(&d3d11_srv_desc, sizeof(d3d11_srv_desc));
-            d3d11_srv_desc.Format = DXGI_FORMAT_R32_TYPELESS;
-            d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_BUFFEREX;
-            d3d11_srv_desc.BufferEx.FirstElement = 0;
-            d3d11_srv_desc.BufferEx.NumElements = ((UINT)buf->cmn.size) / 4;
-            d3d11_srv_desc.BufferEx.Flags = D3D11_BUFFEREX_SRV_FLAG_RAW;
-            hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)buf->d3d11.buf, &d3d11_srv_desc, &buf->d3d11.srv);
-            if (!(SUCCEEDED(hr) && buf->d3d11.srv)) {
-                _SG_ERROR(D3D11_CREATE_BUFFER_SRV_FAILED);
-                return SG_RESOURCESTATE_FAILED;
-            }
-            if (buf->cmn.usage.immutable) {
-                D3D11_UNORDERED_ACCESS_VIEW_DESC d3d11_uav_desc;
-                _sg_clear(&d3d11_uav_desc, sizeof(d3d11_uav_desc));
-                d3d11_uav_desc.Format = DXGI_FORMAT_R32_TYPELESS;
-                d3d11_uav_desc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
-                d3d11_uav_desc.Buffer.FirstElement = 0;
-                d3d11_uav_desc.Buffer.NumElements = ((UINT)buf->cmn.size) / 4;
-                d3d11_uav_desc.Buffer.Flags = D3D11_BUFFER_UAV_FLAG_RAW;
-                hr = _sg_d3d11_CreateUnorderedAccessView(_sg.d3d11.dev, (ID3D11Resource*)buf->d3d11.buf, &d3d11_uav_desc, &buf->d3d11.uav);
-                if (!(SUCCEEDED(hr) && buf->d3d11.uav)) {
-                    _SG_ERROR(D3D11_CREATE_BUFFER_UAV_FAILED);
-                    return SG_RESOURCESTATE_FAILED;
-                }
-            }
-        }
-        */
         _sg_d3d11_setlabel(buf->d3d11.buf, desc->label);
     }
     return SG_RESOURCESTATE_VALID;
@@ -12390,37 +12355,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 return SG_RESOURCESTATE_FAILED;
             }
             _sg_d3d11_setlabel(img->d3d11.tex2d, desc->label);
-
-            // create shader-resource-view for 2D texture
-            /*
-                FIXME FIXME FIXME: move to _sg_d3d11_create_view()
-            D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
-            _sg_clear(&d3d11_srv_desc, sizeof(d3d11_srv_desc));
-            d3d11_srv_desc.Format = _sg_d3d11_srv_pixel_format(img->cmn.pixel_format);
-            switch (img->cmn.type) {
-                case SG_IMAGETYPE_2D:
-                    d3d11_srv_desc.ViewDimension = msaa ? D3D11_SRV_DIMENSION_TEXTURE2DMS : D3D11_SRV_DIMENSION_TEXTURE2D;
-                    d3d11_srv_desc.Texture2D.MipLevels = (UINT)img->cmn.num_mipmaps;
-                    break;
-                case SG_IMAGETYPE_CUBE:
-                    d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
-                    d3d11_srv_desc.TextureCube.MipLevels = (UINT)img->cmn.num_mipmaps;
-                    break;
-                case SG_IMAGETYPE_ARRAY:
-                    d3d11_srv_desc.ViewDimension = msaa ? D3D11_SRV_DIMENSION_TEXTURE2DMSARRAY : D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
-                    d3d11_srv_desc.Texture2DArray.MipLevels = (UINT)img->cmn.num_mipmaps;
-                    d3d11_srv_desc.Texture2DArray.ArraySize = (UINT)img->cmn.num_slices;
-                    break;
-                default:
-                    SOKOL_UNREACHABLE; break;
-            }
-            hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)img->d3d11.tex2d, &d3d11_srv_desc, &img->d3d11.srv);
-            if (!(SUCCEEDED(hr) && img->d3d11.srv)) {
-                _SG_ERROR(D3D11_CREATE_2D_SRV_FAILED);
-                return SG_RESOURCESTATE_FAILED;
-            }
-            _sg_d3d11_setlabel(img->d3d11.srv, desc->label);
-            */
         }
         SOKOL_ASSERT(img->d3d11.tex2d);
         img->d3d11.res = (ID3D11Resource*)img->d3d11.tex2d;
@@ -12986,6 +12920,133 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_pipeline(_sg_pipeline_t* pip) {
     }
     if (pip->d3d11.bs) {
         _sg_d3d11_Release(pip->d3d11.bs);
+    }
+}
+
+// FIXME FIXME FIXME: set label!
+_SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_view(_sg_view_t* view) {
+    SOKOL_ASSERT(view);
+    HRESULT hr;
+    if (view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
+        const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
+        const UINT size = (UINT) buf->cmn.size;
+        SOKOL_ASSERT(_sg_multiple_u64(size, 4));
+        const UINT offset = (UINT) view->cmn.buf.offset;
+        SOKOL_ASSERT(_sg_multiple_u64(offset, 4));
+        SOKOL_ASSERT(offset < size);
+        const UINT first_element = offset / 4;
+        const UINT num_elements = (size - offset) / 4;
+        D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
+        _sg_clear(&d3d11_srv_desc, sizeof(d3d11_srv_desc));
+        d3d11_srv_desc.Format = DXGI_FORMAT_R32_TYPELESS;
+        d3d11_srv_desc.BufferEx.FirstElement = first_element;
+        d3d11_srv_desc.BufferEx.NumElements = num_elements;
+        d3d11_srv_desc.BufferEx.Flags = D3D11_BUFFEREX_SRV_FLAG_RAW;
+        SOKOL_ASSERT(!view->d3d11.srv);
+        hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)buf->d3d11.buf, &d3d11_srv_desc, &view->d3d11.srv);
+        if (!(SUCCEEDED(hr) && view->d3d11.srv)) {
+            _SG_ERROR(D3D11_CREATE_BUFFER_SRV_FAILED);
+            return SG_RESOURCESTATE_FAILED;
+        }
+        // FIXME: set label
+        if (buf->cmn.usage.immutable) {
+            D3D11_UNORDERED_ACCESS_VIEW_DESC d3d11_uav_desc;
+            _sg_clear(&d3d11_uav_desc, sizeof(d3d11_uav_desc));
+            d3d11_uav_desc.Format = DXGI_FORMAT_R32_TYPELESS;
+            d3d11_uav_desc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+            d3d11_uav_desc.Buffer.FirstElement = first_element;
+            d3d11_uav_desc.Buffer.NumElements = num_elements;
+            d3d11_uav_desc.Buffer.Flags = D3D11_BUFFER_UAV_FLAG_RAW;
+            SOKOL_ASSERT(!view->d3d11.uav);
+            hr = _sg_d3d11_CreateUnorderedAccessView(_sg.d3d11.dev, (ID3D11Resource*)buf->d3d11.buf, &d3d11_uav_desc, &view->d3d11.uav);
+            if (!(SUCCEEDED(hr) && view->d3d11.uav)) {
+                _SG_ERROR(D3D11_CREATE_BUFFER_UAV_FAILED);
+                return SG_RESOURCESTATE_FAILED;
+            }
+            // FIXME: set label
+        }
+    } else if (view->cmn.type == SG_VIEWTYPE_STORAGEIMAGE) {
+        // FIXME
+    } else if (view->cmn.type == SG_VIEWTYPE_TEXTURE) {
+        const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+        const bool msaa = img->cmn.sample_count > 1;
+        SOKOL_ASSERT(view->cmn.img.mip_level_count >= 1);
+        SOKOL_ASSERT(view->cmn.img.slice_count >= 1);
+        const UINT first_mip = (UINT)view->cmn.img.mip_level;
+        const UINT mip_count = (UINT)view->cmn.img.mip_level_count;
+        const UINT first_slice = (UINT)view->cmn.img.slice;
+        const UINT slice_count = (UINT)view->cmn.img.slice_count;
+        D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
+        _sg_clear(&d3d11_srv_desc, sizeof(&d3d11_srv_desc));
+        d3d11_srv_desc.Format = _sg_d3d11_srv_pixel_format(img->cmn.pixel_format);
+        switch (img->cmn.type) {
+            case SG_IMAGETYPE_2D:
+                if (msaa) {
+                    d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DMS;
+                } else {
+                    d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+                    d3d11_srv_desc.Texture2D.MostDetailedMip = first_mip;
+                    d3d11_srv_desc.Texture2D.MipLevels = mip_count;
+                }
+                break;
+            case SG_IMAGETYPE_CUBE:
+                SOKOL_ASSERT(!msaa);
+                d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
+                d3d11_srv_desc.TextureCube.MostDetailedMip = first_mip;
+                d3d11_srv_desc.TextureCube.MipLevels = mip_count;
+                break;
+            case SG_IMAGETYPE_ARRAY:
+                if (msaa) {
+                    // NOTE: _sg_validate_image_desc() currently disallows MSAA array textures
+                    d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DMSARRAY;
+                    d3d11_srv_desc.Texture2DMSArray.FirstArraySlice = first_slice;
+                    d3d11_srv_desc.Texture2DMSArray.ArraySize = slice_count;
+                } else {
+                    d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+                    d3d11_srv_desc.Texture2DArray.MostDetailedMip = first_mip;
+                    d3d11_srv_desc.Texture2DArray.MipLevels = mip_count;
+                    d3d11_srv_desc.Texture2DArray.FirstArraySlice = first_slice;
+                    d3d11_srv_desc.Texture2DArray.ArraySize = slice_count;
+                }
+                break;
+            case SG_IMAGETYPE_3D:
+                SOKOL_ASSERT(!msaa);
+                d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
+                d3d11_srv_desc.Texture3D.MostDetailedMip = first_mip;
+                d3d11_srv_desc.Texture3D.MipLevels = mip_count;
+                break;
+            default:
+                SOKOL_UNREACHABLE; break;
+        }
+        hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)img->d3d11.tex2d, &d3d11_srv_desc, &view->d3d11.srv);
+        if (!(SUCCEEDED(hr) && view->d3d11.srv)) {
+            _SG_ERROR(D3D11_CREATE_2D_SRV_FAILED);
+            return SG_RESOURCESTATE_FAILED;
+        }
+        // FIXME: set label
+    } else if (view->cmn.type == SG_VIEWTYPE_COLORATTACHMENT) {
+        // FIXME
+    } else if (view->cmn.type == SG_VIEWTYPE_RESOLVEATTACHMENT) {
+        // FIXME
+    } else if (view->cmn.type == SG_VIEWTYPE_DEPTHSTENCILATTACHMENT) {
+        // FIXME
+    }
+    return SG_RESOURCESTATE_VALID;
+}
+
+_SOKOL_PRIVATE void _sg_d3d11_discard_view(_sg_view_t* view) {
+    SOKOL_ASSERT(view);
+    if (view->d3d11.srv) {
+        _sg_d3d11_Release(view->d3d11.srv);
+    }
+    if (view->d3d11.uav) {
+        _sg_d3d11_Release(view->d3d11.uav);
+    }
+    if (view->d3d11.rtv) {
+        _sg_d3d11_Release(view->d3d11.rtv);
+    }
+    if (view->d3d11.dsv) {
+        _sg_d3d11_Release(view->d3d11.dsv);
     }
 }
 
@@ -14732,6 +14793,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const 
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
         shd->mtl.smp_sampler_n[i] = desc->samplers[i].msl_sampler_n;
     }
+
 
     // create metal library and function objects
     bool shd_valid = true;
@@ -19105,7 +19167,8 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
             }
             if (buf_desc) {
                 SOKOL_ASSERT(buf);
-                _SG_VALIDATE(buf_desc->offset < buf->cmn.size, VALIDATE_VIEWDESC_VIEW_OFFSET_VS_BUFFER_SIZE);
+                _SG_VALIDATE(buf_desc->offset < buf->cmn.size, VALIDATE_VIEWDESC_STORAGEBUFFER_OFFSET_VS_BUFFER_SIZE);
+                _SG_VALIDATE(_sg_multiple_u64(buf_desc->offset, 4), VALIDATE_VIEWDESC_STORAGEBUFFER_OFFSET_MULTIPLE_4);
             } else if (img_desc) {
                 SOKOL_ASSERT(img);
                 _SG_VALIDATE((img_desc->mip_level >= 0) && (img_desc->mip_level < img->cmn.num_mipmaps), VALIDATE_VIEWDESC_IMAGE_MIPLEVEL);
