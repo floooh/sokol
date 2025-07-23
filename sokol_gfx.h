@@ -14975,23 +14975,26 @@ _SOKOL_PRIVATE void _sg_mtl_discard_pipeline(_sg_pipeline_t* pip) {
     _sg_mtl_release_resource(_sg.frame_index, pip->mtl.dss);
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_mtl_create_view(_sg_view_t* view) {
-    SOKOL_ASSERT(view);
+_SOKOL_PRIVATE sg_resource_state _sg_mtl_create_view(_sg_view_t* view, const sg_view_desc* desc) {
+    SOKOL_ASSERT(view && desc);
     if ((SG_VIEWTYPE_TEXTURE == view->cmn.type) || (SG_VIEWTYPE_STORAGEIMAGE == view->cmn.type)) {
         const _sg_image_view_common_t* cmn = &view->cmn.img;
         const _sg_image_t* img = _sg_image_ref_ptr(&cmn->ref);
         SOKOL_ASSERT(cmn->mip_level_count >= 1);
         SOKOL_ASSERT(cmn->slice_count >= 1);
-        for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
-            if (img->mtl.tex[i] == _SG_MTL_INVALID_SLOT_INDEX) {
-                continue;
-            }
-            id<MTLTexture> mtl_tex_view = [_sg_mtl_id(img->mtl.tex[i])
+        for (int slot = 0; slot < img->cmn.num_slots; slot++) {
+            SOKOL_ASSERT(img->mtl.tex[slot] != _SG_MTL_INVALID_SLOT_INDEX);
+            id<MTLTexture> mtl_tex_view = [_sg_mtl_id(img->mtl.tex[slot])
                 newTextureViewWithPixelFormat: _sg_mtl_pixel_format(img->cmn.pixel_format)
                 textureType: _sg_mtl_texture_type(img->cmn.type, img->cmn.sample_count > 1)
                 levels: NSMakeRange((NSUInteger)cmn->mip_level, (NSUInteger)cmn->mip_level_count)
                 slices: NSMakeRange((NSUInteger)cmn->slice, (NSUInteger)cmn->slice_count)];
-            view->mtl.tex_view[i] = _sg_mtl_add_resource(mtl_tex_view);
+            #if defined(SOKOL_DEBUG)
+                if (desc->label) {
+                    mtl_tex_view.label = [NSString stringWithFormat:@"%s.%d", desc->label, slot];
+                }
+            #endif
+            view->mtl.tex_view[slot] = _sg_mtl_add_resource(mtl_tex_view);
             _SG_OBJC_RELEASE(mtl_tex_view);
         }
     }
@@ -19122,7 +19125,7 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
             if (buf_desc) {
                 SOKOL_ASSERT(buf);
                 _SG_VALIDATE(buf_desc->offset < buf->cmn.size, VALIDATE_VIEWDESC_STORAGEBUFFER_OFFSET_VS_BUFFER_SIZE);
-                _SG_VALIDATE(_sg_multiple_u64(buf_desc->offset, 4), VALIDATE_VIEWDESC_STORAGEBUFFER_OFFSET_MULTIPLE_4);
+                _SG_VALIDATE(_sg_multiple_u64((uint64_t)buf_desc->offset, 4), VALIDATE_VIEWDESC_STORAGEBUFFER_OFFSET_MULTIPLE_4);
             } else if (img_desc) {
                 SOKOL_ASSERT(img);
                 _SG_VALIDATE((img_desc->mip_level >= 0) && (img_desc->mip_level < img->cmn.num_mipmaps), VALIDATE_VIEWDESC_IMAGE_MIPLEVEL);
