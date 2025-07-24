@@ -15227,7 +15227,8 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass* pass, const _sg_attachment
     }
 }
 
-_SOKOL_PRIVATE void _sg_mtl_end_pass(void) {
+_SOKOL_PRIVATE void _sg_mtl_end_pass(const _sg_attachments_ptrs_t* atts) {
+    (void)atts;
     if (nil != _sg.mtl.render_cmd_encoder) {
         [_sg.mtl.render_cmd_encoder endEncoding];
         // NOTE: MTLRenderCommandEncoder is autoreleased
