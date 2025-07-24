@@ -13159,13 +13159,12 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_view(_sg_view_t* view) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass* pass) {
-    SOKOL_ASSERT(pass);
+_SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass* pass, const _sg_attachments_ptrs_t* atts) {
+    SOKOL_ASSERT(_sg.d3d11.ctx && pass && atts);
     if (_sg.cur_pass.is_compute) {
         // nothing to do in compute passes
         return;
     }
-    const _sg_attachments_t* atts = _sg_attachments_ref_ptr_or_null(&_sg.cur_pass.atts);
     const sg_swapchain* swapchain = &pass->swapchain;
     const sg_pass_action* action = &pass->action;
 
@@ -13174,14 +13173,20 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass* pass) {
     ID3D11DepthStencilView* dsv = 0;
     _sg.d3d11.cur_swapchain.render_view = 0;
     _sg.d3d11.cur_swapchain.resolve_view = 0;
-    if (atts) {
-        num_rtvs = atts->cmn.num_colors;
-        for (size_t i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-            rtvs[i] = atts->d3d11.colors[i].view.rtv;
+    if (!atts->empty) {
+        SOKOL_ASSERT(atts->num_color_views <= SG_MAX_COLOR_ATTACHMENTS);
+        num_rtvs = atts->num_color_views;
+        for (int i = 0; i < num_rtvs; i++) {
+            SOKOL_ASSERT(atts->color_views[i]);
+            SOKOL_ASSERT(atts->color_views[i]->d3d11.rtv);
+            rtvs[i] = atts->color_views[i]->d3d11.rtv;
         }
-        dsv = atts->d3d11.depth_stencil.view.dsv;
+        if (atts->ds_view) {
+            SOKOL_ASSERT(atts->ds_view->d3d11.dsv);
+            dsv = atts->ds_view->d3d11.dsv;
+        }
     } else {
-        // NOTE: depth-stencil-view is optional
+        // NOTE: swapchain depth-stencil-view is optional
         SOKOL_ASSERT(swapchain->d3d11.render_view);
         num_rtvs = 1;
         rtvs[0] = (ID3D11RenderTargetView*) swapchain->d3d11.render_view;
@@ -13196,15 +13201,15 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass* pass) {
     // set viewport and scissor rect to cover whole screen
     D3D11_VIEWPORT vp;
     _sg_clear(&vp, sizeof(vp));
-    vp.Width = (FLOAT) _sg.cur_pass.width;
-    vp.Height = (FLOAT) _sg.cur_pass.height;
+    vp.Width = (FLOAT) _sg.cur_pass.dim.width;
+    vp.Height = (FLOAT) _sg.cur_pass.dim.height;
     vp.MaxDepth = 1.0f;
     _sg_d3d11_RSSetViewports(_sg.d3d11.ctx, 1, &vp);
     D3D11_RECT rect;
     rect.left = 0;
     rect.top = 0;
-    rect.right = _sg.cur_pass.width;
-    rect.bottom = _sg.cur_pass.height;
+    rect.right = _sg.cur_pass.dim.width;
+    rect.bottom = _sg.cur_pass.dim.height;
     _sg_d3d11_RSSetScissorRects(_sg.d3d11.ctx, 1, &rect);
 
     // perform clear action
@@ -13232,29 +13237,29 @@ _SOKOL_PRIVATE UINT _sg_d3d11_calcsubresource(UINT mip_slice, UINT array_slice, 
     return mip_slice + array_slice * mip_levels;
 }
 
-_SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
-    SOKOL_ASSERT(_sg.d3d11.ctx);
-    const _sg_attachments_t* atts = _sg_attachments_ref_ptr_or_null(&_sg.cur_pass.atts);
+_SOKOL_PRIVATE void _sg_d3d11_end_pass(const _sg_attachments_ptrs_t* atts) {
+    SOKOL_ASSERT(_sg.d3d11.ctx && atts);
 
     if (!_sg.cur_pass.is_compute) {
         // need to resolve MSAA render attachments into texture?
-        if (atts) {
+        if (!atts->empty) {
             // ...for offscreen pass...
-            for (size_t i = 0; i < (size_t)atts->cmn.num_colors; i++) {
-                const _sg_image_t* resolve_img = _sg_image_ref_ptr_or_null(&atts->cmn.resolves[i].image);
-                if (resolve_img) {
-                    const _sg_image_t* color_img = _sg_image_ref_ptr(&atts->cmn.colors[i].image);
-                    const _sg_attachment_common_t* cmn_color_att = &atts->cmn.colors[i];
-                    const _sg_attachment_common_t* cmn_resolve_att = &atts->cmn.resolves[i];
+            for (int i = 0; i < atts->num_color_views; i++) {
+                const _sg_view_t* resolve_view = atts->resolve_views[i];
+                if (resolve_view) {
+                    const _sg_image_t* resolve_img = _sg_image_ref_ptr(&resolve_view->cmn.img.ref);
+                    const _sg_view_t* color_view = atts->color_views[i];
+                    SOKOL_ASSERT(color_view);
+                    const _sg_image_t* color_img = _sg_image_ref_ptr(&color_view->cmn.img.ref);
                     SOKOL_ASSERT(color_img->cmn.sample_count > 1);
                     SOKOL_ASSERT(resolve_img->cmn.sample_count == 1);
                     const UINT src_subres = _sg_d3d11_calcsubresource(
-                        (UINT)cmn_color_att->mip_level,
-                        (UINT)cmn_color_att->slice,
+                        (UINT)color_view->cmn.img.mip_level,
+                        (UINT)color_view->cmn.img.slice,
                         (UINT)color_img->cmn.num_mipmaps);
                     const UINT dst_subres = _sg_d3d11_calcsubresource(
-                        (UINT)cmn_resolve_att->mip_level,
-                        (UINT)cmn_resolve_att->slice,
+                        (UINT)resolve_view->cmn.img.mip_level,
+                        (UINT)resolve_view->cmn.img.slice,
                         (UINT)resolve_img->cmn.num_mipmaps);
                     _sg_d3d11_ResolveSubresource(_sg.d3d11.ctx,
                         resolve_img->d3d11.res,
@@ -13294,7 +13299,7 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_viewport(int x, int y, int w, int h, bool or
     SOKOL_ASSERT(_sg.d3d11.ctx);
     D3D11_VIEWPORT vp;
     vp.TopLeftX = (FLOAT) x;
-    vp.TopLeftY = (FLOAT) (origin_top_left ? y : (_sg.cur_pass.height - (y + h)));
+    vp.TopLeftY = (FLOAT) (origin_top_left ? y : (_sg.cur_pass.dim.height - (y + h)));
     vp.Width = (FLOAT) w;
     vp.Height = (FLOAT) h;
     vp.MinDepth = 0.0f;
@@ -13306,12 +13311,13 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_scissor_rect(int x, int y, int w, int h, boo
     SOKOL_ASSERT(_sg.d3d11.ctx);
     D3D11_RECT rect;
     rect.left = x;
-    rect.top = (origin_top_left ? y : (_sg.cur_pass.height - (y + h)));
+    rect.top = (origin_top_left ? y : (_sg.cur_pass.dim.height - (y + h)));
     rect.right = x + w;
-    rect.bottom = origin_top_left ? (y + h) : (_sg.cur_pass.height - y);
+    rect.bottom = origin_top_left ? (y + h) : (_sg.cur_pass.dim.height - y);
     _sg_d3d11_RSSetScissorRects(_sg.d3d11.ctx, 1, &rect);
 }
 
+/* FIXME FIXME FIXME
 _SOKOL_PRIVATE void _sg_d3d11_populate_storage_attachment_uavs(_sg_pipeline_t* pip, ID3D11UnorderedAccessView** d3d11_cs_uavs) {
     const _sg_attachments_t* atts = _sg_attachments_ref_ptr(&_sg.cur_pass.atts);
     const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
@@ -13325,6 +13331,7 @@ _SOKOL_PRIVATE void _sg_d3d11_populate_storage_attachment_uavs(_sg_pipeline_t* p
         d3d11_cs_uavs[shd->d3d11.simg_register_u_n[i]] = atts->d3d11.storages[i].view.uav;
     }
 }
+*/
 
 _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
@@ -13339,6 +13346,7 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
         _sg_stats_add(d3d11.pipeline.num_cs_set_shader, 1);
         _sg_stats_add(d3d11.pipeline.num_cs_set_constant_buffers, 1);
 
+        /* FIXME FIXME FIXME
         // bind storage attachment UAVs
         if (!_sg_attachments_ref_null(&_sg.cur_pass.atts)) {
             ID3D11UnorderedAccessView* d3d11_cs_uavs[_SG_D3D11_MAX_STAGE_UAV_BINDINGS] = {0};
@@ -13346,6 +13354,7 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
             _sg_d3d11_CSSetUnorderedAccessViews(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UAV_BINDINGS, d3d11_cs_uavs, NULL);
             _sg_stats_add(d3d11.bindings.num_cs_set_unordered_access_views, 1);
         }
+        */
     } else {
         // a render pipeline
         SOKOL_ASSERT(pip->d3d11.rs && pip->d3d11.bs && pip->d3d11.dss);
@@ -18195,17 +18204,17 @@ static inline void _sg_begin_pass(const sg_pass* pass, const _sg_attachments_ptr
     #endif
 }
 
-static inline void _sg_end_pass(void) {
+static inline void _sg_end_pass(const _sg_attachments_ptrs_t* atts) {
     #if defined(_SOKOL_ANY_GL)
-    _sg_gl_end_pass();
+    _sg_gl_end_pass(atts);
     #elif defined(SOKOL_METAL)
-    _sg_mtl_end_pass();
+    _sg_mtl_end_pass(atts);
     #elif defined(SOKOL_D3D11)
-    _sg_d3d11_end_pass();
+    _sg_d3d11_end_pass(atts);
     #elif defined(SOKOL_WGPU)
-    _sg_wgpu_end_pass();
+    _sg_wgpu_end_pass(atts);
     #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_end_pass();
+    _sg_dummy_end_pass(atts);
     #else
     #error("INVALID BACKEND");
     #endif
@@ -21410,7 +21419,8 @@ SOKOL_API_IMPL void sg_end_pass(void) {
     SOKOL_ASSERT(_sg.cur_pass.in_pass);
     _sg_stats_add(num_passes, 1);
     // NOTE: don't exit early if !_sg.cur_pass.valid
-    _sg_end_pass();
+    const _sg_attachments_ptrs_t atts_ptrs = _sg_attachments_ptrs(&_sg.cur_pass.atts);
+    _sg_end_pass(atts_ptrs);
     _sg.cur_pip = _sg_pipeline_ref(0);
     if (_sg.cur_pass.is_compute) {
         _sg_compute_on_endpass();
