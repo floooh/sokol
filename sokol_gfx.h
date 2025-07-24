@@ -12386,24 +12386,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 return SG_RESOURCESTATE_FAILED;
             }
             _sg_d3d11_setlabel(img->d3d11.tex3d, desc->label);
-
-            // create shader-resource-view for 3D texture
-            /*
-                FIXME FIXME FIXME: move to _sg_d3d11_create_view()
-            if (!msaa) {
-                D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
-                _sg_clear(&d3d11_srv_desc, sizeof(d3d11_srv_desc));
-                d3d11_srv_desc.Format = _sg_d3d11_srv_pixel_format(img->cmn.pixel_format);
-                d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
-                d3d11_srv_desc.Texture3D.MipLevels = (UINT)img->cmn.num_mipmaps;
-                hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)img->d3d11.tex3d, &d3d11_srv_desc, &img->d3d11.srv);
-                if (!(SUCCEEDED(hr) && img->d3d11.srv)) {
-                    _SG_ERROR(D3D11_CREATE_3D_SRV_FAILED);
-                    return SG_RESOURCESTATE_FAILED;
-                }
-                _sg_d3d11_setlabel(img->d3d11.srv, desc->label);
-            }
-            */
         }
         SOKOL_ASSERT(img->d3d11.tex3d);
         img->d3d11.res = (ID3D11Resource*)img->d3d11.tex3d;
@@ -13317,22 +13299,6 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_scissor_rect(int x, int y, int w, int h, boo
     _sg_d3d11_RSSetScissorRects(_sg.d3d11.ctx, 1, &rect);
 }
 
-/* FIXME FIXME FIXME
-_SOKOL_PRIVATE void _sg_d3d11_populate_storage_attachment_uavs(_sg_pipeline_t* pip, ID3D11UnorderedAccessView** d3d11_cs_uavs) {
-    const _sg_attachments_t* atts = _sg_attachments_ref_ptr(&_sg.cur_pass.atts);
-    const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
-    for (size_t i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
-        if (shd->cmn.storage_images[i].stage != SG_SHADERSTAGE_COMPUTE) {
-            continue;
-        }
-        SOKOL_ASSERT(shd->d3d11.simg_register_u_n[i] < _SG_D3D11_MAX_STAGE_UAV_BINDINGS);
-        SOKOL_ASSERT(atts->d3d11.storages[i].view.uav);
-        SOKOL_ASSERT(0 == d3d11_cs_uavs[i]);
-        d3d11_cs_uavs[shd->d3d11.simg_register_u_n[i]] = atts->d3d11.storages[i].view.uav;
-    }
-}
-*/
-
 _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     SOKOL_ASSERT(_sg.d3d11.ctx);
@@ -13345,16 +13311,6 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
         _sg_d3d11_CSSetConstantBuffers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UB_BINDINGS, shd->d3d11.cs_cbufs);
         _sg_stats_add(d3d11.pipeline.num_cs_set_shader, 1);
         _sg_stats_add(d3d11.pipeline.num_cs_set_constant_buffers, 1);
-
-        /* FIXME FIXME FIXME
-        // bind storage attachment UAVs
-        if (!_sg_attachments_ref_null(&_sg.cur_pass.atts)) {
-            ID3D11UnorderedAccessView* d3d11_cs_uavs[_SG_D3D11_MAX_STAGE_UAV_BINDINGS] = {0};
-            _sg_d3d11_populate_storage_attachment_uavs(pip, d3d11_cs_uavs);
-            _sg_d3d11_CSSetUnorderedAccessViews(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UAV_BINDINGS, d3d11_cs_uavs, NULL);
-            _sg_stats_add(d3d11.bindings.num_cs_set_unordered_access_views, 1);
-        }
-        */
     } else {
         // a render pipeline
         SOKOL_ASSERT(pip->d3d11.rs && pip->d3d11.bs && pip->d3d11.dss);
@@ -13399,10 +13355,10 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
     ID3D11ShaderResourceView* d3d11_vs_srvs[_SG_D3D11_MAX_STAGE_SRV_BINDINGS] = {0};
     ID3D11ShaderResourceView* d3d11_fs_srvs[_SG_D3D11_MAX_STAGE_SRV_BINDINGS] = {0};
     ID3D11ShaderResourceView* d3d11_cs_srvs[_SG_D3D11_MAX_STAGE_SRV_BINDINGS] = {0};
+    ID3D11UnorderedAccessView* d3d11_cs_uavs[_SG_D3D11_MAX_STAGE_UAV_BINDINGS] = {0};
     ID3D11SamplerState* d3d11_vs_smps[_SG_D3D11_MAX_STAGE_SMP_BINDINGS] = {0};
     ID3D11SamplerState* d3d11_fs_smps[_SG_D3D11_MAX_STAGE_SMP_BINDINGS] = {0};
     ID3D11SamplerState* d3d11_cs_smps[_SG_D3D11_MAX_STAGE_SMP_BINDINGS] = {0};
-    ID3D11UnorderedAccessView* d3d11_cs_uavs[_SG_D3D11_MAX_STAGE_UAV_BINDINGS] = {0};
 
     if (!is_compute) {
         for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
@@ -13415,49 +13371,58 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
             d3d11_vb_offsets[i] = (UINT)bnd->vb_offsets[i];
         }
     }
-    for (size_t i = 0; i < SG_MAX_IMAGE_BINDSLOTS; i++) {
-        const _sg_image_t* img = bnd->imgs[i];
-        if (img == 0) {
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        const _sg_view_t* view = bnd->views[i];
+        if (0 == view) {
             continue;
         }
-        const sg_shader_stage stage = shd->cmn.images[i].stage;
-        SOKOL_ASSERT(stage != SG_SHADERSTAGE_NONE);
-        const uint8_t d3d11_slot = shd->d3d11.img_register_t_n[i];
-        SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_SRV_BINDINGS);
-        SOKOL_ASSERT(img->d3d11.srv);
-        ID3D11ShaderResourceView* d3d11_srv = img->d3d11.srv;
-        switch (stage) {
-            case SG_SHADERSTAGE_VERTEX: d3d11_vs_srvs[d3d11_slot] = d3d11_srv; break;
-            case SG_SHADERSTAGE_FRAGMENT: d3d11_fs_srvs[d3d11_slot] = d3d11_srv; break;
-            case SG_SHADERSTAGE_COMPUTE: d3d11_cs_srvs[d3d11_slot] = d3d11_srv; break;
-            default: SOKOL_UNREACHABLE;
-        }
-    }
-    for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
-        const _sg_buffer_t* sbuf = bnd->sbufs[i];
-        if (sbuf == 0) {
-            continue;
-        }
-        const sg_shader_stage stage = shd->cmn.storage_buffers[i].stage;
-        SOKOL_ASSERT(stage != SG_SHADERSTAGE_NONE);
-        if (shd->cmn.storage_buffers[i].readonly) {
-            SOKOL_ASSERT(sbuf->d3d11.srv);
-            const uint8_t d3d11_slot = shd->d3d11.sbuf_register_t_n[i];
+        const _sg_shader_view_t* shd_view = &shd->cmn.views[i];
+        const sg_shader_stage stage = shd_view->stage;
+        SOKOL_ASSERT((stage == SG_SHADERSTAGE_VERTEX)
+            || (stage == SG_SHADERSTAGE_FRAGMENT)
+            || (stage == SG_SHADERSTAGE_COMPUTE));
+        SOKOL_ASSERT((shd_view->view_type == SG_VIEWTYPE_TEXTURE)
+            || (shd_view->view_type == SG_VIEWTYPE_STORAGEBUFFER)
+            || (shd_view->view_type == SG_VIEWTYPE_STORAGEIMAGE));
+        if (shd_view->view_type == SG_VIEWTYPE_TEXTURE) {
+            const uint8_t d3d11_slot = shd->d3d11.view_register_t_n[i];
             SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_SRV_BINDINGS);
-            ID3D11ShaderResourceView* d3d11_srv = sbuf->d3d11.srv;
+            ID3D11ShaderResourceView* d3d11_srv = view->d3d11.srv;
+            SOKOL_ASSERT(d3d11_srv);
             switch (stage) {
                 case SG_SHADERSTAGE_VERTEX: d3d11_vs_srvs[d3d11_slot] = d3d11_srv; break;
                 case SG_SHADERSTAGE_FRAGMENT: d3d11_fs_srvs[d3d11_slot] = d3d11_srv; break;
                 case SG_SHADERSTAGE_COMPUTE: d3d11_cs_srvs[d3d11_slot] = d3d11_srv; break;
                 default: SOKOL_UNREACHABLE;
             }
-        } else {
-            SOKOL_ASSERT(sbuf->d3d11.uav);
+        } else if (shd_view->view_type == SG_VIEWTYPE_STORAGEBUFFER) {
+            if (shd->cmn.views[i].sbuf_readonly) {
+                const uint8_t d3d11_slot = shd->d3d11.view_register_t_n[i];
+                SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_SRV_BINDINGS);
+                ID3D11ShaderResourceView* d3d11_srv = view->d3d11.srv;
+                SOKOL_ASSERT(d3d11_srv);
+                switch (stage) {
+                    case SG_SHADERSTAGE_VERTEX: d3d11_vs_srvs[d3d11_slot] = d3d11_srv; break;
+                    case SG_SHADERSTAGE_FRAGMENT: d3d11_fs_srvs[d3d11_slot] = d3d11_srv; break;
+                    case SG_SHADERSTAGE_COMPUTE: d3d11_cs_srvs[d3d11_slot] = d3d11_srv; break;
+                    default: SOKOL_UNREACHABLE;
+                }
+            } else {
+                SOKOL_ASSERT(stage == SG_SHADERSTAGE_COMPUTE);
+                const uint8_t d3d11_slot = shd->d3d11.view_register_u_n[i];
+                SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_UAV_BINDINGS);
+                ID3D11UnorderedAccessView* d3d11_uav = view->d3d11.uav;
+                SOKOL_ASSERT(d3d11_uav);
+                d3d11_cs_uavs[d3d11_slot] = d3d11_uav;
+            }
+        } else if (shd_view->view_type == SG_VIEWTYPE_STORAGEIMAGE) {
             SOKOL_ASSERT(stage == SG_SHADERSTAGE_COMPUTE);
-            const uint8_t d3d11_slot = shd->d3d11.sbuf_register_u_n[i];
+            const uint8_t d3d11_slot = shd->d3d11.view_register_u_n[i];
             SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_UAV_BINDINGS);
-            d3d11_cs_uavs[d3d11_slot] = sbuf->d3d11.uav;
-        }
+            ID3D11UnorderedAccessView* d3d11_uav = view->d3d11.uav;
+            SOKOL_ASSERT(d3d11_uav);
+            d3d11_cs_uavs[d3d11_slot] = d3d11_uav;
+        } else SOKOL_UNREACHABLE;
     }
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
         const _sg_sampler_t* smp = bnd->smps[i];
@@ -13478,10 +13443,6 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         }
     }
     if (is_compute) {
-        // in a compute pass with storage attachments, also need to rebind the storage attachments
-        if (!_sg_attachments_ref_null(&_sg.cur_pass.atts)) {
-            _sg_d3d11_populate_storage_attachment_uavs(bnd->pip, d3d11_cs_uavs);
-        }
         _sg_d3d11_CSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SRV_BINDINGS, d3d11_cs_srvs);
         _sg_d3d11_CSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, d3d11_cs_smps);
         _sg_d3d11_CSSetUnorderedAccessViews(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UAV_BINDINGS, d3d11_cs_uavs, NULL);
@@ -21420,7 +21381,7 @@ SOKOL_API_IMPL void sg_end_pass(void) {
     _sg_stats_add(num_passes, 1);
     // NOTE: don't exit early if !_sg.cur_pass.valid
     const _sg_attachments_ptrs_t atts_ptrs = _sg_attachments_ptrs(&_sg.cur_pass.atts);
-    _sg_end_pass(atts_ptrs);
+    _sg_end_pass(&atts_ptrs);
     _sg.cur_pip = _sg_pipeline_ref(0);
     if (_sg.cur_pass.is_compute) {
         _sg_compute_on_endpass();
@@ -22056,7 +22017,6 @@ SOKOL_API_IMPL sg_d3d11_image_info sg_d3d11_query_image_info(sg_image img_id) {
             res.tex2d = (const void*) img->d3d11.tex2d;
             res.tex3d = (const void*) img->d3d11.tex3d;
             res.res = (const void*) img->d3d11.res;
-            res.srv = (const void*) img->d3d11.srv;
         }
     #else
         _SOKOL_UNUSED(img_id);
@@ -22116,12 +22076,16 @@ SOKOL_API_IMPL sg_d3d11_pipeline_info sg_d3d11_query_pipeline_info(sg_pipeline p
     return res;
 }
 
-SOKOL_API_IMPL sg_d3d11_view_info sg_d3d11_query_attachments_info(sg_view view_id) {
+SOKOL_API_IMPL sg_d3d11_view_info sg_d3d11_query_view_info(sg_view view_id) {
     SOKOL_ASSERT(_sg.valid);
     sg_d3d11_view_info res;
     _sg_clear(&res, sizeof(res));
     #if defined(SOKOL_D3D11)
-        #error "FIXME FIXME FIXME"
+        const _sg_view_t* view = _sg_lookup_view(view_id.id);
+        res.srv = (const void*) view->d3d11.srv;
+        res.uav = (const void*) view->d3d11.uav;
+        res.rtv = (const void*) view->d3d11.rtv;
+        res.dsv = (const void*) view->d3d11.dsv;
     #else
         _SOKOL_UNUSED(view_id);
     #endif
