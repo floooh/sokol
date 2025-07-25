@@ -13093,6 +13093,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_view(_sg_view_t* view, const s
             SOKOL_ASSERT(img->cmn.type != SG_IMAGETYPE_3D);
             D3D11_DEPTH_STENCIL_VIEW_DESC d3d11_dsv_desc;
             _sg_clear(&d3d11_dsv_desc, sizeof(d3d11_dsv_desc));
+            d3d11_dsv_desc.Format = _sg_d3d11_dsv_pixel_format(img->cmn.pixel_format);
             switch (img->cmn.type) {
                 case SG_IMAGETYPE_2D:
                     if (msaa) {
@@ -13150,9 +13151,6 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass* pass, const _sg_attachme
         // nothing to do in compute passes
         return;
     }
-    const sg_swapchain* swapchain = &pass->swapchain;
-    const sg_pass_action* action = &pass->action;
-
     int num_rtvs = 0;
     ID3D11RenderTargetView* rtvs[SG_MAX_COLOR_ATTACHMENTS] = { 0 };
     ID3D11DepthStencilView* dsv = 0;
@@ -13172,6 +13170,7 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass* pass, const _sg_attachme
         }
     } else {
         // NOTE: swapchain depth-stencil-view is optional
+        const sg_swapchain* swapchain = &pass->swapchain;
         SOKOL_ASSERT(swapchain->d3d11.render_view);
         num_rtvs = 1;
         rtvs[0] = (ID3D11RenderTargetView*) swapchain->d3d11.render_view;
@@ -13198,6 +13197,7 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass* pass, const _sg_attachme
     _sg_d3d11_RSSetScissorRects(_sg.d3d11.ctx, 1, &rect);
 
     // perform clear action
+    const sg_pass_action* action = &pass->action;
     for (size_t i = 0; i < (size_t)num_rtvs; i++) {
         if (action->colors[i].load_action == SG_LOADACTION_CLEAR) {
             _sg_d3d11_ClearRenderTargetView(_sg.d3d11.ctx, rtvs[i], (float*)&action->colors[i].clear_value);
