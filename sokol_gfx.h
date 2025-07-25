@@ -12571,11 +12571,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
 
     // copy HLSL bind slots
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
+        SOKOL_ASSERT(0 == shd->d3d11.ub_register_b_n[i]);
         shd->d3d11.ub_register_b_n[i] = desc->uniform_blocks[i].hlsl_register_b_n;
     }
     for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
         const sg_shader_view* view = &desc->views[i];
-        SOKOL_ASSERT((0 == shd->d3d11.view_register_t_n) && (0 == shd->d3d11.view_register_u_n));
+        SOKOL_ASSERT((0 == shd->d3d11.view_register_t_n[i]) && (0 == shd->d3d11.view_register_u_n[i]));
         if (view->storage_buffer.stage != SG_SHADERSTAGE_NONE) {
             shd->d3d11.view_register_t_n[i] = view->storage_buffer.hlsl_register_t_n;
             shd->d3d11.view_register_u_n[i] = view->storage_buffer.hlsl_register_u_n;
@@ -12586,6 +12587,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
         }
     }
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+        SOKOL_ASSERT(0 == shd->d3d11.smp_register_s_n[i]);
         shd->d3d11.smp_register_s_n[i] = desc->samplers[i].hlsl_register_s_n;
     }
 
@@ -12921,6 +12923,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_view(_sg_view_t* view, const s
         D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
         _sg_clear(&d3d11_srv_desc, sizeof(d3d11_srv_desc));
         d3d11_srv_desc.Format = DXGI_FORMAT_R32_TYPELESS;
+        d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_BUFFEREX;
         d3d11_srv_desc.BufferEx.FirstElement = first_element;
         d3d11_srv_desc.BufferEx.NumElements = num_elements;
         d3d11_srv_desc.BufferEx.Flags = D3D11_BUFFEREX_SRV_FLAG_RAW;
@@ -20179,9 +20182,9 @@ _SOKOL_PRIVATE void _sg_init_view(_sg_view_t* view, const sg_view_desc* desc) {
         _sg_image_t* img = img_id ? _sg_lookup_image(img_id) : 0;
         sg_resource_state res_state = SG_RESOURCESTATE_INVALID;
         if (buf) {
+            SOKOL_ASSERT(!img);
             res_state = buf->slot.state;
-        }
-        if (img) {
+        } else if (img) {
             SOKOL_ASSERT(!buf);
             res_state = img->slot.state;
         }
