@@ -254,8 +254,8 @@
         Both sg_apply_viewport() and sg_apply_scissor_rect() must be called
         inside a rendering pass (e.g. not in a compute pass, or outside a pass)
 
-        Note that sg_begin_default_pass() and sg_begin_pass() will reset both the
-        viewport and scissor rectangles to cover the entire framebuffer.
+        Note that sg_begin_pass() will reset both the viewport and scissor
+        rectangles to cover the entire framebuffer.
 
     --- to update (overwrite) the content of buffer and image resources, call:
 
