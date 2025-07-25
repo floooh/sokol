@@ -1965,7 +1965,11 @@ typedef struct sg_range {
 enum {
     SG_INVALID_ID = 0,
     SG_NUM_INFLIGHT_FRAMES = 2,
+#if defined(SOKOL_GLES3) || defined(SOKOL_WGPU)
     SG_MAX_COLOR_ATTACHMENTS = 4,
+#else
+    SG_MAX_COLOR_ATTACHMENTS = 8,
+#endif
     SG_MAX_STORAGE_ATTACHMENTS = 4,
     SG_MAX_UNIFORMBLOCK_MEMBERS = 16,
     SG_MAX_VERTEX_ATTRIBUTES = 16,
