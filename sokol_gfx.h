@@ -16397,8 +16397,10 @@ _SOKOL_PRIVATE _sg_wgpu_bindgroup_t* _sg_wgpu_create_bindgroup(_sg_bindings_ptrs
         if (view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
             const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
             SOKOL_ASSERT(buf->wgpu.buf);
+            SOKOL_ASSERT(view->cmn.buf.offset < buf->cmn.size);
             bg_entry->buffer = buf->wgpu.buf;
             bg_entry->offset = (uint64_t)view->cmn.buf.offset;
+            bg_entry->size = (uint64_t)(buf->cmn.size - view->cmn.buf.offset);
         } else {
             SOKOL_ASSERT(view->wgpu.view);
             bg_entry->textureView = view->wgpu.view;
