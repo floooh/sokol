@@ -17132,7 +17132,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
         shd->wgpu.ub_dynoffsets[sokol_slot] = i;
     }
 
-    // create bind group layout for images, samplers and storage buffers
+    // create bind group layout for textures, storage buffers/images and samplers
     _sg_clear(bgl_entries, sizeof(bgl_entries));
     _sg_clear(&bgl_desc, sizeof(bgl_desc));
     bgl_index = 0;
@@ -17141,7 +17141,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
             continue;
         }
         WGPUBindGroupLayoutEntry* bgl_entry = &bgl_entries[bgl_index];
-        bgl_entry->binding = shd->wgpu.view_grp1_bnd_n[i];
         bgl_entry->visibility = _sg_wgpu_shader_stage(shd->cmn.views[i].stage);
         if (shd->cmn.views[i].view_type == SG_VIEWTYPE_TEXTURE) {
             shd->wgpu.view_grp1_bnd_n[i] = desc->views[i].texture.wgsl_group1_binding_n;
@@ -17168,6 +17167,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
         } else {
             SOKOL_UNREACHABLE;
         }
+        bgl_entry->binding = shd->wgpu.view_grp1_bnd_n[i];
         bgl_index += 1;
     }
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
