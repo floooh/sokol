@@ -16885,7 +16885,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
         _sg_clear(&wgpu_tex_desc, sizeof(wgpu_tex_desc));
         wgpu_tex_desc.label = _sg_wgpu_stringview(desc->label);
         wgpu_tex_desc.usage = WGPUTextureUsage_TextureBinding|WGPUTextureUsage_CopyDst;
-        if (desc->usage.color_attachment || desc->usage.depth_stencil_attachment) {
+        if (desc->usage.color_attachment || desc->usage.resolve_attachment || desc->usage.depth_stencil_attachment) {
             wgpu_tex_desc.usage |= WGPUTextureUsage_RenderAttachment;
         }
         if (desc->usage.storage_image) {
