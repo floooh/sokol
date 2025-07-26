@@ -18516,7 +18516,6 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
         #elif defined(SOKOL_WGPU)
         _sg_u128_t wgsl_group0_bits = _sg_u128();
         _sg_u128_t wgsl_group1_bits = _sg_u128();
-        _sg_u128_t wgsl_group2_bits = _sg_u128();
         #endif
         for (size_t ub_idx = 0; ub_idx < SG_MAX_UNIFORMBLOCK_BINDSLOTS; ub_idx++) {
             const sg_shader_uniform_block* ub_desc = &desc->uniform_blocks[ub_idx];
@@ -18632,8 +18631,8 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 glsl_simg_bnd_bits = _sg_validate_set_slot_bit(glsl_simg_bnd_bits, SG_SHADERSTAGE_NONE, simg_desc->glsl_binding_n);
                 #elif defined(SOKOL_WGPU)
                 _SG_VALIDATE(simg_desc->wgsl_group1_binding_n < _SG_WGPU_MAX_VIEW_SMP_BINDGROUP_WGSL_SLOTS, VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
-                _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group2_bits, SG_SHADERSTAGE_NONE, simg_desc->wgsl_group1_binding_n), VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_WGSL_GROUP1_BINDING_COLLISION);
-                wgsl_group2_bits = _sg_validate_set_slot_bit(wgsl_group2_bits, SG_SHADERSTAGE_NONE, simg_desc->wgsl_group1_binding_n);
+                _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group1_bits, SG_SHADERSTAGE_NONE, simg_desc->wgsl_group1_binding_n), VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_WGSL_GROUP1_BINDING_COLLISION);
+                wgsl_group1_bits = _sg_validate_set_slot_bit(wgsl_group1_bits, SG_SHADERSTAGE_NONE, simg_desc->wgsl_group1_binding_n);
                 #endif
             }
         }
