@@ -2153,7 +2153,8 @@ typedef struct sg_features {
     bool mrt_independent_write_mask;    // multiple-render-target rendering can use per-render-target color write masks
     bool compute;                       // storage buffers and compute shaders are supported
     bool msaa_texture_bindings;         // if true, multisampled images can be bound as textures
-    bool separate_buffer_types;         // cannot use the same buffer for vertex and indices (onlu WebGL2)
+    bool separate_buffer_types;         // cannot use the same buffer for vertex and indices (only WebGL2)
+    bool gl_texture_views;              // supports 'proper' texture views (GL 4.3+)
 } sg_features;
 
 /*
@@ -5919,7 +5920,6 @@ typedef struct _sg_image_s {
     _sg_image_common_t cmn;
     struct {
         GLenum target;
-        GLuint msaa_render_buffer;
         GLuint tex[SG_NUM_INFLIGHT_FRAMES];
         bool injected;  // if true, external textures were injected with sg_image_desc.gl_textures
     } gl;
@@ -5959,9 +5959,9 @@ typedef struct _sg_shader_s {
         GLuint prog;
         _sg_gl_shader_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
         _sg_gl_uniform_block_t uniform_blocks[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
-        uint8_t sbuf_binding[SG_MAX_STORAGEBUFFER_BINDSLOTS];
-        uint8_t simg_binding[SG_MAX_STORAGE_ATTACHMENTS];
-        int8_t tex_slot[SG_MAX_IMAGE_SAMPLER_PAIRS]; // GL texture unit index
+        uint8_t sbuf_binding[SG_MAX_VIEW_BINDSLOTS];
+        uint8_t simg_binding[SG_MAX_VIEW_BINDSLOTS];
+        int8_t tex_slot[SG_MAX_TEXTURE_SAMPLER_PAIRS]; // GL texture unit index
     } gl;
 } _sg_gl_shader_t;
 typedef _sg_gl_shader_t _sg_shader_t;
@@ -5995,15 +5995,16 @@ typedef struct _sg_pipeline_s {
 } _sg_gl_pipeline_t;
 typedef _sg_gl_pipeline_t _sg_pipeline_t;
 
-typedef struct _sg_attachments_s {
+typedef struct _sg_view_s {
     _sg_slot_t slot;
-    _sg_attachments_common_t cmn;
+    _sg_view_common_t cmn;
     struct {
-        GLuint fb;
-        GLuint msaa_resolve_framebuffer[SG_MAX_COLOR_ATTACHMENTS];
+        GLuint tex_view[SG_NUM_INFLIGHT_FRAMES];    // only if sg_features.gl_texture_views
+        GLuint msaa_render_buffer;                  // only if !msaa_texture_bindings
+        GLuint msaa_resolve_frame_buffer;
     } gl;
-} _sg_gl_attachments_t;
-typedef _sg_gl_attachments_t _sg_attachments_t;
+} _sg_gl_view_t;
+typedef _sg_gl_view_t _sg_view_t;
 
 typedef struct {
     _sg_gl_attr_t gl_attr;
@@ -6016,9 +6017,9 @@ typedef struct {
     GLuint sampler;
 } _sg_gl_cache_texture_sampler_bind_slot;
 
-#define _SG_GL_MAX_SBUF_BINDINGS (SG_MAX_STORAGEBUFFER_BINDSLOTS)
-#define _SG_GL_MAX_SIMG_BINDINGS (SG_MAX_STORAGE_ATTACHMENTS)
-#define _SG_GL_MAX_IMG_SMP_BINDINGS (SG_MAX_IMAGE_SAMPLER_PAIRS)
+#define _SG_GL_MAX_SBUF_BINDINGS (_SG_MAX_STORAGEBUFFER_BINDINGS_PER_STAGE)
+#define _SG_GL_MAX_SIMG_BINDINGS (_SG_MAX_STORAGEIMAGE_BINDINGS_PER_STAGE)
+#define _SG_GL_MAX_TEX_SMP_BINDINGS (SG_MAX_TEXTURE_SAMPLER_PAIRS)
 typedef struct {
     sg_depth_state depth;
     sg_stencil_state stencil;
@@ -6039,7 +6040,7 @@ typedef struct {
     GLuint stored_index_buffer;
     GLuint stored_storage_buffer;
     GLuint prog;
-    _sg_gl_cache_texture_sampler_bind_slot texture_samplers[_SG_GL_MAX_IMG_SMP_BINDINGS];
+    _sg_gl_cache_texture_sampler_bind_slot texture_samplers[_SG_GL_MAX_TEX_SMP_BINDINGS];
     _sg_gl_cache_texture_sampler_bind_slot stored_texture_sampler;
     int cur_ib_offset;
     GLenum cur_primitive_type;
@@ -6050,7 +6051,8 @@ typedef struct {
 
 typedef struct {
     bool valid;
-    GLuint vao;
+    GLuint vao;     // global mutated vertex-array-object
+    GLuint fb;      // global mutated framebuffer
     _sg_gl_state_cache_t cache;
     bool ext_anisotropic;
     GLint max_anisotropy;
@@ -9169,6 +9171,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
     _sg.features.mrt_independent_blend_state = false;
     _sg.features.mrt_independent_write_mask = true;
     _sg.features.compute = version >= 430;
+    _sg.features.gl_texture_views = version >= 430;
     #if defined(__APPLE__)
     _sg.features.msaa_texture_bindings = false;
     #else
@@ -9496,7 +9499,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_active_texture(GLenum texture) {
 
 _SOKOL_PRIVATE void _sg_gl_cache_clear_texture_sampler_bindings(bool force) {
     _SG_GL_CHECK_ERROR();
-    for (int i = 0; (i < _SG_GL_MAX_IMG_SMP_BINDINGS) && (i < _sg.limits.gl_max_combined_texture_image_units); i++) {
+    for (int i = 0; (i < _SG_GL_MAX_TEX_SMP_BINDINGS) && (i < _sg.limits.gl_max_combined_texture_image_units); i++) {
         if (force || (_sg.gl.cache.texture_samplers[i].texture != 0)) {
             GLenum gl_texture_unit = (GLenum) (GL_TEXTURE0 + i);
             glActiveTexture(gl_texture_unit);
@@ -9522,7 +9525,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_texture_sampler(int8_t gl_tex_slot, GLenum
        target=0 will unbind the previous binding, texture=0 will clear
        the new binding
     */
-    SOKOL_ASSERT((gl_tex_slot >= 0) && (gl_tex_slot < _SG_GL_MAX_IMG_SMP_BINDINGS));
+    SOKOL_ASSERT((gl_tex_slot >= 0) && (gl_tex_slot < _SG_GL_MAX_TEX_SMP_BINDINGS));
     if (gl_tex_slot >= _sg.limits.gl_max_combined_texture_image_units) {
         return;
     }
@@ -9554,12 +9557,12 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_texture_sampler(int8_t gl_tex_slot, GLenum
 }
 
 _SOKOL_PRIVATE void _sg_gl_cache_store_texture_sampler_binding(int8_t gl_tex_slot) {
-    SOKOL_ASSERT((gl_tex_slot >= 0) && (gl_tex_slot < _SG_GL_MAX_IMG_SMP_BINDINGS));
+    SOKOL_ASSERT((gl_tex_slot >= 0) && (gl_tex_slot < _SG_GL_MAX_TEX_SMP_BINDINGS));
     _sg.gl.cache.stored_texture_sampler = _sg.gl.cache.texture_samplers[gl_tex_slot];
 }
 
 _SOKOL_PRIVATE void _sg_gl_cache_restore_texture_sampler_binding(int8_t gl_tex_slot) {
-    SOKOL_ASSERT((gl_tex_slot >= 0) && (gl_tex_slot < _SG_GL_MAX_IMG_SMP_BINDINGS));
+    SOKOL_ASSERT((gl_tex_slot >= 0) && (gl_tex_slot < _SG_GL_MAX_TEX_SMP_BINDINGS));
     _sg_gl_cache_texture_sampler_bind_slot* slot = &_sg.gl.cache.stored_texture_sampler;
     if (slot->texture != 0) {
         // we only care about restoring valid ids
@@ -9574,7 +9577,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_restore_texture_sampler_binding(int8_t gl_tex_s
 // called from _sg_gl_discard_texture() and _sg_gl_discard_sampler()
 _SOKOL_PRIVATE void _sg_gl_cache_invalidate_texture_sampler(GLuint tex, GLuint smp) {
     _SG_GL_CHECK_ERROR();
-    for (size_t i = 0; i < _SG_GL_MAX_IMG_SMP_BINDINGS; i++) {
+    for (size_t i = 0; i < _SG_GL_MAX_TEX_SMP_BINDINGS; i++) {
         _sg_gl_cache_texture_sampler_bind_slot* slot = &_sg.gl.cache.texture_samplers[i];
         if ((0 != slot->target) && ((tex == slot->texture) || (smp == slot->sampler))) {
             _sg_gl_cache_active_texture((GLenum)(GL_TEXTURE0 + i));
@@ -9607,7 +9610,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_program(GLuint prog) {
 
 // called from _sg_gl_discard_pipeline()
 _SOKOL_PRIVATE void _sg_gl_cache_invalidate_pipeline(_sg_pipeline_t* pip) {
-    if (_sg_sref_eql(&_sg.gl.cache.cur_pip, &pip->slot)) {
+    if (_sg_sref_slot_eql(&_sg.gl.cache.cur_pip, &pip->slot)) {
         _sg.gl.cache.cur_pip = _sg_sref(0);
     }
 }
@@ -9712,9 +9715,15 @@ _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
         _sg_gl_init_caps_gles3();
     #endif
 
+    // create and bind global vertex array object which will be mutated as needed
     glGenVertexArrays(1, &_sg.gl.vao);
     glBindVertexArray(_sg.gl.vao);
     _SG_GL_CHECK_ERROR();
+
+    // create global framebuffer object which will be mutated as needed
+    glGenFramebuffers(1, &_sg.gl.fb);
+    _SG_GL_CHECK_ERROR();
+
     // incoming texture data is generally expected to be packed tightly
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     #if defined(SOKOL_GLCORE)
@@ -9726,6 +9735,9 @@ _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
 
 _SOKOL_PRIVATE void _sg_gl_discard_backend(void) {
     SOKOL_ASSERT(_sg.gl.valid);
+    if (_sg.gl.fb) {
+        glDeleteFramebuffers(1, &_sg.gl.fb);
+    }
     if (_sg.gl.vao) {
         glDeleteVertexArrays(1, &_sg.gl.vao);
     }
@@ -9905,14 +9917,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
         return SG_RESOURCESTATE_FAILED;
     }
 
-    // GLES3/WebGL2/macOS doesn't have support for multisampled textures, so create a render buffer object instead
-    const bool msaa = img->cmn.sample_count > 1;
-    if (!_sg.features.msaa_texture_bindings && img->cmn.usage.render_attachment && msaa) {
-        const GLenum gl_internal_format = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
-        glGenRenderbuffers(1, &img->gl.msaa_render_buffer);
-        glBindRenderbuffer(GL_RENDERBUFFER, img->gl.msaa_render_buffer);
-        glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->cmn.sample_count, gl_internal_format, img->cmn.width, img->cmn.height);
-    } else if (img->gl.injected) {
+    if (img->gl.injected) {
         img->gl.target = _sg_gl_texture_target(img->cmn.type, img->cmn.sample_count);
         // inject externally GL textures
         for (int slot = 0; slot < img->cmn.num_slots; slot++) {
@@ -9963,9 +9968,6 @@ _SOKOL_PRIVATE void _sg_gl_discard_image(_sg_image_t* img) {
                 glDeleteTextures(1, &img->gl.tex[slot]);
             }
         }
-    }
-    if (img->gl.msaa_render_buffer) {
-        glDeleteRenderbuffers(1, &img->gl.msaa_render_buffer);
     }
     _SG_GL_CHECK_ERROR();
 }
@@ -10064,14 +10066,14 @@ _SOKOL_PRIVATE GLuint _sg_gl_compile_shader(sg_shader_stage stage, const char* s
 // NOTE: this is an out-of-range check for GLSL bindslots that's also active in release mode
 _SOKOL_PRIVATE bool _sg_gl_ensure_glsl_bindslot_ranges(const sg_shader_desc* desc) {
     SOKOL_ASSERT(desc);
-    for (size_t i = 0; i < SG_MAX_STORAGEBUFFER_BINDSLOTS; i++) {
-        if (desc->storage_buffers[i].glsl_binding_n >= _SG_GL_MAX_SBUF_BINDINGS) {
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        if (desc->views[i].storage_buffer.glsl_binding_n >= _SG_GL_MAX_SBUF_BINDINGS) {
             _SG_ERROR(GL_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE);
             return false;
         }
     }
-    for (size_t i = 0; i < SG_MAX_STORAGE_ATTACHMENTS; i++) {
-        if (desc->storage_images[i].glsl_binding_n >= _SG_GL_MAX_SIMG_BINDINGS) {
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        if (desc->views[i].storage_image.glsl_binding_n >= _SG_GL_MAX_SIMG_BINDINGS) {
             _SG_ERROR(GL_STORAGEIMAGE_GLSL_BINDING_OUT_OF_RANGE);
             return false;
         }
@@ -10184,24 +10186,16 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
         _SOKOL_UNUSED(cur_uniform_offset);
     }
 
-    // copy storage buffer bind slots
-    for (size_t sbuf_index = 0; sbuf_index < SG_MAX_STORAGEBUFFER_BINDSLOTS; sbuf_index++) {
-        const sg_shader_storage_buffer* sbuf_desc = &desc->storage_buffers[sbuf_index];
-        if (sbuf_desc->stage == SG_SHADERSTAGE_NONE) {
-            continue;
+    // copy resource bindslot mappings
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        const sg_shader_view* view = &desc->views[i];
+        SOKOL_ASSERT(0 == shd->gl.sbuf_binding[i]);
+        SOKOL_ASSERT(0 == shd->gl.simg_binding[i]);
+        if (view->storage_buffer.stage != SG_SHADERSTAGE_NONE) {
+            shd->gl.sbuf_binding[i] = view->storage_buffer.glsl_binding_n;
+        } else if (view->storage_image.stage != SG_SHADERSTAGE_NONE) {
+            shd->gl.simg_binding[i] = view->storage_buffer.glsl_binding_n;
         }
-        SOKOL_ASSERT(sbuf_desc->glsl_binding_n < _SG_GL_MAX_SBUF_BINDINGS);
-        shd->gl.sbuf_binding[sbuf_index] = sbuf_desc->glsl_binding_n;
-    }
-
-    // copy storage image bind slots
-    for (size_t simg_index = 0; simg_index < SG_MAX_STORAGE_ATTACHMENTS; simg_index++) {
-        const sg_shader_storage_image* simg_desc = &desc->storage_images[simg_index];
-        if (simg_desc->stage == SG_SHADERSTAGE_NONE) {
-            continue;
-        }
-        SOKOL_ASSERT(simg_desc->glsl_binding_n < _SG_GL_MAX_SIMG_BINDINGS);
-        shd->gl.simg_binding[simg_index] = simg_desc->glsl_binding_n;
     }
 
     // record image sampler location in shader program
@@ -10210,20 +10204,20 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
     glGetIntegerv(GL_CURRENT_PROGRAM, (GLint*)&cur_prog);
     glUseProgram(gl_prog);
     GLint gl_tex_slot = 0;
-    for (size_t img_smp_index = 0; img_smp_index < SG_MAX_IMAGE_SAMPLER_PAIRS; img_smp_index++) {
-        const sg_shader_image_sampler_pair* img_smp_desc = &desc->image_sampler_pairs[img_smp_index];
-        if (img_smp_desc->stage == SG_SHADERSTAGE_NONE) {
+    for (size_t tex_smp_index = 0; tex_smp_index < SG_MAX_TEXTURE_SAMPLER_PAIRS; tex_smp_index++) {
+        const sg_shader_texture_sampler_pair* tex_smp_desc = &desc->texture_sampler_pairs[tex_smp_index];
+        if (tex_smp_desc->stage == SG_SHADERSTAGE_NONE) {
             continue;
         }
-        SOKOL_ASSERT(img_smp_desc->glsl_name);
-        GLint gl_loc = glGetUniformLocation(gl_prog, img_smp_desc->glsl_name);
+        SOKOL_ASSERT(tex_smp_desc->glsl_name);
+        GLint gl_loc = glGetUniformLocation(gl_prog, tex_smp_desc->glsl_name);
         if (gl_loc != -1) {
             glUniform1i(gl_loc, gl_tex_slot);
-            shd->gl.tex_slot[img_smp_index] = (int8_t)gl_tex_slot++;
+            shd->gl.tex_slot[tex_smp_index] = (int8_t)gl_tex_slot++;
         } else {
-            shd->gl.tex_slot[img_smp_index] = -1;
+            shd->gl.tex_slot[tex_smp_index] = -1;
             _SG_WARN(GL_IMAGE_SAMPLER_NAME_NOT_FOUND_IN_SHADER);
-            _SG_LOGMSG(GL_IMAGE_SAMPLER_NAME_NOT_FOUND_IN_SHADER, img_smp_desc->glsl_name);
+            _SG_LOGMSG(GL_IMAGE_SAMPLER_NAME_NOT_FOUND_IN_SHADER, tex_smp_desc->glsl_name);
         }
     }
 
@@ -10321,14 +10315,14 @@ _SOKOL_PRIVATE void _sg_gl_discard_pipeline(_sg_pipeline_t* pip) {
     _sg_gl_cache_invalidate_pipeline(pip);
 }
 
-_SOKOL_PRIVATE void _sg_gl_fb_attach_texture(const _sg_attachment_common_t* att, GLenum gl_att_type) {
-    const _sg_image_t* img = _sg_image_ref_ptr(&att->image);
+_SOKOL_PRIVATE void _sg_gl_fb_attach_texture(const _sg_view_t* view, GLenum gl_att_type) {
+    const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
     const GLuint gl_tex = img->gl.tex[0];
     SOKOL_ASSERT(gl_tex);
     const GLuint gl_target = img->gl.target;
     SOKOL_ASSERT(gl_target);
-    const int mip_level = att->mip_level;
-    const int slice = att->slice;
+    const int mip_level = view->cmn.img.mip_level;
+    const int slice = view->cmn.img.slice;
     switch (img->cmn.type) {
         case SG_IMAGETYPE_2D:
             glFramebufferTexture2D(GL_FRAMEBUFFER, gl_att_type, gl_target, gl_tex, mip_level);
@@ -10350,6 +10344,76 @@ _SOKOL_PRIVATE GLenum _sg_gl_depth_stencil_attachment_type(const _sg_image_t* ds
     }
 }
 
+_SOKOL_PRIVATE sg_resource_state _sg_gl_create_view(_sg_view_t* view, const sg_view_desc* desc) {
+    SOKOL_ASSERT(view && desc);
+    _SG_GL_CHECK_ERROR();
+    if ((view->cmn.type == SG_VIEWTYPE_TEXTURE) && (_sg.features.gl_texture_views)) {
+        // FIXME: glTextureView()
+    } else if ((view->cmn.type == SG_VIEWTYPE_COLORATTACHMENT) || (view->cmn.type == SG_VIEWTYPE_DEPTHSTENCILATTACHMENT)) {
+        // create MSAA render buffer if MSAA textures are not supported
+        const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+        const bool msaa = img->cmn.sample_count > 1;
+        if (msaa && !_sg.features.msaa_texture_bindings) {
+            const GLenum gl_internal_format = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
+            glGenRenderbuffers(1, &view->gl.msaa_render_buffer);
+            glBindRenderbuffer(GL_RENDERBUFFER, view->gl.msaa_render_buffer);
+            glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->cmn.sample_count, gl_internal_format, img->cmn.width, img->cmn.height);
+        }
+    } else if (view->cmn.type == SG_VIEWTYPE_RESOLVEATTACHMENT) {
+        // store current framebuffer binding (restored at end of block)
+        GLuint gl_orig_fb;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&gl_orig_fb);
+
+        // create MSAA resolve framebuffer
+        glGenFramebuffers(1, &view->gl.msaa_resolve_frame_buffer);
+        glBindFramebuffer(GL_FRAMEBUFFER, view->gl.msaa_resolve_frame_buffer);
+        _sg_gl_fb_attach_texture(view, GL_COLOR_ATTACHMENT0);
+        // check if framebuffer is complete
+        const GLenum fb_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (fb_status != GL_FRAMEBUFFER_COMPLETE) {
+            switch (fb_status) {
+                case GL_FRAMEBUFFER_UNDEFINED:
+                    _SG_ERROR(GL_FRAMEBUFFER_STATUS_UNDEFINED);
+                    break;
+                case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
+                    _SG_ERROR(GL_FRAMEBUFFER_STATUS_INCOMPLETE_ATTACHMENT);
+                    break;
+                case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
+                    _SG_ERROR(GL_FRAMEBUFFER_STATUS_INCOMPLETE_MISSING_ATTACHMENT);
+                    break;
+                case GL_FRAMEBUFFER_UNSUPPORTED:
+                    _SG_ERROR(GL_FRAMEBUFFER_STATUS_UNSUPPORTED);
+                    break;
+                case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:
+                    _SG_ERROR(GL_FRAMEBUFFER_STATUS_INCOMPLETE_MULTISAMPLE);
+                    break;
+                default:
+                    _SG_ERROR(GL_FRAMEBUFFER_STATUS_UNKNOWN);
+                    break;
+            }
+            return SG_RESOURCESTATE_FAILED;
+        }
+        // setup color attachments for the framebuffer
+        static const GLenum gl_draw_buf = GL_COLOR_ATTACHMENT0;
+        glDrawBuffers(1, &gl_draw_buf);
+    }
+    _SG_GL_CHECK_ERROR();
+    return SG_RESOURCESTATE_VALID;
+}
+
+_SOKOL_PRIVATE void _sg_gl_discard_view(_sg_view_t* view) {
+    SOKOL_ASSERT(view);
+    _SG_GL_CHECK_ERROR();
+    if (view->gl.msaa_render_buffer) {
+        glDeleteRenderbuffers(1, &view->gl.msaa_render_buffer);
+    }
+    if (view->gl.msaa_resolve_frame_buffer) {
+        glDeleteFramebuffers(1, &view->gl.msaa_resolve_frame_buffer);
+    }
+    _SG_GL_CHECK_ERROR();
+}
+
+/* FIXME FIXME FIXME: move to _sg_gl_create_view() and _sg_gl_begin_pass()
 _SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* atts, const sg_attachments_desc* desc) {
     SOKOL_ASSERT(atts && desc);
     _SOKOL_UNUSED(desc);
@@ -10472,20 +10536,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_attachments(_sg_attachments_t* at
     _SG_GL_CHECK_ERROR();
     return SG_RESOURCESTATE_VALID;
 }
-
-_SOKOL_PRIVATE void _sg_gl_discard_attachments(_sg_attachments_t* atts) {
-    SOKOL_ASSERT(atts);
-    _SG_GL_CHECK_ERROR();
-    if (0 != atts->gl.fb) {
-        glDeleteFramebuffers(1, &atts->gl.fb);
-    }
-    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-        if (atts->gl.msaa_resolve_framebuffer[i]) {
-            glDeleteFramebuffers(1, &atts->gl.msaa_resolve_framebuffer[i]);
-        }
-    }
-    _SG_GL_CHECK_ERROR();
-}
+*/
 
 _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass) {
     // FIXME: what if a texture used as render target is still bound, should we
