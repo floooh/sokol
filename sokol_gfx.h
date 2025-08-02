@@ -10421,6 +10421,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_view(_sg_view_t* view, const sg_v
         // setup color attachments for the framebuffer
         static const GLenum gl_draw_buf = GL_COLOR_ATTACHMENT0;
         glDrawBuffers(1, &gl_draw_buf);
+        // bind original framebuffer
+        glBindFramebuffer(GL_FRAMEBUFFER, gl_orig_fb);
     }
     _SG_GL_CHECK_ERROR();
     return SG_RESOURCESTATE_VALID;
@@ -10708,18 +10710,16 @@ _SOKOL_PRIVATE void _sg_gl_end_render_pass(const _sg_attachments_ptrs_t* atts) {
         const int num_color_atts = atts->num_color_views;
         for (int i = 0; i < num_color_atts; i++) {
             // perform MSAA resolve if needed
-            const _sg_view_t* view = atts->color_views[i];
-            if (view->gl.msaa_resolve_frame_buffer != 0) {
+            const _sg_view_t* rsv_view = atts->resolve_views[i];
+            if (rsv_view->gl.msaa_resolve_frame_buffer != 0) {
                 if (!fb_read_bound) {
-                    // NOTE: we could do this once in _sg_gl_setup_backend() but
-                    // keeping it here is less opaque (and also no perf problem)
                     glBindFramebuffer(GL_READ_FRAMEBUFFER, _sg.gl.fb);
                     fb_read_bound = true;
                 }
-                const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
-                const int w = img->cmn.width;
-                const int h = img->cmn.height;
-                glBindFramebuffer(GL_DRAW_FRAMEBUFFER, view->gl.msaa_resolve_frame_buffer);
+                const _sg_image_t* rsv_img = _sg_image_ref_ptr(&rsv_view->cmn.img.ref);
+                const int w = rsv_img->cmn.width;
+                const int h = rsv_img->cmn.height;
+                glBindFramebuffer(GL_DRAW_FRAMEBUFFER, rsv_view->gl.msaa_resolve_frame_buffer);
                 glReadBuffer((GLenum)(GL_COLOR_ATTACHMENT0 + i));
                 glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
                 fb_draw_bound = true;
