@@ -10506,7 +10506,7 @@ _SOKOL_PRIVATE void _sg_gl_handle_memory_barriers(const _sg_shader_t* shd, const
         }
     }
     if (atts) {
-        for (size_t i = 0; i < atts->num_color_views; i++) {
+        for (int i = 0; i < atts->num_color_views; i++) {
             const _sg_view_t* view = atts->color_views[i];
             SOKOL_ASSERT(view);
             _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
