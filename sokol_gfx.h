@@ -10383,6 +10383,7 @@ _SOKOL_PRIVATE bool _sg_gl_check_framebuffer_status(void) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_gl_create_view(_sg_view_t* view, const sg_view_desc* desc) {
     SOKOL_ASSERT(view && desc);
+    _SOKOL_UNUSED(desc);
     _SG_GL_CHECK_ERROR();
     if ((view->cmn.type == SG_VIEWTYPE_TEXTURE) && (_sg.features.gl_texture_views)) {
         const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
