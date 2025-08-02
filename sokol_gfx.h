@@ -12906,6 +12906,7 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_pipeline(_sg_pipeline_t* pip) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_view(_sg_view_t* view, const sg_view_desc* desc) {
     SOKOL_ASSERT(view && desc);
+    _SOKOL_UNUSED(desc);
     HRESULT hr;
     if (view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
         const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
