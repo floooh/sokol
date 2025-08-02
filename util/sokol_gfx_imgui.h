@@ -1566,18 +1566,6 @@ _SOKOL_PRIVATE const char* _sgimgui_shaderattrbasetype_string(sg_shader_attr_bas
     }
 }
 
-_SOKOL_PRIVATE const char* _sgimgui_viewtype_string(sg_view_type t) {
-    switch (t) {
-        case SG_VIEWTYPE_STORAGEBUFFER:             return "SG_VIEWTYPE_STORAGEBUFFER";
-        case SG_VIEWTYPE_STORAGEIMAGE:              return "SG_VIEWTYPE_STORAGEIMAGE";
-        case SG_VIEWTYPE_TEXTURE:                   return "SG_VIEWTYPE_TEXTURE";
-        case SG_VIEWTYPE_COLORATTACHMENT:           return "SG_VIEWTYPE_COLORATTACHMENT";
-        case SG_VIEWTYPE_RESOLVEATTACHMENT:         return "SG_VIEWTYPE_RESOLVEATTACHMENT";
-        case SG_VIEWTYPE_DEPTHSTENCILATTACHMENT:    return "SG_VIEWTYPE_DEPTHSTENCILATTACHMENT";
-        default:                                    return "???";
-    }
-}
-
 _SOKOL_PRIVATE const char* _sgimgui_bool_string(bool b) {
     return b ? "true" : "false";
 }
