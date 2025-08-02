@@ -10386,7 +10386,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_view(_sg_view_t* view, const sg_v
     _SG_GL_CHECK_ERROR();
     if ((view->cmn.type == SG_VIEWTYPE_TEXTURE) && (_sg.features.gl_texture_views)) {
         const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
-        for (size_t slot = 0; slot < img->cmn.num_slots; slot++) {
+        for (int slot = 0; slot < img->cmn.num_slots; slot++) {
             SOKOL_ASSERT(img->gl.tex[slot] != 0);
             const GLuint min_level = (GLuint)view->cmn.img.mip_level;
             const GLuint num_levels = (GLuint)view->cmn.img.mip_level_count;
@@ -10575,7 +10575,7 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass, const _sg_attachments
         glEnable(GL_FRAMEBUFFER_SRGB);
         #endif
         glBindFramebuffer(GL_FRAMEBUFFER, _sg.gl.fb);
-        for (size_t i = 0; i < atts->num_color_views; i++) {
+        for (int i = 0; i < atts->num_color_views; i++) {
             const _sg_view_t* view = atts->color_views[i];
             const GLenum gl_att_type = (GLenum)(GL_COLOR_ATTACHMENT0 + i);
             if (view->gl.msaa_render_buffer) {
