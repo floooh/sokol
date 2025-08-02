@@ -9261,6 +9261,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.features.mrt_independent_write_mask = false;
     _sg.features.compute = version >= 310;
     _sg.features.msaa_texture_bindings = false;
+    _sg.features.gl_texture_views = version >= 430;
     #if defined(__EMSCRIPTEN__)
     _sg.features.separate_buffer_types = true;
     #else
@@ -10385,7 +10386,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_view(_sg_view_t* view, const sg_v
     _SG_GL_CHECK_ERROR();
     if ((view->cmn.type == SG_VIEWTYPE_TEXTURE) && (_sg.features.gl_texture_views)) {
         const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
-        for (size_t slot; slot < img->cmn.num_slots; slot++) {
+        for (size_t slot = 0; slot < img->cmn.num_slots; slot++) {
             SOKOL_ASSERT(img->gl.tex[slot] != 0);
             const GLuint min_level = (GLuint)view->cmn.img.mip_level;
             const GLuint num_levels = (GLuint)view->cmn.img.mip_level_count;
@@ -10554,8 +10555,8 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass, const _sg_attachments
 
     const sg_swapchain* swapchain = &pass->swapchain;
     const sg_pass_action* action = &pass->action;
-    const bool is_swapchain_pass = !atts->empty;
-    const bool is_offscreen_pass = atts->empty;
+    const bool is_swapchain_pass = atts->empty;
+    const bool is_offscreen_pass = !atts->empty;
 
     // bind the render pass framebuffer
     //
@@ -10622,7 +10623,7 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass, const _sg_attachments
     glScissor(0, 0, _sg.cur_pass.dim.width, _sg.cur_pass.dim.height);
 
     // number of color attachments
-    const int num_color_atts = atts ? atts->num_color_views : 1;
+    const int num_color_atts = is_offscreen_pass ? atts->num_color_views : 1;
 
     // clear color and depth-stencil attachments if needed
     bool clear_any_color = false;
