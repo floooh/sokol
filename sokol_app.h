@@ -2664,6 +2664,7 @@ typedef struct {
     HICON small_icon;
     HCURSOR cursors[_SAPP_MOUSECURSOR_NUM];
     UINT orig_codepage;
+    WCHAR surrogate;
     RECT stored_window_rect;    // used to restore window pos/size when toggling fullscreen => windowed
     bool is_win10_or_greater;
     bool in_create_window;
@@ -7558,11 +7559,20 @@ _SOKOL_PRIVATE void _sapp_win32_key_event(sapp_event_type type, int vk, bool rep
 
 _SOKOL_PRIVATE void _sapp_win32_char_event(uint32_t c, bool repeat) {
     if (_sapp_events_enabled() && (c >= 32)) {
-        _sapp_init_event(SAPP_EVENTTYPE_CHAR);
-        _sapp.event.modifiers = _sapp_win32_mods();
-        _sapp.event.char_code = c;
-        _sapp.event.key_repeat = repeat;
-        _sapp_call_event(&_sapp.event);
+        if (c >= 0xD800 && c <= 0xDBFF) {
+            _sapp.win32.surrogate = (WCHAR)c - 0xD800;
+        } else {
+            if (c > 0xDC00 && c <= 0xDFFF) {
+                c = (uint32_t)(_sapp.win32.surrogate) << 10 | (c - 0xDC00);
+                c += 0x10000;
+                _sapp.win32.surrogate = 0;
+            }
+            _sapp_init_event(SAPP_EVENTTYPE_CHAR);
+            _sapp.event.modifiers = _sapp_win32_mods();
+            _sapp.event.char_code = c;
+            _sapp.event.key_repeat = repeat;
+            _sapp_call_event(&_sapp.event);
+        }
     }
 }
 
@@ -7922,6 +7932,7 @@ _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
     const int win_width = rect.right - rect.left;
     const int win_height = rect.bottom - rect.top;
     _sapp.win32.in_create_window = true;
+    _sapp.win32.surrogate = 0;
     _sapp.win32.hwnd = CreateWindowExW(
         win_ex_style,               // dwExStyle
         L"SOKOLAPP",                // lpClassName
