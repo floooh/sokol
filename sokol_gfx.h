@@ -14994,6 +14994,7 @@ _SOKOL_PRIVATE void _sg_mtl_discard_pipeline(_sg_pipeline_t* pip) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_view(_sg_view_t* view, const sg_view_desc* desc) {
     SOKOL_ASSERT(view && desc);
+    _SOKOL_UNUSED(desc);
     if ((SG_VIEWTYPE_TEXTURE == view->cmn.type) || (SG_VIEWTYPE_STORAGEIMAGE == view->cmn.type)) {
         const _sg_image_view_common_t* cmn = &view->cmn.img;
         const _sg_image_t* img = _sg_image_ref_ptr(&cmn->ref);
