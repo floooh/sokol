@@ -7560,7 +7560,7 @@ _SOKOL_PRIVATE void _sapp_win32_key_event(sapp_event_type type, int vk, bool rep
 _SOKOL_PRIVATE void _sapp_win32_char_event(uint32_t c, bool repeat) {
     if (_sapp_events_enabled() && (c >= 32)) {
         if (c >= 0xD800 && c <= 0xDBFF) {
-            _sapp.win32.surrogate = c - 0xD800;
+            _sapp.win32.surrogate = (WCHAR)c - 0xD800;
         } else {
             if (c > 0xDC00 && c <= 0xDFFF) {
                 c = (uint32_t)(_sapp.win32.surrogate) << 10 | (c - 0xDC00);
