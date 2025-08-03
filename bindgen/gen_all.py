@@ -1,4 +1,4 @@
-import os, argparse, gen_nim, gen_zig, gen_odin, gen_rust, gen_d, gen_jai, gen_c3
+import os, argparse, gen_nim, gen_zig, gen_odin, gen_rust, gen_d, gen_jai, gen_c3, shutil
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--zig-tiger-style", action="store_true", help="Enable zig tiger style mode.")
@@ -48,14 +48,23 @@ for task in zig_tasks:
 # D
 d_tasks = [
     *tasks,
+    [ '../sokol_args.h',  'sargs_',  [] ],
     [ '../sokol_fetch.h', 'sfetch_', [] ],
     [ '../util/sokol_memtrack.h', 'smemtrack_', [] ],
     [ '../util/sokol_imgui.h', 'simgui_',   ['sg_', 'sapp_'] ],
 ]
+# check if nuklear.h is available and copy it
+if os.path.exists('../tests/ext/nuklear.h'):
+    d_tasks.append([ '../util/sokol_nuklear.h', 'snk_',   ['sg_', 'sapp_'] ])
+    if os.path.exists('sokol-d'):
+        shutil.copy('../tests/ext/nuklear.h', 'sokol-d/src/sokol/c/nuklear.h')
 gen_d.prepare()
 for task in d_tasks:
     [c_header_path, main_prefix, dep_prefixes] = task
     gen_d.gen(c_header_path, main_prefix, dep_prefixes)
+# drop nuklear.h if copied (after generated D files)
+if os.path.exists('sokol-d/src/sokol/c/nuklear.h'):
+    os.remove('sokol-d/src/sokol/c/nuklear.h')
 
 # Rust
 gen_rust.prepare()

@@ -385,7 +385,7 @@
 
         const sspine_layer_transform tform = { ... };
 
-        sg_begin_default_pass(...);
+        sg_begin_pass(...);
         sspine_draw_layer(0, tform);
         sg_end_pass();
         sg_commit();

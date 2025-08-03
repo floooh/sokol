@@ -231,19 +231,22 @@
 
     ON ATTACHING YOUR OWN FONTS
     ===========================
-    Since Dear ImGui 1.92.0, using using non-default fonts has been greatly simplified:
+    Since Dear ImGui 1.92.0 using non-default fonts has been greatly simplified:
 
     First, call `simgui_setup()` with the `.no_default_font` so that
     sokol_imgui.h skips adding the default font.
 
     ...then simply call `AddFontDefault()` or `AddFontFromMemoryTTF()` on
-    the Dear ImGui IO object.
+    the Dear ImGui IO object, everything else is taken care of automatically.
 
-    Do *NOT*:
+    Specifically, do *NOT*:
         - call the deprecated `GetTexDataAsRGBA32()` function
-        - create a sokol-gfx image object for the font
+        - create a sokol-gfx image object for the font atlas
         - set the `Font->TexID` on the ImGui IO object
 
+    All those things are now handled inside sokol_imgui.h via a new 'texture update'
+    callback which is called by Dear ImGui whenever the state of the font atlas
+    texture changes.
 
     ON USER-PROVIDED IMAGES AND SAMPLERS
     ====================================
@@ -284,7 +287,7 @@
 
         sg_image img = sg_query_view_image(tex_view);
 
-    NOTE on C bindings since 1.92.0:
+    NOTE on C bindings since Dear ImGui 1.92.0:
 
         Since Dear ImGui v1.92.0 the ImGui::Image function takes an
         ImTextureRef object instead of ImTextureID. In C++ this doesn't

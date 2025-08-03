@@ -1,5 +1,11 @@
 ## Updates
 
+### 03-Aug-2025
+
+sokol_app.h: character input on Windows now transparently supports surrogate pairs,
+for details see PR https://github.com/floooh/sokol/pull/1304. Many thanks to @cloudwu
+for the PR!
+
 ### 29-Jun-2025
 
 The Dear ImGui backend in sokol_imgui.h has been updated for Dear ImGui 1.92.0.
@@ -23,7 +29,7 @@ If you are using Dear ImGui C bindings, you'll need to fix the places where
 the `igImage()` function is called. This now takes an `ImTextureRef` struct
 instead of an `ImTextureID` (in C++ this is not a problem since the ImTextureRef
 is automatically constructed on the fly from the ImTextureID, but in C you'll
-need to do this by hand, e.g. change:
+need to do this by hand, e.g. change):
 
 ```c
 igImage(my_tex_id, ...);

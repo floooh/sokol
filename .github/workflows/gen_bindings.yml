@@ -129,7 +129,7 @@ jobs:
       - uses: actions/checkout@main
         with:
           repository: floooh/sokol-zig
-      - uses: goto-bus-stop/setup-zig@v2
+      - uses: mlugg/setup-zig@v2
       - uses: actions/download-artifact@main
         with:
           name: ignore-me-zig
@@ -319,6 +319,7 @@ jobs:
           dub build :instancingcompute
           dub build :mrt
           dub build :noninterleaved
+          dub build :nuklear
           dub build :offscreen
           dub build :quad
           dub build :shapes
