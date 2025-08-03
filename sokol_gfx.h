@@ -5234,6 +5234,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
                 #pragma comment (lib, "kernel32")   // GetProcAddress()
                 #define _SOKOL_GL_HAS_COMPUTE (1)
                 #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+                #define _SOKOL_GL_HAS_TEXVIEWS (1)
             #endif
         #elif defined(__APPLE__)
             #include <TargetConditionals.h>
@@ -5266,6 +5267,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #endif
             #define _SOKOL_GL_HAS_COMPUTE (1)
             #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+            #define _SOKOL_GL_HAS_TEXVIEWS (1)
         #endif
     #endif
 
@@ -9966,7 +9968,16 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
             img->gl.target = (GLenum)desc->gl_texture_target;
         }
     } else {
-        // create our own GL texture(s)
+        // on platforms that don't support MSAA texture bindings, no actual GL
+        // texture object is created, instead only attachment view object can be built
+        const bool msaa = img->cmn.sample_count > 1;
+        if (msaa && !_sg.features.msaa_texture_bindings) {
+            if (img->cmn.usage.color_attachment || img->cmn.usage.depth_stencil_attachment) {
+                return SG_RESOURCESTATE_VALID;
+            } else {
+                return SG_RESOURCESTATE_FAILED;
+            }
+        }
         img->gl.target = _sg_gl_texture_target(img->cmn.type, img->cmn.sample_count);
         for (int slot = 0; slot < img->cmn.num_slots; slot++) {
             glGenTextures(1, &img->gl.tex[slot]);
@@ -10415,17 +10426,21 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_view(_sg_view_t* view, const sg_v
     _SOKOL_UNUSED(desc);
     _SG_GL_CHECK_ERROR();
     if ((view->cmn.type == SG_VIEWTYPE_TEXTURE) && (_sg.features.gl_texture_views)) {
-        const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
-        for (int slot = 0; slot < img->cmn.num_slots; slot++) {
-            SOKOL_ASSERT(img->gl.tex[slot] != 0);
-            const GLuint min_level = (GLuint)view->cmn.img.mip_level;
-            const GLuint num_levels = (GLuint)view->cmn.img.mip_level_count;
-            const GLuint min_layer = (GLuint)view->cmn.img.slice;
-            const GLuint num_layers = (GLuint)view->cmn.img.slice_count;
-            const GLenum ifmt = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
-            glGenTextures(1, &view->gl.tex_view[slot]);
-            glTextureView(view->gl.tex_view[slot], img->gl.target, img->gl.tex[slot], ifmt, min_level, num_levels, min_layer, num_layers);
+        #if defined(_SOKOL_GL_HAS_TEXVIEWS)
+        if (_sg.features.gl_texture_views) {
+            const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+            for (int slot = 0; slot < img->cmn.num_slots; slot++) {
+                SOKOL_ASSERT(img->gl.tex[slot] != 0);
+                const GLuint min_level = (GLuint)view->cmn.img.mip_level;
+                const GLuint num_levels = (GLuint)view->cmn.img.mip_level_count;
+                const GLuint min_layer = (GLuint)view->cmn.img.slice;
+                const GLuint num_layers = (GLuint)view->cmn.img.slice_count;
+                const GLenum ifmt = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
+                glGenTextures(1, &view->gl.tex_view[slot]);
+                glTextureView(view->gl.tex_view[slot], img->gl.target, img->gl.tex[slot], ifmt, min_level, num_levels, min_layer, num_layers);
+            }
         }
+        #endif
     } else if ((view->cmn.type == SG_VIEWTYPE_COLORATTACHMENT) || (view->cmn.type == SG_VIEWTYPE_DEPTHSTENCILATTACHMENT)) {
         // create MSAA render buffer if MSAA textures are not supported
         const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
@@ -10761,7 +10776,7 @@ _SOKOL_PRIVATE void _sg_gl_end_render_pass(const _sg_attachments_ptrs_t* atts) {
         #if defined(SOKOL_GLES3)
         // need to restore framebuffer binding before invalidate if the MSAA resolve had changed the binding
         if (fb_draw_bound) {
-            glBindFramebuffer(GL_FRAMEBUFFER, atts->gl.fb);
+            glBindFramebuffer(GL_FRAMEBUFFER, _sg.gl.fb);
         }
         GLenum invalidate_atts[SG_MAX_COLOR_ATTACHMENTS + 2] = { 0 };
         int att_index = 0;
@@ -10770,7 +10785,7 @@ _SOKOL_PRIVATE void _sg_gl_end_render_pass(const _sg_attachments_ptrs_t* atts) {
                 invalidate_atts[att_index++] = (GLenum)(GL_COLOR_ATTACHMENT0 + i);
             }
         }
-        if (!_sg_image_ref_null(&atts->cmn.depth_stencil.image)) {
+        if (!atts->ds_view) {
             if (_sg.gl.depth_store_action == SG_STOREACTION_DONTCARE) {
                 invalidate_atts[att_index++] = GL_DEPTH_ATTACHMENT;
             }
@@ -11082,16 +11097,18 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
             GLuint gl_sbuf = sbuf->gl.buf[sbuf->cmn.active_slot];
             _sg_gl_cache_bind_storage_buffer(gl_binding, gl_sbuf);
         } else if (view->cmn.type == SG_VIEWTYPE_STORAGEIMAGE) {
-            const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
-            const uint8_t gl_unit = shd->gl.simg_binding[i];
-            GLuint gl_tex = img->gl.tex[img->cmn.active_slot];
-            GLint level = (GLint)view->cmn.img.mip_level;
-            GLint layer = (GLint)view->cmn.img.slice;
-            GLboolean layered = shd->cmn.views[i].image_type != SG_IMAGETYPE_2D;
-            GLenum access = shd->cmn.views[i].simg_writeonly ? GL_WRITE_ONLY : GL_READ_WRITE;
-            GLenum format = _sg_gl_teximage_internal_format(shd->cmn.views[i].access_format);
-            // FIXME: go through state cache, use view id as key
-            glBindImageTexture(gl_unit, gl_tex, level, layered, layer, access, format);
+            #if defined(_SOKOL_GL_HAS_COMPUTE)
+                const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+                const uint8_t gl_unit = shd->gl.simg_binding[i];
+                GLuint gl_tex = img->gl.tex[img->cmn.active_slot];
+                GLint level = (GLint)view->cmn.img.mip_level;
+                GLint layer = (GLint)view->cmn.img.slice;
+                GLboolean layered = shd->cmn.views[i].image_type != SG_IMAGETYPE_2D;
+                GLenum access = shd->cmn.views[i].simg_writeonly ? GL_WRITE_ONLY : GL_READ_WRITE;
+                GLenum format = _sg_gl_teximage_internal_format(shd->cmn.views[i].access_format);
+                // FIXME: go through state cache, use view id as key
+                glBindImageTexture(gl_unit, gl_tex, level, layered, layer, access, format);
+            #endif
         }
     }
     _SG_GL_CHECK_ERROR();
