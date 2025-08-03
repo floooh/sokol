@@ -5261,13 +5261,13 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #if defined(SOKOL_GLCORE)
                 #define GL_GLEXT_PROTOTYPES
                 #include <GL/gl.h>
+                #define _SOKOL_GL_HAS_TEXVIEWS (1)
             #else
                 #include <GLES3/gl31.h>
                 #include <GLES3/gl3ext.h>
             #endif
             #define _SOKOL_GL_HAS_COMPUTE (1)
             #define _SOKOL_GL_HAS_TEXSTORAGE (1)
-            #define _SOKOL_GL_HAS_TEXVIEWS (1)
         #endif
     #endif
 
