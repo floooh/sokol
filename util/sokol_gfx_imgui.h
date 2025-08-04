@@ -4518,6 +4518,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(sgimgui_t* ctx) {
                 _sgimgui_frame_stats(gl.num_bind_buffer);
                 _sgimgui_frame_stats(gl.num_active_texture);
                 _sgimgui_frame_stats(gl.num_bind_texture);
+                _sgimgui_frame_stats(gl.num_bind_image_texture);
                 _sgimgui_frame_stats(gl.num_bind_sampler);
                 _sgimgui_frame_stats(gl.num_use_program);
                 _sgimgui_frame_stats(gl.num_render_state);

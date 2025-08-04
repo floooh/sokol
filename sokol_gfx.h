@@ -3951,6 +3951,7 @@ typedef struct sg_frame_stats_gl {
     uint32_t num_active_texture;
     uint32_t num_bind_texture;
     uint32_t num_bind_sampler;
+    uint32_t num_bind_image_texture;
     uint32_t num_use_program;
     uint32_t num_render_state;
     uint32_t num_vertex_attrib_pointer;
@@ -6057,6 +6058,7 @@ typedef struct {
     GLuint index_buffer;
     GLuint storage_buffer;  // general bind point
     GLuint storage_buffers[_SG_GL_MAX_SBUF_BINDINGS];
+    int storage_buffer_offsets[_SG_GL_MAX_SBUF_BINDINGS];
     GLuint stored_vertex_buffer;
     GLuint stored_index_buffer;
     GLuint stored_storage_buffer;
@@ -6068,13 +6070,13 @@ typedef struct {
     GLenum cur_index_type;
     GLenum cur_active_texture;
     _sg_sref_t cur_pip;
-} _sg_gl_state_cache_t;
+} _sg_gl_cache_t;
 
 typedef struct {
     bool valid;
     GLuint vao;     // global mutated vertex-array-object
     GLuint fb;      // global mutated framebuffer
-    _sg_gl_state_cache_t cache;
+    _sg_gl_cache_t cache;
     bool ext_anisotropic;
     GLint max_anisotropy;
     sg_store_action color_store_actions[SG_MAX_COLOR_ATTACHMENTS];
@@ -8417,6 +8419,7 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     _SG_XMACRO(glSamplerParameterfv,              void, (GLuint sampler, GLenum pname, const GLfloat* params)) \
     _SG_XMACRO(glDeleteSamplers,                  void, (GLsizei n, const GLuint* samplers)) \
     _SG_XMACRO(glBindBufferBase,                  void, (GLenum target, GLuint index, GLuint buffer)) \
+    _SG_XMACRO(glBindBufferRange,                 void, (GLenum target, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size)) \
     _SG_XMACRO(glTexImage2DMultisample,           void, (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations)) \
     _SG_XMACRO(glTexImage3DMultisample,           void, (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations)) \
     _SG_XMACRO(glDispatchCompute,                 void, (GLuint num_groups_x, GLuint num_groups_y, GLuint num_groups_z)) \
@@ -9438,13 +9441,17 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_buffer(GLenum target, GLuint buffer) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_gl_cache_bind_storage_buffer(uint8_t glsl_binding_n, GLuint buffer) {
+_SOKOL_PRIVATE void _sg_gl_cache_bind_storage_buffer(uint8_t glsl_binding_n, GLuint buffer, int offset, int buf_size) {
     SOKOL_ASSERT(glsl_binding_n < _SG_GL_MAX_SBUF_BINDINGS);
-    if (_sg.gl.cache.storage_buffers[glsl_binding_n] != buffer) {
+    SOKOL_ASSERT(offset < buf_size);
+    const bool buf_neql = _sg.gl.cache.storage_buffers[glsl_binding_n] != buffer;
+    const bool off_neql = _sg.gl.cache.storage_buffer_offsets[glsl_binding_n] != offset;
+    if  (buf_neql || off_neql) {
         _sg.gl.cache.storage_buffers[glsl_binding_n] = buffer;
+        _sg.gl.cache.storage_buffer_offsets[glsl_binding_n] = offset;
         _sg.gl.cache.storage_buffer = buffer; // not a bug
         if (_sg.features.compute) {
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, glsl_binding_n, buffer);
+            glBindBufferRange(GL_SHADER_STORAGE_BUFFER, glsl_binding_n, buffer, offset, buf_size - offset);
         }
         _sg_stats_add(gl.num_bind_buffer, 1);
     }
@@ -11095,7 +11102,7 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
             const _sg_buffer_t* sbuf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
             const uint8_t gl_binding = shd->gl.sbuf_binding[i];
             GLuint gl_sbuf = sbuf->gl.buf[sbuf->cmn.active_slot];
-            _sg_gl_cache_bind_storage_buffer(gl_binding, gl_sbuf);
+            _sg_gl_cache_bind_storage_buffer(gl_binding, gl_sbuf, view->cmn.buf.offset, sbuf->cmn.size);
         } else if (view->cmn.type == SG_VIEWTYPE_STORAGEIMAGE) {
             #if defined(_SOKOL_GL_HAS_COMPUTE)
                 const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
@@ -11106,8 +11113,11 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
                 GLboolean layered = shd->cmn.views[i].image_type != SG_IMAGETYPE_2D;
                 GLenum access = shd->cmn.views[i].simg_writeonly ? GL_WRITE_ONLY : GL_READ_WRITE;
                 GLenum format = _sg_gl_teximage_internal_format(shd->cmn.views[i].access_format);
-                // FIXME: go through state cache, use view id as key
+                // NOTE: we specifically don't go through the GL cache since storage images
+                // are not supported on WebGL2, and on native platforms call caching isn't
+                // worth the hassle
                 glBindImageTexture(gl_unit, gl_tex, level, layered, layer, access, format);
+                _sg_stats_add(gl.num_bind_image_texture, 1);
             #endif
         }
     }
