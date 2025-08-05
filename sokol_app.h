@@ -4267,15 +4267,15 @@ _SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_macos_make_mouse_cursor_image(sapp_
             initWithImage:native
             hotSpot:NSMakePoint(hotspot_x, hotspot_y)];
         
-        [native release];
-        [rep release];
+        _SAPP_OBJC_RELEASE(native);
+        _SAPP_OBJC_RELEASE(rep);
     }
     return ret;
 }
 
 _SOKOL_PRIVATE void _sapp_macos_destroy_mouse_cursor_image(sapp_mouse_cursor_image cursor_image) {
     NSCursor* cursor = (__bridge NSCursor*) (void*) cursor_image.opaque;
-    [cursor release];
+    _SAPP_OBJC_RELEASE(cursor);
 }
 
 _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int num_images) {
@@ -12322,7 +12322,8 @@ SOKOL_API_IMPL void sapp_set_mouse_cursor(sapp_mouse_cursor cursor) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
     SOKOL_ASSERT(cursor != SAPP_MOUSECURSOR_CUSTOM_IMAGE); // call sapp_make_mouse_cursor_image instead.
     if (_sapp.mouse.current_cursor != cursor) {
-        _sapp_update_cursor(cursor, (sapp_mouse_cursor_image) {0}, _sapp.mouse.shown);
+        sapp_mouse_cursor_image img = {0};
+        _sapp_update_cursor(cursor, img, _sapp.mouse.shown);
     }
 }
 
