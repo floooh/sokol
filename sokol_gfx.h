@@ -4296,7 +4296,8 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_COMPUTE_SOURCE_OR_BYTECODE, "compute shader source or byte code expected") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_INVALID_SHADER_COMBO, "cannot combine compute shaders with vertex or fragment shaders") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_NO_BYTECODE_SIZE, "shader byte code length (in bytes) required") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_METAL_THREADS_PER_THREADGROUP, "sg_shader_desc.mtl_threads_per_threadgroup must be initialized for compute shaders (metal)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_METAL_THREADS_PER_THREADGROUP_INITIALIZED, "sg_shader_desc.mtl_threads_per_threadgroup must be initialized for compute shaders (metal)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_METAL_THREADS_PER_THREADGROUP_MULTIPLE_32, "sg_shader_desc.mtl_threads_per_threadgroup (x * y * z) must be a multiple of 32 (metal)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_NO_CONT_MEMBERS, "sg_shader_desc.uniform_blocks[].glsl_uniforms[]: items must occupy continuous slots") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_SIZE_IS_ZERO, "sg_shader_desc.uniform_blocks[].size cannot be zero") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_METAL_BUFFER_SLOT_OUT_OF_RANGE, "sg_shader_desc.uniform_blocks[].msl_buffer_n is out of range (must be 0..7)") \
@@ -4368,7 +4369,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_RESOURCE_ALIVE, "sg_view_desc: resource object is no longer alive (.buffer or .image)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_RESOURCE_FAILED, "sg_view_desc: resource object cannot be in FAILED state (.buffer or .image)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_STORAGEBUFFER_OFFSET_VS_BUFFER_SIZE, "sg_view_desc.storage_buffer.offset is >= buffer size") \
-    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_STORAGEBUFFER_OFFSET_MULTIPLE_4, "sg_view_desc.storage_buffer.offset must be a multiple of 4") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_STORAGEBUFFER_OFFSET_MULTIPLE_256, "sg_view_desc.storage_buffer.offset must be a multiple of 256") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_STORAGEBUFFER_USAGE, "sg_view_desc.storage_buffer.buffer must have been created with sg_buffer_desc.usage.storage_buffer = true") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_STORAGEIMAGE_USAGE, "sg_view_desc.storage_image.image must have been created with sg_image_desc.usage.storage_image = true") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_COLORATTACHMENT_USAGE, "sg_view_desc.color_attachment.image must have been created with sg_image_desc.usage.color_attachment = true") \
@@ -18614,9 +18615,11 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
         }
         #if defined(SOKOL_METAL)
         if (is_compute_shader) {
-            _SG_VALIDATE(desc->mtl_threads_per_threadgroup.x > 0, VALIDATE_SHADERDESC_METAL_THREADS_PER_THREADGROUP);
-            _SG_VALIDATE(desc->mtl_threads_per_threadgroup.y > 0, VALIDATE_SHADERDESC_METAL_THREADS_PER_THREADGROUP);
-            _SG_VALIDATE(desc->mtl_threads_per_threadgroup.z > 0, VALIDATE_SHADERDESC_METAL_THREADS_PER_THREADGROUP);
+            int x = desc->mtl_threads_per_threadgroup.x;
+            int y = desc->mtl_threads_per_threadgroup.y;
+            int z = desc->mtl_threads_per_threadgroup.z;
+            _SG_VALIDATE((x > 0) && (y > 0) && (z > 0), VALIDATE_SHADERDESC_METAL_THREADS_PER_THREADGROUP_INITIALIZED);
+            _SG_VALIDATE(((x * y * z) & 31) == 0, VALIDATE_SHADERDESC_METAL_THREADS_PER_THREADGROUP_MULTIPLE_32);
         }
         #endif
         for (size_t i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
@@ -19031,7 +19034,7 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
             if (buf_desc) {
                 SOKOL_ASSERT(buf);
                 _SG_VALIDATE(buf_desc->offset < buf->cmn.size, VALIDATE_VIEWDESC_STORAGEBUFFER_OFFSET_VS_BUFFER_SIZE);
-                _SG_VALIDATE(_sg_multiple_u64((uint64_t)buf_desc->offset, 4), VALIDATE_VIEWDESC_STORAGEBUFFER_OFFSET_MULTIPLE_4);
+                _SG_VALIDATE(_sg_multiple_u64((uint64_t)buf_desc->offset, 256), VALIDATE_VIEWDESC_STORAGEBUFFER_OFFSET_MULTIPLE_256);
             } else if (img_desc) {
                 SOKOL_ASSERT(img);
                 _SG_VALIDATE((img_desc->mip_level >= 0) && (img_desc->mip_level < img->cmn.num_mipmaps), VALIDATE_VIEWDESC_IMAGE_MIPLEVEL);
