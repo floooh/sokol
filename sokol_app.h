@@ -5588,7 +5588,7 @@ _SOKOL_PRIVATE void _sapp_emsc_update_cursor(sapp_mouse_cursor cursor, sapp_mous
 }
 
 EM_JS(int, sapp_js_make_mouse_cursor_image, (uint8_t* bmp_ptr, int bmp_size, int hotspot_x, int hotspot_y), {
-    const copy = new Uint8Array(Module.HEAPU8.buffer, bmp_ptr, bmp_size);
+    const copy = new Uint8Array(HEAPU8.buffer, bmp_ptr, bmp_size);
     const blob = new Blob([copy.slice()], { type: 'image/bpm' });
     const url = URL.createObjectURL(blob);
     const cursor = {
@@ -5610,11 +5610,11 @@ EM_JS(int, sapp_js_make_mouse_cursor_image, (uint8_t* bmp_ptr, int bmp_size, int
 // Only used by the emscriten backend right now. Returned memory must be freed by caller.
 // Only used by the emscriten backend right now. Returned memory must be freed by caller.
 sapp_range _sapp_bitmap_from_image_desc(sapp_image_desc* desc) {
-    SOKOL_ASSERT(desc->width * desc->height * 4 == desc->pixels.size);
-    int bmp_header_size = 14;
-    int dib_header_size = 124; // common values are 56, I saw 124 for the rgba32-1.bmp file of the test suite included in firefox, and 108 from wikipedia example 2 (transparent)
-    int bmp_size = bmp_header_size + dib_header_size + desc->pixels.size;
-    uint8_t* bmp_data = _sapp_malloc(bmp_size);
+    SOKOL_ASSERT(desc->width * desc->height * 4 == (int) desc->pixels.size);
+    size_t bmp_header_size = 14;
+    size_t dib_header_size = 124; // common values are 56, I saw 124 for the rgba32-1.bmp file of the test suite included in firefox, and 108 from wikipedia example 2 (transparent)
+    size_t bmp_size = bmp_header_size + dib_header_size + desc->pixels.size;
+    uint8_t* bmp_data = (uint8_t*) _sapp_malloc(bmp_size);
     memset(bmp_data, 0, bmp_size);
     uint8_t* bmp_write = bmp_data;
     #define write_byte(val) *(bmp_write++) = val;
@@ -5633,7 +5633,7 @@ sapp_range _sapp_bitmap_from_image_desc(sapp_image_desc* desc) {
     write_int32(bmp_size);
     write_int32(0); // reserved
     write_int32(bmp_header_size+dib_header_size); // offset to pixel data
-    rdx_assert((bmp_write - bmp_header_start) == bmp_header_size, "%i == %i", (int) (bmp_write - bmp_header_start), (int) bmp_header_size);
+    SOKOL_ASSERT((size_t)(bmp_write - bmp_header_start) == bmp_header_size);
     // DIB Header
     uint8_t* dib_header_start = bmp_write;
     write_int32(dib_header_size); // header size
@@ -5653,19 +5653,19 @@ sapp_range _sapp_bitmap_from_image_desc(sapp_image_desc* desc) {
     write_int32(0xff000000); // alpha channel bit mask (big endian)
     write_int32('sRGB'); // color space type 'Win ' 'sRGB' or 0 for RGB
     bmp_write += 64; // color space stuff, unused for 'Win ' or 'sRGB'
-    rdx_assert((bmp_write - dib_header_start) == dib_header_size, "%i == %i", (int) (bmp_write - dib_header_start), (int) dib_header_size);
+    SOKOL_ASSERT((size_t)(bmp_write - dib_header_start) == dib_header_size);
     #undef write_byte
     #undef write_int16
     #undef write_int32
     // copy the pixel data row by row (bmp is bottom to top)
     ptrdiff_t remain = (bmp_data + bmp_size) - bmp_write;
-    rdx_assert(remain == desc->pixels.size, "%i == %i", (int) remain, (int) desc->pixels.size);
-    size_t row_size = desc->width * 4;
+    SOKOL_ASSERT(remain == (int) desc->pixels.size);
+    size_t row_size = (size_t)desc->width * 4;
     for (int y = 0; y < desc->height; y++) {
-        memcpy(bmp_write + (desc->height - y - 1) * row_size, desc->pixels.ptr + y * row_size, row_size);
+        memcpy(bmp_write + (size_t)(desc->height - y - 1) * row_size, (uint8_t*)desc->pixels.ptr + (size_t)y * row_size, row_size);
     }
     //memcpy(bmp_write, desc->pixels.ptr, desc->pixels.size);
-    return (sapp_range) { bmp_data, bmp_size };
+    return (sapp_range) { bmp_data, (size_t) bmp_size };
 }
 
 _SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_emsc_make_mouse_cursor_image(sapp_image_desc* desc, int hotspot_x, int hotspot_y) {
@@ -5673,8 +5673,8 @@ _SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_emsc_make_mouse_cursor_image(sapp_i
     sapp_range bmp_data = _sapp_bitmap_from_image_desc(desc);
 
     // send the bmp blob to the js side
-    int cursor_url_handle = sapp_js_make_mouse_cursor_image(bmp_data.ptr, bmp_data.size, hotspot_x, hotspot_y);
-    _sapp_free(bmp_data.ptr);
+    int cursor_url_handle = sapp_js_make_mouse_cursor_image((uint8_t*) bmp_data.ptr, (int) bmp_data.size, hotspot_x, hotspot_y);
+    _sapp_free((void*)bmp_data.ptr);
 
     sapp_mouse_cursor_image ret = {};
     ret.opaque = (uint64_t) cursor_url_handle;
