@@ -5605,7 +5605,7 @@ EM_JS(int, sapp_js_make_mouse_cursor_image, (uint8_t* bmp_ptr, int bmp_size, int
     const handle = Module.__sapp_cursor_images.length;
     Module.__sapp_cursor_images.push(cursor);
     return handle;
-});
+})
 
 // Only used by the emscriten backend right now. Returned memory must be freed by caller.
 // Only used by the emscriten backend right now. Returned memory must be freed by caller.
@@ -12355,6 +12355,10 @@ SOKOL_API_IMPL sapp_mouse_cursor_image sapp_make_mouse_cursor_image(sapp_image_d
     ret = _sapp_win32_make_mouse_cursor_image(desc, hotspot_x, hotspot_y);
     #elif defined(_SAPP_LINUX)
     ret = _sapp_x11_make_mouse_cursor_image(desc, hotspot_x, hotspot_y);
+    #else
+    _SOKOL_UNUSED(desc);
+    _SOKOL_UNUSED(hotspot_x);
+    _SOKOL_UNUSED(hotspot_y);
     #endif
     return ret;
 }
@@ -12368,6 +12372,8 @@ SOKOL_API_IMPL void sapp_destroy_mouse_cursor_image(sapp_mouse_cursor_image curs
     _sapp_win32_destroy_mouse_cursor_image(cursor_image);
     #elif defined(_SAPP_LINUX)
     _sapp_x11_destroy_mouse_cursor_image(cursor_image);
+    #else
+    _SOKOL_UNUSED(cursor_image);
     #endif
 }
 
