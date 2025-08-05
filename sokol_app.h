@@ -4275,6 +4275,7 @@ _SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_macos_make_mouse_cursor_image(sapp_
 
 _SOKOL_PRIVATE void _sapp_macos_destroy_mouse_cursor_image(sapp_mouse_cursor_image cursor_image) {
     NSCursor* cursor = (__bridge NSCursor*) (void*) cursor_image.opaque;
+    _SOKOL_UNUSED(cursor);
     _SAPP_OBJC_RELEASE(cursor);
 }
 
