@@ -4258,7 +4258,7 @@ _SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_macos_make_mouse_cursor_image(sapp_
         bitsPerPixel:32];
     
     if (rep != nil) {
-        memcpy([rep bitmapData], desc->pixels.ptr, desc->width * desc->height * 4);
+        memcpy([rep bitmapData], desc->pixels.ptr, (size_t) (desc->width * desc->height * 4));
 
         NSImage* native = [[NSImage alloc] initWithSize:NSMakeSize(desc->width, desc->height)];
         [native addRepresentation:rep];
@@ -10906,13 +10906,13 @@ _SOKOL_PRIVATE void _sapp_x11_destroy_cursors(void) {
 _SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_x11_make_mouse_cursor_image(sapp_image_desc* desc, int hotspot_x, int hotspot_y) {
     sapp_mouse_cursor_image ret = {};
     XcursorImage* img = XcursorImageCreate(desc->width, desc->height);
-    SOKOL_ASSERT(img && (img->width == desc->width) && (img->height == desc->height) && img->pixels);
-    img->xhot = hotspot_x;
-    img->yhot = hotspot_y;
+    SOKOL_ASSERT(img && ((int) img->width == desc->width) && ((int) img->height == desc->height) && img->pixels);
+    img->xhot = (XcursorDim) hotspot_x;
+    img->yhot = (XcursorDim) hotspot_y;
     const size_t dest_num_bytes = (size_t)(img->width * img->height) * sizeof(XcursorPixel);
     SOKOL_ASSERT(dest_num_bytes == desc->pixels.size);
     // Convert RGBA -> ARGB
-    for (int i = 0; i < dest_num_bytes; i += 4) {
+    for (size_t i = 0; i < dest_num_bytes; i += 4) {
         ((uint8_t*) img->pixels)[i+3] = ((uint8_t*) desc->pixels.ptr)[i+0];
         ((uint8_t*) img->pixels)[i+2] = ((uint8_t*) desc->pixels.ptr)[i+3];
         ((uint8_t*) img->pixels)[i+1] = ((uint8_t*) desc->pixels.ptr)[i+2];
@@ -12322,7 +12322,7 @@ SOKOL_API_IMPL void sapp_set_mouse_cursor(sapp_mouse_cursor cursor) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
     SOKOL_ASSERT(cursor != SAPP_MOUSECURSOR_CUSTOM_IMAGE); // call sapp_make_mouse_cursor_image instead.
     if (_sapp.mouse.current_cursor != cursor) {
-        _sapp_update_cursor(cursor, (sapp_mouse_cursor_image) {}, _sapp.mouse.shown);
+        _sapp_update_cursor(cursor, (sapp_mouse_cursor_image) {0}, _sapp.mouse.shown);
     }
 }
 
