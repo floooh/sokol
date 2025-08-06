@@ -5654,7 +5654,7 @@ sapp_range _sapp_bitmap_from_image_desc(sapp_image_desc* desc) {
     write_int32('sRGB'); // color space type 'Win ' 'sRGB' or 0 for RGB
     bmp_write += 64; // color space stuff, unused for 'Win ' or 'sRGB'
     SOKOL_ASSERT((size_t)(bmp_write - dib_header_start) == dib_header_size);
-    SOKOL_UNUSED(dib_header_start)
+    SOKOL_UNUSED(dib_header_start);
     #undef write_byte
     #undef write_int16
     #undef write_int32
