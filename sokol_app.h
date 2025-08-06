@@ -5608,7 +5608,6 @@ EM_JS(int, sapp_js_make_mouse_cursor_image, (uint8_t* bmp_ptr, int bmp_size, int
 })
 
 // Only used by the emscriten backend right now. Returned memory must be freed by caller.
-// Only used by the emscriten backend right now. Returned memory must be freed by caller.
 sapp_range _sapp_bitmap_from_image_desc(sapp_image_desc* desc) {
     SOKOL_ASSERT(desc->width * desc->height * 4 == (int) desc->pixels.size);
     size_t bmp_header_size = 14;
@@ -5634,6 +5633,7 @@ sapp_range _sapp_bitmap_from_image_desc(sapp_image_desc* desc) {
     write_int32(0); // reserved
     write_int32(bmp_header_size+dib_header_size); // offset to pixel data
     SOKOL_ASSERT((size_t)(bmp_write - bmp_header_start) == bmp_header_size);
+    SOKOL_UNUSED(bmp_header_start);
     // DIB Header
     uint8_t* dib_header_start = bmp_write;
     write_int32(dib_header_size); // header size
@@ -5654,12 +5654,14 @@ sapp_range _sapp_bitmap_from_image_desc(sapp_image_desc* desc) {
     write_int32('sRGB'); // color space type 'Win ' 'sRGB' or 0 for RGB
     bmp_write += 64; // color space stuff, unused for 'Win ' or 'sRGB'
     SOKOL_ASSERT((size_t)(bmp_write - dib_header_start) == dib_header_size);
+    SOKOL_UNUSED(dib_header_start)
     #undef write_byte
     #undef write_int16
     #undef write_int32
     // copy the pixel data row by row (bmp is bottom to top)
     ptrdiff_t remain = (bmp_data + bmp_size) - bmp_write;
     SOKOL_ASSERT(remain == (int) desc->pixels.size);
+    SOKOL_UNUSED(remain);
     size_t row_size = (size_t)desc->width * 4;
     for (int y = 0; y < desc->height; y++) {
         memcpy(bmp_write + (size_t)(desc->height - y - 1) * row_size, (uint8_t*)desc->pixels.ptr + (size_t)y * row_size, row_size);
