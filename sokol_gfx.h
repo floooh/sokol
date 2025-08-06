@@ -4250,7 +4250,6 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(PIPELINE_POOL_EXHAUSTED, "pipeline pool exhausted") \
     _SG_LOGITEM_XMACRO(VIEW_POOL_EXHAUSTED, "view pool exhausted") \
     _SG_LOGITEM_XMACRO(BEGINPASS_ATTACHMENTS_ALIVE, "sg_begin_pass: an attachment was provided that no longer exists") \
-    _SG_LOGITEM_XMACRO(APPLY_BINDINGS_STORAGE_BUFFER_TRACKER_EXHAUSTED, "sg_apply_bindings: too many read/write storage buffers in pass (bump sg_desc.max_dispatch_calls_per_pass") \
     _SG_LOGITEM_XMACRO(DRAW_WITHOUT_BINDINGS, "attempting to draw without resource bindings") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_CANARY, "sg_buffer_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_IMMUTABLE_DYNAMIC_STREAM, "sg_buffer_desc.usage: only one of .immutable, .dynamic_update, .stream_update can be true") \
@@ -4559,7 +4558,6 @@ typedef enum sg_log_item {
     .pipeline_pool_size             64
     .view_pool_size                 256
     .uniform_buffer_size            4 MB (4*1024*1024)
-    .max_dispatch_calls_per_pass    1024
     .max_commit_listeners           1024
     .disable_validation             false
     .mtl_force_managed_storage_mode false
@@ -4720,7 +4718,6 @@ typedef struct sg_desc {
     int pipeline_pool_size;
     int view_pool_size;
     int uniform_buffer_size;
-    int max_dispatch_calls_per_pass;    // max expected number of dispatch calls per pass (default: 1024)
     int max_commit_listeners;
     bool disable_validation;    // disable validation layer even in debug mode, useful for tests
     bool d3d11_shader_debugging;    // if true, HLSL shaders are compiled with D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION
@@ -5723,13 +5720,6 @@ typedef struct _sg_view_ref_s {
     _sg_sref_t sref;
 } _sg_view_ref_t;
 
-// resource tracking (for keeping track of gpu-written storage resources
-typedef struct {
-    uint32_t size;
-    uint32_t cur;
-    uint32_t* items;
-} _sg_tracker_t;
-
 // constants
 enum {
     _SG_STRING_SIZE = 32,
@@ -5743,7 +5733,6 @@ enum {
     _SG_DEFAULT_PIPELINE_POOL_SIZE = 64,
     _SG_DEFAULT_VIEW_POOL_SIZE = 256,
     _SG_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
-    _SG_DEFAULT_MAX_DISPATCH_CALLS_PER_PASS = 1024,
     _SG_DEFAULT_MAX_COMMIT_LISTENERS = 1024,
     _SG_DEFAULT_WGPU_BINDGROUP_CACHE_SIZE = 1024,
     _SG_MAX_STORAGEBUFFER_BINDINGS_PER_STAGE = 8,
@@ -6600,9 +6589,6 @@ typedef struct {
     #if defined(SOKOL_DEBUG)
     sg_log_item validate_error;
     #endif
-    struct {
-        _sg_tracker_t readwrite_sbufs;      // tracks read/write storage buffers used in compute pass
-    } compute;
     _sg_pools_t pools;
     sg_backend backend;
     sg_features features;
@@ -7186,48 +7172,6 @@ _SG_IMPL_RES_PTR_OR_NULL(_sg_sampler_ref_ptr_or_null, _sg_sampler_ref_t, _sg_sam
 _SG_IMPL_RES_PTR_OR_NULL(_sg_shader_ref_ptr_or_null, _sg_shader_ref_t, _sg_shader_t)
 _SG_IMPL_RES_PTR_OR_NULL(_sg_pipeline_ref_ptr_or_null, _sg_pipeline_ref_t, _sg_pipeline_t)
 _SG_IMPL_RES_PTR_OR_NULL(_sg_view_ref_ptr_or_null, _sg_view_ref_t, _sg_view_t)
-
-// ████████ ██████   █████   ██████ ██   ██ ███████ ██████
-//    ██    ██   ██ ██   ██ ██      ██  ██  ██      ██   ██
-//    ██    ██████  ███████ ██      █████   █████   ██████
-//    ██    ██   ██ ██   ██ ██      ██  ██  ██      ██   ██
-//    ██    ██   ██ ██   ██  ██████ ██   ██ ███████ ██   ██
-//
-// >>tracker
-_SOKOL_PRIVATE void _sg_tracker_init(_sg_tracker_t* tracker, uint32_t num) {
-    SOKOL_ASSERT(tracker);
-    SOKOL_ASSERT(num > 0);
-    SOKOL_ASSERT(0 == tracker->size);
-    SOKOL_ASSERT(0 == tracker->cur);
-    SOKOL_ASSERT(0 == tracker->items);
-    tracker->size = (uint32_t)num;
-    tracker->items = (uint32_t*)_sg_malloc_clear(num * sizeof(uint32_t));
-}
-
-_SOKOL_PRIVATE void _sg_tracker_discard(_sg_tracker_t* tracker) {
-    SOKOL_ASSERT(tracker);
-    if (tracker->items) {
-        _sg_free(tracker->items);
-    }
-    tracker->size = 0;
-    tracker->cur = 0;
-    tracker->items = 0;
-}
-
-_SOKOL_PRIVATE void _sg_tracker_reset(_sg_tracker_t* tracker) {
-    SOKOL_ASSERT(tracker && tracker->items);
-    tracker->cur = 0;
-}
-
-_SOKOL_PRIVATE bool _sg_tracker_add(_sg_tracker_t* tracker, uint32_t res_id) {
-    SOKOL_ASSERT(tracker && tracker->items);
-    if (tracker->cur < tracker->size) {
-        tracker->items[tracker->cur++] = res_id;
-        return true;
-    } else {
-        return false;
-    }
-}
 
 // ██   ██ ███████ ██      ██████  ███████ ██████  ███████
 // ██   ██ ██      ██      ██   ██ ██      ██   ██ ██
@@ -15297,24 +15241,6 @@ _SOKOL_PRIVATE void _sg_mtl_end_pass(const _sg_attachments_ptrs_t* atts) {
         [_sg.mtl.compute_cmd_encoder endEncoding];
         // NOTE: MTLComputeCommandEncoder is autoreleased
         _sg.mtl.compute_cmd_encoder = nil;
-
-        // synchronize any managed resources written by the GPU
-        // NOTE: storage attachment images are currently not managed and are not eligible for syncing
-        #if defined(_SG_TARGET_MACOS)
-        if (_sg_mtl_resource_options_storage_mode_managed_or_shared() == MTLResourceStorageModeManaged) {
-            const bool needs_sync = _sg.compute.readwrite_sbufs.cur > 0;
-            if (needs_sync) {
-                id<MTLBlitCommandEncoder> blit_cmd_encoder = [_sg.mtl.cmd_buffer blitCommandEncoder];
-                for (uint32_t i = 0; i < _sg.compute.readwrite_sbufs.cur; i++) {
-                    _sg_buffer_t* sbuf = _sg_lookup_buffer(_sg.compute.readwrite_sbufs.items[i]);
-                    if (sbuf) {
-                        [blit_cmd_encoder synchronizeResource:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot])];
-                    }
-                }
-                [blit_cmd_encoder endEncoding];
-            }
-        }
-        #endif
     }
     // if this is a swapchain pass, present the drawable
     if (nil != _sg.mtl.cur_drawable) {
@@ -20247,29 +20173,6 @@ _SOKOL_PRIVATE bool _sg_remove_commit_listener(const sg_commit_listener* listene
     return false;
 }
 
-_SOKOL_PRIVATE void _sg_setup_compute(const sg_desc* desc) {
-    SOKOL_ASSERT(desc && (desc->max_dispatch_calls_per_pass > 0));
-    const uint32_t max_tracked_sbufs = (uint32_t)desc->max_dispatch_calls_per_pass * SG_MAX_VIEW_BINDSLOTS;
-    _sg_tracker_init(&_sg.compute.readwrite_sbufs, max_tracked_sbufs);
-}
-
-_SOKOL_PRIVATE void _sg_discard_compute(void) {
-    _sg_tracker_discard(&_sg.compute.readwrite_sbufs);
-}
-
-_SOKOL_PRIVATE void _sg_compute_pass_track_storage_buffer(const _sg_buffer_ref_t* ref, bool readonly) {
-    SOKOL_ASSERT(_sg_buffer_ref_alive(ref));
-    if (!readonly) {
-        _sg_tracker_add(&_sg.compute.readwrite_sbufs, ref->sref.id);
-    }
-}
-
-_SOKOL_PRIVATE void _sg_compute_on_endpass(void) {
-    SOKOL_ASSERT(_sg.cur_pass.in_pass);
-    SOKOL_ASSERT(_sg.cur_pass.is_compute);
-    _sg_tracker_reset(&_sg.compute.readwrite_sbufs);
-}
-
 _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
     /*
         NOTE: on WebGPU, the default color pixel format MUST be provided,
@@ -20292,7 +20195,6 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
     res.pipeline_pool_size = _sg_def(res.pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE);
     res.view_pool_size = _sg_def(res.view_pool_size, _SG_DEFAULT_VIEW_POOL_SIZE);
     res.uniform_buffer_size = _sg_def(res.uniform_buffer_size, _SG_DEFAULT_UB_SIZE);
-    res.max_dispatch_calls_per_pass = _sg_def(res.max_dispatch_calls_per_pass, _SG_DEFAULT_MAX_DISPATCH_CALLS_PER_PASS);
     res.max_commit_listeners = _sg_def(res.max_commit_listeners, _SG_DEFAULT_MAX_COMMIT_LISTENERS);
     res.wgpu_bindgroups_cache_size = _sg_def(res.wgpu_bindgroups_cache_size, _SG_DEFAULT_WGPU_BINDGROUP_CACHE_SIZE);
     return res;
@@ -20372,7 +20274,6 @@ SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
     _SG_CLEAR_ARC_STRUCT(_sg_state_t, _sg);
     _sg.desc = _sg_desc_defaults(desc);
     _sg_setup_pools(&_sg.pools, &_sg.desc);
-    _sg_setup_compute(&_sg.desc);
     _sg_setup_commit_listeners(&_sg.desc);
     _sg.frame_index = 1;
     _sg.stats_enabled = true;
@@ -20384,7 +20285,6 @@ SOKOL_API_IMPL void sg_shutdown(void) {
     _sg_discard_all_resources();
     _sg_discard_backend();
     _sg_discard_commit_listeners();
-    _sg_discard_compute();
     _sg_discard_pools(&_sg.pools);
     _SG_CLEAR_ARC_STRUCT(_sg_state_t, _sg);
 }
@@ -21223,9 +21123,6 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
             if (bnd.views[i]) {
                 if (bnd.views[i]->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
                     _sg.next_draw_valid &= _sg_buffer_ref_valid(&bnd.views[i]->cmn.buf.ref);
-                    if (_sg.cur_pass.is_compute) {
-                        _sg_compute_pass_track_storage_buffer(&bnd.views[i]->cmn.buf.ref, shd->cmn.views[i].sbuf_readonly);
-                    }
                 } else {
                     _sg.next_draw_valid &= _sg_image_ref_valid(&bnd.views[i]->cmn.img.ref);
                 }
@@ -21322,9 +21219,6 @@ SOKOL_API_IMPL void sg_end_pass(void) {
     const _sg_attachments_ptrs_t atts_ptrs = _sg_attachments_ptrs(&_sg.cur_pass.atts);
     _sg_end_pass(&atts_ptrs);
     _sg.cur_pip = _sg_pipeline_ref(0);
-    if (_sg.cur_pass.is_compute) {
-        _sg_compute_on_endpass();
-    }
     _sg_clear(&_sg.cur_pass, sizeof(_sg.cur_pass));
     _SG_TRACE_NOARGS(end_pass);
 }
