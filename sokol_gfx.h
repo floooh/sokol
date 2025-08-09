@@ -10708,7 +10708,7 @@ _SOKOL_PRIVATE void _sg_gl_end_render_pass(const _sg_attachments_ptrs_t* atts) {
         for (int i = 0; i < num_color_atts; i++) {
             // perform MSAA resolve if needed
             const _sg_view_t* rsv_view = atts->resolve_views[i];
-            if (rsv_view->gl.msaa_resolve_frame_buffer != 0) {
+            if (rsv_view && rsv_view->gl.msaa_resolve_frame_buffer) {
                 if (!fb_read_bound) {
                     glBindFramebuffer(GL_READ_FRAMEBUFFER, _sg.gl.fb);
                     fb_read_bound = true;
