@@ -12335,6 +12335,7 @@ SOKOL_API_IMPL sapp_mouse_cursor sapp_get_mouse_cursor(void) {
 }
 
 SOKOL_API_IMPL void sapp_set_mouse_cursor_image(sapp_mouse_cursor_image cursor_image) {
+    SOKOL_ASSERT(cursor_image.opaque != 0);
     if (_sapp.mouse.current_cursor != SAPP_MOUSECURSOR_CUSTOM_IMAGE || _sapp.mouse.current_cursor_image.opaque != cursor_image.opaque) {
         _sapp_update_cursor(SAPP_MOUSECURSOR_CUSTOM_IMAGE, cursor_image, _sapp.mouse.shown);
     }
