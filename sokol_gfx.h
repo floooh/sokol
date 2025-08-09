@@ -9865,7 +9865,7 @@ _SOKOL_PRIVATE void _sg_gl_teximage(const _sg_image_t* img, GLenum tgt, int mip_
                 const GLenum fmt = _sg_gl_teximage_format(img->cmn.pixel_format);
                 #if defined(SOKOL_GLCORE)
                     if (msaa) {
-                        glTexImage2DMultisample(tgt, img->cmn.sample_count, (GLint)ifmt, w, h, GL_TRUE);
+                        glTexImage2DMultisample(tgt, img->cmn.sample_count, (GLenum)ifmt, w, h, GL_TRUE);
                     } else {
                         glTexImage2D(tgt, mip_index, (GLint)ifmt, w, h, 0, fmt, type, data_ptr);
                     }
@@ -9884,7 +9884,7 @@ _SOKOL_PRIVATE void _sg_gl_teximage(const _sg_image_t* img, GLenum tgt, int mip_
                 #if defined(SOKOL_GLCORE)
                     if (msaa) {
                         // NOTE: MSAA works only for array textures, not 3D textures
-                        glTexImage3DMultisample(tgt, img->cmn.sample_count, (GLint)ifmt, w, h, depth, GL_TRUE);
+                        glTexImage3DMultisample(tgt, img->cmn.sample_count, (GLenum)ifmt, w, h, depth, GL_TRUE);
                     } else {
                         glTexImage3D(tgt, mip_index, (GLint)ifmt, w, h, depth, 0, fmt, type, data_ptr);
                     }
