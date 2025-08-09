@@ -2009,6 +2009,7 @@ typedef struct _sfons_t {
     sg_shader shd;
     sgl_pipeline pip;
     sg_image img;
+    sg_view tex_view;
     sg_sampler smp;
     int cur_width, cur_height;
     bool img_dirty;
@@ -2074,21 +2075,21 @@ static int _sfons_render_create(void* user_ptr, int width, int height) {
         shd_desc.uniform_blocks[0].glsl_uniforms[0].glsl_name = "vs_params";
         shd_desc.uniform_blocks[0].glsl_uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
         shd_desc.uniform_blocks[0].glsl_uniforms[0].array_count = 8;
-        shd_desc.images[0].stage = SG_SHADERSTAGE_FRAGMENT;
-        shd_desc.images[0].image_type = SG_IMAGETYPE_2D;
-        shd_desc.images[0].sample_type = SG_IMAGESAMPLETYPE_FLOAT;
-        shd_desc.images[0].hlsl_register_t_n = 0;
-        shd_desc.images[0].msl_texture_n = 0;
-        shd_desc.images[0].wgsl_group1_binding_n = 64;
+        shd_desc.views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT;
+        shd_desc.views[0].texture.image_type = SG_IMAGETYPE_2D;
+        shd_desc.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
+        shd_desc.views[0].texture.hlsl_register_t_n = 0;
+        shd_desc.views[0].texture.msl_texture_n = 0;
+        shd_desc.views[0].texture.wgsl_group1_binding_n = 64;
         shd_desc.samplers[0].stage = SG_SHADERSTAGE_FRAGMENT;
         shd_desc.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
         shd_desc.samplers[0].hlsl_register_s_n = 0;
         shd_desc.samplers[0].msl_sampler_n = 0;
         shd_desc.samplers[0].wgsl_group1_binding_n = 80;
-        shd_desc.image_sampler_pairs[0].stage = SG_SHADERSTAGE_FRAGMENT;
-        shd_desc.image_sampler_pairs[0].glsl_name = "tex_smp";
-        shd_desc.image_sampler_pairs[0].image_slot = 0;
-        shd_desc.image_sampler_pairs[0].sampler_slot = 0;
+        shd_desc.texture_sampler_pairs[0].stage = SG_SHADERSTAGE_FRAGMENT;
+        shd_desc.texture_sampler_pairs[0].glsl_name = "tex_smp";
+        shd_desc.texture_sampler_pairs[0].view_slot = 0;
+        shd_desc.texture_sampler_pairs[0].sampler_slot = 0;
         shd_desc.label = "sokol-fontstash-shader";
         #if defined(SOKOL_GLCORE)
             shd_desc.vertex_func.source = (const char*)_sfons_vs_source_glsl410;
@@ -2135,6 +2136,7 @@ static int _sfons_render_create(void* user_ptr, int width, int height) {
         pip_desc.colors[0].blend.enabled = true;
         pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
         pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        pip_desc.label = "fontstash-pipeline";
         sfons->pip = sgl_make_pipeline(&pip_desc);
     }
 
@@ -2144,25 +2146,36 @@ static int _sfons_render_create(void* user_ptr, int width, int height) {
         _sfons_clear(&smp_desc, sizeof(smp_desc));
         smp_desc.min_filter = SG_FILTER_LINEAR;
         smp_desc.mag_filter = SG_FILTER_LINEAR;
+        smp_desc.label = "fontstash-sampler";
         sfons->smp = sg_make_sampler(&smp_desc);
     }
 
-    // create or re-create font atlas texture
+    // create or re-create font atlas image and texture view
     if (sfons->img.id != SG_INVALID_ID) {
         sg_destroy_image(sfons->img);
         sfons->img.id = SG_INVALID_ID;
     }
+    if (sfons->tex_view.id != SG_INVALID_ID) {
+        sg_destroy_view(sfons->tex_view);
+        sfons->tex_view.id = SG_INVALID_ID;
+    }
+    SOKOL_ASSERT(sfons->img.id == SG_INVALID_ID);
+    SOKOL_ASSERT(sfons->tex_view.id == SG_INVALID_ID);
     sfons->cur_width = width;
     sfons->cur_height = height;
-
-    SOKOL_ASSERT(sfons->img.id == SG_INVALID_ID);
     sg_image_desc img_desc;
     _sfons_clear(&img_desc, sizeof(img_desc));
     img_desc.width = sfons->cur_width;
     img_desc.height = sfons->cur_height;
     img_desc.usage.dynamic_update = true;
     img_desc.pixel_format = SG_PIXELFORMAT_R8;
+    img_desc.label = "fontstash-image";
     sfons->img = sg_make_image(&img_desc);
+    sg_view_desc view_desc;
+    _sfons_clear(&view_desc, sizeof(view_desc));
+    view_desc.texture.image = sfons->img;
+    view_desc.label = "fontstash-texview";
+    sfons->tex_view = sg_make_view(&view_desc);
     return 1;
 }
 
@@ -2182,7 +2195,7 @@ static void _sfons_render_draw(void* user_ptr, const float* verts, const float* 
     SOKOL_ASSERT(user_ptr && verts && tcoords && colors && (nverts > 0));
     _sfons_t* sfons = (_sfons_t*) user_ptr;
     sgl_enable_texture();
-    sgl_texture(sfons->img, sfons->smp);
+    sgl_texture(sfons->tex_view, sfons->smp);
     sgl_push_pipeline();
     sgl_load_pipeline(sfons->pip);
     sgl_begin_triangles();
@@ -2200,6 +2213,10 @@ static void _sfons_render_delete(void* user_ptr) {
     if (sfons->img.id != SG_INVALID_ID) {
         sg_destroy_image(sfons->img);
         sfons->img.id = SG_INVALID_ID;
+    }
+    if (sfons->tex_view.id != SG_INVALID_ID) {
+        sg_destroy_view(sfons->tex_view);
+        sfons->tex_view.id = SG_INVALID_ID;
     }
     if (sfons->smp.id != SG_INVALID_ID) {
         sg_destroy_sampler(sfons->smp);

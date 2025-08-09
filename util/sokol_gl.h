@@ -233,9 +233,9 @@
 
             sgl_enable_texture()
             sgl_disable_texture()
-            sgl_texture(sg_image img, sg_sampler smp)
+            sgl_texture(sg_view tex_view, sg_sampler smp)
 
-        NOTE: the img and smp handles can be invalid (SG_INVALID_ID), in this
+        NOTE: the tex_view and smp handles can be invalid (SG_INVALID_ID), in this
         case, sokol-gl will fall back to the internal default (white) texture
         and sampler.
 
@@ -865,7 +865,7 @@ SOKOL_GL_API_DECL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_
 SOKOL_GL_API_DECL void sgl_scissor_rectf(float x, float y, float w, float h, bool origin_top_left);
 SOKOL_GL_API_DECL void sgl_enable_texture(void);
 SOKOL_GL_API_DECL void sgl_disable_texture(void);
-SOKOL_GL_API_DECL void sgl_texture(sg_image img, sg_sampler smp);
+SOKOL_GL_API_DECL void sgl_texture(sg_view tex_view, sg_sampler smp);
 SOKOL_GL_API_DECL void sgl_layer(int layer_id);
 
 /* pipeline stack functions */
@@ -2767,7 +2767,7 @@ typedef enum {
 
 typedef struct {
     sg_pipeline pip;
-    sg_image img;
+    sg_view view;
     sg_sampler smp;
     int base_vertex;
     int num_vertices;
@@ -2837,7 +2837,7 @@ typedef struct {
     uint32_t rgba;
     float point_size;
     _sgl_primitive_type_t cur_prim_type;
-    sg_image cur_img;
+    sg_view cur_view;
     sg_sampler cur_smp;
     bool texturing_enabled;
     bool matrix_dirty;      /* reset in sgl_end(), set in any of the matrix stack functions */
@@ -2866,6 +2866,7 @@ typedef struct {
     uint32_t init_cookie;
     sgl_desc_t desc;
     sg_image def_img;   // a default white texture
+    sg_view def_view;   // ...and the texture view for the default image
     sg_sampler def_smp; // a default sampler
     sg_shader shd;      // same shader for all contexts
     sgl_context def_ctx_id;
@@ -3305,7 +3306,7 @@ static void _sgl_init_context(sgl_context ctx_id, const sgl_context_desc_t* in_d
     ctx->desc = _sgl_context_desc_defaults(in_desc);
     // NOTE: frame_id must be non-zero, so that updates trigger in first frame
     ctx->frame_id = 1;
-    ctx->cur_img = _sgl.def_img;
+    ctx->cur_view = _sgl.def_view;
     ctx->cur_smp = _sgl.def_smp;
 
     // allocate buffers and pools
@@ -3756,10 +3757,18 @@ static void _sgl_setup_common(void) {
     _sgl.def_img = sg_make_image(&img_desc);
     SOKOL_ASSERT(SG_INVALID_ID != _sgl.def_img.id);
 
+    sg_view_desc view_desc;
+    _sgl_clear(&view_desc, sizeof(view_desc));
+    view_desc.texture.image = _sgl.def_img;
+    view_desc.label = "sgl-default-texture-view";
+    _sgl.def_view = sg_make_view(&view_desc);
+    SOKOL_ASSERT(SG_INVALID_ID != _sgl.def_view.id);
+
     sg_sampler_desc smp_desc;
     _sgl_clear(&smp_desc, sizeof(smp_desc));
     smp_desc.min_filter = SG_FILTER_NEAREST;
     smp_desc.mag_filter = SG_FILTER_NEAREST;
+    smp_desc.label = "sgl-default-sampler";
     _sgl.def_smp = sg_make_sampler(&smp_desc);
     SOKOL_ASSERT(SG_INVALID_ID != _sgl.def_smp.id);
 
@@ -3786,21 +3795,21 @@ static void _sgl_setup_common(void) {
     shd_desc.uniform_blocks[0].glsl_uniforms[0].glsl_name = "vs_params";
     shd_desc.uniform_blocks[0].glsl_uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
     shd_desc.uniform_blocks[0].glsl_uniforms[0].array_count = 8;
-    shd_desc.images[0].stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.images[0].image_type = SG_IMAGETYPE_2D;
-    shd_desc.images[0].sample_type = SG_IMAGESAMPLETYPE_FLOAT;
-    shd_desc.images[0].hlsl_register_t_n = 0;
-    shd_desc.images[0].msl_texture_n = 0;
-    shd_desc.images[0].wgsl_group1_binding_n = 64;
+    shd_desc.views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT;
+    shd_desc.views[0].texture.image_type = SG_IMAGETYPE_2D;
+    shd_desc.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
+    shd_desc.views[0].texture.hlsl_register_t_n = 0;
+    shd_desc.views[0].texture.msl_texture_n = 0;
+    shd_desc.views[0].texture.wgsl_group1_binding_n = 64;
     shd_desc.samplers[0].stage = SG_SHADERSTAGE_FRAGMENT;
     shd_desc.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
     shd_desc.samplers[0].hlsl_register_s_n = 0;
     shd_desc.samplers[0].msl_sampler_n = 0;
     shd_desc.samplers[0].wgsl_group1_binding_n = 80;
-    shd_desc.image_sampler_pairs[0].stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.image_sampler_pairs[0].image_slot = 0;
-    shd_desc.image_sampler_pairs[0].sampler_slot = 0;
-    shd_desc.image_sampler_pairs[0].glsl_name = "tex_smp";
+    shd_desc.texture_sampler_pairs[0].stage = SG_SHADERSTAGE_FRAGMENT;
+    shd_desc.texture_sampler_pairs[0].view_slot = 0;
+    shd_desc.texture_sampler_pairs[0].sampler_slot = 0;
+    shd_desc.texture_sampler_pairs[0].glsl_name = "tex_smp";
     shd_desc.label = "sgl-shader";
     #if defined(SOKOL_GLCORE)
         shd_desc.vertex_func.source = (const char*)_sgl_vs_source_glsl410;
@@ -3843,6 +3852,7 @@ static void _sgl_setup_common(void) {
 // discard resources which are shared between all contexts
 static void _sgl_discard_common(void) {
     sg_push_debug_group("sokol-gl");
+    sg_destroy_view(_sgl.def_view);
     sg_destroy_image(_sgl.def_img);
     sg_destroy_sampler(_sgl.def_smp);
     sg_destroy_shader(_sgl.shd);
@@ -3859,7 +3869,7 @@ static void _sgl_draw(_sgl_context_t* ctx, int layer_id) {
         sg_push_debug_group("sokol-gl");
 
         uint32_t cur_pip_id = SG_INVALID_ID;
-        uint32_t cur_img_id = SG_INVALID_ID;
+        uint32_t cur_tex_id = SG_INVALID_ID;
         uint32_t cur_smp_id = SG_INVALID_ID;
         int cur_uniform_index = -1;
 
@@ -3895,16 +3905,16 @@ static void _sgl_draw(_sgl_context_t* ctx, int layer_id) {
                         if (args->pip.id != cur_pip_id) {
                             sg_apply_pipeline(args->pip);
                             cur_pip_id = args->pip.id;
-                            /* when pipeline changes, also need to re-apply uniforms and bindings */
-                            cur_img_id = SG_INVALID_ID;
+                            // when pipeline changes, also need to re-apply uniforms and bindings
+                            cur_tex_id = SG_INVALID_ID;
                             cur_smp_id = SG_INVALID_ID;
                             cur_uniform_index = -1;
                         }
-                        if ((cur_img_id != args->img.id) || (cur_smp_id != args->smp.id)) {
-                            ctx->bind.images[0] = args->img;
+                        if ((cur_tex_id != args->view.id) || (cur_smp_id != args->smp.id)) {
+                            ctx->bind.views[0] = args->view;
                             ctx->bind.samplers[0] = args->smp;
                             sg_apply_bindings(&ctx->bind);
-                            cur_img_id = args->img.id;
+                            cur_tex_id = args->view.id;
                             cur_smp_id = args->smp.id;
                         }
                         if (cur_uniform_index != args->uniform_index) {
@@ -3912,7 +3922,7 @@ static void _sgl_draw(_sgl_context_t* ctx, int layer_id) {
                             sg_apply_uniforms(0, &ub_range);
                             cur_uniform_index = args->uniform_index;
                         }
-                        /* FIXME: what if number of vertices doesn't match the primitive type? */
+                        // FIXME: what if number of vertices doesn't match the primitive type?
                         if (args->num_vertices > 0) {
                             sg_draw(args->base_vertex, args->num_vertices, 1);
                         }
@@ -4147,7 +4157,7 @@ SOKOL_API_IMPL void sgl_defaults(void) {
     ctx->rgba = 0xFFFFFFFF;
     ctx->point_size = 1.0f;
     ctx->texturing_enabled = false;
-    ctx->cur_img = _sgl.def_img;
+    ctx->cur_view = _sgl.def_view;
     ctx->cur_smp = _sgl.def_smp;
     sgl_load_default_pipeline();
     _sgl_identity(_sgl_matrix_texture(ctx));
@@ -4233,17 +4243,17 @@ SOKOL_API_IMPL void sgl_disable_texture(void) {
     ctx->texturing_enabled = false;
 }
 
-SOKOL_API_IMPL void sgl_texture(sg_image img, sg_sampler smp) {
+SOKOL_API_IMPL void sgl_texture(sg_view tex_view, sg_sampler smp) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl_context_t* ctx = _sgl.cur_ctx;
     if (!ctx) {
         return;
     }
     SOKOL_ASSERT(!ctx->in_begin);
-    if (SG_INVALID_ID != img.id) {
-        ctx->cur_img = img;
+    if (SG_INVALID_ID != tex_view.id) {
+        ctx->cur_view = tex_view;
     } else {
-        ctx->cur_img = _sgl.def_img;
+        ctx->cur_view = _sgl.def_view;
     }
     if (SG_INVALID_ID != smp.id) {
         ctx->cur_smp = smp;
@@ -4339,7 +4349,7 @@ SOKOL_API_IMPL void sgl_end(void) {
 
     // check if command can be merged with current command
     sg_pipeline pip = _sgl_get_pipeline(ctx->pip_stack[ctx->pip_tos], ctx->cur_prim_type);
-    sg_image img = ctx->texturing_enabled ? ctx->cur_img : _sgl.def_img;
+    sg_view view = ctx->texturing_enabled ? ctx->cur_view : _sgl.def_view;
     sg_sampler smp = ctx->texturing_enabled ? ctx->cur_smp : _sgl.def_smp;
     _sgl_command_t* cur_cmd = _sgl_cur_command(ctx);
     bool merge_cmd = false;
@@ -4349,7 +4359,7 @@ SOKOL_API_IMPL void sgl_end(void) {
             (ctx->cur_prim_type != SGL_PRIMITIVETYPE_LINE_STRIP) &&
             (ctx->cur_prim_type != SGL_PRIMITIVETYPE_TRIANGLE_STRIP) &&
             !matrix_dirty &&
-            (cur_cmd->args.draw.img.id == img.id) &&
+            (cur_cmd->args.draw.view.id == view.id) &&
             (cur_cmd->args.draw.smp.id == smp.id) &&
             (cur_cmd->args.draw.pip.id == pip.id))
         {
@@ -4366,7 +4376,7 @@ SOKOL_API_IMPL void sgl_end(void) {
             SOKOL_ASSERT(ctx->uniforms.next > 0);
             cmd->cmd = SGL_COMMAND_DRAW;
             cmd->layer_id = ctx->layer_id;
-            cmd->args.draw.img = img;
+            cmd->args.draw.view = view;
             cmd->args.draw.smp = smp;
             cmd->args.draw.pip = _sgl_get_pipeline(ctx->pip_stack[ctx->pip_tos], ctx->cur_prim_type);
             cmd->args.draw.base_vertex = ctx->base_vertex;

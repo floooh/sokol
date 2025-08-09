@@ -42,7 +42,7 @@ UTEST(sokol_gl, default_init_shutdown) {
     TFLT(_sgl.cur_ctx->u, 0.0f, FLT_MIN);
     TFLT(_sgl.cur_ctx->v, 0.0f, FLT_MIN);
     T(_sgl.cur_ctx->rgba == 0xFFFFFFFF);
-    T(_sgl.cur_ctx->cur_img.id == _sgl.def_img.id);
+    T(_sgl.cur_ctx->cur_view.id == _sgl.def_view.id);
     T(sgl_num_commands() == 0);
     T(sgl_num_vertices() == 0);
     shutdown();
@@ -94,7 +94,7 @@ UTEST(sokol_gl, scissor_rect) {
 
 UTEST(sokol_gl, texture) {
     init();
-    T(_sgl.cur_ctx->cur_img.id == _sgl.def_img.id);
+    T(_sgl.cur_ctx->cur_view.id == _sgl.def_view.id);
     uint32_t pixels[64] = { 0 };
     sg_image img = sg_make_image(&(sg_image_desc){
         .type = SG_IMAGETYPE_2D,
@@ -102,16 +102,19 @@ UTEST(sokol_gl, texture) {
         .height = 8,
         .data.subimage[0][0] = SG_RANGE(pixels),
     });
+    sg_view view = sg_make_view(&(sg_view_desc){
+        .texture = { .image = img },
+    });
     sg_sampler smp = sg_make_sampler(&(sg_sampler_desc){0});
-    sgl_texture(img, smp);
-    T(_sgl.cur_ctx->cur_img.id == img.id);
+    sgl_texture(view, smp);
+    T(_sgl.cur_ctx->cur_view.id == view.id);
     T(_sgl.cur_ctx->cur_smp.id == smp.id);
     shutdown();
 }
 
 UTEST(sokol_gl, texture_image_nosampler) {
     init();
-    T(_sgl.cur_ctx->cur_img.id == _sgl.def_img.id);
+    T(_sgl.cur_ctx->cur_view.id == _sgl.def_view.id);
     uint32_t pixels[64] = { 0 };
     sg_image img = sg_make_image(&(sg_image_desc){
         .type = SG_IMAGETYPE_2D,
@@ -119,27 +122,30 @@ UTEST(sokol_gl, texture_image_nosampler) {
         .height = 8,
         .data.subimage[0][0] = SG_RANGE(pixels),
     });
-    sgl_texture(img, (sg_sampler){0});
-    T(_sgl.cur_ctx->cur_img.id == img.id);
+    sg_view view = sg_make_view(&(sg_view_desc){
+        .texture.image = img,
+    });
+    sgl_texture(view, (sg_sampler){0});
+    T(_sgl.cur_ctx->cur_view.id == view.id);
     T(_sgl.cur_ctx->cur_smp.id == _sgl.def_smp.id);
     shutdown();
 }
 
 UTEST(sokol_gl, texture_noimage_sampler) {
     init();
-    T(_sgl.cur_ctx->cur_img.id == _sgl.def_img.id);
+    T(_sgl.cur_ctx->cur_view.id == _sgl.def_view.id);
     sg_sampler smp = sg_make_sampler(&(sg_sampler_desc){0});
-    sgl_texture((sg_image){0}, smp);
-    T(_sgl.cur_ctx->cur_img.id == _sgl.def_img.id);
+    sgl_texture((sg_view){0}, smp);
+    T(_sgl.cur_ctx->cur_view.id == _sgl.def_view.id);
     T(_sgl.cur_ctx->cur_smp.id == smp.id);
     shutdown();
 }
 
 UTEST(sokol_gl, texture_noimage_nosampler) {
     init();
-    T(_sgl.cur_ctx->cur_img.id == _sgl.def_img.id);
-    sgl_texture((sg_image){0}, (sg_sampler){0});
-    T(_sgl.cur_ctx->cur_img.id == _sgl.def_img.id);
+    T(_sgl.cur_ctx->cur_view.id == _sgl.def_view.id);
+    sgl_texture((sg_view){0}, (sg_sampler){0});
+    T(_sgl.cur_ctx->cur_view.id == _sgl.def_view.id);
     T(_sgl.cur_ctx->cur_smp.id == _sgl.def_smp.id);
     shutdown();
 }
