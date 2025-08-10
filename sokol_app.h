@@ -1606,16 +1606,18 @@ typedef struct sapp_range {
 /*
     sapp_image_desc
 
-    This is used to describe image data to sokol_app.h (at first, window
-    icons, later maybe cursor images).
+    This is used to describe image data to sokol_app.h (window icons and cursor images).
 
-    Note that the actual image pixel format depends on the use case:
+    The pixel format is RGBA8.
 
-    - window icon pixels are RGBA8
+    cursor_hotspot_x and _y are used only for cursors, to define which pixel
+    of the image should be aligned with the mouse position.
 */
 typedef struct sapp_image_desc {
     int width;
     int height;
+    int cursor_hotspot_x;
+    int cursor_hotspot_y;
     sapp_range pixels;
 } sapp_image_desc;
 
@@ -1943,7 +1945,7 @@ SOKOL_APP_API_DECL sapp_mouse_cursor sapp_get_mouse_cursor(void);
 /* set mouse cursor custom image */
 SOKOL_APP_API_DECL void sapp_set_mouse_cursor_image(sapp_mouse_cursor_image cursor_image);
 /* returns a custom cursor image for use with sapp_set_mouse_cursor_image */
-SOKOL_APP_API_DECL sapp_mouse_cursor_image sapp_make_mouse_cursor_image(sapp_image_desc* desc, int hotspot_x, int hotspot_y);
+SOKOL_APP_API_DECL sapp_mouse_cursor_image sapp_make_mouse_cursor_image(const sapp_image_desc* desc);
 /* frees resource associated with the cursor image */
 SOKOL_APP_API_DECL void sapp_destroy_mouse_cursor_image(sapp_mouse_cursor_image image);
 /* return the userdata pointer optionally provided in sapp_desc */
@@ -4241,7 +4243,7 @@ _SOKOL_PRIVATE void _sapp_macos_update_cursor(sapp_mouse_cursor cursor, sapp_mou
     [ns_cursor set];
 }
 
-_SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_macos_make_mouse_cursor_image(sapp_image_desc* desc, int hotspot_x, int hotspot_y) {
+_SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_macos_make_mouse_cursor_image(const sapp_image_desc* desc) {
     // NOTE: see glfw for reference https://github.com/glfw/glfw/blob/ac10768495837eb98da27d01fe706073d6d251c2/src/cocoa_window.m#L1712
     sapp_mouse_cursor_image ret = {};
     NSBitmapImageRep* rep = [[NSBitmapImageRep alloc]
@@ -4265,7 +4267,7 @@ _SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_macos_make_mouse_cursor_image(sapp_
 
         ret.opaque = (uint64_t) (__bridge const void*) [[NSCursor alloc]
             initWithImage:native
-            hotSpot:NSMakePoint(hotspot_x, hotspot_y)];
+            hotSpot:NSMakePoint(desc->cursor_hotspot_x, desc->cursor_hotspot_y)];
         
         _SAPP_OBJC_RELEASE(native);
         _SAPP_OBJC_RELEASE(rep);
@@ -5608,7 +5610,7 @@ EM_JS(int, sapp_js_make_mouse_cursor_image, (uint8_t* bmp_ptr, int bmp_size, int
 })
 
 // Only used by the emscriten backend right now. Returned memory must be freed by caller.
-sapp_range _sapp_bitmap_from_image_desc(sapp_image_desc* desc) {
+sapp_range _sapp_bitmap_from_image_desc(const sapp_image_desc* desc) {
     SOKOL_ASSERT(desc->width * desc->height * 4 == (int) desc->pixels.size);
     size_t bmp_header_size = 14;
     size_t dib_header_size = 124; // common values are 56, I saw 124 for the rgba32-1.bmp file of the test suite included in firefox, and 108 from wikipedia example 2 (transparent)
@@ -5670,12 +5672,12 @@ sapp_range _sapp_bitmap_from_image_desc(sapp_image_desc* desc) {
     return (sapp_range) { bmp_data, (size_t) bmp_size };
 }
 
-_SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_emsc_make_mouse_cursor_image(sapp_image_desc* desc, int hotspot_x, int hotspot_y) {
+_SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_emsc_make_mouse_cursor_image(const sapp_image_desc* desc) {
     // create a bmp image
     sapp_range bmp_data = _sapp_bitmap_from_image_desc(desc);
 
     // send the bmp blob to the js side
-    int cursor_url_handle = sapp_js_make_mouse_cursor_image((uint8_t*) bmp_data.ptr, (int) bmp_data.size, hotspot_x, hotspot_y);
+    int cursor_url_handle = sapp_js_make_mouse_cursor_image((uint8_t*) bmp_data.ptr, (int) bmp_data.size, desc->cursor_hotspot_x, desc->cursor_hotspot_y);
     _sapp_free((void*)bmp_data.ptr);
 
     sapp_mouse_cursor_image ret = {};
@@ -8546,8 +8548,8 @@ _SOKOL_PRIVATE char** _sapp_win32_command_line_to_utf8_argv(LPWSTR w_command_lin
     return argv;
 }
 
-_SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_win32_make_mouse_cursor_image(sapp_image_desc* desc, int hotspot_x, int hotspot_y) {
-    HCURSOR cursor_handle = _sapp_win32_create_icon_from_image(desc, true, hotspot_x, hotspot_y);
+_SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_win32_make_mouse_cursor_image(const sapp_image_desc* desc) {
+    HCURSOR cursor_handle = _sapp_win32_create_icon_from_image(desc, true, desc->cursor_hotspot_x, desc->cursor_hotspot_y);
     sapp_mouse_cursor_image ret = {0};
     ret.opaque = (uint64_t) cursor_handle;
     return ret;
@@ -10906,12 +10908,12 @@ _SOKOL_PRIVATE void _sapp_x11_destroy_cursors(void) {
     }
 }
 
-_SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_x11_make_mouse_cursor_image(sapp_image_desc* desc, int hotspot_x, int hotspot_y) {
+_SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_x11_make_mouse_cursor_image(const sapp_image_desc* desc) {
     sapp_mouse_cursor_image ret = {};
     XcursorImage* img = XcursorImageCreate(desc->width, desc->height);
     SOKOL_ASSERT(img && ((int) img->width == desc->width) && ((int) img->height == desc->height) && img->pixels);
-    img->xhot = (XcursorDim) hotspot_x;
-    img->yhot = (XcursorDim) hotspot_y;
+    img->xhot = (XcursorDim) desc->cursor_hotspot_x;
+    img->yhot = (XcursorDim) desc->cursor_hotspot_y;
     const size_t dest_num_bytes = (size_t)(img->width * img->height) * sizeof(XcursorPixel);
     SOKOL_ASSERT(dest_num_bytes == desc->pixels.size);
     // Copy RGBA -> BGRA
@@ -12341,27 +12343,25 @@ SOKOL_API_IMPL void sapp_set_mouse_cursor_image(sapp_mouse_cursor_image cursor_i
     }
 }
 
-SOKOL_API_IMPL sapp_mouse_cursor_image sapp_make_mouse_cursor_image(sapp_image_desc* desc, int hotspot_x, int hotspot_y) {
+SOKOL_API_IMPL sapp_mouse_cursor_image sapp_make_mouse_cursor_image(const sapp_image_desc* desc) {
     // NOTE: It seems that for some reason, the hotspot doesn't work if it is one less
     //       than the dimention of the cursor image (or more), on windows. So for a cursor
     //       that is 32 by 32 px, a hotspot of x = 30 works, but not x = 31.
     //       The cursor simply dissapears in such cases. Asserting for all platforms to make
     //       the behaviour consistent.
-    SOKOL_ASSERT(hotspot_x < desc->width - 1 && hotspot_y < desc->height - 1);
+    SOKOL_ASSERT(desc->cursor_hotspot_x < desc->width - 1 && desc->cursor_hotspot_y < desc->height - 1);
     SOKOL_ASSERT(desc->width * desc->height * 4 == (int) desc->pixels.size);
     sapp_mouse_cursor_image ret = {0};
     #if defined(_SAPP_MACOS)
-    ret = _sapp_macos_make_mouse_cursor_image(desc, hotspot_x, hotspot_y);
+    ret = _sapp_macos_make_mouse_cursor_image(desc);
     #elif defined(_SAPP_EMSCRIPTEN)
-    ret = _sapp_emsc_make_mouse_cursor_image(desc, hotspot_x, hotspot_y);
+    ret = _sapp_emsc_make_mouse_cursor_image(desc);
     #elif defined(_SAPP_WIN32)
-    ret = _sapp_win32_make_mouse_cursor_image(desc, hotspot_x, hotspot_y);
+    ret = _sapp_win32_make_mouse_cursor_image(desc);
     #elif defined(_SAPP_LINUX)
-    ret = _sapp_x11_make_mouse_cursor_image(desc, hotspot_x, hotspot_y);
+    ret = _sapp_x11_make_mouse_cursor_image(desc);
     #else
     _SOKOL_UNUSED(desc);
-    _SOKOL_UNUSED(hotspot_x);
-    _SOKOL_UNUSED(hotspot_y);
     #endif
     return ret;
 }
