@@ -8548,7 +8548,7 @@ _SOKOL_PRIVATE char** _sapp_win32_command_line_to_utf8_argv(LPWSTR w_command_lin
 
 _SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_win32_make_mouse_cursor_image(sapp_image_desc* desc, int hotspot_x, int hotspot_y) {
     HCURSOR cursor_handle = _sapp_win32_create_icon_from_image(desc, true, hotspot_x, hotspot_y);
-    sapp_mouse_cursor_image ret = {};
+    sapp_mouse_cursor_image ret = {0};
     ret.opaque = (uint64_t) cursor_handle;
     return ret;
 }
@@ -12349,7 +12349,7 @@ SOKOL_API_IMPL sapp_mouse_cursor_image sapp_make_mouse_cursor_image(sapp_image_d
     //       the behaviour consistent.
     SOKOL_ASSERT(hotspot_x < desc->width - 1 && hotspot_y < desc->height - 1);
     SOKOL_ASSERT(desc->width * desc->height * 4 == (int) desc->pixels.size);
-    sapp_mouse_cursor_image ret = {};
+    sapp_mouse_cursor_image ret = {0};
     #if defined(_SAPP_MACOS)
     ret = _sapp_macos_make_mouse_cursor_image(desc, hotspot_x, hotspot_y);
     #elif defined(_SAPP_EMSCRIPTEN)
