@@ -2220,6 +2220,12 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <windows.h>
     #include <windowsx.h>
     #include <shellapi.h>
+
+    #if defined(__GNUC__)
+        #pragma GCC diagnostic push
+        #pragma GCC diagnostic ignored "-Wunknown-pragmas"
+    #endif
+
     #if !defined(SOKOL_NO_ENTRY)    // if SOKOL_NO_ENTRY is defined, it's the application's responsibility to use the right subsystem
 
         #if defined(SOKOL_WIN32_FORCE_MAIN) && defined(SOKOL_WIN32_FORCE_WINMAIN)
@@ -2240,6 +2246,10 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #if defined(SOKOL_D3D11)
         #pragma comment (lib, "dxgi")
         #pragma comment (lib, "d3d11")
+    #endif
+
+    #if defined(__GNUC__)
+        #pragma GCC diagnostic pop
     #endif
 
     #if defined(SOKOL_D3D11)
