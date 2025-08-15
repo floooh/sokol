@@ -16904,14 +16904,14 @@ _SOKOL_PRIVATE _sg_wgpu_shader_func_t _sg_wgpu_create_shader_func(const sg_shade
     _sg_clear(&res, sizeof(res));
     _sg_strcpy(&res.entry, func->entry);
 
-    WGPUShaderModuleWGSLDescriptor wgpu_shdmod_wgsl_desc;
-    _sg_clear(&wgpu_shdmod_wgsl_desc, sizeof(wgpu_shdmod_wgsl_desc));
-    wgpu_shdmod_wgsl_desc.chain.sType = WGPUSType_ShaderSourceWGSL;
-    wgpu_shdmod_wgsl_desc.code = _sg_wgpu_stringview(func->source);
+    WGPUShaderSourceWGSL wgpu_shdsrc_wgsl;
+    _sg_clear(&wgpu_shdsrc_wgsl, sizeof(wgpu_shdsrc_wgsl));
+    wgpu_shdsrc_wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+    wgpu_shdsrc_wgsl.code = _sg_wgpu_stringview(func->source);
 
     WGPUShaderModuleDescriptor wgpu_shdmod_desc;
     _sg_clear(&wgpu_shdmod_desc, sizeof(wgpu_shdmod_desc));
-    wgpu_shdmod_desc.nextInChain = &wgpu_shdmod_wgsl_desc.chain;
+    wgpu_shdmod_desc.nextInChain = &wgpu_shdsrc_wgsl.chain;
     wgpu_shdmod_desc.label = _sg_wgpu_stringview(label);
 
     // NOTE: if compilation fails we won't actually find out in this call since
