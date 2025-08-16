@@ -3345,6 +3345,9 @@ _SOKOL_PRIVATE void _sapp_discard_state(void) {
     if (_sapp.default_icon_pixels) {
         _sapp_free((void*)_sapp.default_icon_pixels);
     }
+    for (int i = 0; i < _SAPP_MOUSECURSOR_NUM; i++) {
+        sapp_unbind_mouse_cursor_image((sapp_mouse_cursor) i);
+    }
     _SAPP_CLEAR_ARC_STRUCT(_sapp_t, _sapp);
 }
 
@@ -12361,32 +12364,21 @@ SOKOL_API_IMPL sapp_mouse_cursor sapp_get_mouse_cursor(void) {
 
 SOKOL_API_IMPL void sapp_bind_mouse_cursor_image(sapp_mouse_cursor cursor, const sapp_image_desc* desc) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    sapp_unbind_mouse_cursor_image(cursor);
+    _sapp.mousecursor_images[(int) cursor] = sapp_make_mouse_cursor_image(desc).opaque;
+}
 
-    // free slot if already used
+SOKOL_APP_API_DECL void sapp_unbind_mouse_cursor_image(sapp_mouse_cursor cursor) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    
     uint64_t* slot = &_sapp.mousecursor_images[(int) cursor];
     if (*slot) {
         sapp_mouse_cursor_image mci = {};
         mci.opaque = *slot;
         sapp_destroy_mouse_cursor_image(mci);
+        *slot = 0;
     }
-
-    // create new cursor and put it in slot
-    sapp_mouse_cursor_image mouse_cursor_image = sapp_make_mouse_cursor_image(desc);
-    *slot = mouse_cursor_image.opaque;
 }
-
-SOKOL_APP_API_DECL void sapp_unbind_mouse_cursor_image(sapp_mouse_cursor cursor) {
-    sapp_mouse_cursor_image mci = {};
-    mci.opaque = _sapp.mousecursor_images[(int) cursor];
-    sapp_destroy_mouse_cursor_image(mci);
-}
-
-// SOKOL_API_IMPL void sapp_set_mouse_cursor_image(sapp_mouse_cursor_image cursor_image) {
-//     SOKOL_ASSERT(cursor_image.opaque != 0);
-//     if (_sapp.mouse.current_cursor != SAPP_MOUSECURSOR_CUSTOM_IMAGE || _sapp.mouse.current_cursor_image.opaque != cursor_image.opaque) {
-//         _sapp_update_cursor(SAPP_MOUSECURSOR_CUSTOM_IMAGE, cursor_image, _sapp.mouse.shown);
-//     }
-// }
 
 SOKOL_API_IMPL sapp_mouse_cursor_image sapp_make_mouse_cursor_image(const sapp_image_desc* desc) {
     // NOTE: It seems that for some reason, the hotspot doesn't work if it is one less
