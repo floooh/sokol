@@ -1910,6 +1910,7 @@ typedef enum sapp_mouse_cursor {
     _SAPP_MOUSECURSOR_NUM,
 } sapp_mouse_cursor;
 
+// @todo remove
 typedef struct sapp_mouse_cursor_image {
     uint64_t opaque; // opaque handle to the platform-specific cursor resource. Guarenteed to be non-zero if valid.
 } sapp_mouse_cursor_image;
@@ -12366,6 +12367,11 @@ SOKOL_API_IMPL sapp_mouse_cursor sapp_bind_mouse_cursor_image(sapp_mouse_cursor 
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
     sapp_unbind_mouse_cursor_image(cursor);
     _sapp.mousecursor_images[(int) cursor] = sapp_make_mouse_cursor_image(desc).opaque;
+    // Update the displayed cursor in case the current cursor is the one we just bound.
+    if (_sapp.mouse.current_cursor == cursor) {
+        sapp_mouse_cursor_image img = {0};
+        _sapp_update_cursor(cursor, img, _sapp.mouse.shown);
+    }
     return cursor; // returning the passed-in cursor puerly for convenience, in case you want to asign the value to a variable.
 }
 
@@ -12378,6 +12384,12 @@ SOKOL_APP_API_DECL void sapp_unbind_mouse_cursor_image(sapp_mouse_cursor cursor)
         mci.opaque = *slot;
         sapp_destroy_mouse_cursor_image(mci);
         *slot = 0;
+    }
+
+    // Update the displayed cursor in case the current cursor is the one we just unbound.
+    if (_sapp.mouse.current_cursor == cursor) {
+        sapp_mouse_cursor_image img = {0};
+        _sapp_update_cursor(cursor, img, _sapp.mouse.shown);
     }
 }
 
