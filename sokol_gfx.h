@@ -4507,7 +4507,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_BINDING_VS_DEPTHSTENCIL_ATTACHMENT, "sg_apply_bindings: cannot bind texture in the same pass it is used as depth-stencil attachment") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_BINDING_VS_COLOR_ATTACHMENT, "sg_apply_bindings: cannot bind texture in the same pass it is used as color attachment") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_BINDING_VS_RESOLVE_ATTACHMENT, "sg_apply_bindings: cannot bind texture in the same pass it is used as resolve attachment") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_BINDING_VS_STORAGE_ATTACHMENT, "sg_apply_bindings: cannot bind texture in the same pass it is used as storage attachment") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXTURE_VS_STORAGEIMAGE_BINDING, "sg_apply_bindings: an image cannot be bound as a texture and storage image at the same time") \
     _SG_LOGITEM_XMACRO(VALIDATE_AU_PASS_EXPECTED, "sg_apply_uniforms: must be called in a pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_AU_NO_PIPELINE, "sg_apply_uniforms: must be called after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_AU_PIPELINE_ALIVE, "sg_apply_uniforms: currently applied pipeline object no longer alive") \
@@ -19472,26 +19472,36 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
             }
         }
 
-        // the same image cannot be used as texture binding and pass attachment
-        if (!_sg_attachments_empty(&_sg.cur_pass.atts)) {
-            for (size_t view_idx = 0; view_idx < SG_MAX_VIEW_BINDSLOTS; view_idx++) {
-                if (shd->cmn.views[view_idx].view_type == SG_VIEWTYPE_TEXTURE) {
-                    if (bindings->views[view_idx].id == SG_INVALID_ID) {
-                        continue;
-                    }
-                    const _sg_view_t* view = _sg_lookup_view(bindings->views[view_idx].id);
-                    if (view) {
-                        const uint32_t img_id = view->cmn.img.ref.sref.id;
+        // the same image cannot be used as texture binding and pass attachment or storage image binding
+        for (size_t tex_view_idx = 0; tex_view_idx < SG_MAX_VIEW_BINDSLOTS; tex_view_idx++) {
+            if (shd->cmn.views[tex_view_idx].view_type == SG_VIEWTYPE_TEXTURE) {
+                if (bindings->views[tex_view_idx].id == SG_INVALID_ID) {
+                    continue;
+                }
+                const _sg_view_t* tex_view = _sg_lookup_view(bindings->views[tex_view_idx].id);
+                if (tex_view) {
+                    const uint32_t img_id = tex_view->cmn.img.ref.sref.id;
+                    if (!_sg_attachments_empty(&_sg.cur_pass.atts)) {
                         _SG_VALIDATE(img_id != _sg.cur_pass.atts.depth_stencil.id, VALIDATE_ABND_TEXTURE_BINDING_VS_DEPTHSTENCIL_ATTACHMENT);
                         for (size_t att_idx = 0; att_idx < SG_MAX_COLOR_ATTACHMENTS; att_idx++) {
                             _SG_VALIDATE(img_id != _sg.cur_pass.atts.colors[att_idx].id, VALIDATE_ABND_TEXTURE_BINDING_VS_COLOR_ATTACHMENT);
                             _SG_VALIDATE(img_id != _sg.cur_pass.atts.resolves[att_idx].id, VALIDATE_ABND_TEXTURE_BINDING_VS_RESOLVE_ATTACHMENT);
                         }
                     }
+                    for (size_t simg_view_idx = 0; simg_view_idx < SG_MAX_VIEW_BINDSLOTS; simg_view_idx++) {
+                        if (shd->cmn.views[simg_view_idx].view_type == SG_VIEWTYPE_STORAGEIMAGE) {
+                            if (bindings->views[simg_view_idx].id == SG_INVALID_ID) {
+                                continue;
+                            }
+                            const _sg_view_t* simg_view = _sg_lookup_view(bindings->views[simg_view_idx].id);
+                            if (simg_view) {
+                                _SG_VALIDATE(simg_view->cmn.img.ref.sref.id != img_id, VALIDATE_ABND_TEXTURE_VS_STORAGEIMAGE_BINDING);
+                            }
+                        }
+                    }
                 }
             }
         }
-
         return _sg_validate_end();
     #endif
 }
