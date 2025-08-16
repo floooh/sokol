@@ -1606,16 +1606,18 @@ typedef struct sapp_range {
 /*
     sapp_image_desc
 
-    This is used to describe image data to sokol_app.h (at first, window
-    icons, later maybe cursor images).
+    This is used to describe image data to sokol_app.h (window icons and cursor images).
 
-    Note that the actual image pixel format depends on the use case:
+    The pixel format is RGBA8.
 
-    - window icon pixels are RGBA8
+    cursor_hotspot_x and _y are used only for cursors, to define which pixel
+    of the image should be aligned with the mouse position.
 */
 typedef struct sapp_image_desc {
     int width;
     int height;
+    int cursor_hotspot_x;
+    int cursor_hotspot_y;
     sapp_range pixels;
 } sapp_image_desc;
 
@@ -1889,6 +1891,22 @@ typedef enum sapp_mouse_cursor {
     SAPP_MOUSECURSOR_RESIZE_NESW,
     SAPP_MOUSECURSOR_RESIZE_ALL,
     SAPP_MOUSECURSOR_NOT_ALLOWED,
+    SAPP_MOUSECURSOR_CUSTOM_0,
+    SAPP_MOUSECURSOR_CUSTOM_1,
+    SAPP_MOUSECURSOR_CUSTOM_2,
+    SAPP_MOUSECURSOR_CUSTOM_3,
+    SAPP_MOUSECURSOR_CUSTOM_4,
+    SAPP_MOUSECURSOR_CUSTOM_5,
+    SAPP_MOUSECURSOR_CUSTOM_6,
+    SAPP_MOUSECURSOR_CUSTOM_7,
+    SAPP_MOUSECURSOR_CUSTOM_8,
+    SAPP_MOUSECURSOR_CUSTOM_9,
+    SAPP_MOUSECURSOR_CUSTOM_10,
+    SAPP_MOUSECURSOR_CUSTOM_11,
+    SAPP_MOUSECURSOR_CUSTOM_12,
+    SAPP_MOUSECURSOR_CUSTOM_13,
+    SAPP_MOUSECURSOR_CUSTOM_14,
+    SAPP_MOUSECURSOR_CUSTOM_15,
     _SAPP_MOUSECURSOR_NUM,
 } sapp_mouse_cursor;
 
@@ -1935,6 +1953,10 @@ SOKOL_APP_API_DECL bool sapp_mouse_locked(void);
 SOKOL_APP_API_DECL void sapp_set_mouse_cursor(sapp_mouse_cursor cursor);
 /* get current mouse cursor type */
 SOKOL_APP_API_DECL sapp_mouse_cursor sapp_get_mouse_cursor(void);
+/* associate a custom mouse cursor image to a sapp_mouse_cursor enum entry */
+SOKOL_APP_API_DECL sapp_mouse_cursor sapp_bind_mouse_cursor_image(sapp_mouse_cursor cursor, const sapp_image_desc* desc);
+/* restore the sapp_mouse_cursor enum entry to it's default system appearance */
+SOKOL_APP_API_DECL void sapp_unbind_mouse_cursor_image(sapp_mouse_cursor cursor);
 /* return the userdata pointer optionally provided in sapp_desc */
 SOKOL_APP_API_DECL void* sapp_userdata(void);
 /* return a copy of the sapp_desc structure */
@@ -3056,6 +3078,7 @@ typedef struct {
     char window_title[_SAPP_MAX_TITLE_LENGTH];      // UTF-8
     wchar_t window_title_wide[_SAPP_MAX_TITLE_LENGTH];   // UTF-32 or UCS-2 */
     sapp_keycode keycodes[SAPP_MAX_KEYCODES];
+    uint64_t mousecursor_images[_SAPP_MOUSECURSOR_NUM]; // contains opaque system dependent handles, zero if unset. @cleanup @rename @todo
 } _sapp_t;
 static _sapp_t _sapp;
 
@@ -3318,6 +3341,9 @@ _SOKOL_PRIVATE void _sapp_discard_state(void) {
     }
     if (_sapp.default_icon_pixels) {
         _sapp_free((void*)_sapp.default_icon_pixels);
+    }
+    for (int i = 0; i < _SAPP_MOUSECURSOR_NUM; i++) {
+        sapp_unbind_mouse_cursor_image((sapp_mouse_cursor) i);
     }
     _SAPP_CLEAR_ARC_STRUCT(_sapp_t, _sapp);
 }
@@ -4226,14 +4252,57 @@ _SOKOL_PRIVATE void _sapp_macos_update_cursor(sapp_mouse_cursor cursor, bool sho
             [NSCursor hide];
         }
     }
-    // update cursor type
+    
+    // update cursor
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
-    if (_sapp.macos.cursors[cursor]) {
-        [_sapp.macos.cursors[cursor] set];
+    NSCursor* ns_cursor = 0;
+    uint64_t custom_cursor = _sapp.mousecursor_images[cursor];
+    if (custom_cursor != 0) {
+        ns_cursor = (__bridge NSCursor*) (void*) custom_cursor;
+    } else if (_sapp.macos.cursors[cursor]) {
+        ns_cursor = _sapp.macos.cursors[cursor];
+    } else {
+        ns_cursor = [NSCursor arrowCursor];
     }
-    else {
-        [[NSCursor arrowCursor] set];
+    [ns_cursor set];
+}
+
+_SOKOL_PRIVATE uint64_t _sapp_macos_make_mouse_cursor_image(const sapp_image_desc* desc) {
+    // NOTE: see glfw for reference https://github.com/glfw/glfw/blob/ac10768495837eb98da27d01fe706073d6d251c2/src/cocoa_window.m#L1712
+    uint64_t opaque_handle = 0;
+    NSBitmapImageRep* rep = [[NSBitmapImageRep alloc]
+        initWithBitmapDataPlanes:NULL
+        pixelsWide:desc->width
+        pixelsHigh:desc->height
+        bitsPerSample:8
+        samplesPerPixel:4
+        hasAlpha:YES
+        isPlanar:NO
+        colorSpaceName:NSCalibratedRGBColorSpace
+        bitmapFormat:NSBitmapFormatAlphaNonpremultiplied
+        bytesPerRow:desc->width * 4
+        bitsPerPixel:32];
+    
+    if (rep != nil) {
+        memcpy([rep bitmapData], desc->pixels.ptr, (size_t) (desc->width * desc->height * 4));
+
+        NSImage* native = [[NSImage alloc] initWithSize:NSMakeSize(desc->width, desc->height)];
+        [native addRepresentation:rep];
+
+        opaque_handle = (uint64_t) (__bridge const void*) [[NSCursor alloc]
+            initWithImage:native
+            hotSpot:NSMakePoint(desc->cursor_hotspot_x, desc->cursor_hotspot_y)];
+        
+        _SAPP_OBJC_RELEASE(native);
+        _SAPP_OBJC_RELEASE(rep);
     }
+    return opaque_handle;
+}
+
+_SOKOL_PRIVATE void _sapp_macos_destroy_mouse_cursor_image(uint64_t opaque_handle) {
+    NSCursor* cursor = (__bridge NSCursor*) (void*) opaque_handle;
+    _SOKOL_UNUSED(cursor);
+    _SAPP_OBJC_RELEASE(cursor);
 }
 
 _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int num_images) {
@@ -5511,7 +5580,7 @@ _SOKOL_PRIVATE void _sapp_emsc_update_mouse_lock_state(void) {
 }
 
 // set mouse cursor type
-EM_JS(void, sapp_js_set_cursor, (int cursor_type, int shown), {
+EM_JS(void, sapp_js_set_cursor, (int cursor_type, int cursor_image_handle, int shown), {
     if (Module.sapp_emsc_target) {
         let cursor;
         if (shown === 0) {
@@ -5529,6 +5598,10 @@ EM_JS(void, sapp_js_set_cursor, (int cursor_type, int shown), {
             case 8: cursor = "nesw-resize"; break;  // SAPP_MOUSECURSOR_RESIZE_NESW
             case 9: cursor = "all-scroll"; break;   // SAPP_MOUSECURSOR_RESIZE_ALL
             case 10: cursor = "not-allowed"; break; // SAPP_MOUSECURSOR_NOT_ALLOWED
+            case 11:                                // SAPP_MOUSECURSOR_CUSTOM_IMAGE
+                let cursor_image = Module.__sapp_cursor_images[cursor_image_handle];
+                cursor = `url('${cursor_image.blob_url}') ${cursor_image.hotspot_x} ${cursor_image.hotspot_y}, auto`;
+            break;
             default: cursor = "auto"; break;
         }
         Module.sapp_emsc_target.style.cursor = cursor;
@@ -5537,7 +5610,116 @@ EM_JS(void, sapp_js_set_cursor, (int cursor_type, int shown), {
 
 _SOKOL_PRIVATE void _sapp_emsc_update_cursor(sapp_mouse_cursor cursor, bool shown) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
-    sapp_js_set_cursor((int)cursor, shown ? 1 : 0);
+    sapp_js_set_cursor((int)cursor, _sapp.mouse.current_cursor, (int) cursor_image.opaque, shown ? 1 : 0);
+}
+
+EM_JS(int, sapp_js_make_mouse_cursor_image, (uint8_t* bmp_ptr, int bmp_size, int hotspot_x, int hotspot_y), {
+    const copy = new Uint8Array(HEAPU8.buffer, bmp_ptr, bmp_size);
+    const blob = new Blob([copy.slice()], { type: 'image/bpm' });
+    const url = URL.createObjectURL(blob);
+    const cursor = {
+        blob_url: url,
+        hotspot_x: hotspot_x,
+        hotspot_y: hotspot_y,
+    };
+
+    // Store a reference to the cursor object in a global table so we can use the index as a
+    // handle on the C side.
+    if (!Module.__sapp_cursor_images) {
+        Module.__sapp_cursor_images = [0]; // dummy entry at idx 0, so a valid handle is never zero.
+    }
+    const handle = Module.__sapp_cursor_images.length;
+    Module.__sapp_cursor_images.push(cursor);
+    return handle;
+})
+
+// Only used by the emscriten backend right now. Returned memory must be freed by caller.
+sapp_range _sapp_bitmap_from_image_desc(const sapp_image_desc* desc) {
+    SOKOL_ASSERT(desc->width * desc->height * 4 == (int) desc->pixels.size);
+    size_t bmp_header_size = 14;
+    size_t dib_header_size = 124; // common values are 56, I saw 124 for the rgba32-1.bmp file of the test suite included in firefox, and 108 from wikipedia example 2 (transparent)
+    size_t bmp_size = bmp_header_size + dib_header_size + desc->pixels.size;
+    uint8_t* bmp_data = (uint8_t*) _sapp_malloc(bmp_size);
+    memset(bmp_data, 0, bmp_size);
+    uint8_t* bmp_write = bmp_data;
+    #define write_byte(val) *(bmp_write++) = val;
+    #define write_int16(val) \
+        *(bmp_write++) = (uint8_t) (val); \
+        *(bmp_write++) = (uint8_t) ((val) >> 8);
+    #define write_int32(val) \
+        *(bmp_write++) = (uint8_t) (val); \
+        *(bmp_write++) = (uint8_t) ((val) >> 8); \
+        *(bmp_write++) = (uint8_t) ((val) >> 16); \
+        *(bmp_write++) = (uint8_t) ((val) >> 24);
+    // bmp file header
+    uint8_t* bmp_header_start = bmp_write;
+    write_byte('B');
+    write_byte('M');
+    write_int32(bmp_size);
+    write_int32(0); // reserved
+    write_int32(bmp_header_size+dib_header_size); // offset to pixel data
+    SOKOL_ASSERT((size_t)(bmp_write - bmp_header_start) == bmp_header_size);
+    _SOKOL_UNUSED(bmp_header_start);
+    // DIB Header
+    uint8_t* dib_header_start = bmp_write;
+    write_int32(dib_header_size); // header size
+    write_int32(desc->width);
+    write_int32(desc->height);
+    write_int16(1); // planes
+    write_int16(32); // bits per pixel
+    write_int32(3); // compression method. 3 = BI_BITFIELDS
+    write_int32(desc->pixels.size); // image size
+    write_int32(2835); // pixel per metre horizontal 
+    write_int32(2835); // pixel per metre vertical
+    write_int32(0); // colors number
+    write_int32(0); // important colors
+    write_int32(0x000000ff); // red channel bit mask (big endian)
+    write_int32(0x0000ff00); // green channel bit mask (big endian)
+    write_int32(0x00ff0000); // blue channel bit mask (big endian)
+    write_int32(0xff000000); // alpha channel bit mask (big endian)
+    write_int32('sRGB'); // color space type 'Win ' 'sRGB' or 0 for RGB
+    bmp_write += 64; // color space stuff, unused for 'Win ' or 'sRGB'
+    SOKOL_ASSERT((size_t)(bmp_write - dib_header_start) == dib_header_size);
+    _SOKOL_UNUSED(dib_header_start);
+    #undef write_byte
+    #undef write_int16
+    #undef write_int32
+    // copy the pixel data row by row (bmp is bottom to top)
+    ptrdiff_t remain = (bmp_data + bmp_size) - bmp_write;
+    SOKOL_ASSERT(remain == (int) desc->pixels.size);
+    _SOKOL_UNUSED(remain);
+    size_t row_size = (size_t)desc->width * 4;
+    for (int y = 0; y < desc->height; y++) {
+        memcpy(bmp_write + (size_t)(desc->height - y - 1) * row_size, (uint8_t*)desc->pixels.ptr + (size_t)y * row_size, row_size);
+    }
+    //memcpy(bmp_write, desc->pixels.ptr, desc->pixels.size);
+    return (sapp_range) { bmp_data, (size_t) bmp_size };
+}
+
+_SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_emsc_make_mouse_cursor_image(const sapp_image_desc* desc) {
+    // create a bmp image
+    sapp_range bmp_data = _sapp_bitmap_from_image_desc(desc);
+
+    // send the bmp blob to the js side
+    int cursor_url_handle = sapp_js_make_mouse_cursor_image((uint8_t*) bmp_data.ptr, (int) bmp_data.size, desc->cursor_hotspot_x, desc->cursor_hotspot_y);
+    _sapp_free((void*)bmp_data.ptr);
+
+    sapp_mouse_cursor_image ret = {};
+    ret.opaque = (uint64_t) cursor_url_handle;
+    return ret;
+}
+
+EM_JS(void, sapp_js_destroy_mouse_cursor_image, (int handle), {
+    if (Module.__sapp_cursor_images) {
+        let cursor = Module.__sapp_cursor_images[handle];
+        URL.revokeObjectURL(cursor.blob_url); // release the url, which should allow the blob to be garbage collected.
+        Module.__sapp_cursor_images[handle] = {}; // clear this array entry, for good measure.
+    }
+})
+
+_SOKOL_PRIVATE void _sapp_emsc_destroy_mouse_cursor_image(sapp_mouse_cursor_image cursor_image) {
+    int handle = (int) cursor_image.opaque;
+    sapp_js_destroy_mouse_cursor_image(handle);
 }
 
 /* JS helper functions to update browser tab favicon */
@@ -7308,21 +7490,25 @@ _SOKOL_PRIVATE bool _sapp_win32_cursor_in_content_area(void) {
     return PtInRect(&area, pos) == TRUE;
 }
 
-_SOKOL_PRIVATE void _sapp_win32_update_cursor(sapp_mouse_cursor cursor, bool shown, bool skip_area_test) {
+_SOKOL_PRIVATE void _sapp_win32_update_cursor(sapp_mouse_cursor cursor, sapp_mouse_cursor_image image, bool shown, bool skip_area_test) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    
     // NOTE: when called from WM_SETCURSOR, the area test would be redundant
     if (!skip_area_test) {
         if (!_sapp_win32_cursor_in_content_area()) {
             return;
         }
     }
-    if (!shown) {
-        SetCursor(NULL);
+    HCURSOR cursor_handle = NULL;
+    if (shown) {
+        if (cursor == SAPP_MOUSECURSOR_CUSTOM_IMAGE) {
+            cursor_handle = (HCURSOR) image.opaque;
+        } else {
+            cursor_handle = _sapp.win32.cursors[cursor];
+            SOKOL_ASSERT(0 != cursor_handle);
+        }
     }
-    else {
-        SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
-        SOKOL_ASSERT(0 != _sapp.win32.cursors[cursor]);
-        SetCursor(_sapp.win32.cursors[cursor]);
-    }
+    SetCursor(cursor_handle);
 }
 
 _SOKOL_PRIVATE void _sapp_win32_capture_mouse(uint8_t btn_mask) {
@@ -8182,7 +8368,7 @@ _SOKOL_PRIVATE void _sapp_win32_update_window_title(void) {
     SetWindowTextW(_sapp.win32.hwnd, _sapp.window_title_wide);
 }
 
-_SOKOL_PRIVATE HICON _sapp_win32_create_icon_from_image(const sapp_image_desc* desc) {
+_SOKOL_PRIVATE HICON _sapp_win32_create_icon_from_image(const sapp_image_desc* desc, bool is_cursor, int hotspot_x, int hotspot_y) {
     BITMAPV5HEADER bi;
     _sapp_clear(&bi, sizeof(bi));
     bi.bV5Size = sizeof(bi);
@@ -8224,9 +8410,9 @@ _SOKOL_PRIVATE HICON _sapp_win32_create_icon_from_image(const sapp_image_desc* d
 
     ICONINFO icon_info;
     _sapp_clear(&icon_info, sizeof(icon_info));
-    icon_info.fIcon = true;
-    icon_info.xHotspot = 0;
-    icon_info.yHotspot = 0;
+    icon_info.fIcon = !is_cursor;
+    icon_info.xHotspot = (DWORD) hotspot_x;
+    icon_info.yHotspot = (DWORD) hotspot_y;
     icon_info.hbmMask = mask;
     icon_info.hbmColor = color;
     HICON icon_handle = CreateIconIndirect(&icon_info);
@@ -8241,8 +8427,8 @@ _SOKOL_PRIVATE void _sapp_win32_set_icon(const sapp_icon_desc* icon_desc, int nu
 
     int big_img_index = _sapp_image_bestmatch(icon_desc->images, num_images, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON));
     int sml_img_index = _sapp_image_bestmatch(icon_desc->images, num_images, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON));
-    HICON big_icon = _sapp_win32_create_icon_from_image(&icon_desc->images[big_img_index]);
-    HICON sml_icon = _sapp_win32_create_icon_from_image(&icon_desc->images[sml_img_index]);
+    HICON big_icon = _sapp_win32_create_icon_from_image(&icon_desc->images[big_img_index], false, 0, 0);
+    HICON sml_icon = _sapp_win32_create_icon_from_image(&icon_desc->images[sml_img_index], false, 0, 0);
 
     // if icon creation or lookup has failed for some reason, leave the currently set icon untouched
     if (0 != big_icon) {
@@ -8384,6 +8570,18 @@ _SOKOL_PRIVATE char** _sapp_win32_command_line_to_utf8_argv(LPWSTR w_command_lin
     }
     *o_argc = argc;
     return argv;
+}
+
+_SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_win32_make_mouse_cursor_image(const sapp_image_desc* desc) {
+    HCURSOR cursor_handle = _sapp_win32_create_icon_from_image(desc, true, desc->cursor_hotspot_x, desc->cursor_hotspot_y);
+    sapp_mouse_cursor_image ret = {0};
+    ret.opaque = (uint64_t) cursor_handle;
+    return ret;
+}
+
+SOKOL_API_IMPL void _sapp_win32_destroy_mouse_cursor_image(sapp_mouse_cursor_image cursor_image) {
+    HCURSOR cursor_handle = (HCURSOR) cursor_image.opaque;
+    DestroyCursor(cursor_handle);
 }
 
 #if !defined(SOKOL_NO_ENTRY)
@@ -10734,16 +10932,46 @@ _SOKOL_PRIVATE void _sapp_x11_destroy_cursors(void) {
     }
 }
 
+_SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_x11_make_mouse_cursor_image(const sapp_image_desc* desc) {
+    sapp_mouse_cursor_image ret = {};
+    XcursorImage* img = XcursorImageCreate(desc->width, desc->height);
+    SOKOL_ASSERT(img && ((int) img->width == desc->width) && ((int) img->height == desc->height) && img->pixels);
+    img->xhot = (XcursorDim) desc->cursor_hotspot_x;
+    img->yhot = (XcursorDim) desc->cursor_hotspot_y;
+    const size_t dest_num_bytes = (size_t)(img->width * img->height) * sizeof(XcursorPixel);
+    SOKOL_ASSERT(dest_num_bytes == desc->pixels.size);
+    // Copy RGBA -> BGRA
+    for (size_t i = 0; i < dest_num_bytes; i += 4) {
+        ((uint8_t*) img->pixels)[i+0] = ((uint8_t*) desc->pixels.ptr)[i+2];
+        ((uint8_t*) img->pixels)[i+1] = ((uint8_t*) desc->pixels.ptr)[i+1];
+        ((uint8_t*) img->pixels)[i+2] = ((uint8_t*) desc->pixels.ptr)[i+0];
+        ((uint8_t*) img->pixels)[i+3] = ((uint8_t*) desc->pixels.ptr)[i+3];
+    }
+    Cursor cursor = XcursorImageLoadCursor(_sapp.x11.display, img);
+    ret.opaque = (uint64_t) cursor;
+    XcursorImageDestroy(img);
+    return ret;
+}
+
+_SOKOL_PRIVATE void _sapp_x11_destroy_mouse_cursor_image(sapp_mouse_cursor_image cursor_image) {
+    Cursor cursor = (Cursor) cursor_image.opaque;
+    XFreeCursor(_sapp.x11.display, cursor);
+}
+
 _SOKOL_PRIVATE void _sapp_x11_toggle_fullscreen(void) {
     _sapp.fullscreen = !_sapp.fullscreen;
     _sapp_x11_set_fullscreen(_sapp.fullscreen);
     _sapp_x11_query_window_size();
 }
 
-_SOKOL_PRIVATE void _sapp_x11_update_cursor(sapp_mouse_cursor cursor, bool shown) {
+_SOKOL_PRIVATE void _sapp_x11_update_cursor(sapp_mouse_cursor cursor, sapp_mouse_cursor_image image, bool shown) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
     if (shown) {
-        if (_sapp.x11.cursors[cursor]) {
+        if (cursor == SAPP_MOUSECURSOR_CUSTOM_IMAGE) {
+            Cursor xcursor = (Cursor) image.opaque;
+            XDefineCursor(_sapp.x11.display, _sapp.x11.window, xcursor);
+        }
+        else if (_sapp.x11.cursors[cursor]) {
             XDefineCursor(_sapp.x11.display, _sapp.x11.window, _sapp.x11.cursors[cursor]);
         }
         else {
@@ -10827,7 +11055,7 @@ _SOKOL_PRIVATE const char* _sapp_x11_get_clipboard_string(void) {
     XEvent event;
     while (!XCheckTypedWindowEvent(_sapp.x11.display, _sapp.x11.window, SelectionNotify, &event)) {
         // Wait for event data to arrive on the X11 display socket
-        struct pollfd fd = { ConnectionNumber(_sapp.x11.display), POLLIN };
+        struct pollfd fd = { ConnectionNumber(_sapp.x11.display), POLLIN, 0 }; // seb: added 0 bc `error: missing field 'revents' initializer [-Werror,-Wmissing-field-initializers]`
         while (!XPending(_sapp.x11.display)) {
             poll(&fd, 1, -1);
         }
@@ -12075,19 +12303,24 @@ SOKOL_API_IMPL void sapp_toggle_fullscreen(void) {
     #endif
 }
 
+_SOKOL_PRIVATE void _sapp_update_cursor(sapp_mouse_cursor cursor, bool shown) {
+    #if defined(_SAPP_MACOS)
+    _sapp_macos_update_cursor(cursor, shown);
+    #elif defined(_SAPP_WIN32)
+    _sapp_win32_update_cursor(cursor, shown, false);
+    #elif defined(_SAPP_LINUX)
+    _sapp_x11_update_cursor(cursor, shown);
+    #elif defined(_SAPP_EMSCRIPTEN)
+    _sapp_emsc_update_cursor(cursor, shown);
+    #endif
+    _sapp.mouse.current_cursor = cursor;
+    _sapp.mouse.shown = shown;
+}
+
 /* NOTE that sapp_show_mouse() does not "stack" like the Win32 or macOS API functions! */
 SOKOL_API_IMPL void sapp_show_mouse(bool show) {
     if (_sapp.mouse.shown != show) {
-        #if defined(_SAPP_MACOS)
-        _sapp_macos_update_cursor(_sapp.mouse.current_cursor, show);
-        #elif defined(_SAPP_WIN32)
-        _sapp_win32_update_cursor(_sapp.mouse.current_cursor, show, false);
-        #elif defined(_SAPP_LINUX)
-        _sapp_x11_update_cursor(_sapp.mouse.current_cursor, show);
-        #elif defined(_SAPP_EMSCRIPTEN)
-        _sapp_emsc_update_cursor(_sapp.mouse.current_cursor, show);
-        #endif
-        _sapp.mouse.shown = show;
+        _sapp_update_cursor(_sapp.mouse.current_cursor, show);
     }
 }
 
@@ -12116,21 +12349,75 @@ SOKOL_API_IMPL bool sapp_mouse_locked(void) {
 SOKOL_API_IMPL void sapp_set_mouse_cursor(sapp_mouse_cursor cursor) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
     if (_sapp.mouse.current_cursor != cursor) {
-        #if defined(_SAPP_MACOS)
-        _sapp_macos_update_cursor(cursor, _sapp.mouse.shown);
-        #elif defined(_SAPP_WIN32)
-        _sapp_win32_update_cursor(cursor, _sapp.mouse.shown, false);
-        #elif defined(_SAPP_LINUX)
-        _sapp_x11_update_cursor(cursor, _sapp.mouse.shown);
-        #elif defined(_SAPP_EMSCRIPTEN)
-        _sapp_emsc_update_cursor(cursor, _sapp.mouse.shown);
-        #endif
-        _sapp.mouse.current_cursor = cursor;
+        _sapp_update_cursor(cursor, _sapp.mouse.shown);
     }
 }
 
 SOKOL_API_IMPL sapp_mouse_cursor sapp_get_mouse_cursor(void) {
     return _sapp.mouse.current_cursor;
+}
+
+_SOKOL_PRIVATE uint64_t _sapp_make_mouse_cursor_image(const sapp_image_desc* desc) {
+    // NOTE: It seems that for some reason, the hotspot doesn't work if it is one less
+    //       than the dimention of the cursor image (or more), on windows. So for a cursor
+    //       that is 32 by 32 px, a hotspot of x = 30 works, but not x = 31.
+    //       The cursor simply dissapears in such cases. Asserting for all platforms to make
+    //       the behaviour consistent.
+    SOKOL_ASSERT(desc->cursor_hotspot_x < desc->width - 1 && desc->cursor_hotspot_y < desc->height - 1);
+    SOKOL_ASSERT(desc->width * desc->height * 4 == (int) desc->pixels.size);
+    uint64_t opaque_handle = 0;
+    #if defined(_SAPP_MACOS)
+    opaque_handle = _sapp_macos_make_mouse_cursor_image(desc);
+    #elif defined(_SAPP_EMSCRIPTEN)
+    opaque_handle = _sapp_emsc_make_mouse_cursor_image(desc);
+    #elif defined(_SAPP_WIN32)
+    opaque_handle = _sapp_win32_make_mouse_cursor_image(desc);
+    #elif defined(_SAPP_LINUX)
+    opaque_handle = _sapp_x11_make_mouse_cursor_image(desc);
+    #else
+    _SOKOL_UNUSED(desc);
+    #endif
+    return opaque_handle;
+}
+
+_SOKOL_PRIVATE void _sapp_destroy_mouse_cursor_image(uint64_t opaque_handle) {
+    #if defined(_SAPP_MACOS)
+    _sapp_macos_destroy_mouse_cursor_image(opaque_handle);
+    #elif defined(_SAPP_EMSCRIPTEN)
+    _sapp_emsc_destroy_mouse_cursor_image(opaque_handle);
+    #elif defined(_SAPP_WIN32)
+    _sapp_win32_destroy_mouse_cursor_image(opaque_handle);
+    #elif defined(_SAPP_LINUX)
+    _sapp_x11_destroy_mouse_cursor_image(opaque_handle);
+    #else
+    _SOKOL_UNUSED(opaque_handle);
+    #endif
+}
+
+SOKOL_API_IMPL sapp_mouse_cursor sapp_bind_mouse_cursor_image(sapp_mouse_cursor cursor, const sapp_image_desc* desc) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    sapp_unbind_mouse_cursor_image(cursor);
+    _sapp.mousecursor_images[(int) cursor] = _sapp_make_mouse_cursor_image(desc);
+    // Update the displayed cursor in case the current cursor is the one we just bound.
+    if (_sapp.mouse.current_cursor == cursor) {
+        _sapp_update_cursor(cursor, _sapp.mouse.shown);
+    }
+    return cursor; // returning the passed-in cursor puerly for convenience, in case you want to asign the value to a variable.
+}
+
+SOKOL_APP_API_DECL void sapp_unbind_mouse_cursor_image(sapp_mouse_cursor cursor) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    
+    uint64_t* slot = &_sapp.mousecursor_images[(int) cursor];
+    if (*slot) {
+        _sapp_destroy_mouse_cursor_image(*slot);
+        *slot = 0;
+    }
+
+    // Update the displayed cursor in case the current cursor is the one we just unbound.
+    if (_sapp.mouse.current_cursor == cursor) {
+        _sapp_update_cursor(cursor, _sapp.mouse.shown);
+    }
 }
 
 SOKOL_API_IMPL void sapp_request_quit(void) {
