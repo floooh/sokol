@@ -1958,7 +1958,7 @@ SOKOL_APP_API_DECL void sapp_set_mouse_cursor(sapp_mouse_cursor cursor);
 /* get current mouse cursor type */
 SOKOL_APP_API_DECL sapp_mouse_cursor sapp_get_mouse_cursor(void);
 /* associate a custom mouse cursor image to a sapp_mouse_cursor enum entry */
-SOKOL_APP_API_DECL void sapp_bind_mouse_cursor_image(sapp_mouse_cursor cursor, const sapp_image_desc* desc);
+SOKOL_APP_API_DECL sapp_mouse_cursor sapp_bind_mouse_cursor_image(sapp_mouse_cursor cursor, const sapp_image_desc* desc);
 /* restore the sapp_mouse_cursor enum entry to it's default system appearance */
 SOKOL_APP_API_DECL void sapp_unbind_mouse_cursor_image(sapp_mouse_cursor cursor);
 
@@ -12362,10 +12362,11 @@ SOKOL_API_IMPL sapp_mouse_cursor sapp_get_mouse_cursor(void) {
     return _sapp.mouse.current_cursor;
 }
 
-SOKOL_API_IMPL void sapp_bind_mouse_cursor_image(sapp_mouse_cursor cursor, const sapp_image_desc* desc) {
+SOKOL_API_IMPL sapp_mouse_cursor sapp_bind_mouse_cursor_image(sapp_mouse_cursor cursor, const sapp_image_desc* desc) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
     sapp_unbind_mouse_cursor_image(cursor);
     _sapp.mousecursor_images[(int) cursor] = sapp_make_mouse_cursor_image(desc).opaque;
+    return cursor; // returning the passed-in cursor puerly for convenience, in case you want to asign the value to a variable.
 }
 
 SOKOL_APP_API_DECL void sapp_unbind_mouse_cursor_image(sapp_mouse_cursor cursor) {
