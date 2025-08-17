@@ -7472,7 +7472,7 @@ _SOKOL_PRIVATE bool _sapp_win32_cursor_in_content_area(void) {
     return PtInRect(&area, pos) == TRUE;
 }
 
-_SOKOL_PRIVATE void _sapp_win32_update_cursor(sapp_mouse_cursor cursor, sapp_mouse_cursor_image image, bool shown, bool skip_area_test) {
+_SOKOL_PRIVATE void _sapp_win32_update_cursor(sapp_mouse_cursor cursor, bool shown, bool skip_area_test) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
     
     // NOTE: when called from WM_SETCURSOR, the area test would be redundant
@@ -7483,8 +7483,8 @@ _SOKOL_PRIVATE void _sapp_win32_update_cursor(sapp_mouse_cursor cursor, sapp_mou
     }
     HCURSOR cursor_handle = NULL;
     if (shown) {
-        if (cursor == SAPP_MOUSECURSOR_CUSTOM_IMAGE) {
-            cursor_handle = (HCURSOR) image.opaque;
+        if (_sapp.custom_mouse_cursors[cursor]) {
+            cursor_handle = (HCURSOR) _sapp.custom_mouse_cursors[cursor];
         } else {
             cursor_handle = _sapp.win32.cursors[cursor];
             SOKOL_ASSERT(0 != cursor_handle);
@@ -8554,15 +8554,12 @@ _SOKOL_PRIVATE char** _sapp_win32_command_line_to_utf8_argv(LPWSTR w_command_lin
     return argv;
 }
 
-_SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_win32_make_custom_mouse_cursor(const sapp_image_desc* desc) {
-    HCURSOR cursor_handle = _sapp_win32_create_icon_from_image(desc, true, desc->cursor_hotspot_x, desc->cursor_hotspot_y);
-    sapp_mouse_cursor_image ret = {0};
-    ret.opaque = (uint64_t) cursor_handle;
-    return ret;
+_SOKOL_PRIVATE uint64_t _sapp_win32_make_custom_mouse_cursor(const sapp_image_desc* desc) {
+    return (uint64_t) _sapp_win32_create_icon_from_image(desc, true, desc->cursor_hotspot_x, desc->cursor_hotspot_y);
 }
 
-SOKOL_API_IMPL void _sapp_win32_destroy_custom_mouse_cursor(sapp_mouse_cursor_image cursor_image) {
-    HCURSOR cursor_handle = (HCURSOR) cursor_image.opaque;
+SOKOL_API_IMPL void _sapp_win32_destroy_custom_mouse_cursor(uint64_t opaque_handle) {
+    HCURSOR cursor_handle = (HCURSOR) opaque_handle;
     DestroyCursor(cursor_handle);
 }
 
@@ -10914,8 +10911,7 @@ _SOKOL_PRIVATE void _sapp_x11_destroy_cursors(void) {
     }
 }
 
-_SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_x11_make_custom_mouse_cursor(const sapp_image_desc* desc) {
-    sapp_mouse_cursor_image ret = {};
+_SOKOL_PRIVATE uint64_t _sapp_x11_make_custom_mouse_cursor(const sapp_image_desc* desc) {
     XcursorImage* img = XcursorImageCreate(desc->width, desc->height);
     SOKOL_ASSERT(img && ((int) img->width == desc->width) && ((int) img->height == desc->height) && img->pixels);
     img->xhot = (XcursorDim) desc->cursor_hotspot_x;
@@ -10930,13 +10926,12 @@ _SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_x11_make_custom_mouse_cursor(const 
         ((uint8_t*) img->pixels)[i+3] = ((uint8_t*) desc->pixels.ptr)[i+3];
     }
     Cursor cursor = XcursorImageLoadCursor(_sapp.x11.display, img);
-    ret.opaque = (uint64_t) cursor;
     XcursorImageDestroy(img);
-    return ret;
+    return (uint64_t) cursor; // return opaque handle
 }
 
-_SOKOL_PRIVATE void _sapp_x11_destroy_custom_mouse_cursor(sapp_mouse_cursor_image cursor_image) {
-    Cursor cursor = (Cursor) cursor_image.opaque;
+_SOKOL_PRIVATE void _sapp_x11_destroy_custom_mouse_cursor(uint64_t opaque_handle) {
+    Cursor cursor = (Cursor) opaque_handle;
     XFreeCursor(_sapp.x11.display, cursor);
 }
 
@@ -10946,11 +10941,11 @@ _SOKOL_PRIVATE void _sapp_x11_toggle_fullscreen(void) {
     _sapp_x11_query_window_size();
 }
 
-_SOKOL_PRIVATE void _sapp_x11_update_cursor(sapp_mouse_cursor cursor, sapp_mouse_cursor_image image, bool shown) {
+_SOKOL_PRIVATE void _sapp_x11_update_cursor(sapp_mouse_cursor cursor, bool shown) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
     if (shown) {
-        if (cursor == SAPP_MOUSECURSOR_CUSTOM_IMAGE) {
-            Cursor xcursor = (Cursor) image.opaque;
+        if (_sapp.custom_mouse_cursors[cursor]) {
+            Cursor xcursor = (Cursor) _sapp.custom_mouse_cursors[cursor];
             XDefineCursor(_sapp.x11.display, _sapp.x11.window, xcursor);
         }
         else if (_sapp.x11.cursors[cursor]) {
