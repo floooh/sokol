@@ -5570,11 +5570,14 @@ _SOKOL_PRIVATE void _sapp_emsc_update_mouse_lock_state(void) {
 }
 
 // set mouse cursor type
-EM_JS(void, sapp_js_set_cursor, (int cursor_type, int cursor_image_handle, int shown), {
+EM_JS(void, sapp_js_set_cursor, (int cursor_type, int shown, int use_custom_cursor_image), {
     if (Module.sapp_emsc_target) {
         let cursor;
         if (shown === 0) {
             cursor = "none";
+        }
+        else if (use_custom_cursor_image) {
+            cursor = Module.__sapp_custom_cursors[cursor_type].css_property;
         }
         else switch (cursor_type) {
             case 0: cursor = "auto"; break;         // SAPP_MOUSECURSOR_DEFAULT
@@ -5588,10 +5591,6 @@ EM_JS(void, sapp_js_set_cursor, (int cursor_type, int cursor_image_handle, int s
             case 8: cursor = "nesw-resize"; break;  // SAPP_MOUSECURSOR_RESIZE_NESW
             case 9: cursor = "all-scroll"; break;   // SAPP_MOUSECURSOR_RESIZE_ALL
             case 10: cursor = "not-allowed"; break; // SAPP_MOUSECURSOR_NOT_ALLOWED
-            case 11:                                // SAPP_MOUSECURSOR_CUSTOM_IMAGE
-                let cursor_image = Module.__sapp_cursor_images[cursor_image_handle];
-                cursor = `url('${cursor_image.blob_url}') ${cursor_image.hotspot_x} ${cursor_image.hotspot_y}, auto`;
-            break;
             default: cursor = "auto"; break;
         }
         Module.sapp_emsc_target.style.cursor = cursor;
@@ -5600,28 +5599,9 @@ EM_JS(void, sapp_js_set_cursor, (int cursor_type, int cursor_image_handle, int s
 
 _SOKOL_PRIVATE void _sapp_emsc_update_cursor(sapp_mouse_cursor cursor, bool shown) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
-    sapp_js_set_cursor((int)cursor, _sapp.mouse.current_cursor, (int) cursor_image.opaque, shown ? 1 : 0);
+    bool use_custom_cursor_image = _sapp.mousecursor_images[cursor] != 0;
+    sapp_js_set_cursor((int)cursor, shown ? 1 : 0, (int)use_custom_cursor_image);
 }
-
-EM_JS(int, sapp_js_make_mouse_cursor_image, (uint8_t* bmp_ptr, int bmp_size, int hotspot_x, int hotspot_y), {
-    const copy = new Uint8Array(HEAPU8.buffer, bmp_ptr, bmp_size);
-    const blob = new Blob([copy.slice()], { type: 'image/bpm' });
-    const url = URL.createObjectURL(blob);
-    const cursor = {
-        blob_url: url,
-        hotspot_x: hotspot_x,
-        hotspot_y: hotspot_y,
-    };
-
-    // Store a reference to the cursor object in a global table so we can use the index as a
-    // handle on the C side.
-    if (!Module.__sapp_cursor_images) {
-        Module.__sapp_cursor_images = [0]; // dummy entry at idx 0, so a valid handle is never zero.
-    }
-    const handle = Module.__sapp_cursor_images.length;
-    Module.__sapp_cursor_images.push(cursor);
-    return handle;
-})
 
 // Only used by the emscriten backend right now. Returned memory must be freed by caller.
 sapp_range _sapp_bitmap_from_image_desc(const sapp_image_desc* desc) {
@@ -5686,30 +5666,46 @@ sapp_range _sapp_bitmap_from_image_desc(const sapp_image_desc* desc) {
     return (sapp_range) { bmp_data, (size_t) bmp_size };
 }
 
-_SOKOL_PRIVATE sapp_mouse_cursor_image _sapp_emsc_make_mouse_cursor_image(const sapp_image_desc* desc) {
+EM_JS(void, sapp_js_make_mouse_cursor_image, (int cursor_slot_idx, uint8_t* bmp_ptr, int bmp_size, int hotspot_x, int hotspot_y), {
+    const copy = new Uint8Array(HEAPU8.buffer, bmp_ptr, bmp_size);
+    const blob = new Blob([copy.slice()], { type: 'image/bpm' });
+    const url = URL.createObjectURL(blob);
+
+    let cursor_slot = {
+        css_property: `url('${url}') ${hotspot_x} ${hotspot_y}, auto`,
+        blob_url: url // so we can release it later        
+    };
+
+    // Store a reference to the js cursor object in a global table, indexed by its sapp_mouse_cursor
+    if (!Module.__sapp_custom_cursors) {
+        Module.__sapp_custom_cursors = Array().fill(null);
+    }
+    Module.__sapp_custom_cursors[cursor_slot_idx] = cursor_slot;
+})
+
+EM_JS(void, sapp_js_destroy_mouse_cursor_image, (int cursor_slot_idx), {
+    if (Module.__sapp_custom_cursors) {
+        let cursor = Module.__sapp_custom_cursors[cursor_slot_idx];
+        URL.revokeObjectURL(cursor.blob_url); // release the url, which should allow the blob to be garbage collected.
+        Module.__sapp_custom_cursors[cursor_slot_idx] = null; // clear this array entry
+    }
+})
+
+_SOKOL_PRIVATE uint64_t _sapp_emsc_make_mouse_cursor_image(const sapp_image_desc* desc, sapp_mouse_cursor cursor) {
     // create a bmp image
     sapp_range bmp_data = _sapp_bitmap_from_image_desc(desc);
 
     // send the bmp blob to the js side
-    int cursor_url_handle = sapp_js_make_mouse_cursor_image((uint8_t*) bmp_data.ptr, (int) bmp_data.size, desc->cursor_hotspot_x, desc->cursor_hotspot_y);
+    sapp_js_make_mouse_cursor_image((int) cursor, (uint8_t*) bmp_data.ptr, (int) bmp_data.size, desc->cursor_hotspot_x, desc->cursor_hotspot_y);
     _sapp_free((void*)bmp_data.ptr);
 
-    sapp_mouse_cursor_image ret = {};
-    ret.opaque = (uint64_t) cursor_url_handle;
-    return ret;
+    return (uint64_t) 1; // for wasm, the handle is simply 1 to signal the slot is used.
 }
 
-EM_JS(void, sapp_js_destroy_mouse_cursor_image, (int handle), {
-    if (Module.__sapp_cursor_images) {
-        let cursor = Module.__sapp_cursor_images[handle];
-        URL.revokeObjectURL(cursor.blob_url); // release the url, which should allow the blob to be garbage collected.
-        Module.__sapp_cursor_images[handle] = {}; // clear this array entry, for good measure.
-    }
-})
-
-_SOKOL_PRIVATE void _sapp_emsc_destroy_mouse_cursor_image(sapp_mouse_cursor_image cursor_image) {
-    int handle = (int) cursor_image.opaque;
-    sapp_js_destroy_mouse_cursor_image(handle);
+// @cleanup
+_SOKOL_PRIVATE void _sapp_emsc_destroy_mouse_cursor_image(uint64_t opaque_handle) {
+    int handle = (int) opaque_handle;
+    //sapp_js_destroy_mouse_cursor_image(handle);
 }
 
 /* JS helper functions to update browser tab favicon */
@@ -12347,7 +12343,7 @@ SOKOL_API_IMPL sapp_mouse_cursor sapp_get_mouse_cursor(void) {
     return _sapp.mouse.current_cursor;
 }
 
-_SOKOL_PRIVATE uint64_t _sapp_make_mouse_cursor_image(const sapp_image_desc* desc) {
+_SOKOL_PRIVATE uint64_t _sapp_make_mouse_cursor_image(const sapp_image_desc* desc, sapp_mouse_cursor cursor) {
     // NOTE: It seems that for some reason, the hotspot doesn't work if it is one less
     //       than the dimention of the cursor image (or more), on windows. So for a cursor
     //       that is 32 by 32 px, a hotspot of x = 30 works, but not x = 31.
@@ -12359,7 +12355,7 @@ _SOKOL_PRIVATE uint64_t _sapp_make_mouse_cursor_image(const sapp_image_desc* des
     #if defined(_SAPP_MACOS)
     opaque_handle = _sapp_macos_make_mouse_cursor_image(desc);
     #elif defined(_SAPP_EMSCRIPTEN)
-    opaque_handle = _sapp_emsc_make_mouse_cursor_image(desc);
+    opaque_handle = _sapp_emsc_make_mouse_cursor_image(desc, cursor);
     #elif defined(_SAPP_WIN32)
     opaque_handle = _sapp_win32_make_mouse_cursor_image(desc);
     #elif defined(_SAPP_LINUX)
@@ -12374,7 +12370,7 @@ _SOKOL_PRIVATE void _sapp_destroy_mouse_cursor_image(uint64_t opaque_handle) {
     #if defined(_SAPP_MACOS)
     _sapp_macos_destroy_mouse_cursor_image(opaque_handle);
     #elif defined(_SAPP_EMSCRIPTEN)
-    _sapp_emsc_destroy_mouse_cursor_image(opaque_handle);
+    //_sapp_emsc_destroy_mouse_cursor_image(opaque_handle);
     #elif defined(_SAPP_WIN32)
     _sapp_win32_destroy_mouse_cursor_image(opaque_handle);
     #elif defined(_SAPP_LINUX)
@@ -12387,7 +12383,7 @@ _SOKOL_PRIVATE void _sapp_destroy_mouse_cursor_image(uint64_t opaque_handle) {
 SOKOL_API_IMPL sapp_mouse_cursor sapp_bind_mouse_cursor_image(sapp_mouse_cursor cursor, const sapp_image_desc* desc) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
     sapp_unbind_mouse_cursor_image(cursor);
-    _sapp.mousecursor_images[(int) cursor] = _sapp_make_mouse_cursor_image(desc);
+    _sapp.mousecursor_images[(int) cursor] = _sapp_make_mouse_cursor_image(desc, cursor);
     // Update the displayed cursor in case the current cursor is the one we just bound.
     if (_sapp.mouse.current_cursor == cursor) {
         _sapp_update_cursor(cursor, _sapp.mouse.shown);
@@ -12400,7 +12396,11 @@ SOKOL_APP_API_DECL void sapp_unbind_mouse_cursor_image(sapp_mouse_cursor cursor)
     
     uint64_t* slot = &_sapp.mousecursor_images[(int) cursor];
     if (*slot) {
+        #if defined(_SAPP_EMSCRIPTEN)
+        sapp_js_destroy_mouse_cursor_image((int) cursor);
+        #else
         _sapp_destroy_mouse_cursor_image(*slot);
+        #endif
         *slot = 0;
     }
 
