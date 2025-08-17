@@ -1,5 +1,10 @@
 ## Updates
 
+### 15-Aug-2025
+
+The sokol_gfx.h WebGPU backend has been fixed for the latest breaking changes in
+webgpu.h (`WGPUShaderModuleWGSLDescriptor` has been renamed to `WGPUShaderSourceWGSL`).
+
 ### 03-Aug-2025
 
 sokol_app.h: character input on Windows now transparently supports surrogate pairs,

@@ -123,13 +123,17 @@ jobs:
     needs: gen-bindings
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # NOTE: don't run test on Windows until zig package fetch is fixed
+        # os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]
     runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@main
         with:
           repository: floooh/sokol-zig
       - uses: mlugg/setup-zig@v2
+        with:
+          version: master
       - uses: actions/download-artifact@main
         with:
           name: ignore-me-zig
