@@ -2240,8 +2240,6 @@ typedef enum sg_image_type {
 } sg_image_type;
 
 /*
-    FIXME: rename to sg_texture_sample_type
-
     sg_image_sample_type
 
     The basic data type of a texture sample as expected by a shader.
