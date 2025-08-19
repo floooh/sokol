@@ -2909,7 +2909,29 @@ typedef struct sg_swapchain {
 /*
     sg_attachments
 
-    TODO
+    Used in sg_pass to provide render pass attachment views. Each
+    type of pass attachment has it corresponding view type:
+
+    sg_attachments.colors[]:
+        populate with color-attachment views, e.g.:
+
+        sg_make_view(&(sg_view_desc){
+            .color_attachment = { ... },
+        });
+
+    sg_attachments.resolves[]:
+        populate with resolve-attachment views, e.g.:
+
+        sg_make_view(&(sg_view_desc){
+            .resolve_attachment = { ... },
+        });
+
+    sg_attachments.depth_stencil:
+        populate with depth-stencil-attachment views, e.g.:
+
+        sg_make_view(&(sg_view_desc){
+            .depth_stencil_attachment = { ... },
+        });
 */
 typedef struct sg_attachments {
     sg_view colors[SG_MAX_COLOR_ATTACHMENTS];
@@ -2933,7 +2955,7 @@ typedef struct sg_attachments {
         });
 
     For an offscreen render pass, provide an sg_pass_action struct with
-    attachments:
+    attachment views:
 
         sg_begin_pass(&(sg_pass){
             .action = { ... },
@@ -2980,25 +3002,21 @@ typedef struct sg_pass {
     - 1..N vertex buffer offsets
     - 0..1 index buffer
     - 0..1 index buffer offset
-    - 0..N storage buffer views
-    - 0..N storage image views
-    - 0..N texture views
+    - 0..N resource views (texture-, storage-image, storage-buffer-views)
     - 0..N samplers
 
     Where 'N' is defined in the following constants:
 
     - SG_MAX_VERTEXBUFFER_BINDSLOTS
-    - SG_MAX_STORAGEBUFFER_BINDGLOTS
-    - SG_MAX_STORAGEIMAGE_BINDSLOTS
-    - SG_MAX_TEXTURE_BINDLOTS
+    - SG_MAX_VIEW_BINDSLOTS
     - SG_MAX_SAMPLER_BINDSLOTS
 
     Note that inside compute passes vertex- and index-buffer-bindings are
     disallowed.
 
     When using sokol-shdc for shader authoring, the `layout(binding=N)`
-    annotation in the shader code directly maps to the slot index for that
-    resource type in the bindings struct, for instance the following vertex-
+    for texture-, storage-image- and storage-buffer-bindings directly
+    maps to the views-array index, for instance the following vertex-
     and fragment-shader interface for sokol-shdc:
 
         @vs vs
@@ -3021,7 +3039,7 @@ typedef struct sg_pass {
         const sg_bindings bnd = {
             .vertex_buffers[0] = ...,
             .views[0] = ssbo_view,
-            .views[0] = vs_tex_view,
+            .views[1] = vs_tex_view,
             .views[2] = fs_tex_view,
             .samplers[0] = vs_smp,
             .samplers[1] = fs_smp,
@@ -3031,9 +3049,9 @@ typedef struct sg_pass {
 
         const sg_bindings bnd = {
             .vertex_buffers[0] = ...,
-            .views[SBUF_ssbo] = ssbo_view,
-            .views[TEX_vs_tex] = vs_tex_view,
-            .views[TEX_fs_tex] = fs_tex_view,
+            .views[VIEW_ssbo] = ssbo_view,
+            .views[VIEW_vs_tex] = vs_tex_view,
+            .views[VIEW_fs_tex] = fs_tex_view,
             .samplers[SMP_vs_smp] = vs_smp,
             .samplers[SMP_fs_smp] = fs_smp,
         };
@@ -3044,7 +3062,7 @@ typedef struct sg_pass {
     different shader variants.
 
     When not using sokol-shdc, the bindslot indices in the sg_bindings
-    struct need to match the per-resource reflection info slot indices
+    struct need to match the per-binding reflection info slot indices
     in the sg_shader_desc struct (for details about that see the
     sg_shader_desc struct documentation).
 
@@ -3071,8 +3089,8 @@ typedef struct sg_bindings {
         the buffer will bound as vertex buffer via sg_bindings.vertex_buffers[]
     .index_buffer (default: false)
         the buffer will bound as index buffer via sg_bindings.index_buffer
-    .storage_buffer_binding (default: false)
-        the buffer will bound as storage buffer via sg_bindings.storage_buffers[]
+    .storage_buffer (default: false)
+        the buffer will bound as storage buffer via sg_bindings.views[]
     .immutable (default: true)
         the buffer content will never be updated from the CPU side (but
         may be written to by a compute shader)
@@ -3162,17 +3180,25 @@ typedef struct sg_buffer_desc {
 /*
     sg_image_usage
 
-    Describes how the image object is going to be used:
+    Describes the intended usage of an image object:
 
-    .storage_image_binding (default: false)
-        the image object is used as storage-image-binding in a
-        compute pass (to be written to by compute shaders)
+    .storage_image (default: false)
+        the image can be used as parent resource of a storage-image-view,
+        which allows compute shaders to write to the image in a compute
+        pass (for read-only access in compute shaders bind the image
+        via a texture view instead
     .color_attachment (default: false)
-        the image object is used as a color-attachemnt in a render pass
+        the image can be used as parent resource of a color-attachment-view,
+        which is then passed into sg_begin_pass via sg_pass.attachments.colors[]
+        so that fragment shaders can render into the image
     .resolve_attachment (default: false)
-        the image object is used as a resolve-attachment in a render pass
+        the image can be used as parent resource of a resolve-attachment-view,
+        which is then passed into sg_begin_pass via sg_pass.attachments.resolves[]
+        as target for an MSAA-resolve operation in sg_end_pass()
     .depth_stencil_attachment (default: false)
-        the image object is used as a depth-stencil-attachment in a render pass
+        the image can be used as parent resource of a depth-stencil-attachmnet-view
+        which is then passes into sg_begin_pass via sg_pass.attachments.depth_stencil
+        as depth-stencil-buffer
     .immutable (default: true)
         the image content cannot be updated from the CPU side
         (but may be updated by the GPU in a render- or compute-pass)
@@ -3181,7 +3207,9 @@ typedef struct sg_buffer_desc {
     .stream_update (default: false)
         the image content is updated each frame by the CPU via
 
-    Note that the usage as texture binding is implicit and always allowed.
+    Note that creating a texture view from the image to be used for
+    texture-sampling in vertex-, fragment- or compute-shaders
+    is always implicitly allowed.
 */
 typedef struct sg_image_usage {
     bool storage_image;
@@ -3196,8 +3224,7 @@ typedef struct sg_image_usage {
 /*
     sg_view_type
 
-    Allows to query the type of a view via the function sg_query_view_type()
-
+    Allows to query the type of a view object via the function sg_query_view_type()
 */
 typedef enum sg_view_type {
     SG_VIEWTYPE_INVALID,
@@ -3254,9 +3281,10 @@ typedef struct sg_image_data {
     initialized by providing a valid .data member which points to initialization
     data.
 
-    Images with usage.attachment or usage.storage_image must
+    Images with usage.*_attachment or usage.storage_image must
     *not* be created with initial content. Be aware that the initial
-    content of render-attachment and storage-attachment images is undefined.
+    content of pass attachment and storage images is undefined
+    (not guaranteed to be zeroed).
 
     ADVANCED TOPIC: Injecting native 3D-API textures:
 
@@ -3266,17 +3294,11 @@ typedef struct sg_image_data {
     .gl_textures[SG_NUM_INFLIGHT_FRAMES]
     .mtl_textures[SG_NUM_INFLIGHT_FRAMES]
     .d3d11_texture
-    .d3d11_shader_resource_view
     .wgpu_texture
-    .wgpu_texture_view
 
     For GL, you can also specify the texture target or leave it empty to use
     the default texture target for the image type (GL_TEXTURE_2D for
     SG_IMAGETYPE_2D etc)
-
-    For D3D11 and WebGPU, either only provide a texture, or both a texture and
-    shader-resource-view / texture-view object. If you want to use access the
-    injected texture in a shader you *must* provide a shader-resource-view.
 
     The same rules apply as for injecting native buffers (see sg_buffer_desc
     documentation for more details).
@@ -3399,8 +3421,14 @@ typedef struct sg_sampler_desc {
                 - if the member is an array, the array count
                 - the member name
 
-    - reflection information for each texture binding used by the shader:
-        - the shader stage the texture appears in (SG_SHADERSTAGE_*)
+    - reflection information for each resource binding by the shader
+      in three flavours, each with an associated view type:
+        - texture bindings => texture views
+        - storage-buffer bindings => storage-buffer views
+        - storage-image bindings => storage-image views
+
+    - texture bindings must provide the following information:
+        - the shader stage the texture binding appears in (SG_SHADERSTAGE_*)
         - the image type (SG_IMAGETYPE_*)
         - the image-sample type (SG_IMAGESAMPLETYPE_*)
         - whether the texture is multisampled
@@ -3409,15 +3437,7 @@ typedef struct sg_sampler_desc {
             - MSL: the texture attribute `[[texture(0..19)]]`
             - WGSL: the binding in `@group(1) @binding(0..127)`
 
-    - reflection information for each sampler used by the shader:
-        - the shader stage the sampler appears in (SG_SHADERSTAGE_*)
-        - the sampler type (SG_SAMPLERTYPE_*)
-        - backend specific bindslots:
-            - HLSL: the sampler register `register(s0..15)`
-            - MSL: the sampler attribute `[[sampler(0..15)]]`
-            - WGSL: the binding in `@group(0) @binding(0..127)`
-
-    - reflection information for each storage buffer binding used by the shader:
+    - storage-buffer bindings must provide the following information:
         - the shader stage the storage buffer appears in (SG_SHADERSTAGE_*)
         - whether the storage buffer is readonly
         - backend specific bindslots:
@@ -3428,7 +3448,7 @@ typedef struct sg_sampler_desc {
             - WGSL: the binding in `@group(1) @binding(0..127)`
             - GL: the binding in `layout(binding=0..7)`
 
-    - reflection information for each storage image binding used by the shader:
+    - storage-image bindings must provide the following information:
         - the shader stage (*must* be SG_SHADERSTAGE_COMPUTE)
         - whether the storage image is writeonly or readwrite (for readonly
           access use a regular texture binding instead)
@@ -3437,15 +3457,23 @@ typedef struct sg_sampler_desc {
           note that only a subset of pixel formats is allowed for storage image
           bindings
         - backend specific bindslots:
-            - HLSL: the UAV register `register(u0..u11)`
+            - HLSL: the UAV register `register(u0..11)`
             - MSL: the texture attribute `[[texture(0..19)]]`
-            - WGSL: the binding in `@group(2) @binding(0..3)`
+            - WGSL: the binding in `@group(1) @binding(0..127)`
             - GLSL: the binding in `layout(binding=0..3, [access_format])`
 
-    - reflection information for each combined image-sampler object
-      used by the shader:
+    - reflection information for each sampler used by the shader:
+        - the shader stage the sampler appears in (SG_SHADERSTAGE_*)
+        - the sampler type (SG_SAMPLERTYPE_*)
+        - backend specific bindslots:
+            - HLSL: the sampler register `register(s0..15)`
+            - MSL: the sampler attribute `[[sampler(0..15)]]`
+            - WGSL: the binding in `@group(0) @binding(0..127)`
+
+    - reflection information for each texture-sampler pair used by
+      the shader:
         - the shader stage (SG_SHADERSTAGE_*)
-        - the texture's array index in the sg_shader_desc.images[] array
+        - the texture's array index in the sg_shader_desc.views[] array
         - the sampler's array index in the sg_shader_desc.samplers[] array
         - GLSL only: the name of the combined image-sampler object
 
@@ -3461,19 +3489,15 @@ typedef struct sg_sampler_desc {
 
         - sg_shader_desc.uniform_blocks[N] => sg_apply_uniforms(N, ...)
 
-    The items in the shader_desc images, samplers and storage_buffers
-    arrays correspond to the same array items in the sg_bindings struct:
-
-        - sg_shader_desc.images[N] => sg_bindings.images[N]
-        - sg_shader_desc.samplers[N] => sg_bindings.samplers[N]
-        - sg_shader_desc.storage_buffers[N] => sg_bindings.storage_buffers[N]
+    The items in the sg_shader_desc.views[] array directly map to
+    the views in the sg_bindings.views[] array!
 
     For all GL backends, shader source-code must be provided. For D3D11 and Metal,
     either shader source-code or byte-code can be provided.
 
-    NOTE that the uniform block, image, sampler, storage_buffer and
-    storage_image arrays may have gaps. This allows to use the same sg_bindings
-    struct for different related shader variants.
+    NOTE that the uniform-block, view and sampler arrays may have gaps. This
+    allows to use the same sg_bindings struct for different but related
+    shader variations.
 
     For D3D11, if source code is provided, the d3dcompiler_47.dll will be loaded
     on demand. If this fails, shader creation will fail. When compiling HLSL
