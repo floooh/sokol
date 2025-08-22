@@ -15891,6 +15891,16 @@ _SOKOL_PRIVATE WGPUTextureViewDimension _sg_wgpu_texture_view_dimension(sg_image
     }
 }
 
+_SOKOL_PRIVATE WGPUTextureViewDimension _sg_wgpu_attachment_view_dimension(sg_image_type t) {
+    switch (t) {
+        case SG_IMAGETYPE_2D:       return WGPUTextureViewDimension_2D;
+        case SG_IMAGETYPE_CUBE:     return WGPUTextureViewDimension_2DArray; // not a bug
+        case SG_IMAGETYPE_3D:       return WGPUTextureViewDimension_2D;
+        case SG_IMAGETYPE_ARRAY:    return WGPUTextureViewDimension_2DArray;
+        default: SOKOL_UNREACHABLE; return WGPUTextureViewDimension_Force32;
+    }
+}
+
 _SOKOL_PRIVATE WGPUTextureDimension _sg_wgpu_texture_dimension(sg_image_type t) {
     if (SG_IMAGETYPE_3D == t) {
         return WGPUTextureDimension_3D;
@@ -17556,11 +17566,15 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_view(_sg_view_t* view, const sg
         WGPUTextureViewDescriptor wgpu_texview_desc;
         _sg_clear(&wgpu_texview_desc, sizeof(wgpu_texview_desc));
         wgpu_texview_desc.label = _sg_wgpu_stringview(desc->label);
-        wgpu_texview_desc.dimension = _sg_wgpu_texture_view_dimension(img->cmn.type);
         wgpu_texview_desc.baseMipLevel = (uint32_t)view->cmn.img.mip_level;
         wgpu_texview_desc.mipLevelCount = (uint32_t)view->cmn.img.mip_level_count;
         wgpu_texview_desc.baseArrayLayer = (uint32_t)view->cmn.img.slice;
         wgpu_texview_desc.arrayLayerCount = (uint32_t)view->cmn.img.slice_count;
+        if (view->cmn.type == SG_VIEWTYPE_TEXTURE) {
+            wgpu_texview_desc.dimension = _sg_wgpu_texture_view_dimension(img->cmn.type);
+        } else {
+            wgpu_texview_desc.dimension = _sg_wgpu_attachment_view_dimension(img->cmn.type);
+        }
         if (view->cmn.type == SG_VIEWTYPE_DEPTHSTENCILATTACHMENT) {
             wgpu_texview_desc.aspect = WGPUTextureAspect_All;
         } else if (_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format)) {
