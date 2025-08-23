@@ -19606,10 +19606,19 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 if (tex_view) {
                     const uint32_t img_id = tex_view->cmn.img.ref.sref.id;
                     if (!_sg_attachments_empty(&_sg.cur_pass.atts)) {
-                        _SG_VALIDATE(img_id != _sg.cur_pass.atts.depth_stencil.id, VALIDATE_ABND_TEXTURE_BINDING_VS_DEPTHSTENCIL_ATTACHMENT);
+                        const _sg_view_t* ds_view = _sg_lookup_view(_sg.cur_pass.atts.depth_stencil.id);
+                        if (ds_view) {
+                            _SG_VALIDATE(img_id != ds_view->cmn.img.ref.sref.id, VALIDATE_ABND_TEXTURE_BINDING_VS_DEPTHSTENCIL_ATTACHMENT);
+                        }
                         for (size_t att_idx = 0; att_idx < SG_MAX_COLOR_ATTACHMENTS; att_idx++) {
-                            _SG_VALIDATE(img_id != _sg.cur_pass.atts.colors[att_idx].id, VALIDATE_ABND_TEXTURE_BINDING_VS_COLOR_ATTACHMENT);
-                            _SG_VALIDATE(img_id != _sg.cur_pass.atts.resolves[att_idx].id, VALIDATE_ABND_TEXTURE_BINDING_VS_RESOLVE_ATTACHMENT);
+                            const _sg_view_t* color_view = _sg_lookup_view(_sg.cur_pass.atts.colors[att_idx].id);
+                            if (color_view) {
+                                _SG_VALIDATE(img_id != color_view->cmn.img.ref.sref.id, VALIDATE_ABND_TEXTURE_BINDING_VS_COLOR_ATTACHMENT);
+                            }
+                            const _sg_view_t* resolve_view = _sg_lookup_view(_sg.cur_pass.atts.resolves[att_idx].id);
+                            if (resolve_view) {
+                                _SG_VALIDATE(img_id != resolve_view->cmn.img.ref.sref.id, VALIDATE_ABND_TEXTURE_BINDING_VS_RESOLVE_ATTACHMENT);
+                            }
                         }
                     }
                     for (size_t simg_view_idx = 0; simg_view_idx < SG_MAX_VIEW_BINDSLOTS; simg_view_idx++) {
@@ -19619,7 +19628,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                             }
                             const _sg_view_t* simg_view = _sg_lookup_view(bindings->views[simg_view_idx].id);
                             if (simg_view) {
-                                _SG_VALIDATE(simg_view->cmn.img.ref.sref.id != img_id, VALIDATE_ABND_TEXTURE_VS_STORAGEIMAGE_BINDING);
+                                _SG_VALIDATE(img_id != simg_view->cmn.img.ref.sref.id, VALIDATE_ABND_TEXTURE_VS_STORAGEIMAGE_BINDING);
                             }
                         }
                     }
