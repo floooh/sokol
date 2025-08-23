@@ -1,5 +1,45 @@
 ## Updates
 
+### 23-Aug-2025
+
+The sokol_gfx.h '**resource view update**'. This is a breaking update which
+changes the resource-binding- and and pass-attachments-model from directly
+binding image- and  buffer-objects to resource view objects.
+
+In a nutshell:
+
+- a new object type `sg_view` with associated functions has been added: view objects
+  'specialize' an image or buffer resource for the different
+   ways a shader
+  accesses image or buffer data (texture sampling vs storage-load/store vs rendering into color- or depth-stencil-buffers)
+- in turn, the object type `sg_attachments` and associated functions has ben removed
+- `sg_bindings` now takes a single array of `sg_view` objects to define
+  texture-, storage-buffer- and storage-image bindings for the next drawcall
+- storage-image-bindings are no longer pass-attachments but 'regular' bindings
+  (like texture- and storage-buffer-bindings)
+- pre-baked pass attachment combinations are no longer a thing, instead
+  `sg_pass.attachments` is now a transient nested struct like `sg_bindings`
+  which defines the pass attachments as arrays of `sg_view` objects
+- storage-buffer-bindings can now have an offset (with the restriction that
+  offsets can't be dynamic, but are baked into a view object, and the offset
+  must have a 256-byte alignment)
+
+When using `sokol-shdc`, note that you need to update sokol-shdc and recompile
+your shaders. You may get new 'bindslot collision errors' which you need to
+resolve by updating the `layout(binding=N)` attributes for textures, storage-buffers
+and storage-images.
+
+For many more details and code examples see the [accompanying blog post](https://floooh.github.io/2025/08/17/sokol-gfx-view-update.html).
+
+Also check out the updated inline-documentation sections that deal with offscreen-
+rendering and resource-binding in the sokol_gfx.h header, and finally
+check out the updated examples (each example has a link to the C and GLSL source code):
+
+- WebGL2: https://floooh.github.io/sokol-html5/
+- WebGPU (required for storage buffer and compute samples): https://floooh.github.io/sokol-webgpu/
+
+The main PR (with links to all related tickets and PRs): https://github.com/floooh/sokol/pull/1287
+
 ### 15-Aug-2025
 
 The sokol_gfx.h WebGPU backend has been fixed for the latest breaking changes in

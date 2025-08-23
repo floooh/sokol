@@ -49,7 +49,7 @@ static sg_buffer create_buffer(void) {
 
 static sg_image create_image(void) {
     return sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
+        .usage.color_attachment = true,
         .width = 256,
         .height = 128
     });
@@ -68,18 +68,13 @@ static sg_pipeline create_pipeline(void) {
     });
 }
 
-static sg_attachments create_attachments(void) {
-    sg_image_desc img_desc = {
-        .usage.render_attachment = true,
-        .width = 128,
-        .height = 128,
-    };
-    return sg_make_attachments(&(sg_attachments_desc){
-        .colors = {
-            [0].image = sg_make_image(&img_desc),
-            [1].image = sg_make_image(&img_desc),
-            [2].image = sg_make_image(&img_desc)
-        },
+static sg_view create_view(void) {
+    return sg_make_view(&(sg_view_desc){
+        .color_attachment.image = sg_make_image(&(sg_image_desc){
+            .usage.color_attachment = true,
+            .width = 128,
+            .height = 128,
+        })
     });
 }
 
@@ -95,7 +90,7 @@ UTEST(sokol_gfx, query_desc) {
         .buffer_pool_size = 1024,
         .sampler_pool_size = 8,
         .shader_pool_size = 128,
-        .attachments_pool_size = 64,
+        .view_pool_size = 64,
     });
     const sg_desc desc = sg_query_desc();
     T(desc.buffer_pool_size == 1024);
@@ -103,7 +98,7 @@ UTEST(sokol_gfx, query_desc) {
     T(desc.sampler_pool_size == 8);
     T(desc.shader_pool_size == 128);
     T(desc.pipeline_pool_size == _SG_DEFAULT_PIPELINE_POOL_SIZE);
-    T(desc.attachments_pool_size == 64);
+    T(desc.view_pool_size == 64);
     T(desc.uniform_buffer_size == _SG_DEFAULT_UB_SIZE);
     sg_shutdown();
 }
@@ -120,7 +115,7 @@ UTEST(sokol_gfx, pool_size) {
         .image_pool_size = 2048,
         .shader_pool_size = 128,
         .pipeline_pool_size = 256,
-        .attachments_pool_size = 64,
+        .view_pool_size = 64,
     });
     T(sg_isvalid());
     /* pool slot 0 is reserved (this is the "invalid slot") */
@@ -128,12 +123,12 @@ UTEST(sokol_gfx, pool_size) {
     T(_sg.pools.image_pool.size == 2049);
     T(_sg.pools.shader_pool.size == 129);
     T(_sg.pools.pipeline_pool.size == 257);
-    T(_sg.pools.attachments_pool.size == 65);
+    T(_sg.pools.view_pool.size == 65);
     T(_sg.pools.buffer_pool.queue_top == 1024);
     T(_sg.pools.image_pool.queue_top == 2048);
     T(_sg.pools.shader_pool.queue_top == 128);
     T(_sg.pools.pipeline_pool.queue_top == 256);
-    T(_sg.pools.attachments_pool.queue_top == 64);
+    T(_sg.pools.view_pool.queue_top == 64);
     sg_shutdown();
 }
 
@@ -292,33 +287,33 @@ UTEST(sokol_gfx, alloc_fail_destroy_pipelines) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, alloc_fail_destroy_attachments) {
+UTEST(sokol_gfx, alloc_fail_destroy_views) {
     setup(&(sg_desc){
-        .attachments_pool_size = 3
+        .view_pool_size = 3
     });
     T(sg_isvalid());
 
-    sg_attachments atts[3] = { {0} };
+    sg_view views[3] = { {0} };
     for (int i = 0; i < 3; i++) {
-        atts[i] = sg_alloc_attachments();
-        T(atts[i].id != SG_INVALID_ID);
-        T((2-i) == _sg.pools.attachments_pool.queue_top);
-        T(sg_query_attachments_state(atts[i]) == SG_RESOURCESTATE_ALLOC);
+        views[i] = sg_alloc_view();
+        T(views[i].id != SG_INVALID_ID);
+        T((2-i) == _sg.pools.view_pool.queue_top);
+        T(sg_query_view_state(views[i]) == SG_RESOURCESTATE_ALLOC);
     }
-    /* the next alloc will fail because the pool is exhausted */
-    sg_attachments a3 = sg_alloc_attachments();
-    T(a3.id == SG_INVALID_ID);
-    T(sg_query_attachments_state(a3) == SG_RESOURCESTATE_INVALID);
+    // the next alloc will fail because the pool is exhausted
+    sg_view v3 = sg_alloc_view();
+    T(v3.id == SG_INVALID_ID);
+    T(sg_query_view_state(v3) == SG_RESOURCESTATE_INVALID);
 
-    /* before destroying, the resources must be either in valid or failed state */
+    // before destroying, the resources must be either in valid or failed state
     for (int i = 0; i < 3; i++) {
-        sg_fail_attachments(atts[i]);
-        T(sg_query_attachments_state(atts[i]) == SG_RESOURCESTATE_FAILED);
+        sg_fail_view(views[i]);
+        T(sg_query_view_state(views[i]) == SG_RESOURCESTATE_FAILED);
     }
     for (int i = 0; i < 3; i++) {
-        sg_destroy_attachments(atts[i]);
-        T(sg_query_attachments_state(atts[i]) == SG_RESOURCESTATE_INVALID);
-        T((i+1) == _sg.pools.attachments_pool.queue_top);
+        sg_destroy_view(views[i]);
+        T(sg_query_view_state(views[i]) == SG_RESOURCESTATE_INVALID);
+        T((i+1) == _sg.pools.view_pool.queue_top);
     }
     sg_shutdown();
 }
@@ -387,7 +382,7 @@ UTEST(sokol_gfx, make_destroy_images) {
         T(imgptr->slot.id == img[i].id);
         T(imgptr->slot.state == SG_RESOURCESTATE_VALID);
         T(imgptr->cmn.type == SG_IMAGETYPE_2D);
-        T(!imgptr->cmn.usage.render_attachment);
+        T(!imgptr->cmn.usage.color_attachment);
         T(imgptr->cmn.width == 8);
         T(imgptr->cmn.height == 8);
         T(imgptr->cmn.num_slices == 1);
@@ -531,49 +526,37 @@ UTEST(sokol_gfx, make_destroy_pipelines) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_destroy_attachments) {
+UTEST(sokol_gfx, make_destroy_views) {
     setup(&(sg_desc){
-        .attachments_pool_size = 3
+        .view_pool_size = 3
     });
     T(sg_isvalid());
 
-    sg_attachments atts[3] = { {0} };
+    sg_view views[3] = { {0} };
 
-    sg_image_desc img_desc = {
-        .usage.render_attachment = true,
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .usage.color_attachment = true,
         .width = 128,
         .height = 128,
-    };
-    sg_attachments_desc atts_desc = (sg_attachments_desc){
-        .colors = {
-            [0].image = sg_make_image(&img_desc),
-            [1].image = sg_make_image(&img_desc),
-            [2].image = sg_make_image(&img_desc)
-        },
-    };
+    });
+    const sg_view_desc view_desc = { .color_attachment.image = img };
     for (int i = 0; i < 3; i++) {
-        atts[i] = sg_make_attachments(&atts_desc);
-        T(atts[i].id != SG_INVALID_ID);
-        T((2-i) == _sg.pools.attachments_pool.queue_top);
-        T(sg_query_attachments_state(atts[i]) == SG_RESOURCESTATE_VALID);
-        const _sg_attachments_t* attsptr = _sg_lookup_attachments(atts[i].id);
-        T(attsptr);
-        T(attsptr->slot.id == atts[i].id);
-        T(attsptr->slot.state == SG_RESOURCESTATE_VALID);
-        T(attsptr->cmn.num_colors == 3);
-        for (int ai = 0; ai < 3; ai++) {
-            const _sg_image_t* img = _sg_image_ref_ptr(&attsptr->cmn.colors[ai].image);
-            T(img == _sg_lookup_image(atts_desc.colors[ai].image.id));
-            T(attsptr->cmn.colors[ai].image.sref.id == atts_desc.colors[ai].image.id);
-        }
+        views[i] = sg_make_view(&view_desc);
+        T(views[i].id != SG_INVALID_ID);
+        T((2-i) == _sg.pools.view_pool.queue_top);
+        T(sg_query_view_state(views[i]) == SG_RESOURCESTATE_VALID);
+        const _sg_view_t* viewptr = _sg_lookup_view(views[i].id);
+        T(viewptr);
+        T(viewptr->slot.id == views[i].id);
+        T(viewptr->slot.state == SG_RESOURCESTATE_VALID);
     }
-    /* trying to create another one fails because pool is exhausted */
-    T(sg_make_attachments(&atts_desc).id == SG_INVALID_ID);
+    // trying to create another one fails because pool is exhausted
+    T(sg_make_view(&view_desc).id == SG_INVALID_ID);
 
     for (int i = 0; i < 3; i++) {
-        sg_destroy_attachments(atts[i]);
-        T(sg_query_attachments_state(atts[i]) == SG_RESOURCESTATE_INVALID);
-        T((i+1) == _sg.pools.attachments_pool.queue_top);
+        sg_destroy_view(views[i]);
+        T(sg_query_view_state(views[i]) == SG_RESOURCESTATE_INVALID);
+        T((i+1) == _sg.pools.view_pool.queue_top);
     }
     sg_shutdown();
 }
@@ -615,7 +598,9 @@ UTEST(sokol_gfx, query_image_defaults) {
     setup(&(sg_desc){0});
     const sg_image_desc desc = sg_query_image_defaults(&(sg_image_desc){0});
     T(desc.type == SG_IMAGETYPE_2D);
-    T(!desc.usage.render_attachment);
+    T(!desc.usage.color_attachment);
+    T(!desc.usage.resolve_attachment);
+    T(!desc.usage.depth_stencil_attachment);
     T(desc.usage.immutable);
     T(desc.num_mipmaps == 1);
     T(desc.pixel_format == SG_PIXELFORMAT_RGBA8);
@@ -792,12 +777,11 @@ UTEST(sokol_gfx, multiple_color_state) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, query_attachments_defaults) {
+UTEST(sokol_gfx, query_view_defaults) {
     setup(&(sg_desc){0});
-    /* sg_attachments_desc doesn't actually have any meaningful default values */
-    const sg_attachments_desc desc = sg_query_attachments_defaults(&(sg_attachments_desc){0});
-    T(desc.colors[0].image.id == SG_INVALID_ID);
-    T(desc.colors[0].mip_level == 0);
+    const sg_view_desc desc = sg_query_view_defaults(&(sg_view_desc){0});
+    T(desc.texture.image.id == SG_INVALID_ID);
+    T(desc.texture.mip_levels.count == 0);
     sg_shutdown();
 }
 
@@ -820,7 +804,7 @@ UTEST(sokol_gfx, query_buffer_info) {
 UTEST(sokol_gfx, query_image_info) {
     setup(&(sg_desc){0});
     sg_image img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
+        .usage.color_attachment = true,
         .width = 256,
         .height = 128
     });
@@ -877,23 +861,19 @@ UTEST(sokol_gfx, query_pipeline_info) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, query_attachments_info) {
+UTEST(sokol_gfx, query_view_info) {
     setup(&(sg_desc){0});
-    sg_image_desc img_desc = {
-        .usage.render_attachment = true,
+    const sg_image img = sg_make_image(&(sg_image_desc){
+        .usage.color_attachment = true,
         .width = 128,
         .height = 128,
-    };
-    sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors = {
-            [0].image = sg_make_image(&img_desc),
-            [1].image = sg_make_image(&img_desc),
-            [2].image = sg_make_image(&img_desc)
-        },
     });
-    const sg_attachments_info info = sg_query_attachments_info(atts);
+    sg_view view = sg_make_view(&(sg_view_desc){
+        .color_attachment.image = img,
+    });
+    const sg_view_info info = sg_query_view_info(view);
     T(info.slot.state == SG_RESOURCESTATE_VALID);
-    T(info.slot.res_id == atts.id);
+    T(info.slot.res_id == view.id);
     sg_shutdown();
 }
 
@@ -973,7 +953,9 @@ UTEST(sokol_gfx, query_image_desc) {
     });
     const sg_image_desc i0_desc = sg_query_image_desc(i0);
     T(i0_desc.type == SG_IMAGETYPE_2D);
-    T(!i0_desc.usage.render_attachment);
+    T(!i0_desc.usage.color_attachment);
+    T(!i0_desc.usage.resolve_attachment);
+    T(!i0_desc.usage.depth_stencil_attachment);
     T(i0_desc.usage.dynamic_update);
     T(i0_desc.width == 256);
     T(i0_desc.height == 512);
@@ -987,7 +969,6 @@ UTEST(sokol_gfx, query_image_desc) {
     T(i0_desc.gl_texture_target == 0);
     T(i0_desc.mtl_textures[0] == 0);
     T(i0_desc.d3d11_texture == 0);
-    T(i0_desc.d3d11_shader_resource_view == 0);
     T(i0_desc.wgpu_texture == 0);
     T(sg_query_image_type(i0) == SG_IMAGETYPE_2D);
     T(sg_query_image_width(i0) == 256);
@@ -999,7 +980,9 @@ UTEST(sokol_gfx, query_image_desc) {
     sg_destroy_image(i0);
     const sg_image_desc i0_desc_x = sg_query_image_desc(i0);
     T(i0_desc_x.type == 0);
-    T(!i0_desc_x.usage.render_attachment);
+    T(!i0_desc_x.usage.color_attachment);
+    T(!i0_desc_x.usage.resolve_attachment);
+    T(!i0_desc_x.usage.depth_stencil_attachment);
     T(!i0_desc_x.usage.dynamic_update);
     T(i0_desc_x.width == 0);
     T(i0_desc_x.height == 0);
@@ -1070,18 +1053,18 @@ UTEST(sokol_gfx, query_shader_desc) {
                 }
             }
         },
-        .images[0] = { .stage = SG_SHADERSTAGE_VERTEX, .image_type = SG_IMAGETYPE_2D, .sample_type = SG_IMAGESAMPLETYPE_FLOAT, .multisampled = true },
-        .images[1] = { .stage = SG_SHADERSTAGE_VERTEX, .image_type = SG_IMAGETYPE_3D, .sample_type = SG_IMAGESAMPLETYPE_DEPTH },
-        .images[2] = { .stage = SG_SHADERSTAGE_FRAGMENT, .image_type = SG_IMAGETYPE_ARRAY, .sample_type = SG_IMAGESAMPLETYPE_DEPTH },
-        .images[3] = { .stage = SG_SHADERSTAGE_FRAGMENT, .image_type = SG_IMAGETYPE_CUBE, .sample_type = SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT },
+        .views[0].texture = { .stage = SG_SHADERSTAGE_VERTEX, .image_type = SG_IMAGETYPE_2D, .sample_type = SG_IMAGESAMPLETYPE_FLOAT, .multisampled = true },
+        .views[1].texture = { .stage = SG_SHADERSTAGE_VERTEX, .image_type = SG_IMAGETYPE_3D, .sample_type = SG_IMAGESAMPLETYPE_DEPTH },
+        .views[2].texture = { .stage = SG_SHADERSTAGE_FRAGMENT, .image_type = SG_IMAGETYPE_ARRAY, .sample_type = SG_IMAGESAMPLETYPE_DEPTH },
+        .views[3].texture = { .stage = SG_SHADERSTAGE_FRAGMENT, .image_type = SG_IMAGETYPE_CUBE, .sample_type = SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT },
         .samplers[0] = { .stage = SG_SHADERSTAGE_VERTEX, .sampler_type = SG_SAMPLERTYPE_FILTERING },
         .samplers[1] = { .stage = SG_SHADERSTAGE_VERTEX, .sampler_type = SG_SAMPLERTYPE_COMPARISON },
         .samplers[2] = { .stage = SG_SHADERSTAGE_FRAGMENT, .sampler_type = SG_SAMPLERTYPE_COMPARISON },
         .samplers[3] = { .stage = SG_SHADERSTAGE_FRAGMENT, .sampler_type = SG_SAMPLERTYPE_NONFILTERING },
-        .image_sampler_pairs[0] = { .stage = SG_SHADERSTAGE_VERTEX, .image_slot = 0, .sampler_slot = 0, .glsl_name = "img0" },
-        .image_sampler_pairs[1] = { .stage = SG_SHADERSTAGE_VERTEX, .image_slot = 1, .sampler_slot = 1, .glsl_name = "img1" },
-        .image_sampler_pairs[2] = { .stage = SG_SHADERSTAGE_FRAGMENT, .image_slot = 2, .sampler_slot = 2, .glsl_name = "img3" },
-        .image_sampler_pairs[3] = { .stage = SG_SHADERSTAGE_FRAGMENT, .image_slot = 3, .sampler_slot = 3, .glsl_name = "img4" },
+        .texture_sampler_pairs[0] = { .stage = SG_SHADERSTAGE_VERTEX, .view_slot = 0, .sampler_slot = 0, .glsl_name = "img0" },
+        .texture_sampler_pairs[1] = { .stage = SG_SHADERSTAGE_VERTEX, .view_slot = 1, .sampler_slot = 1, .glsl_name = "img1" },
+        .texture_sampler_pairs[2] = { .stage = SG_SHADERSTAGE_FRAGMENT, .view_slot = 2, .sampler_slot = 2, .glsl_name = "img3" },
+        .texture_sampler_pairs[3] = { .stage = SG_SHADERSTAGE_FRAGMENT, .view_slot = 3, .sampler_slot = 3, .glsl_name = "img4" },
         .label = "label",
     });
     const sg_shader_desc s0_desc = sg_query_shader_desc(s0);
@@ -1095,22 +1078,22 @@ UTEST(sokol_gfx, query_shader_desc) {
     T(s0_desc.uniform_blocks[0].glsl_uniforms[0].glsl_name == 0);
     T(s0_desc.uniform_blocks[0].glsl_uniforms[0].type == 0);
     T(s0_desc.uniform_blocks[0].glsl_uniforms[0].array_count == 0);
-    T(s0_desc.images[0].stage == SG_SHADERSTAGE_VERTEX);
-    T(s0_desc.images[0].image_type == SG_IMAGETYPE_2D);
-    T(s0_desc.images[0].sample_type == SG_IMAGESAMPLETYPE_FLOAT);
-    T(s0_desc.images[0].multisampled);
-    T(s0_desc.images[1].stage == SG_SHADERSTAGE_VERTEX);
-    T(s0_desc.images[1].image_type == SG_IMAGETYPE_3D);
-    T(s0_desc.images[1].sample_type == SG_IMAGESAMPLETYPE_DEPTH);
-    T(s0_desc.images[1].multisampled == false);
-    T(s0_desc.images[2].stage == SG_SHADERSTAGE_FRAGMENT);
-    T(s0_desc.images[2].image_type == SG_IMAGETYPE_ARRAY);
-    T(s0_desc.images[2].sample_type == SG_IMAGESAMPLETYPE_DEPTH);
-    T(s0_desc.images[2].multisampled == false);
-    T(s0_desc.images[3].stage == SG_SHADERSTAGE_FRAGMENT);
-    T(s0_desc.images[3].image_type == SG_IMAGETYPE_CUBE);
-    T(s0_desc.images[3].sample_type == SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT);
-    T(s0_desc.images[3].multisampled == false);
+    T(s0_desc.views[0].texture.stage == SG_SHADERSTAGE_VERTEX);
+    T(s0_desc.views[0].texture.image_type == SG_IMAGETYPE_2D);
+    T(s0_desc.views[0].texture.sample_type == SG_IMAGESAMPLETYPE_FLOAT);
+    T(s0_desc.views[0].texture.multisampled);
+    T(s0_desc.views[1].texture.stage == SG_SHADERSTAGE_VERTEX);
+    T(s0_desc.views[1].texture.image_type == SG_IMAGETYPE_3D);
+    T(s0_desc.views[1].texture.sample_type == SG_IMAGESAMPLETYPE_DEPTH);
+    T(s0_desc.views[1].texture.multisampled == false);
+    T(s0_desc.views[2].texture.stage == SG_SHADERSTAGE_FRAGMENT);
+    T(s0_desc.views[2].texture.image_type == SG_IMAGETYPE_ARRAY);
+    T(s0_desc.views[2].texture.sample_type == SG_IMAGESAMPLETYPE_DEPTH);
+    T(s0_desc.views[2].texture.multisampled == false);
+    T(s0_desc.views[3].texture.stage == SG_SHADERSTAGE_FRAGMENT);
+    T(s0_desc.views[3].texture.image_type == SG_IMAGETYPE_CUBE);
+    T(s0_desc.views[3].texture.sample_type == SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT);
+    T(s0_desc.views[3].texture.multisampled == false);
     T(s0_desc.samplers[0].stage == SG_SHADERSTAGE_VERTEX);
     T(s0_desc.samplers[0].sampler_type == SG_SAMPLERTYPE_FILTERING);
     T(s0_desc.samplers[1].stage == SG_SHADERSTAGE_VERTEX);
@@ -1119,22 +1102,22 @@ UTEST(sokol_gfx, query_shader_desc) {
     T(s0_desc.samplers[2].sampler_type == SG_SAMPLERTYPE_COMPARISON);
     T(s0_desc.samplers[3].stage == SG_SHADERSTAGE_FRAGMENT);
     T(s0_desc.samplers[3].sampler_type == SG_SAMPLERTYPE_NONFILTERING);
-    T(s0_desc.image_sampler_pairs[0].stage == SG_SHADERSTAGE_VERTEX);
-    T(s0_desc.image_sampler_pairs[0].image_slot == 0);
-    T(s0_desc.image_sampler_pairs[0].sampler_slot == 0);
-    T(s0_desc.image_sampler_pairs[0].glsl_name == 0);
-    T(s0_desc.image_sampler_pairs[1].stage == SG_SHADERSTAGE_VERTEX);
-    T(s0_desc.image_sampler_pairs[1].image_slot == 1);
-    T(s0_desc.image_sampler_pairs[1].sampler_slot == 1);
-    T(s0_desc.image_sampler_pairs[1].glsl_name == 0);
-    T(s0_desc.image_sampler_pairs[2].stage == SG_SHADERSTAGE_FRAGMENT);
-    T(s0_desc.image_sampler_pairs[2].image_slot == 2);
-    T(s0_desc.image_sampler_pairs[2].sampler_slot == 2);
-    T(s0_desc.image_sampler_pairs[2].glsl_name == 0);
-    T(s0_desc.image_sampler_pairs[3].stage == SG_SHADERSTAGE_FRAGMENT);
-    T(s0_desc.image_sampler_pairs[3].image_slot == 3);
-    T(s0_desc.image_sampler_pairs[3].sampler_slot == 3);
-    T(s0_desc.image_sampler_pairs[3].glsl_name == 0);
+    T(s0_desc.texture_sampler_pairs[0].stage == SG_SHADERSTAGE_VERTEX);
+    T(s0_desc.texture_sampler_pairs[0].view_slot == 0);
+    T(s0_desc.texture_sampler_pairs[0].sampler_slot == 0);
+    T(s0_desc.texture_sampler_pairs[0].glsl_name == 0);
+    T(s0_desc.texture_sampler_pairs[1].stage == SG_SHADERSTAGE_VERTEX);
+    T(s0_desc.texture_sampler_pairs[1].view_slot == 1);
+    T(s0_desc.texture_sampler_pairs[1].sampler_slot == 1);
+    T(s0_desc.texture_sampler_pairs[1].glsl_name == 0);
+    T(s0_desc.texture_sampler_pairs[2].stage == SG_SHADERSTAGE_FRAGMENT);
+    T(s0_desc.texture_sampler_pairs[2].view_slot == 2);
+    T(s0_desc.texture_sampler_pairs[2].sampler_slot == 2);
+    T(s0_desc.texture_sampler_pairs[2].glsl_name == 0);
+    T(s0_desc.texture_sampler_pairs[3].stage == SG_SHADERSTAGE_FRAGMENT);
+    T(s0_desc.texture_sampler_pairs[3].view_slot == 3);
+    T(s0_desc.texture_sampler_pairs[3].sampler_slot == 3);
+    T(s0_desc.texture_sampler_pairs[3].glsl_name == 0);
 
     sg_shutdown();
 }
@@ -1213,46 +1196,33 @@ UTEST(sokol_gfx, query_pipeline_desc) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, query_attachments_desc) {
+UTEST(sokol_gfx, query_view_desc) {
     setup(&(sg_desc){0});
 
     const sg_image_desc color_img_desc = {
-        .usage.render_attachment = true,
+        .usage.color_attachment = true,
         .width = 128,
         .height = 128,
     };
     const sg_image_desc depth_img_desc = {
-        .usage.render_attachment = true,
+        .usage.depth_stencil_attachment = true,
         .width = 128,
         .height = 128,
         .pixel_format = SG_PIXELFORMAT_DEPTH,
     };
-    sg_image color_img_0 = sg_make_image(&color_img_desc);
-    sg_image color_img_1 = sg_make_image(&color_img_desc);
-    sg_image color_img_2 = sg_make_image(&color_img_desc);
+    sg_image color_img = sg_make_image(&color_img_desc);
     sg_image depth_img = sg_make_image(&depth_img_desc);
+    sg_view color_view = sg_make_view(&(sg_view_desc){ .color_attachment.image = color_img });
+    sg_view depth_view = sg_make_view(&(sg_view_desc){ .depth_stencil_attachment.image = depth_img });
 
-    sg_attachments a0 = sg_make_attachments(&(sg_attachments_desc){
-        .colors = {
-            [0].image = color_img_0,
-            [1].image = color_img_1,
-            [2].image = color_img_2,
-        },
-        .depth_stencil.image = depth_img,
-    });
-    const sg_attachments_desc a0_desc = sg_query_attachments_desc(a0);
-    T(a0_desc.colors[0].image.id == color_img_0.id);
-    T(a0_desc.colors[0].mip_level == 0);
-    T(a0_desc.colors[0].slice == 0);
-    T(a0_desc.colors[1].image.id == color_img_1.id);
-    T(a0_desc.colors[1].mip_level == 0);
-    T(a0_desc.colors[1].slice == 0);
-    T(a0_desc.colors[2].image.id == color_img_2.id);
-    T(a0_desc.colors[2].mip_level == 0);
-    T(a0_desc.colors[2].slice == 0);
-    T(a0_desc.depth_stencil.image.id == depth_img.id);
-    T(a0_desc.depth_stencil.mip_level == 0);
-    T(a0_desc.depth_stencil.slice == 0);
+    const sg_view_desc color_view_desc = sg_query_view_desc(color_view);
+    T(color_view_desc.color_attachment.image.id == color_img.id);
+    T(color_view_desc.color_attachment.mip_level == 0);
+    T(color_view_desc.color_attachment.slice == 0);
+    const sg_view_desc depth_view_desc = sg_query_view_desc(depth_view);
+    T(depth_view_desc.depth_stencil_attachment.image.id == depth_img.id);
+    T(depth_view_desc.depth_stencil_attachment.mip_level == 0);
+    T(depth_view_desc.depth_stencil_attachment.slice == 0);
 
     sg_shutdown();
 }
@@ -1274,7 +1244,7 @@ UTEST(sokol_gfx, image_resource_states) {
     setup(&(sg_desc){0});
     sg_image img = sg_alloc_image();
     T(sg_query_image_state(img) == SG_RESOURCESTATE_ALLOC);
-    sg_init_image(img, &(sg_image_desc){ .usage.render_attachment = true, .width = 16, .height = 16 });
+    sg_init_image(img, &(sg_image_desc){ .usage.color_attachment = true, .width = 16, .height = 16 });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     sg_uninit_image(img);
     T(sg_query_image_state(img) == SG_RESOURCESTATE_ALLOC);
@@ -1325,18 +1295,18 @@ UTEST(sokol_gfx, pipeline_resource_states) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, attachments_resource_states) {
+UTEST(sokol_gfx, view_resource_states) {
     setup(&(sg_desc){0});
-    sg_attachments atts = sg_alloc_attachments();
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_ALLOC);
-    sg_init_attachments(atts, &(sg_attachments_desc){
-        .colors[0].image = sg_make_image(&(sg_image_desc){ .usage.render_attachment = true, .width=16, .height=16})
+    sg_view view = sg_alloc_view();
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_ALLOC);
+    sg_init_view(view, &(sg_view_desc){
+        .color_attachment.image = sg_make_image(&(sg_image_desc){ .usage.color_attachment = true, .width = 16, .height = 16 }),
     });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_VALID);
-    sg_uninit_attachments(atts);
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_ALLOC);
-    sg_dealloc_attachments(atts);
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_INVALID);
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_VALID);
+    sg_uninit_view(view);
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_ALLOC);
+    sg_dealloc_view(view);
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_INVALID);
     sg_shutdown();
 }
 
@@ -1358,7 +1328,7 @@ UTEST(sokol_gfx, buffer_uninit_count) {
 
 UTEST(sokol_gfx, image_uninit_count) {
     setup(&(sg_desc){0});
-    const sg_image_desc desc = { .usage.render_attachment = true, .width = 128, .height = 128 };
+    const sg_image_desc desc = { .usage.color_attachment = true, .width = 128, .height = 128 };
     sg_image img = sg_make_image(&desc);
     T(sg_query_image_info(img).slot.uninit_count == 0);
     sg_uninit_image(img);
@@ -1404,28 +1374,23 @@ UTEST(sokol_gfx, pipeline_uninit_count) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, atachments_uninit_count) {
+UTEST(sokol_gfx, view_uninit_count) {
     setup(&(sg_desc){0});
-    const sg_image_desc img_desc = {
-        .usage.render_attachment = true,
+    const sg_image img = sg_make_image(&(sg_image_desc){
         .width = 128,
         .height = 128,
-    };
-    const sg_attachments_desc desc = {
-        .colors = {
-            [0].image = sg_make_image(&img_desc),
-        }
-    };
-    sg_attachments atts = sg_make_attachments(&desc);
-    T(sg_query_attachments_info(atts).slot.uninit_count == 0);
-    sg_uninit_attachments(atts);
-    T(sg_query_attachments_info(atts).slot.uninit_count == 1);
-    sg_init_attachments(atts, &desc);
-    T(sg_query_attachments_info(atts).slot.uninit_count == 1);
-    sg_uninit_attachments(atts);
-    T(sg_query_attachments_info(atts).slot.uninit_count == 2);
-    sg_dealloc_attachments(atts);
-    T(sg_query_attachments_info(atts).slot.uninit_count == 0);
+    });
+    const sg_view_desc desc = { .texture.image = img };
+    sg_view view = sg_make_view(&desc);
+    T(sg_query_view_info(view).slot.uninit_count == 0);
+    sg_uninit_view(view);
+    T(sg_query_view_info(view).slot.uninit_count == 1);
+    sg_init_view(view, &desc);
+    T(sg_query_view_info(view).slot.uninit_count == 1);
+    sg_uninit_view(view);
+    T(sg_query_view_info(view).slot.uninit_count == 2);
+    sg_dealloc_view(view);
+    T(sg_query_view_info(view).slot.uninit_count == 0);
     sg_shutdown();
 }
 
@@ -1687,14 +1652,14 @@ UTEST(sokol_gfx, pipeline_double_destroy_is_ok) {
     sg_shutdown();
 }
 
-UTEST(sokoL_gfx, attachments_double_destroy_is_ok) {
+UTEST(sokoL_gfx, view_double_destroy_is_ok) {
     setup(&(sg_desc){0});
-    sg_attachments atts = create_attachments();
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_VALID);
-    sg_destroy_attachments(atts);
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_INVALID);
-    sg_destroy_attachments(atts);
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_INVALID);
+    sg_view view = create_view();
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_VALID);
+    sg_destroy_view(view);
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_INVALID);
+    sg_destroy_view(view);
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_INVALID);
     sg_shutdown();
 }
 
@@ -1763,82 +1728,16 @@ UTEST(sokol_gfx, make_dealloc_pipeline_warns) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_dealloc_attachments_warns) {
+UTEST(sokol_gfx, make_dealloc_view_warns) {
     setup(&(sg_desc){0});
-    sg_attachments atts = create_attachments();
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_VALID);
-    sg_dealloc_attachments(atts);
-    T(log_items[0] == SG_LOGITEM_DEALLOC_ATTACHMENTS_INVALID_STATE);
+    sg_view view = create_view();
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_VALID);
+    sg_dealloc_view(view);
+    T(log_items[0] == SG_LOGITEM_DEALLOC_VIEW_INVALID_STATE);
     T(num_log_called == 1);
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_VALID);
-    sg_destroy_attachments(atts);
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_INVALID);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, alloc_uninit_buffer_warns) {
-    setup(&(sg_desc){0});
-    sg_buffer buf = sg_alloc_buffer();
-    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_ALLOC);
-    sg_uninit_buffer(buf);
-    T(log_items[0] == SG_LOGITEM_UNINIT_BUFFER_INVALID_STATE);
-    T(num_log_called == 1);
-    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_ALLOC);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, alloc_uninit_image_warns) {
-    setup(&(sg_desc){0});
-    sg_image img = sg_alloc_image();
-    T(sg_query_image_state(img) == SG_RESOURCESTATE_ALLOC);
-    sg_uninit_image(img);
-    T(log_items[0] == SG_LOGITEM_UNINIT_IMAGE_INVALID_STATE);
-    T(num_log_called == 1);
-    T(sg_query_image_state(img) == SG_RESOURCESTATE_ALLOC);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, alloc_uninit_sampler_warns) {
-    setup(&(sg_desc){0});
-    sg_sampler smp = sg_alloc_sampler();
-    T(sg_query_sampler_state(smp) == SG_RESOURCESTATE_ALLOC);
-    sg_uninit_sampler(smp);
-    T(log_items[0] == SG_LOGITEM_UNINIT_SAMPLER_INVALID_STATE);
-    T(num_log_called == 1);
-    T(sg_query_sampler_state(smp) == SG_RESOURCESTATE_ALLOC);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, alloc_uninit_shader_warns) {
-    setup(&(sg_desc){0});
-    sg_shader shd = sg_alloc_shader();
-    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_ALLOC);
-    sg_uninit_shader(shd);
-    T(log_items[0] == SG_LOGITEM_UNINIT_SHADER_INVALID_STATE);
-    T(num_log_called == 1);
-    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_ALLOC);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, alloc_uninit_pipeline_warns) {
-    setup(&(sg_desc){0});
-    sg_pipeline pip = sg_alloc_pipeline();
-    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_ALLOC);
-    sg_uninit_pipeline(pip);
-    T(log_items[0] == SG_LOGITEM_UNINIT_PIPELINE_INVALID_STATE);
-    T(num_log_called == 1);
-    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_ALLOC);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, alloc_uninit_attachments_warns) {
-    setup(&(sg_desc){0});
-    sg_attachments atts = sg_alloc_attachments();
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_ALLOC);
-    sg_uninit_attachments(atts);
-    T(log_items[0] == SG_LOGITEM_UNINIT_ATTACHMENTS_INVALID_STATE);
-    T(num_log_called == 1);
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_ALLOC);
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_VALID);
+    sg_destroy_view(view);
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_INVALID);
     sg_shutdown();
 }
 
@@ -1893,13 +1792,13 @@ UTEST(sokol_gfx, alloc_destroy_pipeline_is_ok) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, alloc_destroy_attachments_is_ok) {
+UTEST(sokol_gfx, alloc_destroy_view_is_ok) {
     setup(&(sg_desc){0});
-    sg_attachments atts = sg_alloc_attachments();
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_ALLOC);
-    sg_destroy_attachments(atts);
+    sg_view view = sg_alloc_view();
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_ALLOC);
+    sg_destroy_view(view);
     T(num_log_called == 0);
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_INVALID);
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_INVALID);
     sg_shutdown();
 }
 
@@ -1919,40 +1818,16 @@ UTEST(sokol_gfx, make_pipeline_with_nonvalid_shader) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_attachments_with_nonvalid_color_images) {
+UTEST(sokol_gfx, make_view_with_nonvalid_image) {
     setup(&(sg_desc){
         .disable_validation = true,
     });
-    sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors = {
-            [0].image = sg_alloc_image(),
-            [1].image = sg_alloc_image(),
-        },
-        .depth_stencil = {
-            .image = sg_make_image(&(sg_image_desc){
-                .usage.render_attachment = true,
-                .width = 128,
-                .height = 128
-            })
-        }
+    sg_view view = sg_make_view(&(sg_view_desc){
+        .texture.image = sg_alloc_image(),
     });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    sg_destroy_attachments(atts);
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_INVALID);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_attachments_without_color_attachments) {
-    setup(&(sg_desc){0});
-    sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .depth_stencil.image = sg_make_image(&(sg_image_desc){
-            .usage.render_attachment = true,
-            .width = 64,
-            .height = 64,
-            .pixel_format = SG_PIXELFORMAT_DEPTH,
-        })
-    });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_VALID);
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_FAILED);
+    sg_destroy_view(view);
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_INVALID);
     sg_shutdown();
 }
 
@@ -2150,14 +2025,14 @@ UTEST(sokol_gfx, make_image_validate_msaa_no_rt) {
 UTEST(sokol_gfx, make_image_validate_msaa_num_mipmaps) {
     setup(&(sg_desc){0});
     sg_image img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
+        .usage.color_attachment = true,
         .width = 64,
         .height = 64,
         .sample_count = 4,
         .num_mipmaps = 2,
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_RENDERATTACHMENT_MSAA_NUM_MIPMAPS);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_NUM_MIPMAPS);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
@@ -2165,7 +2040,7 @@ UTEST(sokol_gfx, make_image_validate_msaa_num_mipmaps) {
 UTEST(sokol_gfx, make_image_validate_msaa_3d_image) {
     setup(&(sg_desc){0});
     sg_image img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
+        .usage.color_attachment = true,
         .type = SG_IMAGETYPE_3D,
         .width = 32,
         .height = 32,
@@ -2173,7 +2048,7 @@ UTEST(sokol_gfx, make_image_validate_msaa_3d_image) {
         .sample_count = 4,
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_RENDERATTACHMENT_MSAA_3D_IMAGE);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_3D_IMAGE);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
@@ -2181,7 +2056,7 @@ UTEST(sokol_gfx, make_image_validate_msaa_3d_image) {
 UTEST(sokol_gfx, make_image_validate_depth_3d_image_with_depth_format) {
     setup(&(sg_desc){0});
     sg_image img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
+        .usage.depth_stencil_attachment = true,
         .type = SG_IMAGETYPE_3D,
         .width = 8,
         .height = 8,
@@ -2198,7 +2073,7 @@ UTEST(sokol_gfx, make_image_validate_rt_immutable) {
     setup(&(sg_desc){0});
     sg_image img = sg_make_image(&(sg_image_desc){
         .usage = {
-            .render_attachment = true,
+            .color_attachment = true,
             .dynamic_update = true,
         },
         .width = 8,
@@ -2373,642 +2248,173 @@ UTEST(sokol_gfx, make_sampler_validate_anistropic_requires_linear_filtering) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_attachments_validate_start_canary) {
+UTEST(sokol_gfx, make_view_validate_start_canary) {
     setup(&(sg_desc){0});
-    sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
+    sg_view view = sg_make_view(&(sg_view_desc){
         ._start_canary = 1234,
-        .colors[0].image = sg_make_image(&(sg_image_desc){
-            .usage.render_attachment = true,
+        .color_attachment.image = sg_make_image(&(sg_image_desc){
+            .usage.color_attachment = true,
             .width = 64,
             .height = 64,
         }),
     });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_CANARY);
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_VIEWDESC_CANARY);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_attachments_validate_end_canary) {
+UTEST(sokol_gfx, make_view_validate_end_canary) {
     setup(&(sg_desc){0});
-    sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0].image = sg_make_image(&(sg_image_desc){
-            .usage.render_attachment = true,
+    sg_view atts = sg_make_view(&(sg_view_desc){
+        .color_attachment.image = sg_make_image(&(sg_image_desc){
+            .usage.color_attachment = true,
             .width = 64,
             .height = 64,
         }),
         ._end_canary = 1234,
     });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_CANARY);
+    T(sg_query_view_state(atts) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_VIEWDESC_CANARY);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_attachments_validate_no_cont_color_atts1) {
-    setup(&(sg_desc){0});
-    const sg_image_desc img_desc = { .usage.render_attachment = true, .width = 64, .height = 64 };
-    sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors = {
-            [0].image = sg_make_image(&img_desc),
-            [2].image = sg_make_image(&img_desc),
-        }
-    });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_NO_CONT_COLOR_ATTS);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_attachments_validate_image) {
-    setup(&(sg_desc){0});
-    const sg_image_desc img_desc = { .usage.render_attachment = true, .width = 64, .height = 64 };
-    const sg_image img0 = sg_make_image(&img_desc);
-    const sg_image img1 = sg_make_image(&img_desc);
-    sg_destroy_image(img1);
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors = {
-            [0].image = img0,
-            [1].image = img1,
-        }
-    });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_COLOR_IMAGE);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_attachments_validate_miplevel) {
+UTEST(sokol_gfx, make_view_validate_image) {
     setup(&(sg_desc){0});
     const sg_image img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
+        .usage.color_attachment = true,
+        .width = 64,
+        .height = 65
+    });
+    sg_destroy_image(img);
+    const sg_view view = sg_make_view(&(sg_view_desc){
+        .color_attachment.image = img,
+    });
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_VIEWDESC_RESOURCE_ALIVE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_view_validate_miplevel) {
+    setup(&(sg_desc){0});
+    const sg_image img = sg_make_image(&(sg_image_desc){
+        .usage.color_attachment = 4,
         .width = 16,
         .height = 16,
         .num_mipmaps = 4,
     });
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0] = { .image = img, .mip_level = 4 }
+    const sg_view view = sg_make_view(&(sg_view_desc){
+        .color_attachment = { .image = img, .mip_level = 4 }
     });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_COLOR_MIPLEVEL);
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_VIEWDESC_IMAGE_MIPLEVEL);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_attachments_validate_face) {
+UTEST(sokol_gfx, make_view_validate_face) {
     setup(&(sg_desc){0});
     const sg_image img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
+        .usage.color_attachment = true,
         .type = SG_IMAGETYPE_CUBE,
         .width = 64,
         .height = 64,
     });
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0] = { .image = img, .slice = 6 }
+    const sg_view view = sg_make_view(&(sg_view_desc){
+        .color_attachment = { .image = img, .slice = 6 }
     });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_COLOR_FACE);
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_VIEWDESC_IMAGE_CUBEMAP_SLICE);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_attachments_validate_layer) {
+UTEST(sokol_gfx, make_view_validate_array_slice) {
     setup(&(sg_desc){0});
     const sg_image img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
+        .usage.color_attachment = true,
         .type = SG_IMAGETYPE_ARRAY,
         .width = 64,
         .height = 64,
         .num_slices = 4,
     });
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0] = { .image = img, .slice = 5 },
+    const sg_view view = sg_make_view(&(sg_view_desc){
+        .color_attachment = { .image = img, .slice = 5 },
     });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_COLOR_LAYER);
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_VIEWDESC_IMAGE_ARRAY_SLICE);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_attachments_validate_slice) {
+UTEST(sokol_gfx, make_view_validate_3dslice) {
     setup(&(sg_desc){0});
     const sg_image img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
+        .usage.color_attachment = true,
         .type = SG_IMAGETYPE_3D,
         .width = 64,
         .height = 64,
         .num_slices = 4,
     });
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0] = { .image = img, .slice = 5 },
+    const sg_view view = sg_make_view(&(sg_view_desc){
+        .color_attachment = { .image = img, .slice = 5 },
     });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_COLOR_SLICE);
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_VIEWDESC_IMAGE_3D_SLICE);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_attachments_validate_image_no_rt) {
+UTEST(sokol_gfx, make_view_validate_image_no_usage) {
     setup(&(sg_desc){0});
     const sg_image img = sg_make_image(&(sg_image_desc){
         .usage.dynamic_update = true,
         .width = 8,
         .height = 8,
     });
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0].image = img,
+    const sg_view view = sg_make_view(&(sg_view_desc){
+        .color_attachment.image = img,
     });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_COLOR_IMAGE_NO_RENDERATTACHMENT);
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_VIEWDESC_COLORATTACHMENT_USAGE);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_attachments_validate_color_inv_pixelformat) {
+UTEST(sokol_gfx, make_view_validate_color_inv_pixelformat) {
     setup(&(sg_desc){0});
     const sg_image_desc img_desc = {
-        .usage.render_attachment = true,
+        .usage.color_attachment = true,
         .width = 8,
         .height = 8,
         .pixel_format = SG_PIXELFORMAT_DEPTH,
     };
     reset_log_items();
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0].image = sg_make_image(&img_desc),
-        .depth_stencil.image = sg_make_image(&img_desc),
+    const sg_view view = sg_make_view(&(sg_view_desc){
+        .color_attachment.image = sg_make_image(&img_desc),
     });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_COLOR_INV_PIXELFORMAT);
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_VIEWDESC_COLORATTACHMENT_PIXELFORMAT);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_attachments_validate_depth_inv_pixelformat) {
+UTEST(sokol_gfx, make_view_validate_depth_inv_pixelformat) {
     setup(&(sg_desc){0});
     const sg_image_desc img_desc = {
-        .usage.render_attachment = true,
+        .usage.depth_stencil_attachment = true,
         .width = 8,
         .height = 8,
+        // need to explicitly use a non-depth pixel format, otherwise
+        // the default depth format will be picked
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
     };
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0].image = sg_make_image(&img_desc),
-        .depth_stencil.image = sg_make_image(&img_desc),
+    const sg_view view = sg_make_view(&(sg_view_desc){
+        .depth_stencil_attachment.image = sg_make_image(&img_desc),
     });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_DEPTH_INV_PIXELFORMAT);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_attachments_validate_image_sizes) {
-    setup(&(sg_desc){0});
-    const sg_image img0 = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-    });
-    const sg_image img1 = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 32,
-        .height = 32,
-    });
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors = {
-            [0].image = img0,
-            [1].image = img1,
-        }
-    });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_IMAGE_SIZES);
-    T(log_items[1] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_IMAGE_SIZES);
-    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_attachments_validate_image_sample_counts) {
-    setup(&(sg_desc){0});
-    const sg_image img0 = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-        .sample_count = 4,
-    });
-    const sg_image img1 = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-        .sample_count = 2,
-    });
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors = {
-            [0].image = img0,
-            [1].image = img1,
-        }
-    });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_IMAGE_SAMPLE_COUNTS);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_attachments_validate_resolve_color_image_msaa) {
-    setup(&(sg_desc){0});
-    const sg_image color_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-        .sample_count = 1,
-    });
-    const sg_image resolve_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-        .sample_count = 1,
-    });
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0].image = color_img,
-        .resolves[0].image = resolve_img,
-    });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_COLOR_IMAGE_MSAA);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_attachments_validate_resolve_image) {
-    setup(&(sg_desc){0});
-    const sg_image color_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-        .sample_count = 4,
-    });
-    const sg_image resolve_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-        .sample_count = 1,
-    });
-    sg_destroy_image(resolve_img);
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0].image = color_img,
-        .resolves[0].image = resolve_img,
-    });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_attachments_validate_resolve_sample_count) {
-    setup(&(sg_desc){0});
-    const sg_image color_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-        .sample_count = 4,
-    });
-    const sg_image resolve_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-        .sample_count = 4,
-    });
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0].image = color_img,
-        .resolves[0].image = resolve_img,
-    });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_SAMPLE_COUNT);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_attachments_validate_resolve_miplevel) {
-    setup(&(sg_desc){0});
-    const sg_image color_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-        .sample_count = 4,
-    });
-    const sg_image resolve_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-        .sample_count = 1,
-    });
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0] = { .image = color_img },
-        .resolves[0] = { .image = resolve_img, .mip_level = 1 },
-    });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_MIPLEVEL);
-    // FIXME: these are confusing
-    T(log_items[1] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_SIZES);
-    T(log_items[2] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_SIZES);
-    T(log_items[3] == SG_LOGITEM_VALIDATION_FAILED);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_attachments_validate_resolve_face) {
-    setup(&(sg_desc){0});
-    const sg_image color_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-        .sample_count = 4,
-    });
-    const sg_image resolve_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .type = SG_IMAGETYPE_CUBE,
-        .width = 64,
-        .height = 64,
-        .sample_count = 1,
-    });
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0] = { .image = color_img },
-        .resolves[0] = { .image = resolve_img, .slice = 6 },
-    });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_FACE);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_attachments_validate_resolve_layer) {
-    setup(&(sg_desc){0});
-    const sg_image color_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-        .sample_count = 4,
-    });
-    const sg_image resolve_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .type = SG_IMAGETYPE_ARRAY,
-        .width = 64,
-        .height = 64,
-        .num_slices = 4,
-        .sample_count = 1,
-    });
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0] = { .image = color_img },
-        .resolves[0] = { .image = resolve_img, .slice = 4 },
-    });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_LAYER);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_attachments_validate_resolve_slice) {
-    setup(&(sg_desc){0});
-    const sg_image color_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-        .sample_count = 4,
-    });
-    const sg_image resolve_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .type = SG_IMAGETYPE_3D,
-        .width = 64,
-        .height = 64,
-        .num_slices = 4,
-        .sample_count = 1,
-    });
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0] = { .image = color_img },
-        .resolves[0] = { .image = resolve_img, .slice = 4 },
-    });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_SLICE);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_attachments_validate_resolve_image_no_rt) {
-    setup(&(sg_desc){0});
-    const sg_image color_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-        .sample_count = 4,
-    });
-    const sg_image resolve_img = sg_make_image(&(sg_image_desc){
-        .usage.dynamic_update = true,
-        .width = 64,
-        .height = 64,
-        .sample_count = 1,
-    });
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0] = { .image = color_img },
-        .resolves[0] = { .image = resolve_img },
-    });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_NO_RT);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_attachments_validate_resolve_image_sizes) {
-    setup(&(sg_desc){0});
-    const sg_image color_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-        .sample_count = 4,
-    });
-    const sg_image resolve_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 32,
-        .height = 32,
-        .sample_count = 1,
-    });
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0] = { .image = color_img },
-        .resolves[0] = { .image = resolve_img },
-    });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_SIZES);
-    T(log_items[1] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_SIZES);
-    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_attachments_validate_resolve_image_format) {
-    setup(&(sg_desc){0});
-    const sg_image color_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-        .sample_count = 4,
-    });
-    const sg_image resolve_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-        .pixel_format = SG_PIXELFORMAT_R8,
-        .sample_count = 1,
-    });
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0] = { .image = color_img },
-        .resolves[0] = { .image = resolve_img },
-    });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_RESOLVE_IMAGE_FORMAT);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_attachments_validate_depth_image) {
-    setup(&(sg_desc){0});
-    const sg_image color_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-    });
-    const sg_image depth_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-        .pixel_format = SG_PIXELFORMAT_DEPTH,
-    });
-    sg_destroy_image(depth_img);
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0] = { .image = color_img },
-        .depth_stencil.image = depth_img,
-    });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_attachments_validate_depth_miplevel) {
-    setup(&(sg_desc){0});
-    const sg_image color_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-    });
-    const sg_image depth_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-        .pixel_format = SG_PIXELFORMAT_DEPTH,
-    });
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0] = { .image = color_img },
-        .depth_stencil = { .image = depth_img, .mip_level = 1 },
-    });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_DEPTH_MIPLEVEL);
-    // FIXME: these additional validation errors are confusing
-    T(log_items[1] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SIZES);
-    T(log_items[2] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SIZES);
-    T(log_items[3] == SG_LOGITEM_VALIDATION_FAILED);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_attachments_validate_depth_face) {
-    setup(&(sg_desc){0});
-    const sg_image color_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-    });
-    const sg_image depth_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .type = SG_IMAGETYPE_CUBE,
-        .width = 64,
-        .height = 64,
-        .pixel_format = SG_PIXELFORMAT_DEPTH,
-    });
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0] = { .image = color_img },
-        .depth_stencil = { .image = depth_img, .slice = 6 },
-    });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_DEPTH_FACE);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_attachments_validate_depth_layer) {
-    setup(&(sg_desc){0});
-    const sg_image color_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-    });
-    const sg_image depth_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .type = SG_IMAGETYPE_ARRAY,
-        .width = 64,
-        .height = 64,
-        .num_slices = 4,
-        .pixel_format = SG_PIXELFORMAT_DEPTH,
-    });
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0] = { .image = color_img },
-        .depth_stencil = { .image = depth_img, .slice = 4 },
-    });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_DEPTH_LAYER);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
-    sg_shutdown();
-}
-
-// NOTE: VALIDATE_PASSDESC_DEPTH_SLICE can't actually happen because VALIDATE_IMAGEDESC_DEPTH_3D_IMAGE
-
-// NOTE: VALIDATE_DEPTH_IMAGE_NO_RT can't actually happen because VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT
-
-UTEST(sokol_gfx, make_attachments_validate_depth_image_sizes) {
-    setup(&(sg_desc){0});
-    const sg_image color_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-    });
-    const sg_image depth_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 32,
-        .height = 32,
-        .pixel_format = SG_PIXELFORMAT_DEPTH,
-    });
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0] = { .image = color_img },
-        .depth_stencil = { .image = depth_img },
-    });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SIZES);
-    T(log_items[1] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SIZES);
-    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
-    sg_shutdown();
-}
-
-UTEST(sokol_gfx, make_attachments_validate_depth_image_sample_count) {
-    setup(&(sg_desc){0});
-    const sg_image color_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-        .sample_count = 4,
-    });
-    const sg_image depth_img = sg_make_image(&(sg_image_desc){
-        .usage.render_attachment = true,
-        .width = 64,
-        .height = 64,
-        .pixel_format = SG_PIXELFORMAT_DEPTH,
-        .sample_count = 2,
-    });
-    const sg_attachments atts = sg_make_attachments(&(sg_attachments_desc){
-        .colors[0] = { .image = color_img },
-        .depth_stencil = { .image = depth_img },
-    });
-    T(sg_query_attachments_state(atts) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_ATTACHMENTSDESC_DEPTH_IMAGE_SAMPLE_COUNT);
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_VIEWDESC_DEPTHSTENCILATTACHMENT_PIXELFORMAT);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }

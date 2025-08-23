@@ -251,25 +251,25 @@
     ON USER-PROVIDED IMAGES AND SAMPLERS
     ====================================
     To render your own images via ImGui::Image() you need to create a Dear ImGui
-    compatible texture handle (ImTextureID) from a sokol-gfx image handle
-    or optionally an image handle and a compatible sampler handle.
+    compatible texture handle (ImTextureID) from a sokol-gfx texture view handle
+    or optionally a texture view handle and a compatible sampler handle.
 
     To create a ImTextureID from a sokol-gfx image handle, call:
 
-        sg_image img= ...;
-        ImTextureID imtex_id = simgui_imtextureid(img);
+        sg_view tex_view = sg_make_view(&(sg_view_desc){ .texture_binding.image = img });
+        ImTextureID imtex_id = simgui_imtextureid(tex_view);
 
     Since no sampler is provided, such a texture handle will use a default
     sampler with nearest filtering and clamp-to-edge.
 
     If you need to render with a different sampler, do this instead:
 
-        sg_image img = ...;
+        sg_view tex_view = ...;
         sg_sampler smp = ...;
-        ImTextureID imtex_id = simgui_imtextureid_with_sampler(img, smp);
+        ImTextureID imtex_id = simgui_imtextureid_with_sampler(tex_img, smp);
 
     You don't need to 'release' the ImTextureID handle, the ImTextureID
-    bits is simply a combination of the sg_image and sg_sampler bits.
+    bits is simply a combination of the sg_view and sg_sampler bits.
 
     Once you have constructed an ImTextureID handle via simgui_imtextureid()
     or simgui_imtextureid_with_sampler(), it used in the ImGui::Image()
@@ -277,10 +277,15 @@
 
         ImGui::Image(imtex_id, ...);
 
-    To extract the sg_image and sg_sampler handle from an ImTextureID:
+    To extract the sg_view and sg_sampler handle from an ImTextureID:
 
-        sg_image img = simgui_image_from_imtextureid(imtex_id);
+        sg_view tex_view = simgui_texture_view_from_imtextureid(imtex_id);
         sg_sampler smp = simgui_sampler_from_imtextureid(imtex_id);
+
+    ...use the sokol-gfx function sg_query_view_image() if you need to
+    extract the texture view's image object:
+
+        sg_image img = sg_query_view_image(tex_view);
 
     NOTE on C bindings since Dear ImGui 1.92.0:
 
@@ -526,9 +531,9 @@ SOKOL_IMGUI_API_DECL void simgui_setup(const simgui_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_new_frame(const simgui_frame_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_render(void);
 
-SOKOL_IMGUI_API_DECL uint64_t simgui_imtextureid(sg_image img);
-SOKOL_IMGUI_API_DECL uint64_t simgui_imtextureid_with_sampler(sg_image img, sg_sampler smp);
-SOKOL_IMGUI_API_DECL sg_image simgui_image_from_imtextureid(uint64_t imtex_id);
+SOKOL_IMGUI_API_DECL uint64_t simgui_imtextureid(sg_view tex_view);
+SOKOL_IMGUI_API_DECL uint64_t simgui_imtextureid_with_sampler(sg_view tex_view, sg_sampler smp);
+SOKOL_IMGUI_API_DECL sg_view simgui_texture_view_from_imtextureid(uint64_t imtex_id);
 SOKOL_IMGUI_API_DECL sg_sampler simgui_sampler_from_imtextureid(uint64_t imtex_id);
 
 SOKOL_IMGUI_API_DECL void simgui_add_focus_event(bool focus);
@@ -2598,8 +2603,11 @@ static ImDrawData* _simgui_imgui_get_draw_data(void) {
 
 static void _simgui_destroy_texture(ImTextureData* tex) {
     SOKOL_ASSERT(tex);
-    const sg_image img = simgui_image_from_imtextureid(_simgui_imtexturedata_gettexid(tex));
+    const sg_view view = simgui_texture_view_from_imtextureid(_simgui_imtexturedata_gettexid(tex));
+    const sg_image img = sg_query_view_image(view);
+    SOKOL_ASSERT(img.id != SG_INVALID_ID);
     const sg_sampler smp = simgui_sampler_from_imtextureid(_simgui_imtexturedata_gettexid(tex));
+    sg_destroy_view(view);
     sg_destroy_image(img);
     sg_destroy_sampler(smp);
     _simgui_imtexturedata_settexid(tex, ImTextureID_Invalid);
@@ -2610,7 +2618,7 @@ static void _simgui_update_texture(ImTextureData* tex) {
     SOKOL_ASSERT(tex);
     SOKOL_ASSERT(tex->Format == ImTextureFormat_RGBA32);
     if (tex->Status == ImTextureStatus_WantCreate) {
-        // create new sokol-gfx texture
+        // create new sokol-gfx image, view and sampler
         SOKOL_ASSERT(tex->TexID == 0);
         sg_image_desc img_desc;
         _simgui_clear(&img_desc, sizeof(img_desc));
@@ -2621,6 +2629,12 @@ static void _simgui_update_texture(ImTextureData* tex) {
         img_desc.label = "sokol-imgui-texture";
         sg_image img = sg_make_image(&img_desc);
 
+        sg_view_desc view_desc;
+        _simgui_clear(&view_desc, sizeof(view_desc));
+        view_desc.texture.image = img;
+        view_desc.label = "sokol-imgui-texture-view";
+        sg_view view = sg_make_view(&view_desc);
+
         sg_sampler_desc smp_desc;
         _simgui_clear(&smp_desc, sizeof(smp_desc));
         smp_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
@@ -2630,11 +2644,13 @@ static void _simgui_update_texture(ImTextureData* tex) {
         smp_desc.label = "sokol-imgui-sampler";
         sg_sampler smp = sg_make_sampler(&smp_desc);
 
-        _simgui_imtexturedata_settexid(tex, simgui_imtextureid_with_sampler(img, smp));
+        _simgui_imtexturedata_settexid(tex, simgui_imtextureid_with_sampler(view, smp));
     }
     if ((tex->Status == ImTextureStatus_WantCreate) || (tex->Status == ImTextureStatus_WantUpdates)) {
         SOKOL_ASSERT(tex->TexID != 0);
-        const sg_image img = simgui_image_from_imtextureid(_simgui_imtexturedata_gettexid(tex));
+        const sg_view view = simgui_texture_view_from_imtextureid(_simgui_imtexturedata_gettexid(tex));
+        const sg_image img = sg_query_view_image(view);
+        SOKOL_ASSERT(img.id != SG_INVALID_ID);
         sg_image_data img_data;
         _simgui_clear(&img_data, sizeof(img_data));
         img_data.subimage[0][0].ptr = _simgui_imtexturedata_getpixels(tex);
@@ -2718,21 +2734,21 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     shd_desc.uniform_blocks[0].glsl_uniforms[0].glsl_name = "vs_params";
     shd_desc.uniform_blocks[0].glsl_uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
     shd_desc.uniform_blocks[0].glsl_uniforms[0].array_count = 1;
-    shd_desc.images[0].stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.images[0].image_type = SG_IMAGETYPE_2D;
-    shd_desc.images[0].sample_type = SG_IMAGESAMPLETYPE_FLOAT;
-    shd_desc.images[0].hlsl_register_t_n = 0;
-    shd_desc.images[0].msl_texture_n = 0;
-    shd_desc.images[0].wgsl_group1_binding_n = 64;
+    shd_desc.views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT;
+    shd_desc.views[0].texture.image_type = SG_IMAGETYPE_2D;
+    shd_desc.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
+    shd_desc.views[0].texture.hlsl_register_t_n = 0;
+    shd_desc.views[0].texture.msl_texture_n = 0;
+    shd_desc.views[0].texture.wgsl_group1_binding_n = 64;
     shd_desc.samplers[0].stage = SG_SHADERSTAGE_FRAGMENT;
     shd_desc.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
     shd_desc.samplers[0].hlsl_register_s_n = 0;
     shd_desc.samplers[0].msl_sampler_n = 0;
     shd_desc.samplers[0].wgsl_group1_binding_n = 80;
-    shd_desc.image_sampler_pairs[0].stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.image_sampler_pairs[0].image_slot = 0;
-    shd_desc.image_sampler_pairs[0].sampler_slot = 0;
-    shd_desc.image_sampler_pairs[0].glsl_name = "tex_smp";
+    shd_desc.texture_sampler_pairs[0].stage = SG_SHADERSTAGE_FRAGMENT;
+    shd_desc.texture_sampler_pairs[0].view_slot = 0;
+    shd_desc.texture_sampler_pairs[0].sampler_slot = 0;
+    shd_desc.texture_sampler_pairs[0].glsl_name = "tex_smp";
     shd_desc.label = "sokol-imgui-shader";
     #if defined(SOKOL_GLCORE)
         shd_desc.vertex_func.source = (const char*)_simgui_vs_source_glsl410;
@@ -2804,8 +2820,8 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     pip_desc.label = "sokol-imgui-pipeline";
     _simgui.def_pip = sg_make_pipeline(&pip_desc);
 
-    // create a unfilterable/nonfiltering variants of the shader and pipeline
-    shd_desc.images[0].sample_type = SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT;
+    // create unfilterable/nonfiltering variants of the shader and pipeline
+    shd_desc.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT;
     shd_desc.samplers[0].sampler_type = SG_SAMPLERTYPE_NONFILTERING;
     shd_desc.label = "sokol-imgui-shader-unfilterable";
     _simgui.shd_unfilterable = sg_make_shader(&shd_desc);
@@ -2871,19 +2887,19 @@ SOKOL_API_IMPL void simgui_shutdown(void) {
     _simgui.init_cookie = 0;
 }
 
-SOKOL_API_IMPL uint64_t simgui_imtextureid_with_sampler(sg_image img, sg_sampler smp) {
-    uint32_t img_id = img.id;
+SOKOL_API_IMPL uint64_t simgui_imtextureid_with_sampler(sg_view tex_view, sg_sampler smp) {
+    uint32_t view_id = tex_view.id;
     uint32_t smp_id = smp.id;
-    return (((uint64_t)smp_id)<<32) | img_id;
+    return (((uint64_t)smp_id)<<32) | view_id;
 }
 
-SOKOL_API_IMPL uint64_t simgui_imtextureid(sg_image img) {
-    return simgui_imtextureid_with_sampler(img, _simgui.def_smp);
+SOKOL_API_IMPL uint64_t simgui_imtextureid(sg_view tex_view) {
+    return simgui_imtextureid_with_sampler(tex_view, _simgui.def_smp);
 }
 
-SOKOL_API_IMPL sg_image simgui_image_from_imtextureid(uint64_t imtex_id) {
-    sg_image img = { (uint32_t)imtex_id };
-    return img;
+SOKOL_API_IMPL sg_view simgui_texture_view_from_imtextureid(uint64_t imtex_id) {
+    sg_view view = { (uint32_t)imtex_id };
+    return view;
 }
 
 SOKOL_API_IMPL sg_sampler simgui_sampler_from_imtextureid(uint64_t imtex_id) {
@@ -2929,10 +2945,12 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
     _simgui_imgui_newframe();
 }
 
-static sg_pipeline _simgui_bind_image_sampler(sg_bindings* bindings, ImTextureID imtex_id) {
-    bindings->images[0] = simgui_image_from_imtextureid(imtex_id);
+static sg_pipeline _simgui_bind_texture_sampler(sg_bindings* bindings, ImTextureID imtex_id) {
+    const sg_view tex_view = simgui_texture_view_from_imtextureid(imtex_id);
+    const sg_image img = sg_query_view_image(tex_view);
+    bindings->views[0] = tex_view;
     bindings->samplers[0] = simgui_sampler_from_imtextureid(imtex_id);
-    if (sg_query_pixelformat(sg_query_image_pixelformat(bindings->images[0])).filter) {
+    if (sg_query_pixelformat(sg_query_image_pixelformat(img)).filter) {
         return _simgui.def_pip;
     } else {
         return _simgui.pip_unfilterable;
@@ -3063,7 +3081,7 @@ SOKOL_API_IMPL void simgui_render(void) {
                 if ((tex_id != cmd_tex_id) || (vtx_offset != pcmd->VtxOffset)) {
                     tex_id = cmd_tex_id;
                     vtx_offset = pcmd->VtxOffset;
-                    sg_pipeline pip = _simgui_bind_image_sampler(&bind, tex_id);
+                    sg_pipeline pip = _simgui_bind_texture_sampler(&bind, tex_id);
                     sg_apply_pipeline(pip);
                     sg_apply_uniforms(0, SG_RANGE_REF(vs_params));
                     bind.vertex_buffer_offsets[0] = vb_offset + (int)(pcmd->VtxOffset * sizeof(ImDrawVert));

@@ -169,12 +169,17 @@
     ON USER-PROVIDED IMAGES AND SAMPLERS
     ====================================
     To render your own images via nk_image(), first create an snk_image_t
-    object from a sokol-gfx image and sampler object.
+    object from a sokol-gfx texture view and sampler object.
 
         // create a sokol-nuklear image object which associates an sg_image with an sg_sampler
+        sg_image img = sg_make_image(...);
+        sg_view tex_view = sg_make_view(&(sg_view_desc){
+            .texture = { .image = img },
+        });
+        sg_sampler smp = sg_make_sampler(...);
         snk_image_t snk_img = snk_make_image(&(snk_image_desc_t){
-            .image = sg_make_image(...),
-            .sampler = sg_make_sampler(...),
+            .texture_view = tex_view,
+            .sampler = smp,
         });
 
         // convert the returned image handle into an nk_handle object
@@ -186,7 +191,7 @@
         // finally specify a Nuklear image UI object
         nk_image(ctx, nk_img);
 
-    snk_image_t objects are small and cheap (literally just the image and sampler
+    snk_image_t objects are small and cheap (literally just the view and sampler
     handle).
 
     You can omit the sampler handle in the snk_make_image() call, in this case a
@@ -199,7 +204,10 @@
 
         snk_destroy_image(snk_img);
 
-    But please be aware that the image object needs to be around until snk_render() is called
+    Note that this will not destroy the underlying sokol resources (sg_image, sg_view
+    and sg_sampler).
+
+    Please be aware that the image object needs to be around until snk_render() is called
     in a frame (if this turns out to be too much of a hassle we could introduce some sort
     of garbage collection where destroyed snk_image_t objects are kept around until
     the snk_render() call).
@@ -352,7 +360,7 @@ enum {
 /*
     snk_image_t
 
-    A combined image-sampler pair used to inject custom images and samplers into Nuklear
+    A combined texture-view / sampler pair used to inject custom images and samplers into Nuklear.
 
     Create with snk_make_image(), and convert to an nk_handle via snk_nkhandle().
 */
@@ -362,12 +370,12 @@ typedef struct snk_image_t { uint32_t id; } snk_image_t;
     snk_image_desc_t
 
     Descriptor struct for snk_make_image(). You must provide
-    at least an sg_image handle. Keeping the sg_sampler handle
+    at least an sg_view handle. Keeping the sg_sampler handle
     zero-initialized will select the builtin default sampler
     which uses linear filtering.
 */
 typedef struct snk_image_desc_t {
-    sg_image image;
+    sg_view texture_view;
     sg_sampler sampler;
 } snk_image_desc_t;
 
@@ -544,7 +552,7 @@ typedef struct {
 
 typedef struct {
     _snk_slot_t slot;
-    sg_image image;
+    sg_view tex_view;
     sg_sampler sampler;
 } _snk_image_t;
 
@@ -564,9 +572,11 @@ typedef struct {
     sg_buffer vbuf;
     sg_buffer ibuf;
     sg_image font_img;
+    sg_view font_tex_view;
     sg_sampler font_smp;
     snk_image_t default_font;
     sg_image def_img;
+    sg_view def_tex_view;
     sg_sampler def_smp;
     sg_shader shd;
     sg_pipeline pip;
@@ -2467,14 +2477,14 @@ static snk_image_t _snk_alloc_image(void) {
 static _snk_resource_state _snk_init_image(_snk_image_t* img, const snk_image_desc_t* desc) {
     SOKOL_ASSERT(img && (img->slot.state == _SNK_RESOURCESTATE_ALLOC));
     SOKOL_ASSERT(desc);
-    img->image = desc->image;
+    img->tex_view = desc->texture_view;
     img->sampler = desc->sampler;
     return _SNK_RESOURCESTATE_VALID;
 }
 
 static void _snk_deinit_image(_snk_image_t* img) {
     SOKOL_ASSERT(img);
-    img->image.id = SNK_INVALID_ID;
+    img->tex_view.id = SNK_INVALID_ID;
     img->sampler.id = SNK_INVALID_ID;
 }
 
@@ -2499,7 +2509,7 @@ static void _snk_destroy_all_images(void) {
 static snk_image_desc_t _snk_image_desc_defaults(const snk_image_desc_t* desc) {
     SOKOL_ASSERT(desc);
     snk_image_desc_t res = *desc;
-    res.image.id = _snk_def(res.image.id, _snuklear.def_img.id);
+    res.texture_view.id = _snk_def(res.texture_view.id, _snuklear.def_tex_view.id);
     res.sampler.id = _snk_def(res.sampler.id, _snuklear.def_smp.id);
     return res;
 }
@@ -2599,10 +2609,14 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
                 .ptr = pixels,
                 .size = (size_t)(font_width * font_height) * sizeof(uint32_t)
             },
-            .label = "sokol-nuklear-font"
+            .label = "sokol-nuklear-font-image",
+        });
+        _snuklear.font_tex_view = sg_make_view(&(sg_view_desc){
+            .texture = { .image = _snuklear.font_img },
+            .label = "sokol-nuklear-font-texview",
         });
         _snuklear.default_font = snk_make_image(&(snk_image_desc_t){
-            .image = _snuklear.font_img,
+            .texture_view = _snuklear.font_tex_view,
             .sampler = _snuklear.font_smp,
         });
         nk_font_atlas_end(&_snuklear.atlas, snk_nkhandle(_snuklear.default_font), 0);
@@ -2614,7 +2628,7 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
         }
     }
 
-    // default user image
+    // default user image and texture view
     static uint32_t def_pixels[64];
     memset(def_pixels, 0xFF, sizeof(def_pixels));
     _snuklear.def_img = sg_make_image(&(sg_image_desc){
@@ -2623,6 +2637,10 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
         .pixel_format = SG_PIXELFORMAT_RGBA8,
         .data.subimage[0][0] = SG_RANGE(def_pixels),
         .label = "sokol-nuklear-default-image",
+    });
+    _snuklear.def_tex_view = sg_make_view(&(sg_view_desc){
+        .texture = { .image = _snuklear.def_img },
+        .label = "sokol-nuklear-default-texview",
     });
 
     // shader
@@ -2698,13 +2716,15 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
                 .array_count = 1,
             }
         },
-        .images[0] = {
-            .stage = SG_SHADERSTAGE_FRAGMENT,
-            .image_type = SG_IMAGETYPE_2D,
-            .sample_type = SG_IMAGESAMPLETYPE_FLOAT,
-            .hlsl_register_t_n = 0,
-            .msl_texture_n = 0,
-            .wgsl_group1_binding_n = 64,
+        .views[0] = {
+            .texture = {
+                .stage = SG_SHADERSTAGE_FRAGMENT,
+                .image_type = SG_IMAGETYPE_2D,
+                .sample_type = SG_IMAGESAMPLETYPE_FLOAT,
+                .hlsl_register_t_n = 0,
+                .msl_texture_n = 0,
+                .wgsl_group1_binding_n = 64,
+            },
         },
         .samplers[0] = {
             .stage = SG_SHADERSTAGE_FRAGMENT,
@@ -2713,10 +2733,10 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
             .msl_sampler_n = 0,
             .wgsl_group1_binding_n = 80,
         },
-        .image_sampler_pairs[0] = {
+        .texture_sampler_pairs[0] = {
             .stage = SG_SHADERSTAGE_FRAGMENT,
             .glsl_name = "tex_smp",
-            .image_slot = 0,
+            .view_slot = 0,
             .sampler_slot = 0
         },
         .label = "sokol-nuklear-shader"
@@ -2760,8 +2780,10 @@ SOKOL_API_IMPL void snk_shutdown(void) {
     sg_destroy_pipeline(_snuklear.pip);
     sg_destroy_shader(_snuklear.shd);
     sg_destroy_sampler(_snuklear.font_smp);
+    sg_destroy_view(_snuklear.font_tex_view);
     sg_destroy_image(_snuklear.font_img);
     sg_destroy_sampler(_snuklear.def_smp);
+    sg_destroy_view(_snuklear.def_tex_view);
     sg_destroy_image(_snuklear.def_img);
     sg_destroy_buffer(_snuklear.ibuf);
     sg_destroy_buffer(_snuklear.vbuf);
@@ -2841,7 +2863,7 @@ SOKOL_API_IMPL snk_image_desc_t snk_query_image_desc(snk_image_t img_id) {
     _snk_image_t* img = _snk_lookup_image(img_id.id);
     if (img) {
         return (snk_image_desc_t){
-            .image = img->image,
+            .texture_view = img->tex_view,
             .sampler = img->sampler,
         };
     } else {
@@ -2862,10 +2884,10 @@ SOKOL_API_IMPL snk_image_t snk_image_from_nkhandle(nk_handle h) {
 static void _snk_bind_image_sampler(sg_bindings* bindings, nk_handle h) {
     _snk_image_t* img = _snk_lookup_image((uint32_t)h.id);
     if (img) {
-        bindings->images[0] = img->image;
+        bindings->views[0] = img->tex_view;
         bindings->samplers[0] = img->sampler;
     } else {
-        bindings->images[0] = _snuklear.def_img;
+        bindings->views[0] = _snuklear.def_tex_view;
         bindings->samplers[0] = _snuklear.def_smp;
     }
 }

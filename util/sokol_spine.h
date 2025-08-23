@@ -79,7 +79,7 @@
 
     - sspine_atlas: A wrapper around a spine-c spAtlas object, each spAtlas
       object owns at least one spAtlasPage object, and each spAtlasPage object
-      owns exactly one sokol-gfx image object.
+      owns one sokol-gfx image, view and sampler object.
 
     - sspine_skeleton: A skeleton object requires an atlas object for creation,
       and is a wrapper around one spine-c spSkeletonData and one
@@ -128,7 +128,8 @@
 
         - call sspine_setup() after initializing sokol-gfx
         - create an atlas object from a Spine atlas file with sspine_make_atlas()
-        - load and initialize the sokol-gfx image objects referenced by the atlas
+        - load and initialize the sokol-gfx image, view and sampler objects for the texture
+          data referenced by the atlas
         - create a skeleton object from a Spine skeleton file with sspine_make_skeleton()
         - create at least one instance object with sspine_make_instance()
 
@@ -246,7 +247,7 @@
 
     - The atlas file itself doesn't contain any texture data, it only contains
       filenames of the required textures. Sokol-spine has already allocated
-      a sokol-gfx sg_image and sg_sample handle for each required texture, but the
+      a sokol-gfx sg_image, sg_view and sg_sampler handle for each required texture, but the
       actual loading and initialization must be performed by user code:
 
         // iterate over atlas textures and initialize sokol-gfx image objects
@@ -260,8 +261,8 @@
 
             // the filename is now in img_info.filename.cstr, 'somehow'
             // load and decode the image data into memory, and then
-            // initialize the sokol-gfx image from the existing sg_image handle
-            // in img_info.sgimage:
+            // initialize the sokol-gfx image, view and sampler from the existing
+            // handles in img_info.sgimage:
             sg_init_image(img_info.sgimage, &(sg_image_desc){
                 .width = ...,
                 .height = ...,
@@ -271,8 +272,9 @@
                     .size = ...,    // size of decoded image pixel data in bytes
                 }
             });
-
-            // ...and same procedure for the sampler object
+            sg_init_view(img_info.sgview, &(sg_view_desc){
+                .texture = { .image = img_info.sgimage },
+            });
             sg_init_sampler(img_info.sgsampler, &(sg_image_desc){
                 .min_filter = img_info.min_filter,
                 .mag_filter = img_info.mag_filter,
@@ -1027,6 +1029,7 @@ typedef enum sspine_resource_state {
     _SSPINE_LOGITEM_XMACRO(ATLAS_DESC_NO_DATA, "no data provided in sspine_atlas_desc.data")\
     _SSPINE_LOGITEM_XMACRO(SPINE_ATLAS_CREATION_FAILED, "spAtlas_create() failed")\
     _SSPINE_LOGITEM_XMACRO(SG_ALLOC_IMAGE_FAILED, "sg_alloc_image() failed")\
+    _SSPINE_LOGITEM_XMACRO(SG_ALLOC_VIEW_FAILED, "sg_alloc_view() failed")\
     _SSPINE_LOGITEM_XMACRO(SG_ALLOC_SAMPLER_FAILED, "sg_alloc_sampler() failed")\
     _SSPINE_LOGITEM_XMACRO(SKELETON_DESC_NO_DATA, "no data provided in sspine_skeleton_desc.json_data or .binary_data")\
     _SSPINE_LOGITEM_XMACRO(SKELETON_DESC_NO_ATLAS, "no atlas object provided in sspine_skeleton_desc.atlas")\
@@ -1084,6 +1087,7 @@ typedef struct sspine_context_info {
 typedef struct sspine_image_info {
     bool valid;
     sg_image sgimage;
+    sg_view sgview;
     sg_sampler sgsampler;
     sg_filter min_filter;
     sg_filter mag_filter;
@@ -3287,8 +3291,9 @@ typedef struct {
 
 typedef struct {
     sg_image img;
+    sg_view view;
     sg_sampler smp;
-} _sspine_image_sampler_pair_t;
+} _sspine_image_view_sampler_t;
 
 typedef struct {
     _sspine_slot_t slot;
@@ -3363,7 +3368,7 @@ typedef struct {
 typedef struct {
     int layer;
     sg_pipeline pip;
-    sg_image img;
+    sg_view view;
     sg_sampler smp;
     float pma; // pma = 0.0: use texture color as is, pma = 1.0: multiply texture rgb by texture alpha in fragment shader
     int base_element;
@@ -3431,9 +3436,9 @@ void _spAtlasPage_createTexture(spAtlasPage* self, const char* path) {
     (void)self; (void)path;
 }
 
-static void _sspine_delete_image_sampler_pair(const _sspine_image_sampler_pair_t* isp);
+static void _sspine_delete_image_view_sampler(const _sspine_image_view_sampler_t* ivs);
 void _spAtlasPage_disposeTexture(spAtlasPage* self) {
-    _sspine_delete_image_sampler_pair((const _sspine_image_sampler_pair_t*) self->rendererObject);
+    _sspine_delete_image_view_sampler((const _sspine_image_view_sampler_t*) self->rendererObject);
 }
 
 char* _spUtil_readFile(const char* path, int* length) {
@@ -3969,32 +3974,40 @@ static sspine_atlas _sspine_alloc_atlas(void) {
     }
 }
 
-static const _sspine_image_sampler_pair_t* _sspine_new_image_sampler_pair(sg_image img, sg_sampler smp) {
-    _sspine_image_sampler_pair_t* isp = (_sspine_image_sampler_pair_t*) _sspine_malloc_clear(sizeof(_sspine_image_sampler_pair_t));
-    SOKOL_ASSERT(isp);
-    isp->img = img;
-    isp->smp = smp;
-    return isp;
+static const _sspine_image_view_sampler_t* _sspine_new_image_view_sampler(sg_image img, sg_view view, sg_sampler smp) {
+    _sspine_image_view_sampler_t* ivs = (_sspine_image_view_sampler_t*) _sspine_malloc_clear(sizeof(_sspine_image_view_sampler_t));
+    SOKOL_ASSERT(ivs);
+    ivs->img = img;
+    ivs->view = view;
+    ivs->smp = smp;
+    return ivs;
 }
 
-static void _sspine_delete_image_sampler_pair(const _sspine_image_sampler_pair_t* isp) {
-    if (isp) {
-        sg_destroy_sampler(isp->smp);
-        sg_destroy_image(isp->img);
-        _sspine_free((void*)isp);
+static void _sspine_delete_image_view_sampler(const _sspine_image_view_sampler_t* ivs) {
+    if (ivs) {
+        sg_destroy_sampler(ivs->smp);
+        sg_destroy_view(ivs->view);
+        sg_destroy_image(ivs->img);
+        _sspine_free((void*)ivs);
     }
 }
 
 static sg_image _sspine_image_from_renderer_object(void* renderer_object) {
     SOKOL_ASSERT(renderer_object);
-    const _sspine_image_sampler_pair_t* isp = (const _sspine_image_sampler_pair_t*)renderer_object;
-    return isp->img;
+    const _sspine_image_view_sampler_t* ivs = (const _sspine_image_view_sampler_t*)renderer_object;
+    return ivs->img;
+}
+
+static sg_view _sspine_view_from_renderer_object(void* renderer_object) {
+    SOKOL_ASSERT(renderer_object);
+    const _sspine_image_view_sampler_t* ivs = (const _sspine_image_view_sampler_t*)renderer_object;
+    return ivs->view;
 }
 
 static sg_sampler _sspine_sampler_from_renderer_object(void* renderer_object) {
     SOKOL_ASSERT(renderer_object);
-    const _sspine_image_sampler_pair_t* isp = (const _sspine_image_sampler_pair_t*)renderer_object;
-    return isp->smp;
+    const _sspine_image_view_sampler_t* ivs = (const _sspine_image_view_sampler_t*)renderer_object;
+    return ivs->smp;
 }
 
 static sspine_resource_state _sspine_init_atlas(_sspine_atlas_t* atlas, const sspine_atlas_desc* desc) {
@@ -4016,13 +4029,18 @@ static sspine_resource_state _sspine_init_atlas(_sspine_atlas_t* atlas, const ss
         return SSPINE_RESOURCESTATE_FAILED;
     }
 
-    // allocate a sokol-gfx image and sampler object for each page, but the actual
+    // allocate a sokol-gfx image, view and sampler object for each page, but the actual
     // initialization needs to be delegated to the application
     for (spAtlasPage* page = atlas->sp_atlas->pages; page != 0; page = page->next) {
         atlas->num_pages++;
         const sg_image img = sg_alloc_image();
         if (sg_query_image_state(img) != SG_RESOURCESTATE_ALLOC) {
             _SSPINE_ERROR(SG_ALLOC_IMAGE_FAILED);
+            return SSPINE_RESOURCESTATE_FAILED;
+        }
+        const sg_view view = sg_alloc_view();
+        if (sg_query_view_state(view) != SG_RESOURCESTATE_ALLOC) {
+            _SSPINE_ERROR(SG_ALLOC_VIEW_FAILED);
             return SSPINE_RESOURCESTATE_FAILED;
         }
         const sg_sampler smp = sg_alloc_sampler();
@@ -4034,7 +4052,7 @@ static sspine_resource_state _sspine_init_atlas(_sspine_atlas_t* atlas, const ss
         // need to put the image and sampler handle into a heap-alloc unfortunately,
         // because a void* isn't big enough to stash two 32-bit handles into
         // it directly on platforms with 32-bit pointers (like wasm)
-        page->rendererObject = (void*) _sspine_new_image_sampler_pair(img, smp);
+        page->rendererObject = (void*) _sspine_new_image_view_sampler(img, view, smp);
 
         if (desc->override.premul_alpha_enabled) {
             // NOTE: -1 is spine-c convention for 'true'
@@ -4797,7 +4815,7 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
         int num_indices = 0;
         const uint16_t* indices = 0;
         const spColor* att_color = 0;
-        sg_image img = { SG_INVALID_ID };
+        sg_view view = { SG_INVALID_ID };
         sg_sampler smp = { SG_INVALID_ID };
         bool premul_alpha = false;
         if (sp_slot->attachment->type == SP_ATTACHMENT_REGION) {
@@ -4816,7 +4834,7 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
             num_indices = 6;
             uvs = region->uvs;
             const spAtlasPage* sp_page = ((spAtlasRegion*)region->rendererObject)->page;
-            img = _sspine_image_from_renderer_object(sp_page->rendererObject);
+            view = _sspine_view_from_renderer_object(sp_page->rendererObject);
             smp = _sspine_sampler_from_renderer_object(sp_page->rendererObject);
             premul_alpha = sp_page->pma != 0;
         } else if (sp_slot->attachment->type == SP_ATTACHMENT_MESH) {
@@ -4836,7 +4854,7 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
             num_indices = mesh->trianglesCount; // actually indicesCount???
             uvs = mesh->uvs;
             const spAtlasPage* sp_page = ((spAtlasRegion*)mesh->rendererObject)->page;
-            img = _sspine_image_from_renderer_object(sp_page->rendererObject);
+            view = _sspine_view_from_renderer_object(sp_page->rendererObject);
             smp = _sspine_sampler_from_renderer_object(sp_page->rendererObject);
             premul_alpha = sp_page->pma != 0;
         } else if (sp_slot->attachment->type == SP_ATTACHMENT_CLIPPING) {
@@ -4850,7 +4868,7 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
         SOKOL_ASSERT(vertices && (num_vertices > 0));
         SOKOL_ASSERT(indices && (num_indices > 0));
         SOKOL_ASSERT(uvs);
-        SOKOL_ASSERT(img.id != SG_INVALID_ID);
+        SOKOL_ASSERT(view.id != SG_INVALID_ID);
         SOKOL_ASSERT(smp.id != SG_INVALID_ID);
 
         if (spSkeletonClipping_isClipping(sp_clip)) {
@@ -4917,7 +4935,7 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
         if (cur_cmd
             && (cur_cmd->layer == layer)
             && (cur_cmd->pip.id == pip.id)
-            && (cur_cmd->img.id == img.id)
+            && (cur_cmd->view.id == view.id)
             && (cur_cmd->smp.id == smp.id)
             && (cur_cmd->pma == pma))
         {
@@ -4929,7 +4947,7 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
             if (cmd_ptr) {
                 cmd_ptr->layer = layer;
                 cmd_ptr->pip = pip;
-                cmd_ptr->img = img;
+                cmd_ptr->view = view;
                 cmd_ptr->smp = smp;
                 cmd_ptr->pma = pma;
                 cmd_ptr->base_element = dst_indices.index;
@@ -4993,25 +5011,25 @@ static void _sspine_draw_layer(_sspine_context_t* ctx, int layer, const sspine_l
         const sg_range fsparams_range = { &fsparams, sizeof(fsparams) };
 
         uint32_t cur_pip_id = SG_INVALID_ID;
-        uint32_t cur_img_id = SG_INVALID_ID;
+        uint32_t cur_view_id = SG_INVALID_ID;
         uint32_t cur_smp_id = SG_INVALID_ID;
         float cur_pma = -1.0f;
         for (int i = 0; i < ctx->commands.next; i++) {
             const _sspine_command_t* cmd = &ctx->commands.ptr[i];
-            const bool img_valid = sg_query_image_state(cmd->img) == SG_RESOURCESTATE_VALID;
+            const bool view_valid = sg_query_view_state(cmd->view) == SG_RESOURCESTATE_VALID;
             const bool smp_valid = sg_query_sampler_state(cmd->smp) == SG_RESOURCESTATE_VALID;
-            if ((layer == cmd->layer) && img_valid && smp_valid) {
+            if ((layer == cmd->layer) && view_valid && smp_valid) {
                 if (cur_pip_id != cmd->pip.id) {
                     sg_apply_pipeline(cmd->pip);
                     cur_pip_id = cmd->pip.id;
                     sg_apply_uniforms(0, &vsparams_range);
-                    cur_img_id = SG_INVALID_ID;
+                    cur_view_id = SG_INVALID_ID;
                 }
-                if ((cur_img_id != cmd->img.id) || (cur_smp_id != cmd->smp.id)) {
-                    ctx->bind.images[0] = cmd->img;
+                if ((cur_view_id != cmd->view.id) || (cur_smp_id != cmd->smp.id)) {
+                    ctx->bind.views[0] = cmd->view;
                     ctx->bind.samplers[0] = cmd->smp;
                     sg_apply_bindings(&ctx->bind);
-                    cur_img_id = cmd->img.id;
+                    cur_view_id = cmd->view.id;
                     cur_smp_id = cmd->smp.id;
                 }
                 if (cur_pma != cmd->pma) {
@@ -5109,6 +5127,7 @@ static void _sspine_init_image_info(const _sspine_atlas_t* atlas, int index, ssp
     SOKOL_ASSERT(page->name);
     info->valid = true;
     info->sgimage = _sspine_image_from_renderer_object(page->rendererObject);
+    info->sgview = _sspine_view_from_renderer_object(page->rendererObject);
     info->sgsampler = _sspine_sampler_from_renderer_object(page->rendererObject);
     if (with_overrides && (atlas->overrides.min_filter != _SG_FILTER_DEFAULT)) {
         info->min_filter = atlas->overrides.min_filter;
@@ -5175,21 +5194,21 @@ static void _sspine_init_shared(void) {
     shd_desc.uniform_blocks[1].glsl_uniforms[0].glsl_name = "fs_params";
     shd_desc.uniform_blocks[1].glsl_uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
     shd_desc.uniform_blocks[1].glsl_uniforms[0].array_count = 1;
-    shd_desc.images[0].stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.images[0].image_type = SG_IMAGETYPE_2D;
-    shd_desc.images[0].sample_type = SG_IMAGESAMPLETYPE_FLOAT;
-    shd_desc.images[0].hlsl_register_t_n = 0;
-    shd_desc.images[0].msl_texture_n = 0;
-    shd_desc.images[0].wgsl_group1_binding_n = 64;
+    shd_desc.views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT;
+    shd_desc.views[0].texture.image_type = SG_IMAGETYPE_2D;
+    shd_desc.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
+    shd_desc.views[0].texture.hlsl_register_t_n = 0;
+    shd_desc.views[0].texture.msl_texture_n = 0;
+    shd_desc.views[0].texture.wgsl_group1_binding_n = 64;
     shd_desc.samplers[0].stage = SG_SHADERSTAGE_FRAGMENT;
     shd_desc.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
     shd_desc.samplers[0].hlsl_register_s_n = 0;
     shd_desc.samplers[0].msl_sampler_n = 0;
     shd_desc.samplers[0].wgsl_group1_binding_n = 80;
-    shd_desc.image_sampler_pairs[0].stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.image_sampler_pairs[0].image_slot = 0;
-    shd_desc.image_sampler_pairs[0].sampler_slot = 0;
-    shd_desc.image_sampler_pairs[0].glsl_name = "tex_smp";
+    shd_desc.texture_sampler_pairs[0].stage = SG_SHADERSTAGE_FRAGMENT;
+    shd_desc.texture_sampler_pairs[0].view_slot = 0;
+    shd_desc.texture_sampler_pairs[0].sampler_slot = 0;
+    shd_desc.texture_sampler_pairs[0].glsl_name = "tex_smp";
     shd_desc.label = "sspine-shader";
     #if defined(SOKOL_GLCORE)
         shd_desc.vertex_func.source = (const char*)_sspine_vs_source_glsl410;
