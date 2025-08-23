@@ -3,15 +3,15 @@
 ### 23-Aug-2025
 
 The sokol_gfx.h '**resource view update**'. This is a breaking update which
-changes the resource-binding- and and pass-attachments-model from directly
-binding image- and  buffer-objects to resource view objects.
+changes the resource-binding- and pass-attachments-model from directly
+binding image- and  buffer-objects to binding resource view objects instead.
 
 In a nutshell:
 
-- a new object type `sg_view` with associated functions has been added: view objects
-  'specialize' an image or buffer resource for the different
-   ways a shader
-  accesses image or buffer data (texture sampling vs storage-load/store vs rendering into color- or depth-stencil-buffers)
+- a new object type `sg_view` with associated functions has been added: view
+  objects 'specialize' an image or buffer resource for the different ways a shader
+  accesses image or buffer data (texture sampling vs storage-load/store vs
+  rendering into color- or depth-stencil-buffers)
 - in turn, the object type `sg_attachments` and associated functions has ben removed
 - `sg_bindings` now takes a single array of `sg_view` objects to define
   texture-, storage-buffer- and storage-image bindings for the next drawcall
