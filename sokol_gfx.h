@@ -5284,6 +5284,10 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
 #endif
 
 #if defined(SOKOL_D3D11)
+    #if defined(__GNUC__)
+        #pragma GCC diagnostic push
+        #pragma GCC diagnostic ignored "-Wunknown-pragmas"
+    #endif
     #ifndef D3D11_NO_HELPERS
     #define D3D11_NO_HELPERS
     #endif
@@ -5295,11 +5299,12 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #endif
     #include <d3d11.h>
     #include <d3dcompiler.h>
-    #ifdef _MSC_VER
     #pragma comment (lib, "kernel32")
     #pragma comment (lib, "user32")
     #pragma comment (lib, "dxgi")
     #pragma comment (lib, "d3d11")
+    #if defined(__GNUC__)
+        #pragma GCC diagnostic pop
     #endif
 #elif defined(SOKOL_METAL)
     // see https://clang.llvm.org/docs/LanguageExtensions.html#automatic-reference-counting

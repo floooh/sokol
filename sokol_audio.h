@@ -695,6 +695,10 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 #if defined(SOKOL_DUMMY_BACKEND)
     #define _SAUDIO_NOTHREADS (1)
 #elif defined(_SAUDIO_WINDOWS)
+    #if defined(__GNUC__)
+        #pragma GCC diagnostic push
+        #pragma GCC diagnostic ignored "-Wunknown-pragmas"
+    #endif
     #define _SAUDIO_WINTHREADS (1)
     #ifndef WIN32_LEAN_AND_MEAN
     #define WIN32_LEAN_AND_MEAN
@@ -739,6 +743,9 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
     #ifdef _MSC_VER
         #pragma warning(push)
         #pragma warning(disable:4505)   /* unreferenced local function has been removed */
+    #endif
+    #if defined(__GNUC__)
+        #pragma GCC diagnostic pop
     #endif
 #elif defined(_SAUDIO_APPLE)
     #define _SAUDIO_PTHREADS (1)
