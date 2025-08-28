@@ -1,5 +1,12 @@
 ## Updates
 
+### 28-Aug-2025
+
+- sokol_app.h linux: fixed an issue that prevented to lock the mouse early in the
+  sokol-app `init()` callback. 
+  PR: https://github.com/floooh/sokol/pull/1319 and issue: https://github.com/floooh/sokol/issues/1318.
+  Many thanks to @Joan-rv for identifying the issue and implementing the fix! 
+
 ### 23-Aug-2025
 
 The sokol_gfx.h '**resource view update**'. This is a breaking update which
