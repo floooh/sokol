@@ -10644,6 +10644,19 @@ _SOKOL_PRIVATE void _sapp_x11_send_event(Atom type, int a, int b, int c, int d, 
                &event);
 }
 
+_SOKOL_PRIVATE bool _sapp_x11_wait_for_event(int event_type, double timeout_sec, XEvent* out_event) {
+    _sapp_timestamp_t ts;
+    _sapp_timestamp_init(&ts);
+    while (!XCheckTypedWindowEvent(_sapp.x11.display, _sapp.x11.window, event_type, out_event)) {
+        struct pollfd fd = { ConnectionNumber(_sapp.x11.display), POLLIN };
+        poll(&fd, 1, timeout_sec * 1000);
+        if (_sapp_timestamp_now(&ts) > timeout_sec) {
+            return false;
+        }
+    }
+    return true;
+}
+
 _SOKOL_PRIVATE void _sapp_x11_query_window_size(void) {
     XWindowAttributes attribs;
     XGetWindowAttributes(_sapp.x11.display, _sapp.x11.window, &attribs);
@@ -10825,12 +10838,8 @@ _SOKOL_PRIVATE const char* _sapp_x11_get_clipboard_string(void) {
                       _sapp.x11.window,
                       CurrentTime);
     XEvent event;
-    while (!XCheckTypedWindowEvent(_sapp.x11.display, _sapp.x11.window, SelectionNotify, &event)) {
-        // Wait for event data to arrive on the X11 display socket
-        struct pollfd fd = { ConnectionNumber(_sapp.x11.display), POLLIN };
-        while (!XPending(_sapp.x11.display)) {
-            poll(&fd, 1, -1);
-        }
+    if (!_sapp_x11_wait_for_event(SelectionNotify, 0.1, &event)) {
+        return NULL;
     }
     if (event.xselection.property == None) {
         return NULL;
@@ -10999,6 +11008,8 @@ _SOKOL_PRIVATE bool _sapp_x11_window_visible(void) {
 _SOKOL_PRIVATE void _sapp_x11_show_window(void) {
     if (!_sapp_x11_window_visible()) {
         XMapWindow(_sapp.x11.display, _sapp.x11.window);
+        XEvent dummy;
+        _sapp_x11_wait_for_event(VisibilityNotify, 0.1, &dummy);
         XRaiseWindow(_sapp.x11.display, _sapp.x11.window);
         XFlush(_sapp.x11.display);
     }
