@@ -13,7 +13,6 @@ import shutil
 import sys
 import textwrap
 import logging
-from datetime import datetime
 
 import gen_util as util
 
@@ -33,6 +32,7 @@ module_names = {
     'sglue_':   'glue',
     'sfetch_':  'fetch',
     'simgui_':  'imgui',
+    'sgimgui_': 'gfximgui',
     'snk_':     'nuklear',
     'smemtrack_': 'memtrack',
 }
@@ -50,6 +50,7 @@ c_source_paths = {
     'sglue_':   'sokol-d/src/sokol/c/sokol_glue.c',
     'sfetch_':  'sokol-d/src/sokol/c/sokol_fetch.c',
     'simgui_':  'sokol-d/src/sokol/c/sokol_imgui.c',
+    'sgimgui_': 'sokol-d/src/sokol/c/sokol_gfx_imgui.c',
     'snk_':     'sokol-d/src/sokol/c/sokol_nuklear.c',
     'smemtrack_': 'sokol-d/src/sokol/c/sokol_memtrack.c',
 }
@@ -109,6 +110,7 @@ prim_types = {
 prim_defaults = {
     'int':          '0',
     'bool':         'false',
+    'char':         '0',
     'int8_t':       '0',
     'uint8_t':      '0',
     'int16_t':      '0',
@@ -204,7 +206,10 @@ class TypeConverter:
     def as_d_struct_type(self, s):
         parts = s.lower().split('_')
         outp = '' if s.startswith(self.prefix) else f'{parts[0]}.'
-        return outp + ''.join(part.capitalize() for part in parts[1:] if part != 't')
+        name = ''.join(part.capitalize() for part in parts[1:] if part != 't')
+        if not name:
+            name = parts[0].capitalize()
+        return outp + name
 
     def as_d_enum_type(self, s):
         return self.as_d_struct_type(s)
@@ -448,9 +453,7 @@ def gen_module(inp, dep_prefixes, c_header_path):
     reset_globals()
     header_comment = f"""
     Machine generated D bindings for Sokol library.
-    
-    Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-    
+        
     Source header: {os.path.basename(c_header_path)}
     Module: sokol.{inp['module']}
     
