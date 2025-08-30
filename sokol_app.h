@@ -1692,6 +1692,7 @@ typedef struct sapp_allocator {
     _SAPP_LOGITEM_XMACRO(WIN32_REGISTER_RAW_INPUT_DEVICES_FAILED_MOUSE_LOCK, "RegisterRawInputDevices() failed (on mouse lock)") \
     _SAPP_LOGITEM_XMACRO(WIN32_REGISTER_RAW_INPUT_DEVICES_FAILED_MOUSE_UNLOCK, "RegisterRawInputDevices() failed (on mouse unlock)") \
     _SAPP_LOGITEM_XMACRO(WIN32_GET_RAW_INPUT_DATA_FAILED, "GetRawInputData() failed") \
+    _SAPP_LOGITEM_XMACRO(WIN32_DESTROYICON_FOR_CURSOR_FAILED, "DestroyIcon() for a cursor image failed") \
     _SAPP_LOGITEM_XMACRO(LINUX_GLX_LOAD_LIBGL_FAILED, "failed to load libGL") \
     _SAPP_LOGITEM_XMACRO(LINUX_GLX_LOAD_ENTRY_POINTS_FAILED, "failed to load GLX entry points") \
     _SAPP_LOGITEM_XMACRO(LINUX_GLX_EXTENSION_NOT_FOUND, "GLX extension not found") \
@@ -8570,7 +8571,14 @@ _SOKOL_PRIVATE uint64_t _sapp_win32_make_custom_mouse_cursor(const sapp_image_de
 
 SOKOL_API_IMPL void _sapp_win32_destroy_custom_mouse_cursor(uint64_t opaque_handle) {
     HCURSOR cursor_handle = (HCURSOR) opaque_handle;
-    DestroyCursor(cursor_handle);
+    // NOTE: DestroyIcon() may return zero (failure) if the cursor is currently in
+    // use. Normally that shouldn't happen since when attempting to unbind the
+    // current cursor it will be hidden first, but since there might be other edge
+    // cases we just log a warning but don't fail hard
+    BOOL res = DestroyIcon(cursor_handle);
+    if (!res) {
+        _SAPP_WARN(WIN32_DESTROYICON_FOR_CURSOR_FAILED);
+    }
 }
 
 #if !defined(SOKOL_NO_ENTRY)
@@ -12393,9 +12401,15 @@ SOKOL_API_IMPL sapp_mouse_cursor sapp_bind_mouse_cursor_image(sapp_mouse_cursor 
 
 SOKOL_APP_API_DECL void sapp_unbind_mouse_cursor_image(sapp_mouse_cursor cursor) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
-
     uint64_t* slot = &_sapp.custom_mouse_cursors[(int) cursor];
     if (*slot) {
+        // at least on win32 attempting to destroy a cursor that's currently
+        // active is an error, so when trying to destroy the active cursor
+        // first make the cursor invisible which 'breaks' the dependency
+        const bool shown = _sapp.mouse.shown;
+        if (_sapp.mouse.current_cursor == cursor) {
+            _sapp_update_cursor(cursor, false);
+        }
         #if defined(_SAPP_MACOS)
         _sapp_macos_destroy_custom_mouse_cursor(*slot);
         #elif defined(_SAPP_EMSCRIPTEN)
@@ -12405,13 +12419,11 @@ SOKOL_APP_API_DECL void sapp_unbind_mouse_cursor_image(sapp_mouse_cursor cursor)
         #elif defined(_SAPP_LINUX)
         _sapp_x11_destroy_custom_mouse_cursor(*slot);
         #endif
-
         *slot = 0;
-    }
-
-    // Update the displayed cursor in case the current cursor is the one we just unbound.
-    if (_sapp.mouse.current_cursor == cursor) {
-        _sapp_update_cursor(cursor, _sapp.mouse.shown);
+        // update the displayed cursor in case the current cursor is the one we just unbound
+        if (_sapp.mouse.current_cursor == cursor) {
+            _sapp_update_cursor(cursor, shown);
+        }
     }
 }
 
