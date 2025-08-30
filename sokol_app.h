@@ -2597,7 +2597,7 @@ typedef struct {
     _sapp_macos_app_delegate* app_dlg;
     _sapp_macos_window_delegate* win_dlg;
     _sapp_macos_view* view;
-    NSCursor* system_cursors[_SAPP_MOUSECURSOR_NUM];
+    NSCursor* standard_cursors[_SAPP_MOUSECURSOR_NUM];
     NSCursor* custom_cursors[_SAPP_MOUSECURSOR_NUM];
     #if defined(SOKOL_METAL)
         id<MTLDevice> mtl_device;
@@ -2696,7 +2696,7 @@ typedef struct {
     HDC dc;
     HICON big_icon;
     HICON small_icon;
-    HCURSOR system_cursors[_SAPP_MOUSECURSOR_NUM];
+    HCURSOR standard_cursors[_SAPP_MOUSECURSOR_NUM];
     HCURSOR custom_cursors[_SAPP_MOUSECURSOR_NUM];
     UINT orig_codepage;
     WCHAR surrogate;
@@ -2915,7 +2915,8 @@ typedef struct {
     Colormap colormap;
     Window window;
     Cursor hidden_cursor;
-    Cursor cursors[_SAPP_MOUSECURSOR_NUM];
+    Cursor standard_cursors[_SAPP_MOUSECURSOR_NUM];
+    Cursor custom_cursors[_SAPP_MOUSECURSOR_NUM];
     int window_state;
     float dpi;
     unsigned char error_code;
@@ -3991,19 +3992,19 @@ _SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
 
 _SOKOL_PRIVATE void _sapp_macos_init_cursors(void) {
     for (size_t i = 0; i < _SAPP_MOUSECURSOR_NUM; i++) {
-        _sapp.macos.system_cursors[i] = nil;
+        _sapp.macos.standard_cursors[i] = nil;
         _sapp.macos.custom_cursors[i] = nil;
     }
-    _sapp.macos.system_cursors[SAPP_MOUSECURSOR_ARROW] = [NSCursor arrowCursor];
-    _sapp.macos.system_cursors[SAPP_MOUSECURSOR_IBEAM] = [NSCursor IBeamCursor];
-    _sapp.macos.system_cursors[SAPP_MOUSECURSOR_CROSSHAIR] = [NSCursor crosshairCursor];
-    _sapp.macos.system_cursors[SAPP_MOUSECURSOR_POINTING_HAND] = [NSCursor pointingHandCursor];
-    _sapp.macos.system_cursors[SAPP_MOUSECURSOR_RESIZE_EW] = [NSCursor respondsToSelector:@selector(_windowResizeEastWestCursor)] ? [NSCursor _windowResizeEastWestCursor] : [NSCursor resizeLeftRightCursor];
-    _sapp.macos.system_cursors[SAPP_MOUSECURSOR_RESIZE_NS] = [NSCursor respondsToSelector:@selector(_windowResizeNorthSouthCursor)] ? [NSCursor _windowResizeNorthSouthCursor] : [NSCursor resizeUpDownCursor];
-    _sapp.macos.system_cursors[SAPP_MOUSECURSOR_RESIZE_NWSE] = [NSCursor respondsToSelector:@selector(_windowResizeNorthWestSouthEastCursor)] ? [NSCursor _windowResizeNorthWestSouthEastCursor] : [NSCursor closedHandCursor];
-    _sapp.macos.system_cursors[SAPP_MOUSECURSOR_RESIZE_NESW] = [NSCursor respondsToSelector:@selector(_windowResizeNorthEastSouthWestCursor)] ? [NSCursor _windowResizeNorthEastSouthWestCursor] : [NSCursor closedHandCursor];
-    _sapp.macos.system_cursors[SAPP_MOUSECURSOR_RESIZE_ALL] = [NSCursor closedHandCursor];
-    _sapp.macos.system_cursors[SAPP_MOUSECURSOR_NOT_ALLOWED] = [NSCursor operationNotAllowedCursor];
+    _sapp.macos.standard_cursors[SAPP_MOUSECURSOR_ARROW] = [NSCursor arrowCursor];
+    _sapp.macos.standard_cursors[SAPP_MOUSECURSOR_IBEAM] = [NSCursor IBeamCursor];
+    _sapp.macos.standard_cursors[SAPP_MOUSECURSOR_CROSSHAIR] = [NSCursor crosshairCursor];
+    _sapp.macos.standard_cursors[SAPP_MOUSECURSOR_POINTING_HAND] = [NSCursor pointingHandCursor];
+    _sapp.macos.standard_cursors[SAPP_MOUSECURSOR_RESIZE_EW] = [NSCursor respondsToSelector:@selector(_windowResizeEastWestCursor)] ? [NSCursor _windowResizeEastWestCursor] : [NSCursor resizeLeftRightCursor];
+    _sapp.macos.standard_cursors[SAPP_MOUSECURSOR_RESIZE_NS] = [NSCursor respondsToSelector:@selector(_windowResizeNorthSouthCursor)] ? [NSCursor _windowResizeNorthSouthCursor] : [NSCursor resizeUpDownCursor];
+    _sapp.macos.standard_cursors[SAPP_MOUSECURSOR_RESIZE_NWSE] = [NSCursor respondsToSelector:@selector(_windowResizeNorthWestSouthEastCursor)] ? [NSCursor _windowResizeNorthWestSouthEastCursor] : [NSCursor closedHandCursor];
+    _sapp.macos.standard_cursors[SAPP_MOUSECURSOR_RESIZE_NESW] = [NSCursor respondsToSelector:@selector(_windowResizeNorthEastSouthWestCursor)] ? [NSCursor _windowResizeNorthEastSouthWestCursor] : [NSCursor closedHandCursor];
+    _sapp.macos.standard_cursors[SAPP_MOUSECURSOR_RESIZE_ALL] = [NSCursor closedHandCursor];
+    _sapp.macos.standard_cursors[SAPP_MOUSECURSOR_NOT_ALLOWED] = [NSCursor operationNotAllowedCursor];
 }
 
 _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
@@ -4265,8 +4266,8 @@ _SOKOL_PRIVATE void _sapp_macos_update_cursor(sapp_mouse_cursor cursor, bool sho
     if (_sapp.custom_cursor_bound[cursor]) {
         SOKOL_ASSERT(_sapp.macos.custom_cursors[cursor]);
         ns_cursor = _sapp.macos.custom_cursors[cursor];
-    } else if (_sapp.macos.system_cursors[cursor]) {
-        ns_cursor = _sapp.macos.system_cursors[cursor];
+    } else if (_sapp.macos.standard_cursors[cursor]) {
+        ns_cursor = _sapp.macos.standard_cursors[cursor];
     } else {
         ns_cursor = [NSCursor arrowCursor];
     }
@@ -7461,14 +7462,14 @@ _SOKOL_PRIVATE void _sapp_win32_init_cursor(sapp_mouse_cursor cursor) {
         default: break;
     }
     if (id != 0) {
-        _sapp.win32.system_cursors[cursor] = (HCURSOR)LoadImageW(NULL, MAKEINTRESOURCEW(id), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE|LR_SHARED);
+        _sapp.win32.standard_cursors[cursor] = (HCURSOR)LoadImageW(NULL, MAKEINTRESOURCEW(id), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE|LR_SHARED);
     }
     // fallback: default cursor
-    if (0 == _sapp.win32.system_cursors[cursor]) {
+    if (0 == _sapp.win32.standard_cursors[cursor]) {
         // 32512 => IDC_ARROW
-        _sapp.win32.system_cursors[cursor] = LoadCursorW(NULL, MAKEINTRESOURCEW(32512));
+        _sapp.win32.standard_cursors[cursor] = LoadCursorW(NULL, MAKEINTRESOURCEW(32512));
     }
-    SOKOL_ASSERT(0 != _sapp.win32.system_cursors[cursor]);
+    SOKOL_ASSERT(0 != _sapp.win32.standard_cursors[cursor]);
 }
 
 _SOKOL_PRIVATE void _sapp_win32_init_cursors(void) {
@@ -7508,7 +7509,7 @@ _SOKOL_PRIVATE void _sapp_win32_update_cursor(sapp_mouse_cursor cursor, bool sho
             cursor_handle = _sapp.win32.custom_cursors[cursor];
             SOKOL_ASSERT(0 != cursor_handle);
         } else {
-            cursor_handle = _sapp.win32.system_cursors[cursor];
+            cursor_handle = _sapp.win32.standard_cursors[cursor];
             SOKOL_ASSERT(0 != cursor_handle);
         }
     }
@@ -10920,16 +10921,16 @@ _SOKOL_PRIVATE void _sapp_x11_create_hidden_cursor(void) {
     if (theme) {
         XcursorImage* img = XcursorLibraryLoadImage(name, theme, size);
         if (img) {
-            _sapp.x11.cursors[cursor] = XcursorImageLoadCursor(_sapp.x11.display, img);
+            _sapp.x11.standard_cursors[cursor] = XcursorImageLoadCursor(_sapp.x11.display, img);
             XcursorImageDestroy(img);
         }
     }
-    if (0 == _sapp.x11.cursors[cursor]) {
-        _sapp.x11.cursors[cursor] = XCreateFontCursor(_sapp.x11.display, fallback_native);
+    if (0 == _sapp.x11.standard_cursors[cursor]) {
+        _sapp.x11.standard_cursors[cursor] = XCreateFontCursor(_sapp.x11.display, fallback_native);
     }
 }
 
-_SOKOL_PRIVATE void _sapp_x11_create_cursors(void) {
+_SOKOL_PRIVATE void _sapp_x11_create_standard_cursors(void) {
     SOKOL_ASSERT(_sapp.x11.display);
     const char* cursor_theme = XcursorGetTheme(_sapp.x11.display);
     const int size = XcursorGetDefaultSize(_sapp.x11.display);
@@ -10946,21 +10947,23 @@ _SOKOL_PRIVATE void _sapp_x11_create_cursors(void) {
     _sapp_x11_create_hidden_cursor();
 }
 
-_SOKOL_PRIVATE void _sapp_x11_destroy_cursors(void) {
+_SOKOL_PRIVATE void _sapp_x11_destroy_standard_cursors(void) {
     SOKOL_ASSERT(_sapp.x11.display);
     if (_sapp.x11.hidden_cursor) {
         XFreeCursor(_sapp.x11.display, _sapp.x11.hidden_cursor);
         _sapp.x11.hidden_cursor = 0;
     }
     for (int i = 0; i < _SAPP_MOUSECURSOR_NUM; i++) {
-        if (_sapp.x11.cursors[i]) {
-            XFreeCursor(_sapp.x11.display, _sapp.x11.cursors[i]);
-            _sapp.x11.cursors[i] = 0;
+        if (_sapp.x11.standard_cursors[i]) {
+            XFreeCursor(_sapp.x11.display, _sapp.x11.standard_cursors[i]);
+            _sapp.x11.standard_cursors[i] = 0;
         }
     }
 }
 
-_SOKOL_PRIVATE uint64_t _sapp_x11_make_custom_mouse_cursor(const sapp_image_desc* desc) {
+_SOKOL_PRIVATE bool _sapp_x11_make_custom_mouse_cursor(sapp_mouse_cursor cursor, const sapp_image_desc* desc) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    SOKOL_ASSERT(0 == _sapp.x11.custom_cursors[cursor]);
     XcursorImage* img = XcursorImageCreate(desc->width, desc->height);
     SOKOL_ASSERT(img && ((int) img->width == desc->width) && ((int) img->height == desc->height) && img->pixels);
     img->xhot = (XcursorDim) desc->cursor_hotspot_x;
@@ -10974,14 +10977,17 @@ _SOKOL_PRIVATE uint64_t _sapp_x11_make_custom_mouse_cursor(const sapp_image_desc
         ((uint8_t*) img->pixels)[i+2] = ((uint8_t*) desc->pixels.ptr)[i+0];
         ((uint8_t*) img->pixels)[i+3] = ((uint8_t*) desc->pixels.ptr)[i+3];
     }
-    Cursor cursor = XcursorImageLoadCursor(_sapp.x11.display, img);
+    _sapp.x11.custom_cursors[cursor] = XcursorImageLoadCursor(_sapp.x11.display, img);
     XcursorImageDestroy(img);
-    return (uint64_t) cursor; // return opaque handle
+    return 0 != _sapp.x11.custom_cursors[cursor];
 }
 
-_SOKOL_PRIVATE void _sapp_x11_destroy_custom_mouse_cursor(uint64_t opaque_handle) {
-    Cursor cursor = (Cursor) opaque_handle;
-    XFreeCursor(_sapp.x11.display, cursor);
+_SOKOL_PRIVATE void _sapp_x11_destroy_custom_mouse_cursor(sapp_mouse_cursor cursor) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    Cursor xcursor = _sapp.x11.custom_cursors[cursor];
+    _sapp.x11.custom_cursors[cursor] = 0;
+    SOKOL_ASSERT(xcursor);
+    XFreeCursor(_sapp.x11.display, xcursor);
 }
 
 _SOKOL_PRIVATE void _sapp_x11_toggle_fullscreen(void) {
@@ -10993,18 +10999,16 @@ _SOKOL_PRIVATE void _sapp_x11_toggle_fullscreen(void) {
 _SOKOL_PRIVATE void _sapp_x11_update_cursor(sapp_mouse_cursor cursor, bool shown) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
     if (shown) {
-        if (_sapp.custom_mouse_cursors[cursor]) {
-            Cursor xcursor = (Cursor) _sapp.custom_mouse_cursors[cursor];
+        if (_sapp.custom_cursor_bound[cursor]) {
+            Cursor xcursor = _sapp.x11.custom_cursors[cursor];
+            SOKOL_ASSERT(0 != xcursor);
             XDefineCursor(_sapp.x11.display, _sapp.x11.window, xcursor);
-        }
-        else if (_sapp.x11.cursors[cursor]) {
-            XDefineCursor(_sapp.x11.display, _sapp.x11.window, _sapp.x11.cursors[cursor]);
-        }
-        else {
+        } else if (_sapp.x11.standard_cursors[cursor]) {
+            XDefineCursor(_sapp.x11.display, _sapp.x11.window, _sapp.x11.standard_cursors[cursor]);
+        } else {
             XUndefineCursor(_sapp.x11.display, _sapp.x11.window);
         }
-    }
-    else {
+    } else {
         XDefineCursor(_sapp.x11.display, _sapp.x11.window, _sapp.x11.hidden_cursor);
     }
     XFlush(_sapp.x11.display);
@@ -12099,7 +12103,7 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     _sapp_x11_query_system_dpi();
     _sapp.dpi_scale = _sapp.x11.dpi / 96.0f;
     _sapp_x11_init_extensions();
-    _sapp_x11_create_cursors();
+    _sapp_x11_create_standard_cursors();
     XkbSetDetectableAutoRepeat(_sapp.x11.display, true, NULL);
     _sapp_x11_init_keytable();
 #if defined(_SAPP_GLX)
@@ -12153,7 +12157,7 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     _sapp_egl_destroy();
 #endif
     _sapp_x11_destroy_window();
-    _sapp_x11_destroy_cursors();
+    _sapp_x11_destroy_standard_cursors();
     XCloseDisplay(_sapp.x11.display);
     _sapp_discard_state();
 }
