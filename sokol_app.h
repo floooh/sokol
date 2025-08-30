@@ -12358,7 +12358,7 @@ SOKOL_API_IMPL sapp_mouse_cursor sapp_get_mouse_cursor(void) {
 SOKOL_API_IMPL sapp_mouse_cursor sapp_bind_mouse_cursor_image(sapp_mouse_cursor cursor, const sapp_image_desc* desc) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
     // NOTE: It seems that for some reason, the hotspot doesn't work if it is one less
-    //       than the dimention of the cursor image (or more), on windows. So for a cursor
+    //       than the dimension of the cursor image (or more), on windows. So for a cursor
     //       that is 32 by 32 px, a hotspot of x = 30 works, but not x = 31.
     //       The cursor simply dissapears in such cases. Asserting for all platforms to make
     //       the behaviour consistent.
