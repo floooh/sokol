@@ -2597,7 +2597,8 @@ typedef struct {
     _sapp_macos_app_delegate* app_dlg;
     _sapp_macos_window_delegate* win_dlg;
     _sapp_macos_view* view;
-    NSCursor* cursors[_SAPP_MOUSECURSOR_NUM];
+    NSCursor* system_cursors[_SAPP_MOUSECURSOR_NUM];
+    NSCursor* custom_cursors[_SAPP_MOUSECURSOR_NUM];
     #if defined(SOKOL_METAL)
         id<MTLDevice> mtl_device;
     #endif
@@ -3079,7 +3080,7 @@ typedef struct {
     char window_title[_SAPP_MAX_TITLE_LENGTH];      // UTF-8
     wchar_t window_title_wide[_SAPP_MAX_TITLE_LENGTH];   // UTF-32 or UCS-2 */
     sapp_keycode keycodes[SAPP_MAX_KEYCODES];
-    uint64_t custom_mouse_cursors[_SAPP_MOUSECURSOR_NUM]; // contains opaque system-dependent handles, zero if unset.
+    bool custom_cursor_bound[_SAPP_MOUSECURSOR_NUM]; // true if a custom mouse cursor is bound on that slot
 } _sapp_t;
 static _sapp_t _sapp;
 
@@ -3988,17 +3989,20 @@ _SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
 @end
 
 _SOKOL_PRIVATE void _sapp_macos_init_cursors(void) {
-    _sapp.macos.cursors[SAPP_MOUSECURSOR_DEFAULT] = nil; // not a bug
-    _sapp.macos.cursors[SAPP_MOUSECURSOR_ARROW] = [NSCursor arrowCursor];
-    _sapp.macos.cursors[SAPP_MOUSECURSOR_IBEAM] = [NSCursor IBeamCursor];
-    _sapp.macos.cursors[SAPP_MOUSECURSOR_CROSSHAIR] = [NSCursor crosshairCursor];
-    _sapp.macos.cursors[SAPP_MOUSECURSOR_POINTING_HAND] = [NSCursor pointingHandCursor];
-    _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_EW] = [NSCursor respondsToSelector:@selector(_windowResizeEastWestCursor)] ? [NSCursor _windowResizeEastWestCursor] : [NSCursor resizeLeftRightCursor];
-    _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_NS] = [NSCursor respondsToSelector:@selector(_windowResizeNorthSouthCursor)] ? [NSCursor _windowResizeNorthSouthCursor] : [NSCursor resizeUpDownCursor];
-    _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_NWSE] = [NSCursor respondsToSelector:@selector(_windowResizeNorthWestSouthEastCursor)] ? [NSCursor _windowResizeNorthWestSouthEastCursor] : [NSCursor closedHandCursor];
-    _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_NESW] = [NSCursor respondsToSelector:@selector(_windowResizeNorthEastSouthWestCursor)] ? [NSCursor _windowResizeNorthEastSouthWestCursor] : [NSCursor closedHandCursor];
-    _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_ALL] = [NSCursor closedHandCursor];
-    _sapp.macos.cursors[SAPP_MOUSECURSOR_NOT_ALLOWED] = [NSCursor operationNotAllowedCursor];
+    for (size_t i = 0; i < _SAPP_MOUSECURSOR_NUM; i++) {
+        _sapp.macos.system_cursors[i] = nil;
+        _sapp.macos.custom_cursors[i] = nil;
+    }
+    _sapp.macos.system_cursors[SAPP_MOUSECURSOR_ARROW] = [NSCursor arrowCursor];
+    _sapp.macos.system_cursors[SAPP_MOUSECURSOR_IBEAM] = [NSCursor IBeamCursor];
+    _sapp.macos.system_cursors[SAPP_MOUSECURSOR_CROSSHAIR] = [NSCursor crosshairCursor];
+    _sapp.macos.system_cursors[SAPP_MOUSECURSOR_POINTING_HAND] = [NSCursor pointingHandCursor];
+    _sapp.macos.system_cursors[SAPP_MOUSECURSOR_RESIZE_EW] = [NSCursor respondsToSelector:@selector(_windowResizeEastWestCursor)] ? [NSCursor _windowResizeEastWestCursor] : [NSCursor resizeLeftRightCursor];
+    _sapp.macos.system_cursors[SAPP_MOUSECURSOR_RESIZE_NS] = [NSCursor respondsToSelector:@selector(_windowResizeNorthSouthCursor)] ? [NSCursor _windowResizeNorthSouthCursor] : [NSCursor resizeUpDownCursor];
+    _sapp.macos.system_cursors[SAPP_MOUSECURSOR_RESIZE_NWSE] = [NSCursor respondsToSelector:@selector(_windowResizeNorthWestSouthEastCursor)] ? [NSCursor _windowResizeNorthWestSouthEastCursor] : [NSCursor closedHandCursor];
+    _sapp.macos.system_cursors[SAPP_MOUSECURSOR_RESIZE_NESW] = [NSCursor respondsToSelector:@selector(_windowResizeNorthEastSouthWestCursor)] ? [NSCursor _windowResizeNorthEastSouthWestCursor] : [NSCursor closedHandCursor];
+    _sapp.macos.system_cursors[SAPP_MOUSECURSOR_RESIZE_ALL] = [NSCursor closedHandCursor];
+    _sapp.macos.system_cursors[SAPP_MOUSECURSOR_NOT_ALLOWED] = [NSCursor operationNotAllowedCursor];
 }
 
 _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
@@ -4257,20 +4261,22 @@ _SOKOL_PRIVATE void _sapp_macos_update_cursor(sapp_mouse_cursor cursor, bool sho
     // update cursor
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
     NSCursor* ns_cursor = 0;
-    uint64_t custom_cursor = _sapp.custom_mouse_cursors[cursor];
-    if (custom_cursor != 0) {
-        ns_cursor = (__bridge NSCursor*) (void*) custom_cursor;
-    } else if (_sapp.macos.cursors[cursor]) {
-        ns_cursor = _sapp.macos.cursors[cursor];
+    if (_sapp.custom_cursor_bound[cursor]) {
+        SOKOL_ASSERT(_sapp.macos.custom_cursors[cursor]);
+        ns_cursor = _sapp.macos.custom_cursors[cursor];
+    } else if (_sapp.macos.system_cursors[cursor]) {
+        ns_cursor = _sapp.macos.system_cursors[cursor];
     } else {
         ns_cursor = [NSCursor arrowCursor];
     }
     [ns_cursor set];
 }
 
-_SOKOL_PRIVATE uint64_t _sapp_macos_make_custom_mouse_cursor(const sapp_image_desc* desc) {
+_SOKOL_PRIVATE bool _sapp_macos_make_custom_mouse_cursor(sapp_mouse_cursor cursor, const sapp_image_desc* desc) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    SOKOL_ASSERT(_sapp.macos.custom_cursors[cursor] == nil);
+
     // NOTE: see glfw for reference https://github.com/glfw/glfw/blob/ac10768495837eb98da27d01fe706073d6d251c2/src/cocoa_window.m#L1712
-    uint64_t opaque_handle = 0;
     NSBitmapImageRep* rep = [[NSBitmapImageRep alloc]
         initWithBitmapDataPlanes:NULL
         pixelsWide:desc->width
@@ -4283,27 +4289,29 @@ _SOKOL_PRIVATE uint64_t _sapp_macos_make_custom_mouse_cursor(const sapp_image_de
         bitmapFormat:NSBitmapFormatAlphaNonpremultiplied
         bytesPerRow:desc->width * 4
         bitsPerPixel:32];
-
     if (rep != nil) {
         memcpy([rep bitmapData], desc->pixels.ptr, (size_t) (desc->width * desc->height * 4));
 
         NSImage* native = [[NSImage alloc] initWithSize:NSMakeSize(desc->width, desc->height)];
+        SOKOL_ASSERT(native);
         [native addRepresentation:rep];
 
-        opaque_handle = (uint64_t) (__bridge const void*) [[NSCursor alloc]
+        _sapp.macos.custom_cursors[cursor] = [[NSCursor alloc]
             initWithImage:native
             hotSpot:NSMakePoint(desc->cursor_hotspot_x, desc->cursor_hotspot_y)];
+        SOKOL_ASSERT(_sapp.macos.custom_cursors[cursor] != nil);
 
         _SAPP_OBJC_RELEASE(native);
         _SAPP_OBJC_RELEASE(rep);
+        return true;
     }
-    return opaque_handle;
+    return false;
 }
 
-_SOKOL_PRIVATE void _sapp_macos_destroy_custom_mouse_cursor(uint64_t opaque_handle) {
-    NSCursor* cursor = (__bridge NSCursor*) (void*) opaque_handle;
-    _SOKOL_UNUSED(cursor);
-    _SAPP_OBJC_RELEASE(cursor);
+_SOKOL_PRIVATE void _sapp_macos_destroy_custom_mouse_cursor(sapp_mouse_cursor cursor) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    SOKOL_ASSERT(_sapp.macos.custom_cursors[cursor] != nil);
+    _SAPP_OBJC_RELEASE(_sapp.macos.custom_cursors[cursor]);
 }
 
 _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int num_images) {
@@ -12375,22 +12383,19 @@ SOKOL_API_IMPL sapp_mouse_cursor sapp_bind_mouse_cursor_image(sapp_mouse_cursor 
 
     sapp_unbind_mouse_cursor_image(cursor);
 
-    uint64_t opaque_slot = 0;
+    bool res = false;
     #if defined(_SAPP_MACOS)
-    opaque_slot = _sapp_macos_make_custom_mouse_cursor(desc);
+    res = _sapp_macos_make_custom_mouse_cursor(cursor, desc);
     #elif defined(_SAPP_EMSCRIPTEN)
-    _sapp_emsc_make_custom_mouse_cursor(desc, cursor);
-    opaque_slot = 1; // for web, we just store `1` in the slot to mark it as used. The actual
-                     // cursor resources are held in a parallel array on the JS side.
+    res = _sapp_emsc_make_custom_mouse_cursor(cursor, desc);
     #elif defined(_SAPP_WIN32)
-    opaque_slot = _sapp_win32_make_custom_mouse_cursor(desc);
+    res = _sapp_win32_make_custom_mouse_cursor(cursor, desc);
     #elif defined(_SAPP_LINUX)
-    opaque_slot = _sapp_x11_make_custom_mouse_cursor(desc);
+    res = _sapp_x11_make_custom_mouse_cursor(cursor, desc);
     #else
     _SOKOL_UNUSED(desc);
     #endif
-    SOKOL_ASSERT(opaque_slot != 0);
-    _sapp.custom_mouse_cursors[(int) cursor] = opaque_slot;
+    _sapp.custom_cursor_bound[(int)cursor] = res;
 
     // Update the displayed cursor in case the current cursor is the one we just bound.
     if (_sapp.mouse.current_cursor == cursor) {
@@ -12401,24 +12406,22 @@ SOKOL_API_IMPL sapp_mouse_cursor sapp_bind_mouse_cursor_image(sapp_mouse_cursor 
 
 SOKOL_APP_API_DECL void sapp_unbind_mouse_cursor_image(sapp_mouse_cursor cursor) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
-    uint64_t* slot = &_sapp.custom_mouse_cursors[(int) cursor];
-    if (*slot) {
-        uint64_t platform_cursor_handle = *slot;
+    if (_sapp.custom_cursor_bound[(int)cursor]) {
         // if this is the active cursor, first restore it to its default image,
         // this must be done before attempting to destroy any cursor image
         // resources which at least on win32 would fail if the cursor is still in use
-        *slot = 0;
+        _sapp.custom_cursor_bound[(int)cursor] = false;
         if (_sapp.mouse.current_cursor == cursor) {
             _sapp_update_cursor(cursor, _sapp.mouse.shown);
         }
         #if defined(_SAPP_MACOS)
-        _sapp_macos_destroy_custom_mouse_cursor(platform_cursor_handle);
+        _sapp_macos_destroy_custom_mouse_cursor(cursor);
         #elif defined(_SAPP_EMSCRIPTEN)
-        _sapp_emsc_destroy_custom_mouse_cursor(platform_cursor_handle);
+        _sapp_emsc_destroy_custom_mouse_cursor(cursor);
         #elif defined(_SAPP_WIN32)
-        _sapp_win32_destroy_custom_mouse_cursor(platform_cursor_handle);
+        _sapp_win32_destroy_custom_mouse_cursor(cursor);
         #elif defined(_SAPP_LINUX)
-        _sapp_x11_destroy_custom_mouse_cursor(platform_cursor_handle);
+        _sapp_x11_destroy_custom_mouse_cursor(cursor);
         #endif
     }
 }
