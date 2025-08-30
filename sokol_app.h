@@ -2696,7 +2696,8 @@ typedef struct {
     HDC dc;
     HICON big_icon;
     HICON small_icon;
-    HCURSOR cursors[_SAPP_MOUSECURSOR_NUM];
+    HCURSOR system_cursors[_SAPP_MOUSECURSOR_NUM];
+    HCURSOR custom_cursors[_SAPP_MOUSECURSOR_NUM];
     UINT orig_codepage;
     WCHAR surrogate;
     RECT stored_window_rect;    // used to restore window pos/size when toggling fullscreen => windowed
@@ -7460,14 +7461,14 @@ _SOKOL_PRIVATE void _sapp_win32_init_cursor(sapp_mouse_cursor cursor) {
         default: break;
     }
     if (id != 0) {
-        _sapp.win32.cursors[cursor] = (HCURSOR)LoadImageW(NULL, MAKEINTRESOURCEW(id), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE|LR_SHARED);
+        _sapp.win32.system_cursors[cursor] = (HCURSOR)LoadImageW(NULL, MAKEINTRESOURCEW(id), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE|LR_SHARED);
     }
     // fallback: default cursor
-    if (0 == _sapp.win32.cursors[cursor]) {
+    if (0 == _sapp.win32.system_cursors[cursor]) {
         // 32512 => IDC_ARROW
-        _sapp.win32.cursors[cursor] = LoadCursorW(NULL, MAKEINTRESOURCEW(32512));
+        _sapp.win32.system_cursors[cursor] = LoadCursorW(NULL, MAKEINTRESOURCEW(32512));
     }
-    SOKOL_ASSERT(0 != _sapp.win32.cursors[cursor]);
+    SOKOL_ASSERT(0 != _sapp.win32.system_cursors[cursor]);
 }
 
 _SOKOL_PRIVATE void _sapp_win32_init_cursors(void) {
@@ -7502,10 +7503,12 @@ _SOKOL_PRIVATE void _sapp_win32_update_cursor(sapp_mouse_cursor cursor, bool sho
     }
     HCURSOR cursor_handle = NULL;
     if (shown) {
-        if (_sapp.custom_mouse_cursors[cursor]) {
-            cursor_handle = (HCURSOR) _sapp.custom_mouse_cursors[cursor];
+        if (_sapp.custom_cursor_bound[cursor]) {
+            SOKOL_ASSERT(_sapp.win32.custom_cursors[cursor]);
+            cursor_handle = _sapp.win32.custom_cursors[cursor];
+            SOKOL_ASSERT(0 != cursor_handle);
         } else {
-            cursor_handle = _sapp.win32.cursors[cursor];
+            cursor_handle = _sapp.win32.system_cursors[cursor];
             SOKOL_ASSERT(0 != cursor_handle);
         }
     }
@@ -8369,7 +8372,7 @@ _SOKOL_PRIVATE void _sapp_win32_update_window_title(void) {
     SetWindowTextW(_sapp.win32.hwnd, _sapp.window_title_wide);
 }
 
-_SOKOL_PRIVATE HICON _sapp_win32_create_icon_from_image(const sapp_image_desc* desc, bool is_cursor, int hotspot_x, int hotspot_y) {
+_SOKOL_PRIVATE HICON _sapp_win32_create_icon_from_image(const sapp_image_desc* desc, bool is_cursor) {
     BITMAPV5HEADER bi;
     _sapp_clear(&bi, sizeof(bi));
     bi.bV5Size = sizeof(bi);
@@ -8412,8 +8415,8 @@ _SOKOL_PRIVATE HICON _sapp_win32_create_icon_from_image(const sapp_image_desc* d
     ICONINFO icon_info;
     _sapp_clear(&icon_info, sizeof(icon_info));
     icon_info.fIcon = !is_cursor;
-    icon_info.xHotspot = (DWORD) hotspot_x;
-    icon_info.yHotspot = (DWORD) hotspot_y;
+    icon_info.xHotspot = (DWORD) (is_cursor ? desc->cursor_hotspot_x : 0);
+    icon_info.yHotspot = (DWORD) (is_cursor ? desc->cursor_hotspot_y : 0);
     icon_info.hbmMask = mask;
     icon_info.hbmColor = color;
     HICON icon_handle = CreateIconIndirect(&icon_info);
@@ -8428,8 +8431,8 @@ _SOKOL_PRIVATE void _sapp_win32_set_icon(const sapp_icon_desc* icon_desc, int nu
 
     int big_img_index = _sapp_image_bestmatch(icon_desc->images, num_images, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON));
     int sml_img_index = _sapp_image_bestmatch(icon_desc->images, num_images, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON));
-    HICON big_icon = _sapp_win32_create_icon_from_image(&icon_desc->images[big_img_index], false, 0, 0);
-    HICON sml_icon = _sapp_win32_create_icon_from_image(&icon_desc->images[sml_img_index], false, 0, 0);
+    HICON big_icon = _sapp_win32_create_icon_from_image(&icon_desc->images[big_img_index], false);
+    HICON sml_icon = _sapp_win32_create_icon_from_image(&icon_desc->images[sml_img_index], false);
 
     // if icon creation or lookup has failed for some reason, leave the currently set icon untouched
     if (0 != big_icon) {
@@ -8573,17 +8576,24 @@ _SOKOL_PRIVATE char** _sapp_win32_command_line_to_utf8_argv(LPWSTR w_command_lin
     return argv;
 }
 
-_SOKOL_PRIVATE uint64_t _sapp_win32_make_custom_mouse_cursor(const sapp_image_desc* desc) {
-    return (uint64_t) _sapp_win32_create_icon_from_image(desc, true, desc->cursor_hotspot_x, desc->cursor_hotspot_y);
+_SOKOL_PRIVATE bool _sapp_win32_make_custom_mouse_cursor(sapp_mouse_cursor cursor, const sapp_image_desc* desc) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    SOKOL_ASSERT(0 == _sapp.win32.custom_cursors[cursor]);
+    const HCURSOR win32_cursor = _sapp_win32_create_icon_from_image(desc, true);
+    _sapp.win32.custom_cursors[cursor] = win32_cursor;
+    return win32_cursor != 0;
 }
 
-SOKOL_API_IMPL void _sapp_win32_destroy_custom_mouse_cursor(uint64_t opaque_handle) {
-    HCURSOR cursor_handle = (HCURSOR) opaque_handle;
+SOKOL_API_IMPL void _sapp_win32_destroy_custom_mouse_cursor(sapp_mouse_cursor cursor) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    HCURSOR win32_cursor = _sapp.win32.custom_cursors[cursor];
+    SOKOL_ASSERT(win32_cursor);
+    _sapp.win32.custom_cursors[cursor] = 0;
     // NOTE: DestroyIcon() may return zero (failure) if the cursor is currently in
     // use. Normally that shouldn't happen since when attempting to unbind the
     // current cursor it will be hidden first, but since there might be other edge
     // cases we just log a warning but don't fail hard
-    BOOL res = DestroyIcon(cursor_handle);
+    BOOL res = DestroyIcon(win32_cursor);
     if (!res) {
         _SAPP_WARN(WIN32_DESTROYICON_FOR_CURSOR_FAILED);
     }
