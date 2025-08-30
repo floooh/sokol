@@ -12403,27 +12403,23 @@ SOKOL_APP_API_DECL void sapp_unbind_mouse_cursor_image(sapp_mouse_cursor cursor)
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
     uint64_t* slot = &_sapp.custom_mouse_cursors[(int) cursor];
     if (*slot) {
-        // at least on win32 attempting to destroy a cursor that's currently
-        // active is an error, so when trying to destroy the active cursor
-        // first make the cursor invisible which 'breaks' the dependency
-        const bool shown = _sapp.mouse.shown;
+        uint64_t platform_cursor_handle = *slot;
+        // if this is the active cursor, first restore it to its default image,
+        // this must be done before attempting to destroy any cursor image
+        // resources which at least on win32 would fail if the cursor is still in use
+        *slot = 0;
         if (_sapp.mouse.current_cursor == cursor) {
-            _sapp_update_cursor(cursor, false);
+            _sapp_update_cursor(cursor, _sapp.mouse.shown);
         }
         #if defined(_SAPP_MACOS)
-        _sapp_macos_destroy_custom_mouse_cursor(*slot);
+        _sapp_macos_destroy_custom_mouse_cursor(platform_cursor_handle);
         #elif defined(_SAPP_EMSCRIPTEN)
-        _sapp_emsc_destroy_custom_mouse_cursor(cursor);
+        _sapp_emsc_destroy_custom_mouse_cursor(platform_cursor_handle);
         #elif defined(_SAPP_WIN32)
-        _sapp_win32_destroy_custom_mouse_cursor(*slot);
+        _sapp_win32_destroy_custom_mouse_cursor(platform_cursor_handle);
         #elif defined(_SAPP_LINUX)
-        _sapp_x11_destroy_custom_mouse_cursor(*slot);
+        _sapp_x11_destroy_custom_mouse_cursor(platform_cursor_handle);
         #endif
-        *slot = 0;
-        // update the displayed cursor in case the current cursor is the one we just unbound
-        if (_sapp.mouse.current_cursor == cursor) {
-            _sapp_update_cursor(cursor, shown);
-        }
     }
 }
 
