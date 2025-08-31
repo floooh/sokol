@@ -5599,8 +5599,7 @@ EM_JS(void, sapp_js_set_cursor, (int cursor_type, int shown, int use_custom_curs
         }
         else if (use_custom_cursor_image) {
             cursor = Module.__sapp_custom_cursors[cursor_type].css_property;
-        }
-        else switch (cursor_type) {
+        } else switch (cursor_type) {
             case 0: cursor = "auto"; break;         // SAPP_MOUSECURSOR_DEFAULT
             case 1: cursor = "default"; break;      // SAPP_MOUSECURSOR_ARROW
             case 2: cursor = "text"; break;         // SAPP_MOUSECURSOR_IBEAM
@@ -5620,8 +5619,8 @@ EM_JS(void, sapp_js_set_cursor, (int cursor_type, int shown, int use_custom_curs
 
 _SOKOL_PRIVATE void _sapp_emsc_update_cursor(sapp_mouse_cursor cursor, bool shown) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
-    bool use_custom_cursor_image = _sapp.custom_mouse_cursors[cursor] != 0;
-    sapp_js_set_cursor((int)cursor, shown ? 1 : 0, (int)use_custom_cursor_image);
+    bool custom_cursor = _sapp.custom_cursor_bound[cursor];
+    sapp_js_set_cursor((int)cursor, shown ? 1 : 0, custom_cursor ? 1 : 0);
 }
 
 // Only used by the emscriten backend right now. Returned memory must be freed by caller.
@@ -5689,7 +5688,7 @@ sapp_range _sapp_bitmap_from_image_desc(const sapp_image_desc* desc) {
 
 EM_JS(void, sapp_js_make_custom_mouse_cursor, (int cursor_slot_idx, uint8_t* bmp_ptr, int bmp_size, int hotspot_x, int hotspot_y), {
     const copy = new Uint8Array(HEAPU8.buffer, bmp_ptr, bmp_size);
-    const blob = new Blob([copy.slice()], { type: 'image/bpm' });
+    const blob = new Blob([copy.slice()], { type: 'image/bmp' });
     const url = URL.createObjectURL(blob);
 
     let cursor_slot = {
@@ -5712,13 +5711,11 @@ EM_JS(void, sapp_js_destroy_custom_mouse_cursor, (int cursor_slot_idx), {
     }
 })
 
-_SOKOL_PRIVATE void _sapp_emsc_make_custom_mouse_cursor(const sapp_image_desc* desc, sapp_mouse_cursor cursor) {
-    // create a bmp image
+_SOKOL_PRIVATE bool _sapp_emsc_make_custom_mouse_cursor(sapp_mouse_cursor cursor, const sapp_image_desc* desc) {
     sapp_range bmp_data = _sapp_bitmap_from_image_desc(desc);
-
-    // send the bmp blob to the js side
     sapp_js_make_custom_mouse_cursor((int) cursor, (uint8_t*) bmp_data.ptr, (int) bmp_data.size, desc->cursor_hotspot_x, desc->cursor_hotspot_y);
     _sapp_free((void*)bmp_data.ptr);
+    return true;
 }
 
 _SOKOL_PRIVATE void _sapp_emsc_destroy_custom_mouse_cursor(sapp_mouse_cursor cursor) {
