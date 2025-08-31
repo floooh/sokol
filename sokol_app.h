@@ -5596,8 +5596,7 @@ EM_JS(void, sapp_js_set_cursor, (int cursor_type, int shown, int use_custom_curs
         let cursor;
         if (shown === 0) {
             cursor = "none";
-        }
-        else if (use_custom_cursor_image) {
+        } else if (use_custom_cursor_image != 0) {
             cursor = Module.__sapp_custom_cursors[cursor_type].css_property;
         } else switch (cursor_type) {
             case 0: cursor = "auto"; break;         // SAPP_MOUSECURSOR_DEFAULT
@@ -5623,75 +5622,66 @@ _SOKOL_PRIVATE void _sapp_emsc_update_cursor(sapp_mouse_cursor cursor, bool show
     sapp_js_set_cursor((int)cursor, shown ? 1 : 0, custom_cursor ? 1 : 0);
 }
 
-// Only used by the emscriten backend right now. Returned memory must be freed by caller.
-sapp_range _sapp_bitmap_from_image_desc(const sapp_image_desc* desc) {
-    SOKOL_ASSERT(desc->width * desc->height * 4 == (int) desc->pixels.size);
-    size_t bmp_header_size = 14;
-    size_t dib_header_size = 124; // common values are 56, I saw 124 for the rgba32-1.bmp file of the test suite included in firefox, and 108 from wikipedia example 2 (transparent)
-    size_t bmp_size = bmp_header_size + dib_header_size + desc->pixels.size;
-    uint8_t* bmp_data = (uint8_t*) _sapp_malloc(bmp_size);
-    memset(bmp_data, 0, bmp_size);
-    uint8_t* bmp_write = bmp_data;
-    #define write_byte(val) *(bmp_write++) = val;
-    #define write_int16(val) \
-        *(bmp_write++) = (uint8_t) (val); \
-        *(bmp_write++) = (uint8_t) ((val) >> 8);
-    #define write_int32(val) \
-        *(bmp_write++) = (uint8_t) (val); \
-        *(bmp_write++) = (uint8_t) ((val) >> 8); \
-        *(bmp_write++) = (uint8_t) ((val) >> 16); \
-        *(bmp_write++) = (uint8_t) ((val) >> 24);
-    // bmp file header
-    uint8_t* bmp_header_start = bmp_write;
-    write_byte('B');
-    write_byte('M');
-    write_int32(bmp_size);
-    write_int32(0); // reserved
-    write_int32(bmp_header_size+dib_header_size); // offset to pixel data
-    SOKOL_ASSERT((size_t)(bmp_write - bmp_header_start) == bmp_header_size);
-    _SOKOL_UNUSED(bmp_header_start);
-    // DIB Header
-    uint8_t* dib_header_start = bmp_write;
-    write_int32(dib_header_size); // header size
-    write_int32(desc->width);
-    write_int32(desc->height);
-    write_int16(1); // planes
-    write_int16(32); // bits per pixel
-    write_int32(3); // compression method. 3 = BI_BITFIELDS
-    write_int32(desc->pixels.size); // image size
-    write_int32(2835); // pixel per metre horizontal
-    write_int32(2835); // pixel per metre vertical
-    write_int32(0); // colors number
-    write_int32(0); // important colors
-    write_int32(0x000000ff); // red channel bit mask (big endian)
-    write_int32(0x0000ff00); // green channel bit mask (big endian)
-    write_int32(0x00ff0000); // blue channel bit mask (big endian)
-    write_int32(0xff000000); // alpha channel bit mask (big endian)
-    write_int32('sRGB'); // color space type 'Win ' 'sRGB' or 0 for RGB
-    bmp_write += 64; // color space stuff, unused for 'Win ' or 'sRGB'
-    SOKOL_ASSERT((size_t)(bmp_write - dib_header_start) == dib_header_size);
-    _SOKOL_UNUSED(dib_header_start);
-    #undef write_byte
-    #undef write_int16
-    #undef write_int32
-    // copy the pixel data row by row (bmp is bottom to top)
-    ptrdiff_t remain = (bmp_data + bmp_size) - bmp_write;
-    SOKOL_ASSERT(remain == (int) desc->pixels.size);
-    _SOKOL_UNUSED(remain);
-    size_t row_size = (size_t)desc->width * 4;
-    for (int y = 0; y < desc->height; y++) {
-        memcpy(bmp_write + (size_t)(desc->height - y - 1) * row_size, (uint8_t*)desc->pixels.ptr + (size_t)y * row_size, row_size);
-    }
-    //memcpy(bmp_write, desc->pixels.ptr, desc->pixels.size);
-    return (sapp_range) { bmp_data, (size_t) bmp_size };
-}
+EM_JS(void, sapp_js_make_custom_mouse_cursor, (int cursor_slot_idx, int width, int height, const uint8_t* pixels_ptr, int hotspot_x, int hotspot_y), {
+    // encode the cursor pixels into a BMP which then is encoded into an 'object url'
+    const bmp_hdr_size = 14;
+    const dib_hdr_size = 124; // common values are 56, I saw 124 for the rgba32-1.bmp file of the test suite included in firefox, and 108 from wikipedia example 2 (transparent)
+    const pixels_size = width * height * 4;
+    const bmp_size = bmp_hdr_size + dib_hdr_size + pixels_size;
+    const bmp = new Uint8Array(bmp_size);
+    let idx = 0;
+    const w8 = (val) => {
+        bmp[idx++] = val & 255;
+    };
+    const w16 = (val) => {
+        bmp[idx++] = val & 255;
+        bmp[idx++] = (val >> 8) & 255;
+    };
+    const w32 = (val) => {
+        bmp[idx++] = val & 255;
+        bmp[idx++] = (val >> 8) & 255;
+        bmp[idx++] = (val >> 16) & 255;
+        bmp[idx++] = (val >> 24) & 255;
+    };
 
-EM_JS(void, sapp_js_make_custom_mouse_cursor, (int cursor_slot_idx, uint8_t* bmp_ptr, int bmp_size, int hotspot_x, int hotspot_y), {
-    const copy = new Uint8Array(HEAPU8.buffer, bmp_ptr, bmp_size);
-    const blob = new Blob([copy.slice()], { type: 'image/bmp' });
+    // bmp file header
+    w8(66); // 'B'
+    w8(77); // 'M'
+    w32(bmp_size);
+    w32(0); // reserved
+    w32(bmp_hdr_size + dib_hdr_size); // offset to pixel data
+    assert(idx == bmp_hdr_size);
+
+    // DIB header
+    w32(dib_hdr_size); // header size
+    w32(width);
+    w32(height);
+    w16(1); // planes
+    w16(32); // bits per pixel
+    w32(3); // compression method. 3 = BI_BITFIELDS
+    w32(pixels_size); // image size
+    w32(2835); // pixel per metre horizontal
+    w32(2835); // pixel per metre vertical
+    w32(0); // colors number
+    w32(0); // important colors
+    w32(0x000000ff); // red channel bit mask (big endian)
+    w32(0x0000ff00); // green channel bit mask (big endian)
+    w32(0x00ff0000); // blue channel bit mask (big endian)
+    w32(0xff000000); // alpha channel bit mask (big endian)
+    w8(66); w8(71); w8(82); w8(115); // color space type: 'sRGB'
+    idx += 64; // color space stuff, unused for 'Win ' or 'sRGB'
+    assert(idx == bmp_hdr_size + dib_hdr_size);
+    const row_pitch = width * 4;
+    for (let y = 0; y < height; y++) {
+        const src_idx = pixels_ptr + y * row_pitch;
+        const dst_idx = idx + (height - y - 1) * row_pitch;
+        const row_data = HEAPU8.slice(src_idx, src_idx + row_pitch);
+        bmp.set(row_data, dst_idx);
+    }
+    const blob = new Blob([bmp.buffer], { type: 'image/bmp' });
     const url = URL.createObjectURL(blob);
 
-    let cursor_slot = {
+    const cursor_slot = {
         css_property: `url('${url}') ${hotspot_x} ${hotspot_y}, auto`,
         blob_url: url // so we can release it later
     };
@@ -5712,9 +5702,7 @@ EM_JS(void, sapp_js_destroy_custom_mouse_cursor, (int cursor_slot_idx), {
 })
 
 _SOKOL_PRIVATE bool _sapp_emsc_make_custom_mouse_cursor(sapp_mouse_cursor cursor, const sapp_image_desc* desc) {
-    sapp_range bmp_data = _sapp_bitmap_from_image_desc(desc);
-    sapp_js_make_custom_mouse_cursor((int) cursor, (uint8_t*) bmp_data.ptr, (int) bmp_data.size, desc->cursor_hotspot_x, desc->cursor_hotspot_y);
-    _sapp_free((void*)bmp_data.ptr);
+    sapp_js_make_custom_mouse_cursor((int)cursor, desc->width, desc->height, desc->pixels.ptr, desc->cursor_hotspot_x, desc->cursor_hotspot_y);
     return true;
 }
 
