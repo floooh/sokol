@@ -133,7 +133,7 @@
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    |  ???
     key repeat flag     | YES     | YES   | YES   | ---   | ---     |  YES
     windowed            | YES     | YES   | YES   | ---   | ---     |  YES
-    fullscreen          | YES     | YES   | YES   | YES   | YES     |  ---
+    fullscreen          | YES     | YES   | YES   | YES   | YES     |  YES(3)
     mouse hide          | YES     | YES   | YES   | ---   | ---     |  YES
     mouse lock          | YES     | YES   | YES   | ---   | ---     |  YES
     set cursor type     | YES     | YES   | YES   | ---   | ---     |  YES
@@ -147,6 +147,7 @@
 
     (1) macOS has no regular window icons, instead the dock icon is changed
     (2) supported with EGL only (not GLX)
+    (3) fullscreen in the browser not supported on iphones
 
     STEP BY STEP
     ============
@@ -863,6 +864,10 @@
 
     To check if the application window is currently in fullscreen mode,
     call sapp_is_fullscreen().
+
+    On the web, sapp_desc.fullscreen will have no effect, and the application
+    will always start in non-fullscreen mode. Call sapp_toggle_fullscreen() to
+    switch to fullscreen programatically, if the user allows it.
 
     WINDOW ICON SUPPORT
     ===================
