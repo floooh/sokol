@@ -5695,7 +5695,7 @@ EM_JS(void, sapp_js_make_custom_mouse_cursor, (int cursor_slot_idx, int width, i
 
 EM_JS(void, sapp_js_destroy_custom_mouse_cursor, (int cursor_slot_idx), {
     if (Module.__sapp_custom_cursors) {
-        let cursor = Module.__sapp_custom_cursors[cursor_slot_idx];
+        const cursor = Module.__sapp_custom_cursors[cursor_slot_idx];
         URL.revokeObjectURL(cursor.blob_url); // release the url, which should allow the blob to be garbage collected.
         Module.__sapp_custom_cursors[cursor_slot_idx] = null; // clear this array entry
     }
