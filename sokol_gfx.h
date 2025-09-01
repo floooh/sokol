@@ -5747,7 +5747,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #endif
     #ifndef _SG_GL_CHECK_ERROR
         #if defined(__EMSCRIPTEN__)
-            // generally turn of glGetError() on WASM, it's a too big performance hit
+            // generally turn off glGetError() on WASM, it's a too big performance hit
             // and WebGL provides much better diagnostics anyway
             #define _SG_GL_CHECK_ERROR()
         #elif defined(SOKOL_DEBUG)
