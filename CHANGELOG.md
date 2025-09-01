@@ -15,6 +15,14 @@
   restored when moving the mouse outside a window and then back in. Again, many thanks to @Seb-degraff
   for identifying the issue and providing a fix via PR https://github.com/floooh/sokol/pull/1323!
 
+- ...and another sokol_app.h update: `sapp_toggle_fullscreen()` now works on the web
+  (with the usual web platform caveats: the function needs to be called within
+  or 'near' an input event, and the user may leave fullscreen mode at any time,
+  and Safari on iOS doesn't support fullscreen mode at all).
+
+  Many thanks again to @Seb-degraff for kicking this off! Original PR:
+  https://github.com/floooh/sokol/pull/1322, merge branch PR with additional
+  fixes: https://github.com/floooh/sokol/pull/1324
 
 ### 29-Aug-2025
 
