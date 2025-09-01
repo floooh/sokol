@@ -5746,7 +5746,16 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #define GL_COMPUTE_SHADER 0x91B9
     #endif
     #ifndef _SG_GL_CHECK_ERROR
-    #define _SG_GL_CHECK_ERROR() { SOKOL_ASSERT(glGetError() == GL_NO_ERROR); }
+        #if defined(__EMSCRIPTEN__)
+            // generally turn of glGetError() on WASM, it's a too big performance hit
+            // and WebGL provides much better diagnostics anyway
+            #define _SG_GL_CHECK_ERROR()
+        #elif defined(SOKOL_DEBUG)
+            // make sure that glGetError() is only called in debug mode
+            #define _SG_GL_CHECK_ERROR() { SOKOL_ASSERT(glGetError() == GL_NO_ERROR); }
+        #else
+            #define _SG_GL_CHECK_ERROR()
+        #endif
     #endif
     // make some GL constants generally available to simplify compilation,
     // use of those constants will be filtered by runtime flags
