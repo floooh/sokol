@@ -133,7 +133,7 @@
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    |  ???
     key repeat flag     | YES     | YES   | YES   | ---   | ---     |  YES
     windowed            | YES     | YES   | YES   | ---   | ---     |  YES
-    fullscreen          | YES     | YES   | YES   | YES   | YES     |  ---
+    fullscreen          | YES     | YES   | YES   | YES   | YES     |  YES(3)
     mouse hide          | YES     | YES   | YES   | ---   | ---     |  YES
     mouse lock          | YES     | YES   | YES   | ---   | ---     |  YES
     set cursor type     | YES     | YES   | YES   | ---   | ---     |  YES
@@ -147,6 +147,7 @@
 
     (1) macOS has no regular window icons, instead the dock icon is changed
     (2) supported with EGL only (not GLX)
+    (3) fullscreen in the browser not supported on iphones
 
     STEP BY STEP
     ============
@@ -863,6 +864,10 @@
 
     To check if the application window is currently in fullscreen mode,
     call sapp_is_fullscreen().
+
+    On the web, sapp_desc.fullscreen will have no effect, and the application
+    will always start in non-fullscreen mode. Call sapp_toggle_fullscreen() to
+    switch to fullscreen programatically, if the user allows it.
 
     WINDOW ICON SUPPORT
     ===================
@@ -5713,6 +5718,39 @@ _SOKOL_PRIVATE void _sapp_emsc_destroy_custom_mouse_cursor(sapp_mouse_cursor cur
     sapp_js_destroy_custom_mouse_cursor((int) cursor);
 }
 
+EM_JS(void, sapp_js_toggle_fullscreen, (void), {
+    const canvas = Module.sapp_emsc_target;
+    if (canvas) {
+        if (!document.fullscreenElement) {
+            let promise;
+            if(canvas.requestFullScreen) {
+                canvas.requestFullScreen();
+            } else if(canvas.webkitRequestFullScreen) {
+                canvas.webkitRequestFullScreen();
+            } else if(canvas.mozRequestFullScreen) {
+                canvas.mozRequestFullScreen()
+            }
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            } else if(document.mozExitFullscreen) {
+                canvas.mozExitFullscreen()
+            }
+        }
+    }
+})
+
+_SOKOL_PRIVATE void _sapp_emsc_toggle_fullscreen(void) {
+    sapp_js_toggle_fullscreen();
+    // NOTE: When the fullscreen JS promise completes, _sapp.fullscreen will be updated
+    //       (see _sapp_emsc_fullscreenchange_cb()).
+    //       We still toggle _sapp.fullscreen here so from the sokol_app user's perspective,
+    //       the switch is instant.
+    _sapp.fullscreen = !_sapp.fullscreen; 
+}
+
 /* JS helper functions to update browser tab favicon */
 EM_JS(void, sapp_js_clear_favicon, (void), {
     const link = document.getElementById('sokol-app-favicon');
@@ -6197,6 +6235,13 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_blur_cb(int emsc_type, const EmscriptenFocusEv
     return true;
 }
 
+_SOKOL_PRIVATE EM_BOOL _sapp_emsc_fullscreenchange_cb(int emsc_type, const EmscriptenFullscreenChangeEvent* emsc_event, void* user_data) {
+    _SOKOL_UNUSED(emsc_type);
+    _SOKOL_UNUSED(user_data);
+    _sapp.fullscreen = emsc_event->isFullscreen;
+    return true;
+}
+
 #if defined(SOKOL_GLES3)
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_webgl_context_cb(int emsc_type, const void* reserved, void* user_data) {
     _SOKOL_UNUSED(reserved);
@@ -6253,6 +6298,7 @@ _SOKOL_PRIVATE void _sapp_emsc_register_eventhandlers(void) {
     emscripten_set_pointerlockerror_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, _sapp_emsc_pointerlockerror_cb);
     emscripten_set_focus_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_focus_cb);
     emscripten_set_blur_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_blur_cb);
+    emscripten_set_fullscreenchange_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_fullscreenchange_cb);
     sapp_js_add_beforeunload_listener();
     if (_sapp.clipboard.enabled) {
         sapp_js_add_clipboard_listener();
@@ -6339,6 +6385,7 @@ _SOKOL_PRIVATE void _sapp_emsc_frame_main_loop(void) {
 
 _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
+    _sapp.fullscreen = false; // override user provided fullscreen state: can't start in fullscreen on the web!
     const char* document_title = desc->html5_update_document_title ? _sapp.window_title : 0;
     sapp_js_init(_sapp.html5_canvas_selector, document_title);
     double w, h;
@@ -12316,6 +12363,8 @@ SOKOL_API_IMPL void sapp_toggle_fullscreen(void) {
     _sapp_win32_toggle_fullscreen();
     #elif defined(_SAPP_LINUX)
     _sapp_x11_toggle_fullscreen();
+    #elif defined(_SAPP_EMSCRIPTEN)
+    _sapp_emsc_toggle_fullscreen();
     #endif
 }
 
