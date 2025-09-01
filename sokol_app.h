@@ -5774,7 +5774,7 @@ EM_JS(void, sapp_js_toggle_fullscreen, (void), {
                     __sapp_emsc_set_fullscreen_flag(1);
                 });
             } else {
-                console.warn('sapp_js_toggle_fullscreen(): browser has no [wekbit|moz]exitFullscreen')
+                console.warn('sapp_js_toggle_fullscreen(): browser has no [wekbit|moz]exitFullscreen');
                 // NOTE: don't need to explicitly set the fullscreen flag here
             }
         }
