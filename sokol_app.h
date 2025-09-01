@@ -5391,6 +5391,12 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_invoke_fetch_cb(int index, int success, int
     callback(&response);
 }
 
+// will be called after the request/exitFullscreen promise rejects
+// to restore the _sapp.fullscreen flag to the actual fullscreen state
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_set_fullscreen_flag(int f) {
+    _sapp.fullscreen = (bool)f;
+}
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
@@ -5729,12 +5735,6 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_fullscreenchange_cb(int emsc_type, const Emscr
     _SOKOL_UNUSED(user_data);
     _sapp.fullscreen = emsc_event->isFullscreen;
     return true;
-}
-
-// will be called after the request/exitFullscreen promise rejects
-// to restore the _sapp.fullscreen flag to the actual fullscreen state
-EMSCRIPTEN_KEEPALIVE void _sapp_emsc_set_fullscreen_flag(int f) {
-    _sapp.fullscreen = (bool)f;
 }
 
 EM_JS(void, sapp_js_toggle_fullscreen, (void), {
