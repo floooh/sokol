@@ -5718,37 +5718,65 @@ _SOKOL_PRIVATE void _sapp_emsc_destroy_custom_mouse_cursor(sapp_mouse_cursor cur
     sapp_js_destroy_custom_mouse_cursor((int) cursor);
 }
 
+// will be called after the request/exitFullscreen promise resolves or rejects
+// to set the actual state of fullscreen mode
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_set_fullscreen_flag(int f) {
+    _sapp.fullscreen = (bool)f;
+}
+
 EM_JS(void, sapp_js_toggle_fullscreen, (void), {
     const canvas = Module.sapp_emsc_target;
     if (canvas) {
-        if (!document.fullscreenElement) {
-            let promise;
-            if(canvas.requestFullScreen) {
-                canvas.requestFullScreen();
-            } else if(canvas.webkitRequestFullScreen) {
-                canvas.webkitRequestFullScreen();
-            } else if(canvas.mozRequestFullScreen) {
-                canvas.mozRequestFullScreen()
+        // NOTE: Safari had the prefix until 2023, Firefox until 2018
+        const fullscreenElement = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement;
+        let p = undefined;
+        if (!fullscreenElement) {
+            if (canvas.requestFullscreen) {
+                p = canvas.requestFullscreen();
+            } else if (canvas.webkitRequestFullscreen) {
+                p = canvas.webkitRequestFullscreen();
+            } else if (canvas.mozRequestFullScreen) {
+                p = canvas.mozRequestFullScreen();
+            }
+            if (p) {
+                p.then(() => {
+                    __sapp_emsc_set_fullscreen_flag(1);
+                }).catch((err) => {
+                    console.warn('sapp_js_toggle_fullscreen(): failed to enter fullscreen mode with', err);
+                    __sapp_emsc_set_fullscreen_flag(0);
+                });
+            } else {
+                console.warn('sapp_js_toogle_fullscreen(): browser has no [webkit|moz]requestFullscreen function');
+                __sapp_emsc_set_fullscreen_flag(0);
             }
         } else {
             if (document.exitFullscreen) {
-                document.exitFullscreen();
+                p = document.exitFullscreen();
             } else if (document.webkitExitFullscreen) {
-                document.webkitExitFullscreen();
-            } else if(document.mozExitFullscreen) {
-                canvas.mozExitFullscreen()
+                p = document.webkitExitFullscreen();
+            } else if (document.mozCancelFullScreen) {
+                p = document.mozCancelFullScreen();
+            }
+            if (p) {
+                p.then(() => {
+                    __sapp_emsc_set_fullscreen_flag(0);
+                }).catch((err) => {
+                    console.warn('sapp_js_toggle_fullscreen(): failed to exit fullscreen mode with', err);
+                    _sapp_emsc_set_fullscreen_flag(1);
+                });
+            } else {
+                console.warn('sapp_js_toggle_fullscreen(): browser has no [wekbit|moz]exitFullscreen')
+                // NOTE: don't need to explicitly set the fullscreen flag here
             }
         }
     }
 })
 
 _SOKOL_PRIVATE void _sapp_emsc_toggle_fullscreen(void) {
+    // toggle the fullscreen flag preliminary, this may be undone
+    // when requesting/exiting fullscreen mode actually fails
+    _sapp.fullscreen = !_sapp.fullscreen;
     sapp_js_toggle_fullscreen();
-    // NOTE: When the fullscreen JS promise completes, _sapp.fullscreen will be updated
-    //       (see _sapp_emsc_fullscreenchange_cb()).
-    //       We still toggle _sapp.fullscreen here so from the sokol_app user's perspective,
-    //       the switch is instant.
-    _sapp.fullscreen = !_sapp.fullscreen; 
 }
 
 /* JS helper functions to update browser tab favicon */
@@ -6235,13 +6263,6 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_blur_cb(int emsc_type, const EmscriptenFocusEv
     return true;
 }
 
-_SOKOL_PRIVATE EM_BOOL _sapp_emsc_fullscreenchange_cb(int emsc_type, const EmscriptenFullscreenChangeEvent* emsc_event, void* user_data) {
-    _SOKOL_UNUSED(emsc_type);
-    _SOKOL_UNUSED(user_data);
-    _sapp.fullscreen = emsc_event->isFullscreen;
-    return true;
-}
-
 #if defined(SOKOL_GLES3)
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_webgl_context_cb(int emsc_type, const void* reserved, void* user_data) {
     _SOKOL_UNUSED(reserved);
@@ -6298,7 +6319,6 @@ _SOKOL_PRIVATE void _sapp_emsc_register_eventhandlers(void) {
     emscripten_set_pointerlockerror_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, _sapp_emsc_pointerlockerror_cb);
     emscripten_set_focus_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_focus_cb);
     emscripten_set_blur_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_blur_cb);
-    emscripten_set_fullscreenchange_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_fullscreenchange_cb);
     sapp_js_add_beforeunload_listener();
     if (_sapp.clipboard.enabled) {
         sapp_js_add_clipboard_listener();
