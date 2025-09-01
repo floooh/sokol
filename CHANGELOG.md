@@ -11,6 +11,10 @@
   Many thanks to @Seb-degraff for the PR (https://github.com/floooh/sokol/pull/1309) and sample, but also
   see the merge-branch PR for additional implementation details (https://github.com/floooh/sokol/pull/1321).
 
+- sokol_app.h macos: ...and a followup fix issue on macOS where a custom cursor image isn't properly
+  restored when moving the mouse outside a window and then back in. Again, many thanks to @Seb-degraff
+  for identifying the issue and providing a fix via PR https://github.com/floooh/sokol/pull/1323!
+
 
 ### 29-Aug-2025
 
