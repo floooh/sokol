@@ -5718,6 +5718,14 @@ _SOKOL_PRIVATE void _sapp_emsc_destroy_custom_mouse_cursor(sapp_mouse_cursor cur
     sapp_js_destroy_custom_mouse_cursor((int) cursor);
 }
 
+// NOTE: this callback is needed to react to the user actively leaving fullscreen mode via Esc
+_SOKOL_PRIVATE EM_BOOL _sapp_emsc_fullscreenchange_cb(int emsc_type, const EmscriptenFullscreenChangeEvent* emsc_event, void* user_data) {
+    _SOKOL_UNUSED(emsc_type);
+    _SOKOL_UNUSED(user_data);
+    _sapp.fullscreen = emsc_event->isFullscreen;
+    return true;
+}
+
 // will be called after the request/exitFullscreen promise resolves or rejects
 // to set the actual state of fullscreen mode
 EMSCRIPTEN_KEEPALIVE void _sapp_emsc_set_fullscreen_flag(int f) {
@@ -5739,9 +5747,7 @@ EM_JS(void, sapp_js_toggle_fullscreen, (void), {
                 p = canvas.mozRequestFullScreen();
             }
             if (p) {
-                p.then(() => {
-                    __sapp_emsc_set_fullscreen_flag(1);
-                }).catch((err) => {
+                p.catch((err) => {
                     console.warn('sapp_js_toggle_fullscreen(): failed to enter fullscreen mode with', err);
                     __sapp_emsc_set_fullscreen_flag(0);
                 });
@@ -5758,9 +5764,7 @@ EM_JS(void, sapp_js_toggle_fullscreen, (void), {
                 p = document.mozCancelFullScreen();
             }
             if (p) {
-                p.then(() => {
-                    __sapp_emsc_set_fullscreen_flag(0);
-                }).catch((err) => {
+                p.catch((err) => {
                     console.warn('sapp_js_toggle_fullscreen(): failed to exit fullscreen mode with', err);
                     _sapp_emsc_set_fullscreen_flag(1);
                 });
@@ -6319,6 +6323,7 @@ _SOKOL_PRIVATE void _sapp_emsc_register_eventhandlers(void) {
     emscripten_set_pointerlockerror_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, _sapp_emsc_pointerlockerror_cb);
     emscripten_set_focus_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_focus_cb);
     emscripten_set_blur_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_blur_cb);
+    emscripten_set_fullscreenchange_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_fullscreenchange_cb);
     sapp_js_add_beforeunload_listener();
     if (_sapp.clipboard.enabled) {
         sapp_js_add_clipboard_listener();
@@ -6350,6 +6355,7 @@ _SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers(void) {
     emscripten_set_pointerlockerror_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, 0);
     emscripten_set_focus_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
     emscripten_set_blur_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
+    emscripten_set_fullscreenchange_callback(_sapp.html5_canvas_selector, 0, true, 0);
     if (!_sapp.desc.html5_canvas_resize) {
         emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
     }
