@@ -1,5 +1,17 @@
 ## Updates
 
+### 01-Sep-2025
+
+- sokol_app.h: it's now possible to define custom mouse cursors via two new functions:
+    - `void sapp_bind_mouse_cursor_image(sapp_mouse_cursor cursor, const sapp_image_desc* desc)`
+    - `void sapp_unbind_mouse_cursor_image(sapp_mouse_cursor cursor)`
+
+  For example code see the new sample [cursor-sapp](https://floooh.github.io/sokol-html5/cursor-sapp.html).
+
+  Many thanks to @Seb-degraff for the PR (https://github.com/floooh/sokol/pull/1309) and sample, but also
+  see the merge-branch PR for additional implementation details (https://github.com/floooh/sokol/pull/1321).
+
+
 ### 29-Aug-2025
 
 - sokol_imgui.h: Fixed a high-dpi font blurriness regression in sokol_imgui.h which
