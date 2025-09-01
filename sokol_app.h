@@ -4937,6 +4937,9 @@ static void _sapp_gl_make_current(void) {
             _sapp_macos_mods(event));
     }
 }
+- (void)cursorUpdate:(NSEvent *)event {
+    _sapp_macos_update_cursor(_sapp.mouse.current_cursor, _sapp.mouse.shown);
+}
 @end
 
 #endif // macOS
