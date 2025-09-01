@@ -866,8 +866,13 @@
     call sapp_is_fullscreen().
 
     On the web, sapp_desc.fullscreen will have no effect, and the application
-    will always start in non-fullscreen mode. Call sapp_toggle_fullscreen() to
-    switch to fullscreen programatically, if the user allows it.
+    will always start in non-fullscreen mode. Call sapp_toggle_fullscreen()
+    from within or 'near' an input event to switch to fullscreen programatically.
+    Note that on the web, the fullscreen state may change back to windowed at
+    any time (either because the browser had rejected switching into fullscreen,
+    or the user leaves fullscreen via Esc), this means that the result
+    of sapp_is_fullscreen() may change also without calling sapp_toggle_fullscreen()!
+
 
     WINDOW ICON SUPPORT
     ===================
@@ -5726,8 +5731,8 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_fullscreenchange_cb(int emsc_type, const Emscr
     return true;
 }
 
-// will be called after the request/exitFullscreen promise resolves or rejects
-// to set the actual state of fullscreen mode
+// will be called after the request/exitFullscreen promise rejects
+// to restore the _sapp.fullscreen flag to the actual fullscreen state
 EMSCRIPTEN_KEEPALIVE void _sapp_emsc_set_fullscreen_flag(int f) {
     _sapp.fullscreen = (bool)f;
 }
