@@ -4668,57 +4668,12 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 }
 #endif
 
-_SOKOL_PRIVATE void _sapp_macos_poll_input_events(void) {
-    /*
-
-    NOTE: late event polling temporarily out-commented to check if this
-    causes infrequent and almost impossible to reproduce problems with the
-    window close events, see:
-    https://github.com/floooh/sokol/pull/483#issuecomment-805148815
-
-
-    const NSEventMask mask = NSEventMaskLeftMouseDown |
-                             NSEventMaskLeftMouseUp|
-                             NSEventMaskRightMouseDown |
-                             NSEventMaskRightMouseUp |
-                             NSEventMaskMouseMoved |
-                             NSEventMaskLeftMouseDragged |
-                             NSEventMaskRightMouseDragged |
-                             NSEventMaskMouseEntered |
-                             NSEventMaskMouseExited |
-                             NSEventMaskKeyDown |
-                             NSEventMaskKeyUp |
-                             NSEventMaskCursorUpdate |
-                             NSEventMaskScrollWheel |
-                             NSEventMaskTabletPoint |
-                             NSEventMaskTabletProximity |
-                             NSEventMaskOtherMouseDown |
-                             NSEventMaskOtherMouseUp |
-                             NSEventMaskOtherMouseDragged |
-                             NSEventMaskPressure |
-                             NSEventMaskDirectTouch;
-    @autoreleasepool {
-        for (;;) {
-            // NOTE: using NSDefaultRunLoopMode here causes stuttering in the GL backend,
-            // see: https://github.com/floooh/sokol/issues/486
-            NSEvent* event = [NSApp nextEventMatchingMask:mask untilDate:nil inMode:NSEventTrackingRunLoopMode dequeue:YES];
-            if (event == nil) {
-                break;
-            }
-            [NSApp sendEvent:event];
-        }
-    }
-    */
-}
-
 - (void)drawRect:(NSRect)rect {
     _SOKOL_UNUSED(rect);
     #if defined(_SAPP_ANY_GL)
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
     #endif
     _sapp_timing_measure(&_sapp.timing);
-    /* Catch any last-moment input events */
-    _sapp_macos_poll_input_events();
     @autoreleasepool {
         _sapp_macos_frame();
     }
