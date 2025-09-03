@@ -6407,7 +6407,7 @@ _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
         _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
     }
     _sapp.window_width = _sapp_roundf_gzero(w);
-    _sapp.window_height = _sapp_rounf_gzero(h);
+    _sapp.window_height = _sapp_roundf_gzero(h);
     _sapp.framebuffer_width = _sapp_roundf_gzero(w * _sapp.dpi_scale);
     _sapp.framebuffer_height = _sapp_roundf_gzero(h * _sapp.dpi_scale);
     emscripten_set_canvas_element_size(_sapp.html5_canvas_selector, _sapp.framebuffer_width, _sapp.framebuffer_height);
