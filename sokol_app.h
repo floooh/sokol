@@ -3880,7 +3880,7 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
     _sapp.macos.view.layer.magnificationFilter = kCAFilterNearest;
 }
 
-_SOKOL_PRIVATE void _sapp_macos_mtl_discard(void) {
+_SOKOL_PRIVATE void _sapp_macos_mtl_discard_state(void) {
     _SAPP_OBJC_RELEASE(_sapp.macos.mtl_device);
 }
 
@@ -3965,7 +3965,7 @@ _SOKOL_PRIVATE void _sapp_macos_gl_init(NSRect window_rect) {
     timer_obj = nil;
 }
 
-_SOKOL_PRIVATE void _sapp_macos_gl_discard(void) {
+_SOKOL_PRIVATE void _sapp_macos_gl_discard_state(void) {
     // nothing to do here
 }
 
@@ -4105,9 +4105,9 @@ _SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
     _SAPP_OBJC_RELEASE(_sapp.macos.win_dlg);
     _SAPP_OBJC_RELEASE(_sapp.macos.view);
     #if defined(SOKOL_METAL)
-        _sapp_macos_mtl_discard();
+        _sapp_macos_mtl_discard_state();
     #elif defined(SOKOL_GLCORE)
-        _sapp_macos_gl_discard();
+        _sapp_macos_gl_discard_state();
     #endif
     _SAPP_OBJC_RELEASE(_sapp.macos.window);
 }
@@ -4923,16 +4923,97 @@ static void _sapp_gl_make_current(void) {
 // >>ios
 #if defined(_SAPP_IOS)
 
+#if defined(SOKOL_METAL)
+_SOKOL_PRIVATE void _sapp_ios_mtl_init(void) {
+    const NSInteger max_fps = UIScreen.mainScreen.maximumFramesPerSecond;
+    _sapp.ios.mtl_device = MTLCreateSystemDefaultDevice();
+    _sapp.ios.view = [[_sapp_ios_view alloc] init];
+    _sapp.ios.view.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
+    _sapp.ios.view.device = _sapp.ios.mtl_device;
+    _sapp.ios.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
+    _sapp.ios.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+    _sapp.ios.view.sampleCount = (NSUInteger)_sapp.sample_count;
+    /* NOTE: iOS MTKView seems to ignore thew view's contentScaleFactor
+        and automatically renders at Retina resolution. We'll disable
+        autoResize and instead do the resizing in _sapp_ios_update_dimensions()
+    */
+    _sapp.ios.view.autoResizeDrawable = false;
+    _sapp.ios.view.userInteractionEnabled = YES;
+    _sapp.ios.view.multipleTouchEnabled = YES;
+    _sapp.ios.view_ctrl = [[UIViewController alloc] init];
+    _sapp.ios.view_ctrl.modalPresentationStyle = UIModalPresentationFullScreen;
+    _sapp.ios.view_ctrl.view = _sapp.ios.view;
+    _sapp.ios.window.rootViewController = _sapp.ios.view_ctrl;
+}
+
+_SOKOL_PRIVATE void _sapp_ios_mtl_discard_state(void) {
+    _SAPP_OBJC_RELEASE(_sapp.ios.view_ctrl);
+    _SAPP_OBJC_RELEASE(_sapp.ios.mtl_device);
+}
+
+_SOKOL_PRIVATE bool _sapp_ios_mtl_update_framebuffer_dimensions(CGRect screen_rect) {
+    _sapp.framebuffer_width = _sapp_roundf_gzero(screen_rect.size.width * _sapp.dpi_scale);
+    _sapp.framebuffer_height = _sapp_roundf_gzero(screen_rect.size.height * _sapp.dpi_scale);
+    const CGSize fb_size = _sapp.ios.view.drawableSize;
+    int cur_fb_width = _sapp_roundf_gzero(fb_size.width);
+    int cur_fb_height = _sapp_roundf_gzero(fb_size.height);
+    bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) || (_sapp.framebuffer_height != cur_fb_height);
+    if (dim_changed) {
+        const CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
+        _sapp.ios.view.drawableSize = drawable_size;
+    }
+    return dim_changed;
+}
+#endif
+
+#if defined(SOKOL_GLES3)
+_SOKOL_PRIVATE void _sapp_ios_gles3_init(CGRect screen_rect) {
+    const NSInteger max_fps = UIScreen.mainScreen.maximumFramesPerSecond;
+    _sapp.ios.eagl_ctx = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3];
+    _sapp.ios.view = [[_sapp_ios_view alloc] initWithFrame:screen_rect];
+    _sapp.ios.view.drawableColorFormat = GLKViewDrawableColorFormatRGBA8888;
+    _sapp.ios.view.drawableDepthFormat = GLKViewDrawableDepthFormat24;
+    _sapp.ios.view.drawableStencilFormat = GLKViewDrawableStencilFormatNone;
+    GLKViewDrawableMultisample msaa = _sapp.sample_count > 1 ? GLKViewDrawableMultisample4X : GLKViewDrawableMultisampleNone;
+    _sapp.ios.view.drawableMultisample = msaa;
+    _sapp.ios.view.context = _sapp.ios.eagl_ctx;
+    _sapp.ios.view.enableSetNeedsDisplay = NO;
+    _sapp.ios.view.userInteractionEnabled = YES;
+    _sapp.ios.view.multipleTouchEnabled = YES;
+    // on GLKView, contentScaleFactor appears to work just fine!
+    if (_sapp.desc.high_dpi) {
+        _sapp.ios.view.contentScaleFactor = _sapp.dpi_scale;
+    } else {
+        _sapp.ios.view.contentScaleFactor = 1.0;
+    }
+    _sapp.ios.view_ctrl = [[GLKViewController alloc] init];
+    _sapp.ios.view_ctrl.view = _sapp.ios.view;
+    _sapp.ios.view_ctrl.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
+    _sapp.ios.window.rootViewController = _sapp.ios.view_ctrl;
+}
+
+_SOKOL_PRIVATE void _sapp_ios_gles3_discard_state(void) {
+    _SAPP_OBJC_RELEASE(_sapp.ios.view_ctrl);
+    _SAPP_OBJC_RELEASE(_sapp.ios.eagl_ctx);
+}
+
+_SOKOL_PRIVATE bool _sapp_ios_gles3_update_framebuffer_dimensions(CGRect screen_rect) {
+    _sapp.framebuffer_width = _sapp_roundf_gzero(screen_rect.size.width * _sapp.dpi_scale);
+    _sapp.framebuffer_height = _sapp_roundf_gzero(screen_rect.size.height * _sapp.dpi_scale);
+    int cur_fb_width = _sapp_roundf_gzero(_sapp.ios.view.drawableWidth);
+    int cur_fb_height = _sapp_roundf_gzero(_sapp.ios.view.drawableHeight);
+    return (_sapp.framebuffer_width != cur_fb_width) || (_sapp.framebuffer_height != cur_fb_height);
+}
+#endif
+
 _SOKOL_PRIVATE void _sapp_ios_discard_state(void) {
     // NOTE: it's safe to call [release] on a nil object
     _SAPP_OBJC_RELEASE(_sapp.ios.textfield_dlg);
     _SAPP_OBJC_RELEASE(_sapp.ios.textfield);
     #if defined(SOKOL_METAL)
-        _SAPP_OBJC_RELEASE(_sapp.ios.view_ctrl);
-        _SAPP_OBJC_RELEASE(_sapp.ios.mtl_device);
+        _sapp_ios_mtl_discard_state();
     #else
-        _SAPP_OBJC_RELEASE(_sapp.ios.view_ctrl);
-        _SAPP_OBJC_RELEASE(_sapp.ios.eagl_ctx);
+        _sapp_ios_gles3_discard_state();
     #endif
     _SAPP_OBJC_RELEASE(_sapp.ios.view);
     _SAPP_OBJC_RELEASE(_sapp.ios.window);
@@ -4984,31 +5065,15 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
 
 _SOKOL_PRIVATE void _sapp_ios_update_dimensions(void) {
     CGRect screen_rect = UIScreen.mainScreen.bounds;
-    _sapp.framebuffer_width = _sapp_roundf_gzero(screen_rect.size.width * _sapp.dpi_scale);
-    _sapp.framebuffer_height = _sapp_roundf_gzero(screen_rect.size.height * _sapp.dpi_scale);
     _sapp.window_width = _sapp_roundf_gzero(screen_rect.size.width);
     _sapp.window_height = _sapp_roundf_gzero(screen_rect.size.height);
-    int cur_fb_width, cur_fb_height;
     #if defined(SOKOL_METAL)
-        const CGSize fb_size = _sapp.ios.view.drawableSize;
-        cur_fb_width = _sapp_roundf_gzero(fb_size.width);
-        cur_fb_height = _sapp_roundf_gzero(fb_size.height);
+        bool dim_changed = _sapp_ios_mtl_update_framebuffer_dimensions(screen_rect);
     #else
-        cur_fb_width = _sapp_roundf_gzero(_sapp.ios.view.drawableWidth);
-        cur_fb_height = _sapp_roundf_gzero(_sapp.ios.view.drawableHeight);
+        bool dim_changed = _sapp_ios_gles3_update_framebuffer_dimensions(screen_rect);
     #endif
-    const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) ||
-                             (_sapp.framebuffer_height != cur_fb_height);
-    if (dim_changed) {
-        #if defined(SOKOL_METAL)
-            const CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
-            _sapp.ios.view.drawableSize = drawable_size;
-        #else
-            // nothing to do here, GLKView correctly respects the view's contentScaleFactor
-        #endif
-        if (!_sapp.first_frame) {
-            _sapp_ios_app_event(SAPP_EVENTTYPE_RESIZED);
-        }
+    if (dim_changed && !_sapp.first_frame) {
+        _sapp_ios_app_event(SAPP_EVENTTYPE_RESIZED);
     }
 }
 
@@ -5063,51 +5128,12 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
     }
     _sapp.framebuffer_width = _sapp_roundf_gzero(_sapp.window_width * _sapp.dpi_scale);
     _sapp.framebuffer_height = _sapp_roundf_gzero(_sapp.window_height * _sapp.dpi_scale);
-    NSInteger max_fps = UIScreen.mainScreen.maximumFramesPerSecond;
     #if defined(SOKOL_METAL)
-        _sapp.ios.mtl_device = MTLCreateSystemDefaultDevice();
-        _sapp.ios.view = [[_sapp_ios_view alloc] init];
-        _sapp.ios.view.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
-        _sapp.ios.view.device = _sapp.ios.mtl_device;
-        _sapp.ios.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
-        _sapp.ios.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-        _sapp.ios.view.sampleCount = (NSUInteger)_sapp.sample_count;
-        /* NOTE: iOS MTKView seems to ignore thew view's contentScaleFactor
-            and automatically renders at Retina resolution. We'll disable
-            autoResize and instead do the resizing in _sapp_ios_update_dimensions()
-        */
-        _sapp.ios.view.autoResizeDrawable = false;
-        _sapp.ios.view.userInteractionEnabled = YES;
-        _sapp.ios.view.multipleTouchEnabled = YES;
-        _sapp.ios.view_ctrl = [[UIViewController alloc] init];
-        _sapp.ios.view_ctrl.modalPresentationStyle = UIModalPresentationFullScreen;
-        _sapp.ios.view_ctrl.view = _sapp.ios.view;
-        _sapp.ios.window.rootViewController = _sapp.ios.view_ctrl;
+        _sapp_ios_mtl_init();
     #else
-        _sapp.ios.eagl_ctx = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3];
-        _sapp.ios.view = [[_sapp_ios_view alloc] initWithFrame:screen_rect];
-        _sapp.ios.view.drawableColorFormat = GLKViewDrawableColorFormatRGBA8888;
-        _sapp.ios.view.drawableDepthFormat = GLKViewDrawableDepthFormat24;
-        _sapp.ios.view.drawableStencilFormat = GLKViewDrawableStencilFormatNone;
-        GLKViewDrawableMultisample msaa = _sapp.sample_count > 1 ? GLKViewDrawableMultisample4X : GLKViewDrawableMultisampleNone;
-        _sapp.ios.view.drawableMultisample = msaa;
-        _sapp.ios.view.context = _sapp.ios.eagl_ctx;
-        _sapp.ios.view.enableSetNeedsDisplay = NO;
-        _sapp.ios.view.userInteractionEnabled = YES;
-        _sapp.ios.view.multipleTouchEnabled = YES;
-        // on GLKView, contentScaleFactor appears to work just fine!
-        if (_sapp.desc.high_dpi) {
-            _sapp.ios.view.contentScaleFactor = _sapp.dpi_scale;
-        } else {
-            _sapp.ios.view.contentScaleFactor = 1.0;
-        }
-        _sapp.ios.view_ctrl = [[GLKViewController alloc] init];
-        _sapp.ios.view_ctrl.view = _sapp.ios.view;
-        _sapp.ios.view_ctrl.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
-        _sapp.ios.window.rootViewController = _sapp.ios.view_ctrl;
+        _sapp_ios_gles3_init(screen_rect);
     #endif
     [_sapp.ios.window makeKeyAndVisible];
-
     _sapp.valid = true;
     return YES;
 }
