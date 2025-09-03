@@ -687,8 +687,7 @@
                 const size_t num_bytes = response->data.size;
                 // and the pointer to the data (same as 'buf' in the fetch-call):
                 const void* ptr = response->data.ptr;
-            }
-            else {
+            } else {
                 // on error check the error code:
                 switch (response->error_code) {
                     case SAPP_HTML5_FETCH_ERROR_BUFFER_TOO_SMALL:
@@ -2377,8 +2376,7 @@ _SOKOL_PRIVATE int _sapp_ring_count(_sapp_ring_t* ring) {
     int count;
     if (ring->head >= ring->tail) {
         count = ring->head - ring->tail;
-    }
-    else {
+    } else {
         count = (ring->head + _SAPP_RING_NUM_SLOTS) - ring->tail;
     }
     SOKOL_ASSERT((count >= 0) && (count < _SAPP_RING_NUM_SLOTS));
@@ -3126,8 +3124,7 @@ static void _sapp_log(sapp_log_item log_item, uint32_t log_level, const char* ms
             }
         #endif
         _sapp.desc.logger.func("sapp", log_level, (uint32_t)log_item, msg, line_nr, filename, _sapp.desc.logger.user_data);
-    }
-    else {
+    } else {
         // for log level PANIC it would be 'undefined behaviour' to continue
         if (log_level == 0) {
             abort();
@@ -3170,8 +3167,7 @@ _SOKOL_PRIVATE void* _sapp_malloc_clear(size_t size) {
 _SOKOL_PRIVATE void _sapp_free(void* ptr) {
     if (_sapp.desc.allocator.free_fn) {
         _sapp.desc.allocator.free_fn(ptr, _sapp.desc.allocator.user_data);
-    }
-    else {
+    } else {
         free(ptr);
     }
 }
@@ -3183,11 +3179,20 @@ _SOKOL_PRIVATE void _sapp_free(void* ptr) {
 // ██   ██ ███████ ███████ ██      ███████ ██   ██ ███████
 //
 // >>helpers
+
+// round float to int and at least 1
+_SOKOL_PRIVATE int _sapp_roundf_gzero(float f) {
+    int val = (int)roundf(f);
+    if (val <= 0) {
+        val = 1;
+    }
+    return val;
+}
+
 _SOKOL_PRIVATE void _sapp_call_init(void) {
     if (_sapp.desc.init_cb) {
         _sapp.desc.init_cb();
-    }
-    else if (_sapp.desc.init_userdata_cb) {
+    } else if (_sapp.desc.init_userdata_cb) {
         _sapp.desc.init_userdata_cb(_sapp.desc.user_data);
     }
     _sapp.init_called = true;
@@ -3197,8 +3202,7 @@ _SOKOL_PRIVATE void _sapp_call_frame(void) {
     if (_sapp.init_called && !_sapp.cleanup_called) {
         if (_sapp.desc.frame_cb) {
             _sapp.desc.frame_cb();
-        }
-        else if (_sapp.desc.frame_userdata_cb) {
+        } else if (_sapp.desc.frame_userdata_cb) {
             _sapp.desc.frame_userdata_cb(_sapp.desc.user_data);
         }
     }
@@ -3208,8 +3212,7 @@ _SOKOL_PRIVATE void _sapp_call_cleanup(void) {
     if (!_sapp.cleanup_called) {
         if (_sapp.desc.cleanup_cb) {
             _sapp.desc.cleanup_cb();
-        }
-        else if (_sapp.desc.cleanup_userdata_cb) {
+        } else if (_sapp.desc.cleanup_userdata_cb) {
             _sapp.desc.cleanup_userdata_cb(_sapp.desc.user_data);
         }
         _sapp.cleanup_called = true;
@@ -3220,16 +3223,14 @@ _SOKOL_PRIVATE bool _sapp_call_event(const sapp_event* e) {
     if (!_sapp.cleanup_called) {
         if (_sapp.desc.event_cb) {
             _sapp.desc.event_cb(e);
-        }
-        else if (_sapp.desc.event_userdata_cb) {
+        } else if (_sapp.desc.event_userdata_cb) {
             _sapp.desc.event_userdata_cb(e, _sapp.desc.user_data);
         }
     }
     if (_sapp.event_consumed) {
         _sapp.event_consumed = false;
         return true;
-    }
-    else {
+    } else {
         return false;
     }
 }
@@ -3266,8 +3267,7 @@ _SOKOL_PRIVATE bool _sapp_strcpy(const char* src, char* dst, int max_len) {
     if (c != 0) {
         *end = 0;
         return false;
-    }
-    else {
+    } else {
         return true;
     }
 }
@@ -3385,8 +3385,7 @@ _SOKOL_PRIVATE bool _sapp_events_enabled(void) {
 _SOKOL_PRIVATE sapp_keycode _sapp_translate_key(int scan_code) {
     if ((scan_code >= 0) && (scan_code < SAPP_MAX_KEYCODES)) {
         return _sapp.keycodes[scan_code];
-    }
-    else {
+    } else {
         return SAPP_KEYCODE_INVALID;
     }
 }
@@ -3861,6 +3860,125 @@ _SOKOL_PRIVATE void _sapp_wgpu_frame(void) {
 // >>macos
 #if defined(_SAPP_MACOS)
 
+#if defined(SOKOL_METAL)
+_SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
+    NSInteger max_fps = 60;
+    #if (__MAC_OS_X_VERSION_MAX_ALLOWED >= 120000)
+    if (@available(macOS 12.0, *)) {
+        max_fps = [NSScreen.mainScreen maximumFramesPerSecond];
+    }
+    #endif
+    _sapp.macos.mtl_device = MTLCreateSystemDefaultDevice();
+    _sapp.macos.view = [[_sapp_macos_view alloc] init];
+    [_sapp.macos.view updateTrackingAreas];
+    _sapp.macos.view.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
+    _sapp.macos.view.device = _sapp.macos.mtl_device;
+    _sapp.macos.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
+    _sapp.macos.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+    _sapp.macos.view.sampleCount = (NSUInteger) _sapp.sample_count;
+    _sapp.macos.view.autoResizeDrawable = false;
+    _sapp.macos.view.layer.magnificationFilter = kCAFilterNearest;
+}
+
+_SOKOL_PRIVATE void _sapp_macos_mtl_discard_state(void) {
+    _SAPP_OBJC_RELEASE(_sapp.macos.mtl_device);
+}
+
+_SOKOL_PRIVATE bool _sapp_macos_mtl_update_framebuffer_dimensions(NSRect view_bounds) {
+    _sapp.framebuffer_width = _sapp_roundf_gzero(view_bounds.size.width * _sapp.dpi_scale);
+    _sapp.framebuffer_height = _sapp_roundf_gzero(view_bounds.size.height * _sapp.dpi_scale);
+    const CGSize fb_size = _sapp.macos.view.drawableSize;
+    int cur_fb_width = _sapp_roundf_gzero(fb_size.width);
+    int cur_fb_height = _sapp_roundf_gzero(fb_size.height);
+    bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) || (_sapp.framebuffer_height != cur_fb_height);
+    if (dim_changed) {
+        const CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
+        _sapp.macos.view.drawableSize = drawable_size;
+    }
+    return dim_changed;
+}
+
+_SOKOL_PRIVATE void _sapp_macos_mtl_on_window_will_start_live_resize(void) {
+    // Work around the MTKView resizing glitch by "anchoring" the layer to the window corner opposite
+    // to the currently manipulated corner (or edge). This prevents the content stretching back and
+    // forth during resizing. This is a workaround for this issue: https://github.com/floooh/sokol/issues/700
+    // Can be removed if/when migrating to CAMetalLayer: https://github.com/floooh/sokol/issues/727
+    bool resizing_from_left = _sapp.mouse.x < _sapp.window_width/2;
+    bool resizing_from_top = _sapp.mouse.y < _sapp.window_height/2;
+    NSViewLayerContentsPlacement placement;
+    if (resizing_from_left) {
+        placement = resizing_from_top ? NSViewLayerContentsPlacementBottomRight : NSViewLayerContentsPlacementTopRight;
+    } else {
+        placement = resizing_from_top ? NSViewLayerContentsPlacementBottomLeft : NSViewLayerContentsPlacementTopLeft;
+    }
+    _sapp.macos.view.layerContentsPlacement = placement;
+}
+#endif
+
+#if defined(SOKOL_GLCORE)
+_SOKOL_PRIVATE void _sapp_macos_gl_init(NSRect window_rect) {
+    NSOpenGLPixelFormatAttribute attrs[32];
+    int i = 0;
+    attrs[i++] = NSOpenGLPFAAccelerated;
+    attrs[i++] = NSOpenGLPFADoubleBuffer;
+    attrs[i++] = NSOpenGLPFAOpenGLProfile;
+    const int glVersion = _sapp.desc.gl_major_version * 10 + _sapp.desc.gl_minor_version;
+    switch(glVersion) {
+        case 10: attrs[i++] = NSOpenGLProfileVersionLegacy;  break;
+        case 32: attrs[i++] = NSOpenGLProfileVersion3_2Core; break;
+        case 41: attrs[i++] = NSOpenGLProfileVersion4_1Core; break;
+        default:
+            _SAPP_PANIC(MACOS_INVALID_NSOPENGL_PROFILE);
+    }
+    attrs[i++] = NSOpenGLPFAColorSize; attrs[i++] = 24;
+    attrs[i++] = NSOpenGLPFAAlphaSize; attrs[i++] = 8;
+    attrs[i++] = NSOpenGLPFADepthSize; attrs[i++] = 24;
+    attrs[i++] = NSOpenGLPFAStencilSize; attrs[i++] = 8;
+    if (_sapp.sample_count > 1) {
+        attrs[i++] = NSOpenGLPFAMultisample;
+        attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 1;
+        attrs[i++] = NSOpenGLPFASamples; attrs[i++] = (NSOpenGLPixelFormatAttribute)_sapp.sample_count;
+    } else {
+        attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 0;
+    }
+    attrs[i++] = 0;
+    NSOpenGLPixelFormat* glpixelformat_obj = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
+    SOKOL_ASSERT(glpixelformat_obj != nil);
+
+    _sapp.macos.view = [[_sapp_macos_view alloc]
+        initWithFrame:window_rect
+        pixelFormat:glpixelformat_obj];
+    _SAPP_OBJC_RELEASE(glpixelformat_obj);
+    [_sapp.macos.view updateTrackingAreas];
+    if (_sapp.desc.high_dpi) {
+        [_sapp.macos.view setWantsBestResolutionOpenGLSurface:YES];
+    } else {
+        [_sapp.macos.view setWantsBestResolutionOpenGLSurface:NO];
+    }
+
+    NSTimer* timer_obj = [NSTimer timerWithTimeInterval:0.001
+        target:_sapp.macos.view
+        selector:@selector(timerFired:)
+        userInfo:nil
+        repeats:YES];
+    [[NSRunLoop currentRunLoop] addTimer:timer_obj forMode:NSDefaultRunLoopMode];
+    timer_obj = nil;
+}
+
+_SOKOL_PRIVATE void _sapp_macos_gl_discard_state(void) {
+    // nothing to do here
+}
+
+_SOKOL_PRIVATE bool _sapp_macos_gl_update_framebuffer_dimensions(NSRect view_bounds) {
+    const int cur_fb_width = _sapp_roundf_gzero(view_bounds.size.width * _sapp.dpi_scale);
+    const int cur_fb_height = _sapp_roundf_gzero(view_bounds.size.height * _sapp.dpi_scale);
+    const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) || (_sapp.framebuffer_height != cur_fb_height);
+    _sapp.framebuffer_width = cur_fb_width;
+    _sapp.framebuffer_height = cur_fb_height;
+    return dim_changed;
+}
+#endif
+
 _SOKOL_PRIVATE void _sapp_macos_init_keytable(void) {
     _sapp.keycodes[0x1D] = SAPP_KEYCODE_0;
     _sapp.keycodes[0x12] = SAPP_KEYCODE_1;
@@ -3987,7 +4105,9 @@ _SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
     _SAPP_OBJC_RELEASE(_sapp.macos.win_dlg);
     _SAPP_OBJC_RELEASE(_sapp.macos.view);
     #if defined(SOKOL_METAL)
-        _SAPP_OBJC_RELEASE(_sapp.macos.mtl_device);
+        _sapp_macos_mtl_discard_state();
+    #elif defined(SOKOL_GLCORE)
+        _sapp_macos_gl_discard_state();
     #endif
     _SAPP_OBJC_RELEASE(_sapp.macos.window);
 }
@@ -4112,52 +4232,21 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
     if (_sapp.desc.high_dpi) {
         _sapp.dpi_scale = [_sapp.macos.window screen].backingScaleFactor;
-    }
-    else {
+    } else {
         _sapp.dpi_scale = 1.0f;
     }
-    _sapp.macos.view.layer.contentsScale = _sapp.dpi_scale; // NOTE: needed because we set layerContentsPlacement to a non-scaling value in windowWillStartLiveResize.
+    // NOTE: needed because we set layerContentsPlacement to a non-scaling value in windowWillStartLiveResize.
+    _sapp.macos.view.layer.contentsScale = _sapp.dpi_scale;
     const NSRect bounds = [_sapp.macos.view bounds];
-    _sapp.window_width = (int)roundf(bounds.size.width);
-    _sapp.window_height = (int)roundf(bounds.size.height);
+    _sapp.window_width = _sapp_roundf_gzero(bounds.size.width);
+    _sapp.window_height = _sapp_roundf_gzero(bounds.size.height);
     #if defined(SOKOL_METAL)
-        _sapp.framebuffer_width = (int)roundf(bounds.size.width * _sapp.dpi_scale);
-        _sapp.framebuffer_height = (int)roundf(bounds.size.height * _sapp.dpi_scale);
-        const CGSize fb_size = _sapp.macos.view.drawableSize;
-        const int cur_fb_width = (int)roundf(fb_size.width);
-        const int cur_fb_height = (int)roundf(fb_size.height);
-        const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) ||
-                                 (_sapp.framebuffer_height != cur_fb_height);
+        bool dim_changed = _sapp_macos_mtl_update_framebuffer_dimensions(bounds);
     #elif defined(SOKOL_GLCORE)
-        const int cur_fb_width = (int)roundf(bounds.size.width * _sapp.dpi_scale);
-        const int cur_fb_height = (int)roundf(bounds.size.height * _sapp.dpi_scale);
-        const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) ||
-                                 (_sapp.framebuffer_height != cur_fb_height);
-        _sapp.framebuffer_width = cur_fb_width;
-        _sapp.framebuffer_height = cur_fb_height;
+        bool dim_changed = _sapp_macos_gl_update_framebuffer_dimensions(bounds);
     #endif
-    if (_sapp.framebuffer_width == 0) {
-        _sapp.framebuffer_width = 1;
-    }
-    if (_sapp.framebuffer_height == 0) {
-        _sapp.framebuffer_height = 1;
-    }
-    if (_sapp.window_width == 0) {
-        _sapp.window_width = 1;
-    }
-    if (_sapp.window_height == 0) {
-        _sapp.window_height = 1;
-    }
-    if (dim_changed) {
-        #if defined(SOKOL_METAL)
-            CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
-            _sapp.macos.view.drawableSize = drawable_size;
-        #else
-            // nothing to do for GL?
-        #endif
-        if (!_sapp.first_frame) {
-            _sapp_macos_app_event(SAPP_EVENTTYPE_RESIZED);
-        }
+    if (dim_changed && !_sapp.first_frame) {
+        _sapp_macos_app_event(SAPP_EVENTTYPE_RESIZED);
     }
 }
 
@@ -4206,8 +4295,7 @@ _SOKOL_PRIVATE void _sapp_macos_mouse_update_from_nspoint(NSPoint mouse_pos, boo
         if (clear_dxdy) {
             _sapp.mouse.dx = 0.0f;
             _sapp.mouse.dy = 0.0f;
-        }
-        else if (_sapp.mouse.pos_valid) {
+        } else if (_sapp.mouse.pos_valid) {
             // don't update dx/dy in the very first update
             _sapp.mouse.dx = new_x - _sapp.mouse.x;
             _sapp.mouse.dy = new_y - _sapp.mouse.y;
@@ -4226,8 +4314,7 @@ _SOKOL_PRIVATE void _sapp_macos_show_mouse(bool visible) {
     /* NOTE: this function is only called when the mouse visibility actually changes */
     if (visible) {
         CGDisplayShowCursor(kCGDirectMainDisplay);
-    }
-    else {
+    } else {
         CGDisplayHideCursor(kCGDirectMainDisplay);
     }
 }
@@ -4252,8 +4339,7 @@ _SOKOL_PRIVATE void _sapp_macos_lock_mouse(bool lock) {
     if (_sapp.mouse.locked) {
         CGAssociateMouseAndMouseCursorPosition(NO);
         [NSCursor hide];
-    }
-    else {
+    } else {
         [NSCursor unhide];
         CGAssociateMouseAndMouseCursorPosition(YES);
     }
@@ -4264,8 +4350,7 @@ _SOKOL_PRIVATE void _sapp_macos_update_cursor(sapp_mouse_cursor cursor, bool sho
     if (shown != _sapp.mouse.shown) {
         if (shown) {
             [NSCursor unhide];
-        }
-        else {
+        } else {
             [NSCursor hide];
         }
     }
@@ -4374,10 +4459,10 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         // use 4/5 of screen size as default size
         NSRect screen_rect = NSScreen.mainScreen.frame;
         if (_sapp.window_width == 0) {
-            _sapp.window_width = (int)roundf((screen_rect.size.width * 4.0f) / 5.0f);
+            _sapp.window_width = _sapp_roundf_gzero((screen_rect.size.width * 4.0f) / 5.0f);
         }
         if (_sapp.window_height == 0) {
-            _sapp.window_height = (int)roundf((screen_rect.size.height * 4.0f) / 5.0f);
+            _sapp.window_height = _sapp_roundf_gzero((screen_rect.size.height * 4.0f) / 5.0f);
         }
     }
     const NSUInteger style =
@@ -4399,77 +4484,12 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp.macos.win_dlg = [[_sapp_macos_window_delegate alloc] init];
     _sapp.macos.window.delegate = _sapp.macos.win_dlg;
     #if defined(SOKOL_METAL)
-        NSInteger max_fps = 60;
-        #if (__MAC_OS_X_VERSION_MAX_ALLOWED >= 120000)
-        if (@available(macOS 12.0, *)) {
-            max_fps = [NSScreen.mainScreen maximumFramesPerSecond];
-        }
-        #endif
-        _sapp.macos.mtl_device = MTLCreateSystemDefaultDevice();
-        _sapp.macos.view = [[_sapp_macos_view alloc] init];
-        [_sapp.macos.view updateTrackingAreas];
-        _sapp.macos.view.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
-        _sapp.macos.view.device = _sapp.macos.mtl_device;
-        _sapp.macos.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
-        _sapp.macos.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-        _sapp.macos.view.sampleCount = (NSUInteger) _sapp.sample_count;
-        _sapp.macos.view.autoResizeDrawable = false;
-        _sapp.macos.window.contentView = _sapp.macos.view;
-        [_sapp.macos.window makeFirstResponder:_sapp.macos.view];
-        _sapp.macos.view.layer.magnificationFilter = kCAFilterNearest;
+        _sapp_macos_mtl_init();
     #elif defined(SOKOL_GLCORE)
-        NSOpenGLPixelFormatAttribute attrs[32];
-        int i = 0;
-        attrs[i++] = NSOpenGLPFAAccelerated;
-        attrs[i++] = NSOpenGLPFADoubleBuffer;
-        attrs[i++] = NSOpenGLPFAOpenGLProfile;
-        const int glVersion = _sapp.desc.gl_major_version * 10 + _sapp.desc.gl_minor_version;
-        switch(glVersion) {
-            case 10: attrs[i++] = NSOpenGLProfileVersionLegacy;  break;
-            case 32: attrs[i++] = NSOpenGLProfileVersion3_2Core; break;
-            case 41: attrs[i++] = NSOpenGLProfileVersion4_1Core; break;
-            default:
-                _SAPP_PANIC(MACOS_INVALID_NSOPENGL_PROFILE);
-        }
-        attrs[i++] = NSOpenGLPFAColorSize; attrs[i++] = 24;
-        attrs[i++] = NSOpenGLPFAAlphaSize; attrs[i++] = 8;
-        attrs[i++] = NSOpenGLPFADepthSize; attrs[i++] = 24;
-        attrs[i++] = NSOpenGLPFAStencilSize; attrs[i++] = 8;
-        if (_sapp.sample_count > 1) {
-            attrs[i++] = NSOpenGLPFAMultisample;
-            attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 1;
-            attrs[i++] = NSOpenGLPFASamples; attrs[i++] = (NSOpenGLPixelFormatAttribute)_sapp.sample_count;
-        }
-        else {
-            attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 0;
-        }
-        attrs[i++] = 0;
-        NSOpenGLPixelFormat* glpixelformat_obj = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
-        SOKOL_ASSERT(glpixelformat_obj != nil);
-
-        _sapp.macos.view = [[_sapp_macos_view alloc]
-            initWithFrame:window_rect
-            pixelFormat:glpixelformat_obj];
-        _SAPP_OBJC_RELEASE(glpixelformat_obj);
-        [_sapp.macos.view updateTrackingAreas];
-        if (_sapp.desc.high_dpi) {
-            [_sapp.macos.view setWantsBestResolutionOpenGLSurface:YES];
-        }
-        else {
-            [_sapp.macos.view setWantsBestResolutionOpenGLSurface:NO];
-        }
-
-        _sapp.macos.window.contentView = _sapp.macos.view;
-        [_sapp.macos.window makeFirstResponder:_sapp.macos.view];
-
-        NSTimer* timer_obj = [NSTimer timerWithTimeInterval:0.001
-            target:_sapp.macos.view
-            selector:@selector(timerFired:)
-            userInfo:nil
-            repeats:YES];
-        [[NSRunLoop currentRunLoop] addTimer:timer_obj forMode:NSDefaultRunLoopMode];
-        timer_obj = nil;
+        _sapp_macos_gl_init(window_rect);
     #endif
+    _sapp.macos.window.contentView = _sapp.macos.view;
+    [_sapp.macos.window makeFirstResponder:_sapp.macos.view];
     [_sapp.macos.window center];
     _sapp.valid = true;
     NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
@@ -4513,11 +4533,10 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 @implementation _sapp_macos_window_delegate
 - (BOOL)windowShouldClose:(id)sender {
     _SOKOL_UNUSED(sender);
-    /* only give user-code a chance to intervene when sapp_quit() wasn't already called */
+    // only give user-code a chance to intervene when sapp_quit() wasn't already called
     if (!_sapp.quit_ordered) {
-        /* if window should be closed and event handling is enabled, give user code
-           a chance to intervene via sapp_cancel_quit()
-        */
+        // if window should be closed and event handling is enabled, give user code
+        //  a chance to intervene via sapp_cancel_quit()
         _sapp.quit_requested = true;
         _sapp_macos_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
         /* user code hasn't intervened, quit the app */
@@ -4527,29 +4546,16 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     }
     if (_sapp.quit_ordered) {
         return YES;
-    }
-    else {
+    } else {
         return NO;
     }
 }
 
-#if defined(SOKOL_METAL)
 - (void)windowWillStartLiveResize:(NSNotification *)notification {
-    // Work around the MTKView resizing glitch by "anchoring" the layer to the window corner opposite
-    // to the currently manipulated corner (or edge). This prevents the content stretching back and
-    // forth during resizing. This is a workaround for this issue: https://github.com/floooh/sokol/issues/700
-    // Can be removed if/when migrating to CAMetalLayer: https://github.com/floooh/sokol/issues/727
-    bool resizing_from_left = _sapp.mouse.x < _sapp.window_width/2;
-    bool resizing_from_top = _sapp.mouse.y < _sapp.window_height/2;
-    NSViewLayerContentsPlacement placement;
-    if (resizing_from_left) {
-        placement = resizing_from_top ? NSViewLayerContentsPlacementBottomRight : NSViewLayerContentsPlacementTopRight;
-    } else {
-        placement = resizing_from_top ? NSViewLayerContentsPlacementBottomLeft : NSViewLayerContentsPlacementTopLeft;
-    }
-    _sapp.macos.view.layerContentsPlacement = placement;
+    #if defined(SOKOL_METAL)
+        _sapp_macos_mtl_on_window_will_start_live_resize();
+    #endif
 }
-#endif
 
 - (void)windowDidResize:(NSNotification*)notification {
     _SOKOL_UNUSED(notification);
@@ -4636,8 +4642,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
                 _sapp.event.modifiers = _sapp_macos_mods(nil);
                 _sapp_call_event(&_sapp.event);
             }
-        }
-        else {
+        } else {
             _sapp_clear_drop_buffer();
             _sapp.drop.num_files = 0;
         }
@@ -4663,57 +4668,12 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 }
 #endif
 
-_SOKOL_PRIVATE void _sapp_macos_poll_input_events(void) {
-    /*
-
-    NOTE: late event polling temporarily out-commented to check if this
-    causes infrequent and almost impossible to reproduce problems with the
-    window close events, see:
-    https://github.com/floooh/sokol/pull/483#issuecomment-805148815
-
-
-    const NSEventMask mask = NSEventMaskLeftMouseDown |
-                             NSEventMaskLeftMouseUp|
-                             NSEventMaskRightMouseDown |
-                             NSEventMaskRightMouseUp |
-                             NSEventMaskMouseMoved |
-                             NSEventMaskLeftMouseDragged |
-                             NSEventMaskRightMouseDragged |
-                             NSEventMaskMouseEntered |
-                             NSEventMaskMouseExited |
-                             NSEventMaskKeyDown |
-                             NSEventMaskKeyUp |
-                             NSEventMaskCursorUpdate |
-                             NSEventMaskScrollWheel |
-                             NSEventMaskTabletPoint |
-                             NSEventMaskTabletProximity |
-                             NSEventMaskOtherMouseDown |
-                             NSEventMaskOtherMouseUp |
-                             NSEventMaskOtherMouseDragged |
-                             NSEventMaskPressure |
-                             NSEventMaskDirectTouch;
-    @autoreleasepool {
-        for (;;) {
-            // NOTE: using NSDefaultRunLoopMode here causes stuttering in the GL backend,
-            // see: https://github.com/floooh/sokol/issues/486
-            NSEvent* event = [NSApp nextEventMatchingMask:mask untilDate:nil inMode:NSEventTrackingRunLoopMode dequeue:YES];
-            if (event == nil) {
-                break;
-            }
-            [NSApp sendEvent:event];
-        }
-    }
-    */
-}
-
 - (void)drawRect:(NSRect)rect {
     _SOKOL_UNUSED(rect);
     #if defined(_SAPP_ANY_GL)
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
     #endif
     _sapp_timing_measure(&_sapp.timing);
-    /* Catch any last-moment input events */
-    _sapp_macos_poll_input_events();
     @autoreleasepool {
         _sapp_macos_frame();
     }
@@ -4963,16 +4923,97 @@ static void _sapp_gl_make_current(void) {
 // >>ios
 #if defined(_SAPP_IOS)
 
+#if defined(SOKOL_METAL)
+_SOKOL_PRIVATE void _sapp_ios_mtl_init(void) {
+    const NSInteger max_fps = UIScreen.mainScreen.maximumFramesPerSecond;
+    _sapp.ios.mtl_device = MTLCreateSystemDefaultDevice();
+    _sapp.ios.view = [[_sapp_ios_view alloc] init];
+    _sapp.ios.view.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
+    _sapp.ios.view.device = _sapp.ios.mtl_device;
+    _sapp.ios.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
+    _sapp.ios.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+    _sapp.ios.view.sampleCount = (NSUInteger)_sapp.sample_count;
+    /* NOTE: iOS MTKView seems to ignore thew view's contentScaleFactor
+        and automatically renders at Retina resolution. We'll disable
+        autoResize and instead do the resizing in _sapp_ios_update_dimensions()
+    */
+    _sapp.ios.view.autoResizeDrawable = false;
+    _sapp.ios.view.userInteractionEnabled = YES;
+    _sapp.ios.view.multipleTouchEnabled = YES;
+    _sapp.ios.view_ctrl = [[UIViewController alloc] init];
+    _sapp.ios.view_ctrl.modalPresentationStyle = UIModalPresentationFullScreen;
+    _sapp.ios.view_ctrl.view = _sapp.ios.view;
+    _sapp.ios.window.rootViewController = _sapp.ios.view_ctrl;
+}
+
+_SOKOL_PRIVATE void _sapp_ios_mtl_discard_state(void) {
+    _SAPP_OBJC_RELEASE(_sapp.ios.view_ctrl);
+    _SAPP_OBJC_RELEASE(_sapp.ios.mtl_device);
+}
+
+_SOKOL_PRIVATE bool _sapp_ios_mtl_update_framebuffer_dimensions(CGRect screen_rect) {
+    _sapp.framebuffer_width = _sapp_roundf_gzero(screen_rect.size.width * _sapp.dpi_scale);
+    _sapp.framebuffer_height = _sapp_roundf_gzero(screen_rect.size.height * _sapp.dpi_scale);
+    const CGSize fb_size = _sapp.ios.view.drawableSize;
+    int cur_fb_width = _sapp_roundf_gzero(fb_size.width);
+    int cur_fb_height = _sapp_roundf_gzero(fb_size.height);
+    bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) || (_sapp.framebuffer_height != cur_fb_height);
+    if (dim_changed) {
+        const CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
+        _sapp.ios.view.drawableSize = drawable_size;
+    }
+    return dim_changed;
+}
+#endif
+
+#if defined(SOKOL_GLES3)
+_SOKOL_PRIVATE void _sapp_ios_gles3_init(CGRect screen_rect) {
+    const NSInteger max_fps = UIScreen.mainScreen.maximumFramesPerSecond;
+    _sapp.ios.eagl_ctx = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3];
+    _sapp.ios.view = [[_sapp_ios_view alloc] initWithFrame:screen_rect];
+    _sapp.ios.view.drawableColorFormat = GLKViewDrawableColorFormatRGBA8888;
+    _sapp.ios.view.drawableDepthFormat = GLKViewDrawableDepthFormat24;
+    _sapp.ios.view.drawableStencilFormat = GLKViewDrawableStencilFormatNone;
+    GLKViewDrawableMultisample msaa = _sapp.sample_count > 1 ? GLKViewDrawableMultisample4X : GLKViewDrawableMultisampleNone;
+    _sapp.ios.view.drawableMultisample = msaa;
+    _sapp.ios.view.context = _sapp.ios.eagl_ctx;
+    _sapp.ios.view.enableSetNeedsDisplay = NO;
+    _sapp.ios.view.userInteractionEnabled = YES;
+    _sapp.ios.view.multipleTouchEnabled = YES;
+    // on GLKView, contentScaleFactor appears to work just fine!
+    if (_sapp.desc.high_dpi) {
+        _sapp.ios.view.contentScaleFactor = _sapp.dpi_scale;
+    } else {
+        _sapp.ios.view.contentScaleFactor = 1.0;
+    }
+    _sapp.ios.view_ctrl = [[GLKViewController alloc] init];
+    _sapp.ios.view_ctrl.view = _sapp.ios.view;
+    _sapp.ios.view_ctrl.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
+    _sapp.ios.window.rootViewController = _sapp.ios.view_ctrl;
+}
+
+_SOKOL_PRIVATE void _sapp_ios_gles3_discard_state(void) {
+    _SAPP_OBJC_RELEASE(_sapp.ios.view_ctrl);
+    _SAPP_OBJC_RELEASE(_sapp.ios.eagl_ctx);
+}
+
+_SOKOL_PRIVATE bool _sapp_ios_gles3_update_framebuffer_dimensions(CGRect screen_rect) {
+    _sapp.framebuffer_width = _sapp_roundf_gzero(screen_rect.size.width * _sapp.dpi_scale);
+    _sapp.framebuffer_height = _sapp_roundf_gzero(screen_rect.size.height * _sapp.dpi_scale);
+    int cur_fb_width = _sapp_roundf_gzero(_sapp.ios.view.drawableWidth);
+    int cur_fb_height = _sapp_roundf_gzero(_sapp.ios.view.drawableHeight);
+    return (_sapp.framebuffer_width != cur_fb_width) || (_sapp.framebuffer_height != cur_fb_height);
+}
+#endif
+
 _SOKOL_PRIVATE void _sapp_ios_discard_state(void) {
     // NOTE: it's safe to call [release] on a nil object
     _SAPP_OBJC_RELEASE(_sapp.ios.textfield_dlg);
     _SAPP_OBJC_RELEASE(_sapp.ios.textfield);
     #if defined(SOKOL_METAL)
-        _SAPP_OBJC_RELEASE(_sapp.ios.view_ctrl);
-        _SAPP_OBJC_RELEASE(_sapp.ios.mtl_device);
+        _sapp_ios_mtl_discard_state();
     #else
-        _SAPP_OBJC_RELEASE(_sapp.ios.view_ctrl);
-        _SAPP_OBJC_RELEASE(_sapp.ios.eagl_ctx);
+        _sapp_ios_gles3_discard_state();
     #endif
     _SAPP_OBJC_RELEASE(_sapp.ios.view);
     _SAPP_OBJC_RELEASE(_sapp.ios.window);
@@ -5024,31 +5065,15 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
 
 _SOKOL_PRIVATE void _sapp_ios_update_dimensions(void) {
     CGRect screen_rect = UIScreen.mainScreen.bounds;
-    _sapp.framebuffer_width = (int)roundf(screen_rect.size.width * _sapp.dpi_scale);
-    _sapp.framebuffer_height = (int)roundf(screen_rect.size.height * _sapp.dpi_scale);
-    _sapp.window_width = (int)roundf(screen_rect.size.width);
-    _sapp.window_height = (int)roundf(screen_rect.size.height);
-    int cur_fb_width, cur_fb_height;
+    _sapp.window_width = _sapp_roundf_gzero(screen_rect.size.width);
+    _sapp.window_height = _sapp_roundf_gzero(screen_rect.size.height);
     #if defined(SOKOL_METAL)
-        const CGSize fb_size = _sapp.ios.view.drawableSize;
-        cur_fb_width = (int)roundf(fb_size.width);
-        cur_fb_height = (int)roundf(fb_size.height);
+        bool dim_changed = _sapp_ios_mtl_update_framebuffer_dimensions(screen_rect);
     #else
-        cur_fb_width = (int)roundf(_sapp.ios.view.drawableWidth);
-        cur_fb_height = (int)roundf(_sapp.ios.view.drawableHeight);
+        bool dim_changed = _sapp_ios_gles3_update_framebuffer_dimensions(screen_rect);
     #endif
-    const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) ||
-                             (_sapp.framebuffer_height != cur_fb_height);
-    if (dim_changed) {
-        #if defined(SOKOL_METAL)
-            const CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
-            _sapp.ios.view.drawableSize = drawable_size;
-        #else
-            // nothing to do here, GLKView correctly respects the view's contentScaleFactor
-        #endif
-        if (!_sapp.first_frame) {
-            _sapp_ios_app_event(SAPP_EVENTTYPE_RESIZED);
-        }
+    if (dim_changed && !_sapp.first_frame) {
+        _sapp_ios_app_event(SAPP_EVENTTYPE_RESIZED);
     }
 }
 
@@ -5083,10 +5108,9 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
             name:UIKeyboardDidChangeFrameNotification object:nil];
     }
     if (shown) {
-        /* setting the text field as first responder brings up the onscreen keyboard */
+        // setting the text field as first responder brings up the onscreen keyboard
         [_sapp.ios.textfield becomeFirstResponder];
-    }
-    else {
+    } else {
         [_sapp.ios.textfield resignFirstResponder];
     }
 }
@@ -5095,62 +5119,21 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 - (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
     CGRect screen_rect = UIScreen.mainScreen.bounds;
     _sapp.ios.window = [[UIWindow alloc] initWithFrame:screen_rect];
-    _sapp.window_width = (int)roundf(screen_rect.size.width);
-    _sapp.window_height = (int)roundf(screen_rect.size.height);
+    _sapp.window_width = _sapp_roundf_gzero(screen_rect.size.width);
+    _sapp.window_height = _sapp_roundf_gzero(screen_rect.size.height);
     if (_sapp.desc.high_dpi) {
         _sapp.dpi_scale = (float) UIScreen.mainScreen.nativeScale;
-    }
-    else {
+    } else {
         _sapp.dpi_scale = 1.0f;
     }
-    _sapp.framebuffer_width = (int)roundf(_sapp.window_width * _sapp.dpi_scale);
-    _sapp.framebuffer_height = (int)roundf(_sapp.window_height * _sapp.dpi_scale);
-    NSInteger max_fps = UIScreen.mainScreen.maximumFramesPerSecond;
+    _sapp.framebuffer_width = _sapp_roundf_gzero(_sapp.window_width * _sapp.dpi_scale);
+    _sapp.framebuffer_height = _sapp_roundf_gzero(_sapp.window_height * _sapp.dpi_scale);
     #if defined(SOKOL_METAL)
-        _sapp.ios.mtl_device = MTLCreateSystemDefaultDevice();
-        _sapp.ios.view = [[_sapp_ios_view alloc] init];
-        _sapp.ios.view.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
-        _sapp.ios.view.device = _sapp.ios.mtl_device;
-        _sapp.ios.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
-        _sapp.ios.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-        _sapp.ios.view.sampleCount = (NSUInteger)_sapp.sample_count;
-        /* NOTE: iOS MTKView seems to ignore thew view's contentScaleFactor
-            and automatically renders at Retina resolution. We'll disable
-            autoResize and instead do the resizing in _sapp_ios_update_dimensions()
-        */
-        _sapp.ios.view.autoResizeDrawable = false;
-        _sapp.ios.view.userInteractionEnabled = YES;
-        _sapp.ios.view.multipleTouchEnabled = YES;
-        _sapp.ios.view_ctrl = [[UIViewController alloc] init];
-        _sapp.ios.view_ctrl.modalPresentationStyle = UIModalPresentationFullScreen;
-        _sapp.ios.view_ctrl.view = _sapp.ios.view;
-        _sapp.ios.window.rootViewController = _sapp.ios.view_ctrl;
+        _sapp_ios_mtl_init();
     #else
-        _sapp.ios.eagl_ctx = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3];
-        _sapp.ios.view = [[_sapp_ios_view alloc] initWithFrame:screen_rect];
-        _sapp.ios.view.drawableColorFormat = GLKViewDrawableColorFormatRGBA8888;
-        _sapp.ios.view.drawableDepthFormat = GLKViewDrawableDepthFormat24;
-        _sapp.ios.view.drawableStencilFormat = GLKViewDrawableStencilFormatNone;
-        GLKViewDrawableMultisample msaa = _sapp.sample_count > 1 ? GLKViewDrawableMultisample4X : GLKViewDrawableMultisampleNone;
-        _sapp.ios.view.drawableMultisample = msaa;
-        _sapp.ios.view.context = _sapp.ios.eagl_ctx;
-        _sapp.ios.view.enableSetNeedsDisplay = NO;
-        _sapp.ios.view.userInteractionEnabled = YES;
-        _sapp.ios.view.multipleTouchEnabled = YES;
-        // on GLKView, contentScaleFactor appears to work just fine!
-        if (_sapp.desc.high_dpi) {
-            _sapp.ios.view.contentScaleFactor = _sapp.dpi_scale;
-        }
-        else {
-            _sapp.ios.view.contentScaleFactor = 1.0;
-        }
-        _sapp.ios.view_ctrl = [[GLKViewController alloc] init];
-        _sapp.ios.view_ctrl.view = _sapp.ios.view;
-        _sapp.ios.view_ctrl.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
-        _sapp.ios.window.rootViewController = _sapp.ios.view_ctrl;
+        _sapp_ios_gles3_init(screen_rect);
     #endif
     [_sapp.ios.window makeKeyAndVisible];
-
     _sapp.valid = true;
     return YES;
 }
@@ -5240,9 +5223,8 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
                     }
                 }
             }
-        }
-        else {
-            /* this was a backspace */
+        } else {
+            // this was a backspace
             _sapp_init_event(SAPP_EVENTTYPE_KEY_DOWN);
             _sapp.event.key_code = SAPP_KEYCODE_BACKSPACE;
             _sapp_call_event(&_sapp.event);
@@ -5499,8 +5481,7 @@ EM_JS(uint32_t, sapp_js_dropped_file_size, (int index), {
     const files = Module.sokol_dropped_files;
     if ((index < 0) || (index >= files.length)) {
         return 0;
-    }
-    else {
+    } else {
         return files[index].size;
     }
 })
@@ -5512,8 +5493,7 @@ EM_JS(void, sapp_js_fetch_dropped_file, (int index, _sapp_html5_fetch_callback c
         if (content.byteLength > buf_size) {
             // SAPP_HTML5_FETCH_ERROR_BUFFER_TOO_SMALL
             __sapp_emsc_invoke_fetch_cb(index, 0, 1, callback, 0, buf_ptr, buf_size, user_data);
-        }
-        else {
+        } else {
             HEAPU8.set(new Uint8Array(content), buf_ptr);
             __sapp_emsc_invoke_fetch_cb(index, 1, 0, callback, content.byteLength, buf_ptr, buf_size, user_data);
         }
@@ -5591,8 +5571,7 @@ _SOKOL_PRIVATE void _sapp_emsc_lock_mouse(bool lock) {
     if (lock) {
         /* request mouse-lock during event handler invocation (see _sapp_emsc_update_mouse_lock_state) */
         _sapp.emsc.mouse_lock_requested = true;
-    }
-    else {
+    } else {
         /* NOTE: the _sapp.mouse_locked state will be set in the pointerlockchange callback */
         _sapp.emsc.mouse_lock_requested = false;
         sapp_js_exit_pointerlock();
@@ -5885,22 +5864,19 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
     */
     if (w < 1.0) {
         w = ui_event->windowInnerWidth;
-    }
-    else {
-        _sapp.window_width = (int)roundf(w);
+    } else {
+        _sapp.window_width = _sapp_roundf_gzero(w);
     }
     if (h < 1.0) {
         h = ui_event->windowInnerHeight;
-    }
-    else {
-        _sapp.window_height = (int)roundf(h);
+    } else {
+        _sapp.window_height = _sapp_roundf_gzero(h);
     }
     if (_sapp.desc.high_dpi) {
         _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
     }
-    _sapp.framebuffer_width = (int)roundf(w * _sapp.dpi_scale);
-    _sapp.framebuffer_height = (int)roundf(h * _sapp.dpi_scale);
-    SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
+    _sapp.framebuffer_width = _sapp_roundf_gzero(w * _sapp.dpi_scale);
+    _sapp.framebuffer_height = _sapp_roundf_gzero(h * _sapp.dpi_scale);
     emscripten_set_canvas_element_size(_sapp.html5_canvas_selector, _sapp.framebuffer_width, _sapp.framebuffer_height);
     #if defined(SOKOL_WGPU)
         // on WebGPU: recreate size-dependent rendering surfaces
@@ -6423,18 +6399,17 @@ _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     if (_sapp.desc.html5_canvas_resize) {
         w = (double) _sapp_def(_sapp.desc.width, _SAPP_FALLBACK_DEFAULT_WINDOW_WIDTH);
         h = (double) _sapp_def(_sapp.desc.height, _SAPP_FALLBACK_DEFAULT_WINDOW_HEIGHT);
-    }
-    else {
+    } else {
         emscripten_get_element_css_size(_sapp.html5_canvas_selector, &w, &h);
         emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, false, _sapp_emsc_size_changed);
     }
     if (_sapp.desc.high_dpi) {
         _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
     }
-    _sapp.window_width = (int)roundf(w);
-    _sapp.window_height = (int)roundf(h);
-    _sapp.framebuffer_width = (int)roundf(w * _sapp.dpi_scale);
-    _sapp.framebuffer_height = (int)roundf(h * _sapp.dpi_scale);
+    _sapp.window_width = _sapp_roundf_gzero(w);
+    _sapp.window_height = _sapp_roundf_gzero(h);
+    _sapp.framebuffer_width = _sapp_roundf_gzero(w * _sapp.dpi_scale);
+    _sapp.framebuffer_height = _sapp_roundf_gzero(h * _sapp.dpi_scale);
     emscripten_set_canvas_element_size(_sapp.html5_canvas_selector, _sapp.framebuffer_width, _sapp.framebuffer_height);
     #if defined(SOKOL_GLES3)
         _sapp_emsc_webgl_init();
@@ -6654,8 +6629,7 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
         */
         if (missing < least_missing) {
             closest = current;
-        }
-        else if (missing == least_missing) {
+        } else if (missing == least_missing) {
             if ((color_diff < least_color_diff) ||
                 (color_diff == least_color_diff && extra_diff < least_extra_diff))
             {
@@ -6688,9 +6662,8 @@ _SOKOL_PRIVATE bool _sapp_win32_utf8_to_wide(const char* src, wchar_t* dst, int 
     if ((dst_needed > 0) && (dst_needed < dst_chars)) {
         MultiByteToWideChar(CP_UTF8, 0, src, -1, dst, dst_chars);
         return true;
-    }
-    else {
-        /* input string doesn't fit into destination buffer */
+    } else {
+        // input string doesn't fit into destination buffer
         return false;
     }
 }
@@ -6954,8 +6927,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
         sc_desc->BufferCount = 2;
         sc_desc->SwapEffect = (DXGI_SWAP_EFFECT) _SAPP_DXGI_SWAP_EFFECT_FLIP_DISCARD;
         _sapp.d3d11.use_dxgi_frame_stats = true;
-    }
-    else {
+    } else {
         sc_desc->BufferCount = 1;
         sc_desc->SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
         _sapp.d3d11.use_dxgi_frame_stats = false;
@@ -7025,17 +6997,14 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
             if (SUCCEEDED(hr)) {
                 _sapp_dxgi_MakeWindowAssociation(dxgi_factory, _sapp.win32.hwnd, DXGI_MWA_NO_ALT_ENTER|DXGI_MWA_NO_PRINT_SCREEN);
                 _SAPP_SAFE_RELEASE(dxgi_factory);
-            }
-            else {
+            } else {
                 _SAPP_ERROR(WIN32_D3D11_GET_IDXGIFACTORY_FAILED);
             }
             _SAPP_SAFE_RELEASE(dxgi_adapter);
-        }
-        else {
+        } else {
             _SAPP_ERROR(WIN32_D3D11_GET_IDXGIADAPTER_FAILED);
         }
-    }
-    else {
+    } else {
         _SAPP_PANIC(WIN32_D3D11_QUERY_INTERFACE_IDXGIDEVICE1_FAILED);
     }
 }
@@ -7391,14 +7360,11 @@ _SOKOL_PRIVATE void _sapp_wgl_create_context(void) {
         const DWORD err = GetLastError();
         if (err == (0xc0070000 | ERROR_INVALID_VERSION_ARB)) {
             _SAPP_PANIC(WIN32_WGL_OPENGL_VERSION_NOT_SUPPORTED);
-        }
-        else if (err == (0xc0070000 | ERROR_INVALID_PROFILE_ARB)) {
+        } else if (err == (0xc0070000 | ERROR_INVALID_PROFILE_ARB)) {
             _SAPP_PANIC(WIN32_WGL_OPENGL_PROFILE_NOT_SUPPORTED);
-        }
-        else if (err == (0xc0070000 | ERROR_INCOMPATIBLE_DEVICE_CONTEXTS_ARB)) {
+        } else if (err == (0xc0070000 | ERROR_INCOMPATIBLE_DEVICE_CONTEXTS_ARB)) {
             _SAPP_PANIC(WIN32_WGL_INCOMPATIBLE_DEVICE_CONTEXT);
-        }
-        else {
+        } else {
             _SAPP_PANIC(WIN32_WGL_CREATE_CONTEXT_ATTRIBS_FAILED_OTHER);
         }
     }
@@ -7431,8 +7397,7 @@ _SOKOL_PRIVATE bool _sapp_win32_wide_to_utf8(const wchar_t* src, char* dst, int 
     if (bytes_needed <= dst_num_bytes) {
         WideCharToMultiByte(CP_UTF8, 0, src, -1, dst, dst_num_bytes, NULL, NULL);
         return true;
-    }
-    else {
+    } else {
         return false;
     }
 }
@@ -7443,24 +7408,16 @@ _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
     if (GetClientRect(_sapp.win32.hwnd, &rect)) {
         float window_width = (float)(rect.right - rect.left) / _sapp.win32.dpi.window_scale;
         float window_height = (float)(rect.bottom - rect.top) / _sapp.win32.dpi.window_scale;
-        _sapp.window_width = (int)roundf(window_width);
-        _sapp.window_height = (int)roundf(window_height);
-        int fb_width = (int)roundf(window_width * _sapp.win32.dpi.content_scale);
-        int fb_height = (int)roundf(window_height * _sapp.win32.dpi.content_scale);
-        /* prevent a framebuffer size of 0 when window is minimized */
-        if (0 == fb_width) {
-            fb_width = 1;
-        }
-        if (0 == fb_height) {
-            fb_height = 1;
-        }
+        _sapp.window_width = _sapp_roundf_gzero(window_width);
+        _sapp.window_height = _sapp_roundf_gzero(window_height);
+        int fb_width = _sapp_roundf_gzero(window_width * _sapp.win32.dpi.content_scale);
+        int fb_height = _sapp_roundf_gzero(window_height * _sapp.win32.dpi.content_scale);
         if ((fb_width != _sapp.framebuffer_width) || (fb_height != _sapp.framebuffer_height)) {
             _sapp.framebuffer_width = fb_width;
             _sapp.framebuffer_height = fb_height;
             return true;
         }
-    }
-    else {
+    } else {
         _sapp.window_width = _sapp.window_height = 1;
         _sapp.framebuffer_width = _sapp.framebuffer_height = 1;
     }
@@ -7485,8 +7442,7 @@ _SOKOL_PRIVATE void _sapp_win32_set_fullscreen(bool fullscreen, UINT swp_flags) 
     if (!_sapp.fullscreen) {
         win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX;
         rect = _sapp.win32.stored_window_rect;
-    }
-    else {
+    } else {
         GetWindowRect(_sapp.win32.hwnd, &_sapp.win32.stored_window_rect);
         win_style = WS_POPUP | WS_SYSMENU | WS_VISIBLE;
         rect.left = mr.left;
@@ -7738,8 +7694,7 @@ _SOKOL_PRIVATE bool _sapp_win32_update_monitor(void) {
     if (cur_monitor != _sapp.win32.hmonitor) {
         _sapp.win32.hmonitor = cur_monitor;
         return true;
-    }
-    else {
+    } else {
         return false;
     }
 }
@@ -7896,8 +7851,7 @@ _SOKOL_PRIVATE void _sapp_win32_files_dropped(HDROP hdrop) {
             _sapp.event.modifiers = _sapp_win32_mods();
             _sapp_call_event(&_sapp.event);
         }
-    }
-    else {
+    } else {
         _sapp_clear_drop_buffer();
         _sapp.drop.num_files = 0;
     }
@@ -7977,8 +7931,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                         _sapp.win32.iconified = iconified;
                         if (iconified) {
                             _sapp_win32_app_event(SAPP_EVENTTYPE_ICONIFIED);
-                        }
-                        else {
+                        } else {
                             _sapp_win32_app_event(SAPP_EVENTTYPE_RESTORED);
                         }
                     }
@@ -8084,8 +8037,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                         _sapp.win32.mouse.raw_input.pos_x = new_x;
                         _sapp.win32.mouse.raw_input.pos_y = new_y;
                         _sapp.win32.mouse.raw_input.pos_valid = true;
-                    }
-                    else {
+                    } else {
                         /* mouse reports movement delta (this seems to be the common case) */
                         _sapp.mouse.dx = (float) raw_mouse_data->data.mouse.lLastX;
                         _sapp.mouse.dy = (float) raw_mouse_data->data.mouse.lLastY;
@@ -8253,8 +8205,7 @@ _SOKOL_PRIVATE void _sapp_win32_init_console(void) {
         BOOL con_valid = FALSE;
         if (_sapp.desc.win32_console_create) {
             con_valid = AllocConsole();
-        }
-        else if (_sapp.desc.win32_console_attach) {
+        } else if (_sapp.desc.win32_console_attach) {
             con_valid = AttachConsole(ATTACH_PARENT_PROCESS);
         }
         if (con_valid) {
@@ -8319,14 +8270,12 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
                 // fallback to system-dpi-aware
                 fn_setprocessdpiawareness(PROCESS_SYSTEM_DPI_AWARE);
             }
-        }
-        else {
+        } else {
             /* if the app didn't request HighDPI rendering, let Windows do the upscaling */
             _sapp.win32.dpi.aware = false;
             fn_setprocessdpiawareness(PROCESS_DPI_UNAWARE);
         }
-    }
-    else if (fn_setprocessdpiaware) {
+    } else if (fn_setprocessdpiaware) {
         // fallback for Windows 7
         _sapp.win32.dpi.aware = true;
         fn_setprocessdpiaware();
@@ -8341,15 +8290,13 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
         SOKOL_ASSERT(SUCCEEDED(hr));
         /* clamp window scale to an integer factor */
         _sapp.win32.dpi.window_scale = (float)dpix / 96.0f;
-    }
-    else {
+    } else {
         _sapp.win32.dpi.window_scale = 1.0f;
     }
     if (_sapp.desc.high_dpi) {
         _sapp.win32.dpi.content_scale = _sapp.win32.dpi.window_scale;
         _sapp.win32.dpi.mouse_scale = 1.0f;
-    }
-    else {
+    } else {
         _sapp.win32.dpi.content_scale = 1.0f;
         _sapp.win32.dpi.mouse_scale = 1.0f / _sapp.win32.dpi.window_scale;
     }
@@ -8527,8 +8474,7 @@ _SOKOL_PRIVATE bool _sapp_win32_is_win10_or_greater(void) {
     HMODULE h = GetModuleHandleW(L"kernel32.dll");
     if (NULL != h) {
         return (NULL != GetProcAddress(h, "GetSystemCpuSetInformation"));
-    }
-    else {
+    } else {
         return false;
     }
 }
@@ -8562,8 +8508,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
             if (WM_QUIT == msg.message) {
                 done = true;
                 continue;
-            }
-            else {
+            } else {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
@@ -10664,8 +10609,7 @@ _SOKOL_PRIVATE bool _sapp_glx_has_ext(const char* ext, const char* extensions) {
 _SOKOL_PRIVATE bool _sapp_glx_extsupported(const char* ext, const char* extensions) {
     if (extensions) {
         return _sapp_glx_has_ext(ext, extensions);
-    }
-    else {
+    } else {
         return false;
     }
 }
@@ -10674,11 +10618,9 @@ _SOKOL_PRIVATE void* _sapp_glx_getprocaddr(const char* procname)
 {
     if (_sapp.glx.GetProcAddress) {
         return (void*) _sapp.glx.GetProcAddress(procname);
-    }
-    else if (_sapp.glx.GetProcAddressARB) {
+    } else if (_sapp.glx.GetProcAddressARB) {
         return (void*) _sapp.glx.GetProcAddressARB(procname);
-    }
-    else {
+    } else {
         return dlsym(_sapp.glx.libgl, procname);
     }
 }
@@ -10896,8 +10838,7 @@ _SOKOL_PRIVATE void _sapp_glx_swap_buffers(void) {
 _SOKOL_PRIVATE void _sapp_glx_swapinterval(int interval) {
     if (_sapp.glx.EXT_swap_control) {
         _sapp.glx.SwapIntervalEXT(_sapp.x11.display, _sapp.glx.window, interval);
-    }
-    else if (_sapp.glx.MESA_swap_control) {
+    } else if (_sapp.glx.MESA_swap_control) {
         _sapp.glx.SwapIntervalMESA(interval);
     }
 }
@@ -10955,8 +10896,7 @@ _SOKOL_PRIVATE void _sapp_x11_set_fullscreen(bool enable) {
                                 _NET_WM_STATE_ADD,
                                 _sapp.x11.NET_WM_STATE_FULLSCREEN,
                                 0, 1, 0);
-        }
-        else {
+        } else {
             const int _NET_WM_STATE_REMOVE = 0;
             _sapp_x11_send_event(_sapp.x11.NET_WM_STATE,
                                 _NET_WM_STATE_REMOVE,
@@ -11106,8 +11046,7 @@ _SOKOL_PRIVATE void _sapp_x11_lock_mouse(bool lock) {
             _sapp.x11.window,           // confine_to
             _sapp.x11.hidden_cursor,    // cursor
             CurrentTime);               // time
-    }
-    else {
+    } else {
         if (_sapp.x11.xi.available) {
             XIEventMask em;
             unsigned char mask[] = { 0 };
@@ -11531,11 +11470,9 @@ _SOKOL_PRIVATE int32_t _sapp_x11_keysym_to_unicode(KeySym keysym) {
         mid = (min + max) / 2;
         if (_sapp_x11_keysymtab[mid].keysym < keysym) {
             min = mid + 1;
-        }
-        else if (_sapp_x11_keysymtab[mid].keysym > keysym) {
+        } else if (_sapp_x11_keysymtab[mid].keysym > keysym) {
             max = mid - 1;
-        }
-        else {
+        } else {
             return _sapp_x11_keysymtab[mid].ucs;
         }
     }
@@ -11592,11 +11529,9 @@ _SOKOL_PRIVATE bool _sapp_x11_parse_dropped_files_list(const char* src) {
                 err = true;
                 break;
             }
-        }
-        else if (src_chr == '\r') {
+        } else if (src_chr == '\r') {
             // skip
-        }
-        else if (src_chr == '\n') {
+        } else if (src_chr == '\n') {
             src_count = 0;
             _sapp.drop.num_files++;
             // too many files is not an error
@@ -11605,22 +11540,19 @@ _SOKOL_PRIVATE bool _sapp_x11_parse_dropped_files_list(const char* src) {
             }
             dst_ptr = _sapp.drop.buffer + _sapp.drop.num_files * _sapp.drop.max_path_length;
             dst_end_ptr = dst_ptr + (_sapp.drop.max_path_length - 1);
-        }
-        else if ((src_chr == '%') && src[0] && src[1]) {
+        } else if ((src_chr == '%') && src[0] && src[1]) {
             // a percent-encoded byte (most likely UTF-8 multibyte sequence)
             const char digits[3] = { src[0], src[1], 0 };
             src += 2;
             dst_chr = (char) strtol(digits, 0, 16);
-        }
-        else {
+        } else {
             dst_chr = src_chr;
         }
         if (dst_chr) {
             // dst_end_ptr already has adjustment for terminating zero
             if (dst_ptr < dst_end_ptr) {
                 *dst_ptr++ = dst_chr;
-            }
-            else {
+            } else {
                 _SAPP_ERROR(DROPPED_FILE_PATH_TOO_LONG);
                 err = true;
                 break;
@@ -11631,8 +11563,7 @@ _SOKOL_PRIVATE bool _sapp_x11_parse_dropped_files_list(const char* src) {
         _sapp_clear_drop_buffer();
         _sapp.drop.num_files = 0;
         return false;
-    }
-    else {
+    } else {
         return true;
     }
 }
@@ -11719,8 +11650,7 @@ _SOKOL_PRIVATE void _sapp_x11_on_buttonpress(XEvent* event) {
     if (btn != SAPP_MOUSEBUTTON_INVALID) {
         _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, btn, mods);
         _sapp.x11.mouse_buttons |= (1 << btn);
-    }
-    else {
+    } else {
         // might be a scroll event
         switch (event->xbutton.button) {
             case 4: _sapp_x11_scroll_event(0.0f, 1.0f, mods); break;
@@ -11783,8 +11713,7 @@ _SOKOL_PRIVATE void _sapp_x11_on_propertynotify(XEvent* event) {
                 _sapp.x11.window_state = state;
                 if (state == IconicState) {
                     _sapp_x11_app_event(SAPP_EVENTTYPE_ICONIFIED);
-                }
-                else if (state == NormalState) {
+                } else if (state == NormalState) {
                     _sapp_x11_app_event(SAPP_EVENTTYPE_RESTORED);
                 }
             }
@@ -12658,8 +12587,7 @@ SOKOL_API_IMPL void sapp_html5_fetch_dropped_file(const sapp_html5_fetch_request
                 (void*)request->buffer.ptr,
                 request->buffer.size,
                 request->user_data);
-        }
-        else {
+        } else {
             sapp_js_fetch_dropped_file(index,
                 request->callback,
                 (void*)request->buffer.ptr,
