@@ -2223,6 +2223,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #endif
         #if defined(SOKOL_WGPU)
             #import <QuartzCore/CAMetalLayer.h>
+            #import <QuartzCore/CADisplayLink.h>
         #endif
     #elif defined(_SAPP_IOS)
         #import <UIKit/UIKit.h>
@@ -2602,6 +2603,7 @@ typedef struct {
     @end
 #elif defined(SOKOL_WGPU)
     @interface _sapp_macos_view : NSView
+    - (void)displayLinkFired:(id)sender;
     @end
 #endif // SOKOL_GLCORE
 
@@ -2618,6 +2620,11 @@ typedef struct {
     NSCursor* custom_cursors[_SAPP_MOUSECURSOR_NUM];
     #if defined(SOKOL_METAL)
         id<MTLDevice> mtl_device;
+    #endif
+    #if defined(SOKOL_WGPU)
+    struct {
+        CADisplayLink* display_link;
+    } wgpu;
     #endif
 } _sapp_macos_t;
 
@@ -3914,6 +3921,9 @@ _SOKOL_PRIVATE void _sapp_wgpu_frame(void) {
         _sapp_frame();
         wgpuTextureViewRelease(_sapp.wgpu.swapchain_view);
         _sapp.wgpu.swapchain_view = 0;
+        #if !defined(_SAPP_EMSCRIPTEN)
+        wgpuSurfacePresent(_sapp.wgpu.surface);
+        #endif
     }
 }
 #endif // SOKOL_WGPU
@@ -3950,6 +3960,8 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
         max_fps = [NSScreen.mainScreen maximumFramesPerSecond];
     }
     #endif
+    // NOTE: when eventually switching to CAMetalLayer, use the specialized
+    // CAMetalDisplayLink instead of CADisplayLink!
     _sapp.macos.mtl_device = MTLCreateSystemDefaultDevice();
     _sapp.macos.view = [[_sapp_macos_view alloc] init];
     [_sapp.macos.view updateTrackingAreas];
@@ -4063,17 +4075,21 @@ _SOKOL_PRIVATE bool _sapp_macos_gl_update_framebuffer_dimensions(NSRect view_bou
 
 #if defined(SOKOL_WGPU)
 _SOKOL_PRIVATE void _sapp_macos_wgpu_init(void) {
+    // FIXME: swap-interval
     CAMetalLayer* mtl_layer = [CAMetalLayer layer];
+    mtl_layer.magnificationFilter = kCAFilterNearest;
     _sapp.macos.view = [[_sapp_macos_view alloc] init];
     [_sapp.macos.view updateTrackingAreas];
     [_sapp.macos.view setWantsLayer: YES];
     [_sapp.macos.view setLayer: mtl_layer];
+    _sapp.macos.wgpu.display_link = [_sapp.macos.view displayLinkWithTarget:_sapp.macos.view selector:@selector(displayLinkFired:)];
+    [_sapp.macos.wgpu.display_link addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
     _sapp_wgpu_init();
 }
 
 _SOKOL_PRIVATE void _sapp_macos_wgpu_discard_state(void) {
-
-    // FIXME
+    _SAPP_OBJC_RELEASE(_sapp.macos.wgpu.display_link);
+    _sapp_wgpu_discard();
 }
 #endif
 
@@ -4547,17 +4563,6 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
     CGImageRelease(cg_img);
 }
 
-_SOKOL_PRIVATE void _sapp_macos_frame(void) {
-    #if defined(SOKOL_WGPU)
-        _sapp_frame();
-    #else
-        _sapp_wgpu_frame();
-    #endif
-    if (_sapp.quit_requested || _sapp.quit_ordered) {
-        [_sapp.macos.window performClose:nil];
-    }
-}
-
 @implementation _sapp_macos_app_delegate
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
     _SOKOL_UNUSED(aNotification);
@@ -4777,18 +4782,38 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 }
 #endif
 
+#if defined(SOKOL_WGPU)
+- (void)displayLinkFired:(id)sender {
+    _SOKOL_UNUSED(sender);
+    _sapp_timing_measure(&_sapp.timing);
+    @autoreleasepool {
+        _sapp_wgpu_frame();
+    }
+    if (_sapp.quit_requested || _sapp.quit_ordered) {
+        [_sapp.macos.window performClose:nil];
+    }
+}
+#endif
+
 - (void)drawRect:(NSRect)rect {
     _SOKOL_UNUSED(rect);
+    #if defined(SOKOL_WGPU)
+        // should never be called
+        return;
+    #endif
     #if defined(_SAPP_ANY_GL)
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
     #endif
     _sapp_timing_measure(&_sapp.timing);
     @autoreleasepool {
-        _sapp_macos_frame();
+        _sapp_frame();
     }
     #if defined(_SAPP_ANY_GL)
     [[_sapp.macos.view openGLContext] flushBuffer];
     #endif
+    if (_sapp.quit_requested || _sapp.quit_ordered) {
+        [_sapp.macos.window performClose:nil];
+    }
 }
 
 - (BOOL)isOpaque {
