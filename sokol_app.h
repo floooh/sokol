@@ -3624,6 +3624,8 @@ _SOKOL_PRIVATE void _sapp_wgpu_await(WGPUFuture future) {
         WGPUWaitStatus res = wgpuInstanceWaitAny(_sapp.wgpu.instance, 1, &wait_info, UINT64_MAX);
         SOKOL_ASSERT(res == WGPUWaitStatus_Success); _SOKOL_UNUSED(res);
     #else
+        // this code path should never be called
+        _SOKOL_UNUSED(future);
         SOKOL_ASSERT(false);
     #endif
 }
@@ -3842,6 +3844,8 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_device_and_swapchain(void) {
     WGPUFuture future = wgpuAdapterRequestDevice(_sapp.wgpu.adapter, &dev_desc, cb_info);
     #if defined(_SAPP_WGPU_HAS_WAIT)
         _sapp_wgpu_await(future);
+    #else
+        _SOKOL_UNUSED(future);
     #endif
 }
 
@@ -3860,7 +3864,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_request_adapter_cb(WGPURequestAdapterStatus statu
     _sapp.wgpu.adapter = adapter;
     #if !defined(_SAPP_WGPU_HAS_WAIT)
         // chain device creation
-        _sapp_wgpu_device_and_swapchain();
+        _sapp_wgpu_create_device_and_swapchain();
     #endif
 }
 
@@ -3874,6 +3878,8 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_adapter(void) {
     WGPUFuture future = wgpuInstanceRequestAdapter(_sapp.wgpu.instance, 0, cb_info);
     #if defined(_SAPP_WGPU_HAS_WAIT)
         _sapp_wgpu_await(future);
+    #else
+        _SOKOL_UNUSED(future);
     #endif
 }
 
