@@ -2623,6 +2623,7 @@ typedef struct {
     #endif
     #if defined(SOKOL_WGPU)
     struct {
+        CAMetalLayer* mtl_layer;
         CADisplayLink* display_link;
     } wgpu;
     #endif
@@ -3621,7 +3622,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_await(WGPUFuture future) {
         _sapp_clear(&wait_info, sizeof(wait_info));
         wait_info.future = future;
         WGPUWaitStatus res = wgpuInstanceWaitAny(_sapp.wgpu.instance, 1, &wait_info, UINT64_MAX);
-        SOKOL_ASSERT(res == WGPUWaitStatus_Success);
+        SOKOL_ASSERT(res == WGPUWaitStatus_Success); _SOKOL_UNUSED(res);
     #else
         SOKOL_ASSERT(false);
     #endif
@@ -3779,7 +3780,7 @@ _SOKOL_PRIVATE WGPUTextureView _sapp_wgpu_swapchain_next(void) {
     return wgpuTextureCreateView(surf_tex.texture, 0);
 }
 
-_SOKOL_PRIVATE void _sapp_wgpu_size_changed(void) {
+_SOKOL_PRIVATE void _sapp_wgpu_swapchain_size_changed(void) {
     if (_sapp.wgpu.surface) {
         _sapp_wgpu_discard_swapchain(true);
         _sapp_wgpu_create_swapchain(true);
@@ -3952,14 +3953,19 @@ _SOKOL_PRIVATE void _sapp_wgpu_frame(void) {
 // >>macos
 #if defined(_SAPP_MACOS)
 
-#if defined(SOKOL_METAL)
-_SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
+NSInteger _sapp_macos_max_fps(void) {
     NSInteger max_fps = 60;
     #if (__MAC_OS_X_VERSION_MAX_ALLOWED >= 120000)
     if (@available(macOS 12.0, *)) {
         max_fps = [NSScreen.mainScreen maximumFramesPerSecond];
     }
     #endif
+    return max_fps;
+}
+
+#if defined(SOKOL_METAL)
+_SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
+    NSInteger max_fps = _sapp_macos_max_fps();
     // NOTE: when eventually switching to CAMetalLayer, use the specialized
     // CAMetalDisplayLink instead of CADisplayLink!
     _sapp.macos.mtl_device = MTLCreateSystemDefaultDevice();
@@ -3981,31 +3987,15 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_discard_state(void) {
 _SOKOL_PRIVATE bool _sapp_macos_mtl_update_framebuffer_dimensions(NSRect view_bounds) {
     _sapp.framebuffer_width = _sapp_roundf_gzero(view_bounds.size.width * _sapp.dpi_scale);
     _sapp.framebuffer_height = _sapp_roundf_gzero(view_bounds.size.height * _sapp.dpi_scale);
-    const CGSize fb_size = _sapp.macos.view.drawableSize;
-    int cur_fb_width = _sapp_roundf_gzero(fb_size.width);
-    int cur_fb_height = _sapp_roundf_gzero(fb_size.height);
+    const CGSize cur_fb_size = _sapp.macos.view.drawableSize;
+    int cur_fb_width = _sapp_roundf_gzero(cur_fb_size.width);
+    int cur_fb_height = _sapp_roundf_gzero(cur_fb_size.height);
     bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) || (_sapp.framebuffer_height != cur_fb_height);
     if (dim_changed) {
         const CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
         _sapp.macos.view.drawableSize = drawable_size;
     }
     return dim_changed;
-}
-
-_SOKOL_PRIVATE void _sapp_macos_mtl_on_window_will_start_live_resize(void) {
-    // Work around the MTKView resizing glitch by "anchoring" the layer to the window corner opposite
-    // to the currently manipulated corner (or edge). This prevents the content stretching back and
-    // forth during resizing. This is a workaround for this issue: https://github.com/floooh/sokol/issues/700
-    // Can be removed if/when migrating to CAMetalLayer: https://github.com/floooh/sokol/issues/727
-    bool resizing_from_left = _sapp.mouse.x < _sapp.window_width/2;
-    bool resizing_from_top = _sapp.mouse.y < _sapp.window_height/2;
-    NSViewLayerContentsPlacement placement;
-    if (resizing_from_left) {
-        placement = resizing_from_top ? NSViewLayerContentsPlacementBottomRight : NSViewLayerContentsPlacementTopRight;
-    } else {
-        placement = resizing_from_top ? NSViewLayerContentsPlacementBottomLeft : NSViewLayerContentsPlacementTopLeft;
-    }
-    _sapp.macos.view.layerContentsPlacement = placement;
 }
 #endif
 
@@ -4075,21 +4065,43 @@ _SOKOL_PRIVATE bool _sapp_macos_gl_update_framebuffer_dimensions(NSRect view_bou
 
 #if defined(SOKOL_WGPU)
 _SOKOL_PRIVATE void _sapp_macos_wgpu_init(void) {
-    // FIXME: swap-interval
-    CAMetalLayer* mtl_layer = [CAMetalLayer layer];
-    mtl_layer.magnificationFilter = kCAFilterNearest;
+    NSInteger max_fps = _sapp_macos_max_fps();
+    _sapp.macos.wgpu.mtl_layer = [CAMetalLayer layer];
+    _sapp.macos.wgpu.mtl_layer.magnificationFilter = kCAFilterNearest;
+    _sapp.macos.wgpu.mtl_layer.opaque = true;
+    // NOTE: might experiment with this, valid values are 2 or 3 (default: 3), I don't see any difference tbh
+    // _sapp.macos.wgpu.mtl_layer.maximumDrawableCount = 2;
     _sapp.macos.view = [[_sapp_macos_view alloc] init];
     [_sapp.macos.view updateTrackingAreas];
-    [_sapp.macos.view setWantsLayer: YES];
-    [_sapp.macos.view setLayer: mtl_layer];
+    _sapp.macos.view.wantsLayer = YES;
+    _sapp.macos.view.layer = _sapp.macos.wgpu.mtl_layer;
     _sapp.macos.wgpu.display_link = [_sapp.macos.view displayLinkWithTarget:_sapp.macos.view selector:@selector(displayLinkFired:)];
+    float preferred_fps = max_fps / _sapp.swap_interval;
+    CAFrameRateRange frame_rate_range = { preferred_fps, preferred_fps, preferred_fps };
+    _sapp.macos.wgpu.display_link.preferredFrameRateRange = frame_rate_range;
     [_sapp.macos.wgpu.display_link addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
     _sapp_wgpu_init();
 }
 
 _SOKOL_PRIVATE void _sapp_macos_wgpu_discard_state(void) {
     _SAPP_OBJC_RELEASE(_sapp.macos.wgpu.display_link);
+    _SAPP_OBJC_RELEASE(_sapp.macos.wgpu.mtl_layer);
     _sapp_wgpu_discard();
+}
+
+_SOKOL_PRIVATE bool _sapp_macos_wgpu_update_framebuffer_dimensions(NSRect view_bounds) {
+    _sapp.framebuffer_width = _sapp_roundf_gzero(view_bounds.size.width * _sapp.dpi_scale);
+    _sapp.framebuffer_height = _sapp_roundf_gzero(view_bounds.size.height * _sapp.dpi_scale);
+    const CGSize cur_fb_size = _sapp.macos.wgpu.mtl_layer.drawableSize;
+    int cur_fb_width = _sapp_roundf_gzero(cur_fb_size.width);
+    int cur_fb_height = _sapp_roundf_gzero(cur_fb_size.height);
+    bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) || (_sapp.framebuffer_height != cur_fb_height);
+    if (dim_changed) {
+        const CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
+        _sapp.macos.wgpu.mtl_layer.drawableSize = drawable_size;
+        _sapp_wgpu_swapchain_size_changed();
+    }
+    return dim_changed;
 }
 #endif
 
@@ -4361,8 +4373,7 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
     #elif defined(SOKOL_GLCORE)
         bool dim_changed = _sapp_macos_gl_update_framebuffer_dimensions(bounds);
     #elif defined(SOKOL_WGPU)
-        // FIXME FIXME FIXME
-        bool dim_changed = false;
+        bool dim_changed = _sapp_macos_wgpu_update_framebuffer_dimensions(bounds);
     #endif
     if (dim_changed && !_sapp.first_frame) {
         _sapp_macos_app_event(SAPP_EVENTTYPE_RESIZED);
@@ -4666,8 +4677,20 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
 }
 
 - (void)windowWillStartLiveResize:(NSNotification *)notification {
-    #if defined(SOKOL_METAL)
-        _sapp_macos_mtl_on_window_will_start_live_resize();
+    #if defined(SOKOL_METAL) || defined(SOKOL_WGPU)
+        // Work around the MTKView/CAMetalLayer resizing glitch by "anchoring" the layer to the window corner opposite
+        // to the currently manipulated corner (or edge). This prevents the content stretching back and
+        // forth during resizing. This is a workaround for this issue: https://github.com/floooh/sokol/issues/700
+        // Can be removed if/when migrating to CAMetalLayer: https://github.com/floooh/sokol/issues/727
+        bool resizing_from_left = _sapp.mouse.x < _sapp.window_width/2;
+        bool resizing_from_top = _sapp.mouse.y < _sapp.window_height/2;
+        NSViewLayerContentsPlacement placement;
+        if (resizing_from_left) {
+            placement = resizing_from_top ? NSViewLayerContentsPlacementBottomRight : NSViewLayerContentsPlacementTopRight;
+        } else {
+            placement = resizing_from_top ? NSViewLayerContentsPlacementBottomLeft : NSViewLayerContentsPlacementTopLeft;
+        }
+        _sapp.macos.view.layerContentsPlacement = placement;
     #endif
 }
 
@@ -6014,7 +6037,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
     emscripten_set_canvas_element_size(_sapp.html5_canvas_selector, _sapp.framebuffer_width, _sapp.framebuffer_height);
     #if defined(SOKOL_WGPU)
         // on WebGPU: recreate size-dependent rendering surfaces
-        _sapp_wgpu_size_changed();
+        _sapp_wgpu_swapchain_size_changed();
     #endif
     if (_sapp_events_enabled()) {
         _sapp_init_event(SAPP_EVENTTYPE_RESIZED);
