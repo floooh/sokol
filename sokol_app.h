@@ -3635,7 +3635,6 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
     SOKOL_ASSERT(0 == _sapp.wgpu.msaa_view);
     SOKOL_ASSERT(0 == _sapp.wgpu.depth_stencil_tex);
     SOKOL_ASSERT(0 == _sapp.wgpu.depth_stencil_view);
-    SOKOL_ASSERT(0 == _sapp.wgpu.swapchain_view);
 
     if (!called_from_resize) {
         SOKOL_ASSERT(0 == _sapp.wgpu.surface);
