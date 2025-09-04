@@ -3890,7 +3890,11 @@ _SOKOL_PRIVATE void _sapp_wgpu_init(void) {
     WGPUInstanceDescriptor desc;
     _sapp_clear(&desc, sizeof(desc));
     #if defined(_SAPP_WGPU_HAS_WAIT)
-    desc.capabilities.timedWaitAnyEnable = true;
+        WGPUInstanceFeatureName inst_features[1] = {
+            WGPUInstanceFeatureName_TimedWaitAny,
+        };
+        desc.requiredFeatureCount = 1;
+        desc.requiredFeatures = inst_features;
     #endif
     _sapp.wgpu.instance = wgpuCreateInstance(&desc);
     if (0 == _sapp.wgpu.instance) {
