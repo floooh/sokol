@@ -2598,9 +2598,12 @@ typedef struct {
     @interface _sapp_macos_view : MTKView
     @end
 #elif defined(SOKOL_GLCORE)
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wdeprecated-declarations"
     @interface _sapp_macos_view : NSOpenGLView
     - (void)timerFired:(id)sender;
     @end
+    #pragma clang diagnostic pop
 #elif defined(SOKOL_WGPU)
     @interface _sapp_macos_view : NSView
     - (void)displayLinkFired:(id)sender;
@@ -2644,8 +2647,11 @@ typedef struct {
     @interface _sapp_ios_view : MTKView;
     @end
 #else
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wdeprecated-declarations"
     @interface _sapp_ios_view : GLKView
     @end
+    #pragma clang diagnostic pop
 #endif
 
 typedef struct {
@@ -3937,6 +3943,11 @@ _SOKOL_PRIVATE void _sapp_wgpu_frame(void) {
 // >>apple
 #if defined(_SAPP_APPLE)
 
+#if defined(_SAPP_ANY_GL)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
 #if __has_feature(objc_arc)
 #define _SAPP_OBJC_RELEASE(obj) { obj = nil; }
 #else
@@ -5034,6 +5045,7 @@ static void _sapp_gl_make_current(void) {
         event.isARepeat,
         _sapp_macos_mods(event));
 }
+
 - (void)flagsChanged:(NSEvent*)event {
     const uint32_t old_f = _sapp.macos.flags_changed_store;
     const uint32_t new_f = (uint32_t)event.modifierFlags;
@@ -5421,6 +5433,10 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 }
 @end
 #endif /* TARGET_OS_IPHONE */
+
+#if defined(_SAPP_ANY_GL)
+#pragma clang diagnostic pop // -Wdeprecated-declarations
+#endif
 
 #endif /* _SAPP_APPLE */
 
