@@ -15852,16 +15852,16 @@ _SOKOL_PRIVATE WGPUOptionalBool _sg_wgpu_optional_bool(bool b) {
 _SOKOL_PRIVATE WGPUBufferUsage _sg_wgpu_buffer_usage(const sg_buffer_usage* usg) {
     int res = 0;
     if (usg->vertex_buffer) {
-        res |= WGPUBufferUsage_Vertex;
+        res |= (int)WGPUBufferUsage_Vertex;
     }
     if (usg->index_buffer) {
-        res |= WGPUBufferUsage_Index;
+        res |= (int)WGPUBufferUsage_Index;
     }
     if (usg->storage_buffer) {
-        res |= WGPUBufferUsage_Storage;
+        res |= (int)WGPUBufferUsage_Storage;
     }
     if (!usg->immutable) {
-        res |= WGPUBufferUsage_CopyDst;
+        res |= (int)WGPUBufferUsage_CopyDst;
     }
     return (WGPUBufferUsage)res;
 }
@@ -16212,19 +16212,18 @@ _SOKOL_PRIVATE WGPUBlendFactor _sg_wgpu_blendfactor(sg_blend_factor f) {
 }
 
 _SOKOL_PRIVATE WGPUColorWriteMask _sg_wgpu_colorwritemask(uint8_t m) {
-    // FIXME: change to WGPUColorWriteMask once Emscripten and Dawn webgpu.h agree
     int res = 0;
     if (0 != (m & SG_COLORMASK_R)) {
-        res |= WGPUColorWriteMask_Red;
+        res |= (int)WGPUColorWriteMask_Red;
     }
     if (0 != (m & SG_COLORMASK_G)) {
-        res |= WGPUColorWriteMask_Green;
+        res |= (int)WGPUColorWriteMask_Green;
     }
     if (0 != (m & SG_COLORMASK_B)) {
-        res |= WGPUColorWriteMask_Blue;
+        res |= (int)WGPUColorWriteMask_Blue;
     }
     if (0 != (m & SG_COLORMASK_A)) {
-        res |= WGPUColorWriteMask_Alpha;
+        res |= (int)WGPUColorWriteMask_Alpha;
     }
     return (WGPUColorWriteMask)res;
 }
@@ -16488,8 +16487,11 @@ _SOKOL_PRIVATE uint64_t _sg_wgpu_hash(const void* key, int len, uint64_t seed) {
     }
     switch(len) {
         case 3: h2 ^= (uint32_t)(((unsigned char*)data)[2] << 16);
+        // fall through
         case 2: h2 ^= (uint32_t)(((unsigned char*)data)[1] << 8);
+        // fall through
         case 1: h2 ^= ((unsigned char*)data)[0];
+        // fall through
         h2 *= m;
     };
     h1 ^= h2 >> 18; h1 *= m;
@@ -16733,7 +16735,7 @@ _SOKOL_PRIVATE void _sg_wgpu_bindings_cache_clear(void) {
 }
 
 _SOKOL_PRIVATE bool _sg_wgpu_bindings_cache_vb_dirty(size_t index, const _sg_buffer_t* vb, uint64_t offset) {
-    SOKOL_ASSERT((index >= 0) && (index < SG_MAX_VERTEXBUFFER_BINDSLOTS));
+    SOKOL_ASSERT(index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
     if (vb) {
         return (_sg.wgpu.bindings_cache.vbs[index].buffer.id != vb->slot.id)
             || (_sg.wgpu.bindings_cache.vbs[index].offset != offset);
@@ -16743,7 +16745,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_bindings_cache_vb_dirty(size_t index, const _sg_buf
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_bindings_cache_vb_update(size_t index, const _sg_buffer_t* vb, uint64_t offset) {
-    SOKOL_ASSERT((index >= 0) && (index < SG_MAX_VERTEXBUFFER_BINDSLOTS));
+    SOKOL_ASSERT(index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
     if (vb) {
         _sg.wgpu.bindings_cache.vbs[index].buffer.id = vb->slot.id;
         _sg.wgpu.bindings_cache.vbs[index].offset = offset;
@@ -17020,11 +17022,11 @@ _SOKOL_PRIVATE void _sg_wgpu_copy_buffer_data(const _sg_buffer_t* buf, uint64_t 
         const uint64_t extra_src_offset = clamped_size;
         const uint64_t extra_dst_offset = offset + clamped_size;
         uint8_t extra_data[4] = { 0 };
-        uint8_t* extra_src_ptr = ((uint8_t*)data->ptr) + extra_src_offset;
+        const uint8_t* extra_src_ptr = ((uint8_t*)data->ptr) + extra_src_offset;
         for (size_t i = 0; i < extra_size; i++) {
             extra_data[i] = extra_src_ptr[i];
         }
-        wgpuQueueWriteBuffer(_sg.wgpu.queue, buf->wgpu.buf, extra_dst_offset, extra_src_ptr, 4);
+        wgpuQueueWriteBuffer(_sg.wgpu.queue, buf->wgpu.buf, extra_dst_offset, extra_data, 4);
     }
 }
 
