@@ -2139,8 +2139,8 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(_WIN32)
     /* Windows (D3D11 or GL) */
     #define _SAPP_WIN32 (1)
-    #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE) && !defined(SOKOL_NOAPI)
-    #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11, SOKOL_GLCORE or SOKOL_NOAPI")
+    #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE) && !defined(SOKOL_WGPU) && !defined(SOKOL_NOAPI)
+    #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11, SOKOL_GLCORE, SOKOL_WGPU or SOKOL_NOAPI")
     #endif
 #elif defined(__ANDROID__)
     /* Android */
@@ -3654,6 +3654,13 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
             from_metal_layer.chain.sType = WGPUSType_SurfaceSourceMetalLayer;
             from_metal_layer.layer = _sapp.macos.view.layer;
             surf_desc.nextInChain = &from_metal_layer.chain;
+        #elif defined(_SAPP_WIN32)
+            WGPUSurfaceSourceWindowsHWND from_hwnd;
+            _sapp_clear(&from_hwnd, sizeof(from_hwnd));
+            from_hwnd.chain.sType = WGPUSType_SurfaceSourceWindowsHWND;
+            from_hwnd.hinstance = GetModuleHandleW(NULL);
+            from_hwnd.hwnd = _sapp.win32.hwnd;
+            surf_desc.nextInChain = &from_hwnd.chain;
         #else
         // FIXME FIXME FIXME
         #endif
@@ -8055,6 +8062,26 @@ _SOKOL_PRIVATE void _sapp_win32_timing_measure(void) {
     #endif
 }
 
+_SOKOL_PRIVATE void _sapp_win32_frame(bool from_winproc) {
+    #if defined(SOKOL_WGPU)
+        _sapp_wgpu_frame();
+    #else
+        _sapp_frame();
+    #endif
+    #if defined(SOKOL_D3D11)
+        bool do_not_wait = from_winproc;
+        _sapp_d3d11_present(do_not_wait);
+    #endif
+    #if defined(SOKOL_GLCORE)
+        _sapp_wgl_swap_buffers();
+    #endif
+    if (!from_winproc) {
+        if (IsIconic(_sapp.win32.hwnd)) {
+            Sleep((DWORD)(16 * _sapp.swap_interval));
+        }
+    }
+}
+
 _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (!_sapp.win32.in_create_window) {
         switch (uMsg) {
@@ -8246,14 +8273,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 break;
             case WM_TIMER:
                 _sapp_win32_timing_measure();
-                _sapp_frame();
-                #if defined(SOKOL_D3D11)
-                    // present with DXGI_PRESENT_DO_NOT_WAIT
-                    _sapp_d3d11_present(true);
-                #endif
-                #if defined(SOKOL_GLCORE)
-                    _sapp_wgl_swap_buffers();
-                #endif
+                _sapp_win32_frame(true);
                 /* NOTE: resizing the swap-chain during resize leads to a substantial
                    memory spike (hundreds of megabytes for a few seconds).
 
@@ -8659,11 +8679,12 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     #if defined(SOKOL_D3D11)
         _sapp_d3d11_create_device_and_swapchain();
         _sapp_d3d11_create_default_render_target();
-    #endif
-    #if defined(SOKOL_GLCORE)
+    #elif defined(SOKOL_GLCORE)
         _sapp_wgl_init();
         _sapp_wgl_load_extensions();
         _sapp_wgl_create_context();
+    #elif defined(SOKOL_WGPU)
+        _sapp_wgpu_init();
     #endif
     _sapp.valid = true;
 
@@ -8680,20 +8701,13 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
                 DispatchMessageW(&msg);
             }
         }
-        _sapp_frame();
-        #if defined(SOKOL_D3D11)
-            _sapp_d3d11_present(false);
-            if (IsIconic(_sapp.win32.hwnd)) {
-                Sleep((DWORD)(16 * _sapp.swap_interval));
-            }
-        #endif
-        #if defined(SOKOL_GLCORE)
-            _sapp_wgl_swap_buffers();
-        #endif
-        /* check for window resized, this cannot happen in WM_SIZE as it explodes memory usage */
+        _sapp_win32_frame(false);
+        // check for window resized, this cannot happen in WM_SIZE as it explodes memory usage
         if (_sapp_win32_update_dimensions()) {
             #if defined(SOKOL_D3D11)
             _sapp_d3d11_resize_default_render_target();
+            #elif defined(SOKOL_WGPU)
+            _sapp_wgpu_swapchain_size_changed();
             #endif
             _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
         }
@@ -8717,6 +8731,8 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     #elif defined(SOKOL_GLCORE)
         _sapp_wgl_destroy_context();
         _sapp_wgl_shutdown();
+    #elif defined(SOKOL_WGPU)
+        _sapp_wgpu_discard();
     #endif
     _sapp_win32_destroy_window();
     _sapp_win32_destroy_icons();
