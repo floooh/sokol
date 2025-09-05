@@ -17308,8 +17308,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
         bg_entry->binding = bgl_entry->binding;
         bg_entry->buffer = _sg.wgpu.uniform.buf;
         bg_entry->size = _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE;
-        dynoffset_map[i].sokol_slot = i;
-        dynoffset_map[i].wgpu_slot = bgl_entry->binding;
+        dynoffset_map[i].sokol_slot = (uint8_t)i;
+        dynoffset_map[i].wgpu_slot = (uint8_t)bgl_entry->binding;
         bgl_index += 1;
     }
     bgl_desc.entryCount = bgl_index;
@@ -17326,7 +17326,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
     // dynamic offsets of the WebGPU setBindGroup call must be in
     // 'binding order', not 'bindgroup entry order'
     qsort(dynoffset_map, bgl_index, sizeof(_sg_wgpu_dynoffset_mapping_t), _sg_wgpu_dynoffset_cmp);
-    shd->wgpu.ub_num_dynoffsets = bgl_index;
+    shd->wgpu.ub_num_dynoffsets = (uint8_t)bgl_index;
     for (uint8_t i = 0; i < bgl_index; i++) {
         const uint8_t sokol_slot = dynoffset_map[i].sokol_slot;
         shd->wgpu.ub_dynoffsets[sokol_slot] = i;
