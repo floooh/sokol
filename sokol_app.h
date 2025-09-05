@@ -1977,6 +1977,8 @@ SOKOL_APP_API_DECL void sapp_request_quit(void);
 SOKOL_APP_API_DECL void sapp_cancel_quit(void);
 /* initiate a "hard quit" (quit application without sending SAPP_EVENTTYPE_QUIT_REQUESTED) */
 SOKOL_APP_API_DECL void sapp_quit(void);
+/* this causes the app to block until input is received. the flag will be cleared after that, so you will have to call it again if necessary. */
+SOKOL_APP_API_DECL void sapp_input_wait(void);
 /* call from inside event callback to consume the current event (don't forward to platform) */
 SOKOL_APP_API_DECL void sapp_consume_event(void);
 /* get the current frame counter (for comparison with sapp_event.frame_count) */
@@ -3042,6 +3044,7 @@ typedef struct {
     bool event_consumed;
     bool html5_ask_leave_site;
     bool onscreen_keyboard_shown;
+    bool input_wait;
     int window_width;
     int window_height;
     int framebuffer_width;
@@ -12123,11 +12126,13 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     while (!_sapp.quit_ordered) {
         _sapp_timing_measure(&_sapp.timing);
         int count = XPending(_sapp.x11.display);
-        while (count--) {
+        if(count) while (count--) {
+jmp:;
             XEvent event;
             XNextEvent(_sapp.x11.display, &event);
             _sapp_x11_process_event(&event);
-        }
+        } else if(_sapp.input_wait) goto jmp;
+        _sapp.input_wait = false;
         _sapp_frame();
 #if defined(_SAPP_GLX)
         _sapp_glx_swap_buffers();
@@ -12447,6 +12452,10 @@ SOKOL_API_IMPL void sapp_cancel_quit(void) {
 
 SOKOL_API_IMPL void sapp_quit(void) {
     _sapp.quit_ordered = true;
+}
+
+SOKOL_API_IMPL void sapp_input_wait(void) {
+    _sapp.input_wait = true;
 }
 
 SOKOL_API_IMPL void sapp_consume_event(void) {
