@@ -2120,8 +2120,8 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
         /* MacOS */
         #define _SAPP_MACOS (1)
-        #if !defined(SOKOL_METAL) && !defined(SOKOL_GLCORE)
-        #error("sokol_app.h: unknown 3D API selected for MacOS, must be SOKOL_METAL or SOKOL_GLCORE")
+        #if !defined(SOKOL_METAL) && !defined(SOKOL_GLCORE) && !defined(SOKOL_WGPU)
+        #error("sokol_app.h: unknown 3D API selected for MacOS, must be SOKOL_METAL, SOKOL_GLCORE or SOKOL_WGPU")
         #endif
     #else
         /* iOS or iOS Simulator */
@@ -2139,8 +2139,8 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(_WIN32)
     /* Windows (D3D11 or GL) */
     #define _SAPP_WIN32 (1)
-    #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE) && !defined(SOKOL_NOAPI)
-    #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11, SOKOL_GLCORE or SOKOL_NOAPI")
+    #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE) && !defined(SOKOL_WGPU) && !defined(SOKOL_NOAPI)
+    #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11, SOKOL_GLCORE, SOKOL_WGPU or SOKOL_NOAPI")
     #endif
 #elif defined(__ANDROID__)
     /* Android */
@@ -2154,17 +2154,21 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(__linux__) || defined(__unix__)
     /* Linux */
     #define _SAPP_LINUX (1)
+    #if !defined(SOKOL_GLCORE) && !defined(SOKOL_GLES3) && !defined(SOKOL_WGPU)
+        #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE, SOKOL_GLES3 or SOKOL_WGPU")
+    #endif
     #if defined(SOKOL_GLCORE)
-        #if !defined(SOKOL_FORCE_EGL)
+        #if defined(SOKOL_FORCE_EGL)
+            #define _SAPP_EGL (1)
+        #else
             #define _SAPP_GLX (1)
         #endif
         #define GL_GLEXT_PROTOTYPES
         #include <GL/gl.h>
     #elif defined(SOKOL_GLES3)
+        #define _SAPP_EGL (1)
         #include <GLES3/gl3.h>
         #include <GLES3/gl3ext.h>
-    #else
-        #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE, SOKOL_GLES3")
     #endif
 #else
 #error "sokol_app.h: Unknown platform"
@@ -2203,20 +2207,27 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 
 #if defined(SOKOL_WGPU)
     #include <webgpu/webgpu.h>
+    #if !defined(__EMSCRIPTEN__)
+        #define _SAPP_WGPU_HAS_WAIT (1)
+    #endif
 #endif
 
 #if defined(_SAPP_APPLE)
+    #ifndef GL_SILENCE_DEPRECATION
+    #define GL_SILENCE_DEPRECATION
+    #endif
     #if defined(SOKOL_METAL)
         #import <Metal/Metal.h>
         #import <MetalKit/MetalKit.h>
     #endif
     #if defined(_SAPP_MACOS)
+        #import <Cocoa/Cocoa.h>
         #if defined(_SAPP_ANY_GL)
-            #ifndef GL_SILENCE_DEPRECATION
-            #define GL_SILENCE_DEPRECATION
-            #endif
-            #include <Cocoa/Cocoa.h>
             #include <OpenGL/gl3.h>
+        #endif
+        #if defined(SOKOL_WGPU)
+            #import <QuartzCore/CAMetalLayer.h>
+            #import <QuartzCore/CADisplayLink.h>
         #endif
     #elif defined(_SAPP_IOS)
         #import <UIKit/UIKit.h>
@@ -2319,7 +2330,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <X11/Xcursor/Xcursor.h>
     #include <X11/cursorfont.h> /* XC_* font cursors */
     #include <X11/Xmd.h> /* CARD32 */
-    #if !defined(_SAPP_GLX)
+    #if defined(_SAPP_EGL)
         #include <EGL/egl.h>
     #endif
     #include <dlfcn.h> /* dlopen, dlsym, dlclose */
@@ -2576,7 +2587,7 @@ typedef struct {
     WGPUTexture depth_stencil_tex;
     WGPUTextureView depth_stencil_view;
     WGPUTextureView swapchain_view;
-    bool async_init_done;
+    bool init_done;
 } _sapp_wgpu_t;
 #endif
 
@@ -2594,6 +2605,10 @@ typedef struct {
     @interface _sapp_macos_view : NSOpenGLView
     - (void)timerFired:(id)sender;
     @end
+#elif defined(SOKOL_WGPU)
+    @interface _sapp_macos_view : NSView
+    - (void)displayLinkFired:(id)sender;
+    @end
 #endif // SOKOL_GLCORE
 
 typedef struct {
@@ -2609,6 +2624,12 @@ typedef struct {
     NSCursor* custom_cursors[_SAPP_MOUSECURSOR_NUM];
     #if defined(SOKOL_METAL)
         id<MTLDevice> mtl_device;
+    #endif
+    #if defined(SOKOL_WGPU)
+    struct {
+        CAMetalLayer* mtl_layer;
+        CADisplayLink* display_link;
+    } wgpu;
     #endif
 } _sapp_macos_t;
 
@@ -2988,16 +3009,15 @@ typedef struct {
     bool ARB_create_context;
     bool ARB_create_context_profile;
 } _sapp_glx_t;
+#endif // _SAPP_GLX
 
-#else
-
+#if defined(_SAPP_EGL)
 typedef struct {
     EGLDisplay display;
     EGLContext context;
     EGLSurface surface;
 } _sapp_egl_t;
-
-#endif // _SAPP_GLX
+#endif // _SAPP_EGL
 #endif // _SAPP_LINUX
 
 #if defined(_SAPP_ANY_GL)
@@ -3079,7 +3099,7 @@ typedef struct {
         _sapp_x11_t x11;
         #if defined(_SAPP_GLX)
             _sapp_glx_t glx;
-        #else
+        #elif defined(_SAPP_EGL)
             _sapp_egl_t egl;
         #endif
     #endif
@@ -3590,6 +3610,45 @@ _SOKOL_PRIVATE WGPUStringView _sapp_wgpu_stringview(const char* str) {
     return res;
 }
 
+_SOKOL_PRIVATE WGPUCallbackMode _sapp_wgpu_callbackmode(void) {
+    #if defined(_SAPP_WGPU_HAS_WAIT)
+        return WGPUCallbackMode_WaitAnyOnly;
+    #else
+        return WGPUCallbackMode_AllowProcessEvents;
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_wgpu_await(WGPUFuture future) {
+    #if defined(_SAPP_WGPU_HAS_WAIT)
+        SOKOL_ASSERT(_sapp.wgpu.instance);
+        WGPUFutureWaitInfo wait_info;
+        _sapp_clear(&wait_info, sizeof(wait_info));
+        wait_info.future = future;
+        WGPUWaitStatus res = wgpuInstanceWaitAny(_sapp.wgpu.instance, 1, &wait_info, UINT64_MAX);
+        SOKOL_ASSERT(res == WGPUWaitStatus_Success); _SOKOL_UNUSED(res);
+    #else
+        // this code path should never be called
+        _SOKOL_UNUSED(future);
+        SOKOL_ASSERT(false);
+    #endif
+}
+
+_SOKOL_PRIVATE WGPUTextureFormat _sapp_wgpu_pick_render_format(size_t count, const WGPUTextureFormat* formats) {
+    // NOTE: only accept non-SRGB formats until sokol_app.h gets proper SRGB support
+    SOKOL_ASSERT((count > 0) && formats);
+    for (size_t i = 0; i < count; i++) {
+        const WGPUTextureFormat fmt = formats[i];
+        switch (fmt) {
+            case WGPUTextureFormat_RGBA8Unorm:
+            case WGPUTextureFormat_BGRA8Unorm:
+                return fmt;
+            default: break;
+        }
+    }
+    // FIXME: fallback might still return an SRGB format
+    return formats[0];
+}
+
 _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
     SOKOL_ASSERT(_sapp.wgpu.instance);
     SOKOL_ASSERT(_sapp.wgpu.device);
@@ -3597,7 +3656,6 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
     SOKOL_ASSERT(0 == _sapp.wgpu.msaa_view);
     SOKOL_ASSERT(0 == _sapp.wgpu.depth_stencil_tex);
     SOKOL_ASSERT(0 == _sapp.wgpu.depth_stencil_view);
-    SOKOL_ASSERT(0 == _sapp.wgpu.swapchain_view);
 
     if (!called_from_resize) {
         SOKOL_ASSERT(0 == _sapp.wgpu.surface);
@@ -3609,8 +3667,28 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
             html_canvas_desc.chain.sType = WGPUSType_EmscriptenSurfaceSourceCanvasHTMLSelector;
             html_canvas_desc.selector = _sapp_wgpu_stringview(_sapp.html5_canvas_selector);
             surf_desc.nextInChain = &html_canvas_desc.chain;
+        #elif defined(_SAPP_MACOS)
+            WGPUSurfaceSourceMetalLayer from_metal_layer;
+            _sapp_clear(&from_metal_layer, sizeof(from_metal_layer));
+            from_metal_layer.chain.sType = WGPUSType_SurfaceSourceMetalLayer;
+            from_metal_layer.layer = _sapp.macos.view.layer;
+            surf_desc.nextInChain = &from_metal_layer.chain;
+        #elif defined(_SAPP_WIN32)
+            WGPUSurfaceSourceWindowsHWND from_hwnd;
+            _sapp_clear(&from_hwnd, sizeof(from_hwnd));
+            from_hwnd.chain.sType = WGPUSType_SurfaceSourceWindowsHWND;
+            from_hwnd.hinstance = GetModuleHandleW(NULL);
+            from_hwnd.hwnd = _sapp.win32.hwnd;
+            surf_desc.nextInChain = &from_hwnd.chain;
+        #elif defined(_SAPP_LINUX)
+            WGPUSurfaceSourceXlibWindow from_xlib;
+            _sapp_clear(&from_xlib, sizeof(from_xlib));
+            from_xlib.chain.sType = WGPUSType_SurfaceSourceXlibWindow;
+            from_xlib.display = _sapp.x11.display;
+            from_xlib.window = _sapp.x11.window;
+            surf_desc.nextInChain = &from_xlib.chain;
         #else
-        #error "Unsupported platform for SOKOL_WGPU"
+        #error "sokol_app.h: unsupported WebGPU platform"
         #endif
         _sapp.wgpu.surface = wgpuInstanceCreateSurface(_sapp.wgpu.instance, &surf_desc);
         if (0 == _sapp.wgpu.surface) {
@@ -3622,7 +3700,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
         if (caps_status != WGPUStatus_Success) {
             _SAPP_PANIC(WGPU_SWAPCHAIN_SURFACE_GET_CAPABILITIES_FAILED);
         }
-        _sapp.wgpu.render_format = surf_caps.formats[0];
+        _sapp.wgpu.render_format = _sapp_wgpu_pick_render_format(surf_caps.formatCount, surf_caps.formats);
     }
 
     SOKOL_ASSERT(_sapp.wgpu.surface);
@@ -3736,7 +3814,7 @@ _SOKOL_PRIVATE WGPUTextureView _sapp_wgpu_swapchain_next(void) {
     return wgpuTextureCreateView(surf_tex.texture, 0);
 }
 
-_SOKOL_PRIVATE void _sapp_wgpu_size_changed(void) {
+_SOKOL_PRIVATE void _sapp_wgpu_swapchain_size_changed(void) {
     if (_sapp.wgpu.surface) {
         _sapp_wgpu_discard_swapchain(true);
         _sapp_wgpu_create_swapchain(true);
@@ -3747,7 +3825,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_request_device_cb(WGPURequestDeviceStatus status,
     _SOKOL_UNUSED(msg);
     _SOKOL_UNUSED(userdata1);
     _SOKOL_UNUSED(userdata2);
-    SOKOL_ASSERT(!_sapp.wgpu.async_init_done);
+    SOKOL_ASSERT(!_sapp.wgpu.init_done);
     if (status != WGPURequestDeviceStatus_Success) {
         if (status == WGPURequestDeviceStatus_Error) {
             _SAPP_PANIC(WGPU_REQUEST_DEVICE_STATUS_ERROR);
@@ -3758,7 +3836,50 @@ _SOKOL_PRIVATE void _sapp_wgpu_request_device_cb(WGPURequestDeviceStatus status,
     SOKOL_ASSERT(device);
     _sapp.wgpu.device = device;
     _sapp_wgpu_create_swapchain(false);
-    _sapp.wgpu.async_init_done = true;
+    _sapp.wgpu.init_done = true;
+}
+
+_SOKOL_PRIVATE void _sapp_wgpu_create_device_and_swapchain(void) {
+    SOKOL_ASSERT(_sapp.wgpu.adapter);
+    size_t cur_feature_index = 1;
+    #define _SAPP_WGPU_MAX_REQUESTED_FEATURES (8)
+    WGPUFeatureName requiredFeatures[_SAPP_WGPU_MAX_REQUESTED_FEATURES] = {
+        WGPUFeatureName_Depth32FloatStencil8,
+    };
+    // check for optional features we're interested in
+    if (wgpuAdapterHasFeature(_sapp.wgpu.adapter, WGPUFeatureName_TextureCompressionBC)) {
+        SOKOL_ASSERT(cur_feature_index < _SAPP_WGPU_MAX_REQUESTED_FEATURES);
+        requiredFeatures[cur_feature_index++] = WGPUFeatureName_TextureCompressionBC;
+    }
+    if (wgpuAdapterHasFeature(_sapp.wgpu.adapter, WGPUFeatureName_TextureCompressionETC2)) {
+        SOKOL_ASSERT(cur_feature_index < _SAPP_WGPU_MAX_REQUESTED_FEATURES);
+        requiredFeatures[cur_feature_index++] = WGPUFeatureName_TextureCompressionETC2;
+    }
+    if (wgpuAdapterHasFeature(_sapp.wgpu.adapter, WGPUFeatureName_TextureCompressionASTC)) {
+        SOKOL_ASSERT(cur_feature_index < _SAPP_WGPU_MAX_REQUESTED_FEATURES);
+        requiredFeatures[cur_feature_index++] = WGPUFeatureName_TextureCompressionASTC;
+    }
+    if (wgpuAdapterHasFeature(_sapp.wgpu.adapter, WGPUFeatureName_Float32Filterable)) {
+        SOKOL_ASSERT(cur_feature_index < _SAPP_WGPU_MAX_REQUESTED_FEATURES);
+        requiredFeatures[cur_feature_index++] = WGPUFeatureName_Float32Filterable;
+    }
+    #undef _SAPP_WGPU_MAX_REQUESTED_FEATURES
+
+    WGPURequestDeviceCallbackInfo cb_info;
+    _sapp_clear(&cb_info, sizeof(cb_info));
+    cb_info.mode = _sapp_wgpu_callbackmode();
+    cb_info.callback = _sapp_wgpu_request_device_cb;
+
+    WGPUDeviceDescriptor dev_desc;
+    _sapp_clear(&dev_desc, sizeof(dev_desc));
+    dev_desc.requiredFeatureCount = cur_feature_index;
+    dev_desc.requiredFeatures = requiredFeatures;
+    WGPUFuture future = wgpuAdapterRequestDevice(_sapp.wgpu.adapter, &dev_desc, cb_info);
+    #if defined(_SAPP_WGPU_HAS_WAIT)
+        _sapp_wgpu_await(future);
+    #else
+        _SOKOL_UNUSED(future);
+    #endif
 }
 
 _SOKOL_PRIVATE void _sapp_wgpu_request_adapter_cb(WGPURequestAdapterStatus status, WGPUAdapter adapter, WGPUStringView msg, void* userdata1, void* userdata2) {
@@ -3774,64 +3895,78 @@ _SOKOL_PRIVATE void _sapp_wgpu_request_adapter_cb(WGPURequestAdapterStatus statu
     }
     SOKOL_ASSERT(adapter);
     _sapp.wgpu.adapter = adapter;
-    size_t cur_feature_index = 1;
-    #define _SAPP_WGPU_MAX_REQUESTED_FEATURES (8)
-    WGPUFeatureName requiredFeatures[_SAPP_WGPU_MAX_REQUESTED_FEATURES] = {
-        WGPUFeatureName_Depth32FloatStencil8,
-    };
-    // check for optional features we're interested in
-    if (wgpuAdapterHasFeature(adapter, WGPUFeatureName_TextureCompressionBC)) {
-        SOKOL_ASSERT(cur_feature_index < _SAPP_WGPU_MAX_REQUESTED_FEATURES);
-        requiredFeatures[cur_feature_index++] = WGPUFeatureName_TextureCompressionBC;
-    }
-    if (wgpuAdapterHasFeature(adapter, WGPUFeatureName_TextureCompressionETC2)) {
-        SOKOL_ASSERT(cur_feature_index < _SAPP_WGPU_MAX_REQUESTED_FEATURES);
-        requiredFeatures[cur_feature_index++] = WGPUFeatureName_TextureCompressionETC2;
-    }
-    if (wgpuAdapterHasFeature(adapter, WGPUFeatureName_TextureCompressionASTC)) {
-        SOKOL_ASSERT(cur_feature_index < _SAPP_WGPU_MAX_REQUESTED_FEATURES);
-        requiredFeatures[cur_feature_index++] = WGPUFeatureName_TextureCompressionASTC;
-    }
-    if (wgpuAdapterHasFeature(adapter, WGPUFeatureName_Float32Filterable)) {
-        SOKOL_ASSERT(cur_feature_index < _SAPP_WGPU_MAX_REQUESTED_FEATURES);
-        requiredFeatures[cur_feature_index++] = WGPUFeatureName_Float32Filterable;
-    }
-    #undef _SAPP_WGPU_MAX_REQUESTED_FEATURES
+    #if !defined(_SAPP_WGPU_HAS_WAIT)
+        // chain device creation
+        _sapp_wgpu_create_device_and_swapchain();
+    #endif
+}
 
-    WGPURequestDeviceCallbackInfo cb_info;
+_SOKOL_PRIVATE void _sapp_wgpu_create_adapter(void) {
+    SOKOL_ASSERT(_sapp.wgpu.instance);
+    // FIXME: power preference?
+    WGPURequestAdapterCallbackInfo cb_info;
     _sapp_clear(&cb_info, sizeof(cb_info));
-    cb_info.mode = WGPUCallbackMode_AllowProcessEvents;
-    cb_info.callback = _sapp_wgpu_request_device_cb;
-
-    WGPUDeviceDescriptor dev_desc;
-    _sapp_clear(&dev_desc, sizeof(dev_desc));
-    dev_desc.requiredFeatureCount = cur_feature_index;
-    dev_desc.requiredFeatures = requiredFeatures,
-    wgpuAdapterRequestDevice(adapter, &dev_desc, cb_info);
+    cb_info.mode = _sapp_wgpu_callbackmode();
+    cb_info.callback = _sapp_wgpu_request_adapter_cb;
+    WGPUFuture future = wgpuInstanceRequestAdapter(_sapp.wgpu.instance, 0, cb_info);
+    #if defined(_SAPP_WGPU_HAS_WAIT)
+        _sapp_wgpu_await(future);
+    #else
+        _SOKOL_UNUSED(future);
+    #endif
 }
 
 _SOKOL_PRIVATE void _sapp_wgpu_init(void) {
     SOKOL_ASSERT(0 == _sapp.wgpu.instance);
-    SOKOL_ASSERT(!_sapp.wgpu.async_init_done);
-    _sapp.wgpu.instance = wgpuCreateInstance(0);
+    SOKOL_ASSERT(!_sapp.wgpu.init_done);
+
+    WGPUInstanceDescriptor desc;
+    _sapp_clear(&desc, sizeof(desc));
+    #if defined(_SAPP_WGPU_HAS_WAIT)
+        WGPUInstanceFeatureName inst_features[1] = {
+            WGPUInstanceFeatureName_TimedWaitAny,
+        };
+        desc.requiredFeatureCount = 1;
+        desc.requiredFeatures = inst_features;
+    #endif
+    _sapp.wgpu.instance = wgpuCreateInstance(&desc);
     if (0 == _sapp.wgpu.instance) {
         _SAPP_PANIC(WGPU_CREATE_INSTANCE_FAILED);
     }
-    // FIXME: power preference?
-    WGPURequestAdapterCallbackInfo cb_info;
-    _sapp_clear(&cb_info, sizeof(cb_info));
-    cb_info.mode = WGPUCallbackMode_AllowProcessEvents;
-    cb_info.callback = _sapp_wgpu_request_adapter_cb;
-    wgpuInstanceRequestAdapter(_sapp.wgpu.instance, 0, cb_info);
+    // NOTE: on Emscripten, device and swapchain creation are chained in the callacks
+    _sapp_wgpu_create_adapter();
+    #if defined(_SAPP_WGPU_HAS_WAIT)
+        _sapp_wgpu_create_device_and_swapchain();
+        SOKOL_ASSERT(_sapp.wgpu.init_done);
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_wgpu_discard(void) {
+    _sapp_wgpu_discard_swapchain(false);
+    if (_sapp.wgpu.device) {
+        wgpuDeviceRelease(_sapp.wgpu.device);
+        _sapp.wgpu.device = 0;
+    }
+    if (_sapp.wgpu.adapter) {
+        wgpuAdapterRelease(_sapp.wgpu.adapter);
+        _sapp.wgpu.adapter = 0;
+    }
+    if (_sapp.wgpu.instance) {
+        wgpuInstanceRelease(_sapp.wgpu.instance);
+        _sapp.wgpu.instance = 0;
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_wgpu_frame(void) {
     wgpuInstanceProcessEvents(_sapp.wgpu.instance);
-    if (_sapp.wgpu.async_init_done) {
+    if (_sapp.wgpu.init_done) {
         _sapp.wgpu.swapchain_view = _sapp_wgpu_swapchain_next();
         _sapp_frame();
         wgpuTextureViewRelease(_sapp.wgpu.swapchain_view);
         _sapp.wgpu.swapchain_view = 0;
+        #if !defined(_SAPP_EMSCRIPTEN)
+        wgpuSurfacePresent(_sapp.wgpu.surface);
+        #endif
     }
 }
 #endif // SOKOL_WGPU
@@ -3860,14 +3995,21 @@ _SOKOL_PRIVATE void _sapp_wgpu_frame(void) {
 // >>macos
 #if defined(_SAPP_MACOS)
 
-#if defined(SOKOL_METAL)
-_SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
+NSInteger _sapp_macos_max_fps(void) {
     NSInteger max_fps = 60;
     #if (__MAC_OS_X_VERSION_MAX_ALLOWED >= 120000)
     if (@available(macOS 12.0, *)) {
         max_fps = [NSScreen.mainScreen maximumFramesPerSecond];
     }
     #endif
+    return max_fps;
+}
+
+#if defined(SOKOL_METAL)
+_SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
+    NSInteger max_fps = _sapp_macos_max_fps();
+    // NOTE: when eventually switching to CAMetalLayer, use the specialized
+    // CAMetalDisplayLink instead of CADisplayLink!
     _sapp.macos.mtl_device = MTLCreateSystemDefaultDevice();
     _sapp.macos.view = [[_sapp_macos_view alloc] init];
     [_sapp.macos.view updateTrackingAreas];
@@ -3887,31 +4029,15 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_discard_state(void) {
 _SOKOL_PRIVATE bool _sapp_macos_mtl_update_framebuffer_dimensions(NSRect view_bounds) {
     _sapp.framebuffer_width = _sapp_roundf_gzero(view_bounds.size.width * _sapp.dpi_scale);
     _sapp.framebuffer_height = _sapp_roundf_gzero(view_bounds.size.height * _sapp.dpi_scale);
-    const CGSize fb_size = _sapp.macos.view.drawableSize;
-    int cur_fb_width = _sapp_roundf_gzero(fb_size.width);
-    int cur_fb_height = _sapp_roundf_gzero(fb_size.height);
+    const CGSize cur_fb_size = _sapp.macos.view.drawableSize;
+    int cur_fb_width = _sapp_roundf_gzero(cur_fb_size.width);
+    int cur_fb_height = _sapp_roundf_gzero(cur_fb_size.height);
     bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) || (_sapp.framebuffer_height != cur_fb_height);
     if (dim_changed) {
         const CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
         _sapp.macos.view.drawableSize = drawable_size;
     }
     return dim_changed;
-}
-
-_SOKOL_PRIVATE void _sapp_macos_mtl_on_window_will_start_live_resize(void) {
-    // Work around the MTKView resizing glitch by "anchoring" the layer to the window corner opposite
-    // to the currently manipulated corner (or edge). This prevents the content stretching back and
-    // forth during resizing. This is a workaround for this issue: https://github.com/floooh/sokol/issues/700
-    // Can be removed if/when migrating to CAMetalLayer: https://github.com/floooh/sokol/issues/727
-    bool resizing_from_left = _sapp.mouse.x < _sapp.window_width/2;
-    bool resizing_from_top = _sapp.mouse.y < _sapp.window_height/2;
-    NSViewLayerContentsPlacement placement;
-    if (resizing_from_left) {
-        placement = resizing_from_top ? NSViewLayerContentsPlacementBottomRight : NSViewLayerContentsPlacementTopRight;
-    } else {
-        placement = resizing_from_top ? NSViewLayerContentsPlacementBottomLeft : NSViewLayerContentsPlacementTopLeft;
-    }
-    _sapp.macos.view.layerContentsPlacement = placement;
 }
 #endif
 
@@ -3975,6 +4101,48 @@ _SOKOL_PRIVATE bool _sapp_macos_gl_update_framebuffer_dimensions(NSRect view_bou
     const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) || (_sapp.framebuffer_height != cur_fb_height);
     _sapp.framebuffer_width = cur_fb_width;
     _sapp.framebuffer_height = cur_fb_height;
+    return dim_changed;
+}
+#endif
+
+#if defined(SOKOL_WGPU)
+_SOKOL_PRIVATE void _sapp_macos_wgpu_init(void) {
+    NSInteger max_fps = _sapp_macos_max_fps();
+    _sapp.macos.wgpu.mtl_layer = [CAMetalLayer layer];
+    _sapp.macos.wgpu.mtl_layer.magnificationFilter = kCAFilterNearest;
+    _sapp.macos.wgpu.mtl_layer.opaque = true;
+    // NOTE: might experiment with this, valid values are 2 or 3 (default: 3), I don't see any difference tbh
+    // _sapp.macos.wgpu.mtl_layer.maximumDrawableCount = 2;
+    _sapp.macos.view = [[_sapp_macos_view alloc] init];
+    [_sapp.macos.view updateTrackingAreas];
+    _sapp.macos.view.wantsLayer = YES;
+    _sapp.macos.view.layer = _sapp.macos.wgpu.mtl_layer;
+    _sapp.macos.wgpu.display_link = [_sapp.macos.view displayLinkWithTarget:_sapp.macos.view selector:@selector(displayLinkFired:)];
+    float preferred_fps = max_fps / _sapp.swap_interval;
+    CAFrameRateRange frame_rate_range = { preferred_fps, preferred_fps, preferred_fps };
+    _sapp.macos.wgpu.display_link.preferredFrameRateRange = frame_rate_range;
+    [_sapp.macos.wgpu.display_link addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
+    _sapp_wgpu_init();
+}
+
+_SOKOL_PRIVATE void _sapp_macos_wgpu_discard_state(void) {
+    _SAPP_OBJC_RELEASE(_sapp.macos.wgpu.display_link);
+    _SAPP_OBJC_RELEASE(_sapp.macos.wgpu.mtl_layer);
+    _sapp_wgpu_discard();
+}
+
+_SOKOL_PRIVATE bool _sapp_macos_wgpu_update_framebuffer_dimensions(NSRect view_bounds) {
+    _sapp.framebuffer_width = _sapp_roundf_gzero(view_bounds.size.width * _sapp.dpi_scale);
+    _sapp.framebuffer_height = _sapp_roundf_gzero(view_bounds.size.height * _sapp.dpi_scale);
+    const CGSize cur_fb_size = _sapp.macos.wgpu.mtl_layer.drawableSize;
+    int cur_fb_width = _sapp_roundf_gzero(cur_fb_size.width);
+    int cur_fb_height = _sapp_roundf_gzero(cur_fb_size.height);
+    bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) || (_sapp.framebuffer_height != cur_fb_height);
+    if (dim_changed) {
+        const CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
+        _sapp.macos.wgpu.mtl_layer.drawableSize = drawable_size;
+        _sapp_wgpu_swapchain_size_changed();
+    }
     return dim_changed;
 }
 #endif
@@ -4108,6 +4276,8 @@ _SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
         _sapp_macos_mtl_discard_state();
     #elif defined(SOKOL_GLCORE)
         _sapp_macos_gl_discard_state();
+    #elif defined(SOKOL_WGPU)
+        _sapp_macos_wgpu_discard_state();
     #endif
     _SAPP_OBJC_RELEASE(_sapp.macos.window);
 }
@@ -4244,6 +4414,8 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
         bool dim_changed = _sapp_macos_mtl_update_framebuffer_dimensions(bounds);
     #elif defined(SOKOL_GLCORE)
         bool dim_changed = _sapp_macos_gl_update_framebuffer_dimensions(bounds);
+    #elif defined(SOKOL_WGPU)
+        bool dim_changed = _sapp_macos_wgpu_update_framebuffer_dimensions(bounds);
     #endif
     if (dim_changed && !_sapp.first_frame) {
         _sapp_macos_app_event(SAPP_EVENTTYPE_RESIZED);
@@ -4444,13 +4616,6 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
     CGImageRelease(cg_img);
 }
 
-_SOKOL_PRIVATE void _sapp_macos_frame(void) {
-    _sapp_frame();
-    if (_sapp.quit_requested || _sapp.quit_ordered) {
-        [_sapp.macos.window performClose:nil];
-    }
-}
-
 @implementation _sapp_macos_app_delegate
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
     _SOKOL_UNUSED(aNotification);
@@ -4487,6 +4652,8 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         _sapp_macos_mtl_init();
     #elif defined(SOKOL_GLCORE)
         _sapp_macos_gl_init(window_rect);
+    #elif defined(SOKOL_WGPU)
+        _sapp_macos_wgpu_init();
     #endif
     _sapp.macos.window.contentView = _sapp.macos.view;
     [_sapp.macos.window makeFirstResponder:_sapp.macos.view];
@@ -4552,8 +4719,20 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 }
 
 - (void)windowWillStartLiveResize:(NSNotification *)notification {
-    #if defined(SOKOL_METAL)
-        _sapp_macos_mtl_on_window_will_start_live_resize();
+    #if defined(SOKOL_METAL) || defined(SOKOL_WGPU)
+        // Work around the MTKView/CAMetalLayer resizing glitch by "anchoring" the layer to the window corner opposite
+        // to the currently manipulated corner (or edge). This prevents the content stretching back and
+        // forth during resizing. This is a workaround for this issue: https://github.com/floooh/sokol/issues/700
+        // Can be removed if/when migrating to CAMetalLayer: https://github.com/floooh/sokol/issues/727
+        bool resizing_from_left = _sapp.mouse.x < _sapp.window_width/2;
+        bool resizing_from_top = _sapp.mouse.y < _sapp.window_height/2;
+        NSViewLayerContentsPlacement placement;
+        if (resizing_from_left) {
+            placement = resizing_from_top ? NSViewLayerContentsPlacementBottomRight : NSViewLayerContentsPlacementTopRight;
+        } else {
+            placement = resizing_from_top ? NSViewLayerContentsPlacementBottomLeft : NSViewLayerContentsPlacementTopLeft;
+        }
+        _sapp.macos.view.layerContentsPlacement = placement;
     #endif
 }
 
@@ -4668,18 +4847,38 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 }
 #endif
 
+#if defined(SOKOL_WGPU)
+- (void)displayLinkFired:(id)sender {
+    _SOKOL_UNUSED(sender);
+    _sapp_timing_measure(&_sapp.timing);
+    @autoreleasepool {
+        _sapp_wgpu_frame();
+    }
+    if (_sapp.quit_requested || _sapp.quit_ordered) {
+        [_sapp.macos.window performClose:nil];
+    }
+}
+#endif
+
 - (void)drawRect:(NSRect)rect {
     _SOKOL_UNUSED(rect);
+    #if defined(SOKOL_WGPU)
+        // should never be called
+        return;
+    #endif
     #if defined(_SAPP_ANY_GL)
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
     #endif
     _sapp_timing_measure(&_sapp.timing);
     @autoreleasepool {
-        _sapp_macos_frame();
+        _sapp_frame();
     }
     #if defined(_SAPP_ANY_GL)
     [[_sapp.macos.view openGLContext] flushBuffer];
     #endif
+    if (_sapp.quit_requested || _sapp.quit_ordered) {
+        [_sapp.macos.window performClose:nil];
+    }
 }
 
 - (BOOL)isOpaque {
@@ -4878,6 +5077,7 @@ static void _sapp_gl_make_current(void) {
         event.isARepeat,
         _sapp_macos_mods(event));
 }
+
 - (void)flagsChanged:(NSEvent*)event {
     const uint32_t old_f = _sapp.macos.flags_changed_store;
     const uint32_t new_f = (uint32_t)event.modifierFlags;
@@ -5880,7 +6080,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
     emscripten_set_canvas_element_size(_sapp.html5_canvas_selector, _sapp.framebuffer_width, _sapp.framebuffer_height);
     #if defined(SOKOL_WGPU)
         // on WebGPU: recreate size-dependent rendering surfaces
-        _sapp_wgpu_size_changed();
+        _sapp_wgpu_swapchain_size_changed();
     #endif
     if (_sapp_events_enabled()) {
         _sapp_init_event(SAPP_EVENTTYPE_RESIZED);
@@ -6374,7 +6574,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame_animation_loop(double time, void* userDa
     if (_sapp.quit_ordered) {
         _sapp_emsc_unregister_eventhandlers();
         #if defined(SOKOL_WGPU)
-            _sapp_wgpu_discard_swapchain(false);
+            _sapp_wgpu_discard();
         #endif
         _sapp_call_cleanup();
         _sapp_discard_state();
@@ -7888,6 +8088,26 @@ _SOKOL_PRIVATE void _sapp_win32_timing_measure(void) {
     #endif
 }
 
+_SOKOL_PRIVATE void _sapp_win32_frame(bool from_winproc) {
+    #if defined(SOKOL_WGPU)
+        _sapp_wgpu_frame();
+    #else
+        _sapp_frame();
+    #endif
+    #if defined(SOKOL_D3D11)
+        bool do_not_wait = from_winproc;
+        _sapp_d3d11_present(do_not_wait);
+    #endif
+    #if defined(SOKOL_GLCORE)
+        _sapp_wgl_swap_buffers();
+    #endif
+    if (!from_winproc) {
+        if (IsIconic(_sapp.win32.hwnd)) {
+            Sleep((DWORD)(16 * _sapp.swap_interval));
+        }
+    }
+}
+
 _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (!_sapp.win32.in_create_window) {
         switch (uMsg) {
@@ -8079,14 +8299,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 break;
             case WM_TIMER:
                 _sapp_win32_timing_measure();
-                _sapp_frame();
-                #if defined(SOKOL_D3D11)
-                    // present with DXGI_PRESENT_DO_NOT_WAIT
-                    _sapp_d3d11_present(true);
-                #endif
-                #if defined(SOKOL_GLCORE)
-                    _sapp_wgl_swap_buffers();
-                #endif
+                _sapp_win32_frame(true);
                 /* NOTE: resizing the swap-chain during resize leads to a substantial
                    memory spike (hundreds of megabytes for a few seconds).
 
@@ -8492,11 +8705,12 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     #if defined(SOKOL_D3D11)
         _sapp_d3d11_create_device_and_swapchain();
         _sapp_d3d11_create_default_render_target();
-    #endif
-    #if defined(SOKOL_GLCORE)
+    #elif defined(SOKOL_GLCORE)
         _sapp_wgl_init();
         _sapp_wgl_load_extensions();
         _sapp_wgl_create_context();
+    #elif defined(SOKOL_WGPU)
+        _sapp_wgpu_init();
     #endif
     _sapp.valid = true;
 
@@ -8513,20 +8727,13 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
                 DispatchMessageW(&msg);
             }
         }
-        _sapp_frame();
-        #if defined(SOKOL_D3D11)
-            _sapp_d3d11_present(false);
-            if (IsIconic(_sapp.win32.hwnd)) {
-                Sleep((DWORD)(16 * _sapp.swap_interval));
-            }
-        #endif
-        #if defined(SOKOL_GLCORE)
-            _sapp_wgl_swap_buffers();
-        #endif
-        /* check for window resized, this cannot happen in WM_SIZE as it explodes memory usage */
+        _sapp_win32_frame(false);
+        // check for window resized, this cannot happen in WM_SIZE as it explodes memory usage
         if (_sapp_win32_update_dimensions()) {
             #if defined(SOKOL_D3D11)
             _sapp_d3d11_resize_default_render_target();
+            #elif defined(SOKOL_WGPU)
+            _sapp_wgpu_swapchain_size_changed();
             #endif
             _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
         }
@@ -8550,6 +8757,8 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     #elif defined(SOKOL_GLCORE)
         _sapp_wgl_destroy_context();
         _sapp_wgl_shutdown();
+    #elif defined(SOKOL_WGPU)
+        _sapp_wgpu_discard();
     #endif
     _sapp_win32_destroy_window();
     _sapp_win32_destroy_icons();
@@ -10843,7 +11052,7 @@ _SOKOL_PRIVATE void _sapp_glx_swapinterval(int interval) {
     }
 }
 
-#endif /* _SAPP_GLX */
+#endif // _SAPP_GLX
 
 _SOKOL_PRIVATE void _sapp_x11_send_event(Atom type, int a, int b, int c, int d, int e) {
     XEvent event;
@@ -10878,13 +11087,37 @@ _SOKOL_PRIVATE bool _sapp_x11_wait_for_event(int event_type, double timeout_sec,
     return true;
 }
 
-_SOKOL_PRIVATE void _sapp_x11_query_window_size(void) {
+_SOKOL_PRIVATE void _sapp_x11_app_event(sapp_event_type type) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_x11_update_dimensions(int x11_window_width, int x11_window_height) {
+    // NOTE: do *NOT* use _sapp.dpi_scale for the window scale
+    const float window_scale = _sapp.x11.dpi / 96.0f;
+    _sapp.window_width = _sapp_roundf_gzero(x11_window_width / window_scale);
+    _sapp.window_height = _sapp_roundf_gzero(x11_window_height / window_scale);
+    int cur_fb_width = _sapp.framebuffer_width;
+    int cur_fb_height = _sapp.framebuffer_height;
+    _sapp.framebuffer_width = _sapp_roundf_gzero(_sapp.window_width * _sapp.dpi_scale);
+    _sapp.framebuffer_height = _sapp_roundf_gzero(_sapp.window_height * _sapp.dpi_scale);
+    bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) || (_sapp.framebuffer_height != cur_fb_height);
+    if (dim_changed) {
+        #if defined(SOKOL_WGPU)
+            _sapp_wgpu_swapchain_size_changed();
+        #endif
+        if (!_sapp.first_frame) {
+            _sapp_x11_app_event(SAPP_EVENTTYPE_RESIZED);
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_x11_update_dimensions_from_window_size(void) {
     XWindowAttributes attribs;
     XGetWindowAttributes(_sapp.x11.display, _sapp.x11.window, &attribs);
-    _sapp.window_width = attribs.width;
-    _sapp.window_height = attribs.height;
-    _sapp.framebuffer_width = _sapp.window_width;
-    _sapp.framebuffer_height = _sapp.window_height;
+    _sapp_x11_update_dimensions(attribs.width, attribs.height);
 }
 
 _SOKOL_PRIVATE void _sapp_x11_set_fullscreen(bool enable) {
@@ -10999,7 +11232,7 @@ _SOKOL_PRIVATE void _sapp_x11_destroy_custom_mouse_cursor(sapp_mouse_cursor curs
 _SOKOL_PRIVATE void _sapp_x11_toggle_fullscreen(void) {
     _sapp.fullscreen = !_sapp.fullscreen;
     _sapp_x11_set_fullscreen(_sapp.fullscreen);
-    _sapp_x11_query_window_size();
+    _sapp_x11_update_dimensions_from_window_size();
 }
 
 _SOKOL_PRIVATE void _sapp_x11_update_cursor(sapp_mouse_cursor cursor, bool shown) {
@@ -11177,7 +11410,12 @@ _SOKOL_PRIVATE void _sapp_x11_set_icon(const sapp_icon_desc* icon_desc, int num_
     XFlush(_sapp.x11.display);
 }
 
-_SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
+_SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual_or_null, int depth) {
+    Visual* visual = visual_or_null;
+    if (0 == visual_or_null) {
+        visual = DefaultVisual(_sapp.x11.display, _sapp.x11.screen);
+        depth = DefaultDepth(_sapp.x11.display, _sapp.x11.screen);
+    }
     _sapp.x11.colormap = XCreateColormap(_sapp.x11.display, _sapp.x11.root, visual, AllocNone);
     XSetWindowAttributes wa;
     _sapp_clear(&wa, sizeof(wa));
@@ -11191,20 +11429,22 @@ _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
 
     int display_width = DisplayWidth(_sapp.x11.display, _sapp.x11.screen);
     int display_height = DisplayHeight(_sapp.x11.display, _sapp.x11.screen);
-    int window_width = (int)(_sapp.window_width * _sapp.dpi_scale);
-    int window_height = (int)(_sapp.window_height * _sapp.dpi_scale);
-    if (0 == window_width) {
-        window_width = (display_width * 4) / 5;
+    // NOTE: do *NOT* use _sapp.dpi_scale for the size multiplicator!
+    const float window_scale = _sapp.x11.dpi / 96.0f;
+    int x11_window_width = _sapp_roundf_gzero(_sapp.window_width * window_scale);
+    int x11_window_height = _sapp_roundf_gzero(_sapp.window_height * window_scale);
+    if (0 == _sapp.window_width) {
+        x11_window_width = (display_width * 4) / 5;
     }
-    if (0 == window_height) {
-        window_height = (display_height * 4) / 5;
+    if (0 == _sapp.window_height) {
+        x11_window_height = (display_height * 4) / 5;
     }
     _sapp_x11_grab_error_handler();
     _sapp.x11.window = XCreateWindow(_sapp.x11.display,
                                      _sapp.x11.root,
                                      0, 0,
-                                     (uint32_t)window_width,
-                                     (uint32_t)window_height,
+                                     (uint32_t)x11_window_width,
+                                     (uint32_t)x11_window_height,
                                      0,     /* border width */
                                      depth, /* color depth */
                                      InputOutput,
@@ -11233,7 +11473,7 @@ _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
         XChangeProperty(_sapp.x11.display, _sapp.x11.window, _sapp.x11.xdnd.XdndAware, XA_ATOM, 32, PropModeReplace, (unsigned char*) &version, 1);
     }
     _sapp_x11_update_window_title();
-    _sapp_x11_query_window_size();
+    _sapp_x11_update_dimensions_from_window_size();
 }
 
 _SOKOL_PRIVATE void _sapp_x11_destroy_window(void) {
@@ -11359,13 +11599,6 @@ _SOKOL_PRIVATE uint32_t _sapp_x11_mods(uint32_t x11_mods) {
     return mods;
 }
 
-_SOKOL_PRIVATE void _sapp_x11_app_event(sapp_event_type type) {
-    if (_sapp_events_enabled()) {
-        _sapp_init_event(type);
-        _sapp_call_event(&_sapp.event);
-    }
-}
-
 _SOKOL_PRIVATE sapp_mousebutton _sapp_x11_translate_button(const XEvent* event) {
     switch (event->xbutton.button) {
         case Button1: return SAPP_MOUSEBUTTON_LEFT;
@@ -11377,8 +11610,8 @@ _SOKOL_PRIVATE sapp_mousebutton _sapp_x11_translate_button(const XEvent* event) 
 
 _SOKOL_PRIVATE void _sapp_x11_mouse_update(int x, int y, bool clear_dxdy) {
     if (!_sapp.mouse.locked) {
-        const float new_x = (float) x;
-        const float new_y = (float) y;
+        const float new_x = (float)x;
+        const float new_y = (float)y;
         if (clear_dxdy) {
             _sapp.mouse.dx = 0.0f;
             _sapp.mouse.dy = 0.0f;
@@ -11696,13 +11929,7 @@ _SOKOL_PRIVATE void _sapp_x11_on_motionnotify(XEvent* event) {
 }
 
 _SOKOL_PRIVATE void _sapp_x11_on_configurenotify(XEvent* event) {
-    if ((event->xconfigure.width != _sapp.window_width) || (event->xconfigure.height != _sapp.window_height)) {
-        _sapp.window_width = event->xconfigure.width;
-        _sapp.window_height = event->xconfigure.height;
-        _sapp.framebuffer_width = _sapp.window_width;
-        _sapp.framebuffer_height = _sapp.window_height;
-        _sapp_x11_app_event(SAPP_EVENTTYPE_RESIZED);
-    }
+    _sapp_x11_update_dimensions(event->xconfigure.width, event->xconfigure.height);
 }
 
 _SOKOL_PRIVATE void _sapp_x11_on_propertynotify(XEvent* event) {
@@ -11943,18 +12170,18 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
     }
 }
 
-#if !defined(_SAPP_GLX)
+#if defined(_SAPP_EGL)
 
 _SOKOL_PRIVATE void _sapp_egl_init(void) {
-#if defined(SOKOL_GLCORE)
-    if (!eglBindAPI(EGL_OPENGL_API)) {
-        _SAPP_PANIC(LINUX_EGL_BIND_OPENGL_API_FAILED);
-    }
-#else
-    if (!eglBindAPI(EGL_OPENGL_ES_API)) {
-        _SAPP_PANIC(LINUX_EGL_BIND_OPENGL_ES_API_FAILED);
-    }
-#endif
+    #if defined(SOKOL_GLCORE)
+        if (!eglBindAPI(EGL_OPENGL_API)) {
+            _SAPP_PANIC(LINUX_EGL_BIND_OPENGL_API_FAILED);
+        }
+    #else
+        if (!eglBindAPI(EGL_OPENGL_ES_API)) {
+            _SAPP_PANIC(LINUX_EGL_BIND_OPENGL_ES_API_FAILED);
+        }
+    #endif
 
     _sapp.egl.display = eglGetDisplay((EGLNativeDisplayType)_sapp.x11.display);
     if (EGL_NO_DISPLAY == _sapp.egl.display) {
@@ -12073,7 +12300,20 @@ _SOKOL_PRIVATE void _sapp_egl_destroy(void) {
     }
 }
 
-#endif /* _SAPP_GLX */
+#endif // _SAPP_EGL
+
+_SOKOL_PRIVATE void _sapp_linux_frame(void) {
+    #if defined(SOKOL_WGPU)
+        _sapp_wgpu_frame();
+    #else
+        _sapp_frame();
+        #if defined(_SAPP_GLX)
+            _sapp_glx_swap_buffers();
+        #elif defined(_SAPP_EGL)
+            eglSwapBuffers(_sapp.egl.display, _sapp.egl.surface);
+        #endif
+    #endif
+}
 
 _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     /* The following lines are here to trigger a linker error instead of an
@@ -12096,22 +12336,26 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     _sapp.x11.screen = DefaultScreen(_sapp.x11.display);
     _sapp.x11.root = DefaultRootWindow(_sapp.x11.display);
     _sapp_x11_query_system_dpi();
+    // NOTE: on Linux system-window-size to frame-buffer-size mapping is always 1:1
     _sapp.dpi_scale = _sapp.x11.dpi / 96.0f;
     _sapp_x11_init_extensions();
     _sapp_x11_create_standard_cursors();
     XkbSetDetectableAutoRepeat(_sapp.x11.display, true, NULL);
     _sapp_x11_init_keytable();
-#if defined(_SAPP_GLX)
-    _sapp_glx_init();
-    Visual* visual = 0;
-    int depth = 0;
-    _sapp_glx_choose_visual(&visual, &depth);
-    _sapp_x11_create_window(visual, depth);
-    _sapp_glx_create_context();
-    _sapp_glx_swapinterval(_sapp.swap_interval);
-#else
-    _sapp_egl_init();
-#endif
+    #if defined(_SAPP_GLX)
+        _sapp_glx_init();
+        Visual* visual = 0;
+        int depth = 0;
+        _sapp_glx_choose_visual(&visual, &depth);
+        _sapp_x11_create_window(visual, depth);
+        _sapp_glx_create_context();
+        _sapp_glx_swapinterval(_sapp.swap_interval);
+    #elif defined(_SAPP_EGL)
+        _sapp_egl_init();
+    #elif defined(SOKOL_WGPU)
+        _sapp_x11_create_window(0, 0);
+        _sapp_wgpu_init();
+    #endif
     sapp_set_icon(&desc->icon);
     _sapp.valid = true;
     _sapp_x11_show_window();
@@ -12128,16 +12372,11 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
             XNextEvent(_sapp.x11.display, &event);
             _sapp_x11_process_event(&event);
         }
-        _sapp_frame();
-#if defined(_SAPP_GLX)
-        _sapp_glx_swap_buffers();
-#else
-        eglSwapBuffers(_sapp.egl.display, _sapp.egl.surface);
-#endif
+        _sapp_linux_frame();
         XFlush(_sapp.x11.display);
-        /* handle quit-requested, either from window or from sapp_request_quit() */
+        // handle quit-requested, either from window or from sapp_request_quit()
         if (_sapp.quit_requested && !_sapp.quit_ordered) {
-            /* give user code a chance to intervene */
+            // give user code a chance to intervene
             _sapp_x11_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
             /* if user code hasn't intervened, quit the app */
             if (_sapp.quit_requested) {
@@ -12146,11 +12385,13 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
         }
     }
     _sapp_call_cleanup();
-#if defined(_SAPP_GLX)
-    _sapp_glx_destroy_context();
-#else
-    _sapp_egl_destroy();
-#endif
+    #if defined(_SAPP_GLX)
+        _sapp_glx_destroy_context();
+    #elif defined(_SAPP_EGL)
+        _sapp_egl_destroy();
+    #elif defined(SOKOL_WGPU)
+        _sapp_wgpu_discard();
+    #endif
     _sapp_x11_destroy_window();
     _sapp_x11_destroy_standard_cursors();
     XCloseDisplay(_sapp.x11.display);
@@ -12280,7 +12521,7 @@ SOKOL_API_IMPL const void* sapp_egl_get_display(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_ANDROID)
         return _sapp.android.display;
-    #elif defined(_SAPP_LINUX) && !defined(_SAPP_GLX)
+    #elif defined(_SAPP_LINUX) && defined(_SAPP_EGL)
         return _sapp.egl.display;
     #else
         return 0;
@@ -12291,7 +12532,7 @@ SOKOL_API_IMPL const void* sapp_egl_get_context(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_ANDROID)
         return _sapp.android.context;
-    #elif defined(_SAPP_LINUX) && !defined(_SAPP_GLX)
+    #elif defined(_SAPP_LINUX) && defined(_SAPP_EGL)
         return _sapp.egl.context;
     #else
         return 0;
