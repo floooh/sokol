@@ -2154,17 +2154,21 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(__linux__) || defined(__unix__)
     /* Linux */
     #define _SAPP_LINUX (1)
+    #if !defined(SOKOL_GLCORE) && !defined(SOKOL_GLES3) && !defined(SOKOL_WGPU)
+        #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE, SOKOL_GLES3 or SOKOL_WGPU")
+    #endif
     #if defined(SOKOL_GLCORE)
-        #if !defined(SOKOL_FORCE_EGL)
+        #if defined(SOKOL_FORCE_EGL)
+            #define _SAPP_EGL (1)
+        #else
             #define _SAPP_GLX (1)
         #endif
         #define GL_GLEXT_PROTOTYPES
         #include <GL/gl.h>
     #elif defined(SOKOL_GLES3)
+        #define _SAPP_EGL (1)
         #include <GLES3/gl3.h>
         #include <GLES3/gl3ext.h>
-    #else
-        #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE, SOKOL_GLES3")
     #endif
 #else
 #error "sokol_app.h: Unknown platform"
@@ -2326,7 +2330,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <X11/Xcursor/Xcursor.h>
     #include <X11/cursorfont.h> /* XC_* font cursors */
     #include <X11/Xmd.h> /* CARD32 */
-    #if !defined(_SAPP_GLX)
+    #if defined(_SAPP_EGL)
         #include <EGL/egl.h>
     #endif
     #include <dlfcn.h> /* dlopen, dlsym, dlclose */
@@ -3005,16 +3009,15 @@ typedef struct {
     bool ARB_create_context;
     bool ARB_create_context_profile;
 } _sapp_glx_t;
+#endif // _SAPP_GLX
 
-#else
-
+#if defined(_SAPP_EGL)
 typedef struct {
     EGLDisplay display;
     EGLContext context;
     EGLSurface surface;
 } _sapp_egl_t;
-
-#endif // _SAPP_GLX
+#endif // _SAPP_EGL
 #endif // _SAPP_LINUX
 
 #if defined(_SAPP_ANY_GL)
@@ -3096,7 +3099,7 @@ typedef struct {
         _sapp_x11_t x11;
         #if defined(_SAPP_GLX)
             _sapp_glx_t glx;
-        #else
+        #elif defined(_SAPP_EGL)
             _sapp_egl_t egl;
         #endif
     #endif
@@ -3630,6 +3633,22 @@ _SOKOL_PRIVATE void _sapp_wgpu_await(WGPUFuture future) {
     #endif
 }
 
+_SOKOL_PRIVATE WGPUTextureFormat _sapp_wgpu_pick_render_format(size_t count, const WGPUTextureFormat* formats) {
+    // NOTE: only accept non-SRGB formats until sokol_app.h gets proper SRGB support
+    SOKOL_ASSERT((count > 0) && formats);
+    for (size_t i = 0; i < count; i++) {
+        const WGPUTextureFormat fmt = formats[i];
+        switch (fmt) {
+            case WGPUTextureFormat_RGBA8Unorm:
+            case WGPUTextureFormat_BGRA8Unorm:
+                return fmt;
+            default: break;
+        }
+    }
+    // FIXME: fallback might still return an SRGB format
+    return formats[0];
+}
+
 _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
     SOKOL_ASSERT(_sapp.wgpu.instance);
     SOKOL_ASSERT(_sapp.wgpu.device);
@@ -3661,8 +3680,15 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
             from_hwnd.hinstance = GetModuleHandleW(NULL);
             from_hwnd.hwnd = _sapp.win32.hwnd;
             surf_desc.nextInChain = &from_hwnd.chain;
+        #elif defined(_SAPP_LINUX)
+            WGPUSurfaceSourceXlibWindow from_xlib;
+            _sapp_clear(&from_xlib, sizeof(from_xlib));
+            from_xlib.chain.sType = WGPUSType_SurfaceSourceXlibWindow;
+            from_xlib.display = _sapp.x11.display;
+            from_xlib.window = _sapp.x11.window;
+            surf_desc.nextInChain = &from_xlib.chain;
         #else
-        // FIXME FIXME FIXME
+        #error "sokol_app.h: unsupported WebGPU platform"
         #endif
         _sapp.wgpu.surface = wgpuInstanceCreateSurface(_sapp.wgpu.instance, &surf_desc);
         if (0 == _sapp.wgpu.surface) {
@@ -3674,7 +3700,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
         if (caps_status != WGPUStatus_Success) {
             _SAPP_PANIC(WGPU_SWAPCHAIN_SURFACE_GET_CAPABILITIES_FAILED);
         }
-        _sapp.wgpu.render_format = surf_caps.formats[0];
+        _sapp.wgpu.render_format = _sapp_wgpu_pick_render_format(surf_caps.formatCount, surf_caps.formats);
     }
 
     SOKOL_ASSERT(_sapp.wgpu.surface);
@@ -11026,7 +11052,7 @@ _SOKOL_PRIVATE void _sapp_glx_swapinterval(int interval) {
     }
 }
 
-#endif /* _SAPP_GLX */
+#endif // _SAPP_GLX
 
 _SOKOL_PRIVATE void _sapp_x11_send_event(Atom type, int a, int b, int c, int d, int e) {
     XEvent event;
@@ -11360,7 +11386,12 @@ _SOKOL_PRIVATE void _sapp_x11_set_icon(const sapp_icon_desc* icon_desc, int num_
     XFlush(_sapp.x11.display);
 }
 
-_SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
+_SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual_or_null, int depth) {
+    Visual* visual = visual_or_null;
+    if (0 == visual_or_null) {
+        visual = DefaultVisual(_sapp.x11.display, _sapp.x11.screen);
+        depth = DefaultDepth(_sapp.x11.display, _sapp.x11.screen);
+    }
     _sapp.x11.colormap = XCreateColormap(_sapp.x11.display, _sapp.x11.root, visual, AllocNone);
     XSetWindowAttributes wa;
     _sapp_clear(&wa, sizeof(wa));
@@ -12126,18 +12157,18 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
     }
 }
 
-#if !defined(_SAPP_GLX)
+#if defined(_SAPP_EGL)
 
 _SOKOL_PRIVATE void _sapp_egl_init(void) {
-#if defined(SOKOL_GLCORE)
-    if (!eglBindAPI(EGL_OPENGL_API)) {
-        _SAPP_PANIC(LINUX_EGL_BIND_OPENGL_API_FAILED);
-    }
-#else
-    if (!eglBindAPI(EGL_OPENGL_ES_API)) {
-        _SAPP_PANIC(LINUX_EGL_BIND_OPENGL_ES_API_FAILED);
-    }
-#endif
+    #if defined(SOKOL_GLCORE)
+        if (!eglBindAPI(EGL_OPENGL_API)) {
+            _SAPP_PANIC(LINUX_EGL_BIND_OPENGL_API_FAILED);
+        }
+    #else
+        if (!eglBindAPI(EGL_OPENGL_ES_API)) {
+            _SAPP_PANIC(LINUX_EGL_BIND_OPENGL_ES_API_FAILED);
+        }
+    #endif
 
     _sapp.egl.display = eglGetDisplay((EGLNativeDisplayType)_sapp.x11.display);
     if (EGL_NO_DISPLAY == _sapp.egl.display) {
@@ -12256,7 +12287,20 @@ _SOKOL_PRIVATE void _sapp_egl_destroy(void) {
     }
 }
 
-#endif /* _SAPP_GLX */
+#endif // _SAPP_EGL
+
+_SOKOL_PRIVATE void _sapp_linux_frame(void) {
+    #if defined(SOKOL_WGPU)
+        _sapp_wgpu_frame();
+    #else
+        _sapp_frame();
+        #if defined(_SAPP_GLX)
+            _sapp_glx_swap_buffers();
+        #elif defined(_SAPP_EGL)
+            eglSwapBuffers(_sapp.egl.display, _sapp.egl.surface);
+        #endif
+    #endif
+}
 
 _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     /* The following lines are here to trigger a linker error instead of an
@@ -12284,17 +12328,20 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     _sapp_x11_create_standard_cursors();
     XkbSetDetectableAutoRepeat(_sapp.x11.display, true, NULL);
     _sapp_x11_init_keytable();
-#if defined(_SAPP_GLX)
-    _sapp_glx_init();
-    Visual* visual = 0;
-    int depth = 0;
-    _sapp_glx_choose_visual(&visual, &depth);
-    _sapp_x11_create_window(visual, depth);
-    _sapp_glx_create_context();
-    _sapp_glx_swapinterval(_sapp.swap_interval);
-#else
-    _sapp_egl_init();
-#endif
+    #if defined(_SAPP_GLX)
+        _sapp_glx_init();
+        Visual* visual = 0;
+        int depth = 0;
+        _sapp_glx_choose_visual(&visual, &depth);
+        _sapp_x11_create_window(visual, depth);
+        _sapp_glx_create_context();
+        _sapp_glx_swapinterval(_sapp.swap_interval);
+    #elif defined(_SAPP_EGL)
+        _sapp_egl_init();
+    #elif defined(SOKOL_WGPU)
+        _sapp_x11_create_window(0, 0);
+        _sapp_wgpu_init();
+    #endif
     sapp_set_icon(&desc->icon);
     _sapp.valid = true;
     _sapp_x11_show_window();
@@ -12311,16 +12358,11 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
             XNextEvent(_sapp.x11.display, &event);
             _sapp_x11_process_event(&event);
         }
-        _sapp_frame();
-#if defined(_SAPP_GLX)
-        _sapp_glx_swap_buffers();
-#else
-        eglSwapBuffers(_sapp.egl.display, _sapp.egl.surface);
-#endif
+        _sapp_linux_frame();
         XFlush(_sapp.x11.display);
-        /* handle quit-requested, either from window or from sapp_request_quit() */
+        // handle quit-requested, either from window or from sapp_request_quit()
         if (_sapp.quit_requested && !_sapp.quit_ordered) {
-            /* give user code a chance to intervene */
+            // give user code a chance to intervene
             _sapp_x11_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
             /* if user code hasn't intervened, quit the app */
             if (_sapp.quit_requested) {
@@ -12329,11 +12371,13 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
         }
     }
     _sapp_call_cleanup();
-#if defined(_SAPP_GLX)
-    _sapp_glx_destroy_context();
-#else
-    _sapp_egl_destroy();
-#endif
+    #if defined(_SAPP_GLX)
+        _sapp_glx_destroy_context();
+    #elif defined(_SAPP_EGL)
+        _sapp_egl_destroy();
+    #elif defined(SOKOL_WGPU)
+        _sapp_wgpu_discard();
+    #endif
     _sapp_x11_destroy_window();
     _sapp_x11_destroy_standard_cursors();
     XCloseDisplay(_sapp.x11.display);
@@ -12463,7 +12507,7 @@ SOKOL_API_IMPL const void* sapp_egl_get_display(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_ANDROID)
         return _sapp.android.display;
-    #elif defined(_SAPP_LINUX) && !defined(_SAPP_GLX)
+    #elif defined(_SAPP_LINUX) && defined(_SAPP_EGL)
         return _sapp.egl.display;
     #else
         return 0;
@@ -12474,7 +12518,7 @@ SOKOL_API_IMPL const void* sapp_egl_get_context(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_ANDROID)
         return _sapp.android.context;
-    #elif defined(_SAPP_LINUX) && !defined(_SAPP_GLX)
+    #elif defined(_SAPP_LINUX) && defined(_SAPP_EGL)
         return _sapp.egl.context;
     #else
         return 0;
