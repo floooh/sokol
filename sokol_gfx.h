@@ -16941,24 +16941,20 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     _sg.wgpu.empty_bind_group = wgpuDeviceCreateBindGroup(_sg.wgpu.dev, &bg_desc);
     SOKOL_ASSERT(_sg.wgpu.empty_bind_group);
     wgpuBindGroupLayoutRelease(empty_bgl);
-
-    // create initial per-frame command encoder
-    WGPUCommandEncoderDescriptor cmd_enc_desc;
-    _sg_clear(&cmd_enc_desc, sizeof(cmd_enc_desc));
-    _sg.wgpu.cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
-    SOKOL_ASSERT(_sg.wgpu.cmd_enc);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
     SOKOL_ASSERT(_sg.wgpu.valid);
-    SOKOL_ASSERT(_sg.wgpu.cmd_enc);
     _sg.wgpu.valid = false;
     _sg_wgpu_discard_all_bindgroups();
     _sg_wgpu_bindgroups_cache_discard();
     _sg_wgpu_bindgroups_pool_discard();
     _sg_wgpu_uniform_buffer_discard();
     wgpuBindGroupRelease(_sg.wgpu.empty_bind_group); _sg.wgpu.empty_bind_group = 0;
-    wgpuCommandEncoderRelease(_sg.wgpu.cmd_enc); _sg.wgpu.cmd_enc = 0;
+    // the command encoder is usually released in sg_commit()
+    if (_sg.wgpu.cmd_enc) {
+        wgpuCommandEncoderRelease(_sg.wgpu.cmd_enc); _sg.wgpu.cmd_enc = 0;
+    }
     wgpuQueueRelease(_sg.wgpu.queue); _sg.wgpu.queue = 0;
 }
 
@@ -17712,9 +17708,16 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_render_pass(const sg_pass* pass, const _sg_at
 _SOKOL_PRIVATE void _sg_wgpu_begin_pass(const sg_pass* pass, const _sg_attachments_ptrs_t* atts) {
     SOKOL_ASSERT(pass && atts);
     SOKOL_ASSERT(_sg.wgpu.dev);
-    SOKOL_ASSERT(_sg.wgpu.cmd_enc);
     SOKOL_ASSERT(0 == _sg.wgpu.rpass_enc);
     SOKOL_ASSERT(0 == _sg.wgpu.cpass_enc);
+
+    // first pass in the frame? create command encoder
+    if (0 == _sg.wgpu.cmd_enc) {
+        WGPUCommandEncoderDescriptor cmd_enc_desc;
+        _sg_clear(&cmd_enc_desc, sizeof(cmd_enc_desc));
+        _sg.wgpu.cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
+        SOKOL_ASSERT(_sg.wgpu.cmd_enc);
+    }
 
     _sg_wgpu_bindings_cache_clear();
     if (pass->compute) {
@@ -17752,11 +17755,6 @@ _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
 
     wgpuQueueSubmit(_sg.wgpu.queue, 1, &wgpu_cmd_buf);
     wgpuCommandBufferRelease(wgpu_cmd_buf);
-
-    // create a new render-command-encoder for next frame
-    WGPUCommandEncoderDescriptor cmd_enc_desc;
-    _sg_clear(&cmd_enc_desc, sizeof(cmd_enc_desc));
-    _sg.wgpu.cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
