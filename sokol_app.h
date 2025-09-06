@@ -11610,8 +11610,8 @@ _SOKOL_PRIVATE sapp_mousebutton _sapp_x11_translate_button(const XEvent* event) 
 
 _SOKOL_PRIVATE void _sapp_x11_mouse_update(int x, int y, bool clear_dxdy) {
     if (!_sapp.mouse.locked) {
-        const float new_x = (float) x;
-        const float new_y = (float) y;
+        const float new_x = (float)x;
+        const float new_y = (float)y;
         if (clear_dxdy) {
             _sapp.mouse.dx = 0.0f;
             _sapp.mouse.dy = 0.0f;
@@ -12336,11 +12336,8 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     _sapp.x11.screen = DefaultScreen(_sapp.x11.display);
     _sapp.x11.root = DefaultRootWindow(_sapp.x11.display);
     _sapp_x11_query_system_dpi();
-    if (_sapp.desc.high_dpi) {
-        _sapp.dpi_scale = _sapp.x11.dpi / 96.0f;
-    } else {
-        _sapp.dpi_scale = 1.0f;
-    }
+    // NOTE: on Linux system-window-size to frame-buffer-size mapping is always 1:1
+    _sapp.dpi_scale = _sapp.x11.dpi / 96.0f;
     _sapp_x11_init_extensions();
     _sapp_x11_create_standard_cursors();
     XkbSetDetectableAutoRepeat(_sapp.x11.display, true, NULL);
