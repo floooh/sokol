@@ -11087,13 +11087,37 @@ _SOKOL_PRIVATE bool _sapp_x11_wait_for_event(int event_type, double timeout_sec,
     return true;
 }
 
-_SOKOL_PRIVATE void _sapp_x11_query_window_size(void) {
+_SOKOL_PRIVATE void _sapp_x11_app_event(sapp_event_type type) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_x11_update_dimensions(int x11_window_width, int x11_window_height) {
+    // NOTE: do *NOT* use _sapp.dpi_scale for the window scale
+    const float window_scale = _sapp.x11.dpi / 96.0f;
+    _sapp.window_width = _sapp_roundf_gzero(x11_window_width / window_scale);
+    _sapp.window_height = _sapp_roundf_gzero(x11_window_height / window_scale);
+    int cur_fb_width = _sapp.framebuffer_width;
+    int cur_fb_height = _sapp.framebuffer_height;
+    _sapp.framebuffer_width = _sapp_roundf_gzero(_sapp.window_width * _sapp.dpi_scale);
+    _sapp.framebuffer_height = _sapp_roundf_gzero(_sapp.window_height * _sapp.dpi_scale);
+    bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) || (_sapp.framebuffer_height != cur_fb_height);
+    if (dim_changed) {
+        #if defined(SOKOL_WGPU)
+            _sapp_wgpu_swapchain_size_changed();
+        #endif
+        if (!_sapp.first_frame) {
+            _sapp_x11_app_event(SAPP_EVENTTYPE_RESIZED);
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_x11_update_dimensions_from_window_size(void) {
     XWindowAttributes attribs;
     XGetWindowAttributes(_sapp.x11.display, _sapp.x11.window, &attribs);
-    _sapp.window_width = attribs.width;
-    _sapp.window_height = attribs.height;
-    _sapp.framebuffer_width = _sapp.window_width;
-    _sapp.framebuffer_height = _sapp.window_height;
+    _sapp_x11_update_dimensions(attribs.width, attribs.height);
 }
 
 _SOKOL_PRIVATE void _sapp_x11_set_fullscreen(bool enable) {
@@ -11208,7 +11232,7 @@ _SOKOL_PRIVATE void _sapp_x11_destroy_custom_mouse_cursor(sapp_mouse_cursor curs
 _SOKOL_PRIVATE void _sapp_x11_toggle_fullscreen(void) {
     _sapp.fullscreen = !_sapp.fullscreen;
     _sapp_x11_set_fullscreen(_sapp.fullscreen);
-    _sapp_x11_query_window_size();
+    _sapp_x11_update_dimensions_from_window_size();
 }
 
 _SOKOL_PRIVATE void _sapp_x11_update_cursor(sapp_mouse_cursor cursor, bool shown) {
@@ -11405,20 +11429,22 @@ _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual_or_null, int depth) {
 
     int display_width = DisplayWidth(_sapp.x11.display, _sapp.x11.screen);
     int display_height = DisplayHeight(_sapp.x11.display, _sapp.x11.screen);
-    int window_width = (int)(_sapp.window_width * _sapp.dpi_scale);
-    int window_height = (int)(_sapp.window_height * _sapp.dpi_scale);
-    if (0 == window_width) {
-        window_width = (display_width * 4) / 5;
+    // NOTE: do *NOT* use _sapp.dpi_scale for the size multiplicator!
+    const float window_scale = _sapp.x11.dpi / 96.0f;
+    int x11_window_width = _sapp_roundf_gzero(_sapp.window_width * window_scale);
+    int x11_window_height = _sapp_roundf_gzero(_sapp.window_height * window_scale);
+    if (0 == _sapp.window_width) {
+        x11_window_width = (display_width * 4) / 5;
     }
-    if (0 == window_height) {
-        window_height = (display_height * 4) / 5;
+    if (0 == _sapp.window_height) {
+        x11_window_height = (display_height * 4) / 5;
     }
     _sapp_x11_grab_error_handler();
     _sapp.x11.window = XCreateWindow(_sapp.x11.display,
                                      _sapp.x11.root,
                                      0, 0,
-                                     (uint32_t)window_width,
-                                     (uint32_t)window_height,
+                                     (uint32_t)x11_window_width,
+                                     (uint32_t)x11_window_height,
                                      0,     /* border width */
                                      depth, /* color depth */
                                      InputOutput,
@@ -11447,7 +11473,7 @@ _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual_or_null, int depth) {
         XChangeProperty(_sapp.x11.display, _sapp.x11.window, _sapp.x11.xdnd.XdndAware, XA_ATOM, 32, PropModeReplace, (unsigned char*) &version, 1);
     }
     _sapp_x11_update_window_title();
-    _sapp_x11_query_window_size();
+    _sapp_x11_update_dimensions_from_window_size();
 }
 
 _SOKOL_PRIVATE void _sapp_x11_destroy_window(void) {
@@ -11571,13 +11597,6 @@ _SOKOL_PRIVATE uint32_t _sapp_x11_mods(uint32_t x11_mods) {
         mods |= SAPP_MODIFIER_RMB;
     }
     return mods;
-}
-
-_SOKOL_PRIVATE void _sapp_x11_app_event(sapp_event_type type) {
-    if (_sapp_events_enabled()) {
-        _sapp_init_event(type);
-        _sapp_call_event(&_sapp.event);
-    }
 }
 
 _SOKOL_PRIVATE sapp_mousebutton _sapp_x11_translate_button(const XEvent* event) {
@@ -11910,13 +11929,7 @@ _SOKOL_PRIVATE void _sapp_x11_on_motionnotify(XEvent* event) {
 }
 
 _SOKOL_PRIVATE void _sapp_x11_on_configurenotify(XEvent* event) {
-    if ((event->xconfigure.width != _sapp.window_width) || (event->xconfigure.height != _sapp.window_height)) {
-        _sapp.window_width = event->xconfigure.width;
-        _sapp.window_height = event->xconfigure.height;
-        _sapp.framebuffer_width = _sapp.window_width;
-        _sapp.framebuffer_height = _sapp.window_height;
-        _sapp_x11_app_event(SAPP_EVENTTYPE_RESIZED);
-    }
+    _sapp_x11_update_dimensions(event->xconfigure.width, event->xconfigure.height);
 }
 
 _SOKOL_PRIVATE void _sapp_x11_on_propertynotify(XEvent* event) {
@@ -12323,7 +12336,11 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     _sapp.x11.screen = DefaultScreen(_sapp.x11.display);
     _sapp.x11.root = DefaultRootWindow(_sapp.x11.display);
     _sapp_x11_query_system_dpi();
-    _sapp.dpi_scale = _sapp.x11.dpi / 96.0f;
+    if (_sapp.desc.high_dpi) {
+        _sapp.dpi_scale = _sapp.x11.dpi / 96.0f;
+    } else {
+        _sapp.dpi_scale = 1.0f;
+    }
     _sapp_x11_init_extensions();
     _sapp_x11_create_standard_cursors();
     XkbSetDetectableAutoRepeat(_sapp.x11.display, true, NULL);
