@@ -1760,6 +1760,9 @@ typedef struct sapp_allocator {
     _SAPP_LOGITEM_XMACRO(ANDROID_NATIVE_ACTIVITY_ONCREATE, "NativeActivity onCreate") \
     _SAPP_LOGITEM_XMACRO(ANDROID_CREATE_THREAD_PIPE_FAILED, "failed to create thread pipe") \
     _SAPP_LOGITEM_XMACRO(ANDROID_NATIVE_ACTIVITY_CREATE_SUCCESS, "NativeActivity successfully created") \
+    _SAPP_LOGITEM_XMACRO(WGPU_DEVICE_LOST, "wgpu: device lost") \
+    _SAPP_LOGITEM_XMACRO(WGPU_DEVICE_LOG, "wgpu: device log") \
+    _SAPP_LOGITEM_XMACRO(WGPU_DEVICE_UNCAPTURED_ERROR, "wgpu: uncaptured error") \
     _SAPP_LOGITEM_XMACRO(WGPU_SWAPCHAIN_CREATE_SURFACE_FAILED, "wgpu: failed to create surface for swapchain") \
     _SAPP_LOGITEM_XMACRO(WGPU_SWAPCHAIN_SURFACE_GET_CAPABILITIES_FAILED, "wgpu: wgpuSurfaceGetCapabilities failed") \
     _SAPP_LOGITEM_XMACRO(WGPU_SWAPCHAIN_CREATE_DEPTH_STENCIL_TEXTURE_FAILED, "wgpu: failed to create depth-stencil texture for swapchain") \
@@ -3133,6 +3136,10 @@ static const char* _sapp_log_messages[] = {
 #define _SAPP_ERROR(code) _sapp_log(SAPP_LOGITEM_ ##code, 1, 0, __LINE__)
 #define _SAPP_WARN(code) _sapp_log(SAPP_LOGITEM_ ##code, 2, 0, __LINE__)
 #define _SAPP_INFO(code) _sapp_log(SAPP_LOGITEM_ ##code, 3, 0, __LINE__)
+#define _SAPP_PANIC_MSG(code, msg) _sapp_log(SAPP_LOGITEM_ ##code, 0, msg, __LINE__)
+#define _SAPP_ERROR_MSG(code, msg) _sapp_log(SAPP_LOGITEM_ ##code, 1, msg, __LINE__)
+#define _SAPP_WARN_MSG(code, msg) _sapp_log(SAPP_LOGITEM_ ##code, 2, msg, __LINE__)
+#define _SAPP_INFO_MSG(code, msg) _sapp_log(SAPP_LOGITEM_ ##code, 3, msg, __LINE__)
 
 static void _sapp_log(sapp_log_item log_item, uint32_t log_level, const char* msg, uint32_t line_nr) {
     if (_sapp.desc.logger.func) {
@@ -3263,8 +3270,8 @@ _SOKOL_PRIVATE char* _sapp_dropped_file_path_ptr(int index) {
     return &_sapp.drop.buffer[offset];
 }
 
-/* Copy a string into a fixed size buffer with guaranteed zero-
-   termination.
+/* Copy a string (either zero-terminated or with explicit length)
+   into a fixed size buffer with guaranteed zero-termination.
 
    Return false if the string didn't fit into the buffer and had to be clamped.
 
@@ -3272,24 +3279,34 @@ _SOKOL_PRIVATE char* _sapp_dropped_file_path_ptr(int index) {
    is clamped, because the last zero-byte might be written into
    the middle of a multi-byte sequence.
 */
-_SOKOL_PRIVATE bool _sapp_strcpy(const char* src, char* dst, int max_len) {
-    SOKOL_ASSERT(src && dst && (max_len > 0));
-    char* const end = &(dst[max_len-1]);
+_SOKOL_PRIVATE bool _sapp_strcpy_range(const char* src, size_t src_len, char* dst, size_t dst_buf_len) {
+    SOKOL_ASSERT(src && dst && (dst_buf_len > 0));
+    if (0 == src_len) {
+        src_len = dst_buf_len;
+    }
+    char* const end = &(dst[dst_buf_len-1]);
     char c = 0;
-    for (int i = 0; i < max_len; i++) {
+    for (size_t i = 0; i < dst_buf_len; i++) {
         c = *src;
+        if (i >= src_len) {
+            c = 0;
+        }
         if (c != 0) {
             src++;
         }
         *dst++ = c;
     }
-    /* truncated? */
+    // truncated?
     if (c != 0) {
         *end = 0;
         return false;
     } else {
         return true;
     }
+}
+
+_SOKOL_PRIVATE bool _sapp_strcpy(const char* src, char* dst, size_t dst_buf_len) {
+    return _sapp_strcpy_range(src, 0, dst, dst_buf_len);
 }
 
 _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* desc) {
@@ -3821,6 +3838,46 @@ _SOKOL_PRIVATE void _sapp_wgpu_swapchain_size_changed(void) {
     }
 }
 
+_SOKOL_PRIVATE void _sapp_wgpu_device_lost_cb(const WGPUDevice* dev, WGPUDeviceLostReason reason, WGPUStringView msg, void* ud1, void* ud2) {
+    _SOKOL_UNUSED(dev); _SOKOL_UNUSED(reason); _SOKOL_UNUSED(ud1); _SOKOL_UNUSED(ud2);
+    // NOTE: on wgpuInstanceRelease(), the device lost callback is always called with
+    // WGPUDeviceLostReason_CallbackCancelled (even though no device should exist at that point)
+    if (reason != WGPUDeviceLostReason_CallbackCancelled) {
+        SOKOL_ASSERT(msg.data && (msg.length > 0));
+        char buf[1024];
+        _sapp_strcpy_range(msg.data, msg.length, buf, sizeof(buf));
+        _SAPP_ERROR_MSG(WGPU_DEVICE_LOST, buf);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wgpu_device_logging_cb(WGPULoggingType log_type, WGPUStringView msg, void* ud1, void* ud2) {
+    _SOKOL_UNUSED(log_type); _SOKOL_UNUSED(ud1); _SOKOL_UNUSED(ud2);
+    SOKOL_ASSERT(msg.data && (msg.length > 0));
+    char buf[1024];
+    _sapp_strcpy_range(msg.data, msg.length, buf, sizeof(buf));
+    switch (log_type) {
+        case WGPULoggingType_Warning:
+            _SAPP_WARN_MSG(WGPU_DEVICE_LOG, buf);
+            break;
+        case WGPULoggingType_Error:
+            _SAPP_ERROR_MSG(WGPU_DEVICE_LOG, buf);
+            break;
+        default:
+            _SAPP_INFO_MSG(WGPU_DEVICE_LOG, buf);
+            break;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wgpu_uncaptured_error_cb(const WGPUDevice* dev, WGPUErrorType err_type, WGPUStringView msg, void* ud1, void* ud2) {
+    _SOKOL_UNUSED(dev); _SOKOL_UNUSED(ud1); _SOKOL_UNUSED(ud2);
+    if (err_type != WGPUErrorType_NoError) {
+        SOKOL_ASSERT(msg.data && (msg.length > 0));
+        char buf[1024];
+        _sapp_strcpy_range(msg.data, msg.length, buf, sizeof(buf));
+        _SAPP_ERROR_MSG(WGPU_DEVICE_UNCAPTURED_ERROR, buf);
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_wgpu_request_device_cb(WGPURequestDeviceStatus status, WGPUDevice device, WGPUStringView msg, void* userdata1, void* userdata2) {
     _SOKOL_UNUSED(msg);
     _SOKOL_UNUSED(userdata1);
@@ -3835,6 +3892,10 @@ _SOKOL_PRIVATE void _sapp_wgpu_request_device_cb(WGPURequestDeviceStatus status,
     }
     SOKOL_ASSERT(device);
     _sapp.wgpu.device = device;
+    WGPULoggingCallbackInfo cb_info;
+    _sapp_clear(&cb_info, sizeof(cb_info));
+    cb_info.callback = _sapp_wgpu_device_logging_cb;
+    wgpuDeviceSetLoggingCallback(_sapp.wgpu.device, cb_info);
     _sapp_wgpu_create_swapchain(false);
     _sapp.wgpu.init_done = true;
 }
@@ -3874,6 +3935,9 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_device_and_swapchain(void) {
     _sapp_clear(&dev_desc, sizeof(dev_desc));
     dev_desc.requiredFeatureCount = cur_feature_index;
     dev_desc.requiredFeatures = requiredFeatures;
+    dev_desc.deviceLostCallbackInfo.mode = WGPUCallbackMode_AllowProcessEvents;
+    dev_desc.deviceLostCallbackInfo.callback = _sapp_wgpu_device_lost_cb;
+    dev_desc.uncapturedErrorCallbackInfo.callback = _sapp_wgpu_uncaptured_error_cb;
     WGPUFuture future = wgpuAdapterRequestDevice(_sapp.wgpu.adapter, &dev_desc, cb_info);
     #if defined(_SAPP_WGPU_HAS_WAIT)
         _sapp_wgpu_await(future);
@@ -4451,7 +4515,7 @@ _SOKOL_PRIVATE const char* _sapp_macos_get_clipboard_string(void) {
         if (!str) {
             return _sapp.clipboard.buffer;
         }
-        _sapp_strcpy([str UTF8String], _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
+        _sapp_strcpy([str UTF8String], _sapp.clipboard.buffer, (size_t)_sapp.clipboard.buf_size);
     }
     return _sapp.clipboard.buffer;
 }
@@ -4808,7 +4872,7 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
         bool drop_failed = false;
         for (int i = 0; i < _sapp.drop.num_files; i++) {
             NSURL *fileUrl = [NSURL fileURLWithPath:[pboard.pasteboardItems[(NSUInteger)i] stringForType:NSPasteboardTypeFileURL]];
-            if (!_sapp_strcpy(fileUrl.standardizedURL.path.UTF8String, _sapp_dropped_file_path_ptr(i), _sapp.drop.max_path_length)) {
+            if (!_sapp_strcpy(fileUrl.standardizedURL.path.UTF8String, _sapp_dropped_file_path_ptr(i), (size_t)_sapp.drop.max_path_length)) {
                 _SAPP_ERROR(DROPPED_FILE_PATH_TOO_LONG);
                 drop_failed = true;
                 break;
@@ -12711,7 +12775,7 @@ SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
     #else
         /* not implemented */
     #endif
-    _sapp_strcpy(str, _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
+    _sapp_strcpy(str, _sapp.clipboard.buffer, (size_t)_sapp.clipboard.buf_size);
 }
 
 SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
