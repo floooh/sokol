@@ -3850,6 +3850,8 @@ _SOKOL_PRIVATE void _sapp_wgpu_device_lost_cb(const WGPUDevice* dev, WGPUDeviceL
     }
 }
 
+// NOTE: emdawnwebgpu doesn't seem to have a device logging callback
+#if !defined(_SAPP_EMSCRIPTEN)
 _SOKOL_PRIVATE void _sapp_wgpu_device_logging_cb(WGPULoggingType log_type, WGPUStringView msg, void* ud1, void* ud2) {
     _SOKOL_UNUSED(log_type); _SOKOL_UNUSED(ud1); _SOKOL_UNUSED(ud2);
     SOKOL_ASSERT(msg.data && (msg.length > 0));
@@ -3867,6 +3869,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_device_logging_cb(WGPULoggingType log_type, WGPUS
             break;
     }
 }
+#endif
 
 _SOKOL_PRIVATE void _sapp_wgpu_uncaptured_error_cb(const WGPUDevice* dev, WGPUErrorType err_type, WGPUStringView msg, void* ud1, void* ud2) {
     _SOKOL_UNUSED(dev); _SOKOL_UNUSED(ud1); _SOKOL_UNUSED(ud2);
@@ -3892,10 +3895,12 @@ _SOKOL_PRIVATE void _sapp_wgpu_request_device_cb(WGPURequestDeviceStatus status,
     }
     SOKOL_ASSERT(device);
     _sapp.wgpu.device = device;
-    WGPULoggingCallbackInfo cb_info;
-    _sapp_clear(&cb_info, sizeof(cb_info));
-    cb_info.callback = _sapp_wgpu_device_logging_cb;
-    wgpuDeviceSetLoggingCallback(_sapp.wgpu.device, cb_info);
+    #if !defined(_SAPP_EMSCRIPTEN)
+        WGPULoggingCallbackInfo cb_info;
+        _sapp_clear(&cb_info, sizeof(cb_info));
+        cb_info.callback = _sapp_wgpu_device_logging_cb;
+        wgpuDeviceSetLoggingCallback(_sapp.wgpu.device, cb_info);
+    #endif
     _sapp_wgpu_create_swapchain(false);
     _sapp.wgpu.init_done = true;
 }
