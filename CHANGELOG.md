@@ -4,9 +4,9 @@
 
 - sokol_app.h: added WebGPU support to the native desktop backends (Linux,
   macOS, Windows), e.g. on those platforms you can now compile sokol_app.h with
-  `SOKOL_WGPU` and it will setup and manage a WebGPU swapchain surface,
+  `SOKOL_WGPU` and it will setup and manage a WebGPU device, swapchain surface,
   depth-stencil-buffer and optional MSAA surface for you. You'll need to provide a
-  `<webgpu/webgpu.h> C header and link with a native WebGPU implementation (which
+  `<webgpu/webgpu.h>` C header and link with a native WebGPU implementation (which
   is currently only tested with Google's Dawn library). The WebGPU setup is
   currently fairly hardwired, most notably that the device limits and features are
   hardwired for what's required by sokol_gfx.h, but of course it's still possible
