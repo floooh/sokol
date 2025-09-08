@@ -16211,7 +16211,7 @@ _SOKOL_PRIVATE WGPUBlendFactor _sg_wgpu_blendfactor(sg_blend_factor f) {
     }
 }
 
-_SOKOL_PRIVATE WGPUColorWriteMask _sg_wgpu_colorwritemask(uint8_t m) {
+_SOKOL_PRIVATE WGPUColorWriteMask _sg_wgpu_colorwritemask(sg_color_mask m) {
     int res = 0;
     if (0 != (m & SG_COLORMASK_R)) {
         res |= (int)WGPUColorWriteMask_Red;
