@@ -15852,16 +15852,16 @@ _SOKOL_PRIVATE WGPUOptionalBool _sg_wgpu_optional_bool(bool b) {
 _SOKOL_PRIVATE WGPUBufferUsage _sg_wgpu_buffer_usage(const sg_buffer_usage* usg) {
     int res = 0;
     if (usg->vertex_buffer) {
-        res |= WGPUBufferUsage_Vertex;
+        res |= (int)WGPUBufferUsage_Vertex;
     }
     if (usg->index_buffer) {
-        res |= WGPUBufferUsage_Index;
+        res |= (int)WGPUBufferUsage_Index;
     }
     if (usg->storage_buffer) {
-        res |= WGPUBufferUsage_Storage;
+        res |= (int)WGPUBufferUsage_Storage;
     }
     if (!usg->immutable) {
-        res |= WGPUBufferUsage_CopyDst;
+        res |= (int)WGPUBufferUsage_CopyDst;
     }
     return (WGPUBufferUsage)res;
 }
@@ -16211,20 +16211,19 @@ _SOKOL_PRIVATE WGPUBlendFactor _sg_wgpu_blendfactor(sg_blend_factor f) {
     }
 }
 
-_SOKOL_PRIVATE WGPUColorWriteMask _sg_wgpu_colorwritemask(uint8_t m) {
-    // FIXME: change to WGPUColorWriteMask once Emscripten and Dawn webgpu.h agree
+_SOKOL_PRIVATE WGPUColorWriteMask _sg_wgpu_colorwritemask(sg_color_mask m) {
     int res = 0;
     if (0 != (m & SG_COLORMASK_R)) {
-        res |= WGPUColorWriteMask_Red;
+        res |= (int)WGPUColorWriteMask_Red;
     }
     if (0 != (m & SG_COLORMASK_G)) {
-        res |= WGPUColorWriteMask_Green;
+        res |= (int)WGPUColorWriteMask_Green;
     }
     if (0 != (m & SG_COLORMASK_B)) {
-        res |= WGPUColorWriteMask_Blue;
+        res |= (int)WGPUColorWriteMask_Blue;
     }
     if (0 != (m & SG_COLORMASK_A)) {
-        res |= WGPUColorWriteMask_Alpha;
+        res |= (int)WGPUColorWriteMask_Alpha;
     }
     return (WGPUColorWriteMask)res;
 }
@@ -16488,8 +16487,11 @@ _SOKOL_PRIVATE uint64_t _sg_wgpu_hash(const void* key, int len, uint64_t seed) {
     }
     switch(len) {
         case 3: h2 ^= (uint32_t)(((unsigned char*)data)[2] << 16);
+        // fall through
         case 2: h2 ^= (uint32_t)(((unsigned char*)data)[1] << 8);
+        // fall through
         case 1: h2 ^= ((unsigned char*)data)[0];
+        // fall through
         h2 *= m;
     };
     h1 ^= h2 >> 18; h1 *= m;
@@ -16733,7 +16735,7 @@ _SOKOL_PRIVATE void _sg_wgpu_bindings_cache_clear(void) {
 }
 
 _SOKOL_PRIVATE bool _sg_wgpu_bindings_cache_vb_dirty(size_t index, const _sg_buffer_t* vb, uint64_t offset) {
-    SOKOL_ASSERT((index >= 0) && (index < SG_MAX_VERTEXBUFFER_BINDSLOTS));
+    SOKOL_ASSERT(index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
     if (vb) {
         return (_sg.wgpu.bindings_cache.vbs[index].buffer.id != vb->slot.id)
             || (_sg.wgpu.bindings_cache.vbs[index].offset != offset);
@@ -16743,7 +16745,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_bindings_cache_vb_dirty(size_t index, const _sg_buf
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_bindings_cache_vb_update(size_t index, const _sg_buffer_t* vb, uint64_t offset) {
-    SOKOL_ASSERT((index >= 0) && (index < SG_MAX_VERTEXBUFFER_BINDSLOTS));
+    SOKOL_ASSERT(index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
     if (vb) {
         _sg.wgpu.bindings_cache.vbs[index].buffer.id = vb->slot.id;
         _sg.wgpu.bindings_cache.vbs[index].offset = offset;
@@ -16788,7 +16790,7 @@ _SOKOL_PRIVATE void _sg_wgpu_bindings_cache_bg_update(const _sg_wgpu_bindgroup_t
     }
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_set_bindgroup(size_t bg_idx, _sg_wgpu_bindgroup_t* bg) {
+_SOKOL_PRIVATE void _sg_wgpu_set_bindgroup(uint32_t bg_idx, _sg_wgpu_bindgroup_t* bg) {
     if (_sg_wgpu_bindings_cache_bg_dirty(bg)) {
         _sg_wgpu_bindings_cache_bg_update(bg);
         _sg_stats_add(wgpu.bindings.num_set_bindgroup, 1);
@@ -16939,24 +16941,20 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     _sg.wgpu.empty_bind_group = wgpuDeviceCreateBindGroup(_sg.wgpu.dev, &bg_desc);
     SOKOL_ASSERT(_sg.wgpu.empty_bind_group);
     wgpuBindGroupLayoutRelease(empty_bgl);
-
-    // create initial per-frame command encoder
-    WGPUCommandEncoderDescriptor cmd_enc_desc;
-    _sg_clear(&cmd_enc_desc, sizeof(cmd_enc_desc));
-    _sg.wgpu.cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
-    SOKOL_ASSERT(_sg.wgpu.cmd_enc);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
     SOKOL_ASSERT(_sg.wgpu.valid);
-    SOKOL_ASSERT(_sg.wgpu.cmd_enc);
     _sg.wgpu.valid = false;
     _sg_wgpu_discard_all_bindgroups();
     _sg_wgpu_bindgroups_cache_discard();
     _sg_wgpu_bindgroups_pool_discard();
     _sg_wgpu_uniform_buffer_discard();
     wgpuBindGroupRelease(_sg.wgpu.empty_bind_group); _sg.wgpu.empty_bind_group = 0;
-    wgpuCommandEncoderRelease(_sg.wgpu.cmd_enc); _sg.wgpu.cmd_enc = 0;
+    // the command encoder is usually released in sg_commit()
+    if (_sg.wgpu.cmd_enc) {
+        wgpuCommandEncoderRelease(_sg.wgpu.cmd_enc); _sg.wgpu.cmd_enc = 0;
+    }
     wgpuQueueRelease(_sg.wgpu.queue); _sg.wgpu.queue = 0;
 }
 
@@ -17020,11 +17018,11 @@ _SOKOL_PRIVATE void _sg_wgpu_copy_buffer_data(const _sg_buffer_t* buf, uint64_t 
         const uint64_t extra_src_offset = clamped_size;
         const uint64_t extra_dst_offset = offset + clamped_size;
         uint8_t extra_data[4] = { 0 };
-        uint8_t* extra_src_ptr = ((uint8_t*)data->ptr) + extra_src_offset;
+        const uint8_t* extra_src_ptr = ((uint8_t*)data->ptr) + extra_src_offset;
         for (size_t i = 0; i < extra_size; i++) {
             extra_data[i] = extra_src_ptr[i];
         }
-        wgpuQueueWriteBuffer(_sg.wgpu.queue, buf->wgpu.buf, extra_dst_offset, extra_src_ptr, 4);
+        wgpuQueueWriteBuffer(_sg.wgpu.queue, buf->wgpu.buf, extra_dst_offset, extra_data, 4);
     }
 }
 
@@ -17308,8 +17306,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
         bg_entry->binding = bgl_entry->binding;
         bg_entry->buffer = _sg.wgpu.uniform.buf;
         bg_entry->size = _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE;
-        dynoffset_map[i].sokol_slot = i;
-        dynoffset_map[i].wgpu_slot = bgl_entry->binding;
+        dynoffset_map[i].sokol_slot = (uint8_t)i;
+        dynoffset_map[i].wgpu_slot = (uint8_t)bgl_entry->binding;
         bgl_index += 1;
     }
     bgl_desc.entryCount = bgl_index;
@@ -17326,7 +17324,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
     // dynamic offsets of the WebGPU setBindGroup call must be in
     // 'binding order', not 'bindgroup entry order'
     qsort(dynoffset_map, bgl_index, sizeof(_sg_wgpu_dynoffset_mapping_t), _sg_wgpu_dynoffset_cmp);
-    shd->wgpu.ub_num_dynoffsets = bgl_index;
+    shd->wgpu.ub_num_dynoffsets = (uint8_t)bgl_index;
     for (uint8_t i = 0; i < bgl_index; i++) {
         const uint8_t sokol_slot = dynoffset_map[i].sokol_slot;
         shd->wgpu.ub_dynoffsets[sokol_slot] = i;
@@ -17710,9 +17708,16 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_render_pass(const sg_pass* pass, const _sg_at
 _SOKOL_PRIVATE void _sg_wgpu_begin_pass(const sg_pass* pass, const _sg_attachments_ptrs_t* atts) {
     SOKOL_ASSERT(pass && atts);
     SOKOL_ASSERT(_sg.wgpu.dev);
-    SOKOL_ASSERT(_sg.wgpu.cmd_enc);
     SOKOL_ASSERT(0 == _sg.wgpu.rpass_enc);
     SOKOL_ASSERT(0 == _sg.wgpu.cpass_enc);
+
+    // first pass in the frame? create command encoder
+    if (0 == _sg.wgpu.cmd_enc) {
+        WGPUCommandEncoderDescriptor cmd_enc_desc;
+        _sg_clear(&cmd_enc_desc, sizeof(cmd_enc_desc));
+        _sg.wgpu.cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
+        SOKOL_ASSERT(_sg.wgpu.cmd_enc);
+    }
 
     _sg_wgpu_bindings_cache_clear();
     if (pass->compute) {
@@ -17750,11 +17755,6 @@ _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
 
     wgpuQueueSubmit(_sg.wgpu.queue, 1, &wgpu_cmd_buf);
     wgpuCommandBufferRelease(wgpu_cmd_buf);
-
-    // create a new render-command-encoder for next frame
-    WGPUCommandEncoderDescriptor cmd_enc_desc;
-    _sg_clear(&cmd_enc_desc, sizeof(cmd_enc_desc));
-    _sg.wgpu.cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {

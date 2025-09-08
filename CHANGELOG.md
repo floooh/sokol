@@ -1,5 +1,30 @@
 ## Updates
 
+### 08-Sep-2025
+
+- sokol_app.h: added WebGPU support to the native desktop backends (Linux,
+  macOS, Windows), e.g. on those platforms you can now compile sokol_app.h with
+  `SOKOL_WGPU` and it will setup and manage a WebGPU swapchain surface,
+  depth-stencil-buffer and optional MSAA surface for you. You'll need to provide a
+  `<webgpu/webgpu.h> C header and link with a native WebGPU implementation (which
+  is currently only tested with Google's Dawn library). The WebGPU setup is
+  currently fairly hardwired, most notably that the device limits and features are
+  hardwired for what's required by sokol_gfx.h, but of course it's still possible
+  to use sokol_app.h without sokol_gfx.h and instead render directly via WebGPU
+  code. All in all you should currently still see the native WebGPU backend in
+  sokol_app.h as experimental, in some situations it's not as robust as the native
+  3D API backends (such as window resizing). For me it's currently mainly useful
+  for easier debugging (unlike in the browser it's possible to debug-step into the
+  WebGPU implementation) and for benchmarking the sokol_gfx.h WebGPU backend
+  against the system-native 3D API backends. A nice side effect of this work is also
+  that the 3D API specific code has been better separated from the window system
+  specific code, and it's also a nice preparation for eventually dropping MTKView
+  from the sokol_app.h Metal backend.
+
+  More details in the PR: https://github.com/floooh/sokol/pull/1326
+
+  Also see this PR for what has changed in the sokol-samples: https://github.com/floooh/sokol-samples/pull/182
+
 ### 01-Sep-2025
 
 - sokol_app.h: it's now possible to define custom mouse cursors via two new functions:
