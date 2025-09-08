@@ -9574,7 +9574,7 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
     activity->callbacks->onInputQueueCreated = _sapp_android_on_input_queue_created;
     activity->callbacks->onInputQueueDestroyed = _sapp_android_on_input_queue_destroyed;
     /* activity->callbacks->onContentRectChanged = _sapp_android_on_content_rect_changed; */
-    activity->callbacks->onConfigurationChanged = _sapp_android_on_config_changed;
+    /* activity->callbacks->onConfigurationChanged = _sapp_android_on_config_changed; */
     activity->callbacks->onLowMemory = _sapp_android_on_low_memory;
 
     _SAPP_INFO(ANDROID_NATIVE_ACTIVITY_CREATE_SUCCESS);
@@ -11997,10 +11997,6 @@ _SOKOL_PRIVATE void _sapp_x11_on_motionnotify(XEvent* event) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_x11_on_configurenotify(XEvent* event) {
-    _sapp_x11_update_dimensions(event->xconfigure.width, event->xconfigure.height);
-}
-
 _SOKOL_PRIVATE void _sapp_x11_on_propertynotify(XEvent* event) {
     if (event->xproperty.state == PropertyNewValue) {
         if (event->xproperty.atom == _sapp.x11.WM_STATE) {
@@ -12218,9 +12214,6 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
         case MotionNotify:
             _sapp_x11_on_motionnotify(event);
             break;
-        case ConfigureNotify:
-            _sapp_x11_on_configurenotify(event);
-            break;
         case PropertyNotify:
             _sapp_x11_on_propertynotify(event);
             break;
@@ -12372,6 +12365,7 @@ _SOKOL_PRIVATE void _sapp_egl_destroy(void) {
 #endif // _SAPP_EGL
 
 _SOKOL_PRIVATE void _sapp_linux_frame(void) {
+    _sapp_x11_update_dimensions_from_window_size();
     #if defined(SOKOL_WGPU)
         _sapp_wgpu_frame();
     #else
