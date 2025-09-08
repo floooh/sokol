@@ -65,18 +65,30 @@
 
     Link with the following system libraries:
 
-    - on macOS with Metal: Cocoa, QuartzCore, Metal, MetalKit
-    - on macOS with GL: Cocoa, QuartzCore, OpenGL
-    - on iOS with Metal: Foundation, UIKit, Metal, MetalKit
-    - on iOS with GL: Foundation, UIKit, OpenGLES, GLKit
-    - on Linux with EGL: X11, Xi, Xcursor, EGL, GL (or GLESv2), dl, pthread, m(?)
-    - on Linux with GLX: X11, Xi, Xcursor, GL, dl, pthread, m(?)
+    - on macOS:
+        - all backends: Foundation, Cocoa, QuartzCore
+        - with SOKOL_METAL: Metal, MetalKit
+        - with SOKOL_GLCORE: OpenGL
+        - with SOKOL_WGPU: a WebGPU implementation library (tested with webgpu_dawn)
+    - on iOS:
+        - all backends: Foundation, UIKit
+        - with SOKOL_METAL: Metal, MetalKit
+        - with SOKOL_GLES3: OpenGLES, GLKit
+    - on Linux:
+        - all backends: X11, Xi, Xcursor, dl, pthread, m
+        - with SOKOL_GLCORE: GL
+        - with SOKOL_GLES3: GLESv2
+        - with SOKOL_WGPU: a WebGPU implementation library (tested with webgpu_dawn)
+        - with EGL: EGL
     - on Android: GLESv3, EGL, log, android
-    - on Windows with the MSVC or Clang toolchains: no action needed, libs are defined in-source via pragma-comment-lib
-    - on Windows with MINGW/MSYS2 gcc: compile with '-mwin32' so that _WIN32 is defined
-        - link with the following libs: -lkernel32 -luser32 -lshell32
-        - additionally with the GL backend: -lgdi32
-        - additionally with the D3D11 backend: -ld3d11 -ldxgi
+    - on Windows:
+        - with MSVC or Clang: library dependencies are defined via `#pragma comment`
+        - with SOKOL_WGPU: a WebGPU implementation library (tested with webgpu_dawn)
+        - with MINGW/MSYS2 gcc:
+            - compile with '-mwin32' so that _WIN32 is defined
+            - link with the following libs: -lkernel32 -luser32 -lshell32
+            - additionally with the GL backend: -lgdi32
+            - additionally with the D3D11 backend: -ld3d11 -ldxgi
 
     On Linux, you also need to use the -pthread compiler and linker option, otherwise weird
     things will happen, see here for details: https://github.com/floooh/sokol/issues/376
@@ -86,7 +98,7 @@
     On Emscripten:
         - for WebGL2: add the linker option `-s USE_WEBGL2=1`
         - for WebGPU: compile and link with `--use-port=emdawnwebgpu`
-          (for more exotic situations, read: https://dawn.googlesource.com/dawn/+/refs/heads/main/src/emdawnwebgpu/pkg/README.md)
+          (for more exotic situations read: https://dawn.googlesource.com/dawn/+/refs/heads/main/src/emdawnwebgpu/pkg/README.md)
 
     FEATURE OVERVIEW
     ================
@@ -94,11 +106,12 @@
     implements the 'application-wrapper' parts of a 3D application:
 
     - a common application entry function
-    - creates a window and 3D-API context/device with a 'default framebuffer'
+    - creates a window and 3D-API context/device with a swapchain
+      surface, depth-stencil-buffer surface and optionally MSAA surface
     - makes the rendered frame visible
     - provides keyboard-, mouse- and low-level touch-events
     - platforms: MacOS, iOS, HTML5, Win32, Linux/RaspberryPi, Android
-    - 3D-APIs: Metal, D3D11, GL4.1, GL4.3, GLES3, WebGL, WebGL2, NOAPI
+    - 3D-APIs: Metal, D3D11, GL4.1, GL4.3, GLES3, WebGL2, WebGPU, NOAPI
 
     FEATURE/PLATFORM MATRIX
     =======================
@@ -108,6 +121,7 @@
     gles3/webgl2        | ---     | ---   | YES(2)| YES   | YES     |  YES
     metal               | ---     | YES   | ---   | YES   | ---     |  ---
     d3d11               | YES     | ---   | ---   | ---   | ---     |  ---
+    webgpu              | YES(4)  | YES(4)| YES(4)| NO    | NO      |  YES
     noapi               | YES     | TODO  | TODO  | ---   | TODO    |  ---
     KEY_DOWN            | YES     | YES   | YES   | SOME  | TODO    |  YES
     KEY_UP              | YES     | YES   | YES   | SOME  | TODO    |  YES
@@ -148,6 +162,8 @@
     (1) macOS has no regular window icons, instead the dock icon is changed
     (2) supported with EGL only (not GLX)
     (3) fullscreen in the browser not supported on iphones
+    (4) WebGPU on native desktop platforms should be considered experimental
+        and mainly useful for debugging and benchmarking
 
     STEP BY STEP
     ============
