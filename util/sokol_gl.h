@@ -3752,7 +3752,7 @@ static void _sgl_setup_common(void) {
     img_desc.height = 8;
     img_desc.num_mipmaps = 1;
     img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
-    img_desc.data.subimage[0][0] = SG_RANGE(pixels);
+    img_desc.data.mip_levels[0] = SG_RANGE(pixels);
     img_desc.label = "sgl-default-texture";
     _sgl.def_img = sg_make_image(&img_desc);
     SOKOL_ASSERT(SG_INVALID_ID != _sgl.def_img.id);
