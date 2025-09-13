@@ -2276,8 +2276,8 @@ SOKOL_API_IMPL void sfons_flush(FONScontext* ctx) {
         sfons->img_dirty = false;
         sg_image_data data;
         _sfons_clear(&data, sizeof(data));
-        data.subimage[0][0].ptr = ctx->texData;
-        data.subimage[0][0].size = (size_t) (sfons->cur_width * sfons->cur_height);
+        data.mip_levels[0].ptr = ctx->texData;
+        data.mip_levels[0].size = (size_t) (sfons->cur_width * sfons->cur_height);
         sg_update_image(sfons->img, &data);
     }
 }

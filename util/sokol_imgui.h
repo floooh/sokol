@@ -2653,8 +2653,8 @@ static void _simgui_update_texture(ImTextureData* tex) {
         SOKOL_ASSERT(img.id != SG_INVALID_ID);
         sg_image_data img_data;
         _simgui_clear(&img_data, sizeof(img_data));
-        img_data.subimage[0][0].ptr = _simgui_imtexturedata_getpixels(tex);
-        img_data.subimage[0][0].size = (size_t)_simgui_imtexturedata_getsizeinbytes(tex);
+        img_data.mip_levels[0].ptr = _simgui_imtexturedata_getpixels(tex);
+        img_data.mip_levels[0].size = (size_t)_simgui_imtexturedata_getsizeinbytes(tex);
         sg_update_image(img, &img_data);
         _simgui_imtexturedata_setstatus(tex, ImTextureStatus_OK);
     }

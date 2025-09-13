@@ -4435,7 +4435,7 @@ static void _sdtx_setup_common(void) {
     img_desc.width = 256 * 8;
     img_desc.height = SDTX_MAX_FONTS * 8;
     img_desc.pixel_format = SG_PIXELFORMAT_R8;
-    img_desc.data.subimage[0][0] = SG_RANGE(_sdtx.font_pixels);
+    img_desc.data.mip_levels[0] = SG_RANGE(_sdtx.font_pixels);
     img_desc.label = "sdtx-font-texture";
     _sdtx.font_img = sg_make_image(&img_desc);
     SOKOL_ASSERT(SG_INVALID_ID != _sdtx.font_img.id);
