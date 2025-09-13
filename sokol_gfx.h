@@ -3288,7 +3288,7 @@ typedef enum sg_view_type {
         4, 5 => +Z, -Z
 */
 typedef struct sg_image_data {
-    sg_range subimage[SG_MAX_MIPMAPS];
+    sg_range mip_levels[SG_MAX_MIPMAPS];
 } sg_image_data;
 
 /*
@@ -9985,13 +9985,13 @@ _SOKOL_PRIVATE void _sg_gl_texsubimage(const _sg_image_t* img, GLenum tgt, int m
 }
 
 _SOKOL_PRIVATE void _sg_gl_teximage(const _sg_image_t* img, GLenum tgt, int mip_index, int w, int h, int depth, const GLvoid* data_ptr, GLsizei data_size) {
-    const bool compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
     #if defined(_SOKOL_GL_HAS_TEXSTORAGE)
         if (data_ptr == 0) {
             return;
         }
         _sg_gl_texsubimage(img, tgt, mip_index, w, h, depth, data_ptr, data_size);
     #else
+        const bool compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
         const GLenum ifmt = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
         const bool msaa = img->cmn.sample_count > 1;
         if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
@@ -10076,8 +10076,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
             _sg_gl_cache_bind_texture_sampler(0, img->gl.target, img->gl.tex[slot], 0);
             _sg_gl_texstorage(img);
             for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
-                const GLvoid* data_ptr = desc->data.subimage[mip_index].ptr;
-                const GLsizei data_size = (GLsizei)desc->data.subimage[mip_index].size;
+                const GLvoid* data_ptr = desc->data.mip_levels[mip_index].ptr;
+                const GLsizei data_size = (GLsizei)desc->data.mip_levels[mip_index].size;
                 const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
                 const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
                 const int mip_depth = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
@@ -11424,8 +11424,8 @@ _SOKOL_PRIVATE void _sg_gl_update_image(_sg_image_t* img, const sg_image_data* d
     _sg_gl_cache_bind_texture_sampler(0, img->gl.target, img->gl.tex[img->cmn.active_slot], 0);
     const int num_mips = img->cmn.num_mipmaps;
     for (int mip_index = 0; mip_index < num_mips; mip_index++) {
-        const GLvoid* data_ptr = data->subimage[mip_index].ptr;
-        const GLsizei data_size = (GLsizei)data->subimage[mip_index].size;
+        const GLvoid* data_ptr = data->mip_levels[mip_index].ptr;
+        const GLsizei data_size = (GLsizei)data->mip_levels[mip_index].size;
         const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
         const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
         const int mip_depth = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
@@ -14530,9 +14530,9 @@ _SOKOL_PRIVATE void _sg_mtl_discard_buffer(_sg_buffer_t* buf) {
 _SOKOL_PRIVATE void _sg_mtl_copy_image_data(const _sg_image_t* img, __unsafe_unretained id<MTLTexture> mtl_tex, const sg_image_data* data) {
     const int num_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? 1 : img->cmn.num_slices;
     for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
-        SOKOL_ASSERT(data->subimage[mip_index].ptr);
-        SOKOL_ASSERT(data->subimage[mip_index].size > 0);
-        const uint8_t* data_ptr = (const uint8_t*)data->subimage[mip_index].ptr;
+        SOKOL_ASSERT(data->mip_levels[mip_index].ptr);
+        SOKOL_ASSERT(data->mip_levels[mip_index].size > 0);
+        const uint8_t* data_ptr = (const uint8_t*)data->mip_levels[mip_index].ptr;
         const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
         const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
         int bytes_per_row = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
@@ -14555,7 +14555,7 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_data(const _sg_image_t* img, __unsafe_unr
 
         for (int slice_index = 0; slice_index < num_slices; slice_index++) {
             const int slice_offset = slice_index * bytes_per_slice;
-            SOKOL_ASSERT((slice_offset + bytes_per_slice) <= (int)data->subimage[mip_index].size);
+            SOKOL_ASSERT((slice_offset + bytes_per_slice) <= (int)data->mip_levels[mip_index].size);
             [mtl_tex replaceRegion:region
                 mipmapLevel:(NSUInteger)mip_index
                 slice:(NSUInteger)slice_index
@@ -14639,7 +14639,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg
                 _SG_ERROR(METAL_CREATE_TEXTURE_FAILED);
                 return SG_RESOURCESTATE_FAILED;
             }
-            if (desc->data.subimage[0].ptr) {
+            if (desc->data.mip_levels[0].ptr) {
                 _sg_mtl_copy_image_data(img, mtl_tex, &desc->data);
             }
         }
@@ -18451,14 +18451,14 @@ _SOKOL_PRIVATE void _sg_validate_image_data(const sg_image_data* data, sg_pixel_
         _SOKOL_UNUSED(num_slices);
     #else
         for (int mip_index = 0; mip_index < num_mips; mip_index++) {
-            const bool has_data = data->subimage[mip_index].ptr != 0;
-            const bool has_size = data->subimage[mip_index].size > 0;
+            const bool has_data = data->mip_levels[mip_index].ptr != 0;
+            const bool has_size = data->mip_levels[mip_index].size > 0;
             _SG_VALIDATE(has_data && has_size, VALIDATE_IMAGEDATA_NODATA);
             const int mip_width = _sg_miplevel_dim(width, mip_index);
             const int mip_height = _sg_miplevel_dim(height, mip_index);
             const int bytes_per_slice = _sg_surface_pitch(fmt, mip_width, mip_height, 1);
             const int expected_size = bytes_per_slice * num_slices;
-            _SG_VALIDATE(expected_size == (int)data->subimage[mip_index].size, VALIDATE_IMAGEDATA_DATA_SIZE);
+            _SG_VALIDATE(expected_size == (int)data->mip_levels[mip_index].size, VALIDATE_IMAGEDATA_DATA_SIZE);
         }
     #endif
 }
@@ -18498,7 +18498,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         if (any_attachment || usg->storage_image) {
             SOKOL_ASSERT(((int)fmt >= 0) && ((int)fmt < _SG_PIXELFORMAT_NUM));
             _SG_VALIDATE(usg->immutable, VALIDATE_IMAGEDESC_ATTACHMENT_EXPECT_IMMUTABLE);
-            _SG_VALIDATE(desc->data.subimage[0].ptr==0, VALIDATE_IMAGEDESC_ATTACHMENT_EXPECT_NO_DATA);
+            _SG_VALIDATE(desc->data.mip_levels[0].ptr==0, VALIDATE_IMAGEDESC_ATTACHMENT_EXPECT_NO_DATA);
             if (any_attachment) {
                 _SG_VALIDATE(_sg.formats[fmt].render, VALIDATE_IMAGEDESC_ATTACHMENT_PIXELFORMAT);
                 if (usg->resolve_attachment) {
@@ -18535,8 +18535,8 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
             } else {
                 // image desc must not have data
                 for (int mip_index = 0; mip_index < SG_MAX_MIPMAPS; mip_index++) {
-                    const bool no_data = 0 == desc->data.subimage[mip_index].ptr;
-                    const bool no_size = 0 == desc->data.subimage[mip_index].size;
+                    const bool no_data = 0 == desc->data.mip_levels[mip_index].ptr;
+                    const bool no_size = 0 == desc->data.mip_levels[mip_index].size;
                     if (injected) {
                         _SG_VALIDATE(no_data && no_size, VALIDATE_IMAGEDESC_INJECTED_NO_DATA);
                     }
@@ -21489,10 +21489,10 @@ SOKOL_API_IMPL void sg_update_image(sg_image img_id, const sg_image_data* data) 
     SOKOL_ASSERT(_sg.valid);
     _sg_stats_add(num_update_image, 1);
     for (int mip_index = 0; mip_index < SG_MAX_MIPMAPS; mip_index++) {
-        if (data->subimage[mip_index].size == 0) {
+        if (data->mip_levels[mip_index].size == 0) {
             break;
         }
-        _sg_stats_add(size_update_image, (uint32_t)data->subimage[mip_index].size);
+        _sg_stats_add(size_update_image, (uint32_t)data->mip_levels[mip_index].size);
     }
     _sg_image_t* img = _sg_lookup_image(img_id.id);
     if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
