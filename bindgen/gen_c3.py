@@ -118,11 +118,11 @@ aliases = {
     "void (*)(void)":
         ("Cb", "fn void()"),
     "void (*)(const sapp_event *)":
-        ("EventCb", "fn void(Event*)"),
+        ("EventCb", "fn void(SappEvent*)"),
     "void (*)(const sapp_event *, void *)":
-        ("EventDataCb", "fn void(Event*, void*)"),
+        ("EventDataCb", "fn void(SappEvent*, void*)"),
     "void (*)(const sapp_html5_fetch_response *)":
-        ("ResponseCb", "fn void(Html5FetchResponse*)"),
+        ("ResponseCb", "fn void(SappHtml5FetchResponse*)"),
     "void (*)(float *, int, int)":
         ("StreamCb", "fn void(float*, CInt, CInt)"),
     "void (*)(float *, int, int, void *)":
@@ -208,8 +208,8 @@ def as_parent_module_name_for_enum_type(enum_name, prefix):
 # prefix_bla_blub(_t) => (dep::)BlaBlub
 def as_struct_or_enum_type(s, prefix):
     parts = s.lower().split('_')
-    outp = '' if s.startswith(prefix) else f'sokol::{module_names[parts[0]+"_"]}::'
-    for part in parts[1:]:
+    outp = ''
+    for part in parts:
         # ignore '_t' type postfix
         if part != 't':
             outp += part.capitalize()
@@ -361,9 +361,8 @@ def gen_enum(decl, prefix):
     tpe = "int"
     if any(as_enum_item_name(check_override(item['name'])) == 'FORCE_U32' for item in decl['items']):
         tpe = "uint"
-    l(f'typedef {as_struct_or_enum_type(enum_name, prefix)} = {tpe};')
-    # Constants are in submodule.
-    l(f'module {as_module_name_for_enum_type(enum_name, prefix)};')
+    l(f'enum {as_struct_or_enum_type(enum_name, prefix)} : const {tpe}')
+    l('{')
     value = "-1"
     for item in decl['items']:
         item_name = as_enum_item_name(check_override(item['name']))
@@ -372,10 +371,8 @@ def gen_enum(decl, prefix):
                 value = item['value']
             else:
                 value = str(int(value) + 1)
-            l(f"const {as_struct_or_enum_type(enum_name, prefix)} {item_name} = {value};")
-    l(f'module {as_parent_module_name_for_enum_type(enum_name, prefix)};')
-    # After reopening the original module all dependencies must be reimported.
-    l(f'import sokol;')
+            l(f"    {item_name} = {value},")
+    l('}')
     l('')
 
 def gen_imports(dep_prefixes):
