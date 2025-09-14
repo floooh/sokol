@@ -2007,7 +2007,6 @@ enum {
     SG_MAX_UNIFORMBLOCK_MEMBERS = 16,
     SG_MAX_VERTEX_ATTRIBUTES = 16,
     SG_MAX_MIPMAPS = 16,
-    SG_MAX_TEXTUREARRAY_LAYERS = 128,
     SG_MAX_VERTEXBUFFER_BINDSLOTS = 8,
     SG_MAX_UNIFORMBLOCK_BINDSLOTS = 8,
     SG_MAX_VIEW_BINDSLOTS = 28,
@@ -4381,7 +4380,8 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMMUTABLE_DYNAMIC_STREAM, "sg_image_desc.usage: only one of .immutable, .dynamic_update, .stream_update can be true") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMAGETYPE_2D_NUMSLICES, "sg_image_desc.num_slices must be exactly 1 for SG_IMAGETYPE_2D") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMAGETYPE_CUBE_NUMSLICES, "sg_image_desc.num_slices must be exactly 6 for SG_IMAGETYPE_CUBE") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMAGETYPE_ARRAY_3D_NUMSLICES, "sg_image_desc.num_slices must be >= 1 for SG_IMAGETYPE_ARRAY or SG_IMAGETYPE_3D") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMAGETYPE_ARRAY_NUMSLICES, "sg_image_desc.num_slices must be ((>= 1) && (<= sg_limits.max_image_array_layers)) for SG_IMAGETYPE_ARRAY") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMAGETYPE_3D_NUMSLICES, "sg_image_desc.num_slices must be ((>= 1) && (<= sg_limits.max_image_size_3d)) for SG_IMAGETYPE_ARRAY") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_NUMSLICES, "sg_image_desc.num_slices must be > 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WIDTH, "sg_image_desc.width must be > 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_HEIGHT, "sg_image_desc.height must be > 0") \
@@ -6246,6 +6246,8 @@ typedef struct {
     int sem_index;
 } _sg_d3d11_shader_attr_t;
 
+#define _SG_D3D11_MAX_TEXTUREARRAY_LAYERS (2048)
+#define _SG_D3D11_MAX_TEXTURE_SUBRESOURCES (SG_MAX_MIPMAPS * _SG_D3D11_MAX_TEXTUREARRAY_LAYERS)
 #define _SG_D3D11_MAX_STAGE_UB_BINDINGS (_SG_MAX_UNIFORMBLOCK_BINDINGS_PER_STAGE)
 #define _SG_D3D11_MAX_STAGE_SRV_BINDINGS (_SG_MAX_TEXTURE_BINDINGS_PER_STAGE + _SG_MAX_STORAGEBUFFER_BINDINGS_PER_STAGE)
 #define _SG_D3D11_MAX_STAGE_UAV_BINDINGS (_SG_MAX_STORAGEBUFFER_BINDINGS_PER_STAGE + _SG_MAX_STORAGEIMAGE_BINDINGS_PER_STAGE)
@@ -6316,7 +6318,7 @@ typedef struct {
     bool d3dcompiler_dll_load_failed;
     pD3DCompile D3DCompile_func;
     // global subresourcedata array for texture updates
-    D3D11_SUBRESOURCE_DATA subres_data[SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS];
+    D3D11_SUBRESOURCE_DATA subres_data[_SG_D3D11_MAX_TEXTURE_SUBRESOURCES];
 } _sg_d3d11_backend_t;
 
 #elif defined(SOKOL_METAL)
@@ -12313,7 +12315,7 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.limits.max_image_size_cube = 16 * 1024;
     _sg.limits.max_image_size_3d = 2 * 1024;
     _sg.limits.max_image_size_array = 16 * 1024;
-    _sg.limits.max_image_array_layers = 2 * 1024;
+    _sg.limits.max_image_array_layers = _SG_D3D11_MAX_TEXTUREARRAY_LAYERS;
     _sg.limits.max_vertex_attrs = SG_MAX_VERTEX_ATTRIBUTES;
 
     // see: https://docs.microsoft.com/en-us/windows/win32/api/d3d11/ne-d3d11-d3d11_format_support
@@ -12404,11 +12406,11 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_buffer(_sg_buffer_t* buf) {
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_fill_subres_data(const _sg_image_t* img, const sg_image_data* data) {
-    const int num_slices = img->cmn.num_slices;
+    const int num_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? 1 : img->cmn.num_slices;
     int subres_index = 0;
     for (int slice_index = 0; slice_index < num_slices; slice_index++) {
         for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++, subres_index++) {
-            SOKOL_ASSERT(subres_index < (SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS));
+            SOKOL_ASSERT(subres_index < _SG_D3D11_MAX_TEXTURE_SUBRESOURCES);
             D3D11_SUBRESOURCE_DATA* subres_data = &_sg.d3d11.subres_data[subres_index];
             const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
             const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
@@ -13671,14 +13673,14 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
     SOKOL_ASSERT(img && data);
     SOKOL_ASSERT(_sg.d3d11.ctx);
     SOKOL_ASSERT(img->d3d11.res);
-    const int num_slices = (img->cmn.type != SG_IMAGETYPE_3D) ? img->cmn.num_slices : 1;
+    const int num_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? 1 : img->cmn.num_slices;
     const int num_depth_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? img->cmn.num_slices : 1;
     UINT subres_index = 0;
     HRESULT hr;
     D3D11_MAPPED_SUBRESOURCE d3d11_msr;
     for (int slice_index = 0; slice_index < num_slices; slice_index++) {
         for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++, subres_index++) {
-            SOKOL_ASSERT(subres_index < (SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS));
+            SOKOL_ASSERT(subres_index < _SG_D3D11_MAX_TEXTURE_SUBRESOURCES);
             const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
             const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
             const int src_row_pitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
@@ -18467,12 +18469,22 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_IMAGEDESC_CANARY);
         _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_IMAGEDESC_CANARY);
         _SG_VALIDATE(_sg_one(usg->immutable, usg->dynamic_update, usg->stream_update), VALIDATE_IMAGEDESC_IMMUTABLE_DYNAMIC_STREAM);
-        if (desc->type == SG_IMAGETYPE_2D) {
-            _SG_VALIDATE(desc->num_slices == 1, VALIDATE_IMAGEDESC_IMAGETYPE_2D_NUMSLICES);
-        } else if (desc->type == SG_IMAGETYPE_CUBE) {
-            _SG_VALIDATE(desc->num_slices == 6, VALIDATE_IMAGEDESC_IMAGETYPE_CUBE_NUMSLICES);
-        } else {
-            _SG_VALIDATE(desc->num_slices >= 1, VALIDATE_IMAGEDESC_IMAGETYPE_ARRAY_3D_NUMSLICES);
+        switch (desc->type) {
+            case SG_IMAGETYPE_2D:
+                _SG_VALIDATE(desc->num_slices == 1, VALIDATE_IMAGEDESC_IMAGETYPE_2D_NUMSLICES);
+                break;
+            case SG_IMAGETYPE_CUBE:
+                _SG_VALIDATE(desc->num_slices == 6, VALIDATE_IMAGEDESC_IMAGETYPE_CUBE_NUMSLICES);
+                break;
+            case SG_IMAGETYPE_ARRAY:
+                _SG_VALIDATE((desc->num_slices >= 1) && (desc->num_slices <= _sg.limits.max_image_array_layers), VALIDATE_IMAGEDESC_IMAGETYPE_ARRAY_NUMSLICES);
+                break;
+            case SG_IMAGETYPE_3D:
+                _SG_VALIDATE((desc->num_slices >= 1) && (desc->num_slices <= _sg.limits.max_image_size_3d), VALIDATE_IMAGEDESC_IMAGETYPE_3D_NUMSLICES);
+                break;
+            default:
+                SOKOL_UNREACHABLE;
+                break;
         }
         _SG_VALIDATE(desc->width > 0, VALIDATE_IMAGEDESC_WIDTH);
         _SG_VALIDATE(desc->height > 0, VALIDATE_IMAGEDESC_HEIGHT);
