@@ -12460,11 +12460,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
             d3d11_tex_desc.Width = (UINT)img->cmn.width;
             d3d11_tex_desc.Height = (UINT)img->cmn.height;
             d3d11_tex_desc.MipLevels = (UINT)img->cmn.num_mipmaps;
-            switch (img->cmn.type) {
-                case SG_IMAGETYPE_ARRAY:    d3d11_tex_desc.ArraySize = (UINT)img->cmn.num_slices; break;
-                case SG_IMAGETYPE_CUBE:     d3d11_tex_desc.ArraySize = 6; break;
-                default:                    d3d11_tex_desc.ArraySize = 1; break;
-            }
+            d3d11_tex_desc.ArraySize = (UINT)img->cmn.num_slices;
             d3d11_tex_desc.Format = img->d3d11.format;
             d3d11_tex_desc.BindFlags = _sg_d3d11_image_bind_flags(&img->cmn.usage);
             d3d11_tex_desc.Usage = _sg_d3d11_image_usage(&img->cmn.usage);
