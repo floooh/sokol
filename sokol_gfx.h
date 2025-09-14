@@ -12404,28 +12404,24 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_buffer(_sg_buffer_t* buf) {
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_fill_subres_data(const _sg_image_t* img, const sg_image_data* data) {
-    const int num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
-    const int num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.num_slices:1;
+    const int num_slices = img->cmn.num_slices;
     int subres_index = 0;
-    for (int face_index = 0; face_index < num_faces; face_index++) {
-        for (int slice_index = 0; slice_index < num_slices; slice_index++) {
-            for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++, subres_index++) {
-                SOKOL_ASSERT(subres_index < (SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS));
-                D3D11_SUBRESOURCE_DATA* subres_data = &_sg.d3d11.subres_data[subres_index];
-                const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
-                const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
-                const sg_range* subimg_data = &(data->subimage[face_index][mip_index]);
-                const size_t slice_size = subimg_data->size / (size_t)num_slices;
-                const size_t slice_offset = slice_size * (size_t)slice_index;
-                const uint8_t* ptr = (const uint8_t*) subimg_data->ptr;
-                subres_data->pSysMem = ptr + slice_offset;
-                subres_data->SysMemPitch = (UINT)_sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
-                if (img->cmn.type == SG_IMAGETYPE_3D) {
-                    // FIXME? const int mip_depth = _sg_miplevel_dim(img->depth, mip_index);
-                    subres_data->SysMemSlicePitch = (UINT)_sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
-                } else {
-                    subres_data->SysMemSlicePitch = 0;
-                }
+    for (int slice_index = 0; slice_index < num_slices; slice_index++) {
+        for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++, subres_index++) {
+            SOKOL_ASSERT(subres_index < (SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS));
+            D3D11_SUBRESOURCE_DATA* subres_data = &_sg.d3d11.subres_data[subres_index];
+            const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
+            const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
+            const sg_range* miplevel_data = &(data->mip_levels[mip_index]);
+            const size_t slice_size = miplevel_data->size / (size_t)num_slices;
+            const size_t slice_offset = slice_size * (size_t)slice_index;
+            const uint8_t* ptr = (const uint8_t*) miplevel_data->ptr;
+            subres_data->pSysMem = ptr + slice_offset;
+            subres_data->SysMemPitch = (UINT)_sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
+            if (img->cmn.type == SG_IMAGETYPE_3D) {
+                subres_data->SysMemSlicePitch = (UINT)_sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
+            } else {
+                subres_data->SysMemSlicePitch = 0;
             }
         }
     }
@@ -12447,7 +12443,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
 
     // prepare initial content pointers
     D3D11_SUBRESOURCE_DATA* init_data = 0;
-    if (!injected && desc->data.subimage[0][0].ptr) {
+    if (!injected && desc->data.mip_levels[0].ptr) {
         _sg_d3d11_fill_subres_data(img, &desc->data);
         init_data = _sg.d3d11.subres_data;
     }
@@ -13679,53 +13675,50 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
     SOKOL_ASSERT(img && data);
     SOKOL_ASSERT(_sg.d3d11.ctx);
     SOKOL_ASSERT(img->d3d11.res);
-    const int num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
-    const int num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.num_slices:1;
-    const int num_depth_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? img->cmn.num_slices:1;
+    const int num_slices = (img->cmn.type != SG_IMAGETYPE_3D) ? img->cmn.num_slices : 1;
+    const int num_depth_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? img->cmn.num_slices : 1;
     UINT subres_index = 0;
     HRESULT hr;
     D3D11_MAPPED_SUBRESOURCE d3d11_msr;
-    for (int face_index = 0; face_index < num_faces; face_index++) {
-        for (int slice_index = 0; slice_index < num_slices; slice_index++) {
-            for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++, subres_index++) {
-                SOKOL_ASSERT(subres_index < (SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS));
-                const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
-                const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
-                const int src_row_pitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
-                const int src_depth_pitch = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
-                const sg_range* subimg_data = &(data->subimage[face_index][mip_index]);
-                const size_t slice_size = subimg_data->size / (size_t)num_slices;
-                SOKOL_ASSERT(slice_size == (size_t)(src_depth_pitch * num_depth_slices));
-                const size_t slice_offset = slice_size * (size_t)slice_index;
-                const uint8_t* slice_ptr = ((const uint8_t*)subimg_data->ptr) + slice_offset;
-                hr = _sg_d3d11_Map(_sg.d3d11.ctx, img->d3d11.res, subres_index, D3D11_MAP_WRITE_DISCARD, 0, &d3d11_msr);
-                _sg_stats_add(d3d11.num_map, 1);
-                if (SUCCEEDED(hr)) {
-                    const uint8_t* src_ptr = slice_ptr;
-                    uint8_t* dst_ptr = (uint8_t*)d3d11_msr.pData;
-                    for (int depth_index = 0; depth_index < num_depth_slices; depth_index++) {
-                        if (src_row_pitch == (int)d3d11_msr.RowPitch) {
-                            const size_t copy_size = slice_size / (size_t)num_depth_slices;
-                            SOKOL_ASSERT((copy_size * (size_t)num_depth_slices) == slice_size);
-                            memcpy(dst_ptr, src_ptr, copy_size);
-                        } else {
-                            SOKOL_ASSERT(src_row_pitch < (int)d3d11_msr.RowPitch);
-                            const uint8_t* src_row_ptr = src_ptr;
-                            uint8_t* dst_row_ptr = dst_ptr;
-                            for (int row_index = 0; row_index < mip_height; row_index++) {
-                                memcpy(dst_row_ptr, src_row_ptr, (size_t)src_row_pitch);
-                                src_row_ptr += src_row_pitch;
-                                dst_row_ptr += d3d11_msr.RowPitch;
-                            }
+    for (int slice_index = 0; slice_index < num_slices; slice_index++) {
+        for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++, subres_index++) {
+            SOKOL_ASSERT(subres_index < (SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS));
+            const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
+            const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
+            const int src_row_pitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
+            const int src_depth_pitch = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
+            const sg_range* miplevel_data = &(data->mip_levels[mip_index]);
+            const size_t slice_size = miplevel_data->size / (size_t)num_slices;
+            SOKOL_ASSERT(slice_size == (size_t)(src_depth_pitch * num_depth_slices));
+            const size_t slice_offset = slice_size * (size_t)slice_index;
+            const uint8_t* slice_ptr = ((const uint8_t*)miplevel_data->ptr) + slice_offset;
+            hr = _sg_d3d11_Map(_sg.d3d11.ctx, img->d3d11.res, subres_index, D3D11_MAP_WRITE_DISCARD, 0, &d3d11_msr);
+            _sg_stats_add(d3d11.num_map, 1);
+            if (SUCCEEDED(hr)) {
+                const uint8_t* src_ptr = slice_ptr;
+                uint8_t* dst_ptr = (uint8_t*)d3d11_msr.pData;
+                for (int depth_index = 0; depth_index < num_depth_slices; depth_index++) {
+                    if (src_row_pitch == (int)d3d11_msr.RowPitch) {
+                        const size_t copy_size = slice_size / (size_t)num_depth_slices;
+                        SOKOL_ASSERT((copy_size * (size_t)num_depth_slices) == slice_size);
+                        memcpy(dst_ptr, src_ptr, copy_size);
+                    } else {
+                        SOKOL_ASSERT(src_row_pitch < (int)d3d11_msr.RowPitch);
+                        const uint8_t* src_row_ptr = src_ptr;
+                        uint8_t* dst_row_ptr = dst_ptr;
+                        for (int row_index = 0; row_index < mip_height; row_index++) {
+                            memcpy(dst_row_ptr, src_row_ptr, (size_t)src_row_pitch);
+                            src_row_ptr += src_row_pitch;
+                            dst_row_ptr += d3d11_msr.RowPitch;
                         }
-                        src_ptr += src_depth_pitch;
-                        dst_ptr += d3d11_msr.DepthPitch;
                     }
-                    _sg_d3d11_Unmap(_sg.d3d11.ctx, img->d3d11.res, subres_index);
-                    _sg_stats_add(d3d11.num_unmap, 1);
-                } else {
-                    _SG_ERROR(D3D11_MAP_FOR_UPDATE_IMAGE_FAILED);
+                    src_ptr += src_depth_pitch;
+                    dst_ptr += d3d11_msr.DepthPitch;
                 }
+                _sg_d3d11_Unmap(_sg.d3d11.ctx, img->d3d11.res, subres_index);
+                _sg_stats_add(d3d11.num_unmap, 1);
+            } else {
+                _SG_ERROR(D3D11_MAP_FOR_UPDATE_IMAGE_FAILED);
             }
         }
     }
