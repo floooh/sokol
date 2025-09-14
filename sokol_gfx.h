@@ -8205,6 +8205,12 @@ _SOKOL_PRIVATE void _sg_dummy_setup_backend(const sg_desc* desc) {
     }
     _sg.formats[SG_PIXELFORMAT_DEPTH].depth = true;
     _sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL].depth = true;
+    _sg.limits.max_image_size_2d = 1024;
+    _sg.limits.max_image_size_cube = 1024;
+    _sg.limits.max_image_size_3d = 1024;
+    _sg.limits.max_image_size_array = 1024;
+    _sg.limits.max_image_array_layers = 1024;
+    _sg.limits.max_vertex_attrs = 16;
 }
 
 _SOKOL_PRIVATE void _sg_dummy_discard_backend(void) {
@@ -18421,7 +18427,6 @@ _SOKOL_PRIVATE void _sg_validate_image_data(const sg_image_data* data, sg_pixel_
         _SOKOL_UNUSED(fmt);
         _SOKOL_UNUSED(width);
         _SOKOL_UNUSED(height);
-        _SOKOL_UNUSED(num_faces);
         _SOKOL_UNUSED(num_mips);
         _SOKOL_UNUSED(num_slices);
     #else
