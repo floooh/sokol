@@ -370,7 +370,7 @@ UTEST(sokol_gfx, make_destroy_images) {
     sg_image_desc desc = {
         .width = 8,
         .height = 8,
-        .data.subimage[0][0] = SG_RANGE(data)
+        .data.mip_levels[0] = SG_RANGE(data)
     };
     for (int i = 0; i < 3; i++) {
         img[i] = sg_make_image(&desc);
@@ -963,8 +963,8 @@ UTEST(sokol_gfx, query_image_desc) {
     T(i0_desc.num_mipmaps == 1);
     T(i0_desc.pixel_format == SG_PIXELFORMAT_R8);
     T(i0_desc.sample_count == 1);
-    T(i0_desc.data.subimage[0][0].ptr == 0);
-    T(i0_desc.data.subimage[0][0].size == 0);
+    T(i0_desc.data.mip_levels[0].ptr == 0);
+    T(i0_desc.data.mip_levels[0].size == 0);
     T(i0_desc.gl_textures[0] == 0);
     T(i0_desc.gl_texture_target == 0);
     T(i0_desc.mtl_textures[0] == 0);
@@ -1968,7 +1968,7 @@ UTEST(sokol_gfx, make_image_validate_start_canary) {
         ._start_canary = 1234,
         .width = 8,
         .height = 8,
-        .data.subimage[0][0] = SG_RANGE(pixels),
+        .data.mip_levels[0] = SG_RANGE(pixels),
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_CANARY);
@@ -1982,7 +1982,7 @@ UTEST(sokol_gfx, make_image_validate_end_canary) {
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 8,
         .height = 8,
-        .data.subimage[0][0] = SG_RANGE(pixels),
+        .data.mip_levels[0] = SG_RANGE(pixels),
         ._end_canary = 1234,
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
@@ -1997,7 +1997,7 @@ UTEST(sokol_gfx, make_image_zero_width_height) {
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 0,
         .height = 0,
-        .data.subimage[0][0] = SG_RANGE(pixels),
+        .data.mip_levels[0] = SG_RANGE(pixels),
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_WIDTH);
@@ -2014,7 +2014,7 @@ UTEST(sokol_gfx, make_image_validate_msaa_no_rt) {
         .width = 8,
         .height = 8,
         .sample_count = 4,
-        .data.subimage[0][0] = SG_RANGE(pixels),
+        .data.mip_levels[0] = SG_RANGE(pixels),
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_MSAA_BUT_NO_ATTACHMENT);
@@ -2092,7 +2092,7 @@ UTEST(sokol_gfx, make_image_validate_dynamic_no_data) {
         .usage.dynamic_update = true,
         .width = 8,
         .height = 8,
-        .data.subimage[0][0] = SG_RANGE(pixels),
+        .data.mip_levels[0] = SG_RANGE(pixels),
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA);
@@ -2133,7 +2133,7 @@ UTEST(sokol_gfx, make_image_validate_data_size) {
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 8,
         .height = 8,
-        .data.subimage[0][0] = SG_RANGE(pixels),
+        .data.mip_levels[0] = SG_RANGE(pixels),
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDATA_DATA_SIZE);
@@ -2150,9 +2150,9 @@ UTEST(sokol_gfx, make_image_validate_missing_mipdata) {
         .width = 8,
         .height = 8,
         .num_mipmaps = 4,
-        .data.subimage[0][0] = SG_RANGE(mip0),
-        .data.subimage[0][1] = SG_RANGE(mip1),
-        .data.subimage[0][2] = SG_RANGE(mip2),
+        .data.mip_levels[0] = SG_RANGE(mip0),
+        .data.mip_levels[1] = SG_RANGE(mip1),
+        .data.mip_levels[2] = SG_RANGE(mip2),
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDATA_NODATA);
@@ -2171,10 +2171,10 @@ UTEST(sokol_gfx, make_image_validate_wrong_mipsize) {
         .width = 8,
         .height = 8,
         .num_mipmaps = 4,
-        .data.subimage[0][0] = SG_RANGE(mip0),
-        .data.subimage[0][1] = SG_RANGE(mip2),
-        .data.subimage[0][2] = SG_RANGE(mip1),
-        .data.subimage[0][3] = SG_RANGE(mip3)
+        .data.mip_levels[0] = SG_RANGE(mip0),
+        .data.mip_levels[1] = SG_RANGE(mip2),
+        .data.mip_levels[2] = SG_RANGE(mip1),
+        .data.mip_levels[3] = SG_RANGE(mip3)
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDATA_DATA_SIZE);
