@@ -10086,12 +10086,14 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                 const int mip_depth = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
                 if (SG_IMAGETYPE_CUBE == img->cmn.type) {
                     const int surf_pitch = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
-                    SOKOL_ASSERT((6 * surf_pitch) <= data_size);
                     const uint8_t* surf_ptr = (const uint8_t*) data_ptr;
                     for (int i = 0; i < 6; i++) {
                         const GLenum gl_img_target = _sg_gl_cubeface_target(i);
                         _sg_gl_teximage(img, gl_img_target, mip_index, mip_width, mip_height, mip_depth, surf_ptr, surf_pitch);
-                        surf_ptr += surf_pitch;
+                        if (data_ptr) {
+                            SOKOL_ASSERT((6 * surf_pitch) <= data_size);
+                            surf_ptr += surf_pitch;
+                        }
                     }
                 } else {
                     _sg_gl_teximage(img, img->gl.target, mip_index, mip_width, mip_height, mip_depth, data_ptr, data_size);
