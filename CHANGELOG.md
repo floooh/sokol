@@ -5,8 +5,8 @@
 - sokol_gfx.h: a minor breaking change which removes a special case for
   defining cubemap content to `sg_make_image()` and `sg_update_image()`.
 
-  Instead of providing individual pointer/size pairs to cubemap mip-levels,
-  the cubemap faces are now treated the same as the slices of array- or
+  Instead of providing individual pointer/size pairs to cubemap face pixel
+  data, the cubemap faces are now treated the same as the slices of array- or
   3D-textures.
 
   The `sg_image_data` struct has been changed from this:
