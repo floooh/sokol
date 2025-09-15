@@ -1,5 +1,76 @@
 ## Updates
 
+### 15-Sep-2025
+
+- sokol_gfx.h: a minor breaking change which removes a special case for
+  defining cubemap content to `sg_make_image()` and `sg_update_image()`.
+
+  Instead of providing individual pointer/size pairs to cubemap mip-levels,
+  the cubemap faces are now treated the same as the slices of array- or
+  3D-textures.
+
+  The `sg_image_data` struct has been changed from this:
+
+    ```c
+    typedef struct sg_image_data {
+        sg_range subimage[SG_CUBEFACE_NUM][SG_MAX_MIPMAPS];
+    } sg_image_data;
+    ```
+
+  ...to this (e.g. a simple array of mip-levels):
+
+    ```c
+    typedef struct sg_image_data {
+        sg_range mip_levels[SG_MAX_MIPMAPS];
+    } sg_image_data;
+    ```
+
+  E.g. change your `sg_make_image()` and `sg_update_image()` calls from this:
+
+    ```c
+    const sg_image img = sg_make_image(&(sg_image_desc){
+        // ...
+        .data.subimage[0][0] = SG_RANGE(pixels),
+    });
+    sg_update_image(img, &(sg_image_data){
+        .subimage[0][0] = SG_RANGE(pixels);
+    });
+    ```
+
+  ...to this:
+
+    ```c
+    const sg_image img = sg_make_image(&(sg_image_desc){
+        // ...
+        .data.mip_levels[0] = SG_RANGE(pixels),
+    });
+    sg_update_image(img, &(sg_image_data){
+        .mip_levels[0] = SG_RANGE(pixels);
+    });
+    ```
+
+  ...also see the updated inline documentation for the struct `sg_image_data`.
+
+  Additional changes:
+
+  - The enum `sg_cube_face` has been removed.
+  - For cubemap images, the default value for `sg_image_desc.num_slices` is now 6
+    (previously 1).
+  - Validation layer checks have been added for `sg_image_desc.num_slices` depending
+    on the image type:
+    - `SG_IMAGETYPE_2D`: num_slices must be exactly 1
+    - `SG_IMAGETYPE_CUBE`: num_slices must be exactly 6
+    - `SG_IMAGETYPE_3D`: (num_slices > 0) && (num_slices sg_limits.max_image_size_3d)
+    - `SG_IMAGETYPE_ARRAY`: (num_slices > 0) && (num_slices sg_limits.max_image_array_layers)
+  - An inconsistency has been fixed in the D3D11 backend which limited the number
+    of texture array layers to 128, this has now been bumped to `sg_limits.max_image_array_layers`
+    which in the D3D11 is initialized to 2048)
+  - The public API constant `SG_MAX_TEXTUREARRAY_LAYERS` has been removed.
+
+  The sokol PR: https://github.com/floooh/sokol/pull/1328
+
+  And the PR which updates the samples: https://github.com/floooh/sokol-samples/pull/183
+
 ### 08-Sep-2025
 
 - sokol_app.h: added WebGPU support to the native desktop backends (Linux,

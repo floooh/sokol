@@ -100,7 +100,7 @@ UTEST(sokol_gl, texture) {
         .type = SG_IMAGETYPE_2D,
         .width = 8,
         .height = 8,
-        .data.subimage[0][0] = SG_RANGE(pixels),
+        .data.mip_levels[0] = SG_RANGE(pixels),
     });
     sg_view view = sg_make_view(&(sg_view_desc){
         .texture = { .image = img },
@@ -120,7 +120,7 @@ UTEST(sokol_gl, texture_image_nosampler) {
         .type = SG_IMAGETYPE_2D,
         .width = 8,
         .height = 8,
-        .data.subimage[0][0] = SG_RANGE(pixels),
+        .data.mip_levels[0] = SG_RANGE(pixels),
     });
     sg_view view = sg_make_view(&(sg_view_desc){
         .texture.image = img,

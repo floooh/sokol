@@ -40,7 +40,7 @@
     Optionally define the following to force debug checks and validations
     even in release mode:
 
-        SOKOL_DEBUG         - by default this is defined if _DEBUG is defined
+        SOKOL_DEBUG         - by default this is defined if NDEBUG is not defined
 
     If sokol_app.h is compiled as a DLL, define the following before
     including the declaration or implementation:
