@@ -49,7 +49,7 @@
     });
     ```
 
-  ...also see the update inline documentation for the struct `sg_image_data`.
+  ...also see the updated inline documentation for the struct `sg_image_data`.
 
   Additional changes:
 
