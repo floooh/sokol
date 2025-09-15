@@ -56,15 +56,10 @@
     On Windows, SOKOL_DLL will define SOKOL_GFX_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
-    If you want to compile without deprecated structs and functions,
-    define:
-
-    SOKOL_NO_DEPRECATED
-
     Optionally define the following to force debug checks and validations
     even in release mode:
 
-    SOKOL_DEBUG - by default this is defined if _DEBUG is defined
+    SOKOL_DEBUG - by default this is defined if NDEBUG is not defined
 
     Link with the following system libraries (note that sokol_app.h has
     additional linker requirements):
