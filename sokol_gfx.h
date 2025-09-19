@@ -7103,7 +7103,10 @@ _SOKOL_PRIVATE _sg_view_t* _sg_view_at(uint32_t view_id) {
 
 // returns pointer to resource with matching id check, may return 0
 _SOKOL_PRIVATE _sg_buffer_t* _sg_lookup_buffer(uint32_t buf_id) {
-    if (SG_INVALID_ID != buf_id) {
+    if (
+        SG_INVALID_ID != buf_id &&
+        _sg_slot_index(buf_id) < _sg.pools.buffer_pool.size
+    ) {
         _sg_buffer_t* buf = _sg_buffer_at(buf_id);
         if (buf->slot.id == buf_id) {
             return buf;
@@ -7113,7 +7116,10 @@ _SOKOL_PRIVATE _sg_buffer_t* _sg_lookup_buffer(uint32_t buf_id) {
 }
 
 _SOKOL_PRIVATE _sg_image_t* _sg_lookup_image(uint32_t img_id) {
-    if (SG_INVALID_ID != img_id) {
+    if (
+        SG_INVALID_ID != img_id &&
+        _sg_slot_index(img_id) < _sg.pools.image_pool.size
+    ) {
         _sg_image_t* img = _sg_image_at(img_id);
         if (img->slot.id == img_id) {
             return img;
@@ -7123,7 +7129,10 @@ _SOKOL_PRIVATE _sg_image_t* _sg_lookup_image(uint32_t img_id) {
 }
 
 _SOKOL_PRIVATE _sg_sampler_t* _sg_lookup_sampler(uint32_t smp_id) {
-    if (SG_INVALID_ID != smp_id) {
+    if (
+        SG_INVALID_ID != smp_id &&
+        _sg_slot_index(smp_id) < _sg.pools.sampler_pool.size
+    ) {
         _sg_sampler_t* smp = _sg_sampler_at(smp_id);
         if (smp->slot.id == smp_id) {
             return smp;
@@ -7133,7 +7142,10 @@ _SOKOL_PRIVATE _sg_sampler_t* _sg_lookup_sampler(uint32_t smp_id) {
 }
 
 _SOKOL_PRIVATE _sg_shader_t* _sg_lookup_shader(uint32_t shd_id) {
-    if (SG_INVALID_ID != shd_id) {
+    if (
+        SG_INVALID_ID != shd_id &&
+        _sg_slot_index(shd_id) < _sg.pools.shader_pool.size
+    ) {
         _sg_shader_t* shd = _sg_shader_at(shd_id);
         if (shd->slot.id == shd_id) {
             return shd;
@@ -7143,7 +7155,10 @@ _SOKOL_PRIVATE _sg_shader_t* _sg_lookup_shader(uint32_t shd_id) {
 }
 
 _SOKOL_PRIVATE _sg_pipeline_t* _sg_lookup_pipeline(uint32_t pip_id) {
-    if (SG_INVALID_ID != pip_id) {
+    if (
+        SG_INVALID_ID != pip_id &&
+        _sg_slot_index(pip_id) < _sg.pools.pipeline_pool.size
+    ) {
         _sg_pipeline_t* pip = _sg_pipeline_at(pip_id);
         if (pip->slot.id == pip_id) {
             return pip;
@@ -7153,7 +7168,10 @@ _SOKOL_PRIVATE _sg_pipeline_t* _sg_lookup_pipeline(uint32_t pip_id) {
 }
 
 _SOKOL_PRIVATE _sg_view_t* _sg_lookup_view(uint32_t view_id) {
-    if (SG_INVALID_ID != view_id) {
+    if (
+        SG_INVALID_ID != view_id &&
+        _sg_slot_index(view_id) < _sg.pools.view_pool.size
+    ) {
         _sg_view_t* view = _sg_view_at(view_id);
         if (view->slot.id == view_id) {
             return view;
