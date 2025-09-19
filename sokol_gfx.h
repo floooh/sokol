@@ -1998,15 +1998,15 @@ typedef struct sg_range {
 enum {
     SG_INVALID_ID = 0,
     SG_NUM_INFLIGHT_FRAMES = 2,
-    SG_MAX_COLOR_ATTACHMENTS = 4,
+    SG_MAX_COLOR_ATTACHMENTS = 8,
     SG_MAX_UNIFORMBLOCK_MEMBERS = 16,
     SG_MAX_VERTEX_ATTRIBUTES = 16,
     SG_MAX_MIPMAPS = 16,
     SG_MAX_VERTEXBUFFER_BINDSLOTS = 8,
     SG_MAX_UNIFORMBLOCK_BINDSLOTS = 8,
-    SG_MAX_VIEW_BINDSLOTS = 28,
-    SG_MAX_SAMPLER_BINDSLOTS = 16,
-    SG_MAX_TEXTURE_SAMPLER_PAIRS = 16,
+    SG_MAX_VIEW_BINDSLOTS = 32,
+    SG_MAX_SAMPLER_BINDSLOTS = 12,
+    SG_MAX_TEXTURE_SAMPLER_PAIRS = SG_MAX_VIEW_BINDSLOTS,
 };
 
 /*
@@ -5866,9 +5866,9 @@ enum {
     _SG_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
     _SG_DEFAULT_MAX_COMMIT_LISTENERS = 1024,
     _SG_DEFAULT_WGPU_BINDGROUP_CACHE_SIZE = 1024,
-    _SG_MAX_STORAGEBUFFER_BINDINGS_PER_STAGE = 8,
-    _SG_MAX_STORAGEIMAGE_BINDINGS_PER_STAGE = 4,
-    _SG_MAX_TEXTURE_BINDINGS_PER_STAGE = 16,
+    _SG_MAX_STORAGEBUFFER_BINDINGS_PER_STAGE = SG_MAX_VIEW_BINDSLOTS,
+    _SG_MAX_STORAGEIMAGE_BINDINGS_PER_STAGE = SG_MAX_VIEW_BINDSLOTS,
+    _SG_MAX_TEXTURE_BINDINGS_PER_STAGE = SG_MAX_VIEW_BINDSLOTS,
     _SG_MAX_UNIFORMBLOCK_BINDINGS_PER_STAGE = 8,
 };
 
@@ -6419,9 +6419,14 @@ typedef struct _sg_view_s {
 typedef _sg_mtl_view_t _sg_view_t;
 
 // resource binding state cache
+//
+//  NOTE: buffer bindings space:
+//      - 0..<=7: uniform buffer bindings
+//      - 8..<=22: storage buffer bindings
+//      - 23..<=30: vertex buffer bindings
+#define _SG_MTL_MAX_STAGE_BUFFER_BINDINGS (31)  // see: https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf
 #define _SG_MTL_MAX_STAGE_UB_BINDINGS (_SG_MAX_UNIFORMBLOCK_BINDINGS_PER_STAGE)
-#define _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS (_SG_MTL_MAX_STAGE_UB_BINDINGS + _SG_MAX_STORAGEBUFFER_BINDINGS_PER_STAGE)
-#define _SG_MTL_MAX_STAGE_BUFFER_BINDINGS (_SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS + SG_MAX_VERTEXBUFFER_BINDSLOTS)
+#define _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS (_SG_MTL_MAX_STAGE_BUFFER_BINDINGS - SG_MAX_VERTEXBUFFER_BINDSLOTS)
 #define _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS (_SG_MAX_TEXTURE_BINDINGS_PER_STAGE + _SG_MAX_STORAGEIMAGE_BINDINGS_PER_STAGE)
 #define _SG_MTL_MAX_STAGE_SAMPLER_BINDINGS (SG_MAX_SAMPLER_BINDSLOTS)
 
@@ -6434,7 +6439,6 @@ typedef struct {
 typedef struct {
     _sg_sref_t sref;
     int active_slot;
-    int offset;
 } _sg_mtl_cache_tex_t;
 
 typedef enum {
@@ -14285,8 +14289,8 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
         _sg.limits.max_texture_bindings_per_stage = _sg_min(96, SG_MAX_VIEW_BINDSLOTS); // since iPhone8
     #endif
     _sg.limits.max_storage_image_bindings_per_stage = _sg.limits.max_texture_bindings_per_stage;    // shared with texture bindings
-    _sg.limits.max_storage_buffer_bindings_per_stage = _sg_min(31 - (SG_MAX_VERTEXBUFFER_BINDSLOTS + SG_MAX_UNIFORMBLOCK_BINDSLOTS), SG_MAX_VIEW_BINDSLOTS);
-    _sg.limits.max_color_attachments = 8;
+    _sg.limits.max_storage_buffer_bindings_per_stage = _sg_min(_SG_MTL_MAX_STAGE_BUFFER_BINDINGS - (SG_MAX_VERTEXBUFFER_BINDSLOTS + SG_MAX_UNIFORMBLOCK_BINDSLOTS), SG_MAX_VIEW_BINDSLOTS);
+    _sg.limits.max_color_attachments = _sg_min(8, SG_MAX_COLOR_ATTACHMENTS);
     _sg.limits.max_vertex_attrs = SG_MAX_VERTEX_ATTRIBUTES;
 
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
