@@ -3947,6 +3947,15 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_device_and_swapchain(void) {
     }
     #undef _SAPP_WGPU_MAX_REQUESTED_FEATURES
 
+    WGPULimits adapterLimits = WGPU_LIMITS_INIT;
+    wgpuAdapterGetLimits(_sapp.wgpu.adapter, &adapterLimits);
+
+    WGPULimits requiredLimits = WGPU_LIMITS_INIT;
+    requiredLimits.maxColorAttachments = adapterLimits.maxColorAttachments;
+    requiredLimits.maxSampledTexturesPerShaderStage = adapterLimits.maxSampledTexturesPerShaderStage;
+    requiredLimits.maxStorageBuffersPerShaderStage = adapterLimits.maxStorageBuffersPerShaderStage;
+    requiredLimits.maxStorageTexturesPerShaderStage = adapterLimits.maxStorageTexturesPerShaderStage;
+
     WGPURequestDeviceCallbackInfo cb_info;
     _sapp_clear(&cb_info, sizeof(cb_info));
     cb_info.mode = _sapp_wgpu_callbackmode();
@@ -3956,6 +3965,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_device_and_swapchain(void) {
     _sapp_clear(&dev_desc, sizeof(dev_desc));
     dev_desc.requiredFeatureCount = cur_feature_index;
     dev_desc.requiredFeatures = requiredFeatures;
+    dev_desc.requiredLimits = &requiredLimits;
     dev_desc.deviceLostCallbackInfo.mode = WGPUCallbackMode_AllowProcessEvents;
     dev_desc.deviceLostCallbackInfo.callback = _sapp_wgpu_device_lost_cb;
     dev_desc.uncapturedErrorCallbackInfo.callback = _sapp_wgpu_uncaptured_error_cb;
