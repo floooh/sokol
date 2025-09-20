@@ -748,7 +748,7 @@
 
     Next start the render pass with all attachment-views, as soon as a
     resolve-attachment-view is provided, an MSAA resolve operation will happen
-    at the end of the pass. Also note that the content of the MSAA color-attachemnt-image
+    at the end of the pass. Also note that the content of the MSAA color-attachment-image
     doesn't need to be preserved, since it's only needed until the MSAA-resolve
     at the end of the pass, so the .store_action should be set to "don't care":
 
@@ -1998,15 +1998,15 @@ typedef struct sg_range {
 enum {
     SG_INVALID_ID = 0,
     SG_NUM_INFLIGHT_FRAMES = 2,
-    SG_MAX_COLOR_ATTACHMENTS = 4,
+    SG_MAX_COLOR_ATTACHMENTS = 8,
     SG_MAX_UNIFORMBLOCK_MEMBERS = 16,
     SG_MAX_VERTEX_ATTRIBUTES = 16,
     SG_MAX_MIPMAPS = 16,
     SG_MAX_VERTEXBUFFER_BINDSLOTS = 8,
     SG_MAX_UNIFORMBLOCK_BINDSLOTS = 8,
-    SG_MAX_VIEW_BINDSLOTS = 28,
-    SG_MAX_SAMPLER_BINDSLOTS = 16,
-    SG_MAX_TEXTURE_SAMPLER_PAIRS = 16,
+    SG_MAX_VIEW_BINDSLOTS = 32,
+    SG_MAX_SAMPLER_BINDSLOTS = 12,
+    SG_MAX_TEXTURE_SAMPLER_PAIRS = SG_MAX_VIEW_BINDSLOTS,
 };
 
 /*
@@ -2199,6 +2199,10 @@ typedef struct sg_limits {
     int max_image_size_array;       // max width/height of SG_IMAGETYPE_ARRAY images
     int max_image_array_layers;     // max number of layers in SG_IMAGETYPE_ARRAY images
     int max_vertex_attrs;           // max number of vertex attributes, clamped to SG_MAX_VERTEX_ATTRIBUTES
+    int max_color_attachments;      // max number of render pass color attachments, clamped to SG_MAX_COLOR_ATTACHMENTS
+    int max_texture_bindings_per_stage; // max number of texture bindings per shader stage, clamped to SG_MAX_VIEW_BINDSLOTS
+    int max_storage_buffer_bindings_per_stage;  // max number of storage buffer bindings per shader stage, clamped to SG_MAX_VIEW_BINDSLOTS
+    int max_storage_image_bindings_per_stage;   // max number of storage image bindings per shader stage, clamped to SG_MAX_VIEW_BINDSLOTS
     int gl_max_vertex_uniform_components;    // <= GL_MAX_VERTEX_UNIFORM_COMPONENTS (only on GL backends)
     int gl_max_combined_texture_image_units; // <= GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS (only on GL backends)
 } sg_limits;
@@ -4357,8 +4361,22 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(SHADER_POOL_EXHAUSTED, "shader pool exhausted") \
     _SG_LOGITEM_XMACRO(PIPELINE_POOL_EXHAUSTED, "pipeline pool exhausted") \
     _SG_LOGITEM_XMACRO(VIEW_POOL_EXHAUSTED, "view pool exhausted") \
+    _SG_LOGITEM_XMACRO(BEGINPASS_TOO_MANY_COLOR_ATTACHMENTS, "sg_begin_pass: too many color attachments (sg_limits.max_color_attachments)") \
+    _SG_LOGITEM_XMACRO(BEGINPASS_TOO_MANY_RESOLVE_ATTACHMENTS, "sg_begin_pass: too many resolve attachments (sg_limits.max_color_attachments)") \
     _SG_LOGITEM_XMACRO(BEGINPASS_ATTACHMENTS_ALIVE, "sg_begin_pass: an attachment was provided that no longer exists") \
     _SG_LOGITEM_XMACRO(DRAW_WITHOUT_BINDINGS, "attempting to draw without resource bindings") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on vertex shader stage (sg_limits.max_texture_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on fragment shader stage (sg_limits.max_texture_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on compute shader stage (sg_limits.max_texture_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEBUFFERS, "sg_shader_desc: too many storage buffer bindings on vertex shader stage (sg_limits.max_storage_buffer_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEBUFFERS, "sg_shader_desc: too many storage buffer bindings on fragment shader stage (sg_limits.max_storage_buffer_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEBUFFERS, "sg_shader_desc: too many storage buffer bindings on compute shader stage (sg_limits.max_storage_buffer_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEIMAGES, "sg_shader_desc: too many storage image bindings on vertex shader stage (sg_limits.max_storage_image_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEIMAGES, "sg_shader_desc: too many storage image bindings on fragment shader stage (sg_limits.max_storage_image_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEIMAGES, "sg_shader_desc: too many storage image bindings on compute shader stage (sg_limits.max_storage_image_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURESAMPLERPAIRS, "sg_shader_desc: too many texture-sampler-pairs on vertex shader stage (sg_limits.max_texture_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_TEXTURESAMPLERPAIRS, "sg_shader_desc: too many texture-sampler-pairs on fragment shader stage (sg_limits.max_texture_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURESAMPLERPAIRS, "sg_shader_desc: too many texture-sampler-pairs on compute shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_CANARY, "sg_buffer_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_IMMUTABLE_DYNAMIC_STREAM, "sg_buffer_desc.usage: only one of .immutable, .dynamic_update, .stream_update can be true") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_SEPARATE_BUFFER_TYPES, "sg_buffer_desc.usage: on WebGL2, only one of .vertex_buffer or .index_buffer can be true (check sg_features.separate_buffer_types)") \
@@ -5862,9 +5880,9 @@ enum {
     _SG_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
     _SG_DEFAULT_MAX_COMMIT_LISTENERS = 1024,
     _SG_DEFAULT_WGPU_BINDGROUP_CACHE_SIZE = 1024,
-    _SG_MAX_STORAGEBUFFER_BINDINGS_PER_STAGE = 8,
-    _SG_MAX_STORAGEIMAGE_BINDINGS_PER_STAGE = 4,
-    _SG_MAX_TEXTURE_BINDINGS_PER_STAGE = 16,
+    _SG_MAX_STORAGEBUFFER_BINDINGS_PER_STAGE = SG_MAX_VIEW_BINDSLOTS,
+    _SG_MAX_STORAGEIMAGE_BINDINGS_PER_STAGE = SG_MAX_VIEW_BINDSLOTS,
+    _SG_MAX_TEXTURE_BINDINGS_PER_STAGE = SG_MAX_VIEW_BINDSLOTS,
     _SG_MAX_UNIFORMBLOCK_BINDINGS_PER_STAGE = 8,
 };
 
@@ -6415,10 +6433,16 @@ typedef struct _sg_view_s {
 typedef _sg_mtl_view_t _sg_view_t;
 
 // resource binding state cache
+//
+//  NOTE: reserved buffer bindslot ranges:
+//      - 0..<=7: uniform buffer bindings
+//      - 8..<=22: storage buffer bindings
+//      - 23..<=30: vertex buffer bindings
+//
+#define _SG_MTL_MAX_STAGE_BUFFER_BINDINGS (31)  // see: https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf
 #define _SG_MTL_MAX_STAGE_UB_BINDINGS (_SG_MAX_UNIFORMBLOCK_BINDINGS_PER_STAGE)
-#define _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS (_SG_MTL_MAX_STAGE_UB_BINDINGS + _SG_MAX_STORAGEBUFFER_BINDINGS_PER_STAGE)
-#define _SG_MTL_MAX_STAGE_BUFFER_BINDINGS (_SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS + SG_MAX_VERTEXBUFFER_BINDSLOTS)
-#define _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS (_SG_MAX_TEXTURE_BINDINGS_PER_STAGE + _SG_MAX_STORAGEIMAGE_BINDINGS_PER_STAGE)
+#define _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS (_SG_MTL_MAX_STAGE_BUFFER_BINDINGS - SG_MAX_VERTEXBUFFER_BINDSLOTS)
+#define _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS (SG_MAX_VIEW_BINDSLOTS)
 #define _SG_MTL_MAX_STAGE_SAMPLER_BINDINGS (SG_MAX_SAMPLER_BINDSLOTS)
 
 typedef struct {
@@ -6430,7 +6454,6 @@ typedef struct {
 typedef struct {
     _sg_sref_t sref;
     int active_slot;
-    int offset;
 } _sg_mtl_cache_tex_t;
 
 typedef enum {
@@ -8206,6 +8229,10 @@ _SOKOL_PRIVATE void _sg_dummy_setup_backend(const sg_desc* desc) {
     _sg.limits.max_image_size_array = 1024;
     _sg.limits.max_image_array_layers = 1024;
     _sg.limits.max_vertex_attrs = 16;
+    _sg.limits.max_color_attachments = 4;
+    _sg.limits.max_texture_bindings_per_stage = 16;
+    _sg.limits.max_storage_buffer_bindings_per_stage = 8;
+    _sg.limits.max_storage_image_bindings_per_stage = 4;
 }
 
 _SOKOL_PRIVATE void _sg_dummy_discard_backend(void) {
@@ -14270,6 +14297,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
         _sg.limits.max_image_size_3d = 2 * 1024;
         _sg.limits.max_image_size_array = 16 * 1024;
         _sg.limits.max_image_array_layers = 2 * 1024;
+        _sg.limits.max_texture_bindings_per_stage = _sg_min(128, SG_MAX_VIEW_BINDSLOTS);
     #else
         // FIXME: newer iOS devices support 16k textures
         _sg.limits.max_image_size_2d = 8 * 1024;
@@ -14277,7 +14305,11 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
         _sg.limits.max_image_size_3d = 2 * 1024;
         _sg.limits.max_image_size_array = 8 * 1024;
         _sg.limits.max_image_array_layers = 2 * 1024;
+        _sg.limits.max_texture_bindings_per_stage = _sg_min(96, SG_MAX_VIEW_BINDSLOTS); // since iPhone8
     #endif
+    _sg.limits.max_storage_image_bindings_per_stage = _sg.limits.max_texture_bindings_per_stage;    // shared with texture bindings
+    _sg.limits.max_storage_buffer_bindings_per_stage = _sg_min(_SG_MTL_MAX_STAGE_BUFFER_BINDINGS - (SG_MAX_VERTEXBUFFER_BINDSLOTS + SG_MAX_UNIFORMBLOCK_BINDSLOTS), SG_MAX_VIEW_BINDSLOTS);
+    _sg.limits.max_color_attachments = _sg_min(8, SG_MAX_COLOR_ATTACHMENTS);
     _sg.limits.max_vertex_attrs = SG_MAX_VERTEX_ATTRIBUTES;
 
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
@@ -14839,7 +14871,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const 
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
         shd->mtl.smp_sampler_n[i] = desc->samplers[i].msl_sampler_n;
     }
-
 
     // create metal library and function objects
     bool shd_valid = true;
@@ -16251,6 +16282,10 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.limits.max_image_size_array = (int) l->maxTextureDimension2D;
     _sg.limits.max_image_array_layers = (int) l->maxTextureArrayLayers;
     _sg.limits.max_vertex_attrs = SG_MAX_VERTEX_ATTRIBUTES;
+    _sg.limits.max_color_attachments = _sg_min((int)l->maxColorAttachments, SG_MAX_COLOR_ATTACHMENTS);
+    _sg.limits.max_texture_bindings_per_stage = _sg_min((int)l->maxSampledTexturesPerShaderStage, SG_MAX_VIEW_BINDSLOTS);
+    _sg.limits.max_storage_buffer_bindings_per_stage = _sg_min((int)l->maxStorageBuffersPerShaderStage, SG_MAX_VIEW_BINDSLOTS);
+    _sg.limits.max_storage_image_bindings_per_stage = _sg_min((int)l->maxStorageTexturesPerShaderStage, SG_MAX_VIEW_BINDSLOTS);
 
     // NOTE: no WGPUTextureFormat_R16Unorm
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
@@ -19778,6 +19813,131 @@ _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image_t* img, const sg_i
     #endif
 }
 
+_SOKOL_PRIVATE bool _sg_validate_shader_binding_limits(const sg_shader_desc* desc) {
+    SOKOL_ASSERT(desc);
+
+    // NOTE: this validation check is also active in release mode, if a shader uses
+    // more bindings than allowed, shader creation will fail
+    int vs_num_tex = 0;
+    int fs_num_tex = 0;
+    int cs_num_tex = 0;
+    int vs_num_sbuf = 0;
+    int fs_num_sbuf = 0;
+    int cs_num_sbuf = 0;
+    int vs_num_simg = 0;
+    int fs_num_simg = 0;
+    int cs_num_simg = 0;
+    int vs_num_texsmp = 0;
+    int fs_num_texsmp = 0;
+    int cs_num_texsmp = 0;
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        switch (desc->views[i].texture.stage) {
+            case SG_SHADERSTAGE_VERTEX:   vs_num_tex++; break;
+            case SG_SHADERSTAGE_FRAGMENT: fs_num_tex++; break;
+            case SG_SHADERSTAGE_COMPUTE:  cs_num_tex++; break;
+            default: break;
+        }
+        switch (desc->views[i].storage_buffer.stage) {
+            case SG_SHADERSTAGE_VERTEX:   vs_num_sbuf++; break;
+            case SG_SHADERSTAGE_FRAGMENT: fs_num_sbuf++; break;
+            case SG_SHADERSTAGE_COMPUTE:  cs_num_sbuf++; break;
+            default: break;
+        }
+        switch (desc->views[i].storage_image.stage) {
+            case SG_SHADERSTAGE_VERTEX:   vs_num_simg++; break;
+            case SG_SHADERSTAGE_FRAGMENT: fs_num_simg++; break;
+            case SG_SHADERSTAGE_COMPUTE:  cs_num_simg++; break;
+            default: break;
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_TEXTURE_SAMPLER_PAIRS; i++) {
+        switch (desc->texture_sampler_pairs[i].stage) {
+            case SG_SHADERSTAGE_VERTEX:   vs_num_texsmp++; break;
+            case SG_SHADERSTAGE_FRAGMENT: fs_num_texsmp++; break;
+            case SG_SHADERSTAGE_COMPUTE:  cs_num_texsmp++; break;
+            default: break;
+        }
+    }
+    const int max_tex = _sg.limits.max_texture_bindings_per_stage;
+    const int max_sbuf = _sg.limits.max_storage_buffer_bindings_per_stage;
+    const int max_simg = _sg.limits.max_storage_image_bindings_per_stage;
+    bool retval = true;
+    if (vs_num_tex > max_tex) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURES);
+        retval = false;
+    }
+    if (fs_num_tex > max_tex) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_TEXTURES);
+        retval = false;
+    }
+    if (cs_num_tex > max_tex) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURES);
+        retval = false;
+    }
+    if (vs_num_sbuf > max_sbuf) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEBUFFERS);
+        retval = false;
+    }
+    if (fs_num_sbuf > max_sbuf) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEBUFFERS);
+        retval = false;
+    }
+    if (cs_num_sbuf > max_sbuf) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEBUFFERS);
+        retval = false;
+    }
+    if (vs_num_simg > max_simg) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEIMAGES);
+        retval = false;
+    }
+    if (fs_num_simg > max_simg) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEIMAGES);
+        retval = false;
+    }
+    if (cs_num_simg > max_simg) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEIMAGES);
+        retval = false;
+    }
+    if (vs_num_texsmp > max_tex) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURESAMPLERPAIRS);
+        retval = false;
+    }
+    if (fs_num_texsmp > max_tex) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_TEXTURESAMPLERPAIRS);
+        retval = false;
+    }
+    if (cs_num_texsmp > max_tex) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURESAMPLERPAIRS);
+        retval = false;
+    }
+    return retval;
+}
+
+_SOKOL_PRIVATE bool _sg_validate_pass_attachment_limits(const sg_pass* pass) {
+    SOKOL_ASSERT(pass);
+    int num_color_atts = 0;
+    int num_resolve_atts = 0;
+    for (int att_index = 0; att_index < SG_MAX_COLOR_ATTACHMENTS; att_index++) {
+        if (pass->attachments.colors[att_index].id != SG_INVALID_ID) {
+            num_color_atts += 1;
+        }
+        if (pass->attachments.resolves[att_index].id != SG_INVALID_ID) {
+            num_resolve_atts += 1;
+        }
+    }
+    bool retval = true;
+    if (num_color_atts > _sg.limits.max_color_attachments) {
+        _SG_ERROR(BEGINPASS_TOO_MANY_COLOR_ATTACHMENTS);
+        retval = false;
+    }
+    // max_color_attachments not a bug
+    if (num_resolve_atts > _sg.limits.max_color_attachments) {
+        _SG_ERROR(BEGINPASS_TOO_MANY_RESOLVE_ATTACHMENTS);
+        retval = false;
+    }
+    return retval;
+}
+
 // ██████  ███████ ███████  ██████  ██    ██ ██████   ██████ ███████ ███████
 // ██   ██ ██      ██      ██    ██ ██    ██ ██   ██ ██      ██      ██
 // ██████  █████   ███████ ██    ██ ██    ██ ██████  ██      █████   ███████
@@ -20150,7 +20310,7 @@ _SOKOL_PRIVATE void _sg_init_sampler(_sg_sampler_t* smp, const sg_sampler_desc* 
 _SOKOL_PRIVATE void _sg_init_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && (shd->slot.state == SG_RESOURCESTATE_ALLOC));
     SOKOL_ASSERT(desc);
-    if (_sg_validate_shader_desc(desc)) {
+    if (_sg_validate_shader_binding_limits(desc) && _sg_validate_shader_desc(desc)) {
         _sg_shader_common_init(&shd->cmn, desc);
         shd->slot.state = _sg_create_shader(shd, desc);
     } else {
@@ -21126,7 +21286,11 @@ SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
     SOKOL_ASSERT(_sg_attachments_empty(&_sg.cur_pass.atts));
     SOKOL_ASSERT(pass);
     SOKOL_ASSERT((pass->_start_canary == 0) && (pass->_end_canary == 0));
+    _sg.cur_pass.in_pass = true;
     const sg_pass pass_def = _sg_pass_defaults(pass);
+    if (!_sg_validate_pass_attachment_limits(&pass_def)) {
+        return;
+    }
     if (!_sg_validate_begin_pass(&pass_def)) {
         return;
     }
@@ -21151,7 +21315,6 @@ SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
         _sg.cur_pass.swapchain.sample_count = pass_def.swapchain.sample_count;
     }
     _sg.cur_pass.valid = true;  // may be overruled by backend begin-pass functions
-    _sg.cur_pass.in_pass = true;
     _sg.cur_pass.is_compute = pass_def.compute;
     _sg_begin_pass(&pass_def, &atts_ptrs);
     _SG_TRACE_ARGS(begin_pass, &pass_def);
