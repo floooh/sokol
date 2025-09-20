@@ -748,7 +748,7 @@
 
     Next start the render pass with all attachment-views, as soon as a
     resolve-attachment-view is provided, an MSAA resolve operation will happen
-    at the end of the pass. Also note that the content of the MSAA color-attachemnt-image
+    at the end of the pass. Also note that the content of the MSAA color-attachment-image
     doesn't need to be preserved, since it's only needed until the MSAA-resolve
     at the end of the pass, so the .store_action should be set to "don't care":
 
@@ -4361,6 +4361,8 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(SHADER_POOL_EXHAUSTED, "shader pool exhausted") \
     _SG_LOGITEM_XMACRO(PIPELINE_POOL_EXHAUSTED, "pipeline pool exhausted") \
     _SG_LOGITEM_XMACRO(VIEW_POOL_EXHAUSTED, "view pool exhausted") \
+    _SG_LOGITEM_XMACRO(BEGINPASS_TOO_MANY_COLOR_ATTACHMENTS, "sg_begin_pass: too many color attachments (sg_limits.max_color_attachments)") \
+    _SG_LOGITEM_XMACRO(BEGINPASS_TOO_MANY_RESOLVE_ATTACHMENTS, "sg_begin_pass: too many resolve attachments (sg_limits.max_color_attachments)") \
     _SG_LOGITEM_XMACRO(BEGINPASS_ATTACHMENTS_ALIVE, "sg_begin_pass: an attachment was provided that no longer exists") \
     _SG_LOGITEM_XMACRO(DRAW_WITHOUT_BINDINGS, "attempting to draw without resource bindings") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on vertex shader stage (sg_limits.max_texture_bindings_per_stage)") \
@@ -14870,7 +14872,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const 
         shd->mtl.smp_sampler_n[i] = desc->samplers[i].msl_sampler_n;
     }
 
-
     // create metal library and function objects
     bool shd_valid = true;
     if (desc->vertex_func.source || desc->vertex_func.bytecode.ptr) {
@@ -19908,6 +19909,31 @@ _SOKOL_PRIVATE bool _sg_validate_shader_binding_limits(const sg_shader_desc* des
     return retval;
 }
 
+_SOKOL_PRIVATE bool _sg_validate_pass_attachment_limits(const sg_pass* pass) {
+    SOKOL_ASSERT(pass);
+    int num_color_atts = 0;
+    int num_resolve_atts = 0;
+    for (int att_index = 0; att_index < SG_MAX_COLOR_ATTACHMENTS; att_index++) {
+        if (pass->attachments.colors[att_index].id != SG_INVALID_ID) {
+            num_color_atts += 1;
+        }
+        if (pass->attachments.resolves[att_index].id != SG_INVALID_ID) {
+            num_resolve_atts += 1;
+        }
+    }
+    bool retval = true;
+    if (num_color_atts > _sg.limits.max_color_attachments) {
+        _SG_ERROR(BEGINPASS_TOO_MANY_COLOR_ATTACHMENTS);
+        retval = false;
+    }
+    // max_color_attachments not a bug
+    if (num_resolve_atts > _sg.limits.max_color_attachments) {
+        _SG_ERROR(BEGINPASS_TOO_MANY_RESOLVE_ATTACHMENTS);
+        retval = false;
+    }
+    return retval;
+}
+
 // ██████  ███████ ███████  ██████  ██    ██ ██████   ██████ ███████ ███████
 // ██   ██ ██      ██      ██    ██ ██    ██ ██   ██ ██      ██      ██
 // ██████  █████   ███████ ██    ██ ██    ██ ██████  ██      █████   ███████
@@ -21256,7 +21282,11 @@ SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
     SOKOL_ASSERT(_sg_attachments_empty(&_sg.cur_pass.atts));
     SOKOL_ASSERT(pass);
     SOKOL_ASSERT((pass->_start_canary == 0) && (pass->_end_canary == 0));
+    _sg.cur_pass.in_pass = true;
     const sg_pass pass_def = _sg_pass_defaults(pass);
+    if (!_sg_validate_pass_attachment_limits(&pass_def)) {
+        return;
+    }
     if (!_sg_validate_begin_pass(&pass_def)) {
         return;
     }
@@ -21281,7 +21311,6 @@ SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
         _sg.cur_pass.swapchain.sample_count = pass_def.swapchain.sample_count;
     }
     _sg.cur_pass.valid = true;  // may be overruled by backend begin-pass functions
-    _sg.cur_pass.in_pass = true;
     _sg.cur_pass.is_compute = pass_def.compute;
     _sg_begin_pass(&pass_def, &atts_ptrs);
     _SG_TRACE_ARGS(begin_pass, &pass_def);

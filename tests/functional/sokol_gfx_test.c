@@ -2534,6 +2534,7 @@ UTEST(sokol_gfx, max_texture_bindings_per_stage_vs) {
     sg_shader shd = sg_make_shader(&desc);
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURES);
+    sg_shutdown();
 }
 
 UTEST(sokol_gfx, max_texture_bindings_per_stage_fs) {
@@ -2545,6 +2546,7 @@ UTEST(sokol_gfx, max_texture_bindings_per_stage_fs) {
     sg_shader shd = sg_make_shader(&desc);
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_FRAGMENTSTAGE_TEXTURES);
+    sg_shutdown();
 }
 
 UTEST(sokol_gfx, max_texture_bindings_per_stage_cs) {
@@ -2556,6 +2558,7 @@ UTEST(sokol_gfx, max_texture_bindings_per_stage_cs) {
     sg_shader shd = sg_make_shader(&desc);
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURES);
+    sg_shutdown();
 }
 
 UTEST(sokol_gfx, max_storagebuffer_bindings_per_stage_vs) {
@@ -2567,6 +2570,7 @@ UTEST(sokol_gfx, max_storagebuffer_bindings_per_stage_vs) {
     sg_shader shd = sg_make_shader(&desc);
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEBUFFERS);
+    sg_shutdown();
 }
 
 UTEST(sokol_gfx, max_storagebuffer_bindings_per_stage_fs) {
@@ -2578,6 +2582,7 @@ UTEST(sokol_gfx, max_storagebuffer_bindings_per_stage_fs) {
     sg_shader shd = sg_make_shader(&desc);
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEBUFFERS);
+    sg_shutdown();
 }
 
 UTEST(sokol_gfx, max_storagebuffer_bindings_per_stage_cs) {
@@ -2589,6 +2594,7 @@ UTEST(sokol_gfx, max_storagebuffer_bindings_per_stage_cs) {
     sg_shader shd = sg_make_shader(&desc);
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEBUFFERS);
+    sg_shutdown();
 }
 
 UTEST(sokol_gfx, max_storageimage_bindings_per_stage_vs) {
@@ -2600,6 +2606,7 @@ UTEST(sokol_gfx, max_storageimage_bindings_per_stage_vs) {
     sg_shader shd = sg_make_shader(&desc);
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEIMAGES);
+    sg_shutdown();
 }
 
 UTEST(sokol_gfx, max_storageimage_bindings_per_stage_fs) {
@@ -2611,6 +2618,7 @@ UTEST(sokol_gfx, max_storageimage_bindings_per_stage_fs) {
     sg_shader shd = sg_make_shader(&desc);
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEIMAGES);
+    sg_shutdown();
 }
 
 UTEST(sokol_gfx, max_storageimage_bindings_per_stage_cs) {
@@ -2622,6 +2630,7 @@ UTEST(sokol_gfx, max_storageimage_bindings_per_stage_cs) {
     sg_shader shd = sg_make_shader(&desc);
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEIMAGES);
+    sg_shutdown();
 }
 
 UTEST(sokol_gfx, max_texturesamplerpairs_per_stage_vs) {
@@ -2633,6 +2642,7 @@ UTEST(sokol_gfx, max_texturesamplerpairs_per_stage_vs) {
     sg_shader shd = sg_make_shader(&desc);
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURESAMPLERPAIRS);
+    sg_shutdown();
 }
 
 UTEST(sokol_gfx, max_texturesamplerpairs_per_stage_fs) {
@@ -2644,6 +2654,7 @@ UTEST(sokol_gfx, max_texturesamplerpairs_per_stage_fs) {
     sg_shader shd = sg_make_shader(&desc);
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_FRAGMENTSTAGE_TEXTURESAMPLERPAIRS);
+    sg_shutdown();
 }
 
 UTEST(sokol_gfx, max_texturesamplerpairs_per_stage_cs) {
@@ -2655,4 +2666,35 @@ UTEST(sokol_gfx, max_texturesamplerpairs_per_stage_cs) {
     sg_shader shd = sg_make_shader(&desc);
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURESAMPLERPAIRS);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, max_pass_attachments) {
+    setup(&(sg_desc){0});
+    sg_pass pass = {0};
+    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        sg_image color_img = sg_make_image(&(sg_image_desc){
+            .usage.color_attachment = true,
+            .width = 64,
+            .height = 64,
+            .sample_count = 4,
+        });
+        sg_image resolve_img = sg_make_image(&(sg_image_desc){
+            .usage.resolve_attachment = true,
+            .width = 64,
+            .height = 64,
+        });
+        pass.attachments.colors[i] = sg_make_view(&(sg_view_desc){
+            .color_attachment.image = color_img,
+        });
+        pass.attachments.resolves[i] = sg_make_view(&(sg_view_desc){
+        .resolve_attachment.image = resolve_img,
+        });
+    }
+    sg_begin_pass(&pass);
+    T(log_items[0] == SG_LOGITEM_BEGINPASS_TOO_MANY_COLOR_ATTACHMENTS);
+    T(log_items[1] == SG_LOGITEM_BEGINPASS_TOO_MANY_RESOLVE_ATTACHMENTS);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
 }
