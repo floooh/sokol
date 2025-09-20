@@ -2524,3 +2524,135 @@ UTEST(sokol_gfx, sg_query_surface_pitch) {
     T(sg_query_surface_pitch(SG_PIXELFORMAT_BC1_RGBA, 256, 5, 1) == (256 * 2 * 2));
     sg_shutdown();
 }
+
+UTEST(sokol_gfx, max_texture_bindings_per_stage_vs) {
+    setup(&(sg_desc){0});
+    sg_shader_desc desc = {0};
+    for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        desc.views[i].texture.stage = SG_SHADERSTAGE_VERTEX;
+    }
+    sg_shader shd = sg_make_shader(&desc);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURES);
+}
+
+UTEST(sokol_gfx, max_texture_bindings_per_stage_fs) {
+    setup(&(sg_desc){0});
+    sg_shader_desc desc = {0};
+    for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        desc.views[i].texture.stage = SG_SHADERSTAGE_FRAGMENT;
+    }
+    sg_shader shd = sg_make_shader(&desc);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_FRAGMENTSTAGE_TEXTURES);
+}
+
+UTEST(sokol_gfx, max_texture_bindings_per_stage_cs) {
+    setup(&(sg_desc){0});
+    sg_shader_desc desc = {0};
+    for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        desc.views[i].texture.stage = SG_SHADERSTAGE_COMPUTE;
+    }
+    sg_shader shd = sg_make_shader(&desc);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURES);
+}
+
+UTEST(sokol_gfx, max_storagebuffer_bindings_per_stage_vs) {
+    setup(&(sg_desc){0});
+    sg_shader_desc desc = {0};
+    for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        desc.views[i].storage_buffer.stage = SG_SHADERSTAGE_VERTEX;
+    }
+    sg_shader shd = sg_make_shader(&desc);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEBUFFERS);
+}
+
+UTEST(sokol_gfx, max_storagebuffer_bindings_per_stage_fs) {
+    setup(&(sg_desc){0});
+    sg_shader_desc desc = {0};
+    for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        desc.views[i].storage_buffer.stage = SG_SHADERSTAGE_FRAGMENT;
+    }
+    sg_shader shd = sg_make_shader(&desc);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEBUFFERS);
+}
+
+UTEST(sokol_gfx, max_storagebuffer_bindings_per_stage_cs) {
+    setup(&(sg_desc){0});
+    sg_shader_desc desc = {0};
+    for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        desc.views[i].storage_buffer.stage = SG_SHADERSTAGE_COMPUTE;
+    }
+    sg_shader shd = sg_make_shader(&desc);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEBUFFERS);
+}
+
+UTEST(sokol_gfx, max_storageimage_bindings_per_stage_vs) {
+    setup(&(sg_desc){0});
+    sg_shader_desc desc = {0};
+    for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        desc.views[i].storage_image.stage = SG_SHADERSTAGE_VERTEX;
+    }
+    sg_shader shd = sg_make_shader(&desc);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEIMAGES);
+}
+
+UTEST(sokol_gfx, max_storageimage_bindings_per_stage_fs) {
+    setup(&(sg_desc){0});
+    sg_shader_desc desc = {0};
+    for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        desc.views[i].storage_image.stage = SG_SHADERSTAGE_FRAGMENT;
+    }
+    sg_shader shd = sg_make_shader(&desc);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEIMAGES);
+}
+
+UTEST(sokol_gfx, max_storageimage_bindings_per_stage_cs) {
+    setup(&(sg_desc){0});
+    sg_shader_desc desc = {0};
+    for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        desc.views[i].storage_image.stage = SG_SHADERSTAGE_COMPUTE;
+    }
+    sg_shader shd = sg_make_shader(&desc);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEIMAGES);
+}
+
+UTEST(sokol_gfx, max_texturesamplerpairs_per_stage_vs) {
+    setup(&(sg_desc){0});
+    sg_shader_desc desc = {0};
+    for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        desc.texture_sampler_pairs[i].stage = SG_SHADERSTAGE_VERTEX;
+    }
+    sg_shader shd = sg_make_shader(&desc);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURESAMPLERPAIRS);
+}
+
+UTEST(sokol_gfx, max_texturesamplerpairs_per_stage_fs) {
+    setup(&(sg_desc){0});
+    sg_shader_desc desc = {0};
+    for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        desc.texture_sampler_pairs[i].stage = SG_SHADERSTAGE_FRAGMENT;
+    }
+    sg_shader shd = sg_make_shader(&desc);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_FRAGMENTSTAGE_TEXTURESAMPLERPAIRS);
+}
+
+UTEST(sokol_gfx, max_texturesamplerpairs_per_stage_cs) {
+    setup(&(sg_desc){0});
+    sg_shader_desc desc = {0};
+    for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        desc.texture_sampler_pairs[i].stage = SG_SHADERSTAGE_COMPUTE;
+    }
+    sg_shader shd = sg_make_shader(&desc);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURESAMPLERPAIRS);
+}

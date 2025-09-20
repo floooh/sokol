@@ -4363,10 +4363,18 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VIEW_POOL_EXHAUSTED, "view pool exhausted") \
     _SG_LOGITEM_XMACRO(BEGINPASS_ATTACHMENTS_ALIVE, "sg_begin_pass: an attachment was provided that no longer exists") \
     _SG_LOGITEM_XMACRO(DRAW_WITHOUT_BINDINGS, "attempting to draw without resource bindings") \
-    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_SHADERSTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on one shader stage (sg_limits.max_texture_bindings_per_stage)") \
-    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_SHADERSTAGE_STORAGEBUFFERS, "sg_shader_desc: too many storage buffer bindings on one shader stage (sg_limits.max_storage_buffer_bindings_per_stage)") \
-    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_SHADERSTAGE_STORAGEIMAGES, "sg_shader_desc: too many storage image bindings on one shader stage (sg_limits.max_storage_image_bindings_per_stage)") \
-    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_SHADERSTAGE_TEXTURESAMPLERPAIRS, "sg_shader_desc: too many texture-sampler-pairs on one shader stage (sg_limits.max_texture_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on vertex shader stage (sg_limits.max_texture_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on fragment shader stage (sg_limits.max_texture_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on compute shader stage (sg_limits.max_texture_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEBUFFERS, "sg_shader_desc: too many storage buffer bindings on vertex shader stage (sg_limits.max_storage_buffer_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEBUFFERS, "sg_shader_desc: too many storage buffer bindings on fragment shader stage (sg_limits.max_storage_buffer_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEBUFFERS, "sg_shader_desc: too many storage buffer bindings on compute shader stage (sg_limits.max_storage_buffer_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEIMAGES, "sg_shader_desc: too many storage image bindings on vertex shader stage (sg_limits.max_storage_image_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEIMAGES, "sg_shader_desc: too many storage image bindings on fragment shader stage (sg_limits.max_storage_image_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEIMAGES, "sg_shader_desc: too many storage image bindings on compute shader stage (sg_limits.max_storage_image_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURESAMPLERPAIRS, "sg_shader_desc: too many texture-sampler-pairs on vertex shader stage (sg_limits.max_texture_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_TEXTURESAMPLERPAIRS, "sg_shader_desc: too many texture-sampler-pairs on fragment shader stage (sg_limits.max_texture_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURESAMPLERPAIRS, "sg_shader_desc: too many texture-sampler-pairs on compute shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_CANARY, "sg_buffer_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_IMMUTABLE_DYNAMIC_STREAM, "sg_buffer_desc.usage: only one of .immutable, .dynamic_update, .stream_update can be true") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_SEPARATE_BUFFER_TYPES, "sg_buffer_desc.usage: on WebGL2, only one of .vertex_buffer or .index_buffer can be true (check sg_features.separate_buffer_types)") \
@@ -8219,6 +8227,10 @@ _SOKOL_PRIVATE void _sg_dummy_setup_backend(const sg_desc* desc) {
     _sg.limits.max_image_size_array = 1024;
     _sg.limits.max_image_array_layers = 1024;
     _sg.limits.max_vertex_attrs = 16;
+    _sg.limits.max_color_attachments = 4;
+    _sg.limits.max_texture_bindings_per_stage = 16;
+    _sg.limits.max_storage_buffer_bindings_per_stage = 8;
+    _sg.limits.max_storage_image_bindings_per_stage = 4;
 }
 
 _SOKOL_PRIVATE void _sg_dummy_discard_backend(void) {
@@ -19844,23 +19856,56 @@ _SOKOL_PRIVATE bool _sg_validate_shader_binding_limits(const sg_shader_desc* des
     const int max_tex = _sg.limits.max_texture_bindings_per_stage;
     const int max_sbuf = _sg.limits.max_storage_buffer_bindings_per_stage;
     const int max_simg = _sg.limits.max_storage_image_bindings_per_stage;
-    if ((vs_num_tex > max_tex) || (fs_num_tex > max_tex) || (cs_num_tex > max_tex)) {
-        _SG_ERROR(SHADERDESC_TOO_MANY_SHADERSTAGE_TEXTURES);
-        return false;
+    bool retval = true;
+    if (vs_num_tex > max_tex) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURES);
+        retval = false;
     }
-    if ((vs_num_sbuf > max_sbuf) || (fs_num_sbuf > max_sbuf) || (cs_num_sbuf > max_sbuf)) {
-        _SG_ERROR(SHADERDESC_TOO_MANY_SHADERSTAGE_STORAGEBUFFERS);
-        return false;
+    if (fs_num_tex > max_tex) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_TEXTURES);
+        retval = false;
     }
-    if ((vs_num_simg > max_simg) || (fs_num_simg > max_simg) || (cs_num_simg > max_simg)) {
-        _SG_ERROR(SHADERDESC_TOO_MANY_SHADERSTAGE_STORAGEIMAGES);
-        return false;
+    if (cs_num_tex > max_tex) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURES);
+        retval = false;
     }
-    if ((vs_num_texsmp > max_tex) || (fs_num_texsmp > max_tex) || (cs_num_texsmp > max_tex)) {
-        _SG_ERROR(SHADERDESC_TOO_MANY_SHADERSTAGE_TEXTURESAMPLERPAIRS);
-        return false;
+    if (vs_num_sbuf > max_sbuf) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEBUFFERS);
+        retval = false;
     }
-    return true;
+    if (fs_num_sbuf > max_sbuf) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEBUFFERS);
+        retval = false;
+    }
+    if (cs_num_sbuf > max_sbuf) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEBUFFERS);
+        retval = false;
+    }
+    if (vs_num_simg > max_simg) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEIMAGES);
+        retval = false;
+    }
+    if (fs_num_simg > max_simg) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEIMAGES);
+        retval = false;
+    }
+    if (cs_num_simg > max_simg) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEIMAGES);
+        retval = false;
+    }
+    if (vs_num_texsmp > max_tex) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURESAMPLERPAIRS);
+        retval = false;
+    }
+    if (fs_num_texsmp > max_tex) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_TEXTURESAMPLERPAIRS);
+        retval = false;
+    }
+    if (cs_num_texsmp > max_tex) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURESAMPLERPAIRS);
+        retval = false;
+    }
+    return retval;
 }
 
 // ██████  ███████ ███████  ██████  ██    ██ ██████   ██████ ███████ ███████
