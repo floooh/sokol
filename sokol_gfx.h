@@ -9271,29 +9271,47 @@ _SOKOL_PRIVATE void _sg_gl_init_pixelformats_compute(void) {
 
 _SOKOL_PRIVATE void _sg_gl_init_limits(void) {
     _SG_GL_CHECK_ERROR();
+
     GLint gl_int;
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &gl_int);
     _SG_GL_CHECK_ERROR();
+
     _sg.limits.max_image_size_2d = gl_int;
     _sg.limits.max_image_size_array = gl_int;
+
     glGetIntegerv(GL_MAX_CUBE_MAP_TEXTURE_SIZE, &gl_int);
     _SG_GL_CHECK_ERROR();
     _sg.limits.max_image_size_cube = gl_int;
+
+    glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &gl_int);
+    _SG_GL_CHECK_ERROR();
+    _sg.limits.max_image_size_3d = gl_int;
+
+    glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &gl_int);
+    _SG_GL_CHECK_ERROR();
+    _sg.limits.max_image_array_layers = gl_int;
+
     glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &gl_int);
     _SG_GL_CHECK_ERROR();
     if (gl_int > SG_MAX_VERTEX_ATTRIBUTES) {
         gl_int = SG_MAX_VERTEX_ATTRIBUTES;
     }
     _sg.limits.max_vertex_attrs = gl_int;
+
+    glGetIntegerv(GL_MAX_DRAW_BUFFERS, &gl_int);
+    _SG_GL_CHECK_ERROR();
+    _sg.limits.max_color_attachments = _sg_min(gl_int, SG_MAX_COLOR_ATTACHMENTS);
+
+    glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &gl_int);
+    _SG_GL_CHECK_ERROR();
+    _sg.limits.max_texture_bindings_per_stage = _sg_min(gl_int, SG_MAX_VIEW_BINDSLOTS);
+
+    // FIXME: max_storage_buffer/image_bindings_per_stage,
+
     glGetIntegerv(GL_MAX_VERTEX_UNIFORM_COMPONENTS, &gl_int);
     _SG_GL_CHECK_ERROR();
     _sg.limits.gl_max_vertex_uniform_components = gl_int;
-    glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &gl_int);
-    _SG_GL_CHECK_ERROR();
-    _sg.limits.max_image_size_3d = gl_int;
-    glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &gl_int);
-    _SG_GL_CHECK_ERROR();
-    _sg.limits.max_image_array_layers = gl_int;
+
     if (_sg.gl.ext_anisotropic) {
         glGetIntegerv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &gl_int);
         _SG_GL_CHECK_ERROR();
@@ -9301,6 +9319,7 @@ _SOKOL_PRIVATE void _sg_gl_init_limits(void) {
     } else {
         _sg.gl.max_anisotropy = 1;
     }
+
     glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &gl_int);
     _SG_GL_CHECK_ERROR();
     _sg.limits.gl_max_combined_texture_image_units = gl_int;
