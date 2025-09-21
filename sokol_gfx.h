@@ -9306,7 +9306,15 @@ _SOKOL_PRIVATE void _sg_gl_init_limits(void) {
     _SG_GL_CHECK_ERROR();
     _sg.limits.max_texture_bindings_per_stage = _sg_min(gl_int, SG_MAX_VIEW_BINDSLOTS);
 
-    // FIXME: max_storage_buffer/image_bindings_per_stage,
+    #if defined(_SOKOL_GL_HAS_COMPUTE)
+        glGetIntegerv(GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS, &gl_int);
+        _SG_GL_CHECK_ERROR();
+        _sg.limits.max_storage_buffer_bindings_per_stage = _sg_min(gl_int, SG_MAX_VIEW_BINDSLOTS);
+
+        glGetIntegerv(GL_MAX_IMAGE_UNITS, &gl_int);
+        _SG_GL_CHECK_ERROR();
+        _sg.limits.max_storage_image_bindings_per_stage = _sg_min(gl_int, SG_MAX_VIEW_BINDSLOTS);
+    #endif
 
     glGetIntegerv(GL_MAX_VERTEX_UNIFORM_COMPONENTS, &gl_int);
     _SG_GL_CHECK_ERROR();
@@ -20329,12 +20337,16 @@ _SOKOL_PRIVATE void _sg_init_sampler(_sg_sampler_t* smp, const sg_sampler_desc* 
 _SOKOL_PRIVATE void _sg_init_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && (shd->slot.state == SG_RESOURCESTATE_ALLOC));
     SOKOL_ASSERT(desc);
-    if (_sg_validate_shader_binding_limits(desc) && _sg_validate_shader_desc(desc)) {
-        _sg_shader_common_init(&shd->cmn, desc);
-        shd->slot.state = _sg_create_shader(shd, desc);
-    } else {
+    if (!_sg_validate_shader_desc(desc)) {
         shd->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
     }
+    if (!_sg_validate_shader_binding_limits(desc)) {
+        shd->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
+    }
+    _sg_shader_common_init(&shd->cmn, desc);
+    shd->slot.state = _sg_create_shader(shd, desc);
     SOKOL_ASSERT((shd->slot.state == SG_RESOURCESTATE_VALID)||(shd->slot.state == SG_RESOURCESTATE_FAILED));
 }
 
