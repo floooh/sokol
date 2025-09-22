@@ -2201,10 +2201,12 @@ typedef struct sg_limits {
     int max_vertex_attrs;           // max number of vertex attributes, clamped to SG_MAX_VERTEX_ATTRIBUTES
     int max_color_attachments;      // max number of render pass color attachments, clamped to SG_MAX_COLOR_ATTACHMENTS
     int max_texture_bindings_per_stage; // max number of texture bindings per shader stage, clamped to SG_MAX_VIEW_BINDSLOTS
-    int max_storage_buffer_bindings_per_stage;  // max number of storage buffer bindings per shader stage, clamped to SG_MAX_VIEW_BINDSLOTS
+    int max_readonly_storage_buffer_bindings_per_stage;  // max number of readonly storage buffer bindings per shader stage, clamped to SG_MAX_VIEW_BINDSLOTS
+    int max_writable_storage_buffer_bindings_per_stage; // max writable storage buffers on compute shader stage, clamped to SG_MAX_VIEW_BINDSLOTS
     int max_storage_image_bindings_per_stage;   // max number of storage image bindings per shader stage, clamped to SG_MAX_VIEW_BINDSLOTS
-    int gl_max_vertex_uniform_components;    // <= GL_MAX_VERTEX_UNIFORM_COMPONENTS (only on GL backends)
-    int gl_max_combined_texture_image_units; // <= GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS (only on GL backends)
+    int gl_max_vertex_uniform_components;       // GL_MAX_VERTEX_UNIFORM_COMPONENTS (only on GL backends)
+    int gl_max_combined_texture_image_units;    // GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS (only on GL backends)
+    int d3d11_max_unordered_access_views;       // 8 on feature level 11.0, otherwise 32 (clamped to SG_MAX_VIEW_BINDSLOTS)
 } sg_limits;
 
 /*
@@ -4370,7 +4372,8 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on compute shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEBUFFERS, "sg_shader_desc: too many storage buffer bindings on vertex shader stage (sg_limits.max_storage_buffer_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEBUFFERS, "sg_shader_desc: too many storage buffer bindings on fragment shader stage (sg_limits.max_storage_buffer_bindings_per_stage)") \
-    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEBUFFERS, "sg_shader_desc: too many storage buffer bindings on compute shader stage (sg_limits.max_storage_buffer_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_READONLY_STORAGEBUFFERS, "sg_shader_desc: too many readonly storage buffer bindings on compute shader stage (sg_limits.max_storage_buffer_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_WRITABLE_STORAGEBUFFERS, "sg_shader_desc: too many writable storage buffer bindings on compute shader stage (sg_limits.max_storage_buffer_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEIMAGES, "sg_shader_desc: too many storage image bindings on vertex shader stage (sg_limits.max_storage_image_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEIMAGES, "sg_shader_desc: too many storage image bindings on fragment shader stage (sg_limits.max_storage_image_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEIMAGES, "sg_shader_desc: too many storage image bindings on compute shader stage (sg_limits.max_storage_image_bindings_per_stage)") \
@@ -6266,8 +6269,8 @@ typedef struct {
 #define _SG_D3D11_MAX_TEXTUREARRAY_LAYERS (2048)
 #define _SG_D3D11_MAX_TEXTURE_SUBRESOURCES (SG_MAX_MIPMAPS * _SG_D3D11_MAX_TEXTUREARRAY_LAYERS)
 #define _SG_D3D11_MAX_STAGE_UB_BINDINGS (_SG_MAX_UNIFORMBLOCK_BINDINGS_PER_STAGE)
-#define _SG_D3D11_MAX_STAGE_SRV_BINDINGS (_SG_MAX_TEXTURE_BINDINGS_PER_STAGE + _SG_MAX_STORAGEBUFFER_BINDINGS_PER_STAGE)
-#define _SG_D3D11_MAX_STAGE_UAV_BINDINGS (_SG_MAX_STORAGEBUFFER_BINDINGS_PER_STAGE + _SG_MAX_STORAGEIMAGE_BINDINGS_PER_STAGE)
+#define _SG_D3D11_MAX_STAGE_SRV_BINDINGS (SG_MAX_VIEW_BINDSLOTS)
+#define _SG_D3D11_MAX_STAGE_UAV_BINDINGS (SG_MAX_VIEW_BINDSLOTS)
 #define _SG_D3D11_MAX_STAGE_SMP_BINDINGS (SG_MAX_SAMPLER_BINDSLOTS)
 
 typedef struct _sg_shader_s {
@@ -11989,6 +11992,14 @@ static inline void _sg_d3d11_ClearState(ID3D11DeviceContext* self) {
     #endif
 }
 
+static inline D3D_FEATURE_LEVEL _sg_d3d11_GetFeatureLevel(ID3D11Device* self) {
+    #if defined(__cplusplus)
+        return self->GetFeatureLevel();
+    #else
+        return self->lpVtbl->GetFeatureLevel(self);
+    #endif
+}
+
 //-- enum translation functions ------------------------------------------------
 _SOKOL_PRIVATE D3D11_USAGE _sg_d3d11_image_usage(const sg_image_usage* usg) {
     if (usg->immutable) {
@@ -12382,6 +12393,16 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.limits.max_image_size_array = 16 * 1024;
     _sg.limits.max_image_array_layers = _SG_D3D11_MAX_TEXTUREARRAY_LAYERS;
     _sg.limits.max_vertex_attrs = SG_MAX_VERTEX_ATTRIBUTES;
+    _sg.limits.max_color_attachments = 8;
+    _sg.limits.max_texture_bindings_per_stage = _sg_min(128, SG_MAX_VIEW_BINDSLOTS);
+    _sg.limits.max_readonly_storage_buffer_bindings_per_stage = _sg_min(128, SG_MAX_VIEW_BINDSLOTS);
+    if (_sg_d3d11_GetFeatureLevel(_sg.d3d11.dev) >= D3D_FEATURE_LEVEL_11_1) {
+        _sg.limits.d3d11_max_unordered_access_views = _sg_min(64, SG_MAX_VIEW_BINDSLOTS);
+    } else {
+        _sg.limits.d3d11_max_unordered_access_views = _sg_min(8, SG_MAX_VIEW_BINDSLOTS);
+    }
+    _sg.limits.max_writable_storage_buffer_bindings_per_stage = _sg.limits.d3d11_max_unordered_access_views;
+    _sg.limits.max_storage_image_bindings_per_stage = _sg.limits.d3d11_max_unordered_access_views;
 
     // see: https://docs.microsoft.com/en-us/windows/win32/api/d3d11/ne-d3d11-d3d11_format_support
     for (int fmt = (SG_PIXELFORMAT_NONE+1); fmt < _SG_PIXELFORMAT_NUM; fmt++) {
@@ -12711,6 +12732,7 @@ _SOKOL_PRIVATE bool _sg_d3d11_ensure_hlsl_bindslot_ranges(const sg_shader_desc* 
             return false;
         }
     }
+    SOKOL_ASSERT(_sg.limits.d3d11_max_unordered_access_views <= _SG_D3D11_MAX_STAGE_UAV_BINDINGS);
     for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
         if (desc->views[i].texture.hlsl_register_t_n >= _SG_D3D11_MAX_STAGE_SRV_BINDINGS) {
             _SG_ERROR(D3D11_IMAGE_HLSL_REGISTER_T_OUT_OF_RANGE);
@@ -12720,11 +12742,11 @@ _SOKOL_PRIVATE bool _sg_d3d11_ensure_hlsl_bindslot_ranges(const sg_shader_desc* 
             _SG_ERROR(D3D11_STORAGEBUFFER_HLSL_REGISTER_T_OUT_OF_RANGE);
             return false;
         }
-        if (desc->views[i].storage_buffer.hlsl_register_u_n >= _SG_D3D11_MAX_STAGE_UAV_BINDINGS) {
+        if (desc->views[i].storage_buffer.hlsl_register_u_n >= _sg.limits.d3d11_max_unordered_access_views) {
             _SG_ERROR(D3D11_STORAGEBUFFER_HLSL_REGISTER_U_OUT_OF_RANGE);
             return false;
         }
-        if (desc->views[i].storage_image.hlsl_register_u_n >= _SG_D3D11_MAX_STAGE_UAV_BINDINGS) {
+        if (desc->views[i].storage_image.hlsl_register_u_n >= _sg.limits.d3d11_max_unordered_access_views) {
             _SG_ERROR(D3D11_STORAGEIMAGE_HLSL_REGISTER_U_OUT_OF_RANGE);
             return false;
         }
@@ -13600,7 +13622,7 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
             } else {
                 SOKOL_ASSERT(stage == SG_SHADERSTAGE_COMPUTE);
                 const uint8_t d3d11_slot = shd->d3d11.view_register_u_n[i];
-                SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_UAV_BINDINGS);
+                SOKOL_ASSERT(d3d11_slot < _sg.limits.d3d11_max_unordered_access_views);
                 ID3D11UnorderedAccessView* d3d11_uav = view->d3d11.uav;
                 SOKOL_ASSERT(d3d11_uav);
                 d3d11_cs_uavs[d3d11_slot] = d3d11_uav;
@@ -13608,7 +13630,7 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         } else if (shd_view->view_type == SG_VIEWTYPE_STORAGEIMAGE) {
             SOKOL_ASSERT(stage == SG_SHADERSTAGE_COMPUTE);
             const uint8_t d3d11_slot = shd->d3d11.view_register_u_n[i];
-            SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_UAV_BINDINGS);
+            SOKOL_ASSERT(d3d11_slot < _sg.limits.d3d11_max_unordered_access_views);
             ID3D11UnorderedAccessView* d3d11_uav = view->d3d11.uav;
             SOKOL_ASSERT(d3d11_uav);
             d3d11_cs_uavs[d3d11_slot] = d3d11_uav;
@@ -13633,9 +13655,10 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         }
     }
     if (is_compute) {
+        SOKOL_ASSERT(_sg.limits.d3d11_max_unordered_access_views <= _SG_D3D11_MAX_STAGE_UAV_BINDINGS);
         _sg_d3d11_CSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SRV_BINDINGS, d3d11_cs_srvs);
         _sg_d3d11_CSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, d3d11_cs_smps);
-        _sg_d3d11_CSSetUnorderedAccessViews(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UAV_BINDINGS, d3d11_cs_uavs, NULL);
+        _sg_d3d11_CSSetUnorderedAccessViews(_sg.d3d11.ctx, 0, _sg.limits.d3d11_max_unordered_access_views, d3d11_cs_uavs, NULL);
         _sg_stats_add(d3d11.bindings.num_cs_set_shader_resources, 1);
         _sg_stats_add(d3d11.bindings.num_cs_set_samplers, 1);
         _sg_stats_add(d3d11.bindings.num_cs_set_unordered_access_views, 1);
@@ -19857,7 +19880,8 @@ _SOKOL_PRIVATE bool _sg_validate_shader_binding_limits(const sg_shader_desc* des
     int cs_num_tex = 0;
     int vs_num_sbuf = 0;
     int fs_num_sbuf = 0;
-    int cs_num_sbuf = 0;
+    int cs_num_readonly_sbuf = 0;
+    int cs_num_writable_sbuf = 0;
     int vs_num_simg = 0;
     int fs_num_simg = 0;
     int cs_num_simg = 0;
@@ -19874,7 +19898,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_binding_limits(const sg_shader_desc* des
         switch (desc->views[i].storage_buffer.stage) {
             case SG_SHADERSTAGE_VERTEX:   vs_num_sbuf++; break;
             case SG_SHADERSTAGE_FRAGMENT: fs_num_sbuf++; break;
-            case SG_SHADERSTAGE_COMPUTE:  cs_num_sbuf++; break;
+            case SG_SHADERSTAGE_COMPUTE:  desc->views[i].storage_buffer.readonly ? cs_num_readonly_sbuf++ : cs_num_writable_sbuf++; break;
             default: break;
         }
         switch (desc->views[i].storage_image.stage) {
@@ -19893,7 +19917,8 @@ _SOKOL_PRIVATE bool _sg_validate_shader_binding_limits(const sg_shader_desc* des
         }
     }
     const int max_tex = _sg.limits.max_texture_bindings_per_stage;
-    const int max_sbuf = _sg.limits.max_storage_buffer_bindings_per_stage;
+    const int max_readonly_sbuf = _sg.limits.max_readonly_storage_buffer_bindings_per_stage;
+    const int max_writable_sbuf = _sg.limits.max_writable_storage_buffer_bindings_per_stage;
     const int max_simg = _sg.limits.max_storage_image_bindings_per_stage;
     bool retval = true;
     if (vs_num_tex > max_tex) {
@@ -19908,16 +19933,20 @@ _SOKOL_PRIVATE bool _sg_validate_shader_binding_limits(const sg_shader_desc* des
         _SG_ERROR(SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURES);
         retval = false;
     }
-    if (vs_num_sbuf > max_sbuf) {
+    if (vs_num_sbuf > max_readonly_sbuf) {
         _SG_ERROR(SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEBUFFERS);
         retval = false;
     }
-    if (fs_num_sbuf > max_sbuf) {
+    if (fs_num_sbuf > max_readonly_sbuf) {
         _SG_ERROR(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEBUFFERS);
         retval = false;
     }
-    if (cs_num_sbuf > max_sbuf) {
-        _SG_ERROR(SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEBUFFERS);
+    if (cs_num_readonly_sbuf > max_readonly_sbuf) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_COMPUTESTAGE_READONLY_STORAGEBUFFERS);
+        retval = false;
+    }
+    if (cs_num_writable_sbuf > max_writable_sbuf) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_COMPUTESTAGE_WRITABLE_STORAGEBUFFERS);
         retval = false;
     }
     if (vs_num_simg > max_simg) {
