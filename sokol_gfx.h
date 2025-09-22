@@ -4246,8 +4246,8 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(GL_TEXTURE_FORMAT_NOT_SUPPORTED, "pixel format not supported for texture (gl)") \
     _SG_LOGITEM_XMACRO(GL_3D_TEXTURES_NOT_SUPPORTED, "3d textures not supported (gl)") \
     _SG_LOGITEM_XMACRO(GL_ARRAY_TEXTURES_NOT_SUPPORTED, "array textures not supported (gl)") \
-    _SG_LOGITEM_XMACRO(GL_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE, "GLSL storage buffer bindslot is out of range (must be 0..7) (gl)") \
-    _SG_LOGITEM_XMACRO(GL_STORAGEIMAGE_GLSL_BINDING_OUT_OF_RANGE, "GLSL storage image bindslot is out of range (must be 0..3) (gl)") \
+    _SG_LOGITEM_XMACRO(GL_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE, "GLSL storage buffer bindslot is out of range (sg_limits.max_storage_buffer_bindings_per_stage) (gl)") \
+    _SG_LOGITEM_XMACRO(GL_STORAGEIMAGE_GLSL_BINDING_OUT_OF_RANGE, "GLSL storage image bindslot is out of range (sg.limits.max_storage_image_bindings_per_stage) (gl)") \
     _SG_LOGITEM_XMACRO(GL_SHADER_COMPILATION_FAILED, "shader compilation failed (gl)") \
     _SG_LOGITEM_XMACRO(GL_SHADER_LINKING_FAILED, "shader linking failed (gl)") \
     _SG_LOGITEM_XMACRO(GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER, "vertex attribute not found in shader; NOTE: may be caused by GL driver's GLSL compiler removing unused globals") \
@@ -5668,6 +5668,10 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_MAX 0x8008
         #define GL_WRITE_ONLY 0x88B9
         #define GL_READ_WRITE 0x88BA
+        #define GL_MAX_DRAW_BUFFERS 0x8824
+        #define GL_MAX_TEXTURE_IMAGE_UNITS 0x8872
+        #define GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS 0x90DD
+        #define GL_MAX_IMAGE_UNITS 0x8F38
     #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
@@ -9293,10 +9297,7 @@ _SOKOL_PRIVATE void _sg_gl_init_limits(void) {
 
     glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &gl_int);
     _SG_GL_CHECK_ERROR();
-    if (gl_int > SG_MAX_VERTEX_ATTRIBUTES) {
-        gl_int = SG_MAX_VERTEX_ATTRIBUTES;
-    }
-    _sg.limits.max_vertex_attrs = gl_int;
+    _sg.limits.max_vertex_attrs = _sg_min(gl_int, SG_MAX_VERTEX_ATTRIBUTES);
 
     glGetIntegerv(GL_MAX_DRAW_BUFFERS, &gl_int);
     _SG_GL_CHECK_ERROR();
@@ -9537,9 +9538,9 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
         _sg.gl.cache.storage_buffer = 0;
         _sg_stats_add(gl.num_bind_buffer, 1);
     }
-    for (size_t i = 0; i < _SG_GL_MAX_SBUF_BINDINGS; i++) {
+    for (int i = 0; i < _SG_GL_MAX_SBUF_BINDINGS; i++) {
         if (force || (_sg.gl.cache.storage_buffers[i] != 0)) {
-            if (_sg.features.compute) {
+            if (_sg.features.compute && (i < _sg.limits.max_storage_buffer_bindings_per_stage)) {
                 glBindBufferBase(GL_SHADER_STORAGE_BUFFER, (GLuint)i, 0);
             }
             _sg.gl.cache.storage_buffers[i] = 0;
@@ -9585,6 +9586,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_storage_buffer(uint8_t glsl_binding_n, GLu
         _sg.gl.cache.storage_buffer_offsets[glsl_binding_n] = offset;
         _sg.gl.cache.storage_buffer = buffer; // not a bug
         if (_sg.features.compute) {
+            SOKOL_ASSERT(glsl_binding_n < _sg.limits.max_storage_buffer_bindings_per_stage);
             glBindBufferRange(GL_SHADER_STORAGE_BUFFER, glsl_binding_n, buffer, offset, buf_size - offset);
         }
         _sg_stats_add(gl.num_bind_buffer, 1);
@@ -9644,11 +9646,13 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_buffer(GLuint buf) {
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
         _sg_stats_add(gl.num_bind_buffer, 1);
     }
-    for (size_t i = 0; i < _SG_GL_MAX_SBUF_BINDINGS; i++) {
+    for (int i = 0; i < _SG_GL_MAX_SBUF_BINDINGS; i++) {
         if (buf == _sg.gl.cache.storage_buffers[i]) {
             _sg.gl.cache.storage_buffers[i] = 0;
             _sg.gl.cache.storage_buffer = 0; // not a bug!
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, (GLuint)i, 0);
+            if (_sg.features.compute && (i < _sg.limits.max_storage_buffer_bindings_per_stage)) {
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, (GLuint)i, 0);
+            }
             _sg_stats_add(gl.num_bind_buffer, 1);
         }
     }
@@ -10269,14 +10273,16 @@ _SOKOL_PRIVATE GLuint _sg_gl_compile_shader(sg_shader_stage stage, const char* s
 // NOTE: this is an out-of-range check for GLSL bindslots that's also active in release mode
 _SOKOL_PRIVATE bool _sg_gl_ensure_glsl_bindslot_ranges(const sg_shader_desc* desc) {
     SOKOL_ASSERT(desc);
+    SOKOL_ASSERT(_sg.limits.max_storage_buffer_bindings_per_stage <= _SG_GL_MAX_SBUF_BINDINGS);
+    SOKOL_ASSERT(_sg.limits.max_storage_image_bindings_per_stage <= _SG_GL_MAX_SIMG_BINDINGS);
     for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
-        if (desc->views[i].storage_buffer.glsl_binding_n >= _SG_GL_MAX_SBUF_BINDINGS) {
+        if (desc->views[i].storage_buffer.glsl_binding_n >= _sg.limits.max_storage_buffer_bindings_per_stage) {
             _SG_ERROR(GL_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE);
             return false;
         }
     }
     for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
-        if (desc->views[i].storage_image.glsl_binding_n >= _SG_GL_MAX_SIMG_BINDINGS) {
+        if (desc->views[i].storage_image.glsl_binding_n >= _sg.limits.max_storage_image_bindings_per_stage) {
             _SG_ERROR(GL_STORAGEIMAGE_GLSL_BINDING_OUT_OF_RANGE);
             return false;
         }
@@ -11254,6 +11260,7 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
             #if defined(_SOKOL_GL_HAS_COMPUTE)
                 const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
                 const uint8_t gl_unit = shd->gl.simg_binding[i];
+                SOKOL_ASSERT((int)gl_unit < _sg.limits.max_storage_image_bindings_per_stage);
                 GLuint gl_tex = img->gl.tex[img->cmn.active_slot];
                 GLint level = (GLint)view->cmn.img.mip_level;
                 GLint layer = (GLint)view->cmn.img.slice;
