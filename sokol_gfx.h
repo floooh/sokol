@@ -6312,6 +6312,18 @@ typedef struct {
     HINSTANCE d3dcompiler_dll;
     bool d3dcompiler_dll_load_failed;
     pD3DCompile D3DCompile_func;
+    // static bindings arrays
+    struct {
+        ID3D11Buffer* vbs[SG_MAX_VERTEXBUFFER_BINDSLOTS];
+        UINT vb_offsets[SG_MAX_VERTEXBUFFER_BINDSLOTS];
+        ID3D11ShaderResourceView* vs_srvs[_SG_D3D11_MAX_STAGE_SRV_BINDINGS];
+        ID3D11ShaderResourceView* fs_srvs[_SG_D3D11_MAX_STAGE_SRV_BINDINGS];
+        ID3D11ShaderResourceView* cs_srvs[_SG_D3D11_MAX_STAGE_SRV_BINDINGS];
+        ID3D11UnorderedAccessView* cs_uavs[_SG_D3D11_MAX_STAGE_UAV_BINDINGS];
+        ID3D11SamplerState* vs_smps[_SG_D3D11_MAX_STAGE_SMP_BINDINGS];
+        ID3D11SamplerState* fs_smps[_SG_D3D11_MAX_STAGE_SMP_BINDINGS];
+        ID3D11SamplerState* cs_smps[_SG_D3D11_MAX_STAGE_SMP_BINDINGS];
+    } bnd;
     // global subresourcedata array for texture updates
     D3D11_SUBRESOURCE_DATA subres_data[_SG_D3D11_MAX_TEXTURE_SUBRESOURCES];
 } _sg_d3d11_backend_t;
@@ -13477,27 +13489,36 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
     const _sg_shader_t* shd = _sg_shader_ref_ptr(&bnd->pip->cmn.shader);
     const bool is_compute = bnd->pip->cmn.is_compute;
 
+    if (is_compute) {
+        _sg_clear(&_sg.d3d11.bnd.cs_srvs, sizeof(_sg.d3d11.bnd.cs_srvs));
+        _sg_clear(&_sg.d3d11.bnd.cs_uavs, sizeof(_sg.d3d11.bnd.cs_uavs));
+        _sg_clear(&_sg.d3d11.bnd.cs_smps, sizeof(_sg.d3d11.bnd.cs_smps));
+    } else {
+        _sg_clear(&_sg.d3d11.bnd.vbs, sizeof(_sg.d3d11.bnd.vbs));
+        _sg_clear(&_sg.d3d11.bnd.vb_offsets, sizeof(_sg.d3d11.bnd.vb_offsets));
+        _sg_clear(&_sg.d3d11.bnd.vs_srvs, sizeof(_sg.d3d11.bnd.vs_srvs));
+        _sg_clear(&_sg.d3d11.bnd.fs_srvs, sizeof(_sg.d3d11.bnd.fs_srvs));
+        _sg_clear(&_sg.d3d11.bnd.vs_smps, sizeof(_sg.d3d11.bnd.vs_smps));
+        _sg_clear(&_sg.d3d11.bnd.fs_smps, sizeof(_sg.d3d11.bnd.fs_smps));
+    }
+
     // gather all the D3D11 resources into arrays
     ID3D11Buffer* d3d11_ib = bnd->ib ? bnd->ib->d3d11.buf : 0;
-    ID3D11Buffer* d3d11_vbs[SG_MAX_VERTEXBUFFER_BINDSLOTS] = {0};
-    UINT d3d11_vb_offsets[SG_MAX_VERTEXBUFFER_BINDSLOTS] = {0};
-    ID3D11ShaderResourceView* d3d11_vs_srvs[_SG_D3D11_MAX_STAGE_SRV_BINDINGS] = {0};
-    ID3D11ShaderResourceView* d3d11_fs_srvs[_SG_D3D11_MAX_STAGE_SRV_BINDINGS] = {0};
-    ID3D11ShaderResourceView* d3d11_cs_srvs[_SG_D3D11_MAX_STAGE_SRV_BINDINGS] = {0};
-    ID3D11UnorderedAccessView* d3d11_cs_uavs[_SG_D3D11_MAX_STAGE_UAV_BINDINGS] = {0};
-    ID3D11SamplerState* d3d11_vs_smps[_SG_D3D11_MAX_STAGE_SMP_BINDINGS] = {0};
-    ID3D11SamplerState* d3d11_fs_smps[_SG_D3D11_MAX_STAGE_SMP_BINDINGS] = {0};
-    ID3D11SamplerState* d3d11_cs_smps[_SG_D3D11_MAX_STAGE_SMP_BINDINGS] = {0};
 
-    if (!is_compute) {
+    if (is_compute) {
+        // on D3D11 we need to break a chicken-egg-situation where a resource
+        // may still be set as shader resource view, but is going to be set
+        // as unordered-access-view, so first clear all shader resource view bindings
+        _sg_d3d11_CSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SRV_BINDINGS, _sg.d3d11.bnd.cs_srvs);
+    } else {
         for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
             const _sg_buffer_t* vb = bnd->vbs[i];
             if (vb == 0) {
                 continue;
             }
             SOKOL_ASSERT(vb->d3d11.buf);
-            d3d11_vbs[i] = vb->d3d11.buf;
-            d3d11_vb_offsets[i] = (UINT)bnd->vb_offsets[i];
+            _sg.d3d11.bnd.vbs[i] = vb->d3d11.buf;
+            _sg.d3d11.bnd.vb_offsets[i] = (UINT)bnd->vb_offsets[i];
         }
     }
     for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
@@ -13519,9 +13540,9 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
             ID3D11ShaderResourceView* d3d11_srv = view->d3d11.srv;
             SOKOL_ASSERT(d3d11_srv);
             switch (stage) {
-                case SG_SHADERSTAGE_VERTEX: d3d11_vs_srvs[d3d11_slot] = d3d11_srv; break;
-                case SG_SHADERSTAGE_FRAGMENT: d3d11_fs_srvs[d3d11_slot] = d3d11_srv; break;
-                case SG_SHADERSTAGE_COMPUTE: d3d11_cs_srvs[d3d11_slot] = d3d11_srv; break;
+                case SG_SHADERSTAGE_VERTEX: _sg.d3d11.bnd.vs_srvs[d3d11_slot] = d3d11_srv; break;
+                case SG_SHADERSTAGE_FRAGMENT: _sg.d3d11.bnd.fs_srvs[d3d11_slot] = d3d11_srv; break;
+                case SG_SHADERSTAGE_COMPUTE: _sg.d3d11.bnd.cs_srvs[d3d11_slot] = d3d11_srv; break;
                 default: SOKOL_UNREACHABLE;
             }
         } else if (shd_view->view_type == SG_VIEWTYPE_STORAGEBUFFER) {
@@ -13531,9 +13552,9 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
                 ID3D11ShaderResourceView* d3d11_srv = view->d3d11.srv;
                 SOKOL_ASSERT(d3d11_srv);
                 switch (stage) {
-                    case SG_SHADERSTAGE_VERTEX: d3d11_vs_srvs[d3d11_slot] = d3d11_srv; break;
-                    case SG_SHADERSTAGE_FRAGMENT: d3d11_fs_srvs[d3d11_slot] = d3d11_srv; break;
-                    case SG_SHADERSTAGE_COMPUTE: d3d11_cs_srvs[d3d11_slot] = d3d11_srv; break;
+                    case SG_SHADERSTAGE_VERTEX: _sg.d3d11.bnd.vs_srvs[d3d11_slot] = d3d11_srv; break;
+                    case SG_SHADERSTAGE_FRAGMENT: _sg.d3d11.bnd.fs_srvs[d3d11_slot] = d3d11_srv; break;
+                    case SG_SHADERSTAGE_COMPUTE: _sg.d3d11.bnd.cs_srvs[d3d11_slot] = d3d11_srv; break;
                     default: SOKOL_UNREACHABLE;
                 }
             } else {
@@ -13542,7 +13563,7 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
                 SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_UAV_BINDINGS);
                 ID3D11UnorderedAccessView* d3d11_uav = view->d3d11.uav;
                 SOKOL_ASSERT(d3d11_uav);
-                d3d11_cs_uavs[d3d11_slot] = d3d11_uav;
+                _sg.d3d11.bnd.cs_uavs[d3d11_slot] = d3d11_uav;
             }
         } else if (shd_view->view_type == SG_VIEWTYPE_STORAGEIMAGE) {
             SOKOL_ASSERT(stage == SG_SHADERSTAGE_COMPUTE);
@@ -13550,7 +13571,7 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
             SOKOL_ASSERT(d3d11_slot < _SG_D3D11_MAX_STAGE_UAV_BINDINGS);
             ID3D11UnorderedAccessView* d3d11_uav = view->d3d11.uav;
             SOKOL_ASSERT(d3d11_uav);
-            d3d11_cs_uavs[d3d11_slot] = d3d11_uav;
+            _sg.d3d11.bnd.cs_uavs[d3d11_slot] = d3d11_uav;
         } else SOKOL_UNREACHABLE;
     }
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
@@ -13565,26 +13586,27 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         SOKOL_ASSERT(smp->d3d11.smp);
         ID3D11SamplerState* d3d11_smp = smp->d3d11.smp;
         switch (stage) {
-            case SG_SHADERSTAGE_VERTEX: d3d11_vs_smps[d3d11_slot] = d3d11_smp; break;
-            case SG_SHADERSTAGE_FRAGMENT: d3d11_fs_smps[d3d11_slot] = d3d11_smp; break;
-            case SG_SHADERSTAGE_COMPUTE: d3d11_cs_smps[d3d11_slot] = d3d11_smp; break;
+            case SG_SHADERSTAGE_VERTEX: _sg.d3d11.bnd.vs_smps[d3d11_slot] = d3d11_smp; break;
+            case SG_SHADERSTAGE_FRAGMENT: _sg.d3d11.bnd.fs_smps[d3d11_slot] = d3d11_smp; break;
+            case SG_SHADERSTAGE_COMPUTE: _sg.d3d11.bnd.cs_smps[d3d11_slot] = d3d11_smp; break;
             default: SOKOL_UNREACHABLE;
         }
     }
     if (is_compute) {
-        _sg_d3d11_CSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SRV_BINDINGS, d3d11_cs_srvs);
-        _sg_d3d11_CSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, d3d11_cs_smps);
-        _sg_d3d11_CSSetUnorderedAccessViews(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UAV_BINDINGS, d3d11_cs_uavs, NULL);
+        // NOTE: keep UAVs on front of SRVs
+        _sg_d3d11_CSSetUnorderedAccessViews(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UAV_BINDINGS, _sg.d3d11.bnd.cs_uavs, NULL);
+        _sg_d3d11_CSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SRV_BINDINGS, _sg.d3d11.bnd.cs_srvs);
+        _sg_d3d11_CSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, _sg.d3d11.bnd.cs_smps);
         _sg_stats_add(d3d11.bindings.num_cs_set_shader_resources, 1);
         _sg_stats_add(d3d11.bindings.num_cs_set_samplers, 1);
         _sg_stats_add(d3d11.bindings.num_cs_set_unordered_access_views, 1);
     } else {
-        _sg_d3d11_IASetVertexBuffers(_sg.d3d11.ctx, 0, SG_MAX_VERTEXBUFFER_BINDSLOTS, d3d11_vbs, bnd->pip->d3d11.vb_strides, d3d11_vb_offsets);
+        _sg_d3d11_IASetVertexBuffers(_sg.d3d11.ctx, 0, SG_MAX_VERTEXBUFFER_BINDSLOTS, _sg.d3d11.bnd.vbs, bnd->pip->d3d11.vb_strides, _sg.d3d11.bnd.vb_offsets);
         _sg_d3d11_IASetIndexBuffer(_sg.d3d11.ctx, d3d11_ib, bnd->pip->d3d11.index_format, (UINT)bnd->ib_offset);
-        _sg_d3d11_VSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SRV_BINDINGS, d3d11_vs_srvs);
-        _sg_d3d11_PSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SRV_BINDINGS, d3d11_fs_srvs);
-        _sg_d3d11_VSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, d3d11_vs_smps);
-        _sg_d3d11_PSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, d3d11_fs_smps);
+        _sg_d3d11_VSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SRV_BINDINGS, _sg.d3d11.bnd.vs_srvs);
+        _sg_d3d11_PSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SRV_BINDINGS, _sg.d3d11.bnd.fs_srvs);
+        _sg_d3d11_VSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, _sg.d3d11.bnd.vs_smps);
+        _sg_d3d11_PSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, _sg.d3d11.bnd.fs_smps);
         _sg_stats_add(d3d11.bindings.num_ia_set_vertex_buffers, 1);
         _sg_stats_add(d3d11.bindings.num_ia_set_index_buffer, 1);
         _sg_stats_add(d3d11.bindings.num_vs_set_shader_resources, 1);
