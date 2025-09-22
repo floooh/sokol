@@ -1,5 +1,18 @@
 ## Updates
 
+### 22-Sep-2025
+
+- sokol_gfx.h d3d11: fix a bug in the d3d11 backend which existed since the 'resource-view-update':
+  when a compute pass used ping-ponging by alternating two textures as shader-resource-view binding
+  and unordered-access-view-binding, the D3D11 validation layer would complain that the same resource
+  is still set as input- or output-resource. This has now been fixed rather crudely by first clearing the
+  shader resource bindings before setting the unordered-access-bindings when calling sg_apply_bindings()
+  in a compute pass. IMHO this D3D11 validation layer warning is a false positive though, because at the
+  time of the next draw call, the chicken-egg-situation has been resolved (since at that point, both the
+  UAV and SRV bindings have been set correctly).
+
+  PR: https://github.com/floooh/sokol/pull/1333
+
 ### 15-Sep-2025
 
 - sokol_gfx.h: a minor breaking change which removes a special case for
