@@ -2526,7 +2526,9 @@ UTEST(sokol_gfx, sg_query_surface_pitch) {
 }
 
 UTEST(sokol_gfx, max_texture_bindings_per_stage_vs) {
-    setup(&(sg_desc){0});
+    setup(&(sg_desc){
+        .disable_validation = true,
+    });
     sg_shader_desc desc = {0};
     for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
         desc.views[i].texture.stage = SG_SHADERSTAGE_VERTEX;
@@ -2538,7 +2540,9 @@ UTEST(sokol_gfx, max_texture_bindings_per_stage_vs) {
 }
 
 UTEST(sokol_gfx, max_texture_bindings_per_stage_fs) {
-    setup(&(sg_desc){0});
+    setup(&(sg_desc){
+        .disable_validation = true,
+    });
     sg_shader_desc desc = {0};
     for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
         desc.views[i].texture.stage = SG_SHADERSTAGE_FRAGMENT;
@@ -2550,7 +2554,9 @@ UTEST(sokol_gfx, max_texture_bindings_per_stage_fs) {
 }
 
 UTEST(sokol_gfx, max_texture_bindings_per_stage_cs) {
-    setup(&(sg_desc){0});
+    setup(&(sg_desc){
+        .disable_validation = true,
+    });
     sg_shader_desc desc = {0};
     for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
         desc.views[i].texture.stage = SG_SHADERSTAGE_COMPUTE;
@@ -2574,7 +2580,9 @@ UTEST(sokol_gfx, max_storagebuffer_bindings_per_stage_vs) {
 }
 
 UTEST(sokol_gfx, max_storagebuffer_bindings_per_stage_fs) {
-    setup(&(sg_desc){0});
+    setup(&(sg_desc){
+        .disable_validation = true,
+    });
     sg_shader_desc desc = {0};
     for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
         desc.views[i].storage_buffer.stage = SG_SHADERSTAGE_FRAGMENT;
@@ -2585,20 +2593,37 @@ UTEST(sokol_gfx, max_storagebuffer_bindings_per_stage_fs) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, max_storagebuffer_bindings_per_stage_cs) {
-    setup(&(sg_desc){0});
+UTEST(sokol_gfx, max_writable_storagebuffer_bindings_per_stage_cs) {
+    setup(&(sg_desc){
+        .disable_validation = true,
+    });
     sg_shader_desc desc = {0};
     for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
         desc.views[i].storage_buffer.stage = SG_SHADERSTAGE_COMPUTE;
     }
     sg_shader shd = sg_make_shader(&desc);
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEBUFFERS);
+    T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_COMPUTESTAGE_WRITABLE_STORAGEBUFFERS);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, max_readonly_storagebuffer_bindings_per_stage_cs) {
+    setup(&(sg_desc){0});
+    sg_shader_desc desc = {0};
+    for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        desc.views[i].storage_buffer.stage = SG_SHADERSTAGE_COMPUTE;
+        desc.views[i].storage_buffer.readonly = true;
+    }
+    sg_shader shd = sg_make_shader(&desc);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_COMPUTESTAGE_READONLY_STORAGEBUFFERS);
     sg_shutdown();
 }
 
 UTEST(sokol_gfx, max_storageimage_bindings_per_stage_vs) {
-    setup(&(sg_desc){0});
+    setup(&(sg_desc){
+        .disable_validation = true,
+    });
     sg_shader_desc desc = {0};
     for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
         desc.views[i].storage_image.stage = SG_SHADERSTAGE_VERTEX;
@@ -2610,7 +2635,9 @@ UTEST(sokol_gfx, max_storageimage_bindings_per_stage_vs) {
 }
 
 UTEST(sokol_gfx, max_storageimage_bindings_per_stage_fs) {
-    setup(&(sg_desc){0});
+    setup(&(sg_desc){
+        .disable_validation = true,
+    });
     sg_shader_desc desc = {0};
     for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
         desc.views[i].storage_image.stage = SG_SHADERSTAGE_FRAGMENT;
@@ -2622,7 +2649,9 @@ UTEST(sokol_gfx, max_storageimage_bindings_per_stage_fs) {
 }
 
 UTEST(sokol_gfx, max_storageimage_bindings_per_stage_cs) {
-    setup(&(sg_desc){0});
+    setup(&(sg_desc){
+        .disable_validation = true,
+    });
     sg_shader_desc desc = {0};
     for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
         desc.views[i].storage_image.stage = SG_SHADERSTAGE_COMPUTE;
@@ -2634,7 +2663,9 @@ UTEST(sokol_gfx, max_storageimage_bindings_per_stage_cs) {
 }
 
 UTEST(sokol_gfx, max_texturesamplerpairs_per_stage_vs) {
-    setup(&(sg_desc){0});
+    setup(&(sg_desc){
+        .disable_validation = true,
+    });
     sg_shader_desc desc = {0};
     for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
         desc.texture_sampler_pairs[i].stage = SG_SHADERSTAGE_VERTEX;
@@ -2646,7 +2677,9 @@ UTEST(sokol_gfx, max_texturesamplerpairs_per_stage_vs) {
 }
 
 UTEST(sokol_gfx, max_texturesamplerpairs_per_stage_fs) {
-    setup(&(sg_desc){0});
+    setup(&(sg_desc){
+        .disable_validation = true,
+    });
     sg_shader_desc desc = {0};
     for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
         desc.texture_sampler_pairs[i].stage = SG_SHADERSTAGE_FRAGMENT;
@@ -2658,7 +2691,9 @@ UTEST(sokol_gfx, max_texturesamplerpairs_per_stage_fs) {
 }
 
 UTEST(sokol_gfx, max_texturesamplerpairs_per_stage_cs) {
-    setup(&(sg_desc){0});
+    setup(&(sg_desc){
+        .disable_validation = true,
+    });
     sg_shader_desc desc = {0};
     for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
         desc.texture_sampler_pairs[i].stage = SG_SHADERSTAGE_COMPUTE;

@@ -8250,7 +8250,8 @@ _SOKOL_PRIVATE void _sg_dummy_setup_backend(const sg_desc* desc) {
     _sg.limits.max_vertex_attrs = 16;
     _sg.limits.max_color_attachments = 4;
     _sg.limits.max_texture_bindings_per_stage = 16;
-    _sg.limits.max_storage_buffer_bindings_per_stage = 8;
+    _sg.limits.max_readonly_storage_buffer_bindings_per_stage = 8;
+    _sg.limits.max_writable_storage_buffer_bindings_per_stage = 8;
     _sg.limits.max_storage_image_bindings_per_stage = 4;
 }
 
