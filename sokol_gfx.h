@@ -4203,6 +4203,15 @@ typedef struct sg_frame_stats_wgpu {
     sg_frame_stats_wgpu_bindings bindings;
 } sg_frame_stats_wgpu;
 
+typedef struct sg_resource_stats {
+    uint32_t total_alive;   // number of live objects in pool
+    uint32_t total_free;    // number of free objects in pool
+    uint32_t allocated;     // number of allocated objects in current frame
+    uint32_t deallocated;   // number of deallocated object in current frame
+    uint32_t inited;        // number of initialized objects in current frame
+    uint32_t uninited;      // number of deinitialized objects in current frame
+} sg_resource_stats;
+
 typedef struct sg_frame_stats {
     uint32_t frame_index;   // current frame counter, starts at 0
 
@@ -4222,6 +4231,13 @@ typedef struct sg_frame_stats {
     uint32_t size_update_buffer;
     uint32_t size_append_buffer;
     uint32_t size_update_image;
+
+    sg_resource_stats buffers;
+    sg_resource_stats images;
+    sg_resource_stats samplers;
+    sg_resource_stats views;
+    sg_resource_stats shaders;
+    sg_resource_stats pipelines;
 
     sg_frame_stats_gl gl;
     sg_frame_stats_d3d11 d3d11;
@@ -7331,6 +7347,12 @@ _SG_IMPL_RES_PTR_OR_NULL(_sg_view_ref_ptr_or_null, _sg_view_ref_t, _sg_view_t)
 #define _sg_fequal(val,cmp,delta) ((((val)-(cmp))> -(delta))&&(((val)-(cmp))<(delta)))
 #define _sg_ispow2(val) ((val&(val-1))==0)
 #define _sg_stats_add(key,val) {if(_sg.stats_enabled){ _sg.stats.key+=val;}}
+
+_SOKOL_PRIVATE void _sg_update_resource_stats(sg_resource_stats* stats, const _sg_pool_t* pool) {
+    SOKOL_ASSERT(stats && pool);
+    stats->total_alive = (uint32_t) ((pool->size - 1) - pool->queue_top);
+    stats->total_free = (uint32_t) pool->queue_top;
+}
 
 _SOKOL_PRIVATE uint32_t _sg_align_u32(uint32_t val, uint32_t align) {
     SOKOL_ASSERT((align > 0) && ((align & (align - 1)) == 0));
@@ -20522,6 +20544,12 @@ SOKOL_API_IMPL int sg_query_surface_pitch(sg_pixel_format fmt, int width, int he
 
 SOKOL_API_IMPL sg_frame_stats sg_query_frame_stats(void) {
     SOKOL_ASSERT(_sg.valid);
+    _sg_update_resource_stats(&_sg.prev_stats.buffers, &_sg.pools.buffer_pool);
+    _sg_update_resource_stats(&_sg.prev_stats.images, &_sg.pools.image_pool);
+    _sg_update_resource_stats(&_sg.prev_stats.views, &_sg.pools.view_pool);
+    _sg_update_resource_stats(&_sg.prev_stats.samplers, &_sg.pools.sampler_pool);
+    _sg_update_resource_stats(&_sg.prev_stats.shaders, &_sg.pools.shader_pool);
+    _sg_update_resource_stats(&_sg.prev_stats.pipelines, &_sg.pools.pipeline_pool);
     return _sg.prev_stats;
 }
 
@@ -20542,6 +20570,7 @@ SOKOL_API_IMPL sg_trace_hooks sg_install_trace_hooks(const sg_trace_hooks* trace
 SOKOL_API_IMPL sg_buffer sg_alloc_buffer(void) {
     SOKOL_ASSERT(_sg.valid);
     sg_buffer res = _sg_alloc_buffer();
+    _sg_stats_add(buffers.allocated, 1);
     _SG_TRACE_ARGS(alloc_buffer, res);
     return res;
 }
@@ -20549,6 +20578,7 @@ SOKOL_API_IMPL sg_buffer sg_alloc_buffer(void) {
 SOKOL_API_IMPL sg_image sg_alloc_image(void) {
     SOKOL_ASSERT(_sg.valid);
     sg_image res = _sg_alloc_image();
+    _sg_stats_add(images.allocated, 1);
     _SG_TRACE_ARGS(alloc_image, res);
     return res;
 }
@@ -20556,6 +20586,7 @@ SOKOL_API_IMPL sg_image sg_alloc_image(void) {
 SOKOL_API_IMPL sg_sampler sg_alloc_sampler(void) {
     SOKOL_ASSERT(_sg.valid);
     sg_sampler res = _sg_alloc_sampler();
+    _sg_stats_add(samplers.allocated, 1);
     _SG_TRACE_ARGS(alloc_sampler, res);
     return res;
 }
@@ -20563,6 +20594,7 @@ SOKOL_API_IMPL sg_sampler sg_alloc_sampler(void) {
 SOKOL_API_IMPL sg_shader sg_alloc_shader(void) {
     SOKOL_ASSERT(_sg.valid);
     sg_shader res = _sg_alloc_shader();
+    _sg_stats_add(shaders.allocated, 1);
     _SG_TRACE_ARGS(alloc_shader, res);
     return res;
 }
@@ -20570,6 +20602,7 @@ SOKOL_API_IMPL sg_shader sg_alloc_shader(void) {
 SOKOL_API_IMPL sg_pipeline sg_alloc_pipeline(void) {
     SOKOL_ASSERT(_sg.valid);
     sg_pipeline res = _sg_alloc_pipeline();
+    _sg_stats_add(pipelines.allocated, 1);
     _SG_TRACE_ARGS(alloc_pipeline, res);
     return res;
 }
@@ -20577,6 +20610,7 @@ SOKOL_API_IMPL sg_pipeline sg_alloc_pipeline(void) {
 SOKOL_API_IMPL sg_view sg_alloc_view(void) {
     SOKOL_ASSERT(_sg.valid);
     sg_view res = _sg_alloc_view();
+    _sg_stats_add(views.allocated, 1);
     _SG_TRACE_ARGS(alloc_view, res);
     return res;
 }
@@ -20587,6 +20621,7 @@ SOKOL_API_IMPL void sg_dealloc_buffer(sg_buffer buf_id) {
     if (buf) {
         if (buf->slot.state == SG_RESOURCESTATE_ALLOC) {
             _sg_dealloc_buffer(buf);
+            _sg_stats_add(buffers.deallocated, 1);
         } else {
             _SG_ERROR(DEALLOC_BUFFER_INVALID_STATE);
         }
@@ -20600,6 +20635,7 @@ SOKOL_API_IMPL void sg_dealloc_image(sg_image img_id) {
     if (img) {
         if (img->slot.state == SG_RESOURCESTATE_ALLOC) {
             _sg_dealloc_image(img);
+            _sg_stats_add(images.deallocated, 1);
         } else {
             _SG_ERROR(DEALLOC_IMAGE_INVALID_STATE);
         }
@@ -20613,6 +20649,7 @@ SOKOL_API_IMPL void sg_dealloc_sampler(sg_sampler smp_id) {
     if (smp) {
         if (smp->slot.state == SG_RESOURCESTATE_ALLOC) {
             _sg_dealloc_sampler(smp);
+            _sg_stats_add(samplers.deallocated, 1);
         } else {
             _SG_ERROR(DEALLOC_SAMPLER_INVALID_STATE);
         }
@@ -20626,6 +20663,7 @@ SOKOL_API_IMPL void sg_dealloc_shader(sg_shader shd_id) {
     if (shd) {
         if (shd->slot.state == SG_RESOURCESTATE_ALLOC) {
             _sg_dealloc_shader(shd);
+            _sg_stats_add(shaders.deallocated, 1);
         } else {
             _SG_ERROR(DEALLOC_SHADER_INVALID_STATE);
         }
@@ -20639,6 +20677,7 @@ SOKOL_API_IMPL void sg_dealloc_pipeline(sg_pipeline pip_id) {
     if (pip) {
         if (pip->slot.state == SG_RESOURCESTATE_ALLOC) {
             _sg_dealloc_pipeline(pip);
+            _sg_stats_add(pipelines.deallocated, 1);
         } else {
             _SG_ERROR(DEALLOC_PIPELINE_INVALID_STATE);
         }
@@ -20652,6 +20691,7 @@ SOKOL_API_IMPL void sg_dealloc_view(sg_view view_id) {
     if (view) {
         if (view->slot.state == SG_RESOURCESTATE_ALLOC) {
             _sg_dealloc_view(view);
+            _sg_stats_add(views.deallocated, 1);
         } else {
             _SG_ERROR(DEALLOC_VIEW_INVALID_STATE);
         }
@@ -20667,6 +20707,7 @@ SOKOL_API_IMPL void sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc)
         if (buf->slot.state == SG_RESOURCESTATE_ALLOC) {
             _sg_init_buffer(buf, &desc_def);
             SOKOL_ASSERT((buf->slot.state == SG_RESOURCESTATE_VALID) || (buf->slot.state == SG_RESOURCESTATE_FAILED));
+            _sg_stats_add(buffers.inited, 1);
         } else {
             _SG_ERROR(INIT_BUFFER_INVALID_STATE);
         }
@@ -20682,6 +20723,7 @@ SOKOL_API_IMPL void sg_init_image(sg_image img_id, const sg_image_desc* desc) {
         if (img->slot.state == SG_RESOURCESTATE_ALLOC) {
             _sg_init_image(img, &desc_def);
             SOKOL_ASSERT((img->slot.state == SG_RESOURCESTATE_VALID) || (img->slot.state == SG_RESOURCESTATE_FAILED));
+            _sg_stats_add(images.inited, 1);
         } else {
             _SG_ERROR(INIT_IMAGE_INVALID_STATE);
         }
@@ -20697,6 +20739,7 @@ SOKOL_API_IMPL void sg_init_sampler(sg_sampler smp_id, const sg_sampler_desc* de
         if (smp->slot.state == SG_RESOURCESTATE_ALLOC) {
             _sg_init_sampler(smp, &desc_def);
             SOKOL_ASSERT((smp->slot.state == SG_RESOURCESTATE_VALID) || (smp->slot.state == SG_RESOURCESTATE_FAILED));
+            _sg_stats_add(samplers.inited, 1);
         } else {
             _SG_ERROR(INIT_SAMPLER_INVALID_STATE);
         }
@@ -20712,6 +20755,7 @@ SOKOL_API_IMPL void sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc)
         if (shd->slot.state == SG_RESOURCESTATE_ALLOC) {
             _sg_init_shader(shd, &desc_def);
             SOKOL_ASSERT((shd->slot.state == SG_RESOURCESTATE_VALID) || (shd->slot.state == SG_RESOURCESTATE_FAILED));
+            _sg_stats_add(shaders.inited, 1);
         } else {
             _SG_ERROR(INIT_SHADER_INVALID_STATE);
         }
@@ -20727,6 +20771,7 @@ SOKOL_API_IMPL void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc*
         if (pip->slot.state == SG_RESOURCESTATE_ALLOC) {
             _sg_init_pipeline(pip, &desc_def);
             SOKOL_ASSERT((pip->slot.state == SG_RESOURCESTATE_VALID) || (pip->slot.state == SG_RESOURCESTATE_FAILED));
+            _sg_stats_add(pipelines.inited, 1);
         } else {
             _SG_ERROR(INIT_PIPELINE_INVALID_STATE);
         }
@@ -20744,6 +20789,7 @@ SOKOL_API_IMPL void sg_init_view(sg_view view_id, const sg_view_desc* desc) {
             SOKOL_ASSERT((view->slot.state == SG_RESOURCESTATE_VALID)
                 || (view->slot.state == SG_RESOURCESTATE_FAILED)
                 || (view->slot.state == SG_RESOURCESTATE_ALLOC));
+            _sg_stats_add(views.inited, 1);
         } else {
             _SG_ERROR(INIT_VIEW_INVALID_STATE);
         }
@@ -20758,6 +20804,7 @@ SOKOL_API_IMPL void sg_uninit_buffer(sg_buffer buf_id) {
         if ((buf->slot.state == SG_RESOURCESTATE_VALID) || (buf->slot.state == SG_RESOURCESTATE_FAILED)) {
             _sg_uninit_buffer(buf);
             SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
+            _sg_stats_add(buffers.uninited, 1);
         } else if (buf->slot.state != SG_RESOURCESTATE_ALLOC) {
             _SG_ERROR(UNINIT_BUFFER_INVALID_STATE);
         }
@@ -20772,6 +20819,7 @@ SOKOL_API_IMPL void sg_uninit_image(sg_image img_id) {
         if ((img->slot.state == SG_RESOURCESTATE_VALID) || (img->slot.state == SG_RESOURCESTATE_FAILED)) {
             _sg_uninit_image(img);
             SOKOL_ASSERT(img->slot.state == SG_RESOURCESTATE_ALLOC);
+            _sg_stats_add(images.uninited, 1);
         } else if (img->slot.state != SG_RESOURCESTATE_ALLOC) {
             _SG_ERROR(UNINIT_IMAGE_INVALID_STATE);
         }
@@ -20786,6 +20834,7 @@ SOKOL_API_IMPL void sg_uninit_sampler(sg_sampler smp_id) {
         if ((smp->slot.state == SG_RESOURCESTATE_VALID) || (smp->slot.state == SG_RESOURCESTATE_FAILED)) {
             _sg_uninit_sampler(smp);
             SOKOL_ASSERT(smp->slot.state == SG_RESOURCESTATE_ALLOC);
+            _sg_stats_add(samplers.uninited, 1);
         } else if (smp->slot.state != SG_RESOURCESTATE_ALLOC) {
             _SG_ERROR(UNINIT_SAMPLER_INVALID_STATE);
         }
@@ -20800,6 +20849,7 @@ SOKOL_API_IMPL void sg_uninit_shader(sg_shader shd_id) {
         if ((shd->slot.state == SG_RESOURCESTATE_VALID) || (shd->slot.state == SG_RESOURCESTATE_FAILED)) {
             _sg_uninit_shader(shd);
             SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_ALLOC);
+            _sg_stats_add(shaders.uninited, 1);
         } else if (shd->slot.state != SG_RESOURCESTATE_ALLOC) {
             _SG_ERROR(UNINIT_SHADER_INVALID_STATE);
         }
@@ -20814,6 +20864,7 @@ SOKOL_API_IMPL void sg_uninit_pipeline(sg_pipeline pip_id) {
         if ((pip->slot.state == SG_RESOURCESTATE_VALID) || (pip->slot.state == SG_RESOURCESTATE_FAILED)) {
             _sg_uninit_pipeline(pip);
             SOKOL_ASSERT(pip->slot.state == SG_RESOURCESTATE_ALLOC);
+            _sg_stats_add(pipelines.uninited, 1);
         } else if (pip->slot.state != SG_RESOURCESTATE_ALLOC) {
             _SG_ERROR(UNINIT_PIPELINE_INVALID_STATE);
         }
@@ -20828,6 +20879,7 @@ SOKOL_API_IMPL void sg_uninit_view(sg_view view_id) {
         if ((view->slot.state == SG_RESOURCESTATE_VALID) || (view->slot.state == SG_RESOURCESTATE_FAILED)) {
             _sg_uninit_view(view);
             SOKOL_ASSERT(view->slot.state == SG_RESOURCESTATE_ALLOC);
+            _sg_stats_add(views.uninited, 1);
         } else if (view->slot.state != SG_RESOURCESTATE_ALLOC) {
             _SG_ERROR(UNINIT_VIEW_INVALID_STATE);
         }
