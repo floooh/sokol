@@ -4512,6 +4512,36 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(sgimgui_t* ctx) {
         _sgimgui_frame_stats(size_update_buffer);
         _sgimgui_frame_stats(size_append_buffer);
         _sgimgui_frame_stats(size_update_image);
+        _sgimgui_frame_stats(buffers.total_alive);
+        _sgimgui_frame_stats(buffers.total_free);
+        _sgimgui_frame_stats(buffers.allocated);
+        _sgimgui_frame_stats(buffers.deallocated);
+        _sgimgui_frame_stats(buffers.inited);
+        _sgimgui_frame_stats(buffers.uninited);
+        _sgimgui_frame_stats(images.total_alive);
+        _sgimgui_frame_stats(images.total_free);
+        _sgimgui_frame_stats(images.allocated);
+        _sgimgui_frame_stats(images.deallocated);
+        _sgimgui_frame_stats(images.inited);
+        _sgimgui_frame_stats(images.uninited);
+        _sgimgui_frame_stats(views.total_alive);
+        _sgimgui_frame_stats(views.total_free);
+        _sgimgui_frame_stats(views.allocated);
+        _sgimgui_frame_stats(views.deallocated);
+        _sgimgui_frame_stats(views.inited);
+        _sgimgui_frame_stats(views.uninited);
+        _sgimgui_frame_stats(shaders.total_alive);
+        _sgimgui_frame_stats(shaders.total_free);
+        _sgimgui_frame_stats(shaders.allocated);
+        _sgimgui_frame_stats(shaders.deallocated);
+        _sgimgui_frame_stats(shaders.inited);
+        _sgimgui_frame_stats(shaders.uninited);
+        _sgimgui_frame_stats(pipelines.total_alive);
+        _sgimgui_frame_stats(pipelines.total_free);
+        _sgimgui_frame_stats(pipelines.allocated);
+        _sgimgui_frame_stats(pipelines.deallocated);
+        _sgimgui_frame_stats(pipelines.inited);
+        _sgimgui_frame_stats(pipelines.uninited);
         switch (sg_query_backend()) {
             case SG_BACKEND_GLCORE:
             case SG_BACKEND_GLES3:
