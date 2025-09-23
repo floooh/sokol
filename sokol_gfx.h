@@ -7354,6 +7354,18 @@ _SOKOL_PRIVATE void _sg_update_resource_stats(sg_resource_stats* stats, const _s
     stats->total_free = (uint32_t) pool->queue_top;
 }
 
+_SOKOL_PRIVATE void _sg_update_frame_stats(void) {
+    _sg.stats.frame_index = _sg.frame_index;
+    _sg_update_resource_stats(&_sg.stats.buffers, &_sg.pools.buffer_pool);
+    _sg_update_resource_stats(&_sg.stats.images, &_sg.pools.image_pool);
+    _sg_update_resource_stats(&_sg.stats.views, &_sg.pools.view_pool);
+    _sg_update_resource_stats(&_sg.stats.samplers, &_sg.pools.sampler_pool);
+    _sg_update_resource_stats(&_sg.stats.shaders, &_sg.pools.shader_pool);
+    _sg_update_resource_stats(&_sg.stats.pipelines, &_sg.pools.pipeline_pool);
+    _sg.prev_stats = _sg.stats;
+    _sg_clear(&_sg.stats, sizeof(_sg.stats));
+}
+
 _SOKOL_PRIVATE uint32_t _sg_align_u32(uint32_t val, uint32_t align) {
     SOKOL_ASSERT((align > 0) && ((align & (align - 1)) == 0));
     return (val + (align - 1)) & ~(align - 1);
@@ -20544,12 +20556,6 @@ SOKOL_API_IMPL int sg_query_surface_pitch(sg_pixel_format fmt, int width, int he
 
 SOKOL_API_IMPL sg_frame_stats sg_query_frame_stats(void) {
     SOKOL_ASSERT(_sg.valid);
-    _sg_update_resource_stats(&_sg.prev_stats.buffers, &_sg.pools.buffer_pool);
-    _sg_update_resource_stats(&_sg.prev_stats.images, &_sg.pools.image_pool);
-    _sg_update_resource_stats(&_sg.prev_stats.views, &_sg.pools.view_pool);
-    _sg_update_resource_stats(&_sg.prev_stats.samplers, &_sg.pools.sampler_pool);
-    _sg_update_resource_stats(&_sg.prev_stats.shaders, &_sg.pools.shader_pool);
-    _sg_update_resource_stats(&_sg.prev_stats.pipelines, &_sg.pools.pipeline_pool);
     return _sg.prev_stats;
 }
 
@@ -21449,9 +21455,7 @@ SOKOL_API_IMPL void sg_commit(void) {
     SOKOL_ASSERT(!_sg.cur_pass.valid);
     SOKOL_ASSERT(!_sg.cur_pass.in_pass);
     _sg_commit();
-    _sg.stats.frame_index = _sg.frame_index;
-    _sg.prev_stats = _sg.stats;
-    _sg_clear(&_sg.stats, sizeof(_sg.stats));
+    _sg_update_frame_stats();
     _sg_notify_commit_listeners();
     _SG_TRACE_NOARGS(commit);
     _sg.frame_index++;
