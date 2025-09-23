@@ -1,5 +1,17 @@
 ## Updates
 
+### 23-Sep-2025
+
+- sokol_gfx.h: the `sg_query_frame_stats()` function now returns resource pool
+  information for all resource types (buffers, images, samplers, views, shaders
+  and pipelines):
+    - total number of objects alive
+    - total number of objects in free-queue
+    - number of allocate, deallocate, init and uninit calls in the current frame
+
+  See PR https://github.com/floooh/sokol/pull/1334 and issue https://github.com/floooh/sokol/issues/1332
+  for details!
+
 ### 22-Sep-2025
 
 - sokol_gfx.h d3d11: fix a bug in the d3d11 backend which existed since the 'resource-view-update':
