@@ -3,11 +3,8 @@ setup_emsdk() {
         mkdir -p build && cd build
         git clone https://github.com/emscripten-core/emsdk.git
         cd emsdk
-        # FIXME: temporarily use emsdk 4.0.14 until spine is fixed
-        ./emsdk install 4.0.14
-        ./emsdk activate 4.0.14
-        # ./emsdk install latest
-        # ./emsdk activate latest
+        ./emsdk install latest
+        ./emsdk activate latest
         cd ../..
     fi
     source build/emsdk/emsdk_env.sh
