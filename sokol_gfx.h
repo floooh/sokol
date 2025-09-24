@@ -9326,7 +9326,8 @@ _SOKOL_PRIVATE void _sg_gl_init_limits(void) {
     #if defined(_SOKOL_GL_HAS_COMPUTE)
         glGetIntegerv(GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS, &gl_int);
         _SG_GL_CHECK_ERROR();
-        _sg.limits.max_storage_buffer_bindings_per_stage = _sg_min(gl_int, SG_MAX_VIEW_BINDSLOTS);
+        _sg.limits.max_readonly_storage_buffer_bindings_per_stage = _sg_min(gl_int, SG_MAX_VIEW_BINDSLOTS);
+        _sg.limits.max_writable_storage_buffer_bindings_per_stage = _sg.limits.max_readonly_storage_buffer_bindings_per_stage;
 
         glGetIntegerv(GL_MAX_IMAGE_UNITS, &gl_int);
         _SG_GL_CHECK_ERROR();
@@ -9556,7 +9557,8 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
     }
     for (int i = 0; i < _SG_GL_MAX_SBUF_BINDINGS; i++) {
         if (force || (_sg.gl.cache.storage_buffers[i] != 0)) {
-            if (_sg.features.compute && (i < _sg.limits.max_storage_buffer_bindings_per_stage)) {
+            // NOTE: on GL max readonly and writable storage buffer bindings are identical
+            if (_sg.features.compute && (i < _sg.limits.max_readonly_storage_buffer_bindings_per_stage)) {
                 glBindBufferBase(GL_SHADER_STORAGE_BUFFER, (GLuint)i, 0);
             }
             _sg.gl.cache.storage_buffers[i] = 0;
@@ -9602,7 +9604,8 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_storage_buffer(uint8_t glsl_binding_n, GLu
         _sg.gl.cache.storage_buffer_offsets[glsl_binding_n] = offset;
         _sg.gl.cache.storage_buffer = buffer; // not a bug
         if (_sg.features.compute) {
-            SOKOL_ASSERT(glsl_binding_n < _sg.limits.max_storage_buffer_bindings_per_stage);
+            // NOTE: on GL, max readonly and writeable storage buffer bindings are identical
+            SOKOL_ASSERT(glsl_binding_n < _sg.limits.max_readonly_storage_buffer_bindings_per_stage);
             glBindBufferRange(GL_SHADER_STORAGE_BUFFER, glsl_binding_n, buffer, offset, buf_size - offset);
         }
         _sg_stats_add(gl.num_bind_buffer, 1);
@@ -9666,7 +9669,8 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_buffer(GLuint buf) {
         if (buf == _sg.gl.cache.storage_buffers[i]) {
             _sg.gl.cache.storage_buffers[i] = 0;
             _sg.gl.cache.storage_buffer = 0; // not a bug!
-            if (_sg.features.compute && (i < _sg.limits.max_storage_buffer_bindings_per_stage)) {
+            // NOTE: on GL max readable and writable storage buffer bindings are identical
+            if (_sg.features.compute && (i < _sg.limits.max_readonly_storage_buffer_bindings_per_stage)) {
                 glBindBufferBase(GL_SHADER_STORAGE_BUFFER, (GLuint)i, 0);
             }
             _sg_stats_add(gl.num_bind_buffer, 1);
@@ -10289,10 +10293,11 @@ _SOKOL_PRIVATE GLuint _sg_gl_compile_shader(sg_shader_stage stage, const char* s
 // NOTE: this is an out-of-range check for GLSL bindslots that's also active in release mode
 _SOKOL_PRIVATE bool _sg_gl_ensure_glsl_bindslot_ranges(const sg_shader_desc* desc) {
     SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(_sg.limits.max_storage_buffer_bindings_per_stage <= _SG_GL_MAX_SBUF_BINDINGS);
+    // NOTE: on GL, max readonly and writable storage buffer bindings are identical
+    SOKOL_ASSERT(_sg.limits.max_readonly_storage_buffer_bindings_per_stage <= _SG_GL_MAX_SBUF_BINDINGS);
     SOKOL_ASSERT(_sg.limits.max_storage_image_bindings_per_stage <= _SG_GL_MAX_SIMG_BINDINGS);
     for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
-        if (desc->views[i].storage_buffer.glsl_binding_n >= _sg.limits.max_storage_buffer_bindings_per_stage) {
+        if (desc->views[i].storage_buffer.glsl_binding_n >= _sg.limits.max_readonly_storage_buffer_bindings_per_stage) {
             _SG_ERROR(GL_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE);
             return false;
         }
