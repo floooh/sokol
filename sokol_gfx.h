@@ -4248,7 +4248,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(GL_TEXTURE_FORMAT_NOT_SUPPORTED, "pixel format not supported for texture (gl)") \
     _SG_LOGITEM_XMACRO(GL_3D_TEXTURES_NOT_SUPPORTED, "3d textures not supported (gl)") \
     _SG_LOGITEM_XMACRO(GL_ARRAY_TEXTURES_NOT_SUPPORTED, "array textures not supported (gl)") \
-    _SG_LOGITEM_XMACRO(GL_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE, "GLSL storage buffer bindslot is out of range (sg_limits.max_storage_buffer_bindings_per_stage) (gl)") \
+    _SG_LOGITEM_XMACRO(GL_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE, "GLSL storage buffer bindslot is out of range (sg_limits.max_[*]_storage_buffer_bindings_per_stage) (gl)") \
     _SG_LOGITEM_XMACRO(GL_STORAGEIMAGE_GLSL_BINDING_OUT_OF_RANGE, "GLSL storage image bindslot is out of range (sg.limits.max_storage_image_bindings_per_stage) (gl)") \
     _SG_LOGITEM_XMACRO(GL_SHADER_COMPILATION_FAILED, "shader compilation failed (gl)") \
     _SG_LOGITEM_XMACRO(GL_SHADER_LINKING_FAILED, "shader linking failed (gl)") \
@@ -4370,10 +4370,10 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on vertex shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on fragment shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on compute shader stage (sg_limits.max_texture_bindings_per_stage)") \
-    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEBUFFERS, "sg_shader_desc: too many storage buffer bindings on vertex shader stage (sg_limits.max_storage_buffer_bindings_per_stage)") \
-    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEBUFFERS, "sg_shader_desc: too many storage buffer bindings on fragment shader stage (sg_limits.max_storage_buffer_bindings_per_stage)") \
-    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_READONLY_STORAGEBUFFERS, "sg_shader_desc: too many readonly storage buffer bindings on compute shader stage (sg_limits.max_storage_buffer_bindings_per_stage)") \
-    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_WRITABLE_STORAGEBUFFERS, "sg_shader_desc: too many writable storage buffer bindings on compute shader stage (sg_limits.max_storage_buffer_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEBUFFERS, "sg_shader_desc: too many storage buffer bindings on vertex shader stage (sg_limits.max_readonly_storage_buffer_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEBUFFERS, "sg_shader_desc: too many storage buffer bindings on fragment shader stage (sg_limits.max_readonly_storage_buffer_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_READONLY_STORAGEBUFFERS, "sg_shader_desc: too many readonly storage buffer bindings on compute shader stage (sg_limits.max_readonly_storage_buffer_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_WRITABLE_STORAGEBUFFERS, "sg_shader_desc: too many writable storage buffer bindings on compute shader stage (sg_limits.max_writable_storage_buffer_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEIMAGES, "sg_shader_desc: too many storage image bindings on vertex shader stage (sg_limits.max_storage_image_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEIMAGES, "sg_shader_desc: too many storage image bindings on fragment shader stage (sg_limits.max_storage_image_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEIMAGES, "sg_shader_desc: too many storage image bindings on compute shader stage (sg_limits.max_storage_image_bindings_per_stage)") \
