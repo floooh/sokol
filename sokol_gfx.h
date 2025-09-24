@@ -10293,21 +10293,23 @@ _SOKOL_PRIVATE GLuint _sg_gl_compile_shader(sg_shader_stage stage, const char* s
 // NOTE: this is an out-of-range check for GLSL bindslots that's also active in release mode
 _SOKOL_PRIVATE bool _sg_gl_ensure_glsl_bindslot_ranges(const sg_shader_desc* desc) {
     SOKOL_ASSERT(desc);
-    // NOTE: on GL, max readonly and writable storage buffer bindings are identical
-    SOKOL_ASSERT(_sg.limits.max_readonly_storage_buffer_bindings_per_stage <= _SG_GL_MAX_SBUF_BINDINGS);
-    SOKOL_ASSERT(_sg.limits.max_storage_image_bindings_per_stage <= _SG_GL_MAX_SIMG_BINDINGS);
-    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
-        if (desc->views[i].storage_buffer.glsl_binding_n >= _sg.limits.max_readonly_storage_buffer_bindings_per_stage) {
-            _SG_ERROR(GL_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE);
-            return false;
+    #if defined(_SOKOL_GL_HAS_COMPUTE)
+        // NOTE: on GL, max readonly and writable storage buffer bindings are identical
+        SOKOL_ASSERT(_sg.limits.max_readonly_storage_buffer_bindings_per_stage <= _SG_GL_MAX_SBUF_BINDINGS);
+        SOKOL_ASSERT(_sg.limits.max_storage_image_bindings_per_stage <= _SG_GL_MAX_SIMG_BINDINGS);
+        for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+            if (desc->views[i].storage_buffer.glsl_binding_n >= _sg.limits.max_readonly_storage_buffer_bindings_per_stage) {
+                _SG_ERROR(GL_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE);
+                return false;
+            }
         }
-    }
-    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
-        if (desc->views[i].storage_image.glsl_binding_n >= _sg.limits.max_storage_image_bindings_per_stage) {
-            _SG_ERROR(GL_STORAGEIMAGE_GLSL_BINDING_OUT_OF_RANGE);
-            return false;
+        for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+            if (desc->views[i].storage_image.glsl_binding_n >= _sg.limits.max_storage_image_bindings_per_stage) {
+                _SG_ERROR(GL_STORAGEIMAGE_GLSL_BINDING_OUT_OF_RANGE);
+                return false;
+            }
         }
-    }
+    #endif
     return true;
 }
 
@@ -10833,8 +10835,8 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass, const _sg_attachments
         glDrawBuffers(atts->num_color_views, gl_draw_bufs);
 
         #if defined(_SOKOL_GL_HAS_COMPUTE)
-        _sg_gl_handle_memory_barriers(0, 0, atts);
-        _SG_GL_CHECK_ERROR();
+            _sg_gl_handle_memory_barriers(0, 0, atts);
+            _SG_GL_CHECK_ERROR();
         #endif
 
     } else {
@@ -11362,8 +11364,8 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
 
     // take care of storage resource memory barriers (this needs to happen after the bindings are set)
     #if defined(_SOKOL_GL_HAS_COMPUTE)
-    _sg_gl_handle_memory_barriers(shd, bnd, 0);
-    _SG_GL_CHECK_ERROR();
+        _sg_gl_handle_memory_barriers(shd, bnd, 0);
+        _SG_GL_CHECK_ERROR();
     #endif
 
     return true;
@@ -11448,12 +11450,12 @@ _SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_inst
 
 _SOKOL_PRIVATE void _sg_gl_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     #if defined(_SOKOL_GL_HAS_COMPUTE)
-    if (!_sg.features.compute) {
-        return;
-    }
-    glDispatchCompute((GLuint)num_groups_x, (GLuint)num_groups_y, (GLuint)num_groups_z);
+        if (!_sg.features.compute) {
+            return;
+        }
+        glDispatchCompute((GLuint)num_groups_x, (GLuint)num_groups_y, (GLuint)num_groups_z);
     #else
-    (void)num_groups_x; (void)num_groups_y; (void)num_groups_z;
+        (void)num_groups_x; (void)num_groups_y; (void)num_groups_z;
     #endif
 }
 
