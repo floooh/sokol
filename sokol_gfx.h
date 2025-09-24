@@ -16364,7 +16364,8 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.limits.max_vertex_attrs = SG_MAX_VERTEX_ATTRIBUTES;
     _sg.limits.max_color_attachments = _sg_min((int)l->maxColorAttachments, SG_MAX_COLOR_ATTACHMENTS);
     _sg.limits.max_texture_bindings_per_stage = _sg_min((int)l->maxSampledTexturesPerShaderStage, SG_MAX_VIEW_BINDSLOTS);
-    _sg.limits.max_storage_buffer_bindings_per_stage = _sg_min((int)l->maxStorageBuffersPerShaderStage, SG_MAX_VIEW_BINDSLOTS);
+    _sg.limits.max_readonly_storage_buffer_bindings_per_stage = _sg_min((int)l->maxStorageBuffersPerShaderStage, SG_MAX_VIEW_BINDSLOTS);
+    _sg.limits.max_writable_storage_buffer_bindings_per_stage = _sg.limits.max_readonly_storage_buffer_bindings_per_stage;
     _sg.limits.max_storage_image_bindings_per_stage = _sg_min((int)l->maxStorageTexturesPerShaderStage, SG_MAX_VIEW_BINDSLOTS);
 
     // NOTE: no WGPUTextureFormat_R16Unorm
