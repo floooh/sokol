@@ -896,7 +896,7 @@
       compute-shader-stage:
         - for the desktop GL backend, source code can be provided in '#version 410' or
           '#version 430', version 430 is required when using storage buffers and
-          compute shaders support, but note that this is not available on macOS
+          compute shaders, but note that this is not available on macOS
         - for the GLES3 backend, source code must be provided in '#version 300 es' or
           '#version 310 es' syntax (version 310 is required for storage buffer and
           compute shader support, but note that this is not supported on WebGL2)
@@ -915,7 +915,7 @@
     - Information about the input vertex attributes used by the vertex shader,
       most of that backend-specific:
         - An optional 'base type' (float, signed-/unsigned-int) for each vertex
-          attribute. When provided, this used by the validation layer to check
+          attribute. When provided, this is used by the validation layer to check
           that the CPU-side input vertex format is compatible with the input
           vertex declaration of the vertex shader.
         - Metal: no location information needed since vertex attributes are always bound
@@ -983,9 +983,9 @@
                 - SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT
             - a flag whether the texture is expected to be multisampled
             - a backend-specific bind slot:
-                - D3D11/HLSL: the texture register N (`register(tN)`) where N is 0..23
+                - D3D11/HLSL: the texture register N (`register(tN)`) where N is 0..31
                 (in HLSL, readonly storage buffers and texture share the same bind space)
-                - Metal/MSL: the texture bind slot N (`[[texture(N)]]`) where N is 0..19
+                - Metal/MSL: the texture bind slot N (`[[texture(N)]]`) where N is 0..31
                 (the bind slot must not collide with storage image bindings on the same stage)
                 - WebGPU/WGSL: the binding N in `@group(0) @binding(N)` where N is 0..127
 
@@ -999,15 +999,16 @@
             - a backend-specific bind slot:
                 - D3D11/HLSL:
                     - for readonly storage buffer bindings: the texture register N
-                    (`register(tN)`) where N is 0..23 (in HLSL, readonly storage
+                    (`register(tN)`) where N is 0..31 (in HLSL, readonly storage
                     buffers and textures share the same bind space for
                     'shader resource views')
                     - for read/write storage buffer buffer bindings: the UAV register N
-                    (`register(uN)`) where N is 0..11 (in HLSL, readwrite storage
+                    (`register(uN)`) where N is 0..31 (in HLSL, readwrite storage
                     buffers use their own bind space for 'unordered access views')
-                - Metal/MSL: the buffer bind slot N (`[[buffer(N)]]`) where N is 8..15
+                - Metal/MSL: the buffer bind slot N (`[[buffer(N)]]`) where N is 8..23
                 - WebGPU/WGSL: the binding N in `@group(0) @binding(N)` where N is 0..127
-                - GL/GLSL: the buffer binding N in `layout(binding=N)` where N is 0..7
+                - GL/GLSL: the buffer binding N in `layout(binding=N)`
+                  where N is 0..sg_limits.max_storage_buffer_bindings_per_stage
             - note that storage buffer bindings are not supported on all backends
             and platforms
 
@@ -1027,13 +1028,14 @@
                 - SG_PIXELFORMAT_RGBA32UI/SI/F
             - the access type (readwrite or writeonly)
             - a backend-specific bind slot:
-                - D3D11/HLSL: the UAV register N (`register(uN)` where N is 0..11, the
+                - D3D11/HLSL: the UAV register N (`register(uN)` where N is 0..31, the
                 bind slot must not collide with UAV storage buffer bindings
-                - Metal/MSL: the texture bind slot N (`[[texture(N)]])` where N is 0..19,
+                - Metal/MSL: the texture bind slot N (`[[texture(N)]])` where N is 0..31,
                 the bind slot must not collide with other texture bindings on the same
                 stage
                 - WebGPU/WGSL: the binding N in `@group(1) @binding(N)` where N is 0..127
-                - GL/GLSL: the buffer binding N in `layout(binding=N)` where N is 0..3
+                - GL/GLSL: the buffer binding N in `layout(binding=N)`
+                  where N is 0.._sg.max_storage_image_bindings_per_stage
             - note that storage image bindings are not supported on all backends and platforms
 
     - A description of each sampler used in the shader:
@@ -1043,8 +1045,8 @@
             - SG_SAMPLERTYPE_NONFILTERING,
             - SG_SAMPLERTYPE_COMPARISON,
         - a backend-specific bind slot:
-            - D3D11/HLSL: the sampler register N (`register(sN)`) where N is 0..15
-            - Metal/MSL: the sampler bind slot N (`[[sampler(N)]]`) where N is 0..15
+            - D3D11/HLSL: the sampler register N (`register(sN)`) where N is 0..SG_MAX_SAMPLER_BINDINGS
+            - Metal/MSL: the sampler bind slot N (`[[sampler(N)]]`) where N is 0..SG_MAX_SAMPLER_BINDINGS
             - WebGPU/WGSL: the binding N in `@group(0) @binding(N)` where N is 0..127
 
     - An array of 'texture-sampler-pairs' used by the shader to sample textures,
@@ -1069,24 +1071,24 @@
         - D3D11/HLSL:
             - separate bindslot space per shader stage
             - uniform block bindings (as cbuffer): `register(b0..b7)`
-            - texture- and readonly storage buffer bindings: `register(t0..t23)`
-            - read/write storage buffer and storage image bindings: `register(u0..u11)`
-            - samplers: `register(s0..s15)`
+            - texture- and readonly storage buffer bindings: `register(t0..t31)`
+            - read/write storage buffer and storage image bindings: `register(u0..u31)`
+            - samplers: `register(s0..s11)`
         - Metal/MSL:
             - separate bindslot space per shader stage
             - uniform blocks: `[[buffer(0..7)]]`
-            - storage buffers: `[[buffer(8..15)]]`
-            - textures and storage image bindings: `[[texture(0..19)]]`
-            - samplers: `[[sampler(0..15)]]`
+            - storage buffers: `[[buffer(8..23)]]`
+            - textures and storage image bindings: `[[texture(0..31)]]`
+            - samplers: `[[sampler(0..11)]]`
         - WebGPU/WGSL:
             - common bindslot space across shader stages
             - uniform blocks: `@group(0) @binding(0..15)`
             - textures, storage-images, storage-buffers and sampler: `@group(1) @binding(0..127)`
         - GL/GLSL:
             - uniforms and image-samplers are bound by name
-            - storage buffer bindings: `layout(std430, binding=0..7)` (common
+            - storage buffer bindings: `layout(std430, binding=0..sg_limits.max_storage_buffer_bindings_per_stage` (common
               bindslot space across shader stages)
-            - storage image bindings: `layout(binding=0..3, [access_format])`
+            - storage image bindings: `layout(binding=0..sg_limits.max_storage_image_bindings_per_stage, [access_format])`
 
     For example code of how to create backend-specific shader objects,
     please refer to the following samples:
@@ -2201,8 +2203,7 @@ typedef struct sg_limits {
     int max_vertex_attrs;           // max number of vertex attributes, clamped to SG_MAX_VERTEX_ATTRIBUTES
     int max_color_attachments;      // max number of render pass color attachments, clamped to SG_MAX_COLOR_ATTACHMENTS
     int max_texture_bindings_per_stage; // max number of texture bindings per shader stage, clamped to SG_MAX_VIEW_BINDSLOTS
-    int max_readonly_storage_buffer_bindings_per_stage;  // max number of readonly storage buffer bindings per shader stage, clamped to SG_MAX_VIEW_BINDSLOTS
-    int max_writable_storage_buffer_bindings_per_stage; // max writable storage buffers on compute shader stage, clamped to SG_MAX_VIEW_BINDSLOTS
+    int max_storage_buffer_bindings_per_stage;  // max number of storage buffer bindings per shader stage, clamped to SG_MAX_VIEW_BINDSLOTS
     int max_storage_image_bindings_per_stage;   // max number of storage image bindings per shader stage, clamped to SG_MAX_VIEW_BINDSLOTS
     int gl_max_vertex_uniform_components;       // GL_MAX_VERTEX_UNIFORM_COMPONENTS (only on GL backends)
     int gl_max_combined_texture_image_units;    // GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS (only on GL backends)
@@ -4370,10 +4371,9 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on vertex shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on fragment shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on compute shader stage (sg_limits.max_texture_bindings_per_stage)") \
-    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEBUFFERS, "sg_shader_desc: too many storage buffer bindings on vertex shader stage (sg_limits.max_readonly_storage_buffer_bindings_per_stage)") \
-    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEBUFFERS, "sg_shader_desc: too many storage buffer bindings on fragment shader stage (sg_limits.max_readonly_storage_buffer_bindings_per_stage)") \
-    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_READONLY_STORAGEBUFFERS, "sg_shader_desc: too many readonly storage buffer bindings on compute shader stage (sg_limits.max_readonly_storage_buffer_bindings_per_stage)") \
-    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_WRITABLE_STORAGEBUFFERS, "sg_shader_desc: too many writable storage buffer bindings on compute shader stage (sg_limits.max_writable_storage_buffer_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEBUFFERS, "sg_shader_desc: too many storage buffer bindings on vertex shader stage (sg_limits.max_storage_buffer_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEBUFFERS, "sg_shader_desc: too many storage buffer bindings on fragment shader stage (sg_limits.max_storage_buffer_bindings_per_stage)") \
+    _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEBUFFERS, "sg_shader_desc: too many storage buffer bindings on compute shader stage (sg_limits.max_storage_buffer_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEIMAGES, "sg_shader_desc: too many storage image bindings on vertex shader stage (sg_limits.max_storage_image_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEIMAGES, "sg_shader_desc: too many storage image bindings on fragment shader stage (sg_limits.max_storage_image_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEIMAGES, "sg_shader_desc: too many storage image bindings on compute shader stage (sg_limits.max_storage_image_bindings_per_stage)") \
@@ -8250,8 +8250,7 @@ _SOKOL_PRIVATE void _sg_dummy_setup_backend(const sg_desc* desc) {
     _sg.limits.max_vertex_attrs = 16;
     _sg.limits.max_color_attachments = 4;
     _sg.limits.max_texture_bindings_per_stage = 16;
-    _sg.limits.max_readonly_storage_buffer_bindings_per_stage = 8;
-    _sg.limits.max_writable_storage_buffer_bindings_per_stage = 8;
+    _sg.limits.max_storage_buffer_bindings_per_stage = 8;
     _sg.limits.max_storage_image_bindings_per_stage = 4;
 }
 
@@ -9326,8 +9325,7 @@ _SOKOL_PRIVATE void _sg_gl_init_limits(void) {
     #if defined(_SOKOL_GL_HAS_COMPUTE)
         glGetIntegerv(GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS, &gl_int);
         _SG_GL_CHECK_ERROR();
-        _sg.limits.max_readonly_storage_buffer_bindings_per_stage = _sg_min(gl_int, SG_MAX_VIEW_BINDSLOTS);
-        _sg.limits.max_writable_storage_buffer_bindings_per_stage = _sg.limits.max_readonly_storage_buffer_bindings_per_stage;
+        _sg.limits.max_storage_buffer_bindings_per_stage = _sg_min(gl_int, SG_MAX_VIEW_BINDSLOTS);
 
         glGetIntegerv(GL_MAX_IMAGE_UNITS, &gl_int);
         _SG_GL_CHECK_ERROR();
@@ -9557,8 +9555,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
     }
     for (int i = 0; i < _SG_GL_MAX_SBUF_BINDINGS; i++) {
         if (force || (_sg.gl.cache.storage_buffers[i] != 0)) {
-            // NOTE: on GL max readonly and writable storage buffer bindings are identical
-            if (_sg.features.compute && (i < _sg.limits.max_readonly_storage_buffer_bindings_per_stage)) {
+            if (_sg.features.compute && (i < _sg.limits.max_storage_buffer_bindings_per_stage)) {
                 glBindBufferBase(GL_SHADER_STORAGE_BUFFER, (GLuint)i, 0);
             }
             _sg.gl.cache.storage_buffers[i] = 0;
@@ -9604,8 +9601,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_storage_buffer(uint8_t glsl_binding_n, GLu
         _sg.gl.cache.storage_buffer_offsets[glsl_binding_n] = offset;
         _sg.gl.cache.storage_buffer = buffer; // not a bug
         if (_sg.features.compute) {
-            // NOTE: on GL, max readonly and writeable storage buffer bindings are identical
-            SOKOL_ASSERT(glsl_binding_n < _sg.limits.max_readonly_storage_buffer_bindings_per_stage);
+            SOKOL_ASSERT(glsl_binding_n < _sg.limits.max_storage_buffer_bindings_per_stage);
             glBindBufferRange(GL_SHADER_STORAGE_BUFFER, glsl_binding_n, buffer, offset, buf_size - offset);
         }
         _sg_stats_add(gl.num_bind_buffer, 1);
@@ -9669,8 +9665,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_buffer(GLuint buf) {
         if (buf == _sg.gl.cache.storage_buffers[i]) {
             _sg.gl.cache.storage_buffers[i] = 0;
             _sg.gl.cache.storage_buffer = 0; // not a bug!
-            // NOTE: on GL max readable and writable storage buffer bindings are identical
-            if (_sg.features.compute && (i < _sg.limits.max_readonly_storage_buffer_bindings_per_stage)) {
+            if (_sg.features.compute && (i < _sg.limits.max_storage_buffer_bindings_per_stage)) {
                 glBindBufferBase(GL_SHADER_STORAGE_BUFFER, (GLuint)i, 0);
             }
             _sg_stats_add(gl.num_bind_buffer, 1);
@@ -10294,11 +10289,10 @@ _SOKOL_PRIVATE GLuint _sg_gl_compile_shader(sg_shader_stage stage, const char* s
 _SOKOL_PRIVATE bool _sg_gl_ensure_glsl_bindslot_ranges(const sg_shader_desc* desc) {
     SOKOL_ASSERT(desc); _SOKOL_UNUSED(desc);
     #if defined(_SOKOL_GL_HAS_COMPUTE)
-        // NOTE: on GL, max readonly and writable storage buffer bindings are identical
-        SOKOL_ASSERT(_sg.limits.max_readonly_storage_buffer_bindings_per_stage <= _SG_GL_MAX_SBUF_BINDINGS);
+        SOKOL_ASSERT(_sg.limits.max_storage_buffer_bindings_per_stage <= _SG_GL_MAX_SBUF_BINDINGS);
         SOKOL_ASSERT(_sg.limits.max_storage_image_bindings_per_stage <= _SG_GL_MAX_SIMG_BINDINGS);
         for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
-            if (desc->views[i].storage_buffer.glsl_binding_n >= _sg.limits.max_readonly_storage_buffer_bindings_per_stage) {
+            if (desc->views[i].storage_buffer.glsl_binding_n >= _sg.limits.max_storage_buffer_bindings_per_stage) {
                 _SG_ERROR(GL_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE);
                 return false;
             }
@@ -12415,13 +12409,12 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.limits.max_vertex_attrs = SG_MAX_VERTEX_ATTRIBUTES;
     _sg.limits.max_color_attachments = 8;
     _sg.limits.max_texture_bindings_per_stage = _sg_min(128, SG_MAX_VIEW_BINDSLOTS);
-    _sg.limits.max_readonly_storage_buffer_bindings_per_stage = _sg_min(128, SG_MAX_VIEW_BINDSLOTS);
+    _sg.limits.max_storage_buffer_bindings_per_stage = _sg_min(64, SG_MAX_VIEW_BINDSLOTS);
     if (_sg_d3d11_GetFeatureLevel(_sg.d3d11.dev) >= D3D_FEATURE_LEVEL_11_1) {
         _sg.limits.d3d11_max_unordered_access_views = _sg_min(64, SG_MAX_VIEW_BINDSLOTS);
     } else {
         _sg.limits.d3d11_max_unordered_access_views = _sg_min(8, SG_MAX_VIEW_BINDSLOTS);
     }
-    _sg.limits.max_writable_storage_buffer_bindings_per_stage = _sg.limits.d3d11_max_unordered_access_views;
     _sg.limits.max_storage_image_bindings_per_stage = _sg.limits.d3d11_max_unordered_access_views;
 
     // see: https://docs.microsoft.com/en-us/windows/win32/api/d3d11/ne-d3d11-d3d11_format_support
@@ -14394,8 +14387,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
         _sg.limits.max_texture_bindings_per_stage = _sg_min(96, SG_MAX_VIEW_BINDSLOTS); // since iPhone8
     #endif
     _sg.limits.max_storage_image_bindings_per_stage = _sg.limits.max_texture_bindings_per_stage;    // shared with texture bindings
-    _sg.limits.max_readonly_storage_buffer_bindings_per_stage = _sg_min(_SG_MTL_MAX_STAGE_BUFFER_BINDINGS - (SG_MAX_VERTEXBUFFER_BINDSLOTS + SG_MAX_UNIFORMBLOCK_BINDSLOTS), SG_MAX_VIEW_BINDSLOTS);
-    _sg.limits.max_writable_storage_buffer_bindings_per_stage = _sg.limits.max_readonly_storage_buffer_bindings_per_stage;
+    _sg.limits.max_storage_buffer_bindings_per_stage = _sg_min(_SG_MTL_MAX_STAGE_BUFFER_BINDINGS - (SG_MAX_VERTEXBUFFER_BINDSLOTS + SG_MAX_UNIFORMBLOCK_BINDSLOTS), SG_MAX_VIEW_BINDSLOTS);
     _sg.limits.max_color_attachments = _sg_min(8, SG_MAX_COLOR_ATTACHMENTS);
     _sg.limits.max_vertex_attrs = SG_MAX_VERTEX_ATTRIBUTES;
 
@@ -16371,8 +16363,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.limits.max_vertex_attrs = SG_MAX_VERTEX_ATTRIBUTES;
     _sg.limits.max_color_attachments = _sg_min((int)l->maxColorAttachments, SG_MAX_COLOR_ATTACHMENTS);
     _sg.limits.max_texture_bindings_per_stage = _sg_min((int)l->maxSampledTexturesPerShaderStage, SG_MAX_VIEW_BINDSLOTS);
-    _sg.limits.max_readonly_storage_buffer_bindings_per_stage = _sg_min((int)l->maxStorageBuffersPerShaderStage, SG_MAX_VIEW_BINDSLOTS);
-    _sg.limits.max_writable_storage_buffer_bindings_per_stage = _sg.limits.max_readonly_storage_buffer_bindings_per_stage;
+    _sg.limits.max_storage_buffer_bindings_per_stage = _sg_min((int)l->maxStorageBuffersPerShaderStage, SG_MAX_VIEW_BINDSLOTS);
     _sg.limits.max_storage_image_bindings_per_stage = _sg_min((int)l->maxStorageTexturesPerShaderStage, SG_MAX_VIEW_BINDSLOTS);
 
     // NOTE: no WGPUTextureFormat_R16Unorm
@@ -19911,8 +19902,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_binding_limits(const sg_shader_desc* des
     int cs_num_tex = 0;
     int vs_num_sbuf = 0;
     int fs_num_sbuf = 0;
-    int cs_num_readonly_sbuf = 0;
-    int cs_num_writable_sbuf = 0;
+    int cs_num_sbuf = 0;
     int vs_num_simg = 0;
     int fs_num_simg = 0;
     int cs_num_simg = 0;
@@ -19929,7 +19919,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_binding_limits(const sg_shader_desc* des
         switch (desc->views[i].storage_buffer.stage) {
             case SG_SHADERSTAGE_VERTEX:   vs_num_sbuf++; break;
             case SG_SHADERSTAGE_FRAGMENT: fs_num_sbuf++; break;
-            case SG_SHADERSTAGE_COMPUTE:  desc->views[i].storage_buffer.readonly ? cs_num_readonly_sbuf++ : cs_num_writable_sbuf++; break;
+            case SG_SHADERSTAGE_COMPUTE:  cs_num_sbuf++; break;
             default: break;
         }
         switch (desc->views[i].storage_image.stage) {
@@ -19948,8 +19938,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_binding_limits(const sg_shader_desc* des
         }
     }
     const int max_tex = _sg.limits.max_texture_bindings_per_stage;
-    const int max_readonly_sbuf = _sg.limits.max_readonly_storage_buffer_bindings_per_stage;
-    const int max_writable_sbuf = _sg.limits.max_writable_storage_buffer_bindings_per_stage;
+    const int max_sbuf = _sg.limits.max_storage_buffer_bindings_per_stage;
     const int max_simg = _sg.limits.max_storage_image_bindings_per_stage;
     bool retval = true;
     if (vs_num_tex > max_tex) {
@@ -19964,20 +19953,16 @@ _SOKOL_PRIVATE bool _sg_validate_shader_binding_limits(const sg_shader_desc* des
         _SG_ERROR(SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURES);
         retval = false;
     }
-    if (vs_num_sbuf > max_readonly_sbuf) {
+    if (vs_num_sbuf > max_sbuf) {
         _SG_ERROR(SHADERDESC_TOO_MANY_VERTEXSTAGE_STORAGEBUFFERS);
         retval = false;
     }
-    if (fs_num_sbuf > max_readonly_sbuf) {
+    if (fs_num_sbuf > max_sbuf) {
         _SG_ERROR(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_STORAGEBUFFERS);
         retval = false;
     }
-    if (cs_num_readonly_sbuf > max_readonly_sbuf) {
-        _SG_ERROR(SHADERDESC_TOO_MANY_COMPUTESTAGE_READONLY_STORAGEBUFFERS);
-        retval = false;
-    }
-    if (cs_num_writable_sbuf > max_writable_sbuf) {
-        _SG_ERROR(SHADERDESC_TOO_MANY_COMPUTESTAGE_WRITABLE_STORAGEBUFFERS);
+    if (cs_num_sbuf > max_sbuf) {
+        _SG_ERROR(SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEBUFFERS);
         retval = false;
     }
     if (vs_num_simg > max_simg) {

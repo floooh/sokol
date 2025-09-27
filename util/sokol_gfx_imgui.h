@@ -4452,8 +4452,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
     _sgimgui_igtext("    max_vertex_attrs: %d", l.max_vertex_attrs);
     _sgimgui_igtext("    max_color_attachments: %d", l.max_color_attachments);
     _sgimgui_igtext("    max_texture_bindings_per_stage: %d", l.max_texture_bindings_per_stage);
-    _sgimgui_igtext("    max_readonly_storage_buffer_bindings_per_stage: %d", l.max_readonly_storage_buffer_bindings_per_stage);
-    _sgimgui_igtext("    max_writable_storage_buffer_bindings_per_stage: %d", l.max_writable_storage_buffer_bindings_per_stage);
+    _sgimgui_igtext("    max_storage_buffer_bindings_per_stage: %d", l.max_storage_buffer_bindings_per_stage);
     _sgimgui_igtext("    max_storage_image_bindings_per_stage: %d", l.max_storage_image_bindings_per_stage);
     _sgimgui_igtext("    gl_max_vertex_uniform_components: %d", l.gl_max_vertex_uniform_components);
     _sgimgui_igtext("    gl_max_combined_texture_image_units: %d", l.gl_max_combined_texture_image_units);
