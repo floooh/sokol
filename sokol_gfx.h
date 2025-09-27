@@ -10292,7 +10292,7 @@ _SOKOL_PRIVATE GLuint _sg_gl_compile_shader(sg_shader_stage stage, const char* s
 
 // NOTE: this is an out-of-range check for GLSL bindslots that's also active in release mode
 _SOKOL_PRIVATE bool _sg_gl_ensure_glsl_bindslot_ranges(const sg_shader_desc* desc) {
-    SOKOL_ASSERT(desc);
+    SOKOL_ASSERT(desc); _SOKOL_UNUSED(desc);
     #if defined(_SOKOL_GL_HAS_COMPUTE)
         // NOTE: on GL, max readonly and writable storage buffer bindings are identical
         SOKOL_ASSERT(_sg.limits.max_readonly_storage_buffer_bindings_per_stage <= _SG_GL_MAX_SBUF_BINDINGS);
