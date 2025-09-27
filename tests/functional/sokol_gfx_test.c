@@ -2603,7 +2603,7 @@ UTEST(sokol_gfx, max_writable_storagebuffer_bindings_per_stage_cs) {
     }
     sg_shader shd = sg_make_shader(&desc);
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_COMPUTESTAGE_WRITABLE_STORAGEBUFFERS);
+    T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEBUFFERS);
     sg_shutdown();
 }
 
@@ -2616,7 +2616,7 @@ UTEST(sokol_gfx, max_readonly_storagebuffer_bindings_per_stage_cs) {
     }
     sg_shader shd = sg_make_shader(&desc);
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_COMPUTESTAGE_READONLY_STORAGEBUFFERS);
+    T(log_items[0] == SG_LOGITEM_SHADERDESC_TOO_MANY_COMPUTESTAGE_STORAGEBUFFERS);
     sg_shutdown();
 }
 
