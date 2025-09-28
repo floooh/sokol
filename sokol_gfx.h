@@ -12733,7 +12733,6 @@ _SOKOL_PRIVATE bool _sg_d3d11_ensure_hlsl_bindslot_ranges(const sg_shader_desc* 
             }
         }
     }
-    SOKOL_ASSERT(_sg.limits.d3d11_max_unordered_access_views <= _SG_D3D11_MAX_STAGE_UAV_BINDINGS);
     for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
         const sg_shader_view* view = &desc->views[i];
         if (view->texture.stage != SG_SHADERSTAGE_NONE) {
