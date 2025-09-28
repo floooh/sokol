@@ -1,5 +1,16 @@
 ## Updates
 
+### 28-Sep-2025
+
+- sokol_app.h d3d11/dxgi: Fixed a frame timing bug which could cause a wrong frame time to be reported
+  on 120Hz displays (and essentially cause the app to appear running at half speed). This was caused by overly
+  cautious code around the DXGI GetFrameStatistics() function which was intended to catch timing
+  discontinuities, but which could get into a mode where such a discontinuity was triggered in each frame.
+
+  Ticket: https://github.com/floooh/sokol/issues/1337
+
+  PR: https://github.com/floooh/sokol/pull/1338
+
 ### 23-Sep-2025
 
 - sokol_gfx.h: the `sg_query_frame_stats()` function now returns resource pool
