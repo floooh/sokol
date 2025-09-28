@@ -2009,6 +2009,10 @@ enum {
     SG_MAX_VIEW_BINDSLOTS = 32,
     SG_MAX_SAMPLER_BINDSLOTS = 12,
     SG_MAX_TEXTURE_SAMPLER_PAIRS = 32,  // same as SG_MAX_VIEW_BINDSLOTS
+    SG_MAX_PORTABLE_COLOR_ATTACHMENTS = 4,
+    SG_MAX_PORTABLE_TEXTURE_BINDINGS_PER_STAGE = 16,
+    SG_MAX_PORTABLE_STORAGEBUFFER_BINDINGS_PER_STAGE = 8,   // assuming sg_features.compute = true
+    SG_MAX_PORTABLE_STORAGEIMAGE_BINDINGS_PER_STAGE = 4,    // assuming sg_features.compute = true
 };
 
 /*
@@ -4851,8 +4855,9 @@ typedef struct sg_desc {
     int view_pool_size;
     int uniform_buffer_size;
     int max_commit_listeners;
-    bool disable_validation;    // disable validation layer even in debug mode, useful for tests
-    bool d3d11_shader_debugging;    // if true, HLSL shaders are compiled with D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION
+    bool disable_validation;            // disable validation layer even in debug mode, useful for tests
+    bool enforce_portable_limits;       // if true, enforce portable resource binding limits (SG_MAX_PORTABLE_*)
+    bool d3d11_shader_debugging;        // if true, HLSL shaders are compiled with D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION
     bool mtl_force_managed_storage_mode; // for debugging: use Metal managed storage mode for resources even with UMA
     bool mtl_use_command_buffer_with_retained_references;    // Metal: use a managed MTLCommandBuffer which ref-counts used resources
     bool wgpu_disable_bindgroups_cache;  // set to true to disable the WebGPU backend BindGroup cache
@@ -19978,9 +19983,14 @@ _SOKOL_PRIVATE bool _sg_validate_shader_binding_limits(const sg_shader_desc* des
             default: break;
         }
     }
-    const int max_tex = _sg.limits.max_texture_bindings_per_stage;
-    const int max_sbuf = _sg.limits.max_storage_buffer_bindings_per_stage;
-    const int max_simg = _sg.limits.max_storage_image_bindings_per_stage;
+    int max_tex = _sg.limits.max_texture_bindings_per_stage;
+    int max_sbuf = _sg.limits.max_storage_buffer_bindings_per_stage;
+    int max_simg = _sg.limits.max_storage_image_bindings_per_stage;
+    if (_sg.desc.enforce_portable_limits) {
+        max_tex = _sg_min(max_tex, SG_MAX_PORTABLE_TEXTURE_BINDINGS_PER_STAGE);
+        max_sbuf = _sg_min(max_sbuf, SG_MAX_PORTABLE_STORAGEBUFFER_BINDINGS_PER_STAGE);
+        max_simg = _sg_min(max_simg, SG_MAX_PORTABLE_STORAGEIMAGE_BINDINGS_PER_STAGE);
+    }
     bool retval = true;
     if (vs_num_tex > max_tex) {
         _SG_ERROR(SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURES);
@@ -20046,12 +20056,16 @@ _SOKOL_PRIVATE bool _sg_validate_pass_attachment_limits(const sg_pass* pass) {
         }
     }
     bool retval = true;
-    if (num_color_atts > _sg.limits.max_color_attachments) {
+    int max_color_atts = _sg.limits.max_color_attachments;
+    if (_sg.desc.enforce_portable_limits) {
+        max_color_atts = _sg_min(max_color_atts, SG_MAX_PORTABLE_COLOR_ATTACHMENTS);
+    }
+    if (num_color_atts > max_color_atts) {
         _SG_ERROR(BEGINPASS_TOO_MANY_COLOR_ATTACHMENTS);
         retval = false;
     }
     // max_color_attachments not a bug
-    if (num_resolve_atts > _sg.limits.max_color_attachments) {
+    if (num_resolve_atts > max_color_atts) {
         _SG_ERROR(BEGINPASS_TOO_MANY_RESOLVE_ATTACHMENTS);
         retval = false;
     }
