@@ -4433,47 +4433,29 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_METAL_THREADS_PER_THREADGROUP_MULTIPLE_32, "sg_shader_desc.mtl_threads_per_threadgroup (x * y * z) must be a multiple of 32 (metal)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_NO_CONT_MEMBERS, "sg_shader_desc.uniform_blocks[].glsl_uniforms[]: items must occupy continuous slots") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_SIZE_IS_ZERO, "sg_shader_desc.uniform_blocks[].size cannot be zero") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_METAL_BUFFER_SLOT_OUT_OF_RANGE, "sg_shader_desc.uniform_blocks[].msl_buffer_n is out of range (must be 0..7)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_METAL_BUFFER_SLOT_COLLISION, "sg_shader_desc.uniform_blocks[].msl_buffer_n must be unique across uniform blocks and storage buffers in same shader stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_HLSL_REGISTER_B_OUT_OF_RANGE, "sg_shader_desc.uniform_blocks[]hlsl_register_b_n is out of range (must be 0..7)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_HLSL_REGISTER_B_COLLISION, "sg_shader_desc.uniform_blocks[].hlsl_register_b_n must be unique across uniform blocks in same shader stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_WGSL_GROUP0_BINDING_OUT_OF_RANGE, "sg_shader_desc.uniform_blocks[].wgsl_group0_binding_n is out of range (must be 0..15)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_WGSL_GROUP0_BINDING_COLLISION, "sg_shader_desc.uniform_blocks[].wgsl_group0_binding_n must be unique across all uniform blocks") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_NO_MEMBERS, "sg_shader_desc.uniform_blocks[].glsl_uniforms[]: GL backend requires uniform block member declarations") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_UNIFORM_GLSL_NAME, "sg_shader_desc.uniform_blocks[].glsl_uniforms[].glsl_name missing") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_SIZE_MISMATCH, "sg_shader_desc.uniform_blocks[].glsl_uniforms[]: size of uniform block members doesn't match uniform block size") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_ARRAY_COUNT, "sg_shader_desc.uniform_blocks[].glsl_uniforms[].array_count must be >= 1") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_STD140_ARRAY_TYPE, "sg_shader_desc.uniform_blocks[].glsl_uniforms[].type: uniform arrays only allowed for FLOAT4, INT4, MAT4 in std140 layout") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_METAL_BUFFER_SLOT_OUT_OF_RANGE, "sg_shader_desc.views[].storage_buffer.msl_buffer_n is out of range (must be 8..15)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_METAL_BUFFER_SLOT_COLLISION, "sg_shader_desc.views[].storage_buffer.storagemsl_buffer_n must be unique across uniform blocks and storage buffer in same shader stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_HLSL_REGISTER_T_OUT_OF_RANGE, "sg_shader_desc.views[].storage_buffer.hlsl_register_t_n is out of range (must be 0..31)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_HLSL_REGISTER_T_COLLISION, "sg_shader_desc.views[].storage_buffer.hlsl_register_t_n must be unique across read-only storage buffers and images in same shader stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_HLSL_REGISTER_U_OUT_OF_RANGE, "sg_shader_desc.views[].storage_buffer.hlsl_register_u_n is out of range (must be 0..31)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_HLSL_REGISTER_U_COLLISION, "sg_shader_desc.views[].storage_buffer.hlsl_register_u_n must be unique across read/write storage buffers and storage images in same shader stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE, "sg_shader_desc.views[].storage_buffer.glsl_binding_n is out of range (must be 0..31)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_GLSL_BINDING_COLLISION, "sg_shader_desc.views[].storage_buffer.glsl_binding_n must be unique across shader stages") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_WGSL_GROUP1_BINDING_OUT_OF_RANGE, "sg_shader_desc.views[].storage_buffer.wgsl_group1_binding_n is out of range (must be 0..127)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_WGSL_GROUP1_BINDING_COLLISION, "sg_shader_desc.views[].storage_buffer.wgsl_group1_binding_n must be unique across all images, samplers and storage buffers") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_EXPECT_COMPUTE_STAGE, "sg_shader_desc.views[].storage_image: storage images are allowed on the compute stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_METAL_TEXTURE_SLOT_OUT_OF_RANGE, "sg_shader_desc.views[].storage_image.msl_texture_n is out of range (must be 0..31") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_METAL_TEXTURE_SLOT_COLLISION, "sg_shader_desc.views[].storage_image.msl_texture_n must be unique across images and storage images in same shader stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_HLSL_REGISTER_U_OUT_OF_RANGE, "sg_shader_desc.views[].storage_image.hlsl_register_u_n is out of range (must be 0..11)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_HLSL_REGISTER_U_COLLISION, "sg_shader_desc.views[].storage_image.hlsl_register_u_n must be unique across storage images and read/write storage buffers in same shader stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_GLSL_BINDING_OUT_OF_RANGE, "sg_shader_desc.views[].storage_image.glsl_binding_n is out of range (must be 0..sg_limits.max_storage_image_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_GLSL_BINDING_COLLISION, "sg_shader_desc.views[].storage_image.glsl_binding_n must be unique across shader stages") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_WGSL_GROUP1_BINDING_OUT_OF_RANGE, "sg_shader_desc.views[].storage_image.wgsl_group1_binding_n is out of range (must be 0..7)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_WGSL_GROUP1_BINDING_COLLISION, "sg_shader_desc.views[].storage_image.wgsl_group1_binding_n must be unique in same shader stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_TEXTURE_METAL_TEXTURE_SLOT_OUT_OF_RANGE, "sg_shader_desc.views[].texture.msl_texture_n is out of range (must be 0..31)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_TEXTURE_METAL_TEXTURE_SLOT_COLLISION, "sg_shader_desc.views[].texture.msl_texture_n must be unique across textures and storage images in same shader stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_TEXTURE_HLSL_REGISTER_T_OUT_OF_RANGE, "sg_shader_desc.views[].texture.hlsl_register_t_n is out of range (must be 0..31)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_TEXTURE_HLSL_REGISTER_T_COLLISION, "sg_shader_desc.views[].texture.hlsl_register_t_n must be unique across textures and storage buffers in same shader stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_TEXTURE_WGSL_GROUP1_BINDING_OUT_OF_RANGE, "sg_shader_desc.views[].texture.wgsl_group1_binding_n is out of range (must be 0..127)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_TEXTURE_WGSL_GROUP1_BINDING_COLLISION, "sg_shader_desc.views[].texture.wgsl_group1_binding_n must be unique across all images, samplers and storage buffers") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_METAL_SAMPLER_SLOT_OUT_OF_RANGE, "sg_shader_desc.samplers[].msl_sampler_n is out of range (must be 0..11)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_METAL_SAMPLER_SLOT_COLLISION, "sg_shader_desc.samplers[].msl_sampler_n must be unique in same shader stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_HLSL_REGISTER_S_OUT_OF_RANGE, "sg_shader_desc.samplers[].hlsl_register_s_n is out of rang (must be 0..11)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_HLSL_REGISTER_S_COLLISION, "sg_shader_desc.samplers[].hlsl_register_s_n must be unique in same shader stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_WGSL_GROUP1_BINDING_OUT_OF_RANGE, "sg_shader_desc.samplers[].wgsl_group1_binding_n is out of range (must be 0..127)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_WGSL_GROUP1_BINDING_COLLISION, "sg_shader_desc.samplers[].wgsl_group1_binding_n must be unique across all images, samplers and storage buffers") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_TEXTURE_SAMPLER_PAIR_VIEW_SLOT_OUT_OF_RANGE, "texture-sampler-pair view slot index is out of range (sg_shader_desc.texture_sampler_pairs[].view_slot)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_TEXTURE_SAMPLER_PAIR_SAMPLER_SLOT_OUT_OF_RANGE, "texture-sampler-pair sampler slot index is out of range (sg_shader_desc.texture_sampler_pairs[].sampler_slot)") \
@@ -10292,15 +10274,18 @@ _SOKOL_PRIVATE bool _sg_gl_ensure_glsl_bindslot_ranges(const sg_shader_desc* des
         SOKOL_ASSERT(_sg.limits.max_storage_buffer_bindings_per_stage <= _SG_GL_MAX_SBUF_BINDINGS);
         SOKOL_ASSERT(_sg.limits.max_storage_image_bindings_per_stage <= _SG_GL_MAX_SIMG_BINDINGS);
         for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
-            if (desc->views[i].storage_buffer.glsl_binding_n >= _sg.limits.max_storage_buffer_bindings_per_stage) {
-                _SG_ERROR(GL_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE);
-                return false;
+            const sg_shader_view* view = &desc->views[i];
+            if (view->storage_buffer.stage != SG_SHADERSTAGE_NONE) {
+                if (view->storage_buffer.glsl_binding_n >= _sg.limits.max_storage_buffer_bindings_per_stage) {
+                    _SG_ERROR(GL_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE);
+                    return false;
+                }
             }
-        }
-        for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
-            if (desc->views[i].storage_image.glsl_binding_n >= _sg.limits.max_storage_image_bindings_per_stage) {
-                _SG_ERROR(GL_STORAGEIMAGE_GLSL_BINDING_OUT_OF_RANGE);
-                return false;
+            if (view->storage_image.stage != SG_SHADERSTAGE_NONE) {
+                if (view->storage_image.glsl_binding_n >= _sg.limits.max_storage_image_bindings_per_stage) {
+                    _SG_ERROR(GL_STORAGEIMAGE_GLSL_BINDING_OUT_OF_RANGE);
+                    return false;
+                }
             }
         }
     #endif
@@ -12740,34 +12725,47 @@ _SOKOL_PRIVATE ID3DBlob* _sg_d3d11_compile_shader(const sg_shader_function* shd_
 _SOKOL_PRIVATE bool _sg_d3d11_ensure_hlsl_bindslot_ranges(const sg_shader_desc* desc) {
     SOKOL_ASSERT(desc);
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
-        if (desc->uniform_blocks[i].hlsl_register_b_n >= _SG_D3D11_MAX_STAGE_UB_BINDINGS) {
-            _SG_ERROR(D3D11_UNIFORMBLOCK_HLSL_REGISTER_B_OUT_OF_RANGE);
-            return false;
+        const sg_shader_uniform_block* ub = &desc->uniform_blocks[i];
+        if (ub->stage != SG_SHADERSTAGE_NONE) {
+            if (ub->hlsl_register_b_n >= _SG_D3D11_MAX_STAGE_UB_BINDINGS) {
+                _SG_ERROR(D3D11_UNIFORMBLOCK_HLSL_REGISTER_B_OUT_OF_RANGE);
+                return false;
+            }
         }
     }
     SOKOL_ASSERT(_sg.limits.d3d11_max_unordered_access_views <= _SG_D3D11_MAX_STAGE_UAV_BINDINGS);
     for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
-        if (desc->views[i].texture.hlsl_register_t_n >= _SG_D3D11_MAX_STAGE_SRV_BINDINGS) {
-            _SG_ERROR(D3D11_IMAGE_HLSL_REGISTER_T_OUT_OF_RANGE);
-            return false;
+        const sg_shader_view* view = &desc->views[i];
+        if (view->texture.stage != SG_SHADERSTAGE_NONE) {
+            if (view->texture.hlsl_register_t_n >= _SG_D3D11_MAX_STAGE_SRV_BINDINGS) {
+                _SG_ERROR(D3D11_IMAGE_HLSL_REGISTER_T_OUT_OF_RANGE);
+                return false;
+            }
         }
-        if (desc->views[i].storage_buffer.hlsl_register_t_n >= _SG_D3D11_MAX_STAGE_SRV_BINDINGS) {
-            _SG_ERROR(D3D11_STORAGEBUFFER_HLSL_REGISTER_T_OUT_OF_RANGE);
-            return false;
+        if (view->storage_buffer.stage != SG_SHADERSTAGE_NONE) {
+            if (view->storage_buffer.hlsl_register_t_n >= _SG_D3D11_MAX_STAGE_SRV_BINDINGS) {
+                _SG_ERROR(D3D11_STORAGEBUFFER_HLSL_REGISTER_T_OUT_OF_RANGE);
+                return false;
+            }
+            if (view->storage_buffer.hlsl_register_u_n >= _SG_D3D11_MAX_STAGE_UAV_BINDINGS) {
+                _SG_ERROR(D3D11_STORAGEBUFFER_HLSL_REGISTER_U_OUT_OF_RANGE);
+                return false;
+            }
         }
-        if (desc->views[i].storage_buffer.hlsl_register_u_n >= _sg.limits.d3d11_max_unordered_access_views) {
-            _SG_ERROR(D3D11_STORAGEBUFFER_HLSL_REGISTER_U_OUT_OF_RANGE);
-            return false;
-        }
-        if (desc->views[i].storage_image.hlsl_register_u_n >= _sg.limits.d3d11_max_unordered_access_views) {
-            _SG_ERROR(D3D11_STORAGEIMAGE_HLSL_REGISTER_U_OUT_OF_RANGE);
-            return false;
+        if (view->storage_image.stage != SG_SHADERSTAGE_NONE) {
+            if (view->storage_image.hlsl_register_u_n >= _SG_D3D11_MAX_STAGE_UAV_BINDINGS) {
+                _SG_ERROR(D3D11_STORAGEIMAGE_HLSL_REGISTER_U_OUT_OF_RANGE);
+                return false;
+            }
         }
     }
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
-        if (desc->samplers[i].hlsl_register_s_n >= _SG_D3D11_MAX_STAGE_SMP_BINDINGS) {
-            _SG_ERROR(D3D11_SAMPLER_HLSL_REGISTER_S_OUT_OF_RANGE);
-            return false;
+        const sg_shader_sampler* smp = &desc->samplers[i];
+        if (smp->stage != SG_SHADERSTAGE_NONE) {
+            if (smp->hlsl_register_s_n >= _SG_D3D11_MAX_STAGE_SMP_BINDINGS) {
+                _SG_ERROR(D3D11_SAMPLER_HLSL_REGISTER_S_OUT_OF_RANGE);
+                return false;
+            }
         }
     }
     return true;
@@ -14890,29 +14888,44 @@ _SOKOL_PRIVATE void _sg_mtl_discard_shader_func(const _sg_mtl_shader_func_t* fun
 _SOKOL_PRIVATE bool _sg_mtl_ensure_msl_bindslot_ranges(const sg_shader_desc* desc) {
     SOKOL_ASSERT(desc);
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
-        if (desc->uniform_blocks[i].msl_buffer_n >= _SG_MTL_MAX_STAGE_UB_BINDINGS) {
-            _SG_ERROR(METAL_UNIFORMBLOCK_MSL_BUFFER_SLOT_OUT_OF_RANGE);
-            return false;
+        const sg_shader_uniform_block* ub = &desc->uniform_blocks[i];
+        if (ub->stage != SG_SHADERSTAGE_NONE) {
+            if (ub->msl_buffer_n >= _SG_MTL_MAX_STAGE_UB_BINDINGS) {
+                _SG_ERROR(METAL_UNIFORMBLOCK_MSL_BUFFER_SLOT_OUT_OF_RANGE);
+                return false;
+            }
         }
     }
     for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
-        if (desc->views[i].texture.msl_texture_n >= _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS) {
-            _SG_ERROR(METAL_IMAGE_MSL_TEXTURE_SLOT_OUT_OF_RANGE);
-            return false;
+        const sg_shader_view* view = &desc->views[i];
+        if (view->texture.stage != SG_SHADERSTAGE_NONE) {
+            if (view->texture.msl_texture_n >= _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS) {
+                _SG_ERROR(METAL_IMAGE_MSL_TEXTURE_SLOT_OUT_OF_RANGE);
+                return false;
+            }
         }
-        if (desc->views[i].storage_buffer.msl_buffer_n >= _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS) {
-            _SG_ERROR(METAL_STORAGEBUFFER_MSL_BUFFER_SLOT_OUT_OF_RANGE);
-            return false;
+        if (view->storage_buffer.stage != SG_SHADERSTAGE_NONE) {
+            if ((view->storage_buffer.msl_buffer_n < _SG_MTL_MAX_STAGE_UB_BINDINGS) ||
+                (view->storage_buffer.msl_buffer_n >= _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS))
+            {
+                _SG_ERROR(METAL_STORAGEBUFFER_MSL_BUFFER_SLOT_OUT_OF_RANGE);
+                return false;
+            }
         }
-        if (desc->views[i].storage_image.msl_texture_n >= _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS) {
-            _SG_ERROR(METAL_STORAGEIMAGE_MSL_TEXTURE_SLOT_OUT_OF_RANGE);
-            return false;
+        if (view->storage_image.stage != SG_SHADERSTAGE_NONE) {
+            if (view->storage_image.msl_texture_n >= _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS) {
+                _SG_ERROR(METAL_STORAGEIMAGE_MSL_TEXTURE_SLOT_OUT_OF_RANGE);
+                return false;
+            }
         }
     }
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
-        if (desc->samplers[i].msl_sampler_n >= _SG_MTL_MAX_STAGE_SAMPLER_BINDINGS) {
-            _SG_ERROR(METAL_SAMPLER_MSL_SAMPLER_SLOT_OUT_OF_RANGE);
-            return false;
+        const sg_shader_sampler* smp = &desc->samplers[i];
+        if (smp->stage != SG_SHADERSTAGE_NONE) {
+            if (smp->msl_sampler_n >= _SG_MTL_MAX_STAGE_SAMPLER_BINDINGS) {
+                _SG_ERROR(METAL_SAMPLER_MSL_SAMPLER_SLOT_OUT_OF_RANGE);
+                return false;
+            }
         }
     }
     return true;
@@ -17306,29 +17319,42 @@ _SOKOL_PRIVATE int _sg_wgpu_dynoffset_cmp(const void* a, const void* b) {
 _SOKOL_PRIVATE bool _sg_wgpu_ensure_wgsl_bindslot_ranges(const sg_shader_desc* desc) {
     SOKOL_ASSERT(desc);
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
-        if (desc->uniform_blocks[i].wgsl_group0_binding_n >= _SG_WGPU_MAX_UB_BINDGROUP_WGSL_SLOTS) {
-            _SG_ERROR(WGPU_UNIFORMBLOCK_WGSL_GROUP0_BINDING_OUT_OF_RANGE);
-            return false;
+        const sg_shader_uniform_block* ub = &desc->uniform_blocks[i];
+        if (ub->stage != SG_SHADERSTAGE_NONE) {
+            if (ub->wgsl_group0_binding_n >= _SG_WGPU_MAX_UB_BINDGROUP_WGSL_SLOTS) {
+                _SG_ERROR(WGPU_UNIFORMBLOCK_WGSL_GROUP0_BINDING_OUT_OF_RANGE);
+                return false;
+            }
         }
     }
     for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
-        if (desc->views[i].texture.wgsl_group1_binding_n >= _SG_WGPU_MAX_VIEW_SMP_BINDGROUP_WGSL_SLOTS) {
-            _SG_ERROR(WGPU_TEXTURE_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
-            return false;
+        const sg_shader_view* view = &desc->views[i];
+        if (view->texture.stage != SG_SHADERSTAGE_NONE) {
+            if (view->texture.wgsl_group1_binding_n >= _SG_WGPU_MAX_VIEW_SMP_BINDGROUP_WGSL_SLOTS) {
+                _SG_ERROR(WGPU_TEXTURE_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
+                return false;
+            }
         }
-        if (desc->views[i].storage_buffer.wgsl_group1_binding_n >= _SG_WGPU_MAX_VIEW_SMP_BINDGROUP_WGSL_SLOTS) {
-            _SG_ERROR(WGPU_STORAGEBUFFER_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
-            return false;
+        if (view->storage_buffer.stage != SG_SHADERSTAGE_NONE) {
+            if (view->storage_buffer.wgsl_group1_binding_n >= _SG_WGPU_MAX_VIEW_SMP_BINDGROUP_WGSL_SLOTS) {
+                _SG_ERROR(WGPU_STORAGEBUFFER_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
+                return false;
+            }
         }
-        if (desc->views[i].storage_image.wgsl_group1_binding_n >= _SG_WGPU_MAX_VIEW_SMP_BINDGROUP_WGSL_SLOTS) {
-            _SG_ERROR(WGPU_STORAGEIMAGE_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
-            return false;
+        if (view->storage_image.stage != SG_SHADERSTAGE_NONE) {
+            if (view->storage_image.wgsl_group1_binding_n >= _SG_WGPU_MAX_VIEW_SMP_BINDGROUP_WGSL_SLOTS) {
+                _SG_ERROR(WGPU_STORAGEIMAGE_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
+                return false;
+            }
         }
     }
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
-        if (desc->samplers[i].wgsl_group1_binding_n >= _SG_WGPU_MAX_VIEW_SMP_BINDGROUP_WGSL_SLOTS) {
-            _SG_ERROR(WGPU_SAMPLER_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
-            return false;
+        const sg_shader_sampler* smp = &desc->samplers[i];
+        if (smp->stage != SG_SHADERSTAGE_NONE) {
+            if (smp->wgsl_group1_binding_n >= _SG_WGPU_MAX_VIEW_SMP_BINDGROUP_WGSL_SLOTS) {
+                _SG_ERROR(WGPU_SAMPLER_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
+                return false;
+            }
         }
     }
     return true;
@@ -18833,15 +18859,12 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             }
             _SG_VALIDATE(ub_desc->size > 0, VALIDATE_SHADERDESC_UNIFORMBLOCK_SIZE_IS_ZERO);
             #if defined(SOKOL_METAL)
-            _SG_VALIDATE(ub_desc->msl_buffer_n < _SG_MTL_MAX_STAGE_UB_BINDINGS, VALIDATE_SHADERDESC_UNIFORMBLOCK_METAL_BUFFER_SLOT_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(msl_buf_bits, ub_desc->stage, ub_desc->msl_buffer_n), VALIDATE_SHADERDESC_UNIFORMBLOCK_METAL_BUFFER_SLOT_COLLISION);
             msl_buf_bits = _sg_validate_set_slot_bit(msl_buf_bits, ub_desc->stage, ub_desc->msl_buffer_n);
             #elif defined(SOKOL_D3D11)
-            _SG_VALIDATE(ub_desc->hlsl_register_b_n < _SG_D3D11_MAX_STAGE_UB_BINDINGS, VALIDATE_SHADERDESC_UNIFORMBLOCK_HLSL_REGISTER_B_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(hlsl_buf_bits, ub_desc->stage, ub_desc->hlsl_register_b_n), VALIDATE_SHADERDESC_UNIFORMBLOCK_HLSL_REGISTER_B_COLLISION);
             hlsl_buf_bits = _sg_validate_set_slot_bit(hlsl_buf_bits, ub_desc->stage, ub_desc->hlsl_register_b_n);
             #elif defined(SOKOL_WGPU)
-            _SG_VALIDATE(ub_desc->wgsl_group0_binding_n < _SG_WGPU_MAX_UB_BINDGROUP_WGSL_SLOTS, VALIDATE_SHADERDESC_UNIFORMBLOCK_WGSL_GROUP0_BINDING_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group0_bits, SG_SHADERSTAGE_NONE, ub_desc->wgsl_group0_binding_n), VALIDATE_SHADERDESC_UNIFORMBLOCK_WGSL_GROUP0_BINDING_COLLISION);
             wgsl_group0_bits = _sg_validate_set_slot_bit(wgsl_group0_bits, SG_SHADERSTAGE_NONE, ub_desc->wgsl_group0_binding_n);
             #endif
@@ -18886,15 +18909,12 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 const sg_shader_texture_view* tex_desc = &view_desc->texture;
                 texview_slot_mask |= (1 << view_idx);
                 #if defined(SOKOL_METAL)
-                _SG_VALIDATE(tex_desc->msl_texture_n < _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS, VALIDATE_SHADERDESC_VIEW_TEXTURE_METAL_TEXTURE_SLOT_OUT_OF_RANGE);
                 _SG_VALIDATE(_sg_validate_slot_bits(msl_tex_bits, tex_desc->stage, tex_desc->msl_texture_n), VALIDATE_SHADERDESC_VIEW_TEXTURE_METAL_TEXTURE_SLOT_COLLISION);
                 msl_tex_bits = _sg_validate_set_slot_bit(msl_tex_bits, tex_desc->stage, tex_desc->msl_texture_n);
                 #elif defined(SOKOL_D3D11)
-                _SG_VALIDATE(tex_desc->hlsl_register_t_n < _SG_D3D11_MAX_STAGE_SRV_BINDINGS, VALIDATE_SHADERDESC_VIEW_TEXTURE_HLSL_REGISTER_T_OUT_OF_RANGE);
                 _SG_VALIDATE(_sg_validate_slot_bits(hlsl_srv_bits, tex_desc->stage, tex_desc->hlsl_register_t_n), VALIDATE_SHADERDESC_VIEW_TEXTURE_HLSL_REGISTER_T_COLLISION);
                 hlsl_srv_bits = _sg_validate_set_slot_bit(hlsl_srv_bits, tex_desc->stage, tex_desc->hlsl_register_t_n);
                 #elif defined(SOKOL_WGPU)
-                _SG_VALIDATE(tex_desc->wgsl_group1_binding_n < _SG_WGPU_MAX_VIEW_SMP_BINDGROUP_WGSL_SLOTS, VALIDATE_SHADERDESC_VIEW_TEXTURE_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
                 _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group1_bits, SG_SHADERSTAGE_NONE, tex_desc->wgsl_group1_binding_n), VALIDATE_SHADERDESC_VIEW_TEXTURE_WGSL_GROUP1_BINDING_COLLISION);
                 wgsl_group1_bits = _sg_validate_set_slot_bit(wgsl_group1_bits, SG_SHADERSTAGE_NONE, tex_desc->wgsl_group1_binding_n);
                 #elif defined(SOKOL_DUMMY_BACKEND) || defined(_SOKOL_ANY_GL)
@@ -18903,25 +18923,20 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             } else if (view_desc->storage_buffer.stage != SG_SHADERSTAGE_NONE) {
                 const sg_shader_storage_buffer_view* sbuf_desc = &view_desc->storage_buffer;
                 #if defined(SOKOL_METAL)
-                _SG_VALIDATE((sbuf_desc->msl_buffer_n >= _SG_MTL_MAX_STAGE_UB_BINDINGS) && (sbuf_desc->msl_buffer_n < _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS), VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_METAL_BUFFER_SLOT_OUT_OF_RANGE);
                 _SG_VALIDATE(_sg_validate_slot_bits(msl_buf_bits, sbuf_desc->stage, sbuf_desc->msl_buffer_n), VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_METAL_BUFFER_SLOT_COLLISION);
                 msl_buf_bits = _sg_validate_set_slot_bit(msl_buf_bits, sbuf_desc->stage, sbuf_desc->msl_buffer_n);
                 #elif defined(SOKOL_D3D11)
                 if (sbuf_desc->readonly) {
-                    _SG_VALIDATE(sbuf_desc->hlsl_register_t_n < _SG_D3D11_MAX_STAGE_SRV_BINDINGS, VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_HLSL_REGISTER_T_OUT_OF_RANGE);
                     _SG_VALIDATE(_sg_validate_slot_bits(hlsl_srv_bits, sbuf_desc->stage, sbuf_desc->hlsl_register_t_n), VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_HLSL_REGISTER_T_COLLISION);
                     hlsl_srv_bits = _sg_validate_set_slot_bit(hlsl_srv_bits, sbuf_desc->stage, sbuf_desc->hlsl_register_t_n);
                 } else {
-                    _SG_VALIDATE(sbuf_desc->hlsl_register_u_n < _SG_D3D11_MAX_STAGE_UAV_BINDINGS, VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_HLSL_REGISTER_U_OUT_OF_RANGE);
                     _SG_VALIDATE(_sg_validate_slot_bits(hlsl_uav_bits, sbuf_desc->stage, sbuf_desc->hlsl_register_u_n), VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_HLSL_REGISTER_U_COLLISION);
                     hlsl_uav_bits = _sg_validate_set_slot_bit(hlsl_uav_bits, sbuf_desc->stage, sbuf_desc->hlsl_register_u_n);
                 }
                 #elif defined(_SOKOL_ANY_GL)
-                _SG_VALIDATE(sbuf_desc->glsl_binding_n < _SG_GL_MAX_SBUF_BINDINGS, VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE);
                 _SG_VALIDATE(_sg_validate_slot_bits(glsl_sbuf_bnd_bits, SG_SHADERSTAGE_NONE, sbuf_desc->glsl_binding_n), VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_GLSL_BINDING_COLLISION);
                 glsl_sbuf_bnd_bits = _sg_validate_set_slot_bit(glsl_sbuf_bnd_bits, SG_SHADERSTAGE_NONE, sbuf_desc->glsl_binding_n);
                 #elif defined(SOKOL_WGPU)
-                _SG_VALIDATE(sbuf_desc->wgsl_group1_binding_n < _SG_WGPU_MAX_VIEW_SMP_BINDGROUP_WGSL_SLOTS, VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
                 _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group1_bits, SG_SHADERSTAGE_NONE, sbuf_desc->wgsl_group1_binding_n), VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_WGSL_GROUP1_BINDING_COLLISION);
                 wgsl_group1_bits = _sg_validate_set_slot_bit(wgsl_group1_bits, SG_SHADERSTAGE_NONE, sbuf_desc->wgsl_group1_binding_n);
                 #elif defined(SOKOL_DUMMY_BACKEND)
@@ -18931,19 +18946,15 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 const sg_shader_storage_image_view* simg_desc = &view_desc->storage_image;
                 _SG_VALIDATE(simg_desc->stage == SG_SHADERSTAGE_COMPUTE, VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_EXPECT_COMPUTE_STAGE);
                 #if defined(SOKOL_METAL)
-                _SG_VALIDATE(simg_desc->msl_texture_n < _SG_MTL_MAX_STAGE_TEXTURE_BINDINGS, VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_METAL_TEXTURE_SLOT_OUT_OF_RANGE);
                 _SG_VALIDATE(_sg_validate_slot_bits(msl_tex_bits, simg_desc->stage, simg_desc->msl_texture_n), VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_METAL_TEXTURE_SLOT_COLLISION);
                 msl_tex_bits = _sg_validate_set_slot_bit(msl_tex_bits, simg_desc->stage, simg_desc->msl_texture_n);
                 #elif defined(SOKOL_D3D11)
-                _SG_VALIDATE(simg_desc->hlsl_register_u_n < _SG_D3D11_MAX_STAGE_UAV_BINDINGS, VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_HLSL_REGISTER_U_OUT_OF_RANGE);
                 _SG_VALIDATE(_sg_validate_slot_bits(hlsl_uav_bits, simg_desc->stage, simg_desc->hlsl_register_u_n), VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_HLSL_REGISTER_U_COLLISION);
                 hlsl_uav_bits = _sg_validate_set_slot_bit(hlsl_uav_bits, simg_desc->stage, simg_desc->hlsl_register_u_n);
                 #elif defined(_SOKOL_ANY_GL)
-                _SG_VALIDATE(simg_desc->glsl_binding_n < _SG_GL_MAX_SIMG_BINDINGS, VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_GLSL_BINDING_OUT_OF_RANGE);
                 _SG_VALIDATE(_sg_validate_slot_bits(glsl_simg_bnd_bits, SG_SHADERSTAGE_NONE, simg_desc->glsl_binding_n), VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_GLSL_BINDING_COLLISION);
                 glsl_simg_bnd_bits = _sg_validate_set_slot_bit(glsl_simg_bnd_bits, SG_SHADERSTAGE_NONE, simg_desc->glsl_binding_n);
                 #elif defined(SOKOL_WGPU)
-                _SG_VALIDATE(simg_desc->wgsl_group1_binding_n < _SG_WGPU_MAX_VIEW_SMP_BINDGROUP_WGSL_SLOTS, VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
                 _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group1_bits, SG_SHADERSTAGE_NONE, simg_desc->wgsl_group1_binding_n), VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_WGSL_GROUP1_BINDING_COLLISION);
                 wgsl_group1_bits = _sg_validate_set_slot_bit(wgsl_group1_bits, SG_SHADERSTAGE_NONE, simg_desc->wgsl_group1_binding_n);
                 #endif
@@ -18958,15 +18969,12 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             }
             smp_slot_mask |= (1 << smp_idx);
             #if defined(SOKOL_METAL)
-            _SG_VALIDATE(smp_desc->msl_sampler_n < _SG_MTL_MAX_STAGE_SAMPLER_BINDINGS, VALIDATE_SHADERDESC_SAMPLER_METAL_SAMPLER_SLOT_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(msl_smp_bits, smp_desc->stage, smp_desc->msl_sampler_n), VALIDATE_SHADERDESC_SAMPLER_METAL_SAMPLER_SLOT_COLLISION);
             msl_smp_bits = _sg_validate_set_slot_bit(msl_smp_bits, smp_desc->stage, smp_desc->msl_sampler_n);
             #elif defined(SOKOL_D3D11)
-            _SG_VALIDATE(smp_desc->hlsl_register_s_n < _SG_D3D11_MAX_STAGE_SMP_BINDINGS, VALIDATE_SHADERDESC_SAMPLER_HLSL_REGISTER_S_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(hlsl_smp_bits, smp_desc->stage, smp_desc->hlsl_register_s_n), VALIDATE_SHADERDESC_SAMPLER_HLSL_REGISTER_S_COLLISION);
             hlsl_smp_bits = _sg_validate_set_slot_bit(hlsl_smp_bits, smp_desc->stage, smp_desc->hlsl_register_s_n);
             #elif defined(SOKOL_WGPU)
-            _SG_VALIDATE(smp_desc->wgsl_group1_binding_n < _SG_WGPU_MAX_VIEW_SMP_BINDGROUP_WGSL_SLOTS, VALIDATE_SHADERDESC_SAMPLER_WGSL_GROUP1_BINDING_OUT_OF_RANGE);
             _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group1_bits, SG_SHADERSTAGE_NONE, smp_desc->wgsl_group1_binding_n), VALIDATE_SHADERDESC_SAMPLER_WGSL_GROUP1_BINDING_COLLISION);
             wgsl_group1_bits = _sg_validate_set_slot_bit(wgsl_group1_bits, SG_SHADERSTAGE_NONE, smp_desc->wgsl_group1_binding_n);
             #endif
