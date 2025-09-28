@@ -9,7 +9,7 @@
 
   Ticket: https://github.com/floooh/sokol/issues/1337
 
-  PR: [FIXME]
+  PR: https://github.com/floooh/sokol/pull/1338
 
 ### 23-Sep-2025
 
