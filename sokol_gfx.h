@@ -8269,10 +8269,10 @@ _SOKOL_PRIVATE void _sg_dummy_setup_backend(const sg_desc* desc) {
     _sg.limits.max_image_size_array = 1024;
     _sg.limits.max_image_array_layers = 1024;
     _sg.limits.max_vertex_attrs = 16;
-    _sg.limits.max_color_attachments = 4;
-    _sg.limits.max_texture_bindings_per_stage = 16;
-    _sg.limits.max_storage_buffer_bindings_per_stage = 8;
-    _sg.limits.max_storage_image_bindings_per_stage = 4;
+    _sg.limits.max_color_attachments = SG_MAX_PORTABLE_COLOR_ATTACHMENTS;
+    _sg.limits.max_texture_bindings_per_stage = SG_MAX_PORTABLE_TEXTURE_BINDINGS_PER_STAGE;
+    _sg.limits.max_storage_buffer_bindings_per_stage = SG_MAX_PORTABLE_STORAGEBUFFER_BINDINGS_PER_STAGE;
+    _sg.limits.max_storage_image_bindings_per_stage = SG_MAX_PORTABLE_STORAGEIMAGE_BINDINGS_PER_STAGE;
 }
 
 _SOKOL_PRIVATE void _sg_dummy_discard_backend(void) {
@@ -9344,6 +9344,7 @@ _SOKOL_PRIVATE void _sg_gl_init_limits(void) {
     _sg.limits.max_texture_bindings_per_stage = _sg_min(gl_int, SG_MAX_VIEW_BINDSLOTS);
 
     #if defined(_SOKOL_GL_HAS_COMPUTE)
+    if (_sg.features.compute) {
         glGetIntegerv(GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS, &gl_int);
         _SG_GL_CHECK_ERROR();
         _sg.limits.max_storage_buffer_bindings_per_stage = _sg_min(gl_int, SG_MAX_VIEW_BINDSLOTS);
@@ -9351,6 +9352,7 @@ _SOKOL_PRIVATE void _sg_gl_init_limits(void) {
         glGetIntegerv(GL_MAX_IMAGE_UNITS, &gl_int);
         _SG_GL_CHECK_ERROR();
         _sg.limits.max_storage_image_bindings_per_stage = _sg_min(gl_int, SG_MAX_VIEW_BINDSLOTS);
+    }
     #endif
 
     glGetIntegerv(GL_MAX_VERTEX_UNIFORM_COMPONENTS, &gl_int);
@@ -19983,14 +19985,9 @@ _SOKOL_PRIVATE bool _sg_validate_shader_binding_limits(const sg_shader_desc* des
             default: break;
         }
     }
-    int max_tex = _sg.limits.max_texture_bindings_per_stage;
-    int max_sbuf = _sg.limits.max_storage_buffer_bindings_per_stage;
-    int max_simg = _sg.limits.max_storage_image_bindings_per_stage;
-    if (_sg.desc.enforce_portable_limits) {
-        max_tex = _sg_min(max_tex, SG_MAX_PORTABLE_TEXTURE_BINDINGS_PER_STAGE);
-        max_sbuf = _sg_min(max_sbuf, SG_MAX_PORTABLE_STORAGEBUFFER_BINDINGS_PER_STAGE);
-        max_simg = _sg_min(max_simg, SG_MAX_PORTABLE_STORAGEIMAGE_BINDINGS_PER_STAGE);
-    }
+    const int max_tex = _sg.limits.max_texture_bindings_per_stage;
+    const int max_sbuf = _sg.limits.max_storage_buffer_bindings_per_stage;
+    const int max_simg = _sg.limits.max_storage_image_bindings_per_stage;
     bool retval = true;
     if (vs_num_tex > max_tex) {
         _SG_ERROR(SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURES);
@@ -20057,9 +20054,6 @@ _SOKOL_PRIVATE bool _sg_validate_pass_attachment_limits(const sg_pass* pass) {
     }
     bool retval = true;
     int max_color_atts = _sg.limits.max_color_attachments;
-    if (_sg.desc.enforce_portable_limits) {
-        max_color_atts = _sg_min(max_color_atts, SG_MAX_PORTABLE_COLOR_ATTACHMENTS);
-    }
     if (num_color_atts > max_color_atts) {
         _SG_ERROR(BEGINPASS_TOO_MANY_COLOR_ATTACHMENTS);
         retval = false;
@@ -20729,6 +20723,17 @@ _SOKOL_PRIVATE void _sg_discard_all_resources(void) {
     }
 }
 
+_SOKOL_PRIVATE void _sg_override_portable_limits(void) {
+    if (_sg.desc.enforce_portable_limits) {
+        _sg.limits.max_color_attachments = SG_MAX_PORTABLE_COLOR_ATTACHMENTS;
+        _sg.limits.max_texture_bindings_per_stage = SG_MAX_PORTABLE_TEXTURE_BINDINGS_PER_STAGE;
+        if (_sg.features.compute) {
+            _sg.limits.max_storage_buffer_bindings_per_stage = SG_MAX_PORTABLE_STORAGEBUFFER_BINDINGS_PER_STAGE;
+            _sg.limits.max_storage_image_bindings_per_stage = SG_MAX_PORTABLE_STORAGEIMAGE_BINDINGS_PER_STAGE;
+        }
+    }
+}
+
 // ██████  ██    ██ ██████  ██      ██  ██████
 // ██   ██ ██    ██ ██   ██ ██      ██ ██
 // ██████  ██    ██ ██████  ██      ██ ██
@@ -20747,6 +20752,7 @@ SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
     _sg.frame_index = 1;
     _sg.stats_enabled = true;
     _sg_setup_backend(&_sg.desc);
+    _sg_override_portable_limits();
     _sg.valid = true;
 }
 
