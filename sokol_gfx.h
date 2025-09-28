@@ -12433,7 +12433,7 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.limits.max_image_size_array = 16 * 1024;
     _sg.limits.max_image_array_layers = _SG_D3D11_MAX_TEXTUREARRAY_LAYERS;
     _sg.limits.max_vertex_attrs = SG_MAX_VERTEX_ATTRIBUTES;
-    _sg.limits.max_color_attachments = 8;
+    _sg.limits.max_color_attachments = _sg_min(8, SG_MAX_COLOR_ATTACHMENTS);
     _sg.limits.max_texture_bindings_per_stage = _sg_min(128, SG_MAX_VIEW_BINDSLOTS);
     _sg.limits.max_storage_buffer_bindings_per_stage = _sg_min(64, SG_MAX_VIEW_BINDSLOTS);
     if (_sg_d3d11_GetFeatureLevel(_sg.d3d11.dev) >= D3D_FEATURE_LEVEL_11_1) {
