@@ -469,6 +469,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+          components: rustfmt
       - name: "cargo fmt"
         run: cargo fmt
       - name: "commit and push"
