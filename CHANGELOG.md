@@ -2,7 +2,7 @@
 
 ### 29-Sep-2025
 
-The 'flexible bind limit' update: sokol_gfx.h now allows more render pass
+The 'flexible resource binding limits' update: sokol_gfx.h now allows more render pass
 attachments and resource bindings per shader-stage if supported by the backend.
 
 Existing code should continue to work without changes unless you are using more
@@ -19,8 +19,8 @@ via `sg_query_limits()`):
 - `max_storage_buffer_bindings_per_stage`
 - `max_storage_image_bindings_per_stage`
 
-Those dynamic values are still clamped to max values, but those have been
-increased:
+Those dynamic values are still clamped to hardwired max values, but those have been
+increased too:
 
 - `SG_MAX_COLOR_ATTACHMENTS`: increased from 4 to 8
 - `SG_MAX_VIEW_BINDSLOTS`: increased from 28 to 32
@@ -29,7 +29,7 @@ In turn the maximum amount of samplers that can be bound simultaneously has been
 reduced from 16 to 12 (that way the `sg_bindings` struct can stay at a nice round
 size of 256 bytes).
 
-The former conservative hardwired limitations are now called 'portable limits'
+The former conservative hardwired limits are now called 'portable limits'
 and the following constants have been introduced:
 
 - `SG_MAX_PORTABLE_COLOR_ATTACHMENTS`: 4
@@ -38,7 +38,7 @@ and the following constants have been introduced:
 - `SG_MAX_PORTABLE_STORAGEIMAGE_BINDINGS_PER_STAGE`: 4
 
 You can test your code against those portable limits via the new
-`sg_desc.enforce_portable_limits` config item:
+`sg_desc.enforce_portable_limits` desc item:
 
 ```c
 sg_setup(&(sg_desc){
