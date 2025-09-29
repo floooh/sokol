@@ -4450,8 +4450,23 @@ _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
     _sgimgui_igtext("    max_image_size_array: %d", l.max_image_size_array);
     _sgimgui_igtext("    max_image_array_layers: %d", l.max_image_array_layers);
     _sgimgui_igtext("    max_vertex_attrs: %d", l.max_vertex_attrs);
+    _sgimgui_igtext("    max_color_attachments: %d", l.max_color_attachments);
+    _sgimgui_igtext("    max_texture_bindings_per_stage: %d", l.max_texture_bindings_per_stage);
+    _sgimgui_igtext("    max_storage_buffer_bindings_per_stage: %d", l.max_storage_buffer_bindings_per_stage);
+    _sgimgui_igtext("    max_storage_image_bindings_per_stage: %d", l.max_storage_image_bindings_per_stage);
     _sgimgui_igtext("    gl_max_vertex_uniform_components: %d", l.gl_max_vertex_uniform_components);
     _sgimgui_igtext("    gl_max_combined_texture_image_units: %d", l.gl_max_combined_texture_image_units);
+    _sgimgui_igtext("    d3d11_max_unordered_access_views: %d", l.d3d11_max_unordered_access_views);
+    _sgimgui_igtext("\nStruct Sizes:\n");
+    _sgimgui_igtext("    sg_desc:           %d bytes\n", (int)sizeof(sg_desc));
+    _sgimgui_igtext("    sg_buffer_desc:    %d bytes\n", (int)sizeof(sg_buffer_desc));
+    _sgimgui_igtext("    sg_image_desc:     %d bytes\n", (int)sizeof(sg_image_desc));
+    _sgimgui_igtext("    sg_view_desc:      %d bytes\n", (int)sizeof(sg_view_desc));
+    _sgimgui_igtext("    sg_sampler_desc:   %d bytes\n", (int)sizeof(sg_sampler_desc));
+    _sgimgui_igtext("    sg_shader_desc:    %d bytes\n", (int)sizeof(sg_shader_desc));
+    _sgimgui_igtext("    sg_pipeline_desc:  %d bytes\n", (int)sizeof(sg_pipeline_desc));
+    _sgimgui_igtext("    sg_pass:           %d bytes\n", (int)sizeof(sg_pass));
+    _sgimgui_igtext("    sg_bindings:       %d bytes\n", (int)sizeof(sg_bindings));
     _sgimgui_igtext("\nUsable Pixelformats:");
     for (int i = (int)(SG_PIXELFORMAT_NONE+1); i < (int)_SG_PIXELFORMAT_NUM; i++) {
         sg_pixel_format fmt = (sg_pixel_format)i;
