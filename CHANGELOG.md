@@ -67,7 +67,8 @@ Please be aware of the following backend-specific caveats:
   `sg_limits.d3d11_max_unordered_access_views` 'raw limit' if you need to handle
   a D3D11.0 fallback path. Also: if you create the D3D11 device yourself, be aware
   that higher feature levels are opt-in, e.g. you explicitly need to request
-  a Feature Level 1 device!
+  a feature level 1 device (the `sg_setup()` function now logs a warning if
+  sokol-gfx is initialized with a feature level 0 device).
 - On Metal, storage buffers, uniform buffers and vertex buffers
   all share the same bindspace of at most 31 'buffer slots' per shader stage.
   This means that the number of storage buffers is limited to `31 - 8 - 8 = 15`.
