@@ -4282,6 +4282,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_UNSUPPORTED, "framebuffer completeness check failed with GL_FRAMEBUFFER_UNSUPPORTED (gl)") \
     _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_INCOMPLETE_MULTISAMPLE, "framebuffer completeness check failed with GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE (gl)") \
     _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_UNKNOWN, "framebuffer completeness check failed (unknown reason) (gl)") \
+    _SG_LOGITEM_XMACRO(D3D11_FEATURE_LEVEL_0_DETECTED, "D3D11 Feature Level 0 device detected, this restricts the number of UAV slots to 8! (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_BUFFER_FAILED, "CreateBuffer() failed (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_BUFFER_SRV_FAILED, "CreateShaderResourceView() failed for storage buffer (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_BUFFER_UAV_FAILED, "CreateUnorderedAccessView() failed for storage buffer (d3d11)") \
@@ -12475,6 +12476,9 @@ _SOKOL_PRIVATE void _sg_d3d11_setup_backend(const sg_desc* desc) {
     _sg.d3d11.dev = (ID3D11Device*) desc->environment.d3d11.device;
     _sg.d3d11.ctx = (ID3D11DeviceContext*) desc->environment.d3d11.device_context;
     _sg_d3d11_init_caps();
+    if (_sg_d3d11_GetFeatureLevel(_sg.d3d11.dev) == D3D_FEATURE_LEVEL_11_0) {
+        _SG_WARN(D3D11_FEATURE_LEVEL_0_DETECTED);
+    }
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_discard_backend(void) {
