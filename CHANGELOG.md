@@ -1,5 +1,88 @@
 ## Updates
 
+### 29-Sep-2025
+
+The 'flexible bind limit' update: sokol_gfx.h now allows more render pass
+attachments and resource bindings per shader-stage if supported by the backend.
+
+Existing code should continue to work without changes unless you are using more
+than 12 samplers in a single draw call (read on for the reason).
+
+If you plan to make use of the higher binding limits you'll also need to
+update sokol-shdc.
+
+In sokol_gfx.h the following new items have been added to the `sg_limits` struct (accessible
+via `sg_query_limits()`):
+
+- `max_color_attachments`
+- `max_texture_bindings_per_stage`
+- `max_storage_buffer_bindings_per_stage`
+- `max_storage_image_bindings_per_stage`
+
+Those dynamic values are still clamped to max values, but those have been
+increased:
+
+- `SG_MAX_COLOR_ATTACHMENTS`: increased from 4 to 8
+- `SG_MAX_VIEW_BINDSLOTS`: increased from 28 to 32
+
+In turn the maximum amount of samplers that can be bound simultaneously has been
+reduced from 16 to 12 (that way the `sg_bindings` struct can stay at a nice round
+size of 256 bytes).
+
+The former conservative hardwired limitations are now called 'portable limits'
+and the following constants have been introduced:
+
+- `SG_MAX_PORTABLE_COLOR_ATTACHMENTS`: 4
+- `SG_MAX_PORTABLE_TEXTURE_BINDINGS_PER_STAGE`: 16
+- `SG_MAX_PORTABLE_STORAGEBUFFER_BINDINGS_PER_STAGE`: 8
+- `SG_MAX_PORTABLE_STORAGEIMAGE_BINDINGS_PER_STAGE`: 4
+
+You can test your code against those portable limits via the new
+`sg_desc.enforce_portable_limits` config item:
+
+```c
+sg_setup(&(sg_desc){
+    .enforce_portable_limits = true,
+    // ...
+})
+```
+
+Trying to create a shader object which requires more bindings than supported
+is no longer a fatal validation layer error, but instead fails to create
+the shader object (e.g. the returned object will be in `SG_RESOURCESTATE_FAILED` state).
+
+Likewise, starting a render pass with more color attachments than supported will
+result in an error-level log message and all rendering in the pass will be skipped.
+
+Please be aware of the following backend-specific caveats:
+
+- On D3D11 Feature Level 0, the number of unordered-access-view bindslots is limited to
+  8 (this has been bumped to 64 in feature level 1). Since sokol-gfx uses UAVs for
+  different resource types (specifically writable storage buffers and storage images,
+  but *not* readonly storage buffer - those are shader-resource-views) this 11.0 limit
+  isn't reflected in `sg_limits.max_storage_buffer_bindings_per_stage` (this would
+  have required to add two separate limits for writable and readonly storage buffers,
+  which I had actually implemented at first but then removed because D3D11.0
+  compatibility is not really relevant any longer). You can still check the new
+  `sg_limits.d3d11_max_unordered_access_views` 'raw limit' if you need to handle
+  a D3D11.0 fallback path. Also: if you create the D3D11 device yourself, be aware
+  that higher feature levels are opt-in, e.g. you explicitly need to request
+  a Feature Level 1 device!
+- On Metal, storage buffers, uniform buffers and vertex buffers
+  all share the same bindspace of at most 31 'buffer slots' per shader stage.
+  This means that the number of storage buffers is limited to `31 - 8 - 8 = 15`.
+- For similar reasons, the resource limits in the WebGPU backend in Chrome
+  are very restricited (16 texture bindings, 10 storage buffer bindings and
+  8 storage image bindings per shader stage - for comparison, in Safari those
+  limits are all 32 - which is also strange though, because the maximum number
+  of buffers in a shader stage is limited to 31 in Metal (according to: https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf)
+
+Please note that there are currently no sokol samples which actually make use of
+the expanded binding limits, so there may be implementation bugs. Please
+don't hesitate to write tickets if you run into problems (also with existing code).
+
+PR link: https://github.com/floooh/sokol/pull/1330
+
 ### 28-Sep-2025
 
 - sokol_app.h d3d11/dxgi: Fixed a frame timing bug which could cause a wrong frame time to be reported
