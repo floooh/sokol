@@ -4269,7 +4269,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(GL_TEXTURE_FORMAT_NOT_SUPPORTED, "pixel format not supported for texture (gl)") \
     _SG_LOGITEM_XMACRO(GL_3D_TEXTURES_NOT_SUPPORTED, "3d textures not supported (gl)") \
     _SG_LOGITEM_XMACRO(GL_ARRAY_TEXTURES_NOT_SUPPORTED, "array textures not supported (gl)") \
-    _SG_LOGITEM_XMACRO(GL_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE, "GLSL storage buffer bindslot is out of range (sg_limits.max_[*]_storage_buffer_bindings_per_stage) (gl)") \
+    _SG_LOGITEM_XMACRO(GL_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE, "GLSL storage buffer bindslot is out of range (sg_limits.max_storage_buffer_bindings_per_stage) (gl)") \
     _SG_LOGITEM_XMACRO(GL_STORAGEIMAGE_GLSL_BINDING_OUT_OF_RANGE, "GLSL storage image bindslot is out of range (sg.limits.max_storage_image_bindings_per_stage) (gl)") \
     _SG_LOGITEM_XMACRO(GL_SHADER_COMPILATION_FAILED, "shader compilation failed (gl)") \
     _SG_LOGITEM_XMACRO(GL_SHADER_LINKING_FAILED, "shader linking failed (gl)") \
