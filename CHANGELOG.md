@@ -76,6 +76,11 @@ Please be aware of the following backend-specific caveats:
   8 storage image bindings per shader stage - for comparison, in Safari those
   limits are all 32 - which is also strange though, because the maximum number
   of buffers in a shader stage is limited to 31 in Metal (according to: https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf)
+- Be aware that there may be a separate limit of total number of bindings for a
+  resource type across all shader stages, e.g. don't automatically assume that the
+  total limit for a vertex/fragment-shader pair is 2x the per-stage limit! The
+  only areas where this is relevant should be storage-buffer and storage-image
+  bindings in the GL backend though.
 
 Please note that there are currently no sokol samples which actually make use of
 the expanded binding limits, so there may be implementation bugs. Please
