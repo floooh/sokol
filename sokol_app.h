@@ -4741,6 +4741,26 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
     _sapp.macos.window.acceptsMouseMovedEvents = YES;
     _sapp.macos.window.restorable = YES;
 
+     // Quit menu
+     NSMenu* menu_bar = [[NSMenu alloc] init];
+     NSMenuItem* app_menu_item = [[NSMenuItem alloc] init];
+     [menu_bar addItem:app_menu_item];
+     NSApp.mainMenu = menu_bar;
+     NSMenu* app_menu = [[NSMenu alloc] init];
+     NSString* window_title_as_nsstring = [NSString stringWithUTF8String:_sapp.window_title];
+     // `quit_title` memory will be owned by the NSMenuItem, so no need to release it ourselves
+     NSString* quit_title =  [@"Quit " stringByAppendingString:window_title_as_nsstring];
+     NSMenuItem* quit_menu_item = [[NSMenuItem alloc]
+            initWithTitle:quit_title
+            action:@selector(terminate:)
+            keyEquivalent:@"q"];
+     [app_menu addItem:quit_menu_item];
+     app_menu_item.submenu = app_menu;
+     _SAPP_OBJC_RELEASE(window_title_as_nsstring);
+     _SAPP_OBJC_RELEASE(app_menu);
+     _SAPP_OBJC_RELEASE(app_menu_item);
+     _SAPP_OBJC_RELEASE(menu_bar);
+
     _sapp.macos.win_dlg = [[_sapp_macos_window_delegate alloc] init];
     _sapp.macos.window.delegate = _sapp.macos.win_dlg;
     #if defined(SOKOL_METAL)
