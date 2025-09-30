@@ -4519,6 +4519,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(sgimgui_t* ctx) {
         _sgimgui_frame_stats(num_apply_bindings);
         _sgimgui_frame_stats(num_apply_uniforms);
         _sgimgui_frame_stats(num_draw);
+        _sgimgui_frame_stats(num_draw_ex);
         _sgimgui_frame_stats(num_dispatch);
         _sgimgui_frame_stats(num_update_buffer);
         _sgimgui_frame_stats(num_append_buffer);
