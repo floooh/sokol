@@ -362,6 +362,7 @@ typedef enum sgimgui_cmd_t {
     SGIMGUI_CMD_APPLY_BINDINGS,
     SGIMGUI_CMD_APPLY_UNIFORMS,
     SGIMGUI_CMD_DRAW,
+    SGIMGUI_CMD_DRAW_EX,
     SGIMGUI_CMD_DISPATCH,
     SGIMGUI_CMD_END_PASS,
     SGIMGUI_CMD_COMMIT,
@@ -496,6 +497,14 @@ typedef struct sgimgui_args_draw_t {
     int num_elements;
     int num_instances;
 } sgimgui_args_draw_t;
+
+typedef struct sgimgui_args_draw_ex_t {
+    int base_element;
+    int num_elements;
+    int num_instances;
+    int base_vertex;
+    int base_instance;
+} sgimgui_args_draw_ex_t;
 
 typedef struct sgimgui_args_dispatch_t {
     int num_groups_x;
@@ -650,6 +659,7 @@ typedef union sgimgui_args_t {
     sgimgui_args_apply_bindings_t apply_bindings;
     sgimgui_args_apply_uniforms_t apply_uniforms;
     sgimgui_args_draw_t draw;
+    sgimgui_args_draw_ex_t draw_ex;
     sgimgui_args_dispatch_t dispatch;
     sgimgui_args_alloc_buffer_t alloc_buffer;
     sgimgui_args_alloc_image_t alloc_image;
@@ -2044,6 +2054,16 @@ _SOKOL_PRIVATE sgimgui_str_t _sgimgui_capture_item_string(sgimgui_t* ctx, int in
                 item->args.draw.num_instances);
             break;
 
+        case SGIMGUI_CMD_DRAW_EX:
+            _sgimgui_snprintf(&str, "%d: sg_draw_ex(base_element=%d, num_elements=%d, num_instances=%d, base_vertex=%d, base_instance=%d)",
+                index,
+                item->args.draw_ex.base_element,
+                item->args.draw_ex.num_elements,
+                item->args.draw_ex.num_instances,
+                item->args.draw_ex.base_vertex,
+                item->args.draw_ex.base_instance);
+            break;
+
         case SGIMGUI_CMD_DISPATCH:
             _sgimgui_snprintf(&str, "%d: sg_dispatch(num_groups_x=%d, num_groups_y=%d, num_groups_z=%d)",
                 index,
@@ -2662,6 +2682,24 @@ _SOKOL_PRIVATE void _sgimgui_draw(int base_element, int num_elements, int num_in
     }
     if (ctx->hooks.draw) {
         ctx->hooks.draw(base_element, num_elements, num_instances, ctx->hooks.user_data);
+    }
+}
+
+_SOKOL_PRIVATE void _sgimgui_draw_ex(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance, void* user_data) {
+    sgimgui_t* ctx = (sgimgui_t*)user_data;
+    SOKOL_ASSERT(ctx);
+    sgimgui_capture_item_t* item = _sgimgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SGIMGUI_CMD_DRAW_EX;
+        item->color = _SGIMGUI_COLOR_DRAW;
+        item->args.draw_ex.base_element = base_element;
+        item->args.draw_ex.num_elements = num_elements;
+        item->args.draw_ex.num_instances = num_instances;
+        item->args.draw_ex.base_vertex = base_vertex;
+        item->args.draw_ex.base_instance = base_instance;
+    }
+    if (ctx->hooks.draw_ex) {
+        ctx->hooks.draw_ex(base_element, num_elements, num_instances, base_vertex, base_instance, ctx->hooks.user_data);
     }
 }
 
@@ -4367,6 +4405,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_capture_panel(sgimgui_t* ctx) {
             _sgimgui_draw_uniforms_panel(ctx, &item->args.apply_uniforms);
             break;
         case SGIMGUI_CMD_DRAW:
+        case SGIMGUI_CMD_DRAW_EX:
         case SGIMGUI_CMD_DISPATCH:
         case SGIMGUI_CMD_END_PASS:
         case SGIMGUI_CMD_COMMIT:
