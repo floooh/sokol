@@ -14415,6 +14415,9 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.mrt_independent_write_mask = true;
     _sg.features.compute = true;
     _sg.features.msaa_texture_bindings = true;
+    _sg.features.draw_base_vertex = true;
+    _sg.features.draw_base_instance = true;
+    _sg.features.draw_base_vertex_base_instance = true;
 
     _sg.features.image_clamp_to_border = false;
     #if (MAC_OS_X_VERSION_MAX_ALLOWED >= 120000) || (__IPHONE_OS_VERSION_MAX_ALLOWED >= 140000)
