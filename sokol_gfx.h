@@ -5418,18 +5418,17 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #include <GLES3/gl31.h>
             #define _SOKOL_GL_HAS_COMPUTE (1)
             #define _SOKOL_GL_HAS_TEXSTORAGE (1)
-            #define _SOKOL_GL_HAS_BASEVERTEX (1)
         #elif defined(__linux__) || defined(__unix__)
-            #define _SOKOL_GL_HAS_BASEVERTEX (1)
             #define _SOKOL_GL_HAS_COMPUTE (1)
             #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+            #define _SOKOL_GL_HAS_BASEVERTEX (1)
             #if defined(SOKOL_GLCORE)
                 #define GL_GLEXT_PROTOTYPES
                 #include <GL/gl.h>
                 #define _SOKOL_GL_HAS_TEXVIEWS (1)
                 #define _SOKOL_GL_HAS_BASEINSTANCE (1)
             #else
-                #include <GLES3/gl31.h>
+                #include <GLES3/gl32.h>
                 #include <GLES3/gl3ext.h>
             #endif
         #endif
@@ -9512,6 +9511,9 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     #else
     _sg.features.separate_buffer_types = false;
     #endif
+    _sg.features.draw_base_vertex = version >= 320;
+    _sg.features.draw_base_instance = false;
+    _sg.features.draw_base_vertex_base_instance = false;
 
     bool has_s3tc = false;  // BC1..BC3
     bool has_rgtc = false;  // BC4 and BC5
