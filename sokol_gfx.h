@@ -4659,15 +4659,14 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_AU_NO_UNIFORMBLOCK_AT_SLOT, "sg_apply_uniforms: no uniform block declaration at this shader stage UB slot") \
     _SG_LOGITEM_XMACRO(VALIDATE_AU_SIZE, "sg_apply_uniforms: data size doesn't match declared uniform block size") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_RENDERPASS_EXPECTED, "sg_draw: must be called in a render pass") \
-    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_BASEELEMENT, "sg_draw: base_element cannot be < 0") \
-    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_NUMELEMENTS, "sg_draw: num_elements cannot be < 0") \
-    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_NUMINSTANCES, "sg_draw: num_instances cannot be < 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_BASEELEMENT_GE_ZERO, "sg_draw: base_element cannot be < 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_NUMELEMENTS_GE_ZERO, "sg_draw: num_elements cannot be < 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_NUMINSTANCES_GE_ZERO, "sg_draw: num_instances cannot be < 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_RENDERPASS_EXPECTED, "sg_draw: must be called in a render pass") \
-    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_BASEELEMENT, "sg_draw_ex: base_element cannot be < 0") \
-    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_NUMELEMENTS, "sg_draw_ex: num_elements cannot be < 0") \
-    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_NUMINSTANCES, "sg_draw_ex: num_instances cannot be < 0") \
-    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_BASEVERTEX, "sg_draw_ex: base_vertex cannot be < 0") \
-    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_BASEINSTANCE, "sg_draw_ex: base_instance cannot be < 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_BASEELEMENT_GE_ZERO, "sg_draw_ex: base_element cannot be < 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_NUMELEMENTS_GE_ZERO, "sg_draw_ex: num_elements cannot be < 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_NUMINSTANCES_GE_ZERO, "sg_draw_ex: num_instances cannot be < 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_BASEINSTANCE_GE_ZERO, "sg_draw_ex: base_instance cannot be < 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_BASEVERTEX_VS_INDEXED, "sg_draw_ex(): base_vertex must be == 0 for non-indexed rendering") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_BASEINSTANCE_VS_INSTANCED, "sg_draw_ex(): base_instance must be == 0 for non-instanced rendering") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_BASEVERTEX_NOT_SUPPORTED, "sg_draw_ex(): base_vertex > 0 not supported on this backend (sg_features.draw_base_vertex)") \
@@ -16429,6 +16428,9 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.mrt_independent_write_mask = true;
     _sg.features.compute = true;
     _sg.features.msaa_texture_bindings = true;
+    _sg.features.draw_base_vertex = true;
+    _sg.features.draw_base_instance = true;
+    _sg.features.draw_base_vertex_base_instance = true;
 
     wgpuDeviceGetLimits(_sg.wgpu.dev, &_sg.wgpu.limits);
 
@@ -17639,7 +17641,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, c
         }
     } else {
         WGPUVertexBufferLayout wgpu_vb_layouts[SG_MAX_VERTEXBUFFER_BINDSLOTS];
-        _sg_clear(wgpu_vb_layouts, sieof(wgpu_vb_layouts));
+        _sg_clear(wgpu_vb_layouts, sizeof(wgpu_vb_layouts));
         WGPUVertexAttribute wgpu_vtx_attrs[SG_MAX_VERTEXBUFFER_BINDSLOTS][SG_MAX_VERTEX_ATTRIBUTES];
         _sg_clear(wgpu_vtx_attrs, sizeof(wgpu_vtx_attrs));
         int wgpu_vb_num = 0;
@@ -18048,12 +18050,21 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(int ub_slot, const sg_range* data) {
     _sg_wgpu_set_ub_bindgroup(shd);
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_draw(int base_element, int num_elements, int num_instances) {
+_SOKOL_PRIVATE void _sg_wgpu_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
     SOKOL_ASSERT(_sg.wgpu.rpass_enc);
     if (_sg.use_indexed_draw) {
-        wgpuRenderPassEncoderDrawIndexed(_sg.wgpu.rpass_enc, (uint32_t)num_elements, (uint32_t)num_instances, (uint32_t)base_element, 0, 0);
+        wgpuRenderPassEncoderDrawIndexed(_sg.wgpu.rpass_enc,
+            (uint32_t)num_elements,
+            (uint32_t)num_instances,
+            (uint32_t)base_element,
+            base_vertex,
+            (uint32_t)base_instance);
     } else {
-        wgpuRenderPassEncoderDraw(_sg.wgpu.rpass_enc, (uint32_t)num_elements, (uint32_t)num_instances, (uint32_t)base_element, 0);
+        wgpuRenderPassEncoderDraw(_sg.wgpu.rpass_enc,
+            (uint32_t)num_elements,
+            (uint32_t)num_instances,
+            (uint32_t)base_element,
+            (uint32_t)base_instance);
     }
 }
 
@@ -19875,9 +19886,9 @@ _SOKOL_PRIVATE bool _sg_validate_draw(int base_element, int num_elements, int nu
         }
         _sg_validate_begin();
         _SG_VALIDATE(_sg.cur_pass.in_pass && !_sg.cur_pass.is_compute, VALIDATE_DRAW_RENDERPASS_EXPECTED);
-        _SG_VALIDATE(base_element >= 0, VALIDATE_DRAW_BASEELEMENT);
-        _SG_VALIDATE(num_elements >= 0, VALIDATE_DRAW_NUMELEMENTS);
-        _SG_VALIDATE(num_instances >= 0, VALIDATE_DRAW_NUMINSTANCES);
+        _SG_VALIDATE(base_element >= 0, VALIDATE_DRAW_BASEELEMENT_GE_ZERO);
+        _SG_VALIDATE(num_elements >= 0, VALIDATE_DRAW_NUMELEMENTS_GE_ZERO);
+        _SG_VALIDATE(num_instances >= 0, VALIDATE_DRAW_NUMINSTANCES_GE_ZERO);
         _SG_VALIDATE(_sg.required_bindings_and_uniforms == _sg.applied_bindings_and_uniforms, VALIDATE_DRAW_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
         return _sg_validate_end();
     #endif
@@ -19897,11 +19908,11 @@ _SOKOL_PRIVATE bool _sg_validate_draw_ex(int base_element, int num_elements, int
         }
         _sg_validate_begin();
         _SG_VALIDATE(_sg.cur_pass.in_pass && !_sg.cur_pass.is_compute, VALIDATE_DRAW_EX_RENDERPASS_EXPECTED);
-        _SG_VALIDATE(base_element >= 0, VALIDATE_DRAW_EX_BASEELEMENT);
-        _SG_VALIDATE(num_elements >= 0, VALIDATE_DRAW_EX_NUMELEMENTS);
-        _SG_VALIDATE(num_instances >= 0, VALIDATE_DRAW_EX_NUMINSTANCES);
-        _SG_VALIDATE(base_vertex >= 0, VALIDATE_DRAW_EX_BASEVERTEX);
-        _SG_VALIDATE(base_instance >= 0, VALIDATE_DRAW_EX_BASEINSTANCE);
+        // NOTE: base_vertex is allowed to be < 0
+        _SG_VALIDATE(base_element >= 0, VALIDATE_DRAW_EX_BASEELEMENT_GE_ZERO);
+        _SG_VALIDATE(num_elements >= 0, VALIDATE_DRAW_EX_NUMELEMENTS_GE_ZERO);
+        _SG_VALIDATE(num_instances >= 0, VALIDATE_DRAW_EX_NUMINSTANCES_GE_ZERO);
+        _SG_VALIDATE(base_instance >= 0, VALIDATE_DRAW_EX_BASEINSTANCE_GE_ZERO);
         if (base_vertex > 0) {
             _SG_VALIDATE(_sg.features.draw_base_vertex, VALIDATE_DRAW_EX_BASEVERTEX_NOT_SUPPORTED);
         }
