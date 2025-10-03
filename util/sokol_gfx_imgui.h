@@ -4755,6 +4755,7 @@ SOKOL_API_IMPL void sgimgui_init(sgimgui_t* ctx, const sgimgui_desc_t* desc) {
     hooks.apply_bindings = _sgimgui_apply_bindings;
     hooks.apply_uniforms = _sgimgui_apply_uniforms;
     hooks.draw = _sgimgui_draw;
+    hooks.draw_ex = _sgimgui_draw_ex;
     hooks.dispatch = _sgimgui_dispatch;
     hooks.end_pass = _sgimgui_end_pass;
     hooks.commit = _sgimgui_commit;
