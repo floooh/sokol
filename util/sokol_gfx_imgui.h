@@ -4481,6 +4481,9 @@ _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
     _sgimgui_igtext("    compute: %s", _sgimgui_bool_string(f.compute));
     _sgimgui_igtext("    msaa_texture_bindings: %s", _sgimgui_bool_string(f.msaa_texture_bindings));
     _sgimgui_igtext("    separate_buffer_types: %s", _sgimgui_bool_string(f.separate_buffer_types));
+    _sgimgui_igtext("    draw_base_vertex: %s", _sgimgui_bool_string(f.draw_base_vertex));
+    _sgimgui_igtext("    draw_base_instance: %s", _sgimgui_bool_string(f.draw_base_instance));
+    _sgimgui_igtext("    draw_base_vertex_base_instance: %s", _sgimgui_bool_string(f.draw_base_vertex_base_instance));
     sg_limits l = sg_query_limits();
     _sgimgui_igtext("\nLimits:\n");
     _sgimgui_igtext("    max_image_size_2d: %d", l.max_image_size_2d);
