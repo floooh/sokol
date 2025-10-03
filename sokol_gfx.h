@@ -5393,6 +5393,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
                 #define _SOKOL_GL_HAS_COMPUTE (1)
                 #define _SOKOL_GL_HAS_TEXSTORAGE (1)
                 #define _SOKOL_GL_HAS_TEXVIEWS (1)
+                #define _SOKOL_GL_HAS_BASEVERTEX (1)
+                #define _SOKOL_GL_HAS_BASEINSTANCE (1)
             #endif
         #elif defined(__APPLE__)
             #include <TargetConditionals.h>
@@ -5401,6 +5403,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #endif
             #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
                 #include <OpenGL/gl3.h>
+                #define _SOKOL_GL_HAS_BASEVERTEX (1)
             #else
                 #include <OpenGLES/ES3/gl.h>
                 #include <OpenGLES/ES3/glext.h>
@@ -5415,17 +5418,20 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #include <GLES3/gl31.h>
             #define _SOKOL_GL_HAS_COMPUTE (1)
             #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+            #define _SOKOL_GL_HAS_BASEVERTEX (1)
         #elif defined(__linux__) || defined(__unix__)
+            #define _SOKOL_GL_HAS_BASEVERTEX (1)
+            #define _SOKOL_GL_HAS_COMPUTE (1)
+            #define _SOKOL_GL_HAS_TEXSTORAGE (1)
             #if defined(SOKOL_GLCORE)
                 #define GL_GLEXT_PROTOTYPES
                 #include <GL/gl.h>
                 #define _SOKOL_GL_HAS_TEXVIEWS (1)
+                #define _SOKOL_GL_HAS_BASEINSTANCE (1)
             #else
                 #include <GLES3/gl31.h>
                 #include <GLES3/gl3ext.h>
             #endif
-            #define _SOKOL_GL_HAS_COMPUTE (1)
-            #define _SOKOL_GL_HAS_TEXSTORAGE (1)
         #endif
     #endif
 
@@ -11488,17 +11494,25 @@ _SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_inst
             if ((base_vertex == 0) && (base_instance == 0)) {
                 glDrawElementsInstanced(p_type, num_elements, i_type, indices, num_instances);
             } else if ((base_vertex != 0) && (base_instance == 0) && _sg.features.draw_base_vertex) {
+                #if defined(_SOKOL_GL_HAS_BASEVERTEX)
                 glDrawElementsInstancedBaseVertex(p_type, num_elements, i_type, indices, num_instances, base_vertex);
+                #endif
             } else if ((base_vertex == 0) && (base_instance != 0) && _sg.features.draw_base_instance) {
+                #if defined(_SOKOL_GL_HAS_BASEINSTANCE)
                 glDrawElementsInstancedBaseInstance(p_type, num_elements, i_type, indices, num_instances, (GLuint)base_instance);
+                #endif
             } else if ((base_vertex != 0) && (base_instance != 0) && _sg.features.draw_base_vertex_base_instance) {
+                #if defined(_SOKOL_GL_HAS_BASEINSTANCE)
                 glDrawElementsInstancedBaseVertexBaseInstance(p_type, num_elements, i_type, indices, num_instances, base_vertex, (GLuint)base_instance);
+                #endif
             }
         } else {
             if (base_vertex == 0) {
                 glDrawElements(p_type, num_elements, i_type, indices);
             } else if (_sg.features.draw_base_vertex) {
+                #if defined(_SOKOL_GL_HAS_BASEVERTEX)
                 glDrawElementsBaseVertex(p_type, num_elements, i_type, indices, base_vertex);
+                #endif
             }
         }
     } else {
@@ -11507,7 +11521,9 @@ _SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_inst
             if (base_instance == 0) {
                 glDrawArraysInstanced(p_type, base_element, num_elements, num_instances);
             } else if (_sg.features.draw_base_instance) {
+                #if defined(_SOKOL_GL_HAS_BASEINSTANCE)
                 glDrawArraysInstancedBaseInstance(p_type, base_element, num_elements, num_instances, (GLuint)base_instance);
+                #endif
             }
         } else {
             glDrawArrays(p_type, base_element, num_elements);
