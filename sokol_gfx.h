@@ -12449,6 +12449,9 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.features.mrt_independent_write_mask = true;
     _sg.features.compute = true;
     _sg.features.msaa_texture_bindings = true;
+    _sg.features.draw_base_vertex = true;
+    _sg.features.draw_base_instance = true;
+    _sg.features.draw_base_vertex_base_instance = true;
 
     _sg.limits.max_image_size_2d = 16 * 1024;
     _sg.limits.max_image_size_cube = 16 * 1024;
@@ -13774,19 +13777,28 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_uniforms(int ub_slot, const sg_range* data) 
     _sg_stats_add(d3d11.uniforms.num_update_subresource, 1);
 }
 
-_SOKOL_PRIVATE void _sg_d3d11_draw(int base_element, int num_elements, int num_instances) {
+_SOKOL_PRIVATE void _sg_d3d11_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
     const bool use_instanced_draw = (num_instances > 1) || (_sg.use_instanced_draw);
     if (_sg.use_indexed_draw) {
         if (use_instanced_draw) {
-            _sg_d3d11_DrawIndexedInstanced(_sg.d3d11.ctx, (UINT)num_elements, (UINT)num_instances, (UINT)base_element, 0, 0);
+            _sg_d3d11_DrawIndexedInstanced(_sg.d3d11.ctx,
+                (UINT)num_elements,
+                (UINT)num_instances,
+                (UINT)base_element,
+                base_vertex,
+                (UINT)base_instance);
             _sg_stats_add(d3d11.draw.num_draw_indexed_instanced, 1);
         } else {
-            _sg_d3d11_DrawIndexed(_sg.d3d11.ctx, (UINT)num_elements, (UINT)base_element, 0);
+            _sg_d3d11_DrawIndexed(_sg.d3d11.ctx, (UINT)num_elements, (UINT)base_element, base_vertex);
             _sg_stats_add(d3d11.draw.num_draw_indexed, 1);
         }
     } else {
         if (use_instanced_draw) {
-            _sg_d3d11_DrawInstanced(_sg.d3d11.ctx, (UINT)num_elements, (UINT)num_instances, (UINT)base_element, 0);
+            _sg_d3d11_DrawInstanced(_sg.d3d11.ctx,
+                (UINT)num_elements,
+                (UINT)num_instances,
+                (UINT)base_element,
+                (UINT)base_instance);
             _sg_stats_add(d3d11.draw.num_draw_instanced, 1);
         } else {
             _sg_d3d11_Draw(_sg.d3d11.ctx, (UINT)num_elements, (UINT)base_element);
