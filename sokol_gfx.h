@@ -11490,9 +11490,9 @@ _SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_inst
             } else if ((base_vertex != 0) && (base_instance == 0) && _sg.features.draw_base_vertex) {
                 glDrawElementsInstancedBaseVertex(p_type, num_elements, i_type, indices, num_instances, base_vertex);
             } else if ((base_vertex == 0) && (base_instance != 0) && _sg.features.draw_base_instance) {
-                glDrawElementsInstancedBaseInstance(p_type, num_elements, i_type, indices, num_instances, base_instance);
+                glDrawElementsInstancedBaseInstance(p_type, num_elements, i_type, indices, num_instances, (GLuint)base_instance);
             } else if ((base_vertex != 0) && (base_instance != 0) && _sg.features.draw_base_vertex_base_instance) {
-                glDrawElementsInstancedBaseVertexBaseInstance(p_type, num_elements, i_type, indices, num_instances, base_vertex, base_instance);
+                glDrawElementsInstancedBaseVertexBaseInstance(p_type, num_elements, i_type, indices, num_instances, base_vertex, (GLuint)base_instance);
             }
         } else {
             if (base_vertex == 0) {
@@ -11507,7 +11507,7 @@ _SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_inst
             if (base_instance == 0) {
                 glDrawArraysInstanced(p_type, base_element, num_elements, num_instances);
             } else if (_sg.features.draw_base_instance) {
-                glDrawArraysInstancedBaseInstance(p_type, base_element, num_elements, num_instances, base_instance);
+                glDrawArraysInstancedBaseInstance(p_type, base_element, num_elements, num_instances, (GLuint)base_instance);
             }
         } else {
             glDrawArrays(p_type, base_element, num_elements);
