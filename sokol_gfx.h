@@ -8602,7 +8602,12 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     _SG_XMACRO(glTexStorage3D,                    void, (GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth)) \
     _SG_XMACRO(glCompressedTexSubImage2D,         void, (GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const void *data)) \
     _SG_XMACRO(glCompressedTexSubImage3D,         void, (GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const void *data)) \
-    _SG_XMACRO(glTextureView,                     void, (GLuint texture, GLenum target, GLuint origtexture, GLenum internalformat, GLuint minlevel, GLuint numlevels, GLuint minlayer, GLuint numlayers))
+    _SG_XMACRO(glTextureView,                     void, (GLuint texture, GLenum target, GLuint origtexture, GLenum internalformat, GLuint minlevel, GLuint numlevels, GLuint minlayer, GLuint numlayers)) \
+    _SG_XMACRO(glDrawElementsBaseVertex,          void, (GLenum mode, GLsizei count, GLenum type, const void* indices, GLint basevertex)) \
+    _SG_XMACRO(glDrawElementsInstancedBaseVertex, void, (GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount, GLint basevertex)) \
+    _SG_XMACRO(glDrawElementsInstancedBaseInstance, void, (GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount, GLuint baseinstance)) \
+    _SG_XMACRO(glDrawElementsInstancedBaseVertexBaseInstance, void, (GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount, GLint basevertex, GLuint baseinstance)) \
+    _SG_XMACRO(glDrawArraysInstancedBaseInstance, void, (GLenum mode, GLint first, GLsizei count, GLsizei instancecount, GLuint baseinstance))
 
 // generate GL function pointer typedefs
 #define _SG_XMACRO(name, ret, args) typedef ret (GL_APIENTRY* PFN_ ## name) args;
@@ -9416,6 +9421,9 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
     #else
     _sg.features.msaa_texture_bindings = true;
     #endif
+    _sg.features.draw_base_vertex = version >= 320;
+    _sg.features.draw_base_instance = version >= 420;
+    _sg.features.draw_base_vertex_base_instance = version >= 420;
 
     // scan extensions
     bool has_s3tc = false;  // BC1..BC3
@@ -11467,7 +11475,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_uniforms(int ub_slot, const sg_range* data) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_instances) {
+_SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
     const GLenum p_type = _sg.gl.cache.cur_primitive_type;
     const bool use_instanced_draw = (num_instances > 1) || _sg.use_instanced_draw;
     if (_sg.use_indexed_draw) {
@@ -11477,14 +11485,30 @@ _SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_inst
         const int ib_offset = _sg.gl.cache.cur_ib_offset;
         const GLvoid* indices = (const GLvoid*)(GLintptr)(base_element*i_size+ib_offset);
         if (use_instanced_draw) {
-            glDrawElementsInstanced(p_type, num_elements, i_type, indices, num_instances);
+            if ((base_vertex == 0) && (base_instance == 0)) {
+                glDrawElementsInstanced(p_type, num_elements, i_type, indices, num_instances);
+            } else if ((base_vertex != 0) && (base_instance == 0) && _sg.features.draw_base_vertex) {
+                glDrawElementsInstancedBaseVertex(p_type, num_elements, i_type, indices, num_instances, base_vertex);
+            } else if ((base_vertex == 0) && (base_instance != 0) && _sg.features.draw_base_instance) {
+                glDrawElementsInstancedBaseInstance(p_type, num_elements, i_type, indices, num_instances, base_instance);
+            } else if ((base_vertex != 0) && (base_instance != 0) && _sg.features.draw_base_vertex_base_instance) {
+                glDrawElementsInstancedBaseVertexBaseInstance(p_type, num_elements, i_type, indices, num_instances, base_vertex, base_instance);
+            }
         } else {
-            glDrawElements(p_type, num_elements, i_type, indices);
+            if (base_vertex == 0) {
+                glDrawElements(p_type, num_elements, i_type, indices);
+            } else if (_sg.features.draw_base_vertex) {
+                glDrawElementsBaseVertex(p_type, num_elements, i_type, indices, base_vertex);
+            }
         }
     } else {
         // non-indexed rendering
         if (use_instanced_draw) {
-            glDrawArraysInstanced(p_type, base_element, num_elements, num_instances);
+            if (base_instance == 0) {
+                glDrawArraysInstanced(p_type, base_element, num_elements, num_instances);
+            } else if (_sg.features.draw_base_instance) {
+                glDrawArraysInstancedBaseInstance(p_type, base_element, num_elements, num_instances, base_instance);
+            }
         } else {
             glDrawArrays(p_type, base_element, num_elements);
         }
