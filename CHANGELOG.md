@@ -37,7 +37,7 @@ has been added (note that this requires a WebGPU capable browser).
 
 Related PR: https://github.com/floooh/sokol/pull/1339
 
-Unrelated bugfix in the GL backend: in the internal function `_sg_pipeline_common_init()`
+Unrelated bugfix: in the internal function `_sg_pipeline_common_init()`
 a loop over the pipeline's vertex attribute declarations was using
 `SG_MAX_VERTEXBUFFER_BINDSLOTS` as loop limit instead of `SG_MAX_VERTEX_ATTRIBUTES`.
 This means that the max number of vertex attributes was effectively limited to
