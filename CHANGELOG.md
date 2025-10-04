@@ -12,7 +12,7 @@ function.
 
 Note that support for rendering with `base_vertex` and/or `base_instance` is
 not portable (but only the GL backend has restrictions). To check for feature
-availabality at runtime, two new `sg_feature` flags have been added:
+availabality at runtime, two new `sg_features` flags have been added:
 
 - `sg_features.draw_base_vertex`: rendering with `base_vertex != 0` is supported
 - `sg_features.draw_base_instance`: rendering with `base_instance > 0` is supported
