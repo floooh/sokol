@@ -1,5 +1,49 @@
 ## Updates
 
+### 04-Oct-2025
+
+sokol_gfx.h: a new function `sg_draw_ex()` has been added with additional parameters
+`base_vertex` and `base_instance`. This allows to render from different vertex
+buffer sections without re-binding the vertex buffers with different offsets.
+
+I know, I know... the name `sg_draw_ex()` isn't exactly creative, but at some point in
+the future I expect that `sg_draw_ex()` will become the regular `sg_draw()`
+function.
+
+Note that support for rendering with `base_vertex` and/or `base_instance` is
+not portable (but only the GL backend has restrictions). To check for feature
+availabality at runtime, two new `sg_feature` flags have been added:
+
+- `sg_features.draw_base_vertex`: rendering with `base_vertex != 0` is supported
+- `sg_features.draw_base_instance`: rendering with `base_instance > 0` is supported
+
+On GLES3 platforms the feature availability is as follows:
+
+- on WebGL2 both `base_vertex` and `base_instance` must be zero
+- on all GLES3 versions, `base_instance` must be zero
+- `base_vertex` is only supported in GLES3.2 (technically, the required functions
+  seem to be part of the GLES3.1 standard, but at least on Linux the functions
+  are only declared in the GLES3.2 headers)
+
+On desktop GL the feature availability is as follows:
+
+- `base_vertex` is generally supported (technically since GL 3.2, but that's below
+  the minimum version supported by the sokol_gfx.h GL backend)
+- `base_instance` is only supported since GL 4.2 (this basically means that
+  it can't be used on macOS, but anywhere else)
+
+A new sample [drawex-sapp](https://floooh.github.io/sokol-webgpu/drawex-sapp-ui.html)
+has been added (note that this requires a WebGPU capable browser).
+
+Related PR: https://github.com/floooh/sokol/pull/1339
+
+Unrelated bugfix in the GL backend: in the internal function `_sg_pipeline_common_init()`
+a loop over the pipeline's vertex attribute declarations was using
+`SG_MAX_VERTEXBUFFER_BINDSLOTS` as loop limit instead of `SG_MAX_VERTEX_ATTRIBUTES`.
+This means that the max number of vertex attributes was effectively limited to
+8 instead of 16. This bug slipped in via commit https://github.com/floooh/sokol/commit/73385924cfe98d482462f7064a6621e166441a0a
+on 26-Oct-2024.
+
 ### 29-Sep-2025
 
 The 'flexible resource binding limits' update: sokol_gfx.h now allows more render pass

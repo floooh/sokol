@@ -206,6 +206,23 @@
         containing per-instance data must be bound, and the num_instances parameter
         must be > 1.
 
+        Alternatively, call:
+
+            sg_draw_ex(...)
+
+        to provide a base-vertex and/or base-instance which allows to render
+        from different sections of a vertex buffer without rebinding the
+        vertex buffer with a different offset. Note that the `sg_draw_ex()`
+        only has limited portability on OpenGL, check the sg_limits struct
+        members .draw_base_vertex and .draw_base_instance for runtime support,
+        those are generally true on non-GL-backends, and on GL the feature
+        flags are set according to the GL version:
+
+            - on GL base_instance != 0 is only supported since GL 4.2
+            - on GLES3.x, base_instance != 0 is not supported
+            - on GLES3.x, base_vertex is only supported since GLES3.2
+              (e.g. not supported on WebGL2)
+
     --- ...or kick of a dispatch call to invoke a compute shader workload:
 
             sg_dispatch(int num_groups_x, int num_groups_y, int num_groups_z)
@@ -2192,6 +2209,8 @@ typedef struct sg_features {
     bool compute;                       // storage buffers and compute shaders are supported
     bool msaa_texture_bindings;         // if true, multisampled images can be bound as textures
     bool separate_buffer_types;         // cannot use the same buffer for vertex and indices (only WebGL2)
+    bool draw_base_vertex;              // draw with (base vertex > 0) && (base_instance == 0) supported
+    bool draw_base_instance;            // draw with (base instance > 0) supported
     bool gl_texture_views;              // supports 'proper' texture views (GL 4.3+)
 } sg_features;
 
@@ -3959,6 +3978,7 @@ typedef struct sg_trace_hooks {
     void (*apply_bindings)(const sg_bindings* bindings, void* user_data);
     void (*apply_uniforms)(int ub_index, const sg_range* data, void* user_data);
     void (*draw)(int base_element, int num_elements, int num_instances, void* user_data);
+    void (*draw_ex)(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance, void* user_data);
     void (*dispatch)(int num_groups_x, int num_groups_y, int num_groups_z, void* user_data);
     void (*end_pass)(void* user_data);
     void (*commit)(void* user_data);
@@ -4233,6 +4253,7 @@ typedef struct sg_frame_stats {
     uint32_t num_apply_bindings;
     uint32_t num_apply_uniforms;
     uint32_t num_draw;
+    uint32_t num_draw_ex;
     uint32_t num_dispatch;
     uint32_t num_update_buffer;
     uint32_t num_append_buffer;
@@ -4654,9 +4675,18 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_AU_NO_UNIFORMBLOCK_AT_SLOT, "sg_apply_uniforms: no uniform block declaration at this shader stage UB slot") \
     _SG_LOGITEM_XMACRO(VALIDATE_AU_SIZE, "sg_apply_uniforms: data size doesn't match declared uniform block size") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_RENDERPASS_EXPECTED, "sg_draw: must be called in a render pass") \
-    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_BASEELEMENT, "sg_draw: base_element cannot be < 0") \
-    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_NUMELEMENTS, "sg_draw: num_elements cannot be < 0") \
-    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_NUMINSTANCES, "sg_draw: num_instances cannot be < 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_BASEELEMENT_GE_ZERO, "sg_draw: base_element cannot be < 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_NUMELEMENTS_GE_ZERO, "sg_draw: num_elements cannot be < 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_NUMINSTANCES_GE_ZERO, "sg_draw: num_instances cannot be < 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_RENDERPASS_EXPECTED, "sg_draw: must be called in a render pass") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_BASEELEMENT_GE_ZERO, "sg_draw_ex: base_element cannot be < 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_NUMELEMENTS_GE_ZERO, "sg_draw_ex: num_elements cannot be < 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_NUMINSTANCES_GE_ZERO, "sg_draw_ex: num_instances cannot be < 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_BASEINSTANCE_GE_ZERO, "sg_draw_ex: base_instance cannot be < 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_BASEVERTEX_VS_INDEXED, "sg_draw_ex(): base_vertex must be == 0 for non-indexed rendering") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_BASEINSTANCE_VS_INSTANCED, "sg_draw_ex(): base_instance must be == 0 for non-instanced rendering") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_BASEVERTEX_NOT_SUPPORTED, "sg_draw_ex(): base_vertex != 0 not supported on this backend (sg_features.draw_base_vertex)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_EX_BASEINSTANCE_NOT_SUPPORTED, "sg_draw_ex(): base_instance > 0 not supported on this backend (sg_features.draw_base_instance)") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING, "sg_draw: call to sg_apply_bindings() and/or sg_apply_uniforms() missing after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_COMPUTEPASS_EXPECTED, "sg_dispatch: must be called in a compute pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_NUMGROUPSX, "sg_dispatch: num_groups_x must be >=0 and <65536") \
@@ -4909,6 +4939,7 @@ SOKOL_GFX_API_DECL void sg_apply_pipeline(sg_pipeline pip);
 SOKOL_GFX_API_DECL void sg_apply_bindings(const sg_bindings* bindings);
 SOKOL_GFX_API_DECL void sg_apply_uniforms(int ub_slot, const sg_range* data);
 SOKOL_GFX_API_DECL void sg_draw(int base_element, int num_elements, int num_instances);
+SOKOL_GFX_API_DECL void sg_draw_ex(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance);
 SOKOL_GFX_API_DECL void sg_dispatch(int num_groups_x, int num_groups_y, int num_groups_z);
 SOKOL_GFX_API_DECL void sg_end_pass(void);
 SOKOL_GFX_API_DECL void sg_commit(void);
@@ -5377,6 +5408,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
                 #define _SOKOL_GL_HAS_COMPUTE (1)
                 #define _SOKOL_GL_HAS_TEXSTORAGE (1)
                 #define _SOKOL_GL_HAS_TEXVIEWS (1)
+                #define _SOKOL_GL_HAS_BASEVERTEX (1)
+                #define _SOKOL_GL_HAS_BASEINSTANCE (1)
             #endif
         #elif defined(__APPLE__)
             #include <TargetConditionals.h>
@@ -5385,6 +5418,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #endif
             #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
                 #include <OpenGL/gl3.h>
+                #define _SOKOL_GL_HAS_BASEVERTEX (1)
             #else
                 #include <OpenGLES/ES3/gl.h>
                 #include <OpenGLES/ES3/glext.h>
@@ -5400,16 +5434,18 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #define _SOKOL_GL_HAS_COMPUTE (1)
             #define _SOKOL_GL_HAS_TEXSTORAGE (1)
         #elif defined(__linux__) || defined(__unix__)
+            #define _SOKOL_GL_HAS_COMPUTE (1)
+            #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+            #define _SOKOL_GL_HAS_BASEVERTEX (1)
             #if defined(SOKOL_GLCORE)
                 #define GL_GLEXT_PROTOTYPES
                 #include <GL/gl.h>
                 #define _SOKOL_GL_HAS_TEXVIEWS (1)
+                #define _SOKOL_GL_HAS_BASEINSTANCE (1)
             #else
-                #include <GLES3/gl31.h>
+                #include <GLES3/gl32.h>
                 #include <GLES3/gl3ext.h>
             #endif
-            #define _SOKOL_GL_HAS_COMPUTE (1)
-            #define _SOKOL_GL_HAS_TEXSTORAGE (1)
         #endif
     #endif
 
@@ -6331,8 +6367,6 @@ typedef struct {
     bool valid;
     ID3D11Device* dev;
     ID3D11DeviceContext* ctx;
-    bool use_indexed_draw;
-    bool use_instanced_draw;
     struct {
         ID3D11RenderTargetView* render_view;
         ID3D11RenderTargetView* resolve_view;
@@ -6671,7 +6705,6 @@ typedef struct {
 // the WGPU backend state
 typedef struct {
     bool valid;
-    bool use_indexed_draw;
     WGPUDevice dev;
     WGPULimits limits;
     WGPUQueue queue;
@@ -6759,6 +6792,8 @@ typedef struct {
     } cur_pass;
     _sg_pipeline_ref_t cur_pip;
     bool next_draw_valid;
+    bool use_indexed_draw;
+    bool use_instanced_draw;
     uint32_t required_bindings_and_uniforms;    // used to check that bindings and uniforms are applied after applying pipeline
     uint32_t applied_bindings_and_uniforms;     // bits 0..7: uniform blocks, bit 8: bindings
     #if defined(SOKOL_DEBUG)
@@ -7597,16 +7632,22 @@ _SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const s
     // FIXME: most of this isn't needed for compute pipelines
 
     const uint32_t required_bindings_flag = (1 << SG_MAX_UNIFORMBLOCK_BINDSLOTS);
-    for (int i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
-        const sg_vertex_attr_state* a_state = &desc->layout.attrs[i];
-        if (a_state->format != SG_VERTEXFORMAT_INVALID) {
-            SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
-            cmn->vertex_buffer_layout_active[a_state->buffer_index] = true;
+    for (size_t attr_idx = 0; attr_idx < SG_MAX_VERTEX_ATTRIBUTES; attr_idx++) {
+        const sg_vertex_attr_state* attr_state = &desc->layout.attrs[attr_idx];
+        if (attr_state->format != SG_VERTEXFORMAT_INVALID) {
+            SOKOL_ASSERT(attr_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
+            cmn->vertex_buffer_layout_active[attr_state->buffer_index] = true;
             cmn->required_bindings_and_uniforms |= required_bindings_flag;
         }
     }
-    cmn->is_compute = desc->compute;
     cmn->use_instanced_draw = false;
+    for (size_t vbuf_idx = 0; vbuf_idx < SG_MAX_VERTEXBUFFER_BINDSLOTS; vbuf_idx++) {
+        const sg_vertex_buffer_layout_state* vbuf_state = &desc->layout.buffers[vbuf_idx];
+        if (vbuf_state->step_func == SG_VERTEXSTEP_PER_INSTANCE) {
+            cmn->use_instanced_draw = true;
+        }
+    }
+    cmn->is_compute = desc->compute;
     cmn->shader = _sg_shader_ref(shd);
     cmn->layout = desc->layout;
     cmn->depth = desc->depth;
@@ -8404,10 +8445,12 @@ _SOKOL_PRIVATE void _sg_dummy_apply_uniforms(int ub_slot, const sg_range* data) 
     _SOKOL_UNUSED(data);
 }
 
-_SOKOL_PRIVATE void _sg_dummy_draw(int base_element, int num_elements, int num_instances) {
+_SOKOL_PRIVATE void _sg_dummy_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
     _SOKOL_UNUSED(base_element);
     _SOKOL_UNUSED(num_elements);
     _SOKOL_UNUSED(num_instances);
+    _SOKOL_UNUSED(base_vertex);
+    _SOKOL_UNUSED(base_instance);
 }
 
 _SOKOL_PRIVATE void _sg_dummy_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
@@ -8579,7 +8622,11 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     _SG_XMACRO(glTexStorage3D,                    void, (GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth)) \
     _SG_XMACRO(glCompressedTexSubImage2D,         void, (GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const void *data)) \
     _SG_XMACRO(glCompressedTexSubImage3D,         void, (GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const void *data)) \
-    _SG_XMACRO(glTextureView,                     void, (GLuint texture, GLenum target, GLuint origtexture, GLenum internalformat, GLuint minlevel, GLuint numlevels, GLuint minlayer, GLuint numlayers))
+    _SG_XMACRO(glTextureView,                     void, (GLuint texture, GLenum target, GLuint origtexture, GLenum internalformat, GLuint minlevel, GLuint numlevels, GLuint minlayer, GLuint numlayers)) \
+    _SG_XMACRO(glDrawElementsBaseVertex,          void, (GLenum mode, GLsizei count, GLenum type, const void* indices, GLint basevertex)) \
+    _SG_XMACRO(glDrawElementsInstancedBaseVertex, void, (GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount, GLint basevertex)) \
+    _SG_XMACRO(glDrawElementsInstancedBaseVertexBaseInstance, void, (GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount, GLint basevertex, GLuint baseinstance)) \
+    _SG_XMACRO(glDrawArraysInstancedBaseInstance, void, (GLenum mode, GLint first, GLsizei count, GLsizei instancecount, GLuint baseinstance))
 
 // generate GL function pointer typedefs
 #define _SG_XMACRO(name, ret, args) typedef ret (GL_APIENTRY* PFN_ ## name) args;
@@ -9393,6 +9440,8 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
     #else
     _sg.features.msaa_texture_bindings = true;
     #endif
+    _sg.features.draw_base_vertex = version >= 320;
+    _sg.features.draw_base_instance = version >= 420;
 
     // scan extensions
     bool has_s3tc = false;  // BC1..BC3
@@ -9475,6 +9524,8 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     #else
     _sg.features.separate_buffer_types = false;
     #endif
+    _sg.features.draw_base_vertex = version >= 320;
+    _sg.features.draw_base_instance = false;
 
     bool has_s3tc = false;  // BC1..BC3
     bool has_rgtc = false;  // BC4 and BC5
@@ -10545,7 +10596,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, con
                 gl_attr->divisor = 0;
             } else {
                 gl_attr->divisor = (int8_t) step_rate;
-                pip->cmn.use_instanced_draw = true;
             }
             SOKOL_ASSERT(l_state->stride > 0);
             gl_attr->stride = (uint8_t) l_state->stride;
@@ -11445,24 +11495,46 @@ _SOKOL_PRIVATE void _sg_gl_apply_uniforms(int ub_slot, const sg_range* data) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_instances) {
-    const GLenum i_type = _sg.gl.cache.cur_index_type;
+_SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
     const GLenum p_type = _sg.gl.cache.cur_primitive_type;
-    const bool use_instanced_draw = (num_instances > 1) || _sg_pipeline_ref_ptr(&_sg.cur_pip)->cmn.use_instanced_draw;
-    if (0 != i_type) {
+    const bool use_instanced_draw = (num_instances > 1) || _sg.use_instanced_draw;
+    if (_sg.use_indexed_draw) {
         // indexed rendering
+        const GLenum i_type = _sg.gl.cache.cur_index_type;
         const int i_size = (i_type == GL_UNSIGNED_SHORT) ? 2 : 4;
         const int ib_offset = _sg.gl.cache.cur_ib_offset;
         const GLvoid* indices = (const GLvoid*)(GLintptr)(base_element*i_size+ib_offset);
         if (use_instanced_draw) {
-            glDrawElementsInstanced(p_type, num_elements, i_type, indices, num_instances);
+            if ((base_vertex == 0) && (base_instance == 0)) {
+                glDrawElementsInstanced(p_type, num_elements, i_type, indices, num_instances);
+            } else if ((base_vertex != 0) && (base_instance == 0) && _sg.features.draw_base_vertex) {
+                #if defined(_SOKOL_GL_HAS_BASEVERTEX)
+                glDrawElementsInstancedBaseVertex(p_type, num_elements, i_type, indices, num_instances, base_vertex);
+                #endif
+            } else if ((base_instance != 0) && _sg.features.draw_base_instance) {
+                #if defined(_SOKOL_GL_HAS_BASEINSTANCE)
+                glDrawElementsInstancedBaseVertexBaseInstance(p_type, num_elements, i_type, indices, num_instances, base_vertex, (GLuint)base_instance);
+                #endif
+            }
         } else {
-            glDrawElements(p_type, num_elements, i_type, indices);
+            if (base_vertex == 0) {
+                glDrawElements(p_type, num_elements, i_type, indices);
+            } else if (_sg.features.draw_base_vertex) {
+                #if defined(_SOKOL_GL_HAS_BASEVERTEX)
+                glDrawElementsBaseVertex(p_type, num_elements, i_type, indices, base_vertex);
+                #endif
+            }
         }
     } else {
         // non-indexed rendering
         if (use_instanced_draw) {
-            glDrawArraysInstanced(p_type, base_element, num_elements, num_instances);
+            if (base_instance == 0) {
+                glDrawArraysInstanced(p_type, base_element, num_elements, num_instances);
+            } else if (_sg.features.draw_base_instance) {
+                #if defined(_SOKOL_GL_HAS_BASEINSTANCE)
+                glDrawArraysInstancedBaseInstance(p_type, base_element, num_elements, num_instances, (GLuint)base_instance);
+                #endif
+            }
         } else {
             glDrawArrays(p_type, base_element, num_elements);
         }
@@ -12427,6 +12499,8 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.features.mrt_independent_write_mask = true;
     _sg.features.compute = true;
     _sg.features.msaa_texture_bindings = true;
+    _sg.features.draw_base_vertex = true;
+    _sg.features.draw_base_instance = true;
 
     _sg.limits.max_image_size_2d = 16 * 1024;
     _sg.limits.max_image_size_cube = 16 * 1024;
@@ -13045,7 +13119,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
         d3d11_comp->InputSlotClass = _sg_d3d11_input_classification(step_func);
         if (SG_VERTEXSTEP_PER_INSTANCE == step_func) {
             d3d11_comp->InstanceDataStepRate = (UINT)step_rate;
-            pip->cmn.use_instanced_draw = true;
         }
     }
     for (size_t layout_index = 0; layout_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; layout_index++) {
@@ -13584,9 +13657,6 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
         SOKOL_ASSERT(shd->d3d11.vs);
         SOKOL_ASSERT(shd->d3d11.fs);
 
-        _sg.d3d11.use_indexed_draw = (pip->d3d11.index_format != DXGI_FORMAT_UNKNOWN);
-        _sg.d3d11.use_instanced_draw = pip->cmn.use_instanced_draw;
-
         _sg_d3d11_RSSetState(_sg.d3d11.ctx, pip->d3d11.rs);
         _sg_d3d11_OMSetDepthStencilState(_sg.d3d11.ctx, pip->d3d11.dss, pip->d3d11.stencil_ref);
         _sg_d3d11_OMSetBlendState(_sg.d3d11.ctx, pip->d3d11.bs, (float*)&pip->cmn.blend_color, 0xFFFFFFFF);
@@ -13756,19 +13826,28 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_uniforms(int ub_slot, const sg_range* data) 
     _sg_stats_add(d3d11.uniforms.num_update_subresource, 1);
 }
 
-_SOKOL_PRIVATE void _sg_d3d11_draw(int base_element, int num_elements, int num_instances) {
-    const bool use_instanced_draw = (num_instances > 1) || (_sg.d3d11.use_instanced_draw);
-    if (_sg.d3d11.use_indexed_draw) {
+_SOKOL_PRIVATE void _sg_d3d11_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
+    const bool use_instanced_draw = (num_instances > 1) || (_sg.use_instanced_draw);
+    if (_sg.use_indexed_draw) {
         if (use_instanced_draw) {
-            _sg_d3d11_DrawIndexedInstanced(_sg.d3d11.ctx, (UINT)num_elements, (UINT)num_instances, (UINT)base_element, 0, 0);
+            _sg_d3d11_DrawIndexedInstanced(_sg.d3d11.ctx,
+                (UINT)num_elements,
+                (UINT)num_instances,
+                (UINT)base_element,
+                base_vertex,
+                (UINT)base_instance);
             _sg_stats_add(d3d11.draw.num_draw_indexed_instanced, 1);
         } else {
-            _sg_d3d11_DrawIndexed(_sg.d3d11.ctx, (UINT)num_elements, (UINT)base_element, 0);
+            _sg_d3d11_DrawIndexed(_sg.d3d11.ctx, (UINT)num_elements, (UINT)base_element, base_vertex);
             _sg_stats_add(d3d11.draw.num_draw_indexed, 1);
         }
     } else {
         if (use_instanced_draw) {
-            _sg_d3d11_DrawInstanced(_sg.d3d11.ctx, (UINT)num_elements, (UINT)num_instances, (UINT)base_element, 0);
+            _sg_d3d11_DrawInstanced(_sg.d3d11.ctx,
+                (UINT)num_elements,
+                (UINT)num_instances,
+                (UINT)base_element,
+                (UINT)base_instance);
             _sg_stats_add(d3d11.draw.num_draw_instanced, 1);
         } else {
             _sg_d3d11_Draw(_sg.d3d11.ctx, (UINT)num_elements, (UINT)base_element);
@@ -14396,6 +14475,8 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.mrt_independent_write_mask = true;
     _sg.features.compute = true;
     _sg.features.msaa_texture_bindings = true;
+    _sg.features.draw_base_vertex = true;
+    _sg.features.draw_base_instance = true;
 
     _sg.features.image_clamp_to_border = false;
     #if (MAC_OS_X_VERSION_MAX_ALLOWED >= 120000) || (__IPHONE_OS_VERSION_MAX_ALLOWED >= 140000)
@@ -15107,10 +15188,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, co
                 vtx_desc.layouts[mtl_vb_slot].stride = (NSUInteger)l_state->stride;
                 vtx_desc.layouts[mtl_vb_slot].stepFunction = _sg_mtl_step_function(l_state->step_func);
                 vtx_desc.layouts[mtl_vb_slot].stepRate = (NSUInteger)l_state->step_rate;
-                if (SG_VERTEXSTEP_PER_INSTANCE == l_state->step_func) {
-                    // NOTE: not actually used in _sg_mtl_draw()
-                    pip->cmn.use_instanced_draw = true;
-                }
             }
         }
 
@@ -15891,11 +15968,11 @@ _SOKOL_PRIVATE void _sg_mtl_apply_uniforms(int ub_slot, const sg_range* data) {
     _sg.mtl.cur_ub_offset = _sg_roundup(_sg.mtl.cur_ub_offset + (int)data->size, _SG_MTL_UB_ALIGN);
 }
 
-_SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_instances) {
+_SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
     SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
     const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
     SOKOL_ASSERT(pip);
-    if (SG_INDEXTYPE_NONE != pip->cmn.index_type) {
+    if (_sg.use_indexed_draw) {
         // indexed rendering
         const _sg_buffer_t* ib = _sg_buffer_ref_ptr(&_sg.mtl.cache.cur_ibuf);
         SOKOL_ASSERT(ib && (ib->mtl.buf[ib->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX));
@@ -15905,13 +15982,16 @@ _SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_ins
             indexType:pip->mtl.index_type
             indexBuffer:_sg_mtl_id(ib->mtl.buf[ib->cmn.active_slot])
             indexBufferOffset:index_buffer_offset
-            instanceCount:(NSUInteger)num_instances];
+            instanceCount:(NSUInteger)num_instances
+            baseVertex:base_vertex
+            baseInstance:(NSUInteger)base_instance];
     } else {
         // non-indexed rendering
         [_sg.mtl.render_cmd_encoder drawPrimitives:pip->mtl.prim_type
             vertexStart:(NSUInteger)base_element
             vertexCount:(NSUInteger)num_elements
-            instanceCount:(NSUInteger)num_instances];
+            instanceCount:(NSUInteger)num_instances
+            baseInstance:(NSUInteger)base_instance];
     }
 }
 
@@ -16408,6 +16488,8 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.mrt_independent_write_mask = true;
     _sg.features.compute = true;
     _sg.features.msaa_texture_bindings = true;
+    _sg.features.draw_base_vertex = true;
+    _sg.features.draw_base_instance = true;
 
     wgpuDeviceGetLimits(_sg.wgpu.dev, &_sg.wgpu.limits);
 
@@ -17987,7 +18069,6 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
         SOKOL_ASSERT(!_sg.cur_pass.is_compute);
         SOKOL_ASSERT(pip->wgpu.rpip);
         SOKOL_ASSERT(_sg.wgpu.rpass_enc);
-        _sg.wgpu.use_indexed_draw = (pip->cmn.index_type != SG_INDEXTYPE_NONE);
         wgpuRenderPassEncoderSetPipeline(_sg.wgpu.rpass_enc, pip->wgpu.rpip);
         wgpuRenderPassEncoderSetBlendConstant(_sg.wgpu.rpass_enc, &pip->wgpu.blend_color);
         wgpuRenderPassEncoderSetStencilReference(_sg.wgpu.rpass_enc, pip->cmn.stencil.ref);
@@ -18028,13 +18109,21 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(int ub_slot, const sg_range* data) {
     _sg_wgpu_set_ub_bindgroup(shd);
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_draw(int base_element, int num_elements, int num_instances) {
+_SOKOL_PRIVATE void _sg_wgpu_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
     SOKOL_ASSERT(_sg.wgpu.rpass_enc);
-    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
-    if (SG_INDEXTYPE_NONE != pip->cmn.index_type) {
-        wgpuRenderPassEncoderDrawIndexed(_sg.wgpu.rpass_enc, (uint32_t)num_elements, (uint32_t)num_instances, (uint32_t)base_element, 0, 0);
+    if (_sg.use_indexed_draw) {
+        wgpuRenderPassEncoderDrawIndexed(_sg.wgpu.rpass_enc,
+            (uint32_t)num_elements,
+            (uint32_t)num_instances,
+            (uint32_t)base_element,
+            base_vertex,
+            (uint32_t)base_instance);
     } else {
-        wgpuRenderPassEncoderDraw(_sg.wgpu.rpass_enc, (uint32_t)num_elements, (uint32_t)num_instances, (uint32_t)base_element, 0);
+        wgpuRenderPassEncoderDraw(_sg.wgpu.rpass_enc,
+            (uint32_t)num_elements,
+            (uint32_t)num_instances,
+            (uint32_t)base_element,
+            (uint32_t)base_instance);
     }
 }
 
@@ -18423,17 +18512,17 @@ static inline void _sg_apply_uniforms(int ub_slot, const sg_range* data) {
     #endif
 }
 
-static inline void _sg_draw(int base_element, int num_elements, int num_instances) {
+static inline void _sg_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_index) {
     #if defined(_SOKOL_ANY_GL)
-    _sg_gl_draw(base_element, num_elements, num_instances);
+    _sg_gl_draw(base_element, num_elements, num_instances, base_vertex, base_index);
     #elif defined(SOKOL_METAL)
-    _sg_mtl_draw(base_element, num_elements, num_instances);
+    _sg_mtl_draw(base_element, num_elements, num_instances, base_vertex, base_index);
     #elif defined(SOKOL_D3D11)
-    _sg_d3d11_draw(base_element, num_elements, num_instances);
+    _sg_d3d11_draw(base_element, num_elements, num_instances, base_vertex, base_index);
     #elif defined(SOKOL_WGPU)
-    _sg_wgpu_draw(base_element, num_elements, num_instances);
+    _sg_wgpu_draw(base_element, num_elements, num_instances, base_vertex, base_index);
     #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_draw(base_element, num_elements, num_instances);
+    _sg_dummy_draw(base_element, num_elements, num_instances, base_vertex, base_index);
     #else
     #error("INVALID BACKEND");
     #endif
@@ -19856,9 +19945,46 @@ _SOKOL_PRIVATE bool _sg_validate_draw(int base_element, int num_elements, int nu
         }
         _sg_validate_begin();
         _SG_VALIDATE(_sg.cur_pass.in_pass && !_sg.cur_pass.is_compute, VALIDATE_DRAW_RENDERPASS_EXPECTED);
-        _SG_VALIDATE(base_element >= 0, VALIDATE_DRAW_BASEELEMENT);
-        _SG_VALIDATE(num_elements >= 0, VALIDATE_DRAW_NUMELEMENTS);
-        _SG_VALIDATE(num_instances >= 0, VALIDATE_DRAW_NUMINSTANCES);
+        _SG_VALIDATE(base_element >= 0, VALIDATE_DRAW_BASEELEMENT_GE_ZERO);
+        _SG_VALIDATE(num_elements >= 0, VALIDATE_DRAW_NUMELEMENTS_GE_ZERO);
+        _SG_VALIDATE(num_instances >= 0, VALIDATE_DRAW_NUMINSTANCES_GE_ZERO);
+        _SG_VALIDATE(_sg.required_bindings_and_uniforms == _sg.applied_bindings_and_uniforms, VALIDATE_DRAW_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
+        return _sg_validate_end();
+    #endif
+}
+
+_SOKOL_PRIVATE bool _sg_validate_draw_ex(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(base_element);
+        _SOKOL_UNUSED(num_elements);
+        _SOKOL_UNUSED(num_instances);
+        _SOKOL_UNUSED(base_vertex);
+        _SOKOL_UNUSED(base_instance);
+        return true;
+    #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
+        _sg_validate_begin();
+        _SG_VALIDATE(_sg.cur_pass.in_pass && !_sg.cur_pass.is_compute, VALIDATE_DRAW_EX_RENDERPASS_EXPECTED);
+        // NOTE: base_vertex is allowed to be < 0
+        _SG_VALIDATE(base_element >= 0, VALIDATE_DRAW_EX_BASEELEMENT_GE_ZERO);
+        _SG_VALIDATE(num_elements >= 0, VALIDATE_DRAW_EX_NUMELEMENTS_GE_ZERO);
+        _SG_VALIDATE(num_instances >= 0, VALIDATE_DRAW_EX_NUMINSTANCES_GE_ZERO);
+        _SG_VALIDATE(base_instance >= 0, VALIDATE_DRAW_EX_BASEINSTANCE_GE_ZERO);
+        if (base_vertex != 0) {
+            _SG_VALIDATE(_sg.features.draw_base_vertex, VALIDATE_DRAW_EX_BASEVERTEX_NOT_SUPPORTED);
+        }
+        if (base_instance > 0) {
+            _SG_VALIDATE(_sg.features.draw_base_instance, VALIDATE_DRAW_EX_BASEINSTANCE_NOT_SUPPORTED);
+        }
+        if (!_sg.use_indexed_draw) {
+            _SG_VALIDATE(base_vertex == 0, VALIDATE_DRAW_EX_BASEVERTEX_VS_INDEXED);
+        }
+        const bool use_instanced_draw = (num_instances > 1) || _sg.use_instanced_draw;
+        if (!use_instanced_draw) {
+            _SG_VALIDATE(base_instance == 0, VALIDATE_DRAW_EX_BASEINSTANCE_VS_INSTANCED);
+        }
         _SG_VALIDATE(_sg.required_bindings_and_uniforms == _sg.applied_bindings_and_uniforms, VALIDATE_DRAW_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
         return _sg_validate_end();
     #endif
@@ -21548,6 +21674,8 @@ SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
     if (!_sg.next_draw_valid) {
         return;
     }
+    _sg.use_indexed_draw = pip->cmn.index_type != SG_INDEXTYPE_NONE;
+    _sg.use_instanced_draw = pip->cmn.use_instanced_draw;
 
     _sg_apply_pipeline(pip);
 
@@ -21649,6 +21777,20 @@ SOKOL_API_IMPL void sg_apply_uniforms(int ub_slot, const sg_range* data) {
     _SG_TRACE_ARGS(apply_uniforms, ub_slot, data);
 }
 
+_SOKOL_PRIVATE bool _sg_check_skip_draw(int num_elements, int num_instances) {
+    if (!_sg.cur_pass.valid) {
+        return true;
+    }
+    if (!_sg.next_draw_valid) {
+        return true;
+    }
+    // skip no-op draws
+    if ((0 == num_elements) || (0 == num_instances)) {
+        return true;
+    }
+    return false;
+}
+
 SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instances) {
     SOKOL_ASSERT(_sg.valid);
     #if defined(SOKOL_DEBUG)
@@ -21657,18 +21799,26 @@ SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instance
     }
     #endif
     _sg_stats_add(num_draw, 1);
-    if (!_sg.cur_pass.valid) {
+    if (_sg_check_skip_draw(num_elements, num_instances)) {
         return;
     }
-    if (!_sg.next_draw_valid) {
-        return;
-    }
-    // skip no-op draws
-    if ((0 == num_elements) || (0 == num_instances)) {
-        return;
-    }
-    _sg_draw(base_element, num_elements, num_instances);
+    _sg_draw(base_element, num_elements, num_instances, 0, 0);
     _SG_TRACE_ARGS(draw, base_element, num_elements, num_instances);
+}
+
+SOKOL_API_IMPL void sg_draw_ex(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
+    SOKOL_ASSERT(_sg.valid);
+    #if defined(SOKOL_DEBUG)
+    if (!_sg_validate_draw_ex(base_element, num_elements, num_instances, base_vertex, base_instance)) {
+        return;
+    }
+    #endif
+    _sg_stats_add(num_draw_ex, 1);
+    if (_sg_check_skip_draw(num_elements, num_instances)) {
+        return;
+    }
+    _sg_draw(base_element, num_elements, num_instances, base_vertex, base_instance);
+    _SG_TRACE_ARGS(draw_ex, base_element, num_elements, num_instances, base_vertex, base_instance);
 }
 
 SOKOL_API_IMPL void sg_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
