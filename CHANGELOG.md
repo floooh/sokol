@@ -27,8 +27,8 @@ On GLES3 platforms the feature availability is as follows:
 
 On desktop GL the feature availability is as follows:
 
-- `base_vertex` is generally supported (technically since GL 3.2, but that's the
-  minimum version expected by the sokol_gfx.h GL backend)
+- `base_vertex` is generally supported (technically since GL 3.2, but that's below
+  the minimum version supported by the sokol_gfx.h GL backend)
 - `base_instance` is only supported since GL 4.2 (this basically means that
   it can't be used on macOS, but anywhere else)
 
