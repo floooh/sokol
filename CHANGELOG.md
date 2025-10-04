@@ -37,6 +37,13 @@ has been added (note that this requires a WebGPU capable browser).
 
 Related PR: https://github.com/floooh/sokol/pull/1339
 
+Unrelated bugfix in the GL backend: in the internal function `_sg_pipeline_common_init()`
+a loop over the pipeline's vertex attribute declarations was using
+`SG_MAX_VERTEXBUFFER_BINDSLOTS` as loop limit instead of `SG_MAX_VERTEX_ATTRIBUTES`.
+This means that the max number of vertex attributes was effectively limited to
+8 instead of 16. This bug slipped in via commit https://github.com/floooh/sokol/commit/73385924cfe98d482462f7064a6621e166441a0a
+on 26-Oct-2024.
+
 ### 29-Sep-2025
 
 The 'flexible resource binding limits' update: sokol_gfx.h now allows more render pass
