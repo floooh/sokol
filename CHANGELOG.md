@@ -1,5 +1,12 @@
 ## Updates
 
+### 05-Oct-2025
+
+sokol_imgui.h: fix a bug where an assert would be triggered in `simgui_shutdown()`
+when no Dear ImGui UI was ever rendered.
+
+Details: https://github.com/floooh/sokol/issues/1341
+
 ### 04-Oct-2025
 
 sokol_gfx.h: a new function `sg_draw_ex()` has been added with additional parameters
