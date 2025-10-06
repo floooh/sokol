@@ -4712,8 +4712,8 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
 }
 
 _SOKOL_PRIVATE void _sapp_macos_frame(void) {
-    // NOTE: DO NOT call _sapp_macos_update_dimensions() function from with the
-    // frame callback when called from MTKView's drawRect function.
+    // NOTE: DO NOT call _sapp_macos_update_dimensions() function from within the
+    // frame callback (at least when called from MTKView's drawRect function).
     // This will trigger a chicken-egg situation that triggers a
     // Metal validation layer error about different render target sizes.
     _sapp_timing_measure(&_sapp.timing);
