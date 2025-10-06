@@ -4711,6 +4711,30 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
     CGImageRelease(cg_img);
 }
 
+_SOKOL_PRIVATE void _sapp_macos_frame(void) {
+    // NOTE: DO NOT call _sapp_macos_update_dimensions() function from within the
+    // frame callback (at least when called from MTKView's drawRect function).
+    // This will trigger a chicken-egg situation that triggers a
+    // Metal validation layer error about different render target sizes.
+    _sapp_timing_measure(&_sapp.timing);
+    #if defined(_SAPP_ANY_GL)
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
+    #endif
+    @autoreleasepool {
+        #if defined(SOKOL_WGPU)
+        _sapp_wgpu_frame();
+        #else
+        _sapp_frame();
+        #endif
+    }
+    #if defined(_SAPP_ANY_GL)
+    [[_sapp.macos.view openGLContext] flushBuffer];
+    #endif
+    if (_sapp.quit_requested || _sapp.quit_ordered) {
+        [_sapp.macos.window performClose:nil];
+    }
+}
+
 @implementation _sapp_macos_app_delegate
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
     _SOKOL_UNUSED(aNotification);
@@ -4945,36 +4969,14 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
 #if defined(SOKOL_WGPU)
 - (void)displayLinkFired:(id)sender {
     _SOKOL_UNUSED(sender);
-    _sapp_timing_measure(&_sapp.timing);
-    @autoreleasepool {
-        _sapp_wgpu_frame();
-    }
-    if (_sapp.quit_requested || _sapp.quit_ordered) {
-        [_sapp.macos.window performClose:nil];
-    }
+    _sapp_macos_frame();
 }
-#endif
-
+#else
 - (void)drawRect:(NSRect)rect {
     _SOKOL_UNUSED(rect);
-    #if defined(SOKOL_WGPU)
-        // should never be called
-        return;
-    #endif
-    #if defined(_SAPP_ANY_GL)
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
-    #endif
-    _sapp_timing_measure(&_sapp.timing);
-    @autoreleasepool {
-        _sapp_frame();
-    }
-    #if defined(_SAPP_ANY_GL)
-    [[_sapp.macos.view openGLContext] flushBuffer];
-    #endif
-    if (_sapp.quit_requested || _sapp.quit_ordered) {
-        [_sapp.macos.window performClose:nil];
-    }
+    _sapp_macos_frame();
 }
+#endif
 
 - (BOOL)isOpaque {
     return YES;

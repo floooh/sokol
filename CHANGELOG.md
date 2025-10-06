@@ -1,5 +1,10 @@
 ## Updates
 
+### 06-Oct-2025
+
+sokol_app.h macos: minor code cleanup to unify the per-frame
+code for Metal, GL and WebGPU into one function.
+
 ### 05-Oct-2025
 
 sokol_imgui.h: fix a bug where an assert would be triggered in `simgui_shutdown()`
