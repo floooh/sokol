@@ -5266,7 +5266,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
 #ifdef SOKOL_GFX_IMPL
 #define SOKOL_GFX_IMPL_INCLUDED (1)
 
-#if !(defined(SOKOL_GLCORE)||defined(SOKOL_GLES3)||defined(SOKOL_D3D11)||defined(SOKOL_METAL)||defined(SOKOL_WGPU)||defined(SOKOL_DUMMY_BACKEND))
+#if !(defined(SOKOL_GLCORE)||defined(SOKOL_GLES3)||defined(SOKOL_D3D11)||defined(SOKOL_METAL)||defined(SOKOL_WGPU)||defined(SOKOL_VULKAN)||defined(SOKOL_DUMMY_BACKEND))
 #error "Please select a backend with SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND"
 #endif
 #if defined(SOKOL_MALLOC) || defined(SOKOL_CALLOC) || defined(SOKOL_FREE)
@@ -5389,6 +5389,10 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #if defined(__EMSCRIPTEN__)
         #include <emscripten/emscripten.h>
     #endif
+#elif defined(SOKOL_VULKAN)
+    #include <vulkan/vulkan.h>
+    // FIXME
+    #define SOKOL_DUMMY_BACKEND (1)
 #elif defined(SOKOL_GLCORE) || defined(SOKOL_GLES3)
     #define _SOKOL_ANY_GL (1)
 

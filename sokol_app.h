@@ -2137,32 +2137,32 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #define _SAPP_APPLE (1)
     #include <TargetConditionals.h>
     #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
-        /* MacOS */
+        // MacOS
         #define _SAPP_MACOS (1)
         #if !defined(SOKOL_METAL) && !defined(SOKOL_GLCORE) && !defined(SOKOL_WGPU)
         #error("sokol_app.h: unknown 3D API selected for MacOS, must be SOKOL_METAL, SOKOL_GLCORE or SOKOL_WGPU")
         #endif
     #else
-        /* iOS or iOS Simulator */
+        // iOS or iOS Simulator
         #define _SAPP_IOS (1)
         #if !defined(SOKOL_METAL) && !defined(SOKOL_GLES3)
         #error("sokol_app.h: unknown 3D API selected for iOS, must be SOKOL_METAL or SOKOL_GLES3")
         #endif
     #endif
 #elif defined(__EMSCRIPTEN__)
-    /* emscripten (asm.js or wasm) */
+    // Emscripten
     #define _SAPP_EMSCRIPTEN (1)
     #if !defined(SOKOL_GLES3) && !defined(SOKOL_WGPU)
     #error("sokol_app.h: unknown 3D API selected for emscripten, must be SOKOL_GLES3 or SOKOL_WGPU")
     #endif
 #elif defined(_WIN32)
-    /* Windows (D3D11 or GL) */
+    // Windows (D3D11 or GL)
     #define _SAPP_WIN32 (1)
     #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE) && !defined(SOKOL_WGPU) && !defined(SOKOL_NOAPI)
     #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11, SOKOL_GLCORE, SOKOL_WGPU or SOKOL_NOAPI")
     #endif
 #elif defined(__ANDROID__)
-    /* Android */
+    // Android
     #define _SAPP_ANDROID (1)
     #if !defined(SOKOL_GLES3)
     #error("sokol_app.h: unknown 3D API selected for Android, must be SOKOL_GLES3")
@@ -2171,10 +2171,10 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #error("sokol_app.h: SOKOL_NO_ENTRY is not supported on Android")
     #endif
 #elif defined(__linux__) || defined(__unix__)
-    /* Linux */
+    // Linux
     #define _SAPP_LINUX (1)
-    #if !defined(SOKOL_GLCORE) && !defined(SOKOL_GLES3) && !defined(SOKOL_WGPU)
-        #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE, SOKOL_GLES3 or SOKOL_WGPU")
+    #if !defined(SOKOL_GLCORE) && !defined(SOKOL_GLES3) && !defined(SOKOL_WGPU) && !defined(SOKOL_VULKAN)
+        #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE, SOKOL_GLES3, SOKOL_WGPU or SOKOL_VULKAN")
     #endif
     #if defined(SOKOL_GLCORE)
         #if defined(SOKOL_FORCE_EGL)
@@ -2188,6 +2188,9 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #define _SAPP_EGL (1)
         #include <GLES3/gl3.h>
         #include <GLES3/gl3ext.h>
+    #elif defined(SOKOL_VULKAN)
+        #define VK_USE_PLATFORM_XLIB_KHR
+        #include <vulkan/vulkan.h>
     #endif
 #else
 #error "sokol_app.h: Unknown platform"
@@ -2608,6 +2611,14 @@ typedef struct {
     WGPUTextureView swapchain_view;
     bool init_done;
 } _sapp_wgpu_t;
+#endif
+
+#if defined(SOKOL_VULKAN)
+typedef struct {
+    VkInstance instance;
+    VkPhysicalDevice physical_device;
+    VkDevice device;
+} _sapp_vk_t;
 #endif
 
 #if defined(_SAPP_MACOS)
@@ -3098,6 +3109,9 @@ typedef struct {
     uint32_t* default_icon_pixels;
     #if defined(SOKOL_WGPU)
         _sapp_wgpu_t wgpu;
+    #endif
+    #if defined(SOKOL_VULKAN)
+        _sapp_vk_t vk;
     #endif
     #if defined(_SAPP_MACOS)
         _sapp_macos_t macos;
@@ -4065,6 +4079,66 @@ _SOKOL_PRIVATE void _sapp_wgpu_frame(void) {
     }
 }
 #endif // SOKOL_WGPU
+
+// ██    ██ ██    ██ ██      ██   ██  █████  ███    ██
+// ██    ██ ██    ██ ██      ██  ██  ██   ██ ████   ██
+// ██    ██ ██    ██ ██      █████   ███████ ██ ██  ██
+//  ██  ██  ██    ██ ██      ██  ██  ██   ██ ██  ██ ██
+//   ████    ██████  ███████ ██   ██ ██   ██ ██   ████
+//
+// >>vulkan
+// >>vk
+#if defined(SOKOL_VULKAN)
+
+_SOKOL_PRIVATE void _sapp_vk_create_instance(void) {
+    SOKOL_ASSERT(0 == _sapp.vk.instance);
+
+    VkApplicationInfo app_info;
+    _sapp_clear(&app_info, sizeof(app_info));
+    app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    app_info.pApplicationName = "sokol-app"; // FIXME: override via sapp_desc?
+    app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+    app_info.pEngineName = "sokol";
+    app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+    app_info.apiVersion = VK_API_VERSION_1_4;
+
+    #if defined(SOKOL_DEBUG)
+        uint32_t layer_count = 1;
+    #else
+        uint32_t layer_count = 0;
+    #endif
+    const char* layer_names[] = {
+        "VK_LAYER_KHRONOS_validation",
+    };
+
+    VkInstanceCreateInfo create_info;
+    _sapp_clear(&create_info, sizeof(create_info));
+    create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    create_info.flags = 0;
+    create_info.pApplicationInfo = &app_info;
+    create_info.enabledLayerCount = layer_count;
+    create_info.ppEnabledLayerNames = layer_names;
+    create_info.enabledExtensionCount = 0;
+    create_info.ppEnabledExtensionNames = 0;
+    VkResult res = vkCreateInstance(&create_info, 0, &_sapp.vk.instance);
+    SOKOL_ASSERT((res == VK_SUCCESS) && _sapp.vk.instance);
+}
+
+_SOKOL_PRIVATE void _sapp_vk_destroy_instance(void) {
+    SOKOL_ASSERT(_sapp.vk.instance);
+    vkDestroyInstance(_sapp.vk.instance, 0);
+    _sapp.vk.instance = 0;
+}
+
+_SOKOL_PRIVATE void _sapp_vk_init(void) {
+    _sapp_vk_create_instance();
+}
+
+_SOKOL_PRIVATE void _sapp_vk_discard(void) {
+    _sapp_vk_destroy_instance();
+}
+
+#endif // SOKOL_VULKAN
 
 //  █████  ██████  ██████  ██      ███████
 // ██   ██ ██   ██ ██   ██ ██      ██
@@ -12443,6 +12517,9 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     #elif defined(SOKOL_WGPU)
         _sapp_x11_create_window(0, 0);
         _sapp_wgpu_init();
+    #elif defined(SOKOL_VULKAN)
+        _sapp_x11_create_window(0, 0);
+        _sapp_vk_init();
     #endif
     sapp_set_icon(&desc->icon);
     _sapp.valid = true;
@@ -12479,6 +12556,8 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
         _sapp_egl_destroy();
     #elif defined(SOKOL_WGPU)
         _sapp_wgpu_discard();
+    #elif defined(SOKOL_VULKAN)
+        _sapp_vk_discard();
     #endif
     _sapp_x11_destroy_window();
     _sapp_x11_destroy_standard_cursors();
