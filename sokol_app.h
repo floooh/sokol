@@ -1792,9 +1792,11 @@ typedef struct sapp_allocator {
     _SAPP_LOGITEM_XMACRO(WGPU_REQUEST_ADAPTER_STATUS_ERROR, "wgpu: requesting adapter failed with status 'error'") \
     _SAPP_LOGITEM_XMACRO(WGPU_REQUEST_ADAPTER_STATUS_UNKNOWN, "wgpu: requesting adapter failed with status 'unknown'") \
     _SAPP_LOGITEM_XMACRO(WGPU_CREATE_INSTANCE_FAILED, "wgpu: failed to create instance") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_INSTANCE_FAILED, "vulkan: vkCreateInstance failed") \
     _SAPP_LOGITEM_XMACRO(VULKAN_ENUMERATE_PHYSICAL_DEVICES_FAILED, "vulkan: vkEnumeratePhysicalDevices failed") \
     _SAPP_LOGITEM_XMACRO(VULKAN_NO_PHYSICAL_DEVICES_FOUND, "vulkan: vkEnumeratePhysicalDevices return no devices") \
     _SAPP_LOGITEM_XMACRO(VULKAN_NO_SUITABLE_PHYSICAL_DEVICE_FOUND, "vulkan: no suitable physical device found") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_DEVICE_FAILED, "vulkan: vkCreateDevice failed") \
     _SAPP_LOGITEM_XMACRO(IMAGE_DATA_SIZE_MISMATCH, "image data size mismatch (must be width*height*4 bytes)") \
     _SAPP_LOGITEM_XMACRO(DROPPED_FILE_PATH_TOO_LONG, "dropped file path too long (sapp_desc.max_dropped_filed_path_length)") \
     _SAPP_LOGITEM_XMACRO(CLIPBOARD_STRING_TOO_BIG, "clipboard string didn't fit into clipboard buffer") \
@@ -2620,6 +2622,7 @@ typedef struct {
 typedef struct {
     VkInstance instance;
     VkPhysicalDevice physical_device;
+    uint32_t queue_family_index;
     VkDevice device;
 } _sapp_vk_t;
 #endif
@@ -4131,7 +4134,10 @@ _SOKOL_PRIVATE void _sapp_vk_create_instance(void) {
     create_info.enabledExtensionCount = ext_count;
     create_info.ppEnabledExtensionNames = ext_names;
     VkResult res = vkCreateInstance(&create_info, 0, &_sapp.vk.instance);
-    SOKOL_ASSERT((res == VK_SUCCESS) && _sapp.vk.instance);
+    if (res != VK_SUCCESS) {
+        _SAPP_PANIC(VULKAN_CREATE_INSTANCE_FAILED);
+    }
+    SOKOL_ASSERT(_sapp.vk.instance);
 }
 
 _SOKOL_PRIVATE void _sapp_vk_destroy_instance(void) {
@@ -4168,6 +4174,7 @@ _SOKOL_PRIVATE void _sapp_vk_pick_physical_device(void) {
         for (uint32_t qfp_idx = 0; qfp_idx < queue_family_props_count; qfp_idx++) {
             const VkQueueFlags queue_flags = queue_family_props[qfp_idx].queueFlags;
             if ((queue_flags & required_flags) == required_flags) {
+                _sapp.vk.queue_family_index = qfp_idx;
                 has_required_queues = true;
                 break;
             }
@@ -4187,12 +4194,72 @@ _SOKOL_PRIVATE void _sapp_vk_pick_physical_device(void) {
     SOKOL_ASSERT(_sapp.vk.physical_device);
 }
 
+_SOKOL_PRIVATE void _sapp_vk_create_device(void) {
+    SOKOL_ASSERT(_sapp.vk.physical_device);
+    SOKOL_ASSERT(0 == _sapp.vk.device);
+
+    const float queue_priority = 0.0f;
+    VkDeviceQueueCreateInfo queue_create_info;
+    _sapp_clear(&queue_create_info, sizeof(queue_create_info));
+    queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queue_create_info.queueFamilyIndex = _sapp.vk.queue_family_index;
+    queue_create_info.queueCount = 1;
+    queue_create_info.pQueuePriorities = &queue_priority;
+
+    _SAPP_VK_ZERO_COUNT_AND_ARRAY(32, const char*, ext_count, ext_names)
+    ext_names[ext_count++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+    ext_names[ext_count++] = VK_KHR_SPIRV_1_4_EXTENSION_NAME;
+    ext_names[ext_count++] = VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME;
+    ext_names[ext_count++] = VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME;
+    SOKOL_ASSERT(ext_count <= 32);
+
+    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT xds_features;
+    _sapp_clear(&xds_features, sizeof(xds_features));
+    xds_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
+    xds_features.extendedDynamicState = true;
+
+    VkPhysicalDeviceVulkan13Features vk13_features;
+    _sapp_clear(&vk13_features, sizeof(vk13_features));
+    vk13_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+    vk13_features.pNext = &xds_features;
+    vk13_features.dynamicRendering = true;
+
+    VkPhysicalDeviceFeatures2 features2;
+    _sapp_clear(&features2, sizeof(features2));
+    features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    features2.pNext = &vk13_features;
+
+    VkDeviceCreateInfo dev_create_info;
+    _sapp_clear(&dev_create_info, sizeof(dev_create_info));
+    dev_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    dev_create_info.pNext = &features2;
+    dev_create_info.queueCreateInfoCount = 1;
+    dev_create_info.pQueueCreateInfos = &queue_create_info;
+    dev_create_info.enabledExtensionCount = ext_count;
+    dev_create_info.ppEnabledExtensionNames = ext_names;
+
+    VkResult res = vkCreateDevice(_sapp.vk.physical_device, &dev_create_info, 0, &_sapp.vk.device);
+    if (res != VK_SUCCESS) {
+        _SAPP_PANIC(VULKAN_CREATE_DEVICE_FAILED);
+    }
+    SOKOL_ASSERT(_sapp.vk.device);
+}
+
+_SOKOL_PRIVATE void _sapp_vk_destroy_device(void) {
+    SOKOL_ASSERT(_sapp.vk.device);
+    vkDeviceWaitIdle(_sapp.vk.device);
+    vkDestroyDevice(_sapp.vk.device, 0);
+    _sapp.vk.device = 0;
+}
+
 _SOKOL_PRIVATE void _sapp_vk_init(void) {
     _sapp_vk_create_instance();
     _sapp_vk_pick_physical_device();
+    _sapp_vk_create_device();
 }
 
 _SOKOL_PRIVATE void _sapp_vk_discard(void) {
+    _sapp_vk_destroy_device();
     _sapp_vk_destroy_instance();
 }
 
