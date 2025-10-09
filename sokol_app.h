@@ -5236,7 +5236,9 @@ _SOKOL_PRIVATE void _sapp_ios_mtl_init(void) {
     */
     _sapp.ios.view.autoResizeDrawable = false;
     _sapp.ios.view.userInteractionEnabled = YES;
+#if TARGET_OS_IPHONE && !TARGET_OS_TV
     _sapp.ios.view.multipleTouchEnabled = YES;
+#endif
     _sapp.ios.view_ctrl = [[UIViewController alloc] init];
     _sapp.ios.view_ctrl.modalPresentationStyle = UIModalPresentationFullScreen;
     _sapp.ios.view_ctrl.view = _sapp.ios.view;
@@ -5394,6 +5396,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         _sapp.ios.textfield.delegate = _sapp.ios.textfield_dlg;
         [_sapp.ios.view_ctrl.view addSubview:_sapp.ios.textfield];
 
+#if TARGET_OS_IPHONE && !TARGET_OS_TV
         [[NSNotificationCenter defaultCenter] addObserver:_sapp.ios.textfield_dlg
             selector:@selector(keyboardWasShown:)
             name:UIKeyboardDidShowNotification object:nil];
@@ -5403,6 +5406,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         [[NSNotificationCenter defaultCenter] addObserver:_sapp.ios.textfield_dlg
             selector:@selector(keyboardDidChangeFrame:)
             name:UIKeyboardDidChangeFrameNotification object:nil];
+#endif
     }
     if (shown) {
         // setting the text field as first responder brings up the onscreen keyboard
@@ -5465,6 +5469,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 - (void)keyboardWasShown:(NSNotification*)notif {
     _sapp.onscreen_keyboard_shown = true;
     /* query the keyboard's size, and modify the content view's size */
+#if TARGET_OS_IPHONE && !TARGET_OS_TV
     if (_sapp.desc.ios_keyboard_resizes_canvas) {
         NSDictionary* info = notif.userInfo;
         CGFloat kbd_h = [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].size.height;
@@ -5472,6 +5477,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         view_frame.size.height -= kbd_h;
         _sapp.ios.view.frame = view_frame;
     }
+#endif
 }
 - (void)keyboardWillBeHidden:(NSNotification*)notif {
     _sapp.onscreen_keyboard_shown = false;
@@ -5481,6 +5487,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 }
 - (void)keyboardDidChangeFrame:(NSNotification*)notif {
     /* this is for the case when the screen rotation changes while the keyboard is open */
+#if TARGET_OS_IPHONE && !TARGET_OS_TV
     if (_sapp.onscreen_keyboard_shown && _sapp.desc.ios_keyboard_resizes_canvas) {
         NSDictionary* info = notif.userInfo;
         CGFloat kbd_h = [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].size.height;
@@ -5488,6 +5495,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         view_frame.size.height -= kbd_h;
         _sapp.ios.view.frame = view_frame;
     }
+#endif
 }
 - (BOOL)textField:(UITextField*)textField shouldChangeCharactersInRange:(NSRange)range replacementString:(NSString*)string {
     if (_sapp_events_enabled()) {
