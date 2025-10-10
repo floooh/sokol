@@ -1,5 +1,14 @@
 ## Updates
 
+### 10-Oct-2025
+
+sokol_gfx.h gl: fix breakage in the GL backend when `SOKOL_EXTERNAL_GL_LOADER`
+is defined.
+
+Issue: https://github.com/floooh/sokol/issues/1345
+
+PR: https://github.com/floooh/sokol/pull/1347
+
 ### 06-Oct-2025
 
 sokol_app.h macos: minor code cleanup to unify the per-frame
