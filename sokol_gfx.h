@@ -5405,11 +5405,6 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
                 #endif
                 #include <windows.h>
                 #pragma comment (lib, "kernel32")   // GetProcAddress()
-                #define _SOKOL_GL_HAS_COMPUTE (1)
-                #define _SOKOL_GL_HAS_TEXSTORAGE (1)
-                #define _SOKOL_GL_HAS_TEXVIEWS (1)
-                #define _SOKOL_GL_HAS_BASEVERTEX (1)
-                #define _SOKOL_GL_HAS_BASEINSTANCE (1)
             #endif
         #elif defined(__APPLE__)
             #include <TargetConditionals.h>
@@ -5418,34 +5413,52 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #endif
             #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
                 #include <OpenGL/gl3.h>
-                #define _SOKOL_GL_HAS_BASEVERTEX (1)
             #else
                 #include <OpenGLES/ES3/gl.h>
                 #include <OpenGLES/ES3/glext.h>
-                #define _SOKOL_GL_HAS_TEXSTORAGE (1)
             #endif
         #elif defined(__EMSCRIPTEN__)
             #if defined(SOKOL_GLES3)
                 #include <GLES3/gl3.h>
-                #define _SOKOL_GL_HAS_TEXSTORAGE (1)
             #endif
         #elif defined(__ANDROID__)
             #include <GLES3/gl31.h>
-            #define _SOKOL_GL_HAS_COMPUTE (1)
-            #define _SOKOL_GL_HAS_TEXSTORAGE (1)
         #elif defined(__linux__) || defined(__unix__)
-            #define _SOKOL_GL_HAS_COMPUTE (1)
-            #define _SOKOL_GL_HAS_TEXSTORAGE (1)
-            #define _SOKOL_GL_HAS_BASEVERTEX (1)
             #if defined(SOKOL_GLCORE)
                 #define GL_GLEXT_PROTOTYPES
                 #include <GL/gl.h>
-                #define _SOKOL_GL_HAS_TEXVIEWS (1)
-                #define _SOKOL_GL_HAS_BASEINSTANCE (1)
             #else
                 #include <GLES3/gl32.h>
                 #include <GLES3/gl3ext.h>
             #endif
+        #endif
+    #endif
+
+    // broad GL feature availability defines (DON'T merge this into the above ifdef-block!)
+    #if defined(_WIN32)
+        #define _SOKOL_GL_HAS_COMPUTE (1)
+        #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+        #define _SOKOL_GL_HAS_TEXVIEWS (1)
+        #define _SOKOL_GL_HAS_BASEVERTEX (1)
+        #define _SOKOL_GL_HAS_BASEINSTANCE (1)
+    #elif defined(__APPLE__)
+        #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+            #define _SOKOL_GL_HAS_BASEVERTEX (1)
+        #else
+            #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+        #endif
+    #elif defined(__EMSCRIPTEN__)
+        #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+    #elif defined(__ANDROID__)
+        #define _SOKOL_GL_HAS_COMPUTE (1)
+        #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+    #elif defined(__linux__) || defined(__unix__)
+        #define _SOKOL_GL_HAS_COMPUTE (1)
+        #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+        #define _SOKOL_GL_HAS_BASEVERTEX (1)
+        #if defined(SOKOL_GLCORE)
+            #define _SOKOL_GL_HAS_TEXVIEWS (1)
+            #define _SOKOL_GL_HAS_BASEINSTANCE (1)
         #endif
     #endif
 
