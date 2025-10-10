@@ -1,6 +1,6 @@
 ## Updates
 
-### 07-Oct-2025
+### 10-Oct-2025
 
 sokol_gfx.h gl: fix breakage in the GL backend when `SOKOL_EXTERNAL_GL_LOADER`
 is defined.
