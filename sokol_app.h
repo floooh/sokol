@@ -1797,6 +1797,7 @@ typedef struct sapp_allocator {
     _SAPP_LOGITEM_XMACRO(VULKAN_NO_PHYSICAL_DEVICES_FOUND, "vulkan: vkEnumeratePhysicalDevices return no devices") \
     _SAPP_LOGITEM_XMACRO(VULKAN_NO_SUITABLE_PHYSICAL_DEVICE_FOUND, "vulkan: no suitable physical device found") \
     _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_DEVICE_FAILED, "vulkan: vkCreateDevice failed") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_SURFACE_FAILED, "vulkan: failed to create swapchain surface") \
     _SAPP_LOGITEM_XMACRO(IMAGE_DATA_SIZE_MISMATCH, "image data size mismatch (must be width*height*4 bytes)") \
     _SAPP_LOGITEM_XMACRO(DROPPED_FILE_PATH_TOO_LONG, "dropped file path too long (sapp_desc.max_dropped_filed_path_length)") \
     _SAPP_LOGITEM_XMACRO(CLIPBOARD_STRING_TOO_BIG, "clipboard string didn't fit into clipboard buffer") \
@@ -2621,6 +2622,7 @@ typedef struct {
 #if defined(SOKOL_VULKAN)
 typedef struct {
     VkInstance instance;
+    VkSurfaceKHR surface;
     VkPhysicalDevice physical_device;
     uint32_t queue_family_index;
     VkDevice device;
@@ -4118,11 +4120,11 @@ _SOKOL_PRIVATE void _sapp_vk_create_instance(void) {
     #endif
 
     _SAPP_VK_ZERO_COUNT_AND_ARRAY(32, const char*, ext_count, ext_names)
+    ext_names[ext_count++] = VK_KHR_SURFACE_EXTENSION_NAME;
     #if defined(VK_USE_PLATFORM_XLIB_KHR)
-        ext_names[ext_count++] = VK_KHR_SURFACE_EXTENSION_NAME;
         ext_names[ext_count++] = VK_KHR_XLIB_SURFACE_EXTENSION_NAME;
-        SOKOL_ASSERT(ext_count <= 32);
     #endif
+    SOKOL_ASSERT(ext_count <= 32);
 
     VkInstanceCreateInfo create_info;
     _sapp_clear(&create_info, sizeof(create_info));
@@ -4146,27 +4148,79 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_instance(void) {
     _sapp.vk.instance = 0;
 }
 
+_SOKOL_PRIVATE uint32_t _sapp_vk_get_device_extensions(const char** out_names, uint32_t max_count) {
+    SOKOL_ASSERT(out_names && (max_count > 0));
+    uint32_t count = 0;
+    out_names[count++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+    out_names[count++] = VK_KHR_SPIRV_1_4_EXTENSION_NAME;
+    out_names[count++] = VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME;
+    out_names[count++] = VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME;
+    SOKOL_ASSERT(count <= max_count);
+    return count;
+}
+
+_SOKOL_PRIVATE bool _sapp_vk_check_device_extensions(VkPhysicalDevice pdev, const char** required_exts, uint32_t num_required_exts) {
+    SOKOL_ASSERT(pdev && required_exts && num_required_exts > 0);
+    uint32_t ext_count = 0;
+    VkResult res = vkEnumerateDeviceExtensionProperties(pdev, 0, &ext_count, 0);
+    SOKOL_ASSERT(res == VK_SUCCESS);
+    if (ext_count == 0) {
+        return false;
+    }
+    VkExtensionProperties* ext_props = (VkExtensionProperties*) _sapp_malloc(sizeof(VkExtensionProperties) * ext_count);
+    SOKOL_ASSERT(ext_props);
+    res = vkEnumerateDeviceExtensionProperties(pdev, 0, &ext_count, ext_props);
+    bool all_supported = true;
+    for (uint32_t req_ext_idx = 0; req_ext_idx < num_required_exts; req_ext_idx++) {
+        const char* req_ext_name = required_exts[req_ext_idx];
+        bool required_ext_supported = false;
+        for (uint32_t ext_idx = 0; ext_idx < ext_count; ext_idx++) {
+            const VkExtensionProperties* ext_prop = &ext_props[ext_idx];
+            if (0 == strcmp(req_ext_name, ext_prop->extensionName)) {
+                required_ext_supported = true;
+                break;
+            }
+        }
+        if (!required_ext_supported) {
+            all_supported = false;
+        }
+    }
+    _sapp_free(ext_props);
+    return all_supported;
+}
+
 _SOKOL_PRIVATE void _sapp_vk_pick_physical_device(void) {
     SOKOL_ASSERT(_sapp.vk.instance);
+    SOKOL_ASSERT(_sapp.vk.surface);
     SOKOL_ASSERT(0 == _sapp.vk.physical_device);
+    VkResult res = VK_SUCCESS;
 
     _SAPP_VK_MAX_COUNT_AND_ARRAY(8, VkPhysicalDevice, physical_device_count, physical_devices)
-    VkResult res = vkEnumeratePhysicalDevices(_sapp.vk.instance, &physical_device_count, physical_devices);
+    res = vkEnumeratePhysicalDevices(_sapp.vk.instance, &physical_device_count, physical_devices);
     if ((res != VK_SUCCESS) && (res != VK_INCOMPLETE)) {
         _SAPP_PANIC(VULKAN_ENUMERATE_PHYSICAL_DEVICES_FAILED);
     }
     if (physical_device_count == 0) {
         _SAPP_PANIC(VULKAN_NO_PHYSICAL_DEVICES_FOUND);
     }
+    _SAPP_VK_ZERO_COUNT_AND_ARRAY(32, const char*, ext_count, ext_names);
+    ext_count = _sapp_vk_get_device_extensions(ext_names, 32);
+
     VkPhysicalDevice pdev = 0;
     for (uint32_t pdev_idx = 0; pdev_idx < physical_device_count; pdev_idx++) {
         pdev = physical_devices[pdev_idx];
         VkPhysicalDeviceProperties dev_props;
         _sapp_clear(&dev_props, sizeof(dev_props));
+
         vkGetPhysicalDeviceProperties(pdev, &dev_props);
-        if (dev_props.apiVersion < VK_API_VERSION_1_3) {
+        if (dev_props.apiVersion < VK_API_VERSION_1_4) {
             continue;
         }
+
+        if (!_sapp_vk_check_device_extensions(pdev, ext_names, ext_count)) {
+            continue;
+        }
+
         _SAPP_VK_MAX_COUNT_AND_ARRAY(8, VkQueueFamilyProperties, queue_family_props_count, queue_family_props)
         vkGetPhysicalDeviceQueueFamilyProperties(pdev, &queue_family_props_count, queue_family_props);
         bool has_required_queues = false;
@@ -4182,6 +4236,14 @@ _SOKOL_PRIVATE void _sapp_vk_pick_physical_device(void) {
         if (!has_required_queues) {
             continue;
         }
+
+        VkBool32 presentation_supported = false;
+        res = vkGetPhysicalDeviceSurfaceSupportKHR(pdev, _sapp.vk.queue_family_index, _sapp.vk.surface, &presentation_supported);
+        SOKOL_ASSERT(VK_SUCCESS == res);
+        if (!presentation_supported) {
+            continue;
+        }
+
         // FIXME: check required extensions? at least VK_KHR_swapchain?
 
         // if we arrive here, found a suitable device
@@ -4206,12 +4268,8 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
     queue_create_info.queueCount = 1;
     queue_create_info.pQueuePriorities = &queue_priority;
 
-    _SAPP_VK_ZERO_COUNT_AND_ARRAY(32, const char*, ext_count, ext_names)
-    ext_names[ext_count++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
-    ext_names[ext_count++] = VK_KHR_SPIRV_1_4_EXTENSION_NAME;
-    ext_names[ext_count++] = VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME;
-    ext_names[ext_count++] = VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME;
-    SOKOL_ASSERT(ext_count <= 32);
+    _SAPP_VK_ZERO_COUNT_AND_ARRAY(32, const char*, ext_count, ext_names);
+    ext_count = _sapp_vk_get_device_extensions(ext_names, 32);
 
     VkPhysicalDeviceExtendedDynamicStateFeaturesEXT xds_features;
     _sapp_clear(&xds_features, sizeof(xds_features));
@@ -4252,14 +4310,44 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_device(void) {
     _sapp.vk.device = 0;
 }
 
+_SOKOL_PRIVATE void _sapp_vk_create_surface(void) {
+    SOKOL_ASSERT(_sapp.vk.instance);
+    SOKOL_ASSERT(0 == _sapp.vk.surface);
+    VkResult res = VK_SUCCESS;
+
+    #if defined(_SAPP_LINUX)
+        VkXlibSurfaceCreateInfoKHR xlib_info;
+        _sapp_clear(&xlib_info, sizeof(xlib_info));
+        xlib_info.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
+        xlib_info.dpy = _sapp.x11.display;
+        xlib_info.window = _sapp.x11.window;
+        res = vkCreateXlibSurfaceKHR(_sapp.vk.instance, &xlib_info, 0, &_sapp.vk.surface);
+    #else
+    #error "sokol_app.h: unsupported Vulkan platform"
+    #endif
+    if (res != VK_SUCCESS) {
+        _SAPP_PANIC(VULKAN_CREATE_SURFACE_FAILED);
+    }
+    SOKOL_ASSERT(_sapp.vk.surface);
+}
+
+_SOKOL_PRIVATE void _sapp_vk_destroy_surface(void) {
+    SOKOL_ASSERT(_sapp.vk.instance);
+    SOKOL_ASSERT(_sapp.vk.surface);
+    vkDestroySurfaceKHR(_sapp.vk.instance, _sapp.vk.surface, 0);
+    _sapp.vk.surface = 0;
+}
+
 _SOKOL_PRIVATE void _sapp_vk_init(void) {
     _sapp_vk_create_instance();
+    _sapp_vk_create_surface();
     _sapp_vk_pick_physical_device();
     _sapp_vk_create_device();
 }
 
 _SOKOL_PRIVATE void _sapp_vk_discard(void) {
     _sapp_vk_destroy_device();
+    _sapp_vk_destroy_surface();
     _sapp_vk_destroy_instance();
 }
 
