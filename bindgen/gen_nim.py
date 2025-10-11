@@ -13,24 +13,24 @@ module_names = {
     'slog_':    'log',
     'sg_':      'gfx',
     'sapp_':    'app',
-    'sapp_sg':  'glue',
     'stm_':     'time',
     'saudio_':  'audio',
     'sgl_':     'gl',
     'sdtx_':    'debugtext',
     'sshape_':  'shape',
+    'sglue_':   'glue',
 }
 
 c_source_paths = {
     'slog_':    'sokol-nim/src/sokol/c/sokol_log.c',
     'sg_':      'sokol-nim/src/sokol/c/sokol_gfx.c',
     'sapp_':    'sokol-nim/src/sokol/c/sokol_app.c',
-    'sapp_sg':  'sokol-nim/src/sokol/c/sokol_glue.c',
     'stm_':     'sokol-nim/src/sokol/c/sokol_time.c',
     'saudio_':  'sokol-nim/src/sokol/c/sokol_audio.c',
     'sgl_':     'sokol-nim/src/sokol/c/sokol_gl.c',
     'sdtx_':    'sokol-nim/src/sokol/c/sokol_debugtext.c',
     'sshape_':  'sokol-nim/src/sokol/c/sokol_shape.c',
+    'sglue_':   'sokol-nim/src/sokol/c/sokol_glue.c',
 }
 
 c_callbacks = [
@@ -46,8 +46,6 @@ overrides = {
     'sgl_error':                    'sgl_get_error',
     'sgl_deg':                      'sgl_as_degrees',
     'sgl_rad':                      'sgl_as_radians',
-    'sg_context_desc.color_format': 'int',
-    'sg_context_desc.depth_format': 'int',
     'SGL_NO_ERROR':                 'SGL_ERROR_NO_ERROR',
     'SG_BUFFERTYPE_VERTEXBUFFER':   'SG_BUFFERTYPE_VERTEX_BUFFER',
     'SG_BUFFERTYPE_INDEXBUFFER':    'SG_BUFFERTYPE_INDEX_BUFFER',
@@ -493,31 +491,44 @@ def gen_imports(inp, dep_prefixes):
 def gen_extra(inp):
     if inp['prefix'] in ['sg_']:
         # FIXME: remove when sokol-shdc has been integrated!
-        l('when defined gl:')
+        l('when defined emscripten:')
         l('  const gl*    = true')
         l('  const d3d11* = false')
         l('  const metal* = false')
+        l('  const emscripten* = true')
+        l('elif defined gl:')
+        l('  const gl*    = true')
+        l('  const d3d11* = false')
+        l('  const metal* = false')
+        l('  const emscripten* = false')
         l('elif defined windows:')
         l('  const gl*    = false')
         l('  const d3d11* = true')
         l('  const metal* = false')
+        l('  const emscripten* = false')
         l('elif defined macosx:')
         l('  const gl*    = false')
         l('  const d3d11* = false')
         l('  const metal* = true')
+        l('  const emscripten* = false')
         l('elif defined linux:')
         l('  const gl*    = true')
         l('  const d3d11* = false')
         l('  const metal* = false')
+        l('  const emscripten* = false')
         l('else:')
         l('  error("unsupported platform")')
         l('')
     if inp['prefix'] in ['sg_', 'sapp_']:
-        l('when defined windows:')
+        l('when defined emscripten:')
+        l('  {.passl:"-lGL -ldl".}')
+        l('  {.passc:"-DSOKOL_GLES3".}')
+        l('  {.passL: "-s MIN_WEBGL_VERSION=2 -s MAX_WEBGL_VERSION=2".}')
+        l('elif defined windows:')
         l('  when not defined vcc:')
         l('    {.passl:"-lkernel32 -luser32 -lshell32 -lgdi32".}')
         l('  when defined gl:')
-        l('    {.passc:"-DSOKOL_GLCORE33".}')
+        l('    {.passc:"-DSOKOL_GLCORE".}')
         l('  else:')
         l('    {.passc:"-DSOKOL_D3D11".}')
         l('    when not defined vcc:')
@@ -526,13 +537,13 @@ def gen_extra(inp):
         l('  {.passc:"-x objective-c".}')
         l('  {.passl:"-framework Cocoa -framework QuartzCore".}')
         l('  when defined gl:')
-        l('    {.passc:"-DSOKOL_GLCORE33".}')
+        l('    {.passc:"-DSOKOL_GLCORE".}')
         l('    {.passl:"-framework OpenGL".}')
         l('  else:')
         l('    {.passc:"-DSOKOL_METAL".}')
         l('    {.passl:"-framework Metal -framework MetalKit".}')
         l('elif defined linux:')
-        l('  {.passc:"-DSOKOL_GLCORE33".}')
+        l('  {.passc:"-DSOKOL_GLCORE".}')
         l('  {.passl:"-lX11 -lXi -lXcursor -lGL -lm -ldl -lpthread".}')
         l('else:')
         l('  error("unsupported platform")')
@@ -544,7 +555,8 @@ def gen_extra(inp):
         l('elif defined macosx:')
         l('  {.passl:"-framework AudioToolbox".}')
         l('elif defined linux:')
-        l('  {.passl:"-lasound -lm -lpthread".}')
+        l('  when not defined emscripten:')
+        l('    {.passl:"-lasound -lm -lpthread".}')
         l('else:')
         l('  error("unsupported platform")')
         l('')

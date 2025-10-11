@@ -1,14 +1,14 @@
 #-------------------------------------------------------------------------------
-#   gen_odin.py
+#   gen_jai.py
 #
-#   Generate Odin bindings.
+#   Generate Jai bindings.
 #-------------------------------------------------------------------------------
 import textwrap
 import gen_ir
 import gen_util as util
 import os, shutil, sys
 
-bindings_root = 'sokol-odin'
+bindings_root = 'sokol-jai'
 c_root = f'{bindings_root}/sokol/c'
 module_root = f'{bindings_root}/sokol'
 
@@ -22,47 +22,46 @@ module_names = {
     'sdtx_':    'debugtext',
     'sshape_':  'shape',
     'sglue_':   'glue',
-    'simgui_':   'imgui',
 }
 
 system_libs = {
     'sg_': {
         'windows': {
-            'd3d11': "",
-            'gl': "",
+            'd3d11': '#system_library,link_always "gdi32"; #system_library,link_always "dxguid"; #system_library,link_always "user32"; #system_library,link_always "shell32"; #system_library,link_always "d3d11";',
+            'gl': '#system_library,link_always "gdi32"; #system_library,link_always "dxguid"; #system_library,link_always "user32"; #system_library,link_always "shell32";',
         },
         'macos': {
-            'metal': '"system:Cocoa.framework","system:QuartzCore.framework","system:Metal.framework","system:MetalKit.framework"',
-            'gl': '"system:Cocoa.framework","system:QuartzCore.framework","system:OpenGL.framework"'
+            'metal': '#library,link_always "../../libclang_rt.osx"; #system_library,link_always "Cocoa"; #system_library,link_always "QuartzCore"; #system_library,link_always "Metal"; #system_library,link_always "MetalKit";',
+            'gl': '#system_library,link_always "Cocoa"; #system_library,link_always "QuartzCore"; #system_library,link_always "OpenGL";',
         },
         'linux': {
-            'gl': '"system:GL", "system:dl", "system:pthread"'
+            'gl': '#system_library,link_always "libXcursor"; #system_library,link_always "libX11"; #system_library,link_always "libXi"; #system_library,link_always "libGL";',
         }
     },
     'sapp_': {
         'windows': {
-            'd3d11': '',
-            'gl': '',
+            'd3d11': '#system_library,link_always "gdi32"; #system_library,link_always "dxguid"; #system_library,link_always "user32"; #system_library,link_always "shell32";',
+            'gl': '#system_library,link_always "gdi32"; #system_library,link_always "dxguid"; #system_library,link_always "user32"; #system_library,link_always "shell32";',
         },
         'macos': {
-            'metal': '"system:Cocoa.framework","system:QuartzCore.framework","system:Metal.framework","system:MetalKit.framework"',
-            'gl': '"system:Cocoa.framework","system:QuartzCore.framework","system:OpenGL.framework"',
+            'metal': '#library "../../libclang_rt.osx"; #system_library,link_always "Cocoa"; #system_library,link_always "QuartzCore";',
+            'gl': '#system_library,link_always "Cocoa"; #system_library,link_always "QuartzCore";',
         },
         'linux': {
-            'gl': '"system:X11", "system:Xi", "system:Xcursor", "system:GL", "system:dl", "system:pthread"'
+            'gl': '#system_library,link_always "libXcursor"; #system_library,link_always "libX11"; #system_library,link_always "libXi"; #system_library,link_always "libGL";',
         }
     },
     'saudio_': {
         'windows': {
-            'd3d11': '',
-            'gl': '',
+            'd3d11': '#system_library,link_always "ole32";',
+            'gl': '#system_library,link_always "ole32";',
         },
         'macos': {
-            'metal': '"system:AudioToolbox.framework"',
-            'gl': '"system:AudioToolbox.framework"',
+            'metal': '#system_library,link_always "AudioToolbox";',
+            'gl': '#system_library,link_always "AudioToolbox";',
         },
         'linux': {
-            'gl': '"system:asound", "system:dl", "system:pthread"',
+            'gl': '#system_library,link_always "asound"; #system_library,link_always "dl"; #system_library,link_always "pthread";',
         }
     }
 }
@@ -78,14 +77,11 @@ c_source_names = {
     'sdtx_':    'sokol_debugtext.c',
     'sshape_':  'sokol_shape.c',
     'sglue_':   'sokol_glue.c',
-    'simgui_':  'sokol_imgui.c',
 }
 
 ignores = [
     'sdtx_printf',
     'sdtx_vprintf',
-    'sg_install_trace_hooks',
-    'sg_trace_hooks',
 ]
 
 # NOTE: syntax for function results: "func_name.RESULT"
@@ -95,22 +91,22 @@ overrides = {
 }
 
 prim_types = {
-    'int':          'c.int',
+    'int':          's32',
     'bool':         'bool',
     'char':         'u8',
-    'int8_t':       'i8',
+    'int8_t':       's8',
     'uint8_t':      'u8',
-    'int16_t':      'i16',
+    'int16_t':      's16',
     'uint16_t':     'u16',
-    'int32_t':      'i32',
+    'int32_t':      's32',
     'uint32_t':     'u32',
-    'int64_t':      'i64',
+    'int64_t':      's64',
     'uint64_t':     'u64',
-    'float':        'f32',
-    'double':       'f64',
-    'uintptr_t':    'c.uintptr_t',
-    'intptr_t':     'c.intptr_t',
-    'size_t':       'c.size_t'
+    'float':        'float',
+    'double':       'float64',
+    'uintptr_t':    'u64',
+    'intptr_t':     's64',
+    'size_t':       'u64'
 }
 
 prim_defaults = {
@@ -178,31 +174,22 @@ def as_snake_case(s, prefix):
         outp = outp[len(prefix):]
     return outp
 
-def get_odin_module_path(c_prefix):
+def get_jai_module_path(c_prefix):
     return f'{module_root}/{module_names[c_prefix]}'
 
 def get_csource_path(c_prefix):
     return f'{c_root}/{c_source_names[c_prefix]}'
 
-def make_odin_module_directory(c_prefix):
-    path = get_odin_module_path(c_prefix)
+def make_jai_module_directory(c_prefix):
+    path = get_jai_module_path(c_prefix)
     if not os.path.isdir(path):
         os.makedirs(path)
 
 def as_prim_type(s):
     return prim_types[s]
 
-# prefix_bla_blub(_t) => (dep.)Bla_Blub
 def as_struct_or_enum_type(s, prefix):
-    parts = s.lower().split('_')
-    outp = '' if s.startswith(prefix) else f'{parts[0]}.'
-    for part in parts[1:]:
-        # ignore '_t' type postfix
-        if (part != 't'):
-            outp += part.capitalize()
-            outp += '_'
-    outp = outp[:-1]
-    return outp
+    return s
 
 # PREFIX_ENUM_BLA_BLUB => BLA_BLUB, _PREFIX_ENUM_BLA_BLUB => BLA_BLUB
 def as_enum_item_name(s):
@@ -250,39 +237,26 @@ def type_default_value(s):
     return prim_defaults[s]
 
 def map_type(type, prefix, sub_type):
-    if sub_type not in ['c_arg', 'odin_arg', 'struct_field']:
+    if sub_type not in ['c_arg', 'struct_field']:
         sys.exit(f"Error: map_type(): unknown sub_type '{sub_type}")
     if type == "void":
         return ""
-    elif is_prim_type(type):
-        if sub_type == 'odin_arg':
-            # for Odin args, maps C int (32-bit) to Odin int (pointer-sized),
-            # and the C bool type to Odin's bool type
-            if type == 'int' or type == 'uint32_t':
-                return 'int'
-            elif type == 'bool':
-                return 'bool'
-        return as_prim_type(type)
     elif is_struct_type(type):
         return as_struct_or_enum_type(type, prefix)
     elif is_enum_type(type):
         return as_struct_or_enum_type(type, prefix)
     elif util.is_void_ptr(type):
-        return "rawptr"
+        return "*void"
     elif util.is_const_void_ptr(type):
-        return "rawptr"
+        return "*void"
     elif util.is_string_ptr(type):
-        return "cstring"
+        return "*u8"
     elif is_const_struct_ptr(type):
-        # pass Odin struct args by value, not by pointer
-        if sub_type == 'odin_arg':
-            return f"{as_struct_or_enum_type(util.extract_ptr_type(type), prefix)}"
-        else:
-            return f"^{as_struct_or_enum_type(util.extract_ptr_type(type), prefix)}"
+        return f"*{as_struct_or_enum_type(util.extract_ptr_type(type), prefix)}"
     elif is_prim_ptr(type):
-        return f"^{as_prim_type(util.extract_ptr_type(type))}"
+        return f"*{as_prim_type(util.extract_ptr_type(type))}"
     elif is_const_prim_ptr(type):
-        return f"^{as_prim_type(util.extract_ptr_type(type))}"
+        return f"*{as_prim_type(util.extract_ptr_type(type))}"
     elif util.is_1d_array_type(type):
         array_type = util.extract_array_type(type)
         array_sizes = util.extract_array_sizes(type)
@@ -294,7 +268,9 @@ def map_type(type, prefix, sub_type):
     elif util.is_func_ptr(type):
         res_type = funcptr_result_c(type, prefix)
         res_str = '' if res_type == '' else f' -> {res_type}'
-        return f'proc "c" ({funcptr_args_c(type, prefix)}){res_str}'
+        return f'({funcptr_args_c(type, prefix)}){res_str} #c_call'
+    elif is_prim_type(type):
+        return as_prim_type(type)
     else:
         sys.exit(f"Error map_type(): unknown type '{type}'")
 
@@ -306,12 +282,7 @@ def funcdecl_args_c(decl, prefix):
             s += ', '
         param_name = param_decl['name']
         param_type = check_override(f'{func_name}.{param_name}', default=param_decl['type'])
-        if is_const_struct_ptr(param_type):
-            s += f"#by_ptr {param_name}: {map_type(param_type, prefix, 'odin_arg')}"
-        elif is_int_type(param_type):
-            s += f"#any_int {param_name}: {map_type(param_type, prefix, 'c_arg')}"
-        else:
-            s += f"{param_name}: {map_type(param_type, prefix, 'c_arg')}"
+        s += f"{param_name}: {map_type(param_type, prefix, 'c_arg')}"
     return s
 
 def funcptr_args_c(field_type, prefix):
@@ -346,7 +317,7 @@ def get_system_libs(module, platform, backend):
             if backend in system_libs[module][platform]:
                 libs = system_libs[module][platform][backend]
                 if libs != '':
-                    return f", {libs}"
+                    return f"{libs}"
     return ''
 
 def gen_c_imports(inp, c_prefix, prefix):
@@ -358,124 +329,107 @@ def gen_c_imports(inp, c_prefix, prefix):
     macos_metal_libs = get_system_libs(prefix, 'macos', 'metal')
     macos_gl_libs = get_system_libs(prefix, 'macos', 'gl')
     linux_gl_libs = get_system_libs(prefix, 'linux', 'gl')
-    l( 'import "core:c"')
+    l( '#module_parameters(DEBUG := false, USE_GL := false, USE_DLL := false);')
     l( '')
-    l( '_ :: c')
+    l( '#scope_export;')
     l( '')
-    l( 'SOKOL_DEBUG :: #config(SOKOL_DEBUG, ODIN_DEBUG)')
-    l( '')
-    l(f'DEBUG :: #config(SOKOL_{module_name.upper()}_DEBUG, SOKOL_DEBUG)')
-    l( 'USE_GL :: #config(SOKOL_USE_GL, false)')
-    l( 'USE_DLL :: #config(SOKOL_DLL, false)')
-    l( '')
-    l( 'when ODIN_OS == .Windows {')
-    l( '    when USE_DLL {')
-    l( '        when USE_GL {')
-    l(f'            when DEBUG {{ foreign import {clib_import} {{ "../sokol_dll_windows_x64_gl_debug.lib"{windows_gl_libs} }} }}')
-    l(f'            else       {{ foreign import {clib_import} {{ "../sokol_dll_windows_x64_gl_release.lib"{windows_gl_libs} }} }}')
+    l( '#if OS == .WINDOWS {')
+    l( '    #if USE_DLL {')
+    l( '        #if USE_GL {')
+    l(f'            {windows_gl_libs}')
+    l(f'            #if  DEBUG {{ {clib_import} :: #library "{clib_prefix}_windows_x64_gl_debug";   }}')
+    l(f'            else       {{ {clib_import} :: #library "{clib_prefix}_windows_x64_gl_release"; }}')
     l( '        } else {')
-    l(f'            when DEBUG {{ foreign import {clib_import} {{ "../sokol_dll_windows_x64_d3d11_debug.lib"{windows_d3d11_libs} }} }}')
-    l(f'            else       {{ foreign import {clib_import} {{ "../sokol_dll_windows_x64_d3d11_release.lib"{windows_d3d11_libs} }} }}')
+    l(f'            {windows_d3d11_libs}')
+    l(f'            #if  DEBUG {{ {clib_import} :: #library "{clib_prefix}_windows_x64_d3d11_debug";   }}')
+    l(f'            else       {{ {clib_import} :: #library "{clib_prefix}_windows_x64_d3d11_release"; }}')
     l( '        }')
     l( '    } else {')
-    l( '        when USE_GL {')
-    l(f'            when DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_windows_x64_gl_debug.lib"{windows_gl_libs} }} }}')
-    l(f'            else       {{ foreign import {clib_import} {{ "{clib_prefix}_windows_x64_gl_release.lib"{windows_gl_libs} }} }}')
+    l( '        #if USE_GL {')
+    l(f'            {windows_gl_libs}')
+    l(f'            #if  DEBUG {{ {clib_import} :: #library,no_dll "{clib_prefix}_windows_x64_gl_debug";   }}')
+    l(f'            else       {{ {clib_import} :: #library,no_dll "{clib_prefix}_windows_x64_gl_release"; }}')
     l( '        } else {')
-    l(f'            when DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_windows_x64_d3d11_debug.lib"{windows_d3d11_libs} }} }}')
-    l(f'            else       {{ foreign import {clib_import} {{ "{clib_prefix}_windows_x64_d3d11_release.lib"{windows_d3d11_libs} }} }}')
+    l(f'            {windows_d3d11_libs}')
+    l(f'            #if  DEBUG {{ {clib_import} :: #library,no_dll "{clib_prefix}_windows_x64_d3d11_debug";   }}')
+    l(f'            else       {{ {clib_import} :: #library,no_dll "{clib_prefix}_windows_x64_d3d11_release"; }}')
     l( '        }')
     l( '    }')
-    l( '} else when ODIN_OS == .Darwin {')
-    l( '    when USE_DLL {')
-    l(f'             when  USE_GL && ODIN_ARCH == .arm64 &&  DEBUG {{ foreign import {clib_import} {{ "../dylib/sokol_dylib_macos_arm64_gl_debug.dylib" }} }}')
-    l(f'        else when  USE_GL && ODIN_ARCH == .arm64 && !DEBUG {{ foreign import {clib_import} {{ "../dylib/sokol_dylib_macos_arm64_gl_release.dylib" }} }}')
-    l(f'        else when  USE_GL && ODIN_ARCH == .amd64 &&  DEBUG {{ foreign import {clib_import} {{ "../dylib/sokol_dylib_macos_x64_gl_debug.dylib" }} }}')
-    l(f'        else when  USE_GL && ODIN_ARCH == .amd64 && !DEBUG {{ foreign import {clib_import} {{ "../dylib/sokol_dylib_macos_x64_gl_release.dylib" }} }}')
-    l(f'        else when !USE_GL && ODIN_ARCH == .arm64 &&  DEBUG {{ foreign import {clib_import} {{ "../dylib/sokol_dylib_macos_arm64_metal_debug.dylib" }} }}')
-    l(f'        else when !USE_GL && ODIN_ARCH == .arm64 && !DEBUG {{ foreign import {clib_import} {{ "../dylib/sokol_dylib_macos_arm64_metal_release.dylib" }} }}')
-    l(f'        else when !USE_GL && ODIN_ARCH == .amd64 &&  DEBUG {{ foreign import {clib_import} {{ "../dylib/sokol_dylib_macos_x64_metal_debug.dylib" }} }}')
-    l(f'        else when !USE_GL && ODIN_ARCH == .amd64 && !DEBUG {{ foreign import {clib_import} {{ "../dylib/sokol_dylib_macos_x64_metal_release.dylib" }} }}')
+    l( '}')
+    l( 'else #if OS == .MACOS {')
+    l( '    #if USE_DLL {')
+    l(f'             #if  USE_GL && CPU == .ARM64 &&  DEBUG {{ {clib_import} :: #library "../dylib/sokol_dylib_macos_arm64_gl_debug.dylib"; }}')
+    l(f'        else #if  USE_GL && CPU == .ARM64 && !DEBUG {{ {clib_import} :: #library "../dylib/sokol_dylib_macos_arm64_gl_release.dylib"; }}')
+    l(f'        else #if  USE_GL && CPU == .X64   &&  DEBUG {{ {clib_import} :: #library "../dylib/sokol_dylib_macos_x64_gl_debug.dylib"; }}')
+    l(f'        else #if  USE_GL && CPU == .X64   && !DEBUG {{ {clib_import} :: #library "../dylib/sokol_dylib_macos_x64_gl_release.dylib"; }}')
+    l(f'        else #if !USE_GL && CPU == .ARM64 &&  DEBUG {{ {clib_import} :: #library "../dylib/sokol_dylib_macos_arm64_metal_debug.dylib"; }}')
+    l(f'        else #if !USE_GL && CPU == .ARM64 && !DEBUG {{ {clib_import} :: #library "../dylib/sokol_dylib_macos_arm64_metal_release.dylib"; }}')
+    l(f'        else #if !USE_GL && CPU == .X64   &&  DEBUG {{ {clib_import} :: #library "../dylib/sokol_dylib_macos_x64_metal_debug.dylib"; }}')
+    l(f'        else #if !USE_GL && CPU == .X64   && !DEBUG {{ {clib_import} :: #library "../dylib/sokol_dylib_macos_x64_metal_release.dylib"; }}')
     l( '    } else {')
-    l( '        when USE_GL {')
-    l( '            when ODIN_ARCH == .arm64 {')
-    l(f'                when DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_macos_arm64_gl_debug.a"{macos_gl_libs} }} }}')
-    l(f'                else       {{ foreign import {clib_import} {{ "{clib_prefix}_macos_arm64_gl_release.a"{macos_gl_libs} }} }}')
+    l( '        #if USE_GL {')
+    l(f'            {macos_gl_libs}')
+    l( '            #if CPU == .ARM64 {')
+    l(f'                #if  DEBUG {{ {clib_import} :: #library,no_dll "{clib_prefix}_macos_arm64_gl_debug";   }}')
+    l(f'                else       {{ {clib_import} :: #library,no_dll "{clib_prefix}_macos_arm64_gl_release"; }}')
     l( '            } else {')
-    l(f'                when DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_macos_x64_gl_debug.a"{macos_gl_libs} }} }}')
-    l(f'                else       {{ foreign import {clib_import} {{ "{clib_prefix}_macos_x64_gl_release.a"{macos_gl_libs} }} }}')
+    l(f'                #if  DEBUG {{ {clib_import} :: #library,no_dll "{clib_prefix}_macos_x64_gl_debug";   }}')
+    l(f'                else       {{ {clib_import} :: #library,no_dll "{clib_prefix}_macos_x64_gl_release"; }}')
     l( '            }')
     l( '        } else {')
-    l( '            when ODIN_ARCH == .arm64 {')
-    l(f'                when DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_macos_arm64_metal_debug.a"{macos_metal_libs} }} }}')
-    l(f'                else       {{ foreign import {clib_import} {{ "{clib_prefix}_macos_arm64_metal_release.a"{macos_metal_libs} }} }}')
+    l(f'            {macos_metal_libs}')
+    l( '            #if CPU == .ARM64 {')
+    l(f'                #if  DEBUG {{ {clib_import} :: #library,no_dll "{clib_prefix}_macos_arm64_metal_debug";   }}')
+    l(f'                else       {{ {clib_import} :: #library,no_dll "{clib_prefix}_macos_arm64_metal_release"; }}')
     l( '            } else {')
-    l(f'                when DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_macos_x64_metal_debug.a"{macos_metal_libs} }} }}')
-    l(f'                else       {{ foreign import {clib_import} {{ "{clib_prefix}_macos_x64_metal_release.a"{macos_metal_libs} }} }}')
+    l(f'                #if  DEBUG {{ {clib_import} :: #library,no_dll "{clib_prefix}_macos_x64_metal_debug";   }}')
+    l(f'                else       {{ {clib_import} :: #library,no_dll "{clib_prefix}_macos_x64_metal_release"; }}')
     l( '            }')
     l( '        }')
     l( '    }')
-    l( '} else when ODIN_OS == .Linux {')
-    l( '    when USE_DLL {')
-    l(f'        when DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_debug.so"{linux_gl_libs} }} }}')
-    l(f'        else       {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_release.so"{linux_gl_libs} }} }}')
-    l( '    } else {')
-    l(f'        when DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_debug.a"{linux_gl_libs} }} }}')
-    l(f'        else       {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_release.a"{linux_gl_libs} }} }}')
-    l( '    }')
-    l( '} else when ODIN_ARCH == .wasm32 || ODIN_ARCH == .wasm64p32 {')
-    l(f'    // Feed {clib_prefix}_wasm_gl_debug.a or {clib_prefix}_wasm_gl_release.a into emscripten compiler.')
-    l(f'    foreign import {clib_import} {{ "env.o" }}')
+    l( '} else #if OS == .LINUX {')
+    if linux_gl_libs:
+        l(f'    {linux_gl_libs}')
+    l(f'    #if  DEBUG {{ {clib_import} :: #library,no_dll "{clib_prefix}_linux_x64_gl_debug";   }}')
+    l(f'    else       {{ {clib_import} :: #library,no_dll "{clib_prefix}_linux_x64_gl_release"; }}')
+    l( '} else #if OS == .WASM {')
+    l(f'    #if  DEBUG {{ {clib_import} :: #library,no_dll "{clib_prefix}_wasm_gl_debug";   }}')
+    l(f'    else       {{ {clib_import} :: #library,no_dll "{clib_prefix}_wasm_gl_release"; }}')
     l( '} else {')
-    l( '    #panic("This OS is currently not supported")')
+    l( '    log_error("This OS is currently not supported");')
     l( '}')
     l( '')
 
-    # Need to special case sapp_sg to avoid Odin's context keyword
-    if c_prefix == "sapp_sg":
-        l(f'@(default_calling_convention="c")')
-    else:
-        l(f'@(default_calling_convention="c", link_prefix="{c_prefix}")')
-    l(f"foreign {clib_import} {{")
     prefix = inp['prefix']
     for decl in inp['decls']:
         if decl['kind'] == 'func' and not decl['is_dep'] and not check_ignore(decl['name']):
             args = funcdecl_args_c(decl, prefix)
             res_type = funcdecl_result_c(decl, prefix)
-            res_str = '' if res_type == '' else f'-> {res_type}'
+            res_str = '-> void' if res_type == '' else f'-> {res_type}'
             if decl.get('comment'):
-                c(decl['comment'], indent="    ")
-            # Need to special case sapp_sg to avoid Odin's context keyword
-            if c_prefix == "sapp_sg":
-                l(f'    @(link_name="{decl["name"]}")')
-                l(f"    {check_override(as_snake_case(decl['name'], c_prefix))} :: proc({args}) {res_str} ---")
-            else:
-                l(f"    {as_snake_case(decl['name'], c_prefix)} :: proc({args}) {res_str} ---")
-    l('}')
+                c(decl['comment'])
+            l(f"{decl['name']} :: ({args}) {res_str} #foreign {clib_import};")
     l('')
 
 def gen_consts(decl, prefix):
-    c(decl.get('comment'))
     for item in decl['items']:
         item_name = check_override(item['name'])
         c(item.get('comment'))
-        l(f"{as_snake_case(item_name, prefix)} :: {item['value']}")
+        l(f"{as_snake_case(item_name, prefix)} :: {item['value']};")
     l('')
 
 def gen_struct(decl, prefix):
     c_struct_name = check_override(decl['name'])
     struct_name = as_struct_or_enum_type(c_struct_name, prefix)
-    if decl.get('comment'):
-        c(decl['comment'])
     l(f'{struct_name} :: struct {{')
     for field in decl['fields']:
         field_name = check_override(field['name'])
         field_type = map_type(check_override(f'{c_struct_name}.{field_name}', default=field['type']), prefix, 'struct_field')
         # any field name starting with _ is considered private
         if field_name.startswith('_'):
-            l(f'    _ : {field_type},')
+            l(f'    _ : {field_type};')
         else:
-            l(f'    {field_name} : {field_type},')
+            l(f'    {field_name} : {field_type};')
     l('}')
     l('')
 
@@ -483,37 +437,34 @@ def gen_enum(decl, prefix):
     enum_name = check_override(decl['name'])
     if decl.get('comment'):
         c(decl['comment'])
-    l(f'{as_struct_or_enum_type(enum_name, prefix)} :: enum i32 {{')
+    l(f'{as_struct_or_enum_type(enum_name, prefix)} :: enum u32 {{')
     for item in decl['items']:
         item_name = as_enum_item_name(check_override(item['name']))
         if item_name != 'FORCE_U32' and item_name != 'NUM':
             if 'value' in item:
-                l(f"    {item_name} = {item['value']},")
+                l(f"    {item_name} :: {item['value']};")
             else:
-                l(f"    {item_name},")
+                l(f"    {item_name};")
     l('}')
     l('')
 
 def gen_imports(dep_prefixes):
     for dep_prefix in dep_prefixes:
         dep_module_name = module_names[dep_prefix]
-        l(f'import {dep_prefix[:-1]} "../{dep_module_name}"')
+        l(f'#import,dir "../{dep_module_name}"(DEBUG = USE_DLL, USE_GL = USE_DLL, USE_DLL = USE_DLL);')
     l('')
 
 def gen_helpers(inp):
     if inp['prefix'] == 'sdtx_':
-        l('import "core:fmt"')
-        l('import "core:strings"')
-        l('printf :: proc(s: string, args: ..any) {')
-        l('    fstr := fmt.tprintf(s, ..args)')
-        l('    putr(strings.unsafe_string_to_cstring(fstr), len(fstr))')
+        l('sdtx_printf :: (s: string, args: ..Any) {')
+        l('    #import "Basic";')
+        l('    fstr := tprint(s, ..args);')
+        l('    sdtx_putr(to_c_string(fstr), xx fstr.count);')
         l('}')
 
 def gen_module(inp, c_prefix, dep_prefixes):
     pre_parse(inp)
     l('// machine generated, do not edit')
-    l('')
-    l(f"package sokol_{inp['module']}")
     if inp.get('comment'):
         l('')
         c(inp['comment'])
@@ -547,7 +498,7 @@ def pre_parse(inp):
                 enum_items[enum_name].append(as_enum_item_name(item['name']))
 
 def prepare():
-    print('=== Generating Odin bindings:')
+    print('=== Generating Jai bindings:')
     if not os.path.isdir(module_root):
         os.makedirs(module_root)
     if not os.path.isdir(c_root):
@@ -558,12 +509,12 @@ def gen(c_header_path, c_prefix, dep_c_prefixes):
         print(f'  >> warning: skipping generation for {c_prefix} prefix...')
         return
     reset_globals()
-    make_odin_module_directory(c_prefix)
+    make_jai_module_directory(c_prefix)
     print(f'  {c_header_path} => {module_names[c_prefix]}')
     shutil.copyfile(c_header_path, f'{c_root}/{os.path.basename(c_header_path)}')
     csource_path = get_csource_path(c_prefix)
     module_name = module_names[c_prefix]
     ir = gen_ir.gen(c_header_path, csource_path, module_name, c_prefix, dep_c_prefixes, with_comments=True)
     gen_module(ir, c_prefix, dep_c_prefixes)
-    with open(f"{module_root}/{ir['module']}/{ir['module']}.odin", 'w', newline='\n') as f_outp:
+    with open(f"{module_root}/{ir['module']}/module.jai", 'w', newline='\n') as f_outp:
         f_outp.write(out_lines)

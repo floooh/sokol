@@ -296,7 +296,7 @@ SOKOL_API_IMPL uint64_t stm_round_to_common_refresh_rate(uint64_t ticks) {
         }
         i++;
     }
-    // fallthough: didn't fit into any buckets
+    // fallthrough: didn't fit into any buckets
     return ticks;
 }
 

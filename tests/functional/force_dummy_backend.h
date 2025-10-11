@@ -1,8 +1,8 @@
 #if defined(SOKOL_GLES3)
 #undef SOKOL_GLES3
 #endif
-#if defined(SOKOL_GLCORE33)
-#undef SOKOL_GLCORE33
+#if defined(SOKOL_GLCORE)
+#undef SOKOL_GLCORE
 #endif
 #if defined(SOKOL_METAL)
 #undef SOKOL_METAL

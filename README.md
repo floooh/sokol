@@ -1,12 +1,14 @@
+<p align="center">
+    <img src="assets/logo_full_large.png" style="width: 60%" /><br/><br/>Simple
+    <a href="https://github.com/nothings/stb/blob/master/docs/stb_howto.txt">STB-style</a>
+    cross-platform libraries for C and C++, written in C.<br/><br/>
+</p>
+
 # Sokol
 
-Simple
-[STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
-cross-platform libraries for C and C++, written in C.
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**04-Oct-2025**: new sokol_gfx.h function sg_draw_ex() added)
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**06-Jan-2024**: some new size computation helper functions in sokol_gfx.h)
-
-[![Build](/../../actions/workflows/main.yml/badge.svg)](/../../actions/workflows/main.yml) [![Bindings](/../../actions/workflows/gen_bindings.yml/badge.svg)](/../../actions/workflows/gen_bindings.yml) [![build](https://github.com/floooh/sokol-zig/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-zig/actions/workflows/main.yml) [![build](https://github.com/floooh/sokol-nim/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-nim/actions/workflows/main.yml) [![Odin](https://github.com/floooh/sokol-odin/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-odin/actions/workflows/main.yml)[![Rust](https://github.com/floooh/sokol-rust/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-rust/actions/workflows/main.yml)
+[![Build](/../../actions/workflows/main.yml/badge.svg)](/../../actions/workflows/main.yml) [![Bindings](/../../actions/workflows/gen_bindings.yml/badge.svg)](/../../actions/workflows/gen_bindings.yml) [![build](https://github.com/floooh/sokol-zig/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-zig/actions/workflows/main.yml) [![build](https://github.com/floooh/sokol-nim/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-nim/actions/workflows/main.yml) [![Odin](https://github.com/floooh/sokol-odin/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-odin/actions/workflows/main.yml)[![Rust](https://github.com/floooh/sokol-rust/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-rust/actions/workflows/main.yml)[![Dlang](https://github.com/kassane/sokol-d/actions/workflows/build.yml/badge.svg)](https://github.com/kassane/sokol-d/actions/workflows/build.yml)[![C3](https://github.com/floooh/sokol-c3/actions/workflows/build.yml/badge.svg)](https://github.com/floooh/sokol-c3/actions/workflows/build.yml)
 
 ## Examples and Related Projects
 
@@ -14,9 +16,12 @@ cross-platform libraries for C and C++, written in C.
 
 - [Doom Shareware](https://floooh.github.io/doom-sokol/) ported to the Sokol headers ([source](https://github.com/floooh/doom-sokol))
 
+- [Everybody Wants to Crank the World](https://aras-p.github.io/demo-pd-cranktheworld/) demo by
+Aras Pranckevičius, PC/web port via sokol ([source](https://github.com/aras-p/demo-pd-cranktheworld)).
+
 - [sokol_gp.h](https://github.com/edubart/sokol_gp) a 2D shape drawing library on top of sokol_gfx.h
 
-- [LearnOpenGL examples ported to sokol-gfx](https://www.geertarien.com/learnopengl-examples-html5/) by @geertarien (cool stuff!)
+- [LearnOpenGL examples ported to sokol-gfx](https://zeromake.github.io/learnopengl-examples/) ([git repo](https://github.com/zeromake/learnopengl-examples))
 
 - [Dear ImGui starterkit](https://github.com/floooh/cimgui-sokol-starterkit) a self-contained starterkit for writing Dear ImGui apps in C.
 
@@ -26,9 +31,17 @@ cross-platform libraries for C and C++, written in C.
 
 - A 'single-file' [Pacman clone in C99](https://github.com/floooh/pacman.c/), also available in [Zig](https://github.com/floooh/pacman.zig/)
 
+- [Solar Storm](https://store.steampowered.com/app/2754920/Solar_Storm/), a turn-based scifi artillery game built with Odin and Sokol, released on Steam.
+
+- [Spanking Runners (Samogonki)](https://store.steampowered.com/app/2599800/Spanking_Runners/), arcade racing in a bright and unusual world, released on Steam.
+
 - [MEG-4](https://bztsrc.gitlab.io/meg4) a virtual fantasy console emulator in C89, ported to sokol
 
 - A [Minigolf game](https://mgerdes.github.io/minigolf.html) ([source](https://github.com/mgerdes/minigolf)).
+
+- [hIghQube](https://github.com/RuiVarela/hIghQube) A game demo that used sokol rendering extensively
+
+- [Senos](https://github.com/RuiVarela/Senos) A music app that uses sokol as backend
 
 - ['Dealer's Dungeon'](https://dealers-dungeon.com/demo/) ([lower graphics quality](https://dealers-dungeon.com/demo/?q=3),
 [source](https://github.com/bqqbarbhg/spear))
@@ -69,6 +82,9 @@ These are automatically updated on changes to the C headers:
 - [sokol-odin](https://github.com/floooh/sokol-odin)
 - [sokol-nim](https://github.com/floooh/sokol-nim)
 - [sokol-rust](https://github.com/floooh/sokol-rust)
+- [sokol-d](https://github.com/kassane/sokol-d)
+- [sokol-jai](https://github.com/colinbellino/sokol-jai)
+- [sokol-c3](https://github.com/floooh/sokol-c3)
 
 ## Notes
 
@@ -88,109 +104,11 @@ A blog post with more background info: [A Tour of sokol_gfx.h](http://floooh.git
 
 # sokol_gfx.h:
 
-- simple, modern wrapper around GLES3/WebGL2, GL3.3, D3D11 and Metal
+- simple, modern wrapper around GLES3/WebGL2, GL3.3, D3D11, Metal, and WebGPU
 - buffers, images, shaders, pipeline-state-objects and render-passes
 - does *not* handle window creation or 3D API context initialization
 - does *not* provide shader dialect cross-translation (**BUT** there's now an 'official' shader-cross-compiler solution which
 seamlessly integrates with sokol_gfx.h and IDEs: [see here for details](https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md)
-
-A triangle in C99 with GLFW:
-
-```c
-#define SOKOL_IMPL
-#define SOKOL_GLCORE33
-#include "sokol_gfx.h"
-#include "sokol_log.h"
-#define GLFW_INCLUDE_NONE
-#include "GLFW/glfw3.h"
-
-int main() {
-
-    /* create window and GL context via GLFW */
-    glfwInit();
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    GLFWwindow* w = glfwCreateWindow(640, 480, "Sokol Triangle GLFW", 0, 0);
-    glfwMakeContextCurrent(w);
-    glfwSwapInterval(1);
-
-    /* setup sokol_gfx */
-    sg_setup(&(sg_desc){
-        .logger.func = slog_func,
-    });
-
-    /* a vertex buffer */
-    const float vertices[] = {
-        // positions            // colors
-         0.0f,  0.5f, 0.5f,     1.0f, 0.0f, 0.0f, 1.0f,
-         0.5f, -0.5f, 0.5f,     0.0f, 1.0f, 0.0f, 1.0f,
-        -0.5f, -0.5f, 0.5f,     0.0f, 0.0f, 1.0f, 1.0f
-    };
-    sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){
-        .data = SG_RANGE(vertices)
-    });
-
-    /* a shader */
-    sg_shader shd = sg_make_shader(&(sg_shader_desc){
-        .vs.source =
-            "#version 330\n"
-            "layout(location=0) in vec4 position;\n"
-            "layout(location=1) in vec4 color0;\n"
-            "out vec4 color;\n"
-            "void main() {\n"
-            "  gl_Position = position;\n"
-            "  color = color0;\n"
-            "}\n",
-        .fs.source =
-            "#version 330\n"
-            "in vec4 color;\n"
-            "out vec4 frag_color;\n"
-            "void main() {\n"
-            "  frag_color = color;\n"
-            "}\n"
-    });
-
-    /* a pipeline state object (default render states are fine for triangle) */
-    sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
-        .shader = shd,
-        .layout = {
-            .attrs = {
-                [0].format=SG_VERTEXFORMAT_FLOAT3,
-                [1].format=SG_VERTEXFORMAT_FLOAT4
-            }
-        }
-    });
-
-    /* resource bindings */
-    sg_bindings bind = {
-        .vertex_buffers[0] = vbuf
-    };
-
-    /* default pass action (clear to grey) */
-    sg_pass_action pass_action = {0};
-
-    /* draw loop */
-    while (!glfwWindowShouldClose(w)) {
-        int cur_width, cur_height;
-        glfwGetFramebufferSize(w, &cur_width, &cur_height);
-        sg_begin_default_pass(&pass_action, cur_width, cur_height);
-        sg_apply_pipeline(pip);
-        sg_apply_bindings(&bind);
-        sg_draw(0, 3, 1);
-        sg_end_pass();
-        sg_commit();
-        glfwSwapBuffers(w);
-        glfwPollEvents();
-    }
-
-    /* cleanup */
-    sg_shutdown();
-    glfwTerminate();
-    return 0;
-}
-```
 
 # sokol_app.h
 
@@ -203,32 +121,57 @@ A minimal cross-platform application-wrapper library:
 - supported platforms: Win32, MacOS, Linux (X11), iOS, WASM, Android, UWP
 - supported 3D-APIs: GL3.3 (GLX/WGL), Metal, D3D11, GLES3/WebGL2
 
-A simple clear-loop sample using sokol_app.h and sokol_gfx.h (does not include
-separate sokol.c/.m implementation file which is necessary
-to split the Objective-C code from the C code of the sample):
+The vanilla Hello-Triangle using sokol_gfx.h, sokol_app.h and the
+sokol-shdc shader compiler (shader code not shown):
 
 ```c
-#include "sokol_gfx.h"
 #include "sokol_app.h"
+#include "sokol_gfx.h"
 #include "sokol_log.h"
 #include "sokol_glue.h"
+#include "triangle-sapp.glsl.h"
 
-sg_pass_action pass_action;
+static struct {
+    sg_pipeline pip;
+    sg_bindings bind;
+    sg_pass_action pass_action;
+} state;
 
-void init(void) {
+static void init(void) {
     sg_setup(&(sg_desc){
-        .context = sapp_sgcontext(),
+        .environment = sglue_environment(),
         .logger.func = slog_func,
     });
-    pass_action = (sg_pass_action) {
-        .colors[0] = { .load_action=SG_LOADACTION_CLEAR, .clear_value={1.0f, 0.0f, 0.0f, 1.0f} }
+
+    float vertices[] = {
+         0.0f,  0.5f, 0.5f,     1.0f, 0.0f, 0.0f, 1.0f,
+         0.5f, -0.5f, 0.5f,     0.0f, 1.0f, 0.0f, 1.0f,
+        -0.5f, -0.5f, 0.5f,     0.0f, 0.0f, 1.0f, 1.0f
+    };
+    state.bind.vertex_buffers[0] = sg_make_buffer(&(sg_buffer_desc){
+        .data = SG_RANGE(vertices),
+    });
+
+    state.pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = sg_make_shader(triangle_shader_desc(sg_query_backend())),
+        .layout = {
+            .attrs = {
+                [ATTR_triangle_position].format = SG_VERTEXFORMAT_FLOAT3,
+                [ATTR_triangle_color0].format = SG_VERTEXFORMAT_FLOAT4
+            }
+        },
+    });
+
+    state.pass_action = (sg_pass_action) {
+        .colors[0] = { .load_action=SG_LOADACTION_CLEAR, .clear_value={0.0f, 0.0f, 0.0f, 1.0f } }
     };
 }
 
 void frame(void) {
-    float g = pass_action.colors[0].clear_value.g + 0.01f;
-    pass_action.colors[0].clear_value.g = (g > 1.0f) ? 0.0f : g;
-    sg_begin_default_pass(&pass_action, sapp_width(), sapp_height());
+    sg_begin_pass(&(sg_pass){ .action = state.pass_action, .swapchain = sglue_swapchain() });
+    sg_apply_pipeline(state.pip);
+    sg_apply_bindings(&state.bind);
+    sg_draw(0, 3, 1);
     sg_end_pass();
     sg_commit();
 }
@@ -238,13 +181,15 @@ void cleanup(void) {
 }
 
 sapp_desc sokol_main(int argc, char* argv[]) {
+    (void)argc; (void)argv;
     return (sapp_desc){
         .init_cb = init,
         .frame_cb = frame,
         .cleanup_cb = cleanup,
-        .width = 400,
-        .height = 300,
-        .window_title = "Clear Sample",
+        .width = 640,
+        .height = 480,
+        .window_title = "Triangle",
+        .icon.sokol_default = true,
         .logger.func = slog_func,
     };
 }

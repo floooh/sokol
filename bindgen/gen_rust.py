@@ -1,7 +1,7 @@
 # -------------------------------------------------------------------------------
-#   Generate rust bindings.
+#   Generate Rust bindings.
 #
-#   rust coding style:
+#   Rust coding style:
 #   - types are PascalCase
 #   - otherwise snake_case
 # -------------------------------------------------------------------------------
@@ -19,14 +19,12 @@ module_names = {
     "sgl_": "gl",
     "sdtx_": "debugtext",
     "sshape_": "shape",
-    "sapp_sg": "glue",
     "simgui_": "imgui",
-    "sg_imgui_": "gfx_imgui",
+    "sglue_": "glue",
 }
 
 module_requires_rust_feature = {
     module_names["simgui_"]: "imgui",
-    module_names["sg_imgui_"]: "imgui",
 }
 
 c_source_paths = {
@@ -38,21 +36,21 @@ c_source_paths = {
     "sgl_": "sokol-rust/src/sokol/c/sokol_gl.c",
     "sdtx_": "sokol-rust/src/sokol/c/sokol_debugtext.c",
     "sshape_": "sokol-rust/src/sokol/c/sokol_shape.c",
-    "sapp_sg": "sokol-rust/src/sokol/c/sokol_glue.c",
     "simgui_": "sokol-rust/src/sokol/c/sokol_imgui.c",
-    "sg_imgui_": "sokol-rust/src/sokol/c/sokol_gfx_imgui.c",
+    "sglue_": "sokol-rust/src/sokol/c/sokol_glue.c",
 }
 
 ignores = [
     "sdtx_printf",
     "sdtx_vprintf",
+    "simgui_add_key_event",
     # "sg_install_trace_hooks",
     # "sg_trace_hooks",
 ]
 
 range_struct_name = "Range"
 
-# functions that need to be exposed as 'raw' C callbacks without a rust wrapper function
+# functions that need to be exposed as 'raw' C callbacks without a Rust wrapper function
 c_callbacks = ["slog_func"]
 
 # NOTE: syntax for function results: "func_name.RESULT"
@@ -60,10 +58,13 @@ overrides = {
     "type": "_type",
     "ref": "_ref",
 
-    "sg_apply_uniforms.ub_index": "uintptr_t",
+    "sg_apply_uniforms.ub_slot": "uintptr_t",
     "sg_draw.base_element": "uintptr_t",
     "sg_draw.num_elements": "uintptr_t",
     "sg_draw.num_instances": "uintptr_t",
+    "sg_dispatch.num_groups_x": "uintptr_t",
+    "sg_dispatch.num_groups_y": "uintptr_t",
+    "sg_dispatch.num_groups_z": "uintptr_t",
     "sshape_element_range_t.base_element": "uintptr_t",
     "sshape_element_range_t.num_elements": "uintptr_t",
     "sdtx_font.font_index": "uintptr_t",
@@ -85,13 +86,6 @@ overrides = {
     "sapp_keycode::SAPP_KEYCODE_7": "SAPP_KEYCODE_NUM7",
     "sapp_keycode::SAPP_KEYCODE_8": "SAPP_KEYCODE_NUM8",
     "sapp_keycode::SAPP_KEYCODE_9": "SAPP_KEYCODE_NUM9",
-
-    # "sgl_error": "sgl_get_error",  # 'error' is reserved in zig
-    # "sgl_deg": "sgl_as_degrees",
-    # "sgl_rad": "sgl_as_radians",
-    # "sg_context_desc.color_format": "int",
-    # "SGL_NO_ERROR": "SGL_ERROR_NO_ERROR",
-    # "sg_context_desc.depth_format": "int",
 }
 
 prim_types = {
@@ -600,7 +594,7 @@ def gen_consts(decl, prefix):
     for item in decl["items"]:
         #
         # TODO: What type should these constants have? Currently giving all `usize`
-        #       unless specifically overriden by `special_constant_types`
+        #       unless specifically overridden by `special_constant_types`
         #
 
         item_name = check_override(item["name"])
@@ -755,7 +749,7 @@ def gen_imports(inp, dep_prefixes):
 
 
 def gen_helpers(inp):
-    l("/// Helper function to convert a C string to a rust string slice")
+    l("/// Helper function to convert a C string to a Rust string slice")
     l("#[inline]")
     l("fn c_char_ptr_to_rust_str(c_char_ptr: *const core::ffi::c_char) -> &'static str {")
     l("    let c_str = unsafe { core::ffi::CStr::from_ptr(c_char_ptr) };")
@@ -764,11 +758,11 @@ def gen_helpers(inp):
     l("")
 
     if inp['prefix'] in ['sg_', 'sdtx_', 'sshape_', 'sapp_']:
-        l("/// Helper function to cast a rust slice into a sokol Range")
+        l("/// Helper function to cast a Rust slice into a sokol Range")
         l(f"pub fn slice_as_range<T>(data: &[T]) -> {range_struct_name} {{")
         l(f"    {range_struct_name} {{ size: std::mem::size_of_val(data), ptr: data.as_ptr() as *const _ }}")
         l("}")
-        l("/// Helper function to cast a rust reference into a sokol Range")
+        l("/// Helper function to cast a Rust reference into a sokol Range")
         l(f"pub fn value_as_range<T>(value: &T) -> {range_struct_name} {{")
         l(f"    {range_struct_name} {{ size: std::mem::size_of::<T>(), ptr: value as *const T as *const _ }}")
         l("}")

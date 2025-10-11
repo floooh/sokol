@@ -6,7 +6,7 @@ jobs:
   test-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
       - name: test_win
         run: |
           cd tests
@@ -16,7 +16,7 @@ jobs:
   test-mac:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
       - uses: seanmiddleditch/gha-setup-ninja@master
       - name: test_macos
         run: |
@@ -26,7 +26,7 @@ jobs:
   test-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
       - uses: seanmiddleditch/gha-setup-ninja@master
       - name: prepare
         run: |
@@ -41,41 +41,53 @@ jobs:
     needs: [ test-windows, test-mac, test-linux ]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
+      - uses: actions/checkout@main
         with:
           repository: floooh/sokol-zig
           path: bindgen/sokol-zig
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
         with:
           repository: floooh/sokol-nim
           path: bindgen/sokol-nim
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
         with:
           repository: floooh/sokol-odin
           path: bindgen/sokol-odin
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
         with:
           repository: floooh/sokol-rust
           path: bindgen/sokol-rust
+      - uses: actions/checkout@main
+        with:
+          repository: kassane/sokol-d
+          path: bindgen/sokol-d
+      - uses: actions/checkout@main
+        with:
+          repository: colinbellino/sokol-jai
+          path: bindgen/sokol-jai
+      - uses: actions/checkout@main
+        with:
+          repository: floooh/sokol-c3
+          path: bindgen/sokol-c3
       - name: generate
         run: |
           cd bindgen
           python3 gen_all.py
       - name: upload-zig-artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@main
         with:
           name: ignore-me-zig
           retention-days: 1
           path: bindgen/sokol-zig/src/sokol
       - name: upload-nim-artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@main
         with:
           name: ignore-me-nim
           retention-days: 1
           path: bindgen/sokol-nim/src/sokol
       - name: upload-odin-artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@main
         with:
           name: ignore-me-odin
           retention-days: 1
@@ -83,11 +95,29 @@ jobs:
             bindgen/sokol-odin/sokol
             bindgen/sokol-odin/c
       - name: upload-rust-artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@main
         with:
           name: ignore-me-rust
           retention-days: 1
           path: bindgen/sokol-rust/src
+      - name: upload-d-artifact
+        uses: actions/upload-artifact@main
+        with:
+          name: ignore-me-d
+          retention-days: 1
+          path: bindgen/sokol-d/src/sokol
+      - name: upload-jai-artifact
+        uses: actions/upload-artifact@main
+        with:
+          name: ignore-me-jai
+          retention-days: 1
+          path: bindgen/sokol-jai/sokol
+      - name: upload-c3-artifact
+        uses: actions/upload-artifact@main
+        with:
+          name: ignore-me-c3
+          retention-days: 1
+          path: bindgen/sokol-c3/sokol.c3l
 
   test-zig:
     needs: gen-bindings
@@ -96,13 +126,13 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{matrix.os}}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
         with:
           repository: floooh/sokol-zig
-      - uses: goto-bus-stop/setup-zig@v2
+      - uses: mlugg/setup-zig@v2
         with:
-          version: 0.11.0
-      - uses: actions/download-artifact@v3
+          version: master
+      - uses: actions/download-artifact@main
         with:
           name: ignore-me-zig
           path: src/sokol
@@ -112,37 +142,36 @@ jobs:
             sudo apt-get update
             sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev
       - name: build
-        run: zig build
+        run: zig build examples
 
   test-nim:
     needs: gen-bindings
     strategy:
       fail-fast: false
       matrix:
-        #os: [ubuntu-latest, macos-latest, windows-latest]
-        os: [ubuntu-latest, macos-latest ]
+        # os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]
     runs-on: ${{matrix.os}}
     steps:
-      - uses: jiro4989/setup-nim-action@v1
-        with:
-         nim-version: '2.x'
-         repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/checkout@v4
-        with:
-          repository: floooh/sokol-nim
-      - uses: actions/download-artifact@v3
-        with:
-          name: ignore-me-nim
-          path: src/sokol
       - if: runner.os == 'Linux'
         name: prepare
         run: |
             sudo apt-get update
-            sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+            sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+      - uses: actions/checkout@main
+        with:
+          repository: floooh/sokol-nim
+      - uses: actions/download-artifact@main
+        with:
+          name: ignore-me-nim
+          path: src/sokol
+      - uses: jiro4989/setup-nim-action@v2
+        with:
+         nim-version: '2.0.x'
+         repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: build
         run: |
           nimble install -Y
-          nimble install glm -Y
           nimble build_all
 
   test-odin:
@@ -150,15 +179,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # FIXME: macOS Odin vs Homebrew LLVM currently seems broken
-        # os: [ubuntu-latest, macos-latest, windows-latest]
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{matrix.os}}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
         with:
           repository: floooh/sokol-odin
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@main
         with:
           name: ignore-me-odin
       # NOTE: see https://github.com/floooh/sokol-odin/blob/main/.github/workflows/main.yml
@@ -167,26 +194,43 @@ jobs:
         name: prepare-linux
         run: |
           sudo apt-get update
-          sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev llvm-14
-          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2023-08/odin-ubuntu-amd64-dev-2023-08.zip --output odin.zip
+          sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          echo "/usr/lib/llvm-17/bin" >> $GITHUB_PATH
+          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2024-04/odin-ubuntu-amd64-dev-2024-04.zip --output odin.zip
           unzip odin.zip
+          unzip dist.zip
+          rm -r ./dist/examples
+          mv ./dist/* ./
           chmod a+x ./odin
+          cd sokol
+          chmod a+x ./build_clibs_linux.sh
           ./build_clibs_linux.sh
+          cd ..
       - if: runner.os == 'macOS'
         name: prepare-macos
         run: |
-          brew install llvm@14
-          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2023-08/odin-macos-amd64-dev-2023-08.zip --output odin.zip
+          brew install llvm@17
+          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2024-04/odin-macos-amd64-dev-2024-04.zip --output odin.zip
           unzip odin.zip
+          unzip dist.zip
+          rm -r ./dist/examples
+          mv ./dist/* ./
           chmod a+x ./odin
+          cd sokol
+          chmod a+x ./build_clibs_macos.sh
           ./build_clibs_macos.sh
+          cd ..
       - if: runner.os == 'Windows'
         name: prepare-windows
         shell: cmd
         run: |
-          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2023-08/odin-windows-amd64-dev-2023-08.zip --output odin.zip
+          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2024-04/odin-windows-amd64-dev-2024-04.zip --output odin.zip
           unzip odin.zip
+          cd sokol
           build_clibs_windows.cmd
+          cd ..
       - name: build
         run: |
           ./odin build examples/clear -debug
@@ -220,11 +264,10 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{matrix.os}}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
         with:
           repository: floooh/sokol-rust
-          submodules: recursive
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@main
         with:
           name: ignore-me-rust
           path: src
@@ -241,6 +284,110 @@ jobs:
             cargo --version
             cargo build --examples --verbose
 
+  test-d:
+    needs: gen-bindings
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{matrix.os}}
+    steps:
+      - uses: actions/checkout@main
+        with:
+          repository: kassane/sokol-d
+      - uses: egor-tensin/vs-shell@v2 # get cl.exe (default for Windows)
+      - uses: dlang-community/setup-dlang@v2
+        with:
+          compiler: ldc-master
+      - uses: actions/download-artifact@main
+        with:
+          name: ignore-me-d
+          path: src/sokol
+      - name: prepare
+        if: runner.os == 'Linux'
+        run: |
+            sudo apt-get update
+            sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+      - name: build
+        working-directory: examples
+        run: |
+          dub build :blend
+          dub build :bufferoffsets
+          dub build :clear
+          dub build :cube
+          dub build :debugtext
+          dub build :droptest
+          dub build :imgui
+          dub build :instancing
+          dub build :instancingcompute
+          dub build :mrt
+          dub build :noninterleaved
+          dub build :nuklear
+          dub build :offscreen
+          dub build :quad
+          dub build :shapes
+          dub build :saudio
+          dub build :sglcontext
+          dub build :sglpoints
+          dub build :triangle
+          dub build :texcube
+          dub build :userdata
+          dub build :vertexpull
+  test-jai:
+    needs: gen-bindings
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{matrix.os}}
+    steps:
+      - uses: actions/checkout@main
+        with:
+          repository: colinbellino/sokol-jai
+      - uses: actions/download-artifact@v4
+        with:
+          name: ignore-me-jai
+          path: sokol
+      - name: prepare
+        if: runner.os == 'Linux'
+        run: |
+            sudo apt-get update
+            sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+      - name: build
+        run: echo "run jai here"
+
+  test-c3:
+    needs: gen-bindings
+    strategy:
+      # Continue build even if some platforms fail.
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            arch: arm64
+          - os: ubuntu-latest
+            arch: x64
+          - os: windows-latest
+            arch: x64
+    runs-on: ${{matrix.os}}
+    steps:
+      - uses: actions/checkout@main
+        with:
+          repository: floooh/sokol-c3
+      - uses: radekm/setup-c3@v2
+        with:
+          version: v0.7.5
+      - uses: actions/download-artifact@main
+        with:
+          name: ignore-me-c3
+          path: sokol.c3l
+      - name: prepare
+        if: runner.os == 'Linux'
+        run: |
+            sudo apt-get update
+            sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+      - name: build
+        shell: bash
+        run: ./build-examples.sh
+
   # only deploy the bindings for commits on the main branch
   deploy-zig:
     needs: test-zig
@@ -251,7 +398,7 @@ jobs:
         with:
           repository: floooh/sokol-zig
           ssh-key: ${{ secrets.GHACTIONS_ZIG_PUSH }}
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: ignore-me-zig
           path: src/sokol
@@ -272,7 +419,7 @@ jobs:
         with:
           repository: floooh/sokol-nim
           ssh-key: ${{ secrets.GHACTIONS_NIM_PUSH }}
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: ignore-me-nim
           path: src/sokol
@@ -293,7 +440,7 @@ jobs:
         with:
           repository: floooh/sokol-odin
           ssh-key: ${{ secrets.GHACTIONS_ODIN_PUSH }}
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: ignore-me-odin
       - name: "commit and push"
@@ -315,13 +462,14 @@ jobs:
         with:
           repository: floooh/sokol-rust
           ssh-key: ${{ secrets.GHACTIONS_RUST_PUSH }}
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: ignore-me-rust
           path: src
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+          components: rustfmt
       - name: "cargo fmt"
         run: cargo fmt
       - name: "commit and push"
@@ -329,6 +477,69 @@ jobs:
           git config user.email "none"
           git config user.name "GH Action"
           git status -vv
+          git add -A
+          git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
+          git push
+
+  deploy-d:
+    needs: test-d
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: kassane/sokol-d
+          ssh-key: ${{ secrets.GHACTIONS_D_PUSH }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: ignore-me-d
+          path: src/sokol
+      - name: "commit and push"
+        run: |
+          git config user.email "none"
+          git config user.name "GH Action"
+          git add -A
+          git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
+          git push
+
+  deploy-jai:
+    needs: test-jai
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: colinbellino/sokol-jai
+          ssh-key: ${{ secrets.GHACTIONS_JAI_PUSH }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: ignore-me-jai
+          path: sokol
+      - name: "commit and push"
+        run: |
+          git config user.email "none"
+          git config user.name "GH Action"
+          git add -A
+          git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
+          git push
+
+  deploy-c3:
+    needs: test-c3
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@main
+        with:
+          repository: floooh/sokol-c3
+          ssh-key: ${{ secrets.GHACTIONS_C3_PUSH }}
+      - uses: actions/download-artifact@main
+        with:
+          name: ignore-me-c3
+          path: sokol.c3l
+      - name: "commit and push"
+        run: |
+          git config user.email "none"
+          git config user.name "GH Action"
           git add -A
           git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
           git push

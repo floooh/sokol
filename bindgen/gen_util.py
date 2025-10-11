@@ -1,8 +1,8 @@
 # common utility functions for all bindings generators
 import re
 
-re_1d_array = re.compile("^(?:const )?\w*\s*\*?\[\d*\]$")
-re_2d_array = re.compile("^(?:const )?\w*\s*\*?\[\d*\]\[\d*\]$")
+re_1d_array = re.compile(r"^(?:const )?\w*\s*\*?\[\d*\]$")
+re_2d_array = re.compile(r"^(?:const )?\w*\s*\*?\[\d*\]\[\d*\]$")
 
 def is_1d_array_type(s):
     return re_1d_array.match(s) is not None

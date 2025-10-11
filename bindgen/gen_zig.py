@@ -8,6 +8,7 @@
 #-------------------------------------------------------------------------------
 import gen_ir
 import os, shutil, sys
+import textwrap
 
 import gen_util as util
 
@@ -20,6 +21,9 @@ module_names = {
     'sgl_':     'gl',
     'sdtx_':    'debugtext',
     'sshape_':  'shape',
+    'sglue_':   'glue',
+    'sfetch_':  'fetch',
+    'simgui_':  'imgui',
 }
 
 c_source_paths = {
@@ -31,6 +35,9 @@ c_source_paths = {
     'sgl_':     'sokol-zig/src/sokol/c/sokol_gl.c',
     'sdtx_':    'sokol-zig/src/sokol/c/sokol_debugtext.c',
     'sshape_':  'sokol-zig/src/sokol/c/sokol_shape.c',
+    'sglue_':   'sokol-zig/src/sokol/c/sokol_glue.c',
+    'sfetch_':  'sokol-zig/src/sokol/c/sokol_fetch.c',
+    'simgui_':  'sokol-zig/src/sokol/c/sokol_imgui.c',
 }
 
 ignores = [
@@ -50,9 +57,7 @@ overrides = {
     'sgl_error':                            'sgl_get_error',   # 'error' is reserved in Zig
     'sgl_deg':                              'sgl_as_degrees',
     'sgl_rad':                              'sgl_as_radians',
-    'sg_context_desc.color_format':         'int',
-    'sg_context_desc.depth_format':         'int',
-    'sg_apply_uniforms.ub_index':           'uint32_t',
+    'sg_apply_uniforms.ub_slot':            'uint32_t',
     'sg_draw.base_element':                 'uint32_t',
     'sg_draw.num_elements':                 'uint32_t',
     'sg_draw.num_instances':                'uint32_t',
@@ -60,6 +65,8 @@ overrides = {
     'sshape_element_range_t.num_elements':  'uint32_t',
     'sdtx_font.font_index':                 'uint32_t',
     'SGL_NO_ERROR':                         'SGL_ERROR_NO_ERROR',
+    'sfetch_continue':                      'continue_fetching',  # 'continue' is reserved in Zig
+    'sfetch_desc':                          'sfetch_get_desc'     # 'desc' shadowed by earlier definition
 }
 
 prim_types = {
@@ -118,6 +125,13 @@ def reset_globals():
 def l(s):
     global out_lines
     out_lines += s + '\n'
+
+def c(s, indent="", comment="///"):
+    if not s:
+        return
+    prefix = f"{indent}{comment}"
+    for line in textwrap.dedent(s).splitlines():
+        l(f"{prefix} {line}" if line else prefix )
 
 def as_zig_prim_type(s):
     return prim_types[s]
@@ -318,6 +332,7 @@ def funcdecl_result_zig(decl, prefix):
 def gen_struct(decl, prefix):
     struct_name = check_override(decl['name'])
     zig_type = as_zig_struct_type(struct_name, prefix)
+    c(decl.get('comment'))
     l(f"pub const {zig_type} = extern struct {{")
     for field in decl['fields']:
         field_name = check_override(field['name'])
@@ -337,7 +352,7 @@ def gen_struct(decl, prefix):
         elif is_const_prim_ptr(field_type):
             l(f"    {field_name}: ?[*]const {as_zig_prim_type(util.extract_ptr_type(field_type))} = null,")
         elif util.is_func_ptr(field_type):
-            l(f"    {field_name}: ?*const fn ({funcptr_args_c(field_type, prefix)}) callconv(.C) {funcptr_result_c(field_type)} = null,")
+            l(f"    {field_name}: ?*const fn ({funcptr_args_c(field_type, prefix)}) callconv(.c) {funcptr_result_c(field_type)} = null,")
         elif util.is_1d_array_type(field_type):
             array_type = util.extract_array_type(field_type)
             array_sizes = util.extract_array_sizes(field_type)
@@ -376,14 +391,19 @@ def gen_struct(decl, prefix):
         else:
             sys.exit(f"ERROR gen_struct: {field_name}: {field_type};")
     l("};")
+    l("")
 
 def gen_consts(decl, prefix):
+    c(decl.get('comment'))
     for item in decl['items']:
         item_name = check_override(item['name'])
+        c(item.get('comment'))
         l(f"pub const {util.as_lower_snake_case(item_name, prefix)} = {item['value']};")
+    l("")
 
 def gen_enum(decl, prefix):
     enum_name = check_override(decl['name'])
+    c(decl.get('comment'))
     l(f"pub const {as_zig_enum_type(enum_name, prefix)} = enum(i32) {{")
     for item in decl['items']:
         item_name = as_enum_item_name(check_override(item['name']))
@@ -393,13 +413,21 @@ def gen_enum(decl, prefix):
             else:
                 l(f"    {item_name},")
     l("};")
+    l("")
 
 def gen_func_c(decl, prefix):
-    l(f"pub extern fn {decl['name']}({funcdecl_args_c(decl, prefix)}) {funcdecl_result_c(decl, prefix)};")
+    c(decl.get('comment'))
+    l(f"extern fn {decl['name']}({funcdecl_args_c(decl, prefix)}) {funcdecl_result_c(decl, prefix)};")
+    l('')
 
-def gen_func_zig(decl, prefix):
+def gen_func_zig(decl, prefix, tiger_style=False):
     c_func_name = decl['name']
-    zig_func_name = util.as_lower_camel_case(check_override(decl['name']), prefix)
+    if not tiger_style:
+        zig_func_name = util.as_lower_camel_case(check_override(decl['name']), prefix)
+    else:
+        zig_func_name = util.as_lower_snake_case(check_override(decl['name']), prefix)
+
+    c(decl.get('comment'))
     if c_func_name in c_callbacks:
         # a simple forwarded C callback function
         l(f"pub const {zig_func_name} = {c_func_name};")
@@ -429,6 +457,7 @@ def gen_func_zig(decl, prefix):
         s += ");"
         l(s)
         l("}")
+        l("")
 
 def pre_parse(inp):
     global struct_types
@@ -456,54 +485,46 @@ def gen_helpers(inp):
     l('fn cStrToZig(c_str: [*c]const u8) [:0]const u8 {')
     l('    return @import("std").mem.span(c_str);')
     l('}')
-    if inp['prefix'] in ['sg_', 'sdtx_', 'sshape_']:
+    if inp['prefix'] in ['sg_', 'sdtx_', 'sshape_', 'sfetch_']:
         l('// helper function to convert "anything" to a Range struct')
         l('pub fn asRange(val: anytype) Range {')
         l('    const type_info = @typeInfo(@TypeOf(val));')
         l('    switch (type_info) {')
-        l('        .Pointer => {')
-        l('            switch (type_info.Pointer.size) {')
-        l('                .One => return .{ .ptr = val, .size = @sizeOf(type_info.Pointer.child) },')
-        l('                .Slice => return .{ .ptr = val.ptr, .size = @sizeOf(type_info.Pointer.child) * val.len },')
+        l('        .pointer => |pointer| {')
+        l('            switch (pointer.size) {')
+        l('                .one => switch (@typeInfo(pointer.child)) {')
+        l('                    .array => |array| return .{ .ptr = val, .size = array.len * @sizeOf(array.child) },')
+        l('                    else => return .{ .ptr = val, .size = @sizeOf(pointer.child) },')
+        l('                },')
+        l('                .slice => return .{ .ptr = val.ptr, .size = val.len * @sizeOf(pointer.child) },')
         l('                else => @compileError("FIXME: Pointer type!"),')
         l('            }')
         l('        },')
-        l('        .Struct, .Array => {')
+        l('        .@"struct", .array => {')
         l('            @compileError("Structs and arrays must be passed as pointers to asRange");')
         l('        },')
         l('        else => {')
-        l('            @compileError("Cannot convert to range!");')
+        l('            @compileError("Cannot convert to Range!");')
         l('        },')
         l('    }')
         l('}')
         l('')
     if inp['prefix'] == 'sdtx_':
-        l('// std.fmt compatible Writer')
-        l('pub const Writer = struct {')
-        l('    pub const Error = error{};')
-        l('    pub fn writeAll(self: Writer, bytes: []const u8) Error!void {')
-        l('        _ = self;')
-        l('        for (bytes) |byte| {')
-        l('            putc(byte);')
-        l('        }')
-        l('    }')
-        l('    pub fn writeByteNTimes(self: Writer, byte: u8, n: u64) Error!void {')
-        l('        _ = self;')
-        l('        var i: u64 = 0;')
-        l('        while (i < n) : (i += 1) {')
-        l('            putc(byte);')
-        l('        }')
-        l('    }')
-        l('};')
         l('// std.fmt-style formatted print')
         l('pub fn print(comptime fmt: anytype, args: anytype) void {')
-        l('    const writer: Writer = .{};')
-        l('    @import("std").fmt.format(writer, fmt, args) catch {};')
+        l('    const cbuf = getClearedFmtBuffer();')
+        l('    const p: [*]u8 = @constCast(@ptrCast(cbuf.ptr));')
+        l('    const buf = p[0..cbuf.size];')
+        l('    const out = @import("std").fmt.bufPrint(buf, fmt, args) catch "";')
+        l('    for (out) |c| putc(c);')
         l('}')
         l('')
 
-def gen_module(inp, dep_prefixes):
+def gen_module(inp, dep_prefixes, opt={}):
     l('// machine generated, do not edit')
+    if inp.get('comment'):
+        l('')
+        c(inp['comment'], comment="//")
     l('')
     gen_imports(inp, dep_prefixes)
     gen_helpers(inp)
@@ -521,7 +542,8 @@ def gen_module(inp, dep_prefixes):
                     gen_enum(decl, prefix)
                 elif kind == 'func':
                     gen_func_c(decl, prefix)
-                    gen_func_zig(decl, prefix)
+                    tiger_style = opt.get('tiger-style', False)
+                    gen_func_zig(decl, prefix, tiger_style=tiger_style)
 
 def prepare():
     print('=== Generating Zig bindings:')
@@ -530,7 +552,7 @@ def prepare():
     if not os.path.isdir('sokol-zig/src/sokol/c'):
         os.makedirs('sokol-zig/src/sokol/c')
 
-def gen(c_header_path, c_prefix, dep_c_prefixes):
+def gen(c_header_path, c_prefix, dep_c_prefixes, opt={}):
     if not c_prefix in module_names:
         print(f' >> warning: skipping generation for {c_prefix} prefix...')
         return
@@ -539,8 +561,8 @@ def gen(c_header_path, c_prefix, dep_c_prefixes):
     print(f'  {c_header_path} => {module_name}')
     reset_globals()
     shutil.copyfile(c_header_path, f'sokol-zig/src/sokol/c/{os.path.basename(c_header_path)}')
-    ir = gen_ir.gen(c_header_path, c_source_path, module_name, c_prefix, dep_c_prefixes)
-    gen_module(ir, dep_c_prefixes)
+    ir = gen_ir.gen(c_header_path, c_source_path, module_name, c_prefix, dep_c_prefixes, with_comments=True)
+    gen_module(ir, dep_c_prefixes, opt)
     output_path = f"sokol-zig/src/sokol/{ir['module']}.zig"
     with open(output_path, 'w', newline='\n') as f_outp:
         f_outp.write(out_lines)

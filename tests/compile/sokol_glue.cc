@@ -4,6 +4,6 @@
 #include "sokol_glue.h"
 
 void use_glue_impl() {
-    const sg_context_desc ctx = sapp_sgcontext();
+    const sg_environment ctx = sglue_environment();
     (void)ctx;
 }

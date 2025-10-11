@@ -17,7 +17,7 @@ setup_android() {
         wget --no-verbose https://dl.google.com/android/repository/$sdk_file
         unzip -q $sdk_file
         cd tools/bin
-        yes | ./sdkmanager "platforms;android-28" >/dev/null
+        yes | ./sdkmanager "platforms;android-30" >/dev/null
         yes | ./sdkmanager "build-tools;29.0.3" >/dev/null
         yes | ./sdkmanager "platform-tools" >/dev/null
         yes | ./sdkmanager "ndk-bundle" >/dev/null

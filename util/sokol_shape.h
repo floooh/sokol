@@ -1355,8 +1355,8 @@ SOKOL_API_IMPL sg_buffer_desc sshape_vertex_buffer_desc(const sshape_buffer_t* b
     SOKOL_ASSERT(buf && buf->valid);
     sg_buffer_desc desc = { 0 };
     if (buf->valid) {
-        desc.type = SG_BUFFERTYPE_VERTEXBUFFER;
-        desc.usage = SG_USAGE_IMMUTABLE;
+        desc.usage.vertex_buffer = true;
+        desc.usage.immutable = true;
         desc.data.ptr = buf->vertices.buffer.ptr;
         desc.data.size = buf->vertices.data_size;
     }
@@ -1367,8 +1367,8 @@ SOKOL_API_IMPL sg_buffer_desc sshape_index_buffer_desc(const sshape_buffer_t* bu
     SOKOL_ASSERT(buf && buf->valid);
     sg_buffer_desc desc = { 0 };
     if (buf->valid) {
-        desc.type = SG_BUFFERTYPE_INDEXBUFFER;
-        desc.usage = SG_USAGE_IMMUTABLE;
+        desc.usage.index_buffer = true;
+        desc.usage.immutable = true;
         desc.data.ptr = buf->indices.buffer.ptr;
         desc.data.size = buf->indices.data_size;
     }
