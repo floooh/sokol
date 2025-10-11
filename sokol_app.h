@@ -1797,7 +1797,8 @@ typedef struct sapp_allocator {
     _SAPP_LOGITEM_XMACRO(VULKAN_NO_PHYSICAL_DEVICES_FOUND, "vulkan: vkEnumeratePhysicalDevices return no devices") \
     _SAPP_LOGITEM_XMACRO(VULKAN_NO_SUITABLE_PHYSICAL_DEVICE_FOUND, "vulkan: no suitable physical device found") \
     _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_DEVICE_FAILED, "vulkan: vkCreateDevice failed") \
-    _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_SURFACE_FAILED, "vulkan: failed to create swapchain surface") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_SURFACE_FAILED, "vulkan: vkCreate*SurfaceKHR failed") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_SWAPCHAIN_FAILED, "vulkan: vkCreateSwapchainKHR failed") \
     _SAPP_LOGITEM_XMACRO(IMAGE_DATA_SIZE_MISMATCH, "image data size mismatch (must be width*height*4 bytes)") \
     _SAPP_LOGITEM_XMACRO(DROPPED_FILE_PATH_TOO_LONG, "dropped file path too long (sapp_desc.max_dropped_filed_path_length)") \
     _SAPP_LOGITEM_XMACRO(CLIPBOARD_STRING_TOO_BIG, "clipboard string didn't fit into clipboard buffer") \
@@ -2623,9 +2624,11 @@ typedef struct {
 typedef struct {
     VkInstance instance;
     VkSurfaceKHR surface;
+    VkSurfaceFormatKHR surface_format;
     VkPhysicalDevice physical_device;
     uint32_t queue_family_index;
     VkDevice device;
+    VkSwapchainKHR swapchain;
 } _sapp_vk_t;
 #endif
 
@@ -4244,8 +4247,6 @@ _SOKOL_PRIVATE void _sapp_vk_pick_physical_device(void) {
             continue;
         }
 
-        // FIXME: check required extensions? at least VK_KHR_swapchain?
-
         // if we arrive here, found a suitable device
         break;
     }
@@ -4305,7 +4306,6 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
 
 _SOKOL_PRIVATE void _sapp_vk_destroy_device(void) {
     SOKOL_ASSERT(_sapp.vk.device);
-    vkDeviceWaitIdle(_sapp.vk.device);
     vkDestroyDevice(_sapp.vk.device, 0);
     _sapp.vk.device = 0;
 }
@@ -4338,14 +4338,85 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_surface(void) {
     _sapp.vk.surface = 0;
 }
 
+_SOKOL_PRIVATE VkSurfaceFormatKHR _sapp_vk_pick_surface_format(void) {
+    SOKOL_ASSERT(_sapp.vk.instance);
+    SOKOL_ASSERT(_sapp.vk.surface);
+    _SAPP_VK_MAX_COUNT_AND_ARRAY(64, VkSurfaceFormatKHR, fmt_count, formats);
+    VkResult res = vkGetPhysicalDeviceSurfaceFormatsKHR(_sapp.vk.physical_device, _sapp.vk.surface, &fmt_count, formats);
+    SOKOL_ASSERT((res == VK_SUCCESS) || (res == VK_INCOMPLETE));
+    SOKOL_ASSERT(fmt_count > 0);
+    // FIXME: only accept non-SRGB formats until sokol_app.h gets proper SRGB support
+    for (uint32_t i = 0; i < fmt_count; i++) {
+        switch (formats[i].format) {
+            case VK_FORMAT_B8G8R8A8_UNORM:
+            case VK_FORMAT_R8G8B8A8_UNORM:
+                return formats[i];
+            default: break;
+        }
+    }
+    // FIXME: fallback might still return an SRGB format
+    return formats[0];
+}
+
+_SOKOL_PRIVATE void _sapp_vk_create_swapchain(void) {
+    SOKOL_ASSERT(_sapp.vk.physical_device);
+    SOKOL_ASSERT(_sapp.vk.surface);
+    SOKOL_ASSERT(_sapp.vk.device);
+    SOKOL_ASSERT(0 == _sapp.vk.swapchain);
+
+    VkSurfaceCapabilitiesKHR surf_caps;
+    _sapp_clear(&surf_caps, sizeof(surf_caps));
+    VkResult res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(_sapp.vk.physical_device, _sapp.vk.surface, &surf_caps);
+    SOKOL_ASSERT(res == VK_SUCCESS);
+
+    _sapp.vk.surface_format = _sapp_vk_pick_surface_format();
+    // FIXME: pick better present-mode if supported
+    VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
+
+    // FIXME: better imageExtent (scale vs no-scale!)
+    VkSwapchainCreateInfoKHR create_info;
+    _sapp_clear(&create_info, sizeof(create_info));
+    create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    create_info.flags = 0; // FIXME?
+    create_info.surface = _sapp.vk.surface;
+    create_info.minImageCount = surf_caps.minImageCount;
+    create_info.imageFormat = _sapp.vk.surface_format.format;
+    create_info.imageColorSpace = _sapp.vk.surface_format.colorSpace;
+    create_info.imageExtent = surf_caps.currentExtent;
+    create_info.imageArrayLayers = 1;
+    create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    create_info.preTransform = surf_caps.currentTransform;
+    create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    create_info.presentMode = present_mode;
+    create_info.clipped = true;
+    create_info.oldSwapchain = 0;
+    res = vkCreateSwapchainKHR(_sapp.vk.device, &create_info, 0, &_sapp.vk.swapchain);
+    if (res != VK_SUCCESS) {
+        _SAPP_PANIC(VULKAN_CREATE_SWAPCHAIN_FAILED);
+    }
+    SOKOL_ASSERT(_sapp.vk.swapchain);
+}
+
+_SOKOL_PRIVATE void _sapp_vk_destroy_swapchain(void) {
+    SOKOL_ASSERT(_sapp.vk.device);
+    SOKOL_ASSERT(_sapp.vk.swapchain);
+    vkDestroySwapchainKHR(_sapp.vk.device, _sapp.vk.swapchain, 0);
+    _sapp.vk.swapchain = 0;
+}
+
 _SOKOL_PRIVATE void _sapp_vk_init(void) {
     _sapp_vk_create_instance();
     _sapp_vk_create_surface();
     _sapp_vk_pick_physical_device();
     _sapp_vk_create_device();
+    _sapp_vk_create_swapchain();
 }
 
 _SOKOL_PRIVATE void _sapp_vk_discard(void) {
+    SOKOL_ASSERT(_sapp.vk.device);
+    vkDeviceWaitIdle(_sapp.vk.device);
+    _sapp_vk_destroy_swapchain();
     _sapp_vk_destroy_device();
     _sapp_vk_destroy_surface();
     _sapp_vk_destroy_instance();
