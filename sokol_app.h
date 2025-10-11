@@ -5236,7 +5236,9 @@ _SOKOL_PRIVATE void _sapp_ios_mtl_init(void) {
     */
     _sapp.ios.view.autoResizeDrawable = false;
     _sapp.ios.view.userInteractionEnabled = YES;
+#if TARGET_OS_IPHONE && !TARGET_OS_TV
     _sapp.ios.view.multipleTouchEnabled = YES;
+#endif
     _sapp.ios.view_ctrl = [[UIViewController alloc] init];
     _sapp.ios.view_ctrl.modalPresentationStyle = UIModalPresentationFullScreen;
     _sapp.ios.view_ctrl.view = _sapp.ios.view;
@@ -5394,6 +5396,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         _sapp.ios.textfield.delegate = _sapp.ios.textfield_dlg;
         [_sapp.ios.view_ctrl.view addSubview:_sapp.ios.textfield];
 
+#if TARGET_OS_IPHONE && !TARGET_OS_TV
         [[NSNotificationCenter defaultCenter] addObserver:_sapp.ios.textfield_dlg
             selector:@selector(keyboardWasShown:)
             name:UIKeyboardDidShowNotification object:nil];
@@ -5403,6 +5406,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         [[NSNotificationCenter defaultCenter] addObserver:_sapp.ios.textfield_dlg
             selector:@selector(keyboardDidChangeFrame:)
             name:UIKeyboardDidChangeFrameNotification object:nil];
+#endif
     }
     if (shown) {
         // setting the text field as first responder brings up the onscreen keyboard
@@ -5465,6 +5469,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 - (void)keyboardWasShown:(NSNotification*)notif {
     _sapp.onscreen_keyboard_shown = true;
     /* query the keyboard's size, and modify the content view's size */
+#if TARGET_OS_IPHONE && !TARGET_OS_TV
     if (_sapp.desc.ios_keyboard_resizes_canvas) {
         NSDictionary* info = notif.userInfo;
         CGFloat kbd_h = [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].size.height;
@@ -5472,6 +5477,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         view_frame.size.height -= kbd_h;
         _sapp.ios.view.frame = view_frame;
     }
+#endif
 }
 - (void)keyboardWillBeHidden:(NSNotification*)notif {
     _sapp.onscreen_keyboard_shown = false;
@@ -5481,6 +5487,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 }
 - (void)keyboardDidChangeFrame:(NSNotification*)notif {
     /* this is for the case when the screen rotation changes while the keyboard is open */
+#if TARGET_OS_IPHONE && !TARGET_OS_TV
     if (_sapp.onscreen_keyboard_shown && _sapp.desc.ios_keyboard_resizes_canvas) {
         NSDictionary* info = notif.userInfo;
         CGFloat kbd_h = [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].size.height;
@@ -5488,6 +5495,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         view_frame.size.height -= kbd_h;
         _sapp.ios.view.frame = view_frame;
     }
+#endif
 }
 - (BOOL)textField:(UITextField*)textField shouldChangeCharactersInRange:(NSRange)range replacementString:(NSString*)string {
     if (_sapp_events_enabled()) {
@@ -5547,6 +5555,45 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 }
 - (BOOL)isOpaque {
     return YES;
+}
+- (void)pressEvent:(UIPressType)press type:(sapp_event_type)type {
+    if (_sapp_events_enabled()) {
+        sapp_keycode key;
+        switch (press) {
+            case UIPressTypeUpArrow:    key = SAPP_KEYCODE_UP; break;
+            case UIPressTypeDownArrow:  key = SAPP_KEYCODE_DOWN; break;
+            case UIPressTypeLeftArrow:  key = SAPP_KEYCODE_LEFT; break;
+            case UIPressTypeRightArrow: key = SAPP_KEYCODE_RIGHT; break;
+            case UIPressTypeSelect:     key = SAPP_KEYCODE_ENTER; break;
+            case UIPressTypeMenu:       key = SAPP_KEYCODE_MENU; break;
+            case UIPressTypePlayPause:  key = SAPP_KEYCODE_MENU; break;
+            default:                    key = SAPP_KEYCODE_INVALID; break;
+        }
+        if (key != SAPP_KEYCODE_INVALID) {
+            _sapp_init_event(type);
+            _sapp.event.key_code = key;
+            _sapp.event.key_repeat = false;
+            _sapp.event.modifiers = 0;
+            _sapp_call_event(&_sapp.event);
+        }
+    }
+}
+- (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+    for ( UIPress *press in presses ) {
+        [self pressEvent: press.type type: SAPP_EVENTTYPE_KEY_DOWN];
+    }
+}
+- (void)pressesChanged:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+}
+- (void)pressesEnded:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+    for ( UIPress *press in presses ) {
+        [self pressEvent: press.type type: SAPP_EVENTTYPE_KEY_UP];
+    }
+}
+- (void)pressesCancelled:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+    for ( UIPress *press in presses ) {
+        [self pressEvent: press.type type: SAPP_EVENTTYPE_KEY_UP];
+    }
 }
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent*)event {
     _sapp_ios_touch_event(SAPP_EVENTTYPE_TOUCHES_BEGAN, touches, event);
