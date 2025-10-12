@@ -1862,11 +1862,16 @@ typedef struct sapp_wgpu_environment {
     const void* device;
 } sapp_wgpu_environment;
 
+typedef struct sapp_vulkan_environment {
+    const void* device;
+} sapp_vulkan_environment;
+
 typedef struct sapp_environment {
     sapp_environment_defaults defaults;
     sapp_metal_environment metal;
     sapp_d3d11_environment d3d11;
     sapp_wgpu_environment wgpu;
+    sapp_vulkan_environment vulkan;
 } sapp_environment;
 
 /*
@@ -1898,6 +1903,12 @@ typedef struct sapp_wgpu_swapchain {
     const void* depth_stencil_view;     // WGPUTextureView
 } sapp_wgpu_swapchain;
 
+typedef struct sapp_vulkan_swapchain {
+    const void* render_view;            // vkImageView
+    const void* resolve_view;           // vkImageView
+    const void* depth_stencil_view;     // vkImageView
+} sapp_vulkan_swapchain;
+
 typedef struct sapp_gl_swapchain {
     uint32_t framebuffer;               // GL framebuffer object
 } sapp_gl_swapchain;
@@ -1911,6 +1922,7 @@ typedef struct sapp_swapchain {
     sapp_metal_swapchain metal;
     sapp_d3d11_swapchain d3d11;
     sapp_wgpu_swapchain wgpu;
+    sapp_vulkan_swapchain vulkan;
     sapp_gl_swapchain gl;
 } sapp_swapchain;
 
@@ -3944,6 +3956,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_discard_swapchain(bool called_from_resize) {
 }
 
 _SOKOL_PRIVATE WGPUTextureView _sapp_wgpu_swapchain_next(void) {
+    SOKOL_ASSERT(0 == _sapp.wgpu.swapchain_view);
     WGPUSurfaceTexture surf_tex;
     _sapp_clear(&surf_tex, sizeof(surf_tex));
     wgpuSurfaceGetCurrentTexture(_sapp.wgpu.surface, &surf_tex);
@@ -3967,7 +3980,8 @@ _SOKOL_PRIVATE WGPUTextureView _sapp_wgpu_swapchain_next(void) {
             _SAPP_PANIC(WGPU_SWAPCHAIN_GETCURRENTTEXTURE_FAILED);
             break;
     }
-    return wgpuTextureCreateView(surf_tex.texture, 0);
+    _sapp.wgpu.swapchain_view = wgpuTextureCreateView(surf_tex.texture, 0);
+    SOKOL_ASSERT(_sapp.wgpu.swapchain_view);
 }
 
 _SOKOL_PRIVATE void _sapp_wgpu_swapchain_size_changed(void) {
@@ -4178,10 +4192,11 @@ _SOKOL_PRIVATE void _sapp_wgpu_discard(void) {
 _SOKOL_PRIVATE void _sapp_wgpu_frame(void) {
     wgpuInstanceProcessEvents(_sapp.wgpu.instance);
     if (_sapp.wgpu.init_done) {
-        _sapp.wgpu.swapchain_view = _sapp_wgpu_swapchain_next();
         _sapp_frame();
-        wgpuTextureViewRelease(_sapp.wgpu.swapchain_view);
-        _sapp.wgpu.swapchain_view = 0;
+        if (_sapp.wgpu.swapchain_view) {
+            wgpuTextureViewRelease(_sapp.wgpu.swapchain_view);
+            _sapp.wgpu.swapchain_view = 0;
+        }
         #if !defined(_SAPP_EMSCRIPTEN)
         wgpuSurfacePresent(_sapp.wgpu.surface);
         #endif
@@ -13448,6 +13463,9 @@ SOKOL_API_IMPL sapp_environment sapp_get_environment(void) {
     #if defined(SOKOL_WGPU)
         res.wgpu.device = (const void*) _sapp.wgpu.device;
     #endif
+    #if defined(SOKOL_VULKAN)
+        res.vulkan.device = (const void*) _sapp.vk.device;
+    #endif
     return res;
 }
 
@@ -13483,6 +13501,8 @@ SOKOL_API_IMPL sapp_swapchain sapp_swapchain_next(void) {
         res.d3d11.depth_stencil_view = (const void*) _sapp.d3d11.dsv;
     #endif
     #if defined(SOKOL_WGPU)
+        SOKOL_ASSERT(0 == _sapp.wgpu.swapchain_view);
+        _sapp_wgpu_swapchain_next();
         SOKOL_ASSERT(_sapp.wgpu.swapchain_view);
         if (_sapp.sample_count > 1) {
             SOKOL_ASSERT(_sapp.wgpu.msaa_view);
