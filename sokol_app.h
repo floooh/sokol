@@ -1810,6 +1810,109 @@ typedef enum sapp_log_item {
 #undef _SAPP_LOGITEM_XMACRO
 
 /*
+    sapp_pixel_format
+
+    Defines the pixel format for swapchain surfaces.
+
+    NOTE: when using sokol_gfx.h do not assume that the underlying
+    values are compatible with sg_pixel_format!
+
+*/
+typedef enum sapp_pixel_format {
+    _SAPP_PIXELFORMAT_DEFAULT,
+    SAPP_PIXELFORMAT_RGBA8,
+    SAPP_PIXELFORMAT_SRGBA8,
+    SAPP_PIXELFORMAT_BGRA8,
+    SAPP_PIXELFORMAT_SBGRA8,
+    SAPP_PIXELFORMAT_DEPTH,
+    SAPP_PIXELFORMAT_DEPTH_STENCIL,
+    _SA_PPPIXELFORMAT_FORCE_U32 = 0x7FFFFFFF
+} sapp_pixel_format;
+
+/*
+    sapp_environment
+
+    Used to provide runtime environment information to the
+    outside world (like default pixel formats and the backend
+    3D API device pointer) via a call to sapp_get_environment().
+
+    NOTE: when using sokol_gfx.h, don't assume that sapp_environment
+    is binary compatible with sg_environment! Always use a translation
+    function like sglue_environment() to populate sg_environment
+    from sapp_environment!
+*/
+typedef struct sapp_environment_defaults {
+    sapp_pixel_format color_format;
+    sapp_pixel_format depth_format;
+    int sample_count;
+} sapp_environment_defaults;
+
+typedef struct sapp_metal_environment {
+    const void* device;
+} sapp_metal_environment;
+
+typedef struct sapp_d3d11_environment {
+    const void* device;
+    const void* device_context;
+} sapp_d3d11_environment;
+
+typedef struct sapp_wgpu_environment {
+    const void* device;
+} sapp_wgpu_environment;
+
+typedef struct sapp_environment {
+    sapp_environment_defaults defaults;
+    sapp_metal_environment metal;
+    sapp_d3d11_environment d3d11;
+    sapp_wgpu_environment wgpu;
+} sapp_environment;
+
+/*
+    sapp_swapchain
+
+    Provides swapchain information for the current frame to the outside
+    world via a call to sapp_swapchain_next().
+
+    NOTE: when using sokol_gfx.h, don't assume that the sapp_swapchain struct
+    has the same memory layout as sg_swapchain! Use the sokol_log.h helper
+    function sglue_swapchain_next() to translate sapp_swapchain into a
+    sg_swapchain instead.
+*/
+typedef struct sapp_metal_swapchain {
+    const void* current_drawable;       // CAMetalDrawable (NOT MTLDrawable!!!)
+    const void* depth_stencil_texture;  // MTLTexture
+    const void* msaa_color_texture;     // MTLTexture
+} sapp_metal_swapchain;
+
+typedef struct sapp_d3d11_swapchain {
+    const void* render_view;            // ID3D11RenderTargetView
+    const void* resolve_view;           // ID3D11RenderTargetView
+    const void* depth_stencil_view;     // ID3D11DepthStencilView
+} sapp_d3d11_swapchain;
+
+typedef struct sapp_wgpu_swapchain {
+    const void* render_view;            // WGPUTextureView
+    const void* resolve_view;           // WGPUTextureView
+    const void* depth_stencil_view;     // WGPUTextureView
+} sapp_wgpu_swapchain;
+
+typedef struct sapp_gl_swapchain {
+    uint32_t framebuffer;               // GL framebuffer object
+} sapp_gl_swapchain;
+
+typedef struct sapp_swapchain {
+    int width;
+    int height;
+    int sample_count;
+    sapp_pixel_format color_format;
+    sapp_pixel_format depth_format;
+    sapp_metal_swapchain metal;
+    sapp_d3d11_swapchain d3d11;
+    sapp_wgpu_swapchain wgpu;
+    sapp_gl_swapchain gl;
+} sapp_swapchain;
+
+/*
     sapp_logger
 
     Used in sapp_desc to provide a logging function. Please be aware that
@@ -1834,6 +1937,37 @@ typedef struct sapp_logger {
     sokol-app initialization options, used as return value of sokol_main()
     or sapp_run() argument.
 */
+typedef struct sapp_gl_desc {
+    int major_version;            // override GL/GLES major and minor version (defaults: GL4.1 (macOS) or GL4.3, GLES3.1 (Android) or GLES3.0
+    int minor_version;
+} sapp_gl_desc;
+
+typedef struct sapp_win32_desc {
+    bool console_utf8;            // if true, set the output console codepage to UTF-8
+    bool console_create;          // if true, attach stdout/stderr to a new console window
+    bool console_attach;          // if true, attach stdout/stderr to parent process
+} sapp_win32_desc;
+
+typedef struct sapp_html5_desc {
+    const char* canvas_selector;  // css selector of the HTML5 canvas element, default is "#canvas"
+    bool canvas_resize;           // if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked
+    bool preserve_drawing_buffer; // HTML5 only: whether to preserve default framebuffer content between frames
+    bool premultiplied_alpha;     // HTML5 only: whether the rendered pixels use premultiplied alpha convention
+    bool ask_leave_site;          // initial state of the internal html5_ask_leave_site flag (see sapp_html5_ask_leave_site())
+    bool update_document_title;   // if true, update the HTML document.title with sapp_desc.window_title
+    bool bubble_mouse_events;     // if true, mouse events will bubble up to the web page
+    bool bubble_touch_events;     // same for touch events
+    bool bubble_wheel_events;     // same for wheel events
+    bool bubble_key_events;       // if true, bubble up *all* key events to browser, not just key events that represent characters
+    bool bubble_char_events;      // if true, bubble up character events to browser
+    bool use_emsc_set_main_loop;  // if true, use emscripten_set_main_loop() instead of emscripten_request_animation_frame_loop()
+    bool emsc_set_main_loop_simulate_infinite_loop;   // this will be passed as the simulate_infinite_loop arg to emscripten_set_main_loop()
+} sapp_html5_desc;
+
+typedef struct sapp_ios_desc {
+    bool keyboard_resizes_canvas; // if true, showing the iOS keyboard shrinks the canvas
+} sapp_ios_desc;
+
 typedef struct sapp_desc {
     void (*init_cb)(void);                  // these are the user-provided callbacks without user data
     void (*frame_cb)(void);
@@ -1864,25 +1998,10 @@ typedef struct sapp_desc {
     sapp_logger logger;                 // logging callback override (default: NO LOGGING!)
 
     // backend-specific options
-    int gl_major_version;               // override GL/GLES major and minor version (defaults: GL4.1 (macOS) or GL4.3, GLES3.1 (Android) or GLES3.0
-    int gl_minor_version;
-    bool win32_console_utf8;            // if true, set the output console codepage to UTF-8
-    bool win32_console_create;          // if true, attach stdout/stderr to a new console window
-    bool win32_console_attach;          // if true, attach stdout/stderr to parent process
-    const char* html5_canvas_selector;  // css selector of the HTML5 canvas element, default is "#canvas"
-    bool html5_canvas_resize;           // if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked
-    bool html5_preserve_drawing_buffer; // HTML5 only: whether to preserve default framebuffer content between frames
-    bool html5_premultiplied_alpha;     // HTML5 only: whether the rendered pixels use premultiplied alpha convention
-    bool html5_ask_leave_site;          // initial state of the internal html5_ask_leave_site flag (see sapp_html5_ask_leave_site())
-    bool html5_update_document_title;   // if true, update the HTML document.title with sapp_desc.window_title
-    bool html5_bubble_mouse_events;     // if true, mouse events will bubble up to the web page
-    bool html5_bubble_touch_events;     // same for touch events
-    bool html5_bubble_wheel_events;     // same for wheel events
-    bool html5_bubble_key_events;       // if true, bubble up *all* key events to browser, not just key events that represent characters
-    bool html5_bubble_char_events;      // if true, bubble up character events to browser
-    bool html5_use_emsc_set_main_loop;  // if true, use emscripten_set_main_loop() instead of emscripten_request_animation_frame_loop()
-    bool html5_emsc_set_main_loop_simulate_infinite_loop;   // this will be passed as the simulate_infinite_loop arg to emscripten_set_main_loop()
-    bool ios_keyboard_resizes_canvas;   // if true, showing the iOS keyboard shrinks the canvas
+    sapp_gl_desc gl;
+    sapp_win32_desc win32;
+    sapp_html5_desc html5;
+    sapp_ios_desc ios;
 } sapp_desc;
 
 /* HTML5 specific: request and response structs for
@@ -2025,6 +2144,11 @@ SOKOL_APP_API_DECL const char* sapp_get_dropped_file_path(int index);
 /* special run-function for SOKOL_NO_ENTRY (in standard mode this is an empty stub) */
 SOKOL_APP_API_DECL void sapp_run(const sapp_desc* desc);
 
+/* get runtime environment information */
+sapp_environment sapp_get_environment(void);
+/* get current frame's swapchain information (call one per frame) */
+sapp_swapchain sapp_swapchain_next(void);
+
 /* EGL: get EGLDisplay object */
 SOKOL_APP_API_DECL const void* sapp_egl_get_display(void);
 /* EGL: get EGLContext object */
@@ -2037,45 +2161,17 @@ SOKOL_APP_API_DECL uint32_t sapp_html5_get_dropped_file_size(int index);
 /* HTML5: asynchronously load the content of a dropped file */
 SOKOL_APP_API_DECL void sapp_html5_fetch_dropped_file(const sapp_html5_fetch_request* request);
 
-/* Metal: get bridged pointer to Metal device object */
-SOKOL_APP_API_DECL const void* sapp_metal_get_device(void);
-/* Metal: get bridged pointer to MTKView's current drawable of type CAMetalDrawable */
-SOKOL_APP_API_DECL const void* sapp_metal_get_current_drawable(void);
-/* Metal: get bridged pointer to MTKView's depth-stencil texture of type MTLTexture */
-SOKOL_APP_API_DECL const void* sapp_metal_get_depth_stencil_texture(void);
-/* Metal: get bridged pointer to MTKView's msaa-color-texture of type MTLTexture (may be null) */
-SOKOL_APP_API_DECL const void* sapp_metal_get_msaa_color_texture(void);
 /* macOS: get bridged pointer to macOS NSWindow */
 SOKOL_APP_API_DECL const void* sapp_macos_get_window(void);
 /* iOS: get bridged pointer to iOS UIWindow */
 SOKOL_APP_API_DECL const void* sapp_ios_get_window(void);
 
-/* D3D11: get pointer to ID3D11Device object */
-SOKOL_APP_API_DECL const void* sapp_d3d11_get_device(void);
-/* D3D11: get pointer to ID3D11DeviceContext object */
-SOKOL_APP_API_DECL const void* sapp_d3d11_get_device_context(void);
 /* D3D11: get pointer to IDXGISwapChain object */
 SOKOL_APP_API_DECL const void* sapp_d3d11_get_swap_chain(void);
-/* D3D11: get pointer to ID3D11RenderTargetView object for rendering */
-SOKOL_APP_API_DECL const void* sapp_d3d11_get_render_view(void);
-/* D3D11: get pointer ID3D11RenderTargetView object for msaa-resolve (may return null) */
-SOKOL_APP_API_DECL const void* sapp_d3d11_get_resolve_view(void);
-/* D3D11: get pointer ID3D11DepthStencilView */
-SOKOL_APP_API_DECL const void* sapp_d3d11_get_depth_stencil_view(void);
+
 /* Win32: get the HWND window handle */
 SOKOL_APP_API_DECL const void* sapp_win32_get_hwnd(void);
 
-/* WebGPU: get WGPUDevice handle */
-SOKOL_APP_API_DECL const void* sapp_wgpu_get_device(void);
-/* WebGPU: get swapchain's WGPUTextureView handle for rendering */
-SOKOL_APP_API_DECL const void* sapp_wgpu_get_render_view(void);
-/* WebGPU: get swapchain's MSAA-resolve WGPUTextureView (may return null) */
-SOKOL_APP_API_DECL const void* sapp_wgpu_get_resolve_view(void);
-/* WebGPU: get swapchain's WGPUTextureView for the depth-stencil surface */
-SOKOL_APP_API_DECL const void* sapp_wgpu_get_depth_stencil_view(void);
-
-/* GL: get framebuffer object */
-SOKOL_APP_API_DECL uint32_t sapp_gl_get_framebuffer(void);
 /* GL: get major version */
 SOKOL_APP_API_DECL int sapp_gl_get_major_version(void);
 /* GL: get minor version */
@@ -13291,62 +13387,77 @@ SOKOL_API_IMPL void sapp_html5_fetch_dropped_file(const sapp_html5_fetch_request
     #endif
 }
 
-SOKOL_API_IMPL const void* sapp_metal_get_device(void) {
+SOKOL_API_IMPL sapp_environment sapp_get_environment(void) {
     SOKOL_ASSERT(_sapp.valid);
+    sapp_environment res;
+    _sapp_clear(&res, sizeof(res));
+    res.defaults.color_format = sapp_color_format();
+    res.defaults.depth_format = sapp_depth_format();
+    res.defaults.sample_count = sapp_sample_count();
     #if defined(SOKOL_METAL)
         #if defined(_SAPP_MACOS)
-            const void* obj = (__bridge const void*) _sapp.macos.mtl_device;
+            res.metal.device = (__bridge const void*) _sapp.macos.mtl_device;
         #else
-            const void* obj = (__bridge const void*) _sapp.ios.mtl_device;
+            res.metal.device = (__bridge const void*) _sapp.ios.mtl_device;
         #endif
-        SOKOL_ASSERT(obj);
-        return obj;
-    #else
-        return 0;
     #endif
+    #if defined(SOKOL_D3D11)
+        res.d3d11.device = (const void*) _sapp.d3d11.device;
+        res.d3d11.device_context = (const void*) _sapp.d3d11.device_context;
+    #endif
+    #if defined(SOKOL_WGPU)
+        res.wgpu.device = (const void*) _sapp.wgpu.device;
+    #endif
+    return res;
 }
 
-SOKOL_API_IMPL const void* sapp_metal_get_current_drawable(void) {
+SOKOL_API_IMPL sapp_swapchain sapp_swapchain_next(void) {
     SOKOL_ASSERT(_sapp.valid);
+    // FIXME: make sure that this is only called once per frame?
+    sapp_swapchain res;
+    _sapp_clear(&res, sizeof(res));
+    res.width =
+    res.height =
+    res.sample_count = _sapp_color_format();
+    res.color_format = _SAPP_PIXELFORMAT_DEPTH_STENCIL;
+    res.depth_format = _sapp.sample_count;
     #if defined(SOKOL_METAL)
         #if defined(_SAPP_MACOS)
-            const void* obj = (__bridge const void*) [_sapp.macos.view currentDrawable];
+            res.metal.current_drawable = (__bridge const void*) [_sapp.macos.view currentDrawable];
+            res.metal.depth_stencil_texture = (__bridge const void*) [_sapp.macos.view depthStencilTexture];
+            res.metal.msaa_color_texture = (__bridge const void*) [_sapp.macos.view multisampleColorTexture];
         #else
-            const void* obj = (__bridge const void*) [_sapp.ios.view currentDrawable];
+            res.metal.current_drawable = (__bridge const void*) [_sapp.ios.view currentDrawable];
+            res.metal.depth_stencil_texture = (__bridge const void*) [_sapp.ios.view depthStencilTexture];
+            res.metal.msaa_color_texture = (__bridge const void*) [_sapp.ios.view multisampleColorTexture];
         #endif
-        SOKOL_ASSERT(obj);
-        return obj;
-    #else
-        return 0;
     #endif
-}
-
-SOKOL_API_IMPL const void* sapp_metal_get_depth_stencil_texture(void) {
-    SOKOL_ASSERT(_sapp.valid);
-    #if defined(SOKOL_METAL)
-        #if defined(_SAPP_MACOS)
-            const void* obj = (__bridge const void*) [_sapp.macos.view depthStencilTexture];
-        #else
-            const void* obj = (__bridge const void*) [_sapp.ios.view depthStencilTexture];
-        #endif
-        return obj;
-    #else
-        return 0;
+    #if defined(SOKOL_D3D11)
+        SOKOL_ASSERT(_sapp.d3d11.rtv);
+        if (_sapp.sample_count > 1) {
+            SOKOL_ASSERT(_sapp.d3d11.msaa_rtv);
+            res.d3d11.render_view = (const void*) _sapp.d3d11.msaa_rtv;
+            res.d3d11.resolve_view = (const void*) _sapp.d3d11.rtv;
+        } else {
+            res.d3d11.render_view = (const void*) _sapp.d3d11.rtv;
+        }
+        res.d3d11.depth_stencil_view = (const void*) _sapp.d3d11.dsv;
     #endif
-}
-
-SOKOL_API_IMPL const void* sapp_metal_get_msaa_color_texture(void) {
-    SOKOL_ASSERT(_sapp.valid);
-    #if defined(SOKOL_METAL)
-        #if defined(_SAPP_MACOS)
-            const void* obj = (__bridge const void*) [_sapp.macos.view multisampleColorTexture];
-        #else
-            const void* obj = (__bridge const void*) [_sapp.ios.view multisampleColorTexture];
-        #endif
-        return obj;
-    #else
-        return 0;
+    #if defined(SOKOL_WGPU)
+        SOKOL_ASSERT(_sapp.wgpu.swapchain_view);
+        if (_sapp.sample_count > 1) {
+            SOKOL_ASSERT(_sapp.wgpu.msaa_view);
+            res.wgpu.render_view = (const void*) _sapp.wgpu.msaa_view;
+            res.wgpu.resolve_view = (const void*) _sapp.wgpu.swapchain_view;
+        } else {
+            res.wgpu.render_view = (const void*) _sapp.wgpu.swapchain_view;
+        }
+        res.wgpu.depth_stencil_view = (const void*) _sapp.wgpu.depth_stencil_view;
     #endif
+    #if defined(_SAPP_ANY_GL)
+        res.framebuffer = _sapp.gl.framebuffer;
+    #endif
+    return res;
 }
 
 SOKOL_API_IMPL const void* sapp_macos_get_window(void) {
@@ -13369,24 +13480,6 @@ SOKOL_API_IMPL const void* sapp_ios_get_window(void) {
     #endif
 }
 
-SOKOL_API_IMPL const void* sapp_d3d11_get_device(void) {
-    SOKOL_ASSERT(_sapp.valid);
-    #if defined(SOKOL_D3D11)
-        return _sapp.d3d11.device;
-    #else
-        return 0;
-    #endif
-}
-
-SOKOL_API_IMPL const void* sapp_d3d11_get_device_context(void) {
-    SOKOL_ASSERT(_sapp.valid);
-    #if defined(SOKOL_D3D11)
-        return _sapp.d3d11.device_context;
-    #else
-        return 0;
-    #endif
-}
-
 SOKOL_API_IMPL const void* sapp_d3d11_get_swap_chain(void) {
     SOKOL_ASSERT(_sapp.valid);
 #if defined(SOKOL_D3D11)
@@ -13396,104 +13489,10 @@ SOKOL_API_IMPL const void* sapp_d3d11_get_swap_chain(void) {
 #endif
 }
 
-SOKOL_API_IMPL const void* sapp_d3d11_get_render_view(void) {
-    SOKOL_ASSERT(_sapp.valid);
-    #if defined(SOKOL_D3D11)
-        if (_sapp.sample_count > 1) {
-            SOKOL_ASSERT(_sapp.d3d11.msaa_rtv);
-            return _sapp.d3d11.msaa_rtv;
-        } else {
-            SOKOL_ASSERT(_sapp.d3d11.rtv);
-            return _sapp.d3d11.rtv;
-        }
-    #else
-        return 0;
-    #endif
-}
-
-SOKOL_API_IMPL const void* sapp_d3d11_get_resolve_view(void) {
-    SOKOL_ASSERT(_sapp.valid);
-    #if defined(SOKOL_D3D11)
-        if (_sapp.sample_count > 1) {
-            SOKOL_ASSERT(_sapp.d3d11.rtv);
-            return _sapp.d3d11.rtv;
-        } else {
-            return 0;
-        }
-    #else
-        return 0;
-    #endif
-}
-
-SOKOL_API_IMPL const void* sapp_d3d11_get_depth_stencil_view(void) {
-    SOKOL_ASSERT(_sapp.valid);
-    #if defined(SOKOL_D3D11)
-        return _sapp.d3d11.dsv;
-    #else
-        return 0;
-    #endif
-}
-
 SOKOL_API_IMPL const void* sapp_win32_get_hwnd(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_WIN32)
         return _sapp.win32.hwnd;
-    #else
-        return 0;
-    #endif
-}
-
-SOKOL_API_IMPL const void* sapp_wgpu_get_device(void) {
-    SOKOL_ASSERT(_sapp.valid);
-    #if defined(SOKOL_WGPU)
-        return (const void*) _sapp.wgpu.device;
-    #else
-        return 0;
-    #endif
-}
-
-SOKOL_API_IMPL const void* sapp_wgpu_get_render_view(void) {
-    SOKOL_ASSERT(_sapp.valid);
-    #if defined(SOKOL_WGPU)
-        if (_sapp.sample_count > 1) {
-            SOKOL_ASSERT(_sapp.wgpu.msaa_view);
-            return (const void*) _sapp.wgpu.msaa_view;
-        } else {
-            SOKOL_ASSERT(_sapp.wgpu.swapchain_view);
-            return (const void*) _sapp.wgpu.swapchain_view;
-        }
-    #else
-        return 0;
-    #endif
-}
-
-SOKOL_API_IMPL const void* sapp_wgpu_get_resolve_view(void) {
-    SOKOL_ASSERT(_sapp.valid);
-    #if defined(SOKOL_WGPU)
-        if (_sapp.sample_count > 1) {
-            SOKOL_ASSERT(_sapp.wgpu.swapchain_view);
-            return (const void*) _sapp.wgpu.swapchain_view;
-        } else {
-            return 0;
-        }
-    #else
-        return 0;
-    #endif
-}
-
-SOKOL_API_IMPL const void* sapp_wgpu_get_depth_stencil_view(void) {
-    SOKOL_ASSERT(_sapp.valid);
-    #if defined(SOKOL_WGPU)
-        return (const void*) _sapp.wgpu.depth_stencil_view;
-    #else
-        return 0;
-    #endif
-}
-
-SOKOL_API_IMPL uint32_t sapp_gl_get_framebuffer(void) {
-    SOKOL_ASSERT(_sapp.valid);
-    #if defined(_SAPP_ANY_GL)
-        return _sapp.gl.framebuffer;
     #else
         return 0;
     #endif
