@@ -5987,7 +5987,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 - (void)keyboardWasShown:(NSNotification*)notif {
     _sapp.onscreen_keyboard_shown = true;
     /* query the keyboard's size, and modify the content view's size */
-    if (_sapp.desc.ios_keyboard_resizes_canvas) {
+    if (_sapp.desc.ios.keyboard_resizes_canvas) {
         NSDictionary* info = notif.userInfo;
         CGFloat kbd_h = [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].size.height;
         CGRect view_frame = UIScreen.mainScreen.bounds;
@@ -5997,13 +5997,13 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 }
 - (void)keyboardWillBeHidden:(NSNotification*)notif {
     _sapp.onscreen_keyboard_shown = false;
-    if (_sapp.desc.ios_keyboard_resizes_canvas) {
+    if (_sapp.desc.ios.keyboard_resizes_canvas) {
         _sapp.ios.view.frame = UIScreen.mainScreen.bounds;
     }
 }
 - (void)keyboardDidChangeFrame:(NSNotification*)notif {
     /* this is for the case when the screen rotation changes while the keyboard is open */
-    if (_sapp.onscreen_keyboard_shown && _sapp.desc.ios_keyboard_resizes_canvas) {
+    if (_sapp.onscreen_keyboard_shown && _sapp.desc.ios.keyboard_resizes_canvas) {
         NSDictionary* info = notif.userInfo;
         CGFloat kbd_h = [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].size.height;
         CGRect view_frame = UIScreen.mainScreen.bounds;
