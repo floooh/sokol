@@ -1,4 +1,4 @@
-import os, argparse, gen_nim, gen_zig, gen_odin, gen_rust, gen_d, gen_jai, gen_c3, shutil
+import os, argparse, gen_nim, gen_zig, gen_odin, gen_rust, gen_d, gen_jai, gen_c3, gen_c2, shutil
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--zig-tiger-style", action="store_true", help="Enable zig tiger style mode.")
@@ -78,3 +78,9 @@ gen_c3.prepare()
 for task in tasks:
     [c_header_path, main_prefix, dep_prefixes] = task
     gen_c3.gen(c_header_path, main_prefix, dep_prefixes)
+
+# C2
+gen_c2.prepare()
+for task in tasks:
+    [c_header_path, main_prefix, dep_prefixes] = task
+    gen_c2.gen(c_header_path, main_prefix, dep_prefixes)
