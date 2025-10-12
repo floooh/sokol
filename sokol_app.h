@@ -8958,11 +8958,11 @@ _SOKOL_PRIVATE void _sapp_win32_destroy_icons(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_win32_init_console(void) {
-    if (_sapp.desc.win32_console_create || _sapp.desc.win32_console_attach) {
+    if (_sapp.desc.win32.console_create || _sapp.desc.win32.console_attach) {
         BOOL con_valid = FALSE;
-        if (_sapp.desc.win32_console_create) {
+        if (_sapp.desc.win32.console_create) {
             con_valid = AllocConsole();
-        } else if (_sapp.desc.win32_console_attach) {
+        } else if (_sapp.desc.win32.console_attach) {
             con_valid = AttachConsole(ATTACH_PARENT_PROCESS);
         }
         if (con_valid) {
@@ -8974,14 +8974,14 @@ _SOKOL_PRIVATE void _sapp_win32_init_console(void) {
             (void)err;
         }
     }
-    if (_sapp.desc.win32_console_utf8) {
+    if (_sapp.desc.win32.console_utf8) {
         _sapp.win32.orig_codepage = GetConsoleOutputCP();
         SetConsoleOutputCP(CP_UTF8);
     }
 }
 
 _SOKOL_PRIVATE void _sapp_win32_restore_console(void) {
-    if (_sapp.desc.win32_console_utf8) {
+    if (_sapp.desc.win32.console_utf8) {
         SetConsoleOutputCP(_sapp.win32.orig_codepage);
     }
 }
