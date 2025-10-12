@@ -12869,8 +12869,8 @@ _SOKOL_PRIVATE void _sapp_egl_init(void) {
     }
 
     EGLint ctx_attrs[] = {
-        EGL_CONTEXT_MAJOR_VERSION, _sapp.desc.gl_major_version,
-        EGL_CONTEXT_MINOR_VERSION, _sapp.desc.gl_minor_version,
+        EGL_CONTEXT_MAJOR_VERSION, _sapp.desc.gl.major_version,
+        EGL_CONTEXT_MINOR_VERSION, _sapp.desc.gl.minor_version,
         #if defined(SOKOL_GLCORE)
             EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
         #endif
