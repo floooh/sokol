@@ -1821,7 +1821,7 @@ typedef enum sapp_log_item {
 typedef enum sapp_pixel_format {
     _SAPP_PIXELFORMAT_DEFAULT,
     SAPP_PIXELFORMAT_RGBA8,
-    SAPP_PIXELFORMAT_SRGBA8,
+    SAPP_PIXELFORMAT_SRGB8A8,
     SAPP_PIXELFORMAT_BGRA8,
     SAPP_PIXELFORMAT_SBGRA8,
     SAPP_PIXELFORMAT_DEPTH,
@@ -13418,9 +13418,9 @@ SOKOL_API_IMPL sapp_swapchain sapp_swapchain_next(void) {
     _sapp_clear(&res, sizeof(res));
     res.width =
     res.height =
-    res.sample_count = _sapp_color_format();
-    res.color_format = _SAPP_PIXELFORMAT_DEPTH_STENCIL;
-    res.depth_format = _sapp.sample_count;
+    res.color_format = sapp_color_format();
+    res.depth_format = sapp_depth_format();
+    res.sample_count = sapp_color_format();
     #if defined(SOKOL_METAL)
         #if defined(_SAPP_MACOS)
             res.metal.current_drawable = (__bridge const void*) [_sapp.macos.view currentDrawable];
