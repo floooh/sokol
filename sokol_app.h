@@ -2079,9 +2079,9 @@ SOKOL_APP_API_DECL int sapp_height(void);
 /* same as sapp_height(), but returns float */
 SOKOL_APP_API_DECL float sapp_heightf(void);
 /* get default framebuffer color pixel format */
-SOKOL_APP_API_DECL int sapp_color_format(void);
+SOKOL_APP_API_DECL sapp_pixel_format sapp_color_format(void);
 /* get default framebuffer depth pixel format */
-SOKOL_APP_API_DECL int sapp_depth_format(void);
+SOKOL_APP_API_DECL sapp_pixel_format sapp_depth_format(void);
 /* get default framebuffer sample count */
 SOKOL_APP_API_DECL int sapp_sample_count(void);
 /* returns true when high_dpi was requested and actually running in a high-dpi scenario */
@@ -2223,11 +2223,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #define _SAPP_MAX_TITLE_LENGTH (128)
 #define _SAPP_FALLBACK_DEFAULT_WINDOW_WIDTH (640)
 #define _SAPP_FALLBACK_DEFAULT_WINDOW_HEIGHT (480)
-// NOTE: the pixel format values *must* be compatible with sg_pixel_format
-#define _SAPP_PIXELFORMAT_RGBA8 (23)
-#define _SAPP_PIXELFORMAT_BGRA8 (28)
-#define _SAPP_PIXELFORMAT_DEPTH (43)
-#define _SAPP_PIXELFORMAT_DEPTH_STENCIL (44)
 
 // check if the config defines are alright
 #if defined(__APPLE__)
@@ -3451,24 +3446,24 @@ _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* desc) {
     sapp_desc res = *desc;
     res.sample_count = _sapp_def(res.sample_count, 1);
     res.swap_interval = _sapp_def(res.swap_interval, 1);
-    if (0 == res.gl_major_version) {
+    if (0 == res.gl.major_version) {
         #if defined(SOKOL_GLCORE)
-            res.gl_major_version = 4;
+            res.gl.major_version = 4;
             #if defined(_SAPP_APPLE)
-                res.gl_minor_version = 1;
+                res.gl.minor_version = 1;
             #else
-                res.gl_minor_version = 3;
+                res.gl.minor_version = 3;
             #endif
         #elif defined(SOKOL_GLES3)
-            res.gl_major_version = 3;
+            res.gl.major_version = 3;
             #if defined(_SAPP_ANDROID) || defined(_SAPP_LINUX)
-                res.gl_minor_version = 1;
+                res.gl.minor_version = 1;
             #else
-                res.gl_minor_version = 0;
+                res.gl.minor_version = 0;
             #endif
         #endif
     }
-    res.html5_canvas_selector = _sapp_def(res.html5_canvas_selector, "#canvas");
+    res.html5.canvas_selector = _sapp_def(res.html5.canvas_selector, "#canvas");
     res.clipboard_size = _sapp_def(res.clipboard_size, 8192);
     res.max_dropped_files = _sapp_def(res.max_dropped_files, 1);
     res.max_dropped_file_path_length = _sapp_def(res.max_dropped_file_path_length, 2048);
@@ -3495,9 +3490,9 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _sapp.framebuffer_height = _sapp.window_height;
     _sapp.sample_count = _sapp.desc.sample_count;
     _sapp.swap_interval = _sapp.desc.swap_interval;
-    _sapp_strcpy(_sapp.desc.html5_canvas_selector, _sapp.html5_canvas_selector, sizeof(_sapp.html5_canvas_selector));
-    _sapp.desc.html5_canvas_selector = _sapp.html5_canvas_selector;
-    _sapp.html5_ask_leave_site = _sapp.desc.html5_ask_leave_site;
+    _sapp_strcpy(_sapp.desc.html5.canvas_selector, _sapp.html5_canvas_selector, sizeof(_sapp.html5_canvas_selector));
+    _sapp.desc.html5.canvas_selector = _sapp.html5_canvas_selector;
+    _sapp.html5_ask_leave_site = _sapp.desc.html5.ask_leave_site;
     _sapp.clipboard.enabled = _sapp.desc.enable_clipboard;
     if (_sapp.clipboard.enabled) {
         _sapp.clipboard.buf_size = _sapp.desc.clipboard_size;
@@ -11559,8 +11554,8 @@ _SOKOL_PRIVATE void _sapp_glx_create_context(void) {
     }
     _sapp_x11_grab_error_handler();
     const int attribs[] = {
-        GLX_CONTEXT_MAJOR_VERSION_ARB, _sapp.desc.gl_major_version,
-        GLX_CONTEXT_MINOR_VERSION_ARB, _sapp.desc.gl_minor_version,
+        GLX_CONTEXT_MAJOR_VERSION_ARB, _sapp.desc.gl.major_version,
+        GLX_CONTEXT_MINOR_VERSION_ARB, _sapp.desc.gl.minor_version,
         GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
         GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
         0, 0
@@ -13030,26 +13025,26 @@ SOKOL_API_IMPL float sapp_heightf(void) {
     return (float)sapp_height();
 }
 
-SOKOL_API_IMPL int sapp_color_format(void) {
+SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
     #if defined(SOKOL_WGPU)
         switch (_sapp.wgpu.render_format) {
             case WGPUTextureFormat_RGBA8Unorm:
-                return _SAPP_PIXELFORMAT_RGBA8;
+                return SAPP_PIXELFORMAT_RGBA8;
             case WGPUTextureFormat_BGRA8Unorm:
-                return _SAPP_PIXELFORMAT_BGRA8;
+                return SAPP_PIXELFORMAT_BGRA8;
             default:
                 SOKOL_UNREACHABLE;
                 return 0;
         }
     #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
-        return _SAPP_PIXELFORMAT_BGRA8;
+        return SAPP_PIXELFORMAT_BGRA8;
     #else
-        return _SAPP_PIXELFORMAT_RGBA8;
+        return SAPP_PIXELFORMAT_RGBA8;
     #endif
 }
 
-SOKOL_API_IMPL int sapp_depth_format(void) {
-    return _SAPP_PIXELFORMAT_DEPTH_STENCIL;
+SOKOL_API_IMPL sapp_pixel_format sapp_depth_format(void) {
+    return SAPP_PIXELFORMAT_DEPTH_STENCIL;
 }
 
 SOKOL_API_IMPL int sapp_sample_count(void) {
@@ -13413,14 +13408,13 @@ SOKOL_API_IMPL sapp_environment sapp_get_environment(void) {
 
 SOKOL_API_IMPL sapp_swapchain sapp_swapchain_next(void) {
     SOKOL_ASSERT(_sapp.valid);
-    // FIXME: make sure that this is only called once per frame?
     sapp_swapchain res;
     _sapp_clear(&res, sizeof(res));
-    res.width =
-    res.height =
+    res.width = sapp_width();
+    res.height = sapp_height();
     res.color_format = sapp_color_format();
     res.depth_format = sapp_depth_format();
-    res.sample_count = sapp_color_format();
+    res.sample_count = sapp_sample_count();
     #if defined(SOKOL_METAL)
         #if defined(_SAPP_MACOS)
             res.metal.current_drawable = (__bridge const void*) [_sapp.macos.view currentDrawable];
@@ -13455,7 +13449,7 @@ SOKOL_API_IMPL sapp_swapchain sapp_swapchain_next(void) {
         res.wgpu.depth_stencil_view = (const void*) _sapp.wgpu.depth_stencil_view;
     #endif
     #if defined(_SAPP_ANY_GL)
-        res.framebuffer = _sapp.gl.framebuffer;
+        res.gl.framebuffer = _sapp.gl.framebuffer;
     #endif
     return res;
 }
@@ -13501,7 +13495,7 @@ SOKOL_API_IMPL const void* sapp_win32_get_hwnd(void) {
 SOKOL_API_IMPL int sapp_gl_get_major_version(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_ANY_GL)
-        return _sapp.desc.gl_major_version;
+        return _sapp.desc.gl.major_version;
     #else
         return 0;
     #endif
@@ -13510,7 +13504,7 @@ SOKOL_API_IMPL int sapp_gl_get_major_version(void) {
 SOKOL_API_IMPL int sapp_gl_get_minor_version(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_ANY_GL)
-        return _sapp.desc.gl_minor_version;
+        return _sapp.desc.gl.minor_version;
     #else
         return 0;
     #endif
