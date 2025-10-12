@@ -4665,7 +4665,7 @@ _SOKOL_PRIVATE void _sapp_macos_gl_init(NSRect window_rect) {
     attrs[i++] = NSOpenGLPFAAccelerated;
     attrs[i++] = NSOpenGLPFADoubleBuffer;
     attrs[i++] = NSOpenGLPFAOpenGLProfile;
-    const int glVersion = _sapp.desc.gl_major_version * 10 + _sapp.desc.gl_minor_version;
+    const int glVersion = _sapp.desc.gl.major_version * 10 + _sapp.desc.gl.minor_version;
     switch(glVersion) {
         case 10: attrs[i++] = NSOpenGLProfileVersionLegacy;  break;
         case 32: attrs[i++] = NSOpenGLProfileVersion3_2Core; break;
@@ -8164,8 +8164,8 @@ _SOKOL_PRIVATE void _sapp_wgl_create_context(void) {
         _SAPP_PANIC(WIN32_WGL_ARB_CREATE_CONTEXT_PROFILE_REQUIRED);
     }
     const int attrs[] = {
-        WGL_CONTEXT_MAJOR_VERSION_ARB, _sapp.desc.gl_major_version,
-        WGL_CONTEXT_MINOR_VERSION_ARB, _sapp.desc.gl_minor_version,
+        WGL_CONTEXT_MAJOR_VERSION_ARB, _sapp.desc.gl.major_version,
+        WGL_CONTEXT_MINOR_VERSION_ARB, _sapp.desc.gl.minor_version,
 #if defined(SOKOL_DEBUG)
         WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB | WGL_CONTEXT_DEBUG_BIT_ARB,
 #else
@@ -9527,8 +9527,8 @@ _SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
     }
 
     EGLint ctx_attributes[] = {
-        EGL_CONTEXT_MAJOR_VERSION, _sapp.desc.gl_major_version,
-        EGL_CONTEXT_MINOR_VERSION, _sapp.desc.gl_minor_version,
+        EGL_CONTEXT_MAJOR_VERSION, _sapp.desc.gl.major_version,
+        EGL_CONTEXT_MINOR_VERSION, _sapp.desc.gl.minor_version,
         EGL_NONE,
     };
     EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT, ctx_attributes);
