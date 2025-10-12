@@ -2737,6 +2737,7 @@ typedef struct {
     VkDevice device;
     VkSwapchainKHR swapchain;
     uint32_t num_swapchain_images;
+    uint32_t cur_swapchain_image_index;
     VkImage swapchain_images[_SAPP_VK_MAX_SWAPCHAIN_IMAGES];
     VkImageView swapchain_views[_SAPP_VK_MAX_SWAPCHAIN_IMAGES];
 } _sapp_vk_t;
@@ -4571,6 +4572,18 @@ _SOKOL_PRIVATE void _sapp_vk_discard(void) {
     _sapp_vk_destroy_device();
     _sapp_vk_destroy_surface();
     _sapp_vk_destroy_instance();
+}
+
+_SOKOL_PRIVATE void _sapp_vk_swapchain_next(void) {
+    SOKOL_ASSERT(_sapp.vk.device);
+    SOKOL_ASSERT(_sapp.vk.swapchain);
+    // FIXME! call vkAcquireImage into _sapp.vk.cur_swapchain_image_index
+    SOKOL_ASSERT(false);
+}
+
+_SOKOL_PRIVATE void _sapp_vk_frame(void) {
+    _sapp_frame();
+    // FIXME: presentation
 }
 
 #endif // SOKOL_VULKAN
@@ -12902,6 +12915,8 @@ _SOKOL_PRIVATE void _sapp_linux_frame(void) {
     _sapp_x11_update_dimensions_from_window_size();
     #if defined(SOKOL_WGPU)
         _sapp_wgpu_frame();
+    #elif defined(SOKOL_VULKAN)
+        _sapp_vk_frame();
     #else
         _sapp_frame();
         #if defined(_SAPP_GLX)
@@ -13513,6 +13528,17 @@ SOKOL_API_IMPL sapp_swapchain sapp_swapchain_next(void) {
             res.wgpu.render_view = (const void*) _sapp.wgpu.swapchain_view;
         }
         res.wgpu.depth_stencil_view = (const void*) _sapp.wgpu.depth_stencil_view;
+    #endif
+    #if defined(SOKOL_VULKAN)
+        _sapp_vk_swapchain_next();
+        if (_sapp.sample_count > 1) {
+            // FIXME FIXME FIXME
+            SOKOL_ASSERT(false);
+        } else {
+            res.vulkan.render_view = (const void*) _sapp.vk.swapchain_views[_sapp.vk.cur_swapchain_image_index];
+        }
+        // FIXME
+        // res.vulkan.depth_stencil_view = ...;
     #endif
     #if defined(_SAPP_ANY_GL)
         res.gl.framebuffer = _sapp.gl.framebuffer;
