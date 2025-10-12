@@ -1799,6 +1799,7 @@ typedef struct sapp_allocator {
     _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_DEVICE_FAILED, "vulkan: vkCreateDevice failed") \
     _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_SURFACE_FAILED, "vulkan: vkCreate*SurfaceKHR failed") \
     _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_SWAPCHAIN_FAILED, "vulkan: vkCreateSwapchainKHR failed") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_SWAPCHAIN_CREATE_IMAGE_VIEW_FAILED, "vulkan: vkCreateImageView for swapchain  image failed") \
     _SAPP_LOGITEM_XMACRO(IMAGE_DATA_SIZE_MISMATCH, "image data size mismatch (must be width*height*4 bytes)") \
     _SAPP_LOGITEM_XMACRO(DROPPED_FILE_PATH_TOO_LONG, "dropped file path too long (sapp_desc.max_dropped_filed_path_length)") \
     _SAPP_LOGITEM_XMACRO(CLIPBOARD_STRING_TOO_BIG, "clipboard string didn't fit into clipboard buffer") \
@@ -2713,6 +2714,8 @@ typedef struct {
 #endif
 
 #if defined(SOKOL_VULKAN)
+#define _SAPP_VK_MAX_SWAPCHAIN_IMAGES (8)
+
 typedef struct {
     VkInstance instance;
     VkSurfaceKHR surface;
@@ -2721,6 +2724,9 @@ typedef struct {
     uint32_t queue_family_index;
     VkDevice device;
     VkSwapchainKHR swapchain;
+    uint32_t num_swapchain_images;
+    VkImage swapchain_images[_SAPP_VK_MAX_SWAPCHAIN_IMAGES];
+    VkImageView swapchain_views[_SAPP_VK_MAX_SWAPCHAIN_IMAGES];
 } _sapp_vk_t;
 #endif
 
@@ -4455,6 +4461,9 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(void) {
     SOKOL_ASSERT(_sapp.vk.surface);
     SOKOL_ASSERT(_sapp.vk.device);
     SOKOL_ASSERT(0 == _sapp.vk.swapchain);
+    SOKOL_ASSERT(0 == _sapp.vk.num_swapchain_images);
+    SOKOL_ASSERT(0 == _sapp.vk.swapchain_images[0]);
+    SOKOL_ASSERT(0 == _sapp.vk.swapchain_views[0]);
 
     VkSurfaceCapabilitiesKHR surf_caps;
     _sapp_clear(&surf_caps, sizeof(surf_caps));
@@ -4488,11 +4497,46 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(void) {
         _SAPP_PANIC(VULKAN_CREATE_SWAPCHAIN_FAILED);
     }
     SOKOL_ASSERT(_sapp.vk.swapchain);
+
+    _sapp.vk.num_swapchain_images = _SAPP_VK_MAX_SWAPCHAIN_IMAGES;
+    res = vkGetSwapchainImagesKHR(_sapp.vk.device,
+        _sapp.vk.swapchain,
+        &_sapp.vk.num_swapchain_images,
+        _sapp.vk.swapchain_images);
+    SOKOL_ASSERT(res == VK_SUCCESS);
+    SOKOL_ASSERT(_sapp.vk.num_swapchain_images >= surf_caps.minImageCount);
+
+    VkImageViewCreateInfo view_create_info;
+    _sapp_clear(&view_create_info, sizeof(view_create_info));
+    view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    view_create_info.format = _sapp.vk.surface_format.format;
+    view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    view_create_info.subresourceRange.levelCount = 1;
+    view_create_info.subresourceRange.layerCount = 1;
+    for (uint32_t i = 0; i < _sapp.vk.num_swapchain_images; i++) {
+        SOKOL_ASSERT(_sapp.vk.swapchain_images[i]);
+        SOKOL_ASSERT(0 == _sapp.vk.swapchain_views[i]);
+        view_create_info.image = _sapp.vk.swapchain_images[i];
+        res = vkCreateImageView(_sapp.vk.device, &view_create_info, 0, &_sapp.vk.swapchain_views[i]);
+        if (res != VK_SUCCESS) {
+            _SAPP_PANIC(VULKAN_SWAPCHAIN_CREATE_IMAGE_VIEW_FAILED);
+        }
+        SOKOL_ASSERT(_sapp.vk.swapchain_views[i]);
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_vk_destroy_swapchain(void) {
     SOKOL_ASSERT(_sapp.vk.device);
     SOKOL_ASSERT(_sapp.vk.swapchain);
+    SOKOL_ASSERT(_sapp.vk.num_swapchain_images > 0);
+    for (uint32_t i = 0; i < _sapp.vk.num_swapchain_images; i++) {
+        SOKOL_ASSERT(_sapp.vk.swapchain_views[i]);
+        vkDestroyImageView(_sapp.vk.device, _sapp.vk.swapchain_views[i], 0);
+        _sapp.vk.swapchain_views[i] = 0;
+        _sapp.vk.swapchain_images[i] = 0;
+
+    }
     vkDestroySwapchainKHR(_sapp.vk.device, _sapp.vk.swapchain, 0);
     _sapp.vk.swapchain = 0;
 }
