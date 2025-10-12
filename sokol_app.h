@@ -3955,7 +3955,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_discard_swapchain(bool called_from_resize) {
     }
 }
 
-_SOKOL_PRIVATE WGPUTextureView _sapp_wgpu_swapchain_next(void) {
+_SOKOL_PRIVATE void _sapp_wgpu_swapchain_next(void) {
     SOKOL_ASSERT(0 == _sapp.wgpu.swapchain_view);
     WGPUSurfaceTexture surf_tex;
     _sapp_clear(&surf_tex, sizeof(surf_tex));
@@ -3968,13 +3968,13 @@ _SOKOL_PRIVATE WGPUTextureView _sapp_wgpu_swapchain_next(void) {
         case WGPUSurfaceGetCurrentTextureStatus_Timeout:
         case WGPUSurfaceGetCurrentTextureStatus_Outdated:
         case WGPUSurfaceGetCurrentTextureStatus_Lost:
-            // skip this frame and reconfigure surface
             if (surf_tex.texture) {
                 wgpuTextureRelease(surf_tex.texture);
             }
             _sapp_wgpu_discard_swapchain(false);
             _sapp_wgpu_create_swapchain(false);
-            return 0;
+            // FIXME: currently this will assert in the caller
+            return;
         case WGPUSurfaceGetCurrentTextureStatus_Error:
         default:
             _SAPP_PANIC(WGPU_SWAPCHAIN_GETCURRENTTEXTURE_FAILED);
@@ -13503,6 +13503,7 @@ SOKOL_API_IMPL sapp_swapchain sapp_swapchain_next(void) {
     #if defined(SOKOL_WGPU)
         SOKOL_ASSERT(0 == _sapp.wgpu.swapchain_view);
         _sapp_wgpu_swapchain_next();
+        // FIXME: swapchain_view being null must be allowed and should skip the frame
         SOKOL_ASSERT(_sapp.wgpu.swapchain_view);
         if (_sapp.sample_count > 1) {
             SOKOL_ASSERT(_sapp.wgpu.msaa_view);
