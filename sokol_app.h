@@ -1820,6 +1820,7 @@ typedef enum sapp_log_item {
 */
 typedef enum sapp_pixel_format {
     _SAPP_PIXELFORMAT_DEFAULT,
+    SAPP_PIXELFORMAT_NONE,
     SAPP_PIXELFORMAT_RGBA8,
     SAPP_PIXELFORMAT_SRGB8A8,
     SAPP_PIXELFORMAT_BGRA8,
@@ -3863,7 +3864,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
     surf_conf.alphaMode = WGPUCompositeAlphaMode_Opaque;
     #if defined(_SAPP_EMSCRIPTEN)
         // FIXME: make this further configurable?
-        if (_sapp.desc.html5_premultiplied_alpha) {
+        if (_sapp.desc.html5.premultiplied_alpha) {
             surf_conf.alphaMode = WGPUCompositeAlphaMode_Premultiplied;
         }
     #endif
@@ -6637,7 +6638,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(user_data);
-    bool consume_event = !_sapp.desc.html5_bubble_mouse_events;
+    bool consume_event = !_sapp.desc.html5.bubble_mouse_events;
     _sapp.emsc.mouse_buttons = emsc_event->buttons;
     if (_sapp.mouse.locked) {
         _sapp.mouse.dx = (float) emsc_event->movementX;
@@ -6711,7 +6712,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(emsc_type);
     _SOKOL_UNUSED(user_data);
-    bool consume_event = !_sapp.desc.html5_bubble_wheel_events;
+    bool consume_event = !_sapp.desc.html5.bubble_wheel_events;
     _sapp.emsc.mouse_buttons = emsc_event->mouse.buttons;
     if (_sapp_events_enabled()) {
         _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
@@ -6886,7 +6887,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
             if (type == SAPP_EVENTTYPE_CHAR) {
                 // NOTE: charCode doesn't appear to be supported on Android Chrome
                 _sapp.event.char_code = emsc_event->charCode;
-                consume_event |= !_sapp.desc.html5_bubble_char_events;
+                consume_event |= !_sapp.desc.html5.bubble_char_events;
             } else {
                 if (0 != emsc_event->code[0]) {
                     // This code path is for desktop browsers which send untranslated 'physical' key code strings
@@ -6915,7 +6916,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                 // 'character key events' will always need to bubble up, otherwise the browser
                 // wouldn't be able to generate character events.
                 if (!_sapp_emsc_is_char_key(_sapp.event.key_code)) {
-                    consume_event |= !_sapp.desc.html5_bubble_key_events;
+                    consume_event |= !_sapp.desc.html5.bubble_key_events;
                 }
             }
             consume_event |= _sapp_call_event(&_sapp.event);
@@ -6931,7 +6932,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(user_data);
-    bool consume_event = !_sapp.desc.html5_bubble_touch_events;
+    bool consume_event = !_sapp.desc.html5.bubble_touch_events;
     if (_sapp_events_enabled()) {
         sapp_event_type type;
         switch (emsc_type) {
@@ -7018,8 +7019,8 @@ _SOKOL_PRIVATE void _sapp_emsc_webgl_init(void) {
     attrs.depth = true;
     attrs.stencil = true;
     attrs.antialias = _sapp.sample_count > 1;
-    attrs.premultipliedAlpha = _sapp.desc.html5_premultiplied_alpha;
-    attrs.preserveDrawingBuffer = _sapp.desc.html5_preserve_drawing_buffer;
+    attrs.premultipliedAlpha = _sapp.desc.html5.premultiplied_alpha;
+    attrs.preserveDrawingBuffer = _sapp.desc.html5.preserve_drawing_buffer;
     attrs.enableExtensionsByDefault = true;
     attrs.majorVersion = 2;
     EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx = emscripten_webgl_create_context(_sapp.html5_canvas_selector, &attrs);
@@ -7083,7 +7084,7 @@ _SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers(void) {
     emscripten_set_focus_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
     emscripten_set_blur_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
     emscripten_set_fullscreenchange_callback(_sapp.html5_canvas_selector, 0, true, 0);
-    if (!_sapp.desc.html5_canvas_resize) {
+    if (!_sapp.desc.html5.canvas_resize) {
         emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
     }
     sapp_js_remove_beforeunload_listener();
@@ -7139,10 +7140,10 @@ _SOKOL_PRIVATE void _sapp_emsc_frame_main_loop(void) {
 _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp.fullscreen = false; // override user provided fullscreen state: can't start in fullscreen on the web!
-    const char* document_title = desc->html5_update_document_title ? _sapp.window_title : 0;
+    const char* document_title = desc->html5.update_document_title ? _sapp.window_title : 0;
     sapp_js_init(_sapp.html5_canvas_selector, document_title);
     double w, h;
-    if (_sapp.desc.html5_canvas_resize) {
+    if (_sapp.desc.html5.canvas_resize) {
         w = (double) _sapp_def(_sapp.desc.width, _SAPP_FALLBACK_DEFAULT_WINDOW_WIDTH);
         h = (double) _sapp_def(_sapp.desc.height, _SAPP_FALLBACK_DEFAULT_WINDOW_HEIGHT);
     } else {
@@ -7167,8 +7168,8 @@ _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     sapp_set_icon(&desc->icon);
 
     // start the frame loop
-    if (_sapp.desc.html5_use_emsc_set_main_loop) {
-        emscripten_set_main_loop(_sapp_emsc_frame_main_loop, 0, _sapp.desc.html5_emsc_set_main_loop_simulate_infinite_loop);
+    if (_sapp.desc.html5.use_emsc_set_main_loop) {
+        emscripten_set_main_loop(_sapp_emsc_frame_main_loop, 0, _sapp.desc.html5.emsc_set_main_loop_simulate_infinite_loop);
     } else {
         emscripten_request_animation_frame_loop(_sapp_emsc_frame_animation_loop, 0);
     }
@@ -13034,7 +13035,7 @@ SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
                 return SAPP_PIXELFORMAT_BGRA8;
             default:
                 SOKOL_UNREACHABLE;
-                return 0;
+                return SAPP_PIXELFORMAT_NONE;
         }
     #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
         return SAPP_PIXELFORMAT_BGRA8;
