@@ -4413,6 +4413,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
     vk13_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
     vk13_features.pNext = &xds_features;
     vk13_features.dynamicRendering = true;
+    vk13_features.synchronization2 = true;
 
     VkPhysicalDeviceFeatures2 features2;
     _sapp_clear(&features2, sizeof(features2));
@@ -4652,7 +4653,7 @@ _SOKOL_PRIVATE void _sapp_vk_present(void) {
     present_info.pSwapchains = &_sapp.vk.swapchain;
     present_info.pImageIndices = &_sapp.vk.cur_swapchain_image_index;
     VkResult res = vkQueuePresentKHR(_sapp.vk.queue, &present_info);
-    if ((res != VK_SUCCESS) || (res != VK_SUBOPTIMAL_KHR)) {
+    if ((res != VK_SUCCESS) && (res != VK_SUBOPTIMAL_KHR)) {
         _SAPP_WARN(VULKAN_QUEUE_PRESENT_FAILED);
     }
 }
