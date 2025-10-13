@@ -22,6 +22,7 @@
         #define SOKOL_D3D11
         #define SOKOL_METAL
         #define SOKOL_WGPU
+        #define SOKOL_VULKAN
         #define SOKOL_DUMMY_BACKEND
 
     I.e. for the desktop GL it should look like this:
@@ -5267,7 +5268,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
 #define SOKOL_GFX_IMPL_INCLUDED (1)
 
 #if !(defined(SOKOL_GLCORE)||defined(SOKOL_GLES3)||defined(SOKOL_D3D11)||defined(SOKOL_METAL)||defined(SOKOL_WGPU)||defined(SOKOL_VULKAN)||defined(SOKOL_DUMMY_BACKEND))
-#error "Please select a backend with SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND"
+#error "Please select a backend with SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU, SOKOL_VULKAN or SOKOL_DUMMY_BACKEND"
 #endif
 #if defined(SOKOL_MALLOC) || defined(SOKOL_CALLOC) || defined(SOKOL_FREE)
 #error "SOKOL_MALLOC/CALLOC/FREE macros are no longer supported, please use sg_desc.allocator to override memory allocation functions"
@@ -5391,8 +5392,6 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #endif
 #elif defined(SOKOL_VULKAN)
     #include <vulkan/vulkan.h>
-    // FIXME
-    #define SOKOL_DUMMY_BACKEND (1)
 #elif defined(SOKOL_GLCORE) || defined(SOKOL_GLES3)
     #define _SOKOL_ANY_GL (1)
 
@@ -6721,7 +6720,51 @@ typedef struct {
     _sg_wgpu_bindgroups_cache_t bindgroups_cache;
     _sg_wgpu_bindgroups_pool_t bindgroups_pool;
 } _sg_wgpu_backend_t;
-#endif // SOKOL_WGPU
+
+#elif defined(SOKOL_VULKAN)
+
+typedef struct _sg_buffer_s {
+    _sg_slot_t slot;
+    _sg_buffer_common_t cmn;
+} _sg_vk_buffer_t;
+typedef _sg_vk_buffer_t _sg_buffer_t;
+
+typedef struct _sg_image_s {
+    _sg_slot_t slot;
+    _sg_image_common_t cmn;
+} _sg_vk_image_t;
+typedef _sg_vk_image_t _sg_image_t;
+
+typedef struct _sg_sampler_s {
+    _sg_slot_t slot;
+    _sg_sampler_common_t cmn;
+} _sg_vk_sampler_t;
+typedef _sg_vk_sampler_t _sg_sampler_t;
+
+typedef struct _sg_shader_s {
+    _sg_slot_t slot;
+    _sg_shader_common_t cmn;
+} _sg_vk_shader_t;
+typedef _sg_vk_shader_t _sg_shader_t;
+
+typedef struct _sg_pipeline_s {
+    _sg_slot_t slot;
+    _sg_pipeline_common_t cmn;
+} _sg_vk_pipeline_t;
+typedef _sg_vk_pipeline_t _sg_pipeline_t;
+
+typedef struct _sg_view_s {
+    _sg_slot_t slot;
+    _sg_view_common_t cmn;
+} _sg_vk_view_t;
+typedef _sg_vk_view_t _sg_view_t;
+
+typedef struct {
+    bool valid;
+    VkDevice dev;
+} _sg_vk_backend_t;
+
+#endif // SOKOL_VULKAN
 
 // this *MUST* remain 0
 #define _SG_INVALID_SLOT_INDEX (0)
@@ -6819,6 +6862,8 @@ typedef struct {
     _sg_d3d11_backend_t d3d11;
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_backend_t wgpu;
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_backend_t vk;
     #endif
     #if defined(SOKOL_TRACE_HOOKS)
     sg_trace_hooks hooks;
@@ -18173,6 +18218,8 @@ static inline void _sg_setup_backend(const sg_desc* desc) {
     _sg_d3d11_setup_backend(desc);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_setup_backend(desc);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_setup_backend(desc);
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_setup_backend(desc);
     #else
@@ -18189,6 +18236,8 @@ static inline void _sg_discard_backend(void) {
     _sg_d3d11_discard_backend();
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_discard_backend();
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_discard_backend();
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_discard_backend();
     #else
@@ -18205,6 +18254,8 @@ static inline void _sg_reset_state_cache(void) {
     _sg_d3d11_reset_state_cache();
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_reset_state_cache();
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_reset_state_cache();
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_reset_state_cache();
     #else
@@ -18221,6 +18272,8 @@ static inline sg_resource_state _sg_create_buffer(_sg_buffer_t* buf, const sg_bu
     return _sg_d3d11_create_buffer(buf, desc);
     #elif defined(SOKOL_WGPU)
     return _sg_wgpu_create_buffer(buf, desc);
+    #elif defined(SOKOL_VULKAN)
+    return _sg_vk_create_buffer(buf, desc);
     #elif defined(SOKOL_DUMMY_BACKEND)
     return _sg_dummy_create_buffer(buf, desc);
     #else
@@ -18237,6 +18290,8 @@ static inline void _sg_discard_buffer(_sg_buffer_t* buf) {
     _sg_d3d11_discard_buffer(buf);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_discard_buffer(buf);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_discard_buffer(buf);
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_discard_buffer(buf);
     #else
@@ -18253,6 +18308,8 @@ static inline sg_resource_state _sg_create_image(_sg_image_t* img, const sg_imag
     return _sg_d3d11_create_image(img, desc);
     #elif defined(SOKOL_WGPU)
     return _sg_wgpu_create_image(img, desc);
+    #elif defined(SOKOL_VULKAN)
+    return _sg_vk_create_image(img, desc);
     #elif defined(SOKOL_DUMMY_BACKEND)
     return _sg_dummy_create_image(img, desc);
     #else
@@ -18269,6 +18326,8 @@ static inline void _sg_discard_image(_sg_image_t* img) {
     _sg_d3d11_discard_image(img);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_discard_image(img);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_discard_image(img);
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_discard_image(img);
     #else
@@ -18285,6 +18344,8 @@ static inline sg_resource_state _sg_create_sampler(_sg_sampler_t* smp, const sg_
     return _sg_d3d11_create_sampler(smp, desc);
     #elif defined(SOKOL_WGPU)
     return _sg_wgpu_create_sampler(smp, desc);
+    #elif defined(SOKOL_VULKAN)
+    return _sg_vk_create_sampler(smp, desc);
     #elif defined(SOKOL_DUMMY_BACKEND)
     return _sg_dummy_create_sampler(smp, desc);
     #else
@@ -18301,6 +18362,8 @@ static inline void _sg_discard_sampler(_sg_sampler_t* smp) {
     _sg_d3d11_discard_sampler(smp);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_discard_sampler(smp);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_discard_sampler(smp);
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_discard_sampler(smp);
     #else
@@ -18317,6 +18380,8 @@ static inline sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_sh
     return _sg_d3d11_create_shader(shd, desc);
     #elif defined(SOKOL_WGPU)
     return _sg_wgpu_create_shader(shd, desc);
+    #elif defined(SOKOL_VULKAN)
+    return _sg_vk_create_shader(shd, desc);
     #elif defined(SOKOL_DUMMY_BACKEND)
     return _sg_dummy_create_shader(shd, desc);
     #else
@@ -18332,6 +18397,8 @@ static inline void _sg_discard_shader(_sg_shader_t* shd) {
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_discard_shader(shd);
     #elif defined(SOKOL_WGPU)
+    _sg_wgpu_discard_shader(shd);
+    #elif defined(SOKOL_VULKAN)
     _sg_wgpu_discard_shader(shd);
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_discard_shader(shd);
@@ -18349,6 +18416,8 @@ static inline sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, const s
     return _sg_d3d11_create_pipeline(pip, desc);
     #elif defined(SOKOL_WGPU)
     return _sg_wgpu_create_pipeline(pip, desc);
+    #elif defined(SOKOL_VULKAN)
+    return _sg_vk_create_pipeline(pip, desc);
     #elif defined(SOKOL_DUMMY_BACKEND)
     return _sg_dummy_create_pipeline(pip, desc);
     #else
@@ -18365,6 +18434,8 @@ static inline void _sg_discard_pipeline(_sg_pipeline_t* pip) {
     _sg_d3d11_discard_pipeline(pip);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_discard_pipeline(pip);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_discard_pipeline(pip);
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_discard_pipeline(pip);
     #else
@@ -18381,6 +18452,8 @@ static inline sg_resource_state _sg_create_view(_sg_view_t* view, const sg_view_
     return _sg_d3d11_create_view(view, desc);
     #elif defined(SOKOL_WGPU)
     return _sg_wgpu_create_view(view, desc);
+    #elif defined(SOKOL_VULKAN)
+    return _sg_vk_create_view(view, desc);
     #elif defined(SOKOL_DUMMY_BACKEND)
     return _sg_dummy_create_view(view, desc);
     #else
@@ -18397,6 +18470,8 @@ static inline void _sg_discard_view(_sg_view_t* view) {
     _sg_d3d11_discard_view(view);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_discard_view(view);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_discard_view(view);
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_discard_view(view);
     #else
@@ -18413,6 +18488,8 @@ static inline void _sg_begin_pass(const sg_pass* pass, const _sg_attachments_ptr
     _sg_d3d11_begin_pass(pass, atts);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_begin_pass(pass, atts);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_begin_pass(pass, atts);
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_begin_pass(pass, atts);
     #else
@@ -18429,6 +18506,8 @@ static inline void _sg_end_pass(const _sg_attachments_ptrs_t* atts) {
     _sg_d3d11_end_pass(atts);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_end_pass(atts);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_end_pass(atts);
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_end_pass(atts);
     #else
@@ -18445,6 +18524,8 @@ static inline void _sg_apply_viewport(int x, int y, int w, int h, bool origin_to
     _sg_d3d11_apply_viewport(x, y, w, h, origin_top_left);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_apply_viewport(x, y, w, h, origin_top_left);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_apply_viewport(x, y, w, h, origin_top_left);
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_apply_viewport(x, y, w, h, origin_top_left);
     #else
@@ -18461,6 +18542,8 @@ static inline void _sg_apply_scissor_rect(int x, int y, int w, int h, bool origi
     _sg_d3d11_apply_scissor_rect(x, y, w, h, origin_top_left);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_apply_scissor_rect(x, y, w, h, origin_top_left);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_apply_scissor_rect(x, y, w, h, origin_top_left);
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_apply_scissor_rect(x, y, w, h, origin_top_left);
     #else
@@ -18477,6 +18560,8 @@ static inline void _sg_apply_pipeline(_sg_pipeline_t* pip) {
     _sg_d3d11_apply_pipeline(pip);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_apply_pipeline(pip);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_apply_pipeline(pip);
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_apply_pipeline(pip);
     #else
@@ -18493,6 +18578,8 @@ static inline bool _sg_apply_bindings(_sg_bindings_ptrs_t* bnd) {
     return _sg_d3d11_apply_bindings(bnd);
     #elif defined(SOKOL_WGPU)
     return _sg_wgpu_apply_bindings(bnd);
+    #elif defined(SOKOL_VULKAN)
+    return _sg_vk_apply_bindings(bnd);
     #elif defined(SOKOL_DUMMY_BACKEND)
     return _sg_dummy_apply_bindings(bnd);
     #else
@@ -18509,6 +18596,8 @@ static inline void _sg_apply_uniforms(int ub_slot, const sg_range* data) {
     _sg_d3d11_apply_uniforms(ub_slot, data);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_apply_uniforms(ub_slot, data);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_apply_uniforms(ub_slot, data);
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_apply_uniforms(ub_slot, data);
     #else
@@ -18525,6 +18614,8 @@ static inline void _sg_draw(int base_element, int num_elements, int num_instance
     _sg_d3d11_draw(base_element, num_elements, num_instances, base_vertex, base_index);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_draw(base_element, num_elements, num_instances, base_vertex, base_index);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_draw(base_element, num_elements, num_instances, base_vertex, base_index);
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_draw(base_element, num_elements, num_instances, base_vertex, base_index);
     #else
@@ -18541,6 +18632,8 @@ static inline void _sg_dispatch(int num_groups_x, int num_groups_y, int num_grou
     _sg_d3d11_dispatch(num_groups_x, num_groups_y, num_groups_z);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_dispatch(num_groups_x, num_groups_y, num_groups_z);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_dispatch(num_groups_x, num_groups_y, num_groups_z);
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_dispatch(num_groups_x, num_groups_y, num_groups_z);
     #else
@@ -18557,6 +18650,8 @@ static inline void _sg_commit(void) {
     _sg_d3d11_commit();
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_commit();
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_commit();
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_commit();
     #else
@@ -18573,6 +18668,8 @@ static inline void _sg_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
     _sg_d3d11_update_buffer(buf, data);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_update_buffer(buf, data);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_update_buffer(buf, data);
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_update_buffer(buf, data);
     #else
@@ -18589,6 +18686,8 @@ static inline void _sg_append_buffer(_sg_buffer_t* buf, const sg_range* data, bo
     _sg_d3d11_append_buffer(buf, data, new_frame);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_append_buffer(buf, data, new_frame);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_append_buffer(buf, data, new_frame);
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_append_buffer(buf, data, new_frame);
     #else
@@ -18605,6 +18704,8 @@ static inline void _sg_update_image(_sg_image_t* img, const sg_image_data* data)
     _sg_d3d11_update_image(img, data);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_update_image(img, data);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_update_image(img, data);
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_update_image(img, data);
     #else
