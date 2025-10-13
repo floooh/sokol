@@ -2734,7 +2734,6 @@ typedef struct {
 
 #if defined(SOKOL_VULKAN)
 #define _SAPP_VK_MAX_SWAPCHAIN_IMAGES (8)
-#define _SAPP_VK_NUM_INFLIGHT_FRAMES (2)
 
 typedef struct {
     VkInstance instance;
@@ -2753,7 +2752,7 @@ typedef struct {
     struct {
         VkSemaphore render_finished_sem;
         VkSemaphore present_complete_sem;
-    } sync[_SAPP_VK_NUM_INFLIGHT_FRAMES];
+    } sync[_SAPP_VK_MAX_SWAPCHAIN_IMAGES];
 } _sapp_vk_t;
 #endif
 
@@ -4498,7 +4497,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_sync_objects(void) {
     _sapp_clear(&create_info, sizeof(create_info));
     create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     VkResult res;
-    for (int i = 0; i < _SAPP_VK_NUM_INFLIGHT_FRAMES; i++) {
+    for (uint32_t i = 0; i < _sapp.vk.num_swapchain_images; i++) {
         SOKOL_ASSERT(0 == _sapp.vk.sync[i].present_complete_sem);
         SOKOL_ASSERT(0 == _sapp.vk.sync[i].render_finished_sem);
         res = vkCreateSemaphore(_sapp.vk.device, &create_info, 0, &_sapp.vk.sync[i].present_complete_sem);
@@ -4510,7 +4509,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_sync_objects(void) {
 
 _SOKOL_PRIVATE void _sapp_vk_destroy_sync_objects(void) {
     SOKOL_ASSERT(_sapp.vk.device);
-    for (int i = 0; i < _SAPP_VK_NUM_INFLIGHT_FRAMES; i++) {
+    for (uint32_t i = 0; i < _sapp.vk.num_swapchain_images; i++) {
         SOKOL_ASSERT(_sapp.vk.sync[i].present_complete_sem);
         SOKOL_ASSERT(_sapp.vk.sync[i].render_finished_sem);
         vkDestroySemaphore(_sapp.vk.device, _sapp.vk.sync[i].present_complete_sem, 0);
@@ -4610,15 +4609,15 @@ _SOKOL_PRIVATE void _sapp_vk_init(void) {
     _sapp_vk_create_surface();
     _sapp_vk_pick_physical_device();
     _sapp_vk_create_device();
-    _sapp_vk_create_sync_objects();
     _sapp_vk_create_swapchain();
+    _sapp_vk_create_sync_objects();
 }
 
 _SOKOL_PRIVATE void _sapp_vk_discard(void) {
     SOKOL_ASSERT(_sapp.vk.device);
     vkDeviceWaitIdle(_sapp.vk.device);
-    _sapp_vk_destroy_swapchain();
     _sapp_vk_destroy_sync_objects();
+    _sapp_vk_destroy_swapchain();
     _sapp_vk_destroy_device();
     _sapp_vk_destroy_surface();
     _sapp_vk_destroy_instance();
@@ -4645,7 +4644,7 @@ _SOKOL_PRIVATE void _sapp_vk_present(void) {
     _sapp_clear(&present_info, sizeof(present_info));
     present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     present_info.waitSemaphoreCount = 1;
-    present_info.pWaitSemaphores = &_sapp.vk.sync[_sapp.vk.sync_slot].render_finished_sem;
+    present_info.pWaitSemaphores = &_sapp.vk.sync[_sapp.vk.cur_swapchain_image_index].render_finished_sem;
     present_info.swapchainCount = 1;
     present_info.pSwapchains = &_sapp.vk.swapchain;
     present_info.pImageIndices = &_sapp.vk.cur_swapchain_image_index;
@@ -4658,7 +4657,7 @@ _SOKOL_PRIVATE void _sapp_vk_present(void) {
 _SOKOL_PRIVATE void _sapp_vk_frame(void) {
     _sapp_frame();
     _sapp_vk_present();
-    _sapp.vk.sync_slot = (_sapp.vk.sync_slot + 1) % _SAPP_VK_NUM_INFLIGHT_FRAMES;
+    _sapp.vk.sync_slot = (_sapp.vk.sync_slot + 1) % _sapp.vk.num_swapchain_images;
 }
 
 #endif // SOKOL_VULKAN
@@ -13617,7 +13616,7 @@ SOKOL_API_IMPL sapp_swapchain sapp_swapchain_next(void) {
         }
         // FIXME
         // res.vulkan.depth_stencil_view = ...;
-        res.vulkan.render_finished_semaphore = _sapp.vk.sync[_sapp.vk.sync_slot].render_finished_sem;
+        res.vulkan.render_finished_semaphore = _sapp.vk.sync[_sapp.vk.cur_swapchain_image_index].render_finished_sem;
         res.vulkan.present_complete_semaphore = _sapp.vk.sync[_sapp.vk.sync_slot].present_complete_sem;
     #endif
     #if defined(_SAPP_ANY_GL)

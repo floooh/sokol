@@ -18479,7 +18479,7 @@ _SOKOL_PRIVATE void _sg_vk_begin_pass(const sg_pass* pass, const _sg_attachments
     SOKOL_ASSERT(pass && atts);
     VkResult res;
     const sg_swapchain* swapchain = &pass->swapchain;
-    const bool is_swapchain_pass = !atts->empty;
+    const bool is_swapchain_pass = atts->empty;
 
     // if this is the first pass in the frame, wait for
     if (_sg.vk.first_pass_in_frame) {
@@ -18534,7 +18534,7 @@ _SOKOL_PRIVATE void _sg_vk_commit(void) {
     VkCommandBuffer cmd_buf = _sg.vk.frame[_sg.vk.frame_slot].cmd_buf;
     SOKOL_ASSERT(cmd_buf);
     res = vkEndCommandBuffer(cmd_buf);
-    SOKOL_ASSERT(res);
+    SOKOL_ASSERT(res == VK_SUCCESS);
     const VkPipelineStageFlags wait_dst_stage_mask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submit_info;
     _sg_clear(&submit_info, sizeof(submit_info));
