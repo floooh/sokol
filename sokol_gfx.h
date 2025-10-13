@@ -2054,6 +2054,7 @@ typedef enum sg_backend {
     SG_BACKEND_METAL_MACOS,
     SG_BACKEND_METAL_SIMULATOR,
     SG_BACKEND_WGPU,
+    SG_BACKEND_VULKAN,
     SG_BACKEND_DUMMY,
 } sg_backend;
 
@@ -4819,11 +4820,16 @@ typedef struct sg_wgpu_environment {
     const void* device;
 } sg_wgpu_environment;
 
+typedef struct sg_vulkan_environment {
+    const void* device;
+} sg_vulkan_environment;
+
 typedef struct sg_environment {
     sg_environment_defaults defaults;
     sg_metal_environment metal;
     sg_d3d11_environment d3d11;
     sg_wgpu_environment wgpu;
+    sg_vulkan_environment vulkan;
 } sg_environment;
 
 /*
@@ -18185,13 +18191,12 @@ _SOKOL_PRIVATE void _sg_wgpu_dispatch(int num_groups_x, int num_groups_y, int nu
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
-    SOKOL_ASSERT(data && data->ptr && (data->size > 0));
-    SOKOL_ASSERT(buf);
+    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
     _sg_wgpu_copy_buffer_data(buf, 0, data);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
-    SOKOL_ASSERT(data && data->ptr && (data->size > 0));
+    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
     _SOKOL_UNUSED(new_frame);
     _sg_wgpu_copy_buffer_data(buf, (uint64_t)buf->cmn.append_pos, data);
 }
@@ -18200,6 +18205,163 @@ _SOKOL_PRIVATE void _sg_wgpu_update_image(_sg_image_t* img, const sg_image_data*
     SOKOL_ASSERT(img && data);
     _sg_wgpu_copy_image_data(img, img->wgpu.tex, data);
 }
+
+// ██    ██ ██    ██ ██      ██   ██  █████  ███    ██     ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
+// ██    ██ ██    ██ ██      ██  ██  ██   ██ ████   ██     ██   ██ ██   ██ ██      ██  ██  ██      ████   ██ ██   ██
+// ██    ██ ██    ██ ██      █████   ███████ ██ ██  ██     ██████  ███████ ██      █████   █████   ██ ██  ██ ██   ██
+//  ██  ██  ██    ██ ██      ██  ██  ██   ██ ██  ██ ██     ██   ██ ██   ██ ██      ██  ██  ██      ██  ██ ██ ██   ██
+//   ████    ██████  ███████ ██   ██ ██   ██ ██   ████     ██████  ██   ██  ██████ ██   ██ ███████ ██   ████ ██████
+//
+// >>vulkan
+// >>vk
+#elif defined(SOKOL_VULKAN)
+
+_SOKOL_PRIVATE void _sg_vk_setup_backend(const sg_desc* desc) {
+    SOKOL_ASSERT(desc);
+    SOKOL_ASSERT(desc->environment.vulkan.device);
+    SOKOL_ASSERT(desc->uniform_buffer_size > 0);
+    _sg.backend = SG_BACKEND_VULKAN;
+    _sg.vk.valid = true;
+    _sg.vk.dev = (VkDevice) desc->environment.vulkan.device;
+}
+
+_SOKOL_PRIVATE void _sg_vk_discard_backend(void) {
+    SOKOL_ASSERT(_sg.vk.valid);
+    _sg.vk.valid = false;
+}
+
+_SOKOL_PRIVATE void _sg_vk_reset_state_cache(void) {
+    SOKOL_ASSERT(false && "FIXME");
+}
+
+_SOKOL_PRIVATE sg_resource_state _sg_vk_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
+    SOKOL_ASSERT(buf && desc);
+    SOKOL_ASSERT(buf->cmn.size > 0);
+    SOKOL_ASSERT(false && "FIXME");
+    return SG_RESOURCESTATE_VALID;
+}
+
+_SOKOL_PRIVATE void _sg_vk_discard_buffer(_sg_buffer_t* buf) {
+    SOKOL_ASSERT(buf);
+    SOKOL_ASSERT(false && "FIXME");
+}
+
+_SOKOL_PRIVATE sg_resource_state _sg_vk_create_image(_sg_image_t* img, const sg_image_desc* desc) {
+    SOKOL_ASSERT(img && desc);
+    SOKOL_ASSERT(false && "FIXME");
+    return SG_RESOURCESTATE_VALID;
+}
+
+_SOKOL_PRIVATE void _sg_vk_discard_image(_sg_image_t* img) {
+    SOKOL_ASSERT(img);
+    SOKOL_ASSERT(false && "FIXME");
+}
+
+_SOKOL_PRIVATE sg_resource_state _sg_vk_create_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
+    SOKOL_ASSERT(smp && desc);
+    SOKOL_ASSERT(false && "FIXME");
+    return SG_RESOURCESTATE_VALID;
+}
+
+_SOKOL_PRIVATE void _sg_vk_discard_sampler(_sg_sampler_t* smp) {
+    SOKOL_ASSERT(smp);
+    SOKOL_ASSERT(false && "FIXME");
+}
+
+_SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
+    SOKOL_ASSERT(shd && desc);
+    SOKOL_ASSERT(false && "FIXME");
+    return SG_RESOURCESTATE_VALID;
+}
+
+_SOKOL_PRIVATE void _sg_vk_discard_shader(_sg_shader_t* shd) {
+    SOKOL_ASSERT(shd);
+    SOKOL_ASSERT(false && "FIXME");
+}
+
+_SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, const sg_pipeline_desc* desc) {
+    SOKOL_ASSERT(pip && desc);
+    SOKOL_ASSERT(false && "FIXME");
+    return SG_RESOURCESTATE_VALID;
+}
+
+_SOKOL_PRIVATE void _sg_vk_discard_pipeline(_sg_pipeline_t* pip) {
+    SOKOL_ASSERT(pip);
+    SOKOL_ASSERT(false && "FIXME");
+}
+
+_SOKOL_PRIVATE sg_resource_state _sg_vk_create_view(_sg_view_t* view, const sg_view_desc* desc) {
+    SOKOL_ASSERT(view && desc);
+    SOKOL_ASSERT(false && "FIXME");
+    return SG_RESOURCESTATE_VALID;
+}
+
+_SOKOL_PRIVATE void _sg_vk_discard_view(_sg_view_t* view) {
+    SOKOL_ASSERT(view);
+    SOKOL_ASSERT(false && "FIXME");
+}
+
+_SOKOL_PRIVATE void _sg_vk_begin_pass(const sg_pass* pass, const _sg_attachments_ptrs_t* atts) {
+    SOKOL_ASSERT(pass && atts);
+    SOKOL_ASSERT(false && "FIXME");
+}
+
+_SOKOL_PRIVATE void _sg_vk_end_pass(const _sg_attachments_ptrs_t* atts) {
+    SOKOL_ASSERT(atts);
+    SOKOL_ASSERT(false && "FIXME");
+}
+
+_SOKOL_PRIVATE void _sg_vk_commit(void) {
+    SOKOL_ASSERT(false && "FIXME");
+}
+
+_SOKOL_PRIVATE void _sg_vk_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
+    SOKOL_ASSERT(false && x && y && w && h && origin_top_left && "FIXME");
+}
+
+_SOKOL_PRIVATE void _sg_vk_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
+    SOKOL_ASSERT(false && x && y && w && h && origin_top_left && "FIXME");
+}
+
+_SOKOL_PRIVATE void _sg_vk_apply_pipeline(_sg_pipeline_t* pip) {
+    SOKOL_ASSERT(pip);
+    SOKOL_ASSERT(false && "FIXME");
+}
+
+_SOKOL_PRIVATE bool _sg_vk_apply_bindings(_sg_bindings_ptrs_t* bnd) {
+    SOKOL_ASSERT(bnd);
+    SOKOL_ASSERT(false && "FIXME");
+    return true;
+}
+
+_SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
+    SOKOL_ASSERT(data);
+    SOKOL_ASSERT(false && ub_slot && "FIXME");
+}
+
+_SOKOL_PRIVATE void _sg_vk_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
+    SOKOL_ASSERT(false && base_element && num_elements && num_instances && base_vertex && base_instance && "FIXME");
+}
+
+_SOKOL_PRIVATE void _sg_vk_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
+    SOKOL_ASSERT(false && num_groups_x && num_groups_y && num_groups_z && "FIXME");
+}
+
+_SOKOL_PRIVATE void _sg_vk_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
+    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
+    SOKOL_ASSERT(false && "FIXME");
+}
+
+_SOKOL_PRIVATE void _sg_vk_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
+    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
+    SOKOL_ASSERT(false && new_frame && "FIXME");
+}
+
+_SOKOL_PRIVATE void _sg_vk_update_image(_sg_image_t* img, const sg_image_data* data) {
+    SOKOL_ASSERT(img && data);
+    SOKOL_ASSERT(false && "FIXME");
+}
+
 #endif
 
 //  ██████  ███████ ███    ██ ███████ ██████  ██  ██████     ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
@@ -18399,7 +18561,7 @@ static inline void _sg_discard_shader(_sg_shader_t* shd) {
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_discard_shader(shd);
     #elif defined(SOKOL_VULKAN)
-    _sg_wgpu_discard_shader(shd);
+    _sg_vk_discard_shader(shd);
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_discard_shader(shd);
     #else

@@ -165,6 +165,7 @@ SOKOL_API_IMPL sg_environment sglue_environment(void) {
     res.d3d11.device = env.d3d11.device;
     res.d3d11.device_context = env.d3d11.device_context;
     res.wgpu.device = env.wgpu.device;
+    res.vulkan.device = env.vulkan.device;
     return res;
 }
 
