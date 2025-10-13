@@ -1800,6 +1800,8 @@ typedef struct sapp_allocator {
     _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_SURFACE_FAILED, "vulkan: vkCreate*SurfaceKHR failed") \
     _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_SWAPCHAIN_FAILED, "vulkan: vkCreateSwapchainKHR failed") \
     _SAPP_LOGITEM_XMACRO(VULKAN_SWAPCHAIN_CREATE_IMAGE_VIEW_FAILED, "vulkan: vkCreateImageView for swapchain  image failed") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_ACQUIRE_NEXT_IMAGE_FAILED, "vulkan: vkAcquireNextImageKHR failed") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_QUEUE_PRESENT_FAILED, "vulkan: vkQueuePresentKHR failed") \
     _SAPP_LOGITEM_XMACRO(IMAGE_DATA_SIZE_MISMATCH, "image data size mismatch (must be width*height*4 bytes)") \
     _SAPP_LOGITEM_XMACRO(DROPPED_FILE_PATH_TOO_LONG, "dropped file path too long (sapp_desc.max_dropped_filed_path_length)") \
     _SAPP_LOGITEM_XMACRO(CLIPBOARD_STRING_TOO_BIG, "clipboard string didn't fit into clipboard buffer") \
@@ -1907,6 +1909,7 @@ typedef struct sapp_vulkan_swapchain {
     const void* render_view;            // vkImageView
     const void* resolve_view;           // vkImageView
     const void* depth_stencil_view;     // vkImageView
+    const void* render_finished_semaphore;  // vkSemaphore
 } sapp_vulkan_swapchain;
 
 typedef struct sapp_gl_swapchain {
@@ -2727,6 +2730,7 @@ typedef struct {
 
 #if defined(SOKOL_VULKAN)
 #define _SAPP_VK_MAX_SWAPCHAIN_IMAGES (8)
+#define _SAPP_VK_MAX_FRAMES_IN_FLIGHT (2)
 
 typedef struct {
     VkInstance instance;
@@ -2735,11 +2739,17 @@ typedef struct {
     VkPhysicalDevice physical_device;
     uint32_t queue_family_index;
     VkDevice device;
+    VkQueue present_queue;
     VkSwapchainKHR swapchain;
     uint32_t num_swapchain_images;
     uint32_t cur_swapchain_image_index;
     VkImage swapchain_images[_SAPP_VK_MAX_SWAPCHAIN_IMAGES];
     VkImageView swapchain_views[_SAPP_VK_MAX_SWAPCHAIN_IMAGES];
+    uint32_t sync_slot;
+    struct {
+        VkSemaphore render_finished_sem;
+        VkSemaphore present_complete_sem;
+    } sync[_SAPP_VK_MAX_FRAMES_IN_FLIGHT];
 } _sapp_vk_t;
 #endif
 
@@ -4338,6 +4348,7 @@ _SOKOL_PRIVATE void _sapp_vk_pick_physical_device(void) {
             continue;
         }
 
+        // FIXME: handle theoretical case where graphics and present aren't supported by the same queue family index
         _SAPP_VK_MAX_COUNT_AND_ARRAY(8, VkQueueFamilyProperties, queue_family_props_count, queue_family_props)
         vkGetPhysicalDeviceQueueFamilyProperties(pdev, &queue_family_props_count, queue_family_props);
         bool has_required_queues = false;
@@ -4418,6 +4429,13 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
     SOKOL_ASSERT(_sapp.vk.device);
 }
 
+_SOKOL_PRIVATE void _sapp_vk_get_present_queue(void) {
+    SOKOL_ASSERT(_sapp.vk.device);
+    SOKOL_ASSERT(0 == _sapp.vk.present_queue);
+    vkGetDeviceQueue(_sapp.vk.device, _sapp.vk.queue_family_index, 0, &_sapp.vk.present_queue);
+    SOKOL_ASSERT(_sapp.vk.present_queue);
+}
+
 _SOKOL_PRIVATE void _sapp_vk_destroy_device(void) {
     SOKOL_ASSERT(_sapp.vk.device);
     vkDestroyDevice(_sapp.vk.device, 0);
@@ -4470,6 +4488,34 @@ _SOKOL_PRIVATE VkSurfaceFormatKHR _sapp_vk_pick_surface_format(void) {
     }
     // FIXME: fallback might still return an SRGB format
     return formats[0];
+}
+
+_SOKOL_PRIVATE void _sapp_vk_create_sync_objects(void) {
+    SOKOL_ASSERT(_sapp.vk.device);
+    VkSemaphoreCreateInfo create_info;
+    _sapp_clear(&create_info, sizeof(create_info));
+    create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    VkResult res;
+    for (int i = 0; i < _SAPP_VK_MAX_FRAMES_IN_FLIGHT; i++) {
+        SOKOL_ASSERT(0 == _sapp.vk.sync[i].present_complete_sem);
+        SOKOL_ASSERT(0 == _sapp.vk.sync[i].render_finished_sem);
+        res = vkCreateSemaphore(_sapp.vk.device, &create_info, 0, &_sapp.vk.sync[i].present_complete_sem);
+        SOKOL_ASSERT((res == VK_SUCCESS) && (_sapp.vk.sync[i].present_complete_sem));
+        res = vkCreateSemaphore(_sapp.vk.device, &create_info, 0, &_sapp.vk.sync[i].render_finished_sem);
+        SOKOL_ASSERT((res == VK_SUCCESS) && (_sapp.vk.sync[i].render_finished_sem));
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_vk_destroy_sync_objects(void) {
+    SOKOL_ASSERT(_sapp.vk.device);
+    for (int i = 0; i < _SAPP_VK_MAX_FRAMES_IN_FLIGHT; i++) {
+        SOKOL_ASSERT(_sapp.vk.sync[i].present_complete_sem);
+        SOKOL_ASSERT(_sapp.vk.sync[i].render_finished_sem);
+        vkDestroySemaphore(_sapp.vk.device, _sapp.vk.sync[i].present_complete_sem, 0);
+        vkDestroySemaphore(_sapp.vk.device, _sapp.vk.sync[i].render_finished_sem, 0);
+        _sapp.vk.sync[i].present_complete_sem = 0;
+        _sapp.vk.sync[i].render_finished_sem = 0;
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_vk_create_swapchain(void) {
@@ -4562,6 +4608,8 @@ _SOKOL_PRIVATE void _sapp_vk_init(void) {
     _sapp_vk_create_surface();
     _sapp_vk_pick_physical_device();
     _sapp_vk_create_device();
+    _sapp_vk_get_present_queue();
+    _sapp_vk_create_sync_objects();
     _sapp_vk_create_swapchain();
 }
 
@@ -4569,6 +4617,7 @@ _SOKOL_PRIVATE void _sapp_vk_discard(void) {
     SOKOL_ASSERT(_sapp.vk.device);
     vkDeviceWaitIdle(_sapp.vk.device);
     _sapp_vk_destroy_swapchain();
+    _sapp_vk_destroy_sync_objects();
     _sapp_vk_destroy_device();
     _sapp_vk_destroy_surface();
     _sapp_vk_destroy_instance();
@@ -4577,13 +4626,38 @@ _SOKOL_PRIVATE void _sapp_vk_discard(void) {
 _SOKOL_PRIVATE void _sapp_vk_swapchain_next(void) {
     SOKOL_ASSERT(_sapp.vk.device);
     SOKOL_ASSERT(_sapp.vk.swapchain);
-    // FIXME! call vkAcquireImage into _sapp.vk.cur_swapchain_image_index
-    SOKOL_ASSERT(false);
+    VkResult res = vkAcquireNextImageKHR(
+        _sapp.vk.device,
+        _sapp.vk.swapchain,
+        UINT64_MAX,     // timeout
+        _sapp.vk.sync[_sapp.vk.sync_slot].present_complete_sem, // semaphore to signal
+        0,  // fence to signal
+        &_sapp.vk.cur_swapchain_image_index);
+    if ((res != VK_NOT_READY) && (res != VK_SUBOPTIMAL_KHR) && (res != VK_SUCCESS) && (res != VK_TIMEOUT)) {
+        _SAPP_WARN(VULKAN_ACQUIRE_NEXT_IMAGE_FAILED);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_vk_present(void) {
+    SOKOL_ASSERT(_sapp.vk.present_queue);
+    VkPresentInfoKHR present_info;
+    _sapp_clear(&present_info, sizeof(present_info));
+    present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    present_info.waitSemaphoreCount = 1;
+    present_info.pWaitSemaphores = &_sapp.vk.sync[_sapp.vk.sync_slot].render_finished_sem;
+    present_info.swapchainCount = 1;
+    present_info.pSwapchains = &_sapp.vk.swapchain;
+    present_info.pImageIndices = &_sapp.vk.cur_swapchain_image_index;
+    VkResult res = vkQueuePresentKHR(_sapp.vk.present_queue, &present_info);
+    if ((res != VK_SUCCESS) || (res != VK_SUBOPTIMAL_KHR)) {
+        _SAPP_WARN(VULKAN_QUEUE_PRESENT_FAILED);
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_vk_frame(void) {
     _sapp_frame();
-    // FIXME: presentation
+    _sapp_vk_present();
+    _sapp.vk.sync_slot = (_sapp.vk.sync_slot + 1) % _SAPP_VK_MAX_FRAMES_IN_FLIGHT;
 }
 
 #endif // SOKOL_VULKAN
@@ -13539,6 +13613,7 @@ SOKOL_API_IMPL sapp_swapchain sapp_swapchain_next(void) {
         }
         // FIXME
         // res.vulkan.depth_stencil_view = ...;
+        res.vulkan.render_finished_semaphore = _sapp.vk.sync[_sapp.vk.sync_slot].render_finished_sem;
     #endif
     #if defined(_SAPP_ANY_GL)
         res.gl.framebuffer = _sapp.gl.framebuffer;
