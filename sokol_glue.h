@@ -168,6 +168,7 @@ SOKOL_API_IMPL sg_environment sglue_environment(void) {
     res.vulkan.physical_device = env.vulkan.physical_device;
     res.vulkan.device = env.vulkan.device;
     res.vulkan.queue = env.vulkan.queue;
+    res.vulkan.queue_family_index = env.vulkan.queue_family_index;
     return res;
 }
 
@@ -189,6 +190,11 @@ SOKOL_API_IMPL sg_swapchain sglue_swapchain_next(void) {
     res.wgpu.render_view = sc.wgpu.render_view;
     res.wgpu.resolve_view = sc.wgpu.resolve_view;
     res.wgpu.depth_stencil_view = sc.wgpu.depth_stencil_view;
+    res.vulkan.render_view = sc.vulkan.render_view;
+    res.vulkan.resolve_view = sc.vulkan.resolve_view;
+    res.vulkan.depth_stencil_view = sc.vulkan.depth_stencil_view;
+    res.vulkan.render_finished_semaphore = sc.vulkan.render_finished_semaphore;
+    res.vulkan.present_complete_semaphore = sc.vulkan.present_complete_semaphore;
     res.gl.framebuffer = sc.gl.framebuffer;
     return res;
 }

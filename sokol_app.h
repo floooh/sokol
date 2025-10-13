@@ -1868,6 +1868,7 @@ typedef struct sapp_vulkan_environment {
     const void* physical_device;
     const void* device;
     const void* queue;
+    uint32_t queue_family_index;
 } sapp_vulkan_environment;
 
 typedef struct sapp_environment {
@@ -1912,6 +1913,7 @@ typedef struct sapp_vulkan_swapchain {
     const void* resolve_view;           // vkImageView
     const void* depth_stencil_view;     // vkImageView
     const void* render_finished_semaphore;  // vkSemaphore
+    const void* present_complete_semaphore; // vkSemaphore
 } sapp_vulkan_swapchain;
 
 typedef struct sapp_gl_swapchain {
@@ -2732,7 +2734,7 @@ typedef struct {
 
 #if defined(SOKOL_VULKAN)
 #define _SAPP_VK_MAX_SWAPCHAIN_IMAGES (8)
-#define _SAPP_VK_MAX_FRAMES_IN_FLIGHT (2)
+#define _SAPP_VK_NUM_INFLIGHT_FRAMES (2)
 
 typedef struct {
     VkInstance instance;
@@ -2751,7 +2753,7 @@ typedef struct {
     struct {
         VkSemaphore render_finished_sem;
         VkSemaphore present_complete_sem;
-    } sync[_SAPP_VK_MAX_FRAMES_IN_FLIGHT];
+    } sync[_SAPP_VK_NUM_INFLIGHT_FRAMES];
 } _sapp_vk_t;
 #endif
 
@@ -4496,7 +4498,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_sync_objects(void) {
     _sapp_clear(&create_info, sizeof(create_info));
     create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     VkResult res;
-    for (int i = 0; i < _SAPP_VK_MAX_FRAMES_IN_FLIGHT; i++) {
+    for (int i = 0; i < _SAPP_VK_NUM_INFLIGHT_FRAMES; i++) {
         SOKOL_ASSERT(0 == _sapp.vk.sync[i].present_complete_sem);
         SOKOL_ASSERT(0 == _sapp.vk.sync[i].render_finished_sem);
         res = vkCreateSemaphore(_sapp.vk.device, &create_info, 0, &_sapp.vk.sync[i].present_complete_sem);
@@ -4508,7 +4510,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_sync_objects(void) {
 
 _SOKOL_PRIVATE void _sapp_vk_destroy_sync_objects(void) {
     SOKOL_ASSERT(_sapp.vk.device);
-    for (int i = 0; i < _SAPP_VK_MAX_FRAMES_IN_FLIGHT; i++) {
+    for (int i = 0; i < _SAPP_VK_NUM_INFLIGHT_FRAMES; i++) {
         SOKOL_ASSERT(_sapp.vk.sync[i].present_complete_sem);
         SOKOL_ASSERT(_sapp.vk.sync[i].render_finished_sem);
         vkDestroySemaphore(_sapp.vk.device, _sapp.vk.sync[i].present_complete_sem, 0);
@@ -4656,7 +4658,7 @@ _SOKOL_PRIVATE void _sapp_vk_present(void) {
 _SOKOL_PRIVATE void _sapp_vk_frame(void) {
     _sapp_frame();
     _sapp_vk_present();
-    _sapp.vk.sync_slot = (_sapp.vk.sync_slot + 1) % _SAPP_VK_MAX_FRAMES_IN_FLIGHT;
+    _sapp.vk.sync_slot = (_sapp.vk.sync_slot + 1) % _SAPP_VK_NUM_INFLIGHT_FRAMES;
 }
 
 #endif // SOKOL_VULKAN
@@ -13555,6 +13557,7 @@ SOKOL_API_IMPL sapp_environment sapp_get_environment(void) {
         res.vulkan.physical_device = (const void*) _sapp.vk.physical_device;
         res.vulkan.device = (const void*) _sapp.vk.device;
         res.vulkan.queue = (const void*) _sapp.vk.queue;
+        res.vulkan.queue_family_index = _sapp.vk.queue_family_index;
     #endif
     return res;
 }
@@ -13615,6 +13618,7 @@ SOKOL_API_IMPL sapp_swapchain sapp_swapchain_next(void) {
         // FIXME
         // res.vulkan.depth_stencil_view = ...;
         res.vulkan.render_finished_semaphore = _sapp.vk.sync[_sapp.vk.sync_slot].render_finished_sem;
+        res.vulkan.present_complete_semaphore = _sapp.vk.sync[_sapp.vk.sync_slot].present_complete_sem;
     #endif
     #if defined(_SAPP_ANY_GL)
         res.gl.framebuffer = _sapp.gl.framebuffer;

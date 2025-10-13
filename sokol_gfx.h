@@ -2150,7 +2150,6 @@ typedef enum sg_pixel_format {
     SG_PIXELFORMAT_RGBA32SI,
     SG_PIXELFORMAT_RGBA32F,
 
-    // NOTE: when adding/removing pixel formats before DEPTH, also update sokol_app.h/_SAPP_PIXELFORMAT_*
     SG_PIXELFORMAT_DEPTH,
     SG_PIXELFORMAT_DEPTH_STENCIL,
 
@@ -2937,6 +2936,14 @@ typedef struct sg_wgpu_swapchain {
     const void* depth_stencil_view;     // WGPUTextureView
 } sg_wgpu_swapchain;
 
+typedef struct sg_vulkan_swapchain {
+    const void* render_view;            // vkImageView
+    const void* resolve_view;           // vkImageView
+    const void* depth_stencil_view;     // vkImageView
+    const void* render_finished_semaphore;  // vkSemaphore
+    const void* present_complete_semaphore; // vkSemaphore
+} sg_vulkan_swapchain;
+
 typedef struct sg_gl_swapchain {
     uint32_t framebuffer;               // GL framebuffer object
 } sg_gl_swapchain;
@@ -2950,6 +2957,7 @@ typedef struct sg_swapchain {
     sg_metal_swapchain metal;
     sg_d3d11_swapchain d3d11;
     sg_wgpu_swapchain wgpu;
+    sg_vulkan_swapchain vulkan;
     sg_gl_swapchain gl;
 } sg_swapchain;
 
@@ -4375,6 +4383,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(WGPU_CREATE_PIPELINE_LAYOUT_FAILED, "wgpuDeviceCreatePipelineLayout() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_RENDER_PIPELINE_FAILED, "wgpuDeviceCreateRenderPipeline() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_COMPUTE_PIPELINE_FAILED, "wgpuDeviceCreateComputePipeline() failed") \
+    _SG_LOGITEM_XMACRO(VULKAN_WAIT_FOR_FENCE_FAILED, "vkWaitForFence() failed!") \
     _SG_LOGITEM_XMACRO(IDENTICAL_COMMIT_LISTENER, "attempting to add identical commit listener") \
     _SG_LOGITEM_XMACRO(COMMIT_LISTENER_ARRAY_FULL, "commit listener array full") \
     _SG_LOGITEM_XMACRO(TRACE_HOOKS_NOT_ENABLED, "sg_install_trace_hooks() called, but SOKOL_TRACE_HOOKS is not defined") \
@@ -4824,6 +4833,7 @@ typedef struct sg_vulkan_environment {
     const void* physical_device;
     const void* device;
     const void* queue;
+    uint32_t queue_family_index;
 } sg_vulkan_environment;
 
 typedef struct sg_environment {
@@ -6772,6 +6782,16 @@ typedef struct {
     VkPhysicalDevice phys_dev;
     VkDevice dev;
     VkQueue queue;
+    uint32_t queue_family_index;
+    VkCommandPool cmd_pool;
+    bool first_pass_in_frame;
+    VkSemaphore present_complete_sem;
+    VkSemaphore render_finished_sem;
+    uint32_t frame_slot;
+    struct {
+        VkFence fence;
+        VkCommandBuffer cmd_buf;
+    } frame[SG_NUM_INFLIGHT_FRAMES];
 } _sg_vk_backend_t;
 
 #endif // SOKOL_VULKAN
@@ -18305,6 +18325,58 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
 }
 
+_SOKOL_PRIVATE void _sg_vk_create_fences(void) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    VkFenceCreateInfo create_info;
+    _sg_clear(&create_info, sizeof(create_info));
+    create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+        SOKOL_ASSERT(0 == _sg.vk.frame[i].fence);
+        VkResult res = vkCreateFence(_sg.vk.dev, &create_info, 0, &_sg.vk.frame[i].fence);
+        SOKOL_ASSERT((res == VK_SUCCESS) && _sg.vk.frame[i].fence);
+    }
+}
+
+_SOKOL_PRIVATE void _sg_vk_destroy_fences(void) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+        SOKOL_ASSERT(_sg.vk.frame[i].fence);
+        vkDestroyFence(_sg.vk.dev, _sg.vk.frame[i].fence, 0);
+        _sg.vk.frame[i].fence = 0;
+    }
+}
+
+_SOKOL_PRIVATE void _sg_vk_create_command_pool_and_buffers(void) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(0 == _sg.vk.cmd_pool);
+    VkCommandPoolCreateInfo pool_create_info;
+    _sg_clear(&pool_create_info, sizeof(pool_create_info));
+    pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    pool_create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    pool_create_info.queueFamilyIndex = _sg.vk.queue_family_index;
+    VkResult res = vkCreateCommandPool(_sg.vk.dev, &pool_create_info, 0, &_sg.vk.cmd_pool);
+    SOKOL_ASSERT((res == VK_SUCCESS) && _sg.vk.cmd_pool);
+
+    for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+        VkCommandBufferAllocateInfo cmdbuf_alloc_info;
+        _sg_clear(&cmdbuf_alloc_info, sizeof(cmdbuf_alloc_info));
+        cmdbuf_alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        cmdbuf_alloc_info.commandPool = _sg.vk.cmd_pool;
+        cmdbuf_alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        cmdbuf_alloc_info.commandBufferCount = 1;
+        res = vkAllocateCommandBuffers(_sg.vk.dev, &cmdbuf_alloc_info, &_sg.vk.frame[i].cmd_buf);
+        SOKOL_ASSERT((res == VK_SUCCESS) && _sg.vk.frame[i].cmd_buf);
+    }
+}
+
+_SOKOL_PRIVATE void _sg_vk_destroy_command_pool(void) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(_sg.vk.cmd_pool);
+    // NOTE: command buffers owned by the pool will be automatically destroyed
+    vkDestroyCommandPool(_sg.vk.dev, _sg.vk.cmd_pool, 0);
+}
+
 _SOKOL_PRIVATE void _sg_vk_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->environment.vulkan.physical_device);
@@ -18312,15 +18384,23 @@ _SOKOL_PRIVATE void _sg_vk_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc->environment.vulkan.queue);
     SOKOL_ASSERT(desc->uniform_buffer_size > 0);
     _sg.vk.valid = true;
+    _sg.vk.first_pass_in_frame = true;
     _sg.vk.phys_dev = (VkPhysicalDevice) desc->environment.vulkan.physical_device;
     _sg.vk.dev = (VkDevice) desc->environment.vulkan.device;
     _sg.vk.queue = (VkQueue) desc->environment.vulkan.queue;
+    _sg.vk.queue_family_index = desc->environment.vulkan.queue_family_index;
 
     _sg_vk_init_caps();
+    _sg_vk_create_fences();
+    _sg_vk_create_command_pool_and_buffers();
 }
 
 _SOKOL_PRIVATE void _sg_vk_discard_backend(void) {
     SOKOL_ASSERT(_sg.vk.valid);
+    SOKOL_ASSERT(_sg.vk.dev);
+    vkDeviceWaitIdle(_sg.vk.dev);
+    _sg_vk_destroy_command_pool();
+    _sg_vk_destroy_fences();
     _sg.vk.valid = false;
 }
 
@@ -18397,16 +18477,82 @@ _SOKOL_PRIVATE void _sg_vk_discard_view(_sg_view_t* view) {
 
 _SOKOL_PRIVATE void _sg_vk_begin_pass(const sg_pass* pass, const _sg_attachments_ptrs_t* atts) {
     SOKOL_ASSERT(pass && atts);
-    SOKOL_ASSERT(false && "FIXME");
+    VkResult res;
+    const sg_swapchain* swapchain = &pass->swapchain;
+    const bool is_swapchain_pass = !atts->empty;
+
+    // if this is the first pass in the frame, wait for
+    if (_sg.vk.first_pass_in_frame) {
+        _sg.vk.first_pass_in_frame = false;
+        // block until oldest inflight-frame has finished
+        do {
+            res = vkWaitForFences(_sg.vk.dev,
+                1,
+                &_sg.vk.frame[_sg.vk.frame_slot].fence,
+                VK_TRUE,
+                UINT64_MAX);
+        } while (res == VK_TIMEOUT);
+        if (res != VK_SUCCESS) {
+            _SG_WARN(VULKAN_WAIT_FOR_FENCE_FAILED);
+            _sg.cur_pass.valid = false;
+            return;
+        }
+        res = vkResetFences(_sg.vk.dev, 1, &_sg.vk.frame[_sg.vk.frame_slot].fence);
+        SOKOL_ASSERT(res == VK_SUCCESS);
+        VkCommandBuffer cmd_buf = _sg.vk.frame[_sg.vk.frame_slot].cmd_buf;
+        res = vkResetCommandBuffer(cmd_buf, 0);
+        SOKOL_ASSERT(res == VK_SUCCESS);
+        VkCommandBufferBeginInfo cmdbuf_begin_info;
+        _sg_clear(&cmdbuf_begin_info, sizeof(cmdbuf_begin_info));
+        cmdbuf_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        res = vkBeginCommandBuffer(cmd_buf, &cmdbuf_begin_info);
+        SOKOL_ASSERT(res == VK_SUCCESS);
+    }
+
+    if (is_swapchain_pass) {
+        SOKOL_ASSERT(swapchain->vulkan.present_complete_semaphore);
+        SOKOL_ASSERT(swapchain->vulkan.render_finished_semaphore);
+        // FIXME: need to support multiple present_complete_semaphores
+        SOKOL_ASSERT(0 == _sg.vk.present_complete_sem);
+        _sg.vk.present_complete_sem = (VkSemaphore)swapchain->vulkan.present_complete_semaphore;
+        if (0 == _sg.vk.render_finished_sem) {
+            _sg.vk.render_finished_sem = (VkSemaphore)swapchain->vulkan.render_finished_semaphore;
+        } else {
+            SOKOL_ASSERT(_sg.vk.render_finished_sem == swapchain->vulkan.render_finished_semaphore);
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sg_vk_end_pass(const _sg_attachments_ptrs_t* atts) {
     SOKOL_ASSERT(atts);
-    SOKOL_ASSERT(false && "FIXME");
 }
 
 _SOKOL_PRIVATE void _sg_vk_commit(void) {
-    SOKOL_ASSERT(false && "FIXME");
+    SOKOL_ASSERT(_sg.vk.queue);
+    VkResult res;
+
+    VkCommandBuffer cmd_buf = _sg.vk.frame[_sg.vk.frame_slot].cmd_buf;
+    SOKOL_ASSERT(cmd_buf);
+    res = vkEndCommandBuffer(cmd_buf);
+    SOKOL_ASSERT(res);
+    const VkPipelineStageFlags wait_dst_stage_mask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkSubmitInfo submit_info;
+    _sg_clear(&submit_info, sizeof(submit_info));
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit_info.waitSemaphoreCount = 1;
+    submit_info.pWaitSemaphores = &_sg.vk.present_complete_sem;
+    submit_info.pWaitDstStageMask = &wait_dst_stage_mask;
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &cmd_buf;
+    submit_info.signalSemaphoreCount = 1;
+    submit_info.pSignalSemaphores = &_sg.vk.render_finished_sem;
+    res = vkQueueSubmit(_sg.vk.queue, 1, &submit_info, _sg.vk.frame[_sg.vk.frame_slot].fence);
+    SOKOL_ASSERT(res == VK_SUCCESS);
+
+    _sg.vk.present_complete_sem = 0;
+    _sg.vk.render_finished_sem = 0;
+    _sg.vk.frame_slot = (_sg.vk.frame_slot + 1) % SG_NUM_INFLIGHT_FRAMES;
+    _sg.vk.first_pass_in_frame = true;
 }
 
 _SOKOL_PRIVATE void _sg_vk_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
