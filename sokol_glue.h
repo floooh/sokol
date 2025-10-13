@@ -190,8 +190,11 @@ SOKOL_API_IMPL sg_swapchain sglue_swapchain_next(void) {
     res.wgpu.render_view = sc.wgpu.render_view;
     res.wgpu.resolve_view = sc.wgpu.resolve_view;
     res.wgpu.depth_stencil_view = sc.wgpu.depth_stencil_view;
+    res.vulkan.render_image = sc.vulkan.render_image;
     res.vulkan.render_view = sc.vulkan.render_view;
+    res.vulkan.resolve_image = sc.vulkan.resolve_image;
     res.vulkan.resolve_view = sc.vulkan.resolve_view;
+    res.vulkan.depth_stencil_image = sc.vulkan.depth_stencil_image;
     res.vulkan.depth_stencil_view = sc.vulkan.depth_stencil_view;
     res.vulkan.render_finished_semaphore = sc.vulkan.render_finished_semaphore;
     res.vulkan.present_complete_semaphore = sc.vulkan.present_complete_semaphore;

@@ -2937,8 +2937,11 @@ typedef struct sg_wgpu_swapchain {
 } sg_wgpu_swapchain;
 
 typedef struct sg_vulkan_swapchain {
+    const void* render_image;           // vkImage
     const void* render_view;            // vkImageView
+    const void* resolve_image;          // vkImage
     const void* resolve_view;           // vkImageView
+    const void* depth_stencil_image;    // vkImage
     const void* depth_stencil_view;     // vkImageView
     const void* render_finished_semaphore;  // vkSemaphore
     const void* present_complete_semaphore; // vkSemaphore
@@ -6785,6 +6788,7 @@ typedef struct {
     uint32_t queue_family_index;
     VkCommandPool cmd_pool;
     bool first_pass_in_frame;
+    sg_vulkan_swapchain pass_swapchain;
     VkSemaphore present_complete_sem;
     VkSemaphore render_finished_sem;
     uint32_t frame_slot;
@@ -18475,10 +18479,47 @@ _SOKOL_PRIVATE void _sg_vk_discard_view(_sg_view_t* view) {
     SOKOL_ASSERT(false && "FIXME");
 }
 
+_SOKOL_PRIVATE void _sg_vk_transition_image_layout(
+    VkImage vk_img,
+    VkImageLayout old_layout,
+    VkImageLayout new_layout,
+    VkAccessFlags2 src_access_mask,
+    VkAccessFlags2 dst_access_mask,
+    VkPipelineStageFlags src_stage_mask,
+    VkPipelineStageFlags dst_stage_mask,
+    VkImageAspectFlags aspect_mask,
+    uint32_t base_mip_level,
+    uint32_t base_array_layer)
+{
+    VkImageMemoryBarrier2 barrier;
+    _sg_clear(&barrier, sizeof(barrier));
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    barrier.srcStageMask = src_stage_mask;
+    barrier.srcAccessMask = src_access_mask;
+    barrier.dstStageMask = dst_stage_mask;
+    barrier.dstAccessMask = dst_access_mask;
+    barrier.oldLayout = old_layout;
+    barrier.newLayout = new_layout;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = vk_img;
+    barrier.subresourceRange.aspectMask = aspect_mask;
+    barrier.subresourceRange.baseMipLevel = base_mip_level;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = base_array_layer;
+    barrier.subresourceRange.layerCount = 1;
+    VkDependencyInfo dep_info;
+    _sg_clear(&dep_info, sizeof(dep_info));
+    dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dep_info.imageMemoryBarrierCount = 1;
+    dep_info.pImageMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(_sg.vk.frame[_sg.vk.frame_slot].cmd_buf, &dep_info);
+}
+
 _SOKOL_PRIVATE void _sg_vk_begin_pass(const sg_pass* pass, const _sg_attachments_ptrs_t* atts) {
     SOKOL_ASSERT(pass && atts);
     VkResult res;
-    const sg_swapchain* swapchain = &pass->swapchain;
+    _sg.vk.pass_swapchain = pass->swapchain.vulkan;
     const bool is_swapchain_pass = atts->empty;
 
     // if this is the first pass in the frame, wait for
@@ -18510,21 +18551,47 @@ _SOKOL_PRIVATE void _sg_vk_begin_pass(const sg_pass* pass, const _sg_attachments
     }
 
     if (is_swapchain_pass) {
-        SOKOL_ASSERT(swapchain->vulkan.present_complete_semaphore);
-        SOKOL_ASSERT(swapchain->vulkan.render_finished_semaphore);
+        SOKOL_ASSERT(_sg.vk.pass_swapchain.render_image);
+        SOKOL_ASSERT(_sg.vk.pass_swapchain.render_view);
+        SOKOL_ASSERT(_sg.vk.pass_swapchain.present_complete_semaphore);
+        SOKOL_ASSERT(_sg.vk.pass_swapchain.render_finished_semaphore);
         // FIXME: need to support multiple present_complete_semaphores
         SOKOL_ASSERT(0 == _sg.vk.present_complete_sem);
-        _sg.vk.present_complete_sem = (VkSemaphore)swapchain->vulkan.present_complete_semaphore;
+        _sg.vk.present_complete_sem = (VkSemaphore)_sg.vk.pass_swapchain.present_complete_semaphore;
         if (0 == _sg.vk.render_finished_sem) {
-            _sg.vk.render_finished_sem = (VkSemaphore)swapchain->vulkan.render_finished_semaphore;
+            _sg.vk.render_finished_sem = (VkSemaphore)_sg.vk.pass_swapchain.render_finished_semaphore;
         } else {
-            SOKOL_ASSERT(_sg.vk.render_finished_sem == swapchain->vulkan.render_finished_semaphore);
+            SOKOL_ASSERT(_sg.vk.render_finished_sem == _sg.vk.pass_swapchain.render_finished_semaphore);
         }
+        _sg_vk_transition_image_layout(
+            (VkImage)_sg.vk.pass_swapchain.render_image,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            0,
+            VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+            VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            0, 0); // base_mip_level, base_array_layer
     }
 }
 
 _SOKOL_PRIVATE void _sg_vk_end_pass(const _sg_attachments_ptrs_t* atts) {
     SOKOL_ASSERT(atts);
+    const bool is_swapchain_pass = atts->empty;
+    if (is_swapchain_pass) {
+        SOKOL_ASSERT(_sg.vk.pass_swapchain.render_image);
+        _sg_vk_transition_image_layout(
+            (VkImage)_sg.vk.pass_swapchain.render_image,
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+            VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+            0,
+            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            0, 0); // base_mip_level, base_array_layer
+    }
 }
 
 _SOKOL_PRIVATE void _sg_vk_commit(void) {

@@ -1909,8 +1909,11 @@ typedef struct sapp_wgpu_swapchain {
 } sapp_wgpu_swapchain;
 
 typedef struct sapp_vulkan_swapchain {
+    const void* render_image;           // vkImage
     const void* render_view;            // vkImageView
+    const void* resolve_image;          // vkImage;
     const void* resolve_view;           // vkImageView
+    const void* depth_stencil_image;    // vkImage
     const void* depth_stencil_view;     // vkImageView
     const void* render_finished_semaphore;  // vkSemaphore
     const void* present_complete_semaphore; // vkSemaphore
@@ -13608,15 +13611,17 @@ SOKOL_API_IMPL sapp_swapchain sapp_swapchain_next(void) {
     #endif
     #if defined(SOKOL_VULKAN)
         _sapp_vk_swapchain_next();
+        uint32_t img_idx = _sapp.vk.cur_swapchain_image_index;
         if (_sapp.sample_count > 1) {
             // FIXME FIXME FIXME
             SOKOL_ASSERT(false);
         } else {
-            res.vulkan.render_view = (const void*) _sapp.vk.swapchain_views[_sapp.vk.cur_swapchain_image_index];
+            res.vulkan.render_image = (const void*) _sapp.vk.swapchain_images[img_idx];
+            res.vulkan.render_view = (const void*) _sapp.vk.swapchain_views[img_idx];
         }
         // FIXME
         // res.vulkan.depth_stencil_view = ...;
-        res.vulkan.render_finished_semaphore = _sapp.vk.sync[_sapp.vk.cur_swapchain_image_index].render_finished_sem;
+        res.vulkan.render_finished_semaphore = _sapp.vk.sync[img_idx].render_finished_sem;
         res.vulkan.present_complete_semaphore = _sapp.vk.sync[_sapp.vk.sync_slot].present_complete_sem;
     #endif
     #if defined(_SAPP_ANY_GL)
