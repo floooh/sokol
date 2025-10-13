@@ -1865,7 +1865,9 @@ typedef struct sapp_wgpu_environment {
 } sapp_wgpu_environment;
 
 typedef struct sapp_vulkan_environment {
+    const void* physical_device;
     const void* device;
+    const void* queue;
 } sapp_vulkan_environment;
 
 typedef struct sapp_environment {
@@ -2739,7 +2741,7 @@ typedef struct {
     VkPhysicalDevice physical_device;
     uint32_t queue_family_index;
     VkDevice device;
-    VkQueue present_queue;
+    VkQueue queue;
     VkSwapchainKHR swapchain;
     uint32_t num_swapchain_images;
     uint32_t cur_swapchain_image_index;
@@ -4427,19 +4429,17 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
         _SAPP_PANIC(VULKAN_CREATE_DEVICE_FAILED);
     }
     SOKOL_ASSERT(_sapp.vk.device);
-}
 
-_SOKOL_PRIVATE void _sapp_vk_get_present_queue(void) {
-    SOKOL_ASSERT(_sapp.vk.device);
-    SOKOL_ASSERT(0 == _sapp.vk.present_queue);
-    vkGetDeviceQueue(_sapp.vk.device, _sapp.vk.queue_family_index, 0, &_sapp.vk.present_queue);
-    SOKOL_ASSERT(_sapp.vk.present_queue);
+    SOKOL_ASSERT(0 == _sapp.vk.queue);
+    vkGetDeviceQueue(_sapp.vk.device, _sapp.vk.queue_family_index, 0, &_sapp.vk.queue);
+    SOKOL_ASSERT(_sapp.vk.queue);
 }
 
 _SOKOL_PRIVATE void _sapp_vk_destroy_device(void) {
     SOKOL_ASSERT(_sapp.vk.device);
     vkDestroyDevice(_sapp.vk.device, 0);
     _sapp.vk.device = 0;
+    _sapp.vk.queue = 0;
 }
 
 _SOKOL_PRIVATE void _sapp_vk_create_surface(void) {
@@ -4608,7 +4608,6 @@ _SOKOL_PRIVATE void _sapp_vk_init(void) {
     _sapp_vk_create_surface();
     _sapp_vk_pick_physical_device();
     _sapp_vk_create_device();
-    _sapp_vk_get_present_queue();
     _sapp_vk_create_sync_objects();
     _sapp_vk_create_swapchain();
 }
@@ -4639,7 +4638,7 @@ _SOKOL_PRIVATE void _sapp_vk_swapchain_next(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_vk_present(void) {
-    SOKOL_ASSERT(_sapp.vk.present_queue);
+    SOKOL_ASSERT(_sapp.vk.queue);
     VkPresentInfoKHR present_info;
     _sapp_clear(&present_info, sizeof(present_info));
     present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -4648,7 +4647,7 @@ _SOKOL_PRIVATE void _sapp_vk_present(void) {
     present_info.swapchainCount = 1;
     present_info.pSwapchains = &_sapp.vk.swapchain;
     present_info.pImageIndices = &_sapp.vk.cur_swapchain_image_index;
-    VkResult res = vkQueuePresentKHR(_sapp.vk.present_queue, &present_info);
+    VkResult res = vkQueuePresentKHR(_sapp.vk.queue, &present_info);
     if ((res != VK_SUCCESS) || (res != VK_SUBOPTIMAL_KHR)) {
         _SAPP_WARN(VULKAN_QUEUE_PRESENT_FAILED);
     }
@@ -13553,7 +13552,9 @@ SOKOL_API_IMPL sapp_environment sapp_get_environment(void) {
         res.wgpu.device = (const void*) _sapp.wgpu.device;
     #endif
     #if defined(SOKOL_VULKAN)
+        res.vulkan.physical_device = (const void*) _sapp.vk.physical_device;
         res.vulkan.device = (const void*) _sapp.vk.device;
+        res.vulkan.queue = (const void*) _sapp.vk.queue;
     #endif
     return res;
 }
