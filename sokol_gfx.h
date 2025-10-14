@@ -6788,7 +6788,7 @@ typedef struct {
     uint32_t queue_family_index;
     VkCommandPool cmd_pool;
     bool first_pass_in_frame;
-    sg_vulkan_swapchain pass_swapchain;
+    sg_vulkan_swapchain swapchain;
     VkSemaphore present_complete_sem;
     VkSemaphore render_finished_sem;
     uint32_t frame_slot;
@@ -18243,6 +18243,26 @@ _SOKOL_PRIVATE void _sg_wgpu_update_image(_sg_image_t* img, const sg_image_data*
 // >>vk
 #elif defined(SOKOL_VULKAN)
 
+_SOKOL_PRIVATE VkAttachmentLoadOp _sg_vk_load_op(sg_load_action a) {
+    switch (a) {
+        case SG_LOADACTION_CLEAR:
+            return VK_ATTACHMENT_LOAD_OP_CLEAR;
+        case SG_LOADACTION_DONTCARE:
+            return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        default:
+            return VK_ATTACHMENT_LOAD_OP_LOAD;
+    }
+}
+
+_SOKOL_PRIVATE VkAttachmentStoreOp _sg_vk_store_op(sg_store_action a) {
+    switch (a) {
+        case SG_STOREACTION_STORE:
+            return VK_ATTACHMENT_STORE_OP_STORE;
+        default:
+            return VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    }
+}
+
 _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     _sg.backend = SG_BACKEND_VULKAN;
     _sg.features.origin_top_left = true;
@@ -18516,13 +18536,81 @@ _SOKOL_PRIVATE void _sg_vk_transition_image_layout(
     vkCmdPipelineBarrier2(_sg.vk.frame[_sg.vk.frame_slot].cmd_buf, &dep_info);
 }
 
+_SOKOL_PRIVATE void _sg_vk_init_color_attachment_info(VkRenderingAttachmentInfo* info, const sg_color_attachment_action* action, VkImageView color_view, VkImageView resolve_view) {
+    SOKOL_ASSERT(0 == resolve_view);
+    info->sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    info->imageView = color_view;
+    info->imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    info->resolveMode = VK_RESOLVE_MODE_NONE; // FIXME
+    info->resolveImageView = resolve_view;
+    info->resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED; // FIXME
+    info->loadOp = _sg_vk_load_op(action->load_action);
+    info->storeOp = _sg_vk_store_op(action->store_action);
+    info->clearValue.color.float32[0] = action->clear_value.r;
+    info->clearValue.color.float32[1] = action->clear_value.g;
+    info->clearValue.color.float32[2] = action->clear_value.b;
+    info->clearValue.color.float32[3] = action->clear_value.a;
+}
+
+_SOKOL_PRIVATE void _sg_vk_begin_compute_pass(const sg_pass* pass, VkCommandBuffer cmd_buf) {
+    SOKOL_ASSERT(false && pass && cmd_buf && "FIXME");
+}
+
+_SOKOL_PRIVATE void _sg_vk_begin_render_pass(const sg_pass* pass, const _sg_attachments_ptrs_t* atts, VkCommandBuffer cmd_buf) {
+    const sg_pass_action* action = &pass->action;
+    const bool is_swapchain_pass = atts->empty;
+
+    VkRenderingAttachmentInfo color_att_infos[SG_MAX_COLOR_ATTACHMENTS];
+    _sg_clear(color_att_infos, sizeof(color_att_infos));
+    VkRenderingInfo render_info;
+    _sg_clear(&render_info, sizeof(render_info));
+    render_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+    render_info.renderArea.extent.width = (uint32_t)_sg.cur_pass.dim.width;
+    render_info.renderArea.extent.height = (uint32_t)_sg.cur_pass.dim.height;
+    render_info.layerCount = 1;
+    render_info.pColorAttachments = color_att_infos;
+
+    if (is_swapchain_pass) {
+        _sg.vk.swapchain = pass->swapchain.vulkan;
+        SOKOL_ASSERT(_sg.vk.swapchain.render_image);
+        SOKOL_ASSERT(_sg.vk.swapchain.render_view);
+        SOKOL_ASSERT(_sg.vk.swapchain.present_complete_semaphore);
+        SOKOL_ASSERT(_sg.vk.swapchain.render_finished_semaphore);
+        // FIXME: need to support multiple present_complete_semaphores
+        SOKOL_ASSERT(0 == _sg.vk.present_complete_sem);
+        _sg.vk.present_complete_sem = (VkSemaphore)_sg.vk.swapchain.present_complete_semaphore;
+        if (0 == _sg.vk.render_finished_sem) {
+            _sg.vk.render_finished_sem = (VkSemaphore)_sg.vk.swapchain.render_finished_semaphore;
+        } else {
+            SOKOL_ASSERT(_sg.vk.render_finished_sem == _sg.vk.swapchain.render_finished_semaphore);
+        }
+        _sg_vk_transition_image_layout(
+            (VkImage)_sg.vk.swapchain.render_image,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            0,
+            VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+            VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            0, 0); // base_mip_level, base_array_layer
+
+        VkImageView vk_color_view = (VkImageView)_sg.vk.swapchain.render_view;
+        VkImageView vk_resolve_view = (VkImageView)_sg.vk.swapchain.resolve_view;
+        _sg_vk_init_color_attachment_info(&color_att_infos[0], &action->colors[0], vk_color_view, vk_resolve_view);
+        render_info.colorAttachmentCount = 1;
+    } else {
+        SOKOL_ASSERT(false && "FIXME");
+    }
+    vkCmdBeginRendering(cmd_buf, &render_info);
+}
+
 _SOKOL_PRIVATE void _sg_vk_begin_pass(const sg_pass* pass, const _sg_attachments_ptrs_t* atts) {
     SOKOL_ASSERT(pass && atts);
     VkResult res;
-    _sg.vk.pass_swapchain = pass->swapchain.vulkan;
-    const bool is_swapchain_pass = atts->empty;
+    VkCommandBuffer cmd_buf = _sg.vk.frame[_sg.vk.frame_slot].cmd_buf;
 
-    // if this is the first pass in the frame, wait for
+    // if this is the first pass in the frame, sync and rewind command buffer
     if (_sg.vk.first_pass_in_frame) {
         _sg.vk.first_pass_in_frame = false;
         // block until oldest inflight-frame has finished
@@ -18540,7 +18628,6 @@ _SOKOL_PRIVATE void _sg_vk_begin_pass(const sg_pass* pass, const _sg_attachments
         }
         res = vkResetFences(_sg.vk.dev, 1, &_sg.vk.frame[_sg.vk.frame_slot].fence);
         SOKOL_ASSERT(res == VK_SUCCESS);
-        VkCommandBuffer cmd_buf = _sg.vk.frame[_sg.vk.frame_slot].cmd_buf;
         res = vkResetCommandBuffer(cmd_buf, 0);
         SOKOL_ASSERT(res == VK_SUCCESS);
         VkCommandBufferBeginInfo cmdbuf_begin_info;
@@ -18550,39 +18637,25 @@ _SOKOL_PRIVATE void _sg_vk_begin_pass(const sg_pass* pass, const _sg_attachments
         SOKOL_ASSERT(res == VK_SUCCESS);
     }
 
-    if (is_swapchain_pass) {
-        SOKOL_ASSERT(_sg.vk.pass_swapchain.render_image);
-        SOKOL_ASSERT(_sg.vk.pass_swapchain.render_view);
-        SOKOL_ASSERT(_sg.vk.pass_swapchain.present_complete_semaphore);
-        SOKOL_ASSERT(_sg.vk.pass_swapchain.render_finished_semaphore);
-        // FIXME: need to support multiple present_complete_semaphores
-        SOKOL_ASSERT(0 == _sg.vk.present_complete_sem);
-        _sg.vk.present_complete_sem = (VkSemaphore)_sg.vk.pass_swapchain.present_complete_semaphore;
-        if (0 == _sg.vk.render_finished_sem) {
-            _sg.vk.render_finished_sem = (VkSemaphore)_sg.vk.pass_swapchain.render_finished_semaphore;
-        } else {
-            SOKOL_ASSERT(_sg.vk.render_finished_sem == _sg.vk.pass_swapchain.render_finished_semaphore);
-        }
-        _sg_vk_transition_image_layout(
-            (VkImage)_sg.vk.pass_swapchain.render_image,
-            VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            0,
-            VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-            VK_IMAGE_ASPECT_COLOR_BIT,
-            0, 0); // base_mip_level, base_array_layer
+    if (_sg.cur_pass.is_compute) {
+        _sg_vk_begin_compute_pass(pass, cmd_buf);
+    } else {
+        _sg_vk_begin_render_pass(pass, atts, cmd_buf);
     }
 }
 
-_SOKOL_PRIVATE void _sg_vk_end_pass(const _sg_attachments_ptrs_t* atts) {
-    SOKOL_ASSERT(atts);
+_SOKOL_PRIVATE void _sg_vk_end_compute_pass(VkCommandBuffer cmd_buf) {
+    SOKOL_ASSERT(false && cmd_buf && "FIXME");
+}
+
+_SOKOL_PRIVATE void _sg_vk_end_render_pass(const _sg_attachments_ptrs_t* atts, VkCommandBuffer cmd_buf) {
+    SOKOL_ASSERT(atts && cmd_buf);
     const bool is_swapchain_pass = atts->empty;
+    vkCmdEndRendering(cmd_buf);
     if (is_swapchain_pass) {
-        SOKOL_ASSERT(_sg.vk.pass_swapchain.render_image);
+        SOKOL_ASSERT(_sg.vk.swapchain.render_image);
         _sg_vk_transition_image_layout(
-            (VkImage)_sg.vk.pass_swapchain.render_image,
+            (VkImage)_sg.vk.swapchain.render_image,
             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
             VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
@@ -18591,6 +18664,20 @@ _SOKOL_PRIVATE void _sg_vk_end_pass(const _sg_attachments_ptrs_t* atts) {
             VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
             VK_IMAGE_ASPECT_COLOR_BIT,
             0, 0); // base_mip_level, base_array_layer
+
+        _sg_clear(&_sg.vk.swapchain, sizeof(_sg.vk.swapchain));
+    } else {
+        SOKOL_ASSERT(false && "FIXME");
+    }
+}
+
+_SOKOL_PRIVATE void _sg_vk_end_pass(const _sg_attachments_ptrs_t* atts) {
+    SOKOL_ASSERT(atts);
+    VkCommandBuffer cmd_buf = _sg.vk.frame[_sg.vk.frame_slot].cmd_buf;
+    if (_sg.cur_pass.is_compute) {
+        _sg_vk_end_compute_pass(cmd_buf);
+    } else {
+        _sg_vk_end_render_pass(atts, cmd_buf);
     }
 }
 
