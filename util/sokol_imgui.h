@@ -2949,9 +2949,12 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
 
 static sg_pipeline _simgui_bind_texture_sampler(sg_bindings* bindings, ImTextureID imtex_id) {
     const sg_view tex_view = simgui_texture_view_from_imtextureid(imtex_id);
+    SOKOL_ASSERT(tex_view.id != SG_INVALID_ID);
     const sg_image img = sg_query_view_image(tex_view);
+    SOKOL_ASSERT(img.id != SG_INVALID_ID);
     bindings->views[0] = tex_view;
     bindings->samplers[0] = simgui_sampler_from_imtextureid(imtex_id);
+    SOKOL_ASSERT(bindings->samplers[0].id != SG_INVALID_ID);
     if (sg_query_pixelformat(sg_query_image_pixelformat(img)).filter) {
         return _simgui.def_pip;
     } else {
