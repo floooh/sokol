@@ -4540,14 +4540,23 @@ _SOKOL_PRIVATE void _sapp_vk_update_framebuffer_dimensions_from_surface(void) {
     _sapp.framebuffer_height = (int)surf_caps.currentExtent.height;
 }
 
-_SOKOL_PRIVATE void _sapp_vk_create_swapchain(void) {
+_SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     SOKOL_ASSERT(_sapp.vk.physical_device);
     SOKOL_ASSERT(_sapp.vk.surface);
     SOKOL_ASSERT(_sapp.vk.device);
-    SOKOL_ASSERT(0 == _sapp.vk.swapchain);
-    SOKOL_ASSERT(0 == _sapp.vk.num_swapchain_images);
-    SOKOL_ASSERT(0 == _sapp.vk.swapchain_images[0]);
-    SOKOL_ASSERT(0 == _sapp.vk.swapchain_views[0]);
+    if (!recreate) {
+        SOKOL_ASSERT(0 == _sapp.vk.swapchain);
+        SOKOL_ASSERT(0 == _sapp.vk.num_swapchain_images);
+        SOKOL_ASSERT(0 == _sapp.vk.swapchain_images[0]);
+        SOKOL_ASSERT(0 == _sapp.vk.swapchain_views[0]);
+    } else {
+        SOKOL_ASSERT(_sapp.vk.swapchain);
+        SOKOL_ASSERT(_sapp.vk.num_swapchain_images > 0);
+        SOKOL_ASSERT(_sapp.vk.swapchain_images[0]);
+        SOKOL_ASSERT(_sapp.vk.swapchain_views[0]);
+    }
+
+    VkSwapchainKHR old_swapchain = _sapp.vk.swapchain;
 
     VkSurfaceCapabilitiesKHR surf_caps;
     _sapp_clear(&surf_caps, sizeof(surf_caps));
@@ -4575,12 +4584,21 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(void) {
     create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     create_info.presentMode = present_mode;
     create_info.clipped = true;
-    create_info.oldSwapchain = 0;
+    create_info.oldSwapchain = old_swapchain;
     res = vkCreateSwapchainKHR(_sapp.vk.device, &create_info, 0, &_sapp.vk.swapchain);
     if (res != VK_SUCCESS) {
         _SAPP_PANIC(VULKAN_CREATE_SWAPCHAIN_FAILED);
     }
     SOKOL_ASSERT(_sapp.vk.swapchain);
+
+    if (old_swapchain) {
+        for (uint32_t i = 0; i < _sapp.vk.num_swapchain_images; i++) {
+            SOKOL_ASSERT(_sapp.vk.swapchain_views[i]);
+            vkDestroyImageView(_sapp.vk.device, _sapp.vk.swapchain_views[i], 0);
+            _sapp.vk.swapchain_views[i] = 0;
+        }
+        vkDestroySwapchainKHR(_sapp.vk.device, old_swapchain, 0);
+    }
 
     _sapp.vk.num_swapchain_images = _SAPP_VK_MAX_SWAPCHAIN_IMAGES;
     res = vkGetSwapchainImagesKHR(_sapp.vk.device,
@@ -4630,8 +4648,7 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_swapchain(void) {
 _SOKOL_PRIVATE void _sapp_vk_recreate_swapchain(void) {
     if (_sapp.vk.device) {
         vkDeviceWaitIdle(_sapp.vk.device);
-        _sapp_vk_destroy_swapchain();
-        _sapp_vk_create_swapchain();
+        _sapp_vk_create_swapchain(true);
     }
 }
 
@@ -4640,7 +4657,7 @@ _SOKOL_PRIVATE void _sapp_vk_init(void) {
     _sapp_vk_create_surface();
     _sapp_vk_pick_physical_device();
     _sapp_vk_create_device();
-    _sapp_vk_create_swapchain();
+    _sapp_vk_create_swapchain(false);
     _sapp_vk_create_sync_objects();
 }
 
