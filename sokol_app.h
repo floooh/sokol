@@ -4523,6 +4523,23 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_sync_objects(void) {
     }
 }
 
+_SOKOL_PRIVATE void _sapp_vk_update_framebuffer_dimensions_from_surface(void) {
+    if (0 == _sapp.vk.physical_device) {
+        _sapp.framebuffer_width = _sapp_roundf_gzero(_sapp.window_width * _sapp.dpi_scale);
+        _sapp.framebuffer_height = _sapp_roundf_gzero(_sapp.window_height * _sapp.dpi_scale);
+        return;
+    }
+    SOKOL_ASSERT(_sapp.vk.physical_device);
+    SOKOL_ASSERT(_sapp.vk.surface);
+    VkSurfaceCapabilitiesKHR surf_caps;
+    _sapp_clear(&surf_caps, sizeof(surf_caps));
+    VkResult res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(_sapp.vk.physical_device, _sapp.vk.surface, &surf_caps);
+    SOKOL_ASSERT(res == VK_SUCCESS);
+    SOKOL_ASSERT(surf_caps.currentExtent.width != UINT32_MAX);
+    _sapp.framebuffer_width = (int)surf_caps.currentExtent.width;
+    _sapp.framebuffer_height = (int)surf_caps.currentExtent.height;
+}
+
 _SOKOL_PRIVATE void _sapp_vk_create_swapchain(void) {
     SOKOL_ASSERT(_sapp.vk.physical_device);
     SOKOL_ASSERT(_sapp.vk.surface);
@@ -4591,6 +4608,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(void) {
         }
         SOKOL_ASSERT(_sapp.vk.swapchain_views[i]);
     }
+    _sapp_vk_update_framebuffer_dimensions_from_surface();
 }
 
 _SOKOL_PRIVATE void _sapp_vk_destroy_swapchain(void) {
@@ -4606,6 +4624,15 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_swapchain(void) {
     }
     vkDestroySwapchainKHR(_sapp.vk.device, _sapp.vk.swapchain, 0);
     _sapp.vk.swapchain = 0;
+    _sapp.vk.num_swapchain_images = 0;
+}
+
+_SOKOL_PRIVATE void _sapp_vk_recreate_swapchain(void) {
+    if (_sapp.vk.device) {
+        vkDeviceWaitIdle(_sapp.vk.device);
+        _sapp_vk_destroy_swapchain();
+        _sapp_vk_create_swapchain();
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_vk_init(void) {
@@ -11795,12 +11822,18 @@ _SOKOL_PRIVATE void _sapp_x11_update_dimensions(int x11_window_width, int x11_wi
     _sapp.window_height = _sapp_roundf_gzero(x11_window_height / window_scale);
     int cur_fb_width = _sapp.framebuffer_width;
     int cur_fb_height = _sapp.framebuffer_height;
-    _sapp.framebuffer_width = _sapp_roundf_gzero(_sapp.window_width * _sapp.dpi_scale);
-    _sapp.framebuffer_height = _sapp_roundf_gzero(_sapp.window_height * _sapp.dpi_scale);
+    #if defined(SOKOL_VULKAN)
+        _sapp_vk_update_framebuffer_dimensions_from_surface();
+    #else
+        _sapp.framebuffer_width = _sapp_roundf_gzero(_sapp.window_width * _sapp.dpi_scale);
+        _sapp.framebuffer_height = _sapp_roundf_gzero(_sapp.window_height * _sapp.dpi_scale);
+    #endif
     bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) || (_sapp.framebuffer_height != cur_fb_height);
     if (dim_changed) {
         #if defined(SOKOL_WGPU)
             _sapp_wgpu_swapchain_size_changed();
+        #elif defined(SOKOL_VULKAN)
+            _sapp_vk_recreate_swapchain();
         #endif
         if (!_sapp.first_frame) {
             _sapp_x11_app_event(SAPP_EVENTTYPE_RESIZED);
