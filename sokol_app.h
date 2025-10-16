@@ -4523,23 +4523,6 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_sync_objects(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_vk_update_framebuffer_dimensions_from_surface(void) {
-    if (0 == _sapp.vk.physical_device) {
-        _sapp.framebuffer_width = _sapp_roundf_gzero(_sapp.window_width * _sapp.dpi_scale);
-        _sapp.framebuffer_height = _sapp_roundf_gzero(_sapp.window_height * _sapp.dpi_scale);
-        return;
-    }
-    SOKOL_ASSERT(_sapp.vk.physical_device);
-    SOKOL_ASSERT(_sapp.vk.surface);
-    VkSurfaceCapabilitiesKHR surf_caps;
-    _sapp_clear(&surf_caps, sizeof(surf_caps));
-    VkResult res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(_sapp.vk.physical_device, _sapp.vk.surface, &surf_caps);
-    SOKOL_ASSERT(res == VK_SUCCESS);
-    SOKOL_ASSERT(surf_caps.currentExtent.width != UINT32_MAX);
-    _sapp.framebuffer_width = (int)surf_caps.currentExtent.width;
-    _sapp.framebuffer_height = (int)surf_caps.currentExtent.height;
-}
-
 _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     SOKOL_ASSERT(_sapp.vk.physical_device);
     SOKOL_ASSERT(_sapp.vk.surface);
@@ -4626,7 +4609,11 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
         }
         SOKOL_ASSERT(_sapp.vk.swapchain_views[i]);
     }
-    _sapp_vk_update_framebuffer_dimensions_from_surface();
+
+    // this is the only place in the Vulkan code path which updates
+    // _sapp.framebuffer_width/height
+    _sapp.framebuffer_width = (int)surf_caps.currentExtent.width;
+    _sapp.framebuffer_height = (int)surf_caps.currentExtent.height;
 }
 
 _SOKOL_PRIVATE void _sapp_vk_destroy_swapchain(void) {
@@ -4645,10 +4632,22 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_swapchain(void) {
     _sapp.vk.num_swapchain_images = 0;
 }
 
+#if defined(_SAPP_LINUX)
+_SOKOL_PRIVATE void _sapp_x11_app_event(sapp_event_type type);
+#endif
+
 _SOKOL_PRIVATE void _sapp_vk_recreate_swapchain(void) {
-    if (_sapp.vk.device) {
-        vkDeviceWaitIdle(_sapp.vk.device);
-        _sapp_vk_create_swapchain(true);
+    SOKOL_ASSERT(_sapp.vk.device);
+    vkDeviceWaitIdle(_sapp.vk.device);
+    int fb_width = _sapp.framebuffer_width;
+    int fb_height = _sapp.framebuffer_height;
+    _sapp_vk_create_swapchain(true);
+    if ((fb_width != _sapp.framebuffer_width) || (fb_height != _sapp.framebuffer_height)) {
+        if (!_sapp.first_frame) {
+            #if defined(_SAPP_LINUX)
+            _sapp_x11_app_event(SAPP_EVENTTYPE_RESIZED);
+            #endif
+        }
     }
 }
 
@@ -4697,7 +4696,9 @@ _SOKOL_PRIVATE void _sapp_vk_present(void) {
     present_info.pSwapchains = &_sapp.vk.swapchain;
     present_info.pImageIndices = &_sapp.vk.cur_swapchain_image_index;
     VkResult res = vkQueuePresentKHR(_sapp.vk.queue, &present_info);
-    if ((res != VK_SUCCESS) && (res != VK_SUBOPTIMAL_KHR)) {
+    if ((res == VK_ERROR_OUT_OF_DATE_KHR) || (res == VK_SUBOPTIMAL_KHR)) {
+        _sapp_vk_recreate_swapchain();
+    } else if (res != VK_SUCCESS) {
         _SAPP_WARN(VULKAN_QUEUE_PRESENT_FAILED);
     }
 }
@@ -11834,9 +11835,12 @@ _SOKOL_PRIVATE void _sapp_x11_app_event(sapp_event_type type) {
 
 _SOKOL_PRIVATE void _sapp_x11_update_dimensions(int x11_window_width, int x11_window_height) {
     // NOTE: do *NOT* use _sapp.dpi_scale for the window scale
+    // NOTE: on Vulkan, updating the framebuffer dimensions is entirely handled
+    // by the swapchain management code
     const float window_scale = _sapp.x11.dpi / 96.0f;
     _sapp.window_width = _sapp_roundf_gzero(x11_window_width / window_scale);
     _sapp.window_height = _sapp_roundf_gzero(x11_window_height / window_scale);
+    #if !defined(SOKOL_VULKAN)
     int cur_fb_width = _sapp.framebuffer_width;
     int cur_fb_height = _sapp.framebuffer_height;
     #if defined(SOKOL_VULKAN)
@@ -11849,13 +11853,12 @@ _SOKOL_PRIVATE void _sapp_x11_update_dimensions(int x11_window_width, int x11_wi
     if (dim_changed) {
         #if defined(SOKOL_WGPU)
             _sapp_wgpu_swapchain_size_changed();
-        #elif defined(SOKOL_VULKAN)
-            _sapp_vk_recreate_swapchain();
         #endif
         if (!_sapp.first_frame) {
             _sapp_x11_app_event(SAPP_EVENTTYPE_RESIZED);
         }
     }
+    #endif
 }
 
 _SOKOL_PRIVATE void _sapp_x11_update_dimensions_from_window_size(void) {
