@@ -1842,7 +1842,7 @@ typedef struct sapp_desc {
     int width;                          // the preferred width of the window / canvas
     int height;                         // the preferred height of the window / canvas
     int sample_count;                   // MSAA sample count
-    int swap_interval;                  // the preferred swap interval (ignored on some platforms)
+    int swap_interval;                  // the preferred swap interval (ignored on some platforms), default: 1, disable vsync: -1
     bool high_dpi;                      // whether the rendering canvas is full-resolution on HighDPI displays
     bool fullscreen;                    // whether the window should be created in fullscreen mode
     bool alpha;                         // whether the framebuffer should have an alpha channel (ignored on some platforms)
@@ -3330,6 +3330,8 @@ _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* desc) {
     sapp_desc res = *desc;
     res.sample_count = _sapp_def(res.sample_count, 1);
     res.swap_interval = _sapp_def(res.swap_interval, 1);
+    // disable vsync if swap_interval is -1
+    if (-1 == res.swap_interval) res.swap_interval = 0;
     if (0 == res.gl_major_version) {
         #if defined(SOKOL_GLCORE)
             res.gl_major_version = 4;
@@ -3360,7 +3362,7 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     SOKOL_ASSERT(desc->width >= 0);
     SOKOL_ASSERT(desc->height >= 0);
     SOKOL_ASSERT(desc->sample_count >= 0);
-    SOKOL_ASSERT(desc->swap_interval >= 0);
+    SOKOL_ASSERT(desc->swap_interval >= -1);
     SOKOL_ASSERT(desc->clipboard_size >= 0);
     SOKOL_ASSERT(desc->max_dropped_files >= 0);
     SOKOL_ASSERT(desc->max_dropped_file_path_length >= 0);
