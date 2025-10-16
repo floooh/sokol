@@ -4386,6 +4386,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(WGPU_CREATE_PIPELINE_LAYOUT_FAILED, "wgpuDeviceCreatePipelineLayout() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_RENDER_PIPELINE_FAILED, "wgpuDeviceCreateRenderPipeline() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_COMPUTE_PIPELINE_FAILED, "wgpuDeviceCreateComputePipeline() failed") \
+    _SG_LOGITEM_XMACRO(VULKAN_CREATE_SHADER_MODULE_FAILED, "vkCreateShaderModule() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_WAIT_FOR_FENCE_FAILED, "vkWaitForFence() failed!") \
     _SG_LOGITEM_XMACRO(IDENTICAL_COMMIT_LISTENER, "attempting to add identical commit listener") \
     _SG_LOGITEM_XMACRO(COMMIT_LISTENER_ARRAY_FULL, "commit listener array full") \
@@ -6762,9 +6763,19 @@ typedef struct _sg_sampler_s {
 } _sg_vk_sampler_t;
 typedef _sg_vk_sampler_t _sg_sampler_t;
 
+typedef struct {
+    VkShaderModule module;
+    _sg_str_t entry;
+} _sg_vk_shader_func_t;
+
 typedef struct _sg_shader_s {
     _sg_slot_t slot;
     _sg_shader_common_t cmn;
+    struct {
+        _sg_vk_shader_func_t vertex_func;
+        _sg_vk_shader_func_t fragment_func;
+        _sg_vk_shader_func_t compute_func;
+    } vk;
 } _sg_vk_shader_t;
 typedef _sg_vk_shader_t _sg_shader_t;
 
@@ -18242,6 +18253,14 @@ _SOKOL_PRIVATE void _sg_wgpu_update_image(_sg_image_t* img, const sg_image_data*
 // >>vulkan
 // >>vk
 #elif defined(SOKOL_VULKAN)
+_SOKOL_PRIVATE void _sg_vk_set_object_label(VkObjectType obj_type, uint64_t obj_handle, const char* label) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(obj_handle != 0);
+    if (label) {
+        // FIXME: use vkSetDebugUtilsObjectNamesEXT
+        _SOKOL_UNUSED(obj_type);
+    }
+}
 
 _SOKOL_PRIVATE VkAttachmentLoadOp _sg_vk_load_op(sg_load_action a) {
     switch (a) {
@@ -18466,9 +18485,68 @@ _SOKOL_PRIVATE void _sg_vk_discard_sampler(_sg_sampler_t* smp) {
     SOKOL_ASSERT(false && "FIXME");
 }
 
+_SOKOL_PRIVATE _sg_vk_shader_func_t _sg_vk_create_shader_func(const sg_shader_function* func, const char* label) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(func);
+    SOKOL_ASSERT(func->bytecode.ptr && (func->bytecode.size > 0));
+    SOKOL_ASSERT(func->entry);
+
+    _sg_vk_shader_func_t vk_func;
+    _sg_clear(&vk_func, sizeof(vk_func));
+    _sg_strcpy(&vk_func.entry, func->entry);
+
+    VkShaderModuleCreateInfo create_info;
+    _sg_clear(&create_info, sizeof(create_info));
+    create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    create_info.codeSize = func->bytecode.size;
+    create_info.pCode = func->bytecode.ptr;
+    VkResult res = vkCreateShaderModule(_sg.vk.dev, &create_info, 0, &vk_func.module);
+    if (VK_SUCCESS != res) {
+        _SG_ERROR(VULKAN_CREATE_SHADER_MODULE_FAILED);
+    } else {
+        SOKOL_ASSERT(vk_func.module);
+        _sg_vk_set_object_label(VK_OBJECT_TYPE_SHADER_MODULE, (uint64_t)vk_func.module, label);
+    }
+    return vk_func;
+}
+
+_SOKOL_PRIVATE void _sg_vk_discard_shader_func(_sg_vk_shader_func_t* func) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(func);
+    if (func->module) {
+        vkDestroyShaderModule(_sg.vk.dev, func->module, 0);
+        func->module = 0;
+    }
+}
+
 _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
-    SOKOL_ASSERT(false && "FIXME");
+    SOKOL_ASSERT(shd->vk.vertex_func.module == 0);
+    SOKOL_ASSERT(shd->vk.fragment_func.module == 0);
+    SOKOL_ASSERT(shd->vk.compute_func.module == 0);
+
+    // build shader modules
+    bool shd_valid = true;
+    if (desc->vertex_func.bytecode.ptr) {
+        shd->vk.vertex_func = _sg_vk_create_shader_func(&desc->vertex_func, desc->label);
+        shd_valid &= shd->vk.vertex_func.module != 0;
+    }
+    if (desc->fragment_func.bytecode.ptr) {
+        shd->vk.fragment_func = _sg_vk_create_shader_func(&desc->fragment_func, desc->label);
+        shd_valid &= shd->vk.fragment_func.module != 0;
+    }
+    if (desc->compute_func.bytecode.ptr) {
+        shd->vk.compute_func = _sg_vk_create_shader_func(&desc->compute_func, desc->label);
+        shd_valid &= shd->vk.compute_func.module != 0;
+    }
+    if (!shd_valid) {
+        _sg_vk_discard_shader_func(&shd->vk.vertex_func);
+        _sg_vk_discard_shader_func(&shd->vk.fragment_func);
+        _sg_vk_discard_shader_func(&shd->vk.compute_func);
+        return SG_RESOURCESTATE_FAILED;
+    }
+
+    // FIXME: descriptor sets?
     return SG_RESOURCESTATE_VALID;
 }
 
