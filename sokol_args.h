@@ -600,7 +600,7 @@ _SOKOL_PRIVATE bool _sargs_parse_carg(const char* src) {
         if (_sargs_in_escape()) {
             c = _sargs_escape(c);
             _sargs_end_escape();
-        } else if (_sargs_is_escape(c)) {
+        } else if (_sargs_is_escape(c) && _sargs_parsing_val()) {
             _sargs_start_escape();
             continue;
         }
