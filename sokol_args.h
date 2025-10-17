@@ -671,18 +671,7 @@ _SOKOL_PRIVATE bool _sargs_parse_cargs(int argc, const char** argv) {
     _sargs_expect_key();
     bool retval = true;
     for (int i = 1; i < argc; i++) {
-		int last_pos = _sargs.buf_pos;
         retval &= _sargs_parse_carg(argv[i]);
-		if (*_sargs_str(_sargs.args[i-1].val) == '\0') {
-			/* no value, copy key string */
-		    const char* ptr = argv[i];
-			char c;
-			_sargs.buf_pos = last_pos;
-		    while (0 != (c = *ptr++)) {
-				_sargs_putc(c);
-		    }
-		    _sargs_putc(0);
-		}
     }
     _sargs.parse_state = 0;
     return retval;
