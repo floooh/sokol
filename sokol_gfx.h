@@ -4392,6 +4392,11 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(WGPU_CREATE_RENDER_PIPELINE_FAILED, "wgpuDeviceCreateRenderPipeline() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_COMPUTE_PIPELINE_FAILED, "wgpuDeviceCreateComputePipeline() failed") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_SHADER_MODULE_FAILED, "vkCreateShaderModule() failed!") \
+    _SG_LOGITEM_XMACRO(VULKAN_UNIFORMBLOCK_SPIRV_SET0_BINDING_OUT_OF_RANGE, "uniform block 'spirv_set0_binding_n' is out of range (must be 0..15)") \
+    _SG_LOGITEM_XMACRO(VULKAN_TEXTURE_SPIRV_SET1_BINDING_OUT_OF_RANGE, "texture 'spirv_set1_binding_n' is out of range (must be 0..127)") \
+    _SG_LOGITEM_XMACRO(VULKAN_STORAGEBUFFER_SPIRV_SET1_BINDING_OUT_OF_RANGE, "storage buffer 'spirv_set1_binding_n' is out of range (must be 0..127)") \
+    _SG_LOGITEM_XMACRO(VULKAN_STORAGEIMAGE_SPIRV_SET1_BINDING_OUT_OF_RANGE, "storage image 'spirv_set1_binding_n' is out of range (must be 0..127)") \
+    _SG_LOGITEM_XMACRO(VULKAN_SAMPLER_SPIRV_SET1_BINDING_OUT_OF_RANGE, "sampler 'spirv_set1_binding_n' is out of range (must be 0..127)") \
     _SG_LOGITEM_XMACRO(VULKAN_WAIT_FOR_FENCE_FAILED, "vkWaitForFence() failed!") \
     _SG_LOGITEM_XMACRO(IDENTICAL_COMMIT_LISTENER, "attempting to add identical commit listener") \
     _SG_LOGITEM_XMACRO(COMMIT_LISTENER_ARRAY_FULL, "commit listener array full") \
@@ -6754,6 +6759,15 @@ typedef struct {
 } _sg_wgpu_backend_t;
 
 #elif defined(SOKOL_VULKAN)
+
+#define _SG_VK_MAX_UNIFORM_UPDATE_SIZE (1<<16)
+#define _SG_VK_MAX_DESCRIPTORSETS (2) // 0: uniforms, 1: images, samplers, storage buffers, storage images
+#define _SG_VK_UB_DESCRIPTORSET_INDEX (0)
+#define _SG_VK_VIEW_SMP_DESCRIPTORSET_INDEX (1)
+#define _SG_VK_MAX_UB_DESCRIPTORSET_ENTRIES (SG_MAX_UNIFORMBLOCK_BINDSLOTS)
+#define _SG_VK_MAX_UB_DESCRIPTORSET_SLOTS (2 * SG_MAX_UNIFORMBLOCK_BINDSLOTS)
+#define _SG_VK_MAX_VIEW_SMP_DESCRIPTORSET_ENTRIES (SG_MAX_VIEW_BINDSLOTS + SG_MAX_SAMPLER_BINDSLOTS)
+#define _SG_VK_MAX_VIEW_SMP_DESCRIPTORSET_SLOTS (128)
 
 typedef struct _sg_buffer_s {
     _sg_slot_t slot;
@@ -18529,11 +18543,60 @@ _SOKOL_PRIVATE void _sg_vk_discard_shader_func(_sg_vk_shader_func_t* func) {
     }
 }
 
+_SOKOL_PRIVATE bool _sg_vk_ensure_spirv_bindslot_ranges(const sg_shader_desc* desc) {
+    SOKOL_ASSERT(desc);
+    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
+        const sg_shader_uniform_block* ub = &desc->uniform_blocks[i];
+        if (ub->stage != SG_SHADERSTAGE_NONE) {
+            if (ub->spirv_set0_binding_n >= _SG_VK_MAX_UB_DESCRIPTORSET_SLOTS) {
+                _SG_ERROR(VULKAN_UNIFORMBLOCK_SPIRV_SET0_BINDING_OUT_OF_RANGE);
+                return false;
+            }
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        const sg_shader_view* view = &desc->views[i];
+        if (view->texture.stage != SG_SHADERSTAGE_NONE) {
+            if (view->texture.spirv_set1_binding_n >= _SG_VK_MAX_VIEW_SMP_DESCRIPTORSET_SLOTS) {
+                _SG_ERROR(VULKAN_TEXTURE_SPIRV_SET1_BINDING_OUT_OF_RANGE);
+                return false;
+            }
+        }
+        if (view->storage_buffer.stage != SG_SHADERSTAGE_NONE) {
+            if (view->storage_buffer.spirv_set1_binding_n >= _SG_VK_MAX_VIEW_SMP_DESCRIPTORSET_SLOTS) {
+                _SG_ERROR(VULKAN_STORAGEBUFFER_SPIRV_SET1_BINDING_OUT_OF_RANGE);
+                return false;
+            }
+        }
+        if (view->storage_image.stage != SG_SHADERSTAGE_NONE) {
+            if (view->storage_image.spirv_set1_binding_n >= _SG_VK_MAX_VIEW_SMP_DESCRIPTORSET_SLOTS) {
+                _SG_ERROR(VULKAN_STORAGEIMAGE_SPIRV_SET1_BINDING_OUT_OF_RANGE);
+                return false;
+            }
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+        const sg_shader_sampler* smp = &desc->samplers[i];
+        if (smp->stage != SG_SHADERSTAGE_NONE) {
+            if (smp->spirv_set1_binding_n >= _SG_VK_MAX_VIEW_SMP_DESCRIPTORSET_SLOTS) {
+                _SG_ERROR(VULKAN_SAMPLER_SPIRV_SET1_BINDING_OUT_OF_RANGE);
+                return false;
+            }
+        }
+    }
+    return true;
+
+}
+
 _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(shd->vk.vertex_func.module == 0);
     SOKOL_ASSERT(shd->vk.fragment_func.module == 0);
     SOKOL_ASSERT(shd->vk.compute_func.module == 0);
+
+    if (!_sg_vk_ensure_spirv_bindslot_ranges(desc)) {
+        return SG_RESOURCESTATE_FAILED;
+    }
 
     // build shader modules
     bool shd_valid = true;
