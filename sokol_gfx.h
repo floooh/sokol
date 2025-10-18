@@ -4397,6 +4397,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VULKAN_STORAGEBUFFER_SPIRV_SET1_BINDING_OUT_OF_RANGE, "storage buffer 'spirv_set1_binding_n' is out of range (must be 0..127)") \
     _SG_LOGITEM_XMACRO(VULKAN_STORAGEIMAGE_SPIRV_SET1_BINDING_OUT_OF_RANGE, "storage image 'spirv_set1_binding_n' is out of range (must be 0..127)") \
     _SG_LOGITEM_XMACRO(VULKAN_SAMPLER_SPIRV_SET1_BINDING_OUT_OF_RANGE, "sampler 'spirv_set1_binding_n' is out of range (must be 0..127)") \
+    _SG_LOGITEM_XMACRO(VULKAN_CREATE_DESCRIPTOR_SET_LAYOUT_FAILED, "vkCreateDescriptorSetLayout() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_WAIT_FOR_FENCE_FAILED, "vkWaitForFence() failed!") \
     _SG_LOGITEM_XMACRO(IDENTICAL_COMMIT_LISTENER, "attempting to add identical commit listener") \
     _SG_LOGITEM_XMACRO(COMMIT_LISTENER_ARRAY_FULL, "commit listener array full") \
@@ -6799,6 +6800,12 @@ typedef struct _sg_shader_s {
         _sg_vk_shader_func_t vertex_func;
         _sg_vk_shader_func_t fragment_func;
         _sg_vk_shader_func_t compute_func;
+        VkDescriptorSetLayout dset_ub;
+        VkDescriptorSetLayout dset_view_smp;
+        // indexed by sokol-gfx bind-slot
+        uint8_t ub_set0_bnd_n[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
+        uint8_t view_set1_bnd_n[SG_MAX_VIEW_BINDSLOTS];
+        uint8_t smp_set1_bnd_n[SG_MAX_SAMPLER_BINDSLOTS];
     } vk;
 } _sg_vk_shader_t;
 typedef _sg_vk_shader_t _sg_shader_t;
@@ -17788,7 +17795,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, c
 
     // - @group(0) for uniform blocks
     // - @group(1) for all image, sampler and storagebuffer resources
-    // - @group(2) optional: storage image attachments in compute passes
     size_t num_bgls = 2;
     WGPUBindGroupLayout wgpu_bgl[_SG_WGPU_MAX_BINDGROUPS];
     _sg_clear(&wgpu_bgl, sizeof(wgpu_bgl));
@@ -18440,6 +18446,15 @@ _SOKOL_PRIVATE VkColorComponentFlags _sg_vk_color_write_mask(sg_color_mask m) {
     return (VkColorComponentFlags)res;
 }
 
+_SOKOL_PRIVATE VkShaderStageFlags _sg_vk_shader_stage(sg_shader_stage s) {
+    switch (s) {
+        case SG_SHADERSTAGE_VERTEX: return VK_SHADER_STAGE_VERTEX_BIT;
+        case SG_SHADERSTAGE_FRAGMENT: return VK_SHADER_STAGE_FRAGMENT_BIT;
+        case SG_SHADERSTAGE_COMPUTE: return VK_SHADER_STAGE_COMPUTE_BIT;
+        default: SOKOL_UNREACHABLE; return 0;
+    }
+}
+
 _SOKOL_PRIVATE VkAttachmentLoadOp _sg_vk_load_op(sg_load_action a) {
     switch (a) {
         case SG_LOADACTION_CLEAR:
@@ -18744,9 +18759,12 @@ _SOKOL_PRIVATE bool _sg_vk_ensure_spirv_bindslot_ranges(const sg_shader_desc* de
 
 _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
+    SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(shd->vk.vertex_func.module == 0);
     SOKOL_ASSERT(shd->vk.fragment_func.module == 0);
     SOKOL_ASSERT(shd->vk.compute_func.module == 0);
+    SOKOL_ASSERT(shd->vk.dset_ub == 0);
+    SOKOL_ASSERT(shd->vk.dset_view_smp == 0);
 
     if (!_sg_vk_ensure_spirv_bindslot_ranges(desc)) {
         return SG_RESOURCESTATE_FAILED;
@@ -18773,15 +18791,100 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
         return SG_RESOURCESTATE_FAILED;
     }
 
-    // FIXME: descriptor sets?
+    // descriptor set layouts
+    VkResult res;
+    VkDescriptorSetLayoutBinding dsl_entries[_SG_VK_MAX_VIEW_SMP_DESCRIPTORSET_ENTRIES];
+    _sg_clear(dsl_entries, sizeof(dsl_entries));
+    VkDescriptorSetLayoutCreateInfo dsl_create_info;
+    _sg_clear(&dsl_create_info, sizeof(dsl_create_info));
+    size_t dsl_index = 0;
+    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
+        if (shd->cmn.uniform_blocks[i].stage == SG_SHADERSTAGE_NONE) {
+            continue;
+        }
+        shd->vk.ub_set0_bnd_n[i] = desc->uniform_blocks[i].spirv_set0_binding_n;
+        VkDescriptorSetLayoutBinding* dsl_entry = &dsl_entries[dsl_index];
+        dsl_entry->binding = shd->vk.ub_set0_bnd_n[i];
+        dsl_entry->descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        dsl_entry->descriptorCount = 1;
+        dsl_entry->stageFlags = _sg_vk_shader_stage(shd->cmn.uniform_blocks[i].stage);
+        dsl_index += 1;
+    }
+    dsl_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    dsl_create_info.flags = 0; // FIXME: push descriptor? descriptor buffer? update-after-pool?
+    dsl_create_info.bindingCount = dsl_index;
+    dsl_create_info.pBindings = dsl_entries;
+    res = vkCreateDescriptorSetLayout(_sg.vk.dev, &dsl_create_info, 0, &shd->vk.dset_ub);
+    if (res != VK_SUCCESS) {
+        _SG_ERROR(VULKAN_CREATE_DESCRIPTOR_SET_LAYOUT_FAILED);
+        return SG_RESOURCESTATE_FAILED;
+    }
+
+    _sg_clear(dsl_entries, sizeof(dsl_entries));
+    _sg_clear(&dsl_create_info, sizeof(dsl_create_info));
+    dsl_index = 0;
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        if (shd->cmn.views[i].stage == SG_SHADERSTAGE_NONE) {
+            continue;
+        }
+        SOKOL_ASSERT(dsl_index < _SG_VK_MAX_VIEW_SMP_DESCRIPTORSET_ENTRIES);
+        VkDescriptorSetLayoutBinding* dsl_entry = &dsl_entries[dsl_index];
+        dsl_entry->stageFlags = _sg_vk_shader_stage(shd->cmn.views[i].stage);
+        if (shd->cmn.views[i].view_type == SG_VIEWTYPE_TEXTURE) {
+            shd->vk.view_set1_bnd_n[i] = desc->views[i].texture.spirv_set1_binding_n;
+            dsl_entry->descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        } else if (shd->cmn.views[i].view_type == SG_VIEWTYPE_STORAGEBUFFER) {
+            shd->vk.view_set1_bnd_n[i] = desc->views[i].storage_buffer.spirv_set1_binding_n;
+            dsl_entry->descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        } else if (shd->cmn.views[i].view_type == SG_VIEWTYPE_STORAGEIMAGE) {
+            shd->vk.view_set1_bnd_n[i] = desc->views[i].storage_image.spirv_set1_binding_n;
+            dsl_entry->descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        } else {
+            SOKOL_UNREACHABLE;
+        }
+        dsl_entry->binding = shd->vk.view_set1_bnd_n[i];
+        dsl_entry->descriptorCount = 1;
+        dsl_index += 1;
+    }
+    for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+        if (shd->cmn.samplers[i].stage == SG_SHADERSTAGE_NONE) {
+            continue;
+        }
+        shd->vk.smp_set1_bnd_n[i] = desc->samplers[i].spirv_set1_binding_n;
+        SOKOL_ASSERT(dsl_index < _SG_VK_MAX_VIEW_SMP_DESCRIPTORSET_ENTRIES);
+        VkDescriptorSetLayoutBinding* dsl_entry = &dsl_entries[dsl_index];
+        dsl_entry->binding = shd->vk.smp_set1_bnd_n[i];
+        dsl_entry->descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+        dsl_entry->descriptorCount = 1;
+        dsl_entry->stageFlags = _sg_vk_shader_stage(shd->cmn.views[i].stage);
+        dsl_index += 1;
+    }
+    dsl_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    dsl_create_info.flags = 0; // FIXME: push descriptor? descriptor buffer? update-after-pool?
+    dsl_create_info.bindingCount = dsl_index;
+    dsl_create_info.pBindings = dsl_entries;
+    res = vkCreateDescriptorSetLayout(_sg.vk.dev, &dsl_create_info, 0, &shd->vk.dset_view_smp);
+    if (res != VK_SUCCESS) {
+        _SG_ERROR(VULKAN_CREATE_DESCRIPTOR_SET_LAYOUT_FAILED);
+        return SG_RESOURCESTATE_FAILED;
+    }
     return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_vk_discard_shader(_sg_shader_t* shd) {
     SOKOL_ASSERT(shd);
+    SOKOL_ASSERT(_sg.vk.dev);
     _sg_vk_discard_shader_func(&shd->vk.vertex_func);
     _sg_vk_discard_shader_func(&shd->vk.fragment_func);
     _sg_vk_discard_shader_func(&shd->vk.compute_func);
+    if (shd->vk.dset_ub) {
+        vkDestroyDescriptorSetLayout(_sg.vk.dev, shd->vk.dset_ub, 0);
+        shd->vk.dset_ub = 0;
+    }
+    if (shd->vk.dset_view_smp) {
+        vkDestroyDescriptorSetLayout(_sg.vk.dev, shd->vk.dset_view_smp, 0);
+        shd->vk.dset_view_smp = 0;
+    }
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, const sg_pipeline_desc* desc) {
