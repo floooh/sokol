@@ -18625,7 +18625,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
 
 _SOKOL_PRIVATE void _sg_vk_discard_shader(_sg_shader_t* shd) {
     SOKOL_ASSERT(shd);
-    SOKOL_ASSERT(false && "FIXME");
+    _sg_vk_discard_shader_func(&shd->vk.vertex_func);
+    _sg_vk_discard_shader_func(&shd->vk.fragment_func);
+    _sg_vk_discard_shader_func(&shd->vk.compute_func);
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, const sg_pipeline_desc* desc) {
