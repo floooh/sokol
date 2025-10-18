@@ -6806,6 +6806,9 @@ typedef _sg_vk_shader_t _sg_shader_t;
 typedef struct _sg_pipeline_s {
     _sg_slot_t slot;
     _sg_pipeline_common_t cmn;
+    struct {
+        VkPipeline pip;
+    } vk;
 } _sg_vk_pipeline_t;
 typedef _sg_vk_pipeline_t _sg_pipeline_t;
 
@@ -18286,6 +18289,72 @@ _SOKOL_PRIVATE void _sg_vk_set_object_label(VkObjectType obj_type, uint64_t obj_
     }
 }
 
+_SOKOL_PRIVATE VkVertexInputRate _sg_vk_vertex_input_rate(sg_vertex_step s) {
+    return (s == SG_VERTEXSTEP_PER_VERTEX) ? VK_VERTEX_INPUT_RATE_VERTEX : VK_VERTEX_INPUT_RATE_INSTANCE;
+}
+
+_SOKOL_PRIVATE VkFormat _sg_vk_vertex_format(sg_vertex_format f) {
+    switch (f) {
+        case SG_VERTEXFORMAT_FLOAT:         return VK_FORMAT_R32_SFLOAT;
+        case SG_VERTEXFORMAT_FLOAT2:        return VK_FORMAT_R32G32_SFLOAT;
+        case SG_VERTEXFORMAT_FLOAT3:        return VK_FORMAT_R32G32B32_SFLOAT;
+        case SG_VERTEXFORMAT_FLOAT4:        return VK_FORMAT_R32G32B32A32_SFLOAT;
+        case SG_VERTEXFORMAT_INT:           return VK_FORMAT_R32_SINT;
+        case SG_VERTEXFORMAT_INT2:          return VK_FORMAT_R32G32_SINT;
+        case SG_VERTEXFORMAT_INT3:          return VK_FORMAT_R32G32B32_SINT;
+        case SG_VERTEXFORMAT_INT4:          return VK_FORMAT_R32G32B32A32_SINT;
+        case SG_VERTEXFORMAT_UINT:          return VK_FORMAT_R32_UINT;
+        case SG_VERTEXFORMAT_UINT2:         return VK_FORMAT_R32G32_UINT;
+        case SG_VERTEXFORMAT_UINT3:         return VK_FORMAT_R32G32B32_UINT;
+        case SG_VERTEXFORMAT_UINT4:         return VK_FORMAT_R32G32B32A32_UINT;
+        case SG_VERTEXFORMAT_BYTE4:         return VK_FORMAT_R8G8B8A8_SINT;
+        case SG_VERTEXFORMAT_BYTE4N:        return VK_FORMAT_R8G8B8A8_SNORM;
+        case SG_VERTEXFORMAT_UBYTE4:        return VK_FORMAT_R8G8B8A8_UINT;
+        case SG_VERTEXFORMAT_UBYTE4N:       return VK_FORMAT_R8G8B8A8_UNORM;
+        case SG_VERTEXFORMAT_SHORT2:        return VK_FORMAT_R16G16_SINT;
+        case SG_VERTEXFORMAT_SHORT2N:       return VK_FORMAT_R16G16_SNORM;
+        case SG_VERTEXFORMAT_USHORT2:       return VK_FORMAT_R16G16_UINT;
+        case SG_VERTEXFORMAT_USHORT2N:      return VK_FORMAT_R16G16_UNORM;
+        case SG_VERTEXFORMAT_SHORT4:        return VK_FORMAT_R16G16B16A16_SINT;
+        case SG_VERTEXFORMAT_SHORT4N:       return VK_FORMAT_R16G16B16A16_SNORM;
+        case SG_VERTEXFORMAT_USHORT4:       return VK_FORMAT_R16G16B16A16_UINT;
+        case SG_VERTEXFORMAT_USHORT4N:      return VK_FORMAT_R16G16B16A16_UNORM;
+        case SG_VERTEXFORMAT_UINT10_N2:     return VK_FORMAT_A2R10G10B10_UNORM_PACK32;
+        case SG_VERTEXFORMAT_HALF2:         return VK_FORMAT_R16G16_SFLOAT;
+        case SG_VERTEXFORMAT_HALF4:         return VK_FORMAT_R16G16B16A16_SFLOAT;
+        default:
+            SOKOL_UNREACHABLE;
+            return VK_FORMAT_UNDEFINED;
+    }
+}
+
+_SOKOL_PRIVATE VkPrimitiveTopology _sg_vk_primitive_topology(sg_primitive_type t) {
+    switch (t) {
+        case SG_PRIMITIVETYPE_POINTS:           return VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+        case SG_PRIMITIVETYPE_LINES:            return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+        case SG_PRIMITIVETYPE_LINE_STRIP:       return VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+        case SG_PRIMITIVETYPE_TRIANGLES:        return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        case SG_PRIMITIVETYPE_TRIANGLE_STRIP:   return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+        default:
+            SOKOL_UNREACHABLE;
+            return 0;
+    }
+}
+
+_SOKOL_PRIVATE VkCullModeFlags _sg_vk_cullmode(sg_cull_mode cm) {
+    switch (cm) {
+        case SG_CULLMODE_NONE:      return VK_CULL_MODE_NONE;
+        case SG_CULLMODE_FRONT:     return VK_CULL_MODE_FRONT_BIT;
+        case SG_CULLMODE_BACK:      return VK_CULL_MODE_BACK_BIT;
+        default:
+            SOKOL_UNREACHABLE;
+    }
+}
+
+_SOKOL_PRIVATE VkFrontFace _sg_vk_frontface(sg_face_winding fw) {
+    return (fw == SG_FACEWINDING_CCW) ? VK_FRONT_FACE_COUNTER_CLOCKWISE : VK_FRONT_FACE_CLOCKWISE;
+}
+
 _SOKOL_PRIVATE VkAttachmentLoadOp _sg_vk_load_op(sg_load_action a) {
     switch (a) {
         case SG_LOADACTION_CLEAR:
@@ -18632,7 +18701,98 @@ _SOKOL_PRIVATE void _sg_vk_discard_shader(_sg_shader_t* shd) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && desc);
-    SOKOL_ASSERT(false && "FIXME");
+
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
+    if (pip->cmn.is_compute) {
+        SOKOL_ASSERT(false && "FIXME");
+    } else {
+        uint32_t num_stages = 0;
+        VkPipelineShaderStageCreateInfo stages[2];
+        _sg_clear(&stages, sizeof(stages));
+        if (shd->vk.vertex_func.module) {
+            stages[num_stages].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            stages[num_stages].stage = VK_SHADER_STAGE_VERTEX_BIT;
+            stages[num_stages].module = shd->vk.vertex_func.module;
+            stages[num_stages].pName = shd->vk.vertex_func.entry.buf;
+            num_stages += 1;
+        }
+        if (shd->vk.fragment_func.module) {
+            stages[num_stages].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            stages[num_stages].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+            stages[num_stages].module = shd->vk.fragment_func.module;
+            stages[num_stages].pName = shd->vk.fragment_func.entry.buf;
+            num_stages += 1;
+        }
+
+        uint32_t num_vtx_bnds = 0;
+        VkVertexInputBindingDescription vtx_bnds[SG_MAX_VERTEXBUFFER_BINDSLOTS];
+        _sg_clear(vtx_bnds, sizeof(vtx_bnds));
+        for (uint32_t vbl_idx = 0; vbl_idx < SG_MAX_VERTEXBUFFER_BINDSLOTS; vbl_idx++, num_vtx_bnds++) {
+            const sg_vertex_buffer_layout_state* vbl_state = &desc->layout.buffers[vbl_idx];
+            if (0 == vbl_state->stride) {
+                break;
+            }
+            vtx_bnds[vbl_idx].binding = vbl_idx;
+            vtx_bnds[vbl_idx].stride = (uint32_t)vbl_state->stride;
+            vtx_bnds[vbl_idx].inputRate = _sg_vk_vertex_input_rate(vbl_state->step_func);
+        }
+
+        uint32_t num_vtx_attrs = 0;
+        VkVertexInputAttributeDescription vtx_attrs[SG_MAX_VERTEX_ATTRIBUTES];
+        _sg_clear(vtx_attrs, sizeof(vtx_attrs));
+        for (uint32_t va_idx = 0; va_idx < SG_MAX_VERTEX_ATTRIBUTES; va_idx++, num_vtx_attrs++) {
+            const sg_vertex_attr_state* va_state = &desc->layout.attrs[va_idx];
+            if (SG_VERTEXFORMAT_INVALID == va_state->format) {
+                break;
+            }
+            const uint32_t vbl_idx = (uint32_t)va_state->buffer_index;
+            SOKOL_ASSERT(vbl_idx < SG_MAX_VERTEXBUFFER_BINDSLOTS);
+            SOKOL_ASSERT(pip->cmn.vertex_buffer_layout_active[vbl_idx]);
+            vtx_attrs[va_idx].location = va_idx;
+            vtx_attrs[va_idx].binding = vbl_idx;
+            vtx_attrs[va_idx].format = _sg_vk_vertex_format(va_state->format);
+            vtx_attrs[va_idx].offset = (uint32_t)va_state->offset;
+        }
+
+        VkPipelineVertexInputStateCreateInfo vi_state;
+        _sg_clear(&vi_state, sizeof(vi_state));
+        vi_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vi_state.vertexBindingDescriptionCount = num_vtx_bnds;
+        vi_state.pVertexBindingDescriptions = vtx_bnds;
+        vi_state.vertexAttributeDescriptionCount = num_vtx_attrs;
+        vi_state.pVertexAttributeDescriptions = vtx_attrs;
+
+        VkPipelineInputAssemblyStateCreateInfo ia_state;
+        _sg_clear(&ia_state, sizeof(ia_state));
+        ia_state.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        ia_state.topology = _sg_vk_primitive_topology(desc->primitive_type);
+        ia_state.primitiveRestartEnable = true;
+
+        VkPipelineRasterizationStateCreateInfo rs_state;
+        _sg_clear(&rs_state, sizeof(rs_state));
+        rs_state.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rs_state.depthClampEnable = false;
+        rs_state.rasterizerDiscardEnable = false;
+        rs_state.polygonMode = VK_POLYGON_MODE_FILL;
+        rs_state.cullMode = _sg_vk_cullmode(desc->cull_mode);
+        rs_state.frontFace = _sg_vk_frontface(desc->face_winding);
+        rs_state.depthBiasEnable = ((int32_t)desc->depth.bias) != 0;
+        rs_state.depthBiasConstantFactor = desc->depth.bias;
+        rs_state.depthBiasClamp = desc->depth.bias_clamp;
+        rs_state.depthBiasSlopeFactor = desc->depth.bias_slope_scale;
+        rs_state.lineWidth = 1.0f;
+
+        VkGraphicsPipelineCreateInfo pip_create_info;
+        _sg_clear(&pip_create_info, sizeof(pip_create_info));
+        pip_create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pip_create_info.stageCount = num_stages;
+        pip_create_info.pStages = stages;
+        pip_create_info.pVertexInputState = &vi_state;
+        pip_create_info.pInputAssemblyState = &ia_state;
+        pip_create_info.pRasterizationState = &rs_state;
+
+    }
+
     return SG_RESOURCESTATE_VALID;
 }
 
