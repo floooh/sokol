@@ -18355,6 +18355,91 @@ _SOKOL_PRIVATE VkFrontFace _sg_vk_frontface(sg_face_winding fw) {
     return (fw == SG_FACEWINDING_CCW) ? VK_FRONT_FACE_COUNTER_CLOCKWISE : VK_FRONT_FACE_CLOCKWISE;
 }
 
+_SOKOL_PRIVATE VkCompareOp _sg_vk_compare_op(sg_compare_func f) {
+    switch (f) {
+        case SG_COMPAREFUNC_NEVER:          return VK_COMPARE_OP_NEVER;
+        case SG_COMPAREFUNC_LESS:           return VK_COMPARE_OP_LESS;
+        case SG_COMPAREFUNC_EQUAL:          return VK_COMPARE_OP_EQUAL;
+        case SG_COMPAREFUNC_LESS_EQUAL:     return VK_COMPARE_OP_LESS_OR_EQUAL;
+        case SG_COMPAREFUNC_GREATER:        return VK_COMPARE_OP_GREATER;
+        case SG_COMPAREFUNC_NOT_EQUAL:      return VK_COMPARE_OP_NOT_EQUAL;
+        case SG_COMPAREFUNC_GREATER_EQUAL:  return VK_COMPARE_OP_GREATER_OR_EQUAL;
+        case SG_COMPAREFUNC_ALWAYS:         return VK_COMPARE_OP_ALWAYS;
+        default:
+            SOKOL_UNREACHABLE;
+            return VK_COMPARE_OP_ALWAYS;
+    }
+}
+
+_SOKOL_PRIVATE VkStencilOp _sg_vk_stencil_op(sg_stencil_op op) {
+    switch (op) {
+        case SG_STENCILOP_KEEP:         return VK_STENCIL_OP_KEEP;
+        case SG_STENCILOP_ZERO:         return VK_STENCIL_OP_ZERO;
+        case SG_STENCILOP_REPLACE:      return VK_STENCIL_OP_REPLACE;
+        case SG_STENCILOP_INCR_CLAMP:   return VK_STENCIL_OP_INCREMENT_AND_CLAMP;
+        case SG_STENCILOP_DECR_CLAMP:   return VK_STENCIL_OP_DECREMENT_AND_CLAMP;
+        case SG_STENCILOP_INVERT:       return VK_STENCIL_OP_INVERT;
+        case SG_STENCILOP_INCR_WRAP:    return VK_STENCIL_OP_INCREMENT_AND_WRAP;
+        case SG_STENCILOP_DECR_WRAP:    return VK_STENCIL_OP_DECREMENT_AND_WRAP;
+        default:
+            SOKOL_UNREACHABLE;
+            return VK_STENCIL_OP_KEEP;
+    }
+}
+
+_SOKOL_PRIVATE VkBlendOp _sg_vk_blend_op(sg_blend_op op) {
+    switch (op) {
+        case SG_BLENDOP_ADD:                return VK_BLEND_OP_ADD;
+        case SG_BLENDOP_SUBTRACT:           return VK_BLEND_OP_SUBTRACT;
+        case SG_BLENDOP_REVERSE_SUBTRACT:   return VK_BLEND_OP_REVERSE_SUBTRACT;
+        case SG_BLENDOP_MIN:                return VK_BLEND_OP_MIN;
+        case SG_BLENDOP_MAX:                return VK_BLEND_OP_MAX;
+        default:
+            SOKOL_UNREACHABLE;
+            return VK_BLEND_OP_ADD;
+    }
+}
+
+_SOKOL_PRIVATE VkBlendFactor _sg_vk_blend_factor(sg_blend_factor f) {
+    switch (f) {
+        case SG_BLENDFACTOR_ZERO:                   return VK_BLEND_FACTOR_ZERO;
+        case SG_BLENDFACTOR_ONE:                    return VK_BLEND_FACTOR_ONE;
+        case SG_BLENDFACTOR_SRC_COLOR:              return VK_BLEND_FACTOR_SRC_COLOR;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC_COLOR:    return VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
+        case SG_BLENDFACTOR_SRC_ALPHA:              return VK_BLEND_FACTOR_SRC_ALPHA;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA:    return VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        case SG_BLENDFACTOR_DST_COLOR:              return VK_BLEND_FACTOR_DST_COLOR;
+        case SG_BLENDFACTOR_ONE_MINUS_DST_COLOR:    return VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
+        case SG_BLENDFACTOR_DST_ALPHA:              return VK_BLEND_FACTOR_DST_ALPHA;
+        case SG_BLENDFACTOR_ONE_MINUS_DST_ALPHA:    return VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+        case SG_BLENDFACTOR_SRC_ALPHA_SATURATED:    return VK_BLEND_FACTOR_SRC_ALPHA_SATURATE;
+        case SG_BLENDFACTOR_BLEND_COLOR:            return VK_BLEND_FACTOR_CONSTANT_COLOR;
+        case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR;
+        case SG_BLENDFACTOR_BLEND_ALPHA:            return VK_BLEND_FACTOR_CONSTANT_ALPHA;
+        case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA;
+        default:
+            SOKOL_UNREACHABLE;
+            return VK_BLEND_FACTOR_ONE;
+    }
+}
+
+_SOKOL_PRIVATE VkColorComponentFlags _sg_vk_color_write_mask(sg_color_mask m) {
+    int res = 0;
+    if (0 != (m & SG_COLORMASK_R)) {
+        res |= (int)VK_COLOR_COMPONENT_R_BIT;
+    }
+    if (0 != (m & SG_COLORMASK_G)) {
+        res |= (int)VK_COLOR_COMPONENT_G_BIT;
+    }
+    if (0 != (m & SG_COLORMASK_B)) {
+        res |= (int)VK_COLOR_COMPONENT_B_BIT;
+    }
+    if (0 != (m & SG_COLORMASK_A)) {
+        res |= (int)VK_COLOR_COMPONENT_A_BIT;
+    }
+    return (VkColorComponentFlags)res;
+}
+
 _SOKOL_PRIVATE VkAttachmentLoadOp _sg_vk_load_op(sg_load_action a) {
     switch (a) {
         case SG_LOADACTION_CLEAR:
@@ -18782,6 +18867,60 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
         rs_state.depthBiasSlopeFactor = desc->depth.bias_slope_scale;
         rs_state.lineWidth = 1.0f;
 
+        VkPipelineMultisampleStateCreateInfo ms_state;
+        _sg_clear(&ms_state, sizeof(ms_state));
+        ms_state.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        ms_state.rasterizationSamples = (VkSampleCountFlagBits)desc->sample_count;
+        ms_state.alphaToCoverageEnable = desc->alpha_to_coverage_enabled;
+
+        VkPipelineDepthStencilStateCreateInfo ds_state;
+        _sg_clear(&ds_state, sizeof(ds_state));
+        ds_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        ds_state.depthTestEnable = desc->depth.compare != SG_COMPAREFUNC_ALWAYS;
+        ds_state.depthWriteEnable = desc->depth.write_enabled;
+        ds_state.depthCompareOp = _sg_vk_compare_op(desc->depth.compare);
+        ds_state.depthBoundsTestEnable = false;
+        ds_state.stencilTestEnable = desc->stencil.enabled;
+        ds_state.front.failOp = _sg_vk_stencil_op(desc->stencil.front.fail_op);
+        ds_state.front.passOp = _sg_vk_stencil_op(desc->stencil.front.pass_op);
+        ds_state.front.depthFailOp = _sg_vk_stencil_op(desc->stencil.front.depth_fail_op);
+        ds_state.front.compareOp = _sg_vk_compare_op(desc->stencil.front.compare);
+        ds_state.front.compareMask = desc->stencil.read_mask;
+        ds_state.front.writeMask = desc->stencil.write_mask;
+        ds_state.front.reference = desc->stencil.ref;
+        ds_state.back.failOp = _sg_vk_stencil_op(desc->stencil.back.fail_op);
+        ds_state.back.passOp = _sg_vk_stencil_op(desc->stencil.back.pass_op);
+        ds_state.back.depthFailOp = _sg_vk_stencil_op(desc->stencil.back.depth_fail_op);
+        ds_state.back.compareOp = _sg_vk_compare_op(desc->stencil.back.compare);
+        ds_state.back.compareMask = desc->stencil.read_mask;
+        ds_state.back.writeMask = desc->stencil.write_mask;
+        ds_state.back.reference = desc->stencil.ref;
+
+        VkPipelineColorBlendAttachmentState att_states[SG_MAX_COLOR_ATTACHMENTS];
+        _sg_clear(att_states, sizeof(att_states));
+        SOKOL_ASSERT(desc->color_count < SG_MAX_COLOR_ATTACHMENTS);
+        for (int i = 0; i < desc->color_count; i++) {
+            att_states[i].blendEnable = desc->colors[i].blend.enabled;
+            att_states[i].srcColorBlendFactor = _sg_vk_blend_factor(desc->colors[i].blend.src_factor_rgb);
+            att_states[i].dstColorBlendFactor = _sg_vk_blend_factor(desc->colors[i].blend.dst_factor_rgb);
+            att_states[i].colorBlendOp = _sg_vk_blend_op(desc->colors[i].blend.op_rgb);
+            att_states[i].srcAlphaBlendFactor = _sg_vk_blend_factor(desc->colors[i].blend.src_factor_alpha);
+            att_states[i].dstAlphaBlendFactor = _sg_vk_blend_factor(desc->colors[i].blend.dst_factor_alpha);
+            att_states[i].alphaBlendOp = _sg_vk_blend_op(desc->colors[i].blend.op_alpha);
+            att_states[i].colorWriteMask = _sg_vk_color_write_mask(desc->colors[i].write_mask);
+        }
+
+        VkPipelineColorBlendStateCreateInfo cb_state;
+        _sg_clear(&cb_state, sizeof(cb_state));
+        cb_state.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        cb_state.logicOpEnable = false;
+        cb_state.attachmentCount = (uint32_t)desc->color_count;
+        cb_state.pAttachments = att_states;
+        cb_state.blendConstants[0] = desc->blend_color.r;
+        cb_state.blendConstants[1] = desc->blend_color.g;
+        cb_state.blendConstants[2] = desc->blend_color.b;
+        cb_state.blendConstants[3] = desc->blend_color.a;
+
         VkGraphicsPipelineCreateInfo pip_create_info;
         _sg_clear(&pip_create_info, sizeof(pip_create_info));
         pip_create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -18790,6 +18929,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
         pip_create_info.pVertexInputState = &vi_state;
         pip_create_info.pInputAssemblyState = &ia_state;
         pip_create_info.pRasterizationState = &rs_state;
+        pip_create_info.pMultisampleState = &ms_state;
+        pip_create_info.pDepthStencilState = &ds_state;
+        pip_create_info.pColorBlendState = &cb_state;
 
     }
 
