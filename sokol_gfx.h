@@ -18334,6 +18334,67 @@ _SOKOL_PRIVATE VkFormat _sg_vk_vertex_format(sg_vertex_format f) {
     }
 }
 
+_SOKOL_PRIVATE VkFormat _sg_vk_format(sg_pixel_format fmt) {
+    switch (fmt) {
+        case SG_PIXELFORMAT_R8:             return VK_FORMAT_R8_UNORM;
+        case SG_PIXELFORMAT_R8SN:           return VK_FORMAT_R8_SNORM;
+        case SG_PIXELFORMAT_R8UI:           return VK_FORMAT_R8_UINT;
+        case SG_PIXELFORMAT_R8SI:           return VK_FORMAT_R8_SINT;
+        case SG_PIXELFORMAT_R16:            return VK_FORMAT_R16_UNORM;
+        case SG_PIXELFORMAT_R16SN:          return VK_FORMAT_R16_SNORM;
+        case SG_PIXELFORMAT_R16UI:          return VK_FORMAT_R16_UINT;
+        case SG_PIXELFORMAT_R16SI:          return VK_FORMAT_R16_SINT;
+        case SG_PIXELFORMAT_R16F:           return VK_FORMAT_R16_SFLOAT;
+        case SG_PIXELFORMAT_RG8:            return VK_FORMAT_R8G8_UNORM;
+        case SG_PIXELFORMAT_RG8SN:          return VK_FORMAT_R8G8_SNORM;
+        case SG_PIXELFORMAT_RG8UI:          return VK_FORMAT_R8G8_UINT;
+        case SG_PIXELFORMAT_RG8SI:          return VK_FORMAT_R8G8_SINT;
+        case SG_PIXELFORMAT_R32UI:          return VK_FORMAT_R32_UINT;
+        case SG_PIXELFORMAT_R32SI:          return VK_FORMAT_R32_SINT;
+        case SG_PIXELFORMAT_R32F:           return VK_FORMAT_R32_SFLOAT;
+        case SG_PIXELFORMAT_RG16:           return VK_FORMAT_R16G16_UNORM;
+        case SG_PIXELFORMAT_RG16SN:         return VK_FORMAT_R16G16_SNORM;
+        case SG_PIXELFORMAT_RG16UI:         return VK_FORMAT_R16G16_UINT;
+        case SG_PIXELFORMAT_RG16SI:         return VK_FORMAT_R16G16_SINT;
+        case SG_PIXELFORMAT_RG16F:          return VK_FORMAT_R16G16_SFLOAT;
+        case SG_PIXELFORMAT_RGBA8:          return VK_FORMAT_R8G8B8A8_UNORM;
+        case SG_PIXELFORMAT_SRGB8A8:        return VK_FORMAT_R8G8B8A8_SRGB;
+        case SG_PIXELFORMAT_RGBA8SN:        return VK_FORMAT_R8G8B8A8_SNORM;
+        case SG_PIXELFORMAT_RGBA8UI:        return VK_FORMAT_R8G8B8A8_UINT;
+        case SG_PIXELFORMAT_RGBA8SI:        return VK_FORMAT_R8G8B8A8_SINT;
+        case SG_PIXELFORMAT_BGRA8:          return VK_FORMAT_B8G8R8A8_UNORM;
+        case SG_PIXELFORMAT_RGB10A2:        return VK_FORMAT_A2R10G10B10_UNORM_PACK32;
+        case SG_PIXELFORMAT_RG11B10F:       return VK_FORMAT_B10G11R11_UFLOAT_PACK32;
+        case SG_PIXELFORMAT_RGB9E5:         return VK_FORMAT_E5B9G9R9_UFLOAT_PACK32;
+        case SG_PIXELFORMAT_RG32UI:         return VK_FORMAT_R32G32_UINT;
+        case SG_PIXELFORMAT_RG32SI:         return VK_FORMAT_R32G32_SINT;
+        case SG_PIXELFORMAT_RG32F:          return VK_FORMAT_R32G32_SFLOAT;
+        case SG_PIXELFORMAT_RGBA16:         return VK_FORMAT_R16G16B16A16_UNORM;
+        case SG_PIXELFORMAT_RGBA16SN:       return VK_FORMAT_R16G16B16A16_SNORM;
+        case SG_PIXELFORMAT_RGBA16UI:       return VK_FORMAT_R16G16B16A16_UINT;
+        case SG_PIXELFORMAT_RGBA16SI:       return VK_FORMAT_R16G16B16A16_SINT;
+        case SG_PIXELFORMAT_RGBA16F:        return VK_FORMAT_R16G16B16A16_SFLOAT;
+        case SG_PIXELFORMAT_RGBA32UI:       return VK_FORMAT_R32G32B32A32_UINT;
+        case SG_PIXELFORMAT_RGBA32SI:       return VK_FORMAT_R32G32B32A32_SINT;
+        case SG_PIXELFORMAT_RGBA32F:        return VK_FORMAT_R32G32B32A32_SFLOAT;
+        case SG_PIXELFORMAT_DEPTH:          return VK_FORMAT_R32_TYPELESS;
+        case SG_PIXELFORMAT_DEPTH_STENCIL:  return VK_FORMAT_R24G8_TYPELESS;
+        case SG_PIXELFORMAT_BC1_RGBA:       return VK_FORMAT_BC1_UNORM;
+        case SG_PIXELFORMAT_BC2_RGBA:       return VK_FORMAT_BC2_UNORM;
+        case SG_PIXELFORMAT_BC3_RGBA:       return VK_FORMAT_BC3_UNORM;
+        case SG_PIXELFORMAT_BC3_SRGBA:      return VK_FORMAT_BC3_UNORM_SRGB;
+        case SG_PIXELFORMAT_BC4_R:          return VK_FORMAT_BC4_UNORM;
+        case SG_PIXELFORMAT_BC4_RSN:        return VK_FORMAT_BC4_SNORM;
+        case SG_PIXELFORMAT_BC5_RG:         return VK_FORMAT_BC5_UNORM;
+        case SG_PIXELFORMAT_BC5_RGSN:       return VK_FORMAT_BC5_SNORM;
+        case SG_PIXELFORMAT_BC6H_RGBF:      return VK_FORMAT_BC6H_SF16;
+        case SG_PIXELFORMAT_BC6H_RGBUF:     return VK_FORMAT_BC6H_UF16;
+        case SG_PIXELFORMAT_BC7_RGBA:       return VK_FORMAT_BC7_UNORM;
+        case SG_PIXELFORMAT_BC7_SRGBA:      return VK_FORMAT_BC7_UNORM_SRGB;
+        default:                            return VK_FORMAT_UNKNOWN;
+    };
+}
+
 _SOKOL_PRIVATE VkPrimitiveTopology _sg_vk_primitive_topology(sg_primitive_type t) {
     switch (t) {
         case SG_PRIMITIVETYPE_POINTS:           return VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
@@ -19024,9 +19085,34 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
         cb_state.blendConstants[2] = desc->blend_color.b;
         cb_state.blendConstants[3] = desc->blend_color.a;
 
+        VkFormat color_formats[SG_MAX_COLOR_ATTACHMENTS];
+        _sg_clear(color_formats, sizeof(color_formats));
+        COKOL_ASSERT(desc->color_count <= SG_MAX_COLOR_ATTACHMENTS);
+        for (int i = 0; i < desc->color_count; i++) {
+            color_formats[i] = _sg_vk_format(desc->colors[i].pixel_format);
+        }
+        VkPipelineRenderingCreateInfo rnd_state;
+        _sg_clear(&rnd_state, sizeof(rnd_state));
+        rnd_state.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+        rnd_state.colorAttachmentCount = (uint32_t)desc->color_count;
+        rnd_state.pColorAttachmentFormats = color_formats;
+        rnd_state.depthAttachmentFormat = _sg_vk_depth_format(desc->depth.pixel_format);
+        rnd_state.stencilAttachmentFormat = _sg_vk_stencil_format(desc->depth.pixel_format);
+
+        VkDynamicState dyn_states[2] = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR,
+        };
+        VkPipelineDynamicStateCreateInfo dyn_state;
+        _sg_clear(&dyn_state, sizeof(dyn_state));
+        dyn_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dyn_state.dynamicStateCount = 2;
+        dyn_state.pDynamicStates = dyn_states;
+
         VkGraphicsPipelineCreateInfo pip_create_info;
         _sg_clear(&pip_create_info, sizeof(pip_create_info));
         pip_create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pip_create_info.pNext = &rnd_state;
         pip_create_info.stageCount = num_stages;
         pip_create_info.pStages = stages;
         pip_create_info.pVertexInputState = &vi_state;
@@ -19035,6 +19121,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
         pip_create_info.pMultisampleState = &ms_state;
         pip_create_info.pDepthStencilState = &ds_state;
         pip_create_info.pColorBlendState = &cb_state;
+        pip_create_info.pDynamicState = &dyn_state;
+
+
 
     }
 
