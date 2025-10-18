@@ -3630,7 +3630,8 @@ typedef struct sg_shader_uniform_block {
     uint32_t size;
     uint8_t hlsl_register_b_n;  // HLSL register(bn)
     uint8_t msl_buffer_n;       // MSL [[buffer(n)]]
-    uint8_t wgsl_group0_binding_n; // WGSL @group(0) @binding(n)
+    uint8_t wgsl_group0_binding_n;  // WGSL @group(0) @binding(n)
+    uint8_t spirv_set0_binding_n;   // Vulkan GLSL layout(set=0, binding=n)
     sg_uniform_layout layout;
     sg_glsl_shader_uniform glsl_uniforms[SG_MAX_UNIFORMBLOCK_MEMBERS];
 } sg_shader_uniform_block;
@@ -3643,6 +3644,7 @@ typedef struct sg_shader_texture_view {
     uint8_t hlsl_register_t_n;      // HLSL register(tn) bind slot
     uint8_t msl_texture_n;          // MSL [[texture(n)]] bind slot
     uint8_t wgsl_group1_binding_n;  // WGSL @group(1) @binding(n) bind slot
+    uint8_t spirv_set1_binding_n;   // Vulkan GLSL layout(set=1, binding=0)
 } sg_shader_texture_view;
 
 typedef struct sg_shader_storage_buffer_view {
@@ -3652,6 +3654,7 @@ typedef struct sg_shader_storage_buffer_view {
     uint8_t hlsl_register_u_n;      // HLSL register(un) bind slot (for read/write access)
     uint8_t msl_buffer_n;           // MSL [[buffer(n)]] bind slot
     uint8_t wgsl_group1_binding_n;  // WGSL @group(1) @binding(n) bind slot
+    uint8_t spirv_set1_binding_n;   // Vulkan GLSL layout(set=1, binding=0)
     uint8_t glsl_binding_n;         // GLSL layout(binding=n)
 } sg_shader_storage_buffer_view;
 
@@ -3663,6 +3666,7 @@ typedef struct sg_shader_storage_image_view {
     uint8_t hlsl_register_u_n;      // HLSL register(un) bind slot
     uint8_t msl_texture_n;          // MSL [[texture(n)]] bind slot
     uint8_t wgsl_group1_binding_n;  // WGSL @group(2) @binding(n) bind slot
+    uint8_t spirv_set1_binding_n;   // Vulkan GLSL layout(set=1, binding=0)
     uint8_t glsl_binding_n;         // GLSL layout(binding=n)
 } sg_shader_storage_image_view;
 
@@ -3678,6 +3682,7 @@ typedef struct sg_shader_sampler {
     uint8_t hlsl_register_s_n;      // HLSL register(sn) bind slot
     uint8_t msl_sampler_n;          // MSL [[sampler(n)]] bind slot
     uint8_t wgsl_group1_binding_n;  // WGSL @group(1) @binding(n) bind slot
+    uint8_t spirv_set1_binding_n;   // Vulkan GLSL layout(set=1, binding=0)
 } sg_shader_sampler;
 
 typedef struct sg_shader_texture_sampler_pair {
@@ -4493,6 +4498,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_METAL_BUFFER_SLOT_COLLISION, "sg_shader_desc.uniform_blocks[].msl_buffer_n must be unique across uniform blocks and storage buffers in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_HLSL_REGISTER_B_COLLISION, "sg_shader_desc.uniform_blocks[].hlsl_register_b_n must be unique across uniform blocks in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_WGSL_GROUP0_BINDING_COLLISION, "sg_shader_desc.uniform_blocks[].wgsl_group0_binding_n must be unique across all uniform blocks") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_SPIRV_SET0_BINDING_COLLISION, "sg_shader_desc.unifrom_blocks[].spirv_set0_binding_n must be unique across all uniform blocks") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_NO_MEMBERS, "sg_shader_desc.uniform_blocks[].glsl_uniforms[]: GL backend requires uniform block member declarations") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_UNIFORM_GLSL_NAME, "sg_shader_desc.uniform_blocks[].glsl_uniforms[].glsl_name missing") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_SIZE_MISMATCH, "sg_shader_desc.uniform_blocks[].glsl_uniforms[]: size of uniform block members doesn't match uniform block size") \
@@ -4502,18 +4508,22 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_HLSL_REGISTER_T_COLLISION, "sg_shader_desc.views[].storage_buffer.hlsl_register_t_n must be unique across read-only storage buffers and images in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_HLSL_REGISTER_U_COLLISION, "sg_shader_desc.views[].storage_buffer.hlsl_register_u_n must be unique across read/write storage buffers and storage images in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_GLSL_BINDING_COLLISION, "sg_shader_desc.views[].storage_buffer.glsl_binding_n must be unique across shader stages") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_WGSL_GROUP1_BINDING_COLLISION, "sg_shader_desc.views[].storage_buffer.wgsl_group1_binding_n must be unique across all images, samplers and storage buffers") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_WGSL_GROUP1_BINDING_COLLISION, "sg_shader_desc.views[].storage_buffer.wgsl_group1_binding_n must be unique across all view and sampler bindings") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_SPIRV_SET1_BINDING_COLLISION, "sg_shader_desc.views[].storage_buffer.spirv_set1_binding_n must be unique across all view and sampler bindings") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_EXPECT_COMPUTE_STAGE, "sg_shader_desc.views[].storage_image: storage images are allowed on the compute stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_METAL_TEXTURE_SLOT_COLLISION, "sg_shader_desc.views[].storage_image.msl_texture_n must be unique across images and storage images in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_HLSL_REGISTER_U_COLLISION, "sg_shader_desc.views[].storage_image.hlsl_register_u_n must be unique across storage images and read/write storage buffers in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_GLSL_BINDING_COLLISION, "sg_shader_desc.views[].storage_image.glsl_binding_n must be unique across shader stages") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_WGSL_GROUP1_BINDING_COLLISION, "sg_shader_desc.views[].storage_image.wgsl_group1_binding_n must be unique in same shader stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_WGSL_GROUP1_BINDING_COLLISION, "sg_shader_desc.views[].storage_image.wgsl_group1_binding_n must be unique across all view and sampler bindings") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_SPIRV_SET1_BINDING_COLLISION, "sg_shader_desc.views[].storage_image.spirv_set1_binding_n must be unique across all view and sampler bindings") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_TEXTURE_METAL_TEXTURE_SLOT_COLLISION, "sg_shader_desc.views[].texture.msl_texture_n must be unique across textures and storage images in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_TEXTURE_HLSL_REGISTER_T_COLLISION, "sg_shader_desc.views[].texture.hlsl_register_t_n must be unique across textures and storage buffers in same shader stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_TEXTURE_WGSL_GROUP1_BINDING_COLLISION, "sg_shader_desc.views[].texture.wgsl_group1_binding_n must be unique across all images, samplers and storage buffers") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_TEXTURE_WGSL_GROUP1_BINDING_COLLISION, "sg_shader_desc.views[].texture.wgsl_group1_binding_n must be unique across all view and sampler bindings") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_TEXTURE_SPIRV_SET1_BINDING_COLLISION, "sg_shader_desc.views[].texture.spirv_set1_binding_n must be unique across all view and sampler bindings") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_METAL_SAMPLER_SLOT_COLLISION, "sg_shader_desc.samplers[].msl_sampler_n must be unique in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_HLSL_REGISTER_S_COLLISION, "sg_shader_desc.samplers[].hlsl_register_s_n must be unique in same shader stage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_WGSL_GROUP1_BINDING_COLLISION, "sg_shader_desc.samplers[].wgsl_group1_binding_n must be unique across all images, samplers and storage buffers") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_WGSL_GROUP1_BINDING_COLLISION, "sg_shader_desc.samplers[].wgsl_group1_binding_n must be unique across all view and sampler bindings") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_SAMPLER_SPIRV_SET1_BINDING_COLLISION, "sg_shader_desc.samplers[].spirv_set1_binding_n must be unique across all view and sampler bindings") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_TEXTURE_SAMPLER_PAIR_VIEW_SLOT_OUT_OF_RANGE, "texture-sampler-pair view slot index is out of range (sg_shader_desc.texture_sampler_pairs[].view_slot)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_TEXTURE_SAMPLER_PAIR_SAMPLER_SLOT_OUT_OF_RANGE, "texture-sampler-pair sampler slot index is out of range (sg_shader_desc.texture_sampler_pairs[].sampler_slot)") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_TEXTURE_SAMPLER_PAIR_TEXTURE_STAGE_MISMATCH, "texture-sampler-pair stage doesn't match referenced texture stage") \
@@ -19723,6 +19733,9 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
         #elif defined(SOKOL_WGPU)
         _sg_u128_t wgsl_group0_bits = _sg_u128();
         _sg_u128_t wgsl_group1_bits = _sg_u128();
+        #elif defined(SOKOL_VULKAN)
+        _sg_u128_t spirv_set0_bits = _sg_u128();
+        _sg_u128_t spirv_set1_bits = _sg_u128();
         #endif
         for (size_t ub_idx = 0; ub_idx < SG_MAX_UNIFORMBLOCK_BINDSLOTS; ub_idx++) {
             const sg_shader_uniform_block* ub_desc = &desc->uniform_blocks[ub_idx];
@@ -19739,6 +19752,9 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             #elif defined(SOKOL_WGPU)
             _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group0_bits, SG_SHADERSTAGE_NONE, ub_desc->wgsl_group0_binding_n), VALIDATE_SHADERDESC_UNIFORMBLOCK_WGSL_GROUP0_BINDING_COLLISION);
             wgsl_group0_bits = _sg_validate_set_slot_bit(wgsl_group0_bits, SG_SHADERSTAGE_NONE, ub_desc->wgsl_group0_binding_n);
+            #elif defined(SOKOL_VULKAN)
+            _SG_VALIDATE(_sg_validate_slot_bits(spirv_set0_bits, SG_SHADERSTAGE_NONE, ub_desc->spirv_set0_binding_n), VALIDATE_SHADERDESC_UNIFORMBLOCK_SPIRV_SET0_BINDING_COLLISION);
+            spirv_set0_bits = _sg_validate_set_slot_bit(spirv_set0_bits, SG_SHADERSTAGE_NONE, ub_desc->spirv_set0_binding_n);
             #endif
             #if defined(_SOKOL_ANY_GL)
             bool uniforms_continuous = true;
@@ -19789,6 +19805,9 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 #elif defined(SOKOL_WGPU)
                 _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group1_bits, SG_SHADERSTAGE_NONE, tex_desc->wgsl_group1_binding_n), VALIDATE_SHADERDESC_VIEW_TEXTURE_WGSL_GROUP1_BINDING_COLLISION);
                 wgsl_group1_bits = _sg_validate_set_slot_bit(wgsl_group1_bits, SG_SHADERSTAGE_NONE, tex_desc->wgsl_group1_binding_n);
+                #elif defined(SOKOL_VULKAN)
+                _SG_VALIDATE(_sg_validate_slot_bits(spirv_set1_bits, SG_SHADERSTAGE_NONE, tex_desc->spirv_set1_binding_n), VALIDATE_SHADERDESC_VIEW_TEXTURE_SPIRV_SET1_BINDING_COLLISION);
+                spirv_set1_bits = _sg_validate_set_slot_bit(spirv_set1_bits, SG_SHADERSTAGE_NONE, tex_desc->spirv_set1_binding_n);
                 #elif defined(SOKOL_DUMMY_BACKEND) || defined(_SOKOL_ANY_GL)
                 _SOKOL_UNUSED(tex_desc);
                 #endif
@@ -19811,6 +19830,9 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 #elif defined(SOKOL_WGPU)
                 _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group1_bits, SG_SHADERSTAGE_NONE, sbuf_desc->wgsl_group1_binding_n), VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_WGSL_GROUP1_BINDING_COLLISION);
                 wgsl_group1_bits = _sg_validate_set_slot_bit(wgsl_group1_bits, SG_SHADERSTAGE_NONE, sbuf_desc->wgsl_group1_binding_n);
+                #elif defined(SOKOL_VULKAN)
+                _SG_VALIDATE(_sg_validate_slot_bits(spirv_set1_bits, SG_SHADERSTAGE_NONE, sbuf_desc->spirv_set1_binding_n), VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_SPIRV_SET1_BINDING_COLLISION);
+                spirv_set1_bits = _sg_validate_set_slot_bit(spirv_set1_bits, SG_SHADERSTAGE_NONE, sbuf_desc->spirv_set1_binding_n);
                 #elif defined(SOKOL_DUMMY_BACKEND)
                 _SOKOL_UNUSED(sbuf_desc);
                 #endif
@@ -19829,6 +19851,9 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 #elif defined(SOKOL_WGPU)
                 _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group1_bits, SG_SHADERSTAGE_NONE, simg_desc->wgsl_group1_binding_n), VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_WGSL_GROUP1_BINDING_COLLISION);
                 wgsl_group1_bits = _sg_validate_set_slot_bit(wgsl_group1_bits, SG_SHADERSTAGE_NONE, simg_desc->wgsl_group1_binding_n);
+                #elif defined(SOKOL_VULKAN)
+                _SG_VALIDATE(_sg_validate_slot_bits(spirv_set1_bits, SG_SHADERSTAGE_NONE, simg_desc->spirv_set1_binding_n), VALIDATE_SHADERDESC_VIEW_STORAGEIMAGE_SPIRV_SET1_BINDING_COLLISION);
+                spirv_set1_bits = _sg_validate_set_slot_bit(spirv_set1_bits, SG_SHADERSTAGE_NONE, simg_desc->spirv_set1_binding_n);
                 #endif
             }
         }
@@ -19849,6 +19874,9 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             #elif defined(SOKOL_WGPU)
             _SG_VALIDATE(_sg_validate_slot_bits(wgsl_group1_bits, SG_SHADERSTAGE_NONE, smp_desc->wgsl_group1_binding_n), VALIDATE_SHADERDESC_SAMPLER_WGSL_GROUP1_BINDING_COLLISION);
             wgsl_group1_bits = _sg_validate_set_slot_bit(wgsl_group1_bits, SG_SHADERSTAGE_NONE, smp_desc->wgsl_group1_binding_n);
+            #elif defined(SOKOL_VULKAN)
+            _SG_VALIDATE(_sg_validate_slot_bits(spirv_set1_bits, SG_SHADERSTAGE_NONE, smp_desc->spirv_set1_binding_n), VALIDATE_SHADERDESC_SAMPLER_SPIRV_SET1_BINDING_COLLISION);
+            spirv_set1_bits = _sg_validate_set_slot_bit(spirv_set1_bits, SG_SHADERSTAGE_NONE, smp_desc->spirv_set1_binding_n);
             #endif
         }
 
