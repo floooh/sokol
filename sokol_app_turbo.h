@@ -81,8 +81,8 @@
 extern "C" {
 #endif
 
-SOKOL_APP_TURBO_API_DECL void stm_setup(void);
-SOKOL_APP_TURBO_API_DECL uint64_t stm_now(void);
+SOKOL_APP_TURBO_API_DECL void sapp_setup(const sapp_desc* desc);
+SOKOL_APP_TURBO_API_DECL void sapp_shutdown(void);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -118,20 +118,20 @@ typedef struct {
     uint32_t initialized;
     LARGE_INTEGER freq;
     LARGE_INTEGER start;
-} _stm_state_t;
+} _sat_state_t;
 #elif defined(__APPLE__) && defined(__MACH__)
 #include <mach/mach_time.h>
 typedef struct {
     uint32_t initialized;
     mach_timebase_info_data_t timebase;
     uint64_t start;
-} _stm_state_t;
+} _sat_state_t;
 #elif defined(__EMSCRIPTEN__)
 #include <emscripten/emscripten.h>
 typedef struct {
     uint32_t initialized;
     double start;
-} _stm_state_t;
+} _sat_state_t;
 #else /* anything else, this will need more care for non-Linux platforms */
 #ifdef ESP8266
 // On the ESP8266, clock_gettime ignores the first argument and CLOCK_MONOTONIC isn't defined
@@ -141,9 +141,9 @@ typedef struct {
 typedef struct {
     uint32_t initialized;
     uint64_t start;
-} _stm_state_t;
+} _sat_state_t;
 #endif
-static _stm_state_t _stm;
+static _sat_state_t _stm;
 
 /* prevent 64-bit overflow when computing relative timestamp
     see https://gist.github.com/jspohr/3dc4f00033d79ec5bdaf67bc46c813e3
@@ -155,6 +155,30 @@ _SOKOL_PRIVATE int64_t _stm_int64_muldiv(int64_t value, int64_t numer, int64_t d
     return q * numer + r * numer / denom;
 }
 #endif
+
+SOKOL_API_IMPL void sapp_setup(const sapp_desc* desc) {
+    #if defined(_WIN32)
+        
+    #elif defined(__APPLE__) && defined(__MACH__)
+        
+    #elif defined(__EMSCRIPTEN__)
+        
+    #else
+
+    #endif
+}
+
+SOKOL_API_IMPL void sapp_shutdown() {
+    #if defined(_WIN32)
+        
+    #elif defined(__APPLE__) && defined(__MACH__)
+        
+    #elif defined(__EMSCRIPTEN__)
+        
+    #else
+
+    #endif
+}
 
 SOKOL_API_IMPL void stm_setup(void) {
     memset(&_stm, 0, sizeof(_stm));

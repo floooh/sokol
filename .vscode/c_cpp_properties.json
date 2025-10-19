@@ -5,7 +5,7 @@
             "includePath": [
                 "${workspaceFolder}/**"
             ],
-            "defines": ["SOKOL_IMPL=1"],
+            "defines": ["SOKOL_APP_TURBO_IMPL=1"],
             "compilerPath": "/opt/homebrew/opt/llvm/bin/clang",
             "cStandard": "c17",
             "cppStandard": "c++17",
