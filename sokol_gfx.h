@@ -6770,6 +6770,17 @@ typedef struct {
 #define _SG_VK_MAX_VIEW_SMP_DESCRIPTORSET_ENTRIES (SG_MAX_VIEW_BINDSLOTS + SG_MAX_SAMPLER_BINDSLOTS)
 #define _SG_VK_MAX_VIEW_SMP_DESCRIPTORSET_SLOTS (128)
 
+typedef void (*_sg_vk_delete_queue_destructor_t)(void* obj);
+
+typedef struct {
+    _sg_vk_delete_queue_destructor_t destructor;
+    void* obj;
+} _sg_vk_delete_queue_item_t;
+
+typedef struct {
+    // FIXME
+} _sg_vk_delete_queue_t;
+
 typedef struct _sg_buffer_s {
     _sg_slot_t slot;
     _sg_buffer_common_t cmn;
@@ -6840,6 +6851,7 @@ typedef struct {
     struct {
         VkFence fence;
         VkCommandBuffer cmd_buf;
+        _sg_vk_delete_queue_t delete_queue;
     } frame[SG_NUM_INFLIGHT_FRAMES];
 } _sg_vk_backend_t;
 
@@ -18286,6 +18298,23 @@ _SOKOL_PRIVATE void _sg_wgpu_update_image(_sg_image_t* img, const sg_image_data*
 // >>vulkan
 // >>vk
 #elif defined(SOKOL_VULKAN)
+
+_SOKOL_PRIVATE void _sg_vk_init_delete_queue(_sg_vk_delete_queue_t* queue) {
+    // FIXME
+}
+
+_SOKOL_PRIVATE void _sg_vk_destroy_delete_queue(_sg_vk_delete_queue_t* queue) {
+    // FIXME
+}
+
+_SOKOL_PRIVATE void _sg_vk_delete_queue_collect(_sg_vk_delete_queue_t* queue) {
+    // FIXME
+}
+
+_SOKOL_PRIVATE void _sg_vk_delete_queue_add(_sg_vk_delete_queue_t* queue, _sg_vk_delete_queue_destructor_t destructor, void* obj) {
+    // FIXME
+}
+
 _SOKOL_PRIVATE void _sg_vk_set_object_label(VkObjectType obj_type, uint64_t obj_handle, const char* label) {
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(obj_handle != 0);
@@ -18377,21 +18406,21 @@ _SOKOL_PRIVATE VkFormat _sg_vk_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RGBA32UI:       return VK_FORMAT_R32G32B32A32_UINT;
         case SG_PIXELFORMAT_RGBA32SI:       return VK_FORMAT_R32G32B32A32_SINT;
         case SG_PIXELFORMAT_RGBA32F:        return VK_FORMAT_R32G32B32A32_SFLOAT;
-        case SG_PIXELFORMAT_DEPTH:          return VK_FORMAT_R32_TYPELESS;
-        case SG_PIXELFORMAT_DEPTH_STENCIL:  return VK_FORMAT_R24G8_TYPELESS;
-        case SG_PIXELFORMAT_BC1_RGBA:       return VK_FORMAT_BC1_UNORM;
-        case SG_PIXELFORMAT_BC2_RGBA:       return VK_FORMAT_BC2_UNORM;
-        case SG_PIXELFORMAT_BC3_RGBA:       return VK_FORMAT_BC3_UNORM;
-        case SG_PIXELFORMAT_BC3_SRGBA:      return VK_FORMAT_BC3_UNORM_SRGB;
-        case SG_PIXELFORMAT_BC4_R:          return VK_FORMAT_BC4_UNORM;
-        case SG_PIXELFORMAT_BC4_RSN:        return VK_FORMAT_BC4_SNORM;
-        case SG_PIXELFORMAT_BC5_RG:         return VK_FORMAT_BC5_UNORM;
-        case SG_PIXELFORMAT_BC5_RGSN:       return VK_FORMAT_BC5_SNORM;
-        case SG_PIXELFORMAT_BC6H_RGBF:      return VK_FORMAT_BC6H_SF16;
-        case SG_PIXELFORMAT_BC6H_RGBUF:     return VK_FORMAT_BC6H_UF16;
-        case SG_PIXELFORMAT_BC7_RGBA:       return VK_FORMAT_BC7_UNORM;
-        case SG_PIXELFORMAT_BC7_SRGBA:      return VK_FORMAT_BC7_UNORM_SRGB;
-        default:                            return VK_FORMAT_UNKNOWN;
+        case SG_PIXELFORMAT_DEPTH:          return VK_FORMAT_D32_SFLOAT;
+        case SG_PIXELFORMAT_DEPTH_STENCIL:  return VK_FORMAT_D32_SFLOAT_S8_UINT;
+        case SG_PIXELFORMAT_BC1_RGBA:       return VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
+        case SG_PIXELFORMAT_BC2_RGBA:       return VK_FORMAT_BC2_UNORM_BLOCK;
+        case SG_PIXELFORMAT_BC3_RGBA:       return VK_FORMAT_BC3_UNORM_BLOCK;
+        case SG_PIXELFORMAT_BC3_SRGBA:      return VK_FORMAT_BC3_SRGB_BLOCK;
+        case SG_PIXELFORMAT_BC4_R:          return VK_FORMAT_BC4_UNORM_BLOCK;
+        case SG_PIXELFORMAT_BC4_RSN:        return VK_FORMAT_BC4_SNORM_BLOCK;
+        case SG_PIXELFORMAT_BC5_RG:         return VK_FORMAT_BC5_UNORM_BLOCK;
+        case SG_PIXELFORMAT_BC5_RGSN:       return VK_FORMAT_BC5_SNORM_BLOCK;
+        case SG_PIXELFORMAT_BC6H_RGBF:      return VK_FORMAT_BC6H_SFLOAT_BLOCK;
+        case SG_PIXELFORMAT_BC6H_RGBUF:     return VK_FORMAT_BC6H_UFLOAT_BLOCK;
+        case SG_PIXELFORMAT_BC7_RGBA:       return VK_FORMAT_BC7_UNORM_BLOCK;
+        case SG_PIXELFORMAT_BC7_SRGBA:      return VK_FORMAT_BC7_SRGB_BLOCK;
+        default:                            return VK_FORMAT_UNDEFINED;
     };
 }
 
@@ -18690,12 +18719,18 @@ _SOKOL_PRIVATE void _sg_vk_setup_backend(const sg_desc* desc) {
     _sg_vk_init_caps();
     _sg_vk_create_fences();
     _sg_vk_create_command_pool_and_buffers();
+    for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+        _sg_vk_create_delete_queue(&_sg.vk.frame[i].delete_queue);
+    }
 }
 
 _SOKOL_PRIVATE void _sg_vk_discard_backend(void) {
     SOKOL_ASSERT(_sg.vk.valid);
     SOKOL_ASSERT(_sg.vk.dev);
     vkDeviceWaitIdle(_sg.vk.dev);
+    for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+        _sg_vk_destroy_delete_queue(&_sg.vk.frame[i].delete_queue);
+    }
     _sg_vk_destroy_command_pool();
     _sg_vk_destroy_fences();
     _sg.vk.valid = false;
@@ -18767,6 +18802,7 @@ _SOKOL_PRIVATE _sg_vk_shader_func_t _sg_vk_create_shader_func(const sg_shader_fu
 _SOKOL_PRIVATE void _sg_vk_discard_shader_func(_sg_vk_shader_func_t* func) {
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(func);
+    // FIXME: delete queue
     if (func->module) {
         vkDestroyShaderModule(_sg.vk.dev, func->module, 0);
         func->module = 0;
@@ -18938,6 +18974,7 @@ _SOKOL_PRIVATE void _sg_vk_discard_shader(_sg_shader_t* shd) {
     _sg_vk_discard_shader_func(&shd->vk.vertex_func);
     _sg_vk_discard_shader_func(&shd->vk.fragment_func);
     _sg_vk_discard_shader_func(&shd->vk.compute_func);
+    // FIXME: delete queue
     if (shd->vk.dset_ub) {
         vkDestroyDescriptorSetLayout(_sg.vk.dev, shd->vk.dset_ub, 0);
         shd->vk.dset_ub = 0;
@@ -19087,7 +19124,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
 
         VkFormat color_formats[SG_MAX_COLOR_ATTACHMENTS];
         _sg_clear(color_formats, sizeof(color_formats));
-        COKOL_ASSERT(desc->color_count <= SG_MAX_COLOR_ATTACHMENTS);
+        SOKOL_ASSERT(desc->color_count <= SG_MAX_COLOR_ATTACHMENTS);
         for (int i = 0; i < desc->color_count; i++) {
             color_formats[i] = _sg_vk_format(desc->colors[i].pixel_format);
         }
@@ -19096,8 +19133,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
         rnd_state.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
         rnd_state.colorAttachmentCount = (uint32_t)desc->color_count;
         rnd_state.pColorAttachmentFormats = color_formats;
-        rnd_state.depthAttachmentFormat = _sg_vk_depth_format(desc->depth.pixel_format);
-        rnd_state.stencilAttachmentFormat = _sg_vk_stencil_format(desc->depth.pixel_format);
+        rnd_state.depthAttachmentFormat = _sg_vk_format(desc->depth.pixel_format);
+        rnd_state.stencilAttachmentFormat = _sg_vk_format(desc->depth.pixel_format);
 
         VkDynamicState dyn_states[2] = {
             VK_DYNAMIC_STATE_VIEWPORT,
@@ -19275,6 +19312,9 @@ _SOKOL_PRIVATE void _sg_vk_begin_pass(const sg_pass* pass, const _sg_attachments
         }
         res = vkResetFences(_sg.vk.dev, 1, &_sg.vk.frame[_sg.vk.frame_slot].fence);
         SOKOL_ASSERT(res == VK_SUCCESS);
+
+        _sg_vk_delete_queue_collect(&_sg.vk.frame[_sg.vk.frame_slot].delete_queue);
+
         res = vkResetCommandBuffer(cmd_buf, 0);
         SOKOL_ASSERT(res == VK_SUCCESS);
         VkCommandBufferBeginInfo cmdbuf_begin_info;
