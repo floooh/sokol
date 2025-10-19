@@ -42,6 +42,7 @@
     - on Android: aaudio
     - on Windows with MSVC or Clang toolchain: no action needed, libs are defined in-source via pragma-comment-lib
     - on Windows with MINGW/MSYS2 gcc: compile with '-mwin32' and link with -lole32
+    - on Vita: SceAudio
 
     FEATURE OVERVIEW
     ================
@@ -55,6 +56,7 @@
     - iOS: CoreAudio+AVAudioSession
     - emscripten: WebAudio with ScriptProcessorNode
     - Android: AAudio
+    - Vita: SceAudio
 
     Sokol Audio will not do any buffer mixing or volume control, if you have
     multiple independent input streams of sample data you need to perform the
@@ -379,6 +381,25 @@
     header must be present (usually both are installed with some sort
     of ALSA development package).
 
+    THE VITA BACKEND
+    ================
+    The VITA backend is automatically selected when compiling with vitasdk
+    ('PSP2_SDK_VERSION' is defined).
+
+    For thread synchronisation, the pthread_mutex_* functions are used.
+
+    Samples are converted from float to short (uint16_t) to maintain
+    all the same interface/api as other platforms.
+
+    You may use any supported sample rate you wish, but all audio MUST
+    match the same sample rate you choose.
+
+    This uses the "BGM" port to allow selecting the sample rate ("Main"
+    port is restricted to 48000 only).
+
+    You need to link with the 'SceAudio' library, and the <psp2/audioout.h>
+    header must be present (usually both are installed with the vitasdk).
+
 
     MEMORY ALLOCATION OVERRIDE
     ==========================
@@ -537,6 +558,8 @@ extern "C" {
     _SAUDIO_LOGITEM_XMACRO(COREAUDIO_ALLOCATE_BUFFER_FAILED, "AudioQueueAllocateBuffer() failed") \
     _SAUDIO_LOGITEM_XMACRO(COREAUDIO_START_FAILED, "AudioQueueStart() failed") \
     _SAUDIO_LOGITEM_XMACRO(BACKEND_BUFFER_SIZE_ISNT_MULTIPLE_OF_PACKET_SIZE, "backend buffer size isn't multiple of packet size") \
+    _SAUDIO_LOGITEM_XMACRO(VITA_SCEAUDIO_OPEN_FAILED, "sceAudioOutOpenPort() failed") \
+    _SAUDIO_LOGITEM_XMACRO(VITA_PTHREAD_CREATE_FAILED, "pthread_create() failed") \
 
 #define _SAUDIO_LOGITEM_XMACRO(item,msg) SAUDIO_LOGITEM_##item,
 typedef enum saudio_log_item {
@@ -687,6 +710,9 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
     #define _SAUDIO_ANDROID (1)
 #elif defined(__linux__) || defined(__unix__)
     #define _SAUDIO_LINUX (1)
+#elif defined(PSP2_SDK_VERSION)
+    #define _SAUDIO_VITA (1)
+    #include <psp2/audioout.h>
 #else
 #error "sokol_audio.h: Unknown platform"
 #endif
@@ -782,6 +808,9 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 #elif defined(__EMSCRIPTEN__)
     #define _SAUDIO_NOTHREADS (1)
     #include <emscripten/emscripten.h>
+#elif defined(_SAUDIO_VITA)
+    #define _SAUDIO_PTHREADS (1)
+    #include <pthread.h>
 #endif
 
 #define _saudio_def(val, def) (((val) == 0) ? (def) : (val))
@@ -982,6 +1011,18 @@ typedef struct {
     uint8_t* buffer;
 } _saudio_web_backend_t;
 
+#elif defined(_SAUDIO_VITA)
+
+typedef struct {
+    int device;
+    float* buffer;
+    int16_t* buffer_vita;
+    int buffer_byte_size;
+    int buffer_frames;
+    pthread_t thread;
+    bool thread_stop;
+} _saudio_vita_backend_t;
+
 #else
 #error "unknown platform"
 #endif
@@ -998,6 +1039,8 @@ typedef _saudio_wasapi_backend_t _saudio_backend_t;
 typedef _saudio_aaudio_backend_t _saudio_backend_t;
 #elif defined(_SAUDIO_LINUX)
 typedef _saudio_alsa_backend_t _saudio_backend_t;
+#elif defined(_SAUDIO_VITA)
+typedef _saudio_vita_backend_t _saudio_backend_t;
 #endif
 
 /* a ringbuffer structure */
@@ -1184,6 +1227,26 @@ _SOKOL_PRIVATE void _saudio_mutex_lock(_saudio_mutex_t* m) {
 _SOKOL_PRIVATE void _saudio_mutex_unlock(_saudio_mutex_t* m) {
     LeaveCriticalSection(&m->critsec);
 }
+#elif defined(_SAUDIO_VITA)
+
+_SOKOL_PRIVATE void _saudio_mutex_init(_saudio_mutex_t* m) {
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutex_init(&m->mutex, &attr);
+}
+
+_SOKOL_PRIVATE void _saudio_mutex_destroy(_saudio_mutex_t* m) {
+    pthread_mutex_destroy(&m->mutex);
+}
+
+_SOKOL_PRIVATE void _saudio_mutex_lock(_saudio_mutex_t* m) {
+    pthread_mutex_lock(&m->mutex);
+}
+
+_SOKOL_PRIVATE void _saudio_mutex_unlock(_saudio_mutex_t* m) {
+    pthread_mutex_unlock(&m->mutex);
+}
+
 #else
 #error "sokol_audio.h: unknown platform!"
 #endif
@@ -2144,6 +2207,82 @@ _SOKOL_PRIVATE bool _saudio_coreaudio_backend_init(void) {
     return true;
 }
 
+// ██   ██ ██ ████████  █████
+// ██   ██ ██    ██    ██   ██
+// ██   ██ ██    ██    ███████
+// ██   ██ ██    ██    ██   ██
+//  █████  ██    ██    ██   ██
+//
+// >>vita
+#elif defined(_SAUDIO_VITA)
+
+/* the streaming callback runs in a separate thread */
+_SOKOL_PRIVATE void* _saudio_vita_cb(void* param) {
+    _SOKOL_UNUSED(param);
+    while (!_saudio.backend.thread_stop) {
+        for (int i = 0; i < (_saudio.buffer_frames * _saudio.num_channels); i++) {
+            _saudio.backend.buffer_vita[i] = (int16_t)(_saudio.backend.buffer[i] * 32767.0f);
+        }
+        int write_res = sceAudioOutOutput(_saudio.backend.device, _saudio.backend.buffer_vita);
+        if (write_res < 0) {
+            /* underrun occurred */
+        }
+        else {
+            /* fill the streaming buffer with new data */
+            if (_saudio_has_callback()) {
+                _saudio_stream_callback(_saudio.backend.buffer, _saudio.backend.buffer_frames, _saudio.num_channels);
+            }
+            else {
+                if (0 == _saudio_fifo_read(&_saudio.fifo, (uint8_t*)_saudio.backend.buffer, _saudio.backend.buffer_byte_size)) {
+                    /* not enough read data available, fill the entire buffer with silence */
+                    _saudio_clear(_saudio.backend.buffer, (size_t)_saudio.backend.buffer_byte_size);
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+_SOKOL_PRIVATE bool _saudio_vita_backend_init(void) {
+    SceAudioOutMode sceAudioOutMode = _saudio.num_channels == 1 ? SCE_AUDIO_OUT_MODE_MONO : SCE_AUDIO_OUT_MODE_STEREO;
+    int rc = sceAudioOutOpenPort(SCE_AUDIO_OUT_PORT_TYPE_BGM, _saudio.buffer_frames, _saudio.sample_rate, sceAudioOutMode);
+    if (rc < 0) {
+        _SAUDIO_ERROR(VITA_SCEAUDIO_OPEN_FAILED);
+        return false;
+    }
+    _saudio.backend.device = rc;
+
+    /* read back actual sample rate and channels */
+    _saudio.sample_rate = (int)_saudio.sample_rate;
+    _saudio.bytes_per_frame = _saudio.num_channels * (int)sizeof(float);
+
+    /* allocate the streaming buffer */
+    _saudio.backend.buffer_byte_size = _saudio.buffer_frames * _saudio.bytes_per_frame;
+    _saudio.backend.buffer_frames = _saudio.buffer_frames;
+    _saudio.backend.buffer = (float*) _saudio_malloc_clear((size_t)_saudio.backend.buffer_byte_size);
+    _saudio.backend.buffer_vita = (int16_t*) _saudio_malloc_clear((size_t)(_saudio.buffer_frames * _saudio.num_channels * (int)sizeof(int16_t)));
+
+    /* create the buffer-streaming start thread */
+    if (0 != pthread_create(&_saudio.backend.thread, 0, _saudio_vita_cb, 0)) {
+        _SAUDIO_ERROR(VITA_PTHREAD_CREATE_FAILED);
+        if (_saudio.backend.device >= 0) {
+            sceAudioOutReleasePort(_saudio.backend.device);
+            _saudio.backend.device = -1;
+        }
+        return false;
+    }
+
+    return true;
+}
+
+_SOKOL_PRIVATE void _saudio_vita_backend_shutdown(void) {
+    _saudio.backend.thread_stop = true;
+    pthread_join(_saudio.backend.thread, 0);
+    sceAudioOutReleasePort(_saudio.backend.device);
+    _saudio_free(_saudio.backend.buffer_vita);
+    _saudio_free(_saudio.backend.buffer);
+}
+    
 #else
 #error "unsupported platform"
 #endif
@@ -2161,6 +2300,8 @@ bool _saudio_backend_init(void) {
         return _saudio_aaudio_backend_init();
     #elif defined(_SAUDIO_APPLE)
         return _saudio_coreaudio_backend_init();
+    #elif defined(_SAUDIO_VITA)
+        return _saudio_vita_backend_init();
     #else
     #error "unknown platform"
     #endif
@@ -2179,6 +2320,8 @@ void _saudio_backend_shutdown(void) {
         _saudio_aaudio_backend_shutdown();
     #elif defined(_SAUDIO_APPLE)
         _saudio_coreaudio_backend_shutdown();
+    #elif defined(_SAUDIO_VITA)
+        _saudio_vita_backend_shutdown();
     #else
     #error "unknown platform"
     #endif
