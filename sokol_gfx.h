@@ -18299,7 +18299,7 @@ _SOKOL_PRIVATE void _sg_wgpu_update_image(_sg_image_t* img, const sg_image_data*
 // >>vk
 #elif defined(SOKOL_VULKAN)
 
-_SOKOL_PRIVATE void _sg_vk_init_delete_queue(_sg_vk_delete_queue_t* queue) {
+_SOKOL_PRIVATE void _sg_vk_create_delete_queue(_sg_vk_delete_queue_t* queue) {
     // FIXME
 }
 
@@ -19292,11 +19292,13 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(const sg_pass* pass, const _sg_atta
 _SOKOL_PRIVATE void _sg_vk_begin_pass(const sg_pass* pass, const _sg_attachments_ptrs_t* atts) {
     SOKOL_ASSERT(pass && atts);
     VkResult res;
-    VkCommandBuffer cmd_buf = _sg.vk.frame[_sg.vk.frame_slot].cmd_buf;
+    VkCommandBuffer cmd_buf = 0;
 
     // if this is the first pass in the frame, sync and rewind command buffer
     if (_sg.vk.first_pass_in_frame) {
         _sg.vk.first_pass_in_frame = false;
+        _sg.vk.frame_slot = (_sg.vk.frame_slot + 1) % SG_NUM_INFLIGHT_FRAMES;
+
         // block until oldest inflight-frame has finished
         do {
             res = vkWaitForFences(_sg.vk.dev,
@@ -19314,6 +19316,7 @@ _SOKOL_PRIVATE void _sg_vk_begin_pass(const sg_pass* pass, const _sg_attachments
         SOKOL_ASSERT(res == VK_SUCCESS);
 
         _sg_vk_delete_queue_collect(&_sg.vk.frame[_sg.vk.frame_slot].delete_queue);
+        cmd_buf = _sg.vk.frame[_sg.vk.frame_slot].cmd_buf;
 
         res = vkResetCommandBuffer(cmd_buf, 0);
         SOKOL_ASSERT(res == VK_SUCCESS);
@@ -19322,7 +19325,10 @@ _SOKOL_PRIVATE void _sg_vk_begin_pass(const sg_pass* pass, const _sg_attachments
         cmdbuf_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         res = vkBeginCommandBuffer(cmd_buf, &cmdbuf_begin_info);
         SOKOL_ASSERT(res == VK_SUCCESS);
+    } else {
+        cmd_buf = _sg.vk.frame[_sg.vk.frame_slot].cmd_buf;
     }
+    SOKOL_ASSERT(cmd_buf);
 
     if (_sg.cur_pass.is_compute) {
         _sg_vk_begin_compute_pass(pass, cmd_buf);
@@ -19392,7 +19398,6 @@ _SOKOL_PRIVATE void _sg_vk_commit(void) {
 
     _sg.vk.present_complete_sem = 0;
     _sg.vk.render_finished_sem = 0;
-    _sg.vk.frame_slot = (_sg.vk.frame_slot + 1) % SG_NUM_INFLIGHT_FRAMES;
     _sg.vk.first_pass_in_frame = true;
 }
 
