@@ -18709,7 +18709,7 @@ _SOKOL_PRIVATE void _sg_vk_destroy_command_pool(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_vk_acquire_command_buffer(void) {
+_SOKOL_PRIVATE void _sg_vk_acquire_frame_command_buffer(void) {
     SOKOL_ASSERT(_sg.vk.dev);
     VkResult res;
     if (0 == _sg.vk.cmd_buf) {
@@ -18743,6 +18743,34 @@ _SOKOL_PRIVATE void _sg_vk_acquire_command_buffer(void) {
         SOKOL_ASSERT(res == VK_SUCCESS);
     }
     SOKOL_ASSERT(_sg.vk.cmd_buf);
+}
+
+_SOKOL_PRIVATE void _sg_vk_submit_frame_command_buffer(void) {
+    SOKOL_ASSERT(_sg.vk.cmd_buf);
+
+    VkResult res = vkEndCommandBuffer(_sg.vk.cmd_buf);
+    SOKOL_ASSERT(res == VK_SUCCESS);
+    const VkPipelineStageFlags wait_dst_stage_mask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkSubmitInfo submit_info;
+    _sg_clear(&submit_info, sizeof(submit_info));
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit_info.waitSemaphoreCount = 1;
+    submit_info.pWaitSemaphores = &_sg.vk.present_complete_sem;
+    submit_info.pWaitDstStageMask = &wait_dst_stage_mask;
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &_sg.vk.cmd_buf;
+    submit_info.signalSemaphoreCount = 1;
+    submit_info.pSignalSemaphores = &_sg.vk.render_finished_sem;
+    res = vkQueueSubmit(_sg.vk.queue, 1, &submit_info, _sg.vk.frame[_sg.vk.frame_slot].fence);
+    SOKOL_ASSERT(res == VK_SUCCESS);
+
+    _sg.vk.cmd_buf = 0;
+
+    // NOTE: it's valid to register resource objects for destruction in the
+    // delete queue past this point (between _sg_vk_submit_frame_command_buffer()
+    // and the next _sg_vk_acquire_frame_command_buffer()) since resources which are
+    // destroyed in this 'gap' can at most have been used by the command
+    // buffer that was just submitted
 }
 
 _SOKOL_PRIVATE void _sg_vk_setup_backend(const sg_desc* desc) {
@@ -19335,7 +19363,7 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(const sg_pass* pass, const _sg_atta
 
 _SOKOL_PRIVATE void _sg_vk_begin_pass(const sg_pass* pass, const _sg_attachments_ptrs_t* atts) {
     SOKOL_ASSERT(pass && atts);
-    _sg_vk_acquire_command_buffer();
+    _sg_vk_acquire_frame_command_buffer();
     if (_sg.cur_pass.is_compute) {
         _sg_vk_begin_compute_pass(pass);
     } else {
@@ -19383,25 +19411,7 @@ _SOKOL_PRIVATE void _sg_vk_end_pass(const _sg_attachments_ptrs_t* atts) {
 _SOKOL_PRIVATE void _sg_vk_commit(void) {
     SOKOL_ASSERT(_sg.vk.queue);
     SOKOL_ASSERT(_sg.vk.cmd_buf);
-    VkResult res;
-
-    res = vkEndCommandBuffer(_sg.vk.cmd_buf);
-    SOKOL_ASSERT(res == VK_SUCCESS);
-    const VkPipelineStageFlags wait_dst_stage_mask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    VkSubmitInfo submit_info;
-    _sg_clear(&submit_info, sizeof(submit_info));
-    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit_info.waitSemaphoreCount = 1;
-    submit_info.pWaitSemaphores = &_sg.vk.present_complete_sem;
-    submit_info.pWaitDstStageMask = &wait_dst_stage_mask;
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &_sg.vk.cmd_buf;
-    submit_info.signalSemaphoreCount = 1;
-    submit_info.pSignalSemaphores = &_sg.vk.render_finished_sem;
-    res = vkQueueSubmit(_sg.vk.queue, 1, &submit_info, _sg.vk.frame[_sg.vk.frame_slot].fence);
-    SOKOL_ASSERT(res == VK_SUCCESS);
-
-    _sg.vk.cmd_buf = 0;
+    _sg_vk_submit_frame_command_buffer();
     _sg.vk.present_complete_sem = 0;
     _sg.vk.render_finished_sem = 0;
 }
