@@ -14473,11 +14473,11 @@ _SOKOL_PRIVATE void _sg_mtl_init_pool(const sg_desc* desc) {
     _sg.mtl.idpool.num_slots = 2 *
         (
             2 * desc->buffer_pool_size +
-            4 * desc->image_pool_size +
+            2 * desc->image_pool_size +
             1 * desc->sampler_pool_size +
-            4 * desc->shader_pool_size +
-            2 * desc->pipeline_pool_size +
-            desc->view_pool_size +
+            6 * desc->shader_pool_size +
+            3 * desc->pipeline_pool_size +
+            1 * desc->view_pool_size +
             128
         );
     _sg.mtl.idpool.pool = [NSMutableArray arrayWithCapacity:(NSUInteger)_sg.mtl.idpool.num_slots];
