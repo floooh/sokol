@@ -1,5 +1,15 @@
 ## Updates
 
+### 20-Oct-2025
+
+- sokol_args.h: key-args-strings are no longer escaped (the documentation actually
+  stated this, but the implementation behaved differently)
+
+  PR: https://github.com/floooh/sokol/pull/1355
+  Ticket: https://github.com/floooh/sokol/issues/1353
+
+  Many thanks to @cloudwu for identifying and fixing the issue!
+
 ### 10-Oct-2025
 
 sokol_gfx.h gl: fix breakage in the GL backend when `SOKOL_EXTERNAL_GL_LOADER`
