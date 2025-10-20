@@ -13242,6 +13242,17 @@ SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
                 SOKOL_UNREACHABLE;
                 return SAPP_PIXELFORMAT_NONE;
         }
+    #elif defined(SOKOL_VULKAN)
+        switch (_sapp.vk.surface_format.format) {
+            case VK_FORMAT_R8G8B8A8_UNORM:
+                return SAPP_PIXELFORMAT_RGBA8;
+            case VK_FORMAT_B8G8R8A8_UNORM:
+                return SAPP_PIXELFORMAT_BGRA8;
+            default:
+                // FIXME!
+                SOKOL_UNREACHABLE;
+                return SAPP_PIXELFORMAT_NONE;
+        }
     #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
         return SAPP_PIXELFORMAT_BGRA8;
     #else
@@ -13250,6 +13261,10 @@ SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
 }
 
 SOKOL_API_IMPL sapp_pixel_format sapp_depth_format(void) {
+    #if defined(SOKOL_VULKAN)
+        // FIXME!
+        return SAPP_PIXELFORMAT_NONE;
+    #endif
     return SAPP_PIXELFORMAT_DEPTH_STENCIL;
 }
 

@@ -4399,6 +4399,8 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VULKAN_STORAGEIMAGE_SPIRV_SET1_BINDING_OUT_OF_RANGE, "storage image 'spirv_set1_binding_n' is out of range (must be 0..127)") \
     _SG_LOGITEM_XMACRO(VULKAN_SAMPLER_SPIRV_SET1_BINDING_OUT_OF_RANGE, "sampler 'spirv_set1_binding_n' is out of range (must be 0..127)") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_DESCRIPTOR_SET_LAYOUT_FAILED, "vkCreateDescriptorSetLayout() failed!") \
+    _SG_LOGITEM_XMACRO(VULKAN_CREATE_PIPELINE_LAYOUT_FAILED, "vkCreatePipelineLayout() failed!") \
+    _SG_LOGITEM_XMACRO(VULKAN_CREATE_GRAPHICS_PIPELINE_FAILED, "vkCreateGraphicsPipeline() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_WAIT_FOR_FENCE_FAILED, "vkWaitForFence() failed!") \
     _SG_LOGITEM_XMACRO(IDENTICAL_COMMIT_LISTENER, "attempting to add identical commit listener") \
     _SG_LOGITEM_XMACRO(COMMIT_LISTENER_ARRAY_FULL, "commit listener array full") \
@@ -6763,7 +6765,7 @@ typedef struct {
 #elif defined(SOKOL_VULKAN)
 
 #define _SG_VK_MAX_UNIFORM_UPDATE_SIZE (1<<16)
-#define _SG_VK_MAX_DESCRIPTORSETS (2) // 0: uniforms, 1: images, samplers, storage buffers, storage images
+#define _SG_VK_NUM_DESCRIPTORSETS (2) // 0: uniforms, 1: images, samplers, storage buffers, storage images
 #define _SG_VK_UB_DESCRIPTORSET_INDEX (0)
 #define _SG_VK_VIEW_SMP_DESCRIPTORSET_INDEX (1)
 #define _SG_VK_MAX_UB_DESCRIPTORSET_ENTRIES (SG_MAX_UNIFORMBLOCK_BINDSLOTS)
@@ -6816,6 +6818,7 @@ typedef struct _sg_shader_s {
         _sg_vk_shader_func_t compute_func;
         VkDescriptorSetLayout dset_ub;
         VkDescriptorSetLayout dset_view_smp;
+        VkPipelineLayout pip_layout;
         // indexed by sokol-gfx bind-slot
         uint8_t ub_set0_bnd_n[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
         uint8_t view_set1_bnd_n[SG_MAX_VIEW_BINDSLOTS];
@@ -18308,7 +18311,7 @@ _SOKOL_PRIVATE void _sg_vk_create_delete_queues(void) {
         2 * _sg.desc.image_pool_size +
         1 * _sg.desc.sampler_pool_size +
         5 * _sg.desc.shader_pool_size +
-        3 * _sg.desc.pipeline_pool_size +
+        2 * _sg.desc.pipeline_pool_size +
         1 * _sg.desc.view_pool_size +
         256);
     for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
@@ -19004,7 +19007,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
         return SG_RESOURCESTATE_FAILED;
     }
 
-    // descriptor set layouts
+    // descriptor set layouts and pipeline layout
     VkResult res;
     VkDescriptorSetLayoutBinding dsl_entries[_SG_VK_MAX_VIEW_SMP_DESCRIPTORSET_ENTRIES];
     _sg_clear(dsl_entries, sizeof(dsl_entries));
@@ -19081,7 +19084,27 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
         _SG_ERROR(VULKAN_CREATE_DESCRIPTOR_SET_LAYOUT_FAILED);
         return SG_RESOURCESTATE_FAILED;
     }
+
+    VkDescriptorSetLayout set_layouts[_SG_VK_NUM_DESCRIPTORSETS] = {
+        shd->vk.dset_ub,
+        shd->vk.dset_view_smp,
+    };
+    VkPipelineLayoutCreateInfo pl_create_info;
+    _sg_clear(&pl_create_info, sizeof(pl_create_info));
+    pl_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pl_create_info.setLayoutCount = _SG_VK_NUM_DESCRIPTORSETS;
+    pl_create_info.pSetLayouts = set_layouts;
+    res = vkCreatePipelineLayout(_sg.vk.dev, &pl_create_info, 0, &shd->vk.pip_layout);
+    if (res != VK_SUCCESS) {
+        _SG_ERROR(VULKAN_CREATE_PIPELINE_LAYOUT_FAILED);
+        return SG_RESOURCESTATE_FAILED;
+    }
     return SG_RESOURCESTATE_VALID;
+}
+
+_SOKOL_PRIVATE void _sg_vk_destroy_pipelinelayout(void* obj) {
+    SOKOL_ASSERT(_sg.vk.dev && obj);
+    vkDestroyPipelineLayout(_sg.vk.dev, (VkPipelineLayout)obj, 0);
 }
 
 _SOKOL_PRIVATE void _sg_vk_destroy_descriptorsetlayout(void* obj) {
@@ -19095,6 +19118,10 @@ _SOKOL_PRIVATE void _sg_vk_discard_shader(_sg_shader_t* shd) {
     _sg_vk_discard_shader_func(&shd->vk.vertex_func);
     _sg_vk_discard_shader_func(&shd->vk.fragment_func);
     _sg_vk_discard_shader_func(&shd->vk.compute_func);
+    if (shd->vk.pip_layout) {
+        _sg_vk_delete_queue_add(_sg_vk_destroy_pipelinelayout, (void*)shd->vk.pip_layout);
+        shd->vk.pip_layout = 0;
+    }
     if (shd->vk.dset_ub) {
         _sg_vk_delete_queue_add(_sg_vk_destroy_descriptorsetlayout, (void*)shd->vk.dset_ub);
         shd->vk.dset_ub = 0;
@@ -19107,8 +19134,11 @@ _SOKOL_PRIVATE void _sg_vk_discard_shader(_sg_shader_t* shd) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && desc);
+    SOKOL_ASSERT(_sg.vk.dev);
+    VkResult res;
 
     const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
+    SOKOL_ASSERT(shd->vk.pip_layout);
     if (pip->cmn.is_compute) {
         SOKOL_ASSERT(false && "FIXME");
     } else {
@@ -19172,7 +19202,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
         _sg_clear(&ia_state, sizeof(ia_state));
         ia_state.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
         ia_state.topology = _sg_vk_primitive_topology(desc->primitive_type);
-        ia_state.primitiveRestartEnable = true;
+        ia_state.primitiveRestartEnable = VK_FALSE; // FIXME: needs 'primitiveTopologyRestart feature enabled'
+
+        VkPipelineViewportStateCreateInfo vp_state;
+        _sg_clear(&vp_state, sizeof(vp_state));
+        vp_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        vp_state.viewportCount = 1;
+        vp_state.scissorCount = 1;
 
         VkPipelineRasterizationStateCreateInfo rs_state;
         _sg_clear(&rs_state, sizeof(rs_state));
@@ -19274,22 +19310,36 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
         pip_create_info.pStages = stages;
         pip_create_info.pVertexInputState = &vi_state;
         pip_create_info.pInputAssemblyState = &ia_state;
+        pip_create_info.pViewportState = &vp_state;
         pip_create_info.pRasterizationState = &rs_state;
         pip_create_info.pMultisampleState = &ms_state;
         pip_create_info.pDepthStencilState = &ds_state;
         pip_create_info.pColorBlendState = &cb_state;
         pip_create_info.pDynamicState = &dyn_state;
+        pip_create_info.layout = shd->vk.pip_layout;
 
-
-
+        res = vkCreateGraphicsPipelines(_sg.vk.dev, VK_NULL_HANDLE, 1, &pip_create_info, 0, &pip->vk.pip);
+        if (res != VK_SUCCESS) {
+            _SG_ERROR(VULKAN_CREATE_GRAPHICS_PIPELINE_FAILED);
+            return SG_RESOURCESTATE_FAILED;
+        }
     }
-
+    SOKOL_ASSERT(pip->vk.pip);
+    _sg_vk_set_object_label(VK_OBJECT_TYPE_PIPELINE, (uint64_t)pip->vk.pip, desc->label);
     return SG_RESOURCESTATE_VALID;
+}
+
+_SOKOL_PRIVATE void _sg_vk_destroy_pipeline(void* obj) {
+    SOKOL_ASSERT(_sg.vk.dev && obj);
+    vkDestroyPipeline(_sg.vk.dev, (VkPipeline)obj, 0);
 }
 
 _SOKOL_PRIVATE void _sg_vk_discard_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
-    SOKOL_ASSERT(false && "FIXME");
+    if (pip->vk.pip) {
+        _sg_vk_delete_queue_add(_sg_vk_destroy_pipeline, (void*)pip->vk.pip);
+        pip->vk.pip = 0;
+    }
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_vk_create_view(_sg_view_t* view, const sg_view_desc* desc) {
@@ -19410,6 +19460,18 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(const sg_pass* pass, const _sg_atta
         SOKOL_ASSERT(false && "FIXME");
     }
     vkCmdBeginRendering(_sg.vk.cmd_buf, &render_info);
+
+    VkViewport vp;
+    _sg_clear(&vp, sizeof(vp));
+    vp.width = (float)_sg.cur_pass.dim.width;
+    vp.height = (float)_sg.cur_pass.dim.height;
+    vp.maxDepth = 1.0f;
+    vkCmdSetViewport(_sg.vk.cmd_buf, 0, 1, &vp);
+    VkRect2D rect;
+    _sg_clear(&rect, sizeof(rect));
+    rect.extent.width = (uint32_t)_sg.cur_pass.dim.width;
+    rect.extent.height = (uint32_t)_sg.cur_pass.dim.height;
+    vkCmdSetScissor(_sg.vk.cmd_buf, 0, 1, &rect);
 }
 
 _SOKOL_PRIVATE void _sg_vk_begin_pass(const sg_pass* pass, const _sg_attachments_ptrs_t* atts) {
@@ -19468,16 +19530,36 @@ _SOKOL_PRIVATE void _sg_vk_commit(void) {
 }
 
 _SOKOL_PRIVATE void _sg_vk_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
-    SOKOL_ASSERT(false && x && y && w && h && origin_top_left && "FIXME");
+    SOKOL_ASSERT(_sg.vk.cmd_buf);
+    VkViewport vp;
+    _sg_clear(&vp, sizeof(vp));
+    vp.x = (float) x;
+    vp.y = (float) (origin_top_left ? y : (_sg.cur_pass.dim.height - (y + h)));
+    vp.width = (float) w;
+    vp.height = (float) h;
+    vp.maxDepth = 1.0f;
+    vkCmdSetViewport(_sg.vk.cmd_buf, 0, 1, &vp);
 }
 
 _SOKOL_PRIVATE void _sg_vk_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
-    SOKOL_ASSERT(false && x && y && w && h && origin_top_left && "FIXME");
+    SOKOL_ASSERT(_sg.vk.cmd_buf);
+    VkRect2D rect;
+    _sg_clear(&rect, sizeof(rect));
+    rect.offset.x = x;
+    rect.offset.y = (origin_top_left ? y : (_sg.cur_pass.dim.height - (y + h)));
+    rect.extent.width = (uint32_t) w;
+    rect.extent.height = (uint32_t) h;
+    vkCmdSetScissor(_sg.vk.cmd_buf, 0, 1, &rect);
 }
 
 _SOKOL_PRIVATE void _sg_vk_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
-    SOKOL_ASSERT(false && "FIXME");
+    SOKOL_ASSERT(pip->vk.pip);
+    SOKOL_ASSERT(_sg.vk.cmd_buf);
+    VkPipelineBindPoint bindpoint = pip->cmn.is_compute
+        ? VK_PIPELINE_BIND_POINT_COMPUTE
+        : VK_PIPELINE_BIND_POINT_GRAPHICS;
+    vkCmdBindPipeline(_sg.vk.cmd_buf, bindpoint, pip->vk.pip);
 }
 
 _SOKOL_PRIVATE bool _sg_vk_apply_bindings(_sg_bindings_ptrs_t* bnd) {
@@ -19492,7 +19574,21 @@ _SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
 }
 
 _SOKOL_PRIVATE void _sg_vk_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
-    SOKOL_ASSERT(false && base_element && num_elements && num_instances && base_vertex && base_instance && "FIXME");
+    SOKOL_ASSERT(_sg.vk.cmd_buf);
+    if (_sg.use_indexed_draw) {
+        vkCmdDrawIndexed(_sg.vk.cmd_buf,
+            (uint32_t)num_elements,
+            (uint32_t)num_instances,
+            (uint32_t)base_element,
+            base_vertex,
+            (uint32_t)base_instance);
+    } else {
+        vkCmdDraw(_sg.vk.cmd_buf,
+            (uint32_t)num_elements,
+            (uint32_t)num_instances,
+            (uint32_t)base_element,
+            (uint32_t)base_instance);
+    }
 }
 
 _SOKOL_PRIVATE void _sg_vk_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
