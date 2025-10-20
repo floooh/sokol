@@ -1,5 +1,6 @@
 set(c_sources
-    sokol_app.c
+    # sokol_app.c
+    sokol_app_turbo.c
     sokol_glue.c
     sokol_gfx.c
     sokol_time.c
