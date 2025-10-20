@@ -10,6 +10,13 @@
 
   Many thanks to @cloudwu for identifying and fixing the issue!
 
+- sokol_audio.h: added a new backend for the PS Vita via PR https://github.com/floooh/sokol/pull/1358
+  Please note that I cannot maintain the backend or help with any issues, and
+  normally I wouldn't merge a PR under such circumstances, but since it is very
+  little and straightforward code an exception is justified I guess :)
+
+  Many thanks to @CrackedPixel for the PR!
+
 ### 10-Oct-2025
 
 sokol_gfx.h gl: fix breakage in the GL backend when `SOKOL_EXTERNAL_GL_LOADER`
