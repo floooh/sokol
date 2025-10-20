@@ -19353,6 +19353,34 @@ _SOKOL_PRIVATE void _sg_vk_discard_view(_sg_view_t* view) {
     SOKOL_ASSERT(false && "FIXME");
 }
 
+_SOKOL_PRIVATE void _sg_vk_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
+    SOKOL_ASSERT(_sg.vk.cmd_buf);
+    VkViewport vp;
+    _sg_clear(&vp, sizeof(vp));
+    // first same code as WebGPU
+    vp.x = (float) x;
+    vp.y = (float) (origin_top_left ? y : (_sg.cur_pass.dim.height - (y + h)));
+    vp.width = (float) w;
+    vp.height = (float) h;
+    vp.maxDepth = 1.0f;
+    // now flip the whole thing around since Vulkan uses an inverted clipspace Y axis compared to other APIs
+    // FIXME: clean this code up after testing with origin_top_left true vs false
+    vp.y = (float)_sg.cur_pass.dim.height - vp.y;
+    vp.height = -vp.height;
+    vkCmdSetViewport(_sg.vk.cmd_buf, 0, 1, &vp);
+}
+
+_SOKOL_PRIVATE void _sg_vk_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
+    SOKOL_ASSERT(_sg.vk.cmd_buf);
+    VkRect2D rect;
+    _sg_clear(&rect, sizeof(rect));
+    rect.offset.x = x;
+    rect.offset.y = (origin_top_left ? y : (_sg.cur_pass.dim.height - (y + h)));
+    rect.extent.width = (uint32_t) w;
+    rect.extent.height = (uint32_t) h;
+    vkCmdSetScissor(_sg.vk.cmd_buf, 0, 1, &rect);
+}
+
 _SOKOL_PRIVATE void _sg_vk_transition_image_layout(
     VkImage vk_img,
     VkImageLayout old_layout,
@@ -19461,17 +19489,8 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(const sg_pass* pass, const _sg_atta
     }
     vkCmdBeginRendering(_sg.vk.cmd_buf, &render_info);
 
-    VkViewport vp;
-    _sg_clear(&vp, sizeof(vp));
-    vp.width = (float)_sg.cur_pass.dim.width;
-    vp.height = (float)_sg.cur_pass.dim.height;
-    vp.maxDepth = 1.0f;
-    vkCmdSetViewport(_sg.vk.cmd_buf, 0, 1, &vp);
-    VkRect2D rect;
-    _sg_clear(&rect, sizeof(rect));
-    rect.extent.width = (uint32_t)_sg.cur_pass.dim.width;
-    rect.extent.height = (uint32_t)_sg.cur_pass.dim.height;
-    vkCmdSetScissor(_sg.vk.cmd_buf, 0, 1, &rect);
+    _sg_vk_apply_viewport(0, 0, _sg.cur_pass.dim.width, _sg.cur_pass.dim.height, true);
+    _sg_vk_apply_scissor_rect(0, 0, _sg.cur_pass.dim.width, _sg.cur_pass.dim.height, true);
 }
 
 _SOKOL_PRIVATE void _sg_vk_begin_pass(const sg_pass* pass, const _sg_attachments_ptrs_t* atts) {
@@ -19527,29 +19546,6 @@ _SOKOL_PRIVATE void _sg_vk_commit(void) {
     _sg_vk_submit_frame_command_buffer();
     _sg.vk.present_complete_sem = 0;
     _sg.vk.render_finished_sem = 0;
-}
-
-_SOKOL_PRIVATE void _sg_vk_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
-    SOKOL_ASSERT(_sg.vk.cmd_buf);
-    VkViewport vp;
-    _sg_clear(&vp, sizeof(vp));
-    vp.x = (float) x;
-    vp.y = (float) (origin_top_left ? y : (_sg.cur_pass.dim.height - (y + h)));
-    vp.width = (float) w;
-    vp.height = (float) h;
-    vp.maxDepth = 1.0f;
-    vkCmdSetViewport(_sg.vk.cmd_buf, 0, 1, &vp);
-}
-
-_SOKOL_PRIVATE void _sg_vk_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
-    SOKOL_ASSERT(_sg.vk.cmd_buf);
-    VkRect2D rect;
-    _sg_clear(&rect, sizeof(rect));
-    rect.offset.x = x;
-    rect.offset.y = (origin_top_left ? y : (_sg.cur_pass.dim.height - (y + h)));
-    rect.extent.width = (uint32_t) w;
-    rect.extent.height = (uint32_t) h;
-    vkCmdSetScissor(_sg.vk.cmd_buf, 0, 1, &rect);
 }
 
 _SOKOL_PRIVATE void _sg_vk_apply_pipeline(_sg_pipeline_t* pip) {
