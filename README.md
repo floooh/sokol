@@ -21,8 +21,6 @@ Aras Pranckevičius, PC/web port via sokol ([source](https://github.com/aras-p/d
 
 - [sokol_gp.h](https://github.com/edubart/sokol_gp) a 2D shape drawing library on top of sokol_gfx.h
 
-- [LearnOpenGL examples ported to sokol-gfx](https://zeromake.github.io/learnopengl-examples/) ([git repo](https://github.com/zeromake/learnopengl-examples))
-
 - [Dear ImGui starterkit](https://github.com/floooh/cimgui-sokol-starterkit) a self-contained starterkit for writing Dear ImGui apps in C.
 
 - [qoiview](https://github.com/floooh/qoiview) a basic viewer for the new QOI image file format
@@ -30,6 +28,10 @@ Aras Pranckevičius, PC/web port via sokol ([source](https://github.com/aras-p/d
 - [Tiny 8-bit emulators](https://floooh.github.io/tiny8bit/)
 
 - A 'single-file' [Pacman clone in C99](https://github.com/floooh/pacman.c/), also available in [Zig](https://github.com/floooh/pacman.zig/)
+
+- [Soluna](https://github.com/cloudwu/soluna), a framework to make 2D games in Lua by @cloudwu
+
+- [Deep Future](https://github.com/cloudwu/deepfuture): ...and a game implemented with Soluna
 
 - [Solar Storm](https://store.steampowered.com/app/2754920/Solar_Storm/), a turn-based scifi artillery game built with Odin and Sokol, released on Steam.
 
@@ -45,6 +47,8 @@ Aras Pranckevičius, PC/web port via sokol ([source](https://github.com/aras-p/d
 
 - ['Dealer's Dungeon'](https://dealers-dungeon.com/demo/) ([lower graphics quality](https://dealers-dungeon.com/demo/?q=3),
 [source](https://github.com/bqqbarbhg/spear))
+
+- [LearnOpenGL examples ported to sokol-gfx (may be outdated)](https://zeromake.github.io/learnopengl-examples/) ([git repo](https://github.com/zeromake/learnopengl-examples))
 
 - [Command line tools](https://github.com/floooh/sokol-tools) (shader compiler)
 
