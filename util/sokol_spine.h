@@ -3867,6 +3867,7 @@ static sspine_resource_state _sspine_init_context(_sspine_context_t* ctx, const 
     pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_COLOR;
     pip_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_DST_ALPHA;
     pip_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+
     pip_desc.label = "sspine-pip-multiply";
     ctx->pip.multiply = sg_make_pipeline(&pip_desc);
 
@@ -5036,6 +5037,8 @@ static void _sspine_draw_layer(_sspine_context_t* ctx, int layer, const sspine_l
                     fsparams.pma = cmd->pma;
                     sg_apply_uniforms(1, &fsparams_range);
                     cur_pma = cmd->pma;
+                } else {
+                    sg_apply_uniforms(1, &fsparams_range);
                 }
                 if (cmd->num_elements > 0) {
                     sg_draw(cmd->base_element, cmd->num_elements, 1);
