@@ -145,6 +145,39 @@ typedef struct {
 #endif
 static _sat_state_t _sat;
 
+_SOKOL_PRIVATE void _sapp_macos_setup(const sapp_desc* desc) {
+    (void)desc;
+    _sapp_init_state(desc);
+    _sapp_macos_init_keytable();
+    [NSApplication sharedApplication];
+
+    // set the application dock icon as early as possible, otherwise
+    // the dummy icon will be visible for a short time
+    sapp_set_icon(&_sapp.desc.icon);
+    _sapp.macos.app_dlg = [[_sapp_macos_app_delegate alloc] init];
+    NSApp.delegate = _sapp.macos.app_dlg;
+}
+
+_SOKOL_PRIVATE void _sapp_windows_setup(const sapp_desc* desc) {
+    (void)desc;
+}
+
+_SOKOL_PRIVATE void _sapp_linux_setup(const sapp_desc* desc) {
+    (void)desc;
+}
+
+_SOKOL_PRIVATE void _sapp_macos_shutdown(void) {
+
+}
+
+_SOKOL_PRIVATE void _sapp_windows_shutdown(void) {
+    
+}
+
+_SOKOL_PRIVATE void _sapp_linux_shutdown(void) {
+    
+}
+
 /* prevent 64-bit overflow when computing relative timestamp
     see https://gist.github.com/jspohr/3dc4f00033d79ec5bdaf67bc46c813e3
 */
@@ -159,25 +192,25 @@ _SOKOL_PRIVATE int64_t _sat_int64_muldiv(int64_t value, int64_t numer, int64_t d
 SOKOL_API_IMPL void sapp_setup(const sapp_desc* desc) {
     (void)desc;
     #if defined(_WIN32)
-        
+    _sapp_windows_setup(desc);
     #elif defined(__APPLE__) && defined(__MACH__)
-        
+    _sapp_macos_setup(desc);    
     #elif defined(__EMSCRIPTEN__)
         
     #else
-
+    _sapp_linux_setup(desc);
     #endif
 }
 
 SOKOL_API_IMPL void sapp_shutdown(void) {
     #if defined(_WIN32)
-        
+    _sapp_windows_shutdown();    
     #elif defined(__APPLE__) && defined(__MACH__)
-        
+    _sapp_macos_shutdown();
     #elif defined(__EMSCRIPTEN__)
-        
+    
     #else
-
+    _sapp_linux_shutdown();
     #endif
 }
 
