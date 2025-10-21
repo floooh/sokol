@@ -1,5 +1,11 @@
 ## Updates
 
+### 21-Oct-2025
+
+- sokol_spine.h: merged PR https://github.com/floooh/sokol/pull/1361 which
+  fixes multiply-blend-mode and a validation layer issue when switching
+  between blend modes. Many thanks to @bryanjeal!
+
 ### 20-Oct-2025
 
 - sokol_args.h: key-args-strings are no longer escaped (the documentation actually
