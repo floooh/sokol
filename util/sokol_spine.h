@@ -3863,10 +3863,11 @@ static sspine_resource_state _sspine_init_context(_sspine_context_t* ctx, const 
     pip_desc.label = "sspine-pip-normal/additive";
     ctx->pip.normal_additive = sg_make_pipeline(&pip_desc);
 
-    pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_ZERO;
-    pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_SRC_COLOR;
-    pip_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ZERO;
-    pip_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
+    pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_DST_COLOR;
+    pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_COLOR;
+    pip_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_DST_ALPHA;
+    pip_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+
     pip_desc.label = "sspine-pip-multiply";
     ctx->pip.multiply = sg_make_pipeline(&pip_desc);
 
@@ -5023,6 +5024,7 @@ static void _sspine_draw_layer(_sspine_context_t* ctx, int layer, const sspine_l
                     sg_apply_pipeline(cmd->pip);
                     cur_pip_id = cmd->pip.id;
                     sg_apply_uniforms(0, &vsparams_range);
+                    sg_apply_uniforms(1, &fsparams_range);
                     cur_view_id = SG_INVALID_ID;
                 }
                 if ((cur_view_id != cmd->view.id) || (cur_smp_id != cmd->smp.id)) {
