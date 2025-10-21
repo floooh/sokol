@@ -5024,6 +5024,7 @@ static void _sspine_draw_layer(_sspine_context_t* ctx, int layer, const sspine_l
                     sg_apply_pipeline(cmd->pip);
                     cur_pip_id = cmd->pip.id;
                     sg_apply_uniforms(0, &vsparams_range);
+                    sg_apply_uniforms(1, &fsparams_range);
                     cur_view_id = SG_INVALID_ID;
                 }
                 if ((cur_view_id != cmd->view.id) || (cur_smp_id != cmd->smp.id)) {
@@ -5037,8 +5038,6 @@ static void _sspine_draw_layer(_sspine_context_t* ctx, int layer, const sspine_l
                     fsparams.pma = cmd->pma;
                     sg_apply_uniforms(1, &fsparams_range);
                     cur_pma = cmd->pma;
-                } else {
-                    sg_apply_uniforms(1, &fsparams_range);
                 }
                 if (cmd->num_elements > 0) {
                     sg_draw(cmd->base_element, cmd->num_elements, 1);
