@@ -3863,10 +3863,10 @@ static sspine_resource_state _sspine_init_context(_sspine_context_t* ctx, const 
     pip_desc.label = "sspine-pip-normal/additive";
     ctx->pip.normal_additive = sg_make_pipeline(&pip_desc);
 
-    pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_ZERO;
-    pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_SRC_COLOR;
-    pip_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ZERO;
-    pip_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
+    pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_DST_COLOR;
+    pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_COLOR;
+    pip_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_DST_ALPHA;
+    pip_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     pip_desc.label = "sspine-pip-multiply";
     ctx->pip.multiply = sg_make_pipeline(&pip_desc);
 
