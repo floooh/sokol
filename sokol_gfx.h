@@ -18018,15 +18018,10 @@ _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_sg.wgpu.rpass_enc);
-    // FIXME FIXME FIXME: CLIPPING THE VIEWPORT HERE IS WRONG!!!
-    // (but currently required because WebGPU insists that the viewport rectangle must be
-    // fully contained inside the framebuffer, but this doesn't make any sense, and also
-    // isn't required by the backend APIs)
-    const _sg_recti_t clip = _sg_clipi(x, y, w, h, _sg.cur_pass.dim.width, _sg.cur_pass.dim.height);
-    float xf = (float) clip.x;
-    float yf = (float) (origin_top_left ? clip.y : (_sg.cur_pass.dim.height - (clip.y + clip.h)));
-    float wf = (float) clip.w;
-    float hf = (float) clip.h;
+    float xf = (float) x;
+    float yf = (float) (origin_top_left ? y : (_sg.cur_pass.dim.height - (y + h)));
+    float wf = (float) w;
+    float hf = (float) h;
     wgpuRenderPassEncoderSetViewport(_sg.wgpu.rpass_enc, xf, yf, wf, hf, 0.0f, 1.0f);
 }
 
