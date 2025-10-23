@@ -84,6 +84,9 @@ extern "C" {
 SOKOL_APP_TURBO_API_DECL void sapp_setup(const sapp_desc* desc);
 SOKOL_APP_TURBO_API_DECL void sapp_shutdown(void);
 
+SOKOL_APP_TURBO_API_DECL void sapp_begin_tick(void);
+SOKOL_APP_TURBO_API_DECL void sapp_end_tick(void);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
@@ -145,6 +148,27 @@ typedef struct {
 #endif
 static _sat_state_t _sat;
 
+
+#if defined(_WIN32)
+
+_SOKOL_PRIVATE void _sapp_windows_setup(const sapp_desc* desc) {
+    (void)desc;
+}
+
+_SOKOL_PRIVATE void _sapp_windows_shutdown(void) {
+    
+}
+
+_SOKOL_PRIVATE void _sapp_windows_begin_tick(void) {
+
+}
+
+_SOKOL_PRIVATE void _sapp_windows_end_tick(void) {
+
+}
+
+#elif defined(__APPLE__) && defined(__MACH__)
+
 _SOKOL_PRIVATE void _sapp_macos_setup(const sapp_desc* desc) {
     (void)desc;
     _sapp_init_state(desc);
@@ -158,25 +182,114 @@ _SOKOL_PRIVATE void _sapp_macos_setup(const sapp_desc* desc) {
     NSApp.delegate = _sapp.macos.app_dlg;
 }
 
-_SOKOL_PRIVATE void _sapp_windows_setup(const sapp_desc* desc) {
-    (void)desc;
-}
-
-_SOKOL_PRIVATE void _sapp_linux_setup(const sapp_desc* desc) {
-    (void)desc;
-}
-
 _SOKOL_PRIVATE void _sapp_macos_shutdown(void) {
 
 }
 
-_SOKOL_PRIVATE void _sapp_windows_shutdown(void) {
-    
+_SOKOL_PRIVATE void _sapp_macos_begin_tick(void) {
+
+}
+
+_SOKOL_PRIVATE void _sapp_macos_end_tick(void) {
+
+}
+
+#elif defined(__EMSCRIPTEN__)
+
+#else // Linux and similar
+
+_SOKOL_PRIVATE void _sapp_linux_setup(const sapp_desc* desc) {
+    (void)_sat;
+    /* The following lines are here to trigger a linker error instead of an
+        obscure runtime error if the user has forgotten to add -pthread to
+        the compiler or linker options. They have no other purpose.
+    */
+    pthread_attr_t pthread_attr;
+    pthread_attr_init(&pthread_attr);
+    pthread_attr_destroy(&pthread_attr);
+
+    _sapp_init_state(desc);
+    _sapp.x11.window_state = NormalState;
+
+    XInitThreads();
+    XrmInitialize();
+    _sapp.x11.display = XOpenDisplay(NULL);
+    if (!_sapp.x11.display) {
+        _SAPP_PANIC(LINUX_X11_OPEN_DISPLAY_FAILED);
+    }
+    _sapp.x11.screen = DefaultScreen(_sapp.x11.display);
+    _sapp.x11.root = DefaultRootWindow(_sapp.x11.display);
+    _sapp_x11_query_system_dpi();
+    // NOTE: on Linux system-window-size to frame-buffer-size mapping is always 1:1
+    _sapp.dpi_scale = _sapp.x11.dpi / 96.0f;
+    _sapp_x11_init_extensions();
+    _sapp_x11_create_standard_cursors();
+    XkbSetDetectableAutoRepeat(_sapp.x11.display, true, NULL);
+    _sapp_x11_init_keytable();
+    #if defined(_SAPP_GLX)
+        _sapp_glx_init();
+        Visual* visual = 0;
+        int depth = 0;
+        _sapp_glx_choose_visual(&visual, &depth);
+        _sapp_x11_create_window(visual, depth);
+        _sapp_glx_create_context();
+        _sapp_glx_swapinterval(_sapp.swap_interval);
+    #elif defined(_SAPP_EGL)
+        _sapp_egl_init();
+    #elif defined(SOKOL_WGPU)
+        _sapp_x11_create_window(0, 0);
+        _sapp_wgpu_init();
+    #endif
+    sapp_set_icon(&desc->icon);
+    _sapp.valid = true;
+    _sapp_x11_show_window();
+    if (_sapp.fullscreen) {
+        _sapp_x11_set_fullscreen(true);
+    }
+
+    XFlush(_sapp.x11.display);
 }
 
 _SOKOL_PRIVATE void _sapp_linux_shutdown(void) {
-    
+    _sapp_call_cleanup();
+    #if defined(_SAPP_GLX)
+        _sapp_glx_destroy_context();
+    #elif defined(_SAPP_EGL)
+        _sapp_egl_destroy();
+    #elif defined(SOKOL_WGPU)
+        _sapp_wgpu_discard();
+    #endif
+    _sapp_x11_destroy_window();
+    _sapp_x11_destroy_standard_cursors();
+    XCloseDisplay(_sapp.x11.display);
+    _sapp_discard_state();
 }
+
+_SOKOL_PRIVATE void _sapp_linux_begin_tick(void) {
+    _sapp_timing_measure(&_sapp.timing);
+    int count = XPending(_sapp.x11.display);
+    while (count--) {
+        XEvent event;
+        XNextEvent(_sapp.x11.display, &event);
+        _sapp_x11_process_event(&event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_linux_end_tick(void) {
+    XFlush(_sapp.x11.display);
+    // handle quit-requested, either from window or from sapp_request_quit()
+    if (_sapp.quit_requested && !_sapp.quit_ordered) {
+        // give user code a chance to intervene
+        _sapp_x11_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
+        /* if user code hasn't intervened, quit the app */
+        if (_sapp.quit_requested) {
+            _sapp.quit_ordered = true;
+        }
+    }
+}
+
+#endif
+
 
 /* prevent 64-bit overflow when computing relative timestamp
     see https://gist.github.com/jspohr/3dc4f00033d79ec5bdaf67bc46c813e3
@@ -211,6 +324,30 @@ SOKOL_API_IMPL void sapp_shutdown(void) {
     
     #else
     _sapp_linux_shutdown();
+    #endif
+}
+
+SOKOL_API_IMPL void sapp_begin_tick(void) {
+    #if defined(_WIN32)
+    _sapp_windows_begin_tick();    
+    #elif defined(__APPLE__) && defined(__MACH__)
+    _sapp_macos_begin_tick();
+    #elif defined(__EMSCRIPTEN__)
+    
+    #else
+    _sapp_linux_begin_tick();
+    #endif
+}
+
+SOKOL_API_IMPL void sapp_end_tick(void) {
+    #if defined(_WIN32)
+    _sapp_windows_end_tick();    
+    #elif defined(__APPLE__) && defined(__MACH__)
+    _sapp_macos_end_tick();
+    #elif defined(__EMSCRIPTEN__)
+    
+    #else
+    _sapp_linux_end_tick();
     #endif
 }
 
