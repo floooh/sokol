@@ -29,7 +29,7 @@ if(SOKOL_TURBO_PLATFORM STREQUAL "WIN32")
     target_sources(sokol_turbo PRIVATE sokol-turbo.c)
     target_compile_definitions(sokol_turbo PRIVATE _WIN32 SOKOL_IMPL=1 SOKOL_GLCORE=1)
     
-    target_link_libraries(sokol_turbo PRIVATE
+    target_link_libraries(sokol_turbo PUBLIC
         user32
         gdi32
         shell32
@@ -50,9 +50,12 @@ elseif(SOKOL_TURBO_PLATFORM STREQUAL "LINUX")
     # Find required packages
     find_package(PkgConfig REQUIRED)
     find_package(OpenGL REQUIRED)
-    pkg_check_modules(X11 REQUIRED x11)
-    pkg_check_modules(XRANDR REQUIRED xrandr)
-    pkg_check_modules(XEXT REQUIRED xext)
+    find_package(X11 REQUIRED)
+    # pkg_check_modules(X11 REQUIRED x11)
+    # pkg_check_modules(Xi REQUIRED Xi)
+    # pkg_check_modules(XCursor REQUIRED x11)
+    # pkg_check_modules(XRANDR REQUIRED xrandr)
+    # pkg_check_modules(XEXT REQUIRED xext)
 
     target_include_directories(sokol_turbo PRIVATE
         ${X11_INCLUDE_DIRS}
@@ -60,6 +63,8 @@ elseif(SOKOL_TURBO_PLATFORM STREQUAL "LINUX")
     )
     target_link_libraries(sokol_turbo PRIVATE
         ${X11_LIBRARIES}
+        ${X11_Xi_LIB}
+        ${X11_Xcursor_LIB}
         ${XRANDR_LIBRARIES}
         ${XEXT_LIBRARIES}
         ${OPENGL_LIBRARIES}
@@ -88,7 +93,7 @@ elseif(SOKOL_TURBO_PLATFORM STREQUAL "MACOS")
     find_library(COREGRAPHICS_FRAMEWORK CoreGraphics)
     find_library(OPENGL_FRAMEWORK OpenGL)
 
-    target_link_libraries(sokol_turbo PRIVATE
+    target_link_libraries(sokol_turbo PUBLIC
         ${COCOA_FRAMEWORK}
         ${CARBON_FRAMEWORK}
         ${IOKIT_FRAMEWORK}
@@ -109,6 +114,13 @@ if(MSVC)
     target_compile_options(sokol_turbo PRIVATE /W4)
 else()
     target_compile_options(sokol_turbo PRIVATE -Wall -Wextra -pedantic)
+endif()
+
+# Example executable (optional)
+option(BUILD_EXAMPLES "Build example programs" ON)
+
+if(BUILD_EXAMPLES)
+    add_subdirectory("samples")
 endif()
 
 # Display configuration summary
