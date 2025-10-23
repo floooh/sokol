@@ -8,6 +8,13 @@
 
   PR: https://github.com/floooh/sokol/pull/1362
 
+- sokol_gfx.h gl: fix a somewhat esoteric regression in the GL backend
+  feature detection code when an external GL loader is used which provides
+  a GL version older than 4.6. This regression was introduced in PR
+  https://github.com/floooh/sokol/pull/1347.
+
+  Fix PR: https://github.com/floooh/sokol/pull/1363
+
 ### 21-Oct-2025
 
 - sokol_spine.h: merged PR https://github.com/floooh/sokol/pull/1361 which

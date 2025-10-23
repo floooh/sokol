@@ -5436,11 +5436,17 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
 
     // broad GL feature availability defines (DON'T merge this into the above ifdef-block!)
     #if defined(_WIN32)
-        #define _SOKOL_GL_HAS_COMPUTE (1)
-        #define _SOKOL_GL_HAS_TEXSTORAGE (1)
-        #define _SOKOL_GL_HAS_TEXVIEWS (1)
-        #define _SOKOL_GL_HAS_BASEVERTEX (1)
-        #define _SOKOL_GL_HAS_BASEINSTANCE (1)
+        #if defined(GL_VERSION_4_3) || defined(_SOKOL_USE_WIN32_GL_LOADER)
+            #define _SOKOL_GL_HAS_COMPUTE (1)
+            #define _SOKOL_GL_HAS_TEXVIEWS (1)
+        #endif
+        #if defined(GL_VERSION_4_2) || defined(_SOKOL_USE_WIN32_GL_LOADER)
+            #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+            #define _SOKOL_GL_HAS_BASEINSTANCE (1)
+        #endif
+        #if defined(GL_VERSION_3_2) || defined(_SOKOL_USE_WIN32_GL_LOADER)
+            #define _SOKOL_GL_HAS_BASEVERTEX (1)
+        #endif
     #elif defined(__APPLE__)
         #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
             #define _SOKOL_GL_HAS_BASEVERTEX (1)
@@ -5453,12 +5459,22 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define _SOKOL_GL_HAS_COMPUTE (1)
         #define _SOKOL_GL_HAS_TEXSTORAGE (1)
     #elif defined(__linux__) || defined(__unix__)
-        #define _SOKOL_GL_HAS_COMPUTE (1)
-        #define _SOKOL_GL_HAS_TEXSTORAGE (1)
-        #define _SOKOL_GL_HAS_BASEVERTEX (1)
         #if defined(SOKOL_GLCORE)
-            #define _SOKOL_GL_HAS_TEXVIEWS (1)
-            #define _SOKOL_GL_HAS_BASEINSTANCE (1)
+            #if defined(GL_VERSION_4_3)
+                #define _SOKOL_GL_HAS_COMPUTE (1)
+                #define _SOKOL_GL_HAS_TEXVIEWS (1)
+            #endif
+            #if defined(GL_VERSION_4_2)
+                #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+                #define _SOKOL_GL_HAS_BASEINSTANCE (1)
+            #endif
+            #if defined(GL_VERSION_3_2)
+                #define _SOKOL_GL_HAS_BASEVERTEX (1)
+            #endif
+        #else
+            #define _SOKOL_GL_HAS_COMPUTE (1)
+            #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+            #define _SOKOL_GL_HAS_BASEVERTEX (1)
         #endif
     #endif
 
