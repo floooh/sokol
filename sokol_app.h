@@ -5344,36 +5344,30 @@ _SOKOL_PRIVATE void _sapp_ios_app_event(sapp_event_type type) {
     }
 }
 
-#if defined(_SAPP_TVOS)
-_SOKOL_PRIVATE void _sapp_tvos_press_event(UIPressType press, sapp_event_type type) {
-    sapp_keycode key;
-    switch (press) {
-        case UIPressTypeUpArrow:    key = SAPP_KEYCODE_UP; break;
-        case UIPressTypeDownArrow:  key = SAPP_KEYCODE_DOWN; break;
-        case UIPressTypeLeftArrow:  key = SAPP_KEYCODE_LEFT; break;
-        case UIPressTypeRightArrow: key = SAPP_KEYCODE_RIGHT; break;
-        case UIPressTypeSelect:     key = SAPP_KEYCODE_ENTER; break;
-        case UIPressTypeMenu:       key = SAPP_KEYCODE_MENU; break;
-        case UIPressTypePlayPause:  key = SAPP_KEYCODE_MENU; break;
-        default:                    key = SAPP_KEYCODE_INVALID; break;
-    }
-    if (key != SAPP_KEYCODE_INVALID) {
-        _sapp_init_event(type);
-        _sapp.event.key_code = key;
-        _sapp.event.key_repeat = false;
-        _sapp.event.modifiers = 0;
-        _sapp_call_event(&_sapp.event);
-    }
-}
-
 _SOKOL_PRIVATE void _sapp_tvos_press_event(sapp_event_type type, NSSet<UIPress *>* presses) {
     if (_sapp_events_enabled()) {
-        for ( UIPress *press in presses ) {
-            _sapp_tvos_press_event(press.type, type);
+        for (UIPress *press in presses) {
+            sapp_keycode key = SAPP_KEYCODE_INVALID;
+            switch (press.type) {
+                case UIPressTypeUpArrow:    key = SAPP_KEYCODE_UP; break;
+                case UIPressTypeDownArrow:  key = SAPP_KEYCODE_DOWN; break;
+                case UIPressTypeLeftArrow:  key = SAPP_KEYCODE_LEFT; break;
+                case UIPressTypeRightArrow: key = SAPP_KEYCODE_RIGHT; break;
+                case UIPressTypeSelect:     key = SAPP_KEYCODE_ENTER; break;
+                case UIPressTypeMenu:       key = SAPP_KEYCODE_MENU; break;
+                case UIPressTypePlayPause:  key = SAPP_KEYCODE_PAUSE; break;
+                default: break;
+            }
+            if (key != SAPP_KEYCODE_INVALID) {
+                _sapp_init_event(type);
+                _sapp.event.key_code = key;
+                _sapp.event.key_repeat = false;
+                _sapp.event.modifiers = 0;
+                _sapp_call_event(&_sapp.event);
+            }
         }
     }
 }
-#endif
 
 _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>* touches, UIEvent* event) {
     if (_sapp_events_enabled()) {
@@ -5590,12 +5584,10 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 - (BOOL)isOpaque {
     return YES;
 }
-#if defined(_SAPP_TVOS)
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
     _sapp_tvos_press_event(SAPP_EVENTTYPE_KEY_DOWN, presses);
 }
 - (void)pressesChanged:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
-    // Not sure if we need this, keeping it in case I find a use-case while testing.
 }
 - (void)pressesEnded:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
     _sapp_tvos_press_event(SAPP_EVENTTYPE_KEY_UP, presses);
@@ -5603,7 +5595,6 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 - (void)pressesCancelled:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
     _sapp_tvos_press_event(SAPP_EVENTTYPE_KEY_UP, presses);
 }
-#endif
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent*)event {
     _sapp_ios_touch_event(SAPP_EVENTTYPE_TOUCHES_BEGAN, touches, event);
 }
