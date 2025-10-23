@@ -83,6 +83,8 @@ extern "C" {
 
 SOKOL_APP_TURBO_API_DECL void sapp_setup(const sapp_desc* desc);
 SOKOL_APP_TURBO_API_DECL void sapp_shutdown(void);
+SOKOL_APP_TURBO_API_DECL bool sapp_should_close(void);
+SOKOL_APP_TURBO_API_DECL void sapp_poll_events(void);
 
 SOKOL_APP_TURBO_API_DECL void sapp_begin_tick(void);
 SOKOL_APP_TURBO_API_DECL void sapp_end_tick(void);
@@ -159,6 +161,10 @@ _SOKOL_PRIVATE void _sapp_windows_shutdown(void) {
     
 }
 
+_SOKOL_PRIVATE void _sapp_windows_poll_events(void) {
+
+}
+
 _SOKOL_PRIVATE void _sapp_windows_begin_tick(void) {
 
 }
@@ -180,10 +186,29 @@ _SOKOL_PRIVATE void _sapp_macos_setup(const sapp_desc* desc) {
     sapp_set_icon(&_sapp.desc.icon);
     _sapp.macos.app_dlg = [[_sapp_macos_app_delegate alloc] init];
     NSApp.delegate = _sapp.macos.app_dlg;
+
+    // workaround for "no key-up sent while Cmd is pressed" taken from GLFW:
+    NSEvent* (^keyup_monitor)(NSEvent*) = ^NSEvent* (NSEvent* event) {
+        if ([event modifierFlags] & NSEventModifierFlagCommand) {
+            [[NSApp keyWindow] sendEvent:event];
+        }
+        return event;
+    };
+    _sapp.macos.keyup_monitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyUp handler:keyup_monitor];
 }
 
 _SOKOL_PRIVATE void _sapp_macos_shutdown(void) {
 
+}
+
+_SOKOL_PRIVATE void _sapp_macos_poll_events(void) {
+    NSEvent* event = NULL;
+    while ((event = [NSApp nextEventMatchingMask:NSEventMaskAny
+                                             untilDate:nil
+                                                inMode:NSDefaultRunLoopMode
+                                               dequeue:YES])) {
+        [NSApp sendEvent:event];
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_begin_tick(void) {
@@ -265,6 +290,10 @@ _SOKOL_PRIVATE void _sapp_linux_shutdown(void) {
     _sapp_discard_state();
 }
 
+_SOKOL_PRIVATE void _sapp_linux_poll_events(void) {
+
+}
+
 _SOKOL_PRIVATE void _sapp_linux_begin_tick(void) {
     _sapp_timing_measure(&_sapp.timing);
     int count = XPending(_sapp.x11.display);
@@ -325,6 +354,22 @@ SOKOL_API_IMPL void sapp_shutdown(void) {
     #else
     _sapp_linux_shutdown();
     #endif
+}
+
+SOKOL_API_IMPL bool sapp_should_close(void) {
+    return _sapp.quit_ordered | _sapp.quit_requested;
+}
+
+SOKOL_API_IMPL void sapp_poll_events(void) {
+#if defined(_WIN32)
+    _sapp_windows_poll_events();    
+#elif defined(__APPLE__) && defined(__MACH__)
+    _sapp_macos_poll_events();
+#elif defined(__EMSCRIPTEN__)
+    
+#else
+    _sapp_linux_poll_events();
+#endif
 }
 
 SOKOL_API_IMPL void sapp_begin_tick(void) {

@@ -75,6 +75,10 @@ int main(int argc, char* argv[]) {
         .logger.func = slog_func,
     };
 
+    sapp_setup(&desc);
+
+    sapp_shutdown();
+
     sapp_run(&desc);
 
     return 0;
