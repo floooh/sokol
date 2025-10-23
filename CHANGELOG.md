@@ -1,5 +1,13 @@
 ## Updates
 
+### 23-Oct-2025
+
+- sokol_gfx.h webgpu: the viewport rectangle is no longer clipped against
+  the visible area. This was a design wart in an older version of the
+  WebGPU spec which has been relaxed by now.
+
+  PR: https://github.com/floooh/sokol/pull/1362
+
 ### 21-Oct-2025
 
 - sokol_spine.h: merged PR https://github.com/floooh/sokol/pull/1361 which
