@@ -77,9 +77,11 @@ int main(int argc, char* argv[]) {
 
     sapp_setup(&desc);
 
-    sapp_shutdown();
+    while(!sapp_should_close()) {
+        sapp_poll_events();
+    }
 
-    sapp_run(&desc);
+    sapp_shutdown();
 
     return 0;
 }

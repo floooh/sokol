@@ -275,23 +275,27 @@ _SOKOL_PRIVATE void _sapp_linux_setup(const sapp_desc* desc) {
     XFlush(_sapp.x11.display);
 }
 
-_SOKOL_PRIVATE void _sapp_linux_shutdown(void) {
-    _sapp_call_cleanup();
-    #if defined(_SAPP_GLX)
-        _sapp_glx_destroy_context();
-    #elif defined(_SAPP_EGL)
-        _sapp_egl_destroy();
-    #elif defined(SOKOL_WGPU)
-        _sapp_wgpu_discard();
-    #endif
-    _sapp_x11_destroy_window();
-    _sapp_x11_destroy_standard_cursors();
-    XCloseDisplay(_sapp.x11.display);
-    _sapp_discard_state();
-}
-
 _SOKOL_PRIVATE void _sapp_linux_poll_events(void) {
-
+    while (!_sapp.quit_ordered) {
+        _sapp_timing_measure(&_sapp.timing);
+        int count = XPending(_sapp.x11.display);
+        while (count--) {
+            XEvent event;
+            XNextEvent(_sapp.x11.display, &event);
+            _sapp_x11_process_event(&event);
+        }
+        _sapp_linux_frame();
+        XFlush(_sapp.x11.display);
+        // handle quit-requested, either from window or from sapp_request_quit()
+        if (_sapp.quit_requested && !_sapp.quit_ordered) {
+            // give user code a chance to intervene
+            _sapp_x11_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
+            /* if user code hasn't intervened, quit the app */
+            if (_sapp.quit_requested) {
+                _sapp.quit_ordered = true;
+            }
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_linux_begin_tick(void) {
@@ -315,6 +319,21 @@ _SOKOL_PRIVATE void _sapp_linux_end_tick(void) {
             _sapp.quit_ordered = true;
         }
     }
+}
+
+_SOKOL_PRIVATE void _sapp_linux_shutdown(void) {
+    _sapp_call_cleanup();
+    #if defined(_SAPP_GLX)
+        _sapp_glx_destroy_context();
+    #elif defined(_SAPP_EGL)
+        _sapp_egl_destroy();
+    #elif defined(SOKOL_WGPU)
+        _sapp_wgpu_discard();
+    #endif
+    _sapp_x11_destroy_window();
+    _sapp_x11_destroy_standard_cursors();
+    XCloseDisplay(_sapp.x11.display);
+    _sapp_discard_state();
 }
 
 #endif
@@ -357,7 +376,7 @@ SOKOL_API_IMPL void sapp_shutdown(void) {
 }
 
 SOKOL_API_IMPL bool sapp_should_close(void) {
-    return _sapp.quit_ordered | _sapp.quit_requested;
+    return _sapp.quit_ordered;
 }
 
 SOKOL_API_IMPL void sapp_poll_events(void) {
