@@ -8,6 +8,10 @@
 
   PR: https://github.com/floooh/sokol/pull/1366
 
+- sokol_app.h ios: the iOS backend now suports some tvOS features
+  via PR https://github.com/floooh/sokol/pull/1346, many thanks
+  to @tomasandrle!
+
 ### 23-Oct-2025
 
 - sokol_gfx.h webgpu: the viewport rectangle is no longer clipped against
