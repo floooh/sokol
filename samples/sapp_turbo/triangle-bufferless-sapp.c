@@ -64,6 +64,8 @@ static void init(void) {
 }
 
 static void frame(void) {
+    sapp_begin_tick();
+
     const int width = sapp_width();
     const int height = sapp_height();
     const float fwidth = (float)width;
@@ -118,6 +120,8 @@ static void frame(void) {
     simgui_render();
     sg_end_pass();
     sg_commit();
+
+    sapp_end_tick();
 }
 
 static void cleanup(void) {
@@ -150,8 +154,6 @@ int main(int argc, char* argv[]) {
 
     while(!sapp_should_close()) {
         sapp_poll_events();
-        sapp_begin_tick();
-        sapp_end_tick();
     }
 
     sapp_shutdown();

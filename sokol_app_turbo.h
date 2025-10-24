@@ -180,6 +180,7 @@ _SOKOL_PRIVATE void _sapp_macos_setup(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp_macos_init_keytable();
     [NSApplication sharedApplication];
+    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 
     // set the application dock icon as early as possible, otherwise
     // the dummy icon will be visible for a short time
@@ -195,6 +196,67 @@ _SOKOL_PRIVATE void _sapp_macos_setup(const sapp_desc* desc) {
         return event;
     };
     _sapp.macos.keyup_monitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyUp handler:keyup_monitor];
+
+    // Manually create the window (normally done in applicationDidFinishLaunching)
+    _sapp_macos_init_cursors();
+    if ((_sapp.window_width == 0) || (_sapp.window_height == 0)) {
+        // use 4/5 of screen size as default size
+        NSRect screen_rect = NSScreen.mainScreen.frame;
+        if (_sapp.window_width == 0) {
+            _sapp.window_width = (int)((screen_rect.size.width * 4.0f) / 5.0f);
+        }
+        if (_sapp.window_height == 0) {
+            _sapp.window_height = (int)((screen_rect.size.height * 4.0f) / 5.0f);
+        }
+    }
+    const NSUInteger style =
+        NSWindowStyleMaskTitled |
+        NSWindowStyleMaskClosable |
+        NSWindowStyleMaskMiniaturizable |
+        NSWindowStyleMaskResizable;
+    NSRect window_rect = NSMakeRect(0, 0, _sapp.window_width, _sapp.window_height);
+    _sapp.macos.window = [[_sapp_macos_window alloc]
+        initWithContentRect:window_rect
+        styleMask:style
+        backing:NSBackingStoreBuffered
+        defer:NO];
+    _sapp.macos.window.releasedWhenClosed = NO;
+    _sapp.macos.window.title = [NSString stringWithUTF8String:_sapp.window_title];
+    _sapp.macos.window.acceptsMouseMovedEvents = YES;
+    _sapp.macos.window.restorable = YES;
+
+    _sapp.macos.win_dlg = [[_sapp_macos_window_delegate alloc] init];
+    _sapp.macos.window.delegate = _sapp.macos.win_dlg;
+    #if defined(SOKOL_METAL)
+        _sapp_macos_mtl_init();
+    #elif defined(SOKOL_GLCORE)
+        _sapp_macos_gl_init(window_rect);
+    #elif defined(SOKOL_WGPU)
+        _sapp_macos_wgpu_init();
+    #endif
+    _sapp.macos.window.contentView = _sapp.macos.view;
+    [_sapp.macos.window makeFirstResponder:_sapp.macos.view];
+    [_sapp.macos.window center];
+    _sapp.valid = true;
+    if (_sapp.fullscreen) {
+        [_sapp.macos.window toggleFullScreen:nil];
+    }
+    [NSApp activateIgnoringOtherApps:YES];
+    [_sapp.macos.window makeKeyAndOrderFront:nil];
+    _sapp_macos_update_dimensions();
+    [NSEvent setMouseCoalescingEnabled:NO];
+
+    // workaround for window not being focused during a long init callback
+    NSEvent *focusevent = [NSEvent otherEventWithType:NSEventTypeAppKitDefined
+        location:NSZeroPoint
+        modifierFlags:0x40
+        timestamp:0
+        windowNumber:0
+        context:nil
+        subtype:NSEventSubtypeApplicationActivated
+        data1:0
+        data2:0];
+    [NSApp postEvent:focusevent atStart:YES];
 }
 
 _SOKOL_PRIVATE void _sapp_macos_shutdown(void) {
@@ -202,7 +264,7 @@ _SOKOL_PRIVATE void _sapp_macos_shutdown(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_macos_poll_events(void) {
-    NSEvent* event = NULL;
+    NSEvent* event;
     while ((event = [NSApp nextEventMatchingMask:NSEventMaskAny
                                              untilDate:nil
                                                 inMode:NSDefaultRunLoopMode
