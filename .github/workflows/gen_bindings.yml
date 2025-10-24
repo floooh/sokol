@@ -70,6 +70,10 @@ jobs:
         with:
           repository: floooh/sokol-c3
           path: bindgen/sokol-c3
+      - uses: actions/checkout@main
+        with:
+          repository: angluca/sokol-c2
+          path: bindgen/sokol-c2
       - name: generate
         run: |
           cd bindgen
@@ -118,6 +122,13 @@ jobs:
           name: ignore-me-c3
           retention-days: 1
           path: bindgen/sokol-c3/sokol.c3l
+      - name: upload-c2-artifact
+        uses: actions/upload-artifact@main
+        with:
+          name: ignore-me-c2
+          retention-days: 1
+          path: bindgen/sokol-c2/sokol
+          path: bindgen/sokol-c2/c
 
   test-zig:
     needs: gen-bindings
