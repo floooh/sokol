@@ -1,5 +1,13 @@
 ## Updates
 
+### 24-Oct-2025
+
+- sokol_gfx.h: add a missing validation layer check in sg_begin_pass():
+  when providing a resolve attachment, the associated color attachment must
+  have a sample_count of 1.
+
+  PR: https://github.com/floooh/sokol/pull/1366
+
 ### 23-Oct-2025
 
 - sokol_gfx.h webgpu: the viewport rectangle is no longer clipped against
