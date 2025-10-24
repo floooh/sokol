@@ -8,6 +8,9 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Use FetchContent for faster dependency management
+include(FetchContent)
+
 # Platform detection
 set(SOKOL_TURBO_PLATFORM "")
 if(WIN32)

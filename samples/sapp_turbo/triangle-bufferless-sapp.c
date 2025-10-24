@@ -6,19 +6,40 @@
 //------------------------------------------------------------------------------
 #include "sokol_app_turbo.h"
 #include "sokol_gfx.h"
+#include "sokol_time.h"
 #include "sokol_log.h"
 #include "sokol_glue.h"
+
+#include "cimgui.h"
+#define SOKOL_IMGUI_IMPL
+#include "util/sokol_imgui.h"
 // #include "dbgui/dbgui.h"
 #include "triangle-bufferless-sapp.glsl.h"
 
 static struct {
     sg_pipeline pip;
     sg_pass_action pass_action;
+    uint64_t last_time;
+    double min_raw_frame_time;
+    double max_raw_frame_time;
+    double min_rounded_frame_time;
+    double max_rounded_frame_time;
 } state;
+
+static void reset_minmax_frametimes(void) {
+    state.max_raw_frame_time = 0;
+    state.min_raw_frame_time = 1000.0;
+    state.max_rounded_frame_time = 0;
+    state.min_rounded_frame_time = 1000.0;
+}
 
 static void init(void) {
     sg_setup(&(sg_desc){
         .environment = sglue_environment(),
+        .logger.func = slog_func,
+    });
+    stm_setup();
+    simgui_setup(&(simgui_desc_t){
         .logger.func = slog_func,
     });
     // __dbgui_setup(sapp_sample_count());
@@ -38,25 +59,75 @@ static void init(void) {
     state.pass_action = (sg_pass_action){
         .colors[0] = { .load_action = SG_LOADACTION_CLEAR, .clear_value = { 0, 0, 0, 1} },
     };
+
+    reset_minmax_frametimes();
 }
 
 static void frame(void) {
+    const int width = sapp_width();
+    const int height = sapp_height();
+    const float fwidth = (float)width;
+    const float fheight = (float)height;
+    double raw_frame_time = stm_sec(stm_laptime(&state.last_time));
+    double rounded_frame_time = sapp_frame_duration();
+    if (raw_frame_time > 0) {
+        if (raw_frame_time < state.min_raw_frame_time) {
+            state.min_raw_frame_time = raw_frame_time;
+        }
+        if (raw_frame_time > state.max_raw_frame_time) {
+            state.max_raw_frame_time = raw_frame_time;
+        }
+    }
+    if (rounded_frame_time > 0) {
+        if (rounded_frame_time < state.min_rounded_frame_time) {
+            state.min_rounded_frame_time = rounded_frame_time;
+        }
+        if (rounded_frame_time > state.max_rounded_frame_time) {
+            state.max_rounded_frame_time = rounded_frame_time;
+        }
+    }
+
+    simgui_new_frame(&(simgui_frame_desc_t){
+        .width = width,
+        .height = height,
+        .delta_time = rounded_frame_time,
+        .dpi_scale = sapp_dpi_scale()
+    });
+
+    // controls window
+    igSetNextWindowPos((ImVec2){ 10, 10 }, ImGuiCond_Once);
+    igSetNextWindowSize((ImVec2){ 450, 0 }, ImGuiCond_Once);
+    igBegin("Controls", 0, ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoScrollbar);
+    igText("Raw frame time:     %.3fms (min: %.3f, max: %.3f)",
+        raw_frame_time * 1000.0,
+        state.min_raw_frame_time * 1000.0,
+        state.max_raw_frame_time * 1000.0);
+    igText("Rounded frame time: %.3fms (min: %.3f, max: %.3f)",
+        rounded_frame_time * 1000.0,
+        state.min_rounded_frame_time * 1000.0,
+        state.max_rounded_frame_time * 1000.0);
+    if (igButton("Reset min/max times")) {
+        reset_minmax_frametimes();
+    }
+    igEnd();
+
     sg_begin_pass(&(sg_pass){ .action = state.pass_action, .swapchain = sglue_swapchain() });
     sg_apply_pipeline(state.pip);
     sg_draw(0, 3, 1);
     // __dbgui_draw();
+    simgui_render();
     sg_end_pass();
     sg_commit();
 }
 
 static void cleanup(void) {
     // __dbgui_shutdown();
+    simgui_shutdown();
     sg_shutdown();
 }
 
 static void event(const sapp_event* e) {
-    (void)e;
-    // simgui_handle_event(e);
+    simgui_handle_event(e);
 }
 
 
@@ -68,8 +139,8 @@ int main(int argc, char* argv[]) {
         .frame_cb = frame,
         .cleanup_cb = cleanup,
         .event_cb = event,
-        .width = 640,
-        .height = 480,
+        .width = 1280,
+        .height = 720,
         .window_title = "triangle-bufferless-sapp.c",
         .icon.sokol_default = true,
         .logger.func = slog_func,
@@ -79,6 +150,8 @@ int main(int argc, char* argv[]) {
 
     while(!sapp_should_close()) {
         sapp_poll_events();
+        sapp_begin_tick();
+        sapp_end_tick();
     }
 
     sapp_shutdown();
