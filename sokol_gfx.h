@@ -4392,6 +4392,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(WGPU_CREATE_RENDER_PIPELINE_FAILED, "wgpuDeviceCreateRenderPipeline() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_COMPUTE_PIPELINE_FAILED, "wgpuDeviceCreateComputePipeline() failed") \
     _SG_LOGITEM_XMACRO(VULKAN_DELETE_QUEUE_EXHAUSTED, "vulkan: internal delete queue exhausted (too many objects destroyed per frame)") \
+    _SG_LOGITEM_XMACRO(VULKAN_CREATE_BUFFER_FAILED, "vkCreateBuffer() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_SHADER_MODULE_FAILED, "vkCreateShaderModule() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_UNIFORMBLOCK_SPIRV_SET0_BINDING_OUT_OF_RANGE, "uniform block 'spirv_set0_binding_n' is out of range (must be 0..15)") \
     _SG_LOGITEM_XMACRO(VULKAN_TEXTURE_SPIRV_SET1_BINDING_OUT_OF_RANGE, "texture 'spirv_set1_binding_n' is out of range (must be 0..127)") \
@@ -6776,6 +6777,11 @@ typedef struct {
 typedef void (*_sg_vk_delete_queue_destructor_t)(void* obj);
 
 typedef struct {
+    VkAccessFlags cur;  // current access flags bits
+    VkAccessFlags next; // next access flags bits
+} _sg_vk_access_t;
+
+typedef struct {
     _sg_vk_delete_queue_destructor_t destructor;
     void* obj;
 } _sg_vk_delete_queue_item_t;
@@ -6789,6 +6795,11 @@ typedef struct {
 typedef struct _sg_buffer_s {
     _sg_slot_t slot;
     _sg_buffer_common_t cmn;
+    struct {
+        VkBuffer buf;
+        VkDeviceMemory mem;
+        _sg_vk_access_t access;
+    } vk;
 } _sg_vk_buffer_t;
 typedef _sg_vk_buffer_t _sg_buffer_t;
 
@@ -18365,6 +18376,36 @@ _SOKOL_PRIVATE void _sg_vk_delete_queue_add(_sg_vk_delete_queue_destructor_t des
     queue->index += 1;
 }
 
+_SOKOL_PRIVATE void _sg_vk_buffer_destructor(void* obj) {
+    SOKOL_ASSERT(_sg.vk.dev && obj);
+    vkDestroyBuffer(_sg.vk.dev, (VkBuffer)obj, 0);
+}
+
+_SOKOL_PRIVATE void _sg_vk_memory_destructor(void* obj) {
+    SOKOL_ASSERT(_sg.vk.dev && obj);
+    SOKOL_ASSERT(false && "FIXME");
+}
+
+_SOKOL_PRIVATE void _sg_vk_shader_module_destructor(void* obj) {
+    SOKOL_ASSERT(_sg.vk.dev && obj);
+    vkDestroyShaderModule(_sg.vk.dev, (VkShaderModule)obj, 0);
+}
+
+_SOKOL_PRIVATE void _sg_vk_pipelinelayout_destructor(void* obj) {
+    SOKOL_ASSERT(_sg.vk.dev && obj);
+    vkDestroyPipelineLayout(_sg.vk.dev, (VkPipelineLayout)obj, 0);
+}
+
+_SOKOL_PRIVATE void _sg_vk_descriptorsetlayout_destructor(void* obj) {
+    SOKOL_ASSERT(_sg.vk.dev && obj);
+    vkDestroyDescriptorSetLayout(_sg.vk.dev, (VkDescriptorSetLayout)obj, 0);
+}
+
+_SOKOL_PRIVATE void _sg_vk_pipeline_destructor(void* obj) {
+    SOKOL_ASSERT(_sg.vk.dev && obj);
+    vkDestroyPipeline(_sg.vk.dev, (VkPipeline)obj, 0);
+}
+
 _SOKOL_PRIVATE void _sg_vk_set_object_label(VkObjectType obj_type, uint64_t obj_handle, const char* label) {
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(obj_handle != 0);
@@ -18372,6 +18413,20 @@ _SOKOL_PRIVATE void _sg_vk_set_object_label(VkObjectType obj_type, uint64_t obj_
         // FIXME: use vkSetDebugUtilsObjectNamesEXT
         _SOKOL_UNUSED(obj_type);
     }
+}
+
+_SOKOL_PRIVATE VkBufferUsageFlags _sg_vk_buffer_usage(const sg_buffer_usage* usg) {
+    VkBufferUsageFlags res = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    if (usg->vertex_buffer) {
+        res |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    }
+    if (usg->index_buffer) {
+        res |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+    }
+    if (usg->storage_buffer) {
+        res |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    }
+    return res;
 }
 
 _SOKOL_PRIVATE VkVertexInputRate _sg_vk_vertex_input_rate(sg_vertex_step s) {
@@ -18856,15 +18911,47 @@ _SOKOL_PRIVATE void _sg_vk_reset_state_cache(void) {
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_vk_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
+    SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(buf->cmn.size > 0);
-    SOKOL_ASSERT(false && "FIXME");
+    SOKOL_ASSERT(0 == buf->vk.buf);
+    SOKOL_ASSERT(0 == buf->vk.mem);
+    SOKOL_ASSERT((0 == buf->vk.access.cur) && (0 == buf->vk.access.next));
+    VkResult res;
+    // FIXME: inject external buffer
+
+    VkBufferCreateInfo create_info;
+    _sg_clear(&create_info, sizeof(create_info));
+    create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    create_info.size = (VkDeviceSize)buf->cmn.size;
+    create_info.usage = _sg_vk_buffer_usage(&buf->cmn.usage);
+    create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    res = vkCreateBuffer(_sg.vk.dev, &create_info, 0, &buf->vk.buf);
+    if (res != VK_SUCCESS) {
+        _SG_ERROR(VULKAN_CREATE_BUFFER_FAILED);
+        return SG_RESOURCESTATE_FAILED;
+    }
+    SOKOL_ASSERT(buf->vk.buf);
+    _sg_vk_set_object_label(VK_OBJECT_TYPE_BUFFER, (uint64_t)buf->vk.buf, desc->label);
+
+    // FIXME: allocate gpu memory
+
+    if (buf->cmn.usage.immutable && desc->data.ptr) {
+        // FIXME: upload
+    }
     return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_vk_discard_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
-    SOKOL_ASSERT(false && "FIXME");
+    if (buf->vk.buf) {
+        _sg_vk_delete_queue_add(_sg_vk_buffer_destructor, (void*)buf->vk.buf);
+        buf->vk.buf = 0;
+    }
+    if (buf->vk.mem) {
+        _sg_vk_delete_queue_add(_sg_vk_memory_destructor, (void*)buf->vk.mem);
+        buf->vk.mem = 0;
+    }
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_vk_create_image(_sg_image_t* img, const sg_image_desc* desc) {
@@ -18914,16 +19001,11 @@ _SOKOL_PRIVATE _sg_vk_shader_func_t _sg_vk_create_shader_func(const sg_shader_fu
     return vk_func;
 }
 
-_SOKOL_PRIVATE void _sg_vk_destroy_shader_module(void* obj) {
-    SOKOL_ASSERT(_sg.vk.dev && obj);
-    vkDestroyShaderModule(_sg.vk.dev, (VkShaderModule)obj, 0);
-}
-
 _SOKOL_PRIVATE void _sg_vk_discard_shader_func(_sg_vk_shader_func_t* func) {
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(func);
     if (func->module) {
-        _sg_vk_delete_queue_add(_sg_vk_destroy_shader_module, (void*)func->module);
+        _sg_vk_delete_queue_add(_sg_vk_shader_module_destructor, (void*)func->module);
         func->module = 0;
     }
 }
@@ -19102,16 +19184,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_vk_destroy_pipelinelayout(void* obj) {
-    SOKOL_ASSERT(_sg.vk.dev && obj);
-    vkDestroyPipelineLayout(_sg.vk.dev, (VkPipelineLayout)obj, 0);
-}
-
-_SOKOL_PRIVATE void _sg_vk_destroy_descriptorsetlayout(void* obj) {
-    SOKOL_ASSERT(_sg.vk.dev && obj);
-    vkDestroyDescriptorSetLayout(_sg.vk.dev, (VkDescriptorSetLayout)obj, 0);
-}
-
 _SOKOL_PRIVATE void _sg_vk_discard_shader(_sg_shader_t* shd) {
     SOKOL_ASSERT(shd);
     SOKOL_ASSERT(_sg.vk.dev);
@@ -19119,15 +19191,15 @@ _SOKOL_PRIVATE void _sg_vk_discard_shader(_sg_shader_t* shd) {
     _sg_vk_discard_shader_func(&shd->vk.fragment_func);
     _sg_vk_discard_shader_func(&shd->vk.compute_func);
     if (shd->vk.pip_layout) {
-        _sg_vk_delete_queue_add(_sg_vk_destroy_pipelinelayout, (void*)shd->vk.pip_layout);
+        _sg_vk_delete_queue_add(_sg_vk_pipelinelayout_destructor, (void*)shd->vk.pip_layout);
         shd->vk.pip_layout = 0;
     }
     if (shd->vk.dset_ub) {
-        _sg_vk_delete_queue_add(_sg_vk_destroy_descriptorsetlayout, (void*)shd->vk.dset_ub);
+        _sg_vk_delete_queue_add(_sg_vk_descriptorsetlayout_destructor, (void*)shd->vk.dset_ub);
         shd->vk.dset_ub = 0;
     }
     if (shd->vk.dset_view_smp) {
-        _sg_vk_delete_queue_add(_sg_vk_destroy_descriptorsetlayout, (void*)shd->vk.dset_view_smp);
+        _sg_vk_delete_queue_add(_sg_vk_descriptorsetlayout_destructor, (void*)shd->vk.dset_view_smp);
         shd->vk.dset_view_smp = 0;
     }
 }
@@ -19329,15 +19401,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_vk_destroy_pipeline(void* obj) {
-    SOKOL_ASSERT(_sg.vk.dev && obj);
-    vkDestroyPipeline(_sg.vk.dev, (VkPipeline)obj, 0);
-}
-
 _SOKOL_PRIVATE void _sg_vk_discard_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     if (pip->vk.pip) {
-        _sg_vk_delete_queue_add(_sg_vk_destroy_pipeline, (void*)pip->vk.pip);
+        _sg_vk_delete_queue_add(_sg_vk_pipeline_destructor, (void*)pip->vk.pip);
         pip->vk.pip = 0;
     }
 }
