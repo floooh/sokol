@@ -4391,18 +4391,22 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(WGPU_CREATE_PIPELINE_LAYOUT_FAILED, "wgpuDeviceCreatePipelineLayout() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_RENDER_PIPELINE_FAILED, "wgpuDeviceCreateRenderPipeline() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_COMPUTE_PIPELINE_FAILED, "wgpuDeviceCreateComputePipeline() failed") \
+    _SG_LOGITEM_XMACRO(VULKAN_ALLOC_DEVICE_MEMORY_NO_SUITABLE_MEMORY_TYPE, "vulkan: could not find suitable memory type") \
+    _SG_LOGITEM_XMACRO(VULKAN_ALLOCATE_MEMORY_FAILED, "vulkan: vkAllocateMemory() failed!") \
+    _SG_LOGITEM_XMACRO(VULKAN_ALLOC_BUFFER_DEVICE_MEMORY_FAILED, "vulkan: allocating buffer device memory failed") \
     _SG_LOGITEM_XMACRO(VULKAN_DELETE_QUEUE_EXHAUSTED, "vulkan: internal delete queue exhausted (too many objects destroyed per frame)") \
-    _SG_LOGITEM_XMACRO(VULKAN_CREATE_BUFFER_FAILED, "vkCreateBuffer() failed!") \
-    _SG_LOGITEM_XMACRO(VULKAN_CREATE_SHADER_MODULE_FAILED, "vkCreateShaderModule() failed!") \
-    _SG_LOGITEM_XMACRO(VULKAN_UNIFORMBLOCK_SPIRV_SET0_BINDING_OUT_OF_RANGE, "uniform block 'spirv_set0_binding_n' is out of range (must be 0..15)") \
-    _SG_LOGITEM_XMACRO(VULKAN_TEXTURE_SPIRV_SET1_BINDING_OUT_OF_RANGE, "texture 'spirv_set1_binding_n' is out of range (must be 0..127)") \
-    _SG_LOGITEM_XMACRO(VULKAN_STORAGEBUFFER_SPIRV_SET1_BINDING_OUT_OF_RANGE, "storage buffer 'spirv_set1_binding_n' is out of range (must be 0..127)") \
-    _SG_LOGITEM_XMACRO(VULKAN_STORAGEIMAGE_SPIRV_SET1_BINDING_OUT_OF_RANGE, "storage image 'spirv_set1_binding_n' is out of range (must be 0..127)") \
-    _SG_LOGITEM_XMACRO(VULKAN_SAMPLER_SPIRV_SET1_BINDING_OUT_OF_RANGE, "sampler 'spirv_set1_binding_n' is out of range (must be 0..127)") \
-    _SG_LOGITEM_XMACRO(VULKAN_CREATE_DESCRIPTOR_SET_LAYOUT_FAILED, "vkCreateDescriptorSetLayout() failed!") \
-    _SG_LOGITEM_XMACRO(VULKAN_CREATE_PIPELINE_LAYOUT_FAILED, "vkCreatePipelineLayout() failed!") \
-    _SG_LOGITEM_XMACRO(VULKAN_CREATE_GRAPHICS_PIPELINE_FAILED, "vkCreateGraphicsPipeline() failed!") \
-    _SG_LOGITEM_XMACRO(VULKAN_WAIT_FOR_FENCE_FAILED, "vkWaitForFence() failed!") \
+    _SG_LOGITEM_XMACRO(VULKAN_CREATE_BUFFER_FAILED, "vulkan: vkCreateBuffer() failed!") \
+    _SG_LOGITEM_XMACRO(VULKAN_BIND_BUFFER_MEMORY_FAILED, "vulkan: vkBindBufferMemory() failed!") \
+    _SG_LOGITEM_XMACRO(VULKAN_CREATE_SHADER_MODULE_FAILED, "vukan: vkCreateShaderModule() failed!") \
+    _SG_LOGITEM_XMACRO(VULKAN_UNIFORMBLOCK_SPIRV_SET0_BINDING_OUT_OF_RANGE, "vulkan: uniform block 'spirv_set0_binding_n' is out of range (must be 0..15)") \
+    _SG_LOGITEM_XMACRO(VULKAN_TEXTURE_SPIRV_SET1_BINDING_OUT_OF_RANGE, "vulkan: texture 'spirv_set1_binding_n' is out of range (must be 0..127)") \
+    _SG_LOGITEM_XMACRO(VULKAN_STORAGEBUFFER_SPIRV_SET1_BINDING_OUT_OF_RANGE, "vulkan: storage buffer 'spirv_set1_binding_n' is out of range (must be 0..127)") \
+    _SG_LOGITEM_XMACRO(VULKAN_STORAGEIMAGE_SPIRV_SET1_BINDING_OUT_OF_RANGE, "vulkan: storage image 'spirv_set1_binding_n' is out of range (must be 0..127)") \
+    _SG_LOGITEM_XMACRO(VULKAN_SAMPLER_SPIRV_SET1_BINDING_OUT_OF_RANGE, "vulkan: sampler 'spirv_set1_binding_n' is out of range (must be 0..127)") \
+    _SG_LOGITEM_XMACRO(VULKAN_CREATE_DESCRIPTOR_SET_LAYOUT_FAILED, "vulkan: vkCreateDescriptorSetLayout() failed!") \
+    _SG_LOGITEM_XMACRO(VULKAN_CREATE_PIPELINE_LAYOUT_FAILED, "vulkan: vkCreatePipelineLayout() failed!") \
+    _SG_LOGITEM_XMACRO(VULKAN_CREATE_GRAPHICS_PIPELINE_FAILED, "vulkan: vkCreateGraphicsPipeline() failed!") \
+    _SG_LOGITEM_XMACRO(VULKAN_WAIT_FOR_FENCE_FAILED, "vulkan: vkWaitForFence() failed!") \
     _SG_LOGITEM_XMACRO(IDENTICAL_COMMIT_LISTENER, "attempting to add identical commit listener") \
     _SG_LOGITEM_XMACRO(COMMIT_LISTENER_ARRAY_FULL, "commit listener array full") \
     _SG_LOGITEM_XMACRO(TRACE_HOOKS_NOT_ENABLED, "sg_install_trace_hooks() called, but SOKOL_TRACE_HOOKS is not defined") \
@@ -18316,6 +18320,64 @@ _SOKOL_PRIVATE void _sg_wgpu_update_image(_sg_image_t* img, const sg_image_data*
 // >>vk
 #elif defined(SOKOL_VULKAN)
 
+_SOKOL_PRIVATE int _sg_vk_mem_find_memory_type_index(uint32_t type_filter, VkMemoryPropertyFlags props) {
+    SOKOL_ASSERT(_sg.vk.phys_dev);
+    VkPhysicalDeviceMemoryProperties mem_props;
+    _sg_clear(&mem_props, sizeof(mem_props));
+    vkGetPhysicalDeviceMemoryProperties(_sg.vk.phys_dev, &mem_props);
+    for (int i = 0; i < (int)mem_props.memoryTypeCount; i++) {
+        if ((type_filter & (1 << i)) && ((mem_props.memoryTypes[i].propertyFlags & props) == props)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+_SOKOL_PRIVATE VkDeviceMemory _sg_vk_mem_alloc_device_memory(const VkMemoryRequirements* mem_reqs, VkMemoryPropertyFlags mem_props) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(mem_reqs && (mem_props != 0));
+    int mem_type_index = _sg_vk_mem_find_memory_type_index(mem_reqs->memoryTypeBits, mem_props);
+    if (-1 == mem_type_index) {
+        _SG_ERROR(VULKAN_ALLOC_DEVICE_MEMORY_NO_SUITABLE_MEMORY_TYPE);
+        return 0;
+    }
+    VkMemoryAllocateInfo alloc_info;
+    _sg_clear(&alloc_info, sizeof(alloc_info));
+    alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    alloc_info.allocationSize = mem_reqs->size;
+    alloc_info.memoryTypeIndex = (uint32_t) mem_type_index;
+    VkDeviceMemory vk_dev_mem = 0;
+    VkResult res = vkAllocateMemory(_sg.vk.dev, &alloc_info, 0, &vk_dev_mem);
+    if (res != VK_SUCCESS) {
+        _SG_ERROR(VULKAN_ALLOCATE_MEMORY_FAILED);
+        return 0;
+    }
+    SOKOL_ASSERT(vk_dev_mem);
+    return vk_dev_mem;
+}
+
+_SOKOL_PRIVATE void _sg_vk_mem_free_device_memory(VkDeviceMemory vk_dev_mem) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(vk_dev_mem);
+    vkFreeMemory(_sg.vk.dev, vk_dev_mem, 0);
+}
+
+_SOKOL_PRIVATE bool _sg_vk_mem_alloc_buffer_device_memory(_sg_buffer_t* buf) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(buf);
+    SOKOL_ASSERT(buf->vk.buf);
+    SOKOL_ASSERT(0 == buf->vk.mem);
+    VkMemoryRequirements mem_reqs;
+    _sg_clear(&mem_reqs, sizeof(mem_reqs));
+    vkGetBufferMemoryRequirements(_sg.vk.dev, buf->vk.buf, &mem_reqs);
+    buf->vk.mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (0 == buf->vk.mem) {
+        _SG_ERROR(VULKAN_ALLOC_BUFFER_DEVICE_MEMORY_FAILED);
+        return false;
+    }
+    return true;
+}
+
 _SOKOL_PRIVATE void _sg_vk_create_delete_queues(void) {
     const uint32_t num_items = (uint32_t)
         (2 * _sg.desc.buffer_pool_size +
@@ -18383,7 +18445,7 @@ _SOKOL_PRIVATE void _sg_vk_buffer_destructor(void* obj) {
 
 _SOKOL_PRIVATE void _sg_vk_memory_destructor(void* obj) {
     SOKOL_ASSERT(_sg.vk.dev && obj);
-    SOKOL_ASSERT(false && "FIXME");
+    _sg_vk_mem_free_device_memory((VkDeviceMemory)obj);
 }
 
 _SOKOL_PRIVATE void _sg_vk_shader_module_destructor(void* obj) {
@@ -18934,7 +18996,15 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_buffer(_sg_buffer_t* buf, const s
     SOKOL_ASSERT(buf->vk.buf);
     _sg_vk_set_object_label(VK_OBJECT_TYPE_BUFFER, (uint64_t)buf->vk.buf, desc->label);
 
-    // FIXME: allocate gpu memory
+    if (!_sg_vk_mem_alloc_buffer_device_memory(buf)) {
+        return SG_RESOURCESTATE_FAILED;
+    }
+    SOKOL_ASSERT(buf->vk.mem);
+    res = vkBindBufferMemory(_sg.vk.dev, buf->vk.buf, buf->vk.mem, 0);
+    if (res != VK_SUCCESS) {
+        _SG_ERROR(VULKAN_BIND_BUFFER_MEMORY_FAILED);
+        return SG_RESOURCESTATE_FAILED;
+    }
 
     if (buf->cmn.usage.immutable && desc->data.ptr) {
         // FIXME: upload
