@@ -6858,6 +6858,12 @@ typedef struct _sg_view_s {
 typedef _sg_vk_view_t _sg_view_t;
 
 typedef struct {
+    uint32_t size;
+    uint32_t offset;
+    VkBuffer buf;
+} _sg_vk_staging_t;
+
+typedef struct {
     bool valid;
     VkPhysicalDevice phys_dev;
     VkDevice dev;
@@ -6872,6 +6878,7 @@ typedef struct {
     struct {
         VkFence fence;
         VkCommandBuffer command_buffer;
+        _sg_vk_staging_t staging;
         _sg_vk_delete_queue_t delete_queue;
     } frame[SG_NUM_INFLIGHT_FRAMES];
 } _sg_vk_backend_t;
@@ -18436,6 +18443,26 @@ _SOKOL_PRIVATE void _sg_vk_delete_queue_add(_sg_vk_delete_queue_destructor_t des
     queue->items[queue->index].destructor = destructor;
     queue->items[queue->index].obj = obj;
     queue->index += 1;
+}
+
+_SOKOL_PRIVATE _sg_vk_staging_init(void) {
+    SOKOL_ASSERT(false && "FIXME");
+}
+
+_SOKOL_PRIVATE _sg_vk_staging_discard(void) {
+    SOKOL_ASSERT(false && "FIXME");
+}
+
+_SOKOL_PRIVATE _sg_vk_staging_commit(void) {
+    SOKOL_ASSERT(false && "FIXME");
+}
+
+_SOKOL_PRIVATE _sg_vk_staging_copy_buffer_data(const _sg_buffer_t* buf, uint64_t offset, const sg_range* data) {
+    SOKOL_ASSERT(false && "FIXME");
+}
+
+_SOKOL_PRIVATE _sg_vk_staging_copy_image_data(const _sg_image_t* img, const sg_image_data* data) {
+    SOKOL_ASSERT(false && "FIXME");
 }
 
 _SOKOL_PRIVATE void _sg_vk_buffer_destructor(void* obj) {
