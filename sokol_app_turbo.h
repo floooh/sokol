@@ -84,7 +84,7 @@ extern "C" {
 SOKOL_APP_TURBO_API_DECL void sapp_setup(const sapp_desc* desc);
 SOKOL_APP_TURBO_API_DECL void sapp_shutdown(void);
 SOKOL_APP_TURBO_API_DECL bool sapp_should_close(void);
-SOKOL_APP_TURBO_API_DECL void sapp_poll_events(void);
+// SOKOL_APP_TURBO_API_DECL void sapp_poll_events(void);
 
 SOKOL_APP_TURBO_API_DECL void sapp_begin_tick(void);
 SOKOL_APP_TURBO_API_DECL void sapp_end_tick(void);
@@ -114,40 +114,13 @@ SOKOL_APP_TURBO_API_DECL void sapp_end_tick(void);
     #endif
 #endif
 
-#if defined(_WIN32)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
+
 typedef struct {
-    uint32_t initialized;
-    LARGE_INTEGER freq;
-    LARGE_INTEGER start;
+    uint64_t poll_count;
+    uint64_t begin_count;
+    uint64_t end_count;
 } _sat_state_t;
-#elif defined(__APPLE__) && defined(__MACH__)
-#include <mach/mach_time.h>
-typedef struct {
-    uint32_t initialized;
-    mach_timebase_info_data_t timebase;
-    uint64_t start;
-} _sat_state_t;
-#elif defined(__EMSCRIPTEN__)
-#include <emscripten/emscripten.h>
-typedef struct {
-    uint32_t initialized;
-    double start;
-} _sat_state_t;
-#else /* anything else, this will need more care for non-Linux platforms */
-#ifdef ESP8266
-// On the ESP8266, clock_gettime ignores the first argument and CLOCK_MONOTONIC isn't defined
-#define CLOCK_MONOTONIC 0
-#endif
-#include <time.h>
-typedef struct {
-    uint32_t initialized;
-    uint64_t start;
-} _sat_state_t;
-#endif
+
 static _sat_state_t _sat;
 
 
@@ -346,26 +319,25 @@ _SOKOL_PRIVATE void _sapp_linux_setup(const sapp_desc* desc) {
 }
 
 _SOKOL_PRIVATE void _sapp_linux_poll_events(void) {
-    while (!_sapp.quit_ordered) {
-        _sapp_timing_measure(&_sapp.timing);
-        int count = XPending(_sapp.x11.display);
-        while (count--) {
-            XEvent event;
-            XNextEvent(_sapp.x11.display, &event);
-            _sapp_x11_process_event(&event);
-        }
-        _sapp_linux_frame();
-        XFlush(_sapp.x11.display);
-        // handle quit-requested, either from window or from sapp_request_quit()
-        if (_sapp.quit_requested && !_sapp.quit_ordered) {
-            // give user code a chance to intervene
-            _sapp_x11_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
-            /* if user code hasn't intervened, quit the app */
-            if (_sapp.quit_requested) {
-                _sapp.quit_ordered = true;
-            }
+    _sapp_timing_measure(&_sapp.timing);
+    int count = XPending(_sapp.x11.display);
+    while (count--) {
+        XEvent event;
+        XNextEvent(_sapp.x11.display, &event);
+        _sapp_x11_process_event(&event);
+    }
+    _sapp_linux_frame();
+    XFlush(_sapp.x11.display);
+    // handle quit-requested, either from window or from sapp_request_quit()
+    if (_sapp.quit_requested && !_sapp.quit_ordered) {
+        // give user code a chance to intervene
+        _sapp_x11_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
+        /* if user code hasn't intervened, quit the app */
+        if (_sapp.quit_requested) {
+            _sapp.quit_ordered = true;
         }
     }
+    
 }
 
 _SOKOL_PRIVATE void _sapp_linux_begin_tick(void) {
@@ -376,9 +348,25 @@ _SOKOL_PRIVATE void _sapp_linux_begin_tick(void) {
         XNextEvent(_sapp.x11.display, &event);
         _sapp_x11_process_event(&event);
     }
+    // first part of _sapp_linux_frame()
+    _sapp_x11_update_dimensions_from_window_size();
+
+    // parts of _sapp_frame in charge of calling init callback
+    if (_sapp.first_frame) {
+        _sapp.first_frame = false;
+        _sapp_call_init();
+    }
+    _sapp.frame_count++;
 }
 
 _SOKOL_PRIVATE void _sapp_linux_end_tick(void) {
+    // second part of _sapp_linux_frame()
+    #if defined(_SAPP_GLX)
+        _sapp_glx_swap_buffers();
+    #elif defined(_SAPP_EGL)
+        eglSwapBuffers(_sapp.egl.display, _sapp.egl.surface);
+    #endif
+
     XFlush(_sapp.x11.display);
     // handle quit-requested, either from window or from sapp_request_quit()
     if (_sapp.quit_requested && !_sapp.quit_ordered) {
@@ -422,6 +410,11 @@ _SOKOL_PRIVATE int64_t _sat_int64_muldiv(int64_t value, int64_t numer, int64_t d
 
 SOKOL_API_IMPL void sapp_setup(const sapp_desc* desc) {
     (void)desc;
+
+    _sat.poll_count = 0;
+    _sat.begin_count = 0;
+    _sat.end_count = 0;
+
     #if defined(_WIN32)
     _sapp_windows_setup(desc);
     #elif defined(__APPLE__) && defined(__MACH__)
@@ -450,6 +443,7 @@ SOKOL_API_IMPL bool sapp_should_close(void) {
 }
 
 SOKOL_API_IMPL void sapp_poll_events(void) {
+
 #if defined(_WIN32)
     _sapp_windows_poll_events();    
 #elif defined(__APPLE__) && defined(__MACH__)
@@ -459,6 +453,12 @@ SOKOL_API_IMPL void sapp_poll_events(void) {
 #else
     _sapp_linux_poll_events();
 #endif
+
+    // checks we are properly using poll_events, begin_tick, and end_tick: once per loop iteration
+    _sat.poll_count += 1;
+    // printf("poll: %lu / begin: %lu\n", _sat.poll_count, _sat.begin_count);
+    assert(_sat.poll_count == _sat.begin_count + 1);
+    assert(_sat.poll_count == _sat.end_count + 1);
 }
 
 SOKOL_API_IMPL void sapp_begin_tick(void) {
@@ -471,6 +471,8 @@ SOKOL_API_IMPL void sapp_begin_tick(void) {
     #else
     _sapp_linux_begin_tick();
     #endif
+
+    _sat.begin_count += 1;
 }
 
 SOKOL_API_IMPL void sapp_end_tick(void) {
@@ -483,6 +485,9 @@ SOKOL_API_IMPL void sapp_end_tick(void) {
     #else
     _sapp_linux_end_tick();
     #endif
+
+    _sat.end_count += 1;
+    SOKOL_ASSERT(_sat.begin_count == _sat.end_count);
 }
 
 #endif /* SOKOL_APP_TURBO_IMPL */

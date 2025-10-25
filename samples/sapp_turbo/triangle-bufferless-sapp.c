@@ -16,6 +16,8 @@
 // #include "dbgui/dbgui.h"
 #include "triangle-bufferless-sapp.glsl.h"
 
+#include <stdio.h>
+
 static struct {
     sg_pipeline pip;
     sg_pass_action pass_action;
@@ -140,7 +142,6 @@ int main(int argc, char* argv[]) {
     
     const sapp_desc desc =  (sapp_desc){
         .init_cb = init,
-        .frame_cb = frame,
         .cleanup_cb = cleanup,
         .event_cb = event,
         .width = 1280,
@@ -153,7 +154,7 @@ int main(int argc, char* argv[]) {
     sapp_setup(&desc);
 
     while(!sapp_should_close()) {
-        sapp_poll_events();
+        frame();
     }
 
     sapp_shutdown();
