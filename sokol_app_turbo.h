@@ -257,6 +257,12 @@ _SOKOL_PRIVATE void _sapp_macos_setup(const sapp_desc* desc) {
         data1:0
         data2:0];
     [NSApp postEvent:focusevent atStart:YES];
+
+    // vsync off => swap interval to 0
+    GLint swapInt = 1;
+    NSOpenGLContext* ctx = [_sapp.macos.view openGLContext];
+    [ctx setValues:&swapInt forParameter:NSOpenGLContextParameterSwapInterval];
+    [ctx makeCurrentContext];
 }
 
 _SOKOL_PRIVATE void _sapp_macos_shutdown(void) {
@@ -320,7 +326,9 @@ _SOKOL_PRIVATE void _sapp_linux_setup(const sapp_desc* desc) {
         _sapp_glx_choose_visual(&visual, &depth);
         _sapp_x11_create_window(visual, depth);
         _sapp_glx_create_context();
-        _sapp_glx_swapinterval(_sapp.swap_interval);
+        // _sapp_glx_swapinterval(_sapp.swap_interval);
+        // vsync off => swap interval to 0
+        _sapp_glx_swapinterval(0);
     #elif defined(_SAPP_EGL)
         _sapp_egl_init();
     #elif defined(SOKOL_WGPU)
