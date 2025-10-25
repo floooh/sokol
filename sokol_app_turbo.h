@@ -81,13 +81,43 @@
 extern "C" {
 #endif
 
+// C11 Static assertions for compile-time validation
+_Static_assert(sizeof(uint32_t) == 4, "uint32_t must be 4 bytes");
+_Static_assert(sizeof(uint64_t) == 8, "uint64_t must be 8 bytes");
+_Static_assert(sizeof(void*) >= sizeof(uintptr_t), "Pointer size assumption failed");
+
+// Display/Monitor information
+typedef struct sapp_display {
+    int width_mm;               // Physical width in millimeters
+    int height_mm;              // Physical height in millimeters
+    int width_px;               // Current resolution width in pixels
+    int height_px;              // Current resolution height in pixels
+    int refresh_rate;           // Refresh rate in Hz
+    float dpi_scale;            // DPI scale factor
+    const char* name;           // Display name (may be NULL)
+    bool is_primary;            // True if this is the primary display
+    int pos_x;                  // Display position X in virtual screen
+    int pos_y;                  // Display position Y in virtual screen
+} sapp_display;
+
+_Static_assert(sizeof(sapp_display) <= 128, "Display struct should remain reasonably sized");
+
+#ifndef SAPP_MAX_DISPLAYS
+#define SAPP_MAX_DISPLAYS (4)
+#endif
+
+// Extended sapp API to drive the main loop
 SOKOL_APP_TURBO_API_DECL void sapp_setup(const sapp_desc* desc);
 SOKOL_APP_TURBO_API_DECL void sapp_shutdown(void);
 SOKOL_APP_TURBO_API_DECL bool sapp_should_close(void);
-// SOKOL_APP_TURBO_API_DECL void sapp_poll_events(void);
-
 SOKOL_APP_TURBO_API_DECL void sapp_begin_tick(void);
 SOKOL_APP_TURBO_API_DECL void sapp_end_tick(void);
+
+// Extended sapp display API functions
+SOKOL_APP_TURBO_API_DECL const sapp_display* sapp_display_get_primary(void);
+SOKOL_APP_TURBO_API_DECL const sapp_display* sapp_display_get_window_display(void);
+SOKOL_APP_TURBO_API_DECL int sapp_display_get_count(void);
+SOKOL_APP_TURBO_API_DECL const sapp_display* sapp_display_get_at_index(int index);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -119,9 +149,19 @@ typedef struct {
     uint64_t poll_count;
     uint64_t begin_count;
     uint64_t end_count;
+
+    sapp_display displays[SAPP_MAX_DISPLAYS];
+    int display_count;
+    int window_display_index;
 } _sat_state_t;
 
-static _sat_state_t _sat;
+static _sat_state_t _sat = {
+    .poll_count = 0,
+    .begin_count = 0,
+    .end_count = 0,
+    .display_count = 0,
+    .window_display_index = 0,
+};
 
 
 #if defined(_WIN32)
@@ -264,6 +304,8 @@ _SOKOL_PRIVATE void _sapp_macos_end_tick(void) {
 
 #else // Linux and similar
 
+#include <X11/extensions/Xrandr.h>
+
 _SOKOL_PRIVATE void _sapp_linux_setup(const sapp_desc* desc) {
     (void)_sat;
     /* The following lines are here to trigger a linker error instead of an
@@ -394,6 +436,152 @@ _SOKOL_PRIVATE void _sapp_linux_shutdown(void) {
     _sapp_discard_state();
 }
 
+// Display API
+
+_SOKOL_PRIVATE void _sapp_linux_init_displays(void) {
+    if (!_sapp.x11.display) return;
+
+    _sat.display_count = 0;
+
+    // Check if RandR extension is available
+    int randr_event_base, randr_error_base;
+    if (!XRRQueryExtension(_sapp.x11.display, &randr_event_base, &randr_error_base)) {
+        // Fallback to single display (default screen)
+        sapp_display* display = &_sat.displays[0];
+        display->width_px = DisplayWidth(_sapp.x11.display, _sapp.x11.screen);
+        display->height_px = DisplayHeight(_sapp.x11.display, _sapp.x11.screen);
+        display->width_mm = DisplayWidthMM(_sapp.x11.display, _sapp.x11.screen);
+        display->height_mm = DisplayHeightMM(_sapp.x11.display, _sapp.x11.screen);
+        display->refresh_rate = 60; // Default fallback
+        display->dpi_scale = _sapp.dpi_scale;
+        display->pos_x = 0;
+        display->pos_y = 0;
+        display->is_primary = true;
+        display->name = "Display";
+        _sat.display_count = 1;
+        return;
+    }
+
+    // Use RandR extension for detailed display information
+    XRRScreenResources* screen_resources = XRRGetScreenResources(_sapp.x11.display, _sapp.x11.root);
+    if (!screen_resources) return;
+
+    for (int i = 0; i < screen_resources->noutput && _sat.display_count < SAPP_MAX_DISPLAYS; i++) {
+        XRROutputInfo* output_info = XRRGetOutputInfo(_sapp.x11.display, screen_resources, screen_resources->outputs[i]);
+        if (!output_info || output_info->connection != RR_Connected || output_info->crtc == None) {
+            XRRFreeOutputInfo(output_info);
+            continue;
+        }
+
+        XRRCrtcInfo* crtc_info = XRRGetCrtcInfo(_sapp.x11.display, screen_resources, output_info->crtc);
+        if (!crtc_info) {
+            XRRFreeOutputInfo(output_info);
+            continue;
+        }
+
+        sapp_display* display = &_sat.displays[_sat.display_count];
+
+        // Resolution and position
+        display->width_px = crtc_info->width;
+        display->height_px = crtc_info->height;
+        display->pos_x = crtc_info->x;
+        display->pos_y = crtc_info->y;
+
+        // Physical size
+        display->width_mm = output_info->mm_width;
+        display->height_mm = output_info->mm_height;
+
+        // Refresh rate
+        display->refresh_rate = 60; // Default
+        if (crtc_info->mode != None) {
+            for (int j = 0; j < screen_resources->nmode; j++) {
+                if (screen_resources->modes[j].id == crtc_info->mode) {
+                    XRRModeInfo* mode = &screen_resources->modes[j];
+                    if (mode->hTotal && mode->vTotal) {
+                        display->refresh_rate = (int)round((double)mode->dotClock / (mode->hTotal * mode->vTotal));
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Content scale
+        display->dpi_scale = _sapp.dpi_scale;
+
+        // Display name (convert to static string)
+        static char display_names[4][128];
+        if (output_info->name) {
+            strncpy(display_names[_sat.display_count], output_info->name, 127);
+            display_names[_sat.display_count][127] = '\0';
+            display->name = display_names[_sat.display_count];
+        } else {
+            snprintf(display_names[_sat.display_count], 128, "Display %d", _sat.display_count);
+            display->name = display_names[_sat.display_count];
+        }
+
+        // Primary display (first one is considered primary)
+        display->is_primary = (_sat.display_count == 0);
+
+        XRRFreeCrtcInfo(crtc_info);
+        XRRFreeOutputInfo(output_info);
+        _sat.display_count++;
+    }
+
+    XRRFreeScreenResources(screen_resources);
+
+    // Fallback if no displays found
+    if (_sat.display_count == 0) {
+        sapp_display* display = &_sat.displays[0];
+        display->width_px = DisplayWidth(_sapp.x11.display, _sapp.x11.screen);
+        display->height_px = DisplayHeight(_sapp.x11.display, _sapp.x11.screen);
+        display->width_mm = DisplayWidthMM(_sapp.x11.display, _sapp.x11.screen);
+        display->height_mm = DisplayHeightMM(_sapp.x11.display, _sapp.x11.screen);
+        display->refresh_rate = 60;
+        display->dpi_scale = _sapp.dpi_scale;
+        display->pos_x = 0;
+        display->pos_y = 0;
+        display->is_primary = true;
+        display->name = "Display";
+        _sat.display_count = 1;
+    }
+}
+
+_SOKOL_PRIVATE void sapp_linux_shutdown_displays(void) {
+    _sat.display_count = 0;
+}
+
+_SOKOL_PRIVATE void sapp_linux_update_displays(void) {
+    if (!_sapp.valid || _sat.display_count == 0) return;
+
+    // Get window position
+    Window root_return;
+    int x, y;
+    unsigned int width, height, border_width, depth;
+
+    if (XGetGeometry(_sapp.x11.display, _sapp.x11.window, &root_return, &x, &y, &width, &height, &border_width, &depth)) {
+        // Translate to root coordinates
+        Window child_return;
+        XTranslateCoordinates(_sapp.x11.display, _sapp.x11.window, _sapp.x11.root, 0, 0, &x, &y, &child_return);
+
+        // Find which display contains the center of the window
+        int center_x = x + width / 2;
+        int center_y = y + height / 2;
+
+        for (int i = 0; i < _sat.display_count; i++) {
+            if (center_x >= _sat.displays[i].pos_x &&
+                center_x < _sat.displays[i].pos_x + _sat.displays[i].width_px &&
+                center_y >= _sat.displays[i].pos_y &&
+                center_y < _sat.displays[i].pos_y + _sat.displays[i].height_px) {
+                _sat.window_display_index = i;
+                return;
+            }
+        }
+    }
+
+    // Default to first display if not found
+    _sat.window_display_index = 0;
+}
+
 #endif
 
 
@@ -410,10 +598,6 @@ _SOKOL_PRIVATE int64_t _sat_int64_muldiv(int64_t value, int64_t numer, int64_t d
 
 SOKOL_API_IMPL void sapp_setup(const sapp_desc* desc) {
     (void)desc;
-
-    _sat.poll_count = 0;
-    _sat.begin_count = 0;
-    _sat.end_count = 0;
 
     #if defined(_WIN32)
     _sapp_windows_setup(desc);
@@ -488,6 +672,29 @@ SOKOL_API_IMPL void sapp_end_tick(void) {
 
     _sat.end_count += 1;
     SOKOL_ASSERT(_sat.begin_count == _sat.end_count);
+}
+
+SOKOL_API_IMPL const sapp_display* sapp_display_get_primary(void) {
+    for (int i = 0; i < _sat.display_count; i++) {
+        if (_sat.displays[i].is_primary) {
+            return &_sat.displays[i];
+        }
+    }
+    return _sat.display_count > 0 ? &_sat.displays[0] : NULL;
+}
+
+SOKOL_API_IMPL const sapp_display* sapp_display_get_window_display(void) {
+    SOKOL_ASSERT(_sat.window_display_index >= 0 && _sat.window_display_index < SAPP_MAX_DISPLAYS);
+    return &_sat.displays[_sat.window_display_index];
+}
+
+SOKOL_API_IMPL int sapp_display_get_count(void) {
+    return _sat.display_count;
+}
+
+SOKOL_API_IMPL const sapp_display* sapp_display_get_at_index(int index) {
+    SOKOL_ASSERT(index >= 0 && index < SAPP_MAX_DISPLAYS);
+    return &_sat.displays[index];
 }
 
 #endif /* SOKOL_APP_TURBO_IMPL */
