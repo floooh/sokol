@@ -272,7 +272,7 @@ _SOKOL_PRIVATE void _sapp_macos_setup(const sapp_desc* desc) {
     [NSApp postEvent:focusevent atStart:YES];
 
     // vsync off => swap interval to 0
-    GLint swapInt = 1;
+    GLint swapInt = 0;
     NSOpenGLContext* ctx = [_sapp.macos.view openGLContext];
     [ctx setValues:&swapInt forParameter:NSOpenGLContextParameterSwapInterval];
     [ctx makeCurrentContext];
@@ -293,11 +293,45 @@ _SOKOL_PRIVATE void _sapp_macos_poll_events(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_macos_begin_tick(void) {
+    _sapp_timing_measure(&_sapp.timing);
+    NSEvent* event;
+    while ((event = [NSApp nextEventMatchingMask:NSEventMaskAny
+                                             untilDate:nil
+                                                inMode:NSDefaultRunLoopMode
+                                               dequeue:YES])) {
+        [NSApp sendEvent:event];
+    }
+    // first part of _sapp_macos_frame()
 
+    // NOTE: DO NOT call _sapp_macos_update_dimensions() function from within the
+    // frame callback (at least when called from MTKView's drawRect function).
+    // This will trigger a chicken-egg situation that triggers a
+    // Metal validation layer error about different render target sizes.
+    #if defined(_SAPP_ANY_GL)
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
+    #endif
+
+    // parts of _sapp_frame in charge of calling init callback
+    if (_sapp.first_frame) {
+        _sapp.first_frame = false;
+        _sapp_call_init();
+        // vsync off => swap interval to 0
+        GLint swapInt = 0;
+        NSOpenGLContext* ctx = [_sapp.macos.view openGLContext];
+        [ctx setValues:&swapInt forParameter:NSOpenGLContextParameterSwapInterval];
+        }
+    _sapp.frame_count++;
 }
 
 _SOKOL_PRIVATE void _sapp_macos_end_tick(void) {
-
+    // second part of _sapp_macos_frame()
+    #if defined(_SAPP_ANY_GL)
+    [[_sapp.macos.view openGLContext] flushBuffer];
+    [[_sapp.macos.view openGLContext] update];
+    #endif
+    if (_sapp.quit_requested || _sapp.quit_ordered) {
+        [_sapp.macos.window performClose:nil];
+    }
 }
 
 #elif defined(__EMSCRIPTEN__)
