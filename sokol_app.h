@@ -1792,6 +1792,8 @@ typedef struct sapp_allocator {
     _SAPP_LOGITEM_XMACRO(WGPU_REQUEST_ADAPTER_STATUS_ERROR, "wgpu: requesting adapter failed with status 'error'") \
     _SAPP_LOGITEM_XMACRO(WGPU_REQUEST_ADAPTER_STATUS_UNKNOWN, "wgpu: requesting adapter failed with status 'unknown'") \
     _SAPP_LOGITEM_XMACRO(WGPU_CREATE_INSTANCE_FAILED, "wgpu: failed to create instance") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_ALLOC_DEVICE_MEMORY_NO_SUITABLE_MEMORY_TYPE, "vulkan: could not find suitable memory type") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_ALLOCATE_MEMORY_FAILED, "vulkan: vkAllocateMemory() failed!") \
     _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_INSTANCE_FAILED, "vulkan: vkCreateInstance failed") \
     _SAPP_LOGITEM_XMACRO(VULKAN_ENUMERATE_PHYSICAL_DEVICES_FAILED, "vulkan: vkEnumeratePhysicalDevices failed") \
     _SAPP_LOGITEM_XMACRO(VULKAN_NO_PHYSICAL_DEVICES_FOUND, "vulkan: vkEnumeratePhysicalDevices return no devices") \
@@ -1800,6 +1802,10 @@ typedef struct sapp_allocator {
     _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_SURFACE_FAILED, "vulkan: vkCreate*SurfaceKHR failed") \
     _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_SWAPCHAIN_FAILED, "vulkan: vkCreateSwapchainKHR failed") \
     _SAPP_LOGITEM_XMACRO(VULKAN_SWAPCHAIN_CREATE_IMAGE_VIEW_FAILED, "vulkan: vkCreateImageView for swapchain  image failed") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_SWAPCHAIN_CREATE_DEPTH_IMAGE_FAILED, "vulkan: vkCreateImage for depth-stencil image failed") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_SWAPCHAIN_ALLOC_DEPTH_IMAGE_DEVICE_MEMORY_FAILED, "vulkan: failed to allocate device memory for depth-stencil image") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_SWAPCHAIN_DEPTH_IMAGE_BIND_MEMORY_FAILED, "vulkan: vkBindImageMemory() for depth-stencil image failed") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_SWAPCHAIN_DEPTH_CREATE_IMAGE_VIEW_FAILED, "vulkan: vkCreateImageView() for depth-stencil image failed") \
     _SAPP_LOGITEM_XMACRO(VULKAN_ACQUIRE_NEXT_IMAGE_FAILED, "vulkan: vkAcquireNextImageKHR failed") \
     _SAPP_LOGITEM_XMACRO(VULKAN_QUEUE_PRESENT_FAILED, "vulkan: vkQueuePresentKHR failed") \
     _SAPP_LOGITEM_XMACRO(IMAGE_DATA_SIZE_MISMATCH, "image data size mismatch (must be width*height*4 bytes)") \
@@ -2751,6 +2757,11 @@ typedef struct {
     uint32_t cur_swapchain_image_index;
     VkImage swapchain_images[_SAPP_VK_MAX_SWAPCHAIN_IMAGES];
     VkImageView swapchain_views[_SAPP_VK_MAX_SWAPCHAIN_IMAGES];
+    struct {
+        VkImage image;
+        VkDeviceMemory memory;
+        VkImageView view;
+    } depth;
     uint32_t sync_slot;
     struct {
         VkSemaphore render_finished_sem;
@@ -4234,6 +4245,48 @@ _SOKOL_PRIVATE void _sapp_wgpu_frame(void) {
 #define _SAPP_VK_ZERO_COUNT_AND_ARRAY(num, type, count_name, array_name) uint32_t count_name = 0; type array_name[num] = {0};
 #define _SAPP_VK_MAX_COUNT_AND_ARRAY(num, type, count_name, array_name) uint32_t count_name = num; type array_name[num] = {0};
 
+_SOKOL_PRIVATE int _sapp_vk_mem_find_memory_type_index(uint32_t type_filter, VkMemoryPropertyFlags props) {
+    SOKOL_ASSERT(_sapp.vk.physical_device);
+    VkPhysicalDeviceMemoryProperties mem_props;
+    _sapp_clear(&mem_props, sizeof(mem_props));
+    vkGetPhysicalDeviceMemoryProperties(_sapp.vk.physical_device, &mem_props);
+    for (int i = 0; i < (int)mem_props.memoryTypeCount; i++) {
+        if ((type_filter & (1 << i)) && ((mem_props.memoryTypes[i].propertyFlags & props) == props)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+_SOKOL_PRIVATE VkDeviceMemory _sapp_vk_mem_alloc_device_memory(const VkMemoryRequirements* mem_reqs, VkMemoryPropertyFlags mem_props) {
+    SOKOL_ASSERT(_sapp.vk.device);
+    SOKOL_ASSERT(mem_reqs && (mem_props != 0));
+    int mem_type_index = _sapp_vk_mem_find_memory_type_index(mem_reqs->memoryTypeBits, mem_props);
+    if (-1 == mem_type_index) {
+        _SAPP_ERROR(VULKAN_ALLOC_DEVICE_MEMORY_NO_SUITABLE_MEMORY_TYPE);
+        return 0;
+    }
+    VkMemoryAllocateInfo alloc_info;
+    _sapp_clear(&alloc_info, sizeof(alloc_info));
+    alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    alloc_info.allocationSize = mem_reqs->size;
+    alloc_info.memoryTypeIndex = (uint32_t) mem_type_index;
+    VkDeviceMemory vk_dev_mem = 0;
+    VkResult res = vkAllocateMemory(_sapp.vk.device, &alloc_info, 0, &vk_dev_mem);
+    if (res != VK_SUCCESS) {
+        _SAPP_ERROR(VULKAN_ALLOCATE_MEMORY_FAILED);
+        return 0;
+    }
+    SOKOL_ASSERT(vk_dev_mem);
+    return vk_dev_mem;
+}
+
+_SOKOL_PRIVATE void _sapp_vk_mem_free_device_memory(VkDeviceMemory vk_dev_mem) {
+    SOKOL_ASSERT(_sapp.vk.device);
+    SOKOL_ASSERT(vk_dev_mem);
+    vkFreeMemory(_sapp.vk.device, vk_dev_mem, 0);
+}
+
 _SOKOL_PRIVATE void _sapp_vk_create_instance(void) {
     SOKOL_ASSERT(0 == _sapp.vk.instance);
 
@@ -4523,6 +4576,81 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_sync_objects(void) {
     }
 }
 
+_SOKOL_PRIVATE void _sapp_vk_swapchain_destroy_depth(void) {
+    SOKOL_ASSERT(_sapp.vk.depth.image);
+    SOKOL_ASSERT(_sapp.vk.depth.memory);
+    SOKOL_ASSERT(_sapp.vk.depth.view);
+    vkDestroyImageView(_sapp.vk.device, _sapp.vk.depth.view, 0);
+    _sapp.vk.depth.view = 0;
+    _sapp_vk_mem_free_device_memory(_sapp.vk.depth.memory);
+    _sapp.vk.depth.memory = 0;
+    vkDestroyImage(_sapp.vk.device, _sapp.vk.depth.image, 0);
+    _sapp.vk.depth.image = 0;
+}
+
+_SOKOL_PRIVATE void _sapp_vk_swapchain_create_depth(bool recreate, uint32_t width, uint32_t height, VkSampleCountFlags sample_count_flags) {
+    SOKOL_ASSERT(_sapp.vk.physical_device);
+    SOKOL_ASSERT(_sapp.vk.device);
+    if (recreate) {
+        _sapp_vk_swapchain_destroy_depth();
+    }
+    SOKOL_ASSERT(0 == _sapp.vk.depth.image);
+    SOKOL_ASSERT(0 == _sapp.vk.depth.memory);
+    SOKOL_ASSERT(0 == _sapp.vk.depth.view);
+    VkResult res;
+
+    // create depth buffer image
+    const VkFormat fmt = VK_FORMAT_D32_SFLOAT_S8_UINT;
+    VkImageCreateInfo img_create_info;
+    _sapp_clear(&img_create_info, sizeof(img_create_info));
+    img_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    img_create_info.imageType = VK_IMAGE_TYPE_2D;
+    img_create_info.format = fmt;
+    img_create_info.extent.width = width;
+    img_create_info.extent.height = height;
+    img_create_info.extent.depth = 1;
+    img_create_info.mipLevels = 1;
+    img_create_info.arrayLayers = 1;
+    img_create_info.samples = sample_count_flags;
+    img_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    img_create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    img_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    img_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    res = vkCreateImage(_sapp.vk.device, &img_create_info, 0, &_sapp.vk.depth.image);
+    if (res != VK_SUCCESS) {
+        _SAPP_PANIC(VULKAN_SWAPCHAIN_CREATE_DEPTH_IMAGE_FAILED);
+    }
+    SOKOL_ASSERT(_sapp.vk.depth.image);
+
+    VkMemoryRequirements mem_reqs;
+    _sapp_clear(&mem_reqs, sizeof(mem_reqs));
+    vkGetImageMemoryRequirements(_sapp.vk.device, _sapp.vk.depth.image, &mem_reqs);
+    _sapp.vk.depth.memory = _sapp_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (0 == _sapp.vk.depth.memory) {
+        _SAPP_PANIC(VULKAN_SWAPCHAIN_ALLOC_DEPTH_IMAGE_DEVICE_MEMORY_FAILED);
+    }
+    res = vkBindImageMemory(_sapp.vk.device, _sapp.vk.depth.image, _sapp.vk.depth.memory, 0);
+    if (res != VK_SUCCESS) {
+        _SAPP_PANIC(VULKAN_SWAPCHAIN_DEPTH_IMAGE_BIND_MEMORY_FAILED);
+    }
+    SOKOL_ASSERT(_sapp.vk.depth.memory);
+
+    VkImageViewCreateInfo view_create_info;
+    _sapp_clear(&view_create_info, sizeof(view_create_info));
+    view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    view_create_info.image = _sapp.vk.depth.image;
+    view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    view_create_info.format = fmt;
+    view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+    view_create_info.subresourceRange.levelCount = 1;
+    view_create_info.subresourceRange.layerCount = 1;
+    res = vkCreateImageView(_sapp.vk.device, &view_create_info, 0, &_sapp.vk.depth.view);
+    if (res != VK_SUCCESS) {
+        _SAPP_PANIC(VULKAN_SWAPCHAIN_DEPTH_CREATE_IMAGE_VIEW_FAILED);
+    }
+    SOKOL_ASSERT(_sapp.vk.depth.view);
+}
+
 _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     SOKOL_ASSERT(_sapp.vk.physical_device);
     SOKOL_ASSERT(_sapp.vk.surface);
@@ -4545,6 +4673,8 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     _sapp_clear(&surf_caps, sizeof(surf_caps));
     VkResult res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(_sapp.vk.physical_device, _sapp.vk.surface, &surf_caps);
     SOKOL_ASSERT(res == VK_SUCCESS);
+    const uint32_t width = surf_caps.currentExtent.width;
+    const uint32_t height = surf_caps.currentExtent.height;
 
     _sapp.vk.surface_format = _sapp_vk_pick_surface_format();
     // FIXME: pick better present-mode if supported
@@ -4559,7 +4689,8 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     create_info.minImageCount = surf_caps.minImageCount;
     create_info.imageFormat = _sapp.vk.surface_format.format;
     create_info.imageColorSpace = _sapp.vk.surface_format.colorSpace;
-    create_info.imageExtent = surf_caps.currentExtent;
+    create_info.imageExtent.width = width;
+    create_info.imageExtent.height = height;
     create_info.imageArrayLayers = 1;
     create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -4575,12 +4706,14 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     SOKOL_ASSERT(_sapp.vk.swapchain);
 
     if (old_swapchain) {
+        // destroy swapchain resources
         for (uint32_t i = 0; i < _sapp.vk.num_swapchain_images; i++) {
             SOKOL_ASSERT(_sapp.vk.swapchain_views[i]);
             vkDestroyImageView(_sapp.vk.device, _sapp.vk.swapchain_views[i], 0);
             _sapp.vk.swapchain_views[i] = 0;
         }
         vkDestroySwapchainKHR(_sapp.vk.device, old_swapchain, 0);
+        // FIXME: destroy msaa-buffer resources
     }
 
     _sapp.vk.num_swapchain_images = _SAPP_VK_MAX_SWAPCHAIN_IMAGES;
@@ -4610,6 +4743,9 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
         SOKOL_ASSERT(_sapp.vk.swapchain_views[i]);
     }
 
+    // create depth-stencil buffer
+    _sapp_vk_swapchain_create_depth(recreate, width, height, (VkSampleCountFlagBits)_sapp.sample_count);
+
     // this is the only place in the Vulkan code path which updates
     // _sapp.framebuffer_width/height
     _sapp.framebuffer_width = (int)surf_caps.currentExtent.width;
@@ -4620,6 +4756,7 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_swapchain(void) {
     SOKOL_ASSERT(_sapp.vk.device);
     SOKOL_ASSERT(_sapp.vk.swapchain);
     SOKOL_ASSERT(_sapp.vk.num_swapchain_images > 0);
+    _sapp_vk_swapchain_destroy_depth();
     for (uint32_t i = 0; i < _sapp.vk.num_swapchain_images; i++) {
         SOKOL_ASSERT(_sapp.vk.swapchain_views[i]);
         vkDestroyImageView(_sapp.vk.device, _sapp.vk.swapchain_views[i], 0);
@@ -13687,6 +13824,8 @@ SOKOL_API_IMPL sapp_swapchain sapp_swapchain_next(void) {
         } else {
             res.vulkan.render_image = (const void*) _sapp.vk.swapchain_images[img_idx];
             res.vulkan.render_view = (const void*) _sapp.vk.swapchain_views[img_idx];
+            res.vulkan.depth_stencil_image = (const void*) _sapp.vk.depth.image;
+            res.vulkan.depth_stencil_view = (const void*) _sapp.vk.depth.view;
         }
         // FIXME
         // res.vulkan.depth_stencil_view = ...;
