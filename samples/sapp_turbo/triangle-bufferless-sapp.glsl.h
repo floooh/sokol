@@ -27,6 +27,8 @@
 #define SOKOL_SHDC_ALIGN(a) __attribute__((aligned(a)))
 #endif
 #endif
+
+#ifdef SOKOL_GLCORE
 /*
     #version 410
 
@@ -89,7 +91,9 @@ static const uint8_t fs_source_glsl410[135] = {
     0x72,0x61,0x67,0x5f,0x63,0x6f,0x6c,0x6f,0x72,0x20,0x3d,0x20,0x63,0x6f,0x6c,0x6f,
     0x72,0x3b,0x0a,0x7d,0x0a,0x0a,0x00,
 };
+#endif
 
+#ifdef SOKOL_METAL
 /*
     #pragma clang diagnostic ignored "-Wmissing-prototypes"
     #pragma clang diagnostic ignored "-Wmissing-braces"
@@ -522,8 +526,10 @@ static const uint8_t fs_bytecode_metal_macos[2537] = {
     0x00,0xb3,0x0d,0x81,0x00,0x64,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
     0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
 };
+#endif
 
 static inline const sg_shader_desc* triangle_shader_desc(sg_backend backend) {
+    #ifdef SOKOL_GLCORE
     if (backend == SG_BACKEND_GLCORE) {
         static sg_shader_desc desc;
         static bool valid;
@@ -537,7 +543,8 @@ static inline const sg_shader_desc* triangle_shader_desc(sg_backend backend) {
         }
         return &desc;
     }
-    else if (backend == SG_BACKEND_METAL_MACOS) {
+    #elif defined(SOKOL_METAL)
+    if (backend == SG_BACKEND_METAL_MACOS) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -552,5 +559,6 @@ static inline const sg_shader_desc* triangle_shader_desc(sg_backend backend) {
         }
         return &desc;
     }
+    #endif
     return 0;
 }
