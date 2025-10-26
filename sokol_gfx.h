@@ -18898,6 +18898,10 @@ _SOKOL_PRIVATE VkAttachmentStoreOp _sg_vk_store_op(sg_store_action a) {
     }
 }
 
+_SOKOL_PRIVATE VkIndexType _sg_vk_index_type(sg_index_type t) {
+    return (t == SG_INDEXTYPE_UINT16) ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+}
+
 _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     _sg.backend = SG_BACKEND_VULKAN;
     _sg.features.origin_top_left = true;
@@ -19864,27 +19868,35 @@ _SOKOL_PRIVATE void _sg_vk_apply_pipeline(_sg_pipeline_t* pip) {
 }
 
 _SOKOL_PRIVATE void _sg_vk_apply_vertex_buffers(_sg_bindings_ptrs_t* bnd) {
-    SOKOL_ASSERT(_sg.vk.dev);
-    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
     SOKOL_ASSERT(bnd);
-    for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
-        if (bnd->vbs[i]) {
-            VkBuffer vk_buf = bnd->vbs[i]->vk.buf;
-            VkDeviceSize vk_offset = (VkDeviceSize)bnd->vb_offsets[i];
-            vkCmdBindVertexBuffers(_sg.vk.frame.cmd_buf, i, 1, &vk_buf, &vk_offset);
-        }
-    }
 }
 
 _SOKOL_PRIVATE bool _sg_vk_apply_bindings(_sg_bindings_ptrs_t* bnd) {
-    SOKOL_ASSERT(bnd);
+    SOKOL_ASSERT(bnd && bnd->pip);
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
 
     // FIXME FIXME FIXME:
     // Once we have cpu- or gpu-updated resources we need a pipeline barrier system!
 
     if (!_sg.cur_pass.is_compute) {
-        _sg_vk_apply_vertex_buffers(bnd);
-        // _sg_vk_apply_index_buffer(bnd);
+        // bind vertex buffers
+        // FIXME: could do this in a single call if buffer bindings are guaranteed
+        // to be continuous (currently that's not checked anywhere), or alternative
+        // via nullDescriptor robustness feature (which apparently may have performance downsides)
+        for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
+            if (bnd->vbs[i]) {
+                VkBuffer vk_buf = bnd->vbs[i]->vk.buf;
+                VkDeviceSize vk_offset = (VkDeviceSize)bnd->vb_offsets[i];
+                vkCmdBindVertexBuffers(_sg.vk.frame.cmd_buf, i, 1, &vk_buf, &vk_offset);
+            }
+        }
+        if (bnd->ib) {
+            VkBuffer vk_buf = bnd->ib->vk.buf;
+            VkDeviceSize vk_offset = (VkDeviceSize)bnd->ib_offset;
+            VkIndexType vk_index_type = _sg_vk_index_type(bnd->pip->cmn.index_type);
+            vkCmdBindIndexBuffer(_sg.vk.frame.cmd_buf, vk_buf, vk_offset, vk_index_type);
+        }
     }
     // FIXME
     // _sg_vk_apply_views_and_samplers(bnd);
