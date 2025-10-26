@@ -188,6 +188,9 @@ _SOKOL_PRIVATE void _sapp_windows_end_tick(void) {
 
 #elif defined(__APPLE__) && defined(__MACH__)
 
+
+_SOKOL_PRIVATE void _sapp_macos_init_displays(void);
+
 _SOKOL_PRIVATE void _sapp_macos_setup(const sapp_desc* desc) {
     (void)desc;
     _sapp_init_state(desc);
@@ -278,6 +281,8 @@ _SOKOL_PRIVATE void _sapp_macos_setup(const sapp_desc* desc) {
     [ctx setValues:&swapInt forParameter:NSOpenGLContextParameterSwapInterval];
     [ctx makeCurrentContext];
     #endif
+
+    _sapp_macos_init_displays();
 }
 
 _SOKOL_PRIVATE void _sapp_macos_shutdown(void) {
@@ -394,7 +399,7 @@ _SOKOL_PRIVATE const sapp_display* _sapp_macos_display_get_primary(void) {
     // primary screen is always screen 0
     static char display_names[SAPP_MAX_DISPLAYS][128];
     sapp_display* primary = &_sat.displays[0];
-    _sapp_macos_populate_display_info(screen, primary, display_names[0], sizeof(display_names[0]), "Display 0");
+    _sapp_macos_populate_display_info(screen, primary, display_names[0], 128, "Display 0");
     return primary;
 }
 
@@ -413,7 +418,7 @@ _SOKOL_PRIVATE const sapp_display* _sapp_macos_display_get_window_display(void) 
     // find the index of this NSScreen*
     NSArray* screens = [NSScreen screens];
     int index = -1;
-    for (int i = 0; i< (int)[screens count]) {
+    for (int i = 0; i< (int)[screens count]; i++) {
         NSScreen* current_screen = screens[i];
         if (current_screen == screen) {
             index = i;
@@ -426,7 +431,7 @@ _SOKOL_PRIVATE const sapp_display* _sapp_macos_display_get_window_display(void) 
     }
 
     sapp_display* display = &_sat.displays[index];
-    _sapp_macos_populate_display_info(screen, display, display_names[index], sizeof(display_names[index], "Unknown Display");
+    _sapp_macos_populate_display_info(screen, display, display_names[index], 128, "Unknown Display");
     return display;
 }
 
@@ -450,7 +455,7 @@ _SOKOL_PRIVATE const sapp_display* _sapp_macos_display_get_at_index(int index) {
     snprintf(fallback_name, sizeof(fallback_name), "Display %d", index + 1);
 
     sapp_display* display = &_sat.displays[index];
-    _sapp_macos_populate_display_info(screen, display, display_names[index], sizeof(display_names[index]), fallback_name);
+    _sapp_macos_populate_display_info(screen, display, display_names[index], 128, fallback_name);
     return display;
 }
 
@@ -462,7 +467,7 @@ _SOKOL_PRIVATE void _sapp_macos_init_displays(void) {
 
     for (int i = 0; i < _sat.display_count && _sat.display_count < SAPP_MAX_DISPLAYS; i++) {
         sapp_display* display = &_sat.displays[i];
-        _sapp_macos_populate_display_info(screens[i], display, display_names[i], sizeof(display_names[i]), "Unknown Display");
+        _sapp_macos_populate_display_info(screens[i], display, display_names[i], 128, "Unknown Display");
     }
 }
 

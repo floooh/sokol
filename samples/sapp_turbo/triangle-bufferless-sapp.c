@@ -62,6 +62,19 @@ static void init(void) {
         .colors[0] = { .load_action = SG_LOADACTION_CLEAR, .clear_value = { 0, 0, 0, 1} },
     };
 
+    // List all displays
+    int display_count = sapp_display_get_count();
+    printf("\nTotal Displays: %d\n", display_count);
+    for (int i = 0; i < display_count; i++) {
+        const sapp_display* display = sapp_display_get_at_index(i);
+        if (display) {
+            printf("  Display %d: %s (%dx%d @ %d Hz @ %f DPI scale)\n",
+                   i + 1, display->name ? display->name : "Unknown",
+                   display->width_px, display->height_px, display->refresh_rate, display->dpi_scale);
+        }
+    }
+    printf("\n");
+
     reset_minmax_frametimes();
 }
 
