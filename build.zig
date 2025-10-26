@@ -1,25 +1,8 @@
 const std = @import("std");
 
-// Although this function looks imperative, it does not perform the build
-// directly and instead it mutates the build graph (`b`) that will be then
-// executed by an external runner. The functions in `std.Build` implement a DSL
-// for defining build steps and express dependencies between them, allowing the
-// build runner to parallelize the build automatically (and the cache system to
-// know when a step doesn't need to be re-run).
 pub fn build(b: *std.Build) !void {
-    // Standard target options allow the person running `zig build` to choose
-    // what target to build for. Here we do not override the defaults, which
-    // means any target is allowed, and the default is native. Other options
-    // for restricting supported target set are available.
     const target = b.standardTargetOptions(.{});
-    // Standard optimization options allow the person running `zig build` to select
-    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
-    // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
-    // It's also possible to define more custom flags to toggle optional features
-    // of this build script using `b.option()`. All defined flags (including
-    // target and optimize options) will be listed when running `zig build --help`
-    // in this directory.
 
     const native = b.option(bool, "native", "Do not use dependencies, use system files instead") orelse true;
     const dynamic_linkage = b.option(bool, "shared", "Build sokol_turbo as a shared library") orelse false;
@@ -30,22 +13,7 @@ pub fn build(b: *std.Build) !void {
     const use_sokol_imgui = b.option(bool, "sokol_imgui", "Add support for sokol_imgui.h bindings") orelse false;
     const sokol_backend: SokolBackend = if (use_opengl) .gl else .auto;
 
-    // const lib: *std.Build.Step.Compile = switch (shared) {
-    //     inline else => |x| switch (x) {
-    //         false => std.Build.addStaticLibrary,
-    //         true => std.Build.addSharedLibrary,
-    //     }(b, .{
-    //         .name = "sokol_turbo",
-    //         .target = target,
-    //         .optimize = optimize,
-    //     }),
-    // };
-    // lib.root_module.addIncludePath(b.path("."));
-    // lib.linkLibC();
-
     // if (shared) lib.root_module.addCMacro("SOKOL_DLL", "1");
-
-    // lib.installHeadersDirectory(b.path("."), "sokol_turbo", .{});
 
     // This creates a module, which represents a collection of source files alongside
     // some compilation options, such as optimization mode and linked system libraries.
@@ -96,7 +64,7 @@ pub fn build(b: *std.Build) !void {
     // If neither case applies to you, feel free to delete the declaration you
     // don't need and to put everything under a single module.
     const exe = b.addExecutable(.{
-        .name = "sokol_turbo",
+        .name = "sokol_turbo_test",
         .root_module = b.createModule(.{
             // b.createModule defines a new module just like b.addModule but,
             // unlike b.addModule, it does not expose the module to consumers of
@@ -272,6 +240,8 @@ pub fn buildLibSokol(b: *std.Build, options: LibSokolOptions) !*std.Build.Step.C
     if (options.optimize != .Debug) {
         try cflags.appendBounded("-DNDEBUG");
     }
+    // Question: should we use addCMacro, or .cflags like above?!
+    if (options.dynamic_linkage) lib.root_module.addCMacro("SOKOL_DLL", "1");
     switch (backend) {
         .metal => try cflags.appendBounded("-DSOKOL_METAL"),
         .gl => try cflags.appendBounded("-DSOKOL_GLCORE"),
@@ -358,6 +328,7 @@ pub fn buildLibSokol(b: *std.Build, options: LibSokolOptions) !*std.Build.Step.C
 
     // make sokol headers available to users of `sokol_turbo_clib` via `#include "sokol_turbo/sokol_gfx.h"
     // lib.installHeadersDirectory(b.path("."), "sokol_turbo", .{});
+    // TODO: loop on array of headers and build dest_rel_path, call lib.installHeader
     lib.installHeader(b.path("sokol_app_turbo.h"), "sokol_turbo/sokol_app_turbo.h");
     lib.installHeader(b.path("sokol_app.h"), "sokol_turbo/sokol_app.h");
     lib.installHeader(b.path("sokol_log.h"), "sokol_turbo/sokol_log.h");
@@ -366,7 +337,7 @@ pub fn buildLibSokol(b: *std.Build, options: LibSokolOptions) !*std.Build.Step.C
     lib.installHeader(b.path("sokol_glue.h"), "sokol_turbo/sokol_glue.h");
 
     // installArtifact allows us to find the lib_sokol compile step when
-    // sokol is used as package manager dependency via 'dep_sokol.artifact("sokol_clib")'
+    // sokol is used as package manager dependency via 'dep_sokol.artifact("sokol_turbo_clib")'
     b.installArtifact(lib);
 
     return lib;
