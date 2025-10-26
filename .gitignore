@@ -1,6 +1,8 @@
 .vscode/settings.json
 build/
 .cache/
+.zig-cache/
+zig-out/
 _deps/
 #>fips
 # this area is managed by fips, do not edit

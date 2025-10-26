@@ -7,6 +7,9 @@
 #ifndef SOKOL_GLCORE
     #define SOKOL_GLCORE
 #endif
+
+#include "sokol_defines.h"
+
 /* sokol 3D-API defines are provided by build options */
 #include "sokol_app_turbo.h"
 #include "sokol_gfx.h"
