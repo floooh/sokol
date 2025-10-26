@@ -13398,10 +13398,6 @@ SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
 }
 
 SOKOL_API_IMPL sapp_pixel_format sapp_depth_format(void) {
-    #if defined(SOKOL_VULKAN)
-        // FIXME!
-        return SAPP_PIXELFORMAT_NONE;
-    #endif
     return SAPP_PIXELFORMAT_DEPTH_STENCIL;
 }
 
