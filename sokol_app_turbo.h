@@ -338,6 +338,134 @@ _SOKOL_PRIVATE void _sapp_macos_end_tick(void) {
     }
 }
 
+// Display API
+
+// Helper function to populate display info from NSScreen
+_SOKOL_PRIVATE void _sapp_macos_populate_display_info(NSScreen* screen, sapp_display* display, char* name_buffer, size_t name_buffer_size, const char* fallback_name) {
+    NSRect frame = [screen frame];
+    CGSize size = CGDisplayScreenSize([[[screen deviceDescription] objectForKey:@"NSScreenNumber"] unsignedIntValue]);
+
+    // Get display mode information
+    CGDirectDisplayID displayID = [[[screen deviceDescription] objectForKey:@"NSScreenNumber"] unsignedIntValue];
+    CGDisplayModeRef mode = CGDisplayCopyDisplayMode(displayID);
+
+    // Position and dimensions
+    display->pos_x = (int)frame.origin.x;
+    display->pos_y = (int)frame.origin.y;
+    display->width_px = (int)frame.size.width;
+    display->height_px = (int)frame.size.height;
+    display->width_mm = (int)size.width;
+    display->height_mm = (int)size.height;
+    display->is_primary = (screen == [NSScreen mainScreen]);
+
+    // Refresh rate
+    if (mode) {
+        display->refresh_rate = (int)(CGDisplayModeGetRefreshRate(mode) + 0.5);
+        if (display->refresh_rate == 0) {
+            display->refresh_rate = 60; // Default fallback
+        }
+        CGDisplayModeRelease(mode);
+    } else {
+        display->refresh_rate = 60;
+    }
+
+    // Content scale (DPI)
+    display->dpi_scale = (float)[screen backingScaleFactor];
+
+    // Display name
+    const char* name = [[screen localizedName] UTF8String];
+    if (name) {
+        strncpy(name_buffer, name, name_buffer_size - 1);
+        name_buffer[name_buffer_size - 1] = '\0';
+    } else {
+        strncpy(name_buffer, fallback_name, name_buffer_size - 1);
+        name_buffer[name_buffer_size - 1] = '\0';
+    }
+    display->name = name_buffer;
+}
+
+// Display information implementations
+_SOKOL_PRIVATE const sapp_display* _sapp_macos_display_get_primary(void) {
+    NSScreen* screen = [NSScreen mainScreen];
+    if (!screen) {
+        return NULL;
+    }
+
+    // primary screen is always screen 0
+    static char display_names[SAPP_MAX_DISPLAYS][128];
+    sapp_display* primary = &_sat.displays[0];
+    _sapp_macos_populate_display_info(screen, primary, display_names[0], sizeof(display_names[0]), "Display 0");
+    return primary;
+}
+
+_SOKOL_PRIVATE const sapp_display* _sapp_macos_display_get_window_display(void) {
+    if (!_sapp.valid || !_sapp.macos.window) {
+        return _sapp_macos_display_get_primary();
+    }
+
+    static char display_names[SAPP_MAX_DISPLAYS][128];
+
+    NSScreen* screen = [_sapp.macos.window screen];
+    if (!screen) {
+        return _sapp_macos_display_get_primary();
+    }
+
+    // find the index of this NSScreen*
+    NSArray* screens = [NSScreen screens];
+    int index = -1;
+    for (int i = 0; i< (int)[screens count]) {
+        NSScreen* current_screen = screens[i];
+        if (current_screen == screen) {
+            index = i;
+            break;
+        }
+    }
+
+    if(index == -1) {
+        return NULL;
+    }
+
+    sapp_display* display = &_sat.displays[index];
+    _sapp_macos_populate_display_info(screen, display, display_names[index], sizeof(display_names[index], "Unknown Display");
+    return display;
+}
+
+_SOKOL_PRIVATE int _sapp_macos_display_get_count(void) {
+    if (!_sapp.macos.window) return 0;
+
+    _sat.display_count = (int)[[NSScreen screens] count];
+    return _sat.display_count;
+}
+
+_SOKOL_PRIVATE const sapp_display* _sapp_macos_display_get_at_index(int index) {
+    static char display_names[SAPP_MAX_DISPLAYS][128];
+
+    NSArray* screens = [NSScreen screens];
+    if (index < 0 || index >= (int)[screens count] || index >= SAPP_MAX_DISPLAYS) {
+        return NULL;
+    }
+    NSScreen* screen = screens[index];
+
+    char fallback_name[64];
+    snprintf(fallback_name, sizeof(fallback_name), "Display %d", index + 1);
+
+    sapp_display* display = &_sat.displays[index];
+    _sapp_macos_populate_display_info(screen, display, display_names[index], sizeof(display_names[index]), fallback_name);
+    return display;
+}
+
+_SOKOL_PRIVATE void _sapp_macos_init_displays(void) {
+    NSArray* screens = [NSScreen screens];
+    _sat.display_count = (int)[screens count];
+    
+    static char display_names[SAPP_MAX_DISPLAYS][128];
+
+    for (int i = 0; i < _sat.display_count && _sat.display_count < SAPP_MAX_DISPLAYS; i++) {
+        sapp_display* display = &_sat.displays[i];
+        _sapp_macos_populate_display_info(screens[i], display, display_names[i], sizeof(display_names[i]), "Unknown Display");
+    }
+}
+
 #elif defined(__EMSCRIPTEN__)
 
 #else // Linux and similar
@@ -420,6 +548,8 @@ _SOKOL_PRIVATE void _sapp_linux_poll_events(void) {
     
 }
 
+_SOKOL_PRIVATE _sapp_linux_init_displays();
+
 _SOKOL_PRIVATE void _sapp_linux_begin_tick(void) {
     _sapp_timing_measure(&_sapp.timing);
     int count = XPending(_sapp.x11.display);
@@ -435,6 +565,7 @@ _SOKOL_PRIVATE void _sapp_linux_begin_tick(void) {
     if (_sapp.first_frame) {
         _sapp.first_frame = false;
         _sapp_call_init();
+        _sapp_linux_init_displays();
     }
     _sapp.frame_count++;
 }
@@ -517,7 +648,7 @@ _SOKOL_PRIVATE void _sapp_linux_init_displays(void) {
             continue;
         }
 
-        sapp_display* display = &_sat.displays[_sat.display_count];
+        sapp_display* display = &_sat.displays[i];
 
         // Resolution and position
         display->width_px = crtc_info->width;
