@@ -18556,28 +18556,65 @@ _SOKOL_PRIVATE void _sg_vk_staging_discard(void) {
     _sg.vk.staging.init.size = 0;
 }
 
-_SOKOL_PRIVATE void _sg_vk_staging_acquire_command_buffer(void) {
-    SOKOL_ASSERT(false && "FIXME");
+_SOKOL_PRIVATE void _sg_vk_staging_copy_immutable_buffer_data(_sg_buffer_t* buf, const sg_range* data) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(_sg.vk.queue);
+    SOKOL_ASSERT(_sg.vk.staging.init.mem);
+    SOKOL_ASSERT(_sg.vk.staging.init.buf);
+    SOKOL_ASSERT(buf && buf->vk.buf);
+    SOKOL_ASSERT(data && data->ptr && (data->size > 0));
+    VkResult res;
+
+    VkDeviceMemory mem = _sg.vk.staging.init.mem;
+    VkCommandBuffer cmd_buf = _sg.vk.staging.init.cmd_buf;
+    VkBuffer src_buf = _sg.vk.staging.init.buf;
+    VkBuffer dst_buf = buf->vk.buf;
+    const uint8_t* src_ptr = (const uint8_t*)data->ptr;
+    uint64_t dst_size = _sg.vk.staging.init.size;
+    uint64_t bytes_remaining = data->size;
+    // FIXME: move this into a common helper function shared between immutable buffers and images
+    while (bytes_remaining > 0) {
+        uint64_t bytes_to_copy = bytes_remaining;
+        if (bytes_remaining > dst_size) {
+            bytes_to_copy = dst_size;
+            bytes_remaining -= dst_size;
+        } else {
+            bytes_to_copy = bytes_remaining;
+            bytes_remaining = 0;
+        }
+        void* dst_ptr = 0;
+        res = vkMapMemory(_sg.vk.dev, mem, 0, VK_WHOLE_SIZE, 0, &dst_ptr);
+        SOKOL_ASSERT((res == VK_SUCCESS) && dst_ptr);
+        memcpy(dst_ptr, src_ptr, bytes_to_copy);
+        vkUnmapMemory(_sg.vk.dev, mem);
+        src_ptr += bytes_to_copy;
+
+        VkCommandBufferBeginInfo cmdbuf_begin_info;
+        _sg_clear(&cmdbuf_begin_info, sizeof(cmdbuf_begin_info));
+        cmdbuf_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        cmdbuf_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        res = vkBeginCommandBuffer(cmd_buf, &cmdbuf_begin_info);
+        SOKOL_ASSERT(res == VK_SUCCESS);
+        VkBufferCopy region;
+        _sg_clear(&region, sizeof(region));
+        region.size = bytes_to_copy;
+        vkCmdCopyBuffer(cmd_buf, src_buf, dst_buf, 1, &region);
+        vkEndCommandBuffer(cmd_buf);
+        VkSubmitInfo submit_info;
+        _sg_clear(&submit_info, sizeof(submit_info));
+        submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submit_info.commandBufferCount = 1;
+        submit_info.pCommandBuffers = &cmd_buf;
+        res = vkQueueSubmit(_sg.vk.queue, 1, &submit_info, VK_NULL_HANDLE);
+        SOKOL_ASSERT(res == VK_SUCCESS);
+        res = vkQueueWaitIdle(_sg.vk.queue);
+        SOKOL_ASSERT(res == VK_SUCCESS);
+        res = vkResetCommandBuffer(cmd_buf, 0);
+        SOKOL_ASSERT(res == VK_SUCCESS);
+    }
 }
 
-_SOKOL_PRIVATE void _sg_vk_staging_submit_command_buffer(void) {
-    SOKOL_ASSERT(false && "FIXME");
-}
-
-_SOKOL_PRIVATE void _sg_vk_staging_flush_on_overflow(void) {
-    SOKOL_ASSERT(false && "FIXME");
-    // called on staging buffer overflow:
-    // - _sg_vk_staging_submit_command_buffer()
-    // - vkQueueWaitIdle() ??? => or maybe we can do this with a granular fence?
-    // - _sg_vk_staging_acquire_command_bufffer()
-}
-
-_SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(const _sg_buffer_t* buf, uint64_t offset, const sg_range* data) {
-    SOKOL_ASSERT(false && buf && offset && data && "FIXME");
-    // needs to call _sg_vk_staging_acquire_command_buffer()
-}
-
-_SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(const _sg_image_t* img, const sg_image_data* data) {
+_SOKOL_PRIVATE void _sg_vk_staging_copy_immutable_image_data(const _sg_image_t* img, const sg_image_data* data) {
     SOKOL_ASSERT(false && img && data && "FIXME");
     // needs to call _sg_vk_staging_acquire_command_buffer()
 }
@@ -19042,6 +19079,7 @@ _SOKOL_PRIVATE void _sg_vk_acquire_frame_command_buffer(void) {
         VkCommandBufferBeginInfo cmdbuf_begin_info;
         _sg_clear(&cmdbuf_begin_info, sizeof(cmdbuf_begin_info));
         cmdbuf_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        cmdbuf_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         res = vkBeginCommandBuffer(_sg.vk.frame.cmd_buf, &cmdbuf_begin_info);
         SOKOL_ASSERT(res == VK_SUCCESS);
     }
@@ -19143,9 +19181,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_buffer(_sg_buffer_t* buf, const s
         _SG_ERROR(VULKAN_BIND_BUFFER_MEMORY_FAILED);
         return SG_RESOURCESTATE_FAILED;
     }
-
     if (buf->cmn.usage.immutable && desc->data.ptr) {
-        // FIXME: upload
+        _sg_vk_staging_copy_immutable_buffer_data(buf, &desc->data);
     }
     return SG_RESOURCESTATE_VALID;
 }
