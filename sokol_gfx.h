@@ -19745,6 +19745,25 @@ _SOKOL_PRIVATE void _sg_vk_init_color_attachment_info(VkRenderingAttachmentInfo*
     info->clearValue.color.float32[3] = action->clear_value.a;
 }
 
+_SOKOL_PRIVATE void _sg_vk_init_depth_attachment_info(VkRenderingAttachmentInfo* info, const sg_depth_attachment_action* action, VkImageView ds_view) {
+    info->sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    info->imageView = ds_view;
+    info->imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+    info->resolveMode = VK_RESOLVE_MODE_NONE;
+    info->loadOp = _sg_vk_load_op(action->load_action);
+    info->storeOp = _sg_vk_store_op(action->store_action);
+    info->clearValue.depthStencil.depth = action->clear_value;
+}
+
+_SOKOL_PRIVATE void _sg_vk_init_stencil_attachment_info(VkRenderingAttachmentInfo* info, const sg_stencil_attachment_action* action, VkImageView ds_view) {
+    info->sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    info->imageView = ds_view;
+    info->imageLayout = VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
+    info->resolveMode = VK_RESOLVE_MODE_NONE;
+    info->loadOp = _sg_vk_load_op(action->load_action);
+    info->storeOp = _sg_vk_store_op(action->store_action);
+    info->clearValue.depthStencil.stencil = action->clear_value;
+}
 _SOKOL_PRIVATE void _sg_vk_begin_compute_pass(const sg_pass* pass) {
     SOKOL_ASSERT(false && pass && "FIXME");
 }
@@ -19756,13 +19775,16 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(const sg_pass* pass, const _sg_atta
 
     VkRenderingAttachmentInfo color_att_infos[SG_MAX_COLOR_ATTACHMENTS];
     _sg_clear(color_att_infos, sizeof(color_att_infos));
+    VkRenderingAttachmentInfo depth_att_info;
+    _sg_clear(&depth_att_info, sizeof(depth_att_info));
+    VkRenderingAttachmentInfo stencil_att_info;
+    _sg_clear(&stencil_att_info, sizeof(stencil_att_info));
     VkRenderingInfo render_info;
     _sg_clear(&render_info, sizeof(render_info));
     render_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
     render_info.renderArea.extent.width = (uint32_t)_sg.cur_pass.dim.width;
     render_info.renderArea.extent.height = (uint32_t)_sg.cur_pass.dim.height;
     render_info.layerCount = 1;
-    render_info.pColorAttachments = color_att_infos;
 
     if (is_swapchain_pass) {
         _sg.vk.swapchain = pass->swapchain.vulkan;
@@ -19778,8 +19800,11 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(const sg_pass* pass, const _sg_atta
         } else {
             SOKOL_ASSERT(_sg.vk.render_finished_sem == _sg.vk.swapchain.render_finished_semaphore);
         }
+        VkImage vk_color_image = (VkImage)_sg.vk.swapchain.render_image;
+        VkImageView vk_color_view = (VkImageView)_sg.vk.swapchain.render_view;
+        VkImageView vk_resolve_view = (VkImageView)_sg.vk.swapchain.resolve_view;
         _sg_vk_transition_image_layout(
-            (VkImage)_sg.vk.swapchain.render_image,
+            vk_color_image,
             VK_IMAGE_LAYOUT_UNDEFINED,
             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             0,
@@ -19789,10 +19814,36 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(const sg_pass* pass, const _sg_atta
             VK_IMAGE_ASPECT_COLOR_BIT,
             0, 0); // base_mip_level, base_array_layer
 
-        VkImageView vk_color_view = (VkImageView)_sg.vk.swapchain.render_view;
-        VkImageView vk_resolve_view = (VkImageView)_sg.vk.swapchain.resolve_view;
         _sg_vk_init_color_attachment_info(&color_att_infos[0], &action->colors[0], vk_color_view, vk_resolve_view);
         render_info.colorAttachmentCount = 1;
+        render_info.pColorAttachments = color_att_infos;
+
+        if (_sg.vk.swapchain.depth_stencil_image) {
+            VkImage vk_ds_image = (VkImage)_sg.vk.swapchain.depth_stencil_image;
+            VkImageView vk_ds_view = (VkImageView)_sg.vk.swapchain.depth_stencil_view;
+            VkImageAspectFlags vk_aspect = VK_IMAGE_ASPECT_DEPTH_BIT;
+            const bool has_stencil = _sg_is_depth_stencil_format(pass->swapchain.depth_format);
+            if (has_stencil) {
+                vk_aspect |= VK_IMAGE_ASPECT_STENCIL_BIT;
+            }
+            _sg_vk_transition_image_layout(
+                vk_ds_image,
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                0,
+                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                vk_aspect,
+                0, 0);
+
+            _sg_vk_init_depth_attachment_info(&depth_att_info, &action->depth, vk_ds_view);
+            render_info.pDepthAttachment = &depth_att_info;
+            if (has_stencil) {
+                _sg_vk_init_stencil_attachment_info(&stencil_att_info, &action->stencil, vk_ds_view);
+                render_info.pStencilAttachment = &stencil_att_info;
+            }
+        }
     } else {
         SOKOL_ASSERT(false && "FIXME");
     }
@@ -19833,7 +19884,6 @@ _SOKOL_PRIVATE void _sg_vk_end_render_pass(const _sg_attachments_ptrs_t* atts) {
             VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
             VK_IMAGE_ASPECT_COLOR_BIT,
             0, 0); // base_mip_level, base_array_layer
-
         _sg_clear(&_sg.vk.swapchain, sizeof(_sg.vk.swapchain));
     } else {
         SOKOL_ASSERT(false && "FIXME");
