@@ -74,6 +74,10 @@
         "build.zig",
         "build.zig.zon",
         "src",
+        "sokol_app_turbo.h",
+        "sokol-turbo.c",
+        "sokol-turbo.m",
+        "sokol_defines.h",
         // For example...
         //"LICENSE",
         //"README.md",
