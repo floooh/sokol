@@ -477,6 +477,8 @@ _SOKOL_PRIVATE void _sapp_macos_init_displays(void) {
 
 #include <X11/extensions/Xrandr.h>
 
+_SOKOL_PRIVATE void _sapp_linux_init_displays(void);
+
 _SOKOL_PRIVATE void _sapp_linux_setup(const sapp_desc* desc) {
     (void)_sat;
     /* The following lines are here to trigger a linker error instead of an
@@ -529,6 +531,8 @@ _SOKOL_PRIVATE void _sapp_linux_setup(const sapp_desc* desc) {
     }
 
     XFlush(_sapp.x11.display);
+
+    _sapp_linux_init_displays();
 }
 
 _SOKOL_PRIVATE void _sapp_linux_poll_events(void) {
@@ -553,8 +557,6 @@ _SOKOL_PRIVATE void _sapp_linux_poll_events(void) {
     
 }
 
-_SOKOL_PRIVATE _sapp_linux_init_displays();
-
 _SOKOL_PRIVATE void _sapp_linux_begin_tick(void) {
     _sapp_timing_measure(&_sapp.timing);
     int count = XPending(_sapp.x11.display);
@@ -570,7 +572,6 @@ _SOKOL_PRIVATE void _sapp_linux_begin_tick(void) {
     if (_sapp.first_frame) {
         _sapp.first_frame = false;
         _sapp_call_init();
-        _sapp_linux_init_displays();
     }
     _sapp.frame_count++;
 }
@@ -636,12 +637,20 @@ _SOKOL_PRIVATE void _sapp_linux_init_displays(void) {
         return;
     }
 
+    // 0 = active, 1 = inactive, call it twice to get a full list, if there are 
+    // inactive monitors
+    int monitor_count = 0;
+    XRRMonitorInfo *info = XRRGetMonitors(_sapp.x11.display, _sapp.x11.window, 0, &monitor_count);
+
     // Use RandR extension for detailed display information
-    XRRScreenResources* screen_resources = XRRGetScreenResources(_sapp.x11.display, _sapp.x11.root);
+    XRRScreenResources* screen_resources = XRRGetScreenResourcesCurrent(_sapp.x11.display, _sapp.x11.root);
     if (!screen_resources) return;
 
+    Atom edid_atom = XInternAtom(_sapp.x11.display, RR_PROPERTY_RANDR_EDID, True);
+
     for (int i = 0; i < screen_resources->noutput && _sat.display_count < SAPP_MAX_DISPLAYS; i++) {
-        XRROutputInfo* output_info = XRRGetOutputInfo(_sapp.x11.display, screen_resources, screen_resources->outputs[i]);
+        RROutput output = screen_resources->outputs[i];
+        XRROutputInfo* output_info = XRRGetOutputInfo(_sapp.x11.display, screen_resources, output);
         if (!output_info || output_info->connection != RR_Connected || output_info->crtc == None) {
             XRRFreeOutputInfo(output_info);
             continue;
@@ -682,8 +691,57 @@ _SOKOL_PRIVATE void _sapp_linux_init_displays(void) {
         // Content scale
         display->dpi_scale = _sapp.dpi_scale;
 
+        bool has_edid_property = false;
+        int num_properties = 0;
+        Atom* properties = XRRListOutputProperties(_sapp.x11.display, output, &num_properties);
+        for (int i = 0; i < num_properties; ++i) {
+            if (properties[i] == edid_atom) {
+                has_edid_property = true;
+                break;
+            }
+        }
+        XFree(properties);
+        if (!has_edid_property) {
+            //return false;
+        }
+            
+        if (edid_atom != None) {
+            unsigned char *prop = NULL;
+            int actual_format;
+            Atom actual_type;
+            unsigned long nitems, bytes_after;
+            if (XRRGetOutputProperty(_sapp.x11.display, output, edid_atom, 0, 128, False, False,
+                                     AnyPropertyType, &actual_type, &actual_format,
+                                     &nitems, &bytes_after, &prop) == Success) {
+                if (nitems > 0) {
+                    // EDID is 128-byte or 256-byte block
+                    // bytes 54–71 typically contain the ASCII monitor name descriptor
+                    // A full parser is best, but here’s a simple rough extract:
+                    for (unsigned long j = 0; j + 4 < nitems; j += 18) {
+                        if (prop[j] == 0x00 && prop[j+1] == 0x00 && prop[j+2] == 0x00 &&
+                            prop[j+3] == 0xFC && prop[j+4] == 0x00) {
+                            char name[14];
+                            int k;
+                            for (k = 0; k < 13 && j+5+k < nitems; k++) {
+                                char c = prop[j+5+k];
+                                if (c == 0x0A) break;
+                                name[k] = c;
+                            }
+                            name[k] = '\0';
+                        }
+                    }
+                }
+                else {
+                    // The X11 server simply does not expose this EDID property, altough it exists
+                }
+                XFree(prop);
+            }
+        }
+        else {
+        }
+
         // Display name (convert to static string)
-        static char display_names[4][128];
+        static char display_names[SAPP_MAX_DISPLAYS][128];
         if (output_info->name) {
             strncpy(display_names[_sat.display_count], output_info->name, 127);
             display_names[_sat.display_count][127] = '\0';
@@ -718,6 +776,8 @@ _SOKOL_PRIVATE void _sapp_linux_init_displays(void) {
         display->name = "Display";
         _sat.display_count = 1;
     }
+
+    XRRFreeMonitors(info);
 }
 
 _SOKOL_PRIVATE void sapp_linux_shutdown_displays(void) {
