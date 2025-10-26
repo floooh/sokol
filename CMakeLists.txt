@@ -1,8 +1,8 @@
 #
-# project: sokol-turbo
+# project: sokol_turbo
 #
 cmake_minimum_required(VERSION 3.21)
-project(sokol-turbo)
+project(sokol_turbo)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 20)
@@ -29,7 +29,7 @@ add_library(sokol_turbo STATIC)
 
 # Platform-specific compiler flags and libraries
 if(SOKOL_TURBO_PLATFORM STREQUAL "WIN32")
-    target_sources(sokol_turbo PRIVATE sokol-turbo.c)
+    target_sources(sokol_turbo PRIVATE sokol_turbo.c)
     target_compile_definitions(sokol_turbo PRIVATE _WIN32 SOKOL_IMPL=1 SOKOL_GLCORE=1)
     
     target_link_libraries(sokol_turbo PUBLIC
@@ -47,7 +47,7 @@ if(SOKOL_TURBO_PLATFORM STREQUAL "WIN32")
         _UNICODE
     )
 elseif(SOKOL_TURBO_PLATFORM STREQUAL "LINUX")
-    target_sources(sokol_turbo PRIVATE sokol-turbo.c)
+    target_sources(sokol_turbo PRIVATE sokol_turbo.c)
     target_compile_definitions(sokol_turbo PRIVATE __linux__ SOKOL_IMPL=1 SOKOL_GLCORE=1)
 
     # Find required packages
@@ -80,11 +80,11 @@ elseif(SOKOL_TURBO_PLATFORM STREQUAL "LINUX")
     # Add compile flags
     target_compile_options(sokol_turbo PRIVATE ${X11_CFLAGS_OTHER})
 elseif(SOKOL_TURBO_PLATFORM STREQUAL "MACOS")
-    target_sources(sokol_turbo PRIVATE sokol-turbo.m)
+    target_sources(sokol_turbo PRIVATE sokol_turbo.m)
     target_compile_definitions(sokol_turbo PRIVATE __APPLE__ SOKOL_IMPL=1 SOKOL_METAL=1)
     
     # Enable Objective-C for the .m file
-    set_source_files_properties(sokol-turbo.m PROPERTIES
+    set_source_files_properties(sokol_turbo.m PROPERTIES
         COMPILE_FLAGS "-x objective-c"
     )
 

@@ -214,9 +214,9 @@ pub fn buildLibSokol(b: *std.Build, options: LibSokolOptions) !*std.Build.Step.C
     _ = csrc_root;
 
     const csources = if (mod_target.os.tag == .macos) [_][]const u8{
-        "sokol-turbo.m",
+        "sokol_turbo.m",
     } else [_][]const u8{
-        "sokol-turbo.c",
+        "sokol_turbo.c",
     };
     const mod = b.addModule("mod_sokol_turbo_clib", .{
         .target = options.target,
