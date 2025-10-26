@@ -4,8 +4,8 @@
 #ifndef SOKOL_NO_ENTRY
     #define SOKOL_NO_ENTRY
 #endif
-#ifndef SOKOL_GLCORE
-    #define SOKOL_GLCORE
+#ifndef SOKOL_METAL
+    #define SOKOL_METAL
 #endif
 #define GL_SILENCE_DEPRECATION 1
 /* sokol 3D-API defines are provided by build options */

@@ -81,7 +81,7 @@ elseif(SOKOL_TURBO_PLATFORM STREQUAL "LINUX")
     target_compile_options(sokol_turbo PRIVATE ${X11_CFLAGS_OTHER})
 elseif(SOKOL_TURBO_PLATFORM STREQUAL "MACOS")
     target_sources(sokol_turbo PRIVATE sokol-turbo.m)
-    target_compile_definitions(sokol_turbo PRIVATE __APPLE__ SOKOL_IMPL=1 SOKOL_GLCORE=1)
+    target_compile_definitions(sokol_turbo PRIVATE __APPLE__ SOKOL_IMPL=1 SOKOL_METAL=1)
     
     # Enable Objective-C for the .m file
     set_source_files_properties(sokol-turbo.m PROPERTIES
@@ -95,6 +95,9 @@ elseif(SOKOL_TURBO_PLATFORM STREQUAL "MACOS")
     find_library(COREVIDEO_FRAMEWORK CoreVideo)
     find_library(COREGRAPHICS_FRAMEWORK CoreGraphics)
     find_library(OPENGL_FRAMEWORK OpenGL)
+    find_library(METAL_FRAMEWORK Metal)
+    find_library(METALKIT_FRAMEWORK MetalKit)
+    find_library(QUARTZCORE_FRAMEWORK QuartzCore)
 
     target_link_libraries(sokol_turbo PUBLIC
         ${COCOA_FRAMEWORK}
@@ -103,6 +106,9 @@ elseif(SOKOL_TURBO_PLATFORM STREQUAL "MACOS")
         ${COREVIDEO_FRAMEWORK}
         ${COREGRAPHICS_FRAMEWORK}
         ${OPENGL_FRAMEWORK}
+        ${METAL_FRAMEWORK}
+        ${METALKIT_FRAMEWORK}
+        ${QUARTZCORE_FRAMEWORK}
     )
 endif()
 

@@ -271,11 +271,13 @@ _SOKOL_PRIVATE void _sapp_macos_setup(const sapp_desc* desc) {
         data2:0];
     [NSApp postEvent:focusevent atStart:YES];
 
+    #if defined(_SAPP_ANY_GL)
     // vsync off => swap interval to 0
     GLint swapInt = 0;
     NSOpenGLContext* ctx = [_sapp.macos.view openGLContext];
     [ctx setValues:&swapInt forParameter:NSOpenGLContextParameterSwapInterval];
     [ctx makeCurrentContext];
+    #endif
 }
 
 _SOKOL_PRIVATE void _sapp_macos_shutdown(void) {
@@ -315,11 +317,13 @@ _SOKOL_PRIVATE void _sapp_macos_begin_tick(void) {
     if (_sapp.first_frame) {
         _sapp.first_frame = false;
         _sapp_call_init();
+        #if defined(_SAPP_ANY_GL)
         // vsync off => swap interval to 0
         GLint swapInt = 0;
         NSOpenGLContext* ctx = [_sapp.macos.view openGLContext];
         [ctx setValues:&swapInt forParameter:NSOpenGLContextParameterSwapInterval];
-        }
+        #endif
+    }
     _sapp.frame_count++;
 }
 
