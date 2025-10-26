@@ -6788,11 +6788,6 @@ typedef struct {
 typedef void (*_sg_vk_delete_queue_destructor_t)(void* obj);
 
 typedef struct {
-    VkAccessFlags cur;  // current access flags bits
-    VkAccessFlags next; // next access flags bits
-} _sg_vk_access_t;
-
-typedef struct {
     _sg_vk_delete_queue_destructor_t destructor;
     void* obj;
 } _sg_vk_delete_queue_item_t;
@@ -6809,7 +6804,6 @@ typedef struct _sg_buffer_s {
     struct {
         VkBuffer buf;
         VkDeviceMemory mem;
-        _sg_vk_access_t access;
     } vk;
 } _sg_vk_buffer_t;
 typedef _sg_vk_buffer_t _sg_buffer_t;
@@ -19154,7 +19148,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_buffer(_sg_buffer_t* buf, const s
     SOKOL_ASSERT(buf->cmn.size > 0);
     SOKOL_ASSERT(0 == buf->vk.buf);
     SOKOL_ASSERT(0 == buf->vk.mem);
-    SOKOL_ASSERT((0 == buf->vk.access.cur) && (0 == buf->vk.access.next));
     VkResult res;
     // FIXME: inject external buffer
 
@@ -19870,9 +19863,31 @@ _SOKOL_PRIVATE void _sg_vk_apply_pipeline(_sg_pipeline_t* pip) {
     vkCmdBindPipeline(_sg.vk.frame.cmd_buf, bindpoint, pip->vk.pip);
 }
 
+_SOKOL_PRIVATE void _sg_vk_apply_vertex_buffers(_sg_bindings_ptrs_t* bnd) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+    SOKOL_ASSERT(bnd);
+    for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
+        if (bnd->vbs[i]) {
+            VkBuffer vk_buf = bnd->vbs[i]->vk.buf;
+            VkDeviceSize vk_offset = (VkDeviceSize)bnd->vb_offsets[i];
+            vkCmdBindVertexBuffers(_sg.vk.frame.cmd_buf, i, 1, &vk_buf, &vk_offset);
+        }
+    }
+}
+
 _SOKOL_PRIVATE bool _sg_vk_apply_bindings(_sg_bindings_ptrs_t* bnd) {
     SOKOL_ASSERT(bnd);
-    SOKOL_ASSERT(false && "FIXME");
+
+    // FIXME FIXME FIXME:
+    // Once we have cpu- or gpu-updated resources we need a pipeline barrier system!
+
+    if (!_sg.cur_pass.is_compute) {
+        _sg_vk_apply_vertex_buffers(bnd);
+        // _sg_vk_apply_index_buffer(bnd);
+    }
+    // FIXME
+    // _sg_vk_apply_views_and_samplers(bnd);
     return true;
 }
 
