@@ -1,5 +1,13 @@
 ## Updates
 
+### 27-Oct-2025
+
+- The repository for the D bindings has moved from https://github.com/kassane/sokol-d
+  to https://github.com/floooh/sokol-d, see https://github.com/floooh/sokol-d/discussions/36#discussioncomment-14790873
+  for details, this also means that the level of support for the D bindings
+  will need to be reduced unfortunately (especially when it comes to Dub packaging),
+  the automatic bindings generation will continue to work though.
+
 ### 24-Oct-2025
 
 - sokol_gfx.h: add a missing validation layer check in sg_begin_pass():

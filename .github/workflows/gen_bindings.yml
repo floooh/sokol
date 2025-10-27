@@ -60,7 +60,7 @@ jobs:
           path: bindgen/sokol-rust
       - uses: actions/checkout@main
         with:
-          repository: kassane/sokol-d
+          repository: floooh/sokol-d
           path: bindgen/sokol-d
       - uses: actions/checkout@main
         with:
@@ -293,7 +293,7 @@ jobs:
     steps:
       - uses: actions/checkout@main
         with:
-          repository: kassane/sokol-d
+          repository: floooh/sokol-d
       - uses: egor-tensin/vs-shell@v2 # get cl.exe (default for Windows)
       - uses: dlang-community/setup-dlang@v2
         with:
@@ -488,7 +488,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: kassane/sokol-d
+          repository: floooh/sokol-d
           ssh-key: ${{ secrets.GHACTIONS_D_PUSH }}
       - uses: actions/download-artifact@v4
         with:
