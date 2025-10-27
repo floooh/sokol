@@ -2232,6 +2232,7 @@ typedef struct sg_limits {
     int gl_max_vertex_uniform_components;       // GL_MAX_VERTEX_UNIFORM_COMPONENTS (only on GL backends)
     int gl_max_combined_texture_image_units;    // GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS (only on GL backends)
     int d3d11_max_unordered_access_views;       // 8 on feature level 11.0, otherwise 32 (clamped to SG_MAX_VIEW_BINDSLOTS)
+    int vk_min_uniform_buffer_offset_alignment;
 } sg_limits;
 
 /*
@@ -4401,6 +4402,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VULKAN_UNIFORM_CREATE_BUFFER_FAILED, "vulkan: vkCreateBuffer() failed for uniform buffer") \
     _SG_LOGITEM_XMACRO(VULKAN_UNIFORM_ALLOCATE_MEMORY_FAILED, "vulkan: allocating device memory for uniform buffer failed") \
     _SG_LOGITEM_XMACRO(VULKAN_UNIFORM_BIND_BUFFER_MEMORY_FAILED, "vulkan: vkBindBufferMemory() failed for uniform buffer") \
+    _SG_LOGITEM_XMACRO(VULKAN_UNIFORM_MAP_MEMORY_FAILED, "vulkan: vkMapMemory() failed on uniform buffer") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_BUFFER_FAILED, "vulkan: vkCreateBuffer() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_BIND_BUFFER_MEMORY_FAILED, "vulkan: vkBindBufferMemory() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_SHADER_MODULE_FAILED, "vukan: vkCreateShaderModule() failed!") \
@@ -6907,11 +6909,14 @@ typedef struct {
         uint32_t size;      // uniform buffer size
         uint32_t offset;    // current uniform buffer offset
         VkBuffer cur_buf;   // current uniform buffer
+        void* cur_mem_ptr;  // start of cur_buf memory
         struct {
             VkBuffer buf;
             VkDeviceMemory mem;
+            void* mem_ptr;
         } slots[SG_NUM_INFLIGHT_FRAMES];
     } uniform;
+    VkPhysicalDeviceProperties dev_props;
 } _sg_vk_backend_t;
 
 #endif // SOKOL_VULKAN
@@ -18646,6 +18651,8 @@ _SOKOL_PRIVATE void _sg_vk_uniform_init(void) {
     _sg.vk.uniform.size = (uint32_t) _sg.desc.uniform_buffer_size;
     for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         SOKOL_ASSERT(0 == _sg.vk.uniform.slots[i].buf);
+        SOKOL_ASSERT(0 == _sg.vk.uniform.slots[i].mem);
+        SOKOL_ASSERT(0 == _sg.vk.uniform.slots[i].mem_ptr);
         VkBufferCreateInfo buf_create_info;
         _sg_clear(&buf_create_info, sizeof(buf_create_info));
         buf_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -18670,6 +18677,12 @@ _SOKOL_PRIVATE void _sg_vk_uniform_init(void) {
         if (res != VK_SUCCESS) {
             _SG_PANIC(VULKAN_UNIFORM_BIND_BUFFER_MEMORY_FAILED);
         }
+
+        res = vkMapMemory(_sg.vk.dev, _sg.vk.uniform.slots[i].mem, 0, VK_WHOLE_SIZE, 0, &_sg.vk.uniform.slots[i].mem_ptr);
+        if (res != VK_SUCCESS) {
+            _SG_PANIC(VULKAN_UNIFORM_MAP_MEMORY_FAILED);
+        }
+        SOKOL_ASSERT(_sg.vk.uniform.slots[i].mem_ptr);
     }
 }
 
@@ -18678,6 +18691,9 @@ _SOKOL_PRIVATE void _sg_vk_uniform_discard(void) {
     for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         SOKOL_ASSERT(_sg.vk.uniform.slots[i].buf);
         SOKOL_ASSERT(_sg.vk.uniform.slots[i].mem);
+        SOKOL_ASSERT(_sg.vk.uniform.slots[i].mem_ptr);
+        vkUnmapMemory(_sg.vk.dev, _sg.vk.uniform.slots[i].mem);
+        _sg.vk.uniform.slots[i].mem_ptr = 0;
         _sg_vk_mem_free_device_memory(_sg.vk.uniform.slots[i].mem);
         _sg.vk.uniform.slots[i].mem = 0;
         vkDestroyBuffer(_sg.vk.dev, _sg.vk.uniform.slots[i].buf, 0);
@@ -18686,6 +18702,39 @@ _SOKOL_PRIVATE void _sg_vk_uniform_discard(void) {
     _sg.vk.uniform.size = 0;
     _sg.vk.uniform.offset = 0;
     _sg.vk.uniform.cur_buf = 0;
+}
+
+// called from _sg_vk_acquire_frame_command_buffer()
+_SOKOL_PRIVATE void _sg_vk_uniform_after_acquire(void) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(0 == _sg.vk.uniform.cur_buf);
+    SOKOL_ASSERT(0 == _sg.vk.uniform.cur_mem_ptr);
+    const uint32_t frame_slot = _sg.vk.frame_slot;
+    _sg.vk.uniform.offset = 0;
+    _sg.vk.uniform.cur_buf = _sg.vk.uniform.slots[frame_slot].buf;
+    _sg.vk.uniform.cur_mem_ptr = _sg.vk.uniform.slots[frame_slot].mem_ptr;
+}
+
+// called from _sg_vk_submit_frame_command_buffer()
+_SOKOL_PRIVATE void _sg_vk_uniform_before_submit(void) {
+    SOKOL_ASSERT(_sg.vk.uniform.cur_buf);
+    SOKOL_ASSERT(_sg.vk.uniform.cur_mem_ptr);
+    // NOTE: if the uniform buffer wouldn't be cache-coherent,
+    // this would be the place to do a flush
+    _sg.vk.uniform.cur_buf = 0;
+    _sg.vk.uniform.cur_mem_ptr = 0;
+}
+
+// called form _sg_vk_apply_uniforms, returns offset of data snippet into uniform buffer
+_SOKOL_PRIVATE uint32_t _sg_vk_uniform_copy(const sg_range* data) {
+    SOKOL_ASSERT(data && data->ptr && (data->size > 0));
+    const uint32_t alignment = _sg.vk.dev_props.limits.minUniformBufferOffsetAlignment;
+    SOKOL_ASSERT((_sg.vk.uniform.offset + data->size) <= _sg.vk.uniform.size);
+    SOKOL_ASSERT((_sg.vk.uniform.offset & (alignment - 1)) == 0);
+    const uint32_t offset = _sg.vk.uniform.offset;
+    memcpy(_sg.vk.uniform.cur_mem_ptr + offset, data->ptr, data->size);
+    _sg.vk.uniform.offset = _sg_roundup_u32(_sg.vk.uniform.offset + (uint32_t)data->size, alignment);
+    return offset;
 }
 
 _SOKOL_PRIVATE void _sg_vk_buffer_destructor(void* obj) {
@@ -18989,19 +19038,18 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     _sg.features.draw_base_instance = true;
 
     SOKOL_ASSERT(_sg.vk.phys_dev);
-    VkPhysicalDeviceProperties props;
-    _sg_clear(&props, sizeof(props));
-    vkGetPhysicalDeviceProperties(_sg.vk.phys_dev, &props);
-    _sg.limits.max_image_size_2d = (int)props.limits.maxImageDimension2D;
-    _sg.limits.max_image_size_cube = (int)props.limits.maxImageDimensionCube;
-    _sg.limits.max_image_size_3d = (int)props.limits.maxImageDimension3D;
+    vkGetPhysicalDeviceProperties(_sg.vk.phys_dev, &_sg.vk.dev_props);
+    _sg.limits.max_image_size_2d = (int)_sg.vk.dev_props.limits.maxImageDimension2D;
+    _sg.limits.max_image_size_cube = (int)_sg.vk.dev_props.limits.maxImageDimensionCube;
+    _sg.limits.max_image_size_3d = (int)_sg.vk.dev_props.limits.maxImageDimension3D;
     _sg.limits.max_image_size_array = _sg.limits.max_image_size_2d;
-    _sg.limits.max_image_array_layers = (int)props.limits.maxImageArrayLayers;
-    _sg.limits.max_vertex_attrs = _sg_min((int)props.limits.maxVertexInputAttributes, SG_MAX_VERTEX_ATTRIBUTES);
-    _sg.limits.max_color_attachments = _sg_min((int)props.limits.maxFragmentOutputAttachments, SG_MAX_COLOR_ATTACHMENTS);
-    _sg.limits.max_texture_bindings_per_stage = _sg_min((int)props.limits.maxPerStageDescriptorSampledImages, SG_MAX_VIEW_BINDSLOTS);
-    _sg.limits.max_storage_buffer_bindings_per_stage = _sg_min((int)props.limits.maxPerStageDescriptorStorageBuffers, SG_MAX_VIEW_BINDSLOTS);
-    _sg.limits.max_storage_image_bindings_per_stage = _sg_min((int)props.limits.maxPerStageDescriptorStorageImages, SG_MAX_VIEW_BINDSLOTS);
+    _sg.limits.max_image_array_layers = (int)_sg.vk.dev_props.limits.maxImageArrayLayers;
+    _sg.limits.max_vertex_attrs = _sg_min((int)_sg.vk.dev_props.limits.maxVertexInputAttributes, SG_MAX_VERTEX_ATTRIBUTES);
+    _sg.limits.max_color_attachments = _sg_min((int)_sg.vk.dev_props.limits.maxFragmentOutputAttachments, SG_MAX_COLOR_ATTACHMENTS);
+    _sg.limits.max_texture_bindings_per_stage = _sg_min((int)_sg.vk.dev_props.limits.maxPerStageDescriptorSampledImages, SG_MAX_VIEW_BINDSLOTS);
+    _sg.limits.max_storage_buffer_bindings_per_stage = _sg_min((int)_sg.vk.dev_props.limits.maxPerStageDescriptorStorageBuffers, SG_MAX_VIEW_BINDSLOTS);
+    _sg.limits.max_storage_image_bindings_per_stage = _sg_min((int)_sg.vk.dev_props.limits.maxPerStageDescriptorStorageImages, SG_MAX_VIEW_BINDSLOTS);
+    _sg.limits.vk_min_uniform_buffer_offset_alignment = (int)_sg.vk.dev_props.limits.minUniformBufferOffsetAlignment;
 
     // FIXME: currently these are the same as in the WebGPU backend
     // FIXME: compressed formats
@@ -19155,12 +19203,16 @@ _SOKOL_PRIVATE void _sg_vk_acquire_frame_command_buffer(void) {
         cmdbuf_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         res = vkBeginCommandBuffer(_sg.vk.frame.cmd_buf, &cmdbuf_begin_info);
         SOKOL_ASSERT(res == VK_SUCCESS);
+
+        _sg_vk_uniform_after_acquire();
     }
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
 }
 
 _SOKOL_PRIVATE void _sg_vk_submit_frame_command_buffer(void) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+
+    _sg_vk_uniform_before_submit();
 
     VkResult res = vkEndCommandBuffer(_sg.vk.frame.cmd_buf);
     SOKOL_ASSERT(res == VK_SUCCESS);
@@ -20030,8 +20082,37 @@ _SOKOL_PRIVATE bool _sg_vk_apply_bindings(_sg_bindings_ptrs_t* bnd) {
 }
 
 _SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
+    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+    SOKOL_ASSERT(_sg.vk.uniform.cur_buf);
     SOKOL_ASSERT(data);
-    SOKOL_ASSERT(false && ub_slot && "FIXME");
+    SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
+    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
+    SOKOL_ASSERT(data->size == shd->cmn.uniform_blocks[ub_slot].size);
+
+    // copy data into per-frame uniform buffer
+    const uint32_t offset = _sg_vk_uniform_copy(data);
+
+    // record offset into uniform buffer view a push-descriptor-set
+    const VkPipelineLayout pip_layout = shd->vk.pip_layout;
+    const VkPipelineBindPoint pip_bind_point = _sg.cur_pass.is_compute
+        ? VK_PIPELINE_BIND_POINT_COMPUTE
+        : VK_PIPELINE_BIND_POINT_GRAPHICS;
+
+    VkDescriptorBufferInfo buf_info;
+    _sg_clear(&buf_info, sizeof(buf_info));
+    buf_info.buffer = _sg.vk.uniform.cur_buf;
+    buf_info.offset = (VkDeviceSize)offset;
+    buf_info.range = (VkDeviceSize)data->size;
+    VkWriteDescriptorSet write_dset;
+    _sg_clear(&write_dset, sizeof(write_dset));
+    write_dset.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write_dset.dstSet = 0;  // ignored
+    write_dset.dstBinding = shd->vk.ub_set0_bnd_n[ub_slot];
+    write_dset.descriptorCount = 1;
+    write_dset.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    write_dset.pBufferInfo = &buf_info;
+    vkCmdPushDescriptorSet(_sg.vk.frame.cmd_buf, pip_bind_point, pip_layout, _SG_VK_UB_DESCRIPTORSET_INDEX, 1, &write_dset);
 }
 
 _SOKOL_PRIVATE void _sg_vk_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
