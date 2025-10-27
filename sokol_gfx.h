@@ -4398,6 +4398,9 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VULKAN_STAGING_CREATE_BUFFER_FAILED, "vulkan: vkCreateBuffer() failed for staging buffer") \
     _SG_LOGITEM_XMACRO(VULKAN_STAGING_ALLOCATE_MEMORY_FAILED, "vulkan: allocating device memory for staging buffer failed") \
     _SG_LOGITEM_XMACRO(VULKAN_STAGING_BIND_BUFFER_MEMORY_FAILED, "vulkan: vkBindBufferMemory() failed for staging buffer") \
+    _SG_LOGITEM_XMACRO(VULKAN_UNIFORM_CREATE_BUFFER_FAILED, "vulkan: vkCreateBuffer() failed for uniform buffer") \
+    _SG_LOGITEM_XMACRO(VULKAN_UNIFORM_ALLOCATE_MEMORY_FAILED, "vulkan: allocating device memory for uniform buffer failed") \
+    _SG_LOGITEM_XMACRO(VULKAN_UNIFORM_BIND_BUFFER_MEMORY_FAILED, "vulkan: vkBindBufferMemory() failed for uniform buffer") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_BUFFER_FAILED, "vulkan: vkCreateBuffer() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_BIND_BUFFER_MEMORY_FAILED, "vulkan: vkBindBufferMemory() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_SHADER_MODULE_FAILED, "vukan: vkCreateShaderModule() failed!") \
@@ -4934,7 +4937,7 @@ typedef struct sg_desc {
     int shader_pool_size;
     int pipeline_pool_size;
     int view_pool_size;
-    int uniform_buffer_size;
+    int uniform_buffer_size;            // max size of all sg_apply_uniform() calls per frame, with worst-case 256 byte alignment
     int max_commit_listeners;
     bool disable_validation;            // disable validation layer even in debug mode, useful for tests
     bool enforce_portable_limits;       // if true, enforce portable resource binding limits (SG_MAX_PORTABLE_*)
@@ -6877,6 +6880,7 @@ typedef struct {
             _sg_vk_delete_queue_t delete_queue;
         } slot[SG_NUM_INFLIGHT_FRAMES];
     } frame;
+    // staging system
     struct {
         // staging system for immutable and dynamic resources, generally causes a stall
         struct {
@@ -6894,10 +6898,20 @@ typedef struct {
             VkBuffer cur_buf;   // current staging buffer
             struct {
                 VkBuffer buf;
-                VkBuffer mem;
+                VkDeviceMemory mem;
             } slots[SG_NUM_INFLIGHT_FRAMES];
         } stream;
     } stage;
+    // uniform update system
+    struct {
+        uint32_t size;      // uniform buffer size
+        uint32_t offset;    // current uniform buffer offset
+        VkBuffer cur_buf;   // current uniform buffer
+        struct {
+            VkBuffer buf;
+            VkDeviceMemory mem;
+        } slots[SG_NUM_INFLIGHT_FRAMES];
+    } uniform;
 } _sg_vk_backend_t;
 
 #endif // SOKOL_VULKAN
@@ -18621,6 +18635,59 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(const _sg_image_t* img, const
     // needs to call _sg_vk_staging_acquire_command_buffer()
 }
 
+_SOKOL_PRIVATE void _sg_vk_uniform_init(void) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(_sg.desc.uniform_buffer_size > 0);
+    SOKOL_ASSERT(0 == _sg.vk.uniform.size);
+    SOKOL_ASSERT(0 == _sg.vk.uniform.offset);
+    SOKOL_ASSERT(0 == _sg.vk.uniform.cur_buf);
+    VkResult res;
+
+    _sg.vk.uniform.size = (uint32_t) _sg.desc.uniform_buffer_size;
+    for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+        SOKOL_ASSERT(0 == _sg.vk.uniform.slots[i].buf);
+        VkBufferCreateInfo buf_create_info;
+        _sg_clear(&buf_create_info, sizeof(buf_create_info));
+        buf_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        buf_create_info.size = _sg.vk.uniform.size;
+        buf_create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+        buf_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        res = vkCreateBuffer(_sg.vk.dev, &buf_create_info, 0, &_sg.vk.uniform.slots[i].buf);
+        if (res != VK_SUCCESS) {
+            _SG_PANIC(VULKAN_UNIFORM_CREATE_BUFFER_FAILED);
+        }
+        SOKOL_ASSERT(_sg.vk.uniform.slots[i].buf);
+        _sg_vk_set_object_label(VK_OBJECT_TYPE_BUFFER, (uint64_t)_sg.vk.uniform.slots[i].buf, "uniform-buffer");
+
+        VkMemoryRequirements mem_reqs;
+        _sg_clear(&mem_reqs, sizeof(mem_reqs));
+        vkGetBufferMemoryRequirements(_sg.vk.dev, _sg.vk.uniform.slots[i].buf, &mem_reqs);
+        _sg.vk.uniform.slots[i].mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        if (0 == _sg.vk.uniform.slots[i].mem) {
+            _SG_PANIC(VULKAN_UNIFORM_ALLOCATE_MEMORY_FAILED);
+        }
+        res = vkBindBufferMemory(_sg.vk.dev, _sg.vk.uniform.slots[i].buf, _sg.vk.uniform.slots[i].mem, 0);
+        if (res != VK_SUCCESS) {
+            _SG_PANIC(VULKAN_UNIFORM_BIND_BUFFER_MEMORY_FAILED);
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sg_vk_uniform_discard(void) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+        SOKOL_ASSERT(_sg.vk.uniform.slots[i].buf);
+        SOKOL_ASSERT(_sg.vk.uniform.slots[i].mem);
+        _sg_vk_mem_free_device_memory(_sg.vk.uniform.slots[i].mem);
+        _sg.vk.uniform.slots[i].mem = 0;
+        vkDestroyBuffer(_sg.vk.dev, _sg.vk.uniform.slots[i].buf, 0);
+        _sg.vk.uniform.slots[i].buf = 0;
+    }
+    _sg.vk.uniform.size = 0;
+    _sg.vk.uniform.offset = 0;
+    _sg.vk.uniform.cur_buf = 0;
+}
+
 _SOKOL_PRIVATE void _sg_vk_buffer_destructor(void* obj) {
     SOKOL_ASSERT(_sg.vk.dev && obj);
     vkDestroyBuffer(_sg.vk.dev, (VkBuffer)obj, 0);
@@ -19136,6 +19203,7 @@ _SOKOL_PRIVATE void _sg_vk_setup_backend(const sg_desc* desc) {
     _sg_vk_create_fences();
     _sg_vk_create_frame_command_pool_and_buffers();
     _sg_vk_staging_init();
+    _sg_vk_uniform_init();
     _sg_vk_create_delete_queues();
 }
 
@@ -19144,6 +19212,7 @@ _SOKOL_PRIVATE void _sg_vk_discard_backend(void) {
     SOKOL_ASSERT(_sg.vk.dev);
     vkDeviceWaitIdle(_sg.vk.dev);
     _sg_vk_destroy_delete_queues();
+    _sg_vk_uniform_discard();
     _sg_vk_staging_discard();
     _sg_vk_destroy_frame_command_pool();
     _sg_vk_destroy_fences();
@@ -19302,7 +19371,6 @@ _SOKOL_PRIVATE bool _sg_vk_ensure_spirv_bindslot_ranges(const sg_shader_desc* de
         }
     }
     return true;
-
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
@@ -19353,13 +19421,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
         shd->vk.ub_set0_bnd_n[i] = desc->uniform_blocks[i].spirv_set0_binding_n;
         VkDescriptorSetLayoutBinding* dsl_entry = &dsl_entries[dsl_index];
         dsl_entry->binding = shd->vk.ub_set0_bnd_n[i];
-        dsl_entry->descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        dsl_entry->descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         dsl_entry->descriptorCount = 1;
         dsl_entry->stageFlags = _sg_vk_shader_stage(shd->cmn.uniform_blocks[i].stage);
         dsl_index += 1;
     }
     dsl_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    dsl_create_info.flags = 0; // FIXME: push descriptor? descriptor buffer? update-after-pool?
+    dsl_create_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT;
     dsl_create_info.bindingCount = dsl_index;
     dsl_create_info.pBindings = dsl_entries;
     res = vkCreateDescriptorSetLayout(_sg.vk.dev, &dsl_create_info, 0, &shd->vk.dset_ub);
@@ -19408,7 +19476,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
         dsl_index += 1;
     }
     dsl_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    dsl_create_info.flags = 0; // FIXME: push descriptor? descriptor buffer? update-after-pool?
+    dsl_create_info.flags = 0;
     dsl_create_info.bindingCount = dsl_index;
     dsl_create_info.pBindings = dsl_entries;
     res = vkCreateDescriptorSetLayout(_sg.vk.dev, &dsl_create_info, 0, &shd->vk.dset_view_smp);
