@@ -4943,8 +4943,8 @@ typedef struct sg_desc {
     bool mtl_use_command_buffer_with_retained_references;    // Metal: use a managed MTLCommandBuffer which ref-counts used resources
     bool wgpu_disable_bindgroups_cache;  // set to true to disable the WebGPU backend BindGroup cache
     int wgpu_bindgroups_cache_size;      // number of slots in the WebGPU bindgroup cache (must be 2^N)
-    int vk_init_staging_size;           // Vulkan: size of staging buffer for new resources (default: 4 MB)
-    int vk_update_staging_size;         // Vulkan: size of per-frame staging buffer for updating dynamic resources (default: 16 MB)
+    int vk_copy_staging_size;           // Vulkan: size of staging buffer for immutable and dynamic resources (default: 4 MB)
+    int vk_stream_staging_size;         // Vulkan: size of per-frame staging buffer for updating streaming resources (default: 16 MB)
     sg_allocator allocator;
     sg_logger logger; // optional log function override
     sg_environment environment;
@@ -5981,8 +5981,8 @@ enum {
     _SG_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
     _SG_DEFAULT_MAX_COMMIT_LISTENERS = 1024,
     _SG_DEFAULT_WGPU_BINDGROUP_CACHE_SIZE = 1024,
-    _SG_DEFAULT_VK_INIT_STAGING_SIZE = (4 * 1024 * 1024),
-    _SG_DEFAULT_VK_UPDATE_STAGING_SIZE = (16 * 1024 * 1025),
+    _SG_DEFAULT_VK_COPY_STAGING_SIZE = (4 * 1024 * 1024),
+    _SG_DEFAULT_VK_STREAM_STAGING_SIZE = (16 * 1024 * 1025),
     _SG_MAX_STORAGEBUFFER_BINDINGS_PER_STAGE = SG_MAX_VIEW_BINDSLOTS,
     _SG_MAX_STORAGEIMAGE_BINDINGS_PER_STAGE = SG_MAX_VIEW_BINDSLOTS,
     _SG_MAX_TEXTURE_BINDINGS_PER_STAGE = SG_MAX_VIEW_BINDSLOTS,
@@ -6878,15 +6878,16 @@ typedef struct {
         } slot[SG_NUM_INFLIGHT_FRAMES];
     } frame;
     struct {
-        // staging system for creating resources
+        // staging system for immutable and dynamic resources, generally causes a stall
         struct {
             VkCommandPool cmd_pool;
             VkCommandBuffer cmd_buf;
             uint32_t size;
             VkBuffer buf;
             VkDeviceMemory mem;
-        } init;
-        // double-buffered staging system for updating resources
+        } copy;
+        // staging system for streaming resources, limited per-frame staging size, may fall
+        // back to stalling copy if per-frame staging buffer exhausted
         struct {
             uint32_t size;      // staging buffer size
             uint32_t offset;    // current staging buffer offset
@@ -6895,8 +6896,8 @@ typedef struct {
                 VkBuffer buf;
                 VkBuffer mem;
             } slots[SG_NUM_INFLIGHT_FRAMES];
-        } update;
-    } staging;
+        } stream;
+    } stage;
 } _sg_vk_backend_t;
 
 #endif // SOKOL_VULKAN
@@ -18478,55 +18479,56 @@ _SOKOL_PRIVATE void _sg_vk_staging_init(void) {
     SOKOL_ASSERT(_sg.vk.dev);
     VkResult res;
 
-    // setup init-staging system (used to copy data into immutable resources)
-    SOKOL_ASSERT(0 == _sg.vk.staging.init.cmd_pool);
-    SOKOL_ASSERT(0 == _sg.vk.staging.init.cmd_buf);
-    SOKOL_ASSERT(0 == _sg.vk.staging.init.size);
-    SOKOL_ASSERT(0 == _sg.vk.staging.init.buf);
-    SOKOL_ASSERT(0 == _sg.vk.staging.init.mem);
-    SOKOL_ASSERT(_sg.desc.vk_init_staging_size > 0);
+    // setup staging system for immutable and dynamic resources,
+    // updating these resources generally causes a queue flush
+    SOKOL_ASSERT(0 == _sg.vk.stage.copy.cmd_pool);
+    SOKOL_ASSERT(0 == _sg.vk.stage.copy.cmd_buf);
+    SOKOL_ASSERT(0 == _sg.vk.stage.copy.size);
+    SOKOL_ASSERT(0 == _sg.vk.stage.copy.buf);
+    SOKOL_ASSERT(0 == _sg.vk.stage.copy.mem);
+    SOKOL_ASSERT(_sg.desc.vk_copy_staging_size > 0);
 
     VkCommandPoolCreateInfo pool_create_info;
     _sg_clear(&pool_create_info, sizeof(pool_create_info));
     pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     pool_create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
     pool_create_info.queueFamilyIndex = _sg.vk.queue_family_index;
-    res = vkCreateCommandPool(_sg.vk.dev, &pool_create_info, 0, &_sg.vk.staging.init.cmd_pool);
-    SOKOL_ASSERT((res == VK_SUCCESS && _sg.vk.staging.init.cmd_pool));
-    _sg_vk_set_object_label(VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t)_sg.vk.staging.init.cmd_pool, "init-staging cmd pool");
+    res = vkCreateCommandPool(_sg.vk.dev, &pool_create_info, 0, &_sg.vk.stage.copy.cmd_pool);
+    SOKOL_ASSERT((res == VK_SUCCESS && _sg.vk.stage.copy.cmd_pool));
+    _sg_vk_set_object_label(VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t)_sg.vk.stage.copy.cmd_pool, "copy-staging cmd pool");
 
     VkCommandBufferAllocateInfo cmdbuf_alloc_info;
     _sg_clear(&cmdbuf_alloc_info, sizeof(cmdbuf_alloc_info));
     cmdbuf_alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    cmdbuf_alloc_info.commandPool = _sg.vk.staging.init.cmd_pool;
+    cmdbuf_alloc_info.commandPool = _sg.vk.stage.copy.cmd_pool;
     cmdbuf_alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     cmdbuf_alloc_info.commandBufferCount = 1;
-    res = vkAllocateCommandBuffers(_sg.vk.dev, &cmdbuf_alloc_info, &_sg.vk.staging.init.cmd_buf);
-    SOKOL_ASSERT((res == VK_SUCCESS) && _sg.vk.staging.init.cmd_buf);
-    _sg_vk_set_object_label(VK_OBJECT_TYPE_COMMAND_BUFFER, (uint64_t)_sg.vk.staging.init.cmd_buf, "init-staging cmd buffer");
+    res = vkAllocateCommandBuffers(_sg.vk.dev, &cmdbuf_alloc_info, &_sg.vk.stage.copy.cmd_buf);
+    SOKOL_ASSERT((res == VK_SUCCESS) && _sg.vk.stage.copy.cmd_buf);
+    _sg_vk_set_object_label(VK_OBJECT_TYPE_COMMAND_BUFFER, (uint64_t)_sg.vk.stage.copy.cmd_buf, "copy-staging cmd buffer");
 
-    _sg.vk.staging.init.size = (uint32_t) _sg.desc.vk_init_staging_size;
+    _sg.vk.stage.copy.size = (uint32_t) _sg.desc.vk_copy_staging_size;
     VkBufferCreateInfo buf_create_info;
     _sg_clear(&buf_create_info, sizeof(buf_create_info));
     buf_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    buf_create_info.size = _sg.vk.staging.init.size;
+    buf_create_info.size = _sg.vk.stage.copy.size;
     buf_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     buf_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    res = vkCreateBuffer(_sg.vk.dev, &buf_create_info, 0, &_sg.vk.staging.init.buf);
+    res = vkCreateBuffer(_sg.vk.dev, &buf_create_info, 0, &_sg.vk.stage.copy.buf);
     if (res != VK_SUCCESS) {
         _SG_PANIC(VULKAN_STAGING_CREATE_BUFFER_FAILED);
     }
-    SOKOL_ASSERT(_sg.vk.staging.init.buf);
-    _sg_vk_set_object_label(VK_OBJECT_TYPE_BUFFER, (uint64_t)_sg.vk.staging.init.buf, "init-staging staging buffer");
+    SOKOL_ASSERT(_sg.vk.stage.copy.buf);
+    _sg_vk_set_object_label(VK_OBJECT_TYPE_BUFFER, (uint64_t)_sg.vk.stage.copy.buf, "copy-staging staging buffer");
 
     VkMemoryRequirements mem_reqs;
     _sg_clear(&mem_reqs, sizeof(mem_reqs));
-    vkGetBufferMemoryRequirements(_sg.vk.dev, _sg.vk.staging.init.buf, &mem_reqs);
-    _sg.vk.staging.init.mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    if (0 == _sg.vk.staging.init.mem) {
+    vkGetBufferMemoryRequirements(_sg.vk.dev, _sg.vk.stage.copy.buf, &mem_reqs);
+    _sg.vk.stage.copy.mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    if (0 == _sg.vk.stage.copy.mem) {
         _SG_PANIC(VULKAN_STAGING_ALLOCATE_MEMORY_FAILED);
     }
-    res = vkBindBufferMemory(_sg.vk.dev, _sg.vk.staging.init.buf, _sg.vk.staging.init.mem, 0);
+    res = vkBindBufferMemory(_sg.vk.dev, _sg.vk.stage.copy.buf, _sg.vk.stage.copy.mem, 0);
     if (res != VK_SUCCESS) {
         _SG_PANIC(VULKAN_STAGING_BIND_BUFFER_MEMORY_FAILED);
     }
@@ -18534,37 +18536,43 @@ _SOKOL_PRIVATE void _sg_vk_staging_init(void) {
 
 _SOKOL_PRIVATE void _sg_vk_staging_discard(void) {
     SOKOL_ASSERT(_sg.vk.dev);
-    SOKOL_ASSERT(_sg.vk.staging.init.cmd_pool);
-    SOKOL_ASSERT(_sg.vk.staging.init.cmd_buf);
-    SOKOL_ASSERT(_sg.vk.staging.init.size);
-    SOKOL_ASSERT(_sg.vk.staging.init.buf);
-    SOKOL_ASSERT(_sg.vk.staging.init.mem);
+    SOKOL_ASSERT(_sg.vk.stage.copy.cmd_pool);
+    SOKOL_ASSERT(_sg.vk.stage.copy.cmd_buf);
+    SOKOL_ASSERT(_sg.vk.stage.copy.size);
+    SOKOL_ASSERT(_sg.vk.stage.copy.buf);
+    SOKOL_ASSERT(_sg.vk.stage.copy.mem);
 
-    _sg_vk_mem_free_device_memory(_sg.vk.staging.init.mem);
-    _sg.vk.staging.init.mem = 0;
-    vkDestroyBuffer(_sg.vk.dev, _sg.vk.staging.init.buf, 0);
-    _sg.vk.staging.init.buf = 0;
-    vkDestroyCommandPool(_sg.vk.dev, _sg.vk.staging.init.cmd_pool, 0);
-    _sg.vk.staging.init.cmd_pool = 0;
-    _sg.vk.staging.init.cmd_buf = 0;
-    _sg.vk.staging.init.size = 0;
+    _sg_vk_mem_free_device_memory(_sg.vk.stage.copy.mem);
+    _sg.vk.stage.copy.mem = 0;
+    vkDestroyBuffer(_sg.vk.dev, _sg.vk.stage.copy.buf, 0);
+    _sg.vk.stage.copy.buf = 0;
+    vkDestroyCommandPool(_sg.vk.dev, _sg.vk.stage.copy.cmd_pool, 0);
+    _sg.vk.stage.copy.cmd_pool = 0;
+    _sg.vk.stage.copy.cmd_buf = 0;
+    _sg.vk.stage.copy.size = 0;
 }
 
-_SOKOL_PRIVATE void _sg_vk_staging_copy_immutable_buffer_data(_sg_buffer_t* buf, const sg_range* data) {
+_SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_range* data, size_t offset, bool initial_wait) {
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(_sg.vk.queue);
-    SOKOL_ASSERT(_sg.vk.staging.init.mem);
-    SOKOL_ASSERT(_sg.vk.staging.init.buf);
+    SOKOL_ASSERT(_sg.vk.stage.copy.mem);
+    SOKOL_ASSERT(_sg.vk.stage.copy.buf);
     SOKOL_ASSERT(buf && buf->vk.buf);
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
+    SOKOL_ASSERT((offset + data->size) <= (size_t)buf->cmn.size);
     VkResult res;
 
-    VkDeviceMemory mem = _sg.vk.staging.init.mem;
-    VkCommandBuffer cmd_buf = _sg.vk.staging.init.cmd_buf;
-    VkBuffer src_buf = _sg.vk.staging.init.buf;
+    // an inital wait is only needed for updating existing resources but not when populating a new resource
+    if (initial_wait) {
+        res = vkQueueWaitIdle(_sg.vk.queue);
+    }
+
+    VkDeviceMemory mem = _sg.vk.stage.copy.mem;
+    VkCommandBuffer cmd_buf = _sg.vk.stage.copy.cmd_buf;
+    VkBuffer src_buf = _sg.vk.stage.copy.buf;
     VkBuffer dst_buf = buf->vk.buf;
-    const uint8_t* src_ptr = (const uint8_t*)data->ptr;
-    uint64_t dst_size = _sg.vk.staging.init.size;
+    const uint8_t* src_ptr = ((const uint8_t*)data->ptr) + offset;
+    uint64_t dst_size = _sg.vk.stage.copy.size;
     uint64_t bytes_remaining = data->size;
     // FIXME: move this into a common helper function shared between immutable buffers and images
     while (bytes_remaining > 0) {
@@ -18608,7 +18616,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_immutable_buffer_data(_sg_buffer_t* buf,
     }
 }
 
-_SOKOL_PRIVATE void _sg_vk_staging_copy_immutable_image_data(const _sg_image_t* img, const sg_image_data* data) {
+_SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(const _sg_image_t* img, const sg_image_data* data) {
     SOKOL_ASSERT(false && img && data && "FIXME");
     // needs to call _sg_vk_staging_acquire_command_buffer()
 }
@@ -19179,7 +19187,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_buffer(_sg_buffer_t* buf, const s
         return SG_RESOURCESTATE_FAILED;
     }
     if (buf->cmn.usage.immutable && desc->data.ptr) {
-        _sg_vk_staging_copy_immutable_buffer_data(buf, &desc->data);
+        _sg_vk_staging_copy_buffer_data(buf, &desc->data, 0, false);
     }
     return SG_RESOURCESTATE_VALID;
 }
@@ -22708,8 +22716,8 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
     res.uniform_buffer_size = _sg_def(res.uniform_buffer_size, _SG_DEFAULT_UB_SIZE);
     res.max_commit_listeners = _sg_def(res.max_commit_listeners, _SG_DEFAULT_MAX_COMMIT_LISTENERS);
     res.wgpu_bindgroups_cache_size = _sg_def(res.wgpu_bindgroups_cache_size, _SG_DEFAULT_WGPU_BINDGROUP_CACHE_SIZE);
-    res.vk_init_staging_size = _sg_def(res.vk_init_staging_size, _SG_DEFAULT_VK_INIT_STAGING_SIZE);
-    res.vk_update_staging_size = _sg_def(res.vk_update_staging_size, _SG_DEFAULT_VK_UPDATE_STAGING_SIZE);
+    res.vk_copy_staging_size = _sg_def(res.vk_copy_staging_size, _SG_DEFAULT_VK_COPY_STAGING_SIZE);
+    res.vk_stream_staging_size = _sg_def(res.vk_stream_staging_size, _SG_DEFAULT_VK_STREAM_STAGING_SIZE);
     return res;
 }
 
