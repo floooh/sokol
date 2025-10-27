@@ -19858,13 +19858,18 @@ _SOKOL_PRIVATE void _sg_vk_transition_image_layout(
 }
 
 _SOKOL_PRIVATE void _sg_vk_init_color_attachment_info(VkRenderingAttachmentInfo* info, const sg_color_attachment_action* action, VkImageView color_view, VkImageView resolve_view) {
-    SOKOL_ASSERT(0 == resolve_view);
     info->sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
     info->imageView = color_view;
     info->imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    info->resolveMode = VK_RESOLVE_MODE_NONE; // FIXME
-    info->resolveImageView = resolve_view;
-    info->resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED; // FIXME
+    if (resolve_view) {
+        info->resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
+        info->resolveImageView = resolve_view;
+        info->resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    } else {
+        info->resolveMode = VK_RESOLVE_MODE_NONE;
+        info->resolveImageView = 0;
+        info->resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    }
     info->loadOp = _sg_vk_load_op(action->load_action);
     info->storeOp = _sg_vk_store_op(action->store_action);
     info->clearValue.color.float32[0] = action->clear_value.r;
@@ -19918,6 +19923,10 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(const sg_pass* pass, const _sg_atta
         _sg.vk.swapchain = pass->swapchain.vulkan;
         SOKOL_ASSERT(_sg.vk.swapchain.render_image);
         SOKOL_ASSERT(_sg.vk.swapchain.render_view);
+        if (pass->swapchain.sample_count > 1) {
+            SOKOL_ASSERT(_sg.vk.swapchain.resolve_image);
+            SOKOL_ASSERT(_sg.vk.swapchain.resolve_view);
+        }
         SOKOL_ASSERT(_sg.vk.swapchain.present_complete_semaphore);
         SOKOL_ASSERT(_sg.vk.swapchain.render_finished_semaphore);
         // FIXME: need to support multiple present_complete_semaphores
@@ -19929,6 +19938,7 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(const sg_pass* pass, const _sg_atta
             SOKOL_ASSERT(_sg.vk.render_finished_sem == _sg.vk.swapchain.render_finished_semaphore);
         }
         VkImage vk_color_image = (VkImage)_sg.vk.swapchain.render_image;
+        VkImage vk_resolve_image = (VkImage)_sg.vk.swapchain.resolve_image;
         VkImageView vk_color_view = (VkImageView)_sg.vk.swapchain.render_view;
         VkImageView vk_resolve_view = (VkImageView)_sg.vk.swapchain.resolve_view;
         _sg_vk_transition_image_layout(
@@ -19941,7 +19951,18 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(const sg_pass* pass, const _sg_atta
             VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
             VK_IMAGE_ASPECT_COLOR_BIT,
             0, 0); // base_mip_level, base_array_layer
-
+        if (vk_resolve_image) {
+            _sg_vk_transition_image_layout(
+                vk_resolve_image,
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                0,
+                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                VK_IMAGE_ASPECT_COLOR_BIT,
+                0, 0); // base_mip_level, base_array_layer
+        }
         _sg_vk_init_color_attachment_info(&color_att_infos[0], &action->colors[0], vk_color_view, vk_resolve_view);
         render_info.colorAttachmentCount = 1;
         render_info.pColorAttachments = color_att_infos;
@@ -20002,8 +20023,11 @@ _SOKOL_PRIVATE void _sg_vk_end_render_pass(const _sg_attachments_ptrs_t* atts) {
     vkCmdEndRendering(_sg.vk.frame.cmd_buf);
     if (is_swapchain_pass) {
         SOKOL_ASSERT(_sg.vk.swapchain.render_image);
+        VkImage present_image = _sg.vk.swapchain.resolve_image
+            ? (VkImage)_sg.vk.swapchain.resolve_image
+            : (VkImage)_sg.vk.swapchain.render_image;
         _sg_vk_transition_image_layout(
-            (VkImage)_sg.vk.swapchain.render_image,
+            present_image,
             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
             VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
