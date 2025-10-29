@@ -4395,6 +4395,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VULKAN_ALLOC_DEVICE_MEMORY_NO_SUITABLE_MEMORY_TYPE, "vulkan: could not find suitable memory type") \
     _SG_LOGITEM_XMACRO(VULKAN_ALLOCATE_MEMORY_FAILED, "vulkan: vkAllocateMemory() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_ALLOC_BUFFER_DEVICE_MEMORY_FAILED, "vulkan: allocating buffer device memory failed") \
+    _SG_LOGITEM_XMACRO(VULKAN_ALLOC_IMAGE_DEVICE_MEMORY_FAILED, "vulkan: allocating image device memory failed") \
     _SG_LOGITEM_XMACRO(VULKAN_DELETE_QUEUE_EXHAUSTED, "vulkan: internal delete queue exhausted (too many objects destroyed per frame)") \
     _SG_LOGITEM_XMACRO(VULKAN_STAGING_CREATE_BUFFER_FAILED, "vulkan: vkCreateBuffer() failed for staging buffer") \
     _SG_LOGITEM_XMACRO(VULKAN_STAGING_ALLOCATE_MEMORY_FAILED, "vulkan: allocating device memory for staging buffer failed") \
@@ -4405,6 +4406,8 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VULKAN_UNIFORM_MAP_MEMORY_FAILED, "vulkan: vkMapMemory() failed on uniform buffer") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_BUFFER_FAILED, "vulkan: vkCreateBuffer() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_BIND_BUFFER_MEMORY_FAILED, "vulkan: vkBindBufferMemory() failed!") \
+    _SG_LOGITEM_XMACRO(VULKAN_CREATE_IMAGE_FAILED, "vulkan: vkCreateImage() failed!") \
+    _SG_LOGITEM_XMACRO(VULKAN_BIND_IMAGE_MEMORY_FAILED, "vulkan: vkBindImageMemory() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_SHADER_MODULE_FAILED, "vukan: vkCreateShaderModule() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_UNIFORMBLOCK_SPIRV_SET0_BINDING_OUT_OF_RANGE, "vulkan: uniform block 'spirv_set0_binding_n' is out of range (must be 0..15)") \
     _SG_LOGITEM_XMACRO(VULKAN_TEXTURE_SPIRV_SET1_BINDING_OUT_OF_RANGE, "vulkan: texture 'spirv_set1_binding_n' is out of range (must be 0..127)") \
@@ -6816,6 +6819,11 @@ typedef _sg_vk_buffer_t _sg_buffer_t;
 typedef struct _sg_image_s {
     _sg_slot_t slot;
     _sg_image_common_t cmn;
+    struct {
+        VkImage img;
+        VkDeviceMemory mem;
+        VkImageLayout cur_layout;
+    } vk;
 } _sg_vk_image_t;
 typedef _sg_vk_image_t _sg_image_t;
 
@@ -18430,6 +18438,22 @@ _SOKOL_PRIVATE bool _sg_vk_mem_alloc_buffer_device_memory(_sg_buffer_t* buf) {
     return true;
 }
 
+_SOKOL_PRIVATE bool _sg_vk_mem_alloc_image_device_memory(_sg_image_t* img) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(img);
+    SOKOL_ASSERT(img->vk.img);
+    SOKOL_ASSERT(0 == img->vk.img);
+    VkMemoryRequirements mem_reqs;
+    _sg_clear(&mem_reqs, sizeof(mem_reqs));
+    vkGetImageMemoryRequirements(_sg.vk.dev, img->vk.img, &mem_reqs);
+    img->vk.mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (0 == img->vk.mem) {
+        _SG_ERROR(VULKAN_ALLOC_IMAGE_DEVICE_MEMORY_FAILED);
+        return false;
+    }
+    return true;
+}
+
 _SOKOL_PRIVATE void _sg_vk_create_delete_queues(void) {
     const uint32_t num_items = (uint32_t)
         (2 * _sg.desc.buffer_pool_size +
@@ -18635,9 +18659,91 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_
     }
 }
 
-_SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(const _sg_image_t* img, const sg_image_data* data) {
-    SOKOL_ASSERT(false && img && data && "FIXME");
-    // needs to call _sg_vk_staging_acquire_command_buffer()
+_SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(const _sg_image_t* img, const sg_image_data* data, bool initial_wait) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(_sg.vk.queue);
+    SOKOL_ASSERT(_sg.vk.stage.copy.mem);
+    SOKOL_ASSERT(_sg.vk.stage.copy.buf);
+    SOKOL_ASSERT(img && img->vk.img);
+    SOKOL_ASSERT(img->vk.cur_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    VkResult res;
+
+    // an inital wait is only needed for updating existing resources but not when populating a new resource
+    if (initial_wait) {
+        res = vkQueueWaitIdle(_sg.vk.queue);
+    }
+
+    VkDeviceMemory mem = _sg.vk.stage.copy.mem;
+    VkCommandBuffer cmd_buf = _sg.vk.stage.copy.cmd_buf;
+    VkBuffer src_buf = _sg.vk.stage.copy.buf;
+    VkImage dst_img = img->vk.img;
+
+    VkBufferImageCopy2 region;
+    _sg_clear(&region, sizeof(region));
+    region.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
+    region.bufferOffset = 0;
+    if (_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format)) {
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        if (_sg_is_depth_stencil_format(img->cmn.pixel_format)) {
+            region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+        }
+    } else {
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    }
+    region.imageSubresource.layerCount = 1;
+    VkCopyBufferToImageInfo2 copy_info;
+    _sg_clear(&copy_info, sizeof(copy_info));
+    copy_info.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2;
+    copy_info.srcBuffer = src_buf;
+    copy_info.dstImage = dst_img;
+    copy_info.dstImageLayout = img->vk.cur_layout;
+    copy_info.regionCount = 1;
+    copy_info.pRegions = &region;
+    for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
+        const uint8_t* src_ptr = data->mip_levels[mip_index].ptr;
+        region.imageSubresource.mipLevel = (uint32_t)mip_index;
+        int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
+        int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
+        int mip_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
+        const uint32_t row_pitch = (uint32_t) _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
+        const uint32_t num_rows = (uint32_t) _sg_num_rows(img->cmn.pixel_format, mip_height);
+        if (_sg_is_compressed_pixel_format(img->cmn.pixel_format)) {
+            mip_width = _sg_roundup(mip_width, 4);
+            mip_height = _sg_roundup(mip_height, 4);
+        }
+        region.bufferRowLength = row_pitch;
+        region.bufferImageHeight = num_rows;
+
+        // FIXME: now need to do a rows-remaining-loop like
+        // in the buffer-copy function for the case that
+        // a single mip surface doesn't fit into the staging buffer
+        const uint32_t max_rows = _sg.vk.stage.copy.size / row_pitch;
+        uint32_t rows_remaining = num_rows;
+        uint32_t cur_row = 0;
+        while (rows_remaining > 0) {
+            uint32_t rows_to_copy = rows_remaining;
+            if (rows_remaining > max_rows) {
+                rows_to_copy = max_rows;
+                rows_remaining -= max_rows;
+            } else {
+                rows_to_copy = rows_remaining;
+                rows_remaining = 0;
+            }
+            void* dst_ptr = 0;
+            res = vkMapMemory(_sg.vk.dev, mem, 0, VK_WHOLE_SIZE, 0, &dst_ptr);
+            SOKOL_ASSERT((res == VK_SUCCESS) && dst_ptr);
+
+            const uint64_t bytes_to_copy = rows_to_copy * row_pitch;
+            SOKOL_ASSERT(bytes_to_copy <= _sg.vk.stage.copy.size);
+            memcpy(dst_ptr, src_ptr, bytes_to_copy);
+            vkUnmapMemory(_sg.vk.dev, mem);
+            src_ptr += bytes_to_copy;
+
+            SOKOL_ASSERT(false && "FIXME");
+
+            cur_row += rows_to_copy;
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sg_vk_uniform_init(void) {
@@ -18737,14 +18843,19 @@ _SOKOL_PRIVATE uint32_t _sg_vk_uniform_copy(const sg_range* data) {
     return offset;
 }
 
+_SOKOL_PRIVATE void _sg_vk_memory_destructor(void* obj) {
+    SOKOL_ASSERT(_sg.vk.dev && obj);
+    _sg_vk_mem_free_device_memory((VkDeviceMemory)obj);
+}
+
 _SOKOL_PRIVATE void _sg_vk_buffer_destructor(void* obj) {
     SOKOL_ASSERT(_sg.vk.dev && obj);
     vkDestroyBuffer(_sg.vk.dev, (VkBuffer)obj, 0);
 }
 
-_SOKOL_PRIVATE void _sg_vk_memory_destructor(void* obj) {
+_SOKOL_PRIVATE void _sg_vk_image_destructor(void* obj) {
     SOKOL_ASSERT(_sg.vk.dev && obj);
-    _sg_vk_mem_free_device_memory((VkDeviceMemory)obj);
+    vkDestroyImage(_sg.vk.dev, (VkImage)obj, 0);
 }
 
 _SOKOL_PRIVATE void _sg_vk_shader_module_destructor(void* obj) {
@@ -18818,6 +18929,25 @@ _SOKOL_PRIVATE VkFormat _sg_vk_vertex_format(sg_vertex_format f) {
             SOKOL_UNREACHABLE;
             return VK_FORMAT_UNDEFINED;
     }
+}
+
+_SOKOL_PRIVATE VkImageType _sg_vk_image_type(sg_image_type t) {
+    return (SG_IMAGETYPE_3D == t) ? VK_IMAGE_TYPE_3D : VK_IMAGE_TYPE_2D;
+}
+
+_SOKOL_PRIVATE VkImageUsageFlags _sg_vk_image_usage(const sg_image_usage* usg) {
+    VkImageUsageFlags res = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    res |= VK_IMAGE_USAGE_SAMPLED_BIT;
+    if (usg->storage_image) {
+        res |= VK_IMAGE_USAGE_STORAGE_BIT;
+    }
+    if (usg->color_attachment || usg->resolve_attachment) {
+        res |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    }
+    if (usg->depth_stencil_attachment) {
+        res |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    }
+    return res;
 }
 
 _SOKOL_PRIVATE VkFormat _sg_vk_format(sg_pixel_format fmt) {
@@ -19327,13 +19457,69 @@ _SOKOL_PRIVATE void _sg_vk_discard_buffer(_sg_buffer_t* buf) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_vk_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
-    SOKOL_ASSERT(false && "FIXME");
+    VkResult res;
+    // FIXME: injected images
+
+    if (img->cmn.usage.immutable) {
+        img->vk.cur_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    } else {
+        img->vk.cur_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    }
+
+    VkImageCreateInfo create_info;
+    _sg_clear(&create_info, sizeof(create_info));
+    create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    create_info.flags = 0; // FIXME?
+    create_info.imageType = _sg_vk_image_type(img->cmn.type);
+    create_info.format = _sg_vk_format(desc->pixel_format);
+    create_info.extent.width = (uint32_t)img->cmn.width;
+    create_info.extent.height = (uint32_t)img->cmn.height;
+    if (desc->type == SG_IMAGETYPE_3D) {
+        create_info.extent.depth = (uint32_t)img->cmn.num_slices;
+        create_info.arrayLayers = 1;
+    } else {
+        create_info.extent.depth = 1;
+        create_info.arrayLayers = (uint32_t)img->cmn.num_slices;
+    }
+    create_info.mipLevels = (uint32_t)img->cmn.num_mipmaps;
+    create_info.samples = (VkSampleCountFlagBits)desc->sample_count;
+    create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    create_info.usage = _sg_vk_image_usage(&img->cmn.usage);
+    create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    create_info.initialLayout = img->vk.cur_layout;
+    res = vkCreateImage(_sg.vk.dev, &create_info, 0, &img->vk.img);
+    if (res != VK_SUCCESS) {
+        _SG_ERROR(VULKAN_CREATE_IMAGE_FAILED);
+        return SG_RESOURCESTATE_FAILED;
+    }
+    SOKOL_ASSERT(img->vk.img);
+    _sg_vk_set_object_label(VK_OBJECT_TYPE_IMAGE, (uint64_t)img->vk.img, desc->label);
+
+    if (!_sg_vk_mem_alloc_image_device_memory(img)) {
+        return SG_RESOURCESTATE_FAILED;
+    }
+    SOKOL_ASSERT(img->vk.mem);
+    res = vkBindImageMemory(_sg.vk.dev, img->vk.img, img->vk.mem, 0);
+    if (res != VK_SUCCESS) {
+        _SG_ERROR(VULKAN_BIND_IMAGE_MEMORY_FAILED);
+        return SG_RESOURCESTATE_FAILED;
+    }
+    if (img->cmn.usage.immutable && desc->data.mip_levels[0].ptr) {
+        _sg_vk_staging_copy_image_data(img, &desc->data, false);
+    }
     return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_vk_discard_image(_sg_image_t* img) {
     SOKOL_ASSERT(img);
-    SOKOL_ASSERT(false && "FIXME");
+    if (img->vk.img) {
+        _sg_vk_delete_queue_add(_sg_vk_image_destructor, (void*)img->vk.img);
+        img->vk.img = 0;
+    }
+    if (img->vk.mem) {
+        _sg_vk_delete_queue_add(_sg_vk_memory_destructor, (void*)img->vk.mem);
+        img->vk.mem = 0;
+    }
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_vk_create_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
