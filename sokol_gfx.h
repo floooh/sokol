@@ -8294,12 +8294,17 @@ _SOKOL_PRIVATE bool _sg_multiple_u64(uint64_t val, uint64_t of) {
     return (val & (of-1)) == 0;
 }
 
-/* return row pitch for an image
+// return the texture block width/height of an image format
+_SOKOL_PRIVATE int _sg_block_dim(sg_pixel_format fmt) {
+    if (_sg_is_compressed_pixel_format(fmt)) {
+        return 4;
+    } else {
+        return 1;
+    }
+}
 
-    see ComputePitch in https://github.com/microsoft/DirectXTex/blob/master/DirectXTex/DirectXTexUtil.cpp
-*/
-_SOKOL_PRIVATE int _sg_row_pitch(sg_pixel_format fmt, int width, int row_align) {
-    int pitch;
+// return texture block size in bytes
+_SOKOL_PRIVATE int _sg_block_bytesize(sg_pixel_format fmt) {
     switch (fmt) {
         case SG_PIXELFORMAT_BC1_RGBA:
         case SG_PIXELFORMAT_BC4_R:
@@ -8309,9 +8314,7 @@ _SOKOL_PRIVATE int _sg_row_pitch(sg_pixel_format fmt, int width, int row_align) 
         case SG_PIXELFORMAT_ETC2_RGB8A1:
         case SG_PIXELFORMAT_EAC_R11:
         case SG_PIXELFORMAT_EAC_R11SN:
-            pitch = ((width + 3) / 4) * 8;
-            pitch = pitch < 8 ? 8 : pitch;
-            break;
+            return 8;
         case SG_PIXELFORMAT_BC2_RGBA:
         case SG_PIXELFORMAT_BC3_RGBA:
         case SG_PIXELFORMAT_BC3_SRGBA:
@@ -8327,50 +8330,30 @@ _SOKOL_PRIVATE int _sg_row_pitch(sg_pixel_format fmt, int width, int row_align) 
         case SG_PIXELFORMAT_EAC_RG11SN:
         case SG_PIXELFORMAT_ASTC_4x4_RGBA:
         case SG_PIXELFORMAT_ASTC_4x4_SRGBA:
-            pitch = ((width + 3) / 4) * 16;
-            pitch = pitch < 16 ? 16 : pitch;
-            break;
+            return 16;
         default:
-            pitch = width * _sg_pixelformat_bytesize(fmt);
-            break;
+            return _sg_pixelformat_bytesize(fmt);
     }
+}
+
+/* return row pitch for an image
+
+    see ComputePitch in https://github.com/microsoft/DirectXTex/blob/master/DirectXTex/DirectXTexUtil.cpp
+*/
+_SOKOL_PRIVATE int _sg_row_pitch(sg_pixel_format fmt, int width, int row_align) {
+    const int block_dim = _sg_block_dim(fmt);
+    const int num_blocks_in_row = (width + (block_dim-1)) / block_dim;
+    const int block_num_bytes = _sg_block_bytesize(fmt);
+    int pitch = num_blocks_in_row * block_num_bytes;
+    pitch = (pitch < block_num_bytes) ? block_num_bytes : pitch;
     pitch = _sg_roundup(pitch, row_align);
     return pitch;
 }
 
 // compute the number of rows in a surface depending on pixel format
 _SOKOL_PRIVATE int _sg_num_rows(sg_pixel_format fmt, int height) {
-    int num_rows;
-    switch (fmt) {
-        case SG_PIXELFORMAT_BC1_RGBA:
-        case SG_PIXELFORMAT_BC4_R:
-        case SG_PIXELFORMAT_BC4_RSN:
-        case SG_PIXELFORMAT_ETC2_RGB8:
-        case SG_PIXELFORMAT_ETC2_SRGB8:
-        case SG_PIXELFORMAT_ETC2_RGB8A1:
-        case SG_PIXELFORMAT_ETC2_RGBA8:
-        case SG_PIXELFORMAT_ETC2_SRGB8A8:
-        case SG_PIXELFORMAT_EAC_R11:
-        case SG_PIXELFORMAT_EAC_R11SN:
-        case SG_PIXELFORMAT_EAC_RG11:
-        case SG_PIXELFORMAT_EAC_RG11SN:
-        case SG_PIXELFORMAT_BC2_RGBA:
-        case SG_PIXELFORMAT_BC3_RGBA:
-        case SG_PIXELFORMAT_BC3_SRGBA:
-        case SG_PIXELFORMAT_BC5_RG:
-        case SG_PIXELFORMAT_BC5_RGSN:
-        case SG_PIXELFORMAT_BC6H_RGBF:
-        case SG_PIXELFORMAT_BC6H_RGBUF:
-        case SG_PIXELFORMAT_BC7_RGBA:
-        case SG_PIXELFORMAT_BC7_SRGBA:
-        case SG_PIXELFORMAT_ASTC_4x4_RGBA:
-        case SG_PIXELFORMAT_ASTC_4x4_SRGBA:
-            num_rows = ((height + 3) / 4);
-            break;
-        default:
-            num_rows = height;
-            break;
-    }
+    const int block_dim = _sg_block_dim(fmt);
+    int num_rows = (height + (block_dim-1)) / block_dim;
     if (num_rows < 1) {
         num_rows = 1;
     }
@@ -18380,6 +18363,84 @@ _SOKOL_PRIVATE void _sg_vk_set_object_label(VkObjectType obj_type, uint64_t obj_
     }
 }
 
+_SOKOL_PRIVATE void _sg_vk_barrier_swapchain_into_color_attachment(VkImage vk_img) {
+    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+    VkImageMemoryBarrier2 barrier;
+    _sg_clear(&barrier, sizeof(barrier));
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+    barrier.srcAccessMask = 0;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = vk_img;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.layerCount = 1;
+    VkDependencyInfo dep_info;
+    _sg_clear(&dep_info, sizeof(dep_info));
+    dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dep_info.imageMemoryBarrierCount = 1;
+    dep_info.pImageMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(_sg.vk.frame.cmd_buf, &dep_info);
+}
+
+_SOKOL_PRIVATE void _sg_vk_barrier_swapchain_into_depth_stencil_attachment(VkImage vk_img, bool has_stencil) {
+    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+    VkImageMemoryBarrier2 barrier;
+    _sg_clear(&barrier, sizeof(barrier));
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+    barrier.srcAccessMask = 0;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+    barrier.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = vk_img;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    if (has_stencil) {
+        barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+    }
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.layerCount = 1;
+    VkDependencyInfo dep_info;
+    _sg_clear(&dep_info, sizeof(dep_info));
+    dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dep_info.imageMemoryBarrierCount = 1;
+    dep_info.pImageMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(_sg.vk.frame.cmd_buf, &dep_info);
+}
+
+_SOKOL_PRIVATE void _sg_vk_barrier_swapchain_into_present(VkImage vk_img) {
+    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+    VkImageMemoryBarrier2 barrier;
+    _sg_clear(&barrier, sizeof(barrier));
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    barrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+    barrier.dstAccessMask = 0;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = vk_img;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.layerCount = 1;
+    VkDependencyInfo dep_info;
+    _sg_clear(&dep_info, sizeof(dep_info));
+    dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dep_info.imageMemoryBarrierCount = 1;
+    dep_info.pImageMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(_sg.vk.frame.cmd_buf, &dep_info);
+}
+
 _SOKOL_PRIVATE int _sg_vk_mem_find_memory_type_index(uint32_t type_filter, VkMemoryPropertyFlags props) {
     SOKOL_ASSERT(_sg.vk.phys_dev);
     VkPhysicalDeviceMemoryProperties mem_props;
@@ -18442,7 +18503,7 @@ _SOKOL_PRIVATE bool _sg_vk_mem_alloc_image_device_memory(_sg_image_t* img) {
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(img);
     SOKOL_ASSERT(img->vk.img);
-    SOKOL_ASSERT(0 == img->vk.img);
+    SOKOL_ASSERT(0 == img->vk.mem);
     VkMemoryRequirements mem_reqs;
     _sg_clear(&mem_reqs, sizeof(mem_reqs));
     vkGetImageMemoryRequirements(_sg.vk.dev, img->vk.img, &mem_reqs);
@@ -18595,6 +18656,45 @@ _SOKOL_PRIVATE void _sg_vk_staging_discard(void) {
     _sg.vk.stage.copy.size = 0;
 }
 
+_SOKOL_PRIVATE void _sg_vk_staging_copy_begin(VkCommandBuffer cmd_buf) {
+    SOKOL_ASSERT(cmd_buf);
+    VkCommandBufferBeginInfo cmdbuf_begin_info;
+    _sg_clear(&cmdbuf_begin_info, sizeof(cmdbuf_begin_info));
+    cmdbuf_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    cmdbuf_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    VkResult res = vkBeginCommandBuffer(cmd_buf, &cmdbuf_begin_info);
+    SOKOL_ASSERT(res == VK_SUCCESS);
+}
+
+_SOKOL_PRIVATE void _sg_vk_staging_copy_end(VkCommandBuffer cmd_buf, VkQueue queue) {
+    SOKOL_ASSERT(cmd_buf && queue);
+    VkResult res;
+    vkEndCommandBuffer(cmd_buf);
+    VkSubmitInfo submit_info;
+    _sg_clear(&submit_info, sizeof(submit_info));
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &cmd_buf;
+    res = vkQueueSubmit(queue, 1, &submit_info, VK_NULL_HANDLE);
+    SOKOL_ASSERT(res == VK_SUCCESS);
+    res = vkQueueWaitIdle(queue);
+    SOKOL_ASSERT(res == VK_SUCCESS);
+    res = vkResetCommandBuffer(cmd_buf, 0);
+    SOKOL_ASSERT(res == VK_SUCCESS);
+}
+
+_SOKOL_PRIVATE void _sg_vk_staging_memcpy(VkDeviceMemory mem, const void* ptr, uint32_t num_bytes) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(mem);
+    SOKOL_ASSERT(ptr);
+    SOKOL_ASSERT(num_bytes > 0);
+    void* dst_ptr = 0;
+    VkResult res = vkMapMemory(_sg.vk.dev, mem, 0, VK_WHOLE_SIZE, 0, &dst_ptr);
+    SOKOL_ASSERT((res == VK_SUCCESS) && dst_ptr);
+    memcpy(dst_ptr, ptr, num_bytes);
+    vkUnmapMemory(_sg.vk.dev, mem);
+}
+
 _SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_range* data, size_t offset, bool initial_wait) {
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(_sg.vk.queue);
@@ -18603,11 +18703,11 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_
     SOKOL_ASSERT(buf && buf->vk.buf);
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
     SOKOL_ASSERT((offset + data->size) <= (size_t)buf->cmn.size);
-    VkResult res;
 
     // an inital wait is only needed for updating existing resources but not when populating a new resource
     if (initial_wait) {
-        res = vkQueueWaitIdle(_sg.vk.queue);
+        VkResult res = vkQueueWaitIdle(_sg.vk.queue);
+        SOKOL_ASSERT(res == VK_SUCCESS);
     }
 
     VkDeviceMemory mem = _sg.vk.stage.copy.mem;
@@ -18615,9 +18715,10 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_
     VkBuffer src_buf = _sg.vk.stage.copy.buf;
     VkBuffer dst_buf = buf->vk.buf;
     const uint8_t* src_ptr = ((const uint8_t*)data->ptr) + offset;
-    uint64_t dst_size = _sg.vk.stage.copy.size;
-    uint64_t bytes_remaining = data->size;
-    // FIXME: move this into a common helper function shared between immutable buffers and images
+    uint32_t dst_size = _sg.vk.stage.copy.size;
+    uint32_t bytes_remaining = (uint32_t)data->size;
+    VkBufferCopy region;
+    _sg_clear(&region, sizeof(region));
     while (bytes_remaining > 0) {
         uint64_t bytes_to_copy = bytes_remaining;
         if (bytes_remaining > dst_size) {
@@ -18627,35 +18728,12 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_
             bytes_to_copy = bytes_remaining;
             bytes_remaining = 0;
         }
-        void* dst_ptr = 0;
-        res = vkMapMemory(_sg.vk.dev, mem, 0, VK_WHOLE_SIZE, 0, &dst_ptr);
-        SOKOL_ASSERT((res == VK_SUCCESS) && dst_ptr);
-        memcpy(dst_ptr, src_ptr, bytes_to_copy);
-        vkUnmapMemory(_sg.vk.dev, mem);
+        _sg_vk_staging_memcpy(mem, src_ptr, bytes_to_copy);
         src_ptr += bytes_to_copy;
-
-        VkCommandBufferBeginInfo cmdbuf_begin_info;
-        _sg_clear(&cmdbuf_begin_info, sizeof(cmdbuf_begin_info));
-        cmdbuf_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        cmdbuf_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-        res = vkBeginCommandBuffer(cmd_buf, &cmdbuf_begin_info);
-        SOKOL_ASSERT(res == VK_SUCCESS);
-        VkBufferCopy region;
-        _sg_clear(&region, sizeof(region));
+        _sg_vk_staging_copy_begin(cmd_buf);
         region.size = bytes_to_copy;
         vkCmdCopyBuffer(cmd_buf, src_buf, dst_buf, 1, &region);
-        vkEndCommandBuffer(cmd_buf);
-        VkSubmitInfo submit_info;
-        _sg_clear(&submit_info, sizeof(submit_info));
-        submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submit_info.commandBufferCount = 1;
-        submit_info.pCommandBuffers = &cmd_buf;
-        res = vkQueueSubmit(_sg.vk.queue, 1, &submit_info, VK_NULL_HANDLE);
-        SOKOL_ASSERT(res == VK_SUCCESS);
-        res = vkQueueWaitIdle(_sg.vk.queue);
-        SOKOL_ASSERT(res == VK_SUCCESS);
-        res = vkResetCommandBuffer(cmd_buf, 0);
-        SOKOL_ASSERT(res == VK_SUCCESS);
+        _sg_vk_staging_copy_end(cmd_buf, _sg.vk.queue);
     }
 }
 
@@ -18666,11 +18744,12 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(const _sg_image_t* img, const
     SOKOL_ASSERT(_sg.vk.stage.copy.buf);
     SOKOL_ASSERT(img && img->vk.img);
     SOKOL_ASSERT(img->vk.cur_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    VkResult res;
+    const uint32_t block_dim = (uint32_t)_sg_block_dim(img->cmn.pixel_format);
 
     // an inital wait is only needed for updating existing resources but not when populating a new resource
     if (initial_wait) {
-        res = vkQueueWaitIdle(_sg.vk.queue);
+        VkResult res = vkQueueWaitIdle(_sg.vk.queue);
+        SOKOL_ASSERT(res == VK_SUCCESS);
     }
 
     VkDeviceMemory mem = _sg.vk.stage.copy.mem;
@@ -18691,6 +18770,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(const _sg_image_t* img, const
         region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     }
     region.imageSubresource.layerCount = 1;
+    region.imageExtent.depth = 1;
     VkCopyBufferToImageInfo2 copy_info;
     _sg_clear(&copy_info, sizeof(copy_info));
     copy_info.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2;
@@ -18701,7 +18781,6 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(const _sg_image_t* img, const
     copy_info.pRegions = &region;
     for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
         const uint8_t* src_ptr = data->mip_levels[mip_index].ptr;
-        region.imageSubresource.mipLevel = (uint32_t)mip_index;
         int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
         int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
         int mip_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
@@ -18711,37 +18790,42 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(const _sg_image_t* img, const
             mip_width = _sg_roundup(mip_width, 4);
             mip_height = _sg_roundup(mip_height, 4);
         }
+        region.imageSubresource.mipLevel = (uint32_t)mip_index;
         region.bufferRowLength = row_pitch;
         region.bufferImageHeight = num_rows;
+        region.imageExtent.width = (uint32_t)mip_width;
 
-        // FIXME: now need to do a rows-remaining-loop like
-        // in the buffer-copy function for the case that
-        // a single mip surface doesn't fit into the staging buffer
         const uint32_t max_rows = _sg.vk.stage.copy.size / row_pitch;
-        uint32_t rows_remaining = num_rows;
-        uint32_t cur_row = 0;
-        while (rows_remaining > 0) {
-            uint32_t rows_to_copy = rows_remaining;
-            if (rows_remaining > max_rows) {
-                rows_to_copy = max_rows;
-                rows_remaining -= max_rows;
+        for (int slice_index = 0; slice_index < mip_slices; slice_index++) {
+            if (img->cmn.type == SG_IMAGETYPE_3D) {
+                region.imageOffset.z = slice_index;
             } else {
-                rows_to_copy = rows_remaining;
-                rows_remaining = 0;
+                region.imageSubresource.baseArrayLayer = (uint32_t)slice_index;
             }
-            void* dst_ptr = 0;
-            res = vkMapMemory(_sg.vk.dev, mem, 0, VK_WHOLE_SIZE, 0, &dst_ptr);
-            SOKOL_ASSERT((res == VK_SUCCESS) && dst_ptr);
+            uint32_t rows_remaining = num_rows;
+            uint32_t cur_row = 0;
+            while (rows_remaining > 0) {
+                uint32_t rows_to_copy = rows_remaining;
+                if (rows_remaining > max_rows) {
+                    rows_to_copy = max_rows;
+                    rows_remaining -= max_rows;
+                } else {
+                    rows_to_copy = rows_remaining;
+                    rows_remaining = 0;
+                }
+                const uint32_t bytes_to_copy = rows_to_copy * row_pitch;
+                SOKOL_ASSERT(bytes_to_copy <= _sg.vk.stage.copy.size);
+                _sg_vk_staging_memcpy(mem, src_ptr, bytes_to_copy);
+                src_ptr += bytes_to_copy;
+                _sg_vk_staging_copy_begin(cmd_buf);
 
-            const uint64_t bytes_to_copy = rows_to_copy * row_pitch;
-            SOKOL_ASSERT(bytes_to_copy <= _sg.vk.stage.copy.size);
-            memcpy(dst_ptr, src_ptr, bytes_to_copy);
-            vkUnmapMemory(_sg.vk.dev, mem);
-            src_ptr += bytes_to_copy;
+                region.imageOffset.y = (int32_t)(cur_row * block_dim);
+                region.imageExtent.height = rows_to_copy * block_dim;
+                vkCmdCopyBufferToImage2(cmd_buf, &copy_info);
 
-            SOKOL_ASSERT(false && "FIXME");
-
-            cur_row += rows_to_copy;
+                _sg_vk_staging_copy_end(cmd_buf, _sg.vk.queue);
+                cur_row += rows_to_copy;
+            }
         }
     }
 }
@@ -19460,11 +19544,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_image(_sg_image_t* img, const sg_
     VkResult res;
     // FIXME: injected images
 
-    if (img->cmn.usage.immutable) {
-        img->vk.cur_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    } else {
-        img->vk.cur_layout = VK_IMAGE_LAYOUT_UNDEFINED;
-    }
+    img->vk.cur_layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
     VkImageCreateInfo create_info;
     _sg_clear(&create_info, sizeof(create_info));
@@ -19505,6 +19585,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_image(_sg_image_t* img, const sg_
         return SG_RESOURCESTATE_FAILED;
     }
     if (img->cmn.usage.immutable && desc->data.mip_levels[0].ptr) {
+        // FIXME: transition into staging-dst
+        SOKOL_ASSERT(false && "FIXME");
         _sg_vk_staging_copy_image_data(img, &desc->data, false);
     }
     return SG_RESOURCESTATE_VALID;
@@ -20004,45 +20086,6 @@ _SOKOL_PRIVATE void _sg_vk_apply_scissor_rect(int x, int y, int w, int h, bool o
     vkCmdSetScissor(_sg.vk.frame.cmd_buf, 0, 1, &rect);
 }
 
-_SOKOL_PRIVATE void _sg_vk_transition_image_layout(
-    VkImage vk_img,
-    VkImageLayout old_layout,
-    VkImageLayout new_layout,
-    VkAccessFlags2 src_access_mask,
-    VkAccessFlags2 dst_access_mask,
-    VkPipelineStageFlags src_stage_mask,
-    VkPipelineStageFlags dst_stage_mask,
-    VkImageAspectFlags aspect_mask,
-    uint32_t base_mip_level,
-    uint32_t base_array_layer)
-{
-    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
-
-    VkImageMemoryBarrier2 barrier;
-    _sg_clear(&barrier, sizeof(barrier));
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    barrier.srcStageMask = src_stage_mask;
-    barrier.srcAccessMask = src_access_mask;
-    barrier.dstStageMask = dst_stage_mask;
-    barrier.dstAccessMask = dst_access_mask;
-    barrier.oldLayout = old_layout;
-    barrier.newLayout = new_layout;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = vk_img;
-    barrier.subresourceRange.aspectMask = aspect_mask;
-    barrier.subresourceRange.baseMipLevel = base_mip_level;
-    barrier.subresourceRange.levelCount = 1;
-    barrier.subresourceRange.baseArrayLayer = base_array_layer;
-    barrier.subresourceRange.layerCount = 1;
-    VkDependencyInfo dep_info;
-    _sg_clear(&dep_info, sizeof(dep_info));
-    dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dep_info.imageMemoryBarrierCount = 1;
-    dep_info.pImageMemoryBarriers = &barrier;
-    vkCmdPipelineBarrier2(_sg.vk.frame.cmd_buf, &dep_info);
-}
-
 _SOKOL_PRIVATE void _sg_vk_init_color_attachment_info(VkRenderingAttachmentInfo* info, const sg_color_attachment_action* action, VkImageView color_view, VkImageView resolve_view) {
     info->sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
     info->imageView = color_view;
@@ -20127,27 +20170,9 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(const sg_pass* pass, const _sg_atta
         VkImage vk_resolve_image = (VkImage)_sg.vk.swapchain.resolve_image;
         VkImageView vk_color_view = (VkImageView)_sg.vk.swapchain.render_view;
         VkImageView vk_resolve_view = (VkImageView)_sg.vk.swapchain.resolve_view;
-        _sg_vk_transition_image_layout(
-            vk_color_image,
-            VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            0,
-            VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-            VK_IMAGE_ASPECT_COLOR_BIT,
-            0, 0); // base_mip_level, base_array_layer
+        _sg_vk_barrier_swapchain_into_color_attachment(vk_color_image);
         if (vk_resolve_image) {
-            _sg_vk_transition_image_layout(
-                vk_resolve_image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                0,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_IMAGE_ASPECT_COLOR_BIT,
-                0, 0); // base_mip_level, base_array_layer
+            _sg_vk_barrier_swapchain_into_color_attachment(vk_resolve_image);
         }
         _sg_vk_init_color_attachment_info(&color_att_infos[0], &action->colors[0], vk_color_view, vk_resolve_view);
         render_info.colorAttachmentCount = 1;
@@ -20156,22 +20181,8 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(const sg_pass* pass, const _sg_atta
         if (_sg.vk.swapchain.depth_stencil_image) {
             VkImage vk_ds_image = (VkImage)_sg.vk.swapchain.depth_stencil_image;
             VkImageView vk_ds_view = (VkImageView)_sg.vk.swapchain.depth_stencil_view;
-            VkImageAspectFlags vk_aspect = VK_IMAGE_ASPECT_DEPTH_BIT;
             const bool has_stencil = _sg_is_depth_stencil_format(pass->swapchain.depth_format);
-            if (has_stencil) {
-                vk_aspect |= VK_IMAGE_ASPECT_STENCIL_BIT;
-            }
-            _sg_vk_transition_image_layout(
-                vk_ds_image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                0,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                vk_aspect,
-                0, 0);
-
+            _sg_vk_barrier_swapchain_into_depth_stencil_attachment(vk_ds_image, has_stencil);
             _sg_vk_init_depth_attachment_info(&depth_att_info, &action->depth, vk_ds_view);
             render_info.pDepthAttachment = &depth_att_info;
             if (has_stencil) {
@@ -20212,16 +20223,7 @@ _SOKOL_PRIVATE void _sg_vk_end_render_pass(const _sg_attachments_ptrs_t* atts) {
         VkImage present_image = _sg.vk.swapchain.resolve_image
             ? (VkImage)_sg.vk.swapchain.resolve_image
             : (VkImage)_sg.vk.swapchain.render_image;
-        _sg_vk_transition_image_layout(
-            present_image,
-            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-            VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            0,
-            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-            VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-            VK_IMAGE_ASPECT_COLOR_BIT,
-            0, 0); // base_mip_level, base_array_layer
+        _sg_vk_barrier_swapchain_into_present(present_image);
         _sg_clear(&_sg.vk.swapchain, sizeof(_sg.vk.swapchain));
     } else {
         SOKOL_ASSERT(false && "FIXME");
