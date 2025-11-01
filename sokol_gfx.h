@@ -18433,6 +18433,7 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_dst_stage_mask(_sg_vk_access_t new_a
         SOKOL_ASSERT(0 == (new_access & ~_SG_VK_ACCESS_PRESENT));
         return VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
     }
+    // FIXME: handle other access types
     SOKOL_UNREACHABLE;
     return VK_PIPELINE_STAGE_2_NONE;
 }
@@ -18492,7 +18493,7 @@ _SOKOL_PRIVATE VkImageLayout _sg_vk_image_layout(_sg_vk_access_t access) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_vk_barrier_swapchain(VkImage vkimg, _sg_vk_access_t old_access, _sg_vk_access_t new_access) {
+_SOKOL_PRIVATE void _sg_vk_swapchain_barrier(VkImage vkimg, _sg_vk_access_t old_access, _sg_vk_access_t new_access) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
     VkImageMemoryBarrier2 barrier;
     _sg_clear(&barrier, sizeof(barrier));
@@ -18522,6 +18523,42 @@ _SOKOL_PRIVATE void _sg_vk_barrier_swapchain(VkImage vkimg, _sg_vk_access_t old_
     dep_info.imageMemoryBarrierCount = 1;
     dep_info.pImageMemoryBarriers = &barrier;
     vkCmdPipelineBarrier2(_sg.vk.frame.cmd_buf, &dep_info);
+}
+
+_SOKOL_PRIVATE void _sg_vk_image_barrier(VkCommandBuffer cmd_buf, _sg_image_t* img, _sg_vk_access_t new_access) {
+    SOKOL_ASSERT(cmd_buf && img && img->vk.img);
+    if (img->vk.cur_access == new_access) {
+        return;
+    }
+    VkImageMemoryBarrier2 barrier;
+    _sg_clear(&barrier, sizeof(barrier));
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    barrier.srcStageMask = _sg_vk_src_stage_mask(img->vk.cur_access);
+    barrier.srcAccessMask = _sg_vk_access_mask(img->vk.cur_access);
+    barrier.oldLayout = _sg_vk_image_layout(img->vk.cur_access);
+    barrier.dstStageMask = _sg_vk_dst_stage_mask(new_access);
+    barrier.dstAccessMask = _sg_vk_access_mask(new_access);
+    barrier.newLayout = _sg_vk_image_layout(new_access);
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = img->vk.img;
+    if (_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format)) {
+        barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_DEPTH_BIT;
+        if (_sg_is_depth_stencil_format(img->cmn.pixel_format)) {
+            barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+        }
+    } else {
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    }
+    barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+    barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+    VkDependencyInfo dep_info;
+    _sg_clear(&dep_info, sizeof(dep_info));
+    dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dep_info.imageMemoryBarrierCount = 1;
+    dep_info.pImageMemoryBarriers = &barrier;
+    VkCmdPipelineBarrier2(cmd_buf, &dep_info);
+    img->vk.cur_access = new_access;
 }
 
 _SOKOL_PRIVATE int _sg_vk_mem_find_memory_type_index(uint32_t type_filter, VkMemoryPropertyFlags props) {
@@ -18826,7 +18863,6 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(const _sg_image_t* img, const
     SOKOL_ASSERT(_sg.vk.stage.copy.mem);
     SOKOL_ASSERT(_sg.vk.stage.copy.buf);
     SOKOL_ASSERT(img && img->vk.img);
-    SOKOL_ASSERT(img->vk.cur_access == _SG_VK_ACCESS_STAGING);
     const uint32_t block_dim = (uint32_t)_sg_block_dim(img->cmn.pixel_format);
 
     // an inital wait is only needed for updating existing resources but not when populating a new resource
@@ -18901,6 +18937,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(const _sg_image_t* img, const
                 _sg_vk_staging_memcpy(mem, src_ptr, bytes_to_copy);
                 src_ptr += bytes_to_copy;
                 _sg_vk_staging_copy_begin(cmd_buf);
+                _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_STAGING);
 
                 region.imageOffset.y = (int32_t)(cur_row * block_dim);
                 region.imageExtent.height = rows_to_copy * block_dim;
@@ -19668,8 +19705,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_image(_sg_image_t* img, const sg_
         return SG_RESOURCESTATE_FAILED;
     }
     if (img->cmn.usage.immutable && desc->data.mip_levels[0].ptr) {
-        // FIXME: transition into staging-dst
-        SOKOL_ASSERT(false && "FIXME");
         _sg_vk_staging_copy_image_data(img, &desc->data, false);
     }
     return SG_RESOURCESTATE_VALID;
@@ -20253,9 +20288,9 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(const sg_pass* pass, const _sg_atta
         VkImage vk_resolve_image = (VkImage)_sg.vk.swapchain.resolve_image;
         VkImageView vk_color_view = (VkImageView)_sg.vk.swapchain.render_view;
         VkImageView vk_resolve_view = (VkImageView)_sg.vk.swapchain.resolve_view;
-        _sg_vk_barrier_swapchain(vk_color_image, _SG_VK_ACCESS_NONE, _SG_VK_ACCESS_COLOR_ATTACHMENT);
+        _sg_vk_swapchain_barrier(vk_color_image, _SG_VK_ACCESS_NONE, _SG_VK_ACCESS_COLOR_ATTACHMENT);
         if (vk_resolve_image) {
-            _sg_vk_barrier_swapchain(vk_resolve_image, _SG_VK_ACCESS_NONE, _SG_VK_ACCESS_RESOLVE_ATTACHMENT);
+            _sg_vk_swapchain_barrier(vk_resolve_image, _SG_VK_ACCESS_NONE, _SG_VK_ACCESS_RESOLVE_ATTACHMENT);
         }
         _sg_vk_init_color_attachment_info(&color_att_infos[0], &action->colors[0], vk_color_view, vk_resolve_view);
         render_info.colorAttachmentCount = 1;
@@ -20269,7 +20304,7 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(const sg_pass* pass, const _sg_atta
             if (has_stencil) {
                 dst_access |= _SG_VK_ACCESS_STENCIL_ATTACHMENT;
             }
-            _sg_vk_barrier_swapchain(vk_ds_image, _SG_VK_ACCESS_NONE, dst_access);
+            _sg_vk_swapchain_barrier(vk_ds_image, _SG_VK_ACCESS_NONE, dst_access);
             _sg_vk_init_depth_attachment_info(&depth_att_info, &action->depth, vk_ds_view);
             render_info.pDepthAttachment = &depth_att_info;
             if (has_stencil) {
