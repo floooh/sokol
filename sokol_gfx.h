@@ -18439,6 +18439,7 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_dst_stage_mask(_sg_vk_access_t new_a
 
 _SOKOL_PRIVATE VkAccessFlags2 _sg_vk_access_mask(_sg_vk_access_t access) {
     VkAccessFlags2 f = VK_ACCESS_2_NONE;
+    // NOTE: _SG_VK_ACCESS_PRESENT => NONE
     if (0 != (access & _SG_VK_ACCESS_STAGING)) {
         f |= VK_ACCESS_2_TRANSFER_WRITE_BIT;
     }
@@ -18467,6 +18468,30 @@ _SOKOL_PRIVATE VkAccessFlags2 _sg_vk_access_mask(_sg_vk_access_t access) {
     return f;
 }
 
+_SOKOL_PRIVATE VkImageLayout _sg_vk_image_layout(_sg_vk_access_t access) {
+    switch (access) {
+        case _SG_VK_ACCESS_NONE:
+            return VK_IMAGE_LAYOUT_UNDEFINED;
+        case _SG_VK_ACCESS_STAGING:
+            return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        case _SG_VK_ACCESS_TEXTURE:
+            return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        case _SG_VK_ACCESS_STORAGEIMAGE:
+            return VK_IMAGE_LAYOUT_GENERAL;
+        case _SG_VK_ACCESS_COLOR_ATTACHMENT:
+        case _SG_VK_ACCESS_RESOLVE_ATTACHMENT:
+            return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        case _SG_VK_ACCESS_DEPTH_ATTACHMENT:
+        case _SG_VK_ACCESS_DEPTH_ATTACHMENT|_SG_VK_ACCESS_STENCIL_ATTACHMENT:
+            return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        case _SG_VK_ACCESS_PRESENT:
+            return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        default:
+            SOKOL_UNREACHABLE;
+            return VK_IMAGE_LAYOUT_UNDEFINED;
+    }
+}
+
 _SOKOL_PRIVATE void _sg_vk_barrier_swapchain_into_color_attachment(VkImage vk_img) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
     VkImageMemoryBarrier2 barrier;
@@ -18474,10 +18499,10 @@ _SOKOL_PRIVATE void _sg_vk_barrier_swapchain_into_color_attachment(VkImage vk_im
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrier.srcStageMask = _sg_vk_src_stage_mask(_SG_VK_ACCESS_NONE);
     barrier.srcAccessMask = _sg_vk_access_mask(_SG_VK_ACCESS_NONE);
+    barrier.oldLayout = _sg_vk_image_layout(_SG_VK_ACCESS_NONE);
     barrier.dstStageMask = _sg_vk_dst_stage_mask(_SG_VK_ACCESS_COLOR_ATTACHMENT);
     barrier.dstAccessMask = _sg_vk_access_mask(_SG_VK_ACCESS_COLOR_ATTACHMENT);
-    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    barrier.newLayout = _sg_vk_image_layout(_SG_VK_ACCESS_COLOR_ATTACHMENT);
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.image = vk_img;
@@ -18503,10 +18528,10 @@ _SOKOL_PRIVATE void _sg_vk_barrier_swapchain_into_depth_stencil_attachment(VkIma
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrier.srcStageMask = _sg_vk_src_stage_mask(_SG_VK_ACCESS_NONE);
     barrier.srcAccessMask = _sg_vk_access_mask(_SG_VK_ACCESS_NONE);
+    barrier.oldLayout = _sg_vk_image_layout(_SG_VK_ACCESS_NONE);
     barrier.dstStageMask = _sg_vk_dst_stage_mask(into_access);
     barrier.dstAccessMask = _sg_vk_access_mask(into_access);
-    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    barrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    barrier.newLayout = _sg_vk_image_layout(into_access);
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.image = vk_img;
@@ -18531,10 +18556,10 @@ _SOKOL_PRIVATE void _sg_vk_barrier_swapchain_into_present(VkImage vk_img) {
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrier.srcStageMask = _sg_vk_src_stage_mask(_SG_VK_ACCESS_COLOR_ATTACHMENT);
     barrier.srcAccessMask = _sg_vk_access_mask(_SG_VK_ACCESS_COLOR_ATTACHMENT);
+    barrier.oldLayout = _sg_vk_image_layout(_SG_VK_ACCESS_COLOR_ATTACHMENT);
     barrier.dstStageMask = _sg_vk_dst_stage_mask(_SG_VK_ACCESS_PRESENT);
-    barrier.dstAccessMask = _sg_vk_access_mask(_SG_VK_ACCESS_NONE);
-    barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    barrier.dstAccessMask = _sg_vk_access_mask(_SG_VK_ACCESS_PRESENT);
+    barrier.newLayout = _sg_vk_image_layout(_SG_VK_ACCESS_PRESENT);
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.image = vk_img;
