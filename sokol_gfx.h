@@ -18395,7 +18395,7 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_src_stage_mask(_sg_vk_access_t old_a
     }
     if (0 != (old_access & _SG_VK_ACCESS_STAGING)) {
         SOKOL_ASSERT(0 == (old_access & ~_SG_VK_ACCESS_STAGING));
-        return VK_PIPELINE_STAGE_2_COPY_BIT;
+        return VK_PIPELINE_STAGE_2_TRANSFER_BIT;
     }
     if (0 != (old_access & top_of_pipe_bits)) {
         SOKOL_ASSERT(0 == (old_access & ~top_of_pipe_bits));
@@ -18421,6 +18421,10 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_dst_stage_mask(_sg_vk_access_t new_a
     const int depth_stencil_attachment_output_bits =
         _SG_VK_ACCESS_DEPTH_ATTACHMENT |
         _SG_VK_ACCESS_STENCIL_ATTACHMENT;
+    if (0 != (new_access & _SG_VK_ACCESS_STAGING)) {
+        SOKOL_ASSERT(0 == (new_access & ~_SG_VK_ACCESS_STAGING));
+        return VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    }
     if (0 != (new_access & color_attachment_output_bits)) {
         SOKOL_ASSERT(0 == (new_access & ~color_attachment_output_bits));
         return VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -18557,7 +18561,7 @@ _SOKOL_PRIVATE void _sg_vk_image_barrier(VkCommandBuffer cmd_buf, _sg_image_t* i
     dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
     dep_info.imageMemoryBarrierCount = 1;
     dep_info.pImageMemoryBarriers = &barrier;
-    VkCmdPipelineBarrier2(cmd_buf, &dep_info);
+    vkCmdPipelineBarrier2(cmd_buf, &dep_info);
     img->vk.cur_access = new_access;
 }
 
@@ -18776,14 +18780,15 @@ _SOKOL_PRIVATE void _sg_vk_staging_discard(void) {
     _sg.vk.stage.copy.size = 0;
 }
 
-_SOKOL_PRIVATE void _sg_vk_staging_copy_begin(VkCommandBuffer cmd_buf) {
-    SOKOL_ASSERT(cmd_buf);
+_SOKOL_PRIVATE VkCommandBuffer _sg_vk_staging_copy_begin(void) {
+    VkCommandBuffer cmd_buf = _sg.vk.stage.copy.cmd_buf;
     VkCommandBufferBeginInfo cmdbuf_begin_info;
     _sg_clear(&cmdbuf_begin_info, sizeof(cmdbuf_begin_info));
     cmdbuf_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     cmdbuf_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     VkResult res = vkBeginCommandBuffer(cmd_buf, &cmdbuf_begin_info);
     SOKOL_ASSERT(res == VK_SUCCESS);
+    return cmd_buf;
 }
 
 _SOKOL_PRIVATE void _sg_vk_staging_copy_end(VkCommandBuffer cmd_buf, VkQueue queue) {
@@ -18831,7 +18836,6 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_
     }
 
     VkDeviceMemory mem = _sg.vk.stage.copy.mem;
-    VkCommandBuffer cmd_buf = _sg.vk.stage.copy.cmd_buf;
     VkBuffer src_buf = _sg.vk.stage.copy.buf;
     VkBuffer dst_buf = buf->vk.buf;
     const uint8_t* src_ptr = ((const uint8_t*)data->ptr) + offset;
@@ -18850,14 +18854,14 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_
         }
         _sg_vk_staging_memcpy(mem, src_ptr, bytes_to_copy);
         src_ptr += bytes_to_copy;
-        _sg_vk_staging_copy_begin(cmd_buf);
+        VkCommandBuffer cmd_buf = _sg_vk_staging_copy_begin();
         region.size = bytes_to_copy;
         vkCmdCopyBuffer(cmd_buf, src_buf, dst_buf, 1, &region);
         _sg_vk_staging_copy_end(cmd_buf, _sg.vk.queue);
     }
 }
 
-_SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(const _sg_image_t* img, const sg_image_data* data, bool initial_wait) {
+_SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_image_data* data, bool initial_wait) {
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(_sg.vk.queue);
     SOKOL_ASSERT(_sg.vk.stage.copy.mem);
@@ -18872,7 +18876,6 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(const _sg_image_t* img, const
     }
 
     VkDeviceMemory mem = _sg.vk.stage.copy.mem;
-    VkCommandBuffer cmd_buf = _sg.vk.stage.copy.cmd_buf;
     VkBuffer src_buf = _sg.vk.stage.copy.buf;
     VkImage dst_img = img->vk.img;
 
@@ -18895,7 +18898,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(const _sg_image_t* img, const
     copy_info.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2;
     copy_info.srcBuffer = src_buf;
     copy_info.dstImage = dst_img;
-    copy_info.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL; // FIXME
+    copy_info.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     copy_info.regionCount = 1;
     copy_info.pRegions = &region;
     for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
@@ -18936,7 +18939,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(const _sg_image_t* img, const
                 SOKOL_ASSERT(bytes_to_copy <= _sg.vk.stage.copy.size);
                 _sg_vk_staging_memcpy(mem, src_ptr, bytes_to_copy);
                 src_ptr += bytes_to_copy;
-                _sg_vk_staging_copy_begin(cmd_buf);
+                VkCommandBuffer cmd_buf = _sg_vk_staging_copy_begin();
                 _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_STAGING);
 
                 region.imageOffset.y = (int32_t)(cur_row * block_dim);
@@ -20345,7 +20348,7 @@ _SOKOL_PRIVATE void _sg_vk_end_render_pass(const _sg_attachments_ptrs_t* atts) {
         VkImage present_image = _sg.vk.swapchain.resolve_image
             ? (VkImage)_sg.vk.swapchain.resolve_image
             : (VkImage)_sg.vk.swapchain.render_image;
-        _sg_vk_barrier_swapchain(present_image, _SG_VK_ACCESS_COLOR_ATTACHMENT, _SG_VK_ACCESS_PRESENT);
+        _sg_vk_swapchain_barrier(present_image, _SG_VK_ACCESS_COLOR_ATTACHMENT, _SG_VK_ACCESS_PRESENT);
         _sg_clear(&_sg.vk.swapchain, sizeof(_sg.vk.swapchain));
     } else {
         SOKOL_ASSERT(false && "FIXME");
