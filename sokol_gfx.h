@@ -4418,6 +4418,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_PIPELINE_LAYOUT_FAILED, "vulkan: vkCreatePipelineLayout() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_GRAPHICS_PIPELINE_FAILED, "vulkan: vkCreateGraphicsPipeline() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_IMAGE_VIEW_FAILED, "vulkan: vkCreateImageView() failed!") \
+    _SG_LOGITEM_XMACRO(VULKAN_CREATE_SAMPLER_FAILED, "vulkan: vkCreateSampler() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_WAIT_FOR_FENCE_FAILED, "vulkan: vkWaitForFence() failed!") \
     _SG_LOGITEM_XMACRO(IDENTICAL_COMMIT_LISTENER, "attempting to add identical commit listener") \
     _SG_LOGITEM_XMACRO(COMMIT_LISTENER_ARRAY_FULL, "commit listener array full") \
@@ -6848,6 +6849,9 @@ typedef _sg_vk_image_t _sg_image_t;
 typedef struct _sg_sampler_s {
     _sg_slot_t slot;
     _sg_sampler_common_t cmn;
+    struct {
+        VkSampler smp;
+    } vk;
 } _sg_vk_sampler_t;
 typedef _sg_vk_sampler_t _sg_sampler_t;
 
@@ -19074,6 +19078,11 @@ _SOKOL_PRIVATE void _sg_vk_image_view_destructor(void* obj) {
     vkDestroyImageView(_sg.vk.dev, (VkImageView)obj, 0);
 }
 
+_SOKOL_PRIVATE void _sg_vk_sampler_destructor(void* obj) {
+    SOKOL_ASSERT(_sg.vk.dev && obj);
+    vkDestroySampler(_sg.vk.dev, (VkSampler)obj, 0);
+}
+
 _SOKOL_PRIVATE void _sg_vk_shader_module_destructor(void* obj) {
     SOKOL_ASSERT(_sg.vk.dev && obj);
     vkDestroyShaderModule(_sg.vk.dev, (VkShaderModule)obj, 0);
@@ -19389,6 +19398,41 @@ _SOKOL_PRIVATE VkImageViewType _sg_vk_attachment_image_view_type(sg_image_type t
         case SG_IMAGETYPE_3D: return VK_IMAGE_VIEW_TYPE_2D; // not a bug
         case SG_IMAGETYPE_ARRAY: return VK_IMAGE_VIEW_TYPE_2D_ARRAY;
         default: SOKOL_UNREACHABLE; return VK_IMAGE_VIEW_TYPE_2D;
+    }
+}
+
+_SOKOL_PRIVATE VkFilter _sg_vk_sampler_minmag_filter(sg_filter f) {
+    switch (f) {
+        case SG_FILTER_NEAREST: return VK_FILTER_NEAREST;
+        case SG_FILTER_LINEAR: return VK_FILTER_LINEAR;
+        default: SOKOL_UNREACHABLE; return VK_FILTER_NEAREST;
+    }
+}
+
+_SOKOL_PRIVATE VkSamplerMipmapMode _sg_vk_sampler_mipmap_mode(sg_filter f) {
+    switch (f) {
+        case SG_FILTER_NEAREST: return VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        case SG_FILTER_LINEAR: return VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        default: SOKOL_UNREACHABLE; return VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    }
+}
+
+_SOKOL_PRIVATE VkSamplerAddressMode _sg_vk_sampler_address_mode(sg_wrap w) {
+    switch (w) {
+        case SG_WRAP_REPEAT: return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        case SG_WRAP_CLAMP_TO_EDGE: return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        case SG_WRAP_CLAMP_TO_BORDER: return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+        case SG_WRAP_MIRRORED_REPEAT: return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        default: SOKOL_UNREACHABLE; return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    }
+}
+
+_SOKOL_PRIVATE VkBorderColor _sg_vk_sampler_border_color(sg_border_color c) {
+    switch (c) {
+        case SG_BORDERCOLOR_TRANSPARENT_BLACK: return VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
+        case SG_BORDERCOLOR_OPAQUE_BLACK: return VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+        case SG_BORDERCOLOR_OPAQUE_WHITE: return VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+        default: SOKOL_UNREACHABLE; return VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
     }
 }
 
@@ -19756,13 +19800,47 @@ _SOKOL_PRIVATE void _sg_vk_discard_image(_sg_image_t* img) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_vk_create_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
     SOKOL_ASSERT(smp && desc);
-    SOKOL_ASSERT(false && "FIXME");
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(0 == smp->vk.smp);
+    // FIXME: injection
+
+    VkSamplerCreateInfo create_info;
+    _sg_clear(&create_info, sizeof(create_info));
+    create_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    create_info.magFilter = _sg_vk_sampler_minmag_filter(desc->mag_filter);
+    create_info.minFilter = _sg_vk_sampler_minmag_filter(desc->min_filter);
+    create_info.mipmapMode = _sg_vk_sampler_mipmap_mode(desc->mipmap_filter);
+    create_info.addressModeU = _sg_vk_sampler_address_mode(desc->wrap_u);
+    create_info.addressModeV = _sg_vk_sampler_address_mode(desc->wrap_v);
+    create_info.addressModeW = _sg_vk_sampler_address_mode(desc->wrap_w);
+    create_info.mipLodBias = 0.0f;
+    if (desc->max_anisotropy > 1) {
+        create_info.anisotropyEnable = VK_TRUE;
+        create_info.maxAnisotropy = (float)desc->max_anisotropy;
+    }
+    if (desc->compare != SG_COMPAREFUNC_NEVER) {
+        create_info.compareEnable = VK_TRUE;
+        create_info.compareOp = _sg_vk_compare_op(desc->compare);
+    }
+    create_info.minLod = desc->min_lod;
+    create_info.maxLod = desc->max_lod;
+    create_info.borderColor = _sg_vk_sampler_border_color(desc->border_color);
+    VkResult res = vkCreateSampler(_sg.vk.dev, &create_info, 0, &smp->vk.smp);
+    if (res != VK_SUCCESS) {
+        _SG_ERROR(VULKAN_CREATE_SAMPLER_FAILED);
+        return SG_RESOURCESTATE_FAILED;
+    }
+    SOKOL_ASSERT(smp->vk.smp);
+    _sg_vk_set_object_label(VK_OBJECT_TYPE_SAMPLER, (uint64_t)smp->vk.smp, desc->label);
     return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_vk_discard_sampler(_sg_sampler_t* smp) {
     SOKOL_ASSERT(smp);
-    SOKOL_ASSERT(false && "FIXME");
+    if (smp->vk.smp) {
+        _sg_vk_delete_queue_add(_sg_vk_sampler_destructor, (void*)smp->vk.smp);
+        smp->vk.smp = 0;
+    }
 }
 
 _SOKOL_PRIVATE _sg_vk_shader_func_t _sg_vk_create_shader_func(const sg_shader_function* func, const char* label) {
