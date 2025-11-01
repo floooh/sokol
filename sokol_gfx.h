@@ -18492,78 +18492,28 @@ _SOKOL_PRIVATE VkImageLayout _sg_vk_image_layout(_sg_vk_access_t access) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_vk_barrier_swapchain_into_color_attachment(VkImage vk_img) {
+_SOKOL_PRIVATE void _sg_vk_barrier_swapchain(VkImage vkimg, _sg_vk_access_t old_access, _sg_vk_access_t new_access) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
     VkImageMemoryBarrier2 barrier;
     _sg_clear(&barrier, sizeof(barrier));
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    barrier.srcStageMask = _sg_vk_src_stage_mask(_SG_VK_ACCESS_NONE);
-    barrier.srcAccessMask = _sg_vk_access_mask(_SG_VK_ACCESS_NONE);
-    barrier.oldLayout = _sg_vk_image_layout(_SG_VK_ACCESS_NONE);
-    barrier.dstStageMask = _sg_vk_dst_stage_mask(_SG_VK_ACCESS_COLOR_ATTACHMENT);
-    barrier.dstAccessMask = _sg_vk_access_mask(_SG_VK_ACCESS_COLOR_ATTACHMENT);
-    barrier.newLayout = _sg_vk_image_layout(_SG_VK_ACCESS_COLOR_ATTACHMENT);
+    barrier.srcStageMask = _sg_vk_src_stage_mask(old_access);
+    barrier.srcAccessMask = _sg_vk_access_mask(old_access);
+    barrier.oldLayout = _sg_vk_image_layout(old_access);
+    barrier.dstStageMask = _sg_vk_dst_stage_mask(new_access);
+    barrier.dstAccessMask = _sg_vk_access_mask(new_access);
+    barrier.newLayout = _sg_vk_image_layout(new_access);
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = vk_img;
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    barrier.subresourceRange.levelCount = 1;
-    barrier.subresourceRange.layerCount = 1;
-    VkDependencyInfo dep_info;
-    _sg_clear(&dep_info, sizeof(dep_info));
-    dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dep_info.imageMemoryBarrierCount = 1;
-    dep_info.pImageMemoryBarriers = &barrier;
-    vkCmdPipelineBarrier2(_sg.vk.frame.cmd_buf, &dep_info);
-}
-
-_SOKOL_PRIVATE void _sg_vk_barrier_swapchain_into_depth_stencil_attachment(VkImage vk_img, bool has_stencil) {
-    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
-    _sg_vk_access_t into_access = _SG_VK_ACCESS_DEPTH_ATTACHMENT;
-    if (has_stencil) {
-        into_access |= _SG_VK_ACCESS_STENCIL_ATTACHMENT;
+    barrier.image = vkimg;
+    if (0 != (new_access & (_SG_VK_ACCESS_DEPTH_ATTACHMENT|_SG_VK_ACCESS_STENCIL_ATTACHMENT))) {
+        barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_DEPTH_BIT;
+        if (0 != (new_access & _SG_VK_ACCESS_STENCIL_ATTACHMENT)) {
+            barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+        }
+    } else {
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     }
-    VkImageMemoryBarrier2 barrier;
-    _sg_clear(&barrier, sizeof(barrier));
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    barrier.srcStageMask = _sg_vk_src_stage_mask(_SG_VK_ACCESS_NONE);
-    barrier.srcAccessMask = _sg_vk_access_mask(_SG_VK_ACCESS_NONE);
-    barrier.oldLayout = _sg_vk_image_layout(_SG_VK_ACCESS_NONE);
-    barrier.dstStageMask = _sg_vk_dst_stage_mask(into_access);
-    barrier.dstAccessMask = _sg_vk_access_mask(into_access);
-    barrier.newLayout = _sg_vk_image_layout(into_access);
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = vk_img;
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-    if (has_stencil) {
-        barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
-    }
-    barrier.subresourceRange.levelCount = 1;
-    barrier.subresourceRange.layerCount = 1;
-    VkDependencyInfo dep_info;
-    _sg_clear(&dep_info, sizeof(dep_info));
-    dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dep_info.imageMemoryBarrierCount = 1;
-    dep_info.pImageMemoryBarriers = &barrier;
-    vkCmdPipelineBarrier2(_sg.vk.frame.cmd_buf, &dep_info);
-}
-
-_SOKOL_PRIVATE void _sg_vk_barrier_swapchain_into_present(VkImage vk_img) {
-    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
-    VkImageMemoryBarrier2 barrier;
-    _sg_clear(&barrier, sizeof(barrier));
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    barrier.srcStageMask = _sg_vk_src_stage_mask(_SG_VK_ACCESS_COLOR_ATTACHMENT);
-    barrier.srcAccessMask = _sg_vk_access_mask(_SG_VK_ACCESS_COLOR_ATTACHMENT);
-    barrier.oldLayout = _sg_vk_image_layout(_SG_VK_ACCESS_COLOR_ATTACHMENT);
-    barrier.dstStageMask = _sg_vk_dst_stage_mask(_SG_VK_ACCESS_PRESENT);
-    barrier.dstAccessMask = _sg_vk_access_mask(_SG_VK_ACCESS_PRESENT);
-    barrier.newLayout = _sg_vk_image_layout(_SG_VK_ACCESS_PRESENT);
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = vk_img;
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     barrier.subresourceRange.levelCount = 1;
     barrier.subresourceRange.layerCount = 1;
     VkDependencyInfo dep_info;
@@ -20303,9 +20253,9 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(const sg_pass* pass, const _sg_atta
         VkImage vk_resolve_image = (VkImage)_sg.vk.swapchain.resolve_image;
         VkImageView vk_color_view = (VkImageView)_sg.vk.swapchain.render_view;
         VkImageView vk_resolve_view = (VkImageView)_sg.vk.swapchain.resolve_view;
-        _sg_vk_barrier_swapchain_into_color_attachment(vk_color_image);
+        _sg_vk_barrier_swapchain(vk_color_image, _SG_VK_ACCESS_NONE, _SG_VK_ACCESS_COLOR_ATTACHMENT);
         if (vk_resolve_image) {
-            _sg_vk_barrier_swapchain_into_color_attachment(vk_resolve_image);
+            _sg_vk_barrier_swapchain(vk_resolve_image, _SG_VK_ACCESS_NONE, _SG_VK_ACCESS_RESOLVE_ATTACHMENT);
         }
         _sg_vk_init_color_attachment_info(&color_att_infos[0], &action->colors[0], vk_color_view, vk_resolve_view);
         render_info.colorAttachmentCount = 1;
@@ -20315,7 +20265,11 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(const sg_pass* pass, const _sg_atta
             VkImage vk_ds_image = (VkImage)_sg.vk.swapchain.depth_stencil_image;
             VkImageView vk_ds_view = (VkImageView)_sg.vk.swapchain.depth_stencil_view;
             const bool has_stencil = _sg_is_depth_stencil_format(pass->swapchain.depth_format);
-            _sg_vk_barrier_swapchain_into_depth_stencil_attachment(vk_ds_image, has_stencil);
+            _sg_vk_access_t dst_access = _SG_VK_ACCESS_DEPTH_ATTACHMENT;
+            if (has_stencil) {
+                dst_access |= _SG_VK_ACCESS_STENCIL_ATTACHMENT;
+            }
+            _sg_vk_barrier_swapchain(vk_ds_image, _SG_VK_ACCESS_NONE, dst_access);
             _sg_vk_init_depth_attachment_info(&depth_att_info, &action->depth, vk_ds_view);
             render_info.pDepthAttachment = &depth_att_info;
             if (has_stencil) {
@@ -20356,7 +20310,7 @@ _SOKOL_PRIVATE void _sg_vk_end_render_pass(const _sg_attachments_ptrs_t* atts) {
         VkImage present_image = _sg.vk.swapchain.resolve_image
             ? (VkImage)_sg.vk.swapchain.resolve_image
             : (VkImage)_sg.vk.swapchain.render_image;
-        _sg_vk_barrier_swapchain_into_present(present_image);
+        _sg_vk_barrier_swapchain(present_image, _SG_VK_ACCESS_COLOR_ATTACHMENT, _SG_VK_ACCESS_PRESENT);
         _sg_clear(&_sg.vk.swapchain, sizeof(_sg.vk.swapchain));
     } else {
         SOKOL_ASSERT(false && "FIXME");
