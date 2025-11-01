@@ -6806,6 +6806,23 @@ typedef struct {
     _sg_vk_delete_queue_item_t* items;
 } _sg_vk_delete_queue_t;
 
+typedef enum {
+    _SG_VK_ACCESS_NONE = (0), // initial state for new resources
+    _SG_VK_ACCESS_STAGING = (1<<0),
+    _SG_VK_ACCESS_VERTEXBUFFER = (1<<1),
+    _SG_VK_ACCESS_INDEXBUFFER = (1<<2),
+    _SG_VK_ACCESS_STORAGEBUFFER_RO = (1<<3),
+    _SG_VK_ACCESS_STORAGEBUFFER_RW = (1<<4),
+    _SG_VK_ACCESS_TEXTURE = (1<<5),
+    _SG_VK_ACCESS_STORAGEIMAGE = (1<<6),
+    _SG_VK_ACCESS_COLOR_ATTACHMENT = (1<<7),
+    _SG_VK_ACCESS_RESOLVE_ATTACHMENT = (1<<8),
+    _SG_VK_ACCESS_DEPTH_ATTACHMENT = (1<<9),
+    _SG_VK_ACCESS_STENCIL_ATTACHMENT = (1<<10),
+    _SG_VK_ACCESS_PRESENT = (1<<11),
+} _sg_vk_access_bits_t;
+typedef int _sg_vk_access_t;
+
 typedef struct _sg_buffer_s {
     _sg_slot_t slot;
     _sg_buffer_common_t cmn;
@@ -6822,7 +6839,7 @@ typedef struct _sg_image_s {
     struct {
         VkImage img;
         VkDeviceMemory mem;
-        VkImageLayout cur_layout;
+        _sg_vk_access_t cur_access;
     } vk;
 } _sg_vk_image_t;
 typedef _sg_vk_image_t _sg_image_t;
@@ -18363,14 +18380,71 @@ _SOKOL_PRIVATE void _sg_vk_set_object_label(VkObjectType obj_type, uint64_t obj_
     }
 }
 
+// return pipeline stage where last gpu-write access happened
+_SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_src_stage_mask(_sg_vk_access_t old_access) {
+    const int top_of_pipe_bits =
+        _SG_VK_ACCESS_VERTEXBUFFER |
+        _SG_VK_ACCESS_INDEXBUFFER |
+        _SG_VK_ACCESS_STORAGEBUFFER_RO |
+        _SG_VK_ACCESS_TEXTURE;
+    const int compute_shader_bits =
+        _SG_VK_ACCESS_STORAGEIMAGE |
+        _SG_VK_ACCESS_STORAGEBUFFER_RW;
+    if (old_access == _SG_VK_ACCESS_NONE) {
+        return VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+    }
+    if (0 != (old_access & _SG_VK_ACCESS_STAGING)) {
+        SOKOL_ASSERT(0 == (old_access & ~_SG_VK_ACCESS_STAGING));
+        return VK_PIPELINE_STAGE_2_COPY_BIT;
+    }
+    if (0 != (old_access & top_of_pipe_bits)) {
+        SOKOL_ASSERT(0 == (old_access & ~top_of_pipe_bits));
+        return VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+    }
+    if (0 != (old_access & compute_shader_bits)) {
+        SOKOL_ASSERT(0 == (old_access & ~compute_shader_bits));
+        return VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+    }
+    if (0 != (old_access & _SG_VK_ACCESS_COLOR_ATTACHMENT)) {
+        SOKOL_ASSERT(0 == (old_access & ~_SG_VK_ACCESS_COLOR_ATTACHMENT));
+        return VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    }
+    SOKOL_UNREACHABLE;
+    return VK_PIPELINE_STAGE_2_NONE;
+}
+
+// return pipeline stage which will read from the resource
+_SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_dst_stage_mask(_sg_vk_access_t new_access) {
+    const int color_attachment_output_bits =
+        _SG_VK_ACCESS_COLOR_ATTACHMENT |
+        _SG_VK_ACCESS_RESOLVE_ATTACHMENT;
+    const int depth_stencil_attachment_output_bits =
+        _SG_VK_ACCESS_DEPTH_ATTACHMENT |
+        _SG_VK_ACCESS_STENCIL_ATTACHMENT;
+    if (0 != (new_access & color_attachment_output_bits)) {
+        SOKOL_ASSERT(0 == (new_access & ~color_attachment_output_bits));
+        return VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    }
+    if (0 != (new_access & depth_stencil_attachment_output_bits)) {
+        SOKOL_ASSERT(0 == (new_access & ~depth_stencil_attachment_output_bits));
+        return VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+    }
+    if (0 != (new_access & _SG_VK_ACCESS_PRESENT)) {
+        SOKOL_ASSERT(0 == (new_access & ~_SG_VK_ACCESS_PRESENT));
+        return VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+    }
+    SOKOL_UNREACHABLE;
+    return VK_PIPELINE_STAGE_2_NONE;
+}
+
 _SOKOL_PRIVATE void _sg_vk_barrier_swapchain_into_color_attachment(VkImage vk_img) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
     VkImageMemoryBarrier2 barrier;
     _sg_clear(&barrier, sizeof(barrier));
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    barrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+    barrier.srcStageMask = _sg_vk_src_stage_mask(_SG_VK_ACCESS_NONE);
     barrier.srcAccessMask = 0;
-    barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    barrier.dstStageMask = _sg_vk_dst_stage_mask(_SG_VK_ACCESS_COLOR_ATTACHMENT);
     barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
     barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -18390,12 +18464,16 @@ _SOKOL_PRIVATE void _sg_vk_barrier_swapchain_into_color_attachment(VkImage vk_im
 
 _SOKOL_PRIVATE void _sg_vk_barrier_swapchain_into_depth_stencil_attachment(VkImage vk_img, bool has_stencil) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+    _sg_vk_access_t into_access = _SG_VK_ACCESS_DEPTH_ATTACHMENT;
+    if (has_stencil) {
+        into_access |= _SG_VK_ACCESS_STENCIL_ATTACHMENT;
+    }
     VkImageMemoryBarrier2 barrier;
     _sg_clear(&barrier, sizeof(barrier));
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    barrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+    barrier.srcStageMask = _sg_vk_src_stage_mask(_SG_VK_ACCESS_NONE);
     barrier.srcAccessMask = 0;
-    barrier.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+    barrier.dstStageMask = _sg_vk_dst_stage_mask(into_access);
     barrier.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
     barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     barrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -18421,9 +18499,9 @@ _SOKOL_PRIVATE void _sg_vk_barrier_swapchain_into_present(VkImage vk_img) {
     VkImageMemoryBarrier2 barrier;
     _sg_clear(&barrier, sizeof(barrier));
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    barrier.srcStageMask = _sg_vk_src_stage_mask(_SG_VK_ACCESS_COLOR_ATTACHMENT);
     barrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-    barrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+    barrier.dstStageMask = _sg_vk_dst_stage_mask(_SG_VK_ACCESS_PRESENT);
     barrier.dstAccessMask = 0;
     barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
@@ -18743,7 +18821,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(const _sg_image_t* img, const
     SOKOL_ASSERT(_sg.vk.stage.copy.mem);
     SOKOL_ASSERT(_sg.vk.stage.copy.buf);
     SOKOL_ASSERT(img && img->vk.img);
-    SOKOL_ASSERT(img->vk.cur_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    SOKOL_ASSERT(img->vk.cur_access == _SG_VK_ACCESS_STAGING);
     const uint32_t block_dim = (uint32_t)_sg_block_dim(img->cmn.pixel_format);
 
     // an inital wait is only needed for updating existing resources but not when populating a new resource
@@ -18776,7 +18854,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(const _sg_image_t* img, const
     copy_info.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2;
     copy_info.srcBuffer = src_buf;
     copy_info.dstImage = dst_img;
-    copy_info.dstImageLayout = img->vk.cur_layout;
+    copy_info.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL; // FIXME
     copy_info.regionCount = 1;
     copy_info.pRegions = &region;
     for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
@@ -19544,7 +19622,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_image(_sg_image_t* img, const sg_
     VkResult res;
     // FIXME: injected images
 
-    img->vk.cur_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    img->vk.cur_access = _SG_VK_ACCESS_NONE;
 
     VkImageCreateInfo create_info;
     _sg_clear(&create_info, sizeof(create_info));
@@ -19566,7 +19644,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_image(_sg_image_t* img, const sg_
     create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
     create_info.usage = _sg_vk_image_usage(&img->cmn.usage);
     create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    create_info.initialLayout = img->vk.cur_layout;
+    create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     res = vkCreateImage(_sg.vk.dev, &create_info, 0, &img->vk.img);
     if (res != VK_SUCCESS) {
         _SG_ERROR(VULKAN_CREATE_IMAGE_FAILED);
