@@ -4417,6 +4417,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_DESCRIPTOR_SET_LAYOUT_FAILED, "vulkan: vkCreateDescriptorSetLayout() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_PIPELINE_LAYOUT_FAILED, "vulkan: vkCreatePipelineLayout() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_GRAPHICS_PIPELINE_FAILED, "vulkan: vkCreateGraphicsPipeline() failed!") \
+    _SG_LOGITEM_XMACRO(VULKAN_CREATE_IMAGE_VIEW_FAILED, "vulkan: vkCreateImageView() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_WAIT_FOR_FENCE_FAILED, "vulkan: vkWaitForFence() failed!") \
     _SG_LOGITEM_XMACRO(IDENTICAL_COMMIT_LISTENER, "attempting to add identical commit listener") \
     _SG_LOGITEM_XMACRO(COMMIT_LISTENER_ARRAY_FULL, "commit listener array full") \
@@ -6885,6 +6886,9 @@ typedef _sg_vk_pipeline_t _sg_pipeline_t;
 typedef struct _sg_view_s {
     _sg_slot_t slot;
     _sg_view_common_t cmn;
+    struct {
+        VkImageView img_view;
+    } vk;
 } _sg_vk_view_t;
 typedef _sg_vk_view_t _sg_view_t;
 
@@ -16364,7 +16368,7 @@ _SOKOL_PRIVATE WGPUTextureViewDimension _sg_wgpu_attachment_view_dimension(sg_im
     switch (t) {
         case SG_IMAGETYPE_2D:       return WGPUTextureViewDimension_2D;
         case SG_IMAGETYPE_CUBE:     return WGPUTextureViewDimension_2DArray; // not a bug
-        case SG_IMAGETYPE_3D:       return WGPUTextureViewDimension_2D;
+        case SG_IMAGETYPE_3D:       return WGPUTextureViewDimension_2D; // not a bug
         case SG_IMAGETYPE_ARRAY:    return WGPUTextureViewDimension_2DArray;
         default: SOKOL_UNREACHABLE; return WGPUTextureViewDimension_Force32;
     }
@@ -19065,6 +19069,11 @@ _SOKOL_PRIVATE void _sg_vk_image_destructor(void* obj) {
     vkDestroyImage(_sg.vk.dev, (VkImage)obj, 0);
 }
 
+_SOKOL_PRIVATE void _sg_vk_image_view_destructor(void* obj) {
+    SOKOL_ASSERT(_sg.vk.dev && obj);
+    vkDestroyImageView(_sg.vk.dev, (VkImageView)obj, 0);
+}
+
 _SOKOL_PRIVATE void _sg_vk_shader_module_destructor(void* obj) {
     SOKOL_ASSERT(_sg.vk.dev && obj);
     vkDestroyShaderModule(_sg.vk.dev, (VkShaderModule)obj, 0);
@@ -19361,6 +19370,26 @@ _SOKOL_PRIVATE VkAttachmentStoreOp _sg_vk_store_op(sg_store_action a) {
 
 _SOKOL_PRIVATE VkIndexType _sg_vk_index_type(sg_index_type t) {
     return (t == SG_INDEXTYPE_UINT16) ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+}
+
+_SOKOL_PRIVATE VkImageViewType _sg_vk_texture_image_view_type(sg_image_type t) {
+    switch (t) {
+        case SG_IMAGETYPE_2D: return VK_IMAGE_VIEW_TYPE_2D;
+        case SG_IMAGETYPE_CUBE: return VK_IMAGE_VIEW_TYPE_CUBE;
+        case SG_IMAGETYPE_3D: return VK_IMAGE_VIEW_TYPE_3D;
+        case SG_IMAGETYPE_ARRAY: return VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+        default: SOKOL_UNREACHABLE; return VK_IMAGE_VIEW_TYPE_2D;
+    }
+}
+
+_SOKOL_PRIVATE VkImageViewType _sg_vk_attachment_image_view_type(sg_image_type t) {
+    switch (t) {
+        case SG_IMAGETYPE_2D: return VK_IMAGE_VIEW_TYPE_2D;
+        case SG_IMAGETYPE_CUBE: return VK_IMAGE_VIEW_TYPE_2D_ARRAY; // not a bug
+        case SG_IMAGETYPE_3D: return VK_IMAGE_VIEW_TYPE_2D; // not a bug
+        case SG_IMAGETYPE_ARRAY: return VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+        default: SOKOL_UNREACHABLE; return VK_IMAGE_VIEW_TYPE_2D;
+    }
 }
 
 _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
@@ -19672,7 +19701,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_image(_sg_image_t* img, const sg_
     VkImageCreateInfo create_info;
     _sg_clear(&create_info, sizeof(create_info));
     create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    create_info.flags = 0; // FIXME?
+    create_info.flags = 0; // FIXME? (e.g. VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT to create partial 3D texture views?)
     create_info.imageType = _sg_vk_image_type(img->cmn.type);
     create_info.format = _sg_vk_format(desc->pixel_format);
     create_info.extent.width = (uint32_t)img->cmn.width;
@@ -20170,13 +20199,55 @@ _SOKOL_PRIVATE void _sg_vk_discard_pipeline(_sg_pipeline_t* pip) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_vk_create_view(_sg_view_t* view, const sg_view_desc* desc) {
     SOKOL_ASSERT(view && desc);
-    SOKOL_ASSERT(false && "FIXME");
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(0 == view->vk.img_view);
+    VkResult res;
+    if (view->cmn.type != SG_VIEWTYPE_STORAGEBUFFER) {
+        const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+        SOKOL_ASSERT(img->vk.img);
+        SOKOL_ASSERT(view->cmn.img.mip_level_count >= 1);
+        SOKOL_ASSERT(view->cmn.img.slice_count >= 1);
+        VkImageViewCreateInfo create_info;
+        _sg_clear(&create_info, sizeof(create_info));
+        create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        create_info.image = img->vk.img;
+        if (view->cmn.type == SG_VIEWTYPE_TEXTURE) {
+            create_info.viewType = _sg_vk_texture_image_view_type(img->cmn.type);
+        } else {
+            create_info.viewType = _sg_vk_attachment_image_view_type(img->cmn.type);
+        }
+        create_info.format = _sg_vk_format(img->cmn.pixel_format);
+        if (view->cmn.type == SG_VIEWTYPE_DEPTHSTENCILATTACHMENT) {
+            create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            if (_sg_is_depth_stencil_format(img->cmn.pixel_format)) {
+                create_info.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+            }
+        } else if (_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format)) {
+            create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        } else {
+            create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        }
+        create_info.subresourceRange.baseMipLevel = (uint32_t)view->cmn.img.mip_level;
+        create_info.subresourceRange.levelCount = (uint32_t)view->cmn.img.mip_level_count;
+        create_info.subresourceRange.baseArrayLayer = (uint32_t)view->cmn.img.slice;
+        create_info.subresourceRange.layerCount = (uint32_t)view->cmn.img.slice_count;
+        res = vkCreateImageView(_sg.vk.dev, &create_info, 0, &view->vk.img_view);
+        if (res != VK_SUCCESS) {
+            _SG_ERROR(VULKAN_CREATE_IMAGE_VIEW_FAILED);
+            return SG_RESOURCESTATE_FAILED;
+        }
+        SOKOL_ASSERT(view->vk.img_view);
+        _sg_vk_set_object_label(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)view->vk.img_view, desc->label);
+    }
     return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_vk_discard_view(_sg_view_t* view) {
     SOKOL_ASSERT(view);
-    SOKOL_ASSERT(false && "FIXME");
+    if (view->vk.img_view) {
+        _sg_vk_delete_queue_add(_sg_vk_image_view_destructor, (void*)view->vk.img_view);
+        view->vk.img_view = 0;
+    }
 }
 
 _SOKOL_PRIVATE void _sg_vk_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
