@@ -18437,15 +18437,45 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_dst_stage_mask(_sg_vk_access_t new_a
     return VK_PIPELINE_STAGE_2_NONE;
 }
 
+_SOKOL_PRIVATE VkAccessFlags2 _sg_vk_access_mask(_sg_vk_access_t access) {
+    VkAccessFlags2 f = VK_ACCESS_2_NONE;
+    if (0 != (access & _SG_VK_ACCESS_STAGING)) {
+        f |= VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    }
+    if (0 != (access & _SG_VK_ACCESS_VERTEXBUFFER)) {
+        f |= VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
+    }
+    if (0 != (access & _SG_VK_ACCESS_INDEXBUFFER)) {
+        f |= VK_ACCESS_2_INDEX_READ_BIT;
+    }
+    const int shader_read_bits = _SG_VK_ACCESS_STORAGEBUFFER_RO | _SG_VK_ACCESS_TEXTURE;
+    if (0 != (access & shader_read_bits)) {
+        f |= VK_ACCESS_2_SHADER_READ_BIT;
+    }
+    const int shader_write_bits = _SG_VK_ACCESS_STORAGEBUFFER_RW | _SG_VK_ACCESS_STORAGEIMAGE;
+    if (0 != (access & shader_write_bits)) {
+        f |= VK_ACCESS_2_SHADER_WRITE_BIT;
+    }
+    const int color_write_bits = _SG_VK_ACCESS_COLOR_ATTACHMENT | _SG_VK_ACCESS_RESOLVE_ATTACHMENT;
+    if (0 != (access & color_write_bits)) {
+        f |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    }
+    const int ds_rw_bits = _SG_VK_ACCESS_DEPTH_ATTACHMENT | _SG_VK_ACCESS_STENCIL_ATTACHMENT;
+    if (0 != (access & ds_rw_bits)) {
+        f |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    }
+    return f;
+}
+
 _SOKOL_PRIVATE void _sg_vk_barrier_swapchain_into_color_attachment(VkImage vk_img) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
     VkImageMemoryBarrier2 barrier;
     _sg_clear(&barrier, sizeof(barrier));
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrier.srcStageMask = _sg_vk_src_stage_mask(_SG_VK_ACCESS_NONE);
-    barrier.srcAccessMask = 0;
+    barrier.srcAccessMask = _sg_vk_access_mask(_SG_VK_ACCESS_NONE);
     barrier.dstStageMask = _sg_vk_dst_stage_mask(_SG_VK_ACCESS_COLOR_ATTACHMENT);
-    barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    barrier.dstAccessMask = _sg_vk_access_mask(_SG_VK_ACCESS_COLOR_ATTACHMENT);
     barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -18472,9 +18502,9 @@ _SOKOL_PRIVATE void _sg_vk_barrier_swapchain_into_depth_stencil_attachment(VkIma
     _sg_clear(&barrier, sizeof(barrier));
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrier.srcStageMask = _sg_vk_src_stage_mask(_SG_VK_ACCESS_NONE);
-    barrier.srcAccessMask = 0;
+    barrier.srcAccessMask = _sg_vk_access_mask(_SG_VK_ACCESS_NONE);
     barrier.dstStageMask = _sg_vk_dst_stage_mask(into_access);
-    barrier.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+    barrier.dstAccessMask = _sg_vk_access_mask(into_access);
     barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     barrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -18500,9 +18530,9 @@ _SOKOL_PRIVATE void _sg_vk_barrier_swapchain_into_present(VkImage vk_img) {
     _sg_clear(&barrier, sizeof(barrier));
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrier.srcStageMask = _sg_vk_src_stage_mask(_SG_VK_ACCESS_COLOR_ATTACHMENT);
-    barrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    barrier.srcAccessMask = _sg_vk_access_mask(_SG_VK_ACCESS_COLOR_ATTACHMENT);
     barrier.dstStageMask = _sg_vk_dst_stage_mask(_SG_VK_ACCESS_PRESENT);
-    barrier.dstAccessMask = 0;
+    barrier.dstAccessMask = _sg_vk_access_mask(_SG_VK_ACCESS_NONE);
     barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
