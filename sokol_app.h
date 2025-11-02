@@ -1798,7 +1798,10 @@ typedef struct sapp_allocator {
     _SAPP_LOGITEM_XMACRO(VULKAN_ENUMERATE_PHYSICAL_DEVICES_FAILED, "vulkan: vkEnumeratePhysicalDevices failed") \
     _SAPP_LOGITEM_XMACRO(VULKAN_NO_PHYSICAL_DEVICES_FOUND, "vulkan: vkEnumeratePhysicalDevices return no devices") \
     _SAPP_LOGITEM_XMACRO(VULKAN_NO_SUITABLE_PHYSICAL_DEVICE_FOUND, "vulkan: no suitable physical device found") \
-    _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_DEVICE_FAILED, "vulkan: vkCreateDevice failed") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_DEVICE_FAILED_EXTENSION_NOT_PRESENT, "vulkan: vkCreateDevice failed (extension not present)") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_DEVICE_FAILED_FEATURE_NOT_PRESENT, "vulkan: vkCreateDevice failed (feature not present)") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_DEVICE_FAILED_INITIALIZATION_FAILED, "vulkan: vkCreateDevice failed (initialization failed)") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_DEVICE_FAILED_OTHER, "vulkan: vkCreateDevice failed (other)") \
     _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_SURFACE_FAILED, "vulkan: vkCreate*SurfaceKHR failed") \
     _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_SWAPCHAIN_FAILED, "vulkan: vkCreateSwapchainKHR failed") \
     _SAPP_LOGITEM_XMACRO(VULKAN_SWAPCHAIN_CREATE_IMAGE_VIEW_FAILED, "vulkan: vkCreateImageView for swapchain image failed") \
@@ -4499,7 +4502,20 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
 
     VkResult res = vkCreateDevice(_sapp.vk.physical_device, &dev_create_info, 0, &_sapp.vk.device);
     if (res != VK_SUCCESS) {
-        _SAPP_PANIC(VULKAN_CREATE_DEVICE_FAILED);
+        switch (res) {
+            case VK_ERROR_EXTENSION_NOT_PRESENT:
+                _SAPP_PANIC(VULKAN_CREATE_DEVICE_FAILED_EXTENSION_NOT_PRESENT);
+                break;
+            case VK_ERROR_FEATURE_NOT_PRESENT:
+                _SAPP_PANIC(VULKAN_CREATE_DEVICE_FAILED_FEATURE_NOT_PRESENT);
+                break;
+            case VK_ERROR_INITIALIZATION_FAILED:
+                _SAPP_PANIC(VULKAN_CREATE_DEVICE_FAILED_INITIALIZATION_FAILED);
+                break;
+            default:
+                _SAPP_PANIC(VULKAN_CREATE_DEVICE_FAILED_OTHER);
+                break;
+        }
     }
     SOKOL_ASSERT(_sapp.vk.device);
 

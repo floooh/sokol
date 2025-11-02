@@ -18455,6 +18455,12 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_dst_stage_mask(_sg_vk_access_t new_a
         SOKOL_ASSERT(0 == (new_access & ~_SG_VK_ACCESS_STAGING));
         return VK_PIPELINE_STAGE_2_TRANSFER_BIT;
     }
+    if (0 != (new_access & _SG_VK_ACCESS_TEXTURE)) {
+        SOKOL_ASSERT(0 == (new_access & ~_SG_VK_ACCESS_TEXTURE));
+        return VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
+            | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
+            | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+    }
     if (0 != (new_access & color_attachment_output_bits)) {
         SOKOL_ASSERT(0 == (new_access & ~color_attachment_output_bits));
         return VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -18980,10 +18986,10 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_im
                 src_ptr += bytes_to_copy;
                 VkCommandBuffer cmd_buf = _sg_vk_staging_copy_begin();
                 _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_STAGING);
-
                 region.imageOffset.y = (int32_t)(cur_row * block_dim);
                 region.imageExtent.height = rows_to_copy * block_dim;
                 vkCmdCopyBufferToImage2(cmd_buf, &copy_info);
+                _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
 
                 _sg_vk_staging_copy_end(cmd_buf, _sg.vk.queue);
                 cur_row += rows_to_copy;
@@ -20833,8 +20839,15 @@ _SOKOL_PRIVATE bool _sg_vk_apply_bindings(_sg_bindings_ptrs_t* bnd) {
             vkCmdBindIndexBuffer(_sg.vk.frame.cmd_buf, vk_buf, vk_offset, vk_index_type);
         }
     }
+
+    // FIXME: need to handle memory barriers here?
+    // image- and buffer-barriers are not allowed inside render passes
+
     // bind views and samplers
-    return _sg_vk_bind_view_smp_descriptors(bnd, _sg.cur_pass.is_compute ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS);
+    const VkPipelineBindPoint pip_bind_point = _sg.cur_pass.is_compute
+        ? VK_PIPELINE_BIND_POINT_COMPUTE
+        : VK_PIPELINE_BIND_POINT_GRAPHICS;
+    return _sg_vk_bind_view_smp_descriptors(bnd, pip_bind_point);
 }
 
 _SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
