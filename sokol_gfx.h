@@ -4420,6 +4420,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_IMAGE_VIEW_FAILED, "vulkan: vkCreateImageView() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_SAMPLER_FAILED, "vulkan: vkCreateSampler() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_WAIT_FOR_FENCE_FAILED, "vulkan: vkWaitForFence() failed!") \
+    _SG_LOGITEM_XMACRO(VULKAN_UNIFORM_BUFFER_OVERFLOW, "vulkan: uniform buffer has overflown (increase sg_desc.uniform_buffer_size)") \
     _SG_LOGITEM_XMACRO(IDENTICAL_COMMIT_LISTENER, "attempting to add identical commit listener") \
     _SG_LOGITEM_XMACRO(COMMIT_LISTENER_ARRAY_FULL, "commit listener array full") \
     _SG_LOGITEM_XMACRO(TRACE_HOOKS_NOT_ENABLED, "sg_install_trace_hooks() called, but SOKOL_TRACE_HOOKS is not defined") \
@@ -4951,10 +4952,11 @@ typedef struct sg_desc {
     bool d3d11_shader_debugging;        // if true, HLSL shaders are compiled with D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION
     bool mtl_force_managed_storage_mode; // for debugging: use Metal managed storage mode for resources even with UMA
     bool mtl_use_command_buffer_with_retained_references;    // Metal: use a managed MTLCommandBuffer which ref-counts used resources
-    bool wgpu_disable_bindgroups_cache;  // set to true to disable the WebGPU backend BindGroup cache
-    int wgpu_bindgroups_cache_size;      // number of slots in the WebGPU bindgroup cache (must be 2^N)
-    int vk_copy_staging_size;           // Vulkan: size of staging buffer for immutable and dynamic resources (default: 4 MB)
-    int vk_stream_staging_size;         // Vulkan: size of per-frame staging buffer for updating streaming resources (default: 16 MB)
+    bool wgpu_disable_bindgroups_cache; // set to true to disable the WebGPU backend BindGroup cache
+    int wgpu_bindgroups_cache_size;     // number of slots in the WebGPU bindgroup cache (must be 2^N)
+    int vk_copy_staging_buffer_size;    // Vulkan: size of staging buffer for immutable and dynamic resources (default: 4 MB)
+    int vk_stream_staging_buffer_size;  // Vulkan: size of per-frame staging buffer for updating streaming resources (default: 16 MB)
+    int vk_descriptor_buffer_size;      // Vulkan: size of per-frame descriptor buffer for updating resource bindings (default: 4 MB)
     sg_allocator allocator;
     sg_logger logger; // optional log function override
     sg_environment environment;
@@ -5993,6 +5995,7 @@ enum {
     _SG_DEFAULT_WGPU_BINDGROUP_CACHE_SIZE = 1024,
     _SG_DEFAULT_VK_COPY_STAGING_SIZE = (4 * 1024 * 1024),
     _SG_DEFAULT_VK_STREAM_STAGING_SIZE = (16 * 1024 * 1025),
+    _SG_DEFAULT_VK_DESCRIPTOR_BUFFER_SIZE = (4 * 1024 * 1024),
     _SG_MAX_STORAGEBUFFER_BINDINGS_PER_STAGE = SG_MAX_VIEW_BINDSLOTS,
     _SG_MAX_STORAGEIMAGE_BINDINGS_PER_STAGE = SG_MAX_VIEW_BINDSLOTS,
     _SG_MAX_TEXTURE_BINDINGS_PER_STAGE = SG_MAX_VIEW_BINDSLOTS,
@@ -6900,11 +6903,13 @@ typedef struct _sg_view_s {
 typedef _sg_vk_view_t _sg_view_t;
 
 // a double-buffer cpu-write / gpu-read buffer
+#define _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT (0xFFFFFFFF)
 typedef struct {
-    uint32_t size;      // buffer size
-    uint32_t offset;    // current offset into buffer
-    VkBuffer cur_buf;   // currently mapped buffer
-    void* cur_mem_ptr;  // current pointer into currently mapped buffer
+    uint32_t size;          // buffer size
+    uint32_t align;         // required buffer offset alignemnt
+    uint32_t offset;        // current offset into buffer
+    VkBuffer cur_buf;       // currently mapped buffer
+    void* cur_mem_ptr;      // current pointer into currently mapped buffer
     struct {
         VkBuffer buf;
         VkDeviceMemory mem;
@@ -18722,7 +18727,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_init(void) {
     SOKOL_ASSERT(0 == _sg.vk.stage.copy.size);
     SOKOL_ASSERT(0 == _sg.vk.stage.copy.buf);
     SOKOL_ASSERT(0 == _sg.vk.stage.copy.mem);
-    SOKOL_ASSERT(_sg.desc.vk_copy_staging_size > 0);
+    SOKOL_ASSERT(_sg.desc.vk_copy_staging_buffer_size > 0);
 
     VkCommandPoolCreateInfo pool_create_info;
     _sg_clear(&pool_create_info, sizeof(pool_create_info));
@@ -18743,7 +18748,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_init(void) {
     SOKOL_ASSERT((res == VK_SUCCESS) && _sg.vk.stage.copy.cmd_buf);
     _sg_vk_set_object_label(VK_OBJECT_TYPE_COMMAND_BUFFER, (uint64_t)_sg.vk.stage.copy.cmd_buf, "copy-staging cmd buffer");
 
-    _sg.vk.stage.copy.size = (uint32_t) _sg.desc.vk_copy_staging_size;
+    _sg.vk.stage.copy.size = (uint32_t) _sg.desc.vk_copy_staging_buffer_size;
     VkBufferCreateInfo buf_create_info;
     _sg_clear(&buf_create_info, sizeof(buf_create_info));
     buf_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -18961,15 +18966,16 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_im
     }
 }
 
-_SOKOL_PRIVATE void _sg_vk_shared_buffer_init(_sg_vk_shared_buffer_t* shbuf, uint32_t size, VkBufferUsageFlags vk_usage, const char* label) {
+_SOKOL_PRIVATE void _sg_vk_shared_buffer_init(_sg_vk_shared_buffer_t* shbuf, uint32_t size, uint32_t align, VkBufferUsageFlags vk_usage, const char* label) {
     SOKOL_ASSERT(_sg.vk.dev);
-    SOKOL_ASSERT(shbuf && (size > 0) && (vk_usage != 0));
+    SOKOL_ASSERT(shbuf && (size > 0) && (align > 0) && (vk_usage != 0));
     SOKOL_ASSERT(0 == shbuf->size);
     SOKOL_ASSERT(0 == shbuf->offset);
     SOKOL_ASSERT(0 == shbuf->cur_buf);
     VkResult res;
 
-    shbuf->size = size;
+    shbuf->size = _sg_roundup_u32(size, align);
+    shbuf->align = align;
     for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         SOKOL_ASSERT(0 == shbuf->slots[i].buf);
         SOKOL_ASSERT(0 == shbuf->slots[i].mem);
@@ -19044,10 +19050,24 @@ _SOKOL_PRIVATE void _sg_vk_shared_buffer_before_submit(_sg_vk_shared_buffer_t* s
     shbuf->cur_mem_ptr = 0;
 }
 
+_SOKOL_PRIVATE uint32_t _sg_vk_shared_buffer_memcpy(_sg_vk_shared_buffer_t* shbuf, const void* ptr, uint32_t num_bytes) {
+    SOKOL_ASSERT(shbuf && ptr && (num_bytes > 0));
+    SOKOL_ASSERT(shbuf->cur_mem_ptr);
+    if ((shbuf->offset + num_bytes) > shbuf->size) {
+        return _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT;
+    }
+    SOKOL_ASSERT((shbuf->offset & (shbuf->align - 1)) == 0);
+    const uint32_t offset = shbuf->offset;
+    memcpy(shbuf->cur_mem_ptr + offset, ptr, num_bytes);
+    shbuf->offset = _sg_roundup_u32(shbuf->offset + num_bytes, shbuf->align);
+    return offset;
+}
+
 _SOKOL_PRIVATE void _sg_vk_uniform_init(void) {
     SOKOL_ASSERT(_sg.desc.uniform_buffer_size > 0);
     _sg_vk_shared_buffer_init(&_sg.vk.uniform,
         (uint32_t)_sg.desc.uniform_buffer_size,
+        _sg.vk.dev_props.limits.minUniformBufferOffsetAlignment,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
         "shared-uniform-buffer");
 }
@@ -19069,13 +19089,7 @@ _SOKOL_PRIVATE void _sg_vk_uniform_before_submit(void) {
 // called form _sg_vk_apply_uniforms, returns offset of data snippet into uniform buffer
 _SOKOL_PRIVATE uint32_t _sg_vk_uniform_copy(const sg_range* data) {
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
-    const uint32_t alignment = _sg.vk.dev_props.limits.minUniformBufferOffsetAlignment;
-    SOKOL_ASSERT((_sg.vk.uniform.offset + data->size) <= _sg.vk.uniform.size);
-    SOKOL_ASSERT((_sg.vk.uniform.offset & (alignment - 1)) == 0);
-    const uint32_t offset = _sg.vk.uniform.offset;
-    memcpy(_sg.vk.uniform.cur_mem_ptr + offset, data->ptr, data->size);
-    _sg.vk.uniform.offset = _sg_roundup_u32(_sg.vk.uniform.offset + (uint32_t)data->size, alignment);
-    return offset;
+    return _sg_vk_shared_buffer_memcpy(&_sg.vk.uniform, data->ptr, data->size);
 }
 
 _SOKOL_PRIVATE void _sg_vk_memory_destructor(void* obj) {
@@ -20602,6 +20616,11 @@ _SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
 
     // copy data into per-frame uniform buffer
     const uint32_t offset = _sg_vk_uniform_copy(data);
+    if (offset == _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
+        _SG_ERROR(VULKAN_UNIFORM_BUFFER_OVERFLOW);
+        _sg.next_draw_valid = false;
+        return;
+    }
 
     // record offset into uniform buffer view a push-descriptor-set
     const VkPipelineLayout pip_layout = shd->vk.pip_layout;
@@ -23375,8 +23394,9 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
     res.uniform_buffer_size = _sg_def(res.uniform_buffer_size, _SG_DEFAULT_UB_SIZE);
     res.max_commit_listeners = _sg_def(res.max_commit_listeners, _SG_DEFAULT_MAX_COMMIT_LISTENERS);
     res.wgpu_bindgroups_cache_size = _sg_def(res.wgpu_bindgroups_cache_size, _SG_DEFAULT_WGPU_BINDGROUP_CACHE_SIZE);
-    res.vk_copy_staging_size = _sg_def(res.vk_copy_staging_size, _SG_DEFAULT_VK_COPY_STAGING_SIZE);
-    res.vk_stream_staging_size = _sg_def(res.vk_stream_staging_size, _SG_DEFAULT_VK_STREAM_STAGING_SIZE);
+    res.vk_copy_staging_buffer_size = _sg_def(res.vk_copy_staging_buffer_size, _SG_DEFAULT_VK_COPY_STAGING_SIZE);
+    res.vk_stream_staging_buffer_size = _sg_def(res.vk_stream_staging_buffer_size, _SG_DEFAULT_VK_STREAM_STAGING_SIZE);
+    res.vk_descriptor_buffer_size = _sg_def(res.vk_descriptor_buffer_size, _SG_DEFAULT_VK_DESCRIPTOR_BUFFER_SIZE);
     return res;
 }
 
