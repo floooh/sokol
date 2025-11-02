@@ -6954,7 +6954,9 @@ typedef struct {
     _sg_vk_shared_buffer_t uniform;
     // resource binding system (using descriptor buffers)
     _sg_vk_shared_buffer_t bind;
-    VkPhysicalDeviceProperties dev_props;
+    // device properties (initialized at startup)
+    VkPhysicalDeviceProperties2 device_props;
+    VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_props;
 } _sg_vk_backend_t;
 
 #endif // SOKOL_VULKAN
@@ -19063,11 +19065,12 @@ _SOKOL_PRIVATE uint32_t _sg_vk_shared_buffer_memcpy(_sg_vk_shared_buffer_t* shbu
     return offset;
 }
 
+// uniform data system
 _SOKOL_PRIVATE void _sg_vk_uniform_init(void) {
     SOKOL_ASSERT(_sg.desc.uniform_buffer_size > 0);
     _sg_vk_shared_buffer_init(&_sg.vk.uniform,
         (uint32_t)_sg.desc.uniform_buffer_size,
-        _sg.vk.dev_props.limits.minUniformBufferOffsetAlignment,
+        _sg.vk.device_props.properties.limits.minUniformBufferOffsetAlignment,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
         "shared-uniform-buffer");
 }
@@ -19090,6 +19093,31 @@ _SOKOL_PRIVATE void _sg_vk_uniform_before_submit(void) {
 _SOKOL_PRIVATE uint32_t _sg_vk_uniform_copy(const sg_range* data) {
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
     return _sg_vk_shared_buffer_memcpy(&_sg.vk.uniform, data->ptr, data->size);
+}
+
+// resource binding system
+_SOKOL_PRIVATE void _sg_vk_bind_init(void) {
+    SOKOL_ASSERT(_sg.desc.vk_descriptor_buffer_size > 0);
+    _sg_vk_shared_buffer_init(&_sg.vk.bind,
+        (uint32_t)_sg.desc.vk_descriptor_buffer_size,
+        _sg.vk.descriptor_buffer_props.descriptorBufferOffsetAlignment,
+        VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
+        VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        "shared-descriptor-buffer");
+}
+
+_SOKOL_PRIVATE void _sg_vk_bind_discard(void) {
+    _sg_vk_shared_buffer_discard(&_sg.vk.bind);
+}
+
+// called from _sg_vk_acquire_frame_command_buffer()
+_SOKOL_PRIVATE void _sg_vk_bind_after_acquire(void) {
+    _sg_vk_shared_buffer_after_acquire(&_sg.vk.bind);
+}
+
+// called from _sg_vk_submit_frame_command_buffer()
+_SOKOL_PRIVATE void _sg_vk_bind_before_submit(void) {
+    _sg_vk_shared_buffer_before_submit(&_sg.vk.bind);
 }
 
 _SOKOL_PRIVATE void _sg_vk_memory_destructor(void* obj) {
@@ -19482,18 +19510,22 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     _sg.features.draw_base_instance = true;
 
     SOKOL_ASSERT(_sg.vk.phys_dev);
-    vkGetPhysicalDeviceProperties(_sg.vk.phys_dev, &_sg.vk.dev_props);
-    _sg.limits.max_image_size_2d = (int)_sg.vk.dev_props.limits.maxImageDimension2D;
-    _sg.limits.max_image_size_cube = (int)_sg.vk.dev_props.limits.maxImageDimensionCube;
-    _sg.limits.max_image_size_3d = (int)_sg.vk.dev_props.limits.maxImageDimension3D;
+    _sg.vk.descriptor_buffer_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT;
+    _sg.vk.device_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    _sg.vk.device_props.pNext = &_sg.vk.descriptor_buffer_props;
+    vkGetPhysicalDeviceProperties2(_sg.vk.phys_dev, &_sg.vk.device_props);
+    const VkPhysicalDeviceLimits* l = &_sg.vk.device_props.properties.limits;
+    _sg.limits.max_image_size_2d = (int)l->maxImageDimension2D;
+    _sg.limits.max_image_size_cube = (int)l->maxImageDimensionCube;
+    _sg.limits.max_image_size_3d = (int)l->maxImageDimension3D;
     _sg.limits.max_image_size_array = _sg.limits.max_image_size_2d;
-    _sg.limits.max_image_array_layers = (int)_sg.vk.dev_props.limits.maxImageArrayLayers;
-    _sg.limits.max_vertex_attrs = _sg_min((int)_sg.vk.dev_props.limits.maxVertexInputAttributes, SG_MAX_VERTEX_ATTRIBUTES);
-    _sg.limits.max_color_attachments = _sg_min((int)_sg.vk.dev_props.limits.maxFragmentOutputAttachments, SG_MAX_COLOR_ATTACHMENTS);
-    _sg.limits.max_texture_bindings_per_stage = _sg_min((int)_sg.vk.dev_props.limits.maxPerStageDescriptorSampledImages, SG_MAX_VIEW_BINDSLOTS);
-    _sg.limits.max_storage_buffer_bindings_per_stage = _sg_min((int)_sg.vk.dev_props.limits.maxPerStageDescriptorStorageBuffers, SG_MAX_VIEW_BINDSLOTS);
-    _sg.limits.max_storage_image_bindings_per_stage = _sg_min((int)_sg.vk.dev_props.limits.maxPerStageDescriptorStorageImages, SG_MAX_VIEW_BINDSLOTS);
-    _sg.limits.vk_min_uniform_buffer_offset_alignment = (int)_sg.vk.dev_props.limits.minUniformBufferOffsetAlignment;
+    _sg.limits.max_image_array_layers = (int)l->maxImageArrayLayers;
+    _sg.limits.max_vertex_attrs = _sg_min((int)l->maxVertexInputAttributes, SG_MAX_VERTEX_ATTRIBUTES);
+    _sg.limits.max_color_attachments = _sg_min((int)l->maxFragmentOutputAttachments, SG_MAX_COLOR_ATTACHMENTS);
+    _sg.limits.max_texture_bindings_per_stage = _sg_min((int)l->maxPerStageDescriptorSampledImages, SG_MAX_VIEW_BINDSLOTS);
+    _sg.limits.max_storage_buffer_bindings_per_stage = _sg_min((int)l->maxPerStageDescriptorStorageBuffers, SG_MAX_VIEW_BINDSLOTS);
+    _sg.limits.max_storage_image_bindings_per_stage = _sg_min((int)l->maxPerStageDescriptorStorageImages, SG_MAX_VIEW_BINDSLOTS);
+    _sg.limits.vk_min_uniform_buffer_offset_alignment = (int)l->minUniformBufferOffsetAlignment;
 
     // FIXME: currently these are the same as in the WebGPU backend
     // FIXME: compressed formats
@@ -19649,6 +19681,7 @@ _SOKOL_PRIVATE void _sg_vk_acquire_frame_command_buffer(void) {
         SOKOL_ASSERT(res == VK_SUCCESS);
 
         _sg_vk_uniform_after_acquire();
+        _sg_vk_bind_after_acquire();
     }
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
 }
@@ -19656,6 +19689,7 @@ _SOKOL_PRIVATE void _sg_vk_acquire_frame_command_buffer(void) {
 _SOKOL_PRIVATE void _sg_vk_submit_frame_command_buffer(void) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
 
+    _sg_vk_bind_before_submit();
     _sg_vk_uniform_before_submit();
 
     VkResult res = vkEndCommandBuffer(_sg.vk.frame.cmd_buf);
@@ -19700,6 +19734,7 @@ _SOKOL_PRIVATE void _sg_vk_setup_backend(const sg_desc* desc) {
     _sg_vk_create_frame_command_pool_and_buffers();
     _sg_vk_staging_init();
     _sg_vk_uniform_init();
+    _sg_vk_bind_init();
     _sg_vk_create_delete_queues();
 }
 
@@ -19708,6 +19743,7 @@ _SOKOL_PRIVATE void _sg_vk_discard_backend(void) {
     SOKOL_ASSERT(_sg.vk.dev);
     vkDeviceWaitIdle(_sg.vk.dev);
     _sg_vk_destroy_delete_queues();
+    _sg_vk_bind_discard();
     _sg_vk_uniform_discard();
     _sg_vk_staging_discard();
     _sg_vk_destroy_frame_command_pool();
