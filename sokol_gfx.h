@@ -4422,6 +4422,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_SAMPLER_FAILED, "vulkan: vkCreateSampler() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_WAIT_FOR_FENCE_FAILED, "vulkan: vkWaitForFence() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_UNIFORM_BUFFER_OVERFLOW, "vulkan: uniform buffer has overflown (increase sg_desc.uniform_buffer_size)") \
+    _SG_LOGITEM_XMACRO(VULKAN_DESCRIPTOR_BUFFER_OVERFLOW, "vulkan: desccriptor buffer has overflown (increase sg_desc.vk_descriptor_buffer_size)") \
     _SG_LOGITEM_XMACRO(IDENTICAL_COMMIT_LISTENER, "attempting to add identical commit listener") \
     _SG_LOGITEM_XMACRO(COMMIT_LISTENER_ARRAY_FULL, "commit listener array full") \
     _SG_LOGITEM_XMACRO(TRACE_HOOKS_NOT_ENABLED, "sg_install_trace_hooks() called, but SOKOL_TRACE_HOOKS is not defined") \
@@ -6933,7 +6934,10 @@ typedef struct {
     // extension function pointers
     struct {
         PFN_vkGetDescriptorSetLayoutSizeEXT get_descriptor_set_layout_size;
+        PFN_vkGetDescriptorSetLayoutBindingOffsetEXT get_descriptor_set_layout_binding_offset;
+        PFN_vkGetDescriptorEXT get_descriptor;
         PFN_vkCmdBindDescriptorBuffersEXT cmd_bind_descriptor_buffers;
+        PFN_vkCmdSetDescriptorBufferOffsetsEXT cmd_set_descriptor_buffer_offsets;
     } ext;
 
     uint32_t frame_slot;
@@ -6962,6 +6966,7 @@ typedef struct {
     } stage;
     // uniform update system
     _sg_vk_shared_buffer_t uniform;
+    uint32_t uniform_bind_offsets[SG_MAX_UNIFORM_BINDSLOTS];
     // resource binding system (using descriptor buffers)
     _sg_vk_shared_buffer_t bind;
     // device properties (initialized at startup)
@@ -19078,16 +19083,26 @@ _SOKOL_PRIVATE void _sg_vk_shared_buffer_before_submit(_sg_vk_shared_buffer_t* s
     shbuf->cur_mem_ptr = 0;
 }
 
-_SOKOL_PRIVATE uint32_t _sg_vk_shared_buffer_memcpy(_sg_vk_shared_buffer_t* shbuf, const void* ptr, uint32_t num_bytes) {
-    SOKOL_ASSERT(shbuf && ptr && (num_bytes > 0));
+_SOKOL_PRIVATE void* _sg_vk_shared_buffer_bumpalloc(_sg_vk_shared_buffer_t* shbuf, uint32_t num_bytes) {
+    SOKOL_ASSERT(shbuf && (num_bytes > 0));
     SOKOL_ASSERT(shbuf->cur_mem_ptr);
     if ((shbuf->offset + num_bytes) > shbuf->size) {
-        return _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT;
+        return 0;
     }
     SOKOL_ASSERT((shbuf->offset & (shbuf->align - 1)) == 0);
-    const uint32_t offset = shbuf->offset;
-    memcpy(shbuf->cur_mem_ptr + offset, ptr, num_bytes);
+    void* ptr = shbuf->cur_mem_ptr + shbuf->offset;
     shbuf->offset = _sg_roundup_u32(shbuf->offset + num_bytes, shbuf->align);
+    return ptr;
+}
+
+_SOKOL_PRIVATE uint32_t _sg_vk_shared_buffer_memcpy(_sg_vk_shared_buffer_t* shbuf, const void* src_ptr, uint32_t num_bytes) {
+    SOKOL_ASSERT(shbuf && src_ptr && (num_bytes > 0));
+    const uint32_t offset = shbuf->offset;
+    void* dst_ptr = _sg_vk_shared_buffer_bumpalloc(shbuf, num_bytes);
+    if (0 == dst_ptr) {
+        return _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT;
+    }
+    memcpy(dst_ptr, src_ptr, num_bytes);
     return offset;
 }
 
@@ -19163,6 +19178,114 @@ _SOKOL_PRIVATE void _sg_vk_bind_after_acquire(void) {
 // called from _sg_vk_submit_frame_command_buffer()
 _SOKOL_PRIVATE void _sg_vk_bind_before_submit(void) {
     _sg_vk_shared_buffer_before_submit(&_sg.vk.bind);
+}
+
+_SOKOL_PRIVATE bool _sg_vk_bind_view_smp_descriptors(const _sg_bindings_ptrs_t* bnd, VkPipelineBindPoint vk_bind_point) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+    SOKOL_ASSERT(bnd && bnd->pip);
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&bnd->pip->cmn.shader);
+    const VkDeviceSize dsl_size = shd->vk.dset_view_smp_size;
+    if (dsl_size == 0) {
+        // nothing to bind
+        return true;
+    }
+    // capture current descriptor buffer offset before bump-allocating
+    const VkDeviceSize descriptor_buffer_offset = _sg.vk.bind.offset;
+    void* dst_ptr = _sg_vk_shared_buffer_bumpalloc(&_sg.vk.bind, dsl_size);
+    if (dst_ptr == 0) {
+        _SG_ERROR(VULKAN_DESCRIPTOR_BUFFER_OVERFLOW);
+        return false;
+    }
+    VkDescriptorSetLayout dsl = shd->vk.dset_view_smp;
+    SOKOL_ASSERT(dsl);
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        if (shd->cmn.views[i].stage == SG_SHADERSTAGE_NONE) {
+            continue;
+        }
+        const uint8_t vk_bnd = shd->vk.view_set1_bnd_n[i];
+        const _sg_view_t* view = bnd->views[i];
+        SOKOL_ASSERT(view);
+
+        // FIXME: store this stuff right in the view object!
+        VkDescriptorAddressInfoEXT addr_info;
+        _sg_clear(&addr_info, sizeof(addr_info));
+        addr_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT;
+        VkDescriptorImageInfo img_info;
+        _sg_clear(&img_info, sizeof(img_info));
+        VkDescriptorGetInfoEXT get_info;
+        _sg_clear(&get_info, sizeof(get_info));
+        get_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
+        size_t descriptor_size = 0;
+        switch (view->cmn.type) {
+            case SG_VIEWTYPE_STORAGEBUFFER:
+                const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
+                addr_info.range = (VkDeviceSize)(buf->cmn.size - view->cmn.buf.offset);
+                SOKOL_ASSERT(false && "FIXME: buffer offset => device address");
+                get_info.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                get_info.data.pStorageBuffer = &addr_info;
+                descriptor_size = _sg.vk.descriptor_buffer_props.storageBufferDescriptorSize;
+                break;
+            case SG_VIEWTYPE_STORAGEIMAGE:
+                img_info.imageView = view->vk.img_view;
+                img_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+                get_info.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+                get_info.data.pStorageImage = &img_info;
+                descriptor_size = _sg.vk.descriptor_buffer_props.storageImageDescriptorSize;
+                break;
+            case SG_VIEWTYPE_TEXTURE:
+                img_info.imageView = view->vk.img_view;
+                img_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                get_info.type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+                get_info.data.pSampledImage = &img_info;
+                descriptor_size = _sg.vk.descriptor_buffer_props.sampledImageDescriptorSize;
+                break;
+            default:
+                SOKOL_UNREACHABLE;
+                break;
+        }
+        // offset of current descriptor in descriptor set
+        // FIXME: this should really only happen once when creating the shader!
+        VkDeviceSize dst_offset;
+        _sg.vk.ext.get_descriptor_set_layout_binding_offset(_sg.vk.dev, dsl, vk_bnd, &dst_offset);
+        _sg.vk.ext.get_descriptor(_sg.vk.dev, &get_info, descriptor_size, dst_ptr + dst_offset);
+    }
+    for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+        if (shd->cmn.samplers[i].stage == SG_SHADERSTAGE_NONE) {
+            continue;
+        }
+        const uint8_t vk_bnd = shd->vk.smp_set1_bnd_n[i];
+        const _sg_sampler_t* smp = bnd->smps[i];
+        SOKOL_ASSERT(smp);
+
+        // FIXME: store the VkDescriptorGetInfoEXT object right in the sampler object!
+        VkDescriptorGetInfoEXT get_info;
+        _sg_clear(&get_info, sizeof(get_info));
+        get_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
+        get_info.type = VK_DESCRIPTOR_TYPE_SAMPLER;
+        get_info.data.pSampler = &smp->vk.smp;
+        const size_t descriptor_size = _sg.vk.descriptor_buffer_props.samplerDescriptorSize;
+
+        // offset of current descriptor in descriptor set
+        // FIXME: this should really only happen once when creating the shader!
+        VkDeviceSize dst_offset;
+        _sg.vk.ext.get_descriptor_set_layout_binding_offset(_sg.vk.dev, dsl, vk_bnd, &dst_offset);
+        _sg.vk.ext.get_descriptor(_sg.vk.dev, &get_info, descriptor_size, dst_ptr + dst_offset);
+    }
+
+    // and finally record the new descriptor buffer offset
+    const uint32_t descriptor_buffer_index = 0;
+    SOKOL_ASSERT(shd->vk.pip_layout);
+    _sg.vk.ext.cmd_set_descriptor_buffer_offsets(
+        _sg.vk.frame.cmd_buf,
+        vk_bind_point,
+        shd->vk.pip_layout,
+        _SG_VK_VIEW_SMP_DESCRIPTORSET_INDEX, // firstSet
+        1,  // setCount
+        &descriptor_buffer_index,
+        &descriptor_buffer_offset);
+
+        return true;
 }
 
 _SOKOL_PRIVATE void _sg_vk_memory_destructor(void* obj) {
@@ -19549,8 +19672,20 @@ _SOKOL_PRIVATE void _sg_vk_load_ext_funcs(void) {
     if (0 == _sg.vk.ext.get_descriptor_set_layout_size) {
         _SG_PANIC(VULKAN_REQUIRED_EXTENSION_FUNCTION_MISSING);
     }
+    _sg.vk.ext.get_descriptor_set_layout_binding_offset = (PFN_vkGetDescriptorSetLayoutBindingOffsetEXT)vkGetDeviceProcAddr(_sg.vk.dev, "vkGetDescriptorSetLayoutBindingOffsetEXT");
+    if (0 == _sg.vk.ext.get_descriptor_set_layout_binding_offset) {
+        _SG_PANIC(VULKAN_REQUIRED_EXTENSION_FUNCTION_MISSING);
+    }
+    _sg.vk.ext.get_descriptor = (PFN_vkGetDescriptorEXT)vkGetDeviceProcAddr(_sg.vk.dev, "vkGetDescriptorEXT");
+    if (0 == _sg.vk.ext.get_descriptor) {
+        _SG_PANIC(VULKAN_REQUIRED_EXTENSION_FUNCTION_MISSING);
+    }
     _sg.vk.ext.cmd_bind_descriptor_buffers = (PFN_vkCmdBindDescriptorBuffersEXT)vkGetDeviceProcAddr(_sg.vk.dev, "vkCmdBindDescriptorBuffersEXT");
     if (0 == _sg.vk.ext.cmd_bind_descriptor_buffers) {
+        _SG_PANIC(VULKAN_REQUIRED_EXTENSION_FUNCTION_MISSING);
+    }
+    _sg.vk.ext.cmd_set_descriptor_buffer_offsets = (PFN_vkCmdSetDescriptorBufferOffsetsEXT)vkGetDeviceProcAddr(_sg.vk.dev, "vkCmdSetDescriptorBufferOffsetsEXT");
+    if (0 == _sg.vk.ext.cmd_set_descriptor_buffer_offsets) {
         _SG_PANIC(VULKAN_REQUIRED_EXTENSION_FUNCTION_MISSING);
     }
 }
@@ -19571,10 +19706,6 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     _sg.vk.device_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
     _sg.vk.device_props.pNext = &_sg.vk.descriptor_buffer_props;
     vkGetPhysicalDeviceProperties2(_sg.vk.phys_dev, &_sg.vk.device_props);
-
-    // FIXME: handle push descriptors which require buffer backing
-    // see: https://docs.vulkan.org/features/latest/features/proposals/VK_EXT_descriptor_buffer.html#_push_descriptors
-    SOKOL_ASSERT(_sg.vk.descriptor_buffer_props.bufferlessPushDescriptors);
 
     const VkPhysicalDeviceLimits* l = &_sg.vk.device_props.properties.limits;
     _sg.limits.max_image_size_2d = (int)l->maxImageDimension2D;
@@ -20112,7 +20243,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
         dsl_index += 1;
     }
     dsl_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    dsl_create_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT | VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT;
+    dsl_create_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
     dsl_create_info.bindingCount = dsl_index;
     dsl_create_info.pBindings = dsl_entries;
     res = vkCreateDescriptorSetLayout(_sg.vk.dev, &dsl_create_info, 0, &shd->vk.dset_ub);
@@ -20701,9 +20832,8 @@ _SOKOL_PRIVATE bool _sg_vk_apply_bindings(_sg_bindings_ptrs_t* bnd) {
             vkCmdBindIndexBuffer(_sg.vk.frame.cmd_buf, vk_buf, vk_offset, vk_index_type);
         }
     }
-    // FIXME
-    // _sg_vk_apply_views_and_samplers(bnd);
-    return true;
+    // bind views and samplers
+    return _sg_vk_bind_view_smp_descriptors(bnd, _sg.cur_pass.is_compute ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS);
 }
 
 _SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
@@ -20722,8 +20852,17 @@ _SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
         _sg.next_draw_valid = false;
         return;
     }
+    _sg.vk.uniform_bind_offsets[ub_slot] = offset;
 
-    // record offset into uniform buffer view a push-descriptor-set
+    // bind uniform descriptors
+    // FIXME: move this code into a function _sg_vk_bind_uniform_descriptors()
+    const VkDeviceSize descriptor_buffer_offset = _sg.vk.bind.offset;
+    void* dst_ptr = _sg_vk_shared_buffer_bumpalloc(&_sg.vk.bind, dsl_size)
+
+
+
+    // capture descriptor buffer offset before
+
     const VkPipelineLayout pip_layout = shd->vk.pip_layout;
     const VkPipelineBindPoint pip_bind_point = _sg.cur_pass.is_compute
         ? VK_PIPELINE_BIND_POINT_COMPUTE
