@@ -19042,6 +19042,8 @@ _SOKOL_PRIVATE void _sg_vk_shared_buffer_after_acquire(_sg_vk_shared_buffer_t* s
     shbuf->offset = 0;
     shbuf->cur_buf = shbuf->slots[frame_slot].buf;
     shbuf->cur_mem_ptr = shbuf->slots[frame_slot].mem_ptr;
+    SOKOL_ASSERT(shbuf->cur_buf);
+    SOKOL_ASSERT(shbuf->cur_mem_ptr);
 }
 
 _SOKOL_PRIVATE void _sg_vk_shared_buffer_before_submit(_sg_vk_shared_buffer_t* shbuf) {
