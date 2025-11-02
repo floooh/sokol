@@ -4490,6 +4490,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
     _sapp_clear(&features2, sizeof(features2));
     features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     features2.pNext = &vk13_features;
+    features2.features.samplerAnisotropy = VK_TRUE;
 
     VkDeviceCreateInfo dev_create_info;
     _sapp_clear(&dev_create_info, sizeof(dev_create_info));
