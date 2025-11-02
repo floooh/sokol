@@ -4392,6 +4392,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(WGPU_CREATE_PIPELINE_LAYOUT_FAILED, "wgpuDeviceCreatePipelineLayout() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_RENDER_PIPELINE_FAILED, "wgpuDeviceCreateRenderPipeline() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_COMPUTE_PIPELINE_FAILED, "wgpuDeviceCreateComputePipeline() failed") \
+    _SG_LOGITEM_XMACRO(VULKAN_REQUIRED_EXTENSION_FUNCTION_MISSING, "vulkan: could not look up a required extension function pointer") \
     _SG_LOGITEM_XMACRO(VULKAN_ALLOC_DEVICE_MEMORY_NO_SUITABLE_MEMORY_TYPE, "vulkan: could not find suitable memory type") \
     _SG_LOGITEM_XMACRO(VULKAN_ALLOCATE_MEMORY_FAILED, "vulkan: vkAllocateMemory() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_ALLOC_BUFFER_DEVICE_MEMORY_FAILED, "vulkan: allocating buffer device memory failed") \
@@ -6874,7 +6875,9 @@ typedef struct _sg_shader_s {
         _sg_vk_shader_func_t fragment_func;
         _sg_vk_shader_func_t compute_func;
         VkDescriptorSetLayout dset_ub;
+        VkDeviceSize dset_ub_size;
         VkDescriptorSetLayout dset_view_smp;
+        VkDeviceSize dset_view_smp_size;
         VkPipelineLayout pip_layout;
         // indexed by sokol-gfx bind-slot
         uint8_t ub_set0_bnd_n[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
@@ -6926,6 +6929,13 @@ typedef struct {
     sg_vulkan_swapchain swapchain;
     VkSemaphore present_complete_sem;
     VkSemaphore render_finished_sem;
+
+    // extension function pointers
+    struct {
+        PFN_vkGetDescriptorSetLayoutSizeEXT get_descriptor_set_layout_size;
+        PFN_vkCmdBindDescriptorBuffersEXT cmd_bind_descriptor_buffers;
+    } ext;
+
     uint32_t frame_slot;
     struct {
         VkCommandPool cmd_pool;
@@ -18593,17 +18603,26 @@ _SOKOL_PRIVATE int _sg_vk_mem_find_memory_type_index(uint32_t type_filter, VkMem
     return -1;
 }
 
-_SOKOL_PRIVATE VkDeviceMemory _sg_vk_mem_alloc_device_memory(const VkMemoryRequirements* mem_reqs, VkMemoryPropertyFlags mem_props) {
+_SOKOL_PRIVATE VkDeviceMemory _sg_vk_mem_alloc_device_memory(
+    const VkMemoryRequirements* mem_reqs,
+    VkMemoryPropertyFlags mem_prop_flags,
+    VkMemoryAllocateFlags mem_alloc_flags
+) {
     SOKOL_ASSERT(_sg.vk.dev);
-    SOKOL_ASSERT(mem_reqs && (mem_props != 0));
-    int mem_type_index = _sg_vk_mem_find_memory_type_index(mem_reqs->memoryTypeBits, mem_props);
+    SOKOL_ASSERT(mem_reqs && (mem_prop_flags != 0));
+    int mem_type_index = _sg_vk_mem_find_memory_type_index(mem_reqs->memoryTypeBits, mem_prop_flags);
     if (-1 == mem_type_index) {
         _SG_ERROR(VULKAN_ALLOC_DEVICE_MEMORY_NO_SUITABLE_MEMORY_TYPE);
         return 0;
     }
+    VkMemoryAllocateFlagsInfo flags_info;
+    _sg_clear(&flags_info, sizeof(flags_info));
+    flags_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+    flags_info.flags = mem_alloc_flags;
     VkMemoryAllocateInfo alloc_info;
     _sg_clear(&alloc_info, sizeof(alloc_info));
     alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    alloc_info.pNext = &flags_info;
     alloc_info.allocationSize = mem_reqs->size;
     alloc_info.memoryTypeIndex = (uint32_t) mem_type_index;
     VkDeviceMemory vk_dev_mem = 0;
@@ -18630,7 +18649,7 @@ _SOKOL_PRIVATE bool _sg_vk_mem_alloc_buffer_device_memory(_sg_buffer_t* buf) {
     VkMemoryRequirements mem_reqs;
     _sg_clear(&mem_reqs, sizeof(mem_reqs));
     vkGetBufferMemoryRequirements(_sg.vk.dev, buf->vk.buf, &mem_reqs);
-    buf->vk.mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    buf->vk.mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0);
     if (0 == buf->vk.mem) {
         _SG_ERROR(VULKAN_ALLOC_BUFFER_DEVICE_MEMORY_FAILED);
         return false;
@@ -18646,7 +18665,7 @@ _SOKOL_PRIVATE bool _sg_vk_mem_alloc_image_device_memory(_sg_image_t* img) {
     VkMemoryRequirements mem_reqs;
     _sg_clear(&mem_reqs, sizeof(mem_reqs));
     vkGetImageMemoryRequirements(_sg.vk.dev, img->vk.img, &mem_reqs);
-    img->vk.mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    img->vk.mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0);
     if (0 == img->vk.mem) {
         _SG_ERROR(VULKAN_ALLOC_IMAGE_DEVICE_MEMORY_FAILED);
         return false;
@@ -18767,7 +18786,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_init(void) {
     VkMemoryRequirements mem_reqs;
     _sg_clear(&mem_reqs, sizeof(mem_reqs));
     vkGetBufferMemoryRequirements(_sg.vk.dev, _sg.vk.stage.copy.buf, &mem_reqs);
-    _sg.vk.stage.copy.mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    _sg.vk.stage.copy.mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 0);
     if (0 == _sg.vk.stage.copy.mem) {
         _SG_PANIC(VULKAN_STAGING_ALLOCATE_MEMORY_FAILED);
     }
@@ -18998,7 +19017,12 @@ _SOKOL_PRIVATE void _sg_vk_shared_buffer_init(_sg_vk_shared_buffer_t* shbuf, uin
         VkMemoryRequirements mem_reqs;
         _sg_clear(&mem_reqs, sizeof(mem_reqs));
         vkGetBufferMemoryRequirements(_sg.vk.dev, shbuf->slots[i].buf, &mem_reqs);
-        shbuf->slots[i].mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        const VkMemoryPropertyFlags mem_prop_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+        VkMemoryAllocateFlagBits mem_alloc_flags = 0;
+        if (0 != (vk_usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)) {
+            mem_alloc_flags |= VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+        }
+        shbuf->slots[i].mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, mem_prop_flags, mem_alloc_flags);
         if (0 == shbuf->slots[i].mem) {
             _SG_PANIC(VULKAN_ALLOCATE_SHARED_BUFFER_MEMORY_FAILED);
         }
@@ -19104,6 +19128,7 @@ _SOKOL_PRIVATE void _sg_vk_bind_init(void) {
         (uint32_t)_sg.desc.vk_descriptor_buffer_size,
         _sg.vk.descriptor_buffer_props.descriptorBufferOffsetAlignment,
         VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
+        VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT |
         VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
         "shared-descriptor-buffer");
 }
@@ -19115,6 +19140,24 @@ _SOKOL_PRIVATE void _sg_vk_bind_discard(void) {
 // called from _sg_vk_acquire_frame_command_buffer()
 _SOKOL_PRIVATE void _sg_vk_bind_after_acquire(void) {
     _sg_vk_shared_buffer_after_acquire(&_sg.vk.bind);
+
+    // bind the current frame's descriptor buffer
+    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+    SOKOL_ASSERT(_sg.vk.bind.cur_buf);
+    VkBufferDeviceAddressInfo addr_info;
+    _sg_clear(&addr_info, sizeof(addr_info));
+    addr_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    addr_info.buffer = _sg.vk.bind.cur_buf;
+    const uint64_t device_address = vkGetBufferDeviceAddress(_sg.vk.dev, &addr_info);
+    SOKOL_ASSERT(device_address != 0);
+
+    VkDescriptorBufferBindingInfoEXT bind_info;
+    _sg_clear(&bind_info, sizeof(bind_info));
+    bind_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;
+    bind_info.address = device_address;
+    bind_info.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
+                      VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT;
+    _sg.vk.ext.cmd_bind_descriptor_buffers(_sg.vk.frame.cmd_buf, 1, &bind_info);
 }
 
 // called from _sg_vk_submit_frame_command_buffer()
@@ -19500,6 +19543,18 @@ _SOKOL_PRIVATE VkBorderColor _sg_vk_sampler_border_color(sg_border_color c) {
     }
 }
 
+_SOKOL_PRIVATE void _sg_vk_load_ext_funcs(void) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    _sg.vk.ext.get_descriptor_set_layout_size = (PFN_vkGetDescriptorSetLayoutSizeEXT)vkGetDeviceProcAddr(_sg.vk.dev, "vkGetDescriptorSetLayoutSizeEXT");
+    if (0 == _sg.vk.ext.get_descriptor_set_layout_size) {
+        _SG_PANIC(VULKAN_REQUIRED_EXTENSION_FUNCTION_MISSING);
+    }
+    _sg.vk.ext.cmd_bind_descriptor_buffers = (PFN_vkCmdBindDescriptorBuffersEXT)vkGetDeviceProcAddr(_sg.vk.dev, "vkCmdBindDescriptorBuffersEXT");
+    if (0 == _sg.vk.ext.cmd_bind_descriptor_buffers) {
+        _SG_PANIC(VULKAN_REQUIRED_EXTENSION_FUNCTION_MISSING);
+    }
+}
+
 _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     _sg.backend = SG_BACKEND_VULKAN;
     _sg.features.origin_top_left = true;
@@ -19731,6 +19786,7 @@ _SOKOL_PRIVATE void _sg_vk_setup_backend(const sg_desc* desc) {
     _sg.vk.queue = (VkQueue) desc->environment.vulkan.queue;
     _sg.vk.queue_family_index = desc->environment.vulkan.queue_family_index;
 
+    _sg_vk_load_ext_funcs();
     _sg_vk_init_caps();
     _sg_vk_create_fences();
     _sg_vk_create_frame_command_pool_and_buffers();
@@ -20051,7 +20107,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
         dsl_index += 1;
     }
     dsl_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    dsl_create_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT;
+    dsl_create_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
     dsl_create_info.bindingCount = dsl_index;
     dsl_create_info.pBindings = dsl_entries;
     res = vkCreateDescriptorSetLayout(_sg.vk.dev, &dsl_create_info, 0, &shd->vk.dset_ub);
@@ -20059,6 +20115,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
         _SG_ERROR(VULKAN_CREATE_DESCRIPTOR_SET_LAYOUT_FAILED);
         return SG_RESOURCESTATE_FAILED;
     }
+    _sg.vk.ext.get_descriptor_set_layout_size(_sg.vk.dev, shd->vk.dset_ub, &shd->vk.dset_ub_size);
 
     _sg_clear(dsl_entries, sizeof(dsl_entries));
     _sg_clear(&dsl_create_info, sizeof(dsl_create_info));
@@ -20100,7 +20157,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
         dsl_index += 1;
     }
     dsl_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    dsl_create_info.flags = 0;
+    dsl_create_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
     dsl_create_info.bindingCount = dsl_index;
     dsl_create_info.pBindings = dsl_entries;
     res = vkCreateDescriptorSetLayout(_sg.vk.dev, &dsl_create_info, 0, &shd->vk.dset_view_smp);
@@ -20108,6 +20165,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
         _SG_ERROR(VULKAN_CREATE_DESCRIPTOR_SET_LAYOUT_FAILED);
         return SG_RESOURCESTATE_FAILED;
     }
+    _sg.vk.ext.get_descriptor_set_layout_size(_sg.vk.dev, shd->vk.dset_view_smp, &shd->vk.dset_view_smp_size);
 
     VkDescriptorSetLayout set_layouts[_SG_VK_NUM_DESCRIPTORSETS] = {
         shd->vk.dset_ub,

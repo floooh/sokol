@@ -4459,17 +4459,29 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
     _SAPP_VK_ZERO_COUNT_AND_ARRAY(32, const char*, ext_count, ext_names);
     ext_count = _sapp_vk_get_device_extensions(ext_names, 32);
 
+    VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptor_buffer_features;
+    _sapp_clear(&descriptor_buffer_features, sizeof(descriptor_buffer_features));
+    descriptor_buffer_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT;
+    descriptor_buffer_features.descriptorBuffer = VK_TRUE;
+
     VkPhysicalDeviceExtendedDynamicStateFeaturesEXT xds_features;
     _sapp_clear(&xds_features, sizeof(xds_features));
     xds_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
-    xds_features.extendedDynamicState = true;
+    xds_features.pNext = &descriptor_buffer_features;
+    xds_features.extendedDynamicState = VK_TRUE;
+
+    VkPhysicalDeviceVulkan12Features vk12_features;
+    _sapp_clear(&vk12_features, sizeof(vk12_features));
+    vk12_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    vk12_features.pNext = &xds_features;
+    vk12_features.bufferDeviceAddress = VK_TRUE;
 
     VkPhysicalDeviceVulkan13Features vk13_features;
     _sapp_clear(&vk13_features, sizeof(vk13_features));
     vk13_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-    vk13_features.pNext = &xds_features;
-    vk13_features.dynamicRendering = true;
-    vk13_features.synchronization2 = true;
+    vk13_features.pNext = &vk12_features;
+    vk13_features.dynamicRendering = VK_TRUE;
+    vk13_features.synchronization2 = VK_TRUE;
 
     VkPhysicalDeviceFeatures2 features2;
     _sapp_clear(&features2, sizeof(features2));
