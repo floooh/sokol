@@ -4463,6 +4463,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
     _sapp_clear(&descriptor_buffer_features, sizeof(descriptor_buffer_features));
     descriptor_buffer_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT;
     descriptor_buffer_features.descriptorBuffer = VK_TRUE;
+    descriptor_buffer_features.descriptorBufferPushDescriptors = VK_TRUE;
 
     VkPhysicalDeviceExtendedDynamicStateFeaturesEXT xds_features;
     _sapp_clear(&xds_features, sizeof(xds_features));

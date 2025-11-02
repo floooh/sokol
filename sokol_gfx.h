@@ -19571,6 +19571,11 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     _sg.vk.device_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
     _sg.vk.device_props.pNext = &_sg.vk.descriptor_buffer_props;
     vkGetPhysicalDeviceProperties2(_sg.vk.phys_dev, &_sg.vk.device_props);
+
+    // FIXME: handle push descriptors which require buffer backing
+    // see: https://docs.vulkan.org/features/latest/features/proposals/VK_EXT_descriptor_buffer.html#_push_descriptors
+    SOKOL_ASSERT(_sg.vk.descriptor_buffer_props.bufferlessPushDescriptors);
+
     const VkPhysicalDeviceLimits* l = &_sg.vk.device_props.properties.limits;
     _sg.limits.max_image_size_2d = (int)l->maxImageDimension2D;
     _sg.limits.max_image_size_cube = (int)l->maxImageDimensionCube;
@@ -20107,7 +20112,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
         dsl_index += 1;
     }
     dsl_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    dsl_create_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
+    dsl_create_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT | VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT;
     dsl_create_info.bindingCount = dsl_index;
     dsl_create_info.pBindings = dsl_entries;
     res = vkCreateDescriptorSetLayout(_sg.vk.dev, &dsl_create_info, 0, &shd->vk.dset_ub);
