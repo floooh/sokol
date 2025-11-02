@@ -6966,7 +6966,7 @@ typedef struct {
     } stage;
     // uniform update system
     _sg_vk_shared_buffer_t uniform;
-    uint32_t uniform_bind_offsets[SG_MAX_UNIFORM_BINDSLOTS];
+    uint32_t uniform_bind_offsets[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
     // resource binding system (using descriptor buffers)
     _sg_vk_shared_buffer_t bind;
     // device properties (initialized at startup)
@@ -19112,7 +19112,7 @@ _SOKOL_PRIVATE void _sg_vk_uniform_init(void) {
     _sg_vk_shared_buffer_init(&_sg.vk.uniform,
         (uint32_t)_sg.desc.uniform_buffer_size,
         _sg.vk.device_props.properties.limits.minUniformBufferOffsetAlignment,
-        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
         "shared-uniform-buffer");
 }
 
@@ -20514,6 +20514,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
         _sg_clear(&pip_create_info, sizeof(pip_create_info));
         pip_create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pip_create_info.pNext = &rnd_state;
+        pip_create_info.flags = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
         pip_create_info.stageCount = num_stages;
         pip_create_info.pStages = stages;
         pip_create_info.pVertexInputState = &vi_state;
@@ -20854,20 +20855,64 @@ _SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
     }
     _sg.vk.uniform_bind_offsets[ub_slot] = offset;
 
+    // FIXME: do this once in _sg_vk_uniform_init!
+    VkBufferDeviceAddressInfo addr_info;
+    _sg_clear(&addr_info, sizeof(addr_info));
+    addr_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    addr_info.buffer = _sg.vk.uniform.cur_buf;
+    VkDeviceAddress device_address = vkGetBufferDeviceAddress(_sg.vk.dev, &addr_info);
+
     // bind uniform descriptors
     // FIXME: move this code into a function _sg_vk_bind_uniform_descriptors()
+    const VkDeviceSize dsl_size = shd->vk.dset_ub_size;
     const VkDeviceSize descriptor_buffer_offset = _sg.vk.bind.offset;
-    void* dst_ptr = _sg_vk_shared_buffer_bumpalloc(&_sg.vk.bind, dsl_size)
+    void* dst_ptr = _sg_vk_shared_buffer_bumpalloc(&_sg.vk.bind, dsl_size);
+    if (dst_ptr == 0) {
+        _SG_ERROR(VULKAN_DESCRIPTOR_BUFFER_OVERFLOW);
+        _sg.next_draw_valid = false;
+        return;
+    }
+    VkDescriptorSetLayout dsl = shd->vk.dset_ub;
+    SOKOL_ASSERT(dsl);
+    const size_t descriptor_size = _sg.vk.descriptor_buffer_props.uniformBufferDescriptorSize;
+    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
+        if (shd->cmn.uniform_blocks[i].stage == SG_SHADERSTAGE_NONE) {
+            continue;
+        }
+        VkDescriptorAddressInfoEXT addr_info;
+        _sg_clear(&addr_info, sizeof(addr_info));
+        addr_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT;
+        VkDescriptorGetInfoEXT get_info;
+        _sg_clear(&get_info, sizeof(get_info));
+        get_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
+        get_info.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        get_info.data.pUniformBuffer = &addr_info;
+        addr_info.address = device_address + _sg.vk.uniform_bind_offsets[i];
+        addr_info.range = data->size;
 
+        const uint8_t vk_bnd = shd->vk.ub_set0_bnd_n[i];
+        VkDeviceSize dst_offset;
+        _sg.vk.ext.get_descriptor_set_layout_binding_offset(_sg.vk.dev, dsl, vk_bnd, &dst_offset);
+        _sg.vk.ext.get_descriptor(_sg.vk.dev, &get_info, descriptor_size, dst_ptr + dst_offset);
+    }
 
-
-    // capture descriptor buffer offset before
-
-    const VkPipelineLayout pip_layout = shd->vk.pip_layout;
+    // record the new descriptor buffer offset
+    const uint32_t descriptor_buffer_index = 0;
+    SOKOL_ASSERT(shd->vk.pip_layout);
     const VkPipelineBindPoint pip_bind_point = _sg.cur_pass.is_compute
         ? VK_PIPELINE_BIND_POINT_COMPUTE
         : VK_PIPELINE_BIND_POINT_GRAPHICS;
+    _sg.vk.ext.cmd_set_descriptor_buffer_offsets(
+        _sg.vk.frame.cmd_buf,
+        pip_bind_point,
+        shd->vk.pip_layout,
+        _SG_VK_UB_DESCRIPTORSET_INDEX, // firstIndex
+        1, // setCount
+        &descriptor_buffer_index,
+        &descriptor_buffer_offset);
 
+    /*
+    const VkPipelineLayout pip_layout = shd->vk.pip_layout;
     VkDescriptorBufferInfo buf_info;
     _sg_clear(&buf_info, sizeof(buf_info));
     buf_info.buffer = _sg.vk.uniform.cur_buf;
@@ -20882,6 +20927,7 @@ _SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
     write_dset.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     write_dset.pBufferInfo = &buf_info;
     vkCmdPushDescriptorSet(_sg.vk.frame.cmd_buf, pip_bind_point, pip_layout, _SG_VK_UB_DESCRIPTORSET_INDEX, 1, &write_dset);
+    */
 }
 
 _SOKOL_PRIVATE void _sg_vk_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
