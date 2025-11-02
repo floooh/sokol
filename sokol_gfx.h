@@ -18927,7 +18927,10 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_im
     VkBufferImageCopy2 region;
     _sg_clear(&region, sizeof(region));
     region.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
+    // image data is tightly packed
     region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
     if (_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format)) {
         region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
         if (_sg_is_depth_stencil_format(img->cmn.pixel_format)) {
@@ -18958,8 +18961,6 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_im
             mip_height = _sg_roundup(mip_height, 4);
         }
         region.imageSubresource.mipLevel = (uint32_t)mip_index;
-        region.bufferRowLength = row_pitch;
-        region.bufferImageHeight = num_rows;
         region.imageExtent.width = (uint32_t)mip_width;
 
         const uint32_t max_rows = _sg.vk.stage.copy.size / row_pitch;
