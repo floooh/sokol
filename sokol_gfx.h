@@ -4400,10 +4400,10 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VULKAN_STAGING_CREATE_BUFFER_FAILED, "vulkan: vkCreateBuffer() failed for staging buffer") \
     _SG_LOGITEM_XMACRO(VULKAN_STAGING_ALLOCATE_MEMORY_FAILED, "vulkan: allocating device memory for staging buffer failed") \
     _SG_LOGITEM_XMACRO(VULKAN_STAGING_BIND_BUFFER_MEMORY_FAILED, "vulkan: vkBindBufferMemory() failed for staging buffer") \
-    _SG_LOGITEM_XMACRO(VULKAN_UNIFORM_CREATE_BUFFER_FAILED, "vulkan: vkCreateBuffer() failed for uniform buffer") \
-    _SG_LOGITEM_XMACRO(VULKAN_UNIFORM_ALLOCATE_MEMORY_FAILED, "vulkan: allocating device memory for uniform buffer failed") \
-    _SG_LOGITEM_XMACRO(VULKAN_UNIFORM_BIND_BUFFER_MEMORY_FAILED, "vulkan: vkBindBufferMemory() failed for uniform buffer") \
-    _SG_LOGITEM_XMACRO(VULKAN_UNIFORM_MAP_MEMORY_FAILED, "vulkan: vkMapMemory() failed on uniform buffer") \
+    _SG_LOGITEM_XMACRO(VULKAN_CREATE_SHARED_BUFFER_FAILED, "vulkan: vkCreateBuffer() failed for cpu/gpu-shared buffer") \
+    _SG_LOGITEM_XMACRO(VULKAN_ALLOCATE_SHARED_BUFFER_MEMORY_FAILED, "vulkan: allocating device memory for cpu/gpu-shared buffer failed") \
+    _SG_LOGITEM_XMACRO(VULKAN_BIND_SHARED_BUFFER_MEMORY_FAILED, "vulkan: vkBindBufferMemory() failed for cpu/gpu-shared buffer") \
+    _SG_LOGITEM_XMACRO(VULKAN_MAP_SHARED_BUFFER_MEMORY_FAILED, "vulkan: vkMapMemory() failed on cpu/gpu-shared buffer") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_BUFFER_FAILED, "vulkan: vkCreateBuffer() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_BIND_BUFFER_MEMORY_FAILED, "vulkan: vkBindBufferMemory() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_IMAGE_FAILED, "vulkan: vkCreateImage() failed!") \
@@ -6831,6 +6831,8 @@ typedef struct _sg_buffer_s {
     struct {
         VkBuffer buf;
         VkDeviceMemory mem;
+        _sg_vk_access_t cur_access;
+        _sg_vk_access_t next_access;
     } vk;
 } _sg_vk_buffer_t;
 typedef _sg_vk_buffer_t _sg_buffer_t;
@@ -6842,6 +6844,7 @@ typedef struct _sg_image_s {
         VkImage img;
         VkDeviceMemory mem;
         _sg_vk_access_t cur_access;
+        _sg_vk_access_t next_access;
     } vk;
 } _sg_vk_image_t;
 typedef _sg_vk_image_t _sg_image_t;
@@ -6896,6 +6899,19 @@ typedef struct _sg_view_s {
 } _sg_vk_view_t;
 typedef _sg_vk_view_t _sg_view_t;
 
+// a double-buffer cpu-write / gpu-read buffer
+typedef struct {
+    uint32_t size;      // buffer size
+    uint32_t offset;    // current offset into buffer
+    VkBuffer cur_buf;   // currently mapped buffer
+    void* cur_mem_ptr;  // current pointer into currently mapped buffer
+    struct {
+        VkBuffer buf;
+        VkDeviceMemory mem;
+        void* mem_ptr;
+    } slots[SG_NUM_INFLIGHT_FRAMES];
+} _sg_vk_shared_buffer_t;
+
 typedef struct {
     bool valid;
     VkPhysicalDevice phys_dev;
@@ -6927,28 +6943,12 @@ typedef struct {
         } copy;
         // staging system for streaming resources, limited per-frame staging size, may fall
         // back to stalling copy if per-frame staging buffer exhausted
-        struct {
-            uint32_t size;      // staging buffer size
-            uint32_t offset;    // current staging buffer offset
-            VkBuffer cur_buf;   // current staging buffer
-            struct {
-                VkBuffer buf;
-                VkDeviceMemory mem;
-            } slots[SG_NUM_INFLIGHT_FRAMES];
-        } stream;
+        _sg_vk_shared_buffer_t stream;
     } stage;
     // uniform update system
-    struct {
-        uint32_t size;      // uniform buffer size
-        uint32_t offset;    // current uniform buffer offset
-        VkBuffer cur_buf;   // current uniform buffer
-        void* cur_mem_ptr;  // start of cur_buf memory
-        struct {
-            VkBuffer buf;
-            VkDeviceMemory mem;
-            void* mem_ptr;
-        } slots[SG_NUM_INFLIGHT_FRAMES];
-    } uniform;
+    _sg_vk_shared_buffer_t uniform;
+    // resource binding system (using descriptor buffers)
+    _sg_vk_shared_buffer_t bind;
     VkPhysicalDeviceProperties dev_props;
 } _sg_vk_backend_t;
 
@@ -18961,89 +18961,109 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_im
     }
 }
 
-_SOKOL_PRIVATE void _sg_vk_uniform_init(void) {
+_SOKOL_PRIVATE void _sg_vk_shared_buffer_init(_sg_vk_shared_buffer_t* shbuf, uint32_t size, VkBufferUsageFlags vk_usage, const char* label) {
     SOKOL_ASSERT(_sg.vk.dev);
-    SOKOL_ASSERT(_sg.desc.uniform_buffer_size > 0);
-    SOKOL_ASSERT(0 == _sg.vk.uniform.size);
-    SOKOL_ASSERT(0 == _sg.vk.uniform.offset);
-    SOKOL_ASSERT(0 == _sg.vk.uniform.cur_buf);
+    SOKOL_ASSERT(shbuf && (size > 0) && (vk_usage != 0));
+    SOKOL_ASSERT(0 == shbuf->size);
+    SOKOL_ASSERT(0 == shbuf->offset);
+    SOKOL_ASSERT(0 == shbuf->cur_buf);
     VkResult res;
 
-    _sg.vk.uniform.size = (uint32_t) _sg.desc.uniform_buffer_size;
+    shbuf->size = size;
     for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
-        SOKOL_ASSERT(0 == _sg.vk.uniform.slots[i].buf);
-        SOKOL_ASSERT(0 == _sg.vk.uniform.slots[i].mem);
-        SOKOL_ASSERT(0 == _sg.vk.uniform.slots[i].mem_ptr);
+        SOKOL_ASSERT(0 == shbuf->slots[i].buf);
+        SOKOL_ASSERT(0 == shbuf->slots[i].mem);
+        SOKOL_ASSERT(0 == shbuf->slots[i].mem_ptr);
         VkBufferCreateInfo buf_create_info;
         _sg_clear(&buf_create_info, sizeof(buf_create_info));
         buf_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        buf_create_info.size = _sg.vk.uniform.size;
-        buf_create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+        buf_create_info.size = shbuf->size;
+        buf_create_info.usage = vk_usage;
         buf_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        res = vkCreateBuffer(_sg.vk.dev, &buf_create_info, 0, &_sg.vk.uniform.slots[i].buf);
+        res = vkCreateBuffer(_sg.vk.dev, &buf_create_info, 0, &shbuf->slots[i].buf);
         if (res != VK_SUCCESS) {
-            _SG_PANIC(VULKAN_UNIFORM_CREATE_BUFFER_FAILED);
+            _SG_PANIC(VULKAN_CREATE_SHARED_BUFFER_FAILED);
         }
-        SOKOL_ASSERT(_sg.vk.uniform.slots[i].buf);
-        _sg_vk_set_object_label(VK_OBJECT_TYPE_BUFFER, (uint64_t)_sg.vk.uniform.slots[i].buf, "uniform-buffer");
+        SOKOL_ASSERT(shbuf->slots[i].buf);
+        _sg_vk_set_object_label(VK_OBJECT_TYPE_BUFFER, (uint64_t)shbuf->slots[i].buf, label);
 
         VkMemoryRequirements mem_reqs;
         _sg_clear(&mem_reqs, sizeof(mem_reqs));
-        vkGetBufferMemoryRequirements(_sg.vk.dev, _sg.vk.uniform.slots[i].buf, &mem_reqs);
-        _sg.vk.uniform.slots[i].mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-        if (0 == _sg.vk.uniform.slots[i].mem) {
-            _SG_PANIC(VULKAN_UNIFORM_ALLOCATE_MEMORY_FAILED);
+        vkGetBufferMemoryRequirements(_sg.vk.dev, shbuf->slots[i].buf, &mem_reqs);
+        shbuf->slots[i].mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        if (0 == shbuf->slots[i].mem) {
+            _SG_PANIC(VULKAN_ALLOCATE_SHARED_BUFFER_MEMORY_FAILED);
         }
-        res = vkBindBufferMemory(_sg.vk.dev, _sg.vk.uniform.slots[i].buf, _sg.vk.uniform.slots[i].mem, 0);
+        res = vkBindBufferMemory(_sg.vk.dev, shbuf->slots[i].buf, shbuf->slots[i].mem, 0);
         if (res != VK_SUCCESS) {
-            _SG_PANIC(VULKAN_UNIFORM_BIND_BUFFER_MEMORY_FAILED);
+            _SG_PANIC(VULKAN_BIND_SHARED_BUFFER_MEMORY_FAILED);
         }
 
-        res = vkMapMemory(_sg.vk.dev, _sg.vk.uniform.slots[i].mem, 0, VK_WHOLE_SIZE, 0, &_sg.vk.uniform.slots[i].mem_ptr);
+        res = vkMapMemory(_sg.vk.dev, shbuf->slots[i].mem, 0, VK_WHOLE_SIZE, 0, &shbuf->slots[i].mem_ptr);
         if (res != VK_SUCCESS) {
-            _SG_PANIC(VULKAN_UNIFORM_MAP_MEMORY_FAILED);
+            _SG_PANIC(VULKAN_MAP_SHARED_BUFFER_MEMORY_FAILED);
         }
-        SOKOL_ASSERT(_sg.vk.uniform.slots[i].mem_ptr);
+        SOKOL_ASSERT(shbuf->slots[i].mem_ptr);
     }
 }
 
-_SOKOL_PRIVATE void _sg_vk_uniform_discard(void) {
+_SOKOL_PRIVATE void _sg_vk_shared_buffer_discard(_sg_vk_shared_buffer_t* shbuf) {
     SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(shbuf);
     for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
-        SOKOL_ASSERT(_sg.vk.uniform.slots[i].buf);
-        SOKOL_ASSERT(_sg.vk.uniform.slots[i].mem);
-        SOKOL_ASSERT(_sg.vk.uniform.slots[i].mem_ptr);
-        vkUnmapMemory(_sg.vk.dev, _sg.vk.uniform.slots[i].mem);
-        _sg.vk.uniform.slots[i].mem_ptr = 0;
-        _sg_vk_mem_free_device_memory(_sg.vk.uniform.slots[i].mem);
-        _sg.vk.uniform.slots[i].mem = 0;
-        vkDestroyBuffer(_sg.vk.dev, _sg.vk.uniform.slots[i].buf, 0);
-        _sg.vk.uniform.slots[i].buf = 0;
+        SOKOL_ASSERT(shbuf->slots[i].buf);
+        SOKOL_ASSERT(shbuf->slots[i].mem);
+        SOKOL_ASSERT(shbuf->slots[i].mem_ptr);
+        vkUnmapMemory(_sg.vk.dev, shbuf->slots[i].mem);
+        shbuf->slots[i].mem_ptr = 0;
+        _sg_vk_mem_free_device_memory(shbuf->slots[i].mem);
+        shbuf->slots[i].mem = 0;
+        vkDestroyBuffer(_sg.vk.dev, shbuf->slots[i].buf, 0);
+        shbuf->slots[i].buf = 0;
     }
-    _sg.vk.uniform.size = 0;
-    _sg.vk.uniform.offset = 0;
-    _sg.vk.uniform.cur_buf = 0;
+    shbuf->size = 0;
+    shbuf->offset = 0;
+    shbuf->cur_buf = 0;
+}
+
+_SOKOL_PRIVATE void _sg_vk_shared_buffer_after_acquire(_sg_vk_shared_buffer_t* shbuf) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(0 == shbuf->cur_buf);
+    SOKOL_ASSERT(0 == shbuf->cur_mem_ptr);
+    const uint32_t frame_slot = _sg.vk.frame_slot;
+    shbuf->offset = 0;
+    shbuf->cur_buf = shbuf->slots[frame_slot].buf;
+    shbuf->cur_mem_ptr = shbuf->slots[frame_slot].mem_ptr;
+}
+
+_SOKOL_PRIVATE void _sg_vk_shared_buffer_before_submit(_sg_vk_shared_buffer_t* shbuf) {
+    SOKOL_ASSERT(shbuf->cur_buf);
+    SOKOL_ASSERT(shbuf->cur_mem_ptr);
+    // NOTE: if the buffer wouldn't be cache-coherent, this would be the place to do a flush
+    shbuf->cur_buf = 0;
+    shbuf->cur_mem_ptr = 0;
+}
+
+_SOKOL_PRIVATE void _sg_vk_uniform_init(void) {
+    SOKOL_ASSERT(_sg.desc.uniform_buffer_size > 0);
+    _sg_vk_shared_buffer_init(&_sg.vk.uniform,
+        (uint32_t)_sg.desc.uniform_buffer_size,
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        "shared-uniform-buffer");
+}
+
+_SOKOL_PRIVATE void _sg_vk_uniform_discard(void) {
+    _sg_vk_shared_buffer_discard(&_sg.vk.uniform);
 }
 
 // called from _sg_vk_acquire_frame_command_buffer()
 _SOKOL_PRIVATE void _sg_vk_uniform_after_acquire(void) {
-    SOKOL_ASSERT(_sg.vk.dev);
-    SOKOL_ASSERT(0 == _sg.vk.uniform.cur_buf);
-    SOKOL_ASSERT(0 == _sg.vk.uniform.cur_mem_ptr);
-    const uint32_t frame_slot = _sg.vk.frame_slot;
-    _sg.vk.uniform.offset = 0;
-    _sg.vk.uniform.cur_buf = _sg.vk.uniform.slots[frame_slot].buf;
-    _sg.vk.uniform.cur_mem_ptr = _sg.vk.uniform.slots[frame_slot].mem_ptr;
+    _sg_vk_shared_buffer_after_acquire(&_sg.vk.uniform);
 }
 
 // called from _sg_vk_submit_frame_command_buffer()
 _SOKOL_PRIVATE void _sg_vk_uniform_before_submit(void) {
-    SOKOL_ASSERT(_sg.vk.uniform.cur_buf);
-    SOKOL_ASSERT(_sg.vk.uniform.cur_mem_ptr);
-    // NOTE: if the uniform buffer wouldn't be cache-coherent,
-    // this would be the place to do a flush
-    _sg.vk.uniform.cur_buf = 0;
-    _sg.vk.uniform.cur_mem_ptr = 0;
+    _sg_vk_shared_buffer_before_submit(&_sg.vk.uniform);
 }
 
 // called form _sg_vk_apply_uniforms, returns offset of data snippet into uniform buffer
@@ -19694,6 +19714,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_buffer(_sg_buffer_t* buf, const s
     VkResult res;
     // FIXME: inject external buffer
 
+    buf->vk.cur_access = _SG_VK_ACCESS_NONE;
+    buf->vk.next_access = _SG_VK_ACCESS_NONE;
+
     VkBufferCreateInfo create_info;
     _sg_clear(&create_info, sizeof(create_info));
     create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -19741,6 +19764,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_image(_sg_image_t* img, const sg_
     // FIXME: injected images
 
     img->vk.cur_access = _SG_VK_ACCESS_NONE;
+    img->vk.next_access = _SG_VK_ACCESS_NONE;
 
     VkImageCreateInfo create_info;
     _sg_clear(&create_info, sizeof(create_info));
