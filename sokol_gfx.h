@@ -19396,6 +19396,19 @@ _SOKOL_PRIVATE VkFormat _sg_vk_vertex_format(sg_vertex_format f) {
     }
 }
 
+_SOKOL_PRIVATE VkImageCreateFlags _sg_vk_image_create_flags(sg_image_type t) {
+    switch (t) {
+        case SG_IMAGETYPE_2D: return 0;
+        case SG_IMAGETYPE_CUBE: return VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+        // FIXME: VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT needed for render to slice?
+        case SG_IMAGETYPE_3D: return 0;
+        case SG_IMAGETYPE_ARRAY: return 0;
+        default:
+            SOKOL_UNREACHABLE;
+            return 0;
+    }
+}
+
 _SOKOL_PRIVATE VkImageType _sg_vk_image_type(sg_image_type t) {
     return (SG_IMAGETYPE_3D == t) ? VK_IMAGE_TYPE_3D : VK_IMAGE_TYPE_2D;
 }
@@ -20023,7 +20036,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_image(_sg_image_t* img, const sg_
     VkImageCreateInfo create_info;
     _sg_clear(&create_info, sizeof(create_info));
     create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    create_info.flags = 0; // FIXME? (e.g. VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT to create partial 3D texture views?)
+    create_info.flags = _sg_vk_image_create_flags(img->cmn.type);
     create_info.imageType = _sg_vk_image_type(img->cmn.type);
     create_info.format = _sg_vk_format(desc->pixel_format);
     create_info.extent.width = (uint32_t)img->cmn.width;
