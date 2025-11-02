@@ -18415,8 +18415,7 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_src_stage_mask(_sg_vk_access_t old_a
     const int top_of_pipe_bits =
         _SG_VK_ACCESS_VERTEXBUFFER |
         _SG_VK_ACCESS_INDEXBUFFER |
-        _SG_VK_ACCESS_STORAGEBUFFER_RO |
-        _SG_VK_ACCESS_TEXTURE;
+        _SG_VK_ACCESS_STORAGEBUFFER_RO;
     const int compute_shader_bits =
         _SG_VK_ACCESS_STORAGEIMAGE |
         _SG_VK_ACCESS_STORAGEBUFFER_RW;
@@ -18426,6 +18425,10 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_src_stage_mask(_sg_vk_access_t old_a
     if (0 != (old_access & _SG_VK_ACCESS_STAGING)) {
         SOKOL_ASSERT(0 == (old_access & ~_SG_VK_ACCESS_STAGING));
         return VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    }
+    if (0 != (old_access & _SG_VK_ACCESS_TEXTURE)) {
+        SOKOL_ASSERT(0 == (old_access & ~_SG_VK_ACCESS_TEXTURE));
+        return VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
     }
     if (0 != (old_access & top_of_pipe_bits)) {
         SOKOL_ASSERT(0 == (old_access & ~top_of_pipe_bits));
