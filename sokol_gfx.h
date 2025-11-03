@@ -6799,6 +6799,7 @@ typedef struct {
 #define _SG_VK_MAX_UB_DESCRIPTORSET_SLOTS (2 * SG_MAX_UNIFORMBLOCK_BINDSLOTS)
 #define _SG_VK_MAX_VIEW_SMP_DESCRIPTORSET_ENTRIES (SG_MAX_VIEW_BINDSLOTS + SG_MAX_SAMPLER_BINDSLOTS)
 #define _SG_VK_MAX_VIEW_SMP_DESCRIPTORSET_SLOTS (128)
+#define _SG_VK_MAX_DESCRIPTOR_DATA_SIZE (256) // FIXME: llvmpipe needs 280 bytes, do we need to care about that?
 
 typedef void (*_sg_vk_delete_queue_destructor_t)(void* obj);
 
@@ -6875,15 +6876,19 @@ typedef struct _sg_shader_s {
         _sg_vk_shader_func_t vertex_func;
         _sg_vk_shader_func_t fragment_func;
         _sg_vk_shader_func_t compute_func;
-        VkDescriptorSetLayout dset_ub;
-        VkDeviceSize dset_ub_size;
-        VkDescriptorSetLayout dset_view_smp;
-        VkDeviceSize dset_view_smp_size;
+        VkDescriptorSetLayout ub_dsl;
+        VkDeviceSize ub_dset_size;
+        VkDescriptorSetLayout view_smp_dsl;
+        VkDeviceSize view_smp_dset_size;
         VkPipelineLayout pip_layout;
         // indexed by sokol-gfx bind-slot
         uint8_t ub_set0_bnd_n[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
         uint8_t view_set1_bnd_n[SG_MAX_VIEW_BINDSLOTS];
         uint8_t smp_set1_bnd_n[SG_MAX_SAMPLER_BINDSLOTS];
+        // relative descriptor offsets to start of descriptor set in descriptor buffer
+        uint16_t ub_dset_offsets[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
+        uint16_t view_dset_offsets[SG_MAX_VIEW_BINDSLOTS];
+        uint16_t smp_dset_offsets[SG_MAX_SAMPLER_BINDSLOTS];
     } vk;
 } _sg_vk_shader_t;
 typedef _sg_vk_shader_t _sg_shader_t;
@@ -6902,6 +6907,7 @@ typedef struct _sg_view_s {
     _sg_view_common_t cmn;
     struct {
         VkImageView img_view;
+        uint8_t descriptor_data[_SG_VK_MAX_DESCRIPTOR_DATA_SIZE];
     } vk;
 } _sg_vk_view_t;
 typedef _sg_vk_view_t _sg_view_t;
@@ -6914,9 +6920,11 @@ typedef struct {
     uint32_t offset;        // current offset into buffer
     VkBuffer cur_buf;       // currently mapped buffer
     void* cur_mem_ptr;      // current pointer into currently mapped buffer
+    VkDeviceAddress cur_dev_addr;   // current buffer device address (only valid for some buffer types)
     struct {
         VkBuffer buf;
         VkDeviceMemory mem;
+        VkDeviceAddress dev_addr;   // only valid for some buffer types!
         void* mem_ptr;
     } slots[SG_NUM_INFLIGHT_FRAMES];
 } _sg_vk_shared_buffer_t;
@@ -18410,7 +18418,8 @@ _SOKOL_PRIVATE void _sg_vk_set_object_label(VkObjectType obj_type, uint64_t obj_
     }
 }
 
-// return pipeline stage where last gpu-write access happened
+// return pipeline stage where the gpu-write access happened which needs
+// to complete before the resource barrier
 _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_src_stage_mask(_sg_vk_access_t old_access) {
     const int top_of_pipe_bits =
         _SG_VK_ACCESS_VERTEXBUFFER |
@@ -18446,7 +18455,8 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_src_stage_mask(_sg_vk_access_t old_a
     return VK_PIPELINE_STAGE_2_NONE;
 }
 
-// return pipeline stage which will read from the resource
+// return pipeline stage which will read from the resource and which may
+// only start after the barrier
 _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_dst_stage_mask(_sg_vk_access_t new_access) {
     const int color_attachment_output_bits =
         _SG_VK_ACCESS_COLOR_ATTACHMENT |
@@ -18513,6 +18523,8 @@ _SOKOL_PRIVATE VkAccessFlags2 _sg_vk_access_mask(_sg_vk_access_t access) {
 }
 
 _SOKOL_PRIVATE VkImageLayout _sg_vk_image_layout(_sg_vk_access_t access) {
+    // NOTE: "image layout transitions with VK_IMAGE_LAYOUT_UNDEFINED allow
+    // the implementation to discard the image subresource range"
     switch (access) {
         case _SG_VK_ACCESS_NONE:
             return VK_IMAGE_LAYOUT_UNDEFINED;
@@ -19009,6 +19021,7 @@ _SOKOL_PRIVATE void _sg_vk_shared_buffer_init(_sg_vk_shared_buffer_t* shbuf, uin
     SOKOL_ASSERT(0 == shbuf->offset);
     SOKOL_ASSERT(0 == shbuf->cur_buf);
     VkResult res;
+    const bool want_device_address = 0 != (vk_usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
 
     shbuf->size = _sg_roundup_u32(size, align);
     shbuf->align = align;
@@ -19032,9 +19045,11 @@ _SOKOL_PRIVATE void _sg_vk_shared_buffer_init(_sg_vk_shared_buffer_t* shbuf, uin
         VkMemoryRequirements mem_reqs;
         _sg_clear(&mem_reqs, sizeof(mem_reqs));
         vkGetBufferMemoryRequirements(_sg.vk.dev, shbuf->slots[i].buf, &mem_reqs);
+        // FIXME: we may want host-visible + local memory for uniform and descriptor buffers,
+        // but need to handle failure
         const VkMemoryPropertyFlags mem_prop_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
         VkMemoryAllocateFlagBits mem_alloc_flags = 0;
-        if (0 != (vk_usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)) {
+        if (want_device_address) {
             mem_alloc_flags |= VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
         }
         shbuf->slots[i].mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, mem_prop_flags, mem_alloc_flags);
@@ -19045,7 +19060,14 @@ _SOKOL_PRIVATE void _sg_vk_shared_buffer_init(_sg_vk_shared_buffer_t* shbuf, uin
         if (res != VK_SUCCESS) {
             _SG_PANIC(VULKAN_BIND_SHARED_BUFFER_MEMORY_FAILED);
         }
-
+        if (want_device_address) {
+            VkBufferDeviceAddressInfo addr_info;
+            _sg_clear(&addr_info, sizeof(addr_info));
+            addr_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+            addr_info.buffer = shbuf->slots[i].buf;
+            shbuf->slots[i].dev_addr = vkGetBufferDeviceAddress(_sg.vk.dev, &addr_info);
+            SOKOL_ASSERT(shbuf->slots[i].dev_addr);
+        }
         res = vkMapMemory(_sg.vk.dev, shbuf->slots[i].mem, 0, VK_WHOLE_SIZE, 0, &shbuf->slots[i].mem_ptr);
         if (res != VK_SUCCESS) {
             _SG_PANIC(VULKAN_MAP_SHARED_BUFFER_MEMORY_FAILED);
@@ -19067,20 +19089,24 @@ _SOKOL_PRIVATE void _sg_vk_shared_buffer_discard(_sg_vk_shared_buffer_t* shbuf) 
         shbuf->slots[i].mem = 0;
         vkDestroyBuffer(_sg.vk.dev, shbuf->slots[i].buf, 0);
         shbuf->slots[i].buf = 0;
+        shbuf->slots[i].dev_addr = 0;
     }
     shbuf->size = 0;
     shbuf->offset = 0;
     shbuf->cur_buf = 0;
+    shbuf->cur_dev_addr = 0;
 }
 
 _SOKOL_PRIVATE void _sg_vk_shared_buffer_after_acquire(_sg_vk_shared_buffer_t* shbuf) {
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(0 == shbuf->cur_buf);
     SOKOL_ASSERT(0 == shbuf->cur_mem_ptr);
+    SOKOL_ASSERT(0 == shbuf->cur_dev_addr);
     const uint32_t frame_slot = _sg.vk.frame_slot;
     shbuf->offset = 0;
     shbuf->cur_buf = shbuf->slots[frame_slot].buf;
     shbuf->cur_mem_ptr = shbuf->slots[frame_slot].mem_ptr;
+    shbuf->cur_dev_addr = shbuf->slots[frame_slot].dev_addr; // NOTE: may be 0
     SOKOL_ASSERT(shbuf->cur_buf);
     SOKOL_ASSERT(shbuf->cur_mem_ptr);
 }
@@ -19091,28 +19117,32 @@ _SOKOL_PRIVATE void _sg_vk_shared_buffer_before_submit(_sg_vk_shared_buffer_t* s
     // NOTE: if the buffer wouldn't be cache-coherent, this would be the place to do a flush
     shbuf->cur_buf = 0;
     shbuf->cur_mem_ptr = 0;
+    shbuf->cur_dev_addr = 0;
 }
 
-_SOKOL_PRIVATE void* _sg_vk_shared_buffer_bumpalloc(_sg_vk_shared_buffer_t* shbuf, uint32_t num_bytes) {
+_SOKOL_PRIVATE VkDeviceSize _sg_vk_shared_buffer_alloc(_sg_vk_shared_buffer_t* shbuf, uint32_t num_bytes) {
     SOKOL_ASSERT(shbuf && (num_bytes > 0));
-    SOKOL_ASSERT(shbuf->cur_mem_ptr);
     if ((shbuf->offset + num_bytes) > shbuf->size) {
-        return 0;
+        return _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT;
     }
     SOKOL_ASSERT((shbuf->offset & (shbuf->align - 1)) == 0);
-    void* ptr = shbuf->cur_mem_ptr + shbuf->offset;
+    VkDeviceSize offset = shbuf->offset;
     shbuf->offset = _sg_roundup_u32(shbuf->offset + num_bytes, shbuf->align);
-    return ptr;
+    return offset;
+}
+
+_SOKOL_PRIVATE void* _sg_vk_shared_buffer_ptr(_sg_vk_shared_buffer_t* shbuf, VkDeviceSize offset) {
+    SOKOL_ASSERT(shbuf && shbuf->cur_mem_ptr);
+    SOKOL_ASSERT(offset < shbuf->size);
+    return shbuf->cur_mem_ptr + offset;
 }
 
 _SOKOL_PRIVATE uint32_t _sg_vk_shared_buffer_memcpy(_sg_vk_shared_buffer_t* shbuf, const void* src_ptr, uint32_t num_bytes) {
     SOKOL_ASSERT(shbuf && src_ptr && (num_bytes > 0));
-    const uint32_t offset = shbuf->offset;
-    void* dst_ptr = _sg_vk_shared_buffer_bumpalloc(shbuf, num_bytes);
-    if (0 == dst_ptr) {
-        return _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT;
+    const uint32_t offset = _sg_vk_shared_buffer_alloc(shbuf, num_bytes);
+    if (offset != _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
+        memcpy(_sg_vk_shared_buffer_ptr(shbuf, offset), src_ptr, num_bytes);
     }
-    memcpy(dst_ptr, src_ptr, num_bytes);
     return offset;
 }
 
@@ -19169,17 +19199,11 @@ _SOKOL_PRIVATE void _sg_vk_bind_after_acquire(void) {
     // bind the current frame's descriptor buffer
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
     SOKOL_ASSERT(_sg.vk.bind.cur_buf);
-    VkBufferDeviceAddressInfo addr_info;
-    _sg_clear(&addr_info, sizeof(addr_info));
-    addr_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-    addr_info.buffer = _sg.vk.bind.cur_buf;
-    const uint64_t device_address = vkGetBufferDeviceAddress(_sg.vk.dev, &addr_info);
-    SOKOL_ASSERT(device_address != 0);
-
+    SOKOL_ASSERT(_sg.vk.bind.cur_dev_addr);
     VkDescriptorBufferBindingInfoEXT bind_info;
     _sg_clear(&bind_info, sizeof(bind_info));
     bind_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;
-    bind_info.address = device_address;
+    bind_info.address = _sg.vk.bind.cur_dev_addr;
     bind_info.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
                       VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT;
     _sg.vk.ext.cmd_bind_descriptor_buffers(_sg.vk.frame.cmd_buf, 1, &bind_info);
@@ -19195,19 +19219,19 @@ _SOKOL_PRIVATE bool _sg_vk_bind_view_smp_descriptors(const _sg_bindings_ptrs_t* 
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
     SOKOL_ASSERT(bnd && bnd->pip);
     const _sg_shader_t* shd = _sg_shader_ref_ptr(&bnd->pip->cmn.shader);
-    const VkDeviceSize dsl_size = shd->vk.dset_view_smp_size;
+    const VkDeviceSize dsl_size = shd->vk.view_smp_dset_size;
     if (dsl_size == 0) {
         // nothing to bind
         return true;
     }
     // capture current descriptor buffer offset before bump-allocating
-    const VkDeviceSize descriptor_buffer_offset = _sg.vk.bind.offset;
-    void* dst_ptr = _sg_vk_shared_buffer_bumpalloc(&_sg.vk.bind, dsl_size);
-    if (dst_ptr == 0) {
+    const VkDeviceSize dbuf_offset = _sg_vk_shared_buffer_alloc(&_sg.vk.bind, dsl_size);
+    if (dbuf_offset == _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
         _SG_ERROR(VULKAN_DESCRIPTOR_BUFFER_OVERFLOW);
         return false;
     }
-    VkDescriptorSetLayout dsl = shd->vk.dset_view_smp;
+    void* dbuf_ptr = _sg_vk_shared_buffer_ptr(&_sg.vk.bind, dbuf_offset);
+    VkDescriptorSetLayout dsl = shd->vk.view_smp_dsl;
     SOKOL_ASSERT(dsl);
     for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
         if (shd->cmn.views[i].stage == SG_SHADERSTAGE_NONE) {
@@ -19256,9 +19280,9 @@ _SOKOL_PRIVATE bool _sg_vk_bind_view_smp_descriptors(const _sg_bindings_ptrs_t* 
         }
         // offset of current descriptor in descriptor set
         // FIXME: this should really only happen once when creating the shader!
-        VkDeviceSize dst_offset;
-        _sg.vk.ext.get_descriptor_set_layout_binding_offset(_sg.vk.dev, dsl, vk_bnd, &dst_offset);
-        _sg.vk.ext.get_descriptor(_sg.vk.dev, &get_info, descriptor_size, dst_ptr + dst_offset);
+        VkDeviceSize dset_offset;
+        _sg.vk.ext.get_descriptor_set_layout_binding_offset(_sg.vk.dev, dsl, vk_bnd, &dset_offset);
+        _sg.vk.ext.get_descriptor(_sg.vk.dev, &get_info, descriptor_size, dbuf_ptr + dset_offset);
     }
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
         if (shd->cmn.samplers[i].stage == SG_SHADERSTAGE_NONE) {
@@ -19278,13 +19302,13 @@ _SOKOL_PRIVATE bool _sg_vk_bind_view_smp_descriptors(const _sg_bindings_ptrs_t* 
 
         // offset of current descriptor in descriptor set
         // FIXME: this should really only happen once when creating the shader!
-        VkDeviceSize dst_offset;
-        _sg.vk.ext.get_descriptor_set_layout_binding_offset(_sg.vk.dev, dsl, vk_bnd, &dst_offset);
-        _sg.vk.ext.get_descriptor(_sg.vk.dev, &get_info, descriptor_size, dst_ptr + dst_offset);
+        VkDeviceSize dset_offset;
+        _sg.vk.ext.get_descriptor_set_layout_binding_offset(_sg.vk.dev, dsl, vk_bnd, &dset_offset);
+        _sg.vk.ext.get_descriptor(_sg.vk.dev, &get_info, descriptor_size, dbuf_ptr + dset_offset);
     }
 
     // and finally record the new descriptor buffer offset
-    const uint32_t descriptor_buffer_index = 0;
+    const uint32_t dbuf_index = 0;
     SOKOL_ASSERT(shd->vk.pip_layout);
     _sg.vk.ext.cmd_set_descriptor_buffer_offsets(
         _sg.vk.frame.cmd_buf,
@@ -19292,8 +19316,8 @@ _SOKOL_PRIVATE bool _sg_vk_bind_view_smp_descriptors(const _sg_bindings_ptrs_t* 
         shd->vk.pip_layout,
         _SG_VK_VIEW_SMP_DESCRIPTORSET_INDEX, // firstSet
         1,  // setCount
-        &descriptor_buffer_index,
-        &descriptor_buffer_offset);
+        &dbuf_index,
+        &dbuf_offset);
 
         return true;
 }
@@ -20218,8 +20242,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
     SOKOL_ASSERT(shd->vk.vertex_func.module == 0);
     SOKOL_ASSERT(shd->vk.fragment_func.module == 0);
     SOKOL_ASSERT(shd->vk.compute_func.module == 0);
-    SOKOL_ASSERT(shd->vk.dset_ub == 0);
-    SOKOL_ASSERT(shd->vk.dset_view_smp == 0);
+    SOKOL_ASSERT(shd->vk.ub_dsl == 0);
+    SOKOL_ASSERT(shd->vk.view_smp_dsl == 0);
 
     if (!_sg_vk_ensure_spirv_bindslot_ranges(desc)) {
         return SG_RESOURCESTATE_FAILED;
@@ -20269,12 +20293,23 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
     dsl_create_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
     dsl_create_info.bindingCount = dsl_index;
     dsl_create_info.pBindings = dsl_entries;
-    res = vkCreateDescriptorSetLayout(_sg.vk.dev, &dsl_create_info, 0, &shd->vk.dset_ub);
+    res = vkCreateDescriptorSetLayout(_sg.vk.dev, &dsl_create_info, 0, &shd->vk.ub_dsl);
     if (res != VK_SUCCESS) {
         _SG_ERROR(VULKAN_CREATE_DESCRIPTOR_SET_LAYOUT_FAILED);
         return SG_RESOURCESTATE_FAILED;
     }
-    _sg.vk.ext.get_descriptor_set_layout_size(_sg.vk.dev, shd->vk.dset_ub, &shd->vk.dset_ub_size);
+
+    // store uniform descriptor set size and descriptor offsets
+    _sg.vk.ext.get_descriptor_set_layout_size(_sg.vk.dev, shd->vk.ub_dsl, &shd->vk.ub_dset_size);
+    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
+        if (shd->cmn.uniform_blocks[i].stage == SG_SHADERSTAGE_NONE) {
+            continue;
+        }
+        const uint8_t vk_bnd = shd->vk.ub_set0_bnd_n[i];
+        VkDeviceSize dset_offset;
+        _sg.vk.ext.get_descriptor_set_layout_binding_offset(_sg.vk.dev, shd->vk.ub_dsl, vk_bnd, &dset_offset);
+        shd->vk.ub_dset_offsets[i] = dset_offset;
+    }
 
     _sg_clear(dsl_entries, sizeof(dsl_entries));
     _sg_clear(&dsl_create_info, sizeof(dsl_create_info));
@@ -20319,16 +20354,16 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
     dsl_create_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
     dsl_create_info.bindingCount = dsl_index;
     dsl_create_info.pBindings = dsl_entries;
-    res = vkCreateDescriptorSetLayout(_sg.vk.dev, &dsl_create_info, 0, &shd->vk.dset_view_smp);
+    res = vkCreateDescriptorSetLayout(_sg.vk.dev, &dsl_create_info, 0, &shd->vk.view_smp_dsl);
     if (res != VK_SUCCESS) {
         _SG_ERROR(VULKAN_CREATE_DESCRIPTOR_SET_LAYOUT_FAILED);
         return SG_RESOURCESTATE_FAILED;
     }
-    _sg.vk.ext.get_descriptor_set_layout_size(_sg.vk.dev, shd->vk.dset_view_smp, &shd->vk.dset_view_smp_size);
+    _sg.vk.ext.get_descriptor_set_layout_size(_sg.vk.dev, shd->vk.view_smp_dsl, &shd->vk.view_smp_dset_size);
 
     VkDescriptorSetLayout set_layouts[_SG_VK_NUM_DESCRIPTORSETS] = {
-        shd->vk.dset_ub,
-        shd->vk.dset_view_smp,
+        shd->vk.ub_dsl,
+        shd->vk.view_smp_dsl,
     };
     VkPipelineLayoutCreateInfo pl_create_info;
     _sg_clear(&pl_create_info, sizeof(pl_create_info));
@@ -20353,13 +20388,13 @@ _SOKOL_PRIVATE void _sg_vk_discard_shader(_sg_shader_t* shd) {
         _sg_vk_delete_queue_add(_sg_vk_pipelinelayout_destructor, (void*)shd->vk.pip_layout);
         shd->vk.pip_layout = 0;
     }
-    if (shd->vk.dset_ub) {
-        _sg_vk_delete_queue_add(_sg_vk_descriptorsetlayout_destructor, (void*)shd->vk.dset_ub);
-        shd->vk.dset_ub = 0;
+    if (shd->vk.ub_dsl) {
+        _sg_vk_delete_queue_add(_sg_vk_descriptorsetlayout_destructor, (void*)shd->vk.ub_dsl);
+        shd->vk.ub_dsl = 0;
     }
-    if (shd->vk.dset_view_smp) {
-        _sg_vk_delete_queue_add(_sg_vk_descriptorsetlayout_destructor, (void*)shd->vk.dset_view_smp);
-        shd->vk.dset_view_smp = 0;
+    if (shd->vk.view_smp_dsl) {
+        _sg_vk_delete_queue_add(_sg_vk_descriptorsetlayout_destructor, (void*)shd->vk.view_smp_dsl);
+        shd->vk.view_smp_dsl = 0;
     }
 }
 
@@ -20835,7 +20870,7 @@ _SOKOL_PRIVATE bool _sg_vk_apply_bindings(_sg_bindings_ptrs_t* bnd) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
 
     // FIXME FIXME FIXME:
-    // Once we have cpu- or gpu-updated resources we need a pipeline barrier system!
+    // update barriers (in compute passes) or verify access type (in render pass)
 
     if (!_sg.cur_pass.is_compute) {
         // bind vertex buffers
@@ -20857,9 +20892,6 @@ _SOKOL_PRIVATE bool _sg_vk_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         }
     }
 
-    // FIXME: need to handle memory barriers here?
-    // image- and buffer-barriers are not allowed inside render passes
-
     // bind views and samplers
     const VkPipelineBindPoint pip_bind_point = _sg.cur_pass.is_compute
         ? VK_PIPELINE_BIND_POINT_COMPUTE
@@ -20877,57 +20909,45 @@ _SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
     SOKOL_ASSERT(data->size == shd->cmn.uniform_blocks[ub_slot].size);
 
     // copy data into per-frame uniform buffer
-    const uint32_t offset = _sg_vk_uniform_copy(data);
-    if (offset == _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
+    _sg.vk.uniform_bind_offsets[ub_slot] = _sg_vk_uniform_copy(data);
+    if (_sg.vk.uniform_bind_offsets[ub_slot] == _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
         _SG_ERROR(VULKAN_UNIFORM_BUFFER_OVERFLOW);
         _sg.next_draw_valid = false;
         return;
     }
-    _sg.vk.uniform_bind_offsets[ub_slot] = offset;
 
-    // FIXME: do this once in _sg_vk_uniform_init!
-    VkBufferDeviceAddressInfo addr_info;
-    _sg_clear(&addr_info, sizeof(addr_info));
-    addr_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-    addr_info.buffer = _sg.vk.uniform.cur_buf;
-    VkDeviceAddress device_address = vkGetBufferDeviceAddress(_sg.vk.dev, &addr_info);
-
-    // bind uniform descriptors
-    // FIXME: move this code into a function _sg_vk_bind_uniform_descriptors()
-    const VkDeviceSize dsl_size = shd->vk.dset_ub_size;
-    const VkDeviceSize descriptor_buffer_offset = _sg.vk.bind.offset;
-    void* dst_ptr = _sg_vk_shared_buffer_bumpalloc(&_sg.vk.bind, dsl_size);
-    if (dst_ptr == 0) {
+    // get next pointer in descriptor buffer
+    // NOTE: need to capture current offset before allocating!
+    const VkDeviceSize dbuf_offset = _sg_vk_shared_buffer_alloc(&_sg.vk.bind, shd->vk.ub_dset_size);
+    if (dbuf_offset == _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
         _SG_ERROR(VULKAN_DESCRIPTOR_BUFFER_OVERFLOW);
         _sg.next_draw_valid = false;
         return;
     }
-    VkDescriptorSetLayout dsl = shd->vk.dset_ub;
+    void* dbuf_ptr = _sg_vk_shared_buffer_ptr(&_sg.vk.bind, dbuf_offset);
+
+    VkDescriptorSetLayout dsl = shd->vk.ub_dsl;
     SOKOL_ASSERT(dsl);
     const size_t descriptor_size = _sg.vk.descriptor_buffer_props.uniformBufferDescriptorSize;
+    VkDescriptorAddressInfoEXT addr_info;
+    _sg_clear(&addr_info, sizeof(addr_info));
+    addr_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT;
+    addr_info.range = data->size;
+    VkDescriptorGetInfoEXT get_info;
+    _sg_clear(&get_info, sizeof(get_info));
+    get_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
+    get_info.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    get_info.data.pUniformBuffer = &addr_info;
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
         if (shd->cmn.uniform_blocks[i].stage == SG_SHADERSTAGE_NONE) {
             continue;
         }
-        VkDescriptorAddressInfoEXT addr_info;
-        _sg_clear(&addr_info, sizeof(addr_info));
-        addr_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT;
-        VkDescriptorGetInfoEXT get_info;
-        _sg_clear(&get_info, sizeof(get_info));
-        get_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
-        get_info.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        get_info.data.pUniformBuffer = &addr_info;
-        addr_info.address = device_address + _sg.vk.uniform_bind_offsets[i];
-        addr_info.range = data->size;
-
-        const uint8_t vk_bnd = shd->vk.ub_set0_bnd_n[i];
-        VkDeviceSize dst_offset;
-        _sg.vk.ext.get_descriptor_set_layout_binding_offset(_sg.vk.dev, dsl, vk_bnd, &dst_offset);
-        _sg.vk.ext.get_descriptor(_sg.vk.dev, &get_info, descriptor_size, dst_ptr + dst_offset);
+        addr_info.address = _sg.vk.uniform.cur_dev_addr + _sg.vk.uniform_bind_offsets[i];
+        _sg.vk.ext.get_descriptor(_sg.vk.dev, &get_info, descriptor_size, dbuf_ptr + shd->vk.ub_dset_offsets[i]);
     }
 
     // record the new descriptor buffer offset
-    const uint32_t descriptor_buffer_index = 0;
+    const uint32_t dbuf_index = 0;
     SOKOL_ASSERT(shd->vk.pip_layout);
     const VkPipelineBindPoint pip_bind_point = _sg.cur_pass.is_compute
         ? VK_PIPELINE_BIND_POINT_COMPUTE
@@ -20938,26 +20958,8 @@ _SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
         shd->vk.pip_layout,
         _SG_VK_UB_DESCRIPTORSET_INDEX, // firstIndex
         1, // setCount
-        &descriptor_buffer_index,
-        &descriptor_buffer_offset);
-
-    /*
-    const VkPipelineLayout pip_layout = shd->vk.pip_layout;
-    VkDescriptorBufferInfo buf_info;
-    _sg_clear(&buf_info, sizeof(buf_info));
-    buf_info.buffer = _sg.vk.uniform.cur_buf;
-    buf_info.offset = (VkDeviceSize)offset;
-    buf_info.range = (VkDeviceSize)data->size;
-    VkWriteDescriptorSet write_dset;
-    _sg_clear(&write_dset, sizeof(write_dset));
-    write_dset.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write_dset.dstSet = 0;  // ignored
-    write_dset.dstBinding = shd->vk.ub_set0_bnd_n[ub_slot];
-    write_dset.descriptorCount = 1;
-    write_dset.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    write_dset.pBufferInfo = &buf_info;
-    vkCmdPushDescriptorSet(_sg.vk.frame.cmd_buf, pip_bind_point, pip_layout, _SG_VK_UB_DESCRIPTORSET_INDEX, 1, &write_dset);
-    */
+        &dbuf_index,
+        &dbuf_offset);
 }
 
 _SOKOL_PRIVATE void _sg_vk_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
