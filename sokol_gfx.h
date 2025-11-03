@@ -20395,7 +20395,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
         dsl_entry->binding = shd->vk.smp_set1_bnd_n[i];
         dsl_entry->descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
         dsl_entry->descriptorCount = 1;
-        dsl_entry->stageFlags = _sg_vk_shader_stage(shd->cmn.views[i].stage);
+        dsl_entry->stageFlags = _sg_vk_shader_stage(shd->cmn.samplers[i].stage);
         dsl_index += 1;
     }
     dsl_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
