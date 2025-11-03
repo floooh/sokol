@@ -19241,30 +19241,30 @@ _SOKOL_PRIVATE void _sg_vk_bind_before_submit(void) {
     _sg_vk_shared_buffer_before_submit(&_sg.vk.bind);
 }
 
-_SOKOL_PRIVATE bool _sg_vk_bind_view_smp_descriptors(const _sg_bindings_ptrs_t* bnd, VkPipelineBindPoint vk_bind_point) {
+_SOKOL_PRIVATE bool _sg_vk_bind_view_smp_descriptor_set(const _sg_bindings_ptrs_t* bnd, VkPipelineBindPoint vk_bind_point) {
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
     SOKOL_ASSERT(bnd && bnd->pip);
     const _sg_shader_t* shd = _sg_shader_ref_ptr(&bnd->pip->cmn.shader);
-    const VkDeviceSize dsl_size = shd->vk.view_smp_dset_size;
-    if (dsl_size == 0) {
+    const VkDeviceSize dset_size = shd->vk.view_smp_dset_size;
+    if (dset_size == 0) {
         // nothing to bind
         return true;
     }
-    // capture current descriptor buffer offset before bump-allocating
-    const VkDeviceSize dbuf_offset = _sg_vk_shared_buffer_alloc(&_sg.vk.bind, dsl_size);
-    if (dbuf_offset == _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
+    // get next pointer in descriptor buffer
+    const VkDeviceSize dbuf_offset = _sg_vk_shared_buffer_alloc(&_sg.vk.bind, dset_size);
+    if (_sg.vk.bind.overflown) {
         _SG_ERROR(VULKAN_DESCRIPTOR_BUFFER_OVERFLOW);
         return false;
     }
     void* dbuf_ptr = _sg_vk_shared_buffer_ptr(&_sg.vk.bind, dbuf_offset);
+
     VkDescriptorSetLayout dsl = shd->vk.view_smp_dsl;
     SOKOL_ASSERT(dsl);
     for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
         if (shd->cmn.views[i].stage == SG_SHADERSTAGE_NONE) {
             continue;
         }
-        const uint8_t vk_bnd = shd->vk.view_set1_bnd_n[i];
         const _sg_view_t* view = bnd->views[i];
         SOKOL_ASSERT(view);
 
@@ -19307,15 +19307,13 @@ _SOKOL_PRIVATE bool _sg_vk_bind_view_smp_descriptors(const _sg_bindings_ptrs_t* 
         }
         // offset of current descriptor in descriptor set
         // FIXME: this should really only happen once when creating the shader!
-        VkDeviceSize dset_offset;
-        _sg.vk.ext.get_descriptor_set_layout_binding_offset(_sg.vk.dev, dsl, vk_bnd, &dset_offset);
+        const VkDeviceSize dset_offset = shd->vk.view_dset_offsets[i];
         _sg.vk.ext.get_descriptor(_sg.vk.dev, &get_info, descriptor_size, dbuf_ptr + dset_offset);
     }
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
         if (shd->cmn.samplers[i].stage == SG_SHADERSTAGE_NONE) {
             continue;
         }
-        const uint8_t vk_bnd = shd->vk.smp_set1_bnd_n[i];
         const _sg_sampler_t* smp = bnd->smps[i];
         SOKOL_ASSERT(smp);
 
@@ -19329,8 +19327,7 @@ _SOKOL_PRIVATE bool _sg_vk_bind_view_smp_descriptors(const _sg_bindings_ptrs_t* 
 
         // offset of current descriptor in descriptor set
         // FIXME: this should really only happen once when creating the shader!
-        VkDeviceSize dset_offset;
-        _sg.vk.ext.get_descriptor_set_layout_binding_offset(_sg.vk.dev, dsl, vk_bnd, &dset_offset);
+        const VkDeviceSize dset_offset = shd->vk.smp_dset_offsets[i];
         _sg.vk.ext.get_descriptor(_sg.vk.dev, &get_info, descriptor_size, dbuf_ptr + dset_offset);
     }
 
@@ -20370,7 +20367,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
             continue;
         }
         const uint8_t vk_bnd = shd->vk.ub_set0_bnd_n[i];
-        VkDeviceSize dset_offset;
+        VkDeviceSize dset_offset = 0;
         _sg.vk.ext.get_descriptor_set_layout_binding_offset(_sg.vk.dev, shd->vk.ub_dsl, vk_bnd, &dset_offset);
         shd->vk.ub_dset_offsets[i] = dset_offset;
     }
@@ -20423,7 +20420,27 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
         _SG_ERROR(VULKAN_CREATE_DESCRIPTOR_SET_LAYOUT_FAILED);
         return SG_RESOURCESTATE_FAILED;
     }
+
+    // store view/smp descriptor set size and descriptor offsets
     _sg.vk.ext.get_descriptor_set_layout_size(_sg.vk.dev, shd->vk.view_smp_dsl, &shd->vk.view_smp_dset_size);
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        if (shd->cmn.views[i].stage == SG_SHADERSTAGE_NONE) {
+            continue;
+        }
+        const uint8_t vk_bnd = shd->vk.view_set1_bnd_n[i];
+        VkDeviceSize dset_offset = 0;
+        _sg.vk.ext.get_descriptor_set_layout_binding_offset(_sg.vk.dev, shd->vk.view_smp_dsl, vk_bnd, &dset_offset);
+        shd->vk.view_dset_offsets[i] = dset_offset;
+    }
+    for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+        if (shd->cmn.samplers[i].stage == SG_SHADERSTAGE_NONE) {
+            continue;
+        }
+        const uint8_t vk_bnd = shd->vk.smp_set1_bnd_n[i];
+        VkDeviceSize dset_offset = 0;
+        _sg.vk.ext.get_descriptor_set_layout_binding_offset(_sg.vk.dev, shd->vk.view_smp_dsl, vk_bnd, &dset_offset);
+        shd->vk.smp_dset_offsets[i] = dset_offset;
+    }
 
     VkDescriptorSetLayout set_layouts[_SG_VK_NUM_DESCRIPTORSETS] = {
         shd->vk.ub_dsl,
@@ -20960,7 +20977,7 @@ _SOKOL_PRIVATE bool _sg_vk_apply_bindings(_sg_bindings_ptrs_t* bnd) {
     const VkPipelineBindPoint pip_bind_point = _sg.cur_pass.is_compute
         ? VK_PIPELINE_BIND_POINT_COMPUTE
         : VK_PIPELINE_BIND_POINT_GRAPHICS;
-    return _sg_vk_bind_view_smp_descriptors(bnd, pip_bind_point);
+    return _sg_vk_bind_view_smp_descriptor_set(bnd, pip_bind_point);
 }
 
 _SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
