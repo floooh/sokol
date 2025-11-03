@@ -4339,7 +4339,7 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_instance(void) {
     _sapp.vk.instance = 0;
 }
 
-_SOKOL_PRIVATE uint32_t _sapp_vk_get_device_extensions(const char** out_names, uint32_t max_count) {
+_SOKOL_PRIVATE uint32_t _sapp_vk_required_device_extensions(const char** out_names, uint32_t max_count) {
     SOKOL_ASSERT(out_names && (max_count > 0));
     uint32_t count = 0;
     out_names[count++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
@@ -4396,7 +4396,7 @@ _SOKOL_PRIVATE void _sapp_vk_pick_physical_device(void) {
         _SAPP_PANIC(VULKAN_NO_PHYSICAL_DEVICES_FOUND);
     }
     _SAPP_VK_ZERO_COUNT_AND_ARRAY(32, const char*, ext_count, ext_names);
-    ext_count = _sapp_vk_get_device_extensions(ext_names, 32);
+    ext_count = _sapp_vk_required_device_extensions(ext_names, 32);
 
     VkPhysicalDevice pdev = 0;
     for (uint32_t pdev_idx = 0; pdev_idx < physical_device_count; pdev_idx++) {
@@ -4460,7 +4460,11 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
     queue_create_info.pQueuePriorities = &queue_priority;
 
     _SAPP_VK_ZERO_COUNT_AND_ARRAY(32, const char*, ext_count, ext_names);
-    ext_count = _sapp_vk_get_device_extensions(ext_names, 32);
+    ext_count = _sapp_vk_required_device_extensions(ext_names, 32);
+
+    VkPhysicalDeviceFeatures phys_dev_features;
+    _sapp_clear(&phys_dev_features, sizeof(phys_dev_features));
+    vkGetPhysicalDeviceFeatures(_sapp.vk.physical_device, &phys_dev_features);
 
     VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptor_buffer_features;
     _sapp_clear(&descriptor_buffer_features, sizeof(descriptor_buffer_features));
@@ -4491,7 +4495,15 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
     features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     features2.pNext = &vk13_features;
     features2.features.samplerAnisotropy = VK_TRUE;
-
+    if (phys_dev_features.textureCompressionBC) {
+        features2.features.textureCompressionBC = VK_TRUE;
+    }
+    if (phys_dev_features.textureCompressionETC2) {
+        features2.features.textureCompressionETC2 = VK_TRUE;
+    }
+    if (phys_dev_features.textureCompressionASTC_LDR) {
+        features2.features.textureCompressionASTC_LDR = VK_TRUE;
+    }
     VkDeviceCreateInfo dev_create_info;
     _sapp_clear(&dev_create_info, sizeof(dev_create_info));
     dev_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
