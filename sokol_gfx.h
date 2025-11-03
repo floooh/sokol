@@ -6985,13 +6985,15 @@ typedef struct {
         _sg_vk_shared_buffer_t stream;
     } stage;
     // uniform update system
+    bool uniforms_dirty;
     _sg_vk_shared_buffer_t uniform;
     _sg_vk_uniform_bindinfo_t uniform_bindinfos[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
     // resource binding system (using descriptor buffers)
     _sg_vk_shared_buffer_t bind;
-    // device properties (initialized at startup)
+    // device properties and features (initialized at startup)
     VkPhysicalDeviceProperties2 device_props;
     VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_props;
+    VkPhysicalDeviceFeatures device_features;
 } _sg_vk_backend_t;
 
 #endif // SOKOL_VULKAN
@@ -16597,6 +16599,7 @@ _SOKOL_PRIVATE WGPUTextureFormat _sg_wgpu_textureformat(sg_pixel_format p) {
         case SG_PIXELFORMAT_BGRA8:          return WGPUTextureFormat_BGRA8Unorm;
         case SG_PIXELFORMAT_RGB10A2:        return WGPUTextureFormat_RGB10A2Unorm;
         case SG_PIXELFORMAT_RG11B10F:       return WGPUTextureFormat_RG11B10Ufloat;
+        case SG_PIXELFORMAT_RGB9E5:         return WGPUTextureFormat_RGB9E5Ufloat;
         case SG_PIXELFORMAT_RG32UI:         return WGPUTextureFormat_RG32Uint;
         case SG_PIXELFORMAT_RG32SI:         return WGPUTextureFormat_RG32Sint;
         case SG_PIXELFORMAT_RG32F:          return WGPUTextureFormat_RG32Float;
@@ -16629,7 +16632,6 @@ _SOKOL_PRIVATE WGPUTextureFormat _sg_wgpu_textureformat(sg_pixel_format p) {
         case SG_PIXELFORMAT_EAC_R11SN:      return WGPUTextureFormat_EACR11Snorm;
         case SG_PIXELFORMAT_EAC_RG11:       return WGPUTextureFormat_EACRG11Unorm;
         case SG_PIXELFORMAT_EAC_RG11SN:     return WGPUTextureFormat_EACRG11Snorm;
-        case SG_PIXELFORMAT_RGB9E5:         return WGPUTextureFormat_RGB9E5Ufloat;
         case SG_PIXELFORMAT_ASTC_4x4_RGBA:  return WGPUTextureFormat_ASTC4x4Unorm;
         case SG_PIXELFORMAT_ASTC_4x4_SRGBA: return WGPUTextureFormat_ASTC4x4UnormSrgb;
         // NOT SUPPORTED
@@ -19309,9 +19311,12 @@ _SOKOL_PRIVATE bool _sg_vk_bind_view_smp_descriptor_set(const _sg_bindings_ptrs_
     return true;
 }
 
-_SOKOL_PRIVATE bool _sg_vk_bind_uniform_descriptor_set(const _sg_shader_t* shd, VkPipelineBindPoint vk_bind_point) {
-    SOKOL_ASSERT(shd);
+_SOKOL_PRIVATE bool _sg_vk_bind_uniform_descriptor_set(void) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+    SOKOL_ASSERT(_sg.vk.uniforms_dirty);
+    _sg.vk.uniforms_dirty = false;
+    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
 
     // get next pointer in descriptor buffer
     const VkDeviceSize dbuf_offset = _sg_vk_shared_buffer_alloc(&_sg.vk.bind, shd->vk.ub_dset_size);
@@ -19333,6 +19338,9 @@ _SOKOL_PRIVATE bool _sg_vk_bind_uniform_descriptor_set(const _sg_shader_t* shd, 
     }
 
     // record the descriptor buffer offset
+    const VkPipelineBindPoint vk_bind_point = _sg.cur_pass.is_compute
+        ? VK_PIPELINE_BIND_POINT_COMPUTE
+        : VK_PIPELINE_BIND_POINT_GRAPHICS;
     const uint32_t dbuf_index = 0;
     SOKOL_ASSERT(shd->vk.pip_layout);
     _sg.vk.ext.cmd_set_descriptor_buffer_offsets(
@@ -19533,6 +19541,17 @@ _SOKOL_PRIVATE VkFormat _sg_vk_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_BC6H_RGBUF:     return VK_FORMAT_BC6H_UFLOAT_BLOCK;
         case SG_PIXELFORMAT_BC7_RGBA:       return VK_FORMAT_BC7_UNORM_BLOCK;
         case SG_PIXELFORMAT_BC7_SRGBA:      return VK_FORMAT_BC7_SRGB_BLOCK;
+        case SG_PIXELFORMAT_ETC2_RGB8:      return VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK;
+        case SG_PIXELFORMAT_ETC2_RGB8A1:    return VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK;
+        case SG_PIXELFORMAT_ETC2_RGBA8:     return VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK;
+        case SG_PIXELFORMAT_ETC2_SRGB8:     return VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK;
+        case SG_PIXELFORMAT_ETC2_SRGB8A8:   return VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK;
+        case SG_PIXELFORMAT_EAC_R11:        return VK_FORMAT_EAC_R11_UNORM_BLOCK;
+        case SG_PIXELFORMAT_EAC_R11SN:      return VK_FORMAT_EAC_R11_SNORM_BLOCK;
+        case SG_PIXELFORMAT_EAC_RG11:       return VK_FORMAT_EAC_R11G11_UNORM_BLOCK;
+        case SG_PIXELFORMAT_EAC_RG11SN:     return VK_FORMAT_EAC_R11G11_SNORM_BLOCK;
+        case SG_PIXELFORMAT_ASTC_4x4_RGBA:  return VK_FORMAT_ASTC_4x4_UNORM_BLOCK;
+        case SG_PIXELFORMAT_ASTC_4x4_SRGBA: return VK_FORMAT_ASTC_4x4_SRGB_BLOCK;
         default:                            return VK_FORMAT_UNDEFINED;
     };
 }
@@ -19777,6 +19796,7 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     _sg.vk.device_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
     _sg.vk.device_props.pNext = &_sg.vk.descriptor_buffer_props;
     vkGetPhysicalDeviceProperties2(_sg.vk.phys_dev, &_sg.vk.device_props);
+    vkGetPhysicalDeviceFeatures(_sg.vk.phys_dev, &_sg.vk.device_features);
 
     const VkPhysicalDeviceLimits* l = &_sg.vk.device_props.properties.limits;
     _sg.limits.max_image_size_2d = (int)l->maxImageDimension2D;
@@ -19792,7 +19812,6 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     _sg.limits.vk_min_uniform_buffer_offset_alignment = (int)l->minUniformBufferOffsetAlignment;
 
     // FIXME: currently these are the same as in the WebGPU backend
-    // FIXME: compressed formats
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG8]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA8]);
@@ -19832,6 +19851,38 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL]);
 
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGB9E5]);
+
+    if (_sg.vk.device_features.textureCompressionBC) {
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC1_RGBA]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC2_RGBA]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC3_RGBA]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC3_SRGBA]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC4_R]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC4_RSN]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC5_RG]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC5_RGSN]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC6H_RGBF]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC6H_RGBUF]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC7_RGBA]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC7_SRGBA]);
+    }
+
+    if (_sg.vk.device_features.textureCompressionETC2) {
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_SRGB8]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8A1]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGBA8]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_SRGB8A8]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_EAC_R11]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_EAC_R11SN]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_EAC_RG11]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_EAC_RG11SN]);
+    }
+
+    if (_sg.vk.device_features.textureCompressionASTC_LDR) {
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ASTC_4x4_RGBA]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ASTC_4x4_SRGBA]);
+    }
 
     _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA8]);
     _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA8SN]);
@@ -21015,9 +21066,6 @@ _SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
     SOKOL_ASSERT(_sg.vk.uniform.cur_dev_addr);
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
     SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
-    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
-    const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
-    SOKOL_ASSERT(data->size == shd->cmn.uniform_blocks[ub_slot].size);
 
     // copy data into uniform buffer and keep track of uniform bind infos
     const VkDeviceSize ubuf_offset = _sg_vk_uniform_copy(data);
@@ -21028,18 +21076,16 @@ _SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
     }
     _sg.vk.uniform_bindinfos[ub_slot].addr_info.range = data->size;
     _sg.vk.uniform_bindinfos[ub_slot].addr_info.address = _sg.vk.uniform.cur_dev_addr + ubuf_offset;
-
-    // bind uniform descriptor set
-    const VkPipelineBindPoint vk_bind_point = _sg.cur_pass.is_compute
-        ? VK_PIPELINE_BIND_POINT_COMPUTE
-        : VK_PIPELINE_BIND_POINT_GRAPHICS;
-    if (!_sg_vk_bind_uniform_descriptor_set(shd, vk_bind_point)) {
-        _sg.next_draw_valid = false;
-    }
+    _sg.vk.uniforms_dirty = true;
 }
 
 _SOKOL_PRIVATE void _sg_vk_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+    if (_sg.vk.uniforms_dirty) {
+        if (!_sg_vk_bind_uniform_descriptor_set()) {
+            return;
+        }
+    }
     if (_sg.use_indexed_draw) {
         vkCmdDrawIndexed(_sg.vk.frame.cmd_buf,
             (uint32_t)num_elements,
