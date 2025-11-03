@@ -18691,7 +18691,7 @@ _SOKOL_PRIVATE bool _sg_vk_mem_alloc_buffer_device_memory(_sg_buffer_t* buf) {
     if (buf->cmn.usage.storage_buffer) {
         alloc_flags |= VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
     }
-    buf->vk.mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0);
+    buf->vk.mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, alloc_flags);
     if (0 == buf->vk.mem) {
         _SG_ERROR(VULKAN_ALLOC_BUFFER_DEVICE_MEMORY_FAILED);
         return false;
@@ -19400,7 +19400,7 @@ _SOKOL_PRIVATE VkBufferUsageFlags _sg_vk_buffer_usage(const sg_buffer_usage* usg
         res |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
     }
     if (usg->storage_buffer) {
-        res |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        res |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     }
     return res;
 }
@@ -20690,6 +20690,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_view(_sg_view_t* view, const sg_v
         const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
         SOKOL_ASSERT(buf->vk.dev_addr);
         VkDescriptorAddressInfoEXT addr_info;
+        _sg_clear(&addr_info, sizeof(addr_info));
         addr_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT;
         addr_info.address = buf->vk.dev_addr + (VkDeviceSize)view->cmn.buf.offset;
         addr_info.range = (VkDeviceSize)(buf->cmn.size - view->cmn.buf.offset);
