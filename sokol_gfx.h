@@ -6921,6 +6921,7 @@ typedef struct {
     VkBuffer cur_buf;       // currently mapped buffer
     void* cur_mem_ptr;      // current pointer into currently mapped buffer
     VkDeviceAddress cur_dev_addr;   // current buffer device address (only valid for some buffer types)
+    bool overflown;         // true when in overflown state
     struct {
         VkBuffer buf;
         VkDeviceMemory mem;
@@ -6928,6 +6929,11 @@ typedef struct {
         void* mem_ptr;
     } slots[SG_NUM_INFLIGHT_FRAMES];
 } _sg_vk_shared_buffer_t;
+
+typedef struct {
+    VkDescriptorAddressInfoEXT addr_info;
+    VkDescriptorGetInfoEXT get_info;
+} _sg_vk_uniform_bindinfo_t;
 
 typedef struct {
     bool valid;
@@ -6974,7 +6980,7 @@ typedef struct {
     } stage;
     // uniform update system
     _sg_vk_shared_buffer_t uniform;
-    uint32_t uniform_bind_offsets[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
+    _sg_vk_uniform_bindinfo_t uniform_bindinfos[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
     // resource binding system (using descriptor buffers)
     _sg_vk_shared_buffer_t bind;
     // device properties (initialized at startup)
@@ -19020,6 +19026,7 @@ _SOKOL_PRIVATE void _sg_vk_shared_buffer_init(_sg_vk_shared_buffer_t* shbuf, uin
     SOKOL_ASSERT(0 == shbuf->size);
     SOKOL_ASSERT(0 == shbuf->offset);
     SOKOL_ASSERT(0 == shbuf->cur_buf);
+    SOKOL_ASSERT(false == shbuf->overflown);
     VkResult res;
     const bool want_device_address = 0 != (vk_usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
 
@@ -19095,6 +19102,7 @@ _SOKOL_PRIVATE void _sg_vk_shared_buffer_discard(_sg_vk_shared_buffer_t* shbuf) 
     shbuf->offset = 0;
     shbuf->cur_buf = 0;
     shbuf->cur_dev_addr = 0;
+    shbuf->overflown = false;
 }
 
 _SOKOL_PRIVATE void _sg_vk_shared_buffer_after_acquire(_sg_vk_shared_buffer_t* shbuf) {
@@ -19107,6 +19115,7 @@ _SOKOL_PRIVATE void _sg_vk_shared_buffer_after_acquire(_sg_vk_shared_buffer_t* s
     shbuf->cur_buf = shbuf->slots[frame_slot].buf;
     shbuf->cur_mem_ptr = shbuf->slots[frame_slot].mem_ptr;
     shbuf->cur_dev_addr = shbuf->slots[frame_slot].dev_addr; // NOTE: may be 0
+    shbuf->overflown = false;
     SOKOL_ASSERT(shbuf->cur_buf);
     SOKOL_ASSERT(shbuf->cur_mem_ptr);
 }
@@ -19122,7 +19131,11 @@ _SOKOL_PRIVATE void _sg_vk_shared_buffer_before_submit(_sg_vk_shared_buffer_t* s
 
 _SOKOL_PRIVATE VkDeviceSize _sg_vk_shared_buffer_alloc(_sg_vk_shared_buffer_t* shbuf, uint32_t num_bytes) {
     SOKOL_ASSERT(shbuf && (num_bytes > 0));
+    if (shbuf->overflown) {
+        return _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT;
+    }
     if ((shbuf->offset + num_bytes) > shbuf->size) {
+        shbuf->overflown = true;
         return _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT;
     }
     SOKOL_ASSERT((shbuf->offset & (shbuf->align - 1)) == 0);
@@ -19133,6 +19146,7 @@ _SOKOL_PRIVATE VkDeviceSize _sg_vk_shared_buffer_alloc(_sg_vk_shared_buffer_t* s
 
 _SOKOL_PRIVATE void* _sg_vk_shared_buffer_ptr(_sg_vk_shared_buffer_t* shbuf, VkDeviceSize offset) {
     SOKOL_ASSERT(shbuf && shbuf->cur_mem_ptr);
+    SOKOL_ASSERT(!shbuf->overflown);
     SOKOL_ASSERT(offset < shbuf->size);
     return shbuf->cur_mem_ptr + offset;
 }
@@ -19154,6 +19168,13 @@ _SOKOL_PRIVATE void _sg_vk_uniform_init(void) {
         _sg.vk.device_props.properties.limits.minUniformBufferOffsetAlignment,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
         "shared-uniform-buffer");
+    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
+        _sg_vk_uniform_bindinfo_t* ubi = &_sg.vk.uniform_bindinfos[i];
+        ubi->addr_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT;
+        ubi->get_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
+        ubi->get_info.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        ubi->get_info.data.pUniformBuffer = &ubi->addr_info;
+    }
 }
 
 _SOKOL_PRIVATE void _sg_vk_uniform_discard(void) {
@@ -19163,6 +19184,12 @@ _SOKOL_PRIVATE void _sg_vk_uniform_discard(void) {
 // called from _sg_vk_acquire_frame_command_buffer()
 _SOKOL_PRIVATE void _sg_vk_uniform_after_acquire(void) {
     _sg_vk_shared_buffer_after_acquire(&_sg.vk.uniform);
+    // reset uniform tracking data
+    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
+        _sg_vk_uniform_bindinfo_t* ubi = &_sg.vk.uniform_bindinfos[i];
+        ubi->addr_info.address = 0;
+        ubi->addr_info.range = 0;
+    }
 }
 
 // called from _sg_vk_submit_frame_command_buffer()
@@ -19320,6 +19347,43 @@ _SOKOL_PRIVATE bool _sg_vk_bind_view_smp_descriptors(const _sg_bindings_ptrs_t* 
         &dbuf_offset);
 
         return true;
+}
+
+_SOKOL_PRIVATE bool _sg_vk_bind_uniform_descriptor_set(const _sg_shader_t* shd, VkPipelineBindPoint vk_bind_point) {
+    SOKOL_ASSERT(shd);
+    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+
+    // get next pointer in descriptor buffer
+    const VkDeviceSize dbuf_offset = _sg_vk_shared_buffer_alloc(&_sg.vk.bind, shd->vk.ub_dset_size);
+    if (_sg.vk.bind.overflown) {
+        _SG_ERROR(VULKAN_DESCRIPTOR_BUFFER_OVERFLOW);
+        return false;
+    }
+    void* dbuf_ptr = _sg_vk_shared_buffer_ptr(&_sg.vk.bind, dbuf_offset);
+
+    // update descriptor buffer
+    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
+        if (shd->cmn.uniform_blocks[i].stage == SG_SHADERSTAGE_NONE) {
+            continue;
+        }
+        _sg.vk.ext.get_descriptor(_sg.vk.dev,
+            &_sg.vk.uniform_bindinfos[i].get_info,
+            _sg.vk.descriptor_buffer_props.uniformBufferDescriptorSize,
+            dbuf_ptr + shd->vk.ub_dset_offsets[i]);
+    }
+
+    // record the descriptor buffer offset
+    const uint32_t dbuf_index = 0;
+    SOKOL_ASSERT(shd->vk.pip_layout);
+    _sg.vk.ext.cmd_set_descriptor_buffer_offsets(
+        _sg.vk.frame.cmd_buf,
+        vk_bind_point,
+        shd->vk.pip_layout,
+        _SG_VK_UB_DESCRIPTORSET_INDEX, // firstIndex
+        1, // setCount
+        &dbuf_index,
+        &dbuf_offset);
+    return true;
 }
 
 _SOKOL_PRIVATE void _sg_vk_memory_destructor(void* obj) {
@@ -20900,66 +20964,30 @@ _SOKOL_PRIVATE bool _sg_vk_apply_bindings(_sg_bindings_ptrs_t* bnd) {
 }
 
 _SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
-    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
-    SOKOL_ASSERT(_sg.vk.uniform.cur_buf);
-    SOKOL_ASSERT(data);
+    SOKOL_ASSERT(_sg.vk.uniform.cur_dev_addr);
+    SOKOL_ASSERT(data && data->ptr && (data->size > 0));
     SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
     const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
     const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
     SOKOL_ASSERT(data->size == shd->cmn.uniform_blocks[ub_slot].size);
 
-    // copy data into per-frame uniform buffer
-    _sg.vk.uniform_bind_offsets[ub_slot] = _sg_vk_uniform_copy(data);
-    if (_sg.vk.uniform_bind_offsets[ub_slot] == _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
+    // copy data into uniform buffer and keep track of uniform bind infos
+    const VkDeviceSize ubuf_offset = _sg_vk_uniform_copy(data);
+    if (_sg.vk.uniform.overflown) {
         _SG_ERROR(VULKAN_UNIFORM_BUFFER_OVERFLOW);
         _sg.next_draw_valid = false;
         return;
     }
+    _sg.vk.uniform_bindinfos[ub_slot].addr_info.range = data->size;
+    _sg.vk.uniform_bindinfos[ub_slot].addr_info.address = _sg.vk.uniform.cur_dev_addr + ubuf_offset;
 
-    // get next pointer in descriptor buffer
-    // NOTE: need to capture current offset before allocating!
-    const VkDeviceSize dbuf_offset = _sg_vk_shared_buffer_alloc(&_sg.vk.bind, shd->vk.ub_dset_size);
-    if (dbuf_offset == _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
-        _SG_ERROR(VULKAN_DESCRIPTOR_BUFFER_OVERFLOW);
-        _sg.next_draw_valid = false;
-        return;
-    }
-    void* dbuf_ptr = _sg_vk_shared_buffer_ptr(&_sg.vk.bind, dbuf_offset);
-
-    VkDescriptorSetLayout dsl = shd->vk.ub_dsl;
-    SOKOL_ASSERT(dsl);
-    const size_t descriptor_size = _sg.vk.descriptor_buffer_props.uniformBufferDescriptorSize;
-    VkDescriptorAddressInfoEXT addr_info;
-    _sg_clear(&addr_info, sizeof(addr_info));
-    addr_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT;
-    addr_info.range = data->size;
-    VkDescriptorGetInfoEXT get_info;
-    _sg_clear(&get_info, sizeof(get_info));
-    get_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
-    get_info.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    get_info.data.pUniformBuffer = &addr_info;
-    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
-        if (shd->cmn.uniform_blocks[i].stage == SG_SHADERSTAGE_NONE) {
-            continue;
-        }
-        addr_info.address = _sg.vk.uniform.cur_dev_addr + _sg.vk.uniform_bind_offsets[i];
-        _sg.vk.ext.get_descriptor(_sg.vk.dev, &get_info, descriptor_size, dbuf_ptr + shd->vk.ub_dset_offsets[i]);
-    }
-
-    // record the new descriptor buffer offset
-    const uint32_t dbuf_index = 0;
-    SOKOL_ASSERT(shd->vk.pip_layout);
-    const VkPipelineBindPoint pip_bind_point = _sg.cur_pass.is_compute
+    // bind uniform descriptor set
+    const VkPipelineBindPoint vk_bind_point = _sg.cur_pass.is_compute
         ? VK_PIPELINE_BIND_POINT_COMPUTE
         : VK_PIPELINE_BIND_POINT_GRAPHICS;
-    _sg.vk.ext.cmd_set_descriptor_buffer_offsets(
-        _sg.vk.frame.cmd_buf,
-        pip_bind_point,
-        shd->vk.pip_layout,
-        _SG_VK_UB_DESCRIPTORSET_INDEX, // firstIndex
-        1, // setCount
-        &dbuf_index,
-        &dbuf_offset);
+    if (!_sg_vk_bind_uniform_descriptor_set(shd, vk_bind_point)) {
+        _sg.next_draw_valid = false;
+    }
 }
 
 _SOKOL_PRIVATE void _sg_vk_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
