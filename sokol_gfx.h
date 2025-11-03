@@ -18989,10 +18989,6 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_im
         int mip_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
         const uint32_t row_pitch = (uint32_t) _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
         const uint32_t num_rows = (uint32_t) _sg_num_rows(img->cmn.pixel_format, mip_height);
-        if (_sg_is_compressed_pixel_format(img->cmn.pixel_format)) {
-            mip_width = _sg_roundup(mip_width, 4);
-            mip_height = _sg_roundup(mip_height, 4);
-        }
         region.imageSubresource.mipLevel = (uint32_t)mip_index;
         region.imageExtent.width = (uint32_t)mip_width;
 
@@ -19021,7 +19017,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_im
                 VkCommandBuffer cmd_buf = _sg_vk_staging_copy_begin();
                 _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_STAGING);
                 region.imageOffset.y = (int32_t)(cur_row * block_dim);
-                region.imageExtent.height = rows_to_copy * block_dim;
+                region.imageExtent.height = _sg_min((uint32_t)mip_height, rows_to_copy * block_dim);
                 vkCmdCopyBufferToImage2(cmd_buf, &copy_info);
                 _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
 
