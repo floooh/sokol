@@ -19845,6 +19845,10 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RGBA32UI]);
     _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RGBA32SI]);
 
+    _sg_pixelformat_sfr(&_sg.formats[SG_PIXELFORMAT_R32F]);
+    _sg_pixelformat_sfr(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+    _sg_pixelformat_sfr(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+
     _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH]);
     _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL]);
 
