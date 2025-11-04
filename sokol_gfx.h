@@ -6841,7 +6841,6 @@ typedef struct _sg_buffer_s {
         VkDeviceMemory mem;
         VkDeviceAddress dev_addr;   // only valid for storage buffers
         _sg_vk_access_t cur_access;
-        _sg_vk_access_t next_access;
     } vk;
 } _sg_vk_buffer_t;
 typedef _sg_vk_buffer_t _sg_buffer_t;
@@ -6853,7 +6852,6 @@ typedef struct _sg_image_s {
         VkImage img;
         VkDeviceMemory mem;
         _sg_vk_access_t cur_access;
-        _sg_vk_access_t next_access;
     } vk;
 } _sg_vk_image_t;
 typedef _sg_vk_image_t _sg_image_t;
@@ -20084,7 +20082,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_buffer(_sg_buffer_t* buf, const s
     // FIXME: inject external buffer
 
     buf->vk.cur_access = _SG_VK_ACCESS_NONE;
-    buf->vk.next_access = _SG_VK_ACCESS_NONE;
 
     VkBufferCreateInfo create_info;
     _sg_clear(&create_info, sizeof(create_info));
@@ -20141,7 +20138,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_image(_sg_image_t* img, const sg_
     // FIXME: injected images
 
     img->vk.cur_access = _SG_VK_ACCESS_NONE;
-    img->vk.next_access = _SG_VK_ACCESS_NONE;
 
     VkImageCreateInfo create_info;
     _sg_clear(&create_info, sizeof(create_info));
