@@ -7063,6 +7063,7 @@ typedef struct {
         bool is_compute;
         _sg_dimi_t dim;
         sg_attachments atts;
+        sg_pass_action action;
         struct {
             sg_pixel_format color_fmt;
             sg_pixel_format depth_fmt;
@@ -18562,8 +18563,8 @@ _SOKOL_PRIVATE VkImageLayout _sg_vk_image_layout(_sg_vk_access_t access) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_vk_swapchain_barrier(VkImage vkimg, _sg_vk_access_t old_access, _sg_vk_access_t new_access) {
-    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+_SOKOL_PRIVATE void _sg_vk_swapchain_barrier(VkCommandBuffer cmd_buf, VkImage vkimg, _sg_vk_access_t old_access, _sg_vk_access_t new_access) {
+    SOKOL_ASSERT(cmd_buf);
     VkImageMemoryBarrier2 barrier;
     _sg_clear(&barrier, sizeof(barrier));
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
@@ -18591,7 +18592,7 @@ _SOKOL_PRIVATE void _sg_vk_swapchain_barrier(VkImage vkimg, _sg_vk_access_t old_
     dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
     dep_info.imageMemoryBarrierCount = 1;
     dep_info.pImageMemoryBarriers = &barrier;
-    vkCmdPipelineBarrier2(_sg.vk.frame.cmd_buf, &dep_info);
+    vkCmdPipelineBarrier2(cmd_buf, &dep_info);
 }
 
 _SOKOL_PRIVATE void _sg_vk_image_barrier(VkCommandBuffer cmd_buf, _sg_image_t* img, _sg_vk_access_t new_access) {
@@ -19482,6 +19483,7 @@ _SOKOL_PRIVATE VkImageUsageFlags _sg_vk_image_usage(const sg_image_usage* usg) {
 
 _SOKOL_PRIVATE VkFormat _sg_vk_format(sg_pixel_format fmt) {
     switch (fmt) {
+        case SG_PIXELFORMAT_NONE:           return VK_FORMAT_UNDEFINED;
         case SG_PIXELFORMAT_R8:             return VK_FORMAT_R8_UNORM;
         case SG_PIXELFORMAT_R8SN:           return VK_FORMAT_R8_SNORM;
         case SG_PIXELFORMAT_R8UI:           return VK_FORMAT_R8_UINT;
@@ -20671,8 +20673,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
         rnd_state.colorAttachmentCount = (uint32_t)desc->color_count;
         rnd_state.pColorAttachmentFormats = color_formats;
         rnd_state.depthAttachmentFormat = _sg_vk_format(desc->depth.pixel_format);
-        rnd_state.stencilAttachmentFormat = _sg_vk_format(desc->depth.pixel_format);
-
+        if (_sg_is_depth_stencil_format(desc->depth.pixel_format)) {
+            rnd_state.stencilAttachmentFormat = _sg_vk_format(desc->depth.pixel_format);
+        } else {
+            rnd_state.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
+        }
         VkDynamicState dyn_states[2] = {
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR,
@@ -20890,6 +20895,7 @@ _SOKOL_PRIVATE void _sg_vk_begin_compute_pass(const sg_pass* pass) {
 
 _SOKOL_PRIVATE void _sg_vk_begin_render_pass(const sg_pass* pass, const _sg_attachments_ptrs_t* atts) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+    VkCommandBuffer cmd_buf = _sg.vk.frame.cmd_buf;
     const sg_pass_action* action = &pass->action;
     const bool is_swapchain_pass = atts->empty;
 
@@ -20928,9 +20934,9 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(const sg_pass* pass, const _sg_atta
         VkImage vk_resolve_image = (VkImage)_sg.vk.swapchain.resolve_image;
         VkImageView vk_color_view = (VkImageView)_sg.vk.swapchain.render_view;
         VkImageView vk_resolve_view = (VkImageView)_sg.vk.swapchain.resolve_view;
-        _sg_vk_swapchain_barrier(vk_color_image, _SG_VK_ACCESS_NONE, _SG_VK_ACCESS_COLOR_ATTACHMENT);
+        _sg_vk_swapchain_barrier(cmd_buf, vk_color_image, _SG_VK_ACCESS_NONE, _SG_VK_ACCESS_COLOR_ATTACHMENT);
         if (vk_resolve_image) {
-            _sg_vk_swapchain_barrier(vk_resolve_image, _SG_VK_ACCESS_NONE, _SG_VK_ACCESS_RESOLVE_ATTACHMENT);
+            _sg_vk_swapchain_barrier(cmd_buf, vk_resolve_image, _SG_VK_ACCESS_NONE, _SG_VK_ACCESS_RESOLVE_ATTACHMENT);
         }
         _sg_vk_init_color_attachment_info(&color_att_infos[0], &action->colors[0], vk_color_view, vk_resolve_view);
         render_info.colorAttachmentCount = 1;
@@ -20944,7 +20950,7 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(const sg_pass* pass, const _sg_atta
             if (has_stencil) {
                 dst_access |= _SG_VK_ACCESS_STENCIL_ATTACHMENT;
             }
-            _sg_vk_swapchain_barrier(vk_ds_image, _SG_VK_ACCESS_NONE, dst_access);
+            _sg_vk_swapchain_barrier(cmd_buf, vk_ds_image, _SG_VK_ACCESS_NONE, dst_access);
             _sg_vk_init_depth_attachment_info(&depth_att_info, &action->depth, vk_ds_view);
             render_info.pDepthAttachment = &depth_att_info;
             if (has_stencil) {
@@ -20953,9 +20959,56 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(const sg_pass* pass, const _sg_atta
             }
         }
     } else {
-        SOKOL_ASSERT(false && "FIXME");
+        SOKOL_ASSERT(atts->num_color_views <= SG_MAX_COLOR_ATTACHMENTS);
+        for (int i = 0; i < atts->num_color_views; i++) {
+            SOKOL_ASSERT(atts->color_views[i]);
+            const _sg_view_t* color_view = atts->color_views[i];
+            VkImageView vk_color_view = color_view->vk.img_view;
+            _sg_image_t* color_image = _sg_image_ref_ptr(&color_view->cmn.img.ref);
+            if (pass->action.colors[i].load_action != SG_LOADACTION_LOAD) {
+                // don't need to preserve image content for clear and dontcare
+                color_image->vk.cur_access = _SG_VK_ACCESS_NONE;
+            }
+            _sg_vk_image_barrier(cmd_buf, color_image, _SG_VK_ACCESS_COLOR_ATTACHMENT);
+            const _sg_view_t* resolve_view = atts->resolve_views[i];
+            VkImageView vk_resolve_view = 0;
+            if (resolve_view) {
+                vk_resolve_view = resolve_view->vk.img_view;
+                _sg_image_t* resolve_image = _sg_image_ref_ptr(&resolve_view->cmn.img.ref);
+                // can always discard previous content for resolve image
+                resolve_image->vk.cur_access = _SG_VK_ACCESS_NONE;
+                _sg_vk_image_barrier(cmd_buf, resolve_image, _SG_VK_ACCESS_COLOR_ATTACHMENT);
+            }
+            _sg_vk_init_color_attachment_info(&color_att_infos[i], &action->colors[i], vk_color_view, vk_resolve_view);
+        }
+        if (atts->num_color_views > 0) {
+            render_info.colorAttachmentCount = (uint32_t)atts->num_color_views;
+            render_info.pColorAttachments = color_att_infos;
+        }
+        if (atts->ds_view) {
+            const _sg_view_t* ds_view = atts->ds_view;
+            _sg_image_t* ds_image = _sg_image_ref_ptr(&ds_view->cmn.img.ref);
+            const bool has_stencil = _sg_is_depth_stencil_format(ds_image->cmn.pixel_format);
+            if ((pass->action.depth.load_action != SG_LOADACTION_LOAD) &&
+                (pass->action.stencil.load_action != SG_LOADACTION_LOAD))
+            {
+                ds_image->vk.cur_access = _SG_VK_ACCESS_NONE;
+            }
+            _sg_vk_access_t dst_access = _SG_VK_ACCESS_DEPTH_ATTACHMENT;
+            if (has_stencil) {
+                dst_access |= _SG_VK_ACCESS_STENCIL_ATTACHMENT;
+            }
+            _sg_vk_image_barrier(cmd_buf, ds_image, dst_access);
+            VkImageView vk_ds_view = ds_view->vk.img_view;
+            _sg_vk_init_depth_attachment_info(&depth_att_info, &action->depth, vk_ds_view);
+            render_info.pDepthAttachment = &depth_att_info;
+            if (has_stencil) {
+                _sg_vk_init_stencil_attachment_info(&stencil_att_info, &action->stencil, vk_ds_view);
+                render_info.pStencilAttachment = &stencil_att_info;
+            }
+        }
     }
-    vkCmdBeginRendering(_sg.vk.frame.cmd_buf, &render_info);
+    vkCmdBeginRendering(cmd_buf, &render_info);
 
     _sg_vk_apply_viewport(0, 0, _sg.cur_pass.dim.width, _sg.cur_pass.dim.height, true);
     _sg_vk_apply_scissor_rect(0, 0, _sg.cur_pass.dim.width, _sg.cur_pass.dim.height, true);
@@ -20978,6 +21031,7 @@ _SOKOL_PRIVATE void _sg_vk_end_compute_pass(void) {
 _SOKOL_PRIVATE void _sg_vk_end_render_pass(const _sg_attachments_ptrs_t* atts) {
     SOKOL_ASSERT(atts);
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+    VkCommandBuffer cmd_buf = _sg.vk.frame.cmd_buf;
     const bool is_swapchain_pass = atts->empty;
     vkCmdEndRendering(_sg.vk.frame.cmd_buf);
     if (is_swapchain_pass) {
@@ -20985,10 +21039,27 @@ _SOKOL_PRIVATE void _sg_vk_end_render_pass(const _sg_attachments_ptrs_t* atts) {
         VkImage present_image = _sg.vk.swapchain.resolve_image
             ? (VkImage)_sg.vk.swapchain.resolve_image
             : (VkImage)_sg.vk.swapchain.render_image;
-        _sg_vk_swapchain_barrier(present_image, _SG_VK_ACCESS_COLOR_ATTACHMENT, _SG_VK_ACCESS_PRESENT);
+        _sg_vk_swapchain_barrier(cmd_buf, present_image, _SG_VK_ACCESS_COLOR_ATTACHMENT, _SG_VK_ACCESS_PRESENT);
         _sg_clear(&_sg.vk.swapchain, sizeof(_sg.vk.swapchain));
     } else {
-        SOKOL_ASSERT(false && "FIXME");
+        // transition attachments back to texture access if needed
+        for (int i = 0; i < atts->num_color_views; i++) {
+            if (_sg.cur_pass.action.colors[i].store_action == SG_STOREACTION_STORE) {
+                SOKOL_ASSERT(atts->color_views[i]);
+                _sg_image_t* img = _sg_image_ref_ptr(&atts->color_views[i]->cmn.img.ref);
+                _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
+            }
+            if (atts->resolve_views[i]) {
+                _sg_image_t* img = _sg_image_ref_ptr(&atts->resolve_views[i]->cmn.img.ref);
+                _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
+            }
+        }
+        if (atts->ds_view) {
+            _sg_image_t* img = _sg_image_ref_ptr(&atts->ds_view->cmn.img.ref);
+            if (_sg.cur_pass.action.depth.store_action == SG_STOREACTION_STORE) {
+                _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
+            }
+        }
     }
 }
 
@@ -24655,6 +24726,7 @@ SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
         _sg.cur_pass.swapchain.depth_fmt = pass_def.swapchain.depth_format;
         _sg.cur_pass.swapchain.sample_count = pass_def.swapchain.sample_count;
     }
+    _sg.cur_pass.action = pass_def.action;
     _sg.cur_pass.valid = true;  // may be overruled by backend begin-pass functions
     _sg.cur_pass.is_compute = pass_def.compute;
     _sg_begin_pass(&pass_def, &atts_ptrs);
