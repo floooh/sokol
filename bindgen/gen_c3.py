@@ -327,7 +327,7 @@ def gen_c_imports(inp, c_prefix, prefix):
             args = funcdecl_args_c(decl, prefix)
             res_type = funcdecl_result_c(decl, prefix)
             res_str = 'void' if res_type == '' else res_type
-            l(f'extern fn {res_str} {check_override(as_snake_case(decl["name"], c_prefix))}({args}) @extern("{decl["name"]}");')
+            l(f'extern fn {res_str} {check_override(as_snake_case(decl["name"], c_prefix))}({args}) @cname("{decl["name"]}");')
     l('')
 
 def gen_consts(decl, prefix):
