@@ -18431,107 +18431,142 @@ _SOKOL_PRIVATE void _sg_vk_set_object_label(VkObjectType obj_type, uint64_t obj_
     }
 }
 
-// return pipeline stage where the gpu-write access happened which needs
-// to complete before the resource barrier
-_SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_src_stage_mask(_sg_vk_access_t old_access) {
-    const int top_of_pipe_bits =
+_SOKOL_PRIVATE bool _sg_vk_is_read_access(_sg_vk_access_t access) {
+    _sg_vk_access_t read_bits =
         _SG_VK_ACCESS_VERTEXBUFFER |
         _SG_VK_ACCESS_INDEXBUFFER |
-        _SG_VK_ACCESS_STORAGEBUFFER_RO;
-    const int compute_shader_bits =
-        _SG_VK_ACCESS_STORAGEIMAGE |
-        _SG_VK_ACCESS_STORAGEBUFFER_RW;
-    if (old_access == _SG_VK_ACCESS_NONE) {
-        return VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
-    }
-    if (0 != (old_access & _SG_VK_ACCESS_STAGING)) {
-        SOKOL_ASSERT(0 == (old_access & ~_SG_VK_ACCESS_STAGING));
-        return VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-    }
-    if (0 != (old_access & _SG_VK_ACCESS_TEXTURE)) {
-        SOKOL_ASSERT(0 == (old_access & ~_SG_VK_ACCESS_TEXTURE));
-        return VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
-    }
-    if (0 != (old_access & top_of_pipe_bits)) {
-        SOKOL_ASSERT(0 == (old_access & ~top_of_pipe_bits));
-        return VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
-    }
-    if (0 != (old_access & compute_shader_bits)) {
-        SOKOL_ASSERT(0 == (old_access & ~compute_shader_bits));
-        return VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-    }
-    if (0 != (old_access & _SG_VK_ACCESS_COLOR_ATTACHMENT)) {
-        SOKOL_ASSERT(0 == (old_access & ~_SG_VK_ACCESS_COLOR_ATTACHMENT));
-        return VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    }
-    SOKOL_UNREACHABLE;
-    return VK_PIPELINE_STAGE_2_NONE;
+        _SG_VK_ACCESS_STORAGEBUFFER_RO |
+        _SG_VK_ACCESS_TEXTURE |
+        _SG_VK_ACCESS_PRESENT;
+    return 0 == (access & ~read_bits);
 }
 
-// return pipeline stage which will read from the resource and which may
-// only start after the barrier
-_SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_dst_stage_mask(_sg_vk_access_t new_access) {
-    const int color_attachment_output_bits =
-        _SG_VK_ACCESS_COLOR_ATTACHMENT |
-        _SG_VK_ACCESS_RESOLVE_ATTACHMENT;
-    const int depth_stencil_attachment_output_bits =
-        _SG_VK_ACCESS_DEPTH_ATTACHMENT |
-        _SG_VK_ACCESS_STENCIL_ATTACHMENT;
-    if (0 != (new_access & _SG_VK_ACCESS_STAGING)) {
-        SOKOL_ASSERT(0 == (new_access & ~_SG_VK_ACCESS_STAGING));
-        return VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+// return pipeline stages on 'before' side of a barrier
+_SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_src_stage_mask(_sg_vk_access_t access) {
+    VkPipelineStageFlags2 f = 0;
+    if (access == _SG_VK_ACCESS_NONE) {
+        return VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
     }
-    if (0 != (new_access & _SG_VK_ACCESS_TEXTURE)) {
-        SOKOL_ASSERT(0 == (new_access & ~_SG_VK_ACCESS_TEXTURE));
-        return VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
-            | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
-            | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+    // all read-only accesses are top-of-pipe
+    if (_sg_vk_is_read_access(access)) {
+        return VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
     }
-    if (0 != (new_access & color_attachment_output_bits)) {
-        SOKOL_ASSERT(0 == (new_access & ~color_attachment_output_bits));
-        return VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    if (access & _SG_VK_ACCESS_STAGING) {
+        f |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
     }
-    if (0 != (new_access & depth_stencil_attachment_output_bits)) {
-        SOKOL_ASSERT(0 == (new_access & ~depth_stencil_attachment_output_bits));
-        return VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+    if (access & _SG_VK_ACCESS_STORAGEBUFFER_RW) {
+        f |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
     }
-    if (0 != (new_access & _SG_VK_ACCESS_PRESENT)) {
-        SOKOL_ASSERT(0 == (new_access & ~_SG_VK_ACCESS_PRESENT));
-        return VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+    if (access & _SG_VK_ACCESS_STORAGEIMAGE) {
+        f |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
     }
-    // FIXME: handle other access types
-    SOKOL_UNREACHABLE;
-    return VK_PIPELINE_STAGE_2_NONE;
+    if (access & _SG_VK_ACCESS_COLOR_ATTACHMENT) {
+        f |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    }
+    if (access & _SG_VK_ACCESS_RESOLVE_ATTACHMENT) {
+        f |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    }
+    if (access & _SG_VK_ACCESS_DEPTH_ATTACHMENT) {
+        f |= VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+    }
+    if (access & _SG_VK_ACCESS_STENCIL_ATTACHMENT) {
+        f |= VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+    }
+    SOKOL_ASSERT(f != 0);
+    return f;
+}
+
+// return pipeline stage on 'after side' of a barrier
+_SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_dst_stage_mask(_sg_vk_access_t access) {
+    SOKOL_ASSERT(access != _SG_VK_ACCESS_NONE);
+    VkPipelineStageFlags2 f = 0;
+    if (access & _SG_VK_ACCESS_STAGING) {
+        f |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    }
+    if (access & _SG_VK_ACCESS_VERTEXBUFFER) {
+        f |= VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
+    }
+    if (access & _SG_VK_ACCESS_INDEXBUFFER) {
+        f |= VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
+    }
+    if (access & _SG_VK_ACCESS_STORAGEBUFFER_RO) {
+        f |= VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT |
+             VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
+             VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+    }
+    if (access & _SG_VK_ACCESS_STORAGEBUFFER_RW) {
+        f |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+    }
+    if (access & _SG_VK_ACCESS_TEXTURE) {
+        f |= VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT |
+             VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
+             VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+    }
+    if (access & _SG_VK_ACCESS_STORAGEIMAGE) {
+        f |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+    }
+    if (access & _SG_VK_ACCESS_COLOR_ATTACHMENT) {
+        f |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    }
+    if (access & _SG_VK_ACCESS_RESOLVE_ATTACHMENT) {
+        f |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    }
+    if (access & _SG_VK_ACCESS_DEPTH_ATTACHMENT) {
+        f |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+    }
+    if (access & _SG_VK_ACCESS_STENCIL_ATTACHMENT) {
+        f |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+    }
+    if (access & _SG_VK_ACCESS_PRESENT) {
+        f |= VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+    }
+    SOKOL_ASSERT(f != 0);
+    return f;
 }
 
 _SOKOL_PRIVATE VkAccessFlags2 _sg_vk_access_mask(_sg_vk_access_t access) {
+    if (access == _SG_VK_ACCESS_NONE) {
+        return VK_ACCESS_2_NONE;
+    }
+    if (access & _SG_VK_ACCESS_PRESENT) {
+        return VK_ACCESS_2_NONE;
+    }
     VkAccessFlags2 f = VK_ACCESS_2_NONE;
-    // NOTE: _SG_VK_ACCESS_PRESENT => NONE
-    if (0 != (access & _SG_VK_ACCESS_STAGING)) {
+    if (access & _SG_VK_ACCESS_STAGING) {
         f |= VK_ACCESS_2_TRANSFER_WRITE_BIT;
     }
-    if (0 != (access & _SG_VK_ACCESS_VERTEXBUFFER)) {
+    if (access & _SG_VK_ACCESS_VERTEXBUFFER) {
         f |= VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
     }
-    if (0 != (access & _SG_VK_ACCESS_INDEXBUFFER)) {
+    if (access & _SG_VK_ACCESS_INDEXBUFFER) {
         f |= VK_ACCESS_2_INDEX_READ_BIT;
     }
-    const int shader_read_bits = _SG_VK_ACCESS_STORAGEBUFFER_RO | _SG_VK_ACCESS_TEXTURE;
-    if (0 != (access & shader_read_bits)) {
+    if (access & _SG_VK_ACCESS_STORAGEBUFFER_RO) {
         f |= VK_ACCESS_2_SHADER_READ_BIT;
     }
-    const int shader_write_bits = _SG_VK_ACCESS_STORAGEBUFFER_RW | _SG_VK_ACCESS_STORAGEIMAGE;
-    if (0 != (access & shader_write_bits)) {
+    if (access & _SG_VK_ACCESS_STORAGEBUFFER_RW) {
         f |= VK_ACCESS_2_SHADER_WRITE_BIT;
     }
-    const int color_write_bits = _SG_VK_ACCESS_COLOR_ATTACHMENT | _SG_VK_ACCESS_RESOLVE_ATTACHMENT;
-    if (0 != (access & color_write_bits)) {
+    if (access & _SG_VK_ACCESS_TEXTURE) {
+        f |= VK_ACCESS_2_SHADER_READ_BIT;
+    }
+    if (access & _SG_VK_ACCESS_STORAGEIMAGE) {
+        f |= VK_ACCESS_2_SHADER_WRITE_BIT;
+    }
+    if (access & _SG_VK_ACCESS_COLOR_ATTACHMENT) {
         f |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
     }
-    const int ds_rw_bits = _SG_VK_ACCESS_DEPTH_ATTACHMENT | _SG_VK_ACCESS_STENCIL_ATTACHMENT;
-    if (0 != (access & ds_rw_bits)) {
+    if (access & _SG_VK_ACCESS_RESOLVE_ATTACHMENT) {
+        // FIXME: hmm, also COLOR_ATTACHMENT_READ_BIT?
+        f |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    }
+    if (access & _SG_VK_ACCESS_DEPTH_ATTACHMENT) {
         f |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     }
+    if (access & _SG_VK_ACCESS_STENCIL_ATTACHMENT) {
+        f |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    }
+    SOKOL_ASSERT(f != 0);
     return f;
 }
 
@@ -18595,7 +18630,7 @@ _SOKOL_PRIVATE void _sg_vk_swapchain_barrier(VkCommandBuffer cmd_buf, VkImage vk
 
 _SOKOL_PRIVATE void _sg_vk_image_barrier(VkCommandBuffer cmd_buf, _sg_image_t* img, _sg_vk_access_t new_access) {
     SOKOL_ASSERT(cmd_buf && img && img->vk.img);
-    if (img->vk.cur_access == new_access) {
+    if (_sg_vk_is_read_access(img->vk.cur_access) && _sg_vk_is_read_access(new_access)) {
         return;
     }
     VkImageMemoryBarrier2 barrier;
@@ -18627,6 +18662,31 @@ _SOKOL_PRIVATE void _sg_vk_image_barrier(VkCommandBuffer cmd_buf, _sg_image_t* i
     dep_info.pImageMemoryBarriers = &barrier;
     vkCmdPipelineBarrier2(cmd_buf, &dep_info);
     img->vk.cur_access = new_access;
+}
+
+_SOKOL_PRIVATE void _sg_vk_buffer_barrier(VkCommandBuffer cmd_buf, _sg_buffer_t* buf, _sg_vk_access_t new_access) {
+    SOKOL_ASSERT(cmd_buf && buf && buf->vk.buf);
+    if (_sg_vk_is_read_access(buf->vk.cur_access) && _sg_vk_is_read_access(new_access)) {
+        return;
+    }
+    VkBufferMemoryBarrier2 barrier;
+    barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+    barrier.srcStageMask = _sg_vk_src_stage_mask(buf->vk.cur_access);
+    barrier.srcAccessMask = _sg_vk_access_mask(buf->vk.cur_access);
+    barrier.dstStageMask = _sg_vk_dst_stage_mask(new_access);
+    barrier.dstAccessMask = _sg_vk_access_mask(new_access);
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.buffer = buf->vk.buf;
+    barrier.offset = 0;
+    barrier.size = (VkDeviceSize)buf->cmn.size;
+    VkDependencyInfo dep_info;
+    _sg_clear(&dep_info, sizeof(dep_info));
+    dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dep_info.bufferMemoryBarrierCount = 1;
+    dep_info.pBufferMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(cmd_buf, &dep_info);
+    buf->vk.cur_access = new_access;
 }
 
 _SOKOL_PRIVATE int _sg_vk_mem_find_memory_type_index(uint32_t type_filter, VkMemoryPropertyFlags props) {
