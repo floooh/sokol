@@ -18606,6 +18606,26 @@ _SOKOL_PRIVATE VkImageLayout _sg_vk_image_layout(_sg_vk_access_t access) {
     }
 }
 
+_SOKOL_PRIVATE void _sg_vk_memory_barrier(VkCommandBuffer cmd_buf, _sg_vk_access_t old_access, _sg_vk_access_t new_access) {
+    SOKOL_ASSERT(cmd_buf);
+    if (_sg_vk_is_read_access(old_access) && _sg_vk_is_read_access(new_access)) {
+        return;
+    }
+    VkMemoryBarrier2 barrier;
+    _sg_clear(&barrier, sizeof(barrier));
+    barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
+    barrier.srcStageMask = _sg_vk_src_stage_mask(old_access);
+    barrier.srcAccessMask = _sg_vk_src_access_mask(old_access);
+    barrier.dstStageMask = _sg_vk_dst_stage_mask(new_access);
+    barrier.dstAccessMask = _sg_vk_dst_access_mask(new_access);
+    VkDependencyInfo dep_info;
+    _sg_clear(&dep_info, sizeof(dep_info));
+    dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dep_info.memoryBarrierCount = 1;
+    dep_info.pMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(cmd_buf, &dep_info);
+}
+
 _SOKOL_PRIVATE void _sg_vk_swapchain_barrier(VkCommandBuffer cmd_buf, VkImage vkimg, _sg_vk_access_t old_access, _sg_vk_access_t new_access) {
     SOKOL_ASSERT(cmd_buf);
     VkImageMemoryBarrier2 barrier;
@@ -18674,29 +18694,75 @@ _SOKOL_PRIVATE void _sg_vk_image_barrier(VkCommandBuffer cmd_buf, _sg_image_t* i
     img->vk.cur_access = new_access;
 }
 
-_SOKOL_PRIVATE void _sg_vk_buffer_barrier(VkCommandBuffer cmd_buf, _sg_buffer_t* buf, _sg_vk_access_t new_access) {
-    SOKOL_ASSERT(cmd_buf && buf && buf->vk.buf);
-    if (_sg_vk_is_read_access(buf->vk.cur_access) && _sg_vk_is_read_access(new_access)) {
-        return;
+
+_SOKOL_PRIVATE void _sg_vk_buffer_bindings_barriers(VkCommandBuffer cmd_buf, const _sg_bindings_ptrs_t* bnd) {
+    SOKOL_ASSERT(bnd && bnd->pip);
+
+    // NOTE: all buffer access transitions are handled through a single memory barrier
+    // (see: https://themaister.net/blog/2019/08/14/yet-another-blog-explaining-vulkan-synchronization/)
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&bnd->pip->cmn.shader);
+    // gather current access types for all buffers and clear their cur_access field
+    _sg_vk_access_t cur_access_bits = 0;
+    for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
+        if (bnd->vbs[i]) {
+            cur_access_bits |= bnd->vbs[i]->vk.cur_access;
+            bnd->vbs[i]->vk.cur_access = 0;
+        }
     }
-    VkBufferMemoryBarrier2 barrier;
-    barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
-    barrier.srcStageMask = _sg_vk_src_stage_mask(buf->vk.cur_access);
-    barrier.srcAccessMask = _sg_vk_src_access_mask(buf->vk.cur_access);
-    barrier.dstStageMask = _sg_vk_dst_stage_mask(new_access);
-    barrier.dstAccessMask = _sg_vk_dst_access_mask(new_access);
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.buffer = buf->vk.buf;
-    barrier.offset = 0;
-    barrier.size = (VkDeviceSize)buf->cmn.size;
-    VkDependencyInfo dep_info;
-    _sg_clear(&dep_info, sizeof(dep_info));
-    dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dep_info.bufferMemoryBarrierCount = 1;
-    dep_info.pBufferMemoryBarriers = &barrier;
-    vkCmdPipelineBarrier2(cmd_buf, &dep_info);
-    buf->vk.cur_access = new_access;
+    if (bnd->ib) {
+        cur_access_bits |= bnd->ib->vk.cur_access;
+        bnd->ib->vk.cur_access = 0;
+    }
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        if (bnd->views[i] && (bnd->views[i]->cmn.type == SG_VIEWTYPE_STORAGEBUFFER)) {
+            _sg_buffer_t* buf = _sg_buffer_ref_ptr(&bnd->views[i]->cmn.buf.ref);
+            cur_access_bits |= buf->vk.cur_access;
+            buf->vk.cur_access = 0;
+        }
+    }
+
+    // gather next access type for all buffers and update their cur_access field
+    _sg_vk_access_t next_access_bits = 0;
+    for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
+        if (bnd->vbs[i]) {
+            bnd->vbs[i]->vk.cur_access |= _SG_VK_ACCESS_VERTEXBUFFER;
+            next_access_bits |= _SG_VK_ACCESS_VERTEXBUFFER;
+        }
+    }
+    if (bnd->ib) {
+        bnd->ib->vk.cur_access |= _SG_VK_ACCESS_INDEXBUFFER;
+        next_access_bits |= _SG_VK_ACCESS_INDEXBUFFER;
+    }
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        if (bnd->views[i] && (bnd->views[i]->cmn.type == SG_VIEWTYPE_STORAGEBUFFER)) {
+            _sg_buffer_t* buf = _sg_buffer_ref_ptr(&bnd->views[i]->cmn.buf.ref);
+            if (shd->cmn.views[i].sbuf_readonly) {
+                buf->vk.cur_access |= _SG_VK_ACCESS_STORAGEBUFFER_RO;
+                next_access_bits |= _SG_VK_ACCESS_STORAGEBUFFER_RO;
+            } else {
+                buf->vk.cur_access |= _SG_VK_ACCESS_STORAGEBUFFER_RW;
+                next_access_bits |= _SG_VK_ACCESS_STORAGEBUFFER_RW;
+            }
+        }
+    }
+    _sg_vk_memory_barrier(cmd_buf, cur_access_bits, next_access_bits);
+}
+
+_SOKOL_PRIVATE void _sg_vk_image_bindings_barriers(const _sg_bindings_ptrs_t* bnd, bool is_compute_pass) {
+    if (is_compute_pass) {
+        SOKOL_ASSERT(false && "FIXME");
+    } else {
+        // all images used as textures must already be in texture access state
+        for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+            const _sg_view_t* view = bnd->views[i];
+            if (view) {
+                if (view->cmn.type == SG_VIEWTYPE_TEXTURE) {
+                    const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+                    SOKOL_ASSERT(img->vk.cur_access == _SG_VK_ACCESS_TEXTURE);
+                }
+            }
+        }
+    }
 }
 
 _SOKOL_PRIVATE int _sg_vk_mem_find_memory_type_index(uint32_t type_filter, VkMemoryPropertyFlags props) {
@@ -19318,9 +19384,9 @@ _SOKOL_PRIVATE void _sg_vk_bind_before_submit(void) {
     _sg_vk_shared_buffer_before_submit(&_sg.vk.bind);
 }
 
-_SOKOL_PRIVATE bool _sg_vk_bind_view_smp_descriptor_set(const _sg_bindings_ptrs_t* bnd, VkPipelineBindPoint vk_bind_point) {
+_SOKOL_PRIVATE bool _sg_vk_bind_view_smp_descriptor_set(VkCommandBuffer cmd_buf, const _sg_bindings_ptrs_t* bnd, VkPipelineBindPoint vk_bind_point) {
     SOKOL_ASSERT(_sg.vk.dev);
-    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+    SOKOL_ASSERT(cmd_buf);
     SOKOL_ASSERT(bnd && bnd->pip);
     const _sg_shader_t* shd = _sg_shader_ref_ptr(&bnd->pip->cmn.shader);
 
@@ -19365,7 +19431,7 @@ _SOKOL_PRIVATE bool _sg_vk_bind_view_smp_descriptor_set(const _sg_bindings_ptrs_
     const uint32_t dbuf_index = 0;
     SOKOL_ASSERT(shd->vk.pip_layout);
     _sg.vk.ext.cmd_set_descriptor_buffer_offsets(
-        _sg.vk.frame.cmd_buf,
+        cmd_buf,
         vk_bind_point,
         shd->vk.pip_layout,
         _SG_VK_VIEW_SMP_DESCRIPTORSET_INDEX, // firstSet
@@ -19376,8 +19442,8 @@ _SOKOL_PRIVATE bool _sg_vk_bind_view_smp_descriptor_set(const _sg_bindings_ptrs_
     return true;
 }
 
-_SOKOL_PRIVATE bool _sg_vk_bind_uniform_descriptor_set(void) {
-    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+_SOKOL_PRIVATE bool _sg_vk_bind_uniform_descriptor_set(VkCommandBuffer cmd_buf) {
+    SOKOL_ASSERT(cmd_buf);
     SOKOL_ASSERT(_sg.vk.uniforms_dirty);
     _sg.vk.uniforms_dirty = false;
     const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
@@ -19409,7 +19475,7 @@ _SOKOL_PRIVATE bool _sg_vk_bind_uniform_descriptor_set(void) {
     const uint32_t dbuf_index = 0;
     SOKOL_ASSERT(shd->vk.pip_layout);
     _sg.vk.ext.cmd_set_descriptor_buffer_offsets(
-        _sg.vk.frame.cmd_buf,
+        cmd_buf,
         vk_bind_point,
         shd->vk.pip_layout,
         _SG_VK_UB_DESCRIPTORSET_INDEX, // firstIndex
@@ -21168,9 +21234,11 @@ _SOKOL_PRIVATE bool _sg_vk_apply_bindings(_sg_bindings_ptrs_t* bnd) {
     SOKOL_ASSERT(bnd && bnd->pip);
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+    VkCommandBuffer cmd_buf = _sg.vk.frame.cmd_buf;
 
-    // FIXME FIXME FIXME:
-    // update barriers (in compute passes) or verify access type (in render pass)
+    // insert barriers as needed
+    _sg_vk_buffer_bindings_barriers(cmd_buf, bnd);
+    _sg_vk_image_bindings_barriers(bnd, _sg.cur_pass.is_compute);
 
     if (!_sg.cur_pass.is_compute) {
         // bind vertex buffers
@@ -21181,14 +21249,14 @@ _SOKOL_PRIVATE bool _sg_vk_apply_bindings(_sg_bindings_ptrs_t* bnd) {
             if (bnd->vbs[i]) {
                 VkBuffer vk_buf = bnd->vbs[i]->vk.buf;
                 VkDeviceSize vk_offset = (VkDeviceSize)bnd->vb_offsets[i];
-                vkCmdBindVertexBuffers(_sg.vk.frame.cmd_buf, i, 1, &vk_buf, &vk_offset);
+                vkCmdBindVertexBuffers(cmd_buf, i, 1, &vk_buf, &vk_offset);
             }
         }
         if (bnd->ib) {
             VkBuffer vk_buf = bnd->ib->vk.buf;
             VkDeviceSize vk_offset = (VkDeviceSize)bnd->ib_offset;
             VkIndexType vk_index_type = _sg_vk_index_type(bnd->pip->cmn.index_type);
-            vkCmdBindIndexBuffer(_sg.vk.frame.cmd_buf, vk_buf, vk_offset, vk_index_type);
+            vkCmdBindIndexBuffer(cmd_buf, vk_buf, vk_offset, vk_index_type);
         }
     }
 
@@ -21196,7 +21264,7 @@ _SOKOL_PRIVATE bool _sg_vk_apply_bindings(_sg_bindings_ptrs_t* bnd) {
     const VkPipelineBindPoint pip_bind_point = _sg.cur_pass.is_compute
         ? VK_PIPELINE_BIND_POINT_COMPUTE
         : VK_PIPELINE_BIND_POINT_GRAPHICS;
-    return _sg_vk_bind_view_smp_descriptor_set(bnd, pip_bind_point);
+    return _sg_vk_bind_view_smp_descriptor_set(cmd_buf, bnd, pip_bind_point);
 }
 
 _SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
@@ -21218,20 +21286,21 @@ _SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
 
 _SOKOL_PRIVATE void _sg_vk_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+    VkCommandBuffer cmd_buf = _sg.vk.frame.cmd_buf;
     if (_sg.vk.uniforms_dirty) {
-        if (!_sg_vk_bind_uniform_descriptor_set()) {
+        if (!_sg_vk_bind_uniform_descriptor_set(cmd_buf)) {
             return;
         }
     }
     if (_sg.use_indexed_draw) {
-        vkCmdDrawIndexed(_sg.vk.frame.cmd_buf,
+        vkCmdDrawIndexed(cmd_buf,
             (uint32_t)num_elements,
             (uint32_t)num_instances,
             (uint32_t)base_element,
             base_vertex,
             (uint32_t)base_instance);
     } else {
-        vkCmdDraw(_sg.vk.frame.cmd_buf,
+        vkCmdDraw(cmd_buf,
             (uint32_t)num_elements,
             (uint32_t)num_instances,
             (uint32_t)base_element,
