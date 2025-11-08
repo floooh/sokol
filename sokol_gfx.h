@@ -18524,13 +18524,7 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_dst_stage_mask(_sg_vk_access_t acces
     return f;
 }
 
-// FIXME: add bool is_src_access flag, and two wrapper
-// funcs _sg_vk_src_access_mask / _sg_vk_dst_access_mask
-// then:
-//  - never set read flags in src-access-mask
-//  - top- and bottom-of-pipe must use src- and dst-access-mask == 0
-//  - NOTE: storage-buffer-rw and storageimage must be shader-read+write!
-_SOKOL_PRIVATE VkAccessFlags2 _sg_vk_access_mask(_sg_vk_access_t access) {
+_SOKOL_PRIVATE VkAccessFlags2 _sg_vk_access_mask(_sg_vk_access_t access, bool is_dst_access) {
     if (access == _SG_VK_ACCESS_NONE) {
         return VK_ACCESS_2_NONE;
     }
@@ -18538,26 +18532,29 @@ _SOKOL_PRIVATE VkAccessFlags2 _sg_vk_access_mask(_sg_vk_access_t access) {
         return VK_ACCESS_2_NONE;
     }
     VkAccessFlags2 f = VK_ACCESS_2_NONE;
+    if (is_dst_access) {
+        // NOTE: read bits don't make sense for src-mask
+        if (access & _SG_VK_ACCESS_VERTEXBUFFER) {
+            f |= VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
+        }
+        if (access & _SG_VK_ACCESS_INDEXBUFFER) {
+            f |= VK_ACCESS_2_INDEX_READ_BIT;
+        }
+        if (access & _SG_VK_ACCESS_STORAGEBUFFER_RO) {
+            f |= VK_ACCESS_2_SHADER_READ_BIT;
+        }
+        if (access & _SG_VK_ACCESS_TEXTURE) {
+            f |= VK_ACCESS_2_SHADER_READ_BIT;
+        }
+    }
     if (access & _SG_VK_ACCESS_STAGING) {
         f |= VK_ACCESS_2_TRANSFER_WRITE_BIT;
     }
-    if (access & _SG_VK_ACCESS_VERTEXBUFFER) {
-        f |= VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
-    }
-    if (access & _SG_VK_ACCESS_INDEXBUFFER) {
-        f |= VK_ACCESS_2_INDEX_READ_BIT;
-    }
-    if (access & _SG_VK_ACCESS_STORAGEBUFFER_RO) {
-        f |= VK_ACCESS_2_SHADER_READ_BIT;
-    }
     if (access & _SG_VK_ACCESS_STORAGEBUFFER_RW) {
-        f |= VK_ACCESS_2_SHADER_WRITE_BIT;
-    }
-    if (access & _SG_VK_ACCESS_TEXTURE) {
-        f |= VK_ACCESS_2_SHADER_READ_BIT;
+        f |= VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_SHADER_READ_BIT;
     }
     if (access & _SG_VK_ACCESS_STORAGEIMAGE) {
-        f |= VK_ACCESS_2_SHADER_WRITE_BIT;
+        f |= VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_SHADER_READ_BIT;
     }
     if (access & _SG_VK_ACCESS_COLOR_ATTACHMENT) {
         f |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
@@ -18566,14 +18563,21 @@ _SOKOL_PRIVATE VkAccessFlags2 _sg_vk_access_mask(_sg_vk_access_t access) {
         // FIXME: hmm, also COLOR_ATTACHMENT_READ_BIT?
         f |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
     }
-    if (access & _SG_VK_ACCESS_DEPTH_ATTACHMENT) {
-        f |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    if (access & (_SG_VK_ACCESS_DEPTH_ATTACHMENT | _SG_VK_ACCESS_STENCIL_ATTACHMENT)) {
+        f |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        if (is_dst_access) {
+            f |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+        }
     }
-    if (access & _SG_VK_ACCESS_STENCIL_ATTACHMENT) {
-        f |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    }
-    SOKOL_ASSERT(f != 0);
     return f;
+}
+
+_SOKOL_PRIVATE VkAccessFlags2 _sg_vk_src_access_mask(_sg_vk_access_t access) {
+    return _sg_vk_access_mask(access, false);
+}
+
+_SOKOL_PRIVATE VkAccessFlags2 _sg_vk_dst_access_mask(_sg_vk_access_t access) {
+    return _sg_vk_access_mask(access, true);
 }
 
 _SOKOL_PRIVATE VkImageLayout _sg_vk_image_layout(_sg_vk_access_t access) {
@@ -18608,10 +18612,10 @@ _SOKOL_PRIVATE void _sg_vk_swapchain_barrier(VkCommandBuffer cmd_buf, VkImage vk
     _sg_clear(&barrier, sizeof(barrier));
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrier.srcStageMask = _sg_vk_src_stage_mask(old_access);
-    barrier.srcAccessMask = _sg_vk_access_mask(old_access);
+    barrier.srcAccessMask = _sg_vk_src_access_mask(old_access);
     barrier.oldLayout = _sg_vk_image_layout(old_access);
     barrier.dstStageMask = _sg_vk_dst_stage_mask(new_access);
-    barrier.dstAccessMask = _sg_vk_access_mask(new_access);
+    barrier.dstAccessMask = _sg_vk_dst_access_mask(new_access);
     barrier.newLayout = _sg_vk_image_layout(new_access);
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -18643,10 +18647,10 @@ _SOKOL_PRIVATE void _sg_vk_image_barrier(VkCommandBuffer cmd_buf, _sg_image_t* i
     _sg_clear(&barrier, sizeof(barrier));
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrier.srcStageMask = _sg_vk_src_stage_mask(img->vk.cur_access);
-    barrier.srcAccessMask = _sg_vk_access_mask(img->vk.cur_access);
+    barrier.srcAccessMask = _sg_vk_src_access_mask(img->vk.cur_access);
     barrier.oldLayout = _sg_vk_image_layout(img->vk.cur_access);
     barrier.dstStageMask = _sg_vk_dst_stage_mask(new_access);
-    barrier.dstAccessMask = _sg_vk_access_mask(new_access);
+    barrier.dstAccessMask = _sg_vk_dst_access_mask(new_access);
     barrier.newLayout = _sg_vk_image_layout(new_access);
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -18678,9 +18682,9 @@ _SOKOL_PRIVATE void _sg_vk_buffer_barrier(VkCommandBuffer cmd_buf, _sg_buffer_t*
     VkBufferMemoryBarrier2 barrier;
     barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
     barrier.srcStageMask = _sg_vk_src_stage_mask(buf->vk.cur_access);
-    barrier.srcAccessMask = _sg_vk_access_mask(buf->vk.cur_access);
+    barrier.srcAccessMask = _sg_vk_src_access_mask(buf->vk.cur_access);
     barrier.dstStageMask = _sg_vk_dst_stage_mask(new_access);
-    barrier.dstAccessMask = _sg_vk_access_mask(new_access);
+    barrier.dstAccessMask = _sg_vk_dst_access_mask(new_access);
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.buffer = buf->vk.buf;
