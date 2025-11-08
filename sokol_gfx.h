@@ -4417,7 +4417,8 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VULKAN_SAMPLER_SPIRV_SET1_BINDING_OUT_OF_RANGE, "vulkan: sampler 'spirv_set1_binding_n' is out of range (must be 0..127)") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_DESCRIPTOR_SET_LAYOUT_FAILED, "vulkan: vkCreateDescriptorSetLayout() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_PIPELINE_LAYOUT_FAILED, "vulkan: vkCreatePipelineLayout() failed!") \
-    _SG_LOGITEM_XMACRO(VULKAN_CREATE_GRAPHICS_PIPELINE_FAILED, "vulkan: vkCreateGraphicsPipeline() failed!") \
+    _SG_LOGITEM_XMACRO(VULKAN_CREATE_GRAPHICS_PIPELINE_FAILED, "vulkan: vkCreateGraphicsPipelines() failed!") \
+    _SG_LOGITEM_XMACRO(VULKAN_CREATE_COMPUTE_PIPELINE_FAILED, "vulkan: vkCreateComputePipelines() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_IMAGE_VIEW_FAILED, "vulkan: vkCreateImageView() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_VIEW_MAX_DESCRIPTOR_SIZE, "vulkan: required view descriptor size is greater than _SG_VK_MAX_DESCRIPTOR_DATA_SIZE") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_SAMPLER_FAILED, "vulkan: vkCreateSampler() failed!") \
@@ -20659,7 +20660,21 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
     const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
     SOKOL_ASSERT(shd->vk.pip_layout);
     if (pip->cmn.is_compute) {
-        SOKOL_ASSERT(false && "FIXME");
+        SOKOL_ASSERT(shd->vk.compute_func.module);
+        VkComputePipelineCreateInfo pip_create_info;
+        _sg_clear(&pip_create_info, sizeof(pip_create_info));
+        pip_create_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        pip_create_info.flags = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
+        pip_create_info.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        pip_create_info.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        pip_create_info.stage.module = shd->vk.compute_func.module;
+        pip_create_info.stage.pName = shd->vk.compute_func.entry.buf;
+        pip_create_info.layout = shd->vk.pip_layout;
+        res = vkCreateComputePipelines(_sg.vk.dev, VK_NULL_HANDLE, 1, &pip_create_info, 0, &pip->vk.pip);
+        if (res != VK_SUCCESS) {
+            _SG_ERROR(VULKAN_CREATE_COMPUTE_PIPELINE_FAILED);
+            return SG_RESOURCESTATE_FAILED;
+        }
     } else {
         uint32_t num_stages = 0;
         VkPipelineShaderStageCreateInfo stages[2];
