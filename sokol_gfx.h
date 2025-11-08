@@ -18524,6 +18524,12 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_dst_stage_mask(_sg_vk_access_t acces
     return f;
 }
 
+// FIXME: add bool is_src_access flag, and two wrapper
+// funcs _sg_vk_src_access_mask / _sg_vk_dst_access_mask
+// then:
+//  - never set read flags in src-access-mask
+//  - top- and bottom-of-pipe must use src- and dst-access-mask == 0
+//  - NOTE: storage-buffer-rw and storageimage must be shader-read+write!
 _SOKOL_PRIVATE VkAccessFlags2 _sg_vk_access_mask(_sg_vk_access_t access) {
     if (access == _SG_VK_ACCESS_NONE) {
         return VK_ACCESS_2_NONE;
