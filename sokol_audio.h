@@ -587,8 +587,8 @@ extern "C" {
     _SAUDIO_LOGITEM_XMACRO(BACKEND_BUFFER_SIZE_ISNT_MULTIPLE_OF_PACKET_SIZE, "backend buffer size isn't multiple of packet size") \
     _SAUDIO_LOGITEM_XMACRO(VITA_SCEAUDIO_OPEN_FAILED, "sceAudioOutOpenPort() failed") \
     _SAUDIO_LOGITEM_XMACRO(VITA_PTHREAD_CREATE_FAILED, "pthread_create() failed") \
-    _SAUDIO_LOGITEM_XMACRO(3DS_NDSP_OPEN_FAILED, "ndspInit() failed") \
-    _SAUDIO_LOGITEM_XMACRO(3DS_USERDATA_DEFAULT_MALLOC_FAILED, "user_data not provided, default malloc failed") \
+    _SAUDIO_LOGITEM_XMACRO(N3DS_NDSP_OPEN_FAILED, "ndspInit() failed") \
+    _SAUDIO_LOGITEM_XMACRO(N3DS_USERDATA_DEFAULT_MALLOC_FAILED, "user_data not provided, default malloc failed") \
 
 #define _SAUDIO_LOGITEM_XMACRO(item,msg) SAUDIO_LOGITEM_##item,
 typedef enum saudio_log_item {
@@ -2416,14 +2416,14 @@ _SOKOL_PRIVATE void _saudio_3ds_ndsptrigger_cb(void*) {
 _SOKOL_PRIVATE bool _saudio_3ds_backend_init(void) {
     int rc = ndspInit();
     if (rc != 0) {
-        _SAUDIO_ERROR(3DS_NDSP_OPEN_FAILED);
+        _SAUDIO_ERROR(N3DS_NDSP_OPEN_FAILED);
         return false;
     }
 
     if (_saudio.desc.user_data == NULL) {
         user_data_3ds_t* defaultUserData = (user_data_3ds_t*)_saudio_malloc(sizeof(user_data_3ds_t));
         if (defaultUserData == NULL) {
-            _SAUDIO_ERROR(3DS_USERDATA_DEFAULT_MALLOC_FAILED);
+            _SAUDIO_ERROR(N3DS_USERDATA_DEFAULT_MALLOC_FAILED);
             return false;
         }
 
