@@ -18704,26 +18704,6 @@ _SOKOL_PRIVATE VkImageLayout _sg_vk_image_layout(_sg_vk_access_t access) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_vk_memory_barrier(VkCommandBuffer cmd_buf, _sg_vk_access_t old_access, _sg_vk_access_t new_access) {
-    SOKOL_ASSERT(cmd_buf);
-    if (_sg_vk_is_read_access(old_access) && _sg_vk_is_read_access(new_access)) {
-        return;
-    }
-    VkMemoryBarrier2 barrier;
-    _sg_clear(&barrier, sizeof(barrier));
-    barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
-    barrier.srcStageMask = _sg_vk_src_stage_mask(old_access);
-    barrier.srcAccessMask = _sg_vk_src_access_mask(old_access);
-    barrier.dstStageMask = _sg_vk_dst_stage_mask(new_access);
-    barrier.dstAccessMask = _sg_vk_dst_access_mask(new_access);
-    VkDependencyInfo dep_info;
-    _sg_clear(&dep_info, sizeof(dep_info));
-    dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dep_info.memoryBarrierCount = 1;
-    dep_info.pMemoryBarriers = &barrier;
-    vkCmdPipelineBarrier2(cmd_buf, &dep_info);
-}
-
 _SOKOL_PRIVATE void _sg_vk_swapchain_barrier(VkCommandBuffer cmd_buf, VkImage vkimg, _sg_vk_access_t old_access, _sg_vk_access_t new_access) {
     SOKOL_ASSERT(cmd_buf);
     VkImageMemoryBarrier2 barrier;
@@ -18792,10 +18772,37 @@ _SOKOL_PRIVATE void _sg_vk_image_barrier(VkCommandBuffer cmd_buf, _sg_image_t* i
     img->vk.cur_access = new_access;
 }
 
+_SOKOL_PRIVATE void _sg_vk_buffer_barrier(VkCommandBuffer cmd_buf, _sg_buffer_t* buf, _sg_vk_access_t new_access) {
+    SOKOL_ASSERT(cmd_buf && buf && buf->vk.buf);
+    if (_sg_vk_is_read_access(buf->vk.cur_access) && _sg_vk_is_read_access(new_access)) {
+        return;
+    }
+    VkBufferMemoryBarrier2 barrier;
+    _sg_clear(&barrier, sizeof(barrier));
+    barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+    barrier.srcStageMask = _sg_vk_src_stage_mask(buf->vk.cur_access);
+    barrier.srcAccessMask = _sg_vk_src_access_mask(buf->vk.cur_access);
+    barrier.dstStageMask = _sg_vk_dst_stage_mask(new_access);
+    barrier.dstAccessMask = _sg_vk_dst_access_mask(new_access);
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.buffer = buf->vk.buf;
+    barrier.offset = 0;
+    barrier.size = VK_WHOLE_SIZE;
+    VkDependencyInfo dep_info;
+    _sg_clear(&dep_info, sizeof(dep_info));
+    dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dep_info.bufferMemoryBarrierCount = 1;
+    dep_info.pBufferMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(cmd_buf, &dep_info);
+    buf->vk.cur_access = new_access;
+}
+
 _SOKOL_PRIVATE void _sg_vk_barrier_on_begin_pass(VkCommandBuffer cmd_buf, const sg_pass* pass, const _sg_attachments_ptrs_t* atts, bool is_compute_pass) {
     SOKOL_ASSERT(cmd_buf);
     if (is_compute_pass) {
-        // FIXME FIXME FIXMED
+        SOKOL_ASSERT(0 == _sg.vk.track.buffers.cur_slot);
+        SOKOL_ASSERT(0 == _sg.vk.track.images.cur_slot);
     } else {
         const bool is_swapchain_pass = atts->empty;
         if (is_swapchain_pass) {
@@ -18855,7 +18862,31 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_begin_pass(VkCommandBuffer cmd_buf, const 
 _SOKOL_PRIVATE void _sg_vk_barrier_on_apply_bindings(VkCommandBuffer cmd_buf, const _sg_bindings_ptrs_t* bnd, bool is_compute_pass) {
     SOKOL_ASSERT(bnd);
     if (is_compute_pass) {
-        // FIXME: transition buffers from current into sbuf-ro or sbuf-rw
+        SOKOL_ASSERT(bnd->pip);
+        for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+            const _sg_view_t* view = bnd->views[i];
+            if (0 == view) {
+                continue;
+            } else if (view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
+                const _sg_shader_t* shd = _sg_shader_ref_ptr(&bnd->pip->cmn.shader);
+                _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
+                _sg_vk_access_t new_access = shd->cmn.views[i].sbuf_readonly
+                    ? _SG_VK_ACCESS_STORAGEBUFFER_RO
+                    : _SG_VK_ACCESS_STORAGEBUFFER_RW;
+                _sg_vk_buffer_barrier(cmd_buf, buf, new_access);
+                _sg_track_add(&_sg.vk.track.buffers, buf->slot.id);
+            } else if (view->cmn.type == SG_VIEWTYPE_STORAGEIMAGE) {
+                _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+                _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_STORAGEIMAGE);
+                _sg_track_add(&_sg.vk.track.images, img->slot.id);
+            } else if (view->cmn.type == SG_VIEWTYPE_TEXTURE) {
+                _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+                _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
+                _sg_track_add(&_sg.vk.track.images, img->slot.id);
+            } else {
+                SOKOL_UNREACHABLE;
+            }
+        }
     } else {
         // no transitions allowed in render passes, but check if resources are in
         // correct access state
@@ -18869,22 +18900,19 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_apply_bindings(VkCommandBuffer cmd_buf, co
         }
         for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
             const _sg_view_t* view = bnd->views[i];
-            if (view) {
-                switch (view->cmn.type) {
-                    case SG_VIEWTYPE_STORAGEBUFFER:
-                        const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
-                        _SOKOL_UNUSED(buf);
-                        SOKOL_ASSERT(0 != (buf->vk.cur_access & _SG_VK_ACCESS_STORAGEBUFFER_RO));
-                        break;
-                    case SG_VIEWTYPE_TEXTURE:
-                        const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
-                        _SOKOL_UNUSED(img);
-                        SOKOL_ASSERT(0 != (img->vk.cur_access & _SG_VK_ACCESS_TEXTURE));
-                        break;
-                    default:
-                        SOKOL_UNREACHABLE;
-                        break;
-                }
+            if (0 == view) {
+                continue;
+            }
+            else if (view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
+                const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
+                _SOKOL_UNUSED(buf);
+                SOKOL_ASSERT(0 != (buf->vk.cur_access & _SG_VK_ACCESS_STORAGEBUFFER_RO));
+            } else if (view->cmn.type == SG_VIEWTYPE_TEXTURE) {
+                const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+                _SOKOL_UNUSED(img);
+                SOKOL_ASSERT(0 != (img->vk.cur_access & _SG_VK_ACCESS_TEXTURE));
+            } else {
+                SOKOL_UNREACHABLE;
             }
         }
     }
@@ -18893,7 +18921,27 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_apply_bindings(VkCommandBuffer cmd_buf, co
 _SOKOL_PRIVATE void _sg_vk_barrier_on_end_pass(VkCommandBuffer cmd_buf, const _sg_attachments_ptrs_t* atts, bool is_compute_pass) {
     SOKOL_ASSERT(cmd_buf);
     if (is_compute_pass) {
-        // FIXME: transition all tracked buffers into vertex/index/sbuf-ro
+        // transition all tracked buffers into vertex+index+sbuf-ro access
+        const _sg_vk_access_t new_buf_access = _SG_VK_ACCESS_VERTEXBUFFER|_SG_VK_ACCESS_INDEXBUFFER|_SG_VK_ACCESS_STORAGEBUFFER_RO;
+        for (int i = 0; i < _sg.vk.track.buffers.cur_slot; i++) {
+            const uint32_t buf_id = _sg.vk.track.buffers.slots[i];
+            _sg_buffer_t* buf = _sg_lookup_buffer(buf_id);
+            if (buf) {
+                _sg_vk_buffer_barrier(cmd_buf, buf, new_buf_access);
+            }
+        }
+        _sg_track_reset(&_sg.vk.track.buffers);
+
+        // transition all tracked images into texture access
+        const _sg_vk_access_t new_img_access = _SG_VK_ACCESS_TEXTURE;
+        for (int i = 0; i < _sg.vk.track.images.cur_slot; i++) {
+            const uint32_t img_id = _sg.vk.track.images.slots[i];
+            _sg_image_t* img = _sg_lookup_image(img_id);
+            if (img) {
+                _sg_vk_image_barrier(cmd_buf, img, new_img_access);
+            }
+        }
+        _sg_track_reset(&_sg.vk.track.images);
     } else {
         const bool is_swapchain_pass = atts->empty;
         if (is_swapchain_pass) {
@@ -21207,7 +21255,8 @@ _SOKOL_PRIVATE void _sg_vk_init_stencil_attachment_info(VkRenderingAttachmentInf
 }
 
 _SOKOL_PRIVATE void _sg_vk_begin_compute_pass(VkCommandBuffer cmd_buf, const sg_pass* pass) {
-    // FIXME: reset image access tracking system
+    // FIXME: nothing to do here?
+    _SOKOL_UNUSED(cmd_buf && pass);
 }
 
 _SOKOL_PRIVATE void _sg_vk_begin_render_pass(VkCommandBuffer cmd_buf, const sg_pass* pass, const _sg_attachments_ptrs_t* atts) {
