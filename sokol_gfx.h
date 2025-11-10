@@ -5938,6 +5938,15 @@ typedef struct {
     int* free_queue;
 } _sg_pool_t;
 
+// resource hazard tracking struct
+typedef struct {
+    int num_slots;
+    int cur_slot;
+    uint32_t* slots;        // tracked unique resource ids
+    uint32_t occupy_num_bytes;  // size of occupy_bits array in bytes
+    uint8_t* occupy_bits;   // one set bit for each unique resource (idx = (id & 0xFFFF) >> 3)
+} _sg_track_t;
+
 // resource func forward decls
 struct _sg_buffer_s;
 struct _sg_image_s;
@@ -6989,6 +6998,11 @@ typedef struct {
     _sg_vk_uniform_bindinfo_t uniform_bindinfos[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
     // resource binding system (using descriptor buffers)
     _sg_vk_shared_buffer_t bind;
+    // hazard tracking system for buffers and images
+    struct {
+        _sg_track_t buffers;
+        _sg_track_t images;
+    } track;
     // device properties and features (initialized at startup)
     VkPhysicalDeviceProperties2 device_props;
     VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_props;
@@ -7151,6 +7165,22 @@ static void _sg_log(sg_log_item log_item, uint32_t log_level, const char* msg, u
 // ██      ██ ███████ ██      ██  ██████  ██   ██    ██
 //
 // >>memory
+
+_SOKOL_PRIVATE int _sg_roundup(int val, int round_to) {
+    return (val+(round_to-1)) & ~(round_to-1);
+}
+
+_SOKOL_PRIVATE uint32_t _sg_roundup_u32(uint32_t val, uint32_t round_to) {
+    return (val+(round_to-1)) & ~(round_to-1);
+}
+
+_SOKOL_PRIVATE uint64_t _sg_roundup_u64(uint64_t val, uint64_t round_to) {
+    return (val+(round_to-1)) & ~(round_to-1);
+}
+
+_SOKOL_PRIVATE bool _sg_multiple_u64(uint64_t val, uint64_t of) {
+    return (val & (of-1)) == 0;
+}
 
 // a helper macro to clear a struct with potentially ARC'ed ObjC references
 #if defined(SOKOL_METAL)
@@ -7522,6 +7552,86 @@ _SOKOL_PRIVATE _sg_view_t* _sg_lookup_view(uint32_t view_id) {
         }
     }
     return 0;
+}
+
+// ████████ ██████   █████   ██████ ██   ██
+//    ██    ██   ██ ██   ██ ██      ██  ██
+//    ██    ██████  ███████ ██      █████
+//    ██    ██   ██ ██   ██ ██      ██  ██
+//    ██    ██   ██ ██   ██  ██████ ██   ██
+//
+// >>track
+_SOKOL_PRIVATE void _sg_track_init(_sg_track_t* track, int num_slots) {
+    SOKOL_ASSERT(track && (num_slots > 0));
+    _sg_clear(track, sizeof(_sg_track_t));
+    track->num_slots = num_slots;
+    track->slots = (uint32_t*)_sg_malloc_clear((size_t)num_slots * sizeof(uint32_t));
+    track->occupy_num_bytes = _sg_roundup_u32((uint32_t)num_slots, 8) >> 3;
+    track->occupy_bits = (uint8_t*)_sg_malloc_clear(track->occupy_num_bytes);
+}
+
+_SOKOL_PRIVATE void _sg_track_discard(_sg_track_t* track) {
+    SOKOL_ASSERT(track);
+    if (track->slots) {
+        _sg_free(track->slots);
+        track->slots = 0;
+    }
+    if (track->occupy_bits) {
+        _sg_free(track->occupy_bits);
+        track->occupy_num_bytes = 0;
+        track->occupy_bits = 0;
+    }
+    track->num_slots = 0;
+    track->cur_slot = 0;
+}
+
+_SOKOL_PRIVATE void _sg_track_reset(_sg_track_t* track) {
+    SOKOL_ASSERT(track && track->slots && track->occupy_bits);
+    track->cur_slot = 0;
+    _sg_clear(track->occupy_bits, track->occupy_num_bytes);
+}
+
+_SOKOL_PRIVATE int _sg_track_occupy_index(int slot_index) {
+    const int occupy_index = slot_index >> 3;
+    return occupy_index;
+}
+
+_SOKOL_PRIVATE uint8_t _sg_track_occupy_mask(int slot_index) {
+    return (uint8_t)(1 << (slot_index & 7));
+}
+
+_SOKOL_PRIVATE void _sg_track_add(_sg_track_t* track, uint32_t id) {
+    SOKOL_ASSERT(track && track->slots && track->occupy_bits);
+    SOKOL_ASSERT(id != SG_INVALID_ID);
+    const int slot_index = _sg_slot_index(id);
+    const int occupy_index = _sg_track_occupy_index(slot_index);
+    SOKOL_ASSERT((uint32_t)occupy_index < track->occupy_num_bytes);
+    const uint8_t occupy_mask = _sg_track_occupy_mask(slot_index);
+    // don't record the same resource twice
+    if (0 == (track->occupy_bits[occupy_index] & occupy_mask)) {
+        SOKOL_ASSERT(track->cur_slot < track->num_slots);
+        track->slots[track->cur_slot++] = id;
+        track->occupy_bits[occupy_index] |= occupy_mask;
+    }
+}
+
+_SOKOL_PRIVATE void _sg_track_remove(_sg_track_t* track, uint32_t id) {
+    SOKOL_ASSERT(track && track->slots && track->occupy_bits);
+    SOKOL_ASSERT(id != SG_INVALID_ID);
+    const int slot_index = _sg_slot_index(id);
+    const int occupy_index = _sg_track_occupy_index(slot_index);
+    const uint8_t occupy_mask = _sg_track_occupy_mask(slot_index);
+    if (track->occupy_bits[occupy_index] & occupy_mask) {
+        track->occupy_bits[occupy_index] &= ~occupy_mask;
+        // remove tracked id from the slots array
+        for (int i = 0; i < track->cur_slot; i++) {
+            if (id == track->slots[i]) {
+                SOKOL_ASSERT(track->cur_slot > 0);
+                track->slots[i] = track->slots[--track->cur_slot];
+                break;
+            }
+        }
+    }
 }
 
 // ██████  ███████ ███████ ███████
@@ -8345,22 +8455,6 @@ _SOKOL_PRIVATE int _sg_pixelformat_bytesize(sg_pixel_format fmt) {
             SOKOL_UNREACHABLE;
             return 0;
     }
-}
-
-_SOKOL_PRIVATE int _sg_roundup(int val, int round_to) {
-    return (val+(round_to-1)) & ~(round_to-1);
-}
-
-_SOKOL_PRIVATE uint32_t _sg_roundup_u32(uint32_t val, uint32_t round_to) {
-    return (val+(round_to-1)) & ~(round_to-1);
-}
-
-_SOKOL_PRIVATE uint64_t _sg_roundup_u64(uint64_t val, uint64_t round_to) {
-    return (val+(round_to-1)) & ~(round_to-1);
-}
-
-_SOKOL_PRIVATE bool _sg_multiple_u64(uint64_t val, uint64_t of) {
-    return (val & (of-1)) == 0;
 }
 
 // return the texture block width/height of an image format
@@ -20215,6 +20309,8 @@ _SOKOL_PRIVATE void _sg_vk_setup_backend(const sg_desc* desc) {
     _sg.vk.queue = (VkQueue) desc->environment.vulkan.queue;
     _sg.vk.queue_family_index = desc->environment.vulkan.queue_family_index;
 
+    _sg_track_init(&_sg.vk.track.buffers, _sg.pools.buffer_pool.size);
+    _sg_track_init(&_sg.vk.track.images, _sg.pools.image_pool.size);
     _sg_vk_load_ext_funcs();
     _sg_vk_init_caps();
     _sg_vk_create_fences();
@@ -20235,6 +20331,8 @@ _SOKOL_PRIVATE void _sg_vk_discard_backend(void) {
     _sg_vk_staging_discard();
     _sg_vk_destroy_frame_command_pool();
     _sg_vk_destroy_fences();
+    _sg_track_discard(&_sg.vk.track.images);
+    _sg_track_discard(&_sg.vk.track.buffers);
     _sg.vk.valid = false;
 }
 
@@ -20293,6 +20391,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_buffer(_sg_buffer_t* buf, const s
 
 _SOKOL_PRIVATE void _sg_vk_discard_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
+    _sg_track_remove(&_sg.vk.track.buffers, buf->slot.id);
     if (buf->vk.buf) {
         _sg_vk_delete_queue_add(_sg_vk_buffer_destructor, (void*)buf->vk.buf);
         buf->vk.buf = 0;
@@ -20356,6 +20455,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_image(_sg_image_t* img, const sg_
 
 _SOKOL_PRIVATE void _sg_vk_discard_image(_sg_image_t* img) {
     SOKOL_ASSERT(img);
+    _sg_track_remove(&_sg.vk.track.images, img->slot.id);
     if (img->vk.img) {
         _sg_vk_delete_queue_add(_sg_vk_image_destructor, (void*)img->vk.img);
         img->vk.img = 0;
