@@ -18766,10 +18766,37 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_apply_bindings(VkCommandBuffer cmd_buf, co
     }
 }
 
-_SOKOL_PRIVATE void _sg_vk_barrier_on_end_pass(VkCommandBuffer cmd_buf, bool is_compute_pass) {
+_SOKOL_PRIVATE void _sg_vk_barrier_on_end_pass(VkCommandBuffer cmd_buf, const _sg_attachments_ptrs_t* atts, bool is_compute_pass) {
     SOKOL_ASSERT(cmd_buf);
     if (is_compute_pass) {
         // FIXME: transition all tracked buffers into vertex/index/sbuf-ro
+    } else {
+        const bool is_swapchain_pass = atts->empty;
+        if (is_swapchain_pass) {
+            SOKOL_ASSERT(_sg.vk.swapchain.render_image);
+            VkImage present_image = _sg.vk.swapchain.resolve_image
+                ? (VkImage)_sg.vk.swapchain.resolve_image
+                : (VkImage)_sg.vk.swapchain.render_image;
+            _sg_vk_swapchain_barrier(cmd_buf, present_image, _SG_VK_ACCESS_COLOR_ATTACHMENT, _SG_VK_ACCESS_PRESENT);
+        } else {
+            for (int i = 0; i < atts->num_color_views; i++) {
+                if (_sg.cur_pass.action.colors[i].store_action == SG_STOREACTION_STORE) {
+                    SOKOL_ASSERT(atts->color_views[i]);
+                    _sg_image_t* img = _sg_image_ref_ptr(&atts->color_views[i]->cmn.img.ref);
+                    _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
+                }
+                if (atts->resolve_views[i]) {
+                    _sg_image_t* img = _sg_image_ref_ptr(&atts->resolve_views[i]->cmn.img.ref);
+                    _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
+                }
+            }
+            if (atts->ds_view) {
+                _sg_image_t* img = _sg_image_ref_ptr(&atts->ds_view->cmn.img.ref);
+                if (_sg.cur_pass.action.depth.store_action == SG_STOREACTION_STORE) {
+                    _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
+                }
+            }
+        }
     }
 }
 
@@ -21148,52 +21175,14 @@ _SOKOL_PRIVATE void _sg_vk_begin_pass(const sg_pass* pass, const _sg_attachments
     }
 }
 
-_SOKOL_PRIVATE void _sg_vk_end_compute_pass(void) {
-    // FIXME
-}
-
-_SOKOL_PRIVATE void _sg_vk_end_render_pass(const _sg_attachments_ptrs_t* atts) {
-    SOKOL_ASSERT(atts);
-    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
-    VkCommandBuffer cmd_buf = _sg.vk.frame.cmd_buf;
-    const bool is_swapchain_pass = atts->empty;
-    vkCmdEndRendering(_sg.vk.frame.cmd_buf);
-    if (is_swapchain_pass) {
-        SOKOL_ASSERT(_sg.vk.swapchain.render_image);
-        VkImage present_image = _sg.vk.swapchain.resolve_image
-            ? (VkImage)_sg.vk.swapchain.resolve_image
-            : (VkImage)_sg.vk.swapchain.render_image;
-        _sg_vk_swapchain_barrier(cmd_buf, present_image, _SG_VK_ACCESS_COLOR_ATTACHMENT, _SG_VK_ACCESS_PRESENT);
-        _sg_clear(&_sg.vk.swapchain, sizeof(_sg.vk.swapchain));
-    } else {
-        // transition attachments back to texture access if needed
-        for (int i = 0; i < atts->num_color_views; i++) {
-            if (_sg.cur_pass.action.colors[i].store_action == SG_STOREACTION_STORE) {
-                SOKOL_ASSERT(atts->color_views[i]);
-                _sg_image_t* img = _sg_image_ref_ptr(&atts->color_views[i]->cmn.img.ref);
-                _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
-            }
-            if (atts->resolve_views[i]) {
-                _sg_image_t* img = _sg_image_ref_ptr(&atts->resolve_views[i]->cmn.img.ref);
-                _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
-            }
-        }
-        if (atts->ds_view) {
-            _sg_image_t* img = _sg_image_ref_ptr(&atts->ds_view->cmn.img.ref);
-            if (_sg.cur_pass.action.depth.store_action == SG_STOREACTION_STORE) {
-                _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
-            }
-        }
-    }
-}
-
 _SOKOL_PRIVATE void _sg_vk_end_pass(const _sg_attachments_ptrs_t* atts) {
     SOKOL_ASSERT(atts);
-    if (_sg.cur_pass.is_compute) {
-        _sg_vk_end_compute_pass();
-    } else {
-        _sg_vk_end_render_pass(atts);
+    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+    if (!_sg.cur_pass.is_compute) {
+        vkCmdEndRendering(_sg.vk.frame.cmd_buf);
     }
+    _sg_vk_barrier_on_end_pass(_sg.vk.frame.cmd_buf, atts, _sg.cur_pass.is_compute);
+    _sg_clear(&_sg.vk.swapchain, sizeof(_sg.vk.swapchain));
 }
 
 _SOKOL_PRIVATE void _sg_vk_commit(void) {
