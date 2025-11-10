@@ -18853,10 +18853,40 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_begin_pass(VkCommandBuffer cmd_buf, const 
 }
 
 _SOKOL_PRIVATE void _sg_vk_barrier_on_apply_bindings(VkCommandBuffer cmd_buf, const _sg_bindings_ptrs_t* bnd, bool is_compute_pass) {
+    SOKOL_ASSERT(bnd);
     if (is_compute_pass) {
         // FIXME: transition buffers from current into sbuf-ro or sbuf-rw
     } else {
-        // no transitions allowed in render pass
+        // no transitions allowed in render passes, but check if resources are in
+        // correct access state
+        for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
+            if (bnd->vbs[i]) {
+                SOKOL_ASSERT(0 != (bnd->vbs[i]->vk.cur_access & _SG_VK_ACCESS_VERTEXBUFFER));
+            }
+        }
+        if (bnd->ib) {
+            SOKOL_ASSERT(0 != (bnd->ib->vk.cur_access & _SG_VK_ACCESS_INDEXBUFFER));
+        }
+        for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+            const _sg_view_t* view = bnd->views[i];
+            if (view) {
+                switch (view->cmn.type) {
+                    case SG_VIEWTYPE_STORAGEBUFFER:
+                        const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
+                        _SOKOL_UNUSED(buf);
+                        SOKOL_ASSERT(0 != (buf->vk.cur_access & _SG_VK_ACCESS_STORAGEBUFFER_RO));
+                        break;
+                    case SG_VIEWTYPE_TEXTURE:
+                        const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+                        _SOKOL_UNUSED(img);
+                        SOKOL_ASSERT(0 != (img->vk.cur_access & _SG_VK_ACCESS_TEXTURE));
+                        break;
+                    default:
+                        SOKOL_UNREACHABLE;
+                        break;
+                }
+            }
+        }
     }
 }
 
@@ -19201,6 +19231,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_
         vkCmdCopyBuffer(cmd_buf, src_buf, dst_buf, 1, &region);
         _sg_vk_staging_copy_end(cmd_buf, _sg.vk.queue);
     }
+    buf->vk.cur_access = _SG_VK_ACCESS_VERTEXBUFFER | _SG_VK_ACCESS_INDEXBUFFER | _SG_VK_ACCESS_STORAGEBUFFER_RO;
 }
 
 _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_image_data* data, bool initial_wait) {
