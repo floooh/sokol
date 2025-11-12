@@ -642,7 +642,7 @@ typedef struct saudio_n3ds_desc {
     /* NDSP_INTERP_POLYPHASE = 0 (high quality, slower) */
     /* NDSP_INTERP_LINEAR    = 1 (med quality, medium)  */
     /* NDSP_INTERP_NONE      = 2 (low quality, fast)    */
-    saudio_n3ds_ndspinterptype interpolation_type; /* default value = 0, expected as type ndspInterpType enum */
+    saudio_n3ds_ndspinterptype interpolation_type; /* default value = 0 */
 
     /* 3DS supports different audio channels. they can be used */
     /* in a variety of ways as independent streams etc.        */
