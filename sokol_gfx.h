@@ -6972,9 +6972,11 @@ typedef struct {
     struct {
         VkCommandPool cmd_pool;
         VkCommandBuffer cmd_buf;
+        VkCommandBuffer stream_cmd_buf;
         struct {
             VkFence fence;
             VkCommandBuffer command_buffer;
+            VkCommandBuffer stream_command_buffer;
             _sg_vk_delete_queue_t delete_queue;
         } slot[SG_NUM_INFLIGHT_FRAMES];
     } frame;
@@ -6988,8 +6990,7 @@ typedef struct {
             VkBuffer buf;
             VkDeviceMemory mem;
         } copy;
-        // staging system for streaming resources, limited per-frame staging size, may fall
-        // back to stalling copy if per-frame staging buffer exhausted
+        // staging buffer for per-frame streaming updates
         _sg_vk_shared_buffer_t stream;
     } stage;
     // uniform update system
@@ -19123,254 +19124,7 @@ _SOKOL_PRIVATE void _sg_vk_delete_queue_add(_sg_vk_delete_queue_destructor_t des
     queue->index += 1;
 }
 
-_SOKOL_PRIVATE void _sg_vk_staging_init(void) {
-    SOKOL_ASSERT(_sg.vk.dev);
-    VkResult res;
-
-    // setup staging system for immutable and dynamic resources,
-    // updating these resources generally causes a queue flush
-    SOKOL_ASSERT(0 == _sg.vk.stage.copy.cmd_pool);
-    SOKOL_ASSERT(0 == _sg.vk.stage.copy.cmd_buf);
-    SOKOL_ASSERT(0 == _sg.vk.stage.copy.size);
-    SOKOL_ASSERT(0 == _sg.vk.stage.copy.buf);
-    SOKOL_ASSERT(0 == _sg.vk.stage.copy.mem);
-    SOKOL_ASSERT(_sg.desc.vk_copy_staging_buffer_size > 0);
-
-    VkCommandPoolCreateInfo pool_create_info;
-    _sg_clear(&pool_create_info, sizeof(pool_create_info));
-    pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    pool_create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-    pool_create_info.queueFamilyIndex = _sg.vk.queue_family_index;
-    res = vkCreateCommandPool(_sg.vk.dev, &pool_create_info, 0, &_sg.vk.stage.copy.cmd_pool);
-    SOKOL_ASSERT((res == VK_SUCCESS && _sg.vk.stage.copy.cmd_pool));
-    _sg_vk_set_object_label(VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t)_sg.vk.stage.copy.cmd_pool, "copy-staging cmd pool");
-
-    VkCommandBufferAllocateInfo cmdbuf_alloc_info;
-    _sg_clear(&cmdbuf_alloc_info, sizeof(cmdbuf_alloc_info));
-    cmdbuf_alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    cmdbuf_alloc_info.commandPool = _sg.vk.stage.copy.cmd_pool;
-    cmdbuf_alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    cmdbuf_alloc_info.commandBufferCount = 1;
-    res = vkAllocateCommandBuffers(_sg.vk.dev, &cmdbuf_alloc_info, &_sg.vk.stage.copy.cmd_buf);
-    SOKOL_ASSERT((res == VK_SUCCESS) && _sg.vk.stage.copy.cmd_buf);
-    _sg_vk_set_object_label(VK_OBJECT_TYPE_COMMAND_BUFFER, (uint64_t)_sg.vk.stage.copy.cmd_buf, "copy-staging cmd buffer");
-
-    _sg.vk.stage.copy.size = (uint32_t) _sg.desc.vk_copy_staging_buffer_size;
-    VkBufferCreateInfo buf_create_info;
-    _sg_clear(&buf_create_info, sizeof(buf_create_info));
-    buf_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    buf_create_info.size = _sg.vk.stage.copy.size;
-    buf_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    buf_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    res = vkCreateBuffer(_sg.vk.dev, &buf_create_info, 0, &_sg.vk.stage.copy.buf);
-    if (res != VK_SUCCESS) {
-        _SG_PANIC(VULKAN_STAGING_CREATE_BUFFER_FAILED);
-    }
-    SOKOL_ASSERT(_sg.vk.stage.copy.buf);
-    _sg_vk_set_object_label(VK_OBJECT_TYPE_BUFFER, (uint64_t)_sg.vk.stage.copy.buf, "copy-staging staging buffer");
-
-    VkMemoryRequirements mem_reqs;
-    _sg_clear(&mem_reqs, sizeof(mem_reqs));
-    vkGetBufferMemoryRequirements(_sg.vk.dev, _sg.vk.stage.copy.buf, &mem_reqs);
-    _sg.vk.stage.copy.mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 0);
-    if (0 == _sg.vk.stage.copy.mem) {
-        _SG_PANIC(VULKAN_STAGING_ALLOCATE_MEMORY_FAILED);
-    }
-    res = vkBindBufferMemory(_sg.vk.dev, _sg.vk.stage.copy.buf, _sg.vk.stage.copy.mem, 0);
-    if (res != VK_SUCCESS) {
-        _SG_PANIC(VULKAN_STAGING_BIND_BUFFER_MEMORY_FAILED);
-    }
-}
-
-_SOKOL_PRIVATE void _sg_vk_staging_discard(void) {
-    SOKOL_ASSERT(_sg.vk.dev);
-    SOKOL_ASSERT(_sg.vk.stage.copy.cmd_pool);
-    SOKOL_ASSERT(_sg.vk.stage.copy.cmd_buf);
-    SOKOL_ASSERT(_sg.vk.stage.copy.size);
-    SOKOL_ASSERT(_sg.vk.stage.copy.buf);
-    SOKOL_ASSERT(_sg.vk.stage.copy.mem);
-
-    _sg_vk_mem_free_device_memory(_sg.vk.stage.copy.mem);
-    _sg.vk.stage.copy.mem = 0;
-    vkDestroyBuffer(_sg.vk.dev, _sg.vk.stage.copy.buf, 0);
-    _sg.vk.stage.copy.buf = 0;
-    vkDestroyCommandPool(_sg.vk.dev, _sg.vk.stage.copy.cmd_pool, 0);
-    _sg.vk.stage.copy.cmd_pool = 0;
-    _sg.vk.stage.copy.cmd_buf = 0;
-    _sg.vk.stage.copy.size = 0;
-}
-
-_SOKOL_PRIVATE VkCommandBuffer _sg_vk_staging_copy_begin(void) {
-    VkCommandBuffer cmd_buf = _sg.vk.stage.copy.cmd_buf;
-    VkCommandBufferBeginInfo cmdbuf_begin_info;
-    _sg_clear(&cmdbuf_begin_info, sizeof(cmdbuf_begin_info));
-    cmdbuf_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    cmdbuf_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    VkResult res = vkBeginCommandBuffer(cmd_buf, &cmdbuf_begin_info);
-    SOKOL_ASSERT(res == VK_SUCCESS);
-    return cmd_buf;
-}
-
-_SOKOL_PRIVATE void _sg_vk_staging_copy_end(VkCommandBuffer cmd_buf, VkQueue queue) {
-    SOKOL_ASSERT(cmd_buf && queue);
-    VkResult res;
-    vkEndCommandBuffer(cmd_buf);
-    VkSubmitInfo submit_info;
-    _sg_clear(&submit_info, sizeof(submit_info));
-    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &cmd_buf;
-    res = vkQueueSubmit(queue, 1, &submit_info, VK_NULL_HANDLE);
-    SOKOL_ASSERT(res == VK_SUCCESS);
-    res = vkQueueWaitIdle(queue);
-    SOKOL_ASSERT(res == VK_SUCCESS);
-    res = vkResetCommandBuffer(cmd_buf, 0);
-    SOKOL_ASSERT(res == VK_SUCCESS);
-}
-
-_SOKOL_PRIVATE void _sg_vk_staging_memcpy(VkDeviceMemory mem, const void* ptr, uint32_t num_bytes) {
-    SOKOL_ASSERT(_sg.vk.dev);
-    SOKOL_ASSERT(mem);
-    SOKOL_ASSERT(ptr);
-    SOKOL_ASSERT(num_bytes > 0);
-    void* dst_ptr = 0;
-    VkResult res = vkMapMemory(_sg.vk.dev, mem, 0, VK_WHOLE_SIZE, 0, &dst_ptr);
-    SOKOL_ASSERT((res == VK_SUCCESS) && dst_ptr);
-    memcpy(dst_ptr, ptr, num_bytes);
-    vkUnmapMemory(_sg.vk.dev, mem);
-}
-
-_SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_range* data, size_t offset, bool initial_wait) {
-    SOKOL_ASSERT(_sg.vk.dev);
-    SOKOL_ASSERT(_sg.vk.queue);
-    SOKOL_ASSERT(_sg.vk.stage.copy.mem);
-    SOKOL_ASSERT(_sg.vk.stage.copy.buf);
-    SOKOL_ASSERT(buf && buf->vk.buf);
-    SOKOL_ASSERT(data && data->ptr && (data->size > 0));
-    SOKOL_ASSERT((offset + data->size) <= (size_t)buf->cmn.size);
-
-    // an inital wait is only needed for updating existing resources but not when populating a new resource
-    if (initial_wait) {
-        VkResult res = vkQueueWaitIdle(_sg.vk.queue);
-        SOKOL_ASSERT(res == VK_SUCCESS);
-    }
-
-    VkDeviceMemory mem = _sg.vk.stage.copy.mem;
-    VkBuffer src_buf = _sg.vk.stage.copy.buf;
-    VkBuffer dst_buf = buf->vk.buf;
-    const uint8_t* src_ptr = ((const uint8_t*)data->ptr) + offset;
-    uint32_t dst_size = _sg.vk.stage.copy.size;
-    uint32_t bytes_remaining = (uint32_t)data->size;
-    VkBufferCopy region;
-    _sg_clear(&region, sizeof(region));
-    while (bytes_remaining > 0) {
-        uint64_t bytes_to_copy = bytes_remaining;
-        if (bytes_remaining > dst_size) {
-            bytes_to_copy = dst_size;
-            bytes_remaining -= dst_size;
-        } else {
-            bytes_to_copy = bytes_remaining;
-            bytes_remaining = 0;
-        }
-        _sg_vk_staging_memcpy(mem, src_ptr, bytes_to_copy);
-        src_ptr += bytes_to_copy;
-        VkCommandBuffer cmd_buf = _sg_vk_staging_copy_begin();
-        region.size = bytes_to_copy;
-        vkCmdCopyBuffer(cmd_buf, src_buf, dst_buf, 1, &region);
-        _sg_vk_staging_copy_end(cmd_buf, _sg.vk.queue);
-    }
-    buf->vk.cur_access = _SG_VK_ACCESS_VERTEXBUFFER | _SG_VK_ACCESS_INDEXBUFFER | _SG_VK_ACCESS_STORAGEBUFFER_RO;
-}
-
-_SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_image_data* data, bool initial_wait) {
-    SOKOL_ASSERT(_sg.vk.dev);
-    SOKOL_ASSERT(_sg.vk.queue);
-    SOKOL_ASSERT(_sg.vk.stage.copy.mem);
-    SOKOL_ASSERT(_sg.vk.stage.copy.buf);
-    SOKOL_ASSERT(img && img->vk.img);
-    const uint32_t block_dim = (uint32_t)_sg_block_dim(img->cmn.pixel_format);
-
-    // an inital wait is only needed for updating existing resources but not when populating a new resource
-    if (initial_wait) {
-        VkResult res = vkQueueWaitIdle(_sg.vk.queue);
-        SOKOL_ASSERT(res == VK_SUCCESS);
-    }
-
-    VkDeviceMemory mem = _sg.vk.stage.copy.mem;
-    VkBuffer src_buf = _sg.vk.stage.copy.buf;
-    VkImage dst_img = img->vk.img;
-
-    VkBufferImageCopy2 region;
-    _sg_clear(&region, sizeof(region));
-    region.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
-    // image data is tightly packed
-    region.bufferOffset = 0;
-    region.bufferRowLength = 0;
-    region.bufferImageHeight = 0;
-    if (_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format)) {
-        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-        if (_sg_is_depth_stencil_format(img->cmn.pixel_format)) {
-            region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
-        }
-    } else {
-        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    }
-    region.imageSubresource.layerCount = 1;
-    region.imageExtent.depth = 1;
-    VkCopyBufferToImageInfo2 copy_info;
-    _sg_clear(&copy_info, sizeof(copy_info));
-    copy_info.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2;
-    copy_info.srcBuffer = src_buf;
-    copy_info.dstImage = dst_img;
-    copy_info.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    copy_info.regionCount = 1;
-    copy_info.pRegions = &region;
-    for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
-        const uint8_t* src_ptr = data->mip_levels[mip_index].ptr;
-        int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
-        int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
-        int mip_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
-        const uint32_t row_pitch = (uint32_t) _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
-        const uint32_t num_rows = (uint32_t) _sg_num_rows(img->cmn.pixel_format, mip_height);
-        region.imageSubresource.mipLevel = (uint32_t)mip_index;
-        region.imageExtent.width = (uint32_t)mip_width;
-
-        const uint32_t max_rows = _sg.vk.stage.copy.size / row_pitch;
-        for (int slice_index = 0; slice_index < mip_slices; slice_index++) {
-            if (img->cmn.type == SG_IMAGETYPE_3D) {
-                region.imageOffset.z = slice_index;
-            } else {
-                region.imageSubresource.baseArrayLayer = (uint32_t)slice_index;
-            }
-            uint32_t rows_remaining = num_rows;
-            uint32_t cur_row = 0;
-            while (rows_remaining > 0) {
-                uint32_t rows_to_copy = rows_remaining;
-                if (rows_remaining > max_rows) {
-                    rows_to_copy = max_rows;
-                    rows_remaining -= max_rows;
-                } else {
-                    rows_to_copy = rows_remaining;
-                    rows_remaining = 0;
-                }
-                const uint32_t bytes_to_copy = rows_to_copy * row_pitch;
-                SOKOL_ASSERT(bytes_to_copy <= _sg.vk.stage.copy.size);
-                _sg_vk_staging_memcpy(mem, src_ptr, bytes_to_copy);
-                src_ptr += bytes_to_copy;
-                VkCommandBuffer cmd_buf = _sg_vk_staging_copy_begin();
-                _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_STAGING);
-                region.imageOffset.y = (int32_t)(cur_row * block_dim);
-                region.imageExtent.height = _sg_min((uint32_t)mip_height, rows_to_copy * block_dim);
-                vkCmdCopyBufferToImage2(cmd_buf, &copy_info);
-                _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
-
-                _sg_vk_staging_copy_end(cmd_buf, _sg.vk.queue);
-                cur_row += rows_to_copy;
-            }
-        }
-    }
-}
-
+// double-buffer system for any non-blocking CPU => GPU data
 _SOKOL_PRIVATE void _sg_vk_shared_buffer_init(_sg_vk_shared_buffer_t* shbuf, uint32_t size, uint32_t align, VkBufferUsageFlags vk_usage, const char* label) {
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(shbuf && (size > 0) && (align > 0) && (vk_usage != 0));
@@ -19509,6 +19263,262 @@ _SOKOL_PRIVATE uint32_t _sg_vk_shared_buffer_memcpy(_sg_vk_shared_buffer_t* shbu
         memcpy(_sg_vk_shared_buffer_ptr(shbuf, offset), src_ptr, num_bytes);
     }
     return offset;
+}
+
+// staging system for blocking immutable and dynamic updates, can deal arbitrarily sized data
+_SOKOL_PRIVATE void _sg_vk_staging_copy_init(void) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    VkResult res;
+
+    SOKOL_ASSERT(0 == _sg.vk.stage.copy.cmd_pool);
+    SOKOL_ASSERT(0 == _sg.vk.stage.copy.cmd_buf);
+    SOKOL_ASSERT(0 == _sg.vk.stage.copy.size);
+    SOKOL_ASSERT(0 == _sg.vk.stage.copy.buf);
+    SOKOL_ASSERT(0 == _sg.vk.stage.copy.mem);
+    SOKOL_ASSERT(_sg.desc.vk_copy_staging_buffer_size > 0);
+
+    VkCommandPoolCreateInfo pool_create_info;
+    _sg_clear(&pool_create_info, sizeof(pool_create_info));
+    pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    pool_create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+    pool_create_info.queueFamilyIndex = _sg.vk.queue_family_index;
+    res = vkCreateCommandPool(_sg.vk.dev, &pool_create_info, 0, &_sg.vk.stage.copy.cmd_pool);
+    SOKOL_ASSERT((res == VK_SUCCESS && _sg.vk.stage.copy.cmd_pool));
+    _sg_vk_set_object_label(VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t)_sg.vk.stage.copy.cmd_pool, "copy-staging cmd pool");
+
+    VkCommandBufferAllocateInfo cmdbuf_alloc_info;
+    _sg_clear(&cmdbuf_alloc_info, sizeof(cmdbuf_alloc_info));
+    cmdbuf_alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    cmdbuf_alloc_info.commandPool = _sg.vk.stage.copy.cmd_pool;
+    cmdbuf_alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    cmdbuf_alloc_info.commandBufferCount = 1;
+    res = vkAllocateCommandBuffers(_sg.vk.dev, &cmdbuf_alloc_info, &_sg.vk.stage.copy.cmd_buf);
+    SOKOL_ASSERT((res == VK_SUCCESS) && _sg.vk.stage.copy.cmd_buf);
+    _sg_vk_set_object_label(VK_OBJECT_TYPE_COMMAND_BUFFER, (uint64_t)_sg.vk.stage.copy.cmd_buf, "copy-staging cmd buffer");
+
+    _sg.vk.stage.copy.size = (uint32_t) _sg.desc.vk_copy_staging_buffer_size;
+    VkBufferCreateInfo buf_create_info;
+    _sg_clear(&buf_create_info, sizeof(buf_create_info));
+    buf_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    buf_create_info.size = _sg.vk.stage.copy.size;
+    buf_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    buf_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    res = vkCreateBuffer(_sg.vk.dev, &buf_create_info, 0, &_sg.vk.stage.copy.buf);
+    if (res != VK_SUCCESS) {
+        _SG_PANIC(VULKAN_STAGING_CREATE_BUFFER_FAILED);
+    }
+    SOKOL_ASSERT(_sg.vk.stage.copy.buf);
+    _sg_vk_set_object_label(VK_OBJECT_TYPE_BUFFER, (uint64_t)_sg.vk.stage.copy.buf, "copy-staging staging buffer");
+
+    VkMemoryRequirements mem_reqs;
+    _sg_clear(&mem_reqs, sizeof(mem_reqs));
+    vkGetBufferMemoryRequirements(_sg.vk.dev, _sg.vk.stage.copy.buf, &mem_reqs);
+    _sg.vk.stage.copy.mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 0);
+    if (0 == _sg.vk.stage.copy.mem) {
+        _SG_PANIC(VULKAN_STAGING_ALLOCATE_MEMORY_FAILED);
+    }
+    res = vkBindBufferMemory(_sg.vk.dev, _sg.vk.stage.copy.buf, _sg.vk.stage.copy.mem, 0);
+    if (res != VK_SUCCESS) {
+        _SG_PANIC(VULKAN_STAGING_BIND_BUFFER_MEMORY_FAILED);
+    }
+}
+
+_SOKOL_PRIVATE void _sg_vk_staging_copy_discard(void) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(_sg.vk.stage.copy.cmd_pool);
+    SOKOL_ASSERT(_sg.vk.stage.copy.cmd_buf);
+    SOKOL_ASSERT(_sg.vk.stage.copy.size);
+    SOKOL_ASSERT(_sg.vk.stage.copy.buf);
+    SOKOL_ASSERT(_sg.vk.stage.copy.mem);
+
+    _sg_vk_mem_free_device_memory(_sg.vk.stage.copy.mem);
+    _sg.vk.stage.copy.mem = 0;
+    vkDestroyBuffer(_sg.vk.dev, _sg.vk.stage.copy.buf, 0);
+    _sg.vk.stage.copy.buf = 0;
+    vkDestroyCommandPool(_sg.vk.dev, _sg.vk.stage.copy.cmd_pool, 0);
+    _sg.vk.stage.copy.cmd_pool = 0;
+    _sg.vk.stage.copy.cmd_buf = 0;
+    _sg.vk.stage.copy.size = 0;
+}
+
+_SOKOL_PRIVATE VkCommandBuffer _sg_vk_staging_copy_begin(void) {
+    VkCommandBuffer cmd_buf = _sg.vk.stage.copy.cmd_buf;
+    VkCommandBufferBeginInfo cmdbuf_begin_info;
+    _sg_clear(&cmdbuf_begin_info, sizeof(cmdbuf_begin_info));
+    cmdbuf_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    cmdbuf_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    VkResult res = vkBeginCommandBuffer(cmd_buf, &cmdbuf_begin_info);
+    SOKOL_ASSERT(res == VK_SUCCESS);
+    return cmd_buf;
+}
+
+_SOKOL_PRIVATE void _sg_vk_staging_copy_end(VkCommandBuffer cmd_buf, VkQueue queue) {
+    SOKOL_ASSERT(cmd_buf && queue);
+    VkResult res;
+    vkEndCommandBuffer(cmd_buf);
+    VkSubmitInfo submit_info;
+    _sg_clear(&submit_info, sizeof(submit_info));
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &cmd_buf;
+    res = vkQueueSubmit(queue, 1, &submit_info, VK_NULL_HANDLE);
+    SOKOL_ASSERT(res == VK_SUCCESS);
+    res = vkQueueWaitIdle(queue);
+    SOKOL_ASSERT(res == VK_SUCCESS);
+    res = vkResetCommandBuffer(cmd_buf, 0);
+    SOKOL_ASSERT(res == VK_SUCCESS);
+}
+
+_SOKOL_PRIVATE void _sg_vk_staging_map_memcpy_unmap(VkDeviceMemory mem, const void* ptr, uint32_t num_bytes) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(mem);
+    SOKOL_ASSERT(ptr);
+    SOKOL_ASSERT(num_bytes > 0);
+    void* dst_ptr = 0;
+    VkResult res = vkMapMemory(_sg.vk.dev, mem, 0, VK_WHOLE_SIZE, 0, &dst_ptr);
+    SOKOL_ASSERT((res == VK_SUCCESS) && dst_ptr);
+    memcpy(dst_ptr, ptr, num_bytes);
+    vkUnmapMemory(_sg.vk.dev, mem);
+}
+
+_SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_range* data, size_t offset, bool initial_wait) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(_sg.vk.queue);
+    SOKOL_ASSERT(_sg.vk.stage.copy.mem);
+    SOKOL_ASSERT(_sg.vk.stage.copy.buf);
+    SOKOL_ASSERT(buf && buf->vk.buf);
+    SOKOL_ASSERT(data && data->ptr && (data->size > 0));
+    SOKOL_ASSERT((offset + data->size) <= (size_t)buf->cmn.size);
+
+    // an inital wait is only needed for updating existing resources but not when populating a new resource
+    if (initial_wait) {
+        VkResult res = vkQueueWaitIdle(_sg.vk.queue);
+        SOKOL_ASSERT(res == VK_SUCCESS);
+    }
+
+    VkDeviceMemory mem = _sg.vk.stage.copy.mem;
+    VkBuffer src_buf = _sg.vk.stage.copy.buf;
+    VkBuffer dst_buf = buf->vk.buf;
+    const uint8_t* src_ptr = ((const uint8_t*)data->ptr) + offset;
+    uint32_t dst_size = _sg.vk.stage.copy.size;
+    uint32_t bytes_remaining = (uint32_t)data->size;
+    VkBufferCopy region;
+    _sg_clear(&region, sizeof(region));
+    while (bytes_remaining > 0) {
+        uint64_t bytes_to_copy = bytes_remaining;
+        if (bytes_remaining > dst_size) {
+            bytes_to_copy = dst_size;
+            bytes_remaining -= dst_size;
+        } else {
+            bytes_to_copy = bytes_remaining;
+            bytes_remaining = 0;
+        }
+        _sg_vk_staging_map_memcpy_unmap(mem, src_ptr, bytes_to_copy);
+        src_ptr += bytes_to_copy;
+        VkCommandBuffer cmd_buf = _sg_vk_staging_copy_begin();
+        region.size = bytes_to_copy;
+        vkCmdCopyBuffer(cmd_buf, src_buf, dst_buf, 1, &region);
+        _sg_vk_staging_copy_end(cmd_buf, _sg.vk.queue);
+    }
+    buf->vk.cur_access = _SG_VK_ACCESS_VERTEXBUFFER | _SG_VK_ACCESS_INDEXBUFFER | _SG_VK_ACCESS_STORAGEBUFFER_RO;
+}
+
+_SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_image_data* data, bool initial_wait) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(_sg.vk.queue);
+    SOKOL_ASSERT(_sg.vk.stage.copy.mem);
+    SOKOL_ASSERT(_sg.vk.stage.copy.buf);
+    SOKOL_ASSERT(img && img->vk.img);
+    const uint32_t block_dim = (uint32_t)_sg_block_dim(img->cmn.pixel_format);
+
+    // an inital wait is only needed for updating existing resources but not when populating a new resource
+    if (initial_wait) {
+        VkResult res = vkQueueWaitIdle(_sg.vk.queue);
+        SOKOL_ASSERT(res == VK_SUCCESS);
+    }
+
+    VkDeviceMemory mem = _sg.vk.stage.copy.mem;
+    VkBuffer src_buf = _sg.vk.stage.copy.buf;
+    VkImage dst_img = img->vk.img;
+
+    VkBufferImageCopy2 region;
+    _sg_clear(&region, sizeof(region));
+    region.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
+    // image data is tightly packed
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+    if (_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format)) {
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        if (_sg_is_depth_stencil_format(img->cmn.pixel_format)) {
+            region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+        }
+    } else {
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    }
+    region.imageSubresource.layerCount = 1;
+    region.imageExtent.depth = 1;
+    VkCopyBufferToImageInfo2 copy_info;
+    _sg_clear(&copy_info, sizeof(copy_info));
+    copy_info.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2;
+    copy_info.srcBuffer = src_buf;
+    copy_info.dstImage = dst_img;
+    copy_info.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    copy_info.regionCount = 1;
+    copy_info.pRegions = &region;
+    for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
+        const uint8_t* src_ptr = data->mip_levels[mip_index].ptr;
+        int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
+        int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
+        int mip_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
+        const uint32_t row_pitch = (uint32_t) _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
+        const uint32_t num_rows = (uint32_t) _sg_num_rows(img->cmn.pixel_format, mip_height);
+        region.imageSubresource.mipLevel = (uint32_t)mip_index;
+        region.imageExtent.width = (uint32_t)mip_width;
+
+        const uint32_t max_rows = _sg.vk.stage.copy.size / row_pitch;
+        for (int slice_index = 0; slice_index < mip_slices; slice_index++) {
+            if (img->cmn.type == SG_IMAGETYPE_3D) {
+                region.imageOffset.z = slice_index;
+            } else {
+                region.imageSubresource.baseArrayLayer = (uint32_t)slice_index;
+            }
+            uint32_t rows_remaining = num_rows;
+            uint32_t cur_row = 0;
+            while (rows_remaining > 0) {
+                uint32_t rows_to_copy = rows_remaining;
+                if (rows_remaining > max_rows) {
+                    rows_to_copy = max_rows;
+                    rows_remaining -= max_rows;
+                } else {
+                    rows_to_copy = rows_remaining;
+                    rows_remaining = 0;
+                }
+                const uint32_t bytes_to_copy = rows_to_copy * row_pitch;
+                SOKOL_ASSERT(bytes_to_copy <= _sg.vk.stage.copy.size);
+                _sg_vk_staging_map_memcpy_unmap(mem, src_ptr, bytes_to_copy);
+                src_ptr += bytes_to_copy;
+                VkCommandBuffer cmd_buf = _sg_vk_staging_copy_begin();
+                _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_STAGING);
+                region.imageOffset.y = (int32_t)(cur_row * block_dim);
+                region.imageExtent.height = _sg_min((uint32_t)mip_height, rows_to_copy * block_dim);
+                vkCmdCopyBufferToImage2(cmd_buf, &copy_info);
+                _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
+
+                _sg_vk_staging_copy_end(cmd_buf, _sg.vk.queue);
+                cur_row += rows_to_copy;
+            }
+        }
+    }
+}
+
+// staging system for non-blocking streaming updates with a max per-frame data limit
+_SOKOL_PRIVATE void _sg_vk_staging_stream_init(void) {
+    // FIXME
+}
+
+_SOKOL_PRIVATE void _sg_vk_staging_stream_discard(void) {
+    // FIXME
 }
 
 // uniform data system
@@ -20289,6 +20299,8 @@ _SOKOL_PRIVATE void _sg_vk_create_frame_command_pool_and_buffers(void) {
         cmdbuf_alloc_info.commandBufferCount = 1;
         res = vkAllocateCommandBuffers(_sg.vk.dev, &cmdbuf_alloc_info, &_sg.vk.frame.slot[i].command_buffer);
         SOKOL_ASSERT((res == VK_SUCCESS) && _sg.vk.frame.slot[i].command_buffer);
+        res = vkAllocateCommandBuffers(_sg.vk.dev, &cmdbuf_alloc_info, &_sg.vk.frame.slot[i].stream_command_buffer);
+        SOKOL_ASSERT((res == VK_SUCCESS) && _sg.vk.frame.slot[i].stream_command_buffer);
     }
 }
 
@@ -20296,19 +20308,22 @@ _SOKOL_PRIVATE void _sg_vk_destroy_frame_command_pool(void) {
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(_sg.vk.frame.cmd_pool);
     SOKOL_ASSERT(0 == _sg.vk.frame.cmd_buf);
+    SOKOL_ASSERT(0 == _sg.vk.frame.stream_cmd_buf);
     // NOTE: command buffers owned by the pool will be automatically destroyed
     vkDestroyCommandPool(_sg.vk.dev, _sg.vk.frame.cmd_pool, 0);
     _sg.vk.frame.cmd_pool = 0;
     for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         SOKOL_ASSERT(_sg.vk.frame.slot[i].command_buffer);
         _sg.vk.frame.slot[i].command_buffer = 0;
+        _sg.vk.frame.slot[i].stream_command_buffer = 0;
     }
 }
 
-_SOKOL_PRIVATE void _sg_vk_acquire_frame_command_buffer(void) {
+_SOKOL_PRIVATE void _sg_vk_acquire_frame_command_buffers(void) {
     SOKOL_ASSERT(_sg.vk.dev);
     VkResult res;
     if (0 == _sg.vk.frame.cmd_buf) {
+        SOKOL_ASSERT(0 == _sg.vk.frame.stream_cmd_buf);
         _sg.vk.frame_slot = (_sg.vk.frame_slot + 1) % SG_NUM_INFLIGHT_FRAMES;
         // block until oldest inflight-frame has finished
         do {
@@ -20331,12 +20346,17 @@ _SOKOL_PRIVATE void _sg_vk_acquire_frame_command_buffer(void) {
         _sg.vk.frame.cmd_buf = _sg.vk.frame.slot[_sg.vk.frame_slot].command_buffer;
         res = vkResetCommandBuffer(_sg.vk.frame.cmd_buf, 0);
         SOKOL_ASSERT(res == VK_SUCCESS);
+        _sg.vk.frame.stream_cmd_buf = _sg.vk.frame.slot[_sg.vk.frame_slot].stream_command_buffer;
+        res = vkResetCommandBuffer(_sg.vk.frame.stream_cmd_buf, 0);
+        SOKOL_ASSERT(res == VK_SUCCESS);
 
         VkCommandBufferBeginInfo cmdbuf_begin_info;
         _sg_clear(&cmdbuf_begin_info, sizeof(cmdbuf_begin_info));
         cmdbuf_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         cmdbuf_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         res = vkBeginCommandBuffer(_sg.vk.frame.cmd_buf, &cmdbuf_begin_info);
+        SOKOL_ASSERT(res == VK_SUCCESS);
+        res = vkBeginCommandBuffer(_sg.vk.frame.stream_cmd_buf, &cmdbuf_begin_info);
         SOKOL_ASSERT(res == VK_SUCCESS);
 
         _sg_vk_uniform_after_acquire();
@@ -20345,29 +20365,40 @@ _SOKOL_PRIVATE void _sg_vk_acquire_frame_command_buffer(void) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
 }
 
-_SOKOL_PRIVATE void _sg_vk_submit_frame_command_buffer(void) {
+_SOKOL_PRIVATE void _sg_vk_submit_frame_command_buffers(void) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+    SOKOL_ASSERT(_sg.vk.frame.stream_cmd_buf);
+    VkResult res;
 
     _sg_vk_bind_before_submit();
     _sg_vk_uniform_before_submit();
 
-    VkResult res = vkEndCommandBuffer(_sg.vk.frame.cmd_buf);
+    res = vkEndCommandBuffer(_sg.vk.frame.stream_cmd_buf);
     SOKOL_ASSERT(res == VK_SUCCESS);
-    const VkPipelineStageFlags wait_dst_stage_mask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    VkSubmitInfo submit_info;
-    _sg_clear(&submit_info, sizeof(submit_info));
-    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit_info.waitSemaphoreCount = 1;
-    submit_info.pWaitSemaphores = &_sg.vk.present_complete_sem;
-    submit_info.pWaitDstStageMask = &wait_dst_stage_mask;
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &_sg.vk.frame.cmd_buf;
-    submit_info.signalSemaphoreCount = 1;
-    submit_info.pSignalSemaphores = &_sg.vk.render_finished_sem;
-    res = vkQueueSubmit(_sg.vk.queue, 1, &submit_info, _sg.vk.frame.slot[_sg.vk.frame_slot].fence);
+    res = vkEndCommandBuffer(_sg.vk.frame.cmd_buf);
+    SOKOL_ASSERT(res == VK_SUCCESS);
+
+    VkSubmitInfo submit_infos[2];
+    _sg_clear(submit_infos, sizeof(submit_infos));
+    // streaming-update command buffer
+    submit_infos[0].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit_infos[0].commandBufferCount = 1;
+    submit_infos[0].pCommandBuffers = &_sg.vk.frame.stream_cmd_buf;
+    // render command buffer
+    const VkPipelineStageFlags present_wait_dst_stage_mask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    submit_infos[1].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit_infos[1].waitSemaphoreCount = 1;
+    submit_infos[1].pWaitSemaphores = &_sg.vk.present_complete_sem;
+    submit_infos[1].pWaitDstStageMask = &present_wait_dst_stage_mask;
+    submit_infos[1].commandBufferCount = 1;
+    submit_infos[1].pCommandBuffers = &_sg.vk.frame.cmd_buf;
+    submit_infos[1].signalSemaphoreCount = 1;
+    submit_infos[1].pSignalSemaphores = &_sg.vk.render_finished_sem;
+    res = vkQueueSubmit(_sg.vk.queue, 2, submit_infos, _sg.vk.frame.slot[_sg.vk.frame_slot].fence);
     SOKOL_ASSERT(res == VK_SUCCESS);
 
     _sg.vk.frame.cmd_buf = 0;
+    _sg.vk.frame.stream_cmd_buf = 0;
 
     // NOTE: it's valid to register resource objects for destruction in the
     // delete queue past this point (between _sg_vk_submit_frame_command_buffer()
@@ -20394,7 +20425,8 @@ _SOKOL_PRIVATE void _sg_vk_setup_backend(const sg_desc* desc) {
     _sg_vk_init_caps();
     _sg_vk_create_fences();
     _sg_vk_create_frame_command_pool_and_buffers();
-    _sg_vk_staging_init();
+    _sg_vk_staging_copy_init();
+    _sg_vk_staging_stream_init();
     _sg_vk_uniform_init();
     _sg_vk_bind_init();
     _sg_vk_create_delete_queues();
@@ -20407,7 +20439,8 @@ _SOKOL_PRIVATE void _sg_vk_discard_backend(void) {
     _sg_vk_destroy_delete_queues();
     _sg_vk_bind_discard();
     _sg_vk_uniform_discard();
-    _sg_vk_staging_discard();
+    _sg_vk_staging_stream_discard();
+    _sg_vk_staging_copy_discard();
     _sg_vk_destroy_frame_command_pool();
     _sg_vk_destroy_fences();
     _sg_track_discard(&_sg.vk.track.images);
@@ -21345,7 +21378,7 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(VkCommandBuffer cmd_buf, const sg_p
 
 _SOKOL_PRIVATE void _sg_vk_begin_pass(const sg_pass* pass, const _sg_attachments_ptrs_t* atts) {
     SOKOL_ASSERT(pass && atts);
-    _sg_vk_acquire_frame_command_buffer();
+    _sg_vk_acquire_frame_command_buffers();
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
     _sg_vk_barrier_on_begin_pass(_sg.vk.frame.cmd_buf, pass, atts, _sg.cur_pass.is_compute);
     if (_sg.cur_pass.is_compute) {
@@ -21368,7 +21401,7 @@ _SOKOL_PRIVATE void _sg_vk_end_pass(const _sg_attachments_ptrs_t* atts) {
 _SOKOL_PRIVATE void _sg_vk_commit(void) {
     SOKOL_ASSERT(_sg.vk.queue);
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
-    _sg_vk_submit_frame_command_buffer();
+    _sg_vk_submit_frame_command_buffers();
     _sg.vk.present_complete_sem = 0;
     _sg.vk.render_finished_sem = 0;
 }
