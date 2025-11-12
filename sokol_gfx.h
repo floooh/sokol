@@ -6009,7 +6009,7 @@ enum {
     _SG_DEFAULT_MAX_COMMIT_LISTENERS = 1024,
     _SG_DEFAULT_WGPU_BINDGROUP_CACHE_SIZE = 1024,
     _SG_DEFAULT_VK_COPY_STAGING_SIZE = (4 * 1024 * 1024),
-    _SG_DEFAULT_VK_STREAM_STAGING_SIZE = (16 * 1024 * 1025),
+    _SG_DEFAULT_VK_STREAM_STAGING_SIZE = (16 * 1024 * 1024),
     _SG_DEFAULT_VK_DESCRIPTOR_BUFFER_SIZE = (4 * 1024 * 1024),
     _SG_MAX_STORAGEBUFFER_BINDINGS_PER_STAGE = SG_MAX_VIEW_BINDSLOTS,
     _SG_MAX_STORAGEIMAGE_BINDINGS_PER_STAGE = SG_MAX_VIEW_BINDSLOTS,
@@ -19534,7 +19534,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_after_acquire(void) {
 }
 
 _SOKOL_PRIVATE void _sg_vk_staging_stream_before_submit(void) {
-    _sg_vk_shared_buffer_before_submit(&_sg.vk.uniform);
+    _sg_vk_shared_buffer_before_submit(&_sg.vk.stage.stream);
 }
 
 _SOKOL_PRIVATE void _sg_vk_staging_stream_buffer_data(_sg_buffer_t* buf, const sg_range* src_data, size_t dst_offset) {
