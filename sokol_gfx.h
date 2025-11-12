@@ -19560,6 +19560,10 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_buffer_data(_sg_buffer_t* buf, const s
     region.size = src_data->size;
     _sg_vk_buffer_barrier(cmd_buf, buf, _SG_VK_ACCESS_STAGING);
     vkCmdCopyBuffer(cmd_buf, vk_src_buf, vk_dst_buf, 1, &region);
+    // FIXME: not great to issue a barrier right here,
+    // rethink buffer barrier strategy? => a single memory barrier
+    // at the end of the stream command buffer should be sufficient?
+    _sg_vk_buffer_barrier(cmd_buf, buf, _SG_VK_ACCESS_VERTEXBUFFER|_SG_VK_ACCESS_INDEXBUFFER|_SG_VK_ACCESS_STORAGEBUFFER_RO);
 }
 
 // uniform data system
@@ -21553,7 +21557,12 @@ _SOKOL_PRIVATE void _sg_vk_dispatch(int num_groups_x, int num_groups_y, int num_
 
 _SOKOL_PRIVATE void _sg_vk_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
     SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    SOKOL_ASSERT(false && "FIXME");
+    if (buf->cmn.usage.stream_update) {
+        _sg_vk_acquire_frame_command_buffers();
+        _sg_vk_staging_stream_buffer_data(buf, data, 0);
+    } else {
+        SOKOL_ASSERT(false && "FIXME");
+    }
 }
 
 _SOKOL_PRIVATE void _sg_vk_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
