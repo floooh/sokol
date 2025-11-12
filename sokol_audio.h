@@ -422,10 +422,12 @@
     nothing is provided.
 
     There is a known issue of a noticeable delay when starting a new
-    sound due to the NDSP. I was not able to improve this to my liking
+    sound on emulators. I was not able to improve this to my liking
     and ~300ms can be expected. This can be improved by using a lower
     buffer size than the 2048 default but I would not suggest under
     1536. It may crash under 1408, and they must be in multiples of 128.
+    Note: I was NOT able to reproduce this issue on a real device and
+    the audio worked perfectly.
 
 
     MEMORY ALLOCATION OVERRIDE
