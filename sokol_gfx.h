@@ -21567,7 +21567,13 @@ _SOKOL_PRIVATE void _sg_vk_update_buffer(_sg_buffer_t* buf, const sg_range* data
 
 _SOKOL_PRIVATE void _sg_vk_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
     SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    SOKOL_ASSERT(false && new_frame && "FIXME");
+    _SOKOL_UNUSED(new_frame);
+    if (buf->cmn.usage.stream_update) {
+        _sg_vk_acquire_frame_command_buffers();
+        _sg_vk_staging_stream_buffer_data(buf, data, (size_t)buf->cmn.append_pos);
+    } else {
+        SOKOL_ASSERT(false && new_frame && "FIXME");
+    }
 }
 
 _SOKOL_PRIVATE void _sg_vk_update_image(_sg_image_t* img, const sg_image_data* data) {
