@@ -4401,6 +4401,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VULKAN_STAGING_CREATE_BUFFER_FAILED, "vulkan: vkCreateBuffer() failed for staging buffer") \
     _SG_LOGITEM_XMACRO(VULKAN_STAGING_ALLOCATE_MEMORY_FAILED, "vulkan: allocating device memory for staging buffer failed") \
     _SG_LOGITEM_XMACRO(VULKAN_STAGING_BIND_BUFFER_MEMORY_FAILED, "vulkan: vkBindBufferMemory() failed for staging buffer") \
+    _SG_LOGITEM_XMACRO(VULKAN_STAGING_STREAM_BUFFER_OVERFLOW, "vulkan: per-frame stream staging buffer has overflown (sg_desc.vk_stream_staging_buffer_size)") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_SHARED_BUFFER_FAILED, "vulkan: vkCreateBuffer() failed for cpu/gpu-shared buffer") \
     _SG_LOGITEM_XMACRO(VULKAN_ALLOCATE_SHARED_BUFFER_MEMORY_FAILED, "vulkan: allocating device memory for cpu/gpu-shared buffer failed") \
     _SG_LOGITEM_XMACRO(VULKAN_BIND_SHARED_BUFFER_MEMORY_FAILED, "vulkan: vkBindBufferMemory() failed for cpu/gpu-shared buffer") \
@@ -19381,14 +19382,14 @@ _SOKOL_PRIVATE void _sg_vk_staging_map_memcpy_unmap(VkDeviceMemory mem, const vo
     vkUnmapMemory(_sg.vk.dev, mem);
 }
 
-_SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_range* data, size_t offset, bool initial_wait) {
+_SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_range* src_data, size_t dst_offset, bool initial_wait) {
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(_sg.vk.queue);
     SOKOL_ASSERT(_sg.vk.stage.copy.mem);
     SOKOL_ASSERT(_sg.vk.stage.copy.buf);
     SOKOL_ASSERT(buf && buf->vk.buf);
-    SOKOL_ASSERT(data && data->ptr && (data->size > 0));
-    SOKOL_ASSERT((offset + data->size) <= (size_t)buf->cmn.size);
+    SOKOL_ASSERT(src_data && src_data->ptr && (src_data->size > 0));
+    SOKOL_ASSERT((dst_offset + src_data->size) <= (size_t)buf->cmn.size);
 
     // an inital wait is only needed for updating existing resources but not when populating a new resource
     if (initial_wait) {
@@ -19396,14 +19397,15 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_
         SOKOL_ASSERT(res == VK_SUCCESS);
     }
 
-    VkDeviceMemory mem = _sg.vk.stage.copy.mem;
+    VkDeviceMemory dst_mem = _sg.vk.stage.copy.mem;
     VkBuffer src_buf = _sg.vk.stage.copy.buf;
     VkBuffer dst_buf = buf->vk.buf;
-    const uint8_t* src_ptr = ((const uint8_t*)data->ptr) + offset;
+    const uint8_t* src_ptr = (const uint8_t*)src_data->ptr;
     uint32_t dst_size = _sg.vk.stage.copy.size;
-    uint32_t bytes_remaining = (uint32_t)data->size;
+    uint32_t bytes_remaining = (uint32_t)src_data->size;
     VkBufferCopy region;
     _sg_clear(&region, sizeof(region));
+    region.dstOffset = dst_offset;
     while (bytes_remaining > 0) {
         uint64_t bytes_to_copy = bytes_remaining;
         if (bytes_remaining > dst_size) {
@@ -19413,12 +19415,13 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_
             bytes_to_copy = bytes_remaining;
             bytes_remaining = 0;
         }
-        _sg_vk_staging_map_memcpy_unmap(mem, src_ptr, bytes_to_copy);
-        src_ptr += bytes_to_copy;
-        VkCommandBuffer cmd_buf = _sg_vk_staging_copy_begin();
         region.size = bytes_to_copy;
+        _sg_vk_staging_map_memcpy_unmap(dst_mem, src_ptr, bytes_to_copy);
+        VkCommandBuffer cmd_buf = _sg_vk_staging_copy_begin();
         vkCmdCopyBuffer(cmd_buf, src_buf, dst_buf, 1, &region);
         _sg_vk_staging_copy_end(cmd_buf, _sg.vk.queue);
+        src_ptr += bytes_to_copy;
+        region.dstOffset += bytes_to_copy;
     }
     buf->vk.cur_access = _SG_VK_ACCESS_VERTEXBUFFER | _SG_VK_ACCESS_INDEXBUFFER | _SG_VK_ACCESS_STORAGEBUFFER_RO;
 }
@@ -19514,11 +19517,49 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_im
 
 // staging system for non-blocking streaming updates with a max per-frame data limit
 _SOKOL_PRIVATE void _sg_vk_staging_stream_init(void) {
-    // FIXME
+    SOKOL_ASSERT(_sg.desc.vk_stream_staging_buffer_size > 0);
+    _sg_vk_shared_buffer_init(&_sg.vk.stage.stream,
+        (uint32_t)_sg.desc.vk_stream_staging_buffer_size,
+        16, // NOTE: arbitrary alignment (FIXME?)
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        "shared-stream-buffer");
 }
 
 _SOKOL_PRIVATE void _sg_vk_staging_stream_discard(void) {
-    // FIXME
+    _sg_vk_shared_buffer_discard(&_sg.vk.stage.stream);
+}
+
+_SOKOL_PRIVATE void _sg_vk_staging_stream_after_acquire(void) {
+    _sg_vk_shared_buffer_after_acquire(&_sg.vk.stage.stream);
+}
+
+_SOKOL_PRIVATE void _sg_vk_staging_stream_before_submit(void) {
+    _sg_vk_shared_buffer_before_submit(&_sg.vk.uniform);
+}
+
+_SOKOL_PRIVATE void _sg_vk_staging_stream_buffer_data(_sg_buffer_t* buf, const sg_range* src_data, size_t dst_offset) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(_sg.vk.frame.stream_cmd_buf);
+    SOKOL_ASSERT(_sg.vk.stage.stream.cur_buf);
+    SOKOL_ASSERT(buf && buf->vk.buf);
+    SOKOL_ASSERT(src_data && src_data->ptr && (src_data->size > 0));
+    SOKOL_ASSERT((src_data->size + dst_offset) <= (size_t)buf->cmn.size);
+
+    uint32_t src_offset = _sg_vk_shared_buffer_memcpy(&_sg.vk.stage.stream, src_data->ptr, src_data->size);
+    if (src_offset == _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
+        _SG_ERROR(VULKAN_STAGING_STREAM_BUFFER_OVERFLOW);
+        return;
+    }
+    VkCommandBuffer cmd_buf = _sg.vk.frame.stream_cmd_buf;
+    VkBuffer vk_src_buf = _sg.vk.stage.stream.cur_buf;
+    VkBuffer vk_dst_buf = buf->vk.buf;
+    VkBufferCopy region;
+    _sg_clear(&region, sizeof(region));
+    region.srcOffset = src_offset;
+    region.dstOffset = dst_offset;
+    region.size = src_data->size;
+    _sg_vk_buffer_barrier(cmd_buf, buf, _SG_VK_ACCESS_STAGING);
+    vkCmdCopyBuffer(cmd_buf, vk_src_buf, vk_dst_buf, 1, &region);
 }
 
 // uniform data system
@@ -20361,6 +20402,7 @@ _SOKOL_PRIVATE void _sg_vk_acquire_frame_command_buffers(void) {
 
         _sg_vk_uniform_after_acquire();
         _sg_vk_bind_after_acquire();
+        _sg_vk_staging_stream_after_acquire();
     }
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
 }
@@ -20370,6 +20412,7 @@ _SOKOL_PRIVATE void _sg_vk_submit_frame_command_buffers(void) {
     SOKOL_ASSERT(_sg.vk.frame.stream_cmd_buf);
     VkResult res;
 
+    _sg_vk_staging_stream_before_submit();
     _sg_vk_bind_before_submit();
     _sg_vk_uniform_before_submit();
 
