@@ -1,5 +1,11 @@
 ## Updates
 
+### 13-Nov-2025
+
+- sokol_audio.h gained a new backend for the Nintendo 3DS.
+  See PR https://github.com/floooh/sokol/pull/1372 for details.
+  Many thanks again to @CrackedPixel!
+
 ### 27-Oct-2025
 
 - The repository for the D bindings has moved from https://github.com/kassane/sokol-d
