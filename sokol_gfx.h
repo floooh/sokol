@@ -21457,6 +21457,7 @@ _SOKOL_PRIVATE void _sg_vk_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     SOKOL_ASSERT(pip->vk.pip);
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+    _sg.vk.uniforms_dirty = false;
     VkPipelineBindPoint bindpoint = pip->cmn.is_compute
         ? VK_PIPELINE_BIND_POINT_COMPUTE
         : VK_PIPELINE_BIND_POINT_GRAPHICS;
