@@ -4247,8 +4247,13 @@ _SOKOL_PRIVATE void _sapp_wgpu_frame(void) {
 // >>vk
 #if defined(SOKOL_VULKAN)
 
+#if defined(__cplusplus)
+#define _SAPP_VK_ZERO_COUNT_AND_ARRAY(num, type, count_name, array_name) uint32_t count_name = 0; type array_name[num] = {};
+#define _SAPP_VK_MAX_COUNT_AND_ARRAY(num, type, count_name, array_name) uint32_t count_name = num; type array_name[num] = {};
+#else
 #define _SAPP_VK_ZERO_COUNT_AND_ARRAY(num, type, count_name, array_name) uint32_t count_name = 0; type array_name[num] = {0};
 #define _SAPP_VK_MAX_COUNT_AND_ARRAY(num, type, count_name, array_name) uint32_t count_name = num; type array_name[num] = {0};
+#endif
 
 _SOKOL_PRIVATE int _sapp_vk_mem_find_memory_type_index(uint32_t type_filter, VkMemoryPropertyFlags props) {
     SOKOL_ASSERT(_sapp.vk.physical_device);
@@ -4639,7 +4644,7 @@ _SOKOL_PRIVATE void _sapp_vk_swapchain_create_surface(
     VkFormat format,
     uint32_t width,
     uint32_t height,
-    VkSampleCountFlags sample_count_flags,
+    VkSampleCountFlagBits sample_count_flags,
     VkImageUsageFlags usage,
     VkImageAspectFlags aspect_mask)
 {
@@ -4803,7 +4808,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
         VK_FORMAT_D32_SFLOAT_S8_UINT,
         width,
         height,
-        (VkSampleCountFlags)_sapp.sample_count,
+        (VkSampleCountFlagBits)_sapp.sample_count,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
         VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
 
@@ -4814,7 +4819,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
             _sapp.vk.surface_format.format,
             width,
             height,
-            (VkSampleCountFlags)_sapp.sample_count,
+            (VkSampleCountFlagBits)_sapp.sample_count,
             VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
             VK_IMAGE_ASPECT_COLOR_BIT);
     }
