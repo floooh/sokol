@@ -19161,7 +19161,7 @@ _SOKOL_PRIVATE void _sg_vk_shared_buffer_init(_sg_vk_shared_buffer_t* shbuf, uin
         // FIXME: we may want host-visible + local memory for uniform and descriptor buffers,
         // but need to handle failure
         const VkMemoryPropertyFlags mem_prop_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-        VkMemoryAllocateFlagBits mem_alloc_flags = 0;
+        VkMemoryAllocateFlags mem_alloc_flags = 0;
         if (want_device_address) {
             mem_alloc_flags |= VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
         }
@@ -19250,11 +19250,11 @@ _SOKOL_PRIVATE VkDeviceSize _sg_vk_shared_buffer_alloc(_sg_vk_shared_buffer_t* s
     return offset;
 }
 
-_SOKOL_PRIVATE void* _sg_vk_shared_buffer_ptr(_sg_vk_shared_buffer_t* shbuf, VkDeviceSize offset) {
+_SOKOL_PRIVATE uint8_t* _sg_vk_shared_buffer_ptr(_sg_vk_shared_buffer_t* shbuf, VkDeviceSize offset) {
     SOKOL_ASSERT(shbuf && shbuf->cur_mem_ptr);
     SOKOL_ASSERT(!shbuf->overflown);
     SOKOL_ASSERT(offset < shbuf->size);
-    return shbuf->cur_mem_ptr + offset;
+    return ((uint8_t*)shbuf->cur_mem_ptr) + offset;
 }
 
 _SOKOL_PRIVATE uint32_t _sg_vk_shared_buffer_memcpy(_sg_vk_shared_buffer_t* shbuf, const void* src_ptr, uint32_t num_bytes) {
@@ -19470,7 +19470,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_im
     copy_info.regionCount = 1;
     copy_info.pRegions = &region;
     for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
-        const uint8_t* src_ptr = data->mip_levels[mip_index].ptr;
+        const uint8_t* src_ptr = (uint8_t*)data->mip_levels[mip_index].ptr;
         int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
         int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
         int mip_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
@@ -19664,7 +19664,7 @@ _SOKOL_PRIVATE bool _sg_vk_bind_view_smp_descriptor_set(VkCommandBuffer cmd_buf,
         _SG_ERROR(VULKAN_DESCRIPTOR_BUFFER_OVERFLOW);
         return false;
     }
-    void* dbuf_ptr = _sg_vk_shared_buffer_ptr(&_sg.vk.bind, dbuf_offset);
+    uint8_t* dbuf_ptr = _sg_vk_shared_buffer_ptr(&_sg.vk.bind, dbuf_offset);
 
     // copy pre-recorded descriptor data into descriptor buffer
     for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
@@ -19718,7 +19718,7 @@ _SOKOL_PRIVATE bool _sg_vk_bind_uniform_descriptor_set(VkCommandBuffer cmd_buf) 
         _SG_ERROR(VULKAN_DESCRIPTOR_BUFFER_OVERFLOW);
         return false;
     }
-    void* dbuf_ptr = _sg_vk_shared_buffer_ptr(&_sg.vk.bind, dbuf_offset);
+    uint8_t* dbuf_ptr = _sg_vk_shared_buffer_ptr(&_sg.vk.bind, dbuf_offset);
 
     // update descriptor buffer
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
@@ -19960,7 +19960,7 @@ _SOKOL_PRIVATE VkPrimitiveTopology _sg_vk_primitive_topology(sg_primitive_type t
         case SG_PRIMITIVETYPE_TRIANGLE_STRIP:   return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
         default:
             SOKOL_UNREACHABLE;
-            return 0;
+            return VK_PRIMITIVE_TOPOLOGY_MAX_ENUM;
     }
 }
 
@@ -20699,7 +20699,7 @@ _SOKOL_PRIVATE _sg_vk_shader_func_t _sg_vk_create_shader_func(const sg_shader_fu
     _sg_clear(&create_info, sizeof(create_info));
     create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     create_info.codeSize = func->bytecode.size;
-    create_info.pCode = func->bytecode.ptr;
+    create_info.pCode = (uint32_t*)func->bytecode.ptr;
     VkResult res = vkCreateShaderModule(_sg.vk.dev, &create_info, 0, &vk_func.module);
     if (VK_SUCCESS != res) {
         _SG_ERROR(VULKAN_CREATE_SHADER_MODULE_FAILED);
