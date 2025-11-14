@@ -20496,7 +20496,7 @@ _SOKOL_PRIVATE void _sg_vk_discard_backend(void) {
 }
 
 _SOKOL_PRIVATE void _sg_vk_reset_state_cache(void) {
-    SOKOL_ASSERT(false && "FIXME");
+    // nothing to do here
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_vk_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
