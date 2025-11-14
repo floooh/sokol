@@ -21579,7 +21579,11 @@ _SOKOL_PRIVATE void _sg_vk_append_buffer(_sg_buffer_t* buf, const sg_range* data
 
 _SOKOL_PRIVATE void _sg_vk_update_image(_sg_image_t* img, const sg_image_data* data) {
     SOKOL_ASSERT(img && data);
-    SOKOL_ASSERT(false && "FIXME");
+    if (img->cmn.usage.stream_update) {
+        SOKOL_ASSERT(false && "FIXME");
+    } else {
+        _sg_vk_staging_copy_image_data(img, data, true);
+    }
 }
 
 #endif
