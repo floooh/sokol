@@ -4307,7 +4307,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_instance(void) {
     app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     app_info.pEngineName = "sokol";
     app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    app_info.apiVersion = VK_API_VERSION_1_4;
+    app_info.apiVersion = VK_API_VERSION_1_3;
 
     _SAPP_VK_ZERO_COUNT_AND_ARRAY(32, const char*, layer_count, layer_names);
     #if defined(SOKOL_DEBUG)
@@ -4410,7 +4410,7 @@ _SOKOL_PRIVATE void _sapp_vk_pick_physical_device(void) {
         _sapp_clear(&dev_props, sizeof(dev_props));
 
         vkGetPhysicalDeviceProperties(pdev, &dev_props);
-        if (dev_props.apiVersion < VK_API_VERSION_1_4) {
+        if (dev_props.apiVersion < VK_API_VERSION_1_3) {
             continue;
         }
 
