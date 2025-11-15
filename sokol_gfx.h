@@ -21284,12 +21284,13 @@ _SOKOL_PRIVATE void _sg_vk_apply_viewport(int x, int y, int w, int h, bool origi
 
 _SOKOL_PRIVATE void _sg_vk_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+    const _sg_recti_t clip = _sg_clipi(x, y, w, h, _sg.cur_pass.dim.width, _sg.cur_pass.dim.height);
     VkRect2D rect;
     _sg_clear(&rect, sizeof(rect));
-    rect.offset.x = x;
-    rect.offset.y = (origin_top_left ? y : (_sg.cur_pass.dim.height - (y + h)));
-    rect.extent.width = (uint32_t) w;
-    rect.extent.height = (uint32_t) h;
+    rect.offset.x = clip.x;
+    rect.offset.y = (origin_top_left ? clip.y : (_sg.cur_pass.dim.height - (clip.y + clip.h)));
+    rect.extent.width = (uint32_t) clip.w;
+    rect.extent.height = (uint32_t) clip.h;
     vkCmdSetScissor(_sg.vk.frame.cmd_buf, 0, 1, &rect);
 }
 
