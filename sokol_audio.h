@@ -2473,9 +2473,10 @@ _SOKOL_PRIVATE void _saudio_n3ds_backend_shutdown(void) {
 
     if (_saudio.backend.n3ds_desc.channel_id >= 0) {
         ndspChnWaveBufClear(_saudio.backend.n3ds_desc.channel_id);
-        ndspExit();
         _saudio.backend.n3ds_desc.channel_id = -1;
     }
+
+    ndspExit();
 
     _saudio_free(_saudio.backend.queue_n3ds);
     _saudio_free(_saudio.backend.buffer_n3ds);
