@@ -19576,6 +19576,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_image_data(_sg_image_t* img, const sg_
     VkBufferImageCopy2 region;
     _sg_clear(&region, sizeof(region));
     VkCopyBufferToImageInfo2 copy_info;
+    _sg_clear(&copy_info, sizeof(copy_info));
     _sg_vk_init_vk_image_staging_structs(img, _sg.vk.stage.stream.cur_buf, &region, &copy_info);
     for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
         const sg_range* src_mip = &src_data->mip_levels[mip_index];
