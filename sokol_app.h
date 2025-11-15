@@ -4352,7 +4352,7 @@ _SOKOL_PRIVATE uint32_t _sapp_vk_required_device_extensions(const char** out_nam
     out_names[count++] = VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME;
     out_names[count++] = VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME;
     out_names[count++] = VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME;
-    SOKOL_ASSERT(count <= max_count);
+    SOKOL_ASSERT(count <= max_count); _SOKOL_UNUSED(max_count);
     return count;
 }
 
@@ -4360,7 +4360,7 @@ _SOKOL_PRIVATE bool _sapp_vk_check_device_extensions(VkPhysicalDevice pdev, cons
     SOKOL_ASSERT(pdev && required_exts && num_required_exts > 0);
     uint32_t ext_count = 0;
     VkResult res = vkEnumerateDeviceExtensionProperties(pdev, 0, &ext_count, 0);
-    SOKOL_ASSERT(res == VK_SUCCESS);
+    SOKOL_ASSERT(res == VK_SUCCESS); _SOKOL_UNUSED(res);
     if (ext_count == 0) {
         return false;
     }
@@ -4582,7 +4582,7 @@ _SOKOL_PRIVATE VkSurfaceFormatKHR _sapp_vk_pick_surface_format(void) {
     SOKOL_ASSERT(_sapp.vk.surface);
     _SAPP_VK_MAX_COUNT_AND_ARRAY(64, VkSurfaceFormatKHR, fmt_count, formats);
     VkResult res = vkGetPhysicalDeviceSurfaceFormatsKHR(_sapp.vk.physical_device, _sapp.vk.surface, &fmt_count, formats);
-    SOKOL_ASSERT((res == VK_SUCCESS) || (res == VK_INCOMPLETE));
+    SOKOL_ASSERT((res == VK_SUCCESS) || (res == VK_INCOMPLETE)); _SOKOL_UNUSED(res);
     SOKOL_ASSERT(fmt_count > 0);
     // FIXME: only accept non-SRGB formats until sokol_app.h gets proper SRGB support
     for (uint32_t i = 0; i < fmt_count; i++) {
@@ -4603,6 +4603,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_sync_objects(void) {
     _sapp_clear(&create_info, sizeof(create_info));
     create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     VkResult res;
+    _SOKOL_UNUSED(res);
     for (uint32_t i = 0; i < _sapp.vk.num_swapchain_images; i++) {
         SOKOL_ASSERT(0 == _sapp.vk.sync[i].present_complete_sem);
         SOKOL_ASSERT(0 == _sapp.vk.sync[i].render_finished_sem);

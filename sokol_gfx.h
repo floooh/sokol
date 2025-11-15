@@ -4962,7 +4962,7 @@ typedef struct sg_desc {
     int wgpu_bindgroups_cache_size;     // number of slots in the WebGPU bindgroup cache (must be 2^N)
     int vk_copy_staging_buffer_size;    // Vulkan: size of staging buffer for immutable and dynamic resources (default: 4 MB)
     int vk_stream_staging_buffer_size;  // Vulkan: size of per-frame staging buffer for updating streaming resources (default: 16 MB)
-    int vk_descriptor_buffer_size;      // Vulkan: size of per-frame descriptor buffer for updating resource bindings (default: 4 MB)
+    int vk_descriptor_buffer_size;      // Vulkan: size of per-frame descriptor buffer for updating resource bindings (default: 16 MB)
     sg_allocator allocator;
     sg_logger logger; // optional log function override
     sg_environment environment;
@@ -6010,7 +6010,7 @@ enum {
     _SG_DEFAULT_WGPU_BINDGROUP_CACHE_SIZE = 1024,
     _SG_DEFAULT_VK_COPY_STAGING_SIZE = (4 * 1024 * 1024),
     _SG_DEFAULT_VK_STREAM_STAGING_SIZE = (16 * 1024 * 1024),
-    _SG_DEFAULT_VK_DESCRIPTOR_BUFFER_SIZE = (4 * 1024 * 1024),
+    _SG_DEFAULT_VK_DESCRIPTOR_BUFFER_SIZE = (16 * 1024 * 1024),
     _SG_MAX_STORAGEBUFFER_BINDINGS_PER_STAGE = SG_MAX_VIEW_BINDSLOTS,
     _SG_MAX_STORAGEIMAGE_BINDINGS_PER_STAGE = SG_MAX_VIEW_BINDSLOTS,
     _SG_MAX_TEXTURE_BINDINGS_PER_STAGE = SG_MAX_VIEW_BINDSLOTS,
@@ -18524,7 +18524,7 @@ _SOKOL_PRIVATE void _sg_vk_set_object_label(VkObjectType obj_type, uint64_t obj_
     SOKOL_ASSERT(obj_handle != 0);
     if (label) {
         // FIXME: use vkSetDebugUtilsObjectNamesEXT
-        _SOKOL_UNUSED(obj_type);
+        _SOKOL_UNUSED(obj_type && obj_handle && label);
     }
 }
 
@@ -19349,13 +19349,14 @@ _SOKOL_PRIVATE VkCommandBuffer _sg_vk_staging_copy_begin(void) {
     cmdbuf_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     cmdbuf_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     VkResult res = vkBeginCommandBuffer(cmd_buf, &cmdbuf_begin_info);
-    SOKOL_ASSERT(res == VK_SUCCESS);
+    SOKOL_ASSERT(res == VK_SUCCESS); _SOKOL_UNUSED(res);
     return cmd_buf;
 }
 
 _SOKOL_PRIVATE void _sg_vk_staging_copy_end(VkCommandBuffer cmd_buf, VkQueue queue) {
     SOKOL_ASSERT(cmd_buf && queue);
     VkResult res;
+    _SOKOL_UNUSED(res);
     vkEndCommandBuffer(cmd_buf);
     VkSubmitInfo submit_info;
     _sg_clear(&submit_info, sizeof(submit_info));
@@ -19377,7 +19378,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_map_memcpy_unmap(VkDeviceMemory mem, const vo
     SOKOL_ASSERT(num_bytes > 0);
     void* dst_ptr = 0;
     VkResult res = vkMapMemory(_sg.vk.dev, mem, 0, VK_WHOLE_SIZE, 0, &dst_ptr);
-    SOKOL_ASSERT((res == VK_SUCCESS) && dst_ptr);
+    SOKOL_ASSERT((res == VK_SUCCESS) && dst_ptr); _SOKOL_UNUSED(res);
     memcpy(dst_ptr, ptr, num_bytes);
     vkUnmapMemory(_sg.vk.dev, mem);
 }
@@ -19394,7 +19395,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_
     // an inital wait is only needed for updating existing resources but not when populating a new resource
     if (initial_wait) {
         VkResult res = vkQueueWaitIdle(_sg.vk.queue);
-        SOKOL_ASSERT(res == VK_SUCCESS);
+        SOKOL_ASSERT(res == VK_SUCCESS); _SOKOL_UNUSED(res);
     }
 
     VkDeviceMemory dst_mem = _sg.vk.stage.copy.mem;
@@ -19460,7 +19461,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_im
     // an inital wait is only needed for updating existing resources but not when populating a new resource
     if (initial_wait) {
         VkResult res = vkQueueWaitIdle(_sg.vk.queue);
-        SOKOL_ASSERT(res == VK_SUCCESS);
+        SOKOL_ASSERT(res == VK_SUCCESS); _SOKOL_UNUSED(res);
     }
 
     VkDeviceMemory mem = _sg.vk.stage.copy.mem;
@@ -20012,6 +20013,7 @@ _SOKOL_PRIVATE VkCullModeFlags _sg_vk_cullmode(sg_cull_mode cm) {
         case SG_CULLMODE_BACK:      return VK_CULL_MODE_BACK_BIT;
         default:
             SOKOL_UNREACHABLE;
+            return VK_CULL_MODE_NONE;
     }
 }
 
@@ -20351,7 +20353,7 @@ _SOKOL_PRIVATE void _sg_vk_create_fences(void) {
     for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         SOKOL_ASSERT(0 == _sg.vk.frame.slot[i].fence);
         VkResult res = vkCreateFence(_sg.vk.dev, &create_info, 0, &_sg.vk.frame.slot[i].fence);
-        SOKOL_ASSERT((res == VK_SUCCESS) && _sg.vk.frame.slot[i].fence);
+        SOKOL_ASSERT((res == VK_SUCCESS) && _sg.vk.frame.slot[i].fence); _SOKOL_UNUSED(res);
     }
 }
 
@@ -20374,7 +20376,7 @@ _SOKOL_PRIVATE void _sg_vk_create_frame_command_pool_and_buffers(void) {
     pool_create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     pool_create_info.queueFamilyIndex = _sg.vk.queue_family_index;
     VkResult res = vkCreateCommandPool(_sg.vk.dev, &pool_create_info, 0, &_sg.vk.frame.cmd_pool);
-    SOKOL_ASSERT((res == VK_SUCCESS) && _sg.vk.frame.cmd_pool);
+    SOKOL_ASSERT((res == VK_SUCCESS) && _sg.vk.frame.cmd_pool); _SOKOL_UNUSED(res);
 
     for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         VkCommandBufferAllocateInfo cmdbuf_alloc_info;
@@ -20425,7 +20427,7 @@ _SOKOL_PRIVATE void _sg_vk_acquire_frame_command_buffers(void) {
             return;
         }
         VkResult res = vkResetFences(_sg.vk.dev, 1, &_sg.vk.frame.slot[_sg.vk.frame_slot].fence);
-        SOKOL_ASSERT(res == VK_SUCCESS);
+        SOKOL_ASSERT(res == VK_SUCCESS); _SOKOL_UNUSED(res);
 
         _sg_vk_delete_queue_collect();
 
@@ -20456,6 +20458,7 @@ _SOKOL_PRIVATE void _sg_vk_submit_frame_command_buffers(void) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
     SOKOL_ASSERT(_sg.vk.frame.stream_cmd_buf);
     VkResult res;
+    _SOKOL_UNUSED(res);
 
     _sg_vk_staging_stream_before_submit();
     _sg_vk_bind_before_submit();
@@ -21504,10 +21507,6 @@ _SOKOL_PRIVATE void _sg_vk_apply_pipeline(_sg_pipeline_t* pip) {
         ? VK_PIPELINE_BIND_POINT_COMPUTE
         : VK_PIPELINE_BIND_POINT_GRAPHICS;
     vkCmdBindPipeline(_sg.vk.frame.cmd_buf, bindpoint, pip->vk.pip);
-}
-
-_SOKOL_PRIVATE void _sg_vk_apply_vertex_buffers(_sg_bindings_ptrs_t* bnd) {
-    SOKOL_ASSERT(bnd);
 }
 
 _SOKOL_PRIVATE bool _sg_vk_apply_bindings(_sg_bindings_ptrs_t* bnd) {
