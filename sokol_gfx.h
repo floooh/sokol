@@ -19257,9 +19257,9 @@ _SOKOL_PRIVATE uint8_t* _sg_vk_shared_buffer_ptr(_sg_vk_shared_buffer_t* shbuf, 
     return ((uint8_t*)shbuf->cur_mem_ptr) + offset;
 }
 
-_SOKOL_PRIVATE uint32_t _sg_vk_shared_buffer_memcpy(_sg_vk_shared_buffer_t* shbuf, const void* src_ptr, uint32_t num_bytes) {
+_SOKOL_PRIVATE VkDeviceSize _sg_vk_shared_buffer_memcpy(_sg_vk_shared_buffer_t* shbuf, const void* src_ptr, uint32_t num_bytes) {
     SOKOL_ASSERT(shbuf && src_ptr && (num_bytes > 0));
-    const uint32_t offset = _sg_vk_shared_buffer_alloc(shbuf, num_bytes);
+    const VkDeviceSize offset = _sg_vk_shared_buffer_alloc(shbuf, num_bytes);
     if (offset != _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
         memcpy(_sg_vk_shared_buffer_ptr(shbuf, offset), src_ptr, num_bytes);
     }
@@ -19426,7 +19426,30 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_
     buf->vk.cur_access = _SG_VK_ACCESS_VERTEXBUFFER | _SG_VK_ACCESS_INDEXBUFFER | _SG_VK_ACCESS_STORAGEBUFFER_RO;
 }
 
-_SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_image_data* data, bool initial_wait) {
+_SOKOL_PRIVATE void _sg_vk_init_vk_image_staging_structs(const _sg_image_t* img, VkBuffer vk_buf, VkBufferImageCopy2* region, VkCopyBufferToImageInfo2* copy_info) {
+    SOKOL_ASSERT(img && region && copy_info);
+
+    region->sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
+    if (_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format)) {
+        region->imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        if (_sg_is_depth_stencil_format(img->cmn.pixel_format)) {
+            region->imageSubresource.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+        }
+    } else {
+        region->imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    }
+    region->imageSubresource.layerCount = 1;
+    region->imageExtent.depth = 1;
+
+    copy_info->sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2;
+    copy_info->srcBuffer = vk_buf;
+    copy_info->dstImage = img->vk.img;
+    copy_info->dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    copy_info->regionCount = 1;
+    copy_info->pRegions = region;
+}
+
+_SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_image_data* src_data, bool initial_wait) {
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(_sg.vk.queue);
     SOKOL_ASSERT(_sg.vk.stage.copy.mem);
@@ -19441,36 +19464,13 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_im
     }
 
     VkDeviceMemory mem = _sg.vk.stage.copy.mem;
-    VkBuffer src_buf = _sg.vk.stage.copy.buf;
-    VkImage dst_img = img->vk.img;
-
     VkBufferImageCopy2 region;
     _sg_clear(&region, sizeof(region));
-    region.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
-    // image data is tightly packed
-    region.bufferOffset = 0;
-    region.bufferRowLength = 0;
-    region.bufferImageHeight = 0;
-    if (_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format)) {
-        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-        if (_sg_is_depth_stencil_format(img->cmn.pixel_format)) {
-            region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
-        }
-    } else {
-        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    }
-    region.imageSubresource.layerCount = 1;
-    region.imageExtent.depth = 1;
     VkCopyBufferToImageInfo2 copy_info;
     _sg_clear(&copy_info, sizeof(copy_info));
-    copy_info.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2;
-    copy_info.srcBuffer = src_buf;
-    copy_info.dstImage = dst_img;
-    copy_info.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    copy_info.regionCount = 1;
-    copy_info.pRegions = &region;
+    _sg_vk_init_vk_image_staging_structs(img, _sg.vk.stage.copy.buf, &region, &copy_info);
     for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
-        const uint8_t* src_ptr = (uint8_t*)data->mip_levels[mip_index].ptr;
+        const uint8_t* src_ptr = (uint8_t*)src_data->mip_levels[mip_index].ptr;
         int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
         int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
         int mip_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
@@ -19545,7 +19545,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_buffer_data(_sg_buffer_t* buf, const s
     SOKOL_ASSERT(src_data && src_data->ptr && (src_data->size > 0));
     SOKOL_ASSERT((src_data->size + dst_offset) <= (size_t)buf->cmn.size);
 
-    uint32_t src_offset = _sg_vk_shared_buffer_memcpy(&_sg.vk.stage.stream, src_data->ptr, src_data->size);
+    const uint32_t src_offset = _sg_vk_shared_buffer_memcpy(&_sg.vk.stage.stream, src_data->ptr, src_data->size);
     if (src_offset == _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
         _SG_ERROR(VULKAN_STAGING_STREAM_BUFFER_OVERFLOW);
         return;
@@ -19564,6 +19564,46 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_buffer_data(_sg_buffer_t* buf, const s
     // rethink buffer barrier strategy? => a single memory barrier
     // at the end of the stream command buffer should be sufficient?
     _sg_vk_buffer_barrier(cmd_buf, buf, _SG_VK_ACCESS_VERTEXBUFFER|_SG_VK_ACCESS_INDEXBUFFER|_SG_VK_ACCESS_STORAGEBUFFER_RO);
+}
+
+_SOKOL_PRIVATE void _sg_vk_staging_stream_image_data(_sg_image_t* img, const sg_image_data* src_data) {
+    SOKOL_ASSERT(_sg.vk.dev);
+    SOKOL_ASSERT(_sg.vk.frame.stream_cmd_buf);
+    SOKOL_ASSERT(img && img->vk.img);
+    SOKOL_ASSERT(src_data);
+    VkCommandBuffer cmd_buf = _sg.vk.frame.stream_cmd_buf;
+    _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_STAGING);
+    VkBufferImageCopy2 region;
+    _sg_clear(&region, sizeof(region));
+    VkCopyBufferToImageInfo2 copy_info;
+    _sg_vk_init_vk_image_staging_structs(img, _sg.vk.stage.stream.cur_buf, &region, &copy_info);
+    for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
+        const sg_range* src_mip = &src_data->mip_levels[mip_index];
+        SOKOL_ASSERT(src_mip->ptr);
+        SOKOL_ASSERT(src_mip->size > 0);
+        const uint32_t src_offset = _sg_vk_shared_buffer_memcpy(&_sg.vk.stage.stream, src_mip->ptr, src_mip->size);
+        if (src_offset == _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
+            _SG_ERROR(VULKAN_STAGING_STREAM_BUFFER_OVERFLOW);
+            _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
+            return;
+        }
+        region.bufferOffset = src_offset;
+        int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
+        int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
+        int mip_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
+        region.imageExtent.width = (uint32_t)mip_width;
+        region.imageExtent.height = (uint32_t)mip_height;
+        region.imageSubresource.mipLevel = (uint32_t)mip_index;
+        if (img->cmn.type == SG_IMAGETYPE_3D) {
+            region.imageExtent.depth = (uint32_t)mip_slices;
+            region.imageSubresource.layerCount = 1;
+        } else {
+            region.imageExtent.depth = 1;
+            region.imageSubresource.layerCount = (uint32_t)mip_slices;
+        }
+        vkCmdCopyBufferToImage2(cmd_buf, &copy_info);
+    }
+    _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
 }
 
 // uniform data system
@@ -21563,7 +21603,7 @@ _SOKOL_PRIVATE void _sg_vk_update_buffer(_sg_buffer_t* buf, const sg_range* data
         _sg_vk_acquire_frame_command_buffers();
         _sg_vk_staging_stream_buffer_data(buf, data, 0);
     } else {
-        SOKOL_ASSERT(false && "FIXME");
+        _sg_vk_staging_copy_buffer_data(buf, data, 0, true);
     }
 }
 
@@ -21574,14 +21614,15 @@ _SOKOL_PRIVATE void _sg_vk_append_buffer(_sg_buffer_t* buf, const sg_range* data
         _sg_vk_acquire_frame_command_buffers();
         _sg_vk_staging_stream_buffer_data(buf, data, (size_t)buf->cmn.append_pos);
     } else {
-        SOKOL_ASSERT(false && new_frame && "FIXME");
+        _sg_vk_staging_copy_buffer_data(buf, data, (size_t)buf->cmn.append_pos, true);
     }
 }
 
 _SOKOL_PRIVATE void _sg_vk_update_image(_sg_image_t* img, const sg_image_data* data) {
     SOKOL_ASSERT(img && data);
     if (img->cmn.usage.stream_update) {
-        SOKOL_ASSERT(false && "FIXME");
+        _sg_vk_acquire_frame_command_buffers();
+        _sg_vk_staging_stream_image_data(img, data);
     } else {
         _sg_vk_staging_copy_image_data(img, data, true);
     }
