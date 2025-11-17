@@ -4348,9 +4348,6 @@ _SOKOL_PRIVATE uint32_t _sapp_vk_required_device_extensions(const char** out_nam
     SOKOL_ASSERT(out_names && (max_count > 0));
     uint32_t count = 0;
     out_names[count++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
-    out_names[count++] = VK_KHR_SPIRV_1_4_EXTENSION_NAME;
-    out_names[count++] = VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME;
-    out_names[count++] = VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME;
     out_names[count++] = VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME;
     SOKOL_ASSERT(count <= max_count); _SOKOL_UNUSED(max_count);
     return count;
