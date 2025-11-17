@@ -1206,6 +1206,11 @@
             doesn't matter if the application is started from the command
             line or via double-click.
 
+            NOTE: setting both win32_console_attach and win32_console_create
+            to true also makes sense and has the effect that output
+            will appear in the existing terminal when started from the cmdline, and
+            otherwise (when started via double-click) will open a console window.
+
     MEMORY ALLOCATION OVERRIDE
     ==========================
     You can override the memory allocation functions at initialization time
@@ -8562,7 +8567,7 @@ _SOKOL_PRIVATE void _sapp_win32_init_console(void) {
         }
         if (!con_valid && _sapp.desc.win32_console_create) {
             con_valid = AllocConsole();
-        }  
+        }
         if (con_valid) {
             FILE* res_fp = 0;
             errno_t err;
