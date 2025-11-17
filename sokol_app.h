@@ -8557,11 +8557,12 @@ _SOKOL_PRIVATE void _sapp_win32_destroy_icons(void) {
 _SOKOL_PRIVATE void _sapp_win32_init_console(void) {
     if (_sapp.desc.win32_console_create || _sapp.desc.win32_console_attach) {
         BOOL con_valid = FALSE;
-        if (_sapp.desc.win32_console_create) {
-            con_valid = AllocConsole();
-        } else if (_sapp.desc.win32_console_attach) {
+        if (_sapp.desc.win32_console_attach) {
             con_valid = AttachConsole(ATTACH_PARENT_PROCESS);
         }
+        if (!con_valid && _sapp.desc.win32_console_create) {
+            con_valid = AllocConsole();
+        }  
         if (con_valid) {
             FILE* res_fp = 0;
             errno_t err;
