@@ -4766,14 +4766,14 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     SOKOL_ASSERT(_sapp.vk.swapchain);
 
     if (old_swapchain) {
-        // destroy swapchain resources
+        // NOTE: destroying the depth- and msaa-surfaces happens
+        // down in the respective _sapp_vk_swapchain_create_surface() calls!
         for (uint32_t i = 0; i < _sapp.vk.num_swapchain_images; i++) {
             SOKOL_ASSERT(_sapp.vk.swapchain_views[i]);
             vkDestroyImageView(_sapp.vk.device, _sapp.vk.swapchain_views[i], 0);
             _sapp.vk.swapchain_views[i] = 0;
         }
         vkDestroySwapchainKHR(_sapp.vk.device, old_swapchain, 0);
-        // FIXME: destroy msaa-buffer resources
     }
 
     _sapp.vk.num_swapchain_images = _SAPP_VK_MAX_SWAPCHAIN_IMAGES;
