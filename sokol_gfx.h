@@ -4253,6 +4253,19 @@ typedef struct sg_frame_stats_wgpu {
     sg_frame_stats_wgpu_bindings bindings;
 } sg_frame_stats_wgpu;
 
+typedef struct sg_frame_stats_vk {
+    uint32_t num_cmd_pipeline_barrier;
+    uint32_t num_allocate_memory;
+    uint32_t num_free_memory;
+    uint32_t size_allocate_memory;
+    uint32_t num_delete_queue_added;
+    uint32_t num_delete_queue_collected;
+    uint32_t num_cmd_copy_buffer;
+    uint32_t num_cmd_copy_buffer_to_image;
+    uint32_t num_cmd_set_descriptor_buffer_offsets;
+    uint32_t size_descriptor_buffer_writes;
+} sg_frame_stats_vk;
+
 typedef struct sg_resource_stats {
     uint32_t total_alive;   // number of live objects in pool
     uint32_t total_free;    // number of free objects in pool
@@ -4294,6 +4307,7 @@ typedef struct sg_frame_stats {
     sg_frame_stats_d3d11 d3d11;
     sg_frame_stats_metal metal;
     sg_frame_stats_wgpu wgpu;
+    sg_frame_stats_vk vk;
 } sg_frame_stats;
 
 /*
@@ -18736,6 +18750,7 @@ _SOKOL_PRIVATE void _sg_vk_swapchain_barrier(VkCommandBuffer cmd_buf, VkImage vk
     dep_info.imageMemoryBarrierCount = 1;
     dep_info.pImageMemoryBarriers = &barrier;
     vkCmdPipelineBarrier2(cmd_buf, &dep_info);
+    _sg_stats_add(vk.num_cmd_pipeline_barrier, 1);
 }
 
 _SOKOL_PRIVATE void _sg_vk_image_barrier(VkCommandBuffer cmd_buf, _sg_image_t* img, _sg_vk_access_t new_access) {
@@ -18771,6 +18786,7 @@ _SOKOL_PRIVATE void _sg_vk_image_barrier(VkCommandBuffer cmd_buf, _sg_image_t* i
     dep_info.imageMemoryBarrierCount = 1;
     dep_info.pImageMemoryBarriers = &barrier;
     vkCmdPipelineBarrier2(cmd_buf, &dep_info);
+    _sg_stats_add(vk.num_cmd_pipeline_barrier, 1);
     img->vk.cur_access = new_access;
 }
 
@@ -18797,6 +18813,7 @@ _SOKOL_PRIVATE void _sg_vk_buffer_barrier(VkCommandBuffer cmd_buf, _sg_buffer_t*
     dep_info.bufferMemoryBarrierCount = 1;
     dep_info.pBufferMemoryBarriers = &barrier;
     vkCmdPipelineBarrier2(cmd_buf, &dep_info);
+    _sg_stats_add(vk.num_cmd_pipeline_barrier, 1);
     buf->vk.cur_access = new_access;
 }
 
@@ -19011,6 +19028,8 @@ _SOKOL_PRIVATE VkDeviceMemory _sg_vk_mem_alloc_device_memory(
     alloc_info.memoryTypeIndex = (uint32_t) mem_type_index;
     VkDeviceMemory vk_dev_mem = 0;
     VkResult res = vkAllocateMemory(_sg.vk.dev, &alloc_info, 0, &vk_dev_mem);
+    _sg_stats_add(vk.num_allocate_memory, 1);
+    _sg_stats_add(vk.size_allocate_memory, mem_reqs->size);
     if (res != VK_SUCCESS) {
         _SG_ERROR(VULKAN_ALLOCATE_MEMORY_FAILED);
         return 0;
@@ -19023,6 +19042,7 @@ _SOKOL_PRIVATE void _sg_vk_mem_free_device_memory(VkDeviceMemory vk_dev_mem) {
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(vk_dev_mem);
     vkFreeMemory(_sg.vk.dev, vk_dev_mem, 0);
+    _sg_stats_add(vk.num_free_memory, 1);
 }
 
 _SOKOL_PRIVATE bool _sg_vk_mem_alloc_buffer_device_memory(_sg_buffer_t* buf) {
@@ -19089,6 +19109,7 @@ _SOKOL_PRIVATE void _sg_vk_delete_queue_collect_items(_sg_vk_delete_queue_t* que
         item->destructor = 0;
         item->obj = 0;
     }
+    _sg_stats_add(vk.num_delete_queue_collected, queue->index);
     queue->index = 0;
 }
 
@@ -19123,6 +19144,7 @@ _SOKOL_PRIVATE void _sg_vk_delete_queue_add(_sg_vk_delete_queue_destructor_t des
     queue->items[queue->index].destructor = destructor;
     queue->items[queue->index].obj = obj;
     queue->index += 1;
+    _sg_stats_add(vk.num_delete_queue_added, 1);
 }
 
 // double-buffer system for any non-blocking CPU => GPU data
@@ -19420,6 +19442,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_
         _sg_vk_staging_map_memcpy_unmap(dst_mem, src_ptr, bytes_to_copy);
         VkCommandBuffer cmd_buf = _sg_vk_staging_copy_begin();
         vkCmdCopyBuffer(cmd_buf, src_buf, dst_buf, 1, &region);
+        _sg_stats_add(vk.num_cmd_copy_buffer, 1);
         _sg_vk_staging_copy_end(cmd_buf, _sg.vk.queue);
         src_ptr += bytes_to_copy;
         region.dstOffset += bytes_to_copy;
@@ -19507,6 +19530,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_im
                 region.imageOffset.y = (int32_t)(cur_row * block_dim);
                 region.imageExtent.height = _sg_min((uint32_t)mip_height, rows_to_copy * block_dim);
                 vkCmdCopyBufferToImage2(cmd_buf, &copy_info);
+                _sg_stats_add(vk.num_cmd_copy_buffer_to_image, 1);
                 _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
 
                 _sg_vk_staging_copy_end(cmd_buf, _sg.vk.queue);
@@ -19561,6 +19585,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_buffer_data(_sg_buffer_t* buf, const s
     region.size = src_data->size;
     _sg_vk_buffer_barrier(cmd_buf, buf, _SG_VK_ACCESS_STAGING);
     vkCmdCopyBuffer(cmd_buf, vk_src_buf, vk_dst_buf, 1, &region);
+    _sg_stats_add(vk.num_cmd_copy_buffer, 1);
     // FIXME: not great to issue a barrier right here,
     // rethink buffer barrier strategy? => a single memory barrier
     // at the end of the stream command buffer should be sufficient?
@@ -19604,6 +19629,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_image_data(_sg_image_t* img, const sg_
             region.imageSubresource.layerCount = (uint32_t)mip_slices;
         }
         vkCmdCopyBufferToImage2(cmd_buf, &copy_info);
+        _sg_stats_add(vk.num_cmd_copy_buffer_to_image, 1);
     }
     _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
 }
@@ -19706,6 +19732,7 @@ _SOKOL_PRIVATE bool _sg_vk_bind_view_smp_descriptor_set(VkCommandBuffer cmd_buf,
         _SG_ERROR(VULKAN_DESCRIPTOR_BUFFER_OVERFLOW);
         return false;
     }
+    _sg_stats_add(vk.size_descriptor_buffer_writes, dset_size);
     uint8_t* dbuf_ptr = _sg_vk_shared_buffer_ptr(&_sg.vk.bind, dbuf_offset);
 
     // copy pre-recorded descriptor data into descriptor buffer
@@ -19743,7 +19770,7 @@ _SOKOL_PRIVATE bool _sg_vk_bind_view_smp_descriptor_set(VkCommandBuffer cmd_buf,
         1,  // setCount
         &dbuf_index,
         &dbuf_offset);
-
+    _sg_stats_add(vk.num_cmd_set_descriptor_buffer_offsets, 1);
     return true;
 }
 
@@ -19760,6 +19787,7 @@ _SOKOL_PRIVATE bool _sg_vk_bind_uniform_descriptor_set(VkCommandBuffer cmd_buf) 
         _SG_ERROR(VULKAN_DESCRIPTOR_BUFFER_OVERFLOW);
         return false;
     }
+    _sg_stats_add(vk.size_descriptor_buffer_writes, shd->vk.ub_dset_size);
     uint8_t* dbuf_ptr = _sg_vk_shared_buffer_ptr(&_sg.vk.bind, dbuf_offset);
 
     // update descriptor buffer
@@ -19787,6 +19815,7 @@ _SOKOL_PRIVATE bool _sg_vk_bind_uniform_descriptor_set(VkCommandBuffer cmd_buf) 
         1, // setCount
         &dbuf_index,
         &dbuf_offset);
+    _sg_stats_add(vk.num_cmd_set_descriptor_buffer_offsets, 1);
     return true;
 }
 
