@@ -18719,7 +18719,7 @@ _SOKOL_PRIVATE void _sg_vk_swapchain_beginpass_barrier(VkCommandBuffer cmd_buf, 
     VkImageMemoryBarrier2 barrier;
     _sg_clear(&barrier, sizeof(barrier));
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+    barrier.srcStageMask = _sg_vk_src_stage_mask(pass_access);
     barrier.srcAccessMask = VK_ACCESS_2_NONE;
     barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     barrier.dstStageMask = _sg_vk_dst_stage_mask(pass_access);
@@ -18868,11 +18868,11 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_begin_pass(VkCommandBuffer cmd_buf, const 
             if (vk_swapchain->depth_stencil_image) {
                 VkImage vk_ds_image = (VkImage)vk_swapchain->depth_stencil_image;
                 const bool has_stencil = _sg_is_depth_stencil_format(_sg.cur_pass.swapchain.depth_fmt);
-                _sg_vk_access_t dst_access = _SG_VK_ACCESS_DEPTH_ATTACHMENT;
+                _sg_vk_access_t access = _SG_VK_ACCESS_DEPTH_ATTACHMENT;
                 if (has_stencil) {
-                    dst_access |= _SG_VK_ACCESS_STENCIL_ATTACHMENT;
+                    access |= _SG_VK_ACCESS_STENCIL_ATTACHMENT;
                 }
-                _sg_vk_swapchain_beginpass_barrier(cmd_buf, vk_ds_image, dst_access);
+                _sg_vk_swapchain_beginpass_barrier(cmd_buf, vk_ds_image, access);
             }
         } else {
             SOKOL_ASSERT(atts->num_color_views <= SG_MAX_COLOR_ATTACHMENTS);
