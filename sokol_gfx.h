@@ -18562,7 +18562,7 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_src_stage_mask(_sg_vk_access_t acces
         return VK_PIPELINE_STAGE_2_NONE;
     }
     if (access & _SG_VK_ACCESS_STAGING) {
-        f |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+        f |= VK_PIPELINE_STAGE_2_COPY_BIT;
     }
     if (access & _SG_VK_ACCESS_STORAGEBUFFER_RW) {
         f |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
@@ -18594,7 +18594,7 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_dst_stage_mask(_sg_vk_access_t acces
         return VK_PIPELINE_STAGE_2_NONE;
     }
     if (access & _SG_VK_ACCESS_STAGING) {
-        f |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+        f |= VK_PIPELINE_STAGE_2_COPY_BIT;
     }
     if (access & _SG_VK_ACCESS_VERTEXBUFFER) {
         f |= VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT;
