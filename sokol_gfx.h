@@ -18576,11 +18576,8 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_src_stage_mask(_sg_vk_access_t acces
     if (access & _SG_VK_ACCESS_RESOLVE_ATTACHMENT) {
         f |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
     }
-    if (access & _SG_VK_ACCESS_DEPTH_ATTACHMENT) {
-        f |= VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-    }
-    if (access & _SG_VK_ACCESS_STENCIL_ATTACHMENT) {
-        f |= VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+    if (access & (_SG_VK_ACCESS_DEPTH_ATTACHMENT|_SG_VK_ACCESS_STENCIL_ATTACHMENT)) {
+        f |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
     }
     SOKOL_ASSERT(f != 0);
     return f;
@@ -18624,11 +18621,8 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_dst_stage_mask(_sg_vk_access_t acces
     if (access & _SG_VK_ACCESS_RESOLVE_ATTACHMENT) {
         f |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
     }
-    if (access & _SG_VK_ACCESS_DEPTH_ATTACHMENT) {
-        f |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-    }
-    if (access & _SG_VK_ACCESS_STENCIL_ATTACHMENT) {
-        f |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+    if (access & (_SG_VK_ACCESS_DEPTH_ATTACHMENT|_SG_VK_ACCESS_STENCIL_ATTACHMENT)) {
+        f |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
     }
     SOKOL_ASSERT(f != 0);
     return f;
@@ -18720,7 +18714,7 @@ _SOKOL_PRIVATE void _sg_vk_swapchain_beginpass_barrier(VkCommandBuffer cmd_buf, 
     _sg_clear(&barrier, sizeof(barrier));
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrier.srcStageMask = _sg_vk_src_stage_mask(pass_access);
-    barrier.srcAccessMask = VK_ACCESS_2_NONE;
+    barrier.srcAccessMask = _sg_vk_src_access_mask(pass_access);
     barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     barrier.dstStageMask = _sg_vk_dst_stage_mask(pass_access);
     barrier.dstAccessMask = _sg_vk_dst_access_mask(pass_access);
