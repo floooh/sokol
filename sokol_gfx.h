@@ -18714,23 +18714,60 @@ _SOKOL_PRIVATE VkImageLayout _sg_vk_image_layout(_sg_vk_access_t access) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_vk_swapchain_barrier(VkCommandBuffer cmd_buf, VkImage vkimg, _sg_vk_access_t old_access, _sg_vk_access_t new_access) {
+_SOKOL_PRIVATE void _sg_vk_swapchain_beginpass_barrier(VkCommandBuffer cmd_buf, VkImage vkimg, _sg_vk_access_t pass_access) {
     SOKOL_ASSERT(cmd_buf);
     VkImageMemoryBarrier2 barrier;
     _sg_clear(&barrier, sizeof(barrier));
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    barrier.srcStageMask = _sg_vk_src_stage_mask(old_access);
-    barrier.srcAccessMask = _sg_vk_src_access_mask(old_access);
-    barrier.oldLayout = _sg_vk_image_layout(old_access);
-    barrier.dstStageMask = _sg_vk_dst_stage_mask(new_access);
-    barrier.dstAccessMask = _sg_vk_dst_access_mask(new_access);
-    barrier.newLayout = _sg_vk_image_layout(new_access);
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+    barrier.srcAccessMask = VK_ACCESS_2_NONE;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrier.dstStageMask = _sg_vk_dst_stage_mask(pass_access);
+    barrier.dstAccessMask = _sg_vk_dst_access_mask(pass_access);
+    barrier.newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.image = vkimg;
-    if (0 != (new_access & (_SG_VK_ACCESS_DEPTH_ATTACHMENT|_SG_VK_ACCESS_STENCIL_ATTACHMENT))) {
+    if (0 != (pass_access & (_SG_VK_ACCESS_DEPTH_ATTACHMENT|_SG_VK_ACCESS_STENCIL_ATTACHMENT))) {
         barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_DEPTH_BIT;
-        if (0 != (new_access & _SG_VK_ACCESS_STENCIL_ATTACHMENT)) {
+        if (0 != (pass_access & _SG_VK_ACCESS_STENCIL_ATTACHMENT)) {
+            barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+        }
+    } else {
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    }
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.layerCount = 1;
+    VkDependencyInfo dep_info;
+    _sg_clear(&dep_info, sizeof(dep_info));
+    dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dep_info.imageMemoryBarrierCount = 1;
+    dep_info.pImageMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(cmd_buf, &dep_info);
+    _sg_stats_add(vk.num_cmd_pipeline_barrier, 1);
+}
+
+_SOKOL_PRIVATE void _sg_vk_swapchain_endpass_barrier(VkCommandBuffer cmd_buf, VkImage vkimg, _sg_vk_access_t pass_access, bool present) {
+    SOKOL_ASSERT(cmd_buf);
+    VkImageMemoryBarrier2 barrier;
+    _sg_clear(&barrier, sizeof(barrier));
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    barrier.srcStageMask = _sg_vk_src_stage_mask(pass_access);
+    barrier.srcAccessMask = _sg_vk_src_access_mask(pass_access);
+    barrier.oldLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
+    barrier.dstAccessMask = VK_ACCESS_2_NONE;
+    if (present) {
+        barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    } else {
+        barrier.newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+    }
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = vkimg;
+    if (0 != (pass_access & (_SG_VK_ACCESS_DEPTH_ATTACHMENT|_SG_VK_ACCESS_STENCIL_ATTACHMENT))) {
+        barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_DEPTH_BIT;
+        if (0 != (pass_access & _SG_VK_ACCESS_STENCIL_ATTACHMENT)) {
             barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
         }
     } else {
@@ -18822,20 +18859,20 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_begin_pass(VkCommandBuffer cmd_buf, const 
             const sg_vulkan_swapchain* vk_swapchain = &pass->swapchain.vulkan;
             SOKOL_ASSERT(vk_swapchain->render_image);
             VkImage vk_color_image = (VkImage)vk_swapchain->render_image;
-            _sg_vk_swapchain_barrier(cmd_buf, vk_color_image, _SG_VK_ACCESS_NONE, _SG_VK_ACCESS_COLOR_ATTACHMENT);
-            if (pass->swapchain.sample_count > 1) {
+            _sg_vk_swapchain_beginpass_barrier(cmd_buf, vk_color_image, _SG_VK_ACCESS_COLOR_ATTACHMENT);
+            if (_sg.cur_pass.swapchain.sample_count > 1) {
                 VkImage vk_resolve_image = (VkImage)vk_swapchain->resolve_image;
                 SOKOL_ASSERT(vk_resolve_image);
-                _sg_vk_swapchain_barrier(cmd_buf, vk_resolve_image, _SG_VK_ACCESS_NONE, _SG_VK_ACCESS_RESOLVE_ATTACHMENT);
+                _sg_vk_swapchain_beginpass_barrier(cmd_buf, vk_resolve_image, _SG_VK_ACCESS_RESOLVE_ATTACHMENT);
             }
             if (vk_swapchain->depth_stencil_image) {
                 VkImage vk_ds_image = (VkImage)vk_swapchain->depth_stencil_image;
-                const bool has_stencil = _sg_is_depth_stencil_format(pass->swapchain.depth_format);
+                const bool has_stencil = _sg_is_depth_stencil_format(_sg.cur_pass.swapchain.depth_fmt);
                 _sg_vk_access_t dst_access = _SG_VK_ACCESS_DEPTH_ATTACHMENT;
                 if (has_stencil) {
                     dst_access |= _SG_VK_ACCESS_STENCIL_ATTACHMENT;
                 }
-                _sg_vk_swapchain_barrier(cmd_buf, vk_ds_image, _SG_VK_ACCESS_NONE, dst_access);
+                _sg_vk_swapchain_beginpass_barrier(cmd_buf, vk_ds_image, dst_access);
             }
         } else {
             SOKOL_ASSERT(atts->num_color_views <= SG_MAX_COLOR_ATTACHMENTS);
@@ -18962,7 +18999,7 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_end_pass(VkCommandBuffer cmd_buf, const _s
             VkImage present_image = _sg.vk.swapchain.resolve_image
                 ? (VkImage)_sg.vk.swapchain.resolve_image
                 : (VkImage)_sg.vk.swapchain.render_image;
-            _sg_vk_swapchain_barrier(cmd_buf, present_image, _SG_VK_ACCESS_COLOR_ATTACHMENT, _SG_VK_ACCESS_PRESENT);
+            _sg_vk_swapchain_endpass_barrier(cmd_buf, present_image, _SG_VK_ACCESS_COLOR_ATTACHMENT, true);
         } else {
             for (int i = 0; i < atts->num_color_views; i++) {
                 if (_sg.cur_pass.action.colors[i].store_action == SG_STOREACTION_STORE) {
