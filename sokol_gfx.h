@@ -6854,7 +6854,8 @@ typedef enum {
     _SG_VK_ACCESS_RESOLVE_ATTACHMENT = (1<<8),
     _SG_VK_ACCESS_DEPTH_ATTACHMENT = (1<<9),
     _SG_VK_ACCESS_STENCIL_ATTACHMENT = (1<<10),
-    _SG_VK_ACCESS_PRESENT = (1<<11),
+    _SG_VK_ACCESS_DISCARD = (1<<11),    // in combination with attachments
+    _SG_VK_ACCESS_PRESENT = (1<<12),
 } _sg_vk_access_bits_t;
 typedef int _sg_vk_access_t;
 
@@ -18554,6 +18555,7 @@ _SOKOL_PRIVATE bool _sg_vk_is_read_access(_sg_vk_access_t access) {
 
 // return pipeline stages on 'before' side of a barrier
 _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_src_stage_mask(_sg_vk_access_t access) {
+    access &= ~_SG_VK_ACCESS_DISCARD;
     VkPipelineStageFlags2 f = 0;
     if (access == _SG_VK_ACCESS_NONE) {
         return VK_PIPELINE_STAGE_2_NONE;
@@ -18585,6 +18587,7 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_src_stage_mask(_sg_vk_access_t acces
 
 // return pipeline stage on 'after side' of a barrier
 _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_dst_stage_mask(_sg_vk_access_t access) {
+    access &= ~_SG_VK_ACCESS_DISCARD;
     SOKOL_ASSERT(access != _SG_VK_ACCESS_NONE);
     VkPipelineStageFlags2 f = 0;
     if (access & _SG_VK_ACCESS_PRESENT) {
@@ -18629,6 +18632,7 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_dst_stage_mask(_sg_vk_access_t acces
 }
 
 _SOKOL_PRIVATE VkAccessFlags2 _sg_vk_access_mask(_sg_vk_access_t access, bool is_dst_access) {
+    access &= ~_SG_VK_ACCESS_DISCARD;
     if (access == _SG_VK_ACCESS_NONE) {
         return VK_ACCESS_2_NONE;
     }
@@ -18686,6 +18690,9 @@ _SOKOL_PRIVATE VkAccessFlags2 _sg_vk_dst_access_mask(_sg_vk_access_t access) {
 _SOKOL_PRIVATE VkImageLayout _sg_vk_image_layout(_sg_vk_access_t access) {
     // NOTE: "image layout transitions with VK_IMAGE_LAYOUT_UNDEFINED allow
     // the implementation to discard the image subresource range"
+    if (access & _SG_VK_ACCESS_DISCARD) {
+        return VK_IMAGE_LAYOUT_UNDEFINED;
+    }
     switch (access) {
         case _SG_VK_ACCESS_NONE:
             return VK_IMAGE_LAYOUT_UNDEFINED;
@@ -18875,13 +18882,13 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_begin_pass(VkCommandBuffer cmd_buf, const 
                 _sg_image_t* color_image = _sg_image_ref_ptr(&atts->color_views[i]->cmn.img.ref);
                 if (pass->action.colors[i].load_action != SG_LOADACTION_LOAD) {
                     // don't need to preserve image content for clear and dontcare
-                    color_image->vk.cur_access = _SG_VK_ACCESS_NONE;
+                    color_image->vk.cur_access |= _SG_VK_ACCESS_DISCARD;
                 }
                 _sg_vk_image_barrier(cmd_buf, color_image, _SG_VK_ACCESS_COLOR_ATTACHMENT);
                 if (atts->resolve_views[i]) {
                     _sg_image_t* resolve_image = _sg_image_ref_ptr(&atts->resolve_views[i]->cmn.img.ref);
                     // never need to preserve content for resolve image
-                    resolve_image->vk.cur_access = _SG_VK_ACCESS_NONE;
+                    resolve_image->vk.cur_access |= _SG_VK_ACCESS_DISCARD;
                     _sg_vk_image_barrier(cmd_buf, resolve_image, _SG_VK_ACCESS_RESOLVE_ATTACHMENT);
                 }
             }
@@ -18891,7 +18898,8 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_begin_pass(VkCommandBuffer cmd_buf, const 
                 if ((pass->action.depth.load_action != SG_LOADACTION_LOAD) &&
                     (pass->action.stencil.load_action != SG_LOADACTION_LOAD))
                 {
-                    ds_image->vk.cur_access = _SG_VK_ACCESS_NONE;
+                    // don't need to preserve image content for clear and dontcare
+                    ds_image->vk.cur_access |= _SG_VK_ACCESS_DISCARD;
                 }
                 _sg_vk_access_t dst_access = _SG_VK_ACCESS_DEPTH_ATTACHMENT;
                 if (has_stencil) {
