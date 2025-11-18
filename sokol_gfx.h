@@ -18703,10 +18703,9 @@ _SOKOL_PRIVATE VkImageLayout _sg_vk_image_layout(_sg_vk_access_t access) {
             return VK_IMAGE_LAYOUT_GENERAL;
         case _SG_VK_ACCESS_COLOR_ATTACHMENT:
         case _SG_VK_ACCESS_RESOLVE_ATTACHMENT:
-            return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         case _SG_VK_ACCESS_DEPTH_ATTACHMENT:
         case _SG_VK_ACCESS_DEPTH_ATTACHMENT|_SG_VK_ACCESS_STENCIL_ATTACHMENT:
-            return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            return VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
         case _SG_VK_ACCESS_PRESENT:
             return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
         default:
