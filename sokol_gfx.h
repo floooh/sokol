@@ -7020,9 +7020,9 @@ typedef struct {
         _sg_track_t images;
     } track;
     // device properties and features (initialized at startup)
-    VkPhysicalDeviceProperties2 device_props;
+    VkPhysicalDeviceProperties2 dev_props;
     VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_props;
-    VkPhysicalDeviceFeatures device_features;
+    VkPhysicalDeviceFeatures2 dev_features;
 } _sg_vk_backend_t;
 
 #endif // SOKOL_VULKAN
@@ -19639,7 +19639,7 @@ _SOKOL_PRIVATE void _sg_vk_uniform_init(void) {
     SOKOL_ASSERT(_sg.desc.uniform_buffer_size > 0);
     _sg_vk_shared_buffer_init(&_sg.vk.uniform,
         (uint32_t)_sg.desc.uniform_buffer_size,
-        _sg.vk.device_props.properties.limits.minUniformBufferOffsetAlignment,
+        _sg.vk.dev_props.properties.limits.minUniformBufferOffsetAlignment,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
         "shared-uniform-buffer");
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
@@ -20260,12 +20260,13 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
 
     SOKOL_ASSERT(_sg.vk.phys_dev);
     _sg.vk.descriptor_buffer_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT;
-    _sg.vk.device_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-    _sg.vk.device_props.pNext = &_sg.vk.descriptor_buffer_props;
-    vkGetPhysicalDeviceProperties2(_sg.vk.phys_dev, &_sg.vk.device_props);
-    vkGetPhysicalDeviceFeatures(_sg.vk.phys_dev, &_sg.vk.device_features);
+    _sg.vk.dev_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    _sg.vk.dev_props.pNext = &_sg.vk.descriptor_buffer_props;
+    vkGetPhysicalDeviceProperties2(_sg.vk.phys_dev, &_sg.vk.dev_props);
+    _sg.vk.dev_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    vkGetPhysicalDeviceFeatures2(_sg.vk.phys_dev, &_sg.vk.dev_features);
 
-    const VkPhysicalDeviceLimits* l = &_sg.vk.device_props.properties.limits;
+    const VkPhysicalDeviceLimits* l = &_sg.vk.dev_props.properties.limits;
     _sg.limits.max_image_size_2d = (int)l->maxImageDimension2D;
     _sg.limits.max_image_size_cube = (int)l->maxImageDimensionCube;
     _sg.limits.max_image_size_3d = (int)l->maxImageDimension3D;
@@ -20323,7 +20324,7 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
 
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGB9E5]);
 
-    if (_sg.vk.device_features.textureCompressionBC) {
+    if (_sg.vk.dev_features.features.textureCompressionBC) {
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC1_RGBA]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC2_RGBA]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC3_RGBA]);
@@ -20338,7 +20339,7 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC7_SRGBA]);
     }
 
-    if (_sg.vk.device_features.textureCompressionETC2) {
+    if (_sg.vk.dev_features.features.textureCompressionETC2) {
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_SRGB8]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8A1]);
@@ -20350,7 +20351,7 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_EAC_RG11SN]);
     }
 
-    if (_sg.vk.device_features.textureCompressionASTC_LDR) {
+    if (_sg.vk.dev_features.features.textureCompressionASTC_LDR) {
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ASTC_4x4_RGBA]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ASTC_4x4_SRGBA]);
     }

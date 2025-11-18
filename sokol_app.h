@@ -4464,9 +4464,10 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
     _SAPP_VK_ZERO_COUNT_AND_ARRAY(32, const char*, ext_count, ext_names);
     ext_count = _sapp_vk_required_device_extensions(ext_names, 32);
 
-    VkPhysicalDeviceFeatures phys_dev_features;
-    _sapp_clear(&phys_dev_features, sizeof(phys_dev_features));
-    vkGetPhysicalDeviceFeatures(_sapp.vk.physical_device, &phys_dev_features);
+    VkPhysicalDeviceFeatures2 supports;
+    _sapp_clear(&supports, sizeof(supports));
+    supports.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    vkGetPhysicalDeviceFeatures2(_sapp.vk.physical_device, &supports);
 
     VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptor_buffer_features;
     _sapp_clear(&descriptor_buffer_features, sizeof(descriptor_buffer_features));
@@ -4492,24 +4493,24 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
     vk13_features.dynamicRendering = VK_TRUE;
     vk13_features.synchronization2 = VK_TRUE;
 
-    VkPhysicalDeviceFeatures2 features2;
-    _sapp_clear(&features2, sizeof(features2));
-    features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    features2.pNext = &vk13_features;
-    features2.features.samplerAnisotropy = VK_TRUE;
-    if (phys_dev_features.textureCompressionBC) {
-        features2.features.textureCompressionBC = VK_TRUE;
+    VkPhysicalDeviceFeatures2 required;
+    _sapp_clear(&required, sizeof(required));
+    required.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    required.pNext = &vk13_features;
+    required.features.samplerAnisotropy = VK_TRUE;
+    if (supports.features.textureCompressionBC) {
+        required.features.textureCompressionBC = VK_TRUE;
     }
-    if (phys_dev_features.textureCompressionETC2) {
-        features2.features.textureCompressionETC2 = VK_TRUE;
+    if (supports.features.textureCompressionETC2) {
+        required.features.textureCompressionETC2 = VK_TRUE;
     }
-    if (phys_dev_features.textureCompressionASTC_LDR) {
-        features2.features.textureCompressionASTC_LDR = VK_TRUE;
+    if (supports.features.textureCompressionASTC_LDR) {
+        required.features.textureCompressionASTC_LDR = VK_TRUE;
     }
     VkDeviceCreateInfo dev_create_info;
     _sapp_clear(&dev_create_info, sizeof(dev_create_info));
     dev_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    dev_create_info.pNext = &features2;
+    dev_create_info.pNext = &required;
     dev_create_info.queueCreateInfoCount = 1;
     dev_create_info.pQueueCreateInfos = &queue_create_info;
     dev_create_info.enabledExtensionCount = ext_count;
