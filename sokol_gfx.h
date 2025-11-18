@@ -18597,10 +18597,10 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_dst_stage_mask(_sg_vk_access_t acces
         f |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
     }
     if (access & _SG_VK_ACCESS_VERTEXBUFFER) {
-        f |= VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
+        f |= VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT;
     }
     if (access & _SG_VK_ACCESS_INDEXBUFFER) {
-        f |= VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
+        f |= VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
     }
     if (access & _SG_VK_ACCESS_STORAGEBUFFER_RO) {
         f |= VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT |
