@@ -18556,13 +18556,10 @@ _SOKOL_PRIVATE bool _sg_vk_is_read_access(_sg_vk_access_t access) {
 _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_src_stage_mask(_sg_vk_access_t access) {
     VkPipelineStageFlags2 f = 0;
     if (access == _SG_VK_ACCESS_NONE) {
-        // FIXME: TOP_OF_PIPE is deprecated
-        return VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+        return VK_PIPELINE_STAGE_2_NONE;
     }
-    // all read-only accesses are top-of-pipe
     if (_sg_vk_is_read_access(access)) {
-        // FIXME: TOP_OF_PIPE is deprecated
-        return VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+        return VK_PIPELINE_STAGE_2_NONE;
     }
     if (access & _SG_VK_ACCESS_STAGING) {
         f |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
@@ -18593,6 +18590,9 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_src_stage_mask(_sg_vk_access_t acces
 _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_dst_stage_mask(_sg_vk_access_t access) {
     SOKOL_ASSERT(access != _SG_VK_ACCESS_NONE);
     VkPipelineStageFlags2 f = 0;
+    if (access & _SG_VK_ACCESS_PRESENT) {
+        return VK_PIPELINE_STAGE_2_NONE;
+    }
     if (access & _SG_VK_ACCESS_STAGING) {
         f |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
     }
@@ -18629,10 +18629,6 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_dst_stage_mask(_sg_vk_access_t acces
     }
     if (access & _SG_VK_ACCESS_STENCIL_ATTACHMENT) {
         f |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-    }
-    if (access & _SG_VK_ACCESS_PRESENT) {
-        // FIXME: BOTTOM_OF_PIPE is deprecated
-        f |= VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
     }
     SOKOL_ASSERT(f != 0);
     return f;
