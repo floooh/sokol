@@ -18651,26 +18651,25 @@ _SOKOL_PRIVATE VkAccessFlags2 _sg_vk_access_mask(_sg_vk_access_t access, bool is
             f |= VK_ACCESS_2_INDEX_READ_BIT;
         }
         if (access & _SG_VK_ACCESS_STORAGEBUFFER_RO) {
-            f |= VK_ACCESS_2_SHADER_READ_BIT;
+            f |= VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
         }
         if (access & _SG_VK_ACCESS_TEXTURE) {
-            f |= VK_ACCESS_2_SHADER_READ_BIT;
+            f |= VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
         }
     }
     if (access & _SG_VK_ACCESS_STAGING) {
         f |= VK_ACCESS_2_TRANSFER_WRITE_BIT;
     }
     if (access & _SG_VK_ACCESS_STORAGEBUFFER_RW) {
-        f |= VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_SHADER_READ_BIT;
+        f |= VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
     }
     if (access & _SG_VK_ACCESS_STORAGEIMAGE) {
-        f |= VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_SHADER_READ_BIT;
+        f |= VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
     }
     if (access & _SG_VK_ACCESS_COLOR_ATTACHMENT) {
         f |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
     }
     if (access & _SG_VK_ACCESS_RESOLVE_ATTACHMENT) {
-        // FIXME: hmm, also COLOR_ATTACHMENT_READ_BIT?
         f |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
     }
     if (access & (_SG_VK_ACCESS_DEPTH_ATTACHMENT | _SG_VK_ACCESS_STENCIL_ATTACHMENT)) {
