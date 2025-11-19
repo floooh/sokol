@@ -12105,29 +12105,25 @@ _SOKOL_PRIVATE void _sapp_x11_app_event(sapp_event_type type) {
 
 _SOKOL_PRIVATE void _sapp_x11_update_dimensions(int x11_window_width, int x11_window_height) {
     // NOTE: do *NOT* use _sapp.dpi_scale for the window scale
-    // NOTE: on Vulkan, updating the framebuffer dimensions is entirely handled
-    // by the swapchain management code
     const float window_scale = _sapp.x11.dpi / 96.0f;
     _sapp.window_width = _sapp_roundf_gzero(x11_window_width / window_scale);
     _sapp.window_height = _sapp_roundf_gzero(x11_window_height / window_scale);
+    // NOTE: on Vulkan, updating the framebuffer dimensions is entirely handled
+    // by the swapchain management code
     #if !defined(SOKOL_VULKAN)
-    int cur_fb_width = _sapp.framebuffer_width;
-    int cur_fb_height = _sapp.framebuffer_height;
-    #if defined(SOKOL_VULKAN)
-        _sapp_vk_update_framebuffer_dimensions_from_surface();
-    #else
+        int cur_fb_width = _sapp.framebuffer_width;
+        int cur_fb_height = _sapp.framebuffer_height;
         _sapp.framebuffer_width = _sapp_roundf_gzero(_sapp.window_width * _sapp.dpi_scale);
         _sapp.framebuffer_height = _sapp_roundf_gzero(_sapp.window_height * _sapp.dpi_scale);
-    #endif
-    bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) || (_sapp.framebuffer_height != cur_fb_height);
-    if (dim_changed) {
-        #if defined(SOKOL_WGPU)
-            _sapp_wgpu_swapchain_size_changed();
-        #endif
-        if (!_sapp.first_frame) {
-            _sapp_x11_app_event(SAPP_EVENTTYPE_RESIZED);
+        bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) || (_sapp.framebuffer_height != cur_fb_height);
+        if (dim_changed) {
+            #if defined(SOKOL_WGPU)
+                _sapp_wgpu_swapchain_size_changed();
+            #endif
+            if (!_sapp.first_frame) {
+                _sapp_x11_app_event(SAPP_EVENTTYPE_RESIZED);
+            }
         }
-    }
     #endif
 }
 
