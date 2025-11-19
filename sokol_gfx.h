@@ -5398,6 +5398,12 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
 #define _SG_TRACE_NOARGS(fn)
 #endif
 
+#ifdef __cplusplus
+#define _SG_STRUCT(TYPE, NAME) TYPE NAME = {}
+#else
+#define _SG_STRUCT(TYPE, NAME) TYPE NAME = {0}
+#endif
+
 // default clear values
 #ifndef SG_DEFAULT_CLEAR_RED
 #define SG_DEFAULT_CLEAR_RED (0.5f)
@@ -18719,8 +18725,7 @@ _SOKOL_PRIVATE VkImageLayout _sg_vk_image_layout(_sg_vk_access_t access) {
 
 _SOKOL_PRIVATE void _sg_vk_swapchain_beginpass_barrier(VkCommandBuffer cmd_buf, VkImage vkimg, _sg_vk_access_t pass_access) {
     SOKOL_ASSERT(cmd_buf);
-    VkImageMemoryBarrier2 barrier;
-    _sg_clear(&barrier, sizeof(barrier));
+    _SG_STRUCT(VkImageMemoryBarrier2, barrier);
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrier.srcStageMask = _sg_vk_src_stage_mask(pass_access);
     barrier.srcAccessMask = _sg_vk_src_access_mask(pass_access);
@@ -18741,8 +18746,7 @@ _SOKOL_PRIVATE void _sg_vk_swapchain_beginpass_barrier(VkCommandBuffer cmd_buf, 
     }
     barrier.subresourceRange.levelCount = 1;
     barrier.subresourceRange.layerCount = 1;
-    VkDependencyInfo dep_info;
-    _sg_clear(&dep_info, sizeof(dep_info));
+    _SG_STRUCT(VkDependencyInfo, dep_info);
     dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
     dep_info.imageMemoryBarrierCount = 1;
     dep_info.pImageMemoryBarriers = &barrier;
@@ -18752,8 +18756,7 @@ _SOKOL_PRIVATE void _sg_vk_swapchain_beginpass_barrier(VkCommandBuffer cmd_buf, 
 
 _SOKOL_PRIVATE void _sg_vk_swapchain_endpass_barrier(VkCommandBuffer cmd_buf, VkImage vkimg, _sg_vk_access_t pass_access, bool present) {
     SOKOL_ASSERT(cmd_buf);
-    VkImageMemoryBarrier2 barrier;
-    _sg_clear(&barrier, sizeof(barrier));
+    _SG_STRUCT(VkImageMemoryBarrier2, barrier);
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrier.srcStageMask = _sg_vk_src_stage_mask(pass_access);
     barrier.srcAccessMask = _sg_vk_src_access_mask(pass_access);
@@ -18778,8 +18781,7 @@ _SOKOL_PRIVATE void _sg_vk_swapchain_endpass_barrier(VkCommandBuffer cmd_buf, Vk
     }
     barrier.subresourceRange.levelCount = 1;
     barrier.subresourceRange.layerCount = 1;
-    VkDependencyInfo dep_info;
-    _sg_clear(&dep_info, sizeof(dep_info));
+    _SG_STRUCT(VkDependencyInfo, dep_info);
     dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
     dep_info.imageMemoryBarrierCount = 1;
     dep_info.pImageMemoryBarriers = &barrier;
@@ -18792,8 +18794,7 @@ _SOKOL_PRIVATE void _sg_vk_image_barrier(VkCommandBuffer cmd_buf, _sg_image_t* i
     if (_sg_vk_is_read_access(img->vk.cur_access) && _sg_vk_is_read_access(new_access)) {
         return;
     }
-    VkImageMemoryBarrier2 barrier;
-    _sg_clear(&barrier, sizeof(barrier));
+    _SG_STRUCT(VkImageMemoryBarrier2, barrier);
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrier.srcStageMask = _sg_vk_src_stage_mask(img->vk.cur_access);
     barrier.srcAccessMask = _sg_vk_src_access_mask(img->vk.cur_access);
@@ -18814,8 +18815,7 @@ _SOKOL_PRIVATE void _sg_vk_image_barrier(VkCommandBuffer cmd_buf, _sg_image_t* i
     }
     barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
     barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
-    VkDependencyInfo dep_info;
-    _sg_clear(&dep_info, sizeof(dep_info));
+    _SG_STRUCT(VkDependencyInfo, dep_info);
     dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
     dep_info.imageMemoryBarrierCount = 1;
     dep_info.pImageMemoryBarriers = &barrier;
@@ -18829,8 +18829,7 @@ _SOKOL_PRIVATE void _sg_vk_buffer_barrier(VkCommandBuffer cmd_buf, _sg_buffer_t*
     if (_sg_vk_is_read_access(buf->vk.cur_access) && _sg_vk_is_read_access(new_access)) {
         return;
     }
-    VkBufferMemoryBarrier2 barrier;
-    _sg_clear(&barrier, sizeof(barrier));
+    _SG_STRUCT(VkBufferMemoryBarrier2, barrier);
     barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
     barrier.srcStageMask = _sg_vk_src_stage_mask(buf->vk.cur_access);
     barrier.srcAccessMask = _sg_vk_src_access_mask(buf->vk.cur_access);
@@ -18841,8 +18840,7 @@ _SOKOL_PRIVATE void _sg_vk_buffer_barrier(VkCommandBuffer cmd_buf, _sg_buffer_t*
     barrier.buffer = buf->vk.buf;
     barrier.offset = 0;
     barrier.size = VK_WHOLE_SIZE;
-    VkDependencyInfo dep_info;
-    _sg_clear(&dep_info, sizeof(dep_info));
+    _SG_STRUCT(VkDependencyInfo, dep_info);
     dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
     dep_info.bufferMemoryBarrierCount = 1;
     dep_info.pBufferMemoryBarriers = &barrier;
@@ -19028,12 +19026,11 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_end_pass(VkCommandBuffer cmd_buf, const _s
 
 _SOKOL_PRIVATE int _sg_vk_mem_find_memory_type_index(uint32_t type_filter, VkMemoryPropertyFlags props) {
     SOKOL_ASSERT(_sg.vk.phys_dev);
-    VkPhysicalDeviceMemoryProperties mem_props;
-    _sg_clear(&mem_props, sizeof(mem_props));
+    _SG_STRUCT(VkPhysicalDeviceMemoryProperties, mem_props);
     vkGetPhysicalDeviceMemoryProperties(_sg.vk.phys_dev, &mem_props);
-    for (int i = 0; i < (int)mem_props.memoryTypeCount; i++) {
+    for (uint32_t i = 0; i < mem_props.memoryTypeCount; i++) {
         if ((type_filter & (1 << i)) && ((mem_props.memoryTypes[i].propertyFlags & props) == props)) {
-            return i;
+            return (int)i;
         }
     }
     return -1;
@@ -19051,12 +19048,10 @@ _SOKOL_PRIVATE VkDeviceMemory _sg_vk_mem_alloc_device_memory(
         _SG_ERROR(VULKAN_ALLOC_DEVICE_MEMORY_NO_SUITABLE_MEMORY_TYPE);
         return 0;
     }
-    VkMemoryAllocateFlagsInfo flags_info;
-    _sg_clear(&flags_info, sizeof(flags_info));
+    _SG_STRUCT(VkMemoryAllocateFlagsInfo, flags_info);
     flags_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
     flags_info.flags = mem_alloc_flags;
-    VkMemoryAllocateInfo alloc_info;
-    _sg_clear(&alloc_info, sizeof(alloc_info));
+    _SG_STRUCT(VkMemoryAllocateInfo, alloc_info);
     alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     alloc_info.pNext = &flags_info;
     alloc_info.allocationSize = mem_reqs->size;
@@ -19085,8 +19080,7 @@ _SOKOL_PRIVATE bool _sg_vk_mem_alloc_buffer_device_memory(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
     SOKOL_ASSERT(buf->vk.buf);
     SOKOL_ASSERT(0 == buf->vk.mem);
-    VkMemoryRequirements mem_reqs;
-    _sg_clear(&mem_reqs, sizeof(mem_reqs));
+    _SG_STRUCT(VkMemoryRequirements, mem_reqs);
     vkGetBufferMemoryRequirements(_sg.vk.dev, buf->vk.buf, &mem_reqs);
     VkMemoryAllocateFlags alloc_flags = 0;
     if (buf->cmn.usage.storage_buffer) {
@@ -19105,8 +19099,7 @@ _SOKOL_PRIVATE bool _sg_vk_mem_alloc_image_device_memory(_sg_image_t* img) {
     SOKOL_ASSERT(img);
     SOKOL_ASSERT(img->vk.img);
     SOKOL_ASSERT(0 == img->vk.mem);
-    VkMemoryRequirements mem_reqs;
-    _sg_clear(&mem_reqs, sizeof(mem_reqs));
+    _SG_STRUCT(VkMemoryRequirements, mem_reqs);
     vkGetImageMemoryRequirements(_sg.vk.dev, img->vk.img, &mem_reqs);
     img->vk.mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0);
     if (0 == img->vk.mem) {
@@ -19199,8 +19192,7 @@ _SOKOL_PRIVATE void _sg_vk_shared_buffer_init(_sg_vk_shared_buffer_t* shbuf, uin
         SOKOL_ASSERT(0 == shbuf->slots[i].buf);
         SOKOL_ASSERT(0 == shbuf->slots[i].mem);
         SOKOL_ASSERT(0 == shbuf->slots[i].mem_ptr);
-        VkBufferCreateInfo buf_create_info;
-        _sg_clear(&buf_create_info, sizeof(buf_create_info));
+        _SG_STRUCT(VkBufferCreateInfo, buf_create_info);
         buf_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         buf_create_info.size = shbuf->size;
         buf_create_info.usage = vk_usage;
@@ -19212,8 +19204,7 @@ _SOKOL_PRIVATE void _sg_vk_shared_buffer_init(_sg_vk_shared_buffer_t* shbuf, uin
         SOKOL_ASSERT(shbuf->slots[i].buf);
         _sg_vk_set_object_label(VK_OBJECT_TYPE_BUFFER, (uint64_t)shbuf->slots[i].buf, label);
 
-        VkMemoryRequirements mem_reqs;
-        _sg_clear(&mem_reqs, sizeof(mem_reqs));
+        _SG_STRUCT(VkMemoryRequirements, mem_reqs);
         vkGetBufferMemoryRequirements(_sg.vk.dev, shbuf->slots[i].buf, &mem_reqs);
         // FIXME: we may want host-visible + local memory for uniform and descriptor buffers,
         // but need to handle failure
@@ -19231,8 +19222,7 @@ _SOKOL_PRIVATE void _sg_vk_shared_buffer_init(_sg_vk_shared_buffer_t* shbuf, uin
             _SG_PANIC(VULKAN_BIND_SHARED_BUFFER_MEMORY_FAILED);
         }
         if (want_device_address) {
-            VkBufferDeviceAddressInfo addr_info;
-            _sg_clear(&addr_info, sizeof(addr_info));
+            _SG_STRUCT(VkBufferDeviceAddressInfo, addr_info);
             addr_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
             addr_info.buffer = shbuf->slots[i].buf;
             shbuf->slots[i].dev_addr = vkGetBufferDeviceAddress(_sg.vk.dev, &addr_info);
@@ -19335,8 +19325,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_init(void) {
     SOKOL_ASSERT(0 == _sg.vk.stage.copy.mem);
     SOKOL_ASSERT(_sg.desc.vk_copy_staging_buffer_size > 0);
 
-    VkCommandPoolCreateInfo pool_create_info;
-    _sg_clear(&pool_create_info, sizeof(pool_create_info));
+    _SG_STRUCT(VkCommandPoolCreateInfo, pool_create_info);
     pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     pool_create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
     pool_create_info.queueFamilyIndex = _sg.vk.queue_family_index;
@@ -19344,8 +19333,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_init(void) {
     SOKOL_ASSERT((res == VK_SUCCESS && _sg.vk.stage.copy.cmd_pool));
     _sg_vk_set_object_label(VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t)_sg.vk.stage.copy.cmd_pool, "copy-staging cmd pool");
 
-    VkCommandBufferAllocateInfo cmdbuf_alloc_info;
-    _sg_clear(&cmdbuf_alloc_info, sizeof(cmdbuf_alloc_info));
+    _SG_STRUCT(VkCommandBufferAllocateInfo, cmdbuf_alloc_info);
     cmdbuf_alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     cmdbuf_alloc_info.commandPool = _sg.vk.stage.copy.cmd_pool;
     cmdbuf_alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -19355,8 +19343,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_init(void) {
     _sg_vk_set_object_label(VK_OBJECT_TYPE_COMMAND_BUFFER, (uint64_t)_sg.vk.stage.copy.cmd_buf, "copy-staging cmd buffer");
 
     _sg.vk.stage.copy.size = (uint32_t) _sg.desc.vk_copy_staging_buffer_size;
-    VkBufferCreateInfo buf_create_info;
-    _sg_clear(&buf_create_info, sizeof(buf_create_info));
+    _SG_STRUCT(VkBufferCreateInfo, buf_create_info);
     buf_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     buf_create_info.size = _sg.vk.stage.copy.size;
     buf_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
@@ -19368,8 +19355,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_init(void) {
     SOKOL_ASSERT(_sg.vk.stage.copy.buf);
     _sg_vk_set_object_label(VK_OBJECT_TYPE_BUFFER, (uint64_t)_sg.vk.stage.copy.buf, "copy-staging staging buffer");
 
-    VkMemoryRequirements mem_reqs;
-    _sg_clear(&mem_reqs, sizeof(mem_reqs));
+    _SG_STRUCT(VkMemoryRequirements, mem_reqs);
     vkGetBufferMemoryRequirements(_sg.vk.dev, _sg.vk.stage.copy.buf, &mem_reqs);
     _sg.vk.stage.copy.mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 0);
     if (0 == _sg.vk.stage.copy.mem) {
@@ -19401,8 +19387,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_discard(void) {
 
 _SOKOL_PRIVATE VkCommandBuffer _sg_vk_staging_copy_begin(void) {
     VkCommandBuffer cmd_buf = _sg.vk.stage.copy.cmd_buf;
-    VkCommandBufferBeginInfo cmdbuf_begin_info;
-    _sg_clear(&cmdbuf_begin_info, sizeof(cmdbuf_begin_info));
+    _SG_STRUCT(VkCommandBufferBeginInfo, cmdbuf_begin_info);
     cmdbuf_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     cmdbuf_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     VkResult res = vkBeginCommandBuffer(cmd_buf, &cmdbuf_begin_info);
@@ -19415,8 +19400,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_end(VkCommandBuffer cmd_buf, VkQueue que
     VkResult res;
     _SOKOL_UNUSED(res);
     vkEndCommandBuffer(cmd_buf);
-    VkSubmitInfo submit_info;
-    _sg_clear(&submit_info, sizeof(submit_info));
+    _SG_STRUCT(VkSubmitInfo, submit_info);
     submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &cmd_buf;
@@ -19461,8 +19445,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_
     const uint8_t* src_ptr = (const uint8_t*)src_data->ptr;
     uint32_t dst_size = _sg.vk.stage.copy.size;
     uint32_t bytes_remaining = (uint32_t)src_data->size;
-    VkBufferCopy region;
-    _sg_clear(&region, sizeof(region));
+    _SG_STRUCT(VkBufferCopy, region);
     region.dstOffset = dst_offset;
     while (bytes_remaining > 0) {
         uint64_t bytes_to_copy = bytes_remaining;
@@ -19523,10 +19506,8 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_im
     }
 
     VkDeviceMemory mem = _sg.vk.stage.copy.mem;
-    VkBufferImageCopy2 region;
-    _sg_clear(&region, sizeof(region));
-    VkCopyBufferToImageInfo2 copy_info;
-    _sg_clear(&copy_info, sizeof(copy_info));
+    _SG_STRUCT(VkBufferImageCopy2, region);
+    _SG_STRUCT(VkCopyBufferToImageInfo2, copy_info);
     _sg_vk_init_vk_image_staging_structs(img, _sg.vk.stage.copy.buf, &region, &copy_info);
     for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
         const uint8_t* src_ptr = (uint8_t*)src_data->mip_levels[mip_index].ptr;
@@ -19613,8 +19594,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_buffer_data(_sg_buffer_t* buf, const s
     VkCommandBuffer cmd_buf = _sg.vk.frame.stream_cmd_buf;
     VkBuffer vk_src_buf = _sg.vk.stage.stream.cur_buf;
     VkBuffer vk_dst_buf = buf->vk.buf;
-    VkBufferCopy region;
-    _sg_clear(&region, sizeof(region));
+    _SG_STRUCT(VkBufferCopy, region);
     region.srcOffset = src_offset;
     region.dstOffset = dst_offset;
     region.size = src_data->size;
@@ -19634,10 +19614,8 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_image_data(_sg_image_t* img, const sg_
     SOKOL_ASSERT(src_data);
     VkCommandBuffer cmd_buf = _sg.vk.frame.stream_cmd_buf;
     _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_STAGING);
-    VkBufferImageCopy2 region;
-    _sg_clear(&region, sizeof(region));
-    VkCopyBufferToImageInfo2 copy_info;
-    _sg_clear(&copy_info, sizeof(copy_info));
+    _SG_STRUCT(VkBufferImageCopy2, region);
+    _SG_STRUCT(VkCopyBufferToImageInfo2, copy_info);
     _sg_vk_init_vk_image_staging_structs(img, _sg.vk.stage.stream.cur_buf, &region, &copy_info);
     for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
         const sg_range* src_mip = &src_data->mip_levels[mip_index];
@@ -19736,8 +19714,7 @@ _SOKOL_PRIVATE void _sg_vk_bind_after_acquire(void) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
     SOKOL_ASSERT(_sg.vk.bind.cur_buf);
     SOKOL_ASSERT(_sg.vk.bind.cur_dev_addr);
-    VkDescriptorBufferBindingInfoEXT bind_info;
-    _sg_clear(&bind_info, sizeof(bind_info));
+    _SG_STRUCT(VkDescriptorBufferBindingInfoEXT, bind_info);
     bind_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;
     bind_info.address = _sg.vk.bind.cur_dev_addr;
     bind_info.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
@@ -20411,8 +20388,7 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
 
 _SOKOL_PRIVATE void _sg_vk_create_fences(void) {
     SOKOL_ASSERT(_sg.vk.dev);
-    VkFenceCreateInfo create_info;
-    _sg_clear(&create_info, sizeof(create_info));
+    _SG_STRUCT(VkFenceCreateInfo, create_info);
     create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
@@ -20434,8 +20410,7 @@ _SOKOL_PRIVATE void _sg_vk_destroy_fences(void) {
 _SOKOL_PRIVATE void _sg_vk_create_frame_command_pool_and_buffers(void) {
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(0 == _sg.vk.frame.cmd_pool);
-    VkCommandPoolCreateInfo pool_create_info;
-    _sg_clear(&pool_create_info, sizeof(pool_create_info));
+    _SG_STRUCT(VkCommandPoolCreateInfo, pool_create_info);
     pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     // FIXME: transient bit when the cmd buffers are reset each frame?
     pool_create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
@@ -20444,8 +20419,7 @@ _SOKOL_PRIVATE void _sg_vk_create_frame_command_pool_and_buffers(void) {
     SOKOL_ASSERT((res == VK_SUCCESS) && _sg.vk.frame.cmd_pool); _SOKOL_UNUSED(res);
 
     for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
-        VkCommandBufferAllocateInfo cmdbuf_alloc_info;
-        _sg_clear(&cmdbuf_alloc_info, sizeof(cmdbuf_alloc_info));
+        _SG_STRUCT(VkCommandBufferAllocateInfo, cmdbuf_alloc_info);
         cmdbuf_alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         cmdbuf_alloc_info.commandPool = _sg.vk.frame.cmd_pool;
         cmdbuf_alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -20503,8 +20477,7 @@ _SOKOL_PRIVATE void _sg_vk_acquire_frame_command_buffers(void) {
         res = vkResetCommandBuffer(_sg.vk.frame.stream_cmd_buf, 0);
         SOKOL_ASSERT(res == VK_SUCCESS);
 
-        VkCommandBufferBeginInfo cmdbuf_begin_info;
-        _sg_clear(&cmdbuf_begin_info, sizeof(cmdbuf_begin_info));
+        _SG_STRUCT(VkCommandBufferBeginInfo, cmdbuf_begin_info);
         cmdbuf_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         cmdbuf_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         res = vkBeginCommandBuffer(_sg.vk.frame.cmd_buf, &cmdbuf_begin_info);
@@ -20534,8 +20507,7 @@ _SOKOL_PRIVATE void _sg_vk_submit_frame_command_buffers(void) {
     res = vkEndCommandBuffer(_sg.vk.frame.cmd_buf);
     SOKOL_ASSERT(res == VK_SUCCESS);
 
-    VkSubmitInfo submit_infos[2];
-    _sg_clear(submit_infos, sizeof(submit_infos));
+    _SG_STRUCT(VkSubmitInfo, submit_infos[2]);
     // streaming-update command buffer
     submit_infos[0].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submit_infos[0].commandBufferCount = 1;
@@ -20620,8 +20592,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_buffer(_sg_buffer_t* buf, const s
 
     buf->vk.cur_access = _SG_VK_ACCESS_NONE;
 
-    VkBufferCreateInfo create_info;
-    _sg_clear(&create_info, sizeof(create_info));
+    _SG_STRUCT(VkBufferCreateInfo, create_info);
     create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     create_info.size = (VkDeviceSize)buf->cmn.size;
     create_info.usage = _sg_vk_buffer_usage(&buf->cmn.usage);
@@ -20644,8 +20615,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_buffer(_sg_buffer_t* buf, const s
         return SG_RESOURCESTATE_FAILED;
     }
     if (buf->cmn.usage.storage_buffer) {
-        VkBufferDeviceAddressInfo addr_info;
-        _sg_clear(&addr_info, sizeof(addr_info));
+        _SG_STRUCT(VkBufferDeviceAddressInfo, addr_info);
         addr_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
         addr_info.buffer = buf->vk.buf;
         buf->vk.dev_addr = vkGetBufferDeviceAddress(_sg.vk.dev, &addr_info);
@@ -20677,8 +20647,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_image(_sg_image_t* img, const sg_
 
     img->vk.cur_access = _SG_VK_ACCESS_NONE;
 
-    VkImageCreateInfo create_info;
-    _sg_clear(&create_info, sizeof(create_info));
+    _SG_STRUCT(VkImageCreateInfo, create_info);
     create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     create_info.flags = _sg_vk_image_create_flags(img->cmn.type);
     create_info.imageType = _sg_vk_image_type(img->cmn.type);
@@ -20741,8 +20710,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_sampler(_sg_sampler_t* smp, const
     // FIXME: injection
 
     // create sampler object
-    VkSamplerCreateInfo create_info;
-    _sg_clear(&create_info, sizeof(create_info));
+    _SG_STRUCT(VkSamplerCreateInfo, create_info);
     create_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     create_info.magFilter = _sg_vk_sampler_minmag_filter(desc->mag_filter);
     create_info.minFilter = _sg_vk_sampler_minmag_filter(desc->min_filter);
@@ -20776,8 +20744,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_sampler(_sg_sampler_t* smp, const
         _SG_ERROR(VULKAN_SAMPLER_MAX_DESCRIPTOR_SIZE);
         return SG_RESOURCESTATE_FAILED;
     }
-    VkDescriptorGetInfoEXT get_info;
-    _sg_clear(&get_info, sizeof(get_info));
+    _SG_STRUCT(VkDescriptorGetInfoEXT, get_info);
     get_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
     get_info.type = VK_DESCRIPTOR_TYPE_SAMPLER;
     get_info.data.pSampler = &smp->vk.smp;
@@ -20800,12 +20767,10 @@ _SOKOL_PRIVATE _sg_vk_shader_func_t _sg_vk_create_shader_func(const sg_shader_fu
     SOKOL_ASSERT(func->bytecode.ptr && (func->bytecode.size > 0));
     SOKOL_ASSERT(func->entry);
 
-    _sg_vk_shader_func_t vk_func;
-    _sg_clear(&vk_func, sizeof(vk_func));
+    _SG_STRUCT(_sg_vk_shader_func_t, vk_func);
     _sg_strcpy(&vk_func.entry, func->entry);
 
-    VkShaderModuleCreateInfo create_info;
-    _sg_clear(&create_info, sizeof(create_info));
+    _SG_STRUCT(VkShaderModuleCreateInfo, create_info);
     create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     create_info.codeSize = func->bytecode.size;
     create_info.pCode = (uint32_t*)func->bytecode.ptr;
@@ -20908,10 +20873,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
 
     // descriptor set layouts and pipeline layout
     VkResult res;
-    VkDescriptorSetLayoutBinding dsl_entries[_SG_VK_MAX_VIEW_SMP_DESCRIPTORSET_ENTRIES];
-    _sg_clear(dsl_entries, sizeof(dsl_entries));
-    VkDescriptorSetLayoutCreateInfo dsl_create_info;
-    _sg_clear(&dsl_create_info, sizeof(dsl_create_info));
+    _SG_STRUCT(VkDescriptorSetLayoutBinding, dsl_entries[_SG_VK_MAX_VIEW_SMP_DESCRIPTORSET_ENTRIES]);
+    _SG_STRUCT(VkDescriptorSetLayoutCreateInfo, dsl_create_info);
     size_t dsl_index = 0;
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
         if (shd->cmn.uniform_blocks[i].stage == SG_SHADERSTAGE_NONE) {
@@ -21021,8 +20984,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
         shd->vk.ub_dsl,
         shd->vk.view_smp_dsl,
     };
-    VkPipelineLayoutCreateInfo pl_create_info;
-    _sg_clear(&pl_create_info, sizeof(pl_create_info));
+    _SG_STRUCT(VkPipelineLayoutCreateInfo, pl_create_info);
     pl_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pl_create_info.setLayoutCount = _SG_VK_NUM_DESCRIPTORSETS;
     pl_create_info.pSetLayouts = set_layouts;
@@ -21063,8 +21025,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
     SOKOL_ASSERT(shd->vk.pip_layout);
     if (pip->cmn.is_compute) {
         SOKOL_ASSERT(shd->vk.compute_func.module);
-        VkComputePipelineCreateInfo pip_create_info;
-        _sg_clear(&pip_create_info, sizeof(pip_create_info));
+        _SG_STRUCT(VkComputePipelineCreateInfo, pip_create_info);
         pip_create_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
         pip_create_info.flags = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
         pip_create_info.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -21079,8 +21040,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
         }
     } else {
         uint32_t num_stages = 0;
-        VkPipelineShaderStageCreateInfo stages[2];
-        _sg_clear(&stages, sizeof(stages));
+        _SG_STRUCT(VkPipelineShaderStageCreateInfo, stages[2]);
         if (shd->vk.vertex_func.module) {
             stages[num_stages].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
             stages[num_stages].stage = VK_SHADER_STAGE_VERTEX_BIT;
@@ -21097,8 +21057,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
         }
 
         uint32_t num_vtx_bnds = 0;
-        VkVertexInputBindingDescription vtx_bnds[SG_MAX_VERTEXBUFFER_BINDSLOTS];
-        _sg_clear(vtx_bnds, sizeof(vtx_bnds));
+        _SG_STRUCT(VkVertexInputBindingDescription, vtx_bnds[SG_MAX_VERTEXBUFFER_BINDSLOTS]);
         for (uint32_t vbl_idx = 0; vbl_idx < SG_MAX_VERTEXBUFFER_BINDSLOTS; vbl_idx++, num_vtx_bnds++) {
             const sg_vertex_buffer_layout_state* vbl_state = &desc->layout.buffers[vbl_idx];
             if (0 == vbl_state->stride) {
@@ -21110,8 +21069,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
         }
 
         uint32_t num_vtx_attrs = 0;
-        VkVertexInputAttributeDescription vtx_attrs[SG_MAX_VERTEX_ATTRIBUTES];
-        _sg_clear(vtx_attrs, sizeof(vtx_attrs));
+        _SG_STRUCT(VkVertexInputAttributeDescription, vtx_attrs[SG_MAX_VERTEX_ATTRIBUTES]);
         for (uint32_t va_idx = 0; va_idx < SG_MAX_VERTEX_ATTRIBUTES; va_idx++, num_vtx_attrs++) {
             const sg_vertex_attr_state* va_state = &desc->layout.attrs[va_idx];
             if (SG_VERTEXFORMAT_INVALID == va_state->format) {
@@ -21126,28 +21084,24 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
             vtx_attrs[va_idx].offset = (uint32_t)va_state->offset;
         }
 
-        VkPipelineVertexInputStateCreateInfo vi_state;
-        _sg_clear(&vi_state, sizeof(vi_state));
+        _SG_STRUCT(VkPipelineVertexInputStateCreateInfo, vi_state);
         vi_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         vi_state.vertexBindingDescriptionCount = num_vtx_bnds;
         vi_state.pVertexBindingDescriptions = vtx_bnds;
         vi_state.vertexAttributeDescriptionCount = num_vtx_attrs;
         vi_state.pVertexAttributeDescriptions = vtx_attrs;
 
-        VkPipelineInputAssemblyStateCreateInfo ia_state;
-        _sg_clear(&ia_state, sizeof(ia_state));
+        _SG_STRUCT(VkPipelineInputAssemblyStateCreateInfo, ia_state);
         ia_state.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
         ia_state.topology = _sg_vk_primitive_topology(desc->primitive_type);
         ia_state.primitiveRestartEnable = VK_FALSE; // FIXME: needs 'primitiveTopologyRestart feature enabled'
 
-        VkPipelineViewportStateCreateInfo vp_state;
-        _sg_clear(&vp_state, sizeof(vp_state));
+        _SG_STRUCT(VkPipelineViewportStateCreateInfo, vp_state);
         vp_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
         vp_state.viewportCount = 1;
         vp_state.scissorCount = 1;
 
-        VkPipelineRasterizationStateCreateInfo rs_state;
-        _sg_clear(&rs_state, sizeof(rs_state));
+        _SG_STRUCT(VkPipelineRasterizationStateCreateInfo, rs_state);
         rs_state.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
         rs_state.depthClampEnable = false;
         rs_state.rasterizerDiscardEnable = false;
@@ -21160,14 +21114,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
         rs_state.depthBiasSlopeFactor = desc->depth.bias_slope_scale;
         rs_state.lineWidth = 1.0f;
 
-        VkPipelineMultisampleStateCreateInfo ms_state;
-        _sg_clear(&ms_state, sizeof(ms_state));
+        _SG_STRUCT(VkPipelineMultisampleStateCreateInfo, ms_state);
         ms_state.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms_state.rasterizationSamples = (VkSampleCountFlagBits)desc->sample_count;
         ms_state.alphaToCoverageEnable = desc->alpha_to_coverage_enabled;
 
-        VkPipelineDepthStencilStateCreateInfo ds_state;
-        _sg_clear(&ds_state, sizeof(ds_state));
+        _SG_STRUCT(VkPipelineDepthStencilStateCreateInfo, ds_state);
         ds_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         ds_state.depthTestEnable = desc->depth.compare != SG_COMPAREFUNC_ALWAYS;
         ds_state.depthWriteEnable = desc->depth.write_enabled;
@@ -21189,8 +21141,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
         ds_state.back.writeMask = desc->stencil.write_mask;
         ds_state.back.reference = desc->stencil.ref;
 
-        VkPipelineColorBlendAttachmentState att_states[SG_MAX_COLOR_ATTACHMENTS];
-        _sg_clear(att_states, sizeof(att_states));
+        _SG_STRUCT(VkPipelineColorBlendAttachmentState, att_states[SG_MAX_COLOR_ATTACHMENTS]);
         SOKOL_ASSERT(desc->color_count < SG_MAX_COLOR_ATTACHMENTS);
         for (int i = 0; i < desc->color_count; i++) {
             att_states[i].blendEnable = desc->colors[i].blend.enabled;
@@ -21203,8 +21154,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
             att_states[i].colorWriteMask = _sg_vk_color_write_mask(desc->colors[i].write_mask);
         }
 
-        VkPipelineColorBlendStateCreateInfo cb_state;
-        _sg_clear(&cb_state, sizeof(cb_state));
+        _SG_STRUCT(VkPipelineColorBlendStateCreateInfo, cb_state);
         cb_state.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cb_state.logicOpEnable = false;
         cb_state.attachmentCount = (uint32_t)desc->color_count;
@@ -21214,14 +21164,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
         cb_state.blendConstants[2] = desc->blend_color.b;
         cb_state.blendConstants[3] = desc->blend_color.a;
 
-        VkFormat color_formats[SG_MAX_COLOR_ATTACHMENTS];
-        _sg_clear(color_formats, sizeof(color_formats));
+        _SG_STRUCT(VkFormat, color_formats[SG_MAX_COLOR_ATTACHMENTS]);
         SOKOL_ASSERT(desc->color_count <= SG_MAX_COLOR_ATTACHMENTS);
         for (int i = 0; i < desc->color_count; i++) {
             color_formats[i] = _sg_vk_format(desc->colors[i].pixel_format);
         }
-        VkPipelineRenderingCreateInfo rnd_state;
-        _sg_clear(&rnd_state, sizeof(rnd_state));
+        _SG_STRUCT(VkPipelineRenderingCreateInfo, rnd_state);
         rnd_state.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
         rnd_state.colorAttachmentCount = (uint32_t)desc->color_count;
         rnd_state.pColorAttachmentFormats = color_formats;
@@ -21235,14 +21183,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR,
         };
-        VkPipelineDynamicStateCreateInfo dyn_state;
-        _sg_clear(&dyn_state, sizeof(dyn_state));
+        _SG_STRUCT(VkPipelineDynamicStateCreateInfo, dyn_state);
         dyn_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
         dyn_state.dynamicStateCount = 2;
         dyn_state.pDynamicStates = dyn_states;
 
-        VkGraphicsPipelineCreateInfo pip_create_info;
-        _sg_clear(&pip_create_info, sizeof(pip_create_info));
+        _SG_STRUCT(VkGraphicsPipelineCreateInfo, pip_create_info);
         pip_create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pip_create_info.pNext = &rnd_state;
         pip_create_info.flags = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
@@ -21282,8 +21228,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_view(_sg_view_t* view, const sg_v
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(0 == view->vk.img_view);
     VkResult res;
-    VkDescriptorGetInfoEXT get_info;
-    _sg_clear(&get_info, sizeof(get_info));
+    _SG_STRUCT(VkDescriptorGetInfoEXT, get_info);
     get_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
     if (view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
         // record descriptor data for storage buffer
@@ -21294,8 +21239,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_view(_sg_view_t* view, const sg_v
         }
         const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
         SOKOL_ASSERT(buf->vk.dev_addr);
-        VkDescriptorAddressInfoEXT addr_info;
-        _sg_clear(&addr_info, sizeof(addr_info));
+        _SG_STRUCT(VkDescriptorAddressInfoEXT, addr_info);
         addr_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT;
         addr_info.address = buf->vk.dev_addr + (VkDeviceSize)view->cmn.buf.offset;
         addr_info.range = (VkDeviceSize)(buf->cmn.size - view->cmn.buf.offset);
@@ -21308,8 +21252,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_view(_sg_view_t* view, const sg_v
         SOKOL_ASSERT(img->vk.img);
         SOKOL_ASSERT(view->cmn.img.mip_level_count >= 1);
         SOKOL_ASSERT(view->cmn.img.slice_count >= 1);
-        VkImageViewCreateInfo create_info;
-        _sg_clear(&create_info, sizeof(create_info));
+        _SG_STRUCT(VkImageViewCreateInfo, create_info);
         create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         create_info.image = img->vk.img;
         if (view->cmn.type == SG_VIEWTYPE_TEXTURE) {
@@ -21342,8 +21285,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_view(_sg_view_t* view, const sg_v
 
         // record descriptor data for storage images and textures
         if ((view->cmn.type == SG_VIEWTYPE_STORAGEIMAGE) || (view->cmn.type == SG_VIEWTYPE_TEXTURE)) {
-            VkDescriptorImageInfo img_info;
-            _sg_clear(&img_info, sizeof(img_info));
+            _SG_STRUCT(VkDescriptorImageInfo, img_info);
             img_info.imageView = view->vk.img_view;
             if (view->cmn.type == SG_VIEWTYPE_STORAGEIMAGE) {
                 view->vk.descriptor_size = _sg.vk.descriptor_buffer_props.storageImageDescriptorSize;
@@ -21376,8 +21318,7 @@ _SOKOL_PRIVATE void _sg_vk_discard_view(_sg_view_t* view) {
 
 _SOKOL_PRIVATE void _sg_vk_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
-    VkViewport vp;
-    _sg_clear(&vp, sizeof(vp));
+    _SG_STRUCT(VkViewport, vp);
     vp.x = (float) x;
     vp.width = (float) w;
     vp.height = (float) -h;
@@ -21393,8 +21334,7 @@ _SOKOL_PRIVATE void _sg_vk_apply_viewport(int x, int y, int w, int h, bool origi
 _SOKOL_PRIVATE void _sg_vk_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
     const _sg_recti_t clip = _sg_clipi(x, y, w, h, _sg.cur_pass.dim.width, _sg.cur_pass.dim.height);
-    VkRect2D rect;
-    _sg_clear(&rect, sizeof(rect));
+    _SG_STRUCT(VkRect2D, rect);
     rect.offset.x = clip.x;
     rect.offset.y = (origin_top_left ? clip.y : (_sg.cur_pass.dim.height - (clip.y + clip.h)));
     rect.extent.width = (uint32_t) clip.w;
@@ -21452,14 +21392,10 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(VkCommandBuffer cmd_buf, const sg_p
     const sg_pass_action* action = &pass->action;
     const bool is_swapchain_pass = atts->empty;
 
-    VkRenderingAttachmentInfo color_att_infos[SG_MAX_COLOR_ATTACHMENTS];
-    _sg_clear(color_att_infos, sizeof(color_att_infos));
-    VkRenderingAttachmentInfo depth_att_info;
-    _sg_clear(&depth_att_info, sizeof(depth_att_info));
-    VkRenderingAttachmentInfo stencil_att_info;
-    _sg_clear(&stencil_att_info, sizeof(stencil_att_info));
-    VkRenderingInfo render_info;
-    _sg_clear(&render_info, sizeof(render_info));
+    _SG_STRUCT(VkRenderingAttachmentInfo, color_att_infos[SG_MAX_COLOR_ATTACHMENTS]);
+    _SG_STRUCT(VkRenderingAttachmentInfo, depth_att_info);
+    _SG_STRUCT(VkRenderingAttachmentInfo, stencil_att_info);
+    _SG_STRUCT(VkRenderingInfo, render_info);
     render_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
     render_info.renderArea.extent.width = (uint32_t)_sg.cur_pass.dim.width;
     render_info.renderArea.extent.height = (uint32_t)_sg.cur_pass.dim.height;
@@ -21528,16 +21464,14 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(VkCommandBuffer cmd_buf, const sg_p
     }
     vkCmdBeginRendering(cmd_buf, &render_info);
 
-    VkViewport vp;
-    _sg_clear(&vp, sizeof(vp));
+    _SG_STRUCT(VkViewport, vp);
     vp.y = _sg.cur_pass.dim.height;
     vp.width = (float)_sg.cur_pass.dim.width;
     vp.height = (float)-_sg.cur_pass.dim.height;
     vp.maxDepth = 1.0f;
     vkCmdSetViewport(_sg.vk.frame.cmd_buf, 0, 1, &vp);
 
-    VkRect2D rect;
-    _sg_clear(&rect, sizeof(rect));
+    _SG_STRUCT(VkRect2D, rect);
     rect.extent.width = (uint32_t)_sg.cur_pass.dim.width;
     rect.extent.height = (uint32_t)_sg.cur_pass.dim.height;
     vkCmdSetScissor(_sg.vk.frame.cmd_buf, 0, 1, &rect);
