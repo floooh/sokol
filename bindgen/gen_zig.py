@@ -13,38 +13,40 @@ import textwrap
 import gen_util as util
 
 module_names = {
-    'slog_':    'log',
-    'sg_':      'gfx',
-    'sapp_':    'app',
-    'stm_':     'time',
-    'saudio_':  'audio',
-    'sgl_':     'gl',
-    'sdtx_':    'debugtext',
-    'sshape_':  'shape',
-    'sglue_':   'glue',
-    'sfetch_':  'fetch',
-    'simgui_':  'imgui',
+    'slog_':     'log',
+    'sg_':       'gfx',
+    'sapp_':     'app',
+    'stm_':      'time',
+    'saudio_':   'audio',
+    'sgl_':      'gl',
+    'sdtx_':     'debugtext',
+    'sshape_':   'shape',
+    'sglue_':    'glue',
+    'sfetch_':   'fetch',
+    'simgui_':   'imgui',
+    'sgimgui_':  'sgimgui',
 }
 
 c_source_paths = {
-    'slog_':    'sokol-zig/src/sokol/c/sokol_log.c',
-    'sg_':      'sokol-zig/src/sokol/c/sokol_gfx.c',
-    'sapp_':    'sokol-zig/src/sokol/c/sokol_app.c',
-    'stm_':     'sokol-zig/src/sokol/c/sokol_time.c',
-    'saudio_':  'sokol-zig/src/sokol/c/sokol_audio.c',
-    'sgl_':     'sokol-zig/src/sokol/c/sokol_gl.c',
-    'sdtx_':    'sokol-zig/src/sokol/c/sokol_debugtext.c',
-    'sshape_':  'sokol-zig/src/sokol/c/sokol_shape.c',
-    'sglue_':   'sokol-zig/src/sokol/c/sokol_glue.c',
-    'sfetch_':  'sokol-zig/src/sokol/c/sokol_fetch.c',
-    'simgui_':  'sokol-zig/src/sokol/c/sokol_imgui.c',
+    'slog_':     'sokol-zig/src/sokol/c/sokol_log.c',
+    'sg_':       'sokol-zig/src/sokol/c/sokol_gfx.c',
+    'sapp_':     'sokol-zig/src/sokol/c/sokol_app.c',
+    'stm_':      'sokol-zig/src/sokol/c/sokol_time.c',
+    'saudio_':   'sokol-zig/src/sokol/c/sokol_audio.c',
+    'sgl_':      'sokol-zig/src/sokol/c/sokol_gl.c',
+    'sdtx_':     'sokol-zig/src/sokol/c/sokol_debugtext.c',
+    'sshape_':   'sokol-zig/src/sokol/c/sokol_shape.c',
+    'sglue_':    'sokol-zig/src/sokol/c/sokol_glue.c',
+    'sfetch_':   'sokol-zig/src/sokol/c/sokol_fetch.c',
+    'simgui_':   'sokol-zig/src/sokol/c/sokol_imgui.c',
+    'sgimgui_':  'sokol-zig/src/sokol/c/sokol_gfx_imgui.c',
 }
 
 ignores = [
     'sdtx_printf',
     'sdtx_vprintf',
-    'sg_install_trace_hooks',
-    'sg_trace_hooks',
+    # 'sg_install_trace_hooks',
+    # 'sg_trace_hooks',
 ]
 
 # functions that need to be exposed as 'raw' C callbacks without a Zig wrapper function
@@ -65,8 +67,9 @@ overrides = {
     'sshape_element_range_t.num_elements':  'uint32_t',
     'sdtx_font.font_index':                 'uint32_t',
     'SGL_NO_ERROR':                         'SGL_ERROR_NO_ERROR',
-    'sfetch_continue':                      'continue_fetching',  # 'continue' is reserved in Zig
-    'sfetch_desc':                          'sfetch_get_desc'     # 'desc' shadowed by earlier definition
+    'sfetch_continue':                      'continue_fetching',    # 'continue' is reserved in Zig
+    'sfetch_desc':                          'sfetch_get_desc',      # 'desc' shadowed by earlier definition
+    'sgimgui_t':                            'sgimgui_imgui_debug_t' # 'sgimgui_t' becomes '' without this.
 }
 
 prim_types = {
@@ -89,6 +92,7 @@ prim_types = {
 }
 
 prim_defaults = {
+    'char':         '0',
     'int':          '0',
     'bool':         'false',
     'int8_t':       '0',
@@ -205,6 +209,12 @@ def is_const_struct_ptr(s):
             return True
     return False
 
+def is_struct_ptr(s):
+    for struct_type in struct_types:
+        if s == f"{struct_type} *":
+            return True
+    return False
+
 def type_default_value(s):
     return prim_defaults[s]
 
@@ -214,7 +224,7 @@ def as_c_arg_type(arg_type, prefix):
     elif is_prim_type(arg_type):
         return as_zig_prim_type(arg_type)
     elif is_struct_type(arg_type):
-        return as_zig_struct_type(arg_type, prefix)
+        return as_zig_struct_type(check_override(arg_type), prefix)
     elif is_enum_type(arg_type):
         return as_zig_enum_type(arg_type, prefix)
     elif util.is_void_ptr(arg_type):
@@ -225,6 +235,8 @@ def as_c_arg_type(arg_type, prefix):
         return "[*c]const u8"
     elif is_const_struct_ptr(arg_type):
         return f"[*c]const {as_zig_struct_type(util.extract_ptr_type(arg_type), prefix)}"
+    elif is_struct_ptr(arg_type):
+        return f"*{as_zig_struct_type(check_override(util.extract_ptr_type(arg_type)), prefix)}"
     elif is_prim_ptr(arg_type):
         return f"[*c]{as_zig_prim_type(util.extract_ptr_type(arg_type))}"
     elif is_const_prim_ptr(arg_type):
@@ -255,6 +267,8 @@ def as_zig_arg_type(arg_prefix, arg_type, prefix):
     elif is_const_struct_ptr(arg_type):
         # not a bug, pass const structs by value
         return pre + f"{as_zig_struct_type(util.extract_ptr_type(arg_type), prefix)}"
+    elif is_struct_ptr(arg_type):
+        return pre + f"*{as_zig_struct_type(check_override(util.extract_ptr_type(arg_type)), prefix)}"
     elif is_prim_ptr(arg_type):
         return pre + f"*{as_zig_prim_type(util.extract_ptr_type(arg_type))}"
     elif is_const_prim_ptr(arg_type):
@@ -341,6 +355,8 @@ def gen_struct(decl, prefix):
             l(f"    {field_name}: {as_zig_prim_type(field_type)} = {type_default_value(field_type)},")
         elif is_struct_type(field_type):
             l(f"    {field_name}: {as_zig_struct_type(field_type, prefix)} = .{{}},")
+        elif is_struct_ptr(field_type):
+            l(f"    {field_name}: *{as_zig_struct_type(util.extract_ptr_type(field_type), prefix)} = undefined,")
         elif is_enum_type(field_type):
             l(f"    {field_name}: {as_zig_enum_type(field_type, prefix)} = .{enum_default_item(field_type)},")
         elif util.is_string_ptr(field_type):
@@ -351,6 +367,8 @@ def gen_struct(decl, prefix):
             l(f"    {field_name}: ?*anyopaque = null,")
         elif is_const_prim_ptr(field_type):
             l(f"    {field_name}: ?[*]const {as_zig_prim_type(util.extract_ptr_type(field_type))} = null,")
+        elif is_prim_ptr(field_type):
+            l(f"    {field_name}: *{as_zig_prim_type(util.extract_ptr_type(field_type))} = undefined,")
         elif util.is_func_ptr(field_type):
             l(f"    {field_name}: ?*const fn ({funcptr_args_c(field_type, prefix)}) callconv(.c) {funcptr_result_c(field_type)} = null,")
         elif util.is_1d_array_type(field_type):
