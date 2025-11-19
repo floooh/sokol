@@ -2257,6 +2257,12 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #define _sapp_def(val, def) (((val) == 0) ? (def) : (val))
 #define _sapp_absf(a) (((a)<0.0f)?-(a):(a))
 
+#ifdef __cplusplus
+#define _SAPP_STRUCT(TYPE, NAME) TYPE NAME = {}
+#else
+#define _SAPP_STRUCT(TYPE, NAME) TYPE NAME = {0}
+#endif
+
 #define _SAPP_MAX_TITLE_LENGTH (128)
 #define _SAPP_FALLBACK_DEFAULT_WINDOW_WIDTH (640)
 #define _SAPP_FALLBACK_DEFAULT_WINDOW_HEIGHT (480)
@@ -4256,60 +4262,29 @@ _SOKOL_PRIVATE void _sapp_wgpu_frame(void) {
 #if defined(SOKOL_VULKAN)
 
 #if defined(__cplusplus)
-#define _SAPP_VK_ZERO_COUNT_AND_ARRAY(num, type, count_name, array_name) uint32_t count_name = 0; type array_name[num] = {};
-#define _SAPP_VK_MAX_COUNT_AND_ARRAY(num, type, count_name, array_name) uint32_t count_name = num; type array_name[num] = {};
+#define _SAPP_VK_ZERO_COUNT_AND_ARRAY(num, type, count_name, array_name) uint32_t count_name = 0; type array_name[num] = {}
+#define _SAPP_VK_MAX_COUNT_AND_ARRAY(num, type, count_name, array_name) uint32_t count_name = num; type array_name[num] = {}
 #else
-#define _SAPP_VK_ZERO_COUNT_AND_ARRAY(num, type, count_name, array_name) uint32_t count_name = 0; type array_name[num] = {0};
-#define _SAPP_VK_MAX_COUNT_AND_ARRAY(num, type, count_name, array_name) uint32_t count_name = num; type array_name[num] = {0};
+#define _SAPP_VK_ZERO_COUNT_AND_ARRAY(num, type, count_name, array_name) uint32_t count_name = 0; type array_name[num] = {0}
+#define _SAPP_VK_MAX_COUNT_AND_ARRAY(num, type, count_name, array_name) uint32_t count_name = num; type array_name[num] = {0}
 #endif
 
 _SOKOL_PRIVATE int _sapp_vk_mem_find_memory_type_index(uint32_t type_filter, VkMemoryPropertyFlags props) {
     SOKOL_ASSERT(_sapp.vk.physical_device);
-    VkPhysicalDeviceMemoryProperties mem_props;
-    _sapp_clear(&mem_props, sizeof(mem_props));
+    _SAPP_STRUCT(VkPhysicalDeviceMemoryProperties, mem_props);
     vkGetPhysicalDeviceMemoryProperties(_sapp.vk.physical_device, &mem_props);
-    for (int i = 0; i < (int)mem_props.memoryTypeCount; i++) {
+    for (uint32_t i = 0; i < mem_props.memoryTypeCount; i++) {
         if ((type_filter & (1 << i)) && ((mem_props.memoryTypes[i].propertyFlags & props) == props)) {
-            return i;
+            return (int)i;
         }
     }
     return -1;
 }
 
-_SOKOL_PRIVATE VkDeviceMemory _sapp_vk_mem_alloc_device_memory(const VkMemoryRequirements* mem_reqs, VkMemoryPropertyFlags mem_props) {
-    SOKOL_ASSERT(_sapp.vk.device);
-    SOKOL_ASSERT(mem_reqs && (mem_props != 0));
-    int mem_type_index = _sapp_vk_mem_find_memory_type_index(mem_reqs->memoryTypeBits, mem_props);
-    if (-1 == mem_type_index) {
-        _SAPP_ERROR(VULKAN_ALLOC_DEVICE_MEMORY_NO_SUITABLE_MEMORY_TYPE);
-        return 0;
-    }
-    VkMemoryAllocateInfo alloc_info;
-    _sapp_clear(&alloc_info, sizeof(alloc_info));
-    alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    alloc_info.allocationSize = mem_reqs->size;
-    alloc_info.memoryTypeIndex = (uint32_t) mem_type_index;
-    VkDeviceMemory vk_dev_mem = 0;
-    VkResult res = vkAllocateMemory(_sapp.vk.device, &alloc_info, 0, &vk_dev_mem);
-    if (res != VK_SUCCESS) {
-        _SAPP_ERROR(VULKAN_ALLOCATE_MEMORY_FAILED);
-        return 0;
-    }
-    SOKOL_ASSERT(vk_dev_mem);
-    return vk_dev_mem;
-}
-
-_SOKOL_PRIVATE void _sapp_vk_mem_free_device_memory(VkDeviceMemory vk_dev_mem) {
-    SOKOL_ASSERT(_sapp.vk.device);
-    SOKOL_ASSERT(vk_dev_mem);
-    vkFreeMemory(_sapp.vk.device, vk_dev_mem, 0);
-}
-
 _SOKOL_PRIVATE void _sapp_vk_create_instance(void) {
     SOKOL_ASSERT(0 == _sapp.vk.instance);
 
-    VkApplicationInfo app_info;
-    _sapp_clear(&app_info, sizeof(app_info));
+    _SAPP_STRUCT(VkApplicationInfo, app_info);
     app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     app_info.pApplicationName = "sokol-app"; // FIXME: override via sapp_desc?
     app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -4323,15 +4298,14 @@ _SOKOL_PRIVATE void _sapp_vk_create_instance(void) {
         SOKOL_ASSERT(layer_count <= 32);
     #endif
 
-    _SAPP_VK_ZERO_COUNT_AND_ARRAY(32, const char*, ext_count, ext_names)
+    _SAPP_VK_ZERO_COUNT_AND_ARRAY(32, const char*, ext_count, ext_names);
     ext_names[ext_count++] = VK_KHR_SURFACE_EXTENSION_NAME;
     #if defined(VK_USE_PLATFORM_XLIB_KHR)
         ext_names[ext_count++] = VK_KHR_XLIB_SURFACE_EXTENSION_NAME;
     #endif
     SOKOL_ASSERT(ext_count <= 32);
 
-    VkInstanceCreateInfo create_info;
-    _sapp_clear(&create_info, sizeof(create_info));
+    _SAPP_STRUCT(VkInstanceCreateInfo, create_info);
     create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     create_info.flags = 0;
     create_info.pApplicationInfo = &app_info;
@@ -4397,7 +4371,7 @@ _SOKOL_PRIVATE void _sapp_vk_pick_physical_device(void) {
     SOKOL_ASSERT(0 == _sapp.vk.physical_device);
     VkResult res = VK_SUCCESS;
 
-    _SAPP_VK_MAX_COUNT_AND_ARRAY(8, VkPhysicalDevice, physical_device_count, physical_devices)
+    _SAPP_VK_MAX_COUNT_AND_ARRAY(8, VkPhysicalDevice, physical_device_count, physical_devices);
     res = vkEnumeratePhysicalDevices(_sapp.vk.instance, &physical_device_count, physical_devices);
     if ((res != VK_SUCCESS) && (res != VK_INCOMPLETE)) {
         _SAPP_PANIC(VULKAN_ENUMERATE_PHYSICAL_DEVICES_FAILED);
@@ -4411,20 +4385,16 @@ _SOKOL_PRIVATE void _sapp_vk_pick_physical_device(void) {
     VkPhysicalDevice pdev = 0;
     for (uint32_t pdev_idx = 0; pdev_idx < physical_device_count; pdev_idx++) {
         pdev = physical_devices[pdev_idx];
-        VkPhysicalDeviceProperties dev_props;
-        _sapp_clear(&dev_props, sizeof(dev_props));
-
+        _SAPP_STRUCT(VkPhysicalDeviceProperties, dev_props);
         vkGetPhysicalDeviceProperties(pdev, &dev_props);
         if (dev_props.apiVersion < VK_API_VERSION_1_3) {
             continue;
         }
-
         if (!_sapp_vk_check_device_extensions(pdev, ext_names, ext_count)) {
             continue;
         }
-
         // FIXME: handle theoretical case where graphics and present aren't supported by the same queue family index
-        _SAPP_VK_MAX_COUNT_AND_ARRAY(8, VkQueueFamilyProperties, queue_family_props_count, queue_family_props)
+        _SAPP_VK_MAX_COUNT_AND_ARRAY(8, VkQueueFamilyProperties, queue_family_props_count, queue_family_props);
         vkGetPhysicalDeviceQueueFamilyProperties(pdev, &queue_family_props_count, queue_family_props);
         bool has_required_queues = false;
         const VkQueueFlags required_flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
@@ -4462,8 +4432,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
     SOKOL_ASSERT(0 == _sapp.vk.device);
 
     const float queue_priority = 0.0f;
-    VkDeviceQueueCreateInfo queue_create_info;
-    _sapp_clear(&queue_create_info, sizeof(queue_create_info));
+    _SAPP_STRUCT(VkDeviceQueueCreateInfo, queue_create_info);
     queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     queue_create_info.queueFamilyIndex = _sapp.vk.queue_family_index;
     queue_create_info.queueCount = 1;
@@ -4472,37 +4441,31 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
     _SAPP_VK_ZERO_COUNT_AND_ARRAY(32, const char*, ext_count, ext_names);
     ext_count = _sapp_vk_required_device_extensions(ext_names, 32);
 
-    VkPhysicalDeviceFeatures2 supports;
-    _sapp_clear(&supports, sizeof(supports));
+    _SAPP_STRUCT(VkPhysicalDeviceFeatures2, supports);
     supports.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     vkGetPhysicalDeviceFeatures2(_sapp.vk.physical_device, &supports);
 
-    VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptor_buffer_features;
-    _sapp_clear(&descriptor_buffer_features, sizeof(descriptor_buffer_features));
+    _SAPP_STRUCT(VkPhysicalDeviceDescriptorBufferFeaturesEXT, descriptor_buffer_features);
     descriptor_buffer_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT;
     descriptor_buffer_features.descriptorBuffer = VK_TRUE;
 
-    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT xds_features;
-    _sapp_clear(&xds_features, sizeof(xds_features));
+    _SAPP_STRUCT(VkPhysicalDeviceExtendedDynamicStateFeaturesEXT, xds_features);
     xds_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
     xds_features.pNext = &descriptor_buffer_features;
     xds_features.extendedDynamicState = VK_TRUE;
 
-    VkPhysicalDeviceVulkan12Features vk12_features;
-    _sapp_clear(&vk12_features, sizeof(vk12_features));
+    _SAPP_STRUCT(VkPhysicalDeviceVulkan12Features, vk12_features);
     vk12_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
     vk12_features.pNext = &xds_features;
     vk12_features.bufferDeviceAddress = VK_TRUE;
 
-    VkPhysicalDeviceVulkan13Features vk13_features;
-    _sapp_clear(&vk13_features, sizeof(vk13_features));
+    _SAPP_STRUCT(VkPhysicalDeviceVulkan13Features, vk13_features);
     vk13_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
     vk13_features.pNext = &vk12_features;
     vk13_features.dynamicRendering = VK_TRUE;
     vk13_features.synchronization2 = VK_TRUE;
 
-    VkPhysicalDeviceFeatures2 required;
-    _sapp_clear(&required, sizeof(required));
+    _SAPP_STRUCT(VkPhysicalDeviceFeatures2,  required);
     required.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     required.pNext = &vk13_features;
     required.features.samplerAnisotropy = VK_TRUE;
@@ -4515,8 +4478,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
     if (supports.features.textureCompressionASTC_LDR) {
         required.features.textureCompressionASTC_LDR = VK_TRUE;
     }
-    VkDeviceCreateInfo dev_create_info;
-    _sapp_clear(&dev_create_info, sizeof(dev_create_info));
+    _SAPP_STRUCT(VkDeviceCreateInfo, dev_create_info);
     dev_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     dev_create_info.pNext = &required;
     dev_create_info.queueCreateInfoCount = 1;
@@ -4561,8 +4523,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_surface(void) {
     VkResult res = VK_SUCCESS;
 
     #if defined(_SAPP_LINUX)
-        VkXlibSurfaceCreateInfoKHR xlib_info;
-        _sapp_clear(&xlib_info, sizeof(xlib_info));
+        _SAPP_STRUCT(VkXlibSurfaceCreateInfoKHR, xlib_info);
         xlib_info.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
         xlib_info.dpy = _sapp.x11.display;
         xlib_info.window = _sapp.x11.window;
@@ -4605,8 +4566,7 @@ _SOKOL_PRIVATE VkSurfaceFormatKHR _sapp_vk_pick_surface_format(void) {
 
 _SOKOL_PRIVATE void _sapp_vk_create_sync_objects(void) {
     SOKOL_ASSERT(_sapp.vk.device);
-    VkSemaphoreCreateInfo create_info;
-    _sapp_clear(&create_info, sizeof(create_info));
+    _SAPP_STRUCT(VkSemaphoreCreateInfo, create_info);
     create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     VkResult res;
     _SOKOL_UNUSED(res);
@@ -4632,6 +4592,34 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_sync_objects(void) {
     }
 }
 
+_SOKOL_PRIVATE VkDeviceMemory _sapp_vk_mem_alloc_image_memory(const VkMemoryRequirements* mem_reqs) {
+    SOKOL_ASSERT(_sapp.vk.device);
+    SOKOL_ASSERT(mem_reqs);
+    int mem_type_index = _sapp_vk_mem_find_memory_type_index(mem_reqs->memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (-1 == mem_type_index) {
+        _SAPP_ERROR(VULKAN_ALLOC_DEVICE_MEMORY_NO_SUITABLE_MEMORY_TYPE);
+        return 0;
+    }
+    _SAPP_STRUCT(VkMemoryAllocateInfo, alloc_info);
+    alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    alloc_info.allocationSize = mem_reqs->size;
+    alloc_info.memoryTypeIndex = (uint32_t) mem_type_index;
+    VkDeviceMemory vk_dev_mem = 0;
+    VkResult res = vkAllocateMemory(_sapp.vk.device, &alloc_info, 0, &vk_dev_mem);
+    if (res != VK_SUCCESS) {
+        _SAPP_ERROR(VULKAN_ALLOCATE_MEMORY_FAILED);
+        return 0;
+    }
+    SOKOL_ASSERT(vk_dev_mem);
+    return vk_dev_mem;
+}
+
+_SOKOL_PRIVATE void _sapp_vk_mem_free_image_memory(VkDeviceMemory vk_dev_mem) {
+    SOKOL_ASSERT(_sapp.vk.device);
+    SOKOL_ASSERT(vk_dev_mem);
+    vkFreeMemory(_sapp.vk.device, vk_dev_mem, 0);
+}
+
 _SOKOL_PRIVATE void _sapp_vk_swapchain_destroy_surface(_sapp_vk_swapchain_surface_t* surf) {
     SOKOL_ASSERT(surf);
     SOKOL_ASSERT(surf->img);
@@ -4639,7 +4627,7 @@ _SOKOL_PRIVATE void _sapp_vk_swapchain_destroy_surface(_sapp_vk_swapchain_surfac
     SOKOL_ASSERT(surf->view);
     vkDestroyImageView(_sapp.vk.device, surf->view, 0);
     surf->view = 0;
-    _sapp_vk_mem_free_device_memory(surf->mem);
+    _sapp_vk_mem_free_image_memory(surf->mem);
     surf->mem = 0;
     vkDestroyImage(_sapp.vk.device, surf->img, 0);
     surf->img = 0;
@@ -4666,9 +4654,7 @@ _SOKOL_PRIVATE void _sapp_vk_swapchain_create_surface(
     SOKOL_ASSERT(0 == surf->view);
     VkResult res;
 
-    // create depth buffer image
-    VkImageCreateInfo img_create_info;
-    _sapp_clear(&img_create_info, sizeof(img_create_info));
+    _SAPP_STRUCT(VkImageCreateInfo, img_create_info);
     img_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     img_create_info.imageType = VK_IMAGE_TYPE_2D;
     img_create_info.format = format;
@@ -4688,10 +4674,9 @@ _SOKOL_PRIVATE void _sapp_vk_swapchain_create_surface(
     }
     SOKOL_ASSERT(surf->img);
 
-    VkMemoryRequirements mem_reqs;
-    _sapp_clear(&mem_reqs, sizeof(mem_reqs));
+    _SAPP_STRUCT(VkMemoryRequirements, mem_reqs);
     vkGetImageMemoryRequirements(_sapp.vk.device, surf->img, &mem_reqs);
-    surf->mem = _sapp_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    surf->mem = _sapp_vk_mem_alloc_image_memory(&mem_reqs);
     if (0 == surf->mem) {
         _SAPP_PANIC(VULKAN_SWAPCHAIN_ALLOC_IMAGE_DEVICE_MEMORY_FAILED);
     }
@@ -4701,8 +4686,7 @@ _SOKOL_PRIVATE void _sapp_vk_swapchain_create_surface(
     }
     SOKOL_ASSERT(surf->mem);
 
-    VkImageViewCreateInfo view_create_info;
-    _sapp_clear(&view_create_info, sizeof(view_create_info));
+    _SAPP_STRUCT(VkImageViewCreateInfo, view_create_info);
     view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     view_create_info.image = surf->img;
     view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
@@ -4735,8 +4719,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
 
     VkSwapchainKHR old_swapchain = _sapp.vk.swapchain;
 
-    VkSurfaceCapabilitiesKHR surf_caps;
-    _sapp_clear(&surf_caps, sizeof(surf_caps));
+    _SAPP_STRUCT(VkSurfaceCapabilitiesKHR, surf_caps);
     VkResult res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(_sapp.vk.physical_device, _sapp.vk.surface, &surf_caps);
     SOKOL_ASSERT(res == VK_SUCCESS);
     const uint32_t width = surf_caps.currentExtent.width;
@@ -4747,8 +4730,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
 
     // FIXME: better imageExtent (scale vs no-scale!)
-    VkSwapchainCreateInfoKHR create_info;
-    _sapp_clear(&create_info, sizeof(create_info));
+    _SAPP_STRUCT(VkSwapchainCreateInfoKHR, create_info);
     create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     create_info.flags = 0; // FIXME?
     create_info.surface = _sapp.vk.surface;
@@ -4790,8 +4772,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     SOKOL_ASSERT(res == VK_SUCCESS);
     SOKOL_ASSERT(_sapp.vk.num_swapchain_images >= surf_caps.minImageCount);
 
-    VkImageViewCreateInfo view_create_info;
-    _sapp_clear(&view_create_info, sizeof(view_create_info));
+    _SAPP_STRUCT(VkImageViewCreateInfo, view_create_info);
     view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
     view_create_info.format = _sapp.vk.surface_format.format;
@@ -4912,8 +4893,7 @@ _SOKOL_PRIVATE void _sapp_vk_swapchain_next(void) {
 
 _SOKOL_PRIVATE void _sapp_vk_present(void) {
     SOKOL_ASSERT(_sapp.vk.queue);
-    VkPresentInfoKHR present_info;
-    _sapp_clear(&present_info, sizeof(present_info));
+    _SAPP_STRUCT(VkPresentInfoKHR, present_info);
     present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     present_info.waitSemaphoreCount = 1;
     present_info.pWaitSemaphores = &_sapp.vk.sync[_sapp.vk.cur_swapchain_image_index].render_finished_sem;
