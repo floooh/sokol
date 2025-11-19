@@ -14,6 +14,7 @@ tasks = [
     [ '../util/sokol_gl.h',        'sgl_',      ['sg_'] ],
     [ '../util/sokol_debugtext.h', 'sdtx_',     ['sg_'] ],
     [ '../util/sokol_shape.h',     'sshape_',   ['sg_'] ],
+    [ '../util/sokol_gfx_imgui.h', 'sgimgui_',  ['sg_'] ],
 ]
 
 # Jai
