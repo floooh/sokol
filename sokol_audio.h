@@ -42,6 +42,8 @@
     - on Android: aaudio
     - on Windows with MSVC or Clang toolchain: no action needed, libs are defined in-source via pragma-comment-lib
     - on Windows with MINGW/MSYS2 gcc: compile with '-mwin32' and link with -lole32
+    - on Vita: SceAudio
+    - on 3DS: NDSP (libctru)
 
     FEATURE OVERVIEW
     ================
@@ -55,6 +57,8 @@
     - iOS: CoreAudio+AVAudioSession
     - emscripten: WebAudio with ScriptProcessorNode
     - Android: AAudio
+    - Vita: SceAudio
+    - 3DS: NDSP (libctru)
 
     Sokol Audio will not do any buffer mixing or volume control, if you have
     multiple independent input streams of sample data you need to perform the
@@ -379,6 +383,52 @@
     header must be present (usually both are installed with some sort
     of ALSA development package).
 
+    THE VITA BACKEND
+    ================
+    The VITA backend is automatically selected when compiling with vitasdk
+    ('PSP2_SDK_VERSION' is defined).
+
+    For thread synchronisation, the pthread_mutex_* functions are used.
+
+    Samples are converted from float to short (uint16_t) to maintain
+    all the same interface/api as other platforms.
+
+    You may use any supported sample rate you wish, but all audio MUST
+    match the same sample rate you choose.
+
+    This uses the "BGM" port to allow selecting the sample rate ("Main"
+    port is restricted to 48000 only).
+
+    You need to link with the 'SceAudio' library, and the <psp2/audioout.h>
+    header must be present (usually both are installed with the vitasdk).
+
+    THE 3DS BACKEND
+    ================
+    The 3DS backend is automatically selected when compiling with libctru
+    ('__3DS__' is defined).
+
+    Running a separate thread on the older 3ds is not a good idea and I
+    was not able to get it working without slowing down the main thread
+    too much (it has a single core available with cooperative threads).
+
+    The NDSP seems to work better by using its ndspSetCallback method.
+
+    You may use any supported sample rate you wish, but all audio MUST
+    match the same sample rate you choose or it will sound slowed down
+    or sped up.
+
+    The queue size and other NDSP specific parameters can be chosen by
+    the provided 'saudio_n3ds_desc' type. Defaults will be used if
+    nothing is provided.
+
+    There is a known issue of a noticeable delay when starting a new
+    sound on emulators. I was not able to improve this to my liking
+    and ~300ms can be expected. This can be improved by using a lower
+    buffer size than the 2048 default but I would not suggest under
+    1536. It may crash under 1408, and they must be in multiples of 128.
+    Note: I was NOT able to reproduce this issue on a real device and
+    the audio worked perfectly.
+
 
     MEMORY ALLOCATION OVERRIDE
     ==========================
@@ -537,6 +587,9 @@ extern "C" {
     _SAUDIO_LOGITEM_XMACRO(COREAUDIO_ALLOCATE_BUFFER_FAILED, "AudioQueueAllocateBuffer() failed") \
     _SAUDIO_LOGITEM_XMACRO(COREAUDIO_START_FAILED, "AudioQueueStart() failed") \
     _SAUDIO_LOGITEM_XMACRO(BACKEND_BUFFER_SIZE_ISNT_MULTIPLE_OF_PACKET_SIZE, "backend buffer size isn't multiple of packet size") \
+    _SAUDIO_LOGITEM_XMACRO(VITA_SCEAUDIO_OPEN_FAILED, "sceAudioOutOpenPort() failed") \
+    _SAUDIO_LOGITEM_XMACRO(VITA_PTHREAD_CREATE_FAILED, "pthread_create() failed") \
+    _SAUDIO_LOGITEM_XMACRO(N3DS_NDSP_OPEN_FAILED, "ndspInit() failed") \
 
 #define _SAUDIO_LOGITEM_XMACRO(item,msg) SAUDIO_LOGITEM_##item,
 typedef enum saudio_log_item {
@@ -576,6 +629,31 @@ typedef struct saudio_allocator {
     void* user_data;
 } saudio_allocator;
 
+typedef enum saudio_n3ds_ndspinterptype {
+    SAUDIO_N3DS_DSP_INTERP_POLYPHASE = 0,
+    SAUDIO_N3DS_DSP_INTERP_LINEAR    = 1,
+    SAUDIO_N3DS_DSP_INTERP_NONE      = 2,
+} saudio_n3ds_ndspinterptype;
+
+typedef struct saudio_n3ds_desc {
+    /* the 3DS requires multiple queues that it alternates between. */
+    /* a single buffer will "work" but is choppy due to a slight    */
+    /* delay when it changes queues.                                */
+    int queue_count; /* default value = 2 */
+
+    /* NDSP_INTERP_POLYPHASE = 0 (high quality, slower) */
+    /* NDSP_INTERP_LINEAR    = 1 (med quality, medium)  */
+    /* NDSP_INTERP_NONE      = 2 (low quality, fast)    */
+    saudio_n3ds_ndspinterptype interpolation_type; /* default value = 0 */
+
+    /* 3DS supports different audio channels. they can be used */
+    /* in a variety of ways as independent streams etc.        */
+    /* this implementation in sokol does NOT allow multiple    */
+    /* due to calling the global ndspInit/ndspExit functions.  */
+    /* valid range 0-23                                        */
+    int channel_id; /* default value = 0 */
+} saudio_n3ds_desc;
+
 typedef struct saudio_desc {
     int sample_rate;        // requested sample rate
     int num_channels;       // number of channels, default: 1 (mono)
@@ -585,6 +663,7 @@ typedef struct saudio_desc {
     void (*stream_cb)(float* buffer, int num_frames, int num_channels);  // optional streaming callback (no user data)
     void (*stream_userdata_cb)(float* buffer, int num_frames, int num_channels, void* user_data); //... and with user data
     void* user_data;        // optional user data argument for stream_userdata_cb
+    saudio_n3ds_desc n3ds;       // optional data for use on n3ds
     saudio_allocator allocator;     // optional allocation override functions
     saudio_logger logger;           // optional logging function (default: NO LOGGING!)
 } saudio_desc;
@@ -687,6 +766,12 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
     #define _SAUDIO_ANDROID (1)
 #elif defined(__linux__) || defined(__unix__)
     #define _SAUDIO_LINUX (1)
+#elif defined(PSP2_SDK_VERSION)
+    #define _SAUDIO_VITA (1)
+    #include <psp2/audioout.h>
+#elif defined(__3DS__)
+    #define _SAUDIO_N3DS (1)
+    #include <3ds.h>
 #else
 #error "sokol_audio.h: Unknown platform"
 #endif
@@ -782,6 +867,11 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 #elif defined(__EMSCRIPTEN__)
     #define _SAUDIO_NOTHREADS (1)
     #include <emscripten/emscripten.h>
+#elif defined(_SAUDIO_VITA)
+    #define _SAUDIO_PTHREADS (1)
+    #include <pthread.h>
+#elif defined(_SAUDIO_N3DS)
+    #define _SAUDIO_NOTHREADS (1)
 #endif
 
 #define _saudio_def(val, def) (((val) == 0) ? (def) : (val))
@@ -982,6 +1072,30 @@ typedef struct {
     uint8_t* buffer;
 } _saudio_web_backend_t;
 
+#elif defined(_SAUDIO_VITA)
+
+typedef struct {
+    int device;
+    float* buffer;
+    int16_t* buffer_vita;
+    int buffer_byte_size;
+    int buffer_frames;
+    pthread_t thread;
+    bool thread_stop;
+} _saudio_vita_backend_t;
+
+#elif defined(_SAUDIO_N3DS)
+
+typedef struct {
+    saudio_n3ds_desc n3ds_desc; /* n3ds specific data */
+    float* buffer;              /* used by sokol as floats */
+    int16_t* buffer_n3ds;       /* sokol buffer converted to int16 */
+    ndspWaveBuf* queue_n3ds;    /* device queues on 3DS */
+    int samples_per_buffer;     /* frames * channel count */
+    int buffer_byte_size;
+    bool thread_stop;
+} _saudio_n3ds_backend_t;
+
 #else
 #error "unknown platform"
 #endif
@@ -998,6 +1112,10 @@ typedef _saudio_wasapi_backend_t _saudio_backend_t;
 typedef _saudio_aaudio_backend_t _saudio_backend_t;
 #elif defined(_SAUDIO_LINUX)
 typedef _saudio_alsa_backend_t _saudio_backend_t;
+#elif defined(_SAUDIO_VITA)
+typedef _saudio_vita_backend_t _saudio_backend_t;
+#elif defined(_SAUDIO_N3DS)
+typedef _saudio_n3ds_backend_t _saudio_backend_t;
 #endif
 
 /* a ringbuffer structure */
@@ -1184,6 +1302,26 @@ _SOKOL_PRIVATE void _saudio_mutex_lock(_saudio_mutex_t* m) {
 _SOKOL_PRIVATE void _saudio_mutex_unlock(_saudio_mutex_t* m) {
     LeaveCriticalSection(&m->critsec);
 }
+#elif defined(_SAUDIO_VITA)
+
+_SOKOL_PRIVATE void _saudio_mutex_init(_saudio_mutex_t* m) {
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutex_init(&m->mutex, &attr);
+}
+
+_SOKOL_PRIVATE void _saudio_mutex_destroy(_saudio_mutex_t* m) {
+    pthread_mutex_destroy(&m->mutex);
+}
+
+_SOKOL_PRIVATE void _saudio_mutex_lock(_saudio_mutex_t* m) {
+    pthread_mutex_lock(&m->mutex);
+}
+
+_SOKOL_PRIVATE void _saudio_mutex_unlock(_saudio_mutex_t* m) {
+    pthread_mutex_unlock(&m->mutex);
+}
+
 #else
 #error "sokol_audio.h: unknown platform!"
 #endif
@@ -2144,6 +2282,206 @@ _SOKOL_PRIVATE bool _saudio_coreaudio_backend_init(void) {
     return true;
 }
 
+// ██   ██ ██ ████████  █████
+// ██   ██ ██    ██    ██   ██
+// ██   ██ ██    ██    ███████
+// ██   ██ ██    ██    ██   ██
+//  █████  ██    ██    ██   ██
+//
+// >>vita
+#elif defined(_SAUDIO_VITA)
+
+/* the streaming callback runs in a separate thread */
+_SOKOL_PRIVATE void* _saudio_vita_cb(void* param) {
+    _SOKOL_UNUSED(param);
+    while (!_saudio.backend.thread_stop) {
+        for (int i = 0; i < (_saudio.buffer_frames * _saudio.num_channels); i++) {
+            _saudio.backend.buffer_vita[i] = (int16_t)(_saudio.backend.buffer[i] * 32767.0f);
+        }
+        int write_res = sceAudioOutOutput(_saudio.backend.device, _saudio.backend.buffer_vita);
+        if (write_res < 0) {
+            /* underrun occurred */
+        }
+        else {
+            /* fill the streaming buffer with new data */
+            if (_saudio_has_callback()) {
+                _saudio_stream_callback(_saudio.backend.buffer, _saudio.backend.buffer_frames, _saudio.num_channels);
+            }
+            else {
+                if (0 == _saudio_fifo_read(&_saudio.fifo, (uint8_t*)_saudio.backend.buffer, _saudio.backend.buffer_byte_size)) {
+                    /* not enough read data available, fill the entire buffer with silence */
+                    _saudio_clear(_saudio.backend.buffer, (size_t)_saudio.backend.buffer_byte_size);
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+_SOKOL_PRIVATE bool _saudio_vita_backend_init(void) {
+    SceAudioOutMode sceAudioOutMode = _saudio.num_channels == 1 ? SCE_AUDIO_OUT_MODE_MONO : SCE_AUDIO_OUT_MODE_STEREO;
+    int rc = sceAudioOutOpenPort(SCE_AUDIO_OUT_PORT_TYPE_BGM, _saudio.buffer_frames, _saudio.sample_rate, sceAudioOutMode);
+    if (rc < 0) {
+        _SAUDIO_ERROR(VITA_SCEAUDIO_OPEN_FAILED);
+        return false;
+    }
+    _saudio.backend.device = rc;
+
+    /* read back actual sample rate and channels */
+    _saudio.sample_rate = (int)_saudio.sample_rate;
+    _saudio.bytes_per_frame = _saudio.num_channels * (int)sizeof(float);
+
+    /* allocate the streaming buffer */
+    _saudio.backend.buffer_byte_size = _saudio.buffer_frames * _saudio.bytes_per_frame;
+    _saudio.backend.buffer_frames = _saudio.buffer_frames;
+    _saudio.backend.buffer = (float*) _saudio_malloc_clear((size_t)_saudio.backend.buffer_byte_size);
+    _saudio.backend.buffer_vita = (int16_t*) _saudio_malloc_clear((size_t)(_saudio.buffer_frames * _saudio.num_channels * (int)sizeof(int16_t)));
+
+    /* create the buffer-streaming start thread */
+    if (0 != pthread_create(&_saudio.backend.thread, 0, _saudio_vita_cb, 0)) {
+        _SAUDIO_ERROR(VITA_PTHREAD_CREATE_FAILED);
+        if (_saudio.backend.device >= 0) {
+            sceAudioOutReleasePort(_saudio.backend.device);
+            _saudio.backend.device = -1;
+        }
+        return false;
+    }
+
+    return true;
+}
+
+_SOKOL_PRIVATE void _saudio_vita_backend_shutdown(void) {
+    _saudio.backend.thread_stop = true;
+    pthread_join(_saudio.backend.thread, 0);
+    sceAudioOutReleasePort(_saudio.backend.device);
+    _saudio_free(_saudio.backend.buffer_vita);
+    _saudio_free(_saudio.backend.buffer);
+}
+
+// ███████ ██████  ███████
+//      ██ ██   ██ ██
+//  ██████ ██   ██ ███████
+//      ██ ██   ██      ██
+// ███████ ██████  ███████
+//
+// >>3ds
+#elif defined(_SAUDIO_N3DS)
+
+/* NDSP triggers a callback for _saudio_n3ds_cb on the main thread */
+_SOKOL_PRIVATE void _saudio_n3ds_cb(void*) {
+    if(_saudio.backend.thread_stop) {
+        return;
+    }
+
+    const float scale = 32767.0f;
+
+    ndspWaveBuf* bufferPtr = 0;
+    bufferPtr = 0;
+    int i = 0;
+
+    /* pick an available queue */
+    for (i = 0; i < _saudio.backend.n3ds_desc.queue_count; ++i) {
+        if (_saudio.backend.queue_n3ds[i].status == NDSP_WBUF_DONE) {
+            bufferPtr = &_saudio.backend.queue_n3ds[i];
+            break;
+        }
+    }
+
+    if (!bufferPtr) {
+        /* no buffers are available. we don't want to play     */
+        /* anything, but we also don't want to drain the queue */
+        return;
+    }
+
+    int16_t* target_buffer = bufferPtr->data_pcm16;
+    const float* source_buffer = _saudio.backend.buffer;
+    for (i = 0; i < _saudio.backend.samples_per_buffer; i++) {
+        /* data_pcm16 points to a region in the linear alloc _saudio.backend.buffer_n3ds */
+        target_buffer[i] = (int16_t)(source_buffer[i] * scale);
+    }
+
+    bufferPtr->nsamples = _saudio.buffer_frames; /* nsamples is actually frames */
+    ndspChnWaveBufAdd(_saudio.backend.n3ds_desc.channel_id, bufferPtr);
+    DSP_FlushDataCache(target_buffer, bufferPtr->nsamples * sizeof(int16_t));
+
+    /* fill the streaming buffer with new data */
+    if (_saudio_has_callback()) {
+        _saudio_stream_callback(_saudio.backend.buffer, _saudio.buffer_frames, _saudio.num_channels);
+    }
+    else {
+        if (0 == _saudio_fifo_read(&_saudio.fifo, (uint8_t*)_saudio.backend.buffer, _saudio.backend.buffer_byte_size)) {
+            /* not enough read data available, fill the entire buffer with silence */
+            _saudio_clear(_saudio.backend.buffer, (size_t)_saudio.backend.buffer_byte_size);
+        }
+    }
+}
+
+_SOKOL_PRIVATE bool _saudio_n3ds_backend_init(void) {
+    int rc = ndspInit();
+    if (rc != 0) {
+        _SAUDIO_ERROR(N3DS_NDSP_OPEN_FAILED);
+        return false;
+    }
+
+    /* set defaults if not provided */
+    _saudio.backend.n3ds_desc.queue_count = _saudio_def(_saudio.desc.n3ds.queue_count, 2);
+    _saudio.backend.n3ds_desc.interpolation_type = _saudio_def(_saudio.desc.n3ds.interpolation_type, SAUDIO_N3DS_DSP_INTERP_POLYPHASE);
+    _saudio.backend.n3ds_desc.channel_id = _saudio_def(_saudio.desc.n3ds.channel_id, 0);
+
+    /* clamp to 2 channels max */
+    if (_saudio.num_channels > 2) {
+        _saudio.num_channels = 2;
+    }
+
+    ndspChnReset(_saudio.backend.n3ds_desc.channel_id);
+    ndspChnWaveBufClear(_saudio.backend.n3ds_desc.channel_id);
+    ndspChnSetInterp(_saudio.backend.n3ds_desc.channel_id, (ndspInterpType)_saudio.backend.n3ds_desc.interpolation_type); /* cast to n3ds enum */
+    ndspChnSetRate(_saudio.backend.n3ds_desc.channel_id, _saudio.sample_rate);
+    ndspChnSetFormat(_saudio.backend.n3ds_desc.channel_id, _saudio.num_channels == 1 ? NDSP_FORMAT_MONO_PCM16 : NDSP_FORMAT_STEREO_PCM16);
+    ndspSetOutputMode(_saudio.num_channels == 1 ? NDSP_OUTPUT_MONO : NDSP_OUTPUT_STEREO);
+
+    /* read back actual sample rate and channels */
+    _saudio.sample_rate = (int)_saudio.sample_rate;
+    _saudio.bytes_per_frame = _saudio.num_channels * (int)sizeof(float);
+
+    /* allocate the streaming buffer */
+    _saudio.backend.samples_per_buffer = _saudio.buffer_frames * _saudio.num_channels;
+    _saudio.backend.buffer_byte_size = _saudio.buffer_frames * _saudio.bytes_per_frame;
+    _saudio.backend.buffer = (float*) _saudio_malloc_clear((size_t)_saudio.backend.buffer_byte_size);
+    _saudio.backend.buffer_n3ds = (int16_t*)linearAlloc(_saudio.backend.n3ds_desc.queue_count * _saudio.backend.samples_per_buffer * sizeof(int16_t));
+    _saudio.backend.queue_n3ds = (ndspWaveBuf*)_saudio_malloc(_saudio.backend.n3ds_desc.queue_count * sizeof(ndspWaveBuf));
+
+    /* prepare the 3ds audio queues */
+    int16_t* bufferPtrCopy = _saudio.backend.buffer_n3ds;
+    for (int i = 0; i < _saudio.backend.n3ds_desc.queue_count; ++i) {
+        _saudio.backend.queue_n3ds[i].data_vaddr = bufferPtrCopy; /* point the queue at the section of the linear buffer */
+        _saudio.backend.queue_n3ds[i].looping = false; /* the user should handle looping on their end */
+        _saudio.backend.queue_n3ds[i].status = NDSP_WBUF_DONE; /* default to done status for buffering logic */
+
+        bufferPtrCopy += _saudio.backend.samples_per_buffer;
+    }
+
+    /* instead of a thread, ndsp will trigger a callback */
+    /* when it needs more data.                          */
+    ndspSetCallback(_saudio_n3ds_cb, 0);
+
+    return true;
+}
+
+_SOKOL_PRIVATE void _saudio_n3ds_backend_shutdown(void) {
+    _saudio.backend.thread_stop = true;
+
+    if (_saudio.backend.n3ds_desc.channel_id >= 0) {
+        ndspChnWaveBufClear(_saudio.backend.n3ds_desc.channel_id);
+        _saudio.backend.n3ds_desc.channel_id = -1;
+    }
+
+    ndspExit();
+
+    _saudio_free(_saudio.backend.queue_n3ds);
+    _saudio_free(_saudio.backend.buffer_n3ds);
+    _saudio_free(_saudio.backend.buffer);
+}
 #else
 #error "unsupported platform"
 #endif
@@ -2161,6 +2499,10 @@ bool _saudio_backend_init(void) {
         return _saudio_aaudio_backend_init();
     #elif defined(_SAUDIO_APPLE)
         return _saudio_coreaudio_backend_init();
+    #elif defined(_SAUDIO_VITA)
+        return _saudio_vita_backend_init();
+    #elif defined(_SAUDIO_N3DS)
+        return _saudio_n3ds_backend_init();
     #else
     #error "unknown platform"
     #endif
@@ -2179,6 +2521,10 @@ void _saudio_backend_shutdown(void) {
         _saudio_aaudio_backend_shutdown();
     #elif defined(_SAUDIO_APPLE)
         _saudio_coreaudio_backend_shutdown();
+    #elif defined(_SAUDIO_VITA)
+        _saudio_vita_backend_shutdown();
+    #elif defined(_SAUDIO_N3DS)
+        _saudio_n3ds_backend_shutdown();
     #else
     #error "unknown platform"
     #endif

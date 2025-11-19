@@ -4657,7 +4657,8 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_IMAGE_ALIVE, "sg_begin_pass: color attachment view's image object is uninitialized or no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_IMAGE_VALID, "sg_begin_pass: color attachment view's image is not in valid state (SG_RESOURCESTATE_VALID)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_SIZES, "sg_begin_pass: all color attachments must have the same width and height") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_SAMPLECOUNTS, "sg_begin_pass: all color attachments must have the same sample count") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_SAMPLECOUNT, "sg_begin_pass: when resolve attachments are provided, the color attachment sample count must be 1") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_SAMPLECOUNTS_EQUAL, "sg_begin_pass: all color attachments must have the same sample count") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_NO_COLORATTACHMENTVIEW, "sg_begin_pass: a resolve attachment view must have an associated color attachment view at the same index") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_ALIVE, "sg_begin_pass: resolve attachment view no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_VALID, "sg_begin_pass: resolve attachment view not in valid state (SG_RESOURCESTATE_VALID)") \
@@ -5491,11 +5492,6 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
                 #endif
                 #include <windows.h>
                 #pragma comment (lib, "kernel32")   // GetProcAddress()
-                #define _SOKOL_GL_HAS_COMPUTE (1)
-                #define _SOKOL_GL_HAS_TEXSTORAGE (1)
-                #define _SOKOL_GL_HAS_TEXVIEWS (1)
-                #define _SOKOL_GL_HAS_BASEVERTEX (1)
-                #define _SOKOL_GL_HAS_BASEINSTANCE (1)
             #endif
         #elif defined(__APPLE__)
             #include <TargetConditionals.h>
@@ -5504,34 +5500,68 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #endif
             #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
                 #include <OpenGL/gl3.h>
-                #define _SOKOL_GL_HAS_BASEVERTEX (1)
             #else
                 #include <OpenGLES/ES3/gl.h>
                 #include <OpenGLES/ES3/glext.h>
-                #define _SOKOL_GL_HAS_TEXSTORAGE (1)
             #endif
         #elif defined(__EMSCRIPTEN__)
             #if defined(SOKOL_GLES3)
                 #include <GLES3/gl3.h>
-                #define _SOKOL_GL_HAS_TEXSTORAGE (1)
             #endif
         #elif defined(__ANDROID__)
             #include <GLES3/gl31.h>
-            #define _SOKOL_GL_HAS_COMPUTE (1)
-            #define _SOKOL_GL_HAS_TEXSTORAGE (1)
         #elif defined(__linux__) || defined(__unix__)
-            #define _SOKOL_GL_HAS_COMPUTE (1)
-            #define _SOKOL_GL_HAS_TEXSTORAGE (1)
-            #define _SOKOL_GL_HAS_BASEVERTEX (1)
             #if defined(SOKOL_GLCORE)
                 #define GL_GLEXT_PROTOTYPES
                 #include <GL/gl.h>
-                #define _SOKOL_GL_HAS_TEXVIEWS (1)
-                #define _SOKOL_GL_HAS_BASEINSTANCE (1)
             #else
                 #include <GLES3/gl32.h>
                 #include <GLES3/gl3ext.h>
             #endif
+        #endif
+    #endif
+
+    // broad GL feature availability defines (DON'T merge this into the above ifdef-block!)
+    #if defined(_WIN32)
+        #if defined(GL_VERSION_4_3) || defined(_SOKOL_USE_WIN32_GL_LOADER)
+            #define _SOKOL_GL_HAS_COMPUTE (1)
+            #define _SOKOL_GL_HAS_TEXVIEWS (1)
+        #endif
+        #if defined(GL_VERSION_4_2) || defined(_SOKOL_USE_WIN32_GL_LOADER)
+            #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+            #define _SOKOL_GL_HAS_BASEINSTANCE (1)
+        #endif
+        #if defined(GL_VERSION_3_2) || defined(_SOKOL_USE_WIN32_GL_LOADER)
+            #define _SOKOL_GL_HAS_BASEVERTEX (1)
+        #endif
+    #elif defined(__APPLE__)
+        #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+            #define _SOKOL_GL_HAS_BASEVERTEX (1)
+        #else
+            #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+        #endif
+    #elif defined(__EMSCRIPTEN__)
+        #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+    #elif defined(__ANDROID__)
+        #define _SOKOL_GL_HAS_COMPUTE (1)
+        #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+    #elif defined(__linux__) || defined(__unix__)
+        #if defined(SOKOL_GLCORE)
+            #if defined(GL_VERSION_4_3)
+                #define _SOKOL_GL_HAS_COMPUTE (1)
+                #define _SOKOL_GL_HAS_TEXVIEWS (1)
+            #endif
+            #if defined(GL_VERSION_4_2)
+                #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+                #define _SOKOL_GL_HAS_BASEINSTANCE (1)
+            #endif
+            #if defined(GL_VERSION_3_2)
+                #define _SOKOL_GL_HAS_BASEVERTEX (1)
+            #endif
+        #else
+            #define _SOKOL_GL_HAS_COMPUTE (1)
+            #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+            #define _SOKOL_GL_HAS_BASEVERTEX (1)
         #endif
     #endif
 
@@ -18378,15 +18408,10 @@ _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_sg.wgpu.rpass_enc);
-    // FIXME FIXME FIXME: CLIPPING THE VIEWPORT HERE IS WRONG!!!
-    // (but currently required because WebGPU insists that the viewport rectangle must be
-    // fully contained inside the framebuffer, but this doesn't make any sense, and also
-    // isn't required by the backend APIs)
-    const _sg_recti_t clip = _sg_clipi(x, y, w, h, _sg.cur_pass.dim.width, _sg.cur_pass.dim.height);
-    float xf = (float) clip.x;
-    float yf = (float) (origin_top_left ? clip.y : (_sg.cur_pass.dim.height - (clip.y + clip.h)));
-    float wf = (float) clip.w;
-    float hf = (float) clip.h;
+    float xf = (float) x;
+    float yf = (float) (origin_top_left ? y : (_sg.cur_pass.dim.height - (y + h)));
+    float wf = (float) w;
+    float hf = (float) h;
     wgpuRenderPassEncoderSetViewport(_sg.wgpu.rpass_enc, xf, yf, wf, hf, 0.0f, 1.0f);
 }
 
@@ -23075,7 +23100,7 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
                                 } else {
                                     _SG_VALIDATE(color_width == _sg_image_view_dim(view).width, VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_SIZES);
                                     _SG_VALIDATE(color_height == _sg_image_view_dim(view).height, VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_SIZES);
-                                    _SG_VALIDATE(color_sample_count == img->cmn.sample_count, VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_SAMPLECOUNTS);
+                                    _SG_VALIDATE(color_sample_count == img->cmn.sample_count, VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_SAMPLECOUNTS_EQUAL);
                                 }
                             }
                         }
@@ -23104,6 +23129,7 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
                             _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_IMAGE_VALID);
                             if (img->slot.state == SG_RESOURCESTATE_VALID) {
                                 if (color_width != -1) {
+                                    _SG_VALIDATE(color_sample_count > 1, VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_SAMPLECOUNT);
                                     _SG_VALIDATE(color_width == _sg_image_view_dim(view).width, VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_SIZES);
                                     _SG_VALIDATE(color_height == _sg_image_view_dim(view).height, VALIDATE_BEGINPASS_RESOLVEATTACHMENTVIEW_SIZES);
                                 }

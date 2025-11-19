@@ -4488,7 +4488,8 @@ _SOKOL_PRIVATE void _sgimgui_draw_capture_panel(sgimgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
-    _sgimgui_igtext("Backend: %s\n\n", _sgimgui_backend_string(sg_query_backend()));
+    _sgimgui_igtext("Backend: %s\n", _sgimgui_backend_string(sg_query_backend()));
+    _sgimgui_igtext("Dear ImGui Version: %s\n\n", IMGUI_VERSION);
     sg_features f = sg_query_features();
     _sgimgui_igtext("Features:");
     _sgimgui_igtext("    origin_top_left: %s", _sgimgui_bool_string(f.origin_top_left));
@@ -4500,6 +4501,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
     _sgimgui_igtext("    separate_buffer_types: %s", _sgimgui_bool_string(f.separate_buffer_types));
     _sgimgui_igtext("    draw_base_vertex: %s", _sgimgui_bool_string(f.draw_base_vertex));
     _sgimgui_igtext("    draw_base_instance: %s", _sgimgui_bool_string(f.draw_base_instance));
+    _sgimgui_igtext("    gl_texture_views: %s", _sgimgui_bool_string(f.gl_texture_views));
     sg_limits l = sg_query_limits();
     _sgimgui_igtext("\nLimits:\n");
     _sgimgui_igtext("    max_image_size_2d: %d", l.max_image_size_2d);
