@@ -6864,6 +6864,16 @@ typedef struct {
 #define _SG_VK_MAX_VIEW_SMP_DESCRIPTORSET_SLOTS (128)
 #define _SG_VK_MAX_DESCRIPTOR_DATA_SIZE (256) // FIXME: llvmpipe needs 280 bytes, do we need to care about that?
 
+typedef enum {
+    _SG_VK_MEMTYPE_STORAGE_BUFFER,
+    _SG_VK_MEMTYPE_GENERIC_BUFFER,
+    _SG_VK_MEMTYPE_IMAGE,
+    _SG_VK_MEMTYPE_STAGING_COPY,
+    _SG_VK_MEMTYPE_STAGING_STREAM,
+    _SG_VK_MEMTYPE_UNIFORMS,
+    _SG_VK_MEMTYPE_DESCRIPTORS,
+} _sg_vk_memtype_t;
+
 typedef void (*_sg_vk_delete_queue_destructor_t)(void* obj);
 
 typedef struct {
@@ -19036,13 +19046,42 @@ _SOKOL_PRIVATE int _sg_vk_mem_find_memory_type_index(uint32_t type_filter, VkMem
     return -1;
 }
 
-_SOKOL_PRIVATE VkDeviceMemory _sg_vk_mem_alloc_device_memory(
-    const VkMemoryRequirements* mem_reqs,
-    VkMemoryPropertyFlags mem_prop_flags,
-    VkMemoryAllocateFlags mem_alloc_flags
-) {
+_SOKOL_PRIVATE VkDeviceMemory _sg_vk_mem_alloc_device_memory(_sg_vk_memtype_t mem_type, const VkMemoryRequirements* mem_reqs) {
     SOKOL_ASSERT(_sg.vk.dev);
-    SOKOL_ASSERT(mem_reqs && (mem_prop_flags != 0));
+    SOKOL_ASSERT(mem_reqs);
+
+    VkMemoryPropertyFlags mem_prop_flags = 0;
+    VkMemoryAllocateFlags mem_alloc_flags = 0;
+    switch (mem_type) {
+        case _SG_VK_MEMTYPE_GENERIC_BUFFER:
+            mem_prop_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+            break;
+        case _SG_VK_MEMTYPE_STORAGE_BUFFER:
+            mem_prop_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+            mem_alloc_flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+            break;
+        case _SG_VK_MEMTYPE_IMAGE:
+            mem_prop_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+            break;
+        case _SG_VK_MEMTYPE_STAGING_COPY:
+            mem_prop_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            break;
+        case _SG_VK_MEMTYPE_STAGING_STREAM:
+            mem_prop_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            break;
+        case _SG_VK_MEMTYPE_UNIFORMS:
+            mem_prop_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            mem_alloc_flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+            break;
+        case _SG_VK_MEMTYPE_DESCRIPTORS:
+            mem_prop_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            mem_alloc_flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+            break;
+        default:
+            SOKOL_UNREACHABLE;
+            break;
+    }
+
     int mem_type_index = _sg_vk_mem_find_memory_type_index(mem_reqs->memoryTypeBits, mem_prop_flags);
     if (-1 == mem_type_index) {
         _SG_ERROR(VULKAN_ALLOC_DEVICE_MEMORY_NO_SUITABLE_MEMORY_TYPE);
@@ -19082,11 +19121,10 @@ _SOKOL_PRIVATE bool _sg_vk_mem_alloc_buffer_device_memory(_sg_buffer_t* buf) {
     SOKOL_ASSERT(0 == buf->vk.mem);
     _SG_STRUCT(VkMemoryRequirements, mem_reqs);
     vkGetBufferMemoryRequirements(_sg.vk.dev, buf->vk.buf, &mem_reqs);
-    VkMemoryAllocateFlags alloc_flags = 0;
-    if (buf->cmn.usage.storage_buffer) {
-        alloc_flags |= VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
-    }
-    buf->vk.mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, alloc_flags);
+    _sg_vk_memtype_t mem_type = buf->cmn.usage.storage_buffer
+        ? _SG_VK_MEMTYPE_STORAGE_BUFFER
+        : _SG_VK_MEMTYPE_GENERIC_BUFFER;
+    buf->vk.mem = _sg_vk_mem_alloc_device_memory(mem_type, &mem_reqs);
     if (0 == buf->vk.mem) {
         _SG_ERROR(VULKAN_ALLOC_BUFFER_DEVICE_MEMORY_FAILED);
         return false;
@@ -19101,7 +19139,7 @@ _SOKOL_PRIVATE bool _sg_vk_mem_alloc_image_device_memory(_sg_image_t* img) {
     SOKOL_ASSERT(0 == img->vk.mem);
     _SG_STRUCT(VkMemoryRequirements, mem_reqs);
     vkGetImageMemoryRequirements(_sg.vk.dev, img->vk.img, &mem_reqs);
-    img->vk.mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0);
+    img->vk.mem = _sg_vk_mem_alloc_device_memory(_SG_VK_MEMTYPE_IMAGE, &mem_reqs);
     if (0 == img->vk.mem) {
         _SG_ERROR(VULKAN_ALLOC_IMAGE_DEVICE_MEMORY_FAILED);
         return false;
@@ -19176,15 +19214,35 @@ _SOKOL_PRIVATE void _sg_vk_delete_queue_add(_sg_vk_delete_queue_destructor_t des
 }
 
 // double-buffer system for any non-blocking CPU => GPU data
-_SOKOL_PRIVATE void _sg_vk_shared_buffer_init(_sg_vk_shared_buffer_t* shbuf, uint32_t size, uint32_t align, VkBufferUsageFlags vk_usage, const char* label) {
+_SOKOL_PRIVATE void _sg_vk_shared_buffer_init(_sg_vk_shared_buffer_t* shbuf, uint32_t size, uint32_t align, _sg_vk_memtype_t mem_type, const char* label) {
     SOKOL_ASSERT(_sg.vk.dev);
-    SOKOL_ASSERT(shbuf && (size > 0) && (align > 0) && (vk_usage != 0));
+    SOKOL_ASSERT(shbuf && (size > 0) && (align > 0));
     SOKOL_ASSERT(0 == shbuf->size);
     SOKOL_ASSERT(0 == shbuf->offset);
     SOKOL_ASSERT(0 == shbuf->cur_buf);
     SOKOL_ASSERT(false == shbuf->overflown);
     VkResult res;
-    const bool want_device_address = 0 != (vk_usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
+    VkBufferUsageFlags vk_usage = 0;
+    bool want_device_address = false;
+    switch (mem_type) {
+        case _SG_VK_MEMTYPE_STAGING_STREAM:
+            vk_usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            break;
+        case _SG_VK_MEMTYPE_UNIFORMS:
+            vk_usage  = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+            vk_usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+            want_device_address = true;
+            break;
+        case _SG_VK_MEMTYPE_DESCRIPTORS:
+            vk_usage  = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
+            vk_usage |= VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT;
+            vk_usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+            want_device_address = true;
+            break;
+        default:
+            SOKOL_UNREACHABLE;
+            break;
+    }
 
     shbuf->size = _sg_roundup_u32(size, align);
     shbuf->align = align;
@@ -19206,14 +19264,7 @@ _SOKOL_PRIVATE void _sg_vk_shared_buffer_init(_sg_vk_shared_buffer_t* shbuf, uin
 
         _SG_STRUCT(VkMemoryRequirements, mem_reqs);
         vkGetBufferMemoryRequirements(_sg.vk.dev, shbuf->slots[i].buf, &mem_reqs);
-        // FIXME: we may want host-visible + local memory for uniform and descriptor buffers,
-        // but need to handle failure
-        const VkMemoryPropertyFlags mem_prop_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-        VkMemoryAllocateFlags mem_alloc_flags = 0;
-        if (want_device_address) {
-            mem_alloc_flags |= VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
-        }
-        shbuf->slots[i].mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, mem_prop_flags, mem_alloc_flags);
+        shbuf->slots[i].mem = _sg_vk_mem_alloc_device_memory(mem_type, &mem_reqs);
         if (0 == shbuf->slots[i].mem) {
             _SG_PANIC(VULKAN_ALLOCATE_SHARED_BUFFER_MEMORY_FAILED);
         }
@@ -19357,7 +19408,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_init(void) {
 
     _SG_STRUCT(VkMemoryRequirements, mem_reqs);
     vkGetBufferMemoryRequirements(_sg.vk.dev, _sg.vk.stage.copy.buf, &mem_reqs);
-    _sg.vk.stage.copy.mem = _sg_vk_mem_alloc_device_memory(&mem_reqs, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 0);
+    _sg.vk.stage.copy.mem = _sg_vk_mem_alloc_device_memory(_SG_VK_MEMTYPE_STAGING_COPY, &mem_reqs);
     if (0 == _sg.vk.stage.copy.mem) {
         _SG_PANIC(VULKAN_STAGING_ALLOCATE_MEMORY_FAILED);
     }
@@ -19562,7 +19613,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_init(void) {
     _sg_vk_shared_buffer_init(&_sg.vk.stage.stream,
         (uint32_t)_sg.desc.vk_stream_staging_buffer_size,
         16, // NOTE: arbitrary alignment (FIXME?)
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        _SG_VK_MEMTYPE_STAGING_STREAM,
         "shared-stream-buffer");
 }
 
@@ -19653,7 +19704,7 @@ _SOKOL_PRIVATE void _sg_vk_uniform_init(void) {
     _sg_vk_shared_buffer_init(&_sg.vk.uniform,
         (uint32_t)_sg.desc.uniform_buffer_size,
         _sg.vk.dev_props.properties.limits.minUniformBufferOffsetAlignment,
-        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        _SG_VK_MEMTYPE_UNIFORMS,
         "shared-uniform-buffer");
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
         _sg_vk_uniform_bindinfo_t* ubi = &_sg.vk.uniform_bindinfos[i];
@@ -19696,9 +19747,7 @@ _SOKOL_PRIVATE void _sg_vk_bind_init(void) {
     _sg_vk_shared_buffer_init(&_sg.vk.bind,
         (uint32_t)_sg.desc.vk_descriptor_buffer_size,
         _sg.vk.descriptor_buffer_props.descriptorBufferOffsetAlignment,
-        VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
-        VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT |
-        VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        _SG_VK_MEMTYPE_DESCRIPTORS,
         "shared-descriptor-buffer");
 }
 
