@@ -1868,7 +1868,7 @@
     - sg_apply_bindings(): the sokol-gfx WebGPU backend implements a bindgroup
       cache to prevent excessive creation and destruction of BindGroup objects
       when calling sg_apply_bindings(). The number of slots in the bindgroups
-      cache is defined in sg_desc.wgpu_bindgroups_cache_size when calling
+      cache is defined in sg_desc.wgpu.bindgroups_cache_size when calling
       sg_setup. The cache size must be a power-of-2 number, with the default being
       1024. The bindgroups cache behaviour can be observed by calling the new
       function sg_query_frame_stats(), where the following struct items are
@@ -4389,8 +4389,8 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_OUTPUT, "") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_DSS_FAILED, "failed to create depth stencil state (metal)") \
     _SG_LOGITEM_XMACRO(WGPU_BINDGROUPS_POOL_EXHAUSTED, "bindgroups pool exhausted (increase sg_desc.bindgroups_cache_size) (wgpu)") \
-    _SG_LOGITEM_XMACRO(WGPU_BINDGROUPSCACHE_SIZE_GREATER_ONE, "sg_desc.wgpu_bindgroups_cache_size must be > 1 (wgpu)") \
-    _SG_LOGITEM_XMACRO(WGPU_BINDGROUPSCACHE_SIZE_POW2, "sg_desc.wgpu_bindgroups_cache_size must be a power of 2 (wgpu)") \
+    _SG_LOGITEM_XMACRO(WGPU_BINDGROUPSCACHE_SIZE_GREATER_ONE, "sg_desc.wgpu.bindgroups_cache_size must be > 1 (wgpu)") \
+    _SG_LOGITEM_XMACRO(WGPU_BINDGROUPSCACHE_SIZE_POW2, "sg_desc.wgpu.bindgroups_cache_size must be a power of 2 (wgpu)") \
     _SG_LOGITEM_XMACRO(WGPU_CREATEBINDGROUP_FAILED, "wgpuDeviceCreateBindGroup failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_BUFFER_FAILED, "wgpuDeviceCreateBuffer() failed") \
     _SG_LOGITEM_XMACRO(WGPU_CREATE_TEXTURE_FAILED, "wgpuDeviceCreateTexture() failed") \
@@ -4415,7 +4415,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VULKAN_STAGING_CREATE_BUFFER_FAILED, "vulkan: vkCreateBuffer() failed for staging buffer") \
     _SG_LOGITEM_XMACRO(VULKAN_STAGING_ALLOCATE_MEMORY_FAILED, "vulkan: allocating device memory for staging buffer failed") \
     _SG_LOGITEM_XMACRO(VULKAN_STAGING_BIND_BUFFER_MEMORY_FAILED, "vulkan: vkBindBufferMemory() failed for staging buffer") \
-    _SG_LOGITEM_XMACRO(VULKAN_STAGING_STREAM_BUFFER_OVERFLOW, "vulkan: per-frame stream staging buffer has overflown (sg_desc.vk_stream_staging_buffer_size)") \
+    _SG_LOGITEM_XMACRO(VULKAN_STAGING_STREAM_BUFFER_OVERFLOW, "vulkan: per-frame stream staging buffer has overflown (sg_desc.vulkan.stream_staging_buffer_size)") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_SHARED_BUFFER_FAILED, "vulkan: vkCreateBuffer() failed for cpu/gpu-shared buffer") \
     _SG_LOGITEM_XMACRO(VULKAN_ALLOCATE_SHARED_BUFFER_MEMORY_FAILED, "vulkan: allocating device memory for cpu/gpu-shared buffer failed") \
     _SG_LOGITEM_XMACRO(VULKAN_BIND_SHARED_BUFFER_MEMORY_FAILED, "vulkan: vkBindBufferMemory() failed for cpu/gpu-shared buffer") \
@@ -4440,7 +4440,7 @@ typedef struct sg_frame_stats {
     _SG_LOGITEM_XMACRO(VULKAN_SAMPLER_MAX_DESCRIPTOR_SIZE, "vulkan: required sampler descriptor size is greater than _SG_VK_MAX_DESCRIPTOR_DATA_SIZE") \
     _SG_LOGITEM_XMACRO(VULKAN_WAIT_FOR_FENCE_FAILED, "vulkan: vkWaitForFence() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_UNIFORM_BUFFER_OVERFLOW, "vulkan: uniform buffer has overflown (increase sg_desc.uniform_buffer_size)") \
-    _SG_LOGITEM_XMACRO(VULKAN_DESCRIPTOR_BUFFER_OVERFLOW, "vulkan: desccriptor buffer has overflown (increase sg_desc.vk_descriptor_buffer_size)") \
+    _SG_LOGITEM_XMACRO(VULKAN_DESCRIPTOR_BUFFER_OVERFLOW, "vulkan: desccriptor buffer has overflown (increase sg_desc.vulkan.descriptor_buffer_size)") \
     _SG_LOGITEM_XMACRO(IDENTICAL_COMMIT_LISTENER, "attempting to add identical commit listener") \
     _SG_LOGITEM_XMACRO(COMMIT_LISTENER_ARRAY_FULL, "commit listener array full") \
     _SG_LOGITEM_XMACRO(TRACE_HOOKS_NOT_ENABLED, "sg_install_trace_hooks() called, but SOKOL_TRACE_HOOKS is not defined") \
@@ -4792,18 +4792,22 @@ typedef enum sg_log_item {
 
     The default configuration is:
 
-    .buffer_pool_size               128
-    .image_pool_size                128
-    .sampler_pool_size              64
-    .shader_pool_size               32
-    .pipeline_pool_size             64
-    .view_pool_size                 256
-    .uniform_buffer_size            4 MB (4*1024*1024)
-    .max_commit_listeners           1024
-    .disable_validation             false
-    .mtl_force_managed_storage_mode false
-    .wgpu_disable_bindgroups_cache  false
-    .wgpu_bindgroups_cache_size     1024
+    .buffer_pool_size                   128
+    .image_pool_size                    128
+    .sampler_pool_size                  64
+    .shader_pool_size                   32
+    .pipeline_pool_size                 64
+    .view_pool_size                     256
+    .uniform_buffer_size                4 MB (4*1024*1024)
+    .max_commit_listeners               1024
+    .disable_validation                 false
+    .metal.force_managed_storage_mode   false
+    .metal.use_command_buffer_with_retained_references  false
+    .wgpu.disable_bindgroups_cache      false
+    .wgpu.bindgroups_cache_size         1024
+    .vulkan.copy_staging_buffer_size    4 MB
+    .vulkan.stream_staging_buffer_size  16 MB
+    .vulkan.descriptor_buffer_size      16 MB
 
     .allocator.alloc_fn     0 (in this case, malloc() will be called)
     .allocator.free_fn      0 (in this case, free() will be called)
@@ -4824,11 +4828,11 @@ typedef enum sg_log_item {
         must hold a strong reference to the Objective-C object until sg_setup()
         returns.
 
-        .mtl_force_managed_storage_mode
+        .metal.force_managed_storage_mode
             when enabled, Metal buffers and texture resources are created in managed storage
             mode, otherwise sokol-gfx will decide whether to create buffers and
             textures in managed or shared storage mode (this is mainly a debugging option)
-        .mtl_use_command_buffer_with_retained_references
+        .metal.use_command_buffer_with_retained_references
             when true, the sokol-gfx Metal backend will use Metal command buffers which
             bump the reference count of resource objects as long as they are inflight,
             this is slower than the default command-buffer-with-unretained-references
@@ -4843,7 +4847,7 @@ typedef enum sg_log_item {
             before sg_setup() is called
         .environment.d3d11.device_context
             a pointer to the ID3D11DeviceContext object
-        .d3d11_shader_debugging
+        .d3d11.shader_debugging
             set this to true to compile shaders which are provided as HLSL source
             code with debug information and without optimization, this allows
             shader debugging in tools like RenderDoc, to output source code
@@ -4851,11 +4855,11 @@ typedef enum sg_log_item {
             option
 
     WebGPU specific:
-        .wgpu_disable_bindgroups_cache
+        .wgpu.disable_bindgroups_cache
             When this is true, the WebGPU backend will create and immediately
             release a BindGroup object in the sg_apply_bindings() call, only
             use this for debugging purposes.
-        .wgpu_bindgroups_cache_size
+        .wgpu.bindgroups_cache_size
             The size of the bindgroups cache for re-using BindGroup objects
             between sg_apply_bindings() calls. The smaller the cache size,
             the more likely are cache slot collisions which will cause
@@ -4866,6 +4870,29 @@ typedef enum sg_log_item {
             NOTE: wgpu_bindgroups_cache_size must be a power-of-2 number!
         .environment.wgpu.device
             a WGPUDevice handle
+
+    Vulkan specific:
+        .vulkan.copy_staging_buffer_size
+            Size of the staging buffer in bytes for uploading the initial
+            content of buffers and images, and for updating
+            .usage.dynamic_update resources. The default is 4 MB,
+            bigger resource updates are split into multiple chunks
+            of the staging buffer size
+        .vulkan.stream_staging_buffer_size
+            Size of the staging buffer in bytes for updating .usage.stream_update
+            resources. The default is 16 MB. The size must be big enough
+            to accomodate all update into .usage.stream_update resources.
+            Any additional data will cause an error log message and
+            incomplete rendering. Note that the actually allocated size
+            will be twice as much because the stream-staging-buffer is
+            double-buffered.
+        .vulkan.descriptor_buffer_size
+            Size of the descriptor-upload buffer in bytes. The default
+            size is 16 bytes. The size must be big enough to accomodate
+            all unifrom-block, view- and sampler-bindings in a single
+            frame (assume a worst-case of 256 bytes per binding). Note
+            that the actually allocated size will be twice as much
+            because the descriptor-buffer is double-buffered.
 
     When using sokol_gfx.h and sokol_app.h together, consider using the
     helper function sglue_environment() in the sokol_glue.h header to
@@ -4958,6 +4985,26 @@ typedef struct sg_logger {
     void* user_data;
 } sg_logger;
 
+typedef struct sg_d3d11_desc {
+    bool shader_debugging;  // if true, HLSL shaders are compiled with D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION
+} sg_d3d11_desc;
+
+typedef struct sg_metal_desc {
+    bool force_managed_storage_mode; // for debugging: use Metal managed storage mode for resources even with UMA
+    bool use_command_buffer_with_retained_references;    // Metal: use a managed MTLCommandBuffer which ref-counts used resources
+} sg_metal_desc;
+
+typedef struct sg_wgpu_desc {
+    bool disable_bindgroups_cache; // set to true to disable the WebGPU backend BindGroup cache
+    int bindgroups_cache_size;     // number of slots in the WebGPU bindgroup cache (must be 2^N)
+} sg_wgpu_desc;
+
+typedef struct sg_vulkan_desc {
+    int copy_staging_buffer_size;    // size of staging buffer for immutable and dynamic resources (default: 4 MB)
+    int stream_staging_buffer_size;  // size of per-frame staging buffer for updating streaming resources (default: 16 MB)
+    int descriptor_buffer_size;      // size of per-frame descriptor buffer for updating resource bindings (default: 16 MB)
+} sg_vulkan_desc;
+
 typedef struct sg_desc {
     uint32_t _start_canary;
     int buffer_pool_size;
@@ -4966,21 +5013,17 @@ typedef struct sg_desc {
     int shader_pool_size;
     int pipeline_pool_size;
     int view_pool_size;
-    int uniform_buffer_size;            // max size of all sg_apply_uniform() calls per frame, with worst-case 256 byte alignment
-    int max_commit_listeners;
-    bool disable_validation;            // disable validation layer even in debug mode, useful for tests
-    bool enforce_portable_limits;       // if true, enforce portable resource binding limits (SG_MAX_PORTABLE_*)
-    bool d3d11_shader_debugging;        // if true, HLSL shaders are compiled with D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION
-    bool mtl_force_managed_storage_mode; // for debugging: use Metal managed storage mode for resources even with UMA
-    bool mtl_use_command_buffer_with_retained_references;    // Metal: use a managed MTLCommandBuffer which ref-counts used resources
-    bool wgpu_disable_bindgroups_cache; // set to true to disable the WebGPU backend BindGroup cache
-    int wgpu_bindgroups_cache_size;     // number of slots in the WebGPU bindgroup cache (must be 2^N)
-    int vk_copy_staging_buffer_size;    // Vulkan: size of staging buffer for immutable and dynamic resources (default: 4 MB)
-    int vk_stream_staging_buffer_size;  // Vulkan: size of per-frame staging buffer for updating streaming resources (default: 16 MB)
-    int vk_descriptor_buffer_size;      // Vulkan: size of per-frame descriptor buffer for updating resource bindings (default: 16 MB)
-    sg_allocator allocator;
-    sg_logger logger; // optional log function override
-    sg_environment environment;
+    int uniform_buffer_size;        // max size of all sg_apply_uniform() calls per frame, with worst-case 256 byte alignment
+    int max_commit_listeners;       // max number of commit listener hook functions
+    bool disable_validation;        // disable validation layer even in debug mode, useful for tests
+    bool enforce_portable_limits;   // if true, enforce portable resource binding limits (SG_MAX_PORTABLE_*)
+    sg_d3d11_desc d3d11;            // d3d11-specific setup parameters
+    sg_metal_desc metal;            // metal-specific setup parameters
+    sg_wgpu_desc wgpu;              // webgpu-specific setup parameters
+    sg_vulkan_desc vulkan;          // vulkan-specific setup parameters
+    sg_allocator allocator;         // optional memory allocation hooks
+    sg_logger logger;               // optional log function override
+    sg_environment environment;     // required externally provided runtime objects and defaults
     uint32_t _end_canary;
 } sg_desc;
 
@@ -13224,7 +13267,7 @@ _SOKOL_PRIVATE ID3DBlob* _sg_d3d11_compile_shader(const sg_shader_function* shd_
     }
     SOKOL_ASSERT(shd_func->d3d11_target);
     UINT flags1 = D3DCOMPILE_PACK_MATRIX_COLUMN_MAJOR;
-    if (_sg.desc.d3d11_shader_debugging) {
+    if (_sg.desc.d3d11.shader_debugging) {
         flags1 |= D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
     } else {
         flags1 |= D3DCOMPILE_OPTIMIZATION_LEVEL3;
@@ -15085,7 +15128,7 @@ _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
         #endif
     }
 
-    if (desc->mtl_force_managed_storage_mode) {
+    if (desc->metal.force_managed_storage_mode) {
         _sg.mtl.use_shared_storage_mode = false;
     } else if (@available(macOS 10.15, iOS 13.0, *)) {
         // on Intel Macs, always use managed resources even though the
@@ -15985,7 +16028,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass* pass, const _sg_attachment
     if (nil == _sg.mtl.cmd_buffer) {
         // block until the oldest frame in flight has finished
         dispatch_semaphore_wait(_sg.mtl.sem, DISPATCH_TIME_FOREVER);
-        if (_sg.desc.mtl_use_command_buffer_with_retained_references) {
+        if (_sg.desc.metal.use_command_buffer_with_retained_references) {
             _sg.mtl.cmd_buffer = [_sg.mtl.cmd_queue commandBuffer];
         } else {
             _sg.mtl.cmd_buffer = [_sg.mtl.cmd_queue commandBufferWithUnretainedReferences];
@@ -17070,10 +17113,10 @@ _SOKOL_PRIVATE void _sg_wgpu_uniform_buffer_on_commit(void) {
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_bindgroups_pool_init(const sg_desc* desc) {
-    SOKOL_ASSERT((desc->wgpu_bindgroups_cache_size > 0) && (desc->wgpu_bindgroups_cache_size < _SG_MAX_POOL_SIZE));
+    SOKOL_ASSERT((desc->wgpu.bindgroups_cache_size > 0) && (desc->wgpu.bindgroups_cache_size < _SG_MAX_POOL_SIZE));
     _sg_wgpu_bindgroups_pool_t* p = &_sg.wgpu.bindgroups_pool;
     SOKOL_ASSERT(0 == p->bindgroups);
-    const int pool_size = desc->wgpu_bindgroups_cache_size;
+    const int pool_size = desc->wgpu.bindgroups_cache_size;
     _sg_pool_init(&p->pool, pool_size);
     size_t pool_byte_size = sizeof(_sg_wgpu_bindgroup_t) * (size_t)p->pool.size;
     p->bindgroups = (_sg_wgpu_bindgroup_t*) _sg_malloc_clear(pool_byte_size);
@@ -17336,14 +17379,14 @@ _SOKOL_PRIVATE void _sg_wgpu_bindgroups_cache_init(const sg_desc* desc) {
     SOKOL_ASSERT(_sg.wgpu.bindgroups_cache.num == 0);
     SOKOL_ASSERT(_sg.wgpu.bindgroups_cache.index_mask == 0);
     SOKOL_ASSERT(_sg.wgpu.bindgroups_cache.items == 0);
-    const int num = desc->wgpu_bindgroups_cache_size;
+    const int num = desc->wgpu.bindgroups_cache_size;
     if (num <= 1) {
         _SG_PANIC(WGPU_BINDGROUPSCACHE_SIZE_GREATER_ONE);
     }
     if (!_sg_ispow2(num)) {
         _SG_PANIC(WGPU_BINDGROUPSCACHE_SIZE_POW2);
     }
-    _sg.wgpu.bindgroups_cache.num = (uint32_t)desc->wgpu_bindgroups_cache_size;
+    _sg.wgpu.bindgroups_cache.num = (uint32_t)desc->wgpu.bindgroups_cache_size;
     _sg.wgpu.bindgroups_cache.index_mask = _sg.wgpu.bindgroups_cache.num - 1;
     size_t size_in_bytes = sizeof(_sg_wgpu_bindgroup_handle_t) * (size_t)num;
     _sg.wgpu.bindgroups_cache.items = (_sg_wgpu_bindgroup_handle_t*)_sg_malloc_clear(size_in_bytes);
@@ -17489,7 +17532,7 @@ _SOKOL_PRIVATE void _sg_wgpu_set_bindgroup(uint32_t bg_idx, _sg_wgpu_bindgroup_t
 }
 
 _SOKOL_PRIVATE bool _sg_wgpu_apply_bindings_bindgroup(_sg_bindings_ptrs_t* bnd) {
-    if (!_sg.desc.wgpu_disable_bindgroups_cache) {
+    if (!_sg.desc.wgpu.disable_bindgroups_cache) {
         _sg_wgpu_bindgroup_t* bg = 0;
         _sg_wgpu_bindgroups_cache_key_t key;
         _sg_wgpu_init_bindgroups_cache_key(&key, bnd);
@@ -19374,7 +19417,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_init(void) {
     SOKOL_ASSERT(0 == _sg.vk.stage.copy.size);
     SOKOL_ASSERT(0 == _sg.vk.stage.copy.buf);
     SOKOL_ASSERT(0 == _sg.vk.stage.copy.mem);
-    SOKOL_ASSERT(_sg.desc.vk_copy_staging_buffer_size > 0);
+    SOKOL_ASSERT(_sg.desc.vulkan.copy_staging_buffer_size > 0);
 
     _SG_STRUCT(VkCommandPoolCreateInfo, pool_create_info);
     pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -19393,7 +19436,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_init(void) {
     SOKOL_ASSERT((res == VK_SUCCESS) && _sg.vk.stage.copy.cmd_buf);
     _sg_vk_set_object_label(VK_OBJECT_TYPE_COMMAND_BUFFER, (uint64_t)_sg.vk.stage.copy.cmd_buf, "copy-staging cmd buffer");
 
-    _sg.vk.stage.copy.size = (uint32_t) _sg.desc.vk_copy_staging_buffer_size;
+    _sg.vk.stage.copy.size = (uint32_t) _sg.desc.vulkan.copy_staging_buffer_size;
     _SG_STRUCT(VkBufferCreateInfo, buf_create_info);
     buf_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     buf_create_info.size = _sg.vk.stage.copy.size;
@@ -19609,9 +19652,9 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_im
 
 // staging system for non-blocking streaming updates with a max per-frame data limit
 _SOKOL_PRIVATE void _sg_vk_staging_stream_init(void) {
-    SOKOL_ASSERT(_sg.desc.vk_stream_staging_buffer_size > 0);
+    SOKOL_ASSERT(_sg.desc.vulkan.stream_staging_buffer_size > 0);
     _sg_vk_shared_buffer_init(&_sg.vk.stage.stream,
-        (uint32_t)_sg.desc.vk_stream_staging_buffer_size,
+        (uint32_t)_sg.desc.vulkan.stream_staging_buffer_size,
         16, // NOTE: arbitrary alignment (FIXME?)
         _SG_VK_MEMTYPE_STAGING_STREAM,
         "shared-stream-buffer");
@@ -19743,9 +19786,9 @@ _SOKOL_PRIVATE uint32_t _sg_vk_uniform_copy(const sg_range* data) {
 
 // resource binding system
 _SOKOL_PRIVATE void _sg_vk_bind_init(void) {
-    SOKOL_ASSERT(_sg.desc.vk_descriptor_buffer_size > 0);
+    SOKOL_ASSERT(_sg.desc.vulkan.descriptor_buffer_size > 0);
     _sg_vk_shared_buffer_init(&_sg.vk.bind,
-        (uint32_t)_sg.desc.vk_descriptor_buffer_size,
+        (uint32_t)_sg.desc.vulkan.descriptor_buffer_size,
         _sg.vk.descriptor_buffer_props.descriptorBufferOffsetAlignment,
         _SG_VK_MEMTYPE_DESCRIPTORS,
         "shared-descriptor-buffer");
@@ -24399,10 +24442,10 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
     res.view_pool_size = _sg_def(res.view_pool_size, _SG_DEFAULT_VIEW_POOL_SIZE);
     res.uniform_buffer_size = _sg_def(res.uniform_buffer_size, _SG_DEFAULT_UB_SIZE);
     res.max_commit_listeners = _sg_def(res.max_commit_listeners, _SG_DEFAULT_MAX_COMMIT_LISTENERS);
-    res.wgpu_bindgroups_cache_size = _sg_def(res.wgpu_bindgroups_cache_size, _SG_DEFAULT_WGPU_BINDGROUP_CACHE_SIZE);
-    res.vk_copy_staging_buffer_size = _sg_def(res.vk_copy_staging_buffer_size, _SG_DEFAULT_VK_COPY_STAGING_SIZE);
-    res.vk_stream_staging_buffer_size = _sg_def(res.vk_stream_staging_buffer_size, _SG_DEFAULT_VK_STREAM_STAGING_SIZE);
-    res.vk_descriptor_buffer_size = _sg_def(res.vk_descriptor_buffer_size, _SG_DEFAULT_VK_DESCRIPTOR_BUFFER_SIZE);
+    res.wgpu.bindgroups_cache_size = _sg_def(res.wgpu.bindgroups_cache_size, _SG_DEFAULT_WGPU_BINDGROUP_CACHE_SIZE);
+    res.vulkan.copy_staging_buffer_size = _sg_def(res.vulkan.copy_staging_buffer_size, _SG_DEFAULT_VK_COPY_STAGING_SIZE);
+    res.vulkan.stream_staging_buffer_size = _sg_def(res.vulkan.stream_staging_buffer_size, _SG_DEFAULT_VK_STREAM_STAGING_SIZE);
+    res.vulkan.descriptor_buffer_size = _sg_def(res.vulkan.descriptor_buffer_size, _SG_DEFAULT_VK_DESCRIPTOR_BUFFER_SIZE);
     return res;
 }
 
