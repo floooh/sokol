@@ -1896,11 +1896,14 @@ typedef struct sapp_environment {
     sapp_swapchain
 
     Provides swapchain information for the current frame to the outside
-    world via a call to sapp_swapchain_next().
+    world via a call to sapp_get_swapchain().
+
+    NOTE: sapp_get_swapchain() must be called exactly once per frame since
+    on some backends it will also acquire the next swapchain image.
 
     NOTE: when using sokol_gfx.h, don't assume that the sapp_swapchain struct
     has the same memory layout as sg_swapchain! Use the sokol_log.h helper
-    function sglue_swapchain_next() to translate sapp_swapchain into a
+    function sglue_swapchain() to translate sapp_swapchain into a
     sg_swapchain instead.
 */
 typedef struct sapp_metal_swapchain {
@@ -2183,8 +2186,8 @@ SOKOL_APP_API_DECL void sapp_run(const sapp_desc* desc);
 
 /* get runtime environment information */
 sapp_environment sapp_get_environment(void);
-/* get current frame's swapchain information (call one per frame) */
-sapp_swapchain sapp_swapchain_next(void);
+/* get current frame's swapchain information (call once per frame!) */
+sapp_swapchain sapp_get_swapchain(void);
 
 /* EGL: get EGLDisplay object */
 SOKOL_APP_API_DECL const void* sapp_egl_get_display(void);
@@ -13875,7 +13878,7 @@ SOKOL_API_IMPL sapp_environment sapp_get_environment(void) {
     return res;
 }
 
-SOKOL_API_IMPL sapp_swapchain sapp_swapchain_next(void) {
+SOKOL_API_IMPL sapp_swapchain sapp_get_swapchain(void) {
     SOKOL_ASSERT(_sapp.valid);
     sapp_swapchain res;
     _sapp_clear(&res, sizeof(res));

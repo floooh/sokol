@@ -53,7 +53,7 @@
         functions. Use this in sg_begin_pass() for a 'swapchain pass' like
         this:
 
-        sg_begin_pass(&(sg_pass){ .swapchain = sglue_swapchain_next(), ... });
+        sg_begin_pass(&(sg_pass){ .swapchain = sglue_swapchain(), ... });
 
     LICENSE
     =======
@@ -104,7 +104,7 @@ extern "C" {
 #endif
 
 SOKOL_GLUE_API_DECL sg_environment sglue_environment(void);
-SOKOL_GLUE_API_DECL sg_swapchain sglue_swapchain_next(void);
+SOKOL_GLUE_API_DECL sg_swapchain sglue_swapchain(void);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -173,10 +173,10 @@ SOKOL_API_IMPL sg_environment sglue_environment(void) {
     return res;
 }
 
-SOKOL_API_IMPL sg_swapchain sglue_swapchain_next(void) {
+SOKOL_API_IMPL sg_swapchain sglue_swapchain(void) {
     sg_swapchain res;
     memset(&res, 0, sizeof(res));
-    const sapp_swapchain sc = sapp_swapchain_next();
+    const sapp_swapchain sc = sapp_get_swapchain();
     res.width = sc.width;
     res.height = sc.height;
     res.sample_count = sc.sample_count;

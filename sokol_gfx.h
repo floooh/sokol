@@ -146,7 +146,7 @@
         presents the rendering result on the display. Such a 'swapchain pass'
         is started like this:
 
-            sg_begin_pass(&(sg_pass){ .action = { ... }, .swapchain = sglue_swapchain_next() })
+            sg_begin_pass(&(sg_pass){ .action = { ... }, .swapchain = sglue_swapchain() })
 
         ...where .action is an sg_pass_action struct containing actions to be performed
         at the start and end of a render pass (such as clearing the render surfaces to
@@ -510,7 +510,7 @@
     A frame must have at least one 'swapchain render pass' which renders into an
     externally provided swapchain provided as an sg_swapchain struct to the
     sg_begin_pass() function. If you use sokol_gfx.h together with sokol_app.h,
-    just call the sglue_swapchain_next() helper function in sokol_glue.h to
+    just call the sglue_swapchain() helper function in sokol_glue.h to
     provide the swapchain information. Otherwise the following information
     must be provided:
 
@@ -548,9 +548,9 @@
     initialized sg_swapchain struct by value. This can then be directly plugged
     into the sg_begin_pass function like this:
 
-        sg_begin_pass(&(sg_pass){ .swapchain = sglue_swapchain_next() });
+        sg_begin_pass(&(sg_pass){ .swapchain = sglue_swapchain() });
 
-    As an example for such a helper function check out the function sglue_swapchain_next()
+    As an example for such a helper function check out the function sglue_swapchain()
     in the sokol_glue.h header.
 
     For offscreen render passes, the render target images used in a render pass
@@ -680,7 +680,7 @@
 
         sg_begin_pass(&(sg_pass){
             .action = pass_action,
-            .swapchain = sglue_swapchain_next()
+            .swapchain = sglue_swapchain()
         });
         ...
         sg_end_pass();
@@ -2916,7 +2916,7 @@ typedef struct sg_pass_action {
 
     It's a good practice to write a helper function which returns an initialized
     sg_swapchain struct, which can then be plugged directly into
-    sg_pass.swapchain. Look at the function sglue_swapchain_next() in the sokol_glue.h
+    sg_pass.swapchain. Look at the function sglue_swapchain() in the sokol_glue.h
     as an example.
 */
 typedef struct sg_metal_swapchain {
@@ -3005,12 +3005,12 @@ typedef struct sg_attachments {
     function.
 
     For a swapchain render pass, provide an sg_pass_action and sg_swapchain
-    struct (for instance via the sglue_swapchain_next() helper function from
+    struct (for instance via the sglue_swapchain() helper function from
     sokol_glue.h):
 
         sg_begin_pass(&(sg_pass){
             .action = { ... },
-            .swapchain = sglue_swapchain_next(),
+            .swapchain = sglue_swapchain(),
         });
 
     For an offscreen render pass, provide an sg_pass_action struct with
