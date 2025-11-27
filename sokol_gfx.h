@@ -10927,7 +10927,7 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass, const _sg_attachments
         SOKOL_ASSERT(_sg.limits.max_color_attachments <= SG_MAX_COLOR_ATTACHMENTS);
         for (int i = 0; i < _sg.limits.max_color_attachments; i++) {
             if (i < atts->num_color_views) {
-                gl_draw_bufs[i] = GL_COLOR_ATTACHMENT0 + i;
+                gl_draw_bufs[i] = (GLenum)(GL_COLOR_ATTACHMENT0 + i);
             } else {
                 gl_draw_bufs[i] = GL_NONE;
             }
