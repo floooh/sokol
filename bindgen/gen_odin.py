@@ -33,10 +33,11 @@ system_libs = {
         },
         'macos': {
             'metal': '"system:Cocoa.framework","system:QuartzCore.framework","system:Metal.framework","system:MetalKit.framework"',
-            'gl': '"system:Cocoa.framework","system:QuartzCore.framework","system:OpenGL.framework"'
+            'gl': '"system:Cocoa.framework","system:QuartzCore.framework","system:OpenGL.framework"',
         },
         'linux': {
-            'gl': '"system:GL", "system:dl", "system:pthread"'
+            'gl': '"system:GL", "system:dl", "system:pthread"',
+            'gldll': '"system:GL", "system:dl", "system:pthread"',
         }
     },
     'sapp_': {
@@ -49,7 +50,8 @@ system_libs = {
             'gl': '"system:Cocoa.framework","system:QuartzCore.framework","system:OpenGL.framework"',
         },
         'linux': {
-            'gl': '"system:X11", "system:Xi", "system:Xcursor", "system:GL", "system:dl", "system:pthread"'
+            'gl': '"system:X11", "system:Xi", "system:Xcursor", "system:GL", "system:dl", "system:pthread"',
+            'gldll': '"system:X11", "system:Xi", "system:Xcursor", "system:GL", "system:dl", "system:pthread"',
         }
     },
     'saudio_': {
@@ -63,6 +65,7 @@ system_libs = {
         },
         'linux': {
             'gl': '"system:asound", "system:dl", "system:pthread"',
+            'gldll': '"system:dl", "system:pthread"',
         }
     }
 }
@@ -358,6 +361,7 @@ def gen_c_imports(inp, c_prefix, prefix):
     macos_metal_libs = get_system_libs(prefix, 'macos', 'metal')
     macos_gl_libs = get_system_libs(prefix, 'macos', 'gl')
     linux_gl_libs = get_system_libs(prefix, 'linux', 'gl')
+    linux_gldll_libs = get_system_libs(prefix, 'linux', 'gldll')
     l( 'import "core:c"')
     l( '')
     l( '_ :: c')
@@ -417,8 +421,8 @@ def gen_c_imports(inp, c_prefix, prefix):
     l( '    }')
     l( '} else when ODIN_OS == .Linux {')
     l( '    when USE_DLL {')
-    l(f'        when DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_debug.so"{linux_gl_libs} }} }}')
-    l(f'        else       {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_release.so"{linux_gl_libs} }} }}')
+    l(f'        when DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_debug.so"{linux_gldll_libs} }} }}')
+    l(f'        else       {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_release.so"{linux_gldll_libs} }} }}')
     l( '    } else {')
     l(f'        when DEBUG {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_debug.a"{linux_gl_libs} }} }}')
     l(f'        else       {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_release.a"{linux_gl_libs} }} }}')
