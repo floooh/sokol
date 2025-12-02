@@ -10909,6 +10909,12 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass, const _sg_attachments
                 _sg_gl_fb_attach_texture(view, gl_att_type);
             }
         }
+        // explicitly detach unused color attachments
+        for (int i = atts->num_color_views; i < _sg.limits.max_color_attachments; i++) {
+            const GLenum gl_att_type = (GLenum)(GL_COLOR_ATTACHMENT0 + i);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, gl_att_type, GL_RENDERBUFFER, 0);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, gl_att_type, GL_TEXTURE_2D, 0, 0);
+        }
         if (atts->ds_view) {
             const _sg_view_t* view = atts->ds_view;
             const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
@@ -10918,6 +10924,10 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass, const _sg_attachments
             } else {
                 _sg_gl_fb_attach_texture(view, gl_att_type);
             }
+        } else {
+            // explicitly detach depth-stencil attachment if not used in this pass
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
         }
         if (!_sg_gl_check_framebuffer_status()) {
             _sg.cur_pass.valid = false;
