@@ -1,5 +1,11 @@
 ## Updates
 
+### 02-Dec-2025
+
+- sokol_gfx.h gl: unused framebuffer attachment slots are now explicitly cleared
+  in `sg_begin_pass()`. See PR #1390 for details! Many thanks to @etherbound-dev
+  for catching and fixing the issue!
+
 ### 13-Nov-2025
 
 - sokol_audio.h gained a new backend for the Nintendo 3DS.
