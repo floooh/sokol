@@ -5653,10 +5653,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_PROGRAM_POINT_SIZE 0x8642
         #define GL_DEPTH_ATTACHMENT 0x8D00
         #define GL_DEPTH_STENCIL_ATTACHMENT 0x821A
-        #define GL_COLOR_ATTACHMENT2 0x8CE2
         #define GL_COLOR_ATTACHMENT0 0x8CE0
         #define GL_R16F 0x822D
-        #define GL_COLOR_ATTACHMENT22 0x8CF6
         #define GL_DRAW_FRAMEBUFFER 0x8CA9
         #define GL_FRAMEBUFFER_COMPLETE 0x8CD5
         #define GL_NUM_EXTENSIONS 0x821D
@@ -5698,7 +5696,6 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_RGB10_A2 0x8059
         #define GL_RGBA8 0x8058
         #define GL_SRGB8_ALPHA8 0x8C43
-        #define GL_COLOR_ATTACHMENT1 0x8CE1
         #define GL_RGBA4 0x8056
         #define GL_RGB8 0x8051
         #define GL_ARRAY_BUFFER 0x8892
@@ -5781,7 +5778,6 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_DST_COLOR 0x0306
         #define GL_COMPILE_STATUS 0x8B81
         #define GL_RED 0x1903
-        #define GL_COLOR_ATTACHMENT3 0x8CE3
         #define GL_DST_ALPHA 0x0304
         #define GL_RGB5_A1 0x8057
         #define GL_GREATER 0x0204
@@ -11347,6 +11343,12 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass, const _sg_attachments
                 _sg_gl_fb_attach_texture(view, gl_att_type);
             }
         }
+        // explicitly detach unused color attachments
+        for (int i = atts->num_color_views; i < _sg.limits.max_color_attachments; i++) {
+            const GLenum gl_att_type = (GLenum)(GL_COLOR_ATTACHMENT0 + i);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, gl_att_type, GL_RENDERBUFFER, 0);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, gl_att_type, GL_TEXTURE_2D, 0, 0);
+        }
         if (atts->ds_view) {
             const _sg_view_t* view = atts->ds_view;
             const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
@@ -11356,18 +11358,25 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass, const _sg_attachments
             } else {
                 _sg_gl_fb_attach_texture(view, gl_att_type);
             }
+        } else {
+            // explicitly detach depth-stencil attachment if not used in this pass
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
         }
         if (!_sg_gl_check_framebuffer_status()) {
             _sg.cur_pass.valid = false;
             return;
         }
-        static const GLenum gl_draw_bufs[SG_MAX_COLOR_ATTACHMENTS] = {
-            GL_COLOR_ATTACHMENT0,
-            GL_COLOR_ATTACHMENT1,
-            GL_COLOR_ATTACHMENT2,
-            GL_COLOR_ATTACHMENT3
-        };
-        glDrawBuffers(atts->num_color_views, gl_draw_bufs);
+        GLenum gl_draw_bufs[SG_MAX_COLOR_ATTACHMENTS];
+        SOKOL_ASSERT(_sg.limits.max_color_attachments <= SG_MAX_COLOR_ATTACHMENTS);
+        for (int i = 0; i < _sg.limits.max_color_attachments; i++) {
+            if (i < atts->num_color_views) {
+                gl_draw_bufs[i] = (GLenum)(GL_COLOR_ATTACHMENT0 + i);
+            } else {
+                gl_draw_bufs[i] = GL_NONE;
+            }
+        }
+        glDrawBuffers(_sg.limits.max_color_attachments, gl_draw_bufs);
 
         #if defined(_SOKOL_GL_HAS_COMPUTE)
             _sg_gl_handle_memory_barriers(0, 0, atts);
