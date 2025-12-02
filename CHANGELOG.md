@@ -32,6 +32,7 @@
     - libvulkan-dev
     - vulkan-tools
     - vulkan-validationlayers
+  - mkdir workspace && cd workspace
   - clone https://github.com/floooh/sokol-samples
   - from within sokol-samples:
     - ./fips set config sapp-vk-linux-ninja-debug
