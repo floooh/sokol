@@ -1239,6 +1239,7 @@ _SOKOL_PRIVATE const char* _sgimgui_backend_string(sg_backend b) {
         case SG_BACKEND_METAL_MACOS:        return "SG_BACKEND_METAL_MACOS";
         case SG_BACKEND_METAL_SIMULATOR:    return "SG_BACKEND_METAL_SIMULATOR";
         case SG_BACKEND_WGPU:               return "SG_BACKEND_WGPU";
+        case SG_BACKEND_VULKAN:             return "SG_BACKEND_VULKAN";
         case SG_BACKEND_DUMMY:              return "SG_BACKEND_DUMMY";
         default: return "???";
     }
@@ -3720,6 +3721,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
                         _sgimgui_igtext("  hlsl_register_b_n: %d", ub->hlsl_register_b_n);
                         _sgimgui_igtext("  msl_buffer_n: %d", ub->msl_buffer_n);
                         _sgimgui_igtext("  wgsl_group0_binding_n: %d", ub->wgsl_group0_binding_n);
+                        _sgimgui_igtext("  spirv_set0_binding_n: %d", ub->spirv_set0_binding_n);
                         _sgimgui_igtext("  glsl_uniforms:");
                         for (int j = 0; j < SG_MAX_UNIFORMBLOCK_MEMBERS; j++) {
                             const sg_glsl_shader_uniform* u = &ub->glsl_uniforms[j];
@@ -3750,6 +3752,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
                             _sgimgui_igtext("  hlsl_register_t_n: %d", tex->hlsl_register_t_n);
                             _sgimgui_igtext("  msl_texture_n: %d", tex->msl_texture_n);
                             _sgimgui_igtext("  wgsl_group1_binding_n: %d", tex->wgsl_group1_binding_n);
+                            _sgimgui_igtext("  spirv_set1_binding_n: %d", tex->spirv_set1_binding_n);
                         } else if (view->storage_buffer.stage != SG_SHADERSTAGE_NONE) {
                             const sg_shader_storage_buffer_view* sbuf = &view->storage_buffer;
                             _sgimgui_igtext("- slot: %d", i);
@@ -3763,6 +3766,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
                             }
                             _sgimgui_igtext("  msl_buffer_n: %d", sbuf->msl_buffer_n);
                             _sgimgui_igtext("  wgsl_group1_binding_n: %d", sbuf->wgsl_group1_binding_n);
+                            _sgimgui_igtext("  spirv_group1_binding_n: %d\n", sbuf->spirv_set1_binding_n);
                             _sgimgui_igtext("  glsl_binding_n: %d", sbuf->glsl_binding_n);
                         } else if (view->storage_image.stage != SG_SHADERSTAGE_NONE) {
                             const sg_shader_storage_image_view* simg = &view->storage_image;
@@ -3775,6 +3779,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
                             _sgimgui_igtext("  hlsl_register_u_n: %d", simg->hlsl_register_u_n);
                             _sgimgui_igtext("  msl_texture_n: %d", simg->msl_texture_n);
                             _sgimgui_igtext("  wgsl_group2_binding_n: %d", simg->wgsl_group1_binding_n);
+                            _sgimgui_igtext("  spirv_set1_binding_n: %d", simg->spirv_set1_binding_n);
                             _sgimgui_igtext("  glsl_binding_n: %d", simg->glsl_binding_n);
                         }
                     }
@@ -3794,6 +3799,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(sgimgui_t* ctx, sg_shader shd) {
                         _sgimgui_igtext("  hlsl_register_s_n: %d", ssd->hlsl_register_s_n);
                         _sgimgui_igtext("  msl_sampler_n: %d", ssd->msl_sampler_n);
                         _sgimgui_igtext("  wgsl_group1_binding_n: %d", ssd->wgsl_group1_binding_n);
+                        _sgimgui_igtext("  spirv_set1_binding_1: %d", ssd->spirv_set1_binding_n);
                     }
                     _sgimgui_igtreepop();
                 }
@@ -4291,6 +4297,17 @@ _SOKOL_PRIVATE void _sgimgui_draw_swapchain_panel(sg_swapchain* swapchain) {
             _sgimgui_igtext("GL Objects:");
             _sgimgui_igtext("  Framebuffer: %d", swapchain->gl.framebuffer);
             break;
+        case SG_BACKEND_VULKAN:
+            _sgimgui_igtext("Vulkan Objects:");
+            _sgimgui_igtext("  Render Image: %p", swapchain->vulkan.render_image);
+            _sgimgui_igtext("  Render View: %p", swapchain->vulkan.render_view);
+            _sgimgui_igtext("  Resolve Image: %p", swapchain->vulkan.resolve_image);
+            _sgimgui_igtext("  Resolve View: %p", swapchain->vulkan.resolve_view);
+            _sgimgui_igtext("  Depth Stencil Image: %p", swapchain->vulkan.depth_stencil_image);
+            _sgimgui_igtext("  Depth Stencil View: %p", swapchain->vulkan.depth_stencil_view);
+            _sgimgui_igtext("  Render Finished Semaphore: %p", swapchain->vulkan.render_finished_semaphore);
+            _sgimgui_igtext("  Present Complete Semaphore: %p", swapchain->vulkan.present_complete_semaphore);
+            break;
         default:
             _sgimgui_igtext("  UNKNOWN BACKEND!");
             break;
@@ -4500,6 +4517,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
     _sgimgui_igtext("    gl_max_vertex_uniform_components: %d", l.gl_max_vertex_uniform_components);
     _sgimgui_igtext("    gl_max_combined_texture_image_units: %d", l.gl_max_combined_texture_image_units);
     _sgimgui_igtext("    d3d11_max_unordered_access_views: %d", l.d3d11_max_unordered_access_views);
+    _sgimgui_igtext("    vk_min_uniform_buffer_offset_alignment: %d", l.vk_min_uniform_buffer_offset_alignment);
     _sgimgui_igtext("\nStruct Sizes:\n");
     _sgimgui_igtext("    sg_desc:           %d bytes\n", (int)sizeof(sg_desc));
     _sgimgui_igtext("    sg_buffer_desc:    %d bytes\n", (int)sizeof(sg_buffer_desc));
@@ -4705,6 +4723,18 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(sgimgui_t* ctx) {
                 _sgimgui_frame_stats(d3d11.draw.num_draw);
                 _sgimgui_frame_stats(d3d11.num_map);
                 _sgimgui_frame_stats(d3d11.num_unmap);
+                break;
+            case SG_BACKEND_VULKAN:
+                _sgimgui_frame_stats(vk.num_cmd_pipeline_barrier);
+                _sgimgui_frame_stats(vk.num_allocate_memory);
+                _sgimgui_frame_stats(vk.num_free_memory);
+                _sgimgui_frame_stats(vk.size_allocate_memory);
+                _sgimgui_frame_stats(vk.num_delete_queue_added);
+                _sgimgui_frame_stats(vk.num_delete_queue_collected);
+                _sgimgui_frame_stats(vk.num_cmd_copy_buffer);
+                _sgimgui_frame_stats(vk.num_cmd_copy_buffer_to_image);
+                _sgimgui_frame_stats(vk.num_cmd_set_descriptor_buffer_offsets);
+                _sgimgui_frame_stats(vk.size_descriptor_buffer_writes);
                 break;
             default: break;
         }

@@ -5,6 +5,38 @@
 - sokol_gfx.h gl: unused framebuffer attachment slots are now explicitly cleared
   in `sg_begin_pass()`. See PR https://github.com/floooh/sokol/pull/1390 for details! Many thanks to @etherbound-dev
   for catching and fixing the issue!
+- sokol_app.h: some minor breaking changes in the public API (most code won't be affected):
+  - the platform/backend specific config items in `sapp_desc` have been moved
+    into nested structs to allow a more consistent designated-init coding style
+  - a new enum `sapp_pixel_format` has been added and the functions `sapp_color_format()` and
+    `sapp_depth_format()` now return `sapp_pixel_format` instead of an `int`. Note
+    that the `sapp_pixel_format` values are no longer directly convertible to `sg_pixel_format`
+    values, you need some mapping code between the two enum types
+  - a new function `sapp_get_environment()` has been added which returns a new struct
+    `sapp_environment()`, this conceptually plugs into the sokol-gfx struct `sg_environement`
+    but requires mapping code to translate `sapp_environment` into `sg_environment` (an example
+    of such mapping code is for instance in sokol_glue.h)
+  - likewise, a new function `sapp_get_swapchain()` has been added which returns a new
+    struct `sapp_swapchain`, which conceptually plugs into the sokol-gfx struct `sg_swapchain`
+  - a ton of platform/backend specific functions have been removed which returned type-erased
+    pointers to various 3D backend objects, those pointers have moved into the new
+    structs `sapp_environemnt` and `sapp_swapchain`
+- sokol_gfx.h: a similar minor breaking change in `sg_desc` as was implemented in `sapp_desc`:
+  the individual backend-specific config items have been moved into nested structs
+  to allow a more consistent designated-init style
+- An *experimental Vulkan backend* has been added to sokol_app.h and sokol_gfx.h,
+  [please read this blog post for an overview](https://floooh.github.io/2025/12/01/sokol-vulkan-backend-1.html).
+  Currently the backend only supports Linux and has only been tested on an Intel
+  Meteor Lake embedded GPU. If you want to test this with the sokol-samples:
+  - make sure the following packages are installed (this is for Ubuntu + apt):
+    - libvulkan-dev
+    - vulkan-tools
+    - vulkan-validationlayers
+  - clone https://github.com/floooh/sokol-samples
+  - from within sokol-samples:
+    - ./fips set config sapp-vk-linux-ninja-debug
+    - ./fips build
+    - ./fips run cube-sapp-ui
 
 ### 13-Nov-2025
 
