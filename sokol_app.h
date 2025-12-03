@@ -2305,8 +2305,8 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(_WIN32)
     // Windows (D3D11 or GL)
     #define _SAPP_WIN32 (1)
-    #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE) && !defined(SOKOL_WGPU) && !defined(SOKOL_NOAPI)
-    #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11, SOKOL_GLCORE, SOKOL_WGPU or SOKOL_NOAPI")
+    #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE) && !defined(SOKOL_WGPU) && !defined(SOKOL_NOAPI) && !defined(SOKOL_VULKAN)
+    #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11, SOKOL_GLCORE, SOKOL_WGPU, SOKOL_VULKAN or SOKOL_NOAPI")
     #endif
 #elif defined(__ANDROID__)
     // Android
@@ -2472,6 +2472,10 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #include <dxgi.h>
         // DXGI_SWAP_EFFECT_FLIP_DISCARD is only defined in newer Windows SDKs, so don't depend on it
         #define _SAPP_DXGI_SWAP_EFFECT_FLIP_DISCARD (4)
+    #endif
+    #if defined(SOKOL_VULKAN)
+        #define VK_USE_PLATFORM_WIN32_KHR
+        #include <vulkan/vulkan.h>
     #endif
     #ifndef WM_MOUSEHWHEEL /* see https://github.com/floooh/sokol/issues/138 */
         #define WM_MOUSEHWHEEL (0x020E)
@@ -4305,6 +4309,8 @@ _SOKOL_PRIVATE void _sapp_vk_create_instance(void) {
     ext_names[ext_count++] = VK_KHR_SURFACE_EXTENSION_NAME;
     #if defined(VK_USE_PLATFORM_XLIB_KHR)
         ext_names[ext_count++] = VK_KHR_XLIB_SURFACE_EXTENSION_NAME;
+    #elif defined(VK_USE_PLATFORM_WIN32_KHR)
+        ext_names[ext_count++] = VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
     #endif
     SOKOL_ASSERT(ext_count <= 32);
 
@@ -4531,6 +4537,12 @@ _SOKOL_PRIVATE void _sapp_vk_create_surface(void) {
         xlib_info.dpy = _sapp.x11.display;
         xlib_info.window = _sapp.x11.window;
         res = vkCreateXlibSurfaceKHR(_sapp.vk.instance, &xlib_info, 0, &_sapp.vk.surface);
+    #elif defined(_SAPP_WIN32)
+        _SAPP_STRUCT(VkWin32SurfaceCreateInfoKHR, win32_info);
+        win32_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+        win32_info.hwnd = _sapp.win32.hwnd;
+        win32_info.hinstance = GetModuleHandleW(NULL);;
+        res = vkCreateWin32SurfaceKHR(_sapp.vk.instance, &win32_info, 0, &_sapp.vk.surface);
     #else
     #error "sokol_app.h: unsupported Vulkan platform"
     #endif
@@ -4843,6 +4855,8 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_swapchain(void) {
 
 #if defined(_SAPP_LINUX)
 _SOKOL_PRIVATE void _sapp_x11_app_event(sapp_event_type type);
+#elif defined(_SAPP_WIN32)
+_SOKOL_PRIVATE void _sapp_win32_app_event(sapp_event_type type);
 #endif
 
 _SOKOL_PRIVATE void _sapp_vk_recreate_swapchain(void) {
@@ -4855,6 +4869,8 @@ _SOKOL_PRIVATE void _sapp_vk_recreate_swapchain(void) {
         if (!_sapp.first_frame) {
             #if defined(_SAPP_LINUX)
             _sapp_x11_app_event(SAPP_EVENTTYPE_RESIZED);
+            #elif defined(_SAPP_WIN32)
+            _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
             #endif
         }
     }
@@ -9082,6 +9098,8 @@ _SOKOL_PRIVATE void _sapp_win32_timing_measure(void) {
 _SOKOL_PRIVATE void _sapp_win32_frame(bool from_winproc) {
     #if defined(SOKOL_WGPU)
         _sapp_wgpu_frame();
+    #elif defined(SOKOL_VULKAN)
+        _sapp_vk_frame();
     #else
         _sapp_frame();
     #endif
@@ -9703,6 +9721,8 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         _sapp_wgl_create_context();
     #elif defined(SOKOL_WGPU)
         _sapp_wgpu_init();
+    #elif defined(SOKOL_VULKAN)
+        _sapp_vk_init();
     #endif
     _sapp.valid = true;
 
@@ -9751,6 +9771,8 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         _sapp_wgl_shutdown();
     #elif defined(SOKOL_WGPU)
         _sapp_wgpu_discard();
+    #elif defined(SOKOL_VULKAN)
+        _sapp_vk_discard();
     #endif
     _sapp_win32_destroy_window();
     _sapp_win32_destroy_icons();
