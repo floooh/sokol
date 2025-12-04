@@ -726,7 +726,7 @@ typedef struct sgimgui_frame_stats_window_t {
     bool open;
     bool disable_sokol_imgui_stats;
     bool in_sokol_imgui;
-    sg_frame_stats stats;
+    sg_stats stats;
     // FIXME: add a ringbuffer for a stats history here
 } sgimgui_frame_stats_window_t;
 
@@ -3210,7 +3210,7 @@ _SOKOL_PRIVATE void _sgimgui_push_debug_group(const char* name, void* user_data)
     if (0 == strcmp(name, "sokol-imgui")) {
         ctx->frame_stats_window.in_sokol_imgui = true;
         if (ctx->frame_stats_window.disable_sokol_imgui_stats) {
-            sg_disable_frame_stats();
+            sg_disable_stats();
         }
     }
     sgimgui_capture_item_t* item = _sgimgui_capture_next_write_item(ctx);
@@ -3230,7 +3230,7 @@ _SOKOL_PRIVATE void _sgimgui_pop_debug_group(void* user_data) {
     if (ctx->frame_stats_window.in_sokol_imgui) {
         ctx->frame_stats_window.in_sokol_imgui = false;
         if (ctx->frame_stats_window.disable_sokol_imgui_stats) {
-            sg_enable_frame_stats();
+            sg_enable_stats();
         }
     }
     sgimgui_capture_item_t* item = _sgimgui_capture_next_write_item(ctx);
@@ -4561,183 +4561,203 @@ _SOKOL_PRIVATE void _sgimgui_frame_add_stats_row(const char* key, uint32_t value
 _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(sgimgui_t* ctx) {
     _SOKOL_UNUSED(ctx);
     _sgimgui_igcheckbox("Ignore sokol_imgui.h", &ctx->frame_stats_window.disable_sokol_imgui_stats);
-    const sg_frame_stats* stats = &ctx->frame_stats_window.stats;
+    const sg_stats* stats = &ctx->frame_stats_window.stats;
     const ImGuiTableFlags flags =
         ImGuiTableFlags_Resizable |
         ImGuiTableFlags_ScrollY |
         ImGuiTableFlags_SizingFixedFit |
         ImGuiTableFlags_Borders;
-    if (_sgimgui_igbegintable("##frame_stats_table", 2, flags)) {
+    if (_sgimgui_igbegintable("#frame_stats_table", 2, flags)) {
         _sgimgui_igtablesetupscrollfreeze(0, 1);
         _sgimgui_igtablesetupcolumn("key", ImGuiTableColumnFlags_None);
         _sgimgui_igtablesetupcolumn("value", ImGuiTableColumnFlags_None);
         _sgimgui_igtableheadersrow();
-        _sgimgui_frame_stats(frame_index);
-        _sgimgui_frame_stats(num_passes);
-        _sgimgui_frame_stats(num_apply_viewport);
-        _sgimgui_frame_stats(num_apply_scissor_rect);
-        _sgimgui_frame_stats(num_apply_pipeline);
-        _sgimgui_frame_stats(num_apply_bindings);
-        _sgimgui_frame_stats(num_apply_uniforms);
-        _sgimgui_frame_stats(num_draw);
-        _sgimgui_frame_stats(num_draw_ex);
-        _sgimgui_frame_stats(num_dispatch);
-        _sgimgui_frame_stats(num_update_buffer);
-        _sgimgui_frame_stats(num_append_buffer);
-        _sgimgui_frame_stats(num_update_image);
-        _sgimgui_frame_stats(size_apply_uniforms);
-        _sgimgui_frame_stats(size_update_buffer);
-        _sgimgui_frame_stats(size_append_buffer);
-        _sgimgui_frame_stats(size_update_image);
-        _sgimgui_frame_stats(buffers.total_alive);
-        _sgimgui_frame_stats(buffers.total_free);
-        _sgimgui_frame_stats(buffers.allocated);
-        _sgimgui_frame_stats(buffers.deallocated);
-        _sgimgui_frame_stats(buffers.inited);
-        _sgimgui_frame_stats(buffers.uninited);
-        _sgimgui_frame_stats(images.total_alive);
-        _sgimgui_frame_stats(images.total_free);
-        _sgimgui_frame_stats(images.allocated);
-        _sgimgui_frame_stats(images.deallocated);
-        _sgimgui_frame_stats(images.inited);
-        _sgimgui_frame_stats(images.uninited);
-        _sgimgui_frame_stats(views.total_alive);
-        _sgimgui_frame_stats(views.total_free);
-        _sgimgui_frame_stats(views.allocated);
-        _sgimgui_frame_stats(views.deallocated);
-        _sgimgui_frame_stats(views.inited);
-        _sgimgui_frame_stats(views.uninited);
-        _sgimgui_frame_stats(shaders.total_alive);
-        _sgimgui_frame_stats(shaders.total_free);
-        _sgimgui_frame_stats(shaders.allocated);
-        _sgimgui_frame_stats(shaders.deallocated);
-        _sgimgui_frame_stats(shaders.inited);
-        _sgimgui_frame_stats(shaders.uninited);
-        _sgimgui_frame_stats(pipelines.total_alive);
-        _sgimgui_frame_stats(pipelines.total_free);
-        _sgimgui_frame_stats(pipelines.allocated);
-        _sgimgui_frame_stats(pipelines.deallocated);
-        _sgimgui_frame_stats(pipelines.inited);
-        _sgimgui_frame_stats(pipelines.uninited);
+        _sgimgui_frame_stats(prev_frame.frame_index);
+        _sgimgui_frame_stats(prev_frame.num_passes);
+        _sgimgui_frame_stats(prev_frame.num_apply_viewport);
+        _sgimgui_frame_stats(prev_frame.num_apply_scissor_rect);
+        _sgimgui_frame_stats(prev_frame.num_apply_pipeline);
+        _sgimgui_frame_stats(prev_frame.num_apply_bindings);
+        _sgimgui_frame_stats(prev_frame.num_apply_uniforms);
+        _sgimgui_frame_stats(prev_frame.num_draw);
+        _sgimgui_frame_stats(prev_frame.num_draw_ex);
+        _sgimgui_frame_stats(prev_frame.num_dispatch);
+        _sgimgui_frame_stats(prev_frame.num_update_buffer);
+        _sgimgui_frame_stats(prev_frame.num_append_buffer);
+        _sgimgui_frame_stats(prev_frame.num_update_image);
+        _sgimgui_frame_stats(prev_frame.size_apply_uniforms);
+        _sgimgui_frame_stats(prev_frame.size_update_buffer);
+        _sgimgui_frame_stats(prev_frame.size_append_buffer);
+        _sgimgui_frame_stats(prev_frame.size_update_image);
+        _sgimgui_frame_stats(prev_frame.buffers.allocated);
+        _sgimgui_frame_stats(prev_frame.buffers.deallocated);
+        _sgimgui_frame_stats(prev_frame.buffers.inited);
+        _sgimgui_frame_stats(prev_frame.buffers.uninited);
+        _sgimgui_frame_stats(prev_frame.images.allocated);
+        _sgimgui_frame_stats(prev_frame.images.deallocated);
+        _sgimgui_frame_stats(prev_frame.images.inited);
+        _sgimgui_frame_stats(prev_frame.images.uninited);
+        _sgimgui_frame_stats(prev_frame.views.allocated);
+        _sgimgui_frame_stats(prev_frame.views.deallocated);
+        _sgimgui_frame_stats(prev_frame.views.inited);
+        _sgimgui_frame_stats(prev_frame.views.uninited);
+        _sgimgui_frame_stats(prev_frame.shaders.allocated);
+        _sgimgui_frame_stats(prev_frame.shaders.deallocated);
+        _sgimgui_frame_stats(prev_frame.shaders.inited);
+        _sgimgui_frame_stats(prev_frame.shaders.uninited);
+        _sgimgui_frame_stats(prev_frame.pipelines.allocated);
+        _sgimgui_frame_stats(prev_frame.pipelines.deallocated);
+        _sgimgui_frame_stats(prev_frame.pipelines.inited);
+        _sgimgui_frame_stats(prev_frame.pipelines.uninited);
         switch (sg_query_backend()) {
             case SG_BACKEND_GLCORE:
             case SG_BACKEND_GLES3:
-                _sgimgui_frame_stats(gl.num_bind_buffer);
-                _sgimgui_frame_stats(gl.num_active_texture);
-                _sgimgui_frame_stats(gl.num_bind_texture);
-                _sgimgui_frame_stats(gl.num_bind_image_texture);
-                _sgimgui_frame_stats(gl.num_bind_sampler);
-                _sgimgui_frame_stats(gl.num_use_program);
-                _sgimgui_frame_stats(gl.num_render_state);
-                _sgimgui_frame_stats(gl.num_vertex_attrib_pointer);
-                _sgimgui_frame_stats(gl.num_vertex_attrib_divisor);
-                _sgimgui_frame_stats(gl.num_enable_vertex_attrib_array);
-                _sgimgui_frame_stats(gl.num_disable_vertex_attrib_array);
-                _sgimgui_frame_stats(gl.num_uniform);
-                _sgimgui_frame_stats(gl.num_memory_barriers);
+                _sgimgui_frame_stats(prev_frame.gl.num_bind_buffer);
+                _sgimgui_frame_stats(prev_frame.gl.num_active_texture);
+                _sgimgui_frame_stats(prev_frame.gl.num_bind_texture);
+                _sgimgui_frame_stats(prev_frame.gl.num_bind_image_texture);
+                _sgimgui_frame_stats(prev_frame.gl.num_bind_sampler);
+                _sgimgui_frame_stats(prev_frame.gl.num_use_program);
+                _sgimgui_frame_stats(prev_frame.gl.num_render_state);
+                _sgimgui_frame_stats(prev_frame.gl.num_vertex_attrib_pointer);
+                _sgimgui_frame_stats(prev_frame.gl.num_vertex_attrib_divisor);
+                _sgimgui_frame_stats(prev_frame.gl.num_enable_vertex_attrib_array);
+                _sgimgui_frame_stats(prev_frame.gl.num_disable_vertex_attrib_array);
+                _sgimgui_frame_stats(prev_frame.gl.num_uniform);
+                _sgimgui_frame_stats(prev_frame.gl.num_memory_barriers);
                 break;
             case SG_BACKEND_WGPU:
-                _sgimgui_frame_stats(wgpu.uniforms.num_set_bindgroup);
-                _sgimgui_frame_stats(wgpu.uniforms.size_write_buffer);
-                _sgimgui_frame_stats(wgpu.bindings.num_set_vertex_buffer);
-                _sgimgui_frame_stats(wgpu.bindings.num_skip_redundant_vertex_buffer);
-                _sgimgui_frame_stats(wgpu.bindings.num_set_index_buffer);
-                _sgimgui_frame_stats(wgpu.bindings.num_skip_redundant_index_buffer);
-                _sgimgui_frame_stats(wgpu.bindings.num_create_bindgroup);
-                _sgimgui_frame_stats(wgpu.bindings.num_discard_bindgroup);
-                _sgimgui_frame_stats(wgpu.bindings.num_set_bindgroup);
-                _sgimgui_frame_stats(wgpu.bindings.num_skip_redundant_bindgroup);
-                _sgimgui_frame_stats(wgpu.bindings.num_bindgroup_cache_hits);
-                _sgimgui_frame_stats(wgpu.bindings.num_bindgroup_cache_misses);
-                _sgimgui_frame_stats(wgpu.bindings.num_bindgroup_cache_collisions);
-                _sgimgui_frame_stats(wgpu.bindings.num_bindgroup_cache_invalidates);
-                _sgimgui_frame_stats(wgpu.bindings.num_bindgroup_cache_hash_vs_key_mismatch);
+                _sgimgui_frame_stats(prev_frame.wgpu.uniforms.num_set_bindgroup);
+                _sgimgui_frame_stats(prev_frame.wgpu.uniforms.size_write_buffer);
+                _sgimgui_frame_stats(prev_frame.wgpu.bindings.num_set_vertex_buffer);
+                _sgimgui_frame_stats(prev_frame.wgpu.bindings.num_skip_redundant_vertex_buffer);
+                _sgimgui_frame_stats(prev_frame.wgpu.bindings.num_set_index_buffer);
+                _sgimgui_frame_stats(prev_frame.wgpu.bindings.num_skip_redundant_index_buffer);
+                _sgimgui_frame_stats(prev_frame.wgpu.bindings.num_create_bindgroup);
+                _sgimgui_frame_stats(prev_frame.wgpu.bindings.num_discard_bindgroup);
+                _sgimgui_frame_stats(prev_frame.wgpu.bindings.num_set_bindgroup);
+                _sgimgui_frame_stats(prev_frame.wgpu.bindings.num_skip_redundant_bindgroup);
+                _sgimgui_frame_stats(prev_frame.wgpu.bindings.num_bindgroup_cache_hits);
+                _sgimgui_frame_stats(prev_frame.wgpu.bindings.num_bindgroup_cache_misses);
+                _sgimgui_frame_stats(prev_frame.wgpu.bindings.num_bindgroup_cache_collisions);
+                _sgimgui_frame_stats(prev_frame.wgpu.bindings.num_bindgroup_cache_invalidates);
+                _sgimgui_frame_stats(prev_frame.wgpu.bindings.num_bindgroup_cache_hash_vs_key_mismatch);
                 break;
             case SG_BACKEND_METAL_MACOS:
             case SG_BACKEND_METAL_IOS:
             case SG_BACKEND_METAL_SIMULATOR:
-                _sgimgui_frame_stats(metal.idpool.num_added);
-                _sgimgui_frame_stats(metal.idpool.num_released);
-                _sgimgui_frame_stats(metal.idpool.num_garbage_collected);
-                _sgimgui_frame_stats(metal.pipeline.num_set_blend_color);
-                _sgimgui_frame_stats(metal.pipeline.num_set_cull_mode);
-                _sgimgui_frame_stats(metal.pipeline.num_set_front_facing_winding);
-                _sgimgui_frame_stats(metal.pipeline.num_set_stencil_reference_value);
-                _sgimgui_frame_stats(metal.pipeline.num_set_depth_bias);
-                _sgimgui_frame_stats(metal.pipeline.num_set_render_pipeline_state);
-                _sgimgui_frame_stats(metal.pipeline.num_set_depth_stencil_state);
-                _sgimgui_frame_stats(metal.bindings.num_set_vertex_buffer);
-                _sgimgui_frame_stats(metal.bindings.num_set_fragment_buffer);
-                _sgimgui_frame_stats(metal.bindings.num_set_compute_buffer);
-                _sgimgui_frame_stats(metal.bindings.num_set_vertex_buffer_offset);
-                _sgimgui_frame_stats(metal.bindings.num_set_fragment_buffer_offset);
-                _sgimgui_frame_stats(metal.bindings.num_set_compute_buffer_offset);
-                _sgimgui_frame_stats(metal.bindings.num_set_vertex_texture);
-                _sgimgui_frame_stats(metal.bindings.num_set_fragment_texture);
-                _sgimgui_frame_stats(metal.bindings.num_set_compute_texture);
-                _sgimgui_frame_stats(metal.bindings.num_set_vertex_sampler_state);
-                _sgimgui_frame_stats(metal.bindings.num_set_fragment_sampler_state);
-                _sgimgui_frame_stats(metal.bindings.num_set_compute_sampler_state);
-                _sgimgui_frame_stats(metal.bindings.num_skip_redundant_vertex_buffer);
-                _sgimgui_frame_stats(metal.bindings.num_skip_redundant_fragment_buffer);
-                _sgimgui_frame_stats(metal.bindings.num_skip_redundant_compute_buffer);
-                _sgimgui_frame_stats(metal.bindings.num_skip_redundant_vertex_texture);
-                _sgimgui_frame_stats(metal.bindings.num_skip_redundant_fragment_texture);
-                _sgimgui_frame_stats(metal.bindings.num_skip_redundant_compute_texture);
-                _sgimgui_frame_stats(metal.bindings.num_skip_redundant_vertex_sampler_state);
-                _sgimgui_frame_stats(metal.bindings.num_skip_redundant_fragment_sampler_state);
-                _sgimgui_frame_stats(metal.bindings.num_skip_redundant_compute_sampler_state);
-                _sgimgui_frame_stats(metal.uniforms.num_set_vertex_buffer_offset);
-                _sgimgui_frame_stats(metal.uniforms.num_set_fragment_buffer_offset);
-                _sgimgui_frame_stats(metal.uniforms.num_set_compute_buffer_offset);
+                _sgimgui_frame_stats(prev_frame.metal.idpool.num_added);
+                _sgimgui_frame_stats(prev_frame.metal.idpool.num_released);
+                _sgimgui_frame_stats(prev_frame.metal.idpool.num_garbage_collected);
+                _sgimgui_frame_stats(prev_frame.metal.pipeline.num_set_blend_color);
+                _sgimgui_frame_stats(prev_frame.metal.pipeline.num_set_cull_mode);
+                _sgimgui_frame_stats(prev_frame.metal.pipeline.num_set_front_facing_winding);
+                _sgimgui_frame_stats(prev_frame.metal.pipeline.num_set_stencil_reference_value);
+                _sgimgui_frame_stats(prev_frame.metal.pipeline.num_set_depth_bias);
+                _sgimgui_frame_stats(prev_frame.metal.pipeline.num_set_render_pipeline_state);
+                _sgimgui_frame_stats(prev_frame.metal.pipeline.num_set_depth_stencil_state);
+                _sgimgui_frame_stats(prev_frame.metal.bindings.num_set_vertex_buffer);
+                _sgimgui_frame_stats(prev_frame.metal.bindings.num_set_fragment_buffer);
+                _sgimgui_frame_stats(prev_frame.metal.bindings.num_set_compute_buffer);
+                _sgimgui_frame_stats(prev_frame.metal.bindings.num_set_vertex_buffer_offset);
+                _sgimgui_frame_stats(prev_frame.metal.bindings.num_set_fragment_buffer_offset);
+                _sgimgui_frame_stats(prev_frame.metal.bindings.num_set_compute_buffer_offset);
+                _sgimgui_frame_stats(prev_frame.metal.bindings.num_set_vertex_texture);
+                _sgimgui_frame_stats(prev_frame.metal.bindings.num_set_fragment_texture);
+                _sgimgui_frame_stats(prev_frame.metal.bindings.num_set_compute_texture);
+                _sgimgui_frame_stats(prev_frame.metal.bindings.num_set_vertex_sampler_state);
+                _sgimgui_frame_stats(prev_frame.metal.bindings.num_set_fragment_sampler_state);
+                _sgimgui_frame_stats(prev_frame.metal.bindings.num_set_compute_sampler_state);
+                _sgimgui_frame_stats(prev_frame.metal.bindings.num_skip_redundant_vertex_buffer);
+                _sgimgui_frame_stats(prev_frame.metal.bindings.num_skip_redundant_fragment_buffer);
+                _sgimgui_frame_stats(prev_frame.metal.bindings.num_skip_redundant_compute_buffer);
+                _sgimgui_frame_stats(prev_frame.metal.bindings.num_skip_redundant_vertex_texture);
+                _sgimgui_frame_stats(prev_frame.metal.bindings.num_skip_redundant_fragment_texture);
+                _sgimgui_frame_stats(prev_frame.metal.bindings.num_skip_redundant_compute_texture);
+                _sgimgui_frame_stats(prev_frame.metal.bindings.num_skip_redundant_vertex_sampler_state);
+                _sgimgui_frame_stats(prev_frame.metal.bindings.num_skip_redundant_fragment_sampler_state);
+                _sgimgui_frame_stats(prev_frame.metal.bindings.num_skip_redundant_compute_sampler_state);
+                _sgimgui_frame_stats(prev_frame.metal.uniforms.num_set_vertex_buffer_offset);
+                _sgimgui_frame_stats(prev_frame.metal.uniforms.num_set_fragment_buffer_offset);
+                _sgimgui_frame_stats(prev_frame.metal.uniforms.num_set_compute_buffer_offset);
                 break;
             case SG_BACKEND_D3D11:
-                _sgimgui_frame_stats(d3d11.pass.num_om_set_render_targets);
-                _sgimgui_frame_stats(d3d11.pass.num_clear_render_target_view);
-                _sgimgui_frame_stats(d3d11.pass.num_clear_depth_stencil_view);
-                _sgimgui_frame_stats(d3d11.pass.num_resolve_subresource);
-                _sgimgui_frame_stats(d3d11.pipeline.num_rs_set_state);
-                _sgimgui_frame_stats(d3d11.pipeline.num_om_set_depth_stencil_state);
-                _sgimgui_frame_stats(d3d11.pipeline.num_om_set_blend_state);
-                _sgimgui_frame_stats(d3d11.pipeline.num_ia_set_primitive_topology);
-                _sgimgui_frame_stats(d3d11.pipeline.num_ia_set_input_layout);
-                _sgimgui_frame_stats(d3d11.pipeline.num_vs_set_shader);
-                _sgimgui_frame_stats(d3d11.pipeline.num_vs_set_constant_buffers);
-                _sgimgui_frame_stats(d3d11.pipeline.num_ps_set_shader);
-                _sgimgui_frame_stats(d3d11.pipeline.num_ps_set_constant_buffers);
-                _sgimgui_frame_stats(d3d11.pipeline.num_cs_set_shader);
-                _sgimgui_frame_stats(d3d11.pipeline.num_cs_set_constant_buffers);
-                _sgimgui_frame_stats(d3d11.bindings.num_ia_set_vertex_buffers);
-                _sgimgui_frame_stats(d3d11.bindings.num_ia_set_index_buffer);
-                _sgimgui_frame_stats(d3d11.bindings.num_vs_set_shader_resources);
-                _sgimgui_frame_stats(d3d11.bindings.num_ps_set_shader_resources);
-                _sgimgui_frame_stats(d3d11.bindings.num_cs_set_shader_resources);
-                _sgimgui_frame_stats(d3d11.bindings.num_vs_set_samplers);
-                _sgimgui_frame_stats(d3d11.bindings.num_ps_set_samplers);
-                _sgimgui_frame_stats(d3d11.bindings.num_cs_set_samplers);
-                _sgimgui_frame_stats(d3d11.bindings.num_cs_set_unordered_access_views);
-                _sgimgui_frame_stats(d3d11.uniforms.num_update_subresource);
-                _sgimgui_frame_stats(d3d11.draw.num_draw_indexed_instanced);
-                _sgimgui_frame_stats(d3d11.draw.num_draw_indexed);
-                _sgimgui_frame_stats(d3d11.draw.num_draw_instanced);
-                _sgimgui_frame_stats(d3d11.draw.num_draw);
-                _sgimgui_frame_stats(d3d11.num_map);
-                _sgimgui_frame_stats(d3d11.num_unmap);
+                _sgimgui_frame_stats(prev_frame.d3d11.pass.num_om_set_render_targets);
+                _sgimgui_frame_stats(prev_frame.d3d11.pass.num_clear_render_target_view);
+                _sgimgui_frame_stats(prev_frame.d3d11.pass.num_clear_depth_stencil_view);
+                _sgimgui_frame_stats(prev_frame.d3d11.pass.num_resolve_subresource);
+                _sgimgui_frame_stats(prev_frame.d3d11.pipeline.num_rs_set_state);
+                _sgimgui_frame_stats(prev_frame.d3d11.pipeline.num_om_set_depth_stencil_state);
+                _sgimgui_frame_stats(prev_frame.d3d11.pipeline.num_om_set_blend_state);
+                _sgimgui_frame_stats(prev_frame.d3d11.pipeline.num_ia_set_primitive_topology);
+                _sgimgui_frame_stats(prev_frame.d3d11.pipeline.num_ia_set_input_layout);
+                _sgimgui_frame_stats(prev_frame.d3d11.pipeline.num_vs_set_shader);
+                _sgimgui_frame_stats(prev_frame.d3d11.pipeline.num_vs_set_constant_buffers);
+                _sgimgui_frame_stats(prev_frame.d3d11.pipeline.num_ps_set_shader);
+                _sgimgui_frame_stats(prev_frame.d3d11.pipeline.num_ps_set_constant_buffers);
+                _sgimgui_frame_stats(prev_frame.d3d11.pipeline.num_cs_set_shader);
+                _sgimgui_frame_stats(prev_frame.d3d11.pipeline.num_cs_set_constant_buffers);
+                _sgimgui_frame_stats(prev_frame.d3d11.bindings.num_ia_set_vertex_buffers);
+                _sgimgui_frame_stats(prev_frame.d3d11.bindings.num_ia_set_index_buffer);
+                _sgimgui_frame_stats(prev_frame.d3d11.bindings.num_vs_set_shader_resources);
+                _sgimgui_frame_stats(prev_frame.d3d11.bindings.num_ps_set_shader_resources);
+                _sgimgui_frame_stats(prev_frame.d3d11.bindings.num_cs_set_shader_resources);
+                _sgimgui_frame_stats(prev_frame.d3d11.bindings.num_vs_set_samplers);
+                _sgimgui_frame_stats(prev_frame.d3d11.bindings.num_ps_set_samplers);
+                _sgimgui_frame_stats(prev_frame.d3d11.bindings.num_cs_set_samplers);
+                _sgimgui_frame_stats(prev_frame.d3d11.bindings.num_cs_set_unordered_access_views);
+                _sgimgui_frame_stats(prev_frame.d3d11.uniforms.num_update_subresource);
+                _sgimgui_frame_stats(prev_frame.d3d11.draw.num_draw_indexed_instanced);
+                _sgimgui_frame_stats(prev_frame.d3d11.draw.num_draw_indexed);
+                _sgimgui_frame_stats(prev_frame.d3d11.draw.num_draw_instanced);
+                _sgimgui_frame_stats(prev_frame.d3d11.draw.num_draw);
+                _sgimgui_frame_stats(prev_frame.d3d11.num_map);
+                _sgimgui_frame_stats(prev_frame.d3d11.num_unmap);
                 break;
             case SG_BACKEND_VULKAN:
-                _sgimgui_frame_stats(vk.num_cmd_pipeline_barrier);
-                _sgimgui_frame_stats(vk.num_allocate_memory);
-                _sgimgui_frame_stats(vk.num_free_memory);
-                _sgimgui_frame_stats(vk.size_allocate_memory);
-                _sgimgui_frame_stats(vk.num_delete_queue_added);
-                _sgimgui_frame_stats(vk.num_delete_queue_collected);
-                _sgimgui_frame_stats(vk.num_cmd_copy_buffer);
-                _sgimgui_frame_stats(vk.num_cmd_copy_buffer_to_image);
-                _sgimgui_frame_stats(vk.num_cmd_set_descriptor_buffer_offsets);
-                _sgimgui_frame_stats(vk.size_descriptor_buffer_writes);
+                _sgimgui_frame_stats(prev_frame.vk.num_cmd_pipeline_barrier);
+                _sgimgui_frame_stats(prev_frame.vk.num_allocate_memory);
+                _sgimgui_frame_stats(prev_frame.vk.num_free_memory);
+                _sgimgui_frame_stats(prev_frame.vk.size_allocate_memory);
+                _sgimgui_frame_stats(prev_frame.vk.num_delete_queue_added);
+                _sgimgui_frame_stats(prev_frame.vk.num_delete_queue_collected);
+                _sgimgui_frame_stats(prev_frame.vk.num_cmd_copy_buffer);
+                _sgimgui_frame_stats(prev_frame.vk.num_cmd_copy_buffer_to_image);
+                _sgimgui_frame_stats(prev_frame.vk.num_cmd_set_descriptor_buffer_offsets);
+                _sgimgui_frame_stats(prev_frame.vk.size_descriptor_buffer_writes);
                 break;
             default: break;
         }
+        _sgimgui_frame_stats(total.buffers.alive);
+        _sgimgui_frame_stats(total.buffers.free);
+        _sgimgui_frame_stats(total.buffers.allocated);
+        _sgimgui_frame_stats(total.buffers.deallocated);
+        _sgimgui_frame_stats(total.buffers.inited);
+        _sgimgui_frame_stats(total.buffers.uninited);
+        _sgimgui_frame_stats(total.images.alive);
+        _sgimgui_frame_stats(total.images.free);
+        _sgimgui_frame_stats(total.images.allocated);
+        _sgimgui_frame_stats(total.images.deallocated);
+        _sgimgui_frame_stats(total.images.inited);
+        _sgimgui_frame_stats(total.images.uninited);
+        _sgimgui_frame_stats(total.samplers.alive);
+        _sgimgui_frame_stats(total.samplers.free);
+        _sgimgui_frame_stats(total.samplers.allocated);
+        _sgimgui_frame_stats(total.samplers.deallocated);
+        _sgimgui_frame_stats(total.samplers.inited);
+        _sgimgui_frame_stats(total.samplers.uninited);
+        _sgimgui_frame_stats(total.views.alive);
+        _sgimgui_frame_stats(total.views.free);
+        _sgimgui_frame_stats(total.views.allocated);
+        _sgimgui_frame_stats(total.views.deallocated);
+        _sgimgui_frame_stats(total.views.inited);
+        _sgimgui_frame_stats(total.views.uninited);
+        _sgimgui_frame_stats(total.pipelines.alive);
+        _sgimgui_frame_stats(total.pipelines.free);
+        _sgimgui_frame_stats(total.pipelines.allocated);
+        _sgimgui_frame_stats(total.pipelines.deallocated);
+        _sgimgui_frame_stats(total.pipelines.inited);
+        _sgimgui_frame_stats(total.pipelines.uninited);
         _sgimgui_igendtable();
     }
 }
@@ -5045,7 +5065,7 @@ SOKOL_API_IMPL void sgimgui_draw_frame_stats_window(sgimgui_t* ctx) {
     if (!ctx->frame_stats_window.open) {
         return;
     }
-    _sgimgui_igsetnextwindowsize(IMVEC2(512, 400), ImGuiCond_Once);
+    _sgimgui_igsetnextwindowsize(IMVEC2(640, 400), ImGuiCond_Once);
     if (_sgimgui_igbegin("Frame Stats", &ctx->frame_stats_window.open, 0)) {
         sgimgui_draw_frame_stats_window_content(ctx);
     }
@@ -5109,7 +5129,7 @@ SOKOL_API_IMPL void sgimgui_draw_capabilities_window_content(sgimgui_t* ctx) {
 
 SOKOL_API_IMPL void sgimgui_draw_frame_stats_window_content(sgimgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
-    ctx->frame_stats_window.stats = sg_query_frame_stats();
+    ctx->frame_stats_window.stats = sg_query_stats();
     _sgimgui_draw_frame_stats_panel(ctx);
 }
 
