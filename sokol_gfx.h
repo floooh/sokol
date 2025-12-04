@@ -417,12 +417,12 @@
             sg_image sg_query_view_image(sg_view view)
             sg_buffer sg_query_view_buffer(sg_view view)
 
-    --- you can query frame stats and control stats collection via:
+    --- you can query stats and control stats collection via:
 
-            sg_query_frame_stats()
-            sg_enable_frame_stats()
-            sg_disable_frame_stats()
-            sg_frame_stats_enabled()
+            sg_query_stats()
+            sg_enable_stats()
+            sg_disable_stats()
+            sg_stats_enabled()
 
     --- you can ask at runtime what backend sokol_gfx.h has been compiled for:
 
@@ -1871,7 +1871,7 @@
       cache is defined in sg_desc.wgpu.bindgroups_cache_size when calling
       sg_setup. The cache size must be a power-of-2 number, with the default being
       1024. The bindgroups cache behaviour can be observed by calling the new
-      function sg_query_frame_stats(), where the following struct items are
+      function sg_query_stats(), where the following struct items are
       of interest:
 
         .wgpu.num_bindgroup_cache_hits
@@ -4098,11 +4098,10 @@ typedef struct sg_view_info {
 } sg_view_info;
 
 /*
-    sg_frame_stats
+    sg_stats
 
-    Allows to track generic and backend-specific stats about a
-    render frame. Obtained by calling sg_query_frame_stats(). The returned
-    struct contains information about the *previous* frame.
+    Allows to track generic and backend-specific rendering stats,
+    obtained via sg_query_stats().
 */
 typedef struct sg_frame_stats_gl {
     uint32_t num_bind_buffer;
@@ -4266,14 +4265,30 @@ typedef struct sg_frame_stats_vk {
     uint32_t size_descriptor_buffer_writes;
 } sg_frame_stats_vk;
 
-typedef struct sg_resource_stats {
-    uint32_t total_alive;   // number of live objects in pool
-    uint32_t total_free;    // number of free objects in pool
+typedef struct sg_frame_resource_stats {
     uint32_t allocated;     // number of allocated objects in current frame
     uint32_t deallocated;   // number of deallocated object in current frame
     uint32_t inited;        // number of initialized objects in current frame
     uint32_t uninited;      // number of deinitialized objects in current frame
-} sg_resource_stats;
+} sg_frame_resource_stats;
+
+typedef struct sg_total_resource_stats {
+    uint32_t alive;     // number of live objects in pool
+    uint32_t free;      // number of free objects in pool
+    uint32_t allocated;     // total number of object allocations
+    uint32_t deallocated;   // total number of object deallocations
+    uint32_t inited;        // total number of object initializations
+    uint32_t uninited;      // total number of object deinitializations
+} sg_total_resource_stats;
+
+typedef struct sg_total_stats {
+    sg_total_resource_stats buffers;
+    sg_total_resource_stats images;
+    sg_total_resource_stats samplers;
+    sg_total_resource_stats views;
+    sg_total_resource_stats shaders;
+    sg_total_resource_stats pipelines;
+} sg_total_stats;
 
 typedef struct sg_frame_stats {
     uint32_t frame_index;   // current frame counter, starts at 0
@@ -4296,12 +4311,12 @@ typedef struct sg_frame_stats {
     uint32_t size_append_buffer;
     uint32_t size_update_image;
 
-    sg_resource_stats buffers;
-    sg_resource_stats images;
-    sg_resource_stats samplers;
-    sg_resource_stats views;
-    sg_resource_stats shaders;
-    sg_resource_stats pipelines;
+    sg_frame_resource_stats buffers;
+    sg_frame_resource_stats images;
+    sg_frame_resource_stats samplers;
+    sg_frame_resource_stats views;
+    sg_frame_resource_stats shaders;
+    sg_frame_resource_stats pipelines;
 
     sg_frame_stats_gl gl;
     sg_frame_stats_d3d11 d3d11;
@@ -4309,6 +4324,12 @@ typedef struct sg_frame_stats {
     sg_frame_stats_wgpu wgpu;
     sg_frame_stats_vk vk;
 } sg_frame_stats;
+
+typedef struct sg_stats {
+    sg_frame_stats prev_frame;
+    sg_frame_stats cur_frame;
+    sg_total_stats total;
+} sg_stats;
 
 /*
     sg_log_item
@@ -5155,11 +5176,11 @@ SOKOL_GFX_API_DECL void sg_fail_shader(sg_shader shd);
 SOKOL_GFX_API_DECL void sg_fail_pipeline(sg_pipeline pip);
 SOKOL_GFX_API_DECL void sg_fail_view(sg_view view);
 
-// frame stats
-SOKOL_GFX_API_DECL void sg_enable_frame_stats(void);
-SOKOL_GFX_API_DECL void sg_disable_frame_stats(void);
-SOKOL_GFX_API_DECL bool sg_frame_stats_enabled(void);
-SOKOL_GFX_API_DECL sg_frame_stats sg_query_frame_stats(void);
+// frame and total stats
+SOKOL_GFX_API_DECL void sg_enable_stats(void);
+SOKOL_GFX_API_DECL void sg_disable_stats(void);
+SOKOL_GFX_API_DECL bool sg_stats_enabled(void);
+SOKOL_GFX_API_DECL sg_stats sg_query_stats(void);
 
 /* Backend-specific structs and functions, these may come in handy for mixing
    sokol-gfx rendering with 'native backend' rendering functions.
@@ -7200,8 +7221,7 @@ typedef struct {
     sg_limits limits;
     _sg_pixelformat_info_t formats[_SG_PIXELFORMAT_NUM];
     bool stats_enabled;
-    sg_frame_stats stats;
-    sg_frame_stats prev_stats;
+    sg_stats stats;
     #if defined(_SOKOL_ANY_GL)
     _sg_gl_backend_t gl;
     #elif defined(SOKOL_METAL)
@@ -7892,24 +7912,20 @@ _SG_IMPL_RES_PTR_OR_NULL(_sg_view_ref_ptr_or_null, _sg_view_ref_t, _sg_view_t)
 #define _sg_clamp(v,v0,v1) (((v)<(v0))?(v0):(((v)>(v1))?(v1):(v)))
 #define _sg_fequal(val,cmp,delta) ((((val)-(cmp))> -(delta))&&(((val)-(cmp))<(delta)))
 #define _sg_ispow2(val) ((val&(val-1))==0)
-#define _sg_stats_add(key,val) {if(_sg.stats_enabled){ _sg.stats.key+=val;}}
+#define _sg_stats_add(key,val) {if(_sg.stats_enabled){ _sg.stats.cur_frame.key+=val;}}
+#define _sg_stats_inc(key) {if(_sg.stats_enabled){ _sg.stats.cur_frame.key++;}}
+#define _sg_resource_stats_inc(key) {if(_sg.stats_enabled){ _sg.stats.cur_frame.key++; _sg.stats.total.key++;}}
 
-_SOKOL_PRIVATE void _sg_update_resource_stats(sg_resource_stats* stats, const _sg_pool_t* pool) {
+_SOKOL_PRIVATE void _sg_update_alive_free_resource_stats(sg_total_resource_stats* stats, const _sg_pool_t* pool) {
     SOKOL_ASSERT(stats && pool);
-    stats->total_alive = (uint32_t) ((pool->size - 1) - pool->queue_top);
-    stats->total_free = (uint32_t) pool->queue_top;
+    stats->alive = (uint32_t) ((pool->size - 1) - pool->queue_top);
+    stats->free = (uint32_t) pool->queue_top;
 }
 
-_SOKOL_PRIVATE void _sg_update_frame_stats(void) {
-    _sg.stats.frame_index = _sg.frame_index;
-    _sg_update_resource_stats(&_sg.stats.buffers, &_sg.pools.buffer_pool);
-    _sg_update_resource_stats(&_sg.stats.images, &_sg.pools.image_pool);
-    _sg_update_resource_stats(&_sg.stats.views, &_sg.pools.view_pool);
-    _sg_update_resource_stats(&_sg.stats.samplers, &_sg.pools.sampler_pool);
-    _sg_update_resource_stats(&_sg.stats.shaders, &_sg.pools.shader_pool);
-    _sg_update_resource_stats(&_sg.stats.pipelines, &_sg.pools.pipeline_pool);
-    _sg.prev_stats = _sg.stats;
-    _sg_clear(&_sg.stats, sizeof(_sg.stats));
+_SOKOL_PRIVATE void _sg_update_stats(void) {
+    _sg.stats.cur_frame.frame_index = _sg.frame_index;
+    _sg.stats.prev_frame = _sg.stats.cur_frame;
+    _sg_clear(&_sg.stats.cur_frame, sizeof(_sg.stats.cur_frame));
 }
 
 _SOKOL_PRIVATE uint32_t _sg_align_u32(uint32_t val, uint32_t align) {
@@ -10074,19 +10090,19 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
     if (force || (_sg.gl.cache.vertex_buffer != 0)) {
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         _sg.gl.cache.vertex_buffer = 0;
-        _sg_stats_add(gl.num_bind_buffer, 1);
+        _sg_stats_inc(gl.num_bind_buffer);
     }
     if (force || (_sg.gl.cache.index_buffer != 0)) {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
         _sg.gl.cache.index_buffer = 0;
-        _sg_stats_add(gl.num_bind_buffer, 1);
+        _sg_stats_inc(gl.num_bind_buffer);
     }
     if (force || (_sg.gl.cache.storage_buffer != 0)) {
         if (_sg.features.compute) {
             glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
         }
         _sg.gl.cache.storage_buffer = 0;
-        _sg_stats_add(gl.num_bind_buffer, 1);
+        _sg_stats_inc(gl.num_bind_buffer);
     }
     for (int i = 0; i < _SG_GL_MAX_SBUF_BINDINGS; i++) {
         if (force || (_sg.gl.cache.storage_buffers[i] != 0)) {
@@ -10094,7 +10110,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
                 glBindBufferBase(GL_SHADER_STORAGE_BUFFER, (GLuint)i, 0);
             }
             _sg.gl.cache.storage_buffers[i] = 0;
-            _sg_stats_add(gl.num_bind_buffer, 1);
+            _sg_stats_inc(gl.num_bind_buffer);
         }
     }
 }
@@ -10105,13 +10121,13 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_buffer(GLenum target, GLuint buffer) {
         if (_sg.gl.cache.vertex_buffer != buffer) {
             _sg.gl.cache.vertex_buffer = buffer;
             glBindBuffer(target, buffer);
-            _sg_stats_add(gl.num_bind_buffer, 1);
+            _sg_stats_inc(gl.num_bind_buffer);
         }
     } else if (target == GL_ELEMENT_ARRAY_BUFFER) {
         if (_sg.gl.cache.index_buffer != buffer) {
             _sg.gl.cache.index_buffer = buffer;
             glBindBuffer(target, buffer);
-            _sg_stats_add(gl.num_bind_buffer, 1);
+            _sg_stats_inc(gl.num_bind_buffer);
         }
     } else if (target == GL_SHADER_STORAGE_BUFFER) {
         if (_sg.gl.cache.storage_buffer != buffer) {
@@ -10119,7 +10135,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_buffer(GLenum target, GLuint buffer) {
             if (_sg.features.compute) {
                 glBindBuffer(target, buffer);
             }
-            _sg_stats_add(gl.num_bind_buffer, 1);
+            _sg_stats_inc(gl.num_bind_buffer);
         }
     } else {
         SOKOL_UNREACHABLE;
@@ -10139,7 +10155,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_storage_buffer(uint8_t glsl_binding_n, GLu
             SOKOL_ASSERT(glsl_binding_n < _sg.limits.max_storage_buffer_bindings_per_stage);
             glBindBufferRange(GL_SHADER_STORAGE_BUFFER, glsl_binding_n, buffer, offset, buf_size - offset);
         }
-        _sg_stats_add(gl.num_bind_buffer, 1);
+        _sg_stats_inc(gl.num_bind_buffer);
     }
 }
 
@@ -10184,17 +10200,17 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_buffer(GLuint buf) {
     if (buf == _sg.gl.cache.vertex_buffer) {
         _sg.gl.cache.vertex_buffer = 0;
         glBindBuffer(GL_ARRAY_BUFFER, 0);
-        _sg_stats_add(gl.num_bind_buffer, 1);
+        _sg_stats_inc(gl.num_bind_buffer);
     }
     if (buf == _sg.gl.cache.index_buffer) {
         _sg.gl.cache.index_buffer = 0;
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-        _sg_stats_add(gl.num_bind_buffer, 1);
+        _sg_stats_inc(gl.num_bind_buffer);
     }
     if (buf == _sg.gl.cache.storage_buffer) {
         _sg.gl.cache.storage_buffer = 0;
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-        _sg_stats_add(gl.num_bind_buffer, 1);
+        _sg_stats_inc(gl.num_bind_buffer);
     }
     for (int i = 0; i < _SG_GL_MAX_SBUF_BINDINGS; i++) {
         if (buf == _sg.gl.cache.storage_buffers[i]) {
@@ -10203,7 +10219,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_buffer(GLuint buf) {
             if (_sg.features.compute && (i < _sg.limits.max_storage_buffer_bindings_per_stage)) {
                 glBindBufferBase(GL_SHADER_STORAGE_BUFFER, (GLuint)i, 0);
             }
-            _sg_stats_add(gl.num_bind_buffer, 1);
+            _sg_stats_inc(gl.num_bind_buffer);
         }
     }
     if (buf == _sg.gl.cache.stored_vertex_buffer) {
@@ -10227,7 +10243,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_active_texture(GLenum texture) {
     if (_sg.gl.cache.cur_active_texture != texture) {
         _sg.gl.cache.cur_active_texture = texture;
         glActiveTexture(texture);
-        _sg_stats_add(gl.num_active_texture, 1);
+        _sg_stats_inc(gl.num_active_texture);
     }
     _SG_GL_CHECK_ERROR();
 }
@@ -10238,14 +10254,14 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_texture_sampler_bindings(bool force) {
         if (force || (_sg.gl.cache.texture_samplers[i].texture != 0)) {
             GLenum gl_texture_unit = (GLenum) (GL_TEXTURE0 + i);
             glActiveTexture(gl_texture_unit);
-            _sg_stats_add(gl.num_active_texture, 1);
+            _sg_stats_inc(gl.num_active_texture);
             glBindTexture(GL_TEXTURE_2D, 0);
             glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
             glBindTexture(GL_TEXTURE_3D, 0);
             glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
             _sg_stats_add(gl.num_bind_texture, 4);
             glBindSampler((GLuint)i, 0);
-            _sg_stats_add(gl.num_bind_sampler, 1);
+            _sg_stats_inc(gl.num_bind_sampler);
             _sg.gl.cache.texture_samplers[i].target = 0;
             _sg.gl.cache.texture_samplers[i].texture = 0;
             _sg.gl.cache.texture_samplers[i].sampler = 0;
@@ -10272,18 +10288,18 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_texture_sampler(int8_t gl_tex_slot, GLenum
         if ((target != slot->target) && (slot->target != 0)) {
             glBindTexture(slot->target, 0);
             _SG_GL_CHECK_ERROR();
-            _sg_stats_add(gl.num_bind_texture, 1);
+            _sg_stats_inc(gl.num_bind_texture);
         }
         // apply new binding (can be 0 to unbind)
         if (target != 0) {
             glBindTexture(target, texture);
             _SG_GL_CHECK_ERROR();
-            _sg_stats_add(gl.num_bind_texture, 1);
+            _sg_stats_inc(gl.num_bind_texture);
         }
         // apply new sampler (can be 0 to unbind)
         glBindSampler((GLuint)gl_tex_slot, sampler);
         _SG_GL_CHECK_ERROR();
-        _sg_stats_add(gl.num_bind_sampler, 1);
+        _sg_stats_inc(gl.num_bind_sampler);
 
         slot->target = target;
         slot->texture = texture;
@@ -10318,10 +10334,10 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_texture_sampler(GLuint tex, GLuint s
             _sg_gl_cache_active_texture((GLenum)(GL_TEXTURE0 + i));
             glBindTexture(slot->target, 0);
             _SG_GL_CHECK_ERROR();
-            _sg_stats_add(gl.num_bind_texture, 1);
+            _sg_stats_inc(gl.num_bind_texture);
             glBindSampler((GLuint)i, 0);
             _SG_GL_CHECK_ERROR();
-            _sg_stats_add(gl.num_bind_sampler, 1);
+            _sg_stats_inc(gl.num_bind_sampler);
             slot->target = 0;
             slot->texture = 0;
             slot->sampler = 0;
@@ -10339,7 +10355,7 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_program(GLuint prog) {
     if (prog == _sg.gl.cache.prog) {
         _sg.gl.cache.prog = 0;
         glUseProgram(0);
-        _sg_stats_add(gl.num_use_program, 1);
+        _sg_stats_inc(gl.num_use_program);
     }
 }
 
@@ -10365,7 +10381,7 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
         attr->divisor = -1;
         glDisableVertexAttribArray((GLuint)i);
         _SG_GL_CHECK_ERROR();
-        _sg_stats_add(gl.num_disable_vertex_attrib_array, 1);
+        _sg_stats_inc(gl.num_disable_vertex_attrib_array);
     }
     _sg.gl.cache.cur_primitive_type = GL_TRIANGLES;
 
@@ -11277,7 +11293,7 @@ _SOKOL_PRIVATE void _sg_gl_handle_memory_barriers(const _sg_shader_t* shd, const
     }
     if (0 != gl_barrier_bits) {
         glMemoryBarrier(gl_barrier_bits);
-        _sg_stats_add(gl.num_memory_barriers, 1);
+        _sg_stats_inc(gl.num_memory_barriers);
     }
 
     // mark resources as dirty which will be written by compute shaders
@@ -11557,12 +11573,12 @@ _SOKOL_PRIVATE void _sg_gl_apply_render_pipeline_state(_sg_pipeline_t* pip) {
         if (state_ds->compare != cache_ds->compare) {
             cache_ds->compare = state_ds->compare;
             glDepthFunc(_sg_gl_compare_func(state_ds->compare));
-            _sg_stats_add(gl.num_render_state, 1);
+            _sg_stats_inc(gl.num_render_state);
         }
         if (state_ds->write_enabled != cache_ds->write_enabled) {
             cache_ds->write_enabled = state_ds->write_enabled;
             glDepthMask(state_ds->write_enabled);
-            _sg_stats_add(gl.num_render_state, 1);
+            _sg_stats_inc(gl.num_render_state);
         }
         if (!_sg_fequal(state_ds->bias, cache_ds->bias, 0.000001f) ||
             !_sg_fequal(state_ds->bias_slope_scale, cache_ds->bias_slope_scale, 0.000001f))
@@ -11575,7 +11591,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_render_pipeline_state(_sg_pipeline_t* pip) {
             cache_ds->bias = state_ds->bias;
             cache_ds->bias_slope_scale = state_ds->bias_slope_scale;
             glPolygonOffset(state_ds->bias_slope_scale, state_ds->bias);
-            _sg_stats_add(gl.num_render_state, 1);
+            _sg_stats_inc(gl.num_render_state);
             bool po_enabled = true;
             if (_sg_fequal(state_ds->bias, 0.0f, 0.000001f) &&
                 _sg_fequal(state_ds->bias_slope_scale, 0.0f, 0.000001f))
@@ -11589,7 +11605,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_render_pipeline_state(_sg_pipeline_t* pip) {
                 } else {
                     glDisable(GL_POLYGON_OFFSET_FILL);
                 }
-                _sg_stats_add(gl.num_render_state, 1);
+                _sg_stats_inc(gl.num_render_state);
             }
         }
     }
@@ -11605,12 +11621,12 @@ _SOKOL_PRIVATE void _sg_gl_apply_render_pipeline_state(_sg_pipeline_t* pip) {
             } else {
                 glDisable(GL_STENCIL_TEST);
             }
-            _sg_stats_add(gl.num_render_state, 1);
+            _sg_stats_inc(gl.num_render_state);
         }
         if (state_ss->write_mask != cache_ss->write_mask) {
             cache_ss->write_mask = state_ss->write_mask;
             glStencilMask(state_ss->write_mask);
-            _sg_stats_add(gl.num_render_state, 1);
+            _sg_stats_inc(gl.num_render_state);
         }
         for (int i = 0; i < 2; i++) {
             const sg_stencil_face_state* state_sfs = (i==0)? &state_ss->front : &state_ss->back;
@@ -11625,7 +11641,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_render_pipeline_state(_sg_pipeline_t* pip) {
                     _sg_gl_compare_func(state_sfs->compare),
                     state_ss->ref,
                     state_ss->read_mask);
-                _sg_stats_add(gl.num_render_state, 1);
+                _sg_stats_inc(gl.num_render_state);
             }
             if ((state_sfs->fail_op != cache_sfs->fail_op) ||
                 (state_sfs->depth_fail_op != cache_sfs->depth_fail_op) ||
@@ -11638,7 +11654,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_render_pipeline_state(_sg_pipeline_t* pip) {
                     _sg_gl_stencil_op(state_sfs->fail_op),
                     _sg_gl_stencil_op(state_sfs->depth_fail_op),
                     _sg_gl_stencil_op(state_sfs->pass_op));
-                _sg_stats_add(gl.num_render_state, 1);
+                _sg_stats_inc(gl.num_render_state);
             }
         }
         cache_ss->read_mask = state_ss->read_mask;
@@ -11657,7 +11673,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_render_pipeline_state(_sg_pipeline_t* pip) {
             } else {
                 glDisable(GL_BLEND);
             }
-            _sg_stats_add(gl.num_render_state, 1);
+            _sg_stats_inc(gl.num_render_state);
         }
         if ((state_bs->src_factor_rgb != cache_bs->src_factor_rgb) ||
             (state_bs->dst_factor_rgb != cache_bs->dst_factor_rgb) ||
@@ -11672,13 +11688,13 @@ _SOKOL_PRIVATE void _sg_gl_apply_render_pipeline_state(_sg_pipeline_t* pip) {
                 _sg_gl_blend_factor(state_bs->dst_factor_rgb),
                 _sg_gl_blend_factor(state_bs->src_factor_alpha),
                 _sg_gl_blend_factor(state_bs->dst_factor_alpha));
-            _sg_stats_add(gl.num_render_state, 1);
+            _sg_stats_inc(gl.num_render_state);
         }
         if ((state_bs->op_rgb != cache_bs->op_rgb) || (state_bs->op_alpha != cache_bs->op_alpha)) {
             cache_bs->op_rgb = state_bs->op_rgb;
             cache_bs->op_alpha = state_bs->op_alpha;
             glBlendEquationSeparate(_sg_gl_blend_op(state_bs->op_rgb), _sg_gl_blend_op(state_bs->op_alpha));
-            _sg_stats_add(gl.num_render_state, 1);
+            _sg_stats_inc(gl.num_render_state);
         }
 
         // standalone color target state
@@ -11700,7 +11716,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_render_pipeline_state(_sg_pipeline_t* pip) {
                                     (cm & SG_COLORMASK_A) != 0);
                     }
                 #endif
-                _sg_stats_add(gl.num_render_state, 1);
+                _sg_stats_inc(gl.num_render_state);
             }
         }
 
@@ -11712,7 +11728,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_render_pipeline_state(_sg_pipeline_t* pip) {
             sg_color c = pip->cmn.blend_color;
             _sg.gl.cache.blend_color = c;
             glBlendColor(c.r, c.g, c.b, c.a);
-            _sg_stats_add(gl.num_render_state, 1);
+            _sg_stats_inc(gl.num_render_state);
         }
     } // pip->cmn.color_count > 0
 
@@ -11720,7 +11736,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_render_pipeline_state(_sg_pipeline_t* pip) {
         _sg.gl.cache.cull_mode = pip->gl.cull_mode;
         if (SG_CULLMODE_NONE == pip->gl.cull_mode) {
             glDisable(GL_CULL_FACE);
-            _sg_stats_add(gl.num_render_state, 1);
+            _sg_stats_inc(gl.num_render_state);
         } else {
             glEnable(GL_CULL_FACE);
             GLenum gl_mode = (SG_CULLMODE_FRONT == pip->gl.cull_mode) ? GL_FRONT : GL_BACK;
@@ -11732,7 +11748,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_render_pipeline_state(_sg_pipeline_t* pip) {
         _sg.gl.cache.face_winding = pip->gl.face_winding;
         GLenum gl_winding = (SG_FACEWINDING_CW == pip->gl.face_winding) ? GL_CW : GL_CCW;
         glFrontFace(gl_winding);
-        _sg_stats_add(gl.num_render_state, 1);
+        _sg_stats_inc(gl.num_render_state);
     }
     if (pip->gl.alpha_to_coverage_enabled != _sg.gl.cache.alpha_to_coverage_enabled) {
         _sg.gl.cache.alpha_to_coverage_enabled = pip->gl.alpha_to_coverage_enabled;
@@ -11741,7 +11757,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_render_pipeline_state(_sg_pipeline_t* pip) {
         } else {
             glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
         }
-        _sg_stats_add(gl.num_render_state, 1);
+        _sg_stats_inc(gl.num_render_state);
     }
     #ifdef SOKOL_GLCORE
     if (pip->gl.sample_count != _sg.gl.cache.sample_count) {
@@ -11751,7 +11767,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_render_pipeline_state(_sg_pipeline_t* pip) {
         } else {
             glDisable(GL_MULTISAMPLE);
         }
-        _sg_stats_add(gl.num_render_state, 1);
+        _sg_stats_inc(gl.num_render_state);
     }
     #endif
 }
@@ -11767,7 +11783,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
         if (shd->gl.prog != _sg.gl.cache.prog) {
             _sg.gl.cache.prog = shd->gl.prog;
             glUseProgram(shd->gl.prog);
-            _sg_stats_add(gl.num_use_program, 1);
+            _sg_stats_inc(gl.num_use_program);
         }
 
         if (!pip->cmn.is_compute) {
@@ -11838,7 +11854,7 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
                 // are not supported on WebGL2, and on native platforms call caching isn't
                 // worth the hassle
                 glBindImageTexture(gl_unit, gl_tex, level, layered, layer, access, format);
-                _sg_stats_add(gl.num_bind_image_texture, 1);
+                _sg_stats_inc(gl.num_bind_image_texture);
             #endif
         }
     }
@@ -11879,21 +11895,21 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
                     } else {
                         glVertexAttribIPointer(attr_index, attr->size, attr->type, attr->stride, (const GLvoid*)(GLintptr)vb_offset);
                     }
-                    _sg_stats_add(gl.num_vertex_attrib_pointer, 1);
+                    _sg_stats_inc(gl.num_vertex_attrib_pointer);
                     glVertexAttribDivisor(attr_index, (GLuint)attr->divisor);
-                    _sg_stats_add(gl.num_vertex_attrib_divisor, 1);
+                    _sg_stats_inc(gl.num_vertex_attrib_divisor);
                     cache_attr_dirty = true;
                 }
                 if (cache_attr->gl_attr.vb_index == -1) {
                     glEnableVertexAttribArray(attr_index);
-                    _sg_stats_add(gl.num_enable_vertex_attrib_array, 1);
+                    _sg_stats_inc(gl.num_enable_vertex_attrib_array);
                     cache_attr_dirty = true;
                 }
             } else {
                 // attribute is disabled
                 if (cache_attr->gl_attr.vb_index != -1) {
                     glDisableVertexAttribArray(attr_index);
-                    _sg_stats_add(gl.num_disable_vertex_attrib_array, 1);
+                    _sg_stats_inc(gl.num_disable_vertex_attrib_array);
                     cache_attr_dirty = true;
                 }
             }
@@ -11928,7 +11944,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_uniforms(int ub_slot, const sg_range* data) {
         if (u->gl_loc == -1) {
             continue;
         }
-        _sg_stats_add(gl.num_uniform, 1);
+        _sg_stats_inc(gl.num_uniform);
         GLfloat* fptr = (GLfloat*) (((uint8_t*)data->ptr) + u->offset);
         GLint* iptr = (GLint*) (((uint8_t*)data->ptr) + u->offset);
         switch (u->type) {
@@ -13990,7 +14006,7 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass* pass, const _sg_attachme
     }
     // apply the render-target- and depth-stencil-views
     _sg_d3d11_OMSetRenderTargets(_sg.d3d11.ctx, SG_MAX_COLOR_ATTACHMENTS, rtvs, dsv);
-    _sg_stats_add(d3d11.pass.num_om_set_render_targets, 1);
+    _sg_stats_inc(d3d11.pass.num_om_set_render_targets);
 
     // set viewport and scissor rect to cover whole screen
     D3D11_VIEWPORT vp;
@@ -14011,7 +14027,7 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass* pass, const _sg_attachme
     for (size_t i = 0; i < (size_t)num_rtvs; i++) {
         if (action->colors[i].load_action == SG_LOADACTION_CLEAR) {
             _sg_d3d11_ClearRenderTargetView(_sg.d3d11.ctx, rtvs[i], (float*)&action->colors[i].clear_value);
-            _sg_stats_add(d3d11.pass.num_clear_render_target_view, 1);
+            _sg_stats_inc(d3d11.pass.num_clear_render_target_view);
         }
     }
     UINT ds_flags = 0;
@@ -14023,7 +14039,7 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass* pass, const _sg_attachme
     }
     if ((0 != ds_flags) && dsv) {
         _sg_d3d11_ClearDepthStencilView(_sg.d3d11.ctx, dsv, ds_flags, action->depth.clear_value, action->stencil.clear_value);
-        _sg_stats_add(d3d11.pass.num_clear_depth_stencil_view, 1);
+        _sg_stats_inc(d3d11.pass.num_clear_depth_stencil_view);
     }
 }
 
@@ -14062,7 +14078,7 @@ _SOKOL_PRIVATE void _sg_d3d11_end_pass(const _sg_attachments_ptrs_t* atts) {
                         color_img->d3d11.res,
                         src_subres,
                         color_img->d3d11.format);
-                    _sg_stats_add(d3d11.pass.num_resolve_subresource, 1);
+                    _sg_stats_inc(d3d11.pass.num_resolve_subresource);
                 }
             }
         } else {
@@ -14081,7 +14097,7 @@ _SOKOL_PRIVATE void _sg_d3d11_end_pass(const _sg_attachments_ptrs_t* atts) {
                 _sg_d3d11_ResolveSubresource(_sg.d3d11.ctx, d3d11_resolve_res, 0, d3d11_render_res, 0, _sg_d3d11_rtv_uav_pixel_format(color_fmt));
                 _sg_d3d11_Release(d3d11_render_res);
                 _sg_d3d11_Release(d3d11_resolve_res);
-                _sg_stats_add(d3d11.pass.num_resolve_subresource, 1);
+                _sg_stats_inc(d3d11.pass.num_resolve_subresource);
             }
         }
     }
@@ -14122,8 +14138,8 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
         SOKOL_ASSERT(shd->d3d11.cs);
         _sg_d3d11_CSSetShader(_sg.d3d11.ctx, shd->d3d11.cs, NULL, 0);
         _sg_d3d11_CSSetConstantBuffers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UB_BINDINGS, shd->d3d11.cs_cbufs);
-        _sg_stats_add(d3d11.pipeline.num_cs_set_shader, 1);
-        _sg_stats_add(d3d11.pipeline.num_cs_set_constant_buffers, 1);
+        _sg_stats_inc(d3d11.pipeline.num_cs_set_shader);
+        _sg_stats_inc(d3d11.pipeline.num_cs_set_constant_buffers);
     } else {
         // a render pipeline
         SOKOL_ASSERT(pip->d3d11.rs && pip->d3d11.bs && pip->d3d11.dss);
@@ -14139,15 +14155,15 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
         _sg_d3d11_VSSetConstantBuffers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UB_BINDINGS, shd->d3d11.vs_cbufs);
         _sg_d3d11_PSSetShader(_sg.d3d11.ctx, shd->d3d11.fs, NULL, 0);
         _sg_d3d11_PSSetConstantBuffers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_UB_BINDINGS, shd->d3d11.fs_cbufs);
-        _sg_stats_add(d3d11.pipeline.num_rs_set_state, 1);
-        _sg_stats_add(d3d11.pipeline.num_om_set_depth_stencil_state, 1);
-        _sg_stats_add(d3d11.pipeline.num_om_set_blend_state, 1);
-        _sg_stats_add(d3d11.pipeline.num_ia_set_primitive_topology, 1);
-        _sg_stats_add(d3d11.pipeline.num_ia_set_input_layout, 1);
-        _sg_stats_add(d3d11.pipeline.num_vs_set_shader, 1);
-        _sg_stats_add(d3d11.pipeline.num_vs_set_constant_buffers, 1);
-        _sg_stats_add(d3d11.pipeline.num_ps_set_shader, 1);
-        _sg_stats_add(d3d11.pipeline.num_ps_set_constant_buffers, 1);
+        _sg_stats_inc(d3d11.pipeline.num_rs_set_state);
+        _sg_stats_inc(d3d11.pipeline.num_om_set_depth_stencil_state);
+        _sg_stats_inc(d3d11.pipeline.num_om_set_blend_state);
+        _sg_stats_inc(d3d11.pipeline.num_ia_set_primitive_topology);
+        _sg_stats_inc(d3d11.pipeline.num_ia_set_input_layout);
+        _sg_stats_inc(d3d11.pipeline.num_vs_set_shader);
+        _sg_stats_inc(d3d11.pipeline.num_vs_set_constant_buffers);
+        _sg_stats_inc(d3d11.pipeline.num_ps_set_shader);
+        _sg_stats_inc(d3d11.pipeline.num_ps_set_constant_buffers);
     }
 }
 
@@ -14266,9 +14282,9 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         _sg_d3d11_CSSetUnorderedAccessViews(_sg.d3d11.ctx, 0, _sg.limits.d3d11_max_unordered_access_views, _sg.d3d11.bnd.cs_uavs, NULL);
         _sg_d3d11_CSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SRV_BINDINGS, _sg.d3d11.bnd.cs_srvs);
         _sg_d3d11_CSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, _sg.d3d11.bnd.cs_smps);
-        _sg_stats_add(d3d11.bindings.num_cs_set_shader_resources, 1);
-        _sg_stats_add(d3d11.bindings.num_cs_set_samplers, 1);
-        _sg_stats_add(d3d11.bindings.num_cs_set_unordered_access_views, 1);
+        _sg_stats_inc(d3d11.bindings.num_cs_set_shader_resources);
+        _sg_stats_inc(d3d11.bindings.num_cs_set_samplers);
+        _sg_stats_inc(d3d11.bindings.num_cs_set_unordered_access_views);
     } else {
         _sg_d3d11_IASetVertexBuffers(_sg.d3d11.ctx, 0, SG_MAX_VERTEXBUFFER_BINDSLOTS, _sg.d3d11.bnd.vbs, bnd->pip->d3d11.vb_strides, _sg.d3d11.bnd.vb_offsets);
         _sg_d3d11_IASetIndexBuffer(_sg.d3d11.ctx, d3d11_ib, bnd->pip->d3d11.index_format, (UINT)bnd->ib_offset);
@@ -14276,12 +14292,12 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         _sg_d3d11_PSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SRV_BINDINGS, _sg.d3d11.bnd.fs_srvs);
         _sg_d3d11_VSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, _sg.d3d11.bnd.vs_smps);
         _sg_d3d11_PSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, _sg.d3d11.bnd.fs_smps);
-        _sg_stats_add(d3d11.bindings.num_ia_set_vertex_buffers, 1);
-        _sg_stats_add(d3d11.bindings.num_ia_set_index_buffer, 1);
-        _sg_stats_add(d3d11.bindings.num_vs_set_shader_resources, 1);
-        _sg_stats_add(d3d11.bindings.num_ps_set_shader_resources, 1);
-        _sg_stats_add(d3d11.bindings.num_vs_set_samplers, 1);
-        _sg_stats_add(d3d11.bindings.num_ps_set_samplers, 1);
+        _sg_stats_inc(d3d11.bindings.num_ia_set_vertex_buffers);
+        _sg_stats_inc(d3d11.bindings.num_ia_set_index_buffer);
+        _sg_stats_inc(d3d11.bindings.num_vs_set_shader_resources);
+        _sg_stats_inc(d3d11.bindings.num_ps_set_shader_resources);
+        _sg_stats_inc(d3d11.bindings.num_vs_set_samplers);
+        _sg_stats_inc(d3d11.bindings.num_ps_set_samplers);
     }
     return true;
 }
@@ -14296,7 +14312,7 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_uniforms(int ub_slot, const sg_range* data) 
     ID3D11Buffer* cbuf = shd->d3d11.all_cbufs[ub_slot];
     SOKOL_ASSERT(cbuf);
     _sg_d3d11_UpdateSubresource(_sg.d3d11.ctx, (ID3D11Resource*)cbuf, 0, NULL, data->ptr, 0, 0);
-    _sg_stats_add(d3d11.uniforms.num_update_subresource, 1);
+    _sg_stats_inc(d3d11.uniforms.num_update_subresource);
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
@@ -14309,10 +14325,10 @@ _SOKOL_PRIVATE void _sg_d3d11_draw(int base_element, int num_elements, int num_i
                 (UINT)base_element,
                 base_vertex,
                 (UINT)base_instance);
-            _sg_stats_add(d3d11.draw.num_draw_indexed_instanced, 1);
+            _sg_stats_inc(d3d11.draw.num_draw_indexed_instanced);
         } else {
             _sg_d3d11_DrawIndexed(_sg.d3d11.ctx, (UINT)num_elements, (UINT)base_element, base_vertex);
-            _sg_stats_add(d3d11.draw.num_draw_indexed, 1);
+            _sg_stats_inc(d3d11.draw.num_draw_indexed);
         }
     } else {
         if (use_instanced_draw) {
@@ -14321,10 +14337,10 @@ _SOKOL_PRIVATE void _sg_d3d11_draw(int base_element, int num_elements, int num_i
                 (UINT)num_instances,
                 (UINT)base_element,
                 (UINT)base_instance);
-            _sg_stats_add(d3d11.draw.num_draw_instanced, 1);
+            _sg_stats_inc(d3d11.draw.num_draw_instanced);
         } else {
             _sg_d3d11_Draw(_sg.d3d11.ctx, (UINT)num_elements, (UINT)base_element);
-            _sg_stats_add(d3d11.draw.num_draw, 1);
+            _sg_stats_inc(d3d11.draw.num_draw);
         }
     }
 }
@@ -14343,11 +14359,11 @@ _SOKOL_PRIVATE void _sg_d3d11_update_buffer(_sg_buffer_t* buf, const sg_range* d
     SOKOL_ASSERT(buf->d3d11.buf);
     D3D11_MAPPED_SUBRESOURCE d3d11_msr;
     HRESULT hr = _sg_d3d11_Map(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0, D3D11_MAP_WRITE_DISCARD, 0, &d3d11_msr);
-    _sg_stats_add(d3d11.num_map, 1);
+    _sg_stats_inc(d3d11.num_map);
     if (SUCCEEDED(hr)) {
         memcpy(d3d11_msr.pData, data->ptr, data->size);
         _sg_d3d11_Unmap(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0);
-        _sg_stats_add(d3d11.num_unmap, 1);
+        _sg_stats_inc(d3d11.num_unmap);
     } else {
         _SG_ERROR(D3D11_MAP_FOR_UPDATE_BUFFER_FAILED);
     }
@@ -14360,12 +14376,12 @@ _SOKOL_PRIVATE void _sg_d3d11_append_buffer(_sg_buffer_t* buf, const sg_range* d
     D3D11_MAP map_type = new_frame ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE;
     D3D11_MAPPED_SUBRESOURCE d3d11_msr;
     HRESULT hr = _sg_d3d11_Map(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0, map_type, 0, &d3d11_msr);
-    _sg_stats_add(d3d11.num_map, 1);
+    _sg_stats_inc(d3d11.num_map);
     if (SUCCEEDED(hr)) {
         uint8_t* dst_ptr = (uint8_t*)d3d11_msr.pData + buf->cmn.append_pos;
         memcpy(dst_ptr, data->ptr, data->size);
         _sg_d3d11_Unmap(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0);
-        _sg_stats_add(d3d11.num_unmap, 1);
+        _sg_stats_inc(d3d11.num_unmap);
     } else {
         _SG_ERROR(D3D11_MAP_FOR_APPEND_BUFFER_FAILED);
     }
@@ -14395,7 +14411,7 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
             const size_t slice_offset = slice_size * (size_t)slice_index;
             const uint8_t* slice_ptr = ((const uint8_t*)miplevel_data->ptr) + slice_offset;
             hr = _sg_d3d11_Map(_sg.d3d11.ctx, img->d3d11.res, subres_index, D3D11_MAP_WRITE_DISCARD, 0, &d3d11_msr);
-            _sg_stats_add(d3d11.num_map, 1);
+            _sg_stats_inc(d3d11.num_map);
             if (SUCCEEDED(hr)) {
                 const uint8_t* src_ptr = slice_ptr;
                 uint8_t* dst_ptr = (uint8_t*)d3d11_msr.pData;
@@ -14418,7 +14434,7 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
                     dst_ptr += d3d11_msr.DepthPitch;
                 }
                 _sg_d3d11_Unmap(_sg.d3d11.ctx, img->d3d11.res, subres_index);
-                _sg_stats_add(d3d11.num_unmap, 1);
+                _sg_stats_inc(d3d11.num_unmap);
             } else {
                 _SG_ERROR(D3D11_MAP_FOR_UPDATE_IMAGE_FAILED);
             }
@@ -14863,7 +14879,7 @@ _SOKOL_PRIVATE int _sg_mtl_add_resource(id res) {
     if (nil == res) {
         return _SG_MTL_INVALID_SLOT_INDEX;
     }
-    _sg_stats_add(metal.idpool.num_added, 1);
+    _sg_stats_inc(metal.idpool.num_added);
     const int slot_index = _sg_mtl_alloc_pool_slot();
     // NOTE: the NSMutableArray will take ownership of its items
     SOKOL_ASSERT([NSNull null] == _sg.mtl.idpool.pool[(NSUInteger)slot_index]);
@@ -14880,7 +14896,7 @@ _SOKOL_PRIVATE void _sg_mtl_release_resource(uint32_t frame_index, int slot_inde
     if (slot_index == _SG_MTL_INVALID_SLOT_INDEX) {
         return;
     }
-    _sg_stats_add(metal.idpool.num_released, 1);
+    _sg_stats_inc(metal.idpool.num_released);
     SOKOL_ASSERT((slot_index > 0) && (slot_index < _sg.mtl.idpool.num_slots));
     SOKOL_ASSERT([NSNull null] != _sg.mtl.idpool.pool[(NSUInteger)slot_index]);
     int release_index = _sg.mtl.idpool.release_queue_front++;
@@ -14903,7 +14919,7 @@ _SOKOL_PRIVATE void _sg_mtl_garbage_collect(uint32_t frame_index) {
             // don't need to check further, release-items past this are too young
             break;
         }
-        _sg_stats_add(metal.idpool.num_garbage_collected, 1);
+        _sg_stats_inc(metal.idpool.num_garbage_collected);
         // safe to release this resource
         const int slot_index = _sg.mtl.idpool.release_queue[_sg.mtl.idpool.release_queue_back].slot_index;
         SOKOL_ASSERT((slot_index > 0) && (slot_index < _sg.mtl.idpool.num_slots));
@@ -16148,21 +16164,21 @@ _SOKOL_PRIVATE void _sg_mtl_apply_pipeline(_sg_pipeline_t* pip) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
             sg_color c = pip->cmn.blend_color;
             [_sg.mtl.render_cmd_encoder setBlendColorRed:c.r green:c.g blue:c.b alpha:c.a];
-            _sg_stats_add(metal.pipeline.num_set_blend_color, 1);
+            _sg_stats_inc(metal.pipeline.num_set_blend_color);
             [_sg.mtl.render_cmd_encoder setCullMode:pip->mtl.cull_mode];
-            _sg_stats_add(metal.pipeline.num_set_cull_mode, 1);
+            _sg_stats_inc(metal.pipeline.num_set_cull_mode);
             [_sg.mtl.render_cmd_encoder setFrontFacingWinding:pip->mtl.winding];
-            _sg_stats_add(metal.pipeline.num_set_front_facing_winding, 1);
+            _sg_stats_inc(metal.pipeline.num_set_front_facing_winding);
             [_sg.mtl.render_cmd_encoder setStencilReferenceValue:pip->mtl.stencil_ref];
-            _sg_stats_add(metal.pipeline.num_set_stencil_reference_value, 1);
+            _sg_stats_inc(metal.pipeline.num_set_stencil_reference_value);
             [_sg.mtl.render_cmd_encoder setDepthBias:pip->cmn.depth.bias slopeScale:pip->cmn.depth.bias_slope_scale clamp:pip->cmn.depth.bias_clamp];
-            _sg_stats_add(metal.pipeline.num_set_depth_bias, 1);
+            _sg_stats_inc(metal.pipeline.num_set_depth_bias);
             SOKOL_ASSERT(pip->mtl.rps != _SG_MTL_INVALID_SLOT_INDEX);
             [_sg.mtl.render_cmd_encoder setRenderPipelineState:_sg_mtl_id(pip->mtl.rps)];
-            _sg_stats_add(metal.pipeline.num_set_render_pipeline_state, 1);
+            _sg_stats_inc(metal.pipeline.num_set_render_pipeline_state);
             SOKOL_ASSERT(pip->mtl.dss != _SG_MTL_INVALID_SLOT_INDEX);
             [_sg.mtl.render_cmd_encoder setDepthStencilState:_sg_mtl_id(pip->mtl.dss)];
-            _sg_stats_add(metal.pipeline.num_set_depth_stencil_state, 1);
+            _sg_stats_inc(metal.pipeline.num_set_depth_stencil_state);
         }
     }
 }
@@ -16238,13 +16254,13 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
                 if (0 == (cmp & ~_SG_MTL_CACHE_CMP_OFFSET)) {
                     // only vertex buffer offset has changed
                     [_sg.mtl.render_cmd_encoder setVertexBufferOffset:(NSUInteger)offset atIndex:mtl_slot];
-                    _sg_stats_add(metal.bindings.num_set_vertex_buffer_offset, 1);
+                    _sg_stats_inc(metal.bindings.num_set_vertex_buffer_offset);
                 } else {
                     [_sg.mtl.render_cmd_encoder setVertexBuffer:_sg_mtl_id(vb->mtl.buf[active_slot]) offset:(NSUInteger)offset atIndex:mtl_slot];
-                    _sg_stats_add(metal.bindings.num_set_vertex_buffer, 1);
+                    _sg_stats_inc(metal.bindings.num_set_vertex_buffer);
                 }
             } else {
-                _sg_stats_add(metal.bindings.num_skip_redundant_vertex_buffer, 1);
+                _sg_stats_inc(metal.bindings.num_skip_redundant_vertex_buffer);
             }
         }
     }
@@ -16277,9 +16293,9 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
                 if (cmp != _SG_MTL_CACHE_CMP_EQUAL) {
                     _sg_mtl_cache_tex_upd(cache_item, &view->slot, active_slot);
                     [_sg.mtl.render_cmd_encoder setVertexTexture:_sg_mtl_id(view->mtl.tex_view[active_slot]) atIndex:mtl_slot];
-                    _sg_stats_add(metal.bindings.num_set_vertex_texture, 1);
+                    _sg_stats_inc(metal.bindings.num_set_vertex_texture);
                 } else {
-                    _sg_stats_add(metal.bindings.num_skip_redundant_vertex_texture, 1);
+                    _sg_stats_inc(metal.bindings.num_skip_redundant_vertex_texture);
                 }
             } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
                 SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
@@ -16288,9 +16304,9 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
                 if (cmp != _SG_MTL_CACHE_CMP_EQUAL) {
                     _sg_mtl_cache_tex_upd(cache_item, &view->slot, active_slot);
                     [_sg.mtl.render_cmd_encoder setFragmentTexture:_sg_mtl_id(view->mtl.tex_view[active_slot]) atIndex:mtl_slot];
-                    _sg_stats_add(metal.bindings.num_set_fragment_texture, 1);
+                    _sg_stats_inc(metal.bindings.num_set_fragment_texture);
                 } else {
-                    _sg_stats_add(metal.bindings.num_skip_redundant_fragment_texture, 1);
+                    _sg_stats_inc(metal.bindings.num_skip_redundant_fragment_texture);
                 }
             } else if (stage == SG_SHADERSTAGE_COMPUTE) {
                 SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
@@ -16299,9 +16315,9 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
                 if (cmp != _SG_MTL_CACHE_CMP_EQUAL) {
                     _sg_mtl_cache_tex_upd(cache_item, &view->slot, active_slot);
                     [_sg.mtl.compute_cmd_encoder setTexture:_sg_mtl_id(view->mtl.tex_view[active_slot]) atIndex:mtl_slot];
-                    _sg_stats_add(metal.bindings.num_set_compute_texture, 1);
+                    _sg_stats_inc(metal.bindings.num_set_compute_texture);
                 } else {
-                    _sg_stats_add(metal.bindings.num_skip_redundant_compute_texture, 1);
+                    _sg_stats_inc(metal.bindings.num_skip_redundant_compute_texture);
                 }
             } else SOKOL_UNREACHABLE;
         } else if (shd_view->view_type == SG_VIEWTYPE_STORAGEBUFFER) {
@@ -16319,13 +16335,13 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
                     if (0 == (cmp & ~_SG_MTL_CACHE_CMP_OFFSET)) {
                         // only offset has changed
                         [_sg.mtl.render_cmd_encoder setVertexBufferOffset:(NSUInteger)offset atIndex:mtl_slot];
-                        _sg_stats_add(metal.bindings.num_set_vertex_buffer_offset, 1);
+                        _sg_stats_inc(metal.bindings.num_set_vertex_buffer_offset);
                     } else {
                         [_sg.mtl.render_cmd_encoder setVertexBuffer:_sg_mtl_id(sbuf->mtl.buf[sbuf->cmn.active_slot]) offset:(NSUInteger)offset atIndex:mtl_slot];
-                        _sg_stats_add(metal.bindings.num_set_vertex_buffer, 1);
+                        _sg_stats_inc(metal.bindings.num_set_vertex_buffer);
                     }
                 } else {
-                    _sg_stats_add(metal.bindings.num_skip_redundant_vertex_buffer, 1);
+                    _sg_stats_inc(metal.bindings.num_skip_redundant_vertex_buffer);
                 }
             } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
                 SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
@@ -16336,13 +16352,13 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
                     if (0 == (cmp & ~_SG_MTL_CACHE_CMP_OFFSET)) {
                         // only offset has changed
                         [_sg.mtl.render_cmd_encoder setFragmentBufferOffset:(NSUInteger)offset atIndex:mtl_slot];
-                        _sg_stats_add(metal.bindings.num_set_fragment_buffer_offset, 1);
+                        _sg_stats_inc(metal.bindings.num_set_fragment_buffer_offset);
                     } else {
                         [_sg.mtl.render_cmd_encoder setFragmentBuffer:_sg_mtl_id(sbuf->mtl.buf[active_slot]) offset:(NSUInteger)offset atIndex:mtl_slot];
-                        _sg_stats_add(metal.bindings.num_set_fragment_buffer, 1);
+                        _sg_stats_inc(metal.bindings.num_set_fragment_buffer);
                     }
                 } else {
-                    _sg_stats_add(metal.bindings.num_skip_redundant_fragment_buffer, 1);
+                    _sg_stats_inc(metal.bindings.num_skip_redundant_fragment_buffer);
                 }
             } else if (stage == SG_SHADERSTAGE_COMPUTE) {
                 SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
@@ -16353,13 +16369,13 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
                     if (0 == (cmp & ~_SG_MTL_CACHE_CMP_OFFSET)) {
                         // only offset has changed
                         [_sg.mtl.compute_cmd_encoder setBufferOffset:(NSUInteger)offset atIndex:mtl_slot];
-                        _sg_stats_add(metal.bindings.num_set_compute_buffer_offset, 1);
+                        _sg_stats_inc(metal.bindings.num_set_compute_buffer_offset);
                     } else {
                         [_sg.mtl.compute_cmd_encoder setBuffer:_sg_mtl_id(sbuf->mtl.buf[active_slot]) offset:(NSUInteger)offset atIndex:mtl_slot];
-                        _sg_stats_add(metal.bindings.num_set_compute_buffer, 1);
+                        _sg_stats_inc(metal.bindings.num_set_compute_buffer);
                     }
                 } else {
-                    _sg_stats_add(metal.bindings.num_skip_redundant_compute_buffer, 1);
+                    _sg_stats_inc(metal.bindings.num_skip_redundant_compute_buffer);
                 }
             }
         } else SOKOL_UNREACHABLE;
@@ -16381,27 +16397,27 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
             if (!_sg_sref_slot_eql(&_sg.mtl.cache.cur_vssmps[mtl_slot], &smp->slot)) {
                 _sg.mtl.cache.cur_vssmps[mtl_slot] = _sg_sref(&smp->slot);
                 [_sg.mtl.render_cmd_encoder setVertexSamplerState:_sg_mtl_id(smp->mtl.sampler_state) atIndex:mtl_slot];
-                _sg_stats_add(metal.bindings.num_set_vertex_sampler_state, 1);
+                _sg_stats_inc(metal.bindings.num_set_vertex_sampler_state);
             } else {
-                _sg_stats_add(metal.bindings.num_skip_redundant_vertex_sampler_state, 1);
+                _sg_stats_inc(metal.bindings.num_skip_redundant_vertex_sampler_state);
             }
         } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
             SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
             if (!_sg_sref_slot_eql(&_sg.mtl.cache.cur_fssmps[mtl_slot], &smp->slot)) {
                 _sg.mtl.cache.cur_fssmps[mtl_slot] = _sg_sref(&smp->slot);
                 [_sg.mtl.render_cmd_encoder setFragmentSamplerState:_sg_mtl_id(smp->mtl.sampler_state) atIndex:mtl_slot];
-                _sg_stats_add(metal.bindings.num_set_fragment_sampler_state, 1);
+                _sg_stats_inc(metal.bindings.num_set_fragment_sampler_state);
             } else {
-                _sg_stats_add(metal.bindings.num_skip_redundant_fragment_sampler_state, 1);
+                _sg_stats_inc(metal.bindings.num_skip_redundant_fragment_sampler_state);
             }
         } else if (stage == SG_SHADERSTAGE_COMPUTE) {
             SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
             if (!_sg_sref_slot_eql(&_sg.mtl.cache.cur_cssmps[mtl_slot], &smp->slot)) {
                 _sg.mtl.cache.cur_cssmps[mtl_slot] = _sg_sref(&smp->slot);
                 [_sg.mtl.compute_cmd_encoder setSamplerState:_sg_mtl_id(smp->mtl.sampler_state) atIndex:mtl_slot];
-                _sg_stats_add(metal.bindings.num_set_compute_sampler_state, 1);
+                _sg_stats_inc(metal.bindings.num_set_compute_sampler_state);
             } else {
-                _sg_stats_add(metal.bindings.num_skip_redundant_compute_sampler_state, 1);
+                _sg_stats_inc(metal.bindings.num_skip_redundant_compute_sampler_state);
             }
         } else SOKOL_UNREACHABLE;
     }
@@ -16426,15 +16442,15 @@ _SOKOL_PRIVATE void _sg_mtl_apply_uniforms(int ub_slot, const sg_range* data) {
     if (stage == SG_SHADERSTAGE_VERTEX) {
         SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
         [_sg.mtl.render_cmd_encoder setVertexBufferOffset:(NSUInteger)_sg.mtl.cur_ub_offset atIndex:mtl_slot];
-        _sg_stats_add(metal.uniforms.num_set_vertex_buffer_offset, 1);
+        _sg_stats_inc(metal.uniforms.num_set_vertex_buffer_offset);
     } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
         SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
         [_sg.mtl.render_cmd_encoder setFragmentBufferOffset:(NSUInteger)_sg.mtl.cur_ub_offset atIndex:mtl_slot];
-        _sg_stats_add(metal.uniforms.num_set_fragment_buffer_offset, 1);
+        _sg_stats_inc(metal.uniforms.num_set_fragment_buffer_offset);
     } else if (stage == SG_SHADERSTAGE_COMPUTE) {
         SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
         [_sg.mtl.compute_cmd_encoder setBufferOffset:(NSUInteger)_sg.mtl.cur_ub_offset atIndex:mtl_slot];
-        _sg_stats_add(metal.uniforms.num_set_compute_buffer_offset, 1);
+        _sg_stats_inc(metal.uniforms.num_set_compute_buffer_offset);
     } else {
         SOKOL_UNREACHABLE;
     }
@@ -17283,7 +17299,7 @@ _SOKOL_PRIVATE bool _sg_wgpu_compare_bindgroups_cache_key(_sg_wgpu_bindgroups_ca
         return false;
     }
     if (memcmp(&k0->items, &k1->items, sizeof(k0->items)) != 0) {
-        _sg_stats_add(wgpu.bindings.num_bindgroup_cache_hash_vs_key_mismatch, 1);
+        _sg_stats_inc(wgpu.bindings.num_bindgroup_cache_hash_vs_key_mismatch);
         return false;
     }
     return true;
@@ -17293,7 +17309,7 @@ _SOKOL_PRIVATE _sg_wgpu_bindgroup_t* _sg_wgpu_create_bindgroup(_sg_bindings_ptrs
     SOKOL_ASSERT(_sg.wgpu.dev);
     SOKOL_ASSERT(bnd->pip);
     const _sg_shader_t* shd = _sg_shader_ref_ptr(&bnd->pip->cmn.shader);
-    _sg_stats_add(wgpu.bindings.num_create_bindgroup, 1);
+    _sg_stats_inc(wgpu.bindings.num_create_bindgroup);
     _sg_wgpu_bindgroup_handle_t bg_id = _sg_wgpu_alloc_bindgroup();
     if (bg_id.id == SG_INVALID_ID) {
         return 0;
@@ -17358,7 +17374,7 @@ _SOKOL_PRIVATE _sg_wgpu_bindgroup_t* _sg_wgpu_create_bindgroup(_sg_bindings_ptrs
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_bindgroup(_sg_wgpu_bindgroup_t* bg) {
     SOKOL_ASSERT(bg);
-    _sg_stats_add(wgpu.bindings.num_discard_bindgroup, 1);
+    _sg_stats_inc(wgpu.bindings.num_discard_bindgroup);
     if (bg->slot.state == SG_RESOURCESTATE_VALID) {
         if (bg->bindgroup) {
             wgpuBindGroupRelease(bg->bindgroup);
@@ -17446,7 +17462,7 @@ _SOKOL_PRIVATE void _sg_wgpu_bindgroups_cache_invalidate(_sg_wgpu_bindgroups_cac
             if (invalidate_cache_item) {
                 _sg_wgpu_discard_bindgroup(bg); bg = 0;
                 _sg_wgpu_bindgroups_cache_set(cache_item_idx, SG_INVALID_ID);
-                _sg_stats_add(wgpu.bindings.num_bindgroup_cache_invalidates, 1);
+                _sg_stats_inc(wgpu.bindings.num_bindgroup_cache_invalidates);
             }
         }
     }
@@ -17515,7 +17531,7 @@ _SOKOL_PRIVATE void _sg_wgpu_bindings_cache_bg_update(const _sg_wgpu_bindgroup_t
 _SOKOL_PRIVATE void _sg_wgpu_set_bindgroup(uint32_t bg_idx, _sg_wgpu_bindgroup_t* bg) {
     if (_sg_wgpu_bindings_cache_bg_dirty(bg)) {
         _sg_wgpu_bindings_cache_bg_update(bg);
-        _sg_stats_add(wgpu.bindings.num_set_bindgroup, 1);
+        _sg_stats_inc(wgpu.bindings.num_set_bindgroup);
         if (_sg.cur_pass.is_compute) {
             SOKOL_ASSERT(_sg.wgpu.cpass_enc);
             if (bg) {
@@ -17536,7 +17552,7 @@ _SOKOL_PRIVATE void _sg_wgpu_set_bindgroup(uint32_t bg_idx, _sg_wgpu_bindgroup_t
             }
         }
     } else {
-        _sg_stats_add(wgpu.bindings.num_skip_redundant_bindgroup, 1);
+        _sg_stats_inc(wgpu.bindings.num_skip_redundant_bindgroup);
     }
 }
 
@@ -17552,15 +17568,15 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindings_bindgroup(_sg_bindings_ptrs_t* bnd) 
             SOKOL_ASSERT(bg && (bg->slot.state == SG_RESOURCESTATE_VALID));
             if (!_sg_wgpu_compare_bindgroups_cache_key(&key, &bg->key)) {
                 // cache collision, need to delete cached bindgroup
-                _sg_stats_add(wgpu.bindings.num_bindgroup_cache_collisions, 1);
+                _sg_stats_inc(wgpu.bindings.num_bindgroup_cache_collisions);
                 _sg_wgpu_discard_bindgroup(bg);
                 _sg_wgpu_bindgroups_cache_set(key.hash, SG_INVALID_ID);
                 bg = 0;
             } else {
-                _sg_stats_add(wgpu.bindings.num_bindgroup_cache_hits, 1);
+                _sg_stats_inc(wgpu.bindings.num_bindgroup_cache_hits);
             }
         } else {
-            _sg_stats_add(wgpu.bindings.num_bindgroup_cache_misses, 1);
+            _sg_stats_inc(wgpu.bindings.num_bindgroup_cache_misses);
         }
         if (bg == 0) {
             // either no cache entry yet, or cache collision, create new bindgroup and store in cache
@@ -17604,9 +17620,9 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_index_buffer(_sg_bindings_ptrs_t* bnd) {
             wgpuRenderPassEncoderSetIndexBuffer(_sg.wgpu.rpass_enc, 0, WGPUIndexFormat_Undefined, 0, 0);
         */
         }
-        _sg_stats_add(wgpu.bindings.num_set_index_buffer, 1);
+        _sg_stats_inc(wgpu.bindings.num_set_index_buffer);
     } else {
-        _sg_stats_add(wgpu.bindings.num_skip_redundant_index_buffer, 1);
+        _sg_stats_inc(wgpu.bindings.num_skip_redundant_index_buffer);
     }
     return true;
 }
@@ -17628,9 +17644,9 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_vertex_buffers(_sg_bindings_ptrs_t* bnd) {
                 wgpuRenderPassEncoderSetVertexBuffer(_sg.wgpu.rpass_enc, slot, 0, 0, 0);
             */
             }
-            _sg_stats_add(wgpu.bindings.num_set_vertex_buffer, 1);
+            _sg_stats_inc(wgpu.bindings.num_set_vertex_buffer);
         } else {
-            _sg_stats_add(wgpu.bindings.num_skip_redundant_vertex_buffer, 1);
+            _sg_stats_inc(wgpu.bindings.num_skip_redundant_vertex_buffer);
         }
     }
     return true;
@@ -18367,7 +18383,7 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_compute_pass(const sg_pass* pass) {
     // clear initial bindings
     wgpuComputePassEncoderSetBindGroup(_sg.wgpu.cpass_enc, _SG_WGPU_UB_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
     wgpuComputePassEncoderSetBindGroup(_sg.wgpu.cpass_enc, _SG_WGPU_VIEW_SMP_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
-    _sg_stats_add(wgpu.bindings.num_set_bindgroup, 1);
+    _sg_stats_inc(wgpu.bindings.num_set_bindgroup);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_begin_render_pass(const sg_pass* pass, const _sg_attachments_ptrs_t* atts) {
@@ -18419,7 +18435,7 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_render_pass(const sg_pass* pass, const _sg_at
 
     wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.rpass_enc, _SG_WGPU_UB_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
     wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.rpass_enc, _SG_WGPU_VIEW_SMP_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
-    _sg_stats_add(wgpu.bindings.num_set_bindgroup, 1);
+    _sg_stats_inc(wgpu.bindings.num_set_bindgroup);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_begin_pass(const sg_pass* pass, const _sg_attachments_ptrs_t* atts) {
@@ -18567,7 +18583,7 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(int ub_slot, const sg_range* data) {
     SOKOL_ASSERT(data->size == shd->cmn.uniform_blocks[ub_slot].size);
     SOKOL_ASSERT(data->size <= _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE);
 
-    _sg_stats_add(wgpu.uniforms.num_set_bindgroup, 1);
+    _sg_stats_inc(wgpu.uniforms.num_set_bindgroup);
     memcpy(_sg.wgpu.uniform.staging + _sg.wgpu.uniform.offset, data->ptr, data->size);
     _sg.wgpu.uniform.bind_offsets[ub_slot] = _sg.wgpu.uniform.offset;
     _sg.wgpu.uniform.offset = _sg_roundup_u32(_sg.wgpu.uniform.offset + (uint32_t)data->size, alignment);
@@ -18813,7 +18829,7 @@ _SOKOL_PRIVATE void _sg_vk_swapchain_beginpass_barrier(VkCommandBuffer cmd_buf, 
     dep_info.imageMemoryBarrierCount = 1;
     dep_info.pImageMemoryBarriers = &barrier;
     vkCmdPipelineBarrier2(cmd_buf, &dep_info);
-    _sg_stats_add(vk.num_cmd_pipeline_barrier, 1);
+    _sg_stats_inc(vk.num_cmd_pipeline_barrier);
 }
 
 _SOKOL_PRIVATE void _sg_vk_swapchain_endpass_barrier(VkCommandBuffer cmd_buf, VkImage vkimg, _sg_vk_access_t pass_access, bool present) {
@@ -18848,7 +18864,7 @@ _SOKOL_PRIVATE void _sg_vk_swapchain_endpass_barrier(VkCommandBuffer cmd_buf, Vk
     dep_info.imageMemoryBarrierCount = 1;
     dep_info.pImageMemoryBarriers = &barrier;
     vkCmdPipelineBarrier2(cmd_buf, &dep_info);
-    _sg_stats_add(vk.num_cmd_pipeline_barrier, 1);
+    _sg_stats_inc(vk.num_cmd_pipeline_barrier);
 }
 
 _SOKOL_PRIVATE void _sg_vk_image_barrier(VkCommandBuffer cmd_buf, _sg_image_t* img, _sg_vk_access_t new_access) {
@@ -18882,7 +18898,7 @@ _SOKOL_PRIVATE void _sg_vk_image_barrier(VkCommandBuffer cmd_buf, _sg_image_t* i
     dep_info.imageMemoryBarrierCount = 1;
     dep_info.pImageMemoryBarriers = &barrier;
     vkCmdPipelineBarrier2(cmd_buf, &dep_info);
-    _sg_stats_add(vk.num_cmd_pipeline_barrier, 1);
+    _sg_stats_inc(vk.num_cmd_pipeline_barrier);
     img->vk.cur_access = new_access;
 }
 
@@ -18907,7 +18923,7 @@ _SOKOL_PRIVATE void _sg_vk_buffer_barrier(VkCommandBuffer cmd_buf, _sg_buffer_t*
     dep_info.bufferMemoryBarrierCount = 1;
     dep_info.pBufferMemoryBarriers = &barrier;
     vkCmdPipelineBarrier2(cmd_buf, &dep_info);
-    _sg_stats_add(vk.num_cmd_pipeline_barrier, 1);
+    _sg_stats_inc(vk.num_cmd_pipeline_barrier);
     buf->vk.cur_access = new_access;
 }
 
@@ -19149,7 +19165,7 @@ _SOKOL_PRIVATE VkDeviceMemory _sg_vk_mem_alloc_device_memory(_sg_vk_memtype_t me
     alloc_info.memoryTypeIndex = (uint32_t) mem_type_index;
     VkDeviceMemory vk_dev_mem = 0;
     VkResult res = vkAllocateMemory(_sg.vk.dev, &alloc_info, 0, &vk_dev_mem);
-    _sg_stats_add(vk.num_allocate_memory, 1);
+    _sg_stats_inc(vk.num_allocate_memory, 1);
     _sg_stats_add(vk.size_allocate_memory, mem_reqs->size);
     if (res != VK_SUCCESS) {
         _SG_ERROR(VULKAN_ALLOCATE_MEMORY_FAILED);
@@ -19163,7 +19179,7 @@ _SOKOL_PRIVATE void _sg_vk_mem_free_device_memory(VkDeviceMemory vk_dev_mem) {
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(vk_dev_mem);
     vkFreeMemory(_sg.vk.dev, vk_dev_mem, 0);
-    _sg_stats_add(vk.num_free_memory, 1);
+    _sg_stats_inc(vk.num_free_memory, 1);
 }
 
 _SOKOL_PRIVATE bool _sg_vk_mem_alloc_buffer_device_memory(_sg_buffer_t* buf) {
@@ -19262,7 +19278,7 @@ _SOKOL_PRIVATE void _sg_vk_delete_queue_add(_sg_vk_delete_queue_destructor_t des
     queue->items[queue->index].destructor = destructor;
     queue->items[queue->index].obj = obj;
     queue->index += 1;
-    _sg_stats_add(vk.num_delete_queue_added, 1);
+    _sg_stats_inc(vk.num_delete_queue_added, 1);
 }
 
 // double-buffer system for any non-blocking CPU => GPU data
@@ -19563,7 +19579,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_
         _sg_vk_staging_map_memcpy_unmap(dst_mem, src_ptr, bytes_to_copy);
         VkCommandBuffer cmd_buf = _sg_vk_staging_copy_begin();
         vkCmdCopyBuffer(cmd_buf, src_buf, dst_buf, 1, &region);
-        _sg_stats_add(vk.num_cmd_copy_buffer, 1);
+        _sg_stats_inc(vk.num_cmd_copy_buffer);
         _sg_vk_staging_copy_end(cmd_buf, _sg.vk.queue);
         src_ptr += bytes_to_copy;
         region.dstOffset += bytes_to_copy;
@@ -19649,7 +19665,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_im
                 region.imageOffset.y = (int32_t)(cur_row * block_dim);
                 region.imageExtent.height = _sg_min((uint32_t)mip_height, rows_to_copy * block_dim);
                 vkCmdCopyBufferToImage2(cmd_buf, &copy_info);
-                _sg_stats_add(vk.num_cmd_copy_buffer_to_image, 1);
+                _sg_stats_inc(vk.num_cmd_copy_buffer_to_image);
                 _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
 
                 _sg_vk_staging_copy_end(cmd_buf, _sg.vk.queue);
@@ -19703,7 +19719,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_buffer_data(_sg_buffer_t* buf, const s
     region.size = src_data->size;
     _sg_vk_buffer_barrier(cmd_buf, buf, _SG_VK_ACCESS_STAGING);
     vkCmdCopyBuffer(cmd_buf, vk_src_buf, vk_dst_buf, 1, &region);
-    _sg_stats_add(vk.num_cmd_copy_buffer, 1);
+    _sg_stats_inc(vk.num_cmd_copy_buffer);
     // FIXME: not great to issue a barrier right here,
     // rethink buffer barrier strategy? => a single memory barrier
     // at the end of the stream command buffer should be sufficient?
@@ -19745,7 +19761,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_image_data(_sg_image_t* img, const sg_
             region.imageSubresource.layerCount = (uint32_t)mip_slices;
         }
         vkCmdCopyBufferToImage2(cmd_buf, &copy_info);
-        _sg_stats_add(vk.num_cmd_copy_buffer_to_image, 1);
+        _sg_stats_inc(vk.num_cmd_copy_buffer_to_image);
     }
     _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
 }
@@ -19883,7 +19899,7 @@ _SOKOL_PRIVATE bool _sg_vk_bind_view_smp_descriptor_set(VkCommandBuffer cmd_buf,
         1,  // setCount
         &dbuf_index,
         &dbuf_offset);
-    _sg_stats_add(vk.num_cmd_set_descriptor_buffer_offsets, 1);
+    _sg_stats_inc(vk.num_cmd_set_descriptor_buffer_offsets);
     return true;
 }
 
@@ -19928,7 +19944,7 @@ _SOKOL_PRIVATE bool _sg_vk_bind_uniform_descriptor_set(VkCommandBuffer cmd_buf) 
         1, // setCount
         &dbuf_index,
         &dbuf_offset);
-    _sg_stats_add(vk.num_cmd_set_descriptor_buffer_offsets, 1);
+    _sg_stats_inc(vk.num_cmd_set_descriptor_buffer_offsets);
     return true;
 }
 
@@ -24088,7 +24104,7 @@ _SOKOL_PRIVATE sg_buffer _sg_alloc_buffer(void) {
     int slot_index = _sg_pool_alloc_index(&_sg.pools.buffer_pool);
     if (_SG_INVALID_SLOT_INDEX != slot_index) {
         res.id = _sg_slot_alloc(&_sg.pools.buffer_pool, &_sg.pools.buffers[slot_index].slot, slot_index);
-        _sg_stats_add(buffers.allocated, 1);
+        _sg_resource_stats_inc(buffers.allocated);
     } else {
         res.id = SG_INVALID_ID;
         _SG_ERROR(BUFFER_POOL_EXHAUSTED);
@@ -24101,7 +24117,7 @@ _SOKOL_PRIVATE sg_image _sg_alloc_image(void) {
     int slot_index = _sg_pool_alloc_index(&_sg.pools.image_pool);
     if (_SG_INVALID_SLOT_INDEX != slot_index) {
         res.id = _sg_slot_alloc(&_sg.pools.image_pool, &_sg.pools.images[slot_index].slot, slot_index);
-        _sg_stats_add(images.allocated, 1);
+        _sg_resource_stats_inc(images.allocated);
     } else {
         res.id = SG_INVALID_ID;
         _SG_ERROR(IMAGE_POOL_EXHAUSTED);
@@ -24114,7 +24130,7 @@ _SOKOL_PRIVATE sg_sampler _sg_alloc_sampler(void) {
     int slot_index = _sg_pool_alloc_index(&_sg.pools.sampler_pool);
     if (_SG_INVALID_SLOT_INDEX != slot_index) {
         res.id = _sg_slot_alloc(&_sg.pools.sampler_pool, &_sg.pools.samplers[slot_index].slot, slot_index);
-        _sg_stats_add(samplers.allocated, 1);
+        _sg_resource_stats_inc(samplers.allocated);
     } else {
         res.id = SG_INVALID_ID;
         _SG_ERROR(SAMPLER_POOL_EXHAUSTED);
@@ -24127,7 +24143,7 @@ _SOKOL_PRIVATE sg_shader _sg_alloc_shader(void) {
     int slot_index = _sg_pool_alloc_index(&_sg.pools.shader_pool);
     if (_SG_INVALID_SLOT_INDEX != slot_index) {
         res.id = _sg_slot_alloc(&_sg.pools.shader_pool, &_sg.pools.shaders[slot_index].slot, slot_index);
-        _sg_stats_add(shaders.allocated, 1);
+        _sg_resource_stats_inc(shaders.allocated);
     } else {
         res.id = SG_INVALID_ID;
         _SG_ERROR(SHADER_POOL_EXHAUSTED);
@@ -24140,7 +24156,7 @@ _SOKOL_PRIVATE sg_pipeline _sg_alloc_pipeline(void) {
     int slot_index = _sg_pool_alloc_index(&_sg.pools.pipeline_pool);
     if (_SG_INVALID_SLOT_INDEX != slot_index) {
         res.id =_sg_slot_alloc(&_sg.pools.pipeline_pool, &_sg.pools.pipelines[slot_index].slot, slot_index);
-        _sg_stats_add(pipelines.allocated, 1);
+        _sg_resource_stats_inc(pipelines.allocated);
     } else {
         res.id = SG_INVALID_ID;
         _SG_ERROR(PIPELINE_POOL_EXHAUSTED);
@@ -24153,7 +24169,7 @@ _SOKOL_PRIVATE sg_view _sg_alloc_view(void) {
     int slot_index = _sg_pool_alloc_index(&_sg.pools.view_pool);
     if (_SG_INVALID_SLOT_INDEX != slot_index) {
         res.id = _sg_slot_alloc(&_sg.pools.view_pool, &_sg.pools.views[slot_index].slot, slot_index);
-        _sg_stats_add(views.allocated, 1);
+        _sg_resource_stats_inc(views.allocated);
     } else {
         res.id = SG_INVALID_ID;
         _SG_ERROR(VIEW_POOL_EXHAUSTED);
@@ -24165,42 +24181,42 @@ _SOKOL_PRIVATE void _sg_dealloc_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf && (buf->slot.state == SG_RESOURCESTATE_ALLOC) && (buf->slot.id != SG_INVALID_ID));
     _sg_pool_free_index(&_sg.pools.buffer_pool, _sg_slot_index(buf->slot.id));
     _sg_slot_reset(&buf->slot);
-    _sg_stats_add(buffers.deallocated, 1);
+    _sg_resource_stats_inc(buffers.deallocated);
 }
 
 _SOKOL_PRIVATE void _sg_dealloc_image(_sg_image_t* img) {
     SOKOL_ASSERT(img && (img->slot.state == SG_RESOURCESTATE_ALLOC) && (img->slot.id != SG_INVALID_ID));
     _sg_pool_free_index(&_sg.pools.image_pool, _sg_slot_index(img->slot.id));
     _sg_slot_reset(&img->slot);
-    _sg_stats_add(images.deallocated, 1);
+    _sg_resource_stats_inc(images.deallocated);
 }
 
 _SOKOL_PRIVATE void _sg_dealloc_sampler(_sg_sampler_t* smp) {
     SOKOL_ASSERT(smp && (smp->slot.state == SG_RESOURCESTATE_ALLOC) && (smp->slot.id != SG_INVALID_ID));
     _sg_pool_free_index(&_sg.pools.sampler_pool, _sg_slot_index(smp->slot.id));
     _sg_slot_reset(&smp->slot);
-    _sg_stats_add(samplers.deallocated, 1);
+    _sg_resource_stats_inc(samplers.deallocated);
 }
 
 _SOKOL_PRIVATE void _sg_dealloc_shader(_sg_shader_t* shd) {
     SOKOL_ASSERT(shd && (shd->slot.state == SG_RESOURCESTATE_ALLOC) && (shd->slot.id != SG_INVALID_ID));
     _sg_pool_free_index(&_sg.pools.shader_pool, _sg_slot_index(shd->slot.id));
     _sg_slot_reset(&shd->slot);
-    _sg_stats_add(shaders.deallocated, 1);
+    _sg_resource_stats_inc(shaders.deallocated);
 }
 
 _SOKOL_PRIVATE void _sg_dealloc_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip && (pip->slot.state == SG_RESOURCESTATE_ALLOC) && (pip->slot.id != SG_INVALID_ID));
     _sg_pool_free_index(&_sg.pools.pipeline_pool, _sg_slot_index(pip->slot.id));
     _sg_slot_reset(&pip->slot);
-    _sg_stats_add(pipelines.deallocated, 1);
+    _sg_resource_stats_inc(pipelines.deallocated);
 }
 
 _SOKOL_PRIVATE void _sg_dealloc_view(_sg_view_t* view) {
     SOKOL_ASSERT(view && (view->slot.state == SG_RESOURCESTATE_ALLOC) && (view->slot.id != SG_INVALID_ID));
     _sg_pool_free_index(&_sg.pools.view_pool, _sg_slot_index(view->slot.id));
     _sg_slot_reset(&view->slot);
-    _sg_stats_add(views.deallocated, 1);
+    _sg_resource_stats_inc(views.deallocated);
 }
 
 _SOKOL_PRIVATE void _sg_init_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
@@ -24213,7 +24229,7 @@ _SOKOL_PRIVATE void _sg_init_buffer(_sg_buffer_t* buf, const sg_buffer_desc* des
         buf->slot.state = SG_RESOURCESTATE_FAILED;
     }
     SOKOL_ASSERT((buf->slot.state == SG_RESOURCESTATE_VALID)||(buf->slot.state == SG_RESOURCESTATE_FAILED));
-    _sg_stats_add(buffers.inited, 1);
+    _sg_resource_stats_inc(buffers.inited);
 }
 
 _SOKOL_PRIVATE void _sg_init_image(_sg_image_t* img, const sg_image_desc* desc) {
@@ -24226,7 +24242,7 @@ _SOKOL_PRIVATE void _sg_init_image(_sg_image_t* img, const sg_image_desc* desc) 
         img->slot.state = SG_RESOURCESTATE_FAILED;
     }
     SOKOL_ASSERT((img->slot.state == SG_RESOURCESTATE_VALID)||(img->slot.state == SG_RESOURCESTATE_FAILED));
-    _sg_stats_add(images.inited, 1);
+    _sg_resource_stats_inc(images.inited);
 }
 
 _SOKOL_PRIVATE void _sg_init_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
@@ -24239,7 +24255,7 @@ _SOKOL_PRIVATE void _sg_init_sampler(_sg_sampler_t* smp, const sg_sampler_desc* 
         smp->slot.state = SG_RESOURCESTATE_FAILED;
     }
     SOKOL_ASSERT((smp->slot.state == SG_RESOURCESTATE_VALID)||(smp->slot.state == SG_RESOURCESTATE_FAILED));
-    _sg_stats_add(samplers.inited, 1);
+    _sg_resource_stats_inc(samplers.inited);
 }
 
 _SOKOL_PRIVATE void _sg_init_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
@@ -24256,7 +24272,7 @@ _SOKOL_PRIVATE void _sg_init_shader(_sg_shader_t* shd, const sg_shader_desc* des
     _sg_shader_common_init(&shd->cmn, desc);
     shd->slot.state = _sg_create_shader(shd, desc);
     SOKOL_ASSERT((shd->slot.state == SG_RESOURCESTATE_VALID)||(shd->slot.state == SG_RESOURCESTATE_FAILED));
-    _sg_stats_add(shaders.inited, 1);
+    _sg_resource_stats_inc(shaders.inited);
 }
 
 _SOKOL_PRIVATE void _sg_init_pipeline(_sg_pipeline_t* pip, const sg_pipeline_desc* desc) {
@@ -24274,7 +24290,7 @@ _SOKOL_PRIVATE void _sg_init_pipeline(_sg_pipeline_t* pip, const sg_pipeline_des
         pip->slot.state = SG_RESOURCESTATE_FAILED;
     }
     SOKOL_ASSERT((pip->slot.state == SG_RESOURCESTATE_VALID)||(pip->slot.state == SG_RESOURCESTATE_FAILED));
-    _sg_stats_add(pipelines.inited, 1);
+    _sg_resource_stats_inc(pipelines.inited);
 }
 
 _SOKOL_PRIVATE void _sg_init_view(_sg_view_t* view, const sg_view_desc* desc) {
@@ -24307,49 +24323,49 @@ _SOKOL_PRIVATE void _sg_init_view(_sg_view_t* view, const sg_view_desc* desc) {
        view->slot.state = SG_RESOURCESTATE_FAILED;
     }
     SOKOL_ASSERT((view->slot.state == SG_RESOURCESTATE_VALID) || (view->slot.state == SG_RESOURCESTATE_FAILED));
-    _sg_stats_add(views.inited, 1);
+    _sg_resource_stats_inc(views.inited);
 }
 
 _SOKOL_PRIVATE void _sg_uninit_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf && ((buf->slot.state == SG_RESOURCESTATE_VALID) || (buf->slot.state == SG_RESOURCESTATE_FAILED)));
     _sg_discard_buffer(buf);
     _sg_reset_buffer_to_alloc_state(buf);
-    _sg_stats_add(buffers.uninited, 1);
+    _sg_resource_stats_inc(buffers.uninited);
 }
 
 _SOKOL_PRIVATE void _sg_uninit_image(_sg_image_t* img) {
     SOKOL_ASSERT(img && ((img->slot.state == SG_RESOURCESTATE_VALID) || (img->slot.state == SG_RESOURCESTATE_FAILED)));
     _sg_discard_image(img);
     _sg_reset_image_to_alloc_state(img);
-    _sg_stats_add(images.uninited, 1);
+    _sg_resource_stats_inc(images.uninited);
 }
 
 _SOKOL_PRIVATE void _sg_uninit_sampler(_sg_sampler_t* smp) {
     SOKOL_ASSERT(smp && ((smp->slot.state == SG_RESOURCESTATE_VALID) || (smp->slot.state == SG_RESOURCESTATE_FAILED)));
     _sg_discard_sampler(smp);
     _sg_reset_sampler_to_alloc_state(smp);
-    _sg_stats_add(samplers.uninited, 1);
+    _sg_resource_stats_inc(samplers.uninited);
 }
 
 _SOKOL_PRIVATE void _sg_uninit_shader(_sg_shader_t* shd) {
     SOKOL_ASSERT(shd && ((shd->slot.state == SG_RESOURCESTATE_VALID) || (shd->slot.state == SG_RESOURCESTATE_FAILED)));
     _sg_discard_shader(shd);
     _sg_reset_shader_to_alloc_state(shd);
-    _sg_stats_add(shaders.uninited, 1);
+    _sg_resource_stats_inc(shaders.uninited);
 }
 
 _SOKOL_PRIVATE void _sg_uninit_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip && ((pip->slot.state == SG_RESOURCESTATE_VALID) || (pip->slot.state == SG_RESOURCESTATE_FAILED)));
     _sg_discard_pipeline(pip);
     _sg_reset_pipeline_to_alloc_state(pip);
-    _sg_stats_add(pipelines.uninited, 1);
+    _sg_resource_stats_inc(pipelines.uninited);
 }
 
 _SOKOL_PRIVATE void _sg_uninit_view(_sg_view_t* view) {
     SOKOL_ASSERT(view && ((view->slot.state == SG_RESOURCESTATE_VALID) || (view->slot.state == SG_RESOURCESTATE_FAILED)));
     _sg_discard_view(view);
     _sg_reset_view_to_alloc_state(view);
-    _sg_stats_add(views.uninited, 1);
+    _sg_resource_stats_inc(views.uninited);
 }
 
 _SOKOL_PRIVATE void _sg_setup_commit_listeners(const sg_desc* desc) {
@@ -24621,9 +24637,15 @@ SOKOL_API_IMPL int sg_query_surface_pitch(sg_pixel_format fmt, int width, int he
     return _sg_surface_pitch(fmt, width, height, row_align_bytes);
 }
 
-SOKOL_API_IMPL sg_frame_stats sg_query_frame_stats(void) {
+SOKOL_API_IMPL sg_stats sg_query_stats(void) {
     SOKOL_ASSERT(_sg.valid);
-    return _sg.prev_stats;
+    _sg_update_alive_free_resource_stats(&_sg.stats.total.buffers, &_sg.pools.buffer_pool);
+    _sg_update_alive_free_resource_stats(&_sg.stats.total.images, &_sg.pools.image_pool);
+    _sg_update_alive_free_resource_stats(&_sg.stats.total.views, &_sg.pools.view_pool);
+    _sg_update_alive_free_resource_stats(&_sg.stats.total.samplers, &_sg.pools.sampler_pool);
+    _sg_update_alive_free_resource_stats(&_sg.stats.total.shaders, &_sg.pools.shader_pool);
+    _sg_update_alive_free_resource_stats(&_sg.stats.total.pipelines, &_sg.pools.pipeline_pool);
+    return _sg.stats;
 }
 
 SOKOL_API_IMPL sg_trace_hooks sg_install_trace_hooks(const sg_trace_hooks* trace_hooks) {
@@ -25291,7 +25313,7 @@ SOKOL_API_IMPL void sg_apply_viewport(int x, int y, int width, int height, bool 
         return;
     }
     #endif
-    _sg_stats_add(num_apply_viewport, 1);
+    _sg_stats_inc(num_apply_viewport);
     if (!_sg.cur_pass.valid) {
         return;
     }
@@ -25310,7 +25332,7 @@ SOKOL_API_IMPL void sg_apply_scissor_rect(int x, int y, int width, int height, b
         return;
     }
     #endif
-    _sg_stats_add(num_apply_scissor_rect, 1);
+    _sg_stats_inc(num_apply_scissor_rect);
     if (!_sg.cur_pass.valid) {
         return;
     }
@@ -25324,7 +25346,7 @@ SOKOL_API_IMPL void sg_apply_scissor_rectf(float x, float y, float width, float 
 
 SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
     SOKOL_ASSERT(_sg.valid);
-    _sg_stats_add(num_apply_pipeline, 1);
+    _sg_stats_inc(num_apply_pipeline);
     if (!_sg_validate_apply_pipeline(pip_id)) {
         _sg.next_draw_valid = false;
         return;
@@ -25356,7 +25378,7 @@ SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
 SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(bindings);
-    _sg_stats_add(num_apply_bindings, 1);
+    _sg_stats_inc(num_apply_bindings);
     _sg.applied_bindings_and_uniforms |= (1 << SG_MAX_UNIFORMBLOCK_BINDSLOTS);
     if (!_sg_validate_apply_bindings(bindings)) {
         _sg.next_draw_valid = false;
@@ -25426,7 +25448,7 @@ SOKOL_API_IMPL void sg_apply_uniforms(int ub_slot, const sg_range* data) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
-    _sg_stats_add(num_apply_uniforms, 1);
+    _sg_stats_inc(num_apply_uniforms);
     _sg_stats_add(size_apply_uniforms, (uint32_t)data->size);
     _sg.applied_bindings_and_uniforms |= 1 << ub_slot;
     if (!_sg_validate_apply_uniforms(ub_slot, data)) {
@@ -25464,7 +25486,7 @@ SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instance
         return;
     }
     #endif
-    _sg_stats_add(num_draw, 1);
+    _sg_stats_inc(num_draw);
     if (_sg_check_skip_draw(num_elements, num_instances)) {
         return;
     }
@@ -25479,7 +25501,7 @@ SOKOL_API_IMPL void sg_draw_ex(int base_element, int num_elements, int num_insta
         return;
     }
     #endif
-    _sg_stats_add(num_draw_ex, 1);
+    _sg_stats_inc(num_draw_ex);
     if (_sg_check_skip_draw(num_elements, num_instances)) {
         return;
     }
@@ -25494,7 +25516,7 @@ SOKOL_API_IMPL void sg_dispatch(int num_groups_x, int num_groups_y, int num_grou
         return;
     }
     #endif
-    _sg_stats_add(num_dispatch, 1);
+    _sg_stats_inc(num_dispatch);
     if (!_sg.cur_pass.valid) {
         return;
     }
@@ -25512,7 +25534,7 @@ SOKOL_API_IMPL void sg_dispatch(int num_groups_x, int num_groups_y, int num_grou
 SOKOL_API_IMPL void sg_end_pass(void) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(_sg.cur_pass.in_pass);
-    _sg_stats_add(num_passes, 1);
+    _sg_stats_inc(num_passes);
     // NOTE: don't exit early if !_sg.cur_pass.valid
     const _sg_attachments_ptrs_t atts_ptrs = _sg_attachments_ptrs(&_sg.cur_pass.atts);
     _sg_end_pass(&atts_ptrs);
@@ -25526,7 +25548,7 @@ SOKOL_API_IMPL void sg_commit(void) {
     SOKOL_ASSERT(!_sg.cur_pass.valid);
     SOKOL_ASSERT(!_sg.cur_pass.in_pass);
     _sg_commit();
-    _sg_update_frame_stats();
+    _sg_update_stats();
     _sg_notify_commit_listeners();
     _SG_TRACE_NOARGS(commit);
     _sg.frame_index++;
@@ -25541,7 +25563,7 @@ SOKOL_API_IMPL void sg_reset_state_cache(void) {
 SOKOL_API_IMPL void sg_update_buffer(sg_buffer buf_id, const sg_range* data) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
-    _sg_stats_add(num_update_buffer, 1);
+    _sg_stats_inc(num_update_buffer);
     _sg_stats_add(size_update_buffer, (uint32_t)data->size);
     _sg_buffer_t* buf = _sg_lookup_buffer(buf_id.id);
     if ((data->size > 0) && buf && (buf->slot.state == SG_RESOURCESTATE_VALID)) {
@@ -25561,7 +25583,7 @@ SOKOL_API_IMPL void sg_update_buffer(sg_buffer buf_id, const sg_range* data) {
 SOKOL_API_IMPL int sg_append_buffer(sg_buffer buf_id, const sg_range* data) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(data && data->ptr);
-    _sg_stats_add(num_append_buffer, 1);
+    _sg_stats_inc(num_append_buffer);
     _sg_stats_add(size_append_buffer, (uint32_t)data->size);
     _sg_buffer_t* buf = _sg_lookup_buffer(buf_id.id);
     int result;
@@ -25624,7 +25646,7 @@ SOKOL_API_IMPL bool sg_query_buffer_will_overflow(sg_buffer buf_id, size_t size)
 
 SOKOL_API_IMPL void sg_update_image(sg_image img_id, const sg_image_data* data) {
     SOKOL_ASSERT(_sg.valid);
-    _sg_stats_add(num_update_image, 1);
+    _sg_stats_inc(num_update_image);
     for (int mip_index = 0; mip_index < SG_MAX_MIPMAPS; mip_index++) {
         if (data->mip_levels[mip_index].size == 0) {
             break;
@@ -25665,17 +25687,17 @@ SOKOL_API_IMPL bool sg_remove_commit_listener(sg_commit_listener listener) {
     return _sg_remove_commit_listener(&listener);
 }
 
-SOKOL_API_IMPL void sg_enable_frame_stats(void) {
+SOKOL_API_IMPL void sg_enable_stats(void) {
     SOKOL_ASSERT(_sg.valid);
     _sg.stats_enabled = true;
 }
 
-SOKOL_API_IMPL void sg_disable_frame_stats(void) {
+SOKOL_API_IMPL void sg_disable_stats(void) {
     SOKOL_ASSERT(_sg.valid);
     _sg.stats_enabled = false;
 }
 
-SOKOL_API_IMPL bool sg_frame_stats_enabled(void) {
+SOKOL_API_IMPL bool sg_stats_enabled(void) {
     return _sg.stats_enabled;
 }
 
