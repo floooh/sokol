@@ -1,5 +1,21 @@
 ## Updates
 
+### 04-Dev-2025
+
+- sokol_gfx.h: a minor breaking change for querying runtime statistics: the function
+  `sg_frame_stats sg_query_frame_stats(void)` has been replaced with `sg_stats sg_query_stats(void)`
+  (and a handful related functions renamed from 'frame_stats' to 'stats').
+  The new function `sg_query_stats()` returns additional information not just related to
+  the previous frame: it also reports the current 'running values' for the current frame
+  (careful: those depend on *where* in a frame the function is called, and the stats-values
+  which are not frame related have been moved into a separate nested struct `.total`.
+  The totals are: the number of currently alive and free objects,
+  and the total number alloc, free, init and uninit have been called for each
+  resource type.
+
+  Related issue: https://github.com/floooh/sokol/issues/1388
+  ...and PR: https://github.com/floooh/sokol/pull/1393
+
 ### 02-Dec-2025
 
 - sokol_gfx.h gl: unused framebuffer attachment slots are now explicitly cleared
