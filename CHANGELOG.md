@@ -6,8 +6,8 @@
   `sg_frame_stats sg_query_frame_stats(void)` has been replaced with `sg_stats sg_query_stats(void)`
   (and a handful related functions renamed from 'frame_stats' to 'stats').
   The new function `sg_query_stats()` returns additional information not just related to
-  the previous frame: it also reports the current 'running values' for the current frame
-  (careful: those depend on *where* in a frame the function is called, and the stats-values
+  the previous frame: it also reports the current 'running counts' for the current frame
+  (careful: those depend on *where* in a frame the function is called), and the stats-values
   which are not frame related have been moved into a separate nested struct `.total`.
   The totals are: the number of currently alive and free objects,
   and the total number alloc, free, init and uninit have been called for each
