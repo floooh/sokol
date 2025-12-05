@@ -458,6 +458,7 @@ extern "C" {
 #define _SIMGUI_LOG_ITEMS \
     _SIMGUI_LOGITEM_XMACRO(OK, "Ok") \
     _SIMGUI_LOGITEM_XMACRO(MALLOC_FAILED, "memory allocation failed") \
+    _SIMGUI_LOGITEM_XMACRO(BUFFER_OVERFLOW, "internal vertex/index buffer overflow (increase simgui_desc_t.max_vertices)")
 
 #define _SIMGUI_LOGITEM_XMACRO(item,msg) SIMGUI_LOGITEM_##item,
 typedef enum simgui_log_item_t {
@@ -3201,6 +3202,7 @@ SOKOL_API_IMPL void simgui_render(void) {
         if (((all_vtx_size + vtx_size) > _simgui.vertices.size) ||
             ((all_idx_size + idx_size) > _simgui.indices.size))
         {
+            _SIMGUI_ERROR(BUFFER_OVERFLOW);
             break;
         }
 

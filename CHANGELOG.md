@@ -15,6 +15,10 @@
 
   PR: https://github.com/floooh/sokol/pull/1394
 
+- sokol_imgui.h: added an error-level log message when the internal
+  vertex- or index-buffer would overflow
+  (see https://github.com/floooh/sokol/issues/1387)
+
 ### 04-Dev-2025
 
 - sokol_gfx.h: a minor breaking change for querying runtime statistics: the function
