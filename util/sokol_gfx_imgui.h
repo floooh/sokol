@@ -252,7 +252,11 @@ SOKOL_GFX_IMGUI_API_DECL void sgimgui_draw_capabilities_menu_item(const char* la
 SOKOL_GFX_IMGUI_API_DECL void sgimgui_draw_frame_stats_menu_item(const char* label);
 
 #if defined(__cplusplus)
-} /* extern "C" */
+} // extern "C"
+
+// reference-based equivalents for c++
+inline void sgimgui_setup(const sgimgui_desc_t& desc) { return sgimgui_setup(&desc); }
+
 #endif
 #endif /* SOKOL_GFX_IMGUI_INCLUDED */
 

@@ -6,7 +6,6 @@
 #include "sokol_gfx_imgui.h"
 
 void use_gfx_imgui_impl() {
-    sgimgui_t ctx = {};
-    sgimgui_init(&ctx, { });
-    sgimgui_discard(&ctx);
+    sgimgui_setup({ });
+    sgimgui_shutdown();
 }
