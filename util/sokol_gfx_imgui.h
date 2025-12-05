@@ -1139,7 +1139,7 @@ _SOKOL_PRIVATE void _sgimgui_strcpy(_sgimgui_str_t* dst, const char* src) {
     SOKOL_ASSERT(dst);
     if (src) {
         #if defined(_MSC_VER)
-        strncpy_s(dst->buf, sgimgui_STRBUF_LEN, src, (sgimgui_STRBUF_LEN-1));
+        strncpy_s(dst->buf, _SGIMGUI_STRBUF_LEN, src, (_SGIMGUI_STRBUF_LEN-1));
         #else
         strncpy(dst->buf, src, _SGIMGUI_STRBUF_LEN);
         #endif
