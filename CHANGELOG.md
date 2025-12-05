@@ -1,5 +1,20 @@
 ## Updates
 
+### 05-Dec-2025
+
+- sokol_gfx_imgui.h: a breaking update to harmonize the API with the other sokol
+  headers, and make the sokol_gfx_imgui.h header more language-binding-friend:
+  - all 'internal state' structs have been moved from the public API into the
+    implementation block
+  - the 'context arg' has been removed from the public API functions
+  - `sgimgui_init()` has been renamed to `sgimgui_setup()`
+  - `sgimgui_discard()` has been renamed to `sgimgui_shutdown()`
+  - optional function to draw inidividual menu items have been added
+    (as alternative to the all-in-one `sgimgui_draw_menu()`)
+  - the optional window drawing functions now take a `title` argument
+
+  PR: https://github.com/floooh/sokol/pull/1394
+
 ### 04-Dev-2025
 
 - sokol_gfx.h: a minor breaking change for querying runtime statistics: the function
