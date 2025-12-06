@@ -19165,7 +19165,7 @@ _SOKOL_PRIVATE VkDeviceMemory _sg_vk_mem_alloc_device_memory(_sg_vk_memtype_t me
     alloc_info.memoryTypeIndex = (uint32_t) mem_type_index;
     VkDeviceMemory vk_dev_mem = 0;
     VkResult res = vkAllocateMemory(_sg.vk.dev, &alloc_info, 0, &vk_dev_mem);
-    _sg_stats_inc(vk.num_allocate_memory, 1);
+    _sg_stats_inc(vk.num_allocate_memory);
     _sg_stats_add(vk.size_allocate_memory, mem_reqs->size);
     if (res != VK_SUCCESS) {
         _SG_ERROR(VULKAN_ALLOCATE_MEMORY_FAILED);
@@ -19179,7 +19179,7 @@ _SOKOL_PRIVATE void _sg_vk_mem_free_device_memory(VkDeviceMemory vk_dev_mem) {
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(vk_dev_mem);
     vkFreeMemory(_sg.vk.dev, vk_dev_mem, 0);
-    _sg_stats_inc(vk.num_free_memory, 1);
+    _sg_stats_inc(vk.num_free_memory);
 }
 
 _SOKOL_PRIVATE bool _sg_vk_mem_alloc_buffer_device_memory(_sg_buffer_t* buf) {
@@ -19278,7 +19278,7 @@ _SOKOL_PRIVATE void _sg_vk_delete_queue_add(_sg_vk_delete_queue_destructor_t des
     queue->items[queue->index].destructor = destructor;
     queue->items[queue->index].obj = obj;
     queue->index += 1;
-    _sg_stats_inc(vk.num_delete_queue_added, 1);
+    _sg_stats_inc(vk.num_delete_queue_added);
 }
 
 // double-buffer system for any non-blocking CPU => GPU data
