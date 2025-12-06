@@ -24,6 +24,7 @@ module_names = {
     'sglue_':   'glue',
     'sfetch_':  'fetch',
     'simgui_':  'imgui',
+    'sgimgui_': 'sgimgui',
 }
 
 c_source_paths = {
@@ -38,6 +39,7 @@ c_source_paths = {
     'sglue_':   'sokol-zig/src/sokol/c/sokol_glue.c',
     'sfetch_':  'sokol-zig/src/sokol/c/sokol_fetch.c',
     'simgui_':  'sokol-zig/src/sokol/c/sokol_imgui.c',
+    'sgimgui_': 'sokol-zig/src/sokol/c/sokol_gfx_imgui.c',
 }
 
 ignores = [
