@@ -10974,7 +10974,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
         if (view->storage_buffer.stage != SG_SHADERSTAGE_NONE) {
             shd->gl.sbuf_binding[i] = view->storage_buffer.glsl_binding_n;
         } else if (view->storage_image.stage != SG_SHADERSTAGE_NONE) {
-            shd->gl.simg_binding[i] = view->storage_buffer.glsl_binding_n;
+            shd->gl.simg_binding[i] = view->storage_image.glsl_binding_n;
         }
     }
 
