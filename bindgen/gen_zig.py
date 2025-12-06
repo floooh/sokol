@@ -43,8 +43,6 @@ c_source_paths = {
 ignores = [
     'sdtx_printf',
     'sdtx_vprintf',
-    'sg_install_trace_hooks',
-    'sg_trace_hooks',
 ]
 
 # functions that need to be exposed as 'raw' C callbacks without a Zig wrapper function
