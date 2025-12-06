@@ -312,6 +312,39 @@
             }
         },
         {
+            "name": "linux_vulkan_debug",
+            "generator": "Ninja",
+            "binaryDir": "build/linux_vulkan_debug",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_VULKAN",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "linux_vulkan_release",
+            "generator": "Ninja",
+            "binaryDir": "build/linux_vulkan_release",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_VULKAN",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "linux_vulkan_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/linux_vulkan_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_VULKAN",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+        {
             "name": "linux_gles3_debug",
             "generator": "Ninja",
             "binaryDir": "build/linux_gles3_debug",
@@ -603,6 +636,18 @@
         {
             "name": "linux_gl_analyze",
             "configurePreset": "linux_gl_analyze"
+        },
+        {
+            "name": "linux_vulkan_debug",
+            "configurePreset": "linux_vulkan_debug"
+        },
+        {
+            "name": "linux_vulkan_release",
+            "configurePreset": "linux_vulkan_release"
+        },
+        {
+            "name": "linux_vulkan_analyze",
+            "configurePreset": "linux_vulkan_analyze"
         },
         {
             "name": "linux_gles3_debug",

@@ -13,6 +13,9 @@
 #if defined(SOKOL_WGPU)
 #undef SOKOL_WGPU
 #endif
+#if defined(SOKOL_VULKAN)
+#undef SOKOL_VULKAN
+#endif
 #ifndef SOKOL_DUMMY_BACKEND
 #define SOKOL_DUMMY_BACKEND
 #endif
