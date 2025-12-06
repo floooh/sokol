@@ -1,5 +1,12 @@
 ## Updates
 
+### 06-Dec-2025
+
+- sokol_gfx.h: a couple of small fixes in the GL backend:
+  - https://github.com/floooh/sokol/pull/1396
+  - https://github.com/floooh/sokol/commit/c2cc1858a1896e2b4be9db22cc38f720e4f460e6
+  Many thanks to @Julianiolo for catching those!
+
 ### 05-Dec-2025
 
 - sokol_gfx_imgui.h: a breaking update to harmonize the API with the other sokol
