@@ -24553,6 +24553,7 @@ _SOKOL_PRIVATE void _sg_override_portable_limits(void) {
 //
 // >>public
 SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
+    SOKOL_ASSERT(!_sg.valid);
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
     SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
@@ -24568,6 +24569,7 @@ SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
 }
 
 SOKOL_API_IMPL void sg_shutdown(void) {
+    SOKOL_ASSERT(_sg.valid);
     _sg_discard_all_resources();
     _sg_discard_backend();
     _sg_discard_commit_listeners();
