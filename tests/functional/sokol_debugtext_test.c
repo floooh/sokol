@@ -517,4 +517,5 @@ UTEST(sokol_debug_text, command_buffer_overflow) {
     sdtx_layer(4);
     sdtx_puts("4");
     T(_sdtx.cur_ctx->commands.next == 4);
+    shutdown();
 }
