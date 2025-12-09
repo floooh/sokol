@@ -6839,8 +6839,9 @@ typedef struct {
     uint32_t offset;    // current offset into buf
     uint8_t* staging;   // intermediate buffer for uniform data updates
     WGPUBuffer buf;     // the GPU-side uniform buffer
+    bool dirty;
     uint32_t bind_offsets[SG_MAX_UNIFORMBLOCK_BINDSLOTS];   // NOTE: index is sokol-gfx ub slot index!
-} _sg_wgpu_uniform_buffer_t;
+} _sg_wgpu_uniform_system_t;
 
 typedef struct {
     uint32_t id;
@@ -6905,7 +6906,7 @@ typedef struct {
     WGPUCommandEncoder cmd_enc;
     WGPURenderPassEncoder rpass_enc;
     WGPUComputePassEncoder cpass_enc;
-    _sg_wgpu_uniform_buffer_t uniform;
+    _sg_wgpu_uniform_system_t uniform;
     _sg_wgpu_bindings_cache_t bindings_cache;
     _sg_wgpu_bindgroups_cache_t bindgroups_cache;
     _sg_wgpu_bindgroups_pool_t bindgroups_pool;
@@ -17079,7 +17080,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_uniform_buffer_init(const sg_desc* desc) {
+_SOKOL_PRIVATE void _sg_wgpu_uniform_system_init(const sg_desc* desc) {
     SOKOL_ASSERT(0 == _sg.wgpu.uniform.staging);
     SOKOL_ASSERT(0 == _sg.wgpu.uniform.buf);
 
@@ -17099,7 +17100,7 @@ _SOKOL_PRIVATE void _sg_wgpu_uniform_buffer_init(const sg_desc* desc) {
     SOKOL_ASSERT(_sg.wgpu.uniform.buf);
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_uniform_buffer_discard(void) {
+_SOKOL_PRIVATE void _sg_wgpu_uniform_system_discard(void) {
     if (_sg.wgpu.uniform.buf) {
         wgpuBufferRelease(_sg.wgpu.uniform.buf);
         _sg.wgpu.uniform.buf = 0;
@@ -17110,7 +17111,44 @@ _SOKOL_PRIVATE void _sg_wgpu_uniform_buffer_discard(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_uniform_buffer_on_commit(void) {
+_SOKOL_PRIVATE void _sg_wgpu_uniform_system_set_bindgroup(void) {
+    SOKOL_ASSERT(_sg.wgpu.uniform.dirty);
+    _sg.wgpu.uniform.dirty = false;
+    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
+    // NOTE: dynamic offsets must be in binding order, not in BindGroupEntry order
+    SOKOL_ASSERT(shd->wgpu.ub_num_dynoffsets < SG_MAX_UNIFORMBLOCK_BINDSLOTS);
+    _SG_STRUCT(uint32_t, dyn_offsets[SG_MAX_UNIFORMBLOCK_BINDSLOTS]);
+    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
+        if (shd->cmn.uniform_blocks[i].stage == SG_SHADERSTAGE_NONE) {
+            continue;
+        }
+        uint8_t dynoffset_index = shd->wgpu.ub_dynoffsets[i];
+        SOKOL_ASSERT(dynoffset_index < shd->wgpu.ub_num_dynoffsets);
+        dyn_offsets[dynoffset_index] = _sg.wgpu.uniform.bind_offsets[i];
+    }
+    if (_sg.cur_pass.is_compute) {
+        SOKOL_ASSERT(_sg.wgpu.cpass_enc);
+        wgpuComputePassEncoderSetBindGroup(_sg.wgpu.cpass_enc,
+            _SG_WGPU_UB_BINDGROUP_INDEX,
+            shd->wgpu.bg_ub,
+            shd->wgpu.ub_num_dynoffsets,
+            dyn_offsets);
+    } else {
+        SOKOL_ASSERT(_sg.wgpu.rpass_enc);
+        wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.rpass_enc,
+            _SG_WGPU_UB_BINDGROUP_INDEX,
+            shd->wgpu.bg_ub,
+            shd->wgpu.ub_num_dynoffsets,
+            dyn_offsets);
+    }
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_uniform_system_on_apply_pipeline(void) {
+    _sg.wgpu.uniform.dirty = false;
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_uniform_system_on_commit(void) {
     wgpuQueueWriteBuffer(_sg.wgpu.queue, _sg.wgpu.uniform.buf, 0, _sg.wgpu.uniform.staging, _sg.wgpu.uniform.offset);
     _sg_stats_add(wgpu.uniforms.size_write_buffer, _sg.wgpu.uniform.offset);
     _sg.wgpu.uniform.offset = 0;
@@ -17639,7 +17677,7 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(_sg.wgpu.queue);
 
     _sg_wgpu_init_caps();
-    _sg_wgpu_uniform_buffer_init(desc);
+    _sg_wgpu_uniform_system_init(desc);
     _sg_wgpu_bindgroups_pool_init(desc);
     _sg_wgpu_bindgroups_cache_init(desc);
     _sg_wgpu_bindings_cache_clear();
@@ -17651,7 +17689,7 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
     _sg_wgpu_discard_all_bindgroups();
     _sg_wgpu_bindgroups_cache_discard();
     _sg_wgpu_bindgroups_pool_discard();
-    _sg_wgpu_uniform_buffer_discard();
+    _sg_wgpu_uniform_system_discard();
     // the command encoder is usually released in sg_commit()
     if (_sg.wgpu.cmd_enc) {
         wgpuCommandEncoderRelease(_sg.wgpu.cmd_enc); _sg.wgpu.cmd_enc = 0;
@@ -18407,7 +18445,7 @@ _SOKOL_PRIVATE void _sg_wgpu_end_pass(const _sg_attachments_ptrs_t* atts) {
 _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
     SOKOL_ASSERT(_sg.wgpu.cmd_enc);
 
-    _sg_wgpu_uniform_buffer_on_commit();
+    _sg_wgpu_uniform_system_on_commit();
 
     _SG_STRUCT(WGPUCommandBufferDescriptor, cmd_buf_desc);
     WGPUCommandBuffer wgpu_cmd_buf = wgpuCommandEncoderFinish(_sg.wgpu.cmd_enc, &cmd_buf_desc);
@@ -18438,38 +18476,9 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_scissor_rect(int x, int y, int w, int h, bool
     wgpuRenderPassEncoderSetScissorRect(_sg.wgpu.rpass_enc, sx, sy, sw, sh);
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_set_ub_bindgroup(const _sg_shader_t* shd) {
-    // NOTE: dynamic offsets must be in binding order, not in BindGroupEntry order
-    SOKOL_ASSERT(shd->wgpu.ub_num_dynoffsets < SG_MAX_UNIFORMBLOCK_BINDSLOTS);
-    _SG_STRUCT(uint32_t, dyn_offsets[SG_MAX_UNIFORMBLOCK_BINDSLOTS]);
-    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
-        if (shd->cmn.uniform_blocks[i].stage == SG_SHADERSTAGE_NONE) {
-            continue;
-        }
-        uint8_t dynoffset_index = shd->wgpu.ub_dynoffsets[i];
-        SOKOL_ASSERT(dynoffset_index < shd->wgpu.ub_num_dynoffsets);
-        dyn_offsets[dynoffset_index] = _sg.wgpu.uniform.bind_offsets[i];
-    }
-    if (_sg.cur_pass.is_compute) {
-        SOKOL_ASSERT(_sg.wgpu.cpass_enc);
-        wgpuComputePassEncoderSetBindGroup(_sg.wgpu.cpass_enc,
-            _SG_WGPU_UB_BINDGROUP_INDEX,
-            shd->wgpu.bg_ub,
-            shd->wgpu.ub_num_dynoffsets,
-            dyn_offsets);
-    } else {
-        SOKOL_ASSERT(_sg.wgpu.rpass_enc);
-        wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.rpass_enc,
-            _SG_WGPU_UB_BINDGROUP_INDEX,
-            shd->wgpu.bg_ub,
-            shd->wgpu.ub_num_dynoffsets,
-            dyn_offsets);
-    }
-}
-
 _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
-    const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
+    _sg_wgpu_uniform_system_on_apply_pipeline();
     if (pip->cmn.is_compute) {
         SOKOL_ASSERT(_sg.cur_pass.is_compute);
         SOKOL_ASSERT(pip->wgpu.cpip);
@@ -18483,10 +18492,6 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
         wgpuRenderPassEncoderSetBlendConstant(_sg.wgpu.rpass_enc, &pip->wgpu.blend_color);
         wgpuRenderPassEncoderSetStencilReference(_sg.wgpu.rpass_enc, pip->cmn.stencil.ref);
     }
-    // bind groups must be set because pipelines without uniform blocks or resource bindings
-    // will still create 'empty' BindGroupLayouts
-    _sg_wgpu_set_ub_bindgroup(shd);
-    _sg_wgpu_set_bindgroup(_SG_WGPU_VIEW_SMP_BINDGROUP_INDEX, 0); // this will set the 'empty bind group'
 }
 
 _SOKOL_PRIVATE bool _sg_wgpu_apply_bindings(_sg_bindings_ptrs_t* bnd) {
@@ -18515,12 +18520,14 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(int ub_slot, const sg_range* data) {
     memcpy(_sg.wgpu.uniform.staging + _sg.wgpu.uniform.offset, data->ptr, data->size);
     _sg.wgpu.uniform.bind_offsets[ub_slot] = _sg.wgpu.uniform.offset;
     _sg.wgpu.uniform.offset = _sg_roundup_u32(_sg.wgpu.uniform.offset + (uint32_t)data->size, alignment);
-
-    _sg_wgpu_set_ub_bindgroup(shd);
+    _sg.wgpu.uniform.dirty = true;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
     SOKOL_ASSERT(_sg.wgpu.rpass_enc);
+    if (_sg.wgpu.uniform.dirty) {
+        _sg_wgpu_uniform_system_set_bindgroup();
+    }
     if (_sg.use_indexed_draw) {
         wgpuRenderPassEncoderDrawIndexed(_sg.wgpu.rpass_enc,
             (uint32_t)num_elements,
@@ -18539,6 +18546,9 @@ _SOKOL_PRIVATE void _sg_wgpu_draw(int base_element, int num_elements, int num_in
 
 _SOKOL_PRIVATE void _sg_wgpu_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     SOKOL_ASSERT(_sg.wgpu.cpass_enc);
+    if (_sg.wgpu.uniform.dirty) {
+        _sg_wgpu_uniform_system_set_bindgroup();
+    }
     wgpuComputePassEncoderDispatchWorkgroups(_sg.wgpu.cpass_enc,
         (uint32_t)num_groups_x,
         (uint32_t)num_groups_y,
