@@ -17772,11 +17772,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
         wgpu_tex_desc.dimension = _sg_wgpu_texture_dimension(img->cmn.type);
         wgpu_tex_desc.size.width = (uint32_t) img->cmn.width;
         wgpu_tex_desc.size.height = (uint32_t) img->cmn.height;
-        if (desc->type == SG_IMAGETYPE_CUBE) {
-            wgpu_tex_desc.size.depthOrArrayLayers = 6;
-        } else {
-            wgpu_tex_desc.size.depthOrArrayLayers = (uint32_t) img->cmn.num_slices;
-        }
+        wgpu_tex_desc.size.depthOrArrayLayers = (uint32_t) img->cmn.num_slices;
         wgpu_tex_desc.format = _sg_wgpu_textureformat(img->cmn.pixel_format);
         wgpu_tex_desc.mipLevelCount = (uint32_t) img->cmn.num_mipmaps;
         wgpu_tex_desc.sampleCount = (uint32_t) img->cmn.sample_count;
