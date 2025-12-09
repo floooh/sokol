@@ -6905,7 +6905,6 @@ typedef struct {
     WGPUCommandEncoder cmd_enc;
     WGPURenderPassEncoder rpass_enc;
     WGPUComputePassEncoder cpass_enc;
-    WGPUBindGroup empty_bind_group;
     _sg_wgpu_uniform_buffer_t uniform;
     _sg_wgpu_bindings_cache_t bindings_cache;
     _sg_wgpu_bindgroups_cache_t bindgroups_cache;
@@ -17518,7 +17517,7 @@ _SOKOL_PRIVATE void _sg_wgpu_set_bindgroup(uint32_t bg_idx, _sg_wgpu_bindgroup_t
                 SOKOL_ASSERT(bg->bindgroup);
                 wgpuComputePassEncoderSetBindGroup(_sg.wgpu.cpass_enc, bg_idx, bg->bindgroup, 0, 0);
             } else {
-                wgpuComputePassEncoderSetBindGroup(_sg.wgpu.cpass_enc, bg_idx, _sg.wgpu.empty_bind_group, 0, 0);
+                wgpuComputePassEncoderSetBindGroup(_sg.wgpu.cpass_enc, bg_idx, 0, 0, 0);
             }
         } else {
             SOKOL_ASSERT(_sg.wgpu.rpass_enc);
@@ -17527,7 +17526,7 @@ _SOKOL_PRIVATE void _sg_wgpu_set_bindgroup(uint32_t bg_idx, _sg_wgpu_bindgroup_t
                 SOKOL_ASSERT(bg->bindgroup);
                 wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.rpass_enc, bg_idx, bg->bindgroup, 0, 0);
             } else {
-                wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.rpass_enc, bg_idx, _sg.wgpu.empty_bind_group, 0, 0);
+                wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.rpass_enc, bg_idx, 0, 0, 0);
             }
         }
     } else {
@@ -17594,7 +17593,8 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_index_buffer(_sg_bindings_ptrs_t* bnd) {
             SOKOL_ASSERT(buf_size > offset);
             const uint64_t max_bytes = buf_size - offset;
             wgpuRenderPassEncoderSetIndexBuffer(_sg.wgpu.rpass_enc, ib->wgpu.buf, format, offset, max_bytes);
-        /* FIXME: the else-pass should actually set a null index buffer, but that doesn't seem to work yet
+        /*
+            NOTE: as per webgpu spec setIndexBuffer does not accept a null pointer
         } else {
             wgpuRenderPassEncoderSetIndexBuffer(_sg.wgpu.rpass_enc, 0, WGPUIndexFormat_Undefined, 0, 0);
         */
@@ -17618,10 +17618,8 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_vertex_buffers(_sg_bindings_ptrs_t* bnd) {
                 SOKOL_ASSERT(buf_size > offset);
                 const uint64_t max_bytes = buf_size - offset;
                 wgpuRenderPassEncoderSetVertexBuffer(_sg.wgpu.rpass_enc, slot, vb->wgpu.buf, offset, max_bytes);
-            /* FIXME: the else-pass should actually set a null vertex buffer, but that doesn't seem to work yet
             } else {
                 wgpuRenderPassEncoderSetVertexBuffer(_sg.wgpu.rpass_enc, slot, 0, 0, 0);
-            */
             }
             _sg_stats_inc(wgpu.bindings.num_set_vertex_buffer);
         } else {
@@ -17645,16 +17643,6 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     _sg_wgpu_bindgroups_pool_init(desc);
     _sg_wgpu_bindgroups_cache_init(desc);
     _sg_wgpu_bindings_cache_clear();
-
-    // create an empty bind group
-    _SG_STRUCT(WGPUBindGroupLayoutDescriptor, bgl_desc);
-    WGPUBindGroupLayout empty_bgl = wgpuDeviceCreateBindGroupLayout(_sg.wgpu.dev, &bgl_desc);
-    SOKOL_ASSERT(empty_bgl);
-    _SG_STRUCT(WGPUBindGroupDescriptor, bg_desc);
-    bg_desc.layout = empty_bgl;
-    _sg.wgpu.empty_bind_group = wgpuDeviceCreateBindGroup(_sg.wgpu.dev, &bg_desc);
-    SOKOL_ASSERT(_sg.wgpu.empty_bind_group);
-    wgpuBindGroupLayoutRelease(empty_bgl);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
@@ -17664,7 +17652,6 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
     _sg_wgpu_bindgroups_cache_discard();
     _sg_wgpu_bindgroups_pool_discard();
     _sg_wgpu_uniform_buffer_discard();
-    wgpuBindGroupRelease(_sg.wgpu.empty_bind_group); _sg.wgpu.empty_bind_group = 0;
     // the command encoder is usually released in sg_commit()
     if (_sg.wgpu.cmd_enc) {
         wgpuCommandEncoderRelease(_sg.wgpu.cmd_enc); _sg.wgpu.cmd_enc = 0;
@@ -18332,8 +18319,8 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_compute_pass(const sg_pass* pass) {
     _sg.wgpu.cpass_enc = wgpuCommandEncoderBeginComputePass(_sg.wgpu.cmd_enc, &wgpu_pass_desc);
     SOKOL_ASSERT(_sg.wgpu.cpass_enc);
     // clear initial bindings
-    wgpuComputePassEncoderSetBindGroup(_sg.wgpu.cpass_enc, _SG_WGPU_UB_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
-    wgpuComputePassEncoderSetBindGroup(_sg.wgpu.cpass_enc, _SG_WGPU_VIEW_SMP_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
+    wgpuComputePassEncoderSetBindGroup(_sg.wgpu.cpass_enc, _SG_WGPU_UB_BINDGROUP_INDEX, 0, 0, 0);
+    wgpuComputePassEncoderSetBindGroup(_sg.wgpu.cpass_enc, _SG_WGPU_VIEW_SMP_BINDGROUP_INDEX, 0, 0, 0);
     _sg_stats_inc(wgpu.bindings.num_set_bindgroup);
 }
 
@@ -18381,8 +18368,8 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_render_pass(const sg_pass* pass, const _sg_at
     _sg.wgpu.rpass_enc = wgpuCommandEncoderBeginRenderPass(_sg.wgpu.cmd_enc, &wgpu_pass_desc);
     SOKOL_ASSERT(_sg.wgpu.rpass_enc);
 
-    wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.rpass_enc, _SG_WGPU_UB_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
-    wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.rpass_enc, _SG_WGPU_VIEW_SMP_BINDGROUP_INDEX, _sg.wgpu.empty_bind_group, 0, 0);
+    wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.rpass_enc, _SG_WGPU_UB_BINDGROUP_INDEX, 0, 0, 0);
+    wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.rpass_enc, _SG_WGPU_VIEW_SMP_BINDGROUP_INDEX, 0, 0, 0);
     _sg_stats_inc(wgpu.bindings.num_set_bindgroup);
 }
 
