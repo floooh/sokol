@@ -17739,10 +17739,10 @@ _SOKOL_PRIVATE void _sg_wgpu_copy_buffer_data(const _sg_buffer_t* buf, uint64_t 
     }
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_copy_image_data(const _sg_image_t* img, WGPUTexture wgpu_tex, const sg_image_data* data) {
+_SOKOL_PRIVATE void _sg_wgpu_copy_image_data(const _sg_image_t* img, const sg_image_data* data) {
     _SG_STRUCT(WGPUTexelCopyBufferLayout, wgpu_layout);
     _SG_STRUCT(WGPUTexelCopyTextureInfo, wgpu_copy_tex);
-    wgpu_copy_tex.texture = wgpu_tex;
+    wgpu_copy_tex.texture = img->wgpu.tex;
     wgpu_copy_tex.aspect = WGPUTextureAspect_All;
     _SG_STRUCT(WGPUExtent3D, wgpu_extent);
     for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
@@ -17799,7 +17799,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
             return SG_RESOURCESTATE_FAILED;
         }
         if (desc->data.mip_levels[0].ptr) {
-            _sg_wgpu_copy_image_data(img, img->wgpu.tex, &desc->data);
+            _sg_wgpu_copy_image_data(img, &desc->data);
         }
     }
     return SG_RESOURCESTATE_VALID;
@@ -18575,7 +18575,7 @@ _SOKOL_PRIVATE void _sg_wgpu_append_buffer(_sg_buffer_t* buf, const sg_range* da
 
 _SOKOL_PRIVATE void _sg_wgpu_update_image(_sg_image_t* img, const sg_image_data* data) {
     SOKOL_ASSERT(img && data);
-    _sg_wgpu_copy_image_data(img, img->wgpu.tex, data);
+    _sg_wgpu_copy_image_data(img, data);
 }
 
 // ██    ██ ██    ██ ██      ██   ██  █████  ███    ██     ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
