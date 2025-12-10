@@ -52,7 +52,7 @@
 
     On Windows with sokol_app.h also note the runtime config items to make
     stdout/stderr output visible on the console for WinMain() applications
-    via sapp_desc.win32_console_attach or sapp_desc.win32_console_create,
+    via sapp_desc.win32.console_attach or sapp_desc.win32.console_create,
     however when running in a debugger on Windows, the logging output should
     show up on the debug output UI panel.
 

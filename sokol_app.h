@@ -840,7 +840,7 @@
         sapp_html5_ask_leave_site(bool ask);
 
     The initial state of the associated internal flag can be provided
-    at startup via sapp_desc.html5_ask_leave_site.
+    at startup via sapp_desc.html5.ask_leave_site.
 
     This feature should only be used sparingly in critical situations - for
     instance when the user would loose data - since popping up modal dialog
@@ -1039,11 +1039,13 @@
         sapp_desc sokol_main(int argc, char* argv[]) {
             return (sapp_desc){
                 //...
-                .html5_bubble_mouse_events = true,
-                .html5_bubble_touch_events = true,
-                .html5_bubble_wheel_events = true,
-                .html5_bubble_key_events = true,
-                .html5_bubble_char_events = true,
+                .html5 = {
+                    .bubble_mouse_events = true,
+                    .bubble_touch_events = true,
+                    .bubble_wheel_events = true,
+                    .bubble_key_events = true,
+                    .bubble_char_events = true,
+                }
             };
         }
 
@@ -1074,15 +1076,15 @@
     is '#canvas'.
 
     If you name your canvas differently, you need to communicate that name to
-    sokol_app.h via `sapp_desc.html5_canvas_selector` as a regular css selector
+    sokol_app.h via `sapp_desc.html5.canvas_selector` as a regular css selector
     string that's compatible with `document.querySelector()`. E.g. if your canvas
     object looks like this:
 
         <canvas id="bla" ...></canvas>
 
-    The `sapp_desc.html5_canvas_selector` string must be set to '#bla':
+    The `sapp_desc.html5.canvas_selector` string must be set to '#bla':
 
-        .html5_canvas_selector = "#bla"
+        .html5.canvas_selector = "#bla"
 
     If the canvas object cannot be looked up via `document.querySelector()` you
     need to use one of the alternative methods, both involve the special
@@ -1127,7 +1129,7 @@
     In that case, pass the same string to sokol_app.h which is used as key
     in the specialHTMLTargets[] map:
 
-        .html5_canvas_selector = "my_canvas"
+        .html5.canvas_selector = "my_canvas"
 
     If sokol_app.h can't find your canvas for some reason check for warning
     messages on the browser console.
@@ -1187,11 +1189,11 @@
     To help with these issues, sokol_app.h can be configured at startup
     via the following Windows-specific sapp_desc flags:
 
-        sapp_desc.win32_console_utf8 (default: false)
+        sapp_desc.win32.console_utf8 (default: false)
             When set to true, the output console codepage will be switched
             to UTF-8 (and restored to the original codepage on exit)
 
-        sapp_desc.win32_console_attach (default: false)
+        sapp_desc.win32.console_attach (default: false)
             When set to true, stdout and stderr will be attached to the
             console of the parent process (if the parent process actually
             has a console). This means that if the application was started
@@ -1200,13 +1202,13 @@
             the application is started via double-click, it will behave like
             a regular UI application, and stdout/stderr will not be visible.
 
-        sapp_desc.win32_console_create (default: false)
+        sapp_desc.win32.console_create (default: false)
             When set to true, a new console window will be created and
             stdout/stderr will be redirected to that console window. It
             doesn't matter if the application is started from the command
             line or via double-click.
 
-            NOTE: setting both win32_console_attach and win32_console_create
+            NOTE: setting both win32.console_attach and win32.console_create
             to true also makes sense and has the effect that output
             will appear in the existing terminal when started from the cmdline, and
             otherwise (when started via double-click) will open a console window.
