@@ -5327,6 +5327,27 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     }
 }
 
+// called when in applicationDidFinishedLaunching when no window size was provided
+_SOKOL_PRIVATE void _sapp_macos_init_default_dimensions(void) {
+    if (_sapp.desc.high_dpi) {
+        _sapp.dpi_scale = NSScreen.mainScreen.backingScaleFactor;
+    } else {
+        _sapp.dpi_scale = 1.0f;
+    }
+    NSRect screen_rect = NSScreen.mainScreen.frame;
+    // use 4/5 of screen size as default size
+    const float default_widthf = (screen_rect.size.width * 4.0f) / 5.0f;
+    const float default_heightf = (screen_rect.size.height * 4.0f) / 5.0f;
+    if (_sapp.window_width == 0) {
+        _sapp.window_width = _sapp_roundf_gzero(default_widthf);
+    }
+    if (_sapp.window_height == 0) {
+        _sapp.window_height = _sapp_roundf_gzero(default_heightf);
+    }
+    _sapp.framebuffer_width = _sapp_roundf_gzero(default_widthf * _sapp.dpi_scale);
+    _sapp.framebuffer_height = _sapp_roundf_gzero(default_heightf * _sapp.dpi_scale);
+}
+
 /* NOTE: unlike the iOS version of this function, the macOS version
     can dynamically update the DPI scaling factor when a window is moved
     between HighDPI / LowDPI screens.
@@ -5577,14 +5598,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _SOKOL_UNUSED(aNotification);
     _sapp_macos_init_cursors();
     if ((_sapp.window_width == 0) || (_sapp.window_height == 0)) {
-        // use 4/5 of screen size as default size
-        NSRect screen_rect = NSScreen.mainScreen.frame;
-        if (_sapp.window_width == 0) {
-            _sapp.window_width = _sapp_roundf_gzero((screen_rect.size.width * 4.0f) / 5.0f);
-        }
-        if (_sapp.window_height == 0) {
-            _sapp.window_height = _sapp_roundf_gzero((screen_rect.size.height * 4.0f) / 5.0f);
-        }
+        _sapp_macos_init_default_dimensions();
     }
     const NSUInteger style =
         NSWindowStyleMaskTitled |
