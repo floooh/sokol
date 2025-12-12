@@ -5327,7 +5327,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     }
 }
 
-// called when in applicationDidFinishedLaunching when no window size was provided
+// called in applicationDidFinishedLaunching when no window size was provided
 _SOKOL_PRIVATE void _sapp_macos_init_default_dimensions(void) {
     if (_sapp.desc.high_dpi) {
         _sapp.dpi_scale = NSScreen.mainScreen.backingScaleFactor;
