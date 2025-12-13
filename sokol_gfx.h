@@ -22893,6 +22893,7 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
             }
         }
         for (size_t color_index = 0; color_index < (size_t)desc->color_count; color_index++) {
+            SOKOL_ASSERT(color_index < SG_MAX_COLOR_ATTACHMENTS);
             const sg_blend_state* bs = &desc->colors[color_index].blend;
             if ((bs->op_rgb == SG_BLENDOP_MIN) || (bs->op_rgb == SG_BLENDOP_MAX)) {
                 _SG_VALIDATE((bs->src_factor_rgb == SG_BLENDFACTOR_ONE) && (bs->dst_factor_rgb == SG_BLENDFACTOR_ONE), VALIDATE_PIPELINEDESC_BLENDOP_MINMAX_REQUIRES_BLENDFACTOR_ONE);
