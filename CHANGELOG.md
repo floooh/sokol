@@ -1,5 +1,44 @@
 ## Updates
 
+### 13-Dec-2025
+
+A WebGPU backend code cleanup round:
+
+- sokol_app.h:
+    - on macOS, fixed a WebGPU validation layer warning when the app didn't
+      set an explicit window size (so that the default size is picked). In that
+      case the WebGPU swapchain setup code used a width and height of zero to
+      initialize the swapchain (Windows and Linux wasn't affected from this
+      chicken-egg problem)
+    - moved all struct initializations into a macro to enforce zero-initialization
+      without a separate memset call (also outside the WebGPU backend)
+- sokol_gfx.h:
+    - similar to sokol_app.h, moved all struct initialization into a macro
+      (also outside the WebGPU backend)
+    - settings the uniform block bind group is now delayed into the draw/dispatch
+      functions, this avoids multiple redundant setBindGroup calls when a
+      shader uses multiple uniform blocks
+    - the special 'empty bindgroup' object has been removed and in places where
+      the empty bindgroup was set, the WebGPU SetBindGroup function is now
+      called with a nullptr (clearing bindgroups with a nullptr didn't work
+      in the past, but works correctly now)
+    - unused vertex buffer slots are now explicitly cleared by settings a nullptr
+    - a redundant texture arg in the internal function `_sg_wgpu_copy_image_data`
+      has been removed
+    - a special case for cube maps has been removed in `_sg_wgpu_create_image`
+    - remove two redundant SetBindGroup calls at the end of `_sg_wgpu_apply_pipeline()`,
+      this was required in the past when the shader didn't have any bindings
+      but this seems to have been relaxed
+- sokol-shdc: bindslot allocation for WGSL has been updated to work the
+  same as for Vulkan-SPIRV output, this makes the WGSL bindings more compact
+  but isn't a breaking change
+- utility headers: all embeded WGSL shaders have been updated (in some cases
+  the shader size was significantly removed because of a more recent Tint
+  version in sokol-shdc)
+
+PR: https://github.com/floooh/sokol/pull/1397
+Ticket: https://github.com/floooh/sokol/issues/1367
+
 ### 06-Dec-2025
 
 - sokol_gfx.h: a couple of small fixes in the GL backend:
