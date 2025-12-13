@@ -24056,7 +24056,7 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
         if (a_state->format == SG_VERTEXFORMAT_INVALID) {
             break;
         }
-        SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
+        SOKOL_ASSERT((a_state->buffer_index >= 0) && (a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS));
         sg_vertex_buffer_layout_state* l_state = &def.layout.buffers[a_state->buffer_index];
         l_state->step_func = _sg_def(l_state->step_func, SG_VERTEXSTEP_PER_VERTEX);
         l_state->step_rate = _sg_def(l_state->step_rate, 1);
