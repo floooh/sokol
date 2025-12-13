@@ -8144,7 +8144,7 @@ _SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const s
     for (size_t attr_idx = 0; attr_idx < SG_MAX_VERTEX_ATTRIBUTES; attr_idx++) {
         const sg_vertex_attr_state* attr_state = &desc->layout.attrs[attr_idx];
         if (attr_state->format != SG_VERTEXFORMAT_INVALID) {
-            SOKOL_ASSERT(attr_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
+            SOKOL_ASSERT((attr_state->buffer_index >= 0) && (attr_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS));
             cmn->vertex_buffer_layout_active[attr_state->buffer_index] = true;
             cmn->required_bindings_and_uniforms |= required_bindings_flag;
         }
