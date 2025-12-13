@@ -24077,7 +24077,7 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
         if (a_state->format == SG_VERTEXFORMAT_INVALID) {
             break;
         }
-        SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
+        SOKOL_ASSERT((a_state->buffer_index >= 0) && (a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS));
         if (use_auto_offset) {
             a_state->offset = auto_offset[a_state->buffer_index];
         }
