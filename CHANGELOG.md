@@ -15,14 +15,14 @@ A WebGPU backend code cleanup round:
 - sokol_gfx.h:
     - similar to sokol_app.h, moved all struct initialization into a macro
       (also outside the WebGPU backend)
-    - settings the uniform block bind group is now delayed into the draw/dispatch
+    - setting the uniform block bind group is now delayed into the draw/dispatch
       functions, this avoids multiple redundant setBindGroup calls when a
       shader uses multiple uniform blocks
     - the special 'empty bindgroup' object has been removed and in places where
       the empty bindgroup was set, the WebGPU SetBindGroup function is now
       called with a nullptr (clearing bindgroups with a nullptr didn't work
       in the past, but works correctly now)
-    - unused vertex buffer slots are now explicitly cleared by settings a nullptr
+    - unused vertex buffer slots are now explicitly cleared by setting a nullptr
     - a redundant texture arg in the internal function `_sg_wgpu_copy_image_data`
       has been removed
     - a special case for cube maps has been removed in `_sg_wgpu_create_image`
