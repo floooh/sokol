@@ -33,7 +33,7 @@ A WebGPU backend code cleanup round:
   same as for Vulkan-SPIRV output, this makes the WGSL bindings more compact
   but isn't a breaking change
 - utility headers: all embeded WGSL shaders have been updated (in some cases
-  the shader size was significantly removed because of a more recent Tint
+  the shader size was significantly reduced because of a more recent Tint
   version in sokol-shdc)
 
 PR: https://github.com/floooh/sokol/pull/1397
