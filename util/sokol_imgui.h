@@ -621,6 +621,11 @@ inline void simgui_new_frame(const simgui_frame_desc_t& desc) { return simgui_ne
 // helper macros and constants
 #define _simgui_def(val, def) (((val) == 0) ? (def) : (val))
 
+// collisions with X11 headers
+#if defined(Status)
+#undef Status
+#endif
+
 typedef struct {
     ImVec2 disp_size;
     uint8_t _pad_8[8];
