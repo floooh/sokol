@@ -54,6 +54,7 @@ range_struct_name = "Range"
 c_callbacks = ["slog_func"]
 
 # NOTE: syntax for function results: "func_name.RESULT"
+# CAREFUL: DON"T ADD ANY STRUCT ITEMS HERE SINCE THIS MAY CAUSE MEMORY CORRUPTION
 overrides = {
     "type": "_type",
     "ref": "_ref",
@@ -65,8 +66,6 @@ overrides = {
     "sg_dispatch.num_groups_x": "uintptr_t",
     "sg_dispatch.num_groups_y": "uintptr_t",
     "sg_dispatch.num_groups_z": "uintptr_t",
-    "sshape_element_range_t.base_element": "uintptr_t",
-    "sshape_element_range_t.num_elements": "uintptr_t",
     "sdtx_font.font_index": "uintptr_t",
 
     "sdtx_move": "sdtx_move_cursor",
