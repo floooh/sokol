@@ -532,6 +532,28 @@
                 "CMAKE_C_COMPILER": "clang",
                 "CMAKE_CXX_COMPILER": "clang++"
             }
+        },
+        {
+            "name": "win_d3d12",
+            "binaryDir": "build/win_d3d12",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_D3D12"
+            }
+        },
+        {
+            "name": "win_d3d12_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/win_d3d12_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_D3D12",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
         }
     ],
     "buildPresets": [
@@ -752,6 +774,20 @@
         {
             "name": "win_d3d11_analyze",
             "configurePreset": "win_d3d11_analyze"
+        },
+        {
+            "name": "win_d3d12_debug",
+            "configurePreset": "win_d3d12",
+            "configuration": "Debug"
+        },
+        {
+            "name": "win_d3d12_release",
+            "configurePreset": "win_d3d12",
+            "configuration": "Release"
+        },
+        {
+            "name": "win_d3d12_analyze",
+            "configurePreset": "win_d3d12_analyze"
         }
     ]
 }

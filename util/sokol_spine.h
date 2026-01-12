@@ -1653,7 +1653,7 @@ static const uint8_t _sspine_fs_source_glsl300es[399] = {
     0x6f,0x72,0x2c,0x20,0x76,0x65,0x63,0x34,0x28,0x66,0x73,0x5f,0x70,0x61,0x72,0x61,
     0x6d,0x73,0x5b,0x30,0x5d,0x2e,0x78,0x29,0x29,0x3b,0x0a,0x7d,0x0a,0x0a,0x00,
 };
-#elif defined(SOKOL_D3D11)
+#elif defined(SOKOL_D3D11) || defined(SOKOL_D3D12)
 /*
     cbuffer vs_params : register(b0)
     {
@@ -5441,7 +5441,7 @@ static void _sspine_init_shared(void) {
                 shd_desc.fragment_func.source = (const char*)_sspine_fs_source_metal_sim;
                 break;
         }
-    #elif defined(SOKOL_D3D11)
+    #elif defined(SOKOL_D3D11) || defined(SOKOL_D3D12)
         shd_desc.vertex_func.bytecode = SG_RANGE(_sspine_vs_bytecode_hlsl4);
         shd_desc.fragment_func.bytecode = SG_RANGE(_sspine_fs_bytecode_hlsl4);
     #elif defined(SOKOL_WGPU)

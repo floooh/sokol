@@ -2285,7 +2285,7 @@ static const uint8_t _sgl_fs_source_metal_sim[439] = {
     0x72,0x3b,0x0a,0x20,0x20,0x20,0x20,0x72,0x65,0x74,0x75,0x72,0x6e,0x20,0x6f,0x75,
     0x74,0x3b,0x0a,0x7d,0x0a,0x0a,0x00,
 };
-#elif defined(SOKOL_D3D11)
+#elif defined(SOKOL_D3D11) || defined(SOKOL_D3D12)
 /*
     cbuffer vs_params : register(b0)
     {
@@ -4026,7 +4026,7 @@ static void _sgl_setup_common(void) {
                 shd_desc.fragment_func.source = (const char*)_sgl_fs_source_metal_sim;
                 break;
         }
-    #elif defined(SOKOL_D3D11)
+    #elif defined(SOKOL_D3D11) || defined(SOKOL_D3D12)
         shd_desc.vertex_func.bytecode = SG_RANGE(_sgl_vs_bytecode_hlsl4);
         shd_desc.fragment_func.bytecode = SG_RANGE(_sgl_fs_bytecode_hlsl4);
     #elif defined(SOKOL_WGPU)

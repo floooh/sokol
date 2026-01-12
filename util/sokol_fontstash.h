@@ -1589,7 +1589,7 @@ static const uint8_t _sfons_fs_source_metal_sim[464] = {
     0x2a,0x20,0x69,0x6e,0x2e,0x63,0x6f,0x6c,0x6f,0x72,0x3b,0x0a,0x20,0x20,0x20,0x20,
     0x72,0x65,0x74,0x75,0x72,0x6e,0x20,0x6f,0x75,0x74,0x3b,0x0a,0x7d,0x0a,0x0a,0x00,
 };
-#elif defined(SOKOL_D3D11)
+#elif defined(SOKOL_D3D11) || defined(SOKOL_D3D12)
 /*
     cbuffer vs_params : register(b0)
     {
@@ -2312,7 +2312,7 @@ static int _sfons_render_create(void* user_ptr, int width, int height) {
                     shd_desc.fragment_func.source = (const char*)_sfons_fs_source_metal_sim;
                     break;
             }
-        #elif defined(SOKOL_D3D11)
+        #elif defined(SOKOL_D3D11) || defined(SOKOL_D3D12)
             shd_desc.vertex_func.bytecode = SG_RANGE(_sfons_vs_bytecode_hlsl4);
             shd_desc.fragment_func.bytecode = SG_RANGE(_sfons_fs_bytecode_hlsl4);
         #elif defined(SOKOL_WGPU)

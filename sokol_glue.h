@@ -165,6 +165,11 @@ SOKOL_API_IMPL sg_environment sglue_environment(void) {
     res.metal.device = env.metal.device;
     res.d3d11.device = env.d3d11.device;
     res.d3d11.device_context = env.d3d11.device_context;
+    res.d3d12.device = env.d3d12.device;
+    res.d3d12.command_queue = env.d3d12.command_queue;
+    res.d3d12.fence = env.d3d12.fence;
+    res.d3d12.fence_event = env.d3d12.fence_event;
+    res.d3d12.fence_value = env.d3d12.fence_value;
     res.wgpu.device = env.wgpu.device;
     res.vulkan.instance = env.vulkan.instance;
     res.vulkan.physical_device = env.vulkan.physical_device;
@@ -189,6 +194,12 @@ SOKOL_API_IMPL sg_swapchain sglue_swapchain(void) {
     res.d3d11.render_view = sc.d3d11.render_view;
     res.d3d11.resolve_view = sc.d3d11.resolve_view;
     res.d3d11.depth_stencil_view = sc.d3d11.depth_stencil_view;
+    res.d3d12.render_target = sc.d3d12.render_target;
+    res.d3d12.render_view = sc.d3d12.render_view;
+    res.d3d12.resolve_target = sc.d3d12.resolve_target;
+    res.d3d12.resolve_view = sc.d3d12.resolve_view;
+    res.d3d12.depth_stencil = sc.d3d12.depth_stencil;
+    res.d3d12.depth_stencil_view = sc.d3d12.depth_stencil_view;
     res.wgpu.render_view = sc.wgpu.render_view;
     res.wgpu.resolve_view = sc.wgpu.resolve_view;
     res.wgpu.depth_stencil_view = sc.wgpu.depth_stencil_view;

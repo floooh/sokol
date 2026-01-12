@@ -1888,6 +1888,14 @@ typedef struct sapp_d3d11_environment {
     const void* device_context;
 } sapp_d3d11_environment;
 
+typedef struct sapp_d3d12_environment {
+    const void* device;
+    const void* command_queue;
+    const void* fence;
+    void* fence_event;
+    uint64_t* fence_value;
+} sapp_d3d12_environment;
+
 typedef struct sapp_wgpu_environment {
     const void* device;
 } sapp_wgpu_environment;
@@ -1904,6 +1912,7 @@ typedef struct sapp_environment {
     sapp_environment_defaults defaults;
     sapp_metal_environment metal;
     sapp_d3d11_environment d3d11;
+    sapp_d3d12_environment d3d12;
     sapp_wgpu_environment wgpu;
     sapp_vulkan_environment vulkan;
 } sapp_environment;
@@ -1934,6 +1943,15 @@ typedef struct sapp_d3d11_swapchain {
     const void* depth_stencil_view;     // ID3D11DepthStencilView
 } sapp_d3d11_swapchain;
 
+typedef struct sapp_d3d12_swapchain {
+    const void* render_target;          // ID3D12Resource
+    const void* render_view;            // D3D12_CPU_DESCRIPTOR_HANDLE.ptr
+    const void* resolve_target;         // ID3D12Resource
+    const void* resolve_view;           // D3D12_CPU_DESCRIPTOR_HANDLE.ptr
+    const void* depth_stencil;          // ID3D12Resource
+    const void* depth_stencil_view;     // D3D12_CPU_DESCRIPTOR_HANDLE.ptr
+} sapp_d3d12_swapchain;
+
 typedef struct sapp_wgpu_swapchain {
     const void* render_view;            // WGPUTextureView
     const void* resolve_view;           // WGPUTextureView
@@ -1963,6 +1981,7 @@ typedef struct sapp_swapchain {
     sapp_pixel_format depth_format;
     sapp_metal_swapchain metal;
     sapp_d3d11_swapchain d3d11;
+    sapp_d3d12_swapchain d3d12;
     sapp_wgpu_swapchain wgpu;
     sapp_vulkan_swapchain vulkan;
     sapp_gl_swapchain gl;
@@ -2224,7 +2243,12 @@ SOKOL_APP_API_DECL const void* sapp_ios_get_window(void);
 
 /* D3D11: get pointer to IDXGISwapChain object */
 SOKOL_APP_API_DECL const void* sapp_d3d11_get_swap_chain(void);
-
+/* D3D12: get pointer to ID3D12Device object */
+SOKOL_APP_API_DECL const void* sapp_d3d12_get_device(void);
+/* D3D12: get pointer to ID3D12CommandQueue object */
+SOKOL_APP_API_DECL const void* sapp_d3d12_get_command_queue(void);
+/* D3D12: get pointer to IDXGISwapChain3 object */
+SOKOL_APP_API_DECL const void* sapp_d3d12_get_swap_chain(void);
 /* Win32: get the HWND window handle */
 SOKOL_APP_API_DECL const void* sapp_win32_get_hwnd(void);
 
@@ -2321,8 +2345,8 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(_WIN32)
     // Windows (D3D11 or GL)
     #define _SAPP_WIN32 (1)
-    #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE) && !defined(SOKOL_WGPU) && !defined(SOKOL_VULKAN) && !defined(SOKOL_NOAPI)
-    #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11, SOKOL_GLCORE, SOKOL_WGPU, SOKOL_VULKAN or SOKOL_NOAPI")
+    #if !defined(SOKOL_D3D11) && !defined(SOKOL_D3D12) && !defined(SOKOL_GLCORE) && !defined(SOKOL_WGPU) && !defined(SOKOL_VULKAN) && !defined(SOKOL_NOAPI)
+    #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11, SOKOL_D3D12, SOKOL_GLCORE, SOKOL_WGPU, SOKOL_VULKAN or SOKOL_NOAPI")
     #endif
     #if defined(SOKOL_VULKAN)
     #define VK_USE_PLATFORM_WIN32_KHR
@@ -2479,6 +2503,10 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #pragma comment (lib, "dxgi")
         #pragma comment (lib, "d3d11")
     #endif
+    #if defined(SOKOL_D3D12)
+        #pragma comment (lib, "dxgi")
+        #pragma comment (lib, "d3d12")
+    #endif
 
     #if defined(__GNUC__)
         #pragma GCC diagnostic pop
@@ -2492,6 +2520,16 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #include <dxgi.h>
         // DXGI_SWAP_EFFECT_FLIP_DISCARD is only defined in newer Windows SDKs, so don't depend on it
         #define _SAPP_DXGI_SWAP_EFFECT_FLIP_DISCARD (4)
+    #endif
+    #if defined(SOKOL_D3D12)
+        #ifndef D3D12_NO_HELPERS
+            #define D3D12_NO_HELPERS
+        #endif
+        #include <d3d12.h>
+        #include <dxgi1_4.h>
+        // DXGI_SWAP_EFFECT_FLIP_DISCARD is only defined in newer Windows SDKs, so don't depend on it
+        #define _SAPP_DXGI_SWAP_EFFECT_FLIP_DISCARD (4)
+        #define _SAPP_D3D12_NUM_FRAMES (2)
     #endif
     #ifndef WM_MOUSEHWHEEL /* see https://github.com/floooh/sokol/issues/138 */
         #define WM_MOUSEHWHEEL (0x020E)
@@ -2919,6 +2957,26 @@ typedef struct {
 } _sapp_d3d11_t;
 #endif
 
+#if defined(SOKOL_D3D12) && defined(_SAPP_WIN32)
+typedef struct {
+    ID3D12Device* device;
+    ID3D12CommandQueue* command_queue;
+    IDXGISwapChain3* swap_chain;
+    ID3D12DescriptorHeap* rtv_heap;
+    UINT rtv_descriptor_size;
+    ID3D12Resource* render_targets[_SAPP_D3D12_NUM_FRAMES];
+    ID3D12Resource* msaa_rt;
+    ID3D12DescriptorHeap* dsv_heap;
+    ID3D12Resource* depth_stencil;
+    ID3D12Fence* fence;
+    HANDLE fence_event;
+    UINT64 fence_value;
+    UINT frame_index;
+    bool use_dxgi_frame_stats;
+    UINT sync_refresh_count;
+} _sapp_d3d12_t;
+#endif
+
 #if defined(_SAPP_WIN32)
 
 #ifndef DPI_ENUMS_DECLARED
@@ -3317,6 +3375,8 @@ typedef struct {
         _sapp_win32_t win32;
         #if defined(SOKOL_D3D11)
             _sapp_d3d11_t d3d11;
+        #elif defined(SOKOL_D3D12)
+            _sapp_d3d12_t d3d12;
         #elif defined(SOKOL_GLCORE)
             _sapp_wgl_t wgl;
         #endif
@@ -8396,6 +8456,407 @@ _SOKOL_PRIVATE void _sapp_d3d11_present(bool do_not_wait) {
 
 #endif /* SOKOL_D3D11 */
 
+#if defined(SOKOL_D3D12)
+
+#if defined(__cplusplus)
+#define _sapp_d3d12_Release(self) (self)->Release()
+#define _sapp_win32_refiid(iid) iid
+#else
+#define _sapp_d3d12_Release(self) (self)->lpVtbl->Release(self)
+#define _sapp_win32_refiid(iid) &iid
+#endif
+
+#define _SAPP_SAFE_RELEASE(obj) if (obj) { _sapp_d3d12_Release(obj); obj=0; }
+
+static const IID _sapp_IID_IDXGIFactory4 = { 0x1bc6ea02,0xef36,0x464f, {0xbf,0x0c,0x21,0xca,0x39,0xe5,0x16,0x8a} };
+static const IID _sapp_IID_IDXGISwapChain3 = { 0x94d99bdb,0xf1f8,0x4ab0, {0xb2,0x36,0x7d,0xa0,0x17,0x0e,0xda,0xb1} };
+static const IID _sapp_IID_ID3D12Debug = { 0x344488b7,0x6846,0x474b, {0xb9,0x89,0xf0,0x27,0x44,0x82,0x45,0xe0} };
+static const IID _sapp_IID_ID3D12Device = { 0x189819f1,0x1db6,0x4b57, {0xbe,0x54,0x18,0x21,0x33,0x9b,0x85,0xf7} };
+static const IID _sapp_IID_ID3D12CommandQueue = { 0x0ec870a6,0x5d7e,0x4c22, {0x8c,0xfc,0x5b,0xaa,0xe0,0x76,0x16,0xed} };
+static const IID _sapp_IID_ID3D12DescriptorHeap = { 0x8efb471d,0x616c,0x4f49, {0x90,0xf7,0x12,0x7b,0xb7,0x63,0xfa,0x51} };
+static const IID _sapp_IID_ID3D12Fence = { 0x0a753dcf,0xc4d8,0x4b91, {0xad,0xf6,0xbe,0x5a,0x60,0xd9,0x5a,0x76} };
+static const IID _sapp_IID_ID3D12Resource = { 0x696442be,0xa72e,0x4059, {0xbc,0x79,0x5b,0x5c,0x98,0x04,0x0f,0xad} };
+static const IID _sapp_IID_ID3D12InfoQueue = { 0x0742a90b,0xc387,0x483f, {0xb9,0x46,0x30,0xa7,0xe4,0xe6,0x14,0x58} };
+
+static inline HRESULT _sapp_dxgi_GetBuffer(IDXGISwapChain* self, UINT Buffer, REFIID riid, void** ppSurface) {
+    #if defined(__cplusplus)
+        return self->GetBuffer(Buffer, riid, ppSurface);
+    #else
+        return self->lpVtbl->GetBuffer(self, Buffer, riid, ppSurface);
+    #endif
+}
+
+static inline HRESULT _sapp_dxgi_ResizeBuffers(IDXGISwapChain* self, UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags) {
+    #if defined(__cplusplus)
+        return self->ResizeBuffers(BufferCount, Width, Height, NewFormat, SwapChainFlags);
+    #else
+        return self->lpVtbl->ResizeBuffers(self, BufferCount, Width, Height, NewFormat, SwapChainFlags);
+    #endif
+}
+
+static inline HRESULT _sapp_dxgi_Present(IDXGISwapChain* self, UINT SyncInterval, UINT Flags) {
+    #if defined(__cplusplus)
+        return self->Present(SyncInterval, Flags);
+    #else
+        return self->lpVtbl->Present(self, SyncInterval, Flags);
+    #endif
+}
+
+static inline HRESULT _sapp_dxgi_GetFrameStatistics(IDXGISwapChain* self, DXGI_FRAME_STATISTICS* pStats) {
+    #if defined(__cplusplus)
+        return self->GetFrameStatistics(pStats);
+    #else
+        return self->lpVtbl->GetFrameStatistics(self, pStats);
+    #endif
+}
+
+static inline HRESULT _sapp_dxgi_MakeWindowAssociation(IDXGIFactory* self, HWND WindowHandle, UINT Flags) {
+    #if defined(__cplusplus)
+        return self->MakeWindowAssociation(WindowHandle, Flags);
+    #else
+        return self->lpVtbl->MakeWindowAssociation(self, WindowHandle, Flags);
+    #endif
+}
+
+static inline UINT _sapp_dxgi_GetCurrentBackBufferIndex(IDXGISwapChain3* self) {
+    #if defined(__cplusplus)
+        return self->GetCurrentBackBufferIndex();
+    #else
+        return self->lpVtbl->GetCurrentBackBufferIndex(self);
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_d3d12_wait_for_gpu(void) {
+    #if defined(__cplusplus)
+    if (_sapp.d3d12.fence->GetCompletedValue() < _sapp.d3d12.fence_value) {
+        _sapp.d3d12.fence->SetEventOnCompletion(_sapp.d3d12.fence_value, _sapp.d3d12.fence_event);
+        WaitForSingleObject(_sapp.d3d12.fence_event, INFINITE);
+    }
+    #else
+    if (_sapp.d3d12.fence->lpVtbl->GetCompletedValue(_sapp.d3d12.fence) < _sapp.d3d12.fence_value) {
+        _sapp.d3d12.fence->lpVtbl->SetEventOnCompletion(_sapp.d3d12.fence, _sapp.d3d12.fence_value, _sapp.d3d12.fence_event);
+        WaitForSingleObject(_sapp.d3d12.fence_event, INFINITE);
+    }
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_d3d12_create_device_and_swapchain(void) {
+    HRESULT hr; _SOKOL_UNUSED(hr);
+
+    // enable debug layer in debug builds
+    #if defined(SOKOL_DEBUG)
+    {
+        ID3D12Debug* debug_controller = 0;
+        #if defined(__cplusplus)
+        if (SUCCEEDED(D3D12GetDebugInterface(_sapp_IID_ID3D12Debug, (void**)&debug_controller))) {
+            debug_controller->EnableDebugLayer();
+            debug_controller->Release();
+        }
+        #else
+        if (SUCCEEDED(D3D12GetDebugInterface(_sapp_win32_refiid(_sapp_IID_ID3D12Debug), (void**)&debug_controller))) {
+            debug_controller->lpVtbl->EnableDebugLayer(debug_controller);
+            debug_controller->lpVtbl->Release(debug_controller);
+        }
+        #endif
+    }
+    #endif
+
+    // create dxgi factory
+    IDXGIFactory4* factory = 0;
+    hr = CreateDXGIFactory1(_sapp_win32_refiid(_sapp_IID_IDXGIFactory4), (void**)&factory);
+    SOKOL_ASSERT(SUCCEEDED(hr) && factory);
+
+    // find hardware adapter and create device
+    IDXGIAdapter1* adapter = 0;
+    for (UINT i = 0; ; i++) {
+        #if defined(__cplusplus)
+        if (factory->EnumAdapters1(i, &adapter) == DXGI_ERROR_NOT_FOUND) {
+            break;
+        }
+        DXGI_ADAPTER_DESC1 desc;
+        adapter->GetDesc1(&desc);
+        #else
+        if (factory->lpVtbl->EnumAdapters1(factory, i, &adapter) == DXGI_ERROR_NOT_FOUND) {
+            break;
+        }
+        DXGI_ADAPTER_DESC1 desc;
+        adapter->lpVtbl->GetDesc1(adapter, &desc);
+        #endif
+
+        // skip software adapter
+        if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
+            _sapp_d3d12_Release(adapter);
+            adapter = 0;
+            continue;
+        }
+
+        // try to create device
+        #if defined(__cplusplus)
+        if (SUCCEEDED(D3D12CreateDevice((IUnknown*)adapter, D3D_FEATURE_LEVEL_11_0, _sapp_IID_ID3D12Device, (void**)&_sapp.d3d12.device))) {
+            break;
+        }
+        #else
+        if (SUCCEEDED(D3D12CreateDevice((IUnknown*)adapter, D3D_FEATURE_LEVEL_11_0, _sapp_win32_refiid(_sapp_IID_ID3D12Device), (void**)&_sapp.d3d12.device))) {
+            break;
+        }
+        #endif
+        _sapp_d3d12_Release(adapter);
+        adapter = 0;
+    }
+    SOKOL_ASSERT(_sapp.d3d12.device);
+
+    // suppress debug layer warnings for mismatched clear values (we don't know the app's clear color at resource creation time)
+    #if defined(SOKOL_DEBUG)
+    {
+        ID3D12InfoQueue* info_queue = 0;
+        #if defined(__cplusplus)
+        if (SUCCEEDED(_sapp.d3d12.device->QueryInterface(_sapp_IID_ID3D12InfoQueue, (void**)&info_queue))) {
+            D3D12_MESSAGE_ID hide[] = { D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE };
+            D3D12_INFO_QUEUE_FILTER filter;
+            _sapp_clear(&filter, sizeof(filter));
+            filter.DenyList.NumIDs = 1;
+            filter.DenyList.pIDList = hide;
+            info_queue->AddStorageFilterEntries(&filter);
+            info_queue->Release();
+        }
+        #else
+        if (SUCCEEDED(_sapp.d3d12.device->lpVtbl->QueryInterface(_sapp.d3d12.device, _sapp_win32_refiid(_sapp_IID_ID3D12InfoQueue), (void**)&info_queue))) {
+            D3D12_MESSAGE_ID hide[] = { D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE };
+            D3D12_INFO_QUEUE_FILTER filter;
+            _sapp_clear(&filter, sizeof(filter));
+            filter.DenyList.NumIDs = 1;
+            filter.DenyList.pIDList = hide;
+            info_queue->lpVtbl->AddStorageFilterEntries(info_queue, &filter);
+            info_queue->lpVtbl->Release(info_queue);
+        }
+        #endif
+    }
+    #endif
+
+    // create command queue
+    _SAPP_STRUCT(D3D12_COMMAND_QUEUE_DESC, queue_desc);
+    queue_desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+    queue_desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+    #if defined(__cplusplus)
+    hr = _sapp.d3d12.device->CreateCommandQueue(&queue_desc, IID_PPV_ARGS(&_sapp.d3d12.command_queue));
+    #else
+    hr = _sapp.d3d12.device->lpVtbl->CreateCommandQueue(_sapp.d3d12.device, &queue_desc, _sapp_win32_refiid(_sapp_IID_ID3D12CommandQueue), (void**)&_sapp.d3d12.command_queue);
+    #endif
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d12.command_queue);
+
+    // create swap chain
+    _SAPP_STRUCT(DXGI_SWAP_CHAIN_DESC1, swap_chain_desc);
+    swap_chain_desc.BufferCount = _SAPP_D3D12_NUM_FRAMES;
+    swap_chain_desc.Width = (UINT)_sapp.framebuffer_width;
+    swap_chain_desc.Height = (UINT)_sapp.framebuffer_height;
+    swap_chain_desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    swap_chain_desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    swap_chain_desc.SwapEffect = (DXGI_SWAP_EFFECT)_SAPP_DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    swap_chain_desc.SampleDesc.Count = 1;
+    _sapp.d3d12.use_dxgi_frame_stats = true;
+
+    IDXGISwapChain1* swap_chain1 = 0;
+    #if defined(__cplusplus)
+    hr = factory->CreateSwapChainForHwnd((IUnknown*)_sapp.d3d12.command_queue, _sapp.win32.hwnd, &swap_chain_desc, NULL, NULL, &swap_chain1);
+    SOKOL_ASSERT(SUCCEEDED(hr) && swap_chain1);
+    factory->MakeWindowAssociation(_sapp.win32.hwnd, DXGI_MWA_NO_ALT_ENTER);
+    hr = swap_chain1->QueryInterface(_sapp_win32_refiid(_sapp_IID_IDXGISwapChain3), (void**)&_sapp.d3d12.swap_chain);
+    swap_chain1->Release();
+    #else
+    hr = factory->lpVtbl->CreateSwapChainForHwnd(factory, (IUnknown*)_sapp.d3d12.command_queue, _sapp.win32.hwnd, &swap_chain_desc, NULL, NULL, &swap_chain1);
+    SOKOL_ASSERT(SUCCEEDED(hr) && swap_chain1);
+    factory->lpVtbl->MakeWindowAssociation(factory, _sapp.win32.hwnd, DXGI_MWA_NO_ALT_ENTER);
+    hr = swap_chain1->lpVtbl->QueryInterface(swap_chain1, &_sapp_IID_IDXGISwapChain3, (void**)&_sapp.d3d12.swap_chain);
+    swap_chain1->lpVtbl->Release(swap_chain1);
+    #endif
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d12.swap_chain);
+
+    _sapp.d3d12.frame_index = _sapp_dxgi_GetCurrentBackBufferIndex(_sapp.d3d12.swap_chain);
+
+    // create rtv descriptor heap (extra slot for MSAA render target if needed)
+    _SAPP_STRUCT(D3D12_DESCRIPTOR_HEAP_DESC, rtv_heap_desc);
+    rtv_heap_desc.NumDescriptors = _SAPP_D3D12_NUM_FRAMES + 1;
+    rtv_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+    rtv_heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+    #if defined(__cplusplus)
+    hr = _sapp.d3d12.device->CreateDescriptorHeap(&rtv_heap_desc, IID_PPV_ARGS(&_sapp.d3d12.rtv_heap));
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d12.rtv_heap);
+    _sapp.d3d12.rtv_descriptor_size = _sapp.d3d12.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    #else
+    hr = _sapp.d3d12.device->lpVtbl->CreateDescriptorHeap(_sapp.d3d12.device, &rtv_heap_desc, _sapp_win32_refiid(_sapp_IID_ID3D12DescriptorHeap), (void**)&_sapp.d3d12.rtv_heap);
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d12.rtv_heap);
+    _sapp.d3d12.rtv_descriptor_size = _sapp.d3d12.device->lpVtbl->GetDescriptorHandleIncrementSize(_sapp.d3d12.device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    #endif
+
+    // create dsv descriptor heap
+    _SAPP_STRUCT(D3D12_DESCRIPTOR_HEAP_DESC, dsv_heap_desc);
+    dsv_heap_desc.NumDescriptors = 1;
+    dsv_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+    dsv_heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+    #if defined(__cplusplus)
+    hr = _sapp.d3d12.device->CreateDescriptorHeap(&dsv_heap_desc, IID_PPV_ARGS(&_sapp.d3d12.dsv_heap));
+    #else
+    hr = _sapp.d3d12.device->lpVtbl->CreateDescriptorHeap(_sapp.d3d12.device, &dsv_heap_desc, _sapp_win32_refiid(_sapp_IID_ID3D12DescriptorHeap), (void**)&_sapp.d3d12.dsv_heap);
+    #endif
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d12.dsv_heap);
+
+    // create fence
+    #if defined(__cplusplus)
+    hr = _sapp.d3d12.device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&_sapp.d3d12.fence));
+    #else
+    hr = _sapp.d3d12.device->lpVtbl->CreateFence(_sapp.d3d12.device, 0, D3D12_FENCE_FLAG_NONE, _sapp_win32_refiid(_sapp_IID_ID3D12Fence), (void**)&_sapp.d3d12.fence);
+    #endif
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d12.fence);
+
+    // create fence event
+    _sapp.d3d12.fence_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+    SOKOL_ASSERT(_sapp.d3d12.fence_event);
+
+    // cleanup
+    if (adapter) {
+        _sapp_d3d12_Release(adapter);
+    }
+    _sapp_d3d12_Release(factory);
+}
+
+_SOKOL_PRIVATE void _sapp_d3d12_destroy_device_and_swapchain(void) {
+    _sapp_d3d12_wait_for_gpu();
+    if (_sapp.d3d12.fence_event) {
+        CloseHandle(_sapp.d3d12.fence_event);
+        _sapp.d3d12.fence_event = 0;
+    }
+    _SAPP_SAFE_RELEASE(_sapp.d3d12.fence);
+    _SAPP_SAFE_RELEASE(_sapp.d3d12.dsv_heap);
+    _SAPP_SAFE_RELEASE(_sapp.d3d12.rtv_heap);
+    _SAPP_SAFE_RELEASE(_sapp.d3d12.swap_chain);
+    _SAPP_SAFE_RELEASE(_sapp.d3d12.command_queue);
+    _SAPP_SAFE_RELEASE(_sapp.d3d12.device);
+}
+
+_SOKOL_PRIVATE void _sapp_d3d12_create_default_render_target(void) {
+    HRESULT hr; _SOKOL_UNUSED(hr);
+
+    // create render target views for swap chain buffers
+    #if defined(__cplusplus)
+    D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle = _sapp.d3d12.rtv_heap->GetCPUDescriptorHandleForHeapStart();
+    #else
+    D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle;
+    _sapp.d3d12.rtv_heap->lpVtbl->GetCPUDescriptorHandleForHeapStart(_sapp.d3d12.rtv_heap, &rtv_handle);
+    #endif
+
+    for (UINT i = 0; i < _SAPP_D3D12_NUM_FRAMES; i++) {
+        hr = _sapp_dxgi_GetBuffer((IDXGISwapChain*)_sapp.d3d12.swap_chain, i, _sapp_win32_refiid(_sapp_IID_ID3D12Resource), (void**)&_sapp.d3d12.render_targets[i]);
+        SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d12.render_targets[i]);
+        #if defined(__cplusplus)
+        _sapp.d3d12.device->CreateRenderTargetView(_sapp.d3d12.render_targets[i], NULL, rtv_handle);
+        #else
+        _sapp.d3d12.device->lpVtbl->CreateRenderTargetView(_sapp.d3d12.device, _sapp.d3d12.render_targets[i], NULL, rtv_handle);
+        #endif
+        rtv_handle.ptr += _sapp.d3d12.rtv_descriptor_size;
+    }
+
+    // create MSAA render target if sample_count > 1
+    if (_sapp.sample_count > 1) {
+        _SAPP_STRUCT(D3D12_HEAP_PROPERTIES, msaa_heap_props);
+        msaa_heap_props.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        _SAPP_STRUCT(D3D12_RESOURCE_DESC, msaa_desc);
+        msaa_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        msaa_desc.Width = (UINT)_sapp.framebuffer_width;
+        msaa_desc.Height = (UINT)_sapp.framebuffer_height;
+        msaa_desc.DepthOrArraySize = 1;
+        msaa_desc.MipLevels = 1;
+        msaa_desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        msaa_desc.SampleDesc.Count = (UINT)_sapp.sample_count;
+        msaa_desc.SampleDesc.Quality = 0;
+        msaa_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        #if defined(__cplusplus)
+        hr = _sapp.d3d12.device->CreateCommittedResource(&msaa_heap_props, D3D12_HEAP_FLAG_NONE, &msaa_desc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, NULL, IID_PPV_ARGS(&_sapp.d3d12.msaa_rt));
+        #else
+        hr = _sapp.d3d12.device->lpVtbl->CreateCommittedResource(_sapp.d3d12.device, &msaa_heap_props, D3D12_HEAP_FLAG_NONE, &msaa_desc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, NULL, _sapp_win32_refiid(_sapp_IID_ID3D12Resource), (void**)&_sapp.d3d12.msaa_rt);
+        #endif
+        SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d12.msaa_rt);
+
+        // create RTV for MSAA render target (stored after swap chain RTVs)
+        #if defined(__cplusplus)
+        _sapp.d3d12.device->CreateRenderTargetView(_sapp.d3d12.msaa_rt, NULL, rtv_handle);
+        #else
+        _sapp.d3d12.device->lpVtbl->CreateRenderTargetView(_sapp.d3d12.device, _sapp.d3d12.msaa_rt, NULL, rtv_handle);
+        #endif
+    }
+
+    // create depth stencil
+    _SAPP_STRUCT(D3D12_HEAP_PROPERTIES, heap_props);
+    heap_props.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+    _SAPP_STRUCT(D3D12_RESOURCE_DESC, ds_desc);
+    ds_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    ds_desc.Width = (UINT)_sapp.framebuffer_width;
+    ds_desc.Height = (UINT)_sapp.framebuffer_height;
+    ds_desc.DepthOrArraySize = 1;
+    ds_desc.MipLevels = 1;
+    ds_desc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    ds_desc.SampleDesc.Count = (UINT)_sapp.sample_count;
+    ds_desc.SampleDesc.Quality = 0;
+    ds_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+
+    _SAPP_STRUCT(D3D12_CLEAR_VALUE, clear_value);
+    clear_value.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    clear_value.DepthStencil.Depth = 1.0f;
+    clear_value.DepthStencil.Stencil = 0;
+
+    #if defined(__cplusplus)
+    hr = _sapp.d3d12.device->CreateCommittedResource(&heap_props, D3D12_HEAP_FLAG_NONE, &ds_desc,
+        D3D12_RESOURCE_STATE_DEPTH_WRITE, &clear_value, IID_PPV_ARGS(&_sapp.d3d12.depth_stencil));
+    #else
+    hr = _sapp.d3d12.device->lpVtbl->CreateCommittedResource(_sapp.d3d12.device, &heap_props, D3D12_HEAP_FLAG_NONE, &ds_desc,
+        D3D12_RESOURCE_STATE_DEPTH_WRITE, &clear_value, _sapp_win32_refiid(_sapp_IID_ID3D12Resource), (void**)&_sapp.d3d12.depth_stencil);
+    #endif
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d12.depth_stencil);
+
+    // create depth stencil view
+    #if defined(__cplusplus)
+    D3D12_CPU_DESCRIPTOR_HANDLE dsv_handle = _sapp.d3d12.dsv_heap->GetCPUDescriptorHandleForHeapStart();
+    _sapp.d3d12.device->CreateDepthStencilView(_sapp.d3d12.depth_stencil, NULL, dsv_handle);
+    #else
+    D3D12_CPU_DESCRIPTOR_HANDLE dsv_handle;
+    _sapp.d3d12.dsv_heap->lpVtbl->GetCPUDescriptorHandleForHeapStart(_sapp.d3d12.dsv_heap, &dsv_handle);
+    _sapp.d3d12.device->lpVtbl->CreateDepthStencilView(_sapp.d3d12.device, _sapp.d3d12.depth_stencil, NULL, dsv_handle);
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_d3d12_destroy_default_render_target(void) {
+    _SAPP_SAFE_RELEASE(_sapp.d3d12.depth_stencil);
+    _SAPP_SAFE_RELEASE(_sapp.d3d12.msaa_rt);
+    for (UINT i = 0; i < _SAPP_D3D12_NUM_FRAMES; i++) {
+        _SAPP_SAFE_RELEASE(_sapp.d3d12.render_targets[i]);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_d3d12_resize_default_render_target(void) {
+    if (_sapp.d3d12.swap_chain) {
+        _sapp_d3d12_wait_for_gpu();
+        _sapp_d3d12_destroy_default_render_target();
+        _sapp_dxgi_ResizeBuffers((IDXGISwapChain*)_sapp.d3d12.swap_chain, _SAPP_D3D12_NUM_FRAMES, (UINT)_sapp.framebuffer_width, (UINT)_sapp.framebuffer_height, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
+        _sapp.d3d12.frame_index = _sapp_dxgi_GetCurrentBackBufferIndex(_sapp.d3d12.swap_chain);
+        _sapp_d3d12_create_default_render_target();
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_d3d12_present(bool do_not_wait) {
+    UINT flags = 0;
+    if (_sapp.win32.is_win10_or_greater && do_not_wait) {
+        flags = DXGI_PRESENT_DO_NOT_WAIT;
+    }
+    _sapp_dxgi_Present((IDXGISwapChain*)_sapp.d3d12.swap_chain, (UINT)_sapp.swap_interval, flags);
+    _sapp.d3d12.frame_index = _sapp_dxgi_GetCurrentBackBufferIndex(_sapp.d3d12.swap_chain);
+}
+
+#endif /* SOKOL_D3D12 */
+
 #if defined(SOKOL_GLCORE)
 _SOKOL_PRIVATE void _sapp_wgl_init(void) {
     _sapp.wgl.opengl32 = LoadLibraryA("opengl32.dll");
@@ -9181,6 +9642,24 @@ _SOKOL_PRIVATE void _sapp_win32_timing_measure(void) {
         }
         // fallback if swap model isn't "flip-discard" or GetFrameStatistics failed for another reason
         _sapp_timing_measure(&_sapp.timing);
+    #elif defined(SOKOL_D3D12)
+        // on D3D12, use the more precise DXGI timestamp
+        if (_sapp.d3d12.use_dxgi_frame_stats) {
+            DXGI_FRAME_STATISTICS dxgi_stats;
+            _sapp_clear(&dxgi_stats, sizeof(dxgi_stats));
+            HRESULT hr = _sapp_dxgi_GetFrameStatistics((IDXGISwapChain*)_sapp.d3d12.swap_chain, &dxgi_stats);
+            if (SUCCEEDED(hr)) {
+                if (dxgi_stats.SyncRefreshCount != _sapp.d3d12.sync_refresh_count) {
+                    _sapp.d3d12.sync_refresh_count = dxgi_stats.SyncRefreshCount;
+                    LARGE_INTEGER qpc = dxgi_stats.SyncQPCTime;
+                    const uint64_t now = (uint64_t)_sapp_int64_muldiv(qpc.QuadPart - _sapp.timing.timestamp.win.start.QuadPart, 1000000000, _sapp.timing.timestamp.win.freq.QuadPart);
+                    _sapp_timing_external(&_sapp.timing, (double)now / 1000000000.0);
+                }
+                return;
+            }
+        }
+        // fallback if GetFrameStatistics failed for another reason
+        _sapp_timing_measure(&_sapp.timing);
     #else
         _sapp_timing_measure(&_sapp.timing);
     #endif
@@ -9197,8 +9676,10 @@ _SOKOL_PRIVATE void _sapp_win32_frame(bool from_winproc) {
     #if defined(SOKOL_D3D11)
         bool do_not_wait = from_winproc;
         _sapp_d3d11_present(do_not_wait);
-    #endif
-    #if defined(SOKOL_GLCORE)
+    #elif defined(SOKOL_D3D12)
+        bool do_not_wait = from_winproc;
+        _sapp_d3d12_present(do_not_wait);
+    #elif defined(SOKOL_GLCORE)
         _sapp_wgl_swap_buffers();
     #endif
     if (!from_winproc) {
@@ -9802,6 +10283,9 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     #if defined(SOKOL_D3D11)
         _sapp_d3d11_create_device_and_swapchain();
         _sapp_d3d11_create_default_render_target();
+    #elif defined(SOKOL_D3D12)
+        _sapp_d3d12_create_device_and_swapchain();
+        _sapp_d3d12_create_default_render_target();
     #elif defined(SOKOL_GLCORE)
         _sapp_wgl_init();
         _sapp_wgl_load_extensions();
@@ -9833,6 +10317,8 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         if (_sapp_win32_update_dimensions()) {
             #if defined(SOKOL_D3D11)
             _sapp_d3d11_resize_default_render_target();
+            #elif defined(SOKOL_D3D12)
+            _sapp_d3d12_resize_default_render_target();
             #elif defined(SOKOL_WGPU)
             _sapp_wgpu_swapchain_size_changed();
             #endif
@@ -9855,6 +10341,9 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     #if defined(SOKOL_D3D11)
         _sapp_d3d11_destroy_default_render_target();
         _sapp_d3d11_destroy_device_and_swapchain();
+    #elif defined(SOKOL_D3D12)
+        _sapp_d3d12_destroy_default_render_target();
+        _sapp_d3d12_destroy_device_and_swapchain();
     #elif defined(SOKOL_GLCORE)
         _sapp_wgl_destroy_context();
         _sapp_wgl_shutdown();
@@ -13604,7 +14093,7 @@ SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
                 SOKOL_UNREACHABLE;
                 return SAPP_PIXELFORMAT_NONE;
         }
-    #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
+    #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11) || defined(SOKOL_D3D12)
         return SAPP_PIXELFORMAT_BGRA8;
     #else
         return SAPP_PIXELFORMAT_RGBA8;
@@ -13967,6 +14456,13 @@ SOKOL_API_IMPL sapp_environment sapp_get_environment(void) {
         res.d3d11.device = (const void*) _sapp.d3d11.device;
         res.d3d11.device_context = (const void*) _sapp.d3d11.device_context;
     #endif
+    #if defined(SOKOL_D3D12)
+        res.d3d12.device = (const void*) _sapp.d3d12.device;
+        res.d3d12.command_queue = (const void*) _sapp.d3d12.command_queue;
+        res.d3d12.fence = (const void*) _sapp.d3d12.fence;
+        res.d3d12.fence_event = (void*) _sapp.d3d12.fence_event;
+        res.d3d12.fence_value = &_sapp.d3d12.fence_value;
+    #endif
     #if defined(SOKOL_WGPU)
         res.wgpu.device = (const void*) _sapp.wgpu.device;
     #endif
@@ -14009,6 +14505,33 @@ SOKOL_API_IMPL sapp_swapchain sapp_get_swapchain(void) {
             res.d3d11.render_view = (const void*) _sapp.d3d11.rtv;
         }
         res.d3d11.depth_stencil_view = (const void*) _sapp.d3d11.dsv;
+    #endif
+    #if defined(SOKOL_D3D12)
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle;
+        #if defined(__cplusplus)
+        rtv_handle = _sapp.d3d12.rtv_heap->GetCPUDescriptorHandleForHeapStart();
+        #else
+        _sapp.d3d12.rtv_heap->lpVtbl->GetCPUDescriptorHandleForHeapStart(_sapp.d3d12.rtv_heap, &rtv_handle);
+        #endif
+        if (_sapp.sample_count > 1) {
+            SOKOL_ASSERT(_sapp.d3d12.msaa_rt);
+            res.d3d12.render_target = (const void*) _sapp.d3d12.msaa_rt;
+            // MSAA RTV is at offset _SAPP_D3D12_NUM_FRAMES in the heap
+            res.d3d12.render_view = (const void*) (rtv_handle.ptr + (SIZE_T)(_SAPP_D3D12_NUM_FRAMES * _sapp.d3d12.rtv_descriptor_size));
+            res.d3d12.resolve_target = (const void*) _sapp.d3d12.render_targets[_sapp.d3d12.frame_index];
+            res.d3d12.resolve_view = (const void*) (rtv_handle.ptr + (SIZE_T)(_sapp.d3d12.frame_index * _sapp.d3d12.rtv_descriptor_size));
+        } else {
+            res.d3d12.render_target = (const void*) _sapp.d3d12.render_targets[_sapp.d3d12.frame_index];
+            res.d3d12.render_view = (const void*) (rtv_handle.ptr + (SIZE_T)(_sapp.d3d12.frame_index * _sapp.d3d12.rtv_descriptor_size));
+        }
+        D3D12_CPU_DESCRIPTOR_HANDLE dsv_handle;
+        #if defined(__cplusplus)
+        dsv_handle = _sapp.d3d12.dsv_heap->GetCPUDescriptorHandleForHeapStart();
+        #else
+        _sapp.d3d12.dsv_heap->lpVtbl->GetCPUDescriptorHandleForHeapStart(_sapp.d3d12.dsv_heap, &dsv_handle);
+        #endif
+        res.d3d12.depth_stencil = (const void*) _sapp.d3d12.depth_stencil;
+        res.d3d12.depth_stencil_view = (const void*) dsv_handle.ptr;
     #endif
     #if defined(SOKOL_WGPU)
         SOKOL_ASSERT(0 == _sapp.wgpu.swapchain_view);
@@ -14080,6 +14603,32 @@ SOKOL_API_IMPL const void* sapp_d3d11_get_swap_chain(void) {
 #endif
 }
 
+SOKOL_API_IMPL const void* sapp_d3d12_get_device(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_D3D12)
+        return _sapp.d3d12.device;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sapp_d3d12_get_command_queue(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_D3D12)
+        return _sapp.d3d12.command_queue;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sapp_d3d12_get_swap_chain(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_D3D12)
+        return _sapp.d3d12.swap_chain;
+    #else
+        return 0;
+    #endif
+}
 SOKOL_API_IMPL const void* sapp_win32_get_hwnd(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_WIN32)

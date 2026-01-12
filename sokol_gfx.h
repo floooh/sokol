@@ -20,6 +20,7 @@
         #define SOKOL_GLCORE
         #define SOKOL_GLES3
         #define SOKOL_D3D11
+        #define SOKOL_D3D12
         #define SOKOL_METAL
         #define SOKOL_WGPU
         #define SOKOL_VULKAN
@@ -78,6 +79,9 @@
         - with D3D11:
             - on MSVC or Clang: no action needed, libs are defined in-source via pragma-comment-lib
             - on MINGW/MSYS2 gcc: compile with '-mwin32' so that _WIN32 is defined and link with -ld3d11
+        - with D3D12:
+            - on MSVC or Clang: no action needed, libs are defined in-source via pragma-comment-lib
+            - on MINGW/MSYS2 gcc: compile with '-mwin32' so that _WIN32 is defined and link with -ld3d12
         - with GL: no linking needed since sokol_gfx.h comes with its own GL loader on Windows
 
     On macOS and iOS, the implementation must be compiled as Objective-C.
@@ -2064,6 +2068,7 @@ typedef enum sg_backend {
     SG_BACKEND_GLCORE,
     SG_BACKEND_GLES3,
     SG_BACKEND_D3D11,
+    SG_BACKEND_D3D12,
     SG_BACKEND_METAL_IOS,
     SG_BACKEND_METAL_MACOS,
     SG_BACKEND_METAL_SIMULATOR,
@@ -2950,6 +2955,15 @@ typedef struct sg_d3d11_swapchain {
     const void* depth_stencil_view;     // ID3D11DepthStencilView
 } sg_d3d11_swapchain;
 
+typedef struct sg_d3d12_swapchain {
+    const void* render_view;            // D3D12_CPU_DESCRIPTOR_HANDLE.ptr (RTV)
+    const void* resolve_view;           // D3D12_CPU_DESCRIPTOR_HANDLE.ptr (MSAA resolve RTV)
+    const void* depth_stencil_view;     // D3D12_CPU_DESCRIPTOR_HANDLE.ptr (DSV)
+    const void* render_target;          // ID3D12Resource* (render target for barriers)
+    const void* resolve_target;         // ID3D12Resource* (MSAA resolve target for barriers)
+    const void* depth_stencil;          // ID3D12Resource* (depth stencil for barriers)
+} sg_d3d12_swapchain;
+
 typedef struct sg_wgpu_swapchain {
     const void* render_view;            // WGPUTextureView
     const void* resolve_view;           // WGPUTextureView
@@ -2979,6 +2993,7 @@ typedef struct sg_swapchain {
     sg_pixel_format depth_format;
     sg_metal_swapchain metal;
     sg_d3d11_swapchain d3d11;
+    sg_d3d12_swapchain d3d12;
     sg_wgpu_swapchain wgpu;
     sg_vulkan_swapchain vulkan;
     sg_gl_swapchain gl;
@@ -3220,12 +3235,13 @@ typedef struct sg_buffer_usage {
 
     ADVANCED TOPIC: Injecting native 3D-API buffers:
 
-    The following struct members allow to inject your own GL, Metal
-    or D3D11 buffers into sokol_gfx:
+    The following struct members allow to inject your own GL, Metal,
+    D3D11 or D3D12 buffers into sokol_gfx:
 
     .gl_buffers[SG_NUM_INFLIGHT_FRAMES]
     .mtl_buffers[SG_NUM_INFLIGHT_FRAMES]
     .d3d11_buffer
+    .d3d12_buffer
 
     You must still provide all other struct items except the .data item, and
     these must match the creation parameters of the native buffers you provide.
@@ -3251,6 +3267,7 @@ typedef struct sg_buffer_desc {
     uint32_t gl_buffers[SG_NUM_INFLIGHT_FRAMES];
     const void* mtl_buffers[SG_NUM_INFLIGHT_FRAMES];
     const void* d3d11_buffer;
+    const void* d3d12_buffer;
     const void* wgpu_buffer;
     uint32_t _end_canary;
 } sg_buffer_desc;
@@ -3389,17 +3406,24 @@ typedef struct sg_image_data {
 
     ADVANCED TOPIC: Injecting native 3D-API textures:
 
-    The following struct members allow to inject your own GL, Metal or D3D11
-    textures into sokol_gfx:
+    The following struct members allow to inject your own GL, Metal, D3D11, D3D12
+    or WebGPU textures into sokol_gfx:
 
     .gl_textures[SG_NUM_INFLIGHT_FRAMES]
     .mtl_textures[SG_NUM_INFLIGHT_FRAMES]
     .d3d11_texture
+    .d3d12_texture
     .wgpu_texture
 
     For GL, you can also specify the texture target or leave it empty to use
     the default texture target for the image type (GL_TEXTURE_2D for
     SG_IMAGETYPE_2D etc)
+
+    For D3D12, you can specify the initial resource state of an injected texture
+    via the .d3d12_texture_state member. This should be set to the D3D12_RESOURCE_STATES
+    value that matches the actual state of the injected texture. If not specified (0),
+    sokol_gfx will assume the state based on the image usage flags, which may cause
+    validation errors if the assumption is incorrect.
 
     The same rules apply as for injecting native buffers (see sg_buffer_desc
     documentation for more details).
@@ -3421,6 +3445,8 @@ typedef struct sg_image_desc {
     uint32_t gl_texture_target;
     const void* mtl_textures[SG_NUM_INFLIGHT_FRAMES];
     const void* d3d11_texture;
+    const void* d3d12_texture;
+    uint32_t d3d12_texture_state;
     const void* wgpu_texture;
     uint32_t _end_canary;
 } sg_image_desc;
@@ -3460,6 +3486,7 @@ typedef struct sg_sampler_desc {
     uint32_t gl_sampler;
     const void* mtl_sampler;
     const void* d3d11_sampler;
+    const void* d3d12_sampler;          // D3D12_CPU_DESCRIPTOR_HANDLE.ptr cast to const void*
     const void* wgpu_sampler;
     uint32_t _end_canary;
 } sg_sampler_desc;
@@ -3622,6 +3649,8 @@ typedef struct sg_shader_function {
     const char* entry;
     const char* d3d11_target;   // default: "vs_4_0" or "ps_4_0"
     const char* d3d11_filepath;
+    const char* d3d12_target;   // default: "vs_5_0" or "ps_5_0"
+    const char* d3d12_filepath;
 } sg_shader_function;
 
 typedef enum sg_shader_attr_base_type {
@@ -4192,6 +4221,48 @@ typedef struct sg_frame_stats_d3d11 {
     uint32_t num_unmap;
 } sg_frame_stats_d3d11;
 
+typedef struct sg_frame_stats_d3d12_pass {
+    uint32_t num_set_render_targets;
+    uint32_t num_clear_render_target_view;
+    uint32_t num_clear_depth_stencil_view;
+    uint32_t num_resolve_subresource;
+    uint32_t num_resource_barrier;
+} sg_frame_stats_d3d12_pass;
+
+typedef struct sg_frame_stats_d3d12_pipeline {
+    uint32_t num_set_pipeline_state;
+    uint32_t num_set_root_signature;
+    uint32_t num_set_primitive_topology;
+    uint32_t num_set_stencil_ref;
+    uint32_t num_set_blend_factor;
+} sg_frame_stats_d3d12_pipeline;
+
+typedef struct sg_frame_stats_d3d12_bindings {
+    uint32_t num_set_vertex_buffers;
+    uint32_t num_set_index_buffer;
+    uint32_t num_set_descriptor_heaps;
+    uint32_t num_set_root_descriptor_table;
+    uint32_t num_set_root_constant_buffer_view;
+    uint32_t num_copy_descriptors;
+} sg_frame_stats_d3d12_bindings;
+
+typedef struct sg_frame_stats_d3d12_draw {
+    uint32_t num_draw_indexed_instanced;
+    uint32_t num_draw_indexed;
+    uint32_t num_draw_instanced;
+    uint32_t num_draw;
+    uint32_t num_dispatch;
+} sg_frame_stats_d3d12_draw;
+
+typedef struct sg_frame_stats_d3d12 {
+    sg_frame_stats_d3d12_pass pass;
+    sg_frame_stats_d3d12_pipeline pipeline;
+    sg_frame_stats_d3d12_bindings bindings;
+    sg_frame_stats_d3d12_draw draw;
+    uint32_t num_map;
+    uint32_t num_unmap;
+} sg_frame_stats_d3d12;
+
 typedef struct sg_frame_stats_metal_idpool {
     uint32_t num_added;
     uint32_t num_released;
@@ -4339,6 +4410,7 @@ typedef struct sg_frame_stats {
 
     sg_frame_stats_gl gl;
     sg_frame_stats_d3d11 d3d11;
+    sg_frame_stats_d3d12 d3d12;
     sg_frame_stats_metal metal;
     sg_frame_stats_wgpu wgpu;
     sg_frame_stats_vk vk;
@@ -4410,6 +4482,47 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_UPDATE_BUFFER_FAILED, "Map() failed when updating buffer (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_APPEND_BUFFER_FAILED, "Map() failed when appending to buffer (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_UPDATE_IMAGE_FAILED, "Map() failed when updating image (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D12_CREATE_BUFFER_FAILED, "CreateCommittedResource() failed for buffer (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_MAP_BUFFER_FAILED, "Map() failed for buffer (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_UNIFORMBLOCK_HLSL_REGISTER_B_OUT_OF_RANGE, "uniform block hlsl_register_b_n must be 0..7 (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_IMAGE_HLSL_REGISTER_T_OUT_OF_RANGE, "texture view hlsl_register_t_n must be 0..31 (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_STORAGEBUFFER_HLSL_REGISTER_T_OUT_OF_RANGE, "storage buffer hlsl_register_t_n must be 0..31 (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_STORAGEBUFFER_HLSL_REGISTER_U_OUT_OF_RANGE, "storage buffer hlsl_register_u_n must be 0..31 (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_STORAGEIMAGE_HLSL_REGISTER_U_OUT_OF_RANGE, "storage image hlsl_register_u_n must be 0..31 (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_SAMPLER_HLSL_REGISTER_S_OUT_OF_RANGE, "sampler hlsl_register_s_n must be 0..11 (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_LOAD_D3DCOMPILER_47_DLL_FAILED, "loading d3dcompiler_47.dll failed (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_SHADER_COMPILATION_FAILED, "shader compilation failed (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_SHADER_COMPILATION_OUTPUT, "") \
+    _SG_LOGITEM_XMACRO(D3D12_CREATE_ROOT_SIGNATURE_FAILED, "CreateRootSignature() failed (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_CREATE_PIPELINE_STATE_FAILED, "CreateGraphicsPipelineState() failed (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_PIPELINE_INPUT_LAYOUT_INVALID, "pipeline input layout validation failed - vertex shader input signature doesn't match vertex buffer layout (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_CREATE_DEPTH_TEXTURE_UNSUPPORTED_PIXEL_FORMAT, "pixel format not supported for depth-stencil texture (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_CREATE_DEPTH_TEXTURE_FAILED, "CreateCommittedResource() failed for depth-stencil texture (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_CREATE_2D_TEXTURE_UNSUPPORTED_PIXEL_FORMAT, "pixel format not supported for 2d-, cube- or array-texture (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_CREATE_2D_TEXTURE_FAILED, "CreateCommittedResource() failed for 2d-, cube- or array-texture (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_CREATE_3D_TEXTURE_UNSUPPORTED_PIXEL_FORMAT, "pixel format not supported for 3D texture (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_CREATE_3D_TEXTURE_FAILED, "CreateCommittedResource() failed for 3D texture (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_CREATE_MSAA_TEXTURE_FAILED, "CreateCommittedResource() failed for MSAA render target texture (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_CREATE_RTV_FAILED, "CreateRenderTargetView() failed (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_CREATE_DSV_FAILED, "CreateDepthStencilView() failed (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_CREATE_SRV_FAILED, "CreateShaderResourceView() failed (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_CREATE_UAV_FAILED, "CreateUnorderedAccessView() failed (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_MAP_FOR_UPDATE_BUFFER_FAILED, "Map() failed for update buffer (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_MAP_FOR_APPEND_BUFFER_FAILED, "Map() failed for append buffer (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_UPDATE_BUFFER_ON_IMMUTABLE, "sg_update_buffer() called on immutable buffer (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_APPEND_BUFFER_ON_IMMUTABLE, "sg_append_buffer() called on immutable buffer (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_UPDATE_IMAGE_WHILE_BOUND, "sg_update_image() on image currently bound as attachment (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_IMAGE_UPDATED_TWICE, "sg_update_image() called twice on same image before flush (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_DESCRIPTOR_HEAP_EXHAUSTED, "descriptor heap exhausted (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_UNIFORM_BUFFER_EXHAUSTED, "per-frame uniform buffer exhausted (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_UPLOAD_RING_BUFFER_EXHAUSTED, "per-frame upload ring buffer exhausted (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_DEFERRED_IMAGE_UPDATES_OVERFLOW, "deferred image updates queue exhausted (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_RELEASE_QUEUE_FULL, "deferred release queue is full (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_SIGNAL_FENCE_FAILED, "failed to signal fence (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_WAIT_FENCE_FAILED, "failed to set event on fence completion (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_RESET_COMMAND_ALLOCATOR_FAILED, "failed to reset command allocator (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_RESET_COMMAND_LIST_FAILED, "failed to reset command list (d3d12)") \
+    _SG_LOGITEM_XMACRO(D3D12_INJECTED_TEXTURE_STATE_NOT_SPECIFIED, "injected texture state not specified, assuming default (d3d12)") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_BUFFER_FAILED, "failed to create buffer object (metal)") \
     _SG_LOGITEM_XMACRO(METAL_TEXTURE_FORMAT_NOT_SUPPORTED, "pixel format not supported for texture (metal)") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_TEXTURE_FAILED, "failed to create texture object (metal)") \
@@ -4685,6 +4798,15 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RESOLVEVIEW_NOTSET, "sg_begin_pass: expected pass.swapchain.d3d11.resolve_view == 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_DEPTHSTENCILVIEW, "sg_begin_pass: expected pass.swapchain.d3d11.depth_stencil_view != 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_DEPTHSTENCILVIEW_NOTSET, "sg_begin_pass: expected pass.swapchain.d3d11.depth_stencil_view == 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D12_EXPECT_RENDERVIEW, "sg_begin_pass: expected pass.swapchain.d3d12.render_view != 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D12_EXPECT_RENDERVIEW_NOTSET, "sg_begin_pass: expected pass.swapchain.d3d12.render_view == 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D12_EXPECT_RESOLVEVIEW, "sg_begin_pass: expected pass.swapchain.d3d12.resolve_view != 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D12_EXPECT_RESOLVEVIEW_NOTSET, "sg_begin_pass: expected pass.swapchain.d3d12.resolve_view == 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D12_EXPECT_DEPTHSTENCILVIEW, "sg_begin_pass: expected pass.swapchain.d3d12.depth_stencil_view != 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D12_EXPECT_DEPTHSTENCILVIEW_NOTSET, "sg_begin_pass: expected pass.swapchain.d3d12.depth_stencil_view == 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D12_EXPECT_RENDERTARGET, "sg_begin_pass: expected pass.swapchain.d3d12.render_target != 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D12_EXPECT_RESOLVETARGET, "sg_begin_pass: expected pass.swapchain.d3d12.resolve_target != 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_D3D12_EXPECT_DEPTHSTENCIL, "sg_begin_pass: expected pass.swapchain.d3d12.depth_stencil != 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_RENDERVIEW, "sg_begin_pass: expected pass.swapchain.wgpu.render_view != 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_RENDERVIEW_NOTSET, "sg_begin_pass: expected pass.swapchain.wgpu.render_view == 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_RESOLVEVIEW, "sg_begin_pass: expected pass.swapchain.wgpu.resolve_view != 0") \
@@ -4843,6 +4965,9 @@ typedef enum sg_log_item {
     .uniform_buffer_size                4 MB (4*1024*1024)
     .max_commit_listeners               1024
     .disable_validation                 false
+    .d3d12.shader_heap_size             4096 (per-frame SRV/UAV descriptors)
+    .d3d12.sampler_heap_size            1024 (per-frame sampler descriptors, max 1024)
+    .d3d12.upload_ring_buffer_size      8 MB (8*1024*1024, per-frame for image updates)
     .metal.force_managed_storage_mode   false
     .metal.use_command_buffer_with_retained_references  false
     .wgpu.disable_bindgroups_cache      false
@@ -4957,6 +5082,14 @@ typedef struct sg_d3d11_environment {
     const void* device_context;
 } sg_d3d11_environment;
 
+typedef struct sg_d3d12_environment {
+    const void* device;
+    const void* command_queue;
+    const void* fence;
+    void* fence_event;
+    uint64_t* fence_value;
+} sg_d3d12_environment;
+
 typedef struct sg_wgpu_environment {
     const void* device;
 } sg_wgpu_environment;
@@ -4973,6 +5106,7 @@ typedef struct sg_environment {
     sg_environment_defaults defaults;
     sg_metal_environment metal;
     sg_d3d11_environment d3d11;
+    sg_d3d12_environment d3d12;
     sg_wgpu_environment wgpu;
     sg_vulkan_environment vulkan;
 } sg_environment;
@@ -5032,6 +5166,14 @@ typedef struct sg_d3d11_desc {
     bool shader_debugging;  // if true, HLSL shaders are compiled with D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION
 } sg_d3d11_desc;
 
+typedef struct sg_d3d12_desc {
+    bool shader_debugging;      // if true, HLSL shaders are compiled with D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION
+    int shader_heap_size;       // per-frame SRV/UAV descriptor heap size (default: 4096)
+    int sampler_heap_size;      // per-frame sampler descriptor heap size (default: 1024, max: 1024)
+    int upload_ring_buffer_size; // per-frame upload ring buffer size for image updates (default: 8 MB)
+    int max_deferred_image_updates; // maximum number of deferred image updates per frame (default: 128)
+} sg_d3d12_desc;
+
 typedef struct sg_metal_desc {
     bool force_managed_storage_mode; // for debugging: use Metal managed storage mode for resources even with UMA
     bool use_command_buffer_with_retained_references;    // Metal: use a managed MTLCommandBuffer which ref-counts used resources
@@ -5061,6 +5203,7 @@ typedef struct sg_desc {
     bool disable_validation;        // disable validation layer even in debug mode, useful for tests
     bool enforce_portable_limits;   // if true, enforce portable resource binding limits (SG_MAX_PORTABLE_*)
     sg_d3d11_desc d3d11;            // d3d11-specific setup parameters
+    sg_d3d12_desc d3d12;            // d3d12-specific setup parameters
     sg_metal_desc metal;            // metal-specific setup parameters
     sg_wgpu_desc wgpu;              // webgpu-specific setup parameters
     sg_vulkan_desc vulkan;          // vulkan-specific setup parameters
@@ -5244,6 +5387,37 @@ typedef struct sg_d3d11_view_info {
     const void* dsv;    // ID3D11DepthStencilView
 } sg_d3d11_view_info;
 
+typedef struct sg_d3d12_buffer_info {
+    const void* res;    // ID3D12Resource*
+} sg_d3d12_buffer_info;
+
+typedef struct sg_d3d12_image_info {
+    const void* res;    // ID3D12Resource*
+} sg_d3d12_image_info;
+
+typedef struct sg_d3d12_sampler_info {
+    const void* smp;    // D3D12_CPU_DESCRIPTOR_HANDLE.ptr
+} sg_d3d12_sampler_info;
+
+typedef struct sg_d3d12_shader_info {
+    const void* vs_blob;        // shader bytecode (void*)
+    size_t vs_blob_length;
+    const void* fs_blob;        // shader bytecode (void*)
+    size_t fs_blob_length;
+} sg_d3d12_shader_info;
+
+typedef struct sg_d3d12_pipeline_info {
+    const void* pso;        // ID3D12PipelineState*
+    const void* root_sig;   // ID3D12RootSignature*
+} sg_d3d12_pipeline_info;
+
+typedef struct sg_d3d12_view_info {
+    const void* srv;    // D3D12_CPU_DESCRIPTOR_HANDLE.ptr
+    const void* uav;    // D3D12_CPU_DESCRIPTOR_HANDLE.ptr
+    const void* rtv;    // D3D12_CPU_DESCRIPTOR_HANDLE.ptr
+    const void* dsv;    // D3D12_CPU_DESCRIPTOR_HANDLE.ptr
+} sg_d3d12_view_info;
+
 typedef struct sg_mtl_buffer_info {
     const void* buf[SG_NUM_INFLIGHT_FRAMES];  // id<MTLBuffer>
     int active_slot;
@@ -5338,6 +5512,19 @@ SOKOL_GFX_API_DECL sg_d3d11_shader_info sg_d3d11_query_shader_info(sg_shader shd
 SOKOL_GFX_API_DECL sg_d3d11_pipeline_info sg_d3d11_query_pipeline_info(sg_pipeline pip);
 // D3D11: get internal view resource objects
 SOKOL_GFX_API_DECL sg_d3d11_view_info sg_d3d11_query_view_info(sg_view view);
+
+// D3D12: get internal buffer resource objects
+SOKOL_GFX_API_DECL sg_d3d12_buffer_info sg_d3d12_query_buffer_info(sg_buffer buf);
+// D3D12: get internal image resource objects
+SOKOL_GFX_API_DECL sg_d3d12_image_info sg_d3d12_query_image_info(sg_image img);
+// D3D12: get internal sampler resource objects
+SOKOL_GFX_API_DECL sg_d3d12_sampler_info sg_d3d12_query_sampler_info(sg_sampler smp);
+// D3D12: get internal shader resource objects
+SOKOL_GFX_API_DECL sg_d3d12_shader_info sg_d3d12_query_shader_info(sg_shader shd);
+// D3D12: get internal pipeline resource objects
+SOKOL_GFX_API_DECL sg_d3d12_pipeline_info sg_d3d12_query_pipeline_info(sg_pipeline pip);
+// D3D12: get internal view resource objects
+SOKOL_GFX_API_DECL sg_d3d12_view_info sg_d3d12_query_view_info(sg_view view);
 
 // Metal: return __bridge-casted MTLDevice
 SOKOL_GFX_API_DECL const void* sg_mtl_device(void);
@@ -5439,8 +5626,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
 #ifdef SOKOL_GFX_IMPL
 #define SOKOL_GFX_IMPL_INCLUDED (1)
 
-#if !(defined(SOKOL_GLCORE)||defined(SOKOL_GLES3)||defined(SOKOL_D3D11)||defined(SOKOL_METAL)||defined(SOKOL_WGPU)||defined(SOKOL_VULKAN)||defined(SOKOL_DUMMY_BACKEND))
-#error "Please select a backend with SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU, SOKOL_VULKAN or SOKOL_DUMMY_BACKEND"
+#if !(defined(SOKOL_GLCORE)||defined(SOKOL_GLES3)||defined(SOKOL_D3D11)||defined(SOKOL_D3D12)||defined(SOKOL_METAL)||defined(SOKOL_WGPU)||defined(SOKOL_VULKAN)||defined(SOKOL_DUMMY_BACKEND))
+#error "Please select a backend with SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_D3D12, SOKOL_METAL, SOKOL_WGPU, SOKOL_VULKAN or SOKOL_DUMMY_BACKEND"
 #endif
 #if defined(SOKOL_MALLOC) || defined(SOKOL_CALLOC) || defined(SOKOL_FREE)
 #error "SOKOL_MALLOC/CALLOC/FREE macros are no longer supported, please use sg_desc.allocator to override memory allocation functions"
@@ -5541,6 +5728,31 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #pragma comment (lib, "user32")
     #pragma comment (lib, "dxgi")
     #pragma comment (lib, "d3d11")
+    #if defined(__GNUC__)
+        #pragma GCC diagnostic pop
+    #endif
+#elif defined(SOKOL_D3D12)
+    #if defined(__GNUC__)
+        #pragma GCC diagnostic push
+        #pragma GCC diagnostic ignored "-Wunknown-pragmas"
+    #endif
+    #ifndef D3D12_NO_HELPERS
+    #define D3D12_NO_HELPERS
+    #endif
+    #ifndef WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
+    #endif
+    #ifndef NOMINMAX
+    #define NOMINMAX
+    #endif
+    #include <stdio.h>
+    #include <d3d12.h>
+    #include <dxgi1_4.h>
+    #include <d3dcompiler.h>
+    #pragma comment (lib, "kernel32")
+    #pragma comment (lib, "user32")
+    #pragma comment (lib, "dxgi")
+    #pragma comment (lib, "d3d12")
     #if defined(__GNUC__)
         #pragma GCC diagnostic pop
     #endif
@@ -6163,6 +6375,10 @@ enum {
     _SG_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
     _SG_DEFAULT_MAX_COMMIT_LISTENERS = 1024,
     _SG_DEFAULT_WGPU_BINDGROUP_CACHE_SIZE = 1024,
+    _SG_DEFAULT_D3D12_SHADER_HEAP_SIZE = 4096,      // per-frame SRV/UAV descriptors
+    _SG_DEFAULT_D3D12_SAMPLER_HEAP_SIZE = 1024,     // per-frame sampler descriptors (max 1024 due to D3D12 limit of 2048 total with 2 frames)
+    _SG_DEFAULT_D3D12_UPLOAD_RING_SIZE = (8 * 1024 * 1024), // per-frame upload ring buffer size for image updates
+    _SG_DEFAULT_D3D12_MAX_DEFERRED_IMAGE_UPDATES = 128, // maximum deferred image updates per frame
     _SG_DEFAULT_VK_COPY_STAGING_SIZE = (4 * 1024 * 1024),
     _SG_DEFAULT_VK_STREAM_STAGING_SIZE = (16 * 1024 * 1024),
     _SG_DEFAULT_VK_DESCRIPTOR_BUFFER_SIZE = (16 * 1024 * 1024),
@@ -6629,6 +6845,304 @@ typedef struct {
     // global subresourcedata array for texture updates
     D3D11_SUBRESOURCE_DATA subres_data[_SG_D3D11_MAX_TEXTURE_SUBRESOURCES];
 } _sg_d3d11_backend_t;
+
+#elif defined(SOKOL_D3D12)
+
+#define _SG_D3D12_MAX_STAGE_UB_BINDINGS (_SG_MAX_UNIFORMBLOCK_BINDINGS_PER_STAGE)
+#define _SG_D3D12_MAX_STAGE_SRV_BINDINGS (SG_MAX_VIEW_BINDSLOTS)
+#define _SG_D3D12_MAX_STAGE_UAV_BINDINGS (SG_MAX_VIEW_BINDSLOTS)
+#define _SG_D3D12_MAX_STAGE_SMP_BINDINGS (SG_MAX_SAMPLER_BINDSLOTS)
+#define _SG_D3D12_INVALID_ROOT_PARAM_IDX (0xFF)
+
+typedef enum {
+    _SG_D3D12_GPUDIRTY_STORAGEBUFFER = (1<<0),
+    _SG_D3D12_GPUDIRTY_STORAGEIMAGE = (1<<1),
+    _SG_D3D12_GPUDIRTY_BUFFER_ALL = _SG_D3D12_GPUDIRTY_STORAGEBUFFER,
+    _SG_D3D12_GPUDIRTY_IMAGE_ALL = _SG_D3D12_GPUDIRTY_STORAGEIMAGE,
+} _sg_d3d12_gpudirty_t;
+
+typedef struct _sg_buffer_s {
+    _sg_slot_t slot;
+    _sg_buffer_common_t cmn;
+    struct {
+        ID3D12Resource* res;
+        ID3D12Resource* ring_res[SG_NUM_INFLIGHT_FRAMES];
+        void* ring_mapped_ptr[SG_NUM_INFLIGHT_FRAMES];
+        void* mapped_ptr;
+        uint8_t gpu_dirty_flags;
+    } d3d12;
+} _sg_d3d12_buffer_t;
+typedef _sg_d3d12_buffer_t _sg_buffer_t;
+
+typedef struct _sg_image_s {
+    _sg_slot_t slot;
+    _sg_image_common_t cmn;
+    struct {
+        DXGI_FORMAT format;
+        ID3D12Resource* res;
+        D3D12_RESOURCE_STATES current_state;
+        int deferred_update_index;
+        uint8_t gpu_dirty_flags;
+    } d3d12;
+} _sg_d3d12_image_t;
+typedef _sg_d3d12_image_t _sg_image_t;
+
+typedef struct {
+    _sg_image_t* img;
+    UINT64 ring_offset;
+} _sg_d3d12_deferred_image_update_t;
+
+typedef struct _sg_sampler_s {
+    _sg_slot_t slot;
+    _sg_sampler_common_t cmn;
+    struct {
+        D3D12_CPU_DESCRIPTOR_HANDLE handle;
+        bool injected;
+    } d3d12;
+} _sg_d3d12_sampler_t;
+typedef _sg_d3d12_sampler_t _sg_sampler_t;
+
+typedef struct {
+    _sg_str_t sem_name;
+    int sem_index;
+} _sg_d3d12_shader_attr_t;
+
+typedef struct _sg_shader_s {
+    _sg_slot_t slot;
+    _sg_shader_common_t cmn;
+    struct {
+        _sg_d3d12_shader_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
+        void* vs_blob;
+        size_t vs_blob_length;
+        void* fs_blob;
+        size_t fs_blob_length;
+        void* cs_blob;
+        size_t cs_blob_length;
+        uint8_t ub_register_b_n[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
+        uint8_t view_register_t_n[SG_MAX_VIEW_BINDSLOTS];
+        uint8_t view_register_u_n[SG_MAX_VIEW_BINDSLOTS];
+        uint8_t smp_register_s_n[SG_MAX_SAMPLER_BINDSLOTS];
+    } d3d12;
+} _sg_d3d12_shader_t;
+typedef _sg_d3d12_shader_t _sg_shader_t;
+
+typedef struct _sg_pipeline_s {
+    _sg_slot_t slot;
+    _sg_pipeline_common_t cmn;
+    struct {
+        // core pipeline objects
+        ID3D12PipelineState* pso;
+        ID3D12RootSignature* root_sig;
+        // render state
+        UINT vb_strides[SG_MAX_VERTEXBUFFER_BINDSLOTS];
+        D3D_PRIMITIVE_TOPOLOGY topology;
+        DXGI_FORMAT index_format;
+        UINT stencil_ref;
+        // root parameter indices
+        uint8_t ub_root_param_idx[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
+        uint8_t vs_srv_table_root_param_idx;
+        uint8_t fs_srv_table_root_param_idx;
+        uint8_t cs_srv_table_root_param_idx;
+        uint8_t vs_smp_table_root_param_idx;
+        uint8_t fs_smp_table_root_param_idx;
+        uint8_t cs_smp_table_root_param_idx;
+        uint8_t cs_uav_table_root_param_idx;
+        // vertex shader resource tracking
+        uint8_t vs_srv_base_reg;
+        uint8_t vs_srv_count;
+        uint8_t vs_smp_base_reg;
+        uint8_t vs_smp_count;
+        // fragment shader resource tracking
+        uint8_t fs_srv_base_reg;
+        uint8_t fs_srv_count;
+        uint8_t fs_smp_base_reg;
+        uint8_t fs_smp_count;
+        // compute shader resource tracking
+        uint8_t cs_srv_base_reg;
+        uint8_t cs_srv_count;
+        uint8_t cs_smp_base_reg;
+        uint8_t cs_smp_count;
+        uint8_t cs_uav_base_reg;
+        uint8_t cs_uav_count;
+    } d3d12;
+} _sg_d3d12_pipeline_t;
+typedef _sg_d3d12_pipeline_t _sg_pipeline_t;
+
+typedef struct _sg_view_s {
+    _sg_slot_t slot;
+    _sg_view_common_t cmn;
+    struct {
+        D3D12_CPU_DESCRIPTOR_HANDLE srv;
+        D3D12_CPU_DESCRIPTOR_HANDLE uav;
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv;
+        D3D12_CPU_DESCRIPTOR_HANDLE dsv;
+    } d3d12;
+} _sg_d3d12_view_t;
+typedef _sg_d3d12_view_t _sg_view_t;
+
+#define _SG_D3D12_UB_ALIGN (256)
+#define _SG_D3D12_UPLOAD_RING_ALIGN (512)
+#define _SG_D3D12_UPLOAD_RING_OVERFLOW_RESULT (UINT64_MAX)
+#define _SG_D3D12_FENCE_VALUE_PENDING (UINT64_MAX)
+
+typedef enum {
+    _SG_D3D12_RELEASE_RESOURCE,
+    _SG_D3D12_RELEASE_PIPELINE,
+    _SG_D3D12_RELEASE_ROOTSIG,
+    _SG_D3D12_RELEASE_SRV_UAV_SLOT,
+    _SG_D3D12_RELEASE_RTV_SLOT,
+    _SG_D3D12_RELEASE_DSV_SLOT,
+    _SG_D3D12_RELEASE_SAMPLER_SLOT,
+} _sg_d3d12_release_type_t;
+
+typedef struct {
+    _sg_d3d12_release_type_t type;
+    UINT64 fence_value;
+    union {
+        ID3D12Resource* resource;
+        ID3D12PipelineState* pipeline;
+        ID3D12RootSignature* rootsig;
+        int slot_index;
+    };
+} _sg_d3d12_release_item_t;
+
+typedef struct {
+    _sg_sref_t cur_pip;
+} _sg_d3d12_cache_t;
+
+typedef struct {
+    bool valid;
+    ID3D12Device* dev;
+    ID3D12CommandQueue* cmd_queue;
+    // pipeline state cache
+    _sg_d3d12_cache_t cache;
+    // per-frame command recording
+    ID3D12CommandAllocator* frame_cmd_allocs[SG_NUM_INFLIGHT_FRAMES];
+    UINT64 frame_fence_values[SG_NUM_INFLIGHT_FRAMES];
+    ID3D12GraphicsCommandList* frame_cmd_list;
+    int frame_index;
+    bool frame_started;
+    // upload command list for initial resource data
+    ID3D12CommandAllocator* upload_cmd_alloc;
+    ID3D12GraphicsCommandList* upload_cmd_list;
+    UINT64 upload_fence_value;
+    // GPU/CPU synchronization (caller-owned via environment)
+    ID3D12Fence* fence;
+    HANDLE fence_event;
+    uint64_t* fence_value;
+    // current swapchain state
+    struct {
+        D3D12_CPU_DESCRIPTOR_HANDLE render_view;
+        D3D12_CPU_DESCRIPTOR_HANDLE resolve_view;
+        ID3D12Resource* render_target;
+        ID3D12Resource* resolve_target;
+    } cur_swapchain;
+    // uniform buffer ring for sg_apply_uniforms
+    struct {
+        ID3D12Resource* buf;
+        D3D12_GPU_VIRTUAL_ADDRESS gpu_addr;
+        uint8_t* base_ptr;
+        int size;
+        int per_frame_size;
+        int offset;
+    } ub;
+    // CPU-side descriptor heaps for resource creation
+    struct {
+        ID3D12DescriptorHeap* heap;
+        D3D12_CPU_DESCRIPTOR_HANDLE cpu_start;
+        UINT increment_size;
+        int num_descriptors;
+        int next_index;
+        int* free_queue;
+        int queue_top;
+    } srv_uav_heap;
+    struct {
+        ID3D12DescriptorHeap* heap;
+        D3D12_CPU_DESCRIPTOR_HANDLE cpu_start;
+        UINT increment_size;
+        int num_descriptors;
+        int next_index;
+        int* free_queue;
+        int queue_top;
+    } rtv_heap;
+    struct {
+        ID3D12DescriptorHeap* heap;
+        D3D12_CPU_DESCRIPTOR_HANDLE cpu_start;
+        UINT increment_size;
+        int num_descriptors;
+        int next_index;
+        int* free_queue;
+        int queue_top;
+    } dsv_heap;
+    struct {
+        ID3D12DescriptorHeap* heap;
+        D3D12_CPU_DESCRIPTOR_HANDLE cpu_start;
+        UINT increment_size;
+        int num_descriptors;
+        int next_index;
+        int* free_queue;
+        int queue_top;
+    } cpu_sampler_heap;
+    // GPU-visible descriptor heaps for shader binding
+    struct {
+        ID3D12DescriptorHeap* heap;
+        D3D12_CPU_DESCRIPTOR_HANDLE cpu_start;
+        D3D12_GPU_DESCRIPTOR_HANDLE gpu_start;
+        UINT increment_size;
+        int num_descriptors;
+        int per_frame_descriptors;
+        int cur_offset;
+    } shader_heap;
+    struct {
+        ID3D12DescriptorHeap* heap;
+        D3D12_CPU_DESCRIPTOR_HANDLE cpu_start;
+        D3D12_GPU_DESCRIPTOR_HANDLE gpu_start;
+        UINT increment_size;
+        int num_descriptors;
+        int per_frame_descriptors;
+        int cur_offset;
+    } sampler_heap;
+    bool descriptor_heaps_bound;
+    // per-draw binding state
+    struct {
+        D3D12_CPU_DESCRIPTOR_HANDLE vs_srvs[_SG_D3D12_MAX_STAGE_SRV_BINDINGS];
+        D3D12_CPU_DESCRIPTOR_HANDLE fs_srvs[_SG_D3D12_MAX_STAGE_SRV_BINDINGS];
+        D3D12_CPU_DESCRIPTOR_HANDLE cs_srvs[_SG_D3D12_MAX_STAGE_SRV_BINDINGS];
+        D3D12_CPU_DESCRIPTOR_HANDLE cs_uavs[_SG_D3D12_MAX_STAGE_UAV_BINDINGS];
+        D3D12_CPU_DESCRIPTOR_HANDLE vs_smps[_SG_D3D12_MAX_STAGE_SMP_BINDINGS];
+        D3D12_CPU_DESCRIPTOR_HANDLE fs_smps[_SG_D3D12_MAX_STAGE_SMP_BINDINGS];
+        D3D12_CPU_DESCRIPTOR_HANDLE cs_smps[_SG_D3D12_MAX_STAGE_SMP_BINDINGS];
+    } bnd;
+    // null descriptors for unbound slots
+    D3D12_CPU_DESCRIPTOR_HANDLE null_srv;
+    D3D12_CPU_DESCRIPTOR_HANDLE null_uav;
+    D3D12_CPU_DESCRIPTOR_HANDLE null_sampler;
+    // deferred resource release queue
+    struct {
+        _sg_d3d12_release_item_t* items;
+        int num_slots;
+        int front;
+        int back;
+    } release_queue;
+    // upload ring buffer for texture updates
+    struct {
+        ID3D12Resource* buffer;
+        UINT64 size;
+        UINT64 per_frame_size;
+        UINT64 offset;
+        void* mapped_ptr;
+    } upload_ring;
+    // deferred image update queue
+    struct {
+        _sg_d3d12_deferred_image_update_t* items;
+        int max_updates;
+        int num_updates;
+    } deferred_image_updates;
+    // on-demand loaded d3dcompiler_47.dll handles
+    HINSTANCE d3dcompiler_dll;
+    bool d3dcompiler_dll_load_failed;
+    pD3DCompile D3DCompile_func;
+} _sg_d3d12_backend_t;
 
 #elif defined(SOKOL_METAL)
 
@@ -7275,6 +7789,8 @@ typedef struct {
     _sg_mtl_backend_t mtl;
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_backend_t d3d11;
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_backend_t d3d12;
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_backend_t wgpu;
     #elif defined(SOKOL_VULKAN)
@@ -13132,6 +13648,10 @@ _SOKOL_PRIVATE void _sg_d3d11_setup_backend(const sg_desc* desc) {
 
 _SOKOL_PRIVATE void _sg_d3d11_discard_backend(void) {
     SOKOL_ASSERT(_sg.d3d11.valid);
+    if (_sg.d3d11.d3dcompiler_dll) {
+        FreeLibrary(_sg.d3d11.d3dcompiler_dll);
+        _sg.d3d11.d3dcompiler_dll = 0;
+    }
     _sg.d3d11.valid = false;
 }
 
@@ -14511,12 +15031,4635 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
     }
 }
 
-// ███    ███ ███████ ████████  █████  ██          ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
-// ████  ████ ██         ██    ██   ██ ██          ██   ██ ██   ██ ██      ██  ██  ██      ████   ██ ██   ██
-// ██ ████ ██ █████      ██    ███████ ██          ██████  ███████ ██      █████   █████   ██ ██  ██ ██   ██
-// ██  ██  ██ ██         ██    ██   ██ ██          ██   ██ ██   ██ ██      ██  ██  ██      ██  ██ ██ ██   ██
-// ██      ██ ███████    ██    ██   ██ ███████     ██████  ██   ██  ██████ ██   ██ ███████ ██   ████ ██████
+// ██████  ██████  ██████   ██ ██████   ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
+// ██   ██      ██ ██   ██ ███     ██   ██   ██ ██   ██ ██      ██  ██  ██      ████   ██ ██   ██
+// ██   ██  █████  ██   ██  ██  █████   ██████  ███████ ██      █████   █████   ██ ██  ██ ██   ██
+// ██   ██      ██ ██   ██  ██ ██       ██   ██ ██   ██ ██      ██  ██  ██      ██  ██ ██ ██   ██
+// ██████  ██████  ██████   ██ ██████   ██████  ██   ██  ██████ ██   ██ ███████ ██   ████ ██████
 //
+#elif defined(SOKOL_D3D12)
+
+static const GUID _sg_IID_ID3D12CommandAllocator = { 0x6102dee4, 0xaf59, 0x4b09, { 0xb9, 0x99, 0xb4, 0x4d, 0x73, 0xf0, 0x9b, 0x24 } };
+static const GUID _sg_IID_ID3D12GraphicsCommandList = { 0x5b160d0f, 0xac1b, 0x4185, { 0x8b, 0xa8, 0xb3, 0xae, 0x42, 0xa5, 0xa4, 0x55 } };
+static const GUID _sg_IID_ID3D12Resource = { 0x696442be, 0xa72e, 0x4059, { 0xbc, 0x79, 0x5b, 0x5c, 0x98, 0x04, 0x0f, 0xad } };
+static const GUID _sg_IID_ID3D12RootSignature = { 0xc54a6b66, 0x72df, 0x4ee8, { 0x8b, 0xe5, 0xa9, 0x46, 0xa1, 0x42, 0x92, 0x14 } };
+static const GUID _sg_IID_ID3D12PipelineState = { 0x765a30f3, 0xf624, 0x4c6f, { 0xa8, 0x28, 0xac, 0xe9, 0x48, 0x62, 0x24, 0x45 } };
+static const GUID _sg_IID_ID3D12Fence = { 0x0a753dcf, 0xc4d8, 0x4b91, { 0xad, 0xf6, 0xbe, 0x5a, 0x60, 0xd9, 0x5a, 0x76 } };
+static const GUID _sg_IID_ID3D12DescriptorHeap = { 0x8efb471d, 0x616c, 0x4f49, { 0x90, 0xf7, 0x12, 0x7b, 0xb7, 0x63, 0xfa, 0x51 } };
+
+#if defined(__cplusplus)
+#define _sg_d3d12_AddRef(self) (self)->AddRef()
+#else
+#define _sg_d3d12_AddRef(self) (self)->lpVtbl->AddRef(self)
+#endif
+
+#if defined(__cplusplus)
+#define _sg_d3d12_Release(self) (self)->Release()
+#else
+#define _sg_d3d12_Release(self) (self)->lpVtbl->Release(self)
+#endif
+
+#if defined(__cplusplus)
+#define _sg_win32_refguid(guid) guid
+#else
+#define _sg_win32_refguid(guid) &guid
+#endif
+
+// NOTE: This needs to be a macro since we can't use the polymorphism in C. It's called on many kinds of resources.
+// NOTE: Based on microsoft docs, it's fine to call this with pData=NULL if DataSize is also zero.
+#if defined(__cplusplus)
+#define _sg_d3d12_SetPrivateData(self, guid, DataSize, pData) (self)->SetPrivateData(guid, DataSize, pData)
+#else
+#define _sg_d3d12_SetPrivateData(self, guid, DataSize, pData) (self)->lpVtbl->SetPrivateData(self, guid, DataSize, pData)
+#endif
+
+static const GUID _sg_d3d12_WKPDID_D3DDebugObjectName = { 0x429b8c22,0x9188,0x4b0c, {0x87,0x42,0xac,0xb0,0xbf,0x85,0xc2,0x00} };
+
+#if defined(SOKOL_DEBUG)
+#define _sg_d3d12_setlabel(self, label) _sg_d3d12_SetPrivateData((ID3D12Object*)(self), _sg_win32_refguid(_sg_d3d12_WKPDID_D3DDebugObjectName), label ? (UINT)strlen(label) : 0, label)
+#else
+#define _sg_d3d12_setlabel(self, label)
+#endif
+
+//-- D3D12 C/C++ wrappers ------------------------------------------------------
+static inline HRESULT _sg_d3d12_CheckFeatureSupport(ID3D12Device* self, D3D12_FEATURE Feature, void* pFeatureSupportData, UINT FeatureSupportDataSize) {
+    #if defined(__cplusplus)
+        return self->CheckFeatureSupport(Feature, pFeatureSupportData, FeatureSupportDataSize);
+    #else
+        return self->lpVtbl->CheckFeatureSupport(self, Feature, pFeatureSupportData, FeatureSupportDataSize);
+    #endif
+}
+
+static inline HRESULT _sg_d3d12_CreateCommandAllocator(ID3D12Device* self, D3D12_COMMAND_LIST_TYPE type, REFIID riid, void** ppCommandAllocator) {
+    #if defined(__cplusplus)
+        return self->CreateCommandAllocator(type, riid, ppCommandAllocator);
+    #else
+        return self->lpVtbl->CreateCommandAllocator(self, type, riid, ppCommandAllocator);
+    #endif
+}
+
+static inline HRESULT _sg_d3d12_CreateCommandList(ID3D12Device* self, UINT nodeMask, D3D12_COMMAND_LIST_TYPE type, ID3D12CommandAllocator* pCommandAllocator, ID3D12PipelineState* pInitialState, REFIID riid, void** ppCommandList) {
+    #if defined(__cplusplus)
+        return self->CreateCommandList(nodeMask, type, pCommandAllocator, pInitialState, riid, ppCommandList);
+    #else
+        return self->lpVtbl->CreateCommandList(self, nodeMask, type, pCommandAllocator, pInitialState, riid, ppCommandList);
+    #endif
+}
+
+static inline HRESULT _sg_d3d12_CreateCommittedResource(ID3D12Device* self, const D3D12_HEAP_PROPERTIES* pHeapProperties, D3D12_HEAP_FLAGS HeapFlags, const D3D12_RESOURCE_DESC* pDesc, D3D12_RESOURCE_STATES InitialResourceState, const D3D12_CLEAR_VALUE* pOptimizedClearValue, REFIID riid, void** ppvResource) {
+    #if defined(__cplusplus)
+        return self->CreateCommittedResource(pHeapProperties, HeapFlags, pDesc, InitialResourceState, pOptimizedClearValue, riid, ppvResource);
+    #else
+        return self->lpVtbl->CreateCommittedResource(self, pHeapProperties, HeapFlags, pDesc, InitialResourceState, pOptimizedClearValue, riid, ppvResource);
+    #endif
+}
+
+static inline D3D12_RESOURCE_DESC _sg_d3d12_GetDesc(ID3D12Resource* self) {
+    #if defined(__cplusplus)
+        return self->GetDesc();
+    #else
+        D3D12_RESOURCE_DESC desc;
+        self->lpVtbl->GetDesc(self, &desc);
+        return desc;
+    #endif
+}
+
+static inline HRESULT _sg_d3d12_CreateRootSignature(ID3D12Device* self, UINT nodeMask, const void* pBlobWithRootSignature, SIZE_T blobLengthInBytes, REFIID riid, void** ppvRootSignature) {
+    #if defined(__cplusplus)
+        return self->CreateRootSignature(nodeMask, pBlobWithRootSignature, blobLengthInBytes, riid, ppvRootSignature);
+    #else
+        return self->lpVtbl->CreateRootSignature(self, nodeMask, pBlobWithRootSignature, blobLengthInBytes, riid, ppvRootSignature);
+    #endif
+}
+
+static inline HRESULT _sg_d3d12_CreateGraphicsPipelineState(ID3D12Device* self, const D3D12_GRAPHICS_PIPELINE_STATE_DESC* pDesc, REFIID riid, void** ppPipelineState) {
+    #if defined(__cplusplus)
+        return self->CreateGraphicsPipelineState(pDesc, riid, ppPipelineState);
+    #else
+        return self->lpVtbl->CreateGraphicsPipelineState(self, pDesc, riid, ppPipelineState);
+    #endif
+}
+
+static inline HRESULT _sg_d3d12_CreateComputePipelineState(ID3D12Device* self, const D3D12_COMPUTE_PIPELINE_STATE_DESC* pDesc, REFIID riid, void** ppPipelineState) {
+    #if defined(__cplusplus)
+        return self->CreateComputePipelineState(pDesc, riid, ppPipelineState);
+    #else
+        return self->lpVtbl->CreateComputePipelineState(self, pDesc, riid, ppPipelineState);
+    #endif
+}
+
+static inline HRESULT _sg_d3d12_ResetCommandAllocator(ID3D12CommandAllocator* self) {
+    #if defined(__cplusplus)
+        return self->Reset();
+    #else
+        return self->lpVtbl->Reset(self);
+    #endif
+}
+
+static inline HRESULT _sg_d3d12_ResetCommandList(ID3D12GraphicsCommandList* self, ID3D12CommandAllocator* pAllocator, ID3D12PipelineState* pInitialState) {
+    #if defined(__cplusplus)
+        return self->Reset(pAllocator, pInitialState);
+    #else
+        return self->lpVtbl->Reset(self, pAllocator, pInitialState);
+    #endif
+}
+
+static inline HRESULT _sg_d3d12_Close(ID3D12GraphicsCommandList* self) {
+    #if defined(__cplusplus)
+        return self->Close();
+    #else
+        return self->lpVtbl->Close(self);
+    #endif
+}
+
+static inline void _sg_d3d12_ResourceBarrier(ID3D12GraphicsCommandList* self, UINT NumBarriers, const D3D12_RESOURCE_BARRIER* pBarriers) {
+    #if defined(__cplusplus)
+        self->ResourceBarrier(NumBarriers, pBarriers);
+    #else
+        self->lpVtbl->ResourceBarrier(self, NumBarriers, pBarriers);
+    #endif
+}
+
+static inline void _sg_d3d12_ResolveSubresource(ID3D12GraphicsCommandList* self, ID3D12Resource* pDstResource, UINT DstSubresource, ID3D12Resource* pSrcResource, UINT SrcSubresource, DXGI_FORMAT Format) {
+    #if defined(__cplusplus)
+        self->ResolveSubresource(pDstResource, DstSubresource, pSrcResource, SrcSubresource, Format);
+    #else
+        self->lpVtbl->ResolveSubresource(self, pDstResource, DstSubresource, pSrcResource, SrcSubresource, Format);
+    #endif
+}
+
+static inline void _sg_d3d12_ClearRenderTargetView(ID3D12GraphicsCommandList* self, D3D12_CPU_DESCRIPTOR_HANDLE RenderTargetView, const FLOAT ColorRGBA[4], UINT NumRects, const D3D12_RECT* pRects) {
+    #if defined(__cplusplus)
+        self->ClearRenderTargetView(RenderTargetView, ColorRGBA, NumRects, pRects);
+    #else
+        self->lpVtbl->ClearRenderTargetView(self, RenderTargetView, ColorRGBA, NumRects, pRects);
+    #endif
+}
+
+static inline void _sg_d3d12_ClearDepthStencilView(ID3D12GraphicsCommandList* self, D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilView, D3D12_CLEAR_FLAGS ClearFlags, FLOAT Depth, UINT8 Stencil, UINT NumRects, const D3D12_RECT* pRects) {
+    #if defined(__cplusplus)
+        self->ClearDepthStencilView(DepthStencilView, ClearFlags, Depth, Stencil, NumRects, pRects);
+    #else
+        self->lpVtbl->ClearDepthStencilView(self, DepthStencilView, ClearFlags, Depth, Stencil, NumRects, pRects);
+    #endif
+}
+
+static inline void _sg_d3d12_OMSetRenderTargets(ID3D12GraphicsCommandList* self, UINT NumRenderTargetDescriptors, const D3D12_CPU_DESCRIPTOR_HANDLE* pRenderTargetDescriptors, BOOL RTsSingleHandleToDescriptorRange, const D3D12_CPU_DESCRIPTOR_HANDLE* pDepthStencilDescriptor) {
+    #if defined(__cplusplus)
+        self->OMSetRenderTargets(NumRenderTargetDescriptors, pRenderTargetDescriptors, RTsSingleHandleToDescriptorRange, pDepthStencilDescriptor);
+    #else
+        self->lpVtbl->OMSetRenderTargets(self, NumRenderTargetDescriptors, pRenderTargetDescriptors, RTsSingleHandleToDescriptorRange, pDepthStencilDescriptor);
+    #endif
+}
+
+static inline void _sg_d3d12_RSSetViewports(ID3D12GraphicsCommandList* self, UINT NumViewports, const D3D12_VIEWPORT* pViewports) {
+    #if defined(__cplusplus)
+        self->RSSetViewports(NumViewports, pViewports);
+    #else
+        self->lpVtbl->RSSetViewports(self, NumViewports, pViewports);
+    #endif
+}
+
+static inline void _sg_d3d12_RSSetScissorRects(ID3D12GraphicsCommandList* self, UINT NumRects, const D3D12_RECT* pRects) {
+    #if defined(__cplusplus)
+        self->RSSetScissorRects(NumRects, pRects);
+    #else
+        self->lpVtbl->RSSetScissorRects(self, NumRects, pRects);
+    #endif
+}
+
+static inline void _sg_d3d12_ExecuteCommandLists(ID3D12CommandQueue* self, UINT NumCommandLists, ID3D12CommandList* const* ppCommandLists) {
+    #if defined(__cplusplus)
+        self->ExecuteCommandLists(NumCommandLists, ppCommandLists);
+    #else
+        self->lpVtbl->ExecuteCommandLists(self, NumCommandLists, ppCommandLists);
+    #endif
+}
+
+static inline HRESULT _sg_d3d12_Map(ID3D12Resource* self, UINT Subresource, const D3D12_RANGE* pReadRange, void** ppData) {
+    #if defined(__cplusplus)
+        return self->Map(Subresource, pReadRange, ppData);
+    #else
+        return self->lpVtbl->Map(self, Subresource, pReadRange, ppData);
+    #endif
+}
+
+static inline void _sg_d3d12_Unmap(ID3D12Resource* self, UINT Subresource, const D3D12_RANGE* pWrittenRange) {
+    #if defined(__cplusplus)
+        self->Unmap(Subresource, pWrittenRange);
+    #else
+        self->lpVtbl->Unmap(self, Subresource, pWrittenRange);
+    #endif
+}
+
+static inline D3D12_GPU_VIRTUAL_ADDRESS _sg_d3d12_GetGPUVirtualAddress(ID3D12Resource* self) {
+    #if defined(__cplusplus)
+        return self->GetGPUVirtualAddress();
+    #else
+        return self->lpVtbl->GetGPUVirtualAddress(self);
+    #endif
+}
+
+static inline void _sg_d3d12_SetPipelineState(ID3D12GraphicsCommandList* self, ID3D12PipelineState* pPipelineState) {
+    #if defined(__cplusplus)
+        self->SetPipelineState(pPipelineState);
+    #else
+        self->lpVtbl->SetPipelineState(self, pPipelineState);
+    #endif
+}
+
+static inline void _sg_d3d12_SetGraphicsRootSignature(ID3D12GraphicsCommandList* self, ID3D12RootSignature* pRootSignature) {
+    #if defined(__cplusplus)
+        self->SetGraphicsRootSignature(pRootSignature);
+    #else
+        self->lpVtbl->SetGraphicsRootSignature(self, pRootSignature);
+    #endif
+}
+
+static inline void _sg_d3d12_SetComputeRootSignature(ID3D12GraphicsCommandList* self, ID3D12RootSignature* pRootSignature) {
+    #if defined(__cplusplus)
+        self->SetComputeRootSignature(pRootSignature);
+    #else
+        self->lpVtbl->SetComputeRootSignature(self, pRootSignature);
+    #endif
+}
+
+static inline void _sg_d3d12_IASetPrimitiveTopology(ID3D12GraphicsCommandList* self, D3D12_PRIMITIVE_TOPOLOGY PrimitiveTopology) {
+    #if defined(__cplusplus)
+        self->IASetPrimitiveTopology(PrimitiveTopology);
+    #else
+        self->lpVtbl->IASetPrimitiveTopology(self, PrimitiveTopology);
+    #endif
+}
+
+static inline void _sg_d3d12_IASetVertexBuffers(ID3D12GraphicsCommandList* self, UINT StartSlot, UINT NumViews, const D3D12_VERTEX_BUFFER_VIEW* pViews) {
+    #if defined(__cplusplus)
+        self->IASetVertexBuffers(StartSlot, NumViews, pViews);
+    #else
+        self->lpVtbl->IASetVertexBuffers(self, StartSlot, NumViews, pViews);
+    #endif
+}
+
+static inline void _sg_d3d12_IASetIndexBuffer(ID3D12GraphicsCommandList* self, const D3D12_INDEX_BUFFER_VIEW* pView) {
+    #if defined(__cplusplus)
+        self->IASetIndexBuffer(pView);
+    #else
+        self->lpVtbl->IASetIndexBuffer(self, pView);
+    #endif
+}
+
+static inline void _sg_d3d12_OMSetStencilRef(ID3D12GraphicsCommandList* self, UINT StencilRef) {
+    #if defined(__cplusplus)
+        self->OMSetStencilRef(StencilRef);
+    #else
+        self->lpVtbl->OMSetStencilRef(self, StencilRef);
+    #endif
+}
+
+static inline void _sg_d3d12_OMSetBlendFactor(ID3D12GraphicsCommandList* self, const FLOAT BlendFactor[4]) {
+    #if defined(__cplusplus)
+        self->OMSetBlendFactor(BlendFactor);
+    #else
+        self->lpVtbl->OMSetBlendFactor(self, BlendFactor);
+    #endif
+}
+
+static inline void _sg_d3d12_SetGraphicsRootConstantBufferView(ID3D12GraphicsCommandList* self, UINT RootParameterIndex, D3D12_GPU_VIRTUAL_ADDRESS BufferLocation) {
+    #if defined(__cplusplus)
+        self->SetGraphicsRootConstantBufferView(RootParameterIndex, BufferLocation);
+    #else
+        self->lpVtbl->SetGraphicsRootConstantBufferView(self, RootParameterIndex, BufferLocation);
+    #endif
+}
+
+static inline void _sg_d3d12_SetGraphicsRootDescriptorTable(ID3D12GraphicsCommandList* self, UINT RootParameterIndex, D3D12_GPU_DESCRIPTOR_HANDLE BaseDescriptor) {
+    #if defined(__cplusplus)
+        self->SetGraphicsRootDescriptorTable(RootParameterIndex, BaseDescriptor);
+    #else
+        self->lpVtbl->SetGraphicsRootDescriptorTable(self, RootParameterIndex, BaseDescriptor);
+    #endif
+}
+
+static inline void _sg_d3d12_SetComputeRootConstantBufferView(ID3D12GraphicsCommandList* self, UINT RootParameterIndex, D3D12_GPU_VIRTUAL_ADDRESS BufferLocation) {
+    #if defined(__cplusplus)
+        self->SetComputeRootConstantBufferView(RootParameterIndex, BufferLocation);
+    #else
+        self->lpVtbl->SetComputeRootConstantBufferView(self, RootParameterIndex, BufferLocation);
+    #endif
+}
+
+static inline void _sg_d3d12_SetComputeRootDescriptorTable(ID3D12GraphicsCommandList* self, UINT RootParameterIndex, D3D12_GPU_DESCRIPTOR_HANDLE BaseDescriptor) {
+    #if defined(__cplusplus)
+        self->SetComputeRootDescriptorTable(RootParameterIndex, BaseDescriptor);
+    #else
+        self->lpVtbl->SetComputeRootDescriptorTable(self, RootParameterIndex, BaseDescriptor);
+    #endif
+}
+
+static inline void _sg_d3d12_Dispatch(ID3D12GraphicsCommandList* self, UINT ThreadGroupCountX, UINT ThreadGroupCountY, UINT ThreadGroupCountZ) {
+    #if defined(__cplusplus)
+        self->Dispatch(ThreadGroupCountX, ThreadGroupCountY, ThreadGroupCountZ);
+    #else
+        self->lpVtbl->Dispatch(self, ThreadGroupCountX, ThreadGroupCountY, ThreadGroupCountZ);
+    #endif
+}
+
+static inline void _sg_d3d12_SetDescriptorHeaps(ID3D12GraphicsCommandList* self, UINT NumDescriptorHeaps, ID3D12DescriptorHeap* const* ppDescriptorHeaps) {
+    #if defined(__cplusplus)
+        self->SetDescriptorHeaps(NumDescriptorHeaps, ppDescriptorHeaps);
+    #else
+        self->lpVtbl->SetDescriptorHeaps(self, NumDescriptorHeaps, ppDescriptorHeaps);
+    #endif
+}
+
+static inline void _sg_d3d12_CopyDescriptors(ID3D12Device* self, UINT NumDestDescriptorRanges, const D3D12_CPU_DESCRIPTOR_HANDLE* pDestDescriptorRangeStarts, const UINT* pDestDescriptorRangeSizes, UINT NumSrcDescriptorRanges, const D3D12_CPU_DESCRIPTOR_HANDLE* pSrcDescriptorRangeStarts, const UINT* pSrcDescriptorRangeSizes, D3D12_DESCRIPTOR_HEAP_TYPE DescriptorHeapsType) {
+    #if defined(__cplusplus)
+        self->CopyDescriptors(NumDestDescriptorRanges, pDestDescriptorRangeStarts, pDestDescriptorRangeSizes, NumSrcDescriptorRanges, pSrcDescriptorRangeStarts, pSrcDescriptorRangeSizes, DescriptorHeapsType);
+    #else
+        self->lpVtbl->CopyDescriptors(self, NumDestDescriptorRanges, pDestDescriptorRangeStarts, pDestDescriptorRangeSizes, NumSrcDescriptorRanges, pSrcDescriptorRangeStarts, pSrcDescriptorRangeSizes, DescriptorHeapsType);
+    #endif
+}
+
+static inline void _sg_d3d12_GetCopyableFootprints(ID3D12Device* self, const D3D12_RESOURCE_DESC* pResourceDesc, UINT FirstSubresource, UINT NumSubresources, UINT64 BaseOffset, D3D12_PLACED_SUBRESOURCE_FOOTPRINT* pLayouts, UINT* pNumRows, UINT64* pRowSizeInBytes, UINT64* pTotalBytes) {
+    #if defined(__cplusplus)
+        self->GetCopyableFootprints(pResourceDesc, FirstSubresource, NumSubresources, BaseOffset, pLayouts, pNumRows, pRowSizeInBytes, pTotalBytes);
+    #else
+        self->lpVtbl->GetCopyableFootprints(self, pResourceDesc, FirstSubresource, NumSubresources, BaseOffset, pLayouts, pNumRows, pRowSizeInBytes, pTotalBytes);
+    #endif
+}
+
+static inline void _sg_d3d12_CopyTextureRegion(ID3D12GraphicsCommandList* self, const D3D12_TEXTURE_COPY_LOCATION* pDst, UINT DstX, UINT DstY, UINT DstZ, const D3D12_TEXTURE_COPY_LOCATION* pSrc, const D3D12_BOX* pSrcBox) {
+    #if defined(__cplusplus)
+        self->CopyTextureRegion(pDst, DstX, DstY, DstZ, pSrc, pSrcBox);
+    #else
+        self->lpVtbl->CopyTextureRegion(self, pDst, DstX, DstY, DstZ, pSrc, pSrcBox);
+    #endif
+}
+
+static inline void _sg_d3d12_CopyBufferRegion(ID3D12GraphicsCommandList* self, ID3D12Resource* pDstBuffer, UINT64 DstOffset, ID3D12Resource* pSrcBuffer, UINT64 SrcOffset, UINT64 NumBytes) {
+    #if defined(__cplusplus)
+        self->CopyBufferRegion(pDstBuffer, DstOffset, pSrcBuffer, SrcOffset, NumBytes);
+    #else
+        self->lpVtbl->CopyBufferRegion(self, pDstBuffer, DstOffset, pSrcBuffer, SrcOffset, NumBytes);
+    #endif
+}
+
+static inline void _sg_d3d12_DrawInstanced(ID3D12GraphicsCommandList* self, UINT VertexCountPerInstance, UINT InstanceCount, UINT StartVertexLocation, UINT StartInstanceLocation) {
+    #if defined(__cplusplus)
+        self->DrawInstanced(VertexCountPerInstance, InstanceCount, StartVertexLocation, StartInstanceLocation);
+    #else
+        self->lpVtbl->DrawInstanced(self, VertexCountPerInstance, InstanceCount, StartVertexLocation, StartInstanceLocation);
+    #endif
+}
+
+static inline void _sg_d3d12_DrawIndexedInstanced(ID3D12GraphicsCommandList* self, UINT IndexCountPerInstance, UINT InstanceCount, UINT StartIndexLocation, INT BaseVertexLocation, UINT StartInstanceLocation) {
+    #if defined(__cplusplus)
+        self->DrawIndexedInstanced(IndexCountPerInstance, InstanceCount, StartIndexLocation, BaseVertexLocation, StartInstanceLocation);
+    #else
+        self->lpVtbl->DrawIndexedInstanced(self, IndexCountPerInstance, InstanceCount, StartIndexLocation, BaseVertexLocation, StartInstanceLocation);
+    #endif
+}
+
+static inline HRESULT _sg_d3d12_CreateFence(ID3D12Device* self, UINT64 InitialValue, D3D12_FENCE_FLAGS Flags, REFIID riid, void** ppFence) {
+    #if defined(__cplusplus)
+        return self->CreateFence(InitialValue, Flags, riid, ppFence);
+    #else
+        return self->lpVtbl->CreateFence(self, InitialValue, Flags, riid, ppFence);
+    #endif
+}
+
+static inline UINT64 _sg_d3d12_GetCompletedValue(ID3D12Fence* self) {
+    #if defined(__cplusplus)
+        return self->GetCompletedValue();
+    #else
+        return self->lpVtbl->GetCompletedValue(self);
+    #endif
+}
+
+static inline HRESULT _sg_d3d12_SetEventOnCompletion(ID3D12Fence* self, UINT64 Value, HANDLE hEvent) {
+    #if defined(__cplusplus)
+        return self->SetEventOnCompletion(Value, hEvent);
+    #else
+        return self->lpVtbl->SetEventOnCompletion(self, Value, hEvent);
+    #endif
+}
+
+static inline HRESULT _sg_d3d12_Signal(ID3D12CommandQueue* self, ID3D12Fence* pFence, UINT64 Value) {
+    #if defined(__cplusplus)
+        return self->Signal(pFence, Value);
+    #else
+        return self->lpVtbl->Signal(self, pFence, Value);
+    #endif
+}
+
+static inline void _sg_d3d12_ReleaseFence(ID3D12Fence* self) {
+    #if defined(__cplusplus)
+        self->Release();
+    #else
+        self->lpVtbl->Release(self);
+    #endif
+}
+
+static inline HRESULT _sg_d3d12_CreateDescriptorHeap(ID3D12Device* self, const D3D12_DESCRIPTOR_HEAP_DESC* pDesc, ID3D12DescriptorHeap** ppHeap) {
+    #if defined(__cplusplus)
+        return self->CreateDescriptorHeap(pDesc, IID_PPV_ARGS(ppHeap));
+    #else
+        return self->lpVtbl->CreateDescriptorHeap(self, pDesc, &_sg_IID_ID3D12DescriptorHeap, (void**)ppHeap);
+    #endif
+}
+
+static inline UINT _sg_d3d12_GetDescriptorHandleIncrementSize(ID3D12Device* self, D3D12_DESCRIPTOR_HEAP_TYPE type) {
+    #if defined(__cplusplus)
+        return self->GetDescriptorHandleIncrementSize(type);
+    #else
+        return self->lpVtbl->GetDescriptorHandleIncrementSize(self, type);
+    #endif
+}
+
+static inline D3D12_CPU_DESCRIPTOR_HANDLE _sg_d3d12_GetCPUDescriptorHandleForHeapStart(ID3D12DescriptorHeap* self) {
+    #if defined(__cplusplus)
+        return self->GetCPUDescriptorHandleForHeapStart();
+    #else
+        D3D12_CPU_DESCRIPTOR_HANDLE handle;
+        self->lpVtbl->GetCPUDescriptorHandleForHeapStart(self, &handle);
+        return handle;
+    #endif
+}
+
+static inline D3D12_GPU_DESCRIPTOR_HANDLE _sg_d3d12_GetGPUDescriptorHandleForHeapStart(ID3D12DescriptorHeap* self) {
+    #if defined(__cplusplus)
+        return self->GetGPUDescriptorHandleForHeapStart();
+    #else
+        D3D12_GPU_DESCRIPTOR_HANDLE handle;
+        self->lpVtbl->GetGPUDescriptorHandleForHeapStart(self, &handle);
+        return handle;
+    #endif
+}
+
+static inline void _sg_d3d12_ReleaseDescriptorHeap(ID3D12DescriptorHeap* self) {
+    #if defined(__cplusplus)
+        self->Release();
+    #else
+        self->lpVtbl->Release(self);
+    #endif
+}
+
+static inline void _sg_d3d12_CreateShaderResourceView(ID3D12Device* self, ID3D12Resource* pResource, const D3D12_SHADER_RESOURCE_VIEW_DESC* pDesc, D3D12_CPU_DESCRIPTOR_HANDLE DestDescriptor) {
+    #if defined(__cplusplus)
+        self->CreateShaderResourceView(pResource, pDesc, DestDescriptor);
+    #else
+        self->lpVtbl->CreateShaderResourceView(self, pResource, pDesc, DestDescriptor);
+    #endif
+}
+
+static inline void _sg_d3d12_CreateUnorderedAccessView(ID3D12Device* self, ID3D12Resource* pResource, ID3D12Resource* pCounterResource, const D3D12_UNORDERED_ACCESS_VIEW_DESC* pDesc, D3D12_CPU_DESCRIPTOR_HANDLE DestDescriptor) {
+    #if defined(__cplusplus)
+        self->CreateUnorderedAccessView(pResource, pCounterResource, pDesc, DestDescriptor);
+    #else
+        self->lpVtbl->CreateUnorderedAccessView(self, pResource, pCounterResource, pDesc, DestDescriptor);
+    #endif
+}
+
+static inline void _sg_d3d12_CreateRenderTargetView(ID3D12Device* self, ID3D12Resource* pResource, const D3D12_RENDER_TARGET_VIEW_DESC* pDesc, D3D12_CPU_DESCRIPTOR_HANDLE DestDescriptor) {
+    #if defined(__cplusplus)
+        self->CreateRenderTargetView(pResource, pDesc, DestDescriptor);
+    #else
+        self->lpVtbl->CreateRenderTargetView(self, pResource, pDesc, DestDescriptor);
+    #endif
+}
+
+static inline void _sg_d3d12_CreateDepthStencilView(ID3D12Device* self, ID3D12Resource* pResource, const D3D12_DEPTH_STENCIL_VIEW_DESC* pDesc, D3D12_CPU_DESCRIPTOR_HANDLE DestDescriptor) {
+    #if defined(__cplusplus)
+        self->CreateDepthStencilView(pResource, pDesc, DestDescriptor);
+    #else
+        self->lpVtbl->CreateDepthStencilView(self, pResource, pDesc, DestDescriptor);
+    #endif
+}
+
+static inline void _sg_d3d12_CreateSampler(ID3D12Device* self, const D3D12_SAMPLER_DESC* pDesc, D3D12_CPU_DESCRIPTOR_HANDLE DestDescriptor) {
+    #if defined(__cplusplus)
+        self->CreateSampler(pDesc, DestDescriptor);
+    #else
+        self->lpVtbl->CreateSampler(self, pDesc, DestDescriptor);
+    #endif
+}
+
+static inline void _sg_d3d12_BeginEvent(ID3D12GraphicsCommandList* self, UINT Metadata, const void* pData, UINT Size) {
+    #if defined(__cplusplus)
+        self->BeginEvent(Metadata, pData, Size);
+    #else
+        self->lpVtbl->BeginEvent(self, Metadata, pData, Size);
+    #endif
+}
+
+static inline void _sg_d3d12_EndEvent(ID3D12GraphicsCommandList* self) {
+    #if defined(__cplusplus)
+        self->EndEvent();
+    #else
+        self->lpVtbl->EndEvent(self);
+    #endif
+}
+
+//-- enum translation functions ------------------------------------------------
+// convert sokol pixel format to DXGI format for texture resource creation, using typeless for depth formats
+_SOKOL_PRIVATE DXGI_FORMAT _sg_d3d12_texture_pixel_format(sg_pixel_format fmt) {
+    switch (fmt) {
+        case SG_PIXELFORMAT_R8:             return DXGI_FORMAT_R8_UNORM;
+        case SG_PIXELFORMAT_R8SN:           return DXGI_FORMAT_R8_SNORM;
+        case SG_PIXELFORMAT_R8UI:           return DXGI_FORMAT_R8_UINT;
+        case SG_PIXELFORMAT_R8SI:           return DXGI_FORMAT_R8_SINT;
+        case SG_PIXELFORMAT_R16:            return DXGI_FORMAT_R16_UNORM;
+        case SG_PIXELFORMAT_R16SN:          return DXGI_FORMAT_R16_SNORM;
+        case SG_PIXELFORMAT_R16UI:          return DXGI_FORMAT_R16_UINT;
+        case SG_PIXELFORMAT_R16SI:          return DXGI_FORMAT_R16_SINT;
+        case SG_PIXELFORMAT_R16F:           return DXGI_FORMAT_R16_FLOAT;
+        case SG_PIXELFORMAT_RG8:            return DXGI_FORMAT_R8G8_UNORM;
+        case SG_PIXELFORMAT_RG8SN:          return DXGI_FORMAT_R8G8_SNORM;
+        case SG_PIXELFORMAT_RG8UI:          return DXGI_FORMAT_R8G8_UINT;
+        case SG_PIXELFORMAT_RG8SI:          return DXGI_FORMAT_R8G8_SINT;
+        case SG_PIXELFORMAT_R32UI:          return DXGI_FORMAT_R32_UINT;
+        case SG_PIXELFORMAT_R32SI:          return DXGI_FORMAT_R32_SINT;
+        case SG_PIXELFORMAT_R32F:           return DXGI_FORMAT_R32_FLOAT;
+        case SG_PIXELFORMAT_RG16:           return DXGI_FORMAT_R16G16_UNORM;
+        case SG_PIXELFORMAT_RG16SN:         return DXGI_FORMAT_R16G16_SNORM;
+        case SG_PIXELFORMAT_RG16UI:         return DXGI_FORMAT_R16G16_UINT;
+        case SG_PIXELFORMAT_RG16SI:         return DXGI_FORMAT_R16G16_SINT;
+        case SG_PIXELFORMAT_RG16F:          return DXGI_FORMAT_R16G16_FLOAT;
+        case SG_PIXELFORMAT_RGBA8:          return DXGI_FORMAT_R8G8B8A8_UNORM;
+        case SG_PIXELFORMAT_SRGB8A8:        return DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+        case SG_PIXELFORMAT_RGBA8SN:        return DXGI_FORMAT_R8G8B8A8_SNORM;
+        case SG_PIXELFORMAT_RGBA8UI:        return DXGI_FORMAT_R8G8B8A8_UINT;
+        case SG_PIXELFORMAT_RGBA8SI:        return DXGI_FORMAT_R8G8B8A8_SINT;
+        case SG_PIXELFORMAT_BGRA8:          return DXGI_FORMAT_B8G8R8A8_UNORM;
+        case SG_PIXELFORMAT_RGB10A2:        return DXGI_FORMAT_R10G10B10A2_UNORM;
+        case SG_PIXELFORMAT_RG11B10F:       return DXGI_FORMAT_R11G11B10_FLOAT;
+        case SG_PIXELFORMAT_RGB9E5:         return DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
+        case SG_PIXELFORMAT_RG32UI:         return DXGI_FORMAT_R32G32_UINT;
+        case SG_PIXELFORMAT_RG32SI:         return DXGI_FORMAT_R32G32_SINT;
+        case SG_PIXELFORMAT_RG32F:          return DXGI_FORMAT_R32G32_FLOAT;
+        case SG_PIXELFORMAT_RGBA16:         return DXGI_FORMAT_R16G16B16A16_UNORM;
+        case SG_PIXELFORMAT_RGBA16SN:       return DXGI_FORMAT_R16G16B16A16_SNORM;
+        case SG_PIXELFORMAT_RGBA16UI:       return DXGI_FORMAT_R16G16B16A16_UINT;
+        case SG_PIXELFORMAT_RGBA16SI:       return DXGI_FORMAT_R16G16B16A16_SINT;
+        case SG_PIXELFORMAT_RGBA16F:        return DXGI_FORMAT_R16G16B16A16_FLOAT;
+        case SG_PIXELFORMAT_RGBA32UI:       return DXGI_FORMAT_R32G32B32A32_UINT;
+        case SG_PIXELFORMAT_RGBA32SI:       return DXGI_FORMAT_R32G32B32A32_SINT;
+        case SG_PIXELFORMAT_RGBA32F:        return DXGI_FORMAT_R32G32B32A32_FLOAT;
+        case SG_PIXELFORMAT_DEPTH:          return DXGI_FORMAT_R32_TYPELESS;
+        case SG_PIXELFORMAT_DEPTH_STENCIL:  return DXGI_FORMAT_R24G8_TYPELESS;
+        case SG_PIXELFORMAT_BC1_RGBA:       return DXGI_FORMAT_BC1_UNORM;
+        case SG_PIXELFORMAT_BC2_RGBA:       return DXGI_FORMAT_BC2_UNORM;
+        case SG_PIXELFORMAT_BC3_RGBA:       return DXGI_FORMAT_BC3_UNORM;
+        case SG_PIXELFORMAT_BC3_SRGBA:      return DXGI_FORMAT_BC3_UNORM_SRGB;
+        case SG_PIXELFORMAT_BC4_R:          return DXGI_FORMAT_BC4_UNORM;
+        case SG_PIXELFORMAT_BC4_RSN:        return DXGI_FORMAT_BC4_SNORM;
+        case SG_PIXELFORMAT_BC5_RG:         return DXGI_FORMAT_BC5_UNORM;
+        case SG_PIXELFORMAT_BC5_RGSN:       return DXGI_FORMAT_BC5_SNORM;
+        case SG_PIXELFORMAT_BC6H_RGBF:      return DXGI_FORMAT_BC6H_SF16;
+        case SG_PIXELFORMAT_BC6H_RGBUF:     return DXGI_FORMAT_BC6H_UF16;
+        case SG_PIXELFORMAT_BC7_RGBA:       return DXGI_FORMAT_BC7_UNORM;
+        case SG_PIXELFORMAT_BC7_SRGBA:      return DXGI_FORMAT_BC7_UNORM_SRGB;
+        default:                            return DXGI_FORMAT_UNKNOWN;
+    };
+}
+
+// convert sokol pixel format to DXGI format for shader resource view, mapping depth formats to readable types
+_SOKOL_PRIVATE DXGI_FORMAT _sg_d3d12_srv_pixel_format(sg_pixel_format fmt) {
+    if (fmt == SG_PIXELFORMAT_DEPTH) {
+        return DXGI_FORMAT_R32_FLOAT;
+    } else if (fmt == SG_PIXELFORMAT_DEPTH_STENCIL) {
+        return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+    } else {
+        return _sg_d3d12_texture_pixel_format(fmt);
+    }
+}
+
+// convert sokol pixel format to DXGI format for depth stencil view
+_SOKOL_PRIVATE DXGI_FORMAT _sg_d3d12_dsv_pixel_format(sg_pixel_format fmt) {
+    if (fmt == SG_PIXELFORMAT_DEPTH) {
+        return DXGI_FORMAT_D32_FLOAT;
+    } else if (fmt == SG_PIXELFORMAT_DEPTH_STENCIL) {
+        return DXGI_FORMAT_D24_UNORM_S8_UINT;
+    } else {
+        return _sg_d3d12_texture_pixel_format(fmt);
+    }
+}
+
+// convert sokol pixel format to DXGI format for render target view or unordered access view
+_SOKOL_PRIVATE DXGI_FORMAT _sg_d3d12_rtv_uav_pixel_format(sg_pixel_format fmt) {
+    if (fmt == SG_PIXELFORMAT_DEPTH) {
+        return DXGI_FORMAT_R32_FLOAT;
+    } else if (fmt == SG_PIXELFORMAT_DEPTH_STENCIL) {
+        return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+    } else {
+        return _sg_d3d12_texture_pixel_format(fmt);
+    }
+}
+
+static inline LPVOID _sg_d3d12_GetBufferPointer(ID3D10Blob* self) {
+    #if defined(__cplusplus)
+        return self->GetBufferPointer();
+    #else
+        return self->lpVtbl->GetBufferPointer(self);
+    #endif
+}
+
+static inline SIZE_T _sg_d3d12_GetBufferSize(ID3D10Blob* self) {
+    #if defined(__cplusplus)
+        return self->GetBufferSize();
+    #else
+        return self->lpVtbl->GetBufferSize(self);
+    #endif
+}
+
+// convert sokol primitive type to D3D12 primitive topology for IASetPrimitiveTopology
+_SOKOL_PRIVATE D3D_PRIMITIVE_TOPOLOGY _sg_d3d12_primitive_topology(sg_primitive_type prim_type) {
+    switch (prim_type) {
+        case SG_PRIMITIVETYPE_POINTS:           return D3D_PRIMITIVE_TOPOLOGY_POINTLIST;
+        case SG_PRIMITIVETYPE_LINES:            return D3D_PRIMITIVE_TOPOLOGY_LINELIST;
+        case SG_PRIMITIVETYPE_LINE_STRIP:       return D3D_PRIMITIVE_TOPOLOGY_LINESTRIP;
+        case SG_PRIMITIVETYPE_TRIANGLES:        return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+        case SG_PRIMITIVETYPE_TRIANGLE_STRIP:   return D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+        default: SOKOL_UNREACHABLE; return (D3D_PRIMITIVE_TOPOLOGY) 0;
+    }
+}
+
+// convert sokol primitive type to D3D12 topology type for pipeline state object creation
+_SOKOL_PRIVATE D3D12_PRIMITIVE_TOPOLOGY_TYPE _sg_d3d12_primitive_topology_type(sg_primitive_type prim_type) {
+    switch (prim_type) {
+        case SG_PRIMITIVETYPE_POINTS:           return D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
+        case SG_PRIMITIVETYPE_LINES:
+        case SG_PRIMITIVETYPE_LINE_STRIP:       return D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
+        case SG_PRIMITIVETYPE_TRIANGLES:
+        case SG_PRIMITIVETYPE_TRIANGLE_STRIP:   return D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        default: SOKOL_UNREACHABLE; return D3D12_PRIMITIVE_TOPOLOGY_TYPE_UNDEFINED;
+    }
+}
+
+// convert sokol index type to DXGI format for index buffer binding
+_SOKOL_PRIVATE DXGI_FORMAT _sg_d3d12_index_format(sg_index_type index_type) {
+    switch (index_type) {
+        case SG_INDEXTYPE_NONE:     return DXGI_FORMAT_UNKNOWN;
+        case SG_INDEXTYPE_UINT16:   return DXGI_FORMAT_R16_UINT;
+        case SG_INDEXTYPE_UINT32:   return DXGI_FORMAT_R32_UINT;
+        default: SOKOL_UNREACHABLE; return (DXGI_FORMAT) 0;
+    }
+}
+
+// convert sokol vertex attribute format to DXGI format for input layout description
+_SOKOL_PRIVATE DXGI_FORMAT _sg_d3d12_vertex_format(sg_vertex_format fmt) {
+    switch (fmt) {
+        case SG_VERTEXFORMAT_FLOAT:     return DXGI_FORMAT_R32_FLOAT;
+        case SG_VERTEXFORMAT_FLOAT2:    return DXGI_FORMAT_R32G32_FLOAT;
+        case SG_VERTEXFORMAT_FLOAT3:    return DXGI_FORMAT_R32G32B32_FLOAT;
+        case SG_VERTEXFORMAT_FLOAT4:    return DXGI_FORMAT_R32G32B32A32_FLOAT;
+        case SG_VERTEXFORMAT_INT:       return DXGI_FORMAT_R32_SINT;
+        case SG_VERTEXFORMAT_INT2:      return DXGI_FORMAT_R32G32_SINT;
+        case SG_VERTEXFORMAT_INT3:      return DXGI_FORMAT_R32G32B32_SINT;
+        case SG_VERTEXFORMAT_INT4:      return DXGI_FORMAT_R32G32B32A32_SINT;
+        case SG_VERTEXFORMAT_UINT:      return DXGI_FORMAT_R32_UINT;
+        case SG_VERTEXFORMAT_UINT2:     return DXGI_FORMAT_R32G32_UINT;
+        case SG_VERTEXFORMAT_UINT3:     return DXGI_FORMAT_R32G32B32_UINT;
+        case SG_VERTEXFORMAT_UINT4:     return DXGI_FORMAT_R32G32B32A32_UINT;
+        case SG_VERTEXFORMAT_BYTE4:     return DXGI_FORMAT_R8G8B8A8_SINT;
+        case SG_VERTEXFORMAT_BYTE4N:    return DXGI_FORMAT_R8G8B8A8_SNORM;
+        case SG_VERTEXFORMAT_UBYTE4:    return DXGI_FORMAT_R8G8B8A8_UINT;
+        case SG_VERTEXFORMAT_UBYTE4N:   return DXGI_FORMAT_R8G8B8A8_UNORM;
+        case SG_VERTEXFORMAT_SHORT2:    return DXGI_FORMAT_R16G16_SINT;
+        case SG_VERTEXFORMAT_SHORT2N:   return DXGI_FORMAT_R16G16_SNORM;
+        case SG_VERTEXFORMAT_USHORT2:   return DXGI_FORMAT_R16G16_UINT;
+        case SG_VERTEXFORMAT_USHORT2N:  return DXGI_FORMAT_R16G16_UNORM;
+        case SG_VERTEXFORMAT_SHORT4:    return DXGI_FORMAT_R16G16B16A16_SINT;
+        case SG_VERTEXFORMAT_SHORT4N:   return DXGI_FORMAT_R16G16B16A16_SNORM;
+        case SG_VERTEXFORMAT_USHORT4:   return DXGI_FORMAT_R16G16B16A16_UINT;
+        case SG_VERTEXFORMAT_USHORT4N:  return DXGI_FORMAT_R16G16B16A16_UNORM;
+        case SG_VERTEXFORMAT_UINT10_N2: return DXGI_FORMAT_R10G10B10A2_UNORM;
+        case SG_VERTEXFORMAT_HALF2:     return DXGI_FORMAT_R16G16_FLOAT;
+        case SG_VERTEXFORMAT_HALF4:     return DXGI_FORMAT_R16G16B16A16_FLOAT;
+        default: SOKOL_UNREACHABLE; return (DXGI_FORMAT) 0;
+    }
+}
+
+// convert sokol vertex step to D3D12 input classification for input layout
+_SOKOL_PRIVATE D3D12_INPUT_CLASSIFICATION _sg_d3d12_input_classification(sg_vertex_step step) {
+    switch (step) {
+        case SG_VERTEXSTEP_PER_VERTEX:      return D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+        case SG_VERTEXSTEP_PER_INSTANCE:    return D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA;
+        default: SOKOL_UNREACHABLE; return (D3D12_INPUT_CLASSIFICATION) 0;
+    }
+}
+
+// convert sokol cull mode to D3D12 cull mode
+_SOKOL_PRIVATE D3D12_CULL_MODE _sg_d3d12_cull_mode(sg_cull_mode m) {
+    switch (m) {
+        case SG_CULLMODE_NONE:      return D3D12_CULL_MODE_NONE;
+        case SG_CULLMODE_FRONT:     return D3D12_CULL_MODE_FRONT;
+        case SG_CULLMODE_BACK:      return D3D12_CULL_MODE_BACK;
+        default: SOKOL_UNREACHABLE; return (D3D12_CULL_MODE) 0;
+    }
+}
+
+// convert sokol comparison function to D3D12 comparison function
+_SOKOL_PRIVATE D3D12_COMPARISON_FUNC _sg_d3d12_compare_func(sg_compare_func f) {
+    switch (f) {
+        case SG_COMPAREFUNC_NEVER:          return D3D12_COMPARISON_FUNC_NEVER;
+        case SG_COMPAREFUNC_LESS:           return D3D12_COMPARISON_FUNC_LESS;
+        case SG_COMPAREFUNC_EQUAL:          return D3D12_COMPARISON_FUNC_EQUAL;
+        case SG_COMPAREFUNC_LESS_EQUAL:     return D3D12_COMPARISON_FUNC_LESS_EQUAL;
+        case SG_COMPAREFUNC_GREATER:        return D3D12_COMPARISON_FUNC_GREATER;
+        case SG_COMPAREFUNC_NOT_EQUAL:      return D3D12_COMPARISON_FUNC_NOT_EQUAL;
+        case SG_COMPAREFUNC_GREATER_EQUAL:  return D3D12_COMPARISON_FUNC_GREATER_EQUAL;
+        case SG_COMPAREFUNC_ALWAYS:         return D3D12_COMPARISON_FUNC_ALWAYS;
+        default: SOKOL_UNREACHABLE; return (D3D12_COMPARISON_FUNC) 0;
+    }
+}
+
+// convert sokol filter modes to D3D12 filter (supports anisotropic and comparison filtering)
+_SOKOL_PRIVATE D3D12_FILTER _sg_d3d12_filter(sg_filter min_f, sg_filter mag_f, sg_filter mipmap_f, bool comparison, uint32_t max_anisotropy) {
+    uint32_t d3d12_filter = 0;
+    if (max_anisotropy > 1) {
+        // D3D12_FILTER_ANISOTROPIC = 0x55,
+        d3d12_filter |= 0x55;
+    } else {
+        // D3D12_FILTER_MIN_MAG_MIP_POINT = 0,
+        // D3D12_FILTER_MIN_MAG_POINT_MIP_LINEAR = 0x1,
+        // D3D12_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT = 0x4,
+        // D3D12_FILTER_MIN_POINT_MAG_MIP_LINEAR = 0x5,
+        // D3D12_FILTER_MIN_LINEAR_MAG_MIP_POINT = 0x10,
+        // D3D12_FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR = 0x11,
+        // D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT = 0x14,
+        // D3D12_FILTER_MIN_MAG_MIP_LINEAR = 0x15,
+        if (mipmap_f == SG_FILTER_LINEAR) {
+            d3d12_filter |= 0x01;
+        }
+        if (mag_f == SG_FILTER_LINEAR) {
+            d3d12_filter |= 0x04;
+        }
+        if (min_f == SG_FILTER_LINEAR) {
+            d3d12_filter |= 0x10;
+        }
+    }
+    // D3D12_FILTER_COMPARISON_MIN_MAG_MIP_POINT = 0x80,
+    // D3D12_FILTER_COMPARISON_MIN_MAG_POINT_MIP_LINEAR = 0x81,
+    // D3D12_FILTER_COMPARISON_MIN_POINT_MAG_LINEAR_MIP_POINT = 0x84,
+    // D3D12_FILTER_COMPARISON_MIN_POINT_MAG_MIP_LINEAR = 0x85,
+    // D3D12_FILTER_COMPARISON_MIN_LINEAR_MAG_MIP_POINT = 0x90,
+    // D3D12_FILTER_COMPARISON_MIN_LINEAR_MAG_POINT_MIP_LINEAR = 0x91,
+    // D3D12_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT = 0x94,
+    // D3D12_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR = 0x95,
+    // D3D12_FILTER_COMPARISON_ANISOTROPIC = 0xd5,
+    if (comparison) {
+        d3d12_filter |= 0x80;
+    }
+    return (D3D12_FILTER)d3d12_filter;
+}
+
+// convert sokol wrap mode to D3D12 texture address mode
+_SOKOL_PRIVATE D3D12_TEXTURE_ADDRESS_MODE _sg_d3d12_address_mode(sg_wrap m) {
+    switch (m) {
+        case SG_WRAP_REPEAT:            return D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+        case SG_WRAP_CLAMP_TO_EDGE:     return D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        case SG_WRAP_CLAMP_TO_BORDER:   return D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+        case SG_WRAP_MIRRORED_REPEAT:   return D3D12_TEXTURE_ADDRESS_MODE_MIRROR;
+        default: SOKOL_UNREACHABLE; return (D3D12_TEXTURE_ADDRESS_MODE) 0;
+    }
+}
+
+// convert sokol stencil operation to D3D12 stencil operation
+_SOKOL_PRIVATE D3D12_STENCIL_OP _sg_d3d12_stencil_op(sg_stencil_op op) {
+    switch (op) {
+        case SG_STENCILOP_KEEP:         return D3D12_STENCIL_OP_KEEP;
+        case SG_STENCILOP_ZERO:         return D3D12_STENCIL_OP_ZERO;
+        case SG_STENCILOP_REPLACE:      return D3D12_STENCIL_OP_REPLACE;
+        case SG_STENCILOP_INCR_CLAMP:   return D3D12_STENCIL_OP_INCR_SAT;
+        case SG_STENCILOP_DECR_CLAMP:   return D3D12_STENCIL_OP_DECR_SAT;
+        case SG_STENCILOP_INVERT:       return D3D12_STENCIL_OP_INVERT;
+        case SG_STENCILOP_INCR_WRAP:    return D3D12_STENCIL_OP_INCR;
+        case SG_STENCILOP_DECR_WRAP:    return D3D12_STENCIL_OP_DECR;
+        default: SOKOL_UNREACHABLE; return (D3D12_STENCIL_OP) 0;
+    }
+}
+
+// convert sokol blend factor to D3D12 blend factor
+_SOKOL_PRIVATE D3D12_BLEND _sg_d3d12_blend_factor(sg_blend_factor f) {
+    switch (f) {
+        case SG_BLENDFACTOR_ZERO:                   return D3D12_BLEND_ZERO;
+        case SG_BLENDFACTOR_ONE:                    return D3D12_BLEND_ONE;
+        case SG_BLENDFACTOR_SRC_COLOR:              return D3D12_BLEND_SRC_COLOR;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC_COLOR:    return D3D12_BLEND_INV_SRC_COLOR;
+        case SG_BLENDFACTOR_SRC_ALPHA:              return D3D12_BLEND_SRC_ALPHA;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA:    return D3D12_BLEND_INV_SRC_ALPHA;
+        case SG_BLENDFACTOR_DST_COLOR:              return D3D12_BLEND_DEST_COLOR;
+        case SG_BLENDFACTOR_ONE_MINUS_DST_COLOR:    return D3D12_BLEND_INV_DEST_COLOR;
+        case SG_BLENDFACTOR_DST_ALPHA:              return D3D12_BLEND_DEST_ALPHA;
+        case SG_BLENDFACTOR_ONE_MINUS_DST_ALPHA:    return D3D12_BLEND_INV_DEST_ALPHA;
+        case SG_BLENDFACTOR_SRC_ALPHA_SATURATED:    return D3D12_BLEND_SRC_ALPHA_SAT;
+        case SG_BLENDFACTOR_BLEND_COLOR:            return D3D12_BLEND_BLEND_FACTOR;
+        case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return D3D12_BLEND_INV_BLEND_FACTOR;
+        case SG_BLENDFACTOR_BLEND_ALPHA:            return D3D12_BLEND_BLEND_FACTOR;
+        case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return D3D12_BLEND_INV_BLEND_FACTOR;
+        default: SOKOL_UNREACHABLE; return (D3D12_BLEND) 0;
+    }
+}
+
+// convert sokol blend operation to D3D12 blend operation
+_SOKOL_PRIVATE D3D12_BLEND_OP _sg_d3d12_blend_op(sg_blend_op op) {
+    switch (op) {
+        case SG_BLENDOP_ADD:                return D3D12_BLEND_OP_ADD;
+        case SG_BLENDOP_SUBTRACT:           return D3D12_BLEND_OP_SUBTRACT;
+        case SG_BLENDOP_REVERSE_SUBTRACT:   return D3D12_BLEND_OP_REV_SUBTRACT;
+        case SG_BLENDOP_MIN:                return D3D12_BLEND_OP_MIN;
+        case SG_BLENDOP_MAX:                return D3D12_BLEND_OP_MAX;
+        default: SOKOL_UNREACHABLE; return (D3D12_BLEND_OP) 0;
+    }
+}
+
+// convert sokol color mask to D3D12 color write enable mask
+_SOKOL_PRIVATE UINT8 _sg_d3d12_color_write_mask(sg_color_mask m) {
+    UINT8 res = 0;
+    if (m & SG_COLORMASK_R) {
+        res |= D3D12_COLOR_WRITE_ENABLE_RED;
+    }
+    if (m & SG_COLORMASK_G) {
+        res |= D3D12_COLOR_WRITE_ENABLE_GREEN;
+    }
+    if (m & SG_COLORMASK_B) {
+        res |= D3D12_COLOR_WRITE_ENABLE_BLUE;
+    }
+    if (m & SG_COLORMASK_A) {
+        res |= D3D12_COLOR_WRITE_ENABLE_ALPHA;
+    }
+    return res;
+}
+
+// query device for DXGI format support capabilities
+_SOKOL_PRIVATE D3D12_FORMAT_SUPPORT1 _sg_d3d12_dxgi_fmt_caps(DXGI_FORMAT dxgi_fmt) {
+    D3D12_FORMAT_SUPPORT1 fmt_caps = (D3D12_FORMAT_SUPPORT1)0;
+    if (dxgi_fmt != DXGI_FORMAT_UNKNOWN) {
+        _SG_STRUCT(D3D12_FEATURE_DATA_FORMAT_SUPPORT, fmt_support);
+        fmt_support.Format = dxgi_fmt;
+        HRESULT hr = _sg_d3d12_CheckFeatureSupport(_sg.d3d12.dev, D3D12_FEATURE_FORMAT_SUPPORT, &fmt_support, sizeof(fmt_support));
+        SOKOL_ASSERT(SUCCEEDED(hr) || (E_FAIL == hr));
+        if (SUCCEEDED(hr)) {
+            fmt_caps = fmt_support.Support1;
+        }
+    }
+    return fmt_caps;
+}
+
+// initialize backend capabilities and query device for pixel format support
+_SOKOL_PRIVATE void _sg_d3d12_init_caps(void) {
+    _sg.backend = SG_BACKEND_D3D12;
+
+    _sg.features.origin_top_left = true;
+    _sg.features.image_clamp_to_border = true;
+    _sg.features.mrt_independent_blend_state = true;
+    _sg.features.mrt_independent_write_mask = true;
+    _sg.features.compute = true;
+    _sg.features.msaa_texture_bindings = true;
+    _sg.features.draw_base_vertex = true;
+    _sg.features.draw_base_instance = true;
+
+    _sg.limits.max_image_size_2d = 16 * 1024;
+    _sg.limits.max_image_size_cube = 16 * 1024;
+    _sg.limits.max_image_size_3d = 2 * 1024;
+    _sg.limits.max_image_size_array = 16 * 1024;
+    _sg.limits.max_image_array_layers = 2048;
+    _sg.limits.max_vertex_attrs = SG_MAX_VERTEX_ATTRIBUTES;
+    _sg.limits.max_color_attachments = _sg_min(8, SG_MAX_COLOR_ATTACHMENTS);
+    _sg.limits.max_texture_bindings_per_stage = _sg_min(128, SG_MAX_VIEW_BINDSLOTS);
+    _sg.limits.max_storage_buffer_bindings_per_stage = _sg_min(64, SG_MAX_VIEW_BINDSLOTS);
+    _sg.limits.max_storage_image_bindings_per_stage = _sg_min(64, SG_MAX_VIEW_BINDSLOTS);
+
+    for (int fmt = (SG_PIXELFORMAT_NONE+1); fmt < _SG_PIXELFORMAT_NUM; fmt++) {
+        const D3D12_FORMAT_SUPPORT1 srv_caps = _sg_d3d12_dxgi_fmt_caps(_sg_d3d12_srv_pixel_format((sg_pixel_format)fmt));
+        const D3D12_FORMAT_SUPPORT1 rtv_uav_caps = _sg_d3d12_dxgi_fmt_caps(_sg_d3d12_rtv_uav_pixel_format((sg_pixel_format)fmt));
+        const D3D12_FORMAT_SUPPORT1 dsv_caps = _sg_d3d12_dxgi_fmt_caps(_sg_d3d12_dsv_pixel_format((sg_pixel_format)fmt));
+        _sg_pixelformat_info_t* info = &_sg.formats[fmt];
+        const bool render = 0 != (rtv_uav_caps & D3D12_FORMAT_SUPPORT1_RENDER_TARGET);
+        const bool depth  = 0 != (dsv_caps & D3D12_FORMAT_SUPPORT1_DEPTH_STENCIL);
+        info->sample = 0 != (srv_caps & D3D12_FORMAT_SUPPORT1_TEXTURE2D);
+        info->filter = 0 != (srv_caps & D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE);
+        info->render = render || depth;
+        if (depth) {
+            info->blend = 0 != (dsv_caps & D3D12_FORMAT_SUPPORT1_BLENDABLE);
+            info->msaa  = 0 != (dsv_caps & D3D12_FORMAT_SUPPORT1_MULTISAMPLE_RENDERTARGET);
+        } else {
+            info->blend = 0 != (rtv_uav_caps & D3D12_FORMAT_SUPPORT1_BLENDABLE);
+            info->msaa  = 0 != (rtv_uav_caps & D3D12_FORMAT_SUPPORT1_MULTISAMPLE_RENDERTARGET);
+        }
+        info->depth = depth;
+        info->read = info->write = 0 != (rtv_uav_caps & D3D12_FORMAT_SUPPORT1_TYPED_UNORDERED_ACCESS_VIEW);
+    }
+}
+
+// signal fence with error checking
+_SOKOL_PRIVATE void _sg_d3d12_signal_fence(void) {
+    (*_sg.d3d12.fence_value)++;
+    HRESULT hr = _sg_d3d12_Signal(_sg.d3d12.cmd_queue, _sg.d3d12.fence, *_sg.d3d12.fence_value);
+    if (!SUCCEEDED(hr)) {
+        _SG_ERROR(D3D12_SIGNAL_FENCE_FAILED);
+    }
+}
+
+// wait for GPU to reach a specific fence value
+_SOKOL_PRIVATE void _sg_d3d12_wait_for_fence(UINT64 fence_value) {
+    if (_sg_d3d12_GetCompletedValue(_sg.d3d12.fence) < fence_value) {
+        HRESULT hr = _sg_d3d12_SetEventOnCompletion(_sg.d3d12.fence, fence_value, _sg.d3d12.fence_event);
+        if (!SUCCEEDED(hr)) {
+            _SG_ERROR(D3D12_WAIT_FENCE_FAILED);
+            return;
+        }
+        WaitForSingleObject(_sg.d3d12.fence_event, INFINITE);
+    }
+}
+
+//-- deferred release queue ---------------------------------------------------
+// release a queued item by freeing the D3D12 object or returning descriptor slot to free list
+_SOKOL_PRIVATE void _sg_d3d12_release_item(_sg_d3d12_release_item_t* item) {
+    switch (item->type) {
+        case _SG_D3D12_RELEASE_RESOURCE:
+            if (item->resource) {
+                _sg_d3d12_Release(item->resource);
+            }
+            break;
+        case _SG_D3D12_RELEASE_PIPELINE:
+            if (item->pipeline) {
+                _sg_d3d12_Release(item->pipeline);
+            }
+            break;
+        case _SG_D3D12_RELEASE_ROOTSIG:
+            if (item->rootsig) {
+                _sg_d3d12_Release(item->rootsig);
+            }
+            break;
+        case _SG_D3D12_RELEASE_SRV_UAV_SLOT:
+            if (item->slot_index >= 0) {
+                SOKOL_ASSERT(_sg.d3d12.srv_uav_heap.queue_top < _sg.d3d12.srv_uav_heap.num_descriptors);
+                _sg.d3d12.srv_uav_heap.free_queue[_sg.d3d12.srv_uav_heap.queue_top++] = item->slot_index;
+            }
+            break;
+        case _SG_D3D12_RELEASE_RTV_SLOT:
+            if (item->slot_index >= 0) {
+                SOKOL_ASSERT(_sg.d3d12.rtv_heap.queue_top < _sg.d3d12.rtv_heap.num_descriptors);
+                _sg.d3d12.rtv_heap.free_queue[_sg.d3d12.rtv_heap.queue_top++] = item->slot_index;
+            }
+            break;
+        case _SG_D3D12_RELEASE_DSV_SLOT:
+            if (item->slot_index >= 0) {
+                SOKOL_ASSERT(_sg.d3d12.dsv_heap.queue_top < _sg.d3d12.dsv_heap.num_descriptors);
+                _sg.d3d12.dsv_heap.free_queue[_sg.d3d12.dsv_heap.queue_top++] = item->slot_index;
+            }
+            break;
+        case _SG_D3D12_RELEASE_SAMPLER_SLOT:
+            if (item->slot_index >= 0) {
+                SOKOL_ASSERT(_sg.d3d12.cpu_sampler_heap.queue_top < _sg.d3d12.cpu_sampler_heap.num_descriptors);
+                _sg.d3d12.cpu_sampler_heap.free_queue[_sg.d3d12.cpu_sampler_heap.queue_top++] = item->slot_index;
+            }
+            break;
+    }
+    _sg_clear(item, sizeof(*item));
+}
+
+// process release queue and free items whose fence values have been completed by the GPU
+_SOKOL_PRIVATE void _sg_d3d12_garbage_collect(void) {
+    const UINT64 completed_value = _sg_d3d12_GetCompletedValue(_sg.d3d12.fence);
+    while (_sg.d3d12.release_queue.back != _sg.d3d12.release_queue.front) {
+        const UINT64 item_fence_value = _sg.d3d12.release_queue.items[_sg.d3d12.release_queue.back].fence_value;
+        if ((item_fence_value > 0) && (completed_value < item_fence_value)) {
+            break;
+        }
+        SOKOL_ASSERT((item_fence_value == 0) || (completed_value >= item_fence_value));
+        _sg_d3d12_release_item(&_sg.d3d12.release_queue.items[_sg.d3d12.release_queue.back]);
+        _sg.d3d12.release_queue.back++;
+        if (_sg.d3d12.release_queue.back >= _sg.d3d12.release_queue.num_slots) {
+            _sg.d3d12.release_queue.back = 0;
+        }
+    }
+}
+
+// force release all queued items immediately without checking fence values, used during shutdown
+_SOKOL_PRIVATE void _sg_d3d12_drain_release_queue(void) {
+    while (_sg.d3d12.release_queue.back != _sg.d3d12.release_queue.front) {
+        _sg_d3d12_release_item(&_sg.d3d12.release_queue.items[_sg.d3d12.release_queue.back]);
+        _sg.d3d12.release_queue.back++;
+        if (_sg.d3d12.release_queue.back >= _sg.d3d12.release_queue.num_slots) {
+            _sg.d3d12.release_queue.back = 0;
+        }
+    }
+}
+
+// assign the current fence value to all pending release items
+// called after signal_fence() in commit to ensure correct synchronization
+_SOKOL_PRIVATE void _sg_d3d12_flush_pending_releases(void) {
+    int idx = _sg.d3d12.release_queue.front;
+    while (idx != _sg.d3d12.release_queue.back) {
+        idx = (idx - 1 + _sg.d3d12.release_queue.num_slots) % _sg.d3d12.release_queue.num_slots;
+        if (_sg.d3d12.release_queue.items[idx].fence_value != _SG_D3D12_FENCE_VALUE_PENDING) {
+            break;
+        }
+        _sg.d3d12.release_queue.items[idx].fence_value = *_sg.d3d12.fence_value;
+    }
+}
+
+// add an item to the circular release queue
+// if queue is full, attempt garbage collection and GPU sync before failing
+_SOKOL_PRIVATE void _sg_d3d12_release_queue_add(_sg_d3d12_release_item_t item) {
+    int next_front = _sg.d3d12.release_queue.front + 1;
+    if (next_front >= _sg.d3d12.release_queue.num_slots) {
+        next_front = 0;
+    }
+    if (next_front == _sg.d3d12.release_queue.back) {
+        // queue is full - attempt garbage collection to free completed items
+        _SG_WARN(D3D12_RELEASE_QUEUE_FULL);
+        _sg_d3d12_garbage_collect();
+
+        // recalculate next_front after GC may have freed slots
+        next_front = _sg.d3d12.release_queue.front + 1;
+        if (next_front >= _sg.d3d12.release_queue.num_slots) {
+            next_front = 0;
+        }
+
+        // if still full after GC, wait for GPU to complete all pending work
+        if (next_front == _sg.d3d12.release_queue.back) {
+            _sg_d3d12_wait_for_fence(*_sg.d3d12.fence_value);
+            _sg_d3d12_garbage_collect();
+
+            next_front = _sg.d3d12.release_queue.front + 1;
+            if (next_front >= _sg.d3d12.release_queue.num_slots) {
+                next_front = 0;
+            }
+        }
+
+        // if STILL full after GPU sync, release immediately (safe since GPU is idle)
+        if (next_front == _sg.d3d12.release_queue.back) {
+            _SG_WARN(D3D12_RELEASE_QUEUE_FULL);
+            _sg_d3d12_release_item(&item);
+            return;
+        }
+    }
+    int release_index = _sg.d3d12.release_queue.front++;
+    if (_sg.d3d12.release_queue.front >= _sg.d3d12.release_queue.num_slots) {
+        _sg.d3d12.release_queue.front = 0;
+    }
+    SOKOL_ASSERT(0 == _sg.d3d12.release_queue.items[release_index].fence_value);
+    _sg.d3d12.release_queue.items[release_index] = item;
+}
+
+// mark a D3D12 resource for release, adding it to the deferred-release queue
+// the resource will be released after the GPU has finished using it
+// null resource pointers are ignored
+_SOKOL_PRIVATE void _sg_d3d12_deferred_release_resource(ID3D12Resource* res) {
+    if (res == NULL) {
+        return;
+    }
+    _SG_STRUCT(_sg_d3d12_release_item_t, item);
+    item.type = _SG_D3D12_RELEASE_RESOURCE;
+    item.fence_value = _SG_D3D12_FENCE_VALUE_PENDING;
+    item.resource = res;
+    _sg_d3d12_release_queue_add(item);
+}
+
+// queue a pipeline state object for deferred release
+_SOKOL_PRIVATE void _sg_d3d12_deferred_release_pipeline(ID3D12PipelineState* pso) {
+    if (pso == NULL) {
+        return;
+    }
+    _SG_STRUCT(_sg_d3d12_release_item_t, item);
+    item.type = _SG_D3D12_RELEASE_PIPELINE;
+    item.fence_value = _SG_D3D12_FENCE_VALUE_PENDING;
+    item.pipeline = pso;
+    _sg_d3d12_release_queue_add(item);
+}
+
+// queue a root signature for deferred release
+_SOKOL_PRIVATE void _sg_d3d12_deferred_release_rootsig(ID3D12RootSignature* rootsig) {
+    if (rootsig == NULL) {
+        return;
+    }
+    _SG_STRUCT(_sg_d3d12_release_item_t, item);
+    item.type = _SG_D3D12_RELEASE_ROOTSIG;
+    item.fence_value = _SG_D3D12_FENCE_VALUE_PENDING;
+    item.rootsig = rootsig;
+    _sg_d3d12_release_queue_add(item);
+}
+
+// queue a descriptor heap slot for deferred release and recycling
+_SOKOL_PRIVATE void _sg_d3d12_deferred_release_slot(_sg_d3d12_release_type_t slot_type, int slot_index) {
+    if (slot_index < 0) {
+        return;
+    }
+    _SG_STRUCT(_sg_d3d12_release_item_t, item);
+    item.type = slot_type;
+    item.fence_value = _SG_D3D12_FENCE_VALUE_PENDING;
+    item.slot_index = slot_index;
+    _sg_d3d12_release_queue_add(item);
+}
+
+// queue an SRV/UAV descriptor for deferred release by converting handle to slot index
+_SOKOL_PRIVATE void _sg_d3d12_deferred_release_srv_uav(D3D12_CPU_DESCRIPTOR_HANDLE handle) {
+    if (handle.ptr == 0) {
+        return;
+    }
+    int slot_index = (int)((handle.ptr - _sg.d3d12.srv_uav_heap.cpu_start.ptr) / _sg.d3d12.srv_uav_heap.increment_size);
+    _sg_d3d12_deferred_release_slot(_SG_D3D12_RELEASE_SRV_UAV_SLOT, slot_index);
+}
+
+// immediately return an SRV/UAV descriptor slot to the free queue
+// use when the descriptor was just allocated but never used by GPU (e.g., creation failure)
+_SOKOL_PRIVATE void _sg_d3d12_immediate_release_srv_uav(D3D12_CPU_DESCRIPTOR_HANDLE handle) {
+    if (handle.ptr == 0) {
+        return;
+    }
+    int slot_index = (int)((handle.ptr - _sg.d3d12.srv_uav_heap.cpu_start.ptr) / _sg.d3d12.srv_uav_heap.increment_size);
+    if (slot_index >= 0) {
+        SOKOL_ASSERT(_sg.d3d12.srv_uav_heap.queue_top < _sg.d3d12.srv_uav_heap.num_descriptors);
+        _sg.d3d12.srv_uav_heap.free_queue[_sg.d3d12.srv_uav_heap.queue_top++] = slot_index;
+    }
+}
+
+// queue an RTV descriptor for deferred release by converting handle to slot index
+_SOKOL_PRIVATE void _sg_d3d12_deferred_release_rtv(D3D12_CPU_DESCRIPTOR_HANDLE handle) {
+    if (handle.ptr == 0) {
+        return;
+    }
+    int slot_index = (int)((handle.ptr - _sg.d3d12.rtv_heap.cpu_start.ptr) / _sg.d3d12.rtv_heap.increment_size);
+    _sg_d3d12_deferred_release_slot(_SG_D3D12_RELEASE_RTV_SLOT, slot_index);
+}
+
+// queue a DSV descriptor for deferred release by converting handle to slot index
+_SOKOL_PRIVATE void _sg_d3d12_deferred_release_dsv(D3D12_CPU_DESCRIPTOR_HANDLE handle) {
+    if (handle.ptr == 0) {
+        return;
+    }
+    int slot_index = (int)((handle.ptr - _sg.d3d12.dsv_heap.cpu_start.ptr) / _sg.d3d12.dsv_heap.increment_size);
+    _sg_d3d12_deferred_release_slot(_SG_D3D12_RELEASE_DSV_SLOT, slot_index);
+}
+
+// queue a sampler descriptor for deferred release by converting handle to slot index
+_SOKOL_PRIVATE void _sg_d3d12_deferred_release_sampler(D3D12_CPU_DESCRIPTOR_HANDLE handle) {
+    if (handle.ptr == 0) {
+        return;
+    }
+    int slot_index = (int)((handle.ptr - _sg.d3d12.cpu_sampler_heap.cpu_start.ptr) / _sg.d3d12.cpu_sampler_heap.increment_size);
+    _sg_d3d12_deferred_release_slot(_SG_D3D12_RELEASE_SAMPLER_SLOT, slot_index);
+}
+
+// wait for GPU to finish processing upload command list before reusing upload resources
+_SOKOL_PRIVATE void _sg_d3d12_wait_for_upload_allocator(void) {
+    if (_sg.d3d12.upload_fence_value > 0) {
+        _sg_d3d12_wait_for_fence(_sg.d3d12.upload_fence_value);
+    }
+}
+
+//-- descriptor heap management -----------------------------------------------
+// allocate a descriptor from the SRV/UAV heap, preferring recycled slots from free queue
+_SOKOL_PRIVATE D3D12_CPU_DESCRIPTOR_HANDLE _sg_d3d12_alloc_srv_uav_descriptor(void) {
+    D3D12_CPU_DESCRIPTOR_HANDLE handle;
+    int index;
+    if (_sg.d3d12.srv_uav_heap.queue_top > 0) {
+        index = _sg.d3d12.srv_uav_heap.free_queue[--_sg.d3d12.srv_uav_heap.queue_top];
+    } else if (_sg.d3d12.srv_uav_heap.next_index < _sg.d3d12.srv_uav_heap.num_descriptors) {
+        index = _sg.d3d12.srv_uav_heap.next_index++;
+    } else {
+        _SG_ERROR(D3D12_DESCRIPTOR_HEAP_EXHAUSTED);
+        handle.ptr = 0;
+        return handle;
+    }
+    handle.ptr = _sg.d3d12.srv_uav_heap.cpu_start.ptr + (SIZE_T)((UINT)index * _sg.d3d12.srv_uav_heap.increment_size);
+    return handle;
+}
+
+// allocate a descriptor from the CPU sampler heap, preferring recycled slots from free queue
+_SOKOL_PRIVATE D3D12_CPU_DESCRIPTOR_HANDLE _sg_d3d12_alloc_sampler_descriptor(void) {
+    D3D12_CPU_DESCRIPTOR_HANDLE handle;
+    int index;
+    if (_sg.d3d12.cpu_sampler_heap.queue_top > 0) {
+        index = _sg.d3d12.cpu_sampler_heap.free_queue[--_sg.d3d12.cpu_sampler_heap.queue_top];
+    } else if (_sg.d3d12.cpu_sampler_heap.next_index < _sg.d3d12.cpu_sampler_heap.num_descriptors) {
+        index = _sg.d3d12.cpu_sampler_heap.next_index++;
+    } else {
+        _SG_ERROR(D3D12_DESCRIPTOR_HEAP_EXHAUSTED);
+        handle.ptr = 0;
+        return handle;
+    }
+    handle.ptr = _sg.d3d12.cpu_sampler_heap.cpu_start.ptr + (SIZE_T)((UINT)index * _sg.d3d12.cpu_sampler_heap.increment_size);
+    return handle;
+}
+
+// initialize the D3D12 backend, create command allocators, descriptor heaps, and ring buffers
+_SOKOL_PRIVATE void _sg_d3d12_setup_backend(const sg_desc* desc) {
+    SOKOL_ASSERT(desc);
+    SOKOL_ASSERT(desc->environment.d3d12.device);
+    SOKOL_ASSERT(desc->environment.d3d12.command_queue);
+    SOKOL_ASSERT(desc->environment.d3d12.fence);
+    SOKOL_ASSERT(desc->environment.d3d12.fence_event);
+    SOKOL_ASSERT(desc->environment.d3d12.fence_value);
+    _sg.d3d12.valid = true;
+    _sg.d3d12.dev = (ID3D12Device*) desc->environment.d3d12.device;
+    _sg.d3d12.cmd_queue = (ID3D12CommandQueue*) desc->environment.d3d12.command_queue;
+
+    HRESULT hr;
+    for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+        hr = _sg_d3d12_CreateCommandAllocator(_sg.d3d12.dev,
+            D3D12_COMMAND_LIST_TYPE_DIRECT,
+            _sg_win32_refguid(_sg_IID_ID3D12CommandAllocator),
+            (void**)&_sg.d3d12.frame_cmd_allocs[i]);
+        SOKOL_ASSERT(SUCCEEDED(hr) && _sg.d3d12.frame_cmd_allocs[i]);
+        _sg.d3d12.frame_fence_values[i] = 0;
+    }
+
+    hr = _sg_d3d12_CreateCommandAllocator(_sg.d3d12.dev,
+        D3D12_COMMAND_LIST_TYPE_DIRECT,
+        _sg_win32_refguid(_sg_IID_ID3D12CommandAllocator),
+        (void**)&_sg.d3d12.upload_cmd_alloc);
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sg.d3d12.upload_cmd_alloc);
+
+    hr = _sg_d3d12_CreateCommandList(_sg.d3d12.dev,
+        0,
+        D3D12_COMMAND_LIST_TYPE_DIRECT,
+        _sg.d3d12.upload_cmd_alloc,
+        NULL,
+        _sg_win32_refguid(_sg_IID_ID3D12GraphicsCommandList),
+        (void**)&_sg.d3d12.upload_cmd_list);
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sg.d3d12.upload_cmd_list);
+
+    _sg_d3d12_Close(_sg.d3d12.upload_cmd_list);
+
+    _sg.d3d12.frame_index = 0;
+    _sg.d3d12.frame_started = false;
+    _sg.d3d12.descriptor_heaps_bound = false;
+
+    hr = _sg_d3d12_CreateCommandList(_sg.d3d12.dev,
+        0,
+        D3D12_COMMAND_LIST_TYPE_DIRECT,
+        _sg.d3d12.frame_cmd_allocs[0],
+        NULL,
+        _sg_win32_refguid(_sg_IID_ID3D12GraphicsCommandList),
+        (void**)&_sg.d3d12.frame_cmd_list);
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sg.d3d12.frame_cmd_list);
+
+    _sg_d3d12_Close(_sg.d3d12.frame_cmd_list);
+
+    _sg.d3d12.fence = (ID3D12Fence*)desc->environment.d3d12.fence;
+    _sg.d3d12.fence_event = (HANDLE)desc->environment.d3d12.fence_event;
+    _sg.d3d12.fence_value = desc->environment.d3d12.fence_value;
+    _sg.d3d12.upload_fence_value = 0;
+
+    _sg.d3d12.release_queue.front = 0;
+    _sg.d3d12.release_queue.back = 0;
+    _sg.d3d12.release_queue.num_slots = 2 *
+        (
+            2 * desc->buffer_pool_size +
+            4 * desc->image_pool_size +
+            1 * desc->sampler_pool_size +
+            4 * desc->shader_pool_size +
+            2 * desc->pipeline_pool_size +
+            desc->view_pool_size +
+            128
+        );
+    _sg.d3d12.release_queue.items = (_sg_d3d12_release_item_t*)_sg_malloc_clear(
+        (size_t)_sg.d3d12.release_queue.num_slots * sizeof(_sg_d3d12_release_item_t));
+    SOKOL_ASSERT(_sg.d3d12.release_queue.items);
+
+    _sg.d3d12.deferred_image_updates.max_updates = desc->d3d12.max_deferred_image_updates;
+    _sg.d3d12.deferred_image_updates.num_updates = 0;
+    _sg.d3d12.deferred_image_updates.items = (_sg_d3d12_deferred_image_update_t*)_sg_malloc_clear(
+        (size_t)_sg.d3d12.deferred_image_updates.max_updates * sizeof(_sg_d3d12_deferred_image_update_t));
+    SOKOL_ASSERT(_sg.d3d12.deferred_image_updates.items);
+
+    _sg.d3d12.ub.per_frame_size = desc->uniform_buffer_size;
+    _sg.d3d12.ub.size = _sg.d3d12.ub.per_frame_size * SG_NUM_INFLIGHT_FRAMES;
+    SOKOL_ASSERT(_sg.d3d12.ub.size > 0);
+
+    _SG_STRUCT(D3D12_HEAP_PROPERTIES, ub_heap_props);
+    ub_heap_props.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+    _SG_STRUCT(D3D12_RESOURCE_DESC, ub_res_desc);
+    ub_res_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    ub_res_desc.Width = (UINT64)_sg.d3d12.ub.size;
+    ub_res_desc.Height = 1;
+    ub_res_desc.DepthOrArraySize = 1;
+    ub_res_desc.MipLevels = 1;
+    ub_res_desc.Format = DXGI_FORMAT_UNKNOWN;
+    ub_res_desc.SampleDesc.Count = 1;
+    ub_res_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+    hr = _sg_d3d12_CreateCommittedResource(_sg.d3d12.dev,
+        &ub_heap_props,
+        D3D12_HEAP_FLAG_NONE,
+        &ub_res_desc,
+        D3D12_RESOURCE_STATE_GENERIC_READ,
+        NULL,
+        _sg_win32_refguid(_sg_IID_ID3D12Resource),
+        (void**)&_sg.d3d12.ub.buf);
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sg.d3d12.ub.buf);
+
+    _SG_STRUCT(D3D12_RANGE, read_range);
+    hr = _sg_d3d12_Map(_sg.d3d12.ub.buf, 0, &read_range, (void**)&_sg.d3d12.ub.base_ptr);
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sg.d3d12.ub.base_ptr);
+
+    _sg.d3d12.ub.gpu_addr = _sg_d3d12_GetGPUVirtualAddress(_sg.d3d12.ub.buf);
+    _sg.d3d12.ub.offset = 0;
+
+    _sg.d3d12.srv_uav_heap.num_descriptors = desc->view_pool_size * 2;
+    _SG_STRUCT(D3D12_DESCRIPTOR_HEAP_DESC, srv_uav_heap_desc);
+    srv_uav_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+    srv_uav_heap_desc.NumDescriptors = (UINT)_sg.d3d12.srv_uav_heap.num_descriptors;
+    srv_uav_heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+    hr = _sg_d3d12_CreateDescriptorHeap(_sg.d3d12.dev, &srv_uav_heap_desc, &_sg.d3d12.srv_uav_heap.heap);
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sg.d3d12.srv_uav_heap.heap);
+    _sg_d3d12_setlabel(_sg.d3d12.srv_uav_heap.heap, "sokol-gfx.srv_uav_heap");
+    _sg.d3d12.srv_uav_heap.cpu_start = _sg_d3d12_GetCPUDescriptorHandleForHeapStart(_sg.d3d12.srv_uav_heap.heap);
+    _sg.d3d12.srv_uav_heap.increment_size = _sg_d3d12_GetDescriptorHandleIncrementSize(_sg.d3d12.dev, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    _sg.d3d12.srv_uav_heap.next_index = 0;
+    _sg.d3d12.srv_uav_heap.free_queue = (int*)_sg_malloc_clear(sizeof(int) * (size_t)_sg.d3d12.srv_uav_heap.num_descriptors);
+    SOKOL_ASSERT(_sg.d3d12.srv_uav_heap.free_queue);
+    _sg.d3d12.srv_uav_heap.queue_top = 0;
+
+    _sg.d3d12.rtv_heap.num_descriptors = desc->view_pool_size;
+    _SG_STRUCT(D3D12_DESCRIPTOR_HEAP_DESC, rtv_heap_desc);
+    rtv_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+    rtv_heap_desc.NumDescriptors = (UINT)_sg.d3d12.rtv_heap.num_descriptors;
+    rtv_heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+    hr = _sg_d3d12_CreateDescriptorHeap(_sg.d3d12.dev, &rtv_heap_desc, &_sg.d3d12.rtv_heap.heap);
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sg.d3d12.rtv_heap.heap);
+    _sg_d3d12_setlabel(_sg.d3d12.rtv_heap.heap, "sokol-gfx.rtv_heap");
+    _sg.d3d12.rtv_heap.cpu_start = _sg_d3d12_GetCPUDescriptorHandleForHeapStart(_sg.d3d12.rtv_heap.heap);
+    _sg.d3d12.rtv_heap.increment_size = _sg_d3d12_GetDescriptorHandleIncrementSize(_sg.d3d12.dev, D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    _sg.d3d12.rtv_heap.next_index = 0;
+    _sg.d3d12.rtv_heap.free_queue = (int*)_sg_malloc_clear(sizeof(int) * (size_t)_sg.d3d12.rtv_heap.num_descriptors);
+    SOKOL_ASSERT(_sg.d3d12.rtv_heap.free_queue);
+    _sg.d3d12.rtv_heap.queue_top = 0;
+
+    _sg.d3d12.dsv_heap.num_descriptors = desc->view_pool_size;
+    _SG_STRUCT(D3D12_DESCRIPTOR_HEAP_DESC, dsv_heap_desc);
+    dsv_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+    dsv_heap_desc.NumDescriptors = (UINT)_sg.d3d12.dsv_heap.num_descriptors;
+    dsv_heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+    hr = _sg_d3d12_CreateDescriptorHeap(_sg.d3d12.dev, &dsv_heap_desc, &_sg.d3d12.dsv_heap.heap);
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sg.d3d12.dsv_heap.heap);
+    _sg_d3d12_setlabel(_sg.d3d12.dsv_heap.heap, "sokol-gfx.dsv_heap");
+    _sg.d3d12.dsv_heap.cpu_start = _sg_d3d12_GetCPUDescriptorHandleForHeapStart(_sg.d3d12.dsv_heap.heap);
+    _sg.d3d12.dsv_heap.increment_size = _sg_d3d12_GetDescriptorHandleIncrementSize(_sg.d3d12.dev, D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+    _sg.d3d12.dsv_heap.next_index = 0;
+    _sg.d3d12.dsv_heap.free_queue = (int*)_sg_malloc_clear(sizeof(int) * (size_t)_sg.d3d12.dsv_heap.num_descriptors);
+    SOKOL_ASSERT(_sg.d3d12.dsv_heap.free_queue);
+    _sg.d3d12.dsv_heap.queue_top = 0;
+
+    _sg.d3d12.cpu_sampler_heap.num_descriptors = desc->sampler_pool_size;
+    _SG_STRUCT(D3D12_DESCRIPTOR_HEAP_DESC, cpu_sampler_heap_desc);
+    cpu_sampler_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
+    cpu_sampler_heap_desc.NumDescriptors = (UINT)_sg.d3d12.cpu_sampler_heap.num_descriptors;
+    cpu_sampler_heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+    hr = _sg_d3d12_CreateDescriptorHeap(_sg.d3d12.dev, &cpu_sampler_heap_desc, &_sg.d3d12.cpu_sampler_heap.heap);
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sg.d3d12.cpu_sampler_heap.heap);
+    _sg_d3d12_setlabel(_sg.d3d12.cpu_sampler_heap.heap, "sokol-gfx.cpu_sampler_heap");
+    _sg.d3d12.cpu_sampler_heap.cpu_start = _sg_d3d12_GetCPUDescriptorHandleForHeapStart(_sg.d3d12.cpu_sampler_heap.heap);
+    _sg.d3d12.cpu_sampler_heap.increment_size = _sg_d3d12_GetDescriptorHandleIncrementSize(_sg.d3d12.dev, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+    _sg.d3d12.cpu_sampler_heap.next_index = 0;
+    _sg.d3d12.cpu_sampler_heap.free_queue = (int*)_sg_malloc_clear(sizeof(int) * (size_t)_sg.d3d12.cpu_sampler_heap.num_descriptors);
+    SOKOL_ASSERT(_sg.d3d12.cpu_sampler_heap.free_queue);
+    _sg.d3d12.cpu_sampler_heap.queue_top = 0;
+
+    _sg.d3d12.shader_heap.per_frame_descriptors = desc->d3d12.shader_heap_size;
+    _sg.d3d12.shader_heap.num_descriptors = _sg.d3d12.shader_heap.per_frame_descriptors * SG_NUM_INFLIGHT_FRAMES;
+    _SG_STRUCT(D3D12_DESCRIPTOR_HEAP_DESC, shader_heap_desc);
+    shader_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+    shader_heap_desc.NumDescriptors = (UINT)_sg.d3d12.shader_heap.num_descriptors;
+    shader_heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    hr = _sg_d3d12_CreateDescriptorHeap(_sg.d3d12.dev, &shader_heap_desc, &_sg.d3d12.shader_heap.heap);
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sg.d3d12.shader_heap.heap);
+    _sg_d3d12_setlabel(_sg.d3d12.shader_heap.heap, "sokol-gfx.shader_heap");
+    _sg.d3d12.shader_heap.cpu_start = _sg_d3d12_GetCPUDescriptorHandleForHeapStart(_sg.d3d12.shader_heap.heap);
+    _sg.d3d12.shader_heap.gpu_start = _sg_d3d12_GetGPUDescriptorHandleForHeapStart(_sg.d3d12.shader_heap.heap);
+    _sg.d3d12.shader_heap.increment_size = _sg_d3d12_GetDescriptorHandleIncrementSize(_sg.d3d12.dev, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    _sg.d3d12.shader_heap.cur_offset = 0;
+
+    _sg.d3d12.sampler_heap.per_frame_descriptors = desc->d3d12.sampler_heap_size;
+    _sg.d3d12.sampler_heap.num_descriptors = _sg.d3d12.sampler_heap.per_frame_descriptors * SG_NUM_INFLIGHT_FRAMES;
+        _SG_STRUCT(D3D12_DESCRIPTOR_HEAP_DESC, sampler_heap_desc);
+    sampler_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
+    sampler_heap_desc.NumDescriptors = (UINT)_sg.d3d12.sampler_heap.num_descriptors;
+    sampler_heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    hr = _sg_d3d12_CreateDescriptorHeap(_sg.d3d12.dev, &sampler_heap_desc, &_sg.d3d12.sampler_heap.heap);
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sg.d3d12.sampler_heap.heap);
+    _sg_d3d12_setlabel(_sg.d3d12.sampler_heap.heap, "sokol-gfx.sampler_heap");
+    _sg.d3d12.sampler_heap.cpu_start = _sg_d3d12_GetCPUDescriptorHandleForHeapStart(_sg.d3d12.sampler_heap.heap);
+    _sg.d3d12.sampler_heap.gpu_start = _sg_d3d12_GetGPUDescriptorHandleForHeapStart(_sg.d3d12.sampler_heap.heap);
+    _sg.d3d12.sampler_heap.increment_size = _sg_d3d12_GetDescriptorHandleIncrementSize(_sg.d3d12.dev, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+    _sg.d3d12.sampler_heap.cur_offset = 0;
+
+    {
+        _SG_STRUCT(D3D12_SHADER_RESOURCE_VIEW_DESC, null_srv_desc);
+        null_srv_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        null_srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        null_srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        null_srv_desc.Texture2D.MipLevels = 1;
+        _sg.d3d12.null_srv = _sg_d3d12_alloc_srv_uav_descriptor();
+        SOKOL_ASSERT(_sg.d3d12.null_srv.ptr != 0);
+        _sg_d3d12_CreateShaderResourceView(_sg.d3d12.dev, NULL, &null_srv_desc, _sg.d3d12.null_srv);
+    }
+
+    {
+        _SG_STRUCT(D3D12_UNORDERED_ACCESS_VIEW_DESC, null_uav_desc);
+        null_uav_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        null_uav_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+        null_uav_desc.Texture2D.MipSlice = 0;
+        null_uav_desc.Texture2D.PlaneSlice = 0;
+        _sg.d3d12.null_uav = _sg_d3d12_alloc_srv_uav_descriptor();
+        SOKOL_ASSERT(_sg.d3d12.null_uav.ptr != 0);
+        _sg_d3d12_CreateUnorderedAccessView(_sg.d3d12.dev, NULL, NULL, &null_uav_desc, _sg.d3d12.null_uav);
+    }
+
+    {
+        _SG_STRUCT(D3D12_SAMPLER_DESC, null_smp_desc);
+        null_smp_desc.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+        null_smp_desc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        null_smp_desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        null_smp_desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        null_smp_desc.MaxLOD = D3D12_FLOAT32_MAX;
+        _sg.d3d12.null_sampler = _sg_d3d12_alloc_sampler_descriptor();
+        SOKOL_ASSERT(_sg.d3d12.null_sampler.ptr != 0);
+        _sg_d3d12_CreateSampler(_sg.d3d12.dev, &null_smp_desc, _sg.d3d12.null_sampler);
+    }
+
+    _sg.d3d12.upload_ring.per_frame_size = (UINT64)desc->d3d12.upload_ring_buffer_size;
+    _sg.d3d12.upload_ring.size = _sg.d3d12.upload_ring.per_frame_size * SG_NUM_INFLIGHT_FRAMES;
+    SOKOL_ASSERT(_sg.d3d12.upload_ring.size > 0);
+
+    _SG_STRUCT(D3D12_HEAP_PROPERTIES, upload_ring_heap_props);
+    upload_ring_heap_props.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+    _SG_STRUCT(D3D12_RESOURCE_DESC, upload_ring_desc);
+    upload_ring_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    upload_ring_desc.Width = _sg.d3d12.upload_ring.size;
+    upload_ring_desc.Height = 1;
+    upload_ring_desc.DepthOrArraySize = 1;
+    upload_ring_desc.MipLevels = 1;
+    upload_ring_desc.Format = DXGI_FORMAT_UNKNOWN;
+    upload_ring_desc.SampleDesc.Count = 1;
+    upload_ring_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+    hr = _sg_d3d12_CreateCommittedResource(_sg.d3d12.dev,
+        &upload_ring_heap_props,
+        D3D12_HEAP_FLAG_NONE,
+        &upload_ring_desc,
+        D3D12_RESOURCE_STATE_GENERIC_READ,
+        NULL,
+        _sg_win32_refguid(_sg_IID_ID3D12Resource),
+        (void**)&_sg.d3d12.upload_ring.buffer);
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sg.d3d12.upload_ring.buffer);
+
+    _sg_clear(&read_range, sizeof(read_range));
+    hr = _sg_d3d12_Map(_sg.d3d12.upload_ring.buffer, 0, &read_range, &_sg.d3d12.upload_ring.mapped_ptr);
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sg.d3d12.upload_ring.mapped_ptr);
+
+    _sg.d3d12.upload_ring.offset = 0;
+
+    _sg_d3d12_init_caps();
+}
+
+// shutdown the D3D12 backend, wait for GPU idle and release all resources
+_SOKOL_PRIVATE void _sg_d3d12_discard_backend(void) {
+    SOKOL_ASSERT(_sg.d3d12.valid);
+    if (_sg.d3d12.fence && _sg.d3d12.cmd_queue) {
+        _sg_d3d12_signal_fence();
+        _sg_d3d12_wait_for_fence(*_sg.d3d12.fence_value);
+    }
+    _sg_d3d12_drain_release_queue();
+    if (_sg.d3d12.release_queue.items) {
+        _sg_free(_sg.d3d12.release_queue.items);
+        _sg.d3d12.release_queue.items = 0;
+    }
+    if (_sg.d3d12.deferred_image_updates.items) {
+        _sg_free(_sg.d3d12.deferred_image_updates.items);
+        _sg.d3d12.deferred_image_updates.items = 0;
+    }
+    _sg.d3d12.fence = 0;
+    _sg.d3d12.fence_event = 0;
+    _sg.d3d12.fence_value = 0;
+    if (_sg.d3d12.ub.buf) {
+        _sg_d3d12_Unmap(_sg.d3d12.ub.buf, 0, NULL);
+        _sg_d3d12_Release(_sg.d3d12.ub.buf);
+        _sg.d3d12.ub.buf = 0;
+        _sg.d3d12.ub.base_ptr = 0;
+    }
+    if (_sg.d3d12.upload_ring.buffer) {
+        _sg_d3d12_Unmap(_sg.d3d12.upload_ring.buffer, 0, NULL);
+        _sg_d3d12_Release(_sg.d3d12.upload_ring.buffer);
+        _sg.d3d12.upload_ring.buffer = 0;
+        _sg.d3d12.upload_ring.mapped_ptr = 0;
+    }
+    if (_sg.d3d12.srv_uav_heap.free_queue) {
+        _sg_free(_sg.d3d12.srv_uav_heap.free_queue);
+        _sg.d3d12.srv_uav_heap.free_queue = 0;
+    }
+    if (_sg.d3d12.srv_uav_heap.heap) {
+        _sg_d3d12_ReleaseDescriptorHeap(_sg.d3d12.srv_uav_heap.heap);
+        _sg.d3d12.srv_uav_heap.heap = 0;
+    }
+    if (_sg.d3d12.rtv_heap.free_queue) {
+        _sg_free(_sg.d3d12.rtv_heap.free_queue);
+        _sg.d3d12.rtv_heap.free_queue = 0;
+    }
+    if (_sg.d3d12.rtv_heap.heap) {
+        _sg_d3d12_ReleaseDescriptorHeap(_sg.d3d12.rtv_heap.heap);
+        _sg.d3d12.rtv_heap.heap = 0;
+    }
+    if (_sg.d3d12.dsv_heap.free_queue) {
+        _sg_free(_sg.d3d12.dsv_heap.free_queue);
+        _sg.d3d12.dsv_heap.free_queue = 0;
+    }
+    if (_sg.d3d12.dsv_heap.heap) {
+        _sg_d3d12_ReleaseDescriptorHeap(_sg.d3d12.dsv_heap.heap);
+        _sg.d3d12.dsv_heap.heap = 0;
+    }
+    if (_sg.d3d12.cpu_sampler_heap.free_queue) {
+        _sg_free(_sg.d3d12.cpu_sampler_heap.free_queue);
+        _sg.d3d12.cpu_sampler_heap.free_queue = 0;
+    }
+    if (_sg.d3d12.cpu_sampler_heap.heap) {
+        _sg_d3d12_ReleaseDescriptorHeap(_sg.d3d12.cpu_sampler_heap.heap);
+        _sg.d3d12.cpu_sampler_heap.heap = 0;
+    }
+    if (_sg.d3d12.shader_heap.heap) {
+        _sg_d3d12_ReleaseDescriptorHeap(_sg.d3d12.shader_heap.heap);
+        _sg.d3d12.shader_heap.heap = 0;
+    }
+    if (_sg.d3d12.sampler_heap.heap) {
+        _sg_d3d12_ReleaseDescriptorHeap(_sg.d3d12.sampler_heap.heap);
+        _sg.d3d12.sampler_heap.heap = 0;
+    }
+    if (_sg.d3d12.frame_cmd_list) {
+        _sg_d3d12_Release(_sg.d3d12.frame_cmd_list);
+        _sg.d3d12.frame_cmd_list = 0;
+    }
+    for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+        if (_sg.d3d12.frame_cmd_allocs[i]) {
+            _sg_d3d12_Release(_sg.d3d12.frame_cmd_allocs[i]);
+            _sg.d3d12.frame_cmd_allocs[i] = 0;
+        }
+    }
+    if (_sg.d3d12.upload_cmd_list) {
+        _sg_d3d12_Release(_sg.d3d12.upload_cmd_list);
+        _sg.d3d12.upload_cmd_list = 0;
+    }
+    if (_sg.d3d12.upload_cmd_alloc) {
+        _sg_d3d12_Release(_sg.d3d12.upload_cmd_alloc);
+        _sg.d3d12.upload_cmd_alloc = 0;
+    }
+    if (_sg.d3d12.d3dcompiler_dll) {
+        FreeLibrary(_sg.d3d12.d3dcompiler_dll);
+        _sg.d3d12.d3dcompiler_dll = 0;
+    }
+    _sg.d3d12.valid = false;
+}
+
+// reset the cached pipeline state
+_SOKOL_PRIVATE void _sg_d3d12_reset_state_cache(void) {
+    _sg.d3d12.cache.cur_pip = _sg_sref(0);
+}
+
+// dynamically load d3dcompiler_47.dll for shader compilation from source
+_SOKOL_PRIVATE bool _sg_d3d12_load_d3dcompiler_dll(void) {
+    if ((0 == _sg.d3d12.d3dcompiler_dll) && !_sg.d3d12.d3dcompiler_dll_load_failed) {
+        _sg.d3d12.d3dcompiler_dll = LoadLibraryA("d3dcompiler_47.dll");
+        if (0 == _sg.d3d12.d3dcompiler_dll) {
+            _SG_ERROR(D3D12_LOAD_D3DCOMPILER_47_DLL_FAILED);
+            _sg.d3d12.d3dcompiler_dll_load_failed = true;
+            return false;
+        }
+        _sg.d3d12.D3DCompile_func = (pD3DCompile)(void*) GetProcAddress(_sg.d3d12.d3dcompiler_dll, "D3DCompile");
+        SOKOL_ASSERT(_sg.d3d12.D3DCompile_func);
+    }
+    return 0 != _sg.d3d12.d3dcompiler_dll;
+}
+
+// compile HLSL shader source code to bytecode using d3dcompiler
+_SOKOL_PRIVATE ID3DBlob* _sg_d3d12_compile_shader(const sg_shader_function* shd_func) {
+    if (!_sg_d3d12_load_d3dcompiler_dll()) {
+        return NULL;
+    }
+    SOKOL_ASSERT(shd_func->d3d12_target);
+    UINT flags1 = D3DCOMPILE_PACK_MATRIX_COLUMN_MAJOR;
+    if (_sg.desc.d3d12.shader_debugging) {
+        flags1 |= D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+    } else {
+        flags1 |= D3DCOMPILE_OPTIMIZATION_LEVEL3;
+    }
+    ID3DBlob* output = NULL;
+    ID3DBlob* errors_or_warnings = NULL;
+    HRESULT hr = _sg.d3d12.D3DCompile_func(
+        shd_func->source,
+        strlen(shd_func->source),
+        shd_func->d3d12_filepath,
+        NULL,
+        D3D_COMPILE_STANDARD_FILE_INCLUDE,
+        shd_func->entry ? shd_func->entry : "main",
+        shd_func->d3d12_target,
+        flags1,
+        0,
+        &output,
+        &errors_or_warnings);
+    if (FAILED(hr)) {
+        _SG_ERROR(D3D12_SHADER_COMPILATION_FAILED);
+    }
+    if (errors_or_warnings) {
+        _SG_WARN(D3D12_SHADER_COMPILATION_OUTPUT);
+        _SG_LOGMSG(D3D12_SHADER_COMPILATION_OUTPUT, (LPCSTR)_sg_d3d12_GetBufferPointer(errors_or_warnings));
+        _sg_d3d12_Release(errors_or_warnings);
+        errors_or_warnings = NULL;
+    }
+    if (FAILED(hr)) {
+        if (output) {
+            _sg_d3d12_Release(output);
+            output = NULL;
+        }
+    }
+    return output;
+}
+
+//-- resource creation and destruction ----------------------------------------
+// create a buffer resource in default or upload heap depending on usage
+_SOKOL_PRIVATE sg_resource_state _sg_d3d12_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
+    SOKOL_ASSERT(buf && desc);
+    SOKOL_ASSERT(!buf->d3d12.res);
+    const bool injected = (0 != desc->d3d12_buffer);
+    if (injected) {
+        buf->d3d12.res = (ID3D12Resource*) desc->d3d12_buffer;
+        _sg_d3d12_AddRef(buf->d3d12.res);
+        _sg_d3d12_setlabel(buf->d3d12.res, desc->label);
+        buf->d3d12.mapped_ptr = NULL;
+        buf->d3d12.gpu_dirty_flags = 0;
+        return SG_RESOURCESTATE_VALID;
+    }
+
+    const bool is_immutable = buf->cmn.usage.immutable;
+    const bool is_storage = buf->cmn.usage.storage_buffer;
+
+    _SG_STRUCT(D3D12_HEAP_PROPERTIES, heap_props);
+    heap_props.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+    heap_props.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+
+    _SG_STRUCT(D3D12_RESOURCE_DESC, res_desc);
+    res_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    res_desc.Alignment = 0;
+    res_desc.Width = (UINT64)buf->cmn.size;
+    res_desc.Height = 1;
+    res_desc.DepthOrArraySize = 1;
+    res_desc.MipLevels = 1;
+    res_desc.Format = DXGI_FORMAT_UNKNOWN;
+    res_desc.SampleDesc.Count = 1;
+    res_desc.SampleDesc.Quality = 0;
+    res_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    res_desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+    if (is_storage && is_immutable) {
+        res_desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    }
+
+    HRESULT hr;
+
+    if (is_immutable) {
+        heap_props.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        hr = _sg_d3d12_CreateCommittedResource(
+            _sg.d3d12.dev,
+            &heap_props,
+            D3D12_HEAP_FLAG_NONE,
+            &res_desc,
+            D3D12_RESOURCE_STATE_COMMON,
+            NULL,
+            _sg_win32_refguid(_sg_IID_ID3D12Resource),
+            (void**)&buf->d3d12.res
+        );
+        if (!(SUCCEEDED(hr) && buf->d3d12.res)) {
+            _SG_ERROR(D3D12_CREATE_BUFFER_FAILED);
+            return SG_RESOURCESTATE_FAILED;
+        }
+
+        if (desc->data.ptr && _sg.d3d12.upload_cmd_list) {
+            _SG_STRUCT(D3D12_HEAP_PROPERTIES, upload_heap_props);
+            upload_heap_props.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+            _SG_STRUCT(D3D12_RESOURCE_DESC, upload_desc);
+            upload_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+            upload_desc.Width = (UINT64)buf->cmn.size;
+            upload_desc.Height = 1;
+            upload_desc.DepthOrArraySize = 1;
+            upload_desc.MipLevels = 1;
+            upload_desc.Format = DXGI_FORMAT_UNKNOWN;
+            upload_desc.SampleDesc.Count = 1;
+            upload_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+            ID3D12Resource* upload_buf = NULL;
+            hr = _sg_d3d12_CreateCommittedResource(
+                _sg.d3d12.dev,
+                &upload_heap_props,
+                D3D12_HEAP_FLAG_NONE,
+                &upload_desc,
+                D3D12_RESOURCE_STATE_GENERIC_READ,
+                NULL,
+                _sg_win32_refguid(_sg_IID_ID3D12Resource),
+                (void**)&upload_buf
+            );
+            if (SUCCEEDED(hr) && upload_buf) {
+                void* mapped_ptr = NULL;
+                _SG_STRUCT(D3D12_RANGE, read_range);
+                hr = _sg_d3d12_Map(upload_buf, 0, &read_range, &mapped_ptr);
+                if (SUCCEEDED(hr) && mapped_ptr) {
+                    memcpy(mapped_ptr, desc->data.ptr, desc->data.size);
+                    _sg_d3d12_Unmap(upload_buf, 0, NULL);
+
+                    _sg_d3d12_wait_for_upload_allocator();
+                    _sg_d3d12_ResetCommandAllocator(_sg.d3d12.upload_cmd_alloc);
+                    _sg_d3d12_ResetCommandList(_sg.d3d12.upload_cmd_list, _sg.d3d12.upload_cmd_alloc, NULL);
+
+                    // transition buffer to COPY_DEST for initial data upload
+                    _SG_STRUCT(D3D12_RESOURCE_BARRIER, barrier);
+                    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+                    barrier.Transition.pResource = buf->d3d12.res;
+                    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+                    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+                    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+                    _sg_d3d12_ResourceBarrier(_sg.d3d12.upload_cmd_list, 1, &barrier);
+
+                    _sg_d3d12_CopyBufferRegion(_sg.d3d12.upload_cmd_list, buf->d3d12.res, 0, upload_buf, 0, (UINT64)desc->data.size);
+
+                    // transition buffer to GENERIC_READ after copy completes
+                    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+                    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
+                    _sg_d3d12_ResourceBarrier(_sg.d3d12.upload_cmd_list, 1, &barrier);
+
+                    _sg_d3d12_Close(_sg.d3d12.upload_cmd_list);
+                    ID3D12CommandList* cmd_lists[] = { (ID3D12CommandList*)_sg.d3d12.upload_cmd_list };
+                    _sg_d3d12_ExecuteCommandLists(_sg.d3d12.cmd_queue, 1, cmd_lists);
+
+                    _sg_d3d12_signal_fence();
+                    _sg.d3d12.upload_fence_value = *_sg.d3d12.fence_value;
+
+                    _sg_d3d12_deferred_release_resource(upload_buf);
+                    upload_buf = NULL;
+                }
+            }
+        }
+    } else {
+        heap_props.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+        for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+            hr = _sg_d3d12_CreateCommittedResource(
+                _sg.d3d12.dev,
+                &heap_props,
+                D3D12_HEAP_FLAG_NONE,
+                &res_desc,
+                D3D12_RESOURCE_STATE_GENERIC_READ,
+                NULL,
+                _sg_win32_refguid(_sg_IID_ID3D12Resource),
+                (void**)&buf->d3d12.ring_res[i]
+            );
+            if (!(SUCCEEDED(hr) && buf->d3d12.ring_res[i])) {
+                _SG_ERROR(D3D12_CREATE_BUFFER_FAILED);
+                for (int j = 0; j < i; j++) {
+                    if (buf->d3d12.ring_mapped_ptr[j]) {
+                        _sg_d3d12_Unmap(buf->d3d12.ring_res[j], 0, NULL);
+                        buf->d3d12.ring_mapped_ptr[j] = NULL;
+                    }
+                    _sg_d3d12_Release(buf->d3d12.ring_res[j]);
+                    buf->d3d12.ring_res[j] = NULL;
+                }
+                return SG_RESOURCESTATE_FAILED;
+            }
+
+            _SG_STRUCT(D3D12_RANGE, read_range);
+            hr = _sg_d3d12_Map(buf->d3d12.ring_res[i], 0, &read_range, &buf->d3d12.ring_mapped_ptr[i]);
+            if (!(SUCCEEDED(hr) && buf->d3d12.ring_mapped_ptr[i])) {
+                _SG_ERROR(D3D12_MAP_BUFFER_FAILED);
+                for (int j = 0; j <= i; j++) {
+                    if (buf->d3d12.ring_mapped_ptr[j]) {
+                        _sg_d3d12_Unmap(buf->d3d12.ring_res[j], 0, NULL);
+                        buf->d3d12.ring_mapped_ptr[j] = NULL;
+                    }
+                    _sg_d3d12_Release(buf->d3d12.ring_res[j]);
+                    buf->d3d12.ring_res[j] = NULL;
+                }
+                return SG_RESOURCESTATE_FAILED;
+            }
+
+            if (desc->data.ptr) {
+                memcpy(buf->d3d12.ring_mapped_ptr[i], desc->data.ptr, desc->data.size);
+            }
+        }
+
+        buf->d3d12.res = NULL;
+        buf->d3d12.mapped_ptr = NULL;
+    }
+
+    if (is_immutable) {
+        _sg_d3d12_setlabel(buf->d3d12.res, desc->label);
+        buf->d3d12.mapped_ptr = NULL;
+    } else {
+        if (desc->label) {
+            for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+                char label_with_frame[256];
+                #if defined(_MSC_VER)
+                _snprintf_s(label_with_frame, sizeof(label_with_frame), _TRUNCATE, "%s_frame%d", desc->label, i);
+                #else
+                snprintf(label_with_frame, sizeof(label_with_frame), "%s_frame%d", desc->label, i);
+                #endif
+                _sg_d3d12_setlabel(buf->d3d12.ring_res[i], label_with_frame);
+            }
+        } else {
+            for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+                _sg_d3d12_setlabel(buf->d3d12.ring_res[i], NULL);
+            }
+        }
+    }
+    buf->d3d12.gpu_dirty_flags = 0;
+    return SG_RESOURCESTATE_VALID;
+}
+
+// queue buffer resource for deferred release after GPU finishes using it
+_SOKOL_PRIVATE void _sg_d3d12_discard_buffer(_sg_buffer_t* buf) {
+    SOKOL_ASSERT(buf);
+    if (buf->d3d12.res) {
+        _sg_d3d12_deferred_release_resource(buf->d3d12.res);
+    } else {
+        for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+            if (buf->d3d12.ring_res[i]) {
+                if (buf->d3d12.ring_mapped_ptr[i]) {
+                    _sg_d3d12_Unmap(buf->d3d12.ring_res[i], 0, NULL);
+                    buf->d3d12.ring_mapped_ptr[i] = NULL;
+                }
+                _sg_d3d12_deferred_release_resource(buf->d3d12.ring_res[i]);
+                buf->d3d12.ring_res[i] = NULL;
+            }
+        }
+    }
+}
+
+// determine resource creation flags based on image usage
+_SOKOL_PRIVATE D3D12_RESOURCE_FLAGS _sg_d3d12_image_resource_flags(const sg_image_usage* usg) {
+    D3D12_RESOURCE_FLAGS res = D3D12_RESOURCE_FLAG_NONE;
+    if (usg->color_attachment || usg->resolve_attachment) {
+        res |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+    }
+    if (usg->depth_stencil_attachment) {
+        res |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+    }
+    if (usg->storage_image) {
+        res |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    }
+    return res;
+}
+
+// determine the initial resource state for newly created images
+_SOKOL_PRIVATE D3D12_RESOURCE_STATES _sg_d3d12_image_initial_state(const sg_image_usage* usg) {
+    if (usg->depth_stencil_attachment) {
+        return D3D12_RESOURCE_STATE_DEPTH_WRITE;
+    } else if (usg->color_attachment || usg->resolve_attachment) {
+        return D3D12_RESOURCE_STATE_RENDER_TARGET;
+    } else {
+        return D3D12_RESOURCE_STATE_COMMON;
+    }
+}
+
+// create a texture resource and optional shader resource view descriptors
+_SOKOL_PRIVATE sg_resource_state _sg_d3d12_create_image(_sg_image_t* img, const sg_image_desc* desc) {
+    SOKOL_ASSERT(img && desc);
+    SOKOL_ASSERT(0 == img->d3d12.res);
+    HRESULT hr;
+
+    const bool injected = (0 != desc->d3d12_texture);
+    const bool msaa = (img->cmn.sample_count > 1);
+    SOKOL_ASSERT(!(msaa && (img->cmn.type == SG_IMAGETYPE_CUBE)));
+    img->d3d12.format = _sg_d3d12_texture_pixel_format(img->cmn.pixel_format);
+    if (img->d3d12.format == DXGI_FORMAT_UNKNOWN) {
+        if (img->cmn.usage.depth_stencil_attachment) {
+            _SG_ERROR(D3D12_CREATE_DEPTH_TEXTURE_UNSUPPORTED_PIXEL_FORMAT);
+        } else if (img->cmn.type == SG_IMAGETYPE_3D) {
+            _SG_ERROR(D3D12_CREATE_3D_TEXTURE_UNSUPPORTED_PIXEL_FORMAT);
+        } else {
+            _SG_ERROR(D3D12_CREATE_2D_TEXTURE_UNSUPPORTED_PIXEL_FORMAT);
+        }
+        return SG_RESOURCESTATE_FAILED;
+    }
+
+    if (injected) {
+        img->d3d12.res = (ID3D12Resource*)desc->d3d12_texture;
+        _sg_d3d12_AddRef(img->d3d12.res);
+
+        if (desc->d3d12_texture_state != 0) {
+            img->d3d12.current_state = (D3D12_RESOURCE_STATES)desc->d3d12_texture_state;
+        } else {
+            // warn that we're assuming initial state - caller should specify for correctness
+            _SG_WARN(D3D12_INJECTED_TEXTURE_STATE_NOT_SPECIFIED);
+            img->d3d12.current_state = _sg_d3d12_image_initial_state(&img->cmn.usage);
+        }
+        img->d3d12.gpu_dirty_flags = 0;
+    } else {
+        _SG_STRUCT(D3D12_HEAP_PROPERTIES, heap_props);
+        heap_props.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        _SG_STRUCT(D3D12_RESOURCE_DESC, res_desc);
+
+        if (img->cmn.type == SG_IMAGETYPE_3D) {
+            res_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE3D;
+            res_desc.DepthOrArraySize = (UINT16)img->cmn.num_slices;
+        } else {
+            res_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+            if (img->cmn.type == SG_IMAGETYPE_CUBE) {
+                res_desc.DepthOrArraySize = (UINT16)img->cmn.num_slices;
+            } else if (img->cmn.type == SG_IMAGETYPE_ARRAY) {
+                res_desc.DepthOrArraySize = (UINT16)img->cmn.num_slices;
+            } else {
+                res_desc.DepthOrArraySize = 1;
+            }
+        }
+
+        res_desc.Width = (UINT64)img->cmn.width;
+        res_desc.Height = (UINT)img->cmn.height;
+        res_desc.MipLevels = (UINT16)img->cmn.num_mipmaps;
+        res_desc.Format = img->d3d12.format;
+        res_desc.SampleDesc.Count = (UINT)img->cmn.sample_count;
+        res_desc.SampleDesc.Quality = 0;
+        res_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        res_desc.Flags = _sg_d3d12_image_resource_flags(&img->cmn.usage);
+
+        D3D12_RESOURCE_STATES initial_state = _sg_d3d12_image_initial_state(&img->cmn.usage);
+
+        _SG_STRUCT(D3D12_CLEAR_VALUE, clear_value);
+        D3D12_CLEAR_VALUE* p_clear_value = NULL;
+        if (img->cmn.usage.color_attachment || img->cmn.usage.resolve_attachment) {
+            clear_value.Format = _sg_d3d12_rtv_uav_pixel_format(img->cmn.pixel_format);
+            p_clear_value = &clear_value;
+        } else if (img->cmn.usage.depth_stencil_attachment) {
+            clear_value.Format = _sg_d3d12_dsv_pixel_format(img->cmn.pixel_format);
+            clear_value.DepthStencil.Depth = 1.0f;
+            clear_value.DepthStencil.Stencil = 0;
+            p_clear_value = &clear_value;
+        }
+
+        D3D12_RESOURCE_STATES create_state = initial_state;
+        const bool has_data = (desc->data.mip_levels[0].ptr != 0);
+        if (has_data) {
+            create_state = D3D12_RESOURCE_STATE_COPY_DEST;
+        }
+
+        hr = _sg_d3d12_CreateCommittedResource(_sg.d3d12.dev,
+            &heap_props,
+            D3D12_HEAP_FLAG_NONE,
+            &res_desc,
+            create_state,
+            p_clear_value,
+            _sg_win32_refguid(_sg_IID_ID3D12Resource),
+            (void**)&img->d3d12.res);
+        if (!(SUCCEEDED(hr) && img->d3d12.res)) {
+            if (img->cmn.usage.depth_stencil_attachment) {
+                _SG_ERROR(D3D12_CREATE_DEPTH_TEXTURE_FAILED);
+            } else if (msaa) {
+                _SG_ERROR(D3D12_CREATE_MSAA_TEXTURE_FAILED);
+            } else if (img->cmn.type == SG_IMAGETYPE_3D) {
+                _SG_ERROR(D3D12_CREATE_3D_TEXTURE_FAILED);
+            } else {
+                _SG_ERROR(D3D12_CREATE_2D_TEXTURE_FAILED);
+            }
+            return SG_RESOURCESTATE_FAILED;
+        }
+
+        img->d3d12.current_state = create_state;
+        img->d3d12.gpu_dirty_flags = 0;
+
+        if (has_data && _sg.d3d12.upload_cmd_list) {
+            const int num_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? 1 : img->cmn.num_slices;
+            const int num_subresources = num_slices * img->cmn.num_mipmaps;
+
+            UINT64 upload_size = 0;
+            _sg_d3d12_GetCopyableFootprints(_sg.d3d12.dev, &res_desc, 0, (UINT)num_subresources, 0, NULL, NULL, NULL, &upload_size);
+
+            _SG_STRUCT(D3D12_HEAP_PROPERTIES, upload_heap_props);
+            upload_heap_props.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+            _SG_STRUCT(D3D12_RESOURCE_DESC, upload_desc);
+            upload_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+            upload_desc.Width = upload_size;
+            upload_desc.Height = 1;
+            upload_desc.DepthOrArraySize = 1;
+            upload_desc.MipLevels = 1;
+            upload_desc.Format = DXGI_FORMAT_UNKNOWN;
+            upload_desc.SampleDesc.Count = 1;
+            upload_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+            ID3D12Resource* upload_buf = NULL;
+            hr = _sg_d3d12_CreateCommittedResource(_sg.d3d12.dev,
+                &upload_heap_props,
+                D3D12_HEAP_FLAG_NONE,
+                &upload_desc,
+                D3D12_RESOURCE_STATE_GENERIC_READ,
+                NULL,
+                _sg_win32_refguid(_sg_IID_ID3D12Resource),
+                (void**)&upload_buf);
+            if (SUCCEEDED(hr) && upload_buf) {
+                D3D12_PLACED_SUBRESOURCE_FOOTPRINT* footprints = (D3D12_PLACED_SUBRESOURCE_FOOTPRINT*)_sg_malloc((size_t)num_subresources * sizeof(D3D12_PLACED_SUBRESOURCE_FOOTPRINT));
+                UINT* num_rows = (UINT*)_sg_malloc((size_t)num_subresources * sizeof(UINT));
+                UINT64* row_sizes = (UINT64*)_sg_malloc((size_t)num_subresources * sizeof(UINT64));
+                SOKOL_ASSERT(footprints && num_rows && row_sizes);
+                _sg_d3d12_GetCopyableFootprints(_sg.d3d12.dev, &res_desc, 0, (UINT)num_subresources, 0, footprints, num_rows, row_sizes, NULL);
+
+                void* mapped_ptr = NULL;
+                _SG_STRUCT(D3D12_RANGE, read_range);
+                hr = _sg_d3d12_Map(upload_buf, 0, &read_range, &mapped_ptr);
+                if (SUCCEEDED(hr) && mapped_ptr) {
+                    int subres_idx = 0;
+                    for (int slice = 0; slice < num_slices; slice++) {
+                        for (int mip = 0; mip < img->cmn.num_mipmaps; mip++, subres_idx++) {
+                            const sg_range* mip_data = &desc->data.mip_levels[mip];
+                            if (mip_data->ptr) {
+                                const D3D12_PLACED_SUBRESOURCE_FOOTPRINT* fp = &footprints[subres_idx];
+                                uint8_t* dst_base = (uint8_t*)mapped_ptr + fp->Offset;
+                                const int mip_width = _sg_miplevel_dim(img->cmn.width, mip);
+                                const int src_row_pitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
+                                const size_t slice_size = mip_data->size / (size_t)num_slices;
+                                const uint8_t* src_base = (const uint8_t*)mip_data->ptr + slice_size * (size_t)slice;
+
+                                for (UINT row = 0; row < num_rows[subres_idx]; row++) {
+                                    memcpy(dst_base + row * fp->Footprint.RowPitch,
+                                           src_base + row * (UINT)src_row_pitch,
+                                           (size_t)row_sizes[subres_idx]);
+                                }
+                            }
+                        }
+                    }
+                    _sg_d3d12_Unmap(upload_buf, 0, NULL);
+
+                    _sg_d3d12_wait_for_upload_allocator();
+                    _sg_d3d12_ResetCommandAllocator(_sg.d3d12.upload_cmd_alloc);
+                    _sg_d3d12_ResetCommandList(_sg.d3d12.upload_cmd_list, _sg.d3d12.upload_cmd_alloc, NULL);
+
+                    for (int i = 0; i < num_subresources; i++) {
+                        _SG_STRUCT(D3D12_TEXTURE_COPY_LOCATION, dst_loc);
+                        dst_loc.pResource = img->d3d12.res;
+                        dst_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                        dst_loc.SubresourceIndex = (UINT)i;
+
+                        _SG_STRUCT(D3D12_TEXTURE_COPY_LOCATION, src_loc);
+                        src_loc.pResource = upload_buf;
+                        src_loc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+                        src_loc.PlacedFootprint = footprints[i];
+
+                        _sg_d3d12_CopyTextureRegion(_sg.d3d12.upload_cmd_list, &dst_loc, 0, 0, 0, &src_loc, NULL);
+                    }
+
+                    // transition image to its initial state after copy (PIXEL_SHADER_RESOURCE or COMMON)
+                    if (initial_state != D3D12_RESOURCE_STATE_COPY_DEST) {
+                        _SG_STRUCT(D3D12_RESOURCE_BARRIER, barrier);
+                        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+                        barrier.Transition.pResource = img->d3d12.res;
+                        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+                        barrier.Transition.StateAfter = initial_state;
+                        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+                        _sg_d3d12_ResourceBarrier(_sg.d3d12.upload_cmd_list, 1, &barrier);
+
+                        img->d3d12.current_state = initial_state;
+                    }
+
+                    _sg_d3d12_Close(_sg.d3d12.upload_cmd_list);
+                    ID3D12CommandList* cmd_lists[] = { (ID3D12CommandList*)_sg.d3d12.upload_cmd_list };
+                    _sg_d3d12_ExecuteCommandLists(_sg.d3d12.cmd_queue, 1, cmd_lists);
+
+                    _sg_d3d12_signal_fence();
+                    _sg.d3d12.upload_fence_value = *_sg.d3d12.fence_value;
+
+                    _sg_d3d12_deferred_release_resource(upload_buf);
+                    upload_buf = NULL;
+                }
+                if (upload_buf) {
+                    _sg_d3d12_Release(upload_buf);
+                }
+                _sg_free(footprints);
+                _sg_free(num_rows);
+                _sg_free(row_sizes);
+            }
+        }
+    }
+
+    _sg_d3d12_setlabel(img->d3d12.res, desc->label);
+    img->d3d12.deferred_update_index = -1;
+    return SG_RESOURCESTATE_VALID;
+}
+
+// cancel any pending updates and queue image resource for deferred release
+_SOKOL_PRIVATE void _sg_d3d12_discard_image(_sg_image_t* img) {
+    SOKOL_ASSERT(img);
+    if (img->d3d12.deferred_update_index >= 0) {
+        _sg.d3d12.deferred_image_updates.items[img->d3d12.deferred_update_index].img = NULL;
+        img->d3d12.deferred_update_index = -1;
+    }
+    if (img->d3d12.res) {
+        _sg_d3d12_deferred_release_resource(img->d3d12.res);
+    }
+}
+
+// create a sampler descriptor in the CPU-side sampler heap
+_SOKOL_PRIVATE sg_resource_state _sg_d3d12_create_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
+    SOKOL_ASSERT(smp && desc);
+
+    const bool injected = (0 != desc->d3d12_sampler);
+    smp->d3d12.injected = injected;
+    if (injected) {
+        smp->d3d12.handle.ptr = (SIZE_T)desc->d3d12_sampler;
+    } else {
+        _SG_STRUCT(D3D12_SAMPLER_DESC, d3d12_desc);
+        d3d12_desc.Filter = _sg_d3d12_filter(desc->min_filter, desc->mag_filter, desc->mipmap_filter, desc->compare != SG_COMPAREFUNC_NEVER, desc->max_anisotropy);
+        d3d12_desc.AddressU = _sg_d3d12_address_mode(desc->wrap_u);
+        d3d12_desc.AddressV = _sg_d3d12_address_mode(desc->wrap_v);
+        d3d12_desc.AddressW = _sg_d3d12_address_mode(desc->wrap_w);
+        d3d12_desc.MipLODBias = 0.0f;
+        switch (desc->border_color) {
+            case SG_BORDERCOLOR_TRANSPARENT_BLACK:
+                break;
+            case SG_BORDERCOLOR_OPAQUE_WHITE:
+                for (int i = 0; i < 4; i++) {
+                    d3d12_desc.BorderColor[i] = 1.0f;
+                }
+                break;
+            default:
+                d3d12_desc.BorderColor[3] = 1.0f;
+                break;
+        }
+        d3d12_desc.MaxAnisotropy = desc->max_anisotropy;
+        d3d12_desc.ComparisonFunc = _sg_d3d12_compare_func(desc->compare);
+        d3d12_desc.MinLOD = desc->min_lod;
+        d3d12_desc.MaxLOD = desc->max_lod;
+
+        smp->d3d12.handle = _sg_d3d12_alloc_sampler_descriptor();
+        if (0 == smp->d3d12.handle.ptr) {
+            return SG_RESOURCESTATE_FAILED;
+        }
+        _sg_d3d12_CreateSampler(_sg.d3d12.dev, &d3d12_desc, smp->d3d12.handle);
+    }
+
+    return SG_RESOURCESTATE_VALID;
+}
+
+// queue sampler descriptor for deferred release
+_SOKOL_PRIVATE void _sg_d3d12_discard_sampler(_sg_sampler_t* smp) {
+    SOKOL_ASSERT(smp);
+    if (!smp->d3d12.injected) {
+        _sg_d3d12_deferred_release_sampler(smp->d3d12.handle);
+    }
+}
+
+// validate that HLSL register indices are within supported ranges
+_SOKOL_PRIVATE bool _sg_d3d12_ensure_hlsl_bindslot_ranges(const sg_shader_desc* desc) {
+    SOKOL_ASSERT(desc);
+    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
+        const sg_shader_uniform_block* ub = &desc->uniform_blocks[i];
+        if (ub->stage != SG_SHADERSTAGE_NONE) {
+            if (ub->hlsl_register_b_n >= _SG_D3D12_MAX_STAGE_UB_BINDINGS) {
+                _SG_ERROR(D3D12_UNIFORMBLOCK_HLSL_REGISTER_B_OUT_OF_RANGE);
+                return false;
+            }
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        const sg_shader_view* view = &desc->views[i];
+        if (view->texture.stage != SG_SHADERSTAGE_NONE) {
+            if (view->texture.hlsl_register_t_n >= _SG_D3D12_MAX_STAGE_SRV_BINDINGS) {
+                _SG_ERROR(D3D12_IMAGE_HLSL_REGISTER_T_OUT_OF_RANGE);
+                return false;
+            }
+        }
+        if (view->storage_buffer.stage != SG_SHADERSTAGE_NONE) {
+            if (view->storage_buffer.hlsl_register_t_n >= _SG_D3D12_MAX_STAGE_SRV_BINDINGS) {
+                _SG_ERROR(D3D12_STORAGEBUFFER_HLSL_REGISTER_T_OUT_OF_RANGE);
+                return false;
+            }
+            if (view->storage_buffer.hlsl_register_u_n >= _SG_D3D12_MAX_STAGE_UAV_BINDINGS) {
+                _SG_ERROR(D3D12_STORAGEBUFFER_HLSL_REGISTER_U_OUT_OF_RANGE);
+                return false;
+            }
+        }
+        if (view->storage_image.stage != SG_SHADERSTAGE_NONE) {
+            if (view->storage_image.hlsl_register_u_n >= _SG_D3D12_MAX_STAGE_UAV_BINDINGS) {
+                _SG_ERROR(D3D12_STORAGEIMAGE_HLSL_REGISTER_U_OUT_OF_RANGE);
+                return false;
+            }
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+        const sg_shader_sampler* smp = &desc->samplers[i];
+        if (smp->stage != SG_SHADERSTAGE_NONE) {
+            if (smp->hlsl_register_s_n >= _SG_D3D12_MAX_STAGE_SMP_BINDINGS) {
+                _SG_ERROR(D3D12_SAMPLER_HLSL_REGISTER_S_OUT_OF_RANGE);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+// create shader bytecode blobs and root signature for resource binding
+_SOKOL_PRIVATE sg_resource_state _sg_d3d12_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
+    SOKOL_ASSERT(shd && desc);
+    SOKOL_ASSERT(!shd->d3d12.vs_blob && !shd->d3d12.fs_blob && !shd->d3d12.cs_blob);
+
+    if (!_sg_d3d12_ensure_hlsl_bindslot_ranges(desc)) {
+        return SG_RESOURCESTATE_FAILED;
+    }
+
+    for (size_t i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
+        _sg_strcpy(&shd->d3d12.attrs[i].sem_name, desc->attrs[i].hlsl_sem_name);
+        shd->d3d12.attrs[i].sem_index = desc->attrs[i].hlsl_sem_index;
+    }
+
+    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
+        SOKOL_ASSERT(0 == shd->d3d12.ub_register_b_n[i]);
+        shd->d3d12.ub_register_b_n[i] = desc->uniform_blocks[i].hlsl_register_b_n;
+    }
+
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        const sg_shader_view* view = &desc->views[i];
+        SOKOL_ASSERT((0 == shd->d3d12.view_register_t_n[i]) && (0 == shd->d3d12.view_register_u_n[i]));
+        if (view->storage_buffer.stage != SG_SHADERSTAGE_NONE) {
+            shd->d3d12.view_register_t_n[i] = view->storage_buffer.hlsl_register_t_n;
+            shd->d3d12.view_register_u_n[i] = view->storage_buffer.hlsl_register_u_n;
+        } else if (view->texture.stage != SG_SHADERSTAGE_NONE) {
+            shd->d3d12.view_register_t_n[i] = view->texture.hlsl_register_t_n;
+        } else if (view->storage_image.stage != SG_SHADERSTAGE_NONE) {
+            shd->d3d12.view_register_u_n[i] = view->storage_image.hlsl_register_u_n;
+        }
+    }
+
+    for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+        SOKOL_ASSERT(0 == shd->d3d12.smp_register_s_n[i]);
+        shd->d3d12.smp_register_s_n[i] = desc->samplers[i].hlsl_register_s_n;
+    }
+
+    const bool has_vs = desc->vertex_func.bytecode.ptr || desc->vertex_func.source;
+    const bool has_fs = desc->fragment_func.bytecode.ptr || desc->fragment_func.source;
+    const bool has_cs = desc->compute_func.bytecode.ptr || desc->compute_func.source;
+
+    bool vs_valid = false;
+    bool fs_valid = false;
+    bool cs_valid = false;
+
+    if (has_vs) {
+        const void* vs_ptr = 0;
+        SIZE_T vs_length = 0;
+        ID3DBlob* vs_blob = 0;
+        if (desc->vertex_func.bytecode.ptr) {
+            SOKOL_ASSERT(desc->vertex_func.bytecode.size > 0);
+            vs_ptr = desc->vertex_func.bytecode.ptr;
+            vs_length = desc->vertex_func.bytecode.size;
+        } else {
+            SOKOL_ASSERT(desc->vertex_func.source);
+            vs_blob = _sg_d3d12_compile_shader(&desc->vertex_func);
+            if (vs_blob) {
+                vs_ptr = _sg_d3d12_GetBufferPointer(vs_blob);
+                vs_length = _sg_d3d12_GetBufferSize(vs_blob);
+            }
+        }
+        if (vs_ptr && (vs_length > 0)) {
+            shd->d3d12.vs_blob_length = vs_length;
+            shd->d3d12.vs_blob = _sg_malloc((size_t)vs_length);
+            SOKOL_ASSERT(shd->d3d12.vs_blob);
+            memcpy(shd->d3d12.vs_blob, vs_ptr, vs_length);
+            vs_valid = true;
+        }
+        if (vs_blob) {
+            _sg_d3d12_Release(vs_blob);
+        }
+    }
+
+    if (has_fs) {
+        const void* fs_ptr = 0;
+        SIZE_T fs_length = 0;
+        ID3DBlob* fs_blob = 0;
+        if (desc->fragment_func.bytecode.ptr) {
+            SOKOL_ASSERT(desc->fragment_func.bytecode.size > 0);
+            fs_ptr = desc->fragment_func.bytecode.ptr;
+            fs_length = desc->fragment_func.bytecode.size;
+        } else {
+            SOKOL_ASSERT(desc->fragment_func.source);
+            fs_blob = _sg_d3d12_compile_shader(&desc->fragment_func);
+            if (fs_blob) {
+                fs_ptr = _sg_d3d12_GetBufferPointer(fs_blob);
+                fs_length = _sg_d3d12_GetBufferSize(fs_blob);
+            }
+        }
+        if (fs_ptr && (fs_length > 0)) {
+            shd->d3d12.fs_blob_length = fs_length;
+            shd->d3d12.fs_blob = _sg_malloc((size_t)fs_length);
+            SOKOL_ASSERT(shd->d3d12.fs_blob);
+            memcpy(shd->d3d12.fs_blob, fs_ptr, fs_length);
+            fs_valid = true;
+        }
+        if (fs_blob) {
+            _sg_d3d12_Release(fs_blob);
+        }
+    }
+
+    if (has_cs) {
+        const void* cs_ptr = 0;
+        SIZE_T cs_length = 0;
+        ID3DBlob* cs_blob = 0;
+        if (desc->compute_func.bytecode.ptr) {
+            SOKOL_ASSERT(desc->compute_func.bytecode.size > 0);
+            cs_ptr = desc->compute_func.bytecode.ptr;
+            cs_length = desc->compute_func.bytecode.size;
+        } else {
+            SOKOL_ASSERT(desc->compute_func.source);
+            cs_blob = _sg_d3d12_compile_shader(&desc->compute_func);
+            if (cs_blob) {
+                cs_ptr = _sg_d3d12_GetBufferPointer(cs_blob);
+                cs_length = _sg_d3d12_GetBufferSize(cs_blob);
+            }
+        }
+        if (cs_ptr && (cs_length > 0)) {
+            shd->d3d12.cs_blob_length = cs_length;
+            shd->d3d12.cs_blob = _sg_malloc((size_t)cs_length);
+            SOKOL_ASSERT(shd->d3d12.cs_blob);
+            memcpy(shd->d3d12.cs_blob, cs_ptr, cs_length);
+            cs_valid = true;
+        }
+        if (cs_blob) {
+            _sg_d3d12_Release(cs_blob);
+        }
+    }
+
+    if ((vs_valid && fs_valid) || cs_valid) {
+        return SG_RESOURCESTATE_VALID;
+    } else {
+        return SG_RESOURCESTATE_FAILED;
+    }
+}
+
+// free shader bytecode blobs
+_SOKOL_PRIVATE void _sg_d3d12_discard_shader(_sg_shader_t* shd) {
+    SOKOL_ASSERT(shd);
+    if (shd->d3d12.vs_blob) {
+        _sg_free(shd->d3d12.vs_blob);
+    }
+    if (shd->d3d12.fs_blob) {
+        _sg_free(shd->d3d12.fs_blob);
+    }
+    if (shd->d3d12.cs_blob) {
+        _sg_free(shd->d3d12.cs_blob);
+    }
+}
+
+// create a pipeline state object with render state and input layout
+_SOKOL_PRIVATE sg_resource_state _sg_d3d12_create_pipeline(_sg_pipeline_t* pip, const sg_pipeline_desc* desc) {
+    SOKOL_ASSERT(pip && desc);
+    _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
+
+    if (pip->cmn.is_compute) {
+        SOKOL_ASSERT(shd->d3d12.cs_blob && shd->d3d12.cs_blob_length > 0);
+        SOKOL_ASSERT(!pip->d3d12.pso && !pip->d3d12.root_sig);
+
+        HRESULT hr;
+
+        for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
+            pip->d3d12.ub_root_param_idx[i] = _SG_D3D12_INVALID_ROOT_PARAM_IDX;
+        }
+        pip->d3d12.cs_srv_table_root_param_idx = _SG_D3D12_INVALID_ROOT_PARAM_IDX;
+        pip->d3d12.cs_smp_table_root_param_idx = _SG_D3D12_INVALID_ROOT_PARAM_IDX;
+        pip->d3d12.cs_uav_table_root_param_idx = _SG_D3D12_INVALID_ROOT_PARAM_IDX;
+
+        uint8_t cs_srv_min = 0xFF, cs_srv_max = 0;
+        uint8_t cs_uav_min = 0xFF, cs_uav_max = 0;
+        uint8_t cs_smp_min = 0xFF, cs_smp_max = 0;
+        for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+            const _sg_shader_view_t* view = &shd->cmn.views[i];
+            if (view->stage == SG_SHADERSTAGE_COMPUTE) {
+                if ((view->view_type == SG_VIEWTYPE_STORAGEBUFFER) && !view->sbuf_readonly) {
+                    uint8_t reg = shd->d3d12.view_register_u_n[i];
+                    if (reg < cs_uav_min) cs_uav_min = reg;
+                    if (reg > cs_uav_max) cs_uav_max = reg;
+                } else {
+                    uint8_t reg = shd->d3d12.view_register_t_n[i];
+                    if (reg < cs_srv_min) cs_srv_min = reg;
+                    if (reg > cs_srv_max) cs_srv_max = reg;
+                }
+            }
+        }
+        for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+            if (shd->cmn.samplers[i].stage == SG_SHADERSTAGE_COMPUTE) {
+                uint8_t reg = shd->d3d12.smp_register_s_n[i];
+                if (reg < cs_smp_min) cs_smp_min = reg;
+                if (reg > cs_smp_max) cs_smp_max = reg;
+            }
+        }
+
+        int num_cs_srvs = (cs_srv_min <= cs_srv_max) ? (cs_srv_max - cs_srv_min + 1) : 0;
+        int num_cs_uavs = (cs_uav_min <= cs_uav_max) ? (cs_uav_max - cs_uav_min + 1) : 0;
+        int num_cs_smps = (cs_smp_min <= cs_smp_max) ? (cs_smp_max - cs_smp_min + 1) : 0;
+        pip->d3d12.cs_srv_base_reg = (num_cs_srvs > 0) ? cs_srv_min : 0;
+        pip->d3d12.cs_srv_count = (uint8_t)num_cs_srvs;
+        pip->d3d12.cs_uav_base_reg = (num_cs_uavs > 0) ? cs_uav_min : 0;
+        pip->d3d12.cs_uav_count = (uint8_t)num_cs_uavs;
+        pip->d3d12.cs_smp_base_reg = (num_cs_smps > 0) ? cs_smp_min : 0;
+        pip->d3d12.cs_smp_count = (uint8_t)num_cs_smps;
+
+        _SG_STRUCT(D3D12_ROOT_PARAMETER, root_params[SG_MAX_UNIFORMBLOCK_BINDSLOTS + 3]);
+        UINT num_root_params = 0;
+
+        _SG_STRUCT(D3D12_DESCRIPTOR_RANGE, ranges[3]);
+        int range_idx = 0;
+
+        for (size_t ub_slot = 0; ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS; ub_slot++) {
+            const _sg_shader_uniform_block_t* ub = &shd->cmn.uniform_blocks[ub_slot];
+            if (ub->stage == SG_SHADERSTAGE_COMPUTE) {
+                D3D12_ROOT_PARAMETER* param = &root_params[num_root_params];
+                param->ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+                param->Descriptor.ShaderRegister = shd->d3d12.ub_register_b_n[ub_slot];
+                param->Descriptor.RegisterSpace = 0;
+                param->ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+                pip->d3d12.ub_root_param_idx[ub_slot] = (uint8_t)num_root_params;
+                num_root_params++;
+            }
+        }
+
+        if (num_cs_srvs > 0) {
+            D3D12_DESCRIPTOR_RANGE* range = &ranges[range_idx++];
+            range->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+            range->NumDescriptors = (UINT)num_cs_srvs;
+            range->BaseShaderRegister = pip->d3d12.cs_srv_base_reg;
+            range->RegisterSpace = 0;
+            range->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+            D3D12_ROOT_PARAMETER* param = &root_params[num_root_params];
+            param->ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+            param->DescriptorTable.NumDescriptorRanges = 1;
+            param->DescriptorTable.pDescriptorRanges = range;
+            param->ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+            pip->d3d12.cs_srv_table_root_param_idx = (uint8_t)num_root_params;
+            num_root_params++;
+        }
+
+        if (num_cs_uavs > 0) {
+            D3D12_DESCRIPTOR_RANGE* range = &ranges[range_idx++];
+            range->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+            range->NumDescriptors = (UINT)num_cs_uavs;
+            range->BaseShaderRegister = pip->d3d12.cs_uav_base_reg;
+            range->RegisterSpace = 0;
+            range->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+            D3D12_ROOT_PARAMETER* param = &root_params[num_root_params];
+            param->ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+            param->DescriptorTable.NumDescriptorRanges = 1;
+            param->DescriptorTable.pDescriptorRanges = range;
+            param->ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+            pip->d3d12.cs_uav_table_root_param_idx = (uint8_t)num_root_params;
+            num_root_params++;
+        }
+
+        if (num_cs_smps > 0) {
+            D3D12_DESCRIPTOR_RANGE* range = &ranges[range_idx++];
+            range->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+            range->NumDescriptors = (UINT)num_cs_smps;
+            range->BaseShaderRegister = pip->d3d12.cs_smp_base_reg;
+            range->RegisterSpace = 0;
+            range->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+            D3D12_ROOT_PARAMETER* param = &root_params[num_root_params];
+            param->ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+            param->DescriptorTable.NumDescriptorRanges = 1;
+            param->DescriptorTable.pDescriptorRanges = range;
+            param->ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+            pip->d3d12.cs_smp_table_root_param_idx = (uint8_t)num_root_params;
+            num_root_params++;
+        }
+
+        _SOKOL_UNUSED(range_idx);
+
+        _SG_STRUCT(D3D12_ROOT_SIGNATURE_DESC, root_sig_desc);
+        root_sig_desc.NumParameters = num_root_params;
+        root_sig_desc.pParameters = (num_root_params > 0) ? root_params : NULL;
+        root_sig_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+
+        ID3DBlob* sig_blob = 0;
+        ID3DBlob* error_blob = 0;
+        hr = D3D12SerializeRootSignature(&root_sig_desc, D3D_ROOT_SIGNATURE_VERSION_1, &sig_blob, &error_blob);
+        if (error_blob) {
+            _sg_d3d12_Release(error_blob);
+        }
+        if (FAILED(hr)) {
+            _SG_ERROR(D3D12_CREATE_ROOT_SIGNATURE_FAILED);
+            if (sig_blob) {
+                _sg_d3d12_Release(sig_blob);
+            }
+            return SG_RESOURCESTATE_FAILED;
+        }
+        hr = _sg_d3d12_CreateRootSignature(_sg.d3d12.dev,
+            0,
+            _sg_d3d12_GetBufferPointer(sig_blob),
+            _sg_d3d12_GetBufferSize(sig_blob),
+            _sg_win32_refguid(_sg_IID_ID3D12RootSignature),
+            (void**)&pip->d3d12.root_sig);
+        _sg_d3d12_Release(sig_blob);
+        if (FAILED(hr)) {
+            _SG_ERROR(D3D12_CREATE_ROOT_SIGNATURE_FAILED);
+            return SG_RESOURCESTATE_FAILED;
+        }
+
+        _SG_STRUCT(D3D12_COMPUTE_PIPELINE_STATE_DESC, pso_desc);
+        pso_desc.pRootSignature = pip->d3d12.root_sig;
+        pso_desc.CS.pShaderBytecode = shd->d3d12.cs_blob;
+        pso_desc.CS.BytecodeLength = shd->d3d12.cs_blob_length;
+
+        hr = _sg_d3d12_CreateComputePipelineState(_sg.d3d12.dev, &pso_desc, _sg_win32_refguid(_sg_IID_ID3D12PipelineState), (void**)&pip->d3d12.pso);
+        if (!(SUCCEEDED(hr) && pip->d3d12.pso)) {
+            _SG_ERROR(D3D12_CREATE_PIPELINE_STATE_FAILED);
+            _sg_d3d12_Release(pip->d3d12.root_sig);
+            pip->d3d12.root_sig = 0;
+            return SG_RESOURCESTATE_FAILED;
+        }
+
+        _sg_d3d12_setlabel(pip->d3d12.pso, desc->label);
+        _sg_d3d12_setlabel(pip->d3d12.root_sig, desc->label);
+        return SG_RESOURCESTATE_VALID;
+    }
+
+    SOKOL_ASSERT(shd->d3d12.vs_blob && shd->d3d12.vs_blob_length > 0);
+    SOKOL_ASSERT(!pip->d3d12.pso && !pip->d3d12.root_sig);
+
+    pip->d3d12.index_format = _sg_d3d12_index_format(pip->cmn.index_type);
+    pip->d3d12.topology = _sg_d3d12_primitive_topology(desc->primitive_type);
+    pip->d3d12.stencil_ref = desc->stencil.ref;
+
+    HRESULT hr;
+
+    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
+        pip->d3d12.ub_root_param_idx[i] = _SG_D3D12_INVALID_ROOT_PARAM_IDX;
+    }
+    pip->d3d12.vs_srv_table_root_param_idx = _SG_D3D12_INVALID_ROOT_PARAM_IDX;
+    pip->d3d12.fs_srv_table_root_param_idx = _SG_D3D12_INVALID_ROOT_PARAM_IDX;
+    pip->d3d12.cs_srv_table_root_param_idx = _SG_D3D12_INVALID_ROOT_PARAM_IDX;
+    pip->d3d12.vs_smp_table_root_param_idx = _SG_D3D12_INVALID_ROOT_PARAM_IDX;
+    pip->d3d12.fs_smp_table_root_param_idx = _SG_D3D12_INVALID_ROOT_PARAM_IDX;
+    pip->d3d12.cs_smp_table_root_param_idx = _SG_D3D12_INVALID_ROOT_PARAM_IDX;
+    pip->d3d12.cs_uav_table_root_param_idx = _SG_D3D12_INVALID_ROOT_PARAM_IDX;
+
+    uint8_t vs_srv_min = 0xFF, vs_srv_max = 0;
+    uint8_t fs_srv_min = 0xFF, fs_srv_max = 0;
+    uint8_t vs_smp_min = 0xFF, vs_smp_max = 0;
+    uint8_t fs_smp_min = 0xFF, fs_smp_max = 0;
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        const _sg_shader_view_t* view = &shd->cmn.views[i];
+        if (view->stage == SG_SHADERSTAGE_VERTEX) {
+            uint8_t reg = shd->d3d12.view_register_t_n[i];
+            if (reg < vs_srv_min) vs_srv_min = reg;
+            if (reg > vs_srv_max) vs_srv_max = reg;
+        } else if (view->stage == SG_SHADERSTAGE_FRAGMENT) {
+            uint8_t reg = shd->d3d12.view_register_t_n[i];
+            if (reg < fs_srv_min) fs_srv_min = reg;
+            if (reg > fs_srv_max) fs_srv_max = reg;
+        }
+    }
+    for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+        sg_shader_stage stage = shd->cmn.samplers[i].stage;
+        if (stage == SG_SHADERSTAGE_VERTEX) {
+            uint8_t reg = shd->d3d12.smp_register_s_n[i];
+            if (reg < vs_smp_min) vs_smp_min = reg;
+            if (reg > vs_smp_max) vs_smp_max = reg;
+        } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
+            uint8_t reg = shd->d3d12.smp_register_s_n[i];
+            if (reg < fs_smp_min) fs_smp_min = reg;
+            if (reg > fs_smp_max) fs_smp_max = reg;
+        }
+    }
+    int num_vs_srvs = (vs_srv_min <= vs_srv_max) ? (vs_srv_max - vs_srv_min + 1) : 0;
+    int num_fs_srvs = (fs_srv_min <= fs_srv_max) ? (fs_srv_max - fs_srv_min + 1) : 0;
+    int num_vs_smps = (vs_smp_min <= vs_smp_max) ? (vs_smp_max - vs_smp_min + 1) : 0;
+    int num_fs_smps = (fs_smp_min <= fs_smp_max) ? (fs_smp_max - fs_smp_min + 1) : 0;
+    pip->d3d12.vs_srv_base_reg = (num_vs_srvs > 0) ? vs_srv_min : 0;
+    pip->d3d12.vs_srv_count = (uint8_t)num_vs_srvs;
+    pip->d3d12.fs_srv_base_reg = (num_fs_srvs > 0) ? fs_srv_min : 0;
+    pip->d3d12.fs_srv_count = (uint8_t)num_fs_srvs;
+    pip->d3d12.vs_smp_base_reg = (num_vs_smps > 0) ? vs_smp_min : 0;
+    pip->d3d12.vs_smp_count = (uint8_t)num_vs_smps;
+    pip->d3d12.fs_smp_base_reg = (num_fs_smps > 0) ? fs_smp_min : 0;
+    pip->d3d12.fs_smp_count = (uint8_t)num_fs_smps;
+
+    _SG_STRUCT(D3D12_ROOT_PARAMETER, root_params[SG_MAX_UNIFORMBLOCK_BINDSLOTS + 4]);
+    UINT num_root_params = 0;
+
+    _SG_STRUCT(D3D12_DESCRIPTOR_RANGE, srv_ranges[2]);
+    _SG_STRUCT(D3D12_DESCRIPTOR_RANGE, smp_ranges[2]);
+    int srv_range_idx = 0;
+    int smp_range_idx = 0;
+
+    for (size_t ub_slot = 0; ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS; ub_slot++) {
+        const _sg_shader_uniform_block_t* ub = &shd->cmn.uniform_blocks[ub_slot];
+        if (ub->stage != SG_SHADERSTAGE_NONE) {
+            D3D12_ROOT_PARAMETER* param = &root_params[num_root_params];
+            param->ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+            param->Descriptor.ShaderRegister = shd->d3d12.ub_register_b_n[ub_slot];
+            param->Descriptor.RegisterSpace = 0;
+            if (ub->stage == SG_SHADERSTAGE_VERTEX) {
+                param->ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+            } else if (ub->stage == SG_SHADERSTAGE_FRAGMENT) {
+                param->ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+            } else {
+                param->ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+            }
+            pip->d3d12.ub_root_param_idx[ub_slot] = (uint8_t)num_root_params;
+            num_root_params++;
+        }
+    }
+
+    if (num_vs_srvs > 0) {
+        D3D12_DESCRIPTOR_RANGE* range = &srv_ranges[srv_range_idx++];
+        range->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+        range->NumDescriptors = (UINT)num_vs_srvs;
+        range->BaseShaderRegister = pip->d3d12.vs_srv_base_reg;
+        range->RegisterSpace = 0;
+        range->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+        D3D12_ROOT_PARAMETER* param = &root_params[num_root_params];
+        param->ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        param->DescriptorTable.NumDescriptorRanges = 1;
+        param->DescriptorTable.pDescriptorRanges = range;
+        param->ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+        pip->d3d12.vs_srv_table_root_param_idx = (uint8_t)num_root_params;
+        num_root_params++;
+    }
+
+    if (num_fs_srvs > 0) {
+        D3D12_DESCRIPTOR_RANGE* range = &srv_ranges[srv_range_idx++];
+        range->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+        range->NumDescriptors = (UINT)num_fs_srvs;
+        range->BaseShaderRegister = pip->d3d12.fs_srv_base_reg;
+        range->RegisterSpace = 0;
+        range->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+        D3D12_ROOT_PARAMETER* param = &root_params[num_root_params];
+        param->ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        param->DescriptorTable.NumDescriptorRanges = 1;
+        param->DescriptorTable.pDescriptorRanges = range;
+        param->ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+        pip->d3d12.fs_srv_table_root_param_idx = (uint8_t)num_root_params;
+        num_root_params++;
+    }
+
+    if (num_vs_smps > 0) {
+        D3D12_DESCRIPTOR_RANGE* range = &smp_ranges[smp_range_idx++];
+        range->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+        range->NumDescriptors = (UINT)num_vs_smps;
+        range->BaseShaderRegister = pip->d3d12.vs_smp_base_reg;
+        range->RegisterSpace = 0;
+        range->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+        D3D12_ROOT_PARAMETER* param = &root_params[num_root_params];
+        param->ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        param->DescriptorTable.NumDescriptorRanges = 1;
+        param->DescriptorTable.pDescriptorRanges = range;
+        param->ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+        pip->d3d12.vs_smp_table_root_param_idx = (uint8_t)num_root_params;
+        num_root_params++;
+    }
+
+    if (num_fs_smps > 0) {
+        D3D12_DESCRIPTOR_RANGE* range = &smp_ranges[smp_range_idx++];
+        range->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+        range->NumDescriptors = (UINT)num_fs_smps;
+        range->BaseShaderRegister = pip->d3d12.fs_smp_base_reg;
+        range->RegisterSpace = 0;
+        range->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+        D3D12_ROOT_PARAMETER* param = &root_params[num_root_params];
+        param->ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        param->DescriptorTable.NumDescriptorRanges = 1;
+        param->DescriptorTable.pDescriptorRanges = range;
+        param->ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+        pip->d3d12.fs_smp_table_root_param_idx = (uint8_t)num_root_params;
+        num_root_params++;
+    }
+
+    _SOKOL_UNUSED(srv_range_idx);
+    _SOKOL_UNUSED(smp_range_idx);
+
+    _SG_STRUCT(D3D12_ROOT_SIGNATURE_DESC, root_sig_desc);
+    root_sig_desc.NumParameters = num_root_params;
+    root_sig_desc.pParameters = (num_root_params > 0) ? root_params : NULL;
+    root_sig_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+
+    ID3DBlob* sig_blob = 0;
+    ID3DBlob* error_blob = 0;
+    hr = D3D12SerializeRootSignature(&root_sig_desc, D3D_ROOT_SIGNATURE_VERSION_1, &sig_blob, &error_blob);
+    if (error_blob) {
+        _sg_d3d12_Release(error_blob);
+    }
+    if (FAILED(hr)) {
+        _SG_ERROR(D3D12_CREATE_ROOT_SIGNATURE_FAILED);
+        if (sig_blob) {
+            _sg_d3d12_Release(sig_blob);
+        }
+        return SG_RESOURCESTATE_FAILED;
+    }
+    hr = _sg_d3d12_CreateRootSignature(_sg.d3d12.dev,
+        0,
+        _sg_d3d12_GetBufferPointer(sig_blob),
+        _sg_d3d12_GetBufferSize(sig_blob),
+        _sg_win32_refguid(_sg_IID_ID3D12RootSignature),
+        (void**)&pip->d3d12.root_sig);
+    _sg_d3d12_Release(sig_blob);
+    if (FAILED(hr)) {
+        _SG_ERROR(D3D12_CREATE_ROOT_SIGNATURE_FAILED);
+        return SG_RESOURCESTATE_FAILED;
+    }
+
+    _SG_STRUCT(D3D12_INPUT_ELEMENT_DESC, d3d12_input_elems[SG_MAX_VERTEX_ATTRIBUTES]);
+    size_t attr_index = 0;
+    for (; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+        const sg_vertex_attr_state* a_state = &desc->layout.attrs[attr_index];
+        if (a_state->format == SG_VERTEXFORMAT_INVALID) {
+            break;
+        }
+        SOKOL_ASSERT(a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS);
+        SOKOL_ASSERT(pip->cmn.vertex_buffer_layout_active[a_state->buffer_index]);
+        const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[a_state->buffer_index];
+        const sg_vertex_step step_func = l_state->step_func;
+        const int step_rate = l_state->step_rate;
+        D3D12_INPUT_ELEMENT_DESC* d3d12_elem = &d3d12_input_elems[attr_index];
+        d3d12_elem->SemanticName = _sg_strptr(&shd->d3d12.attrs[attr_index].sem_name);
+        d3d12_elem->SemanticIndex = (UINT)shd->d3d12.attrs[attr_index].sem_index;
+        d3d12_elem->Format = _sg_d3d12_vertex_format(a_state->format);
+        d3d12_elem->InputSlot = (UINT)a_state->buffer_index;
+        d3d12_elem->AlignedByteOffset = (UINT)a_state->offset;
+        d3d12_elem->InputSlotClass = _sg_d3d12_input_classification(step_func);
+        if (SG_VERTEXSTEP_PER_INSTANCE == step_func) {
+            d3d12_elem->InstanceDataStepRate = (UINT)step_rate;
+        }
+    }
+
+    for (size_t layout_index = 0; layout_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; layout_index++) {
+        if (pip->cmn.vertex_buffer_layout_active[layout_index]) {
+            const sg_vertex_buffer_layout_state* l_state = &desc->layout.buffers[layout_index];
+            SOKOL_ASSERT(l_state->stride > 0);
+            pip->d3d12.vb_strides[layout_index] = (UINT)l_state->stride;
+        } else {
+            pip->d3d12.vb_strides[layout_index] = 0;
+        }
+    }
+
+    _SG_STRUCT(D3D12_GRAPHICS_PIPELINE_STATE_DESC, pso_desc);
+    pso_desc.pRootSignature = pip->d3d12.root_sig;
+
+    pso_desc.InputLayout.pInputElementDescs = d3d12_input_elems;
+    pso_desc.InputLayout.NumElements = (UINT)attr_index;
+
+    pso_desc.VS.pShaderBytecode = shd->d3d12.vs_blob;
+    pso_desc.VS.BytecodeLength = shd->d3d12.vs_blob_length;
+
+    if (shd->d3d12.fs_blob) {
+        pso_desc.PS.pShaderBytecode = shd->d3d12.fs_blob;
+        pso_desc.PS.BytecodeLength = shd->d3d12.fs_blob_length;
+    }
+
+    pso_desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+    pso_desc.RasterizerState.CullMode = _sg_d3d12_cull_mode(desc->cull_mode);
+    pso_desc.RasterizerState.FrontCounterClockwise = desc->face_winding == SG_FACEWINDING_CCW;
+    pso_desc.RasterizerState.DepthBias = (INT)pip->cmn.depth.bias;
+    pso_desc.RasterizerState.DepthBiasClamp = pip->cmn.depth.bias_clamp;
+    pso_desc.RasterizerState.SlopeScaledDepthBias = pip->cmn.depth.bias_slope_scale;
+    pso_desc.RasterizerState.DepthClipEnable = TRUE;
+    pso_desc.RasterizerState.MultisampleEnable = desc->sample_count > 1;
+    pso_desc.RasterizerState.AntialiasedLineEnable = FALSE;
+    pso_desc.RasterizerState.ForcedSampleCount = 0;
+    pso_desc.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+
+    pso_desc.DepthStencilState.DepthEnable = TRUE;
+    pso_desc.DepthStencilState.DepthWriteMask = desc->depth.write_enabled ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
+    pso_desc.DepthStencilState.DepthFunc = _sg_d3d12_compare_func(desc->depth.compare);
+    pso_desc.DepthStencilState.StencilEnable = desc->stencil.enabled;
+    pso_desc.DepthStencilState.StencilReadMask = desc->stencil.read_mask;
+    pso_desc.DepthStencilState.StencilWriteMask = desc->stencil.write_mask;
+    const sg_stencil_face_state* sf = &desc->stencil.front;
+    pso_desc.DepthStencilState.FrontFace.StencilFailOp = _sg_d3d12_stencil_op(sf->fail_op);
+    pso_desc.DepthStencilState.FrontFace.StencilDepthFailOp = _sg_d3d12_stencil_op(sf->depth_fail_op);
+    pso_desc.DepthStencilState.FrontFace.StencilPassOp = _sg_d3d12_stencil_op(sf->pass_op);
+    pso_desc.DepthStencilState.FrontFace.StencilFunc = _sg_d3d12_compare_func(sf->compare);
+    const sg_stencil_face_state* sb = &desc->stencil.back;
+    pso_desc.DepthStencilState.BackFace.StencilFailOp = _sg_d3d12_stencil_op(sb->fail_op);
+    pso_desc.DepthStencilState.BackFace.StencilDepthFailOp = _sg_d3d12_stencil_op(sb->depth_fail_op);
+    pso_desc.DepthStencilState.BackFace.StencilPassOp = _sg_d3d12_stencil_op(sb->pass_op);
+    pso_desc.DepthStencilState.BackFace.StencilFunc = _sg_d3d12_compare_func(sb->compare);
+
+    pso_desc.BlendState.AlphaToCoverageEnable = desc->alpha_to_coverage_enabled;
+    pso_desc.BlendState.IndependentBlendEnable = TRUE;
+    {
+        size_t i = 0;
+        for (i = 0; i < (size_t)desc->color_count; i++) {
+            const sg_blend_state* src = &desc->colors[i].blend;
+            D3D12_RENDER_TARGET_BLEND_DESC* dst = &pso_desc.BlendState.RenderTarget[i];
+            dst->BlendEnable = src->enabled;
+            dst->LogicOpEnable = FALSE;
+            dst->SrcBlend = _sg_d3d12_blend_factor(src->src_factor_rgb);
+            dst->DestBlend = _sg_d3d12_blend_factor(src->dst_factor_rgb);
+            dst->BlendOp = _sg_d3d12_blend_op(src->op_rgb);
+            dst->SrcBlendAlpha = _sg_d3d12_blend_factor(src->src_factor_alpha);
+            dst->DestBlendAlpha = _sg_d3d12_blend_factor(src->dst_factor_alpha);
+            dst->BlendOpAlpha = _sg_d3d12_blend_op(src->op_alpha);
+            dst->LogicOp = D3D12_LOGIC_OP_NOOP;
+            dst->RenderTargetWriteMask = _sg_d3d12_color_write_mask(desc->colors[i].write_mask);
+        }
+        for (; i < 8; i++) {
+            D3D12_RENDER_TARGET_BLEND_DESC* dst = &pso_desc.BlendState.RenderTarget[i];
+            dst->BlendEnable = FALSE;
+            dst->LogicOpEnable = FALSE;
+            dst->SrcBlend = dst->SrcBlendAlpha = D3D12_BLEND_ONE;
+            dst->DestBlend = dst->DestBlendAlpha = D3D12_BLEND_ZERO;
+            dst->BlendOp = dst->BlendOpAlpha = D3D12_BLEND_OP_ADD;
+            dst->LogicOp = D3D12_LOGIC_OP_NOOP;
+            dst->RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+        }
+    }
+
+    pso_desc.SampleMask = UINT_MAX;
+    pso_desc.PrimitiveTopologyType = _sg_d3d12_primitive_topology_type(desc->primitive_type);
+
+    pso_desc.NumRenderTargets = (UINT)desc->color_count;
+    for (int i = 0; i < desc->color_count; i++) {
+        pso_desc.RTVFormats[i] = _sg_d3d12_texture_pixel_format(desc->colors[i].pixel_format);
+    }
+
+    pso_desc.DSVFormat = _sg_d3d12_dsv_pixel_format(desc->depth.pixel_format);
+
+    pso_desc.SampleDesc.Count = (UINT)desc->sample_count;
+    pso_desc.SampleDesc.Quality = 0;
+
+    hr = _sg_d3d12_CreateGraphicsPipelineState(_sg.d3d12.dev, &pso_desc, _sg_win32_refguid(_sg_IID_ID3D12PipelineState), (void**)&pip->d3d12.pso);
+    if (!(SUCCEEDED(hr) && pip->d3d12.pso)) {
+        if (hr == E_INVALIDARG && pso_desc.InputLayout.NumElements > 0) {
+            _SG_ERROR(D3D12_PIPELINE_INPUT_LAYOUT_INVALID);
+        } else {
+            _SG_ERROR(D3D12_CREATE_PIPELINE_STATE_FAILED);
+        }
+        _sg_d3d12_Release(pip->d3d12.root_sig);
+        pip->d3d12.root_sig = 0;
+        return SG_RESOURCESTATE_FAILED;
+    }
+
+    _sg_d3d12_setlabel(pip->d3d12.pso, desc->label);
+    _sg_d3d12_setlabel(pip->d3d12.root_sig, desc->label);
+    return SG_RESOURCESTATE_VALID;
+}
+
+// clear cached pipeline if it matches the one being discarded
+_SOKOL_PRIVATE void _sg_d3d12_cache_invalidate_pipeline(_sg_pipeline_t* pip) {
+    if (_sg_sref_slot_eql(&_sg.d3d12.cache.cur_pip, &pip->slot)) {
+        _sg.d3d12.cache.cur_pip = _sg_sref(0);
+    }
+}
+
+// invalidate cached pipeline state and queue PSO and root signature for deferred release
+_SOKOL_PRIVATE void _sg_d3d12_discard_pipeline(_sg_pipeline_t* pip) {
+    SOKOL_ASSERT(pip);
+    _sg_d3d12_cache_invalidate_pipeline(pip);
+    _sg_d3d12_deferred_release_pipeline(pip->d3d12.pso);
+    _sg_d3d12_deferred_release_rootsig(pip->d3d12.root_sig);
+}
+
+// allocate a descriptor from the render target view heap
+_SOKOL_PRIVATE D3D12_CPU_DESCRIPTOR_HANDLE _sg_d3d12_alloc_rtv_descriptor(void) {
+    D3D12_CPU_DESCRIPTOR_HANDLE handle;
+    int index;
+    if (_sg.d3d12.rtv_heap.queue_top > 0) {
+        index = _sg.d3d12.rtv_heap.free_queue[--_sg.d3d12.rtv_heap.queue_top];
+    } else if (_sg.d3d12.rtv_heap.next_index < _sg.d3d12.rtv_heap.num_descriptors) {
+        index = _sg.d3d12.rtv_heap.next_index++;
+    } else {
+        _SG_ERROR(D3D12_DESCRIPTOR_HEAP_EXHAUSTED);
+        handle.ptr = 0;
+        return handle;
+    }
+    handle.ptr = _sg.d3d12.rtv_heap.cpu_start.ptr + (SIZE_T)((UINT)index * _sg.d3d12.rtv_heap.increment_size);
+    return handle;
+}
+
+// allocate a descriptor from the depth stencil view heap
+_SOKOL_PRIVATE D3D12_CPU_DESCRIPTOR_HANDLE _sg_d3d12_alloc_dsv_descriptor(void) {
+    D3D12_CPU_DESCRIPTOR_HANDLE handle;
+    int index;
+    if (_sg.d3d12.dsv_heap.queue_top > 0) {
+        index = _sg.d3d12.dsv_heap.free_queue[--_sg.d3d12.dsv_heap.queue_top];
+    } else if (_sg.d3d12.dsv_heap.next_index < _sg.d3d12.dsv_heap.num_descriptors) {
+        index = _sg.d3d12.dsv_heap.next_index++;
+    } else {
+        _SG_ERROR(D3D12_DESCRIPTOR_HEAP_EXHAUSTED);
+        handle.ptr = 0;
+        return handle;
+    }
+    handle.ptr = _sg.d3d12.dsv_heap.cpu_start.ptr + (SIZE_T)((UINT)index * _sg.d3d12.dsv_heap.increment_size);
+    return handle;
+}
+
+// create view descriptors for textures, storage buffers, or attachment images
+_SOKOL_PRIVATE sg_resource_state _sg_d3d12_create_view(_sg_view_t* view, const sg_view_desc* desc) {
+    SOKOL_ASSERT(view && desc);
+    _SOKOL_UNUSED(desc);
+    if (view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
+        const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
+        SOKOL_ASSERT(buf->d3d12.res);
+        const UINT size = (UINT) buf->cmn.size;
+        SOKOL_ASSERT(_sg_multiple_u64(size, 4));
+        const UINT offset = (UINT) view->cmn.buf.offset;
+        SOKOL_ASSERT(_sg_multiple_u64(offset, 4));
+        SOKOL_ASSERT(offset < size);
+        const UINT first_element = offset / 4;
+        const UINT num_elements = (size - offset) / 4;
+
+        _SG_STRUCT(D3D12_SHADER_RESOURCE_VIEW_DESC, srv_desc);
+        srv_desc.Format = DXGI_FORMAT_R32_TYPELESS;
+        srv_desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+        srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        srv_desc.Buffer.FirstElement = first_element;
+        srv_desc.Buffer.NumElements = num_elements;
+        srv_desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+        view->d3d12.srv = _sg_d3d12_alloc_srv_uav_descriptor();
+        if (0 == view->d3d12.srv.ptr) {
+            _SG_ERROR(D3D12_DESCRIPTOR_HEAP_EXHAUSTED);
+            return SG_RESOURCESTATE_FAILED;
+        }
+        _sg_d3d12_CreateShaderResourceView(_sg.d3d12.dev, buf->d3d12.res, &srv_desc, view->d3d12.srv);
+
+        if (buf->cmn.usage.immutable) {
+            _SG_STRUCT(D3D12_UNORDERED_ACCESS_VIEW_DESC, uav_desc);
+            uav_desc.Format = DXGI_FORMAT_R32_TYPELESS;
+            uav_desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+            uav_desc.Buffer.FirstElement = first_element;
+            uav_desc.Buffer.NumElements = num_elements;
+            uav_desc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
+            view->d3d12.uav = _sg_d3d12_alloc_srv_uav_descriptor();
+            if (0 == view->d3d12.uav.ptr) {
+                _SG_ERROR(D3D12_DESCRIPTOR_HEAP_EXHAUSTED);
+                _sg_d3d12_immediate_release_srv_uav(view->d3d12.srv);
+                view->d3d12.srv.ptr = 0;
+                return SG_RESOURCESTATE_FAILED;
+            }
+            _sg_d3d12_CreateUnorderedAccessView(_sg.d3d12.dev, buf->d3d12.res, NULL, &uav_desc, view->d3d12.uav);
+        }
+    } else {
+        const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+        SOKOL_ASSERT(img->d3d12.res);
+        const bool msaa = img->cmn.sample_count > 1;
+        SOKOL_ASSERT(view->cmn.img.mip_level_count >= 1);
+        SOKOL_ASSERT(view->cmn.img.slice_count >= 1);
+        const UINT mip_level = (UINT)view->cmn.img.mip_level;
+        const UINT mip_count = (UINT)view->cmn.img.mip_level_count;
+        const UINT slice = (UINT)view->cmn.img.slice;
+        const UINT slice_count = (UINT)view->cmn.img.slice_count;
+
+        if (view->cmn.type == SG_VIEWTYPE_STORAGEIMAGE) {
+            SOKOL_ASSERT(!msaa);
+            _SG_STRUCT(D3D12_UNORDERED_ACCESS_VIEW_DESC, uav_desc);
+            uav_desc.Format = _sg_d3d12_rtv_uav_pixel_format(img->cmn.pixel_format);
+            switch (img->cmn.type) {
+                case SG_IMAGETYPE_2D:
+                    uav_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+                    uav_desc.Texture2D.MipSlice = mip_level;
+                    uav_desc.Texture2D.PlaneSlice = 0;
+                    break;
+                case SG_IMAGETYPE_CUBE:
+                case SG_IMAGETYPE_ARRAY:
+                    uav_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+                    uav_desc.Texture2DArray.MipSlice = mip_level;
+                    uav_desc.Texture2DArray.FirstArraySlice = slice;
+                    uav_desc.Texture2DArray.ArraySize = 1;
+                    uav_desc.Texture2DArray.PlaneSlice = 0;
+                    break;
+                case SG_IMAGETYPE_3D:
+                    uav_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE3D;
+                    uav_desc.Texture3D.MipSlice = mip_level;
+                    uav_desc.Texture3D.FirstWSlice = slice;
+                    uav_desc.Texture3D.WSize = 1;
+                    break;
+                default: SOKOL_UNREACHABLE; break;
+            }
+            view->d3d12.uav = _sg_d3d12_alloc_srv_uav_descriptor();
+            if (0 == view->d3d12.uav.ptr) {
+                _SG_ERROR(D3D12_DESCRIPTOR_HEAP_EXHAUSTED);
+                return SG_RESOURCESTATE_FAILED;
+            }
+            _sg_d3d12_CreateUnorderedAccessView(_sg.d3d12.dev, img->d3d12.res, NULL, &uav_desc, view->d3d12.uav);
+
+        } else if (view->cmn.type == SG_VIEWTYPE_TEXTURE) {
+            _SG_STRUCT(D3D12_SHADER_RESOURCE_VIEW_DESC, srv_desc);
+            srv_desc.Format = _sg_d3d12_srv_pixel_format(img->cmn.pixel_format);
+            srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            switch (img->cmn.type) {
+                case SG_IMAGETYPE_2D:
+                    if (msaa) {
+                        srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
+                    } else {
+                        srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+                        srv_desc.Texture2D.MostDetailedMip = mip_level;
+                        srv_desc.Texture2D.MipLevels = mip_count;
+                        srv_desc.Texture2D.PlaneSlice = 0;
+                        srv_desc.Texture2D.ResourceMinLODClamp = 0.0f;
+                    }
+                    break;
+                case SG_IMAGETYPE_CUBE:
+                    SOKOL_ASSERT(!msaa);
+                    srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+                    srv_desc.TextureCube.MostDetailedMip = mip_level;
+                    srv_desc.TextureCube.MipLevels = mip_count;
+                    srv_desc.TextureCube.ResourceMinLODClamp = 0.0f;
+                    break;
+                case SG_IMAGETYPE_ARRAY:
+                    if (msaa) {
+                        srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY;
+                        srv_desc.Texture2DMSArray.FirstArraySlice = slice;
+                        srv_desc.Texture2DMSArray.ArraySize = slice_count;
+                    } else {
+                        srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+                        srv_desc.Texture2DArray.MostDetailedMip = mip_level;
+                        srv_desc.Texture2DArray.MipLevels = mip_count;
+                        srv_desc.Texture2DArray.FirstArraySlice = slice;
+                        srv_desc.Texture2DArray.ArraySize = slice_count;
+                        srv_desc.Texture2DArray.PlaneSlice = 0;
+                        srv_desc.Texture2DArray.ResourceMinLODClamp = 0.0f;
+                    }
+                    break;
+                case SG_IMAGETYPE_3D:
+                    SOKOL_ASSERT(!msaa);
+                    srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
+                    srv_desc.Texture3D.MostDetailedMip = mip_level;
+                    srv_desc.Texture3D.MipLevels = mip_count;
+                    srv_desc.Texture3D.ResourceMinLODClamp = 0.0f;
+                    break;
+                default:
+                    SOKOL_UNREACHABLE; break;
+            }
+            view->d3d12.srv = _sg_d3d12_alloc_srv_uav_descriptor();
+            if (0 == view->d3d12.srv.ptr) {
+                _SG_ERROR(D3D12_DESCRIPTOR_HEAP_EXHAUSTED);
+                return SG_RESOURCESTATE_FAILED;
+            }
+            _sg_d3d12_CreateShaderResourceView(_sg.d3d12.dev, img->d3d12.res, &srv_desc, view->d3d12.srv);
+
+        } else if (view->cmn.type == SG_VIEWTYPE_COLORATTACHMENT) {
+            _SG_STRUCT(D3D12_RENDER_TARGET_VIEW_DESC, rtv_desc);
+            rtv_desc.Format = _sg_d3d12_rtv_uav_pixel_format(img->cmn.pixel_format);
+            switch (img->cmn.type) {
+                case SG_IMAGETYPE_2D:
+                    if (msaa) {
+                        rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMS;
+                    } else {
+                        rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+                        rtv_desc.Texture2D.MipSlice = mip_level;
+                        rtv_desc.Texture2D.PlaneSlice = 0;
+                    }
+                    break;
+                case SG_IMAGETYPE_CUBE:
+                case SG_IMAGETYPE_ARRAY:
+                    if (msaa) {
+                        rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY;
+                        rtv_desc.Texture2DMSArray.FirstArraySlice = slice;
+                        rtv_desc.Texture2DMSArray.ArraySize = 1;
+                    } else {
+                        rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
+                        rtv_desc.Texture2DArray.MipSlice = mip_level;
+                        rtv_desc.Texture2DArray.FirstArraySlice = slice;
+                        rtv_desc.Texture2DArray.ArraySize = 1;
+                        rtv_desc.Texture2DArray.PlaneSlice = 0;
+                    }
+                    break;
+                case SG_IMAGETYPE_3D:
+                    SOKOL_ASSERT(!msaa);
+                    rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE3D;
+                    rtv_desc.Texture3D.MipSlice = mip_level;
+                    rtv_desc.Texture3D.FirstWSlice = slice;
+                    rtv_desc.Texture3D.WSize = 1;
+                    break;
+                default: SOKOL_UNREACHABLE; break;
+            }
+            view->d3d12.rtv = _sg_d3d12_alloc_rtv_descriptor();
+            if (0 == view->d3d12.rtv.ptr) {
+                _SG_ERROR(D3D12_DESCRIPTOR_HEAP_EXHAUSTED);
+                return SG_RESOURCESTATE_FAILED;
+            }
+            _sg_d3d12_CreateRenderTargetView(_sg.d3d12.dev, img->d3d12.res, &rtv_desc, view->d3d12.rtv);
+
+        } else if (view->cmn.type == SG_VIEWTYPE_DEPTHSTENCILATTACHMENT) {
+            SOKOL_ASSERT(img->cmn.type != SG_IMAGETYPE_3D);
+            _SG_STRUCT(D3D12_DEPTH_STENCIL_VIEW_DESC, dsv_desc);
+            dsv_desc.Format = _sg_d3d12_dsv_pixel_format(img->cmn.pixel_format);
+            switch (img->cmn.type) {
+                case SG_IMAGETYPE_2D:
+                    if (msaa) {
+                        dsv_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMS;
+                    } else {
+                        dsv_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+                        dsv_desc.Texture2D.MipSlice = mip_level;
+                    }
+                    break;
+                case SG_IMAGETYPE_CUBE:
+                case SG_IMAGETYPE_ARRAY:
+                    if (msaa) {
+                        dsv_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY;
+                        dsv_desc.Texture2DMSArray.FirstArraySlice = slice;
+                        dsv_desc.Texture2DMSArray.ArraySize = 1;
+                    } else {
+                        dsv_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
+                        dsv_desc.Texture2DArray.MipSlice = mip_level;
+                        dsv_desc.Texture2DArray.FirstArraySlice = slice;
+                        dsv_desc.Texture2DArray.ArraySize = 1;
+                    }
+                    break;
+                default: SOKOL_UNREACHABLE; break;
+            }
+            view->d3d12.dsv = _sg_d3d12_alloc_dsv_descriptor();
+            if (0 == view->d3d12.dsv.ptr) {
+                _SG_ERROR(D3D12_DESCRIPTOR_HEAP_EXHAUSTED);
+                return SG_RESOURCESTATE_FAILED;
+            }
+            _sg_d3d12_CreateDepthStencilView(_sg.d3d12.dev, img->d3d12.res, &dsv_desc, view->d3d12.dsv);
+        }
+    }
+    return SG_RESOURCESTATE_VALID;
+}
+
+// queue view descriptors for deferred release
+_SOKOL_PRIVATE void _sg_d3d12_discard_view(_sg_view_t* view) {
+    SOKOL_ASSERT(view);
+    _sg_d3d12_deferred_release_srv_uav(view->d3d12.srv);
+    _sg_d3d12_deferred_release_srv_uav(view->d3d12.uav);
+    _sg_d3d12_deferred_release_rtv(view->d3d12.rtv);
+    _sg_d3d12_deferred_release_dsv(view->d3d12.dsv);
+}
+
+// allocate space from per-frame upload ring buffer for staging texture data
+_SOKOL_PRIVATE UINT64 _sg_d3d12_alloc_from_upload_ring(UINT64 size) {
+    const UINT64 alignment = _SG_D3D12_UPLOAD_RING_ALIGN;
+    const UINT64 aligned_size = (size + alignment - 1) & ~(alignment - 1);
+
+    // check if allocation fits in remaining ring buffer space for this frame
+    if ((_sg.d3d12.upload_ring.offset + aligned_size) > _sg.d3d12.upload_ring.per_frame_size) {
+        _SG_ERROR(D3D12_UPLOAD_RING_BUFFER_EXHAUSTED);
+        return _SG_D3D12_UPLOAD_RING_OVERFLOW_RESULT;
+    }
+
+    // calculate absolute offset in ring buffer accounting for current frame
+    const UINT64 frame_base = (UINT64)_sg.d3d12.frame_index * _sg.d3d12.upload_ring.per_frame_size;
+    const UINT64 abs_offset = frame_base + _sg.d3d12.upload_ring.offset;
+
+    // advance ring buffer offset
+    _sg.d3d12.upload_ring.offset += aligned_size;
+
+    return abs_offset;
+}
+
+// reset command allocator and command list for the current frame, wait if GPU is still using it
+_SOKOL_PRIVATE void _sg_d3d12_acquire_frame_command_list(void) {
+    SOKOL_ASSERT(_sg.d3d12.frame_cmd_list);
+    if (!_sg.d3d12.frame_started) {
+        ID3D12CommandAllocator* cur_alloc = _sg.d3d12.frame_cmd_allocs[_sg.d3d12.frame_index];
+        UINT64 alloc_fence_value = _sg.d3d12.frame_fence_values[_sg.d3d12.frame_index];
+
+        // wait for GPU to finish with this frame's command allocator before resetting
+        if (alloc_fence_value > 0) {
+            _sg_d3d12_wait_for_fence(alloc_fence_value);
+        }
+
+        HRESULT hr = _sg_d3d12_ResetCommandAllocator(cur_alloc);
+        if (!SUCCEEDED(hr)) {
+            _SG_ERROR(D3D12_RESET_COMMAND_ALLOCATOR_FAILED);
+        }
+        hr = _sg_d3d12_ResetCommandList(_sg.d3d12.frame_cmd_list, cur_alloc, NULL);
+        if (!SUCCEEDED(hr)) {
+            _SG_ERROR(D3D12_RESET_COMMAND_LIST_FAILED);
+        }
+
+        // reset per-frame resource offsets and state
+        _sg.d3d12.ub.offset = 0;
+        _sg.d3d12.shader_heap.cur_offset = 0;
+        _sg.d3d12.sampler_heap.cur_offset = 0;
+        _sg.d3d12.upload_ring.offset = 0;
+
+        _sg.d3d12.cache.cur_pip = _sg_sref(0);
+
+        _sg.d3d12.frame_started = true;
+    }
+    SOKOL_ASSERT(_sg.d3d12.frame_started);
+}
+
+// process all pending image updates by batching copy operations and state transitions
+_SOKOL_PRIVATE void _sg_d3d12_process_deferred_image_updates(void) {
+    // early out if no pending updates
+    if (_sg.d3d12.deferred_image_updates.num_updates == 0) {
+        return;
+    }
+
+    _sg_d3d12_acquire_frame_command_list();
+    SOKOL_ASSERT(_sg.d3d12.frame_cmd_list);
+
+    // allocate barrier array for all potential state transitions (to COPY_DEST and back)
+    const int max_barriers = _sg.d3d12.deferred_image_updates.num_updates * 2;
+    D3D12_RESOURCE_BARRIER* barriers = (D3D12_RESOURCE_BARRIER*)_sg_malloc((size_t)max_barriers * sizeof(D3D12_RESOURCE_BARRIER));
+    SOKOL_ASSERT(barriers);
+
+    // build barriers to transition all images to COPY_DEST state (deduplicated)
+    int num_to_copy_barriers = 0;
+    for (int i = 0; i < _sg.d3d12.deferred_image_updates.num_updates; i++) {
+        _sg_d3d12_deferred_image_update_t* update = &_sg.d3d12.deferred_image_updates.items[i];
+        if (!update->img) {
+            continue;
+        }
+        D3D12_RESOURCE_STATES current_state = update->img->d3d12.current_state;
+        if (current_state != D3D12_RESOURCE_STATE_COPY_DEST) {
+            // avoid duplicate barriers for same image
+            bool already_added = false;
+            for (int j = 0; j < i; j++) {
+                if (_sg.d3d12.deferred_image_updates.items[j].img == update->img) {
+                    already_added = true;
+                    break;
+                }
+            }
+            if (!already_added) {
+                D3D12_RESOURCE_BARRIER* barrier = &barriers[num_to_copy_barriers++];
+                _sg_clear(barrier, sizeof(D3D12_RESOURCE_BARRIER));
+                barrier->Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+                barrier->Transition.pResource = update->img->d3d12.res;
+                barrier->Transition.StateBefore = current_state;
+                barrier->Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+                barrier->Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+            }
+        }
+    }
+
+    // batch transition all images to COPY_DEST state before copying
+    if (num_to_copy_barriers > 0) {
+        _sg_d3d12_ResourceBarrier(_sg.d3d12.frame_cmd_list, (UINT)num_to_copy_barriers, barriers);
+        _sg_stats_add(d3d12.pass.num_resource_barrier, (uint32_t)num_to_copy_barriers);
+
+        for (int i = 0; i < _sg.d3d12.deferred_image_updates.num_updates; i++) {
+            _sg_d3d12_deferred_image_update_t* update = &_sg.d3d12.deferred_image_updates.items[i];
+            if (update->img) {
+                update->img->d3d12.current_state = D3D12_RESOURCE_STATE_COPY_DEST;
+            }
+        }
+    }
+
+    // perform actual texture copy operations from upload ring buffer to each image
+    for (int i = 0; i < _sg.d3d12.deferred_image_updates.num_updates; i++) {
+        _sg_d3d12_deferred_image_update_t* update = &_sg.d3d12.deferred_image_updates.items[i];
+        _sg_image_t* img = update->img;
+        if (!img) {
+            continue;
+        }
+
+        const int num_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? 1 : img->cmn.num_slices;
+        const int num_subresources = num_slices * img->cmn.num_mipmaps;
+
+        D3D12_RESOURCE_DESC res_desc = _sg_d3d12_GetDesc(img->d3d12.res);
+
+        // get footprint information for all subresources to know their layout
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT* footprints = (D3D12_PLACED_SUBRESOURCE_FOOTPRINT*)_sg_malloc((size_t)num_subresources * sizeof(D3D12_PLACED_SUBRESOURCE_FOOTPRINT));
+        SOKOL_ASSERT(footprints);
+        _sg_d3d12_GetCopyableFootprints(_sg.d3d12.dev, &res_desc, 0, (UINT)num_subresources, 0, footprints, NULL, NULL, NULL);
+
+        // copy each subresource from upload buffer to texture
+        for (int s = 0; s < num_subresources; s++) {
+            _SG_STRUCT(D3D12_TEXTURE_COPY_LOCATION, dst_loc);
+            dst_loc.pResource = img->d3d12.res;
+            dst_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+            dst_loc.SubresourceIndex = (UINT)s;
+
+            // adjust footprint offset to point to this update's location in ring buffer
+            D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp = footprints[s];
+            fp.Offset += update->ring_offset;
+
+            _SG_STRUCT(D3D12_TEXTURE_COPY_LOCATION, src_loc);
+            src_loc.pResource = _sg.d3d12.upload_ring.buffer;
+            src_loc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+            src_loc.PlacedFootprint = fp;
+
+            _sg_d3d12_CopyTextureRegion(_sg.d3d12.frame_cmd_list, &dst_loc, 0, 0, 0, &src_loc, NULL);
+        }
+
+        _sg_free(footprints);
+    }
+
+    // build barriers to transition images back to COMMON state after copying
+    int num_from_copy_barriers = 0;
+    for (int i = 0; i < _sg.d3d12.deferred_image_updates.num_updates; i++) {
+        _sg_d3d12_deferred_image_update_t* update = &_sg.d3d12.deferred_image_updates.items[i];
+        if (!update->img) {
+            continue;
+        }
+        bool already_added = false;
+        for (int j = 0; j < i; j++) {
+            if (_sg.d3d12.deferred_image_updates.items[j].img == update->img) {
+                already_added = true;
+                break;
+            }
+        }
+        if (!already_added) {
+            D3D12_RESOURCE_BARRIER* barrier = &barriers[num_from_copy_barriers++];
+            _sg_clear(barrier, sizeof(D3D12_RESOURCE_BARRIER));
+            barrier->Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrier->Transition.pResource = update->img->d3d12.res;
+            barrier->Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+            barrier->Transition.StateAfter = _sg_d3d12_image_initial_state(&update->img->cmn.usage);
+            barrier->Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        }
+    }
+
+    // batch transition all images to their intended usage state after copying
+    if (num_from_copy_barriers > 0) {
+        _sg_d3d12_ResourceBarrier(_sg.d3d12.frame_cmd_list, (UINT)num_from_copy_barriers, barriers);
+        _sg_stats_add(d3d12.pass.num_resource_barrier, (uint32_t)num_from_copy_barriers);
+
+        for (int i = 0; i < _sg.d3d12.deferred_image_updates.num_updates; i++) {
+            _sg_d3d12_deferred_image_update_t* update = &_sg.d3d12.deferred_image_updates.items[i];
+            if (update->img) {
+                update->img->d3d12.current_state = _sg_d3d12_image_initial_state(&update->img->cmn.usage);
+            }
+        }
+    }
+
+    _sg_free(barriers);
+
+    // clear deferred update indices and reset update queue
+    for (int i = 0; i < _sg.d3d12.deferred_image_updates.num_updates; i++) {
+        if (_sg.d3d12.deferred_image_updates.items[i].img) {
+            _sg.d3d12.deferred_image_updates.items[i].img->d3d12.deferred_update_index = -1;
+        }
+    }
+
+    _sg.d3d12.deferred_image_updates.num_updates = 0;
+}
+
+// insert a resource barrier to transition an image to a new state if needed
+_SOKOL_PRIVATE void _sg_d3d12_transition_image_state(_sg_image_t* img, D3D12_RESOURCE_STATES new_state) {
+    SOKOL_ASSERT(img);
+    if (!img->d3d12.res) {
+        return;
+    }
+
+    // transition all subresources to the new state
+    if (img->d3d12.current_state != new_state) {
+        _SG_STRUCT(D3D12_RESOURCE_BARRIER, barrier);
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Transition.pResource = img->d3d12.res;
+        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrier.Transition.StateBefore = img->d3d12.current_state;
+        barrier.Transition.StateAfter = new_state;
+        _sg_d3d12_ResourceBarrier(_sg.d3d12.frame_cmd_list, 1, &barrier);
+        _sg_stats_add(d3d12.pass.num_resource_barrier, 1);
+        img->d3d12.current_state = new_state;
+    }
+}
+
+//-- command list and state management ----------------------------------------
+// transition attachment images to render target state and set up render targets
+_SOKOL_PRIVATE void _sg_d3d12_begin_pass(const sg_pass* pass, const _sg_attachments_ptrs_t* atts) {
+    SOKOL_ASSERT(_sg.d3d12.frame_cmd_list && pass && atts);
+
+    // check if any attachment images have pending deferred updates and process them first
+    if (!atts->empty) {
+        for (int i = 0; i < atts->num_color_views; i++) {
+            if (atts->color_views[i]) {
+                const _sg_image_t* color_img = _sg_image_ref_ptr(&atts->color_views[i]->cmn.img.ref);
+                if (color_img && color_img->d3d12.deferred_update_index >= 0) {
+                    _sg_d3d12_process_deferred_image_updates();
+                    break;
+                }
+            }
+        }
+        if (atts->ds_view) {
+            const _sg_image_t* ds_img = _sg_image_ref_ptr(&atts->ds_view->cmn.img.ref);
+            if (ds_img && ds_img->d3d12.deferred_update_index >= 0) {
+                _sg_d3d12_process_deferred_image_updates();
+            }
+        }
+    }
+
+    _sg_d3d12_acquire_frame_command_list();
+
+    // compute passes don't need render target setup
+    if (_sg.cur_pass.is_compute) {
+        return;
+    }
+
+    _SG_STRUCT(D3D12_CPU_DESCRIPTOR_HANDLE, rtvs[SG_MAX_COLOR_ATTACHMENTS]);
+    _SG_STRUCT(D3D12_CPU_DESCRIPTOR_HANDLE, dsv);
+    int num_rtvs = 0;
+    bool has_dsv = false;
+
+    // clear swapchain tracking state
+    _sg.d3d12.cur_swapchain.render_view.ptr = 0;
+    _sg.d3d12.cur_swapchain.resolve_view.ptr = 0;
+    _sg.d3d12.cur_swapchain.render_target = 0;
+    _sg.d3d12.cur_swapchain.resolve_target = 0;
+
+    // setup render targets from attachments or swapchain
+    if (!atts->empty) {
+        SOKOL_ASSERT(atts->num_color_views <= SG_MAX_COLOR_ATTACHMENTS);
+        num_rtvs = atts->num_color_views;
+
+        // transition color attachments to render target state
+        for (int i = 0; i < num_rtvs; i++) {
+            SOKOL_ASSERT(atts->color_views[i]);
+            rtvs[i] = atts->color_views[i]->d3d12.rtv;
+
+            _sg_image_t* color_img = (_sg_image_t*)_sg_image_ref_ptr(&atts->color_views[i]->cmn.img.ref);
+            SOKOL_ASSERT(color_img && color_img->d3d12.res);
+            _sg_d3d12_transition_image_state(color_img, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        }
+
+        // transition depth stencil attachment to depth write state
+        if (atts->ds_view) {
+            dsv = atts->ds_view->d3d12.dsv;
+            has_dsv = true;
+
+            _sg_image_t* ds_img = (_sg_image_t*)_sg_image_ref_ptr(&atts->ds_view->cmn.img.ref);
+            SOKOL_ASSERT(ds_img && ds_img->d3d12.res);
+            _sg_d3d12_transition_image_state(ds_img, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+        }
+    } else {
+        // use swapchain render targets and depth stencil
+        const sg_swapchain* swapchain = &pass->swapchain;
+        SOKOL_ASSERT(swapchain->d3d12.render_view);
+        num_rtvs = 1;
+        rtvs[0].ptr = (SIZE_T)swapchain->d3d12.render_view;
+        if (swapchain->d3d12.depth_stencil_view) {
+            dsv.ptr = (SIZE_T)swapchain->d3d12.depth_stencil_view;
+            has_dsv = true;
+        }
+        _sg.d3d12.cur_swapchain.render_view.ptr = (SIZE_T)swapchain->d3d12.render_view;
+        _sg.d3d12.cur_swapchain.resolve_view.ptr = (SIZE_T)swapchain->d3d12.resolve_view;
+        _sg.d3d12.cur_swapchain.render_target = (ID3D12Resource*)swapchain->d3d12.render_target;
+        _sg.d3d12.cur_swapchain.resolve_target = (ID3D12Resource*)swapchain->d3d12.resolve_target;
+
+        // transition swapchain from present to render target state (if not using MSAA resolve)
+        if (_sg.d3d12.cur_swapchain.render_target && !_sg.d3d12.cur_swapchain.resolve_target) {
+            _SG_STRUCT(D3D12_RESOURCE_BARRIER, barrier);
+            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrier.Transition.pResource = _sg.d3d12.cur_swapchain.render_target;
+            barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+            barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+            barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+            _sg_d3d12_ResourceBarrier(_sg.d3d12.frame_cmd_list, 1, &barrier);
+            _sg_stats_inc(d3d12.pass.num_resource_barrier);
+        }
+    }
+
+    // bind render targets to output merger stage
+    _sg_d3d12_OMSetRenderTargets(_sg.d3d12.frame_cmd_list, (UINT)num_rtvs, rtvs, FALSE, has_dsv ? &dsv : NULL);
+    _sg_stats_inc(d3d12.pass.num_set_render_targets);
+
+    // set viewport to full pass dimensions
+    _SG_STRUCT(D3D12_VIEWPORT, vp);
+    vp.Width = (FLOAT)_sg.cur_pass.dim.width;
+    vp.Height = (FLOAT)_sg.cur_pass.dim.height;
+    vp.MaxDepth = 1.0f;
+    _sg_d3d12_RSSetViewports(_sg.d3d12.frame_cmd_list, 1, &vp);
+
+    // set scissor rect to full pass dimensions
+    D3D12_RECT rect;
+    rect.left = 0;
+    rect.top = 0;
+    rect.right = _sg.cur_pass.dim.width;
+    rect.bottom = _sg.cur_pass.dim.height;
+    _sg_d3d12_RSSetScissorRects(_sg.d3d12.frame_cmd_list, 1, &rect);
+
+    // clear render targets and depth stencil based on load actions
+    const sg_pass_action* action = &pass->action;
+    for (int i = 0; i < num_rtvs; i++) {
+        if (action->colors[i].load_action == SG_LOADACTION_CLEAR) {
+            _sg_d3d12_ClearRenderTargetView(_sg.d3d12.frame_cmd_list, rtvs[i], (float*)&action->colors[i].clear_value, 0, NULL);
+            _sg_stats_inc(d3d12.pass.num_clear_render_target_view);
+        }
+    }
+    if (has_dsv) {
+        D3D12_CLEAR_FLAGS ds_flags = (D3D12_CLEAR_FLAGS)0;
+        if (action->depth.load_action == SG_LOADACTION_CLEAR) {
+            ds_flags |= D3D12_CLEAR_FLAG_DEPTH;
+        }
+        if (action->stencil.load_action == SG_LOADACTION_CLEAR) {
+            ds_flags |= D3D12_CLEAR_FLAG_STENCIL;
+        }
+        if (ds_flags != 0) {
+            _sg_d3d12_ClearDepthStencilView(_sg.d3d12.frame_cmd_list, dsv, ds_flags, action->depth.clear_value, action->stencil.clear_value, 0, NULL);
+            _sg_stats_inc(d3d12.pass.num_clear_depth_stencil_view);
+        }
+    }
+}
+
+// calculate subresource index from mip level and array slice for texture operations
+_SOKOL_PRIVATE UINT _sg_d3d12_calcsubresource(UINT mip_slice, UINT array_slice, UINT mip_levels) {
+    return mip_slice + array_slice * mip_levels;
+}
+
+// perform MSAA resolve if needed and transition attachment images back to shader resource state
+_SOKOL_PRIVATE void _sg_d3d12_end_pass(const _sg_attachments_ptrs_t* atts) {
+    SOKOL_ASSERT(_sg.d3d12.frame_cmd_list && atts);
+
+    if (!_sg.cur_pass.is_compute) {
+        if (!atts->empty) {
+            // process each color attachment for MSAA resolve or transition back to common state
+            for (int i = 0; i < atts->num_color_views; i++) {
+                const _sg_view_t* resolve_view = atts->resolve_views[i];
+                if (resolve_view) {
+                    // perform MSAA resolve from multisample render target to single-sample texture
+                    const _sg_image_t* resolve_img = _sg_image_ref_ptr(&resolve_view->cmn.img.ref);
+                    SOKOL_ASSERT(resolve_img && resolve_img->d3d12.res);
+                    const _sg_view_t* color_view = atts->color_views[i];
+                    SOKOL_ASSERT(color_view);
+                    const _sg_image_t* color_img = _sg_image_ref_ptr(&color_view->cmn.img.ref);
+                    SOKOL_ASSERT(color_img && color_img->d3d12.res);
+                    SOKOL_ASSERT(color_img->cmn.sample_count > 1);
+                    SOKOL_ASSERT(resolve_img->cmn.sample_count == 1);
+
+                    // calculate subresource indices for source and destination
+                    const UINT src_subres = _sg_d3d12_calcsubresource(
+                        (UINT)color_view->cmn.img.mip_level,
+                        (UINT)color_view->cmn.img.slice,
+                        (UINT)color_img->cmn.num_mipmaps);
+                    const UINT dst_subres = _sg_d3d12_calcsubresource(
+                        (UINT)resolve_view->cmn.img.mip_level,
+                        (UINT)resolve_view->cmn.img.slice,
+                        (UINT)resolve_img->cmn.num_mipmaps);
+
+                    _SG_STRUCT(D3D12_RESOURCE_BARRIER, barriers[2]);
+
+                    // transition MSAA source to resolve source and destination to resolve dest
+                    // use ALL_SUBRESOURCES to keep all subresources in sync (like Vulkan backend)
+                    barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+                    barriers[0].Transition.pResource = color_img->d3d12.res;
+                    barriers[0].Transition.StateBefore = color_img->d3d12.current_state;
+                    barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_RESOLVE_SOURCE;
+                    barriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+                    barriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+                    barriers[1].Transition.pResource = resolve_img->d3d12.res;
+                    barriers[1].Transition.StateBefore = resolve_img->d3d12.current_state;
+                    barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_RESOLVE_DEST;
+                    barriers[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+                    _sg_d3d12_ResourceBarrier(_sg.d3d12.frame_cmd_list, 2, barriers);
+                    _sg_stats_inc(d3d12.pass.num_resource_barrier);
+
+                    // perform the MSAA resolve operation
+                    _sg_d3d12_ResolveSubresource(_sg.d3d12.frame_cmd_list,
+                        resolve_img->d3d12.res,
+                        dst_subres,
+                        color_img->d3d12.res,
+                        src_subres,
+                        color_img->d3d12.format);
+                    _sg_stats_inc(d3d12.pass.num_resolve_subresource);
+
+                    // transition both images back to common state for future use
+                    barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_RESOLVE_SOURCE;
+                    barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_COMMON;
+                    barriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_RESOLVE_DEST;
+                    barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_COMMON;
+
+                    _sg_d3d12_ResourceBarrier(_sg.d3d12.frame_cmd_list, 2, barriers);
+                    _sg_stats_inc(d3d12.pass.num_resource_barrier);
+
+                    // update image state tracking
+                    _sg_image_t* color_img_mut = (_sg_image_t*)color_img;
+                    color_img_mut->d3d12.current_state = D3D12_RESOURCE_STATE_COMMON;
+                    _sg_image_t* resolve_img_mut = (_sg_image_t*)resolve_img;
+                    resolve_img_mut->d3d12.current_state = D3D12_RESOURCE_STATE_COMMON;
+                } else {
+                    // no resolve needed, just transition back to common state
+                    const _sg_view_t* color_view = atts->color_views[i];
+                    SOKOL_ASSERT(color_view);
+                    _sg_image_t* color_img = (_sg_image_t*)_sg_image_ref_ptr(&color_view->cmn.img.ref);
+                    SOKOL_ASSERT(color_img && color_img->d3d12.res);
+
+                    _sg_d3d12_transition_image_state(color_img, D3D12_RESOURCE_STATE_COMMON);
+                }
+            }
+
+            // transition depth stencil back to common state
+            if (atts->ds_view) {
+                _sg_image_t* ds_img = (_sg_image_t*)_sg_image_ref_ptr(&atts->ds_view->cmn.img.ref);
+                SOKOL_ASSERT(ds_img && ds_img->d3d12.res);
+                _sg_d3d12_transition_image_state(ds_img, D3D12_RESOURCE_STATE_COMMON);
+            }
+        } else {
+            // handle swapchain MSAA resolve or transition to present state
+            if (_sg.d3d12.cur_swapchain.resolve_target) {
+                // swapchain is using MSAA, resolve to presentation target
+                SOKOL_ASSERT(_sg.d3d12.cur_swapchain.render_target);
+                SOKOL_ASSERT(_sg.cur_pass.swapchain.sample_count > 1);
+                SOKOL_ASSERT(_sg.cur_pass.swapchain.color_fmt > SG_PIXELFORMAT_NONE);
+
+                _SG_STRUCT(D3D12_RESOURCE_BARRIER, barriers[2]);
+
+                // transition render target to resolve source and resolve target to resolve dest
+                barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+                barriers[0].Transition.pResource = _sg.d3d12.cur_swapchain.render_target;
+                barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+                barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_RESOLVE_SOURCE;
+                barriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+                barriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+                barriers[1].Transition.pResource = _sg.d3d12.cur_swapchain.resolve_target;
+                barriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+                barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_RESOLVE_DEST;
+                barriers[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+                _sg_d3d12_ResourceBarrier(_sg.d3d12.frame_cmd_list, 2, barriers);
+                _sg_stats_inc(d3d12.pass.num_resource_barrier);
+
+                // resolve swapchain MSAA render target to presentation target
+                const sg_pixel_format color_fmt = _sg.cur_pass.swapchain.color_fmt;
+                _sg_d3d12_ResolveSubresource(_sg.d3d12.frame_cmd_list,
+                    _sg.d3d12.cur_swapchain.resolve_target,
+                    0,
+                    _sg.d3d12.cur_swapchain.render_target,
+                    0,
+                    _sg_d3d12_rtv_uav_pixel_format(color_fmt));
+                _sg_stats_inc(d3d12.pass.num_resolve_subresource);
+
+                // transition render target back and resolve target to present
+                barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_RESOLVE_SOURCE;
+                barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+                barriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_RESOLVE_DEST;
+                barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+
+                _sg_d3d12_ResourceBarrier(_sg.d3d12.frame_cmd_list, 2, barriers);
+                _sg_stats_inc(d3d12.pass.num_resource_barrier);
+            } else if (_sg.d3d12.cur_swapchain.render_target) {
+                // no MSAA, just transition swapchain back to present state
+                _SG_STRUCT(D3D12_RESOURCE_BARRIER, barrier);
+                barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+                barrier.Transition.pResource = _sg.d3d12.cur_swapchain.render_target;
+                barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+                barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+                barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+                _sg_d3d12_ResourceBarrier(_sg.d3d12.frame_cmd_list, 1, &barrier);
+                _sg_stats_inc(d3d12.pass.num_resource_barrier);
+            }
+        }
+    }
+
+    _sg.d3d12.cur_swapchain.render_view.ptr = 0;
+    _sg.d3d12.cur_swapchain.resolve_view.ptr = 0;
+    _sg.d3d12.cur_swapchain.render_target = 0;
+    _sg.d3d12.cur_swapchain.resolve_target = 0;
+}
+
+// set viewport with optional vertical flip for origin handling
+_SOKOL_PRIVATE void _sg_d3d12_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
+    SOKOL_ASSERT(_sg.d3d12.frame_cmd_list);
+    D3D12_VIEWPORT vp;
+    vp.TopLeftX = (FLOAT)x;
+    vp.TopLeftY = (FLOAT)(origin_top_left ? y : (_sg.cur_pass.dim.height - (y + h)));
+    vp.Width = (FLOAT)w;
+    vp.Height = (FLOAT)h;
+    vp.MinDepth = 0.0f;
+    vp.MaxDepth = 1.0f;
+    _sg_d3d12_RSSetViewports(_sg.d3d12.frame_cmd_list, 1, &vp);
+}
+
+// set scissor rectangle with optional vertical flip for origin handling
+_SOKOL_PRIVATE void _sg_d3d12_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
+    SOKOL_ASSERT(_sg.d3d12.frame_cmd_list);
+    D3D12_RECT rect;
+    rect.left = x;
+    rect.top = origin_top_left ? y : (_sg.cur_pass.dim.height - (y + h));
+    rect.right = x + w;
+    rect.bottom = origin_top_left ? (y + h) : (_sg.cur_pass.dim.height - y);
+    _sg_d3d12_RSSetScissorRects(_sg.d3d12.frame_cmd_list, 1, &rect);
+}
+
+// bind pipeline state object and root signature, set topology and blend/stencil state
+_SOKOL_PRIVATE void _sg_d3d12_apply_pipeline(_sg_pipeline_t* pip) {
+    SOKOL_ASSERT(pip);
+    SOKOL_ASSERT(_sg.d3d12.frame_cmd_list);
+    // only update pipeline state if it has changed
+    if (!_sg_sref_slot_eql(&_sg.d3d12.cache.cur_pip, &pip->slot)) {
+        _sg.d3d12.cache.cur_pip = _sg_sref(&pip->slot);
+
+        if (pip->cmn.is_compute) {
+            // bind compute PSO and root signature
+            SOKOL_ASSERT(pip->d3d12.pso && pip->d3d12.root_sig);
+            _sg_d3d12_SetPipelineState(_sg.d3d12.frame_cmd_list, pip->d3d12.pso);
+            _sg_stats_inc(d3d12.pipeline.num_set_pipeline_state);
+            _sg_d3d12_SetComputeRootSignature(_sg.d3d12.frame_cmd_list, pip->d3d12.root_sig);
+            _sg_stats_inc(d3d12.pipeline.num_set_root_signature);
+        } else {
+            // bind graphics PSO, root signature, topology, and blend/stencil state
+            SOKOL_ASSERT(pip->d3d12.pso && pip->d3d12.root_sig);
+
+            _sg_d3d12_SetPipelineState(_sg.d3d12.frame_cmd_list, pip->d3d12.pso);
+            _sg_stats_inc(d3d12.pipeline.num_set_pipeline_state);
+            _sg_d3d12_SetGraphicsRootSignature(_sg.d3d12.frame_cmd_list, pip->d3d12.root_sig);
+            _sg_stats_inc(d3d12.pipeline.num_set_root_signature);
+            _sg_d3d12_IASetPrimitiveTopology(_sg.d3d12.frame_cmd_list, pip->d3d12.topology);
+            _sg_stats_inc(d3d12.pipeline.num_set_primitive_topology);
+            _sg_d3d12_OMSetStencilRef(_sg.d3d12.frame_cmd_list, pip->d3d12.stencil_ref);
+            _sg_stats_inc(d3d12.pipeline.num_set_stencil_ref);
+            float blend_color[4] = { pip->cmn.blend_color.r, pip->cmn.blend_color.g, pip->cmn.blend_color.b, pip->cmn.blend_color.a };
+            _sg_d3d12_OMSetBlendFactor(_sg.d3d12.frame_cmd_list, blend_color);
+            _sg_stats_inc(d3d12.pipeline.num_set_blend_factor);
+        }
+    }
+}
+
+// insert UAV barriers for storage buffers and images to ensure compute write visibility
+_SOKOL_PRIVATE void _sg_d3d12_handle_uav_barriers(const _sg_bindings_ptrs_t* bnd) {
+    SOKOL_ASSERT(bnd);
+    if (!_sg.cur_pass.is_compute) {
+        return;
+    }
+
+    _SG_STRUCT(D3D12_RESOURCE_BARRIER, uav_barriers[SG_MAX_VIEW_BINDSLOTS]);
+    int num_uav_barriers = 0;
+
+    // collect UAV barriers for all storage buffers and images that were written in previous dispatch
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        const _sg_view_t* view = bnd->views[i];
+        if (!view) {
+            continue;
+        }
+        if (view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
+            _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
+            // insert UAV barrier if buffer was written to by GPU (dirty flag set)
+            if (buf && (buf->d3d12.gpu_dirty_flags & _SG_D3D12_GPUDIRTY_STORAGEBUFFER)) {
+                ID3D12Resource* res = buf->d3d12.res ? buf->d3d12.res : buf->d3d12.ring_res[_sg.d3d12.frame_index];
+                if (res) {
+                    uav_barriers[num_uav_barriers].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+                    uav_barriers[num_uav_barriers].UAV.pResource = res;
+                    num_uav_barriers++;
+                    buf->d3d12.gpu_dirty_flags &= (uint8_t)~_SG_D3D12_GPUDIRTY_STORAGEBUFFER;
+                }
+            }
+        } else if (view->cmn.type == SG_VIEWTYPE_STORAGEIMAGE) {
+            _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+            // insert UAV barrier if image was written to by GPU (dirty flag set)
+            if (img && (img->d3d12.gpu_dirty_flags & _SG_D3D12_GPUDIRTY_STORAGEIMAGE)) {
+                if (img->d3d12.res) {
+                    uav_barriers[num_uav_barriers].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+                    uav_barriers[num_uav_barriers].UAV.pResource = img->d3d12.res;
+                    num_uav_barriers++;
+                    img->d3d12.gpu_dirty_flags &= (uint8_t)~_SG_D3D12_GPUDIRTY_STORAGEIMAGE;
+                }
+            }
+        }
+    }
+
+    // batch execute all UAV barriers
+    if (num_uav_barriers > 0) {
+        _sg_d3d12_ResourceBarrier(_sg.d3d12.frame_cmd_list, (UINT)num_uav_barriers, uav_barriers);
+        _sg_stats_add(d3d12.pass.num_resource_barrier, (uint32_t)num_uav_barriers);
+    }
+
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        const _sg_view_t* view = bnd->views[i];
+        if (!view) {
+            continue;
+        }
+        if (view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
+            _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
+            if (buf) {
+                buf->d3d12.gpu_dirty_flags |= _SG_D3D12_GPUDIRTY_STORAGEBUFFER;
+            }
+        } else if (view->cmn.type == SG_VIEWTYPE_STORAGEIMAGE) {
+            _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+            if (img) {
+                img->d3d12.gpu_dirty_flags |= _SG_D3D12_GPUDIRTY_STORAGEIMAGE;
+            }
+        }
+    }
+}
+
+// bind vertex/index buffers and resource views via descriptor tables
+_SOKOL_PRIVATE bool _sg_d3d12_apply_bindings(_sg_bindings_ptrs_t* bnd) {
+    SOKOL_ASSERT(bnd);
+    SOKOL_ASSERT(bnd->pip);
+    SOKOL_ASSERT(_sg.d3d12.frame_cmd_list);
+
+    // process any pending deferred image updates before binding
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        const _sg_view_t* view = bnd->views[i];
+        if (view) {
+            if (view->cmn.type != SG_VIEWTYPE_STORAGEBUFFER) {
+                const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+                if (img && img->d3d12.deferred_update_index >= 0) {
+                    _sg_d3d12_process_deferred_image_updates();
+                    break;
+                }
+            }
+        }
+    }
+
+    _sg_d3d12_handle_uav_barriers(bnd);
+
+    const bool is_compute = bnd->pip->cmn.is_compute;
+    if (is_compute) {
+        // compute shader binding path
+        const _sg_shader_t* shd = _sg_shader_ref_ptr(&bnd->pip->cmn.shader);
+
+        _sg_clear(&_sg.d3d12.bnd, sizeof(_sg.d3d12.bnd));
+
+        // collect compute shader UAVs and SRVs by register slot
+        for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+            const _sg_view_t* view = bnd->views[i];
+            if (view == 0) {
+                continue;
+            }
+            const _sg_shader_view_t* shd_view = &shd->cmn.views[i];
+            if (shd_view->stage != SG_SHADERSTAGE_COMPUTE) {
+                continue;
+            }
+            if ((shd_view->view_type == SG_VIEWTYPE_STORAGEBUFFER) && !shd_view->sbuf_readonly) {
+                const uint8_t reg_slot = shd->d3d12.view_register_u_n[i];
+                SOKOL_ASSERT(reg_slot < _SG_D3D12_MAX_STAGE_UAV_BINDINGS);
+                SOKOL_ASSERT(view->d3d12.uav.ptr != 0);
+                _sg.d3d12.bnd.cs_uavs[reg_slot] = view->d3d12.uav;
+            } else {
+                const uint8_t reg_slot = shd->d3d12.view_register_t_n[i];
+                SOKOL_ASSERT(reg_slot < _SG_D3D12_MAX_STAGE_SRV_BINDINGS);
+                SOKOL_ASSERT(view->d3d12.srv.ptr != 0);
+                _sg.d3d12.bnd.cs_srvs[reg_slot] = view->d3d12.srv;
+            }
+        }
+
+        // collect compute shader samplers by register slot
+        for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+            const _sg_sampler_t* smp = bnd->smps[i];
+            if (smp == 0) {
+                continue;
+            }
+            if (shd->cmn.samplers[i].stage != SG_SHADERSTAGE_COMPUTE) {
+                continue;
+            }
+            const uint8_t reg_slot = shd->d3d12.smp_register_s_n[i];
+            SOKOL_ASSERT(reg_slot < _SG_D3D12_MAX_STAGE_SMP_BINDINGS);
+            SOKOL_ASSERT(smp->d3d12.handle.ptr != 0);
+            _sg.d3d12.bnd.cs_smps[reg_slot] = smp->d3d12.handle;
+        }
+
+        // transition storage images to unordered access state if not already
+        _SG_STRUCT(D3D12_RESOURCE_BARRIER, uav_barriers[SG_MAX_VIEW_BINDSLOTS]);
+        int num_uav_barriers = 0;
+        for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+            const _sg_view_t* view = bnd->views[i];
+            if (view == 0) {
+                continue;
+            }
+            const _sg_shader_view_t* shd_view = &shd->cmn.views[i];
+            if (shd_view->stage != SG_SHADERSTAGE_COMPUTE) {
+                continue;
+            }
+            if (shd_view->view_type == SG_VIEWTYPE_STORAGEIMAGE) {
+                _sg_image_t* img = (_sg_image_t*)_sg_image_ref_ptr(&view->cmn.img.ref);
+                if (img && img->d3d12.current_state != D3D12_RESOURCE_STATE_UNORDERED_ACCESS) {
+                    uav_barriers[num_uav_barriers].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+                    uav_barriers[num_uav_barriers].Transition.pResource = img->d3d12.res;
+                    uav_barriers[num_uav_barriers].Transition.StateBefore = img->d3d12.current_state;
+                    uav_barriers[num_uav_barriers].Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+                    uav_barriers[num_uav_barriers].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+                    num_uav_barriers++;
+                }
+            }
+        }
+        if (num_uav_barriers > 0) {
+            _sg_d3d12_ResourceBarrier(_sg.d3d12.frame_cmd_list, (UINT)num_uav_barriers, uav_barriers);
+            _sg_stats_inc(d3d12.pass.num_resource_barrier);
+
+            for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+                const _sg_view_t* view = bnd->views[i];
+                if (view == 0) {
+                    continue;
+                }
+                const _sg_shader_view_t* shd_view = &shd->cmn.views[i];
+                if (shd_view->stage != SG_SHADERSTAGE_COMPUTE) {
+                    continue;
+                }
+                if (shd_view->view_type == SG_VIEWTYPE_STORAGEIMAGE) {
+                    _sg_image_t* img = (_sg_image_t*)_sg_image_ref_ptr(&view->cmn.img.ref);
+                    if (img) {
+                        img->d3d12.current_state = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+                    }
+                }
+            }
+        }
+
+        // bind descriptor heaps if not already bound for this command list
+        if (!_sg.d3d12.descriptor_heaps_bound) {
+            ID3D12DescriptorHeap* heaps[2];
+            UINT num_heaps = 0;
+            if (_sg.d3d12.shader_heap.heap) {
+                heaps[num_heaps++] = _sg.d3d12.shader_heap.heap;
+            }
+            if (_sg.d3d12.sampler_heap.heap) {
+                heaps[num_heaps++] = _sg.d3d12.sampler_heap.heap;
+            }
+            if (num_heaps > 0) {
+                _sg_d3d12_SetDescriptorHeaps(_sg.d3d12.frame_cmd_list, num_heaps, heaps);
+                _sg_stats_inc(d3d12.bindings.num_set_descriptor_heaps);
+                _sg.d3d12.descriptor_heaps_bound = true;
+            }
+        }
+
+        // calculate per-frame descriptor heap base offsets
+        const int shader_frame_base = _sg.d3d12.frame_index * _sg.d3d12.shader_heap.per_frame_descriptors;
+        const int sampler_frame_base = _sg.d3d12.frame_index * _sg.d3d12.sampler_heap.per_frame_descriptors;
+
+        // check if descriptor heaps have enough space for this draw call
+        const int total_shader_descriptors = bnd->pip->d3d12.cs_srv_count + bnd->pip->d3d12.cs_uav_count;
+        const int total_sampler_descriptors = bnd->pip->d3d12.cs_smp_count;
+        if ((_sg.d3d12.shader_heap.cur_offset + total_shader_descriptors) > _sg.d3d12.shader_heap.per_frame_descriptors) {
+            _SG_ERROR(D3D12_DESCRIPTOR_HEAP_EXHAUSTED);
+            return false;
+        }
+        if ((_sg.d3d12.sampler_heap.cur_offset + total_sampler_descriptors) > _sg.d3d12.sampler_heap.per_frame_descriptors) {
+            _SG_ERROR(D3D12_DESCRIPTOR_HEAP_EXHAUSTED);
+            return false;
+        }
+
+        // copy compute SRV descriptors to shader-visible heap and bind descriptor table
+        if (bnd->pip->d3d12.cs_srv_table_root_param_idx != _SG_D3D12_INVALID_ROOT_PARAM_IDX) {
+            const int num_cs_srvs = bnd->pip->d3d12.cs_srv_count;
+            const int base_reg = bnd->pip->d3d12.cs_srv_base_reg;
+            if (num_cs_srvs > 0) {
+                SOKOL_ASSERT((_sg.d3d12.shader_heap.cur_offset + num_cs_srvs) <= _sg.d3d12.shader_heap.per_frame_descriptors);
+                const int abs_offset = shader_frame_base + _sg.d3d12.shader_heap.cur_offset;
+                D3D12_CPU_DESCRIPTOR_HANDLE dest_cpu;
+                dest_cpu.ptr = _sg.d3d12.shader_heap.cpu_start.ptr +
+                    ((SIZE_T)abs_offset * (SIZE_T)_sg.d3d12.shader_heap.increment_size);
+                D3D12_GPU_DESCRIPTOR_HANDLE dest_gpu;
+                dest_gpu.ptr = _sg.d3d12.shader_heap.gpu_start.ptr +
+                    ((UINT64)abs_offset * (UINT64)_sg.d3d12.shader_heap.increment_size);
+
+                D3D12_CPU_DESCRIPTOR_HANDLE src_handles[SG_MAX_VIEW_BINDSLOTS];
+                UINT src_sizes[SG_MAX_VIEW_BINDSLOTS];
+                for (int j = 0; j < num_cs_srvs; j++) {
+                    src_handles[j] = _sg.d3d12.bnd.cs_srvs[base_reg + j];
+                    if (src_handles[j].ptr == 0) {
+                        src_handles[j] = _sg.d3d12.null_srv;
+                    }
+                    SOKOL_ASSERT(src_handles[j].ptr != 0);
+                    src_sizes[j] = 1;
+                }
+                const UINT dest_size = (UINT)num_cs_srvs;
+                _sg_d3d12_CopyDescriptors(_sg.d3d12.dev,
+                    1, &dest_cpu, &dest_size,
+                    (UINT)num_cs_srvs, src_handles, src_sizes,
+                    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                _sg_stats_add(d3d12.bindings.num_copy_descriptors, (uint32_t)num_cs_srvs);
+                _sg.d3d12.shader_heap.cur_offset += num_cs_srvs;
+
+                _sg_d3d12_SetComputeRootDescriptorTable(_sg.d3d12.frame_cmd_list,
+                    bnd->pip->d3d12.cs_srv_table_root_param_idx, dest_gpu);
+                _sg_stats_inc(d3d12.bindings.num_set_root_descriptor_table);
+            }
+        }
+
+        // copy compute UAV descriptors to shader-visible heap and bind descriptor table
+        if (bnd->pip->d3d12.cs_uav_table_root_param_idx != _SG_D3D12_INVALID_ROOT_PARAM_IDX) {
+            const int num_cs_uavs = bnd->pip->d3d12.cs_uav_count;
+            const int base_reg = bnd->pip->d3d12.cs_uav_base_reg;
+            if (num_cs_uavs > 0) {
+                SOKOL_ASSERT((_sg.d3d12.shader_heap.cur_offset + num_cs_uavs) <= _sg.d3d12.shader_heap.per_frame_descriptors);
+                const int abs_offset = shader_frame_base + _sg.d3d12.shader_heap.cur_offset;
+                D3D12_CPU_DESCRIPTOR_HANDLE dest_cpu;
+                dest_cpu.ptr = _sg.d3d12.shader_heap.cpu_start.ptr +
+                    ((SIZE_T)abs_offset * (SIZE_T)_sg.d3d12.shader_heap.increment_size);
+                D3D12_GPU_DESCRIPTOR_HANDLE dest_gpu;
+                dest_gpu.ptr = _sg.d3d12.shader_heap.gpu_start.ptr +
+                    ((UINT64)abs_offset * (UINT64)_sg.d3d12.shader_heap.increment_size);
+
+                D3D12_CPU_DESCRIPTOR_HANDLE src_handles[SG_MAX_VIEW_BINDSLOTS];
+                UINT src_sizes[SG_MAX_VIEW_BINDSLOTS];
+                for (int j = 0; j < num_cs_uavs; j++) {
+                    src_handles[j] = _sg.d3d12.bnd.cs_uavs[base_reg + j];
+                    if (src_handles[j].ptr == 0) {
+                        src_handles[j] = _sg.d3d12.null_uav;
+                    }
+                    SOKOL_ASSERT(src_handles[j].ptr != 0);
+                    src_sizes[j] = 1;
+                }
+                const UINT dest_size = (UINT)num_cs_uavs;
+                _sg_d3d12_CopyDescriptors(_sg.d3d12.dev,
+                    1, &dest_cpu, &dest_size,
+                    (UINT)num_cs_uavs, src_handles, src_sizes,
+                    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                _sg_stats_add(d3d12.bindings.num_copy_descriptors, (uint32_t)num_cs_uavs);
+                _sg.d3d12.shader_heap.cur_offset += num_cs_uavs;
+
+                _sg_d3d12_SetComputeRootDescriptorTable(_sg.d3d12.frame_cmd_list,
+                    bnd->pip->d3d12.cs_uav_table_root_param_idx, dest_gpu);
+                _sg_stats_inc(d3d12.bindings.num_set_root_descriptor_table);
+            }
+        }
+
+        // copy compute sampler descriptors to shader-visible heap and bind descriptor table
+        if (bnd->pip->d3d12.cs_smp_table_root_param_idx != _SG_D3D12_INVALID_ROOT_PARAM_IDX) {
+            const int num_cs_smps = bnd->pip->d3d12.cs_smp_count;
+            const int base_reg = bnd->pip->d3d12.cs_smp_base_reg;
+            if (num_cs_smps > 0) {
+                SOKOL_ASSERT((_sg.d3d12.sampler_heap.cur_offset + num_cs_smps) <= _sg.d3d12.sampler_heap.per_frame_descriptors);
+                const int abs_offset = sampler_frame_base + _sg.d3d12.sampler_heap.cur_offset;
+                D3D12_CPU_DESCRIPTOR_HANDLE dest_cpu;
+                dest_cpu.ptr = _sg.d3d12.sampler_heap.cpu_start.ptr +
+                    ((SIZE_T)abs_offset * (SIZE_T)_sg.d3d12.sampler_heap.increment_size);
+                D3D12_GPU_DESCRIPTOR_HANDLE dest_gpu;
+                dest_gpu.ptr = _sg.d3d12.sampler_heap.gpu_start.ptr +
+                    ((UINT64)abs_offset * (UINT64)_sg.d3d12.sampler_heap.increment_size);
+
+                D3D12_CPU_DESCRIPTOR_HANDLE src_handles[SG_MAX_SAMPLER_BINDSLOTS];
+                UINT src_sizes[SG_MAX_SAMPLER_BINDSLOTS];
+                for (int j = 0; j < num_cs_smps; j++) {
+                    src_handles[j] = _sg.d3d12.bnd.cs_smps[base_reg + j];
+                    if (src_handles[j].ptr == 0) {
+                        src_handles[j] = _sg.d3d12.null_sampler;
+                    }
+                    SOKOL_ASSERT(src_handles[j].ptr != 0);
+                    src_sizes[j] = 1;
+                }
+                const UINT dest_size = (UINT)num_cs_smps;
+                _sg_d3d12_CopyDescriptors(_sg.d3d12.dev,
+                    1, &dest_cpu, &dest_size,
+                    (UINT)num_cs_smps, src_handles, src_sizes,
+                    D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+                _sg_stats_add(d3d12.bindings.num_copy_descriptors, (uint32_t)num_cs_smps);
+                _sg.d3d12.sampler_heap.cur_offset += num_cs_smps;
+
+                _sg_d3d12_SetComputeRootDescriptorTable(_sg.d3d12.frame_cmd_list,
+                    bnd->pip->d3d12.cs_smp_table_root_param_idx, dest_gpu);
+                _sg_stats_inc(d3d12.bindings.num_set_root_descriptor_table);
+            }
+        }
+
+        return true;
+    }
+
+    // graphics shader binding path - setup vertex buffers
+    _SG_STRUCT(D3D12_VERTEX_BUFFER_VIEW, vb_views[SG_MAX_VERTEXBUFFER_BINDSLOTS]);
+    UINT num_vbs = 0;
+    const int frame_index = _sg.d3d12.frame_index;
+    for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
+        const _sg_buffer_t* vb = bnd->vbs[i];
+        if (vb == 0) {
+            break;
+        }
+        ID3D12Resource* vb_res = vb->d3d12.res ? vb->d3d12.res : vb->d3d12.ring_res[frame_index];
+        SOKOL_ASSERT(vb_res);
+        vb_views[i].BufferLocation = _sg_d3d12_GetGPUVirtualAddress(vb_res) + (D3D12_GPU_VIRTUAL_ADDRESS)bnd->vb_offsets[i];
+        vb_views[i].SizeInBytes = (UINT)(vb->cmn.size - bnd->vb_offsets[i]);
+        vb_views[i].StrideInBytes = bnd->pip->d3d12.vb_strides[i];
+        num_vbs++;
+    }
+    if (num_vbs > 0) {
+        _sg_d3d12_IASetVertexBuffers(_sg.d3d12.frame_cmd_list, 0, num_vbs, vb_views);
+        _sg_stats_inc(d3d12.bindings.num_set_vertex_buffers);
+    }
+
+    // setup index buffer if present
+    if (bnd->ib) {
+        ID3D12Resource* ib_res = bnd->ib->d3d12.res ? bnd->ib->d3d12.res : bnd->ib->d3d12.ring_res[frame_index];
+        SOKOL_ASSERT(ib_res);
+        D3D12_INDEX_BUFFER_VIEW ib_view;
+        ib_view.BufferLocation = _sg_d3d12_GetGPUVirtualAddress(ib_res) + (D3D12_GPU_VIRTUAL_ADDRESS)bnd->ib_offset;
+        ib_view.SizeInBytes = (UINT)(bnd->ib->cmn.size - bnd->ib_offset);
+        ib_view.Format = bnd->pip->d3d12.index_format;
+        _sg_d3d12_IASetIndexBuffer(_sg.d3d12.frame_cmd_list, &ib_view);
+        _sg_stats_inc(d3d12.bindings.num_set_index_buffer);
+    }
+
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&bnd->pip->cmn.shader);
+
+    _sg_clear(&_sg.d3d12.bnd, sizeof(_sg.d3d12.bnd));
+
+    // collect vertex and fragment shader SRVs by register slot and stage
+    for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        const _sg_view_t* view = bnd->views[i];
+        if (view == 0) {
+            continue;
+        }
+        const _sg_shader_view_t* shd_view = &shd->cmn.views[i];
+        const sg_shader_stage stage = shd_view->stage;
+        if ((shd_view->view_type == SG_VIEWTYPE_TEXTURE) ||
+            ((shd_view->view_type == SG_VIEWTYPE_STORAGEBUFFER) && shd_view->sbuf_readonly)) {
+            const uint8_t reg_slot = shd->d3d12.view_register_t_n[i];
+            SOKOL_ASSERT(reg_slot < _SG_D3D12_MAX_STAGE_SRV_BINDINGS);
+            SOKOL_ASSERT(view->d3d12.srv.ptr != 0);
+            switch (stage) {
+                case SG_SHADERSTAGE_VERTEX: _sg.d3d12.bnd.vs_srvs[reg_slot] = view->d3d12.srv; break;
+                case SG_SHADERSTAGE_FRAGMENT: _sg.d3d12.bnd.fs_srvs[reg_slot] = view->d3d12.srv; break;
+                default: break;
+            }
+        }
+    }
+
+    for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+        const _sg_sampler_t* smp = bnd->smps[i];
+        if (smp == 0) {
+            continue;
+        }
+        const sg_shader_stage stage = shd->cmn.samplers[i].stage;
+        const uint8_t reg_slot = shd->d3d12.smp_register_s_n[i];
+        SOKOL_ASSERT(reg_slot < _SG_D3D12_MAX_STAGE_SMP_BINDINGS);
+        SOKOL_ASSERT(smp->d3d12.handle.ptr != 0);
+        switch (stage) {
+            case SG_SHADERSTAGE_VERTEX: _sg.d3d12.bnd.vs_smps[reg_slot] = smp->d3d12.handle; break;
+            case SG_SHADERSTAGE_FRAGMENT: _sg.d3d12.bnd.fs_smps[reg_slot] = smp->d3d12.handle; break;
+            default: break;
+        }
+    }
+
+    // bind descriptor heaps if not already bound for this command list
+    if (!_sg.d3d12.descriptor_heaps_bound) {
+        ID3D12DescriptorHeap* heaps[2];
+        UINT num_heaps = 0;
+        if (_sg.d3d12.shader_heap.heap) {
+            heaps[num_heaps++] = _sg.d3d12.shader_heap.heap;
+        }
+        if (_sg.d3d12.sampler_heap.heap) {
+            heaps[num_heaps++] = _sg.d3d12.sampler_heap.heap;
+        }
+        if (num_heaps > 0) {
+            _sg_d3d12_SetDescriptorHeaps(_sg.d3d12.frame_cmd_list, num_heaps, heaps);
+            _sg_stats_inc(d3d12.bindings.num_set_descriptor_heaps);
+            _sg.d3d12.descriptor_heaps_bound = true;
+        }
+    }
+
+    // calculate per-frame descriptor heap base offsets
+    const int shader_frame_base = _sg.d3d12.frame_index * _sg.d3d12.shader_heap.per_frame_descriptors;
+    const int sampler_frame_base = _sg.d3d12.frame_index * _sg.d3d12.sampler_heap.per_frame_descriptors;
+
+    // check if descriptor heaps have enough space for this draw call
+    const int total_shader_descriptors = bnd->pip->d3d12.vs_srv_count + bnd->pip->d3d12.fs_srv_count;
+    const int total_sampler_descriptors = bnd->pip->d3d12.vs_smp_count + bnd->pip->d3d12.fs_smp_count;
+    if ((_sg.d3d12.shader_heap.cur_offset + total_shader_descriptors) > _sg.d3d12.shader_heap.per_frame_descriptors) {
+        _SG_ERROR(D3D12_DESCRIPTOR_HEAP_EXHAUSTED);
+        return false;
+    }
+    if ((_sg.d3d12.sampler_heap.cur_offset + total_sampler_descriptors) > _sg.d3d12.sampler_heap.per_frame_descriptors) {
+        _SG_ERROR(D3D12_DESCRIPTOR_HEAP_EXHAUSTED);
+        return false;
+    }
+
+    if (bnd->pip->d3d12.vs_srv_table_root_param_idx != _SG_D3D12_INVALID_ROOT_PARAM_IDX) {
+        const int num_vs_srvs = bnd->pip->d3d12.vs_srv_count;
+        const int base_reg = bnd->pip->d3d12.vs_srv_base_reg;
+        if (num_vs_srvs > 0) {
+            SOKOL_ASSERT((base_reg + num_vs_srvs) <= _SG_D3D12_MAX_STAGE_SRV_BINDINGS);
+            if ((_sg.d3d12.shader_heap.cur_offset + num_vs_srvs) > _sg.d3d12.shader_heap.per_frame_descriptors) {
+                _SG_ERROR(D3D12_DESCRIPTOR_HEAP_EXHAUSTED);
+                return false;
+            }
+            const int abs_offset = shader_frame_base + _sg.d3d12.shader_heap.cur_offset;
+            D3D12_CPU_DESCRIPTOR_HANDLE dest_cpu;
+            dest_cpu.ptr = _sg.d3d12.shader_heap.cpu_start.ptr +
+                (SIZE_T)((UINT)abs_offset * _sg.d3d12.shader_heap.increment_size);
+            D3D12_GPU_DESCRIPTOR_HANDLE dest_gpu;
+            dest_gpu.ptr = _sg.d3d12.shader_heap.gpu_start.ptr +
+                (UINT64)((UINT)abs_offset * _sg.d3d12.shader_heap.increment_size);
+
+            D3D12_CPU_DESCRIPTOR_HANDLE src_handles[SG_MAX_VIEW_BINDSLOTS];
+            UINT src_sizes[SG_MAX_VIEW_BINDSLOTS];
+            for (int j = 0; j < num_vs_srvs; j++) {
+                src_handles[j] = _sg.d3d12.bnd.vs_srvs[base_reg + j];
+                if (src_handles[j].ptr == 0) {
+                    src_handles[j] = _sg.d3d12.null_srv;
+                }
+                src_sizes[j] = 1;
+            }
+            const UINT dest_size = (UINT)num_vs_srvs;
+            _sg_d3d12_CopyDescriptors(_sg.d3d12.dev,
+                1, &dest_cpu, &dest_size,
+                (UINT)num_vs_srvs, src_handles, src_sizes,
+                D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            _sg_stats_add(d3d12.bindings.num_copy_descriptors, (uint32_t)num_vs_srvs);
+            _sg.d3d12.shader_heap.cur_offset += num_vs_srvs;
+
+            _sg_d3d12_SetGraphicsRootDescriptorTable(_sg.d3d12.frame_cmd_list,
+                bnd->pip->d3d12.vs_srv_table_root_param_idx, dest_gpu);
+            _sg_stats_inc(d3d12.bindings.num_set_root_descriptor_table);
+        }
+    }
+
+    // copy fragment shader SRV descriptors to shader-visible heap and bind descriptor table
+    if (bnd->pip->d3d12.fs_srv_table_root_param_idx != _SG_D3D12_INVALID_ROOT_PARAM_IDX) {
+        const int num_fs_srvs = bnd->pip->d3d12.fs_srv_count;
+        const int base_reg = bnd->pip->d3d12.fs_srv_base_reg;
+        if (num_fs_srvs > 0) {
+            SOKOL_ASSERT((base_reg + num_fs_srvs) <= _SG_D3D12_MAX_STAGE_SRV_BINDINGS);
+            if ((_sg.d3d12.shader_heap.cur_offset + num_fs_srvs) > _sg.d3d12.shader_heap.per_frame_descriptors) {
+                _SG_ERROR(D3D12_DESCRIPTOR_HEAP_EXHAUSTED);
+                return false;
+            }
+            const int abs_offset = shader_frame_base + _sg.d3d12.shader_heap.cur_offset;
+            D3D12_CPU_DESCRIPTOR_HANDLE dest_cpu;
+            dest_cpu.ptr = _sg.d3d12.shader_heap.cpu_start.ptr +
+                (SIZE_T)((UINT)abs_offset * _sg.d3d12.shader_heap.increment_size);
+            D3D12_GPU_DESCRIPTOR_HANDLE dest_gpu;
+            dest_gpu.ptr = _sg.d3d12.shader_heap.gpu_start.ptr +
+                (UINT64)((UINT)abs_offset * _sg.d3d12.shader_heap.increment_size);
+
+            D3D12_CPU_DESCRIPTOR_HANDLE src_handles[SG_MAX_VIEW_BINDSLOTS];
+            UINT src_sizes[SG_MAX_VIEW_BINDSLOTS];
+            for (int j = 0; j < num_fs_srvs; j++) {
+                src_handles[j] = _sg.d3d12.bnd.fs_srvs[base_reg + j];
+                if (src_handles[j].ptr == 0) {
+                    src_handles[j] = _sg.d3d12.null_srv;
+                }
+                src_sizes[j] = 1;
+            }
+            const UINT dest_size = (UINT)num_fs_srvs;
+            _sg_d3d12_CopyDescriptors(_sg.d3d12.dev,
+                1, &dest_cpu, &dest_size,
+                (UINT)num_fs_srvs, src_handles, src_sizes,
+                D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            _sg_stats_add(d3d12.bindings.num_copy_descriptors, (uint32_t)num_fs_srvs);
+            _sg.d3d12.shader_heap.cur_offset += num_fs_srvs;
+
+            _sg_d3d12_SetGraphicsRootDescriptorTable(_sg.d3d12.frame_cmd_list,
+                bnd->pip->d3d12.fs_srv_table_root_param_idx, dest_gpu);
+            _sg_stats_inc(d3d12.bindings.num_set_root_descriptor_table);
+        }
+    }
+
+    // copy vertex shader sampler descriptors to shader-visible heap and bind descriptor table
+    if (bnd->pip->d3d12.vs_smp_table_root_param_idx != _SG_D3D12_INVALID_ROOT_PARAM_IDX) {
+        const int num_vs_smps = bnd->pip->d3d12.vs_smp_count;
+        const int base_reg = bnd->pip->d3d12.vs_smp_base_reg;
+        if (num_vs_smps > 0) {
+            SOKOL_ASSERT((base_reg + num_vs_smps) <= _SG_D3D12_MAX_STAGE_SMP_BINDINGS);
+            if ((_sg.d3d12.sampler_heap.cur_offset + num_vs_smps) > _sg.d3d12.sampler_heap.per_frame_descriptors) {
+                _SG_ERROR(D3D12_DESCRIPTOR_HEAP_EXHAUSTED);
+                return false;
+            }
+            const int abs_offset = sampler_frame_base + _sg.d3d12.sampler_heap.cur_offset;
+            D3D12_CPU_DESCRIPTOR_HANDLE dest_cpu;
+            dest_cpu.ptr = _sg.d3d12.sampler_heap.cpu_start.ptr +
+                (SIZE_T)((UINT)abs_offset * _sg.d3d12.sampler_heap.increment_size);
+            D3D12_GPU_DESCRIPTOR_HANDLE dest_gpu;
+            dest_gpu.ptr = _sg.d3d12.sampler_heap.gpu_start.ptr +
+                (UINT64)((UINT)abs_offset * _sg.d3d12.sampler_heap.increment_size);
+
+            D3D12_CPU_DESCRIPTOR_HANDLE src_handles[SG_MAX_SAMPLER_BINDSLOTS];
+            UINT src_sizes[SG_MAX_SAMPLER_BINDSLOTS];
+            for (int j = 0; j < num_vs_smps; j++) {
+                src_handles[j] = _sg.d3d12.bnd.vs_smps[base_reg + j];
+                if (src_handles[j].ptr == 0) {
+                    src_handles[j] = _sg.d3d12.null_sampler;
+                }
+                src_sizes[j] = 1;
+            }
+            const UINT dest_size = (UINT)num_vs_smps;
+            _sg_d3d12_CopyDescriptors(_sg.d3d12.dev,
+                1, &dest_cpu, &dest_size,
+                (UINT)num_vs_smps, src_handles, src_sizes,
+                D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+            _sg_stats_add(d3d12.bindings.num_copy_descriptors, (uint32_t)num_vs_smps);
+            _sg.d3d12.sampler_heap.cur_offset += num_vs_smps;
+
+            _sg_d3d12_SetGraphicsRootDescriptorTable(_sg.d3d12.frame_cmd_list,
+                bnd->pip->d3d12.vs_smp_table_root_param_idx, dest_gpu);
+            _sg_stats_inc(d3d12.bindings.num_set_root_descriptor_table);
+        }
+    }
+
+    // copy fragment shader sampler descriptors to shader-visible heap and bind descriptor table
+    if (bnd->pip->d3d12.fs_smp_table_root_param_idx != _SG_D3D12_INVALID_ROOT_PARAM_IDX) {
+        const int num_fs_smps = bnd->pip->d3d12.fs_smp_count;
+        const int base_reg = bnd->pip->d3d12.fs_smp_base_reg;
+        if (num_fs_smps > 0) {
+            SOKOL_ASSERT((base_reg + num_fs_smps) <= _SG_D3D12_MAX_STAGE_SMP_BINDINGS);
+            if ((_sg.d3d12.sampler_heap.cur_offset + num_fs_smps) > _sg.d3d12.sampler_heap.per_frame_descriptors) {
+                _SG_ERROR(D3D12_DESCRIPTOR_HEAP_EXHAUSTED);
+                return false;
+            }
+            const int abs_offset = sampler_frame_base + _sg.d3d12.sampler_heap.cur_offset;
+            D3D12_CPU_DESCRIPTOR_HANDLE dest_cpu;
+            dest_cpu.ptr = _sg.d3d12.sampler_heap.cpu_start.ptr +
+                (SIZE_T)((UINT)abs_offset * _sg.d3d12.sampler_heap.increment_size);
+            D3D12_GPU_DESCRIPTOR_HANDLE dest_gpu;
+            dest_gpu.ptr = _sg.d3d12.sampler_heap.gpu_start.ptr +
+                (UINT64)((UINT)abs_offset * _sg.d3d12.sampler_heap.increment_size);
+
+            D3D12_CPU_DESCRIPTOR_HANDLE src_handles[SG_MAX_SAMPLER_BINDSLOTS];
+            UINT src_sizes[SG_MAX_SAMPLER_BINDSLOTS];
+            for (int j = 0; j < num_fs_smps; j++) {
+                src_handles[j] = _sg.d3d12.bnd.fs_smps[base_reg + j];
+                if (src_handles[j].ptr == 0) {
+                    src_handles[j] = _sg.d3d12.null_sampler;
+                }
+                src_sizes[j] = 1;
+            }
+            const UINT dest_size = (UINT)num_fs_smps;
+            _sg_d3d12_CopyDescriptors(_sg.d3d12.dev,
+                1, &dest_cpu, &dest_size,
+                (UINT)num_fs_smps, src_handles, src_sizes,
+                D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+            _sg_stats_add(d3d12.bindings.num_copy_descriptors, (uint32_t)num_fs_smps);
+            _sg.d3d12.sampler_heap.cur_offset += num_fs_smps;
+
+            _sg_d3d12_SetGraphicsRootDescriptorTable(_sg.d3d12.frame_cmd_list,
+                bnd->pip->d3d12.fs_smp_table_root_param_idx, dest_gpu);
+            _sg_stats_inc(d3d12.bindings.num_set_root_descriptor_table);
+        }
+    }
+
+    return true;
+}
+
+// copy uniform data to ring buffer and bind as constant buffer view
+_SOKOL_PRIVATE void _sg_d3d12_apply_uniforms(int ub_slot, const sg_range* data) {
+    SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
+    SOKOL_ASSERT(data && data->ptr && (data->size > 0));
+    SOKOL_ASSERT(_sg.d3d12.frame_cmd_list);
+    SOKOL_ASSERT((_sg.d3d12.ub.offset & (_SG_D3D12_UB_ALIGN - 1)) == 0);
+
+    // check if uniform data fits in remaining ring buffer space for this frame
+    const int required_size = _sg_roundup((int)data->size, _SG_D3D12_UB_ALIGN);
+    if ((_sg.d3d12.ub.offset + required_size) > _sg.d3d12.ub.per_frame_size) {
+        _SG_ERROR(D3D12_UNIFORM_BUFFER_EXHAUSTED);
+        _sg.next_draw_valid = false;
+        return;
+    }
+
+    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
+    SOKOL_ASSERT(pip);
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
+    SOKOL_ASSERT(shd);
+    SOKOL_ASSERT(data->size == shd->cmn.uniform_blocks[ub_slot].size);
+    _SOKOL_UNUSED(shd);
+
+    const uint8_t root_param_idx = pip->d3d12.ub_root_param_idx[ub_slot];
+    SOKOL_ASSERT(root_param_idx != _SG_D3D12_INVALID_ROOT_PARAM_IDX);
+
+    // calculate absolute offset in ring buffer for current frame
+    const int frame_base = _sg.d3d12.frame_index * _sg.d3d12.ub.per_frame_size;
+    const int abs_offset = frame_base + _sg.d3d12.ub.offset;
+
+    // copy uniform data to mapped ring buffer
+    uint8_t* dst = _sg.d3d12.ub.base_ptr + abs_offset;
+    memcpy(dst, data->ptr, data->size);
+
+    // bind GPU address as root constant buffer view
+    D3D12_GPU_VIRTUAL_ADDRESS gpu_addr = _sg.d3d12.ub.gpu_addr + (D3D12_GPU_VIRTUAL_ADDRESS)abs_offset;
+    if (pip->cmn.is_compute) {
+        _sg_d3d12_SetComputeRootConstantBufferView(_sg.d3d12.frame_cmd_list, root_param_idx, gpu_addr);
+    } else {
+        _sg_d3d12_SetGraphicsRootConstantBufferView(_sg.d3d12.frame_cmd_list, root_param_idx, gpu_addr);
+    }
+    _sg_stats_inc(d3d12.bindings.num_set_root_constant_buffer_view);
+
+    // advance ring buffer offset with 256-byte alignment
+    _sg.d3d12.ub.offset = _sg_roundup(_sg.d3d12.ub.offset + (int)data->size, _SG_D3D12_UB_ALIGN);
+}
+
+//-- rendering and compute dispatch -------------------------------------------
+// execute indexed or non-indexed instanced draw call
+_SOKOL_PRIVATE void _sg_d3d12_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
+    SOKOL_ASSERT(_sg.d3d12.frame_cmd_list);
+    if (_sg.use_indexed_draw) {
+        _sg_d3d12_DrawIndexedInstanced(_sg.d3d12.frame_cmd_list,
+            (UINT)num_elements,
+            (UINT)num_instances,
+            (UINT)base_element,
+            base_vertex,
+            (UINT)base_instance);
+        if (num_instances > 1) {
+            _sg_stats_inc(d3d12.draw.num_draw_indexed_instanced);
+        } else {
+            _sg_stats_inc(d3d12.draw.num_draw_indexed);
+        }
+    } else {
+        _sg_d3d12_DrawInstanced(_sg.d3d12.frame_cmd_list,
+            (UINT)num_elements,
+            (UINT)num_instances,
+            (UINT)base_element,
+            (UINT)base_instance);
+        if (num_instances > 1) {
+            _sg_stats_inc(d3d12.draw.num_draw_instanced);
+        } else {
+            _sg_stats_inc(d3d12.draw.num_draw);
+        }
+    }
+}
+
+// execute compute shader dispatch with specified thread group counts
+_SOKOL_PRIVATE void _sg_d3d12_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
+    SOKOL_ASSERT(_sg.d3d12.frame_cmd_list);
+    _sg_d3d12_Dispatch(_sg.d3d12.frame_cmd_list, (UINT)num_groups_x, (UINT)num_groups_y, (UINT)num_groups_z);
+    _sg_stats_inc(d3d12.draw.num_dispatch);
+}
+
+// submit command lists, advance to next frame, and wait for GPU to finish oldest frame
+_SOKOL_PRIVATE void _sg_d3d12_commit(void) {
+    SOKOL_ASSERT(_sg.d3d12.frame_cmd_list && _sg.d3d12.cmd_queue);
+
+    // process any remaining deferred image updates
+    const bool has_deferred_updates = (_sg.d3d12.deferred_image_updates.num_updates > 0);
+    if (has_deferred_updates) {
+        _sg_d3d12_process_deferred_image_updates();
+    }
+
+    // submit command list if there's work to do
+    const bool needs_submit = _sg.d3d12.frame_started || has_deferred_updates;
+    if (needs_submit) {
+        _sg_d3d12_Close(_sg.d3d12.frame_cmd_list);
+
+        ID3D12CommandList* cmd_lists[] = { (ID3D12CommandList*)_sg.d3d12.frame_cmd_list };
+        _sg_d3d12_ExecuteCommandLists(_sg.d3d12.cmd_queue, 1, cmd_lists);
+
+        // signal fence with incremented value to track this frame's completion
+        _sg_d3d12_signal_fence();
+        _sg.d3d12.frame_fence_values[_sg.d3d12.frame_index] = *_sg.d3d12.fence_value;
+    }
+
+    // assign correct fence value to any pending release items
+    _sg_d3d12_flush_pending_releases();
+
+    // advance to next frame in ring buffer
+    const int next_frame_index = (_sg.d3d12.frame_index + 1) % SG_NUM_INFLIGHT_FRAMES;
+
+    // wait for GPU to finish with the next frame's resources before reusing them
+    const UINT64 next_frame_fence_value = _sg.d3d12.frame_fence_values[next_frame_index];
+    if (next_frame_fence_value != 0) {
+        _sg_d3d12_wait_for_fence(next_frame_fence_value);
+    }
+
+    // free resources whose fence values have been completed by GPU
+    _sg_d3d12_garbage_collect();
+
+    // update frame state for next frame
+    _sg.d3d12.frame_index = next_frame_index;
+    _sg.d3d12.frame_started = false;
+    _sg.d3d12.descriptor_heaps_bound = false;
+
+}
+
+//-- resource updates and synchronization -------------------------------------
+// update a dynamic buffer by copying data to the current frame's ring buffer slot
+_SOKOL_PRIVATE void _sg_d3d12_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
+    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
+
+    if (buf->d3d12.res) {
+        _SG_ERROR(D3D12_UPDATE_BUFFER_ON_IMMUTABLE);
+        return;
+    }
+
+    const int frame_index = _sg.d3d12.frame_index;
+    SOKOL_ASSERT(buf->d3d12.ring_res[frame_index]);
+    if (buf->d3d12.ring_mapped_ptr[frame_index]) {
+        memcpy(buf->d3d12.ring_mapped_ptr[frame_index], data->ptr, data->size);
+    } else {
+        _SG_ERROR(D3D12_MAP_FOR_UPDATE_BUFFER_FAILED);
+    }
+}
+
+// append data to a dynamic buffer, advancing the ring buffer offset
+_SOKOL_PRIVATE void _sg_d3d12_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
+    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
+    _SOKOL_UNUSED(new_frame);
+
+    if (buf->d3d12.res) {
+        _SG_ERROR(D3D12_APPEND_BUFFER_ON_IMMUTABLE);
+        return;
+    }
+
+    const int frame_index = _sg.d3d12.frame_index;
+    SOKOL_ASSERT(buf->d3d12.ring_res[frame_index]);
+    if (buf->d3d12.ring_mapped_ptr[frame_index]) {
+        uint8_t* dst_ptr = (uint8_t*)buf->d3d12.ring_mapped_ptr[frame_index] + buf->cmn.append_pos;
+        memcpy(dst_ptr, data->ptr, data->size);
+    } else {
+        _SG_ERROR(D3D12_MAP_FOR_APPEND_BUFFER_FAILED);
+    }
+}
+
+_SOKOL_PRIVATE bool _sg_d3d12_image_bound_as_attachment(const _sg_image_t* img) {
+    if (!_sg.cur_pass.in_pass) {
+        return false;
+    }
+    _sg_attachments_ptrs_t atts = _sg_attachments_ptrs(&_sg.cur_pass.atts);
+    if (atts.empty) {
+        return false;
+    }
+    for (int i = 0; i < atts.num_color_views; i++) {
+        if (atts.color_views[i]) {
+            const _sg_image_t* att_img = _sg_image_ref_ptr(&atts.color_views[i]->cmn.img.ref);
+            if (att_img == img) {
+                return true;
+            }
+        }
+        if (atts.resolve_views[i]) {
+            const _sg_image_t* att_img = _sg_image_ref_ptr(&atts.resolve_views[i]->cmn.img.ref);
+            if (att_img == img) {
+                return true;
+            }
+        }
+    }
+    if (atts.ds_view) {
+        const _sg_image_t* att_img = _sg_image_ref_ptr(&atts.ds_view->cmn.img.ref);
+        if (att_img == img) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// queue an image update by copying data to upload ring buffer for deferred processing
+_SOKOL_PRIVATE void _sg_d3d12_update_image(_sg_image_t* img, const sg_image_data* data) {
+    SOKOL_ASSERT(img && data);
+    SOKOL_ASSERT(img->d3d12.res);
+
+    if (_sg_d3d12_image_bound_as_attachment(img)) {
+        _SG_ERROR(D3D12_UPDATE_IMAGE_WHILE_BOUND);
+        return;
+    }
+
+    if (_sg.d3d12.deferred_image_updates.num_updates >= _sg.d3d12.deferred_image_updates.max_updates) {
+        _SG_ERROR(D3D12_DEFERRED_IMAGE_UPDATES_OVERFLOW);
+        return;
+    }
+
+    if (img->d3d12.deferred_update_index >= 0) {
+        _SG_ERROR(D3D12_IMAGE_UPDATED_TWICE);
+        return;
+    }
+
+    const int num_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? 1 : img->cmn.num_slices;
+    const int num_subresources = num_slices * img->cmn.num_mipmaps;
+
+    D3D12_RESOURCE_DESC res_desc = _sg_d3d12_GetDesc(img->d3d12.res);
+
+    // calculate total upload size needed for all subresources
+    UINT64 upload_size = 0;
+    _sg_d3d12_GetCopyableFootprints(_sg.d3d12.dev, &res_desc, 0, (UINT)num_subresources, 0, NULL, NULL, NULL, &upload_size);
+
+    // allocate space in upload ring buffer for texture data
+    UINT64 ring_offset = _sg_d3d12_alloc_from_upload_ring(upload_size);
+    if (ring_offset == _SG_D3D12_UPLOAD_RING_OVERFLOW_RESULT) {
+        return;
+    }
+    void* mapped_ptr = (uint8_t*)_sg.d3d12.upload_ring.mapped_ptr + ring_offset;
+
+    // get footprints for each subresource to know layout in upload buffer
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT* footprints = (D3D12_PLACED_SUBRESOURCE_FOOTPRINT*)_sg_malloc((size_t)num_subresources * sizeof(D3D12_PLACED_SUBRESOURCE_FOOTPRINT));
+    UINT* num_rows = (UINT*)_sg_malloc((size_t)num_subresources * sizeof(UINT));
+    UINT64* row_sizes = (UINT64*)_sg_malloc((size_t)num_subresources * sizeof(UINT64));
+    SOKOL_ASSERT(footprints && num_rows && row_sizes);
+    _sg_d3d12_GetCopyableFootprints(_sg.d3d12.dev, &res_desc, 0, (UINT)num_subresources, 0, footprints, num_rows, row_sizes, NULL);
+
+    // copy texture data to upload ring buffer, accounting for D3D12 row pitch alignment
+    int subres_idx = 0;
+    for (int slice = 0; slice < num_slices; slice++) {
+        for (int mip = 0; mip < img->cmn.num_mipmaps; mip++, subres_idx++) {
+            const sg_range* mip_data = &data->mip_levels[mip];
+            if (mip_data->ptr) {
+                const D3D12_PLACED_SUBRESOURCE_FOOTPRINT* fp = &footprints[subres_idx];
+                uint8_t* dst_base = (uint8_t*)mapped_ptr + fp->Offset;
+                const int mip_width = _sg_miplevel_dim(img->cmn.width, mip);
+                const int src_row_pitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
+                const size_t slice_size = mip_data->size / (size_t)num_slices;
+                const uint8_t* src_base = (const uint8_t*)mip_data->ptr + slice_size * (size_t)slice;
+
+                // copy row by row due to different src and dst row pitches
+                for (UINT row = 0; row < num_rows[subres_idx]; row++) {
+                    memcpy(dst_base + row * fp->Footprint.RowPitch,
+                           src_base + row * (UINT)src_row_pitch,
+                           (size_t)row_sizes[subres_idx]);
+                }
+            }
+        }
+    }
+
+    _sg_free(footprints);
+    _sg_free(num_rows);
+    _sg_free(row_sizes);
+
+    // queue image update for deferred processing during next pass or commit
+    const int update_index = _sg.d3d12.deferred_image_updates.num_updates++;
+    _sg_d3d12_deferred_image_update_t* update = &_sg.d3d12.deferred_image_updates.items[update_index];
+    update->img = img;
+    update->ring_offset = ring_offset;
+    img->d3d12.deferred_update_index = update_index;
+}
+
+_SOKOL_PRIVATE void _sg_d3d12_push_debug_group(const char* name) {
+    SOKOL_ASSERT(name);
+    if (_sg.d3d12.frame_cmd_list && _sg.cur_pass.in_pass) {
+        size_t len = strlen(name) + 1;
+        _sg_d3d12_BeginEvent(_sg.d3d12.frame_cmd_list, 0, name, (UINT)len);
+    }
+}
+
+_SOKOL_PRIVATE void _sg_d3d12_pop_debug_group(void) {
+    if (_sg.d3d12.frame_cmd_list && _sg.cur_pass.in_pass) {
+        _sg_d3d12_EndEvent(_sg.d3d12.frame_cmd_list);
+    }
+}
+
 // >>metal backend
 #elif defined(SOKOL_METAL)
 
@@ -21847,6 +26990,8 @@ static inline void _sg_setup_backend(const sg_desc* desc) {
     _sg_mtl_setup_backend(desc);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_setup_backend(desc);
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_setup_backend(desc);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_setup_backend(desc);
     #elif defined(SOKOL_VULKAN)
@@ -21865,6 +27010,8 @@ static inline void _sg_discard_backend(void) {
     _sg_mtl_discard_backend();
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_discard_backend();
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_discard_backend();
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_discard_backend();
     #elif defined(SOKOL_VULKAN)
@@ -21883,6 +27030,8 @@ static inline void _sg_reset_state_cache(void) {
     _sg_mtl_reset_state_cache();
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_reset_state_cache();
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_reset_state_cache();
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_reset_state_cache();
     #elif defined(SOKOL_VULKAN)
@@ -21901,6 +27050,8 @@ static inline sg_resource_state _sg_create_buffer(_sg_buffer_t* buf, const sg_bu
     return _sg_mtl_create_buffer(buf, desc);
     #elif defined(SOKOL_D3D11)
     return _sg_d3d11_create_buffer(buf, desc);
+    #elif defined(SOKOL_D3D12)
+    return _sg_d3d12_create_buffer(buf, desc);
     #elif defined(SOKOL_WGPU)
     return _sg_wgpu_create_buffer(buf, desc);
     #elif defined(SOKOL_VULKAN)
@@ -21919,6 +27070,8 @@ static inline void _sg_discard_buffer(_sg_buffer_t* buf) {
     _sg_mtl_discard_buffer(buf);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_discard_buffer(buf);
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_discard_buffer(buf);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_discard_buffer(buf);
     #elif defined(SOKOL_VULKAN)
@@ -21937,6 +27090,8 @@ static inline sg_resource_state _sg_create_image(_sg_image_t* img, const sg_imag
     return _sg_mtl_create_image(img, desc);
     #elif defined(SOKOL_D3D11)
     return _sg_d3d11_create_image(img, desc);
+    #elif defined(SOKOL_D3D12)
+    return _sg_d3d12_create_image(img, desc);
     #elif defined(SOKOL_WGPU)
     return _sg_wgpu_create_image(img, desc);
     #elif defined(SOKOL_VULKAN)
@@ -21955,6 +27110,8 @@ static inline void _sg_discard_image(_sg_image_t* img) {
     _sg_mtl_discard_image(img);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_discard_image(img);
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_discard_image(img);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_discard_image(img);
     #elif defined(SOKOL_VULKAN)
@@ -21973,6 +27130,8 @@ static inline sg_resource_state _sg_create_sampler(_sg_sampler_t* smp, const sg_
     return _sg_mtl_create_sampler(smp, desc);
     #elif defined(SOKOL_D3D11)
     return _sg_d3d11_create_sampler(smp, desc);
+    #elif defined(SOKOL_D3D12)
+    return _sg_d3d12_create_sampler(smp, desc);
     #elif defined(SOKOL_WGPU)
     return _sg_wgpu_create_sampler(smp, desc);
     #elif defined(SOKOL_VULKAN)
@@ -21991,6 +27150,8 @@ static inline void _sg_discard_sampler(_sg_sampler_t* smp) {
     _sg_mtl_discard_sampler(smp);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_discard_sampler(smp);
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_discard_sampler(smp);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_discard_sampler(smp);
     #elif defined(SOKOL_VULKAN)
@@ -22009,6 +27170,8 @@ static inline sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_sh
     return _sg_mtl_create_shader(shd, desc);
     #elif defined(SOKOL_D3D11)
     return _sg_d3d11_create_shader(shd, desc);
+    #elif defined(SOKOL_D3D12)
+    return _sg_d3d12_create_shader(shd, desc);
     #elif defined(SOKOL_WGPU)
     return _sg_wgpu_create_shader(shd, desc);
     #elif defined(SOKOL_VULKAN)
@@ -22027,6 +27190,8 @@ static inline void _sg_discard_shader(_sg_shader_t* shd) {
     _sg_mtl_discard_shader(shd);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_discard_shader(shd);
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_discard_shader(shd);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_discard_shader(shd);
     #elif defined(SOKOL_VULKAN)
@@ -22045,6 +27210,8 @@ static inline sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, const s
     return _sg_mtl_create_pipeline(pip, desc);
     #elif defined(SOKOL_D3D11)
     return _sg_d3d11_create_pipeline(pip, desc);
+    #elif defined(SOKOL_D3D12)
+    return _sg_d3d12_create_pipeline(pip, desc);
     #elif defined(SOKOL_WGPU)
     return _sg_wgpu_create_pipeline(pip, desc);
     #elif defined(SOKOL_VULKAN)
@@ -22063,6 +27230,8 @@ static inline void _sg_discard_pipeline(_sg_pipeline_t* pip) {
     _sg_mtl_discard_pipeline(pip);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_discard_pipeline(pip);
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_discard_pipeline(pip);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_discard_pipeline(pip);
     #elif defined(SOKOL_VULKAN)
@@ -22081,6 +27250,8 @@ static inline sg_resource_state _sg_create_view(_sg_view_t* view, const sg_view_
     return _sg_mtl_create_view(view, desc);
     #elif defined(SOKOL_D3D11)
     return _sg_d3d11_create_view(view, desc);
+    #elif defined(SOKOL_D3D12)
+    return _sg_d3d12_create_view(view, desc);
     #elif defined(SOKOL_WGPU)
     return _sg_wgpu_create_view(view, desc);
     #elif defined(SOKOL_VULKAN)
@@ -22099,6 +27270,8 @@ static inline void _sg_discard_view(_sg_view_t* view) {
     _sg_mtl_discard_view(view);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_discard_view(view);
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_discard_view(view);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_discard_view(view);
     #elif defined(SOKOL_VULKAN)
@@ -22117,6 +27290,8 @@ static inline void _sg_begin_pass(const sg_pass* pass, const _sg_attachments_ptr
     _sg_mtl_begin_pass(pass, atts);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_begin_pass(pass, atts);
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_begin_pass(pass, atts);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_begin_pass(pass, atts);
     #elif defined(SOKOL_VULKAN)
@@ -22135,6 +27310,8 @@ static inline void _sg_end_pass(const _sg_attachments_ptrs_t* atts) {
     _sg_mtl_end_pass(atts);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_end_pass(atts);
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_end_pass(atts);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_end_pass(atts);
     #elif defined(SOKOL_VULKAN)
@@ -22153,6 +27330,8 @@ static inline void _sg_apply_viewport(int x, int y, int w, int h, bool origin_to
     _sg_mtl_apply_viewport(x, y, w, h, origin_top_left);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_apply_viewport(x, y, w, h, origin_top_left);
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_apply_viewport(x, y, w, h, origin_top_left);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_apply_viewport(x, y, w, h, origin_top_left);
     #elif defined(SOKOL_VULKAN)
@@ -22171,6 +27350,8 @@ static inline void _sg_apply_scissor_rect(int x, int y, int w, int h, bool origi
     _sg_mtl_apply_scissor_rect(x, y, w, h, origin_top_left);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_apply_scissor_rect(x, y, w, h, origin_top_left);
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_apply_scissor_rect(x, y, w, h, origin_top_left);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_apply_scissor_rect(x, y, w, h, origin_top_left);
     #elif defined(SOKOL_VULKAN)
@@ -22189,6 +27370,8 @@ static inline void _sg_apply_pipeline(_sg_pipeline_t* pip) {
     _sg_mtl_apply_pipeline(pip);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_apply_pipeline(pip);
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_apply_pipeline(pip);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_apply_pipeline(pip);
     #elif defined(SOKOL_VULKAN)
@@ -22207,6 +27390,8 @@ static inline bool _sg_apply_bindings(_sg_bindings_ptrs_t* bnd) {
     return _sg_mtl_apply_bindings(bnd);
     #elif defined(SOKOL_D3D11)
     return _sg_d3d11_apply_bindings(bnd);
+    #elif defined(SOKOL_D3D12)
+    return _sg_d3d12_apply_bindings(bnd);
     #elif defined(SOKOL_WGPU)
     return _sg_wgpu_apply_bindings(bnd);
     #elif defined(SOKOL_VULKAN)
@@ -22225,6 +27410,8 @@ static inline void _sg_apply_uniforms(int ub_slot, const sg_range* data) {
     _sg_mtl_apply_uniforms(ub_slot, data);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_apply_uniforms(ub_slot, data);
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_apply_uniforms(ub_slot, data);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_apply_uniforms(ub_slot, data);
     #elif defined(SOKOL_VULKAN)
@@ -22243,6 +27430,8 @@ static inline void _sg_draw(int base_element, int num_elements, int num_instance
     _sg_mtl_draw(base_element, num_elements, num_instances, base_vertex, base_index);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_draw(base_element, num_elements, num_instances, base_vertex, base_index);
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_draw(base_element, num_elements, num_instances, base_vertex, base_index);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_draw(base_element, num_elements, num_instances, base_vertex, base_index);
     #elif defined(SOKOL_VULKAN)
@@ -22261,6 +27450,8 @@ static inline void _sg_dispatch(int num_groups_x, int num_groups_y, int num_grou
     _sg_mtl_dispatch(num_groups_x, num_groups_y, num_groups_z);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_dispatch(num_groups_x, num_groups_y, num_groups_z);
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_dispatch(num_groups_x, num_groups_y, num_groups_z);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_dispatch(num_groups_x, num_groups_y, num_groups_z);
     #elif defined(SOKOL_VULKAN)
@@ -22279,6 +27470,8 @@ static inline void _sg_commit(void) {
     _sg_mtl_commit();
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_commit();
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_commit();
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_commit();
     #elif defined(SOKOL_VULKAN)
@@ -22297,6 +27490,8 @@ static inline void _sg_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
     _sg_mtl_update_buffer(buf, data);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_update_buffer(buf, data);
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_update_buffer(buf, data);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_update_buffer(buf, data);
     #elif defined(SOKOL_VULKAN)
@@ -22315,6 +27510,8 @@ static inline void _sg_append_buffer(_sg_buffer_t* buf, const sg_range* data, bo
     _sg_mtl_append_buffer(buf, data, new_frame);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_append_buffer(buf, data, new_frame);
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_append_buffer(buf, data, new_frame);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_append_buffer(buf, data, new_frame);
     #elif defined(SOKOL_VULKAN)
@@ -22333,6 +27530,8 @@ static inline void _sg_update_image(_sg_image_t* img, const sg_image_data* data)
     _sg_mtl_update_image(img, data);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_update_image(img, data);
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_update_image(img, data);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_update_image(img, data);
     #elif defined(SOKOL_VULKAN)
@@ -22347,6 +27546,8 @@ static inline void _sg_update_image(_sg_image_t* img, const sg_image_data* data)
 static inline void _sg_push_debug_group(const char* name) {
     #if defined(SOKOL_METAL)
     _sg_mtl_push_debug_group(name);
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_push_debug_group(name);
     #else
     _SOKOL_UNUSED(name);
     #endif
@@ -22355,6 +27556,8 @@ static inline void _sg_push_debug_group(const char* name) {
 static inline void _sg_pop_debug_group(void) {
     #if defined(SOKOL_METAL)
     _sg_mtl_pop_debug_group();
+    #elif defined(SOKOL_D3D12)
+    _sg_d3d12_pop_debug_group();
     #endif
 }
 
@@ -22408,6 +27611,7 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
         bool injected = (0 != desc->gl_buffers[0]) ||
                         (0 != desc->mtl_buffers[0]) ||
                         (0 != desc->d3d11_buffer) ||
+                        (0 != desc->d3d12_buffer) ||
                         (0 != desc->wgpu_buffer);
         if (!injected && desc->usage.immutable) {
             if (desc->data.ptr) {
@@ -22488,6 +27692,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         const bool injected = (0 != desc->gl_textures[0]) ||
                               (0 != desc->mtl_textures[0]) ||
                               (0 != desc->d3d11_texture) ||
+                              (0 != desc->d3d12_texture) ||
                               (0 != desc->wgpu_texture);
         if (_sg_is_depth_or_depth_stencil_format(fmt)) {
             _SG_VALIDATE(desc->type != SG_IMAGETYPE_3D, VALIDATE_IMAGEDESC_DEPTH_3D_IMAGE);
@@ -22659,8 +27864,8 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 _SG_VALIDATE(0 != desc->vertex_func.source, VALIDATE_SHADERDESC_VERTEX_SOURCE);
                 _SG_VALIDATE(0 != desc->fragment_func.source, VALIDATE_SHADERDESC_FRAGMENT_SOURCE);
             }
-        #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
-            // on Metal or D3D11, must provide shader source code or byte code
+        #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11) || defined(SOKOL_D3D12)
+            // on Metal or D3D11/D3D12, must provide shader source code or byte code
             if (is_compute_shader) {
                 _SG_VALIDATE((0 != desc->compute_func.source) || (0 != desc->compute_func.bytecode.ptr), VALIDATE_SHADERDESC_COMPUTE_SOURCE_OR_BYTECODE);
             } else {
@@ -22794,7 +27999,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 #elif defined(SOKOL_VULKAN)
                 _SG_VALIDATE(_sg_validate_slot_bits(spirv_set1_bits, SG_SHADERSTAGE_NONE, tex_desc->spirv_set1_binding_n), VALIDATE_SHADERDESC_VIEW_TEXTURE_SPIRV_SET1_BINDING_COLLISION);
                 spirv_set1_bits = _sg_validate_set_slot_bit(spirv_set1_bits, SG_SHADERSTAGE_NONE, tex_desc->spirv_set1_binding_n);
-                #elif defined(SOKOL_DUMMY_BACKEND) || defined(_SOKOL_ANY_GL)
+                #elif defined(SOKOL_DUMMY_BACKEND) || defined(_SOKOL_ANY_GL) || defined(SOKOL_D3D12)
                 _SOKOL_UNUSED(tex_desc);
                 #endif
             } else if (view_desc->storage_buffer.stage != SG_SHADERSTAGE_NONE) {
@@ -22819,7 +28024,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 #elif defined(SOKOL_VULKAN)
                 _SG_VALIDATE(_sg_validate_slot_bits(spirv_set1_bits, SG_SHADERSTAGE_NONE, sbuf_desc->spirv_set1_binding_n), VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_SPIRV_SET1_BINDING_COLLISION);
                 spirv_set1_bits = _sg_validate_set_slot_bit(spirv_set1_bits, SG_SHADERSTAGE_NONE, sbuf_desc->spirv_set1_binding_n);
-                #elif defined(SOKOL_DUMMY_BACKEND)
+                #elif defined(SOKOL_DUMMY_BACKEND) || defined(SOKOL_D3D12)
                 _SOKOL_UNUSED(sbuf_desc);
                 #endif
             } else if (view_desc->storage_image.stage != SG_SHADERSTAGE_NONE) {
@@ -22951,6 +28156,9 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
                     #if defined(SOKOL_D3D11)
                     // on D3D11, semantic names (and semantic indices) must be provided
                     _SG_VALIDATE(!_sg_strempty(&shd->d3d11.attrs[attr_index].sem_name), VALIDATE_PIPELINEDESC_ATTR_SEMANTICS);
+                    #elif defined(SOKOL_D3D12)
+                    // on D3D12, semantic names (and semantic indices) must be provided
+                    _SG_VALIDATE(!_sg_strempty(&shd->d3d12.attrs[attr_index].sem_name), VALIDATE_PIPELINEDESC_ATTR_SEMANTICS);
                     #endif
                 }
                 // must only use readonly storage buffer bindings in render pipelines
@@ -23188,6 +28396,22 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
                 } else {
                     _SG_VALIDATE(pass->swapchain.d3d11.resolve_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RESOLVEVIEW_NOTSET);
                 }
+            #elif defined(SOKOL_D3D12)
+                _SG_VALIDATE(pass->swapchain.d3d12.render_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D12_EXPECT_RENDERVIEW);
+                if (pass->swapchain.depth_format == SG_PIXELFORMAT_NONE) {
+                    _SG_VALIDATE(pass->swapchain.d3d12.depth_stencil_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D12_EXPECT_DEPTHSTENCILVIEW_NOTSET);
+                } else {
+                    _SG_VALIDATE(pass->swapchain.d3d12.depth_stencil_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D12_EXPECT_DEPTHSTENCILVIEW);
+                    _SG_VALIDATE(pass->swapchain.d3d12.depth_stencil != 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D12_EXPECT_DEPTHSTENCIL);
+                }
+                if (pass->swapchain.sample_count > 1) {
+                    _SG_VALIDATE(pass->swapchain.d3d12.resolve_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D12_EXPECT_RESOLVEVIEW);
+                    _SG_VALIDATE(pass->swapchain.d3d12.render_target != 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D12_EXPECT_RENDERTARGET);
+                    _SG_VALIDATE(pass->swapchain.d3d12.resolve_target != 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D12_EXPECT_RESOLVETARGET);
+                } else {
+                    _SG_VALIDATE(pass->swapchain.d3d12.resolve_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D12_EXPECT_RESOLVEVIEW_NOTSET);
+                    _SG_VALIDATE(pass->swapchain.d3d12.render_target != 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D12_EXPECT_RENDERTARGET);
+                }
             #elif defined(SOKOL_WGPU)
                 _SG_VALIDATE(pass->swapchain.wgpu.render_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_RENDERVIEW);
                 if (pass->swapchain.depth_format == SG_PIXELFORMAT_NONE) {
@@ -23319,6 +28543,10 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
                 _SG_VALIDATE(pass->swapchain.d3d11.render_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RENDERVIEW_NOTSET);
                 _SG_VALIDATE(pass->swapchain.d3d11.depth_stencil_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_DEPTHSTENCILVIEW_NOTSET);
                 _SG_VALIDATE(pass->swapchain.d3d11.resolve_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D11_EXPECT_RESOLVEVIEW_NOTSET);
+            #elif defined(SOKOL_D3D12)
+                _SG_VALIDATE(pass->swapchain.d3d12.render_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D12_EXPECT_RENDERVIEW_NOTSET);
+                _SG_VALIDATE(pass->swapchain.d3d12.depth_stencil_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D12_EXPECT_DEPTHSTENCILVIEW_NOTSET);
+                _SG_VALIDATE(pass->swapchain.d3d12.resolve_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_D3D12_EXPECT_RESOLVEVIEW_NOTSET);
             #elif defined(SOKOL_WGPU)
                 _SG_VALIDATE(pass->swapchain.wgpu.render_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_RENDERVIEW_NOTSET);
                 _SG_VALIDATE(pass->swapchain.wgpu.depth_stencil_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_DEPTHSTENCILVIEW_NOTSET);
@@ -24051,6 +29279,17 @@ _SOKOL_PRIVATE sg_shader_desc _sg_shader_desc_defaults(const sg_shader_desc* des
             def.compute_func.d3d11_target = _sg_def(def.fragment_func.d3d11_target,"cs_5_0");
         }
     #endif
+    #if defined(SOKOL_D3D12)
+        if (def.vertex_func.source) {
+            def.vertex_func.d3d12_target = _sg_def(def.vertex_func.d3d12_target, "vs_5_0");
+        }
+        if (def.fragment_func.source) {
+            def.fragment_func.d3d12_target = _sg_def(def.fragment_func.d3d12_target, "ps_5_0");
+        }
+        if (def.compute_func.source) {
+            def.compute_func.d3d12_target = _sg_def(def.compute_func.d3d12_target, "cs_5_0");
+        }
+    #endif
     def.mtl_threads_per_threadgroup.y = _sg_def(desc->mtl_threads_per_threadgroup.y, 1);
     def.mtl_threads_per_threadgroup.z = _sg_def(desc->mtl_threads_per_threadgroup.z, 1);
     for (size_t ub_index = 0; ub_index < SG_MAX_UNIFORMBLOCK_BINDSLOTS; ub_index++) {
@@ -24536,7 +29775,7 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
     sg_desc res = *desc;
     #if defined(SOKOL_WGPU)
         SOKOL_ASSERT(SG_PIXELFORMAT_NONE < res.environment.defaults.color_format);
-    #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
+    #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11) || defined(SOKOL_D3D12)
         res.environment.defaults.color_format = _sg_def(res.environment.defaults.color_format, SG_PIXELFORMAT_BGRA8);
     #else
         res.environment.defaults.color_format = _sg_def(res.environment.defaults.color_format, SG_PIXELFORMAT_RGBA8);
@@ -24551,6 +29790,10 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
     res.view_pool_size = _sg_def(res.view_pool_size, _SG_DEFAULT_VIEW_POOL_SIZE);
     res.uniform_buffer_size = _sg_def(res.uniform_buffer_size, _SG_DEFAULT_UB_SIZE);
     res.max_commit_listeners = _sg_def(res.max_commit_listeners, _SG_DEFAULT_MAX_COMMIT_LISTENERS);
+    res.d3d12.shader_heap_size = _sg_def(res.d3d12.shader_heap_size, _SG_DEFAULT_D3D12_SHADER_HEAP_SIZE);
+    res.d3d12.sampler_heap_size = _sg_def(res.d3d12.sampler_heap_size, _SG_DEFAULT_D3D12_SAMPLER_HEAP_SIZE);
+    res.d3d12.upload_ring_buffer_size = _sg_def(res.d3d12.upload_ring_buffer_size, _SG_DEFAULT_D3D12_UPLOAD_RING_SIZE);
+    res.d3d12.max_deferred_image_updates = _sg_def(res.d3d12.max_deferred_image_updates, _SG_DEFAULT_D3D12_MAX_DEFERRED_IMAGE_UPDATES);
     res.wgpu.bindgroups_cache_size = _sg_def(res.wgpu.bindgroups_cache_size, _SG_DEFAULT_WGPU_BINDGROUP_CACHE_SIZE);
     res.vulkan.copy_staging_buffer_size = _sg_def(res.vulkan.copy_staging_buffer_size, _SG_DEFAULT_VK_COPY_STAGING_SIZE);
     res.vulkan.stream_staging_buffer_size = _sg_def(res.vulkan.stream_staging_buffer_size, _SG_DEFAULT_VK_STREAM_STAGING_SIZE);
@@ -26299,6 +31542,103 @@ SOKOL_API_IMPL sg_d3d11_view_info sg_d3d11_query_view_info(sg_view view_id) {
         res.uav = (const void*) view->d3d11.uav;
         res.rtv = (const void*) view->d3d11.rtv;
         res.dsv = (const void*) view->d3d11.dsv;
+    #else
+        _SOKOL_UNUSED(view_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_d3d12_buffer_info sg_d3d12_query_buffer_info(sg_buffer buf_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_d3d12_buffer_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_D3D12)
+        const _sg_buffer_t* buf = _sg_lookup_buffer(buf_id.id);
+        if (buf) {
+            res.res = (const void*) buf->d3d12.res;
+        }
+    #else
+        _SOKOL_UNUSED(buf_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_d3d12_image_info sg_d3d12_query_image_info(sg_image img_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_d3d12_image_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_D3D12)
+        const _sg_image_t* img = _sg_lookup_image(img_id.id);
+        if (img) {
+            res.res = (const void*) img->d3d12.res;
+        }
+    #else
+        _SOKOL_UNUSED(img_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_d3d12_sampler_info sg_d3d12_query_sampler_info(sg_sampler smp_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_d3d12_sampler_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_D3D12)
+        const _sg_sampler_t* smp = _sg_lookup_sampler(smp_id.id);
+        if (smp) {
+            res.smp = (const void*) smp->d3d12.handle.ptr;
+        }
+    #else
+        _SOKOL_UNUSED(smp_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_d3d12_shader_info sg_d3d12_query_shader_info(sg_shader shd_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_d3d12_shader_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_D3D12)
+        const _sg_shader_t* shd = _sg_lookup_shader(shd_id.id);
+        if (shd) {
+            res.vs_blob = (const void*) shd->d3d12.vs_blob;
+            res.vs_blob_length = shd->d3d12.vs_blob_length;
+            res.fs_blob = (const void*) shd->d3d12.fs_blob;
+            res.fs_blob_length = shd->d3d12.fs_blob_length;
+        }
+    #else
+        _SOKOL_UNUSED(shd_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_d3d12_pipeline_info sg_d3d12_query_pipeline_info(sg_pipeline pip_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_d3d12_pipeline_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_D3D12)
+        const _sg_pipeline_t* pip = _sg_lookup_pipeline(pip_id.id);
+        if (pip) {
+            res.pso = (const void*) pip->d3d12.pso;
+            res.root_sig = (const void*) pip->d3d12.root_sig;
+        }
+    #else
+        _SOKOL_UNUSED(pip_id);
+    #endif
+    return res;
+}
+
+SOKOL_API_IMPL sg_d3d12_view_info sg_d3d12_query_view_info(sg_view view_id) {
+    SOKOL_ASSERT(_sg.valid);
+    sg_d3d12_view_info res;
+    _sg_clear(&res, sizeof(res));
+    #if defined(SOKOL_D3D12)
+        const _sg_view_t* view = _sg_lookup_view(view_id.id);
+        if (view) {
+            res.srv = (const void*) view->d3d12.srv.ptr;
+            res.uav = (const void*) view->d3d12.uav.ptr;
+            res.rtv = (const void*) view->d3d12.rtv.ptr;
+            res.dsv = (const void*) view->d3d12.dsv.ptr;
+        }
     #else
         _SOKOL_UNUSED(view_id);
     #endif
