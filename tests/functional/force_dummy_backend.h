@@ -10,6 +10,9 @@
 #if defined(SOKOL_D3D11)
 #undef SOKOL_D3D11
 #endif
+#if defined(SOKOL_D3D12)
+#undef SOKOL_D3D12
+#endif
 #if defined(SOKOL_WGPU)
 #undef SOKOL_WGPU
 #endif

@@ -4,9 +4,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 11)
 
-# SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU, SOKOL_DUMMY
+# SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_D3D12, SOKOL_METAL, SOKOL_WGPU, SOKOL_VULKAN, SOKOL_DUMMY
 set(SOKOL_BACKEND "SOKOL_DUMMY_BACKEND" CACHE STRING "Select 3D backend API")
-set_property(CACHE SOKOL_BACKEND PROPERTY STRINGS SOKOL_GLCORE SOKOL_METAL SOKOL_D3D11 SOKOL_VULKAN SOKOL_DUMMY_BACKEND)
+set_property(CACHE SOKOL_BACKEND PROPERTY STRINGS SOKOL_GLCORE SOKOL_METAL SOKOL_D3D11 SOKOL_D3D12 SOKOL_VULKAN SOKOL_DUMMY_BACKEND)
 option(SOKOL_FORCE_EGL "Force EGL with GLCORE backend" OFF)
 option(USE_ARC "Enable/disable ARC" OFF)
 option(USE_ANALYZER "Enable/disable clang analyzer" OFF)
@@ -63,8 +63,8 @@ else()
         # FIXME: consider using clang-tidy via CMAKE_CXX_CLANG_TIDY: https://ortogonal.github.io/cmake-clang-tidy/
         # with the default settings this spams the output with irrelevant C++ coding style warnings in 3rd party libs though
         message(">> Configuring for static code analysis")
-        set(c_flags ${c_flags} --analyze -Xanalyzer -analyzer-opt-analyze-headers)
-        set(cxx_flags ${cxx_flags} --analyze -Xanalyzer -analyzer-opt-analyze-headers)
+        set(c_flags ${c_flags} --analyze -Xanalyzer -analyzer-opt-analyze-headers -Wno-unused-command-line-argument)
+        set(cxx_flags ${cxx_flags} --analyze -Xanalyzer -analyzer-opt-analyze-headers -Wno-unused-command-line-argument)
         set(link_flags ${link_flags} --analyze -Wno-unused-command-line-argument)
     endif()
 endif()
