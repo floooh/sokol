@@ -5087,7 +5087,7 @@ typedef struct sg_d3d12_environment {
     const void* command_queue;
     const void* fence;
     void* fence_event;
-    uint64_t* fence_value;
+    void* fence_value;              // uint64_t*, passed as void* for language binding compatibility
 } sg_d3d12_environment;
 
 typedef struct sg_wgpu_environment {
@@ -16303,7 +16303,7 @@ _SOKOL_PRIVATE void _sg_d3d12_setup_backend(const sg_desc* desc) {
 
     _sg.d3d12.fence = (ID3D12Fence*)desc->environment.d3d12.fence;
     _sg.d3d12.fence_event = (HANDLE)desc->environment.d3d12.fence_event;
-    _sg.d3d12.fence_value = desc->environment.d3d12.fence_value;
+    _sg.d3d12.fence_value = (uint64_t*)desc->environment.d3d12.fence_value;
     _sg.d3d12.upload_fence_value = 0;
 
     _sg.d3d12.release_queue.front = 0;

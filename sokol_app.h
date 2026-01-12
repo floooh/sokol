@@ -1893,7 +1893,7 @@ typedef struct sapp_d3d12_environment {
     const void* command_queue;
     const void* fence;
     void* fence_event;
-    uint64_t* fence_value;
+    void* fence_value;              // uint64_t*, passed as void* for language binding compatibility
 } sapp_d3d12_environment;
 
 typedef struct sapp_wgpu_environment {
@@ -14461,7 +14461,7 @@ SOKOL_API_IMPL sapp_environment sapp_get_environment(void) {
         res.d3d12.command_queue = (const void*) _sapp.d3d12.command_queue;
         res.d3d12.fence = (const void*) _sapp.d3d12.fence;
         res.d3d12.fence_event = (void*) _sapp.d3d12.fence_event;
-        res.d3d12.fence_value = &_sapp.d3d12.fence_value;
+        res.d3d12.fence_value = (void*)&_sapp.d3d12.fence_value;
     #endif
     #if defined(SOKOL_WGPU)
         res.wgpu.device = (const void*) _sapp.wgpu.device;
