@@ -5579,7 +5579,11 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
                 #include <GLES3/gl3.h>
             #endif
         #elif defined(__ANDROID__)
-            #include <GLES3/gl31.h>
+            #if __ANDROID_API__ >= 24
+                #include <GLES3/gl32.h>
+            #else
+                #include <GLES3/gl31.h>
+            #endif
         #elif defined(__linux__) || defined(__unix__)
             #if defined(SOKOL_GLCORE)
                 #define GL_GLEXT_PROTOTYPES
@@ -5615,6 +5619,9 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #elif defined(__ANDROID__)
         #define _SOKOL_GL_HAS_COMPUTE (1)
         #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+        #if __ANDROID_API__ >= 24
+            #define _SOKOL_GL_HAS_COLORMASKI (1)
+        #endif
     #elif defined(__linux__) || defined(__unix__)
         #if defined(SOKOL_GLCORE)
             #if defined(GL_VERSION_4_3)
@@ -5632,6 +5639,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #define _SOKOL_GL_HAS_COMPUTE (1)
             #define _SOKOL_GL_HAS_TEXSTORAGE (1)
             #define _SOKOL_GL_HAS_BASEVERTEX (1)
+            #define _SOKOL_GL_HAS_COLORMASKI (1)
         #endif
     #endif
 
@@ -9989,8 +9997,13 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     const int version = major_version * 100 + minor_version * 10;
     _sg.features.origin_top_left = false;
     _sg.features.image_clamp_to_border = false;
+    #if defined(_SOKOL_GL_HAS_COLORMASKI)
+    _sg.features.mrt_independent_blend_state = version >= 320;
+    _sg.features.mrt_independent_write_mask = version >= 320;
+    #else
     _sg.features.mrt_independent_blend_state = false;
     _sg.features.mrt_independent_write_mask = false;
+    #endif
     _sg.features.compute = version >= 310;
     _sg.features.msaa_texture_bindings = false;
     _sg.features.gl_texture_views = version >= 430;
@@ -11707,7 +11720,22 @@ _SOKOL_PRIVATE void _sg_gl_apply_render_pipeline_state(_sg_pipeline_t* pip) {
                                 (cm & SG_COLORMASK_G) != 0,
                                 (cm & SG_COLORMASK_B) != 0,
                                 (cm & SG_COLORMASK_A) != 0);
+                #elif defined(_SOKOL_GL_HAS_COLORMASKI)
+                    // Native GLES 3.2+ supports glColorMaski
+                    if (_sg.features.mrt_independent_write_mask) {
+                        glColorMaski(i,
+                                    (cm & SG_COLORMASK_R) != 0,
+                                    (cm & SG_COLORMASK_G) != 0,
+                                    (cm & SG_COLORMASK_B) != 0,
+                                    (cm & SG_COLORMASK_A) != 0);
+                    } else if (0 == i) {
+                        glColorMask((cm & SG_COLORMASK_R) != 0,
+                                    (cm & SG_COLORMASK_G) != 0,
+                                    (cm & SG_COLORMASK_B) != 0,
+                                    (cm & SG_COLORMASK_A) != 0);
+                    }
                 #else
+                    // WebGL2 - no indexed color mask support
                     if (0 == i) {
                         glColorMask((cm & SG_COLORMASK_R) != 0,
                                     (cm & SG_COLORMASK_G) != 0,
