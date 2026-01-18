@@ -11365,6 +11365,14 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass, const _sg_attachments
             glFramebufferTexture2D(GL_FRAMEBUFFER, gl_att_type, GL_TEXTURE_2D, 0, 0);
         }
         if (atts->ds_view) {
+            // When switching between depth-only and depth-stencil attachments,
+            // explicitly detach BOTH attachment types first. Some GL drivers
+            // fail with GL_FRAMEBUFFER_UNSUPPORTED if both attachment types
+            // are bound to the same FBO.
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, 0);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
             const _sg_view_t* view = atts->ds_view;
             const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
             const GLenum gl_att_type = _sg_gl_depth_stencil_attachment_type(img);
