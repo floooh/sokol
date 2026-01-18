@@ -1,5 +1,14 @@
 ## Updates
 
+### 18-Jan-2026
+
+Happy New Year!
+
+- sokol_gfx.h gl: merged PR https://github.com/floooh/sokol/pull/1412 which fixes
+  a GL error on some drivers when switching between `GL_DEPTH_ATTACHMENT` and
+  `GL_DEPTH_STENCIL_ATTACHMENT`. Many thanks to @luigi-rosso for identifying
+  the issue and providing a fix!
+
 ### 13-Dec-2025
 
 A WebGPU backend code cleanup round:
