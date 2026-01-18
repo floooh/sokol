@@ -2176,6 +2176,12 @@ SOKOL_APP_API_DECL void sapp_set_clipboard_string(const char* str);
 SOKOL_APP_API_DECL const char* sapp_get_clipboard_string(void);
 /* set the window title (only on desktop platforms) */
 SOKOL_APP_API_DECL void sapp_set_window_title(const char* str);
+/* set the window position (only on desktop platforms) */
+SOKOL_APP_API_DECL void sapp_set_window_position(int x, int y);
+/* returns the width of the primary screen in pixels */
+SOKOL_APP_API_DECL int sapp_screen_width(void);
+/* returns the height of the primary screen in pixels */
+SOKOL_APP_API_DECL int sapp_screen_height(void);
 /* set the window icon (only on Windows and Linux) */
 SOKOL_APP_API_DECL void sapp_set_icon(const sapp_icon_desc* icon_desc);
 /* gets the total number of dropped files (after an SAPP_EVENTTYPE_FILES_DROPPED event) */
@@ -5413,6 +5419,38 @@ _SOKOL_PRIVATE const char* _sapp_macos_get_clipboard_string(void) {
 
 _SOKOL_PRIVATE void _sapp_macos_update_window_title(void) {
     [_sapp.macos.window setTitle: [NSString stringWithUTF8String:_sapp.window_title]];
+}
+
+_SOKOL_PRIVATE void _sapp_macos_set_window_position(int x, int y) {
+    if (_sapp.macos.window) {
+        NSArray* screens = [NSScreen screens];
+        if (screens && [screens count] > 0) {
+            NSScreen* primary = [screens objectAtIndex:0];
+            NSRect primary_frame = [primary frame];
+            NSRect window_frame = [_sapp.macos.window frame];
+            CGFloat new_x = (CGFloat)x;
+            CGFloat new_y = primary_frame.size.height - (CGFloat)y - window_frame.size.height;
+            [_sapp.macos.window setFrameOrigin:NSMakePoint(new_x, new_y)];
+        }
+    }
+}
+
+_SOKOL_PRIVATE int _sapp_macos_screen_width(void) {
+    NSArray* screens = [NSScreen screens];
+    if (screens && [screens count] > 0) {
+        NSScreen* primary = [screens objectAtIndex:0];
+        return (int)[primary frame].size.width;
+    }
+    return 0;
+}
+
+_SOKOL_PRIVATE int _sapp_macos_screen_height(void) {
+    NSArray* screens = [NSScreen screens];
+    if (screens && [screens count] > 0) {
+        NSScreen* primary = [screens objectAtIndex:0];
+        return (int)[primary frame].size.height;
+    }
+    return 0;
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mouse_update_from_nspoint(NSPoint mouse_pos, bool clear_dxdy) {
@@ -9583,6 +9621,36 @@ _SOKOL_PRIVATE void _sapp_win32_update_window_title(void) {
     SetWindowTextW(_sapp.win32.hwnd, _sapp.window_title_wide);
 }
 
+_SOKOL_PRIVATE void _sapp_win32_set_window_position(int x, int y) {
+    SetWindowPos(_sapp.win32.hwnd, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+}
+
+_SOKOL_PRIVATE int _sapp_win32_screen_width(void) {
+    if (_sapp.win32.hwnd) {
+        HMONITOR hMonitor = MonitorFromWindow(_sapp.win32.hwnd, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi;
+        ZeroMemory(&mi, sizeof(mi));
+        mi.cbSize = sizeof(mi);
+        if (GetMonitorInfo(hMonitor, &mi)) {
+            return (mi.rcMonitor.right - mi.rcMonitor.left) > 0 ? (mi.rcMonitor.right - mi.rcMonitor.left) : 1;
+        }
+    }
+    return GetSystemMetrics(SM_CXSCREEN);
+}
+
+_SOKOL_PRIVATE int _sapp_win32_screen_height(void) {
+    if (_sapp.win32.hwnd) {
+        HMONITOR hMonitor = MonitorFromWindow(_sapp.win32.hwnd, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi;
+        ZeroMemory(&mi, sizeof(mi));
+        mi.cbSize = sizeof(mi);
+        if (GetMonitorInfo(hMonitor, &mi)) {
+            return (mi.rcMonitor.bottom - mi.rcMonitor.top) > 0 ? (mi.rcMonitor.bottom - mi.rcMonitor.top) : 1;
+        }
+    }
+    return GetSystemMetrics(SM_CYSCREEN);
+}
+
 _SOKOL_PRIVATE HICON _sapp_win32_create_icon_from_image(const sapp_image_desc* desc, bool is_cursor) {
     _SAPP_STRUCT(BITMAPV5HEADER, bi);
     bi.bV5Size = sizeof(bi);
@@ -12361,6 +12429,18 @@ _SOKOL_PRIVATE void _sapp_x11_update_window_title(void) {
     XFlush(_sapp.x11.display);
 }
 
+_SOKOL_PRIVATE void _sapp_x11_set_window_position(int x, int y) {
+    XMoveWindow(_sapp.x11.display, _sapp.x11.window, x, y);
+}
+
+_SOKOL_PRIVATE int _sapp_x11_screen_width(void) {
+    return DisplayWidth(_sapp.x11.display, DefaultScreen(_sapp.x11.display));
+}
+
+_SOKOL_PRIVATE int _sapp_x11_screen_height(void) {
+    return DisplayHeight(_sapp.x11.display, DefaultScreen(_sapp.x11.display));
+}
+
 _SOKOL_PRIVATE void _sapp_x11_set_icon(const sapp_icon_desc* icon_desc, int num_images) {
     SOKOL_ASSERT((num_images > 0) && (num_images <= SAPP_MAX_ICONIMAGES));
     int long_count = 0;
@@ -13730,6 +13810,40 @@ SOKOL_API_IMPL void sapp_set_window_title(const char* title) {
         _sapp_win32_update_window_title();
     #elif defined(_SAPP_LINUX)
         _sapp_x11_update_window_title();
+    #endif
+}
+
+SOKOL_API_IMPL void sapp_set_window_position(int x, int y) {
+    #if defined(_SAPP_MACOS)
+        _sapp_macos_set_window_position(x, y);
+    #elif defined(_SAPP_WIN32)
+        _sapp_win32_set_window_position(x, y);
+    #elif defined(_SAPP_LINUX)
+        _sapp_x11_set_window_position(x, y);
+    #endif
+}
+
+SOKOL_API_IMPL int sapp_screen_width(void) {
+    #if defined(_SAPP_MACOS)
+        return _sapp_macos_screen_width();
+    #elif defined(_SAPP_WIN32)
+        return _sapp_win32_screen_width();
+    #elif defined(_SAPP_LINUX)
+        return _sapp_x11_screen_width();
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL int sapp_screen_height(void) {
+    #if defined(_SAPP_MACOS)
+        return _sapp_macos_screen_height();
+    #elif defined(_SAPP_WIN32)
+        return _sapp_win32_screen_height();
+    #elif defined(_SAPP_LINUX)
+        return _sapp_x11_screen_height();
+    #else
+        return 0;
     #endif
 }
 
