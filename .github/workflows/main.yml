@@ -7,6 +7,12 @@ jobs:
         runs-on: windows-latest
         steps:
         - uses: actions/checkout@main
+        - name: prepare vulkan sdk
+          uses: humbletim/setup-vulkan-sdk@main
+          with:
+            vulkan-query-version: 1.4.335.0
+            vulkan-components: Vulkan-Headers
+            vulkan-use-cache: true
         - name: test_win
           run: |
             cd tests
