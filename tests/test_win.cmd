@@ -1,3 +1,7 @@
+cmake --preset win_vk || exit /b 10
+cmake --build --preset win_vk_debug || exit /b 10
+cmake --build --preset win_vk_release || exit /b 10
+
 cmake --preset win_gl || exit /b 10
 cmake --build --preset win_gl_debug || exit /b 10
 cmake --build --preset win_gl_release || exit /b 10

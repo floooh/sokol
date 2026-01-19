@@ -6,6 +6,13 @@
   per-multiple-render-target color write masks on GLES3.2. Many thanks to
   @luigi-rosso for the PR!
 
+- sokol_app.h: Added Windows support for the experimental Vulkan backend
+  (still only tested on an Intel Meteor Lake integrated GPU). The other good news
+  is that RenderDoc works with the sokol-gfx vulkan backend on Windows (it didn't on
+  Linux).
+
+  PR: https://github.com/floooh/sokol/pull/1417
+
 ### 18-Jan-2026
 
 Happy New Year!

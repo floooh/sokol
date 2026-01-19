@@ -70,12 +70,26 @@
     - on iOS with GL: OpenGLES
     - on Linux with EGL: GL or GLESv2
     - on Linux with GLX: GL
+    - on Linux with Vulkan: vulkan
     - on Android: GLESv3, log, android
-    - on Windows with the MSVC or Clang toolchains: no action needed, libs are defined in-source via pragma-comment-lib
-    - on Windows with MINGW/MSYS2 gcc: compile with '-mwin32' so that _WIN32 is defined
-        - with the D3D11 backend: -ld3d11
+    - on Windows:
+        - with Vulkan: link with vulkan-1 (this is explicit in case you want to
+          use your own Vulkan loader library)
+        - with D3D11:
+            - on MSVC or Clang: no action needed, libs are defined in-source via pragma-comment-lib
+            - on MINGW/MSYS2 gcc: compile with '-mwin32' so that _WIN32 is defined and link with -ld3d11
+        - with GL: no linking needed since sokol_gfx.h comes with its own GL loader on Windows
 
     On macOS and iOS, the implementation must be compiled as Objective-C.
+
+    For Linux+Vulkan install the following packages (or equivalents):
+        - libvulkan-dev
+        - vulkan-validationlayers
+        - vulkan-tools
+
+    For Windows+Vulkan install the Vulkan SDK and in your build system:
+        - add a header search path to $ENV{VULKAN_SDK}/Include
+        - add a link search path to $ENV{VULKAN_SDK}/Env
 
     On Emscripten:
         - for WebGL2: add the linker option `-s USE_WEBGL2=1`
@@ -19126,7 +19140,7 @@ _SOKOL_PRIVATE VkDeviceMemory _sg_vk_mem_alloc_device_memory(_sg_vk_memtype_t me
     VkDeviceMemory vk_dev_mem = 0;
     VkResult res = vkAllocateMemory(_sg.vk.dev, &alloc_info, 0, &vk_dev_mem);
     _sg_stats_inc(vk.num_allocate_memory);
-    _sg_stats_add(vk.size_allocate_memory, mem_reqs->size);
+    _sg_stats_add(vk.size_allocate_memory, (uint32_t)mem_reqs->size);
     if (res != VK_SUCCESS) {
         _SG_ERROR(VULKAN_ALLOCATE_MEMORY_FAILED);
         return 0;
@@ -19536,7 +19550,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_
             bytes_remaining = 0;
         }
         region.size = bytes_to_copy;
-        _sg_vk_staging_map_memcpy_unmap(dst_mem, src_ptr, bytes_to_copy);
+        _sg_vk_staging_map_memcpy_unmap(dst_mem, src_ptr, (uint32_t)bytes_to_copy);
         VkCommandBuffer cmd_buf = _sg_vk_staging_copy_begin();
         vkCmdCopyBuffer(cmd_buf, src_buf, dst_buf, 1, &region);
         _sg_stats_inc(vk.num_cmd_copy_buffer);
@@ -19665,7 +19679,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_buffer_data(_sg_buffer_t* buf, const s
     SOKOL_ASSERT(src_data && src_data->ptr && (src_data->size > 0));
     SOKOL_ASSERT((src_data->size + dst_offset) <= (size_t)buf->cmn.size);
 
-    const uint32_t src_offset = _sg_vk_shared_buffer_memcpy(&_sg.vk.stage.stream, src_data->ptr, src_data->size);
+    const uint32_t src_offset = (uint32_t)_sg_vk_shared_buffer_memcpy(&_sg.vk.stage.stream, src_data->ptr, (uint32_t)src_data->size);
     if (src_offset == _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
         _SG_ERROR(VULKAN_STAGING_STREAM_BUFFER_OVERFLOW);
         return;
@@ -19700,7 +19714,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_image_data(_sg_image_t* img, const sg_
         const sg_range* src_mip = &src_data->mip_levels[mip_index];
         SOKOL_ASSERT(src_mip->ptr);
         SOKOL_ASSERT(src_mip->size > 0);
-        const uint32_t src_offset = _sg_vk_shared_buffer_memcpy(&_sg.vk.stage.stream, src_mip->ptr, src_mip->size);
+        const uint32_t src_offset = (uint32_t)_sg_vk_shared_buffer_memcpy(&_sg.vk.stage.stream, src_mip->ptr, (uint32_t)src_mip->size);
         if (src_offset == _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
             _SG_ERROR(VULKAN_STAGING_STREAM_BUFFER_OVERFLOW);
             _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
@@ -19731,7 +19745,7 @@ _SOKOL_PRIVATE void _sg_vk_uniform_init(void) {
     SOKOL_ASSERT(_sg.desc.uniform_buffer_size > 0);
     _sg_vk_shared_buffer_init(&_sg.vk.uniform,
         (uint32_t)_sg.desc.uniform_buffer_size,
-        _sg.vk.dev_props.properties.limits.minUniformBufferOffsetAlignment,
+        (uint32_t)_sg.vk.dev_props.properties.limits.minUniformBufferOffsetAlignment,
         _SG_VK_MEMTYPE_UNIFORMS,
         "shared-uniform-buffer");
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
@@ -19766,7 +19780,7 @@ _SOKOL_PRIVATE void _sg_vk_uniform_before_submit(void) {
 // called form _sg_vk_apply_uniforms, returns offset of data snippet into uniform buffer
 _SOKOL_PRIVATE uint32_t _sg_vk_uniform_copy(const sg_range* data) {
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
-    return _sg_vk_shared_buffer_memcpy(&_sg.vk.uniform, data->ptr, data->size);
+    return (uint32_t)_sg_vk_shared_buffer_memcpy(&_sg.vk.uniform, data->ptr, (uint32_t)data->size);
 }
 
 // resource binding system
@@ -19774,7 +19788,7 @@ _SOKOL_PRIVATE void _sg_vk_bind_init(void) {
     SOKOL_ASSERT(_sg.desc.vulkan.descriptor_buffer_size > 0);
     _sg_vk_shared_buffer_init(&_sg.vk.bind,
         (uint32_t)_sg.desc.vulkan.descriptor_buffer_size,
-        _sg.vk.descriptor_buffer_props.descriptorBufferOffsetAlignment,
+        (uint32_t)_sg.vk.descriptor_buffer_props.descriptorBufferOffsetAlignment,
         _SG_VK_MEMTYPE_DESCRIPTORS,
         "shared-descriptor-buffer");
 }
@@ -19816,12 +19830,12 @@ _SOKOL_PRIVATE bool _sg_vk_bind_view_smp_descriptor_set(VkCommandBuffer cmd_buf,
         // nothing to bind
         return true;
     }
-    const VkDeviceSize dbuf_offset = _sg_vk_shared_buffer_alloc(&_sg.vk.bind, dset_size);
+    const VkDeviceSize dbuf_offset = _sg_vk_shared_buffer_alloc(&_sg.vk.bind, (uint32_t)dset_size);
     if (_sg.vk.bind.overflown) {
         _SG_ERROR(VULKAN_DESCRIPTOR_BUFFER_OVERFLOW);
         return false;
     }
-    _sg_stats_add(vk.size_descriptor_buffer_writes, dset_size);
+    _sg_stats_add(vk.size_descriptor_buffer_writes, (uint32_t)dset_size);
     uint8_t* dbuf_ptr = _sg_vk_shared_buffer_ptr(&_sg.vk.bind, dbuf_offset);
 
     // copy pre-recorded descriptor data into descriptor buffer
@@ -19871,12 +19885,12 @@ _SOKOL_PRIVATE bool _sg_vk_bind_uniform_descriptor_set(VkCommandBuffer cmd_buf) 
     const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
 
     // get next pointer in descriptor buffer
-    const VkDeviceSize dbuf_offset = _sg_vk_shared_buffer_alloc(&_sg.vk.bind, shd->vk.ub_dset_size);
+    const VkDeviceSize dbuf_offset = _sg_vk_shared_buffer_alloc(&_sg.vk.bind, (uint32_t)shd->vk.ub_dset_size);
     if (_sg.vk.bind.overflown) {
         _SG_ERROR(VULKAN_DESCRIPTOR_BUFFER_OVERFLOW);
         return false;
     }
-    _sg_stats_add(vk.size_descriptor_buffer_writes, shd->vk.ub_dset_size);
+    _sg_stats_add(vk.size_descriptor_buffer_writes, (uint32_t)shd->vk.ub_dset_size);
     uint8_t* dbuf_ptr = _sg_vk_shared_buffer_ptr(&_sg.vk.bind, dbuf_offset);
 
     // update descriptor buffer
@@ -20542,7 +20556,7 @@ _SOKOL_PRIVATE void _sg_vk_acquire_frame_command_buffers(void) {
             _sg.cur_pass.valid = false;
             return;
         }
-        VkResult res = vkResetFences(_sg.vk.dev, 1, &_sg.vk.frame.slot[_sg.vk.frame_slot].fence);
+        res = vkResetFences(_sg.vk.dev, 1, &_sg.vk.frame.slot[_sg.vk.frame_slot].fence);
         SOKOL_ASSERT(res == VK_SUCCESS); _SOKOL_UNUSED(res);
 
         _sg_vk_delete_queue_collect();
@@ -20952,7 +20966,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
     VkResult res;
     _SG_STRUCT(VkDescriptorSetLayoutBinding, dsl_entries[_SG_VK_MAX_VIEW_SMP_DESCRIPTORSET_ENTRIES]);
     _SG_STRUCT(VkDescriptorSetLayoutCreateInfo, dsl_create_info);
-    size_t dsl_index = 0;
+    uint32_t dsl_index = 0;
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
         if (shd->cmn.uniform_blocks[i].stage == SG_SHADERSTAGE_NONE) {
             continue;
@@ -20984,7 +20998,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
         const uint8_t vk_bnd = shd->vk.ub_set0_bnd_n[i];
         VkDeviceSize dset_offset = 0;
         _sg.vk.ext.get_descriptor_set_layout_binding_offset(_sg.vk.dev, shd->vk.ub_dsl, vk_bnd, &dset_offset);
-        shd->vk.ub_dset_offsets[i] = dset_offset;
+        shd->vk.ub_dset_offsets[i] = (uint16_t)dset_offset;
     }
 
     _sg_clear(dsl_entries, sizeof(dsl_entries));
@@ -21045,7 +21059,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
         const uint8_t vk_bnd = shd->vk.view_set1_bnd_n[i];
         VkDeviceSize dset_offset = 0;
         _sg.vk.ext.get_descriptor_set_layout_binding_offset(_sg.vk.dev, shd->vk.view_smp_dsl, vk_bnd, &dset_offset);
-        shd->vk.view_dset_offsets[i] = dset_offset;
+        shd->vk.view_dset_offsets[i] = (uint16_t)dset_offset;
     }
     for (size_t i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
         if (shd->cmn.samplers[i].stage == SG_SHADERSTAGE_NONE) {
@@ -21054,7 +21068,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
         const uint8_t vk_bnd = shd->vk.smp_set1_bnd_n[i];
         VkDeviceSize dset_offset = 0;
         _sg.vk.ext.get_descriptor_set_layout_binding_offset(_sg.vk.dev, shd->vk.view_smp_dsl, vk_bnd, &dset_offset);
-        shd->vk.smp_dset_offsets[i] = dset_offset;
+        shd->vk.smp_dset_offsets[i] = (uint16_t)dset_offset;
     }
 
     VkDescriptorSetLayout set_layouts[_SG_VK_NUM_DESCRIPTORSETS] = {
@@ -21542,7 +21556,7 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(VkCommandBuffer cmd_buf, const sg_p
     vkCmdBeginRendering(cmd_buf, &render_info);
 
     _SG_STRUCT(VkViewport, vp);
-    vp.y = _sg.cur_pass.dim.height;
+    vp.y = (float)_sg.cur_pass.dim.height;
     vp.width = (float)_sg.cur_pass.dim.width;
     vp.height = (float)-_sg.cur_pass.dim.height;
     vp.maxDepth = 1.0f;
@@ -21609,7 +21623,7 @@ _SOKOL_PRIVATE bool _sg_vk_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         // FIXME: could do this in a single call if buffer bindings are guaranteed
         // to be continuous (currently that's not checked anywhere), or alternative
         // via nullDescriptor robustness feature (which apparently may have performance downsides)
-        for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
+        for (uint32_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
             if (bnd->vbs[i]) {
                 VkBuffer vk_buf = bnd->vbs[i]->vk.buf;
                 VkDeviceSize vk_offset = (VkDeviceSize)bnd->vb_offsets[i];

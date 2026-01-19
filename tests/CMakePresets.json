@@ -468,6 +468,28 @@
             }
         },
         {
+            "name": "win_vk",
+            "binaryDir": "build/win_vk",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_VULKAN"
+            }
+        },
+        {
+            "name": "win_vk_analyze",
+            "generator": "Ninja",
+            "binaryDir": "build/win_vk_analyze",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_VULKAN",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "USE_ANALYZER": {
+                    "type": "BOOL",
+                    "value": "ON"
+                },
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+        {
             "name": "win_gl",
             "binaryDir": "build/win_gl",
             "cacheVariables": {
@@ -692,6 +714,16 @@
         {
             "name": "android_release",
             "configurePreset": "android_release"
+        },
+        {
+            "name": "win_vk_debug",
+            "configurePreset": "win_vk",
+            "configuration": "Debug"
+        },
+        {
+            "name": "win_vk_release",
+            "configurePreset": "win_vk",
+            "configuration": "Release"
         },
         {
             "name": "win_gl_debug",
