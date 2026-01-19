@@ -4295,6 +4295,8 @@ _SOKOL_PRIVATE void _sapp_vk_create_instance(void) {
     ext_names[ext_count++] = VK_KHR_SURFACE_EXTENSION_NAME;
     #if defined(VK_USE_PLATFORM_XLIB_KHR)
         ext_names[ext_count++] = VK_KHR_XLIB_SURFACE_EXTENSION_NAME;
+    #elif defined(VK_USE_PLATFORM_WIN32_KHR)
+        ext_names[ext_count++] = VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
     #endif
     SOKOL_ASSERT(ext_count <= 32);
 
@@ -9086,6 +9088,8 @@ _SOKOL_PRIVATE void _sapp_win32_timing_measure(void) {
 _SOKOL_PRIVATE void _sapp_win32_frame(bool from_winproc) {
     #if defined(SOKOL_WGPU)
         _sapp_wgpu_frame();
+    #elif defined(SOKOL_VULKAN)
+        _sapp_vk_frame();
     #else
         _sapp_frame();
     #endif
@@ -9703,6 +9707,8 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         _sapp_wgl_create_context();
     #elif defined(SOKOL_WGPU)
         _sapp_wgpu_init();
+    #elif defined(SOKOL_VULKAN)
+        _sapp_vk_init();
     #endif
     _sapp.valid = true;
 
@@ -9751,6 +9757,8 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         _sapp_wgl_shutdown();
     #elif defined(SOKOL_WGPU)
         _sapp_wgpu_discard();
+    #elif defined(SOKOL_VULKAN)
+        _sapp_vk_discard();
     #endif
     _sapp_win32_destroy_window();
     _sapp_win32_destroy_icons();
