@@ -2307,8 +2307,12 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(_WIN32)
     // Windows (D3D11 or GL)
     #define _SAPP_WIN32 (1)
-    #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE) && !defined(SOKOL_WGPU) && !defined(SOKOL_NOAPI)
-    #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11, SOKOL_GLCORE, SOKOL_WGPU or SOKOL_NOAPI")
+    #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE) && !defined(SOKOL_WGPU) && !defined(SOKOL_VULKAN) && !defined(SOKOL_NOAPI)
+    #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11, SOKOL_GLCORE, SOKOL_WGPU, SOKOL_VULKAN or SOKOL_NOAPI")
+    #endif
+    #if defined(SOKOL_VULKAN)
+    #define VK_USE_PLATFORM_WIN32_KHR
+    #include <vulkan/vulkan.h>
     #endif
 #elif defined(__ANDROID__)
     // Android
@@ -4517,6 +4521,12 @@ _SOKOL_PRIVATE void _sapp_vk_create_surface(void) {
         xlib_info.dpy = _sapp.x11.display;
         xlib_info.window = _sapp.x11.window;
         res = vkCreateXlibSurfaceKHR(_sapp.vk.instance, &xlib_info, 0, &_sapp.vk.surface);
+    #elif defined(_SAPP_WIN32)
+        _SAPP_STRUCT(VkWin32SurfaceCreateInfoKHR, win32_info);
+        win32_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+        win32_info.hinstance = GetModuleHandleW(NULL);
+        win32_info.hwnd = _sapp.win32.hwnd;
+        res = vkCreateWin32SurfaceKHR(_sapp.vk.instance, &win32_info, 0, &_sapp.vk.surface);
     #else
     #error "sokol_app.h: unsupported Vulkan platform"
     #endif
