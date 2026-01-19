@@ -100,6 +100,11 @@
     On Linux, you also need to use the -pthread compiler and linker option, otherwise weird
     things will happen, see here for details: https://github.com/floooh/sokol/issues/376
 
+    For Linux+Vulkan install the following packages (or equivalents):
+        - libvulkan-dev
+        - vulkan-validationlayers
+        - vulkan-tools
+
     On macOS and iOS, the implementation must be compiled as Objective-C.
 
     On Emscripten:

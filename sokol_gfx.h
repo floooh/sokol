@@ -72,11 +72,24 @@
     - on Linux with GLX: GL
     - on Linux with Vulkan: vulkan
     - on Android: GLESv3, log, android
-    - on Windows with the MSVC or Clang toolchains: no action needed, libs are defined in-source via pragma-comment-lib
-    - on Windows with MINGW/MSYS2 gcc: compile with '-mwin32' so that _WIN32 is defined
-        - with the D3D11 backend: -ld3d11
+    - on Windows:
+        - with Vulkan: link with vulkan-1 (this is explicit in case you want to
+          use your own Vulkan loader library)
+        - with D3D11:
+            - on MSVC or Clang: no action needed, libs are defined in-source via pragma-comment-lib
+            - on MINGW/MSYS2 gcc: compile with '-mwin32' so that _WIN32 is defined and link with -ld3d11
+        - with GL: no linking needed since sokol_gfx.h comes with its own GL loader on Windows
 
     On macOS and iOS, the implementation must be compiled as Objective-C.
+
+    For Linux+Vulkan install the following packages (or equivalents):
+        - libvulkan-dev
+        - vulkan-validationlayers
+        - vulkan-tools
+
+    For Windows+Vulkan install the Vulkan SDK and in your build system:
+        - add a header search path to $ENV{VULKAN_SDK}/Include
+        - add a link search path to $ENV{VULKAN_SDK}/Env
 
     On Emscripten:
         - for WebGL2: add the linker option `-s USE_WEBGL2=1`
