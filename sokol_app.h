@@ -23,6 +23,7 @@
         #define SOKOL_D3D11
         #define SOKOL_METAL
         #define SOKOL_WGPU
+        #define SOKOL_VULKAN
         #define SOKOL_NOAPI
 
     Optionally provide the following defines with your own implementations:
@@ -79,11 +80,17 @@
         - with SOKOL_GLCORE: GL
         - with SOKOL_GLES3: GLESv2
         - with SOKOL_WGPU: a WebGPU implementation library (tested with webgpu_dawn)
+        - with SOKOL_VULKAN: vulkan
         - with EGL: EGL
     - on Android: GLESv3, EGL, log, android
     - on Windows:
         - with MSVC or Clang: library dependencies are defined via `#pragma comment`
         - with SOKOL_WGPU: a WebGPU implementation library (tested with webgpu_dawn)
+        - with SOKOL_VULKAN:
+            - install the Vulkan SDK
+            - set a header search path to $VULKAN_SDK/Include
+            - set a library search path to $VULKAN_SDK/Lib
+            - link with vulkan-1.lib
         - with MINGW/MSYS2 gcc:
             - compile with '-mwin32' so that _WIN32 is defined
             - link with the following libs: -lkernel32 -luser32 -lshell32

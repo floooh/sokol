@@ -70,6 +70,7 @@
     - on iOS with GL: OpenGLES
     - on Linux with EGL: GL or GLESv2
     - on Linux with GLX: GL
+    - on Linux with Vulkan: vulkan
     - on Android: GLESv3, log, android
     - on Windows with the MSVC or Clang toolchains: no action needed, libs are defined in-source via pragma-comment-lib
     - on Windows with MINGW/MSYS2 gcc: compile with '-mwin32' so that _WIN32 is defined
