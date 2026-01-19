@@ -5610,8 +5610,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #define _SOKOL_GL_HAS_BASEVERTEX (1)
         #endif
     #elif defined(__APPLE__)
-        #define _SOKOL_GL_HAS_COLORMASKI (1)
         #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+            #define _SOKOL_GL_HAS_COLORMASKI (1)
             #define _SOKOL_GL_HAS_BASEVERTEX (1)
         #else
             #define _SOKOL_GL_HAS_TEXSTORAGE (1)
