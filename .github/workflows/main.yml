@@ -11,7 +11,7 @@ jobs:
           uses: humbletim/setup-vulkan-sdk@main
           with:
             vulkan-query-version: 1.4.335.0
-            vulkan-components: Vulkan-Headers
+            vulkan-components: Vulkan-Headers, Vulkan-Loader
             vulkan-use-cache: true
         - name: test_win
           run: |
