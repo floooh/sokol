@@ -5597,6 +5597,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
 
     // broad GL feature availability defines (DON'T merge this into the above ifdef-block!)
     #if defined(_WIN32)
+        #define _SOKOL_GL_HAS_COLORMASKI (1)
         #if defined(GL_VERSION_4_3) || defined(_SOKOL_USE_WIN32_GL_LOADER)
             #define _SOKOL_GL_HAS_COMPUTE (1)
             #define _SOKOL_GL_HAS_TEXVIEWS (1)
@@ -5609,6 +5610,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #define _SOKOL_GL_HAS_BASEVERTEX (1)
         #endif
     #elif defined(__APPLE__)
+        #define _SOKOL_GL_HAS_COLORMASKI (1)
         #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
             #define _SOKOL_GL_HAS_BASEVERTEX (1)
         #else
@@ -5619,10 +5621,11 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #elif defined(__ANDROID__)
         #define _SOKOL_GL_HAS_COMPUTE (1)
         #define _SOKOL_GL_HAS_TEXSTORAGE (1)
-        #if __ANDROID_API__ >= 24
+        #if defined(GL_ES_VERSION_3_2)
             #define _SOKOL_GL_HAS_COLORMASKI (1)
         #endif
     #elif defined(__linux__) || defined(__unix__)
+        #define _SOKOL_GL_HAS_COLORMASKI (1)
         #if defined(SOKOL_GLCORE)
             #if defined(GL_VERSION_4_3)
                 #define _SOKOL_GL_HAS_COMPUTE (1)
@@ -5639,7 +5642,6 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #define _SOKOL_GL_HAS_COMPUTE (1)
             #define _SOKOL_GL_HAS_TEXSTORAGE (1)
             #define _SOKOL_GL_HAS_BASEVERTEX (1)
-            #define _SOKOL_GL_HAS_COLORMASKI (1)
         #endif
     #endif
 
@@ -9997,11 +9999,10 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     const int version = major_version * 100 + minor_version * 10;
     _sg.features.origin_top_left = false;
     _sg.features.image_clamp_to_border = false;
+    _sg.features.mrt_independent_blend_state = false;
     #if defined(_SOKOL_GL_HAS_COLORMASKI)
-    _sg.features.mrt_independent_blend_state = version >= 320;
     _sg.features.mrt_independent_write_mask = version >= 320;
     #else
-    _sg.features.mrt_independent_blend_state = false;
     _sg.features.mrt_independent_write_mask = false;
     #endif
     _sg.features.compute = version >= 310;
@@ -11722,35 +11723,23 @@ _SOKOL_PRIVATE void _sg_gl_apply_render_pipeline_state(_sg_pipeline_t* pip) {
             if (pip->gl.color_write_mask[i] != _sg.gl.cache.color_write_mask[i]) {
                 const sg_color_mask cm = pip->gl.color_write_mask[i];
                 _sg.gl.cache.color_write_mask[i] = cm;
-                #ifdef SOKOL_GLCORE
+                if (_sg.features.mrt_independent_write_mask) {
+                    #if defined(_SOKOL_GL_HAS_COLORMASKI)
                     glColorMaski(i,
                                 (cm & SG_COLORMASK_R) != 0,
                                 (cm & SG_COLORMASK_G) != 0,
                                 (cm & SG_COLORMASK_B) != 0,
                                 (cm & SG_COLORMASK_A) != 0);
-                #elif defined(_SOKOL_GL_HAS_COLORMASKI)
-                    // Native GLES 3.2+ supports glColorMaski
-                    if (_sg.features.mrt_independent_write_mask) {
-                        glColorMaski(i,
-                                    (cm & SG_COLORMASK_R) != 0,
-                                    (cm & SG_COLORMASK_G) != 0,
-                                    (cm & SG_COLORMASK_B) != 0,
-                                    (cm & SG_COLORMASK_A) != 0);
-                    } else if (0 == i) {
-                        glColorMask((cm & SG_COLORMASK_R) != 0,
-                                    (cm & SG_COLORMASK_G) != 0,
-                                    (cm & SG_COLORMASK_B) != 0,
-                                    (cm & SG_COLORMASK_A) != 0);
-                    }
-                #else
-                    // WebGL2 - no indexed color mask support
-                    if (0 == i) {
-                        glColorMask((cm & SG_COLORMASK_R) != 0,
-                                    (cm & SG_COLORMASK_G) != 0,
-                                    (cm & SG_COLORMASK_B) != 0,
-                                    (cm & SG_COLORMASK_A) != 0);
-                    }
-                #endif
+                    #else
+                    // can't happen
+                    SOKOL_ASSERT(false);
+                    #endif
+                } else if (0 == i) {
+                    glColorMask((cm & SG_COLORMASK_R) != 0,
+                                (cm & SG_COLORMASK_G) != 0,
+                                (cm & SG_COLORMASK_B) != 0,
+                                (cm & SG_COLORMASK_A) != 0);
+                }
                 _sg_stats_inc(gl.num_render_state);
             }
         }
