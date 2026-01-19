@@ -1,5 +1,11 @@
 ## Updates
 
+### 19-Jan-2026
+
+- sokol_gfx.h gl: merged PR https://github.com/floooh/sokol/pull/1414, this enables
+  per-multiple-render-target color write masks on GLES3.2. Many thanks to
+  @luigi-rosso for the PR!
+
 ### 18-Jan-2026
 
 Happy New Year!
