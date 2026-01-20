@@ -5337,6 +5337,8 @@ SOKOL_GFX_API_DECL const void* sg_mtl_device(void);
 SOKOL_GFX_API_DECL const void* sg_mtl_render_command_encoder(void);
 // Metal: return __bridge-casted MTLComputeCommandEncoder when inside compute pass (otherwise zero)
 SOKOL_GFX_API_DECL const void* sg_mtl_compute_command_encoder(void);
+// Metal: return __bridge-casted MTLCommandQueue
+SOKOL_GFX_API_DECL const void* sg_mtl_command_queue(void);
 // Metal: get internal __bridge-casted buffer resource objects
 SOKOL_GFX_API_DECL sg_mtl_buffer_info sg_mtl_query_buffer_info(sg_buffer buf);
 // Metal: get internal __bridge-casted image resource objects
@@ -26222,6 +26224,18 @@ SOKOL_API_IMPL const void* sg_mtl_compute_command_encoder(void) {
     #if defined(SOKOL_METAL)
         if (nil != _sg.mtl.compute_cmd_encoder) {
             return (__bridge const void*) _sg.mtl.compute_cmd_encoder;
+        } else {
+            return 0;
+        }
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sg_mtl_command_queue(void) {
+    #if defined(SOKOL_METAL)
+        if (nil != _sg.mtl.cmd_queue) {
+            return (__bridge const void*) _sg.mtl.cmd_queue;
         } else {
             return 0;
         }
