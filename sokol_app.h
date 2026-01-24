@@ -4307,7 +4307,6 @@ _SOKOL_PRIVATE void _sapp_vk_set_object_label(VkObjectType obj_type, uint64_t ob
         _SOKOL_UNUSED(obj_type);
         _SOKOL_UNUSED(obj_handle);
         _SOKOL_UNUSED(label);
-        return;
     #endif
 }
 
