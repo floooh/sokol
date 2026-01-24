@@ -5,6 +5,16 @@
 - sokol_app.h/sokol_gfx.h vk: object debug labels are now working in the experimental
   Vulkan backend (via `VK_EXT_debug_utils`). Debug labels are only set in debug mode
   (e.g. `SOKOL_DEBUG` is defined). PR: https://github.com/floooh/sokol/pull/1422
+- sokol_gfx.h vk: Fix catastrophic performance of uniform updates on the Intel Vulkan
+  driver for Windows. This was caused by letting the descriptor-buffer-extension
+  function `vkGetDescriptorEXT()` write the descriptor data directly into the descriptor
+  buffer which completely destroys performance on the Intel Windows driver (interestingly
+  this is fast on the same machine in Linux). The fix is now to write the descriptor data
+  into an intermediate sysmem chunk and then do a single memcpy() of the entire descriptor
+  set into the descriptor buffer. As a bonus there are now also no more redundant `vkGetDescriptorEXT()`
+  calls when multiple uniform blocks are used in a shader. Overall performance in the `drawcallperf-sapp`
+  sample is still behind GL and D3D11, but at least it's roughly in the same ballpark now.
+  PR: https://github.com/floooh/sokol/pull/1424
 
 ### 19-Jan-2026
 
