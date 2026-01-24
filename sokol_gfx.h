@@ -4466,6 +4466,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VULKAN_STORAGEIMAGE_SPIRV_SET1_BINDING_OUT_OF_RANGE, "vulkan: storage image 'spirv_set1_binding_n' is out of range (must be 0..127)") \
     _SG_LOGITEM_XMACRO(VULKAN_SAMPLER_SPIRV_SET1_BINDING_OUT_OF_RANGE, "vulkan: sampler 'spirv_set1_binding_n' is out of range (must be 0..127)") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_DESCRIPTOR_SET_LAYOUT_FAILED, "vulkan: vkCreateDescriptorSetLayout() failed!") \
+    _SG_LOGITEM_XMACRO(VULKAN_SHADER_UNIFORM_DESCRIPTOR_SET_SIZE_VS_CACHE_SIZE, "vulkan: shader uniform descriptor set is too big for the descriptor set cache (please write a Github issue)") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_PIPELINE_LAYOUT_FAILED, "vulkan: vkCreatePipelineLayout() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_GRAPHICS_PIPELINE_FAILED, "vulkan: vkCreateGraphicsPipelines() failed!") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_COMPUTE_PIPELINE_FAILED, "vulkan: vkCreateComputePipelines() failed!") \
@@ -19920,15 +19921,8 @@ _SOKOL_PRIVATE bool _sg_vk_bind_uniform_descriptor_set(VkCommandBuffer cmd_buf) 
     uint8_t* dbuf_ptr = _sg_vk_shared_buffer_ptr(&_sg.vk.bind, dbuf_offset);
 
     // update descriptor buffer
-    for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
-        if (shd->cmn.uniform_blocks[i].stage == SG_SHADERSTAGE_NONE) {
-            continue;
-        }
-        _sg.vk.ext.get_descriptor(_sg.vk.dev,
-            &_sg.vk.uniforms.get_info[i],
-            _sg.vk.descriptor_buffer_props.uniformBufferDescriptorSize,
-            dbuf_ptr + shd->vk.ub_dset_offsets[i]);
-    }
+    SOKOL_ASSERT(shd->vk.ub_dset_size <= _sg.vk.uniforms.dset_cache_size);
+    memcpy(dbuf_ptr, _sg.vk.uniforms.dset_cache, shd->vk.ub_dset_size);
 
     // record the descriptor buffer offset
     const VkPipelineBindPoint vk_bind_point = _sg.cur_pass.is_compute
@@ -21025,6 +21019,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_shader(_sg_shader_t* shd, const s
 
     // store uniform descriptor set size and descriptor offsets
     _sg.vk.ext.get_descriptor_set_layout_size(_sg.vk.dev, shd->vk.ub_dsl, &shd->vk.ub_dset_size);
+    if (shd->vk.ub_dset_size > _sg.vk.uniforms.dset_cache_size) {
+        _SG_ERROR(VULKAN_SHADER_UNIFORM_DESCRIPTOR_SET_SIZE_VS_CACHE_SIZE);
+        return SG_RESOURCESTATE_FAILED;
+    }
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
         if (shd->cmn.uniform_blocks[i].stage == SG_SHADERSTAGE_NONE) {
             continue;
@@ -21683,6 +21681,9 @@ _SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
     SOKOL_ASSERT(_sg.vk.uniforms.dbuf.cur_dev_addr);
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
     SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
+    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
+    SOKOL_ASSERT(data->size == shd->cmn.uniform_blocks[ub_slot].size);
 
     // copy data into uniform buffer and keep track of uniform bind infos
     const VkDeviceSize ubuf_offset = _sg_vk_uniform_copy(data);
@@ -21693,6 +21694,17 @@ _SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
     }
     _sg.vk.uniforms.addr_info[ub_slot].range = data->size;
     _sg.vk.uniforms.addr_info[ub_slot].address = _sg.vk.uniforms.dbuf.cur_dev_addr + ubuf_offset;
+
+    // copy uniform buffer descriptor data into intermediate sysmem buffer
+    // NOTE: letting vkGetDescriptorEXT write directly into the descriptor
+    // buffer has catastrophic performance on some Vulkan drivers, notably
+    // Intel's Windows driver
+    size_t dsize = _sg.vk.descriptor_buffer_props.uniformBufferDescriptorSize;
+    SOKOL_ASSERT((shd->vk.ub_dset_offsets[ub_slot] + dsize) <= _sg.vk.uniforms.dset_cache_size);
+    uint8_t* dst_ptr = _sg.vk.uniforms.dset_cache + shd->vk.ub_dset_offsets[ub_slot];
+    _sg.vk.ext.get_descriptor(_sg.vk.dev, &_sg.vk.uniforms.get_info[ub_slot], dsize, dst_ptr);
+
+    // set uniforms dirty, applying the descriptor buffer offset is happens in draw/dispatch
     _sg.vk.uniforms.dirty = true;
 }
 
