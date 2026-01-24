@@ -21699,7 +21699,7 @@ _SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
     // NOTE: letting vkGetDescriptorEXT write directly into the descriptor
     // buffer has catastrophic performance on some Vulkan drivers, notably
     // Intel's Windows driver
-    size_t dsize = _sg.vk.descriptor_buffer_props.uniformBufferDescriptorSize;
+    const size_t dsize = _sg.vk.descriptor_buffer_props.uniformBufferDescriptorSize;
     SOKOL_ASSERT((shd->vk.ub_dset_offsets[ub_slot] + dsize) <= _sg.vk.uniforms.dset_cache_size);
     uint8_t* dst_ptr = _sg.vk.uniforms.dset_cache + shd->vk.ub_dset_offsets[ub_slot];
     _sg.vk.ext.get_descriptor(_sg.vk.dev, &_sg.vk.uniforms.get_info[ub_slot], dsize, dst_ptr);
