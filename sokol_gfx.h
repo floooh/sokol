@@ -7094,11 +7094,6 @@ typedef struct {
 } _sg_vk_shared_buffer_t;
 
 typedef struct {
-    VkDescriptorAddressInfoEXT addr_info;
-    VkDescriptorGetInfoEXT get_info;
-} _sg_vk_uniform_bindinfo_t;
-
-typedef struct {
     bool valid;
     VkInstance instance;
     VkPhysicalDevice phys_dev;
@@ -7145,9 +7140,14 @@ typedef struct {
         _sg_vk_shared_buffer_t stream;
     } stage;
     // uniform update system
-    bool uniforms_dirty;
-    _sg_vk_shared_buffer_t uniform;
-    _sg_vk_uniform_bindinfo_t uniform_bindinfos[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
+    struct {
+        bool dirty;
+        _sg_vk_shared_buffer_t dbuf;    // descriptor buffer
+        VkDescriptorAddressInfoEXT addr_info[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
+        VkDescriptorGetInfoEXT get_info[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
+        size_t dset_cache_size;
+        uint8_t* dset_cache;
+    } uniforms;
     // resource binding system (using descriptor buffers)
     _sg_vk_shared_buffer_t bind;
     // hazard tracking system for buffers and images
@@ -19760,44 +19760,53 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_image_data(_sg_image_t* img, const sg_
 // uniform data system
 _SOKOL_PRIVATE void _sg_vk_uniform_init(void) {
     SOKOL_ASSERT(_sg.desc.uniform_buffer_size > 0);
-    _sg_vk_shared_buffer_init(&_sg.vk.uniform,
+    SOKOL_ASSERT(0 == _sg.vk.uniforms.dset_cache);
+
+    _sg_vk_shared_buffer_init(&_sg.vk.uniforms.dbuf,
         (uint32_t)_sg.desc.uniform_buffer_size,
         (uint32_t)_sg.vk.dev_props.properties.limits.minUniformBufferOffsetAlignment,
         _SG_VK_MEMTYPE_UNIFORMS,
         "shared-uniform-buffer");
+
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
-        _sg_vk_uniform_bindinfo_t* ubi = &_sg.vk.uniform_bindinfos[i];
-        ubi->addr_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT;
-        ubi->get_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
-        ubi->get_info.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        ubi->get_info.data.pUniformBuffer = &ubi->addr_info;
+        _sg.vk.uniforms.addr_info[i].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT;
+        _sg.vk.uniforms.get_info[i].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
+        _sg.vk.uniforms.get_info[i].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        _sg.vk.uniforms.get_info[i].data.pUniformBuffer = &_sg.vk.uniforms.addr_info[i];
     }
+
+    // NOTE: we assume here that the max alignment for uniform buffer
+    // descriptors in the descriptor buffer is the same as the assumed max
+    // descriptor size (e.g. 256 bytes)
+    _sg.vk.uniforms.dset_cache_size = SG_MAX_UNIFORMBLOCK_BINDSLOTS * _SG_VK_MAX_DESCRIPTOR_DATA_SIZE;
+    _sg.vk.uniforms.dset_cache = (uint8_t*)_sg_malloc_clear(_sg.vk.uniforms.dset_cache_size);
 }
 
 _SOKOL_PRIVATE void _sg_vk_uniform_discard(void) {
-    _sg_vk_shared_buffer_discard(&_sg.vk.uniform);
+    SOKOL_ASSERT(_sg.vk.uniforms.dset_cache);
+    _sg_free(_sg.vk.uniforms.dset_cache); _sg.vk.uniforms.dset_cache = 0;
+    _sg_vk_shared_buffer_discard(&_sg.vk.uniforms.dbuf);
 }
 
 // called from _sg_vk_acquire_frame_command_buffer()
 _SOKOL_PRIVATE void _sg_vk_uniform_after_acquire(void) {
-    _sg_vk_shared_buffer_after_acquire(&_sg.vk.uniform);
+    _sg_vk_shared_buffer_after_acquire(&_sg.vk.uniforms.dbuf);
     // reset uniform tracking data
     for (size_t i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
-        _sg_vk_uniform_bindinfo_t* ubi = &_sg.vk.uniform_bindinfos[i];
-        ubi->addr_info.address = 0;
-        ubi->addr_info.range = 0;
+        _sg.vk.uniforms.addr_info[i].address = 0;
+        _sg.vk.uniforms.addr_info[i].range = 0;
     }
 }
 
 // called from _sg_vk_submit_frame_command_buffer()
 _SOKOL_PRIVATE void _sg_vk_uniform_before_submit(void) {
-    _sg_vk_shared_buffer_before_submit(&_sg.vk.uniform);
+    _sg_vk_shared_buffer_before_submit(&_sg.vk.uniforms.dbuf);
 }
 
 // called form _sg_vk_apply_uniforms, returns offset of data snippet into uniform buffer
 _SOKOL_PRIVATE uint32_t _sg_vk_uniform_copy(const sg_range* data) {
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
-    return (uint32_t)_sg_vk_shared_buffer_memcpy(&_sg.vk.uniform, data->ptr, (uint32_t)data->size);
+    return (uint32_t)_sg_vk_shared_buffer_memcpy(&_sg.vk.uniforms.dbuf, data->ptr, (uint32_t)data->size);
 }
 
 // resource binding system
@@ -19896,8 +19905,8 @@ _SOKOL_PRIVATE bool _sg_vk_bind_view_smp_descriptor_set(VkCommandBuffer cmd_buf,
 
 _SOKOL_PRIVATE bool _sg_vk_bind_uniform_descriptor_set(VkCommandBuffer cmd_buf) {
     SOKOL_ASSERT(cmd_buf);
-    SOKOL_ASSERT(_sg.vk.uniforms_dirty);
-    _sg.vk.uniforms_dirty = false;
+    SOKOL_ASSERT(_sg.vk.uniforms.dirty);
+    _sg.vk.uniforms.dirty = false;
     const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
     const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
 
@@ -19916,7 +19925,7 @@ _SOKOL_PRIVATE bool _sg_vk_bind_uniform_descriptor_set(VkCommandBuffer cmd_buf) 
             continue;
         }
         _sg.vk.ext.get_descriptor(_sg.vk.dev,
-            &_sg.vk.uniform_bindinfos[i].get_info,
+            &_sg.vk.uniforms.get_info[i],
             _sg.vk.descriptor_buffer_props.uniformBufferDescriptorSize,
             dbuf_ptr + shd->vk.ub_dset_offsets[i]);
     }
@@ -21627,7 +21636,7 @@ _SOKOL_PRIVATE void _sg_vk_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     SOKOL_ASSERT(pip->vk.pip);
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
-    _sg.vk.uniforms_dirty = false;
+    _sg.vk.uniforms.dirty = false;
     VkPipelineBindPoint bindpoint = pip->cmn.is_compute
         ? VK_PIPELINE_BIND_POINT_COMPUTE
         : VK_PIPELINE_BIND_POINT_GRAPHICS;
@@ -21671,26 +21680,26 @@ _SOKOL_PRIVATE bool _sg_vk_apply_bindings(_sg_bindings_ptrs_t* bnd) {
 }
 
 _SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
-    SOKOL_ASSERT(_sg.vk.uniform.cur_dev_addr);
+    SOKOL_ASSERT(_sg.vk.uniforms.dbuf.cur_dev_addr);
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
     SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
 
     // copy data into uniform buffer and keep track of uniform bind infos
     const VkDeviceSize ubuf_offset = _sg_vk_uniform_copy(data);
-    if (_sg.vk.uniform.overflown) {
+    if (_sg.vk.uniforms.dbuf.overflown) {
         _SG_ERROR(VULKAN_UNIFORM_BUFFER_OVERFLOW);
         _sg.next_draw_valid = false;
         return;
     }
-    _sg.vk.uniform_bindinfos[ub_slot].addr_info.range = data->size;
-    _sg.vk.uniform_bindinfos[ub_slot].addr_info.address = _sg.vk.uniform.cur_dev_addr + ubuf_offset;
-    _sg.vk.uniforms_dirty = true;
+    _sg.vk.uniforms.addr_info[ub_slot].range = data->size;
+    _sg.vk.uniforms.addr_info[ub_slot].address = _sg.vk.uniforms.dbuf.cur_dev_addr + ubuf_offset;
+    _sg.vk.uniforms.dirty = true;
 }
 
 _SOKOL_PRIVATE void _sg_vk_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
     VkCommandBuffer cmd_buf = _sg.vk.frame.cmd_buf;
-    if (_sg.vk.uniforms_dirty) {
+    if (_sg.vk.uniforms.dirty) {
         if (!_sg_vk_bind_uniform_descriptor_set(cmd_buf)) {
             return;
         }
@@ -21714,7 +21723,7 @@ _SOKOL_PRIVATE void _sg_vk_draw(int base_element, int num_elements, int num_inst
 _SOKOL_PRIVATE void _sg_vk_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
     VkCommandBuffer cmd_buf = _sg.vk.frame.cmd_buf;
-    if (_sg.vk.uniforms_dirty) {
+    if (_sg.vk.uniforms.dirty) {
         if (!_sg_vk_bind_uniform_descriptor_set(cmd_buf)) {
             return;
         }
