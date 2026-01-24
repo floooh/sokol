@@ -1,5 +1,11 @@
 ## Updates
 
+### 24-Jan-2026
+
+- sokol_app.h/sokol_gfx.h vk: object debug labels are now working in the experimental
+  Vulkan backend (via `VK_EXT_debug_utils`). Debug labels are only set in debug mode
+  (e.g. `SOKOL_DEBUG` is defined). PR: https://github.com/floooh/sokol/pull/1422
+
 ### 19-Jan-2026
 
 - sokol_gfx.h gl: merged PR https://github.com/floooh/sokol/pull/1414, this enables

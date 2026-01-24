@@ -1811,6 +1811,7 @@ typedef struct sapp_allocator {
     _SAPP_LOGITEM_XMACRO(WGPU_REQUEST_ADAPTER_STATUS_ERROR, "wgpu: requesting adapter failed with status 'error'") \
     _SAPP_LOGITEM_XMACRO(WGPU_REQUEST_ADAPTER_STATUS_UNKNOWN, "wgpu: requesting adapter failed with status 'unknown'") \
     _SAPP_LOGITEM_XMACRO(WGPU_CREATE_INSTANCE_FAILED, "wgpu: failed to create instance") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_REQUIRED_INSTANCE_EXTENSION_FUNCTION_MISSING, "vulkan: could not lookup a required instance extension function pointer") \
     _SAPP_LOGITEM_XMACRO(VULKAN_ALLOC_DEVICE_MEMORY_NO_SUITABLE_MEMORY_TYPE, "vulkan: could not find suitable memory type") \
     _SAPP_LOGITEM_XMACRO(VULKAN_ALLOCATE_MEMORY_FAILED, "vulkan: vkAllocateMemory() failed!") \
     _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_INSTANCE_FAILED, "vulkan: vkCreateInstance failed") \
@@ -1892,6 +1893,7 @@ typedef struct sapp_wgpu_environment {
 } sapp_wgpu_environment;
 
 typedef struct sapp_vulkan_environment {
+    const void* instance;
     const void* physical_device;
     const void* device;
     const void* queue;
@@ -2807,6 +2809,9 @@ typedef struct {
         VkSemaphore render_finished_sem;
         VkSemaphore present_complete_sem;
     } sync[_SAPP_VK_MAX_SWAPCHAIN_IMAGES];
+    struct {
+        PFN_vkSetDebugUtilsObjectNameEXT set_debug_utils_object_name_ext;
+    } ext;
 } _sapp_vk_t;
 #endif
 
@@ -4274,6 +4279,38 @@ _SOKOL_PRIVATE void _sapp_wgpu_frame(void) {
 #define _SAPP_VK_MAX_COUNT_AND_ARRAY(num, type, count_name, array_name) uint32_t count_name = num; type array_name[num] = {0}
 #endif
 
+_SOKOL_PRIVATE void _sapp_vk_load_instance_ext_funcs(void) {
+    SOKOL_ASSERT(_sapp.vk.instance);
+    #if defined(SOKOL_DEBUG)
+        _sapp.vk.ext.set_debug_utils_object_name_ext = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetInstanceProcAddr(_sapp.vk.instance, "vkSetDebugUtilsObjectNameEXT");
+        if (0 == _sapp.vk.ext.set_debug_utils_object_name_ext) {
+            _SAPP_PANIC(VULKAN_REQUIRED_INSTANCE_EXTENSION_FUNCTION_MISSING);
+        }
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_vk_set_object_label(VkObjectType obj_type, uint64_t obj_handle, const char* label) {
+    #if defined(SOKOL_DEBUG)
+        SOKOL_ASSERT(_sapp.vk.device);
+        SOKOL_ASSERT(_sapp.vk.ext.set_debug_utils_object_name_ext);
+        SOKOL_ASSERT(obj_handle);
+        if (label) {
+            _SAPP_STRUCT(VkDebugUtilsObjectNameInfoEXT, name_info);
+            name_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+            name_info.objectType = obj_type;
+            name_info.objectHandle = obj_handle,
+            name_info.pObjectName = label;
+            VkResult res = _sapp.vk.ext.set_debug_utils_object_name_ext(_sapp.vk.device, &name_info);
+            SOKOL_ASSERT(res == VK_SUCCESS);
+        }
+    #else
+        _SOKOL_UNUSED(obj_type);
+        _SOKOL_UNUSED(obj_handle);
+        _SOKOL_UNUSED(label);
+        return;
+    #endif
+}
+
 _SOKOL_PRIVATE int _sapp_vk_mem_find_memory_type_index(uint32_t type_filter, VkMemoryPropertyFlags props) {
     SOKOL_ASSERT(_sapp.vk.physical_device);
     _SAPP_STRUCT(VkPhysicalDeviceMemoryProperties, mem_props);
@@ -4305,6 +4342,9 @@ _SOKOL_PRIVATE void _sapp_vk_create_instance(void) {
 
     _SAPP_VK_ZERO_COUNT_AND_ARRAY(32, const char*, ext_count, ext_names);
     ext_names[ext_count++] = VK_KHR_SURFACE_EXTENSION_NAME;
+    #if defined(SOKOL_DEBUG)
+        ext_names[ext_count++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+    #endif
     #if defined(VK_USE_PLATFORM_XLIB_KHR)
         ext_names[ext_count++] = VK_KHR_XLIB_SURFACE_EXTENSION_NAME;
     #elif defined(VK_USE_PLATFORM_WIN32_KHR)
@@ -4588,8 +4628,10 @@ _SOKOL_PRIVATE void _sapp_vk_create_sync_objects(void) {
         SOKOL_ASSERT(0 == _sapp.vk.sync[i].render_finished_sem);
         res = vkCreateSemaphore(_sapp.vk.device, &create_info, 0, &_sapp.vk.sync[i].present_complete_sem);
         SOKOL_ASSERT((res == VK_SUCCESS) && (_sapp.vk.sync[i].present_complete_sem));
+        _sapp_vk_set_object_label(VK_OBJECT_TYPE_SEMAPHORE, (uint64_t)_sapp.vk.sync[i].present_complete_sem, "present_complete_sem");
         res = vkCreateSemaphore(_sapp.vk.device, &create_info, 0, &_sapp.vk.sync[i].render_finished_sem);
         SOKOL_ASSERT((res == VK_SUCCESS) && (_sapp.vk.sync[i].render_finished_sem));
+        _sapp_vk_set_object_label(VK_OBJECT_TYPE_SEMAPHORE, (uint64_t)_sapp.vk.sync[i].render_finished_sem, "render_finished_sem");
     }
 }
 
@@ -4654,7 +4696,9 @@ _SOKOL_PRIVATE void _sapp_vk_swapchain_create_surface(
     uint32_t height,
     VkSampleCountFlagBits sample_count_flags,
     VkImageUsageFlags usage,
-    VkImageAspectFlags aspect_mask)
+    VkImageAspectFlags aspect_mask,
+    const char* image_debug_label,
+    const char* view_debug_label)
 {
     SOKOL_ASSERT(_sapp.vk.physical_device);
     SOKOL_ASSERT(_sapp.vk.device);
@@ -4686,6 +4730,7 @@ _SOKOL_PRIVATE void _sapp_vk_swapchain_create_surface(
         _SAPP_PANIC(VULKAN_SWAPCHAIN_CREATE_IMAGE_FAILED);
     }
     SOKOL_ASSERT(surf->img);
+    _sapp_vk_set_object_label(VK_OBJECT_TYPE_IMAGE, (uint64_t)surf->img, image_debug_label);
 
     _SAPP_STRUCT(VkMemoryRequirements, mem_reqs);
     vkGetImageMemoryRequirements(_sapp.vk.device, surf->img, &mem_reqs);
@@ -4712,6 +4757,7 @@ _SOKOL_PRIVATE void _sapp_vk_swapchain_create_surface(
         _SAPP_PANIC(VULKAN_SWAPCHAIN_CREATE_IMAGE_VIEW_FAILED);
     }
     SOKOL_ASSERT(surf->view);
+    _sapp_vk_set_object_label(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)surf->view, view_debug_label);
 }
 
 _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
@@ -4801,6 +4847,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
             _SAPP_PANIC(VULKAN_SWAPCHAIN_CREATE_IMAGE_VIEW_FAILED);
         }
         SOKOL_ASSERT(_sapp.vk.swapchain_views[i]);
+        _sapp_vk_set_object_label(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)_sapp.vk.swapchain_views[i], "swapchain_view");
     }
 
     // create depth-stencil buffer
@@ -4811,7 +4858,9 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
         height,
         (VkSampleCountFlagBits)_sapp.sample_count,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
+        VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
+        "swapchain_depthstencil_image",
+        "swapchain_depthstencil_view");
 
     // optionally create MSAA surface
     if (_sapp.sample_count > 1) {
@@ -4822,7 +4871,9 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
             height,
             (VkSampleCountFlagBits)_sapp.sample_count,
             VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-            VK_IMAGE_ASPECT_COLOR_BIT);
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            "swapchain_msaa_image",
+            "swapchain_msaa_view");
     }
 
     // this is the only place in the Vulkan code path which updates
@@ -4872,6 +4923,7 @@ _SOKOL_PRIVATE void _sapp_vk_recreate_swapchain(void) {
 
 _SOKOL_PRIVATE void _sapp_vk_init(void) {
     _sapp_vk_create_instance();
+    _sapp_vk_load_instance_ext_funcs();
     _sapp_vk_create_surface();
     _sapp_vk_pick_physical_device();
     _sapp_vk_create_device();
@@ -13880,6 +13932,7 @@ SOKOL_API_IMPL sapp_environment sapp_get_environment(void) {
         res.wgpu.device = (const void*) _sapp.wgpu.device;
     #endif
     #if defined(SOKOL_VULKAN)
+        res.vulkan.instance = (const void*) _sapp.vk.instance;
         res.vulkan.physical_device = (const void*) _sapp.vk.physical_device;
         res.vulkan.device = (const void*) _sapp.vk.device;
         res.vulkan.queue = (const void*) _sapp.vk.queue;

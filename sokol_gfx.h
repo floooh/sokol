@@ -4955,6 +4955,7 @@ typedef struct sg_wgpu_environment {
 } sg_wgpu_environment;
 
 typedef struct sg_vulkan_environment {
+    const void* instance;
     const void* physical_device;
     const void* device;
     const void* queue;
@@ -7099,6 +7100,7 @@ typedef struct {
 
 typedef struct {
     bool valid;
+    VkInstance instance;
     VkPhysicalDevice phys_dev;
     VkDevice dev;
     VkQueue queue;
@@ -7109,6 +7111,7 @@ typedef struct {
 
     // extension function pointers
     struct {
+        PFN_vkSetDebugUtilsObjectNameEXT set_debug_utils_object_name_ext;
         PFN_vkGetDescriptorSetLayoutSizeEXT get_descriptor_set_layout_size;
         PFN_vkGetDescriptorSetLayoutBindingOffsetEXT get_descriptor_set_layout_binding_offset;
         PFN_vkGetDescriptorEXT get_descriptor;
@@ -18620,12 +18623,24 @@ _SOKOL_PRIVATE void _sg_wgpu_update_image(_sg_image_t* img, const sg_image_data*
 #elif defined(SOKOL_VULKAN)
 
 _SOKOL_PRIVATE void _sg_vk_set_object_label(VkObjectType obj_type, uint64_t obj_handle, const char* label) {
-    SOKOL_ASSERT(_sg.vk.dev);
-    SOKOL_ASSERT(obj_handle != 0);
-    if (label) {
-        // FIXME: use vkSetDebugUtilsObjectNamesEXT
-        _SOKOL_UNUSED(obj_type && obj_handle && label);
-    }
+    #if defined(SOKOL_DEBUG)
+        SOKOL_ASSERT(_sg.vk.dev);
+        SOKOL_ASSERT(_sg.vk.ext.set_debug_utils_object_name_ext);
+        SOKOL_ASSERT(obj_handle != 0);
+        if (label) {
+            _SG_STRUCT(VkDebugUtilsObjectNameInfoEXT, name_info);
+            name_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+            name_info.objectType = obj_type;
+            name_info.objectHandle = obj_handle,
+            name_info.pObjectName = label;
+            VkResult res = _sg.vk.ext.set_debug_utils_object_name_ext(_sg.vk.dev, &name_info);
+            SOKOL_ASSERT(res == VK_SUCCESS);
+        }
+    #else
+        _SOKOL_UNUSED(obj_type);
+        _SOKOL_UNUSED(obj_handle);
+        _SOKOL_UNUSED(label);
+    #endif
 }
 
 _SOKOL_PRIVATE bool _sg_vk_is_read_access(_sg_vk_access_t access) {
@@ -20330,6 +20345,12 @@ _SOKOL_PRIVATE VkBorderColor _sg_vk_sampler_border_color(sg_border_color c) {
 
 _SOKOL_PRIVATE void _sg_vk_load_ext_funcs(void) {
     SOKOL_ASSERT(_sg.vk.dev);
+    #if defined(SOKOL_DEBUG)
+        _sg.vk.ext.set_debug_utils_object_name_ext = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetInstanceProcAddr(_sg.vk.instance, "vkSetDebugUtilsObjectNameEXT");
+        if (0 == _sg.vk.ext.set_debug_utils_object_name_ext) {
+            _SG_PANIC(VULKAN_REQUIRED_EXTENSION_FUNCTION_MISSING);
+        }
+    #endif
     _sg.vk.ext.get_descriptor_set_layout_size = (PFN_vkGetDescriptorSetLayoutSizeEXT)vkGetDeviceProcAddr(_sg.vk.dev, "vkGetDescriptorSetLayoutSizeEXT");
     if (0 == _sg.vk.ext.get_descriptor_set_layout_size) {
         _SG_PANIC(VULKAN_REQUIRED_EXTENSION_FUNCTION_MISSING);
@@ -20630,11 +20651,13 @@ _SOKOL_PRIVATE void _sg_vk_submit_frame_command_buffers(void) {
 
 _SOKOL_PRIVATE void _sg_vk_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
+    SOKOL_ASSERT(desc->environment.vulkan.instance);
     SOKOL_ASSERT(desc->environment.vulkan.physical_device);
     SOKOL_ASSERT(desc->environment.vulkan.device);
     SOKOL_ASSERT(desc->environment.vulkan.queue);
     SOKOL_ASSERT(desc->uniform_buffer_size > 0);
     _sg.vk.valid = true;
+    _sg.vk.instance = (VkInstance) desc->environment.vulkan.instance;
     _sg.vk.phys_dev = (VkPhysicalDevice) desc->environment.vulkan.physical_device;
     _sg.vk.dev = (VkDevice) desc->environment.vulkan.device;
     _sg.vk.queue = (VkQueue) desc->environment.vulkan.queue;
