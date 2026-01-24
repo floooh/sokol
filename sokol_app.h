@@ -1893,6 +1893,7 @@ typedef struct sapp_wgpu_environment {
 } sapp_wgpu_environment;
 
 typedef struct sapp_vulkan_environment {
+    const void* instance;
     const void* physical_device;
     const void* device;
     const void* queue;
@@ -13931,6 +13932,7 @@ SOKOL_API_IMPL sapp_environment sapp_get_environment(void) {
         res.wgpu.device = (const void*) _sapp.wgpu.device;
     #endif
     #if defined(SOKOL_VULKAN)
+        res.vulkan.instance = (const void*) _sapp.vk.instance;
         res.vulkan.physical_device = (const void*) _sapp.vk.physical_device;
         res.vulkan.device = (const void*) _sapp.vk.device;
         res.vulkan.queue = (const void*) _sapp.vk.queue;
