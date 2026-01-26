@@ -4515,6 +4515,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
     required.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     required.pNext = &vk13_features;
     required.features.samplerAnisotropy = VK_TRUE;
+    required.features.dualSrcBlend = VK_TRUE;
     if (supports.features.textureCompressionBC) {
         required.features.textureCompressionBC = VK_TRUE;
     }

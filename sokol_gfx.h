@@ -20433,7 +20433,7 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     _sg.features.msaa_texture_bindings = true;
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
-    _sg.features.dual_source_blending = false;  // FIXME!
+    _sg.features.dual_source_blending = true;
 
     SOKOL_ASSERT(_sg.vk.phys_dev);
     _sg.vk.descriptor_buffer_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT;
