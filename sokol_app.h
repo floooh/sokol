@@ -4146,7 +4146,6 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_device_and_swapchain(void) {
     if (wgpuAdapterHasFeature(_sapp.wgpu.adapter, WGPUFeatureName_DualSourceBlending)) {
         SOKOL_ASSERT(cur_feature_index < _SAPP_WGPU_MAX_REQUESTED_FEATURES);
         requiredFeatures[cur_feature_index++] = WGPUFeatureName_DualSourceBlending;
-
     }
     #undef _SAPP_WGPU_MAX_REQUESTED_FEATURES
 
