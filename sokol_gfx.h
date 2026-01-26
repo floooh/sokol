@@ -5630,6 +5630,9 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #define _SOKOL_GL_HAS_TEXSTORAGE (1)
             #define _SOKOL_GL_HAS_BASEINSTANCE (1)
         #endif
+        #if defined(GL_VERSION_3_3) || defined(_SOKOL_USE_WIN32_GL_LOADER)
+            #define _SOKOL_GL_HAS_DUALSOURCEBLENDING (1)
+        #endif
         #if defined(GL_VERSION_3_2) || defined(_SOKOL_USE_WIN32_GL_LOADER)
             #define _SOKOL_GL_HAS_BASEVERTEX (1)
         #endif
@@ -5637,6 +5640,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
             #define _SOKOL_GL_HAS_COLORMASKI (1)
             #define _SOKOL_GL_HAS_BASEVERTEX (1)
+            #define _SOKOL_GL_HAS_DUALSOURCEBLENDING (1)
         #else
             #define _SOKOL_GL_HAS_TEXSTORAGE (1)
         #endif
@@ -5658,6 +5662,9 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #if defined(GL_VERSION_4_2)
                 #define _SOKOL_GL_HAS_TEXSTORAGE (1)
                 #define _SOKOL_GL_HAS_BASEINSTANCE (1)
+            #endif
+            #if defined(GL_VERSION_3_3)
+                #define _SOKOL_GL_HAS_DUALSOURCEBLENDING (1)
             #endif
             #if defined(GL_VERSION_3_2)
                 #define _SOKOL_GL_HAS_BASEVERTEX (1)
@@ -9420,10 +9427,12 @@ _SOKOL_PRIVATE GLenum _sg_gl_blend_factor(sg_blend_factor f) {
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return GL_ONE_MINUS_CONSTANT_COLOR;
         case SG_BLENDFACTOR_BLEND_ALPHA:            return GL_CONSTANT_ALPHA;
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return GL_ONE_MINUS_CONSTANT_ALPHA;
+        #if defined(_SOKOL_GL_HAS_DUALSOURCEBLENDING)
         case SG_BLENDFACTOR_SRC1_COLOR:             return GL_SRC1_COLOR;
         case SG_BLENDFACTOR_ONE_MINUS_SRC1_COLOR:   return GL_ONE_MINUS_SRC1_COLOR;
         case SG_BLENDFACTOR_SRC1_ALPHA:             return GL_SRC1_ALPHA;
         case SG_BLENDFACTOR_ONE_MINUS_SRC1_ALPHA:   return GL_ONE_MINUS_SRC1_ALPHA;
+        #endif
         default: SOKOL_UNREACHABLE; return 0;
     }
 }
