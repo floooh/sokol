@@ -2226,6 +2226,7 @@ typedef struct sg_features {
     bool separate_buffer_types;         // cannot use the same buffer for vertex and indices (only WebGL2)
     bool draw_base_vertex;              // draw with (base vertex > 0) && (base_instance == 0) supported
     bool draw_base_instance;            // draw with (base instance > 0) supported
+    bool dual_source_blending;          // dual-source-blending supported (not on GLES3)
     bool gl_texture_views;              // supports 'proper' texture views (GL 4.3+)
 } sg_features;
 
@@ -4633,6 +4634,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_ATTR_SEMANTICS, "D3D11 missing vertex attribute semantics in shader") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_SHADER_READONLY_STORAGEBUFFERS, "sg_pipeline_desc.shader: only readonly storage buffer bindings allowed in render pipelines") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_BLENDOP_MINMAX_REQUIRES_BLENDFACTOR_ONE, "SG_BLENDOP_MIN/MAX requires all blend factors to be SG_BLENDFACTOR_ONE") \
+    _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_DUAL_SOURCE_BLENDING_NOT_SUPPORTED, "dual source blending not supported (sg_features.dual_source_blending)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_CANARY, "sg_view_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE, "sg_view_desc: only one view type can be active") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_ANY_VIEWTYPE, "sg_view_desc: exactly one view type must be active") \
@@ -8068,6 +8070,18 @@ _SOKOL_PRIVATE bool _sg_attachments_alive(const _sg_attachments_ptrs_t* atts_ptr
     return true;
 }
 
+_SOKOL_PRIVATE bool _sg_is_dualsource_blendfactor(sg_blend_factor f) {
+    switch (f) {
+        case SG_BLENDFACTOR_SRC1_COLOR:
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_COLOR:
+        case SG_BLENDFACTOR_SRC1_ALPHA:
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_ALPHA:
+            return true;
+        default:
+            return false;
+    }
+}
+
 _SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_buffer_desc* desc) {
     cmn->size = (int)desc->size;
     cmn->append_pos = 0;
@@ -9959,6 +9973,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
     #endif
     _sg.features.draw_base_vertex = version >= 320;
     _sg.features.draw_base_instance = version >= 420;
+    _sg.features.dual_source_blending = version >= 330;
 
     // scan extensions
     bool has_s3tc = false;  // BC1..BC3
@@ -10047,6 +10062,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     #endif
     _sg.features.draw_base_vertex = version >= 320;
     _sg.features.draw_base_instance = false;
+    _sg.features.dual_source_blending = false;
 
     bool has_s3tc = false;  // BC1..BC3
     bool has_rgtc = false;  // BC4 and BC5
@@ -13050,6 +13066,7 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.features.msaa_texture_bindings = true;
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
+    _sg.features.dual_source_blending = true;
 
     _sg.limits.max_image_size_2d = 16 * 1024;
     _sg.limits.max_image_size_cube = 16 * 1024;
@@ -15013,6 +15030,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.msaa_texture_bindings = true;
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
+    _sg.features.dual_source_blending = true;
 
     _sg.features.image_clamp_to_border = false;
     #if (MAC_OS_X_VERSION_MAX_ALLOWED >= 120000) || (__IPHONE_OS_VERSION_MAX_ALLOWED >= 140000)
@@ -17030,6 +17048,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.msaa_texture_bindings = true;
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
+    _sg.features.dual_source_lending = true;
 
     wgpuDeviceGetLimits(_sg.wgpu.dev, &_sg.wgpu.limits);
 
@@ -20414,6 +20433,7 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     _sg.features.msaa_texture_bindings = true;
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
+    _sg.features.dual_source_blending = false;  // FIXME!
 
     SOKOL_ASSERT(_sg.vk.phys_dev);
     _sg.vk.descriptor_buffer_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT;
@@ -22947,6 +22967,14 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
             }
             if ((bs->op_alpha == SG_BLENDOP_MIN) || (bs->op_alpha == SG_BLENDOP_MAX)) {
                 _SG_VALIDATE((bs->src_factor_alpha == SG_BLENDFACTOR_ONE) && (bs->dst_factor_alpha == SG_BLENDFACTOR_ONE), VALIDATE_PIPELINEDESC_BLENDOP_MINMAX_REQUIRES_BLENDFACTOR_ONE);
+            }
+            const bool is_dualsource_blendmode =
+                _sg_is_dualsource_blendfactor(bs->src_factor_rgb) ||
+                _sg_is_dualsource_blendfactor(bs->dst_factor_rgb) ||
+                _sg_is_dualsource_blendfactor(bs->src_factor_alpha) ||
+                _sg_is_dualsource_blendfactor(bs->dst_factor_alpha);
+            if (is_dualsource_blendmode) {
+                _SG_VALIDATE(_sg.features.dual_source_blending, VALIDATE_PIPELINEDESC_DUAL_SOURCE_BLENDING_NOT_SUPPORTED);
             }
         }
         return _sg_validate_end();
