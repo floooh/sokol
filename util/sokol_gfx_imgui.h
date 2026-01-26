@@ -1470,6 +1470,10 @@ _SOKOL_PRIVATE const char* _sgimgui_blendfactor_string(sg_blend_factor f) {
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return "SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR";
         case SG_BLENDFACTOR_BLEND_ALPHA:            return "SG_BLENDFACTOR_BLEND_ALPHA";
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return "SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA";
+        case SG_BLENDFACTOR_SRC1_COLOR:             return "SG_BLENDFACTOR_SRC1_COLOR";
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_COLOR:   return "SG_BLENDFACTOR_ONE_MINUS_SRC1_COLOR";
+        case SG_BLENDFACTOR_SRC1_ALPHA:             return "SG_BLENDFACTOR_SRC1_ALPHA";
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_ALPHA:   return "SG_BLENDFACTOR_ONE_MINUS_SRC1_ALPHA";
         default:                                    return "???";
     }
 }
@@ -4467,6 +4471,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
     _sgimgui_igtext("    separate_buffer_types: %s", _sgimgui_bool_string(f.separate_buffer_types));
     _sgimgui_igtext("    draw_base_vertex: %s", _sgimgui_bool_string(f.draw_base_vertex));
     _sgimgui_igtext("    draw_base_instance: %s", _sgimgui_bool_string(f.draw_base_instance));
+    _sgimgui_igtext("    dual_source_blending: %s", _sgimgui_bool_string(f.dual_source_blending));
     _sgimgui_igtext("    gl_texture_views: %s", _sgimgui_bool_string(f.gl_texture_views));
     sg_limits l = sg_query_limits();
     _sgimgui_igtext("\nLimits:\n");
