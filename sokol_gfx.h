@@ -22977,12 +22977,12 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
             if ((bs->op_alpha == SG_BLENDOP_MIN) || (bs->op_alpha == SG_BLENDOP_MAX)) {
                 _SG_VALIDATE((bs->src_factor_alpha == SG_BLENDFACTOR_ONE) && (bs->dst_factor_alpha == SG_BLENDFACTOR_ONE), VALIDATE_PIPELINEDESC_BLENDOP_MINMAX_REQUIRES_BLENDFACTOR_ONE);
             }
-            const bool is_dualsource_blendmode =
+            const bool needs_dualsource_blending =
                 _sg_is_dualsource_blendfactor(bs->src_factor_rgb) ||
                 _sg_is_dualsource_blendfactor(bs->dst_factor_rgb) ||
                 _sg_is_dualsource_blendfactor(bs->src_factor_alpha) ||
                 _sg_is_dualsource_blendfactor(bs->dst_factor_alpha);
-            if (is_dualsource_blendmode) {
+            if (needs_dualsource_blending) {
                 _SG_VALIDATE(_sg.features.dual_source_blending, VALIDATE_PIPELINEDESC_DUAL_SOURCE_BLENDING_NOT_SUPPORTED);
             }
         }
