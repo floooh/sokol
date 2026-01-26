@@ -1,5 +1,30 @@
 ## Updates
 
+### 26-Jan-2026
+
+- sokol_gfx.h: added support for dual-source-blending behind a new
+  feature flag `sg_query_features().dual_source_blending`:
+  - GL: available since 3.3
+  - GLES3/WebGL2: generally not available
+  - D3D11/Metal: generally available
+  - WebGPU: dynamic availability via `WGPUFeatureName_DualSourceBlending`
+  - experimental Vulkan backend: currently required (initialization will
+    fail when the `dualSrcBlend` feature is not available)
+
+  Trying to use dual-source blend-factors when `sg_features.dual_source_blending`
+  is false will result in a validation layer error in debug mode and 'undefined
+  behaviour' in release mode.
+
+  Note that currently there is no sokol-sample which tests/demonstrates
+  dual-source-blending. The plan here is to replace the `blend-sapp` and
+  `blend-op-sapp` samples with a new sample which has a Dear ImGui UI to control
+  all blending features.
+
+  Many thanks to @Tremus for the original PR to kick things off!
+
+  Original PR: https://github.com/floooh/sokol/pull/1423
+  Final PR (making the feature dynamic): https://github.com/floooh/sokol/pull/1426
+
 ### 24-Jan-2026
 
 - sokol_app.h/sokol_gfx.h vk: object debug labels are now working in the experimental

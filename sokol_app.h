@@ -4122,7 +4122,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_request_device_cb(WGPURequestDeviceStatus status,
 _SOKOL_PRIVATE void _sapp_wgpu_create_device_and_swapchain(void) {
     SOKOL_ASSERT(_sapp.wgpu.adapter);
     size_t cur_feature_index = 1;
-    #define _SAPP_WGPU_MAX_REQUESTED_FEATURES (8)
+    #define _SAPP_WGPU_MAX_REQUESTED_FEATURES (16)
     WGPUFeatureName requiredFeatures[_SAPP_WGPU_MAX_REQUESTED_FEATURES] = {
         WGPUFeatureName_Depth32FloatStencil8,
     };
@@ -4142,6 +4142,10 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_device_and_swapchain(void) {
     if (wgpuAdapterHasFeature(_sapp.wgpu.adapter, WGPUFeatureName_Float32Filterable)) {
         SOKOL_ASSERT(cur_feature_index < _SAPP_WGPU_MAX_REQUESTED_FEATURES);
         requiredFeatures[cur_feature_index++] = WGPUFeatureName_Float32Filterable;
+    }
+    if (wgpuAdapterHasFeature(_sapp.wgpu.adapter, WGPUFeatureName_DualSourceBlending)) {
+        SOKOL_ASSERT(cur_feature_index < _SAPP_WGPU_MAX_REQUESTED_FEATURES);
+        requiredFeatures[cur_feature_index++] = WGPUFeatureName_DualSourceBlending;
     }
     #undef _SAPP_WGPU_MAX_REQUESTED_FEATURES
 
@@ -4515,6 +4519,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
     required.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     required.pNext = &vk13_features;
     required.features.samplerAnisotropy = VK_TRUE;
+    required.features.dualSrcBlend = VK_TRUE;
     if (supports.features.textureCompressionBC) {
         required.features.textureCompressionBC = VK_TRUE;
     }

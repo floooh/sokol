@@ -2226,6 +2226,7 @@ typedef struct sg_features {
     bool separate_buffer_types;         // cannot use the same buffer for vertex and indices (only WebGL2)
     bool draw_base_vertex;              // draw with (base vertex > 0) && (base_instance == 0) supported
     bool draw_base_instance;            // draw with (base instance > 0) supported
+    bool dual_source_blending;          // dual-source-blending supported
     bool gl_texture_views;              // supports 'proper' texture views (GL 4.3+)
 } sg_features;
 
@@ -2726,6 +2727,10 @@ typedef enum sg_blend_factor {
     SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR,
     SG_BLENDFACTOR_BLEND_ALPHA,
     SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA,
+    SG_BLENDFACTOR_SRC1_COLOR,
+    SG_BLENDFACTOR_ONE_MINUS_SRC1_COLOR,
+    SG_BLENDFACTOR_SRC1_ALPHA,
+    SG_BLENDFACTOR_ONE_MINUS_SRC1_ALPHA,
     _SG_BLENDFACTOR_NUM,
     _SG_BLENDFACTOR_FORCE_U32 = 0x7FFFFFFF
 } sg_blend_factor;
@@ -4629,6 +4634,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_ATTR_SEMANTICS, "D3D11 missing vertex attribute semantics in shader") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_SHADER_READONLY_STORAGEBUFFERS, "sg_pipeline_desc.shader: only readonly storage buffer bindings allowed in render pipelines") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_BLENDOP_MINMAX_REQUIRES_BLENDFACTOR_ONE, "SG_BLENDOP_MIN/MAX requires all blend factors to be SG_BLENDFACTOR_ONE") \
+    _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_DUAL_SOURCE_BLENDING_NOT_SUPPORTED, "dual source blending not supported (sg_features.dual_source_blending)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_CANARY, "sg_view_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE, "sg_view_desc: only one view type can be active") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_ANY_VIEWTYPE, "sg_view_desc: exactly one view type must be active") \
@@ -5624,6 +5630,9 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #define _SOKOL_GL_HAS_TEXSTORAGE (1)
             #define _SOKOL_GL_HAS_BASEINSTANCE (1)
         #endif
+        #if defined(GL_VERSION_3_3) || defined(_SOKOL_USE_WIN32_GL_LOADER)
+            #define _SOKOL_GL_HAS_DUALSOURCEBLENDING (1)
+        #endif
         #if defined(GL_VERSION_3_2) || defined(_SOKOL_USE_WIN32_GL_LOADER)
             #define _SOKOL_GL_HAS_BASEVERTEX (1)
         #endif
@@ -5631,6 +5640,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
             #define _SOKOL_GL_HAS_COLORMASKI (1)
             #define _SOKOL_GL_HAS_BASEVERTEX (1)
+            #define _SOKOL_GL_HAS_DUALSOURCEBLENDING (1)
         #else
             #define _SOKOL_GL_HAS_TEXSTORAGE (1)
         #endif
@@ -5652,6 +5662,9 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #if defined(GL_VERSION_4_2)
                 #define _SOKOL_GL_HAS_TEXSTORAGE (1)
                 #define _SOKOL_GL_HAS_BASEINSTANCE (1)
+            #endif
+            #if defined(GL_VERSION_3_3)
+                #define _SOKOL_GL_HAS_DUALSOURCEBLENDING (1)
             #endif
             #if defined(GL_VERSION_3_2)
                 #define _SOKOL_GL_HAS_BASEVERTEX (1)
@@ -5771,6 +5784,10 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_ONE_MINUS_CONSTANT_ALPHA 0x8004
         #define GL_NONE 0
         #define GL_SRC_COLOR 0x0300
+        #define GL_SRC1_ALPHA 0x8589
+        #define GL_SRC1_COLOR 0x88F9
+        #define GL_ONE_MINUS_SRC1_ALPHA 0x88FB
+        #define GL_ONE_MINUS_SRC1_COLOR 0x88FA
         #define GL_BYTE 0x1400
         #define GL_TEXTURE_CUBE_MAP_NEGATIVE_Z 0x851A
         #define GL_LINE_STRIP 0x0003
@@ -8060,6 +8077,18 @@ _SOKOL_PRIVATE bool _sg_attachments_alive(const _sg_attachments_ptrs_t* atts_ptr
     return true;
 }
 
+_SOKOL_PRIVATE bool _sg_is_dualsource_blendfactor(sg_blend_factor f) {
+    switch (f) {
+        case SG_BLENDFACTOR_SRC1_COLOR:
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_COLOR:
+        case SG_BLENDFACTOR_SRC1_ALPHA:
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_ALPHA:
+            return true;
+        default:
+            return false;
+    }
+}
+
 _SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_buffer_desc* desc) {
     cmn->size = (int)desc->size;
     cmn->append_pos = 0;
@@ -9398,6 +9427,12 @@ _SOKOL_PRIVATE GLenum _sg_gl_blend_factor(sg_blend_factor f) {
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return GL_ONE_MINUS_CONSTANT_COLOR;
         case SG_BLENDFACTOR_BLEND_ALPHA:            return GL_CONSTANT_ALPHA;
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return GL_ONE_MINUS_CONSTANT_ALPHA;
+        #if defined(_SOKOL_GL_HAS_DUALSOURCEBLENDING)
+        case SG_BLENDFACTOR_SRC1_COLOR:             return GL_SRC1_COLOR;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_COLOR:   return GL_ONE_MINUS_SRC1_COLOR;
+        case SG_BLENDFACTOR_SRC1_ALPHA:             return GL_SRC1_ALPHA;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_ALPHA:   return GL_ONE_MINUS_SRC1_ALPHA;
+        #endif
         default: SOKOL_UNREACHABLE; return 0;
     }
 }
@@ -9947,6 +9982,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
     #endif
     _sg.features.draw_base_vertex = version >= 320;
     _sg.features.draw_base_instance = version >= 420;
+    _sg.features.dual_source_blending = version >= 330;
 
     // scan extensions
     bool has_s3tc = false;  // BC1..BC3
@@ -10035,6 +10071,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     #endif
     _sg.features.draw_base_vertex = version >= 320;
     _sg.features.draw_base_instance = false;
+    _sg.features.dual_source_blending = false;
 
     bool has_s3tc = false;  // BC1..BC3
     bool has_rgtc = false;  // BC4 and BC5
@@ -12978,6 +13015,10 @@ _SOKOL_PRIVATE D3D11_BLEND _sg_d3d11_blend_factor(sg_blend_factor f) {
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return D3D11_BLEND_INV_BLEND_FACTOR;
         case SG_BLENDFACTOR_BLEND_ALPHA:            return D3D11_BLEND_BLEND_FACTOR;
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return D3D11_BLEND_INV_BLEND_FACTOR;
+        case SG_BLENDFACTOR_SRC1_COLOR:             return D3D11_BLEND_SRC1_COLOR;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_COLOR:   return D3D11_BLEND_INV_SRC1_COLOR;
+        case SG_BLENDFACTOR_SRC1_ALPHA:             return D3D11_BLEND_SRC1_ALPHA;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_ALPHA:   return D3D11_BLEND_INV_SRC1_ALPHA;
         default: SOKOL_UNREACHABLE; return (D3D11_BLEND) 0;
     }
 }
@@ -13034,6 +13075,7 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.features.msaa_texture_bindings = true;
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
+    _sg.features.dual_source_blending = true;
 
     _sg.limits.max_image_size_2d = 16 * 1024;
     _sg.limits.max_image_size_cube = 16 * 1024;
@@ -14709,6 +14751,10 @@ _SOKOL_PRIVATE MTLBlendFactor _sg_mtl_blend_factor(sg_blend_factor f) {
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return MTLBlendFactorOneMinusBlendColor;
         case SG_BLENDFACTOR_BLEND_ALPHA:            return MTLBlendFactorBlendAlpha;
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return MTLBlendFactorOneMinusBlendAlpha;
+        case SG_BLENDFACTOR_SRC1_COLOR:             return MTLBlendFactorSource1Color;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_COLOR:   return MTLBlendFactorOneMinusSource1Color;
+        case SG_BLENDFACTOR_SRC1_ALPHA:             return MTLBlendFactorSource1Alpha;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_ALPHA:   return MTLBlendFactorOneMinusSource1Alpha;
         default: SOKOL_UNREACHABLE; return (MTLBlendFactor)0;
     }
 }
@@ -14993,6 +15039,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.msaa_texture_bindings = true;
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
+    _sg.features.dual_source_blending = true;
 
     _sg.features.image_clamp_to_border = false;
     #if (MAC_OS_X_VERSION_MAX_ALLOWED >= 120000) || (__IPHONE_OS_VERSION_MAX_ALLOWED >= 140000)
@@ -16964,6 +17011,10 @@ _SOKOL_PRIVATE WGPUBlendFactor _sg_wgpu_blendfactor(sg_blend_factor f) {
         // FIXME: separate blend alpha value not supported?
         case SG_BLENDFACTOR_BLEND_ALPHA:            return WGPUBlendFactor_Constant;
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return WGPUBlendFactor_OneMinusConstant;
+        case SG_BLENDFACTOR_SRC1_COLOR:             return WGPUBlendFactor_Src1 ;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_COLOR:   return WGPUBlendFactor_OneMinusSrc1;
+        case SG_BLENDFACTOR_SRC1_ALPHA:             return WGPUBlendFactor_Src1Alpha;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_ALPHA:   return WGPUBlendFactor_OneMinusSrc1Alpha;
         default:
             SOKOL_UNREACHABLE;
             return WGPUBlendFactor_Force32;
@@ -17006,6 +17057,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.msaa_texture_bindings = true;
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
+    _sg.features.dual_source_blending = wgpuDeviceHasFeature(_sg.wgpu.dev, WGPUFeatureName_DualSourceBlending);
 
     wgpuDeviceGetLimits(_sg.wgpu.dev, &_sg.wgpu.limits);
 
@@ -20235,6 +20287,10 @@ _SOKOL_PRIVATE VkBlendFactor _sg_vk_blend_factor(sg_blend_factor f) {
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR;
         case SG_BLENDFACTOR_BLEND_ALPHA:            return VK_BLEND_FACTOR_CONSTANT_ALPHA;
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA;
+        case SG_BLENDFACTOR_SRC1_COLOR:             return VK_BLEND_FACTOR_SRC1_COLOR ;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_COLOR:   return VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR;
+        case SG_BLENDFACTOR_SRC1_ALPHA:             return VK_BLEND_FACTOR_SRC1_ALPHA;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_ALPHA:   return VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA;
         default:
             SOKOL_UNREACHABLE;
             return VK_BLEND_FACTOR_ONE;
@@ -20386,6 +20442,7 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     _sg.features.msaa_texture_bindings = true;
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
+    _sg.features.dual_source_blending = true;
 
     SOKOL_ASSERT(_sg.vk.phys_dev);
     _sg.vk.descriptor_buffer_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT;
@@ -22919,6 +22976,14 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
             }
             if ((bs->op_alpha == SG_BLENDOP_MIN) || (bs->op_alpha == SG_BLENDOP_MAX)) {
                 _SG_VALIDATE((bs->src_factor_alpha == SG_BLENDFACTOR_ONE) && (bs->dst_factor_alpha == SG_BLENDFACTOR_ONE), VALIDATE_PIPELINEDESC_BLENDOP_MINMAX_REQUIRES_BLENDFACTOR_ONE);
+            }
+            const bool needs_dualsource_blending =
+                _sg_is_dualsource_blendfactor(bs->src_factor_rgb) ||
+                _sg_is_dualsource_blendfactor(bs->dst_factor_rgb) ||
+                _sg_is_dualsource_blendfactor(bs->src_factor_alpha) ||
+                _sg_is_dualsource_blendfactor(bs->dst_factor_alpha);
+            if (needs_dualsource_blending) {
+                _SG_VALIDATE(_sg.features.dual_source_blending, VALIDATE_PIPELINEDESC_DUAL_SOURCE_BLENDING_NOT_SUPPORTED);
             }
         }
         return _sg_validate_end();
