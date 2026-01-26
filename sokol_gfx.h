@@ -2726,6 +2726,10 @@ typedef enum sg_blend_factor {
     SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR,
     SG_BLENDFACTOR_BLEND_ALPHA,
     SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA,
+    SG_BLENDFACTOR_SRC1_COLOR,
+    SG_BLENDFACTOR_ONE_MINUS_SRC1_COLOR,
+    SG_BLENDFACTOR_SRC1_ALPHA,
+    SG_BLENDFACTOR_ONE_MINUS_SRC1_ALPHA,
     _SG_BLENDFACTOR_NUM,
     _SG_BLENDFACTOR_FORCE_U32 = 0x7FFFFFFF
 } sg_blend_factor;
@@ -5771,6 +5775,10 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_ONE_MINUS_CONSTANT_ALPHA 0x8004
         #define GL_NONE 0
         #define GL_SRC_COLOR 0x0300
+        #define GL_SRC1_ALPHA 0x8589
+        #define GL_SRC1_COLOR 0x88F9
+        #define GL_ONE_MINUS_SRC1_ALPHA 0x88FB
+        #define GL_ONE_MINUS_SRC1_COLOR 0x88FA
         #define GL_BYTE 0x1400
         #define GL_TEXTURE_CUBE_MAP_NEGATIVE_Z 0x851A
         #define GL_LINE_STRIP 0x0003
@@ -9398,6 +9406,10 @@ _SOKOL_PRIVATE GLenum _sg_gl_blend_factor(sg_blend_factor f) {
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return GL_ONE_MINUS_CONSTANT_COLOR;
         case SG_BLENDFACTOR_BLEND_ALPHA:            return GL_CONSTANT_ALPHA;
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return GL_ONE_MINUS_CONSTANT_ALPHA;
+        case SG_BLENDFACTOR_SRC1_COLOR:             return GL_SRC1_COLOR;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_COLOR:   return GL_ONE_MINUS_SRC1_COLOR;
+        case SG_BLENDFACTOR_SRC1_ALPHA:             return GL_SRC1_ALPHA;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_ALPHA:   return GL_ONE_MINUS_SRC1_ALPHA;
         default: SOKOL_UNREACHABLE; return 0;
     }
 }
@@ -12978,6 +12990,10 @@ _SOKOL_PRIVATE D3D11_BLEND _sg_d3d11_blend_factor(sg_blend_factor f) {
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return D3D11_BLEND_INV_BLEND_FACTOR;
         case SG_BLENDFACTOR_BLEND_ALPHA:            return D3D11_BLEND_BLEND_FACTOR;
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return D3D11_BLEND_INV_BLEND_FACTOR;
+        case SG_BLENDFACTOR_SRC1_COLOR:             return D3D11_BLEND_SRC1_COLOR;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_COLOR:   return D3D11_BLEND_INV_SRC1_COLOR;
+        case SG_BLENDFACTOR_SRC1_ALPHA:             return D3D11_BLEND_SRC1_ALPHA;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_ALPHA:   return D3D11_BLEND_INV_SRC1_ALPHA;
         default: SOKOL_UNREACHABLE; return (D3D11_BLEND) 0;
     }
 }
@@ -14709,6 +14725,10 @@ _SOKOL_PRIVATE MTLBlendFactor _sg_mtl_blend_factor(sg_blend_factor f) {
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return MTLBlendFactorOneMinusBlendColor;
         case SG_BLENDFACTOR_BLEND_ALPHA:            return MTLBlendFactorBlendAlpha;
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return MTLBlendFactorOneMinusBlendAlpha;
+        case SG_BLENDFACTOR_SRC1_COLOR:             return MTLBlendFactorSource1Color;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_COLOR:   return MTLBlendFactorOneMinusSource1Color;
+        case SG_BLENDFACTOR_SRC1_ALPHA:             return MTLBlendFactorSource1Alpha;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_ALPHA:   return MTLBlendFactorOneMinusSource1Alpha;
         default: SOKOL_UNREACHABLE; return (MTLBlendFactor)0;
     }
 }
@@ -16964,6 +16984,10 @@ _SOKOL_PRIVATE WGPUBlendFactor _sg_wgpu_blendfactor(sg_blend_factor f) {
         // FIXME: separate blend alpha value not supported?
         case SG_BLENDFACTOR_BLEND_ALPHA:            return WGPUBlendFactor_Constant;
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return WGPUBlendFactor_OneMinusConstant;
+        case SG_BLENDFACTOR_SRC1_COLOR:             return WGPUBlendFactor_Src1 ;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_COLOR:   return WGPUBlendFactor_OneMinusSrc1;
+        case SG_BLENDFACTOR_SRC1_ALPHA:             return WGPUBlendFactor_Src1Alpha;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_ALPHA:   return WGPUBlendFactor_OneMinusSrc1Alpha;
         default:
             SOKOL_UNREACHABLE;
             return WGPUBlendFactor_Force32;
@@ -20235,6 +20259,10 @@ _SOKOL_PRIVATE VkBlendFactor _sg_vk_blend_factor(sg_blend_factor f) {
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR;
         case SG_BLENDFACTOR_BLEND_ALPHA:            return VK_BLEND_FACTOR_CONSTANT_ALPHA;
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA;
+        case SG_BLENDFACTOR_SRC1_COLOR:             return VK_BLEND_FACTOR_SRC1_COLOR ;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_COLOR:   return VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR;
+        case SG_BLENDFACTOR_SRC1_ALPHA:             return VK_BLEND_FACTOR_SRC1_ALPHA;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC1_ALPHA:   return VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA;
         default:
             SOKOL_UNREACHABLE;
             return VK_BLEND_FACTOR_ONE;
