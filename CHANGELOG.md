@@ -8,6 +8,8 @@
   - GLES3/WebGL2: generally not available
   - D3D11/Metal: generally available
   - WebGPU: dynamic availability via `WGPUFeatureName_DualSourceBlending`
+  - experimental Vulkan backend: currently required (initialization will
+    fail when the `dualSrcBlend` feature is not available)
 
   Trying to use dual-source blend-factors when `sg_features.dual_source_blending`
   is false will result in a validation layer error in debug mode and 'undefined
