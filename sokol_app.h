@@ -4979,7 +4979,9 @@ _SOKOL_PRIVATE void _sapp_vk_present(void) {
     _SAPP_STRUCT(VkPresentInfoKHR, present_info);
     present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     present_info.waitSemaphoreCount = 1;
-    present_info.pWaitSemaphores = &_sapp.vk.sync[_sapp.vk.sync_slot].render_finished_sem;
+    // NOTE: using the current swapchain image index here instead of `sync_slot` is *NOT* a bug! The render_finished_semaphore *must*
+    // be associated with the current swapchain image in case the swapchain implementation doesn't return swapchain images in order
+    present_info.pWaitSemaphores = &_sapp.vk.sync[_sapp.vk.cur_swapchain_image_index].render_finished_sem;
     present_info.swapchainCount = 1;
     present_info.pSwapchains = &_sapp.vk.swapchain;
     present_info.pImageIndices = &_sapp.vk.cur_swapchain_image_index;
@@ -14019,7 +14021,9 @@ SOKOL_API_IMPL sapp_swapchain sapp_get_swapchain(void) {
         }
         res.vulkan.depth_stencil_image = (const void*) _sapp.vk.depth.img;
         res.vulkan.depth_stencil_view = (const void*) _sapp.vk.depth.view;
-        res.vulkan.render_finished_semaphore = _sapp.vk.sync[_sapp.vk.sync_slot].render_finished_sem;
+        // NOTE: using the current swapchain image index here is *NOT* a bug! The render_finished_semaphore *must*
+        // be associated with its swapchain image in case the swapchain implementation doesn't return swapchain images in order
+        res.vulkan.render_finished_semaphore = _sapp.vk.sync[img_idx].render_finished_sem;
         res.vulkan.present_complete_semaphore = _sapp.vk.sync[_sapp.vk.sync_slot].present_complete_sem;
     #endif
     #if defined(_SAPP_ANY_GL)
