@@ -4790,6 +4790,37 @@ _SOKOL_PRIVATE uint32_t _sapp_vk_swapchain_min_image_count(const VkSurfaceCapabi
     return min_image_count;
 }
 
+_SOKOL_PRIVATE void _sapp_vk_create_swapchain_image_view(uint32_t image_index) {
+    SOKOL_ASSERT(_sapp.vk.device);
+    SOKOL_ASSERT(image_index < _sapp.vk.num_swapchain_images);
+    SOKOL_ASSERT(_sapp.vk.swapchain_images[image_index]);
+    SOKOL_ASSERT(0 == _sapp.vk.swapchain_views[image_index]);
+
+    _SAPP_STRUCT(VkImageViewCreateInfo, view_create_info);
+    view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    view_create_info.format = _sapp.vk.surface_format.format;
+    view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    view_create_info.subresourceRange.levelCount = 1;
+    view_create_info.subresourceRange.layerCount = 1;
+    view_create_info.image = _sapp.vk.swapchain_images[image_index];
+    VkResult res = vkCreateImageView(_sapp.vk.device, &view_create_info, 0, &_sapp.vk.swapchain_views[image_index]);
+    if (res != VK_SUCCESS) {
+        _SAPP_PANIC(VULKAN_SWAPCHAIN_CREATE_IMAGE_VIEW_FAILED);
+    }
+    SOKOL_ASSERT(_sapp.vk.swapchain_views[image_index]);
+    _sapp_vk_set_object_label(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)_sapp.vk.swapchain_views[image_index], "swapchain_view");
+}
+
+_SOKOL_PRIVATE void _sapp_vk_destroy_swapchain_image_view(uint32_t image_index) {
+    SOKOL_ASSERT(_sapp.vk.device);
+    SOKOL_ASSERT(image_index < _sapp.vk.num_swapchain_images);
+    if (_sapp.vk.swapchain_views[image_index]) {
+        vkDestroyImageView(_sapp.vk.device, _sapp.vk.swapchain_views[image_index], 0);
+        _sapp.vk.swapchain_views[image_index] = 0;
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     SOKOL_ASSERT(_sapp.vk.physical_device);
     SOKOL_ASSERT(_sapp.vk.surface);
@@ -4803,7 +4834,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
         SOKOL_ASSERT(_sapp.vk.swapchain);
         SOKOL_ASSERT(_sapp.vk.num_swapchain_images > 0);
         SOKOL_ASSERT(_sapp.vk.swapchain_images[0]);
-        SOKOL_ASSERT(_sapp.vk.swapchain_views[0]);
+        // NOTE: swapchain_views are lazily created and may be 0 here
     }
 
     VkSwapchainKHR old_swapchain = _sapp.vk.swapchain;
@@ -4833,7 +4864,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     _SAPP_STRUCT(VkSwapchainCreateInfoKHR, create_info);
     create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     create_info.pNext = &spm_create_info;
-    create_info.flags = 0; // FIXME?
+    create_info.flags = VK_SWAPCHAIN_CREATE_DEFERRED_MEMORY_ALLOCATION_BIT_EXT;
     create_info.surface = _sapp.vk.surface;
     create_info.minImageCount = _sapp_vk_swapchain_min_image_count(&surf_caps);
     create_info.imageFormat = _sapp.vk.surface_format.format;
@@ -4858,9 +4889,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
         // NOTE: destroying the depth- and msaa-surfaces happens
         // down in the respective _sapp_vk_swapchain_create_surface() calls!
         for (uint32_t i = 0; i < _sapp.vk.num_swapchain_images; i++) {
-            SOKOL_ASSERT(_sapp.vk.swapchain_views[i]);
-            vkDestroyImageView(_sapp.vk.device, _sapp.vk.swapchain_views[i], 0);
-            _sapp.vk.swapchain_views[i] = 0;
+            _sapp_vk_destroy_swapchain_image_view(i);
         }
         vkDestroySwapchainKHR(_sapp.vk.device, old_swapchain, 0);
     }
@@ -4873,24 +4902,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     SOKOL_ASSERT(res == VK_SUCCESS);
     SOKOL_ASSERT(_sapp.vk.num_swapchain_images >= surf_caps.minImageCount);
 
-    _SAPP_STRUCT(VkImageViewCreateInfo, view_create_info);
-    view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    view_create_info.format = _sapp.vk.surface_format.format;
-    view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    view_create_info.subresourceRange.levelCount = 1;
-    view_create_info.subresourceRange.layerCount = 1;
-    for (uint32_t i = 0; i < _sapp.vk.num_swapchain_images; i++) {
-        SOKOL_ASSERT(_sapp.vk.swapchain_images[i]);
-        SOKOL_ASSERT(0 == _sapp.vk.swapchain_views[i]);
-        view_create_info.image = _sapp.vk.swapchain_images[i];
-        res = vkCreateImageView(_sapp.vk.device, &view_create_info, 0, &_sapp.vk.swapchain_views[i]);
-        if (res != VK_SUCCESS) {
-            _SAPP_PANIC(VULKAN_SWAPCHAIN_CREATE_IMAGE_VIEW_FAILED);
-        }
-        SOKOL_ASSERT(_sapp.vk.swapchain_views[i]);
-        _sapp_vk_set_object_label(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)_sapp.vk.swapchain_views[i], "swapchain_view");
-    }
+    // NOTE: image views are created deferred after vkAcquireNextImage!
 
     // create depth-stencil buffer
     _sapp_vk_swapchain_create_surface(&_sapp.vk.depth,
@@ -4933,11 +4945,8 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_swapchain(void) {
     }
     _sapp_vk_swapchain_destroy_surface(&_sapp.vk.depth);
     for (uint32_t i = 0; i < _sapp.vk.num_swapchain_images; i++) {
-        SOKOL_ASSERT(_sapp.vk.swapchain_views[i]);
-        vkDestroyImageView(_sapp.vk.device, _sapp.vk.swapchain_views[i], 0);
-        _sapp.vk.swapchain_views[i] = 0;
+        _sapp_vk_destroy_swapchain_image_view(i);
         _sapp.vk.swapchain_images[i] = 0;
-
     }
     vkDestroySwapchainKHR(_sapp.vk.device, _sapp.vk.swapchain, 0);
     _sapp.vk.swapchain = 0;
@@ -4995,6 +5004,12 @@ _SOKOL_PRIVATE void _sapp_vk_swapchain_next(void) {
         &_sapp.vk.cur_swapchain_image_index);
     if ((res != VK_NOT_READY) && (res != VK_SUBOPTIMAL_KHR) && (res != VK_SUCCESS) && (res != VK_TIMEOUT)) {
         _SAPP_WARN(VULKAN_ACQUIRE_NEXT_IMAGE_FAILED);
+    }
+
+    // if not happened yet, create image-view (this must be deferred to
+    // after vkAcquireNextImage because of VK_SWAPCHAIN_CREATE_DEFERRED_MEMORY_ALLOCATION_BIT_EXT)
+    if (0 == _sapp.vk.swapchain_views[_sapp.vk.cur_swapchain_image_index]) {
+        _sapp_vk_create_swapchain_image_view(_sapp.vk.cur_swapchain_image_index);
     }
 }
 
