@@ -4865,8 +4865,8 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     uint32_t fb_width = surf_caps.surfaceCapabilities.currentExtent.width;
     uint32_t fb_height = surf_caps.surfaceCapabilities.currentExtent.height;
     if (_sapp.vk.present_scaling_supported) {
-        fb_width = (uint32_t)_sapp_roundf_gzero(fb_width * _sapp.win32.dpi.content_scale);
-        fb_height = (uint32_t)_sapp_roundf_gzero(fb_height * _sapp.win32.dpi.content_scale);
+        fb_width = (uint32_t)_sapp_roundf_gzero(fb_width / _sapp.dpi_scale);
+        fb_height = (uint32_t)_sapp_roundf_gzero(fb_height / _sapp.dpi_scale);
     }
 
     // scaling-behaviour (only if supported)
