@@ -2798,6 +2798,7 @@ typedef struct {
     VkDevice device;
     VkQueue queue;
     VkSwapchainKHR swapchain;
+    VkPresentModeKHR present_mode;
     uint32_t num_swapchain_images;
     uint32_t cur_swapchain_image_index;
     VkImage swapchain_images[_SAPP_VK_MAX_SWAPCHAIN_IMAGES];
@@ -4815,11 +4816,23 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
 
     _sapp.vk.surface_format = _sapp_vk_pick_surface_format();
     // FIXME: pick better present-mode if supported
-    VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
+    _sapp.vk.present_mode = VK_PRESENT_MODE_FIFO_KHR;
+
+    // possible present modes we want to switch between dynamically
+    // (immediate is needed on Windows during window-move/resize)
+    VkPresentModeKHR present_modes[2] = {
+        _sapp.vk.present_mode,
+        VK_PRESENT_MODE_IMMEDIATE_KHR,
+    };
+    _SAPP_STRUCT(VkSwapchainPresentModesCreateInfoEXT, spm_create_info);
+    spm_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODES_CREATE_INFO_EXT;
+    spm_create_info.presentModeCount = 2;
+    spm_create_info.pPresentModes = present_modes;
 
     // FIXME: better imageExtent (scale vs no-scale!)
     _SAPP_STRUCT(VkSwapchainCreateInfoKHR, create_info);
     create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    create_info.pNext = &spm_create_info;
     create_info.flags = 0; // FIXME?
     create_info.surface = _sapp.vk.surface;
     create_info.minImageCount = _sapp_vk_swapchain_min_image_count(&surf_caps);
@@ -4832,7 +4845,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     create_info.preTransform = surf_caps.currentTransform;
     create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    create_info.presentMode = present_mode;
+    create_info.presentMode = _sapp.vk.present_mode;
     create_info.clipped = true;
     create_info.oldSwapchain = old_swapchain;
     res = vkCreateSwapchainKHR(_sapp.vk.device, &create_info, 0, &_sapp.vk.swapchain);
@@ -4985,10 +4998,18 @@ _SOKOL_PRIVATE void _sapp_vk_swapchain_next(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_vk_present(void) {
+_SOKOL_PRIVATE void _sapp_vk_present(bool present_immediate) {
     SOKOL_ASSERT(_sapp.vk.queue);
+
+    VkPresentModeKHR present_mode = present_immediate ? VK_PRESENT_MODE_IMMEDIATE_KHR : _sapp.vk.present_mode;
+    _SAPP_STRUCT(VkSwapchainPresentModeInfoEXT, scpm_info);
+    scpm_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODE_INFO_EXT;
+    scpm_info.swapchainCount = 1;
+    scpm_info.pPresentModes = &present_mode;
+
     _SAPP_STRUCT(VkPresentInfoKHR, present_info);
     present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    present_info.pNext = &scpm_info;
     present_info.waitSemaphoreCount = 1;
     // NOTE: using the current swapchain image index here instead of `sync_slot` is *NOT* a bug! The render_finished_semaphore *must*
     // be associated with the current swapchain image in case the swapchain implementation doesn't return swapchain images in order
@@ -5004,9 +5025,9 @@ _SOKOL_PRIVATE void _sapp_vk_present(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_vk_frame(void) {
+_SOKOL_PRIVATE void _sapp_vk_frame(bool present_immediate) {
     _sapp_frame();
-    _sapp_vk_present();
+    _sapp_vk_present(present_immediate);
     _sapp.vk.sync_slot = (_sapp.vk.sync_slot + 1) % _sapp.vk.num_swapchain_images;
 }
 
@@ -9184,7 +9205,8 @@ _SOKOL_PRIVATE void _sapp_win32_frame(bool from_winproc) {
     #if defined(SOKOL_WGPU)
         _sapp_wgpu_frame();
     #elif defined(SOKOL_VULKAN)
-        _sapp_vk_frame();
+        bool present_immediate = from_winproc;
+        _sapp_vk_frame(present_immediate);
     #else
         _sapp_frame();
     #endif
@@ -13391,7 +13413,7 @@ _SOKOL_PRIVATE void _sapp_linux_frame(void) {
     #if defined(SOKOL_WGPU)
         _sapp_wgpu_frame();
     #elif defined(SOKOL_VULKAN)
-        _sapp_vk_frame();
+        _sapp_vk_frame(false);
     #else
         _sapp_frame();
         #if defined(_SAPP_GLX)
