@@ -4764,6 +4764,20 @@ _SOKOL_PRIVATE void _sapp_vk_swapchain_create_surface(
     _sapp_vk_set_object_label(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)surf->view, view_debug_label);
 }
 
+_SOKOL_PRIVATE uint32_t _sapp_vk_swapchain_min_image_count(const VkSurfaceCapabilitiesKHR* surf_caps) {
+    // FIXME: figure out why at least 3 swapchain images are required to appease the validation layer
+    // (on the Linux Intel driver, present-mode-fifo has a surf_caps.minImageCount == 3, while
+    // on Windows surf_caps.minImageCount == 2, and using this directly causes validation layer
+    // errors about the present-complete semaphore (to reproduce simply change the '= 3' below to '= 2')
+    SOKOL_ASSERT(surf_caps);
+    const uint32_t required_image_count = 3;
+    uint32_t min_image_count = surf_caps->minImageCount;
+    if (min_image_count < required_image_count) {
+        min_image_count = required_image_count;
+    }
+    return min_image_count;
+}
+
 _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     SOKOL_ASSERT(_sapp.vk.physical_device);
     SOKOL_ASSERT(_sapp.vk.surface);
@@ -4797,7 +4811,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     create_info.flags = 0; // FIXME?
     create_info.surface = _sapp.vk.surface;
-    create_info.minImageCount = surf_caps.minImageCount;
+    create_info.minImageCount = _sapp_vk_swapchain_min_image_count(&surf_caps);
     create_info.imageFormat = _sapp.vk.surface_format.format;
     create_info.imageColorSpace = _sapp.vk.surface_format.colorSpace;
     create_info.imageExtent.width = width;
@@ -4965,6 +4979,8 @@ _SOKOL_PRIVATE void _sapp_vk_present(void) {
     _SAPP_STRUCT(VkPresentInfoKHR, present_info);
     present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     present_info.waitSemaphoreCount = 1;
+    // NOTE: using the current swapchain image index here instead of `sync_slot` is *NOT* a bug! The render_finished_semaphore *must*
+    // be associated with the current swapchain image in case the swapchain implementation doesn't return swapchain images in order
     present_info.pWaitSemaphores = &_sapp.vk.sync[_sapp.vk.cur_swapchain_image_index].render_finished_sem;
     present_info.swapchainCount = 1;
     present_info.pSwapchains = &_sapp.vk.swapchain;
@@ -14005,6 +14021,8 @@ SOKOL_API_IMPL sapp_swapchain sapp_get_swapchain(void) {
         }
         res.vulkan.depth_stencil_image = (const void*) _sapp.vk.depth.img;
         res.vulkan.depth_stencil_view = (const void*) _sapp.vk.depth.view;
+        // NOTE: using the current swapchain image index here is *NOT* a bug! The render_finished_semaphore *must*
+        // be associated with its swapchain image in case the swapchain implementation doesn't return swapchain images in order
         res.vulkan.render_finished_semaphore = _sapp.vk.sync[img_idx].render_finished_sem;
         res.vulkan.present_complete_semaphore = _sapp.vk.sync[_sapp.vk.sync_slot].present_complete_sem;
     #endif

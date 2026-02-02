@@ -1,5 +1,22 @@
 ## Updates
 
+### 01-Feb-2026
+
+- sokol_gfx.h vulkan: the frame-sync-related validation layer errors on Windows
+  have been fixed (at least on the configs I can currently test: RTX5070 and Intel
+  Meteor Lake GPU). Unfortunately that doesn't guarantee that all other configs
+  are validation-error-clean. There are still a couple of issues on Windows to
+  deal with (especially a very high input-to-display lag compared to the
+  D3D11/DXGI backend, and moving/resizing the application window is stuttery on
+  NVIDIA (this is caused by the render-during-window-move/resize code waiting
+  for vsync). The next step will be to port the swapchain code to  `VK_KHR_swpachain_maintenance1`
+  (which probably would have been a good idea right from the start).
+
+  Also please keep in mind that the Vulkan backend is still deep in
+  'highly experimental state'.
+
+  PR: https://github.com/floooh/sokol/pull/1430
+
 ### 26-Jan-2026
 
 - sokol_gfx.h: added support for dual-source-blending behind a new
