@@ -4836,18 +4836,31 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
         SOKOL_ASSERT(_sapp.vk.swapchain_images[0]);
         // NOTE: swapchain_views are lazily created and may be 0 here
     }
-
     VkSwapchainKHR old_swapchain = _sapp.vk.swapchain;
 
-    _SAPP_STRUCT(VkSurfaceCapabilitiesKHR, surf_caps);
-    VkResult res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(_sapp.vk.physical_device, _sapp.vk.surface, &surf_caps);
-    SOKOL_ASSERT(res == VK_SUCCESS);
-    const uint32_t width = surf_caps.currentExtent.width;
-    const uint32_t height = surf_caps.currentExtent.height;
-
-    _sapp.vk.surface_format = _sapp_vk_pick_surface_format();
     // FIXME: pick better present-mode if supported
     _sapp.vk.present_mode = VK_PRESENT_MODE_FIFO_KHR;
+
+    _SAPP_STRUCT(VkSurfacePresentModeKHR, surf_present_mode);
+    surf_present_mode.sType = VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_KHR;
+    surf_present_mode.presentMode = _sapp.vk.present_mode;
+    _SAPP_STRUCT(VkPhysicalDeviceSurfaceInfo2KHR, surf_info);
+    surf_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR;
+    surf_info.pNext = &surf_present_mode;
+    surf_info.surface = _sapp.vk.surface;
+
+    _SAPP_STRUCT(VkSurfacePresentScalingCapabilitiesKHR, surf_scaling_caps);
+    surf_scaling_caps.sType = VK_STRUCTURE_TYPE_SURFACE_PRESENT_SCALING_CAPABILITIES_KHR;
+    _SAPP_STRUCT(VkSurfaceCapabilities2KHR, surf_caps);
+    surf_caps.sType = VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR;
+    surf_caps.pNext = &surf_scaling_caps;
+    VkResult res = vkGetPhysicalDeviceSurfaceCapabilities2KHR(_sapp.vk.physical_device, &surf_info, &surf_caps);
+    SOKOL_ASSERT(res == VK_SUCCESS);
+
+    const uint32_t width = surf_caps.surfaceCapabilities.currentExtent.width;
+    const uint32_t height = surf_caps.surfaceCapabilities.currentExtent.height;
+
+    _sapp.vk.surface_format = _sapp_vk_pick_surface_format();
 
     // possible present modes we want to switch between dynamically
     // (immediate is needed on Windows during window-move/resize)
@@ -4866,7 +4879,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     create_info.pNext = &spm_create_info;
     create_info.flags = VK_SWAPCHAIN_CREATE_DEFERRED_MEMORY_ALLOCATION_BIT_EXT;
     create_info.surface = _sapp.vk.surface;
-    create_info.minImageCount = _sapp_vk_swapchain_min_image_count(&surf_caps);
+    create_info.minImageCount = _sapp_vk_swapchain_min_image_count(&surf_caps.surfaceCapabilities);
     create_info.imageFormat = _sapp.vk.surface_format.format;
     create_info.imageColorSpace = _sapp.vk.surface_format.colorSpace;
     create_info.imageExtent.width = width;
@@ -4874,7 +4887,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     create_info.imageArrayLayers = 1;
     create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    create_info.preTransform = surf_caps.currentTransform;
+    create_info.preTransform = surf_caps.surfaceCapabilities.currentTransform;
     create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     create_info.presentMode = _sapp.vk.present_mode;
     create_info.clipped = true;
@@ -4900,7 +4913,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
         &_sapp.vk.num_swapchain_images,
         _sapp.vk.swapchain_images);
     SOKOL_ASSERT(res == VK_SUCCESS);
-    SOKOL_ASSERT(_sapp.vk.num_swapchain_images >= surf_caps.minImageCount);
+    SOKOL_ASSERT(_sapp.vk.num_swapchain_images >= surf_caps.surfaceCapabilities.minImageCount);
 
     // NOTE: image views are created deferred after vkAcquireNextImage!
 
@@ -4932,8 +4945,8 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
 
     // this is the only place in the Vulkan code path which updates
     // _sapp.framebuffer_width/height
-    _sapp.framebuffer_width = (int)surf_caps.currentExtent.width;
-    _sapp.framebuffer_height = (int)surf_caps.currentExtent.height;
+    _sapp.framebuffer_width = (int)surf_caps.surfaceCapabilities.currentExtent.width;
+    _sapp.framebuffer_height = (int)surf_caps.surfaceCapabilities.currentExtent.height;
 }
 
 _SOKOL_PRIVATE void _sapp_vk_destroy_swapchain(void) {
