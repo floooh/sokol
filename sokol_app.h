@@ -4510,9 +4510,14 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
     xds_features.pNext = &descriptor_buffer_features;
     xds_features.extendedDynamicState = VK_TRUE;
 
+    _SAPP_STRUCT(VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT, scm1_features);
+    scm1_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT;
+    scm1_features.pNext = &xds_features;
+    scm1_features.swapchainMaintenance1 = VK_TRUE;
+
     _SAPP_STRUCT(VkPhysicalDeviceVulkan12Features, vk12_features);
     vk12_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
-    vk12_features.pNext = &xds_features;
+    vk12_features.pNext = &scm1_features;
     vk12_features.bufferDeviceAddress = VK_TRUE;
 
     _SAPP_STRUCT(VkPhysicalDeviceVulkan13Features, vk13_features);
