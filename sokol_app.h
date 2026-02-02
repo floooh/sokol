@@ -4345,6 +4345,9 @@ _SOKOL_PRIVATE void _sapp_vk_create_instance(void) {
 
     _SAPP_VK_ZERO_COUNT_AND_ARRAY(32, const char*, ext_count, ext_names);
     ext_names[ext_count++] = VK_KHR_SURFACE_EXTENSION_NAME;
+    ext_names[ext_count++] = VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME;
+    // NOTE: VK_KHR_surface_maintenance1 not yet supported on Linux+Intel
+    ext_names[ext_count++] = VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME;
     #if defined(SOKOL_DEBUG)
         ext_names[ext_count++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
     #endif
@@ -4380,6 +4383,8 @@ _SOKOL_PRIVATE uint32_t _sapp_vk_required_device_extensions(const char** out_nam
     SOKOL_ASSERT(out_names && (max_count > 0));
     uint32_t count = 0;
     out_names[count++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+    // NOTE: VK_KHR_swapchain_maintenance not yet supported on Linux+Intel
+    out_names[count++] = VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
     out_names[count++] = VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME;
     SOKOL_ASSERT(count <= max_count); _SOKOL_UNUSED(max_count);
     return count;
@@ -4432,9 +4437,9 @@ _SOKOL_PRIVATE void _sapp_vk_pick_physical_device(void) {
     _SAPP_VK_ZERO_COUNT_AND_ARRAY(32, const char*, ext_count, ext_names);
     ext_count = _sapp_vk_required_device_extensions(ext_names, 32);
 
-    VkPhysicalDevice pdev = 0;
+    VkPhysicalDevice suitable_pdev = 0;
     for (uint32_t pdev_idx = 0; pdev_idx < physical_device_count; pdev_idx++) {
-        pdev = physical_devices[pdev_idx];
+        const VkPhysicalDevice pdev = physical_devices[pdev_idx];
         _SAPP_STRUCT(VkPhysicalDeviceProperties, dev_props);
         vkGetPhysicalDeviceProperties(pdev, &dev_props);
         if (dev_props.apiVersion < VK_API_VERSION_1_3) {
@@ -4468,12 +4473,13 @@ _SOKOL_PRIVATE void _sapp_vk_pick_physical_device(void) {
         }
 
         // if we arrive here, found a suitable device
+        suitable_pdev = pdev;
         break;
     }
-    if (0 == pdev) {
+    if (0 == suitable_pdev) {
         _SAPP_PANIC(VULKAN_NO_SUITABLE_PHYSICAL_DEVICE_FOUND);
     }
-    _sapp.vk.physical_device = pdev;
+    _sapp.vk.physical_device = suitable_pdev;
     SOKOL_ASSERT(_sapp.vk.physical_device);
 }
 
