@@ -1,5 +1,20 @@
 ## Updates
 
+### 03-Feb-2026
+
+- sokol_gfx.h vulkan: another round of small fixes and code cleanups in the
+  vulkan backend:
+  - execution wouldn't properly fail when no suitable Vulkan device could be found
+  - minor code cleanup around creating and destroying swapchain image-views
+  - on Windows, the `SAPP_EVENTTYPE_RESIZED` event is now fired in the same place
+    as on Linux, right after recreating swapchain resources
+  - on Windows, the internal framebuffer width/height is now updated only in
+    a single place (right after recreating swapchain resources)
+  - frame time measurement was actually broken on the Windows+Vulkan combination
+    and has been fixed
+
+  PR: https://github.com/floooh/sokol/pull/1433
+
 ### 01-Feb-2026
 
 - sokol_gfx.h vulkan: the frame-sync-related validation layer errors on Windows
@@ -9,8 +24,10 @@
   deal with (especially a very high input-to-display lag compared to the
   D3D11/DXGI backend, and moving/resizing the application window is stuttery on
   NVIDIA (this is caused by the render-during-window-move/resize code waiting
-  for vsync). The next step will be to port the swapchain code to  `VK_KHR_swpachain_maintenance1`
-  (which probably would have been a good idea right from the start).
+  for vsync). ~~The next step will be to port the swapchain code to  `VK_KHR_swpachain_maintenance1`
+  (which probably would have been a good idea right from the start).~~ nvm, I didn't
+  realize how badly supported `VK_[KHR|EXT]_swapchain_maintenenace1` is actually
+  supported when I wrote that heh.
 
   Also please keep in mind that the Vulkan backend is still deep in
   'highly experimental state'.

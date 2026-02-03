@@ -4439,7 +4439,7 @@ _SOKOL_PRIVATE void _sapp_vk_pick_physical_device(void) {
     _SAPP_VK_ZERO_COUNT_AND_ARRAY(32, const char*, ext_count, ext_names);
     ext_count = _sapp_vk_required_device_extensions(ext_names, 32);
 
-    VkPhysicalDevice suitable_pdev = 0;
+    VkPhysicalDevice picked_pdev = 0;
     for (uint32_t pdev_idx = 0; pdev_idx < physical_device_count; pdev_idx++) {
         const VkPhysicalDevice pdev = physical_devices[pdev_idx];
         _SAPP_STRUCT(VkPhysicalDeviceProperties, dev_props);
@@ -4475,13 +4475,13 @@ _SOKOL_PRIVATE void _sapp_vk_pick_physical_device(void) {
         }
 
         // if we arrive here, found a suitable device
-        suitable_pdev = pdev;
+        picked_pdev = pdev;
         break;
     }
-    if (0 == suitable_pdev) {
+    if (0 == picked_pdev) {
         _SAPP_PANIC(VULKAN_NO_SUITABLE_PHYSICAL_DEVICE_FOUND);
     }
-    _sapp.vk.physical_device = suitable_pdev;
+    _sapp.vk.physical_device = picked_pdev;
     SOKOL_ASSERT(_sapp.vk.physical_device);
 }
 
@@ -4990,7 +4990,6 @@ _SOKOL_PRIVATE void _sapp_x11_app_event(sapp_event_type type);
 #if defined(_SAPP_WIN32)
 _SOKOL_PRIVATE void _sapp_win32_app_event(sapp_event_type type);
 #endif
-
 
 _SOKOL_PRIVATE void _sapp_vk_recreate_swapchain(void) {
     SOKOL_ASSERT(_sapp.vk.device);
@@ -8782,7 +8781,7 @@ _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
         _sapp.window_width = _sapp_roundf_gzero(window_width);
         _sapp.window_height = _sapp_roundf_gzero(window_height);
         // NOTE: on Vulkan, updating the framebuffer dimensions and firing the resize-event
-        // is entirely handled by the swapchain management code
+        // is handled entirely by the swapchain management code
         #if !defined(SOKOL_VULKAN)
             int fb_width = _sapp_roundf_gzero(window_width * _sapp.win32.dpi.content_scale);
             int fb_height = _sapp_roundf_gzero(window_height * _sapp.win32.dpi.content_scale);
@@ -9251,11 +9250,7 @@ _SOKOL_PRIVATE void _sapp_win32_timing_measure(void) {
         }
         // fallback if swap model isn't "flip-discard" or GetFrameStatistics failed for another reason
         _sapp_timing_measure(&_sapp.timing);
-    #endif
-    #if defined(SOKOL_GLCORE)
-        _sapp_timing_measure(&_sapp.timing);
-    #endif
-    #if defined(SOKOL_NOAPI)
+    #else
         _sapp_timing_measure(&_sapp.timing);
     #endif
 }
