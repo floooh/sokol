@@ -4432,9 +4432,9 @@ _SOKOL_PRIVATE void _sapp_vk_pick_physical_device(void) {
     _SAPP_VK_ZERO_COUNT_AND_ARRAY(32, const char*, ext_count, ext_names);
     ext_count = _sapp_vk_required_device_extensions(ext_names, 32);
 
-    VkPhysicalDevice pdev = 0;
+    VkPhysicalDevice picked_pdev = 0;
     for (uint32_t pdev_idx = 0; pdev_idx < physical_device_count; pdev_idx++) {
-        pdev = physical_devices[pdev_idx];
+        const VkPhysicalDevice pdev = physical_devices[pdev_idx];
         _SAPP_STRUCT(VkPhysicalDeviceProperties, dev_props);
         vkGetPhysicalDeviceProperties(pdev, &dev_props);
         if (dev_props.apiVersion < VK_API_VERSION_1_3) {
@@ -4468,12 +4468,13 @@ _SOKOL_PRIVATE void _sapp_vk_pick_physical_device(void) {
         }
 
         // if we arrive here, found a suitable device
+        picked_pdev = pdev;
         break;
     }
-    if (0 == pdev) {
+    if (0 == picked_pdev) {
         _SAPP_PANIC(VULKAN_NO_SUITABLE_PHYSICAL_DEVICE_FOUND);
     }
-    _sapp.vk.physical_device = pdev;
+    _sapp.vk.physical_device = picked_pdev;
     SOKOL_ASSERT(_sapp.vk.physical_device);
 }
 
@@ -4778,6 +4779,36 @@ _SOKOL_PRIVATE uint32_t _sapp_vk_swapchain_min_image_count(const VkSurfaceCapabi
     return min_image_count;
 }
 
+_SOKOL_PRIVATE void _sapp_vk_create_swapchain_image_view(uint32_t image_index) {
+    SOKOL_ASSERT(_sapp.vk.device);
+    SOKOL_ASSERT(image_index < _sapp.vk.num_swapchain_images);
+    SOKOL_ASSERT(_sapp.vk.swapchain_images[image_index]);
+    SOKOL_ASSERT(0 == _sapp.vk.swapchain_views[image_index]);
+
+    _SAPP_STRUCT(VkImageViewCreateInfo, view_create_info);
+    view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    view_create_info.format = _sapp.vk.surface_format.format;
+    view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    view_create_info.subresourceRange.levelCount = 1;
+    view_create_info.subresourceRange.layerCount = 1;
+    view_create_info.image = _sapp.vk.swapchain_images[image_index];
+    VkResult res = vkCreateImageView(_sapp.vk.device, &view_create_info, 0, &_sapp.vk.swapchain_views[image_index]);
+    if (res != VK_SUCCESS) {
+        _SAPP_PANIC(VULKAN_SWAPCHAIN_CREATE_IMAGE_VIEW_FAILED);
+    }
+    SOKOL_ASSERT(_sapp.vk.swapchain_views[image_index]);
+    _sapp_vk_set_object_label(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)_sapp.vk.swapchain_views[image_index], "swapchain_view");
+}
+
+_SOKOL_PRIVATE void _sapp_vk_destroy_swapchain_image_view(uint32_t image_index) {
+    SOKOL_ASSERT(_sapp.vk.device);
+    SOKOL_ASSERT(image_index < _sapp.vk.num_swapchain_images);
+    SOKOL_ASSERT(_sapp.vk.swapchain_views[image_index]);
+    vkDestroyImageView(_sapp.vk.device, _sapp.vk.swapchain_views[image_index], 0);
+    _sapp.vk.swapchain_views[image_index] = 0;
+}
+
 _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     SOKOL_ASSERT(_sapp.vk.physical_device);
     SOKOL_ASSERT(_sapp.vk.surface);
@@ -4799,23 +4830,21 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     _SAPP_STRUCT(VkSurfaceCapabilitiesKHR, surf_caps);
     VkResult res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(_sapp.vk.physical_device, _sapp.vk.surface, &surf_caps);
     SOKOL_ASSERT(res == VK_SUCCESS);
-    const uint32_t width = surf_caps.currentExtent.width;
-    const uint32_t height = surf_caps.currentExtent.height;
+    const uint32_t fb_width = surf_caps.currentExtent.width;
+    const uint32_t fb_height = surf_caps.currentExtent.height;
 
     _sapp.vk.surface_format = _sapp_vk_pick_surface_format();
-    // FIXME: pick better present-mode if supported
-    VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
+    const VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
 
-    // FIXME: better imageExtent (scale vs no-scale!)
     _SAPP_STRUCT(VkSwapchainCreateInfoKHR, create_info);
     create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    create_info.flags = 0; // FIXME?
+    create_info.flags = 0;
     create_info.surface = _sapp.vk.surface;
     create_info.minImageCount = _sapp_vk_swapchain_min_image_count(&surf_caps);
     create_info.imageFormat = _sapp.vk.surface_format.format;
     create_info.imageColorSpace = _sapp.vk.surface_format.colorSpace;
-    create_info.imageExtent.width = width;
-    create_info.imageExtent.height = height;
+    create_info.imageExtent.width = fb_width;
+    create_info.imageExtent.height = fb_height;
     create_info.imageArrayLayers = 1;
     create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -4834,9 +4863,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
         // NOTE: destroying the depth- and msaa-surfaces happens
         // down in the respective _sapp_vk_swapchain_create_surface() calls!
         for (uint32_t i = 0; i < _sapp.vk.num_swapchain_images; i++) {
-            SOKOL_ASSERT(_sapp.vk.swapchain_views[i]);
-            vkDestroyImageView(_sapp.vk.device, _sapp.vk.swapchain_views[i], 0);
-            _sapp.vk.swapchain_views[i] = 0;
+            _sapp_vk_destroy_swapchain_image_view(i);
         }
         vkDestroySwapchainKHR(_sapp.vk.device, old_swapchain, 0);
     }
@@ -4849,31 +4876,16 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     SOKOL_ASSERT(res == VK_SUCCESS);
     SOKOL_ASSERT(_sapp.vk.num_swapchain_images >= surf_caps.minImageCount);
 
-    _SAPP_STRUCT(VkImageViewCreateInfo, view_create_info);
-    view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    view_create_info.format = _sapp.vk.surface_format.format;
-    view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    view_create_info.subresourceRange.levelCount = 1;
-    view_create_info.subresourceRange.layerCount = 1;
     for (uint32_t i = 0; i < _sapp.vk.num_swapchain_images; i++) {
-        SOKOL_ASSERT(_sapp.vk.swapchain_images[i]);
-        SOKOL_ASSERT(0 == _sapp.vk.swapchain_views[i]);
-        view_create_info.image = _sapp.vk.swapchain_images[i];
-        res = vkCreateImageView(_sapp.vk.device, &view_create_info, 0, &_sapp.vk.swapchain_views[i]);
-        if (res != VK_SUCCESS) {
-            _SAPP_PANIC(VULKAN_SWAPCHAIN_CREATE_IMAGE_VIEW_FAILED);
-        }
-        SOKOL_ASSERT(_sapp.vk.swapchain_views[i]);
-        _sapp_vk_set_object_label(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)_sapp.vk.swapchain_views[i], "swapchain_view");
+        _sapp_vk_create_swapchain_image_view(i);
     }
 
     // create depth-stencil buffer
     _sapp_vk_swapchain_create_surface(&_sapp.vk.depth,
         recreate,
         VK_FORMAT_D32_SFLOAT_S8_UINT,
-        width,
-        height,
+        fb_width,
+        fb_height,
         (VkSampleCountFlagBits)_sapp.sample_count,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
         VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
@@ -4885,8 +4897,8 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
         _sapp_vk_swapchain_create_surface(&_sapp.vk.msaa,
             recreate,
             _sapp.vk.surface_format.format,
-            width,
-            height,
+            fb_width,
+            fb_height,
             (VkSampleCountFlagBits)_sapp.sample_count,
             VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
             VK_IMAGE_ASPECT_COLOR_BIT,
@@ -4896,8 +4908,8 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
 
     // this is the only place in the Vulkan code path which updates
     // _sapp.framebuffer_width/height
-    _sapp.framebuffer_width = (int)surf_caps.currentExtent.width;
-    _sapp.framebuffer_height = (int)surf_caps.currentExtent.height;
+    _sapp.framebuffer_width = (int)fb_width;
+    _sapp.framebuffer_height = (int)fb_height;
 }
 
 _SOKOL_PRIVATE void _sapp_vk_destroy_swapchain(void) {
@@ -4909,11 +4921,8 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_swapchain(void) {
     }
     _sapp_vk_swapchain_destroy_surface(&_sapp.vk.depth);
     for (uint32_t i = 0; i < _sapp.vk.num_swapchain_images; i++) {
-        SOKOL_ASSERT(_sapp.vk.swapchain_views[i]);
-        vkDestroyImageView(_sapp.vk.device, _sapp.vk.swapchain_views[i], 0);
-        _sapp.vk.swapchain_views[i] = 0;
+        _sapp_vk_destroy_swapchain_image_view(i);
         _sapp.vk.swapchain_images[i] = 0;
-
     }
     vkDestroySwapchainKHR(_sapp.vk.device, _sapp.vk.swapchain, 0);
     _sapp.vk.swapchain = 0;
@@ -4922,6 +4931,9 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_swapchain(void) {
 
 #if defined(_SAPP_LINUX)
 _SOKOL_PRIVATE void _sapp_x11_app_event(sapp_event_type type);
+#endif
+#if defined(_SAPP_WIN32)
+_SOKOL_PRIVATE void _sapp_win32_app_event(sapp_event_type type);
 #endif
 
 _SOKOL_PRIVATE void _sapp_vk_recreate_swapchain(void) {
@@ -4934,6 +4946,9 @@ _SOKOL_PRIVATE void _sapp_vk_recreate_swapchain(void) {
         if (!_sapp.first_frame) {
             #if defined(_SAPP_LINUX)
             _sapp_x11_app_event(SAPP_EVENTTYPE_RESIZED);
+            #endif
+            #if defined(_SAPP_WIN32)
+            _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
             #endif
         }
     }
@@ -8696,16 +8711,22 @@ _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
         float window_height = (float)(rect.bottom - rect.top) / _sapp.win32.dpi.window_scale;
         _sapp.window_width = _sapp_roundf_gzero(window_width);
         _sapp.window_height = _sapp_roundf_gzero(window_height);
-        int fb_width = _sapp_roundf_gzero(window_width * _sapp.win32.dpi.content_scale);
-        int fb_height = _sapp_roundf_gzero(window_height * _sapp.win32.dpi.content_scale);
-        if ((fb_width != _sapp.framebuffer_width) || (fb_height != _sapp.framebuffer_height)) {
-            _sapp.framebuffer_width = fb_width;
-            _sapp.framebuffer_height = fb_height;
-            return true;
-        }
+        // NOTE: on Vulkan, updating the framebuffer dimensions and firing the resize-event
+        // is handled entirely by the swapchain management code
+        #if !defined(SOKOL_VULKAN)
+            int fb_width = _sapp_roundf_gzero(window_width * _sapp.win32.dpi.content_scale);
+            int fb_height = _sapp_roundf_gzero(window_height * _sapp.win32.dpi.content_scale);
+            if ((fb_width != _sapp.framebuffer_width) || (fb_height != _sapp.framebuffer_height)) {
+                _sapp.framebuffer_width = fb_width;
+                _sapp.framebuffer_height = fb_height;
+                return true;
+            }
+        #endif
     } else {
         _sapp.window_width = _sapp.window_height = 1;
+        #if !defined(SOKOL_VULKAN)
         _sapp.framebuffer_width = _sapp.framebuffer_height = 1;
+        #endif
     }
     return false;
 }
@@ -9160,11 +9181,7 @@ _SOKOL_PRIVATE void _sapp_win32_timing_measure(void) {
         }
         // fallback if swap model isn't "flip-discard" or GetFrameStatistics failed for another reason
         _sapp_timing_measure(&_sapp.timing);
-    #endif
-    #if defined(SOKOL_GLCORE)
-        _sapp_timing_measure(&_sapp.timing);
-    #endif
-    #if defined(SOKOL_NOAPI)
+    #else
         _sapp_timing_measure(&_sapp.timing);
     #endif
 }
@@ -9811,6 +9828,8 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         }
         _sapp_win32_frame(false);
         // check for window resized, this cannot happen in WM_SIZE as it explodes memory usage
+        // NOTE: when Vulkan is active, _sapp_win32_update_dimensions() will never return true,
+        // instead the resize-event is fixed by the swapchain management code
         if (_sapp_win32_update_dimensions()) {
             #if defined(SOKOL_D3D11)
             _sapp_d3d11_resize_default_render_target();
