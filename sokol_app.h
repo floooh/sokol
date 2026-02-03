@@ -4432,9 +4432,9 @@ _SOKOL_PRIVATE void _sapp_vk_pick_physical_device(void) {
     _SAPP_VK_ZERO_COUNT_AND_ARRAY(32, const char*, ext_count, ext_names);
     ext_count = _sapp_vk_required_device_extensions(ext_names, 32);
 
-    VkPhysicalDevice pdev = 0;
+    VkPhysicalDevice picked_pdev = 0;
     for (uint32_t pdev_idx = 0; pdev_idx < physical_device_count; pdev_idx++) {
-        pdev = physical_devices[pdev_idx];
+        const VkPhysicalDevice pdev = physical_devices[pdev_idx];
         _SAPP_STRUCT(VkPhysicalDeviceProperties, dev_props);
         vkGetPhysicalDeviceProperties(pdev, &dev_props);
         if (dev_props.apiVersion < VK_API_VERSION_1_3) {
@@ -4468,12 +4468,13 @@ _SOKOL_PRIVATE void _sapp_vk_pick_physical_device(void) {
         }
 
         // if we arrive here, found a suitable device
+        picked_pdev = pdev;
         break;
     }
-    if (0 == pdev) {
+    if (0 == picked_pdev) {
         _SAPP_PANIC(VULKAN_NO_SUITABLE_PHYSICAL_DEVICE_FOUND);
     }
-    _sapp.vk.physical_device = pdev;
+    _sapp.vk.physical_device = picked_pdev;
     SOKOL_ASSERT(_sapp.vk.physical_device);
 }
 
