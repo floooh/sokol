@@ -9181,11 +9181,7 @@ _SOKOL_PRIVATE void _sapp_win32_timing_measure(void) {
         }
         // fallback if swap model isn't "flip-discard" or GetFrameStatistics failed for another reason
         _sapp_timing_measure(&_sapp.timing);
-    #endif
-    #if defined(SOKOL_GLCORE)
-        _sapp_timing_measure(&_sapp.timing);
-    #endif
-    #if defined(SOKOL_NOAPI)
+    #else
         _sapp_timing_measure(&_sapp.timing);
     #endif
 }
