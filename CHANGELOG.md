@@ -9,8 +9,10 @@
   deal with (especially a very high input-to-display lag compared to the
   D3D11/DXGI backend, and moving/resizing the application window is stuttery on
   NVIDIA (this is caused by the render-during-window-move/resize code waiting
-  for vsync). The next step will be to port the swapchain code to  `VK_KHR_swpachain_maintenance1`
-  (which probably would have been a good idea right from the start).
+  for vsync). ~~The next step will be to port the swapchain code to  `VK_KHR_swpachain_maintenance1`
+  (which probably would have been a good idea right from the start).~~ nvm, I didn't
+  realize how badly supported `VK_[KHR|EXT]_swapchain_maintenenace1` is actually
+  supported when I wrote that heh.
 
   Also please keep in mind that the Vulkan backend is still deep in
   'highly experimental state'.
