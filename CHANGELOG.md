@@ -1,5 +1,18 @@
 ## Updates
 
+### 03-Feb-2026
+
+- sokol_gfx.h vulkan: another round of small fixes and code cleanups in the
+  vulkan backend:
+  - execution wouldn't properly fail when no suitable Vulkan device could be found
+  - minor code cleanup around creating and destroying swapchain image-views
+  - on Windows, the `SAPP_EVENTTYPE_RESIZED` event is now fired in the same place
+    as on Linux, right after recreating swapchain resources
+  - on Windows, the internal framebuffer width/height is now updated only in
+    a single place (right after recreating swapchain resources)
+  - frame time measurement was actually broken on the Windows+Vulkan combination
+    and has been fixed
+
 ### 01-Feb-2026
 
 - sokol_gfx.h vulkan: the frame-sync-related validation layer errors on Windows
