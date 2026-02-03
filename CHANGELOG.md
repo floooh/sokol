@@ -13,6 +13,8 @@
   - frame time measurement was actually broken on the Windows+Vulkan combination
     and has been fixed
 
+  PR: https://github.com/floooh/sokol/pull/1433
+
 ### 01-Feb-2026
 
 - sokol_gfx.h vulkan: the frame-sync-related validation layer errors on Windows
