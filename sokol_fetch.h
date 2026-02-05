@@ -75,7 +75,7 @@
 
     (1) initialize sokol-fetch with default parameters (but NOTE that the
         default setup parameters provide a safe-but-slow "serialized"
-        operation). In order to see any logging output in case or errors
+        operation). In order to see any logging output in case of errors
         you should always provide a logging function
         (such as 'slog_func' from sokol_log.h):
 
