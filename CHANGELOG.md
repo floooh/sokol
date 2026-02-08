@@ -1,5 +1,22 @@
 ## Updates
 
+### 08-Feb-2026
+
+- sokol_app.h ios/mtl: Fix a spurious assert when applying scissor rect after
+  rotating the device and which might lead to a drawable-size mismatch. This
+  doesn't appear to be 100% watertight but works much better than
+  before. The assert might be the result of a behaviour change in MTKView
+  between iOS versions (which tbh wouldn't be the first time this happened).
+  A 'perfect' solution will need to wait until the next round of iOS/macOS
+  window system glue updates which will finally get rid of MTKView and instead
+  use `CAMetalLayer` and `CADisplayLink` directly. Until then it's definitely
+  recommended to disable display rotation for your application via the Info.plist
+  file. Many thanks to @ArMuSebastian for writing the issue and providing
+  a simple reproducer.
+
+  Issue: https://github.com/floooh/sokol/issues/1437
+  PR: https://github.com/floooh/sokol/pull/1438
+
 ### 03-Feb-2026
 
 - sokol_gfx.h vulkan: another round of small fixes and code cleanups in the
