@@ -6215,16 +6215,23 @@ _SOKOL_PRIVATE void _sapp_ios_mtl_discard_state(void) {
 }
 
 _SOKOL_PRIVATE bool _sapp_ios_mtl_update_framebuffer_dimensions(CGRect screen_rect) {
-    _sapp.framebuffer_width = _sapp_roundf_gzero(screen_rect.size.width * _sapp.dpi_scale);
-    _sapp.framebuffer_height = _sapp_roundf_gzero(screen_rect.size.height * _sapp.dpi_scale);
-    const CGSize fb_size = _sapp.ios.view.drawableSize;
-    int cur_fb_width = _sapp_roundf_gzero(fb_size.width);
-    int cur_fb_height = _sapp_roundf_gzero(fb_size.height);
-    bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) || (_sapp.framebuffer_height != cur_fb_height);
-    if (dim_changed) {
-        const CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
+    // get current screen size and if it changed, update the MTKView drawable size
+    const int screen_width = _sapp_roundf_gzero(screen_rect.size.width * _sapp.dpi_scale);
+    const int screen_height = _sapp_roundf_gzero(screen_rect.size.height * _sapp.dpi_scale);
+    const CGSize view_size = _sapp.ios.view.drawableSize;
+    const int view_width = _sapp_roundf_gzero(view_size.width);
+    const int view_height = _sapp_roundf_gzero(view_size.height);
+    const bool needs_update = (screen_width != view_width) || (screen_height != view_height);
+    if (needs_update) {
+        const CGSize drawable_size = { (CGFloat) screen_width, (CGFloat) screen_height };
         _sapp.ios.view.drawableSize = drawable_size;
     }
+    // now separately, get the current drawable's size
+    const int cur_fb_width = _sapp_roundf_gzero(_sapp.ios.view.currentDrawable.texture.width);
+    const int cur_fb_height = _sapp_roundf_gzero(_sapp.ios.view.currentDrawable.texture.height);
+    const bool dim_changed = (cur_fb_width != _sapp.framebuffer_width) || (cur_fb_height != _sapp.framebuffer_height);
+    _sapp.framebuffer_width = cur_fb_width;
+    _sapp.framebuffer_height = cur_fb_height;
     return dim_changed;
 }
 #endif
@@ -6366,6 +6373,11 @@ _SOKOL_PRIVATE void _sapp_ios_update_dimensions(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_ios_frame(void) {
+    // NOTE: it's not great to call _sapp_ios_update_dimensions() so early in
+    // the frame, since this calls MTKView.currentDrawable, which should be
+    // delayed until the latest possible moment (e.g. sapp_get_swapchain()).
+    // MTKView is on the chopping block anyway though, so don't bother too much
+    // getting it right until MTKView is replaced with CAMetalLayer.
     _sapp_ios_update_dimensions();
     _sapp_frame();
 }
