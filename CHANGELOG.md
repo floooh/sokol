@@ -4,7 +4,7 @@
 
 - sokol_app.h: 'harmonized' mouse wheel scaling with GLFW. This only affects
   Windows and Emscripten. Basically, on Windows and Emscripten mouse wheel
-  events where scaled to be 4x 'faster' than intended (e.g. a mouse wheel
+  events were scaled to be 4x 'faster' than intended (e.g. a mouse wheel
   'click' was 4 units instead of 1). On macOS and Linux the scaling was already
   correct.
 
