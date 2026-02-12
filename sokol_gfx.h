@@ -1709,7 +1709,7 @@
 
                 sg_buffer buf = sg_make_buffer(...)
                 if (sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID) {
-                    // creating the resource has failed
+                    // creating the resource has succeeded
                 }
 
     When calling the 'make functions', the created resource goes through a number
