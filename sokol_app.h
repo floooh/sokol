@@ -7289,7 +7289,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelE
         /* see https://github.com/floooh/sokol/issues/339 */
         float scale;
         switch (emsc_event->deltaMode) {
-            case DOM_DELTA_PIXEL: scale = -0.04f; break;
+            case DOM_DELTA_PIXEL: scale = -0.01f; break;
             case DOM_DELTA_LINE:  scale = -1.33f; break;
             case DOM_DELTA_PAGE:  scale = -10.0f; break; // FIXME: this is a guess
             default:              scale = -0.1f; break;  // shouldn't happen
