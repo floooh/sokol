@@ -1,5 +1,15 @@
 ## Updates
 
+### 12-Feb-2026
+
+- sokol_app.h: 'harmonized' mouse wheel scaling with GLFW. This only affects
+  Windows and Emscripten. Basically, on Windows and Emscripten mouse wheel
+  events where scaled to be 4x 'faster' than intended (e.g. a mouse wheel
+  'click' was 4 units instead of 1). On macOS and Linux the scaling was already
+  correct.
+
+  PR: https://github.com/floooh/sokol/pull/1442
+
 ### 08-Feb-2026
 
 - sokol_app.h ios/mtl: Fix a spurious assert when applying scissor rect after
