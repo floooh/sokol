@@ -1815,7 +1815,7 @@ static const uint8_t _snk_fs_source_metal_sim[436] = {
     0x20,0x20,0x20,0x20,0x72,0x65,0x74,0x75,0x72,0x6e,0x20,0x6f,0x75,0x74,0x3b,0x0a,
     0x7d,0x0a,0x0a,0x00,
 };
-#elif defined(SOKOL_D3D11)
+#elif defined(SOKOL_D3D11) || defined(SOKOL_D3D12)
 /*
     cbuffer vs_params : register(b0)
     {
@@ -2845,7 +2845,7 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
                 fs_source = (const char*)_snk_fs_source_metal_sim;
                 break;
         }
-    #elif defined(SOKOL_D3D11)
+    #elif defined(SOKOL_D3D11) || defined(SOKOL_D3D12)
         vs_bytecode = SG_RANGE(_snk_vs_bytecode_hlsl4);
         fs_bytecode = SG_RANGE(_snk_fs_bytecode_hlsl4);
     #elif defined(SOKOL_WGPU)
