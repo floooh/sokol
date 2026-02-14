@@ -2405,14 +2405,15 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #ifndef GL_SILENCE_DEPRECATION
     #define GL_SILENCE_DEPRECATION
     #endif
-    #if defined(SOKOL_METAL)
-        #import <Metal/Metal.h>
-        #import <MetalKit/MetalKit.h>
-    #endif
     #if defined(_SAPP_MACOS)
         #import <Cocoa/Cocoa.h>
         #if defined(_SAPP_ANY_GL)
             #include <OpenGL/gl3.h>
+        #endif
+        #if defined(SOKOL_METAL)
+            #import <Metal/Metal.h>
+            #import <QuartzCore/CAMetalLayer.h>
+            #import <QuartzCore/CADisplayLink.h>
         #endif
         #if defined(SOKOL_WGPU)
             #import <QuartzCore/CAMetalLayer.h>
@@ -2420,6 +2421,10 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #endif
     #elif defined(_SAPP_IOS)
         #import <UIKit/UIKit.h>
+        #if defined(SOKOL_METAL)
+            #import <Metal/Metal.h>
+            #import <MetalKit/MetalKit.h>
+        #endif
         #if defined(_SAPP_ANY_GL)
             #import <GLKit/GLKit.h>
             #include <OpenGLES/ES3/gl.h>
@@ -2822,16 +2827,13 @@ typedef struct {
 @end
 @interface _sapp_macos_window_delegate : NSObject<NSWindowDelegate>
 @end
-#if defined(SOKOL_METAL)
-    @interface _sapp_macos_view : MTKView
+#if defined(SOKOL_METAL) || defined(SOKOL_WGPU)
+    @interface _sapp_macos_view : NSView
+    - (void)displayLinkFired:(id)sender;
     @end
 #elif defined(SOKOL_GLCORE)
     @interface _sapp_macos_view : NSOpenGLView
     - (void)timerFired:(id)sender;
-    @end
-#elif defined(SOKOL_WGPU)
-    @interface _sapp_macos_view : NSView
-    - (void)displayLinkFired:(id)sender;
     @end
 #endif // SOKOL_GLCORE
 
@@ -2847,7 +2849,11 @@ typedef struct {
     NSCursor* standard_cursors[_SAPP_MOUSECURSOR_NUM];
     NSCursor* custom_cursors[_SAPP_MOUSECURSOR_NUM];
     #if defined(SOKOL_METAL)
-        id<MTLDevice> mtl_device;
+    struct {
+        id<MTLDevice> device;
+        CAMetalLayer* layer;
+        CADisplayLink* display_link;
+    } mtl;
     #endif
     #if defined(SOKOL_WGPU)
     struct {
@@ -5053,34 +5059,92 @@ NSInteger _sapp_macos_max_fps(void) {
 #if defined(SOKOL_METAL)
 _SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
     NSInteger max_fps = _sapp_macos_max_fps();
-    // NOTE: when eventually switching to CAMetalLayer, use the specialized
-    // CAMetalDisplayLink instead of CADisplayLink!
-    _sapp.macos.mtl_device = MTLCreateSystemDefaultDevice();
+    _sapp.macos.mtl.device = MTLCreateSystemDefaultDevice();
+    _sapp.macos.mtl.layer = [CAMetalLayer layer];
+    _sapp.macos.mtl.layer.device = _sapp.macos.mtl.device;
+    _sapp.macos.mtl.layer.magnificationFilter = kCAFilterNearest;
+    _sapp.macos.mtl.layer.opaque = true;
+    _sapp.macos.mtl.layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+    // FIXME: _sapp.macos.mtl.layer.colorspace = ...;
     _sapp.macos.view = [[_sapp_macos_view alloc] init];
     [_sapp.macos.view updateTrackingAreas];
-    _sapp.macos.view.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
-    _sapp.macos.view.device = _sapp.macos.mtl_device;
-    _sapp.macos.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
-    _sapp.macos.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-    _sapp.macos.view.sampleCount = (NSUInteger) _sapp.sample_count;
-    _sapp.macos.view.autoResizeDrawable = false;
-    _sapp.macos.view.layer.magnificationFilter = kCAFilterNearest;
+    _sapp.macos.view.wantsLayer = YES;
+    _sapp.macos.view.layer = _sapp.macos.mtl.layer;
+    // FIXME: hmm this method is macOS 14.0+
+    _sapp.macos.mtl.display_link = [_sapp.macos.view displayLinkWithTarget:_sapp.macos.view selector:@selector(displayLinkFired:)];
+    const float preferred_fps = max_fps / _sapp.swap_interval;
+    const CAFrameRateRange frame_rate_range = { preferred_fps, preferred_fps, preferred_fps };
+    _sapp.macos.mtl.display_link.preferredFrameRateRange = frame_rate_range;
+    [_sapp.macos.mtl.display_link addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
+    // FIXME: _sapp_macos_mtl_swapchain_init();
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_discard_state(void) {
-    _SAPP_OBJC_RELEASE(_sapp.macos.mtl_device);
+    // FIXME: _sapp_macos_mtl_swapchain_discard();
+    _SAPP_OBJC_RELEASE(_sapp.macos.mtl.display_link);
+    _SAPP_OBJC_RELEASE(_sapp.macos.mtl.layer);
+    _SAPP_OBJC_RELEASE(_sapp.macos.mtl.device);
 }
 
 _SOKOL_PRIVATE bool _sapp_macos_mtl_update_framebuffer_dimensions(NSRect view_bounds) {
     _sapp.framebuffer_width = _sapp_roundf_gzero(view_bounds.size.width * _sapp.dpi_scale);
     _sapp.framebuffer_height = _sapp_roundf_gzero(view_bounds.size.height * _sapp.dpi_scale);
-    const CGSize cur_fb_size = _sapp.macos.view.drawableSize;
+    const CGSize cur_fb_size = _sapp.macos.mtl.layer.drawableSize;
     int cur_fb_width = _sapp_roundf_gzero(cur_fb_size.width);
     int cur_fb_height = _sapp_roundf_gzero(cur_fb_size.height);
     bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) || (_sapp.framebuffer_height != cur_fb_height);
     if (dim_changed) {
         const CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
-        _sapp.macos.view.drawableSize = drawable_size;
+        _sapp.macos.mtl.layer.drawableSize = drawable_size;
+        // FIXME: _sapp_macos_mtl_swapchain_size_changed();
+    }
+    return dim_changed;
+}
+
+_SOKOL_PRIVATE id<CAMetalDrawable> _sapp_macos_mtl_swapchain_next(void) {
+    id<CAMetalDrawable> drawable = [_sapp.macos.mtl.layer nextDrawable];
+    SOKOL_ASSERT(drawable != nil);
+    return drawable;
+}
+#endif
+
+#if defined(SOKOL_WGPU)
+_SOKOL_PRIVATE void _sapp_macos_wgpu_init(void) {
+    NSInteger max_fps = _sapp_macos_max_fps();
+    _sapp.macos.wgpu.mtl_layer = [CAMetalLayer layer];
+    _sapp.macos.wgpu.mtl_layer.magnificationFilter = kCAFilterNearest;
+    _sapp.macos.wgpu.mtl_layer.opaque = true;
+    // NOTE: might experiment with this, valid values are 2 or 3 (default: 3), I don't see any difference tbh
+    // _sapp.macos.wgpu.mtl_layer.maximumDrawableCount = 2;
+    _sapp.macos.view = [[_sapp_macos_view alloc] init];
+    [_sapp.macos.view updateTrackingAreas];
+    _sapp.macos.view.wantsLayer = YES;
+    _sapp.macos.view.layer = _sapp.macos.wgpu.mtl_layer;
+    _sapp.macos.wgpu.display_link = [_sapp.macos.view displayLinkWithTarget:_sapp.macos.view selector:@selector(displayLinkFired:)];
+    float preferred_fps = max_fps / _sapp.swap_interval;
+    CAFrameRateRange frame_rate_range = { preferred_fps, preferred_fps, preferred_fps };
+    _sapp.macos.wgpu.display_link.preferredFrameRateRange = frame_rate_range;
+    [_sapp.macos.wgpu.display_link addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
+    _sapp_wgpu_init();
+}
+
+_SOKOL_PRIVATE void _sapp_macos_wgpu_discard_state(void) {
+    _SAPP_OBJC_RELEASE(_sapp.macos.wgpu.display_link);
+    _SAPP_OBJC_RELEASE(_sapp.macos.wgpu.mtl_layer);
+    _sapp_wgpu_discard();
+}
+
+_SOKOL_PRIVATE bool _sapp_macos_wgpu_update_framebuffer_dimensions(NSRect view_bounds) {
+    _sapp.framebuffer_width = _sapp_roundf_gzero(view_bounds.size.width * _sapp.dpi_scale);
+    _sapp.framebuffer_height = _sapp_roundf_gzero(view_bounds.size.height * _sapp.dpi_scale);
+    const CGSize cur_fb_size = _sapp.macos.wgpu.mtl_layer.drawableSize;
+    int cur_fb_width = _sapp_roundf_gzero(cur_fb_size.width);
+    int cur_fb_height = _sapp_roundf_gzero(cur_fb_size.height);
+    bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) || (_sapp.framebuffer_height != cur_fb_height);
+    if (dim_changed) {
+        const CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
+        _sapp.macos.wgpu.mtl_layer.drawableSize = drawable_size;
+        _sapp_wgpu_swapchain_size_changed();
     }
     return dim_changed;
 }
@@ -5146,48 +5210,6 @@ _SOKOL_PRIVATE bool _sapp_macos_gl_update_framebuffer_dimensions(NSRect view_bou
     const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) || (_sapp.framebuffer_height != cur_fb_height);
     _sapp.framebuffer_width = cur_fb_width;
     _sapp.framebuffer_height = cur_fb_height;
-    return dim_changed;
-}
-#endif
-
-#if defined(SOKOL_WGPU)
-_SOKOL_PRIVATE void _sapp_macos_wgpu_init(void) {
-    NSInteger max_fps = _sapp_macos_max_fps();
-    _sapp.macos.wgpu.mtl_layer = [CAMetalLayer layer];
-    _sapp.macos.wgpu.mtl_layer.magnificationFilter = kCAFilterNearest;
-    _sapp.macos.wgpu.mtl_layer.opaque = true;
-    // NOTE: might experiment with this, valid values are 2 or 3 (default: 3), I don't see any difference tbh
-    // _sapp.macos.wgpu.mtl_layer.maximumDrawableCount = 2;
-    _sapp.macos.view = [[_sapp_macos_view alloc] init];
-    [_sapp.macos.view updateTrackingAreas];
-    _sapp.macos.view.wantsLayer = YES;
-    _sapp.macos.view.layer = _sapp.macos.wgpu.mtl_layer;
-    _sapp.macos.wgpu.display_link = [_sapp.macos.view displayLinkWithTarget:_sapp.macos.view selector:@selector(displayLinkFired:)];
-    float preferred_fps = max_fps / _sapp.swap_interval;
-    CAFrameRateRange frame_rate_range = { preferred_fps, preferred_fps, preferred_fps };
-    _sapp.macos.wgpu.display_link.preferredFrameRateRange = frame_rate_range;
-    [_sapp.macos.wgpu.display_link addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
-    _sapp_wgpu_init();
-}
-
-_SOKOL_PRIVATE void _sapp_macos_wgpu_discard_state(void) {
-    _SAPP_OBJC_RELEASE(_sapp.macos.wgpu.display_link);
-    _SAPP_OBJC_RELEASE(_sapp.macos.wgpu.mtl_layer);
-    _sapp_wgpu_discard();
-}
-
-_SOKOL_PRIVATE bool _sapp_macos_wgpu_update_framebuffer_dimensions(NSRect view_bounds) {
-    _sapp.framebuffer_width = _sapp_roundf_gzero(view_bounds.size.width * _sapp.dpi_scale);
-    _sapp.framebuffer_height = _sapp_roundf_gzero(view_bounds.size.height * _sapp.dpi_scale);
-    const CGSize cur_fb_size = _sapp.macos.wgpu.mtl_layer.drawableSize;
-    int cur_fb_width = _sapp_roundf_gzero(cur_fb_size.width);
-    int cur_fb_height = _sapp_roundf_gzero(cur_fb_size.height);
-    bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) || (_sapp.framebuffer_height != cur_fb_height);
-    if (dim_changed) {
-        const CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
-        _sapp.macos.wgpu.mtl_layer.drawableSize = drawable_size;
-        _sapp_wgpu_swapchain_size_changed();
-    }
     return dim_changed;
 }
 #endif
@@ -5930,14 +5952,9 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 }
 #endif
 
-#if defined(SOKOL_WGPU)
+#if defined(SOKOL_METAL) || defined(SOKOL_WGPU)
 - (void)displayLinkFired:(id)sender {
     _SOKOL_UNUSED(sender);
-    _sapp_macos_frame();
-}
-#else
-- (void)drawRect:(NSRect)rect {
-    _SOKOL_UNUSED(rect);
     _sapp_macos_frame();
 }
 #endif
@@ -13970,7 +13987,7 @@ SOKOL_API_IMPL sapp_environment sapp_get_environment(void) {
     res.defaults.sample_count = sapp_sample_count();
     #if defined(SOKOL_METAL)
         #if defined(_SAPP_MACOS)
-            res.metal.device = (__bridge const void*) _sapp.macos.mtl_device;
+            res.metal.device = (__bridge const void*) _sapp.macos.mtl.device;
         #else
             res.metal.device = (__bridge const void*) _sapp.ios.mtl_device;
         #endif
@@ -13995,16 +14012,11 @@ SOKOL_API_IMPL sapp_environment sapp_get_environment(void) {
 SOKOL_API_IMPL sapp_swapchain sapp_get_swapchain(void) {
     SOKOL_ASSERT(_sapp.valid);
     _SAPP_STRUCT(sapp_swapchain, res);
-    res.width = sapp_width();
-    res.height = sapp_height();
-    res.color_format = sapp_color_format();
-    res.depth_format = sapp_depth_format();
-    res.sample_count = sapp_sample_count();
     #if defined(SOKOL_METAL)
         #if defined(_SAPP_MACOS)
-            res.metal.current_drawable = (__bridge const void*) [_sapp.macos.view currentDrawable];
-            res.metal.depth_stencil_texture = (__bridge const void*) [_sapp.macos.view depthStencilTexture];
-            res.metal.msaa_color_texture = (__bridge const void*) [_sapp.macos.view multisampleColorTexture];
+            res.metal.current_drawable = (__bridge const void*) _sapp_macos_mtl_swapchain_next();
+            res.metal.depth_stencil_texture = (__bridge const void*) nil; // FIXME! [_sapp.macos.view depthStencilTexture];
+            res.metal.msaa_color_texture = (__bridge const void*) nil; // FIXME! [_sapp.macos.view multisampleColorTexture];
         #else
             res.metal.current_drawable = (__bridge const void*) [_sapp.ios.view currentDrawable];
             res.metal.depth_stencil_texture = (__bridge const void*) [_sapp.ios.view depthStencilTexture];
@@ -14060,6 +14072,11 @@ SOKOL_API_IMPL sapp_swapchain sapp_get_swapchain(void) {
     #if defined(_SAPP_ANY_GL)
         res.gl.framebuffer = _sapp.gl.framebuffer;
     #endif
+    res.width = sapp_width();
+    res.height = sapp_height();
+    res.color_format = sapp_color_format();
+    res.depth_format = sapp_depth_format();
+    res.sample_count = sapp_sample_count();
     return res;
 }
 
