@@ -5051,13 +5051,7 @@ _SOKOL_PRIVATE void _sapp_vk_frame(void) {
 #if defined(_SAPP_MACOS)
 
 NSInteger _sapp_macos_max_fps(void) {
-    NSInteger max_fps = 60;
-    #if (__MAC_OS_X_VERSION_MAX_ALLOWED >= 120000)
-    if (@available(macOS 12.0, *)) {
-        max_fps = [NSScreen.mainScreen maximumFramesPerSecond];
-    }
-    #endif
-    return max_fps;
+    return [NSScreen.mainScreen maximumFramesPerSecond];
 }
 
 #if defined(SOKOL_METAL)
