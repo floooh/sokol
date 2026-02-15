@@ -5083,6 +5083,8 @@ _SOKOL_PRIVATE id<MTLTexture> _sapp_macos_mtl_create_texture(int width, int heig
     if (mtl_tex) {
         mtl_tex.label = [NSString stringWithUTF8String:label];
     }
+    #else
+        _SOKOL_UNUSED(label);
     #endif
     return mtl_tex;
 }
