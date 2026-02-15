@@ -5089,7 +5089,7 @@ _SOKOL_PRIVATE id<MTLTexture> _sapp_macos_mtl_create_texture(int width, int heig
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_swapchain_create(int width, int height) {
     // FIXME: make pixel format configurable
-    _sapp.macos.mtl.depth_tex =_sapp_macos_mtl_create_texture(width, height, MTLPixelFormatDepth32Float_Stencil8, 1, "swapchain_depth_tex");
+    _sapp.macos.mtl.depth_tex =_sapp_macos_mtl_create_texture(width, height, MTLPixelFormatDepth32Float_Stencil8, _sapp.sample_count, "swapchain_depth_tex");
     if (nil == _sapp.macos.mtl.depth_tex) {
         _SAPP_PANIC(MACOS_METAL_CREATE_SWAPCHAIN_DEPTH_TEXTURE_FAILED);
     }
