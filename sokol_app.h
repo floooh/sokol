@@ -1713,6 +1713,8 @@ typedef struct sapp_allocator {
     _SAPP_LOGITEM_XMACRO(OK, "Ok") \
     _SAPP_LOGITEM_XMACRO(MALLOC_FAILED, "memory allocation failed") \
     _SAPP_LOGITEM_XMACRO(MACOS_INVALID_NSOPENGL_PROFILE, "macos: invalid NSOpenGLProfile (valid choices are 1.0 and 4.1)") \
+    _SAPP_LOGITEM_XMACRO(MACOS_METAL_CREATE_SWAPCHAIN_DEPTH_TEXTURE_FAILED, "macos metal: failed to create swapchain depth-buffer texture") \
+    _SAPP_LOGITEM_XMACRO(MACOS_METAL_CREATE_SWAPCHAIN_MSAA_TEXTURE_FAILED, "macos metal: failed to create swapchain msaa texture") \
     _SAPP_LOGITEM_XMACRO(WIN32_LOAD_OPENGL32_DLL_FAILED, "failed loading opengl32.dll") \
     _SAPP_LOGITEM_XMACRO(WIN32_CREATE_HELPER_WINDOW_FAILED, "failed to create helper window") \
     _SAPP_LOGITEM_XMACRO(WIN32_HELPER_WINDOW_GETDC_FAILED, "failed to get helper window DC") \
@@ -2853,6 +2855,8 @@ typedef struct {
         id<MTLDevice> device;
         CAMetalLayer* layer;
         CADisplayLink* display_link;
+        id<MTLTexture> depth_tex;
+        id<MTLTexture> msaa_tex;
     } mtl;
     #endif
     #if defined(SOKOL_WGPU)
@@ -5057,6 +5061,60 @@ NSInteger _sapp_macos_max_fps(void) {
 }
 
 #if defined(SOKOL_METAL)
+_SOKOL_PRIVATE id<MTLTexture> _sapp_macos_mtl_create_texture(int width, int height, MTLPixelFormat fmt, int sample_count, const char* label) {
+    MTLTextureDescriptor* mtl_desc = [[MTLTextureDescriptor alloc] init];
+    if (sample_count > 1) {
+        mtl_desc.textureType = MTLTextureType2DMultisample;
+    } else {
+        mtl_desc.textureType = MTLTextureType2D;
+    }
+    mtl_desc.pixelFormat = fmt;
+    mtl_desc.width = (NSUInteger)width;
+    mtl_desc.height = (NSUInteger)height;
+    mtl_desc.depth = 1;
+    mtl_desc.mipmapLevelCount = 1;
+    mtl_desc.arrayLength = 1;
+    mtl_desc.sampleCount = (NSUInteger)sample_count;
+    mtl_desc.usage = MTLTextureUsageRenderTarget;
+    mtl_desc.resourceOptions = MTLResourceStorageModePrivate;
+    id<MTLTexture> mtl_tex = [_sapp.macos.mtl.device newTextureWithDescriptor:mtl_desc];
+    _SAPP_OBJC_RELEASE(mtl_desc);
+    #if defined(SOKOL_DEBUG)
+    if (mtl_tex) {
+        mtl_tex.label = [NSString stringWithUTF8String:label];
+    }
+    #endif
+    return mtl_tex;
+}
+
+_SOKOL_PRIVATE void _sapp_macos_mtl_swapchain_create(int width, int height) {
+    // FIXME: make pixel format configurable
+    _sapp.macos.mtl.depth_tex =_sapp_macos_mtl_create_texture(width, height, MTLPixelFormatDepth32Float_Stencil8, 1, "swapchain_depth_tex");
+    if (nil == _sapp.macos.mtl.depth_tex) {
+        _SAPP_PANIC(MACOS_METAL_CREATE_SWAPCHAIN_DEPTH_TEXTURE_FAILED);
+    }
+    if (_sapp.sample_count > 1) {
+        _sapp.macos.mtl.msaa_tex = _sapp_macos_mtl_create_texture(width, height, MTLPixelFormatBGRA8Unorm, _sapp.sample_count, "swapchain_msaa_tex");
+        if (nil == _sapp.macos.mtl.msaa_tex) {
+            _SAPP_PANIC(MACOS_METAL_CREATE_SWAPCHAIN_MSAA_TEXTURE_FAILED);
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_macos_mtl_swapchain_destroy(void) {
+    if (_sapp.macos.mtl.depth_tex) {
+        _SAPP_OBJC_RELEASE(_sapp.macos.mtl.depth_tex);
+    }
+    if (_sapp.macos.mtl.msaa_tex) {
+        _SAPP_OBJC_RELEASE(_sapp.macos.mtl.msaa_tex);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_macos_mtl_swapchain_resize(int width, int height) {
+    _sapp_macos_mtl_swapchain_destroy();
+    _sapp_macos_mtl_swapchain_create(width, height);
+}
+
 _SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
     NSInteger max_fps = _sapp_macos_max_fps();
     _sapp.macos.mtl.device = MTLCreateSystemDefaultDevice();
@@ -5076,11 +5134,10 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
     const CAFrameRateRange frame_rate_range = { preferred_fps, preferred_fps, preferred_fps };
     _sapp.macos.mtl.display_link.preferredFrameRateRange = frame_rate_range;
     [_sapp.macos.mtl.display_link addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
-    // FIXME: _sapp_macos_mtl_swapchain_init();
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_discard_state(void) {
-    // FIXME: _sapp_macos_mtl_swapchain_discard();
+    _sapp_macos_mtl_swapchain_destroy();
     _SAPP_OBJC_RELEASE(_sapp.macos.mtl.display_link);
     _SAPP_OBJC_RELEASE(_sapp.macos.mtl.layer);
     _SAPP_OBJC_RELEASE(_sapp.macos.mtl.device);
@@ -5096,7 +5153,7 @@ _SOKOL_PRIVATE bool _sapp_macos_mtl_update_framebuffer_dimensions(NSRect view_bo
     if (dim_changed) {
         const CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
         _sapp.macos.mtl.layer.drawableSize = drawable_size;
-        // FIXME: _sapp_macos_mtl_swapchain_size_changed();
+        _sapp_macos_mtl_swapchain_resize(_sapp.framebuffer_width, _sapp.framebuffer_height);
     }
     return dim_changed;
 }
@@ -14015,8 +14072,8 @@ SOKOL_API_IMPL sapp_swapchain sapp_get_swapchain(void) {
     #if defined(SOKOL_METAL)
         #if defined(_SAPP_MACOS)
             res.metal.current_drawable = (__bridge const void*) _sapp_macos_mtl_swapchain_next();
-            res.metal.depth_stencil_texture = (__bridge const void*) nil; // FIXME! [_sapp.macos.view depthStencilTexture];
-            res.metal.msaa_color_texture = (__bridge const void*) nil; // FIXME! [_sapp.macos.view multisampleColorTexture];
+            res.metal.depth_stencil_texture = (__bridge const void*) _sapp.macos.mtl.depth_tex;
+            res.metal.msaa_color_texture = (__bridge const void*) _sapp.macos.mtl.msaa_tex;
         #else
             res.metal.current_drawable = (__bridge const void*) [_sapp.ios.view currentDrawable];
             res.metal.depth_stencil_texture = (__bridge const void*) [_sapp.ios.view depthStencilTexture];
