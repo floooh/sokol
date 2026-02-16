@@ -68,7 +68,7 @@
 
     - on macOS:
         - all backends: Foundation, Cocoa, QuartzCore
-        - with SOKOL_METAL: Metal, MetalKit
+        - with SOKOL_METAL: Metal
         - with SOKOL_GLCORE: OpenGL
         - with SOKOL_WGPU: a WebGPU implementation library (tested with webgpu_dawn)
     - on iOS:
