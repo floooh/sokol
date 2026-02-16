@@ -2854,7 +2854,7 @@ typedef struct {
         id<MTLTexture> depth_tex;
         id<MTLTexture> msaa_tex;
         // NOTE: CADisplayLink.timestamp seems to be very stable, so we'll use
-        // this instead of the generic filterered+measured frame timing code
+        // this instead of the generic measured+filtered frame timing code
         struct {
             CFTimeInterval timestamp;
             CFTimeInterval frame_duration_sec;
