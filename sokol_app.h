@@ -2304,9 +2304,13 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #if !defined(SOKOL_METAL) && !defined(SOKOL_GLCORE) && !defined(SOKOL_WGPU)
         #error("sokol_app.h: unknown 3D API selected for MacOS, must be SOKOL_METAL, SOKOL_GLCORE or SOKOL_WGPU")
         #endif
+        #if !defined(SOKOL_METAL)
+        #define _SAPP_USE_FILTERED_FRAME_TIMING (1)
+        #endif
     #else
         // iOS or iOS Simulator
         #define _SAPP_IOS (1)
+        #define _SAPP_USE_FILTERED_FRAME_TIMING (1)
         #if !defined(SOKOL_METAL) && !defined(SOKOL_GLES3)
         #error("sokol_app.h: unknown 3D API selected for iOS, must be SOKOL_METAL or SOKOL_GLES3")
         #endif
@@ -2317,12 +2321,14 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(__EMSCRIPTEN__)
     // Emscripten
     #define _SAPP_EMSCRIPTEN (1)
+    #define _SAPP_USE_FILTERED_FRAME_TIMING (1)
     #if !defined(SOKOL_GLES3) && !defined(SOKOL_WGPU)
     #error("sokol_app.h: unknown 3D API selected for emscripten, must be SOKOL_GLES3 or SOKOL_WGPU")
     #endif
 #elif defined(_WIN32)
     // Windows (D3D11 or GL)
     #define _SAPP_WIN32 (1)
+    #define _SAPP_USE_FILTERED_FRAME_TIMING (1)
     #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE) && !defined(SOKOL_WGPU) && !defined(SOKOL_VULKAN) && !defined(SOKOL_NOAPI)
     #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11, SOKOL_GLCORE, SOKOL_WGPU, SOKOL_VULKAN or SOKOL_NOAPI")
     #endif
@@ -2333,6 +2339,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(__ANDROID__)
     // Android
     #define _SAPP_ANDROID (1)
+    #define _SAPP_USE_FILTERED_FRAME_TIMING (1)
     #if !defined(SOKOL_GLES3)
     #error("sokol_app.h: unknown 3D API selected for Android, must be SOKOL_GLES3")
     #endif
@@ -2342,6 +2349,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(__linux__) || defined(__unix__)
     // Linux
     #define _SAPP_LINUX (1)
+    #define _SAPP_USE_FILTERED_FRAME_TIMING (1)
     #if !defined(SOKOL_GLCORE) && !defined(SOKOL_GLES3) && !defined(SOKOL_WGPU) && !defined(SOKOL_VULKAN)
         #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE, SOKOL_GLES3, SOKOL_WGPU or SOKOL_VULKAN")
     #endif
@@ -2409,25 +2417,22 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #endif
     #if defined(_SAPP_MACOS)
         #import <Cocoa/Cocoa.h>
-        #if defined(_SAPP_ANY_GL)
-            #include <OpenGL/gl3.h>
-        #endif
         #if defined(SOKOL_METAL)
             #import <Metal/Metal.h>
             #import <QuartzCore/CAMetalLayer.h>
             #import <QuartzCore/CADisplayLink.h>
-        #endif
-        #if defined(SOKOL_WGPU)
+        #elif defined(SOKOL_WGPU)
             #import <QuartzCore/CAMetalLayer.h>
             #import <QuartzCore/CADisplayLink.h>
+        #elif defined(_SAPP_ANY_GL)
+            #include <OpenGL/gl3.h>
         #endif
     #elif defined(_SAPP_IOS)
         #import <UIKit/UIKit.h>
         #if defined(SOKOL_METAL)
             #import <Metal/Metal.h>
             #import <MetalKit/MetalKit.h>
-        #endif
-        #if defined(_SAPP_ANY_GL)
+        #elif defined(_SAPP_ANY_GL)
             #import <GLKit/GLKit.h>
             #include <OpenGLES/ES3/gl.h>
         #endif
@@ -2548,6 +2553,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #endif
 
 
+#if defined(_SAPP_USE_FILTERED_FRAME_TIMING)
 // ███████ ██████   █████  ███    ███ ███████     ████████ ██ ███    ███ ██ ███    ██  ██████
 // ██      ██   ██ ██   ██ ████  ████ ██             ██    ██ ████  ████ ██ ████   ██ ██
 // █████   ██████  ███████ ██ ████ ██ █████          ██    ██ ██ ████ ██ ██ ██ ██  ██ ██   ███
@@ -2603,17 +2609,6 @@ _SOKOL_PRIVATE double _sapp_ring_dequeue(_sapp_ring_t* ring) {
     return val;
 }
 
-/*
-    NOTE:
-
-    Q: Why not use CAMetalDrawable.presentedTime on macOS and iOS?
-    A: The value appears to be highly unstable during the first few
-    seconds, sometimes several frames are dropped in sequence, or
-    switch between 120 and 60 Hz for a few frames. Simply measuring
-    and averaging the frame time yielded a more stable frame duration.
-    Maybe switching to CVDisplayLink would yield better results.
-    Until then just measure the time.
-*/
 typedef struct {
     #if defined(_SAPP_APPLE)
         struct {
@@ -2763,6 +2758,7 @@ _SOKOL_PRIVATE void _sapp_timing_external(_sapp_timing_t* t, double now) {
 _SOKOL_PRIVATE double _sapp_timing_get_avg(_sapp_timing_t* t) {
     return t->avg;
 }
+#endif
 
 // ███████ ████████ ██████  ██    ██  ██████ ████████ ███████
 // ██         ██    ██   ██ ██    ██ ██         ██    ██
@@ -2857,6 +2853,12 @@ typedef struct {
         CADisplayLink* display_link;
         id<MTLTexture> depth_tex;
         id<MTLTexture> msaa_tex;
+        // NOTE: CADisplayLink.timestamp seems to be very stable, so we'll use
+        // this instead of the generic filterered+measured frame timing code
+        struct {
+            CFTimeInterval timestamp;
+            CFTimeInterval frame_duration_sec;
+        } timing;
     } mtl;
     #endif
     #if defined(SOKOL_WGPU)
@@ -3304,13 +3306,15 @@ typedef struct {
     int swap_interval;
     float dpi_scale;
     uint64_t frame_count;
-    _sapp_timing_t timing;
     sapp_event event;
     _sapp_mouse_t mouse;
     _sapp_clipboard_t clipboard;
     _sapp_drop_t drop;
     sapp_icon_desc default_icon_desc;
     uint32_t* default_icon_pixels;
+    #if defined(_SAPP_USE_FILTERED_FRAME_TIMING)
+        _sapp_timing_t timing;
+    #endif
     #if defined(SOKOL_WGPU)
         _sapp_wgpu_t wgpu;
     #endif
@@ -3612,7 +3616,9 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _sapp.dpi_scale = 1.0f;
     _sapp.fullscreen = _sapp.desc.fullscreen;
     _sapp.mouse.shown = true;
+    #if defined(_SAPP_USE_FILTERED_FRAME_TIMING)
     _sapp_timing_init(&_sapp.timing);
+    #endif
 }
 
 _SOKOL_PRIVATE void _sapp_discard_state(void) {
@@ -5111,6 +5117,36 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_swapchain_resize(int width, int height) {
     _sapp_macos_mtl_swapchain_create(width, height);
 }
 
+_SOKOL_PRIVATE void _sapp_macos_mtl_timing_init(void) {
+    _sapp.macos.mtl.timing.timestamp = 0.0;
+    _sapp.macos.mtl.timing.frame_duration_sec = 1.0 / _sapp_macos_max_fps();
+}
+
+_SOKOL_PRIVATE void _sapp_macos_mtl_timing_update(void) {
+    CFTimeInterval cur_timestamp = _sapp.macos.mtl.display_link.timestamp;
+    // skip first frame (frame_duration had been initialized to display refresh rate)
+    if (_sapp.macos.mtl.timing.timestamp > 0.0) {
+        _sapp.macos.mtl.timing.frame_duration_sec = cur_timestamp - _sapp.macos.mtl.timing.timestamp;
+        const CFTimeInterval max_frame_duration_sec = 0.2;
+        if (_sapp.macos.mtl.timing.frame_duration_sec <= 0.00001) {
+            // this should never actually happen, but just to be sure we don't end up with
+            // a negative or zero frame duration for some reason
+            _sapp.macos.mtl.timing.frame_duration_sec = 1.0 / _sapp_macos_max_fps();
+        } else if (_sapp.macos.mtl.timing.frame_duration_sec > max_frame_duration_sec) {
+            // avoid death-spiral in case of ultra-slow framerate (e.g. when debugging)
+            _sapp.macos.mtl.timing.frame_duration_sec = max_frame_duration_sec;
+        }
+    } else {
+        SOKOL_ASSERT(_sapp.macos.mtl.timing.frame_duration_sec > 0.0);
+    }
+    _sapp.macos.mtl.timing.timestamp = cur_timestamp;
+}
+
+_SOKOL_PRIVATE double _sapp_macos_mtl_timing_frame_duration(void) {
+    SOKOL_ASSERT(_sapp.macos.mtl.timing.frame_duration_sec > 0.0);
+    return _sapp.macos.mtl.timing.frame_duration_sec;
+}
+
 _SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
     NSInteger max_fps = _sapp_macos_max_fps();
     _sapp.macos.mtl.device = MTLCreateSystemDefaultDevice();
@@ -5131,6 +5167,7 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
     const CAFrameRateRange frame_rate_range = { preferred_fps, preferred_fps, preferred_fps };
     _sapp.macos.mtl.display_link.preferredFrameRateRange = frame_rate_range;
     [_sapp.macos.mtl.display_link addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
+    _sapp_macos_mtl_timing_init();
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_discard_state(void) {
@@ -5763,7 +5800,13 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     // frame callback (at least when called from MTKView's drawRect function).
     // This will trigger a chicken-egg situation that triggers a
     // Metal validation layer error about different render target sizes.
+    #if defined(_SAPP_USE_FILTERED_FRAME_TIMING)
     _sapp_timing_measure(&_sapp.timing);
+    #elif defined(_SAPP_MACOS) && defined(SOKOL_METAL)
+    _sapp_macos_mtl_timing_update();
+    #else
+    #error "FIXME: invalid frame timing configuration"
+    #endif
     #if defined(_SAPP_ANY_GL)
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
     #endif
@@ -5902,7 +5945,9 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 
 - (void)windowDidChangeScreen:(NSNotification*)notification {
     _SOKOL_UNUSED(notification);
+    #if defined(_SAPP_USE_FILTERED_FRAME_TIMING)
     _sapp_timing_reset(&_sapp.timing);
+    #endif
     _sapp_macos_update_dimensions();
 }
 
@@ -13646,7 +13691,11 @@ SOKOL_API_IMPL uint64_t sapp_frame_count(void) {
 }
 
 SOKOL_API_IMPL double sapp_frame_duration(void) {
-    return _sapp_timing_get_avg(&_sapp.timing);
+    #if defined(_SAPP_MACOS) && defined(SOKOL_METAL)
+        return _sapp_macos_mtl_timing_frame_duration();
+    #else
+        return _sapp_timing_get_avg(&_sapp.timing);
+    #endif
 }
 
 SOKOL_API_IMPL int sapp_width(void) {
