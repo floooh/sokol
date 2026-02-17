@@ -5047,6 +5047,9 @@ _SOKOL_PRIVATE void _sapp_vk_frame(void) {
 #define _SAPP_OBJC_RELEASE(obj) { [obj release]; obj = nil; }
 #endif
 
+#define _SAPP_MACOS_MTL_OBSCURED_FRAME_DURATION_IN_SECONDS (0.1)
+#define _SAPP_MACOS_MTL_MAX_FRAME_DURATION_IN_SECONDS (0.25)
+
 // ███    ███  █████   ██████  ██████  ███████
 // ████  ████ ██   ██ ██      ██    ██ ██
 // ██ ████ ██ ███████ ██      ██    ██ ███████
@@ -5122,18 +5125,24 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_timing_init(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_timing_update(void) {
-    CFTimeInterval cur_timestamp = _sapp.macos.mtl.display_link.timestamp;
+    CFTimeInterval cur_timestamp = 0.0;
+    if (_sapp.macos.mtl.display_link) {
+        cur_timestamp = _sapp.macos.mtl.display_link.timestamp;
+    } else {
+        // fallback timer is active (NOTE: this assumes that the application is starting
+        // in display-link mode, so that the currently stored timestamp is valid
+        cur_timestamp = _sapp.macos.mtl.timing.timestamp + _SAPP_MACOS_MTL_OBSCURED_FRAME_DURATION_IN_SECONDS;
+    }
     // skip first frame (frame_duration had been initialized to display refresh rate)
     if (_sapp.macos.mtl.timing.timestamp > 0.0) {
         _sapp.macos.mtl.timing.frame_duration_sec = cur_timestamp - _sapp.macos.mtl.timing.timestamp;
-        const CFTimeInterval max_frame_duration_sec = 0.2;
         if (_sapp.macos.mtl.timing.frame_duration_sec <= 0.00001) {
             // this should never actually happen, but just to be sure we don't end up with
             // a negative or zero frame duration for some reason
             _sapp.macos.mtl.timing.frame_duration_sec = 1.0 / _sapp_macos_max_fps();
-        } else if (_sapp.macos.mtl.timing.frame_duration_sec > max_frame_duration_sec) {
+        } else if (_sapp.macos.mtl.timing.frame_duration_sec > _SAPP_MACOS_MTL_MAX_FRAME_DURATION_IN_SECONDS) {
             // avoid death-spiral in case of ultra-slow framerate (e.g. when debugging)
-            _sapp.macos.mtl.timing.frame_duration_sec = max_frame_duration_sec;
+            _sapp.macos.mtl.timing.frame_duration_sec = _SAPP_MACOS_MTL_MAX_FRAME_DURATION_IN_SECONDS;
         }
     } else {
         SOKOL_ASSERT(_sapp.macos.mtl.timing.frame_duration_sec > 0.0);
@@ -5146,8 +5155,37 @@ _SOKOL_PRIVATE double _sapp_macos_mtl_timing_frame_duration(void) {
     return _sapp.macos.mtl.timing.frame_duration_sec;
 }
 
-_SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
+_SOKOL_PRIVATE void _sapp_macos_mtl_start_display_link(void) {
+    // NOTE: CADisplayLink is only available since macOS 14.0
+    SOKOL_ASSERT(nil == _sapp.macos.mtl.display_link);
+    SOKOL_ASSERT(nil != _sapp.macos.view);
     NSInteger max_fps = _sapp_macos_max_fps();
+    _sapp.macos.mtl.display_link = [_sapp.macos.view displayLinkWithTarget:_sapp.macos.view selector:@selector(displayLinkFired:)];
+    const float preferred_fps = max_fps / _sapp.swap_interval;
+    const CAFrameRateRange frame_rate_range = { preferred_fps, preferred_fps, preferred_fps };
+    _sapp.macos.mtl.display_link.preferredFrameRateRange = frame_rate_range;
+    [_sapp.macos.mtl.display_link addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
+}
+
+_SOKOL_PRIVATE void _sapp_macos_mtl_stop_display_link(void) {
+    if (nil != _sapp.macos.mtl.display_link) {
+        [_sapp.macos.mtl.display_link invalidate];
+        // NOTE: the run-loop held the only strong reference to the display link
+        _sapp.macos.mtl.display_link = nil;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_macos_start_timer(void) {
+    // FIXME
+    // - create NSTimer with 10 fps (use _SAPP_MACOS_MTL_OBSCURED_FRAME_DURATION_IN_SECONDS)
+    // - linked to selector [_sapp.macos.view displayLinkFired]
+}
+
+_SOKOL_PRIVATE void _sapp_macos_stop_timer(void) {
+    // FIXME: invalidate NSTimer
+}
+
+_SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
     _sapp.macos.mtl.device = MTLCreateSystemDefaultDevice();
     _sapp.macos.mtl.layer = [CAMetalLayer layer];
     _sapp.macos.mtl.layer.device = _sapp.macos.mtl.device;
@@ -5160,18 +5198,13 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
     [_sapp.macos.view updateTrackingAreas];
     _sapp.macos.view.wantsLayer = YES;
     _sapp.macos.view.layer = _sapp.macos.mtl.layer;
-    // NOTE: CADisplayLink is only available since macOS 14.0
-    _sapp.macos.mtl.display_link = [_sapp.macos.view displayLinkWithTarget:_sapp.macos.view selector:@selector(displayLinkFired:)];
-    const float preferred_fps = max_fps / _sapp.swap_interval;
-    const CAFrameRateRange frame_rate_range = { preferred_fps, preferred_fps, preferred_fps };
-    _sapp.macos.mtl.display_link.preferredFrameRateRange = frame_rate_range;
-    [_sapp.macos.mtl.display_link addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
+    _sapp_macos_mtl_start_display_link();
     _sapp_macos_mtl_timing_init();
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_discard_state(void) {
+    _sapp_macos_mtl_stop_display_link();
     _sapp_macos_mtl_swapchain_destroy();
-    _SAPP_OBJC_RELEASE(_sapp.macos.mtl.display_link);
     _SAPP_OBJC_RELEASE(_sapp.macos.mtl.layer);
     _SAPP_OBJC_RELEASE(_sapp.macos.mtl.device);
 }
