@@ -5090,7 +5090,6 @@ _SOKOL_PRIVATE id<MTLTexture> _sapp_macos_mtl_create_texture(int width, int heig
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_swapchain_create(int width, int height) {
-    // FIXME: make pixel format configurable
     _sapp.macos.mtl.depth_tex =_sapp_macos_mtl_create_texture(width, height, MTLPixelFormatDepth32Float_Stencil8, _sapp.sample_count, "swapchain_depth_tex");
     if (nil == _sapp.macos.mtl.depth_tex) {
         _SAPP_PANIC(MACOS_METAL_CREATE_SWAPCHAIN_DEPTH_TEXTURE_FAILED);
@@ -5155,7 +5154,7 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
     _sapp.macos.mtl.layer.magnificationFilter = kCAFilterNearest;
     _sapp.macos.mtl.layer.opaque = true;
     _sapp.macos.mtl.layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
-    // FIXME? (default is 3) _sapp.macos.mtl.layer.maximumDrawableCount = 2;
+    //NOTE: default is 3: _sapp.macos.mtl.layer.maximumDrawableCount = 2;
     // FIXME: _sapp.macos.mtl.layer.colorspace = ...;
     _sapp.macos.view = [[_sapp_macos_view alloc] init];
     [_sapp.macos.view updateTrackingAreas];
@@ -6049,9 +6048,11 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     [ctx setValues:&swapInt forParameter:NSOpenGLContextParameterSwapInterval];
     [ctx makeCurrentContext];
 }
-#endif
-
-#if defined(SOKOL_METAL) || defined(SOKOL_WGPU)
+- (void)drawRect:(NSRect)rect {
+    _SOKOL_UNUSED(rect);
+    _sapp_macos_frame();
+}
+#elif defined(SOKOL_METAL) || defined(SOKOL_WGPU)
 - (void)displayLinkFired:(id)sender {
     _SOKOL_UNUSED(sender);
     _sapp_macos_frame();
