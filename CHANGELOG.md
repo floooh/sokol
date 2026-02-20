@@ -2,12 +2,13 @@
 
 ### 20-Feb-2026
 
-- sokol_app.h macos+metal: The swapchain code has been rewritten to replace MetalKit's
-  MTKView with `CAMetalLayer` and `CADisplayLink`. Dropping `MTKView` was planned
-  for a long time because of its 'brittleness': updating macOS versions would
-  sometimes come with surprising behaviour swapchain changes, which hopefully are
-  easier to manage when 'cutting the middleman' by kicking out MTKView. This
-  also means that on macOS you no longer need to link with MetalKit.
+- sokol_app.h macos+metal: The swapchain code has been rewritten to replace
+  MetalKit's MTKView with `CAMetalLayer` and `CADisplayLink`. Dropping `MTKView`
+  was planned for a long time because of its 'brittleness': updating macOS
+  versions would sometimes come with surprising swapchain behaviour changes, which
+  hopefully are easier to manage in the future when 'cutting the middleman' by
+  kicking out MTKView. This also means that on macOS you no longer need to link
+  with MetalKit.
 
   The one big downside of the update is that the min-spec for sokol_app.h
   had to be bumped to macOS 14 (Sonoma) - this is when CADisplayLink was introduced.
