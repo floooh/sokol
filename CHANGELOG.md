@@ -1,5 +1,61 @@
 ## Updates
 
+### 20-Feb-2026
+
+- sokol_app.h macos+metal: The swapchain code has been rewritten to replace
+  MetalKit's MTKView with `CAMetalLayer` and `CADisplayLink`. Dropping `MTKView`
+  was planned for a long time because of its 'brittleness': updating macOS
+  versions would sometimes come with surprising swapchain behaviour changes, which
+  hopefully are easier to manage in the future when 'cutting the middleman' by
+  kicking out MTKView. This also means that on macOS you no longer need to link
+  with MetalKit.
+
+  The one big downside of the update is that the min-spec for sokol_app.h
+  had to be bumped to macOS 14 (Sonoma) - this is when CADisplayLink was introduced.
+  This might be be a bit too soon (Sonoma was released in September 2023).
+  If this turns out to be a major problem the best solution
+  would be to bring back the MTKView code via a compile-time define (instead of
+  switching to the older CVDisplayLink alternative which seems to be
+  mostly deprecated and generally more hassle to work with than CADisplayLink).
+
+  The upside is that CADisplayLink has the most stable presentation timestamp
+  I've seen anywhere yet: Basically, subtracting the `CADisplayLink.timestamp`
+  property of two consecutive frames gives a rockstable frame duration without
+  *any* timing jitter - finally somebody getting it right ;) This means that for the
+  macos+metal backend sokol_app.h doesn't need to use the complicated jitter-filtering
+  which needs a second or so to adjust to framerate changes in exchange
+  for a jitter-free frame duration.  Instead the frame duration is directly
+  taken from `CADisplayLink` without any filtering.
+
+  The other 'interesting' change in the new update is how frames are triggered
+  for minified and obscured windows: `CADisplayLink` completely stops when the
+  window if minified while `MTKView` continues calling the frame callback.
+  To mimick the MTKView behaviour, a 'fallback timer' kicks in which calls
+  the frame callback at a fixed 60Hz frequency while the window is minified
+  **or** fully obscured, e.g.:
+
+  - window became minified or obscured:
+    - stop the CADisplayLink
+    - start a 'fallback' 60Hz NSTimer
+  - window became deminified or visible:
+    - stop the fallback NSTimer
+    - start the CADisplayLink
+
+  This whole 'problem complex' of what to do when a window is minified or
+  completely obscured will need proper fixing in a followup update. Basically,
+  an app should be able to detect when the 'frame workload' can be reduced
+  because the window is fully obscured or minified (although there needs to be
+  some wiggle room for vastly different platform behaviour).
+  For more details see this planning ticket: https://github.com/floooh/sokol/issues/1446.
+
+  The actual `CAMetalLayer`+`CADisplayLink` change is in this PR:
+
+  https://github.com/floooh/sokol/pull/1444
+
+  PS: the same change hasn't been implemented for iOS yet, e.g. the sokol_app.h
+  iOS backend still uses MTKView. This will be fixed in a non-too-distant
+  followup update.
+
 ### 12-Feb-2026
 
 - sokol_app.h: 'harmonized' mouse wheel scaling with GLFW. This only affects
