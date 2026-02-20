@@ -5049,7 +5049,7 @@ _SOKOL_PRIVATE void _sapp_vk_frame(void) {
 #define _SAPP_OBJC_RELEASE(obj) { [obj release]; obj = nil; }
 #endif
 
-#define _SAPP_MACOS_MTL_OBSCURED_FRAME_DURATION_IN_SECONDS (0.1)
+#define _SAPP_MACOS_MTL_OBSCURED_FRAME_DURATION_IN_SECONDS (0.01667)
 #define _SAPP_MACOS_MTL_MAX_FRAME_DURATION_IN_SECONDS (0.25)
 
 // ███    ███  █████   ██████  ██████  ███████
