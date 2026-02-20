@@ -45,7 +45,7 @@
   completely obscured will need proper fixing in a followup update. Basically,
   an app should be able to detect when the 'frame workload' can be reduced
   because the window is fully obscured or minified (although there needs to be
-  some wiggle room for vastly differeing platform behaviour).
+  some wiggle room for vastly differing platform behaviour).
   For more details see this planning ticket: https://github.com/floooh/sokol/issues/1446.
 
   The actual `CAMetalLayer`+`CADisplayLink` change is in this PR:
