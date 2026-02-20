@@ -29,7 +29,7 @@
 
   The other 'interesting' change in the new update is how frames are triggered
   for minified and obscured windows: `CADisplayLink` completely stops when the
-  window if minified while `MTKView` continues calling the frame callback.
+  window is minified while `MTKView` continues calling the frame callback.
   To mimick the MTKView behaviour, a 'fallback timer' kicks in which calls
   the frame callback at a fixed 60Hz frequency while the window is minified
   **or** fully obscured, e.g.:
