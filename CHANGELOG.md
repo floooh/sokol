@@ -30,9 +30,9 @@
   The other 'interesting' change in the new update is how frames are triggered
   for minified and obscured windows: `CADisplayLink` completely stops when the
   window is minified while `MTKView` continues calling the frame callback.
-  To mimick the MTKView behaviour, a 'fallback timer' kicks in which calls
-  the frame callback at a fixed 60Hz frequency while the window is minified
-  **or** fully obscured, e.g.:
+  To mimick the MTKView behaviour, I added a 'fallback timer' which kicks in
+  while the window is in minified or obscured state and which triggers the
+  frame callback at a fixed 60Hz frequency, e.g.:
 
   - window became minified or obscured:
     - stop the CADisplayLink
@@ -45,7 +45,7 @@
   completely obscured will need proper fixing in a followup update. Basically,
   an app should be able to detect when the 'frame workload' can be reduced
   because the window is fully obscured or minified (although there needs to be
-  some wiggle room for vastly different platform behaviour).
+  some wiggle room for vastly differeing platform behaviour).
   For more details see this planning ticket: https://github.com/floooh/sokol/issues/1446.
 
   The actual `CAMetalLayer`+`CADisplayLink` change is in this PR:
