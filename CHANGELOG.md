@@ -15,8 +15,8 @@
   This might be be a bit too soon (Sonoma was released in September 2023).
   If this turns out to be a major problem the best solution
   would be to bring back the MTKView code via a compile-time define (instead of
-  switching to the older CVDisplayLink alternative which mostly seems to be
-  deprecated and generally more hassle to work with than CADisplayLink).
+  switching to the older CVDisplayLink alternative which seems to be
+  mostly deprecated and generally more hassle to work with than CADisplayLink).
 
   The upside is that CADisplayLink has the most stable presentation timestamp
   I've seen anywhere yet: Basically, subtracting the `CADisplayLink.timestamp`
