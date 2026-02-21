@@ -32,7 +32,7 @@ system_libs = {
             'gl': "",
         },
         'macos': {
-            'metal': '"system:Cocoa.framework","system:QuartzCore.framework","system:Metal.framework","system:MetalKit.framework"',
+            'metal': '"system:Cocoa.framework","system:QuartzCore.framework","system:Metal.framework"',
             'gl': '"system:Cocoa.framework","system:QuartzCore.framework","system:OpenGL.framework"',
         },
         'linux': {
@@ -46,7 +46,7 @@ system_libs = {
             'gl': '',
         },
         'macos': {
-            'metal': '"system:Cocoa.framework","system:QuartzCore.framework","system:Metal.framework","system:MetalKit.framework"',
+            'metal': '"system:Cocoa.framework","system:QuartzCore.framework","system:Metal.framework"',
             'gl': '"system:Cocoa.framework","system:QuartzCore.framework","system:OpenGL.framework"',
         },
         'linux': {

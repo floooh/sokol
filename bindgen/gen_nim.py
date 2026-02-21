@@ -539,7 +539,7 @@ def gen_extra(inp):
         l('    {.passl:"-framework OpenGL".}')
         l('  else:')
         l('    {.passc:"-DSOKOL_METAL".}')
-        l('    {.passl:"-framework Metal -framework MetalKit".}')
+        l('    {.passl:"-framework Metal".}')
         l('elif defined linux:')
         l('  {.passc:"-DSOKOL_GLCORE".}')
         l('  {.passl:"-lX11 -lXi -lXcursor -lGL -lm -ldl -lpthread".}')
