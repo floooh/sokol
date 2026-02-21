@@ -2875,7 +2875,7 @@ typedef struct {
 
 #if defined(_SAPP_IOS)
 
-@interface _sapp_app_delegate : NSObject<UIApplicationDelegate>
+@interface _sapp_scene_delegate : NSObject<UIApplicationDelegate, UIWindowSceneDelegate>;
 @end
 @interface _sapp_textfield_dlg : NSObject<UITextFieldDelegate>
 - (void)keyboardWasShown:(NSNotification*)notif;
@@ -6494,7 +6494,7 @@ _SOKOL_PRIVATE void _sapp_ios_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     static int argc = 1;
     static char* argv[] = { (char*)"sokol_app" };
-    UIApplicationMain(argc, argv, nil, NSStringFromClass([_sapp_app_delegate class]));
+    UIApplicationMain(argc, argv, nil, NSStringFromClass([_sapp_scene_delegate class]));
 }
 
 /* iOS entry function */
@@ -6618,8 +6618,40 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
     }
 }
 
-@implementation _sapp_app_delegate
+@implementation _sapp_scene_delegate
+- (UISceneConfiguration*) application:(UIApplication*)application
+    configurationForConnectingSceneSession:(UISceneSession*)connectingSceneSession
+    options:(UISceneConnectionOptions*)options
+{
+    UISceneConfiguration* config = [[UISceneConfiguration alloc] initWithName:@"SokolSceneConfiguration" sessionRole:connectingSceneSession.role];
+    config.delegateClass = [_sapp_scene_delegate class];
+    return config;
+}
+
+- (void)scene:(UIScene*)scene willConnectToSession:(UISceneSession*)session options:(UISceneConnectionOptions*)connectionOptions {
+    CGRect screen_rect = UIScreen.mainScreen.bounds;
+    _sapp.ios.window = [[UIWindow alloc] initWithWindowScene:scene];
+    _sapp.window_width = _sapp_roundf_gzero(screen_rect.size.width);
+    _sapp.window_height = _sapp_roundf_gzero(screen_rect.size.height);
+    if (_sapp.desc.high_dpi) {
+        _sapp.dpi_scale = (float) UIScreen.mainScreen.nativeScale;
+    } else {
+        _sapp.dpi_scale = 1.0f;
+    }
+    _sapp.framebuffer_width = _sapp_roundf_gzero(_sapp.window_width * _sapp.dpi_scale);
+    _sapp.framebuffer_height = _sapp_roundf_gzero(_sapp.window_height * _sapp.dpi_scale);
+    #if defined(SOKOL_METAL)
+        _sapp_ios_mtl_init();
+    #else
+        _sapp_ios_gles3_init(screen_rect);
+    #endif
+    [_sapp.ios.window makeKeyAndVisible];
+    _sapp.valid = true;
+}
+
 - (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
+    return YES;
+    /*
     CGRect screen_rect = UIScreen.mainScreen.bounds;
     _sapp.ios.window = [[UIWindow alloc] initWithFrame:screen_rect];
     _sapp.window_width = _sapp_roundf_gzero(screen_rect.size.width);
@@ -6639,6 +6671,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
     [_sapp.ios.window makeKeyAndVisible];
     _sapp.valid = true;
     return YES;
+    */
 }
 
 - (void)applicationWillResignActive:(UIApplication *)application {
