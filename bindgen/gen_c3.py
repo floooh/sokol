@@ -361,7 +361,7 @@ def gen_enum(decl, prefix):
     tpe = "int"
     if any(as_enum_item_name(check_override(item['name'])) == 'FORCE_U32' for item in decl['items']):
         tpe = "uint"
-    l(f'constdef {as_struct_or_enum_type(enum_name, prefix)} : {tpe}')
+    l(f'enum {as_struct_or_enum_type(enum_name, prefix)} : const {tpe}')
     l('{')
     value = "-1"
     for item in decl['items']:
