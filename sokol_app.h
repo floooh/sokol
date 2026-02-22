@@ -6386,8 +6386,8 @@ static void _sapp_gl_make_current(void) {
 #if defined(_SAPP_IOS)
 
 #if defined(SOKOL_METAL)
-_SOKOL_PRIVATE void _sapp_ios_mtl_init(void) {
-    const NSInteger max_fps = UIScreen.mainScreen.maximumFramesPerSecond;
+_SOKOL_PRIVATE void _sapp_ios_mtl_init(UIWindowScene* windowScene) {
+    const NSInteger max_fps = windowScene.screen.maximumFramesPerSecond;
     _sapp.ios.mtl_device = MTLCreateSystemDefaultDevice();
     _sapp.ios.view = [[_sapp_ios_view alloc] init];
     _sapp.ios.view.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
@@ -6438,8 +6438,9 @@ _SOKOL_PRIVATE bool _sapp_ios_mtl_update_framebuffer_dimensions(CGRect screen_re
 #endif
 
 #if defined(SOKOL_GLES3)
-_SOKOL_PRIVATE void _sapp_ios_gles3_init(CGRect screen_rect) {
-    const NSInteger max_fps = UIScreen.mainScreen.maximumFramesPerSecond;
+_SOKOL_PRIVATE void _sapp_ios_gles3_init(UIWindowScene* windowScene) {
+    const NSInteger max_fps = windowScene.screen.maximumFramesPerSecond;
+    const CGRect screen_rect = windowScene.screen.bounds;
     _sapp.ios.eagl_ctx = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3];
     _sapp.ios.view = [[_sapp_ios_view alloc] initWithFrame:screen_rect];
     _sapp.ios.view.drawableColorFormat = GLKViewDrawableColorFormatRGBA8888;
@@ -6642,9 +6643,9 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
     _sapp.framebuffer_width = _sapp_roundf_gzero(_sapp.window_width * _sapp.dpi_scale);
     _sapp.framebuffer_height = _sapp_roundf_gzero(_sapp.window_height * _sapp.dpi_scale);
     #if defined(SOKOL_METAL)
-        _sapp_ios_mtl_init();
+        _sapp_ios_mtl_init(windowScene);
     #else
-        _sapp_ios_gles3_init(screen_rect);
+        _sapp_ios_gles3_init(windowScene);
     #endif
     [_sapp.ios.window makeKeyAndVisible];
     _sapp.valid = true;
