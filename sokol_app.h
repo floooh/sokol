@@ -5238,6 +5238,7 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
     _sapp.macos.mtl.layer.magnificationFilter = kCAFilterNearest;
     _sapp.macos.mtl.layer.opaque = true;
     _sapp.macos.mtl.layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+    _sapp.macos.mtl.layer.framebufferOnly = true;
     //NOTE: default is 3: _sapp.macos.mtl.layer.maximumDrawableCount = 2;
     // FIXME: _sapp.macos.mtl.layer.colorspace = ...;
     _sapp.macos.view = [[_sapp_macos_view alloc] init];
@@ -5875,7 +5876,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     // Metal validation layer error about different render target sizes.
     #if defined(_SAPP_USE_FILTERED_FRAME_TIMING)
     _sapp_timing_measure(&_sapp.timing);
-    #elif defined(_SAPP_MACOS) && defined(SOKOL_METAL)
+    #elif defined(SOKOL_METAL)
     _sapp_macos_mtl_timing_update();
     #else
     #error "FIXME: invalid frame timing configuration"
@@ -6461,7 +6462,7 @@ _SOKOL_PRIVATE void _sapp_ios_mtl_start_display_link(UIWindowScene* windowScene)
     SOKOL_ASSERT(nil == _sapp.ios.mtl.display_link);
     SOKOL_ASSERT(nil != _sapp.ios.view);
     const NSInteger max_fps = windowScene.screen.maximumFramesPerSecond;
-    _sapp.ios.mtl.display_link = [_sapp.ios.view displayLinkWithTarget:_sapp.ios.view selector:@selector(displayLinkFired:)];
+    _sapp.ios.mtl.display_link = [CADisplayLink displayLinkWithTarget:_sapp.ios.view selector:@selector(displayLinkFired:)];
     const float preferred_fps = max_fps / _sapp.swap_interval;
     const CAFrameRateRange frame_rate_range = { preferred_fps, preferred_fps, preferred_fps };
     _sapp.ios.mtl.display_link.preferredFrameRateRange = frame_rate_range;
@@ -6478,18 +6479,21 @@ _SOKOL_PRIVATE void _sapp_ios_mtl_stop_display_link(void) {
 
 _SOKOL_PRIVATE void _sapp_ios_mtl_init(UIWindowScene* windowScene) {
     _sapp.ios.mtl.device = MTLCreateSystemDefaultDevice();
-    _sapp.ios.mtl.layer = [CAMetalLayer layer];
-    _sapp.ios.mtl.layer.device = _sapp.ios.mtl.device;
-    _sapp.ios.mtl.layer.magnificationFilter = kCAFilterNearest;
-    _sapp.ios.mtl.layer.opaque = true;
-    _sapp.ios.mtl.layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
 
-    _sapp.ios.view = [[_sapp_ios_view alloc] init];
-    _sapp.ios.view.layer = _sapp.ios.mtl.layer;
+    _sapp.ios.view = [[_sapp_ios_view alloc] initWithFrame:windowScene.screen.bounds];
     _sapp.ios.view.userInteractionEnabled = YES;
     #if !defined(_SAPP_TVOS)
         _sapp.ios.view.multipleTouchEnabled = YES;
     #endif
+
+    _sapp.ios.mtl.layer = [CAMetalLayer layer];
+    _sapp.ios.mtl.layer.device = _sapp.ios.mtl.device;
+    _sapp.ios.mtl.layer.opaque = true;
+    _sapp.ios.mtl.layer.framebufferOnly = true;
+    _sapp.ios.mtl.layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+    _sapp.ios.mtl.layer.frame = _sapp.ios.view.layer.frame;
+
+    [_sapp.ios.view.layer addSublayer:_sapp.ios.mtl.layer];
 
     _sapp.ios.view_ctrl = [[UIViewController alloc] init];
     _sapp.ios.view_ctrl.modalPresentationStyle = UIModalPresentationFullScreen;
@@ -6518,6 +6522,7 @@ _SOKOL_PRIVATE bool _sapp_ios_mtl_update_framebuffer_dimensions(CGRect screen_re
     if (dim_changed) {
         const CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
         _sapp.ios.mtl.layer.drawableSize = drawable_size;
+        _sapp.ios.mtl.layer.frame = screen_rect;
         _sapp_ios_mtl_swapchain_resize(_sapp.framebuffer_width, _sapp.framebuffer_height);
     }
     return dim_changed;
@@ -6662,13 +6667,20 @@ _SOKOL_PRIVATE void _sapp_ios_update_dimensions(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_ios_frame(void) {
-    // NOTE: it's not great to call _sapp_ios_update_dimensions() so early in
-    // the frame, since this calls MTKView.currentDrawable, which should be
-    // delayed until the latest possible moment (e.g. sapp_get_swapchain()).
-    // MTKView is on the chopping block anyway though, so don't bother too much
-    // getting it right until MTKView is replaced with CAMetalLayer.
-    _sapp_ios_update_dimensions();
-    _sapp_frame();
+    #if defined(_SAPP_USE_FILTERED_FRAME_TIMING)
+    _sapp_timing_measure(&_sapp.timing);
+    #elif defined(SOKOL_METAL)
+    _sapp_ios_mtl_timing_update();
+    #else
+    #error "FIXME: Invalid frame timing configuration"
+    #endif
+    #if defined(_SAPP_ANY_GL)
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
+    #endif
+    @autoreleasepool {
+        _sapp_ios_update_dimensions();
+        _sapp_frame();
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
@@ -6846,16 +6858,18 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 @end
 
 @implementation _sapp_ios_view
+#if defined(SOKOL_METAL)
+- (void)displayLinkFired:(id)sender {
+    _SOKOL_UNUSED(sender);
+    _sapp_ios_frame();
+}
+#else
 - (void)drawRect:(CGRect)rect {
     _SOKOL_UNUSED(rect);
-    #if defined(_SAPP_ANY_GL)
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
-    #endif
-    _sapp_timing_measure(&_sapp.timing);
-    @autoreleasepool {
-        _sapp_ios_frame();
-    }
+    _sapp_ios_frame();
 }
+#endif
+
 - (BOOL)isOpaque {
     return YES;
 }
