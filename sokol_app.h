@@ -6560,7 +6560,7 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
 }
 
 _SOKOL_PRIVATE void _sapp_ios_update_dimensions(void) {
-    CGRect screen_rect = UIScreen.mainScreen.bounds;
+    CGRect screen_rect = _sapp.ios.window.windowScene.screen.bounds;
     _sapp.window_width = _sapp_roundf_gzero(screen_rect.size.width);
     _sapp.window_height = _sapp_roundf_gzero(screen_rect.size.height);
     #if defined(SOKOL_METAL)
@@ -6629,12 +6629,13 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 }
 
 - (void)scene:(UIScene*)scene willConnectToSession:(UISceneSession*)session options:(UISceneConnectionOptions*)connectionOptions {
-    CGRect screen_rect = UIScreen.mainScreen.bounds;
-    _sapp.ios.window = [[UIWindow alloc] initWithWindowScene:scene];
+    UIWindowScene* windowScene = (UIWindowScene*)scene;
+    CGRect screen_rect = windowScene.screen.bounds;
+    _sapp.ios.window = [[UIWindow alloc] initWithWindowScene:windowScene];
     _sapp.window_width = _sapp_roundf_gzero(screen_rect.size.width);
     _sapp.window_height = _sapp_roundf_gzero(screen_rect.size.height);
     if (_sapp.desc.high_dpi) {
-        _sapp.dpi_scale = (float) UIScreen.mainScreen.nativeScale;
+        _sapp.dpi_scale = (float) windowScene.screen.nativeScale;
     } else {
         _sapp.dpi_scale = 1.0f;
     }
@@ -6651,37 +6652,16 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 
 - (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
     return YES;
-    /*
-    CGRect screen_rect = UIScreen.mainScreen.bounds;
-    _sapp.ios.window = [[UIWindow alloc] initWithFrame:screen_rect];
-    _sapp.window_width = _sapp_roundf_gzero(screen_rect.size.width);
-    _sapp.window_height = _sapp_roundf_gzero(screen_rect.size.height);
-    if (_sapp.desc.high_dpi) {
-        _sapp.dpi_scale = (float) UIScreen.mainScreen.nativeScale;
-    } else {
-        _sapp.dpi_scale = 1.0f;
-    }
-    _sapp.framebuffer_width = _sapp_roundf_gzero(_sapp.window_width * _sapp.dpi_scale);
-    _sapp.framebuffer_height = _sapp_roundf_gzero(_sapp.window_height * _sapp.dpi_scale);
-    #if defined(SOKOL_METAL)
-        _sapp_ios_mtl_init();
-    #else
-        _sapp_ios_gles3_init(screen_rect);
-    #endif
-    [_sapp.ios.window makeKeyAndVisible];
-    _sapp.valid = true;
-    return YES;
-    */
 }
 
-- (void)applicationWillResignActive:(UIApplication *)application {
+- (void)sceneWillResignActive:(UIScene*)scene {
     if (!_sapp.ios.suspended) {
         _sapp.ios.suspended = true;
         _sapp_ios_app_event(SAPP_EVENTTYPE_SUSPENDED);
     }
 }
 
-- (void)applicationDidBecomeActive:(UIApplication *)application {
+- (void)sceneDidBecomeActive:(UIScene*)scene {
     if (_sapp.ios.suspended) {
         _sapp.ios.suspended = false;
         _sapp_ios_app_event(SAPP_EVENTTYPE_RESUMED);
@@ -6708,7 +6688,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
     if (_sapp.desc.ios.keyboard_resizes_canvas) {
         NSDictionary* info = notif.userInfo;
         CGFloat kbd_h = [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].size.height;
-        CGRect view_frame = UIScreen.mainScreen.bounds;
+        CGRect view_frame = _sapp.ios.window.windowScene.screen.bounds;
         view_frame.size.height -= kbd_h;
         _sapp.ios.view.frame = view_frame;
     }
@@ -6717,7 +6697,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 - (void)keyboardWillBeHidden:(NSNotification*)notif {
     _sapp.onscreen_keyboard_shown = false;
     if (_sapp.desc.ios.keyboard_resizes_canvas) {
-        _sapp.ios.view.frame = UIScreen.mainScreen.bounds;
+        _sapp.ios.view.frame = _sapp.ios.window.windowScene.screen.bounds;
     }
 }
 - (void)keyboardDidChangeFrame:(NSNotification*)notif {
@@ -6726,7 +6706,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
     if (_sapp.onscreen_keyboard_shown && _sapp.desc.ios.keyboard_resizes_canvas) {
         NSDictionary* info = notif.userInfo;
         CGFloat kbd_h = [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].size.height;
-        CGRect view_frame = UIScreen.mainScreen.bounds;
+        CGRect view_frame = _sapp.ios.window.windowScene.screen.bounds;
         view_frame.size.height -= kbd_h;
         _sapp.ios.view.frame = view_frame;
     }
