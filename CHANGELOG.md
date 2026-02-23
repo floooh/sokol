@@ -1,5 +1,25 @@
 ## Updates
 
+### 23-Feb-2026
+
+- sokol_app.h ios+metal: Remove MTKView from the iOS+Metal backend and
+  migrate to UIScene lifecycle events.
+  - Implement the new 'UIScene lifecycle' which fixes a deprecation warning
+    at startup that this will be required with the next major iOS update. This
+    change essentially replaces most application delegate callbacks with
+    scene delegate callbacks. This change requires to bump the minimal
+    supported iOS version to 13 (released 2019)
+  - Replace MTKView with CAMetalLayer and CADisplayLink, the one important
+    difference to the macOS backend is that the frame callback isn't called
+    when the application is in the background (you can check for the
+    events `SAPP_EVENTTYPE_SUSPENDED` and `SAPP_EVENTTYPE_RESUMED` if you need
+    to handle this situation). In your build scripts, no longer link with
+    MetalKit, instead link with QuartzCore.
+  - Note that the changes have only been tested in the simulator, I currently
+    don't own any recent physical iOS devices.
+
+  PR: https://github.com/floooh/sokol/pull/1447
+
 ### 20-Feb-2026
 
 - sokol_app.h macos+metal: The swapchain code has been rewritten to replace
