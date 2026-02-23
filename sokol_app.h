@@ -2310,9 +2310,11 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #else
         // iOS or iOS Simulator
         #define _SAPP_IOS (1)
-        #define _SAPP_USE_FILTERED_FRAME_TIMING (1)
         #if !defined(SOKOL_METAL) && !defined(SOKOL_GLES3)
         #error("sokol_app.h: unknown 3D API selected for iOS, must be SOKOL_METAL or SOKOL_GLES3")
+        #endif
+        #if !defined(SOKOL_METAL)
+        #define _SAPP_USE_FILTERED_FRAME_TIMING (1)
         #endif
         #if TARGET_OS_TV
         #define _SAPP_TVOS (1)
@@ -2909,6 +2911,10 @@ typedef struct {
         CADisplayLink* display_link;
         id<MTLTexture> depth_tex;
         id<MTLTexture> msaa_tex;
+        struct {
+            CFTimeInterval timestamp;
+            CFTimeInterval frame_duration_sec;
+        } timing;
     } mtl;
     #else
     EAGLContext* eagl_ctx;
@@ -5060,9 +5066,6 @@ _SOKOL_PRIVATE void _sapp_vk_frame(void) {
 #define _SAPP_OBJC_RELEASE(obj) { [obj release]; obj = nil; }
 #endif
 
-#define _SAPP_MACOS_MTL_OBSCURED_FRAME_DURATION_IN_SECONDS (0.01667)
-#define _SAPP_MACOS_MTL_MAX_FRAME_DURATION_IN_SECONDS (0.25)
-
 // ███    ███  █████   ██████  ██████  ███████
 // ████  ████ ██   ██ ██      ██    ██ ██
 // ██ ████ ██ ███████ ██      ██    ██ ███████
@@ -5072,7 +5075,10 @@ _SOKOL_PRIVATE void _sapp_vk_frame(void) {
 // >>macos
 #if defined(_SAPP_MACOS)
 
-NSInteger _sapp_macos_max_fps(void) {
+#define _SAPP_MACOS_MTL_OBSCURED_FRAME_DURATION_IN_SECONDS (0.01667)
+#define _SAPP_MACOS_MTL_MAX_FRAME_DURATION_IN_SECONDS (0.25)
+
+_SOKOL_PRIVATE NSInteger _sapp_macos_max_fps(void) {
     return [NSScreen.mainScreen maximumFramesPerSecond];
 }
 
@@ -5871,10 +5877,6 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
 }
 
 _SOKOL_PRIVATE void _sapp_macos_frame(void) {
-    // NOTE: DO NOT call _sapp_macos_update_dimensions() function from within the
-    // frame callback (at least when called from MTKView's drawRect function).
-    // This will trigger a chicken-egg situation that triggers a
-    // Metal validation layer error about different render target sizes.
     #if defined(_SAPP_USE_FILTERED_FRAME_TIMING)
     _sapp_timing_measure(&_sapp.timing);
     #elif defined(SOKOL_METAL)
@@ -6397,7 +6399,14 @@ static void _sapp_gl_make_current(void) {
 // >>ios
 #if defined(_SAPP_IOS)
 
+#define _SAPP_IOS_MTL_MAX_FRAME_DURATION_IN_SECONDS (0.25)
+
+_SOKOL_PRIVATE NSInteger _sapp_ios_max_fps(void) {
+    return _sapp.ios.window.windowScene.screen.maximumFramesPerSecond;
+}
+
 #if defined(SOKOL_METAL)
+
 _SOKOL_PRIVATE id<MTLTexture> _sapp_ios_mtl_create_texture(int width, int height, MTLPixelFormat fmt, int sample_count, const char* label) {
     MTLTextureDescriptor* mtl_desc = [[MTLTextureDescriptor alloc] init];
     if (sample_count > 1) {
@@ -6459,12 +6468,40 @@ _SOKOL_PRIVATE id<CAMetalDrawable> _sapp_ios_mtl_swapchain_next(void) {
     return drawable;
 }
 
-_SOKOL_PRIVATE void _sapp_ios_mtl_start_display_link(UIWindowScene* windowScene) {
+_SOKOL_PRIVATE void _sapp_ios_mtl_timing_init(void) {
+    _sapp.ios.mtl.timing.timestamp = 0.0;
+    _sapp.ios.mtl.timing.frame_duration_sec = 1.0 / _sapp_ios_max_fps();
+}
+
+_SOKOL_PRIVATE void _sapp_ios_mtl_timing_update(void) {
+    const CFTimeInterval cur_timestamp = _sapp.ios.mtl.display_link.timestamp;
+    // skip first frame (frame_duration had been initialized to display refresh rate)
+    if (_sapp.ios.mtl.timing.timestamp > 0.0) {
+        _sapp.ios.mtl.timing.frame_duration_sec = cur_timestamp - _sapp.ios.mtl.timing.timestamp;
+        if (_sapp.ios.mtl.timing.frame_duration_sec <= 0.00001) {
+            // this should never actually happen, but just to be sure we don't end up with
+            // a negative or zero frame duration for some reason
+            _sapp.ios.mtl.timing.frame_duration_sec = 1.0 / _sapp_ios_max_fps();
+        } else if (_sapp.ios.mtl.timing.frame_duration_sec > _SAPP_IOS_MTL_MAX_FRAME_DURATION_IN_SECONDS) {
+            // avoid death-spiral in case of ultra-slow framerate (e.g. when debugging)
+            _sapp.ios.mtl.timing.frame_duration_sec = _SAPP_IOS_MTL_MAX_FRAME_DURATION_IN_SECONDS;
+        }
+    } else {
+        SOKOL_ASSERT(_sapp.ios.mtl.timing.frame_duration_sec > 0.0);
+    }
+    _sapp.ios.mtl.timing.timestamp = cur_timestamp;
+}
+
+_SOKOL_PRIVATE double _sapp_ios_mtl_timing_frame_duration(void) {
+    SOKOL_ASSERT(_sapp.ios.mtl.timing.frame_duration_sec > 0.0);
+    return _sapp.ios.mtl.timing.frame_duration_sec;
+}
+
+_SOKOL_PRIVATE void _sapp_ios_mtl_start_display_link(void) {
     SOKOL_ASSERT(nil == _sapp.ios.mtl.display_link);
     SOKOL_ASSERT(nil != _sapp.ios.view);
-    const NSInteger max_fps = windowScene.screen.maximumFramesPerSecond;
     _sapp.ios.mtl.display_link = [CADisplayLink displayLinkWithTarget:_sapp.ios.view selector:@selector(displayLinkFired:)];
-    const float preferred_fps = max_fps / _sapp.swap_interval;
+    const float preferred_fps = _sapp_ios_max_fps() / _sapp.swap_interval;
     const CAFrameRateRange frame_rate_range = { preferred_fps, preferred_fps, preferred_fps };
     _sapp.ios.mtl.display_link.preferredFrameRateRange = frame_rate_range;
     [_sapp.ios.mtl.display_link addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
@@ -6501,7 +6538,8 @@ _SOKOL_PRIVATE void _sapp_ios_mtl_init(UIWindowScene* windowScene) {
     _sapp.ios.view_ctrl.view = _sapp.ios.view;
     _sapp.ios.window.rootViewController = _sapp.ios.view_ctrl;
 
-    _sapp_ios_mtl_start_display_link(windowScene);
+    _sapp_ios_mtl_start_display_link();
+    _sapp_ios_mtl_timing_init();
 }
 
 _SOKOL_PRIVATE void _sapp_ios_mtl_discard_state(void) {
@@ -6532,7 +6570,6 @@ _SOKOL_PRIVATE bool _sapp_ios_mtl_update_framebuffer_dimensions(CGRect screen_re
 
 #if defined(SOKOL_GLES3)
 _SOKOL_PRIVATE void _sapp_ios_gles3_init(UIWindowScene* windowScene) {
-    const NSInteger max_fps = windowScene.screen.maximumFramesPerSecond;
     const CGRect screen_rect = windowScene.screen.bounds;
     _sapp.ios.eagl_ctx = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3];
     _sapp.ios.view = [[_sapp_ios_view alloc] initWithFrame:screen_rect];
@@ -6553,7 +6590,7 @@ _SOKOL_PRIVATE void _sapp_ios_gles3_init(UIWindowScene* windowScene) {
     }
     _sapp.ios.view_ctrl = [[GLKViewController alloc] init];
     _sapp.ios.view_ctrl.view = _sapp.ios.view;
-    _sapp.ios.view_ctrl.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
+    _sapp.ios.view_ctrl.preferredFramesPerSecond = _sapp_ios_max_fps() / _sapp.swap_interval;
     _sapp.ios.window.rootViewController = _sapp.ios.view_ctrl;
 }
 
@@ -13894,6 +13931,8 @@ SOKOL_API_IMPL uint64_t sapp_frame_count(void) {
 SOKOL_API_IMPL double sapp_frame_duration(void) {
     #if defined(_SAPP_MACOS) && defined(SOKOL_METAL)
         return _sapp_macos_mtl_timing_frame_duration();
+    #elif defined(_SAPP_IOS) && defined(SOKOL_METAL)
+        return _sapp_ios_mtl_timing_frame_duration();
     #else
         return _sapp_timing_get_avg(&_sapp.timing);
     #endif
