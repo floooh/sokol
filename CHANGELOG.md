@@ -8,7 +8,7 @@
     at startup that this will be required with the next major iOS update. This
     change essentially replaces most application delegate callbacks with
     scene delegate callbacks. This change requires to bump the minimal
-    supported iOS version to 13 (released 2019)
+    supported iOS version to 15 (released 2021)
   - Replace MTKView with CAMetalLayer and CADisplayLink, the one important
     difference to the macOS backend is that the frame callback isn't called
     when the application is in the background (you can check for the
