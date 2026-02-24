@@ -1858,6 +1858,7 @@ typedef enum sapp_pixel_format {
     SAPP_PIXELFORMAT_SRGB8A8,
     SAPP_PIXELFORMAT_BGRA8,
     SAPP_PIXELFORMAT_SBGRA8,
+    SAPP_PIXELFORMAT_RGBA16F,
     SAPP_PIXELFORMAT_DEPTH,
     SAPP_PIXELFORMAT_DEPTH_STENCIL,
     _SA_PPPIXELFORMAT_FORCE_U32 = 0x7FFFFFFF
@@ -2043,6 +2044,7 @@ typedef struct sapp_desc {
     int sample_count;                   // MSAA sample count
     int swap_interval;                  // the preferred swap interval (ignored on some platforms)
     bool high_dpi;                      // whether the rendering canvas is full-resolution on HighDPI displays
+    bool hdr;                           // whether the swapchain should be HDR-capable
     bool fullscreen;                    // whether the window should be created in fullscreen mode
     bool alpha;                         // whether the framebuffer should have an alpha channel (ignored on some platforms)
     const char* window_title;           // the window title as UTF-8 encoded string
@@ -2154,6 +2156,10 @@ SOKOL_APP_API_DECL bool sapp_keyboard_shown(void);
 SOKOL_APP_API_DECL bool sapp_is_fullscreen(void);
 /* toggle fullscreen mode */
 SOKOL_APP_API_DECL void sapp_toggle_fullscreen(void);
+/* return true if the swapchain is HDR-capable */
+SOKOL_APP_API_DECL bool sapp_hdr(void);
+/* enable or disable HDR mode */
+SOKOL_APP_API_DECL void sapp_enable_hdr(bool enable);
 /* show or hide the mouse cursor */
 SOKOL_APP_API_DECL void sapp_show_mouse(bool show);
 /* show or hide the mouse cursor */
@@ -3874,6 +3880,8 @@ _SOKOL_PRIVATE void _sapp_setup_default_icon(void) {
 // >>wgpu
 #if defined(SOKOL_WGPU)
 
+_SOKOL_PRIVATE WGPUTextureFormat _sapp_wgpu_pick_render_format(size_t count, const WGPUTextureFormat* formats);
+
 _SOKOL_PRIVATE WGPUStringView _sapp_wgpu_stringview(const char* str) {
     WGPUStringView res;
     if (str) {
@@ -3911,6 +3919,13 @@ _SOKOL_PRIVATE void _sapp_wgpu_await(WGPUFuture future) {
 _SOKOL_PRIVATE WGPUTextureFormat _sapp_wgpu_pick_render_format(size_t count, const WGPUTextureFormat* formats) {
     // NOTE: only accept non-SRGB formats until sokol_app.h gets proper SRGB support
     SOKOL_ASSERT((count > 0) && formats);
+    if (_sapp.desc.hdr) {
+        for (size_t i = 0; i < count; i++) {
+            if (formats[i] == WGPUTextureFormat_RGBA16Float) {
+                return WGPUTextureFormat_RGBA16Float;
+            }
+        }
+    }
     for (size_t i = 0; i < count; i++) {
         const WGPUTextureFormat fmt = formats[i];
         switch (fmt) {
@@ -3922,6 +3937,21 @@ _SOKOL_PRIVATE WGPUTextureFormat _sapp_wgpu_pick_render_format(size_t count, con
     }
     // FIXME: fallback might still return an SRGB format
     return formats[0];
+}
+
+_SOKOL_PRIVATE void _sapp_wgpu_enable_hdr(bool enable) {
+    if (_sapp.desc.hdr != enable) {
+        _sapp.desc.hdr = enable;
+        if (_sapp.wgpu.surface) {
+            _SAPP_STRUCT(WGPUSurfaceCapabilities, surf_caps);
+            WGPUStatus caps_status = wgpuSurfaceGetCapabilities(_sapp.wgpu.surface, _sapp.wgpu.adapter, &surf_caps);
+            if (caps_status == WGPUStatus_Success) {
+                _sapp.wgpu.render_format = _sapp_wgpu_pick_render_format(surf_caps.formatCount, surf_caps.formats);
+                _sapp_wgpu_discard_swapchain(true);
+                _sapp_wgpu_create_swapchain(true);
+            }
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
@@ -4645,6 +4675,13 @@ _SOKOL_PRIVATE VkSurfaceFormatKHR _sapp_vk_pick_surface_format(void) {
     SOKOL_ASSERT((res == VK_SUCCESS) || (res == VK_INCOMPLETE)); _SOKOL_UNUSED(res);
     SOKOL_ASSERT(fmt_count > 0);
     // FIXME: only accept non-SRGB formats until sokol_app.h gets proper SRGB support
+    if (_sapp.desc.hdr) {
+        for (uint32_t i = 0; i < fmt_count; i++) {
+            if (formats[i].format == VK_FORMAT_R16G16B16A16_SFLOAT) {
+                return formats[i];
+            }
+        }
+    }
     for (uint32_t i = 0; i < fmt_count; i++) {
         switch (formats[i].format) {
             case VK_FORMAT_B8G8R8A8_UNORM:
@@ -4842,6 +4879,15 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_swapchain_image_view(uint32_t image_index) 
     SOKOL_ASSERT(_sapp.vk.swapchain_views[image_index]);
     vkDestroyImageView(_sapp.vk.device, _sapp.vk.swapchain_views[image_index], 0);
     _sapp.vk.swapchain_views[image_index] = 0;
+}
+
+_SOKOL_PRIVATE void _sapp_vk_enable_hdr(bool enable) {
+    if (_sapp.desc.hdr != enable) {
+        _sapp.desc.hdr = enable;
+        if (_sapp.vk.swapchain) {
+            _sapp_vk_create_swapchain(true);
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
@@ -5083,6 +5129,31 @@ _SOKOL_PRIVATE NSInteger _sapp_macos_max_fps(void) {
 }
 
 #if defined(SOKOL_METAL)
+
+_SOKOL_PRIVATE void _sapp_macos_mtl_swapchain_resize(int width, int height);
+_SOKOL_PRIVATE void _sapp_ios_mtl_swapchain_resize(int width, int height);
+
+_SOKOL_PRIVATE void _sapp_mtl_enable_hdr(bool enable) {
+    if (_sapp.desc.hdr != enable) {
+        _sapp.desc.hdr = enable;
+        MTLPixelFormat fmt = _sapp.desc.hdr ? MTLPixelFormatRGBA16Float : MTLPixelFormatBGRA8Unorm;
+        BOOL wants_hdr = _sapp.desc.hdr ? YES : NO;
+        #if defined(_SAPP_MACOS)
+            _sapp.macos.mtl.layer.pixelFormat = fmt;
+            if ([(id)_sapp.macos.view respondsToSelector:@selector(setWantsExtendedDynamicRangeContent:)]) {
+                [(id)_sapp.macos.view setWantsExtendedDynamicRangeContent:wants_hdr];
+            }
+            _sapp_macos_mtl_swapchain_resize(_sapp.framebuffer_width, _sapp.framebuffer_height);
+        #elif defined(_SAPP_IOS)
+            _sapp.ios.mtl.layer.pixelFormat = fmt;
+            if ([(id)_sapp.ios.view respondsToSelector:@selector(setWantsExtendedDynamicRangeContent:)]) {
+                [(id)_sapp.ios.view setWantsExtendedDynamicRangeContent:wants_hdr];
+            }
+            _sapp_ios_mtl_swapchain_resize(_sapp.framebuffer_width, _sapp.framebuffer_height);
+        #endif
+    }
+}
+
 _SOKOL_PRIVATE id<MTLTexture> _sapp_macos_mtl_create_texture(int width, int height, MTLPixelFormat fmt, int sample_count, const char* label) {
     MTLTextureDescriptor* mtl_desc = [[MTLTextureDescriptor alloc] init];
     if (sample_count > 1) {
@@ -5117,7 +5188,7 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_swapchain_create(int width, int height) {
         _SAPP_PANIC(METAL_CREATE_SWAPCHAIN_DEPTH_TEXTURE_FAILED);
     }
     if (_sapp.sample_count > 1) {
-        _sapp.macos.mtl.msaa_tex = _sapp_macos_mtl_create_texture(width, height, MTLPixelFormatBGRA8Unorm, _sapp.sample_count, "swapchain_msaa_tex");
+        _sapp.macos.mtl.msaa_tex = _sapp_macos_mtl_create_texture(width, height, _sapp.macos.mtl.layer.pixelFormat, _sapp.sample_count, "swapchain_msaa_tex");
         if (nil == _sapp.macos.mtl.msaa_tex) {
             _SAPP_PANIC(METAL_CREATE_SWAPCHAIN_MSAA_TEXTURE_FAILED);
         }
@@ -5191,7 +5262,7 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_start_display_link(void) {
     SOKOL_ASSERT(nil != _sapp.macos.view);
     NSInteger max_fps = _sapp_macos_max_fps();
     _sapp.macos.mtl.display_link = [_sapp.macos.view displayLinkWithTarget:_sapp.macos.view selector:@selector(displayLinkFired:)];
-    const float preferred_fps = max_fps / _sapp.swap_interval;
+    const float preferred_fps = (float)max_fps / (float)_sapp.swap_interval;
     const CAFrameRateRange frame_rate_range = { preferred_fps, preferred_fps, preferred_fps };
     _sapp.macos.mtl.display_link.preferredFrameRateRange = frame_rate_range;
     [_sapp.macos.mtl.display_link addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
@@ -5244,7 +5315,11 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
     _sapp.macos.mtl.layer.device = _sapp.macos.mtl.device;
     _sapp.macos.mtl.layer.magnificationFilter = kCAFilterNearest;
     _sapp.macos.mtl.layer.opaque = true;
-    _sapp.macos.mtl.layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+    if (_sapp.desc.hdr) {
+        _sapp.macos.mtl.layer.pixelFormat = MTLPixelFormatRGBA16Float;
+    } else {
+        _sapp.macos.mtl.layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+    }
     _sapp.macos.mtl.layer.framebufferOnly = true;
     //NOTE: default is 3: _sapp.macos.mtl.layer.maximumDrawableCount = 2;
     // FIXME: _sapp.macos.mtl.layer.colorspace = ...;
@@ -5252,6 +5327,11 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
     [_sapp.macos.view updateTrackingAreas];
     _sapp.macos.view.wantsLayer = YES;
     _sapp.macos.view.layer = _sapp.macos.mtl.layer;
+    if (_sapp.desc.hdr) {
+        if ([(id)_sapp.macos.view respondsToSelector:@selector(setWantsExtendedDynamicRangeContent:)]) {
+            [(id)_sapp.macos.view setWantsExtendedDynamicRangeContent:YES];
+        }
+    }
     _sapp_macos_mtl_start_display_link();
     _sapp_macos_mtl_timing_init();
 }
@@ -6406,7 +6486,6 @@ _SOKOL_PRIVATE NSInteger _sapp_ios_max_fps(void) {
 }
 
 #if defined(SOKOL_METAL)
-
 _SOKOL_PRIVATE id<MTLTexture> _sapp_ios_mtl_create_texture(int width, int height, MTLPixelFormat fmt, int sample_count, const char* label) {
     MTLTextureDescriptor* mtl_desc = [[MTLTextureDescriptor alloc] init];
     if (sample_count > 1) {
@@ -6441,7 +6520,7 @@ _SOKOL_PRIVATE void _sapp_ios_mtl_swapchain_create(int width, int height) {
         _SAPP_PANIC(METAL_CREATE_SWAPCHAIN_DEPTH_TEXTURE_FAILED);
     }
     if (_sapp.sample_count > 1) {
-        _sapp.ios.mtl.msaa_tex = _sapp_ios_mtl_create_texture(width, height, MTLPixelFormatBGRA8Unorm, _sapp.sample_count, "swapchain_msaa_tex");
+        _sapp.ios.mtl.msaa_tex = _sapp_ios_mtl_create_texture(width, height, _sapp.ios.mtl.layer.pixelFormat, _sapp.sample_count, "swapchain_msaa_tex");
         if (nil == _sapp.ios.mtl.msaa_tex) {
             _SAPP_PANIC(METAL_CREATE_SWAPCHAIN_MSAA_TEXTURE_FAILED);
         }
@@ -6528,10 +6607,20 @@ _SOKOL_PRIVATE void _sapp_ios_mtl_init(UIWindowScene* windowScene) {
     _sapp.ios.mtl.layer.device = _sapp.ios.mtl.device;
     _sapp.ios.mtl.layer.opaque = true;
     _sapp.ios.mtl.layer.framebufferOnly = true;
-    _sapp.ios.mtl.layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+    if (_sapp.desc.hdr) {
+        _sapp.ios.mtl.layer.pixelFormat = MTLPixelFormatRGBA16Float;
+    } else {
+        _sapp.ios.mtl.layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+    }
     _sapp.ios.mtl.layer.frame = _sapp.ios.view.layer.frame;
 
     [_sapp.ios.view.layer addSublayer:_sapp.ios.mtl.layer];
+
+    if (_sapp.desc.hdr) {
+        if ([(id)_sapp.ios.view respondsToSelector:@selector(setWantsExtendedDynamicRangeContent:)]) {
+            [(id)_sapp.ios.view setWantsExtendedDynamicRangeContent:YES];
+        }
+    }
 
     _sapp.ios.view_ctrl = [[UIViewController alloc] init];
     _sapp.ios.view_ctrl.modalPresentationStyle = UIModalPresentationFullScreen;
@@ -8473,6 +8562,8 @@ _SOKOL_PRIVATE void _sapp_win32_init_keytable(void) {
 
 #if defined(SOKOL_D3D11)
 
+_SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(void);
+
 #if defined(__cplusplus)
 #define _sapp_d3d11_Release(self) (self)->Release()
 #define _sapp_win32_refiid(iid) iid
@@ -8584,11 +8675,29 @@ static inline HRESULT _sapp_dxgi_MakeWindowAssociation(IDXGIFactory* self, HWND 
     #endif
 }
 
+_SOKOL_PRIVATE void _sapp_d3d11_enable_hdr(bool enable) {
+    if (_sapp.desc.hdr != enable) {
+        _sapp.desc.hdr = enable;
+        if (_sapp.desc.hdr) {
+            _sapp.d3d11.swap_chain_desc.BufferDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+        } else {
+            _sapp.d3d11.swap_chain_desc.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        }
+        if (_sapp.d3d11.swap_chain) {
+            _sapp_d3d11_resize_default_render_target();
+        }
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     DXGI_SWAP_CHAIN_DESC* sc_desc = &_sapp.d3d11.swap_chain_desc;
     sc_desc->BufferDesc.Width = (UINT)_sapp.framebuffer_width;
     sc_desc->BufferDesc.Height = (UINT)_sapp.framebuffer_height;
-    sc_desc->BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    if (_sapp.desc.hdr) {
+        sc_desc->BufferDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+    } else {
+        sc_desc->BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    }
     sc_desc->BufferDesc.RefreshRate.Numerator = 60;
     sc_desc->BufferDesc.RefreshRate.Denominator = 1;
     sc_desc->OutputWindow = _sapp.win32.hwnd;
@@ -8743,7 +8852,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_destroy_default_render_target(void) {
 _SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(void) {
     if (_sapp.d3d11.swap_chain) {
         _sapp_d3d11_destroy_default_render_target();
-        _sapp_dxgi_ResizeBuffers(_sapp.d3d11.swap_chain, _sapp.d3d11.swap_chain_desc.BufferCount, (UINT)_sapp.framebuffer_width, (UINT)_sapp.framebuffer_height, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
+        _sapp_dxgi_ResizeBuffers(_sapp.d3d11.swap_chain, _sapp.d3d11.swap_chain_desc.BufferCount, (UINT)_sapp.framebuffer_width, (UINT)_sapp.framebuffer_height, _sapp.d3d11.swap_chain_desc.BufferDesc.Format, 0);
         _sapp_d3d11_create_default_render_target();
     }
 }
@@ -13961,6 +14070,8 @@ SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
                 return SAPP_PIXELFORMAT_RGBA8;
             case WGPUTextureFormat_BGRA8Unorm:
                 return SAPP_PIXELFORMAT_BGRA8;
+            case WGPUTextureFormat_RGBA16Float:
+                return SAPP_PIXELFORMAT_RGBA16F;
             default:
                 SOKOL_UNREACHABLE;
                 return SAPP_PIXELFORMAT_NONE;
@@ -13971,13 +14082,19 @@ SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
                 return SAPP_PIXELFORMAT_RGBA8;
             case VK_FORMAT_B8G8R8A8_UNORM:
                 return SAPP_PIXELFORMAT_BGRA8;
+            case VK_FORMAT_R16G16B16A16_SFLOAT:
+                return SAPP_PIXELFORMAT_RGBA16F;
             default:
                 // FIXME!
                 SOKOL_UNREACHABLE;
                 return SAPP_PIXELFORMAT_NONE;
         }
     #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
-        return SAPP_PIXELFORMAT_BGRA8;
+        if (_sapp.desc.hdr) {
+            return SAPP_PIXELFORMAT_RGBA16F;
+        } else {
+            return SAPP_PIXELFORMAT_BGRA8;
+        }
     #else
         return SAPP_PIXELFORMAT_RGBA8;
     #endif
@@ -14048,6 +14165,24 @@ SOKOL_API_IMPL void sapp_toggle_fullscreen(void) {
     _sapp_x11_toggle_fullscreen();
     #elif defined(_SAPP_EMSCRIPTEN)
     _sapp_emsc_toggle_fullscreen();
+    #endif
+}
+
+SOKOL_API_IMPL bool sapp_hdr(void) {
+    return _sapp.desc.hdr;
+}
+
+SOKOL_API_IMPL void sapp_enable_hdr(bool enable) {
+    #if defined(SOKOL_METAL)
+        _sapp_mtl_enable_hdr(enable);
+    #elif defined(SOKOL_D3D11)
+        _sapp_d3d11_enable_hdr(enable);
+    #elif defined(SOKOL_WGPU)
+        _sapp_wgpu_enable_hdr(enable);
+    #elif defined(SOKOL_VULKAN)
+        _sapp_vk_enable_hdr(enable);
+    #else
+        _SOKOL_UNUSED(enable);
     #endif
 }
 
