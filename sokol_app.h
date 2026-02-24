@@ -2804,6 +2804,8 @@ typedef struct {
     VkDevice device;
     VkQueue queue;
     VkSwapchainKHR swapchain;
+    VkPresentModeKHR present_mode;
+    bool present_scaling_supported;
     uint32_t num_swapchain_images;
     uint32_t cur_swapchain_image_index;
     VkImage swapchain_images[_SAPP_VK_MAX_SWAPCHAIN_IMAGES];
@@ -4380,6 +4382,9 @@ _SOKOL_PRIVATE void _sapp_vk_create_instance(void) {
 
     _SAPP_VK_ZERO_COUNT_AND_ARRAY(32, const char*, ext_count, ext_names);
     ext_names[ext_count++] = VK_KHR_SURFACE_EXTENSION_NAME;
+    ext_names[ext_count++] = VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME;
+    // NOTE: VK_KHR_surface_maintenance1 not yet supported on Linux+Intel
+    ext_names[ext_count++] = VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME;
     #if defined(SOKOL_DEBUG)
         ext_names[ext_count++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
     #endif
@@ -4415,6 +4420,8 @@ _SOKOL_PRIVATE uint32_t _sapp_vk_required_device_extensions(const char** out_nam
     SOKOL_ASSERT(out_names && (max_count > 0));
     uint32_t count = 0;
     out_names[count++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+    // NOTE: VK_KHR_swapchain_maintenance not yet supported on Linux+Intel
+    out_names[count++] = VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
     out_names[count++] = VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME;
     SOKOL_ASSERT(count <= max_count); _SOKOL_UNUSED(max_count);
     return count;
@@ -4540,9 +4547,14 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
     xds_features.pNext = &descriptor_buffer_features;
     xds_features.extendedDynamicState = VK_TRUE;
 
+    _SAPP_STRUCT(VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT, scm1_features);
+    scm1_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT;
+    scm1_features.pNext = &xds_features;
+    scm1_features.swapchainMaintenance1 = VK_TRUE;
+
     _SAPP_STRUCT(VkPhysicalDeviceVulkan12Features, vk12_features);
     vk12_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
-    vk12_features.pNext = &xds_features;
+    vk12_features.pNext = &scm1_features;
     vk12_features.bufferDeviceAddress = VK_TRUE;
 
     _SAPP_STRUCT(VkPhysicalDeviceVulkan13Features, vk13_features);
@@ -4839,9 +4851,10 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain_image_view(uint32_t image_index) {
 _SOKOL_PRIVATE void _sapp_vk_destroy_swapchain_image_view(uint32_t image_index) {
     SOKOL_ASSERT(_sapp.vk.device);
     SOKOL_ASSERT(image_index < _sapp.vk.num_swapchain_images);
-    SOKOL_ASSERT(_sapp.vk.swapchain_views[image_index]);
-    vkDestroyImageView(_sapp.vk.device, _sapp.vk.swapchain_views[image_index], 0);
-    _sapp.vk.swapchain_views[image_index] = 0;
+    if (_sapp.vk.swapchain_views[image_index]) {
+        vkDestroyImageView(_sapp.vk.device, _sapp.vk.swapchain_views[image_index], 0);
+        _sapp.vk.swapchain_views[image_index] = 0;
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
@@ -4857,25 +4870,69 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
         SOKOL_ASSERT(_sapp.vk.swapchain);
         SOKOL_ASSERT(_sapp.vk.num_swapchain_images > 0);
         SOKOL_ASSERT(_sapp.vk.swapchain_images[0]);
-        SOKOL_ASSERT(_sapp.vk.swapchain_views[0]);
+        // NOTE: swapchain_views are lazily created and may be 0 here
     }
-
     VkSwapchainKHR old_swapchain = _sapp.vk.swapchain;
 
-    _SAPP_STRUCT(VkSurfaceCapabilitiesKHR, surf_caps);
-    VkResult res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(_sapp.vk.physical_device, _sapp.vk.surface, &surf_caps);
-    SOKOL_ASSERT(res == VK_SUCCESS);
-    const uint32_t fb_width = surf_caps.currentExtent.width;
-    const uint32_t fb_height = surf_caps.currentExtent.height;
+    // FIXME: pick better present-mode if supported
+    _sapp.vk.present_mode = VK_PRESENT_MODE_FIFO_KHR;
 
+    _SAPP_STRUCT(VkSurfacePresentModeKHR, surf_present_mode);
+    surf_present_mode.sType = VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_KHR;
+    surf_present_mode.presentMode = _sapp.vk.present_mode;
+    _SAPP_STRUCT(VkPhysicalDeviceSurfaceInfo2KHR, surf_info);
+    surf_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR;
+    surf_info.pNext = &surf_present_mode;
+    surf_info.surface = _sapp.vk.surface;
+
+    _SAPP_STRUCT(VkSurfacePresentScalingCapabilitiesKHR, surf_scaling_caps);
+    surf_scaling_caps.sType = VK_STRUCTURE_TYPE_SURFACE_PRESENT_SCALING_CAPABILITIES_KHR;
+    _SAPP_STRUCT(VkSurfaceCapabilities2KHR, surf_caps);
+    surf_caps.sType = VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR;
+    surf_caps.pNext = &surf_scaling_caps;
+    VkResult res = vkGetPhysicalDeviceSurfaceCapabilities2KHR(_sapp.vk.physical_device, &surf_info, &surf_caps);
+    SOKOL_ASSERT(res == VK_SUCCESS);
+
+    // FIXME: should we also check min/max scaled-image-extent for present_scaling_supported?
+    _sapp.vk.present_scaling_supported = 0 != (surf_scaling_caps.supportedPresentScaling & VK_PRESENT_SCALING_STRETCH_BIT_EXT);
     _sapp.vk.surface_format = _sapp_vk_pick_surface_format();
-    const VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
+
+    uint32_t fb_width = surf_caps.surfaceCapabilities.currentExtent.width;
+    uint32_t fb_height = surf_caps.surfaceCapabilities.currentExtent.height;
+    if (_sapp.vk.present_scaling_supported) {
+        fb_width = (uint32_t)_sapp_roundf_gzero(fb_width / _sapp.dpi_scale);
+        fb_height = (uint32_t)_sapp_roundf_gzero(fb_height / _sapp.dpi_scale);
+    }
+
+    // scaling-behaviour (only if supported)
+    _SAPP_STRUCT(VkSwapchainPresentScalingCreateInfoEXT, scps_create_info);
+    if (_sapp.vk.present_scaling_supported) {
+        scps_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_SCALING_CREATE_INFO_EXT;
+        scps_create_info.scalingBehavior = VK_PRESENT_SCALING_STRETCH_BIT_EXT;
+        scps_create_info.presentGravityX = VK_PRESENT_GRAVITY_MIN_BIT_EXT;
+        scps_create_info.presentGravityY = VK_PRESENT_GRAVITY_MIN_BIT_EXT;
+    }
+
+    // possible present modes we want to switch between dynamically
+    // (immediate is needed on Windows during window-move/resize)
+    VkPresentModeKHR present_modes[2] = {
+        _sapp.vk.present_mode,
+        VK_PRESENT_MODE_IMMEDIATE_KHR,
+    };
+    _SAPP_STRUCT(VkSwapchainPresentModesCreateInfoEXT, spm_create_info);
+    spm_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODES_CREATE_INFO_EXT;
+    if (_sapp.vk.present_scaling_supported) {
+        spm_create_info.pNext = &scps_create_info;
+    }
+    spm_create_info.presentModeCount = 2;
+    spm_create_info.pPresentModes = present_modes;
 
     _SAPP_STRUCT(VkSwapchainCreateInfoKHR, create_info);
     create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    create_info.flags = 0;
+    create_info.pNext = &spm_create_info;
+    create_info.flags = VK_SWAPCHAIN_CREATE_DEFERRED_MEMORY_ALLOCATION_BIT_EXT;
     create_info.surface = _sapp.vk.surface;
-    create_info.minImageCount = _sapp_vk_swapchain_min_image_count(&surf_caps);
+    create_info.minImageCount = _sapp_vk_swapchain_min_image_count(&surf_caps.surfaceCapabilities);
     create_info.imageFormat = _sapp.vk.surface_format.format;
     create_info.imageColorSpace = _sapp.vk.surface_format.colorSpace;
     create_info.imageExtent.width = fb_width;
@@ -4883,9 +4940,9 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
     create_info.imageArrayLayers = 1;
     create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    create_info.preTransform = surf_caps.currentTransform;
+    create_info.preTransform = surf_caps.surfaceCapabilities.currentTransform;
     create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    create_info.presentMode = present_mode;
+    create_info.presentMode = _sapp.vk.present_mode;
     create_info.clipped = true;
     create_info.oldSwapchain = old_swapchain;
     res = vkCreateSwapchainKHR(_sapp.vk.device, &create_info, 0, &_sapp.vk.swapchain);
@@ -4909,11 +4966,9 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
         &_sapp.vk.num_swapchain_images,
         _sapp.vk.swapchain_images);
     SOKOL_ASSERT(res == VK_SUCCESS);
-    SOKOL_ASSERT(_sapp.vk.num_swapchain_images >= surf_caps.minImageCount);
+    SOKOL_ASSERT(_sapp.vk.num_swapchain_images >= surf_caps.surfaceCapabilities.minImageCount);
 
-    for (uint32_t i = 0; i < _sapp.vk.num_swapchain_images; i++) {
-        _sapp_vk_create_swapchain_image_view(i);
-    }
+    // NOTE: image views are created deferred after vkAcquireNextImage!
 
     // create depth-stencil buffer
     _sapp_vk_swapchain_create_surface(&_sapp.vk.depth,
@@ -5022,12 +5077,26 @@ _SOKOL_PRIVATE void _sapp_vk_swapchain_next(void) {
     if ((res != VK_NOT_READY) && (res != VK_SUBOPTIMAL_KHR) && (res != VK_SUCCESS) && (res != VK_TIMEOUT)) {
         _SAPP_WARN(VULKAN_ACQUIRE_NEXT_IMAGE_FAILED);
     }
+
+    // if not happened yet, create image-view (this must be deferred to
+    // after vkAcquireNextImage because of VK_SWAPCHAIN_CREATE_DEFERRED_MEMORY_ALLOCATION_BIT_EXT)
+    if (0 == _sapp.vk.swapchain_views[_sapp.vk.cur_swapchain_image_index]) {
+        _sapp_vk_create_swapchain_image_view(_sapp.vk.cur_swapchain_image_index);
+    }
 }
 
-_SOKOL_PRIVATE void _sapp_vk_present(void) {
+_SOKOL_PRIVATE void _sapp_vk_present(bool present_immediate) {
     SOKOL_ASSERT(_sapp.vk.queue);
+
+    VkPresentModeKHR present_mode = present_immediate ? VK_PRESENT_MODE_IMMEDIATE_KHR : _sapp.vk.present_mode;
+    _SAPP_STRUCT(VkSwapchainPresentModeInfoEXT, scpm_info);
+    scpm_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODE_INFO_EXT;
+    scpm_info.swapchainCount = 1;
+    scpm_info.pPresentModes = &present_mode;
+
     _SAPP_STRUCT(VkPresentInfoKHR, present_info);
     present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    present_info.pNext = &scpm_info;
     present_info.waitSemaphoreCount = 1;
     // NOTE: using the current swapchain image index here instead of `sync_slot` is *NOT* a bug! The render_finished_semaphore *must*
     // be associated with the current swapchain image in case the swapchain implementation doesn't return swapchain images in order
@@ -5043,9 +5112,9 @@ _SOKOL_PRIVATE void _sapp_vk_present(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_vk_frame(void) {
+_SOKOL_PRIVATE void _sapp_vk_frame(bool present_immediate) {
     _sapp_frame();
-    _sapp_vk_present();
+    _sapp_vk_present(present_immediate);
     _sapp.vk.sync_slot = (_sapp.vk.sync_slot + 1) % _sapp.vk.num_swapchain_images;
 }
 
@@ -9556,7 +9625,8 @@ _SOKOL_PRIVATE void _sapp_win32_frame(bool from_winproc) {
     #if defined(SOKOL_WGPU)
         _sapp_wgpu_frame();
     #elif defined(SOKOL_VULKAN)
-        _sapp_vk_frame();
+        bool present_immediate = from_winproc;
+        _sapp_vk_frame(present_immediate);
     #else
         _sapp_frame();
     #endif
@@ -10195,7 +10265,8 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         _sapp_win32_frame(false);
         // check for window resized, this cannot happen in WM_SIZE as it explodes memory usage
         // NOTE: when Vulkan is active, _sapp_win32_update_dimensions() will never return true,
-        // instead the resize-event is fixed by the swapchain management code
+        // instead the resize event is fired by the swapchain management code
+        // (see _sapp_vk_recreate_swapchain())
         if (_sapp_win32_update_dimensions()) {
             #if defined(SOKOL_D3D11)
             _sapp_d3d11_resize_default_render_target();
@@ -13765,7 +13836,7 @@ _SOKOL_PRIVATE void _sapp_linux_frame(void) {
     #if defined(SOKOL_WGPU)
         _sapp_wgpu_frame();
     #elif defined(SOKOL_VULKAN)
-        _sapp_vk_frame();
+        _sapp_vk_frame(false);
     #else
         _sapp_frame();
         #if defined(_SAPP_GLX)
