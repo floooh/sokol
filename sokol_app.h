@@ -1858,6 +1858,7 @@ typedef enum sapp_pixel_format {
     SAPP_PIXELFORMAT_SRGB8A8,
     SAPP_PIXELFORMAT_BGRA8,
     SAPP_PIXELFORMAT_SBGRA8,
+    SAPP_PIXELFORMAT_RGBA16F,
     SAPP_PIXELFORMAT_DEPTH,
     SAPP_PIXELFORMAT_DEPTH_STENCIL,
     _SA_PPPIXELFORMAT_FORCE_U32 = 0x7FFFFFFF
@@ -2044,6 +2045,7 @@ typedef struct sapp_desc {
     int swap_interval;                  // the preferred swap interval (ignored on some platforms)
     bool high_dpi;                      // whether the rendering canvas is full-resolution on HighDPI displays
     bool fullscreen;                    // whether the window should be created in fullscreen mode
+    sapp_pixel_format color_format;     // the preferred color format of the swapchain
     bool alpha;                         // whether the framebuffer should have an alpha channel (ignored on some platforms)
     const char* window_title;           // the window title as UTF-8 encoded string
     bool enable_clipboard;              // enable clipboard access, default is false
@@ -2154,6 +2156,8 @@ SOKOL_APP_API_DECL bool sapp_keyboard_shown(void);
 SOKOL_APP_API_DECL bool sapp_is_fullscreen(void);
 /* toggle fullscreen mode */
 SOKOL_APP_API_DECL void sapp_toggle_fullscreen(void);
+/* set the swapchain color format at runtime */
+SOKOL_APP_API_DECL void sapp_set_color_format(sapp_pixel_format fmt);
 /* show or hide the mouse cursor */
 SOKOL_APP_API_DECL void sapp_show_mouse(bool show);
 /* show or hide the mouse cursor */
@@ -3909,8 +3913,24 @@ _SOKOL_PRIVATE void _sapp_wgpu_await(WGPUFuture future) {
 }
 
 _SOKOL_PRIVATE WGPUTextureFormat _sapp_wgpu_pick_render_format(size_t count, const WGPUTextureFormat* formats) {
-    // NOTE: only accept non-SRGB formats until sokol_app.h gets proper SRGB support
     SOKOL_ASSERT((count > 0) && formats);
+    WGPUTextureFormat requested_fmt = WGPUTextureFormat_Undefined;
+    switch (_sapp.desc.color_format) {
+        case SAPP_PIXELFORMAT_RGBA8:    requested_fmt = WGPUTextureFormat_RGBA8Unorm; break;
+        case SAPP_PIXELFORMAT_SRGB8A8:  requested_fmt = WGPUTextureFormat_RGBA8UnormSrgb; break;
+        case SAPP_PIXELFORMAT_BGRA8:    requested_fmt = WGPUTextureFormat_BGRA8Unorm; break;
+        case SAPP_PIXELFORMAT_SBGRA8:   requested_fmt = WGPUTextureFormat_BGRA8UnormSrgb; break;
+        case SAPP_PIXELFORMAT_RGBA16F:  requested_fmt = WGPUTextureFormat_RGBA16Float; break;
+        default: break;
+    }
+    if (requested_fmt != WGPUTextureFormat_Undefined) {
+        for (size_t i = 0; i < count; i++) {
+            if (formats[i] == requested_fmt) {
+                return requested_fmt;
+            }
+        }
+    }
+    // if requested format not available, pick a default
     for (size_t i = 0; i < count; i++) {
         const WGPUTextureFormat fmt = formats[i];
         switch (fmt) {
@@ -3922,6 +3942,21 @@ _SOKOL_PRIVATE WGPUTextureFormat _sapp_wgpu_pick_render_format(size_t count, con
     }
     // FIXME: fallback might still return an SRGB format
     return formats[0];
+}
+
+_SOKOL_PRIVATE void _sapp_wgpu_set_color_format(sapp_pixel_format fmt) {
+    if (_sapp.desc.color_format != fmt) {
+        _sapp.desc.color_format = fmt;
+        if (_sapp.wgpu.surface) {
+            _SAPP_STRUCT(WGPUSurfaceCapabilities, surf_caps);
+            WGPUStatus caps_status = wgpuSurfaceGetCapabilities(_sapp.wgpu.surface, _sapp.wgpu.adapter, &surf_caps);
+            if (caps_status == WGPUStatus_Success) {
+                _sapp.wgpu.render_format = _sapp_wgpu_pick_render_format(surf_caps.formatCount, surf_caps.formats);
+                _sapp_wgpu_discard_swapchain(true);
+                _sapp_wgpu_create_swapchain(true);
+            }
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
@@ -4644,7 +4679,25 @@ _SOKOL_PRIVATE VkSurfaceFormatKHR _sapp_vk_pick_surface_format(void) {
     VkResult res = vkGetPhysicalDeviceSurfaceFormatsKHR(_sapp.vk.physical_device, _sapp.vk.surface, &fmt_count, formats);
     SOKOL_ASSERT((res == VK_SUCCESS) || (res == VK_INCOMPLETE)); _SOKOL_UNUSED(res);
     SOKOL_ASSERT(fmt_count > 0);
-    // FIXME: only accept non-SRGB formats until sokol_app.h gets proper SRGB support
+
+    VkFormat requested_fmt = VK_FORMAT_UNDEFINED;
+    switch (_sapp.desc.color_format) {
+        case SAPP_PIXELFORMAT_RGBA8:    requested_fmt = VK_FORMAT_R8G8B8A8_UNORM; break;
+        case SAPP_PIXELFORMAT_SRGB8A8:  requested_fmt = VK_FORMAT_R8G8B8A8_SRGB; break;
+        case SAPP_PIXELFORMAT_BGRA8:    requested_fmt = VK_FORMAT_B8G8R8A8_UNORM; break;
+        case SAPP_PIXELFORMAT_SBGRA8:   requested_fmt = VK_FORMAT_B8G8R8A8_SRGB; break;
+        case SAPP_PIXELFORMAT_RGBA16F:  requested_fmt = VK_FORMAT_R16G16B16A16_SFLOAT; break;
+        default: break;
+    }
+    if (requested_fmt != VK_FORMAT_UNDEFINED) {
+        for (uint32_t i = 0; i < fmt_count; i++) {
+            if (formats[i].format == requested_fmt) {
+                return formats[i];
+            }
+        }
+    }
+
+    // fallback: only accept non-SRGB formats until sokol_app.h gets proper SRGB support
     for (uint32_t i = 0; i < fmt_count; i++) {
         switch (formats[i].format) {
             case VK_FORMAT_B8G8R8A8_UNORM:
@@ -4842,6 +4895,15 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_swapchain_image_view(uint32_t image_index) 
     SOKOL_ASSERT(_sapp.vk.swapchain_views[image_index]);
     vkDestroyImageView(_sapp.vk.device, _sapp.vk.swapchain_views[image_index], 0);
     _sapp.vk.swapchain_views[image_index] = 0;
+}
+
+_SOKOL_PRIVATE void _sapp_vk_set_color_format(sapp_pixel_format fmt) {
+    if (_sapp.desc.color_format != fmt) {
+        _sapp.desc.color_format = fmt;
+        if (_sapp.vk.swapchain) {
+            _sapp_vk_create_swapchain(true);
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
@@ -5083,6 +5145,39 @@ _SOKOL_PRIVATE NSInteger _sapp_macos_max_fps(void) {
 }
 
 #if defined(SOKOL_METAL)
+
+_SOKOL_PRIVATE void _sapp_macos_mtl_swapchain_resize(int width, int height);
+_SOKOL_PRIVATE void _sapp_ios_mtl_swapchain_resize(int width, int height);
+
+_SOKOL_PRIVATE void _sapp_mtl_set_color_format(sapp_pixel_format fmt) {
+    if (_sapp.desc.color_format != fmt) {
+        _sapp.desc.color_format = fmt;
+        MTLPixelFormat mtl_fmt = MTLPixelFormatBGRA8Unorm;
+        switch (_sapp.desc.color_format) {
+            case SAPP_PIXELFORMAT_RGBA8:    mtl_fmt = MTLPixelFormatRGBA8Unorm; break;
+            case SAPP_PIXELFORMAT_SRGB8A8:  mtl_fmt = MTLPixelFormatRGBA8Unorm_sRGB; break;
+            case SAPP_PIXELFORMAT_BGRA8:    mtl_fmt = MTLPixelFormatBGRA8Unorm; break;
+            case SAPP_PIXELFORMAT_SBGRA8:   mtl_fmt = MTLPixelFormatBGRA8Unorm_sRGB; break;
+            case SAPP_PIXELFORMAT_RGBA16F:  mtl_fmt = MTLPixelFormatRGBA16Float; break;
+            default: break;
+        }
+        BOOL wants_hdr = (_sapp.desc.color_format == SAPP_PIXELFORMAT_RGBA16F) ? YES : NO;
+        #if defined(_SAPP_MACOS)
+            _sapp.macos.mtl.layer.pixelFormat = mtl_fmt;
+            if ([(id)_sapp.macos.view respondsToSelector:@selector(setWantsExtendedDynamicRangeContent:)]) {
+                [(id)_sapp.macos.view setWantsExtendedDynamicRangeContent:wants_hdr];
+            }
+            _sapp_macos_mtl_swapchain_resize(_sapp.framebuffer_width, _sapp.framebuffer_height);
+        #elif defined(_SAPP_IOS)
+            _sapp.ios.mtl.layer.pixelFormat = mtl_fmt;
+            if ([(id)_sapp.ios.view respondsToSelector:@selector(setWantsExtendedDynamicRangeContent:)]) {
+                [(id)_sapp.ios.view setWantsExtendedDynamicRangeContent:wants_hdr];
+            }
+            _sapp_ios_mtl_swapchain_resize(_sapp.framebuffer_width, _sapp.framebuffer_height);
+        #endif
+    }
+}
+
 _SOKOL_PRIVATE id<MTLTexture> _sapp_macos_mtl_create_texture(int width, int height, MTLPixelFormat fmt, int sample_count, const char* label) {
     MTLTextureDescriptor* mtl_desc = [[MTLTextureDescriptor alloc] init];
     if (sample_count > 1) {
@@ -5244,7 +5339,19 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
     _sapp.macos.mtl.layer.device = _sapp.macos.mtl.device;
     _sapp.macos.mtl.layer.magnificationFilter = kCAFilterNearest;
     _sapp.macos.mtl.layer.opaque = true;
-    _sapp.macos.mtl.layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+    switch (_sapp.desc.color_format) {
+        case SAPP_PIXELFORMAT_RGBA8:    _sapp.macos.mtl.layer.pixelFormat = MTLPixelFormatRGBA8Unorm; break;
+        case SAPP_PIXELFORMAT_SRGB8A8:  _sapp.macos.mtl.layer.pixelFormat = MTLPixelFormatRGBA8Unorm_sRGB; break;
+        case SAPP_PIXELFORMAT_BGRA8:    _sapp.macos.mtl.layer.pixelFormat = MTLPixelFormatBGRA8Unorm; break;
+        case SAPP_PIXELFORMAT_SBGRA8:   _sapp.macos.mtl.layer.pixelFormat = MTLPixelFormatBGRA8Unorm_sRGB; break;
+        case SAPP_PIXELFORMAT_RGBA16F:  _sapp.macos.mtl.layer.pixelFormat = MTLPixelFormatRGBA16Float; break;
+        default:                        _sapp.macos.mtl.layer.pixelFormat = MTLPixelFormatBGRA8Unorm; break;
+    }
+    if (_sapp.desc.color_format == SAPP_PIXELFORMAT_RGBA16F) {
+        if ([(id)_sapp.macos.view respondsToSelector:@selector(setWantsExtendedDynamicRangeContent:)]) {
+            [(id)_sapp.macos.view setWantsExtendedDynamicRangeContent:YES];
+        }
+    }
     _sapp.macos.mtl.layer.framebufferOnly = true;
     //NOTE: default is 3: _sapp.macos.mtl.layer.maximumDrawableCount = 2;
     // FIXME: _sapp.macos.mtl.layer.colorspace = ...;
@@ -6528,10 +6635,23 @@ _SOKOL_PRIVATE void _sapp_ios_mtl_init(UIWindowScene* windowScene) {
     _sapp.ios.mtl.layer.device = _sapp.ios.mtl.device;
     _sapp.ios.mtl.layer.opaque = true;
     _sapp.ios.mtl.layer.framebufferOnly = true;
-    _sapp.ios.mtl.layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+    switch (_sapp.desc.color_format) {
+        case SAPP_PIXELFORMAT_RGBA8:    _sapp.ios.mtl.layer.pixelFormat = MTLPixelFormatRGBA8Unorm; break;
+        case SAPP_PIXELFORMAT_SRGB8A8:  _sapp.ios.mtl.layer.pixelFormat = MTLPixelFormatRGBA8Unorm_sRGB; break;
+        case SAPP_PIXELFORMAT_BGRA8:    _sapp.ios.mtl.layer.pixelFormat = MTLPixelFormatBGRA8Unorm; break;
+        case SAPP_PIXELFORMAT_SBGRA8:   _sapp.ios.mtl.layer.pixelFormat = MTLPixelFormatBGRA8Unorm_sRGB; break;
+        case SAPP_PIXELFORMAT_RGBA16F:  _sapp.ios.mtl.layer.pixelFormat = MTLPixelFormatRGBA16Float; break;
+        default:                        _sapp.ios.mtl.layer.pixelFormat = MTLPixelFormatBGRA8Unorm; break;
+    }
     _sapp.ios.mtl.layer.frame = _sapp.ios.view.layer.frame;
 
     [_sapp.ios.view.layer addSublayer:_sapp.ios.mtl.layer];
+
+    if (_sapp.desc.color_format == SAPP_PIXELFORMAT_RGBA16F) {
+        if ([(id)_sapp.ios.view respondsToSelector:@selector(setWantsExtendedDynamicRangeContent:)]) {
+            [(id)_sapp.ios.view setWantsExtendedDynamicRangeContent:YES];
+        }
+    }
 
     _sapp.ios.view_ctrl = [[UIViewController alloc] init];
     _sapp.ios.view_ctrl.modalPresentationStyle = UIModalPresentationFullScreen;
@@ -8473,6 +8593,25 @@ _SOKOL_PRIVATE void _sapp_win32_init_keytable(void) {
 
 #if defined(SOKOL_D3D11)
 
+_SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(void);
+
+_SOKOL_PRIVATE void _sapp_d3d11_set_color_format(sapp_pixel_format fmt) {
+    if (_sapp.desc.color_format != fmt) {
+        _sapp.desc.color_format = fmt;
+        switch (_sapp.desc.color_format) {
+            case SAPP_PIXELFORMAT_RGBA8:    _sapp.d3d11.swap_chain_desc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; break;
+            case SAPP_PIXELFORMAT_SRGB8A8:  _sapp.d3d11.swap_chain_desc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB; break;
+            case SAPP_PIXELFORMAT_BGRA8:    _sapp.d3d11.swap_chain_desc.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM; break;
+            case SAPP_PIXELFORMAT_SBGRA8:   _sapp.d3d11.swap_chain_desc.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB; break;
+            case SAPP_PIXELFORMAT_RGBA16F:  _sapp.d3d11.swap_chain_desc.BufferDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT; break;
+            default: break;
+        }
+        if (_sapp.d3d11.swap_chain) {
+            _sapp_d3d11_resize_default_render_target();
+        }
+    }
+}
+
 #if defined(__cplusplus)
 #define _sapp_d3d11_Release(self) (self)->Release()
 #define _sapp_win32_refiid(iid) iid
@@ -8588,7 +8727,14 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     DXGI_SWAP_CHAIN_DESC* sc_desc = &_sapp.d3d11.swap_chain_desc;
     sc_desc->BufferDesc.Width = (UINT)_sapp.framebuffer_width;
     sc_desc->BufferDesc.Height = (UINT)_sapp.framebuffer_height;
-    sc_desc->BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    switch (_sapp.desc.color_format) {
+        case SAPP_PIXELFORMAT_RGBA8:    sc_desc->BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; break;
+        case SAPP_PIXELFORMAT_SRGB8A8:  sc_desc->BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB; break;
+        case SAPP_PIXELFORMAT_BGRA8:    sc_desc->BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM; break;
+        case SAPP_PIXELFORMAT_SBGRA8:   sc_desc->BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB; break;
+        case SAPP_PIXELFORMAT_RGBA16F:  sc_desc->BufferDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT; break;
+        default:                        sc_desc->BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM; break;
+    }
     sc_desc->BufferDesc.RefreshRate.Numerator = 60;
     sc_desc->BufferDesc.RefreshRate.Denominator = 1;
     sc_desc->OutputWindow = _sapp.win32.hwnd;
@@ -13959,8 +14105,12 @@ SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
         switch (_sapp.wgpu.render_format) {
             case WGPUTextureFormat_RGBA8Unorm:
                 return SAPP_PIXELFORMAT_RGBA8;
+            case WGPUTextureFormat_RGBA8UnormSrgb:
+                return SAPP_PIXELFORMAT_SRGB8A8;
             case WGPUTextureFormat_BGRA8Unorm:
                 return SAPP_PIXELFORMAT_BGRA8;
+            case WGPUTextureFormat_BGRA8UnormSrgb:
+                return SAPP_PIXELFORMAT_SBGRA8;
             default:
                 SOKOL_UNREACHABLE;
                 return SAPP_PIXELFORMAT_NONE;
@@ -13969,15 +14119,23 @@ SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
         switch (_sapp.vk.surface_format.format) {
             case VK_FORMAT_R8G8B8A8_UNORM:
                 return SAPP_PIXELFORMAT_RGBA8;
+            case VK_FORMAT_R8G8B8A8_SRGB:
+                return SAPP_PIXELFORMAT_SRGB8A8;
             case VK_FORMAT_B8G8R8A8_UNORM:
                 return SAPP_PIXELFORMAT_BGRA8;
+            case VK_FORMAT_B8G8R8A8_SRGB:
+                return SAPP_PIXELFORMAT_SBGRA8;
             default:
                 // FIXME!
                 SOKOL_UNREACHABLE;
                 return SAPP_PIXELFORMAT_NONE;
         }
     #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
-        return SAPP_PIXELFORMAT_BGRA8;
+        if (_sapp.desc.color_format != _SAPP_PIXELFORMAT_DEFAULT) {
+            return _sapp.desc.color_format;
+        } else {
+            return SAPP_PIXELFORMAT_BGRA8;
+        }
     #else
         return SAPP_PIXELFORMAT_RGBA8;
     #endif
@@ -14048,6 +14206,20 @@ SOKOL_API_IMPL void sapp_toggle_fullscreen(void) {
     _sapp_x11_toggle_fullscreen();
     #elif defined(_SAPP_EMSCRIPTEN)
     _sapp_emsc_toggle_fullscreen();
+    #endif
+}
+
+SOKOL_API_IMPL void sapp_set_color_format(sapp_pixel_format fmt) {
+    #if defined(SOKOL_METAL)
+        _sapp_mtl_set_color_format(fmt);
+    #elif defined(SOKOL_D3D11)
+        _sapp_d3d11_set_color_format(fmt);
+    #elif defined(SOKOL_WGPU)
+        _sapp_wgpu_set_color_format(fmt);
+    #elif defined(SOKOL_VULKAN)
+        _sapp_vk_set_color_format(fmt);
+    #else
+        _sapp.desc.color_format = fmt;
     #endif
 }
 
