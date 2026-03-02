@@ -9856,6 +9856,18 @@ _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
     if (_sapp.fullscreen) {
         _sapp_win32_set_fullscreen(_sapp.fullscreen, SWP_HIDEWINDOW);
         _sapp_win32_update_dimensions();
+    } else {
+        MONITORINFO info = {0};
+        info.cbSize = sizeof(MONITORINFO);
+        GetMonitorInfoW(_sapp.win32.hmonitor, &info);
+        int monitor_width = info.rcMonitor.right - info.rcMonitor.left;
+        int monitor_height = info.rcMonitor.bottom - info.rcMonitor.top;
+
+        int width = _sapp.framebuffer_width;
+        int height = _sapp.framebuffer_height;
+        int center_x = (monitor_width - width) / 2;
+        int center_y = (monitor_height - height) / 2;
+        SetWindowPos(_sapp.win32.hwnd, HWND_TOP, center_x, center_y, width, height, SWP_NOOWNERZORDER);
     }
     ShowWindow(_sapp.win32.hwnd, SW_SHOW);
     DragAcceptFiles(_sapp.win32.hwnd, 1);
