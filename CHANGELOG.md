@@ -1,5 +1,18 @@
 ## Updates
 
+### 03-Mar-2026
+
+- sokol_app.h macos+metal: Merged PR https://github.com/floooh/sokol/pull/1453,
+  this is a followup to the recent removal of MTKView. In specific situations
+  on macOS 14, occluding or minimizing the app window would crash in
+  the `CADisplayLink.invalidate` method (not reproducible in macOS 26). The
+  workaround is to pause/unpause the CADisplayLink instead of invalidating
+  and creating the object.
+
+  For more details also see the issue: https://github.com/floooh/sokol/issues/1448
+
+  Many thanks to @rizerco!
+
 ### 23-Feb-2026
 
 - sokol_app.h ios+metal: Remove MTKView from the iOS+Metal backend and

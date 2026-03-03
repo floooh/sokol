@@ -5145,7 +5145,7 @@ _SOKOL_PRIVATE id<CAMetalDrawable> _sapp_macos_mtl_swapchain_next(void) {
 }
 
 _SOKOL_PRIVATE bool _sapp_macos_mtl_display_link_active(void) {
-    return _sapp.macos.mtl.display_link != nil;
+    return (nil != _sapp.macos.mtl.display_link) && (!_sapp.macos.mtl.display_link.paused);
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_timing_init(void) {
@@ -5185,6 +5185,10 @@ _SOKOL_PRIVATE double _sapp_macos_mtl_timing_frame_duration(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_start_display_link(void) {
+    if (nil != _sapp.macos.mtl.display_link) {
+        _sapp.macos.mtl.display_link.paused = false;
+        return;
+    }
     // NOTE: CADisplayLink is only available since macOS 14.0
     SOKOL_ASSERT(nil == _sapp.macos.mtl.display_link);
     SOKOL_ASSERT(nil == _sapp.macos.mtl.fallback_timer);
@@ -5199,14 +5203,11 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_start_display_link(void) {
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_stop_display_link(void) {
     if (nil != _sapp.macos.mtl.display_link) {
-        [_sapp.macos.mtl.display_link invalidate];
-        // NOTE: the run-loop held the only strong reference to the display link
-        _sapp.macos.mtl.display_link = nil;
+        _sapp.macos.mtl.display_link.paused = true;
     }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_start_fallback_timer(void) {
-    SOKOL_ASSERT(nil == _sapp.macos.mtl.display_link);
     SOKOL_ASSERT(nil == _sapp.macos.mtl.fallback_timer);
     _sapp.macos.mtl.fallback_timer = [NSTimer
         timerWithTimeInterval: _SAPP_MACOS_MTL_OBSCURED_FRAME_DURATION_IN_SECONDS
