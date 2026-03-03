@@ -5145,7 +5145,7 @@ _SOKOL_PRIVATE id<CAMetalDrawable> _sapp_macos_mtl_swapchain_next(void) {
 }
 
 _SOKOL_PRIVATE bool _sapp_macos_mtl_display_link_active(void) {
-    return !_sapp.macos.mtl.display_link.paused;
+    return (nil != _sapp.macos.mtl.display_link) && (!_sapp.macos.mtl.display_link.paused);
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_timing_init(void) {
