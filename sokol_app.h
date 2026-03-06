@@ -7208,6 +7208,14 @@ EM_JS(void, sapp_js_init, (const char* c_str_target_selector, const char* c_str_
     }
 })
 
+EM_JS(void, sapp_js_focus, (void), {
+    if (window) {
+        if (window.focus) {
+            window.focus();
+        }
+    }
+})
+
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_pointerlockchange_cb(int emsc_type, const EmscriptenPointerlockChangeEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(emsc_type);
     _SOKOL_UNUSED(user_data);
@@ -7628,6 +7636,10 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
         // mouse lock can only be activated in mouse button events (not in move, enter or leave)
         if (is_button_event) {
             _sapp_emsc_update_mouse_lock_state();
+            if (consume_event) {
+                // always grab focus on click, in case we are in an iframe
+                sapp_js_focus();
+            }
         }
     }
     return consume_event;
