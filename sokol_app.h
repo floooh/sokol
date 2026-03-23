@@ -2006,6 +2006,10 @@ typedef struct sapp_win32_desc {
     bool console_attach;          // if true, attach stdout/stderr to parent process
 } sapp_win32_desc;
 
+typedef struct sapp_d3d11_desc {
+    bool disable_dxgi_timing;     // if true, use regular measured frame duration instead of DXGI's SyncQPCTime timestamp
+} sapp_d3d11_desc;
+
 typedef struct sapp_html5_desc {
     const char* canvas_selector;  // css selector of the HTML5 canvas element, default is "#canvas"
     bool canvas_resize;           // if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked
@@ -2045,10 +2049,11 @@ typedef struct sapp_desc {
     bool high_dpi;                      // whether the rendering canvas is full-resolution on HighDPI displays
     bool fullscreen;                    // whether the window should be created in fullscreen mode
     bool alpha;                         // whether the framebuffer should have an alpha channel (ignored on some platforms)
-    const char* window_title;           // the window title as UTF-8 encoded string
     bool enable_clipboard;              // enable clipboard access, default is false
-    int clipboard_size;                 // max size of clipboard content in bytes
     bool enable_dragndrop;              // enable file dropping (drag'n'drop), default is false
+    bool disable_timing_filter;         // if true, use 'raw' unfiltered frame duration (may have jitter)
+    const char* window_title;           // the window title as UTF-8 encoded string
+    int clipboard_size;                 // max size of clipboard content in bytes
     int max_dropped_files;              // max number of dropped files to process (default: 1)
     int max_dropped_file_path_length;   // max length in bytes of a dropped UTF-8 file path (default: 2048)
     sapp_icon_desc icon;                // the initial window icon to set
@@ -2058,6 +2063,7 @@ typedef struct sapp_desc {
     // backend-specific options
     sapp_gl_desc gl;
     sapp_win32_desc win32;
+    sapp_d3d11_desc d3d11;
     sapp_html5_desc html5;
     sapp_ios_desc ios;
 } sapp_desc;
@@ -8597,7 +8603,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     if (_sapp.win32.is_win10_or_greater) {
         sc_desc->BufferCount = 2;
         sc_desc->SwapEffect = (DXGI_SWAP_EFFECT) _SAPP_DXGI_SWAP_EFFECT_FLIP_DISCARD;
-        _sapp.d3d11.use_dxgi_frame_stats = true;
+        _sapp.d3d11.use_dxgi_frame_stats = !_sapp.desc.d3d11.disable_dxgi_timing;
     } else {
         sc_desc->BufferCount = 1;
         sc_desc->SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
