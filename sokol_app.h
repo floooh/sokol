@@ -2941,8 +2941,6 @@ typedef struct {
     DXGI_SWAP_CHAIN_DESC swap_chain_desc;
     IDXGISwapChain* swap_chain;
     IDXGIDevice1* dxgi_device;
-    bool use_dxgi_frame_stats;
-    UINT sync_refresh_count;
 } _sapp_d3d11_t;
 #endif
 
@@ -8593,11 +8591,9 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     if (_sapp.win32.is_win10_or_greater) {
         sc_desc->BufferCount = 2;
         sc_desc->SwapEffect = (DXGI_SWAP_EFFECT) _SAPP_DXGI_SWAP_EFFECT_FLIP_DISCARD;
-        _sapp.d3d11.use_dxgi_frame_stats = true;
     } else {
         sc_desc->BufferCount = 1;
         sc_desc->SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-        _sapp.d3d11.use_dxgi_frame_stats = false;
     }
     sc_desc->SampleDesc.Count = 1;
     sc_desc->SampleDesc.Quality = 0;
