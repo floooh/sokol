@@ -20689,13 +20689,20 @@ _SOKOL_PRIVATE void _sg_vk_submit_frame_command_buffers(void) {
     // render command buffer
     const VkPipelineStageFlags present_wait_dst_stage_mask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     submit_infos[1].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit_infos[1].waitSemaphoreCount = 1;
-    submit_infos[1].pWaitSemaphores = &_sg.vk.present_complete_sem;
-    submit_infos[1].pWaitDstStageMask = &present_wait_dst_stage_mask;
+    // NOTE: the render_finished_sem and present_complete_sem are only
+    // provided in swapchain passes, but rendering without a swapchain
+    // pass should be a valid scenario (for instance for 'headless rendering')
+    //
+    // see: https://github.com/floooh/sokol/issues/1459
+    if (_sg.vk.present_complete_sem && _sg.vk.render_finished_sem) {
+        submit_infos[1].waitSemaphoreCount = 1;
+        submit_infos[1].pWaitSemaphores = &_sg.vk.present_complete_sem;
+        submit_infos[1].pWaitDstStageMask = &present_wait_dst_stage_mask;
+        submit_infos[1].signalSemaphoreCount = 1;
+        submit_infos[1].pSignalSemaphores = &_sg.vk.render_finished_sem;
+    }
     submit_infos[1].commandBufferCount = 1;
     submit_infos[1].pCommandBuffers = &_sg.vk.frame.cmd_buf;
-    submit_infos[1].signalSemaphoreCount = 1;
-    submit_infos[1].pSignalSemaphores = &_sg.vk.render_finished_sem;
     res = vkQueueSubmit(_sg.vk.queue, 2, submit_infos, _sg.vk.frame.slot[_sg.vk.frame_slot].fence);
     SOKOL_ASSERT(res == VK_SUCCESS);
 
