@@ -2696,7 +2696,8 @@ typedef struct {
     int num;
     _sapp_timestamp_t timestamp;
     _sapp_ring_t ring;
-    bool filter_enabled;
+    bool jitter_filter_allowed;
+    bool jitter_filter_enabled;
 } _sapp_timing_t;
 
 _SOKOL_PRIVATE void _sapp_timing_reset(_sapp_timing_t* t) {
@@ -2709,17 +2710,24 @@ _SOKOL_PRIVATE void _sapp_timing_reset(_sapp_timing_t* t) {
 
 _SOKOL_PRIVATE void _sapp_timing_init(_sapp_timing_t* t, const sapp_desc* desc) {
     t->avg = 1.0 / 60.0;    // dummy value until first actual value is available
-    t->filter_enabled = !desc->disable_timing_filter;
+    t->jitter_filter_allowed = !desc->disable_timing_filter;
+    t->jitter_filter_enabled = t->jitter_filter_allowed;
     _sapp_timing_reset(t);
     _sapp_timestamp_init(&t->timestamp);
 }
 
-_SOKOL_PRIVATE void _sapp_timing_set_filter_enabled(_sapp_timing_t* t, bool enabled) {
-    t->filter_enabled = enabled;
+_SOKOL_PRIVATE void _sapp_timing_enable_jitter_filter(_sapp_timing_t* t) {
+    _sapp_timing_reset(t);
+    t->jitter_filter_enabled = t->jitter_filter_allowed;
+}
+
+_SOKOL_PRIVATE void _sapp_timing_disable_jitter_filter(_sapp_timing_t* t) {
+    _sapp_timing_reset(t);
+    t->jitter_filter_enabled = false;
 }
 
 _SOKOL_PRIVATE void _sapp_timing_put_duration(_sapp_timing_t* t, double dur) {
-    if (t->filter_enabled) {
+    if (t->jitter_filter_enabled) {
         // arbitrary upper limit to ignore outliers (e.g. during window resizing, or debugging)
         double min_dur = 0.0;
         double max_dur = 0.1;
@@ -2769,12 +2777,12 @@ _SOKOL_PRIVATE void _sapp_timing_put_timestamp(_sapp_timing_t* t, double now) {
     t->last = now;
 }
 
-_SOKOL_PRIVATE void _sapp_timing_measure(_sapp_timing_t* t) {
+_SOKOL_PRIVATE void _sapp_timing_update(_sapp_timing_t* t) {
     const double now = _sapp_timestamp_now(&t->timestamp);
     _sapp_timing_put_timestamp(t, now);
 }
 
-_SOKOL_PRIVATE double _sapp_timing_get_avg(_sapp_timing_t* t) {
+_SOKOL_PRIVATE double _sapp_timing_frame_duration(_sapp_timing_t* t) {
     return t->avg;
 }
 #endif
@@ -2961,9 +2969,11 @@ typedef struct {
     DXGI_SWAP_CHAIN_DESC swap_chain_desc;
     IDXGISwapChain* swap_chain;
     IDXGIDevice1* dxgi_device;
-    bool dxgi_frame_stats_available;
-    bool dxgi_frame_stats_active;
-    UINT sync_refresh_count;
+    struct {
+        bool vsync_timing_available;
+        bool vsync_timing_active;
+        UINT sync_refresh_count;
+    } timing;
 } _sapp_d3d11_t;
 #endif
 
@@ -5896,7 +5906,7 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
 
 _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     #if defined(_SAPP_USE_TIMING_SYSTEM)
-    _sapp_timing_measure(&_sapp.timing);
+    _sapp_timing_update(&_sapp.timing);
     #elif defined(SOKOL_METAL)
     _sapp_macos_mtl_timing_update();
     #else
@@ -6724,7 +6734,7 @@ _SOKOL_PRIVATE void _sapp_ios_update_dimensions(void) {
 
 _SOKOL_PRIVATE void _sapp_ios_frame(void) {
     #if defined(_SAPP_USE_TIMING_SYSTEM)
-    _sapp_timing_measure(&_sapp.timing);
+    _sapp_timing_update(&_sapp.timing);
     #elif defined(SOKOL_METAL)
     _sapp_ios_mtl_timing_update();
     #else
@@ -9546,42 +9556,57 @@ _SOKOL_PRIVATE void _sapp_win32_files_dropped(HDROP hdrop) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_win32_dxgi_timing_init(void) {
+// called when window enters regular visible state
+_SOKOL_PRIVATE void _sapp_win32_timing_start_vsync_timing(void) {
+    #if defined(SOKOL_D3D11)
+        if (!_sapp.d3d11.timing.vsync_timing_available) {
+            _sapp_timing_enable_jitter_filter(&_sapp.timing);
+        }
+        _sapp.d3d11.timing.vsync_timing_active = _sapp.d3d11.timing.vsync_timing_available;
+    #else
+        _sapp_timing_enable_jitter_filter(&_sapp.timing);
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_win32_timing_init(void) {
     #if defined(SOKOL_D3D11)
         if (_sapp.win32.is_win10_or_greater) {
-            _sapp.d3d11.dxgi_frame_stats_available = !_sapp.desc.d3d11.disable_dxgi_timing;
+            _sapp.d3d11.timing.vsync_timing_available = !_sapp.desc.d3d11.disable_dxgi_timing;
         } else {
-            _sapp.d3d11.dxgi_frame_stats_available = false;
+            _sapp.d3d11.timing.vsync_timing_available = false;
         }
-        _sapp_timing_set_filter_enabled(&_sapp.timing, !_sapp.d3d11.dxgi_frame_stats_available);
-        _sapp.d3d11.dxgi_frame_stats_active = _sapp.d3d11.dxgi_frame_stats_available;
+        // if DXGI timestamps are available, generally disable the jitter filter (and it always stays off)
+        if (_sapp.d3d11.timing.vsync_timing_available) {
+            _sapp_timing_disable_jitter_filter(&_sapp.timing);
+        }
     #endif
+    _sapp_win32_timing_start_vsync_timing();
 }
 
-_SOKOL_PRIVATE void _sapp_win32_dxgi_timing_deactivate(void) {
+// called when window enters sized/moved/obscured/minimized
+_SOKOL_PRIVATE void _sapp_win32_timing_stop_vsync_timing(void) {
     #if defined(SOKOL_D3D11)
-        _sapp.d3d11.dxgi_frame_stats_active = false;
+        if (!_sapp.d3d11.timing.vsync_timing_available) {
+            _sapp_timing_disable_jitter_filter(&_sapp.timing);
+        }
+        _sapp.d3d11.timing.vsync_timing_active = false;
+    #else
+        _sapp_timing_disable_jitter_filter(&_sapp.timing);
     #endif
 }
 
-_SOKOL_PRIVATE void _sapp_win32_dxgi_timing_activate(void) {
-    #if defined(SOKOL_D3D11)
-        _sapp.d3d11.dxgi_frame_stats_active = _sapp.d3d11.dxgi_frame_stats_available;
-    #endif
-}
-
-_SOKOL_PRIVATE void _sapp_win32_timing_measure(void) {
+_SOKOL_PRIVATE void _sapp_win32_timing_update(void) {
     #if defined(SOKOL_D3D11)
         // on D3D11, use the more precise DXGI timestamp
-        if (_sapp.d3d11.dxgi_frame_stats_active) {
+        if (_sapp.d3d11.timing.vsync_timing_active) {
             _SAPP_STRUCT(DXGI_FRAME_STATISTICS, dxgi_stats);
             HRESULT hr = _sapp_dxgi_GetFrameStatistics(_sapp.d3d11.swap_chain, &dxgi_stats);
             if (SUCCEEDED(hr)) {
                 // NOTE: when window is obscured, neither SyncRefreshCount nor
                 // SyncQPCTime are updated, this simply means that the current
                 // frame duration "sticks" to the last valid value
-                if (dxgi_stats.SyncRefreshCount != _sapp.d3d11.sync_refresh_count) {
-                    _sapp.d3d11.sync_refresh_count = dxgi_stats.SyncRefreshCount;
+                if (dxgi_stats.SyncRefreshCount != _sapp.d3d11.timing.sync_refresh_count) {
+                    _sapp.d3d11.timing.sync_refresh_count = dxgi_stats.SyncRefreshCount;
                     LARGE_INTEGER qpc = dxgi_stats.SyncQPCTime;
                     const uint64_t now = (uint64_t)_sapp_int64_muldiv(qpc.QuadPart - _sapp.timing.timestamp.win.start.QuadPart, 1000000000, _sapp.timing.timestamp.win.freq.QuadPart);
                     _sapp_timing_put_timestamp(&_sapp.timing, (double)now / 1000000000.0);
@@ -9590,9 +9615,9 @@ _SOKOL_PRIVATE void _sapp_win32_timing_measure(void) {
             }
         }
         // fallback if swap model isn't "flip-discard" or GetFrameStatistics failed for another reason
-        _sapp_timing_measure(&_sapp.timing);
+        _sapp_timing_update(&_sapp.timing);
     #else
-        _sapp_timing_measure(&_sapp.timing);
+        _sapp_timing_update(&_sapp.timing);
     #endif
 }
 
@@ -9802,14 +9827,14 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 break;
             case WM_ENTERSIZEMOVE:
                 SetTimer(_sapp.win32.hwnd, 1, USER_TIMER_MINIMUM, NULL);
-                _sapp_win32_dxgi_timing_deactivate();
+                _sapp_win32_timing_stop_vsync_timing();
                 break;
             case WM_EXITSIZEMOVE:
                 KillTimer(_sapp.win32.hwnd, 1);
-                _sapp_win32_dxgi_timing_activate();
+                _sapp_win32_timing_start_vsync_timing();
                 break;
             case WM_TIMER:
-                _sapp_win32_timing_measure();
+                _sapp_win32_timing_update();
                 _sapp_win32_frame(true);
                 /* NOTE: resizing the swap-chain during resize leads to a substantial
                    memory spike (hundreds of megabytes for a few seconds).
@@ -10210,11 +10235,11 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     _sapp_win32_init_dpi();
     _sapp_win32_init_cursors();
     _sapp_win32_create_window();
+    _sapp_win32_timing_init();
     sapp_set_icon(&desc->icon);
     #if defined(SOKOL_D3D11)
         _sapp_d3d11_create_device_and_swapchain();
         _sapp_d3d11_create_default_render_target();
-        _sapp_win32_dxgi_timing_init();
     #elif defined(SOKOL_GLCORE)
         _sapp_wgl_init();
         _sapp_wgl_load_extensions();
@@ -10228,7 +10253,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
 
     bool done = false;
     while (!(done || _sapp.quit_ordered)) {
-        _sapp_win32_timing_measure();
+        _sapp_win32_timing_update();
         MSG msg;
         while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
             if (WM_QUIT == msg.message) {
@@ -10566,7 +10591,7 @@ _SOKOL_PRIVATE void _sapp_android_frame(void) {
     SOKOL_ASSERT(_sapp.android.display != EGL_NO_DISPLAY);
     SOKOL_ASSERT(_sapp.android.context != EGL_NO_CONTEXT);
     SOKOL_ASSERT(_sapp.android.surface != EGL_NO_SURFACE);
-    _sapp_timing_measure(&_sapp.timing);
+    _sapp_timing_update(&_sapp.timing);
     _sapp_android_update_dimensions(_sapp.android.current.window, false);
     _sapp_frame();
     eglSwapBuffers(_sapp.android.display, _sapp.android.surface);
@@ -13876,7 +13901,7 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
 
     XFlush(_sapp.x11.display);
     while (!_sapp.quit_ordered) {
-        _sapp_timing_measure(&_sapp.timing);
+        _sapp_timing_update(&_sapp.timing);
         int count = XPending(_sapp.x11.display);
         while (count--) {
             XEvent event;
@@ -13977,7 +14002,7 @@ SOKOL_API_IMPL uint64_t sapp_frame_count(void) {
 
 SOKOL_API_IMPL double sapp_frame_duration(void) {
     #if defined(_SAPP_USE_TIMING_SYSTEM)
-        return _sapp_timing_get_avg(&_sapp.timing);
+        return _sapp_timing_frame_duration(&_sapp.timing);
     #elif defined(_SAPP_MACOS)
         return _sapp_macos_mtl_timing_frame_duration();
     #elif defined(_SAPP_IOS)
