@@ -2683,83 +2683,61 @@ _SOKOL_PRIVATE double _sapp_timestamp_now(_sapp_timestamp_t* ts) {
 }
 
 typedef struct {
-    double last;
-    double accum;
-    double avg;
-    int spike_count;
-    int num;
     _sapp_timestamp_t timestamp;
-    _sapp_ring_t ring;
+    double dt_min;          // config: min clamp value for unfiltered time delta (seconds)
+    double dt_max;          // config: max clamp value for unfiltered time delta (seconds)
+    double dt_threshold;    // config: threshold time delta for 'resetting' filtering (default: 0.004s, 4ms)
+    double alpha;       // EMA smoothing factor (default: 0.01)
+    double last;        // last absolute time in seconds
+    double dt;          // unfiltered frame delta in seconds, clamped to dt_min/dt_max
+    double smooth_dt;   // smoothed frame delta in seconds
 } _sapp_timing_t;
 
-_SOKOL_PRIVATE void _sapp_timing_reset(_sapp_timing_t* t) {
-    t->last = 0.0;
-    t->accum = 0.0;
-    t->spike_count = 0;
-    t->num = 0;
-    _sapp_ring_init(&t->ring);
-}
-
 _SOKOL_PRIVATE void _sapp_timing_init(_sapp_timing_t* t) {
-    t->avg = 1.0 / 60.0;    // dummy value until first actual value is available
-    _sapp_timing_reset(t);
     _sapp_timestamp_init(&t->timestamp);
+    t->dt_min = 0.001;          // 1 ms
+    t->dt_max = 0.1;            // 100 ms
+    t->dt_threshold = 0.004;    // 4ms
+    t->alpha = 0.025;
+    t->dt = 1.0 / 60.0;         // a 'likely' non-null value
+    t->smooth_dt = t->dt;
 }
 
-_SOKOL_PRIVATE void _sapp_timing_put(_sapp_timing_t* t, double dur) {
-    // arbitrary upper limit to ignore outliers (e.g. during window resizing, or debugging)
-    double min_dur = 0.0;
-    double max_dur = 0.1;
-    // if we have enough samples for a useful average, use a much tighter 'valid window'
-    if (_sapp_ring_full(&t->ring)) {
-        min_dur = t->avg * 0.8;
-        max_dur = t->avg * 1.2;
+_SOKOL_PRIVATE void _sapp_timing_delta(_sapp_timing_t* t, double dt) {
+    // first clamp raw dt against min/max (min avoid division by zero, max
+    // may avoids glitches and 'death-spirals' during debugging
+    if (dt < t->dt_min) {
+        dt = t->dt_min;
+    } else if (dt > t->dt_max) {
+        dt = t->dt_max;
     }
-    if ((dur < min_dur) || (dur > max_dur)) {
-        t->spike_count++;
-        // if there have been many spikes in a row, the display refresh rate
-        // might have changed, so a timing reset is needed
-        if (t->spike_count > 20) {
-            _sapp_timing_reset(t);
-        }
-        return;
+    t->dt = dt;
+    if (fabs(dt - t->smooth_dt) > t->dt_threshold) {
+        // 'reset' filter when new delta is outside threshold
+        t->smooth_dt = dt;
+    } else {
+        // regular EMA filter
+        t->smooth_dt = (t->alpha * dt) + ((1.0 - t->alpha) * t->smooth_dt);
     }
-    if (_sapp_ring_full(&t->ring)) {
-        double old_val = _sapp_ring_dequeue(&t->ring);
-        t->accum -= old_val;
-        t->num -= 1;
-    }
-    _sapp_ring_enqueue(&t->ring, dur);
-    t->accum += dur;
-    t->num += 1;
-    SOKOL_ASSERT(t->num > 0);
-    t->avg = t->accum / t->num;
-    t->spike_count = 0;
 }
 
-_SOKOL_PRIVATE void _sapp_timing_discontinuity(_sapp_timing_t* t) {
-    t->last = 0.0;
-}
-
-_SOKOL_PRIVATE void _sapp_timing_measure(_sapp_timing_t* t) {
-    const double now = _sapp_timestamp_now(&t->timestamp);
+_SOKOL_PRIVATE void _sapp_timing_update(_sapp_timing_t* t, double external_now) {
+    double now;
+    if (external_now == 0.0) {
+        now = _sapp_timestamp_now(&t->timestamp);
+    } else {
+        now = external_now;
+    }
     if (t->last > 0.0) {
-        double dur = now - t->last;
-        _sapp_timing_put(t, dur);
+        double dt = now - t->last;
+        _sapp_timing_delta(t, dt);
     }
     t->last = now;
+
 }
 
-_SOKOL_PRIVATE void _sapp_timing_external(_sapp_timing_t* t, double now) {
-    if (t->last > 0.0) {
-        double dur = now - t->last;
-        _sapp_timing_put(t, dur);
-    }
-    t->last = now;
-}
-
-_SOKOL_PRIVATE double _sapp_timing_get_avg(_sapp_timing_t* t) {
-    return t->avg;
+_SOKOL_PRIVATE double _sapp_timing_get(_sapp_timing_t* t) {
+    return t->smooth_dt;
 }
 #endif
 
@@ -5879,7 +5857,7 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
 
 _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     #if defined(_SAPP_USE_FILTERED_FRAME_TIMING)
-    _sapp_timing_measure(&_sapp.timing);
+    _sapp_timing_update(&_sapp.timing, 0.0);
     #elif defined(SOKOL_METAL)
     _sapp_macos_mtl_timing_update();
     #else
@@ -6023,9 +6001,6 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 
 - (void)windowDidChangeScreen:(NSNotification*)notification {
     _SOKOL_UNUSED(notification);
-    #if defined(_SAPP_USE_FILTERED_FRAME_TIMING)
-    _sapp_timing_reset(&_sapp.timing);
-    #endif
     _sapp_macos_update_dimensions();
 }
 
@@ -13935,7 +13910,7 @@ SOKOL_API_IMPL double sapp_frame_duration(void) {
     #elif defined(_SAPP_IOS) && defined(SOKOL_METAL)
         return _sapp_ios_mtl_timing_frame_duration();
     #else
-        return _sapp_timing_get_avg(&_sapp.timing);
+        return _sapp_timing_get(&_sapp.timing);
     #endif
 }
 
