@@ -2304,17 +2304,11 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #if !defined(SOKOL_METAL) && !defined(SOKOL_GLCORE) && !defined(SOKOL_WGPU)
         #error("sokol_app.h: unknown 3D API selected for MacOS, must be SOKOL_METAL, SOKOL_GLCORE or SOKOL_WGPU")
         #endif
-        #if !defined(SOKOL_METAL)
-        #define _SAPP_USE_FILTERED_FRAME_TIMING (1)
-        #endif
     #else
         // iOS or iOS Simulator
         #define _SAPP_IOS (1)
         #if !defined(SOKOL_METAL) && !defined(SOKOL_GLES3)
         #error("sokol_app.h: unknown 3D API selected for iOS, must be SOKOL_METAL or SOKOL_GLES3")
-        #endif
-        #if !defined(SOKOL_METAL)
-        #define _SAPP_USE_FILTERED_FRAME_TIMING (1)
         #endif
         #if TARGET_OS_TV
         #define _SAPP_TVOS (1)
@@ -2323,14 +2317,12 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(__EMSCRIPTEN__)
     // Emscripten
     #define _SAPP_EMSCRIPTEN (1)
-    #define _SAPP_USE_FILTERED_FRAME_TIMING (1)
     #if !defined(SOKOL_GLES3) && !defined(SOKOL_WGPU)
     #error("sokol_app.h: unknown 3D API selected for emscripten, must be SOKOL_GLES3 or SOKOL_WGPU")
     #endif
 #elif defined(_WIN32)
     // Windows (D3D11 or GL)
     #define _SAPP_WIN32 (1)
-    #define _SAPP_USE_FILTERED_FRAME_TIMING (1)
     #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE) && !defined(SOKOL_WGPU) && !defined(SOKOL_VULKAN) && !defined(SOKOL_NOAPI)
     #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11, SOKOL_GLCORE, SOKOL_WGPU, SOKOL_VULKAN or SOKOL_NOAPI")
     #endif
@@ -2341,7 +2333,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(__ANDROID__)
     // Android
     #define _SAPP_ANDROID (1)
-    #define _SAPP_USE_FILTERED_FRAME_TIMING (1)
     #if !defined(SOKOL_GLES3)
     #error("sokol_app.h: unknown 3D API selected for Android, must be SOKOL_GLES3")
     #endif
@@ -2351,7 +2342,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(__linux__) || defined(__unix__)
     // Linux
     #define _SAPP_LINUX (1)
-    #define _SAPP_USE_FILTERED_FRAME_TIMING (1)
     #if !defined(SOKOL_GLCORE) && !defined(SOKOL_GLES3) && !defined(SOKOL_WGPU) && !defined(SOKOL_VULKAN)
         #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE, SOKOL_GLES3, SOKOL_WGPU or SOKOL_VULKAN")
     #endif
@@ -2556,7 +2546,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #endif
 
 
-#if defined(_SAPP_USE_FILTERED_FRAME_TIMING)
 // ███████ ██████   █████  ███    ███ ███████     ████████ ██ ███    ███ ██ ███    ██  ██████
 // ██      ██   ██ ██   ██ ████  ████ ██             ██    ██ ████  ████ ██ ████   ██ ██
 // █████   ██████  ███████ ██ ████ ██ █████          ██    ██ ██ ████ ██ ██ ██ ██  ██ ██   ███
@@ -2739,7 +2728,6 @@ _SOKOL_PRIVATE void _sapp_timing_update(_sapp_timing_t* t, double external_now) 
 _SOKOL_PRIVATE double _sapp_timing_get(_sapp_timing_t* t) {
     return t->smooth_dt;
 }
-#endif
 
 // ███████ ████████ ██████  ██    ██  ██████ ████████ ███████
 // ██         ██    ██   ██ ██    ██ ██         ██    ██
@@ -3309,9 +3297,7 @@ typedef struct {
     _sapp_drop_t drop;
     sapp_icon_desc default_icon_desc;
     uint32_t* default_icon_pixels;
-    #if defined(_SAPP_USE_FILTERED_FRAME_TIMING)
-        _sapp_timing_t timing;
-    #endif
+    _sapp_timing_t timing;
     #if defined(SOKOL_WGPU)
         _sapp_wgpu_t wgpu;
     #endif
@@ -3613,9 +3599,7 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _sapp.dpi_scale = 1.0f;
     _sapp.fullscreen = _sapp.desc.fullscreen;
     _sapp.mouse.shown = true;
-    #if defined(_SAPP_USE_FILTERED_FRAME_TIMING)
     _sapp_timing_init(&_sapp.timing);
-    #endif
 }
 
 _SOKOL_PRIVATE void _sapp_discard_state(void) {
@@ -5053,7 +5037,7 @@ _SOKOL_PRIVATE void _sapp_vk_frame(void) {
 // >>macos
 #if defined(_SAPP_MACOS)
 
-#define _SAPP_MACOS_MTL_OBSCURED_FRAME_DURATION_IN_SECONDS (0.01667)
+#define _SAPP_MACOS_MTL_OBSCURED_FRAME_DURATION_IN_SECONDS (0.0166667)
 #define _SAPP_MACOS_MTL_MAX_FRAME_DURATION_IN_SECONDS (0.25)
 
 _SOKOL_PRIVATE NSInteger _sapp_macos_max_fps(void) {
@@ -5132,34 +5116,35 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_timing_init(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_timing_update(void) {
-    CFTimeInterval cur_timestamp = 0.0;
+    // NOTE: if display link is not active, frame duration will be provided
+    // by the regular platform-agnostic timing code
     if (_sapp_macos_mtl_display_link_active()) {
-        cur_timestamp = _sapp.macos.mtl.display_link.timestamp;
-    } else {
-        // fallback timer is active (NOTE: this assumes that the application is starting
-        // in display-link mode, so that the currently stored timestamp is valid
-        cur_timestamp = _sapp.macos.mtl.timing.timestamp + _SAPP_MACOS_MTL_OBSCURED_FRAME_DURATION_IN_SECONDS;
-    }
-    // skip first frame (frame_duration had been initialized to display refresh rate)
-    if (_sapp.macos.mtl.timing.timestamp > 0.0) {
-        _sapp.macos.mtl.timing.frame_duration_sec = cur_timestamp - _sapp.macos.mtl.timing.timestamp;
-        if (_sapp.macos.mtl.timing.frame_duration_sec <= 0.00001) {
-            // this should never actually happen, but just to be sure we don't end up with
-            // a negative or zero frame duration for some reason
-            _sapp.macos.mtl.timing.frame_duration_sec = 1.0 / _sapp_macos_max_fps();
-        } else if (_sapp.macos.mtl.timing.frame_duration_sec > _SAPP_MACOS_MTL_MAX_FRAME_DURATION_IN_SECONDS) {
-            // avoid death-spiral in case of ultra-slow framerate (e.g. when debugging)
-            _sapp.macos.mtl.timing.frame_duration_sec = _SAPP_MACOS_MTL_MAX_FRAME_DURATION_IN_SECONDS;
+        CFTimeInterval cur_timestamp = _sapp.macos.mtl.display_link.timestamp;
+        // skip first frame (frame_duration had been initialized to display refresh rate)
+        if (_sapp.macos.mtl.timing.timestamp > 0.0) {
+            _sapp.macos.mtl.timing.frame_duration_sec = cur_timestamp - _sapp.macos.mtl.timing.timestamp;
+            if (_sapp.macos.mtl.timing.frame_duration_sec <= 0.00001) {
+                // this should never actually happen, but just to be sure we don't end up with
+                // a negative or zero frame duration for some reason
+                _sapp.macos.mtl.timing.frame_duration_sec = 1.0 / _sapp_macos_max_fps();
+            } else if (_sapp.macos.mtl.timing.frame_duration_sec > _SAPP_MACOS_MTL_MAX_FRAME_DURATION_IN_SECONDS) {
+                // avoid death-spiral in case of ultra-slow framerate (e.g. when debugging)
+                _sapp.macos.mtl.timing.frame_duration_sec = _SAPP_MACOS_MTL_MAX_FRAME_DURATION_IN_SECONDS;
+            }
+        } else {
+            SOKOL_ASSERT(_sapp.macos.mtl.timing.frame_duration_sec > 0.0);
         }
-    } else {
-        SOKOL_ASSERT(_sapp.macos.mtl.timing.frame_duration_sec > 0.0);
+        _sapp.macos.mtl.timing.timestamp = cur_timestamp;
     }
-    _sapp.macos.mtl.timing.timestamp = cur_timestamp;
 }
 
 _SOKOL_PRIVATE double _sapp_macos_mtl_timing_frame_duration(void) {
     SOKOL_ASSERT(_sapp.macos.mtl.timing.frame_duration_sec > 0.0);
-    return _sapp.macos.mtl.timing.frame_duration_sec;
+    if (_sapp_macos_mtl_display_link_active()) {
+        return _sapp.macos.mtl.timing.frame_duration_sec;
+    } else {
+        return _sapp_timing_get(&_sapp.timing);
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_start_display_link(void) {
@@ -5856,12 +5841,9 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
 }
 
 _SOKOL_PRIVATE void _sapp_macos_frame(void) {
-    #if defined(_SAPP_USE_FILTERED_FRAME_TIMING)
     _sapp_timing_update(&_sapp.timing, 0.0);
-    #elif defined(SOKOL_METAL)
+    #if defined(SOKOL_METAL)
     _sapp_macos_mtl_timing_update();
-    #else
-    #error "FIXME: invalid frame timing configuration"
     #endif
     #if defined(_SAPP_ANY_GL)
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
@@ -6681,12 +6663,9 @@ _SOKOL_PRIVATE void _sapp_ios_update_dimensions(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_ios_frame(void) {
-    #if defined(_SAPP_USE_FILTERED_FRAME_TIMING)
-    _sapp_timing_measure(&_sapp.timing);
-    #elif defined(SOKOL_METAL)
+    _sapp_timing_update(&_sapp.timing);
+    #if defined(SOKOL_METAL)
     _sapp_ios_mtl_timing_update();
-    #else
-    #error "FIXME: Invalid frame timing configuration"
     #endif
     #if defined(_SAPP_ANY_GL)
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
