@@ -2186,6 +2186,8 @@ SOKOL_APP_API_DECL void sapp_consume_event(void);
 SOKOL_APP_API_DECL uint64_t sapp_frame_count(void);
 /* get an averaged/smoothed frame duration in seconds */
 SOKOL_APP_API_DECL double sapp_frame_duration(void);
+/* get 'raw' unfiltered frame duration in seconds */
+SOKOL_APP_API_DECL double sapp_frame_duration_unfiltered(void);
 /* write string into clipboard */
 SOKOL_APP_API_DECL void sapp_set_clipboard_string(const char* str);
 /* read string from clipboard (usually during SAPP_EVENTTYPE_CLIPBOARD_PASTED) */
@@ -13891,6 +13893,10 @@ SOKOL_API_IMPL double sapp_frame_duration(void) {
     #else
         return _sapp_timing_get(&_sapp.timing);
     #endif
+}
+
+SOKOL_API_IMPL double sapp_frame_duration_unfiltered(void) {
+    return _sapp.timing.dt;
 }
 
 SOKOL_API_IMPL int sapp_width(void) {
