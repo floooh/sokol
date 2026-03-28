@@ -13771,7 +13771,7 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
 
     XFlush(_sapp.x11.display);
     while (!_sapp.quit_ordered) {
-        _sapp_timing_measure(&_sapp.timing);
+        _sapp_timing_update(&_sapp.timing, 0.0);
         int count = XPending(_sapp.x11.display);
         while (count--) {
             XEvent event;
