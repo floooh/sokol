@@ -2678,37 +2678,57 @@ typedef struct {
     double dt_min;          // config: min clamp value for unfiltered time delta (seconds)
     double dt_max;          // config: max clamp value for unfiltered time delta (seconds)
     double dt_threshold;    // config: threshold time delta for 'resetting' filtering (default: 0.004s, 4ms)
-    double alpha;       // EMA smoothing factor (default: 0.01)
+    double tau;         // time constant in seconds, higher => smoother, lower => more responsive
     double last;        // last absolute time in seconds
     double dt;          // unfiltered frame delta in seconds, clamped to dt_min/dt_max
+    double ema1;        // first 'double ema' result
+    double ema2;        // second 'double ema' result
     double smooth_dt;   // smoothed frame delta in seconds
 } _sapp_timing_t;
 
 _SOKOL_PRIVATE void _sapp_timing_init(_sapp_timing_t* t) {
     _sapp_timestamp_init(&t->timestamp);
-    t->dt_min = 0.001;          // 1 ms
+    t->dt_min = 0.000001;       // 1 us
     t->dt_max = 0.1;            // 100 ms
     t->dt_threshold = 0.004;    // 4ms
-    t->alpha = 0.025;
+    t->tau = 0.3;
     t->dt = 1.0 / 60.0;         // a 'likely' non-null value
+    t->ema1 = t->dt;
+    t->ema2 = t->dt;
     t->smooth_dt = t->dt;
+}
+
+_SOKOL_PRIVATE double _sapp_timing_clamp(_sapp_timing_t* t, double dt) {
+    if (dt < t->dt_min) {
+        return t->dt_min;
+    } else if (dt > t->dt_max) {
+        return t->dt_max;
+    } else {
+        return dt;
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_timing_delta(_sapp_timing_t* t, double dt) {
     // first clamp raw dt against min/max (min avoid division by zero, max
     // may avoids glitches and 'death-spirals' during debugging
-    if (dt < t->dt_min) {
-        dt = t->dt_min;
-    } else if (dt > t->dt_max) {
-        dt = t->dt_max;
-    }
+    dt = _sapp_timing_clamp(t, dt);
     t->dt = dt;
-    if (fabs(dt - t->smooth_dt) > t->dt_threshold) {
+    const double error = fabs(dt - t->smooth_dt);
+    if (error > t->dt_threshold) {
         // 'reset' filter when new delta is outside threshold
+        t->ema1 = dt;
+        t->ema2 = dt;
         t->smooth_dt = dt;
     } else {
-        // regular EMA filter
-        t->smooth_dt = (t->alpha * dt) + ((1.0 - t->alpha) * t->smooth_dt);
+        // make response time frame-rate independent, approximation for 1.0 - exp(-dt/t->tau)
+        const double alpha = dt / (dt + t->tau);
+        // first ema filter step
+        t->ema1 = t->ema1 + alpha * (dt - t->ema1);
+        // second ema filter step
+        t->ema2 = t->ema2 + alpha * (t->ema1 - t->ema2);
+        // smoothed result, clamp to make sure it doesn't slip to < 0
+        double res = (2.0 * t->ema1) - t->ema2;
+        t->smooth_dt = _sapp_timing_clamp(t, res);
     }
 }
 
@@ -2913,8 +2933,6 @@ typedef struct {
     DXGI_SWAP_CHAIN_DESC swap_chain_desc;
     IDXGISwapChain* swap_chain;
     IDXGIDevice1* dxgi_device;
-    bool use_dxgi_frame_stats;
-    UINT sync_refresh_count;
 } _sapp_d3d11_t;
 #endif
 
@@ -8553,11 +8571,9 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     if (_sapp.win32.is_win10_or_greater) {
         sc_desc->BufferCount = 2;
         sc_desc->SwapEffect = (DXGI_SWAP_EFFECT) _SAPP_DXGI_SWAP_EFFECT_FLIP_DISCARD;
-        _sapp.d3d11.use_dxgi_frame_stats = true;
     } else {
         sc_desc->BufferCount = 1;
         sc_desc->SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-        _sapp.d3d11.use_dxgi_frame_stats = false;
     }
     sc_desc->SampleDesc.Count = 1;
     sc_desc->SampleDesc.Quality = 0;
@@ -9486,29 +9502,6 @@ _SOKOL_PRIVATE void _sapp_win32_files_dropped(HDROP hdrop) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_win32_timing_measure(void) {
-    #if defined(SOKOL_D3D11)
-        // on D3D11, use the more precise DXGI timestamp
-        if (_sapp.d3d11.use_dxgi_frame_stats) {
-            _SAPP_STRUCT(DXGI_FRAME_STATISTICS, dxgi_stats);
-            HRESULT hr = _sapp_dxgi_GetFrameStatistics(_sapp.d3d11.swap_chain, &dxgi_stats);
-            if (SUCCEEDED(hr)) {
-                if (dxgi_stats.SyncRefreshCount != _sapp.d3d11.sync_refresh_count) {
-                    _sapp.d3d11.sync_refresh_count = dxgi_stats.SyncRefreshCount;
-                    LARGE_INTEGER qpc = dxgi_stats.SyncQPCTime;
-                    const uint64_t now = (uint64_t)_sapp_int64_muldiv(qpc.QuadPart - _sapp.timing.timestamp.win.start.QuadPart, 1000000000, _sapp.timing.timestamp.win.freq.QuadPart);
-                    _sapp_timing_external(&_sapp.timing, (double)now / 1000000000.0);
-                }
-                return;
-            }
-        }
-        // fallback if swap model isn't "flip-discard" or GetFrameStatistics failed for another reason
-        _sapp_timing_measure(&_sapp.timing);
-    #else
-        _sapp_timing_measure(&_sapp.timing);
-    #endif
-}
-
 _SOKOL_PRIVATE void _sapp_win32_frame(bool from_winproc) {
     #if defined(SOKOL_WGPU)
         _sapp_wgpu_frame();
@@ -9720,14 +9713,16 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 KillTimer(_sapp.win32.hwnd, 1);
                 break;
             case WM_TIMER:
-                _sapp_win32_timing_measure();
+                _sapp_timing_update(&_sapp.timing, 0.0);
                 _sapp_win32_frame(true);
-                /* NOTE: resizing the swap-chain during resize leads to a substantial
-                   memory spike (hundreds of megabytes for a few seconds).
-
+                /*
+                * NOTE: resizing each frame explodes memory usage
+                *
                 if (_sapp_win32_update_dimensions()) {
                     #if defined(SOKOL_D3D11)
                     _sapp_d3d11_resize_default_render_target();
+                    #elif defined(SOKOL_WGPU)
+                    _sapp_wgpu_swapchain_size_changed();
                     #endif
                     _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
                 }
@@ -9747,10 +9742,6 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 break;
             case WM_DROPFILES:
                 _sapp_win32_files_dropped((HDROP)wParam);
-                break;
-            case WM_DISPLAYCHANGE:
-                // refresh rate might have changed
-                _sapp_timing_reset(&_sapp.timing);
                 break;
 
             default:
@@ -10138,7 +10129,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
 
     bool done = false;
     while (!(done || _sapp.quit_ordered)) {
-        _sapp_win32_timing_measure();
+        _sapp_timing_update(&_sapp.timing, 0.0);
         MSG msg;
         while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
             if (WM_QUIT == msg.message) {
@@ -10160,12 +10151,6 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
             _sapp_wgpu_swapchain_size_changed();
             #endif
             _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
-        }
-        /* check if the window monitor has changed, need to reset timing because
-           the new monitor might have a different refresh rate
-        */
-        if (_sapp_win32_update_monitor()) {
-            _sapp_timing_reset(&_sapp.timing);
         }
         if (_sapp.quit_requested) {
             PostMessage(_sapp.win32.hwnd, WM_CLOSE, 0, 0);
