@@ -6683,7 +6683,7 @@ _SOKOL_PRIVATE void _sapp_ios_update_dimensions(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_ios_frame(void) {
-    _sapp_timing_update(&_sapp.timing);
+    _sapp_timing_update(&_sapp.timing, 0.0);
     #if defined(SOKOL_METAL)
     _sapp_ios_mtl_timing_update();
     #endif
@@ -8000,7 +8000,7 @@ _SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers(void) {
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame_animation_loop(double time, void* userData) {
     _SOKOL_UNUSED(userData);
-    _sapp_timing_external(&_sapp.timing, time / 1000.0);
+    _sapp_timing_update(&_sapp.timing, time / 1000.0);
 
     #if defined(SOKOL_WGPU)
         _sapp_wgpu_frame();
@@ -10461,7 +10461,7 @@ _SOKOL_PRIVATE void _sapp_android_frame(void) {
     SOKOL_ASSERT(_sapp.android.display != EGL_NO_DISPLAY);
     SOKOL_ASSERT(_sapp.android.context != EGL_NO_CONTEXT);
     SOKOL_ASSERT(_sapp.android.surface != EGL_NO_SURFACE);
-    _sapp_timing_measure(&_sapp.timing);
+    _sapp_timing_update(&_sapp.timing, 0.0);
     _sapp_android_update_dimensions(_sapp.android.current.window, false);
     _sapp_frame();
     eglSwapBuffers(_sapp.android.display, _sapp.android.surface);
