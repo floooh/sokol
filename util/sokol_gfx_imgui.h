@@ -270,11 +270,11 @@ inline void sgimgui_setup(const sgimgui_desc_t& desc) { return sgimgui_setup(&de
 
 #if defined(__cplusplus)
     #if !defined(IMGUI_VERSION)
-    #error "Please include imgui.h before the sokol_imgui.h implementation"
+    #error "Please include imgui.h before the sokol_gfx_imgui.h implementation"
     #endif
 #else
     #if !defined(CIMGUI_API)
-    #error "Please include cimgui.h before the sokol_imgui.h implementation"
+    #error "Please include cimgui.h before the sokol_gfx_imgui.h implementation"
     #endif
 #endif
 #ifndef SOKOL_ASSERT
