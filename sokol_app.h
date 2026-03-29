@@ -2555,54 +2555,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 // ██      ██   ██ ██   ██ ██      ██ ███████        ██    ██ ██      ██ ██ ██   ████  ██████
 //
 // >>frame timing
-#define _SAPP_RING_NUM_SLOTS (256)
-typedef struct {
-    int head;
-    int tail;
-    double buf[_SAPP_RING_NUM_SLOTS];
-} _sapp_ring_t;
-
-_SOKOL_PRIVATE int _sapp_ring_idx(int i) {
-    return i % _SAPP_RING_NUM_SLOTS;
-}
-
-_SOKOL_PRIVATE void _sapp_ring_init(_sapp_ring_t* ring) {
-    ring->head = 0;
-    ring->tail = 0;
-}
-
-_SOKOL_PRIVATE bool _sapp_ring_full(_sapp_ring_t* ring) {
-    return _sapp_ring_idx(ring->head + 1) == ring->tail;
-}
-
-_SOKOL_PRIVATE bool _sapp_ring_empty(_sapp_ring_t* ring) {
-    return ring->head == ring->tail;
-}
-
-_SOKOL_PRIVATE int _sapp_ring_count(_sapp_ring_t* ring) {
-    int count;
-    if (ring->head >= ring->tail) {
-        count = ring->head - ring->tail;
-    } else {
-        count = (ring->head + _SAPP_RING_NUM_SLOTS) - ring->tail;
-    }
-    SOKOL_ASSERT((count >= 0) && (count < _SAPP_RING_NUM_SLOTS));
-    return count;
-}
-
-_SOKOL_PRIVATE void _sapp_ring_enqueue(_sapp_ring_t* ring, double val) {
-    SOKOL_ASSERT(!_sapp_ring_full(ring));
-    ring->buf[ring->head] = val;
-    ring->head = _sapp_ring_idx(ring->head + 1);
-}
-
-_SOKOL_PRIVATE double _sapp_ring_dequeue(_sapp_ring_t* ring) {
-    SOKOL_ASSERT(!_sapp_ring_empty(ring));
-    double val = ring->buf[ring->tail];
-    ring->tail = _sapp_ring_idx(ring->tail + 1);
-    return val;
-}
-
 typedef struct {
     #if defined(_SAPP_APPLE)
         struct {
@@ -2678,7 +2630,7 @@ typedef struct {
     double dt_min;          // config: min clamp value for unfiltered time delta (seconds)
     double dt_max;          // config: max clamp value for unfiltered time delta (seconds)
     double dt_threshold;    // config: threshold time delta for 'resetting' filtering (default: 0.004s, 4ms)
-    double tau;         // time constant in seconds, higher => smoother, lower => more responsive
+    double tau;             // config: time constant in seconds, higher => smoother, lower => more responsive
     double last;        // last absolute time in seconds
     double dt;          // unfiltered frame delta in seconds, clamped to dt_min/dt_max
     double ema1;        // first 'double ema' result
