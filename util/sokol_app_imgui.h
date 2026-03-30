@@ -114,17 +114,14 @@ SOKOL_APP_IMGUI_API_DECL void sappimgui_draw_menu(const char* title);
 
 SOKOL_APP_IMGUI_API_DECL void sappimgui_draw_hud_window_content(void);
 SOKOL_APP_IMGUI_API_DECL void sappimgui_draw_publicstate_window_content(void);
-SOKOL_APP_IMGUI_API_DECL void sappimgui_draw_input_window_content(void);
 SOKOL_APP_IMGUI_API_DECL void sappimgui_draw_event_window_content(void);
 
 SOKOL_APP_IMGUI_API_DECL void sappimgui_draw_hud_window(const char* title);
 SOKOL_APP_IMGUI_API_DECL void sappimgui_draw_publicstate_window(const char* title);
-SOKOL_APP_IMGUI_API_DECL void sappimgui_draw_input_window(const char* title);
 SOKOL_APP_IMGUI_API_DECL void sappimgui_draw_event_window(const char* title);
 
 SOKOL_APP_IMGUI_API_DECL void sappimgui_draw_hud_menu_item(const char* label);
 SOKOL_APP_IMGUI_API_DECL void sappimgui_draw_publicstate_menu_item(const char* label);
-SOKOL_APP_IMGUI_API_DECL void sappimgui_draw_input_menu_item(const char* label);
 SOKOL_APP_IMGUI_API_DECL void sappimgui_draw_event_menu_item(const char* label);
 
 #if defined(__cplusplus)
@@ -242,10 +239,6 @@ typedef struct {
 
 typedef struct {
     bool open;
-} _sappimgui_input_window_t;
-
-typedef struct {
-    bool open;
 } _sappimgui_publicstate_window_t;
 
 typedef struct {
@@ -261,7 +254,6 @@ typedef struct {
     } frames;
     _sappimgui_hud_window_t hud_window;
     _sappimgui_publicstate_window_t publicstate_window;
-    _sappimgui_input_window_t input_window;
     _sappimgui_event_window_t event_window;
 } _sappimgui_state_t;
 static _sappimgui_state_t _sappimgui;
@@ -566,6 +558,16 @@ _SOKOL_PRIVATE const char* _sappimgui_mousebutton_string(sapp_mousebutton btn) {
     }
 }
 
+_SOKOL_PRIVATE const char* _sappimgui_androidtooltype_string(sapp_android_tooltype t) {
+    switch (t) {
+        case SAPP_ANDROIDTOOLTYPE_UNKNOWN: return "UNKNOWN";
+        case SAPP_ANDROIDTOOLTYPE_FINGER: return "FINGER";
+        case SAPP_ANDROIDTOOLTYPE_STYLUS: return "STYLUS";
+        case SAPP_ANDROIDTOOLTYPE_MOUSE: return "MOUSE";
+        default: return "???";
+    }
+}
+
 //--- C => C++ layer -----------------------------------------------------------
 
 #if defined(__cplusplus)
@@ -675,6 +677,35 @@ _SOKOL_PRIVATE void _sappimgui_popstylecolor(int count) {
 }
 
 //--- inernal ui functions -----------------------------------------------------
+_SOKOL_PRIVATE void _sappimgui_draw_modifiers(uint32_t modifiers) {
+    _sappimgui_igsameline();
+    if (0 == modifiers) {
+        _sappimgui_igtext("NONE");
+    } else {
+        if (0 != (modifiers & SAPP_MODIFIER_SHIFT)) {
+            _sappimgui_igsameline(); _sappimgui_igtext("SHIFT");
+        }
+        if (0 != (modifiers & SAPP_MODIFIER_CTRL)) {
+            _sappimgui_igsameline(); _sappimgui_igtext("CTRL");
+        }
+        if (0 != (modifiers & SAPP_MODIFIER_ALT)) {
+            _sappimgui_igsameline(); _sappimgui_igtext("ALT");
+        }
+        if (0 != (modifiers & SAPP_MODIFIER_SUPER)) {
+            _sappimgui_igsameline(); _sappimgui_igtext("SUPER");
+        }
+        if (0 != (modifiers & SAPP_MODIFIER_LMB)) {
+            _sappimgui_igsameline(); _sappimgui_igtext("LMG");
+        }
+        if (0 != (modifiers & SAPP_MODIFIER_RMB)) {
+            _sappimgui_igsameline(); _sappimgui_igtext("RMB");
+        }
+        if (0 != (modifiers & SAPP_MODIFIER_MMB)) {
+            _sappimgui_igsameline(); _sappimgui_igtext("MMB");
+        }
+    }
+}
+
 _SOKOL_PRIVATE void _sappimgui_draw_event(sapp_event_type ev_type, uint64_t cur_frame_count) {
     SOKOL_ASSERT(((int)ev_type >= 0) && ((int)ev_type < _SAPP_EVENTTYPE_NUM));
     const sapp_event* ev = &_sappimgui.event_window.events[ev_type];
@@ -740,7 +771,30 @@ _SOKOL_PRIVATE void _sappimgui_draw_event(sapp_event_type ev_type, uint64_t cur_
     c.w += flash_intensity;
     _sappimgui_pushstylecolor(ImGuiCol_Header, c);
     if (_sappimgui_igcollapsingheader(title, 0)) {
-        _sappimgui_igtext("FIXME!");
+        _sappimgui_igtext("frame: %d", ev->frame_count);
+        _sappimgui_igtext("type: %s", ev_name);
+        _sappimgui_igtext("key code: %s", _sappimgui_keycode_string(ev->key_code));
+        _sappimgui_igtext("char code: 0x%05X", ev->char_code);
+        _sappimgui_igtext("key repeat: %s", _sappimgui_bool_string(ev->key_repeat));
+        _sappimgui_igtext("modifiers: "); _sappimgui_draw_modifiers(ev->modifiers);
+        _sappimgui_igtext("mouse button: %s", _sappimgui_mousebutton_string(ev->mouse_button));
+        _sappimgui_igtext("mouse x: %.2f", ev->mouse_x);
+        _sappimgui_igtext("mouse y: %.2f", ev->mouse_y);
+        _sappimgui_igtext("scroll x: %.2f", ev->scroll_x);
+        _sappimgui_igtext("scroll y: %.2f", ev->scroll_y);
+        _sappimgui_igtext("window width: %d", ev->window_width);
+        _sappimgui_igtext("window height: %d", ev->window_height);
+        _sappimgui_igtext("framebuffer width: %d", ev->framebuffer_width);
+        _sappimgui_igtext("framebuffer height: %d", ev->framebuffer_height);
+        _sappimgui_igtext("num touches: %d", ev->num_touches);
+        for (int i = 0; i < ev->num_touches; i++) {
+            _sappimgui_igtext("touch point %d", i);
+            _sappimgui_igtext("  identifier: %x", ev->touches[i].identifier);
+            _sappimgui_igtext("  pos x: %.2f", ev->touches[i].pos_x);
+            _sappimgui_igtext("  pos y: %.2f", ev->touches[i].pos_y);
+            _sappimgui_igtext("  changed: %s", _sappimgui_bool_string(ev->touches[i].changed));
+            _sappimgui_igtext("  android tooltype: %s", _sappimgui_androidtooltype_string(ev->touches[i].android_tooltype));
+        }
     }
     _sappimgui_popstylecolor(1);
 }
@@ -778,10 +832,9 @@ SOKOL_API_IMPL void sappimgui_track_event(const sapp_event* ev) {
 
 SOKOL_API_IMPL void sappimgui_draw(void) {
     SOKOL_ASSERT(_SAPPIMGUI_INIT_TAG == _sappimgui.init_tag);
-    sappimgui_draw_hud_window("Hud");
-    sappimgui_draw_publicstate_window("Public State");
-    sappimgui_draw_input_window("Input");
-    sappimgui_draw_event_window("Events");
+    sappimgui_draw_hud_window("[sapp] Hud");
+    sappimgui_draw_publicstate_window("[sapp] Public State");
+    sappimgui_draw_event_window("[sapp] Events");
 }
 
 SOKOL_API_IMPL void sappimgui_draw_menu(const char* title) {
@@ -789,7 +842,6 @@ SOKOL_API_IMPL void sappimgui_draw_menu(const char* title) {
     SOKOL_ASSERT(title);
     if (_sappimgui_igbeginmenu(title)) {
         sappimgui_draw_hud_menu_item("Hud");
-        sappimgui_draw_input_menu_item("Input");
         sappimgui_draw_publicstate_menu_item("Public State");
         sappimgui_draw_event_menu_item("Events");
         _sappimgui_igendmenu();
@@ -800,12 +852,6 @@ SOKOL_API_IMPL void sappimgui_draw_hud_menu_item(const char* label) {
     SOKOL_ASSERT(_SAPPIMGUI_INIT_TAG == _sappimgui.init_tag);
     SOKOL_ASSERT(label);
     _sappimgui_igmenuitemboolptr(label, 0, &_sappimgui.hud_window.open, true);
-}
-
-SOKOL_API_IMPL void sappimgui_draw_input_menu_item(const char* label) {
-    SOKOL_ASSERT(_SAPPIMGUI_INIT_TAG == _sappimgui.init_tag);
-    SOKOL_ASSERT(label);
-    _sappimgui_igmenuitemboolptr(label, 0, &_sappimgui.input_window.open, true);
 }
 
 SOKOL_API_IMPL void sappimgui_draw_publicstate_menu_item(const char* label) {
@@ -836,18 +882,6 @@ SOKOL_API_IMPL void sappimgui_draw_hud_window(const char* title) {
         sappimgui_draw_hud_window_content();
     }
     _sappimgui_popstylevar(1);
-    _sappimgui_igend();
-}
-
-SOKOL_API_IMPL void sappimgui_draw_input_window(const char* title) {
-    SOKOL_ASSERT(_SAPPIMGUI_INIT_TAG == _sappimgui.init_tag);
-    SOKOL_ASSERT(title);
-    if (!_sappimgui.input_window.open) {
-        return;
-    }
-    if (_sappimgui_igbegin(title, &_sappimgui.input_window.open, 0)) {
-        sappimgui_draw_input_window_content();
-    }
     _sappimgui_igend();
 }
 
@@ -891,11 +925,6 @@ SOKOL_API_IMPL void sappimgui_draw_hud_window_content(void) {
     _sappimgui_igplotlines("##raw", _sappimgui_raw_dt_getter, 0, _SAPPIMGUI_RING_NUM_SLOTS - 1, 0, "raw frame dt (ms)", scale_min, scale_max, IMVEC2(256,48));
     _sappimgui_igsameline();
     _sappimgui_igtext("min: %6.3fms\nmax: %6.3fms", stats.raw.minimum * 1000.0, stats.raw.maximum * 1000.0);
-}
-
-SOKOL_API_IMPL void sappimgui_draw_input_window_content(void) {
-    SOKOL_ASSERT(_SAPPIMGUI_INIT_TAG == _sappimgui.init_tag);
-    _sappimgui_igtext("FIXME");
 }
 
 SOKOL_API_IMPL void sappimgui_draw_publicstate_window_content(void) {
