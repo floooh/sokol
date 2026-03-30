@@ -882,7 +882,7 @@ SOKOL_API_IMPL void sappimgui_draw_hud_window_content(void) {
     const _sappimgui_frame_stats_t stats = _sappimgui_frame_stats();
     float scale_min = (float)(stats.filtered.average * 1000.0) - 4.0f;
     float scale_max = (float)(stats.filtered.average * 1000.0) + 4.0f;
-    float cur_dt = sapp_frame_duration();
+    double cur_dt = sapp_frame_duration();
     int fps = (int)round(1.0 / cur_dt);
     _sappimgui_igtext("fps: %d (%.3fms)", fps, cur_dt * 1000.0);
     _sappimgui_igplotlines("##filtered", _sappimgui_filtered_dt_getter, 0, _SAPPIMGUI_RING_NUM_SLOTS - 1, 0, "filtered frame dt (ms)", scale_min, scale_max, IMVEC2(256,48));
@@ -905,7 +905,7 @@ SOKOL_API_IMPL void sappimgui_draw_publicstate_window_content(void) {
     _sappimgui_igtext("color format: %s", _sappimgui_pixelformat_string(sapp_color_format()));
     _sappimgui_igtext("depth format: %s", _sappimgui_pixelformat_string(sapp_depth_format()));
     _sappimgui_igtext("sample count: %d", sapp_sample_count());
-    _sappimgui_igtext("high dpi: %d", _sappimgui_bool_string(sapp_high_dpi()));
+    _sappimgui_igtext("high dpi: %s", _sappimgui_bool_string(sapp_high_dpi()));
     _sappimgui_igtext("dpi scale: %f", sapp_dpi_scale());
     _sappimgui_igtext("frame count: %d", sapp_frame_count());
     _sappimgui_igtext("frame duration: %.6f", sapp_frame_duration());
