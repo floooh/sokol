@@ -2493,6 +2493,7 @@ typedef enum sg_vertex_format {
     SG_VERTEXFORMAT_SHORT4N,
     SG_VERTEXFORMAT_USHORT4,
     SG_VERTEXFORMAT_USHORT4N,
+    SG_VERTEXFORMAT_INT10_N2,
     SG_VERTEXFORMAT_UINT10_N2,
     SG_VERTEXFORMAT_HALF2,
     SG_VERTEXFORMAT_HALF4,
@@ -8330,6 +8331,7 @@ _SOKOL_PRIVATE int _sg_vertexformat_bytesize(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_SHORT4N:   return 8;
         case SG_VERTEXFORMAT_USHORT4:   return 8;
         case SG_VERTEXFORMAT_USHORT4N:  return 8;
+        case SG_VERTEXFORMAT_INT10_N2:  return 4;
         case SG_VERTEXFORMAT_UINT10_N2: return 4;
         case SG_VERTEXFORMAT_HALF2:     return 4;
         case SG_VERTEXFORMAT_HALF4:     return 8;
@@ -8366,6 +8368,7 @@ _SOKOL_PRIVATE const char* _sg_vertexformat_to_string(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_SHORT4N:   return "SHORT4N";
         case SG_VERTEXFORMAT_USHORT4:   return "USHORT4";
         case SG_VERTEXFORMAT_USHORT4N:  return "USHORT4N";
+        case SG_VERTEXFORMAT_INT10_N2:  return "INT10_N2";
         case SG_VERTEXFORMAT_UINT10_N2: return "UINT10_N2";
         case SG_VERTEXFORMAT_HALF2:     return "HALF2";
         case SG_VERTEXFORMAT_HALF4:     return "HALF4";
@@ -8401,6 +8404,7 @@ _SOKOL_PRIVATE sg_shader_attr_base_type _sg_vertexformat_basetype(sg_vertex_form
         case SG_VERTEXFORMAT_USHORT2N:
         case SG_VERTEXFORMAT_SHORT4N:
         case SG_VERTEXFORMAT_USHORT4N:
+        case SG_VERTEXFORMAT_INT10_N2:
         case SG_VERTEXFORMAT_UINT10_N2:
             return SG_SHADERATTRBASETYPE_FLOAT;
         case SG_VERTEXFORMAT_INT:
@@ -9297,6 +9301,7 @@ _SOKOL_PRIVATE GLint _sg_gl_vertexformat_size(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_SHORT4N:   return 4;
         case SG_VERTEXFORMAT_USHORT4:   return 4;
         case SG_VERTEXFORMAT_USHORT4N:  return 4;
+        case SG_VERTEXFORMAT_INT10_N2:  return 4;
         case SG_VERTEXFORMAT_UINT10_N2: return 4;
         case SG_VERTEXFORMAT_HALF2:     return 2;
         case SG_VERTEXFORMAT_HALF4:     return 4;
@@ -9337,6 +9342,8 @@ _SOKOL_PRIVATE GLenum _sg_gl_vertexformat_type(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_USHORT4:
         case SG_VERTEXFORMAT_USHORT4N:
             return GL_UNSIGNED_SHORT;
+        case SG_VERTEXFORMAT_INT10_N2:
+            return GL_INT_2_10_10_10_REV;
         case SG_VERTEXFORMAT_UINT10_N2:
             return GL_UNSIGNED_INT_2_10_10_10_REV;
         case SG_VERTEXFORMAT_HALF2:
@@ -9355,6 +9362,7 @@ _SOKOL_PRIVATE GLboolean _sg_gl_vertexformat_normalized(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_USHORT2N:
         case SG_VERTEXFORMAT_SHORT4N:
         case SG_VERTEXFORMAT_USHORT4N:
+        case SG_VERTEXFORMAT_INT10_N2:
         case SG_VERTEXFORMAT_UINT10_N2:
             return GL_TRUE;
         default:
@@ -14613,6 +14621,7 @@ _SOKOL_PRIVATE MTLVertexFormat _sg_mtl_vertex_format(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_SHORT4N:   return MTLVertexFormatShort4Normalized;
         case SG_VERTEXFORMAT_USHORT4:   return MTLVertexFormatUShort4;
         case SG_VERTEXFORMAT_USHORT4N:  return MTLVertexFormatUShort4Normalized;
+        case SG_VERTEXFORMAT_INT10_N2:  return MTLVertexFormatInt1010102Normalized;
         case SG_VERTEXFORMAT_UINT10_N2: return MTLVertexFormatUInt1010102Normalized;
         case SG_VERTEXFORMAT_HALF2:     return MTLVertexFormatHalf2;
         case SG_VERTEXFORMAT_HALF4:     return MTLVertexFormatHalf4;
@@ -20083,6 +20092,7 @@ _SOKOL_PRIVATE VkFormat _sg_vk_vertex_format(sg_vertex_format f) {
         case SG_VERTEXFORMAT_SHORT4N:       return VK_FORMAT_R16G16B16A16_SNORM;
         case SG_VERTEXFORMAT_USHORT4:       return VK_FORMAT_R16G16B16A16_UINT;
         case SG_VERTEXFORMAT_USHORT4N:      return VK_FORMAT_R16G16B16A16_UNORM;
+        case SG_VERTEXFORMAT_INT10_N2:      return VK_FORMAT_A2R10G10B10_SNORM_PACK32;
         case SG_VERTEXFORMAT_UINT10_N2:     return VK_FORMAT_A2R10G10B10_UNORM_PACK32;
         case SG_VERTEXFORMAT_HALF2:         return VK_FORMAT_R16G16_SFLOAT;
         case SG_VERTEXFORMAT_HALF4:         return VK_FORMAT_R16G16B16A16_SFLOAT;
