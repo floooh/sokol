@@ -4906,15 +4906,15 @@ SOKOL_API_IMPL void sgimgui_shutdown(void) {
 }
 
 SOKOL_API_IMPL void sgimgui_draw(void) {
-    sgimgui_draw_buffer_window("Buffers");
-    sgimgui_draw_image_window("Images");
-    sgimgui_draw_sampler_window("Samplers");
-    sgimgui_draw_shader_window("Shaders");
-    sgimgui_draw_pipeline_window("Pipelines");
-    sgimgui_draw_view_window("Views");
-    sgimgui_draw_capture_window("Frame Capture");
-    sgimgui_draw_capabilities_window("Capabilities");
-    sgimgui_draw_frame_stats_window("Frame Stats");
+    sgimgui_draw_buffer_window("[sg] Buffers");
+    sgimgui_draw_image_window("[sg] Images");
+    sgimgui_draw_sampler_window("[sg] Samplers");
+    sgimgui_draw_shader_window("[sg] Shaders");
+    sgimgui_draw_pipeline_window("[sg] Pipelines");
+    sgimgui_draw_view_window("[sg] Views");
+    sgimgui_draw_capture_window("[sg] Frame Capture");
+    sgimgui_draw_capabilities_window("[sg] Capabilities");
+    sgimgui_draw_frame_stats_window("[sg] Frame Stats");
 }
 
 SOKOL_API_IMPL void sgimgui_draw_menu(const char* title) {
