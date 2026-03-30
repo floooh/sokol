@@ -14153,17 +14153,18 @@ SOKOL_API_IMPL void sapp_set_icon(const sapp_icon_desc* desc) {
 }
 
 SOKOL_API_IMPL int sapp_get_num_dropped_files(void) {
-    SOKOL_ASSERT(_sapp.drop.enabled);
+    if (!_sapp.drop.enabled) {
+        return 0;
+    }
     return _sapp.drop.num_files;
 }
 
 SOKOL_API_IMPL const char* sapp_get_dropped_file_path(int index) {
-    SOKOL_ASSERT(_sapp.drop.enabled);
     SOKOL_ASSERT((index >= 0) && (index < _sapp.drop.num_files));
-    SOKOL_ASSERT(_sapp.drop.buffer);
     if (!_sapp.drop.enabled) {
         return "";
     }
+    SOKOL_ASSERT(_sapp.drop.buffer);
     if ((index < 0) || (index >= _sapp.drop.max_files)) {
         return "";
     }
@@ -14171,7 +14172,6 @@ SOKOL_API_IMPL const char* sapp_get_dropped_file_path(int index) {
 }
 
 SOKOL_API_IMPL uint32_t sapp_html5_get_dropped_file_size(int index) {
-    SOKOL_ASSERT(_sapp.drop.enabled);
     SOKOL_ASSERT((index >= 0) && (index < _sapp.drop.num_files));
     #if defined(_SAPP_EMSCRIPTEN)
         if (!_sapp.drop.enabled) {
