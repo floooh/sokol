@@ -604,8 +604,8 @@ _SOKOL_PRIVATE void _sappimgui_pushstylevar(ImGuiStyleVar v, float val) {
     _SAPPIMGUI_IMGUI_FUNC(PushStyleVar)(v, val);
 }
 
-_SOKOL_PRIVATE void _sappimgui_popstylevar(int count) {
-    _SAPPIMGUI_IMGUI_FUNC(PopStyleVar)(count);
+_SOKOL_PRIVATE void _sappimgui_popstylevar(void) {
+    _SAPPIMGUI_IMGUI_FUNC(PopStyleVar)();
 }
 
 _SOKOL_PRIVATE ImGuiViewport* _sappimgui_iggetmainviewport(void) {
@@ -649,7 +649,11 @@ _SOKOL_PRIVATE bool _sappimgui_igmenuitemboolptr(const char* label, const char* 
 }
 
 _SOKOL_PRIVATE void _sappimgui_igplotlines(const char* label, float(*values_getter)(void* data, int idx), void* data, int values_count, int values_offset, const char* overlay_text, float scale_min, float scale_max, ImVec2 graph_size) {
-    _SAPPIMGUI_IMGUI_FUNC(PlotLines)(label, values_getter, data, values_count, values_offset, overlay_text, scale_min, scale_max, graph_size);
+    #if defined(__cplusplus)
+        ImGui::PlotLines(label, values_getter, data, values_count, values_offset, overlay_text, scale_min, scale_max, graph_size);
+    #else
+        _SAPPIMGUI_IMGUI_FUNC(PlotLinesCallbackEx)(label, values_getter, data, values_count, values_offset, overlay_text, scale_min, scale_max, graph_size);
+    #endif
 }
 
 _SOKOL_PRIVATE bool _sappimgui_igcollapsingheader(const char* label, ImGuiTreeNodeFlags flags) {
@@ -672,8 +676,8 @@ _SOKOL_PRIVATE void _sappimgui_pushstylecolor(ImGuiCol idx, ImVec4 c) {
     #endif
 }
 
-_SOKOL_PRIVATE void _sappimgui_popstylecolor(int count) {
-    _SAPPIMGUI_IMGUI_FUNC(PopStyleColor)(count);
+_SOKOL_PRIVATE void _sappimgui_popstylecolor(void) {
+    _SAPPIMGUI_IMGUI_FUNC(PopStyleColor)();
 }
 
 //--- inernal ui functions -----------------------------------------------------
@@ -796,7 +800,7 @@ _SOKOL_PRIVATE void _sappimgui_draw_event(sapp_event_type ev_type, uint64_t cur_
             _sappimgui_igtext("  android tooltype: %s", _sappimgui_androidtooltype_string(ev->touches[i].android_tooltype));
         }
     }
-    _sappimgui_popstylecolor(1);
+    _sappimgui_popstylecolor();
 }
 
 //--- public functions ---------------------------------------------------------
@@ -881,7 +885,7 @@ SOKOL_API_IMPL void sappimgui_draw_hud_window(const char* title) {
     if (_sappimgui_igbegin(title, &_sappimgui.hud_window.open, f)) {
         sappimgui_draw_hud_window_content();
     }
-    _sappimgui_popstylevar(1);
+    _sappimgui_popstylevar();
     _sappimgui_igend();
 }
 
