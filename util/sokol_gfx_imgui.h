@@ -1901,7 +1901,7 @@ _SOKOL_PRIVATE _sgimgui_str_t _sgimgui_capture_item_string(_sgimgui_t* ctx, int 
         case _SGIMGUI_CMD_MAKE_VIEW:
             {
                 _sgimgui_str_t res_id = _sgimgui_view_id_string(ctx, item->args.make_view.result);
-                _sgimgui_snprintf(&str, "%d: sg_make_views(desc=..) => %s", index, res_id.buf);
+                _sgimgui_snprintf(&str, "%d: sg_make_view(desc=..) => %s", index, res_id.buf);
             }
             break;
 
@@ -2103,7 +2103,7 @@ _SOKOL_PRIVATE _sgimgui_str_t _sgimgui_capture_item_string(_sgimgui_t* ctx, int 
         case _SGIMGUI_CMD_DEALLOC_IMAGE:
             {
                 _sgimgui_str_t res_id = _sgimgui_image_id_string(ctx, item->args.dealloc_image.image);
-                _sgimgui_snprintf(&str, "%d: sg_dealloc_image(img=%d)", index, res_id.buf);
+                _sgimgui_snprintf(&str, "%d: sg_dealloc_image(img=%s)", index, res_id.buf);
             }
             break;
 
@@ -3223,13 +3223,13 @@ _SOKOL_PRIVATE void _sgimgui_draw_image(_sgimgui_t* ctx, sg_image img, float* op
     sg_view view = {SG_INVALID_ID};
     for (int i = 0; i < ctx->view_window.num_slots; i++) {
         const _sgimgui_view_t* view_ui = &ctx->view_window.slots[i];
-        view = view_ui->res_id;
-        if (sg_query_view_type(view) == SG_VIEWTYPE_TEXTURE) {
-            sg_image view_img = sg_query_view_image(view);
+        if (sg_query_view_type(view_ui->res_id) == SG_VIEWTYPE_TEXTURE) {
+            sg_image view_img = sg_query_view_image(view_ui->res_id);
             if (view_img.id == img.id) {
                 // FIXME: once texture views can have a separate image type, check this instead
                 const bool image_renderable = (sg_query_image_type(view_img) == SG_IMAGETYPE_2D) && (sg_query_image_sample_count(view_img) == 1);
                 if (image_renderable) {
+                    view = view_ui->res_id;
                     break;
                 }
             }
@@ -3251,7 +3251,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_image(_sgimgui_t* ctx, sg_image img, float* op
         _sgimgui_igimage(simgui_imtextureid(view), IMVEC2(w, h));
         _sgimgui_igpopid();
     } else {
-        _sgimgui_igtext("Image has no renderable texture view.", img.id);
+        _sgimgui_igtext("Image has no renderable texture view.");
     }
 }
 
@@ -3426,7 +3426,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_list(_sgimgui_t* ctx) {
 
 _SOKOL_PRIVATE void _sgimgui_draw_pipeline_list(_sgimgui_t* ctx) {
     _sgimgui_igbeginchild("pipeline_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), true, 0);
-    for (int i = 1; i < ctx->pipeline_window.num_slots; i++) {
+    for (int i = 0; i < ctx->pipeline_window.num_slots; i++) {
         sg_pipeline pip = ctx->pipeline_window.slots[i].res_id;
         sg_resource_state state = sg_query_pipeline_state(pip);
         if ((state != SG_RESOURCESTATE_INVALID) && (state != SG_RESOURCESTATE_INITIAL)) {
@@ -3441,7 +3441,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_pipeline_list(_sgimgui_t* ctx) {
 
 _SOKOL_PRIVATE void _sgimgui_draw_view_list(_sgimgui_t* ctx) {
     _sgimgui_igbeginchild("view_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), true, 0);
-    for (int i = 1; i < ctx->view_window.num_slots; i++) {
+    for (int i = 0; i < ctx->view_window.num_slots; i++) {
         sg_view view = ctx->view_window.slots[i].res_id;
         sg_resource_state state = sg_query_view_state(view);
         if ((state != SG_RESOURCESTATE_INVALID) && (state != SG_RESOURCESTATE_INITIAL)) {
@@ -3748,7 +3748,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_panel(_sgimgui_t* ctx, sg_shader shd) {
                             _sgimgui_igtext("  writeonly: %s", _sgimgui_bool_string(simg->writeonly));
                             _sgimgui_igtext("  hlsl_register_u_n: %d", simg->hlsl_register_u_n);
                             _sgimgui_igtext("  msl_texture_n: %d", simg->msl_texture_n);
-                            _sgimgui_igtext("  wgsl_group2_binding_n: %d", simg->wgsl_group1_binding_n);
+                            _sgimgui_igtext("  wgsl_group1_binding_n: %d", simg->wgsl_group1_binding_n);
                             _sgimgui_igtext("  spirv_set1_binding_n: %d", simg->spirv_set1_binding_n);
                             _sgimgui_igtext("  glsl_binding_n: %d", simg->glsl_binding_n);
                         }
@@ -4197,7 +4197,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_passaction_panel(const sg_pass_action* action,
         case SG_LOADACTION_CLEAR: _sgimgui_igtext("    load action: CLEAR 0x%02X", s_att->clear_value); break;
         default: _sgimgui_igtext("    ???"); break;
     }
-    switch (d_att->store_action) {
+    switch (s_att->store_action) {
         case SG_STOREACTION_STORE: _sgimgui_igtext("    store action: STORE"); break;
         case SG_STOREACTION_DONTCARE: _sgimgui_igtext("    store action: DONTCARE"); break;
         default: _sgimgui_igtext("    ???"); break;
@@ -4374,7 +4374,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_capture_panel(_sgimgui_t* ctx) {
             _sgimgui_draw_image_panel(ctx, item->args.update_image.image);
             break;
         case _SGIMGUI_CMD_APPEND_BUFFER:
-            _sgimgui_draw_buffer_panel(ctx, item->args.update_buffer.buffer);
+            _sgimgui_draw_buffer_panel(ctx, item->args.append_buffer.buffer);
             break;
         case _SGIMGUI_CMD_BEGIN_PASS:
             _sgimgui_draw_pass_panel(ctx, &item->args.begin_pass.pass);
