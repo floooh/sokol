@@ -156,6 +156,11 @@ SOKOL_APP_IMGUI_API_DECL void sappimgui_draw_event_menu_item(const char* label);
         #define _SOKOL_PRIVATE static
     #endif
 #endif
+#ifndef SOKOL_DEBUG
+    #ifndef NDEBUG
+        #define SOKOL_DEBUG
+    #endif
+#endif
 #ifndef _SOKOL_UNUSED
 #define _SOKOL_UNUSED(x) (void)(x)
 #endif
@@ -195,9 +200,11 @@ _SOKOL_PRIVATE bool _sappimgui_ring_full(_sappimgui_ring_t* ring) {
     return _sappimgui_ring_idx(ring->head + 1) == ring->tail;
 }
 
+#if defined(SOKOL_DEBUG)
 _SOKOL_PRIVATE bool _sappimgui_ring_empty(_sappimgui_ring_t* ring) {
     return ring->head == ring->tail;
 }
+#endif
 
 _SOKOL_PRIVATE int _sappimgui_ring_count(_sappimgui_ring_t* ring) {
     int count;
