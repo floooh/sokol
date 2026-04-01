@@ -2630,7 +2630,7 @@ typedef struct {
     double dt_min;          // config: min clamp value for unfiltered time delta (seconds)
     double dt_max;          // config: max clamp value for unfiltered time delta (seconds)
     double dt_threshold;    // config: threshold time delta for 'resetting' filtering (default: 0.004s, 4ms)
-    double tau;             // config: time constant in seconds, higher => smoother, lower => more responsive
+    double alpha;           // config: smoothing constant, lower values smoother, higher values faster response
     double last;        // last absolute time in seconds
     double dt;          // unfiltered frame delta in seconds, clamped to dt_min/dt_max
     double ema1;        // first 'double ema' result
@@ -2643,7 +2643,7 @@ _SOKOL_PRIVATE void _sapp_timing_init(_sapp_timing_t* t) {
     t->dt_min = 0.000001;       // 1 us
     t->dt_max = 0.1;            // 100 ms
     t->dt_threshold = 0.004;    // 4ms
-    t->tau = 0.3;
+    t->alpha = 0.025;
     t->dt = 1.0 / 60.0;         // a 'likely' non-null value
     t->ema1 = t->dt;
     t->ema2 = t->dt;
@@ -2673,12 +2673,10 @@ _SOKOL_PRIVATE void _sapp_timing_delta(_sapp_timing_t* t, double dt) {
         t->ema2 = dt;
         t->smooth_dt = dt;
     } else {
-        // make response time frame-rate independent, approximation for 1.0 - exp(-dt/t->tau)
-        const double alpha = dt / (dt + t->tau);
         // first ema filter step
-        t->ema1 = t->ema1 + alpha * (dt - t->ema1);
+        t->ema1 = t->ema1 + t->alpha * (dt - t->ema1);
         // second ema filter step
-        t->ema2 = t->ema2 + alpha * (t->ema1 - t->ema2);
+        t->ema2 = t->ema2 + t->alpha * (t->ema1 - t->ema2);
         // smoothed result, clamp to make sure it doesn't slip to < 0
         double res = (2.0 * t->ema1) - t->ema2;
         t->smooth_dt = _sapp_timing_clamp(t, res);
