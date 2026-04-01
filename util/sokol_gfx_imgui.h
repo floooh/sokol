@@ -60,9 +60,9 @@
 
     STEP BY STEP:
     =============
-    --- call sgimgui_init() with optional allocator overrides:
+    --- call sgimgui_setup() with optional allocator overrides:
 
-            sgimgui_init(&(sgimgui_desc_t){
+            sgimgui_setup(&(sgimgui_desc_t){
                 .allocator = {
                     .alloc_fn = my_malloc,
                     .free_fn = my_free,
@@ -100,7 +100,7 @@
 
     --- before application shutdown, call:
 
-            sgimgui_discard();
+            sgimgui_shutdown();
 
         ...this is not strictly necessary because the application exits
         anyway, but not doing this may trigger memory leak detection tools.
@@ -117,30 +117,39 @@
     The following functions only render the window *content* (so you
     can integrate the UI into you own windows):
 
-        void sgimgui_draw_buffer_window_content();
-        void sgimgui_draw_image_window_content();
-        void sgimgui_draw_sampler_window_content();
-        void sgimgui_draw_shader_window_content();
-        void sgimgui_draw_pipeline_window_content();
-        void sgimgui_draw_view_window_content();
-        void sgimgui_draw_capture_window_content();
-        void sgimgui_draw_capabilities_window_content();
-        void sgimgui_draw_frame_stats_window_content();
+        void sgimgui_draw_buffer_window_content(void);
+        void sgimgui_draw_image_window_content(void);
+        void sgimgui_draw_sampler_window_content(void);
+        void sgimgui_draw_shader_window_content(void);
+        void sgimgui_draw_pipeline_window_content(void);
+        void sgimgui_draw_view_window_content(void);
+        void sgimgui_draw_capture_window_content(void);
+        void sgimgui_draw_capabilities_window_content(void);
+        void sgimgui_draw_frame_stats_window_content(void);
 
     And these are the 'full window' drawing functions:
 
-        void sgimgui_draw_buffer_window("Buffers");
-        void sgimgui_draw_image_window("Images");
-        void sgimgui_draw_sampler_window("Samplers");
-        void sgimgui_draw_shader_window("Shaders");
-        void sgimgui_draw_pipeline_window("Pipelines");
-        void sgimgui_draw_view_window("Views");
-        void sgimgui_draw_capture_window("Frame Capture");
-        void sgimgui_draw_capabilities_window("Capabilities");
-        void sgimgui_draw_frame_stats_window("Frame Stats");
+        void sgimgui_draw_buffer_window(const char* title);
+        void sgimgui_draw_image_window(const char* title);
+        void sgimgui_draw_sampler_window(const char* title);
+        void sgimgui_draw_shader_window(const char* title);
+        void sgimgui_draw_pipeline_window(const char* title);
+        void sgimgui_draw_view_window(const char* title);
+        void sgimgui_draw_capture_window(const char* title);
+        void sgimgui_draw_capabilities_window(const char* title);
+        void sgimgui_draw_frame_stats_window(const char* title);
 
-    Finer-grained drawing functions may be moved to the public API
-    in the future as needed.
+    To draw the individual menu items:
+
+        void sgimgui_draw_buffer_menu_item(const char* label);
+        void sgimgui_draw_image_menu_item(const char* label);
+        void sgimgui_draw_sampler_menu_item(const char* label);
+        void sgimgui_draw_shader_menu_item(const char* label);
+        void sgimgui_draw_pipeline_menu_item(const char* label);
+        void sgimgui_draw_view_menu_item(const char* label);
+        void sgimgui_draw_capture_menu_item(const char* label);
+        void sgimgui_draw_capabilities_menu_item(const char* label);
+        void sgimgui_draw_frame_stats_menu_item(const char* label);
 
     LICENSE
     =======
@@ -2250,7 +2259,7 @@ _SOKOL_PRIVATE _sgimgui_str_t _sgimgui_capture_item_string(_sgimgui_t* ctx, int 
         case _SGIMGUI_CMD_FAIL_PIPELINE:
             {
                 _sgimgui_str_t res_id = _sgimgui_pipeline_id_string(ctx, item->args.fail_pipeline.pipeline);
-                _sgimgui_snprintf(&str, "%d: sg_fail_pipeline(shd=%s)", index, res_id.buf);
+                _sgimgui_snprintf(&str, "%d: sg_fail_pipeline(pip=%s)", index, res_id.buf);
             }
             break;
 

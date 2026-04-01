@@ -16,7 +16,7 @@
 
     NOTE that the implementation can be compiled either as C++ or as C.
     When compiled as C++, sokol_app_imgui.h will directly call into the
-    Dear ImGui C++ API. When compiled as C, sokol_gfx_imgui.h will call
+    Dear ImGui C++ API. When compiled as C, sokol_app_imgui.h will call
     cimgui.h functions instead.
 
     Include the following file(s) before including sokol_app_imgui.h:
@@ -53,7 +53,52 @@
 
     STEP BY STEP
     ============
-    [FIXME]
+    - call sappimgui_setup() before any other sappimgui functions:
+
+        sappimgui_setup();
+
+    - in your sokol-app event event handler callback, this records
+      the events for the event-viewer window:
+
+        sappimgui_track_event(ev);
+
+    - somewhere at the start of your sokol-app frame callback, this
+      records the frame duration for the debug hud:
+
+        sappimgui_track_frame();
+
+    - inside Dear ImGui's BeginMainMenuBar/EndMainMenuBar
+
+        sappimgui_draw_menu("sokol-app");
+
+    - and somewhere in your Dear ImGui top-level rendering code:
+
+        sappimgui_draw();
+
+    ALTERNATIVE DRAWING FUNCTIONS:
+    ==============================
+    Instead of the convenient but all-in-one sappimgui_draw() function,
+    you can also use the following granular functions which might allow
+    better integration with your existing UI:
+
+    The following functions only render the window *content* (so you
+    can integrate the UI into you own windows):
+
+        void sappimgui_draw_hud_window_content(void);
+        void sappimgui_draw_publicstate_window_content(void);
+        void sappimgui_draw_event_window_content(void);
+
+    And these are the 'full window' drawing functions:
+
+        void sappimgui_draw_hud_window(const char* title);
+        void sappimgui_draw_publicstate_window(const char* title);
+        void sappimgui_draw_event_window(const char* title);
+
+    To draw the individual menu items:
+
+        void sappimgui_draw_hud_menu_item(const char* label);
+        void sappimgui_draw_publicstate_menu_item(const char* label);
+        void sappimgui_draw_event_menu_item(const char* label);
 
     LICENSE
     =======
@@ -687,7 +732,7 @@ _SOKOL_PRIVATE void _sappimgui_popstylecolor(void) {
     _SAPPIMGUI_IMGUI_FUNC(PopStyleColor)();
 }
 
-//--- inernal ui functions -----------------------------------------------------
+//--- internal ui functions -----------------------------------------------------
 _SOKOL_PRIVATE void _sappimgui_draw_modifiers(uint32_t modifiers) {
     _sappimgui_igsameline();
     if (0 == modifiers) {
@@ -706,7 +751,7 @@ _SOKOL_PRIVATE void _sappimgui_draw_modifiers(uint32_t modifiers) {
             _sappimgui_igsameline(); _sappimgui_igtext("SUPER");
         }
         if (0 != (modifiers & SAPP_MODIFIER_LMB)) {
-            _sappimgui_igsameline(); _sappimgui_igtext("LMG");
+            _sappimgui_igsameline(); _sappimgui_igtext("LMB");
         }
         if (0 != (modifiers & SAPP_MODIFIER_RMB)) {
             _sappimgui_igsameline(); _sappimgui_igtext("RMB");
@@ -941,7 +986,7 @@ SOKOL_API_IMPL void sappimgui_draw_hud_window_content(void) {
 SOKOL_API_IMPL void sappimgui_draw_publicstate_window_content(void) {
     SOKOL_ASSERT(_SAPPIMGUI_INIT_TAG == _sappimgui.init_tag);
     _sappimgui_igtext("width: %d", sapp_width());
-    _sappimgui_igtext("heght: %d", sapp_height());
+    _sappimgui_igtext("height: %d", sapp_height());
     _sappimgui_igtext("color format: %s", _sappimgui_pixelformat_string(sapp_color_format()));
     _sappimgui_igtext("depth format: %s", _sappimgui_pixelformat_string(sapp_depth_format()));
     _sappimgui_igtext("sample count: %d", sapp_sample_count());
@@ -958,7 +1003,7 @@ SOKOL_API_IMPL void sappimgui_draw_publicstate_window_content(void) {
     _sappimgui_igtext("clipboard string: %s", sapp_get_clipboard_string());
     _sappimgui_igtext("num dropped files: %d", sapp_get_num_dropped_files());
     for (int i = 0; i < sapp_get_num_dropped_files(); i++) {
-        _sappimgui_igtext("dopped file path #%d: %s", sapp_get_dropped_file_path(i));
+        _sappimgui_igtext("dropped file path #%d: %s", sapp_get_dropped_file_path(i));
     }
 }
 
