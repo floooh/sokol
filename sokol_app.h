@@ -2651,6 +2651,7 @@ _SOKOL_PRIVATE void _sapp_timing_init(_sapp_timing_t* t) {
 }
 
 _SOKOL_PRIVATE double _sapp_timing_clamp(_sapp_timing_t* t, double dt) {
+    SOKOL_ASSERT((t->dt_min > 0.0) && (t->dt_max > 0.0) && (t->dt_max >= t->dt_min));
     if (dt < t->dt_min) {
         return t->dt_min;
     } else if (dt > t->dt_max) {
@@ -5010,7 +5011,6 @@ _SOKOL_PRIVATE void _sapp_vk_frame(void) {
 #if defined(_SAPP_MACOS)
 
 #define _SAPP_MACOS_MTL_OBSCURED_FRAME_DURATION_IN_SECONDS (0.0166667)
-#define _SAPP_MACOS_MTL_MAX_FRAME_DURATION_IN_SECONDS (0.25)
 
 _SOKOL_PRIVATE NSInteger _sapp_macos_max_fps(void) {
     return [NSScreen.mainScreen maximumFramesPerSecond];
@@ -5094,15 +5094,8 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_timing_update(void) {
         CFTimeInterval cur_timestamp = _sapp.macos.mtl.display_link.timestamp;
         // skip first frame (frame_duration had been initialized to display refresh rate)
         if (_sapp.macos.mtl.timing.timestamp > 0.0) {
-            _sapp.macos.mtl.timing.frame_duration_sec = cur_timestamp - _sapp.macos.mtl.timing.timestamp;
-            if (_sapp.macos.mtl.timing.frame_duration_sec <= 0.00001) {
-                // this should never actually happen, but just to be sure we don't end up with
-                // a negative or zero frame duration for some reason
-                _sapp.macos.mtl.timing.frame_duration_sec = 1.0 / _sapp_macos_max_fps();
-            } else if (_sapp.macos.mtl.timing.frame_duration_sec > _SAPP_MACOS_MTL_MAX_FRAME_DURATION_IN_SECONDS) {
-                // avoid death-spiral in case of ultra-slow framerate (e.g. when debugging)
-                _sapp.macos.mtl.timing.frame_duration_sec = _SAPP_MACOS_MTL_MAX_FRAME_DURATION_IN_SECONDS;
-            }
+            const double dt = cur_timestamp - _sapp.macos.mtl.timing.timestamp;
+            _sapp.macos.mtl.timing.frame_duration_sec = _sapp_timing_clamp(&_sapp.timing, dt);
         } else {
             SOKOL_ASSERT(_sapp.macos.mtl.timing.frame_duration_sec > 0.0);
         }
@@ -5111,8 +5104,8 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_timing_update(void) {
 }
 
 _SOKOL_PRIVATE double _sapp_macos_mtl_timing_frame_duration(void) {
-    SOKOL_ASSERT(_sapp.macos.mtl.timing.frame_duration_sec > 0.0);
     if (_sapp_macos_mtl_display_link_active()) {
+        SOKOL_ASSERT(_sapp.macos.mtl.timing.frame_duration_sec > 0.0);
         return _sapp.macos.mtl.timing.frame_duration_sec;
     } else {
         return _sapp_timing_get(&_sapp.timing);
@@ -6329,8 +6322,6 @@ static void _sapp_gl_make_current(void) {
 // >>ios
 #if defined(_SAPP_IOS)
 
-#define _SAPP_IOS_MTL_MAX_FRAME_DURATION_IN_SECONDS (0.25)
-
 _SOKOL_PRIVATE NSInteger _sapp_ios_max_fps(void) {
     return _sapp.ios.window.windowScene.screen.maximumFramesPerSecond;
 }
@@ -6407,15 +6398,8 @@ _SOKOL_PRIVATE void _sapp_ios_mtl_timing_update(void) {
     const CFTimeInterval cur_timestamp = _sapp.ios.mtl.display_link.timestamp;
     // skip first frame (frame_duration had been initialized to display refresh rate)
     if (_sapp.ios.mtl.timing.timestamp > 0.0) {
-        _sapp.ios.mtl.timing.frame_duration_sec = cur_timestamp - _sapp.ios.mtl.timing.timestamp;
-        if (_sapp.ios.mtl.timing.frame_duration_sec <= 0.00001) {
-            // this should never actually happen, but just to be sure we don't end up with
-            // a negative or zero frame duration for some reason
-            _sapp.ios.mtl.timing.frame_duration_sec = 1.0 / _sapp_ios_max_fps();
-        } else if (_sapp.ios.mtl.timing.frame_duration_sec > _SAPP_IOS_MTL_MAX_FRAME_DURATION_IN_SECONDS) {
-            // avoid death-spiral in case of ultra-slow framerate (e.g. when debugging)
-            _sapp.ios.mtl.timing.frame_duration_sec = _SAPP_IOS_MTL_MAX_FRAME_DURATION_IN_SECONDS;
-        }
+        const double dt = cur_timestamp - _sapp.ios.mtl.timing.timestamp;
+        _sapp.ios.mtl.timing.frame_duration_sec = _sapp_timing_clamp(&_sapp.timing, dt);
     } else {
         SOKOL_ASSERT(_sapp.ios.mtl.timing.frame_duration_sec > 0.0);
     }
