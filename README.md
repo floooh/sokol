@@ -21,6 +21,8 @@ Aras Pranckevičius, PC/web port via sokol ([source](https://github.com/aras-p/d
 
 - [sokol_gp.h](https://github.com/edubart/sokol_gp) a 2D shape drawing library on top of sokol_gfx.h
 
+- [NanoVG backend](https://github.com/vinnyhorgan/nanovg) a sokol_gfx backend for the amazing [NanoVG](https://github.com/memononen/nanovg) library.
+
 - [Dear ImGui starterkit](https://github.com/floooh/cimgui-sokol-starterkit) a self-contained starterkit for writing Dear ImGui apps in C.
 
 - [qoiview](https://github.com/floooh/qoiview) a basic viewer for the new QOI image file format
