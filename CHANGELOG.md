@@ -7,7 +7,7 @@
   - The frame time smoothing now happens with a simple 'EMA filter'
     (EMA == Exponential Moving Average) instead of the previously used
     'Moving Average' filter. The new filter adjusts more quickly and
-    less abrupt to spikes while giving about the same amount of smoothing.
+    less abruptly to spikes while giving about the same amount of smoothing.
     Currently the filter parameters are hardwired to work well for typical
     refresh rates. If that is too restrictive it might make sense to
     make them adjustable via `sapp_desc`.
@@ -31,7 +31,7 @@
 - a new debug-visualization header has been added: `sokol_app_imgui.h`. Same
   ideas as `sokol_gfx_imgui.h`, e.g. a debugging UI which allows to inspect
   sokol_app.h state (most importantly: a timing hud with a history graph for
-  filtered and unfiltered frame duration. To see this in action go here: https://floooh.github.io/sokol-html5/cube-sapp-ui.html
+  filtered and unfiltered frame duration). To see this in action go here: https://floooh.github.io/sokol-html5/cube-sapp-ui.html
 
   ...and in the menubar open `sokol-app => Hud`.
 
