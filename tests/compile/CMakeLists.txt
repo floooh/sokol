@@ -10,6 +10,7 @@ set(c_sources
     sokol_fontstash.c
     sokol_imgui.c
     sokol_gfx_imgui.c
+    sokol_app_imgui.c
     sokol_shape.c
     sokol_nuklear.c
     sokol_color.c
@@ -32,6 +33,7 @@ set(cxx_sources
     sokol_fontstash.cc
     sokol_imgui.cc
     sokol_gfx_imgui.cc
+    sokol_app_imgui.cc
     sokol_shape.cc
     sokol_color.cc
     sokol_spine.cc
