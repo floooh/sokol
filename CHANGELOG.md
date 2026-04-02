@@ -1,5 +1,47 @@
 ## Updates
 
+### 02-Apr-2026
+
+- sokol_app.h: a complete rewrite of the frame timing code to fix a couple
+  of known issues:
+  - The frame time smoothing now happens with a simple 'EMA filter'
+    (EMA == Exponential Moving Average) instead of the previously used
+    'Moving Average' filter. The new filter adjusts more quickly and
+    less abrupt to spikes while giving about the same amount of smoothing.
+    Currently the filter parameters are hardwired to work well for typical
+    refresh rates. If that is too restrictive it might make sense to
+    make them adjustable via `sapp_desc`.
+  - In the D3D11/DXGI backend, the DXGI-based timing code has been removed.
+    There were just too many caveats where the DXGI-provided timestamp
+    isn't updated or provides useless data (for instance when the window is
+    obscured or minimized, or when vsync is disabled via an external GPU
+    vendor control panel).
+  - A new function has been added to obtain the unfiltered frame duration:
+    `sapp_frame_duration_unfiltered()`.
+  - One known issue remains: on my Win11+NVIDIA gaming PC, when vsync is forced
+    off via the NVIDIA control panel, frame time may varie wildly.  A typical
+    frame might be 0.1ms, but in some sessions there may be 3..4ms spikes every
+    half second or so - such an extreme difference will still throw off the filter
+    (using the unfiltered frame duration works fine in this case though).
+    Technically this is an unsupported scenario (since sokol_app.h doesn't have an
+    'official' feature to disable vsync), that's why I decided to merge despite
+    this known issue (also the vsync-off behaviour is still much better than
+    before where it didn't work at all).
+
+- a new debug-visualization header has been added: `sokol_app_imgui.h`. Same
+  ideas as `sokol_gfx_imgui.h`, e.g. a debugging UI which allows to inspect
+  sokol_app.h state (most importantly: a timing hud with a history graph for
+  filtered and unfiltered frame duration. To see this in action go here: https://floooh.github.io/sokol-html5/cube-sapp-ui.html
+
+  ...and in the menubar open `sokol-app => Hud`.
+
+- An unrelated minor change in sokol_gfx_imgui.h: stringified
+  enums are now without prefixes (e.g. `"SG_PIXELFORMAT_RGBA8"`
+  is now just `"RGBA8"`. This is more compact and also makes more
+  sense when the debug UI is used with the non-C language bindings.
+
+  Related PR: https://github.com/floooh/sokol/pull/1463
+
 ### 03-Mar-2026
 
 - sokol_app.h macos+metal: Merged PR https://github.com/floooh/sokol/pull/1453,
