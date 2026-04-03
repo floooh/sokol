@@ -1407,6 +1407,7 @@ _SOKOL_PRIVATE const char* _sgimgui_vertexformat_string(sg_vertex_format f) {
         case SG_VERTEXFORMAT_SHORT4N:   return "SHORT4N";
         case SG_VERTEXFORMAT_USHORT4:   return "USHORT4";
         case SG_VERTEXFORMAT_USHORT4N:  return "USHORT4N";
+        case SG_VERTEXFORMAT_INT10_N2:  return "INT10_N2";
         case SG_VERTEXFORMAT_UINT10_N2: return "UINT10_N2";
         case SG_VERTEXFORMAT_HALF2:     return "HALF2";
         case SG_VERTEXFORMAT_HALF4:     return "HALF4";
@@ -4481,6 +4482,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
     _sgimgui_igtext("    draw_base_vertex: %s", _sgimgui_bool_string(f.draw_base_vertex));
     _sgimgui_igtext("    draw_base_instance: %s", _sgimgui_bool_string(f.draw_base_instance));
     _sgimgui_igtext("    dual_source_blending: %s", _sgimgui_bool_string(f.dual_source_blending));
+    _sgimgui_igtext("    vertexformat_int10_n2: %s", _sgimgui_bool_string(f.vertexformat_int10_n2));
     _sgimgui_igtext("    gl_texture_views: %s", _sgimgui_bool_string(f.gl_texture_views));
     sg_limits l = sg_query_limits();
     _sgimgui_igtext("\nLimits:\n");
