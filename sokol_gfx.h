@@ -2227,6 +2227,7 @@ typedef struct sg_features {
     bool draw_base_vertex;              // draw with (base vertex > 0) && (base_instance == 0) supported
     bool draw_base_instance;            // draw with (base instance > 0) supported
     bool dual_source_blending;          // dual-source-blending supported
+    bool vertexformat_int10_n2;         // SG_VERTEXFORMAT_INT10_N2 is supported
     bool gl_texture_views;              // supports 'proper' texture views (GL 4.3+)
 } sg_features;
 
@@ -2493,6 +2494,7 @@ typedef enum sg_vertex_format {
     SG_VERTEXFORMAT_SHORT4N,
     SG_VERTEXFORMAT_USHORT4,
     SG_VERTEXFORMAT_USHORT4N,
+    SG_VERTEXFORMAT_INT10_N2,
     SG_VERTEXFORMAT_UINT10_N2,
     SG_VERTEXFORMAT_HALF2,
     SG_VERTEXFORMAT_HALF4,
@@ -4630,6 +4632,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_NO_COMPUTE_SHADER_EXPECTED, "sg_pipeline_desc.compute is false, but shader is a compute shader") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_NO_CONT_ATTRS, "sg_pipeline_desc.layout.attrs is not continuous") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_ATTR_BASETYPE_MISMATCH, "sg_pipeline_desc.layout.attrs[].format is incompatible with sg_shader_desc.attrs[].base_type") \
+    _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_ATTR_VERTEXFORMAT_INT10_N2_NOT_SUPPORTED, "sg_pipeline_desc.layout.attrs[].format: SG_VERTEXFORMAT_INT10_N2 not supported on this platform") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4, "sg_pipeline_desc.layout.buffers[].stride must be multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_ATTR_SEMANTICS, "D3D11 missing vertex attribute semantics in shader") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_SHADER_READONLY_STORAGEBUFFERS, "sg_pipeline_desc.shader: only readonly storage buffer bindings allowed in render pipelines") \
@@ -8330,6 +8333,7 @@ _SOKOL_PRIVATE int _sg_vertexformat_bytesize(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_SHORT4N:   return 8;
         case SG_VERTEXFORMAT_USHORT4:   return 8;
         case SG_VERTEXFORMAT_USHORT4N:  return 8;
+        case SG_VERTEXFORMAT_INT10_N2:  return 4;
         case SG_VERTEXFORMAT_UINT10_N2: return 4;
         case SG_VERTEXFORMAT_HALF2:     return 4;
         case SG_VERTEXFORMAT_HALF4:     return 8;
@@ -8366,6 +8370,7 @@ _SOKOL_PRIVATE const char* _sg_vertexformat_to_string(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_SHORT4N:   return "SHORT4N";
         case SG_VERTEXFORMAT_USHORT4:   return "USHORT4";
         case SG_VERTEXFORMAT_USHORT4N:  return "USHORT4N";
+        case SG_VERTEXFORMAT_INT10_N2:  return "INT10_N2";
         case SG_VERTEXFORMAT_UINT10_N2: return "UINT10_N2";
         case SG_VERTEXFORMAT_HALF2:     return "HALF2";
         case SG_VERTEXFORMAT_HALF4:     return "HALF4";
@@ -8401,6 +8406,7 @@ _SOKOL_PRIVATE sg_shader_attr_base_type _sg_vertexformat_basetype(sg_vertex_form
         case SG_VERTEXFORMAT_USHORT2N:
         case SG_VERTEXFORMAT_SHORT4N:
         case SG_VERTEXFORMAT_USHORT4N:
+        case SG_VERTEXFORMAT_INT10_N2:
         case SG_VERTEXFORMAT_UINT10_N2:
             return SG_SHADERATTRBASETYPE_FLOAT;
         case SG_VERTEXFORMAT_INT:
@@ -9297,6 +9303,7 @@ _SOKOL_PRIVATE GLint _sg_gl_vertexformat_size(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_SHORT4N:   return 4;
         case SG_VERTEXFORMAT_USHORT4:   return 4;
         case SG_VERTEXFORMAT_USHORT4N:  return 4;
+        case SG_VERTEXFORMAT_INT10_N2:  return 4;
         case SG_VERTEXFORMAT_UINT10_N2: return 4;
         case SG_VERTEXFORMAT_HALF2:     return 2;
         case SG_VERTEXFORMAT_HALF4:     return 4;
@@ -9337,6 +9344,8 @@ _SOKOL_PRIVATE GLenum _sg_gl_vertexformat_type(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_USHORT4:
         case SG_VERTEXFORMAT_USHORT4N:
             return GL_UNSIGNED_SHORT;
+        case SG_VERTEXFORMAT_INT10_N2:
+            return GL_INT_2_10_10_10_REV;
         case SG_VERTEXFORMAT_UINT10_N2:
             return GL_UNSIGNED_INT_2_10_10_10_REV;
         case SG_VERTEXFORMAT_HALF2:
@@ -9355,6 +9364,7 @@ _SOKOL_PRIVATE GLboolean _sg_gl_vertexformat_normalized(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_USHORT2N:
         case SG_VERTEXFORMAT_SHORT4N:
         case SG_VERTEXFORMAT_USHORT4N:
+        case SG_VERTEXFORMAT_INT10_N2:
         case SG_VERTEXFORMAT_UINT10_N2:
             return GL_TRUE;
         default:
@@ -9983,6 +9993,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
     _sg.features.draw_base_vertex = version >= 320;
     _sg.features.draw_base_instance = version >= 420;
     _sg.features.dual_source_blending = version >= 330;
+    _sg.features.vertexformat_int10_n2 = true;
 
     // scan extensions
     bool has_s3tc = false;  // BC1..BC3
@@ -10072,6 +10083,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.features.draw_base_vertex = version >= 320;
     _sg.features.draw_base_instance = false;
     _sg.features.dual_source_blending = false;
+    _sg.features.vertexformat_int10_n2 = true;
 
     bool has_s3tc = false;  // BC1..BC3
     bool has_rgtc = false;  // BC4 and BC5
@@ -13076,6 +13088,7 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
     _sg.features.dual_source_blending = true;
+    _sg.features.vertexformat_int10_n2 = false;
 
     _sg.limits.max_image_size_2d = 16 * 1024;
     _sg.limits.max_image_size_cube = 16 * 1024;
@@ -14613,6 +14626,7 @@ _SOKOL_PRIVATE MTLVertexFormat _sg_mtl_vertex_format(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_SHORT4N:   return MTLVertexFormatShort4Normalized;
         case SG_VERTEXFORMAT_USHORT4:   return MTLVertexFormatUShort4;
         case SG_VERTEXFORMAT_USHORT4N:  return MTLVertexFormatUShort4Normalized;
+        case SG_VERTEXFORMAT_INT10_N2:  return MTLVertexFormatInt1010102Normalized;
         case SG_VERTEXFORMAT_UINT10_N2: return MTLVertexFormatUInt1010102Normalized;
         case SG_VERTEXFORMAT_HALF2:     return MTLVertexFormatHalf2;
         case SG_VERTEXFORMAT_HALF4:     return MTLVertexFormatHalf4;
@@ -15040,6 +15054,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
     _sg.features.dual_source_blending = true;
+    _sg.features.vertexformat_int10_n2 = true;
 
     _sg.features.image_clamp_to_border = false;
     #if (MAC_OS_X_VERSION_MAX_ALLOWED >= 120000) || (__IPHONE_OS_VERSION_MAX_ALLOWED >= 140000)
@@ -17058,6 +17073,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
     _sg.features.dual_source_blending = wgpuDeviceHasFeature(_sg.wgpu.dev, WGPUFeatureName_DualSourceBlending);
+    _sg.features.vertexformat_int10_n2 = false;
 
     wgpuDeviceGetLimits(_sg.wgpu.dev, &_sg.wgpu.limits);
 
@@ -20083,7 +20099,8 @@ _SOKOL_PRIVATE VkFormat _sg_vk_vertex_format(sg_vertex_format f) {
         case SG_VERTEXFORMAT_SHORT4N:       return VK_FORMAT_R16G16B16A16_SNORM;
         case SG_VERTEXFORMAT_USHORT4:       return VK_FORMAT_R16G16B16A16_UINT;
         case SG_VERTEXFORMAT_USHORT4N:      return VK_FORMAT_R16G16B16A16_UNORM;
-        case SG_VERTEXFORMAT_UINT10_N2:     return VK_FORMAT_A2R10G10B10_UNORM_PACK32;
+        case SG_VERTEXFORMAT_INT10_N2:      return VK_FORMAT_A2B10G10R10_SNORM_PACK32;
+        case SG_VERTEXFORMAT_UINT10_N2:     return VK_FORMAT_A2B10G10R10_UNORM_PACK32;
         case SG_VERTEXFORMAT_HALF2:         return VK_FORMAT_R16G16_SFLOAT;
         case SG_VERTEXFORMAT_HALF4:         return VK_FORMAT_R16G16B16A16_SFLOAT;
         default:
@@ -20443,6 +20460,7 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
     _sg.features.dual_source_blending = true;
+    _sg.features.vertexformat_int10_n2 = true;
 
     SOKOL_ASSERT(_sg.vk.phys_dev);
     _sg.vk.descriptor_buffer_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT;
@@ -22954,6 +22972,9 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
                             _SG_LOGMSG(VALIDATE_PIPELINEDESC_ATTR_BASETYPE_MISMATCH, "shader attr base type:");
                             _SG_LOGMSG(VALIDATE_PIPELINEDESC_ATTR_BASETYPE_MISMATCH, _sg_shaderattrbasetype_to_string(shd->cmn.attrs[attr_index].base_type));
                         }
+                    }
+                    if (a_state->format == SG_VERTEXFORMAT_INT10_N2) {
+                        _SG_VALIDATE(_sg.features.vertexformat_int10_n2, VALIDATE_PIPELINEDESC_ATTR_VERTEXFORMAT_INT10_N2_NOT_SUPPORTED);
                     }
                     #if defined(SOKOL_D3D11)
                     // on D3D11, semantic names (and semantic indices) must be provided
