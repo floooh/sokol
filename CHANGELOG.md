@@ -1,5 +1,14 @@
 ## Updates
 
+### 03-Apr-2026:
+
+- sokol_gfx.h: add support for the 10/10/10/2-bit packed, signed vertex
+  format `SG_VERTEXFORMAT_INT2_N2`. Note that this format is not portable
+  (not supported in the D3D11 and WebGPU backends). Check the new feature
+  flag `sg_features.vertexformat_int10_n2` for support.
+
+  Many thank to @exavi for the initial PR (https://github.com/floooh/sokol/pull/1466)!
+
 ### 02-Apr-2026
 
 - sokol_app.h: a complete rewrite of the frame timing code to fix a couple
