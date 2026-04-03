@@ -19,7 +19,7 @@
   - A new function has been added to obtain the unfiltered frame duration:
     `sapp_frame_duration_unfiltered()`.
   - One known issue remains: on my Win11+NVIDIA gaming PC, when vsync is forced
-    off via the NVIDIA control panel, frame time may varie wildly.  A typical
+    off via the NVIDIA control panel, frame time may vary wildly.  A typical
     frame might be 0.1ms, but in some sessions there may be 3..4ms spikes every
     half second or so - such an extreme difference will still throw off the filter
     (using the unfiltered frame duration works fine in this case though).
