@@ -67,12 +67,12 @@
     Link with the following system libraries:
 
     - on macOS:
-        - all backends: Foundation, Cocoa, QuartzCore
+        - all backends: AppKit, QuartzCore
         - with SOKOL_METAL: Metal
         - with SOKOL_GLCORE: OpenGL
         - with SOKOL_WGPU: a WebGPU implementation library (tested with webgpu_dawn)
     - on iOS:
-        - all backends: Foundation, UIKit, QuartzCore
+        - all backends: UIKit, QuartzCore
         - with SOKOL_METAL: Metal
         - with SOKOL_GLES3: OpenGLES, GLKit
     - on Linux:
@@ -2413,7 +2413,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #define GL_SILENCE_DEPRECATION
     #endif
     #if defined(_SAPP_MACOS)
-        #import <Cocoa/Cocoa.h>
+        #import <AppKit/AppKit.h>
         #if defined(SOKOL_METAL)
             #import <Metal/Metal.h>
             #import <QuartzCore/CAMetalLayer.h>
