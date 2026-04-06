@@ -304,16 +304,13 @@ UTEST(sokol_fetch, ring_wrap_count) {
 }
 
 /* NOTE: channel_worker is called from a thread */
-static int num_processed_items = 0;
 static void channel_worker(_sfetch_t* ctx, uint32_t slot_id) {
     (void)ctx;
     (void)slot_id;
-    num_processed_items++;
 }
 
 UTEST(sokol_fetch, channel_init_discard) {
     sfetch_setup(&(sfetch_desc_t){0});
-    num_processed_items = 0;
     _sfetch_channel_t chn = {0};
     const uint32_t num_slots = 12;
     const uint32_t num_lanes = 64;
