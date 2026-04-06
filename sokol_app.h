@@ -8978,6 +8978,12 @@ _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
     if (GetClientRect(_sapp.win32.hwnd, &rect)) {
         float window_width = (float)(rect.right - rect.left) / _sapp.win32.dpi.window_scale;
         float window_height = (float)(rect.bottom - rect.top) / _sapp.win32.dpi.window_scale;
+        if ((window_width == 0.0f) && (window_height == 0.0f)) {
+            // both width and height being zero means the window is minimized, in that
+            // case pretend that the size didn't change (this is consistent with other
+            // window systems) - also see: https://github.com/floooh/sokol/issues/1465
+            return false;
+        }
         _sapp.window_width = _sapp_roundf_gzero(window_width);
         _sapp.window_height = _sapp_roundf_gzero(window_height);
         // NOTE: on Vulkan, updating the framebuffer dimensions and firing the resize-event
