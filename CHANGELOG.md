@@ -13,6 +13,17 @@
   Issue: https://github.com/floooh/sokol/issues/1465
   PR: https://github.com/floooh/sokol/pull/1469
 
+- sokol_app.h win32: dpi-awareness code cleanup:
+  - the process is now always set to 'dpi aware' in the D3D11 backend, not only
+    when `sapp_desc.high_dpi` is set to true (for the GL and Vulkan backend, the
+    process is still set to dpi-unaware when the sokol_app.h is initialized without
+    `sapp_desc.high_dpi` so that window-system upscaling works)
+  - a `WM_DPICHANGED` message no longer triggers an assert when dpi-awareness had
+    already been initialized outside sokol_app.h (e.g via manifest.xml), fixes
+    https://github.com/floooh/sokol/issues/1369
+
+  PR: https://github.com/floooh/sokol/pull/1471
+
 ### 03-Apr-2026:
 
 - sokol_gfx.h: add support for the 10/10/10/2-bit packed, signed vertex
