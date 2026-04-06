@@ -9819,19 +9819,31 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
         to newest. SetProcessDpiAwarenessContext() is required for the new
         DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 method.
     */
-    if (fn_setprocessdpiawareness) {
-        // first try the Win10 Creator Update per-monitor-dpi awareness, if that fails, fall back to system-dpi-awareness
-        // NOTE: if DPI awareness had already been set otherwise (e.g. via manifest.xml) both calls will fail
-        _sapp.win32.dpi.aware = true;
-        DPI_AWARENESS_CONTEXT_T per_monitor_aware_v2 = (DPI_AWARENESS_CONTEXT_T)-4;
-        if (!(fn_setprocessdpiawarenesscontext && fn_setprocessdpiawarenesscontext(per_monitor_aware_v2))) {
-            // fallback to system-dpi-aware
-            fn_setprocessdpiawareness(PROCESS_SYSTEM_DPI_AWARE);
+    bool init_dpi_awareness = true;
+    #if !defined(SOKOL_D3D11)
+        // special case for GL and Vulkan: if no high-dpi is requested, need to set the
+        // process to dpi-unaware, so that Windows takes care of upscaling
+        if (!_sapp.desc.high_dpi) {
+            _sapp.win32.dpi.aware = false;
+            fn_setprocessdpiawareness(PROCESS_DPI_UNAWARE);
+            init_dpi_awareness = false;
         }
-    } else if (fn_setprocessdpiaware) {
-        // fallback for Windows 7
-        _sapp.win32.dpi.aware = true;
-        fn_setprocessdpiaware();
+    #endif
+    if (init_dpi_awareness) {
+        if (fn_setprocessdpiawareness) {
+            // first try the Win10 Creator Update per-monitor-dpi awareness, if that fails, fall back to system-dpi-awareness
+            // NOTE: if DPI awareness had already been set otherwise (e.g. via manifest.xml) both calls will fail
+            _sapp.win32.dpi.aware = true;
+            DPI_AWARENESS_CONTEXT_T per_monitor_aware_v2 = (DPI_AWARENESS_CONTEXT_T)-4;
+            if (!(fn_setprocessdpiawarenesscontext && fn_setprocessdpiawarenesscontext(per_monitor_aware_v2))) {
+                // fallback to system-dpi-aware
+                fn_setprocessdpiawareness(PROCESS_SYSTEM_DPI_AWARE);
+            }
+        } else if (fn_setprocessdpiaware) {
+            // fallback for Windows 7
+            _sapp.win32.dpi.aware = true;
+            fn_setprocessdpiaware();
+        }
     }
     // get dpi scale factor for main monitor
     if (fn_getdpiformonitor && _sapp.win32.dpi.aware) {
