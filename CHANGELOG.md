@@ -6,7 +6,9 @@
   size to be reset to 1x1 pixels, and also no longer sends a resize-event to
   the sokol-app event callback. This behaviour is consistent with other
   platforms and doesn't cause Dear ImGui windows to be piled up in the top-left
-  corner.
+  corner. Note that behaviour for the experimental Vulkan backend is unchanged,
+  and minimizing the window currently causes a panic with Vulkan on Windows
+  (separately tracked via https://github.com/floooh/sokol/issues/1470).
 
   Issue: https://github.com/floooh/sokol/issues/1465
   PR: https://github.com/floooh/sokol/pull/1469
