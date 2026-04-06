@@ -9380,11 +9380,9 @@ _SOKOL_PRIVATE void _sapp_win32_char_event(uint32_t c, bool repeat) {
 }
 
 _SOKOL_PRIVATE void _sapp_win32_dpi_changed(HWND hWnd, LPRECT proposed_win_rect) {
-    /* called on WM_DPICHANGED, which will only be sent to the application
-        if sapp_desc.high_dpi is true and the Windows version is recent enough
-        to support DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
-    */
-    SOKOL_ASSERT(_sapp.desc.high_dpi);
+    if (!_sapp.desc.high_dpi) {
+        return;
+    }
     HINSTANCE user32 = LoadLibraryA("user32.dll");
     if (!user32) {
         return;
@@ -9822,27 +9820,20 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
         DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 method.
     */
     if (fn_setprocessdpiawareness) {
-        if (_sapp.desc.high_dpi) {
-            /* app requests HighDPI rendering, first try the Win10 Creator Update per-monitor-dpi awareness,
-               if that fails, fall back to system-dpi-awareness
-            */
-            _sapp.win32.dpi.aware = true;
-            DPI_AWARENESS_CONTEXT_T per_monitor_aware_v2 = (DPI_AWARENESS_CONTEXT_T)-4;
-            if (!(fn_setprocessdpiawarenesscontext && fn_setprocessdpiawarenesscontext(per_monitor_aware_v2))) {
-                // fallback to system-dpi-aware
-                fn_setprocessdpiawareness(PROCESS_SYSTEM_DPI_AWARE);
-            }
-        } else {
-            /* if the app didn't request HighDPI rendering, let Windows do the upscaling */
-            _sapp.win32.dpi.aware = false;
-            fn_setprocessdpiawareness(PROCESS_DPI_UNAWARE);
+        // first try the Win10 Creator Update per-monitor-dpi awareness, if that fails, fall back to system-dpi-awareness
+        // NOTE: if DPI awareness had already been set otherwise (e.g. via manifest.xml) both calls will fail
+        _sapp.win32.dpi.aware = true;
+        DPI_AWARENESS_CONTEXT_T per_monitor_aware_v2 = (DPI_AWARENESS_CONTEXT_T)-4;
+        if (!(fn_setprocessdpiawarenesscontext && fn_setprocessdpiawarenesscontext(per_monitor_aware_v2))) {
+            // fallback to system-dpi-aware
+            fn_setprocessdpiawareness(PROCESS_SYSTEM_DPI_AWARE);
         }
     } else if (fn_setprocessdpiaware) {
         // fallback for Windows 7
         _sapp.win32.dpi.aware = true;
         fn_setprocessdpiaware();
     }
-    /* get dpi scale factor for main monitor */
+    // get dpi scale factor for main monitor
     if (fn_getdpiformonitor && _sapp.win32.dpi.aware) {
         POINT pt = { 1, 1 };
         HMONITOR hm = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
@@ -9850,7 +9841,7 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
         HRESULT hr = fn_getdpiformonitor(hm, MDT_EFFECTIVE_DPI, &dpix, &dpiy);
         _SOKOL_UNUSED(hr);
         SOKOL_ASSERT(SUCCEEDED(hr));
-        /* clamp window scale to an integer factor */
+        // clamp window scale to an integer factor
         _sapp.win32.dpi.window_scale = (float)dpix / 96.0f;
     } else {
         _sapp.win32.dpi.window_scale = 1.0f;
