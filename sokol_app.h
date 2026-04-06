@@ -9380,7 +9380,7 @@ _SOKOL_PRIVATE void _sapp_win32_char_event(uint32_t c, bool repeat) {
 }
 
 _SOKOL_PRIVATE void _sapp_win32_dpi_changed(HWND hWnd, LPRECT proposed_win_rect) {
-    if (!_sapp.desc.high_dpi) {
+    if (!_sapp.win32.dpi.aware) {
         return;
     }
     HINSTANCE user32 = LoadLibraryA("user32.dll");
@@ -9391,10 +9391,15 @@ _SOKOL_PRIVATE void _sapp_win32_dpi_changed(HWND hWnd, LPRECT proposed_win_rect)
     GETDPIFORWINDOW_T fn_getdpiforwindow = (GETDPIFORWINDOW_T)(void*)GetProcAddress(user32, "GetDpiForWindow");
     if (fn_getdpiforwindow) {
         UINT dpix = fn_getdpiforwindow(_sapp.win32.hwnd);
-        // NOTE: for high-dpi apps, mouse_scale remains one
         _sapp.win32.dpi.window_scale = (float)dpix / 96.0f;
-        _sapp.win32.dpi.content_scale = _sapp.win32.dpi.window_scale;
-        _sapp.dpi_scale = _sapp.win32.dpi.window_scale;
+        if (_sapp.desc.high_dpi) {
+            _sapp.win32.dpi.content_scale = _sapp.win32.dpi.window_scale;
+            _sapp.win32.dpi.mouse_scale = 1.0f;
+        } else {
+            _sapp.win32.dpi.content_scale = 1.0f;
+            _sapp.win32.dpi.mouse_scale = 1.0f / _sapp.win32.dpi.window_scale;
+        }
+        _sapp.dpi_scale = _sapp.win32.dpi.content_scale;
         SetWindowPos(hWnd, 0,
             proposed_win_rect->left,
             proposed_win_rect->top,
