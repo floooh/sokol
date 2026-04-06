@@ -1,5 +1,16 @@
 ## Updates
 
+### 06-Apr-2026
+
+- sokol_app.h win32+d3d11+gl: minimizing the window no longer causes the framebuffer
+  size to be reset to 1x1 pixels, and also no longer sends a resize-event to
+  the sokol-app event callback. This behaviour is consistent with other
+  platforms and doesn't cause Dear ImGui windows to be piled up in the top-left
+  corner.
+
+  Issue: https://github.com/floooh/sokol/issues/1465
+  PR: https://github.com/floooh/sokol/pull/1469
+
 ### 03-Apr-2026:
 
 - sokol_gfx.h: add support for the 10/10/10/2-bit packed, signed vertex
