@@ -358,6 +358,14 @@
 
     For thread synchronisation a Win32 critical section is used.
 
+    By default, the WASAPI backend calls CoInitializeEx(0, COINIT_MULTITHREADED)
+    in saudio_setup() and CoUninitialize() in saudio_shutdown(). This can be
+    disabled with the setup option `saudio_desc.win32.skip_coinitialize`. In that
+    case the library user must make sure to initialize COM before calling
+    saudio_setup() (FWIW though, at least on Win11 it looks like CoInitializeEx
+    isn't needed at all for sokol_audio.h, take that info with a huge grain of salt
+    though).
+
     WASAPI may use a different size for its own streaming buffer then requested,
     so the base latency may be slightly bigger. The current backend implementation
     converts the incoming floating point sample values to signed 16-bit
@@ -652,6 +660,10 @@ typedef struct saudio_n3ds_desc {
     int channel_id; /* default value = 0 */
 } saudio_n3ds_desc;
 
+typedef struct saudio_win32_desc {
+    bool skip_coinitialize; // when true sokol-audio will not call CoInitializeEx/CoUninitialze
+} saudio_win32_desc;
+
 typedef struct saudio_desc {
     int sample_rate;        // requested sample rate
     int num_channels;       // number of channels, default: 1 (mono)
@@ -661,7 +673,8 @@ typedef struct saudio_desc {
     void (*stream_cb)(float* buffer, int num_frames, int num_channels);  // optional streaming callback (no user data)
     void (*stream_userdata_cb)(float* buffer, int num_frames, int num_channels, void* user_data); //... and with user data
     void* user_data;        // optional user data argument for stream_userdata_cb
-    saudio_n3ds_desc n3ds;       // optional data for use on n3ds
+    saudio_win32_desc win32;        // optional config options for windows
+    saudio_n3ds_desc n3ds;          // optional data for use on n3ds
     saudio_allocator allocator;     // optional allocation override functions
     saudio_logger logger;           // optional logging function (default: NO LOGGING!)
 } saudio_desc;
@@ -1643,12 +1656,15 @@ _SOKOL_PRIVATE void _saudio_wasapi_release(void) {
 
 _SOKOL_PRIVATE bool _saudio_wasapi_backend_init(void) {
     REFERENCE_TIME dur;
-    /* CoInitializeEx could have been called elsewhere already, in which
-        case the function returns with S_FALSE (thus it does not make much
-        sense to check the result)
-    */
-    HRESULT hr = CoInitializeEx(0, COINIT_MULTITHREADED);
-    _SOKOL_UNUSED(hr);
+    HRESULT hr;
+    if (!_saudio.desc.win32.skip_coinitialize) {
+        /* CoInitializeEx could have been called elsewhere already, in which
+            case the function returns with S_FALSE (thus it does not make much
+            sense to check the result)
+        */
+        hr = CoInitializeEx(0, COINIT_MULTITHREADED);
+        _SOKOL_UNUSED(hr);
+    }
     _saudio.backend.thread.buffer_end_event = CreateEvent(0, FALSE, FALSE, 0);
     if (0 == _saudio.backend.thread.buffer_end_event) {
         _SAUDIO_ERROR(WASAPI_CREATE_EVENT_FAILED);
@@ -1751,7 +1767,9 @@ _SOKOL_PRIVATE void _saudio_wasapi_backend_shutdown(void) {
         IAudioClient_Stop(_saudio.backend.audio_client);
     }
     _saudio_wasapi_release();
-    CoUninitialize();
+    if (!_saudio.desc.win32.skip_coinitialize) {
+        CoUninitialize();
+    }
 }
 
 // ██     ██ ███████ ██████   █████  ██    ██ ██████  ██  ██████
