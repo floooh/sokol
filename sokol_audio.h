@@ -22,8 +22,6 @@
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     SAUDIO_RING_MAX_SLOTS           - max number of slots in the push-audio ring buffer (default 1024)
-    SAUDIO_OSX_USE_SYSTEM_HEADERS   - define this to force inclusion of system headers on
-                                      macOS instead of using embedded CoreAudio declarations
 
     If sokol_audio.h is compiled as a DLL, define the following before
     including the declaration or implementation:
@@ -360,6 +358,14 @@
 
     For thread synchronisation a Win32 critical section is used.
 
+    By default, the WASAPI backend calls CoInitializeEx(0, COINIT_MULTITHREADED)
+    in saudio_setup() and CoUninitialize() in saudio_shutdown(). This can be
+    disabled with the setup option `saudio_desc.win32.skip_coinitialize`. In that
+    case the library user must make sure to initialize COM before calling
+    saudio_setup() (FWIW though, at least on Win11 it looks like CoInitializeEx
+    isn't needed at all for sokol_audio.h, take that info with a huge grain of salt
+    though).
+
     WASAPI may use a different size for its own streaming buffer then requested,
     so the base latency may be slightly bigger. The current backend implementation
     converts the incoming floating point sample values to signed 16-bit
@@ -654,6 +660,10 @@ typedef struct saudio_n3ds_desc {
     int channel_id; /* default value = 0 */
 } saudio_n3ds_desc;
 
+typedef struct saudio_win32_desc {
+    bool skip_coinitialize; // when true sokol-audio will not call CoInitializeEx/CoUninitialze
+} saudio_win32_desc;
+
 typedef struct saudio_desc {
     int sample_rate;        // requested sample rate
     int num_channels;       // number of channels, default: 1 (mono)
@@ -663,7 +673,8 @@ typedef struct saudio_desc {
     void (*stream_cb)(float* buffer, int num_frames, int num_channels);  // optional streaming callback (no user data)
     void (*stream_userdata_cb)(float* buffer, int num_frames, int num_channels, void* user_data); //... and with user data
     void* user_data;        // optional user data argument for stream_userdata_cb
-    saudio_n3ds_desc n3ds;       // optional data for use on n3ds
+    saudio_win32_desc win32;        // optional config options for windows
+    saudio_n3ds_desc n3ds;          // optional data for use on n3ds
     saudio_allocator allocator;     // optional allocation override functions
     saudio_logger logger;           // optional logging function (default: NO LOGGING!)
 } saudio_desc;
@@ -836,10 +847,6 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
     #define _SAUDIO_PTHREADS (1)
     #include <pthread.h>
     #if defined(_SAUDIO_IOS)
-        // always use system headers on iOS (for now at least)
-        #if !defined(SAUDIO_OSX_USE_SYSTEM_HEADERS)
-            #define SAUDIO_OSX_USE_SYSTEM_HEADERS (1)
-        #endif
         #if !defined(__cplusplus)
             #if __has_feature(objc_arc) && !__has_feature(objc_arc_fields)
                 #error "sokol_audio.h on iOS requires __has_feature(objc_arc_field) if ARC is enabled (use a more recent compiler version)"
@@ -848,9 +855,7 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
         #include <AudioToolbox/AudioToolbox.h>
         #include <AVFoundation/AVFoundation.h>
     #else
-        #if defined(SAUDIO_OSX_USE_SYSTEM_HEADERS)
-            #include <AudioToolbox/AudioToolbox.h>
-        #endif
+        #include <AudioToolbox/AudioToolbox.h>
     #endif
 #elif defined(_SAUDIO_ANDROID)
     #define _SAUDIO_PTHREADS (1)
@@ -921,105 +926,8 @@ typedef struct {
 
 #elif defined(_SAUDIO_APPLE)
 
-#if defined(SAUDIO_OSX_USE_SYSTEM_HEADERS)
-
-typedef AudioQueueRef _saudio_AudioQueueRef;
-typedef AudioQueueBufferRef _saudio_AudioQueueBufferRef;
-typedef AudioStreamBasicDescription _saudio_AudioStreamBasicDescription;
-typedef OSStatus _saudio_OSStatus;
-
-#define _saudio_kAudioFormatLinearPCM (kAudioFormatLinearPCM)
-#define _saudio_kLinearPCMFormatFlagIsFloat (kLinearPCMFormatFlagIsFloat)
-#define _saudio_kAudioFormatFlagIsPacked (kAudioFormatFlagIsPacked)
-
-#else
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-// embedded AudioToolbox declarations
-typedef uint32_t _saudio_AudioFormatID;
-typedef uint32_t _saudio_AudioFormatFlags;
-typedef int32_t _saudio_OSStatus;
-typedef uint32_t _saudio_SMPTETimeType;
-typedef uint32_t _saudio_SMPTETimeFlags;
-typedef uint32_t _saudio_AudioTimeStampFlags;
-typedef void* _saudio_CFRunLoopRef;
-typedef void* _saudio_CFStringRef;
-typedef void* _saudio_AudioQueueRef;
-
-#define _saudio_kAudioFormatLinearPCM ('lpcm')
-#define _saudio_kLinearPCMFormatFlagIsFloat (1U << 0)
-#define _saudio_kAudioFormatFlagIsPacked (1U << 3)
-
-typedef struct _saudio_AudioStreamBasicDescription {
-    double mSampleRate;
-    _saudio_AudioFormatID mFormatID;
-    _saudio_AudioFormatFlags mFormatFlags;
-    uint32_t mBytesPerPacket;
-    uint32_t mFramesPerPacket;
-    uint32_t mBytesPerFrame;
-    uint32_t mChannelsPerFrame;
-    uint32_t mBitsPerChannel;
-    uint32_t mReserved;
-} _saudio_AudioStreamBasicDescription;
-
-typedef struct _saudio_AudioStreamPacketDescription {
-    int64_t mStartOffset;
-    uint32_t mVariableFramesInPacket;
-    uint32_t mDataByteSize;
-} _saudio_AudioStreamPacketDescription;
-
-typedef struct _saudio_SMPTETime {
-    int16_t mSubframes;
-    int16_t mSubframeDivisor;
-    uint32_t mCounter;
-    _saudio_SMPTETimeType mType;
-    _saudio_SMPTETimeFlags mFlags;
-    int16_t mHours;
-    int16_t mMinutes;
-    int16_t mSeconds;
-    int16_t mFrames;
-} _saudio_SMPTETime;
-
-typedef struct _saudio_AudioTimeStamp {
-    double mSampleTime;
-    uint64_t mHostTime;
-    double mRateScalar;
-    uint64_t mWordClockTime;
-    _saudio_SMPTETime mSMPTETime;
-    _saudio_AudioTimeStampFlags mFlags;
-    uint32_t mReserved;
-} _saudio_AudioTimeStamp;
-
-typedef struct _saudio_AudioQueueBuffer {
-    const uint32_t mAudioDataBytesCapacity;
-    void* const mAudioData;
-    uint32_t mAudioDataByteSize;
-    void * mUserData;
-    const uint32_t mPacketDescriptionCapacity;
-    _saudio_AudioStreamPacketDescription* const mPacketDescriptions;
-    uint32_t mPacketDescriptionCount;
-} _saudio_AudioQueueBuffer;
-typedef _saudio_AudioQueueBuffer* _saudio_AudioQueueBufferRef;
-
-typedef void (*_saudio_AudioQueueOutputCallback)(void* user_data, _saudio_AudioQueueRef inAQ, _saudio_AudioQueueBufferRef inBuffer);
-
-extern _saudio_OSStatus AudioQueueNewOutput(const _saudio_AudioStreamBasicDescription* inFormat, _saudio_AudioQueueOutputCallback inCallbackProc, void* inUserData, _saudio_CFRunLoopRef inCallbackRunLoop, _saudio_CFStringRef inCallbackRunLoopMode, uint32_t inFlags, _saudio_AudioQueueRef* outAQ);
-extern _saudio_OSStatus AudioQueueDispose(_saudio_AudioQueueRef inAQ, bool inImmediate);
-extern _saudio_OSStatus AudioQueueAllocateBuffer(_saudio_AudioQueueRef inAQ, uint32_t inBufferByteSize, _saudio_AudioQueueBufferRef* outBuffer);
-extern _saudio_OSStatus AudioQueueEnqueueBuffer(_saudio_AudioQueueRef inAQ, _saudio_AudioQueueBufferRef inBuffer, uint32_t inNumPacketDescs, const _saudio_AudioStreamPacketDescription* inPacketDescs);
-extern _saudio_OSStatus AudioQueueStart(_saudio_AudioQueueRef inAQ, const _saudio_AudioTimeStamp * inStartTime);
-extern _saudio_OSStatus AudioQueueStop(_saudio_AudioQueueRef inAQ, bool inImmediate);
-
-#ifdef __cplusplus
-} // extern "C"
-#endif
-
-#endif // SAUDIO_OSX_USE_SYSTEM_HEADERS
-
 typedef struct {
-    _saudio_AudioQueueRef ca_audio_queue;
+    AudioQueueRef ca_audio_queue;
     #if defined(_SAUDIO_IOS)
     id ca_interruption_handler;
     #endif
@@ -1748,12 +1656,15 @@ _SOKOL_PRIVATE void _saudio_wasapi_release(void) {
 
 _SOKOL_PRIVATE bool _saudio_wasapi_backend_init(void) {
     REFERENCE_TIME dur;
-    /* CoInitializeEx could have been called elsewhere already, in which
-        case the function returns with S_FALSE (thus it does not make much
-        sense to check the result)
-    */
-    HRESULT hr = CoInitializeEx(0, COINIT_MULTITHREADED);
-    _SOKOL_UNUSED(hr);
+    HRESULT hr;
+    if (!_saudio.desc.win32.skip_coinitialize) {
+        /* CoInitializeEx could have been called elsewhere already, in which
+            case the function returns with S_FALSE (thus it does not make much
+            sense to check the result)
+        */
+        hr = CoInitializeEx(0, COINIT_MULTITHREADED);
+        _SOKOL_UNUSED(hr);
+    }
     _saudio.backend.thread.buffer_end_event = CreateEvent(0, FALSE, FALSE, 0);
     if (0 == _saudio.backend.thread.buffer_end_event) {
         _SAUDIO_ERROR(WASAPI_CREATE_EVENT_FAILED);
@@ -1856,7 +1767,9 @@ _SOKOL_PRIVATE void _saudio_wasapi_backend_shutdown(void) {
         IAudioClient_Stop(_saudio.backend.audio_client);
     }
     _saudio_wasapi_release();
-    CoUninitialize();
+    if (!_saudio.desc.win32.skip_coinitialize) {
+        CoUninitialize();
+    }
 }
 
 // ██     ██ ███████ ██████   █████  ██    ██ ██████  ██  ██████
@@ -2185,7 +2098,7 @@ _SOKOL_PRIVATE bool _saudio_aaudio_backend_init(void) {
 #endif // _SAUDIO_IOS
 
 /* NOTE: the buffer data callback is called on a separate thread! */
-_SOKOL_PRIVATE void _saudio_coreaudio_callback(void* user_data, _saudio_AudioQueueRef queue, _saudio_AudioQueueBufferRef buffer) {
+_SOKOL_PRIVATE void _saudio_coreaudio_callback(void* user_data, AudioQueueRef queue, AudioQueueBufferRef buffer) {
     _SOKOL_UNUSED(user_data);
     if (_saudio_has_callback()) {
         const int num_frames = (int)buffer->mAudioDataByteSize / _saudio.bytes_per_frame;
@@ -2237,17 +2150,17 @@ _SOKOL_PRIVATE bool _saudio_coreaudio_backend_init(void) {
     #endif
 
     /* create an audio queue with fp32 samples */
-    _saudio_AudioStreamBasicDescription fmt;
+    AudioStreamBasicDescription fmt;
     _saudio_clear(&fmt, sizeof(fmt));
     fmt.mSampleRate = (double) _saudio.sample_rate;
-    fmt.mFormatID = _saudio_kAudioFormatLinearPCM;
-    fmt.mFormatFlags = _saudio_kLinearPCMFormatFlagIsFloat | _saudio_kAudioFormatFlagIsPacked;
+    fmt.mFormatID = kAudioFormatLinearPCM;
+    fmt.mFormatFlags = kLinearPCMFormatFlagIsFloat | kAudioFormatFlagIsPacked;
     fmt.mFramesPerPacket = 1;
     fmt.mChannelsPerFrame = (uint32_t) _saudio.num_channels;
     fmt.mBytesPerFrame = (uint32_t)sizeof(float) * (uint32_t)_saudio.num_channels;
     fmt.mBytesPerPacket = fmt.mBytesPerFrame;
     fmt.mBitsPerChannel = 32;
-    _saudio_OSStatus res = AudioQueueNewOutput(&fmt, _saudio_coreaudio_callback, 0, NULL, NULL, 0, &_saudio.backend.ca_audio_queue);
+    OSStatus res = AudioQueueNewOutput(&fmt, _saudio_coreaudio_callback, 0, NULL, NULL, 0, &_saudio.backend.ca_audio_queue);
     if (0 != res) {
         _SAUDIO_ERROR(COREAUDIO_NEW_OUTPUT_FAILED);
         return false;
@@ -2256,7 +2169,7 @@ _SOKOL_PRIVATE bool _saudio_coreaudio_backend_init(void) {
 
     /* create 2 audio buffers */
     for (int i = 0; i < 2; i++) {
-        _saudio_AudioQueueBufferRef buf = NULL;
+        AudioQueueBufferRef buf = NULL;
         const uint32_t buf_byte_size = (uint32_t)_saudio.buffer_frames * fmt.mBytesPerFrame;
         res = AudioQueueAllocateBuffer(_saudio.backend.ca_audio_queue, buf_byte_size, &buf);
         if (0 != res) {
