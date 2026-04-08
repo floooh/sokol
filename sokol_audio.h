@@ -834,7 +834,6 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
     #define _SAUDIO_PTHREADS (1)
     #include <pthread.h>
     #if defined(_SAUDIO_IOS)
-        // always use system headers on iOS (for now at least)
         #if !defined(__cplusplus)
             #if __has_feature(objc_arc) && !__has_feature(objc_arc_fields)
                 #error "sokol_audio.h on iOS requires __has_feature(objc_arc_field) if ARC is enabled (use a more recent compiler version)"
