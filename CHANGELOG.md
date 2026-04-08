@@ -1,5 +1,22 @@
 ## Updates
 
+### 08-Apr-2026
+
+Some minor code cleanup in sokol_audio.h:
+
+- sokol_audio.h macos/ios: the config option `SAUDIO_OSX_USE_SYSTEM_HEADERS`
+  and embedded AudioToolbox interface declarations have been removed, instead
+  the AudioToolbox header is now always included, this was a workaround for
+  an ancient Zig issue (https://github.com/ziglang/zig/issues/8360) which had
+  been fixed for a long time
+- sokol_audio.h windows: a new setup config item `saudio_desc.win32.skip_coinitialize`.
+  When this is set to true in the `saudio_setup()` call, sokol_audio.h will
+  not call `CoInitializeEx` and `CoUninitialize` instead the library user is
+  responsible for initializing COM. See https://github.com/floooh/sokol/issues/1398
+  for when that might be useful.
+
+PR: https://github.com/floooh/sokol/pull/1474
+
 ### 06-Apr-2026
 
 - sokol_app.h win32+d3d11+gl: minimizing the window no longer causes the framebuffer
