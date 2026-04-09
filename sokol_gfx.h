@@ -4547,6 +4547,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDATA_DATA_SIZE, "sg_image_data: data size doesn't match expected surface size") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_CANARY, "sg_image_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMMUTABLE_DYNAMIC_STREAM, "sg_image_desc.usage: only one of .immutable, .dynamic_update, .stream_update can be true") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_COLOR_DEPTH_STENCIL, "sg_image_desc.usage: only one of .color_attachment and .depth_stencil_attachment can be true") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMAGETYPE_2D_NUMSLICES, "sg_image_desc.num_slices must be exactly 1 for SG_IMAGETYPE_2D") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMAGETYPE_CUBE_NUMSLICES, "sg_image_desc.num_slices must be exactly 6 for SG_IMAGETYPE_CUBE") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMAGETYPE_ARRAY_NUMSLICES, "sg_image_desc.num_slices must be ((>= 1) && (<= sg_limits.max_image_array_layers)) for SG_IMAGETYPE_ARRAY") \
@@ -22490,6 +22491,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_IMAGEDESC_CANARY);
         _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_IMAGEDESC_CANARY);
         _SG_VALIDATE(_sg_one(usg->immutable, usg->dynamic_update, usg->stream_update), VALIDATE_IMAGEDESC_IMMUTABLE_DYNAMIC_STREAM);
+        _SG_VALIDATE(!(usg->color_attachment && usg->depth_stencil_attachment), VALIDATE_IMAGEDESC_ATTACHMENT_COLOR_DEPTH_STENCIL);
         switch (desc->type) {
             case SG_IMAGETYPE_2D:
                 _SG_VALIDATE(desc->num_slices == 1, VALIDATE_IMAGEDESC_IMAGETYPE_2D_NUMSLICES);
