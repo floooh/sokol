@@ -10186,14 +10186,14 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
         _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R32F]);
         _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA32UI]);
         _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA16UI]);
-        _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBAUI]);
+        _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA8UI]);
         _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R32UI]);
         _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA32SI]);
         _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA16SI]);
         _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA8SI]);
         _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R32SI]);
         _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA8]);
-        _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFROMAT_RGBASN]);
+        _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA8SN]);
     }
 }
 #endif
