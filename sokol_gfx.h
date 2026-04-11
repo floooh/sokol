@@ -16923,6 +16923,8 @@ _SOKOL_PRIVATE WGPUTextureFormat _sg_wgpu_textureformat(sg_pixel_format p) {
         case SG_PIXELFORMAT_R8SN:           return WGPUTextureFormat_R8Snorm;
         case SG_PIXELFORMAT_R8UI:           return WGPUTextureFormat_R8Uint;
         case SG_PIXELFORMAT_R8SI:           return WGPUTextureFormat_R8Sint;
+        case SG_PIXELFORMAT_R16:            return WGPUTextureFormat_R16Unorm;
+        case SG_PIXELFORMAT_R16SN:          return WGPUTextureFormat_R16Snorm;
         case SG_PIXELFORMAT_R16UI:          return WGPUTextureFormat_R16Uint;
         case SG_PIXELFORMAT_R16SI:          return WGPUTextureFormat_R16Sint;
         case SG_PIXELFORMAT_R16F:           return WGPUTextureFormat_R16Float;
@@ -16933,6 +16935,8 @@ _SOKOL_PRIVATE WGPUTextureFormat _sg_wgpu_textureformat(sg_pixel_format p) {
         case SG_PIXELFORMAT_R32UI:          return WGPUTextureFormat_R32Uint;
         case SG_PIXELFORMAT_R32SI:          return WGPUTextureFormat_R32Sint;
         case SG_PIXELFORMAT_R32F:           return WGPUTextureFormat_R32Float;
+        case SG_PIXELFORMAT_RG16:           return WGPUTextureFormat_RG16Unorm;
+        case SG_PIXELFORMAT_RG16SN:         return WGPUTextureFormat_RG16Snorm;
         case SG_PIXELFORMAT_RG16UI:         return WGPUTextureFormat_RG16Uint;
         case SG_PIXELFORMAT_RG16SI:         return WGPUTextureFormat_RG16Sint;
         case SG_PIXELFORMAT_RG16F:          return WGPUTextureFormat_RG16Float;
@@ -16948,6 +16952,8 @@ _SOKOL_PRIVATE WGPUTextureFormat _sg_wgpu_textureformat(sg_pixel_format p) {
         case SG_PIXELFORMAT_RG32UI:         return WGPUTextureFormat_RG32Uint;
         case SG_PIXELFORMAT_RG32SI:         return WGPUTextureFormat_RG32Sint;
         case SG_PIXELFORMAT_RG32F:          return WGPUTextureFormat_RG32Float;
+        case SG_PIXELFORMAT_RGBA16:         return WGPUTextureFormat_RGBA16Unorm;
+        case SG_PIXELFORMAT_RGBA16SN:       return WGPUTextureFormat_RGBA16Snorm;
         case SG_PIXELFORMAT_RGBA16UI:       return WGPUTextureFormat_RGBA16Uint;
         case SG_PIXELFORMAT_RGBA16SI:       return WGPUTextureFormat_RGBA16Sint;
         case SG_PIXELFORMAT_RGBA16F:        return WGPUTextureFormat_RGBA16Float;
@@ -16979,15 +16985,6 @@ _SOKOL_PRIVATE WGPUTextureFormat _sg_wgpu_textureformat(sg_pixel_format p) {
         case SG_PIXELFORMAT_EAC_RG11SN:     return WGPUTextureFormat_EACRG11Snorm;
         case SG_PIXELFORMAT_ASTC_4x4_RGBA:  return WGPUTextureFormat_ASTC4x4Unorm;
         case SG_PIXELFORMAT_ASTC_4x4_SRGBA: return WGPUTextureFormat_ASTC4x4UnormSrgb;
-        // NOT SUPPORTED
-        case SG_PIXELFORMAT_R16:
-        case SG_PIXELFORMAT_R16SN:
-        case SG_PIXELFORMAT_RG16:
-        case SG_PIXELFORMAT_RG16SN:
-        case SG_PIXELFORMAT_RGBA16:
-        case SG_PIXELFORMAT_RGBA16SN:
-            return WGPUTextureFormat_Undefined;
-
         default:
             SOKOL_UNREACHABLE;
             return WGPUTextureFormat_Force32;
@@ -17120,7 +17117,6 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.limits.max_storage_buffer_bindings_per_stage = _sg_min((int)l->maxStorageBuffersPerShaderStage, SG_MAX_VIEW_BINDSLOTS);
     _sg.limits.max_storage_image_bindings_per_stage = _sg_min((int)l->maxStorageTexturesPerShaderStage, SG_MAX_VIEW_BINDSLOTS);
 
-    // NOTE: no WGPUTextureFormat_R16Unorm
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG8]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA8]);
@@ -17168,6 +17164,22 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
         _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RG32F]);
         _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
     }
+    if (wgpuDeviceHasFeature(_sg.wgpu.dev, WGPUFeatureName_Float32Blendable)) {
+        _sg.formats[SG_PIXELFORMAT_R32F].blend = true;
+        _sg.formats[SG_PIXELFORMAT_RG32F].blend = true;
+        _sg.formats[SG_PIXELFORMAT_RGBA32F].blend = true;
+    }
+    if (wgpuDeviceHasFeature(_sg.wgpu.dev, WGPUFeatureName_TextureFormatsTier1)) {
+        _sg_pixelformat_sbr(&_sg.formats[SG_PIXELFORMAT_R16]);
+        _sg_pixelformat_sbr(&_sg.formats[SG_PIXELFORMAT_R16SN]);
+        _sg_pixelformat_sbr(&_sg.formats[SG_PIXELFORMAT_RG16]);
+        _sg_pixelformat_sbr(&_sg.formats[SG_PIXELFORMAT_RG16SN]);
+        _sg_pixelformat_sbr(&_sg.formats[SG_PIXELFORMAT_RGBA16]);
+        _sg_pixelformat_sbr(&_sg.formats[SG_PIXELFORMAT_RGBA16SN]);
+        _sg_pixelformat_sbr(&_sg.formats[SG_PIXELFORMAT_R8SN]);
+        _sg_pixelformat_sbr(&_sg.formats[SG_PIXELFORMAT_RG8SN]);
+        _sg_pixelformat_sbr(&_sg.formats[SG_PIXELFORMAT_RGBA8SN]);
+    }
 
     _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH]);
     _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL]);
@@ -17206,6 +17218,8 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     }
 
     // see: https://github.com/gpuweb/gpuweb/issues/513
+    // NOTE: can't express read-only/write-only vs read-write in sokol-gfx
+    // e.g. some of the below formats are only read-write with texture-tier-2
     _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA8]);
     _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA8SN]);
     _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA8UI]);
@@ -17222,6 +17236,14 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA32UI]);
     _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA32SI]);
     _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+    if (wgpuDeviceHasFeature(_sg.wgpu.dev, WGPUFeatureName_TextureFormatsTier2)) {
+        _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R8]);
+        _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R8UI]);
+        _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R8SI]);
+        _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R16UI]);
+        _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R16SI]);
+        _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R16F]);
+    }
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_uniform_system_init(const sg_desc* desc) {
