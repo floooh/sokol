@@ -12100,8 +12100,8 @@ _SOKOL_PRIVATE void _sapp_x11_init_keytable(void) {
                 continue;
             }
             for (int j = 0; j < num_keymap_items; j++) {
-                if (strncmp(desc->names->key_aliases[i].alias, keymap[i].name, XkbKeyNameLength) == 0) {
-                    key = keymap[i].key;
+                if (strncmp(desc->names->key_aliases[i].alias, keymap[j].name, XkbKeyNameLength) == 0) {
+                    key = keymap[j].key;
                     break;
                 }
             }
