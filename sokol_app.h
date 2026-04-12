@@ -2565,7 +2565,7 @@ typedef struct {
             uint64_t start;
         } mach;
     #elif defined(_SAPP_EMSCRIPTEN)
-        // empty
+        int _dummy;
     #elif defined(_SAPP_WIN32)
         struct {
             LARGE_INTEGER freq;
