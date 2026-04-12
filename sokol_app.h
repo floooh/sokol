@@ -7205,6 +7205,8 @@ _SOKOL_PRIVATE void _sapp_emsc_update_cursor(sapp_mouse_cursor cursor, bool show
     sapp_js_set_cursor((int)cursor, shown ? 1 : 0, custom_cursor ? 1 : 0);
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdollar-in-identifier-extension"
 EM_JS(void, sapp_js_make_custom_mouse_cursor, (int cursor_slot_idx, int width, int height, const void* pixels_ptr, int hotspot_x, int hotspot_y), {
     // encode the cursor pixels into a BMP which then is encoded into an 'object url'
     const bmp_hdr_size = 14;
@@ -7276,6 +7278,7 @@ EM_JS(void, sapp_js_make_custom_mouse_cursor, (int cursor_slot_idx, int width, i
     Module.__sapp_custom_cursors[cursor_slot_idx] = cursor_slot;
 })
 
+#pragma GCC diagnostic pop
 EM_JS(void, sapp_js_destroy_custom_mouse_cursor, (int cursor_slot_idx), {
     if (Module.__sapp_custom_cursors) {
         const cursor = Module.__sapp_custom_cursors[cursor_slot_idx];
