@@ -15228,22 +15228,43 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ASTC_4x4_SRGBA]);
     #endif
 
-    // compute shader access (see: https://github.com/gpuweb/gpuweb/issues/513)
-    // for now let's use the same conservative set on all backends even though
-    // some backends are less restrictive
+    // compute shader access
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R8]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R8SN]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R8UI]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R8SI]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R16]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R16SN]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R16UI]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R16SI]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R16F]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RG8]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RG8SN]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RG8UI]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RG8SI]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R32UI]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R32SI]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R32F]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RG16]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RG16SN]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RG16UI]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RG16SI]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RG16F]);
     _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA8]);
     _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA8SN]);
     _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA8UI]);
     _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA8SI]);
-    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA16UI]);
-    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA16SI]);
-    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
-    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R32UI]);
-    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R32SI]);
-    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_R32F]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_BGRA8]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGB10A2]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RG11B10F]);
     _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RG32UI]);
     _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RG32SI]);
     _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA16]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA16SN]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA16UI]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA16SI]);
+    _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
     _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA32UI]);
     _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA32SI]);
     _sg_pixelformat_compute_all(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
