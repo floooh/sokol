@@ -1845,11 +1845,20 @@ EM_JS(int, saudio_js_init, (int sample_rate, int num_channels, int buffer_size),
         // in some browsers, WebAudio needs to be activated on a user action
         const resume_webaudio = () => {
             if (Module._saudio_context) {
-                if (Module._saudio_context.state === 'suspended') {
-                    Module._saudio_context.resume();
+                const state = Module._saudio_context.state;
+                if ((state === 'suspended') || (state === 'interrupted')) {
+                    Module._saudio_context.resume().catch((err) => {
+                        console.warn('sokol_audio.h: webaudio resume failed');
+                    });
                 }
             }
         };
+        Module._saudio_context.onstatechange = resume_webaudio;
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                resume_webaudio();
+            }
+        });
         document.addEventListener('click', resume_webaudio, {once:true});
         document.addEventListener('touchend', resume_webaudio, {once:true});
         document.addEventListener('keydown', resume_webaudio, {once:true});
@@ -1894,15 +1903,18 @@ EM_JS(int, saudio_js_buffer_frames, (void), {
     }
 })
 
-/* return 1 if the WebAudio context is currently suspended, else 0 */
+/* return 1 if the WebAudio context is currently suspended (or interrupted), else 0 */
 EM_JS(int, saudio_js_suspended, (void), {
     if (Module._saudio_context) {
-        if (Module._saudio_context.state === 'suspended') {
+        const state = Module._saudio_context.state;
+        if ((state === 'suspended') || (state === 'interrupted')) {
             return 1;
-        }
-        else {
+        } else {
             return 0;
         }
+    } else {
+        // shouldn't actually happen since caller makes sure that setup has been called
+        return 0;
     }
 })
 
