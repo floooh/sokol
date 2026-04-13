@@ -1,5 +1,31 @@
 ## Updates
 
+### 13-Apr-2026
+
+- sokol_gfx.h: update pixel format cababilities for most backends:
+  - GL 4.3+: the pixel format compute read/write flags have been updated
+    according the table in the glBindImageTexture documentation:
+    https://registry.khronos.org/OpenGL-Refpages/gl4/html/glBindImageTexture.xhtml
+  - GLES 3.1+: same, but for the pixel format table in
+    https://registry.khronos.org/OpenGL-Refpages/es3/html/glBindImageTexture.xhtml
+  - Metal: the pixel format compute read/write flags have been updated
+    according to https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf
+    (with the caveat that some limits of older iOS device GPUs are ignored - specifically A8 to A10).
+  - WebGPU: pixel format caps have been updated with the optional features
+    provided by the extensions `float32-blendable` and `texture-formats-tier1`
+    and `texture-formats-tier2`
+  - Vulkan: pixel format caps initialization has been rewritten from a hardwired table
+    to querying caps dynamically (similar to the D3D11 backend)
+  - D3D11: no changes, this was already querying all pixel format caps via the API
+
+- sokol_app.h wgpu: the sokol-app WebGPU backend now requests the optional
+  extensions `shader-f16`, `float32-blendable` and `texture-formats-tier2`
+  (`texture-formats-tier1` is not specifically requested because it is included
+  in `tier2`).
+
+PR: https://github.com/floooh/sokol/pull/1476
+related ticket: https://github.com/floooh/sokol/issues/1473
+
 ### 08-Apr-2026
 
 Some minor code cleanup in sokol_audio.h:
