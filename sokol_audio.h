@@ -1903,6 +1903,9 @@ EM_JS(int, saudio_js_suspended, (void), {
         else {
             return 0;
         }
+    } else {
+        // shouldn't actually happen since caller makes sure that setup has been called
+        return 0;
     }
 })
 
