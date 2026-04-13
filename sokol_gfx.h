@@ -20557,9 +20557,15 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     _sg.limits.max_storage_image_bindings_per_stage = _sg_min((int)l->maxPerStageDescriptorStorageImages, SG_MAX_VIEW_BINDSLOTS);
     _sg.limits.vk_min_uniform_buffer_offset_alignment = (int)l->minUniformBufferOffsetAlignment;
 
+    _SG_STRUCT(VkPhysicalDeviceImageFormatInfo2, fmt_info);
+    fmt_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2;
+    fmt_info.type = VK_IMAGE_TYPE_2D;
+    fmt_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    _SG_STRUCT(VkImageFormatProperties2, props2);
+    props2.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2;
     for (int fmt = (SG_PIXELFORMAT_NONE+1); fmt < _SG_PIXELFORMAT_NUM; fmt++) {
-        VkFormat vkfmt = _sg_vk_format((sg_pixel_format)fmt);
         _SG_STRUCT(VkFormatProperties, props);
+        VkFormat vkfmt = _sg_vk_format((sg_pixel_format)fmt);
         vkGetPhysicalDeviceFormatProperties(_sg.vk.phys_dev, vkfmt, &props);
         const VkFormatFeatureFlags f = props.optimalTilingFeatures;
         _sg_pixelformat_info_t* info = &_sg.formats[fmt];
@@ -20573,8 +20579,18 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
             info->render = true;
         }
         if (info->render || info->depth) {
-            // FIXME: is there a way to query msaa support?
-            info->msaa = true;
+            // query msaa support
+            fmt_info.format = vkfmt;
+            fmt_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+            if (info->depth) {
+                fmt_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+            } else {
+                fmt_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+            }
+            VkResult res = vkGetPhysicalDeviceImageFormatProperties2(_sg.vk.phys_dev, &fmt_info, &props2);
+            if (res == VK_SUCCESS) {
+                info->msaa = props2.imageFormatProperties.sampleCounts > VK_SAMPLE_COUNT_1_BIT;
+            }
         }
     }
 }
