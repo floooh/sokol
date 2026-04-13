@@ -2,6 +2,13 @@
 
 ### 13-Apr-2026
 
+- sokol_audio.h emscripten: added handling for the WebAudio 'interrupted'
+  state (Safari specific behaviour). The sokol_audio.h code which handled
+  WebAudio suspend/resume could be confused if the audio context goes into
+  the so far unknown state 'interrupted'.
+
+  More details in the PR: https://github.com/floooh/sokol/pull/1479
+
 - sokol_gfx.h: update pixel format cababilities for most backends:
   - GL 4.3+: the pixel format compute read/write flags have been updated
     according the table in the glBindImageTexture documentation:
