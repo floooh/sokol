@@ -137,7 +137,7 @@ jobs:
           repository: floooh/sokol-zig
       - uses: mlugg/setup-zig@v2
         with:
-          version: 0.15.2
+          version: 0.16.0
       - uses: actions/download-artifact@main
         with:
           name: ignore-me-zig
