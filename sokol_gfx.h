@@ -2974,6 +2974,7 @@ typedef struct sg_gl_swapchain {
 } sg_gl_swapchain;
 
 typedef struct sg_swapchain {
+    bool invalid;
     int width;
     int height;
     int sample_count;
@@ -7252,6 +7253,7 @@ typedef struct {
         sg_attachments atts;
         sg_pass_action action;
         struct {
+            bool invalid;
             sg_pixel_format color_fmt;
             sg_pixel_format depth_fmt;
             int sample_count;
@@ -16247,10 +16249,11 @@ _SOKOL_PRIVATE void _sg_mtl_end_pass(const _sg_attachments_ptrs_t* atts) {
 _SOKOL_PRIVATE void _sg_mtl_commit(void) {
     SOKOL_ASSERT(nil == _sg.mtl.render_cmd_encoder);
     SOKOL_ASSERT(nil == _sg.mtl.compute_cmd_encoder);
-    SOKOL_ASSERT(nil != _sg.mtl.cmd_buffer);
 
     // commit the frame's command buffer
-    [_sg.mtl.cmd_buffer commit];
+    if (_sg.mtl.cmd_buffer) {
+        [_sg.mtl.cmd_buffer commit];
+    }
 
     // garbage-collect resources pending for release
     _sg_mtl_garbage_collect(_sg.frame_index);
@@ -23195,6 +23198,7 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
         if (_sg.desc.disable_validation) {
             return true;
         }
+        const bool is_invalid_swapchain_pass = pass->swapchain.invalid;
         const bool is_compute_pass = pass->compute;
         const bool is_swapchain_pass = !is_compute_pass && _sg_attachments_empty(&pass->attachments);
         const bool is_offscreen_pass = !(is_compute_pass || is_swapchain_pass);
@@ -23203,8 +23207,9 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
         _SG_VALIDATE(pass->_end_canary == 0, VALIDATE_BEGINPASS_CANARY);
         if (is_compute_pass) {
             _SG_VALIDATE(_sg_attachments_empty(&pass->attachments), VALIDATE_BEGINPASS_COMPUTEPASS_EXPECT_NO_ATTACHMENTS);
+        } else if (is_invalid_swapchain_pass) {
+            // empty block not a bug, skips to 'swapchain zeroed' validation at the end
         } else if (is_swapchain_pass) {
-            // this is a swapchain pass
             _SG_VALIDATE(pass->swapchain.width > 0, VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_WIDTH);
             _SG_VALIDATE(pass->swapchain.height > 0, VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_HEIGHT);
             _SG_VALIDATE(pass->swapchain.sample_count > 0, VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_SAMPLECOUNT);
@@ -23247,6 +23252,8 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
                 } else {
                     _SG_VALIDATE(pass->swapchain.wgpu.resolve_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_RESOLVEVIEW_NOTSET);
                 }
+            #elif defined(SOKOL_VULKAN)
+                #error "FIXME VULKAN!
             #endif
         } else {
             // this is an 'offscreen pass'
@@ -23352,7 +23359,7 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
             // must have at least color- or depth-stencil-attachments
             _SG_VALIDATE(has_color_atts || has_depth_stencil_atts, VALIDATE_BEGINPASS_ATTACHMENTS_EXPECTED);
         }
-        if (is_compute_pass || is_offscreen_pass) {
+        if (is_compute_pass || is_offscreen_pass || is_invalid_swapchain_pass) {
             _SG_VALIDATE(pass->swapchain.width == 0, VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_WIDTH_NOTSET);
             _SG_VALIDATE(pass->swapchain.height == 0, VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_HEIGHT_NOTSET);
             _SG_VALIDATE(pass->swapchain.sample_count == 0, VALIDATE_BEGINPASS_SWAPCHAIN_EXPECT_SAMPLECOUNT_NOTSET);
@@ -23372,6 +23379,8 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
                 _SG_VALIDATE(pass->swapchain.wgpu.resolve_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_RESOLVEVIEW_NOTSET);
             #elif defined(_SOKOL_ANY_GL)
                 _SG_VALIDATE(pass->swapchain.gl.framebuffer == 0, VALIDATE_BEGINPASS_SWAPCHAIN_GL_EXPECT_FRAMEBUFFER_NOTSET);
+            #elif defined(SOKOL_VULKAN)
+                #error "FIXME VULKAN!"
             #endif
         }
         return _sg_validate_end();
@@ -24608,7 +24617,7 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
 _SOKOL_PRIVATE sg_pass _sg_pass_defaults(const sg_pass* pass) {
     sg_pass res = *pass;
     if (!res.compute) {
-        if (_sg_attachments_empty(&pass->attachments)) {
+        if (!pass->swapchain.invalid && _sg_attachments_empty(&pass->attachments)) {
             // this is a swapchain-pass
             res.swapchain.sample_count = _sg_def(res.swapchain.sample_count, _sg.desc.environment.defaults.sample_count);
             res.swapchain.color_format = _sg_def(res.swapchain.color_format, _sg.desc.environment.defaults.color_format);
@@ -25405,6 +25414,7 @@ SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
     SOKOL_ASSERT((pass->_start_canary == 0) && (pass->_end_canary == 0));
     _sg.cur_pass.in_pass = true;
     const sg_pass pass_def = _sg_pass_defaults(pass);
+    _SG_TRACE_ARGS(begin_pass, &pass_def);
     if (!_sg_validate_pass_attachment_limits(&pass_def)) {
         return;
     }
@@ -25421,36 +25431,37 @@ SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
         _sg.cur_pass.dim = _sg_attachments_dim(&atts_ptrs);
     } else if (!pass_def.compute) {
         // a swapchain pass
-        SOKOL_ASSERT(pass_def.swapchain.width > 0);
-        SOKOL_ASSERT(pass_def.swapchain.height > 0);
-        SOKOL_ASSERT(pass_def.swapchain.color_format > SG_PIXELFORMAT_NONE);
-        SOKOL_ASSERT(pass_def.swapchain.sample_count > 0);
-        _sg.cur_pass.dim.width = pass_def.swapchain.width;
-        _sg.cur_pass.dim.height = pass_def.swapchain.height;
+        // NOTE: all all values allowed to be zero if swapchain is invalid
+        _sg.cur_pass.swapchain.invalid = pass_def.swapchain.invalid;
         _sg.cur_pass.swapchain.color_fmt = pass_def.swapchain.color_format;
         _sg.cur_pass.swapchain.depth_fmt = pass_def.swapchain.depth_format;
         _sg.cur_pass.swapchain.sample_count = pass_def.swapchain.sample_count;
+        _sg.cur_pass.dim.width = pass_def.swapchain.width;
+        _sg.cur_pass.dim.height = pass_def.swapchain.height;
     }
     _sg.cur_pass.action = pass_def.action;
     _sg.cur_pass.valid = true;  // may be overruled by backend begin-pass functions
     _sg.cur_pass.is_compute = pass_def.compute;
+    if (_sg.cur_pass.swapchain.invalid) {
+        _sg.cur_pass.valid = false;
+        return;
+    }
     _sg_begin_pass(&pass_def, &atts_ptrs);
-    _SG_TRACE_ARGS(begin_pass, &pass_def);
 }
 
 SOKOL_API_IMPL void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left) {
     SOKOL_ASSERT(_sg.valid);
+    _sg_stats_inc(num_apply_viewport);
+    _SG_TRACE_ARGS(apply_viewport, x, y, width, height, origin_top_left);
+    if (!_sg.cur_pass.valid) {
+        return;
+    }
     #if defined(SOKOL_DEBUG)
     if (!_sg_validate_apply_viewport(x, y, width, height, origin_top_left)) {
         return;
     }
     #endif
-    _sg_stats_inc(num_apply_viewport);
-    if (!_sg.cur_pass.valid) {
-        return;
-    }
     _sg_apply_viewport(x, y, width, height, origin_top_left);
-    _SG_TRACE_ARGS(apply_viewport, x, y, width, height, origin_top_left);
 }
 
 SOKOL_API_IMPL void sg_apply_viewportf(float x, float y, float width, float height, bool origin_top_left) {
@@ -25459,17 +25470,17 @@ SOKOL_API_IMPL void sg_apply_viewportf(float x, float y, float width, float heig
 
 SOKOL_API_IMPL void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left) {
     SOKOL_ASSERT(_sg.valid);
+    _sg_stats_inc(num_apply_scissor_rect);
+    _SG_TRACE_ARGS(apply_scissor_rect, x, y, width, height, origin_top_left);
+    if (!_sg.cur_pass.valid) {
+        return;
+    }
     #if defined(SOKOL_DEBUG)
     if (!_sg_validate_apply_scissor_rect(x, y, width, height, origin_top_left)) {
         return;
     }
     #endif
-    _sg_stats_inc(num_apply_scissor_rect);
-    if (!_sg.cur_pass.valid) {
-        return;
-    }
     _sg_apply_scissor_rect(x, y, width, height, origin_top_left);
-    _SG_TRACE_ARGS(apply_scissor_rect, x, y, width, height, origin_top_left);
 }
 
 SOKOL_API_IMPL void sg_apply_scissor_rectf(float x, float y, float width, float height, bool origin_top_left) {
@@ -25479,11 +25490,12 @@ SOKOL_API_IMPL void sg_apply_scissor_rectf(float x, float y, float width, float 
 SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
     SOKOL_ASSERT(_sg.valid);
     _sg_stats_inc(num_apply_pipeline);
-    if (!_sg_validate_apply_pipeline(pip_id)) {
-        _sg.next_draw_valid = false;
+    _SG_TRACE_ARGS(apply_pipeline, pip_id);
+    if (!_sg.cur_pass.valid) {
         return;
     }
-    if (!_sg.cur_pass.valid) {
+    if (!_sg_validate_apply_pipeline(pip_id)) {
+        _sg.next_draw_valid = false;
         return;
     }
     _sg_pipeline_t* pip = _sg_lookup_pipeline(pip_id.id);
@@ -25503,14 +25515,16 @@ SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
     const _sg_shader_t* shd = _sg_shader_ref_ptr(&pip->cmn.shader);
     _sg.required_bindings_and_uniforms = pip->cmn.required_bindings_and_uniforms | shd->cmn.required_bindings_and_uniforms;
     _sg.applied_bindings_and_uniforms = 0;
-
-    _SG_TRACE_ARGS(apply_pipeline, pip_id);
 }
 
 SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(bindings);
     _sg_stats_inc(num_apply_bindings);
+    _SG_TRACE_ARGS(apply_bindings, bindings);
+    if (!_sg.cur_pass.valid) {
+        return;
+    }
     _sg.applied_bindings_and_uniforms |= (1 << SG_MAX_UNIFORMBLOCK_BINDSLOTS);
     if (!_sg_validate_apply_bindings(bindings)) {
         _sg.next_draw_valid = false;
@@ -25518,9 +25532,6 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
     SOKOL_ASSERT((bindings->_start_canary == 0) && (bindings->_end_canary==0));
     if (!_sg_pipeline_ref_alive(&_sg.cur_pip)) {
         _sg.next_draw_valid = false;
-    }
-    if (!_sg.cur_pass.valid) {
-        return;
     }
     if (!_sg.next_draw_valid) {
         return;
@@ -25571,7 +25582,6 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
 
     if (_sg.next_draw_valid) {
         _sg.next_draw_valid &= _sg_apply_bindings(&bnd);
-        _SG_TRACE_ARGS(apply_bindings, bindings);
     }
 }
 
@@ -25581,19 +25591,19 @@ SOKOL_API_IMPL void sg_apply_uniforms(int ub_slot, const sg_range* data) {
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
     _sg_stats_inc(num_apply_uniforms);
     _sg_stats_add(size_apply_uniforms, (uint32_t)data->size);
+    _SG_TRACE_ARGS(apply_uniforms, ub_slot, data);
+    if (!_sg.cur_pass.valid) {
+        return;
+    }
     _sg.applied_bindings_and_uniforms |= 1 << ub_slot;
     if (!_sg_validate_apply_uniforms(ub_slot, data)) {
         _sg.next_draw_valid = false;
-        return;
-    }
-    if (!_sg.cur_pass.valid) {
         return;
     }
     if (!_sg.next_draw_valid) {
         return;
     }
     _sg_apply_uniforms(ub_slot, data);
-    _SG_TRACE_ARGS(apply_uniforms, ub_slot, data);
 }
 
 _SOKOL_PRIVATE bool _sg_check_skip_draw(int num_elements, int num_instances) {
@@ -25612,42 +25622,38 @@ _SOKOL_PRIVATE bool _sg_check_skip_draw(int num_elements, int num_instances) {
 
 SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instances) {
     SOKOL_ASSERT(_sg.valid);
+    _sg_stats_inc(num_draw);
+    _SG_TRACE_ARGS(draw, base_element, num_elements, num_instances);
+    if (_sg_check_skip_draw(num_elements, num_instances)) {
+        return;
+    }
     #if defined(SOKOL_DEBUG)
     if (!_sg_validate_draw(base_element, num_elements, num_instances)) {
         return;
     }
     #endif
-    _sg_stats_inc(num_draw);
-    if (_sg_check_skip_draw(num_elements, num_instances)) {
-        return;
-    }
     _sg_draw(base_element, num_elements, num_instances, 0, 0);
-    _SG_TRACE_ARGS(draw, base_element, num_elements, num_instances);
 }
 
 SOKOL_API_IMPL void sg_draw_ex(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
     SOKOL_ASSERT(_sg.valid);
+    _sg_stats_inc(num_draw_ex);
+    _SG_TRACE_ARGS(draw_ex, base_element, num_elements, num_instances, base_vertex, base_instance);
+    if (_sg_check_skip_draw(num_elements, num_instances)) {
+        return;
+    }
     #if defined(SOKOL_DEBUG)
     if (!_sg_validate_draw_ex(base_element, num_elements, num_instances, base_vertex, base_instance)) {
         return;
     }
     #endif
-    _sg_stats_inc(num_draw_ex);
-    if (_sg_check_skip_draw(num_elements, num_instances)) {
-        return;
-    }
     _sg_draw(base_element, num_elements, num_instances, base_vertex, base_instance);
-    _SG_TRACE_ARGS(draw_ex, base_element, num_elements, num_instances, base_vertex, base_instance);
 }
 
 SOKOL_API_IMPL void sg_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     SOKOL_ASSERT(_sg.valid);
-    #if defined(SOKOL_DEBUG)
-    if (!_sg_validate_dispatch(num_groups_x, num_groups_y, num_groups_z)) {
-        return;
-    }
-    #endif
     _sg_stats_inc(num_dispatch);
+    _SG_TRACE_ARGS(dispatch, num_groups_x, num_groups_y, num_groups_z);
     if (!_sg.cur_pass.valid) {
         return;
     }
@@ -25658,20 +25664,26 @@ SOKOL_API_IMPL void sg_dispatch(int num_groups_x, int num_groups_y, int num_grou
     if ((0 == num_groups_x) || (0 == num_groups_y) || (0 == num_groups_z)) {
         return;
     }
+    #if defined(SOKOL_DEBUG)
+    if (!_sg_validate_dispatch(num_groups_x, num_groups_y, num_groups_z)) {
+        return;
+    }
+    #endif
     _sg_dispatch(num_groups_x, num_groups_y, num_groups_z);
-    _SG_TRACE_ARGS(dispatch, num_groups_x, num_groups_y, num_groups_z);
 }
 
 SOKOL_API_IMPL void sg_end_pass(void) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(_sg.cur_pass.in_pass);
     _sg_stats_inc(num_passes);
+    _SG_TRACE_NOARGS(end_pass);
     // NOTE: don't exit early if !_sg.cur_pass.valid
-    const _sg_attachments_ptrs_t atts_ptrs = _sg_attachments_ptrs(&_sg.cur_pass.atts);
-    _sg_end_pass(&atts_ptrs);
+    if (!_sg.cur_pass.swapchain.invalid) {
+        const _sg_attachments_ptrs_t atts_ptrs = _sg_attachments_ptrs(&_sg.cur_pass.atts);
+        _sg_end_pass(&atts_ptrs);
+    }
     _sg.cur_pip = _sg_pipeline_ref(0);
     _sg_clear(&_sg.cur_pass, sizeof(_sg.cur_pass));
-    _SG_TRACE_NOARGS(end_pass);
 }
 
 SOKOL_API_IMPL void sg_commit(void) {
