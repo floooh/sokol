@@ -4697,6 +4697,22 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_DEPTHSTENCILVIEW, "sg_begin_pass: expected pass.swapchain.wgpu.depth_stencil_view != 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_DEPTHSTENCILVIEW_NOTSET, "sg_begin_pass: expected pass.swapchain.wgpu.depth_stencil_view == 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_GL_EXPECT_FRAMEBUFFER_NOTSET, "sg_begin_pass: expected pass.swapchain.gl.framebuffer == 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RENDERIMAGE, "sg_begin_pass: expected pass.swapchain.vk.render_image != 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RENDERIMAGE_NOTSET, "sg_begin_pass: expected pass.swapchain.vk.render_image == 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RENDERVIEW, "sg_begin_pass: expected pass.swapchain.vk.render_view != 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RENDERVIEW_NOTSET, "sg_begin_pass: expected pass.swapchain.vk.render_view == 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_DEPTHSTENCILIMAGE, "sg_begin_pass: expected pass.swapchain.vk.depth_stencil_image != 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_DEPTHSTENCILIMAGE_NOTSET, "sg_begin_pass: expected pass.swapchain.vk.depth_stencil_image == 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_DEPTHSTENCILVIEW, "sg_begin_pass: expected pass.swapchain.vk.depth_stencil_view != 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_DEPTHSTENCILVIEW_NOTSET, "sg_begin_pass: expected pass.swapchain.vk.depth_stencil_view == 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RESOLVEIMAGE, "sg_begin_pass: expected pass.swapchain.vk.resolve_image != 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RESOLVEIMAGE_NOTSET, "sg_begin_pass: expected pass.swapchain.vk.resolve_image == 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RESOLVEVIEW, "sg_begin_pass: expected pass.swapchain.vk.resolve_view != 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RESOLVEVIEW_NOTSET, "sg_begin_pass: expected pass.swapchain.vk.resolve_view == 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RENDERFINISHEDSEMAPHORE, "sg_begin_pass: expected pass.swapchain.vk.render_finished_semaphore != 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RENDERFINISHEDSEMAPHORE_NOTSET, "sg_begin_pass: expected pass.swapchain.vk.render_finished_semaphore == 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_PRESENTCOMPLETESEMAPHORE, "sg_begin_pass: expected pass.swapchain.vk.present_complete_semaphore != 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_PRESENTCOMPLETESEMAPHORE_NOTSET, "sg_begin_pass: expected pass.swapchain.vk.present_complete_semaphore == 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEWS_CONTINUOUS, "sg_begin_pass: color attachment view array must be continuous") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_ALIVE, "sg_begin_pass: color attachment view no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_BEGINPASS_COLORATTACHMENTVIEW_VALID, "sg_begin_pass: color attachment view not in valid state (SG_RESOURCESTATE_VALID)") \
@@ -21727,7 +21743,6 @@ _SOKOL_PRIVATE void _sg_vk_end_pass(const _sg_attachments_ptrs_t* atts) {
 
 _SOKOL_PRIVATE void _sg_vk_commit(void) {
     SOKOL_ASSERT(_sg.vk.queue);
-    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
     _sg_vk_submit_frame_command_buffers();
     _sg.vk.present_complete_sem = 0;
     _sg.vk.render_finished_sem = 0;
@@ -23253,7 +23268,24 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
                     _SG_VALIDATE(pass->swapchain.wgpu.resolve_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_WGPU_EXPECT_RESOLVEVIEW_NOTSET);
                 }
             #elif defined(SOKOL_VULKAN)
-                #error "FIXME VULKAN!
+                _SG_VALIDATE(pass->swapchain.vulkan.render_image != 0, VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RENDERIMAGE);
+                _SG_VALIDATE(pass->swapchain.vulkan.render_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RENDERVIEW);
+                if (pass->swapchain.depth_format == SG_PIXELFORMAT_NONE) {
+                    _SG_VALIDATE(pass->swapchain.vulkan.depth_stencil_image == 0, VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_DEPTHSTENCILIMAGE_NOTSET);
+                    _SG_VALIDATE(pass->swapchain.vulkan.depth_stencil_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_DEPTHSTENCILVIEW_NOTSET);
+                } else {
+                    _SG_VALIDATE(pass->swapchain.vulkan.depth_stencil_image != 0, VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_DEPTHSTENCILIMAGE);
+                    _SG_VALIDATE(pass->swapchain.vulkan.depth_stencil_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_DEPTHSTENCILVIEW);
+                }
+                if (pass->swapchain.sample_count > 1) {
+                    _SG_VALIDATE(pass->swapchain.vulkan.resolve_image != 0, VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RESOLVEIMAGE);
+                    _SG_VALIDATE(pass->swapchain.vulkan.resolve_view != 0, VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RESOLVEVIEW);
+                } else {
+                    _SG_VALIDATE(pass->swapchain.vulkan.resolve_image == 0, VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RESOLVEIMAGE_NOTSET);
+                    _SG_VALIDATE(pass->swapchain.vulkan.resolve_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RESOLVEVIEW_NOTSET);
+                }
+                _SG_VALIDATE(pass->swapchain.vulkan.render_finished_semaphore != 0, VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RENDERFINISHEDSEMAPHORE);
+                _SG_VALIDATE(pass->swapchain.vulkan.present_complete_semaphore != 0, VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_PRESENTCOMPLETESEMAPHORE);
             #endif
         } else {
             // this is an 'offscreen pass'
@@ -23380,7 +23412,14 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
             #elif defined(_SOKOL_ANY_GL)
                 _SG_VALIDATE(pass->swapchain.gl.framebuffer == 0, VALIDATE_BEGINPASS_SWAPCHAIN_GL_EXPECT_FRAMEBUFFER_NOTSET);
             #elif defined(SOKOL_VULKAN)
-                #error "FIXME VULKAN!"
+                _SG_VALIDATE(pass->swapchain.vulkan.render_image == 0, VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RENDERIMAGE_NOTSET);
+                _SG_VALIDATE(pass->swapchain.vulkan.render_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RENDERVIEW_NOTSET);
+                _SG_VALIDATE(pass->swapchain.vulkan.depth_stencil_image == 0, VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_DEPTHSTENCILIMAGE_NOTSET);
+                _SG_VALIDATE(pass->swapchain.vulkan.depth_stencil_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_DEPTHSTENCILVIEW_NOTSET);
+                _SG_VALIDATE(pass->swapchain.vulkan.resolve_image == 0, VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RESOLVEIMAGE_NOTSET);
+                _SG_VALIDATE(pass->swapchain.vulkan.resolve_view == 0, VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RESOLVEVIEW_NOTSET);
+                _SG_VALIDATE(pass->swapchain.vulkan.render_finished_semaphore == 0, VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_RENDERFINISHEDSEMAPHORE_NOTSET);
+                _SG_VALIDATE(pass->swapchain.vulkan.present_complete_semaphore == 0, VALIDATE_BEGINPASS_SWAPCHAIN_VULKAN_EXPECT_PRESENTCOMPLETESEMAPHORE_NOTSET);
             #endif
         }
         return _sg_validate_end();
