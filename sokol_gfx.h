@@ -21743,7 +21743,9 @@ _SOKOL_PRIVATE void _sg_vk_end_pass(const _sg_attachments_ptrs_t* atts) {
 
 _SOKOL_PRIVATE void _sg_vk_commit(void) {
     SOKOL_ASSERT(_sg.vk.queue);
-    _sg_vk_submit_frame_command_buffers();
+    if (_sg.vk.frame.cmd_buf) {
+        _sg_vk_submit_frame_command_buffers();
+    }
     _sg.vk.present_complete_sem = 0;
     _sg.vk.render_finished_sem = 0;
 }
