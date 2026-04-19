@@ -11,6 +11,8 @@
   reasons. On its own the sokol-gfx feature isn't useful, it needs coordination
   with the external swapchain code (without this coordination, the external swapchain
   code may still keep presenting the swapchain, causing flicker)
+- sokol_gfx.h vulkan: missing validation for Vulkan swapchain resources has
+  been added to the validation layer in the `sg_begin_pass()` call
 
   Ticket: https://github.com/floooh/sokol/issues/1480
   PR: https://github.com/floooh/sokol/pull/1482
