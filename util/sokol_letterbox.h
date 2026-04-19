@@ -133,27 +133,24 @@ SOKOL_LETTERBOX_API_DECL slbx_rect slbx_viewport(int width, int height, const sl
         #define SOKOL_DEBUG
     #endif
 #endif
-#ifndef _SOKOL_PRIVATE
-    #if defined(__GNUC__) || defined(__clang__)
-        #define _SOKOL_PRIVATE __attribute__((unused)) static
-    #else
-        #define _SOKOL_PRIVATE static
-    #endif
-#endif
 #ifndef SOKOL_ASSERT
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
 #endif
 
-_SOKOL_PRIVATE  slbx_rect slbx_viewport(int width, int height, const slbx_options* opts) {
+slbx_rect slbx_viewport(int width, int height, const slbx_options* opts) {
     SOKOL_ASSERT((width > 0) && (height > 0));
     SOKOL_ASSERT(opts);
     SOKOL_ASSERT(opts->aspect > 0.0f);
-    float cw = (float)(width - (opts->border.left + opts->border.right));
+    const float b_top = (float)opts->border.top;
+    const float b_bottom = (float)opts->border.bottom;
+    const float b_left = (float)opts->border.left;
+    const float b_right = (float)opts->border.right;
+    float cw = (float)width - (b_left + b_right);
     if (cw < 1.0f) {
         cw = 1.0f;
     }
-    float ch = (float)(width - (opts->border.top + opts->border.bottom));
+    float ch = (float)height - (b_top + b_bottom);
     if (ch < 1.0f) {
         ch = 1.0f;
     }
@@ -161,17 +158,17 @@ _SOKOL_PRIVATE  slbx_rect slbx_viewport(int width, int height, const slbx_option
     const float canvas_aspect = (float)width / (float)height;
     float vp_x, vp_y, vp_w, vp_h;
     if (content_aspect < canvas_aspect) {
-        vp_y = (float)border.top;
+        vp_y =
         vp_h = ch;
         vp_w = ch * content_aspect;
-        vp_x = (float)border.left + (cw - vp_w) * 0.5f;
+        vp_x = b_left + (cw - vp_w) * 0.5f;
     } else {
-        vp_x = (float)border.left;
+        vp_x = b_left;
         vp_w = cw;
-        vp_h = cw / context_aspect;
-        vp_y = (float)border.top + (ch - vp_h) * 0.5f;
+        vp_h = cw / content_aspect;
+        vp_y = b_top + (ch - vp_h) * 0.5f;
     }
-    const sblx_rect res = { (int)vp_x, (int)vp_y, (int)vp_w, (int)vp_h };
+    const slbx_rect res = { (int)vp_x, (int)vp_y, (int)vp_w, (int)vp_h };
     return res;
 }
 
