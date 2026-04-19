@@ -1,5 +1,21 @@
 ## Updates
 
+### 19-Apr-2026
+
+- sokol_gfx.h: swapchain render-passes can now be marked as 'invalid' via the
+  new boolean `sg_swapchain.invalid`. When this flag is set to true, all other
+  struct members must be zeroed, and sokol-gfx will silently skip all rendering
+  operations in this pass. The purpose of the flag is to communicate to sokol-gfx
+  that the external swapchain handling code cannot provide valid rendering
+  surfaces, or that rendering to this swapchain needs to be skipped for other
+  reasons. On its own the sokol-gfx feature isn't useful, it needs coordination
+  with the external swapchain code (if you just set the flag to true, the external
+  swapchain will still keep presenting the swapchain resulting in flipping between
+  the latest swapchain surface content, resulting in flickering).
+
+  Ticket: https://github.com/floooh/sokol/issues/1480
+  PR: https://github.com/floooh/sokol/pull/1482
+
 ### 13-Apr-2026
 
 - sokol_audio.h emscripten: added handling for the WebAudio 'interrupted'
