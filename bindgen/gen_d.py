@@ -33,6 +33,7 @@ module_names = {
     'sfetch_':  'fetch',
     'simgui_':  'imgui',
     'sgimgui_': 'gfximgui',
+    'sappimgui_': 'appimgui',
     'snk_':     'nuklear',
     'smemtrack_': 'memtrack',
 }
@@ -51,6 +52,7 @@ c_source_paths = {
     'sfetch_':  'sokol-d/src/sokol/c/sokol_fetch.c',
     'simgui_':  'sokol-d/src/sokol/c/sokol_imgui.c',
     'sgimgui_': 'sokol-d/src/sokol/c/sokol_gfx_imgui.c',
+    'sappimgui_': 'sokol-d/src/sokol/c/sokol_app_imgui.c',
     'snk_':     'sokol-d/src/sokol/c/sokol_nuklear.c',
     'smemtrack_': 'sokol-d/src/sokol/c/sokol_memtrack.c',
 }
