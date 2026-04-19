@@ -25,6 +25,7 @@ module_names = {
     'sfetch_':  'fetch',
     'simgui_':  'imgui',
     'sgimgui_': 'sgimgui',
+    'sappimgui_': 'sappimgui',
 }
 
 c_source_paths = {
@@ -40,6 +41,7 @@ c_source_paths = {
     'sfetch_':  'sokol-zig/src/sokol/c/sokol_fetch.c',
     'simgui_':  'sokol-zig/src/sokol/c/sokol_imgui.c',
     'sgimgui_': 'sokol-zig/src/sokol/c/sokol_gfx_imgui.c',
+    'sappimgui_': 'sokol-zig/src/sokol/c/sokol_app_imgui.c',
 }
 
 ignores = [
