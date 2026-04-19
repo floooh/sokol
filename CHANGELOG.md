@@ -9,9 +9,8 @@
   that the external swapchain handling code cannot provide valid rendering
   surfaces, or that rendering to this swapchain needs to be skipped for other
   reasons. On its own the sokol-gfx feature isn't useful, it needs coordination
-  with the external swapchain code (if you just set the flag to true, the external
-  swapchain will still keep presenting the swapchain resulting in flipping between
-  the latest swapchain surface content, resulting in flickering).
+  with the external swapchain code (without this coordination, the external swapchain
+  code may still keep presenting the swapchain, causing flicker)
 
   Ticket: https://github.com/floooh/sokol/issues/1480
   PR: https://github.com/floooh/sokol/pull/1482
