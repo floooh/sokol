@@ -2739,6 +2739,7 @@ typedef struct {
     VkDevice device;
     VkQueue queue;
     VkSwapchainKHR swapchain;
+    bool swapchain_acquired;
     uint32_t num_swapchain_images;
     uint32_t cur_swapchain_image_index;
     VkImage swapchain_images[_SAPP_VK_MAX_SWAPCHAIN_IMAGES];
@@ -4953,6 +4954,7 @@ _SOKOL_PRIVATE void _sapp_vk_discard(void) {
 _SOKOL_PRIVATE void _sapp_vk_swapchain_next(void) {
     SOKOL_ASSERT(_sapp.vk.device);
     SOKOL_ASSERT(_sapp.vk.swapchain);
+    _sapp.vk.swapchain_acquired = true;
     VkResult res = vkAcquireNextImageKHR(
         _sapp.vk.device,
         _sapp.vk.swapchain,
@@ -4967,20 +4969,23 @@ _SOKOL_PRIVATE void _sapp_vk_swapchain_next(void) {
 
 _SOKOL_PRIVATE void _sapp_vk_present(void) {
     SOKOL_ASSERT(_sapp.vk.queue);
-    _SAPP_STRUCT(VkPresentInfoKHR, present_info);
-    present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    present_info.waitSemaphoreCount = 1;
-    // NOTE: using the current swapchain image index here instead of `sync_slot` is *NOT* a bug! The render_finished_semaphore *must*
-    // be associated with the current swapchain image in case the swapchain implementation doesn't return swapchain images in order
-    present_info.pWaitSemaphores = &_sapp.vk.sync[_sapp.vk.cur_swapchain_image_index].render_finished_sem;
-    present_info.swapchainCount = 1;
-    present_info.pSwapchains = &_sapp.vk.swapchain;
-    present_info.pImageIndices = &_sapp.vk.cur_swapchain_image_index;
-    VkResult res = vkQueuePresentKHR(_sapp.vk.queue, &present_info);
-    if ((res == VK_ERROR_OUT_OF_DATE_KHR) || (res == VK_SUBOPTIMAL_KHR)) {
-        _sapp_vk_recreate_swapchain();
-    } else if (res != VK_SUCCESS) {
-        _SAPP_WARN(VULKAN_QUEUE_PRESENT_FAILED);
+    if (_sapp.vk.swapchain_acquired) {
+        _sapp.vk.swapchain_acquired = false;
+        _SAPP_STRUCT(VkPresentInfoKHR, present_info);
+        present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        present_info.waitSemaphoreCount = 1;
+        // NOTE: using the current swapchain image index here instead of `sync_slot` is *NOT* a bug! The render_finished_semaphore *must*
+        // be associated with the current swapchain image in case the swapchain implementation doesn't return swapchain images in order
+        present_info.pWaitSemaphores = &_sapp.vk.sync[_sapp.vk.cur_swapchain_image_index].render_finished_sem;
+        present_info.swapchainCount = 1;
+        present_info.pSwapchains = &_sapp.vk.swapchain;
+        present_info.pImageIndices = &_sapp.vk.cur_swapchain_image_index;
+        VkResult res = vkQueuePresentKHR(_sapp.vk.queue, &present_info);
+        if ((res == VK_ERROR_OUT_OF_DATE_KHR) || (res == VK_SUBOPTIMAL_KHR)) {
+            _sapp_vk_recreate_swapchain();
+        } else if (res != VK_SUCCESS) {
+            _SAPP_WARN(VULKAN_QUEUE_PRESENT_FAILED);
+        }
     }
 }
 

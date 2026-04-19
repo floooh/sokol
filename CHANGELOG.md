@@ -1,5 +1,22 @@
 ## Updates
 
+### 19-Apr-2026
+
+- sokol_gfx.h: swapchain render-passes can now be marked as 'invalid' via the
+  new boolean `sg_swapchain.invalid`. When this flag is set to true, all other
+  struct members must be zeroed, and sokol-gfx will silently skip all rendering
+  operations in this pass. The purpose of the flag is to communicate to sokol-gfx
+  that the external swapchain handling code cannot provide valid rendering
+  surfaces, or that rendering to this swapchain needs to be skipped for other
+  reasons. On its own the sokol-gfx feature isn't useful, it needs coordination
+  with the external swapchain code (without this coordination, the external swapchain
+  code may still keep presenting the swapchain, causing flicker)
+- sokol_gfx.h vulkan: missing validation for Vulkan swapchain resources has
+  been added to the validation layer in the `sg_begin_pass()` call
+
+  Ticket: https://github.com/floooh/sokol/issues/1480
+  PR: https://github.com/floooh/sokol/pull/1482
+
 ### 13-Apr-2026
 
 - sokol_audio.h emscripten: added handling for the WebAudio 'interrupted'
