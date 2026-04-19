@@ -559,7 +559,7 @@
                 - an optional MTLTexture for the depth/stencil buffer
 
     A sg_swapchain struct provided to sg_begin_pass() can indicate that the
-    swapchain is in an 'invalid state' via the booleab `sg_swapchain.invalid`.
+    swapchain is in an 'invalid state' via the boolean `sg_swapchain.invalid`.
     When this flag is set, all other sg_swapchain members must be zeroed.
     An invalid swapchain will cause all rendering operations in that pass
     to be silently skipped.
@@ -2900,7 +2900,7 @@ typedef struct sg_pass_action {
 
     The width and height *must* be > 0.
 
-    The boolean `sg_swapchain.invalid` is used to communite an invalid
+    The boolean `sg_swapchain.invalid` is used to communicate an invalid
     swapchain state to sokol-gfx (for instance the swapchain code outside of
     sokol-gfx not being able to create swapchain surfaces). When the .invalid
     boolean is set to true, all other sg_swapchain struct items must be zeroed
@@ -25485,7 +25485,7 @@ SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
         _sg.cur_pass.dim = _sg_attachments_dim(&atts_ptrs);
     } else if (!pass_def.compute) {
         // a swapchain pass
-        // NOTE: all all values allowed to be zero if swapchain is invalid
+        // NOTE: all values allowed to be zero if swapchain is invalid
         _sg.cur_pass.swapchain.invalid = pass_def.swapchain.invalid;
         _sg.cur_pass.swapchain.color_fmt = pass_def.swapchain.color_format;
         _sg.cur_pass.swapchain.depth_fmt = pass_def.swapchain.depth_format;
