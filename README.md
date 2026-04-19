@@ -16,6 +16,8 @@
 
 - [Doom Shareware](https://floooh.github.io/doom-sokol/) ported to the Sokol headers ([source](https://github.com/floooh/doom-sokol))
 
+- [Syntonic Dentiforms Redux](https://aras-p.github.io/SyntonicDentiforms/) demo remaster by Aras Pranckevičius ([blog post](https://aras-p.info/blog/2026/04/13/Syntonic-Dentiforms-redux/)).
+
 - [Everybody Wants to Crank the World](https://aras-p.github.io/demo-pd-cranktheworld/) demo by
 Aras Pranckevičius, PC/web port via sokol ([source](https://github.com/aras-p/demo-pd-cranktheworld)).
 
