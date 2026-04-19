@@ -558,6 +558,12 @@
                   rendering goes into
                 - an optional MTLTexture for the depth/stencil buffer
 
+    A sg_swapchain struct provided to sg_begin_pass() can indicate that the
+    swapchain is in an 'invalid state' via the booleab `sg_swapchain.invalid`.
+    When this flag is set, all other sg_swapchain members must be zeroed.
+    An invalid swapchain will cause all rendering operations in that pass
+    to be silently skipped.
+
     It's recommended that you create a helper function which returns an
     initialized sg_swapchain struct by value. This can then be directly plugged
     into the sg_begin_pass function like this:
@@ -2894,7 +2900,14 @@ typedef struct sg_pass_action {
 
     The width and height *must* be > 0.
 
-    Additionally the following backend API specific objects must be passed in
+    The boolean `sg_swapchain.invalid` is used to communite an invalid
+    swapchain state to sokol-gfx (for instance the swapchain code outside of
+    sokol-gfx not being able to create swapchain surfaces). When the .invalid
+    boolean is set to true, all other sg_swapchain struct items must be zeroed
+    (checked in the validation layer), and all rendering in this swapchain-pass
+    will be silently skipped.
+
+    For valid swapchains, the following backend API specific objects must be passed in
     as 'type erased' void pointers:
 
     GL:
