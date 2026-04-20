@@ -55,6 +55,7 @@ d_tasks = [
     [ '../util/sokol_memtrack.h', 'smemtrack_', [] ],
     [ '../util/sokol_imgui.h', 'simgui_',   ['sg_', 'sapp_'] ],
     [ '../util/sokol_gfx_imgui.h', 'sgimgui_',   ['sg_', 'sapp_'] ],
+    [ '../util/sokol_app_imgui.h', 'sappimgui_', ['sapp_'] ],
 ]
 # check if nuklear.h is available and copy it
 if os.path.exists('../tests/ext/nuklear.h'):
