@@ -4,25 +4,12 @@
 #   Generate Jai bindings.
 #-------------------------------------------------------------------------------
 import textwrap
-import gen_ir
 import gen_util as util
-import os, shutil, sys
+import os, sys
 
 bindings_root = 'sokol-jai'
 c_root = f'{bindings_root}/sokol/c'
 module_root = f'{bindings_root}/sokol'
-
-module_names = {
-    'slog_':    'log',
-    'sg_':      'gfx',
-    'sapp_':    'app',
-    'stm_':     'time',
-    'saudio_':  'audio',
-    'sgl_':     'gl',
-    'sdtx_':    'debugtext',
-    'sshape_':  'shape',
-    'sglue_':   'glue',
-}
 
 system_libs = {
     'sg_': {
@@ -64,19 +51,6 @@ system_libs = {
             'gl': '#system_library,link_always "asound"; #system_library,link_always "dl"; #system_library,link_always "pthread";',
         }
     }
-}
-
-c_source_names = {
-    'slog_':    'sokol_log.c',
-    'sg_':      'sokol_gfx.c',
-    'sapp_':    'sokol_app.c',
-    'sapp_sg':  'sokol_glue.c',
-    'stm_':     'sokol_time.c',
-    'saudio_':  'sokol_audio.c',
-    'sgl_':     'sokol_gl.c',
-    'sdtx_':    'sokol_debugtext.c',
-    'sshape_':  'sokol_shape.c',
-    'sglue_':   'sokol_glue.c',
 }
 
 ignores = [
@@ -174,14 +148,11 @@ def as_snake_case(s, prefix):
         outp = outp[len(prefix):]
     return outp
 
-def get_jai_module_path(c_prefix):
-    return f'{module_root}/{module_names[c_prefix]}'
+def get_jai_module_path(mod_name):
+    return f'{module_root}/{mod_name}'
 
-def get_csource_path(c_prefix):
-    return f'{c_root}/{c_source_names[c_prefix]}'
-
-def make_jai_module_directory(c_prefix):
-    path = get_jai_module_path(c_prefix)
+def make_jai_module_directory(mod_name):
+    path = get_jai_module_path(mod_name)
     if not os.path.isdir(path):
         os.makedirs(path)
 
@@ -320,8 +291,9 @@ def get_system_libs(module, platform, backend):
                     return f"{libs}"
     return ''
 
-def gen_c_imports(inp, c_prefix, prefix):
-    module_name = inp["module"]
+def gen_c_imports(inp):
+    module_name = inp['module']
+    prefix = inp['prefix'];
     clib_prefix = f'sokol_{module_name}'
     clib_import = f'{clib_prefix}_clib'
     windows_d3d11_libs = get_system_libs(prefix, 'windows', 'd3d11')
@@ -448,7 +420,9 @@ def gen_enum(decl, prefix):
     l('}')
     l('')
 
-def gen_imports(dep_prefixes):
+def gen_imports(inp):
+    module_names = inp['module_names']
+    dep_prefixes = inp['dep_prefixes']
     for dep_prefix in dep_prefixes:
         dep_module_name = module_names[dep_prefix]
         l(f'#import,dir "../{dep_module_name}"(DEBUG = USE_DLL, USE_GL = USE_DLL, USE_DLL = USE_DLL);')
@@ -462,16 +436,16 @@ def gen_helpers(inp):
         l('    sdtx_putr(to_c_string(fstr), xx fstr.count);')
         l('}')
 
-def gen_module(inp, c_prefix, dep_prefixes):
+def gen_module(inp):
     pre_parse(inp)
     l('// machine generated, do not edit')
     if inp.get('comment'):
         l('')
         c(inp['comment'])
-    gen_imports(dep_prefixes)
+    gen_imports(inp)
     gen_helpers(inp)
     prefix = inp['prefix']
-    gen_c_imports(inp, c_prefix, prefix)
+    gen_c_imports(inp)
     for decl in inp['decls']:
         if not decl['is_dep']:
             kind = decl['kind']
@@ -498,23 +472,14 @@ def pre_parse(inp):
                 enum_items[enum_name].append(as_enum_item_name(item['name']))
 
 def prepare():
-    print('=== Generating Jai bindings:')
-    if not os.path.isdir(module_root):
-        os.makedirs(module_root)
-    if not os.path.isdir(c_root):
-        os.makedirs(c_root)
+    util.prepare('Jai', module_root, c_root)
 
-def gen(c_header_path, c_prefix, dep_c_prefixes):
-    if not c_prefix in module_names:
-        print(f'  >> warning: skipping generation for {c_prefix} prefix...')
-        return
+def gen(opts):
     reset_globals()
-    make_jai_module_directory(c_prefix)
-    print(f'  {c_header_path} => {module_names[c_prefix]}')
-    shutil.copyfile(c_header_path, f'{c_root}/{os.path.basename(c_header_path)}')
-    csource_path = get_csource_path(c_prefix)
-    module_name = module_names[c_prefix]
-    ir = gen_ir.gen(c_header_path, csource_path, module_name, c_prefix, dep_c_prefixes, with_comments=True)
-    gen_module(ir, c_prefix, dep_c_prefixes)
-    with open(f"{module_root}/{ir['module']}/module.jai", 'w', newline='\n') as f_outp:
-        f_outp.write(out_lines)
+    success, ir = util.gen_ir(opts, c_root, with_comments=True)
+    if success:
+        mod_name = ir['module']
+        make_jai_module_directory(mod_name)
+        gen_module(ir)
+        with open(f"{get_jai_module_path(mod_name)}/module.jai", 'w', newline='\n') as f_outp:
+            f_outp.write(out_lines)

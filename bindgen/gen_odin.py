@@ -4,26 +4,12 @@
 #   Generate Odin bindings.
 #-------------------------------------------------------------------------------
 import textwrap
-import gen_ir
 import gen_util as util
-import os, shutil, sys
+import os, sys
 
 bindings_root = 'sokol-odin'
 c_root = f'{bindings_root}/sokol/c'
 module_root = f'{bindings_root}/sokol'
-
-module_names = {
-    'slog_':    'log',
-    'sg_':      'gfx',
-    'sapp_':    'app',
-    'stm_':     'time',
-    'saudio_':  'audio',
-    'sgl_':     'gl',
-    'sdtx_':    'debugtext',
-    'sshape_':  'shape',
-    'sglue_':   'glue',
-    'simgui_':   'imgui',
-}
 
 system_libs = {
     'sg_': {
@@ -68,20 +54,6 @@ system_libs = {
             'gldll': '"system:dl", "system:pthread"',
         }
     }
-}
-
-c_source_names = {
-    'slog_':    'sokol_log.c',
-    'sg_':      'sokol_gfx.c',
-    'sapp_':    'sokol_app.c',
-    'sapp_sg':  'sokol_glue.c',
-    'stm_':     'sokol_time.c',
-    'saudio_':  'sokol_audio.c',
-    'sgl_':     'sokol_gl.c',
-    'sdtx_':    'sokol_debugtext.c',
-    'sshape_':  'sokol_shape.c',
-    'sglue_':   'sokol_glue.c',
-    'simgui_':  'sokol_imgui.c',
 }
 
 ignores = [
@@ -181,14 +153,11 @@ def as_snake_case(s, prefix):
         outp = outp[len(prefix):]
     return outp
 
-def get_odin_module_path(c_prefix):
-    return f'{module_root}/{module_names[c_prefix]}'
+def get_odin_module_path(mod_name):
+    return f'{module_root}/{mod_name}'
 
-def get_csource_path(c_prefix):
-    return f'{c_root}/{c_source_names[c_prefix]}'
-
-def make_odin_module_directory(c_prefix):
-    path = get_odin_module_path(c_prefix)
+def make_odin_module_directory(mod_name):
+    path = get_odin_module_path(mod_name)
     if not os.path.isdir(path):
         os.makedirs(path)
 
@@ -201,7 +170,7 @@ def as_struct_or_enum_type(s, prefix):
     outp = '' if s.startswith(prefix) else f'{parts[0]}.'
     for part in parts[1:]:
         # ignore '_t' type postfix
-        if (part != 't'):
+        if part != 't':
             outp += part.capitalize()
             outp += '_'
     outp = outp[:-1]
@@ -352,8 +321,9 @@ def get_system_libs(module, platform, backend):
                     return f", {libs}"
     return ''
 
-def gen_c_imports(inp, c_prefix, prefix):
+def gen_c_imports(inp):
     module_name = inp["module"]
+    prefix = inp['prefix']
     clib_prefix = f'sokol_{module_name}'
     clib_import = f'{clib_prefix}_clib'
     windows_d3d11_libs = get_system_libs(prefix, 'windows', 'd3d11')
@@ -435,11 +405,7 @@ def gen_c_imports(inp, c_prefix, prefix):
     l( '}')
     l( '')
 
-    # Need to special case sapp_sg to avoid Odin's context keyword
-    if c_prefix == "sapp_sg":
-        l(f'@(default_calling_convention="c")')
-    else:
-        l(f'@(default_calling_convention="c", link_prefix="{c_prefix}")')
+    l(f'@(default_calling_convention="c", link_prefix="{prefix}")')
     l(f"foreign {clib_import} {{")
     prefix = inp['prefix']
     for decl in inp['decls']:
@@ -449,12 +415,7 @@ def gen_c_imports(inp, c_prefix, prefix):
             res_str = '' if res_type == '' else f'-> {res_type}'
             if decl.get('comment'):
                 c(decl['comment'], indent="    ")
-            # Need to special case sapp_sg to avoid Odin's context keyword
-            if c_prefix == "sapp_sg":
-                l(f'    @(link_name="{decl["name"]}")')
-                l(f"    {check_override(as_snake_case(decl['name'], c_prefix))} :: proc({args}) {res_str} ---")
-            else:
-                l(f"    {as_snake_case(decl['name'], c_prefix)} :: proc({args}) {res_str} ---")
+            l(f"    {as_snake_case(decl['name'], prefix)} :: proc({args}) {res_str} ---")
     l('}')
     l('')
 
@@ -498,7 +459,9 @@ def gen_enum(decl, prefix):
     l('}')
     l('')
 
-def gen_imports(dep_prefixes):
+def gen_imports(inp):
+    module_names = inp['module_names']
+    dep_prefixes = inp['dep_prefixes']
     for dep_prefix in dep_prefixes:
         dep_module_name = module_names[dep_prefix]
         l(f'import {dep_prefix[:-1]} "../{dep_module_name}"')
@@ -513,7 +476,7 @@ def gen_helpers(inp):
         l('    putr(strings.unsafe_string_to_cstring(fstr), len(fstr))')
         l('}')
 
-def gen_module(inp, c_prefix, dep_prefixes):
+def gen_module(inp):
     pre_parse(inp)
     l('// machine generated, do not edit')
     l('')
@@ -521,10 +484,10 @@ def gen_module(inp, c_prefix, dep_prefixes):
     if inp.get('comment'):
         l('')
         c(inp['comment'])
-    gen_imports(dep_prefixes)
+    gen_imports(inp)
     gen_helpers(inp)
     prefix = inp['prefix']
-    gen_c_imports(inp, c_prefix, prefix)
+    gen_c_imports(inp)
     for decl in inp['decls']:
         if not decl['is_dep']:
             kind = decl['kind']
@@ -551,23 +514,14 @@ def pre_parse(inp):
                 enum_items[enum_name].append(as_enum_item_name(item['name']))
 
 def prepare():
-    print('=== Generating Odin bindings:')
-    if not os.path.isdir(module_root):
-        os.makedirs(module_root)
-    if not os.path.isdir(c_root):
-        os.makedirs(c_root)
+    util.prepare('Odin', module_root, c_root)
 
-def gen(c_header_path, c_prefix, dep_c_prefixes):
-    if not c_prefix in module_names:
-        print(f'  >> warning: skipping generation for {c_prefix} prefix...')
-        return
+def gen(opts):
     reset_globals()
-    make_odin_module_directory(c_prefix)
-    print(f'  {c_header_path} => {module_names[c_prefix]}')
-    shutil.copyfile(c_header_path, f'{c_root}/{os.path.basename(c_header_path)}')
-    csource_path = get_csource_path(c_prefix)
-    module_name = module_names[c_prefix]
-    ir = gen_ir.gen(c_header_path, csource_path, module_name, c_prefix, dep_c_prefixes, with_comments=True)
-    gen_module(ir, c_prefix, dep_c_prefixes)
-    with open(f"{module_root}/{ir['module']}/{ir['module']}.odin", 'w', newline='\n') as f_outp:
-        f_outp.write(out_lines)
+    success, ir = util.gen_ir(opts, c_root, with_comments=True)
+    if success:
+        mod_name = ir['module']
+        make_odin_module_directory(mod_name)
+        gen_module(ir)
+        with open(f"{get_odin_module_path(mod_name)}/{mod_name}.odin", 'w', newline='\n') as f_outp:
+            f_outp.write(out_lines)

@@ -1,5 +1,15 @@
 ## Updates
 
+### 20-Apr-2026
+
+- fix various warts in the language bindings generator scripts which
+  reduces manual overhead for adding new headers to the bindings
+  (small breaking change in the sokol-zig bindings: the module `sgimgui`
+  has been renamed to `gfximgui` and the module `sappimgui` to `appimgui`)
+
+  Ticket: https://github.com/floooh/sokol/issues/1489
+  PR: https://github.com/floooh/sokol/pull/1490
+
 ### 19-Apr-2026
 
 - sokol_gfx.h: swapchain render-passes can now be marked as 'invalid' via the

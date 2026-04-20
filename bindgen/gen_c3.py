@@ -3,16 +3,14 @@
 #
 #   Generate C3 bindings.
 #-------------------------------------------------------------------------------
-import gen_ir
 import gen_util as util
-import os, shutil, sys
+import sys
 
 bindings_root = 'sokol-c3'
 c_root = f'{bindings_root}/sokol.c3l/c'
 module_root = f'{bindings_root}/sokol.c3l'
 
-# TODO: Consider changing module names to something shorter.
-#       For example we could C prefixes, for example `sg` instead of current `gfx`.
+# NOTE: these module names differ from the names in other bindings
 module_names = {
     'slog_':    'slog',
     'sg_':      'sg',
@@ -23,19 +21,6 @@ module_names = {
     'sdtx_':    'sdtx',
     'sshape_':  'sshape',
     'sglue_':   'sglue',
-}
-
-c_source_names = {
-    'slog_':    'sokol_log.c',
-    'sg_':      'sokol_gfx.c',
-    'sapp_':    'sokol_app.c',
-    'sapp_sg':  'sokol_glue.c',
-    'stm_':     'sokol_time.c',
-    'saudio_':  'sokol_audio.c',
-    'sgl_':     'sokol_gl.c',
-    'sdtx_':    'sokol_debugtext.c',
-    'sshape_':  'sokol_shape.c',
-    'sglue_':   'sokol_glue.c',
 }
 
 ignores = [
@@ -170,17 +155,6 @@ def as_snake_case(s, prefix):
     if outp.lower().startswith(prefix):
         outp = outp[len(prefix):]
     return outp
-
-def get_c3_module_path(c_prefix):
-    return f'{module_root}'
-
-def get_csource_path(c_prefix):
-    return f'{c_root}/{c_source_names[c_prefix]}'
-
-def make_c3_module_directory(c_prefix):
-    path = get_c3_module_path(c_prefix)
-    if not os.path.isdir(path):
-        os.makedirs(path)
 
 def as_prim_type(s):
     return prim_types[s]
@@ -320,16 +294,6 @@ def funcdecl_result_c(decl, prefix):
     res_c_type = decl_type[:decl_type.index('(')].strip()
     return map_type(check_override(f'{func_name}.RESULT', default=res_c_type), prefix, 'c_arg')
 
-def gen_c_imports(inp, c_prefix, prefix):
-    prefix = inp['prefix']
-    for decl in inp['decls']:
-        if decl['kind'] == 'func' and not decl['is_dep'] and not check_ignore(decl['name']):
-            args = funcdecl_args_c(decl, prefix)
-            res_type = funcdecl_result_c(decl, prefix)
-            res_str = 'void' if res_type == '' else res_type
-            l(f'extern fn {res_str} {check_override(as_snake_case(decl["name"], c_prefix))}({args}) @cname("{decl["name"]}");')
-    l('')
-
 def gen_consts(decl, prefix):
     for item in decl["items"]:
         #
@@ -375,8 +339,18 @@ def gen_enum(decl, prefix):
     l('}')
     l('')
 
-def gen_imports(dep_prefixes):
+def gen_imports():
     l(f'import sokol;')
+    l('')
+
+def gen_c_imports(inp):
+    prefix = inp['prefix']
+    for decl in inp['decls']:
+        if decl['kind'] == 'func' and not decl['is_dep'] and not check_ignore(decl['name']):
+            args = funcdecl_args_c(decl, prefix)
+            res_type = funcdecl_result_c(decl, prefix)
+            res_str = 'void' if res_type == '' else res_type
+            l(f'extern fn {res_str} {check_override(as_snake_case(decl["name"], prefix))}({args}) @cname("{decl["name"]}");')
     l('')
 
 def gen_function_pointer_aliases():
@@ -385,14 +359,15 @@ def gen_function_pointer_aliases():
         l(f'alias {alias_name} = {right_hand_side};')
     l('')
 
-def gen_module(inp, c_prefix, dep_prefixes):
+def gen_module(inp):
+    module_names = inp['module_names']
+    prefix = inp['prefix']
     pre_parse(inp)
     l('// machine generated, do not edit')
     l('')
-    l(f"module sokol::{module_names[c_prefix]};")
-    gen_imports(dep_prefixes)
-    prefix = inp['prefix']
-    gen_c_imports(inp, c_prefix, prefix)
+    l(f"module sokol::{module_names[prefix]};")
+    gen_imports()
+    gen_c_imports(inp)
     for decl in inp['decls']:
         if not decl['is_dep']:
             kind = decl['kind']
@@ -420,23 +395,14 @@ def pre_parse(inp):
                 enum_items[enum_name].append(as_enum_item_name(item['name']))
 
 def prepare():
-    print('=== Generating C3 bindings:')
-    if not os.path.isdir(module_root):
-        os.makedirs(module_root)
-    if not os.path.isdir(c_root):
-        os.makedirs(c_root)
+    util.prepare('C3', module_root, c_root);
 
-def gen(c_header_path, c_prefix, dep_c_prefixes):
-    if not c_prefix in module_names:
-        print(f'  >> warning: skipping generation for {c_prefix} prefix...')
-        return
+def gen(opts):
+    # override module names
+    opts['module_names'] = module_names
     reset_globals()
-    make_c3_module_directory(c_prefix)
-    print(f'  {c_header_path} => {module_names[c_prefix]}')
-    shutil.copyfile(c_header_path, f'{c_root}/{os.path.basename(c_header_path)}')
-    csource_path = get_csource_path(c_prefix)
-    module_name = module_names[c_prefix]
-    ir = gen_ir.gen(c_header_path, csource_path, module_name, c_prefix, dep_c_prefixes)
-    gen_module(ir, c_prefix, dep_c_prefixes)
-    with open(f"{module_root}/{ir['module']}.c3", 'w', newline='\n') as f_outp:
-        f_outp.write(out_lines)
+    success, ir = util.gen_ir(opts, c_root)
+    if success:
+        gen_module(ir)
+        with open(f"{module_root}/{ir['module']}.c3", 'w', newline='\n') as f_outp:
+            f_outp.write(out_lines)

@@ -1,7 +1,7 @@
 #-------------------------------------------------------------------------------
 #   Generate an intermediate representation of a clang AST dump.
 #-------------------------------------------------------------------------------
-import re, json, sys, subprocess
+import re, json, sys, subprocess, os
 
 def is_api_decl(decl, prefix):
     if 'name' in decl:
@@ -121,16 +121,20 @@ def parse_decl(decl, source):
         return None
 
 def clang(csrc_path, with_comments=False):
-    cmd = ['clang', '-Xclang', '-ast-dump=json', "-c", csrc_path]
+    cmd = ['clang', '-Xclang', '-ast-dump=json', '-c', csrc_path]
     if with_comments:
         cmd.append('-fparse-all-comments')
     return subprocess.check_output(cmd)
 
-def gen(header_path, source_path, module, main_prefix, dep_prefixes, with_comments=False):
+def gen(header_path, source_path, module, module_names, main_prefix, dep_prefixes, with_comments=False):
+    os.makedirs('out', exist_ok = True)
     ast = clang(source_path, with_comments=with_comments)
     inp = json.loads(ast)
     outp = {}
+    outp['c_header_path'] = header_path
+    outp['c_source_path'] = source_path
     outp['module'] = module
+    outp['module_names'] = module_names
     outp['prefix'] = main_prefix
     outp['dep_prefixes'] = dep_prefixes
     outp['decls'] = []
@@ -151,6 +155,6 @@ def gen(header_path, source_path, module, main_prefix, dep_prefixes, with_commen
                     outp_decl['is_dep'] = is_dep
                     outp_decl['dep_prefix'] = dep_prefix(decl, dep_prefixes)
                     outp['decls'].append(outp_decl)
-    with open(f'{module}.json', 'w') as f:
+    with open(f'out/{module}.json', 'w') as f:
         f.write(json.dumps(outp, indent=2));
     return outp
