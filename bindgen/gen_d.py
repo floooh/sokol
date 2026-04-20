@@ -22,25 +22,6 @@ c_root = f'{module_root}/c'
 # Configure logging for debugging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-c_source_paths = {
-    'slog_':    'sokol-d/src/sokol/c/sokol_log.c',
-    'sg_':      'sokol-d/src/sokol/c/sokol_gfx.c',
-    'sapp_':    'sokol-d/src/sokol/c/sokol_app.c',
-    'sargs_':   'sokol-d/src/sokol/c/sokol_args.c',
-    'stm_':     'sokol-d/src/sokol/c/sokol_time.c',
-    'saudio_':  'sokol-d/src/sokol/c/sokol_audio.c',
-    'sgl_':     'sokol-d/src/sokol/c/sokol_gl.c',
-    'sdtx_':    'sokol-d/src/sokol/c/sokol_debugtext.c',
-    'sshape_':  'sokol-d/src/sokol/c/sokol_shape.c',
-    'sglue_':   'sokol-d/src/sokol/c/sokol_glue.c',
-    'sfetch_':  'sokol-d/src/sokol/c/sokol_fetch.c',
-    'simgui_':  'sokol-d/src/sokol/c/sokol_imgui.c',
-    'sgimgui_': 'sokol-d/src/sokol/c/sokol_gfx_imgui.c',
-    'sappimgui_': 'sokol-d/src/sokol/c/sokol_app_imgui.c',
-    'snk_':     'sokol-d/src/sokol/c/sokol_nuklear.c',
-    'smemtrack_': 'sokol-d/src/sokol/c/sokol_memtrack.c',
-}
-
 ignores = [
     'sdtx_printf',
     'sdtx_vprintf',
@@ -429,18 +410,20 @@ def gen_func(decl, type_converter, prefix):
     l(f"    {'return ' if result_type != 'void' else ''}{c_func_name}({call_args_str});")
     l("}")
 
-def gen_imports(inp, dep_prefixes):
+def gen_imports(inp):
+    dep_prefixes = inp['dep_prefixes']
+    module_names = inp['module_names']
     for dep_prefix in dep_prefixes:
         if dep_prefix in module_names:
             l(f'import {dep_prefix[:-1]} = sokol.{module_names[dep_prefix]};')
     l('')
 
-def gen_module(inp, dep_prefixes, c_header_path):
+def gen_module(inp):
     reset_globals()
     header_comment = f"""
     Machine generated D bindings for Sokol library.
 
-    Source header: {os.path.basename(c_header_path)}
+    Source header: {os.path.basename(inp['c_header_path'])}
     Module: sokol.{inp['module']}
 
     Do not edit manually; regenerate using gen_d.py.
@@ -448,7 +431,7 @@ def gen_module(inp, dep_prefixes, c_header_path):
     format_comment(header_comment, multiline=True)
     l(f'module sokol.{inp["module"]};')
     logging.info(f"Generating imports for module {inp['module']}")
-    gen_imports(inp, dep_prefixes)
+    gen_imports(inp)
     # Add Nuklear types for the nuklear module
     if inp['module'] == 'nuklear':
         gen_nuklear_types()
@@ -470,24 +453,10 @@ def prepare():
     util.prepare('D', module_root, c_root)
 
 def gen(opts):
-    c_header_path = opts['c_header_path']
-    c_prefix = opts['c_prefix']
-    dep_c_prefixes = opts['dep_c_prefixes']
-    module_names = opts['module_names']
-    if not os.path.isfile(c_header_path):
-        raise FileNotFoundError(f"Header file not found: {c_header_path}")
-    if c_prefix not in module_names:
-        logging.warning(f"Skipping generation for prefix {c_prefix}")
-        print(f' >> warning: skipping generation for {c_prefix} prefix...')
-        return
-    module_name = module_names[c_prefix]
-    c_source_path = c_source_paths[c_prefix]
-    logging.info(f"Generating bindings for {c_header_path} => {module_name}")
-    print(f'  {c_header_path} => {module_name}')
     reset_globals()
-    shutil.copyfile(c_header_path, f'{c_root}/{os.path.basename(c_header_path)}')
-    ir = gen_ir.gen(c_header_path, c_source_path, module_name, c_prefix, dep_c_prefixes, with_comments=True)
-    gen_module(ir, dep_c_prefixes, c_header_path)
-    output_path = f'{module_root}/{ir['module']}.d'
-    with open(output_path, 'w', newline='\n') as f_outp:
-        f_outp.write(out_lines)
+    success, ir = util.gen_ir(opts, c_root, with_comments=True)
+    if success:
+        gen_module(ir)
+        output_path = f'{module_root}/{ir['module']}.d'
+        with open(output_path, 'w', newline='\n') as f_outp:
+            f_outp.write(out_lines)

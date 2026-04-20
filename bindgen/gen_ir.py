@@ -121,7 +121,7 @@ def parse_decl(decl, source):
         return None
 
 def clang(csrc_path, with_comments=False):
-    cmd = ['clang', '-Xclang', '-ast-dump=json', '-I', '..', '-I', '../util', '-c', csrc_path]
+    cmd = ['clang', '-Xclang', '-ast-dump=json', '-c', csrc_path]
     if with_comments:
         cmd.append('-fparse-all-comments')
     return subprocess.check_output(cmd)
@@ -131,6 +131,8 @@ def gen(header_path, source_path, module, module_names, main_prefix, dep_prefixe
     ast = clang(source_path, with_comments=with_comments)
     inp = json.loads(ast)
     outp = {}
+    outp['c_header_path'] = header_path
+    outp['c_source_path'] = source_path
     outp['module'] = module
     outp['module_names'] = module_names
     outp['prefix'] = main_prefix

@@ -18,19 +18,6 @@ module_requires_rust_feature = {
     'imgui': 'imgui',
 }
 
-c_source_paths = {
-    "slog_": "sokol-rust/src/sokol/c/sokol_log.c",
-    "sg_": "sokol-rust/src/sokol/c/sokol_gfx.c",
-    "sapp_": "sokol-rust/src/sokol/c/sokol_app.c",
-    "stm_": "sokol-rust/src/sokol/c/sokol_time.c",
-    "saudio_": "sokol-rust/src/sokol/c/sokol_audio.c",
-    "sgl_": "sokol-rust/src/sokol/c/sokol_gl.c",
-    "sdtx_": "sokol-rust/src/sokol/c/sokol_debugtext.c",
-    "sshape_": "sokol-rust/src/sokol/c/sokol_shape.c",
-    "simgui_": "sokol-rust/src/sokol/c/sokol_imgui.c",
-    "sglue_": "sokol-rust/src/sokol/c/sokol_glue.c",
-}
-
 ignores = [
     "sdtx_printf",
     "sdtx_vprintf",
@@ -730,7 +717,9 @@ def pre_parse(inp):
             for item in decl["items"]:
                 enum_items[enum_name].append(as_enum_item_name(item["name"]))
 
-def gen_imports(inp, dep_prefixes):
+def gen_imports(inp):
+    dep_prefixes = inp['dep_prefixes']
+    module_names = inp['module_names']
     for dep_prefix in dep_prefixes:
         dep_module_name = module_names[dep_prefix]
         # l(f'const {dep_prefix[:-1]} = @import("{dep_module_name}.rs");')
@@ -797,7 +786,7 @@ def gen_helpers(inp):
     #     l("")
 
 
-def gen_module(inp, dep_prefixes):
+def gen_module(inp):
     module = inp['module']
     if module in module_requires_rust_feature:
         feature = module_requires_rust_feature[module]
@@ -810,7 +799,7 @@ def gen_module(inp, dep_prefixes):
     l("#![allow(dead_code)]")
     l("#![allow(unused_imports)]")
     l("")
-    gen_imports(inp, dep_prefixes)
+    gen_imports(inp)
     gen_helpers(inp)
     pre_parse(inp)
     prefix = inp["prefix"]
@@ -849,30 +838,18 @@ def prepare():
 
 
 def gen(opts):
-    c_header_path = opts['c_header_path']
-    c_prefix = opts['c_prefix']
-    dep_c_prefixes = opts['dep_c_prefixes']
-    module_names = opts['module_names']
-    if c_prefix not in module_names:
-        print(f' >> warning: skipping generation for {c_prefix} prefix...')
-        return
-
-    module_name = module_names[c_prefix]
-    c_source_path = c_source_paths[c_prefix]
-    print(f'  {c_header_path} => {module_name}')
     reset_globals()
-    c_path_in_project = f'sokol-rust/src/sokol/c/{os.path.basename(c_header_path)}'
-    shutil.copyfile(c_header_path, c_path_in_project)
-    ir = gen_ir.gen(c_header_path, c_source_path, module_name, c_prefix, dep_c_prefixes)
-    gen_module(ir, dep_c_prefixes)
-    output_path = f"sokol-rust/src/{ir['module']}.rs"
-    with open(output_path, 'w', newline='\n') as f_outp:
-        f_outp.write(out_lines)
+    success, ir = util.gen_ir(opts, c_root)
+    if success:
+        gen_module(ir)
+        output_path = f"sokol-rust/src/{ir['module']}.rs"
+        with open(output_path, 'w', newline='\n') as f_outp:
+            f_outp.write(out_lines)
 
-    with open("sokol-rust/src/lib.rs", "a", newline="\n") as f_outp:
-        module = ir['module']
-        if module in module_requires_rust_feature:
-            feature = module_requires_rust_feature[module]
-            f_outp.write(f"/// Enable feature \"{feature}\" to use\n")
-            f_outp.write(f"#[cfg(feature=\"{feature}\")]\n")
-        f_outp.write(f"pub mod {module};\n")
+        with open("sokol-rust/src/lib.rs", "a", newline="\n") as f_outp:
+            module = ir['module']
+            if module in module_requires_rust_feature:
+                feature = module_requires_rust_feature[module]
+                f_outp.write(f"/// Enable feature \"{feature}\" to use\n")
+                f_outp.write(f"#[cfg(feature=\"{feature}\")]\n")
+            f_outp.write(f"pub mod {module};\n")

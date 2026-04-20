@@ -12,17 +12,8 @@ import os, shutil, sys
 module_root = 'sokol-nim/src/sokol'
 c_root = f'{module_root}/c'
 
-c_source_paths = {
-    'slog_':    'sokol-nim/src/sokol/c/sokol_log.c',
-    'sg_':      'sokol-nim/src/sokol/c/sokol_gfx.c',
-    'sapp_':    'sokol-nim/src/sokol/c/sokol_app.c',
-    'stm_':     'sokol-nim/src/sokol/c/sokol_time.c',
-    'saudio_':  'sokol-nim/src/sokol/c/sokol_audio.c',
-    'sgl_':     'sokol-nim/src/sokol/c/sokol_gl.c',
-    'sdtx_':    'sokol-nim/src/sokol/c/sokol_debugtext.c',
-    'sshape_':  'sokol-nim/src/sokol/c/sokol_shape.c',
-    'sglue_':   'sokol-nim/src/sokol/c/sokol_glue.c',
-}
+# will be overwritten in gen-func
+module_names = {}
 
 c_callbacks = [
     'slog_func',
@@ -155,10 +146,12 @@ struct_types = []
 enum_types = []
 out_lines = ''
 
-def reset_globals():
+def reset_globals(mod_names):
     global struct_types
     global enum_types
     global out_lines
+    global module_names
+    module_names = mod_names
     struct_types = []
     enum_types = []
     out_lines = ''
@@ -172,6 +165,7 @@ def as_nim_prim_type(s):
 
 # prefix_bla_blub(_t) => (dep.)BlaBlub
 def as_nim_type_name(s, prefix):
+    global module_names
     parts = s.lower().split('_')
     dep = parts[0] + '_'
     outp = ''
@@ -179,7 +173,7 @@ def as_nim_type_name(s, prefix):
         outp = module_names[dep] + '.'
     for part in parts[1:]:
         # ignore '_t' type postfix
-        if (part != 't'):
+        if part != 't':
             outp += part.capitalize()
     return outp
 
@@ -471,7 +465,9 @@ def pre_parse(inp):
             enum_name = decl['name']
             enum_types.append(enum_name)
 
-def gen_imports(inp, dep_prefixes):
+def gen_imports(inp):
+    module_names = inp['module_names']
+    dep_prefixes = inp['dep_prefixes']
     for dep_prefix in dep_prefixes:
         dep_module_name = module_names[dep_prefix]
         l(f'import {dep_module_name}')
@@ -567,16 +563,16 @@ def gen_extra(inp):
     #    l('converter to_Range*[T](source: T): Range =')
     #    l('  Range(addr: source.addr, size: source.sizeof.uint)')
     #    l('')
-    c_source_path = '/'.join(c_source_paths[inp['prefix']].split('/')[3:])
-    l('{.passc:"-DSOKOL_NIM_IMPL".}')
+    l('{.passc:"-DIMPL".}')
     l('when defined(release):')
     l('  {.passc:"-DNDEBUG".}')
-    l(f'{{.compile:"{c_source_path}".}}')
+    rel_c_source_path = f'{os.path.relpath(inp['c_source_path'], module_root)}'
+    l(f'{{.compile:"{rel_c_source_path}".}}')
 
-def gen_module(inp, dep_prefixes):
+def gen_module(inp):
     l('## machine generated, do not edit')
     l('')
-    gen_imports(inp, dep_prefixes)
+    gen_imports(inp)
     pre_parse(inp)
     prefix = inp['prefix']
     for decl in inp['decls']:
@@ -598,21 +594,10 @@ def prepare():
     util.prepare('Nim', module_root, c_root)
 
 def gen(opts):
-    c_header_path = opts['c_header_path']
-    c_prefix = opts['c_prefix']
-    dep_c_prefixes = opts['dep_c_prefixes']
-    module_names = opts['module_names']
-    if not c_prefix in module_names:
-        print(f'  >> warning: skipping generation for {c_prefix} prefix...')
-        return
-    global out_lines
-    module_name = module_names[c_prefix]
-    c_source_path = c_source_paths[c_prefix]
-    print(f'  {c_header_path} => {module_name}')
-    reset_globals()
-    shutil.copyfile(c_header_path, f'{c_root}/{os.path.basename(c_header_path)}')
-    ir = gen_ir.gen(c_header_path, c_source_path, module_name, c_prefix, dep_c_prefixes)
-    gen_module(ir, dep_c_prefixes)
-    output_path = f'{module_root}/{ir['module']}.nim'
-    with open(output_path, 'w', newline='\n') as f_outp:
-        f_outp.write(out_lines)
+    reset_globals(opts['module_names'])
+    success, ir = util.gen_ir(opts, c_root)
+    if success:
+        gen_module(ir)
+        output_path = f'{module_root}/{ir['module']}.nim'
+        with open(output_path, 'w', newline='\n') as f_outp:
+            f_outp.write(out_lines)

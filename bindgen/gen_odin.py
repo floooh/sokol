@@ -171,7 +171,7 @@ def as_struct_or_enum_type(s, prefix):
     outp = '' if s.startswith(prefix) else f'{parts[0]}.'
     for part in parts[1:]:
         # ignore '_t' type postfix
-        if (part != 't'):
+        if part != 't':
             outp += part.capitalize()
             outp += '_'
     outp = outp[:-1]

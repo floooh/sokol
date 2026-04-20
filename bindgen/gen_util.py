@@ -63,18 +63,21 @@ def prepare(language_name, rel_mod_root_dir, rel_c_root_dir):
         os.makedirs(rel_mod_root_dir, exist_ok = True)
     if not os.path.isdir(rel_c_root_dir):
         os.makedirs(rel_c_root_dir, exist_ok = True)
+    shutil.copyfile('impl/sokol_defines.h', f'{rel_c_root_dir}/sokol_defines.h')
 
 def gen_ir(opts, c_root, with_comments=False):
-    c_header_path = opts['c_header_path']
+    c_src_header_path = opts['c_header_path']
     c_prefix = opts['c_prefix']
     dep_c_prefixes = opts['dep_c_prefixes']
     module_names = opts['module_names']
     if not c_prefix in module_names:
         print('>> warning: skipping generation for {c_prefix} prefix...')
         return False, {}
-    c_source_path = f'impl/{os.path.splitext(os.path.basename(c_header_path))[0]}.c'
-    shutil.copy(c_header_path, c_root)
-    shutil.copy(c_source_path, c_root)
+    c_src_source_path = f'impl/{os.path.splitext(os.path.basename(c_src_header_path))[0]}.c'
+    c_dst_header_path = f'{c_root}/{os.path.basename(c_src_header_path)}'
+    c_dst_source_path = f'{c_root}/{os.path.splitext(os.path.basename(c_src_header_path))[0]}.c'
+    shutil.copyfile(c_src_header_path, c_dst_header_path)
+    shutil.copyfile(c_src_source_path, c_dst_source_path)
     module_name = module_names[c_prefix]
-    res = ir.gen(c_header_path, c_source_path, module_name, module_names, c_prefix, dep_c_prefixes, with_comments)
+    res = ir.gen(c_dst_header_path, c_dst_source_path, module_name, module_names, c_prefix, dep_c_prefixes, with_comments)
     return True, res

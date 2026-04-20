@@ -1,4 +1,3 @@
-#if defined(SOKOL_TRACE_HOOKS)
 #if defined(IMPL)
 #ifndef CIMGUI_HEADER_PATH
 #define CIMGUI_HEADER_PATH "cimgui.h"
@@ -7,7 +6,6 @@
 #define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
 #define SOKOL_APP_IMGUI_IMPL
 #include CIMGUI_HEADER_PATH
-#endif
 #endif
 #include "sokol_defines.h"
 #include "sokol_app.h"
