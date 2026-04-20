@@ -95,7 +95,7 @@ typedef enum slbx_anchor {
     FIXME: docs
 */
 typedef struct slbx_letterbox_desc {
-    float aspect;       // default: 1.0f
+    float content_aspect_ratio;     // width / height, default: 1.0f
     slbx_anchor anchor;
     slbx_border border;
 } slbx_letterbox_desc;
@@ -149,7 +149,7 @@ slbx_viewport slbx_letterbox_viewport(int width, int height, const slbx_letterbo
     if (ch < 1.0f) {
         ch = 1.0f;
     }
-    const float content_aspect = desc->aspect == 0.0f ? 1.0f : desc->aspect;
+    const float content_aspect = desc->content_aspect_ratio == 0.0f ? 1.0f : desc->content_aspect_ratio;
     const float canvas_aspect = cw / ch;
     float vp_x, vp_y, vp_w, vp_h;
     if (content_aspect < canvas_aspect) {
