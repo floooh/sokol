@@ -83,38 +83,34 @@ typedef struct slbx_border {
     FIXME: docs
 */
 typedef enum slbx_anchor {
-    _SLBX_ANCHOR_DEFAULT = 0,
-    SLBX_ANCHOR_TOP = 0x1,
-    SLBX_ANCHOR_BOTTOM = 0x2,
-    SLBX_ANCHOR_LEFT = 0x4,
-    SLBX_ANCHOR_RIGHT = 0x8,
-    SLBX_ANCHOR_TOP_LEFT = 0x5,
-    SLBX_ANCHOR_TOP_RIGHT = 0x9,
-    SLBX_ANCHOR_BOTTOM_LEFT = 0x6,
-    SLBX_ANCHOR_BOTTOM_RIGHT = 0xA,
+    SLBX_ANCHOR_CENTER = 0,
+    SLBX_ANCHOR_TOP,
+    SLBX_ANCHOR_BOTTOM,
+    SLBX_ANCHOR_LEFT,
+    SLBX_ANCHOR_RIGHT,
     _SLBX_ANCHOR_FORCE_U32 = 0x7FFFFFFF,
 } slbx_anchor;
 
 /*
     FIXME: docs
 */
-typedef struct slbx_options {
-    float aspect;
+typedef struct slbx_letterbox_desc {
+    float aspect;       // default: 1.0f
     slbx_anchor anchor;
     slbx_border border;
-} slbx_options;
+} slbx_letterbox_desc;
 
 /*
     FIXME: docs
 */
-typedef struct slbx_rect {
+typedef struct slbx_viewport {
     int x;
     int y;
     int width;
     int height;
-} slbx_rect;
+} slbx_viewport;
 
-SOKOL_LETTERBOX_API_DECL slbx_rect slbx_viewport(int width, int height, const slbx_options* opts);
+SOKOL_LETTERBOX_API_DECL slbx_viewport slbx_letterbox_viewport(int width, int height, const slbx_letterbox_desc* desc);
 
 #ifdef __cplusplus
 } // extern "C"
@@ -138,14 +134,13 @@ SOKOL_LETTERBOX_API_DECL slbx_rect slbx_viewport(int width, int height, const sl
     #define SOKOL_ASSERT(c) assert(c)
 #endif
 
-slbx_rect slbx_viewport(int width, int height, const slbx_options* opts) {
+slbx_viewport slbx_letterbox_viewport(int width, int height, const slbx_letterbox_desc* desc) {
     SOKOL_ASSERT((width > 0) && (height > 0));
-    SOKOL_ASSERT(opts);
-    SOKOL_ASSERT(opts->aspect > 0.0f);
-    const float b_top = (float)opts->border.top;
-    const float b_bottom = (float)opts->border.bottom;
-    const float b_left = (float)opts->border.left;
-    const float b_right = (float)opts->border.right;
+    SOKOL_ASSERT(desc);
+    const float b_top = (float)desc->border.top;
+    const float b_bottom = (float)desc->border.bottom;
+    const float b_left = (float)desc->border.left;
+    const float b_right = (float)desc->border.right;
     float cw = (float)width - (b_left + b_right);
     if (cw < 1.0f) {
         cw = 1.0f;
@@ -154,22 +149,34 @@ slbx_rect slbx_viewport(int width, int height, const slbx_options* opts) {
     if (ch < 1.0f) {
         ch = 1.0f;
     }
-    const float content_aspect = opts->aspect;
-    const float canvas_aspect = (float)width / (float)height;
+    const float content_aspect = desc->aspect == 0.0f ? 1.0f : desc->aspect;
+    const float canvas_aspect = cw / ch;
     float vp_x, vp_y, vp_w, vp_h;
     if (content_aspect < canvas_aspect) {
-        vp_y =
+        vp_y = b_top;
         vp_h = ch;
         vp_w = ch * content_aspect;
-        vp_x = b_left + (cw - vp_w) * 0.5f;
+        if (desc->anchor == SLBX_ANCHOR_LEFT) {
+            vp_x = b_left;
+        } else if (desc->anchor == SLBX_ANCHOR_RIGHT) {
+            vp_x = width - (b_right + vp_w);
+        } else {
+            vp_x = b_left + (cw - vp_w) * 0.5f;
+        }
     } else {
         vp_x = b_left;
         vp_w = cw;
         vp_h = cw / content_aspect;
-        vp_y = b_top + (ch - vp_h) * 0.5f;
+        if (desc->anchor == SLBX_ANCHOR_TOP) {
+            vp_y = b_top;
+        } else if (desc->anchor == SLBX_ANCHOR_BOTTOM) {
+            vp_y = height - (b_bottom + vp_h);
+        } else {
+            vp_y = b_top + (ch - vp_h) * 0.5f;
+        }
     }
-    const slbx_rect res = { (int)vp_x, (int)vp_y, (int)vp_w, (int)vp_h };
-    return res;
+    const slbx_viewport vp = { (int)vp_x, (int)vp_y, (int)vp_w, (int)vp_h };
+    return vp;
 }
 
 #endif // SOKOL_LETTERBOX_IMPL
