@@ -5,9 +5,8 @@
 #   - type identifiers are PascalCase, everything else is camelCase
 #   - reference: https://nim-lang.org/docs/nep1.html
 #-------------------------------------------------------------------------------
-import gen_ir
 import gen_util as util
-import os, shutil, sys
+import os, sys
 
 module_root = 'sokol-nim/src/sokol'
 c_root = f'{module_root}/c'

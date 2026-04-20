@@ -4,9 +4,8 @@
 #   Generate Odin bindings.
 #-------------------------------------------------------------------------------
 import textwrap
-import gen_ir
 import gen_util as util
-import os, shutil, sys
+import os, sys
 
 bindings_root = 'sokol-odin'
 c_root = f'{bindings_root}/sokol/c'

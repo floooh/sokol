@@ -5,8 +5,7 @@
 #   - types are PascalCase
 #   - otherwise snake_case
 # -------------------------------------------------------------------------------
-import gen_ir
-import os, shutil, sys
+import os, sys
 
 import gen_util as util
 

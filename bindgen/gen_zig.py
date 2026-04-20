@@ -6,8 +6,7 @@
 #   - functions are camelCase
 #   - otherwise snake_case
 #-------------------------------------------------------------------------------
-import gen_ir
-import os, shutil, sys
+import os, sys
 import textwrap
 
 import gen_util as util

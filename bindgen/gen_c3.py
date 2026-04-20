@@ -3,9 +3,8 @@
 #
 #   Generate C3 bindings.
 #-------------------------------------------------------------------------------
-import gen_ir
 import gen_util as util
-import os, shutil, sys
+import sys
 
 bindings_root = 'sokol-c3'
 c_root = f'{bindings_root}/sokol.c3l/c'

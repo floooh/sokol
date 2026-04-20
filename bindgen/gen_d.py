@@ -7,11 +7,7 @@
 #   - Variables: snake_case
 #   - Doc-comments: /++ ... +/ for declarations, /// for fields, with proper wrapping
 #-------------------------------------------------------------------------------
-import gen_ir
 import os
-import shutil
-import sys
-import textwrap
 import logging
 
 import gen_util as util

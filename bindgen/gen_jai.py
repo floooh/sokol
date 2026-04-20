@@ -4,9 +4,8 @@
 #   Generate Jai bindings.
 #-------------------------------------------------------------------------------
 import textwrap
-import gen_ir
 import gen_util as util
-import os, shutil, sys
+import os, sys
 
 bindings_root = 'sokol-jai'
 c_root = f'{bindings_root}/sokol/c'
