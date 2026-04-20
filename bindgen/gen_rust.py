@@ -10,21 +10,12 @@ import os, shutil, sys
 
 import gen_util as util
 
-module_names = {
-    "slog_": "log",
-    "sg_": "gfx",
-    "sapp_": "app",
-    "stm_": "time",
-    "saudio_": "audio",
-    "sgl_": "gl",
-    "sdtx_": "debugtext",
-    "sshape_": "shape",
-    "simgui_": "imgui",
-    "sglue_": "glue",
-}
+lib_root = 'sokol-rust/src'
+module_root = f'{lib_root}/sokol'
+c_root = f'{module_root}/c'
 
 module_requires_rust_feature = {
-    module_names["simgui_"]: "imgui",
+    'imgui': 'imgui',
 }
 
 c_source_paths = {
@@ -852,17 +843,16 @@ def gen_module(inp, dep_prefixes):
 
 
 def prepare():
-    print("=== Generating Rust bindings:")
-    if not os.path.isdir("sokol-rust/src/sokol"):
-        os.makedirs("sokol-rust/src/sokol")
-    if not os.path.isdir("sokol-rust/src/sokol/c"):
-        os.makedirs("sokol-rust/src/sokol/c")
-
-    with open("sokol-rust/src/lib.rs", "w", newline="\n") as f_outp:
-        f_outp.write("//! Automatically generated sokol bindings for Rust\n\n")
+    util.prepare('Rust', module_root, c_root)
+    with open(f'{lib_root}/lib.rs', 'w', newline='\n') as f_outp:
+        f_outp.write('//! Automatically generated sokol bindings for Rust\n\n')
 
 
-def gen(c_header_path, c_prefix, dep_c_prefixes):
+def gen(opts):
+    c_header_path = opts['c_header_path']
+    c_prefix = opts['c_prefix']
+    dep_c_prefixes = opts['dep_c_prefixes']
+    module_names = opts['module_names']
     if c_prefix not in module_names:
         print(f' >> warning: skipping generation for {c_prefix} prefix...')
         return

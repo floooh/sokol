@@ -16,27 +16,11 @@ import logging
 
 import gen_util as util
 
+module_root = 'sokol-d/src/sokol'
+c_root = f'{module_root}/c'
+
 # Configure logging for debugging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-module_names = {
-    'slog_':    'log',
-    'sg_':      'gfx',
-    'sapp_':    'app',
-    'sargs_':   'args',
-    'stm_':     'time',
-    'saudio_':  'audio',
-    'sgl_':     'gl',
-    'sdtx_':    'debugtext',
-    'sshape_':  'shape',
-    'sglue_':   'glue',
-    'sfetch_':  'fetch',
-    'simgui_':  'imgui',
-    'sgimgui_': 'gfximgui',
-    'sappimgui_': 'appimgui',
-    'snk_':     'nuklear',
-    'smemtrack_': 'memtrack',
-}
 
 c_source_paths = {
     'slog_':    'sokol-d/src/sokol/c/sokol_log.c',
@@ -157,44 +141,44 @@ class TypeConverter:
 
         if util.is_func_ptr(c_type):
             return self.as_func_ptr_type(c_type, decl_name)
-        
+
         if c_type == "void":
             return "" if is_param else "void"
-        
+
         if c_type in prim_types:
             return prim_types[c_type]
-        
+
         if c_type in self.struct_types:
             return self.as_d_struct_type(c_type)
-        
+
         if c_type in self.enum_types:
             return self.as_d_enum_type(c_type)
-        
+
         if util.is_void_ptr(c_type):
             return "void*"
-        
+
         if util.is_const_void_ptr(c_type):
             return "const(void)*"
-        
+
         if util.is_string_ptr(c_type):
             return "const(char)*"
-        
+
         if self.is_struct_ptr(c_type) or self.is_const_struct_ptr(c_type):
             struct_type = util.extract_ptr_type(c_type.strip())
             d_type = self.as_d_struct_type(struct_type)
             return f"const {d_type}*" if is_param else f"{d_type}*"
-        
+
         if self.is_prim_ptr(c_type):
             prim_type = util.extract_ptr_type(c_type.strip())
             return f"{prim_types[prim_type]}*"
-        
+
         if self.is_const_prim_ptr(c_type):
             prim_type = util.extract_ptr_type(c_type.strip())
             return f"const {prim_types[prim_type]}*"
-        
+
         if util.is_array_type(c_type):
             return self.as_array_type(c_type)
-        
+
         # Handle external types (e.g., nk_handle, nk_flags) not in struct_types or prim_types
         if c_type not in self.struct_types and c_type not in prim_types:
             if c_type.endswith('*'):
@@ -341,7 +325,7 @@ def gen_struct(decl, type_converter):
 
         d_type_str = type_converter.as_d_type(field_type, decl_name=field_key)
         default = type_converter.default_value(field_type)
-        
+
         if default:
             default_value = f" = {default}"
         elif util.is_func_ptr(field_type):
@@ -455,10 +439,10 @@ def gen_module(inp, dep_prefixes, c_header_path):
     reset_globals()
     header_comment = f"""
     Machine generated D bindings for Sokol library.
-        
+
     Source header: {os.path.basename(c_header_path)}
     Module: sokol.{inp['module']}
-    
+
     Do not edit manually; regenerate using gen_d.py.
     """
     format_comment(header_comment, multiline=True)
@@ -483,10 +467,13 @@ def gen_module(inp, dep_prefixes, c_header_path):
 
 def prepare():
     logging.info("Preparing directories for D bindings generation")
-    print('=== Generating D bindings:')
-    os.makedirs('sokol-d/src/sokol/c', exist_ok=True)
+    util.prepare('D', module_root, c_root)
 
-def gen(c_header_path, c_prefix, dep_c_prefixes):
+def gen(opts):
+    c_header_path = opts['c_header_path']
+    c_prefix = opts['c_prefix']
+    dep_c_prefixes = opts['dep_c_prefixes']
+    module_names = opts['module_names']
     if not os.path.isfile(c_header_path):
         raise FileNotFoundError(f"Header file not found: {c_header_path}")
     if c_prefix not in module_names:
@@ -498,9 +485,9 @@ def gen(c_header_path, c_prefix, dep_c_prefixes):
     logging.info(f"Generating bindings for {c_header_path} => {module_name}")
     print(f'  {c_header_path} => {module_name}')
     reset_globals()
-    shutil.copyfile(c_header_path, f'sokol-d/src/sokol/c/{os.path.basename(c_header_path)}')
+    shutil.copyfile(c_header_path, f'{c_root}/{os.path.basename(c_header_path)}')
     ir = gen_ir.gen(c_header_path, c_source_path, module_name, c_prefix, dep_c_prefixes, with_comments=True)
     gen_module(ir, dep_c_prefixes, c_header_path)
-    output_path = f"sokol-d/src/sokol/{ir['module']}.d"
+    output_path = f'{module_root}/{ir['module']}.d'
     with open(output_path, 'w', newline='\n') as f_outp:
         f_outp.write(out_lines)

@@ -1,11 +1,3 @@
-*.json
-*.nim
-*.zig
+out/
 __pycache__/
-sokol-nim/
-sokol-zig/
-sokol-odin/
-sokol-rust/
-sokol-d/
-sokol-jai/
-sokol-c3/
+sokol-*/

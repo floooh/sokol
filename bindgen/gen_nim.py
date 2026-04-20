@@ -9,17 +9,8 @@ import gen_ir
 import gen_util as util
 import os, shutil, sys
 
-module_names = {
-    'slog_':    'log',
-    'sg_':      'gfx',
-    'sapp_':    'app',
-    'stm_':     'time',
-    'saudio_':  'audio',
-    'sgl_':     'gl',
-    'sdtx_':    'debugtext',
-    'sshape_':  'shape',
-    'sglue_':   'glue',
-}
+module_root = 'sokol-nim/src/sokol'
+c_root = f'{module_root}/c'
 
 c_source_paths = {
     'slog_':    'sokol-nim/src/sokol/c/sokol_log.c',
@@ -604,13 +595,13 @@ def gen_module(inp, dep_prefixes):
     gen_extra(inp)
 
 def prepare():
-    print('=== Generating Nim bindings:')
-    if not os.path.isdir('sokol-nim/src/sokol'):
-        os.makedirs('sokol-nim/src/sokol')
-    if not os.path.isdir('sokol-nim/src/sokol/c'):
-        os.makedirs('sokol-nim/src/sokol/c')
+    util.prepare('Nim', module_root, c_root)
 
-def gen(c_header_path, c_prefix, dep_c_prefixes):
+def gen(opts):
+    c_header_path = opts['c_header_path']
+    c_prefix = opts['c_prefix']
+    dep_c_prefixes = opts['dep_c_prefixes']
+    module_names = opts['module_names']
     if not c_prefix in module_names:
         print(f'  >> warning: skipping generation for {c_prefix} prefix...')
         return
@@ -619,9 +610,9 @@ def gen(c_header_path, c_prefix, dep_c_prefixes):
     c_source_path = c_source_paths[c_prefix]
     print(f'  {c_header_path} => {module_name}')
     reset_globals()
-    shutil.copyfile(c_header_path, f'sokol-nim/src/sokol/c/{os.path.basename(c_header_path)}')
+    shutil.copyfile(c_header_path, f'{c_root}/{os.path.basename(c_header_path)}')
     ir = gen_ir.gen(c_header_path, c_source_path, module_name, c_prefix, dep_c_prefixes)
     gen_module(ir, dep_c_prefixes)
-    output_path = f"sokol-nim/src/sokol/{ir['module']}.nim"
+    output_path = f'{module_root}/{ir['module']}.nim'
     with open(output_path, 'w', newline='\n') as f_outp:
         f_outp.write(out_lines)
