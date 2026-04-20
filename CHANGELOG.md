@@ -3,7 +3,7 @@
 ### 20-Apr-2026
 
 - fix various warts in the language bindings generator scripts which
-  reduce the manual overhead for adding new headers to the bindings
+  reduces manual overhead for adding new headers to the bindings
   (small breaking change in the sokol-zig bindings: the module `sgimgui`
   has been renamed to `gfximgui` and the module `sappimgui` to `appimgui`)
 
