@@ -1,5 +1,18 @@
 ## Updates
 
+### 21-Apr-2026
+
+- Added a new header [sokol_letterbox.h](util/sokol_letterbox.h), this is just
+  a single helper function which returns viewport parameters to render
+  fixed-aspect-ratio content in a variable-aspect-ratio window (something that
+  I found myself using in pretty much all my toy projects). The header is standalone and can
+  be used with any rendering API that has a function to set the viewport rectangle.
+
+  See the [letterbox-sapp.c WASM sample and example code](https://floooh.github.io/sokol-html5/letterbox-sapp.html)
+  to understand the feature set.
+
+  PR: https://github.com/floooh/sokol/pull/1491
+
 ### 20-Apr-2026
 
 - fix various warts in the language bindings generator scripts which
