@@ -3,7 +3,7 @@
 #endif
 #ifndef SOKOL_LETTERBOX_INCLUDED
 /*
-    sokol_letterbox.h -- provide fixed-aspect viewport for any framebuffer size
+    sokol_letterbox.h -- provide fixed-aspect viewport for random-aspect framebuffer
 
     Project URL: https://github.com/floooh/sokol
 
@@ -19,9 +19,66 @@
 
     SOKOL_DLL
 
+    WHAT
+    ====
+    Computes viewport parameters to render fixed-aspect content in a variable-aspect
+    framebuffer (e.g. position a 16:9 frame in a randomly sized window) - commonly
+    known as 'letterboxing'.
+
+    Check the WASM example here:
+
+        https://floooh.github.io/sokol-html5/letterbox-sapp.html
+
     USAGE
     =====
-    [TODO]
+    Just call slbx_letterbox_viewport() and plug the result into sg_apply_viewport().
+
+    Takes a framebuffer width/height as input and a pointer to an slbx_letterbox_desc
+    struct:
+
+    ```c
+    int w = sapp_width();
+    int h = sapp_height();
+    slbx_viewport vp = slbx_letterbox_viewport(w, h, &(slbx_letterbox_desc){
+        .content_aspect_ratio = 16.0f / 9.0f,
+    });
+    ```
+
+    ...then plug the resulting viewport parameters into `sg_apply_viewport()` (or
+    a similar viewport function).
+
+    ```c
+    sg_apply_viewport(vp.x, vp.y, vp.width, vp.height, true);
+    ```
+
+    You can define a 'safe border' in pixels:
+    ```c
+    slbx_viewport vp = slbx_letterbox_viewport(w, h, &(slbx_letterbox_desc){
+        .content_aspect_ratio = 16.0f / 9.0f,
+        .border = {
+            .left = 10,
+            .right = 10,
+            .top = 10,
+            .bottom = 10,
+        },
+    });
+    ```
+
+    ...and finally you can anchor the content so that it sticks to an edge
+    of the framebuffer (the default behaviour is to center the content):
+
+    ```c
+    slbx_viewport vp = slbx_letterbox_viewport(w, h, &(slbx_letterbox_desc){
+        .content_aspect_ratio = 16.0f / 9.0f,
+        .anchor = SLBX_ANCHOR_TOP,
+        .border = {
+            .left = 10,
+            .right = 10,
+            .top = 10,
+            .bottom = 10,
+        },
+    });
+    ```
 
     LICENSE
     =======
@@ -70,7 +127,8 @@ extern "C" {
 #endif
 
 /*
-    FIXME: docs
+    Defines a 'safe border' in pixels. Used as nested struct
+    in slbx_letterbox_desc.
 */
 typedef struct slbx_border {
     int left;
@@ -80,7 +138,8 @@ typedef struct slbx_border {
 } slbx_border;
 
 /*
-    FIXME: docs
+    Anchor the content to a side. The default is to center the content.
+    Used in slbx_letterbox_desc.
 */
 typedef enum slbx_anchor {
     SLBX_ANCHOR_CENTER = 0,
@@ -92,7 +151,8 @@ typedef enum slbx_anchor {
 } slbx_anchor;
 
 /*
-    FIXME: docs
+    The content letterbox description. Used as input to the
+    slbx_letterbox_viewport() function.
 */
 typedef struct slbx_letterbox_desc {
     float content_aspect_ratio;     // width / height, default: 1.0f
@@ -101,7 +161,7 @@ typedef struct slbx_letterbox_desc {
 } slbx_letterbox_desc;
 
 /*
-    FIXME: docs
+    The resulting viewport. Return value of slbx_letterbox_viewport()
 */
 typedef struct slbx_viewport {
     int x;
@@ -110,6 +170,7 @@ typedef struct slbx_viewport {
     int height;
 } slbx_viewport;
 
+// compute viewport for 'letterboxing' fixed-aspect content in a variable-aspect framebuffer
 SOKOL_LETTERBOX_API_DECL slbx_viewport slbx_letterbox_viewport(int width, int height, const slbx_letterbox_desc* desc);
 
 #ifdef __cplusplus
