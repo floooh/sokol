@@ -31,7 +31,7 @@
 
     USAGE
     =====
-    Just call slbx_letterbox_viewport() and plug the result into sg_apply_viewport().
+    Just call slbx_letterbox() and plug the result into sg_apply_viewport().
 
     Takes a framebuffer width/height as input and a pointer to an slbx_letterbox_desc
     struct:
@@ -39,7 +39,7 @@
     ```c
     int w = sapp_width();
     int h = sapp_height();
-    slbx_viewport vp = slbx_letterbox_viewport(w, h, &(slbx_letterbox_desc){
+    slbx_viewport vp = slbx_letterbox(w, h, &(slbx_letterbox_desc){
         .content_aspect_ratio = 16.0f / 9.0f,
     });
     ```
@@ -53,7 +53,7 @@
 
     You can define a 'safe border' in pixels:
     ```c
-    slbx_viewport vp = slbx_letterbox_viewport(w, h, &(slbx_letterbox_desc){
+    slbx_viewport vp = slbx_letterbox(w, h, &(slbx_letterbox_desc){
         .content_aspect_ratio = 16.0f / 9.0f,
         .border = {
             .left = 10,
@@ -68,7 +68,7 @@
     of the framebuffer (the default behaviour is to center the content):
 
     ```c
-    slbx_viewport vp = slbx_letterbox_viewport(w, h, &(slbx_letterbox_desc){
+    slbx_viewport vp = slbx_letterbox(w, h, &(slbx_letterbox_desc){
         .content_aspect_ratio = 16.0f / 9.0f,
         .anchor = SLBX_ANCHOR_TOP,
         .border = {
@@ -152,7 +152,7 @@ typedef enum slbx_anchor {
 
 /*
     The content letterbox description. Used as input to the
-    slbx_letterbox_viewport() function.
+    slbx_letterbox() function.
 */
 typedef struct slbx_letterbox_desc {
     float content_aspect_ratio;     // width / height, default: 1.0f
@@ -161,7 +161,7 @@ typedef struct slbx_letterbox_desc {
 } slbx_letterbox_desc;
 
 /*
-    The resulting viewport. Return value of slbx_letterbox_viewport()
+    The resulting viewport. Return value of slbx_letterbox()
 */
 typedef struct slbx_viewport {
     int x;
@@ -171,7 +171,7 @@ typedef struct slbx_viewport {
 } slbx_viewport;
 
 // compute viewport for 'letterboxing' fixed-aspect content in a variable-aspect framebuffer
-SOKOL_LETTERBOX_API_DECL slbx_viewport slbx_letterbox_viewport(int width, int height, const slbx_letterbox_desc* desc);
+SOKOL_LETTERBOX_API_DECL slbx_viewport slbx_letterbox(int width, int height, const slbx_letterbox_desc* desc);
 
 #ifdef __cplusplus
 } // extern "C"
@@ -195,7 +195,7 @@ SOKOL_LETTERBOX_API_DECL slbx_viewport slbx_letterbox_viewport(int width, int he
     #define SOKOL_ASSERT(c) assert(c)
 #endif
 
-slbx_viewport slbx_letterbox_viewport(int width, int height, const slbx_letterbox_desc* desc) {
+slbx_viewport slbx_letterbox(int width, int height, const slbx_letterbox_desc* desc) {
     SOKOL_ASSERT((width > 0) && (height > 0));
     SOKOL_ASSERT(desc);
     const float b_top = (float)desc->border.top;
