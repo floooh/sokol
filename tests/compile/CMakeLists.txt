@@ -16,6 +16,7 @@ set(c_sources
     sokol_color.c
     sokol_spine.c
     sokol_log.c
+    sokol_letterbox.c
     sokol_main.c)
 if (NOT ANDROID)
     set(c_sources ${c_sources} sokol_fetch.c)
@@ -38,6 +39,7 @@ set(cxx_sources
     sokol_color.cc
     sokol_spine.cc
     sokol_log.cc
+    sokol_letterbox.cc
     sokol_main.cc)
 if (NOT ANDROID)
     set(cxx_sources ${cxx_sources} sokol_fetch.cc)
