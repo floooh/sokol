@@ -29,8 +29,8 @@
 
         https://floooh.github.io/sokol-html5/letterbox-sapp.html
 
-    USAGE
-    =====
+    HOW
+    ===
     Just call slbx_letterbox() and plug the result into sg_apply_viewport().
 
     Takes a framebuffer width/height as input and a pointer to an slbx_letterbox_desc
