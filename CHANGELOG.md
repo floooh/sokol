@@ -1,5 +1,10 @@
 ## Updates
 
+### 25-Apr-2026
+
+- Please take note of this [sokol-shdc update](https://github.com/floooh/sokol-tools/blob/master/CHANGELOG.md#25-apr-2026)
+  (only affects WGSL code generation).
+
 ### 21-Apr-2026
 
 - Added a new header [sokol_letterbox.h](util/sokol_letterbox.h), this is just
