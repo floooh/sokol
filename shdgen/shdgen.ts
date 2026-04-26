@@ -105,11 +105,11 @@ function gatherShader(shd: Shader): string[] {
     res.push(...gatherSlang(shd, 'metal_sim', '.metal', false));
     res.push('#elif defined(SOKOL_D3D11)');
     res.push(...gatherSlang(shd, 'hlsl4', '.fxc', true));
-    res.push('#elif defined(SOKOL_WGPU');
+    res.push('#elif defined(SOKOL_WGPU)');
     res.push(...gatherSlang(shd, 'wgsl', '.wgsl', false));
-    res.push('#elif defined(SOKOL_VULKAN');
+    res.push('#elif defined(SOKOL_VULKAN)');
     res.push(...gatherSlang(shd, 'spirv_vk', '', true));
-    res.push('elif defined(SOKOL_DUMMY_BACKEND');
+    res.push('elif defined(SOKOL_DUMMY_BACKEND)');
     res.push(`static const char* ${shd.prefix}_vs_source_dummy = "";`);
     res.push(`static const char* ${shd.prefix}_fs_source_dummy = "";`);
     res.push('#else');
