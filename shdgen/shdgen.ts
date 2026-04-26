@@ -134,7 +134,7 @@ function gatherShader(shd: Shader): string[] {
     res.push(...gatherSlang(shd, 'wgsl', '.wgsl', false));
     res.push('#elif defined(SOKOL_VULKAN)');
     res.push(...gatherSlang(shd, 'spirv_vk', '', true));
-    res.push('elif defined(SOKOL_DUMMY_BACKEND)');
+    res.push('#elif defined(SOKOL_DUMMY_BACKEND)');
     res.push(`static const char* ${shd.prefix}_vs_source_dummy = "";`);
     res.push(`static const char* ${shd.prefix}_fs_source_dummy = "";`);
     res.push('#else');
