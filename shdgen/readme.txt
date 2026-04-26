@@ -10,4 +10,10 @@ to the sokol directory, then run
 deno run --allow-all shdgen.ts
 ```
 
+...or to run from a feature branch:
+
+```
+deno run --allow-all shdgen.ts --branch [name]
+```
+
 ...then review and test the header before git commit and push.

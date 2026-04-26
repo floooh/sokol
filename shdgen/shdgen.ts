@@ -1,9 +1,7 @@
-#!/usr/bin/env -S deno --allow-all
 import { parseArgs } from 'jsr:@std/cli@^1/parse-args';
 
 type Shader = { filename: string, prefix: string, prog: string };
 type Header = { path: string, shaders: Shader[] };
-
 
 const headers: Header[] = [
     // sokol_gl.h
@@ -40,8 +38,12 @@ const headers: Header[] = [
 
 const denoArgs = parseArgs(Deno.args, {
     boolean: ['hlsl'],
-    string: ['shdcroot'],
-    default: { hlsl: false, shdcroot: '../../sokol-tools-bin' }
+    string: ['shdcroot', 'branch'],
+    default: {
+        hlsl: false,
+        shdcroot: '../../sokol-tools-bin',
+        branch: 'master',
+    },
 });
 
 function dirExists(path: string): boolean {
@@ -205,7 +207,7 @@ function sleep(ms: number): Promise<void> {
 async function compileHlslRemote(): Promise<void> {
     const repo = 'floooh/sokol';
     const workflow = 'compile_hlsl.yml';
-    const ref = 'shdgen';
+    const ref = denoArgs.branch;
     const startTime = new Date().toISOString();
 
     // trigger workflow
