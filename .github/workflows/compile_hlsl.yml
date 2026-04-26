@@ -1,6 +1,6 @@
 # NOTE: this is only triggered via REST API
 name: "compile_hlsl"
-on: [push, workflow_dispatch]
+on: workflow_dispatch
 
 jobs:
   compile-hlsl:
