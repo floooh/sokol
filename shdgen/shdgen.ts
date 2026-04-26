@@ -19,8 +19,18 @@ const denoArgs = parseArgs(Deno.args, {
     default: { hlsl: false, shdcroot: '../../sokol-tools-bin' }
 });
 
+function dirExists(path: string): boolean {
+    try {
+        return Deno.statSync(path).isDirectory;
+    } catch {
+        return false;
+    }
+}
+
 async function main(): Promise<void> {
-    Deno.removeSync('out', { recursive: true });
+    if (dirExists('out')) {
+        Deno.removeSync('out', { recursive: true });
+    }
     Deno.mkdirSync('out/tmpdir', { recursive: true });
 
     if (denoArgs.hlsl) {
