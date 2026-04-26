@@ -985,7 +985,7 @@ inline sgl_pipeline sgl_context_make_pipeline(sgl_context ctx, const sg_pipeline
 #define _sgl_def(val, def) (((val) == 0) ? (def) : (val))
 #define _SGL_INIT_COOKIE (0xABCDABCD)
 
-//>#shdgen _sgl
+//>#shdgen
 /*
     Embedded source code compiled with:
 
@@ -2875,14 +2875,13 @@ static const uint8_t _sgl_fs_bytecode_spirv_vk[792] = {
     0x1b,0x00,0x00,0x00,0x3e,0x00,0x03,0x00,0x09,0x00,0x00,0x00,0x1c,0x00,0x00,0x00,
     0xfd,0x00,0x01,0x00,0x38,0x00,0x01,0x00,
 };
-//<#shdgen
-
 #elif defined(SOKOL_DUMMY_BACKEND)
 static const char* _sgl_vs_source_dummy = "";
 static const char* _sgl_fs_source_dummy = "";
 #else
 #error "Please define one of SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND!"
 #endif
+//<#shdgen
 
 // ████████ ██    ██ ██████  ███████ ███████
 //    ██     ██  ██  ██   ██ ██      ██
