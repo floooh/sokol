@@ -1,4 +1,5 @@
-# NOTE: this is only triggered via REST API
+# NOTE: this is only triggered via the gh command line tool
+# to compile HLSL shaders to DXBC bytecode on a non-Windows machine
 name: "compile_hlsl"
 on: workflow_dispatch
 
