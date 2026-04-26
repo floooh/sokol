@@ -1,5 +1,17 @@
 ## Updates
 
+### 26-Apr-2026
+
+A new code-generation script has been added which compiles and injects the embedded
+shaders into sokol headers. This is a purely internal change which reduces
+manual work on my side when the embedded shaders need to be updated. There shouldn't
+be any observable differences when using the sokol headers.
+
+The affected headers are: sokol_gl.h, sokol_debugtext.h, sokol_fontstash.h,
+sokol_imgui.h, sokol_nuklear.h and sokol_spine.h
+
+PR: https://github.com/floooh/sokol/pull/1496
+
 ### 25-Apr-2026
 
 - Please take note of this [sokol-shdc update](https://github.com/floooh/sokol-tools/blob/master/CHANGELOG.md#25-apr-2026)

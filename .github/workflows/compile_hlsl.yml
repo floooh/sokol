@@ -1,0 +1,22 @@
+# NOTE: this is only triggered via the gh command line tool
+# to compile HLSL shaders to DXBC bytecode on a non-Windows machine
+name: "compile_hlsl"
+on: workflow_dispatch
+
+jobs:
+  compile-hlsl:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@main
+      - uses: denoland/setup-deno@v2
+      - name: compile-hlsl
+        run: |
+          cd shdgen
+          git clone --depth=1 https://github.com/floooh/sokol-tools-bin
+          deno run --allow-all shdgen.ts --hlsl --shdcroot sokol-tools-bin
+      - name: upload-artifact
+        uses: actions/upload-artifact@main
+        with:
+          name: hlsl-shader
+          path: shdgen/out
+          retention-days: 1
