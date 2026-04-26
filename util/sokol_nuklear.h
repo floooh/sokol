@@ -597,6 +597,7 @@ typedef struct {
 } _snk_state_t;
 static _snk_state_t _snuklear;
 
+//>#shdgen
 /*
     Embedded source code compiled with:
 
@@ -2369,6 +2370,7 @@ static const char* _snk_fs_source_dummy = "";
 #else
 #error "Please define one of SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND!"
 #endif
+//<#shdgen
 
 #if !defined(SOKOL_NUKLEAR_NO_SOKOL_APP)
 static void _snk_clipboard_copy(nk_handle usr, const char *text, int len) {
@@ -2825,35 +2827,35 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
     const char* vs_source = 0;
     const char* fs_source = 0;
     #if defined(SOKOL_GLCORE)
-        vs_source = (const char*)_snk_vs_source_glsl410;
-        fs_source = (const char*)_snk_fs_source_glsl410;
+        vs_source = (const char*)_snk_shd_vs_source_glsl410;
+        fs_source = (const char*)_snk_shd_fs_source_glsl410;
     #elif defined(SOKOL_GLES3)
-        vs_source = (const char*)_snk_vs_source_glsl300es;
-        fs_source = (const char*)_snk_fs_source_glsl300es;
+        vs_source = (const char*)_snk_shd_vs_source_glsl300es;
+        fs_source = (const char*)_snk_shd_fs_source_glsl300es;
     #elif defined(SOKOL_METAL)
         switch (sg_query_backend()) {
             case SG_BACKEND_METAL_MACOS:
-                vs_bytecode = SG_RANGE(_snk_vs_bytecode_metal_macos);
-                fs_bytecode = SG_RANGE(_snk_fs_bytecode_metal_macos);
+                vs_bytecode = SG_RANGE(_snk_shd_vs_bytecode_metal_macos);
+                fs_bytecode = SG_RANGE(_snk_shd_fs_bytecode_metal_macos);
                 break;
             case SG_BACKEND_METAL_IOS:
-                vs_bytecode = SG_RANGE(_snk_vs_bytecode_metal_ios);
-                fs_bytecode = SG_RANGE(_snk_fs_bytecode_metal_ios);
+                vs_bytecode = SG_RANGE(_snk_shd_vs_bytecode_metal_ios);
+                fs_bytecode = SG_RANGE(_snk_shd_fs_bytecode_metal_ios);
                 break;
             default:
-                vs_source = (const char*)_snk_vs_source_metal_sim;
-                fs_source = (const char*)_snk_fs_source_metal_sim;
+                vs_source = (const char*)_snk_shd_vs_source_metal_sim;
+                fs_source = (const char*)_snk_shd_fs_source_metal_sim;
                 break;
         }
     #elif defined(SOKOL_D3D11)
-        vs_bytecode = SG_RANGE(_snk_vs_bytecode_hlsl4);
-        fs_bytecode = SG_RANGE(_snk_fs_bytecode_hlsl4);
+        vs_bytecode = SG_RANGE(_snk_shd_vs_bytecode_hlsl4);
+        fs_bytecode = SG_RANGE(_snk_shd_fs_bytecode_hlsl4);
     #elif defined(SOKOL_WGPU)
-        vs_source = (const char*)_snk_vs_source_wgsl;
-        fs_source = (const char*)_snk_fs_source_wgsl;
+        vs_source = (const char*)_snk_shd_vs_source_wgsl;
+        fs_source = (const char*)_snk_shd_fs_source_wgsl;
     #elif defined(SOKOL_VULKAN)
-        vs_bytecode = SG_RANGE(_snk_vs_bytecode_spirv_vk);
-        fs_bytecode = SG_RANGE(_snk_fs_bytecode_spirv_vk);
+        vs_bytecode = SG_RANGE(_snk_shd_vs_bytecode_spirv_vk);
+        fs_bytecode = SG_RANGE(_snk_shd_fs_bytecode_spirv_vk);
     #else
         vs_source = _snk_vs_source_dummy;
         fs_source = _snk_fs_source_dummy;

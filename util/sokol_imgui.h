@@ -649,6 +649,7 @@ typedef struct {
 } _simgui_state_t;
 static _simgui_state_t _simgui;
 
+//>#shdgen
 /*
     Embedded source code compiled with:
 
@@ -2423,6 +2424,7 @@ static const char* _simgui_fs_source_dummy = "";
 #else
 #error "Please define one of SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND!"
 #endif
+//<#shdgen
 
 #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
 static void _simgui_set_clipboard(ImGuiContext* ctx, const char* text) {
@@ -2932,38 +2934,38 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     shd_desc.texture_sampler_pairs[0].glsl_name = "tex_smp";
     shd_desc.label = "sokol-imgui-shader";
     #if defined(SOKOL_GLCORE)
-        shd_desc.vertex_func.source = (const char*)_simgui_vs_source_glsl410;
-        shd_desc.fragment_func.source = (const char*)_simgui_fs_source_glsl410;
+        shd_desc.vertex_func.source = (const char*)_simgui_shd_vs_source_glsl410;
+        shd_desc.fragment_func.source = (const char*)_simgui_shd_fs_source_glsl410;
     #elif defined(SOKOL_GLES3)
-        shd_desc.vertex_func.source = (const char*)_simgui_vs_source_glsl300es;
-        shd_desc.fragment_func.source = (const char*)_simgui_fs_source_glsl300es;
+        shd_desc.vertex_func.source = (const char*)_simgui_shd_vs_source_glsl300es;
+        shd_desc.fragment_func.source = (const char*)_simgui_shd_fs_source_glsl300es;
     #elif defined(SOKOL_METAL)
         shd_desc.vertex_func.entry = "main0";
         shd_desc.fragment_func.entry = "main0";
         switch (sg_query_backend()) {
             case SG_BACKEND_METAL_MACOS:
-                shd_desc.vertex_func.bytecode = SG_RANGE(_simgui_vs_bytecode_metal_macos);
-                shd_desc.fragment_func.bytecode = SG_RANGE(_simgui_fs_bytecode_metal_macos);
+                shd_desc.vertex_func.bytecode = SG_RANGE(_simgui_shd_vs_bytecode_metal_macos);
+                shd_desc.fragment_func.bytecode = SG_RANGE(_simgui_shd_fs_bytecode_metal_macos);
                 break;
             case SG_BACKEND_METAL_IOS:
-                shd_desc.vertex_func.bytecode = SG_RANGE(_simgui_vs_bytecode_metal_ios);
-                shd_desc.fragment_func.bytecode = SG_RANGE(_simgui_fs_bytecode_metal_ios);
+                shd_desc.vertex_func.bytecode = SG_RANGE(_simgui_shd_vs_bytecode_metal_ios);
+                shd_desc.fragment_func.bytecode = SG_RANGE(_simgui_shd_fs_bytecode_metal_ios);
                 break;
             default:
-                shd_desc.vertex_func.source = (const char*)_simgui_vs_source_metal_sim;
-                shd_desc.fragment_func.source = (const char*)_simgui_fs_source_metal_sim;
+                shd_desc.vertex_func.source = (const char*)_simgui_shd_vs_source_metal_sim;
+                shd_desc.fragment_func.source = (const char*)_simgui_shd_fs_source_metal_sim;
                 break;
         }
     #elif defined(SOKOL_D3D11)
-        shd_desc.vertex_func.bytecode = SG_RANGE(_simgui_vs_bytecode_hlsl4);
-        shd_desc.fragment_func.bytecode = SG_RANGE(_simgui_fs_bytecode_hlsl4);
+        shd_desc.vertex_func.bytecode = SG_RANGE(_simgui_shd_vs_bytecode_hlsl4);
+        shd_desc.fragment_func.bytecode = SG_RANGE(_simgui_shd_fs_bytecode_hlsl4);
     #elif defined(SOKOL_WGPU)
-        shd_desc.vertex_func.source = (const char*)_simgui_vs_source_wgsl;
-        shd_desc.fragment_func.source = (const char*)_simgui_fs_source_wgsl;
+        shd_desc.vertex_func.source = (const char*)_simgui_shd_vs_source_wgsl;
+        shd_desc.fragment_func.source = (const char*)_simgui_shd_fs_source_wgsl;
     #elif defined(SOKOL_VULKAN)
-        shd_desc.vertex_func.bytecode = SG_RANGE(_simgui_vs_bytecode_spirv_vk);
+        shd_desc.vertex_func.bytecode = SG_RANGE(_simgui_shd_vs_bytecode_spirv_vk);
         shd_desc.vertex_func.entry = "main";
-        shd_desc.fragment_func.bytecode = SG_RANGE(_simgui_fs_bytecode_spirv_vk);
+        shd_desc.fragment_func.bytecode = SG_RANGE(_simgui_shd_fs_bytecode_spirv_vk);
         shd_desc.fragment_func.entry = "main";
     #else
         shd_desc.vertex_func.source = _simgui_vs_source_dummy;

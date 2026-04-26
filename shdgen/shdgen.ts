@@ -15,9 +15,28 @@ const headers: Header[] = [
     {
         path: '../util/sokol_debugtext.h',
         shaders: [ { filename: 'sokol_debugtext.glsl', prefix: '_sdtx', prog: 'shd' } ],
-    }
+    },
+    // sokol_fontstash.h
+    {
+        path: '../util/sokol_fontstash.h',
+        shaders: [ { filename: 'sokol_fontstash.glsl', prefix: '_sfons', prog: 'shd' } ],
+    },
+    // sokol_imgui.h
+    {
+        path: '../util/sokol_imgui.h',
+        shaders: [ { filename: 'sokol_imgui.glsl', prefix: '_simgui', prog: 'shd' } ],
+    },
+    // sokol_nuklear.h
+    {
+        path: '../util/sokol_nuklear.h',
+        shaders: [ { filename: 'sokol_nuklear.glsl', prefix: '_snk', prog: 'shd' } ],
+    },
+    // sokol_spine.h
+    {
+        path: '../util/sokol_spine.h',
+        shaders: [ { filename: 'sokol_spine.glsl', prefix: '_sspine', prog: 'shd' } ],
+    },
 ];
-
 
 const denoArgs = parseArgs(Deno.args, {
     boolean: ['hlsl'],

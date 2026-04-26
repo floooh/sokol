@@ -1431,6 +1431,7 @@ SOKOL_SPINE_API_DECL void sspine_set_skin(sspine_instance instance, sspine_skin 
 #include <stdlib.h> // malloc/free
 #include <string.h> // memset, strcmp
 
+//>#shdgen
 // ███████╗██╗  ██╗ █████╗ ██████╗ ███████╗██████╗ ███████╗
 // ██╔════╝██║  ██║██╔══██╗██╔══██╗██╔════╝██╔══██╗██╔════╝
 // ███████╗███████║███████║██║  ██║█████╗  ██████╔╝███████╗
@@ -3426,6 +3427,7 @@ static const char* _sspine_fs_source_dummy = "";
 #else
 #error "Please define one of SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND!"
 #endif
+//<#shdgen
 
 // ███████ ████████ ██████  ██    ██  ██████ ████████ ███████
 // ██         ██    ██   ██ ██    ██ ██         ██    ██
@@ -5419,38 +5421,38 @@ static void _sspine_init_shared(void) {
     shd_desc.texture_sampler_pairs[0].glsl_name = "tex_smp";
     shd_desc.label = "sspine-shader";
     #if defined(SOKOL_GLCORE)
-        shd_desc.vertex_func.source = (const char*)_sspine_vs_source_glsl410;
-        shd_desc.fragment_func.source = (const char*)_sspine_fs_source_glsl410;
+        shd_desc.vertex_func.source = (const char*)_sspine_shd_vs_source_glsl410;
+        shd_desc.fragment_func.source = (const char*)_sspine_shd_fs_source_glsl410;
     #elif defined(SOKOL_GLES3)
-        shd_desc.vertex_func.source = (const char*)_sspine_vs_source_glsl300es;
-        shd_desc.fragment_func.source = (const char*)_sspine_fs_source_glsl300es;
+        shd_desc.vertex_func.source = (const char*)_sspine_shd_vs_source_glsl300es;
+        shd_desc.fragment_func.source = (const char*)_sspine_shd_fs_source_glsl300es;
     #elif defined(SOKOL_METAL)
         shd_desc.vertex_func.entry = "main0";
         shd_desc.fragment_func.entry = "main0";
         switch (sg_query_backend()) {
             case SG_BACKEND_METAL_MACOS:
-                shd_desc.vertex_func.bytecode = SG_RANGE(_sspine_vs_bytecode_metal_macos);
-                shd_desc.fragment_func.bytecode = SG_RANGE(_sspine_fs_bytecode_metal_macos);
+                shd_desc.vertex_func.bytecode = SG_RANGE(_sspine_shd_vs_bytecode_metal_macos);
+                shd_desc.fragment_func.bytecode = SG_RANGE(_sspine_shd_fs_bytecode_metal_macos);
                 break;
             case SG_BACKEND_METAL_IOS:
-                shd_desc.vertex_func.bytecode = SG_RANGE(_sspine_vs_bytecode_metal_ios);
-                shd_desc.fragment_func.bytecode = SG_RANGE(_sspine_fs_bytecode_metal_ios);
+                shd_desc.vertex_func.bytecode = SG_RANGE(_sspine_shd_vs_bytecode_metal_ios);
+                shd_desc.fragment_func.bytecode = SG_RANGE(_sspine_shd_fs_bytecode_metal_ios);
                 break;
             default:
-                shd_desc.vertex_func.source = (const char*)_sspine_vs_source_metal_sim;
-                shd_desc.fragment_func.source = (const char*)_sspine_fs_source_metal_sim;
+                shd_desc.vertex_func.source = (const char*)_sspine_shd_vs_source_metal_sim;
+                shd_desc.fragment_func.source = (const char*)_sspine_shd_fs_source_metal_sim;
                 break;
         }
     #elif defined(SOKOL_D3D11)
-        shd_desc.vertex_func.bytecode = SG_RANGE(_sspine_vs_bytecode_hlsl4);
-        shd_desc.fragment_func.bytecode = SG_RANGE(_sspine_fs_bytecode_hlsl4);
+        shd_desc.vertex_func.bytecode = SG_RANGE(_sspine_shd_vs_bytecode_hlsl4);
+        shd_desc.fragment_func.bytecode = SG_RANGE(_sspine_shd_fs_bytecode_hlsl4);
     #elif defined(SOKOL_WGPU)
-        shd_desc.vertex_func.source = (const char*)_sspine_vs_source_wgsl;
-        shd_desc.fragment_func.source = (const char*)_sspine_fs_source_wgsl;
+        shd_desc.vertex_func.source = (const char*)_sspine_shd_vs_source_wgsl;
+        shd_desc.fragment_func.source = (const char*)_sspine_shd_fs_source_wgsl;
     #elif defined(SOKOL_VULKAN)
-        shd_desc.vertex_func.bytecode = SG_RANGE(_sspine_vs_bytecode_spirv_vk);
+        shd_desc.vertex_func.bytecode = SG_RANGE(_sspine_shd_vs_bytecode_spirv_vk);
         shd_desc.vertex_func.entry = "main";
-        shd_desc.fragment_func.bytecode = SG_RANGE(_sspine_fs_bytecode_spirv_vk);
+        shd_desc.fragment_func.bytecode = SG_RANGE(_sspine_shd_fs_bytecode_spirv_vk);
         shd_desc.fragment_func.entry = "main";
     #else
         shd_desc.vertex_func.source = _sspine_vs_source_dummy;
