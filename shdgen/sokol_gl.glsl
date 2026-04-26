@@ -30,4 +30,4 @@ void main() {
 }
 @end
 
-@program sgl vs fs
+@program shd vs fs

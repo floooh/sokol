@@ -2375,6 +2375,7 @@ static const uint8_t _sdtx_font_oric[2048] = {
     0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, // FF
 };
 
+//>#shdgen
 /*
     Embedded source code compiled with:
 
@@ -4038,6 +4039,7 @@ static const char* _sdtx_fs_src_dummy = "";
 #else
 #error "Please define one of SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND!"
 #endif
+//<#shdgen
 
 // ███████ ████████ ██████  ██    ██  ██████ ████████ ███████
 // ██         ██    ██   ██ ██    ██ ██         ██    ██

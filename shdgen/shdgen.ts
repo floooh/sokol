@@ -6,9 +6,15 @@ type Header = { path: string, shaders: Shader[] };
 
 
 const headers: Header[] = [
+    // sokol_gl.h
     {
         path: '../util/sokol_gl.h',
-        shaders: [ { filename: 'sokol_gl.glsl', prefix: '_sgl', prog: 'sgl' } ],
+        shaders: [ { filename: 'sokol_gl.glsl', prefix: '_sgl', prog: 'shd' } ],
+    },
+    // sokol_debugtext.h
+    {
+        path: '../util/sokol_debugtext.h',
+        shaders: [ { filename: 'sokol_debugtext.glsl', prefix: '_sdtx', prog: 'shd' } ],
     }
 ];
 
