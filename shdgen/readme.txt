@@ -1,3 +1,5 @@
+> NOTE: internal use only, don't expect this to work on your machine.
+
 Helper script to regenerate embedded shaders.
 
 Requires `deno` in the path and a logged-in `gh` (needed for
