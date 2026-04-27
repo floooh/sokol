@@ -73,13 +73,30 @@
 extern "C" {
 #endif
 
+enum {
+    SFB_INVALID_ID = 0,
+};
+
 /*
     sfb_framebuffer
 
-    A framebuffer handle, created with sg_make_framebuffer(), destroyed
-    with sg_destroy_framebuffer()
+    A framebuffer handle, created with sfb_make_framebuffer(), destroyed
+    with sfb_destroy_framebuffer()
 */
 typedef struct sfb_framebuffer { uint32_t id; } sfb_framebuffer;
+
+/*
+    sfb_resource_state
+
+    TODO: docs
+*/
+typedef enum sfb_resource_state {
+    SFB_RESOURCESTATE_INITIAL,
+    SFB_RESOURCESTATE_VALID,
+    SFB_RESOURCESTATE_FAILED,
+    SFB_RESOURCESTATE_INVALID,
+    _SFB_RESOURCESTATE_FORCE_U32 = 0x7FFFFFFF
+} sfb_resource_state;
 
 /*
     sfb_format
@@ -90,7 +107,7 @@ typedef enum sfb_format {
     _SFB_FORMAT_DEFAULT = 0,
     SFB_FORMAT_RGBA8,
     SFB_FORMAT_PALETTE8,
-    _SG_FORMAT_FORCE_U32 = 0x7FFFFFFF
+    _SFB_FORMAT_FORCE_U32 = 0x7FFFFFFF
 } sfb_format;
 
 /*
@@ -102,7 +119,7 @@ typedef enum sfb_orientation {
     _SFB_ORIENTATION_DEFAULT = 0,
     SFB_ORIENTATION_LANDSCAPE,
     SFB_ORIENTATION_PORTRAIT,
-    _SG_ORIENTATION_FORCE_U32 = 0x7FFFFFFF
+    _SFB_ORIENTATION_FORCE_U32 = 0x7FFFFFFF
 } sfb_orientation;
 
 /*
@@ -162,15 +179,38 @@ typedef struct sfb_update_desc {
 } sfb_update_desc;
 
 /*
+    sfb_render_overrides
+
+    TODO doc
+*/
+typedef struct sfb_render_overrides {
+    sg_pipeline pip;
+    sg_bindings bindings;
+    sg_range uniforms[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
+} sfb_render_overrides;
+
+/*
     sfb_render_desc
 
     TODO: doc
-    FIXME: draw filter/shader
 */
 typedef struct sfb_render_desc {
     sfb_rect cliprect;  // clip rectangle in pixels, e.g. visible area inside framebuffer, default: [0, 0, width, height]
-    // FIXME: CRT shader and shader params
+    sfb_render_overrides overrides; // for plugging in CRT shaders etc...
 } sfb_render_desc;
+
+/*
+    sfb_framebuffer_info
+
+    TODO doc
+*/
+typedef struct sfb_framebuffer_info {
+    sg_image update_image;
+    sg_view update_texture_view;
+    sg_image render_image;
+    sg_view render_texture_view;
+    sg_view render_colorattachment_view;
+} sfb_framebuffer_info;
 
 /*
     sfb_allocator
@@ -192,7 +232,7 @@ typedef struct sfb_allocator {
     Used in sfb_desc to provide a custom logging and error reporting
     callback to sokol_framebuffer.h.
 */
-typedef struct sfb_logger_t {
+typedef struct sfb_logger {
     void (*func)(
         const char* tag,                // always "sfb"
         uint32_t log_level,             // 0=panic, 1=error, 2=warning, 3=info
@@ -202,7 +242,7 @@ typedef struct sfb_logger_t {
         const char* filename_or_null,   // source filename, may be nullptr in release mode
         void* user_data);
     void* user_data;
-} sfb_logger_t;
+} sfb_logger;
 
 /*
     TODO doc
@@ -221,13 +261,13 @@ SOKOL_FRAMEBUFFER_API_DECL void sfb_shutdown(void);
 // create a framebuffer object
 SOKOL_FRAMEBUFFER_API_DECL sfb_framebuffer sfb_make_framebuffer(const sfb_framebuffer_desc* desc);
 // destroy framebuffer object
-SOKOL_FRAMEBUFFER_API_DECL void sfb_framebuffer sfb_destroy_framebuffer(sfb_framebuffer fb);
+SOKOL_FRAMEBUFFER_API_DECL void sfb_destroy_framebuffer(sfb_framebuffer fb);
 // resize framebuffer textures, note: discards previous content!
 SOKOL_FRAMEBUFFER_API_DECL void sfb_resize(int new_width, int new_height);
 // update framebuffer and/or color palette content (must be called outside any sokol-gfx pass)
-SOKOL_FRAMEBUFFER_API_DECL sfb_update(sfb_framebuffer fb, const sfb_update_desc* desc);
+SOKOL_FRAMEBUFFER_API_DECL void sfb_update(sfb_framebuffer fb, const sfb_update_desc* desc);
 // draw framebuffer content (must be called inside a sokol-gfx render pass)
-SOKOL_FRAMEBUFFER_API_DECL sfb_render(sfb_framebuffer fb, const sfb_render_desc* desc);
+SOKOL_FRAMEBUFFER_API_DECL void sfb_render(sfb_framebuffer fb, const sfb_render_desc* desc);
 
 // query current framebuffer properties
 SOKOL_FRAMEBUFFER_API_DECL sfb_framebuffer_info sfb_query_framebuffer_info(sfb_framebuffer fb);
@@ -245,6 +285,9 @@ SOKOL_FRAMEBUFFER_API_DECL uint32_t sfb_color_u8(uint8_t r, uint8_t g, uint8_t b
 #ifdef SOKOL_FRAMEBUFFER_IMPL
 #define SOKOL_FRAMEBUFFER_IMPL_INCLUDED (1)
 
+#include <stdlib.h> // malloc, free, abort
+#include <string.h> // memset
+
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL
 #endif
@@ -258,6 +301,254 @@ SOKOL_FRAMEBUFFER_API_DECL uint32_t sfb_color_u8(uint8_t r, uint8_t g, uint8_t b
     #define SOKOL_ASSERT(c) assert(c)
 #endif
 
-// FIXME
+#ifdef __cplusplus
+#define _SFB_STRUCT(TYPE, NAME) TYPE NAME = {}
+#else
+#define _SFB_STRUCT(TYPE, NAME) TYPE NAME = {0}
+#endif
+
+
+// >>structs
+enum {
+    _SFB_SLOT_SHIFT = 16,
+    _SFB_SLOT_MASK = (1<<_SFB_SLOT_SHIFT)-1,
+    _SFB_MAX_POOL_SIZE = (1<<_SFB_SLOT_SHIFT),
+    _SFB_DEFAULT_FRAMEBUFFER_POOL_SIZE = 8,
+};
+
+#define _SFB_INVALID_SLOT_INDEX (0)
+
+typedef struct {
+    uint32_t id;
+    uint32_t uninit_count;
+    sg_resource_state state;
+} _sfb_slot_t;
+
+typedef struct {
+    _sfb_slot_t slot;
+} _sfb_framebuffer_t;
+
+// resource pool housekeeping struct
+typedef struct {
+    int size;
+    int queue_top;
+    uint32_t* gen_ctrs;
+    int* free_queue;
+} _sfb_pool_t;
+
+typedef struct {
+    _sfb_pool_t framebuffer_pool;
+    _sfb_framebuffer_t* framebuffers;
+} _sfb_pools_t;
+
+typedef struct {
+    uint32_t init_tag;
+    sfb_desc desc;
+    _sfb_pools_t pools;
+} _sfb_state_t;
+static _sfb_state_t _sfb;
+
+// >>logging
+#define _SFB_LOG_ITEMS \
+    _SFB_LOGITEM_XMACRO(OK, "Ok") \
+    _SFB_LOGITEM_XMACRO(MALLOC_FAILED, "memory allocation failed") \
+
+#define _SFB_LOGITEM_XMACRO(item,msg) _SFB_LOGITEM_##item,
+typedef enum {
+    _SFB_LOG_ITEMS
+} _sfb_log_item_t;
+#undef _SFB_LOGITEM_XMACRO
+
+#if defined(SOKOL_DEBUG)
+#define _SFB_LOGITEM_XMACRO(item,msg) #item ": " msg,
+static const char* _sfb_log_messages[] = {
+    _SFB_LOG_ITEMS
+};
+#undef _SFB_LOGITEM_XMACRO
+#endif // SOKOL_DEBUG
+
+#define _SFB_PANIC(code) _sfb_log(_SFB_LOGITEM_ ##code, 0, 0, __LINE__)
+#define _SFB_ERROR(code) _sfb_log(_SFB_LOGITEM_ ##code, 1, 0, __LINE__)
+#define _SFB_WARN(code) _sfb_log(_SFB_LOGITEM_ ##code, 2, 0, __LINE__)
+#define _SFB_INFO(code) _sfb_log(_SFB_LOGITEM_ ##code, 3, 0, __LINE__)
+#define _SFB_LOGMSG(code,msg) _sfb_log(_SFB_LOGITEM_ ##code, 3, msg, __LINE__)
+
+static void _sfb_log(_sfb_log_item_t log_item, uint32_t log_level, const char* msg, uint32_t line_nr) {
+    if (_sfb.desc.logger.func) {
+        const char* filename = 0;
+        #if defined(SOKOL_DEBUG)
+            filename = __FILE__;
+            if (0 == msg) {
+                msg = _sfb_log_messages[log_item];
+            }
+        #endif
+        _sfb.desc.logger.func("sfb", log_level, (uint32_t)log_item, msg, line_nr, filename, _sfb.desc.logger.user_data);
+    } else {
+        // for log level PANIC it would be 'undefined behaviour' to continue
+        if (log_level == 0) {
+            abort();
+        }
+    }
+}
+
+// >>memory
+static void _sfb_clear(void* ptr, size_t size) {
+    SOKOL_ASSERT(ptr && (size > 0));
+    memset(ptr, 0, size);
+}
+
+static void* _sfb_malloc(size_t size) {
+    SOKOL_ASSERT(size > 0);
+    void* ptr;
+    if (_sfb.desc.allocator.alloc_fn) {
+        ptr = _sfb.desc.allocator.alloc_fn(size, _sfb.desc.allocator.user_data);
+    } else {
+        ptr = malloc(size);
+    }
+    if (0 == ptr) {
+        _SFB_PANIC(MALLOC_FAILED);
+    }
+    return ptr;
+}
+
+static void* _sfb_malloc_clear(size_t size) {
+    void* ptr = _sfb_malloc(size);
+    _sfb_clear(ptr, size);
+    return ptr;
+}
+
+static void _sfb_free(void* ptr) {
+    if (_sfb.desc.allocator.free_fn) {
+        _sfb.desc.allocator.free_fn(ptr, _sfb.desc.allocator.user_data);
+    } else {
+        free(ptr);
+    }
+}
+
+// >>pool
+static void _sfb_pool_init(_sfb_pool_t* pool, int num) {
+    SOKOL_ASSERT(pool && (num >= 1));
+    // slot 0 is reserved for the 'invalid id', so bump the pool size by 1
+    pool->size = num + 1;
+    pool->queue_top = 0;
+    // generation counters indexable by pool slot index, slot 0 is reserved
+    size_t gen_ctrs_size = sizeof(uint32_t) * (size_t)pool->size;
+    pool->gen_ctrs = (uint32_t*)_sfb_malloc_clear(gen_ctrs_size);
+    // it's not a bug to only reserve 'num' here
+    pool->free_queue = (int*) _sfb_malloc_clear(sizeof(int) * (size_t)num);
+    // never allocate the zero-th pool item since the invalid id is 0
+    for (int i = pool->size-1; i >= 1; i--) {
+        pool->free_queue[pool->queue_top++] = i;
+    }
+}
+
+static void _sfb_pool_discard(_sfb_pool_t* pool) {
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    _sfb_free(pool->free_queue);
+    pool->free_queue = 0;
+    SOKOL_ASSERT(pool->gen_ctrs);
+    _sfb_free(pool->gen_ctrs);
+    pool->gen_ctrs = 0;
+    pool->size = 0;
+    pool->queue_top = 0;
+}
+
+static int _sfb_pool_alloc_index(_sfb_pool_t* pool) {
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    if (pool->queue_top > 0) {
+        int slot_index = pool->free_queue[--pool->queue_top];
+        SOKOL_ASSERT((slot_index > 0) && (slot_index < pool->size));
+        return slot_index;
+    } else {
+        // pool exhausted
+        return _SFB_INVALID_SLOT_INDEX;
+    }
+}
+
+static void _sfb_pool_free_index(_sfb_pool_t* pool, int slot_index) {
+    SOKOL_ASSERT((slot_index > _SFB_INVALID_SLOT_INDEX) && (slot_index < pool->size));
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    SOKOL_ASSERT(pool->queue_top < pool->size);
+    #ifdef SOKOL_DEBUG
+    // debug check against double-free
+    for (int i = 0; i < pool->queue_top; i++) {
+        SOKOL_ASSERT(pool->free_queue[i] != slot_index);
+    }
+    #endif
+    pool->free_queue[pool->queue_top++] = slot_index;
+    SOKOL_ASSERT(pool->queue_top <= (pool->size-1));
+}
+
+static void _sfb_slot_reset(_sfb_slot_t* slot) {
+    SOKOL_ASSERT(slot);
+    _sfb_clear(slot, sizeof(_sfb_slot_t));
+}
+
+static void _sfb_setup_pools(_sfb_pools_t* p, const sfb_desc* desc) {
+    SOKOL_ASSERT(p);
+    SOKOL_ASSERT(desc);
+    // note: the pools here will have an additional item, since slot 0 is reserved
+    SOKOL_ASSERT((desc->framebuffer_pool_size > 0) && (desc->framebuffer_pool_size < _SFB_MAX_POOL_SIZE));
+    _sfb_pool_init(&p->framebuffer_pool, desc->framebuffer_pool_size);
+    size_t fb_pool_byte_size = sizeof(_sfb_framebuffer_t) * (size_t)p->framebuffer_pool.size;
+    p->framebuffers = (_sfb_framebuffer_t*) _sfb_malloc_clear(fb_pool_byte_size);
+}
+
+static void _sfb_discard_pools(_sfb_pools_t* p) {
+    SOKOL_ASSERT(p);
+    _sfb_free(p->framebuffers); p->framebuffers = 0;
+    _sfb_pool_discard(&p->framebuffer_pool);
+}
+
+/* allocate the slot at slot_index:
+    - bump the slot's generation counter
+    - create a resource id from the generation counter and slot index
+    - set the slot's id to this id
+    - set the slot's state to ALLOC
+    - return the resource id
+*/
+static uint32_t _sfb_slot_alloc(_sfb_pool_t* pool, _sfb_slot_t* slot, int slot_index) {
+    /* FIXME: add handling for an overflowing generation counter,
+       for now, just overflow (another option is to disable
+       the slot)
+    */
+    SOKOL_ASSERT(pool && pool->gen_ctrs);
+    SOKOL_ASSERT((slot_index > _SFB_INVALID_SLOT_INDEX) && (slot_index < pool->size));
+    SOKOL_ASSERT(slot->id == SG_INVALID_ID);
+    SOKOL_ASSERT(slot->state == SG_RESOURCESTATE_INITIAL);
+    uint32_t ctr = ++pool->gen_ctrs[slot_index];
+    slot->id = (ctr<<_SFB_SLOT_SHIFT)|(slot_index & _SFB_SLOT_MASK);
+    slot->state = SG_RESOURCESTATE_ALLOC;
+    return slot->id;
+}
+
+// extract slot index from id
+static int _sfb_slot_index(uint32_t id) {
+    int slot_index = (int) (id & _SFB_SLOT_MASK);
+    SOKOL_ASSERT(_SFB_INVALID_SLOT_INDEX != slot_index);
+    return slot_index;
+}
+
+// returns pointer to resource by id without matching id check
+static _sfb_framebuffer_t* _sfb_framebuffer_at(uint32_t fb_id) {
+    SOKOL_ASSERT(SFB_INVALID_ID != fb_id);
+    int slot_index = _sfb_slot_index(fb_id);
+    SOKOL_ASSERT((slot_index > _SFB_INVALID_SLOT_INDEX) && (slot_index < _sfb.pools.framebuffer_pool.size));
+    return &_sfb.pools.framebuffers[slot_index];
+}
+
+// returns pointer to resource with matching id check, may return 0
+static _sfb_framebuffer_t* _sfb_lookup_buffer(uint32_t fb_id) {
+    if (SFB_INVALID_ID != fb_id) {
+        _sfb_framebuffer_t* fb = _sfb_framebuffer_at(fb_id);
+        if (fb->slot.id == fb_id) {
+            return fb;
+        }
+    }
+    return 0;
+}
 
 #endif // SOKOL_FRAMEBUFFER_IMPL
