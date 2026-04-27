@@ -2609,6 +2609,7 @@ SOKOL_API_IMPL void simgui_shutdown(void) {
     _simgui_imgui_destroy_context();
 
     // NOTE: it's valid to call the destroy funcs with SG_INVALID_ID
+    sg_push_debug_group("sokol-imgui");
     sg_destroy_pipeline(_simgui.pip_unfilterable);
     sg_destroy_shader(_simgui.shd_unfilterable);
     sg_destroy_pipeline(_simgui.def_pip);
@@ -2617,7 +2618,6 @@ SOKOL_API_IMPL void simgui_shutdown(void) {
     sg_destroy_buffer(_simgui.ibuf);
     sg_destroy_buffer(_simgui.vbuf);
     sg_pop_debug_group();
-    sg_push_debug_group("sokol-imgui");
     SOKOL_ASSERT(_simgui.vertices.ptr);
     _simgui_free((void*)_simgui.vertices.ptr);
     SOKOL_ASSERT(_simgui.indices.ptr);
@@ -2923,7 +2923,7 @@ _SOKOL_PRIVATE ImGuiKey _simgui_map_keycode(sapp_keycode key) {
         case SAPP_KEYCODE_APOSTROPHE:   return ImGuiKey_Apostrophe;
         case SAPP_KEYCODE_COMMA:        return ImGuiKey_Comma;
         case SAPP_KEYCODE_MINUS:        return ImGuiKey_Minus;
-        case SAPP_KEYCODE_PERIOD:       return ImGuiKey_Apostrophe;
+        case SAPP_KEYCODE_PERIOD:       return ImGuiKey_Period;
         case SAPP_KEYCODE_SLASH:        return ImGuiKey_Slash;
         case SAPP_KEYCODE_0:            return ImGuiKey_0;
         case SAPP_KEYCODE_1:            return ImGuiKey_1;
