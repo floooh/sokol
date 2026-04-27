@@ -4464,7 +4464,7 @@ SOKOL_API_IMPL void sgl_lookat(float eye_x, float eye_y, float eye_z, float cent
     _sgl_lookat(_sgl_matrix(ctx), eye_x, eye_y, eye_z, center_x, center_y, center_z, up_x, up_y, up_z);
 }
 
-SOKOL_GL_API_DECL void sgl_push_matrix(void) {
+SOKOL_API_IMPL void sgl_push_matrix(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl_context_t* ctx = _sgl.cur_ctx;
     if (!ctx) {
@@ -4483,7 +4483,7 @@ SOKOL_GL_API_DECL void sgl_push_matrix(void) {
     }
 }
 
-SOKOL_GL_API_DECL void sgl_pop_matrix(void) {
+SOKOL_API_IMPL void sgl_pop_matrix(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl_context_t* ctx = _sgl.cur_ctx;
     if (!ctx) {
