@@ -1735,7 +1735,9 @@ _SOKOL_PRIVATE bool _sfetch_file_handle_valid(_sfetch_file_handle_t h) {
 
 _SOKOL_PRIVATE uint32_t _sfetch_file_size(_sfetch_file_handle_t h) {
     fseek(h, 0, SEEK_END);
-    return (uint32_t) ftell(h);
+    long fpos = ftell(h);
+    SOKOL_ASSERT(fpos >= 0);
+    return (uint32_t) fpos;
 }
 
 _SOKOL_PRIVATE bool _sfetch_file_read(_sfetch_file_handle_t h, uint32_t offset, uint32_t num_bytes, void* ptr) {
@@ -1849,18 +1851,16 @@ _SOKOL_PRIVATE uint32_t _sfetch_thread_dequeue_incoming(_sfetch_thread_t* thread
     return item;
 }
 
-_SOKOL_PRIVATE bool _sfetch_thread_enqueue_outgoing(_sfetch_thread_t* thread, _sfetch_ring_t* outgoing, uint32_t item) {
+_SOKOL_PRIVATE void _sfetch_thread_enqueue_outgoing(_sfetch_thread_t* thread, _sfetch_ring_t* outgoing, uint32_t item) {
     /* called from thread function */
     SOKOL_ASSERT(thread && thread->valid);
     SOKOL_ASSERT(outgoing && outgoing->buf);
     SOKOL_ASSERT(0 != item);
     pthread_mutex_lock(&thread->outgoing_mutex);
-    bool result = false;
     if (!_sfetch_ring_full(outgoing)) {
         _sfetch_ring_enqueue(outgoing, item);
     }
     pthread_mutex_unlock(&thread->outgoing_mutex);
-    return result;
 }
 
 _SOKOL_PRIVATE void _sfetch_thread_dequeue_outgoing(_sfetch_thread_t* thread, _sfetch_ring_t* outgoing, _sfetch_ring_t* dst) {
@@ -2034,17 +2034,15 @@ _SOKOL_PRIVATE uint32_t _sfetch_thread_dequeue_incoming(_sfetch_thread_t* thread
     return item;
 }
 
-_SOKOL_PRIVATE bool _sfetch_thread_enqueue_outgoing(_sfetch_thread_t* thread, _sfetch_ring_t* outgoing, uint32_t item) {
+_SOKOL_PRIVATE void _sfetch_thread_enqueue_outgoing(_sfetch_thread_t* thread, _sfetch_ring_t* outgoing, uint32_t item) {
     /* called from thread function */
     SOKOL_ASSERT(thread && thread->valid);
     SOKOL_ASSERT(outgoing && outgoing->buf);
     EnterCriticalSection(&thread->outgoing_critsec);
-    bool result = false;
     if (!_sfetch_ring_full(outgoing)) {
         _sfetch_ring_enqueue(outgoing, item);
     }
     LeaveCriticalSection(&thread->outgoing_critsec);
-    return result;
 }
 
 _SOKOL_PRIVATE void _sfetch_thread_dequeue_outgoing(_sfetch_thread_t* thread, _sfetch_ring_t* outgoing, _sfetch_ring_t* dst) {
