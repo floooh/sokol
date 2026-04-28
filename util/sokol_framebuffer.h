@@ -92,6 +92,7 @@ typedef struct sfb_framebuffer { uint32_t id; } sfb_framebuffer;
 */
 typedef enum sfb_resource_state {
     SFB_RESOURCESTATE_INITIAL,
+    SFB_RESOURCESTATE_ALLOC,
     SFB_RESOURCESTATE_VALID,
     SFB_RESOURCESTATE_FAILED,
     SFB_RESOURCESTATE_INVALID,
@@ -307,6 +308,7 @@ SOKOL_FRAMEBUFFER_API_DECL uint32_t sfb_color_u8(uint8_t r, uint8_t g, uint8_t b
 #define _SFB_STRUCT(TYPE, NAME) TYPE NAME = {0}
 #endif
 
+#define _sfb_def(val, def) (((val) == 0) ? (def) : (val))
 
 // >>structs
 enum {
@@ -320,8 +322,7 @@ enum {
 
 typedef struct {
     uint32_t id;
-    uint32_t uninit_count;
-    sg_resource_state state;
+    sfb_resource_state state;
 } _sfb_slot_t;
 
 typedef struct {
@@ -336,6 +337,7 @@ typedef struct {
     int* free_queue;
 } _sfb_pool_t;
 
+#define _SFB_INVALID_SLOT_INDEX (0)
 typedef struct {
     _sfb_pool_t framebuffer_pool;
     _sfb_framebuffer_t* framebuffers;
@@ -352,6 +354,7 @@ static _sfb_state_t _sfb;
 #define _SFB_LOG_ITEMS \
     _SFB_LOGITEM_XMACRO(OK, "Ok") \
     _SFB_LOGITEM_XMACRO(MALLOC_FAILED, "memory allocation failed") \
+    _SFB_LOGITEM_XMACRO(FRAMEBUFFER_POOL_EXHAUSTED, "framebuffer pool exhausted (sfb_desc.framebuffer_pool_size)") \
 
 #define _SFB_LOGITEM_XMACRO(item,msg) _SFB_LOGITEM_##item,
 typedef enum {
@@ -517,11 +520,11 @@ static uint32_t _sfb_slot_alloc(_sfb_pool_t* pool, _sfb_slot_t* slot, int slot_i
     */
     SOKOL_ASSERT(pool && pool->gen_ctrs);
     SOKOL_ASSERT((slot_index > _SFB_INVALID_SLOT_INDEX) && (slot_index < pool->size));
-    SOKOL_ASSERT(slot->id == SG_INVALID_ID);
-    SOKOL_ASSERT(slot->state == SG_RESOURCESTATE_INITIAL);
+    SOKOL_ASSERT(slot->id == SFB_INVALID_ID);
+    SOKOL_ASSERT(slot->state == SFB_RESOURCESTATE_INITIAL);
     uint32_t ctr = ++pool->gen_ctrs[slot_index];
     slot->id = (ctr<<_SFB_SLOT_SHIFT)|(slot_index & _SFB_SLOT_MASK);
-    slot->state = SG_RESOURCESTATE_ALLOC;
+    slot->state = SFB_RESOURCESTATE_ALLOC;
     return slot->id;
 }
 
@@ -541,7 +544,7 @@ static _sfb_framebuffer_t* _sfb_framebuffer_at(uint32_t fb_id) {
 }
 
 // returns pointer to resource with matching id check, may return 0
-static _sfb_framebuffer_t* _sfb_lookup_buffer(uint32_t fb_id) {
+static _sfb_framebuffer_t* _sfb_lookup_framebuffer(uint32_t fb_id) {
     if (SFB_INVALID_ID != fb_id) {
         _sfb_framebuffer_t* fb = _sfb_framebuffer_at(fb_id);
         if (fb->slot.id == fb_id) {
@@ -549,6 +552,109 @@ static _sfb_framebuffer_t* _sfb_lookup_buffer(uint32_t fb_id) {
         }
     }
     return 0;
+}
+
+static sfb_framebuffer _sfb_alloc_framebuffer(void) {
+    sfb_framebuffer res;
+    int slot_index = _sfb_pool_alloc_index(&_sfb.pools.framebuffer_pool);
+    if (_SFB_INVALID_SLOT_INDEX != slot_index) {
+        res.id = _sfb_slot_alloc(&_sfb.pools.framebuffer_pool, &_sfb.pools.framebuffers[slot_index].slot, slot_index);
+    } else {
+        res.id = SFB_INVALID_ID;
+        _SFB_ERROR(FRAMEBUFFER_POOL_EXHAUSTED);
+    }
+    return res;
+}
+
+static void _sfb_dealloc_framebuffer(_sfb_framebuffer_t* fb) {
+    SOKOL_ASSERT(fb && (fb->slot.state == SFB_RESOURCESTATE_ALLOC) && (fb->slot.id != SFB_INVALID_ID));
+    _sfb_pool_free_index(&_sfb.pools.framebuffer_pool, _sfb_slot_index(fb->slot.id));
+    _sfb_slot_reset(&fb->slot);
+}
+
+static sfb_desc _sfb_desc_defaults(const sfb_desc* desc) {
+    SOKOL_ASSERT(desc);
+    sfb_desc res = *desc;
+    res.framebuffer_pool_size = _sfb_def(res.framebuffer_pool_size, _SFB_DEFAULT_FRAMEBUFFER_POOL_SIZE);
+    return res;
+}
+
+static sfb_framebuffer_desc _sfb_framebuffer_desc_defaults(const sfb_framebuffer_desc* desc) {
+    SOKOL_ASSERT(desc);
+    sfb_framebuffer_desc res = *desc;
+    res.format = _sfb_def(res.format, SFB_FORMAT_RGBA8);
+    res.orientation = _sfb_def(res.orientation, SFB_ORIENTATION_LANDSCAPE);
+    return res;
+}
+
+static void _sfb_init_framebuffer(_sfb_framebuffer_t* fb, const sfb_framebuffer_desc* desc) {
+    SOKOL_ASSERT(fb && (fb->slot.state == SFB_RESOURCESTATE_ALLOC));
+    SOKOL_ASSERT(desc);
+    // FIXME
+    fb->slot.state = SFB_RESOURCESTATE_VALID;
+}
+
+static void _sfb_uninit_framebuffer(_sfb_framebuffer_t* fb) {
+    SOKOL_ASSERT(fb && (fb->slot.state == SFB_RESOURCESTATE_VALID) || (fb->slot.state == SFB_RESOURCESTATE_FAILED));
+    // FIXME
+    fb->slot.state = SFB_RESOURCESTATE_ALLOC;
+}
+
+static void _sfb_discard_all_resources(void) {
+    for (int i = 1; i < _sfb.pools.framebuffer_pool.size; i++) {
+        sfb_resource_state state = _sfb.pools.framebuffers[i].slot.state;
+        if ((state == SFB_RESOURCESTATE_VALID) || (state == SFB_RESOURCESTATE_FAILED)) {
+            _sfb_uninit_framebuffer(&_sfb.pools.framebuffers[i]);
+        }
+    }
+}
+
+// >>public
+#define _SFB_INIT_TAG (0xDCBADCBA)
+
+SOKOL_API_IMPL void sfb_setup(const sfb_desc* desc) {
+    SOKOL_ASSERT(desc);
+    SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
+    _sfb_clear(&_sfb, sizeof(_sfb));
+    _sfb.init_tag = _SFB_INIT_TAG;
+    _sfb.desc = _sfb_desc_defaults(desc);
+    _sfb_setup_pools(&_sfb.pools, &_sfb.desc);
+}
+
+SOKOL_API_IMPL void sfb_shutdown(void) {
+    SOKOL_ASSERT(_SFB_INIT_TAG == _sfb.init_tag);
+    _sfb_discard_all_resources();
+    _sfb_discard_pools(&_sfb.pools);
+    _sfb_clear(&_sfb, sizeof(_sfb));
+}
+
+SOKOL_API_IMPL sfb_framebuffer sfb_make_framebuffer(const sfb_framebuffer_desc* desc) {
+    SOKOL_ASSERT(_SFB_INIT_TAG == _sfb.init_tag);
+    SOKOL_ASSERT(desc);
+    sfb_framebuffer_desc desc_def = _sfb_framebuffer_desc_defaults(desc);
+    sfb_framebuffer fb_id = _sfb_alloc_framebuffer();
+    if (fb_id.id != SFB_INVALID_ID) {
+        _sfb_framebuffer_t* fb = _sfb_framebuffer_at(fb_id.id);
+        SOKOL_ASSERT(fb && (fb->slot.state == SFB_RESOURCESTATE_ALLOC));
+        _sfb_init_framebuffer(fb, &desc_def);
+        SOKOL_ASSERT((fb->slot.state == SFB_RESOURCESTATE_VALID) || (fb->slot.state == SFB_RESOURCESTATE_FAILED));
+    }
+    return fb_id;
+}
+
+SOKOL_API_IMPL void sfb_destroy_framebuffer(sfb_framebuffer fb_id) {
+    SOKOL_ASSERT(_SFB_INIT_TAG == _sfb.init_tag);
+    _sfb_framebuffer_t* fb = _sfb_lookup_framebuffer(fb_id.id);
+    if (fb) {
+        if ((fb->slot.state == SFB_RESOURCESTATE_VALID) || (fb->slot.state == SFB_RESOURCESTATE_FAILED)) {
+            _sfb_uninit_framebuffer(fb);
+            SOKOL_ASSERT(fb->slot.state == SFB_RESOURCESTATE_ALLOC);
+        }
+        if (fb->slot.state == SFB_RESOURCESTATE_ALLOC) {
+            _sfb_dealloc_framebuffer(fb);
+            SOKOL_ASSERT(fb->slot.state == SFB_RESOURCESTATE_INITIAL);
+        }
+    }
 }
 
 #endif // SOKOL_FRAMEBUFFER_IMPL
