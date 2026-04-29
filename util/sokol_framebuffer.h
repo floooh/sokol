@@ -19,6 +19,9 @@
 
     SOKOL_DLL
 
+    NOTE: the implementation is written in C99 and cannot be compiled in C++ mode,
+    the declaration can be used from C++ though.
+
     [TODO: documentation]
 
     LICENSE
@@ -154,6 +157,7 @@ typedef struct sfb_render_pass_desc {
 typedef struct sfb_framebuffer_desc {
     int width;                      // width in pixels, must be provided
     int height;                     // height in pixels, must be provided
+    int prescale;                   // bilinear-prefiltered prescale factor, default: 1
     sfb_format format;              // framebuffer pixel format, default: SFB_FORMAT_RGBA8
     sfb_orientation orientation;    // framebuffer orientation, default: SFB_ORIENTATION_LANDSCAPE
     sfb_render_pass_desc render_pass;   // pixel formats and sample count of sokol-gfx render pass (defaults: use sokol-gfx defaults)
@@ -208,9 +212,10 @@ typedef struct sfb_render_desc {
 typedef struct sfb_framebuffer_info {
     sg_image update_image;
     sg_view update_texture_view;
-    sg_image render_image;
-    sg_view render_texture_view;
-    sg_view render_colorattachment_view;
+    sg_image prescale_image;            // only valid when sfb_framebuffer_desc.prescale > 1
+    sg_view prescale_texture_view;      // only valid when sfb_framebuffer_desc.prescale > 1
+    sg_image palette_image;             // only valid when sfb_framebuffer_desc.format == SFB_FORMAT_PALETTE8
+    sg_view palette_texture_view;       // only valid when sfb_framebuffer_desc.format == SFB_FORMAT_PALETTE8
 } sfb_framebuffer_info;
 
 /*
@@ -263,8 +268,8 @@ SOKOL_FRAMEBUFFER_API_DECL void sfb_shutdown(void);
 SOKOL_FRAMEBUFFER_API_DECL sfb_framebuffer sfb_make_framebuffer(const sfb_framebuffer_desc* desc);
 // destroy framebuffer object
 SOKOL_FRAMEBUFFER_API_DECL void sfb_destroy_framebuffer(sfb_framebuffer fb);
-// resize framebuffer textures, note: discards previous content!
-SOKOL_FRAMEBUFFER_API_DECL void sfb_resize(int new_width, int new_height);
+// query framebuffer resource state (valid or failed)
+SOKOL_FRAMEBUFFER_API_DECL sfb_resource_state sfb_query_framebuffer_state(sfb_framebuffer fb);
 // update framebuffer and/or color palette content (must be called outside any sokol-gfx pass)
 SOKOL_FRAMEBUFFER_API_DECL void sfb_update(sfb_framebuffer fb, const sfb_update_desc* desc);
 // draw framebuffer content (must be called inside a sokol-gfx render pass)
@@ -276,6 +281,8 @@ SOKOL_FRAMEBUFFER_API_DECL sfb_framebuffer_info sfb_query_framebuffer_info(sfb_f
 SOKOL_FRAMEBUFFER_API_DECL uint32_t sfb_color_f32(float r, float g, float b, float a);
 // helper function to create packed RGBA8 uint32_t from uint8_t (0 .. 255)
 SOKOL_FRAMEBUFFER_API_DECL uint32_t sfb_color_u8(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+
+// FIXME: C++ overloads
 
 #ifdef __cplusplus
 } // extern "C"
@@ -302,12 +309,6 @@ SOKOL_FRAMEBUFFER_API_DECL uint32_t sfb_color_u8(uint8_t r, uint8_t g, uint8_t b
     #define SOKOL_ASSERT(c) assert(c)
 #endif
 
-#ifdef __cplusplus
-#define _SFB_STRUCT(TYPE, NAME) TYPE NAME = {}
-#else
-#define _SFB_STRUCT(TYPE, NAME) TYPE NAME = {0}
-#endif
-
 #define _sfb_def(val, def) (((val) == 0) ? (def) : (val))
 
 // >>structs
@@ -327,6 +328,20 @@ typedef struct {
 
 typedef struct {
     _sfb_slot_t slot;
+    sfb_framebuffer_desc desc;
+    struct {
+        sg_image img;
+        sg_view tex_view;
+    } update;
+    struct {
+        sg_image img;
+        sg_view tex_view;
+        sg_view att_view;
+    } prescale;
+    struct {
+        sg_image img;
+        sg_view tex_view;
+    } palette;
 } _sfb_framebuffer_t;
 
 // resource pool housekeeping struct
@@ -355,6 +370,8 @@ static _sfb_state_t _sfb;
     _SFB_LOGITEM_XMACRO(OK, "Ok") \
     _SFB_LOGITEM_XMACRO(MALLOC_FAILED, "memory allocation failed") \
     _SFB_LOGITEM_XMACRO(FRAMEBUFFER_POOL_EXHAUSTED, "framebuffer pool exhausted (sfb_desc.framebuffer_pool_size)") \
+    _SFB_LOGITEM_XMACRO(INVALID_FRAMEBUFFER_WIDTH, "sfb_framebuffer_desc.width must be > 0") \
+    _SFB_LOGITEM_XMACRO(INVALID_FRAMEBUFFER_HEIGHT, "sfb_framebuffer_desc.height must be > 0") \
 
 #define _SFB_LOGITEM_XMACRO(item,msg) _SFB_LOGITEM_##item,
 typedef enum {
@@ -485,11 +502,6 @@ static void _sfb_pool_free_index(_sfb_pool_t* pool, int slot_index) {
     SOKOL_ASSERT(pool->queue_top <= (pool->size-1));
 }
 
-static void _sfb_slot_reset(_sfb_slot_t* slot) {
-    SOKOL_ASSERT(slot);
-    _sfb_clear(slot, sizeof(_sfb_slot_t));
-}
-
 static void _sfb_setup_pools(_sfb_pools_t* p, const sfb_desc* desc) {
     SOKOL_ASSERT(p);
     SOKOL_ASSERT(desc);
@@ -569,7 +581,7 @@ static sfb_framebuffer _sfb_alloc_framebuffer(void) {
 static void _sfb_dealloc_framebuffer(_sfb_framebuffer_t* fb) {
     SOKOL_ASSERT(fb && (fb->slot.state == SFB_RESOURCESTATE_ALLOC) && (fb->slot.id != SFB_INVALID_ID));
     _sfb_pool_free_index(&_sfb.pools.framebuffer_pool, _sfb_slot_index(fb->slot.id));
-    _sfb_slot_reset(&fb->slot);
+    _sfb_clear(fb, sizeof(_sfb_framebuffer_t));
 }
 
 static sfb_desc _sfb_desc_defaults(const sfb_desc* desc) {
@@ -582,6 +594,7 @@ static sfb_desc _sfb_desc_defaults(const sfb_desc* desc) {
 static sfb_framebuffer_desc _sfb_framebuffer_desc_defaults(const sfb_framebuffer_desc* desc) {
     SOKOL_ASSERT(desc);
     sfb_framebuffer_desc res = *desc;
+    res.prescale = _sfb_def(res.prescale, 1);
     res.format = _sfb_def(res.format, SFB_FORMAT_RGBA8);
     res.orientation = _sfb_def(res.orientation, SFB_ORIENTATION_LANDSCAPE);
     return res;
@@ -590,13 +603,78 @@ static sfb_framebuffer_desc _sfb_framebuffer_desc_defaults(const sfb_framebuffer
 static void _sfb_init_framebuffer(_sfb_framebuffer_t* fb, const sfb_framebuffer_desc* desc) {
     SOKOL_ASSERT(fb && (fb->slot.state == SFB_RESOURCESTATE_ALLOC));
     SOKOL_ASSERT(desc);
-    // FIXME
-    fb->slot.state = SFB_RESOURCESTATE_VALID;
+    if (desc->width <= 0) {
+        _SFB_ERROR(INVALID_FRAMEBUFFER_WIDTH);
+        fb->slot.state = SFB_RESOURCESTATE_FAILED;
+        return;
+    }
+    if (desc->height <= 0) {
+        _SFB_ERROR(INVALID_FRAMEBUFFER_HEIGHT);
+        fb->slot.state = SFB_RESOURCESTATE_FAILED;
+        return;
+    }
+    fb->desc = *desc;
+
+    bool valid = true;
+    fb->update.img = sg_make_image(&(sg_image_desc){
+        .usage.stream_update = true,
+        .width = fb->desc.width,
+        .height = fb->desc.height,
+        .pixel_format = fb->desc.format == SFB_FORMAT_RGBA8 ? SG_PIXELFORMAT_RGBA8 : SG_PIXELFORMAT_R8,
+        .label = "sfb-update-image",
+    });
+    valid &= sg_query_image_state(fb->update.img) == SG_RESOURCESTATE_VALID;
+    fb->update.tex_view = sg_make_view(&(sg_view_desc){
+        .texture.image = fb->update.img,
+        .label = "sfb-update-tex-view",
+    });
+    valid &= sg_query_view_state(fb->update.tex_view) == SG_RESOURCESTATE_VALID;
+    if (fb->desc.prescale > 1) {
+        fb->prescale.img = sg_make_image(&(sg_image_desc){
+            .usage.color_attachment = true,
+            .width = fb->desc.width * fb->desc.prescale,
+            .height = fb->desc.height * fb->desc.prescale,
+            .pixel_format = SG_PIXELFORMAT_RGBA8,
+            .label = "sfb-prescale-image",
+        });
+        valid &= sg_query_image_state(fb->prescale.img) == SG_RESOURCESTATE_VALID;
+        fb->prescale.tex_view = sg_make_view(&(sg_view_desc){
+            .texture.image = fb->prescale.img,
+            .label = "sfb-prescale-texture-view",
+        });
+        valid &= sg_query_view_state(fb->prescale.tex_view) == SG_RESOURCESTATE_VALID;
+        fb->prescale.att_view = sg_make_view(&(sg_view_desc){
+            .color_attachment.image = fb->prescale.img,
+            .label = "sfb-prescale-attachment-view",
+        });
+        valid &= sg_query_view_state(fb->prescale.att_view) == SG_RESOURCESTATE_VALID;
+    }
+    if (fb->desc.format == SFB_FORMAT_PALETTE8) {
+        fb->palette.img = sg_make_image(&(sg_image_desc){
+            .width = 256,
+            .height = 1,
+            .pixel_format = SG_PIXELFORMAT_RGBA8,
+            .label = "sfb-palette-img",
+        });
+        valid &= sg_query_image_state(fb->palette.img) == SG_RESOURCESTATE_VALID;
+        fb->palette.tex_view = sg_make_view(&(sg_view_desc){
+            .texture.image = fb->palette.img,
+        });
+        valid &= sg_query_view_state(fb->palette.tex_view) == SG_RESOURCESTATE_VALID;
+    }
+    fb->slot.state = valid ? SFB_RESOURCESTATE_VALID : SFB_RESOURCESTATE_FAILED;
 }
 
 static void _sfb_uninit_framebuffer(_sfb_framebuffer_t* fb) {
     SOKOL_ASSERT(fb && (fb->slot.state == SFB_RESOURCESTATE_VALID) || (fb->slot.state == SFB_RESOURCESTATE_FAILED));
-    // FIXME
+    // it's ok to call the destroy funcs with invalid id or in failed state
+    sg_destroy_image(fb->update.img);
+    sg_destroy_view(fb->update.tex_view);
+    sg_destroy_image(fb->prescale.img);
+    sg_destroy_view(fb->prescale.tex_view);
+    sg_destroy_view(fb->prescale.att_view);
+    sg_destroy_image(fb->palette.img);
+    sg_destroy_view(fb->palette.tex_view);
     fb->slot.state = SFB_RESOURCESTATE_ALLOC;
 }
 
@@ -655,6 +733,12 @@ SOKOL_API_IMPL void sfb_destroy_framebuffer(sfb_framebuffer fb_id) {
             SOKOL_ASSERT(fb->slot.state == SFB_RESOURCESTATE_INITIAL);
         }
     }
+}
+
+SOKOL_API_IMPL sfb_resource_state sfb_query_framebuffer_state(sfb_framebuffer fb_id) {
+    SOKOL_ASSERT(_SFB_INIT_TAG == _sfb.init_tag);
+    _sfb_framebuffer_t* fb = _sfb_lookup_framebuffer(fb_id.id);
+    return fb ? fb->slot.state : SFB_RESOURCESTATE_INVALID;
 }
 
 #endif // SOKOL_FRAMEBUFFER_IMPL
