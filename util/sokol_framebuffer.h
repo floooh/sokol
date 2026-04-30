@@ -164,23 +164,13 @@ typedef struct sfb_framebuffer_desc {
 } sfb_framebuffer_desc;
 
 /*
-    sfb_range
-
-    TODO: doc
-*/
-typedef struct sfb_range {
-    void* ptr;
-    size_t size;
-} sfb_range;
-
-/*
     sfb_update_desc
 
     TODO: doc
 */
 typedef struct sfb_update_desc {
-    sfb_range pixels;
-    sfb_range palette;
+    sg_range pixels;
+    sg_range palette;
 } sfb_update_desc;
 
 /*
@@ -212,8 +202,8 @@ typedef struct sfb_render_desc {
 typedef struct sfb_framebuffer_info {
     sg_image update_image;
     sg_view update_texture_view;
-    sg_image prescale_image;            // only valid when sfb_framebuffer_desc.prescale > 1
-    sg_view prescale_texture_view;      // only valid when sfb_framebuffer_desc.prescale > 1
+    sg_image prescale_image;
+    sg_view prescale_texture_view;
     sg_image palette_image;             // only valid when sfb_framebuffer_desc.format == SFB_FORMAT_PALETTE8
     sg_view palette_texture_view;       // only valid when sfb_framebuffer_desc.format == SFB_FORMAT_PALETTE8
 } sfb_framebuffer_info;
@@ -268,18 +258,21 @@ SOKOL_FRAMEBUFFER_API_DECL void sfb_shutdown(void);
 SOKOL_FRAMEBUFFER_API_DECL sfb_framebuffer sfb_make_framebuffer(const sfb_framebuffer_desc* desc);
 // destroy framebuffer object
 SOKOL_FRAMEBUFFER_API_DECL void sfb_destroy_framebuffer(sfb_framebuffer fb);
-// query framebuffer resource state (valid or failed)
-SOKOL_FRAMEBUFFER_API_DECL sfb_resource_state sfb_query_framebuffer_state(sfb_framebuffer fb);
 // update framebuffer and/or color palette content (must be called outside any sokol-gfx pass)
 SOKOL_FRAMEBUFFER_API_DECL void sfb_update(sfb_framebuffer fb, const sfb_update_desc* desc);
 // draw framebuffer content (must be called inside a sokol-gfx render pass)
 SOKOL_FRAMEBUFFER_API_DECL void sfb_render(sfb_framebuffer fb, const sfb_render_desc* desc);
 
+// query framebuffer resource state (valid or failed)
+SOKOL_FRAMEBUFFER_API_DECL sfb_resource_state sfb_query_framebuffer_state(sfb_framebuffer fb);
 // query current framebuffer properties
 SOKOL_FRAMEBUFFER_API_DECL sfb_framebuffer_info sfb_query_framebuffer_info(sfb_framebuffer fb);
-// helper function to create packed RGBA8 uint32_t from float r, g, b, a (0.0 .. 1.0)
+// query the framebuffer desc, with default values patched in
+SOKOL_FRAMEBUFFER_API_DECL sfb_framebuffer_desc sfb_query_framebuffer_desc(sfb_framebuffer fb);
+
+// helper function to create packed RGBA8 uint32_t from floats (useful for palette updates)
 SOKOL_FRAMEBUFFER_API_DECL uint32_t sfb_color_f32(float r, float g, float b, float a);
-// helper function to create packed RGBA8 uint32_t from uint8_t (0 .. 255)
+// helper function to create packed RGBA8 uint32_t from uint8_t's (usefule for palette updates)
 SOKOL_FRAMEBUFFER_API_DECL uint32_t sfb_color_u8(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 
 // FIXME: C++ overloads
@@ -372,6 +365,14 @@ static _sfb_state_t _sfb;
     _SFB_LOGITEM_XMACRO(FRAMEBUFFER_POOL_EXHAUSTED, "framebuffer pool exhausted (sfb_desc.framebuffer_pool_size)") \
     _SFB_LOGITEM_XMACRO(INVALID_FRAMEBUFFER_WIDTH, "sfb_framebuffer_desc.width must be > 0") \
     _SFB_LOGITEM_XMACRO(INVALID_FRAMEBUFFER_HEIGHT, "sfb_framebuffer_desc.height must be > 0") \
+    _SFB_LOGITEM_XMACRO(UPDATE_PIXEL_RANGE_EXPECTED, "sfb_update: sfb_update_desc.pixels.ptr cannot be 0") \
+    _SFB_LOGITEM_XMACRO(UPDATE_PALETTE_RANGE_EXPECTED, "sfb_update: sfb_update_desc.palette.ptr cannot be 0") \
+    _SFB_LOGITEM_XMACRO(UPDATE_PALETTE_RANGE_IGNORED, "sfb_update: sfb_update_desc.palette is ignored for non-paletted framebuffer") \
+    _SFB_LOGITEM_XMACRO(UPDATE_INVALID_FRAMEBUFFER_HANDLE, "sfb_update: framebuffer handle not valid") \
+    _SFB_LOGITEM_XMACRO(UPDATE_FRAMEBUFFER_RESOURCESTATE_NOT_VALID, "sfb_update: framebuffer not in valid resource state") \
+    _SFB_LOGITEM_XMACRO(UPDATE_PIXEL_RANGE_SIZE_RGBA8, "sfb_update: unexpected sfb_update_desc.pixels.size, must be (width * height * 4) bytes") \
+    _SFB_LOGITEM_XMACRO(UPDATE_PIXEL_RANGE_SIZE_PALETTE8, "sfb_update: unexpected sfb_update_desc.pixels.size, must be (width * height) bytes") \
+    _SFB_LOGITEM_XMACRO(UPDATE_PALETTE_RANGE_SIZE, "sfb_update: unexpected sfb_update_desc.palette.size, must be 256 * 4 bytes") \
 
 #define _SFB_LOGITEM_XMACRO(item,msg) _SFB_LOGITEM_##item,
 typedef enum {
@@ -617,7 +618,7 @@ static void _sfb_init_framebuffer(_sfb_framebuffer_t* fb, const sfb_framebuffer_
 
     bool valid = true;
     fb->update.img = sg_make_image(&(sg_image_desc){
-        .usage.stream_update = true,
+        .usage.dynamic_update = true,
         .width = fb->desc.width,
         .height = fb->desc.height,
         .pixel_format = fb->desc.format == SFB_FORMAT_RGBA8 ? SG_PIXELFORMAT_RGBA8 : SG_PIXELFORMAT_R8,
@@ -629,28 +630,27 @@ static void _sfb_init_framebuffer(_sfb_framebuffer_t* fb, const sfb_framebuffer_
         .label = "sfb-update-tex-view",
     });
     valid &= sg_query_view_state(fb->update.tex_view) == SG_RESOURCESTATE_VALID;
-    if (fb->desc.prescale > 1) {
-        fb->prescale.img = sg_make_image(&(sg_image_desc){
-            .usage.color_attachment = true,
-            .width = fb->desc.width * fb->desc.prescale,
-            .height = fb->desc.height * fb->desc.prescale,
-            .pixel_format = SG_PIXELFORMAT_RGBA8,
-            .label = "sfb-prescale-image",
-        });
-        valid &= sg_query_image_state(fb->prescale.img) == SG_RESOURCESTATE_VALID;
-        fb->prescale.tex_view = sg_make_view(&(sg_view_desc){
-            .texture.image = fb->prescale.img,
-            .label = "sfb-prescale-texture-view",
-        });
-        valid &= sg_query_view_state(fb->prescale.tex_view) == SG_RESOURCESTATE_VALID;
-        fb->prescale.att_view = sg_make_view(&(sg_view_desc){
-            .color_attachment.image = fb->prescale.img,
-            .label = "sfb-prescale-attachment-view",
-        });
-        valid &= sg_query_view_state(fb->prescale.att_view) == SG_RESOURCESTATE_VALID;
-    }
+    fb->prescale.img = sg_make_image(&(sg_image_desc){
+        .usage.color_attachment = true,
+        .width = fb->desc.width * fb->desc.prescale,
+        .height = fb->desc.height * fb->desc.prescale,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .label = "sfb-prescale-image",
+    });
+    valid &= sg_query_image_state(fb->prescale.img) == SG_RESOURCESTATE_VALID;
+    fb->prescale.tex_view = sg_make_view(&(sg_view_desc){
+        .texture.image = fb->prescale.img,
+        .label = "sfb-prescale-texture-view",
+    });
+    valid &= sg_query_view_state(fb->prescale.tex_view) == SG_RESOURCESTATE_VALID;
+    fb->prescale.att_view = sg_make_view(&(sg_view_desc){
+        .color_attachment.image = fb->prescale.img,
+        .label = "sfb-prescale-attachment-view",
+    });
+    valid &= sg_query_view_state(fb->prescale.att_view) == SG_RESOURCESTATE_VALID;
     if (fb->desc.format == SFB_FORMAT_PALETTE8) {
         fb->palette.img = sg_make_image(&(sg_image_desc){
+            .usage.dynamic_update = true,
             .width = 256,
             .height = 1,
             .pixel_format = SG_PIXELFORMAT_RGBA8,
@@ -685,6 +685,48 @@ static void _sfb_discard_all_resources(void) {
             _sfb_uninit_framebuffer(&_sfb.pools.framebuffers[i]);
         }
     }
+}
+
+static bool _sfb_validate_update(const _sfb_framebuffer_t* fb, const sfb_update_desc* desc) {
+    if (fb == 0) {
+        _SFB_ERROR(UPDATE_INVALID_FRAMEBUFFER_HANDLE);
+        return false;
+    }
+    if (fb->slot.state != SFB_RESOURCESTATE_VALID) {
+        _SFB_ERROR(UPDATE_FRAMEBUFFER_RESOURCESTATE_NOT_VALID);
+        return false;
+    }
+    if (desc->pixels.ptr == 0) {
+        _SFB_ERROR(UPDATE_PIXEL_RANGE_EXPECTED);
+        return false;
+    }
+    if (fb->desc.format == SFB_FORMAT_PALETTE8) {
+        if (desc->pixels.size != (size_t)(fb->desc.width * fb->desc.height)) {
+            _SFB_ERROR(UPDATE_PIXEL_RANGE_SIZE_PALETTE8);
+            return false;
+        }
+    } else {
+        if (desc->pixels.size != (size_t)(fb->desc.width * fb->desc.height * 4)) {
+            _SFB_ERROR(UPDATE_PIXEL_RANGE_SIZE_PALETTE8);
+            return false;
+        }
+    }
+    if (fb->desc.format == SFB_FORMAT_PALETTE8) {
+        if (desc->palette.ptr == 0) {
+            _SFB_ERROR(UPDATE_PALETTE_RANGE_EXPECTED);
+            return false;
+        }
+        if (desc->pixels.size != 256 * sizeof(uint32_t)) {
+            _SFB_ERROR(UPDATE_PALETTE_RANGE_SIZE);
+            return false;
+        }
+    } else {
+        if (desc->palette.ptr) {
+            _SFB_WARN(UPDATE_PALETTE_RANGE_IGNORED);
+            return true;
+        }
+    }
+    return true;
 }
 
 // >>public
@@ -740,5 +782,53 @@ SOKOL_API_IMPL sfb_resource_state sfb_query_framebuffer_state(sfb_framebuffer fb
     _sfb_framebuffer_t* fb = _sfb_lookup_framebuffer(fb_id.id);
     return fb ? fb->slot.state : SFB_RESOURCESTATE_INVALID;
 }
+
+SOKOL_API_IMPL sfb_framebuffer_info sfb_query_framebuffer_info(sfb_framebuffer fb_id) {
+    SOKOL_ASSERT(_SFB_INIT_TAG == _sfb.init_tag);
+    _sfb_framebuffer_t* fb = _sfb_lookup_framebuffer(fb_id.id);
+    if (fb) {
+        return (sfb_framebuffer_info){
+            .update_image = fb->update.img,
+            .update_texture_view = fb->update.tex_view,
+            .prescale_image = fb->prescale.img,
+            .prescale_texture_view = fb->prescale.tex_view,
+            .palette_image = fb->palette.img,
+            .palette_texture_view = fb->palette.tex_view,
+        };
+    } else {
+        return (sfb_framebuffer_info){0};
+    }
+}
+
+SOKOL_API_IMPL sfb_framebuffer_desc sfb_query_framebuffer_desc(sfb_framebuffer fb_id) {
+    SOKOL_ASSERT(_SFB_INIT_TAG == _sfb.init_tag);
+    _sfb_framebuffer_t* fb = _sfb_lookup_framebuffer(fb_id.id);
+    if (fb) {
+        return fb->desc;
+    } else {
+        return (sfb_framebuffer_desc){0};
+    }
+}
+
+SOKOL_API_IMPL void sfb_update(sfb_framebuffer fb_id, const sfb_update_desc* desc) {
+    SOKOL_ASSERT(_SFB_INIT_TAG == _sfb.init_tag);
+    SOKOL_ASSERT(desc);
+    _sfb_framebuffer_t* fb = _sfb_lookup_framebuffer(fb_id.id);
+    if (!_sfb_validate_update(fb, desc)) {
+        return;
+    }
+
+    // update dynamic textures
+    if (desc->pixels.ptr) {
+        sg_update_image(fb->update.img, &(sg_image_data){ .mip_levels[0] = desc->pixels });
+    }
+    if (desc->palette.ptr) {
+        sg_update_image(fb->palette.img, &(sg_image_data){ .mip_levels[0] = desc->palette });
+    }
+
+    // render into prescale-image even if prescale-factor is 1
+    // (in that case the cliprect is applied)
+}
+
 
 #endif // SOKOL_FRAMEBUFFER_IMPL
