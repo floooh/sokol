@@ -4101,6 +4101,10 @@ typedef struct {
         sg_shader rgba8;
         sg_shader display;
     } shd;
+    struct {
+        sg_sampler nearest;
+        sg_sampler linear;
+    } smp;
 } _sfb_state_t;
 static _sfb_state_t _sfb;
 
@@ -4840,10 +4844,32 @@ static void _sfb_create_shaders(void) {
     _sfb_create_display_shader();
 }
 
-static void _sfb_discard_shaders(void) {
+static void _sfb_destroy_shaders(void) {
     sg_destroy_shader(_sfb.shd.palette8);
     sg_destroy_shader(_sfb.shd.rgba8);
     sg_destroy_shader(_sfb.shd.display);
+}
+
+static void _sfb_create_samplers(void) {
+    _sfb.smp.nearest = sg_make_sampler(&(sg_sampler_desc){
+        .min_filter = SG_FILTER_NEAREST,
+        .mag_filter = SG_FILTER_NEAREST,
+        .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
+        .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
+        .label = "sfb-nearest-sampler",
+    });
+    _sfb.smp.linear = sg_make_sampler(&(sg_sampler_desc){
+        .min_filter = SG_FILTER_LINEAR,
+        .mag_filter = SG_FILTER_LINEAR,
+        .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
+        .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
+        .label = "sfb-linear-sampler",
+    });
+}
+
+static void _sfb_destroy_samplers(void) {
+    sg_destroy_sampler(_sfb.smp.nearest);
+    sg_destroy_sampler(_sfb.smp.linear);
 }
 
 // >>public
@@ -4856,12 +4882,14 @@ SOKOL_API_IMPL void sfb_setup(const sfb_desc* desc) {
     _sfb.init_tag = _SFB_INIT_TAG;
     _sfb.desc = _sfb_desc_defaults(desc);
     _sfb_setup_pools(&_sfb.pools, &_sfb.desc);
+    _sfb_create_samplers();
     _sfb_create_shaders();
 }
 
 SOKOL_API_IMPL void sfb_shutdown(void) {
     SOKOL_ASSERT(_SFB_INIT_TAG == _sfb.init_tag);
-    _sfb_discard_shaders();
+    _sfb_destroy_shaders();
+    _sfb_destroy_samplers();
     _sfb_discard_all_resources();
     _sfb_discard_pools(&_sfb.pools);
     _sfb_clear(&_sfb, sizeof(_sfb));
