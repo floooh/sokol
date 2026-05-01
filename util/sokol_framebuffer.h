@@ -302,6 +302,10 @@ SOKOL_FRAMEBUFFER_API_DECL uint32_t sfb_color_u8(uint8_t r, uint8_t g, uint8_t b
     #define SOKOL_ASSERT(c) assert(c)
 #endif
 
+//>#shdgen
+
+//<#shdgen
+
 #define _sfb_def(val, def) (((val) == 0) ? (def) : (val))
 
 // >>structs
@@ -355,6 +359,11 @@ typedef struct {
     uint32_t init_tag;
     sfb_desc desc;
     _sfb_pools_t pools;
+    struct {
+        sg_shader palette8;
+        sg_shader rgba8;
+        sg_shader display;
+    } shd;
 } _sfb_state_t;
 static _sfb_state_t _sfb;
 
@@ -727,6 +736,12 @@ static bool _sfb_validate_update(const _sfb_framebuffer_t* fb, const sfb_update_
         }
     }
     return true;
+}
+
+static void _sfb_create_palette8_shader(void) {
+    _sbf.shd.palette8 = sg_make_shader(&(sg_shader_desc){
+        .
+    });
 }
 
 // >>public
