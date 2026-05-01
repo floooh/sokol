@@ -4470,15 +4470,15 @@ static bool _sfb_validate_update(const _sfb_framebuffer_t* fb, const sfb_update_
     return true;
 }
 
-static void _sfb_create_shaders(void) {
+static void _sfb_create_palette8_shader(void) {
     sg_shader_function vs = {0};
     sg_shader_function fs = {0};
     #if defined SOKOL_GLCORE
         vs.source = (const char*)_sfb_palette8_vs_source_glsl410;
-        fs.source = (const char*)_sfb_display_fs_source_glsl410;
+        fs.source = (const char*)_sfb_palette8_fs_source_glsl410;
     #elif defined(SOKOL_GLES3)
         vs.source = (const char*)_sfb_palette8_vs_source_glsl300es;
-        fs.source = (const char*)_sfb_display_fs_source_glsl300es;
+        fs.source = (const char*)_sfb_palette8_fs_source_glsl300es;
     #elif defined(SOKOL_METAL)
         vs.entry = "main0";
         fs.entry = "main0";
@@ -4584,6 +4584,196 @@ static void _sfb_create_shaders(void) {
             },
         }
     });
+}
+
+static void _sfb_create_rgba8_shader(void) {
+    sg_shader_function vs = {0};
+    sg_shader_function fs = {0};
+    #if defined SOKOL_GLCORE
+        vs.source = (const char*)_sfb_rgba8_vs_source_glsl410;
+        fs.source = (const char*)_sfb_rgba8_fs_source_glsl410;
+    #elif defined(SOKOL_GLES3)
+        vs.source = (const char*)_sfb_rgba8_vs_source_glsl300es;
+        fs.source = (const char*)_sfb_rgba8_fs_source_glsl300es;
+    #elif defined(SOKOL_METAL)
+        vs.entry = "main0";
+        fs.entry = "main0";
+        switch (sg_query_backend()) {
+            case SG_BACKEND_METAL_MACOS:
+                vs.bytecode = SG_RANGE(_sfb_rgba8_vs_bytecode_metal_macos);
+                fs.bytecode = SG_RANGE(_sfb_rgba8_fs_bytecode_metal_macos);
+                break;
+            case SG_BACKEND_METAL_IOS:
+                vs.bytecode = SG_RANGE(_sfb_rgba8_vs_bytecode_metal_ios);
+                fs.bytecode = SG_RANGE(_sfb_rgba8_fs_bytecode_metal_ios);
+                break;
+            default:
+                vs.source = (const char*)_sfb_rgba8_vs_source_metal_sim;
+                fs.source = (const char*)_sfb_rgba8_fs_source_metal_sim;
+                break;
+        }
+    #elif defined(SOKOL_D3D11)
+        vs.bytecode = SG_RANGE(_sbf_rgba8_vs_bytecode_hlsl4);
+        fs.bytecode = SG_RANGE(_sbf_rgba8_fs_bytecode_hlsl4);
+    #elif defined(SOKOL_WGPU)
+        vs.source = (const char*)_sfb_rgba8_vs_source_wgsl;
+        fs.source = (const char*)_sfb_rgba8_fs_source_wgsl;
+    #elif defined(SOKOL_VULKAN)
+        vs.bytecode = SG_RANGE(_sfb_rgba8_vs_bytecode_spirv_vk);
+        fs.bytecode = SG_RANGE(_sfb_rgba8_fs_bytecode_spirv_vk);
+    #else
+        vs.source = (const char*)_sfb_rgba8_vs_source_dummy;
+        fs.source = (const char*)_sfb_rgba8_fs_source_dummy;
+    #endif
+    _sfb.shd.rgba8 = sg_make_shader(&(sg_shader_desc){
+        .label = "sbf-rgba8-shader",
+        .vertex_func = vs,
+        .fragment_func = fs,
+        .attrs = {
+            [0] = {
+                .glsl_name = "in_pos",
+                .base_type = SG_SHADERATTRBASETYPE_FLOAT,
+                .hlsl_sem_name = "TEXCOORD",
+                .hlsl_sem_index = 0
+            },
+            [1] = {
+                .glsl_name = "in_uv",
+                .base_type = SG_SHADERATTRBASETYPE_FLOAT,
+                .hlsl_sem_name = "TEXCOORD",
+                .hlsl_sem_index = 1,
+            },
+        },
+        .uniform_blocks[0] = {
+            .stage = SG_SHADERSTAGE_VERTEX,
+            .layout = SG_UNIFORMLAYOUT_STD140,
+            .size = sizeof(_sfb_vs_params_t),
+            .hlsl_register_b_n = 0,
+            .msl_buffer_n = 0,
+            .wgsl_group0_binding_n = 0,
+            .spirv_set0_binding_n = 0,
+            .glsl_uniforms[0] = {
+                .type = SG_UNIFORMTYPE_FLOAT4,
+                .array_count = 1,
+                .glsl_name = "vs_params",
+            },
+        },
+        .views[0].texture = {
+            .stage = SG_SHADERSTAGE_FRAGMENT,
+            .image_type = SG_IMAGETYPE_2D,
+            .sample_type = SG_IMAGESAMPLETYPE_FLOAT,
+            .hlsl_register_t_n = 0,
+            .msl_texture_n = 0,
+            .wgsl_group1_binding_n = 0,
+            .spirv_set1_binding_n = 0,
+        },
+        .samplers[0] = {
+            .stage = SG_SHADERSTAGE_FRAGMENT,
+            .sampler_type = SG_SAMPLERTYPE_FILTERING,
+            .hlsl_register_s_n = 0,
+            .msl_sampler_n = 0,
+            .wgsl_group1_binding_n = 0,
+            .spirv_set1_binding_n = 0,
+        },
+        .texture_sampler_pairs = {
+            [0] = {
+                .stage = SG_SHADERSTAGE_FRAGMENT,
+                .view_slot = 0,
+                .sampler_slot = 0,
+                .glsl_name = "fb_tex_smp",
+            },
+        },
+    });
+}
+
+static void _sfb_create_display_shader(void) {
+    sg_shader_function vs = {0};
+    sg_shader_function fs = {0};
+    #if defined SOKOL_GLCORE
+        vs.source = (const char*)_sfb_display_vs_source_glsl410;
+        fs.source = (const char*)_sfb_display_fs_source_glsl410;
+    #elif defined(SOKOL_GLES3)
+        vs.source = (const char*)_sfb_display_vs_source_glsl300es;
+        fs.source = (const char*)_sfb_display_fs_source_glsl300es;
+    #elif defined(SOKOL_METAL)
+        vs.entry = "main0";
+        fs.entry = "main0";
+        switch (sg_query_backend()) {
+            case SG_BACKEND_METAL_MACOS:
+                vs.bytecode = SG_RANGE(_sfb_display_vs_bytecode_metal_macos);
+                fs.bytecode = SG_RANGE(_sfb_display_fs_bytecode_metal_macos);
+                break;
+            case SG_BACKEND_METAL_IOS:
+                vs.bytecode = SG_RANGE(_sfb_display_vs_bytecode_metal_ios);
+                fs.bytecode = SG_RANGE(_sfb_display_fs_bytecode_metal_ios);
+                break;
+            default:
+                vs.source = (const char*)_sfb_display_vs_source_metal_sim;
+                fs.source = (const char*)_sfb_display_fs_source_metal_sim;
+                break;
+        }
+    #elif defined(SOKOL_D3D11)
+        vs.bytecode = SG_RANGE(_sbf_display_vs_bytecode_hlsl4);
+        fs.bytecode = SG_RANGE(_sbf_display_fs_bytecode_hlsl4);
+    #elif defined(SOKOL_WGPU)
+        vs.source = (const char*)_sfb_display_vs_source_wgsl;
+        fs.source = (const char*)_sfb_display_fs_source_wgsl;
+    #elif defined(SOKOL_VULKAN)
+        vs.bytecode = SG_RANGE(_sfb_display_vs_bytecode_spirv_vk);
+        fs.bytecode = SG_RANGE(_sfb_display_fs_bytecode_spirv_vk);
+    #else
+        vs.source = (const char*)_sfb_display_vs_source_dummy;
+        fs.source = (const char*)_sfb_display_fs_source_dummy;
+    #endif
+    _sfb.shd.rgba8 = sg_make_shader(&(sg_shader_desc){
+        .label = "sbf-display-shader",
+        .vertex_func = vs,
+        .fragment_func = fs,
+        .attrs = {
+            [0] = {
+                .glsl_name = "in_pos",
+                .base_type = SG_SHADERATTRBASETYPE_FLOAT,
+                .hlsl_sem_name = "TEXCOORD",
+                .hlsl_sem_index = 0
+            },
+            [1] = {
+                .glsl_name = "in_uv",
+                .base_type = SG_SHADERATTRBASETYPE_FLOAT,
+                .hlsl_sem_name = "TEXCOORD",
+                .hlsl_sem_index = 1,
+            },
+        },
+        .views[0].texture = {
+            .stage = SG_SHADERSTAGE_FRAGMENT,
+            .image_type = SG_IMAGETYPE_2D,
+            .sample_type = SG_IMAGESAMPLETYPE_FLOAT,
+            .hlsl_register_t_n = 0,
+            .msl_texture_n = 0,
+            .wgsl_group1_binding_n = 0,
+            .spirv_set1_binding_n = 0,
+        },
+        .samplers[0] = {
+            .stage = SG_SHADERSTAGE_FRAGMENT,
+            .sampler_type = SG_SAMPLERTYPE_FILTERING,
+            .hlsl_register_s_n = 0,
+            .msl_sampler_n = 0,
+            .wgsl_group1_binding_n = 0,
+            .spirv_set1_binding_n = 0,
+        },
+        .texture_sampler_pairs = {
+            [0] = {
+                .stage = SG_SHADERSTAGE_FRAGMENT,
+                .view_slot = 0,
+                .sampler_slot = 0,
+                .glsl_name = "tex_smp",
+            },
+        },
+    });
+}
+
+static void _sfb_create_shaders(void) {
+    _sfb_create_palette8_shader();
+    _sfb_create_rgba8_shader();
+    _sfb_create_display_shader();
 }
 
 static void _sfb_discard_shaders(void) {
