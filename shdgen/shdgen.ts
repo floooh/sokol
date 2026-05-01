@@ -1,50 +1,33 @@
 import { parseArgs } from 'jsr:@std/cli@^1/parse-args';
 
-type Shader = { filename: string, prefix: string, prog: string };
-type Header = { path: string, shaders: Shader[] };
-
-const headers: Header[] = [
-    // sokol_gl.h
-    {
-        path: '../util/sokol_gl.h',
-        shaders: [ { filename: 'sokol_gl.glsl', prefix: '_sgl', prog: 'shd' } ],
-    },
-    // sokol_debugtext.h
-    {
-        path: '../util/sokol_debugtext.h',
-        shaders: [ { filename: 'sokol_debugtext.glsl', prefix: '_sdtx', prog: 'shd' } ],
-    },
-    // sokol_fontstash.h
-    {
-        path: '../util/sokol_fontstash.h',
-        shaders: [ { filename: 'sokol_fontstash.glsl', prefix: '_sfons', prog: 'shd' } ],
-    },
-    // sokol_imgui.h
-    {
-        path: '../util/sokol_imgui.h',
-        shaders: [ { filename: 'sokol_imgui.glsl', prefix: '_simgui', prog: 'shd' } ],
-    },
-    // sokol_nuklear.h
-    {
-        path: '../util/sokol_nuklear.h',
-        shaders: [ { filename: 'sokol_nuklear.glsl', prefix: '_snk', prog: 'shd' } ],
-    },
-    // sokol_spine.h
-    {
-        path: '../util/sokol_spine.h',
-        shaders: [ { filename: 'sokol_spine.glsl', prefix: '_sspine', prog: 'shd' } ],
-    },
-];
-
 const denoArgs = parseArgs(Deno.args, {
-    boolean: ['hlsl'],
-    string: ['shdcroot', 'branch'],
+    boolean: ['hlsl', 'local'],
+    string: ['shdcroot', 'branch', 'only'],
     default: {
         hlsl: false,
+        local: false,
         shdcroot: '../../sokol-tools-bin',
         branch: 'master',
+        only: null,
     },
 });
+
+type Item = { header: string, shader: string, prefix: string, progs: string[] };
+
+const items: Item[] = [
+    { header: '../util/sokol_gl.h', shader: 'sokol_gl.glsl', prefix: '_sgl', progs: ['shd'] },
+    { header: '../util/sokol_debugtext.h', shader: 'sokol_debugtext.glsl', prefix: '_sdtx', progs: ['shd'] },
+    { header: '../util/sokol_fontstash.h', shader: 'sokol_fontstash.glsl', prefix: '_sfons', progs: ['shd'] },
+    { header: '../util/sokol_imgui.h', shader: 'sokol_imgui.glsl', prefix: '_simgui', progs: ['shd'] },
+    { header: '../util/sokol_nuklear.h', shader: 'sokol_nuklear.glsl', prefix: '_snk', progs: ['shd'] },
+    { header: '../util/sokol_spine.h', shader: 'sokol_spine.glsl', prefix: '_sspine', progs: ['shd'] },
+    {
+        header: '../util/sokol_framebuffer.h',
+        shader: 'sokol_framebuffer.glsl',
+        prefix:  '_sfb',
+        progs: ['rgba8', 'palette8', 'display'],
+    }
+];
 
 function dirExists(path: string): boolean {
     try {
@@ -62,34 +45,47 @@ async function main(): Promise<void> {
 
     if (denoArgs.hlsl) {
         // only compile hlsl shaders into binaries (runs on CI)
-        for (const hdr of headers) {
-            for (const shd of hdr.shaders) {
-                await compile(shd, true);
-            }
+        for (const item of items) {
+            await compile(item);
         }
     } else {
         // compile non-HLSL shader locally, and HLSL by triggering a remote Github CI run
-        await compileHlslRemote();
-        for (const hdr of headers) {
+        if (!denoArgs.local) {
+            await compileHlslRemote();
+        }
+        for (const item of items) {
+            await compile(item);
             const outp: string[] = []
-            for (const shd of hdr.shaders) {
-                await compile(shd, false);
-                outp.push(...gatherShader(shd));
+            for (const prog of item.progs) {
+                outp.push(...gatherShader(item, prog));
             }
-            inject(hdr.path, outp);
+            if (denoArgs.only && !item.header.includes(denoArgs.only)) {
+                continue;
+            }
+            inject(item.header, outp);
         }
     }
 }
 
-async function compile(shd: Shader, hlsl: boolean): Promise<void> {
-    await shdc([
-        '-i', shd.filename,
-        '-o', `out/${shd.filename}`,
+async function compile(item: Item): Promise<void> {
+    let slangs: string;
+    if (denoArgs.hlsl) {
+        slangs = 'hlsl4';
+    } else {
+        slangs = 'glsl410:glsl300es:metal_macos:metal_ios:metal_sim:wgsl:spirv_vk';
+        if (denoArgs.local) {
+            slangs += ':hlsl4';
+        }
+    }
+    const args = [
+        '-i', item.shader,
         '-t', 'out/tmpdir',
-        '-l', hlsl ? 'hlsl4' : 'glsl410:glsl300es:metal_macos:metal_ios:metal_sim:wgsl:spirv_vk',
-        '-f', 'bare_yaml',
+        '-l', slangs,
         '-b',
-    ]);
+    ];
+    // compile once as regular C header and once as bare_yaml
+    await shdc([...args, '-o', `out/${item.shader}.h`]);
+    await shdc([...args, '-o', `out/${item.shader}`, '-f', 'bare_yaml']);
 }
 
 function bytesToCArray(name: string, bytes: Uint8Array): string[] {
@@ -104,41 +100,45 @@ function bytesToCArray(name: string, bytes: Uint8Array): string[] {
     return lines;
 }
 
-function gatherSlang(shd: Shader, slang: string, ext: string, isBinary: boolean): string[] {
+function gatherSlang(item: Item, prog: string, slang: string, ext: string, isBinary: boolean): string[] {
     const res: string[] = [];
     for (const stage of ['vertex', 'fragment']) {
-        const path = `out/${shd.filename}_${shd.prog}_${slang}_${stage}${ext}`;
+        const path = `out/${item.shader}_${prog}_${slang}_${stage}${ext}`;
         let bytes: Uint8Array = Deno.readFileSync(path);
         if (!isBinary) {
             // for source code, append a terminating zero
             bytes = new Uint8Array([...bytes, 0]);
         }
-        const cArrayName = `${shd.prefix}_${shd.prog}_${stage==='vertex'?'vs':'fs'}_${isBinary?'bytecode':'source'}_${slang}`;
+        const cArrayName = `${item.prefix}_${prog}_${stage==='vertex'?'vs':'fs'}_${isBinary?'bytecode':'source'}_${slang}`;
         const cArray = bytesToCArray(cArrayName, bytes);
         res.push(...cArray);
     }
     return res;
 }
 
-function gatherShader(shd: Shader): string[] {
+function gatherShader(item: Item, prog: string): string[] {
     const res: string[] = [];
     res.push('#if defined(SOKOL_GLCORE)');
-    res.push(...gatherSlang(shd, 'glsl410', '.glsl', false));
+    res.push(...gatherSlang(item, prog, 'glsl410', '.glsl', false));
     res.push('#elif defined(SOKOL_GLES3)');
-    res.push(...gatherSlang(shd, 'glsl300es', '.glsl', false));
+    res.push(...gatherSlang(item, prog, 'glsl300es', '.glsl', false));
     res.push('#elif defined(SOKOL_METAL)');
-    res.push(...gatherSlang(shd, 'metal_macos', '.metallib', true));
-    res.push(...gatherSlang(shd, 'metal_ios', '.metallib', true));
-    res.push(...gatherSlang(shd, 'metal_sim', '.metal', false));
+    res.push(...gatherSlang(item, prog, 'metal_macos', '.metallib', true));
+    res.push(...gatherSlang(item, prog, 'metal_ios', '.metallib', true));
+    res.push(...gatherSlang(item, prog, 'metal_sim', '.metal', false));
     res.push('#elif defined(SOKOL_D3D11)');
-    res.push(...gatherSlang(shd, 'hlsl4', '.fxc', true));
+    if (denoArgs.local) {
+        res.push(...gatherSlang(item, prog, 'hlsl4', '.hlsl', false));
+    } else {
+        res.push(...gatherSlang(item, prog, 'hlsl4', '.fxc', true));
+    }
     res.push('#elif defined(SOKOL_WGPU)');
-    res.push(...gatherSlang(shd, 'wgsl', '.wgsl', false));
+    res.push(...gatherSlang(item, prog, 'wgsl', '.wgsl', false));
     res.push('#elif defined(SOKOL_VULKAN)');
-    res.push(...gatherSlang(shd, 'spirv_vk', '', true));
+    res.push(...gatherSlang(item, prog, 'spirv_vk', '', true));
     res.push('#elif defined(SOKOL_DUMMY_BACKEND)');
-    res.push(`static const char* ${shd.prefix}_vs_source_dummy = "";`);
-    res.push(`static const char* ${shd.prefix}_fs_source_dummy = "";`);
+    res.push(`static const char* ${item.prefix}_${prog}_vs_source_dummy = "";`);
+    res.push(`static const char* ${item.prefix}_${prog}_fs_source_dummy = "";`);
     res.push('#else');
     res.push('#error "Please define one of SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU, SOKOL_VULKAN or SOKOL_DUMMY_BACKEND!"');
     res.push('#endif');
