@@ -4066,6 +4066,11 @@ typedef struct {
         sg_image img;
         sg_view tex_view;
     } palette;
+    // FIXME: rendering should be bufferless
+    struct {
+        sg_buffer offscreen;
+        sg_buffer display;
+    } vbuf;
 } _sfb_framebuffer_t;
 
 // resource pool housekeeping struct
@@ -4342,6 +4347,48 @@ static sfb_framebuffer_desc _sfb_framebuffer_desc_defaults(const sfb_framebuffer
     return res;
 }
 
+// FIXME: rendering should be bufferless
+static const float _sfb_verts[] = {
+    0.0f, 0.0f, 0.0f, 0.0f,
+    1.0f, 0.0f, 1.0f, 0.0f,
+    0.0f, 1.0f, 0.0f, 1.0f,
+    1.0f, 1.0f, 1.0f, 1.0f
+};
+
+static const float _sfb_verts_rot[] = {
+    0.0f, 0.0f, 1.0f, 0.0f,
+    1.0f, 0.0f, 1.0f, 1.0f,
+    0.0f, 1.0f, 0.0f, 0.0f,
+    1.0f, 1.0f, 0.0f, 1.0f
+};
+
+static const float _sfb_verts_flipped[] = {
+    0.0f, 0.0f, 0.0f, 1.0f,
+    1.0f, 0.0f, 1.0f, 1.0f,
+    0.0f, 1.0f, 0.0f, 0.0f,
+    1.0f, 1.0f, 1.0f, 0.0f
+};
+
+static const float _sfb_verts_flipped_rot[] = {
+    0.0f, 0.0f, 1.0f, 1.0f,
+    1.0f, 0.0f, 1.0f, 0.0f,
+    0.0f, 1.0f, 0.0f, 1.0f,
+    1.0f, 1.0f, 0.0f, 0.0f
+};
+
+static sg_range _sfb_select_vertices(sfb_orientation orientation) {
+    SOKOL_ASSERT(sizeof(_sfb_verts) == sizeof(_sfb_verts_rot));
+    SOKOL_ASSERT(sizeof(_sfb_verts) == sizeof(_sfb_verts_flipped));
+    SOKOL_ASSERT(sizeof(_sfb_verts) == sizeof(_sfb_verts_flipped_rot));
+    const bool portrait = orientation == SFB_ORIENTATION_PORTRAIT;
+    return (sg_range){
+        .ptr = sg_query_features().origin_top_left ?
+            (portrait ? _sfb_verts_rot : _sfb_verts) :
+            (portrait ? _sfb_verts_flipped_rot : _sfb_verts_flipped),
+        .size = sizeof(_sfb_verts),
+    };
+}
+
 static void _sfb_init_framebuffer(_sfb_framebuffer_t* fb, const sfb_framebuffer_desc* desc) {
     SOKOL_ASSERT(fb && (fb->slot.state == SFB_RESOURCESTATE_ALLOC));
     SOKOL_ASSERT(desc);
@@ -4358,6 +4405,8 @@ static void _sfb_init_framebuffer(_sfb_framebuffer_t* fb, const sfb_framebuffer_
     fb->desc = *desc;
 
     bool valid = true;
+
+    // create images and views
     fb->update.img = sg_make_image(&(sg_image_desc){
         .usage.dynamic_update = true,
         .width = fb->desc.width,
@@ -4403,6 +4452,19 @@ static void _sfb_init_framebuffer(_sfb_framebuffer_t* fb, const sfb_framebuffer_
         });
         valid &= sg_query_view_state(fb->palette.tex_view) == SG_RESOURCESTATE_VALID;
     }
+
+    // create vertex buffers (FIXME: rendering should be bufferless)
+    fb->vbuf.offscreen = sg_make_buffer(&(sg_buffer_desc){
+        .data = SG_RANGE(_sfb_verts),
+        .label = "sfb-offscreen-vbuf",
+    });
+    valid &= sg_query_buffer_state(fb->vbuf.offscreen) == SG_RESOURCESTATE_VALID;
+    fb->vbuf.display = sg_make_buffer(&(sg_buffer_desc){
+        .data = _sfb_select_vertices(fb->desc.orientation),
+        .label = "sfb-display-vbuf",
+    });
+    valid &= sg_query_buffer_state(fb->vbuf.display) == SG_RESOURCESTATE_VALID;
+
     fb->slot.state = valid ? SFB_RESOURCESTATE_VALID : SFB_RESOURCESTATE_FAILED;
 }
 
@@ -4416,6 +4478,8 @@ static void _sfb_uninit_framebuffer(_sfb_framebuffer_t* fb) {
     sg_destroy_view(fb->prescale.att_view);
     sg_destroy_image(fb->palette.img);
     sg_destroy_view(fb->palette.tex_view);
+    sg_destroy_buffer(fb->vbuf.offscreen);
+    sg_destroy_buffer(fb->vbuf.display);
     fb->slot.state = SFB_RESOURCESTATE_ALLOC;
 }
 
