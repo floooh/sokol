@@ -4066,6 +4066,7 @@ typedef struct {
         sg_image img;
         sg_view tex_view;
     } palette;
+    sg_pipeline offscreen_pip;
     // FIXME: rendering should be bufferless
     struct {
         sg_buffer offscreen;
@@ -4105,6 +4106,7 @@ typedef struct {
         sg_sampler nearest;
         sg_sampler linear;
     } smp;
+    sg_pipeline display_pip;
 } _sfb_state_t;
 static _sfb_state_t _sfb;
 
@@ -4469,6 +4471,20 @@ static void _sfb_init_framebuffer(_sfb_framebuffer_t* fb, const sfb_framebuffer_
     });
     valid &= sg_query_buffer_state(fb->vbuf.display) == SG_RESOURCESTATE_VALID;
 
+    // pipeline object
+    fb->offscreen_pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = fb->desc.format == SFB_FORMAT_PALETTE8 ? _sfb.shd.palette8 : _sfb.shd.rgba8,
+        // FIXME: rendering should be bufferless
+        .layout.attrs = {
+            [0].format = SG_VERTEXFORMAT_FLOAT2,
+            [1].format = SG_VERTEXFORMAT_FLOAT2,
+        },
+        .primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP,
+        .depth.pixel_format = SG_PIXELFORMAT_NONE,
+        .label = "sfb-pipeline",
+    });
+    valid &= sg_query_pipeline_state(fb->offscreen_pip) == SG_RESOURCESTATE_VALID;
+
     fb->slot.state = valid ? SFB_RESOURCESTATE_VALID : SFB_RESOURCESTATE_FAILED;
 }
 
@@ -4484,6 +4500,7 @@ static void _sfb_uninit_framebuffer(_sfb_framebuffer_t* fb) {
     sg_destroy_view(fb->palette.tex_view);
     sg_destroy_buffer(fb->vbuf.offscreen);
     sg_destroy_buffer(fb->vbuf.display);
+    sg_destroy_pipeline(fb->offscreen_pip);
     fb->slot.state = SFB_RESOURCESTATE_ALLOC;
 }
 
@@ -4792,7 +4809,7 @@ static void _sfb_create_display_shader(void) {
         vs.source = (const char*)_sfb_display_vs_source_dummy;
         fs.source = (const char*)_sfb_display_fs_source_dummy;
     #endif
-    _sfb.shd.rgba8 = sg_make_shader(&(sg_shader_desc){
+    _sfb.shd.display = sg_make_shader(&(sg_shader_desc){
         .label = "sbf-display-shader",
         .vertex_func = vs,
         .fragment_func = fs,
@@ -4872,6 +4889,22 @@ static void _sfb_destroy_samplers(void) {
     sg_destroy_sampler(_sfb.smp.linear);
 }
 
+static void _sfb_create_display_pipeline(void) {
+    _sfb.display_pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = _sfb.shd.display,
+        .layout.attrs = {
+            [0].format = SG_VERTEXFORMAT_FLOAT2,
+            [1].format = SG_VERTEXFORMAT_FLOAT2,
+        },
+        .primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP,
+        .label = "sfb-display-pipeline",
+    });
+}
+
+static void _sfb_destroy_display_pipeline(void) {
+    sg_destroy_pipeline(_sfb.display_pip);
+}
+
 // >>public
 #define _SFB_INIT_TAG (0xDCBADCBA)
 
@@ -4884,10 +4917,12 @@ SOKOL_API_IMPL void sfb_setup(const sfb_desc* desc) {
     _sfb_setup_pools(&_sfb.pools, &_sfb.desc);
     _sfb_create_samplers();
     _sfb_create_shaders();
+    _sfb_create_display_pipeline();
 }
 
 SOKOL_API_IMPL void sfb_shutdown(void) {
     SOKOL_ASSERT(_SFB_INIT_TAG == _sfb.init_tag);
+    _sfb_destroy_display_pipeline();
     _sfb_destroy_shaders();
     _sfb_destroy_samplers();
     _sfb_discard_all_resources();
