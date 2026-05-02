@@ -171,6 +171,7 @@ typedef struct sfb_framebuffer_desc {
 typedef struct sfb_update_desc {
     sg_range pixels;
     sg_range palette;
+    sfb_rect cliprect;  // clip rectangle in pixels, e.g. visible area in framebuffer, default: [0, 0, width, height]
 } sfb_update_desc;
 
 /*
@@ -180,19 +181,10 @@ typedef struct sfb_update_desc {
 */
 typedef struct sfb_render_overrides {
     sg_pipeline pip;
-    sg_bindings bindings;
+    sg_view views[SG_MAX_VIEW_BINDSLOTS];
+    sg_sampler samplers[SG_MAX_SAMPLER_BINDSLOTS];
     sg_range uniforms[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
 } sfb_render_overrides;
-
-/*
-    sfb_render_desc
-
-    TODO: doc
-*/
-typedef struct sfb_render_desc {
-    sfb_rect cliprect;  // clip rectangle in pixels, e.g. visible area inside framebuffer, default: [0, 0, width, height]
-    sfb_render_overrides overrides; // for plugging in CRT shaders etc...
-} sfb_render_desc;
 
 /*
     sfb_framebuffer_info
@@ -260,8 +252,10 @@ SOKOL_FRAMEBUFFER_API_DECL sfb_framebuffer sfb_make_framebuffer(const sfb_frameb
 SOKOL_FRAMEBUFFER_API_DECL void sfb_destroy_framebuffer(sfb_framebuffer fb);
 // update framebuffer and/or color palette content (must be called outside any sokol-gfx pass)
 SOKOL_FRAMEBUFFER_API_DECL void sfb_update(sfb_framebuffer fb, const sfb_update_desc* desc);
-// draw framebuffer content (must be called inside a sokol-gfx render pass)
-SOKOL_FRAMEBUFFER_API_DECL void sfb_render(sfb_framebuffer fb, const sfb_render_desc* desc);
+// draw framebuffer content with default shader (must be called inside a sokol-gfx render pass)
+SOKOL_FRAMEBUFFER_API_DECL void sfb_render(sfb_framebuffer fb);
+// draw framebuffer content with injected shader (must be called inside a sokol-gfx render pass)
+SOKOL_FRAMEBUFFER_API_DECL void sfb_render_ex(sfb_framebuffer fb, const sfb_render_overrides* overrides);
 
 // query framebuffer resource state (valid or failed)
 SOKOL_FRAMEBUFFER_API_DECL sfb_resource_state sfb_query_framebuffer_state(sfb_framebuffer fb);
@@ -4117,14 +4111,16 @@ static _sfb_state_t _sfb;
     _SFB_LOGITEM_XMACRO(FRAMEBUFFER_POOL_EXHAUSTED, "framebuffer pool exhausted (sfb_desc.framebuffer_pool_size)") \
     _SFB_LOGITEM_XMACRO(INVALID_FRAMEBUFFER_WIDTH, "sfb_framebuffer_desc.width must be > 0") \
     _SFB_LOGITEM_XMACRO(INVALID_FRAMEBUFFER_HEIGHT, "sfb_framebuffer_desc.height must be > 0") \
+    _SFB_LOGITEM_XMACRO(UPDATE_INVALID_FRAMEBUFFER_HANDLE, "sfb_update: framebuffer handle not valid") \
+    _SFB_LOGITEM_XMACRO(UPDATE_FRAMEBUFFER_RESOURCESTATE_NOT_VALID, "sfb_update: framebuffer not in valid resource state") \
     _SFB_LOGITEM_XMACRO(UPDATE_PIXEL_RANGE_EXPECTED, "sfb_update: sfb_update_desc.pixels.ptr cannot be 0") \
     _SFB_LOGITEM_XMACRO(UPDATE_PALETTE_RANGE_EXPECTED, "sfb_update: sfb_update_desc.palette.ptr cannot be 0") \
     _SFB_LOGITEM_XMACRO(UPDATE_PALETTE_RANGE_IGNORED, "sfb_update: sfb_update_desc.palette is ignored for non-paletted framebuffer") \
-    _SFB_LOGITEM_XMACRO(UPDATE_INVALID_FRAMEBUFFER_HANDLE, "sfb_update: framebuffer handle not valid") \
-    _SFB_LOGITEM_XMACRO(UPDATE_FRAMEBUFFER_RESOURCESTATE_NOT_VALID, "sfb_update: framebuffer not in valid resource state") \
     _SFB_LOGITEM_XMACRO(UPDATE_PIXEL_RANGE_SIZE_RGBA8, "sfb_update: unexpected sfb_update_desc.pixels.size, must be (width * height * 4) bytes") \
     _SFB_LOGITEM_XMACRO(UPDATE_PIXEL_RANGE_SIZE_PALETTE8, "sfb_update: unexpected sfb_update_desc.pixels.size, must be (width * height) bytes") \
     _SFB_LOGITEM_XMACRO(UPDATE_PALETTE_RANGE_SIZE, "sfb_update: unexpected sfb_update_desc.palette.size, must be 256 * 4 bytes") \
+    _SFB_LOGITEM_XMACRO(RENDER_EX_INVALID_FRAMEBUFFER_HANDLE, "sfb_render_ex: framebuffer handle not valid") \
+    _SFB_LOGITEM_XMACRO(RENDER_EX_FRAMEBUFFER_RESOURCESTATE_NOT_VALID, "sfb_render_ex: framebuffer not in valid resource state") \
 
 #define _SFB_LOGITEM_XMACRO(item,msg) _SFB_LOGITEM_##item,
 typedef enum {
@@ -4481,6 +4477,7 @@ static void _sfb_init_framebuffer(_sfb_framebuffer_t* fb, const sfb_framebuffer_
         },
         .primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP,
         .depth.pixel_format = SG_PIXELFORMAT_NONE,
+        .colors[0].pixel_format = SG_PIXELFORMAT_RGBA8,
         .label = "sfb-pipeline",
     });
     valid &= sg_query_pipeline_state(fb->offscreen_pip) == SG_RESOURCESTATE_VALID;
@@ -4905,6 +4902,41 @@ static void _sfb_destroy_display_pipeline(void) {
     sg_destroy_pipeline(_sfb.display_pip);
 }
 
+static void _sfb_render(const _sfb_framebuffer_t* fb, const sfb_render_overrides* overrides) {
+    SOKOL_ASSERT(fb && overrides);
+    if (fb == 0) {
+        _SFB_ERROR(RENDER_EX_INVALID_FRAMEBUFFER_HANDLE);
+        return;
+    }
+    if (fb->slot.state != SFB_RESOURCESTATE_VALID) {
+        _SFB_ERROR(RENDER_EX_FRAMEBUFFER_RESOURCESTATE_NOT_VALID);
+        return;
+    }
+    const sg_pipeline pip = (overrides->pip.id != SG_INVALID_ID) ? overrides->pip : _sfb.display_pip;
+    sg_bindings bindings = (sg_bindings){
+        .vertex_buffers[0] = fb->vbuf.display,
+    };
+    for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        bindings.views[i] = overrides->views[i];
+    }
+    bindings.views[0] = fb->prescale.tex_view;
+    for (int i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+        bindings.samplers[i] = overrides->samplers[i];
+    }
+    if (bindings.samplers[0].id == SG_INVALID_ID) {
+        bindings.samplers[0] = _sfb.smp.linear;
+    }
+
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&bindings);
+    for (int ub_slot = 0; ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS; ub_slot++) {
+        if (overrides->uniforms[ub_slot].ptr) {
+            sg_apply_uniforms(ub_slot, &overrides->uniforms[ub_slot]);
+        }
+    }
+    sg_draw(0, 4, 1);
+}
+
 // >>public
 #define _SFB_INIT_TAG (0xDCBADCBA)
 
@@ -5008,9 +5040,50 @@ SOKOL_API_IMPL void sfb_update(sfb_framebuffer fb_id, const sfb_update_desc* des
         sg_update_image(fb->palette.img, &(sg_image_data){ .mip_levels[0] = desc->palette });
     }
 
-    // render into prescale-image even if prescale-factor is 1
-    // (in that case the cliprect is applied)
+    // do an offscreen pass into the prescale image with nearest filtering,
+    // this will also apply the cliprect
+    sg_begin_pass(&(sg_pass){
+        .action.colors[0] = { .load_action = SG_LOADACTION_DONTCARE },
+        .attachments = { .colors[0] = fb->prescale.att_view },
+        .label = "sfb-prescale-pass",
+    });
+    sg_apply_pipeline(fb->offscreen_pip);
+    sg_apply_bindings(&(sg_bindings){
+        .vertex_buffers[0] = fb->vbuf.offscreen,
+        .views = {
+            [0] = fb->update.tex_view,
+            [1] = fb->palette.tex_view,
+        },
+        .samplers[0] = _sfb.smp.nearest,
+    });
+    const int clip_width = _sfb_def(desc->cliprect.width, fb->desc.width);
+    const int clip_height = _sfb_def(desc->cliprect.height, fb->desc.height);
+    const _sfb_vs_params_t vs_params = (_sfb_vs_params_t){
+        .uv_offset = {
+            (float)desc->cliprect.x / (float)fb->desc.width,
+            (float)desc->cliprect.y / (float)fb->desc.height,
+        },
+        .uv_scale = {
+            (float)clip_width / (float)fb->desc.width,
+            (float)clip_height / (float)fb->desc.height,
+        },
+    };
+    sg_apply_uniforms(0, &SG_RANGE(vs_params));
+    sg_draw(0, 4, 1);
+    sg_end_pass();
 }
 
+SOKOL_API_IMPL void sfb_render(sfb_framebuffer fb_id) {
+    SOKOL_ASSERT(_SFB_INIT_TAG == _sfb.init_tag);
+    _sfb_framebuffer_t* fb = _sfb_lookup_framebuffer(fb_id.id);
+    _sfb_render(fb, &(sfb_render_overrides){0});
+}
+
+SOKOL_API_IMPL void sfb_render_ex(sfb_framebuffer fb_id, const sfb_render_overrides* overrides) {
+    SOKOL_ASSERT(_SFB_INIT_TAG == _sfb.init_tag);
+    SOKOL_ASSERT(overrides);
+    _sfb_framebuffer_t* fb = _sfb_lookup_framebuffer(fb_id.id);
+    _sfb_render(fb, overrides);
+}
 
 #endif // SOKOL_FRAMEBUFFER_IMPL
