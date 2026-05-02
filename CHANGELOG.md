@@ -1,5 +1,24 @@
 ## Updates
 
+### 01-May-2026
+
+- sokol_app.h macos: Move `activationPolicy` in front of window
+  creation. This fixes the edge case that when the app is built as 'bare'
+  cmdline executable (e.g. not as a macOS app bundle with Info.plist file),
+  and the exe is started from a fullscreen terminal, the application window
+  would be opened on the same screen as the fullscreen app before visibility
+  and control switches to the desktop screen (but leaving the app window
+  on the now hidden terminal screen). Moving activationPolicy before
+  window creation fixes the behaviour and makes it identical with app bundles
+  (visibility and focus switch to the desktop screen first, then the window
+  is opened on the desktop screen).
+
+  Many thanks to @johannesmono for reporting the issue and suggesting the
+  correct solution!
+
+  Issue: https://github.com/floooh/sokol/issues/1500
+  PR: https://github.com/floooh/sokol/pull/1501
+
 ### 26-Apr-2026
 
 A new code-generation script has been added which compiles and injects the embedded

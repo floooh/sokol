@@ -52,6 +52,8 @@ Aras Pranckevičius, PC/web port via sokol ([source](https://github.com/aras-p/d
 - ['Dealer's Dungeon'](https://dealers-dungeon.com/demo/) ([lower graphics quality](https://dealers-dungeon.com/demo/?q=3),
 [source](https://github.com/bqqbarbhg/spear))
 
+- ['Brick Warrior'](https://github.com/chrishulbert/brickwarrior) - a 1990's Breakout clone ported to Sokol :)
+
 - [LearnOpenGL examples ported to sokol-gfx (may be outdated)](https://zeromake.github.io/learnopengl-examples/) ([git repo](https://github.com/zeromake/learnopengl-examples))
 
 - [Command line tools](https://github.com/floooh/sokol-tools) (shader compiler)
