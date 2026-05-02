@@ -5842,6 +5842,8 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 @implementation _sapp_macos_app_delegate
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
     _SOKOL_UNUSED(aNotification);
+    // NOTE: keep activationPolicy in front of window creation (see https://github.com/floooh/sokol/issues/1500)
+    NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
     _sapp_macos_init_cursors();
     if ((_sapp.window_width == 0) || (_sapp.window_height == 0)) {
         _sapp_macos_init_default_dimensions();
@@ -5875,7 +5877,6 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     [_sapp.macos.window makeFirstResponder:_sapp.macos.view];
     [_sapp.macos.window center];
     _sapp.valid = true;
-    NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
     if (_sapp.fullscreen) {
         /* ^^^ on GL, this already toggles a rendered frame, so set the valid flag before */
         [_sapp.macos.window toggleFullScreen:self];
