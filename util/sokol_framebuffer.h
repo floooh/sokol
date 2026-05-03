@@ -4586,8 +4586,8 @@ static void _sfb_create_palette8_shader(void) {
                 break;
         }
     #elif defined(SOKOL_D3D11)
-        vs.bytecode = SG_RANGE(_sbf_palette8_vs_bytecode_hlsl4);
-        fs.bytecode = SG_RANGE(_sbf_palette8_fs_bytecode_hlsl4);
+        vs.bytecode = SG_RANGE(_sfb_palette8_vs_bytecode_hlsl4);
+        fs.bytecode = SG_RANGE(_sfb_palette8_fs_bytecode_hlsl4);
     #elif defined(SOKOL_WGPU)
         vs.source = (const char*)_sfb_palette8_vs_source_wgsl;
         fs.source = (const char*)_sfb_palette8_fs_source_wgsl;
@@ -4702,8 +4702,8 @@ static void _sfb_create_rgba8_shader(void) {
                 break;
         }
     #elif defined(SOKOL_D3D11)
-        vs.bytecode = SG_RANGE(_sbf_rgba8_vs_bytecode_hlsl4);
-        fs.bytecode = SG_RANGE(_sbf_rgba8_fs_bytecode_hlsl4);
+        vs.bytecode = SG_RANGE(_sfb_rgba8_vs_bytecode_hlsl4);
+        fs.bytecode = SG_RANGE(_sfb_rgba8_fs_bytecode_hlsl4);
     #elif defined(SOKOL_WGPU)
         vs.source = (const char*)_sfb_rgba8_vs_source_wgsl;
         fs.source = (const char*)_sfb_rgba8_fs_source_wgsl;
@@ -4801,8 +4801,8 @@ static void _sfb_create_display_shader(void) {
                 break;
         }
     #elif defined(SOKOL_D3D11)
-        vs.bytecode = SG_RANGE(_sbf_display_vs_bytecode_hlsl4);
-        fs.bytecode = SG_RANGE(_sbf_display_fs_bytecode_hlsl4);
+        vs.bytecode = SG_RANGE(_sfb_display_vs_bytecode_hlsl4);
+        fs.bytecode = SG_RANGE(_sfb_display_fs_bytecode_hlsl4);
     #elif defined(SOKOL_WGPU)
         vs.source = (const char*)_sfb_display_vs_source_wgsl;
         fs.source = (const char*)_sfb_display_fs_source_wgsl;
