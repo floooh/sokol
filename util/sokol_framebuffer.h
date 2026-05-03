@@ -4903,7 +4903,7 @@ static void _sfb_destroy_display_pipeline(void) {
 }
 
 static void _sfb_render(const _sfb_framebuffer_t* fb, const sfb_render_overrides* overrides) {
-    SOKOL_ASSERT(fb && overrides);
+    SOKOL_ASSERT(overrides);
     if (fb == 0) {
         _SFB_ERROR(RENDER_EX_INVALID_FRAMEBUFFER_HANDLE);
         return;
