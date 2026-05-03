@@ -4878,8 +4878,8 @@ static void _sfb_create_palette8_shader(void) {
             .sampler_type = SG_SAMPLERTYPE_FILTERING,
             .hlsl_register_s_n = 0,
             .msl_sampler_n = 0,
-            .wgsl_group1_binding_n = 0,
-            .spirv_set1_binding_n = 0,
+            .wgsl_group1_binding_n = 32,
+            .spirv_set1_binding_n = 32,
         },
         .texture_sampler_pairs = {
             [0] = {
@@ -4969,8 +4969,8 @@ static void _sfb_create_rgba8_shader(void) {
             .sampler_type = SG_SAMPLERTYPE_FILTERING,
             .hlsl_register_s_n = 0,
             .msl_sampler_n = 0,
-            .wgsl_group1_binding_n = 0,
-            .spirv_set1_binding_n = 0,
+            .wgsl_group1_binding_n = 32,
+            .spirv_set1_binding_n = 32,
         },
         .texture_sampler_pairs = {
             [0] = {
@@ -5054,8 +5054,8 @@ static void _sfb_create_display_shader(void) {
             .sampler_type = SG_SAMPLERTYPE_FILTERING,
             .hlsl_register_s_n = 0,
             .msl_sampler_n = 0,
-            .wgsl_group1_binding_n = 0,
-            .spirv_set1_binding_n = 0,
+            .wgsl_group1_binding_n = 32,
+            .spirv_set1_binding_n = 32,
         },
         .texture_sampler_pairs = {
             [0] = {
