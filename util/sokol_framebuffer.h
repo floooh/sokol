@@ -4358,31 +4358,31 @@ static sfb_framebuffer_desc _sfb_framebuffer_desc_defaults(const sfb_framebuffer
 
 // FIXME: rendering should be bufferless
 static const float _sfb_verts[] = {
-    0.0f, 0.0f, 0.0f, 0.0f,
-    1.0f, 0.0f, 1.0f, 0.0f,
-    0.0f, 1.0f, 0.0f, 1.0f,
-    1.0f, 1.0f, 1.0f, 1.0f
+    0.0f, 1.0f, 0.0f, 0.0f,
+    1.0f, 1.0f, 1.0f, 0.0f,
+    0.0f, 0.0f, 0.0f, 1.0f,
+    1.0f, 0.0f, 1.0f, 1.0f
 };
 
 static const float _sfb_verts_rot[] = {
-    0.0f, 0.0f, 1.0f, 0.0f,
-    1.0f, 0.0f, 1.0f, 1.0f,
-    0.0f, 1.0f, 0.0f, 0.0f,
-    1.0f, 1.0f, 0.0f, 1.0f
+    0.0f, 1.0f, 1.0f, 0.0f,
+    1.0f, 1.0f, 1.0f, 1.0f,
+    0.0f, 0.0f, 0.0f, 0.0f,
+    1.0f, 0.0f, 0.0f, 1.0f
 };
 
 static const float _sfb_verts_flipped[] = {
-    0.0f, 0.0f, 0.0f, 1.0f,
-    1.0f, 0.0f, 1.0f, 1.0f,
-    0.0f, 1.0f, 0.0f, 0.0f,
-    1.0f, 1.0f, 1.0f, 0.0f
+    0.0f, 1.0f, 0.0f, 1.0f,
+    1.0f, 1.0f, 1.0f, 1.0f,
+    0.0f, 0.0f, 0.0f, 0.0f,
+    1.0f, 0.0f, 1.0f, 0.0f
 };
 
 static const float _sfb_verts_flipped_rot[] = {
-    0.0f, 0.0f, 1.0f, 1.0f,
-    1.0f, 0.0f, 1.0f, 0.0f,
-    0.0f, 1.0f, 0.0f, 1.0f,
-    1.0f, 1.0f, 0.0f, 0.0f
+    0.0f, 1.0f, 1.0f, 1.0f,
+    1.0f, 1.0f, 1.0f, 0.0f,
+    0.0f, 0.0f, 0.0f, 1.0f,
+    1.0f, 0.0f, 0.0f, 0.0f
 };
 
 static sg_range _sfb_select_vertices(sfb_orientation orientation) {
