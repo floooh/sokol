@@ -4539,7 +4539,7 @@ static bool _sfb_validate_update(const _sfb_framebuffer_t* fb, const sfb_update_
             _SFB_ERROR(UPDATE_PALETTE_RANGE_EXPECTED);
             return false;
         }
-        if (desc->pixels.size != 256 * sizeof(uint32_t)) {
+        if (desc->palette.size != 256 * sizeof(uint32_t)) {
             _SFB_ERROR(UPDATE_PALETTE_RANGE_SIZE);
             return false;
         }
