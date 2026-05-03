@@ -1705,8 +1705,8 @@ static const uint8_t _sfons_shd_fs_bytecode_spirv_vk[888] = {
     0xfd,0x00,0x01,0x00,0x38,0x00,0x01,0x00,
 };
 #elif defined(SOKOL_DUMMY_BACKEND)
-static const char* _sfons_vs_source_dummy = "";
-static const char* _sfons_fs_source_dummy = "";
+static const char* _sfons_shd_vs_source_dummy = "";
+static const char* _sfons_shd_fs_source_dummy = "";
 #else
 #error "Please define one of SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU, SOKOL_VULKAN or SOKOL_DUMMY_BACKEND!"
 #endif
@@ -1841,8 +1841,8 @@ static int _sfons_render_create(void* user_ptr, int width, int height) {
             shd_desc.fragment_func.bytecode = SG_RANGE(_sfons_shd_fs_bytecode_spirv_vk);
             shd_desc.fragment_func.entry = "main";
         #else
-            shd_desc.vertex_func.source = _sfons_vs_source_dummy;
-            shd_desc.fragment_func.source = _sfons_fs_source_dummy;
+            shd_desc.vertex_func.source = _sfons_shd_vs_source_dummy;
+            shd_desc.fragment_func.source = _sfons_shd_fs_source_dummy;
         #endif
         shd_desc.label = "sfons-shader";
         sfons->shd = sg_make_shader(&shd_desc);
