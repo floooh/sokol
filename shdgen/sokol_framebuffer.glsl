@@ -1,5 +1,5 @@
-@vs prescale_vs
-layout(binding=0) uniform vs_params {
+@vs offscreen_vs
+layout(binding=0) uniform offscreen_vs_params {
     vec2 uv_offset;
     vec2 uv_scale;
 };
@@ -21,7 +21,7 @@ void main() {
     frag_color = texture(sampler2D(fb_tex, smp), uv);
 }
 @end
-@program rgba8 prescale_vs rgba8_fs
+@program rgba8 offscreen_vs rgba8_fs
 
 // offscreen shader with color palette decoding
 @fs palette8_fs
@@ -35,13 +35,26 @@ void main() {
     frag_color = vec4(texture(sampler2D(pal_tex, smp), vec2(pix,0)).xyz, 1.0);
 }
 @end
-@program palette8 prescale_vs palette8_fs
+@program palette8 offscreen_vs palette8_fs
 
 @vs display_vs
-layout(location=0) in vec2 in_pos;
-layout(location=1) in vec2 in_uv;
+@glsl_options flip_vert_y
+layout(binding=0) uniform display_vs_params {
+    int rotate;
+};
 out vec2 uv;
+
 void main() {
+    vec2 in_pos, in_uv;
+    in_pos.x = (gl_VertexIndex & 1) != 0 ? 0.0 : 1.0;
+    in_pos.y = (gl_VertexIndex & 2) != 0 ? 1.0 : 0.0;
+    if (rotate == 0) {
+        in_uv.x = in_pos.x;
+        in_uv.y = 1.0 - in_pos.y;
+    } else {
+        in_uv.x = in_pos.y;
+        in_uv.y = in_pos.x;
+    }
     gl_Position = vec4(in_pos*2.0-1.0, 0.5, 1.0);
     uv = in_uv;
 }
