@@ -115,18 +115,6 @@ typedef enum sfb_format {
 } sfb_format;
 
 /*
-    sfb_orientation
-
-    TODO: doc
-*/
-typedef enum sfb_orientation {
-    _SFB_ORIENTATION_DEFAULT = 0,
-    SFB_ORIENTATION_LANDSCAPE,
-    SFB_ORIENTATION_PORTRAIT,
-    _SFB_ORIENTATION_FORCE_U32 = 0x7FFFFFFF
-} sfb_orientation;
-
-/*
     sfb_rect
 
     TODO doc:
@@ -159,7 +147,7 @@ typedef struct sfb_framebuffer_desc {
     int height;                     // height in pixels, must be provided
     int prescale;                   // bilinear-prefiltered prescale factor, default: 1
     sfb_format format;              // framebuffer pixel format, default: SFB_FORMAT_RGBA8
-    sfb_orientation orientation;    // framebuffer orientation, default: SFB_ORIENTATION_LANDSCAPE
+    bool rotate90;                  // when true, framebuffer is rotated 90 degree during sfb_render()
     sfb_render_pass_desc render_pass;   // pixel formats and sample count of sokol-gfx render pass (defaults: use sokol-gfx defaults)
 } sfb_framebuffer_desc;
 
@@ -4650,7 +4638,6 @@ static sfb_framebuffer_desc _sfb_framebuffer_desc_defaults(const sfb_framebuffer
     sfb_framebuffer_desc res = *desc;
     res.prescale = _sfb_def(res.prescale, 1);
     res.format = _sfb_def(res.format, SFB_FORMAT_RGBA8);
-    res.orientation = _sfb_def(res.orientation, SFB_ORIENTATION_LANDSCAPE);
     return res;
 }
 
@@ -5140,7 +5127,7 @@ static void _sfb_render(const _sfb_framebuffer_t* fb, const sfb_render_overrides
     sg_apply_pipeline(pip);
     sg_apply_bindings(&bindings);
     const _sfb_display_vs_params_t vs_params = {
-        .rotate = (fb->desc.orientation == SFB_ORIENTATION_PORTRAIT) ? 1 : 0,
+        .rotate = (int)fb->desc.rotate90,
     };
     sg_apply_uniforms(0, &SG_RANGE(vs_params));
     for (int ub_slot = 1; ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS; ub_slot++) {
