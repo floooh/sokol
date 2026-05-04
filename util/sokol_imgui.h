@@ -1969,8 +1969,8 @@ static const uint8_t _simgui_shd_fs_bytecode_spirv_vk[780] = {
     0x1c,0x00,0x00,0x00,0xfd,0x00,0x01,0x00,0x38,0x00,0x01,0x00,
 };
 #elif defined(SOKOL_DUMMY_BACKEND)
-static const char* _simgui_vs_source_dummy = "";
-static const char* _simgui_fs_source_dummy = "";
+static const char* _simgui_shd_vs_source_dummy = "";
+static const char* _simgui_shd_fs_source_dummy = "";
 #else
 #error "Please define one of SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU, SOKOL_VULKAN or SOKOL_DUMMY_BACKEND!"
 #endif
@@ -2518,8 +2518,8 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         shd_desc.fragment_func.bytecode = SG_RANGE(_simgui_shd_fs_bytecode_spirv_vk);
         shd_desc.fragment_func.entry = "main";
     #else
-        shd_desc.vertex_func.source = _simgui_vs_source_dummy;
-        shd_desc.fragment_func.source = _simgui_fs_source_dummy;
+        shd_desc.vertex_func.source = _simgui_shd_vs_source_dummy;
+        shd_desc.fragment_func.source = _simgui_shd_fs_source_dummy;
     #endif
     _simgui.def_shd = sg_make_shader(&shd_desc);
 
