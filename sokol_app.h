@@ -10647,7 +10647,8 @@ _SOKOL_PRIVATE void _sapp_android_frame_callback(int64_t frame_time_nanos, void*
         return;
     }
     if (_sapp_android_should_update()) {
-        /* Post the next frame callback. */
+        // Post the next frame callback. We do this here rather than later so the runnable can be
+        // queued early in the looper.
         AChoreographer_postFrameCallback64(_sapp.android.choreographer, _sapp_android_frame_callback, NULL);
         _sapp.android.frame_callback_in_flight = true;
         _sapp_android_frame((double)frame_time_nanos / 1.0e9);
@@ -10698,18 +10699,20 @@ _SOKOL_PRIVATE void* _sapp_android_loop(void* arg) {
     while (!_sapp.android.is_thread_stopping) {
         #if __ANDROID_API__ >= 29
             if (_sapp.android.choreographer != NULL) {
-                /* When we have a choreographer, we get frame callbacks via _sapp_android_frame_callback. */
+                // Posts _sapp_android_frame_callback with the choreographer to start our frame
+                // loop (for example, on first run or when resuming). When we have a choreographer,
+                // we'll get frame callbacks via _sapp_android_frame_callback.
                 if (!_sapp.android.frame_callback_in_flight && _sapp_android_should_update()) {
                     AChoreographer_postFrameCallback64(_sapp.android.choreographer, _sapp_android_frame_callback, NULL);
                     _sapp.android.frame_callback_in_flight = true;
                 }
-                /* Process events. We don't need a while loop here because we're already being driven by
-                   the outer while loop. */
+                // Blocks until the next event. We don't need a while loop here because we're
+                // already being driven by the outer while loop.
                 ALooper_pollOnce(-1, NULL, NULL, NULL);
                 continue;
             }
         #endif
-        /* sokol frame -- fallback if not updating frames from choreographer callbacks */
+        // sokol frame -- fallback if not updating frames from choreographer callbacks
         if (_sapp_android_should_update()) {
             _sapp_android_frame(0.0);
         }
