@@ -1800,6 +1800,8 @@ typedef struct sapp_allocator {
     _SAPP_LOGITEM_XMACRO(ANDROID_NATIVE_ACTIVITY_ONCREATE, "NativeActivity onCreate") \
     _SAPP_LOGITEM_XMACRO(ANDROID_CREATE_THREAD_PIPE_FAILED, "failed to create thread pipe") \
     _SAPP_LOGITEM_XMACRO(ANDROID_NATIVE_ACTIVITY_CREATE_SUCCESS, "NativeActivity successfully created") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_CHOREOGRAPHER_ENABLED, "Choreographer frame loop enabled") \
+    _SAPP_LOGITEM_XMACRO(ANDROID_CHOREOGRAPHER_UNAVAILABLE, "Choreographer unavailable, using poll loop") \
     _SAPP_LOGITEM_XMACRO(WGPU_DEVICE_LOST, "wgpu: device lost") \
     _SAPP_LOGITEM_XMACRO(WGPU_DEVICE_LOG, "wgpu: device log") \
     _SAPP_LOGITEM_XMACRO(WGPU_DEVICE_UNCAPTURED_ERROR, "wgpu: uncaptured error") \
@@ -2515,6 +2517,9 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <time.h>
     #include <android/native_activity.h>
     #include <android/looper.h>
+    #if __ANDROID_API__ >= 29
+        #include <android/choreographer.h>
+    #endif
     #include <EGL/egl.h>
     #include <GLES3/gl3.h>
 #elif defined(_SAPP_LINUX)
@@ -3047,6 +3052,10 @@ typedef struct {
     EGLDisplay display;
     EGLContext context;
     EGLSurface surface;
+    #if __ANDROID_API__ >= 29
+    AChoreographer* choreographer;
+    bool frame_callback_in_flight;
+    #endif
 } _sapp_android_t;
 
 #endif // _SAPP_ANDROID
@@ -10432,11 +10441,11 @@ _SOKOL_PRIVATE void _sapp_android_shutdown(void) {
     ANativeActivity_finish(_sapp.android.activity);
 }
 
-_SOKOL_PRIVATE void _sapp_android_frame(void) {
+_SOKOL_PRIVATE void _sapp_android_frame(double external_now) {
     SOKOL_ASSERT(_sapp.android.display != EGL_NO_DISPLAY);
     SOKOL_ASSERT(_sapp.android.context != EGL_NO_CONTEXT);
     SOKOL_ASSERT(_sapp.android.surface != EGL_NO_SURFACE);
-    _sapp_timing_update(&_sapp.timing, 0.0);
+    _sapp_timing_update(&_sapp.timing, external_now);
     _sapp_android_update_dimensions(_sapp.android.current.window, false);
     _sapp_frame();
     eglSwapBuffers(_sapp.android.display, _sapp.android.surface);
@@ -10630,6 +10639,23 @@ _SOKOL_PRIVATE bool _sapp_android_should_update(void) {
     return is_in_front && has_surface;
 }
 
+#if __ANDROID_API__ >= 29
+_SOKOL_PRIVATE void _sapp_android_frame_callback(int64_t frame_time_nanos, void* data) {
+    _SOKOL_UNUSED(data);
+    _sapp.android.frame_callback_in_flight = false;
+    if (_sapp.android.is_thread_stopping) {
+        return;
+    }
+    if (_sapp_android_should_update()) {
+        // Post the next frame callback. We do this here rather than later so the runnable can be
+        // queued early in the looper.
+        AChoreographer_postFrameCallback64(_sapp.android.choreographer, _sapp_android_frame_callback, NULL);
+        _sapp.android.frame_callback_in_flight = true;
+        _sapp_android_frame((double)frame_time_nanos / 1.0e9);
+    }
+}
+#endif
+
 _SOKOL_PRIVATE void _sapp_android_show_keyboard(bool shown) {
     SOKOL_ASSERT(_sapp.valid);
     /* This seems to be broken in the NDK, but there is (a very cumbersome) workaround... */
@@ -10652,6 +10678,17 @@ _SOKOL_PRIVATE void* _sapp_android_loop(void* arg) {
         _sapp_android_main_cb,
         NULL); /* data */
 
+    #if __ANDROID_API__ >= 29
+        _sapp.android.choreographer = AChoreographer_getInstance();
+        if (_sapp.android.choreographer != NULL) {
+            _SAPP_INFO(ANDROID_CHOREOGRAPHER_ENABLED);
+        } else {
+            _SAPP_INFO(ANDROID_CHOREOGRAPHER_UNAVAILABLE);
+        }
+    #else
+        _SAPP_INFO(ANDROID_CHOREOGRAPHER_UNAVAILABLE);
+    #endif
+
     /* signal start to main thread */
     pthread_mutex_lock(&_sapp.android.pt.mutex);
     _sapp.android.is_thread_started = true;
@@ -10660,9 +10697,24 @@ _SOKOL_PRIVATE void* _sapp_android_loop(void* arg) {
 
     /* main loop */
     while (!_sapp.android.is_thread_stopping) {
-        /* sokol frame */
+        #if __ANDROID_API__ >= 29
+            if (_sapp.android.choreographer != NULL) {
+                // Posts _sapp_android_frame_callback with the choreographer to start our frame
+                // loop (for example, on first run or when resuming). When we have a choreographer,
+                // we'll get frame callbacks via _sapp_android_frame_callback.
+                if (!_sapp.android.frame_callback_in_flight && _sapp_android_should_update()) {
+                    AChoreographer_postFrameCallback64(_sapp.android.choreographer, _sapp_android_frame_callback, NULL);
+                    _sapp.android.frame_callback_in_flight = true;
+                }
+                // Blocks until the next event. We don't need a while loop here because we're
+                // already being driven by the outer while loop.
+                ALooper_pollOnce(-1, NULL, NULL, NULL);
+                continue;
+            }
+        #endif
+        // sokol frame -- fallback if not updating frames from choreographer callbacks
         if (_sapp_android_should_update()) {
-            _sapp_android_frame();
+            _sapp_android_frame(0.0);
         }
 
         /* process all events (or stop early if app is requested to quit) */
