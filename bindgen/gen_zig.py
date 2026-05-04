@@ -342,9 +342,9 @@ def gen_struct(decl, prefix):
                     sys.exit(f"ERROR gen_struct is_1d_array_type: {array_type}")
                 t0 = f"[{array_sizes[0]}]{zig_type}"
                 t1 = f"[_]{zig_type}"
-                l(f"    {field_name}: {t0} = {t1}{{{def_val}}} ** {array_sizes[0]},")
+                l(f"    {field_name}: {t0} = @splat({def_val}),")
             elif util.is_const_void_ptr(array_type):
-                l(f"    {field_name}: [{array_sizes[0]}]?*const anyopaque = [_]?*const anyopaque{{null}} ** {array_sizes[0]},")
+                l(f"    {field_name}: [{array_sizes[0]}]?*const anyopaque = @splat(null),")
             else:
                 sys.exit(f"ERROR gen_struct: array {field_name}: {field_type} => {array_type} [{array_sizes[0]}]")
         elif util.is_2d_array_type(field_type):
@@ -359,7 +359,7 @@ def gen_struct(decl, prefix):
             else:
                 sys.exit(f"ERROR gen_struct is_2d_array_type: {array_type}")
             t0 = f"[{array_sizes[0]}][{array_sizes[1]}]{zig_type}"
-            l(f"    {field_name}: {t0} = [_][{array_sizes[1]}]{zig_type}{{[_]{zig_type}{{{def_val}}} ** {array_sizes[1]}}} ** {array_sizes[0]},")
+            l(f"    {field_name}: {t0} = @splat(@splat({def_val})),")
         else:
             sys.exit(f"ERROR gen_struct: {field_name}: {field_type};")
     l("};")
