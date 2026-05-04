@@ -2208,9 +2208,9 @@ SOKOL_APP_API_DECL const char* sapp_get_dropped_file_path(int index);
 SOKOL_APP_API_DECL void sapp_run(const sapp_desc* desc);
 
 /* get runtime environment information */
-sapp_environment sapp_get_environment(void);
+SOKOL_APP_API_DECL sapp_environment sapp_get_environment(void);
 /* get current frame's swapchain information (call once per frame!) */
-sapp_swapchain sapp_get_swapchain(void);
+SOKOL_APP_API_DECL sapp_swapchain sapp_get_swapchain(void);
 
 /* EGL: get EGLDisplay object */
 SOKOL_APP_API_DECL const void* sapp_egl_get_display(void);
@@ -10191,7 +10191,7 @@ _SOKOL_PRIVATE bool _sapp_win32_make_custom_mouse_cursor(sapp_mouse_cursor curso
     return win32_cursor != 0;
 }
 
-SOKOL_API_IMPL void _sapp_win32_destroy_custom_mouse_cursor(sapp_mouse_cursor cursor) {
+_SOKOL_PRIVATE void _sapp_win32_destroy_custom_mouse_cursor(sapp_mouse_cursor cursor) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
     HCURSOR win32_cursor = _sapp.win32.custom_cursors[cursor];
     SOKOL_ASSERT(win32_cursor);
@@ -14059,7 +14059,7 @@ SOKOL_API_IMPL sapp_mouse_cursor sapp_bind_mouse_cursor_image(sapp_mouse_cursor 
     return cursor; // returning the passed-in cursor puerly for convenience, in case you want to asign the value to a variable.
 }
 
-SOKOL_APP_API_DECL void sapp_unbind_mouse_cursor_image(sapp_mouse_cursor cursor) {
+SOKOL_API_IMPL void sapp_unbind_mouse_cursor_image(sapp_mouse_cursor cursor) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
     if (_sapp.custom_cursor_bound[(int)cursor]) {
         // if this is the active cursor, first restore it to its default image,
