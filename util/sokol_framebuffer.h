@@ -4421,8 +4421,6 @@ static _sfb_state_t _sfb;
     _SFB_LOGITEM_XMACRO(INVALID_FRAMEBUFFER_HEIGHT, "sfb_framebuffer_desc.height must be > 0") \
     _SFB_LOGITEM_XMACRO(UPDATE_INVALID_FRAMEBUFFER_HANDLE, "sfb_update: framebuffer handle not valid") \
     _SFB_LOGITEM_XMACRO(UPDATE_FRAMEBUFFER_RESOURCESTATE_NOT_VALID, "sfb_update: framebuffer not in valid resource state") \
-    _SFB_LOGITEM_XMACRO(UPDATE_PIXEL_RANGE_EXPECTED, "sfb_update: sfb_update_desc.pixels.ptr cannot be 0") \
-    _SFB_LOGITEM_XMACRO(UPDATE_PALETTE_RANGE_EXPECTED, "sfb_update: sfb_update_desc.palette.ptr cannot be 0") \
     _SFB_LOGITEM_XMACRO(UPDATE_PALETTE_RANGE_IGNORED, "sfb_update: sfb_update_desc.palette is ignored for non-paletted framebuffer") \
     _SFB_LOGITEM_XMACRO(UPDATE_PIXEL_RANGE_SIZE_RGBA8, "sfb_update: unexpected sfb_update_desc.pixels.size, must be (width * height * 4) bytes") \
     _SFB_LOGITEM_XMACRO(UPDATE_PIXEL_RANGE_SIZE_PALETTE8, "sfb_update: unexpected sfb_update_desc.pixels.size, must be (width * height) bytes") \
@@ -4775,32 +4773,30 @@ static bool _sfb_validate_update(const _sfb_framebuffer_t* fb, const sfb_update_
         _SFB_ERROR(UPDATE_FRAMEBUFFER_RESOURCESTATE_NOT_VALID);
         return false;
     }
-    if (desc->pixels.ptr == 0) {
-        _SFB_ERROR(UPDATE_PIXEL_RANGE_EXPECTED);
-        return false;
+
+    // if pixel data is provided make sure the size matches
+    if (desc->pixels.ptr) {
+        if (fb->desc.format == SFB_FORMAT_PALETTE8) {
+            if (desc->pixels.size != (size_t)(fb->desc.width * fb->desc.height)) {
+                _SFB_ERROR(UPDATE_PIXEL_RANGE_SIZE_PALETTE8);
+                return false;
+            }
+        } else {
+            if (desc->pixels.size != (size_t)(fb->desc.width * fb->desc.height * 4)) {
+                _SFB_ERROR(UPDATE_PIXEL_RANGE_SIZE_RGBA8);
+                return false;
+            }
+        }
     }
-    if (fb->desc.format == SFB_FORMAT_PALETTE8) {
-        if (desc->pixels.size != (size_t)(fb->desc.width * fb->desc.height)) {
-            _SFB_ERROR(UPDATE_PIXEL_RANGE_SIZE_PALETTE8);
-            return false;
-        }
-    } else {
-        if (desc->pixels.size != (size_t)(fb->desc.width * fb->desc.height * 4)) {
-            _SFB_ERROR(UPDATE_PIXEL_RANGE_SIZE_PALETTE8);
-            return false;
-        }
-    }
-    if (fb->desc.format == SFB_FORMAT_PALETTE8) {
-        if (desc->palette.ptr == 0) {
-            _SFB_ERROR(UPDATE_PALETTE_RANGE_EXPECTED);
-            return false;
-        }
-        if (desc->palette.size != 256 * sizeof(uint32_t)) {
-            _SFB_ERROR(UPDATE_PALETTE_RANGE_SIZE);
-            return false;
-        }
-    } else {
-        if (desc->palette.ptr) {
+
+    // if palette data is provided make sure the size matches
+    if (desc->palette.ptr) {
+        if (fb->desc.format == SFB_FORMAT_PALETTE8) {
+            if (desc->palette.size != 256 * sizeof(uint32_t)) {
+                _SFB_ERROR(UPDATE_PALETTE_RANGE_SIZE);
+                return false;
+            }
+        } else {
             _SFB_WARN(UPDATE_PALETTE_RANGE_IGNORED);
             return true;
         }
