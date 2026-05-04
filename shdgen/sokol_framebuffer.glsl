@@ -37,9 +37,9 @@ void main() {
 @end
 @program palette8 offscreen_vs palette8_fs
 
-@vs display_vs
+@vs render_vs
 @glsl_options flip_vert_y
-layout(binding=0) uniform display_vs_params {
+layout(binding=0) uniform render_vs_params {
     int rotate;
 };
 out vec2 uv;
@@ -59,7 +59,7 @@ void main() {
     uv = in_uv;
 }
 @end
-@fs display_fs
+@fs render_fs
 layout(binding=0) uniform texture2D tex;
 layout(binding=0) uniform sampler smp;
 in vec2 uv;
@@ -69,4 +69,4 @@ void main() {
     frag_color = vec4(texture(sampler2D(tex, smp), uv).xyz, 1.0);
 }
 @end
-@program display display_vs display_fs
+@program render render_vs render_fs
