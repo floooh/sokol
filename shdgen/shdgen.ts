@@ -25,7 +25,7 @@ const items: Item[] = [
         header: '../util/sokol_framebuffer.h',
         shader: 'sokol_framebuffer.glsl',
         prefix:  '_sfb',
-        progs: ['rgba8', 'palette8', 'display'],
+        progs: ['rgba8', 'palette8', 'render'],
     }
 ];
 
