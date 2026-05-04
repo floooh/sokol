@@ -1,5 +1,16 @@
 ## Updates
 
+### 04-May-2026
+
+- sokol_app.h android: The sokol-app Android backend now uses the Choreographer
+  API (if available) for frame pacing and for the frame duration (which has
+  much less jitter, similar to CADisplayLink on macOS/iOS).
+
+  Many thanks to @learnopengles for the PR!
+
+  Issue: https://github.com/floooh/sokol/issues/1502
+  PR: https://github.com/floooh/sokol/pull/1503
+
 ### 01-May-2026
 
 - sokol_app.h macos: Move `activationPolicy` in front of window
