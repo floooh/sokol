@@ -252,15 +252,12 @@ SOKOL_FRAMEBUFFER_API_DECL sfb_framebuffer_info sfb_query_framebuffer_info(sfb_f
 // query the framebuffer desc, with default values patched in
 SOKOL_FRAMEBUFFER_API_DECL sfb_framebuffer_desc sfb_query_framebuffer_desc(sfb_framebuffer fb);
 
-// helper function to create packed RGBA8 uint32_t from floats (useful for palette updates)
-SOKOL_FRAMEBUFFER_API_DECL uint32_t sfb_color_f32(float r, float g, float b, float a);
-// helper function to create packed RGBA8 uint32_t from uint8_t's (usefule for palette updates)
-SOKOL_FRAMEBUFFER_API_DECL uint32_t sfb_color_u8(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-
-// FIXME: C++ overloads
-
 #ifdef __cplusplus
 } // extern "C"
+inline void sfb_setup(const sfb_desc& desc) { return sfb_setup(&desc); }
+inline void sfb_make_framebuffer(const sfb_framebuffer_desc& desc) { return sfb_make_framebuffer(&desc); }
+inline void sfb_update(sfb_framebuffer fb, const sfb_update_desc& desc) { return sfb_update(fb, &desc); }
+inline void sfb_render_ex(sfb_framebuffer fb, const sfb_render_overrides& overrides) { return sfb_render_ex(fb, &overrides); }
 #endif
 #endif // SOKOL_FRAMEBUFFER_INCLUDED
 
