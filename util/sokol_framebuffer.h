@@ -22,7 +22,228 @@
     NOTE: the implementation is written in C99 and cannot be compiled in C++ mode,
     the declaration can be used from C++ though.
 
-    [TODO: documentation]
+    WHAT
+    ====
+    Provides old-school pixel framebuffers for CPU rendering in two pixel format:
+
+    - direct RGBA8 (32 bits per pixel)
+    - 8-bits per pixel indexing a 256-entry RGBA8 color palette
+
+    HOW
+    ===
+    First initialize sokol_framebuffer.h via:
+
+        sfb_setup(&(sfb_desc){
+            .logger.func = slog_func,
+        });
+
+    If you need more than 8 framebuffers at the same time, increase the
+    framebuffer pool:
+
+        sfb_setup(&(sfb_desc){
+            .framebuffer_pool_size = 129,
+            .logger.func = slog_func,
+        });
+
+    You can also provide a custom allocator:
+
+        sfb_setup(&(sfb_desc){
+            .framebuffer_pool_size = 129,
+            .allocator = {
+                .alloc_fn = my_malloc,
+                .free_fn = my_free,
+                .user_data = my_user_data,
+            }
+            .logger.func = slog_func,
+        });
+
+    Next, create one or more framebuffers. You need to provide at least
+    a width and height:
+
+        sfb_framebuffer fb = sfb_make_framebuffer(&(sfb_framebuffer_desc){
+            .width = 320,
+            .height = 256,
+        });
+
+    By default this creates an RGBA8 framebuffer. To get the paletted format
+    (1 byte per pixel and 256 color palette entries):
+
+        sfb_framebuffer fb = sfb_make_framebuffer(&(sfb_framebuffer_desc){
+            .width = 320,
+            .height = 256,
+            .format = SFB_FORMAT_PALETTE8,
+        });
+
+    You can also provide a 'prescale factor'. This allows to balance
+    pixel crispiness against bluriness. E.g. if you want your final rendered
+    framebuffer to look less blurry but not quite have the harsh look
+    of nearest filtering, try a prescale factor of 2:
+
+        sfb_framebuffer fb = sfb_make_framebuffer(&(sfb_framebuffer_desc){
+            .width = 320,
+            .height = 256,
+            .format = SFB_FORMAT_PALETTE8,
+            .prescale = 2,
+        });
+
+    You can rotate the framebuffer by 90 degrees, this is mainly useful to
+    emulate some classic arcade machines where a regular 4:3 CRT was installed
+    in 'portrait mode':
+
+        sfb_framebuffer fb = sfb_make_framebuffer(&(sfb_framebuffer_desc){
+            .width = 320,
+            .height = 256,
+            .format = SFB_FORMAT_PALETTE8,
+            .prescale = 2,
+            .rotate90 = true,
+        });
+
+    Finally if you plan to render the framebuffer in a render pass with different
+    properties than the default swapchain format, you'll need to provide
+    a color- and depth-pixelformat and a sample count which matches the
+    properties of the render pass:
+
+        sfb_framebuffer fb = sfb_make_framebuffer(&(sfb_framebuffer_desc){
+            .width = 320,
+            .height = 256,
+            .format = SFB_FORMAT_PALETTE8,
+            .prescale = 2,
+            .rotate90 = true,
+            .render_pass = {
+                .color_format = SG_PIXELFORMAT_...
+                .depth_format = SG_PIXELFORMAT_...
+                .sample_count = ...,
+            },
+        });
+
+    The actual pixel buffer and color palette are owned by you. For a 320x256
+    framebuffer with 32-bits per pixel (SFB_FORMAT_RGBA8), use an uint32_t
+    buffer like this:
+
+        uint32_t pixels[320][256];
+
+    For the paletted format (1 byte per pixel and a 256 entry color palette):
+
+        uint8_t pixels[320][256];
+        uint32_t palette[256];
+
+    ...now 'render' into the pixel and palette buffers with the CPU.
+
+    An RGBA8 pixel or palette entry split into red, green, blue, alpha like this:
+
+        |AAAAAAAA|BBBBBBBB|GGGGGGGG|RRRRRRRR|
+
+    E.g. bits 24 to 31 are the alpha component, bits 16 to 23 the blue component,
+    bits 8 to 15 to green component and bits 0 to 7 the red component. Or typically:
+
+        uint8_t a = 255;
+        uint8_t r = ...;
+        uint8_t g = ...;
+        uint8_t b = ...;
+        uint32 pixel = (a << 24) | (b << 16) | (g << 8) | r;
+
+    Whenever the pixel buffer or color palette content changes, call sfb_update()
+    outside a sokol-gfx render pass, and ONLY ONCE PER FRAME at most:
+
+        sfb_update(&(sfb_update_desc){
+            .pixels = SG_RANGE(pixels),
+            .palette = SG_RANGE(palette),
+        });
+
+    Of course for an RGBA8 framebuffer you'd only provide the pixels:
+
+        sfb_update(&(sfb_update_desc){
+            .pixels = SG_RANGE(pixels),
+        });
+
+    ...but even for a paletted framebuffer you can omit the data that doesn't
+    change. E.g. when only the palette changes but not the pixel data:
+
+        sfb_update(&(sfb_update_desc){
+            .palette = SG_RANGE(palette),
+        });
+
+    ...or vice versa when only the pixels but not the palette entries change:
+
+        sfb_update(&(sfb_update_desc){
+            .pixels = SG_RANGE(pixels),
+        });
+
+    You can also provide a cliprect here to only render a subsection of the
+    frame buffer. For instance to only render the top-left quadrant of a
+    320x256 framebuffer:
+
+        sfb_update(fb, &(sfb_update_desc){
+            .pixels = SG_RANGE(pixels),
+            .palette = SG_RANGE(palette),
+            .cliprect = { .x = 0, .y = 0, .width = 160, .height = 128 },
+        });
+
+    The sfb_update() function will do up to two calls to the sokol-gfx
+    function sg_update_image() - once for the pixel data and once for the
+    palette data (this is why the function must only be called at most
+    once per frame), and then do an render pass into an internal color attachment
+    texture (this is why the function must be called outside any sokol-gfx
+    pass).
+
+    Finally, to render your framebuffer to the display, call sfb_render()
+    *inside* a sokol-gfx render pass:
+
+        sg_begin_pass(...);
+        sfb_render(fb);
+        ...
+        sg_end_pass();
+
+    This will stretch the framebuffer to the whole canvas which might distort
+    its aspect ratio. If you want a fixed aspect ratio consider setting a
+    viewport with the help of sokol_letterbox.h.
+
+    For more control over the rendering process, call sfb_render_ex() instead.
+    For instance to override the default sampler with linear filtering and
+    instead use a builtin sampler with nearest filtering:
+
+        sfb_render_ex(fb, &(sfb_render_desc){
+            .use_nearest_filter = true,
+        });
+
+    Note though that the prescale factor provided in the sfb_make_framebuffer()
+    call is a better way to tweak bluriness vs crispiness. Only use the
+    nearest-filter override if you want a 100% pixelized look.
+
+    The main purpose of sfb_render_ex() is to inject a more advanced shader though
+    (like a CRT shader).
+
+    TODO: refer to a future sokol_crt.h header.
+
+    If you want to do the final rendering entirely yourself you can get handles
+    to all the internally used resources of a framebuffer object via:
+
+        sfb_framebuffer_info info = sfb_query_framebuffer_info(fb);
+
+    This gives you the internally managed sokol-gfx image and view object handles
+    for use in your own rendering.
+
+    To query the current 'resource state' of a framebuffer:
+
+        sfb_resoure_state state = sfb_query_framebuffer_state(fb);
+
+    ...this is mainly useful to check whether framebuffer creation via
+    sfb_make_framebuffer() had failed.
+
+    To get a copy the the sfb_framebuffer_desc struct (patched with defaults)
+    of a framebuffer object:
+
+        sfb_framebuffer_desc desc = sfb_query_framebuffer_desc(fb);
+
+    To destroy a framebuffer object:
+
+        sfb_destroy_framebuffer(fb);
+
+    ...calling sfb_shutdown() will also destroy any remaining framebuffer
+    objects:
+
+        sfb_shutdown();
+
 
     LICENSE
     =======
@@ -167,12 +388,13 @@ typedef struct sfb_update_desc {
 
     TODO doc
 */
-typedef struct sfb_render_overrides {
+typedef struct sfb_render_desc {
+    bool use_nearest_filter;
     sg_pipeline pip;
     sg_view views[SG_MAX_VIEW_BINDSLOTS];
     sg_sampler samplers[SG_MAX_SAMPLER_BINDSLOTS];
     sg_range uniforms[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
-} sfb_render_overrides;
+} sfb_render_desc;
 
 /*
     sfb_framebuffer_info
@@ -182,8 +404,8 @@ typedef struct sfb_render_overrides {
 typedef struct sfb_framebuffer_info {
     sg_image update_image;
     sg_view update_texture_view;
-    sg_image prescale_image;
-    sg_view prescale_texture_view;
+    sg_image offscreen_image;
+    sg_view offscreen_texture_view;
     sg_image palette_image;             // only valid when sfb_framebuffer_desc.format == SFB_FORMAT_PALETTE8
     sg_view palette_texture_view;       // only valid when sfb_framebuffer_desc.format == SFB_FORMAT_PALETTE8
 } sfb_framebuffer_info;
@@ -243,7 +465,7 @@ SOKOL_FRAMEBUFFER_API_DECL void sfb_update(sfb_framebuffer fb, const sfb_update_
 // draw framebuffer content with default shader (must be called inside a sokol-gfx render pass)
 SOKOL_FRAMEBUFFER_API_DECL void sfb_render(sfb_framebuffer fb);
 // draw framebuffer content with injected shader (must be called inside a sokol-gfx render pass)
-SOKOL_FRAMEBUFFER_API_DECL void sfb_render_ex(sfb_framebuffer fb, const sfb_render_overrides* overrides);
+SOKOL_FRAMEBUFFER_API_DECL void sfb_render_ex(sfb_framebuffer fb, const sfb_render_desc* desc);
 
 // query framebuffer resource state (valid or failed)
 SOKOL_FRAMEBUFFER_API_DECL sfb_resource_state sfb_query_framebuffer_state(sfb_framebuffer fb);
@@ -257,7 +479,7 @@ SOKOL_FRAMEBUFFER_API_DECL sfb_framebuffer_desc sfb_query_framebuffer_desc(sfb_f
 inline void sfb_setup(const sfb_desc& desc) { return sfb_setup(&desc); }
 inline void sfb_make_framebuffer(const sfb_framebuffer_desc& desc) { return sfb_make_framebuffer(&desc); }
 inline void sfb_update(sfb_framebuffer fb, const sfb_update_desc& desc) { return sfb_update(fb, &desc); }
-inline void sfb_render_ex(sfb_framebuffer fb, const sfb_render_overrides& overrides) { return sfb_render_ex(fb, &overrides); }
+inline void sfb_render_ex(sfb_framebuffer fb, const sfb_render_desc& desc) { return sfb_render_ex(fb, &desc); }
 #endif
 #endif // SOKOL_FRAMEBUFFER_INCLUDED
 
@@ -4360,7 +4582,7 @@ typedef struct {
         sg_image img;
         sg_view tex_view;
         sg_view att_view;
-    } prescale;
+    } offscreen;
     struct {
         sg_image img;
         sg_view tex_view;
@@ -4682,24 +4904,24 @@ static void _sfb_init_framebuffer(_sfb_framebuffer_t* fb, const sfb_framebuffer_
         .label = "sfb-update-tex-view",
     });
     valid &= sg_query_view_state(fb->update.tex_view) == SG_RESOURCESTATE_VALID;
-    fb->prescale.img = sg_make_image(&(sg_image_desc){
+    fb->offscreen.img = sg_make_image(&(sg_image_desc){
         .usage.color_attachment = true,
         .width = fb->desc.width * fb->desc.prescale,
         .height = fb->desc.height * fb->desc.prescale,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .label = "sfb-prescale-image",
+        .label = "sfb-offscreen-image",
     });
-    valid &= sg_query_image_state(fb->prescale.img) == SG_RESOURCESTATE_VALID;
-    fb->prescale.tex_view = sg_make_view(&(sg_view_desc){
-        .texture.image = fb->prescale.img,
-        .label = "sfb-prescale-texture-view",
+    valid &= sg_query_image_state(fb->offscreen.img) == SG_RESOURCESTATE_VALID;
+    fb->offscreen.tex_view = sg_make_view(&(sg_view_desc){
+        .texture.image = fb->offscreen.img,
+        .label = "sfb-offscreen-texture-view",
     });
-    valid &= sg_query_view_state(fb->prescale.tex_view) == SG_RESOURCESTATE_VALID;
-    fb->prescale.att_view = sg_make_view(&(sg_view_desc){
-        .color_attachment.image = fb->prescale.img,
-        .label = "sfb-prescale-attachment-view",
+    valid &= sg_query_view_state(fb->offscreen.tex_view) == SG_RESOURCESTATE_VALID;
+    fb->offscreen.att_view = sg_make_view(&(sg_view_desc){
+        .color_attachment.image = fb->offscreen.img,
+        .label = "sfb-offscreen-attachment-view",
     });
-    valid &= sg_query_view_state(fb->prescale.att_view) == SG_RESOURCESTATE_VALID;
+    valid &= sg_query_view_state(fb->offscreen.att_view) == SG_RESOURCESTATE_VALID;
     if (fb->desc.format == SFB_FORMAT_PALETTE8) {
         fb->palette.img = sg_make_image(&(sg_image_desc){
             .usage.dynamic_update = true,
@@ -4742,9 +4964,9 @@ static void _sfb_uninit_framebuffer(_sfb_framebuffer_t* fb) {
     // it's ok to call the destroy funcs with invalid id or in failed state
     sg_destroy_image(fb->update.img);
     sg_destroy_view(fb->update.tex_view);
-    sg_destroy_image(fb->prescale.img);
-    sg_destroy_view(fb->prescale.tex_view);
-    sg_destroy_view(fb->prescale.att_view);
+    sg_destroy_image(fb->offscreen.img);
+    sg_destroy_view(fb->offscreen.tex_view);
+    sg_destroy_view(fb->offscreen.att_view);
     sg_destroy_image(fb->palette.img);
     sg_destroy_view(fb->palette.tex_view);
     sg_destroy_pipeline(fb->offscreen_pip);
@@ -5107,8 +5329,8 @@ static void _sfb_destroy_samplers(void) {
     sg_destroy_sampler(_sfb.smp.linear);
 }
 
-static void _sfb_render(const _sfb_framebuffer_t* fb, const sfb_render_overrides* overrides) {
-    SOKOL_ASSERT(overrides);
+static void _sfb_render(const _sfb_framebuffer_t* fb, const sfb_render_desc* desc) {
+    SOKOL_ASSERT(desc);
     if (fb == 0) {
         _SFB_ERROR(RENDER_EX_INVALID_FRAMEBUFFER_HANDLE);
         return;
@@ -5117,17 +5339,17 @@ static void _sfb_render(const _sfb_framebuffer_t* fb, const sfb_render_overrides
         _SFB_ERROR(RENDER_EX_FRAMEBUFFER_RESOURCESTATE_NOT_VALID);
         return;
     }
-    const sg_pipeline pip = (overrides->pip.id != SG_INVALID_ID) ? overrides->pip : fb->render_pip;
+    const sg_pipeline pip = (desc->pip.id != SG_INVALID_ID) ? desc->pip : fb->render_pip;
     sg_bindings bindings = {0};
-    bindings.views[0] = fb->prescale.tex_view;
+    bindings.views[0] = fb->offscreen.tex_view;
     for (int i = 1; i < SG_MAX_VIEW_BINDSLOTS; i++) {
-        bindings.views[i] = overrides->views[i];
+        bindings.views[i] = desc->views[i];
     }
     for (int i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
-        bindings.samplers[i] = overrides->samplers[i];
+        bindings.samplers[i] = desc->samplers[i];
     }
     if (bindings.samplers[0].id == SG_INVALID_ID) {
-        bindings.samplers[0] = _sfb.smp.linear;
+        bindings.samplers[0] = desc->use_nearest_filter ? _sfb.smp.nearest : _sfb.smp.linear;
     }
 
     sg_apply_pipeline(pip);
@@ -5137,8 +5359,8 @@ static void _sfb_render(const _sfb_framebuffer_t* fb, const sfb_render_overrides
     };
     sg_apply_uniforms(0, &SG_RANGE(vs_params));
     for (int ub_slot = 1; ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS; ub_slot++) {
-        if (overrides->uniforms[ub_slot].ptr) {
-            sg_apply_uniforms(ub_slot, &overrides->uniforms[ub_slot]);
+        if (desc->uniforms[ub_slot].ptr) {
+            sg_apply_uniforms(ub_slot, &desc->uniforms[ub_slot]);
         }
     }
     sg_draw(0, 4, 1);
@@ -5209,8 +5431,8 @@ SOKOL_API_IMPL sfb_framebuffer_info sfb_query_framebuffer_info(sfb_framebuffer f
         return (sfb_framebuffer_info){
             .update_image = fb->update.img,
             .update_texture_view = fb->update.tex_view,
-            .prescale_image = fb->prescale.img,
-            .prescale_texture_view = fb->prescale.tex_view,
+            .offscreen_image = fb->offscreen.img,
+            .offscreen_texture_view = fb->offscreen.tex_view,
             .palette_image = fb->palette.img,
             .palette_texture_view = fb->palette.tex_view,
         };
@@ -5245,12 +5467,12 @@ SOKOL_API_IMPL void sfb_update(sfb_framebuffer fb_id, const sfb_update_desc* des
         sg_update_image(fb->palette.img, &(sg_image_data){ .mip_levels[0] = desc->palette });
     }
 
-    // do an offscreen pass into the prescale image with nearest filtering,
+    // do an offscreen pass into the offscreen image with nearest filtering,
     // this will also apply the cliprect
     sg_begin_pass(&(sg_pass){
         .action.colors[0] = { .load_action = SG_LOADACTION_DONTCARE },
-        .attachments = { .colors[0] = fb->prescale.att_view },
-        .label = "sfb-prescale-pass",
+        .attachments = { .colors[0] = fb->offscreen.att_view },
+        .label = "sfb-offscreen-pass",
     });
     sg_apply_pipeline(fb->offscreen_pip);
     sg_apply_bindings(&(sg_bindings){
@@ -5280,14 +5502,14 @@ SOKOL_API_IMPL void sfb_update(sfb_framebuffer fb_id, const sfb_update_desc* des
 SOKOL_API_IMPL void sfb_render(sfb_framebuffer fb_id) {
     SOKOL_ASSERT(_SFB_INIT_TAG == _sfb.init_tag);
     _sfb_framebuffer_t* fb = _sfb_lookup_framebuffer(fb_id.id);
-    _sfb_render(fb, &(sfb_render_overrides){0});
+    _sfb_render(fb, &(sfb_render_desc){0});
 }
 
-SOKOL_API_IMPL void sfb_render_ex(sfb_framebuffer fb_id, const sfb_render_overrides* overrides) {
+SOKOL_API_IMPL void sfb_render_ex(sfb_framebuffer fb_id, const sfb_render_desc* desc) {
     SOKOL_ASSERT(_SFB_INIT_TAG == _sfb.init_tag);
-    SOKOL_ASSERT(overrides);
+    SOKOL_ASSERT(desc);
     _sfb_framebuffer_t* fb = _sfb_lookup_framebuffer(fb_id.id);
-    _sfb_render(fb, overrides);
+    _sfb_render(fb, desc);
 }
 
 #endif // SOKOL_FRAMEBUFFER_IMPL
