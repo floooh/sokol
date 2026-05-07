@@ -6,8 +6,8 @@ layout(binding=0) uniform offscreen_vs_params {
 out vec2 uv;
 
 void main() {
-    float x = (gl_VertexIndex & 1) != 0 ? 0.0 : 1.0;
-    float y = (gl_VertexIndex & 2) != 0 ? 1.0 : 0.0;
+    float x = (gl_VertexIndex & 1) != 0 ? 2.0 : 0.0;
+    float y = (gl_VertexIndex & 2) != 0 ? 2.0 : 0.0;
     gl_Position = vec4(vec2(x, y) * 2.0 - 1.0, 0.5, 1.0);
     uv = (vec2(x, 1.0 - y) * uv_scale) + uv_offset;
 }
@@ -46,8 +46,8 @@ out vec2 uv;
 
 void main() {
     vec2 in_pos, in_uv;
-    in_pos.x = (gl_VertexIndex & 1) != 0 ? 0.0 : 1.0;
-    in_pos.y = (gl_VertexIndex & 2) != 0 ? 1.0 : 0.0;
+    in_pos.x = (gl_VertexIndex & 1) != 0 ? 2.0 : 0.0;
+    in_pos.y = (gl_VertexIndex & 2) != 0 ? 2.0 : 0.0;
     if (rotate == 0) {
         in_uv.x = in_pos.x;
         in_uv.y = 1.0 - in_pos.y;
