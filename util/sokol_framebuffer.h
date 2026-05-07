@@ -297,7 +297,11 @@
 extern "C" {
 #endif
 
+/*
+    Public constants.
+*/
 enum {
+    // the value of an invalid framebuffer handle
     SFB_INVALID_ID = 0,
 };
 
@@ -312,7 +316,9 @@ typedef struct sfb_framebuffer { uint32_t id; } sfb_framebuffer;
 /*
     sfb_resource_state
 
-    TODO: docs
+    The state of a framebuffer object, obtainable via sfg_query_framebuffer_state().
+    Publicly visible values are only SFB_RESOURCESTATE_VALID
+    and SFB_RESOURCESTATE_FAILED.
 */
 typedef enum sfb_resource_state {
     SFB_RESOURCESTATE_INITIAL,
@@ -326,7 +332,9 @@ typedef enum sfb_resource_state {
 /*
     sfb_format
 
-    TODO: doc
+    The framebuffer pixel format. Either RGBA8 direct color where each
+    pixel is an uint32_t, or paletted format with uint8_t pixels as
+    index into a 256 entry color palette.
 */
 typedef enum sfb_format {
     _SFB_FORMAT_DEFAULT = 0,
@@ -338,7 +346,7 @@ typedef enum sfb_format {
 /*
     sfb_rect
 
-    TODO doc:
+    Used as clipping rectangle in struct sfb_update_desc.
 */
 typedef struct sfb_rect {
     int x;
@@ -350,7 +358,10 @@ typedef struct sfb_rect {
 /*
     sfb_pass_desc
 
-    TODO: doc
+    Describes render pass properties in an sfb_framebuffer_desc (color-
+    and depth-pixel-format, sample count). This is used to create the
+    sg_pipeline objects applied in the render functions. When rendering
+    to a default swapchain all the values can remain at default (zero).
 */
 typedef struct sfb_render_pass_desc {
     sg_pixel_format color_format;
@@ -361,7 +372,8 @@ typedef struct sfb_render_pass_desc {
 /*
     sfb_framebuffer_desc
 
-    TODO: doc
+    Creation parameters for a framebuffer object. Passed into
+    sfb_make_framebuffer().
 */
 typedef struct sfb_framebuffer_desc {
     int width;                      // width in pixels, must be provided
@@ -375,31 +387,40 @@ typedef struct sfb_framebuffer_desc {
 /*
     sfb_update_desc
 
-    TODO: doc
+    Passed into sfb_update() to update the pixel-date, color-palette-data
+    and/or clipping rectangle. The sfb_update() function should only be
+    called when any of the above actually changes, at most once per frame,
+    and outside any sokol-gfx pass.
 */
 typedef struct sfb_update_desc {
-    sg_range pixels;
-    sg_range palette;
+    sg_range pixels;    // pointer to and size-in-bytes of the updated pixel data
+    sg_range palette;   // pointer to and size-in-bytes of the updated color palette
     sfb_rect cliprect;  // clip rectangle in pixels, e.g. visible area in framebuffer, default: [0, 0, width, height]
 } sfb_update_desc;
 
 /*
     sfb_render_overrides
 
-    TODO doc
+    Passed into sfb_render_ex() to override the default shader. Mainly
+    useful to inject custom shaders (like CRT shaders).
+
+    TODO: add more details once sokol_crt.h is ready.
 */
 typedef struct sfb_render_desc {
-    bool use_nearest_filter;
-    sg_pipeline pip;
-    sg_view views[SG_MAX_VIEW_BINDSLOTS];
-    sg_sampler samplers[SG_MAX_SAMPLER_BINDSLOTS];
-    sg_range uniforms[SG_MAX_UNIFORMBLOCK_BINDSLOTS];
+    bool use_nearest_filter;    // use nearest filtering instead of the default linear filtering
+    sg_pipeline pip;            // override the sg_pipeline object (and implicitly: shader object)
+    sg_view views[SG_MAX_VIEW_BINDSLOTS];   // provide additional view bindings
+    sg_sampler samplers[SG_MAX_SAMPLER_BINDSLOTS];  // provide additional samplers
+    sg_range uniforms[SG_MAX_UNIFORMBLOCK_BINDSLOTS];   // provide additional uniform data
 } sfb_render_desc;
 
 /*
     sfb_framebuffer_info
 
-    TODO doc
+    Result of sfb_query_framebuffer_info(), returns handles to the internally
+    managed images and texture views. This is mostly useful when completely
+    replacing the sfb_render[_ex]() functions with a complete custom implementation
+    (like a CRT shader which requires multiple render passes).
 */
 typedef struct sfb_framebuffer_info {
     sg_image update_image;
@@ -443,7 +464,8 @@ typedef struct sfb_logger {
 } sfb_logger;
 
 /*
-    TODO doc
+    Initialization parameters passed into sfb_setup(). You should at least
+    provide a logging function, otherwise you won't see any error logging.
 */
 typedef struct sfb_desc {
     int framebuffer_pool_size;      // default: 8
