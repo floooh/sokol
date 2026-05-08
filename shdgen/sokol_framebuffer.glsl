@@ -1,4 +1,5 @@
 @vs offscreen_vs
+@glsl_options flip_vert_y
 layout(binding=0) uniform offscreen_vs_params {
     vec2 uv_offset;
     vec2 uv_scale;
@@ -38,7 +39,6 @@ void main() {
 @program palette8 offscreen_vs palette8_fs
 
 @vs render_vs
-@glsl_options flip_vert_y
 layout(binding=0) uniform render_vs_params {
     int rotate;
 };
