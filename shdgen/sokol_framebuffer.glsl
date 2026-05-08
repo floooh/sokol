@@ -52,8 +52,8 @@ void main() {
         in_uv.x = in_pos.x;
         in_uv.y = 1.0 - in_pos.y;
     } else {
-        in_uv.x = in_pos.y;
-        in_uv.y = in_pos.x;
+        in_uv.x = 1.0 - in_pos.y;
+        in_uv.y = 1.0 - in_pos.x;
     }
     gl_Position = vec4(in_pos*2.0-1.0, 0.5, 1.0);
     uv = in_uv;
