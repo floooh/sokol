@@ -380,9 +380,31 @@ typedef struct sfb_framebuffer_desc {
     int height;                     // height in pixels, must be provided
     int prescale;                   // bilinear-prefiltered prescale factor, default: 1
     sfb_format format;              // framebuffer pixel format, default: SFB_FORMAT_RGBA8
+    sfb_rect cliprect;              // an optional sub-rectangle of the framebuffer with the visible data
     bool rotate90;                  // when true, framebuffer is rotated 90 degree during sfb_render()
     sfb_render_pass_desc render_pass;   // pixel formats and sample count of sokol-gfx render pass (defaults: use sokol-gfx defaults)
 } sfb_framebuffer_desc;
+
+/*
+    sfb_resize_desc
+
+    Parameters for sfb_resize(). Needs to be called before sfb_update()
+    in a frame if any of the framebuffer with potentially new framebuffer
+    size parameters or clipping rectangle. Note that the sfb_resize() function
+    can be called even when no resizing needs to happen, in that case the
+    function will be a silent no-op and return false. When the function
+    return true this means that internal image objects had been recreated
+    and need to be repopulated again via sfb_update()
+
+    Resizing is slightly cheaper than destroying and creating the frambuffer
+    because only image objects needs to be re-created, but no pipeline objects.
+*/
+typedef struct sfb_resize_desc {
+    int width;
+    int height;
+    int prescale;
+    sfb_rect cliprect;
+} sfb_resize_desc;
 
 /*
     sfb_update_desc
@@ -395,7 +417,6 @@ typedef struct sfb_framebuffer_desc {
 typedef struct sfb_update_desc {
     sg_range pixels;    // pointer to and size-in-bytes of the updated pixel data
     sg_range palette;   // pointer to and size-in-bytes of the updated color palette
-    sfb_rect cliprect;  // clip rectangle in pixels, e.g. visible area in framebuffer, default: [0, 0, width, height]
 } sfb_update_desc;
 
 /*
@@ -415,6 +436,20 @@ typedef struct sfb_render_desc {
 } sfb_render_desc;
 
 /*
+    sfb_texture_info
+
+    Nested struct in sfb_framebuffer_info to describe the properties of
+    an internal image/view pair.
+*/
+typedef struct sfb_texture_info {
+    int width;
+    int height;
+    sg_pixel_format pixel_format;
+    sg_image image;
+    sg_view tex_view;
+} sfb_texture_info;
+
+/*
     sfb_framebuffer_info
 
     Result of sfb_query_framebuffer_info(), returns handles to the internally
@@ -423,14 +458,11 @@ typedef struct sfb_render_desc {
     (like a CRT shader which requires multiple render passes).
 */
 typedef struct sfb_framebuffer_info {
-    sg_image update_image;
-    sg_view update_texture_view;
-    sg_image offscreen_image;
-    sg_view offscreen_texture_view;
-    sg_image palette_image;             // only valid when sfb_framebuffer_desc.format == SFB_FORMAT_PALETTE8
-    sg_view palette_texture_view;       // only valid when sfb_framebuffer_desc.format == SFB_FORMAT_PALETTE8
-    sg_sampler nearest_sampler;     // sampler for nearest-filtering
-    sg_sampler linear_sampler;      // sampler for linear-filtering
+    sfb_texture_info update;        // properties of the internal update texture
+    sfb_texture_info offscreen;     // properties of the internal offscreen texture
+    sfb_texture_info palette;       // properties of the internal palette texture
+    sg_sampler nearest_sampler;     // internal sampler for nearest-filtering
+    sg_sampler linear_sampler;      // internal sampler for linear-filtering
 } sfb_framebuffer_info;
 
 /*
@@ -484,6 +516,8 @@ SOKOL_FRAMEBUFFER_API_DECL void sfb_shutdown(void);
 SOKOL_FRAMEBUFFER_API_DECL sfb_framebuffer sfb_make_framebuffer(const sfb_framebuffer_desc* desc);
 // destroy framebuffer object
 SOKOL_FRAMEBUFFER_API_DECL void sfb_destroy_framebuffer(sfb_framebuffer fb);
+// resize internal images (no-op if resize isn't needed), return true when images had to be re-created
+SOKOL_FRAMEBUFFER_API_DECL bool sfb_resize(sfb_framebuffer fb, const sfb_resize_desc* desc);
 // update framebuffer and/or color palette content (must be called outside any sokol-gfx pass)
 SOKOL_FRAMEBUFFER_API_DECL void sfb_update(sfb_framebuffer fb, const sfb_update_desc* desc);
 // draw framebuffer content with default shader (must be called inside a sokol-gfx render pass)
@@ -4592,7 +4626,13 @@ typedef struct {
 
 typedef struct {
     _sfb_slot_t slot;
-    sfb_framebuffer_desc desc;
+    int width;
+    int height;
+    int prescale;
+    sfb_format format;
+    sfb_rect cliprect;
+    bool rotate90;
+    sfb_render_pass_desc render_pass;
     struct {
         sg_image img;
         sg_view tex_view;
@@ -4884,12 +4924,86 @@ static sfb_desc _sfb_desc_defaults(const sfb_desc* desc) {
     return res;
 }
 
-static sfb_framebuffer_desc _sfb_framebuffer_desc_defaults(const sfb_framebuffer_desc* desc) {
-    SOKOL_ASSERT(desc);
-    sfb_framebuffer_desc res = *desc;
-    res.prescale = _sfb_def(res.prescale, 1);
-    res.format = _sfb_def(res.format, SFB_FORMAT_RGBA8);
-    return res;
+static void _sfb_destroy_update_images_and_views(_sfb_framebuffer_t* fb) {
+    SOKOL_ASSERT(fb);
+    sg_destroy_image(fb->update.img);
+    sg_destroy_view(fb->update.tex_view);
+}
+
+static void _sfb_destroy_offscreen_images_and_views(_sfb_framebuffer_t* fb) {
+    SOKOL_ASSERT(fb);
+    sg_destroy_image(fb->offscreen.img);
+    sg_destroy_view(fb->offscreen.tex_view);
+    sg_destroy_view(fb->offscreen.att_view);
+}
+
+static void _sfb_destroy_palette_images_and_views(_sfb_framebuffer_t* fb) {
+    SOKOL_ASSERT(fb);
+    sg_destroy_image(fb->palette.img);
+    sg_destroy_view(fb->palette.tex_view);
+}
+
+static bool _sfb_create_update_images_and_views(_sfb_framebuffer_t* fb) {
+    SOKOL_ASSERT(fb);
+    bool valid = true;
+    fb->update.img = sg_make_image(&(sg_image_desc){
+        .usage.dynamic_update = true,
+        .width = fb->width,
+        .height = fb->height,
+        .pixel_format = fb->format == SFB_FORMAT_RGBA8 ? SG_PIXELFORMAT_RGBA8 : SG_PIXELFORMAT_R8,
+        .label = "sfb-update-image",
+    });
+    valid &= sg_query_image_state(fb->update.img) == SG_RESOURCESTATE_VALID;
+    fb->update.tex_view = sg_make_view(&(sg_view_desc){
+        .texture.image = fb->update.img,
+        .label = "sfb-update-tex-view",
+    });
+    valid &= sg_query_view_state(fb->update.tex_view) == SG_RESOURCESTATE_VALID;
+    return valid;
+}
+
+static bool _sfb_create_offscreen_images_and_views(_sfb_framebuffer_t* fb) {
+    SOKOL_ASSERT(fb);
+    bool valid = true;
+    fb->offscreen.img = sg_make_image(&(sg_image_desc){
+        .usage.color_attachment = true,
+        .width = fb->cliprect.width * fb->prescale,
+        .height = fb->cliprect.height * fb->prescale,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .label = "sfb-offscreen-image",
+    });
+    valid &= sg_query_image_state(fb->offscreen.img) == SG_RESOURCESTATE_VALID;
+    fb->offscreen.tex_view = sg_make_view(&(sg_view_desc){
+        .texture.image = fb->offscreen.img,
+        .label = "sfb-offscreen-texture-view",
+    });
+    valid &= sg_query_view_state(fb->offscreen.tex_view) == SG_RESOURCESTATE_VALID;
+    fb->offscreen.att_view = sg_make_view(&(sg_view_desc){
+        .color_attachment.image = fb->offscreen.img,
+        .label = "sfb-offscreen-attachment-view",
+    });
+    valid &= sg_query_view_state(fb->offscreen.att_view) == SG_RESOURCESTATE_VALID;
+    return valid;
+}
+
+static bool _sfb_create_palette_images_and_views(_sfb_framebuffer_t* fb) {
+    SOKOL_ASSERT(fb);
+    bool valid = true;
+    if (fb->format == SFB_FORMAT_PALETTE8) {
+        fb->palette.img = sg_make_image(&(sg_image_desc){
+            .usage.dynamic_update = true,
+            .width = 256,
+            .height = 1,
+            .pixel_format = SG_PIXELFORMAT_RGBA8,
+            .label = "sfb-palette-img",
+        });
+        valid &= sg_query_image_state(fb->palette.img) == SG_RESOURCESTATE_VALID;
+        fb->palette.tex_view = sg_make_view(&(sg_view_desc){
+            .texture.image = fb->palette.img,
+        });
+        valid &= sg_query_view_state(fb->palette.tex_view) == SG_RESOURCESTATE_VALID;
+    }
+    return valid;
 }
 
 static void _sfb_init_framebuffer(_sfb_framebuffer_t* fb, const sfb_framebuffer_desc* desc) {
@@ -4905,87 +5019,44 @@ static void _sfb_init_framebuffer(_sfb_framebuffer_t* fb, const sfb_framebuffer_
         fb->slot.state = SFB_RESOURCESTATE_FAILED;
         return;
     }
-    fb->desc = *desc;
+    fb->width = desc->width;
+    fb->height = desc->height;
+    fb->prescale = _sfb_def(desc->prescale, 1);
+    fb->format = _sfb_def(desc->format, SFB_FORMAT_RGBA8);
+    fb->cliprect.x = desc->cliprect.x;
+    fb->cliprect.y = desc->cliprect.y;
+    fb->cliprect.width = _sfb_def(desc->cliprect.width, fb->width);
+    fb->cliprect.height = _sfb_def(desc->cliprect.height, fb->height);
+    fb->rotate90 = desc->rotate90;
+    fb->render_pass = desc->render_pass;
 
-    bool valid = true;
-
-    // create images and views
-    fb->update.img = sg_make_image(&(sg_image_desc){
-        .usage.dynamic_update = true,
-        .width = fb->desc.width,
-        .height = fb->desc.height,
-        .pixel_format = fb->desc.format == SFB_FORMAT_RGBA8 ? SG_PIXELFORMAT_RGBA8 : SG_PIXELFORMAT_R8,
-        .label = "sfb-update-image",
-    });
-    valid &= sg_query_image_state(fb->update.img) == SG_RESOURCESTATE_VALID;
-    fb->update.tex_view = sg_make_view(&(sg_view_desc){
-        .texture.image = fb->update.img,
-        .label = "sfb-update-tex-view",
-    });
-    valid &= sg_query_view_state(fb->update.tex_view) == SG_RESOURCESTATE_VALID;
-    fb->offscreen.img = sg_make_image(&(sg_image_desc){
-        .usage.color_attachment = true,
-        .width = fb->desc.width * fb->desc.prescale,
-        .height = fb->desc.height * fb->desc.prescale,
-        .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .label = "sfb-offscreen-image",
-    });
-    valid &= sg_query_image_state(fb->offscreen.img) == SG_RESOURCESTATE_VALID;
-    fb->offscreen.tex_view = sg_make_view(&(sg_view_desc){
-        .texture.image = fb->offscreen.img,
-        .label = "sfb-offscreen-texture-view",
-    });
-    valid &= sg_query_view_state(fb->offscreen.tex_view) == SG_RESOURCESTATE_VALID;
-    fb->offscreen.att_view = sg_make_view(&(sg_view_desc){
-        .color_attachment.image = fb->offscreen.img,
-        .label = "sfb-offscreen-attachment-view",
-    });
-    valid &= sg_query_view_state(fb->offscreen.att_view) == SG_RESOURCESTATE_VALID;
-    if (fb->desc.format == SFB_FORMAT_PALETTE8) {
-        fb->palette.img = sg_make_image(&(sg_image_desc){
-            .usage.dynamic_update = true,
-            .width = 256,
-            .height = 1,
-            .pixel_format = SG_PIXELFORMAT_RGBA8,
-            .label = "sfb-palette-img",
-        });
-        valid &= sg_query_image_state(fb->palette.img) == SG_RESOURCESTATE_VALID;
-        fb->palette.tex_view = sg_make_view(&(sg_view_desc){
-            .texture.image = fb->palette.img,
-        });
-        valid &= sg_query_view_state(fb->palette.tex_view) == SG_RESOURCESTATE_VALID;
-    }
-
-    // pipeline objects
+    bool valid = _sfb_create_update_images_and_views(fb);
+    valid &= _sfb_create_offscreen_images_and_views(fb);
+    valid &= _sfb_create_palette_images_and_views(fb);
     fb->offscreen_pip = sg_make_pipeline(&(sg_pipeline_desc){
-        .shader = fb->desc.format == SFB_FORMAT_PALETTE8 ? _sfb.shd.palette8 : _sfb.shd.rgba8,
+        .shader = fb->format == SFB_FORMAT_PALETTE8 ? _sfb.shd.palette8 : _sfb.shd.rgba8,
         .depth.pixel_format = SG_PIXELFORMAT_NONE,
         .colors[0].pixel_format = SG_PIXELFORMAT_RGBA8,
         .label = "sfb-pipeline",
     });
     valid &= sg_query_pipeline_state(fb->offscreen_pip) == SG_RESOURCESTATE_VALID;
-
     fb->render_pip = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = _sfb.shd.render,
-        .sample_count = fb->desc.render_pass.sample_count,
-        .depth.pixel_format = fb->desc.render_pass.depth_format,
-        .colors[0].pixel_format = fb->desc.render_pass.color_format,
+        .sample_count = fb->render_pass.sample_count,
+        .depth.pixel_format = fb->render_pass.depth_format,
+        .colors[0].pixel_format = fb->render_pass.color_format,
         .label = "sfb-render-pipeline",
     });
-
+    valid &= sg_query_pipeline_state(fb->render_pip) == SG_RESOURCESTATE_VALID;
     fb->slot.state = valid ? SFB_RESOURCESTATE_VALID : SFB_RESOURCESTATE_FAILED;
 }
 
 static void _sfb_uninit_framebuffer(_sfb_framebuffer_t* fb) {
     SOKOL_ASSERT(fb && (fb->slot.state == SFB_RESOURCESTATE_VALID) || (fb->slot.state == SFB_RESOURCESTATE_FAILED));
+    _sfb_destroy_palette_images_and_views(fb);
+    _sfb_destroy_offscreen_images_and_views(fb);
+    _sfb_destroy_update_images_and_views(fb);
     // it's ok to call the destroy funcs with invalid id or in failed state
-    sg_destroy_image(fb->update.img);
-    sg_destroy_view(fb->update.tex_view);
-    sg_destroy_image(fb->offscreen.img);
-    sg_destroy_view(fb->offscreen.tex_view);
-    sg_destroy_view(fb->offscreen.att_view);
-    sg_destroy_image(fb->palette.img);
-    sg_destroy_view(fb->palette.tex_view);
     sg_destroy_pipeline(fb->offscreen_pip);
     sg_destroy_pipeline(fb->render_pip);
     fb->slot.state = SFB_RESOURCESTATE_ALLOC;
@@ -5012,13 +5083,13 @@ static bool _sfb_validate_update(const _sfb_framebuffer_t* fb, const sfb_update_
 
     // if pixel data is provided make sure the size matches
     if (desc->pixels.ptr) {
-        if (fb->desc.format == SFB_FORMAT_PALETTE8) {
-            if (desc->pixels.size != (size_t)(fb->desc.width * fb->desc.height)) {
+        if (fb->format == SFB_FORMAT_PALETTE8) {
+            if (desc->pixels.size != (size_t)(fb->width * fb->height)) {
                 _SFB_ERROR(UPDATE_PIXEL_RANGE_SIZE_PALETTE8);
                 return false;
             }
         } else {
-            if (desc->pixels.size != (size_t)(fb->desc.width * fb->desc.height * 4)) {
+            if (desc->pixels.size != (size_t)(fb->width * fb->height * 4)) {
                 _SFB_ERROR(UPDATE_PIXEL_RANGE_SIZE_RGBA8);
                 return false;
             }
@@ -5027,7 +5098,7 @@ static bool _sfb_validate_update(const _sfb_framebuffer_t* fb, const sfb_update_
 
     // if palette data is provided make sure the size matches
     if (desc->palette.ptr) {
-        if (fb->desc.format == SFB_FORMAT_PALETTE8) {
+        if (fb->format == SFB_FORMAT_PALETTE8) {
             if (desc->palette.size != 256 * sizeof(uint32_t)) {
                 _SFB_ERROR(UPDATE_PALETTE_RANGE_SIZE);
                 return false;
@@ -5369,7 +5440,7 @@ static void _sfb_render(const _sfb_framebuffer_t* fb, const sfb_render_desc* des
     sg_apply_pipeline(pip);
     sg_apply_bindings(&bindings);
     const _sfb_render_vs_params_t vs_params = {
-        .rotate = (int)fb->desc.rotate90,
+        .rotate = (int)fb->rotate90,
     };
     sg_apply_uniforms(0, &SG_RANGE(vs_params));
     for (int ub_slot = 1; ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS; ub_slot++) {
@@ -5406,12 +5477,11 @@ SOKOL_API_IMPL void sfb_shutdown(void) {
 SOKOL_API_IMPL sfb_framebuffer sfb_make_framebuffer(const sfb_framebuffer_desc* desc) {
     SOKOL_ASSERT(_SFB_INIT_TAG == _sfb.init_tag);
     SOKOL_ASSERT(desc);
-    sfb_framebuffer_desc desc_def = _sfb_framebuffer_desc_defaults(desc);
     sfb_framebuffer fb_id = _sfb_alloc_framebuffer();
     if (fb_id.id != SFB_INVALID_ID) {
         _sfb_framebuffer_t* fb = _sfb_framebuffer_at(fb_id.id);
         SOKOL_ASSERT(fb && (fb->slot.state == SFB_RESOURCESTATE_ALLOC));
-        _sfb_init_framebuffer(fb, &desc_def);
+        _sfb_init_framebuffer(fb, desc);
         SOKOL_ASSERT((fb->slot.state == SFB_RESOURCESTATE_VALID) || (fb->slot.state == SFB_RESOURCESTATE_FAILED));
     }
     return fb_id;
@@ -5443,12 +5513,27 @@ SOKOL_API_IMPL sfb_framebuffer_info sfb_query_framebuffer_info(sfb_framebuffer f
     _sfb_framebuffer_t* fb = _sfb_lookup_framebuffer(fb_id.id);
     if (fb) {
         return (sfb_framebuffer_info){
-            .update_image = fb->update.img,
-            .update_texture_view = fb->update.tex_view,
-            .offscreen_image = fb->offscreen.img,
-            .offscreen_texture_view = fb->offscreen.tex_view,
-            .palette_image = fb->palette.img,
-            .palette_texture_view = fb->palette.tex_view,
+            .update = {
+                .width = fb->width,
+                .height = fb->height,
+                .pixel_format = fb->format == SFB_FORMAT_RGBA8 ? SG_PIXELFORMAT_RGBA8 : SG_PIXELFORMAT_R8,
+                .image = fb->update.img,
+                .tex_view = fb->update.tex_view,
+            },
+            .offscreen = {
+                .width = fb->cliprect.width * fb->prescale,
+                .height = fb->cliprect.height * fb->prescale,
+                .pixel_format = SG_PIXELFORMAT_RGBA8,
+                .image = fb->offscreen.img,
+                .tex_view = fb->offscreen.tex_view,
+            },
+            .palette = {
+                .width = 256,
+                .height = 1,
+                .pixel_format = SG_PIXELFORMAT_RGBA8,
+                .image = fb->palette.img,
+                .tex_view = fb->palette.tex_view,
+            },
             .nearest_sampler = _sfb.smp.nearest,
             .linear_sampler = _sfb.smp.linear,
         };
@@ -5461,10 +5546,48 @@ SOKOL_API_IMPL sfb_framebuffer_desc sfb_query_framebuffer_desc(sfb_framebuffer f
     SOKOL_ASSERT(_SFB_INIT_TAG == _sfb.init_tag);
     _sfb_framebuffer_t* fb = _sfb_lookup_framebuffer(fb_id.id);
     if (fb) {
-        return fb->desc;
+        return (sfb_framebuffer_desc){
+            .width = fb->width,
+            .height = fb->height,
+            .prescale = fb->prescale,
+            .format = fb->format,
+            .cliprect = fb->cliprect,
+            .rotate90 = fb->rotate90,
+            .render_pass = fb->render_pass,
+        };
     } else {
         return (sfb_framebuffer_desc){0};
     }
+}
+
+SOKOL_API_IMPL bool sfb_resize(sfb_framebuffer fb_id, const sfb_resize_desc* desc) {
+    SOKOL_ASSERT(_SFB_INIT_TAG == _sfb.init_tag);
+    SOKOL_ASSERT(desc);
+    _sfb_framebuffer_t* fb = _sfb_lookup_framebuffer(fb_id.id);
+    bool retval = false;
+    if (fb) {
+        if ((desc->width != fb->width) || (desc->height != fb->height)) {
+            retval = true;
+            _sfb_destroy_update_images_and_views(fb);
+            fb->width = desc->width;
+            fb->height = desc->height;
+            _sfb_create_update_images_and_views(fb);
+        }
+        const int prescale = _sfb_def(desc->prescale, 1);
+        const int cw = _sfb_def(desc->cliprect.width, fb->width);
+        const int ch = _sfb_def(desc->cliprect.height, fb->height);
+        if ((prescale != fb->prescale) || (cw != fb->cliprect.width) || (ch != fb->cliprect.height)) {
+            retval = true;
+            _sfb_destroy_offscreen_images_and_views(fb);
+            fb->prescale = prescale;
+            fb->cliprect.width = desc->cliprect.width;
+            fb->cliprect.height = desc->cliprect.height;
+            _sfb_create_offscreen_images_and_views(fb);
+        }
+        fb->cliprect.x = desc->cliprect.x;
+        fb->cliprect.y = desc->cliprect.y;
+    }
+    return retval;
 }
 
 SOKOL_API_IMPL void sfb_update(sfb_framebuffer fb_id, const sfb_update_desc* desc) {
@@ -5479,7 +5602,7 @@ SOKOL_API_IMPL void sfb_update(sfb_framebuffer fb_id, const sfb_update_desc* des
     if (desc->pixels.ptr) {
         sg_update_image(fb->update.img, &(sg_image_data){ .mip_levels[0] = desc->pixels });
     }
-    if ((fb->desc.format == SFB_FORMAT_PALETTE8) && desc->palette.ptr) {
+    if ((fb->format == SFB_FORMAT_PALETTE8) && desc->palette.ptr) {
         sg_update_image(fb->palette.img, &(sg_image_data){ .mip_levels[0] = desc->palette });
     }
 
@@ -5498,16 +5621,14 @@ SOKOL_API_IMPL void sfb_update(sfb_framebuffer fb_id, const sfb_update_desc* des
         },
         .samplers[0] = _sfb.smp.nearest,
     });
-    const int clip_width = _sfb_def(desc->cliprect.width, fb->desc.width);
-    const int clip_height = _sfb_def(desc->cliprect.height, fb->desc.height);
     const _sfb_offscreen_vs_params_t vs_params = {
         .uv_offset = {
-            (float)desc->cliprect.x / (float)fb->desc.width,
-            (float)desc->cliprect.y / (float)fb->desc.height,
+            (float)fb->cliprect.x / (float)fb->width,
+            (float)fb->cliprect.y / (float)fb->height,
         },
         .uv_scale = {
-            (float)clip_width / (float)fb->desc.width,
-            (float)clip_height / (float)fb->desc.height,
+            (float)fb->cliprect.width / (float)fb->width,
+            (float)fb->cliprect.height / (float)fb->height,
         },
     };
     sg_apply_uniforms(0, &SG_RANGE(vs_params));
