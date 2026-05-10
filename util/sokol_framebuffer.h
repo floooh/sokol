@@ -98,6 +98,23 @@
             .rotate90 = true,
         });
 
+    You can define a sub-rectangle of the framebuffer to be rendered. For instance
+    to only render the upper-left quadrant of a 320x256 framebuffer:
+
+        sfb_framebuffer fb = sfb_make_framebuffer(&(sfb_framebuffer_desc){
+            .width = 512
+            .height = 512,
+            .format = SFB_FORMAT_PALETTE8,
+            .prescale = 2,
+            .rotate90 = true,
+            .cliprect = {
+                .x = 0,
+                .y = 0,
+                .width = 160,
+                .height = 128,
+            }
+        });
+
     Finally if you plan to render the framebuffer in a render pass with different
     properties than the default swapchain format, you'll need to provide
     a color- and depth-pixelformat and a sample count which matches the
@@ -169,16 +186,6 @@
             .pixels = SG_RANGE(pixels),
         });
 
-    You can also provide a cliprect here to only render a subsection of the
-    frame buffer. For instance to only render the top-left quadrant of a
-    320x256 framebuffer:
-
-        sfb_update(fb, &(sfb_update_desc){
-            .pixels = SG_RANGE(pixels),
-            .palette = SG_RANGE(palette),
-            .cliprect = { .x = 0, .y = 0, .width = 160, .height = 128 },
-        });
-
     The sfb_update() function will do up to two calls to the sokol-gfx
     function sg_update_image() - once for the pixel data and once for the
     palette data (this is why the function must only be called at most
@@ -215,13 +222,27 @@
 
     TODO: refer to a future sokol_crt.h header.
 
+    If any of the sizing properties of the framebuffer changes, call:
+
+        bool size_changed = sfb_resize(fb, &(sfb_resize_desc){
+            .width = new_width,
+            .height = new_height,
+            .prescale = new_prescale,
+            .cliprect = new_cliprect
+        });
+
+    The sfb_resize() function is 'lazy', it will only destroy and recreate internal
+    objects when actually needed (e.g. the size of image objects has changed). In
+    that case, true is returned. When the function returns false, it was
+    basically a cheap no-op.
+
     If you want to do the final rendering entirely yourself you can get handles
     to all the internally used resources of a framebuffer object via:
 
         sfb_framebuffer_info info = sfb_query_framebuffer_info(fb);
 
-    This gives you the internally managed sokol-gfx image and view object handles
-    for use in your own rendering.
+    This returns handles to all internal image, view and sampler objects
+    as well as image sizes and pixel formats.
 
     To query the current 'resource state' of a framebuffer:
 
@@ -346,7 +367,8 @@ typedef enum sfb_format {
 /*
     sfb_rect
 
-    Used as clipping rectangle in struct sfb_update_desc.
+    Used as clipping rectangle in struct sfb_framebuffer_desc
+    and sfb_resize_desc.
 */
 typedef struct sfb_rect {
     int x;
@@ -453,9 +475,10 @@ typedef struct sfb_texture_info {
     sfb_framebuffer_info
 
     Result of sfb_query_framebuffer_info(), returns handles to the internally
-    managed images, texture views and samplers. This is mostly useful when completely
-    replacing the sfb_render[_ex]() functions with a complete custom implementation
-    (like a CRT shader which requires multiple render passes).
+    managed images, texture views and samplers, image sizes and pixel formats.
+    This is mostly useful when completely replacing the sfb_render[_ex]()
+    functions with a complete custom implementation (like a CRT shader which
+    requires multiple render passes).
 */
 typedef struct sfb_framebuffer_info {
     sfb_texture_info update;        // properties of the internal update texture
