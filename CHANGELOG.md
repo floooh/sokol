@@ -16,7 +16,6 @@
   sokol_framebuffer.h implementation PR for links to the side-project PRs):
     - [Doom on Sokol](https://floooh.github.io/doom-sokol/)
     - [Tiny Emulators](https://floooh.github.io/tiny8bit/)
-    - [Pacman.c](https://floooh.github.io/pacman.c/pacman.html)
 
 ### 04-May-2026
 
