@@ -1917,8 +1917,8 @@ static const uint8_t _snk_shd_fs_bytecode_spirv_vk[780] = {
     0x1c,0x00,0x00,0x00,0xfd,0x00,0x01,0x00,0x38,0x00,0x01,0x00,
 };
 #elif defined(SOKOL_DUMMY_BACKEND)
-static const char* _snk_vs_source_dummy = "";
-static const char* _snk_fs_source_dummy = "";
+static const char* _snk_shd_vs_source_dummy = "";
+static const char* _snk_shd_fs_source_dummy = "";
 #else
 #error "Please define one of SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU, SOKOL_VULKAN or SOKOL_DUMMY_BACKEND!"
 #endif
@@ -2409,8 +2409,8 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
         vs_bytecode = SG_RANGE(_snk_shd_vs_bytecode_spirv_vk);
         fs_bytecode = SG_RANGE(_snk_shd_fs_bytecode_spirv_vk);
     #else
-        vs_source = _snk_vs_source_dummy;
-        fs_source = _snk_fs_source_dummy;
+        vs_source = _snk_shd_vs_source_dummy;
+        fs_source = _snk_shd_fs_source_dummy;
     #endif
     _snuklear.shd = sg_make_shader(&(sg_shader_desc){
         .attrs = {

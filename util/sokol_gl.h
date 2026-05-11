@@ -2391,8 +2391,8 @@ static const uint8_t _sgl_shd_fs_bytecode_spirv_vk[792] = {
     0xfd,0x00,0x01,0x00,0x38,0x00,0x01,0x00,
 };
 #elif defined(SOKOL_DUMMY_BACKEND)
-static const char* _sgl_vs_source_dummy = "";
-static const char* _sgl_fs_source_dummy = "";
+static const char* _sgl_shd_vs_source_dummy = "";
+static const char* _sgl_shd_fs_source_dummy = "";
 #else
 #error "Please define one of SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU, SOKOL_VULKAN or SOKOL_DUMMY_BACKEND!"
 #endif
@@ -3554,8 +3554,8 @@ static void _sgl_setup_common(void) {
         shd_desc.fragment_func.bytecode = SG_RANGE(_sgl_shd_fs_bytecode_spirv_vk);
         shd_desc.fragment_func.entry = "main";
     #else
-        shd_desc.vertex_func.source = _sgl_vs_source_dummy;
-        shd_desc.fragment_func.source = _sgl_fs_source_dummy;
+        shd_desc.vertex_func.source = _sgl_shd_vs_source_dummy;
+        shd_desc.fragment_func.source = _sgl_shd_fs_source_dummy;
     #endif
     _sgl.shd = sg_make_shader(&shd_desc);
     SOKOL_ASSERT(SG_INVALID_ID != _sgl.shd.id);
