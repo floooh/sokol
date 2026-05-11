@@ -5594,7 +5594,10 @@ SOKOL_API_IMPL bool sfb_resize(sfb_framebuffer fb_id, const sfb_resize_desc* des
             _sfb_destroy_update_images_and_views(fb);
             fb->width = desc->width;
             fb->height = desc->height;
-            _sfb_create_update_images_and_views(fb);
+            bool res = _sfb_create_update_images_and_views(fb);
+            if (!res) {
+                fb->slot.state = SFB_RESOURCESTATE_FAILED;
+            }
         }
         const int prescale = _sfb_def(desc->prescale, 1);
         const int cw = _sfb_def(desc->cliprect.width, fb->width);
@@ -5605,7 +5608,10 @@ SOKOL_API_IMPL bool sfb_resize(sfb_framebuffer fb_id, const sfb_resize_desc* des
             fb->prescale = prescale;
             fb->cliprect.width = desc->cliprect.width;
             fb->cliprect.height = desc->cliprect.height;
-            _sfb_create_offscreen_images_and_views(fb);
+            bool res = _sfb_create_offscreen_images_and_views(fb);
+            if (!res) {
+                fb->slot.state = SFB_RESOURCESTATE_FAILED;
+            }
         }
         fb->cliprect.x = desc->cliprect.x;
         fb->cliprect.y = desc->cliprect.y;
