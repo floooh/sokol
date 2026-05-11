@@ -1,5 +1,23 @@
 ## Updates
 
+### 11-May-2026
+
+- A new header `sokol_framebuffer.h` has been added which provides a 'CPU framebuffer'
+  in 32-bits-per-pixel direct-color mode or 8-bits-per-pixel color-palette mode
+  (Mode13H-style).
+
+  Implementation PR: https://github.com/floooh/sokol/pull/1495
+
+  New samples:
+    - [framebuffer-sapp.c](https://floooh.github.io/sokol-html5/framebuffer-sapp.html): a 'simplest possible' example
+    - [ilbm-sapp.c](https://floooh.github.io/sokol-html5/ilbm-sapp.html): load and display Amiga IFF ILBM images
+
+  The following side-projects have also been moved to sokol_framebuffer.h (see the
+  sokol_framebuffer.h implementation PR for links to the side-project PRs):
+    - [Doom on Sokol](https://floooh.github.io/doom-sokol/)
+    - [Tiny Emulators](https://floooh.github.io/tiny8bit/)
+    - [Pacman.c](https://floooh.github.io/pacman.c/pacman.html)
+
 ### 01-May-2026
 
 - sokol_app.h macos: Move `activationPolicy` in front of window
