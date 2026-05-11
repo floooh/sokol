@@ -3297,9 +3297,9 @@ typedef struct sg_buffer_desc {
         the image content cannot be updated from the CPU side
         (but may be updated by the GPU in a render- or compute-pass)
     .dynamic_update (default: false)
-        the image content is updated infrequently by the CPU
+        the image content is updated infrequently by the CPU via sg_update_image()
     .stream_update (default: false)
-        the image content is updated each frame by the CPU via
+        the image content is updated each frame by the CPU via sg_update_image()
 
     Note that creating a texture view from the image to be used for
     texture-sampling in vertex-, fragment- or compute-shaders
