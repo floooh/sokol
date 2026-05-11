@@ -5075,7 +5075,7 @@ static void _sfb_init_framebuffer(_sfb_framebuffer_t* fb, const sfb_framebuffer_
 }
 
 static void _sfb_uninit_framebuffer(_sfb_framebuffer_t* fb) {
-    SOKOL_ASSERT(fb && (fb->slot.state == SFB_RESOURCESTATE_VALID) || (fb->slot.state == SFB_RESOURCESTATE_FAILED));
+    SOKOL_ASSERT(fb && ((fb->slot.state == SFB_RESOURCESTATE_VALID) || (fb->slot.state == SFB_RESOURCESTATE_FAILED)));
     _sfb_destroy_palette_images_and_views(fb);
     _sfb_destroy_offscreen_images_and_views(fb);
     _sfb_destroy_update_images_and_views(fb);
