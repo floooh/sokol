@@ -378,7 +378,7 @@ typedef struct sfb_rect {
 } sfb_rect;
 
 /*
-    sfb_pass_desc
+    sfb_render_pass_desc
 
     Describes render pass properties in an sfb_framebuffer_desc (color-
     and depth-pixel-format, sample count). This is used to create the
@@ -410,13 +410,13 @@ typedef struct sfb_framebuffer_desc {
 /*
     sfb_resize_desc
 
-    Parameters for sfb_resize(). Needs to be called before sfb_update()
-    in a frame if any of the framebuffer with potentially new framebuffer
-    size parameters or clipping rectangle. Note that the sfb_resize() function
-    can be called even when no resizing needs to happen, in that case the
-    function will be a silent no-op and return false. When the function
-    return true this means that internal image objects had been recreated
-    and need to be repopulated again via sfb_update()
+    Parameters for sfb_resize(). Needs to be called before sfb_update() in a
+    frame if with potentially new framebuffer size parameters or clipping
+    rectangle. Note that the sfb_resize() function can be called even when no
+    resizing needs to happen, in that case the function will be a silent no-op
+    and return false. When the function returns true this means that internal
+    image objects had been recreated and need to be repopulated again via
+    sfb_update()
 
     Resizing is slightly cheaper than destroying and creating the frambuffer
     because only image objects needs to be re-created, but no pipeline objects.
@@ -431,10 +431,9 @@ typedef struct sfb_resize_desc {
 /*
     sfb_update_desc
 
-    Passed into sfb_update() to update the pixel-date, color-palette-data
-    and/or clipping rectangle. The sfb_update() function should only be
-    called when any of the above actually changes, at most once per frame,
-    and outside any sokol-gfx pass.
+    Passed into sfb_update() to update the pixel-date and/or color-palette-data
+    The sfb_update() function should only be called when any of the above
+    actually changes, at most once per frame, and outside any sokol-gfx pass.
 */
 typedef struct sfb_update_desc {
     sg_range pixels;    // pointer to and size-in-bytes of the updated pixel data
