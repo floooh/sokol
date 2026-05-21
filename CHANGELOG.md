@@ -1,5 +1,14 @@
 ## Updates
 
+### 21-May-2026
+
+- sokol_imgui.h: fix for removal of the deprecated `ImDrawCallback_ResetRenderState`
+  magic value (only an issue when building with `IMGUI_DISABLE_OBSOLETE_FUNCTIONS`).
+
+  Original issue which introduced the magic value check: https://github.com/floooh/sokol/issues/1000
+  New issue with the breakage report: https://github.com/floooh/sokol/issues/1514
+  Fix PR: https://github.com/floooh/sokol/pull/1515
+
 ### 11-May-2026
 
 - A new header `sokol_framebuffer.h` has been added which provides a 'CPU framebuffer'

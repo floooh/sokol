@@ -2812,8 +2812,10 @@ SOKOL_API_IMPL void simgui_render(void) {
             ImDrawCmd* pcmd = &cl->CmdBuffer.Data[cmd_index];
             if (pcmd->UserCallback != 0) {
                 // User callback, registered via ImDrawList::AddCallback()
-                // (ImDrawCallback_ResetRenderState is a special callback value used by the user to request the renderer to reset render state.)
-                if (pcmd->UserCallback != ImDrawCallback_ResetRenderState) {
+                // NOTE: once the deprecated ImDrawCallback_ResetRenderState define has
+                // been completely removed from Dear ImGui the below magic value can be removed too
+                const intptr_t deprecated_ImDrawCallback_ResetRenderState_magic_value = (-8);
+                if ((intptr_t)pcmd->UserCallback != deprecated_ImDrawCallback_ResetRenderState_magic_value) {
                     pcmd->UserCallback(cl, pcmd);
                     // need to re-apply all state after calling a user callback
                     sg_reset_state_cache();
