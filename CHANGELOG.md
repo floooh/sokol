@@ -1,5 +1,23 @@
 ## Updates
 
+### 24-May-2026
+
+- sokol_app.h vulkan: Properly fix the situation when
+  `vkGetPhysicalDeviceSurfaceCapabilitiesKHR` returns a width and height of zero.
+  This is for instance the case when minimizing the application window on Windows.
+  The Intel Vulkan driver refuses to create a swapchain object in that case
+  (previously resulting in a triggert assert), while the Nvidia Vulkan driver
+  happily creates a zero-sized swapchain object and image objects (there are
+  validation layer errors though). In this situation, sokol_app.h will now go into
+  an 'invalid swapchain state' until the window is deminimized. Thos builds on top
+  of the recent introduction of 'invalid swapchain passes' in sokol-gfx (such an
+  invalid swapchain pass silently skips all rendering operations).
+
+  Please note that the Vulkan backend should still be considered 'experimental'
+  (especially on Windows).
+
+  PR: https://github.com/floooh/sokol/pull/1518
+
 ### 21-May-2026
 
 - sokol_imgui.h: fix for removal of the deprecated `ImDrawCallback_ResetRenderState`
