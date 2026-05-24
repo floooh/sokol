@@ -4849,8 +4849,10 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(void) {
         if (_sapp.vk.swapchain_valid) {
             _sapp_vk_destroy_swapchain();
         }
-        _sapp.framebuffer_width = 0;
-        _sapp.framebuffer_height = 0;
+        // NOTE: keep stored framebuffer width/height unchanged here instead
+        // of resetting to 0 is intended! (harmonizes behaviour with other
+        // platforms and backends, and avoids things like Dear ImGui
+        // piling up its windows in the top-left corner)
         return;
     }
 
@@ -4949,7 +4951,7 @@ _SOKOL_PRIVATE void _sapp_vk_recreate_swapchain(void) {
     int fb_height = _sapp.framebuffer_height;
     _sapp_vk_create_swapchain();
     if ((fb_width != _sapp.framebuffer_width) || (fb_height != _sapp.framebuffer_height)) {
-        if (!_sapp.first_frame) {
+        if (_sapp.vk.swapchain_valid && !_sapp.first_frame) {
             #if defined(_SAPP_LINUX)
             _sapp_x11_app_event(SAPP_EVENTTYPE_RESIZED);
             #endif
@@ -5028,6 +5030,7 @@ _SOKOL_PRIVATE void _sapp_vk_frame(void) {
     _sapp_frame();
     _sapp_vk_present();
     if (_sapp.vk.swapchain_valid) {
+        SOKOL_ASSERT(_sapp.vk.num_swapchain_images > 0);
         _sapp.vk.sync_slot = (_sapp.vk.sync_slot + 1) % _sapp.vk.num_swapchain_images;
     }
 }
@@ -14398,7 +14401,6 @@ SOKOL_API_IMPL sapp_swapchain sapp_get_swapchain(void) {
         if (res.invalid) {
             return res;
         }
-        // FIXME: swapchain_view being null must be allowed and should skip the frame
         uint32_t img_idx = _sapp.vk.cur_swapchain_image_index;
         if (_sapp.sample_count > 1) {
             SOKOL_ASSERT(_sapp.vk.msaa.img && _sapp.vk.msaa.view);
