@@ -178,6 +178,10 @@ SOKOL_API_IMPL sg_swapchain sglue_swapchain(void) {
     sg_swapchain res;
     memset(&res, 0, sizeof(res));
     const sapp_swapchain sc = sapp_get_swapchain();
+    res.invalid = sc.invalid;
+    if (res.invalid) {
+        return res;
+    }
     res.width = sc.width;
     res.height = sc.height;
     res.sample_count = sc.sample_count;
