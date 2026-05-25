@@ -5295,6 +5295,9 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
     if (_sapp.desc.swapchain.hdr) {
         _sapp.mtl.layer.wantsExtendedDynamicRangeContent = YES;
     }
+    if (_sapp.desc.swapchain.disable_vsync || _sapp.desc.metal.disable_display_sync) {
+        _sapp.mtl.layer.displaySyncEnabled = false;
+    }
     //NOTE: default is 3: _sapp.macos.mtl.layer.maximumDrawableCount = 2;
     // FIXME: _sapp.macos.mtl.layer.colorspace = ...;
     _sapp.macos.view = [[_sapp_macos_view alloc] init];
@@ -6508,6 +6511,9 @@ _SOKOL_PRIVATE void _sapp_ios_mtl_init(UIWindowScene* windowScene) {
     CGColorSpaceRelease(colorspace);
     if (_sapp.desc.swapchain.hdr) {
         _sapp.mtl.layer.wantsExtendedDynamicRangeContent = YES;
+    }
+    if (_sapp.desc.swapchain.disable_vsync || _sapp.desc.metal.disable_display_sync) {
+        _sapp.mtl.layer.displaySyncEnabled = false;
     }
     _sapp.ios.mtl.layer.frame = _sapp.ios.view.layer.frame;
 
