@@ -6500,7 +6500,7 @@ _SOKOL_PRIVATE void _sapp_ios_mtl_init(UIWindowScene* windowScene) {
 
     _sapp.ios.mtl.layer = [CAMetalLayer layer];
     _sapp.ios.mtl.layer.device = _sapp.ios.mtl.device;
-    _sapp.ios.mtl.layer.opaque = true;
+    _sapp.mtl.layer.opaque = _sapp.desc.swapchain.composite_mode == SAPP_COMPOSITEMODE_OPAQUE;
     _sapp.ios.mtl.layer.framebufferOnly = true;
     _sapp.ios.mtl.layer.pixelFormat = _sapp_mtl_color_format();
     CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(_sapp_mtl_color_space());
