@@ -14003,7 +14003,6 @@ SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
             case MTLPixelFormatRGBA16Float:
                 return SAPP_PIXELFORMAT_RGBA16F;
             default:
-                // FIXME!
                 SOKOL_UNREACHABLE;
                 return SAPP_PIXELFORMAT_NONE;
         }
