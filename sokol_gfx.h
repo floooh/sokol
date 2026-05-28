@@ -18312,7 +18312,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
                 bgl_entry->storageTexture.access = WGPUStorageTextureAccess_ReadWrite;
             }
             bgl_entry->storageTexture.format = _sg_wgpu_textureformat(shd->cmn.views[i].access_format);
-            bgl_entry->texture.viewDimension = _sg_wgpu_texture_view_dimension(shd->cmn.views[i].image_type);
+            bgl_entry->storageTexture.viewDimension = _sg_wgpu_texture_view_dimension(shd->cmn.views[i].image_type);
         } else {
             SOKOL_UNREACHABLE;
         }
