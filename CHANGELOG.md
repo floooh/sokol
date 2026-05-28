@@ -8,14 +8,14 @@ Please be aware of the following bug reports and fixes in recent days:
   memory barrier bits
   - Issue: https://github.com/floooh/sokol/issues/1521
   - Fix: https://github.com/floooh/sokol/commit/1dd48f8614a0044228e4ad5dd70d03a444566195
-- sokol_gfx.h: `texture` vs `storageTexture` confustion when initializing storage
+- sokol_gfx.h: `texture` vs `storageTexture` confusion when initializing storage
   image BindGroupLayoutEntry, also in the same PR is a bugfix for the
   `glBindImageTexture` call in the GL backend (I misunderstood the purpose
   of the `layered` argument):
   - Issue: https://github.com/floooh/sokol/issues/1522
   - Fix: https://github.com/floooh/sokol/issues/1525
 - sokol-shdc: added a missing `#include` when runtime reflection functions
-  are code generated:
+  are code-generated:
   - Issue: https://github.com/floooh/sokol-tools/issues/216
   - Fix: https://github.com/floooh/sokol-tools/pull/217
 
