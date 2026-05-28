@@ -1,5 +1,25 @@
 ## Updates
 
+### 28-May-2026
+
+Please be aware of the following bug reports and fixes in recent days:
+
+- sokol_gfx.h gl: a `&` vs `&=` confusion when tracking storage image
+  memory barrier bits
+  - Issue: https://github.com/floooh/sokol/issues/1521
+  - Fix: https://github.com/floooh/sokol/commit/1dd48f8614a0044228e4ad5dd70d03a444566195
+- sokol_gfx.h: `texture` vs `storageTexture` confustion when initializing storage
+  image BindGroupLayoutEntry
+  - Issue: https://github.com/floooh/sokol/issues/1522
+  - Fix: https://github.com/floooh/sokol/issues/1525
+- sokol-shdc: added a missing `#include` when runtime reflection functions
+  are code generated:
+  - Issue: https://github.com/floooh/sokol-tools/issues/216
+  - Fix: https://github.com/floooh/sokol-tools/pull/217
+
+Many thanks to @mattiasljungstrom, @oyisre and @erincatto for the reports
+and investigations and suggested fixes!
+
 ### 24-May-2026
 
 - sokol_app.h vulkan: Properly fix the situation when
