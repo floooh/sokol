@@ -9,7 +9,9 @@ Please be aware of the following bug reports and fixes in recent days:
   - Issue: https://github.com/floooh/sokol/issues/1521
   - Fix: https://github.com/floooh/sokol/commit/1dd48f8614a0044228e4ad5dd70d03a444566195
 - sokol_gfx.h: `texture` vs `storageTexture` confustion when initializing storage
-  image BindGroupLayoutEntry
+  image BindGroupLayoutEntry, also in the same PR is a bugfix for the
+  `glBindImageTexture` call in the GL backend (I misunderstood the purpose
+  of the `layered` argument):
   - Issue: https://github.com/floooh/sokol/issues/1522
   - Fix: https://github.com/floooh/sokol/issues/1525
 - sokol-shdc: added a missing `#include` when runtime reflection functions
