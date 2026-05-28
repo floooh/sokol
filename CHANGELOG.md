@@ -19,8 +19,8 @@ Please be aware of the following bug reports and fixes in recent days:
   - Issue: https://github.com/floooh/sokol-tools/issues/216
   - Fix: https://github.com/floooh/sokol-tools/pull/217
 
-Many thanks to @mattiasljungstrom, @oyisre and @erincatto for the reports
-and investigations and suggested fixes!
+Many thanks to @mattiasljungstrom, @oyisre and @erincatto for the reports, investigations
+and suggested fixes!
 
 ### 24-May-2026
 
