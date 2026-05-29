@@ -1,5 +1,19 @@
 ## Updates
 
+### 29-May-2026
+
+- sokol_app.h macos: don't disable 'mouse event coalescing' (coalescing merges
+  high frequency mouse-move events into low frequency events). Coalescing was
+  disabled in March 2021 in an attempt to *reduce* mouse lag, but with high
+  frequency mice this might actually have the opposite effect and introduce
+  extreme mouse lag by flooding the event queue with 'raw' mouse move events (at
+  least this is a current theory, also neither GLFW nor SDL have coalescing
+  disabled, so I guess it's the right thing to do)
+
+  Related ticket: https://github.com/floooh/sokol/issues/1344
+
+  Commit: https://github.com/floooh/sokol/commit/4ad893e4cccb983d431d106547fed2ee42b6b232
+
 ### 28-May-2026
 
 Please be aware of the following bug reports and fixes in recent days:
