@@ -377,8 +377,9 @@
             whether the GL context is a GLES context
 
         const void* sapp_android_get_native_activity(void);
-            On Android, get the native activity ANativeActivity pointer, otherwise
-            a null pointer.
+        const void* sapp_android_get_native_window(void);
+            On Android, get the native activity ANativeActivity pointer,
+            or native window ANativeWindow pointer, otherwise a null pointer.
 
     --- Implement the frame-callback function, this function will be called
         on the same thread as the init callback, but might be on a different
@@ -2252,6 +2253,9 @@ SOKOL_APP_API_DECL const void* sapp_x11_get_display(void);
 
 /* Android: get native activity handle */
 SOKOL_APP_API_DECL const void* sapp_android_get_native_activity(void);
+/* Android: get native window handle */
+SOKOL_APP_API_DECL const void* sapp_android_get_native_window(void);
+
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -14514,6 +14518,14 @@ SOKOL_API_IMPL const void* sapp_android_get_native_activity(void) {
     // needs to be callable from within sokol_main() (see: https://github.com/floooh/sokol/issues/708)
     #if defined(_SAPP_ANDROID)
         return (void*)_sapp.android.activity;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sapp_android_get_native_window(void) {
+    #if defined(_SAPP_ANDROID)
+        return (void*)_sapp.android.current.window;
     #else
         return 0;
     #endif
