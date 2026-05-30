@@ -1402,7 +1402,7 @@ typedef enum sapp_event_type {
     SAPP_EVENTTYPE_CLIPBOARD_PASTED,
     SAPP_EVENTTYPE_FILES_DROPPED,
     _SAPP_EVENTTYPE_NUM,
-    _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFFF
+    _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFFF,
 } sapp_event_type;
 
 /*
@@ -1535,6 +1535,7 @@ typedef enum sapp_keycode {
     SAPP_KEYCODE_RIGHT_ALT        = 346,
     SAPP_KEYCODE_RIGHT_SUPER      = 347,
     SAPP_KEYCODE_MENU             = 348,
+    _SAPP_KEYCODE_FORCE_U32 = 0x7FFFFFFF,
 } sapp_keycode;
 
 /*
@@ -1552,6 +1553,7 @@ typedef enum sapp_android_tooltype {
     SAPP_ANDROIDTOOLTYPE_FINGER = 1,    // TOOL_TYPE_FINGER
     SAPP_ANDROIDTOOLTYPE_STYLUS = 2,    // TOOL_TYPE_STYLUS
     SAPP_ANDROIDTOOLTYPE_MOUSE = 3,     // TOOL_TYPE_MOUSE
+    _SAPP_ANDROIDTOOLTYPE_FORCE_U32 = 0x7FFFFFFF,
 } sapp_android_tooltype;
 
 /*
@@ -1582,6 +1584,7 @@ typedef enum sapp_mousebutton {
     SAPP_MOUSEBUTTON_RIGHT = 0x1,
     SAPP_MOUSEBUTTON_MIDDLE = 0x2,
     SAPP_MOUSEBUTTON_INVALID = 0x100,
+    _SAPP_MOUSEBUTTON_FORCE_U32 = 0x7FFFFFFF,
 } sapp_mousebutton;
 
 /*
@@ -1844,6 +1847,7 @@ typedef struct sapp_allocator {
 #define _SAPP_LOGITEM_XMACRO(item,msg) SAPP_LOGITEM_##item,
 typedef enum sapp_log_item {
     _SAPP_LOG_ITEMS
+    _SAPP_LOGITEM_FORCE_U32 = 0x7FFFFFFF,
 } sapp_log_item;
 #undef _SAPP_LOGITEM_XMACRO
 
@@ -1866,7 +1870,7 @@ typedef enum sapp_pixel_format {
     SAPP_PIXELFORMAT_RGBA16F,
     SAPP_PIXELFORMAT_DEPTH,
     SAPP_PIXELFORMAT_DEPTH_STENCIL,
-    _SAPP_PIXELFORMAT_FORCE_U32 = 0x7FFFFFFF
+    _SAPP_PIXELFORMAT_FORCE_U32 = 0x7FFFFFFF,
 } sapp_pixel_format;
 
 /*
@@ -1989,6 +1993,7 @@ typedef enum sapp_composite_mode {
     SAPP_COMPOSITEMODE_OPAQUE,          // no blending with background
     SAPP_COMPOSITEMODE_ALPHA,           // regular alpha blending with background
     SAPP_COMPOSITEMODE_PREMULTIPLIED_ALPHA, // premultiplied alpha-blending with background
+    _SAPP_COMPOSITEMODE_FORCE_U32 = 0x7FFFFFFF,
 } sapp_composite_mode;
 
 /*
@@ -2102,6 +2107,7 @@ typedef enum sapp_html5_fetch_error {
     SAPP_HTML5_FETCH_ERROR_NO_ERROR,
     SAPP_HTML5_FETCH_ERROR_BUFFER_TOO_SMALL,
     SAPP_HTML5_FETCH_ERROR_OTHER,
+    _SAPP_HTML5_FORCE_U32 = 0x7FFFFFFF,
 } sapp_html5_fetch_error;
 
 typedef struct sapp_html5_fetch_response {
@@ -2154,6 +2160,7 @@ typedef enum sapp_mouse_cursor {
     SAPP_MOUSECURSOR_CUSTOM_14,
     SAPP_MOUSECURSOR_CUSTOM_15,
     _SAPP_MOUSECURSOR_NUM,
+    _SAPP_MOUSECURSOR_FORCE_U32 = 0x7FFFFFFF,
 } sapp_mouse_cursor;
 
 /* user-provided functions */
@@ -2910,8 +2917,7 @@ typedef struct {
 #if defined(_SAPP_WIN32)
 
 #ifndef DPI_ENUMS_DECLARED
-typedef enum PROCESS_DPI_AWARENESS
-{
+typedef enum PROCESS_DPI_AWARENESS {
     PROCESS_DPI_UNAWARE = 0,
     PROCESS_SYSTEM_DPI_AWARE = 1,
     PROCESS_PER_MONITOR_DPI_AWARE = 2
