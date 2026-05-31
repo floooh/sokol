@@ -1924,11 +1924,12 @@ typedef struct sapp_environment {
 /*
     sapp_swapchain
 
-    Provides swapchain information for the current frame to the outside
-    world via a call to sapp_get_swapchain().
+    Provides swapchain information for the next swapchain render pass,
+    result of sapp_acquire_swapchain()
 
-    NOTE: sapp_get_swapchain() must be called exactly once per frame since
-    on some backends it will also acquire the next swapchain image.
+    NOTE: sapp_acquire_swapchain() must be called exactly once per frame,
+    and ideally right before the swapchain render pass (e.g. not earlier
+    in the frame).
 
     NOTE: when using sokol_gfx.h, don't assume that the sapp_swapchain struct
     has the same memory layout as sg_swapchain! Use the sokol_log.h helper
@@ -2167,6 +2168,11 @@ typedef enum sapp_mouse_cursor {
 /* user-provided functions */
 extern sapp_desc sokol_main(int argc, char* argv[]);
 
+/* get runtime environment information */
+SOKOL_APP_API_DECL sapp_environment sapp_get_environment(void);
+/* acquire swapchain info for the next swapchain render pass, call exactly once per frame */
+SOKOL_APP_API_DECL sapp_swapchain sapp_acquire_swapchain(void);
+
 /* returns true after sokol-app has been initialized */
 SOKOL_APP_API_DECL bool sapp_isvalid(void);
 /* returns the current framebuffer width in pixels */
@@ -2244,11 +2250,6 @@ SOKOL_APP_API_DECL const char* sapp_get_dropped_file_path(int index);
 
 /* special run-function for SOKOL_NO_ENTRY (in standard mode this is an empty stub) */
 SOKOL_APP_API_DECL void sapp_run(const sapp_desc* desc);
-
-/* get runtime environment information */
-SOKOL_APP_API_DECL sapp_environment sapp_get_environment(void);
-/* get current frame's swapchain information (call once per frame!) */
-SOKOL_APP_API_DECL sapp_swapchain sapp_get_swapchain(void);
 
 /* EGL: get EGLDisplay object */
 SOKOL_APP_API_DECL const void* sapp_egl_get_display(void);
@@ -14403,7 +14404,7 @@ SOKOL_API_IMPL sapp_environment sapp_get_environment(void) {
     return res;
 }
 
-SOKOL_API_IMPL sapp_swapchain sapp_get_swapchain(void) {
+SOKOL_API_IMPL sapp_swapchain sapp_acquire_swapchain(void) {
     SOKOL_ASSERT(_sapp.valid);
     _SAPP_STRUCT(sapp_swapchain, res);
     #if defined(SOKOL_METAL)
