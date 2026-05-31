@@ -6925,9 +6925,6 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 }
 #endif
 
-- (BOOL)isOpaque {
-    return YES;
-}
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
     _sapp_tvos_press_event(SAPP_EVENTTYPE_KEY_DOWN, presses);
 }
