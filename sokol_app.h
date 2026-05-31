@@ -5306,7 +5306,11 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
     _sapp.mtl.layer = [CAMetalLayer layer];
     _sapp.mtl.layer.device = _sapp.mtl.device;
     _sapp.mtl.layer.magnificationFilter = kCAFilterNearest;
-    _sapp.mtl.layer.opaque = _sapp.desc.swapchain.composite_mode == SAPP_COMPOSITEMODE_OPAQUE;
+    #if defined(_SAPP_MACOS)
+        _sapp.mtl.layer.opaque = _sapp.desc.swapchain.composite_mode == SAPP_COMPOSITEMODE_OPAQUE;
+    #else
+        _sapp.mtl.layer.opaque = YES;
+    #endif
     _sapp.mtl.layer.pixelFormat = _sapp_mtl_color_format();
     _sapp.mtl.layer.framebufferOnly = true;
     CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(_sapp_mtl_color_space());
