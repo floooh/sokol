@@ -5315,7 +5315,7 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
     if (_sapp.desc.swapchain.hdr) {
         _sapp.mtl.layer.wantsExtendedDynamicRangeContent = YES;
     }
-    if (_sapp.desc.swapchain.disable_vsync || _sapp.desc.metal.disable_display_sync) {
+    if (_sapp.desc.metal.disable_display_sync) {
         _sapp.mtl.layer.displaySyncEnabled = false;
     }
     //NOTE: default is 3: _sapp.macos.mtl.layer.maximumDrawableCount = 2;
@@ -5995,7 +5995,11 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp.macos.window.title = [NSString stringWithUTF8String:_sapp.window_title];
     _sapp.macos.window.acceptsMouseMovedEvents = YES;
     _sapp.macos.window.restorable = YES;
-
+    if (_sapp.desc.swapchain.composite_mode != SAPP_COMPOSITEMODE_OPAQUE) {
+        _sapp.macos.window.opaque = NO;
+        _sapp.macos.window.backgroundColor = [NSColor clearColor];
+        _sapp.macos.window.hasShadow = NO;
+    }
     _sapp.macos.win_dlg = [[_sapp_macos_window_delegate alloc] init];
     _sapp.macos.window.delegate = _sapp.macos.win_dlg;
     #if defined(SOKOL_METAL)
@@ -6225,7 +6229,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 #endif
 
 - (BOOL)isOpaque {
-    return YES;
+    return _sapp.desc.swapchain.composite_mode == SAPP_COMPOSITEMODE_OPAQUE;
 }
 - (BOOL)canBecomeKeyView {
     return YES;
@@ -6532,7 +6536,7 @@ _SOKOL_PRIVATE void _sapp_ios_mtl_init(UIWindowScene* windowScene) {
     if (_sapp.desc.swapchain.hdr) {
         _sapp.mtl.layer.wantsExtendedDynamicRangeContent = YES;
     }
-    if (_sapp.desc.swapchain.disable_vsync || _sapp.desc.metal.disable_display_sync) {
+    if (_sapp.desc.metal.disable_display_sync) {
         _sapp.mtl.layer.displaySyncEnabled = false;
     }
     _sapp.ios.mtl.layer.frame = _sapp.ios.view.layer.frame;
