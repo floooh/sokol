@@ -4654,6 +4654,8 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_SHADER_READONLY_STORAGEBUFFERS, "sg_pipeline_desc.shader: only readonly storage buffer bindings allowed in render pipelines") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_BLENDOP_MINMAX_REQUIRES_BLENDFACTOR_ONE, "SG_BLENDOP_MIN/MAX requires all blend factors to be SG_BLENDFACTOR_ONE") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_DUAL_SOURCE_BLENDING_NOT_SUPPORTED, "dual source blending not supported (sg_features.dual_source_blending)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_DEPTH_FORMAT_NONE_BUT_DEPTH_WRITE_ENABLED, "sg_pipeline_desc.depth.write_enabled cannot be true when sg_pipeline_desc.depth.pixel_format is SG_PIXELFORMAT_NONE") \
+    _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_DEPTH_FORMAT_NONE_COMPARE_FUNC_MISMATCH, "sg_pipeline_desc.depth.compare muste be SG_COMPAREFUNC_ALWAYS or SG_COMPAREFUNC_NEVER when sg_pipeline_desc.pixel_format is SG_PIXELFORMAT_NONE") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_CANARY, "sg_view_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE, "sg_view_desc: only one view type can be active") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_ANY_VIEWTYPE, "sg_view_desc: exactly one view type must be active") \
@@ -23062,6 +23064,10 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
                     _SG_VALIDATE(_sg_multiple_u64((uint64_t)l_state->stride, 4), VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4);
                 }
             }
+        }
+        if (desc->depth.pixel_format == SG_PIXELFORMAT_NONE) {
+            _SG_VALIDATE(desc->depth.write_enabled == false, VALIDATE_PIPELINEDESC_DEPTH_FORMAT_NONE_BUT_DEPTH_WRITE_ENABLED);
+            _SG_VALIDATE((desc->depth.compare == SG_COMPAREFUNC_ALWAYS) || (desc->depth.compare == SG_COMPAREFUNC_NEVER), VALIDATE_PIPELINEDESC_DEPTH_FORMAT_NONE_COMPARE_FUNC_MISMATCH);
         }
         for (size_t color_index = 0; color_index < (size_t)desc->color_count; color_index++) {
             SOKOL_ASSERT(color_index < SG_MAX_COLOR_ATTACHMENTS);
