@@ -1718,6 +1718,7 @@ typedef struct sapp_allocator {
 #define _SAPP_LOG_ITEMS \
     _SAPP_LOGITEM_XMACRO(OK, "Ok") \
     _SAPP_LOGITEM_XMACRO(MALLOC_FAILED, "memory allocation failed") \
+    _SAPP_LOGITEM_XMACRO(SWAPCHAIN_DEPTHFORMAT_INVALID, "sapp_desc.swapchain.depth_format must be zero, SAPP_PIXELFORMAT_NONE, SAPP_PIXELFORMAT_DEPTH or SAPP_PIXELFORMAT_DEPTH_STENCIL") \
     _SAPP_LOGITEM_XMACRO(MACOS_INVALID_NSOPENGL_PROFILE, "macos: invalid NSOpenGLProfile (valid choices are 1.0 and 4.1)") \
     _SAPP_LOGITEM_XMACRO(METAL_CREATE_SWAPCHAIN_DEPTH_TEXTURE_FAILED, "metal: failed to create swapchain depth-buffer texture") \
     _SAPP_LOGITEM_XMACRO(METAL_CREATE_SWAPCHAIN_MSAA_TEXTURE_FAILED, "metal: failed to create swapchain msaa texture") \
@@ -3571,6 +3572,17 @@ _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* desc) {
     return res;
 }
 
+_SOKOL_PRIVATE void _sapp_assert_desc(const sapp_desc* desc) {
+    switch (desc->swapchain.depth_format) {
+        case SAPP_PIXELFORMAT_NONE:
+        case SAPP_PIXELFORMAT_DEPTH:
+        case SAPP_PIXELFORMAT_DEPTH_STENCIL:
+            break;
+        default:
+            _SAPP_PANIC(SWAPCHAIN_DEPTHFORMAT_INVALID);
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->width >= 0);
@@ -3582,6 +3594,7 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     SOKOL_ASSERT(desc->max_dropped_file_path_length >= 0);
     _SAPP_CLEAR_ARC_STRUCT(_sapp_t, _sapp);
     _sapp.desc = _sapp_desc_defaults(desc);
+    _sapp_assert_desc(&_sapp.desc);
     _sapp.first_frame = true;
     // NOTE: _sapp.desc.width/height may be 0! Platform backends need to deal with this
     _sapp.window_width = _sapp.desc.width;
