@@ -10334,6 +10334,7 @@ _SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
             eglGetConfigAttrib(_sapp.egl.display, c, EGL_STENCIL_SIZE, &s) && 
             eglGetConfigAttrib(_sapp.egl.display, c, EGL_SAMPLES, &n) && 
             (r == 8) && (g == 8) && (b == 8) && (a == alpha_size) && (d == 24) && (s == 8) && (n == sample_count)) { 
+            exact_cfg_found = true;
             config = c;
             break;
         }
