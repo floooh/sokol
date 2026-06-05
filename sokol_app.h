@@ -10308,8 +10308,8 @@ _SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
         EGL_GREEN_SIZE, 8,
         EGL_BLUE_SIZE, 8,
         EGL_ALPHA_SIZE, alpha_size,
-        EGL_DEPTH_SIZE, 16,
-        EGL_STENCIL_SIZE, 0,
+        EGL_DEPTH_SIZE, 24,
+        EGL_STENCIL_SIZE, 8,
         EGL_NONE,
     };
     EGLConfig available_cfgs[32];
