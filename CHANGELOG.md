@@ -1,5 +1,17 @@
 ## Updates
 
+### 05-Jun-2026
+
+- sokol_app.h android: Update the default framebuffer config from 16-bit
+  depth buffer and no stencil buffer to 24/8 depth-stencil buffer. Also
+  correctly setup multisampling.
+
+  Issue: https://github.com/floooh/sokol/issues/1530
+  PR: https://github.com/floooh/sokol/pull/1531
+
+  Many thanks to @stark26583 for the identifying the issue and providing
+  the initial PR!
+
 ### 29-May-2026
 
 - sokol_app.h macos: don't disable 'mouse event coalescing' (coalescing merges
