@@ -377,8 +377,9 @@
             whether the GL context is a GLES context
 
         const void* sapp_android_get_native_activity(void);
-            On Android, get the native activity ANativeActivity pointer, otherwise
-            a null pointer.
+        const void* sapp_android_get_native_window(void);
+            On Android, get the native activity ANativeActivity pointer,
+            or native window ANativeWindow pointer, otherwise a null pointer.
 
     --- Implement the frame-callback function, this function will be called
         on the same thread as the init callback, but might be on a different
@@ -2288,6 +2289,9 @@ SOKOL_APP_API_DECL const void* sapp_x11_get_display(void);
 
 /* Android: get native activity handle */
 SOKOL_APP_API_DECL const void* sapp_android_get_native_activity(void);
+/* Android: get native window handle */
+SOKOL_APP_API_DECL const void* sapp_android_get_native_window(void);
+
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -6024,7 +6028,6 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     [NSApp activateIgnoringOtherApps:YES];
     [_sapp.macos.window makeKeyAndOrderFront:nil];
     _sapp_macos_update_dimensions();
-    [NSEvent setMouseCoalescingEnabled:NO];
 
     // workaround for window not being focused during a long init callback
     // for details see: https://github.com/floooh/sokol/pull/982
@@ -10342,6 +10345,7 @@ _SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
     if (eglInitialize(display, NULL, NULL) == EGL_FALSE) {
         return false;
     }
+    EGLint sample_count = _sapp.desc.sample_count > 1 ? _sapp.desc.sample_count : 0;
     EGLint alpha_size = _sapp.desc.alpha ? 8 : 0;
     const EGLint cfg_attributes[] = {
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
@@ -10350,8 +10354,10 @@ _SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
         EGL_GREEN_SIZE, 8,
         EGL_BLUE_SIZE, 8,
         EGL_ALPHA_SIZE, alpha_size,
-        EGL_DEPTH_SIZE, 16,
-        EGL_STENCIL_SIZE, 0,
+        EGL_DEPTH_SIZE, 24,
+        EGL_STENCIL_SIZE, 8,
+        EGL_SAMPLE_BUFFERS, _sapp.desc.sample_count > 1 ? 1 : 0,
+        EGL_SAMPLES, sample_count,
         EGL_NONE,
     };
     EGLConfig available_cfgs[32];
@@ -10365,13 +10371,15 @@ _SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
     bool exact_cfg_found = false;
     for (int i = 0; i < cfg_count; ++i) {
         EGLConfig c = available_cfgs[i];
-        EGLint r, g, b, a, d;
+        EGLint r, g, b, a, d, s, n;
         if (eglGetConfigAttrib(display, c, EGL_RED_SIZE, &r) == EGL_TRUE &&
             eglGetConfigAttrib(display, c, EGL_GREEN_SIZE, &g) == EGL_TRUE &&
             eglGetConfigAttrib(display, c, EGL_BLUE_SIZE, &b) == EGL_TRUE &&
             eglGetConfigAttrib(display, c, EGL_ALPHA_SIZE, &a) == EGL_TRUE &&
             eglGetConfigAttrib(display, c, EGL_DEPTH_SIZE, &d) == EGL_TRUE &&
-            r == 8 && g == 8 && b == 8 && (alpha_size == 0 || a == alpha_size) && d == 16) {
+            eglGetConfigAttrib(display, c, EGL_STENCIL_SIZE, &s) == EGL_TRUE &&
+            eglGetConfigAttrib(display, c, EGL_SAMPLES, &n) == EGL_TRUE &&
+            (r == 8) && (g == 8) && (b == 8) && (a == alpha_size) && (d == 24) && (s == 8) && (n == sample_count)) {
             exact_cfg_found = true;
             config = c;
             break;
@@ -14562,6 +14570,14 @@ SOKOL_API_IMPL const void* sapp_android_get_native_activity(void) {
     // needs to be callable from within sokol_main() (see: https://github.com/floooh/sokol/issues/708)
     #if defined(_SAPP_ANDROID)
         return (void*)_sapp.android.activity;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sapp_android_get_native_window(void) {
+    #if defined(_SAPP_ANDROID)
+        return (void*)_sapp.android.current.window;
     #else
         return 0;
     #endif

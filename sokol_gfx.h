@@ -11433,7 +11433,7 @@ _SOKOL_PRIVATE void _sg_gl_handle_memory_barriers(const _sg_shader_t* shd, const
                 }
             } else if (view->cmn.type == SG_VIEWTYPE_STORAGEIMAGE) {
                 _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
-                if (img->gl.gpu_dirty_flags &= _SG_GL_GPUDIRTY_STORAGEIMAGE) {
+                if (img->gl.gpu_dirty_flags & _SG_GL_GPUDIRTY_STORAGEIMAGE) {
                     gl_barrier_bits |= GL_SHADER_IMAGE_ACCESS_BARRIER_BIT;
                     img->gl.gpu_dirty_flags &= (uint8_t)~_SG_GL_GPUDIRTY_STORAGEIMAGE;
                 }
@@ -12020,7 +12020,9 @@ _SOKOL_PRIVATE bool _sg_gl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
                 GLuint gl_tex = img->gl.tex[img->cmn.active_slot];
                 GLint level = (GLint)view->cmn.img.mip_level;
                 GLint layer = (GLint)view->cmn.img.slice;
-                GLboolean layered = shd->cmn.views[i].image_type != SG_IMAGETYPE_2D;
+                // NOTE: when picking a specific layer, the 'layered' flag must be false,
+                // this was previously bugged
+                GLboolean layered = GL_FALSE;
                 GLenum access = shd->cmn.views[i].simg_writeonly ? GL_WRITE_ONLY : GL_READ_WRITE;
                 GLenum format = _sg_gl_teximage_internal_format(shd->cmn.views[i].access_format);
                 // NOTE: we specifically don't go through the GL cache since storage images
@@ -18318,7 +18320,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
                 bgl_entry->storageTexture.access = WGPUStorageTextureAccess_ReadWrite;
             }
             bgl_entry->storageTexture.format = _sg_wgpu_textureformat(shd->cmn.views[i].access_format);
-            bgl_entry->texture.viewDimension = _sg_wgpu_texture_view_dimension(shd->cmn.views[i].image_type);
+            bgl_entry->storageTexture.viewDimension = _sg_wgpu_texture_view_dimension(shd->cmn.views[i].image_type);
         } else {
             SOKOL_UNREACHABLE;
         }
