@@ -5860,7 +5860,23 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
     CGImageRelease(cg_img);
 }
 
+_SOKOL_PRIVATE void _sapp_macos_drain_events(void) {
+    @autoreleasepool {
+        while (true) {
+            NSEvent* event = [NSApp nextEventMatchingMask:NSEventMaskAny
+                untilDate: [NSDate distantPast]
+                inMode:NSDefaultRunLoopMode
+                dequeue:YES];
+            if (event == nil) {
+                break;
+            }
+            [NSApp sendEvent:event];
+        }
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_macos_frame(void) {
+    _sapp_macos_drain_events();
     _sapp_timing_update(&_sapp.timing, 0.0);
     #if defined(SOKOL_METAL)
     _sapp_macos_mtl_timing_update();
