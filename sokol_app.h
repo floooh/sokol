@@ -2704,10 +2704,6 @@ _SOKOL_PRIVATE void _sapp_timing_update(_sapp_timing_t* t, double external_now) 
 
 }
 
-_SOKOL_PRIVATE double _sapp_timing_get(_sapp_timing_t* t) {
-    return t->smooth_dt;
-}
-
 // ███████ ████████ ██████  ██    ██  ██████ ████████ ███████
 // ██         ██    ██   ██ ██    ██ ██         ██    ██
 // ███████    ██    ██████  ██    ██ ██         ██    ███████
@@ -2805,12 +2801,6 @@ typedef struct {
         NSTimer* fallback_timer;
         id<MTLTexture> depth_tex;
         id<MTLTexture> msaa_tex;
-        // NOTE: CADisplayLink.timestamp seems to be very stable, so we'll use
-        // this instead of the generic measured+filtered frame timing code
-        struct {
-            CFTimeInterval timestamp;
-            CFTimeInterval frame_duration_sec;
-        } timing;
     } mtl;
     #endif
     #if defined(SOKOL_WGPU)
@@ -5137,36 +5127,6 @@ _SOKOL_PRIVATE bool _sapp_macos_mtl_display_link_active(void) {
     return (nil != _sapp.macos.mtl.display_link) && (!_sapp.macos.mtl.display_link.paused);
 }
 
-_SOKOL_PRIVATE void _sapp_macos_mtl_timing_init(void) {
-    _sapp.macos.mtl.timing.timestamp = 0.0;
-    _sapp.macos.mtl.timing.frame_duration_sec = 1.0 / _sapp_macos_max_fps();
-}
-
-_SOKOL_PRIVATE void _sapp_macos_mtl_timing_update(void) {
-    // NOTE: if display link is not active, frame duration will be provided
-    // by the regular platform-agnostic timing code
-    if (_sapp_macos_mtl_display_link_active()) {
-        CFTimeInterval cur_timestamp = _sapp.macos.mtl.display_link.timestamp;
-        // skip first frame (frame_duration had been initialized to display refresh rate)
-        if (_sapp.macos.mtl.timing.timestamp > 0.0) {
-            const double dt = cur_timestamp - _sapp.macos.mtl.timing.timestamp;
-            _sapp.macos.mtl.timing.frame_duration_sec = _sapp_timing_clamp(&_sapp.timing, dt);
-        } else {
-            SOKOL_ASSERT(_sapp.macos.mtl.timing.frame_duration_sec > 0.0);
-        }
-        _sapp.macos.mtl.timing.timestamp = cur_timestamp;
-    }
-}
-
-_SOKOL_PRIVATE double _sapp_macos_mtl_timing_frame_duration(void) {
-    if (_sapp_macos_mtl_display_link_active()) {
-        SOKOL_ASSERT(_sapp.macos.mtl.timing.frame_duration_sec > 0.0);
-        return _sapp.macos.mtl.timing.frame_duration_sec;
-    } else {
-        return _sapp_timing_get(&_sapp.timing);
-    }
-}
-
 _SOKOL_PRIVATE void _sapp_macos_mtl_start_display_link(void) {
     if (nil != _sapp.macos.mtl.display_link) {
         _sapp.macos.mtl.display_link.paused = false;
@@ -5237,7 +5197,6 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
     _sapp.macos.view.wantsLayer = YES;
     _sapp.macos.view.layer = _sapp.macos.mtl.layer;
     _sapp_macos_mtl_start_display_link();
-    _sapp_macos_mtl_timing_init();
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_discard_state(void) {
@@ -5862,9 +5821,6 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
 
 _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp_timing_update(&_sapp.timing, 0.0);
-    #if defined(SOKOL_METAL)
-    _sapp_macos_mtl_timing_update();
-    #endif
     #if defined(_SAPP_ANY_GL)
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
     #endif
@@ -13937,13 +13893,7 @@ SOKOL_API_IMPL uint64_t sapp_frame_count(void) {
 }
 
 SOKOL_API_IMPL double sapp_frame_duration(void) {
-    #if defined(_SAPP_MACOS) && defined(SOKOL_METAL)
-        return _sapp_macos_mtl_timing_frame_duration();
-    #elif defined(_SAPP_IOS) && defined(SOKOL_METAL)
-        return _sapp_ios_mtl_timing_frame_duration();
-    #else
-        return _sapp_timing_get(&_sapp.timing);
-    #endif
+    return _sapp.timing.smooth_dt;
 }
 
 SOKOL_API_IMPL double sapp_frame_duration_unfiltered(void) {
