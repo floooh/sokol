@@ -2775,6 +2775,7 @@ typedef struct {
     @interface _sapp_macos_view : NSView
     - (void)displayLinkFired:(id)sender;
     - (void)fallbackTimerFired:(NSTimer*)timer;
+    - (void)nextFrameRequested;
     @end
 #elif defined(SOKOL_GLCORE)
     @interface _sapp_macos_view : NSOpenGLView
@@ -2799,6 +2800,8 @@ typedef struct {
         CAMetalLayer* layer;
         CADisplayLink* display_link;
         NSTimer* fallback_timer;
+        NSTimer* display_timer;
+        bool display_timer_active;
         id<MTLTexture> depth_tex;
         id<MTLTexture> msaa_tex;
     } mtl;
@@ -5123,6 +5126,7 @@ _SOKOL_PRIVATE id<CAMetalDrawable> _sapp_macos_mtl_swapchain_next(void) {
     return drawable;
 }
 
+/*
 _SOKOL_PRIVATE bool _sapp_macos_mtl_display_link_active(void) {
     return (nil != _sapp.macos.mtl.display_link) && (!_sapp.macos.mtl.display_link.paused);
 }
@@ -5149,6 +5153,44 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_stop_display_link(void) {
         _sapp.macos.mtl.display_link.paused = true;
     }
 }
+*/
+
+_SOKOL_PRIVATE void _sapp_macos_mtl_request_next_frame(void) {
+    [_sapp.macos.view performSelector:@selector(nextFrameRequested)
+                      onThread:[NSThread mainThread]
+                      withObject:nil
+                      waitUntilDone:NO
+                      modes:@[NSDefaultRunLoopMode, NSEventTrackingRunLoopMode, NSModalPanelRunLoopMode]];
+}
+
+_SOKOL_PRIVATE bool _sapp_macos_mtl_display_timer_active(void) {
+    // return nil != _sapp.macos.mtl.display_timer;
+    return _sapp.macos.mtl.display_timer_active;
+}
+
+_SOKOL_PRIVATE void _sapp_macos_mtl_start_display_timer(void) {
+    _sapp.macos.mtl.display_timer_active = true;
+    /*
+    SOKOL_ASSERT(nil == _sapp.macos.mtl.display_timer);
+    _sapp.macos.mtl.display_timer = [NSTimer
+        timerWithTimeInterval: 0.0001
+        target: _sapp.macos.view
+        selector: @selector(fallbackTimerFired:)
+        userInfo: nil
+        repeats: YES];
+    [[NSRunLoop currentRunLoop] addTimer:_sapp.macos.mtl.display_timer forMode:NSRunLoopCommonModes];
+    */
+}
+
+_SOKOL_PRIVATE void _sapp_macos_mtl_stop_display_timer(void) {
+    _sapp.macos.mtl.display_timer_active = false;
+    /*
+    if (nil != _sapp.macos.mtl.display_timer) {
+        [_sapp.macos.mtl.display_timer invalidate];
+        _sapp.macos.mtl.display_timer = nil;
+    }
+    */
+}
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_start_fallback_timer(void) {
     SOKOL_ASSERT(nil == _sapp.macos.mtl.fallback_timer);
@@ -5169,16 +5211,18 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_stop_fallback_timer(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_transition_to_occluded(void) {
-    if (_sapp_macos_mtl_display_link_active()) {
-        _sapp_macos_mtl_stop_display_link();
+    if (_sapp_macos_mtl_display_timer_active()) {
+        //_sapp_macos_mtl_stop_display_link();
+        _sapp_macos_mtl_stop_display_timer();
         _sapp_macos_mtl_start_fallback_timer();
     }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_transition_to_visible(void) {
-    if (!_sapp_macos_mtl_display_link_active()) {
+    if (!_sapp_macos_mtl_display_timer_active()) {
         _sapp_macos_mtl_stop_fallback_timer();
-        _sapp_macos_mtl_start_display_link();
+        //_sapp_macos_mtl_start_display_link();
+        _sapp_macos_mtl_start_display_timer();
     }
 }
 
@@ -5196,11 +5240,15 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
     [_sapp.macos.view updateTrackingAreas];
     _sapp.macos.view.wantsLayer = YES;
     _sapp.macos.view.layer = _sapp.macos.mtl.layer;
-    _sapp_macos_mtl_start_display_link();
+    // _sapp_macos_mtl_start_display_link();
+    _sapp_macos_mtl_start_display_timer();
+    _sapp_macos_mtl_request_next_frame();
+
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_discard_state(void) {
-    _sapp_macos_mtl_stop_display_link();
+    //_sapp_macos_mtl_stop_display_link();
+    _sapp_macos_mtl_stop_display_timer();
     _sapp_macos_mtl_stop_fallback_timer();
     _sapp_macos_mtl_swapchain_destroy();
     _SAPP_OBJC_RELEASE(_sapp.macos.mtl.layer);
@@ -5819,7 +5867,23 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
     CGImageRelease(cg_img);
 }
 
+_SOKOL_PRIVATE void _sapp_macos_drain_events(void) {
+    @autoreleasepool {
+        while (true) {
+            NSEvent* event = [NSApp nextEventMatchingMask:NSEventMaskAny
+                untilDate: [NSDate distantPast]
+                inMode:NSDefaultRunLoopMode
+                dequeue:YES];
+            if (event == nil) {
+                break;
+            }
+            [NSApp sendEvent:event];
+        }
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_macos_frame(void) {
+    _sapp_macos_drain_events();
     _sapp_timing_update(&_sapp.timing, 0.0);
     #if defined(_SAPP_ANY_GL)
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
@@ -6083,7 +6147,11 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 #elif defined(SOKOL_METAL) || defined(SOKOL_WGPU)
 - (void)displayLinkFired:(id)sender {
     _SOKOL_UNUSED(sender);
+    //_sapp_macos_frame();
+}
+- (void)nextFrameRequested {
     _sapp_macos_frame();
+    _sapp_macos_mtl_request_next_frame();
 }
 - (void)fallbackTimerFired:(NSTimer*)timer {
     _SOKOL_UNUSED(timer);
