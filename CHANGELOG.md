@@ -1,5 +1,17 @@
 ## Updates
 
+### 11-Jun-2026
+
+- sokol_app.h linux: fix a long-standing bug in the sokol-app Linux backend
+  where `sapp_get_clipboard_string()` returns a null pointer instead of an
+  empty string when the clipboard is empty or when an error occurs while
+  querying the clipboard.
+
+  Issue: https://github.com/floooh/sokol/issues/1538
+  PR: https://github.com/floooh/sokol/pull/1539
+
+  Many thanks to @OrfeasPliaridis for reporting the problem!
+
 ### 05-Jun-2026
 
 - sokol_app.h android: Update the default framebuffer config from 16-bit
