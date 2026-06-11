@@ -2,8 +2,8 @@
 
 ### 11-Jun-2026
 
-- sokol_app.h linux: fix a long-standing bug in the sokol-app Linux backend
-  where `sapp_get_clipboard_string()` returns a null pointer instead of an
+- sokol_app.h linux: fixed a long-standing bug in the sokol-app Linux backend
+  where `sapp_get_clipboard_string()` returned a null pointer instead of an
   empty string when the clipboard is empty or when an error occurs while
   querying the clipboard.
 
