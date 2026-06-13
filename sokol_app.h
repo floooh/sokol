@@ -5128,6 +5128,7 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_request_next_frame(void) {
                       withObject:nil
                       waitUntilDone:NO
                       modes:@[NSDefaultRunLoopMode, NSEventTrackingRunLoopMode, NSModalPanelRunLoopMode]];
+    CFRunLoopWakeUp(CFRunLoopGetMain());
 }
 
 _SOKOL_PRIVATE bool _sapp_macos_mtl_occluded(void) {
@@ -14322,6 +14323,10 @@ SOKOL_API_IMPL sapp_swapchain sapp_get_swapchain(void) {
     _SAPP_STRUCT(sapp_swapchain, res);
     #if defined(SOKOL_METAL)
         #if defined(_SAPP_MACOS)
+            if (_sapp_macos_mtl_occluded()) {
+                res.invalid = true;
+                return res;
+            }
             res.metal.current_drawable = (__bridge const void*) _sapp_macos_mtl_swapchain_next();
             res.metal.depth_stencil_texture = (__bridge const void*) _sapp.macos.mtl.depth_tex;
             res.metal.msaa_color_texture = (__bridge const void*) _sapp.macos.mtl.msaa_tex;
