@@ -1868,7 +1868,7 @@ typedef enum sapp_pixel_format {
     SAPP_PIXELFORMAT_RGBA8,
     SAPP_PIXELFORMAT_SRGB8A8,
     SAPP_PIXELFORMAT_BGRA8,
-    SAPP_PIXELFORMAT_SBGRA8,
+    SAPP_PIXELFORMAT_SBGR8A8,
     SAPP_PIXELFORMAT_RGBA16F,
     SAPP_PIXELFORMAT_DEPTH,
     SAPP_PIXELFORMAT_DEPTH_STENCIL,
@@ -14056,7 +14056,7 @@ SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
             case MTLPixelFormatBGRA8Unorm:
                 return SAPP_PIXELFORMAT_BGRA8;
             case MTLPixelFormatBGRA8Unorm_sRGB:
-                return SAPP_PIXELFORMAT_SBGRA8;
+                return SAPP_PIXELFORMAT_SBGR8A8;
             case MTLPixelFormatRGBA16Float:
                 return SAPP_PIXELFORMAT_RGBA16F;
             default:
@@ -14066,7 +14066,11 @@ SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
     #elif defined(SOKOL_D3D11)
         return SAPP_PIXELFORMAT_BGRA8;
     #else
-        return SAPP_PIXELFORMAT_RGBA8;
+        if (_sapp.desc.swapchain.srgb) {
+            return SAPP_PIXELFORMAT_SRGB8A8;
+        } else {
+            return SAPP_PIXELFORMAT_RGBA8;
+        }
     #endif
 }
 
