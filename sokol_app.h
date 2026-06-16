@@ -5404,6 +5404,8 @@ _SOKOL_PRIVATE bool _sapp_macos_wgpu_update_framebuffer_dimensions(NSRect view_b
 
 #if defined(SOKOL_GLCORE)
 _SOKOL_PRIVATE void _sapp_macos_gl_init(NSRect window_rect) {
+    const int sample_count = _sapp.desc.swapchain.sample_count;
+    const sapp_pixel_format dfmt = _sapp.desc.swapchain.depth_format;
     NSOpenGLPixelFormatAttribute attrs[32];
     int i = 0;
     attrs[i++] = NSOpenGLPFAAccelerated;
@@ -5419,12 +5421,16 @@ _SOKOL_PRIVATE void _sapp_macos_gl_init(NSRect window_rect) {
     }
     attrs[i++] = NSOpenGLPFAColorSize; attrs[i++] = 24;
     attrs[i++] = NSOpenGLPFAAlphaSize; attrs[i++] = 8;
-    attrs[i++] = NSOpenGLPFADepthSize; attrs[i++] = 24;
-    attrs[i++] = NSOpenGLPFAStencilSize; attrs[i++] = 8;
-    if (_sapp.sample_count > 1) {
+    if (dfmt != SAPP_PIXELFORMAT_NONE) {
+        attrs[i++] = NSOpenGLPFADepthSize; attrs[i++] = 24;
+    }
+    if (dfmt == SAPP_PIXELFORMAT_DEPTH_STENCIL) {
+        attrs[i++] = NSOpenGLPFAStencilSize; attrs[i++] = 8;
+    }
+    if (sample_count > 1) {
         attrs[i++] = NSOpenGLPFAMultisample;
         attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 1;
-        attrs[i++] = NSOpenGLPFASamples; attrs[i++] = (NSOpenGLPixelFormatAttribute)_sapp.sample_count;
+        attrs[i++] = NSOpenGLPFASamples; attrs[i++] = (NSOpenGLPixelFormatAttribute)sample_count;
     } else {
         attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 0;
     }
@@ -6215,9 +6221,17 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 }
 - (void)prepareOpenGL {
     [super prepareOpenGL];
-    GLint swapInt = 1;
+    // NOTE: NSOpenGLContext swap interval is broken/ignored since macOS 13
+    GLint swap_interval = _sapp.desc.swapchain.swap_interval;
+    if (_sapp.desc.swapchain.disable_vsync) {
+        swap_interval = 0;
+    }
     NSOpenGLContext* ctx = [_sapp.macos.view openGLContext];
-    [ctx setValues:&swapInt forParameter:NSOpenGLContextParameterSwapInterval];
+    [ctx setValues:&swap_interval forParameter:NSOpenGLContextParameterSwapInterval];
+    if (_sapp.desc.swapchain.composite_mode != SAPP_COMPOSITEMODE_OPAQUE) {
+        GLint opacity = 0;
+        [ctx setValues:&opacity forParameter:NSOpenGLContextParameterSurfaceOpacity];
+    }
     [ctx makeCurrentContext];
 }
 - (void)drawRect:(NSRect)rect {
