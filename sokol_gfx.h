@@ -14614,6 +14614,9 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
 //
 // >>metal backend
 #elif defined(SOKOL_METAL)
+#pragma clang diagnostic push
+// silenace Intel Mac deprecations for now
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
 #if __has_feature(objc_arc)
 #define _SG_OBJC_RETAIN(obj) { }
@@ -16749,6 +16752,8 @@ _SOKOL_PRIVATE void _sg_mtl_pop_debug_group(void) {
         [_sg.mtl.compute_cmd_encoder popDebugGroup];
     }
 }
+
+#pragma clang diagnostic pop // Intel Mac deprecations
 
 // ██     ██ ███████ ██████   ██████  ██████  ██    ██     ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
 // ██     ██ ██      ██   ██ ██       ██   ██ ██    ██     ██   ██ ██   ██ ██      ██  ██  ██      ████   ██ ██   ██
