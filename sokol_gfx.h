@@ -2153,7 +2153,7 @@ typedef enum sg_pixel_format {
     SG_PIXELFORMAT_RGBA8UI,
     SG_PIXELFORMAT_RGBA8SI,
     SG_PIXELFORMAT_BGRA8,
-    SG_PIXELFORMAT_SBGRA8,
+    SG_PIXELFORMAT_SBGR8A8,
     SG_PIXELFORMAT_RGB10A2,
     SG_PIXELFORMAT_RG11B10F,
     SG_PIXELFORMAT_RGB9E5,
@@ -8630,6 +8630,16 @@ _SOKOL_PRIVATE bool _sg_is_depth_stencil_format(sg_pixel_format fmt) {
     return (SG_PIXELFORMAT_DEPTH_STENCIL == fmt);
 }
 
+_SOKOL_PRIVATE bool _sg_is_srgb_format(sg_pixel_format fmt) {
+    switch (fmt) {
+        case SG_PIXELFORMAT_SRGB8A8:
+        case SG_PIXELFORMAT_SBGR8A8:
+            return true;
+        default:
+            return false;
+    }
+}
+
 _SOKOL_PRIVATE int _sg_pixelformat_bytesize(sg_pixel_format fmt) {
     switch (fmt) {
         case SG_PIXELFORMAT_R8:
@@ -8661,7 +8671,7 @@ _SOKOL_PRIVATE int _sg_pixelformat_bytesize(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RGBA8UI:
         case SG_PIXELFORMAT_RGBA8SI:
         case SG_PIXELFORMAT_BGRA8:
-        case SG_PIXELFORMAT_SBGRA8:
+        case SG_PIXELFORMAT_SBGR8A8:
         case SG_PIXELFORMAT_RGB10A2:
         case SG_PIXELFORMAT_RG11B10F:
         case SG_PIXELFORMAT_RGB9E5:
@@ -9834,6 +9844,7 @@ _SOKOL_PRIVATE void _sg_gl_init_pixelformats(bool has_bgra) {
     _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA8SI]);
     if (has_bgra) {
         _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_BGRA8]);
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_SBGR8A8]);
     }
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGB10A2]);
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGB9E5]);
@@ -11572,7 +11583,11 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass, const _sg_attachments
     } else {
         // swapchain pass
         #if defined(SOKOL_GLCORE)
-        glDisable(GL_FRAMEBUFFER_SRGB);
+        if (_sg_is_srgb_format(swapchain->color_format)) {
+            glEnable(GL_FRAMEBUFFER_SRGB);
+        } else {
+            glDisable(GL_FRAMEBUFFER_SRGB);
+        }
         #endif
         // NOTE: on some platforms, the default framebuffer of a context
         // is null, so we can't actually assert here that the
@@ -14759,7 +14774,7 @@ _SOKOL_PRIVATE MTLPixelFormat _sg_mtl_pixel_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RGBA8UI:                return MTLPixelFormatRGBA8Uint;
         case SG_PIXELFORMAT_RGBA8SI:                return MTLPixelFormatRGBA8Sint;
         case SG_PIXELFORMAT_BGRA8:                  return MTLPixelFormatBGRA8Unorm;
-        case SG_PIXELFORMAT_SBGRA8:                 return MTLPixelFormatBGRA8Unorm_sRGB;
+        case SG_PIXELFORMAT_SBGR8A8:                return MTLPixelFormatBGRA8Unorm_sRGB;
         case SG_PIXELFORMAT_RGB10A2:                return MTLPixelFormatRGB10A2Unorm;
         case SG_PIXELFORMAT_RG11B10F:               return MTLPixelFormatRG11B10Float;
         case SG_PIXELFORMAT_RGB9E5:                 return MTLPixelFormatRGB9E5Float;
@@ -15219,7 +15234,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA8UI]);
     _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA8SI]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_BGRA8]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_SBGRA8]);
+    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_SBGR8A8]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGB10A2]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG11B10F]);
     #if defined(_SG_TARGET_MACOS)
