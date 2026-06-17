@@ -7978,13 +7978,18 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_webgl_context_cb(int emsc_type, const void* re
 }
 
 _SOKOL_PRIVATE void _sapp_emsc_webgl_init(void) {
+    const sapp_pixel_format depth_fmt = _sapp.desc.swapchain.depth_format;
+    const bool wants_alpha = _sapp.desc.swapchain.composite_mode != SAPP_COMPOSITEMODE_OPAQUE;
+    const bool wants_premul_alpha = _sapp.desc.swapchain.composite_mode == SAPP_COMPOSITEMODE_PREMULTIPLIED_ALPHA;
+    const bool wants_depth = depth_fmt != SAPP_PIXELFORMAT_NONE;
+    const bool wants_stencil = depth_fmt == SAPP_PIXELFORMAT_DEPTH_STENCIL;
     EmscriptenWebGLContextAttributes attrs;
     emscripten_webgl_init_context_attributes(&attrs);
-    attrs.alpha = _sapp.desc.alpha;
-    attrs.depth = true;
-    attrs.stencil = true;
-    attrs.antialias = _sapp.sample_count > 1;
-    attrs.premultipliedAlpha = _sapp.desc.html5.premultiplied_alpha;
+    attrs.alpha = wants_alpha;
+    attrs.depth = wants_depth;
+    attrs.stencil = wants_stencil;
+    attrs.antialias = _sapp.desc.swapchain.sample_count > 1;
+    attrs.premultipliedAlpha = wants_premul_alpha;
     attrs.preserveDrawingBuffer = _sapp.desc.html5.preserve_drawing_buffer;
     attrs.enableExtensionsByDefault = true;
     attrs.majorVersion = 2;
