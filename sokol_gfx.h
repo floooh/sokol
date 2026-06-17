@@ -11509,13 +11509,6 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass, const _sg_attachments
     const bool is_offscreen_pass = !atts->empty;
 
     // bind the render pass framebuffer
-    //
-    // FIXME: Disabling SRGB conversion for the default framebuffer is
-    // a crude hack to make behaviour for sRGB render target textures
-    // identical with the Metal and D3D11 swapchains created by sokol-app.
-    //
-    // This will need a cleaner solution (e.g. allowing to configure
-    // sokol_app.h with an sRGB or RGB framebuffer.
     if (is_offscreen_pass) {
 
         // offscreen pass, mutate the global offscreen framebuffer object
