@@ -3937,6 +3937,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
 
     const sapp_pixel_format depth_fmt = _sapp.desc.swapchain.depth_format;
     const uint32_t sample_count = (uint32_t)_sapp.desc.swapchain.sample_count;
+    const bool hdr = _sapp.desc.swapchain.hdr;
 
     if (!called_from_resize) {
         SOKOL_ASSERT(0 == _sapp.wgpu.surface);
@@ -3987,6 +3988,13 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
     surf_conf.height = (uint32_t)_sapp.framebuffer_height;
     surf_conf.alphaMode = _sapp_wgpu_composite_alpha_mode(_sapp.desc.swapchain.composite_mode);
     surf_conf.presentMode = _sapp.desc.swapchain.disable_vsync ? WGPUPresentMode_Immediate : WGPUPresentMode_Fifo;
+    if (hdr) {
+        _SAPP_STRUCT(WGPUSurfaceColorManagement, surf_cm);
+        surf_conf.nextInChain = &surf_cm.chain;
+        surf_cm.chain.sType = WGPUSType_SurfaceColorManagement;
+        surf_cm.colorSpace = WGPUPredefinedColorSpace_DisplayP3;
+        surf_cm.toneMappingMode = WGPUToneMappingMode_Extended;
+    }
     wgpuSurfaceConfigure(_sapp.wgpu.surface, &surf_conf);
 
     if (depth_fmt != SAPP_PIXELFORMAT_NONE) {
