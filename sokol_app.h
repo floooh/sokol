@@ -2763,6 +2763,7 @@ typedef struct {
     WGPUTexture depth_stencil_tex;
     WGPUTextureView depth_stencil_view;
     WGPUTextureView swapchain_view;
+    WGPUTextureFormat swapchain_view_format;
     bool init_done;
 } _sapp_wgpu_t;
 #endif
@@ -3920,6 +3921,19 @@ _SOKOL_PRIVATE WGPUTextureFormat _sapp_wgpu_pick_render_format(size_t count, con
     return formats[0];
 }
 
+_SOKOL_PRIVATE WGPUTextureFormat _sapp_wgpu_pick_swapchain_view_format(WGPUTextureFormat surface_format) {
+    if (_sapp.desc.swapchain.srgb) {
+        switch (surface_format) {
+            case WGPUTextureFormat_RGBA8Unorm:
+                return WGPUTextureFormat_RGBA8UnormSrgb;
+            case WGPUTextureFormat_BGRA8Unorm:
+                return WGPUTextureFormat_BGRA8UnormSrgb;
+            default: break;
+        }
+    }
+    return surface_format;
+}
+
 _SOKOL_PRIVATE WGPUCompositeAlphaMode _sapp_wgpu_composite_alpha_mode(sapp_composite_mode m) {
     switch (m) {
         case SAPP_COMPOSITEMODE_OPAQUE: return WGPUCompositeAlphaMode_Opaque;
@@ -3938,6 +3952,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
     const sapp_pixel_format depth_fmt = _sapp.desc.swapchain.depth_format;
     const uint32_t sample_count = (uint32_t)_sapp.desc.swapchain.sample_count;
     const bool hdr = _sapp.desc.swapchain.hdr;
+    const bool srgb = _sapp.desc.swapchain.srgb;
 
     if (!called_from_resize) {
         SOKOL_ASSERT(0 == _sapp.wgpu.surface);
@@ -3977,6 +3992,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
             _SAPP_PANIC(WGPU_SWAPCHAIN_SURFACE_GET_CAPABILITIES_FAILED);
         }
         _sapp.wgpu.surface_format = _sapp_wgpu_pick_render_format(surf_caps.formatCount, surf_caps.formats);
+        _sapp.wgpu.swapchain_view_format = _sapp_wgpu_pick_swapchain_view_format(_sapp.wgpu.surface_format);
     }
 
     SOKOL_ASSERT(_sapp.wgpu.surface);
@@ -3988,6 +4004,10 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
     surf_conf.height = (uint32_t)_sapp.framebuffer_height;
     surf_conf.alphaMode = _sapp_wgpu_composite_alpha_mode(_sapp.desc.swapchain.composite_mode);
     surf_conf.presentMode = _sapp.desc.swapchain.disable_vsync ? WGPUPresentMode_Immediate : WGPUPresentMode_Fifo;
+    if (srgb) {
+        surf_conf.viewFormatCount = 1;
+        surf_conf.viewFormats = &_sapp.wgpu.swapchain_view_format;
+    }
     if (hdr) {
         _SAPP_STRUCT(WGPUSurfaceColorManagement, surf_cm);
         surf_conf.nextInChain = &surf_cm.chain;
@@ -4028,7 +4048,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
         msaa_desc.size.width = (uint32_t)_sapp.framebuffer_width;
         msaa_desc.size.height = (uint32_t)_sapp.framebuffer_height;
         msaa_desc.size.depthOrArrayLayers = 1;
-        msaa_desc.format = _sapp.wgpu.surface_format;
+        msaa_desc.format = _sapp.wgpu.swapchain_view_format;
         msaa_desc.mipLevelCount = 1;
         msaa_desc.sampleCount = sample_count;
         _sapp.wgpu.msaa_tex = wgpuDeviceCreateTexture(_sapp.wgpu.device, &msaa_desc);
@@ -4090,7 +4110,18 @@ _SOKOL_PRIVATE bool _sapp_wgpu_swapchain_next(void) {
             _SAPP_ERROR(WGPU_SWAPCHAIN_GETCURRENTTEXTURE_FAILED);
             break;
     }
-    _sapp.wgpu.swapchain_view = wgpuTextureCreateView(surf_tex.texture, 0);
+    if (_sapp.wgpu.surface_format == _sapp.wgpu.swapchain_view_format) {
+        _sapp.wgpu.swapchain_view = wgpuTextureCreateView(surf_tex.texture, 0);
+    } else {
+        _SAPP_STRUCT(WGPUTextureViewDescriptor, view_desc);
+        view_desc.format = _sapp.wgpu.swapchain_view_format;
+        view_desc.mipLevelCount = 1;
+        view_desc.arrayLayerCount = 1;
+        view_desc.dimension = WGPUTextureViewDimension_2D;
+        view_desc.aspect = WGPUTextureAspect_All;
+        _sapp.wgpu.swapchain_view = wgpuTextureCreateView(surf_tex.texture, &view_desc);
+
+    }
     wgpuTextureRelease(surf_tex.texture);
     SOKOL_ASSERT(_sapp.wgpu.swapchain_view);
     return true;
@@ -14062,11 +14093,15 @@ SOKOL_API_IMPL float sapp_heightf(void) {
 
 SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
     #if defined(SOKOL_WGPU)
-        switch (_sapp.wgpu.surface_format) {
+        switch (_sapp.wgpu.swapchain_view_format) {
             case WGPUTextureFormat_RGBA8Unorm:
                 return SAPP_PIXELFORMAT_RGBA8;
+            case WGPUTextureFormat_RGBA8UnormSrgb:
+                return SAPP_PIXELFORMAT_SRGB8A8;
             case WGPUTextureFormat_BGRA8Unorm:
                 return SAPP_PIXELFORMAT_BGRA8;
+            case WGPUTextureFormat_BGRA8UnormSrgb:
+                return SAPP_PIXELFORMAT_SBGR8A8;
             case WGPUTextureFormat_RGBA16Float:
                 return SAPP_PIXELFORMAT_RGBA16F;
             default:
