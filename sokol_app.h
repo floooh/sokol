@@ -2024,16 +2024,6 @@ typedef struct sapp_logger {
     sokol-app initialization options, used as return value of sokol_main()
     or sapp_run() argument.
 */
-typedef struct sapp_swapchain_desc {
-    sapp_pixel_format depth_format;     // NONE, DEPTH or DEPTH_STENCIL, default: SAPP_PIXELFORMAT_DEPTH
-    sapp_composite_mode composite_mode; // default: SAPP_COMPOSITEMODE_OPAQUE
-    int sample_count;                   // MSAA sample count, default: 1
-    int swap_interval;                  // the preferred swap interval (ignored on some platforms)
-    bool srgb;                          // request sRGB framebuffer
-    bool hdr;                           // request HDR framebuffer
-    bool disable_vsync;                 // optional and with differing behaviour, consider this a debugging feature!
-} sapp_swapchain_desc;
-
 typedef struct sapp_gl_desc {
     int major_version;          // override GL/GLES major and minor version (defaults: GL4.1 (macOS) or GL4.3, GLES3.1 (Android) or GLES3.0
     int minor_version;
@@ -2082,9 +2072,15 @@ typedef struct sapp_desc {
 
     int width;                          // the preferred width of the window / canvas
     int height;                         // the preferred height of the window / canvas
+    sapp_pixel_format depth_format;     // NONE, DEPTH or DEPTH_STENCIL, default: SAPP_PIXELFORMAT_DEPTH
+    sapp_composite_mode composite_mode; // default: SAPP_COMPOSITEMODE_OPAQUE
+    int sample_count;                   // MSAA sample count, default: 1
+    int swap_interval;                  // the preferred swap interval (ignored on some platforms)
+    bool srgb;                          // request sRGB framebuffer
+    bool hdr;                           // request HDR framebuffer
+    bool disable_vsync;                 // optional and with differing behaviour, consider this a debugging feature!
     bool high_dpi;                      // whether the rendering canvas is full-resolution on HighDPI displays
     bool fullscreen;                    // whether the window should be created in fullscreen mode
-    sapp_swapchain_desc swapchain;      // swapchain configuration
     const char* window_title;           // the window title as UTF-8 encoded string
     bool enable_clipboard;              // enable clipboard access, default is false
     int clipboard_size;                 // max size of clipboard content in bytes
@@ -3282,7 +3278,7 @@ typedef struct {
 typedef struct {
     sapp_desc desc;
     bool valid;
-    bool fullscreen;
+    bool fullscreen;            // current(!) fullscreen state
     bool first_frame;
     bool init_called;
     bool cleanup_called;
@@ -3539,20 +3535,13 @@ _SOKOL_PRIVATE bool _sapp_strcpy(const char* src, char* dst, size_t dst_buf_len)
     return _sapp_strcpy_range(src, 0, dst, dst_buf_len);
 }
 
-_SOKOL_PRIVATE sapp_swapchain_desc _sapp_swapchain_desc_defaults(const sapp_swapchain_desc* desc) {
-    SOKOL_ASSERT(desc);
-    sapp_swapchain_desc res = *desc;
+_SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* desc) {
+    SOKOL_ASSERT(desc && (desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
+    sapp_desc res = *desc;
     res.depth_format = _sapp_def(res.depth_format, SAPP_PIXELFORMAT_DEPTH);
     res.composite_mode = _sapp_def(res.composite_mode, SAPP_COMPOSITEMODE_OPAQUE);
     res.sample_count = _sapp_def(res.sample_count, 1);
     res.swap_interval = _sapp_def(res.swap_interval, 1);
-    return res;
-}
-
-_SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* desc) {
-    SOKOL_ASSERT(desc && (desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
-    sapp_desc res = *desc;
-    res.swapchain = _sapp_swapchain_desc_defaults(&res.swapchain);
     if (0 == res.gl.major_version) {
         #if defined(SOKOL_GLCORE)
             res.gl.major_version = 4;
@@ -3579,7 +3568,7 @@ _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* desc) {
 }
 
 _SOKOL_PRIVATE void _sapp_assert_desc(const sapp_desc* desc) {
-    switch (desc->swapchain.depth_format) {
+    switch (desc->depth_format) {
         case SAPP_PIXELFORMAT_NONE:
         case SAPP_PIXELFORMAT_DEPTH:
         case SAPP_PIXELFORMAT_DEPTH_STENCIL:
@@ -3593,8 +3582,8 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->width >= 0);
     SOKOL_ASSERT(desc->height >= 0);
-    SOKOL_ASSERT(desc->swapchain.sample_count >= 0);
-    SOKOL_ASSERT(desc->swapchain.swap_interval >= 0);
+    SOKOL_ASSERT(desc->sample_count >= 0);
+    SOKOL_ASSERT(desc->swap_interval >= 0);
     SOKOL_ASSERT(desc->clipboard_size >= 0);
     SOKOL_ASSERT(desc->max_dropped_files >= 0);
     SOKOL_ASSERT(desc->max_dropped_file_path_length >= 0);
@@ -5187,7 +5176,7 @@ _SOKOL_PRIVATE id<MTLTexture> _sapp_mtl_create_texture(int width, int height, MT
 }
 
 _SOKOL_PRIVATE MTLPixelFormat _sapp_mtl_depth_format(void) {
-    switch (_sapp.desc.swapchain.depth_format) {
+    switch (_sapp.desc.depth_format) {
         case SAPP_PIXELFORMAT_DEPTH: return MTLPixelFormatDepth32Float;
         case SAPP_PIXELFORMAT_DEPTH_STENCIL: return MTLPixelFormatDepth32Float_Stencil8;
         default: SOKOL_UNREACHABLE; return MTLPixelFormatInvalid;
@@ -5195,11 +5184,11 @@ _SOKOL_PRIVATE MTLPixelFormat _sapp_mtl_depth_format(void) {
 }
 
 _SOKOL_PRIVATE MTLPixelFormat _sapp_mtl_color_format(void) {
-    if (_sapp.desc.swapchain.hdr) {
+    if (_sapp.desc.hdr) {
         return MTLPixelFormatRGBA16Float;
     } else {
         // 32 bit
-        if (_sapp.desc.swapchain.srgb) {
+        if (_sapp.desc.srgb) {
             return MTLPixelFormatBGRA8Unorm_sRGB;
         } else {
             return MTLPixelFormatBGRA8Unorm;
@@ -5208,7 +5197,7 @@ _SOKOL_PRIVATE MTLPixelFormat _sapp_mtl_color_format(void) {
 }
 
 _SOKOL_PRIVATE CFStringRef _sapp_mtl_color_space(void) {
-    if (_sapp.desc.swapchain.hdr) {
+    if (_sapp.desc.hdr) {
         return kCGColorSpaceExtendedLinearDisplayP3;
     } else {
         return kCGColorSpaceSRGB;
@@ -5216,15 +5205,15 @@ _SOKOL_PRIVATE CFStringRef _sapp_mtl_color_space(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_mtl_swapchain_create(int width, int height) {
-    const int sample_count = _sapp.desc.swapchain.sample_count;
-    if (_sapp.desc.swapchain.depth_format != SAPP_PIXELFORMAT_NONE) {
+    const int sample_count = _sapp.desc.sample_count;
+    if (_sapp.desc.depth_format != SAPP_PIXELFORMAT_NONE) {
         MTLPixelFormat format = _sapp_mtl_depth_format();
         _sapp.mtl.depth_tex =_sapp_mtl_create_texture(width, height, format, sample_count, "swapchain_depth_tex");
         if (nil == _sapp.mtl.depth_tex) {
             _SAPP_PANIC(METAL_CREATE_SWAPCHAIN_DEPTH_TEXTURE_FAILED);
         }
     }
-    if (_sapp.desc.swapchain.sample_count > 1) {
+    if (_sapp.desc.sample_count > 1) {
         MTLPixelFormat format = _sapp_mtl_color_format();
         _sapp.mtl.msaa_tex = _sapp_mtl_create_texture(width, height, format, sample_count, "swapchain_msaa_tex");
         if (nil == _sapp.mtl.msaa_tex) {
@@ -5318,7 +5307,7 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_start_display_link(void) {
     SOKOL_ASSERT(nil != _sapp.macos.view);
     NSInteger max_fps = _sapp_macos_max_fps();
     _sapp.mtl.display_link = [_sapp.macos.view displayLinkWithTarget:_sapp.macos.view selector:@selector(displayLinkFired:)];
-    const float preferred_fps = max_fps / _sapp.desc.swapchain.swap_interval;
+    const float preferred_fps = max_fps / _sapp.desc.swap_interval;
     const CAFrameRateRange frame_rate_range = { preferred_fps, preferred_fps, preferred_fps };
     _sapp.mtl.display_link.preferredFrameRateRange = frame_rate_range;
     [_sapp.mtl.display_link addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
@@ -5371,13 +5360,13 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
     _sapp.mtl.layer = [CAMetalLayer layer];
     _sapp.mtl.layer.device = _sapp.mtl.device;
     _sapp.mtl.layer.magnificationFilter = kCAFilterNearest;
-    _sapp.mtl.layer.opaque = _sapp.desc.swapchain.composite_mode == SAPP_COMPOSITEMODE_OPAQUE;
+    _sapp.mtl.layer.opaque = _sapp.desc.composite_mode == SAPP_COMPOSITEMODE_OPAQUE;
     _sapp.mtl.layer.pixelFormat = _sapp_mtl_color_format();
     _sapp.mtl.layer.framebufferOnly = true;
     CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(_sapp_mtl_color_space());
     _sapp.mtl.layer.colorspace = colorspace;
     CGColorSpaceRelease(colorspace);
-    if (_sapp.desc.swapchain.hdr) {
+    if (_sapp.desc.hdr) {
         _sapp.mtl.layer.wantsExtendedDynamicRangeContent = YES;
     }
     if (_sapp.desc.metal.disable_display_sync) {
@@ -6066,7 +6055,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp.macos.window.title = [NSString stringWithUTF8String:_sapp.window_title];
     _sapp.macos.window.acceptsMouseMovedEvents = YES;
     _sapp.macos.window.restorable = YES;
-    if (_sapp.desc.swapchain.composite_mode != SAPP_COMPOSITEMODE_OPAQUE) {
+    if (_sapp.desc.composite_mode != SAPP_COMPOSITEMODE_OPAQUE) {
         _sapp.macos.window.opaque = NO;
         _sapp.macos.window.backgroundColor = [NSColor clearColor];
         _sapp.macos.window.hasShadow = NO;
@@ -6311,7 +6300,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 #endif
 
 - (BOOL)isOpaque {
-    return _sapp.desc.swapchain.composite_mode == SAPP_COMPOSITEMODE_OPAQUE;
+    return _sapp.desc.composite_mode == SAPP_COMPOSITEMODE_OPAQUE;
 }
 - (BOOL)canBecomeKeyView {
     return YES;
@@ -14143,11 +14132,11 @@ SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
 }
 
 SOKOL_API_IMPL sapp_pixel_format sapp_depth_format(void) {
-    return _sapp.desc.swapchain.depth_format;
+    return _sapp.desc.depth_format;
 }
 
 SOKOL_API_IMPL int sapp_sample_count(void) {
-    return _sapp.desc.swapchain.sample_count;
+    return _sapp.desc.sample_count;
 }
 
 SOKOL_API_IMPL bool sapp_high_dpi(void) {
