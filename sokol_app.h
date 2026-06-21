@@ -3889,7 +3889,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_await(WGPUFuture future) {
 
 _SOKOL_PRIVATE WGPUTextureFormat _sapp_wgpu_pick_render_format(size_t count, const WGPUTextureFormat* formats) {
     SOKOL_ASSERT((count > 0) && formats);
-    if (_sapp.desc.swapchain.hdr) {
+    if (_sapp.desc.hdr) {
         for (size_t i = 0; i < count; i++) {
             const WGPUTextureFormat fmt = formats[i];
             if (fmt == WGPUTextureFormat_RGBA16Float) {
@@ -3911,7 +3911,7 @@ _SOKOL_PRIVATE WGPUTextureFormat _sapp_wgpu_pick_render_format(size_t count, con
 }
 
 _SOKOL_PRIVATE WGPUTextureFormat _sapp_wgpu_pick_swapchain_view_format(WGPUTextureFormat surface_format) {
-    if (_sapp.desc.swapchain.srgb) {
+    if (_sapp.desc.srgb) {
         switch (surface_format) {
             case WGPUTextureFormat_RGBA8Unorm:
                 return WGPUTextureFormat_RGBA8UnormSrgb;
@@ -3938,10 +3938,10 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
     SOKOL_ASSERT(0 == _sapp.wgpu.depth_stencil_tex);
     SOKOL_ASSERT(0 == _sapp.wgpu.depth_stencil_view);
 
-    const sapp_pixel_format depth_fmt = _sapp.desc.swapchain.depth_format;
-    const uint32_t sample_count = (uint32_t)_sapp.desc.swapchain.sample_count;
-    const bool hdr = _sapp.desc.swapchain.hdr;
-    const bool srgb = _sapp.desc.swapchain.srgb;
+    const sapp_pixel_format depth_fmt = _sapp.desc.depth_format;
+    const uint32_t sample_count = (uint32_t)_sapp.desc.sample_count;
+    const bool hdr = _sapp.desc.hdr;
+    const bool srgb = _sapp.desc.srgb;
 
     if (!called_from_resize) {
         SOKOL_ASSERT(0 == _sapp.wgpu.surface);
@@ -3991,8 +3991,8 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
     surf_conf.usage = WGPUTextureUsage_RenderAttachment;
     surf_conf.width = (uint32_t)_sapp.framebuffer_width;
     surf_conf.height = (uint32_t)_sapp.framebuffer_height;
-    surf_conf.alphaMode = _sapp_wgpu_composite_alpha_mode(_sapp.desc.swapchain.composite_mode);
-    surf_conf.presentMode = _sapp.desc.swapchain.disable_vsync ? WGPUPresentMode_Immediate : WGPUPresentMode_Fifo;
+    surf_conf.alphaMode = _sapp_wgpu_composite_alpha_mode(_sapp.desc.composite_mode);
+    surf_conf.presentMode = _sapp.desc.disable_vsync ? WGPUPresentMode_Immediate : WGPUPresentMode_Fifo;
     if (srgb) {
         surf_conf.viewFormatCount = 1;
         surf_conf.viewFormats = &_sapp.wgpu.swapchain_view_format;
@@ -5450,8 +5450,8 @@ _SOKOL_PRIVATE bool _sapp_macos_wgpu_update_framebuffer_dimensions(NSRect view_b
 
 #if defined(SOKOL_GLCORE)
 _SOKOL_PRIVATE void _sapp_macos_gl_init(NSRect window_rect) {
-    const int sample_count = _sapp.desc.swapchain.sample_count;
-    const sapp_pixel_format dfmt = _sapp.desc.swapchain.depth_format;
+    const int sample_count = _sapp.desc.sample_count;
+    const sapp_pixel_format dfmt = _sapp.desc.depth_format;
     NSOpenGLPixelFormatAttribute attrs[32];
     int i = 0;
     attrs[i++] = NSOpenGLPFAAccelerated;
@@ -6268,13 +6268,13 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 - (void)prepareOpenGL {
     [super prepareOpenGL];
     // NOTE: NSOpenGLContext swap interval is broken/ignored since macOS 13
-    GLint swap_interval = _sapp.desc.swapchain.swap_interval;
-    if (_sapp.desc.swapchain.disable_vsync) {
+    GLint swap_interval = _sapp.desc.swap_interval;
+    if (_sapp.desc.disable_vsync) {
         swap_interval = 0;
     }
     NSOpenGLContext* ctx = [_sapp.macos.view openGLContext];
     [ctx setValues:&swap_interval forParameter:NSOpenGLContextParameterSwapInterval];
-    if (_sapp.desc.swapchain.composite_mode != SAPP_COMPOSITEMODE_OPAQUE) {
+    if (_sapp.desc.composite_mode != SAPP_COMPOSITEMODE_OPAQUE) {
         GLint opacity = 0;
         [ctx setValues:&opacity forParameter:NSOpenGLContextParameterSurfaceOpacity];
     }
@@ -8024,9 +8024,9 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_webgl_context_cb(int emsc_type, const void* re
 }
 
 _SOKOL_PRIVATE void _sapp_emsc_webgl_init(void) {
-    const sapp_pixel_format depth_fmt = _sapp.desc.swapchain.depth_format;
-    const bool wants_alpha = _sapp.desc.swapchain.composite_mode != SAPP_COMPOSITEMODE_OPAQUE;
-    const bool wants_premul_alpha = _sapp.desc.swapchain.composite_mode == SAPP_COMPOSITEMODE_PREMULTIPLIED_ALPHA;
+    const sapp_pixel_format depth_fmt = _sapp.desc.depth_format;
+    const bool wants_alpha = _sapp.desc.composite_mode != SAPP_COMPOSITEMODE_OPAQUE;
+    const bool wants_premul_alpha = _sapp.desc.composite_mode == SAPP_COMPOSITEMODE_PREMULTIPLIED_ALPHA;
     const bool wants_depth = depth_fmt != SAPP_PIXELFORMAT_NONE;
     const bool wants_stencil = depth_fmt == SAPP_PIXELFORMAT_DEPTH_STENCIL;
     EmscriptenWebGLContextAttributes attrs;
@@ -8034,7 +8034,7 @@ _SOKOL_PRIVATE void _sapp_emsc_webgl_init(void) {
     attrs.alpha = wants_alpha;
     attrs.depth = wants_depth;
     attrs.stencil = wants_stencil;
-    attrs.antialias = _sapp.desc.swapchain.sample_count > 1;
+    attrs.antialias = _sapp.desc.sample_count > 1;
     attrs.premultipliedAlpha = wants_premul_alpha;
     attrs.preserveDrawingBuffer = _sapp.desc.html5.preserve_drawing_buffer;
     attrs.enableExtensionsByDefault = true;
@@ -14123,7 +14123,7 @@ SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
     #elif defined(SOKOL_D3D11)
         return SAPP_PIXELFORMAT_BGRA8;
     #else
-        if (_sapp.desc.swapchain.srgb) {
+        if (_sapp.desc.srgb) {
             return SAPP_PIXELFORMAT_SRGB8A8;
         } else {
             return SAPP_PIXELFORMAT_RGBA8;
@@ -14527,7 +14527,7 @@ SOKOL_API_IMPL sapp_swapchain sapp_acquire_swapchain(void) {
             res.invalid = true;
             return res;
         }
-        if (_sapp.desc.swapchain.sample_count > 1) {
+        if (_sapp.desc.sample_count > 1) {
             SOKOL_ASSERT(_sapp.wgpu.msaa_view);
             res.wgpu.render_view = (const void*) _sapp.wgpu.msaa_view;
             res.wgpu.resolve_view = (const void*) _sapp.wgpu.swapchain_view;
