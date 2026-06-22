@@ -9167,8 +9167,13 @@ _SOKOL_PRIVATE void _sapp_wgl_create_context(void) {
     }
     _sapp.wgl.MakeCurrent(_sapp.win32.dc, _sapp.wgl.gl_ctx);
     if (_sapp.wgl.ext_swap_control) {
-        /* FIXME: DwmIsCompositionEnabled() (see GLFW) */
-        _sapp.wgl.SwapIntervalEXT(_sapp.desc.swap_interval);
+        if (_sapp.desc.disable_vsync) {
+            _sapp.wgl.SwapIntervalEXT(0);
+        } else {
+            // NOTE: Intel GL SwapIntervalEXT seems to be broken (only 0 and 1 is accepted)
+            // values greater 1 disable vsync but still return true. We'll simply ignore that bug.
+            _sapp.wgl.SwapIntervalEXT(_sapp.desc.swap_interval);
+        }
     }
     const uint32_t gl_framebuffer_binding = 0x8CA6;
     _sapp.wgl.GetIntegerv(gl_framebuffer_binding, (int32_t*)&_sapp.gl.framebuffer);
