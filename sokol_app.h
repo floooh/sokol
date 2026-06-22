@@ -2990,6 +2990,7 @@ typedef struct {
 #define WGL_STENCIL_BITS_ARB 0x2023
 #define WGL_DOUBLE_BUFFER_ARB 0x2011
 #define WGL_SAMPLES_ARB 0x2042
+#define WGL_FRAMEBUFFER_SRGB_CAPABLE_ARB 0x20a9
 #define WGL_CONTEXT_DEBUG_BIT_ARB 0x00000001
 #define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x00000002
 #define WGL_CONTEXT_PROFILE_MASK_ARB 0x9126
@@ -3031,6 +3032,7 @@ typedef struct {
     bool arb_pixel_format;
     bool arb_create_context;
     bool arb_create_context_profile;
+    bool arb_framebuffer_srgb;
     HWND msg_hwnd;
     HDC msg_dc;
 } _sapp_wgl_t;
@@ -8237,6 +8239,7 @@ typedef struct {
     int         stencil_bits;
     int         samples;
     bool        doublebuffer;
+    bool        srgb_capable;
     uintptr_t   handle;
 } _sapp_gl_fbconfig;
 
@@ -8271,6 +8274,9 @@ _SOKOL_PRIVATE void _sapp_gl_init_fbselect(_sapp_gl_fbselect* fbselect) {
 _SOKOL_PRIVATE bool _sapp_gl_select_fbconfig(_sapp_gl_fbselect* fbselect, const _sapp_gl_fbconfig* desired, const _sapp_gl_fbconfig* current) {
     int missing = 0;
     if (desired->doublebuffer != current->doublebuffer) {
+        return false;
+    }
+    if (desired->srgb_capable != current->srgb_capable) {
         return false;
     }
 
@@ -8989,6 +8995,7 @@ _SOKOL_PRIVATE void _sapp_wgl_load_extensions(void) {
     _sapp.wgl.arb_create_context_profile = _sapp_wgl_ext_supported("WGL_ARB_create_context_profile");
     _sapp.wgl.ext_swap_control = _sapp_wgl_ext_supported("WGL_EXT_swap_control");
     _sapp.wgl.arb_pixel_format = _sapp_wgl_ext_supported("WGL_ARB_pixel_format");
+    _sapp.wgl.arb_framebuffer_srgb = _sapp_wgl_ext_supported("WGL_ARB_framebuffer_sRGB");
     _sapp.wgl.MakeCurrent(_sapp.wgl.msg_dc, 0);
     _sapp.wgl.DeleteContext(rc);
 }
@@ -9013,43 +9020,37 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
     SOKOL_ASSERT(_sapp.win32.dc);
     SOKOL_ASSERT(_sapp.wgl.arb_pixel_format);
 
-    #define _sapp_wgl_num_query_tags (12)
-    const int query_tags[_sapp_wgl_num_query_tags] = {
-        WGL_SUPPORT_OPENGL_ARB,
-        WGL_DRAW_TO_WINDOW_ARB,
-        WGL_PIXEL_TYPE_ARB,
-        WGL_ACCELERATION_ARB,
-        WGL_DOUBLE_BUFFER_ARB,
-        WGL_RED_BITS_ARB,
-        WGL_GREEN_BITS_ARB,
-        WGL_BLUE_BITS_ARB,
-        WGL_ALPHA_BITS_ARB,
-        WGL_DEPTH_BITS_ARB,
-        WGL_STENCIL_BITS_ARB,
-        WGL_SAMPLES_ARB,
-    };
-    const int result_support_opengl_index = 0;
-    const int result_draw_to_window_index = 1;
-    const int result_pixel_type_index = 2;
-    const int result_acceleration_index = 3;
-    const int result_double_buffer_index = 4;
-    const int result_red_bits_index = 5;
-    const int result_green_bits_index = 6;
-    const int result_blue_bits_index = 7;
-    const int result_alpha_bits_index = 8;
-    const int result_depth_bits_index = 9;
-    const int result_stencil_bits_index = 10;
-    const int result_samples_index = 11;
-
-    int query_results[_sapp_wgl_num_query_tags] = {0};
-    // Drop the last item if multisample extension is not supported.
-    //  If in future querying with multiple extensions, will have to shuffle index values to have active extensions on the end.
-    int query_count = _sapp_wgl_num_query_tags;
-    if (!_sapp.wgl.arb_multisample) {
-        query_count = _sapp_wgl_num_query_tags - 1;
+    #define _SAPP_WGL_MAX_QUERY_TAGS (13)
+    #define _SAPP_WGL_ADD(tag, count, idx) SOKOL_ASSERT(count<_SAPP_WGL_MAX_QUERY_TAGS);query_tags[count]=tag;idx=count++;
+    int query_tags[_SAPP_WGL_MAX_QUERY_TAGS] = {0};
+    int query_results[_SAPP_WGL_MAX_QUERY_TAGS] = {0};
+    int query_count = 0;
+    int support_opengl_idx = -1, draw_to_window_idx = -1, pixel_type_idx = -1, acceleration_idx = -1, double_buffer_idx = -1;
+    int red_bits_idx = -1, green_bits_idx = -1, blue_bits_idx = -1, alpha_bits_idx = -1;
+    int depth_bits_idx = -1, stencil_bits_idx = -1;
+    int samples_idx = -1, framebuffer_srgb_capable_idx = -1;
+    _SAPP_WGL_ADD(WGL_SUPPORT_OPENGL_ARB, query_count, support_opengl_idx);
+    _SAPP_WGL_ADD(WGL_DRAW_TO_WINDOW_ARB, query_count, draw_to_window_idx);
+    _SAPP_WGL_ADD(WGL_PIXEL_TYPE_ARB, query_count, pixel_type_idx);
+    _SAPP_WGL_ADD(WGL_ACCELERATION_ARB, query_count, acceleration_idx);
+    _SAPP_WGL_ADD(WGL_DOUBLE_BUFFER_ARB, query_count, double_buffer_idx);
+    _SAPP_WGL_ADD(WGL_RED_BITS_ARB, query_count, red_bits_idx);
+    _SAPP_WGL_ADD(WGL_GREEN_BITS_ARB, query_count, green_bits_idx);
+    _SAPP_WGL_ADD(WGL_BLUE_BITS_ARB, query_count, blue_bits_idx);
+    _SAPP_WGL_ADD(WGL_ALPHA_BITS_ARB, query_count, alpha_bits_idx);
+    _SAPP_WGL_ADD(WGL_DEPTH_BITS_ARB, query_count, depth_bits_idx);
+    _SAPP_WGL_ADD(WGL_STENCIL_BITS_ARB, query_count, stencil_bits_idx);
+    if (_sapp.wgl.arb_multisample) {
+        _SAPP_WGL_ADD(WGL_SAMPLES_ARB, query_count, samples_idx);
+    }
+    if (_sapp.wgl.arb_framebuffer_srgb) {
+        _SAPP_WGL_ADD(WGL_FRAMEBUFFER_SRGB_CAPABLE_ARB, query_count, framebuffer_srgb_capable_idx);
     }
 
-    int native_count = _sapp_wgl_attrib(1, WGL_NUMBER_PIXEL_FORMATS_ARB);
+    bool wants_depth = _sapp.desc.depth_format != SAPP_PIXELFORMAT_NONE;
+    bool wants_stencil = _sapp.desc.depth_format == SAPP_PIXELFORMAT_DEPTH_STENCIL;
+    bool wants_msaa = (_sapp.desc.sample_count > 1) && _sapp.wgl.arb_multisample;
+    bool wants_srgb = _sapp.desc.srgb && _sapp.wgl.arb_framebuffer_srgb;
 
     _sapp_gl_fbconfig desired;
     _sapp_gl_init_fbconfig(&desired);
@@ -9057,36 +9058,57 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
     desired.green_bits = 8;
     desired.blue_bits = 8;
     desired.alpha_bits = 8;
-    desired.depth_bits = 24;
-    desired.stencil_bits = 8;
+    if (wants_depth) {
+        desired.depth_bits = 24;
+    } else {
+        desired.depth_bits = 0;
+    }
+    if (wants_stencil) {
+        desired.stencil_bits = 8;
+    } else {
+        desired.stencil_bits = 0;
+    }
     desired.doublebuffer = true;
-    desired.samples = (_sapp.sample_count > 1) ? _sapp.sample_count : 0;
+    if (wants_msaa) {
+        desired.samples = _sapp.desc.sample_count;
+    } else {
+        desired.samples = 0;
+    }
+    desired.srgb_capable = wants_srgb;
 
     int pixel_format = 0;
-
     _sapp_gl_fbselect fbselect;
     _sapp_gl_init_fbselect(&fbselect);
+    const int native_count = _sapp_wgl_attrib(1, WGL_NUMBER_PIXEL_FORMATS_ARB);
     for (int i = 0; i < native_count; i++) {
         const int n = i + 1;
         _sapp_wgl_attribiv(n, query_count, query_tags, query_results);
 
-        if (query_results[result_support_opengl_index] == 0
-            || query_results[result_draw_to_window_index] == 0
-            || query_results[result_pixel_type_index] != WGL_TYPE_RGBA_ARB
-            || query_results[result_acceleration_index] == WGL_NO_ACCELERATION_ARB)
+        if (query_results[support_opengl_idx] == 0
+            || query_results[draw_to_window_idx] == 0
+            || query_results[pixel_type_idx] != WGL_TYPE_RGBA_ARB
+            || query_results[acceleration_idx] == WGL_NO_ACCELERATION_ARB)
         {
             continue;
         }
 
         _SAPP_STRUCT(_sapp_gl_fbconfig, u);
-        u.red_bits     = query_results[result_red_bits_index];
-        u.green_bits   = query_results[result_green_bits_index];
-        u.blue_bits    = query_results[result_blue_bits_index];
-        u.alpha_bits   = query_results[result_alpha_bits_index];
-        u.depth_bits   = query_results[result_depth_bits_index];
-        u.stencil_bits = query_results[result_stencil_bits_index];
-        u.doublebuffer = 0 != query_results[result_double_buffer_index];
-        u.samples = query_results[result_samples_index]; // NOTE: If arb_multisample is not supported  - just takes the default 0
+        u.red_bits     = query_results[red_bits_idx];
+        u.green_bits   = query_results[green_bits_idx];
+        u.blue_bits    = query_results[blue_bits_idx];
+        u.alpha_bits   = query_results[alpha_bits_idx];
+        u.depth_bits   = query_results[depth_bits_idx];
+        u.stencil_bits = query_results[stencil_bits_idx];
+        u.doublebuffer = 0 != query_results[double_buffer_idx];
+
+        if (_sapp.wgl.arb_multisample) {
+            SOKOL_ASSERT(samples_idx);
+            u.samples = query_results[samples_idx];
+        }
+        if (_sapp.wgl.arb_framebuffer_srgb) {
+            SOKOL_ASSERT(framebuffer_srgb_capable_idx);
+            u.srgb_capable = 0 != query_results[framebuffer_srgb_capable_idx];
+        }
 
         // Test if this pixel format is better than the previous one
         if (_sapp_gl_select_fbconfig(&fbselect, &desired, &u)) {
@@ -9098,7 +9120,6 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
             }
         }
     }
-
     return pixel_format;
 }
 
@@ -9147,7 +9168,7 @@ _SOKOL_PRIVATE void _sapp_wgl_create_context(void) {
     _sapp.wgl.MakeCurrent(_sapp.win32.dc, _sapp.wgl.gl_ctx);
     if (_sapp.wgl.ext_swap_control) {
         /* FIXME: DwmIsCompositionEnabled() (see GLFW) */
-        _sapp.wgl.SwapIntervalEXT(_sapp.swap_interval);
+        _sapp.wgl.SwapIntervalEXT(_sapp.desc.swap_interval);
     }
     const uint32_t gl_framebuffer_binding = 0x8CA6;
     _sapp.wgl.GetIntegerv(gl_framebuffer_binding, (int32_t*)&_sapp.gl.framebuffer);
@@ -9664,7 +9685,7 @@ _SOKOL_PRIVATE void _sapp_win32_frame(bool from_winproc) {
     #endif
     if (!from_winproc) {
         if (IsIconic(_sapp.win32.hwnd)) {
-            Sleep((DWORD)(16 * _sapp.swap_interval));
+            Sleep((DWORD)(16 * _sapp.desc.swap_interval));
         }
     }
 }
