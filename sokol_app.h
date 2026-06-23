@@ -3107,6 +3107,7 @@ typedef struct {
 #define GLX_DEPTH_SIZE 12
 #define GLX_STENCIL_SIZE 13
 #define GLX_SAMPLES 0x186a1
+#define GLX_FRAMEBUFFER_SRGB_CAPABLE_ARB 0x20B2
 #define GLX_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
 #define GLX_CONTEXT_PROFILE_MASK_ARB 0x9126
 #define GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x00000002
@@ -3233,6 +3234,7 @@ typedef struct {
     bool EXT_swap_control;
     bool MESA_swap_control;
     bool ARB_multisample;
+    bool ARB_framebuffer_srgb;
     bool ARB_create_context;
     bool ARB_create_context_profile;
 } _sapp_glx_t;
@@ -3538,7 +3540,7 @@ _SOKOL_PRIVATE bool _sapp_strcpy(const char* src, char* dst, size_t dst_buf_len)
 }
 
 _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* desc) {
-    SOKOL_ASSERT(desc && (desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
+    SOKOL_ASSERT(desc && ((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn)));
     sapp_desc res = *desc;
     res.depth_format = _sapp_def(res.depth_format, SAPP_PIXELFORMAT_DEPTH);
     res.composite_mode = _sapp_def(res.composite_mode, SAPP_COMPOSITEMODE_OPAQUE);
@@ -8362,6 +8364,9 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
         if (desired->doublebuffer != current->doublebuffer) {
             continue;
         }
+        if (desired->srgb_capable != current->srgb_capable) {
+            continue;
+        }
         missing = 0;
         if (desired->alpha_bits > 0 && current->alpha_bits == 0) {
             missing++;
@@ -12531,6 +12536,7 @@ _SOKOL_PRIVATE void _sapp_glx_init(void) {
         _sapp.glx.MESA_swap_control = 0 != _sapp.glx.SwapIntervalMESA;
     }
     _sapp.glx.ARB_multisample = _sapp_glx_extsupported("GLX_ARB_multisample", exts);
+    _sapp.glx.ARB_framebuffer_srgb = _sapp_glx_extsupported("GLX_ARB_framebuffer_sRGB", exts);
     if (_sapp_glx_extsupported("GLX_ARB_create_context", exts)) {
         _sapp.glx.CreateContextAttribsARB = (PFNGLXCREATECONTEXTATTRIBSARBPROC) _sapp_glx_getprocaddr("glXCreateContextAttribsARB");
         _sapp.glx.ARB_create_context = 0 != _sapp.glx.CreateContextAttribsARB;
@@ -12588,25 +12594,46 @@ _SOKOL_PRIVATE GLXFBConfig _sapp_glx_choosefbconfig(void) {
         u->alpha_bits = _sapp_glx_attrib(n, GLX_ALPHA_SIZE);
         u->depth_bits = _sapp_glx_attrib(n, GLX_DEPTH_SIZE);
         u->stencil_bits = _sapp_glx_attrib(n, GLX_STENCIL_SIZE);
-        if (_sapp_glx_attrib(n, GLX_DOUBLEBUFFER)) {
-            u->doublebuffer = true;
-        }
         if (_sapp.glx.ARB_multisample) {
             u->samples = _sapp_glx_attrib(n, GLX_SAMPLES);
+        }
+        u->doublebuffer = (bool)_sapp_glx_attrib(n, GLX_DOUBLEBUFFER);
+        if (_sapp.glx.ARB_framebuffer_srgb) {
+            u->srgb_capable = (bool)_sapp_glx_attrib(n, GLX_FRAMEBUFFER_SRGB_CAPABLE_ARB);
         }
         u->handle = (uintptr_t) n;
         usable_count++;
     }
+
+    bool wants_depth = _sapp.desc.depth_format != SAPP_PIXELFORMAT_NONE;
+    bool wants_stencil = _sapp.desc.depth_format == SAPP_PIXELFORMAT_DEPTH_STENCIL;
+    bool wants_msaa = (_sapp.desc.sample_count > 1) && _sapp.glx.ARB_multisample;
+    bool wants_srgb = _sapp.desc.srgb && _sapp.glx.ARB_framebuffer_srgb;
+
     _sapp_gl_fbconfig desired;
     _sapp_gl_init_fbconfig(&desired);
     desired.red_bits = 8;
     desired.green_bits = 8;
     desired.blue_bits = 8;
     desired.alpha_bits = 8;
-    desired.depth_bits = 24;
-    desired.stencil_bits = 8;
+    if (wants_depth) {
+        desired.depth_bits = 24;
+    } else {
+        desired.depth_bits = 0;
+    }
+    if (wants_stencil) {
+        desired.stencil_bits = 8;
+    } else {
+        desired.stencil_bits = 0;
+    }
     desired.doublebuffer = true;
-    desired.samples = _sapp.sample_count > 1 ? _sapp.sample_count : 0;
+    if (wants_msaa) {
+        desired.samples = _sapp.desc.sample_count;
+    } else {
+        desired.samples = 0;
+    }
+    desired.srgb_capable = wants_srgb;
+
     closest = _sapp_gl_choose_fbconfig(&desired, usable_configs, usable_count);
     GLXFBConfig result = 0;
     if (closest) {
@@ -13976,7 +14003,11 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
         _sapp_glx_choose_visual(&visual, &depth);
         _sapp_x11_create_window(visual, depth);
         _sapp_glx_create_context();
-        _sapp_glx_swapinterval(_sapp.swap_interval);
+        if (_sapp.desc.disable_vsync) {
+            _sapp_glx_swapinterval(0);
+        } else {
+            _sapp_glx_swapinterval(_sapp.desc.swap_interval);
+        }
     #elif defined(_SAPP_EGL)
         _sapp_egl_init();
     #elif defined(SOKOL_WGPU)
