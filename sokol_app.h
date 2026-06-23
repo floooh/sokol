@@ -13845,8 +13845,18 @@ _SOKOL_PRIVATE void _sapp_egl_init(void) {
         _SAPP_PANIC(LINUX_EGL_INITIALIZE_FAILED);
     }
 
-    EGLint sample_count = _sapp.desc.sample_count > 1 ? _sapp.desc.sample_count : 0;
-    EGLint alpha_size = _sapp.desc.alpha ? 8 : 0;
+    // FIXME: composite is not fully supported yet
+    bool wants_alpha = _sapp.desc.composite_mode != SAPP_COMPOSITEMODE_OPAQUE;
+    bool wants_msaa = _sapp.desc.sample_count > 1;
+    bool wants_depth = _sapp.desc.depth_format != SAPP_PIXELFORMAT_NONE;
+    bool wants_stencil = _sapp.desc.depth_format == SAPP_PIXELFORMAT_DEPTH_STENCIL;
+    bool wants_srgb = _sapp.desc.srgb;
+
+    EGLint sample_buffers = wants_msaa ? 1 : 0;
+    EGLint sample_count = wants_msaa ? _sapp.desc.sample_count : 0;
+    EGLint alpha_size = wants_alpha ? 8 : 0;
+    EGLint depth_size = wants_depth ? 24 : 0;
+    EGLint stencil_size = wants_stencil ? 8 : 0;
     const EGLint config_attrs[] = {
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
         #if defined(SOKOL_GLCORE)
@@ -13858,9 +13868,9 @@ _SOKOL_PRIVATE void _sapp_egl_init(void) {
         EGL_GREEN_SIZE, 8,
         EGL_BLUE_SIZE, 8,
         EGL_ALPHA_SIZE, alpha_size,
-        EGL_DEPTH_SIZE, 24,
-        EGL_STENCIL_SIZE, 8,
-        EGL_SAMPLE_BUFFERS, _sapp.desc.sample_count > 1 ? 1 : 0,
+        EGL_DEPTH_SIZE, depth_size,
+        EGL_STENCIL_SIZE, stencil_size,
+        EGL_SAMPLE_BUFFERS, sample_buffers,
         EGL_SAMPLES, sample_count,
         EGL_NONE,
     };
@@ -13882,7 +13892,12 @@ _SOKOL_PRIVATE void _sapp_egl_init(void) {
             eglGetConfigAttrib(_sapp.egl.display, c, EGL_DEPTH_SIZE, &d) &&
             eglGetConfigAttrib(_sapp.egl.display, c, EGL_STENCIL_SIZE, &s) &&
             eglGetConfigAttrib(_sapp.egl.display, c, EGL_SAMPLES, &n) &&
-            (r == 8) && (g == 8) && (b == 8) && (a == alpha_size) && (d == 24) && (s == 8) && (n == sample_count)) {
+            (r == 8) && (g == 8) && (b == 8) &&
+            (a == alpha_size) &&
+            (d == depth_size) &&
+            (s == stencil_size) &&
+            (n == sample_count))
+        {
             config = c;
             break;
         }
@@ -13905,7 +13920,12 @@ _SOKOL_PRIVATE void _sapp_egl_init(void) {
     _sapp_x11_create_window(visual_info->visual, visual_info->depth);
     XFree(visual_info);
 
-    _sapp.egl.surface = eglCreateWindowSurface(_sapp.egl.display, config, (EGLNativeWindowType)_sapp.x11.window, NULL);
+    EGLint srgb_surface_attribs[] = {
+        EGL_GL_COLORSPACE, EGL_GL_COLORSPACE_SRGB,
+        EGL_NONE,
+    };
+    const EGLint* surf_attrs = wants_srgb ? srgb_surface_attribs : 0;
+    _sapp.egl.surface = eglCreateWindowSurface(_sapp.egl.display, config, (EGLNativeWindowType)_sapp.x11.window, surf_attrs);
     if (EGL_NO_SURFACE == _sapp.egl.surface) {
         _SAPP_PANIC(LINUX_EGL_CREATE_WINDOW_SURFACE_FAILED);
     }
@@ -13929,7 +13949,11 @@ _SOKOL_PRIVATE void _sapp_egl_init(void) {
     }
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sapp.gl.framebuffer);
 
-    eglSwapInterval(_sapp.egl.display, _sapp.swap_interval);
+    if (_sapp.desc.disable_vsync) {
+        eglSwapInterval(_sapp.egl.display, 0);
+    } else {
+        eglSwapInterval(_sapp.egl.display, _sapp.desc.swap_interval);
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_egl_destroy(void) {
