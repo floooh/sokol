@@ -10463,8 +10463,18 @@ _SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
     if (eglInitialize(display, NULL, NULL) == EGL_FALSE) {
         return false;
     }
-    EGLint sample_count = _sapp.desc.sample_count > 1 ? _sapp.desc.sample_count : 0;
-    EGLint alpha_size = _sapp.desc.alpha ? 8 : 0;
+
+    // FIXME: composite mode is not fully supported yet
+    bool wants_alpha = _sapp.desc.composite_mode != SAPP_COMPOSITEMODE_OPAQUE;
+    bool wants_msaa = _sapp.desc.sample_count > 1;
+    bool wants_depth = _sapp.desc.depth_format != SAPP_PIXELFORMAT_NONE;
+    bool wants_stencil = _sapp.desc.depth_format == SAPP_PIXELFORMAT_DEPTH_STENCIL;
+
+    EGLint sample_buffers = wants_msaa ? 1 : 0;
+    EGLint sample_count = wants_msaa ? _sapp.desc.sample_count : 0;
+    EGLint alpha_size = wants_alpha ? 8 : 0;
+    EGLint depth_size = wants_depth ? 24 : 0;
+    EGLint stencil_size = wants_stencil ? 8 : 0;
     const EGLint cfg_attributes[] = {
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
         EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
@@ -10472,9 +10482,9 @@ _SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
         EGL_GREEN_SIZE, 8,
         EGL_BLUE_SIZE, 8,
         EGL_ALPHA_SIZE, alpha_size,
-        EGL_DEPTH_SIZE, 24,
-        EGL_STENCIL_SIZE, 8,
-        EGL_SAMPLE_BUFFERS, _sapp.desc.sample_count > 1 ? 1 : 0,
+        EGL_DEPTH_SIZE, depth_size,
+        EGL_STENCIL_SIZE, stencil_size,
+        EGL_SAMPLE_BUFFERS, sample_buffers,
         EGL_SAMPLES, sample_count,
         EGL_NONE,
     };
@@ -10485,8 +10495,7 @@ _SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
     SOKOL_ASSERT(cfg_count <= 32);
 
     /* find config with 8-bit rgb buffer if available, ndk sample does not trust egl spec */
-    EGLConfig config;
-    bool exact_cfg_found = false;
+    EGLConfig config = available_cfgs[0];
     for (int i = 0; i < cfg_count; ++i) {
         EGLConfig c = available_cfgs[i];
         EGLint r, g, b, a, d, s, n;
@@ -10497,14 +10506,15 @@ _SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
             eglGetConfigAttrib(display, c, EGL_DEPTH_SIZE, &d) == EGL_TRUE &&
             eglGetConfigAttrib(display, c, EGL_STENCIL_SIZE, &s) == EGL_TRUE &&
             eglGetConfigAttrib(display, c, EGL_SAMPLES, &n) == EGL_TRUE &&
-            (r == 8) && (g == 8) && (b == 8) && (a == alpha_size) && (d == 24) && (s == 8) && (n == sample_count)) {
-            exact_cfg_found = true;
+            (r == 8) && (g == 8) && (b == 8) &&
+            (a == alpha_size) &&
+            (d == depth_size) &&
+            (s == stencil_size) &&
+            (n == sample_count))
+        {
             config = c;
             break;
         }
-    }
-    if (!exact_cfg_found) {
-        config = available_cfgs[0];
     }
 
     EGLint ctx_attributes[] = {
@@ -10549,7 +10559,13 @@ _SOKOL_PRIVATE bool _sapp_android_init_egl_surface(ANativeWindow* window) {
     /* ANativeActivity_setWindowFlags(activity, AWINDOW_FLAG_KEEP_SCREEN_ON, 0); */
 
     /* create egl surface and make it current */
-    EGLSurface surface = eglCreateWindowSurface(_sapp.android.display, _sapp.android.config, window, NULL);
+    bool wants_srgb = _sapp.desc.srgb;
+    EGLint srgb_surface_attrs[] = {
+        EGL_GL_COLORSPACE, EGL_GL_COLORSPACE_SRGB,
+        EGL_NONE,
+    };
+    const EGLint* surf_attrs = wants_srgb ? srgb_surface_attrs : 0;
+    EGLSurface surface = eglCreateWindowSurface(_sapp.android.display, _sapp.android.config, window, surf_attrs);
     if (surface == EGL_NO_SURFACE) {
         return false;
     }
@@ -13845,7 +13861,7 @@ _SOKOL_PRIVATE void _sapp_egl_init(void) {
         _SAPP_PANIC(LINUX_EGL_INITIALIZE_FAILED);
     }
 
-    // FIXME: composite is not fully supported yet
+    // FIXME: composite mode is not fully supported yet
     bool wants_alpha = _sapp.desc.composite_mode != SAPP_COMPOSITEMODE_OPAQUE;
     bool wants_msaa = _sapp.desc.sample_count > 1;
     bool wants_depth = _sapp.desc.depth_format != SAPP_PIXELFORMAT_NONE;
