@@ -5191,7 +5191,6 @@ _SOKOL_PRIVATE MTLPixelFormat _sapp_mtl_color_format(void) {
     if (_sapp.desc.hdr) {
         return MTLPixelFormatRGBA16Float;
     } else {
-        // 32 bit
         if (_sapp.desc.srgb) {
             return MTLPixelFormatBGRA8Unorm_sRGB;
         } else {
@@ -8706,11 +8705,47 @@ static inline HRESULT _sapp_dxgi_MakeWindowAssociation(IDXGIFactory* self, HWND 
     #endif
 }
 
+_SOKOL_PRIVATE DXGI_FORMAT _sapp_d3d11_swapchain_color_format(void) {
+    if (_sapp.desc.hdr) {
+        return DXGI_FORMAT_R16G16B16A16_FLOAT;
+    } else {
+        return DXGI_FORMAT_B8G8R8A8_UNORM;
+    }
+}
+
+_SOKOL_PRIVATE DXGI_FORMAT _sapp_d3d11_msaatex_color_format(void) {
+    if (_sapp.desc.hdr) {
+        return DXGI_FORMAT_R16G16B16A16_TYPELESS;
+    } else {
+        return DXGI_FORMAT_B8G8R8A8_TYPELESS;
+    }
+}
+
+_SOKOL_PRIVATE DXGI_FORMAT _sapp_d3d11_view_color_format(void) {
+    if (_sapp.desc.hdr) {
+        return DXGI_FORMAT_R16G16B16A16_FLOAT;
+    } else {
+        if (_sapp.desc.srgb) {
+            return DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+        } else {
+            return DXGI_FORMAT_B8G8R8A8_UNORM;
+        }
+    }
+}
+
+_SOKOL_PRIVATE DXGI_FORMAT _sapp_d3d11_depth_format(void) {
+    switch (_sapp.desc.depth_format) {
+        case SAPP_PIXELFORMAT_DEPTH: return DXGI_FORMAT_D32_FLOAT;
+        case SAPP_PIXELFORMAT_DEPTH_STENCIL: return DXGI_FORMAT_D24_UNORM_S8_UINT;
+        default: SOKOL_UNREACHABLE; return DXGI_FORMAT_UNKNOWN;
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     DXGI_SWAP_CHAIN_DESC* sc_desc = &_sapp.d3d11.swap_chain_desc;
     sc_desc->BufferDesc.Width = (UINT)_sapp.framebuffer_width;
     sc_desc->BufferDesc.Height = (UINT)_sapp.framebuffer_height;
-    sc_desc->BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    sc_desc->BufferDesc.Format = _sapp_d3d11_swapchain_color_format();
     sc_desc->BufferDesc.RefreshRate.Numerator = 60;
     sc_desc->BufferDesc.RefreshRate.Denominator = 1;
     sc_desc->OutputWindow = _sapp.win32.hwnd;
@@ -8816,39 +8851,59 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target(void) {
 
     HRESULT hr; _SOKOL_UNUSED(hr);
 
-    /* view for the swapchain-created framebuffer */
+    bool wants_msaa = _sapp.desc.sample_count > 1;
+    bool wants_depth = _sapp.desc.depth_format != SAPP_PIXELFORMAT_NONE;
+    bool wants_srgb = _sapp.desc.srgb;
+
+    // view for the swapchain-created framebuffer
     hr = _sapp_dxgi_GetBuffer(_sapp.d3d11.swap_chain, 0, _sapp_win32_refiid(_sapp_IID_ID3D11Texture2D), (void**)&_sapp.d3d11.rt);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.rt);
-    hr = _sapp_d3d11_CreateRenderTargetView(_sapp.d3d11.device, (ID3D11Resource*)_sapp.d3d11.rt, NULL, &_sapp.d3d11.rtv);
+
+    // when SRGB is requested, the view needs a different format than the surface
+    _SAPP_STRUCT(D3D11_RENDER_TARGET_VIEW_DESC, d3d11_rtv_desc);
+    if (wants_srgb) {
+        d3d11_rtv_desc.Format = _sapp_d3d11_view_color_format();
+        if (wants_msaa) {
+            d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DMS;
+        } else {
+            d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+        }
+    }
+    const D3D11_RENDER_TARGET_VIEW_DESC* rtv_desc_ptr = wants_srgb ? &d3d11_rtv_desc : NULL;
+    hr = _sapp_d3d11_CreateRenderTargetView(_sapp.d3d11.device, (ID3D11Resource*)_sapp.d3d11.rt, rtv_desc_ptr, &_sapp.d3d11.rtv);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.rtv);
 
-    /* common desc for MSAA and depth-stencil texture */
-    _SAPP_STRUCT(D3D11_TEXTURE2D_DESC, tex_desc);
-    tex_desc.Width = (UINT)_sapp.framebuffer_width;
-    tex_desc.Height = (UINT)_sapp.framebuffer_height;
-    tex_desc.MipLevels = 1;
-    tex_desc.ArraySize = 1;
-    tex_desc.Usage = D3D11_USAGE_DEFAULT;
-    tex_desc.BindFlags = D3D11_BIND_RENDER_TARGET;
-    tex_desc.SampleDesc.Count = (UINT) _sapp.sample_count;
-    tex_desc.SampleDesc.Quality = (UINT) (_sapp.sample_count > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0);
+    // common desc for MSAA and depth-stencil texture
+    if (wants_depth || wants_msaa) {
+        _SAPP_STRUCT(D3D11_TEXTURE2D_DESC, tex_desc);
+        tex_desc.Width = (UINT)_sapp.framebuffer_width;
+        tex_desc.Height = (UINT)_sapp.framebuffer_height;
+        tex_desc.MipLevels = 1;
+        tex_desc.ArraySize = 1;
+        tex_desc.Usage = D3D11_USAGE_DEFAULT;
+        tex_desc.BindFlags = D3D11_BIND_RENDER_TARGET;
+        tex_desc.SampleDesc.Count = (UINT) _sapp.desc.sample_count;
+        tex_desc.SampleDesc.Quality = (UINT) wants_msaa ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
 
-    /* create MSAA texture and view if antialiasing requested */
-    if (_sapp.sample_count > 1) {
-        tex_desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-        hr = _sapp_d3d11_CreateTexture2D(_sapp.d3d11.device, &tex_desc, NULL, &_sapp.d3d11.msaa_rt);
-        SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.msaa_rt);
-        hr = _sapp_d3d11_CreateRenderTargetView(_sapp.d3d11.device, (ID3D11Resource*)_sapp.d3d11.msaa_rt, NULL, &_sapp.d3d11.msaa_rtv);
-        SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.msaa_rtv);
+        // create MSAA texture and view if antialiasing requested
+        if (wants_msaa) {
+            tex_desc.Format = _sapp_d3d11_msaatex_color_format();
+            hr = _sapp_d3d11_CreateTexture2D(_sapp.d3d11.device, &tex_desc, NULL, &_sapp.d3d11.msaa_rt);
+            SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.msaa_rt);
+            hr = _sapp_d3d11_CreateRenderTargetView(_sapp.d3d11.device, (ID3D11Resource*)_sapp.d3d11.msaa_rt, rtv_desc_ptr, &_sapp.d3d11.msaa_rtv);
+            SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.msaa_rtv);
+        }
+
+        // texture and view for the depth-stencil-surface
+        if (wants_depth) {
+            tex_desc.Format = _sapp_d3d11_depth_format();
+            tex_desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+            hr = _sapp_d3d11_CreateTexture2D(_sapp.d3d11.device, &tex_desc, NULL, &_sapp.d3d11.ds);
+            SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.ds);
+            hr = _sapp_d3d11_CreateDepthStencilView(_sapp.d3d11.device, (ID3D11Resource*)_sapp.d3d11.ds, NULL, &_sapp.d3d11.dsv);
+            SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.dsv);
+        }
     }
-
-    /* texture and view for the depth-stencil-surface */
-    tex_desc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-    tex_desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
-    hr = _sapp_d3d11_CreateTexture2D(_sapp.d3d11.device, &tex_desc, NULL, &_sapp.d3d11.ds);
-    SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.ds);
-    hr = _sapp_d3d11_CreateDepthStencilView(_sapp.d3d11.device, (ID3D11Resource*)_sapp.d3d11.ds, NULL, &_sapp.d3d11.dsv);
-    SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.dsv);
 }
 
 _SOKOL_PRIVATE void _sapp_d3d11_destroy_default_render_target(void) {
@@ -8877,7 +8932,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_present(bool do_not_wait) {
         */
         flags = DXGI_PRESENT_DO_NOT_WAIT;
     }
-    _sapp_dxgi_Present(_sapp.d3d11.swap_chain, (UINT)_sapp.swap_interval, flags);
+    _sapp_dxgi_Present(_sapp.d3d11.swap_chain, (UINT)_sapp.desc.swap_interval, flags);
 }
 
 #endif /* SOKOL_D3D11 */
@@ -14236,6 +14291,17 @@ SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
                 return SAPP_PIXELFORMAT_NONE;
         }
     #elif defined(SOKOL_D3D11)
+        switch (_sapp_d3d11_view_color_format()) {
+            case DXGI_FORMAT_B8G8R8A8_UNORM:
+                return SAPP_PIXELFORMAT_BGRA8;
+            case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+                return SAPP_PIXELFORMAT_SBGR8A8;
+            case DXGI_FORMAT_R16G16B16A16_FLOAT:
+                return SAPP_PIXELFORMAT_RGBA16F;
+            default:
+                SOKOL_UNREACHABLE;
+                return SAPP_PIXELFORMAT_NONE;
+        }
         return SAPP_PIXELFORMAT_BGRA8;
     #else
         if (_sapp.desc.srgb) {
@@ -14627,7 +14693,7 @@ SOKOL_API_IMPL sapp_swapchain sapp_acquire_swapchain(void) {
     #endif
     #if defined(SOKOL_D3D11)
         SOKOL_ASSERT(_sapp.d3d11.rtv);
-        if (_sapp.sample_count > 1) {
+        if (_sapp.desc.sample_count > 1) {
             SOKOL_ASSERT(_sapp.d3d11.msaa_rtv);
             res.d3d11.render_view = (const void*) _sapp.d3d11.msaa_rtv;
             res.d3d11.resolve_view = (const void*) _sapp.d3d11.rtv;
