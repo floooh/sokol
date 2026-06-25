@@ -146,9 +146,10 @@ _SOKOL_PRIVATE sg_pixel_format _sglue_to_sgpixelformat(sapp_pixel_format fmt) {
         case SAPP_PIXELFORMAT_RGBA8: return SG_PIXELFORMAT_RGBA8;
         case SAPP_PIXELFORMAT_SRGB8A8: return SG_PIXELFORMAT_SRGB8A8;
         case SAPP_PIXELFORMAT_BGRA8: return SG_PIXELFORMAT_BGRA8;
+        case SAPP_PIXELFORMAT_SBGR8A8: return SG_PIXELFORMAT_SBGR8A8;
+        case SAPP_PIXELFORMAT_RGBA16F: return SG_PIXELFORMAT_RGBA16F;
         case SAPP_PIXELFORMAT_DEPTH_STENCIL: return SG_PIXELFORMAT_DEPTH_STENCIL;
         case SAPP_PIXELFORMAT_DEPTH: return SG_PIXELFORMAT_DEPTH;
-        case SAPP_PIXELFORMAT_SBGRA8: // FIXME!
         default:
             SOKOL_UNREACHABLE;
             return SG_PIXELFORMAT_NONE;
@@ -177,7 +178,7 @@ SOKOL_API_IMPL sg_environment sglue_environment(void) {
 SOKOL_API_IMPL sg_swapchain sglue_swapchain(void) {
     sg_swapchain res;
     memset(&res, 0, sizeof(res));
-    const sapp_swapchain sc = sapp_get_swapchain();
+    const sapp_swapchain sc = sapp_acquire_swapchain();
     res.invalid = sc.invalid;
     if (res.invalid) {
         return res;

@@ -404,7 +404,8 @@ _SOKOL_PRIVATE const char* _sappimgui_pixelformat_string(sapp_pixel_format fmt) 
         case SAPP_PIXELFORMAT_RGBA8: return "RGBA8";
         case SAPP_PIXELFORMAT_SRGB8A8: return "SRGB8A8";
         case SAPP_PIXELFORMAT_BGRA8: return "BGRA8";
-        case SAPP_PIXELFORMAT_SBGRA8: return "SBGRA8";
+        case SAPP_PIXELFORMAT_SBGR8A8: return "SBGR8A8";
+        case SAPP_PIXELFORMAT_RGBA16F: return "RGBA16F";
         case SAPP_PIXELFORMAT_DEPTH: return "DEPTH";
         case SAPP_PIXELFORMAT_DEPTH_STENCIL: return "DEPTH_STENCIL";
         default: return "???";
