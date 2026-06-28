@@ -12953,6 +12953,20 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_rtv_uav_pixel_format(sg_pixel_format fmt) {
     }
 }
 
+_SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_resolve_pixel_format(sg_pixel_format fmt) {
+    if (fmt == SG_PIXELFORMAT_SRGB8A8) {
+        return DXGI_FORMAT_R8G8B8A8_UNORM;
+    } else if (fmt == SG_PIXELFORMAT_SBGR8A8) {
+        return DXGI_FORMAT_B8G8R8A8_UNORM;
+    } else if (fmt == SG_PIXELFORMAT_DEPTH) {
+        return DXGI_FORMAT_R32_FLOAT;
+    } else if (fmt == SG_PIXELFORMAT_DEPTH_STENCIL) {
+        return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+    } else {
+        return _sg_d3d11_texture_pixel_format(fmt);
+    }
+}
+
 _SOKOL_PRIVATE D3D11_PRIMITIVE_TOPOLOGY _sg_d3d11_primitive_topology(sg_primitive_type prim_type) {
     switch (prim_type) {
         case SG_PRIMITIVETYPE_POINTS:           return D3D11_PRIMITIVE_TOPOLOGY_POINTLIST;
@@ -14266,7 +14280,7 @@ _SOKOL_PRIVATE void _sg_d3d11_end_pass(const _sg_attachments_ptrs_t* atts) {
                 SOKOL_ASSERT(d3d11_render_res);
                 SOKOL_ASSERT(d3d11_resolve_res);
                 const sg_pixel_format color_fmt = _sg.cur_pass.swapchain.color_fmt;
-                _sg_d3d11_ResolveSubresource(_sg.d3d11.ctx, d3d11_resolve_res, 0, d3d11_render_res, 0, _sg_d3d11_rtv_uav_pixel_format(color_fmt));
+                _sg_d3d11_ResolveSubresource(_sg.d3d11.ctx, d3d11_resolve_res, 0, d3d11_render_res, 0, _sg_d3d11_resolve_pixel_format(color_fmt));
                 _sg_d3d11_Release(d3d11_render_res);
                 _sg_d3d11_Release(d3d11_resolve_res);
                 _sg_stats_inc(d3d11.pass.num_resolve_subresource);

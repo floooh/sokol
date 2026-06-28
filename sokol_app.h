@@ -14302,7 +14302,6 @@ SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
                 SOKOL_UNREACHABLE;
                 return SAPP_PIXELFORMAT_NONE;
         }
-        return SAPP_PIXELFORMAT_BGRA8;
     #else
         if (_sapp.desc.srgb) {
             return SAPP_PIXELFORMAT_SRGB8A8;
