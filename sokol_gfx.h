@@ -12862,7 +12862,7 @@ _SOKOL_PRIVATE UINT _sg_d3d11_buffer_cpu_access_flags(const sg_buffer_usage* usg
     return usg->immutable ? 0 : D3D11_CPU_ACCESS_WRITE;
 }
 
-_SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_texture_pixel_format(sg_pixel_format fmt) {
+_SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_base_pixel_format(sg_pixel_format fmt) {
     switch (fmt) {
         case SG_PIXELFORMAT_R8:             return DXGI_FORMAT_R8_UNORM;
         case SG_PIXELFORMAT_R8SN:           return DXGI_FORMAT_R8_SNORM;
@@ -12891,6 +12891,7 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_texture_pixel_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RGBA8UI:        return DXGI_FORMAT_R8G8B8A8_UINT;
         case SG_PIXELFORMAT_RGBA8SI:        return DXGI_FORMAT_R8G8B8A8_SINT;
         case SG_PIXELFORMAT_BGRA8:          return DXGI_FORMAT_B8G8R8A8_UNORM;
+        case SG_PIXELFORMAT_SBGR8A8:        return DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
         case SG_PIXELFORMAT_RGB10A2:        return DXGI_FORMAT_R10G10B10A2_UNORM;
         case SG_PIXELFORMAT_RG11B10F:       return DXGI_FORMAT_R11G11B10_FLOAT;
         case SG_PIXELFORMAT_RGB9E5:         return DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
@@ -12923,13 +12924,23 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_texture_pixel_format(sg_pixel_format fmt) {
     };
 }
 
+_SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_texture_pixel_format(sg_pixel_format fmt) {
+    if (fmt == SG_PIXELFORMAT_SRGB8A8) {
+        return DXGI_FORMAT_R8G8B8A8_TYPELESS;
+    } else if (fmt == SG_PIXELFORMAT_SBGR8A8) {
+        return DXGI_FORMAT_B8G8R8A8_TYPELESS;
+    } else {
+        return _sg_d3d11_base_pixel_format(fmt);
+    }
+}
+
 _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_srv_pixel_format(sg_pixel_format fmt) {
     if (fmt == SG_PIXELFORMAT_DEPTH) {
         return DXGI_FORMAT_R32_FLOAT;
     } else if (fmt == SG_PIXELFORMAT_DEPTH_STENCIL) {
         return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
     } else {
-        return _sg_d3d11_texture_pixel_format(fmt);
+        return _sg_d3d11_base_pixel_format(fmt);
     }
 }
 
@@ -12939,7 +12950,7 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_dsv_pixel_format(sg_pixel_format fmt) {
     } else if (fmt == SG_PIXELFORMAT_DEPTH_STENCIL) {
         return DXGI_FORMAT_D24_UNORM_S8_UINT;
     } else {
-        return _sg_d3d11_texture_pixel_format(fmt);
+        return _sg_d3d11_base_pixel_format(fmt);
     }
 }
 
@@ -12949,21 +12960,7 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_rtv_uav_pixel_format(sg_pixel_format fmt) {
     } else if (fmt == SG_PIXELFORMAT_DEPTH_STENCIL) {
         return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
     } else {
-        return _sg_d3d11_texture_pixel_format(fmt);
-    }
-}
-
-_SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_resolve_pixel_format(sg_pixel_format fmt) {
-    if (fmt == SG_PIXELFORMAT_SRGB8A8) {
-        return DXGI_FORMAT_R8G8B8A8_UNORM;
-    } else if (fmt == SG_PIXELFORMAT_SBGR8A8) {
-        return DXGI_FORMAT_B8G8R8A8_UNORM;
-    } else if (fmt == SG_PIXELFORMAT_DEPTH) {
-        return DXGI_FORMAT_R32_FLOAT;
-    } else if (fmt == SG_PIXELFORMAT_DEPTH_STENCIL) {
-        return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
-    } else {
-        return _sg_d3d11_texture_pixel_format(fmt);
+        return _sg_d3d11_base_pixel_format(fmt);
     }
 }
 
@@ -14263,7 +14260,7 @@ _SOKOL_PRIVATE void _sg_d3d11_end_pass(const _sg_attachments_ptrs_t* atts) {
                         dst_subres,
                         color_img->d3d11.res,
                         src_subres,
-                        color_img->d3d11.format);
+                        _sg_d3d11_rtv_uav_pixel_format(color_img->cmn.pixel_format));
                     _sg_stats_inc(d3d11.pass.num_resolve_subresource);
                 }
             }
@@ -14280,7 +14277,7 @@ _SOKOL_PRIVATE void _sg_d3d11_end_pass(const _sg_attachments_ptrs_t* atts) {
                 SOKOL_ASSERT(d3d11_render_res);
                 SOKOL_ASSERT(d3d11_resolve_res);
                 const sg_pixel_format color_fmt = _sg.cur_pass.swapchain.color_fmt;
-                _sg_d3d11_ResolveSubresource(_sg.d3d11.ctx, d3d11_resolve_res, 0, d3d11_render_res, 0, _sg_d3d11_resolve_pixel_format(color_fmt));
+                _sg_d3d11_ResolveSubresource(_sg.d3d11.ctx, d3d11_resolve_res, 0, d3d11_render_res, 0, _sg_d3d11_rtv_uav_pixel_format(color_fmt));
                 _sg_d3d11_Release(d3d11_render_res);
                 _sg_d3d11_Release(d3d11_resolve_res);
                 _sg_stats_inc(d3d11.pass.num_resolve_subresource);
