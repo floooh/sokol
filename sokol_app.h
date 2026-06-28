@@ -8853,7 +8853,6 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target(void) {
 
     bool wants_msaa = _sapp.desc.sample_count > 1;
     bool wants_depth = _sapp.desc.depth_format != SAPP_PIXELFORMAT_NONE;
-    bool wants_srgb = _sapp.desc.srgb;
 
     // view for the swapchain-created framebuffer
     hr = _sapp_dxgi_GetBuffer(_sapp.d3d11.swap_chain, 0, _sapp_win32_refiid(_sapp_IID_ID3D11Texture2D), (void**)&_sapp.d3d11.rt);
@@ -8920,16 +8919,20 @@ _SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_d3d11_present(bool do_not_wait) {
+_SOKOL_PRIVATE void _sapp_d3d11_present(bool from_winproc) {
     UINT flags = 0;
-    if (_sapp.win32.is_win10_or_greater && do_not_wait) {
-        /* this hack/workaround somewhat improves window-movement and -sizing
-            responsiveness when rendering is controlled via WM_TIMER during window
-            move and resize on NVIDIA cards on Win10 with recent drivers.
-        */
-        flags = DXGI_PRESENT_DO_NOT_WAIT;
+    UINT swap_interval = (UINT)_sapp.desc.swap_interval;
+    // DXGI_PRESENT_DO_NOT_WAIT isn't supported on Win7
+    if (_sapp.win32.is_win10_or_greater) {
+        if (_sapp.desc.disable_vsync || from_winproc) {
+            // NOTE: disabled vsync-throttling when called from the winproc modal window
+            // resize/movement loop avoids window system stuttering on some drivers
+            // (notably: NVIDIA)
+            flags |= DXGI_PRESENT_DO_NOT_WAIT;
+            swap_interval = 0;
+        }
     }
-    _sapp_dxgi_Present(_sapp.d3d11.swap_chain, (UINT)_sapp.desc.swap_interval, flags);
+    _sapp_dxgi_Present(_sapp.d3d11.swap_chain, swap_interval, flags);
 }
 
 #endif /* SOKOL_D3D11 */
@@ -9739,8 +9742,7 @@ _SOKOL_PRIVATE void _sapp_win32_frame(bool from_winproc) {
         _sapp_frame();
     #endif
     #if defined(SOKOL_D3D11)
-        bool do_not_wait = from_winproc;
-        _sapp_d3d11_present(do_not_wait);
+        _sapp_d3d11_present(from_winproc);
     #endif
     #if defined(SOKOL_GLCORE)
         _sapp_wgl_swap_buffers();
