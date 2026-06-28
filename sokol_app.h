@@ -14220,13 +14220,20 @@ SOKOL_API_IMPL uint64_t sapp_frame_count(void) {
 }
 
 SOKOL_API_IMPL double sapp_frame_duration(void) {
-    #if defined(_SAPP_MACOS) && defined(SOKOL_METAL)
-        return _sapp_macos_mtl_timing_frame_duration();
-    #elif defined(_SAPP_IOS) && defined(SOKOL_METAL)
-        return _sapp_ios_mtl_timing_frame_duration();
-    #else
-        return _sapp_timing_get(&_sapp.timing);
-    #endif
+    // when vsync is disabled, always return unfiltered frame duration,
+    // this is because frame pacing on some platforms is entirely
+    // unpredictable with vsync disabled
+    if (_sapp.desc.disable_vsync) {
+        return _sapp.timing.dt;
+    } else {
+        #if defined(_SAPP_MACOS) && defined(SOKOL_METAL)
+            return _sapp_macos_mtl_timing_frame_duration();
+        #elif defined(_SAPP_IOS) && defined(SOKOL_METAL)
+            return _sapp_ios_mtl_timing_frame_duration();
+        #else
+            return _sapp_timing_get(&_sapp.timing);
+        #endif
+    }
 }
 
 SOKOL_API_IMPL double sapp_frame_duration_unfiltered(void) {
