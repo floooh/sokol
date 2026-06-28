@@ -8861,16 +8861,13 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target(void) {
 
     // when SRGB is requested, the view needs a different format than the surface
     _SAPP_STRUCT(D3D11_RENDER_TARGET_VIEW_DESC, d3d11_rtv_desc);
-    if (wants_srgb) {
-        d3d11_rtv_desc.Format = _sapp_d3d11_view_color_format();
-        if (wants_msaa) {
-            d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DMS;
-        } else {
-            d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-        }
+    d3d11_rtv_desc.Format = _sapp_d3d11_view_color_format();
+    if (wants_msaa) {
+        d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DMS;
+    } else {
+        d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
     }
-    const D3D11_RENDER_TARGET_VIEW_DESC* rtv_desc_ptr = wants_srgb ? &d3d11_rtv_desc : NULL;
-    hr = _sapp_d3d11_CreateRenderTargetView(_sapp.d3d11.device, (ID3D11Resource*)_sapp.d3d11.rt, rtv_desc_ptr, &_sapp.d3d11.rtv);
+    hr = _sapp_d3d11_CreateRenderTargetView(_sapp.d3d11.device, (ID3D11Resource*)_sapp.d3d11.rt, &d3d11_rtv_desc, &_sapp.d3d11.rtv);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.rtv);
 
     // common desc for MSAA and depth-stencil texture
@@ -8890,7 +8887,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target(void) {
             tex_desc.Format = _sapp_d3d11_msaatex_color_format();
             hr = _sapp_d3d11_CreateTexture2D(_sapp.d3d11.device, &tex_desc, NULL, &_sapp.d3d11.msaa_rt);
             SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.msaa_rt);
-            hr = _sapp_d3d11_CreateRenderTargetView(_sapp.d3d11.device, (ID3D11Resource*)_sapp.d3d11.msaa_rt, rtv_desc_ptr, &_sapp.d3d11.msaa_rtv);
+            hr = _sapp_d3d11_CreateRenderTargetView(_sapp.d3d11.device, (ID3D11Resource*)_sapp.d3d11.msaa_rt, &d3d11_rtv_desc, &_sapp.d3d11.msaa_rtv);
             SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.msaa_rtv);
         }
 
