@@ -4798,9 +4798,6 @@ _SOKOL_PRIVATE void _sapp_vk_swapchain_create_surface(
     SOKOL_ASSERT(_sapp.vk.physical_device);
     SOKOL_ASSERT(_sapp.vk.device);
     SOKOL_ASSERT(surf);
-    if (surf->img) {
-        _sapp_vk_swapchain_destroy_surface(surf);
-    }
     SOKOL_ASSERT(0 == surf->img);
     SOKOL_ASSERT(0 == surf->mem);
     SOKOL_ASSERT(0 == surf->view);
@@ -4899,7 +4896,7 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_swapchain_image_view(uint32_t image_index) 
     _sapp.vk.swapchain_views[image_index] = 0;
 }
 
-_SOKOL_PRIVATE void _sapp_vk_destroy_swapchain(void) {
+_SOKOL_PRIVATE void _sapp_vk_destroy_associated_swapchain_resources(void) {
     SOKOL_ASSERT(_sapp.vk.device);
     if (_sapp.vk.msaa.img) {
         _sapp_vk_swapchain_destroy_surface(&_sapp.vk.msaa);
@@ -4911,11 +4908,16 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_swapchain(void) {
         _sapp_vk_destroy_swapchain_image_view(i);
         _sapp.vk.swapchain_images[i] = 0;
     }
+    _sapp_vk_destroy_sync_objects();
+}
+
+_SOKOL_PRIVATE void _sapp_vk_destroy_swapchain(void) {
+    SOKOL_ASSERT(_sapp.vk.device);
+    _sapp_vk_destroy_associated_swapchain_resources();
     if (_sapp.vk.swapchain) {
         vkDestroySwapchainKHR(_sapp.vk.device, _sapp.vk.swapchain, 0);
         _sapp.vk.swapchain = 0;
     }
-    _sapp_vk_destroy_sync_objects();
     _sapp.vk.num_swapchain_images = 0;
     _sapp.vk.swapchain_valid = false;
 }
@@ -4935,6 +4937,10 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(void) {
         SOKOL_ASSERT(0 == _sapp.vk.swapchain_images[0]);
         SOKOL_ASSERT(0 == _sapp.vk.swapchain_views[0]);
     }
+
+    const bool wants_msaa = _sapp.desc.sample_count > 1;
+    const bool wants_depth = _sapp.desc.depth_format != SAPP_PIXELFORMAT_NONE;
+    const bool wants_stencil = _sapp.desc.depth_format == SAPP_PIXELFORMAT_DEPTH_STENCIL;
 
     _SAPP_STRUCT(VkSurfaceCapabilitiesKHR, surf_caps);
     VkResult res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(_sapp.vk.physical_device, _sapp.vk.surface, &surf_caps);
@@ -4971,6 +4977,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(void) {
     create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     create_info.preTransform = surf_caps.currentTransform;
+    // FIXME: composite mode
     create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     create_info.presentMode = present_mode;
     create_info.clipped = true;
@@ -4982,13 +4989,8 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(void) {
     SOKOL_ASSERT(_sapp.vk.swapchain);
 
     if (old_swapchain) {
-        // NOTE: destroying the depth- and msaa-surfaces happens
-        // down in the respective _sapp_vk_swapchain_create_surface() calls!
-        for (uint32_t i = 0; i < _sapp.vk.num_swapchain_images; i++) {
-            _sapp_vk_destroy_swapchain_image_view(i);
-        }
+        _sapp_vk_destroy_associated_swapchain_resources();
         vkDestroySwapchainKHR(_sapp.vk.device, old_swapchain, 0);
-        _sapp_vk_destroy_sync_objects();
     }
 
     _sapp.vk.num_swapchain_images = _SAPP_VK_MAX_SWAPCHAIN_IMAGES;
@@ -5004,23 +5006,31 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(void) {
     }
 
     // create depth-stencil buffer
-    _sapp_vk_swapchain_create_surface(&_sapp.vk.depth,
-        VK_FORMAT_D32_SFLOAT_S8_UINT,
-        fb_width,
-        fb_height,
-        (VkSampleCountFlagBits)_sapp.sample_count,
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
-        "swapchain_depthstencil_image",
-        "swapchain_depthstencil_view");
+    if (wants_depth) {
+        VkFormat format = VK_FORMAT_D32_SFLOAT;
+        VkImageAspectFlags aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        if (wants_stencil) {
+            format = VK_FORMAT_D32_SFLOAT_S8_UINT;
+            aspect_mask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+        }
+        _sapp_vk_swapchain_create_surface(&_sapp.vk.depth,
+            format,
+            fb_width,
+            fb_height,
+            (VkSampleCountFlagBits)_sapp.desc.sample_count,
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+            aspect_mask,
+            "swapchain_depthstencil_image",
+            "swapchain_depthstencil_view");
+    }
 
     // optionally create MSAA surface
-    if (_sapp.sample_count > 1) {
+    if (wants_msaa) {
         _sapp_vk_swapchain_create_surface(&_sapp.vk.msaa,
             _sapp.vk.surface_format.format,
             fb_width,
             fb_height,
-            (VkSampleCountFlagBits)_sapp.sample_count,
+            (VkSampleCountFlagBits)_sapp.desc.sample_count,
             VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
             VK_IMAGE_ASPECT_COLOR_BIT,
             "swapchain_msaa_image",
@@ -14729,7 +14739,7 @@ SOKOL_API_IMPL sapp_swapchain sapp_acquire_swapchain(void) {
             return res;
         }
         uint32_t img_idx = _sapp.vk.cur_swapchain_image_index;
-        if (_sapp.sample_count > 1) {
+        if (_sapp.desc.sample_count > 1) {
             SOKOL_ASSERT(_sapp.vk.msaa.img && _sapp.vk.msaa.view);
             res.vulkan.render_image = (const void*) _sapp.vk.msaa.img;
             res.vulkan.render_view = (const void*) _sapp.vk.msaa.view;
