@@ -168,7 +168,10 @@
             "binaryDir": "build/ios_gl",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_GLES3",
-                "CMAKE_SYSTEM_NAME": "iOS"
+                "CMAKE_SYSTEM_NAME": "iOS",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY": "",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED": "NO",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED": "NO"
             }
         },
         {
@@ -184,7 +187,10 @@
                     "value": "ON"
                 },
                 "CMAKE_C_COMPILER": "clang",
-                "CMAKE_CXX_COMPILER": "clang++"
+                "CMAKE_CXX_COMPILER": "clang++",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY": "",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED": "NO",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED": "NO"
             }
         },
         {
@@ -193,7 +199,10 @@
             "binaryDir": "build/ios_metal",
             "cacheVariables": {
                 "SOKOL_BACKEND": "SOKOL_METAL",
-                "CMAKE_SYSTEM_NAME": "iOS"
+                "CMAKE_SYSTEM_NAME": "iOS",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY": "",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED": "NO",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED": "NO"
             }
         },
         {
@@ -209,7 +218,10 @@
                     "value": "ON"
                 },
                 "CMAKE_C_COMPILER": "clang",
-                "CMAKE_CXX_COMPILER": "clang++"
+                "CMAKE_CXX_COMPILER": "clang++",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY": "",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED": "NO",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED": "NO"
             }
         },
         {
@@ -222,7 +234,10 @@
                     "type": "BOOL",
                     "value": "ON"
                 },
-                "CMAKE_SYSTEM_NAME": "iOS"
+                "CMAKE_SYSTEM_NAME": "iOS",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY": "",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED": "NO",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED": "NO"
             }
         },
         {
@@ -242,7 +257,10 @@
                     "value": "ON"
                 },
                 "CMAKE_C_COMPILER": "clang",
-                "CMAKE_CXX_COMPILER": "clang++"
+                "CMAKE_CXX_COMPILER": "clang++",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY": "",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED": "NO",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED": "NO"
             }
         },
         {
@@ -255,7 +273,10 @@
                     "type": "BOOL",
                     "value": "ON"
                 },
-                "CMAKE_SYSTEM_NAME": "iOS"
+                "CMAKE_SYSTEM_NAME": "iOS",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY": "",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED": "NO",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED": "NO"
             }
         },
         {
@@ -275,7 +296,10 @@
                     "value": "ON"
                 },
                 "CMAKE_C_COMPILER": "clang",
-                "CMAKE_CXX_COMPILER": "clang++"
+                "CMAKE_CXX_COMPILER": "clang++",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY": "",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED": "NO",
+                "CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED": "NO"
             }
         },
         {
@@ -587,13 +611,13 @@
             "name": "ios_gl_debug",
             "configurePreset": "ios_gl",
             "configuration": "Debug",
-            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+            "nativeToolOptions": [ "-quiet" ]
         },
         {
             "name": "ios_gl_release",
             "configurePreset": "ios_gl",
             "configuration": "Release",
-            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+            "nativeToolOptions": [ "-quiet" ]
         },
         {
             "name": "ios_gl_analyze",
@@ -603,13 +627,13 @@
             "name": "ios_metal_debug",
             "configurePreset": "ios_metal",
             "configuration": "Debug",
-            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+            "nativeToolOptions": [ "-quiet" ]
         },
         {
             "name": "ios_metal_release",
             "configurePreset": "ios_metal",
             "configuration": "Release",
-            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+            "nativeToolOptions": [ "-quiet" ]
         },
         {
             "name": "ios_metal_analyze",
@@ -619,13 +643,13 @@
             "name": "ios_arc_gl_debug",
             "configurePreset": "ios_arc_gl",
             "configuration": "Debug",
-            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+            "nativeToolOptions": [ "-quiet" ]
         },
         {
             "name": "ios_arc_gl_release",
             "configurePreset": "ios_arc_gl",
             "configuration": "Release",
-            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+            "nativeToolOptions": [ "-quiet" ]
         },
         {
             "name": "ios_arc_gl_analyze",
@@ -635,13 +659,13 @@
             "name": "ios_arc_metal_debug",
             "configurePreset": "ios_arc_metal",
             "configuration": "Debug",
-            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+            "nativeToolOptions": [ "-quiet" ]
         },
         {
             "name": "ios_arc_metal_release",
             "configurePreset": "ios_arc_metal",
             "configuration": "Release",
-            "nativeToolOptions": [ "CODE_SIGN_IDENTITY=\"\"", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGNING_ALLOWED=NO" ]
+            "nativeToolOptions": [ "-quiet" ]
         },
         {
             "name": "ios_arc_metal_analyze",
