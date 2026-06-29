@@ -4933,6 +4933,21 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_swapchain(void) {
     _sapp.vk.swapchain_valid = false;
 }
 
+_SOKOL_PRIVATE bool _sapp_vk_has_present_mode(VkPresentModeKHR mode) {
+    SOKOL_ASSERT(_sapp.vk.physical_device);
+    SOKOL_ASSERT(_sapp.vk.surface);
+    _SAPP_VK_MAX_COUNT_AND_ARRAY(32, VkPresentModeKHR, present_mode_count, present_modes);
+    VkResult res = vkGetPhysicalDeviceSurfacePresentModesKHR(_sapp.vk.physical_device, _sapp.vk.surface, &present_mode_count, present_modes);
+    if (VK_SUCCESS == res) {
+        for (uint32_t i = 0; i < present_mode_count; i++) {
+            if (present_modes[i] == mode) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 _SOKOL_PRIVATE void _sapp_vk_create_swapchain(void) {
     SOKOL_ASSERT(_sapp.vk.physical_device);
     SOKOL_ASSERT(_sapp.vk.surface);
@@ -4974,7 +4989,10 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(void) {
 
     VkSwapchainKHR old_swapchain = _sapp.vk.swapchain;
     _sapp.vk.surface_format = _sapp_vk_pick_surface_format(wants_srgb);
-    const VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
+    VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
+    if (_sapp.desc.disable_vsync && _sapp_vk_has_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR)) {
+        present_mode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+    }
 
     _SAPP_STRUCT(VkSwapchainCreateInfoKHR, create_info);
     create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
