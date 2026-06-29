@@ -4688,14 +4688,25 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_surface(void) {
     _sapp.vk.surface = 0;
 }
 
-_SOKOL_PRIVATE VkSurfaceFormatKHR _sapp_vk_pick_surface_format(void) {
+_SOKOL_PRIVATE VkSurfaceFormatKHR _sapp_vk_pick_surface_format(bool wants_srgb) {
     SOKOL_ASSERT(_sapp.vk.instance);
     SOKOL_ASSERT(_sapp.vk.surface);
     _SAPP_VK_MAX_COUNT_AND_ARRAY(64, VkSurfaceFormatKHR, fmt_count, formats);
     VkResult res = vkGetPhysicalDeviceSurfaceFormatsKHR(_sapp.vk.physical_device, _sapp.vk.surface, &fmt_count, formats);
     SOKOL_ASSERT((res == VK_SUCCESS) || (res == VK_INCOMPLETE)); _SOKOL_UNUSED(res);
     SOKOL_ASSERT(fmt_count > 0);
-    // FIXME: only accept non-SRGB formats until sokol_app.h gets proper SRGB support
+    // first try to find SRGB format if requested
+    if (wants_srgb) {
+        for (uint32_t i = 0; i < fmt_count; i++) {
+            switch (formats[i].format) {
+                case VK_FORMAT_B8G8R8A8_SRGB:
+                case VK_FORMAT_R8G8B8A8_SRGB:
+                    return formats[i];
+                default: break;
+            }
+        }
+    }
+    // fallthrough or no srgb format requested
     for (uint32_t i = 0; i < fmt_count; i++) {
         switch (formats[i].format) {
             case VK_FORMAT_B8G8R8A8_UNORM:
@@ -4704,7 +4715,7 @@ _SOKOL_PRIVATE VkSurfaceFormatKHR _sapp_vk_pick_surface_format(void) {
             default: break;
         }
     }
-    // FIXME: fallback might still return an SRGB format
+    // fallthrough: just take whatever's offered
     return formats[0];
 }
 
@@ -4941,6 +4952,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(void) {
     const bool wants_msaa = _sapp.desc.sample_count > 1;
     const bool wants_depth = _sapp.desc.depth_format != SAPP_PIXELFORMAT_NONE;
     const bool wants_stencil = _sapp.desc.depth_format == SAPP_PIXELFORMAT_DEPTH_STENCIL;
+    const bool wants_srgb = _sapp.desc.srgb;
 
     _SAPP_STRUCT(VkSurfaceCapabilitiesKHR, surf_caps);
     VkResult res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(_sapp.vk.physical_device, _sapp.vk.surface, &surf_caps);
@@ -4961,7 +4973,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(void) {
     }
 
     VkSwapchainKHR old_swapchain = _sapp.vk.swapchain;
-    _sapp.vk.surface_format = _sapp_vk_pick_surface_format();
+    _sapp.vk.surface_format = _sapp_vk_pick_surface_format(wants_srgb);
     const VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
 
     _SAPP_STRUCT(VkSwapchainCreateInfoKHR, create_info);
@@ -14287,10 +14299,15 @@ SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
         switch (_sapp.vk.surface_format.format) {
             case VK_FORMAT_R8G8B8A8_UNORM:
                 return SAPP_PIXELFORMAT_RGBA8;
+            case VK_FORMAT_R8G8B8A8_SRGB:
+                return SAPP_PIXELFORMAT_SRGB8A8;
             case VK_FORMAT_B8G8R8A8_UNORM:
                 return SAPP_PIXELFORMAT_BGRA8;
+            case VK_FORMAT_B8G8R8A8_SRGB:
+                return SAPP_PIXELFORMAT_SBGR8A8;
+            case VK_FORMAT_R16G16B16A16_SFLOAT:
+                return SAPP_PIXELFORMAT_RGBA16F;
             default:
-                // FIXME!
                 SOKOL_UNREACHABLE;
                 return SAPP_PIXELFORMAT_NONE;
         }
