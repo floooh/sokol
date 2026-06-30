@@ -11,7 +11,7 @@ out vec4 color;
 void main() {
     gl_Position = vec4(((position/disp_size)-0.5)*vec2(2.0,-2.0), 0.5, 1.0);
     uv = texcoord0;
-    color = vec4(pow(color.rgb, vec3(gamma)), color0.a);
+    color = vec4(pow(color0.rgb, vec3(gamma)), color0.a);
 }
 @end
 
