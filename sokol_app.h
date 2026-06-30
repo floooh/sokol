@@ -13069,6 +13069,7 @@ _SOKOL_PRIVATE void _sapp_x11_lock_mouse(bool lock) {
 
 _SOKOL_PRIVATE void _sapp_x11_set_clipboard_string(const char* str) {
     SOKOL_ASSERT(_sapp.clipboard.enabled && _sapp.clipboard.buffer);
+    _sapp.clipboard.buffer[0] = 0;
     if (strlen(str) >= (size_t)_sapp.clipboard.buf_size) {
         _SAPP_ERROR(CLIPBOARD_STRING_TOO_BIG);
     }
@@ -13095,10 +13096,10 @@ _SOKOL_PRIVATE const char* _sapp_x11_get_clipboard_string(void) {
                       CurrentTime);
     XEvent event;
     if (!_sapp_x11_wait_for_event(SelectionNotify, 0.1, &event)) {
-        return NULL;
+        return _sapp.clipboard.buffer;
     }
     if (event.xselection.property == None) {
-        return NULL;
+        return _sapp.clipboard.buffer;
     }
     char* data = NULL;
     Atom actualType;
@@ -13120,12 +13121,12 @@ _SOKOL_PRIVATE const char* _sapp_x11_get_clipboard_string(void) {
         if (data != NULL) {
             XFree(data);
         }
-        return NULL;
+        return _sapp.clipboard.buffer;
     }
     if ((actualType == incremental) || (itemCount >= (size_t)_sapp.clipboard.buf_size)) {
         _SAPP_ERROR(CLIPBOARD_STRING_TOO_BIG);
         XFree(data);
-        return NULL;
+        return _sapp.clipboard.buffer;
     }
     _sapp_strcpy(data, _sapp.clipboard.buffer, (size_t)_sapp.clipboard.buf_size);
     XFree(data);

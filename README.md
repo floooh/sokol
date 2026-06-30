@@ -6,7 +6,7 @@
 
 # Sokol
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**24-May-2026**: properly handle window minimized state in sokol_app.h vulkan backend)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**11-Jun-2026**: bugfix in sokol_app.h `sapp_get_clipboard_string()` on Linux)
 
 [![Build](/../../actions/workflows/main.yml/badge.svg)](/../../actions/workflows/main.yml) [![Bindings](/../../actions/workflows/gen_bindings.yml/badge.svg)](/../../actions/workflows/gen_bindings.yml) [![build](https://github.com/floooh/sokol-zig/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-zig/actions/workflows/main.yml) [![build](https://github.com/floooh/sokol-nim/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-nim/actions/workflows/main.yml) [![Odin](https://github.com/floooh/sokol-odin/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-odin/actions/workflows/main.yml)[![Rust](https://github.com/floooh/sokol-rust/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-rust/actions/workflows/main.yml)[![Dlang](https://github.com/floooh/sokol-d/actions/workflows/build.yml/badge.svg)](https://github.com/floooh/sokol-d/actions/workflows/build.yml)[![C3](https://github.com/floooh/sokol-c3/actions/workflows/build.yml/badge.svg)](https://github.com/floooh/sokol-c3/actions/workflows/build.yml)
 
@@ -114,6 +114,42 @@ The core headers are standalone and can be used independently from each other.
 - adds only minimal size overhead to executables
 
 A blog post with more background info: [A Tour of sokol_gfx.h](http://floooh.github.io/2017/07/29/sokol-gfx-tour.html)
+
+## Quick build troubleshooting
+
+When a first Sokol integration fails to compile or link, the problem is usually
+one of the following configuration mismatches:
+
+- Define `SOKOL_IMPL` (or the per-header `SOKOL_*_IMPL` define) in exactly one
+  C or C++ translation unit before including the Sokol headers. Other files
+  should include the headers without the implementation define.
+- Select exactly one rendering backend in that same implementation translation
+  unit, for example `SOKOL_GLCORE`, `SOKOL_GLES3`, `SOKOL_D3D11`, `SOKOL_METAL`,
+  `SOKOL_WGPU` or `SOKOL_VULKAN`. The backend define must match the shader code
+  and any window/context setup code you use.
+- If `sokol_gfx.h` and `sokol_app.h` are used together, use the same backend
+  define for both headers. `sokol_app.h` creates the matching window and 3D API
+  context; `sokol_glue.h` then forwards the platform-specific environment via
+  `sglue_environment()` and `sglue_swapchain()`.
+- macOS and iOS builds which use `sokol_app.h` or Metal must compile the
+  implementation file as Objective-C or Objective-C++ (`.m` or `.mm`, or the
+  equivalent compiler flag), and link the frameworks listed in the header docs.
+- Emscripten WebGL2 builds require the linker option `-s USE_WEBGL2=1` when using
+  `SOKOL_GLES3`. WebGPU builds use `SOKOL_WGPU` and need the WebGPU port/options
+  described in the `sokol_gfx.h` header comments.
+- On Linux, OpenGL builds commonly need the GL/X11 development packages installed
+  by the platform package manager. `SOKOL_GLCORE` uses GLX by default; define
+  `SOKOL_FORCE_EGL` if your build intentionally uses EGL instead.
+- On Windows, MSVC and Clang builds usually pick up common system libraries via
+  in-source `#pragma comment(lib, ...)` directives. MinGW/MSYS2 builds may need
+  explicit linker flags such as `-ld3d11` for `SOKOL_D3D11`.
+- For shader-related errors, confirm that generated shader headers come from a
+  `sokol-shdc` version compatible with the Sokol headers and were generated for
+  the same backend(s) selected at compile time.
+
+For exact per-header compiler and linker requirements, see the comment block at
+the top of each Sokol header and the build notes in
+[`sokol-samples`](https://github.com/floooh/sokol-samples).
 
 # sokol_gfx.h:
 
