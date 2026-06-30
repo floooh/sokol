@@ -1994,8 +1994,7 @@ typedef struct sapp_swapchain {
 typedef enum sapp_composite_mode {
     _SAPP_COMPOSITEMODE_DEFAULT,        // default is OPAQUE
     SAPP_COMPOSITEMODE_OPAQUE,          // no blending with background
-    SAPP_COMPOSITEMODE_ALPHA,           // regular alpha blending with background
-    SAPP_COMPOSITEMODE_PREMULTIPLIED_ALPHA, // premultiplied alpha-blending with background
+    SAPP_COMPOSITEMODE_PREMULTIPLIED,   // premultiplied alpha-blending with background
     _SAPP_COMPOSITEMODE_FORCE_U32 = 0x7FFFFFFF,
 } sapp_composite_mode;
 
@@ -8087,7 +8086,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_webgl_context_cb(int emsc_type, const void* re
 _SOKOL_PRIVATE void _sapp_emsc_webgl_init(void) {
     const sapp_pixel_format depth_fmt = _sapp.desc.depth_format;
     const bool wants_alpha = _sapp.desc.composite_mode != SAPP_COMPOSITEMODE_OPAQUE;
-    const bool wants_premul_alpha = _sapp.desc.composite_mode == SAPP_COMPOSITEMODE_PREMULTIPLIED_ALPHA;
+    const bool wants_premul_alpha = _sapp.desc.composite_mode == SAPP_COMPOSITEMODE_PREMULTIPLIED;
     const bool wants_depth = depth_fmt != SAPP_PIXELFORMAT_NONE;
     const bool wants_stencil = depth_fmt == SAPP_PIXELFORMAT_DEPTH_STENCIL;
     EmscriptenWebGLContextAttributes attrs;
