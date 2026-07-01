@@ -1860,9 +1860,8 @@ typedef enum sapp_log_item {
 
     Defines the pixel format for swapchain surfaces.
 
-    NOTE: when using sokol_gfx.h do not assume that the underlying
-    values are compatible with sg_pixel_format!
-
+    NOTE: DO NOT directly cast this enum to sokol_gfx.h's sg_pixel_format,
+    the enum values are totally different!
 */
 typedef enum sapp_pixel_format {
     _SAPP_PIXELFORMAT_DEFAULT,
@@ -2073,12 +2072,12 @@ typedef struct sapp_desc {
 
     int width;                          // the preferred width of the window / canvas
     int height;                         // the preferred height of the window / canvas
-    sapp_pixel_format depth_format;     // NONE, DEPTH or DEPTH_STENCIL, default: SAPP_PIXELFORMAT_DEPTH
+    sapp_pixel_format depth_format;     // SAPP_PIXELFORMAT_NONE, _DEPTH or _DEPTH_STENCIL, default: SAPP_PIXELFORMAT_DEPTH
     sapp_composite_mode composite_mode; // default: SAPP_COMPOSITEMODE_OPAQUE
     int sample_count;                   // MSAA sample count, default: 1
-    int swap_interval;                  // the preferred swap interval (ignored on some platforms)
-    bool srgb;                          // request sRGB framebuffer
-    bool hdr;                           // request HDR framebuffer
+    int swap_interval;                  // the preferred swap interval (ignored on some platforms), default: 1
+    bool srgb;                          // request sRGB framebuffer (not supported on WebGL)
+    bool hdr;                           // request HDR framebuffer (highly experimental, only supported on macOS+Metal and WebGPU)
     bool disable_vsync;                 // optional and with differing behaviour, consider this a debugging feature!
     bool high_dpi;                      // whether the rendering canvas is full-resolution on HighDPI displays
     bool fullscreen;                    // whether the window should be created in fullscreen mode
