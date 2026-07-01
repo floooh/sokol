@@ -4655,7 +4655,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_BLENDOP_MINMAX_REQUIRES_BLENDFACTOR_ONE, "SG_BLENDOP_MIN/MAX requires all blend factors to be SG_BLENDFACTOR_ONE") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_DUAL_SOURCE_BLENDING_NOT_SUPPORTED, "dual source blending not supported (sg_features.dual_source_blending)") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_DEPTH_FORMAT_NONE_BUT_DEPTH_WRITE_ENABLED, "sg_pipeline_desc.depth.write_enabled cannot be true when sg_pipeline_desc.depth.pixel_format is SG_PIXELFORMAT_NONE") \
-    _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_DEPTH_FORMAT_NONE_COMPARE_FUNC_MISMATCH, "sg_pipeline_desc.depth.compare muste be SG_COMPAREFUNC_ALWAYS or SG_COMPAREFUNC_NEVER when sg_pipeline_desc.pixel_format is SG_PIXELFORMAT_NONE") \
+    _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_DEPTH_FORMAT_NONE_COMPARE_FUNC_MISMATCH, "sg_pipeline_desc.depth.compare must be SG_COMPAREFUNC_ALWAYS or SG_COMPAREFUNC_NEVER when sg_pipeline_desc.pixel_format is SG_PIXELFORMAT_NONE") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_CANARY, "sg_view_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE, "sg_view_desc: only one view type can be active") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_ANY_VIEWTYPE, "sg_view_desc: exactly one view type must be active") \
