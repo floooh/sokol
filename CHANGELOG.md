@@ -98,6 +98,8 @@ New and updated sokol samples (note: WebGPU browser support required):
   without the webpage (instead the desktop is peaking through)
 - [hdr-sapp](https://floooh.github.io/sokol-webgpu/hdr-sapp.html): test the new HDR framebuffer feature
   (only tested on Chrome+WebGPU and native macOS+Metal on my MBP)
+- most 2D sokol samples are now configured without a depth buffer (note that sokol_gl.h currently requires
+  a depth buffer even when only rendering 2D content)
 
 PR link: https://github.com/floooh/sokol/pull/1520
 
