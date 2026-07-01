@@ -127,55 +127,57 @@
 
     FEATURE/PLATFORM MATRIX
     =======================
-                        | Windows | macOS | Linux |  iOS  | Android |  HTML5
-    --------------------+---------+-------+-------+-------+---------+--------
-    gl 4.x              | YES     | YES   | YES   | ---   | ---     |  ---
-    gles3/webgl2        | ---     | ---   | YES(2)| YES   | YES     |  YES
-    metal               | ---     | YES   | ---   | YES   | ---     |  ---
-    d3d11               | YES     | ---   | ---   | ---   | ---     |  ---
-    webgpu              | YES(4)  | YES(4)| YES(4)| NO    | NO      |  YES
-    noapi               | YES     | TODO  | TODO  | ---   | TODO    |  ---
-    KEY_DOWN            | YES     | YES   | YES   | SOME  | TODO    |  YES
-    KEY_UP              | YES     | YES   | YES   | SOME  | TODO    |  YES
-    CHAR                | YES     | YES   | YES   | YES   | TODO    |  YES
-    MOUSE_DOWN          | YES     | YES   | YES   | ---   | ---     |  YES
-    MOUSE_UP            | YES     | YES   | YES   | ---   | ---     |  YES
-    MOUSE_SCROLL        | YES     | YES   | YES   | ---   | ---     |  YES
-    MOUSE_MOVE          | YES     | YES   | YES   | ---   | ---     |  YES
-    MOUSE_ENTER         | YES     | YES   | YES   | ---   | ---     |  YES
-    MOUSE_LEAVE         | YES     | YES   | YES   | ---   | ---     |  YES
-    TOUCHES_BEGAN       | ---     | ---   | ---   | YES   | YES     |  YES
-    TOUCHES_MOVED       | ---     | ---   | ---   | YES   | YES     |  YES
-    TOUCHES_ENDED       | ---     | ---   | ---   | YES   | YES     |  YES
-    TOUCHES_CANCELLED   | ---     | ---   | ---   | YES   | YES     |  YES
-    RESIZED             | YES     | YES   | YES   | YES   | YES     |  YES
-    ICONIFIED           | YES     | YES   | YES   | ---   | ---     |  ---
-    RESTORED            | YES     | YES   | YES   | ---   | ---     |  ---
-    FOCUSED             | YES     | YES   | YES   | ---   | ---     |  YES
-    UNFOCUSED           | YES     | YES   | YES   | ---   | ---     |  YES
-    SUSPENDED           | ---     | ---   | ---   | YES   | YES     |  TODO
-    RESUMED             | ---     | ---   | ---   | YES   | YES     |  TODO
-    QUIT_REQUESTED      | YES     | YES   | YES   | ---   | ---     |  YES
-    IME                 | TODO    | TODO? | TODO  | ???   | TODO    |  ???
-    key repeat flag     | YES     | YES   | YES   | ---   | ---     |  YES
-    windowed            | YES     | YES   | YES   | ---   | ---     |  YES
-    fullscreen          | YES     | YES   | YES   | YES   | YES     |  YES(3)
-    mouse hide          | YES     | YES   | YES   | ---   | ---     |  YES
-    mouse lock          | YES     | YES   | YES   | ---   | ---     |  YES
-    set cursor type     | YES     | YES   | YES   | ---   | ---     |  YES
-    screen keyboard     | ---     | ---   | ---   | YES   | TODO    |  YES
-    swap interval       | YES     | YES   | YES   | YES   | TODO    |  YES
-    high-dpi            | YES     | YES   | TODO  | YES   | YES     |  YES
-    clipboard           | YES     | YES   | YES   | ---   | ---     |  YES
-    MSAA                | YES     | YES   | YES   | YES   | YES     |  YES
-    drag'n'drop         | YES     | YES   | YES   | ---   | ---     |  YES
-    window icon         | YES     | YES(1)| YES   | ---   | ---     |  YES
+                        | Windows | macOS | Linux  |  iOS  | Android | HTML5
+    --------------------+---------+-------+--------+-------+---------+-------
+    gl 4.x              | YES     | YES   | YES    | ---   | ---     | ---
+    gles3/webgl2        | ---     | ---   | YES(2) | YES   | YES     | YES
+    metal               | ---     | YES   | ---    | YES   | ---     | ---
+    d3d11               | YES     | ---   | ---    | ---   | ---     | ---
+    webgpu              | YES(4)  | YES(4)| YES(4) | ---   | ---     | YES
+    vulkan              | YES(7)  | ---   | YES(7) | ---   | ---     | ---
+    noapi               | YES     | TODO  | TODO   | ---   | ---     | ---
+    key+char events     | YES     | YES   | YES    | ---   | ---     | YES
+    mouse events        | YES     | YES   | YES    | ---   | ---     | YES
+    touch events        | ---     | ---   | ---    | YES   | YES     | TES
+    resized event       | YES     | YES   | YES    | YES   | YES     | YES
+    iconifed/restored   | YES     | YES   | YES    | ---   | ---     | ---
+    focused/unfocused   | YES     | YES   | YES    | ---   | ---     | YES
+    suspended/resumed   | ---     | ---   | ---    | YES   | YES     | TODO
+    programmatic quit   | YES     | YES   | YES    | ---   | ---     | YES
+    key repeat flag     | YES     | YES   | YES    | ---   | ---     | YES
+    windowed            | YES     | YES   | YES    | ---   | ---     | YES
+    fullscreen          | YES     | YES   | YES    | YES   | YES     | YES(3)
+    depth format        | YES     | YES   | YES    | YES   | YES     | YES
+    mouse hide          | YES     | YES   | YES    | ---   | ---     | YES
+    mouse lock          | YES     | YES   | YES    | ---   | ---     | YES
+    set cursor type     | YES     | YES   | YES    | ---   | ---     | YES
+    screen keyboard     | ---     | ---   | ---    | YES   | ---     | YES
+    high-dpi            | YES     | YES   | TODO   | YES   | YES     | YES
+    clipboard           | YES     | YES   | YES    | ---   | ---     | YES
+    MSAA                | YES     | YES   | YES    | YES   | YES     | YES
+    drag'n'drop         | YES     | YES   | YES    | ---   | ---     | YES
+    window icon         | YES     | YES(1)| YES    | ---   | ---     | YES
+    srgb framebuffer    | YES     | YES   | YES    | YES   | YES     | YES(5)
+    hdr framebuffer     | ---     | YES(6)| ---    | YES(6)| ---     | YES(5)
+    composite mode      | ---     | YES(6)| ---    | ---   | ---     | YES
+    disable vsync       | YES     | ---(8)| YES    | ---   | ---     | ---
+    swap interval       | YES(10) | YES(9)| YES(10)| YES   | ---     |
 
     (1) macOS has no regular window icons, instead the dock icon is changed
     (2) supported with EGL only (not GLX)
     (3) fullscreen in the browser not supported on iphones
     (4) WebGPU on native desktop platforms should be considered experimental
         and mainly useful for debugging and benchmarking
+    (5) only supported on WebGPU, but not WebGL2
+    (6) only supported on Metal, but not GL/GLES3
+    (7) Vulkan support is highly experimental and has serious frame pacing
+        issues on Windows+NVIDIA with FIFO presentation mode
+    (8) on macOS+Metal, rendering is currently always vsync-throttled
+        because CADisplayLink drives the frame loop, and this doesn't allow
+        running faster than vsync, on macOS+GL, setting the swap interval
+        has no effect since macOS 13
+    (9) on macOS+GL, setting the swap interval has no effect since macOS 13
+    (10) swap interval not supported on Vulkan
 
     STEP BY STEP
     ============
