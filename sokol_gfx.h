@@ -14634,7 +14634,7 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
 // >>metal backend
 #elif defined(SOKOL_METAL)
 #pragma clang diagnostic push
-// silenace Intel Mac deprecations for now
+// silence Intel Mac deprecations for now
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
 #if __has_feature(objc_arc)
