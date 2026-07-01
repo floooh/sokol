@@ -23,12 +23,12 @@ New sokol_app.h features:
 - Composite mode: allows to request a transparent framebuffer via
   `sapp_desc.composite_mode = SAPP_COMPOSITEMODE_PREMULTIPLIED`. This is mainly
   useful on the web to render on top of a webpage. On native platforms currently
-  only macOS+Metal support for rendering a transparent window on top of the
+  only macOS+Metal is supported for rendering a transparent window on top of the
   desktop background.
 - Disable vsync: on some plaform/backend combos it's now possible to disable
   vsync-throttling via (`sapp_desc.disable_vsync`), this is currently mainly
   intended as debugging feature to check how fast the per-frame code runs without
-  vsync getting in the way.  This is not currently supported on macOS, iOS,
+  vsync getting in the way.  Disabling vsync is not currently supported on macOS, iOS,
   Android and the web (mainly because disabling vsync would require a separate
   code path). In the future this will probably be replaced with a proper
   'presentation mode enum', but this is also tricky because the features and
@@ -36,7 +36,7 @@ New sokol_app.h features:
 
 Other sokol_app.h changes and notes:
 
-- A new `sapp_pixel_format` has been added: `SAPP_PIXELFORMAT_RGBA16F` (used
+- A new `sapp_pixel_format` item has been added: `SAPP_PIXELFORMAT_RGBA16F` (used
   for HDR framebuffers)
 - A new `sapp_composite_mode` enum has been added with two items: `SAPP_COMPOSITEMODE_OPAQUE`
   and `SAPP_COMPOSITEMODE_PREMULTIPLIED`
