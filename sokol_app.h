@@ -4000,8 +4000,8 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
         surf_conf.viewFormatCount = 1;
         surf_conf.viewFormats = &_sapp.wgpu.swapchain_view_format;
     }
+    _SAPP_STRUCT(WGPUSurfaceColorManagement, surf_cm);
     if (hdr) {
-        _SAPP_STRUCT(WGPUSurfaceColorManagement, surf_cm);
         surf_conf.nextInChain = &surf_cm.chain;
         surf_cm.chain.sType = WGPUSType_SurfaceColorManagement;
         surf_cm.colorSpace = WGPUPredefinedColorSpace_DisplayP3;
@@ -14353,6 +14353,9 @@ SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
                 SOKOL_UNREACHABLE;
                 return SAPP_PIXELFORMAT_NONE;
         }
+    #elif defined(_SAPP_EMSCRIPTEN)
+        // Emscripten + WebGL2: no SRGB framebuffer support
+        return SAPP_PIXELFORMAT_RGBA8;
     #else
         if (_sapp.desc.srgb) {
             return SAPP_PIXELFORMAT_SRGB8A8;
