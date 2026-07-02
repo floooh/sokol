@@ -50,6 +50,7 @@ Other sokol_app.h changes and notes:
   `CAMetalLayer.displaySyncEnabled` seems to slightly reduce input-to-screen latency so it
   made sense to add this very specialized configuration option.
 - **BREAKING**: the `sapp_desc.alpha` struct member has been removed and replaced with `sapp_desc.composite_mode`
+- **BREAKING**: the `sapp_desc.html5.premultiplied_alpha;` struct member has been replaced in favour of `sapp_desc.composite_mode`
 - **BREAKING**: the function `sapp_get_swapchain()` has been renamed to `sapp_acquire_swapchain()`
   (the new name makes it clearer that this function is only supposed to be called once per
   frame). Note though that the sokol_glue.h function `sglue_swapchain()` keeps its name, so
