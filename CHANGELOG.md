@@ -92,7 +92,7 @@ Notable changes in other sokol headers:
 
 New and updated sokol samples (note: WebGPU browser support required):
 
-- [srgb-sapp](https://floooh.github.io/sokol-webgpu/srgb-sapp.html): the 'Hello Triangle' in an SRGB framebuffer
+- [srgb-sapp](https://floooh.github.io/sokol-webgpu/srgb-sapp.html): the 'Hello Triangle' into an SRGB framebuffer
 - [srgb-msaa-sapp](https://floooh.github.io/sokol-webgpu/srgb-msaa-sapp.html): same but into an SRGB+MSAA framebuffer
 - [srgb-offscreen-sapp](https://floooh.github.io/sokol-webgpu/srgb-offscreen-sapp.html): test rendering into an
   SRGB framebuffer with and without MSAA
