@@ -73,7 +73,7 @@
         - with SOKOL_WGPU: a WebGPU implementation library (tested with webgpu_dawn)
     - on iOS:
         - all backends: Foundation, UIKit, QuartzCore
-        - with SOKOL_METAL: Metal
+        - with SOKOL_METAL: Metal, CoreGraphics
         - with SOKOL_GLES3: OpenGLES, GLKit
     - on Linux:
         - all backends: X11, Xi, Xcursor, dl, pthread, m
