@@ -78,7 +78,7 @@ Changes in sokol_gfx.h
 - two new validation layer checks have been added when creating a `sg_pipeline` object
   which check that certain depth states are compatible with the expected depth buffer configuration
   (those trigger when no depth buffer exists but the pipeline state expects one)
-- srgb-related bugfix in the sokol_gfx.h backend: MSAA resolve failed in `sg_end_pass()` when
+- srgb-related bugfix in the D3D11 backend: MSAA resolve failed in `sg_end_pass()` when
   rendering into an SRGB+MSAA render attachment
 - new deprecation warnings for Intel Mac specific Metal features in the macOS 27 SDK
   have been silenced via `#pragma clang diagnostic ignored "-Wno-deprecated-declarations"`
