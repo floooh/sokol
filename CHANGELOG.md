@@ -58,7 +58,7 @@ Other sokol_app.h changes and notes:
 - On macOS+Metal, calling `sapp_acquire_swapchain()` now returns an 'invalid swapchain'
   when the window is obscured. This then causes all rendering operations in the
   sokol-gfx swapchain-pass to be skipped (or you may decide to skip the entire pass
-  in the first pace by looking at the returned `sapp_swapchain.invalid` boolean)
+  in the first place by looking at the returned `sapp_swapchain.invalid` boolean)
 - **NOTE**: the `CoreGraphics` framework must now be linked when building for iOS+Metal
 - **NOTE**: on Emscripten+WebGPU be aware of this new-found issue in emdawnwebgpu:
   https://issues.chromium.org/issues/529689760 (TL;DR: disable the Closure pass for now
