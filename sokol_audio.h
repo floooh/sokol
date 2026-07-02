@@ -2055,6 +2055,9 @@ _SOKOL_PRIVATE bool _saudio_aaudio_backend_init(void) {
 #elif defined(_SAUDIO_APPLE)
 
 #if defined(_SAUDIO_IOS)
+// silence iOS AVAudioSessionInterruptionTypeBegan deprecation warning
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #if __has_feature(objc_arc)
 #define _SAUDIO_OBJC_RELEASE(obj) { obj = nil; }
 #else
@@ -2107,6 +2110,7 @@ _SOKOL_PRIVATE bool _saudio_aaudio_backend_init(void) {
     }
 }
 @end
+#pragma clang diagnostic pop
 #endif // _SAUDIO_IOS
 
 /* NOTE: the buffer data callback is called on a separate thread! */
