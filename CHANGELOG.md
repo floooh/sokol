@@ -2,7 +2,7 @@
 
 ### 02-Jul-2026
 
-The 'advanced swapchain config update'!
+The 'advanced swapchain configuration update'!
 
 New sokol_app.h features:
 
@@ -14,7 +14,7 @@ New sokol_app.h features:
   `SAPP_PIXELFORMAT_DEPTH_STENCIL` (depth-stencil buffer). The default is
   `SAPP_PIXELFORMAT_DEPTH` (**NOTE**: previously the default was to create
   a depth-stencil buffer, so this might be a breaking change for you).
-- SRGB support: it's now possible to request an SRGB framebuffer via
+- SRGB framebuffer support: it's now possible to request an SRGB framebuffer via
   `sapp_desc.srgb`, this works on all platforms and backends except WebGL2.
 - Experimental HDR support: `sapp_desc.hdr` allows to request an HDR framebuffer.
   Currently this is only implemented for WebGPU and macOS/iOS+Metal. HDR mode
@@ -28,9 +28,10 @@ New sokol_app.h features:
 - Disable vsync: on some plaform/backend combos it's now possible to disable
   vsync-throttling via (`sapp_desc.disable_vsync`), this is currently mainly
   intended as debugging feature to check how fast the per-frame code runs without
-  vsync getting in the way.  Disabling vsync is not currently supported on macOS, iOS,
+  vsync-throttling.  Disabling vsync is not currently supported on macOS, iOS,
   Android and the web (mainly because disabling vsync would require a separate
-  code path). In the future this will probably be replaced with a proper
+  code path in those cases, or in case of macOS+GL the feature simply being
+  broken in the GL driver). In the future this will probably be replaced with a proper
   'presentation mode enum', but this is also tricky because the features and
   capabilities differ drastically between the various window system glues.
 
@@ -86,6 +87,8 @@ Notable changes in other sokol headers:
 - sokol_imgui.h now applies a 'counter-gamma-correction' when rendering into
   an SRGB framebuffer (this is detected by first looking at `simgui_desc.color_format`,
   and when this is the default value by looking at `sg_query_desc().environment.defaults.color_format`)
+- in sokol_audio.h an iOS deprecation warning in the iOS 27 SDK about `AVAudioSessionInterruptionType`
+  has been silenced
 
 New and updated sokol samples (note: WebGPU browser support required):
 
