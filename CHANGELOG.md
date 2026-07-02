@@ -46,7 +46,7 @@ Other sokol_app.h changes and notes:
   true has the effect that `CAMetalLayer` doesn't wait for vsync to present the current frame,
   however vsync-throttling is still in effect via `CADisplayLink` (I spent a couple of days
   experimenting with removing CADisplayLink, since theoretically it's redundant when CAMetalLayer
-  waits for vsync anyway, but this resulted a much more jittery frame pacing). Still, disabling
+  waits for vsync anyway, but this resulted in a much more jittery frame pacing). Still, disabling
   `CAMetalLayer.displaySyncEnabled` seems to slightly reduce input-to-screen latency so it
   made sense to add this very specialized configuration option.
 - **BREAKING**: the `sapp_desc.alpha` struct member has been removed and replaced with `sapp_desc.composite_mode`
