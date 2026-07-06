@@ -2816,6 +2816,7 @@ typedef struct {
     } timing;
     #if defined(_SAPP_MACOS)
     NSTimer* occluded_timer;
+    bool use_perform_selector_for_frame_pacing; // used for disable_vsync (skips CADisplayLink)
     #endif
 } _sapp_metal_t;
 #endif
@@ -2831,6 +2832,7 @@ typedef struct {
     @interface _sapp_macos_view : NSView
     - (void)displayLinkFired:(id)sender;
     - (void)occludedTimerFired:(NSTimer*)timer;
+    - (void)vsyncDisabledFrameFired;
     @end
 #elif defined(SOKOL_GLCORE)
     @interface _sapp_macos_view : NSOpenGLView
@@ -5347,7 +5349,25 @@ _SOKOL_PRIVATE double _sapp_macos_mtl_timing_frame_duration(void) {
     }
 }
 
+_SOKOL_PRIVATE void _sapp_macos_mtl_request_frame_vsync_disabled(void) {
+    SOKOL_ASSERT(_sapp.desc.disable_vsync);
+    // request next frame without CADisplayLink
+    [_sapp.macos.view performSelector:@selector(vsyncDisabledFrameFired)
+                      onThread:[NSThread mainThread]
+                      withObject:nil
+                      waitUntilDone:NO
+                      modes:@[NSDefaultRunLoopMode, NSEventTrackingRunLoopMode, NSModalPanelRunLoopMode]];
+    CFRunLoopWakeUp(CFRunLoopGetMain());
+}
+
 _SOKOL_PRIVATE void _sapp_macos_mtl_start_displayed_frame_pacing(void) {
+    // special case vsync disabled: in that case performSelector is used
+    // for frame pacing instead of CADisplayLink
+    if (_sapp.desc.disable_vsync) {
+        _sapp.mtl.use_perform_selector_for_frame_pacing = true;
+        _sapp_macos_mtl_request_frame_vsync_disabled();
+        return;
+    }
     if (nil != _sapp.mtl.display_link) {
         _sapp.mtl.display_link.paused = false;
         return;
@@ -5365,6 +5385,10 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_start_displayed_frame_pacing(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_stop_displayed_frame_pacing(void) {
+    if (_sapp.desc.disable_vsync) {
+        _sapp.mtl.use_perform_selector_for_frame_pacing = false;
+        return;
+    }
     if (nil != _sapp.mtl.display_link) {
         _sapp.mtl.display_link.paused = true;
     }
@@ -6336,6 +6360,12 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _SOKOL_UNUSED(timer);
     if (_sapp_macos_mtl_is_occluded()) {
         _sapp_macos_frame();
+    }
+}
+- (void)vsyncDisabledFrameFired {
+    if (!_sapp_macos_mtl_is_occluded()) {
+        _sapp_macos_frame();
+        _sapp_macos_mtl_request_frame_vsync_disabled();
     }
 }
 #endif
