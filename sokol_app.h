@@ -2815,7 +2815,7 @@ typedef struct {
         CFTimeInterval frame_duration_sec;
     } timing;
     #if defined(_SAPP_MACOS)
-    NSTimer* obscured_timer;
+    NSTimer* occluded_timer;
     #endif
 } _sapp_metal_t;
 #endif
@@ -2830,7 +2830,7 @@ typedef struct {
 #if defined(SOKOL_METAL) || defined(SOKOL_WGPU)
     @interface _sapp_macos_view : NSView
     - (void)displayLinkFired:(id)sender;
-    - (void)obscuredTimerFired:(NSTimer*)timer;
+    - (void)occludedTimerFired:(NSTimer*)timer;
     @end
 #elif defined(SOKOL_GLCORE)
     @interface _sapp_macos_view : NSOpenGLView
@@ -5297,7 +5297,7 @@ _SOKOL_PRIVATE id<CAMetalDrawable> _sapp_mtl_swapchain_next(void) {
 // >>macos
 #if defined(_SAPP_MACOS)
 
-#define _SAPP_MACOS_MTL_OBSCURED_FRAME_DURATION_IN_SECONDS (0.0166667)
+#define _SAPP_MACOS_MTL_OCCLUDED_FRAME_DURATION_IN_SECONDS (0.0166667)
 
 _SOKOL_PRIVATE NSInteger _sapp_macos_max_fps(void) {
     return [NSScreen.mainScreen maximumFramesPerSecond];
@@ -5305,8 +5305,16 @@ _SOKOL_PRIVATE NSInteger _sapp_macos_max_fps(void) {
 
 #if defined(SOKOL_METAL)
 
+// NOTE: this is *not* simply the opposite of occluded! Checking
+// whether the display link is active is used for frame timing
+// (e.g. when the display link is active, the display link's timestamp
+// will be used instead of measured time)
 _SOKOL_PRIVATE bool _sapp_macos_mtl_display_link_active(void) {
     return (nil != _sapp.mtl.display_link) && (!_sapp.mtl.display_link.paused);
+}
+
+_SOKOL_PRIVATE bool _sapp_macos_mtl_is_occluded(void) {
+    return nil != _sapp.mtl.occluded_timer;
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_timing_init(void) {
@@ -5339,14 +5347,14 @@ _SOKOL_PRIVATE double _sapp_macos_mtl_timing_frame_duration(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_macos_mtl_start_display_link(void) {
+_SOKOL_PRIVATE void _sapp_macos_mtl_start_displayed_frame_pacing(void) {
     if (nil != _sapp.mtl.display_link) {
         _sapp.mtl.display_link.paused = false;
         return;
     }
     // NOTE: CADisplayLink is only available since macOS 14.0
     SOKOL_ASSERT(nil == _sapp.mtl.display_link);
-    SOKOL_ASSERT(nil == _sapp.mtl.obscured_timer);
+    SOKOL_ASSERT(nil == _sapp.mtl.occluded_timer);
     SOKOL_ASSERT(nil != _sapp.macos.view);
     NSInteger max_fps = _sapp_macos_max_fps();
     _sapp.mtl.display_link = [_sapp.macos.view displayLinkWithTarget:_sapp.macos.view selector:@selector(displayLinkFired:)];
@@ -5356,45 +5364,41 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_start_display_link(void) {
     [_sapp.mtl.display_link addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
 }
 
-_SOKOL_PRIVATE void _sapp_macos_mtl_stop_display_link(void) {
+_SOKOL_PRIVATE void _sapp_macos_mtl_stop_displayed_frame_pacing(void) {
     if (nil != _sapp.mtl.display_link) {
         _sapp.mtl.display_link.paused = true;
     }
 }
 
-_SOKOL_PRIVATE bool _sapp_macos_mtl_is_obscured(void) {
-    return nil != _sapp.mtl.obscured_timer;
-}
-
-_SOKOL_PRIVATE void _sapp_macos_mtl_start_obscured_timer(void) {
-    SOKOL_ASSERT(nil == _sapp.mtl.obscured_timer);
-    _sapp.mtl.obscured_timer = [NSTimer
-        timerWithTimeInterval: _SAPP_MACOS_MTL_OBSCURED_FRAME_DURATION_IN_SECONDS
+_SOKOL_PRIVATE void _sapp_macos_mtl_start_occluded_frame_pacing(void) {
+    SOKOL_ASSERT(nil == _sapp.mtl.occluded_timer);
+    _sapp.mtl.occluded_timer = [NSTimer
+        timerWithTimeInterval: _SAPP_MACOS_MTL_OCCLUDED_FRAME_DURATION_IN_SECONDS
         target: _sapp.macos.view
-        selector: @selector(obscuredTimerFired:)
+        selector: @selector(occludedTimerFired:)
         userInfo: nil
         repeats: YES];
-    [[NSRunLoop currentRunLoop] addTimer:_sapp.mtl.obscured_timer forMode:NSRunLoopCommonModes];
+    [[NSRunLoop currentRunLoop] addTimer:_sapp.mtl.occluded_timer forMode:NSRunLoopCommonModes];
 }
 
-_SOKOL_PRIVATE void _sapp_macos_mtl_stop_obscured_timer(void) {
-    if (nil != _sapp.mtl.obscured_timer) {
-        [_sapp.mtl.obscured_timer invalidate];
-        _sapp.mtl.obscured_timer = nil;
+_SOKOL_PRIVATE void _sapp_macos_mtl_stop_occluded_frame_pacing(void) {
+    if (nil != _sapp.mtl.occluded_timer) {
+        [_sapp.mtl.occluded_timer invalidate];
+        _sapp.mtl.occluded_timer = nil;
     }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_transition_to_occluded(void) {
-    if (_sapp_macos_mtl_display_link_active()) {
-        _sapp_macos_mtl_stop_display_link();
-        _sapp_macos_mtl_start_obscured_timer();
+    if (!_sapp_macos_mtl_is_occluded()) {
+        _sapp_macos_mtl_stop_displayed_frame_pacing();
+        _sapp_macos_mtl_start_occluded_frame_pacing();
     }
 }
 
-_SOKOL_PRIVATE void _sapp_macos_mtl_transition_to_visible(void) {
-    if (!_sapp_macos_mtl_display_link_active()) {
-        _sapp_macos_mtl_stop_obscured_timer();
-        _sapp_macos_mtl_start_display_link();
+_SOKOL_PRIVATE void _sapp_macos_mtl_transition_to_displayed(void) {
+    if (_sapp_macos_mtl_is_occluded()) {
+        _sapp_macos_mtl_stop_occluded_frame_pacing();
+        _sapp_macos_mtl_start_displayed_frame_pacing();
     }
 }
 
@@ -5412,21 +5416,22 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_init(void) {
     if (_sapp.desc.hdr) {
         _sapp.mtl.layer.wantsExtendedDynamicRangeContent = YES;
     }
-    if (_sapp.desc.metal.disable_display_sync) {
+    if (_sapp.desc.metal.disable_display_sync || _sapp.desc.disable_vsync) {
         _sapp.mtl.layer.displaySyncEnabled = false;
     }
-    //NOTE: default is 3: _sapp.macos.mtl.layer.maximumDrawableCount = 2;
+    // NOTE: default maximumDrawableCount is 3, but 2 doesn't seem to make any difference:
+    // _sapp.macos.mtl.layer.maximumDrawableCount = 2;
     _sapp.macos.view = [[_sapp_macos_view alloc] init];
     [_sapp.macos.view updateTrackingAreas];
     _sapp.macos.view.wantsLayer = YES;
     _sapp.macos.view.layer = _sapp.mtl.layer;
-    _sapp_macos_mtl_start_display_link();
+    _sapp_macos_mtl_start_displayed_frame_pacing();
     _sapp_macos_mtl_timing_init();
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mtl_discard_state(void) {
-    _sapp_macos_mtl_stop_display_link();
-    _sapp_macos_mtl_stop_obscured_timer();
+    _sapp_macos_mtl_stop_displayed_frame_pacing();
+    _sapp_macos_mtl_stop_occluded_frame_pacing();
     _sapp_mtl_swapchain_destroy();
     _SAPP_OBJC_RELEASE(_sapp.mtl.layer);
     _SAPP_OBJC_RELEASE(_sapp.mtl.device);
@@ -6202,24 +6207,18 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 
 - (void)windowDidMiniaturize:(NSNotification*)notification {
     _SOKOL_UNUSED(notification);
-    #if defined(SOKOL_METAL)
-    _sapp_macos_mtl_transition_to_occluded();
-    #endif
     _sapp_macos_app_event(SAPP_EVENTTYPE_ICONIFIED);
 }
 
 - (void)windowDidDeminiaturize:(NSNotification*)notification {
     _SOKOL_UNUSED(notification);
-    #if defined(SOKOL_METAL)
-    _sapp_macos_mtl_transition_to_visible();
-    #endif
     _sapp_macos_app_event(SAPP_EVENTTYPE_RESTORED);
 }
 
 - (void)windowDidChangeOcclusionState:(NSNotification*)notification {
     #if defined(SOKOL_METAL)
     if (_sapp.macos.window.occlusionState & NSWindowOcclusionStateVisible) {
-        _sapp_macos_mtl_transition_to_visible();
+        _sapp_macos_mtl_transition_to_displayed();
     } else {
         _sapp_macos_mtl_transition_to_occluded();
     }
@@ -6329,13 +6328,13 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 #elif defined(SOKOL_METAL) || defined(SOKOL_WGPU)
 - (void)displayLinkFired:(id)sender {
     _SOKOL_UNUSED(sender);
-    if (!_sapp_macos_mtl_is_obscured()) {
+    if (!_sapp_macos_mtl_is_occluded()) {
         _sapp_macos_frame();
     }
 }
-- (void)obscuredTimerFired:(NSTimer*)timer {
+- (void)occludedTimerFired:(NSTimer*)timer {
     _SOKOL_UNUSED(timer);
-    if (_sapp_macos_mtl_is_obscured()) {
+    if (_sapp_macos_mtl_is_occluded()) {
         _sapp_macos_frame();
     }
 }
@@ -14736,7 +14735,7 @@ SOKOL_API_IMPL sapp_swapchain sapp_acquire_swapchain(void) {
     _SAPP_STRUCT(sapp_swapchain, res);
     #if defined(SOKOL_METAL)
         #if defined(_SAPP_MACOS)
-            if (_sapp_macos_mtl_is_obscured()) {
+            if (_sapp_macos_mtl_is_occluded()) {
                 res.invalid = true;
                 return res;
             }
