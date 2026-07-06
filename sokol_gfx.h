@@ -12907,7 +12907,7 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_base_pixel_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RGBA32SI:       return DXGI_FORMAT_R32G32B32A32_SINT;
         case SG_PIXELFORMAT_RGBA32F:        return DXGI_FORMAT_R32G32B32A32_FLOAT;
         case SG_PIXELFORMAT_DEPTH:          return DXGI_FORMAT_R32_TYPELESS;
-        case SG_PIXELFORMAT_DEPTH_STENCIL:  return DXGI_FORMAT_R24G8_TYPELESS;
+        case SG_PIXELFORMAT_DEPTH_STENCIL:  return DXGI_FORMAT_R32G8X24_TYPELESS;
         case SG_PIXELFORMAT_BC1_RGBA:       return DXGI_FORMAT_BC1_UNORM;
         case SG_PIXELFORMAT_BC2_RGBA:       return DXGI_FORMAT_BC2_UNORM;
         case SG_PIXELFORMAT_BC3_RGBA:       return DXGI_FORMAT_BC3_UNORM;
@@ -12938,7 +12938,7 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_srv_pixel_format(sg_pixel_format fmt) {
     if (fmt == SG_PIXELFORMAT_DEPTH) {
         return DXGI_FORMAT_R32_FLOAT;
     } else if (fmt == SG_PIXELFORMAT_DEPTH_STENCIL) {
-        return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+        return DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
     } else {
         return _sg_d3d11_base_pixel_format(fmt);
     }
@@ -12948,7 +12948,7 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_dsv_pixel_format(sg_pixel_format fmt) {
     if (fmt == SG_PIXELFORMAT_DEPTH) {
         return DXGI_FORMAT_D32_FLOAT;
     } else if (fmt == SG_PIXELFORMAT_DEPTH_STENCIL) {
-        return DXGI_FORMAT_D24_UNORM_S8_UINT;
+        return DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
     } else {
         return _sg_d3d11_base_pixel_format(fmt);
     }
@@ -12958,7 +12958,7 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_rtv_uav_pixel_format(sg_pixel_format fmt) {
     if (fmt == SG_PIXELFORMAT_DEPTH) {
         return DXGI_FORMAT_R32_FLOAT;
     } else if (fmt == SG_PIXELFORMAT_DEPTH_STENCIL) {
-        return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+        return DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
     } else {
         return _sg_d3d11_base_pixel_format(fmt);
     }
