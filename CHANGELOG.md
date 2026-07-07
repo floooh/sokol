@@ -1,5 +1,16 @@
 ## Updates
 
+### 07-Jul-2026
+
+sokol_app.h + sokol_gfx.h d3d11: a small udpate which harmonizes the internal
+pixel format for depth-stencil buffers with the Metal, Vulkan and WebGPU backends
+(the internal format has been changed from `DXGI_FORMAT_D24_UNORM_S8_UINT` to
+`DXGI_FORMAT_D32_FLOAT_S8X24_UINT`, e.g. 32-bit float for depth and 8-bit uint
+for stencil). Note that the GL backends currently still use a 24/8 bit
+depth-stencil format.
+
+PR: https://github.com/floooh/sokol/pull/1545
+
 ### 02-Jul-2026
 
 The 'advanced swapchain configuration update'!

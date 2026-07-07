@@ -8776,7 +8776,7 @@ _SOKOL_PRIVATE DXGI_FORMAT _sapp_d3d11_view_color_format(void) {
 _SOKOL_PRIVATE DXGI_FORMAT _sapp_d3d11_depth_format(void) {
     switch (_sapp.desc.depth_format) {
         case SAPP_PIXELFORMAT_DEPTH: return DXGI_FORMAT_D32_FLOAT;
-        case SAPP_PIXELFORMAT_DEPTH_STENCIL: return DXGI_FORMAT_D24_UNORM_S8_UINT;
+        case SAPP_PIXELFORMAT_DEPTH_STENCIL: return DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
         default: SOKOL_UNREACHABLE; return DXGI_FORMAT_UNKNOWN;
     }
 }
