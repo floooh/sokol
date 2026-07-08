@@ -5992,6 +5992,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_MAX_TEXTURE_IMAGE_UNITS 0x8872
         #define GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS 0x90DD
         #define GL_MAX_IMAGE_UNITS 0x8F38
+        #define GL_FLOAT_32_UNSIGNED_INT_24_8_REV 0x8DAD
+        #define GL_DEPTH32F_STENCIL8 0x8CAD
     #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
@@ -9614,7 +9616,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_type(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_DEPTH:
             return GL_FLOAT;
         case SG_PIXELFORMAT_DEPTH_STENCIL:
-            return GL_UNSIGNED_INT_24_8;
+            return GL_FLOAT_32_UNSIGNED_INT_24_8_REV;
         default:
             SOKOL_UNREACHABLE; return 0;
     }
@@ -9773,7 +9775,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RGBA32SI:   return GL_RGBA32I;
         case SG_PIXELFORMAT_RGBA32F:    return GL_RGBA32F;
         case SG_PIXELFORMAT_DEPTH:      return GL_DEPTH_COMPONENT32F;
-        case SG_PIXELFORMAT_DEPTH_STENCIL:      return GL_DEPTH24_STENCIL8;
+        case SG_PIXELFORMAT_DEPTH_STENCIL:      return GL_DEPTH32F_STENCIL8;
         case SG_PIXELFORMAT_BC1_RGBA:           return GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
         case SG_PIXELFORMAT_BC2_RGBA:           return GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
         case SG_PIXELFORMAT_BC3_RGBA:           return GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
