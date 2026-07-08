@@ -9,6 +9,8 @@ the swapchain framebuffer created via sokol_app.h are still limited to
 D24/S8 (this is because the WGL/GLX/NSOpenGL glue libraries don't allow
 to explicitly request a floating point depth buffer).
 
+PR: https://github.com/floooh/sokol/pull/1548
+
 ### 07-Jul-2026
 
 sokol_app.h + sokol_gfx.h d3d11: a small udpate which harmonizes the internal
