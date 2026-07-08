@@ -5,7 +5,7 @@
 sokol_gfx.h gl/gles3: harmonize internal format of depth-stencil textures
 with the other backends to `GL_DEPTH32F_STENCIL8`, **NOTE** though that unlike
 other backends this only affects depth-stencil textures created via sokol_gfx.h,
-the swapchain framebuffer created via sokol_app.h are still limited to
+the swapchain framebuffers created via sokol_app.h are still limited to
 D24/S8 (this is because the WGL/GLX/NSOpenGL glue libraries don't allow
 to explicitly request a floating point depth buffer).
 
