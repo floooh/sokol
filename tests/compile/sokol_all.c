@@ -73,7 +73,7 @@ void use_all(void) {
     sgl_setup(&(sgl_desc_t){0});
     const slbx_viewport vp = slbx_letterbox(256, 256, &(slbx_letterbox_desc){0}); (void)vp;
     void* p = smemtrack_alloc(8, 0); (void)p;
-    sshape_plane_sizes(10);
+    sshape_plane_sizes(10, SSHAPE_MAX_VERTEX_SIZE);
     simgui_setup(&(simgui_desc_t){0});
     sgimgui_setup(&(sgimgui_desc_t){0});
     sappimgui_setup();

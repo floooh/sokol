@@ -734,7 +734,7 @@ static int _sshape_vertex_position_offset(const sshape_state_t* state) {
 }
 
 static int _sshape_vertex_normal_offset(const sshape_state_t* state) {
-    SOKOL_ASSERT(!state->disable.normals);
+    SOKOL_ASSERT(!state->disable.normals); (void)state;
     return 3 * sizeof(float);
 }
 

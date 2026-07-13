@@ -3,5 +3,5 @@
 #include "sokol_shape.h"
 
 void use_shape_impl() {
-    sshape_plane_sizes(10);
+    sshape_plane_sizes(10, SSHAPE_MAX_VERTEX_SIZE);
 }
