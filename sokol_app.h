@@ -2063,6 +2063,7 @@ typedef struct sapp_desc {
     void (*frame_cb)(void);
     void (*cleanup_cb)(void);
     void (*event_cb)(const sapp_event*);
+    bool (*native_event_cb)(const void* native_event);
 
     void* user_data;                        // these are the user-provided callbacks with user data
     void (*init_userdata_cb)(void*);
@@ -10846,7 +10847,10 @@ _SOKOL_PRIVATE int _sapp_android_input_cb(int fd, int events, void* data) {
             continue;
         }
         int32_t handled = 0;
-        if (_sapp_android_touch_event(event) || _sapp_android_key_event(event)) {
+        if (_sapp.desc.native_event_cb && _sapp.desc.native_event_cb(event)) {
+            handled = 1;
+        }
+        if (!handled && (_sapp_android_touch_event(event) || _sapp_android_key_event(event))) {
             handled = 1;
         }
         AInputQueue_finishEvent(_sapp.android.current.input, event, handled);
