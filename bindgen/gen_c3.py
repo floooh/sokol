@@ -112,6 +112,8 @@ aliases = {
         ("StreamCb", "fn void(float*, CInt, CInt)"),
     "void (*)(float *, int, int, void *)":
         ("StreamDataCb", "fn void(float*, CInt, CInt, void*)"),
+    "bool (*)(const void *)":
+        ("NativeEventCb", "fn bool(void*)"),
 }
 
 struct_types = []
