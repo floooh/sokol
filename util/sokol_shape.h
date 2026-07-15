@@ -714,16 +714,16 @@ static bool _sshape_validate_buffer_item(const sshape_buffer_item_t* item, uint3
     return true;
 }
 
-static size_t _sshape_vertex_size(bool has_normals, bool has_texcoords, bool has_colors) {
-    size_t s = 3 * sizeof(float);
+static uint32_t _sshape_vertex_size(bool has_normals, bool has_texcoords, bool has_colors) {
+    uint32_t s = 3 * (uint32_t)sizeof(float);
     if (has_normals) {
-        s += sizeof(uint32_t);
+        s += (uint32_t)sizeof(uint32_t);
     }
     if (has_texcoords) {
-        s += 2 * sizeof(uint16_t);
+        s += 2 * (uint32_t)sizeof(uint16_t);
     }
     if (has_colors) {
-        s += sizeof(uint32_t);
+        s += (uint32_t)sizeof(uint32_t);
     }
     return s;
 }
@@ -759,7 +759,7 @@ static int _sshape_vertex_color_offset(const sshape_state_t* state) {
     return offset;
 }
 
-static size_t _sshape_vertex_size_from_state(const sshape_state_t* state) {
+static uint32_t _sshape_vertex_size_from_state(const sshape_state_t* state) {
     const bool has_normals = !state->disable.normals;
     const bool has_texcoords = !state->disable.texcoords;
     const bool has_colors = !state->disable.colors;
@@ -767,7 +767,7 @@ static size_t _sshape_vertex_size_from_state(const sshape_state_t* state) {
 }
 
 static bool _sshape_validate_state(const sshape_state_t* state, uint32_t num_vertices, uint32_t num_indices) {
-    const size_t vertex_size = _sshape_vertex_size_from_state(state);
+    const uint32_t vertex_size = (uint32_t)_sshape_vertex_size_from_state(state);
     if (!_sshape_validate_buffer_item(&state->vertices, num_vertices * vertex_size)) {
         return false;
     }
@@ -928,7 +928,7 @@ SOKOL_API_IMPL sshape_sizes_t sshape_plane_sizes(uint32_t tiles, size_t vertex_s
     sshape_sizes_t res = { {0} };
     res.vertices.num = _sshape_plane_num_vertices(tiles);
     res.indices.num = _sshape_plane_num_indices(tiles);
-    res.vertices.size = res.vertices.num * vertex_size;
+    res.vertices.size = res.vertices.num * (uint32_t)vertex_size;
     res.indices.size = res.indices.num * sizeof(uint16_t);
     return res;
 }
@@ -939,7 +939,7 @@ SOKOL_API_IMPL sshape_sizes_t sshape_box_sizes(uint32_t tiles, size_t vertex_siz
     sshape_sizes_t res = { {0} };
     res.vertices.num = _sshape_box_num_vertices(tiles);
     res.indices.num = _sshape_box_num_indices(tiles);
-    res.vertices.size = res.vertices.num * vertex_size;
+    res.vertices.size = res.vertices.num * (uint32_t)vertex_size;
     res.indices.size = res.indices.num * sizeof(uint16_t);
     return res;
 }
@@ -950,7 +950,7 @@ SOKOL_API_IMPL sshape_sizes_t sshape_sphere_sizes(uint32_t slices, uint32_t stac
     sshape_sizes_t res = { {0} };
     res.vertices.num = _sshape_sphere_num_vertices(slices, stacks);
     res.indices.num = _sshape_sphere_num_indices(slices, stacks);
-    res.vertices.size = res.vertices.num * vertex_size;
+    res.vertices.size = res.vertices.num * (uint32_t)vertex_size;
     res.indices.size = res.indices.num * sizeof(uint16_t);
     return res;
 }
@@ -961,7 +961,7 @@ SOKOL_API_IMPL sshape_sizes_t sshape_cylinder_sizes(uint32_t slices, uint32_t st
     sshape_sizes_t res = { {0} };
     res.vertices.num = _sshape_cylinder_num_vertices(slices, stacks);
     res.indices.num = _sshape_cylinder_num_indices(slices, stacks);
-    res.vertices.size = res.vertices.num * vertex_size;
+    res.vertices.size = res.vertices.num * (uint32_t)vertex_size;
     res.indices.size = res.indices.num * sizeof(uint16_t);
     return res;
 }
@@ -972,7 +972,7 @@ SOKOL_API_IMPL sshape_sizes_t sshape_torus_sizes(uint32_t sides, uint32_t rings,
     sshape_sizes_t res = { {0} };
     res.vertices.num = _sshape_torus_num_vertices(sides, rings);
     res.indices.num = _sshape_torus_num_indices(sides, rings);
-    res.vertices.size = res.vertices.num * vertex_size;
+    res.vertices.size = res.vertices.num * (uint32_t)vertex_size;
     res.indices.size = res.indices.num * sizeof(uint16_t);
     return res;
 }
