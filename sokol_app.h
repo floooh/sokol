@@ -2058,6 +2058,10 @@ typedef struct sapp_metal_desc {
     bool disable_display_sync;      // feeds into CAMetalLayer.displaySyncEnabled
 } sapp_metal_desc;
 
+typedef struct sapp_android_desc {
+    bool (*native_event_cb)(const void* native_event);
+} sapp_android_desc;
+
 typedef struct sapp_desc {
     void (*init_cb)(void);                  // these are the user-provided callbacks without user data
     void (*frame_cb)(void);
@@ -2097,6 +2101,7 @@ typedef struct sapp_desc {
     sapp_win32_desc win32;
     sapp_html5_desc html5;
     sapp_ios_desc ios;
+    sapp_android_desc android;
 } sapp_desc;
 
 /* HTML5 specific: request and response structs for
@@ -10846,7 +10851,10 @@ _SOKOL_PRIVATE int _sapp_android_input_cb(int fd, int events, void* data) {
             continue;
         }
         int32_t handled = 0;
-        if (_sapp_android_touch_event(event) || _sapp_android_key_event(event)) {
+        if (_sapp.desc.android.native_event_cb && _sapp.desc.android.native_event_cb(event)) {
+            handled = 1;
+        }
+        if (!handled && (_sapp_android_touch_event(event) || _sapp_android_key_event(event))) {
             handled = 1;
         }
         AInputQueue_finishEvent(_sapp.android.current.input, event, handled);
