@@ -1,5 +1,11 @@
 ## Updates
 
+### 15-Jul-2026
+
+sokol_app.h android: added a platform-specific 'native' event callback
+which allows to intercept *all* Android events. See PR https://github.com/floooh/sokol/pull/1551
+for details. Many thanks to @jasonfrowe!
+
 ### 08-Jul-2026
 
 sokol_gfx.h gl/gles3: harmonize internal format of depth-stencil textures
