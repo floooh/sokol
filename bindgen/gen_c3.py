@@ -233,6 +233,12 @@ def is_const_struct_ptr(s):
             return True
     return False
 
+def is_struct_ptr(s):
+    for struct_type in struct_types:
+        if s == f"{struct_type} *":
+            return True
+    return False
+
 def type_default_value(s):
     return prim_defaults[s]
 
@@ -254,6 +260,8 @@ def map_type(type, prefix, sub_type):
     elif util.is_string_ptr(type):
         return "ZString"
     elif is_const_struct_ptr(type):
+        return f"{as_struct_or_enum_type(util.extract_ptr_type(type), prefix)}*"
+    elif is_struct_ptr(type):
         return f"{as_struct_or_enum_type(util.extract_ptr_type(type), prefix)}*"
     elif is_prim_ptr(type):
         return f"{as_prim_type(util.extract_ptr_type(type))}*"

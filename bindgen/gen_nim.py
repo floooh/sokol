@@ -251,6 +251,12 @@ def is_const_struct_ptr(s):
             return True
     return False
 
+def is_struct_ptr(s):
+    for struct_type in struct_types:
+        if s == f"{struct_type} *":
+            return True
+    return False
+
 def type_default_value(s):
     return prim_defaults[s]
 
@@ -294,6 +300,8 @@ def as_nim_type(ctype, prefix, struct_ptr_as_value=False):
             return f"{nim_type}"
         else:
             return f"ptr {nim_type}"
+    elif is_struct_ptr(ctype):
+        return f"ptr {as_nim_type(util.extract_ptr_type(ctype), prefix)}"
     elif is_prim_ptr(ctype) or is_const_prim_ptr(ctype):
         return f"ptr {as_nim_type(util.extract_ptr_type(ctype), prefix)}"
     elif util.is_func_ptr(ctype):
