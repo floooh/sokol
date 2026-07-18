@@ -406,10 +406,12 @@ typedef struct sshape_range_t {
 #define SSHAPE_RANGE(x) (sshape_range_t){ &x, sizeof(x) }
 #endif
 
-// the minumum vertex size in bytes (when no optional components are used)
-#define SSHAPE_MIN_VERTEX_SIZE (12)
-// the maximum vertex size in bytes (when all optional components are used)
-#define SSHAPE_MAX_VERTEX_SIZE (24)
+enum {
+    // the minumum vertex size in bytes (when no optional components are used)
+    SSHAPE_MIN_VERTEX_SIZE = 12,
+    // the maximum vertex size in bytes (when all optional components are used)
+    SSHAPE_MAX_VERTEX_SIZE = 24,
+};
 
 // a 4x4 matrix wrapper struct
 typedef struct sshape_mat4_t { float m[4][4]; } sshape_mat4_t;
