@@ -1485,7 +1485,7 @@ SOKOL_API_IMPL sshape_element_range_t sshape_element_range(const sshape_state_t*
 SOKOL_API_IMPL sg_vertex_buffer_layout_state sshape_vertex_buffer_layout_state(const sshape_state_t* state) {
     SOKOL_ASSERT(state && state->valid);
     sg_vertex_buffer_layout_state layout_state = { 0 };
-    layout_state.stride = _sshape_vertex_size_from_state(state);
+    layout_state.stride = (int)_sshape_vertex_size_from_state(state);
     return layout_state;
 }
 
