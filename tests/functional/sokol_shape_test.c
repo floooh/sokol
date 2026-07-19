@@ -168,7 +168,7 @@ UTEST(sokol_shape, torus_buffer_sizes) {
 }
 
 UTEST(sokol_shape, buffer_layout_desc) {
-    sshape_state_t shp = {0};
+    sshape_state_t shp = { .valid = true };
     const sg_vertex_buffer_layout_state l_state = sshape_vertex_buffer_layout_state(&shp);
     T(SSHAPE_MAX_VERTEX_SIZE == l_state.stride);
     T(0 == l_state.step_func);
@@ -176,7 +176,7 @@ UTEST(sokol_shape, buffer_layout_desc) {
 }
 
 UTEST(sokol_shape, attr_descs) {
-    sshape_state_t shp = {0};
+    sshape_state_t shp = { .valid = true };
     {
         const sg_vertex_attr_state a_state = sshape_position_vertex_attr_state(&shp);
         T(0 == a_state.offset);
