@@ -758,14 +758,14 @@ static int _sshape_vertex_position_offset(const sshape_state_t* state) {
 
 static int _sshape_vertex_normal_offset(const sshape_state_t* state) {
     SOKOL_ASSERT(!state->disable.normals); (void)state;
-    return 3 * sizeof(float);
+    return (int)(3 * sizeof(float));
 }
 
 static int _sshape_vertex_texcoord_offset(const sshape_state_t* state) {
     SOKOL_ASSERT(!state->disable.texcoords);
     int offset = 3 * sizeof(float);
     if (!state->disable.normals) {
-        offset += sizeof(uint32_t);
+        offset += (int)sizeof(uint32_t);
     }
     return offset;
 }
@@ -774,10 +774,10 @@ static int _sshape_vertex_color_offset(const sshape_state_t* state) {
     SOKOL_ASSERT(!state->disable.colors);
     int offset = 3 * sizeof(float);
     if (!state->disable.normals) {
-        offset += sizeof(uint32_t);
+        offset += (int)sizeof(uint32_t);
     }
     if (!state->disable.texcoords) {
-        offset += 2 * sizeof(uint16_t);
+        offset += (int)(2 * sizeof(uint16_t));
     }
     return offset;
 }
