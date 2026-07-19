@@ -90,136 +90,138 @@ UTEST(sokol_shape, mat4_transpose) {
 UTEST(sokol_shape, plane_buffer_sizes) {
     sshape_sizes_t res;
 
-    res = sshape_plane_sizes(1);
+    res = sshape_plane_sizes(1, SSHAPE_MAX_VERTEX_SIZE);
     T(4 == res.vertices.num);
     T(6 == res.indices.num);
-    T(res.vertices.num * sizeof(sshape_vertex_t) == res.vertices.size);
+    T(res.vertices.num * SSHAPE_MAX_VERTEX_SIZE == res.vertices.size);
     T(res.indices.num * sizeof(uint16_t) == res.indices.size);
 
-    res = sshape_plane_sizes(2);
+    res = sshape_plane_sizes(2, SSHAPE_MAX_VERTEX_SIZE);
     T(9 == res.vertices.num);
     T(24 == res.indices.num);
-    T(res.vertices.num * sizeof(sshape_vertex_t) == res.vertices.size);
+    T(res.vertices.num * SSHAPE_MAX_VERTEX_SIZE== res.vertices.size);
     T(res.indices.num * sizeof(uint16_t) == res.indices.size);
 }
 
 UTEST(sokol_shape, box_buffer_sizes) {
     sshape_sizes_t res;
 
-    res = sshape_box_sizes(1);
+    res = sshape_box_sizes(1, SSHAPE_MAX_VERTEX_SIZE);
     T(24 == res.vertices.num);
     T(36 == res.indices.num);
-    T(res.vertices.num * sizeof(sshape_vertex_t) == res.vertices.size);
+    T(res.vertices.num * SSHAPE_MAX_VERTEX_SIZE == res.vertices.size);
     T(res.indices.num * sizeof(uint16_t) == res.indices.size);
 
-    res = sshape_box_sizes(2);
+    res = sshape_box_sizes(2, SSHAPE_MAX_VERTEX_SIZE);
     T(54 == res.vertices.num);
     T(144 == res.indices.num);
-    T(res.vertices.num * sizeof(sshape_vertex_t) == res.vertices.size);
+    T(res.vertices.num * SSHAPE_MAX_VERTEX_SIZE == res.vertices.size);
     T(res.indices.num * sizeof(uint16_t) == res.indices.size);
 }
 
 UTEST(sokol_shape, sphere_buffer_sizes) {
     sshape_sizes_t res;
 
-    res = sshape_sphere_sizes(3, 2);
+    res = sshape_sphere_sizes(3, 2, SSHAPE_MAX_VERTEX_SIZE);
     T(12 == res.vertices.num);
     T(18 == res.indices.num);
-    T(res.vertices.num * sizeof(sshape_vertex_t) == res.vertices.size);
+    T(res.vertices.num * SSHAPE_MAX_VERTEX_SIZE == res.vertices.size);
     T(res.indices.num * sizeof(uint16_t) == res.indices.size);
 
-    res = sshape_sphere_sizes(36, 12);
+    res = sshape_sphere_sizes(36, 12, SSHAPE_MAX_VERTEX_SIZE);
     T(481 ==  res.vertices.num);
     T(2376 == res.indices.num);
-    T(res.vertices.num * sizeof(sshape_vertex_t) == res.vertices.size);
+    T(res.vertices.num * SSHAPE_MAX_VERTEX_SIZE== res.vertices.size);
     T(res.indices.num * sizeof(uint16_t) == res.indices.size);
 }
 
 UTEST(sokol_shape, cylinder_buffer_sizes) {
     sshape_sizes_t res;
 
-    res = sshape_cylinder_sizes(3, 1);
+    res = sshape_cylinder_sizes(3, 1, SSHAPE_MAX_VERTEX_SIZE);
     T(24 == res.vertices.num);
     T(36 == res.indices.num);
-    T(res.vertices.num * sizeof(sshape_vertex_t) == res.vertices.size);
+    T(res.vertices.num * SSHAPE_MAX_VERTEX_SIZE == res.vertices.size);
     T(res.indices.num * sizeof(uint16_t) == res.indices.size);
 
-    res = sshape_cylinder_sizes(5, 2);
+    res = sshape_cylinder_sizes(5, 2, SSHAPE_MAX_VERTEX_SIZE);
     T(42 == res.vertices.num);
     T(90 == res.indices.num);
-    T(res.vertices.num * sizeof(sshape_vertex_t) == res.vertices.size);
+    T(res.vertices.num * SSHAPE_MAX_VERTEX_SIZE == res.vertices.size);
     T(res.indices.num * sizeof(uint16_t) == res.indices.size);
 }
 
 UTEST(sokol_shape, torus_buffer_sizes) {
     sshape_sizes_t res;
 
-    res = sshape_torus_sizes(3, 3);
+    res = sshape_torus_sizes(3, 3, SSHAPE_MAX_VERTEX_SIZE);
     T(16 == res.vertices.num);
     T(54 == res.indices.num);
-    T(res.vertices.num * sizeof(sshape_vertex_t) == res.vertices.size);
+    T(res.vertices.num * SSHAPE_MAX_VERTEX_SIZE == res.vertices.size);
     T(res.indices.num * sizeof(uint16_t) == res.indices.size);
 
-    res = sshape_torus_sizes(4, 5);
+    res = sshape_torus_sizes(4, 5, SSHAPE_MAX_VERTEX_SIZE);
     T(30 == res.vertices.num);
     T(120 == res.indices.num);
-    T(res.vertices.num * sizeof(sshape_vertex_t) == res.vertices.size);
+    T(res.vertices.num * SSHAPE_MAX_VERTEX_SIZE == res.vertices.size);
     T(res.indices.num * sizeof(uint16_t) == res.indices.size);
 }
 
 UTEST(sokol_shape, buffer_layout_desc) {
-    const sg_vertex_buffer_layout_state l_state = sshape_vertex_buffer_layout_state();
-    T(sizeof(sshape_vertex_t) == l_state.stride);
+    sshape_state_t shp = { .valid = true };
+    const sg_vertex_buffer_layout_state l_state = sshape_vertex_buffer_layout_state(&shp);
+    T(SSHAPE_MAX_VERTEX_SIZE == l_state.stride);
     T(0 == l_state.step_func);
     T(0 == l_state.step_rate);
 }
 
 UTEST(sokol_shape, attr_descs) {
+    sshape_state_t shp = { .valid = true };
     {
-        const sg_vertex_attr_state a_state = sshape_position_vertex_attr_state();
-        T(offsetof(sshape_vertex_t, x) == a_state.offset);
+        const sg_vertex_attr_state a_state = sshape_position_vertex_attr_state(&shp);
+        T(0 == a_state.offset);
         T(SG_VERTEXFORMAT_FLOAT3 == a_state.format);
         T(0 == a_state.buffer_index);
     }
     {
-        const sg_vertex_attr_state a_state = sshape_normal_vertex_attr_state();
-        T(offsetof(sshape_vertex_t, normal) == a_state.offset);
+        const sg_vertex_attr_state a_state = sshape_normal_vertex_attr_state(&shp);
+        T(12 == a_state.offset);
         T(SG_VERTEXFORMAT_BYTE4N == a_state.format);
         T(0 == a_state.buffer_index);
     }
     {
-        const sg_vertex_attr_state a_state = sshape_texcoord_vertex_attr_state();
-        T(offsetof(sshape_vertex_t, u) == a_state.offset);
+        const sg_vertex_attr_state a_state = sshape_texcoord_vertex_attr_state(&shp);
+        T(16 == a_state.offset);
         T(SG_VERTEXFORMAT_USHORT2N == a_state.format);
         T(0 == a_state.buffer_index);
     }
     {
-        const sg_vertex_attr_state a_state = sshape_color_vertex_attr_state();
-        T(offsetof(sshape_vertex_t, color) == a_state.offset);
+        const sg_vertex_attr_state a_state = sshape_color_vertex_attr_state(&shp);
+        T(20 == a_state.offset);
         T(SG_VERTEXFORMAT_UBYTE4N == a_state.format);
         T(0 == a_state.buffer_index);
     }
 }
 
 UTEST(sokol_shape, buffer_descs_elm_range) {
-    sshape_vertex_t vx[128] = { 0 };
+    uint8_t vx[SSHAPE_MAX_VERTEX_SIZE * 128] = { 0 };
     uint16_t ix[128] = { 0 };
-    sshape_buffer_t buf = {
+    sshape_state_t shp = {
         .vertices.buffer = SSHAPE_RANGE(vx),
         .indices.buffer = SSHAPE_RANGE(ix),
     };
 
     // build a box...
     {
-        buf = sshape_build_box(&buf, &(sshape_box_t) {0});
-        const sg_buffer_desc vbuf_desc = sshape_vertex_buffer_desc(&buf);
-        const sg_buffer_desc ibuf_desc = sshape_index_buffer_desc(&buf);
-        const sshape_element_range_t elm_range = sshape_element_range(&buf);
+        sshape_build_box(&shp, &(sshape_box_t) {0});
+        const sg_buffer_desc vbuf_desc = sshape_vertex_buffer_desc(&shp);
+        const sg_buffer_desc ibuf_desc = sshape_index_buffer_desc(&shp);
+        const sshape_element_range_t elm_range = sshape_element_range(&shp);
         T(vbuf_desc.size == 0);
         T(vbuf_desc.usage.vertex_buffer);
         T(vbuf_desc.usage.immutable);
         T(vbuf_desc.data.ptr == vx);
-        T(vbuf_desc.data.size == 24 * sizeof(sshape_vertex_t));
+        T(vbuf_desc.data.size == 24 * SSHAPE_MAX_VERTEX_SIZE);
         T(ibuf_desc.size == 0);
         T(ibuf_desc.usage.index_buffer);
         T(ibuf_desc.usage.immutable);
@@ -231,15 +233,15 @@ UTEST(sokol_shape, buffer_descs_elm_range) {
 
     // append a plane...
     {
-        buf = sshape_build_plane(&buf, &(sshape_plane_t) {0});
-        const sg_buffer_desc vbuf_desc = sshape_vertex_buffer_desc(&buf);
-        const sg_buffer_desc ibuf_desc = sshape_index_buffer_desc(&buf);
-        const sshape_element_range_t elm_range = sshape_element_range(&buf);
+        sshape_build_plane(&shp, &(sshape_plane_t) {0});
+        const sg_buffer_desc vbuf_desc = sshape_vertex_buffer_desc(&shp);
+        const sg_buffer_desc ibuf_desc = sshape_index_buffer_desc(&shp);
+        const sshape_element_range_t elm_range = sshape_element_range(&shp);
         T(vbuf_desc.size == 0);
         T(vbuf_desc.usage.vertex_buffer);
         T(vbuf_desc.usage.immutable);
         T(vbuf_desc.data.ptr == vx);
-        T(vbuf_desc.data.size == 28 * sizeof(sshape_vertex_t));
+        T(vbuf_desc.data.size == 28 * SSHAPE_MAX_VERTEX_SIZE);
         T(ibuf_desc.size == 0);
         T(ibuf_desc.usage.index_buffer);
         T(ibuf_desc.usage.immutable);
@@ -251,22 +253,24 @@ UTEST(sokol_shape, buffer_descs_elm_range) {
 }
 
 UTEST(sokol_shape, build_plane_defaults) {
-    sshape_vertex_t vx[64] = { 0 };
+    uint8_t vx[SSHAPE_MAX_VERTEX_SIZE * 64] = { 0 };
     uint16_t ix[64] = { 0 };
 
-    sshape_buffer_t buf = {
+    sshape_state_t shp = {
         .vertices.buffer = SSHAPE_RANGE(vx),
         .indices.buffer  = SSHAPE_RANGE(ix),
     };
-    buf = sshape_build_plane(&buf, &(sshape_plane_t) { 0 });
+    sshape_build_plane(&shp, &(sshape_plane_t) { 0 });
 
-    T(buf.valid);
-    T(0 == buf.vertices.shape_offset);
-    T(4 * sizeof(sshape_vertex_t) == buf.vertices.data_size);
-    T(0 == buf.indices.shape_offset);
-    T(6 * sizeof(uint16_t) == buf.indices.data_size);
+    T(shp.valid);
+    T(0 == shp.vertices.shape_offset);
+    T(4 * SSHAPE_MAX_VERTEX_SIZE == shp.vertices.data_size);
+    T(0 == shp.indices.shape_offset);
+    T(6 * sizeof(uint16_t) == shp.indices.data_size);
     for (int i = 0; i < 4; i++) {
-        T(vx[i].color == 0xFFFFFFFF);
+        uint32_t* c_ptr = (uint32_t*)&(vx[i * SSHAPE_MAX_VERTEX_SIZE + 20]);
+        const uint32_t c = *c_ptr;
+        T(c == 0xFFFFFFFF);
     }
     T(ix[0] == 0);
     T(ix[1] == 1);
@@ -277,145 +281,148 @@ UTEST(sokol_shape, build_plane_defaults) {
 }
 
 UTEST(sokol_shape, build_plane_validate) {
-    sshape_vertex_t vx[64] = { 0 };
+    uint8_t vx[SSHAPE_MAX_VERTEX_SIZE * 64] = { 0 };
     uint16_t ix[64] = { 0 };
     const sshape_plane_t params = { 0 };
 
     // vertex buffer too small
     {
-        sshape_buffer_t buf = {
-            .vertices.buffer = { .ptr = vx, .size = 3 * sizeof(sshape_vertex_t) },
+        sshape_state_t shp = {
+            .vertices.buffer = { .ptr = vx, .size = 3 * SSHAPE_MAX_VERTEX_SIZE },
             .indices.buffer  = SSHAPE_RANGE(ix),
         };
-        T(!sshape_build_plane(&buf, &params).valid);
+        sshape_build_plane(&shp, &params);
+        T(!shp.valid);
     }
 
     // index buffer too small
     {
-        sshape_buffer_t buf = {
+        sshape_state_t shp = {
             .vertices.buffer = SSHAPE_RANGE(vx),
             .indices.buffer  = { .ptr = ix, .size = 5 * sizeof(uint16_t) }
         };
-        T(!sshape_build_plane(&buf, &params).valid);
+        sshape_build_plane(&shp, &params);
+        T(!shp.valid);
     }
     // just the right size
     {
-        sshape_buffer_t buf = {
-            .vertices.buffer = { .ptr = vx, .size = 4 * sizeof(sshape_vertex_t) },
+        sshape_state_t shp = {
+            .vertices.buffer = { .ptr = vx, .size = 4 * SSHAPE_MAX_VERTEX_SIZE },
             .indices.buffer  = { .ptr = ix, .size = 6 * sizeof(uint16_t) }
         };
-        T(sshape_build_plane(&buf, &params).valid);
+        sshape_build_plane(&shp, &params);
+        T(shp.valid);
     }
 
     // too small for two planes
     {
-        sshape_buffer_t buf = {
-            .vertices.buffer = { .ptr = vx, .size = 5 * sizeof(sshape_vertex_t) },
+        sshape_state_t shp = {
+            .vertices.buffer = { .ptr = vx, .size = 5 * SSHAPE_MAX_VERTEX_SIZE },
             .indices.buffer  = { .ptr = ix, .size = 7 * sizeof(uint16_t) }
         };
-        buf = sshape_build_plane(&buf, &params);
-        T(buf.valid);
-        buf = sshape_build_plane(&buf, &params);
-        T(!buf.valid);
+        sshape_build_plane(&shp, &params);
+        T(shp.valid);
+        sshape_build_plane(&shp, &params);
+        T(!shp.valid);
     }
 
     // just the right size for two planes
     {
-        sshape_buffer_t buf = {
-            .vertices.buffer = { .ptr = vx, .size = 8 * sizeof(sshape_vertex_t) },
+        sshape_state_t shp = {
+            .vertices.buffer = { .ptr = vx, .size = 8 * SSHAPE_MAX_VERTEX_SIZE },
             .indices.buffer  = { .ptr = ix, .size = 12 * sizeof(uint16_t) }
         };
-        buf = sshape_build_plane(&buf, &params);
-        T(buf.valid);
-        T(buf.vertices.shape_offset == 0);
-        T(buf.vertices.data_size == 4 * sizeof(sshape_vertex_t));
-        T(buf.indices.shape_offset == 0);
-        T(buf.indices.data_size == 6 * sizeof(uint16_t));
-        buf = sshape_build_plane(&buf, &params);
-        T(buf.valid);
-        T(buf.vertices.shape_offset == 4 * sizeof(sshape_vertex_t));
-        T(buf.vertices.data_size == 8 * sizeof(sshape_vertex_t));
-        T(buf.indices.shape_offset == 6 * sizeof(uint16_t));
-        T(buf.indices.data_size == 12 * sizeof(uint16_t));
+        sshape_build_plane(&shp, &params);
+        T(shp.valid);
+        T(shp.vertices.shape_offset == 0);
+        T(shp.vertices.data_size == 4 * SSHAPE_MAX_VERTEX_SIZE);
+        T(shp.indices.shape_offset == 0);
+        T(shp.indices.data_size == 6 * sizeof(uint16_t));
+        sshape_build_plane(&shp, &params);
+        T(shp.valid);
+        T(shp.vertices.shape_offset == 4 * SSHAPE_MAX_VERTEX_SIZE);
+        T(shp.vertices.data_size == 8 * SSHAPE_MAX_VERTEX_SIZE);
+        T(shp.indices.shape_offset == 6 * sizeof(uint16_t));
+        T(shp.indices.data_size == 12 * sizeof(uint16_t));
     }
 }
 
 UTEST(sokol_shape, build_box_defaults) {
-    sshape_vertex_t vx[128] = { 0 };
+    uint8_t vx[SSHAPE_MAX_VERTEX_SIZE * 128] = { 0 };
     uint16_t ix[128] = { 0 };
 
-    sshape_buffer_t buf = {
+    sshape_state_t shp = {
         .vertices.buffer = SSHAPE_RANGE(vx),
         .indices.buffer  = SSHAPE_RANGE(ix),
     };
-    buf = sshape_build_box(&buf, &(sshape_box_t) { .color = 0xFF0000FF });
-    T(buf.valid);
-    T(buf.vertices.buffer.ptr == vx);
-    T(buf.vertices.buffer.size == sizeof(vx));
-    T(buf.indices.buffer.ptr == ix);
-    T(buf.indices.buffer.size == sizeof(ix));
-    T(buf.vertices.shape_offset == 0);
-    T(buf.vertices.data_size == 24 * sizeof(sshape_vertex_t));
-    T(buf.indices.shape_offset == 0);
-    T(buf.indices.data_size == 36 * sizeof(uint16_t));
+    sshape_build_box(&shp, &(sshape_box_t) { .color = 0xFF0000FF });
+    T(shp.valid);
+    T(shp.vertices.buffer.ptr == vx);
+    T(shp.vertices.buffer.size == sizeof(vx));
+    T(shp.indices.buffer.ptr == ix);
+    T(shp.indices.buffer.size == sizeof(ix));
+    T(shp.vertices.shape_offset == 0);
+    T(shp.vertices.data_size == 24 * SSHAPE_MAX_VERTEX_SIZE);
+    T(shp.indices.shape_offset == 0);
+    T(shp.indices.data_size == 36 * sizeof(uint16_t));
 }
 
 UTEST(sokol_shape, build_sphere_defaults) {
-    sshape_vertex_t vx[128] = { 0 };
+    uint8_t vx[SSHAPE_MAX_VERTEX_SIZE * 128] = { 0 };
     uint16_t ix[128] = { 0 };
 
-    sshape_buffer_t buf = {
+    sshape_state_t shp = {
         .vertices.buffer = SSHAPE_RANGE(vx),
         .indices.buffer  = SSHAPE_RANGE(ix),
     };
-    buf = sshape_build_sphere(&buf, &(sshape_sphere_t) { .color = 0xFF0000FF });
-    T(buf.valid);
-    T(buf.vertices.buffer.ptr == vx);
-    T(buf.vertices.buffer.size == sizeof(vx));
-    T(buf.indices.buffer.ptr == ix);
-    T(buf.indices.buffer.size == sizeof(ix));
-    T(buf.vertices.shape_offset == 0);
-    T(buf.vertices.data_size == 30 * sizeof(sshape_vertex_t));
-    T(buf.indices.shape_offset == 0);
-    T(buf.indices.data_size == 90 * sizeof(uint16_t));
+    sshape_build_sphere(&shp, &(sshape_sphere_t) { .color = 0xFF0000FF });
+    T(shp.valid);
+    T(shp.vertices.buffer.ptr == vx);
+    T(shp.vertices.buffer.size == sizeof(vx));
+    T(shp.indices.buffer.ptr == ix);
+    T(shp.indices.buffer.size == sizeof(ix));
+    T(shp.vertices.shape_offset == 0);
+    T(shp.vertices.data_size == 30 * SSHAPE_MAX_VERTEX_SIZE);
+    T(shp.indices.shape_offset == 0);
+    T(shp.indices.data_size == 90 * sizeof(uint16_t));
 }
 
 UTEST(sokol_shape, build_cylinder_defaults) {
-    sshape_vertex_t vx[128] = { 0 };
+    uint8_t vx[SSHAPE_MAX_VERTEX_SIZE * 128] = { 0 };
     uint16_t ix[128] = { 0 };
 
-    sshape_buffer_t buf = {
+    sshape_state_t shp = {
         .vertices.buffer = SSHAPE_RANGE(vx),
         .indices.buffer  = SSHAPE_RANGE(ix)
     };
-    buf = sshape_build_cylinder(&buf, &(sshape_cylinder_t) { .color = 0xFF0000FF });
-    T(buf.valid);
-    T(buf.vertices.buffer.ptr == vx);
-    T(buf.vertices.buffer.size == sizeof(vx));
-    T(buf.indices.buffer.ptr == ix);
-    T(buf.indices.buffer.size == sizeof(ix));
-    T(buf.vertices.shape_offset == 0);
-    T(buf.vertices.data_size == 36 * sizeof(sshape_vertex_t));
-    T(buf.indices.shape_offset == 0);
-    T(buf.indices.data_size == 60 * sizeof(uint16_t));
+    sshape_build_cylinder(&shp, &(sshape_cylinder_t) { .color = 0xFF0000FF });
+    T(shp.valid);
+    T(shp.vertices.buffer.ptr == vx);
+    T(shp.vertices.buffer.size == sizeof(vx));
+    T(shp.indices.buffer.ptr == ix);
+    T(shp.indices.buffer.size == sizeof(ix));
+    T(shp.vertices.shape_offset == 0);
+    T(shp.vertices.data_size == 36 * SSHAPE_MAX_VERTEX_SIZE);
+    T(shp.indices.shape_offset == 0);
+    T(shp.indices.data_size == 60 * sizeof(uint16_t));
 }
 
 UTEST(sokol_shape, build_torus_defaults) {
-    sshape_vertex_t vx[128] = { 0 };
+    uint8_t vx[SSHAPE_MAX_VERTEX_SIZE * 128] = { 0 };
     uint16_t ix[256] = { 0 };
 
-    sshape_buffer_t buf = {
+    sshape_state_t shp = {
         .vertices.buffer = SSHAPE_RANGE(vx),
         .indices.buffer  = SSHAPE_RANGE(ix),
     };
-    buf = sshape_build_torus(&buf, &(sshape_torus_t) { .color = 0xFF0000FF });
-    T(buf.valid);
-    T(buf.vertices.buffer.ptr == vx);
-    T(buf.vertices.buffer.size == sizeof(vx));
-    T(buf.indices.buffer.ptr == ix);
-    T(buf.indices.buffer.size == sizeof(ix));
-    T(buf.vertices.shape_offset == 0);
-    T(buf.vertices.data_size == 36 * sizeof(sshape_vertex_t));
-    T(buf.indices.shape_offset == 0);
-    T(buf.indices.data_size == 150 * sizeof(uint16_t));
+    sshape_build_torus(&shp, &(sshape_torus_t) { .color = 0xFF0000FF });
+    T(shp.valid);
+    T(shp.vertices.buffer.ptr == vx);
+    T(shp.vertices.buffer.size == sizeof(vx));
+    T(shp.indices.buffer.ptr == ix);
+    T(shp.indices.buffer.size == sizeof(ix));
+    T(shp.vertices.shape_offset == 0);
+    T(shp.vertices.data_size == 36 * SSHAPE_MAX_VERTEX_SIZE);
+    T(shp.indices.shape_offset == 0);
+    T(shp.indices.data_size == 150 * sizeof(uint16_t));
 }
