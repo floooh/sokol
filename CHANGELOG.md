@@ -1,5 +1,24 @@
 ## Updates
 
+### 19-Jul-2026
+
+sokol_shape.h: some breaking changes:
+
+- it's now possible to omit vertex components (vertex component formats are still
+  hardwired though)
+- new public constants `SSHAPE_MIN_VERTEX_SIZE` and `SSHAPE_MAX_VERTEX_SIZE`
+- some public structs have been removed or renamed to make more sense with the changed behaviour:
+  - `sshape_vertex_t` => removed, since a hardwired struct doesn't make sense anymore with the
+    flexible vertex layout
+  - `sshape_buffer_t` => `sshape_state_t`
+  - `sshape_buffer_item_t` => `sshape_buffer_state_t`
+- the shape-builder functions now modify the 'shape state struct' in place instead of returning
+  a modified copy
+
+Also check the source code of the updated example [shapes-sapp.c](https://floooh.github.io/sokol-html5/shapes-sapp.html)
+
+PR: https://github.com/floooh/sokol/pull/1550
+
 ### 15-Jul-2026
 
 sokol_app.h android: added a platform-specific 'native' event callback
