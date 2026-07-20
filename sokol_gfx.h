@@ -2279,6 +2279,7 @@ typedef struct sg_limits {
 typedef enum sg_resource_state {
     SG_RESOURCESTATE_INITIAL,
     SG_RESOURCESTATE_ALLOC,
+    SG_RESOURCESTATE_UNSEALED;
     SG_RESOURCESTATE_VALID,
     SG_RESOURCESTATE_FAILED,
     SG_RESOURCESTATE_INVALID,
@@ -3201,6 +3202,7 @@ typedef struct sg_buffer_usage {
     bool immutable;
     bool dynamic_update;
     bool stream_update;
+    bool write_unsealed;
 } sg_buffer_usage;
 
 /*
@@ -3314,6 +3316,7 @@ typedef struct sg_image_usage {
     bool immutable;
     bool dynamic_update;
     bool stream_update;
+    bool write_unsealed;
 } sg_image_usage;
 
 /*
@@ -3365,6 +3368,83 @@ typedef enum sg_view_type {
 typedef struct sg_image_data {
     sg_range mip_levels[SG_MAX_MIPMAPS];
 } sg_image_data;
+
+/*
+    sg_image_extent
+
+    TODO
+*/
+typedef struct sg_image_extent {
+    int width;
+    int height
+    int num_slices;
+} sg_image_extent;
+
+/*
+    sg_image_location
+
+    Describes a source or destination location in an image object.
+*/
+typedef struct sg_image_location {
+    sg_image img;
+    int mip_level;
+    int x, y, z;
+} sg_image_location;
+
+/*
+    sg_write_image_source
+
+    TODO
+*/
+typedef struct sg_write_image_source {
+    sg_range data;
+    int offset;             // optional offset into .data
+    int bytes_per_row;      // default 0 means rows are tightly packed
+    int rows_per_slice;     // default 0 means 'height of mip_level'
+} sg_write_image_source;
+
+/*
+    sg_write_image_desc
+
+    TODO
+*/
+typedef struct sg_write_image_desc {
+    sg_write_image_source src;
+    sg_image_location dst;
+    sg_image_extent size;
+} sg_write_image_desc;
+
+/*
+    sg_buffer_location
+
+    TODO
+*/
+typedef struct sg_buffer_location {
+    sg_buffer buf;
+    int offset;
+} sg_buffer_location;
+
+/*
+    sg_write_buffer_source
+
+    TODO
+*/
+typedef struct sg_write_buffer_source {
+    sg_range data;
+    int offset;
+} sg_write_buffer_source;
+
+/*
+    sg_write_buffer_desc
+
+    TODO
+*/
+typedef struct sg_write_buffer_desc {
+    sg_write_buffer_source src;
+    sg_buffer_location dst;
+    int size;
+
+} sg_write_buffer_desc;
 
 /*
     sg_image_desc
@@ -4668,13 +4748,13 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_COLORATTACHMENT_USAGE, "sg_view_desc.color_attachment.image must have been created with sg_image_desc.usage.color_attachment = true") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_RESOLVEATTACHMENT_USAGE, "sg_view_desc.resolve_attachment.image must have been created with sg_image_desc.usage.resolve_attachment = true") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_DEPTHSTENCILATTACHMENT_USAGE, "sg_view_desc.depth_stencil_attachment.image must have been created with sg_image_desc.usage.depth_stencil_attachment = true") \
-    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_MIPLEVEL, "sg_view_desc: image/attachment view mip level is out of range (must be >=0 and <image.num_miplevels)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_MIPLEVEL, "sg_view_desc: image/attachment view mip level is out of range (must be >=0 and <image.num_mipmaps)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_2D_SLICE, "sg_view_desc: image/attachment view slice is out of range for 2D image (must be 0)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_CUBEMAP_SLICE, "sg_view_desc: image/attachment view slice is out of range for cubemap image (must be >=0 and <6)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_ARRAY_SLICE, "sg_view_desc: image/attachment view slice is out of range for 2D array image (must be >=0 and <image.num_slices") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_3D_SLICE, "sg_view_desc: image/attachment view slice is out of range for 3D image (must be 0)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_EXPECT_NO_MSAA, "sg_view_desc: MSAA texture bindings not allowed on this backend (sg_features.msaa_texture_bindings)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_MIPLEVELS, "sg_view_desc: texture view mip levels are out of range (must be >=0 and <image.num_miplevels)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_MIPLEVELS, "sg_view_desc: texture view mip levels are out of range (must be >=0 and <image.num_mipmaps)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_2D_SLICES, "sg_view_desc: texture view slices are out of range for 2D image (must be 0)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_CUBEMAP_SLICES, "sg_view_desc: texture view slices are out of range for cubemap image (must be 0)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_TEXTURE_ARRAY_SLICES, "sg_view_desc: texture view slices are out of range for 2D array image (must be >=0 and <image.num_slices") \
@@ -5118,7 +5198,7 @@ SOKOL_GFX_API_DECL void sg_pop_debug_group(void);
 SOKOL_GFX_API_DECL bool sg_add_commit_listener(sg_commit_listener listener);
 SOKOL_GFX_API_DECL bool sg_remove_commit_listener(sg_commit_listener listener);
 
-// resource creation, destruction and updating
+// resource creation and destruction
 SOKOL_GFX_API_DECL sg_buffer sg_make_buffer(const sg_buffer_desc* desc);
 SOKOL_GFX_API_DECL sg_image sg_make_image(const sg_image_desc* desc);
 SOKOL_GFX_API_DECL sg_sampler sg_make_sampler(const sg_sampler_desc* desc);
@@ -5131,11 +5211,6 @@ SOKOL_GFX_API_DECL void sg_destroy_sampler(sg_sampler smp);
 SOKOL_GFX_API_DECL void sg_destroy_shader(sg_shader shd);
 SOKOL_GFX_API_DECL void sg_destroy_pipeline(sg_pipeline pip);
 SOKOL_GFX_API_DECL void sg_destroy_view(sg_view view);
-SOKOL_GFX_API_DECL void sg_update_buffer(sg_buffer buf, const sg_range* data);
-SOKOL_GFX_API_DECL void sg_update_image(sg_image img, const sg_image_data* data);
-SOKOL_GFX_API_DECL int sg_append_buffer(sg_buffer buf, const sg_range* data);
-SOKOL_GFX_API_DECL bool sg_query_buffer_overflow(sg_buffer buf);
-SOKOL_GFX_API_DECL bool sg_query_buffer_will_overflow(sg_buffer buf, size_t size);
 
 // render and compute functions
 SOKOL_GFX_API_DECL void sg_begin_pass(const sg_pass* pass);
@@ -5151,6 +5226,19 @@ SOKOL_GFX_API_DECL void sg_draw_ex(int base_element, int num_elements, int num_i
 SOKOL_GFX_API_DECL void sg_dispatch(int num_groups_x, int num_groups_y, int num_groups_z);
 SOKOL_GFX_API_DECL void sg_end_pass(void);
 SOKOL_GFX_API_DECL void sg_commit(void);
+
+// resource update functions (wip)
+SOKOL_GFX_API_DECL void sg_write_buffer_unsealed(const sg_write_buffer_desc* desc);
+SOKOL_GFX_API_DECL void sg_seal_buffer(sg_buffer buf);
+SOKOL_GFX_API_DECL void sg_write_image_unsealed(const sg_write_image_desc* desc);
+SOKOL_GFX_API_DECL void sg_seal_image(sg_image img);
+
+// update functions (will be deprecated by new resource update functions)
+SOKOL_GFX_API_DECL void sg_update_buffer(sg_buffer buf, const sg_range* data);
+SOKOL_GFX_API_DECL void sg_update_image(sg_image img, const sg_image_data* data);
+SOKOL_GFX_API_DECL int sg_append_buffer(sg_buffer buf, const sg_range* data);
+SOKOL_GFX_API_DECL bool sg_query_buffer_overflow(sg_buffer buf);
+SOKOL_GFX_API_DECL bool sg_query_buffer_will_overflow(sg_buffer buf, size_t size);
 
 // getting information
 SOKOL_GFX_API_DECL sg_desc sg_query_desc(void);
