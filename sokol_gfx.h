@@ -3388,7 +3388,7 @@ typedef struct sg_image_extent {
 typedef struct sg_image_location {
     sg_image image;
     int mip_level;
-    int x, y, z;
+    int x, y, slice;
 } sg_image_location;
 
 /*
@@ -4645,6 +4645,8 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDATA_DATA_SIZE, "sg_image_data: data size doesn't match expected surface size") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_CANARY, "sg_image_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMMUTABLE_DYNAMIC_STREAM, "sg_image_desc.usage: only one of .immutable, .dynamic_update, .stream_update can be true") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_UNSEALED_VS_IMMUTABLE, "sg_image_desc.usage: .write_unsealed only allowed for .immutable images") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_UNSEALED_VS_ATTACHMENT, "sg_image_desc.usage: .write_unsealed not allowed for images with attachment usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_COLOR_DEPTH_STENCIL, "sg_image_desc.usage: only one of .color_attachment and .depth_stencil_attachment can be true") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMAGETYPE_2D_NUMSLICES, "sg_image_desc.num_slices must be exactly 1 for SG_IMAGETYPE_2D") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMAGETYPE_CUBE_NUMSLICES, "sg_image_desc.num_slices must be exactly 6 for SG_IMAGETYPE_CUBE") \
@@ -4665,9 +4667,12 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_3D_IMAGE, "3D images cannot have a sample_count > 1") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE, "cube images cannot have sample_count > 1") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_ARRAY_IMAGE, "array images cannot have sample_count > 1") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_STORAGEIMAGE_EXPECT_IMMUTABLE, "torage images must be sg_image_usage.immutable") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_STORAGEIMAGE_EXPECT_NO_DATA, "storage images cannot be initialized with data") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_STORAGEIMAGE_PIXELFORMAT, "invalid pixel format for storage image") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_STORAGEIMAGE_EXPECT_NO_MSAA, "storage images cannot be multisampled") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_INJECTED_NO_DATA, "images with injected textures cannot be initialized with data") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_UNSEALED_NO_DATA, "images with usage .write_unsealed cannot be initialized with data") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA, "dynamic/stream-update images cannot be initialized with data") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE, "compressed images must be immutable") \
     _SG_LOGITEM_XMACRO(VALIDATE_SAMPLERDESC_CANARY, "sg_sampler_desc not initialized") \
@@ -4743,7 +4748,8 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE, "sg_view_desc: only one view type can be active") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_ANY_VIEWTYPE, "sg_view_desc: exactly one view type must be active") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_RESOURCE_ALIVE, "sg_view_desc: resource object is no longer alive (.buffer or .image)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_RESOURCE_FAILED, "sg_view_desc: resource object cannot be in FAILED state (.buffer or .image)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_RESOURCE_VALID, "sg_view_desc: resource object must be in valid state (.buffer or .image)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_IMAGE_VALID_UNSEALED, "sg_view_desc: texture view image must be in valid or unsealed state") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_STORAGEBUFFER_OFFSET_VS_BUFFER_SIZE, "sg_view_desc.storage_buffer.offset is >= buffer size") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_STORAGEBUFFER_OFFSET_MULTIPLE_256, "sg_view_desc.storage_buffer.offset must be a multiple of 256") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_STORAGEBUFFER_USAGE, "sg_view_desc.storage_buffer.buffer must have been created with sg_buffer_desc.usage.storage_buffer = true") \
@@ -8149,6 +8155,18 @@ _SOKOL_PRIVATE _sg_recti_t _sg_clipi(int x, int y, int w, int h, int clip_width,
     return res;
 }
 
+_SOKOL_PRIVATE bool _sg_resource_state_valid_failed(sg_resource_state s) {
+    return (s == SG_RESOURCESTATE_VALID) || (s == SG_RESOURCESTATE_FAILED);
+}
+
+_SOKOL_PRIVATE bool _sg_resource_state_valid_failed_unsealed(sg_resource_state s) {
+    return (s == SG_RESOURCESTATE_VALID) || (s == SG_RESOURCESTATE_FAILED) || (s == SG_RESOURCESTATE_UNSEALED);
+}
+
+_SOKOL_PRIVATE bool _sg_resource_state_valid_unsealed(sg_resource_state s) {
+    return (s == SG_RESOURCESTATE_VALID) || (s == SG_RESOURCESTATE_UNSEALED);
+}
+
 // return size of a mipmap level
 _SOKOL_PRIVATE int _sg_miplevel_dim(int base_dim, int mip_level) {
     return _sg_max(base_dim >> mip_level, 1);
@@ -8396,7 +8414,7 @@ _SOKOL_PRIVATE void _sg_buffer_view_common_init(_sg_buffer_view_common_t* cmn, c
 }
 
 _SOKOL_PRIVATE void _sg_texture_view_common_init(_sg_image_view_common_t* cmn, const sg_texture_view_desc* desc, _sg_image_t* img) {
-    SOKOL_ASSERT(SG_RESOURCESTATE_VALID == img->slot.state);
+    SOKOL_ASSERT(_sg_resource_state_valid_unsealed(img->slot.state));
     cmn->ref = _sg_image_ref(img);
     cmn->mip_level = desc->mip_levels.base;
     cmn->mip_level_count = _sg_def(desc->mip_levels.count, img->cmn.num_mipmaps - cmn->mip_level);
@@ -15709,6 +15727,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg
         _SG_OBJC_RELEASE(mtl_tex);
     }
     _SG_OBJC_RELEASE(mtl_desc);
+    if (desc->usage.write_unsealed) {
+        return SG_RESOURCESTATE_UNSEALED;
+    }
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -22794,28 +22815,34 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         if (_sg_is_depth_or_depth_stencil_format(fmt)) {
             _SG_VALIDATE(desc->type != SG_IMAGETYPE_3D, VALIDATE_IMAGEDESC_DEPTH_3D_IMAGE);
         }
-        if (any_attachment || usg->storage_image) {
+        if (any_attachment) {
             SOKOL_ASSERT(((int)fmt >= 0) && ((int)fmt < _SG_PIXELFORMAT_NUM));
             _SG_VALIDATE(usg->immutable, VALIDATE_IMAGEDESC_ATTACHMENT_EXPECT_IMMUTABLE);
             _SG_VALIDATE(desc->data.mip_levels[0].ptr==0, VALIDATE_IMAGEDESC_ATTACHMENT_EXPECT_NO_DATA);
-            if (any_attachment) {
-                _SG_VALIDATE(_sg.formats[fmt].render, VALIDATE_IMAGEDESC_ATTACHMENT_PIXELFORMAT);
-                if (usg->resolve_attachment) {
-                    _SG_VALIDATE(desc->sample_count == 1, VALIDATE_IMAGEDESC_ATTACHMENT_RESOLVE_EXPECT_NO_MSAA);
-                }
-                if (desc->sample_count > 1) {
-                    _SG_VALIDATE(_sg.formats[fmt].msaa, VALIDATE_IMAGEDESC_ATTACHMENT_NO_MSAA_SUPPORT);
-                    _SG_VALIDATE(desc->num_mipmaps == 1, VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_NUM_MIPMAPS);
-                    _SG_VALIDATE(desc->type != SG_IMAGETYPE_ARRAY, VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_ARRAY_IMAGE);
-                    _SG_VALIDATE(desc->type != SG_IMAGETYPE_3D, VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_3D_IMAGE);
-                    _SG_VALIDATE(desc->type != SG_IMAGETYPE_CUBE, VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE);
-                }
-            } else if (usg->storage_image) {
-                _SG_VALIDATE(_sg_is_valid_storage_image_format(fmt), VALIDATE_IMAGEDESC_STORAGEIMAGE_PIXELFORMAT);
-                // D3D11 doesn't allow multisampled UAVs (see: https://github.com/gpuweb/gpuweb/issues/513)
-                _SG_VALIDATE(desc->sample_count == 1, VALIDATE_IMAGEDESC_STORAGEIMAGE_EXPECT_NO_MSAA);
+            _SG_VALIDATE(_sg.formats[fmt].render, VALIDATE_IMAGEDESC_ATTACHMENT_PIXELFORMAT);
+            if (usg->resolve_attachment) {
+                _SG_VALIDATE(desc->sample_count == 1, VALIDATE_IMAGEDESC_ATTACHMENT_RESOLVE_EXPECT_NO_MSAA);
             }
-        } else {
+            if (desc->sample_count > 1) {
+                _SG_VALIDATE(_sg.formats[fmt].msaa, VALIDATE_IMAGEDESC_ATTACHMENT_NO_MSAA_SUPPORT);
+                _SG_VALIDATE(desc->num_mipmaps == 1, VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_NUM_MIPMAPS);
+                _SG_VALIDATE(desc->type != SG_IMAGETYPE_ARRAY, VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_ARRAY_IMAGE);
+                _SG_VALIDATE(desc->type != SG_IMAGETYPE_3D, VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_3D_IMAGE);
+                _SG_VALIDATE(desc->type != SG_IMAGETYPE_CUBE, VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE);
+            }
+        }
+        if (usg->storage_image) {
+            _SG_VALIDATE(usg->immutable, VALIDATE_IMAGEDESC_STORAGEIMAGE_EXPECT_IMMUTABLE);
+            _SG_VALIDATE(desc->data.mip_levels[0].ptr==0, VALIDATE_IMAGEDESC_STORAGEIMAGE_EXPECT_NO_DATA);
+            _SG_VALIDATE(_sg_is_valid_storage_image_format(fmt), VALIDATE_IMAGEDESC_STORAGEIMAGE_PIXELFORMAT);
+            // D3D11 doesn't allow multisampled UAVs (see: https://github.com/gpuweb/gpuweb/issues/513)
+            _SG_VALIDATE(desc->sample_count == 1, VALIDATE_IMAGEDESC_STORAGEIMAGE_EXPECT_NO_MSAA);
+        }
+        if (usg->write_unsealed) {
+            _SG_VALIDATE(usg->immutable, VALIDATE_IMAGEDESC_UNSEALED_VS_IMMUTABLE);
+            _SG_VALIDATE(!any_attachment, VALIDATE_IMAGEDESC_UNSEALED_VS_ATTACHMENT);
+        }
+        if (!any_attachment) {
             _SG_VALIDATE(desc->sample_count == 1, VALIDATE_IMAGEDESC_MSAA_BUT_NO_ATTACHMENT);
             const bool valid_nonrt_fmt = !_sg_is_valid_attachment_depth_format(fmt);
             _SG_VALIDATE(valid_nonrt_fmt, VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT);
@@ -22823,7 +22850,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
             if (is_compressed) {
                 _SG_VALIDATE(usg->immutable, VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE);
             }
-            if (!injected && usg->immutable) {
+            if (!injected && !usg->write_unsealed && usg->immutable) {
                 // image desc must have valid data
                 _sg_validate_image_data(&desc->data,
                     desc->pixel_format,
@@ -22838,6 +22865,9 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
                     const bool no_size = 0 == desc->data.mip_levels[mip_index].size;
                     if (injected) {
                         _SG_VALIDATE(no_data && no_size, VALIDATE_IMAGEDESC_INJECTED_NO_DATA);
+                    }
+                    if (usg->write_unsealed) {
+                        _SG_VALIDATE(no_data && no_size, VALIDATE_IMAGEDESC_UNSEALED_NO_DATA);
                     }
                     if (!usg->immutable) {
                         _SG_VALIDATE(no_data && no_size, VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA);
@@ -23356,7 +23386,7 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
             buf = _sg_lookup_buffer(buf_desc->buffer.id);
             _SG_VALIDATE(buf, VALIDATE_VIEWDESC_RESOURCE_ALIVE);
             if (buf) {
-                _SG_VALIDATE(buf->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_VIEWDESC_RESOURCE_FAILED);
+                _SG_VALIDATE(buf->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_VIEWDESC_RESOURCE_VALID);
                 res_valid = buf->slot.state == SG_RESOURCESTATE_VALID;
             }
         } else if (img_desc) {
@@ -23364,7 +23394,7 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
             img = _sg_lookup_image(img_desc->image.id);
             _SG_VALIDATE(img, VALIDATE_VIEWDESC_RESOURCE_ALIVE);
             if (img) {
-                _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_VIEWDESC_RESOURCE_FAILED);
+                _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_VIEWDESC_RESOURCE_VALID);
                 res_valid = img->slot.state == SG_RESOURCESTATE_VALID;
             }
         } else {
@@ -23372,8 +23402,9 @@ _SOKOL_PRIVATE bool _sg_validate_view_desc(const sg_view_desc* desc) {
             img = _sg_lookup_image(tex_desc->image.id);
             _SG_VALIDATE(img, VALIDATE_VIEWDESC_RESOURCE_ALIVE);
             if (img) {
-                _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_VIEWDESC_RESOURCE_FAILED);
-                res_valid = img->slot.state == SG_RESOURCESTATE_VALID;
+                bool img_valid_or_unsealed = _sg_resource_state_valid_unsealed(img->slot.state);
+                _SG_VALIDATE(img_valid_or_unsealed, VALIDATE_VIEWDESC_IMAGE_VALID_UNSEALED);
+                res_valid = img_valid_or_unsealed;
             }
         }
         if (res_valid) {
@@ -24559,14 +24590,6 @@ _SOKOL_PRIVATE sg_view_desc _sg_view_desc_defaults(const sg_view_desc* desc) {
     return def;
 }
 
-_SOKOL_PRIVATE bool _sg_resource_state_valid_failed(sg_resource_state s) {
-    return (s == SG_RESOURCESTATE_VALID) || (s == SG_RESOURCESTATE_FAILED);
-}
-
-_SOKOL_PRIVATE bool _sg_resource_state_valid_failed_unsealed(sg_resource_state s) {
-    return (s == SG_RESOURCESTATE_VALID) || (s == SG_RESOURCESTATE_FAILED) || (s == SG_RESOURCESTATE_UNSEALED);
-}
-
 _SOKOL_PRIVATE sg_buffer _sg_alloc_buffer(void) {
     sg_buffer res;
     int slot_index = _sg_pool_alloc_index(&_sg.pools.buffer_pool);
@@ -24781,7 +24804,7 @@ _SOKOL_PRIVATE void _sg_init_view(_sg_view_t* view, const sg_view_desc* desc) {
             SOKOL_ASSERT(!buf);
             res_state = img->slot.state;
         }
-        if (res_state == SG_RESOURCESTATE_VALID) {
+        if (_sg_resource_state_valid_unsealed(res_state)) {
             _sg_view_common_init(&view->cmn, desc, buf, img);
             view->slot.state = _sg_create_view(view, desc);
         } else {
