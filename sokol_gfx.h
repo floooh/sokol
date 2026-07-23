@@ -15602,6 +15602,62 @@ _SOKOL_PRIVATE void _sg_mtl_seal_buffer(_sg_buffer_t* buf) {
     _SOKOL_UNUSED(buf);
 }
 
+_SOKOL_PRIVATE void _sg_mtl_write_miplevel_data(const _sg_image_t* img,
+    __unsafe_unretained id<MTLTexture> mtl_tex,
+    const uint8_t* src_ptr,
+    size_t src_size,
+    int src_bytes_per_row,
+    int src_bytes_per_slice,
+    int mip_level,
+    int x,
+    int y,
+    int slice,
+    int width,
+    int height,
+    int num_slices)
+{
+    SOKOL_ASSERT(img);
+    SOKOL_ASSERT(mtl_tex);
+    SOKOL_ASSERT(src_ptr);
+    SOKOL_ASSERT(src_size > 0);
+    SOKOL_ASSERT(src_bytes_per_row > 0);
+    SOKOL_ASSERT(src_bytes_per_slice > 0);
+    SOKOL_ASSERT((mip_level >= 0) && (mip_level < img->cmn.num_mipmaps));
+    SOKOL_ASSERT((x >= 0) && (x < _sg_miplevel_dim(img->cmn.width, mip_level)));
+    SOKOL_ASSERT((y >= 0) && (y < _sg_miplevel_dim(img->cmn.height, mip_level)));
+    SOKOL_ASSERT((slice >= 0) && (slice < img->cmn.num_slices));
+    SOKOL_ASSERT((width > 0) && (x + width < _sg_miplevel_dim(img->cmn.width, mip_level)));
+    SOKOL_ASSERT((height > 0) && (y + height < _sg_miplevel_dim(img->cmn.height, mip_level)));
+    SOKOL_ASSERT((num_slices > 1) && (slice + num_slices < img->cmn.num_slices));
+
+    /* bytesPerImage special case: https://developer.apple.com/documentation/metal/mtltexture/1515679-replaceregion
+
+        "Supply a nonzero value only when you copy data to a MTLTextureType3D type texture"
+    */
+    MTLRegion mtl_region;
+    int mtl_bytes_per_image;
+    if (img->cmn.type == SG_IMAGETYPE_3D) {
+        mtl_region = MTLRegionMake3D(x, y, slice, (NSUInteger)width, (NSUInteger)height, (NSUInteger)num_slices);
+        mtl_bytes_per_image = src_bytes_per_slice;
+    } else {
+        mtl_region = MTLRegionMake2D(x, y, (NSUInteger)width, (NSUInteger)height);
+        mtl_bytes_per_image = 0;
+    }
+
+    int mtl_slice_index = (img->cmn.type == SG_IMAGETYPE_3D) ? 0 : slice;
+    int mtl_num_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? 1 : num_slices;
+    for (int i = 0; i < mtl_num_slices; i++) {
+        const int src_offset = i * src_bytes_per_slice;
+        SOKOL_ASSERT((src_offset + src_bytes_per_slice) <= (int)src_size);
+        [mtl_tex replaceRegion:mtl_region
+            mipmapLevel:(NSUInteger)mip_level
+            slice:(NSUInteger)(mtl_slice_index + i)
+            withBytes:src_ptr + src_offset
+            bytesPerRow:(NSUInteger)src_bytes_per_row
+            bytesPerImage:(NSUInteger)mtl_bytes_per_image];
+    }
+}
+
 _SOKOL_PRIVATE void _sg_mtl_copy_image_data(const _sg_image_t* img, __unsafe_unretained id<MTLTexture> mtl_tex, const sg_image_data* data) {
     const int num_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? 1 : img->cmn.num_slices;
     for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
