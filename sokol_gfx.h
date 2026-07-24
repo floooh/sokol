@@ -3400,7 +3400,7 @@ typedef struct sg_write_image_source {
     sg_range data;
     size_t offset;          // optional offset into .data
     int bytes_per_row;      // default 0 means rows are tightly packed
-    int rows_per_slice;     // default 0 means 'height of mip_level'
+    int bytes_per_slice;    // default 0 means slices are tightly packed
 } sg_write_image_source;
 
 /*
@@ -3411,7 +3411,7 @@ typedef struct sg_write_image_source {
 typedef struct sg_write_image_desc {
     sg_write_image_source src;
     sg_image_location dst;
-    sg_image_extent size;
+    sg_image_extent size;   // default 0 means: width/height of mip level, num_slices=1
 } sg_write_image_desc;
 
 /*
@@ -4421,6 +4421,7 @@ typedef struct sg_frame_stats {
     uint32_t num_append_buffer;
     uint32_t num_update_image;
     uint32_t num_write_buffer_unsealed;
+    uint32_t num_write_image_unsealed;
     uint32_t num_seal_buffer;
 
     uint32_t size_apply_uniforms;
@@ -4618,6 +4619,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(BEGINPASS_ATTACHMENTS_ALIVE, "sg_begin_pass: an attachment was provided that no longer exists") \
     _SG_LOGITEM_XMACRO(DRAW_WITHOUT_BINDINGS, "attempting to draw without resource bindings") \
     _SG_LOGITEM_XMACRO(WRITE_BUFFER_UNSEALED_BUFFER_ALIVE, "sg_write_buffer_unsealed: buffer is no longer alive") \
+    _SG_LOGITEM_XMACRO(WRITE_IMAGE_UNSEALED_IMAGE_ALIVE, "sg_write_image_unsealed: image is no longer alive") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on vertex shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on fragment shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on compute shader stage (sg_limits.max_texture_bindings_per_stage)") \
@@ -16971,6 +16973,23 @@ _SOKOL_PRIVATE void _sg_mtl_write_buffer_unsealed(_sg_buffer_t* buf, const sg_wr
     #endif
 }
 
+_SOKOL_PRIVATE void _sg_mtl_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
+    SOKOL_ASSERT(img && desc);
+    __unsafe_unretained id<MTLTexture> mtl_tex = _sg_mtl_id(img->mtl.tex[img->cmn.active_slot]);
+    _sg_mtl_write_miplevel_data(img, mtl_tex,
+        desc->src.data.ptr,
+        desc->src.data.size,
+        desc->src.bytes_per_row,
+        desc->src.bytes_per_slice,
+        desc->dst.mip_level,
+        desc->dst.x,
+        desc->dst.y,
+        desc->dst.slice,
+        desc->size.width,
+        desc->size.height,
+        desc->size.num_slices);
+}
+
 _SOKOL_PRIVATE void _sg_mtl_push_debug_group(const char* name) {
     SOKOL_ASSERT(name);
     if (_sg.mtl.render_cmd_encoder) {
@@ -22701,6 +22720,24 @@ static inline void _sg_write_buffer_unsealed(_sg_buffer_t* buf, const sg_write_b
     #endif
 }
 
+static inline void _sg_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_write_image_unsealed(img, desc);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_write_image_unsealed(img, desc);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_write_image_unsealed(img, desc);
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_write_image_unsealed(img, desc);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_write_image_unsealed(img, desc);
+    #elif defined(SOKOL_DUMMY_BACKEND)
+    _sg_dummy_write_image_unsealed(img, desc);
+    #else
+    #error("INVALID BACKEND");
+    #endif
+}
+
 static inline void _sg_seal_buffer(_sg_buffer_t* buf) {
     #if defined(_SOKOL_ANY_GL)
     _sg_gl_seal_buffer(buf);
@@ -24281,6 +24318,21 @@ _SOKOL_PRIVATE bool _sg_validate_write_buffer_unsealed(const _sg_buffer_t* buf, 
     #endif
 }
 
+_SOKOL_PRIVATE bool _sg_validate_write_image_unsealed(const _sg_image_t* img, const sg_write_image_desc* desc) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(buf);
+        _SOKOL_UNUSED(desc);
+    #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
+        SOKOL_ASSERT(img && desc);
+        _sg_validate_begin();
+        SOKOL_ASSERT(false && "FIXME");
+        return _sg_validate_end();
+    #endif
+}
+
 _SOKOL_PRIVATE bool _sg_validate_seal_buffer(const _sg_buffer_t* buf) {
     #if !defined(SOKOL_DEBUG)
         _SOKOL_UNUSED(buf);
@@ -25038,6 +25090,19 @@ _SOKOL_PRIVATE sg_pass _sg_pass_defaults(const sg_pass* pass) {
 _SOKOL_PRIVATE sg_write_buffer_desc _sg_write_buffer_desc_defaults(const sg_write_buffer_desc* desc) {
     sg_write_buffer_desc res = *desc;
     res.size = _sg_def(res.size, desc->src.data.size);
+    return res;
+}
+
+_SOKOL_PRIVATE sg_write_image_desc _sg_write_image_desc_defaults(const _sg_image_t* img, const sg_write_image_desc* desc) {
+    sg_write_image_desc res = *desc;
+    const sg_pixel_format fmt = img->cmn.pixel_format;
+    const int mip_width = _sg_miplevel_dim(img->cmn.width, desc->dst.mip_level);
+    const int mip_height = _sg_miplevel_dim(img->cmn.height, desc->dst.mip_level);
+    res.src.bytes_per_row = _sg_def(res.src.bytes_per_row, _sg_row_pitch(fmt, mip_width, 1));
+    res.src.bytes_per_slice = _sg_def(res.src.bytes_per_slice, _sg_surface_pitch(fmt, mip_width, mip_height, 1));
+    res.size.width = _sg_def(res.size.width, mip_width);
+    res.size.height = _sg_def(res.size.height, mip_height);
+    res.size.num_slices = _sg_def(res.size.num_slices, 1);
     return res;
 }
 
@@ -26228,9 +26293,9 @@ SOKOL_API_IMPL void sg_write_buffer_unsealed(const sg_write_buffer_desc* desc) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(desc);
     _sg_stats_inc(num_write_buffer_unsealed);
-    sg_write_buffer_desc desc_def = _sg_write_buffer_desc_defaults(desc);
     _sg_buffer_t* buf = _sg_lookup_buffer(desc->dst.buffer.id);
     if (buf) {
+        sg_write_buffer_desc desc_def = _sg_write_buffer_desc_defaults(desc);
         if (_sg_validate_write_buffer_unsealed(buf, &desc_def)) {
             _sg_write_buffer_unsealed(buf, &desc_def);
         }
@@ -26244,7 +26309,18 @@ SOKOL_API_IMPL void sg_write_buffer_unsealed(const sg_write_buffer_desc* desc) {
 SOKOL_API_IMPL void sg_write_image_unsealed(const sg_write_image_desc* desc) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(false && "FIXME"); _SOKOL_UNUSED(desc);
+    _sg_stats_inc(num_write_image_unsealed);
+    _sg_image_t* img = _sg_lookup_image(desc->dst.image.id);
+    if (img) {
+        sg_write_image_desc desc_def = _sg_write_image_desc_defaults(img, desc);
+        if (_sg_validate_write_image_unsealed(img, &desc_def)) {
+            _sg_write_image_unsealed(img, &desc_def);
+        }
+    } else {
+        _SG_ERROR(WRITE_IMAGE_UNSEALED_IMAGE_ALIVE);
+    }
+    // FIXME
+    // _SG_TRACE_ARGS(write_image_unsealed, desc));
 }
 
 SOKOL_API_IMPL void sg_seal_buffer(sg_buffer buf_id) {
