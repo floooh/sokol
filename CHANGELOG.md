@@ -1,5 +1,11 @@
 ## Updates
 
+### 25-Jul-2026
+
+sokol_imgui.h has been fixed for Dear ImGui v1.92.9: in the result of `ImGui::GetDrawData()`
+call, the `CmdListsCount` item has been obsoleted in favour of `CmdLists.Size`. The symptom
+is that your UI suddenly comes out blank (e.g. no UI rendered).
+
 ### 19-Jul-2026
 
 sokol_shape.h: some breaking changes:

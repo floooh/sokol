@@ -2800,7 +2800,7 @@ SOKOL_API_IMPL void simgui_render(void) {
     }
 
     // catch up with texture updates (important: this needs to happen before
-    // checking the CmdListsCount, otherwise textures might get stuck in
+    // checking the CmdLists.Size, otherwise textures might get stuck in
     // 'WantCreate' state)
     if (draw_data->Textures) {
         for (size_t i = 0; i < (size_t)draw_data->Textures->Size; i++) {
@@ -2812,7 +2812,7 @@ SOKOL_API_IMPL void simgui_render(void) {
     }
 
     // early-out if nothing needs to be rendered
-    if (draw_data->CmdListsCount == 0) {
+    if (draw_data->CmdLists.Size == 0) {
         return;
     }
 
@@ -2824,7 +2824,7 @@ SOKOL_API_IMPL void simgui_render(void) {
     size_t all_vtx_size = 0;
     size_t all_idx_size = 0;
     int cmd_list_count = 0;
-    for (int cl_index = 0; cl_index < draw_data->CmdListsCount; cl_index++, cmd_list_count++) {
+    for (int cl_index = 0; cl_index < draw_data->CmdLists.Size; cl_index++, cmd_list_count++) {
         ImDrawList* cl = _simgui_imdrawlist_at(draw_data, cl_index);
         const size_t vtx_size = (size_t)cl->VtxBuffer.Size * sizeof(ImDrawVert);
         const size_t idx_size = (size_t)cl->IdxBuffer.Size * sizeof(ImDrawIdx);
