@@ -425,6 +425,10 @@ typedef enum {
     _SGIMGUI_CMD_UPDATE_BUFFER,
     _SGIMGUI_CMD_UPDATE_IMAGE,
     _SGIMGUI_CMD_APPEND_BUFFER,
+    _SGIMGUI_CMD_WRITE_BUFFER_UNSEALED,
+    _SGIMGUI_CMD_WRITE_IMAGE_UNSEALED,
+    _SGIMGUI_CMD_SEAL_BUFFER,
+    _SGIMGUI_CMD_SEAL_IMAGE,
     _SGIMGUI_CMD_BEGIN_PASS,
     _SGIMGUI_CMD_APPLY_VIEWPORT,
     _SGIMGUI_CMD_APPLY_SCISSOR_RECT,
@@ -722,6 +726,10 @@ typedef union {
     _sgimgui_args_update_buffer_t update_buffer;
     _sgimgui_args_update_image_t update_image;
     _sgimgui_args_append_buffer_t append_buffer;
+    _sgimgui_args_write_buffer_unsealed_t write_buffer_unsealed;
+    _sgimgui_args_write_image_unsealed_t write_image_unsealed;
+    _sgimgui_args_seal_buffer_t seal_buffer;
+    _sgimgui_args_seal_image_t seal_image;
     _sgimgui_args_begin_pass_t begin_pass;
     _sgimgui_args_apply_viewport_t apply_viewport;
     _sgimgui_args_apply_scissor_rect_t apply_scissor_rect;
@@ -1982,6 +1990,22 @@ _SOKOL_PRIVATE _sgimgui_str_t _sgimgui_capture_item_string(_sgimgui_t* ctx, int 
                     item->args.append_buffer.data_size,
                     item->args.append_buffer.result);
             }
+            break;
+
+        case _SGIMGUI_CMD_WRITE_BUFFER_UNSEALED:
+            SOKOL_ASSERT(false, "FIXME _SGIMGUI_CMD_WRITE_BUFFER_UNSEALED");
+            break;
+
+        case _SGIMGUI_CMD_WRITE_IMAGE_UNSEALED:
+            SOKOL_ASSERT(false, "FIXME _SGIMGUI_CMD_WRITE_IMAGE_UNSEALED");
+            break;
+
+        case _SGIMGUI_CMD_SEAL_BUFFER:
+            SOKOL_ASSERT(false, "FIXME _SGIMGUI_CMD_SEAL_BUFFER");
+            break;
+
+        case _SGIMGUI_CMD_SEAL_IMAGE:
+            SOKOL_ASSERT(false, "FIXME _SGIMGUI_CMD_SEAL_IMAGE");
             break;
 
         case _SGIMGUI_CMD_BEGIN_PASS:

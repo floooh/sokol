@@ -4105,6 +4105,10 @@ typedef struct sg_trace_hooks {
     void (*update_buffer)(sg_buffer buf, const sg_range* data, void* user_data);
     void (*update_image)(sg_image img, const sg_image_data* data, void* user_data);
     void (*append_buffer)(sg_buffer buf, const sg_range* data, int result, void* user_data);
+    void (*write_buffer_unsealed)(const sg_write_buffer_desc* desc, void* user_data);
+    void (*write_image_unsealed)(const sg_write_image_desc* desc, void* user_data);
+    void (*seal_buffer)(sg_buffer buf, void* user_data);
+    void (*seal_image)(sg_image img, void* user_data);
     void (*begin_pass)(const sg_pass* pass, void* user_data);
     void (*apply_viewport)(int x, int y, int width, int height, bool origin_top_left, void* user_data);
     void (*apply_scissor_rect)(int x, int y, int width, int height, bool origin_top_left, void* user_data);
@@ -5264,8 +5268,8 @@ SOKOL_GFX_API_DECL void sg_commit(void);
 
 // resource update functions (wip)
 SOKOL_GFX_API_DECL void sg_write_buffer_unsealed(const sg_write_buffer_desc* desc);
-SOKOL_GFX_API_DECL void sg_seal_buffer(sg_buffer buf);
 SOKOL_GFX_API_DECL void sg_write_image_unsealed(const sg_write_image_desc* desc);
+SOKOL_GFX_API_DECL void sg_seal_buffer(sg_buffer buf);
 SOKOL_GFX_API_DECL void sg_seal_image(sg_image img);
 
 // update functions (will be deprecated by new resource update functions)
@@ -26370,8 +26374,7 @@ SOKOL_API_IMPL void sg_write_buffer_unsealed(const sg_write_buffer_desc* desc) {
     } else {
         _SG_ERROR(WRITE_BUFFER_UNSEALED_BUFFER_ALIVE);
     }
-    // FIXME
-    // _SG_TRACE_ARGS(write_buffer_unsealed, desc);
+    _SG_TRACE_ARGS(write_buffer_unsealed, desc);
 }
 
 SOKOL_API_IMPL void sg_write_image_unsealed(const sg_write_image_desc* desc) {
@@ -26387,8 +26390,7 @@ SOKOL_API_IMPL void sg_write_image_unsealed(const sg_write_image_desc* desc) {
     } else {
         _SG_ERROR(WRITE_IMAGE_UNSEALED_IMAGE_ALIVE);
     }
-    // FIXME
-    // _SG_TRACE_ARGS(write_image_unsealed, desc));
+    _SG_TRACE_ARGS(write_image_unsealed, desc);
 }
 
 SOKOL_API_IMPL void sg_seal_buffer(sg_buffer buf_id) {
@@ -26401,7 +26403,7 @@ SOKOL_API_IMPL void sg_seal_buffer(sg_buffer buf_id) {
             buf->slot.state = SG_RESOURCESTATE_VALID;
         }
     }
-    // _SG_TRACE_ARGS(seal_buffer, buf_id);
+    _SG_TRACE_ARGS(seal_buffer, buf_id);
 }
 
 SOKOL_API_IMPL void sg_seal_image(sg_image img_id) {
@@ -26414,7 +26416,7 @@ SOKOL_API_IMPL void sg_seal_image(sg_image img_id) {
             img->slot.state = SG_RESOURCESTATE_VALID;
         }
     }
-    // _SG_TRACE_ARGS(seal_image, img_id);
+    _SG_TRACE_ARGS(seal_image, img_id);
 }
 
 SOKOL_API_IMPL void sg_push_debug_group(const char* name) {
