@@ -3398,7 +3398,7 @@ typedef struct sg_image_location {
 */
 typedef struct sg_write_image_source {
     sg_range data;
-    size_t offset;          // optional offset into .data
+    size_t offset;          // optional offset into src data
     int bytes_per_row;      // default 0 means rows are tightly packed
     int bytes_per_slice;    // default 0 means slices are tightly packed
 } sg_write_image_source;
@@ -4423,6 +4423,7 @@ typedef struct sg_frame_stats {
     uint32_t num_write_buffer_unsealed;
     uint32_t num_write_image_unsealed;
     uint32_t num_seal_buffer;
+    uint32_t num_seal_image;
 
     uint32_t size_apply_uniforms;
     uint32_t size_update_buffer;
@@ -4953,7 +4954,22 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_SIZE, "sg_write_buffer_unsealed: desc.size must be > 0 and <= desc.src.data.size") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_WRITE_OVERFLOW, "sg_write_buffer_unsealed: desc.dst.offset + desc.size must be <= buffer size") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_READ_OVERFLOW, "sg_write_buffer_unsealed: desc.src.offset + desc.size must be <= desc.src.data.size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_USAGE, "sg_write_image_unsealed: image usage must be .immutable && .write_unsealed") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_RESOURCESTATE, "sg_write_image_unsealed: image resource state must be SG_RESOURCESTATE_UNSEALED") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_SRC_DATA_POINTER, "sg_write_image_unsealed: desc.src.data.ptr must be valid") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_SRC_DATA_SIZE, "sg_write_image_unsealed: desc.src.data.size must be > 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_BYTESPERROW, "sg_write_image_unsealed: desc.src.bytes_per_row must be a multiple of the pixel or compression block size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_BYTESPERSLICE, "sg_write_image_unsealed: desc.src.bytes_per_slice must be a multiple desc.src.bytes_per_row") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_MIPLEVEL, "sg_write_image_unsealed: desc.dst.mip_level must be >= 0 and less than the number of mipmaps in the destination image") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_WIDTH, "sg_write_image_unsealed: desc.size.width must be >= 0 and <= destination image width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_HEIGHT, "sg_write_image_unsealed: desc.size.height must be >= 0 and <= destination image heigth") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_NUMSLICES, "sg_write_image_unsealed: desc.size.num_slices must be >= 0 and <= destination image num slices") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_READ_OVERFLOW, "sg_write_image_unsealed: desc.src.offset + size of written data must be <= desc.src.data.size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_WRITE_WIDTH_OVERFLOW, "sg_write_image_unsealed: desc.src.x + desc.size.width must be <= destination mip level width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_WRITE_HEIGHT_OVERFLOW, "sg_write_image_unsealed: desc.src.y + desc.size.height must be <= destination mip level height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_WRITE_NUMSLICES_OVERFLOW, "sg_write_image_unsealed: desc.src.slice + desc.size.num_slices must be <= destination number of slices in mip level") \
     _SG_LOGITEM_XMACRO(VALIDATE_SEALBUFFER_RESOURCESTATE, "sg_seal_buffer: buffer resource state must be SG_RESOURCESTATE_UNSEALED") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SEALIMAGE_RESOURCESTATE, "sg_seal_image: image resource state must be SG_RESOURCESTATE_UNSEALED") \
     _SG_LOGITEM_XMACRO(VALIDATION_FAILED, "validation layer checks failed") \
 
 #define _SG_LOGITEM_XMACRO(item,msg) SG_LOGITEM_##item,
@@ -7497,20 +7513,21 @@ static void _sg_log(sg_log_item log_item, uint32_t log_level, const char* msg, u
 //
 // >>memory
 
-_SOKOL_PRIVATE int _sg_roundup(int val, int round_to) {
+_SOKOL_PRIVATE int _sg_roundup_pow2(int val, int round_to) {
     return (val+(round_to-1)) & ~(round_to-1);
 }
 
-_SOKOL_PRIVATE uint32_t _sg_roundup_u32(uint32_t val, uint32_t round_to) {
+_SOKOL_PRIVATE uint32_t _sg_roundup_pow2_u32(uint32_t val, uint32_t round_to) {
     return (val+(round_to-1)) & ~(round_to-1);
 }
 
-_SOKOL_PRIVATE uint64_t _sg_roundup_u64(uint64_t val, uint64_t round_to) {
+_SOKOL_PRIVATE uint64_t _sg_roundup_pow2_u64(uint64_t val, uint64_t round_to) {
     return (val+(round_to-1)) & ~(round_to-1);
 }
 
 _SOKOL_PRIVATE bool _sg_multiple_u64(uint64_t val, uint64_t of) {
-    return (val & (of-1)) == 0;
+    SOKOL_ASSERT(of > 0);
+    return (val % of) == 0;
 }
 
 // a helper macro to clear a struct with potentially ARC'ed ObjC references
@@ -7897,7 +7914,7 @@ _SOKOL_PRIVATE void _sg_track_init(_sg_track_t* track, int num_slots) {
     _sg_clear(track, sizeof(_sg_track_t));
     track->num_slots = num_slots;
     track->slots = (uint32_t*)_sg_malloc_clear((size_t)num_slots * sizeof(uint32_t));
-    track->occupy_num_bytes = _sg_roundup_u32((uint32_t)num_slots, 8) >> 3;
+    track->occupy_num_bytes = _sg_roundup_pow2_u32((uint32_t)num_slots, 8) >> 3;
     track->occupy_bits = (uint8_t*)_sg_malloc_clear(track->occupy_num_bytes);
 }
 
@@ -8873,7 +8890,7 @@ _SOKOL_PRIVATE int _sg_row_pitch(sg_pixel_format fmt, int width, int row_align) 
     const int block_num_bytes = _sg_block_bytesize(fmt);
     int pitch = num_blocks_in_row * block_num_bytes;
     pitch = (pitch < block_num_bytes) ? block_num_bytes : pitch;
-    pitch = _sg_roundup(pitch, row_align);
+    pitch = _sg_roundup_pow2(pitch, row_align);
     return pitch;
 }
 
@@ -9217,6 +9234,11 @@ _SOKOL_PRIVATE void _sg_dummy_write_buffer_unsealed(_sg_buffer_t* buf, const sg_
 _SOKOL_PRIVATE void _sg_dummy_seal_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
     _SOKOL_UNUSED(buf);
+}
+
+_SOKOL_PRIVATE void _sg_dummy_seal_image(_sg_image_t* img) {
+    SOKOL_ASSERT(img);
+    _SOKOL_UNUSED(img);
 }
 
 //  ██████  ██████  ███████ ███    ██  ██████  ██          ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
@@ -13755,7 +13777,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
         const _sg_shader_uniform_block_t* ub = &shd->cmn.uniform_blocks[ub_index];
         ID3D11Buffer* cbuf = 0;
         _SG_STRUCT(D3D11_BUFFER_DESC, cb_desc);
-        cb_desc.ByteWidth = (UINT)_sg_roundup((int)ub->size, 16);
+        cb_desc.ByteWidth = (UINT)_sg_roundup_pow2((int)ub->size, 16);
         cb_desc.Usage = D3D11_USAGE_DEFAULT;
         cb_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
         hr = _sg_d3d11_CreateBuffer(_sg.d3d11.dev, &cb_desc, NULL, &cbuf);
@@ -15608,6 +15630,7 @@ _SOKOL_PRIVATE void _sg_mtl_write_miplevel_data(const _sg_image_t* img,
     __unsafe_unretained id<MTLTexture> mtl_tex,
     const uint8_t* src_ptr,
     size_t src_size,
+    size_t src_offset,
     int src_bytes_per_row,
     int src_bytes_per_slice,
     int mip_level,
@@ -15628,9 +15651,10 @@ _SOKOL_PRIVATE void _sg_mtl_write_miplevel_data(const _sg_image_t* img,
     SOKOL_ASSERT((x >= 0) && (x < _sg_miplevel_dim(img->cmn.width, mip_level)));
     SOKOL_ASSERT((y >= 0) && (y < _sg_miplevel_dim(img->cmn.height, mip_level)));
     SOKOL_ASSERT((slice >= 0) && (slice < img->cmn.num_slices));
-    SOKOL_ASSERT((width > 0) && (x + width < _sg_miplevel_dim(img->cmn.width, mip_level)));
-    SOKOL_ASSERT((height > 0) && (y + height < _sg_miplevel_dim(img->cmn.height, mip_level)));
-    SOKOL_ASSERT((num_slices > 1) && (slice + num_slices < img->cmn.num_slices));
+    SOKOL_ASSERT((width > 0) && (x + width <= _sg_miplevel_dim(img->cmn.width, mip_level)));
+    SOKOL_ASSERT((height > 0) && (y + height <= _sg_miplevel_dim(img->cmn.height, mip_level)));
+    SOKOL_ASSERT((num_slices > 0) && (slice + num_slices <= img->cmn.num_slices));
+    SOKOL_ASSERT((src_offset + src_bytes_per_slice * (size_t)num_slices) <= src_size);
 
     /* bytesPerImage special case: https://developer.apple.com/documentation/metal/mtltexture/1515679-replaceregion
 
@@ -15797,6 +15821,12 @@ _SOKOL_PRIVATE void _sg_mtl_discard_image(_sg_image_t* img) {
     for (int slot = 0; slot < img->cmn.num_slots; slot++) {
         _sg_mtl_release_resource(_sg.frame_index, img->mtl.tex[slot]);
     }
+}
+
+_SOKOL_PRIVATE void _sg_mtl_seal_image(_sg_image_t* img) {
+    SOKOL_ASSERT(img);
+    // nothing to do here
+    _SOKOL_UNUSED(img);
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
@@ -16873,7 +16903,7 @@ _SOKOL_PRIVATE void _sg_mtl_apply_uniforms(int ub_slot, const sg_range* data) {
     } else {
         SOKOL_UNREACHABLE;
     }
-    _sg.mtl.cur_ub_offset = _sg_roundup(_sg.mtl.cur_ub_offset + (int)data->size, _SG_MTL_UB_ALIGN);
+    _sg.mtl.cur_ub_offset = _sg_roundup_pow2(_sg.mtl.cur_ub_offset + (int)data->size, _SG_MTL_UB_ALIGN);
 }
 
 _SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
@@ -16979,6 +17009,7 @@ _SOKOL_PRIVATE void _sg_mtl_write_image_unsealed(_sg_image_t* img, const sg_writ
     _sg_mtl_write_miplevel_data(img, mtl_tex,
         desc->src.data.ptr,
         desc->src.data.size,
+        desc->src.offset,
         desc->src.bytes_per_row,
         desc->src.bytes_per_slice,
         desc->dst.mip_level,
@@ -18212,7 +18243,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
     } else {
         // buffer mapping size must be multiple of 4, so round up buffer size (only a problem
         // with index buffers containing odd number of indices)
-        const uint64_t wgpu_buf_size = _sg_roundup_u64((uint64_t)buf->cmn.size, 4);
+        const uint64_t wgpu_buf_size = _sg_roundup_pow2_u64((uint64_t)buf->cmn.size, 4);
         const bool map_at_creation = buf->cmn.usage.immutable && (desc->data.ptr);
 
         _SG_STRUCT(WGPUBufferDescriptor, wgpu_buf_desc);
@@ -18279,8 +18310,8 @@ _SOKOL_PRIVATE void _sg_wgpu_copy_image_data(const _sg_image_t* img, const sg_im
         const int row_pitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
         const int num_rows = _sg_num_rows(img->cmn.pixel_format, mip_height);
         if (_sg_is_compressed_pixel_format(img->cmn.pixel_format)) {
-            mip_width = _sg_roundup(mip_width, 4);
-            mip_height = _sg_roundup(mip_height, 4);
+            mip_width = _sg_roundup_pow2(mip_width, 4);
+            mip_height = _sg_roundup_pow2(mip_height, 4);
         }
         wgpu_layout.bytesPerRow = (uint32_t)row_pitch;
         wgpu_layout.rowsPerImage = (uint32_t)num_rows;
@@ -19017,7 +19048,7 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(int ub_slot, const sg_range* data) {
     _sg_stats_inc(wgpu.uniforms.num_set_bindgroup);
     memcpy(_sg.wgpu.uniform.staging + _sg.wgpu.uniform.offset, data->ptr, data->size);
     _sg.wgpu.uniform.bind_offsets[ub_slot] = _sg.wgpu.uniform.offset;
-    _sg.wgpu.uniform.offset = _sg_roundup_u32(_sg.wgpu.uniform.offset + (uint32_t)data->size, alignment);
+    _sg.wgpu.uniform.offset = _sg_roundup_pow2_u32(_sg.wgpu.uniform.offset + (uint32_t)data->size, alignment);
     _sg.wgpu.uniform.dirty = true;
 }
 
@@ -19760,7 +19791,7 @@ _SOKOL_PRIVATE void _sg_vk_shared_buffer_init(_sg_vk_shared_buffer_t* shbuf, uin
             break;
     }
 
-    shbuf->size = _sg_roundup_u32(size, align);
+    shbuf->size = _sg_roundup_pow2_u32(size, align);
     shbuf->align = align;
     for (size_t i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         SOKOL_ASSERT(0 == shbuf->slots[i].buf);
@@ -19860,7 +19891,7 @@ _SOKOL_PRIVATE VkDeviceSize _sg_vk_shared_buffer_alloc(_sg_vk_shared_buffer_t* s
     }
     SOKOL_ASSERT((shbuf->offset & (shbuf->align - 1)) == 0);
     VkDeviceSize offset = shbuf->offset;
-    shbuf->offset = _sg_roundup_u32(shbuf->offset + num_bytes, shbuf->align);
+    shbuf->offset = _sg_roundup_pow2_u32(shbuf->offset + num_bytes, shbuf->align);
     return offset;
 }
 
@@ -22756,6 +22787,24 @@ static inline void _sg_seal_buffer(_sg_buffer_t* buf) {
     #endif
 }
 
+static inline void _sg_seal_image(_sg_image_t* img) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_seal_image(img);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_seal_image(img);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_seal_image(img);
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_seal_image(img);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_seal_image(img);
+    #elif defined(SOKOL_DUMMY_BACKEND)
+    _sg_dummy_seal_image(img);
+    #else
+    #error("INVALID BACKEND");
+    #endif
+}
+
 static inline void _sg_push_debug_group(const char* name) {
     #if defined(SOKOL_METAL)
     _sg_mtl_push_debug_group(name);
@@ -24320,15 +24369,33 @@ _SOKOL_PRIVATE bool _sg_validate_write_buffer_unsealed(const _sg_buffer_t* buf, 
 
 _SOKOL_PRIVATE bool _sg_validate_write_image_unsealed(const _sg_image_t* img, const sg_write_image_desc* desc) {
     #if !defined(SOKOL_DEBUG)
-        _SOKOL_UNUSED(buf);
+        _SOKOL_UNUSED(img);
         _SOKOL_UNUSED(desc);
+        return true;
     #else
         if (_sg.desc.disable_validation) {
             return true;
         }
         SOKOL_ASSERT(img && desc);
+        const size_t write_size = desc->src.bytes_per_slice * (size_t)desc->size.num_slices;
+        const int mip_width = _sg_miplevel_dim(img->cmn.width, desc->dst.mip_level);
+        const int mip_height = _sg_miplevel_dim(img->cmn.height, desc->dst.mip_level);
+        const int mip_depth_or_slices = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, desc->dst.mip_level) : img->cmn.num_slices;
         _sg_validate_begin();
-        SOKOL_ASSERT(false && "FIXME");
+        _SG_VALIDATE(img->cmn.usage.immutable && img->cmn.usage.write_unsealed, VALIDATE_WRITEIMAGEUNSEALED_USAGE);
+        _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_UNSEALED, VALIDATE_WRITEIMAGEUNSEALED_RESOURCESTATE);
+        _SG_VALIDATE(desc->src.data.ptr, VALIDATE_WRITEIMAGEUNSEALED_SRC_DATA_POINTER);
+        _SG_VALIDATE(desc->src.data.size, VALIDATE_WRITEIMAGEUNSEALED_SRC_DATA_SIZE);
+        _SG_VALIDATE((desc->src.bytes_per_row > 0) && _sg_multiple_u64(desc->src.bytes_per_row, _sg_block_bytesize(img->cmn.pixel_format)), VALIDATE_WRITEIMAGEUNSEALED_BYTESPERROW);
+        _SG_VALIDATE((desc->src.bytes_per_slice > 0) && _sg_multiple_u64(desc->src.bytes_per_slice, desc->src.bytes_per_row), VALIDATE_WRITEIMAGEUNSEALED_BYTESPERSLICE);
+        _SG_VALIDATE((desc->dst.mip_level >= 0) && (desc->dst.mip_level < img->cmn.num_mipmaps), VALIDATE_WRITEIMAGEUNSEALED_MIPLEVEL);
+        _SG_VALIDATE((desc->size.width >= 0) && (desc->size.width <= mip_width), VALIDATE_WRITEIMAGEUNSEALED_WIDTH);
+        _SG_VALIDATE((desc->size.height >= 0) && (desc->size.height <= mip_height), VALIDATE_WRITEIMAGEUNSEALED_HEIGHT);
+        _SG_VALIDATE((desc->size.num_slices >= 0) && (desc->size.num_slices <= mip_depth_or_slices), VALIDATE_WRITEIMAGEUNSEALED_NUMSLICES);
+        _SG_VALIDATE((desc->src.offset + write_size) <= desc->src.data.size, VALIDATE_WRITEIMAGEUNSEALED_READ_OVERFLOW);
+        _SG_VALIDATE((desc->dst.x + desc->size.width) <= mip_width, VALIDATE_WRITEIMAGEUNSEALED_WRITE_WIDTH_OVERFLOW);
+        _SG_VALIDATE((desc->dst.y + desc->size.height) <= mip_height, VALIDATE_WRITEIMAGEUNSEALED_WRITE_HEIGHT_OVERFLOW);
+        _SG_VALIDATE((desc->dst.slice + desc->size.num_slices) <= mip_depth_or_slices, VALIDATE_WRITEIMAGEUNSEALED_WRITE_NUMSLICES_OVERFLOW);
         return _sg_validate_end();
     #endif
 }
@@ -24344,6 +24411,21 @@ _SOKOL_PRIVATE bool _sg_validate_seal_buffer(const _sg_buffer_t* buf) {
         SOKOL_ASSERT(buf);
         _sg_validate_begin();
         _SG_VALIDATE(buf->slot.state == SG_RESOURCESTATE_UNSEALED, VALIDATE_SEALBUFFER_RESOURCESTATE);
+        return _sg_validate_end();
+    #endif
+}
+
+_SOKOL_PRIVATE bool _sg_validate_seal_image(const _sg_image_t* img) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(img);
+        return true;
+    #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
+        SOKOL_ASSERT(img);
+        _sg_validate_begin();
+        _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_UNSEALED, VALIDATE_SEALIMAGE_RESOURCESTATE);
         return _sg_validate_end();
     #endif
 }
@@ -25098,11 +25180,12 @@ _SOKOL_PRIVATE sg_write_image_desc _sg_write_image_desc_defaults(const _sg_image
     const sg_pixel_format fmt = img->cmn.pixel_format;
     const int mip_width = _sg_miplevel_dim(img->cmn.width, desc->dst.mip_level);
     const int mip_height = _sg_miplevel_dim(img->cmn.height, desc->dst.mip_level);
+    const int mip_depth_or_slices = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, desc->dst.mip_level) : img->cmn.num_slices;
     res.src.bytes_per_row = _sg_def(res.src.bytes_per_row, _sg_row_pitch(fmt, mip_width, 1));
     res.src.bytes_per_slice = _sg_def(res.src.bytes_per_slice, _sg_surface_pitch(fmt, mip_width, mip_height, 1));
     res.size.width = _sg_def(res.size.width, mip_width);
     res.size.height = _sg_def(res.size.height, mip_height);
-    res.size.num_slices = _sg_def(res.size.num_slices, 1);
+    res.size.num_slices = _sg_def(res.size.num_slices, mip_depth_or_slices);
     return res;
 }
 
@@ -26231,7 +26314,7 @@ SOKOL_API_IMPL int sg_append_buffer(sg_buffer buf_id, const sg_range* data) {
                     // update and append on same buffer in same frame not allowed
                     SOKOL_ASSERT(buf->cmn.update_frame_index != _sg.frame_index);
                     _sg_append_buffer(buf, data, buf->cmn.append_frame_index != _sg.frame_index);
-                    buf->cmn.append_pos += (int) _sg_roundup_u64(data->size, 4);
+                    buf->cmn.append_pos += (int) _sg_roundup_pow2_u64(data->size, 4);
                     buf->cmn.append_frame_index = _sg.frame_index;
                 }
             }
@@ -26262,7 +26345,7 @@ SOKOL_API_IMPL bool sg_query_buffer_will_overflow(sg_buffer buf_id, size_t size)
         if (buf->cmn.append_frame_index != _sg.frame_index) {
             append_pos = 0;
         }
-        if ((append_pos + _sg_roundup((int)size, 4)) > buf->cmn.size) {
+        if ((append_pos + _sg_roundup_pow2((int)size, 4)) > buf->cmn.size) {
             result = true;
         }
     }
@@ -26333,12 +26416,20 @@ SOKOL_API_IMPL void sg_seal_buffer(sg_buffer buf_id) {
             buf->slot.state = SG_RESOURCESTATE_VALID;
         }
     }
-    // _SG_TRACE_ARGS(seal_buffer, img_id);
+    // _SG_TRACE_ARGS(seal_buffer, buf_id);
 }
 
 SOKOL_API_IMPL void sg_seal_image(sg_image img_id) {
     SOKOL_ASSERT(_sg.valid);
-    SOKOL_ASSERT(false && "FIXME"); _SOKOL_UNUSED(img_id);
+    _sg_stats_inc(num_seal_image);
+    _sg_image_t* img = _sg_lookup_image(img_id.id);
+    if (img) {
+        if (_sg_validate_seal_image(img)) {
+            _sg_seal_image(img);
+            img->slot.state = SG_RESOURCESTATE_VALID;
+        }
+    }
+    // _SG_TRACE_ARGS(seal_image, img_id);
 }
 
 SOKOL_API_IMPL void sg_push_debug_group(const char* name) {
