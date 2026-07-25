@@ -538,6 +538,30 @@ typedef struct {
 } _sgimgui_args_append_buffer_t;
 
 typedef struct {
+    size_t src_data_size;
+    size_t src_data_offset;
+    sg_buffer_location dst;
+    size_t write_size;
+} _sgimgui_args_write_buffer_unsealed_t;
+
+typedef struct {
+    size_t src_data_size;
+    size_t src_data_offset;
+    int src_bytes_per_row;
+    int src_bytes_per_slice;
+    sg_image_location dst;
+    sg_image_extent write_size;
+} _sgimgui_args_write_image_unsealed_t;
+
+typedef struct {
+    sg_buffer buffer;
+} _sgimgui_args_seal_buffer_t;
+
+typedef struct {
+    sg_image image;
+} _sgimgui_args_seal_image_t;
+
+typedef struct {
     sg_pass pass;
 } _sgimgui_args_begin_pass_t;
 
@@ -1201,6 +1225,7 @@ _SOKOL_PRIVATE const char* _sgimgui_resourcestate_string(sg_resource_state s) {
     switch (s) {
         case SG_RESOURCESTATE_INITIAL:  return "INITIAL";
         case SG_RESOURCESTATE_ALLOC:    return "ALLOC";
+        case SG_RESOURCESTATE_UNSEALED: return "UNSEALED";
         case SG_RESOURCESTATE_VALID:    return "VALID";
         case SG_RESOURCESTATE_FAILED:   return "FAILED";
         default:                        return "INVALID";
@@ -1993,19 +2018,25 @@ _SOKOL_PRIVATE _sgimgui_str_t _sgimgui_capture_item_string(_sgimgui_t* ctx, int 
             break;
 
         case _SGIMGUI_CMD_WRITE_BUFFER_UNSEALED:
-            SOKOL_ASSERT(false, "FIXME _SGIMGUI_CMD_WRITE_BUFFER_UNSEALED");
+            _sgimgui_snprintf(&str, "%d: sg_write_buffer_unsealed(desc=...)", index);
             break;
 
         case _SGIMGUI_CMD_WRITE_IMAGE_UNSEALED:
-            SOKOL_ASSERT(false, "FIXME _SGIMGUI_CMD_WRITE_IMAGE_UNSEALED");
+            _sgimgui_snprintf(&str, "%d: sg_write_image_unsealed(desc=...)", index);
             break;
 
         case _SGIMGUI_CMD_SEAL_BUFFER:
-            SOKOL_ASSERT(false, "FIXME _SGIMGUI_CMD_SEAL_BUFFER");
+            {
+                _sgimgui_str_t res_id = _sgimgui_buffer_id_string(ctx, item->args.seal_buffer.buffer);
+                _sgimgui_snprintf(&str, "%d: sg_seal_buffer(buf=%s)", index, res_id.buf);
+            }
             break;
 
         case _SGIMGUI_CMD_SEAL_IMAGE:
-            SOKOL_ASSERT(false, "FIXME _SGIMGUI_CMD_SEAL_IMAGE");
+            {
+                _sgimgui_str_t res_id = _sgimgui_image_id_string(ctx, item->args.seal_image.image);
+                _sgimgui_snprintf(&str, "%d: sg_seal_image(img=%s)", index, res_id.buf);
+            }
             break;
 
         case _SGIMGUI_CMD_BEGIN_PASS:
@@ -2572,6 +2603,70 @@ _SOKOL_PRIVATE void _sgimgui_append_buffer(sg_buffer buf, const sg_range* data, 
     }
     if (ctx->hooks.append_buffer) {
         ctx->hooks.append_buffer(buf, data, result, ctx->hooks.user_data);
+    }
+}
+
+_SOKOL_PRIVATE void _sgimgui_write_buffer_unsealed(const sg_write_buffer_desc* desc, void* user_data) {
+    _sgimgui_t* ctx = (_sgimgui_t*)user_data;
+    SOKOL_ASSERT(ctx);
+    _sgimgui_capture_item_t* item = _sgimgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = _SGIMGUI_CMD_WRITE_BUFFER_UNSEALED;
+        item->color = _SGIMGUI_COLOR_RSRC;
+        item->args.write_buffer_unsealed.src_data_size = desc->src.data.size;
+        item->args.write_buffer_unsealed.src_data_offset = desc->src.offset;
+        item->args.write_buffer_unsealed.dst = desc->dst;
+        item->args.write_buffer_unsealed.write_size = desc->size;
+    }
+    if (ctx->hooks.write_buffer_unsealed) {
+        ctx->hooks.write_buffer_unsealed(desc, user_data);
+    }
+}
+
+_SOKOL_PRIVATE void _sgimgui_write_image_unsealed(const sg_write_image_desc* desc, void* user_data) {
+    _sgimgui_t* ctx = (_sgimgui_t*)user_data;
+    SOKOL_ASSERT(ctx);
+    _sgimgui_capture_item_t* item = _sgimgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = _SGIMGUI_CMD_WRITE_IMAGE_UNSEALED;
+        item->color = _SGIMGUI_COLOR_RSRC;
+        item->args.write_image_unsealed.src_data_size = desc->src.data.size;
+        item->args.write_image_unsealed.src_data_offset = desc->src.offset;
+        item->args.write_image_unsealed.src_bytes_per_row = desc->src.bytes_per_row;
+        item->args.write_image_unsealed.src_bytes_per_slice = desc->src.bytes_per_slice;
+        item->args.write_image_unsealed.dst = desc->dst;
+        item->args.write_image_unsealed.write_size = desc->size;
+    }
+    if (ctx->hooks.write_image_unsealed) {
+        ctx->hooks.write_image_unsealed(desc, user_data);
+    }
+}
+
+_SOKOL_PRIVATE void _sgimgui_seal_buffer(sg_buffer buf, void* user_data) {
+    _sgimgui_t* ctx = (_sgimgui_t*)user_data;
+    SOKOL_ASSERT(ctx);
+    _sgimgui_capture_item_t* item = _sgimgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = _SGIMGUI_CMD_SEAL_BUFFER;
+        item->color = _SGIMGUI_COLOR_RSRC;
+        item->args.seal_buffer.buffer = buf;
+    }
+    if (ctx->hooks.seal_buffer) {
+        ctx->hooks.seal_buffer(buf, user_data);
+    }
+}
+
+_SOKOL_PRIVATE void _sgimgui_seal_image(sg_image img, void* user_data) {
+    _sgimgui_t* ctx = (_sgimgui_t*)user_data;
+    SOKOL_ASSERT(ctx);
+    _sgimgui_capture_item_t* item = _sgimgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = _SGIMGUI_CMD_SEAL_IMAGE;
+        item->color = _SGIMGUI_COLOR_RSRC;
+        item->args.seal_image.image = img;
+    }
+    if (ctx->hooks.seal_image) {
+        ctx->hooks.seal_image(img, user_data);
     }
 }
 
@@ -3545,6 +3640,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_buffer_panel(_sgimgui_t* ctx, sg_buffer buf) {
             _sgimgui_igtext("  immutable: %s", _sgimgui_bool_string(buf_ui->desc.usage.immutable));
             _sgimgui_igtext("  dynamic_update: %s", _sgimgui_bool_string(buf_ui->desc.usage.dynamic_update));
             _sgimgui_igtext("  stream_update: %s", _sgimgui_bool_string(buf_ui->desc.usage.stream_update));
+            _sgimgui_igtext("  write_unsealed: %s", _sgimgui_bool_string(buf_ui->desc.usage.write_unsealed));
             _sgimgui_igtext("Size:  %d", (int)buf_ui->desc.size);
             if (!buf_ui->desc.usage.immutable) {
                 _sgimgui_igseparator();
@@ -3583,6 +3679,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_image_panel(_sgimgui_t* ctx, sg_image img) {
             _sgimgui_igtext("  immutable: %s", _sgimgui_bool_string(desc->usage.immutable));
             _sgimgui_igtext("  dynamic_update: %s", _sgimgui_bool_string(desc->usage.dynamic_update));
             _sgimgui_igtext("  stream_update: %s", _sgimgui_bool_string(desc->usage.stream_update));
+            _sgimgui_igtext("  write_unsealed: %s", _sgimgui_bool_string(desc->usage.write_unsealed));
             _sgimgui_igtext("Width:          %d", desc->width);
             _sgimgui_igtext("Height:         %d", desc->height);
             _sgimgui_igtext("Num Slices:     %d", desc->num_slices);
@@ -4413,6 +4510,18 @@ _SOKOL_PRIVATE void _sgimgui_draw_capture_panel(_sgimgui_t* ctx) {
         case _SGIMGUI_CMD_APPEND_BUFFER:
             _sgimgui_draw_buffer_panel(ctx, item->args.append_buffer.buffer);
             break;
+        case _SGIMGUI_CMD_WRITE_BUFFER_UNSEALED:
+            _sgimgui_draw_buffer_panel(ctx, item->args.write_buffer_unsealed.dst.buffer);;
+            break;
+        case _SGIMGUI_CMD_WRITE_IMAGE_UNSEALED:
+            _sgimgui_draw_image_panel(ctx, item->args.write_image_unsealed.dst.image);
+            break;
+        case _SGIMGUI_CMD_SEAL_BUFFER:
+            _sgimgui_draw_image_panel(ctx, item->args.seal_image.image);
+            break;
+        case _SGIMGUI_CMD_SEAL_IMAGE:
+            _sgimgui_draw_image_panel(ctx, item->args.seal_image.image);
+            break;
         case _SGIMGUI_CMD_BEGIN_PASS:
             _sgimgui_draw_pass_panel(ctx, &item->args.begin_pass.pass);
             break;
@@ -4808,6 +4917,10 @@ SOKOL_API_IMPL void sgimgui_setup(const sgimgui_desc_t* desc) {
     hooks.update_buffer = _sgimgui_update_buffer;
     hooks.update_image = _sgimgui_update_image;
     hooks.append_buffer = _sgimgui_append_buffer;
+    hooks.write_buffer_unsealed = _sgimgui_write_buffer_unsealed;
+    hooks.write_image_unsealed = _sgimgui_write_image_unsealed;
+    hooks.seal_buffer = _sgimgui_seal_buffer;
+    hooks.seal_image = _sgimgui_seal_image;
     hooks.begin_pass = _sgimgui_begin_pass;
     hooks.apply_viewport = _sgimgui_apply_viewport;
     hooks.apply_scissor_rect = _sgimgui_apply_scissor_rect;
