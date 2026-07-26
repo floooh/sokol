@@ -12474,15 +12474,27 @@ _SOKOL_PRIVATE void _sg_gl_update_image(_sg_image_t* img, const sg_image_data* d
 
 _SOKOL_PRIVATE void _sg_gl_write_buffer_unsealed(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == buf->slot.state);
     SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
     SOKOL_ASSERT((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size);
     SOKOL_ASSERT((desc->src.offset + desc->size) <= desc->src.data.size);
 
-    SOKOL_ASSERT(false && "FIXME!");
+    const GLenum gl_tgt = _sg_gl_buffer_target(&buf->cmn.usage);
+    SOKOL_ASSERT(buf->cmn.active_slot == 0);
+    const GLuint gl_buf = buf->gl.buf[0];
+    SOKOL_ASSERT(gl_buf);
+    _SG_GL_CHECK_ERROR();
+    _sg_gl_cache_store_buffer_binding(gl_tgt);
+    _sg_gl_cache_bind_buffer(gl_tgt, gl_buf);
+    const uint8_t* src_ptr = ((uint8_t*)desc->src.data.ptr) + desc->src.offset;
+    glBufferSubData(gl_tgt, (GLintptr)desc->dst.offset, (GLsizeiptr)desc->size, (const void*)src_ptr);
+    _sg_gl_cache_restore_buffer_binding(gl_tgt);
+    _SG_GL_CHECK_ERROR();
 }
 
 _SOKOL_PRIVATE void _sg_gl_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == img->slot.state);
 
     SOKOL_ASSERT(false && "FIMXE");
 }
@@ -15637,9 +15649,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_buffer(_sg_buffer_t* buf, const 
         buf->mtl.buf[slot] = _sg_mtl_add_resource(mtl_buf);
         _SG_OBJC_RELEASE(mtl_buf);
     }
-    if (desc->usage.write_unsealed) {
-        return SG_RESOURCESTATE_UNSEALED;
-    }
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -15829,9 +15838,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg
         _SG_OBJC_RELEASE(mtl_tex);
     }
     _SG_OBJC_RELEASE(mtl_desc);
-    if (desc->usage.write_unsealed) {
-        return SG_RESOURCESTATE_UNSEALED;
-    }
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -17009,6 +17015,7 @@ _SOKOL_PRIVATE void _sg_mtl_update_image(_sg_image_t* img, const sg_image_data* 
 
 _SOKOL_PRIVATE void _sg_mtl_write_buffer_unsealed(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == buf->slot.state);
     SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
     SOKOL_ASSERT((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size);
     SOKOL_ASSERT((desc->src.offset + desc->size) <= desc->src.data.size);
@@ -17020,6 +17027,7 @@ _SOKOL_PRIVATE void _sg_mtl_write_buffer_unsealed(_sg_buffer_t* buf, const sg_wr
 
 _SOKOL_PRIVATE void _sg_mtl_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == img->slot.state);
     __unsafe_unretained id<MTLTexture> mtl_tex = _sg_mtl_id(img->mtl.tex[img->cmn.active_slot]);
     _sg_mtl_write_miplevel_data(img, mtl_tex,
         (const uint8_t*)desc->src.data.ptr,
@@ -24920,7 +24928,11 @@ _SOKOL_PRIVATE void _sg_init_buffer(_sg_buffer_t* buf, const sg_buffer_desc* des
     SOKOL_ASSERT(desc);
     if (_sg_validate_buffer_desc(desc)) {
         _sg_buffer_common_init(&buf->cmn, desc);
-        buf->slot.state = _sg_create_buffer(buf, desc);
+        sg_resource_state res_state = _sg_create_buffer(buf, desc);
+        if (desc->usage.write_unsealed && (res_state == SG_RESOURCESTATE_VALID)) {
+            res_state = SG_RESOURCESTATE_UNSEALED;
+        }
+        buf->slot.state = res_state;
     } else {
         buf->slot.state = SG_RESOURCESTATE_FAILED;
     }
@@ -24933,7 +24945,11 @@ _SOKOL_PRIVATE void _sg_init_image(_sg_image_t* img, const sg_image_desc* desc) 
     SOKOL_ASSERT(desc);
     if (_sg_validate_image_desc(desc)) {
         _sg_image_common_init(&img->cmn, desc);
-        img->slot.state = _sg_create_image(img, desc);
+        sg_resource_state res_state = _sg_create_image(img, desc);
+        if (desc->usage.write_unsealed && (res_state == SG_RESOURCESTATE_VALID)) {
+            res_state = SG_RESOURCESTATE_UNSEALED;
+        }
+        img->slot.state = res_state;
     } else {
         img->slot.state = SG_RESOURCESTATE_FAILED;
     }
