@@ -12532,19 +12532,18 @@ _SOKOL_PRIVATE void _sg_gl_update_image(_sg_image_t* img, const sg_image_data* d
         const GLsizei data_size = (GLsizei)data->mip_levels[mip_index].size;
         const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
         const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
-        const int mip_depth = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
-        if (SG_IMAGETYPE_CUBE == img->cmn.type) {
-            const int surf_pitch = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
-            SOKOL_ASSERT((6 * surf_pitch) <= data_size);
-            const uint8_t* surf_ptr = (const uint8_t*) data_ptr;
-            for (int i = 0; i < 6; i++) {
-                const GLenum gl_img_target = _sg_gl_cubeface_target(i);
-                _sg_gl_texsubimage(img, gl_img_target, mip_index, mip_width, mip_height, mip_depth, surf_ptr, surf_pitch);
-                surf_ptr += surf_pitch;
-            }
-        } else {
-            _sg_gl_texsubimage(img, img->gl.target, mip_index, mip_width, mip_height, mip_depth, data_ptr, data_size);
-        }
+        const int mip_depth_or_num_slices = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
+        _sg_gl_write_miplevel_data(img,
+            data_ptr,
+            data_size,
+            0,  // src_offset
+            _sg_row_pitch(img->cmn.pixel_format, mip_width, 1),
+            _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1),
+            mip_index,
+            0, 0, 0,    // x, y, slice
+            mip_width,
+            mip_height,
+            mip_depth_or_num_slices);
     }
     _sg_gl_cache_restore_texture_sampler_binding(0);
 }
