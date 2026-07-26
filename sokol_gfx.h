@@ -12460,6 +12460,21 @@ _SOKOL_PRIVATE void _sg_gl_update_image(_sg_image_t* img, const sg_image_data* d
     _sg_gl_cache_restore_texture_sampler_binding(0);
 }
 
+_SOKOL_PRIVATE void _sg_gl_write_buffer_unsealed(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
+    SOKOL_ASSERT(buf && desc);
+    SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
+    SOKOL_ASSERT((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size);
+    SOKOL_ASSERT((desc->src.offset + desc->size) <= desc->src.data.size);
+
+    SOKOL_ASSERT(false && "FIXME!");
+}
+
+_SOKOL_PRIVATE void _sg_gl_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
+    SOKOL_ASSERT(img && desc);
+
+    SOKOL_ASSERT(false && "FIMXE");
+}
+
 // ██████  ██████  ██████   ██  ██     ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
 // ██   ██      ██ ██   ██ ███ ███     ██   ██ ██   ██ ██      ██  ██  ██      ████   ██ ██   ██
 // ██   ██  █████  ██   ██  ██  ██     ██████  ███████ ██      █████   █████   ██ ██  ██ ██   ██
@@ -15626,8 +15641,12 @@ _SOKOL_PRIVATE void _sg_mtl_discard_buffer(_sg_buffer_t* buf) {
 
 _SOKOL_PRIVATE void _sg_mtl_seal_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
-    // nothing to do here
-    _SOKOL_UNUSED(buf);
+    #if defined(_SG_TARGET_MACOS)
+    __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot]);
+    if (_sg_mtl_resource_options_storage_mode_managed_or_shared() == MTLResourceStorageModeManaged) {
+        [mtl_buf didModifyRange:NSMakeRange(0, buf->cmn.size)];
+    }
+    #endif
 }
 
 _SOKOL_PRIVATE void _sg_mtl_write_miplevel_data(const _sg_image_t* img,
@@ -16985,11 +17004,6 @@ _SOKOL_PRIVATE void _sg_mtl_write_buffer_unsealed(_sg_buffer_t* buf, const sg_wr
     uint8_t* dst_ptr = ((uint8_t*)[mtl_buf contents]) + desc->dst.offset;
     const uint8_t* src_ptr = ((uint8_t*)desc->src.data.ptr) + desc->src.offset;
     memcpy(dst_ptr, src_ptr, desc->size);
-    #if defined(_SG_TARGET_MACOS)
-    if (_sg_mtl_resource_options_storage_mode_managed_or_shared() == MTLResourceStorageModeManaged) {
-        [mtl_buf didModifyRange:NSMakeRange(desc->dst.offset, desc->size)];
-    }
-    #endif
 }
 
 _SOKOL_PRIVATE void _sg_mtl_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
