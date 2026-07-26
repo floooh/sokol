@@ -10874,6 +10874,12 @@ _SOKOL_PRIVATE void _sg_gl_discard_buffer(_sg_buffer_t* buf) {
     _SG_GL_CHECK_ERROR();
 }
 
+_SOKOL_PRIVATE void _sg_gl_seal_buffer(_sg_buffer_t* buf) {
+    SOKOL_ASSERT(buf);
+    // nothing to do here
+    _SOKOL_UNUSED(buf);
+}
+
 _SOKOL_PRIVATE bool _sg_gl_supported_texture_format(sg_pixel_format fmt) {
     const int fmt_index = (int) fmt;
     SOKOL_ASSERT((fmt_index > SG_PIXELFORMAT_NONE) && (fmt_index < _SG_PIXELFORMAT_NUM));
@@ -11076,6 +11082,12 @@ _SOKOL_PRIVATE void _sg_gl_discard_image(_sg_image_t* img) {
         }
     }
     _SG_GL_CHECK_ERROR();
+}
+
+_SOKOL_PRIVATE void _sg_gl_seal_image(_sg_image_t* img) {
+    SOKOL_ASSERT(img);
+    // nothing to do here
+    _SOKOL_UNUSED(img);
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_gl_create_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
