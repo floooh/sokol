@@ -10808,7 +10808,6 @@ _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
     glGenFramebuffers(1, &_sg.gl.fb);
     _SG_GL_CHECK_ERROR();
 
-    // incoming texture data is generally expected to be packed tightly
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     #if defined(SOKOL_GLCORE)
         // enable seamless cubemap sampling (only desktop GL)
@@ -10923,6 +10922,84 @@ _SOKOL_PRIVATE void _sg_gl_texstorage(const _sg_image_t* img) {
         glTexParameteri(tgt, GL_TEXTURE_MAX_LEVEL, num_mips - 1);
     #endif
     _SG_GL_CHECK_ERROR();
+}
+
+_SOKOL_PRIVATE void _sg_gl_write_miplevel_data(const _sg_image_t* img,
+    const uint8_t* src_ptr,
+    size_t src_size,
+    size_t src_offset,
+    int src_bytes_per_row,
+    int src_bytes_per_slice,
+    int mip_level,
+    int x,
+    int y,
+    int slice,
+    int width,
+    int height,
+    int num_slices)
+{
+    SOKOL_ASSERT(img);
+    SOKOL_ASSERT(src_ptr);
+    SOKOL_ASSERT(src_size > 0);
+    SOKOL_ASSERT(src_bytes_per_row > 0);
+    SOKOL_ASSERT(src_bytes_per_slice > 0);
+    SOKOL_ASSERT((mip_level >= 0) && (mip_level < img->cmn.num_mipmaps));
+    SOKOL_ASSERT((x >= 0) && (x < _sg_miplevel_dim(img->cmn.width, mip_level)));
+    SOKOL_ASSERT((y >= 0) && (y < _sg_miplevel_dim(img->cmn.height, mip_level)));
+    SOKOL_ASSERT((slice >= 0) && (slice < img->cmn.num_slices));
+    SOKOL_ASSERT((width > 0) && (x + width <= _sg_miplevel_dim(img->cmn.width, mip_level)));
+    SOKOL_ASSERT((height > 0) && (y + height <= _sg_miplevel_dim(img->cmn.height, mip_level)));
+    SOKOL_ASSERT((num_slices > 0) && (slice + num_slices <= img->cmn.num_slices));
+    SOKOL_ASSERT((src_offset + src_bytes_per_slice * (size_t)num_slices) <= src_size);
+
+    const bool compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
+    const sg_pixel_format fmt = img->cmn.pixel_format;
+
+    // configure pixel unpack properties, note that GL works in number of pixels/blocks, not in bytes
+    const GLint unpack_row_length = src_bytes_per_row / _sg_block_bytesize(fmt);
+    const GLint unpack_img_height = src_bytes_per_slice / src_bytes_per_row;
+    _SG_GL_CHECK_ERROR();
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, unpack_row_length);
+    glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, unpack_img_height);
+    _SG_GL_CHECK_ERROR();
+    const GLenum gl_tgt = img->gl.target;
+    const GLenum gl_ifmt = _sg_gl_teximage_internal_format(fmt);
+    const GLsizei gl_img_size = (GLsizei)(src_size - src_offset);
+    SOKOL_ASSERT(gl_img_size > 0);
+    const GLenum gl_type = _sg_gl_teximage_type(img->cmn.pixel_format);
+    const GLenum gl_fmt = _sg_gl_teximage_format(img->cmn.pixel_format);
+    if (SG_IMAGETYPE_2D == img->cmn.type) {
+        const void* gl_data = (const void*)(src_ptr + src_offset);
+        if (compressed) {
+            glCompressedTexSubImage2D(gl_tgt, mip_level, x, y, width, height, gl_ifmt, gl_img_size, gl_data);
+        } else {
+            glTexSubImage2D(gl_tgt, mip_level, x, y, width, height, gl_fmt, gl_type, gl_data);
+        }
+    } else if (SG_IMAGETYPE_CUBE == img->cmn.type) {
+        for (int i = 0; i < num_slices; i++) {
+            const void* gl_data = (const void*)(src_ptr + src_offset + i * src_bytes_per_slice);
+            const int face_index = i + slice;
+            SOKOL_ASSERT(face_index < 6);
+            const GLenum gl_cubeface_tgt = _sg_gl_cubeface_target(face_index);
+            if (compressed) {
+                glCompressedTexSubImage2D(gl_cubeface_tgt, mip_level, x, y, width, height, gl_ifmt, gl_img_size, gl_data);
+            } else {
+                glTexSubImage2D(gl_cubeface_tgt, mip_level, x, y, width, height, gl_fmt, gl_type, gl_data);
+            }
+        }
+    } else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
+        const void* gl_data = (const void*)(src_ptr + src_offset);
+        if (compressed) {
+            glCompressedTexSubImage3D(gl_tgt, mip_level, x, y, slice, width, height, num_slices, gl_ifmt, gl_img_size, gl_data);
+        } else {
+            glTexSubImage3D(gl_tgt, mip_level, x, y, slice, width, height, num_slices, gl_fmt, gl_type, gl_data);
+        }
+    }
+    _SG_GL_CHECK_ERROR();
+
+    // reset pixel unpack properties
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, 0);
 }
 
 _SOKOL_PRIVATE void _sg_gl_texsubimage(const _sg_image_t* img, GLenum tgt, int mip_index, int w, int h, int depth, const GLvoid* data_ptr, GLsizei data_size) {
@@ -12495,8 +12572,24 @@ _SOKOL_PRIVATE void _sg_gl_write_buffer_unsealed(_sg_buffer_t* buf, const sg_wri
 _SOKOL_PRIVATE void _sg_gl_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == img->slot.state);
-
-    SOKOL_ASSERT(false && "FIMXE");
+    SOKOL_ASSERT(0 == img->cmn.active_slot);
+    SOKOL_ASSERT(0 != img->gl.tex[0]);
+    _sg_gl_cache_store_texture_sampler_binding(0);
+    _sg_gl_cache_bind_texture_sampler(0, img->gl.target, img->gl.tex[0], 0);
+    _sg_gl_write_miplevel_data(img,
+        (const uint8_t*)desc->src.data.ptr,
+        desc->src.data.size,
+        desc->src.offset,
+        desc->src.bytes_per_row,
+        desc->src.bytes_per_slice,
+        desc->dst.mip_level,
+        desc->dst.x,
+        desc->dst.y,
+        desc->dst.slice,
+        desc->size.width,
+        desc->size.height,
+        desc->size.num_slices);
+    _sg_gl_cache_restore_texture_sampler_binding(0);
 }
 
 // ██████  ██████  ██████   ██  ██     ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
@@ -15716,12 +15809,12 @@ _SOKOL_PRIVATE void _sg_mtl_write_miplevel_data(const _sg_image_t* img,
     const int mtl_slice_index = (img->cmn.type == SG_IMAGETYPE_3D) ? 0 : slice;
     const int mtl_num_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? 1 : num_slices;
     for (int i = 0; i < mtl_num_slices; i++) {
-        const int src_offset = i * src_bytes_per_slice;
-        SOKOL_ASSERT((src_offset + src_bytes_per_slice) <= (int)src_size);
+        const int offset = src_offset + i * src_bytes_per_slice;
+        SOKOL_ASSERT((offset + src_bytes_per_slice) <= (int)src_size);
         [mtl_tex replaceRegion:mtl_region
             mipmapLevel:(NSUInteger)mip_level
             slice:(NSUInteger)(mtl_slice_index + i)
-            withBytes:src_ptr + src_offset
+            withBytes:src_ptr + offset
             bytesPerRow:(NSUInteger)src_bytes_per_row
             bytesPerImage:(NSUInteger)mtl_bytes_per_image];
     }
