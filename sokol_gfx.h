@@ -4625,6 +4625,8 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(DRAW_WITHOUT_BINDINGS, "attempting to draw without resource bindings") \
     _SG_LOGITEM_XMACRO(WRITE_BUFFER_UNSEALED_BUFFER_ALIVE, "sg_write_buffer_unsealed: buffer is no longer alive") \
     _SG_LOGITEM_XMACRO(WRITE_IMAGE_UNSEALED_IMAGE_ALIVE, "sg_write_image_unsealed: image is no longer alive") \
+    _SG_LOGITEM_XMACRO(SEAL_BUFFER_ALIVE, "sg_seal_buffer: buffer is no longer alive") \
+    _SG_LOGITEM_XMACRO(SEAL_IMAGE_ALIVE, "sg_seal_image: image is no longer alive") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on vertex shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on fragment shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on compute shader stage (sg_limits.max_texture_bindings_per_stage)") \
@@ -7528,6 +7530,12 @@ _SOKOL_PRIVATE uint32_t _sg_roundup_pow2_u32(uint32_t val, uint32_t round_to) {
 
 _SOKOL_PRIVATE uint64_t _sg_roundup_pow2_u64(uint64_t val, uint64_t round_to) {
     return (val+(round_to-1)) & ~(round_to-1);
+}
+
+_SOKOL_PRIVATE bool _sg_multiple(int val, int of) {
+    SOKOL_ASSERT(val >= 0);
+    SOKOL_ASSERT(of > 0);
+    return (val % of) == 0;
 }
 
 _SOKOL_PRIVATE bool _sg_multiple_u64(uint64_t val, uint64_t of) {
@@ -10952,6 +10960,7 @@ _SOKOL_PRIVATE void _sg_gl_write_miplevel_data(const _sg_image_t* img,
     SOKOL_ASSERT((height > 0) && (y + height <= _sg_miplevel_dim(img->cmn.height, mip_level)));
     SOKOL_ASSERT((num_slices > 0) && (slice + num_slices <= img->cmn.num_slices));
     SOKOL_ASSERT((src_offset + src_bytes_per_slice * (size_t)num_slices) <= src_size);
+    SOKOL_ASSERT(_sg_multiple(src_bytes_per_slice, src_bytes_per_row));
 
     const bool compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
     const sg_pixel_format fmt = img->cmn.pixel_format;
@@ -15792,6 +15801,7 @@ _SOKOL_PRIVATE void _sg_mtl_write_miplevel_data(const _sg_image_t* img,
     SOKOL_ASSERT((height > 0) && (y + height <= _sg_miplevel_dim(img->cmn.height, mip_level)));
     SOKOL_ASSERT((num_slices > 0) && (slice + num_slices <= img->cmn.num_slices));
     SOKOL_ASSERT((src_offset + src_bytes_per_slice * (size_t)num_slices) <= src_size);
+    SOKOL_ASSERT(_sg_multiple(src_bytes_per_slice, src_bytes_per_row));
 
     /* bytesPerImage special case: https://developer.apple.com/documentation/metal/mtltexture/1515679-replaceregion
 
@@ -18426,6 +18436,57 @@ _SOKOL_PRIVATE void _sg_wgpu_copy_buffer_data(const _sg_buffer_t* buf, uint64_t 
     }
 }
 
+_SOKOL_PRIVATE void _sg_wgpu_write_miplevel_data(const _sg_image_t* img,
+    WGPUTexture wgpu_tex,
+    const uint8_t* src_ptr,
+    size_t src_size,
+    size_t src_offset,
+    int src_bytes_per_row,
+    int src_bytes_per_slice,
+    int mip_level,
+    int x,
+    int y,
+    int slice,
+    int width,
+    int height,
+    int num_slices)
+{
+    SOKOL_ASSERT(img);
+    SOKOL_ASSERT(wgpu_tex);
+    SOKOL_ASSERT(src_ptr);
+    SOKOL_ASSERT(src_size > 0);
+    SOKOL_ASSERT(src_bytes_per_row > 0);
+    SOKOL_ASSERT(src_bytes_per_slice > 0);
+    SOKOL_ASSERT((mip_level >= 0) && (mip_level < img->cmn.num_mipmaps));
+    SOKOL_ASSERT((x >= 0) && (x < _sg_miplevel_dim(img->cmn.width, mip_level)));
+    SOKOL_ASSERT((y >= 0) && (y < _sg_miplevel_dim(img->cmn.height, mip_level)));
+    SOKOL_ASSERT((slice >= 0) && (slice < img->cmn.num_slices));
+    SOKOL_ASSERT((width > 0) && (x + width <= _sg_miplevel_dim(img->cmn.width, mip_level)));
+    SOKOL_ASSERT((height > 0) && (y + height <= _sg_miplevel_dim(img->cmn.height, mip_level)));
+    SOKOL_ASSERT((num_slices > 0) && (slice + num_slices <= img->cmn.num_slices));
+    SOKOL_ASSERT((src_offset + src_bytes_per_slice * (size_t)num_slices) <= src_size);
+    SOKOL_ASSERT(_sg_multiple(src_bytes_per_slice, src_bytes_per_row));
+
+    const int block_dim = _sg_block_dim(img->cmn.pixel_format);
+    _SG_STRUCT(WGPUTexelCopyBufferLayout, wgpu_layout);
+    _SG_STRUCT(WGPUTexelCopyTextureInfo, wgpu_copy_tex);
+    _SG_STRUCT(WGPUExtent3D, wgpu_extent);
+    wgpu_layout.offset = src_offset;
+    wgpu_layout.bytesPerRow = (uint32_t)src_bytes_per_row;
+    wgpu_layout.rowsPerImage = (uint32_t)(src_bytes_per_slice / src_bytes_per_row);
+    wgpu_copy_tex.texture = img->wgpu.tex;
+    wgpu_copy_tex.mipLevel = (uint32_t)mip_level;
+    wgpu_copy_tex.origin.x = x;
+    wgpu_copy_tex.origin.y = y;
+    wgpu_copy_tex.origin.z = slice;
+    wgpu_copy_tex.aspect = WGPUTextureAspect_All;
+    wgpu_extent.width = (uint32_t)_sg_roundup_pow2(width, block_dim);
+    wgpu_extent.height = (uint32_t)_sg_roundup_pow2(height, block_dim);
+    wgpu_extent.depthOrArrayLayers = num_slices;
+    const void* ptr = (const void*)(src_ptr + src_offset);
+    wgpuQueueWriteTexture(_sg.wgpu.queue, &wgpu_copy_tex, ptr, src_size, &wgpu_layout, &wgpu_extent);
+}
+
 _SOKOL_PRIVATE void _sg_wgpu_copy_image_data(const _sg_image_t* img, const sg_image_data* data) {
     _SG_STRUCT(WGPUTexelCopyBufferLayout, wgpu_layout);
     _SG_STRUCT(WGPUTexelCopyTextureInfo, wgpu_copy_tex);
@@ -19251,7 +19312,21 @@ _SOKOL_PRIVATE void _sg_wgpu_write_buffer_unsealed(_sg_buffer_t* buf, const sg_w
 _SOKOL_PRIVATE void _sg_wgpu_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == img->slot.state);
-    SOKOL_ASSERT(false && "FIXME");
+    WGPUTexture wgpu_tex = img->wgpu.tex;
+    SOKOL_ASSERT(wgpu_tex);
+    _sg_wgpu_write_miplevel_data(img, wgpu_tex,
+        (const uint8_t*)desc->src.data.ptr,
+        desc->src.data.size,
+        desc->src.offset,
+        desc->src.bytes_per_row,
+        desc->src.bytes_per_slice,
+        desc->dst.mip_level,
+        desc->dst.x,
+        desc->dst.y,
+        desc->dst.slice,
+        desc->size.width,
+        desc->size.height,
+        desc->size.num_slices);
 }
 
 // ██    ██ ██    ██ ██      ██   ██  █████  ███    ██     ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
@@ -26575,6 +26650,8 @@ SOKOL_API_IMPL void sg_seal_buffer(sg_buffer buf_id) {
             _sg_seal_buffer(buf);
             buf->slot.state = SG_RESOURCESTATE_VALID;
         }
+    } else {
+        _SG_ERROR(SEAL_BUFFER_ALIVE);
     }
     _SG_TRACE_ARGS(seal_buffer, buf_id);
 }
@@ -26588,6 +26665,8 @@ SOKOL_API_IMPL void sg_seal_image(sg_image img_id) {
             _sg_seal_image(img);
             img->slot.state = SG_RESOURCESTATE_VALID;
         }
+    } else {
+        _SG_ERROR(SEAL_IMAGE_ALIVE);
     }
     _SG_TRACE_ARGS(seal_image, img_id);
 }
