@@ -18488,29 +18488,25 @@ _SOKOL_PRIVATE void _sg_wgpu_write_miplevel_data(const _sg_image_t* img,
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_copy_image_data(const _sg_image_t* img, const sg_image_data* data) {
-    _SG_STRUCT(WGPUTexelCopyBufferLayout, wgpu_layout);
-    _SG_STRUCT(WGPUTexelCopyTextureInfo, wgpu_copy_tex);
-    wgpu_copy_tex.texture = img->wgpu.tex;
-    wgpu_copy_tex.aspect = WGPUTextureAspect_All;
-    _SG_STRUCT(WGPUExtent3D, wgpu_extent);
-    for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
-        wgpu_copy_tex.mipLevel = (uint32_t)mip_index;
-        int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
-        int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
-        int mip_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
-        const int row_pitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
-        const int num_rows = _sg_num_rows(img->cmn.pixel_format, mip_height);
-        if (_sg_is_compressed_pixel_format(img->cmn.pixel_format)) {
-            mip_width = _sg_roundup_pow2(mip_width, 4);
-            mip_height = _sg_roundup_pow2(mip_height, 4);
-        }
-        wgpu_layout.bytesPerRow = (uint32_t)row_pitch;
-        wgpu_layout.rowsPerImage = (uint32_t)num_rows;
-        wgpu_extent.width = (uint32_t)mip_width;
-        wgpu_extent.height = (uint32_t)mip_height;
-        wgpu_extent.depthOrArrayLayers = (uint32_t)mip_slices;
-        const sg_range* mip_data = &data->mip_levels[mip_index];
-        wgpuQueueWriteTexture(_sg.wgpu.queue, &wgpu_copy_tex, mip_data->ptr, mip_data->size, &wgpu_layout, &wgpu_extent);
+    for (int mip_level = 0; mip_level < img->cmn.num_mipmaps; mip_level++) {
+        const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_level);
+        const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_level);
+        const int mip_depth_or_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_miplevel_dim(img->cmn.num_slices, mip_level) : img->cmn.num_slices;
+        const int bytes_per_row = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
+        const int bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
+        _sg_wgpu_write_miplevel_data(img, img->wgpu.tex,
+            (const uint8_t*)data->mip_levels[mip_level].ptr,
+            data->mip_levels[mip_level].size,
+            0,  // src_offset
+            bytes_per_row,
+            bytes_per_slice,
+            mip_level,
+            0,  // x
+            0,  // y
+            0,  // slice
+            mip_width,
+            mip_height,
+            mip_depth_or_slices);
     }
 }
 
