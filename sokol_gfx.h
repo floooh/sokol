@@ -4706,7 +4706,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_SIZE_MISMATCH, "sg_shader_desc.uniform_blocks[].glsl_uniforms[]: size of uniform block members doesn't match uniform block size") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_ARRAY_COUNT, "sg_shader_desc.uniform_blocks[].glsl_uniforms[].array_count must be >= 1") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_STD140_ARRAY_TYPE, "sg_shader_desc.uniform_blocks[].glsl_uniforms[].type: uniform arrays only allowed for FLOAT4, INT4, MAT4 in std140 layout") \
-    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_METAL_BUFFER_SLOT_COLLISION, "sg_shader_desc.views[].storage_buffer.storagemsl_buffer_n must be unique across uniform blocks and storage buffer in same shader stage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_METAL_BUFFER_SLOT_COLLISION, "sg_shader_desc.views[].storage_buffer.msl_buffer_n must be unique across uniform blocks and storage buffer in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_HLSL_REGISTER_T_COLLISION, "sg_shader_desc.views[].storage_buffer.hlsl_register_t_n must be unique across read-only storage buffers and images in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_HLSL_REGISTER_U_COLLISION, "sg_shader_desc.views[].storage_buffer.hlsl_register_u_n must be unique across read/write storage buffers and storage images in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_GLSL_BINDING_COLLISION, "sg_shader_desc.views[].storage_buffer.glsl_binding_n must be unique across shader stages") \
@@ -6991,6 +6991,7 @@ typedef struct _sg_buffer_s {
     _sg_buffer_common_t cmn;
     struct {
         WGPUBuffer buf;
+        uint8_t* mapped_ptr;
     } wgpu;
 } _sg_wgpu_buffer_t;
 typedef _sg_wgpu_buffer_t _sg_buffer_t;
@@ -18359,7 +18360,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
         // buffer mapping size must be multiple of 4, so round up buffer size (only a problem
         // with index buffers containing odd number of indices)
         const uint64_t wgpu_buf_size = _sg_roundup_pow2_u64((uint64_t)buf->cmn.size, 4);
-        const bool map_at_creation = buf->cmn.usage.immutable && (desc->data.ptr);
+        const bool map_at_creation = buf->cmn.usage.immutable && (desc->data.ptr || buf->cmn.usage.write_unsealed);
 
         _SG_STRUCT(WGPUBufferDescriptor, wgpu_buf_desc);
         wgpu_buf_desc.usage = _sg_wgpu_buffer_usage(&buf->cmn.usage);
@@ -18372,13 +18373,16 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
             return SG_RESOURCESTATE_FAILED;
         }
         if (map_at_creation) {
-            SOKOL_ASSERT(desc->data.ptr && (desc->data.size > 0));
-            SOKOL_ASSERT(desc->data.size <= (size_t)buf->cmn.size);
             // FIXME: inefficient on WASM
-            void* ptr = wgpuBufferGetMappedRange(buf->wgpu.buf, 0, wgpu_buf_size);
-            SOKOL_ASSERT(ptr);
-            memcpy(ptr, desc->data.ptr, desc->data.size);
-            wgpuBufferUnmap(buf->wgpu.buf);
+            buf->wgpu.mapped_ptr = wgpuBufferGetMappedRange(buf->wgpu.buf, 0, wgpu_buf_size);
+            SOKOL_ASSERT(buf->wgpu.mapped_ptr);
+            if (desc->data.ptr) {
+                SOKOL_ASSERT(desc->data.ptr && (desc->data.size > 0));
+                SOKOL_ASSERT(desc->data.size <= (size_t)buf->cmn.size);
+                memcpy(buf->wgpu.mapped_ptr, desc->data.ptr, desc->data.size);
+                wgpuBufferUnmap(buf->wgpu.buf);
+                buf->wgpu.mapped_ptr = 0;
+            }
         }
     }
     return SG_RESOURCESTATE_VALID;
@@ -18386,9 +18390,20 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
-    if (buf->wgpu.buf) {
-        wgpuBufferRelease(buf->wgpu.buf);
+    SOKOL_ASSERT(buf->wgpu.buf);
+    if (buf->wgpu.mapped_ptr) {
+        wgpuBufferUnmap(buf->wgpu.buf);
+        buf->wgpu.mapped_ptr = 0;
     }
+    wgpuBufferRelease(buf->wgpu.buf);
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_seal_buffer(_sg_buffer_t* buf) {
+    SOKOL_ASSERT(buf);
+    SOKOL_ASSERT(buf->wgpu.buf);
+    SOKOL_ASSERT(buf->wgpu.mapped_ptr);
+    wgpuBufferUnmap(buf->wgpu.buf);
+    buf->wgpu.mapped_ptr = 0;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_copy_buffer_data(const _sg_buffer_t* buf, uint64_t offset, const sg_range* data) {
@@ -18479,6 +18494,12 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_image(_sg_image_t* img) {
         wgpuTextureRelease(img->wgpu.tex);
         img->wgpu.tex = 0;
     }
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_seal_image(_sg_image_t* img) {
+    SOKOL_ASSERT(img);
+    // nothing to do here
+    _SOKOL_UNUSED(img);
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
@@ -19213,6 +19234,24 @@ _SOKOL_PRIVATE void _sg_wgpu_append_buffer(_sg_buffer_t* buf, const sg_range* da
 _SOKOL_PRIVATE void _sg_wgpu_update_image(_sg_image_t* img, const sg_image_data* data) {
     SOKOL_ASSERT(img && data);
     _sg_wgpu_copy_image_data(img, data);
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_write_buffer_unsealed(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
+    SOKOL_ASSERT(buf && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == buf->slot.state);
+    SOKOL_ASSERT(buf->wgpu.mapped_ptr);
+    SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
+    SOKOL_ASSERT((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size);
+    SOKOL_ASSERT((desc->src.offset + desc->size) <= desc->src.data.size);
+    uint8_t* dst_ptr = buf->wgpu.mapped_ptr + desc->dst.offset;
+    const uint8_t* src_ptr = ((uint8_t*)desc->src.data.ptr) + desc->src.offset;
+    memcpy(dst_ptr, src_ptr, desc->size);
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
+    SOKOL_ASSERT(img && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == img->slot.state);
+    SOKOL_ASSERT(false && "FIXME");
 }
 
 // ██    ██ ██    ██ ██      ██   ██  █████  ███    ██     ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
