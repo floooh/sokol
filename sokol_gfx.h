@@ -13132,7 +13132,7 @@ _SOKOL_PRIVATE UINT _sg_d3d11_image_cpu_access_flags(const sg_image_usage* usg) 
 
 _SOKOL_PRIVATE D3D11_USAGE _sg_d3d11_buffer_usage(const sg_buffer_usage* usg) {
     if (usg->immutable) {
-        return usg->storage_buffer ? D3D11_USAGE_DEFAULT : D3D11_USAGE_IMMUTABLE;
+        return (usg->storage_buffer || usg->write_unsealed) ? D3D11_USAGE_DEFAULT : D3D11_USAGE_IMMUTABLE;
     } else {
         return D3D11_USAGE_DYNAMIC;
     }
@@ -13596,6 +13596,12 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_buffer(_sg_buffer_t* buf) {
     }
 }
 
+_SOKOL_PRIVATE void _sg_d3d11_seal_buffer(_sg_buffer_t* buf) {
+    SOKOL_ASSERT(buf);
+    // nothing to do here
+    _SOKOL_UNUSED(buf);
+}
+
 _SOKOL_PRIVATE void _sg_d3d11_fill_subres_data(const _sg_image_t* img, const sg_image_data* data) {
     const int num_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? 1 : img->cmn.num_slices;
     int subres_index = 0;
@@ -13715,6 +13721,12 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_image(_sg_image_t* img) {
     if (img->d3d11.res) {
         _sg_d3d11_Release(img->d3d11.res);
     }
+}
+
+_SOKOL_PRIVATE void _sg_d3d11_seal_image(_sg_image_t* img) {
+    SOKOL_ASSERT(img);
+
+    SOKOL_ASSERT(false && "FIXME");
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
@@ -14924,6 +14936,31 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
             }
         }
     }
+}
+
+_SOKOL_PRIVATE void _sg_d3d11_write_buffer_unsealed(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
+    SOKOL_ASSERT(_sg.d3d11.ctx);
+    SOKOL_ASSERT(buf && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == buf->slot.state);
+    SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
+    SOKOL_ASSERT((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size);
+    SOKOL_ASSERT((desc->src.offset + desc->size) <= desc->src.data.size);
+    ID3D11Resource* d3d11_buf = (ID3D11Resource*)buf->d3d11.buf;
+    SOKOL_ASSERT(d3d11_buf);
+    _SG_STRUCT(D3D11_BOX, d3d11_dst_box);
+    d3d11_dst_box.left = (UINT)desc->dst.offset;
+    d3d11_dst_box.right = d3d11_dst_box.left + (UINT)desc->size;
+    d3d11_dst_box.back = 1;
+    d3d11_dst_box.bottom = 1;
+    const void* d3d11_src_ptr = (void*)(((uint8_t*)desc->src.data.ptr) + desc->src.offset);
+    _sg_d3d11_UpdateSubresource(_sg.d3d11.ctx, d3d11_buf, 0, &d3d11_dst_box, d3d11_src_ptr, 0, 0);
+}
+
+_SOKOL_PRIVATE void _sg_d3d11_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
+    SOKOL_ASSERT(img && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == img->slot.state);
+
+    SOKOL_ASSERT(false && "FIXME");
 }
 
 // ███    ███ ███████ ████████  █████  ██          ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
