@@ -14984,7 +14984,7 @@ _SOKOL_PRIVATE void _sg_d3d11_write_miplevel_data(const _sg_image_t* img,
         d3d11_num_slices = 1;
         d3d11_dst_box.front = (UINT)slice;
         d3d11_dst_box.back = (UINT)(slice + num_slices);
-        d3d11_src_depth_pitch = src_bytes_per_slice;
+        d3d11_src_depth_pitch = (UINT)src_bytes_per_slice;
     } else {
         d3d11_slice = slice;
         d3d11_num_slices = num_slices;
