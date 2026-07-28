@@ -25103,7 +25103,7 @@ _SOKOL_PRIVATE sg_pipeline _sg_alloc_pipeline(void) {
     } else {
         res.id = SG_INVALID_ID;
         _SG_ERROR(PIPELINE_POOL_EXHAUSTED);
-   }
+    }
     return res;
 }
 
