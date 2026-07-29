@@ -18967,6 +18967,9 @@ _SOKOL_PRIVATE VkAccessFlags2 _sg_vk_access_mask(_sg_vk_access_t access, bool is
     }
     if (access & _SG_VK_ACCESS_COLOR_ATTACHMENT) {
         f |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+        if (is_dst_access) {
+            f |= VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
+        }
     }
     if (access & _SG_VK_ACCESS_RESOLVE_ATTACHMENT) {
         f |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
