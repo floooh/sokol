@@ -1,5 +1,15 @@
 ## Updates
 
+### 29-Jul-2026
+
+sokol_gfx.h vk: fix a synchronization2 validation layer warning when using a a render attachment
+with `SG_LOADACTION_LOAD`.
+
+Ticket: https://github.com/floooh/sokol/issues/1558
+PR: https://github.com/floooh/sokol/pull/1560
+
+Many thanks to @@alexschlessinger for the ticket and investigation!
+
 ### 25-Jul-2026
 
 sokol_imgui.h has been fixed for Dear ImGui v1.92.9: in the result of `ImGui::GetDrawData()`
