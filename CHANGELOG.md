@@ -2,7 +2,7 @@
 
 ### 29-Jul-2026
 
-sokol_gfx.h vk: fix a synchronization2 validation layer warning when using a a render attachment
+sokol_gfx.h vk: fix a synchronization2 validation layer warning when using a render attachment
 with `SG_LOADACTION_LOAD`.
 
 Ticket: https://github.com/floooh/sokol/issues/1558
