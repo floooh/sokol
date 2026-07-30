@@ -8,7 +8,7 @@ with `SG_LOADACTION_LOAD`.
 Ticket: https://github.com/floooh/sokol/issues/1558
 PR: https://github.com/floooh/sokol/pull/1560
 
-Many thanks to @@alexschlessinger for the ticket and investigation!
+Many thanks to @alexschlessinger for the ticket and investigation!
 
 ### 25-Jul-2026
 
