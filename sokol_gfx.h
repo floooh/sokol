@@ -21548,6 +21548,12 @@ _SOKOL_PRIVATE void _sg_vk_discard_buffer(_sg_buffer_t* buf) {
     }
 }
 
+_SOKOL_PRIVATE void _sg_vk_seal_buffer(_sg_buffer_t* buf) {
+    SOKOL_ASSERT(buf);
+
+    SOKOL_ASSERT(false && "FIXME");
+}
+
 _SOKOL_PRIVATE sg_resource_state _sg_vk_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     VkResult res;
@@ -21609,6 +21615,12 @@ _SOKOL_PRIVATE void _sg_vk_discard_image(_sg_image_t* img) {
         _sg_vk_delete_queue_add(_sg_vk_memory_destructor, (void*)img->vk.mem);
         img->vk.mem = 0;
     }
+}
+
+_SOKOL_PRIVATE void _sg_vk_seal_image(_sg_image_t* img) {
+    SOKOL_ASSERT(img);
+
+    SOKOL_ASSERT(false && "FIXME");
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_vk_create_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
@@ -22562,6 +22574,23 @@ _SOKOL_PRIVATE void _sg_vk_update_image(_sg_image_t* img, const sg_image_data* d
     } else {
         _sg_vk_staging_copy_image_data(img, data, true);
     }
+}
+
+_SOKOL_PRIVATE void _sg_vk_write_buffer_unsealed(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
+    SOKOL_ASSERT(buf && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == buf->slot.state);
+    SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
+    SOKOL_ASSERT((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size);
+    SOKOL_ASSERT((desc->src.offset + desc->size) <= desc->src.data.size);
+
+    SOKOL_ASSERT(false && "FIXME");
+}
+
+_SOKOL_PRIVATE void _sg_vk_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
+    SOKOL_ASSERT(img && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == img->slot.state);
+
+    SOKOL_ASSERT(false && "FIXME");
 }
 
 #endif
