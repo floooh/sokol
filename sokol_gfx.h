@@ -20366,14 +20366,16 @@ _SOKOL_PRIVATE void _sg_vk_staging_map_memcpy_unmap(VkDeviceMemory mem, const vo
     vkUnmapMemory(_sg.vk.dev, mem);
 }
 
-_SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_range* src_data, size_t dst_offset, bool initial_wait) {
+_SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_range* src_data, size_t src_offset, size_t dst_offset, size_t copy_size, bool initial_wait) {
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(_sg.vk.queue);
     SOKOL_ASSERT(_sg.vk.stage.copy.mem);
     SOKOL_ASSERT(_sg.vk.stage.copy.buf);
     SOKOL_ASSERT(buf && buf->vk.buf);
+    SOKOL_ASSERT(copy_size > 0);
     SOKOL_ASSERT(src_data && src_data->ptr && (src_data->size > 0));
-    SOKOL_ASSERT((dst_offset + src_data->size) <= (size_t)buf->cmn.size);
+    SOKOL_ASSERT((src_offset + copy_size) <= src_data->size);
+    SOKOL_ASSERT((dst_offset + copy_size) <= (size_t)buf->cmn.size);
 
     // an inital wait is only needed for updating existing resources but not when populating a new resource
     if (initial_wait) {
@@ -20381,16 +20383,17 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_
         SOKOL_ASSERT(res == VK_SUCCESS); _SOKOL_UNUSED(res);
     }
 
-    VkDeviceMemory dst_mem = _sg.vk.stage.copy.mem;
+    VkDeviceMemory stage_mem = _sg.vk.stage.copy.mem;
     VkBuffer src_buf = _sg.vk.stage.copy.buf;
     VkBuffer dst_buf = buf->vk.buf;
-    const uint8_t* src_ptr = (const uint8_t*)src_data->ptr;
-    uint32_t dst_size = _sg.vk.stage.copy.size;
-    uint32_t bytes_remaining = (uint32_t)src_data->size;
+    const uint8_t* src_ptr = (const uint8_t*)src_data->ptr + src_offset;
+    size_t dst_size = _sg.vk.stage.copy.size;
+    size_t bytes_remaining = copy_size;
     _SG_STRUCT(VkBufferCopy, region);
+    region.srcOffset = 0;
     region.dstOffset = dst_offset;
     while (bytes_remaining > 0) {
-        uint64_t bytes_to_copy = bytes_remaining;
+        size_t bytes_to_copy;
         if (bytes_remaining > dst_size) {
             bytes_to_copy = dst_size;
             bytes_remaining -= dst_size;
@@ -20399,7 +20402,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_
             bytes_remaining = 0;
         }
         region.size = bytes_to_copy;
-        _sg_vk_staging_map_memcpy_unmap(dst_mem, src_ptr, (uint32_t)bytes_to_copy);
+        _sg_vk_staging_map_memcpy_unmap(stage_mem, src_ptr, (uint32_t)bytes_to_copy);
         VkCommandBuffer cmd_buf = _sg_vk_staging_copy_begin();
         vkCmdCopyBuffer(cmd_buf, src_buf, dst_buf, 1, &region);
         _sg_stats_inc(vk.num_cmd_copy_buffer);
@@ -20520,28 +20523,30 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_before_submit(void) {
     _sg_vk_shared_buffer_before_submit(&_sg.vk.stage.stream);
 }
 
-_SOKOL_PRIVATE void _sg_vk_staging_stream_buffer_data(_sg_buffer_t* buf, const sg_range* src_data, size_t dst_offset) {
+_SOKOL_PRIVATE void _sg_vk_staging_stream_buffer_data(_sg_buffer_t* buf, const sg_range* src_data, size_t src_offset, size_t dst_offset, size_t copy_size) {
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(_sg.vk.frame.stream_cmd_buf);
     SOKOL_ASSERT(_sg.vk.stage.stream.cur_buf);
     SOKOL_ASSERT(buf && buf->vk.buf);
     SOKOL_ASSERT(src_data && src_data->ptr && (src_data->size > 0));
-    SOKOL_ASSERT((src_data->size + dst_offset) <= (size_t)buf->cmn.size);
+    SOKOL_ASSERT((src_offset + copy_size) <= src_data->size);
+    SOKOL_ASSERT((dst_offset + copy_size) <= (size_t)buf->cmn.size);
 
-    const uint32_t src_offset = (uint32_t)_sg_vk_shared_buffer_memcpy(&_sg.vk.stage.stream, src_data->ptr, (uint32_t)src_data->size);
-    if (src_offset == _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
+    const uint8_t* src_ptr = (const uint8_t*)src_data->ptr + src_offset;
+    const VkDeviceSize vk_stage_offset = _sg_vk_shared_buffer_memcpy(&_sg.vk.stage.stream, src_ptr, (uint32_t)copy_size);
+    if (vk_stage_offset == _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
         _SG_ERROR(VULKAN_STAGING_STREAM_BUFFER_OVERFLOW);
         return;
     }
     VkCommandBuffer cmd_buf = _sg.vk.frame.stream_cmd_buf;
-    VkBuffer vk_src_buf = _sg.vk.stage.stream.cur_buf;
+    VkBuffer vk_stage_buf = _sg.vk.stage.stream.cur_buf;
     VkBuffer vk_dst_buf = buf->vk.buf;
     _SG_STRUCT(VkBufferCopy, region);
-    region.srcOffset = src_offset;
+    region.srcOffset = vk_stage_offset;
     region.dstOffset = dst_offset;
-    region.size = src_data->size;
+    region.size = copy_size;
     _sg_vk_buffer_barrier(cmd_buf, buf, _SG_VK_ACCESS_STAGING);
-    vkCmdCopyBuffer(cmd_buf, vk_src_buf, vk_dst_buf, 1, &region);
+    vkCmdCopyBuffer(cmd_buf, vk_stage_buf, vk_dst_buf, 1, &region);
     _sg_stats_inc(vk.num_cmd_copy_buffer);
     // FIXME: not great to issue a barrier right here,
     // rethink buffer barrier strategy? => a single memory barrier
@@ -21530,7 +21535,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_buffer(_sg_buffer_t* buf, const s
         SOKOL_ASSERT(buf->vk.dev_addr);
     }
     if (buf->cmn.usage.immutable && desc->data.ptr) {
-        _sg_vk_staging_copy_buffer_data(buf, &desc->data, 0, false);
+        _sg_vk_staging_copy_buffer_data(buf, &desc->data, 0, 0, desc->data.size, false);
     }
     return SG_RESOURCESTATE_VALID;
 }
@@ -21550,8 +21555,8 @@ _SOKOL_PRIVATE void _sg_vk_discard_buffer(_sg_buffer_t* buf) {
 
 _SOKOL_PRIVATE void _sg_vk_seal_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
-
-    SOKOL_ASSERT(false && "FIXME");
+    // nothing to do here
+    _SOKOL_UNUSED(buf);
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_vk_create_image(_sg_image_t* img, const sg_image_desc* desc) {
@@ -22549,9 +22554,9 @@ _SOKOL_PRIVATE void _sg_vk_update_buffer(_sg_buffer_t* buf, const sg_range* data
     SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
     if (buf->cmn.usage.stream_update) {
         _sg_vk_acquire_frame_command_buffers();
-        _sg_vk_staging_stream_buffer_data(buf, data, 0);
+        _sg_vk_staging_stream_buffer_data(buf, data, 0, 0, data->size);
     } else {
-        _sg_vk_staging_copy_buffer_data(buf, data, 0, true);
+        _sg_vk_staging_copy_buffer_data(buf, data, 0, 0, data->size, true);
     }
 }
 
@@ -22560,9 +22565,9 @@ _SOKOL_PRIVATE void _sg_vk_append_buffer(_sg_buffer_t* buf, const sg_range* data
     _SOKOL_UNUSED(new_frame);
     if (buf->cmn.usage.stream_update) {
         _sg_vk_acquire_frame_command_buffers();
-        _sg_vk_staging_stream_buffer_data(buf, data, (size_t)buf->cmn.append_pos);
+        _sg_vk_staging_stream_buffer_data(buf, data, 0, (size_t)buf->cmn.append_pos, data->size);
     } else {
-        _sg_vk_staging_copy_buffer_data(buf, data, (size_t)buf->cmn.append_pos, true);
+        _sg_vk_staging_copy_buffer_data(buf, data, 0, (size_t)buf->cmn.append_pos, data->size, true);
     }
 }
 
@@ -22582,8 +22587,7 @@ _SOKOL_PRIVATE void _sg_vk_write_buffer_unsealed(_sg_buffer_t* buf, const sg_wri
     SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
     SOKOL_ASSERT((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size);
     SOKOL_ASSERT((desc->src.offset + desc->size) <= desc->src.data.size);
-
-    SOKOL_ASSERT(false && "FIXME");
+    _sg_vk_staging_copy_buffer_data(buf, &desc->src.data, desc->src.offset, desc->dst.offset, desc->size, false);
 }
 
 _SOKOL_PRIVATE void _sg_vk_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {

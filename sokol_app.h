@@ -4492,7 +4492,7 @@ _SOKOL_PRIVATE VkBool32 _sapp_vk_debug_utils_messenger_cb(
 {
     SOKOL_ASSERT(cb_data);
     _SOKOL_UNUSED(user_data);
-    uint32_t log_level = 0;
+    uint32_t log_level;
     if (message_severity > VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
         log_level = 1; // error
     } else if (message_severity > VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
@@ -4500,7 +4500,7 @@ _SOKOL_PRIVATE VkBool32 _sapp_vk_debug_utils_messenger_cb(
     } else {
         log_level = 3; // info
     }
-    sapp_log_item log_item = 0;
+    sapp_log_item log_item;
     if (0 != (message_types & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)) {
         log_item = SAPP_LOGITEM_VULKAN_DEBUG_VALIDATION;
     } else if (0 != (message_types & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)) {
