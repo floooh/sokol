@@ -10960,6 +10960,7 @@ _SOKOL_PRIVATE void _sg_gl_write_miplevel_data(const _sg_image_t* img,
     SOKOL_ASSERT((height > 0) && (y + height <= _sg_miplevel_dim(img->cmn.height, mip_level)));
     SOKOL_ASSERT((num_slices > 0) && (slice + num_slices <= img->cmn.num_slices));
     SOKOL_ASSERT((src_offset + src_bytes_per_slice * (size_t)num_slices) <= src_size);
+    SOKOL_ASSERT(_sg_multiple(src_bytes_per_row), _sg_block_bytesize(img->fmt.pixel_format));
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_slice, src_bytes_per_row));
 
     const bool compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
@@ -14968,6 +14969,7 @@ _SOKOL_PRIVATE void _sg_d3d11_write_miplevel_data(const _sg_image_t* img,
     SOKOL_ASSERT((height > 0) && (y + height <= _sg_miplevel_dim(img->cmn.height, mip_level)));
     SOKOL_ASSERT((num_slices > 0) && (slice + num_slices <= img->cmn.num_slices));
     SOKOL_ASSERT((src_offset + src_bytes_per_slice * (size_t)num_slices) <= src_size);
+    SOKOL_ASSERT(_sg_multiple(src_bytes_per_row), _sg_block_bytesize(img->fmt.pixel_format));
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_slice, src_bytes_per_row));
 
     const UINT d3d11_src_row_pitch = (UINT)src_bytes_per_row;
@@ -15917,6 +15919,7 @@ _SOKOL_PRIVATE void _sg_mtl_write_miplevel_data(const _sg_image_t* img,
     SOKOL_ASSERT((height > 0) && (y + height <= _sg_miplevel_dim(img->cmn.height, mip_level)));
     SOKOL_ASSERT((num_slices > 0) && (slice + num_slices <= img->cmn.num_slices));
     SOKOL_ASSERT((src_offset + src_bytes_per_slice * (size_t)num_slices) <= src_size);
+    SOKOL_ASSERT(_sg_multiple(src_bytes_per_row), _sg_block_bytesize(img->fmt.pixel_format));
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_slice, src_bytes_per_row));
 
     /* bytesPerImage special case: https://developer.apple.com/documentation/metal/mtltexture/1515679-replaceregion
@@ -18581,6 +18584,7 @@ _SOKOL_PRIVATE void _sg_wgpu_write_miplevel_data(const _sg_image_t* img,
     SOKOL_ASSERT((height > 0) && (y + height <= _sg_miplevel_dim(img->cmn.height, mip_level)));
     SOKOL_ASSERT((num_slices > 0) && (slice + num_slices <= img->cmn.num_slices));
     SOKOL_ASSERT((src_offset + src_bytes_per_slice * (size_t)num_slices) <= src_size);
+    SOKOL_ASSERT(_sg_multiple(src_bytes_per_row), _sg_block_bytesize(img->fmt.pixel_format));
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_slice, src_bytes_per_row));
 
     const int block_dim = _sg_block_dim(img->cmn.pixel_format);
@@ -20436,68 +20440,123 @@ _SOKOL_PRIVATE void _sg_vk_init_vk_image_staging_structs(const _sg_image_t* img,
     copy_info->pRegions = region;
 }
 
-_SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_image_data* src_data, bool initial_wait) {
+_SOKOL_PRIVATE void _sg_vk_staging_copy_miplevel_data(_sg_image_t* img,
+    const uint8_t* src_ptr,
+    size_t src_size,
+    size_t src_offset,
+    int src_bytes_per_row,
+    int src_bytes_per_slice,
+    int mip_level,
+    int x,
+    int y,
+    int slice,
+    int width,
+    int height,
+    int num_slices,
+    bool initial_wait)
+{
     SOKOL_ASSERT(_sg.vk.dev);
     SOKOL_ASSERT(_sg.vk.queue);
     SOKOL_ASSERT(_sg.vk.stage.copy.mem);
     SOKOL_ASSERT(_sg.vk.stage.copy.buf);
     SOKOL_ASSERT(img && img->vk.img);
-    const uint32_t block_dim = (uint32_t)_sg_block_dim(img->cmn.pixel_format);
+    SOKOL_ASSERT(src_ptr);
+    SOKOL_ASSERT(src_size > 0);
+    SOKOL_ASSERT(src_bytes_per_row > 0);
+    SOKOL_ASSERT(src_bytes_per_slice > 0);
+    SOKOL_ASSERT((mip_level >= 0) && (mip_level < img->cmn.num_mipmaps));
+    SOKOL_ASSERT((x >= 0) && (x < _sg_miplevel_dim(img->cmn.width, mip_level)));
+    SOKOL_ASSERT((y >= 0) && (y < _sg_miplevel_dim(img->cmn.height, mip_level)));
+    SOKOL_ASSERT((slice >= 0) && (slice < img->cmn.num_slices));
+    SOKOL_ASSERT((width > 0) && (x + width <= _sg_miplevel_dim(img->cmn.width, mip_level)));
+    SOKOL_ASSERT((height > 0) && (y + height <= _sg_miplevel_dim(img->cmn.height, mip_level)));
+    SOKOL_ASSERT((num_slices > 0) && (slice + num_slices <= img->cmn.num_slices));
+    SOKOL_ASSERT((src_offset + src_bytes_per_slice * (size_t)num_slices) <= src_size);
+    SOKOL_ASSERT(_sg_multiple(src_bytes_per_row, _sg_block_bytesize(img->cmn.pixel_format)));
+    SOKOL_ASSERT(_sg_multiple(src_bytes_per_slice, src_bytes_per_row));
 
-    // an inital wait is only needed for updating existing resources but not when populating a new resource
     if (initial_wait) {
         VkResult res = vkQueueWaitIdle(_sg.vk.queue);
         SOKOL_ASSERT(res == VK_SUCCESS); _SOKOL_UNUSED(res);
     }
-
-    VkDeviceMemory mem = _sg.vk.stage.copy.mem;
+    const VkDeviceMemory mem = _sg.vk.stage.copy.mem;
     _SG_STRUCT(VkBufferImageCopy2, region);
     _SG_STRUCT(VkCopyBufferToImageInfo2, copy_info);
     _sg_vk_init_vk_image_staging_structs(img, _sg.vk.stage.copy.buf, &region, &copy_info);
-    for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
-        const uint8_t* src_ptr = (uint8_t*)src_data->mip_levels[mip_index].ptr;
-        int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
-        int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
-        int mip_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
-        const uint32_t row_pitch = (uint32_t) _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
-        const uint32_t num_rows = (uint32_t) _sg_num_rows(img->cmn.pixel_format, mip_height);
-        region.imageSubresource.mipLevel = (uint32_t)mip_index;
-        region.imageExtent.width = (uint32_t)mip_width;
+    const int block_dim = _sg_block_dim(img->cmn.pixel_format);
+    const int block_bytesize = _sg_block_bytesize(img->cmn.pixel_format);
+    region.bufferRowLength = (src_bytes_per_row / block_bytesize) * block_dim;
+    region.bufferImageHeight = (src_bytes_per_slice / src_bytes_per_row) * block_dim;
+    region.imageSubresource.mipLevel = (uint32_t)mip_level;
+    region.imageOffset.x = x;
+    region.imageExtent.width = (uint32_t)width;
 
-        const uint32_t max_rows = _sg.vk.stage.copy.size / row_pitch;
-        for (int slice_index = 0; slice_index < mip_slices; slice_index++) {
-            if (img->cmn.type == SG_IMAGETYPE_3D) {
-                region.imageOffset.z = slice_index;
-            } else {
-                region.imageSubresource.baseArrayLayer = (uint32_t)slice_index;
-            }
-            uint32_t rows_remaining = num_rows;
-            uint32_t cur_row = 0;
-            while (rows_remaining > 0) {
-                uint32_t rows_to_copy = rows_remaining;
-                if (rows_remaining > max_rows) {
-                    rows_to_copy = max_rows;
-                    rows_remaining -= max_rows;
-                } else {
-                    rows_to_copy = rows_remaining;
-                    rows_remaining = 0;
-                }
-                const uint32_t bytes_to_copy = rows_to_copy * row_pitch;
-                SOKOL_ASSERT(bytes_to_copy <= _sg.vk.stage.copy.size);
-                _sg_vk_staging_map_memcpy_unmap(mem, src_ptr, bytes_to_copy);
-                src_ptr += bytes_to_copy;
-                VkCommandBuffer cmd_buf = _sg_vk_staging_copy_begin();
-                _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_STAGING);
-                region.imageOffset.y = (int32_t)(cur_row * block_dim);
-                region.imageExtent.height = _sg_min((uint32_t)mip_height, rows_to_copy * block_dim);
-                vkCmdCopyBufferToImage2(cmd_buf, &copy_info);
-                _sg_stats_inc(vk.num_cmd_copy_buffer_to_image);
-                _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
-
-                _sg_vk_staging_copy_end(cmd_buf, _sg.vk.queue);
-                cur_row += rows_to_copy;
-            }
+    // NOTE: each array and depth slices are copied individually, this
+    // simplifies copying through a smallish staging buffer which may
+    // be smaller than even an individual slice
+    const uint8_t* cur_ptr = src_ptr + src_offset;
+    const uint32_t max_rows = _sg.vk.stage.copy.size / (uint32_t)src_bytes_per_row;
+    const uint32_t num_rows = (uint32_t)(src_bytes_per_slice / src_bytes_per_row);
+    for (int i = 0; i < num_slices; i++) {
+        int cur_slice = i + slice;
+        if (img->cmn.type == SG_IMAGETYPE_3D) {
+            region.imageOffset.z = (uint32_t)cur_slice;
+        } else {
+            region.imageSubresource.baseArrayLayer = (uint32_t)cur_slice;
         }
+        uint32_t rows_remaining = num_rows;
+        uint32_t cur_row = 0;
+        while (rows_remaining > 0) {
+            uint32_t rows_to_copy = rows_remaining;
+            if (rows_remaining > max_rows) {
+                rows_to_copy = max_rows;
+                rows_remaining -= max_rows;
+            } else {
+                rows_to_copy = rows_remaining;
+                rows_remaining = 0;
+            }
+            const uint32_t bytes_to_copy = rows_to_copy * (uint32_t)src_bytes_per_row;
+            SOKOL_ASSERT(bytes_to_copy <= _sg.vk.stage.copy.size);
+            _sg_vk_staging_map_memcpy_unmap(mem, cur_ptr, bytes_to_copy);
+            cur_ptr += bytes_to_copy;
+            VkCommandBuffer cmd_buf = _sg_vk_staging_copy_begin();
+            _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_STAGING);
+            region.imageOffset.y = y + (int32_t)(cur_row * block_dim);
+            region.imageExtent.height = _sg_min((uint32_t)height, rows_to_copy * block_dim);
+            vkCmdCopyBufferToImage2(cmd_buf, &copy_info);
+            _sg_stats_inc(vk.num_cmd_copy_buffer_to_image);
+            _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
+            _sg_vk_staging_copy_end(cmd_buf, _sg.vk.queue);
+            cur_row += rows_to_copy;
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_image_data* src_data, bool initial_wait) {
+    SOKOL_ASSERT(img);
+    const sg_pixel_format fmt = img->cmn.pixel_format;
+    for (int mip_level = 0; mip_level < img->cmn.num_mipmaps; mip_level++) {
+        SOKOL_ASSERT(src_data->mip_levels[mip_level].ptr);
+        SOKOL_ASSERT(src_data->mip_levels[mip_level].size > 0);
+        const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_level);
+        const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_level);
+        const int mip_depth_or_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_miplevel_dim(img->cmn.num_slices, mip_level) : img->cmn.num_slices;
+        const int bytes_per_row = _sg_row_pitch(fmt, mip_width, 1);
+        const int bytes_per_slice = _sg_surface_pitch(fmt, mip_width, mip_height, 1);
+        _sg_vk_staging_copy_miplevel_data(img,
+            (const uint8_t*)src_data->mip_levels[mip_level].ptr,
+            src_data->mip_levels[mip_level].size,
+            0,  // src_offset
+            bytes_per_row,
+            bytes_per_slice,
+            mip_level,
+            0,  // x
+            0,  // y
+            0,  // slice
+            mip_width,
+            mip_height,
+            mip_depth_or_slices,
+            (mip_level == 0) ? initial_wait : false);
     }
 }
 
