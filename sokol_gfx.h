@@ -4560,6 +4560,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VULKAN_STAGING_ALLOCATE_MEMORY_FAILED, "vulkan: allocating device memory for staging buffer failed") \
     _SG_LOGITEM_XMACRO(VULKAN_STAGING_BIND_BUFFER_MEMORY_FAILED, "vulkan: vkBindBufferMemory() failed for staging buffer") \
     _SG_LOGITEM_XMACRO(VULKAN_STAGING_STREAM_BUFFER_OVERFLOW, "vulkan: per-frame stream staging buffer has overflown (sg_desc.vulkan.stream_staging_buffer_size)") \
+    _SG_LOGITEM_XMACRO(VULKAN_STAGING_IMAGE_ROW_PITCH_GREATER_STAGING_BUFFER, "vulkan: the row-pitch of an image update operation is greater than the staging buffer size (increase sg_desc.vulkan.copy_staging_buffer_size)") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_SHARED_BUFFER_FAILED, "vulkan: vkCreateBuffer() failed for cpu/gpu-shared buffer") \
     _SG_LOGITEM_XMACRO(VULKAN_ALLOCATE_SHARED_BUFFER_MEMORY_FAILED, "vulkan: allocating device memory for cpu/gpu-shared buffer failed") \
     _SG_LOGITEM_XMACRO(VULKAN_BIND_SHARED_BUFFER_MEMORY_FAILED, "vulkan: vkBindBufferMemory() failed for cpu/gpu-shared buffer") \
@@ -20494,10 +20495,17 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_miplevel_data(_sg_image_t* img,
     // NOTE: each array and depth slices are copied individually, this
     // simplifies copying through a smallish staging buffer which may
     // be smaller than even an individual slice
-    const uint8_t* cur_ptr = src_ptr + src_offset;
     const uint32_t max_rows = _sg.vk.stage.copy.size / (uint32_t)src_bytes_per_row;
-    const uint32_t num_rows = (uint32_t)(src_bytes_per_slice / src_bytes_per_row);
+    if (max_rows == 0) {
+        _SG_ERROR(VULKAN_STAGING_IMAGE_ROW_PITCH_GREATER_STAGING_BUFFER);
+        return;
+    }
+    // actual number of slice-rows to copy (cannot use src_bytes_per_slice for
+    // computation, since the source data may have gaps between slices)
+    const uint32_t num_rows = (uint32_t)_sg_num_rows(img->cmn.pixel_format, height);
+    SOKOL_ASSERT((uint32_t)src_bytes_per_slice >= (num_rows * (uint32_t)src_bytes_per_row));
     for (int i = 0; i < num_slices; i++) {
+        const uint8_t* cur_ptr = src_ptr + src_offset + (size_t)i * (size_t)src_bytes_per_slice;
         int cur_slice = i + slice;
         if (img->cmn.type == SG_IMAGETYPE_3D) {
             region.imageOffset.z = (uint32_t)cur_slice;
