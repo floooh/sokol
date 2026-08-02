@@ -21691,8 +21691,8 @@ _SOKOL_PRIVATE void _sg_vk_discard_image(_sg_image_t* img) {
 
 _SOKOL_PRIVATE void _sg_vk_seal_image(_sg_image_t* img) {
     SOKOL_ASSERT(img);
-
-    SOKOL_ASSERT(false && "FIXME");
+    // nothing to do here
+    _SOKOL_UNUSED(img);
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_vk_create_sampler(_sg_sampler_t* smp, const sg_sampler_desc* desc) {
@@ -22660,8 +22660,20 @@ _SOKOL_PRIVATE void _sg_vk_write_buffer_unsealed(_sg_buffer_t* buf, const sg_wri
 _SOKOL_PRIVATE void _sg_vk_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == img->slot.state);
-
-    SOKOL_ASSERT(false && "FIXME");
+    _sg_vk_staging_copy_miplevel_data(img,
+        (const uint8_t*)desc->src.data.ptr,
+        desc->src.data.size,
+        desc->src.offset,
+        desc->src.bytes_per_row,
+        desc->src.bytes_per_slice,
+        desc->dst.mip_level,
+        desc->dst.x,
+        desc->dst.y,
+        desc->dst.slice,
+        desc->size.width,
+        desc->size.height,
+        desc->size.num_slices,
+        false); // initial_wait
 }
 
 #endif
