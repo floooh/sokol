@@ -5125,16 +5125,19 @@ _SOKOL_PRIVATE void _sapp_vk_discard(void) {
 
 _SOKOL_PRIVATE void _sapp_vk_swapchain_next(void) {
     SOKOL_ASSERT(_sapp.vk.device);
+    // swapchain_acquired flag should always be false at this point
+    // since it's reset by _sapp_vk_present()
+    SOKOL_ASSERT(!_sapp.vk.swapchain_acquired);
     if (!_sapp.vk.swapchain_valid) {
         // try to re-create swapchain and resume normal operation when succeeded
+        // (the failure path may be triggered on Windows with NVIDIA while the
+        // application window is minimized)
         _sapp_vk_recreate_swapchain();
         if (!_sapp.vk.swapchain_valid) {
-            _sapp.vk.swapchain_acquired = false;
             return;
         }
     }
     SOKOL_ASSERT(_sapp.vk.swapchain);
-    _sapp.vk.swapchain_acquired = true;
     VkResult res = vkAcquireNextImageKHR(
         _sapp.vk.device,
         _sapp.vk.swapchain,
@@ -5142,14 +5145,30 @@ _SOKOL_PRIVATE void _sapp_vk_swapchain_next(void) {
         _sapp.vk.sync[_sapp.vk.sync_slot].present_complete_sem, // semaphore to signal
         0,  // fence to signal
         &_sapp.vk.cur_swapchain_image_index);
-    if ((res != VK_NOT_READY) && (res != VK_SUBOPTIMAL_KHR) && (res != VK_SUCCESS) && (res != VK_TIMEOUT)) {
-        _SAPP_WARN(VULKAN_ACQUIRE_NEXT_IMAGE_FAILED);
+    // NOTE: on some configs (e.g. Linux+Intel, Windows+Intel, Windows+NVIDIA) vkAcquireNextImageKHR
+    // never returns with VK_ERROR_OUT_OF_DATE, and essentially always succeeds.
+    // This makes the following error handling hard to test reliably, we're basically
+    // doing the same here as in the SaschaWillems samples: when vkAcquireNextImage returns
+    // with VK_ERROR_OUT_OF_DATE, we just recreate the swapchain but don't attempt to
+    // re-acquire and instead skip the next frame (via sapp_acquire_swapchain returning
+    // an 'invalid' swapchain which then causes sokol-gfx to skip rendering and presentation)
+    //
+    // also see ticket: https://github.com/floooh/sokol/issues/1564
+    //
+    if ((res == VK_SUCCESS) || (res == VK_SUBOPTIMAL_KHR)) {
+        // only place where the swapchain_acquired flag is set to true
+        _sapp.vk.swapchain_acquired = true;
+    } else if (res == VK_ERROR_OUT_OF_DATE_KHR) {
+        _sapp_vk_recreate_swapchain();
+    } else {
+        _SAPP_ERROR(VULKAN_ACQUIRE_NEXT_IMAGE_FAILED);
     }
 }
 
 _SOKOL_PRIVATE void _sapp_vk_present(void) {
     SOKOL_ASSERT(_sapp.vk.queue);
     if (_sapp.vk.swapchain_acquired) {
+        // only place where swapchain_acquired flag is set to false
         _sapp.vk.swapchain_acquired = false;
         _SAPP_STRUCT(VkPresentInfoKHR, present_info);
         present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -5161,6 +5180,9 @@ _SOKOL_PRIVATE void _sapp_vk_present(void) {
         present_info.pSwapchains = &_sapp.vk.swapchain;
         present_info.pImageIndices = &_sapp.vk.cur_swapchain_image_index;
         VkResult res = vkQueuePresentKHR(_sapp.vk.queue, &present_info);
+        // NOTE: the different behaviour for VK_SUBOPTIMAL_KHR here compared to
+        // to the acquire-swapchain code is intended, it's the same as in the
+        // SaschaWillems Vulkan samples
         if ((res == VK_ERROR_OUT_OF_DATE_KHR) || (res == VK_SUBOPTIMAL_KHR)) {
             _sapp_vk_recreate_swapchain();
         } else if (res != VK_SUCCESS) {
@@ -14781,7 +14803,7 @@ SOKOL_API_IMPL sapp_swapchain sapp_acquire_swapchain(void) {
     #endif
     #if defined(SOKOL_VULKAN)
         _sapp_vk_swapchain_next();
-        res.invalid = !_sapp.vk.swapchain_valid;
+        res.invalid = !_sapp.vk.swapchain_acquired;
         if (res.invalid) {
             return res;
         }
