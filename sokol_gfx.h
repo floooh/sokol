@@ -10961,7 +10961,7 @@ _SOKOL_PRIVATE void _sg_gl_write_miplevel_data(const _sg_image_t* img,
     SOKOL_ASSERT((height > 0) && (y + height <= _sg_miplevel_dim(img->cmn.height, mip_level)));
     SOKOL_ASSERT((num_slices > 0) && (slice + num_slices <= img->cmn.num_slices));
     SOKOL_ASSERT((src_offset + src_bytes_per_slice * (size_t)num_slices) <= src_size);
-    SOKOL_ASSERT(_sg_multiple(src_bytes_per_row), _sg_block_bytesize(img->fmt.pixel_format));
+    SOKOL_ASSERT(_sg_multiple(src_bytes_per_row, _sg_block_bytesize(img->cmn.pixel_format)));
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_slice, src_bytes_per_row));
 
     const bool compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
@@ -14970,7 +14970,7 @@ _SOKOL_PRIVATE void _sg_d3d11_write_miplevel_data(const _sg_image_t* img,
     SOKOL_ASSERT((height > 0) && (y + height <= _sg_miplevel_dim(img->cmn.height, mip_level)));
     SOKOL_ASSERT((num_slices > 0) && (slice + num_slices <= img->cmn.num_slices));
     SOKOL_ASSERT((src_offset + src_bytes_per_slice * (size_t)num_slices) <= src_size);
-    SOKOL_ASSERT(_sg_multiple(src_bytes_per_row), _sg_block_bytesize(img->fmt.pixel_format));
+    SOKOL_ASSERT(_sg_multiple(src_bytes_per_row, _sg_block_bytesize(img->cmn.pixel_format)));
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_slice, src_bytes_per_row));
 
     const UINT d3d11_src_row_pitch = (UINT)src_bytes_per_row;
@@ -15920,7 +15920,7 @@ _SOKOL_PRIVATE void _sg_mtl_write_miplevel_data(const _sg_image_t* img,
     SOKOL_ASSERT((height > 0) && (y + height <= _sg_miplevel_dim(img->cmn.height, mip_level)));
     SOKOL_ASSERT((num_slices > 0) && (slice + num_slices <= img->cmn.num_slices));
     SOKOL_ASSERT((src_offset + src_bytes_per_slice * (size_t)num_slices) <= src_size);
-    SOKOL_ASSERT(_sg_multiple(src_bytes_per_row), _sg_block_bytesize(img->fmt.pixel_format));
+    SOKOL_ASSERT(_sg_multiple(src_bytes_per_row, _sg_block_bytesize(img->cmn.pixel_format)));
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_slice, src_bytes_per_row));
 
     /* bytesPerImage special case: https://developer.apple.com/documentation/metal/mtltexture/1515679-replaceregion
@@ -18585,7 +18585,7 @@ _SOKOL_PRIVATE void _sg_wgpu_write_miplevel_data(const _sg_image_t* img,
     SOKOL_ASSERT((height > 0) && (y + height <= _sg_miplevel_dim(img->cmn.height, mip_level)));
     SOKOL_ASSERT((num_slices > 0) && (slice + num_slices <= img->cmn.num_slices));
     SOKOL_ASSERT((src_offset + src_bytes_per_slice * (size_t)num_slices) <= src_size);
-    SOKOL_ASSERT(_sg_multiple(src_bytes_per_row), _sg_block_bytesize(img->fmt.pixel_format));
+    SOKOL_ASSERT(_sg_multiple(src_bytes_per_row, _sg_block_bytesize(img->cmn.pixel_format)));
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_slice, src_bytes_per_row));
 
     const int block_dim = _sg_block_dim(img->cmn.pixel_format);
