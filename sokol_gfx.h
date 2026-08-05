@@ -4972,6 +4972,9 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_HEIGHT, "sg_write_image_unsealed: desc.size.height must be >= 0 and <= destination image heigth") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_NUMSLICES, "sg_write_image_unsealed: desc.size.num_slices must be >= 0 and <= destination image num slices") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_READ_OVERFLOW, "sg_write_image_unsealed: desc.src.offset + size of written data must be <= desc.src.data.size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_DST_X_RANGE, "sg_write_image_unsealed: desc.dst.x must be >= 0 and < miplevel width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_DST_Y_RANGE, "sg_write_image_unsealed: desc.dst.y must be >= 0 and < miplevel height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_DST_SLICE_RANGE, "sg_write_image_unsealed: desc.dst.slice must be >= 0 and < miplevel depth or array/cubemap slices") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_WRITE_WIDTH_OVERFLOW, "sg_write_image_unsealed: desc.src.x + desc.size.width must be <= destination mip level width") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_WRITE_HEIGHT_OVERFLOW, "sg_write_image_unsealed: desc.src.y + desc.size.height must be <= destination mip level height") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_WRITE_NUMSLICES_OVERFLOW, "sg_write_image_unsealed: desc.src.slice + desc.size.num_slices must be <= destination number of slices in mip level") \
@@ -24849,6 +24852,9 @@ _SOKOL_PRIVATE bool _sg_validate_write_image_unsealed(const _sg_image_t* img, co
         _SG_VALIDATE((desc->size.height >= 0) && (desc->size.height <= mip_height), VALIDATE_WRITEIMAGEUNSEALED_HEIGHT);
         _SG_VALIDATE((desc->size.num_slices >= 0) && (desc->size.num_slices <= mip_depth_or_slices), VALIDATE_WRITEIMAGEUNSEALED_NUMSLICES);
         _SG_VALIDATE((desc->src.offset + write_size) <= desc->src.data.size, VALIDATE_WRITEIMAGEUNSEALED_READ_OVERFLOW);
+        _SG_VALIDATE((desc->dst.x >= 0) && (desc->dst.x < mip_width), VALIDATE_WRITEIMAGEUNSEALED_DST_X_RANGE);
+        _SG_VALIDATE((desc->dst.y >= 0) && (desc->dst.y < mip_height), VALIDATE_WRITEIMAGEUNSEALED_DST_Y_RANGE);
+        _SG_VALIDATE((desc->dst.slice >= 0) && (desc->dst.slice < mip_depth_or_slices), VALIDATE_WRITEIMAGEUNSEALED_DST_SLICE_RANGE);
         _SG_VALIDATE((desc->dst.x + desc->size.width) <= mip_width, VALIDATE_WRITEIMAGEUNSEALED_WRITE_WIDTH_OVERFLOW);
         _SG_VALIDATE((desc->dst.y + desc->size.height) <= mip_height, VALIDATE_WRITEIMAGEUNSEALED_WRITE_HEIGHT_OVERFLOW);
         _SG_VALIDATE((desc->dst.slice + desc->size.num_slices) <= mip_depth_or_slices, VALIDATE_WRITEIMAGEUNSEALED_WRITE_NUMSLICES_OVERFLOW);
