@@ -25653,9 +25653,9 @@ _SOKOL_PRIVATE sg_write_image_desc _sg_write_image_desc_defaults(const _sg_image
     const int mip_depth_or_slices = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, desc->dst.mip_level) : img->cmn.num_slices;
     res.src.bytes_per_row = _sg_def(res.src.bytes_per_row, _sg_row_pitch(fmt, mip_width, 1));
     res.src.bytes_per_slice = _sg_def(res.src.bytes_per_slice, _sg_surface_pitch(fmt, mip_width, mip_height, 1));
-    res.size.width = _sg_def(res.size.width, mip_width);
-    res.size.height = _sg_def(res.size.height, mip_height);
-    res.size.num_slices = _sg_def(res.size.num_slices, mip_depth_or_slices);
+    res.size.width = _sg_def(res.size.width, mip_width - desc->dst.x);
+    res.size.height = _sg_def(res.size.height, mip_height - desc->dst.y);
+    res.size.num_slices = _sg_def(res.size.num_slices, mip_depth_or_slices - desc->dst.slice);
     return res;
 }
 
