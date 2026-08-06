@@ -18560,7 +18560,6 @@ _SOKOL_PRIVATE void _sg_wgpu_copy_buffer_data(const _sg_buffer_t* buf, uint64_t 
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_write_miplevel_data(const _sg_image_t* img,
-    WGPUTexture wgpu_tex,
     const uint8_t* src_ptr,
     size_t src_size,
     size_t src_offset,
@@ -18618,7 +18617,7 @@ _SOKOL_PRIVATE void _sg_wgpu_copy_image_data(const _sg_image_t* img, const sg_im
         const int mip_depth_or_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_miplevel_dim(img->cmn.num_slices, mip_level) : img->cmn.num_slices;
         const int bytes_per_row = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
         const int bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
-        _sg_wgpu_write_miplevel_data(img, img->wgpu.tex,
+        _sg_wgpu_write_miplevel_data(img,
             (const uint8_t*)data->mip_levels[mip_level].ptr,
             data->mip_levels[mip_level].size,
             0,  // src_offset
@@ -19432,9 +19431,7 @@ _SOKOL_PRIVATE void _sg_wgpu_write_buffer_unsealed(_sg_buffer_t* buf, const sg_w
 _SOKOL_PRIVATE void _sg_wgpu_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == img->slot.state);
-    WGPUTexture wgpu_tex = img->wgpu.tex;
-    SOKOL_ASSERT(wgpu_tex);
-    _sg_wgpu_write_miplevel_data(img, wgpu_tex,
+    _sg_wgpu_write_miplevel_data(img,
         (const uint8_t*)desc->src.data.ptr,
         desc->src.data.size,
         desc->src.offset,
