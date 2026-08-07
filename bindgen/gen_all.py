@@ -5,36 +5,40 @@ parser.add_argument("--zig-tiger-style", action="store_true", help="Enable zig t
 args = parser.parse_args()
 
 tasks = [
-    [ '../sokol_log.h',            'slog_',     [] ],
-    [ '../sokol_gfx.h',            'sg_',       [] ],
-    [ '../sokol_app.h',            'sapp_',     [] ],
-    [ '../sokol_glue.h',           'sglue_',    ['sg_'] ],
-    [ '../sokol_time.h',           'stm_',      [] ],
-    [ '../sokol_audio.h',          'saudio_',   [] ],
-    [ '../util/sokol_gl.h',        'sgl_',      ['sg_'] ],
-    [ '../util/sokol_debugtext.h', 'sdtx_',     ['sg_'] ],
-    [ '../util/sokol_shape.h',     'sshape_',   ['sg_'] ],
+    [ '../sokol_log.h',              'slog_',     [] ],
+    [ '../sokol_gfx.h',              'sg_',       [] ],
+    [ '../sokol_app.h',              'sapp_',     [] ],
+    [ '../sokol_glue.h',             'sglue_',    ['sg_'] ],
+    [ '../sokol_time.h',             'stm_',      [] ],
+    [ '../sokol_audio.h',            'saudio_',   [] ],
+    [ '../util/sokol_gl.h',          'sgl_',      ['sg_'] ],
+    [ '../util/sokol_debugtext.h',   'sdtx_',     ['sg_'] ],
+    [ '../util/sokol_shape.h',       'sshape_',   ['sg_'] ],
+    [ '../util/sokol_framebuffer.h', 'sfb_',      ['sg_'] ],
+    [ '../util/sokol_letterbox.h',   'slbx_',     [] ],
 ]
 
 # common prefix- to module-names mapping table
 # (language bindings may decide to ignore those and use their own idiomatic mapping)
 module_names = {
-    'slog_':    'log',
-    'sg_':      'gfx',
-    'sapp_':    'app',
-    'sargs_':   'args',
-    'stm_':     'time',
-    'saudio_':  'audio',
-    'sgl_':     'gl',
-    'sdtx_':    'debugtext',
-    'sshape_':  'shape',
-    'sglue_':   'glue',
-    'sfetch_':  'fetch',
-    'simgui_':  'imgui',
-    'sgimgui_': 'gfximgui',
+    'slog_':      'log',
+    'sg_':        'gfx',
+    'sapp_':      'app',
+    'sargs_':     'args',
+    'stm_':       'time',
+    'saudio_':    'audio',
+    'sgl_':       'gl',
+    'sdtx_':      'debugtext',
+    'sshape_':    'shape',
+    'sglue_':     'glue',
+    'sfetch_':    'fetch',
+    'simgui_':    'imgui',
+    'sgimgui_':   'gfximgui',
     'sappimgui_': 'appimgui',
-    'snk_':     'nuklear',
+    'snk_':       'nuklear',
     'smemtrack_': 'memtrack',
+    'sfb_':       'framebuffer',
+    'slbx_':      'letterbox',
 }
 
 # Jai

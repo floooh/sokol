@@ -1,5 +1,17 @@
 ## Updates
 
+### 03-Aug-2026
+
+sokol_app.h vk: Fixed a serious window resizing problem on Linux with NVIDIA drivers. This seems
+to be the only combo which may actually return `VK_ERROR_OUT_OF_DATE_KHR`
+from `vkAcquireNextImageKHR`, and this error path wasn't properly handled before
+(because that error is never triggered on any of my devices).
+
+Many thanks to @PossiblyAShrub reporting and investigating the problem, and for testing the fix!
+
+Issue: https://github.com/floooh/sokol/issues/1564
+PR: https://github.com/floooh/sokol/pull/1565
+
 ### 29-Jul-2026
 
 sokol_gfx.h vk: fix a synchronization2 validation layer warning when using a render attachment
