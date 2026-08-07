@@ -7,7 +7,6 @@
 #-------------------------------------------------------------------------------
 import gen_util as util
 import os, sys
-
 module_root = 'sokol-nim/src/sokol'
 c_root = f'{module_root}/c'
 
@@ -65,6 +64,7 @@ enumPrefixOverrides = {
     'EVENTTYPE': 'eventType',
     'KEYCODE': 'keyCode',
     'MOUSEBUTTON': 'mouseButton',
+    "SHADERATTRBASETYPE": 'shaderAttrBaseType'
 }
 
 prim_types = {
@@ -208,6 +208,7 @@ def as_camel_case(s, prefix, wrap=True):
     if wrap:
         outp = wrap_keywords(outp)
     return outp
+
 
 # PREFIX_ENUM_BLA_BLO => blaBlo
 def as_enum_item_name(s, wrap=True):
@@ -424,7 +425,7 @@ def gen_func_nim(decl, prefix):
         for i, param_decl in enumerate(decl['params']):
             if i > 0:
                 s += ", "
-            arg_name = param_decl['name']
+            arg_name = as_camel_case(param_decl['name'], prefix)
             arg_type = param_decl['type']
             if is_const_struct_ptr(arg_type):
                 s += f"addr({arg_name})"
@@ -444,16 +445,13 @@ def gen_array_converters(decl, prefix):
             array_base_type = as_nim_type(array_type, prefix)
             if util.is_1d_array_type(field['type']):
                 n = array_sizes[0]
-                l(f'converter to{struct_name}{field_name}*[N:static[int]](items: array[N, {array_base_type}]): array[{n}, {array_base_type}] =')
-                l(f'  static: assert(N <= {n})')
+                l(f'converter to{struct_name}{field_name}*[N:static[int]](items: array[N, {array_base_type}]): array[{n}, {array_base_type}] {{.requires: N<={n}.}} =')
                 l(f'  for index,item in items.pairs: result[index]=item')
                 l('')
             elif util.is_2d_array_type(field['type']):
                 x = array_sizes[1]
                 y = array_sizes[0]
-                l(f'converter to{struct_name}{field_name}*[Y:static[int], X:static[int]](items: array[Y, array[X, {array_base_type}]]): array[{y}, array[{x}, {array_base_type}]] =')
-                l(f'  static: assert(X <= {x})')
-                l(f'  static: assert(Y <= {y})')
+                l(f'converter to{struct_name}{field_name}*[Y:static[int], X:static[int]](items: array[Y, array[X, {array_base_type}]]): array[{y}, array[{x}, {array_base_type}]] {{.requires: X<={x} and Y<={y}.}}=')
                 l(f'  for indexY,itemY in items.pairs:')
                 l(f'    for indexX, itemX in itemY.pairs:')
                 l(f'      result[indexY][indexX] = itemX')
@@ -513,42 +511,42 @@ def gen_extra(inp):
         l('')
     if inp['prefix'] in ['sg_', 'sapp_']:
         l('when defined emscripten:')
-        l('  {.passl:"-lGL -ldl".}')
-        l('  {.passc:"-DSOKOL_GLES3".}')
+        l('  {.passL:"-lGL -ldl".}')
+        l('  {.passC:"-DSOKOL_GLES3".}')
         l('  {.passL: "-s MIN_WEBGL_VERSION=2 -s MAX_WEBGL_VERSION=2".}')
         l('elif defined windows:')
         l('  when not defined vcc:')
-        l('    {.passl:"-lkernel32 -luser32 -lshell32 -lgdi32".}')
+        l('    {.passL:"-lkernel32 -luser32 -lshell32 -lgdi32".}')
         l('  when defined gl:')
-        l('    {.passc:"-DSOKOL_GLCORE".}')
+        l('    {.passC:"-DSOKOL_GLCORE".}')
         l('  else:')
-        l('    {.passc:"-DSOKOL_D3D11".}')
+        l('    {.passC:"-DSOKOL_D3D11".}')
         l('    when not defined vcc:')
-        l('      {.passl:"-ld3d11 -ldxgi".}')
+        l('      {.passL:"-ld3d11 -ldxgi".}')
         l('elif defined macosx:')
-        l('  {.passc:"-x objective-c".}')
-        l('  {.passl:"-framework Cocoa -framework QuartzCore".}')
+        l('  {.passC:"-x objective-c".}')
+        l('  {.passL:"-framework Cocoa -framework QuartzCore".}')
         l('  when defined gl:')
-        l('    {.passc:"-DSOKOL_GLCORE".}')
-        l('    {.passl:"-framework OpenGL".}')
+        l('    {.passC:"-DSOKOL_GLCORE".}')
+        l('    {.passL:"-framework OpenGL".}')
         l('  else:')
-        l('    {.passc:"-DSOKOL_METAL".}')
-        l('    {.passl:"-framework Metal".}')
+        l('    {.passC:"-DSOKOL_METAL".}')
+        l('    {.passL:"-framework Metal".}')
         l('elif defined linux:')
-        l('  {.passc:"-DSOKOL_GLCORE".}')
-        l('  {.passl:"-lX11 -lXi -lXcursor -lGL -lm -ldl -lpthread".}')
+        l('  {.passC:"-DSOKOL_GLCORE".}')
+        l('  {.passL:"-lX11 -lXi -lXcursor -lGL -lm -ldl -lpthread".}')
         l('else:')
         l('  error("unsupported platform")')
         l('')
     if inp['prefix'] in ['saudio_']:
         l('when defined windows:')
         l('  when not defined vcc:')
-        l('    {.passl:"-lkernel32 -lole32".}')
+        l('    {.passL:"-lkernel32 -lole32".}')
         l('elif defined macosx:')
-        l('  {.passl:"-framework AudioToolbox".}')
+        l('  {.passL:"-framework AudioToolbox".}')
         l('elif defined linux:')
         l('  when not defined emscripten:')
-        l('    {.passl:"-lasound -lm -lpthread".}')
+        l('    {.passL:"-lasound -lm -lpthread".}')
         l('else:')
         l('  error("unsupported platform")')
         l('')
@@ -570,15 +568,27 @@ def gen_extra(inp):
     #    l('converter to_Range*[T](source: T): Range =')
     #    l('  Range(addr: source.addr, size: source.sizeof.uint)')
     #    l('')
-    l('{.passc:"-DIMPL".}')
+    l('{.passC:"-DIMPL".}')
     l('when defined(release):')
-    l('  {.passc:"-DNDEBUG".}')
+    l('  {.passC:"-DNDEBUG".}')
     rel_c_source_path = f'{os.path.relpath(inp['c_source_path'], module_root)}'
     l(f'{{.compile:"{rel_c_source_path}".}}')
 
 def gen_module(inp):
-    l('## machine generated, do not edit')
-    l('')
+    # the lenientconverters are used for the converters of arrays, which are now kinda deprecated in nimony
+    # The reqires macro implements the directive of the same name that exists in nimony
+    l("## machine generated, do not edit")
+    l("when defined(nimony):")
+    l("  {.feature: \"lenientconverters\".}")
+    l("")
+    l("when not defined(nimony):")
+    l("  import std/macros")
+    l("  macro requires(condition: untyped, body: untyped): untyped =")
+    l("    result = body")
+    l("    let assertStmt = quote do:")
+    l("      static:")
+    l("        doAssert `condition`, \"Precondition failed: \" + astToStr(`condition`)")
+    l("    result.body.insert(0, assertStmt)")
     gen_imports(inp)
     pre_parse(inp)
     prefix = inp['prefix']
