@@ -64,6 +64,7 @@ enumPrefixOverrides = {
     'EVENTTYPE': 'eventType',
     'KEYCODE': 'keyCode',
     'MOUSEBUTTON': 'mouseButton',
+    "SHADERATTRBASETYPE": 'shaderAttrBaseType'
 }
 
 prim_types = {
@@ -207,6 +208,7 @@ def as_camel_case(s, prefix, wrap=True):
     if wrap:
         outp = wrap_keywords(outp)
     return outp
+
 
 # PREFIX_ENUM_BLA_BLO => blaBlo
 def as_enum_item_name(s, wrap=True):
