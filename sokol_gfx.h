@@ -12543,8 +12543,8 @@ _SOKOL_PRIVATE void _sg_gl_update_image(_sg_image_t* img, const sg_image_data* d
     _sg_gl_cache_bind_texture_sampler(0, img->gl.target, img->gl.tex[img->cmn.active_slot], 0);
     const int num_mips = img->cmn.num_mipmaps;
     for (int mip_index = 0; mip_index < num_mips; mip_index++) {
-        const GLvoid* data_ptr = data->mip_levels[mip_index].ptr;
-        const GLsizei data_size = (GLsizei)data->mip_levels[mip_index].size;
+        const uint8_t* data_ptr = (const uint8_t*)data->mip_levels[mip_index].ptr;
+        const size_t data_size = (size_t)data->mip_levels[mip_index].size;
         const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
         const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
         const int mip_depth_or_num_slices = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
@@ -18507,7 +18507,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
         }
         if (map_at_creation) {
             // FIXME: inefficient on WASM
-            buf->wgpu.mapped_ptr = wgpuBufferGetMappedRange(buf->wgpu.buf, 0, wgpu_buf_size);
+            buf->wgpu.mapped_ptr = (uint8_t*)wgpuBufferGetMappedRange(buf->wgpu.buf, 0, wgpu_buf_size);
             SOKOL_ASSERT(buf->wgpu.mapped_ptr);
             if (desc->data.ptr) {
                 SOKOL_ASSERT(desc->data.ptr && (desc->data.size > 0));
@@ -18574,7 +18574,6 @@ _SOKOL_PRIVATE void _sg_wgpu_write_miplevel_data(const _sg_image_t* img,
     int num_slices)
 {
     SOKOL_ASSERT(img);
-    SOKOL_ASSERT(wgpu_tex);
     SOKOL_ASSERT(src_ptr);
     SOKOL_ASSERT(src_size > 0);
     SOKOL_ASSERT(src_bytes_per_row > 0);
