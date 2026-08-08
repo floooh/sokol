@@ -20480,9 +20480,10 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_miplevel_data(_sg_image_t* img,
     SOKOL_ASSERT((width > 0) && (x + width <= _sg_miplevel_dim(img->cmn.width, mip_level)));
     SOKOL_ASSERT((height > 0) && (y + height <= _sg_miplevel_dim(img->cmn.height, mip_level)));
     SOKOL_ASSERT((num_slices > 0) && (slice + num_slices <= img->cmn.num_slices));
-    SOKOL_ASSERT((src_offset + src_bytes_per_slice * (size_t)num_slices) <= src_size);
+    SOKOL_ASSERT((src_offset + (size_t)src_bytes_per_slice * (size_t)num_slices) <= src_size);
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_row, _sg_block_bytesize(img->cmn.pixel_format)));
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_slice, src_bytes_per_row));
+    _SOKOL_UNUSED(src_size);
 
     if (initial_wait) {
         VkResult res = vkQueueWaitIdle(_sg.vk.queue);
@@ -20494,8 +20495,8 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_miplevel_data(_sg_image_t* img,
     _sg_vk_init_vk_image_staging_structs(img, _sg.vk.stage.copy.buf, &region, &copy_info);
     const int block_dim = _sg_block_dim(img->cmn.pixel_format);
     const int block_bytesize = _sg_block_bytesize(img->cmn.pixel_format);
-    region.bufferRowLength = (src_bytes_per_row / block_bytesize) * block_dim;
-    region.bufferImageHeight = (src_bytes_per_slice / src_bytes_per_row) * block_dim;
+    region.bufferRowLength = (uint32_t)((src_bytes_per_row / block_bytesize) * block_dim);
+    region.bufferImageHeight = (uint32_t)((src_bytes_per_slice / src_bytes_per_row) * block_dim);
     region.imageSubresource.mipLevel = (uint32_t)mip_level;
     region.imageOffset.x = x;
     region.imageExtent.width = (uint32_t)width;
@@ -20503,27 +20504,27 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_miplevel_data(_sg_image_t* img,
     // NOTE: each array and depth slices are copied individually, this
     // simplifies copying through a smallish staging buffer which may
     // be smaller than even an individual slice
-    const uint32_t max_rows = _sg.vk.stage.copy.size / (uint32_t)src_bytes_per_row;
+    const int max_rows = (int)_sg.vk.stage.copy.size / src_bytes_per_row;
     if (max_rows == 0) {
         _SG_ERROR(VULKAN_STAGING_IMAGE_ROW_PITCH_GREATER_STAGING_BUFFER);
         return;
     }
     // actual number of slice-rows to copy (cannot use src_bytes_per_slice for
     // computation, since the source data may have gaps between slices)
-    const uint32_t num_rows = (uint32_t)_sg_num_rows(img->cmn.pixel_format, height);
-    SOKOL_ASSERT((uint32_t)src_bytes_per_slice >= (num_rows * (uint32_t)src_bytes_per_row));
+    const int num_rows = _sg_num_rows(img->cmn.pixel_format, height);
+    SOKOL_ASSERT(src_bytes_per_slice >= (num_rows * src_bytes_per_row));
     for (int i = 0; i < num_slices; i++) {
         const uint8_t* cur_ptr = src_ptr + src_offset + (size_t)i * (size_t)src_bytes_per_slice;
         int cur_slice = i + slice;
         if (img->cmn.type == SG_IMAGETYPE_3D) {
-            region.imageOffset.z = (uint32_t)cur_slice;
+            region.imageOffset.z = cur_slice;
         } else {
             region.imageSubresource.baseArrayLayer = (uint32_t)cur_slice;
         }
-        uint32_t rows_remaining = num_rows;
-        uint32_t cur_row = 0;
+        int rows_remaining = num_rows;
+        int cur_row = 0;
         while (rows_remaining > 0) {
-            uint32_t rows_to_copy = rows_remaining;
+            int rows_to_copy = rows_remaining;
             if (rows_remaining > max_rows) {
                 rows_to_copy = max_rows;
                 rows_remaining -= max_rows;
@@ -20531,14 +20532,14 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_miplevel_data(_sg_image_t* img,
                 rows_to_copy = rows_remaining;
                 rows_remaining = 0;
             }
-            const uint32_t bytes_to_copy = rows_to_copy * (uint32_t)src_bytes_per_row;
-            SOKOL_ASSERT(bytes_to_copy <= _sg.vk.stage.copy.size);
-            _sg_vk_staging_map_memcpy_unmap(mem, cur_ptr, bytes_to_copy);
+            const int bytes_to_copy = rows_to_copy * src_bytes_per_row;
+            SOKOL_ASSERT(bytes_to_copy <= (int)_sg.vk.stage.copy.size);
+            _sg_vk_staging_map_memcpy_unmap(mem, cur_ptr, (uint32_t)bytes_to_copy);
             cur_ptr += bytes_to_copy;
             VkCommandBuffer cmd_buf = _sg_vk_staging_copy_begin();
             _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_STAGING);
-            region.imageOffset.y = y + (int32_t)(cur_row * block_dim);
-            region.imageExtent.height = _sg_min((uint32_t)height, rows_to_copy * block_dim);
+            region.imageOffset.y = y + cur_row * block_dim;
+            region.imageExtent.height = (uint32_t)_sg_min(height, rows_to_copy * block_dim);
             vkCmdCopyBufferToImage2(cmd_buf, &copy_info);
             _sg_stats_inc(vk.num_cmd_copy_buffer_to_image);
             _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
