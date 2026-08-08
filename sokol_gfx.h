@@ -18595,7 +18595,7 @@ _SOKOL_PRIVATE void _sg_wgpu_write_miplevel_data(const _sg_image_t* img,
     SOKOL_ASSERT((width > 0) && (x + width <= _sg_miplevel_dim(img->cmn.width, mip_level)));
     SOKOL_ASSERT((height > 0) && (y + height <= _sg_miplevel_dim(img->cmn.height, mip_level)));
     SOKOL_ASSERT((num_slices > 0) && (slice + num_slices <= img->cmn.num_slices));
-    SOKOL_ASSERT((src_offset + src_bytes_per_slice * (size_t)num_slices) <= src_size);
+    SOKOL_ASSERT((src_offset + (size_t)src_bytes_per_slice * (size_t)num_slices) <= src_size);
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_row, _sg_block_bytesize(img->cmn.pixel_format)));
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_slice, src_bytes_per_row));
 
@@ -18608,13 +18608,13 @@ _SOKOL_PRIVATE void _sg_wgpu_write_miplevel_data(const _sg_image_t* img,
     wgpu_layout.rowsPerImage = (uint32_t)(src_bytes_per_slice / src_bytes_per_row);
     wgpu_copy_tex.texture = img->wgpu.tex;
     wgpu_copy_tex.mipLevel = (uint32_t)mip_level;
-    wgpu_copy_tex.origin.x = x;
-    wgpu_copy_tex.origin.y = y;
-    wgpu_copy_tex.origin.z = slice;
+    wgpu_copy_tex.origin.x = (uint32_t)x;
+    wgpu_copy_tex.origin.y = (uint32_t)y;
+    wgpu_copy_tex.origin.z = (uint32_t)slice;
     wgpu_copy_tex.aspect = WGPUTextureAspect_All;
     wgpu_extent.width = (uint32_t)_sg_roundup_pow2(width, block_dim);
     wgpu_extent.height = (uint32_t)_sg_roundup_pow2(height, block_dim);
-    wgpu_extent.depthOrArrayLayers = num_slices;
+    wgpu_extent.depthOrArrayLayers = (uint32_t)num_slices;
     wgpuQueueWriteTexture(_sg.wgpu.queue, &wgpu_copy_tex, (const void*)src_ptr, src_size, &wgpu_layout, &wgpu_extent);
 }
 
