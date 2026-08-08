@@ -6129,6 +6129,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_MAX_IMAGE_UNITS 0x8F38
         #define GL_FLOAT_32_UNSIGNED_INT_24_8_REV 0x8DAD
         #define GL_DEPTH32F_STENCIL8 0x8CAD
+        #define GL_UNPACK_ROW_LENGTH 0x0CF2
+        #define GL_UNPACK_IMAGE_HEIGHT 0x806E
     #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
