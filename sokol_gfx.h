@@ -4965,8 +4965,8 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_RESOURCESTATE, "sg_write_image_unsealed: image resource state must be SG_RESOURCESTATE_UNSEALED") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_SRC_DATA_POINTER, "sg_write_image_unsealed: desc.src.data.ptr must be valid") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_SRC_DATA_SIZE, "sg_write_image_unsealed: desc.src.data.size must be > 0") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_BYTESPERROW, "sg_write_image_unsealed: desc.src.bytes_per_row must be a multiple of the pixel or compression block size") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_BYTESPERSLICE, "sg_write_image_unsealed: desc.src.bytes_per_slice must be a multiple desc.src.bytes_per_row") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_BYTESPERROW, "sg_write_image_unsealed: desc.src.bytes_per_row must be a multiple of the pixel or compression-block size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_BYTESPERSLICE, "sg_write_image_unsealed: desc.src.bytes_per_slice must be a multiple of desc.src.bytes_per_row") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_MIPLEVEL, "sg_write_image_unsealed: desc.dst.mip_level must be >= 0 and less than the number of mipmaps in the destination image") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_WIDTH, "sg_write_image_unsealed: desc.size.width must be >= 0 and <= destination image width") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_HEIGHT, "sg_write_image_unsealed: desc.size.height must be >= 0 and <= destination image heigth") \
@@ -15944,8 +15944,8 @@ _SOKOL_PRIVATE void _sg_mtl_write_miplevel_data(const _sg_image_t* img,
     const int mtl_slice_index = (img->cmn.type == SG_IMAGETYPE_3D) ? 0 : slice;
     const int mtl_num_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? 1 : num_slices;
     for (int i = 0; i < mtl_num_slices; i++) {
-        const int offset = src_offset + i * src_bytes_per_slice;
-        SOKOL_ASSERT((offset + src_bytes_per_slice) <= (int)src_size);
+        const size_t offset = src_offset + i * src_bytes_per_slice;
+        SOKOL_ASSERT((offset + src_bytes_per_slice) <= src_size);
         [mtl_tex replaceRegion:mtl_region
             mipmapLevel:(NSUInteger)mip_level
             slice:(NSUInteger)(mtl_slice_index + i)
@@ -18607,8 +18607,7 @@ _SOKOL_PRIVATE void _sg_wgpu_write_miplevel_data(const _sg_image_t* img,
     wgpu_extent.width = (uint32_t)_sg_roundup_pow2(width, block_dim);
     wgpu_extent.height = (uint32_t)_sg_roundup_pow2(height, block_dim);
     wgpu_extent.depthOrArrayLayers = num_slices;
-    const void* ptr = (const void*)(src_ptr + src_offset);
-    wgpuQueueWriteTexture(_sg.wgpu.queue, &wgpu_copy_tex, ptr, src_size, &wgpu_layout, &wgpu_extent);
+    wgpuQueueWriteTexture(_sg.wgpu.queue, &wgpu_copy_tex, (const void*)src_ptr, src_size, &wgpu_layout, &wgpu_extent);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_copy_image_data(const _sg_image_t* img, const sg_image_data* data) {
@@ -24838,12 +24837,13 @@ _SOKOL_PRIVATE bool _sg_validate_write_image_unsealed(const _sg_image_t* img, co
         const int mip_width = _sg_miplevel_dim(img->cmn.width, desc->dst.mip_level);
         const int mip_height = _sg_miplevel_dim(img->cmn.height, desc->dst.mip_level);
         const int mip_depth_or_slices = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, desc->dst.mip_level) : img->cmn.num_slices;
+        const int bsize = _sg_block_byte_size(img->cmn.pixel_format);
         _sg_validate_begin();
         _SG_VALIDATE(img->cmn.usage.immutable && img->cmn.usage.write_unsealed, VALIDATE_WRITEIMAGEUNSEALED_USAGE);
         _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_UNSEALED, VALIDATE_WRITEIMAGEUNSEALED_RESOURCESTATE);
         _SG_VALIDATE(desc->src.data.ptr, VALIDATE_WRITEIMAGEUNSEALED_SRC_DATA_POINTER);
         _SG_VALIDATE(desc->src.data.size, VALIDATE_WRITEIMAGEUNSEALED_SRC_DATA_SIZE);
-        _SG_VALIDATE((desc->src.bytes_per_row > 0) && _sg_multiple_u64(desc->src.bytes_per_row, _sg_block_bytesize(img->cmn.pixel_format)), VALIDATE_WRITEIMAGEUNSEALED_BYTESPERROW);
+        _SG_VALIDATE((desc->src.bytes_per_row > 0) && _sg_multiple_u64(desc->src.bytes_per_row, bsize), VALIDATE_WRITEIMAGEUNSEALED_BYTESPERROW);
         _SG_VALIDATE((desc->src.bytes_per_slice > 0) && _sg_multiple_u64(desc->src.bytes_per_slice, desc->src.bytes_per_row), VALIDATE_WRITEIMAGEUNSEALED_BYTESPERSLICE);
         _SG_VALIDATE((desc->dst.mip_level >= 0) && (desc->dst.mip_level < img->cmn.num_mipmaps), VALIDATE_WRITEIMAGEUNSEALED_MIPLEVEL);
         _SG_VALIDATE((desc->size.width >= 0) && (desc->size.width <= mip_width), VALIDATE_WRITEIMAGEUNSEALED_WIDTH);
