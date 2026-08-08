@@ -24837,7 +24837,7 @@ _SOKOL_PRIVATE bool _sg_validate_write_image_unsealed(const _sg_image_t* img, co
         const int mip_width = _sg_miplevel_dim(img->cmn.width, desc->dst.mip_level);
         const int mip_height = _sg_miplevel_dim(img->cmn.height, desc->dst.mip_level);
         const int mip_depth_or_slices = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, desc->dst.mip_level) : img->cmn.num_slices;
-        const int bsize = _sg_block_byte_size(img->cmn.pixel_format);
+        const int bsize = _sg_block_bytesize(img->cmn.pixel_format);
         _sg_validate_begin();
         _SG_VALIDATE(img->cmn.usage.immutable && img->cmn.usage.write_unsealed, VALIDATE_WRITEIMAGEUNSEALED_USAGE);
         _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_UNSEALED, VALIDATE_WRITEIMAGEUNSEALED_RESOURCESTATE);
