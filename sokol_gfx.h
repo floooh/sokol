@@ -14975,6 +14975,7 @@ _SOKOL_PRIVATE void _sg_d3d11_write_miplevel_data(const _sg_image_t* img,
     SOKOL_ASSERT((src_offset + src_bytes_per_slice * (size_t)num_slices) <= src_size);
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_row, _sg_block_bytesize(img->cmn.pixel_format)));
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_slice, src_bytes_per_row));
+    _SOKOL_UNUSED(src_size);
 
     const UINT d3d11_src_row_pitch = (UINT)src_bytes_per_row;
     UINT d3d11_src_depth_pitch = 0;
@@ -15925,6 +15926,7 @@ _SOKOL_PRIVATE void _sg_mtl_write_miplevel_data(const _sg_image_t* img,
     SOKOL_ASSERT((src_offset + src_bytes_per_slice * (size_t)num_slices) <= src_size);
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_row, _sg_block_bytesize(img->cmn.pixel_format)));
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_slice, src_bytes_per_row));
+    _SOKOL_UNUSED(src_size);
 
     /* bytesPerImage special case: https://developer.apple.com/documentation/metal/mtltexture/1515679-replaceregion
 
