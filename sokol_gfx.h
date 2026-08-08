@@ -9250,6 +9250,12 @@ _SOKOL_PRIVATE void _sg_dummy_write_buffer_unsealed(_sg_buffer_t* buf, const sg_
     _SOKOL_UNUSED(desc);
 }
 
+_SOKOL_PRIVATE void _sg_dummy_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
+    SOKOL_ASSERT(img && desc);
+    _SOKOL_UNUSED(img);
+    _SOKOL_UNUSED(desc);
+}
+
 _SOKOL_PRIVATE void _sg_dummy_seal_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
     _SOKOL_UNUSED(buf);
@@ -10965,7 +10971,7 @@ _SOKOL_PRIVATE void _sg_gl_write_miplevel_data(const _sg_image_t* img,
     SOKOL_ASSERT((width > 0) && (x + width <= _sg_miplevel_dim(img->cmn.width, mip_level)));
     SOKOL_ASSERT((height > 0) && (y + height <= _sg_miplevel_dim(img->cmn.height, mip_level)));
     SOKOL_ASSERT((num_slices > 0) && (slice + num_slices <= img->cmn.num_slices));
-    SOKOL_ASSERT((src_offset + src_bytes_per_slice * (size_t)num_slices) <= src_size);
+    SOKOL_ASSERT((src_offset + (size_t)src_bytes_per_slice * (size_t)num_slices) <= src_size);
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_row, _sg_block_bytesize(img->cmn.pixel_format)));
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_slice, src_bytes_per_row));
 
@@ -15892,7 +15898,7 @@ _SOKOL_PRIVATE void _sg_mtl_seal_buffer(_sg_buffer_t* buf) {
     #if defined(_SG_TARGET_MACOS)
     __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot]);
     if (_sg_mtl_resource_options_storage_mode_managed_or_shared() == MTLResourceStorageModeManaged) {
-        [mtl_buf didModifyRange:NSMakeRange(0, buf->cmn.size)];
+        [mtl_buf didModifyRange:NSMakeRange(0, (NSUInteger)buf->cmn.size)];
     }
     #endif
 }
@@ -15925,7 +15931,7 @@ _SOKOL_PRIVATE void _sg_mtl_write_miplevel_data(const _sg_image_t* img,
     SOKOL_ASSERT((width > 0) && (x + width <= _sg_miplevel_dim(img->cmn.width, mip_level)));
     SOKOL_ASSERT((height > 0) && (y + height <= _sg_miplevel_dim(img->cmn.height, mip_level)));
     SOKOL_ASSERT((num_slices > 0) && (slice + num_slices <= img->cmn.num_slices));
-    SOKOL_ASSERT((src_offset + src_bytes_per_slice * (size_t)num_slices) <= src_size);
+    SOKOL_ASSERT((src_offset + (size_t)src_bytes_per_slice * (size_t)num_slices) <= src_size);
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_row, _sg_block_bytesize(img->cmn.pixel_format)));
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_slice, src_bytes_per_row));
     _SOKOL_UNUSED(src_size);
@@ -15937,17 +15943,17 @@ _SOKOL_PRIVATE void _sg_mtl_write_miplevel_data(const _sg_image_t* img,
     MTLRegion mtl_region;
     int mtl_bytes_per_image;
     if (img->cmn.type == SG_IMAGETYPE_3D) {
-        mtl_region = MTLRegionMake3D(x, y, slice, (NSUInteger)width, (NSUInteger)height, (NSUInteger)num_slices);
+        mtl_region = MTLRegionMake3D((NSUInteger)x, (NSUInteger)y, (NSUInteger)slice, (NSUInteger)width, (NSUInteger)height, (NSUInteger)num_slices);
         mtl_bytes_per_image = src_bytes_per_slice;
     } else {
-        mtl_region = MTLRegionMake2D(x, y, (NSUInteger)width, (NSUInteger)height);
+        mtl_region = MTLRegionMake2D((NSUInteger)x, (NSUInteger)y, (NSUInteger)width, (NSUInteger)height);
         mtl_bytes_per_image = 0;
     }
     const int mtl_slice_index = (img->cmn.type == SG_IMAGETYPE_3D) ? 0 : slice;
     const int mtl_num_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? 1 : num_slices;
     for (int i = 0; i < mtl_num_slices; i++) {
-        const size_t offset = src_offset + i * src_bytes_per_slice;
-        SOKOL_ASSERT((offset + src_bytes_per_slice) <= src_size);
+        const size_t offset = src_offset + (size_t)(i * src_bytes_per_slice);
+        SOKOL_ASSERT((offset + (size_t)src_bytes_per_slice) <= src_size);
         [mtl_tex replaceRegion:mtl_region
             mipmapLevel:(NSUInteger)mip_level
             slice:(NSUInteger)(mtl_slice_index + i)
@@ -24835,7 +24841,7 @@ _SOKOL_PRIVATE bool _sg_validate_write_image_unsealed(const _sg_image_t* img, co
             return true;
         }
         SOKOL_ASSERT(img && desc);
-        const size_t write_size = desc->src.bytes_per_slice * (size_t)desc->size.num_slices;
+        const size_t write_size = (size_t)desc->src.bytes_per_slice * (size_t)desc->size.num_slices;
         const int mip_width = _sg_miplevel_dim(img->cmn.width, desc->dst.mip_level);
         const int mip_height = _sg_miplevel_dim(img->cmn.height, desc->dst.mip_level);
         const int mip_depth_or_slices = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, desc->dst.mip_level) : img->cmn.num_slices;
@@ -24845,8 +24851,8 @@ _SOKOL_PRIVATE bool _sg_validate_write_image_unsealed(const _sg_image_t* img, co
         _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_UNSEALED, VALIDATE_WRITEIMAGEUNSEALED_RESOURCESTATE);
         _SG_VALIDATE(desc->src.data.ptr, VALIDATE_WRITEIMAGEUNSEALED_SRC_DATA_POINTER);
         _SG_VALIDATE(desc->src.data.size, VALIDATE_WRITEIMAGEUNSEALED_SRC_DATA_SIZE);
-        _SG_VALIDATE((desc->src.bytes_per_row > 0) && _sg_multiple_u64(desc->src.bytes_per_row, bsize), VALIDATE_WRITEIMAGEUNSEALED_BYTESPERROW);
-        _SG_VALIDATE((desc->src.bytes_per_slice > 0) && _sg_multiple_u64(desc->src.bytes_per_slice, desc->src.bytes_per_row), VALIDATE_WRITEIMAGEUNSEALED_BYTESPERSLICE);
+        _SG_VALIDATE((desc->src.bytes_per_row > 0) && _sg_multiple(desc->src.bytes_per_row, bsize), VALIDATE_WRITEIMAGEUNSEALED_BYTESPERROW);
+        _SG_VALIDATE((desc->src.bytes_per_slice > 0) && _sg_multiple(desc->src.bytes_per_slice, desc->src.bytes_per_row), VALIDATE_WRITEIMAGEUNSEALED_BYTESPERSLICE);
         _SG_VALIDATE((desc->dst.mip_level >= 0) && (desc->dst.mip_level < img->cmn.num_mipmaps), VALIDATE_WRITEIMAGEUNSEALED_MIPLEVEL);
         _SG_VALIDATE((desc->size.width >= 0) && (desc->size.width <= mip_width), VALIDATE_WRITEIMAGEUNSEALED_WIDTH);
         _SG_VALIDATE((desc->size.height >= 0) && (desc->size.height <= mip_height), VALIDATE_WRITEIMAGEUNSEALED_HEIGHT);
