@@ -15900,6 +15900,8 @@ _SOKOL_PRIVATE void _sg_mtl_seal_buffer(_sg_buffer_t* buf) {
     if (_sg_mtl_resource_options_storage_mode_managed_or_shared() == MTLResourceStorageModeManaged) {
         [mtl_buf didModifyRange:NSMakeRange(0, (NSUInteger)buf->cmn.size)];
     }
+    #else
+    _SOKOL_UNUSED(buf);
     #endif
 }
 
