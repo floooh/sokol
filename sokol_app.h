@@ -1825,6 +1825,9 @@ typedef struct sapp_allocator {
     _SAPP_LOGITEM_XMACRO(WGPU_REQUEST_ADAPTER_STATUS_ERROR, "wgpu: requesting adapter failed with status 'error'") \
     _SAPP_LOGITEM_XMACRO(WGPU_REQUEST_ADAPTER_STATUS_UNKNOWN, "wgpu: requesting adapter failed with status 'unknown'") \
     _SAPP_LOGITEM_XMACRO(WGPU_CREATE_INSTANCE_FAILED, "wgpu: failed to create instance") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_DEBUG_GENERAL, "") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_DEBUG_VALIDATION, "") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_DEBUG_PERFORMANCE, "") \
     _SAPP_LOGITEM_XMACRO(VULKAN_REQUIRED_INSTANCE_EXTENSION_FUNCTION_MISSING, "vulkan: could not lookup a required instance extension function pointer") \
     _SAPP_LOGITEM_XMACRO(VULKAN_ALLOC_DEVICE_MEMORY_NO_SUITABLE_MEMORY_TYPE, "vulkan: could not find suitable memory type") \
     _SAPP_LOGITEM_XMACRO(VULKAN_ALLOCATE_MEMORY_FAILED, "vulkan: vkAllocateMemory() failed!") \
@@ -2780,6 +2783,9 @@ typedef struct {
 
 typedef struct {
     VkInstance instance;
+    #if defined(SOKOL_DEBUG)
+        VkDebugUtilsMessengerEXT debug_utils_messenger;
+    #endif
     VkSurfaceKHR surface;
     VkSurfaceFormatKHR surface_format;
     VkPhysicalDevice physical_device;
@@ -2802,6 +2808,8 @@ typedef struct {
     } sync[_SAPP_VK_MAX_SWAPCHAIN_IMAGES];
     struct {
         PFN_vkSetDebugUtilsObjectNameEXT set_debug_utils_object_name_ext;
+        PFN_vkCreateDebugUtilsMessengerEXT create_debug_utils_messenger_ext;
+        PFN_vkDestroyDebugUtilsMessengerEXT destroy_debug_utils_messenger_ext;
     } ext;
 } _sapp_vk_t;
 #endif
@@ -4381,6 +4389,14 @@ _SOKOL_PRIVATE void _sapp_vk_load_instance_ext_funcs(void) {
         if (0 == _sapp.vk.ext.set_debug_utils_object_name_ext) {
             _SAPP_PANIC(VULKAN_REQUIRED_INSTANCE_EXTENSION_FUNCTION_MISSING);
         }
+        _sapp.vk.ext.create_debug_utils_messenger_ext = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(_sapp.vk.instance, "vkCreateDebugUtilsMessengerEXT");
+        if (0 == _sapp.vk.ext.create_debug_utils_messenger_ext) {
+            _SAPP_PANIC(VULKAN_REQUIRED_INSTANCE_EXTENSION_FUNCTION_MISSING);
+        }
+        _sapp.vk.ext.destroy_debug_utils_messenger_ext = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(_sapp.vk.instance, "vkDestroyDebugUtilsMessengerEXT");
+        if (0 == _sapp.vk.ext.destroy_debug_utils_messenger_ext) {
+            _SAPP_PANIC(VULKAN_REQUIRED_INSTANCE_EXTENSION_FUNCTION_MISSING);
+        }
     #endif
 }
 
@@ -4466,6 +4482,73 @@ _SOKOL_PRIVATE void _sapp_vk_destroy_instance(void) {
     vkDestroyInstance(_sapp.vk.instance, 0);
     _sapp.vk.instance = 0;
 }
+
+#if defined(SOKOL_DEBUG)
+_SOKOL_PRIVATE VkBool32 _sapp_vk_debug_utils_messenger_cb(
+    VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
+    VkDebugUtilsMessageTypeFlagsEXT message_types,
+    const VkDebugUtilsMessengerCallbackDataEXT* cb_data,
+    void* user_data)
+{
+    SOKOL_ASSERT(cb_data);
+    _SOKOL_UNUSED(user_data);
+    uint32_t log_level;
+    if (message_severity > VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+        log_level = 1; // error
+    } else if (message_severity > VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
+        log_level = 2; // warn
+    } else {
+        log_level = 3; // info
+    }
+    sapp_log_item log_item;
+    if (0 != (message_types & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)) {
+        log_item = SAPP_LOGITEM_VULKAN_DEBUG_VALIDATION;
+    } else if (0 != (message_types & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)) {
+        log_item = SAPP_LOGITEM_VULKAN_DEBUG_PERFORMANCE;
+    } else {
+        log_item = SAPP_LOGITEM_VULKAN_DEBUG_GENERAL;
+    }
+    // only show warnings, errors, and all validation layer messages
+    if ((log_level < 3) || (log_item == SAPP_LOGITEM_VULKAN_DEBUG_VALIDATION)) {
+        if (cb_data->pMessage) {
+            _sapp_log(log_item, log_level, cb_data->pMessage, __LINE__);
+        } else {
+            _sapp_log(log_item, log_level, "no message (cb_data->pMessage is 0)", __LINE__);
+        }
+    }
+    // "The application should always return VK_FALSE. The VK_TRUE value
+    // is reserved for layer development"
+    return VK_FALSE;
+}
+
+_SOKOL_PRIVATE void _sapp_vk_create_debug_utils_messenger(void) {
+    SOKOL_ASSERT(_sapp.vk.instance);
+    SOKOL_ASSERT(0 == _sapp.vk.debug_utils_messenger);
+    SOKOL_ASSERT(_sapp.vk.ext.create_debug_utils_messenger_ext);
+
+    _SAPP_STRUCT(VkDebugUtilsMessengerCreateInfoEXT, create_info);
+    create_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    create_info.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
+        | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT
+        | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
+        | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    create_info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
+        | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
+        | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    create_info.pfnUserCallback = _sapp_vk_debug_utils_messenger_cb;
+    VkResult res = _sapp.vk.ext.create_debug_utils_messenger_ext(_sapp.vk.instance, &create_info, 0, &_sapp.vk.debug_utils_messenger);
+    SOKOL_ASSERT(res == VK_SUCCESS);
+    SOKOL_ASSERT(_sapp.vk.debug_utils_messenger);
+}
+
+_SOKOL_PRIVATE void _sapp_vk_destroy_debug_utils_messenger(void) {
+    SOKOL_ASSERT(_sapp.vk.instance);
+    SOKOL_ASSERT(_sapp.vk.debug_utils_messenger);
+    SOKOL_ASSERT(_sapp.vk.ext.destroy_debug_utils_messenger_ext);
+    _sapp.vk.ext.destroy_debug_utils_messenger_ext(_sapp.vk.instance, _sapp.vk.debug_utils_messenger, 0);
+    _sapp.vk.debug_utils_messenger = 0;
+}
+#endif // SOKOL_DEBUG
 
 _SOKOL_PRIVATE uint32_t _sapp_vk_required_device_extensions(const char** out_names, uint32_t max_count) {
     SOKOL_ASSERT(out_names && (max_count > 0));
@@ -5108,6 +5191,9 @@ _SOKOL_PRIVATE void _sapp_vk_recreate_swapchain(void) {
 _SOKOL_PRIVATE void _sapp_vk_init(void) {
     _sapp_vk_create_instance();
     _sapp_vk_load_instance_ext_funcs();
+    #if defined(SOKOL_DEBUG)
+    _sapp_vk_create_debug_utils_messenger();
+    #endif
     _sapp_vk_create_surface();
     _sapp_vk_pick_physical_device();
     _sapp_vk_create_device();
@@ -5120,6 +5206,9 @@ _SOKOL_PRIVATE void _sapp_vk_discard(void) {
     _sapp_vk_destroy_swapchain();
     _sapp_vk_destroy_device();
     _sapp_vk_destroy_surface();
+    #if defined(SOKOL_DEBUG)
+    _sapp_vk_destroy_debug_utils_messenger();
+    #endif
     _sapp_vk_destroy_instance();
 }
 
