@@ -64,7 +64,7 @@ Implementation PR: https://github.com/floooh/sokol/pull/1554
 
 Some additional info re the new resource update API:
 
-I have decided to release split this into small updates which
+I have decided to split this into small updates which
 each implement one feature of the new API. In general the new
 API is split into 3 areas, which will be released as incremental
 updates roughly in this order:
