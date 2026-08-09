@@ -30,6 +30,8 @@ overrides = {
     'SG_BUFFERTYPE_VERTEXBUFFER':   'SG_BUFFERTYPE_VERTEX_BUFFER',
     'SG_BUFFERTYPE_INDEXBUFFER':    'SG_BUFFERTYPE_INDEX_BUFFER',
     'SG_ACTION_DONTCARE':           'SG_ACTION_DONT_CARE',
+    'SG_LOADACTION_DONTCARE':       'SG_LOADACTION_DONT_CARE',
+    'SG_STOREACTION_DONTCARE':      'SG_STOREACTION_DONT_CARE',
     'ptr':                          'addr', # range ptr
     'func':                         'fn',
     'slog_func':                    'fn',
@@ -64,7 +66,8 @@ enumPrefixOverrides = {
     'EVENTTYPE': 'eventType',
     'KEYCODE': 'keyCode',
     'MOUSEBUTTON': 'mouseButton',
-    "SHADERATTRBASETYPE": 'shaderAttrBaseType'
+    "SHADERATTRBASETYPE": 'shaderAttrBaseType',
+    'IMAGESAMPLETYPE': 'imageSampleType',
 }
 
 prim_types = {
