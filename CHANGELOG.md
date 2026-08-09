@@ -1,5 +1,94 @@
 ## Updates
 
+### 09-Aug-2026
+
+sokol_gfx.h: A new way to populate immutable buffers and images via a new 'unsealed'
+resource state. This is the first step towards a new resource update API which has
+been rolling around in the back of my head for a very long time.
+
+The gist is:
+
+1. Create immutable buffers and images with a new usage flag `desc.usage.write_unsealed`
+   and without providing initial data, this will create the resource object in
+   a new resource state `UNSEALED`.
+2. While the resource is in unsealed state, call the following new functions once
+   or multiple times to populate the resource content with data in CPU memory:
+    ```c
+    void sg_write_buffer_unsealed(const sg_write_buffer_desc* desc);
+    void sg_write_image_unsealed(const sg_write_image_desc* desc);
+    ```
+3. When done, 'seal' the resource object so that it can be used in
+   render- or compute-passes, this transitions the resource state from
+   `UNSEALED` to `VALID`:
+    ```c
+    void sg_seal_buffer(sg_buffer buf);
+    void sg_seal_image(sg_image img);
+    ```
+
+These new functions are especially useful to populate large resources from
+smaller pieces because you no longer need to allocate a large intermediate
+chunk of system memory to gather all the data before creating the resource.
+Instead you can create an empty immutable resource upfront and then write
+the initial content piece by piece.
+
+Especially the `sg_write_image_unsealed` function allows much more flexibility
+than before:
+
+- Allows to update subregions of a mipmap, previously only an entire mipmap
+  could be updated at a time
+- The source pixel data no longer has to be packed tightly in memory, but can
+  have a custom row- and slice-pitch.
+
+Trying to bind a resource in `UNSEALED` state is not a hard error but will
+silently skip the next draw- or dispatch-calls while the unsealed resource
+remains bound. This behaviour is in line with other non-`VALID` resource
+states.
+
+For more details, please see the new documentation header section
+`ON POPULATING IMMUTABLE RESOURCES` and the updated inline documentation
+for the new structs `sg_write_buffer_desc` and `sg_write_image_desc`.
+
+The following samples have been updated to use the new functions:
+
+- [vertexindexbuffer-sapp](https://floooh.github.io/sokol-webgpu/vertexindexbuffer-sapp.html): uses `sg_write_buffer_unsealed()`
+  to write the separate vertex- and index-chunks (this one requires a WebGPU capable browser)
+- [cubemap-jpeg-sapp](https://floooh.github.io/sokol-html5/cubemap-jpeg-sapp.html): uses `sg_write_image_unsealed()` to
+  write the loaded cubemap faces separately.
+
+And a new test/sample has been written which allows to tinker with the `sg_write_image_unsealed()`
+functionality, including what the resulting source code would look like:
+
+- [writeimage-sapp](https://floooh.github.io/sokol-html5/writeimage-sapp.html)
+
+Implementation PR: https://github.com/floooh/sokol/pull/1554
+
+Some additional info re the new resource update API:
+
+I have decided to release split this into small updates which
+each implement one feature of the new API. In general the new
+API is split into 3 areas, which will be released as incremental
+updates roughly in this order:
+
+- writing CPU-side data to GPU resources
+    - initialize immutable buffers and images via 'write-unsealed' (this update)
+    - write-transient: for writing data that's consumed later
+      in the same frame and doesn't survive into the next frame
+      (replacement for the current `usage.stream_update`)
+    - write-persistent: for writing data into resources that survive
+      until overwritten or the resource is destroyed (replacement
+      for the current `usage.dynamic_update`)
+- copying data between GPU resources:
+    - copy-buffer-to-buffer
+    - copy-buffer-to-image
+    - copy-image-to-image
+    - copy-image-to-buffer
+- reading GPU-side data back into CPU-side memory (most likely
+  asynchronous with a completion callback):
+    - read-buffer
+    - read-image
+
+Cheers!
+
 ### 03-Aug-2026
 
 sokol_app.h vk: Fixed a serious window resizing problem on Linux with NVIDIA drivers. This seems
