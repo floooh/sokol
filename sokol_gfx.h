@@ -2431,8 +2431,10 @@ typedef struct sg_limits {
     pool slot is unoccupied and can be allocated. When a resource is
     created, first an id is allocated, and the resource pool slot
     is set to state ALLOC. After allocation, the resource is
-    initialized, which may result in the VALID or FAILED state. The
-    reason why allocation and initialization are separate is because
+    initialized, which may result in the VALID, UNSEALED or FAILED state.
+    UNSEALED is a special state for immutable buffers and images which
+    allows to write data into the resource after the creation call.
+    The reason why allocation and initialization are separate is because
     some resource types (e.g. buffers and images) might be asynchronously
     initialized by the user application. If a resource which is not
     in the VALID state is attempted to be used for rendering, rendering
@@ -3353,12 +3355,18 @@ typedef struct sg_bindings {
         the buffer will be bound as storage buffer via storage-buffer-view
         in sg_bindings.views[]
     .immutable (default: true)
-        the buffer content will never be updated from the CPU side (but
-        may be written to by a compute shader)
+        the buffer content will never be updated from the CPU side while
+        in 'valid' resource state (but may be written to by a compute shader)
     .dynamic_update (default: false)
         the buffer content will be infrequently updated from the CPU side
     .stream_upate (default: false)
         the buffer content will be updated each frame from the CPU side
+    .write_unsealed (default: false)
+        when true, creates an immutable buffer in 'unsealed' resource state,
+        unsealed buffers can be populated with data by one or multiple
+        `sg_write_buffer_unsealed()` calls before being 'sealed' by
+        calling `sg_seal_buffer()` which transitions from 'unsealed'
+        to 'valid' resource state
 */
 typedef struct sg_buffer_usage {
     bool vertex_buffer;
@@ -3468,6 +3476,12 @@ typedef struct sg_buffer_desc {
         the image content is updated infrequently by the CPU via sg_update_image()
     .stream_update (default: false)
         the image content is updated each frame by the CPU via sg_update_image()
+    .write_unsealed (default: false)
+        when true, creates an immutable image in 'unsealed' resource state,
+        unsealed images can be populated with data by one or multiple
+        `sg_write_image_unsealed()` calls before being 'sealed' by
+        calling `sg_seal_image()` which transitions from 'unsealed'
+        to 'valid' resource state
 
     Note that creating a texture view from the image to be used for
     texture-sampling in vertex-, fragment- or compute-shaders
@@ -3529,6 +3543,9 @@ typedef enum sg_view_type {
         [3] => -Y
         [4] => +Z
         [5] => -Z
+
+    NOTE: for more flexible resource initialization of immutable images
+    also consider the sg_write_image_unsealed() function!
 */
 typedef struct sg_image_data {
     sg_range mip_levels[SG_MAX_MIPMAPS];
@@ -3537,7 +3554,7 @@ typedef struct sg_image_data {
 /*
     sg_image_extent
 
-    TODO
+    Defines the size of a region within an image's mip level.
 */
 typedef struct sg_image_extent {
     int width;
@@ -3548,7 +3565,7 @@ typedef struct sg_image_extent {
 /*
     sg_image_location
 
-    Describes a source or destination location in an image object.
+    Describes a source or destination location in an image.
 */
 typedef struct sg_image_location {
     sg_image image;
@@ -3559,30 +3576,76 @@ typedef struct sg_image_location {
 /*
     sg_write_image_source
 
-    TODO
+    Describes the data to be written from CPU memory into an image:
+
+    .data
+        Pointer to and size of the data in CPU memory
+    .offset
+        Optional offset that's added to data.ptr
+    .bytes_per_row
+        Optional number of bytes between rows of image data,
+        can be left zero-initialized when the image data is tighly packed
+        (e.g. no gaps between rows). For uncompressed pixel formats,
+        .bytes_per_row must be a multiple of the pixel size in bytes
+        (e.g. for RGBA4 a multiple of 4), for compressed pixel formats,
+        .bytes_per_row must be a multiple of the compression block
+        size in bytes
+    .bytes_per_slice
+        Optional number of bytes of between the start of array/cubemap/volume
+        slices, can be left zero-initialized when the image data is tightly
+        packed (e.g. no gaps between slices). Must be a multiple of
+        .bytes_per_row
 */
 typedef struct sg_write_image_source {
     sg_range data;
-    size_t offset;          // optional offset into src data
-    int bytes_per_row;      // default 0 means rows are tightly packed
-    int bytes_per_slice;    // default 0 means slices are tightly packed
+    size_t offset;
+    int bytes_per_row;
+    int bytes_per_slice;
 } sg_write_image_source;
 
 /*
     sg_write_image_desc
 
-    TODO
+    Describes a write operation into a single mipmap from CPU memory into
+    an image object.
+
+    .src
+        Defines the location and layout of the source data in CPU memory.
+        See documentation of the struct `sg_write_image_source` for details.
+    .dst
+        Defines the destination image object and the location of the
+        destination region to write the data to. See documentation of the
+        struct `sg_image_location` for details.
+    .size
+        Defines the size of the destination region. See the documentation
+        of the struct `sg_image_extent` for details.
+
+    Note the following rules for zero-initialized default values:
+
+    .src.bytes_per_row
+        Default-zero indicates that the source data is layed out as a tightly
+        packed complete mip-map (e.g. when writing data into miplevel 0 of
+        a 256x256 RGBA8 image, .src.bytes_per_row will be 1024.
+    .src.bytes_per_slice
+        Same as above, default-zero indicates that the source data is layed
+        out as a tightly packed complete mip-map (e.g. when writing data into
+        miplevel 0 of a 256x256 image, .src.bytes_per_slice will be 256*1024).
+    .size.width, .size.height, .size.num_slices
+        Default-zero means 'the remaining width, height and num_slices' taking
+        .dst.x/y/slice into account. E.g. when .dst.x/y/num_slices are all zero,
+        .size.width/height/num_slices for instance for a 256x256 cubemap the
+        default sizes are: .width=256, .height=256, .num_slices=6
 */
 typedef struct sg_write_image_desc {
     sg_write_image_source src;
     sg_image_location dst;
-    sg_image_extent size;   // default 0 means: width/height of mip level, num_slices=1
+    sg_image_extent size;
 } sg_write_image_desc;
 
 /*
     sg_buffer_location
 
-    TODO
+    Describes the source or destination location in a buffer.
 */
 typedef struct sg_buffer_location {
     sg_buffer buffer;
@@ -3592,7 +3655,12 @@ typedef struct sg_buffer_location {
 /*
     sg_write_buffer_source
 
-    TODO
+    Describes the data to be written from CPU memory into a buffer.
+
+    .data
+        Pointer to and size of the data in CPU memory
+    .offset
+        Optional offset that's added to data.ptr
 */
 typedef struct sg_write_buffer_source {
     sg_range data;
@@ -3602,12 +3670,23 @@ typedef struct sg_write_buffer_source {
 /*
     sg_write_buffer_desc
 
-    TODO
+    Describes a write operation into a buffer from CPU memory into
+    a buffer object.
+
+    .src
+        Defines the location of the source data in CPU memory.
+        See documentation of the struct `sg_write_buffer_source` for details.
+    .dst
+        Defines the destination buffer object and offset into the buffer's
+        memory.
+    .size
+        Number of bytes to be copied. When this is default-zero, the
+        size will be taken from .src.data.size instead.
 */
 typedef struct sg_write_buffer_desc {
     sg_write_buffer_source src;
     sg_buffer_location dst;
-    size_t size;                // default: .dst.data.size
+    size_t size;
 } sg_write_buffer_desc;
 
 /*
@@ -5437,7 +5516,7 @@ SOKOL_GFX_API_DECL void sg_dispatch(int num_groups_x, int num_groups_y, int num_
 SOKOL_GFX_API_DECL void sg_end_pass(void);
 SOKOL_GFX_API_DECL void sg_commit(void);
 
-// resource update functions (wip)
+// resource update functions (wip new resource update api)
 SOKOL_GFX_API_DECL void sg_write_buffer_unsealed(const sg_write_buffer_desc* desc);
 SOKOL_GFX_API_DECL void sg_write_image_unsealed(const sg_write_image_desc* desc);
 SOKOL_GFX_API_DECL void sg_seal_buffer(sg_buffer buf);
