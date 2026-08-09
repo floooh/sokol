@@ -292,9 +292,9 @@ def as_nim_type(ctype, prefix, struct_ptr_as_value=False):
     elif is_enum_type(ctype):
         return as_nim_type_name(ctype, prefix)
     elif util.is_string_ptr(ctype):
-        return "cstring"
+        return "nil cstring"
     elif util.is_void_ptr(ctype) or util.is_const_void_ptr(ctype):
-        return "pointer"
+        return "nil pointer"
     elif is_const_struct_ptr(ctype):
         nim_type = as_nim_type(util.extract_ptr_type(ctype), prefix)
         if struct_ptr_as_value:
