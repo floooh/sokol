@@ -8,7 +8,7 @@ been rolling around in the back of my head for a very long time.
 
 The gist is:
 
-1. Create immutable buffers and images with a new usage flag `desc.usage.write_unsealed`
+1. Create immutable buffers and images with a new usage flag `desc.usage.write_unsealed = true`
    and without providing initial data, this will create the resource object in
    a new resource state `UNSEALED`.
 2. While the resource is in unsealed state, call the following new functions once
@@ -87,7 +87,13 @@ updates roughly in this order:
     - read-buffer
     - read-image
 
-Cheers!
+...and a couple of minor updates:
+
+- in the sokol_app.h vulkan backend, a DebugUtilsMessenger object is now created
+  (in debug build mode) which routes messages from the Vulkan driver and
+  validation layers to the installing sokol-app logging function.
+- the sokol_gfx_imgui.h header has been updated for the new write-unsealed
+  types and functions
 
 ### 03-Aug-2026
 
