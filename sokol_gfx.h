@@ -73,12 +73,12 @@
     - on Linux with Vulkan: vulkan
     - on Android: GLESv3, log, android
     - on Windows:
-        - with Vulkan: link with vulkan-1 (this is explicit in case you want to
-          use your own Vulkan loader library)
         - with D3D11:
             - on MSVC or Clang: no action needed, libs are defined in-source via pragma-comment-lib
             - on MINGW/MSYS2 gcc: compile with '-mwin32' so that _WIN32 is defined and link with -ld3d11
         - with GL: no linking needed since sokol_gfx.h comes with its own GL loader on Windows
+        - with Vulkan: explicitly link with vulkan-1 (this is explicit in case you want to use
+          your own Vulkan loader)
 
     On macOS and iOS, the implementation must be compiled as Objective-C.
 
@@ -95,6 +95,8 @@
         - for WebGL2: add the linker option `-s USE_WEBGL2=1`
         - for WebGPU: compile and link with `--use-port=emdawnwebgpu`
           (for more exotic situations, read: https://dawn.googlesource.com/dawn/+/refs/heads/main/src/emdawnwebgpu/pkg/README.md)
+          NOTE that you may also need to pass `-sDEFAULT_TO_CXX` to the Emscripten
+          linker when using emdaenwebgpu in C projects.
 
     sokol_gfx DOES NOT:
     ===================
@@ -287,6 +289,21 @@
 
         Note that sg_begin_pass() will reset both the viewport and scissor
         rectangles to cover the entire framebuffer.
+
+    --- to populate immutable buffers and images after creation, call:
+
+            sg_write_buffer_unsealed(const sg_write_buffer_desc* desc)
+            sg_write_image_unsealed(const sg_write_image_desc* desc)
+
+        These are more flexible alternatives to passing the content in the
+        sg_make_buffer or sg_make_image calls. To use these write-unsealed
+        calls, create the buffers and images with usage `desc.usage.write_unsealed = true`,
+        which creates the resource in 'unsealed resource state'.
+        The `sg_write_*_unsealed` functions can only be called on resources
+        in unsealed state. After all data has been initialized, call the
+        functions `sg_seal_buffer()` or `sg_seal_image()` to transition the
+        resource from unsealed into valid state. For more details see the
+        doc section `ON POPULATING IMMUTABLE RESOURCES` below.
 
     --- to update (overwrite) the content of buffer and image resources, call:
 
@@ -1325,6 +1342,154 @@
 
     The by far easiest way to tackle the common uniform block layout problem is
     to use the sokol-shdc shader cross-compiler tool!
+
+
+    ON POPULATING IMMUTABLE RESOURCES
+    =================================
+    There's two ways to initialize immutable resources (buffers and images)
+    with data:
+
+    1. directly in the sg_make_buffer and sg_make_image calls via the nested
+       structs sg_buffer_desc.data and sg_image_desc.data
+    2. after creation via the sg_write_buffer_unsealed and sg_write_image_unsealed
+       calls
+
+    Passing the initial data (i.e. point (1)) right into the sg_make_buffer and
+    sg_make_image functions is preferred when that data already exists as a data
+    blob with the right data layout in memory, e.g.:
+
+    ```c
+    uint8_t vertex_data[] = { ... };
+    const sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .data = SG_RANGE(vertex_data),
+    });
+    ```
+
+    ```c
+    uint8_t mip0_data[] = { ... };
+    uint8_t mip1_data[] = { ... };
+    // ... more mip levels
+    const sg_image img = sg_make_image(&(sg_image_desc){
+        .data.mip_levels = {
+            [0] = SG_RANGE(mip0_data),
+            [1] = SG_RANGE(mip1_data),
+            // ...
+        },
+        // ... more create options
+    });
+    ```
+
+    Using the 'write-unsealed' functions is a bit more effort but
+    much more flexible (especially for initializing image data).
+
+    The general procedure for initializing immutable resources after creation
+    is:
+
+    1. Create the resource in resource state 'unsealed' via the write_unsealed
+       usage flag (note that `desc.usage.write_unsealed = true` implies
+       `desc.usage.immutable = true`).
+
+        For buffers:
+        ```c
+        const sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+            .usage.write_unsealed = true,
+            .size = buffer_size,
+        });
+
+        For images:
+        ```c
+        const sg_image img = sg_make_image(&(sg_image_desc){
+            .usage.write_unsealed = true,
+            // ...further image creation options
+        });
+        ```
+
+    2. Populate the unsealed resources with one or multiple write-unsealed
+       calls.
+
+        For buffers:
+        ```c
+        sg_write_buffer_unsealed(&(sg_write_buffer_desc){
+            .src = {
+                .data = {
+                    .ptr = src_data_ptr,
+                    .size = src_data_size,
+                },
+                .offset = ...,  // optional offset into src.data
+            },
+            .dst = {
+                .buffer = buf,
+                .offset = ...,  // optional offset into buffer
+            },
+            .size = ...,  // optional number of bytes to write
+        });
+        ```
+
+        You can usually omit `.src.offset`, `.dst.offset` and `.size`. In
+        that case all data pointed to by `.src.data` will be copied to the
+        start of the buffer, e.g. the simplest possible `sg_write_buffer_unsealed`
+        call looks like this:
+        ```c
+        uint8_t vertex_data[] = { ... };
+        sg_write_buffer_unsealed(&(sg_write_buffer_desc){
+            .src.data = SG_RANGE(vertex_data),
+            .dst.buffer = buf,
+        });
+        ```
+
+        For images the write-unsealed call works per mip-level:
+        ```c
+        sg_write_image_unsealed(&(sg_write_image_desc){
+            .src = {
+                .data = {
+                    .ptr = src_data_ptr,
+                    .size = src_data_size,
+                },
+                .offset = ...,          // optional offset into source data
+                .bytes_per_row = ...,   // optional bytes per row of source data
+                .bytes_per_slice = ..., // optional bytes per slice of source data
+            },
+            .dst = {
+                .image = img,
+                .mip_level = ...,       // the miplevel to write into
+                .x = ...,               // x position of region to write in pixels
+                .y = ...,               // y position of region to write in pixels
+                .slice = ...,           // array/cubemap/3d slice index to write to
+            },
+            .size = {
+                .width = ...,           // width in pixels of region to write in pixels
+                .height = ...,          // height in pixels of region to write in pixels
+                .num_slices = ...,      // number of array/cubemap/3d slices to write
+            },
+        });
+        ```
+
+        Most of the sg_write_image_unsealed options have useful defaults,
+        for instance to initialize the entire first mip level with data that's
+        tightly packed in memory the call looks much simpler:
+        ```c
+        uint8_t mip_data = { ... };
+        sg_write_image_unsealed(&(sg_write_image_desc){
+            .src.data = SG_RANGE(mip_data),
+            .dst.image = img,
+        });
+        ```
+
+    3. After all data has been written to the unsealed resources, 'seal'
+       the resource by calling:
+        ```c
+        sg_seal_buffer(buf);
+        sg_seal_image(img);
+        ```
+
+        This transitions the resource state from 'unsealed' to 'valid' and allows
+        the resource to be bound via the `sg_apply_bindings` call (technically
+        you can bind an unsealed resource, but this will cause the following
+        sg_draw/sg_dispatch calls to be silently ignored).
+
+        Once a resource has been sealed it can no longer be updated with CPU
+        data, e.g. it's not possible to transition a resource back from
+        'valid' to 'unsealed' resource state.
 
 
     ON STORAGE BUFFERS
@@ -9451,10 +9616,10 @@ _SOKOL_PRIVATE void _sg_gl_unload_opengl(void) {
 //-- type translation ----------------------------------------------------------
 _SOKOL_PRIVATE GLenum _sg_gl_buffer_target(const sg_buffer_usage* usg) {
     // NOTE: the buffer target returned here is only used for the bind point
-    // to copy data into the buffer, expect for WebGL2, the bind point doesn't
+    // to copy data into the buffer, except for WebGL2, the bind point doesn't
     // need to match the later usage of the buffer (but because of the WebGL2
     // restriction we cannot simply select a random bind point, because in WebGL2
-    // a buffer cannot 'switch' bind points later.
+    // a buffer cannot 'switch' bind points later)
     if (usg->vertex_buffer) {
         return GL_ARRAY_BUFFER;
     } else if (usg->index_buffer) {
