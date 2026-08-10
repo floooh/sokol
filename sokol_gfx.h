@@ -3359,7 +3359,7 @@ typedef struct sg_bindings {
         in 'valid' resource state (but may be written to by a compute shader)
     .dynamic_update (default: false)
         the buffer content will be infrequently updated from the CPU side
-    .stream_upate (default: false)
+    .stream_update (default: false)
         the buffer content will be updated each frame from the CPU side
     .write_unsealed (default: false)
         when true, creates an immutable buffer in 'unsealed' resource state,
