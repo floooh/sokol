@@ -5224,6 +5224,12 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_WRITE_NUMSLICES_OVERFLOW, "sg_write_image_unsealed: desc.src.slice + desc.size.num_slices must be <= destination number of slices in mip level") \
     _SG_LOGITEM_XMACRO(VALIDATE_SEALBUFFER_RESOURCESTATE, "sg_seal_buffer: buffer resource state must be SG_RESOURCESTATE_UNSEALED") \
     _SG_LOGITEM_XMACRO(VALIDATE_SEALIMAGE_RESOURCESTATE, "sg_seal_image: image resource state must be SG_RESOURCESTATE_UNSEALED") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DESTROYBUFFER_VALID, "sg_destroy_buffer: buffer handle is invalid or no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DESTROYIMAGE_VALID, "sg_destroy_image: image handle is invalid or no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DESTROYSAMPLER_VALID, "sg_destroy_sampler: sampler handle is invalid or no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DESTROYSHADER_VALID, "sg_destroy_shader: shader handle is invalid or no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DESTROYPIPELINE_VALID, "sg_destroy_pipeline: pipeline handle is invalid or no longer alive") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DESTROYVIEW_VALID, "sg_destroy_view: view handle is invalid or no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATION_FAILED, "validation layer checks failed") \
 
 #define _SG_LOGITEM_XMACRO(item,msg) SG_LOGITEM_##item,
@@ -25145,6 +25151,90 @@ _SOKOL_PRIVATE bool _sg_validate_seal_image(const _sg_image_t* img) {
     #endif
 }
 
+_SOKOL_PRIVATE bool _sg_validate_destroy_buffer(const _sg_buffer_t* buf) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(buf);
+        return true;
+    #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
+        _sg_validate_begin();
+        _SG_VALIDATE(buf != 0, VALIDATE_DESTROYBUFFER_VALID);
+        return _sg_validate_end();
+    #endif
+}
+
+_SOKOL_PRIVATE bool _sg_validate_destroy_image(const _sg_image_t* img) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(img);
+        return true;
+    #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
+        _sg_validate_begin();
+        _SG_VALIDATE(img != 0, VALIDATE_DESTROYIMAGE_VALID);
+        return _sg_validate_end();
+    #endif
+}
+
+_SOKOL_PRIVATE bool _sg_validate_destroy_sampler(const _sg_sampler_t* smp) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(smp);
+        return true;
+    #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
+        _sg_validate_begin();
+        _SG_VALIDATE(smp != 0, VALIDATE_DESTROYSAMPLER_VALID);
+        return _sg_validate_end();
+    #endif
+}
+
+_SOKOL_PRIVATE bool _sg_validate_destroy_shader(const _sg_shader_t* shd) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(shd);
+        return true;
+    #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
+        _sg_validate_begin();
+        _SG_VALIDATE(shd != 0, VALIDATE_DESTROYSHADER_VALID);
+        return _sg_validate_end();
+    #endif
+}
+
+_SOKOL_PRIVATE bool _sg_validate_destroy_pipeline(const _sg_pipeline_t* pip) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(pip);
+        return true;
+    #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
+        _sg_validate_begin();
+        _SG_VALIDATE(pip != 0, VALIDATE_DESTROYPIPELINE_VALID);
+        return _sg_validate_end();
+    #endif
+}
+
+_SOKOL_PRIVATE bool _sg_validate_destroy_view(const _sg_view_t* view) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(view);
+        return true;
+    #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
+        _sg_validate_begin();
+        _SG_VALIDATE(view != 0, VALIDATE_DESTROYVIEW_VALID);
+        return _sg_validate_end();
+    #endif
+}
+
 _SOKOL_PRIVATE bool _sg_validate_shader_binding_limits(const sg_shader_desc* desc) {
     SOKOL_ASSERT(desc);
 
@@ -26601,6 +26691,9 @@ SOKOL_API_IMPL void sg_destroy_buffer(sg_buffer buf_id) {
     SOKOL_ASSERT(_sg.valid);
     _SG_TRACE_ARGS(destroy_buffer, buf_id);
     _sg_buffer_t* buf = _sg_lookup_buffer(buf_id.id);
+    if (!_sg_validate_destroy_buffer(buf)) {
+        return;
+    }
     if (buf) {
         if (_sg_resource_state_valid_failed_unsealed(buf->slot.state)) {
             _sg_uninit_buffer(buf);
@@ -26617,6 +26710,9 @@ SOKOL_API_IMPL void sg_destroy_image(sg_image img_id) {
     SOKOL_ASSERT(_sg.valid);
     _SG_TRACE_ARGS(destroy_image, img_id);
     _sg_image_t* img = _sg_lookup_image(img_id.id);
+    if (!_sg_validate_destroy_image(img)) {
+        return;
+    }
     if (img) {
         if (_sg_resource_state_valid_failed_unsealed(img->slot.state)) {
             _sg_uninit_image(img);
@@ -26633,6 +26729,9 @@ SOKOL_API_IMPL void sg_destroy_sampler(sg_sampler smp_id) {
     SOKOL_ASSERT(_sg.valid);
     _SG_TRACE_ARGS(destroy_sampler, smp_id);
     _sg_sampler_t* smp = _sg_lookup_sampler(smp_id.id);
+    if (!_sg_validate_destroy_sampler(smp)) {
+        return;
+    }
     if (smp) {
         if (_sg_resource_state_valid_failed(smp->slot.state)) {
             _sg_uninit_sampler(smp);
@@ -26649,6 +26748,9 @@ SOKOL_API_IMPL void sg_destroy_shader(sg_shader shd_id) {
     SOKOL_ASSERT(_sg.valid);
     _SG_TRACE_ARGS(destroy_shader, shd_id);
     _sg_shader_t* shd = _sg_lookup_shader(shd_id.id);
+    if (!_sg_validate_destroy_shader(shd)) {
+        return;
+    }
     if (shd) {
         if (_sg_resource_state_valid_failed(shd->slot.state)) {
             _sg_uninit_shader(shd);
@@ -26665,6 +26767,9 @@ SOKOL_API_IMPL void sg_destroy_pipeline(sg_pipeline pip_id) {
     SOKOL_ASSERT(_sg.valid);
     _SG_TRACE_ARGS(destroy_pipeline, pip_id);
     _sg_pipeline_t* pip = _sg_lookup_pipeline(pip_id.id);
+    if (!_sg_validate_destroy_pipeline(pip)) {
+        return;
+    }
     if (pip) {
         if (_sg_resource_state_valid_failed(pip->slot.state)) {
             _sg_uninit_pipeline(pip);
@@ -26681,6 +26786,9 @@ SOKOL_API_IMPL void sg_destroy_view(sg_view view_id) {
     SOKOL_ASSERT(_sg.valid);
     _SG_TRACE_ARGS(destroy_view, view_id);
     _sg_view_t* view = _sg_lookup_view(view_id.id);
+    if (!_sg_validate_destroy_view(view)) {
+        return;
+    }
     if (view) {
         if (_sg_resource_state_valid_failed(view->slot.state)) {
             _sg_uninit_view(view);
