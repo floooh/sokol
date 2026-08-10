@@ -25464,11 +25464,19 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
 
     // resolve vertex layout strides and offsets
     _SG_STRUCT(int, auto_offset[SG_MAX_VERTEXBUFFER_BINDSLOTS]);
-    bool use_auto_offset = true;
+    _SG_STRUCT(bool, use_auto_offset[SG_MAX_VERTEXBUFFER_BINDSLOTS]);
+    for (int buf_index = 0; buf_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; buf_index++) {
+        use_auto_offset[buf_index] = true;
+    }
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
-        // to use computed offsets, *all* attr offsets must be 0
-        if (def.layout.attrs[attr_index].offset != 0) {
-            use_auto_offset = false;
+        const sg_vertex_attr_state* a_state = &def.layout.attrs[attr_index];
+        if (a_state->format == SG_VERTEXFORMAT_INVALID) {
+            break;
+        }
+        // to use computed offsets for a specific buffer, *all* its attr offsets must be 0
+        if (a_state->offset != 0) {
+            SOKOL_ASSERT((a_state->buffer_index >= 0) && (a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS));
+            use_auto_offset[a_state->buffer_index] = false;
         }
     }
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
@@ -25477,7 +25485,7 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
             break;
         }
         SOKOL_ASSERT((a_state->buffer_index >= 0) && (a_state->buffer_index < SG_MAX_VERTEXBUFFER_BINDSLOTS));
-        if (use_auto_offset) {
+        if (use_auto_offset[a_state->buffer_index]) {
             a_state->offset = auto_offset[a_state->buffer_index];
         }
         auto_offset[a_state->buffer_index] += _sg_vertexformat_bytesize(a_state->format);
