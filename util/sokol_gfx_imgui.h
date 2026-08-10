@@ -345,6 +345,8 @@ typedef struct {
     _sgimgui_str_t vs_d3d11_target;
     _sgimgui_str_t fs_entry;
     _sgimgui_str_t fs_d3d11_target;
+    _sgimgui_str_t cs_entry;
+    _sgimgui_str_t cs_d3d11_target;
     _sgimgui_str_t glsl_texture_sampler_name[SG_MAX_TEXTURE_SAMPLER_PAIRS];
     _sgimgui_str_t glsl_uniform_name[SG_MAX_UNIFORMBLOCK_BINDSLOTS][SG_MAX_UNIFORMBLOCK_MEMBERS];
     _sgimgui_str_t attr_glsl_name[SG_MAX_VERTEX_ATTRIBUTES];
@@ -1723,6 +1725,10 @@ _SOKOL_PRIVATE void _sgimgui_shader_created(_sgimgui_t* ctx, sg_shader res_id, i
         shd->fs_entry = _sgimgui_make_str(shd->desc.fragment_func.entry);
         shd->desc.fragment_func.entry = shd->fs_entry.buf;
     }
+    if (shd->desc.compute_func.entry) {
+        shd->cs_entry = _sgimgui_make_str(shd->desc.compute_func.entry);
+        shd->desc.compute_func.entry = shd->cs_entry.buf;
+    }
     if (shd->desc.vertex_func.d3d11_target) {
         shd->vs_d3d11_target = _sgimgui_make_str(shd->desc.vertex_func.d3d11_target);
         shd->desc.vertex_func.d3d11_target = shd->vs_d3d11_target.buf;
@@ -1730,6 +1736,10 @@ _SOKOL_PRIVATE void _sgimgui_shader_created(_sgimgui_t* ctx, sg_shader res_id, i
     if (shd->desc.fragment_func.d3d11_target) {
         shd->fs_d3d11_target = _sgimgui_make_str(shd->desc.fragment_func.d3d11_target);
         shd->desc.fragment_func.d3d11_target = shd->fs_d3d11_target.buf;
+    }
+    if (shd->desc.compute_func.d3d11_target) {
+        shd->cs_d3d11_target = _sgimgui_make_str(shd->desc.compute_func.d3d11_target);
+        shd->desc.compute_func.d3d11_target = shd->cs_d3d11_target.buf;
     }
     for (int i = 0; i < SG_MAX_UNIFORMBLOCK_BINDSLOTS; i++) {
         for (int j = 0; j < SG_MAX_UNIFORMBLOCK_MEMBERS; j++) {
@@ -1757,6 +1767,12 @@ _SOKOL_PRIVATE void _sgimgui_shader_created(_sgimgui_t* ctx, sg_shader res_id, i
     }
     if (shd->desc.fragment_func.bytecode.ptr) {
         shd->desc.fragment_func.bytecode.ptr = _sgimgui_bin_dup(&ctx->desc.allocator, shd->desc.fragment_func.bytecode.ptr, shd->desc.fragment_func.bytecode.size);
+    }
+    if (shd->desc.compute_func.source) {
+        shd->desc.compute_func.source = _sgimgui_str_dup(&ctx->desc.allocator, shd->desc.compute_func.source);
+    }
+    if (shd->desc.compute_func.bytecode.ptr) {
+        shd->desc.compute_func.bytecode.ptr = _sgimgui_bin_dup(&ctx->desc.allocator, shd->desc.compute_func.bytecode.ptr, shd->desc.compute_func.bytecode.size);
     }
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
         sg_shader_vertex_attr* va = &shd->desc.attrs[i];
@@ -1790,6 +1806,14 @@ _SOKOL_PRIVATE void _sgimgui_shader_destroyed(_sgimgui_t* ctx, int slot_index) {
     if (shd->desc.fragment_func.bytecode.ptr) {
         _sgimgui_free(&ctx->desc.allocator, (void*)shd->desc.fragment_func.bytecode.ptr);
         shd->desc.fragment_func.bytecode.ptr = 0;
+    }
+    if (shd->desc.compute_func.source) {
+        _sgimgui_free(&ctx->desc.allocator, (void*)shd->desc.compute_func.source);
+        shd->desc.compute_func.source = 0;
+    }
+    if (shd->desc.compute_func.bytecode.ptr) {
+        _sgimgui_free(&ctx->desc.allocator, (void*)shd->desc.compute_func.bytecode.ptr);
+        shd->desc.compute_func.bytecode.ptr = 0;
     }
 }
 
@@ -2619,7 +2643,7 @@ _SOKOL_PRIVATE void _sgimgui_write_buffer_unsealed(const sg_write_buffer_desc* d
         item->args.write_buffer_unsealed.write_size = desc->size;
     }
     if (ctx->hooks.write_buffer_unsealed) {
-        ctx->hooks.write_buffer_unsealed(desc, user_data);
+        ctx->hooks.write_buffer_unsealed(desc, ctx->hooks.user_data);
     }
 }
 
@@ -2638,7 +2662,7 @@ _SOKOL_PRIVATE void _sgimgui_write_image_unsealed(const sg_write_image_desc* des
         item->args.write_image_unsealed.write_size = desc->size;
     }
     if (ctx->hooks.write_image_unsealed) {
-        ctx->hooks.write_image_unsealed(desc, user_data);
+        ctx->hooks.write_image_unsealed(desc, ctx->hooks.user_data);
     }
 }
 
@@ -2652,7 +2676,7 @@ _SOKOL_PRIVATE void _sgimgui_seal_buffer(sg_buffer buf, void* user_data) {
         item->args.seal_buffer.buffer = buf;
     }
     if (ctx->hooks.seal_buffer) {
-        ctx->hooks.seal_buffer(buf, user_data);
+        ctx->hooks.seal_buffer(buf, ctx->hooks.user_data);
     }
 }
 
@@ -2666,7 +2690,7 @@ _SOKOL_PRIVATE void _sgimgui_seal_image(sg_image img, void* user_data) {
         item->args.seal_image.image = img;
     }
     if (ctx->hooks.seal_image) {
-        ctx->hooks.seal_image(img, user_data);
+        ctx->hooks.seal_image(img, ctx->hooks.user_data);
     }
 }
 
@@ -3589,6 +3613,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_view_list(_sgimgui_t* ctx) {
 _SOKOL_PRIVATE void _sgimgui_draw_capture_list(_sgimgui_t* ctx) {
     _sgimgui_igbeginchild("capture_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), ImGuiChildFlags_Borders, ImGuiWindowFlags_None);
     const int num_items = _sgimgui_capture_num_read_items(ctx);
+    SOKOL_ASSERT(num_items < 64);
     uint64_t group_stack = 1;   /* bit set: group unfolded, cleared: folded */
     for (int i = 0; i < num_items; i++) {
         const _sgimgui_capture_item_t* item = _sgimgui_capture_read_item_at(ctx, i);
@@ -4517,7 +4542,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_capture_panel(_sgimgui_t* ctx) {
             _sgimgui_draw_image_panel(ctx, item->args.write_image_unsealed.dst.image);
             break;
         case _SGIMGUI_CMD_SEAL_BUFFER:
-            _sgimgui_draw_image_panel(ctx, item->args.seal_image.image);
+            _sgimgui_draw_buffer_panel(ctx, item->args.seal_buffer.buffer);
             break;
         case _SGIMGUI_CMD_SEAL_IMAGE:
             _sgimgui_draw_image_panel(ctx, item->args.seal_image.image);
@@ -4561,6 +4586,24 @@ _SOKOL_PRIVATE void _sgimgui_draw_capture_panel(_sgimgui_t* ctx) {
         case _SGIMGUI_CMD_ALLOC_VIEW:
             _sgimgui_draw_view_panel(ctx, item->args.alloc_view.result);
             break;
+        case _SGIMGUI_CMD_DEALLOC_BUFFER:
+            _sgimgui_draw_buffer_panel(ctx, item->args.dealloc_buffer.buffer);
+            break;
+        case _SGIMGUI_CMD_DEALLOC_IMAGE:
+            _sgimgui_draw_image_panel(ctx, item->args.dealloc_image.image);
+            break;
+        case _SGIMGUI_CMD_DEALLOC_SAMPLER:
+            _sgimgui_draw_sampler_panel(ctx, item->args.dealloc_sampler.sampler);
+            break;
+        case _SGIMGUI_CMD_DEALLOC_SHADER:
+            _sgimgui_draw_shader_panel(ctx, item->args.dealloc_shader.shader);
+            break;
+        case _SGIMGUI_CMD_DEALLOC_PIPELINE:
+            _sgimgui_draw_pipeline_panel(ctx, item->args.dealloc_pipeline.pipeline);
+            break;
+        case _SGIMGUI_CMD_DEALLOC_VIEW:
+            _sgimgui_draw_view_panel(ctx, item->args.dealloc_view.view);
+            break;
         case _SGIMGUI_CMD_INIT_BUFFER:
             _sgimgui_draw_buffer_panel(ctx, item->args.init_buffer.buffer);
             break;
@@ -4578,6 +4621,24 @@ _SOKOL_PRIVATE void _sgimgui_draw_capture_panel(_sgimgui_t* ctx) {
             break;
         case _SGIMGUI_CMD_INIT_VIEW:
             _sgimgui_draw_view_panel(ctx, item->args.init_view.view);
+            break;
+        case _SGIMGUI_CMD_UNINIT_BUFFER:
+            _sgimgui_draw_buffer_panel(ctx, item->args.uninit_buffer.buffer);
+            break;
+        case _SGIMGUI_CMD_UNINIT_IMAGE:
+            _sgimgui_draw_image_panel(ctx, item->args.uninit_image.image);
+            break;
+        case _SGIMGUI_CMD_UNINIT_SAMPLER:
+            _sgimgui_draw_sampler_panel(ctx, item->args.uninit_sampler.sampler);
+            break;
+        case _SGIMGUI_CMD_UNINIT_SHADER:
+            _sgimgui_draw_shader_panel(ctx, item->args.uninit_shader.shader);
+            break;
+        case _SGIMGUI_CMD_UNINIT_PIPELINE:
+            _sgimgui_draw_pipeline_panel(ctx, item->args.uninit_pipeline.pipeline);
+            break;
+        case _SGIMGUI_CMD_UNINIT_VIEW:
+            _sgimgui_draw_view_panel(ctx, item->args.uninit_view.view);
             break;
         case _SGIMGUI_CMD_FAIL_BUFFER:
             _sgimgui_draw_buffer_panel(ctx, item->args.fail_buffer.buffer);
