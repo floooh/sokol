@@ -12,10 +12,10 @@ Many thanks to @nihiL7331!
 
 Also note a couple of other minor fixes that happened today:
 
-- sokol_gfx_imgui.h: a deprecated usage of BeginChild has been updated (6c3fa5ac6493f4a157f4a8d9740ef0ede1d69ebb)
-- a general bugfix-sweep in sokol_gfx_imgui.h (nothing particularly critical: 7ecd68d1b8fd0216c06e3a378ffb211745abff0e)
+- sokol_gfx_imgui.h: a deprecated usage of BeginChild has been updated (https://github.com/floooh/sokol/commit/6c3fa5ac6493f4a157f4a8d9740ef0ede1d69ebb)
+- a general bugfix-sweep in sokol_gfx_imgui.h (nothing particularly critical: https://github.com/floooh/sokol/commit/7ecd68d1b8fd0216c06e3a378ffb211745abff0e)
 - in the WebGPU backend, fixed an edge case in the index-buffer bindings cache (the index format wasn't
-  taken in account): e309617e1331ac554906d9b3ff79eee59b482c55
+  taken in account): https://github.com/floooh/sokol/commit/e309617e1331ac554906d9b3ff79eee59b482c55
 
 Also the sokol-nim bindings and example are currently being updated for 'Nim-next' (Nimony),
 thanks to @leiserfg for taking care of that!
