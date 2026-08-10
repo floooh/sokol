@@ -4743,7 +4743,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(D3D11_STORAGEBUFFER_HLSL_REGISTER_U_OUT_OF_RANGE, "sg_shader_desc.views[].storage_buffer.hlsl_register_u_n is out of range (must be 0..31)") \
     _SG_LOGITEM_XMACRO(D3D11_IMAGE_HLSL_REGISTER_T_OUT_OF_RANGE, "sg_shader_desc.views[].texture.hlsl_register_t_n is out of range (must be 0..31)") \
     _SG_LOGITEM_XMACRO(D3D11_STORAGEIMAGE_HLSL_REGISTER_U_OUT_OF_RANGE, "sg_shader_desc.views[].storage_image.hlsl_register_u_n is out of range (must be 0..31)") \
-    _SG_LOGITEM_XMACRO(D3D11_SAMPLER_HLSL_REGISTER_S_OUT_OF_RANGE, "sampler 'hlsl_register_s_n' is out of rang (must be 0..11)") \
+    _SG_LOGITEM_XMACRO(D3D11_SAMPLER_HLSL_REGISTER_S_OUT_OF_RANGE, "sampler 'hlsl_register_s_n' is out of range (must be 0..11)") \
     _SG_LOGITEM_XMACRO(D3D11_LOAD_D3DCOMPILER_47_DLL_FAILED, "loading d3dcompiler_47.dll failed (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_SHADER_COMPILATION_FAILED, "shader compilation failed (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_SHADER_COMPILATION_OUTPUT, "") \
