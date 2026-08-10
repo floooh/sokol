@@ -7372,6 +7372,7 @@ typedef struct {
     struct {
         sg_buffer buffer;
         uint64_t offset;
+        WGPUIndexFormat format;
     } ib;
     _sg_wgpu_bindgroup_handle_t bg;
 } _sg_wgpu_bindings_cache_t;
@@ -18283,9 +18284,7 @@ _SOKOL_PRIVATE uint64_t _sg_wgpu_hash(const void* key, int len, uint64_t seed) {
         // fall through
         case 2: h2 ^= (uint32_t)(((unsigned char*)data)[1] << 8);
         // fall through
-        case 1: h2 ^= ((unsigned char*)data)[0];
-        // fall through
-        h2 *= m;
+        case 1: h2 ^= ((unsigned char*)data)[0]; h2 *= m; break;
     };
     h1 ^= h2 >> 18; h1 *= m;
     h2 ^= h1 >> 22; h2 *= m;
@@ -18546,22 +18545,25 @@ _SOKOL_PRIVATE void _sg_wgpu_bindings_cache_vb_update(size_t index, const _sg_bu
     }
 }
 
-_SOKOL_PRIVATE bool _sg_wgpu_bindings_cache_ib_dirty(const _sg_buffer_t* ib, uint64_t offset) {
+_SOKOL_PRIVATE bool _sg_wgpu_bindings_cache_ib_dirty(const _sg_buffer_t* ib, uint64_t offset, WGPUIndexFormat format) {
     if (ib) {
         return (_sg.wgpu.bindings_cache.ib.buffer.id != ib->slot.id)
-            || (_sg.wgpu.bindings_cache.ib.offset != offset);
+            || (_sg.wgpu.bindings_cache.ib.offset != offset)
+            || (_sg.wgpu.bindings_cache.ib.format != format);
     } else {
         return _sg.wgpu.bindings_cache.ib.buffer.id != SG_INVALID_ID;
     }
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_bindings_cache_ib_update(const _sg_buffer_t* ib, uint64_t offset) {
+_SOKOL_PRIVATE void _sg_wgpu_bindings_cache_ib_update(const _sg_buffer_t* ib, uint64_t offset, WGPUIndexFormat format) {
     if (ib) {
         _sg.wgpu.bindings_cache.ib.buffer.id = ib->slot.id;
         _sg.wgpu.bindings_cache.ib.offset = offset;
+        _sg.wgpu.bindings_cache.ib.format = format;
     } else {
         _sg.wgpu.bindings_cache.ib.buffer.id = SG_INVALID_ID;
         _sg.wgpu.bindings_cache.ib.offset = 0;
+        _sg.wgpu.bindings_cache.ib.format = WGPUIndexFormat_Undefined;
     }
 }
 
@@ -18660,10 +18662,10 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_index_buffer(_sg_bindings_ptrs_t* bnd) {
     SOKOL_ASSERT(_sg.wgpu.rpass_enc);
     const _sg_buffer_t* ib = bnd->ib;
     uint64_t offset = (uint64_t)bnd->ib_offset;
-    if (_sg_wgpu_bindings_cache_ib_dirty(ib, offset)) {
-        _sg_wgpu_bindings_cache_ib_update(ib, offset);
+    const WGPUIndexFormat format = _sg_wgpu_indexformat(bnd->pip->cmn.index_type);
+    if (_sg_wgpu_bindings_cache_ib_dirty(ib, offset, format)) {
+        _sg_wgpu_bindings_cache_ib_update(ib, offset, format);
         if (ib) {
-            const WGPUIndexFormat format = _sg_wgpu_indexformat(bnd->pip->cmn.index_type);
             const uint64_t buf_size = (uint64_t)ib->cmn.size;
             SOKOL_ASSERT(buf_size > offset);
             const uint64_t max_bytes = buf_size - offset;
@@ -23813,6 +23815,7 @@ _SOKOL_PRIVATE bool _sg_validate_slot_bits(_sg_u128_t bits, sg_shader_stage stag
             mask.hi = 1ULL << slot;
             break;
         case SG_SHADERSTAGE_COMPUTE:
+            // NOTE: compute shaders can never collide with other shader types
             SOKOL_ASSERT(slot < 64);
             mask.lo = 1ULL << slot;
             break;
