@@ -337,7 +337,7 @@ typedef struct sfb_framebuffer { uint32_t id; } sfb_framebuffer;
 /*
     sfb_resource_state
 
-    The state of a framebuffer object, obtainable via sfg_query_framebuffer_state().
+    The state of a framebuffer object, obtainable via sfb_query_framebuffer_state().
     Publicly visible values are only SFB_RESOURCESTATE_VALID
     and SFB_RESOURCESTATE_FAILED.
 */
@@ -4680,7 +4680,6 @@ typedef struct {
     int* free_queue;
 } _sfb_pool_t;
 
-#define _SFB_INVALID_SLOT_INDEX (0)
 typedef struct {
     _sfb_pool_t framebuffer_pool;
     _sfb_framebuffer_t* framebuffers;
