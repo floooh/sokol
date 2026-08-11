@@ -8805,6 +8805,14 @@ static inline HRESULT _sapp_d3d11_CreateDepthStencilView(ID3D11Device* self, ID3
     #endif
 }
 
+static inline void _sapp_d3d11_Flush(ID3D11DeviceContext* self) {
+    #if defined(__cplusplus)
+        self->Flush();
+    #else
+        self->lpVtbl->Flush(self);
+    #endif
+}
+
 static inline HRESULT _sapp_dxgi_ResizeBuffers(IDXGISwapChain* self, UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags) {
     #if defined(__cplusplus)
         return self->ResizeBuffers(BufferCount, Width, Height, NewFormat, SwapChainFlags);
@@ -9071,6 +9079,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(void) {
     if (_sapp.d3d11.swap_chain) {
         _sapp_d3d11_destroy_default_render_target();
         _sapp_dxgi_ResizeBuffers(_sapp.d3d11.swap_chain, _sapp.d3d11.swap_chain_desc.BufferCount, (UINT)_sapp.framebuffer_width, (UINT)_sapp.framebuffer_height, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
+        _sapp_d3d11_Flush(_sapp.d3d11.device_context);
         _sapp_d3d11_create_default_render_target();
     }
 }
@@ -10101,18 +10110,14 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
             case WM_TIMER:
                 _sapp_timing_update(&_sapp.timing, 0.0);
                 _sapp_win32_frame(true);
-                /*
-                * NOTE: resizing each frame explodes memory usage
-                *
                 if (_sapp_win32_update_dimensions()) {
                     #if defined(SOKOL_D3D11)
                     _sapp_d3d11_resize_default_render_target();
-                    #elif defined(SOKOL_WGPU)
-                    _sapp_wgpu_swapchain_size_changed();
+                    //#elif defined(SOKOL_WGPU)
+                    //_sapp_wgpu_swapchain_size_changed();
                     #endif
                     _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
                 }
-                */
                 break;
             case WM_NCLBUTTONDOWN:
                 /* workaround for half-second pause when starting to move window
