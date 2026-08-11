@@ -17,7 +17,7 @@ Also note a couple of other minor fixes that happened today:
 - in the WebGPU backend, fixed an edge case in the index-buffer bindings cache (the index format wasn't
   taken in account): https://github.com/floooh/sokol/commit/e309617e1331ac554906d9b3ff79eee59b482c55
 
-Also the sokol-nim bindings and example are currently being updated for 'Nim-next' (Nimony),
+Also the sokol-nim bindings and examples are currently being updated for 'Nim-next' (Nimony),
 thanks to @leiserfg for taking care of that!
 
 ### 09-Aug-2026
@@ -111,7 +111,7 @@ updates roughly in this order:
 
 - in the sokol_app.h vulkan backend, a DebugUtilsMessenger object is now created
   (in debug build mode) which routes messages from the Vulkan driver and
-  validation layers to the installing sokol-app logging function.
+  validation layers to the installed sokol-app logging function.
 - the sokol_gfx_imgui.h header has been updated for the new write-unsealed
   types and functions
 
