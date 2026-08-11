@@ -4680,7 +4680,6 @@ typedef struct {
     int* free_queue;
 } _sfb_pool_t;
 
-#define _SFB_INVALID_SLOT_INDEX (0)
 typedef struct {
     _sfb_pool_t framebuffer_pool;
     _sfb_framebuffer_t* framebuffers;
