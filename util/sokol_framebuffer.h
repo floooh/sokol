@@ -583,7 +583,7 @@ inline void sfb_render_ex(sfb_framebuffer fb, const sfb_render_desc& desc) { ret
     #define SOKOL_ASSERT(c) assert(c)
 #endif
 
-// >#shdgen
+//>#shdgen
 #if defined(SOKOL_GLCORE)
 static const uint8_t _sfb_rgba8_vs_source_glsl410[407] = {
     0x23,0x76,0x65,0x72,0x73,0x69,0x6f,0x6e,0x20,0x34,0x31,0x30,0x0a,0x0a,0x75,0x6e,
