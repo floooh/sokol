@@ -3357,25 +3357,29 @@ typedef struct sg_bindings {
     .immutable (default: true)
         the buffer content will never be updated from the CPU side while
         in 'valid' resource state (but may be written to by a compute shader)
-    .dynamic_update (default: false)
-        the buffer content will be infrequently updated from the CPU side
-    .stream_update (default: false)
-        the buffer content will be updated each frame from the CPU side
     .write_unsealed (default: false)
         when true, creates an immutable buffer in 'unsealed' resource state,
         unsealed buffers can be populated with data by one or multiple
         `sg_write_buffer_unsealed()` calls before being 'sealed' by
         calling `sg_seal_buffer()` which transitions from 'unsealed'
         to 'valid' resource state
+    .write_transient (default: false)
+        TODO: docs
+    .dynamic_update (default: false)
+        the buffer content will be infrequently updated from the CPU side
+    .stream_update (deprecated, default: false)
+        the buffer content will be updated each frame from the CPU side
 */
 typedef struct sg_buffer_usage {
     bool vertex_buffer;
     bool index_buffer;
     bool storage_buffer;
     bool immutable;
-    bool dynamic_update;
-    bool stream_update;
     bool write_unsealed;
+    bool write_transient;
+    bool dynamic_update;
+    // deprecated:
+    bool stream_update;
 } sg_buffer_usage;
 
 /*
@@ -3472,16 +3476,18 @@ typedef struct sg_buffer_desc {
     .immutable (default: true)
         the image content cannot be updated from the CPU side
         (but may be updated by the GPU in a render- or compute-pass)
-    .dynamic_update (default: false)
-        the image content is updated infrequently by the CPU via sg_update_image()
-    .stream_update (default: false)
-        the image content is updated each frame by the CPU via sg_update_image()
     .write_unsealed (default: false)
         when true, creates an immutable image in 'unsealed' resource state,
         unsealed images can be populated with data by one or multiple
         `sg_write_image_unsealed()` calls before being 'sealed' by
         calling `sg_seal_image()` which transitions from 'unsealed'
         to 'valid' resource state
+    .write_transient (default: false)
+        TODO: docs
+    .dynamic_update (default: false)
+        the image content is updated infrequently by the CPU via sg_update_image()
+    .stream_update (deprecated, default: false)
+        the image content is updated each frame by the CPU via sg_update_image()
 
     Note that creating a texture view from the image to be used for
     texture-sampling in vertex-, fragment- or compute-shaders
@@ -3493,9 +3499,11 @@ typedef struct sg_image_usage {
     bool resolve_attachment;
     bool depth_stencil_attachment;
     bool immutable;
-    bool dynamic_update;
-    bool stream_update;
     bool write_unsealed;
+    bool write_transient;
+    bool dynamic_update;
+    // deprecated:
+    bool stream_update;
 } sg_image_usage;
 
 /*
@@ -4349,6 +4357,8 @@ typedef struct sg_trace_hooks {
     void (*update_buffer)(sg_buffer buf, const sg_range* data, void* user_data);
     void (*update_image)(sg_image img, const sg_image_data* data, void* user_data);
     void (*append_buffer)(sg_buffer buf, const sg_range* data, int result, void* user_data);
+    void (*write_buffer_transient)(const sg_write_buffer_desc* desc, void* user_data);
+    void (*write_image_transient)(const sg_write_image_desc* desc, void* user_data);
     void (*write_buffer_unsealed)(const sg_write_buffer_desc* desc, void* user_data);
     void (*write_image_unsealed)(const sg_write_image_desc* desc, void* user_data);
     void (*seal_buffer)(sg_buffer buf, void* user_data);
@@ -4668,6 +4678,8 @@ typedef struct sg_frame_stats {
     uint32_t num_update_buffer;
     uint32_t num_append_buffer;
     uint32_t num_update_image;
+    uint32_t num_write_buffer_transient;
+    uint32_t num_write_image_transient;
     uint32_t num_write_buffer_unsealed;
     uint32_t num_write_image_unsealed;
     uint32_t num_seal_buffer;
@@ -4868,6 +4880,8 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(BEGINPASS_TOO_MANY_RESOLVE_ATTACHMENTS, "sg_begin_pass: too many resolve attachments (sg_limits.max_color_attachments)") \
     _SG_LOGITEM_XMACRO(BEGINPASS_ATTACHMENTS_ALIVE, "sg_begin_pass: an attachment was provided that no longer exists") \
     _SG_LOGITEM_XMACRO(DRAW_WITHOUT_BINDINGS, "attempting to draw without resource bindings") \
+    _SG_LOGITEM_XMACRO(WRITE_BUFFER_TRANSIENT_BUFFER_ALIVE, "sg_write_buffer_transient: buffer is no longer alive") \
+    _SG_LOGITEM_XMACRO(WRITE_IMAGE_TRANSIENT_IMAGE_ALIVE, "sg_write_image_transient: image is no longer alive") \
     _SG_LOGITEM_XMACRO(WRITE_BUFFER_UNSEALED_BUFFER_ALIVE, "sg_write_buffer_unsealed: buffer is no longer alive") \
     _SG_LOGITEM_XMACRO(WRITE_IMAGE_UNSEALED_IMAGE_ALIVE, "sg_write_image_unsealed: image is no longer alive") \
     _SG_LOGITEM_XMACRO(SEAL_BUFFER_ALIVE, "sg_seal_buffer: buffer is no longer alive") \
@@ -5517,6 +5531,8 @@ SOKOL_GFX_API_DECL void sg_end_pass(void);
 SOKOL_GFX_API_DECL void sg_commit(void);
 
 // resource update functions (wip new resource update api)
+SOKOL_GFX_API_DECL void sg_write_buffer_transient(const sg_write_buffer_desc* desc);
+SOKOL_GFX_API_DECL void sg_write_image_transient(const sg_write_image_desc* desc);
 SOKOL_GFX_API_DECL void sg_write_buffer_unsealed(const sg_write_buffer_desc* desc);
 SOKOL_GFX_API_DECL void sg_write_image_unsealed(const sg_write_image_desc* desc);
 SOKOL_GFX_API_DECL void sg_seal_buffer(sg_buffer buf);
@@ -5837,6 +5853,8 @@ inline void sg_init_shader(sg_shader shd, const sg_shader_desc& desc) { return s
 inline void sg_init_pipeline(sg_pipeline pip, const sg_pipeline_desc& desc) { return sg_init_pipeline(pip, &desc); }
 inline void sg_init_view(sg_view view, const sg_view_desc& desc) { return sg_init_view(view, &desc); }
 
+inline void sg_write_buffer_transient(const sg_write_buffer_desc* desc) { return sg_write_buffer_transient(&desc); }
+inline void sg_write_image_transient(const sg_write_image_desc* desc) { return sg_write_image_transient(&desc); }
 inline void sg_write_buffer_unsealed(const sg_write_buffer_desc& desc) { return sg_write_buffer_unsealed(&desc); }
 inline void sg_write_image_unsealed(const sg_write_image_desc& desc) { return sg_write_image_unsealed(&desc); }
 inline void sg_update_image(sg_image img, const sg_image_data& data) { return sg_update_image(img, &data); }
@@ -17496,6 +17514,22 @@ _SOKOL_PRIVATE void _sg_mtl_update_image(_sg_image_t* img, const sg_image_data* 
     _sg_mtl_copy_image_data(img, mtl_tex, data);
 }
 
+_SOKOL_PRIVATE void _sg_mtl_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
+    SOKOL_ASSERT(buf && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_VALID == buf->slot.state);
+    SOKOL_ASSERT(buf->cmn.usage.write_transient);
+
+    SOKOL_ASSERT(false && "FIXME: _sg_mtl_write_buffer_transient");
+}
+
+_SOKOL_PRIVATE void _sg_mtl_write_image_transient(_sg_image_t* img, const sg_write_image_desc* desc) {
+    SOKOL_ASSERT(img && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_VALID == img->slot.state);
+    SOKOL_ASSERT(img->cmn.usage.write_transient);
+
+    SOKOL_ASSERT(false && "FIXME: _sg_mtl_write_image_transient");
+}
+
 _SOKOL_PRIVATE void _sg_mtl_write_buffer_unsealed(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == buf->slot.state);
@@ -23446,6 +23480,42 @@ static inline void _sg_update_image(_sg_image_t* img, const sg_image_data* data)
     #endif
 }
 
+static inline void _sg_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_write_buffer_transient(buf, desc);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_write_buffer_transient(buf, desc);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_write_buffer_transient(buf, desc);
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_write_buffer_transient(buf, desc);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_write_buffer_transient(buf, desc);
+    #elif defined(SOKOL_DUMMY_BACKEND)
+    _sg_dummy_write_buffer_transient(buf, desc);
+    #else
+    #error("INVALID BACKEND");
+    #endif
+}
+
+static inline void _sg_write_image_transient(_sg_image_t* img, const sg_write_image_desc* desc) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_write_image_transient(img, desc);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_write_image_transient(img, desc);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_write_image_transient(img, desc);
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_write_image_transient(img, desc);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_write_image_transient(img, desc);
+    #elif defined(SOKOL_DUMMY_BACKEND)
+    _sg_dummy_write_image_transient(img, desc);
+    #else
+    #error("INVALID BACKEND");
+    #endif
+}
+
 static inline void _sg_write_buffer_unsealed(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
     #if defined(_SOKOL_ANY_GL)
     _sg_gl_write_buffer_unsealed(buf, desc);
@@ -25055,6 +25125,38 @@ _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image_t* img, const sg_i
             img->cmn.height,
             img->cmn.num_mipmaps,
             img->cmn.num_slices);
+        return _sg_validate_end();
+    #endif
+}
+
+_SOKOL_PRIVATE bool _sg_validate_write_buffer_transient(const _sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(buf);
+        _SOKOL_UNUSED(desc);
+        return true;
+    #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
+        SOKOL_ASSERT(buf && desc);
+        _sg_validate_begin();
+        SOKOL_ASSERT(false && "FIXME: _sg_validate_write_buffer_transient");
+        return _sg_validate_end();
+    #endif
+}
+
+_SOKOL_PRIVATE bool _sg_validate_write_image_transient(const _sg_image_t* img, const sg_write_image_desc* desc) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(img);
+        _SOKOL_UNUSED(desc);
+        return true;
+    #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
+        SOKOL_ASSERT(img && desc);
+        _sg_validate_begin();
+        SOKOL_ASSERT(false && "FIXME: _sg_validate_write_image_transient");
         return _sg_validate_end();
     #endif
 }
@@ -27104,6 +27206,37 @@ SOKOL_API_IMPL void sg_update_image(sg_image img_id, const sg_image_data* data) 
         }
     }
     _SG_TRACE_ARGS(update_image, img_id, data);
+}
+
+SOKOL_API_IMPL void sg_write_buffer_transient(const sg_write_buffer_desc* desc) {
+    SOKOL_ASSERT(_sg.valid);
+    SOKOL_ASSERT(desc);
+    _sg_stats_inc(num_write_buffer_transient);
+    _sg_buffer_t* buf = _sg_lookup_buffer(desc->dst.buffer.id);
+    if (buf) {
+        sg_write_buffer_desc desc_def = _sg_write_buffer_desc_defaults(desc);
+        if (_sg_validate_write_buffer_transient(buf, &desc_def)) {
+            _sg_write_buffer_transient(buf, &desc_def);
+        }
+    } else {
+        _SG_ERROR(WRITE_BUFFER_TRANSIENT_BUFFER_ALIVE);
+    }
+    _SG_TRACE_ARGS(write_buffer_transient, desc);
+}
+
+SOKOL_API_IMPL void sg_write_image_transient(const sg_write_image_desc* desc) {
+    SOKOL_ASSERT(_sg.valid);
+    SOKOL_ASSERT(desc);
+    _sg_image_t* img = _sg_lookup_image(desc->dst.image.id);
+    if (img) {
+        sg_write_image_desc desc_def = _sg_write_image_desc_defaults(img, desc);
+        if (_sg_validate_write_image_transient(img, &desc_def)) {
+            _sg_write_image_transient(img, &desc_def);
+        }
+    } else {
+        _SG_ERROR(WRITE_IMAGE_TRANSIENT_IMAGE_ALIVE);
+    }
+    _SG_TRACE_ARGS(write_image_transient, desc);
 }
 
 SOKOL_API_IMPL void sg_write_buffer_unsealed(const sg_write_buffer_desc* desc) {
