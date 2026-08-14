@@ -3378,8 +3378,6 @@ typedef struct sg_buffer_usage {
     bool write_unsealed;
     bool write_transient;
     bool dynamic_update;
-    // deprecated:
-    bool stream_update;
 } sg_buffer_usage;
 
 /*
@@ -3486,8 +3484,6 @@ typedef struct sg_buffer_desc {
         TODO: docs
     .dynamic_update (default: false)
         the image content is updated infrequently by the CPU via sg_update_image()
-    .stream_update (deprecated, default: false)
-        the image content is updated each frame by the CPU via sg_update_image()
 
     Note that creating a texture view from the image to be used for
     texture-sampling in vertex-, fragment- or compute-shaders
@@ -3500,9 +3496,7 @@ typedef struct sg_image_usage {
     bool depth_stencil_attachment;
     bool immutable;
     bool write_unsealed;
-    bool write_transient;
     bool dynamic_update;
-    // deprecated:
     bool stream_update;
 } sg_image_usage;
 
@@ -4899,7 +4893,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_TEXTURESAMPLERPAIRS, "sg_shader_desc: too many texture-sampler-pairs on fragment shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURESAMPLERPAIRS, "sg_shader_desc: too many texture-sampler-pairs on compute shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_CANARY, "sg_buffer_desc not initialized") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_IMMUTABLE_DYNAMIC_STREAM, "sg_buffer_desc.usage: only one of .immutable, .dynamic_update, .stream_update can be true") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_IMMUTABLE_VS_WRITABLE, "sg_buffer_desc.usage: only one of .immutable, .dynamic_update, .write_transient can be true") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_UNSEALED_VS_IMMUTABLE, "sg_buffer_desc.usage: .write_unsealed only allowed for .immutable buffers") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_SEPARATE_BUFFER_TYPES, "sg_buffer_desc.usage: on WebGL2, only one of .vertex_buffer or .index_buffer can be true (check sg_features.separate_buffer_types)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_EXPECT_NONZERO_SIZE, "sg_buffer_desc.size must be greater zero") \
@@ -17525,7 +17519,7 @@ _SOKOL_PRIVATE void _sg_mtl_write_buffer_transient(_sg_buffer_t* buf, const sg_w
 _SOKOL_PRIVATE void _sg_mtl_write_image_transient(_sg_image_t* img, const sg_write_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_VALID == img->slot.state);
-    SOKOL_ASSERT(img->cmn.usage.write_transient);
+//    SOKOL_ASSERT(img->cmn.usage.write_transient);
 
     SOKOL_ASSERT(false && "FIXME: _sg_mtl_write_image_transient");
 }
@@ -23629,7 +23623,7 @@ _SOKOL_PRIVATE bool _sg_validate_end(void) {
 #endif
 
 _SOKOL_PRIVATE bool _sg_one(bool b0, bool b1, bool b2) {
-    return (b0 && !b1 && !b2) || (!b0 && b1 && !b2) || (!b0 && !b1 && b2);
+    return (b0 + b1 + b2) == 1;
 }
 
 _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
@@ -23645,7 +23639,7 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
         _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_BUFFERDESC_CANARY);
         _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_BUFFERDESC_CANARY);
         _SG_VALIDATE(desc->size > 0, VALIDATE_BUFFERDESC_EXPECT_NONZERO_SIZE);
-        _SG_VALIDATE(_sg_one(desc->usage.immutable, desc->usage.dynamic_update, desc->usage.stream_update), VALIDATE_BUFFERDESC_IMMUTABLE_DYNAMIC_STREAM);
+        _SG_VALIDATE(_sg_one(desc->usage.immutable, desc->usage.dynamic_update, desc->usage.write_transient), VALIDATE_BUFFERDESC_IMMUTABLE_VS_WRITABLE);
         if (_sg.features.separate_buffer_types) {
             _SG_VALIDATE(_sg_one(desc->usage.vertex_buffer, desc->usage.index_buffer, desc->usage.storage_buffer), VALIDATE_BUFFERDESC_SEPARATE_BUFFER_TYPES);
         }
@@ -25388,7 +25382,7 @@ _SOKOL_PRIVATE sg_buffer_usage _sg_buffer_usage_defaults(const sg_buffer_usage* 
     if (!(def.vertex_buffer || def.index_buffer || def.storage_buffer)) {
         def.vertex_buffer = true;
     }
-    if (!(def.immutable || def.stream_update || def.dynamic_update)) {
+    if (!(def.immutable || def.write_transient || def.dynamic_update)) {
         def.immutable = true;
     }
     return def;
