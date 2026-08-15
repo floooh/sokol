@@ -5212,7 +5212,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_USAGE, "sg_write_buffer_unsealed: buffer usage must be .immutable && .write_unsealed") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_RESOURCESTATE, "sg_write_buffer_unsealed: buffer resource state must be SG_RESOURCESTATE_UNSEALED") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_USAGE, "sg_write_buffer_transient: buffer usage must be !.immutable && .write_transient") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND, "sg_write_buffer_transient: cannot be called after buffer has been bound in this frame") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND, "sg_write_buffer_transient: cannot be called after buffer has already been bound in this frame") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_SRC_DATA_POINTER, "sg_write_buffer_*: desc.src.data.ptr must be valid") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_SRC_DATA_SIZE, "sg_write_buffer_*: desc.src.data.size must be > 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_SIZE, "sg_write_buffer_*: desc.size must be > 0 and <= desc.src.data.size") \
@@ -17519,12 +17519,32 @@ _SOKOL_PRIVATE void _sg_mtl_update_image(_sg_image_t* img, const sg_image_data* 
     _sg_mtl_copy_image_data(img, mtl_tex, data);
 }
 
+_SOKOL_PRIVATE void _sg_mtl_write_buffer_common(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
+    SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
+    SOKOL_ASSERT((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size);
+    SOKOL_ASSERT((desc->src.offset + desc->size) <= desc->src.data.size);
+    __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot]);
+    uint8_t* dst_ptr = ((uint8_t*)[mtl_buf contents]) + desc->dst.offset;
+    const uint8_t* src_ptr = ((uint8_t*)desc->src.data.ptr) + desc->src.offset;
+    memcpy(dst_ptr, src_ptr, desc->size);
+}
+
 _SOKOL_PRIVATE void _sg_mtl_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_VALID == buf->slot.state);
     SOKOL_ASSERT(buf->cmn.usage.write_transient);
+    _sg_mtl_write_buffer_common(buf, desc);
+    if (_sg_mtl_resource_options_storage_mode_managed_or_shared() == MTLResourceStorageModeManaged) {
+        __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot]);
+        [mtl_buf didModifyRange:NSMakeRange(desc->dst.offset, desc->size)];
+    }
+}
 
-    SOKOL_ASSERT(false && "FIXME: _sg_mtl_write_buffer_transient");
+_SOKOL_PRIVATE void _sg_mtl_write_buffer_unsealed(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
+    SOKOL_ASSERT(buf && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == buf->slot.state);
+    SOKOL_ASSERT(buf->cmn.usage.write_unsealed);
+    _sg_mtl_write_buffer_common(buf, desc);
 }
 
 _SOKOL_PRIVATE void _sg_mtl_write_image_transient(_sg_image_t* img, const sg_write_image_desc* desc) {
@@ -17533,18 +17553,6 @@ _SOKOL_PRIVATE void _sg_mtl_write_image_transient(_sg_image_t* img, const sg_wri
 //    SOKOL_ASSERT(img->cmn.usage.write_transient);
 
     SOKOL_ASSERT(false && "FIXME: _sg_mtl_write_image_transient");
-}
-
-_SOKOL_PRIVATE void _sg_mtl_write_buffer_unsealed(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
-    SOKOL_ASSERT(buf && desc);
-    SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == buf->slot.state);
-    SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
-    SOKOL_ASSERT((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size);
-    SOKOL_ASSERT((desc->src.offset + desc->size) <= desc->src.data.size);
-    __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot]);
-    uint8_t* dst_ptr = ((uint8_t*)[mtl_buf contents]) + desc->dst.offset;
-    const uint8_t* src_ptr = ((uint8_t*)desc->src.data.ptr) + desc->src.offset;
-    memcpy(dst_ptr, src_ptr, desc->size);
 }
 
 _SOKOL_PRIVATE void _sg_mtl_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
