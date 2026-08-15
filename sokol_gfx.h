@@ -5141,11 +5141,13 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBUF_ALIVE, "sg_apply_bindings: vertex buffer no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBUF_USAGE, "sg_apply_bindings: buffer in vertex buffer bind slot must have usage.vertex_buffer") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBUF_OVERFLOW, "sg_apply_bindings: buffer in vertex buffer bind slot is overflown") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBUF_WRITE_TRANSIENT, "sg_apply_bindings: sg_write_buffer_transient() hasn't been called this frame for usage.write_transient buffer in vertex buffer slot") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_NO_IBUF, "sg_apply_bindings: pipeline object defines non-indexed rendering, but index buffer binding provided") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_IBUF, "sg_apply_bindings: pipeline object defines indexed rendering, but no index buffer binding provided") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_IBUF_ALIVE, "sg_apply_bindings: index buffer no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_IBUF_USAGE, "sg_apply_bindings: buffer in index buffer bind slot must have usage.index_buffer") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_IBUF_OVERFLOW, "sg_apply_bindings: buffer in index buffer slot is overflown") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_IBUF_WRITE_TRANSIENT, "sg_apply_bindings: sg_write_buffer_transient() hasn't been called this frame for usage.write_transient buffer in index buffer slot") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_VIEW_BINDING, "sg_apply_bindings: view binding is missing or the view handle is invalid") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VIEW_ALIVE, "sg_apply_bindings: view no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECT_TEXVIEW, "sg_apply_bindings: view type mismatch in bindslot (shader expects a texture view)") \
@@ -5157,6 +5159,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_EXPECTED_FILTERABLE_IMAGE, "sg_apply_bindings: filterable image expected") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_EXPECTED_DEPTH_IMAGE, "sg_apply_bindings: depth image expected") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_READWRITE_IMMUTABLE, "sg_apply_bindings: storage buffers bound as read/write must have usage immutable") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_SBUF_WRITE_TRANSIENT, "sg_apply_bindings: sg_write_buffer_transient() hasn't been called this frame for usage.write_transient storage buffer in view slot") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SIMGVIEW_COMPUTE_PASS_EXPECTED, "sg_apply_bindings: storage image bindings can only appear on compute passes") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SIMGVIEW_IMAGETYPE_MISMATCH, "sg_apply_bindings: image type of bound storage image doesn't match shader desc") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SIMGVIEW_ACCESSFORMAT, "sg_apply_bindings: pixel format of storage image view doesn't match access format in shader desc") \
@@ -5208,11 +5211,13 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_UPDIMG_ONCE, "sg_update_image: only one update allowed per image and frame") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_USAGE, "sg_write_buffer_unsealed: buffer usage must be .immutable && .write_unsealed") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_RESOURCESTATE, "sg_write_buffer_unsealed: buffer resource state must be SG_RESOURCESTATE_UNSEALED") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_SRC_DATA_POINTER, "sg_write_buffer_unsealed: desc.src.data.ptr must be valid") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_SRC_DATA_SIZE, "sg_write_buffer_unsealed: desc.src.data.size must be > 0") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_SIZE, "sg_write_buffer_unsealed: desc.size must be > 0 and <= desc.src.data.size") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_WRITE_OVERFLOW, "sg_write_buffer_unsealed: desc.dst.offset + desc.size must be <= buffer size") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_READ_OVERFLOW, "sg_write_buffer_unsealed: desc.src.offset + desc.size must be <= desc.src.data.size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_USAGE, "sg_write_buffer_transient: buffer usage must be !.immutable && .write_transient") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND, "sg_write_buffer_transient: cannot be called after buffer has been bound in this frame") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_SRC_DATA_POINTER, "sg_write_buffer_*: desc.src.data.ptr must be valid") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_SRC_DATA_SIZE, "sg_write_buffer_*: desc.src.data.size must be > 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_SIZE, "sg_write_buffer_*: desc.size must be > 0 and <= desc.src.data.size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_WRITE_OVERFLOW, "sg_write_buffer_*: desc.dst.offset + desc.size must be <= buffer size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_READ_OVERFLOW, "sg_write_buffer_*: desc.src.offset + desc.size must be <= desc.src.data.size") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_USAGE, "sg_write_image_unsealed: image usage must be .immutable && .write_unsealed") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_RESOURCESTATE, "sg_write_image_unsealed: image resource state must be SG_RESOURCESTATE_UNSEALED") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_SRC_DATA_POINTER, "sg_write_image_unsealed: desc.src.data.ptr must be valid") \
@@ -6624,19 +6629,23 @@ typedef struct {
 
 typedef struct {
     int size;
+    int num_slots;
+    int active_slot;
+    uint32_t bind_frame_index;  // last frame index buffer was bound
+    uint32_t write_transient_frame_index; // last frame index when written to
+    sg_buffer_usage usage;
+    // deprecated
     int append_pos;
     bool append_overflow;
     uint32_t update_frame_index;
     uint32_t append_frame_index;
-    int num_slots;
-    int active_slot;
-    sg_buffer_usage usage;
 } _sg_buffer_common_t;
 
 typedef struct {
-    uint32_t upd_frame_index;
     int num_slots;
     int active_slot;
+    uint32_t bind_frame_index;  // last frame index buffer was bound
+    uint32_t write_transient_frame_index; // last frame index when written to
     sg_image_type type;
     int width;
     int height;
@@ -6645,6 +6654,8 @@ typedef struct {
     sg_image_usage usage;
     sg_pixel_format pixel_format;
     int sample_count;
+    // deprecated:
+    uint32_t upd_frame_index;
 } _sg_image_common_t;
 
 typedef struct {
@@ -24791,6 +24802,9 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                         if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
                             _SG_VALIDATE(buf->cmn.usage.vertex_buffer, VALIDATE_ABND_VBUF_USAGE);
                             _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_VBUF_OVERFLOW);
+                            if (buf->cmn.usage.write_transient) {
+                                _SG_VALIDATE(buf->cmn.write_transient_frame_index == _sg.frame_index, VALIDATE_ABND_VBUF_WRITE_TRANSIENT);
+                            }
                         }
                     }
                 }
@@ -24816,6 +24830,9 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
                     _SG_VALIDATE(buf->cmn.usage.index_buffer, VALIDATE_ABND_IBUF_USAGE);
                     _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_IBUF_OVERFLOW);
+                    if (buf->cmn.usage.write_transient) {
+                        _SG_VALIDATE(buf->cmn.write_transient_frame_index == _sg.frame_index, VALIDATE_ABND_IBUF_WRITE_TRANSIENT);
+                    }
                 }
             }
         }
@@ -24863,6 +24880,9 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                                     const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
                                     if (!shd->cmn.views[i].sbuf_readonly) {
                                         _SG_VALIDATE(buf->cmn.usage.immutable, VALIDATE_ABND_SBVIEW_READWRITE_IMMUTABLE);
+                                    }
+                                    if (buf->cmn.usage.write_transient) {
+                                        _SG_VALIDATE(buf->cmn.write_transient_frame_index == _sg.frame_index, VALIDATE_ABND_SBVIEW_SBUF_WRITE_TRANSIENT);
                                     }
                                 }
                             } else if (shd->cmn.views[i].view_type == SG_VIEWTYPE_STORAGEIMAGE) {
@@ -25123,6 +25143,14 @@ _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image_t* img, const sg_i
     #endif
 }
 
+_SOKOL_PRIVATE void _sg_validate_write_buffer_common(const _sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
+    _SG_VALIDATE(desc->src.data.ptr, VALIDATE_WRITEBUFFER_SRC_DATA_POINTER);
+    _SG_VALIDATE(desc->src.data.size > 0, VALIDATE_WRITEBUFFER_SRC_DATA_SIZE);
+    _SG_VALIDATE((desc->size > 0) && (desc->size <= desc->src.data.size), VALIDATE_WRITEBUFFER_SIZE);
+    _SG_VALIDATE((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size, VALIDATE_WRITEBUFFER_WRITE_OVERFLOW);
+    _SG_VALIDATE((desc->src.offset + desc->size) <= desc->src.data.size, VALIDATE_WRITEBUFFER_READ_OVERFLOW);
+}
+
 _SOKOL_PRIVATE bool _sg_validate_write_buffer_transient(const _sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
     #if !defined(SOKOL_DEBUG)
         _SOKOL_UNUSED(buf);
@@ -25134,23 +25162,10 @@ _SOKOL_PRIVATE bool _sg_validate_write_buffer_transient(const _sg_buffer_t* buf,
         }
         SOKOL_ASSERT(buf && desc);
         _sg_validate_begin();
-        SOKOL_ASSERT(false && "FIXME: _sg_validate_write_buffer_transient");
-        return _sg_validate_end();
-    #endif
-}
-
-_SOKOL_PRIVATE bool _sg_validate_write_image_transient(const _sg_image_t* img, const sg_write_image_desc* desc) {
-    #if !defined(SOKOL_DEBUG)
-        _SOKOL_UNUSED(img);
-        _SOKOL_UNUSED(desc);
-        return true;
-    #else
-        if (_sg.desc.disable_validation) {
-            return true;
-        }
-        SOKOL_ASSERT(img && desc);
-        _sg_validate_begin();
-        SOKOL_ASSERT(false && "FIXME: _sg_validate_write_image_transient");
+        _SG_VALIDATE(!buf->cmn.usage.immutable && buf->cmn.usage.write_transient, VALIDATE_WRITEBUFFERTRANSIENT_USAGE);
+        // write-transient is only allowed before resource is bound in current frame
+        _SG_VALIDATE(buf->cmn.bind_frame_index != _sg.frame_index, VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND);
+        _sg_validate_write_buffer_common(buf, desc);
         return _sg_validate_end();
     #endif
 }
@@ -25168,11 +25183,23 @@ _SOKOL_PRIVATE bool _sg_validate_write_buffer_unsealed(const _sg_buffer_t* buf, 
         _sg_validate_begin();
         _SG_VALIDATE(buf->cmn.usage.immutable && buf->cmn.usage.write_unsealed, VALIDATE_WRITEBUFFERUNSEALED_USAGE);
         _SG_VALIDATE(buf->slot.state == SG_RESOURCESTATE_UNSEALED, VALIDATE_WRITEBUFFERUNSEALED_RESOURCESTATE);
-        _SG_VALIDATE(desc->src.data.ptr, VALIDATE_WRITEBUFFERUNSEALED_SRC_DATA_POINTER);
-        _SG_VALIDATE(desc->src.data.size > 0, VALIDATE_WRITEBUFFERUNSEALED_SRC_DATA_SIZE);
-        _SG_VALIDATE((desc->size > 0) && (desc->size <= desc->src.data.size), VALIDATE_WRITEBUFFERUNSEALED_SIZE);
-        _SG_VALIDATE((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size, VALIDATE_WRITEBUFFERUNSEALED_WRITE_OVERFLOW);
-        _SG_VALIDATE((desc->src.offset + desc->size) <= desc->src.data.size, VALIDATE_WRITEBUFFERUNSEALED_READ_OVERFLOW);
+        _sg_validate_write_buffer_common(buf, desc);
+        return _sg_validate_end();
+    #endif
+}
+
+_SOKOL_PRIVATE bool _sg_validate_write_image_transient(const _sg_image_t* img, const sg_write_image_desc* desc) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(img);
+        _SOKOL_UNUSED(desc);
+        return true;
+    #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
+        SOKOL_ASSERT(img && desc);
+        _sg_validate_begin();
+        SOKOL_ASSERT(false && "FIXME: _sg_validate_write_image_transient");
         return _sg_validate_end();
     #endif
 }
@@ -26939,27 +26966,46 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
         for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
             if (bnd.pip->cmn.vertex_buffer_layout_active[i]) {
                 SOKOL_ASSERT(bindings->vertex_buffers[i].id != SG_INVALID_ID);
-                bnd.vbs[i] = _sg_lookup_buffer(bindings->vertex_buffers[i].id);
-                bnd.vb_offsets[i] = bindings->vertex_buffer_offsets[i];
-                _sg.next_draw_valid &= bnd.vbs[i] && (SG_RESOURCESTATE_VALID == bnd.vbs[i]->slot.state);
+                _sg_buffer_t* buf = _sg_lookup_buffer(bindings->vertex_buffers[i].id);
+                if (buf && (SG_RESOURCESTATE_VALID == buf->slot.state)) {
+                    buf->cmn.bind_frame_index = _sg.frame_index;
+                    bnd.vbs[i] = buf;
+                    bnd.vb_offsets[i] = bindings->vertex_buffer_offsets[i];
+                } else {
+                    _sg.next_draw_valid = false;
+                }
             }
         }
         if (bindings->index_buffer.id) {
-            bnd.ib = _sg_lookup_buffer(bindings->index_buffer.id);
-            bnd.ib_offset = bindings->index_buffer_offset;
-            _sg.next_draw_valid &= bnd.ib && (SG_RESOURCESTATE_VALID == bnd.ib->slot.state);
+            _sg_buffer_t* buf = _sg_lookup_buffer(bindings->index_buffer.id);
+            if (buf && (SG_RESOURCESTATE_VALID == buf->slot.state)) {
+                buf->cmn.bind_frame_index = _sg.frame_index;
+                bnd.ib = buf;
+                bnd.ib_offset = bindings->index_buffer_offset;
+            } else {
+                _sg.next_draw_valid = false;
+            }
         }
     }
 
     for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
         if (shd->cmn.views[i].view_type != SG_VIEWTYPE_INVALID) {
             SOKOL_ASSERT(bindings->views[i].id != SG_INVALID_ID);
-            bnd.views[i] = _sg_lookup_view(bindings->views[i].id);
-            if (bnd.views[i]) {
-                if (bnd.views[i]->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
-                    _sg.next_draw_valid &= _sg_buffer_ref_valid(&bnd.views[i]->cmn.buf.ref);
+            _sg_view_t* view = _sg_lookup_view(bindings->views[i].id);
+            bnd.views[i] = view;
+            if (view) {
+                if (view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
+                    if (_sg_buffer_ref_valid(&view->cmn.buf.ref)) {
+                        view->cmn.buf.ref.ptr->cmn.bind_frame_index = _sg.frame_index;
+                    } else {
+                        _sg.next_draw_valid = false;
+                    }
                 } else {
-                    _sg.next_draw_valid &= _sg_image_ref_valid(&bnd.views[i]->cmn.img.ref);
+                    if (_sg_image_ref_valid(&view->cmn.img.ref)) {
+                        view->cmn.img.ref.ptr->cmn.bind_frame_index = _sg.frame_index;
+                    } else {
+                        _sg.next_draw_valid = false;
+                    }
                 }
             } else {
                 _sg.next_draw_valid = false;
@@ -27210,6 +27256,13 @@ SOKOL_API_IMPL void sg_write_buffer_transient(const sg_write_buffer_desc* desc) 
     if (buf) {
         sg_write_buffer_desc desc_def = _sg_write_buffer_desc_defaults(desc);
         if (_sg_validate_write_buffer_transient(buf, &desc_def)) {
+            // if this is the first call in a frame, rotate the 'active_slot'
+            if (buf->cmn.write_transient_frame_index != _sg.frame_index) {
+                buf->cmn.write_transient_frame_index = _sg.frame_index;
+                if (++buf->cmn.active_slot >= buf->cmn.num_slots) {
+                    buf->cmn.active_slot = 0;
+                }
+            }
             _sg_write_buffer_transient(buf, &desc_def);
         }
     } else {
