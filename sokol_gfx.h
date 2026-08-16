@@ -5157,11 +5157,13 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_EXPECTED_NON_MULTISAMPLED_IMAGE, "sg_apply_bindings: texture bindings expects image with sample_count == 1") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_EXPECTED_FILTERABLE_IMAGE, "sg_apply_bindings: filterable image expected") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_EXPECTED_DEPTH_IMAGE, "sg_apply_bindings: depth image expected") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_IMAGE_WRITE_TRANSIENT, "sg_apply_bindings: sg_write_image_transient() hasn't been called this frame for usage.write_transient texture image in view slot") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_READWRITE_IMMUTABLE, "sg_apply_bindings: storage buffers bound as read/write must have usage immutable") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_SBUF_WRITE_TRANSIENT, "sg_apply_bindings: sg_write_buffer_transient() hasn't been called this frame for usage.write_transient storage buffer in view slot") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_BUFFER_WRITE_TRANSIENT, "sg_apply_bindings: sg_write_buffer_transient() hasn't been called this frame for usage.write_transient storage buffer in view slot") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SIMGVIEW_COMPUTE_PASS_EXPECTED, "sg_apply_bindings: storage image bindings can only appear on compute passes") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SIMGVIEW_IMAGETYPE_MISMATCH, "sg_apply_bindings: image type of bound storage image doesn't match shader desc") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SIMGVIEW_ACCESSFORMAT, "sg_apply_bindings: pixel format of storage image view doesn't match access format in shader desc") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SIMGVIEW_IMAGE_WRITE_TRANSIENT, "sg_apply_bindings: sg_write_image_transient() hasn't been called this frame for usage.write_transient storage image in view slot") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_SAMPLER_BINDING, "sg_apply_bindings: sampler binding is missing or the sampler handle is invalid") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_UNEXPECTED_SAMPLER_COMPARE_NEVER, "sg_apply_bindings: shader expects SG_SAMPLERTYPE_COMPARISON but sampler has SG_COMPAREFUNC_NEVER") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_SAMPLER_COMPARE_NEVER, "sg_apply_bindings: shader expects SG_SAMPLERTYPE_FILTERING or SG_SAMPLERTYPE_NONFILTERING but sampler doesn't have SG_COMPAREFUNC_NEVER") \
@@ -17557,14 +17559,27 @@ _SOKOL_PRIVATE void _sg_mtl_write_buffer_unsealed(_sg_buffer_t* buf, const sg_wr
 _SOKOL_PRIVATE void _sg_mtl_write_image_transient(_sg_image_t* img, const sg_write_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_VALID == img->slot.state);
-//    SOKOL_ASSERT(img->cmn.usage.write_transient);
-
-    SOKOL_ASSERT(false && "FIXME: _sg_mtl_write_image_transient");
+    SOKOL_ASSERT(img->cmn.usage.write_transient);
+    __unsafe_unretained id<MTLTexture> mtl_tex = _sg_mtl_id(img->mtl.tex[img->cmn.active_slot]);
+    _sg_mtl_write_miplevel_data(img, mtl_tex,
+        (const uint8_t*)desc->src.data.ptr,
+        desc->src.data.size,
+        desc->src.offset,
+        desc->src.bytes_per_row,
+        desc->src.bytes_per_slice,
+        desc->dst.mip_level,
+        desc->dst.x,
+        desc->dst.y,
+        desc->dst.slice,
+        desc->size.width,
+        desc->size.height,
+        desc->size.num_slices);
 }
 
 _SOKOL_PRIVATE void _sg_mtl_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == img->slot.state);
+    SOKOL_ASSERT(img->cmn.usage.write_unsealed);
     __unsafe_unretained id<MTLTexture> mtl_tex = _sg_mtl_id(img->mtl.tex[img->cmn.active_slot]);
     _sg_mtl_write_miplevel_data(img, mtl_tex,
         (const uint8_t*)desc->src.data.ptr,
@@ -24883,6 +24898,9 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                                         default:
                                             break;
                                     }
+                                    if (img->cmn.usage.write_transient) {
+                                        _SG_VALIDATE(img->cmn.write_transient_frame_index == _sg.frame_index, VALIDATE_ABND_TEXVIEW_IMAGE_WRITE_TRANSIENT);
+                                    }
                                 }
                             } else if (shd->cmn.views[i].view_type == SG_VIEWTYPE_STORAGEBUFFER) {
                                 // the view object must be a storage buffer view
@@ -24894,7 +24912,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                                         _SG_VALIDATE(buf->cmn.usage.immutable, VALIDATE_ABND_SBVIEW_READWRITE_IMMUTABLE);
                                     }
                                     if (buf->cmn.usage.write_transient) {
-                                        _SG_VALIDATE(buf->cmn.write_transient_frame_index == _sg.frame_index, VALIDATE_ABND_SBVIEW_SBUF_WRITE_TRANSIENT);
+                                        _SG_VALIDATE(buf->cmn.write_transient_frame_index == _sg.frame_index, VALIDATE_ABND_SBVIEW_BUFFER_WRITE_TRANSIENT);
                                     }
                                 }
                             } else if (shd->cmn.views[i].view_type == SG_VIEWTYPE_STORAGEIMAGE) {
@@ -24907,6 +24925,9 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                                     const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
                                     _SG_VALIDATE(img->cmn.type == shd->cmn.views[i].image_type, VALIDATE_ABND_SIMGVIEW_IMAGETYPE_MISMATCH);
                                     _SG_VALIDATE(img->cmn.pixel_format == shd->cmn.views[i].access_format, VALIDATE_ABND_SIMGVIEW_ACCESSFORMAT);
+                                    if (img->cmn.usage.write_transient) {
+                                        _SG_VALIDATE(img->cmn.write_transient_frame_index == _sg.frame_index, VALIDATE_ABND_SIMGVIEW_IMAGE_WRITE_TRANSIENT);
+                                    }
                                 }
                             }
                         }
@@ -27297,6 +27318,13 @@ SOKOL_API_IMPL void sg_write_image_transient(const sg_write_image_desc* desc) {
     if (img) {
         sg_write_image_desc desc_def = _sg_write_image_desc_defaults(img, desc);
         if (_sg_validate_write_image_transient(img, &desc_def)) {
+            // if this is the first call in a frame, rotate the 'active_slot'
+            if (img->cmn.write_transient_frame_index != _sg.frame_index) {
+                img->cmn.write_transient_frame_index = _sg.frame_index;
+                if (++img->cmn.active_slot >= img->cmn.num_slots) {
+                    img->cmn.active_slot = 0;
+                }
+            }
             _sg_write_image_transient(img, &desc_def);
         }
     } else {
