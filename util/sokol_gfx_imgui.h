@@ -3663,9 +3663,9 @@ _SOKOL_PRIVATE void _sgimgui_draw_buffer_panel(_sgimgui_t* ctx, sg_buffer buf) {
             _sgimgui_igtext("  index_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.index_buffer));
             _sgimgui_igtext("  storage_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.storage_buffer));
             _sgimgui_igtext("  immutable: %s", _sgimgui_bool_string(buf_ui->desc.usage.immutable));
-            _sgimgui_igtext("  dynamic_update: %s", _sgimgui_bool_string(buf_ui->desc.usage.dynamic_update));
-            _sgimgui_igtext("  stream_update: %s", _sgimgui_bool_string(buf_ui->desc.usage.stream_update));
             _sgimgui_igtext("  write_unsealed: %s", _sgimgui_bool_string(buf_ui->desc.usage.write_unsealed));
+            _sgimgui_igtext("  write_transient: %s", _sgimgui_bool_string(buf_ui->desc.usage.write_transient));
+            _sgimgui_igtext("  dynamic_update: %s", _sgimgui_bool_string(buf_ui->desc.usage.dynamic_update));
             _sgimgui_igtext("Size:  %d", (int)buf_ui->desc.size);
             if (!buf_ui->desc.usage.immutable) {
                 _sgimgui_igseparator();
@@ -3702,9 +3702,9 @@ _SOKOL_PRIVATE void _sgimgui_draw_image_panel(_sgimgui_t* ctx, sg_image img) {
             _sgimgui_igtext("  resolve_attachment: %s", _sgimgui_bool_string(desc->usage.resolve_attachment));
             _sgimgui_igtext("  depth_stencil_attachment: %s", _sgimgui_bool_string(desc->usage.depth_stencil_attachment));
             _sgimgui_igtext("  immutable: %s", _sgimgui_bool_string(desc->usage.immutable));
-            _sgimgui_igtext("  dynamic_update: %s", _sgimgui_bool_string(desc->usage.dynamic_update));
-            _sgimgui_igtext("  stream_update: %s", _sgimgui_bool_string(desc->usage.stream_update));
             _sgimgui_igtext("  write_unsealed: %s", _sgimgui_bool_string(desc->usage.write_unsealed));
+            _sgimgui_igtext("  write_transient: %s", _sgimgui_bool_string(desc->usage.write_transient));
+            _sgimgui_igtext("  dynamic_update: %s", _sgimgui_bool_string(desc->usage.dynamic_update));
             _sgimgui_igtext("Width:          %d", desc->width);
             _sgimgui_igtext("Height:         %d", desc->height);
             _sgimgui_igtext("Num Slices:     %d", desc->num_slices);
