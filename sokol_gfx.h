@@ -3496,8 +3496,8 @@ typedef struct sg_image_usage {
     bool depth_stencil_attachment;
     bool immutable;
     bool write_unsealed;
+    bool write_transient;
     bool dynamic_update;
-    bool stream_update;
 } sg_image_usage;
 
 /*
@@ -4906,7 +4906,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDATA_NODATA, "sg_image_data: no data (.ptr and/or .size is zero)") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDATA_DATA_SIZE, "sg_image_data: data size doesn't match expected surface size") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_CANARY, "sg_image_desc not initialized") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMMUTABLE_DYNAMIC_STREAM, "sg_image_desc.usage: only one of .immutable, .dynamic_update, .stream_update can be true") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMMUTABLE_VS_WRITABLE, "sg_image_desc.usage: only one of .immutable, .dynamic_update, .write_transient can be true") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_UNSEALED_VS_IMMUTABLE, "sg_image_desc.usage: .write_unsealed only allowed for .immutable images") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_UNSEALED_VS_ATTACHMENT, "sg_image_desc.usage: .write_unsealed not allowed for images with attachment usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_COLOR_DEPTH_STENCIL, "sg_image_desc.usage: only one of .color_attachment and .depth_stencil_attachment can be true") \
@@ -4934,8 +4934,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_STORAGEIMAGE_PIXELFORMAT, "invalid pixel format for storage image") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_STORAGEIMAGE_EXPECT_NO_MSAA, "storage images cannot be multisampled") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_INJECTED_NO_DATA, "images with injected textures cannot be initialized with data") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_UNSEALED_NO_DATA, "images with usage .write_unsealed cannot be initialized with data") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA, "dynamic/stream-update images cannot be initialized with data") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITABLE_NO_DATA, "cpu-writable images cannot be initialized with data") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE, "compressed images must be immutable") \
     _SG_LOGITEM_XMACRO(VALIDATE_SAMPLERDESC_CANARY, "sg_sampler_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_SAMPLERDESC_ANISTROPIC_REQUIRES_LINEAR_FILTERING, "sg_sampler_desc.max_anisotropy > 1 requires min/mag/mipmap_filter to be SG_FILTER_LINEAR") \
@@ -5220,21 +5219,23 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_READ_OVERFLOW, "sg_write_buffer_*: desc.src.offset + desc.size must be <= desc.src.data.size") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_USAGE, "sg_write_image_unsealed: image usage must be .immutable && .write_unsealed") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_RESOURCESTATE, "sg_write_image_unsealed: image resource state must be SG_RESOURCESTATE_UNSEALED") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_SRC_DATA_POINTER, "sg_write_image_unsealed: desc.src.data.ptr must be valid") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_SRC_DATA_SIZE, "sg_write_image_unsealed: desc.src.data.size must be > 0") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_BYTESPERROW, "sg_write_image_unsealed: desc.src.bytes_per_row must be a multiple of the pixel or compression-block size") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_BYTESPERSLICE, "sg_write_image_unsealed: desc.src.bytes_per_slice must be a multiple of desc.src.bytes_per_row") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_MIPLEVEL, "sg_write_image_unsealed: desc.dst.mip_level must be >= 0 and less than the number of mipmaps in the destination image") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_WIDTH, "sg_write_image_unsealed: desc.size.width must be >= 0 and <= destination image width") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_HEIGHT, "sg_write_image_unsealed: desc.size.height must be >= 0 and <= destination image heigth") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_NUMSLICES, "sg_write_image_unsealed: desc.size.num_slices must be >= 0 and <= destination image num slices") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_READ_OVERFLOW, "sg_write_image_unsealed: desc.src.offset + size of written data must be <= desc.src.data.size") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_DST_X_RANGE, "sg_write_image_unsealed: desc.dst.x must be >= 0 and < miplevel width") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_DST_Y_RANGE, "sg_write_image_unsealed: desc.dst.y must be >= 0 and < miplevel height") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_DST_SLICE_RANGE, "sg_write_image_unsealed: desc.dst.slice must be >= 0 and < miplevel depth or array/cubemap slices") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_WRITE_WIDTH_OVERFLOW, "sg_write_image_unsealed: desc.src.x + desc.size.width must be <= destination mip level width") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_WRITE_HEIGHT_OVERFLOW, "sg_write_image_unsealed: desc.src.y + desc.size.height must be <= destination mip level height") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_WRITE_NUMSLICES_OVERFLOW, "sg_write_image_unsealed: desc.src.slice + desc.size.num_slices must be <= destination number of slices in mip level") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGETRANSIENT_USAGE, "sg_write_image_transient: image usage must be !.immutable && .write_transient") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGETRANSIENT_WRITE_BEFORE_BIND, "sg_write_image_transient: cannot be called after image has already been bound in this frame") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_SRC_DATA_POINTER, "sg_write_image_*: desc.src.data.ptr must be valid") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_SRC_DATA_SIZE, "sg_write_image_*: desc.src.data.size must be > 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_BYTESPERROW, "sg_write_image_*: desc.src.bytes_per_row must be a multiple of the pixel or compression-block size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_BYTESPERSLICE, "sg_write_image_*: desc.src.bytes_per_slice must be a multiple of desc.src.bytes_per_row") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_MIPLEVEL, "sg_write_image_*: desc.dst.mip_level must be >= 0 and less than the number of mipmaps in the destination image") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_WIDTH, "sg_write_image_*: desc.size.width must be >= 0 and <= destination image width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_HEIGHT, "sg_write_image_*: desc.size.height must be >= 0 and <= destination image heigth") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_NUMSLICES, "sg_write_image_*: desc.size.num_slices must be >= 0 and <= destination image num slices") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_READ_OVERFLOW, "sg_write_image_*: desc.src.offset + size of written data must be <= desc.src.data.size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_DST_X_RANGE, "sg_write_image_*: desc.dst.x must be >= 0 and < miplevel width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_DST_Y_RANGE, "sg_write_image_*: desc.dst.y must be >= 0 and < miplevel height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_DST_SLICE_RANGE, "sg_write_image_*: desc.dst.slice must be >= 0 and < miplevel depth or array/cubemap slices") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_WRITE_WIDTH_OVERFLOW, "sg_write_image_*: desc.src.x + desc.size.width must be <= destination mip level width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_WRITE_HEIGHT_OVERFLOW, "sg_write_image_*: desc.src.y + desc.size.height must be <= destination mip level height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_WRITE_NUMSLICES_OVERFLOW, "sg_write_image_*: desc.src.slice + desc.size.num_slices must be <= destination number of slices in mip level") \
     _SG_LOGITEM_XMACRO(VALIDATE_SEALBUFFER_RESOURCESTATE, "sg_seal_buffer: buffer resource state must be SG_RESOURCESTATE_UNSEALED") \
     _SG_LOGITEM_XMACRO(VALIDATE_SEALIMAGE_RESOURCESTATE, "sg_seal_image: image resource state must be SG_RESOURCESTATE_UNSEALED") \
     _SG_LOGITEM_XMACRO(VALIDATION_FAILED, "validation layer checks failed") \
@@ -8569,19 +8570,23 @@ _SOKOL_PRIVATE bool _sg_is_dualsource_blendfactor(sg_blend_factor f) {
 
 _SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_buffer_desc* desc) {
     cmn->size = (int)desc->size;
+    cmn->num_slots = desc->usage.immutable ? 1 : SG_NUM_INFLIGHT_FRAMES;
+    cmn->active_slot = 0;
+    cmn->bind_frame_index = 0;
+    cmn->write_transient_frame_index = 0;
+    cmn->usage = desc->usage;
+    // deprecated
     cmn->append_pos = 0;
     cmn->append_overflow = false;
     cmn->update_frame_index = 0;
     cmn->append_frame_index = 0;
-    cmn->num_slots = desc->usage.immutable ? 1 : SG_NUM_INFLIGHT_FRAMES;
-    cmn->active_slot = 0;
-    cmn->usage = desc->usage;
 }
 
 _SOKOL_PRIVATE void _sg_image_common_init(_sg_image_common_t* cmn, const sg_image_desc* desc) {
-    cmn->upd_frame_index = 0;
     cmn->num_slots = desc->usage.immutable ? 1 : SG_NUM_INFLIGHT_FRAMES;
     cmn->active_slot = 0;
+    cmn->bind_frame_index = 0;
+    cmn->write_transient_frame_index = 0;
     cmn->type = desc->type;
     cmn->width = desc->width;
     cmn->height = desc->height;
@@ -8590,6 +8595,8 @@ _SOKOL_PRIVATE void _sg_image_common_init(_sg_image_common_t* cmn, const sg_imag
     cmn->usage = desc->usage;
     cmn->pixel_format = desc->pixel_format;
     cmn->sample_count = desc->sample_count;
+    // deprecated
+    cmn->upd_frame_index = 0;
 }
 
 _SOKOL_PRIVATE void _sg_sampler_common_init(_sg_sampler_common_t* cmn, const sg_sampler_desc* desc) {
@@ -23724,7 +23731,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         _sg_validate_begin();
         _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_IMAGEDESC_CANARY);
         _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_IMAGEDESC_CANARY);
-        _SG_VALIDATE(_sg_one(usg->immutable, usg->dynamic_update, usg->stream_update), VALIDATE_IMAGEDESC_IMMUTABLE_DYNAMIC_STREAM);
+        _SG_VALIDATE(_sg_one(usg->immutable, usg->dynamic_update, usg->write_transient), VALIDATE_IMAGEDESC_IMMUTABLE_VS_WRITABLE);
         _SG_VALIDATE(!(usg->color_attachment && usg->depth_stencil_attachment), VALIDATE_IMAGEDESC_ATTACHMENT_COLOR_DEPTH_STENCIL);
         switch (desc->type) {
             case SG_IMAGETYPE_2D:
@@ -23804,11 +23811,8 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
                     if (injected) {
                         _SG_VALIDATE(no_data && no_size, VALIDATE_IMAGEDESC_INJECTED_NO_DATA);
                     }
-                    if (usg->write_unsealed) {
-                        _SG_VALIDATE(no_data && no_size, VALIDATE_IMAGEDESC_UNSEALED_NO_DATA);
-                    }
-                    if (!usg->immutable) {
-                        _SG_VALIDATE(no_data && no_size, VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA);
+                    if (!usg->immutable || usg->write_unsealed) {
+                        _SG_VALIDATE(no_data && no_size, VALIDATE_IMAGEDESC_WRITABLE_NO_DATA);
                     }
                 }
             }
@@ -25196,6 +25200,29 @@ _SOKOL_PRIVATE bool _sg_validate_write_buffer_unsealed(const _sg_buffer_t* buf, 
     #endif
 }
 
+_SOKOL_PRIVATE void _sg_validate_write_image_common(const _sg_image_t* img, const sg_write_image_desc* desc) {
+    const size_t write_size = (size_t)desc->src.bytes_per_slice * (size_t)desc->size.num_slices;
+    const int mip_width = _sg_miplevel_dim(img->cmn.width, desc->dst.mip_level);
+    const int mip_height = _sg_miplevel_dim(img->cmn.height, desc->dst.mip_level);
+    const int mip_depth_or_slices = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, desc->dst.mip_level) : img->cmn.num_slices;
+    const int bsize = _sg_block_bytesize(img->cmn.pixel_format);
+    _SG_VALIDATE(desc->src.data.ptr, VALIDATE_WRITEIMAGE_SRC_DATA_POINTER);
+    _SG_VALIDATE(desc->src.data.size, VALIDATE_WRITEIMAGE_SRC_DATA_SIZE);
+    _SG_VALIDATE((desc->src.bytes_per_row > 0) && _sg_multiple(desc->src.bytes_per_row, bsize), VALIDATE_WRITEIMAGE_BYTESPERROW);
+    _SG_VALIDATE((desc->src.bytes_per_slice > 0) && _sg_multiple(desc->src.bytes_per_slice, desc->src.bytes_per_row), VALIDATE_WRITEIMAGE_BYTESPERSLICE);
+    _SG_VALIDATE((desc->dst.mip_level >= 0) && (desc->dst.mip_level < img->cmn.num_mipmaps), VALIDATE_WRITEIMAGE_MIPLEVEL);
+    _SG_VALIDATE((desc->size.width >= 0) && (desc->size.width <= mip_width), VALIDATE_WRITEIMAGE_WIDTH);
+    _SG_VALIDATE((desc->size.height >= 0) && (desc->size.height <= mip_height), VALIDATE_WRITEIMAGE_HEIGHT);
+    _SG_VALIDATE((desc->size.num_slices >= 0) && (desc->size.num_slices <= mip_depth_or_slices), VALIDATE_WRITEIMAGE_NUMSLICES);
+    _SG_VALIDATE((desc->src.offset + write_size) <= desc->src.data.size, VALIDATE_WRITEIMAGE_READ_OVERFLOW);
+    _SG_VALIDATE((desc->dst.x >= 0) && (desc->dst.x < mip_width), VALIDATE_WRITEIMAGE_DST_X_RANGE);
+    _SG_VALIDATE((desc->dst.y >= 0) && (desc->dst.y < mip_height), VALIDATE_WRITEIMAGE_DST_Y_RANGE);
+    _SG_VALIDATE((desc->dst.slice >= 0) && (desc->dst.slice < mip_depth_or_slices), VALIDATE_WRITEIMAGE_DST_SLICE_RANGE);
+    _SG_VALIDATE((desc->dst.x + desc->size.width) <= mip_width, VALIDATE_WRITEIMAGE_WRITE_WIDTH_OVERFLOW);
+    _SG_VALIDATE((desc->dst.y + desc->size.height) <= mip_height, VALIDATE_WRITEIMAGE_WRITE_HEIGHT_OVERFLOW);
+    _SG_VALIDATE((desc->dst.slice + desc->size.num_slices) <= mip_depth_or_slices, VALIDATE_WRITEIMAGE_WRITE_NUMSLICES_OVERFLOW);
+}
+
 _SOKOL_PRIVATE bool _sg_validate_write_image_transient(const _sg_image_t* img, const sg_write_image_desc* desc) {
     #if !defined(SOKOL_DEBUG)
         _SOKOL_UNUSED(img);
@@ -25207,7 +25234,10 @@ _SOKOL_PRIVATE bool _sg_validate_write_image_transient(const _sg_image_t* img, c
         }
         SOKOL_ASSERT(img && desc);
         _sg_validate_begin();
-        SOKOL_ASSERT(false && "FIXME: _sg_validate_write_image_transient");
+        _SG_VALIDATE(!img->cmn.usage.immutable && img->cmn.usage.write_transient, VALIDATE_WRITEIMAGETRANSIENT_USAGE);
+        // write-transient is only allowed before resource is bound in current frame
+        _SG_VALIDATE(img->cmn.bind_frame_index != _sg.frame_index, VALIDATE_WRITEIMAGETRANSIENT_WRITE_BEFORE_BIND);
+        _sg_validate_write_image_common(img, desc);
         return _sg_validate_end();
     #endif
 }
@@ -25222,29 +25252,10 @@ _SOKOL_PRIVATE bool _sg_validate_write_image_unsealed(const _sg_image_t* img, co
             return true;
         }
         SOKOL_ASSERT(img && desc);
-        const size_t write_size = (size_t)desc->src.bytes_per_slice * (size_t)desc->size.num_slices;
-        const int mip_width = _sg_miplevel_dim(img->cmn.width, desc->dst.mip_level);
-        const int mip_height = _sg_miplevel_dim(img->cmn.height, desc->dst.mip_level);
-        const int mip_depth_or_slices = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, desc->dst.mip_level) : img->cmn.num_slices;
-        const int bsize = _sg_block_bytesize(img->cmn.pixel_format);
         _sg_validate_begin();
         _SG_VALIDATE(img->cmn.usage.immutable && img->cmn.usage.write_unsealed, VALIDATE_WRITEIMAGEUNSEALED_USAGE);
         _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_UNSEALED, VALIDATE_WRITEIMAGEUNSEALED_RESOURCESTATE);
-        _SG_VALIDATE(desc->src.data.ptr, VALIDATE_WRITEIMAGEUNSEALED_SRC_DATA_POINTER);
-        _SG_VALIDATE(desc->src.data.size, VALIDATE_WRITEIMAGEUNSEALED_SRC_DATA_SIZE);
-        _SG_VALIDATE((desc->src.bytes_per_row > 0) && _sg_multiple(desc->src.bytes_per_row, bsize), VALIDATE_WRITEIMAGEUNSEALED_BYTESPERROW);
-        _SG_VALIDATE((desc->src.bytes_per_slice > 0) && _sg_multiple(desc->src.bytes_per_slice, desc->src.bytes_per_row), VALIDATE_WRITEIMAGEUNSEALED_BYTESPERSLICE);
-        _SG_VALIDATE((desc->dst.mip_level >= 0) && (desc->dst.mip_level < img->cmn.num_mipmaps), VALIDATE_WRITEIMAGEUNSEALED_MIPLEVEL);
-        _SG_VALIDATE((desc->size.width >= 0) && (desc->size.width <= mip_width), VALIDATE_WRITEIMAGEUNSEALED_WIDTH);
-        _SG_VALIDATE((desc->size.height >= 0) && (desc->size.height <= mip_height), VALIDATE_WRITEIMAGEUNSEALED_HEIGHT);
-        _SG_VALIDATE((desc->size.num_slices >= 0) && (desc->size.num_slices <= mip_depth_or_slices), VALIDATE_WRITEIMAGEUNSEALED_NUMSLICES);
-        _SG_VALIDATE((desc->src.offset + write_size) <= desc->src.data.size, VALIDATE_WRITEIMAGEUNSEALED_READ_OVERFLOW);
-        _SG_VALIDATE((desc->dst.x >= 0) && (desc->dst.x < mip_width), VALIDATE_WRITEIMAGEUNSEALED_DST_X_RANGE);
-        _SG_VALIDATE((desc->dst.y >= 0) && (desc->dst.y < mip_height), VALIDATE_WRITEIMAGEUNSEALED_DST_Y_RANGE);
-        _SG_VALIDATE((desc->dst.slice >= 0) && (desc->dst.slice < mip_depth_or_slices), VALIDATE_WRITEIMAGEUNSEALED_DST_SLICE_RANGE);
-        _SG_VALIDATE((desc->dst.x + desc->size.width) <= mip_width, VALIDATE_WRITEIMAGEUNSEALED_WRITE_WIDTH_OVERFLOW);
-        _SG_VALIDATE((desc->dst.y + desc->size.height) <= mip_height, VALIDATE_WRITEIMAGEUNSEALED_WRITE_HEIGHT_OVERFLOW);
-        _SG_VALIDATE((desc->dst.slice + desc->size.num_slices) <= mip_depth_or_slices, VALIDATE_WRITEIMAGEUNSEALED_WRITE_NUMSLICES_OVERFLOW);
+        _sg_validate_write_image_common(img, desc);
         return _sg_validate_end();
     #endif
 }
@@ -25435,7 +25446,7 @@ _SOKOL_PRIVATE sg_buffer_desc _sg_buffer_desc_defaults(const sg_buffer_desc* des
 
 _SOKOL_PRIVATE sg_image_usage _sg_image_usage_defaults(const sg_image_usage *usg) {
     sg_image_usage def = *usg;
-    if (!(def.immutable || def.stream_update || def.dynamic_update)) {
+    if (!(def.immutable || def.write_transient || def.dynamic_update)) {
         def.immutable = true;
     }
     return def;
