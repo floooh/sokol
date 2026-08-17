@@ -3985,7 +3985,7 @@ static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* i
     _sdtx_clear(&vbuf_desc, sizeof(vbuf_desc));
     vbuf_desc.size = vbuf_size;
     vbuf_desc.usage.vertex_buffer = true;
-    vbuf_desc.usage.stream_update = true;
+    vbuf_desc.usage.write_transient = true;
     vbuf_desc.label = "sdtx-vbuf";
     ctx->vbuf = sg_make_buffer(&vbuf_desc);
     SOKOL_ASSERT(SG_INVALID_ID != ctx->vbuf.id);
@@ -4353,8 +4353,12 @@ SOKOL_API_IMPL void _sdtx_draw_layer(_sdtx_context_t* ctx, int layer_id) {
 
         if (ctx->update_frame_id != ctx->frame_id) {
             ctx->update_frame_id = ctx->frame_id;
-            const sg_range range = { ctx->vertices.ptr, (size_t)ctx->vertices.next * sizeof(_sdtx_vertex_t) };
-            sg_update_buffer(ctx->vbuf, &range);
+            sg_write_buffer_desc write_desc;
+            _sdtx_clear(&write_desc, sizeof(write_desc));
+            write_desc.src.data.ptr = ctx->vertices.ptr;
+            write_desc.src.data.size = (size_t)ctx->vertices.next * sizeof(_sdtx_vertex_t);
+            write_desc.dst.buffer = ctx->vbuf;
+            sg_write_buffer_transient(&write_desc);
         }
 
         sg_apply_pipeline(ctx->pip);
