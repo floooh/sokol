@@ -5214,6 +5214,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_RESOURCESTATE, "sg_write_buffer_unsealed: buffer resource state must be SG_RESOURCESTATE_UNSEALED") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_USAGE, "sg_write_buffer_transient: buffer usage must be !.immutable && .write_transient") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND, "sg_write_buffer_transient: cannot be called after buffer has already been bound in this frame") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_DST_OFFSET_ALIGNMENT, "sg_write_buffer_transient: dst.offset must be a multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_SRC_DATA_POINTER, "sg_write_buffer_*: desc.src.data.ptr must be valid") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_SRC_DATA_SIZE, "sg_write_buffer_*: desc.src.data.size must be > 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_SIZE, "sg_write_buffer_*: desc.size must be > 0 and <= desc.src.data.size") \
@@ -7118,6 +7119,11 @@ typedef struct _sg_buffer_s {
     _sg_buffer_common_t cmn;
     struct {
         int buf[SG_NUM_INFLIGHT_FRAMES];  // index into _sg_mtl_pool
+        // NOTE: write range tracking can be removed when removing Intel Mac compatibility
+        struct {
+            size_t start;
+            size_t end;
+        } write_range;
     } mtl;
 } _sg_mtl_buffer_t;
 typedef _sg_mtl_buffer_t _sg_buffer_t;
@@ -16170,16 +16176,26 @@ _SOKOL_PRIVATE void _sg_mtl_discard_buffer(_sg_buffer_t* buf) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_mtl_seal_buffer(_sg_buffer_t* buf) {
+_SOKOL_PRIVATE void _sg_mtl_commit_write_range(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
     #if defined(_SG_TARGET_MACOS)
-    __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot]);
-    if (_sg_mtl_resource_options_storage_mode_managed_or_shared() == MTLResourceStorageModeManaged) {
-        [mtl_buf didModifyRange:NSMakeRange(0, (NSUInteger)buf->cmn.size)];
+    if (buf->mtl.write_range.end > buf->mtl.write_range.start) {
+        __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot]);
+        if (_sg_mtl_resource_options_storage_mode_managed_or_shared() == MTLResourceStorageModeManaged) {
+            const NSRange ns_range = NSMakeRange(
+                buf->mtl.write_range.start,
+                buf->mtl.write_range.end - buf->mtl.write_range.start);
+            [mtl_buf didModifyRange:ns_range];
+        }
     }
-    #else
-    _SOKOL_UNUSED(buf);
     #endif
+    // NOTE: write_range is not reset here, but instead in _sg_mtl_write_buffer_transient().
+    // This is because the _sg_mtl_commit_write_range may never actually be called in
+    // a frame (either because the buffer isn't used, or because the frame's swapchain is invalid)
+}
+
+_SOKOL_PRIVATE void _sg_mtl_seal_buffer(_sg_buffer_t* buf) {
+    _sg_mtl_commit_write_range(buf);
 }
 
 _SOKOL_PRIVATE void _sg_mtl_write_miplevel_data(const _sg_image_t* img,
@@ -17223,14 +17239,20 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         _sg.mtl.cache.cur_ibuf_offset = bnd->ib_offset;
         if (bnd->ib) {
             SOKOL_ASSERT(bnd->pip->cmn.index_type != SG_INDEXTYPE_NONE);
+            if (bnd->ib->cmn.usage.write_transient) {
+                _sg_mtl_commit_write_range(bnd->ib);
+            }
         } else {
             SOKOL_ASSERT(bnd->pip->cmn.index_type == SG_INDEXTYPE_NONE);
         }
         // apply vertex buffers
         for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
-            const _sg_buffer_t* vb = bnd->vbs[i];
+            _sg_buffer_t* vb = bnd->vbs[i];
             if (vb == 0) {
                 continue;
+            }
+            if (vb->cmn.usage.write_transient) {
+                _sg_mtl_commit_write_range(vb);
             }
             const NSUInteger mtl_slot = _sg_mtl_vertexbuffer_bindslot(i);
             SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_BUFFER_BINDINGS);
@@ -17312,7 +17334,10 @@ _SOKOL_PRIVATE bool _sg_mtl_apply_bindings(_sg_bindings_ptrs_t* bnd) {
             } else SOKOL_UNREACHABLE;
         } else if (shd_view->view_type == SG_VIEWTYPE_STORAGEBUFFER) {
             SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_UB_SBUF_BINDINGS);
-            const _sg_buffer_t* sbuf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
+            _sg_buffer_t* sbuf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
+            if (sbuf->cmn.usage.write_transient) {
+                _sg_mtl_commit_write_range(sbuf);
+            }
             const int active_slot = sbuf->cmn.active_slot;
             SOKOL_ASSERT(sbuf->mtl.buf[sbuf->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
             const int offset = view->cmn.buf.offset;
@@ -17532,21 +17557,37 @@ _SOKOL_PRIVATE void _sg_mtl_write_buffer_common(_sg_buffer_t* buf, const sg_writ
     SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
     SOKOL_ASSERT((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size);
     SOKOL_ASSERT((desc->src.offset + desc->size) <= desc->src.data.size);
+
+    // copy data...
     __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot]);
     uint8_t* dst_ptr = ((uint8_t*)[mtl_buf contents]) + desc->dst.offset;
     const uint8_t* src_ptr = ((uint8_t*)desc->src.data.ptr) + desc->src.offset;
     memcpy(dst_ptr, src_ptr, desc->size);
+
+    // ...and update dirty range
+    // (NOTE: can be removed when removing Intel Mac compatibility)
+    const size_t cur_range_start = desc->dst.offset;
+    const size_t cur_range_end = desc->dst.offset + desc->size;
+    if (cur_range_start < buf->mtl.write_range.start) {
+        buf->mtl.write_range.start = cur_range_start;
+    }
+    if (cur_range_end > buf->mtl.write_range.end) {
+        buf->mtl.write_range.end = cur_range_end;
+    }
 }
 
-_SOKOL_PRIVATE void _sg_mtl_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
+_SOKOL_PRIVATE void _sg_mtl_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc, bool first_time_in_frame) {
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_VALID == buf->slot.state);
     SOKOL_ASSERT(buf->cmn.usage.write_transient);
-    _sg_mtl_write_buffer_common(buf, desc);
-    if (_sg_mtl_resource_options_storage_mode_managed_or_shared() == MTLResourceStorageModeManaged) {
-        __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot]);
-        [mtl_buf didModifyRange:NSMakeRange(desc->dst.offset, desc->size)];
+    // reset write range trackers when called for the first time in a frame
+    // (NOTE: can be removed when removing Intel Mac compatibility)
+    if (first_time_in_frame) {
+        buf->mtl.write_range.start = buf->cmn.size;
+        buf->mtl.write_range.end = 0;
     }
+    _sg_mtl_write_buffer_common(buf, desc);
+    // NOTE: didModifyRange happens at bind time
 }
 
 _SOKOL_PRIVATE void _sg_mtl_write_buffer_unsealed(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
@@ -17556,10 +17597,11 @@ _SOKOL_PRIVATE void _sg_mtl_write_buffer_unsealed(_sg_buffer_t* buf, const sg_wr
     _sg_mtl_write_buffer_common(buf, desc);
 }
 
-_SOKOL_PRIVATE void _sg_mtl_write_image_transient(_sg_image_t* img, const sg_write_image_desc* desc) {
+_SOKOL_PRIVATE void _sg_mtl_write_image_transient(_sg_image_t* img, const sg_write_image_desc* desc, bool first_time_in_frame) {
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_VALID == img->slot.state);
     SOKOL_ASSERT(img->cmn.usage.write_transient);
+    _SOKOL_UNUSED(first_time_in_frame);
     __unsafe_unretained id<MTLTexture> mtl_tex = _sg_mtl_id(img->mtl.tex[img->cmn.active_slot]);
     _sg_mtl_write_miplevel_data(img, mtl_tex,
         (const uint8_t*)desc->src.data.ptr,
@@ -23515,37 +23557,37 @@ static inline void _sg_update_image(_sg_image_t* img, const sg_image_data* data)
     #endif
 }
 
-static inline void _sg_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
+static inline void _sg_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc, bool first_time_in_frame) {
     #if defined(_SOKOL_ANY_GL)
-    _sg_gl_write_buffer_transient(buf, desc);
+    _sg_gl_write_buffer_transient(buf, desc, first_time_in_frame);
     #elif defined(SOKOL_METAL)
-    _sg_mtl_write_buffer_transient(buf, desc);
+    _sg_mtl_write_buffer_transient(buf, desc, first_time_in_frame);
     #elif defined(SOKOL_D3D11)
-    _sg_d3d11_write_buffer_transient(buf, desc);
+    _sg_d3d11_write_buffer_transient(buf, desc, first_time_in_frame);
     #elif defined(SOKOL_WGPU)
-    _sg_wgpu_write_buffer_transient(buf, desc);
+    _sg_wgpu_write_buffer_transient(buf, desc, first_time_in_frame);
     #elif defined(SOKOL_VULKAN)
-    _sg_vk_write_buffer_transient(buf, desc);
+    _sg_vk_write_buffer_transient(buf, desc, first_time_in_frame);
     #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_write_buffer_transient(buf, desc);
+    _sg_dummy_write_buffer_transient(buf, desc, first_time_in_frame);
     #else
     #error("INVALID BACKEND");
     #endif
 }
 
-static inline void _sg_write_image_transient(_sg_image_t* img, const sg_write_image_desc* desc) {
+static inline void _sg_write_image_transient(_sg_image_t* img, const sg_write_image_desc* desc, bool first_time_in_frame) {
     #if defined(_SOKOL_ANY_GL)
-    _sg_gl_write_image_transient(img, desc);
+    _sg_gl_write_image_transient(img, desc, first_time_in_frame);
     #elif defined(SOKOL_METAL)
-    _sg_mtl_write_image_transient(img, desc);
+    _sg_mtl_write_image_transient(img, desc, first_time_in_frame);
     #elif defined(SOKOL_D3D11)
-    _sg_d3d11_write_image_transient(img, desc);
+    _sg_d3d11_write_image_transient(img, desc, first_time_in_frame);
     #elif defined(SOKOL_WGPU)
-    _sg_wgpu_write_image_transient(img, desc);
+    _sg_wgpu_write_image_transient(img, desc, first_time_in_frame);
     #elif defined(SOKOL_VULKAN)
-    _sg_vk_write_image_transient(img, desc);
+    _sg_vk_write_image_transient(img, desc, first_time_in_frame);
     #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_write_image_transient(img, desc);
+    _sg_dummy_write_image_transient(img, desc, first_time_in_frame);
     #else
     #error("INVALID BACKEND");
     #endif
@@ -25198,6 +25240,8 @@ _SOKOL_PRIVATE bool _sg_validate_write_buffer_transient(const _sg_buffer_t* buf,
         _SG_VALIDATE(!buf->cmn.usage.immutable && buf->cmn.usage.write_transient, VALIDATE_WRITEBUFFERTRANSIENT_USAGE);
         // write-transient is only allowed before resource is bound in current frame
         _SG_VALIDATE(buf->cmn.bind_frame_index != _sg.frame_index, VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND);
+        // WebGPU restriction: offset must be a multiple of 4 (odd size is allowed and specifically handled)
+        _SG_VALIDATE(_sg_multiple_u64(desc->dst.offset, 4), VALIDATE_WRITEBUFFERTRANSIENT_DST_OFFSET_ALIGNMENT);
         _sg_validate_write_buffer_common(buf, desc);
         return _sg_validate_end();
     #endif
@@ -27223,7 +27267,7 @@ SOKOL_API_IMPL int sg_append_buffer(sg_buffer buf_id, const sg_range* data) {
         const int start_pos = buf->cmn.append_pos;
         // NOTE: the multiple-of-4 requirement for the buffer offset is coming
         // from WebGPU, but we want identical behaviour between backends
-        SOKOL_ASSERT(_sg_multiple_u64((uint64_t)start_pos, 4));
+        SOKOL_ASSERT(_sg_multiple(start_pos, 4));
         if (buf->slot.state == SG_RESOURCESTATE_VALID) {
             if (_sg_validate_append_buffer(buf, data)) {
                 if (!buf->cmn.append_overflow && (data->size > 0)) {
@@ -27297,13 +27341,15 @@ SOKOL_API_IMPL void sg_write_buffer_transient(const sg_write_buffer_desc* desc) 
         sg_write_buffer_desc desc_def = _sg_write_buffer_desc_defaults(desc);
         if (_sg_validate_write_buffer_transient(buf, &desc_def)) {
             // if this is the first call in a frame, rotate the 'active_slot'
+            bool first_time_in_frame = false;
             if (buf->cmn.write_transient_frame_index != _sg.frame_index) {
+                first_time_in_frame = true;
                 buf->cmn.write_transient_frame_index = _sg.frame_index;
                 if (++buf->cmn.active_slot >= buf->cmn.num_slots) {
                     buf->cmn.active_slot = 0;
                 }
             }
-            _sg_write_buffer_transient(buf, &desc_def);
+            _sg_write_buffer_transient(buf, &desc_def, first_time_in_frame);
         }
     } else {
         _SG_ERROR(WRITE_BUFFER_TRANSIENT_BUFFER_ALIVE);
@@ -27319,13 +27365,15 @@ SOKOL_API_IMPL void sg_write_image_transient(const sg_write_image_desc* desc) {
         sg_write_image_desc desc_def = _sg_write_image_desc_defaults(img, desc);
         if (_sg_validate_write_image_transient(img, &desc_def)) {
             // if this is the first call in a frame, rotate the 'active_slot'
+            bool first_time_in_frame = false;
             if (img->cmn.write_transient_frame_index != _sg.frame_index) {
+                first_time_in_frame = true;
                 img->cmn.write_transient_frame_index = _sg.frame_index;
                 if (++img->cmn.active_slot >= img->cmn.num_slots) {
                     img->cmn.active_slot = 0;
                 }
             }
-            _sg_write_image_transient(img, &desc_def);
+            _sg_write_image_transient(img, &desc_def, first_time_in_frame);
         }
     } else {
         _SG_ERROR(WRITE_IMAGE_TRANSIENT_IMAGE_ALIVE);
