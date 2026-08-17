@@ -9784,7 +9784,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_buffer_usage(const sg_buffer_usage* usg) {
         return GL_STATIC_DRAW;
     } else if (usg->dynamic_update) {
         return GL_DYNAMIC_DRAW;
-    } else if (usg->stream_update) {
+    } else if (usg->write_transient) {
         return GL_STREAM_DRAW;
     } else {
         SOKOL_UNREACHABLE; return 0;
@@ -12854,17 +12854,13 @@ _SOKOL_PRIVATE void _sg_gl_update_image(_sg_image_t* img, const sg_image_data* d
     _sg_gl_cache_restore_texture_sampler_binding(0);
 }
 
-_SOKOL_PRIVATE void _sg_gl_write_buffer_unsealed(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
-    SOKOL_ASSERT(buf && desc);
-    SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == buf->slot.state);
+_SOKOL_PRIVATE void _sg_gl_write_buffer_common(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
     SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
     SOKOL_ASSERT((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size);
     SOKOL_ASSERT((desc->src.offset + desc->size) <= desc->src.data.size);
-
+    SOKOL_ASSERT(buf->cmn.active_slot < buf->cmn.num_slots);
     const GLenum gl_tgt = _sg_gl_buffer_target(&buf->cmn.usage);
-    SOKOL_ASSERT(buf->cmn.active_slot == 0);
-    const GLuint gl_buf = buf->gl.buf[0];
-    SOKOL_ASSERT(gl_buf);
+    const GLuint gl_buf = buf->gl.buf[buf->cmn.active_slot];
     _SG_GL_CHECK_ERROR();
     _sg_gl_cache_store_buffer_binding(gl_tgt);
     _sg_gl_cache_bind_buffer(gl_tgt, gl_buf);
@@ -12874,13 +12870,26 @@ _SOKOL_PRIVATE void _sg_gl_write_buffer_unsealed(_sg_buffer_t* buf, const sg_wri
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE void _sg_gl_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
-    SOKOL_ASSERT(img && desc);
-    SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == img->slot.state);
-    SOKOL_ASSERT(0 == img->cmn.active_slot);
-    SOKOL_ASSERT(0 != img->gl.tex[0]);
+_SOKOL_PRIVATE void _sg_gl_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc, bool first_time_in_frame) {
+    SOKOL_ASSERT(buf && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_VALID == buf->slot.state);
+    SOKOL_ASSERT(buf->cmn.usage.write_transient);
+    _SOKOL_UNUSED(first_time_in_frame);
+    _sg_gl_write_buffer_common(buf, desc);
+}
+
+_SOKOL_PRIVATE void _sg_gl_write_buffer_unsealed(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
+    SOKOL_ASSERT(buf && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == buf->slot.state);
+    SOKOL_ASSERT(buf->cmn.usage.write_unsealed);
+    SOKOL_ASSERT(0 == buf->gl.buf[buf->cmn.active_slot]);
+    _sg_gl_write_buffer_common(buf, desc);
+}
+
+_SOKOL_PRIVATE void _sg_gl_write_image_common(_sg_image_t* img, const sg_write_image_desc* desc) {
+    SOKOL_ASSERT(img->cmn.active_slot < img->cmn.num_slots);
     _sg_gl_cache_store_texture_sampler_binding(0);
-    _sg_gl_cache_bind_texture_sampler(0, img->gl.target, img->gl.tex[0], 0);
+    _sg_gl_cache_bind_texture_sampler(0, img->gl.target, img->gl.tex[img->cmn.active_slot], 0);
     _sg_gl_write_miplevel_data(img,
         (const uint8_t*)desc->src.data.ptr,
         desc->src.data.size,
@@ -12895,6 +12904,22 @@ _SOKOL_PRIVATE void _sg_gl_write_image_unsealed(_sg_image_t* img, const sg_write
         desc->size.height,
         desc->size.num_slices);
     _sg_gl_cache_restore_texture_sampler_binding(0);
+}
+
+_SOKOL_PRIVATE void _sg_gl_write_image_transient(_sg_image_t* img, const sg_write_image_desc* desc, bool first_time_in_frame) {
+    SOKOL_ASSERT(img && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_VALID == img->slot.state);
+    SOKOL_ASSERT(img->cmn.usage.write_transient);
+    _SOKOL_UNUSED(first_time_in_frame);
+    _sg_gl_write_image_common(img, desc);
+}
+
+_SOKOL_PRIVATE void _sg_gl_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
+    SOKOL_ASSERT(img && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == img->slot.state);
+    SOKOL_ASSERT(img->cmn.usage.write_unsealed);
+    SOKOL_ASSERT(0 == img->cmn.active_slot);
+    _sg_gl_write_image_common(img, desc);
 }
 
 // ██████  ██████  ██████   ██  ██     ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
@@ -17557,6 +17582,7 @@ _SOKOL_PRIVATE void _sg_mtl_write_buffer_common(_sg_buffer_t* buf, const sg_writ
     SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
     SOKOL_ASSERT((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size);
     SOKOL_ASSERT((desc->src.offset + desc->size) <= desc->src.data.size);
+    SOKOL_ASSERT(buf->cmn.active_slot < buf->cmn.num_slots);
 
     // copy data...
     __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot]);
@@ -17594,6 +17620,7 @@ _SOKOL_PRIVATE void _sg_mtl_write_buffer_unsealed(_sg_buffer_t* buf, const sg_wr
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == buf->slot.state);
     SOKOL_ASSERT(buf->cmn.usage.write_unsealed);
+    SOKOL_ASSERT(0 == buf->cmn.active_slot);
     _sg_mtl_write_buffer_common(buf, desc);
 }
 
@@ -17622,6 +17649,7 @@ _SOKOL_PRIVATE void _sg_mtl_write_image_unsealed(_sg_image_t* img, const sg_writ
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == img->slot.state);
     SOKOL_ASSERT(img->cmn.usage.write_unsealed);
+    SOKOL_ASSERT(0 == img->cmn.active_slot);
     __unsafe_unretained id<MTLTexture> mtl_tex = _sg_mtl_id(img->mtl.tex[img->cmn.active_slot]);
     _sg_mtl_write_miplevel_data(img, mtl_tex,
         (const uint8_t*)desc->src.data.ptr,
