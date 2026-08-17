@@ -1,5 +1,15 @@
 ## Updates
 
+### 17-Aug-2026
+
+sokol_spine.h: fixed a bug in the embedded `sg_shader_desc` struct for D3D11/HLSL
+where the fragment shader uniform block was set to the wrong HLSL bindslot. This
+caused the wrong pre-multiplied-alpha mode to be selected in the shader.
+
+Ticket: https://github.com/floooh/sokol/issues/1582
+
+Many thanks to @mattiasljungstrom for the detailed bug report!
+
 ### 10-Aug-2026
 
 sokol_gfx.h: in sg_make_pipeline, the decision whether 'vertex attribute
