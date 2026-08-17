@@ -4883,7 +4883,7 @@ static void _sspine_init_shared(void) {
     shd_desc.uniform_blocks[1].stage = SG_SHADERSTAGE_FRAGMENT;
     shd_desc.uniform_blocks[1].size = 16;
     shd_desc.uniform_blocks[1].layout = SG_UNIFORMLAYOUT_STD140;
-    shd_desc.uniform_blocks[1].hlsl_register_b_n = 0;
+    shd_desc.uniform_blocks[1].hlsl_register_b_n = 1;
     shd_desc.uniform_blocks[1].msl_buffer_n = 1;
     shd_desc.uniform_blocks[1].wgsl_group0_binding_n = 1;
     shd_desc.uniform_blocks[1].spirv_set0_binding_n = 1;
