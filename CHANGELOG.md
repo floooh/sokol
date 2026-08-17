@@ -2,18 +2,16 @@
 
 ### 17-Aug-2026
 
-In sokol_gfx.h fixed broken storage image validation (this was a regression from the
+- In sokol_gfx.h fixed broken storage image validation (this was a regression from the
 recent write-unsealed update).
 
-Ticket: https://github.com/floooh/sokol/issues/1583
+  Ticket: https://github.com/floooh/sokol/issues/1583
 
-sokol_spine.h: fixed a bug in the embedded `sg_shader_desc` struct for D3D11/HLSL
+- sokol_spine.h: fixed a bug in the embedded `sg_shader_desc` struct for D3D11/HLSL
 where the fragment shader uniform block was set to the wrong HLSL bindslot. This
 caused the wrong pre-multiplied-alpha mode to be selected in the shader.
 
-Ticket: https://github.com/floooh/sokol/issues/1582
-
-...and another one:
+  Ticket: https://github.com/floooh/sokol/issues/1582
 
 Many thanks to @mattiasljungstrom for the detailed bug reports!
 
