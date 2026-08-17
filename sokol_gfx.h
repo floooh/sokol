@@ -23697,7 +23697,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
             _SG_VALIDATE(usg->immutable, VALIDATE_IMAGEDESC_UNSEALED_VS_IMMUTABLE);
             _SG_VALIDATE(!any_attachment, VALIDATE_IMAGEDESC_UNSEALED_VS_ATTACHMENT);
         }
-        if (!any_attachment) {
+        if (!any_attachment && !usg->storage_image) {
             _SG_VALIDATE(desc->sample_count == 1, VALIDATE_IMAGEDESC_MSAA_BUT_NO_ATTACHMENT);
             const bool valid_nonrt_fmt = !_sg_is_valid_attachment_depth_format(fmt);
             _SG_VALIDATE(valid_nonrt_fmt, VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT);
