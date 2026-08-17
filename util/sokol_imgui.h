@@ -2819,7 +2819,8 @@ SOKOL_API_IMPL void simgui_render(void) {
     // copy vertices and indices into an intermediate buffer so that
     // they can be updated with a single sg_write_buffer_transient() call each
     // FIXME: check if it's feasable (WebGL2) to get rid of the intermediate
-    // buffer and instead use multiple write-transient
+    // vertex buffer and instead use multiple write-transient (not possible
+    // for index buffer because of 4-byte alignment restriction for dest-offset)
     // But check WebGL2 performance!
     size_t all_vtx_size = 0;
     size_t all_idx_size = 0;
