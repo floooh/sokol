@@ -5856,8 +5856,8 @@ inline void sg_init_shader(sg_shader shd, const sg_shader_desc& desc) { return s
 inline void sg_init_pipeline(sg_pipeline pip, const sg_pipeline_desc& desc) { return sg_init_pipeline(pip, &desc); }
 inline void sg_init_view(sg_view view, const sg_view_desc& desc) { return sg_init_view(view, &desc); }
 
-inline void sg_write_buffer_transient(const sg_write_buffer_desc* desc) { return sg_write_buffer_transient(&desc); }
-inline void sg_write_image_transient(const sg_write_image_desc* desc) { return sg_write_image_transient(&desc); }
+inline void sg_write_buffer_transient(const sg_write_buffer_desc& desc) { return sg_write_buffer_transient(&desc); }
+inline void sg_write_image_transient(const sg_write_image_desc& desc) { return sg_write_image_transient(&desc); }
 inline void sg_write_buffer_unsealed(const sg_write_buffer_desc& desc) { return sg_write_buffer_unsealed(&desc); }
 inline void sg_write_image_unsealed(const sg_write_image_desc& desc) { return sg_write_image_unsealed(&desc); }
 inline void sg_update_image(sg_image img, const sg_image_data& data) { return sg_update_image(img, &data); }
