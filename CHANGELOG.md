@@ -8,7 +8,14 @@ caused the wrong pre-multiplied-alpha mode to be selected in the shader.
 
 Ticket: https://github.com/floooh/sokol/issues/1582
 
-Many thanks to @mattiasljungstrom for the detailed bug report!
+...and another one:
+
+In sokol_gfx.h fixed broken storage image validation (this was a regression from the
+recent write-unsealed update).
+
+Ticket: https://github.com/floooh/sokol/issues/1583
+
+Many thanks to @mattiasljungstrom for the detailed bug reports!
 
 ### 10-Aug-2026
 
