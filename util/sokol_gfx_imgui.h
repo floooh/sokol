@@ -1102,6 +1102,7 @@ _SOKOL_PRIVATE void _sgimgui_free(const sgimgui_allocator_t* allocator, void* pt
 _SOKOL_PRIVATE int _sgimgui_slot_index(uint32_t id, int num_slots) {
     int slot_index = (int) (id & _SGIMGUI_SLOT_MASK);
     SOKOL_ASSERT((slot_index > 0) && (slot_index < num_slots));
+    _SOKOL_UNUSED(num_slots);
     return slot_index;
 }
 
