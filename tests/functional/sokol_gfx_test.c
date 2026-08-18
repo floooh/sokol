@@ -591,6 +591,10 @@ UTEST(sokol_gfx, query_buffer_defaults) {
     desc = sg_query_buffer_defaults(&(sg_buffer_desc){ .usage.stream_update = true });
     T(desc.usage.vertex_buffer);
     T(desc.usage.stream_update);
+    desc = sg_query_buffer_defaults(&(sg_buffer_desc){ .usage.indirect_buffer = true });
+    T(desc.usage.indirect_buffer);
+    T(!desc.usage.vertex_buffer);
+    T(desc.usage.immutable);
     sg_shutdown();
 }
 
@@ -1958,6 +1962,34 @@ UTEST(sokol_gfx, make_buffer_storagebuffer_not_supported_and_size) {
     T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_STORAGEBUFFER_SUPPORTED);
     T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_STORAGEBUFFER_SIZE_MULTIPLE_4);
     T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, indirect_buffer) {
+    setup(&(sg_desc){0});
+    const uint32_t args[5] = { 3, 1, 0, 0, 0 };
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(args) });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_INDIRECTBUFFER_SUPPORTED);
+    reset_log_items();
+    _sg.features.compute = true;
+    buf = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(args) });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    _sg.cur_pass.valid = true;
+    _sg.cur_pass.in_pass = true;
+    _sg.next_draw_valid = true;
+    sg_draw_indirect(buf, 0);
+    T(sg_query_stats().cur_frame.num_draw_indirect == 1);
+    reset_log_items();
+    sg_draw_indirect(buf, 2);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_INDIRECT_BUFFER_OFFSET);
+    reset_log_items();
+    sg_draw_indirect(buf, 8);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_INDIRECT_BUFFER_RANGE);
+    _sg.cur_pass.is_compute = true;
+    sg_dispatch_indirect(buf, 0);
+    T(sg_query_stats().cur_frame.num_dispatch_indirect == 1);
+    _sg.cur_pass.in_pass = false;
     sg_shutdown();
 }
 
