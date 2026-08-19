@@ -19841,9 +19841,20 @@ _SOKOL_PRIVATE void _sg_wgpu_write_image_transient(_sg_image_t* img, const sg_wr
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_VALID == img->slot.state);
     SOKOL_ASSERT(img->cmn.usage.write_transient);
-
-    SOKOL_ASSERT(false && "FIXME!");
     _SOKOL_UNUSED(first_time_in_frame);
+    _sg_wgpu_write_miplevel_data(img,
+        (const uint8_t*)desc->src.data.ptr,
+        desc->src.data.size,
+        desc->src.offset,
+        desc->src.bytes_per_row,
+        desc->src.bytes_per_slice,
+        desc->dst.mip_level,
+        desc->dst.x,
+        desc->dst.y,
+        desc->dst.slice,
+        desc->size.width,
+        desc->size.height,
+        desc->size.num_slices);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
