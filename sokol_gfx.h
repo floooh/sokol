@@ -18936,19 +18936,21 @@ _SOKOL_PRIVATE void _sg_wgpu_seal_buffer(_sg_buffer_t* buf) {
     buf->wgpu.mapped_ptr = 0;
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_copy_buffer_data(const _sg_buffer_t* buf, uint64_t offset, const sg_range* data) {
-    SOKOL_ASSERT((offset + data->size) <= (size_t)buf->cmn.size);
+_SOKOL_PRIVATE void _sg_wgpu_copy_buffer_data(const _sg_buffer_t* buf, uint64_t dst_offset, const sg_range* src_data, uint64_t src_offset, uint64_t size) {
+    SOKOL_ASSERT((dst_offset + size) <= (uint64_t)buf->cmn.size);
+    SOKOL_ASSERT((src_offset + size) <= src_data->size);
+    const uint8_t* src_ptr = (uint8_t*)src_data->ptr + src_offset;
     // WebGPU's write-buffer requires the size to be a multiple of four, so we may need to split the copy
     // operation into two writeBuffer calls
-    uint64_t clamped_size = data->size & ~3UL;
-    uint64_t extra_size = data->size & 3UL;
+    uint64_t clamped_size = size & ~3UL;
+    uint64_t extra_size = size & 3UL;
     SOKOL_ASSERT(extra_size < 4);
-    wgpuQueueWriteBuffer(_sg.wgpu.queue, buf->wgpu.buf, offset, data->ptr, clamped_size);
+    wgpuQueueWriteBuffer(_sg.wgpu.queue, buf->wgpu.buf, dst_offset, src_ptr, clamped_size);
     if (extra_size > 0) {
         const uint64_t extra_src_offset = clamped_size;
-        const uint64_t extra_dst_offset = offset + clamped_size;
+        const uint64_t extra_dst_offset = dst_offset + clamped_size;
         uint8_t extra_data[4] = { 0 };
-        const uint8_t* extra_src_ptr = ((uint8_t*)data->ptr) + extra_src_offset;
+        const uint8_t* extra_src_ptr = src_ptr + extra_src_offset;
         for (size_t i = 0; i < extra_size; i++) {
             extra_data[i] = extra_src_ptr[i];
         }
@@ -19797,13 +19799,13 @@ _SOKOL_PRIVATE void _sg_wgpu_dispatch(int num_groups_x, int num_groups_y, int nu
 
 _SOKOL_PRIVATE void _sg_wgpu_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
     SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    _sg_wgpu_copy_buffer_data(buf, 0, data);
+    _sg_wgpu_copy_buffer_data(buf, 0, data, 0, data->size);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
     SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
     _SOKOL_UNUSED(new_frame);
-    _sg_wgpu_copy_buffer_data(buf, (uint64_t)buf->cmn.append_pos, data);
+    _sg_wgpu_copy_buffer_data(buf, (uint64_t)buf->cmn.append_pos, data, 0, data->size);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_update_image(_sg_image_t* img, const sg_image_data* data) {
@@ -19811,9 +19813,19 @@ _SOKOL_PRIVATE void _sg_wgpu_update_image(_sg_image_t* img, const sg_image_data*
     _sg_wgpu_copy_image_data(img, data);
 }
 
+_SOKOL_PRIVATE void _sg_wgpu_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc, bool first_time_in_frame) {
+    SOKOL_ASSERT(buf && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_VALID == buf->slot.state);
+    SOKOL_ASSERT(buf->cmn.usage.write_transient);
+    SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
+    _SOKOL_UNUSED(first_time_in_frame);
+    _sg_wgpu_copy_buffer_data(buf, desc->dst.offset, &desc->src.data, desc->src.offset, desc->size);
+}
+
 _SOKOL_PRIVATE void _sg_wgpu_write_buffer_unsealed(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == buf->slot.state);
+    SOKOL_ASSERT(buf->cmn.usage.write_unsealed);
     SOKOL_ASSERT(buf->wgpu.mapped_ptr);
     SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
     SOKOL_ASSERT((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size);
@@ -19823,9 +19835,19 @@ _SOKOL_PRIVATE void _sg_wgpu_write_buffer_unsealed(_sg_buffer_t* buf, const sg_w
     memcpy(dst_ptr, src_ptr, desc->size);
 }
 
+_SOKOL_PRIVATE void _sg_wgpu_write_image_transient(_sg_image_t* img, const sg_write_image_desc* desc, bool first_time_in_frame) {
+    SOKOL_ASSERT(img && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_VALID == img->slot.state);
+    SOKOL_ASSERT(img->cmn.usage.write_transient);
+
+    SOKOL_ASSERT(false && "FIXME!");
+    _SOKOL_UNUSED(first_time_in_frame);
+}
+
 _SOKOL_PRIVATE void _sg_wgpu_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == img->slot.state);
+    SOKOL_ASSERT(img->cmn.usage.write_unsealed);
     _sg_wgpu_write_miplevel_data(img,
         (const uint8_t*)desc->src.data.ptr,
         desc->src.data.size,
