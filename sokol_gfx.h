@@ -15328,10 +15328,20 @@ _SOKOL_PRIVATE void _sg_d3d11_write_miplevel_data(const _sg_image_t* img,
     }
 }
 
+_SOKOL_PRIVATE void _sg_d3d11_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc, bool first_time_in_frame) {
+    SOKOL_ASSERT(buf && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_VALID == buf->slot.state);
+    SOKOL_ASSERT(buf->cmn.usage.write_transient);
+
+    _SOKOL_UNUSED(first_time_in_frame);
+    SOKOL_ASSERT(false && "FIXME");
+}
+
 _SOKOL_PRIVATE void _sg_d3d11_write_buffer_unsealed(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
     SOKOL_ASSERT(_sg.d3d11.ctx);
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == buf->slot.state);
+    SOKOL_ASSERT(buf->cmn.usage.write_unsealed);
     SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
     SOKOL_ASSERT((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size);
     SOKOL_ASSERT((desc->src.offset + desc->size) <= desc->src.data.size);
@@ -15346,9 +15356,19 @@ _SOKOL_PRIVATE void _sg_d3d11_write_buffer_unsealed(_sg_buffer_t* buf, const sg_
     _sg_d3d11_UpdateSubresource(_sg.d3d11.ctx, d3d11_buf, 0, &d3d11_dst_box, d3d11_src_ptr, 0, 0);
 }
 
+_SOKOL_PRIVATE void _sg_d3d11_write_image_transient(_sg_image_t* img, const sg_write_image_desc* desc, bool first_time_in_frame) {
+    SOKOL_ASSERT(img && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_VALID == img->slot.state);
+    SOKOL_ASSERT(img->cmn.usage.write_transient);
+
+    _SOKOL_UNUSED(first_time_in_frame);
+    SOKOL_ASSERT(false && "FIXME");
+}
+
 _SOKOL_PRIVATE void _sg_d3d11_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == img->slot.state);
+    SOKOL_ASSERT(img->cmn.usage.write_unsealed);
     ID3D11Resource* d3d11_res = img->d3d11.res;
     _sg_d3d11_write_miplevel_data(img, d3d11_res,
         (const uint8_t*)desc->src.data.ptr,
