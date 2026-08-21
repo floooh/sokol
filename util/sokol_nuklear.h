@@ -2282,7 +2282,7 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
     _snuklear.vbuf = sg_make_buffer(&(sg_buffer_desc){
         .usage = {
             .vertex_buffer = true,
-            .stream_update = true,
+            .write_transient = true,
         },
         .size = _snuklear.vertex_buffer_size,
         .label = "sokol-nuklear-vertices"
@@ -2293,7 +2293,7 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
     _snuklear.ibuf = sg_make_buffer(&(sg_buffer_desc){
         .usage = {
             .index_buffer = true,
-            .stream_update = true,
+            .write_transient = true,
         },
         .size = _snuklear.index_buffer_size,
         .label = "sokol-nuklear-indices"
@@ -2681,8 +2681,20 @@ SOKOL_API_IMPL void snk_render(int width, int height) {
     if (!vertex_buffer_overflow && !index_buffer_overflow) {
 
         // Setup rendering
-        sg_update_buffer(_snuklear.vbuf, &(sg_range){ nk_buffer_memory_const(&verts), nk_buffer_total(&verts) });
-        sg_update_buffer(_snuklear.ibuf, &(sg_range){ nk_buffer_memory_const(&idx), nk_buffer_total(&idx) });
+        sg_write_buffer_transient(&(sg_write_buffer_desc){
+            .src.data = {
+                .ptr = nk_buffer_memory_const(&verts),
+                .size = nk_buffer_total(&verts),
+            },
+            .dst.buffer = _snuklear.vbuf,
+        });
+        sg_write_buffer_transient(&(sg_write_buffer_desc){
+            .src.data = {
+                .ptr = nk_buffer_memory_const(&idx),
+                .size = nk_buffer_total(&idx),
+            },
+            .dst.buffer = _snuklear.ibuf,
+        });
         const float dpi_scale = _snuklear.desc.dpi_scale;
         const int fb_width = (int)(_snuklear.vs_params.disp_size[0] * dpi_scale);
         const int fb_height = (int)(_snuklear.vs_params.disp_size[1] * dpi_scale);
