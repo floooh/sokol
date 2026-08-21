@@ -4764,6 +4764,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_UPDATE_BUFFER_FAILED, "Map() failed when updating buffer (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_APPEND_BUFFER_FAILED, "Map() failed when appending to buffer (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_UPDATE_IMAGE_FAILED, "Map() failed when updating image (d3d11)") \
+    _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_WRITE_BUFFER_TRANSIENT_FAILED, "Map() failed during sg_write_buffer_transient(d3d11)") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_BUFFER_FAILED, "failed to create buffer object (metal)") \
     _SG_LOGITEM_XMACRO(METAL_TEXTURE_FORMAT_NOT_SUPPORTED, "pixel format not supported for texture (metal)") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_TEXTURE_FAILED, "failed to create texture object (metal)") \
@@ -14985,6 +14986,29 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
     }
 }
 
+_SOKOL_PRIVATE void* _sg_d3d11_map_buffer(_sg_buffer_t* buf, D3D11_MAP d3d11_map_type) {
+    SOKOL_ASSERT(buf);
+    SOKOL_ASSERT(_sg.d3d11.ctx);
+    SOKOL_ASSERT(buf->d3d11.buf);
+    D3D11_MAPPED_SUBRESOURCE d3d11_msr;
+    HRESULT hr = _sg_d3d11_Map(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0, d3d11_map_type, 0, &d3d11_msr);
+    _sg_stats_inc(d3d11.num_map);
+    if (SUCCEEDED(hr)) {
+        SOKOL_ASSERT(d3d11_msr.pData);
+        return d3d11_msr.pData;
+    } else {
+        return 0;
+    }
+}
+
+_SOKOL_PRIVATE void _sg_d3d11_unmap_buffer(_sg_buffer_t* buf) {
+    SOKOL_ASSERT(buf);
+    SOKOL_ASSERT(_sg.d3d11.ctx);
+    SOKOL_ASSERT(buf->d3d11.buf);
+    _sg_d3d11_Unmap(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0);
+    _sg_stats_inc(d3d11.num_unmap);
+}
+
 _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
     SOKOL_ASSERT(bnd);
     SOKOL_ASSERT(bnd->pip);
@@ -15173,15 +15197,10 @@ _SOKOL_PRIVATE void _sg_d3d11_commit(void) {
 
 _SOKOL_PRIVATE void _sg_d3d11_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
     SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    SOKOL_ASSERT(_sg.d3d11.ctx);
-    SOKOL_ASSERT(buf->d3d11.buf);
-    D3D11_MAPPED_SUBRESOURCE d3d11_msr;
-    HRESULT hr = _sg_d3d11_Map(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0, D3D11_MAP_WRITE_DISCARD, 0, &d3d11_msr);
-    _sg_stats_inc(d3d11.num_map);
-    if (SUCCEEDED(hr)) {
-        memcpy(d3d11_msr.pData, data->ptr, data->size);
-        _sg_d3d11_Unmap(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0);
-        _sg_stats_inc(d3d11.num_unmap);
+    void* mapped_ptr = _sg_d3d11_map_buffer(buf, D3D11_MAP_WRITE_DISCARD);
+    if (mapped_ptr) {
+        memcpy(mapped_ptr, data->ptr, data->size);
+        _sg_d3d11_unmap_buffer(buf);
     } else {
         _SG_ERROR(D3D11_MAP_FOR_UPDATE_BUFFER_FAILED);
     }
@@ -15191,15 +15210,12 @@ _SOKOL_PRIVATE void _sg_d3d11_append_buffer(_sg_buffer_t* buf, const sg_range* d
     SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
     SOKOL_ASSERT(_sg.d3d11.ctx);
     SOKOL_ASSERT(buf->d3d11.buf);
-    D3D11_MAP map_type = new_frame ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE;
-    D3D11_MAPPED_SUBRESOURCE d3d11_msr;
-    HRESULT hr = _sg_d3d11_Map(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0, map_type, 0, &d3d11_msr);
-    _sg_stats_inc(d3d11.num_map);
-    if (SUCCEEDED(hr)) {
-        uint8_t* dst_ptr = (uint8_t*)d3d11_msr.pData + buf->cmn.append_pos;
+    D3D11_MAP d3d11_map_type = new_frame ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE;
+    void* mapped_ptr = _sg_d3d11_map_buffer(buf, d3d11_map_type);
+    if (mapped_ptr) {
+        uint8_t* dst_ptr = (uint8_t*)mapped_ptr + buf->cmn.append_pos;
         memcpy(dst_ptr, data->ptr, data->size);
-        _sg_d3d11_Unmap(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0);
-        _sg_stats_inc(d3d11.num_unmap);
+        _sg_d3d11_unmap_buffer(buf);
     } else {
         _SG_ERROR(D3D11_MAP_FOR_APPEND_BUFFER_FAILED);
     }
@@ -15332,9 +15348,19 @@ _SOKOL_PRIVATE void _sg_d3d11_write_buffer_transient(_sg_buffer_t* buf, const sg
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_VALID == buf->slot.state);
     SOKOL_ASSERT(buf->cmn.usage.write_transient);
-
-    _SOKOL_UNUSED(first_time_in_frame);
-    SOKOL_ASSERT(false && "FIXME");
+    SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
+    SOKOL_ASSERT((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size);
+    SOKOL_ASSERT((desc->src.offset + desc->size) <= desc->src.data.size);
+    const D3D11_MAP d3d11_map_type = first_time_in_frame ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE;
+    void* mapped_ptr = _sg_d3d11_map_buffer(buf, d3d11_map_type);
+    if (mapped_ptr) {
+        uint8_t* dst_ptr = (uint8_t*)mapped_ptr + desc->dst.offset;
+        const uint8_t* src_ptr = (uint8_t*)desc->src.data.ptr + desc->src.offset;
+        memcpy(dst_ptr, src_ptr, desc->size);
+        _sg_d3d11_unmap_buffer(buf);
+    } else {
+        _SG_ERROR(D3D11_MAP_FOR_WRITE_BUFFER_TRANSIENT_FAILED);
+    }
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_write_buffer_unsealed(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
@@ -17607,7 +17633,7 @@ _SOKOL_PRIVATE void _sg_mtl_write_buffer_common(_sg_buffer_t* buf, const sg_writ
     // copy data...
     __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot]);
     uint8_t* dst_ptr = ((uint8_t*)[mtl_buf contents]) + desc->dst.offset;
-    const uint8_t* src_ptr = ((uint8_t*)desc->src.data.ptr) + desc->src.offset;
+    const uint8_t* src_ptr = (uint8_t*)desc->src.data.ptr + desc->src.offset;
     memcpy(dst_ptr, src_ptr, desc->size);
 
     // ...and update dirty range
