@@ -13410,19 +13410,25 @@ static inline D3D_FEATURE_LEVEL _sg_d3d11_GetFeatureLevel(ID3D11Device* self) {
 
 //-- enum translation functions ------------------------------------------------
 _SOKOL_PRIVATE D3D11_USAGE _sg_d3d11_image_usage(const sg_image_usage* usg) {
-    if (usg->immutable) {
-        if (usg->color_attachment ||
-            usg->resolve_attachment ||
-            usg->depth_stencil_attachment ||
-            usg->storage_image ||
-            usg->write_unsealed)
-        {
-            return D3D11_USAGE_DEFAULT;
-        } else {
-            return D3D11_USAGE_IMMUTABLE;
-        }
-    } else {
+    const bool any_attachment = usg->color_attachment || usg->resolve_attachment || usg->depth_stencil_attachment;
+    const bool any_write_access = usg->write_unsealed || usg->write_transient;
+    if (any_attachment || any_write_access || usg->storage_image) {
+        return D3D11_USAGE_DEFAULT;
+    } else if (usg->dynamic_update) {
+        // FIXME: deprecated
         return D3D11_USAGE_DYNAMIC;
+    } else {
+        SOKOL_ASSERT(usg->immutable);
+        return D3D11_USAGE_IMMUTABLE;
+    }
+}
+
+_SOKOL_PRIVATE UINT _sg_d3d11_image_cpu_access_flags(const sg_image_usage* usg) {
+    if (usg->dynamic_update) {
+        // FIXME: deprecated
+        return D3D11_CPU_ACCESS_WRITE;
+    } else {
+        return 0;
     }
 }
 
@@ -13440,24 +13446,31 @@ _SOKOL_PRIVATE UINT _sg_d3d11_image_bind_flags(const sg_image_usage* usg) {
     return res;
 }
 
-_SOKOL_PRIVATE UINT _sg_d3d11_image_cpu_access_flags(const sg_image_usage* usg) {
-    if (usg->color_attachment ||
-        usg->resolve_attachment ||
-        usg->depth_stencil_attachment ||
-        usg->storage_image ||
-        usg->immutable)
-    {
-        return 0;
+_SOKOL_PRIVATE D3D11_USAGE _sg_d3d11_buffer_usage(const sg_buffer_usage* usg) {
+    if (usg->dynamic_update) {
+        // FIXME: deprecated
+        return D3D11_USAGE_DYNAMIC;
+    } else if (usg->write_transient) {
+        return D3D11_USAGE_DYNAMIC;
+    } else if (usg->write_unsealed) {
+        return D3D11_USAGE_DEFAULT;
+    } else if (usg->storage_buffer) {
+        return D3D11_USAGE_DEFAULT;
+    } else if (usg->immutable) {
+        return D3D11_USAGE_IMMUTABLE;
     } else {
-        return D3D11_CPU_ACCESS_WRITE;
+        return D3D11_USAGE_DEFAULT;
     }
 }
 
-_SOKOL_PRIVATE D3D11_USAGE _sg_d3d11_buffer_usage(const sg_buffer_usage* usg) {
-    if (usg->immutable) {
-        return (usg->storage_buffer || usg->write_unsealed) ? D3D11_USAGE_DEFAULT : D3D11_USAGE_IMMUTABLE;
+_SOKOL_PRIVATE UINT _sg_d3d11_buffer_cpu_access_flags(const sg_buffer_usage* usg) {
+    if (usg->dynamic_update) {
+        // FIXME: deprecated
+        return D3D11_CPU_ACCESS_WRITE;
+    } else if (usg->write_transient) {
+        return D3D11_CPU_ACCESS_WRITE;
     } else {
-        return D3D11_USAGE_DYNAMIC;
+        return 0;
     }
 }
 
@@ -13480,10 +13493,6 @@ _SOKOL_PRIVATE UINT _sg_d3d11_buffer_bind_flags(const sg_buffer_usage* usg) {
 
 _SOKOL_PRIVATE UINT _sg_d3d11_buffer_misc_flags(const sg_buffer_usage* usg) {
     return usg->storage_buffer ? D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS : 0;
-}
-
-_SOKOL_PRIVATE UINT _sg_d3d11_buffer_cpu_access_flags(const sg_buffer_usage* usg) {
-    return usg->immutable ? 0 : D3D11_CPU_ACCESS_WRITE;
 }
 
 _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_base_pixel_format(sg_pixel_format fmt) {
@@ -15386,9 +15395,22 @@ _SOKOL_PRIVATE void _sg_d3d11_write_image_transient(_sg_image_t* img, const sg_w
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_VALID == img->slot.state);
     SOKOL_ASSERT(img->cmn.usage.write_transient);
-
     _SOKOL_UNUSED(first_time_in_frame);
-    SOKOL_ASSERT(false && "FIXME");
+    // NOTE: not using map/unmap but copy-sub-resource for write-transient textures is intended!
+    ID3D11Resource* d3d11_res = img->d3d11.res;
+    _sg_d3d11_write_miplevel_data(img, d3d11_res,
+        (const uint8_t*)desc->src.data.ptr,
+        desc->src.data.size,
+        desc->src.offset,
+        desc->src.bytes_per_row,
+        desc->src.bytes_per_slice,
+        desc->dst.mip_level,
+        desc->dst.x,
+        desc->dst.y,
+        desc->dst.slice,
+        desc->size.width,
+        desc->size.height,
+        desc->size.num_slices);
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
