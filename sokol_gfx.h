@@ -9528,6 +9528,20 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     }
 }
 
+_SOKOL_PRIVATE void _sg_dummy_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc, bool first_time_in_frame) {
+    SOKOL_ASSERT(buf && desc);
+    _SOKOL_UNUSED(buf);
+    _SOKOL_UNUSED(desc);
+    _SOKOL_UNUSED(first_time_in_frame);
+}
+
+_SOKOL_PRIVATE void _sg_dummy_write_image_transient(_sg_image_t* img, const sg_write_image_desc* desc, bool first_time_in_frame) {
+    SOKOL_ASSERT(img && desc);
+    _SOKOL_UNUSED(img);
+    _SOKOL_UNUSED(desc);
+    _SOKOL_UNUSED(first_time_in_frame);
+}
+
 _SOKOL_PRIVATE void _sg_dummy_write_buffer_unsealed(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
     _SOKOL_UNUSED(buf);
@@ -17677,7 +17691,7 @@ _SOKOL_PRIVATE void _sg_mtl_write_buffer_transient(_sg_buffer_t* buf, const sg_w
     // reset write range trackers when called for the first time in a frame
     // (NOTE: can be removed when removing Intel Mac compatibility)
     if (first_time_in_frame) {
-        buf->mtl.write_range.start = buf->cmn.size;
+        buf->mtl.write_range.start = (size_t)buf->cmn.size;
         buf->mtl.write_range.end = 0;
     }
     _sg_mtl_write_buffer_common(buf, desc);
@@ -25349,6 +25363,7 @@ _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image_t* img, const sg_i
     #endif
 }
 
+#if defined(SOKOL_DEBUG)
 _SOKOL_PRIVATE void _sg_validate_write_buffer_common(const _sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
     _SG_VALIDATE(desc->src.data.ptr, VALIDATE_WRITEBUFFER_SRC_DATA_POINTER);
     _SG_VALIDATE(desc->src.data.size > 0, VALIDATE_WRITEBUFFER_SRC_DATA_SIZE);
@@ -25356,6 +25371,7 @@ _SOKOL_PRIVATE void _sg_validate_write_buffer_common(const _sg_buffer_t* buf, co
     _SG_VALIDATE((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size, VALIDATE_WRITEBUFFER_WRITE_OVERFLOW);
     _SG_VALIDATE((desc->src.offset + desc->size) <= desc->src.data.size, VALIDATE_WRITEBUFFER_READ_OVERFLOW);
 }
+#endif
 
 _SOKOL_PRIVATE bool _sg_validate_write_buffer_transient(const _sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
     #if !defined(SOKOL_DEBUG)
@@ -25396,6 +25412,7 @@ _SOKOL_PRIVATE bool _sg_validate_write_buffer_unsealed(const _sg_buffer_t* buf, 
     #endif
 }
 
+#if defined(SOKOL_DEBUG)
 _SOKOL_PRIVATE void _sg_validate_write_image_common(const _sg_image_t* img, const sg_write_image_desc* desc) {
     const size_t write_size = (size_t)desc->src.bytes_per_slice * (size_t)desc->size.num_slices;
     const int mip_width = _sg_miplevel_dim(img->cmn.width, desc->dst.mip_level);
@@ -25418,6 +25435,7 @@ _SOKOL_PRIVATE void _sg_validate_write_image_common(const _sg_image_t* img, cons
     _SG_VALIDATE((desc->dst.y + desc->size.height) <= mip_height, VALIDATE_WRITEIMAGE_WRITE_HEIGHT_OVERFLOW);
     _SG_VALIDATE((desc->dst.slice + desc->size.num_slices) <= mip_depth_or_slices, VALIDATE_WRITEIMAGE_WRITE_NUMSLICES_OVERFLOW);
 }
+#endif
 
 _SOKOL_PRIVATE bool _sg_validate_write_image_transient(const _sg_image_t* img, const sg_write_image_desc* desc) {
     #if !defined(SOKOL_DEBUG)
