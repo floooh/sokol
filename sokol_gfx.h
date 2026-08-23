@@ -16284,8 +16284,8 @@ _SOKOL_PRIVATE void _sg_mtl_discard_buffer(_sg_buffer_t* buf) {
 }
 
 _SOKOL_PRIVATE void _sg_mtl_commit_write_range(_sg_buffer_t* buf) {
-    SOKOL_ASSERT(buf);
     #if defined(_SG_TARGET_MACOS)
+    SOKOL_ASSERT(buf);
     if (buf->mtl.write_range.end > buf->mtl.write_range.start) {
         __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot]);
         if (_sg_mtl_resource_options_storage_mode_managed_or_shared() == MTLResourceStorageModeManaged) {
@@ -16295,6 +16295,8 @@ _SOKOL_PRIVATE void _sg_mtl_commit_write_range(_sg_buffer_t* buf) {
             [mtl_buf didModifyRange:ns_range];
         }
     }
+    #else
+    _SOKOL_UNUSED(buf);
     #endif
     // NOTE: write_range is not reset here, but instead in _sg_mtl_write_buffer_transient().
     // This is because the _sg_mtl_commit_write_range may never actually be called in
