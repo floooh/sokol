@@ -23134,38 +23134,47 @@ _SOKOL_PRIVATE void _sg_vk_dispatch(int num_groups_x, int num_groups_y, int num_
 
 _SOKOL_PRIVATE void _sg_vk_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
     SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    if (buf->cmn.usage.stream_update) {
-        _sg_vk_acquire_frame_command_buffers();
-        _sg_vk_staging_stream_buffer_data(buf, data, 0, 0, data->size);
-    } else {
-        _sg_vk_staging_copy_buffer_data(buf, data, 0, 0, data->size, true);
-    }
+    SOKOL_ASSERT(!buf->cmn.usage.write_transient);
+    _sg_vk_staging_copy_buffer_data(buf, data, 0, 0, data->size, true);
 }
 
 _SOKOL_PRIVATE void _sg_vk_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
     SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
+    SOKOL_ASSERT(!buf->cmn.usage.write_transient);
     _SOKOL_UNUSED(new_frame);
-    if (buf->cmn.usage.stream_update) {
-        _sg_vk_acquire_frame_command_buffers();
-        _sg_vk_staging_stream_buffer_data(buf, data, 0, (size_t)buf->cmn.append_pos, data->size);
-    } else {
-        _sg_vk_staging_copy_buffer_data(buf, data, 0, (size_t)buf->cmn.append_pos, data->size, true);
-    }
+    _sg_vk_staging_copy_buffer_data(buf, data, 0, (size_t)buf->cmn.append_pos, data->size, true);
 }
 
 _SOKOL_PRIVATE void _sg_vk_update_image(_sg_image_t* img, const sg_image_data* data) {
     SOKOL_ASSERT(img && data);
-    if (img->cmn.usage.stream_update) {
+    SOKOL_ASSERT(!img->cmn.usage.write_transient);
+    _sg_vk_staging_copy_image_data(img, data, true);
+}
+
+_SOKOL_PRIVATE void _sg_vk_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc, bool first_time_in_frame) {
+    SOKOL_ASSERT(buf && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_VALID == buf->slot.state);
+    SOKOL_ASSERT(buf->cmn.usage.write_transient);
+    if (first_time_in_frame) {
         _sg_vk_acquire_frame_command_buffers();
-        _sg_vk_staging_stream_image_data(img, data);
-    } else {
-        _sg_vk_staging_copy_image_data(img, data, true);
     }
+    _sg_vk_staging_stream_buffer_data(buf, &desc->src.data, desc->src.offset, desc->dst.offset, desc->size);
+}
+
+_SOKOL_PRIVATE void _sg_vk_write_image_transient(_sg_image_t* img, const sg_write_image_desc* desc, bool first_time_in_frame) {
+    SOKOL_ASSERT(img && desc);
+    SOKOL_ASSERT(SG_RESOURCESTATE_VALID == img->slot.state);
+    SOKOL_ASSERT(img->cmn.usage.write_transient);
+    if (first_time_in_frame) {
+        _sg_vk_acquire_frame_command_buffers();
+    }
+    SOKOL_ASSERT(false && "FIXME");
 }
 
 _SOKOL_PRIVATE void _sg_vk_write_buffer_unsealed(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == buf->slot.state);
+    SOKOL_ASSERT(buf->cmn.usage.write_unsealed);
     SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
     SOKOL_ASSERT((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size);
     SOKOL_ASSERT((desc->src.offset + desc->size) <= desc->src.data.size);
@@ -23175,6 +23184,7 @@ _SOKOL_PRIVATE void _sg_vk_write_buffer_unsealed(_sg_buffer_t* buf, const sg_wri
 _SOKOL_PRIVATE void _sg_vk_write_image_unsealed(_sg_image_t* img, const sg_write_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == img->slot.state);
+    SOKOL_ASSERT(img->cmn.usage.write_unsealed);
     _sg_vk_staging_copy_miplevel_data(img,
         (const uint8_t*)desc->src.data.ptr,
         desc->src.data.size,
