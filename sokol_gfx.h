@@ -21191,7 +21191,7 @@ _SOKOL_PRIVATE bool _sg_vk_staging_stream_miplevel_data(_sg_image_t* img,
     }
     const uint8_t* vk_src_ptr = src_ptr + src_offset;
     const size_t vk_size = src_bytes_per_slice * (size_t)num_slices;
-    const uint32_t vk_src_offset = (uint32_t)_sg_vk_shared_buffer_memcpy(&_sg.vk.stage.stream, vk_src_ptr, vk_size);
+    const uint32_t vk_src_offset = (uint32_t)_sg_vk_shared_buffer_memcpy(&_sg.vk.stage.stream, vk_src_ptr, (uint32_t)vk_size);
     if (vk_src_offset == _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
         _SG_ERROR(VULKAN_STAGING_STREAM_BUFFER_OVERFLOW);
         return false;
