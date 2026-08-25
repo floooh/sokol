@@ -4834,6 +4834,12 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(_sgimgui_t* ctx) {
         _sgimgui_frame_stats(prev_frame.num_update_buffer);
         _sgimgui_frame_stats(prev_frame.num_append_buffer);
         _sgimgui_frame_stats(prev_frame.num_update_image);
+        _sgimgui_frame_stats(prev_frame.num_write_buffer_transient);
+        _sgimgui_frame_stats(prev_frame.num_write_image_transient);
+        _sgimgui_frame_stats(prev_frame.num_write_buffer_unsealed);
+        _sgimgui_frame_stats(prev_frame.num_write_image_unsealed);
+        _sgimgui_frame_stats(prev_frame.num_seal_buffer);
+        _sgimgui_frame_stats(prev_frame.num_seal_image);
         _sgimgui_frame_stats(prev_frame.size_apply_uniforms);
         _sgimgui_frame_stats(prev_frame.size_update_buffer);
         _sgimgui_frame_stats(prev_frame.size_append_buffer);
@@ -4846,6 +4852,10 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(_sgimgui_t* ctx) {
         _sgimgui_frame_stats(prev_frame.images.deallocated);
         _sgimgui_frame_stats(prev_frame.images.inited);
         _sgimgui_frame_stats(prev_frame.images.uninited);
+        _sgimgui_frame_stats(prev_frame.samplers.allocated);
+        _sgimgui_frame_stats(prev_frame.samplers.deallocated);
+        _sgimgui_frame_stats(prev_frame.samplers.inited);
+        _sgimgui_frame_stats(prev_frame.samplers.uninited);
         _sgimgui_frame_stats(prev_frame.views.allocated);
         _sgimgui_frame_stats(prev_frame.views.deallocated);
         _sgimgui_frame_stats(prev_frame.views.inited);
@@ -5001,6 +5011,12 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(_sgimgui_t* ctx) {
         _sgimgui_frame_stats(total.views.deallocated);
         _sgimgui_frame_stats(total.views.inited);
         _sgimgui_frame_stats(total.views.uninited);
+        _sgimgui_frame_stats(total.shaders.alive);
+        _sgimgui_frame_stats(total.shaders.free);
+        _sgimgui_frame_stats(total.shaders.allocated);
+        _sgimgui_frame_stats(total.shaders.deallocated);
+        _sgimgui_frame_stats(total.shaders.inited);
+        _sgimgui_frame_stats(total.shaders.uninited);
         _sgimgui_frame_stats(total.pipelines.alive);
         _sgimgui_frame_stats(total.pipelines.free);
         _sgimgui_frame_stats(total.pipelines.allocated);
