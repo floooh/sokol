@@ -6636,7 +6636,7 @@ typedef struct {
     int size;
     int num_slots;
     int active_slot;
-    uint32_t bind_frame_index;  // last frame index buffer was bound
+    uint32_t bind_frame_index;  // last frame index the buffer was bound
     uint32_t write_transient_frame_index; // last frame index when written to
     sg_buffer_usage usage;
     // deprecated
@@ -6649,7 +6649,7 @@ typedef struct {
 typedef struct {
     int num_slots;
     int active_slot;
-    uint32_t bind_frame_index;  // last frame index buffer was bound
+    uint32_t bind_frame_index;  // last frame index the image was bound
     uint32_t write_transient_frame_index; // last frame index when written to
     sg_image_type type;
     int width;
@@ -21136,7 +21136,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_buffer_data(_sg_buffer_t* buf, const s
     _sg_vk_buffer_barrier(cmd_buf, buf, _SG_VK_ACCESS_VERTEXBUFFER|_SG_VK_ACCESS_INDEXBUFFER|_SG_VK_ACCESS_STORAGEBUFFER_RO);
 }
 
-_SOKOL_PRIVATE bool _sg_vk_staging_stream_miplevel_data(_sg_image_t* img,
+_SOKOL_PRIVATE void _sg_vk_staging_stream_miplevel_data(_sg_image_t* img,
     const uint8_t* src_ptr,
     size_t src_size,
     size_t src_offset,
@@ -21194,12 +21194,10 @@ _SOKOL_PRIVATE bool _sg_vk_staging_stream_miplevel_data(_sg_image_t* img,
     const uint32_t vk_src_offset = (uint32_t)_sg_vk_shared_buffer_memcpy(&_sg.vk.stage.stream, vk_src_ptr, (uint32_t)vk_size);
     if (vk_src_offset == _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
         _SG_ERROR(VULKAN_STAGING_STREAM_BUFFER_OVERFLOW);
-        return false;
     }
     region.bufferOffset = vk_src_offset;
     vkCmdCopyBufferToImage2(cmd_buf, &copy_info);
     _sg_stats_inc(vk.num_cmd_copy_buffer_to_image);
-    return true;
 }
 
 // uniform data system
