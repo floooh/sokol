@@ -27562,6 +27562,7 @@ SOKOL_API_IMPL void sg_write_buffer_transient(const sg_write_buffer_desc* desc) 
 SOKOL_API_IMPL void sg_write_image_transient(const sg_write_image_desc* desc) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(desc);
+    _sg_stats_inc(num_write_image_transient);
     _sg_image_t* img = _sg_lookup_image(desc->dst.image.id);
     if (img) {
         sg_write_image_desc desc_def = _sg_write_image_desc_defaults(img, desc);
