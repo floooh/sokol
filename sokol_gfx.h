@@ -12897,7 +12897,7 @@ _SOKOL_PRIVATE void _sg_gl_write_buffer_unsealed(_sg_buffer_t* buf, const sg_wri
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_UNSEALED == buf->slot.state);
     SOKOL_ASSERT(buf->cmn.usage.write_unsealed);
-    SOKOL_ASSERT(0 == buf->gl.buf[buf->cmn.active_slot]);
+    SOKOL_ASSERT(buf->gl.buf[buf->cmn.active_slot]);
     _sg_gl_write_buffer_common(buf, desc);
 }
 
