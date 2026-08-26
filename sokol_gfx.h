@@ -19128,8 +19128,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
         bg_entry->binding = bgl_entry->binding;
         bg_entry->buffer = _sg.wgpu.uniform.buf;
         bg_entry->size = _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE;
-        dynoffset_map[i].sokol_slot = (uint8_t)i;
-        dynoffset_map[i].wgpu_slot = (uint8_t)bgl_entry->binding;
+        dynoffset_map[bgl_index].sokol_slot = (uint8_t)i;
+        dynoffset_map[bgl_index].wgpu_slot = (uint8_t)bgl_entry->binding;
         bgl_index += 1;
     }
     bgl_desc.entryCount = bgl_index;
