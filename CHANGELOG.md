@@ -1,5 +1,28 @@
 ## Updates
 
+### 26-Aug-2026
+
+- sokol_gfx.h wgpu: small but important bug-fix in the WebGPU backend when using
+  sparse uniform-block bindslots.
+
+  Ticket: https://github.com/floooh/sokol/issues/1586
+  PR: https://github.com/floooh/sokol/pull/1587
+
+  New regression sample: https://floooh.github.io/sokol-webgpu/sparse-ub-slots-sapp.html
+
+  Many thanks to @bgourlie for the bug report!
+
+### 18-Aug-2026
+
+- sokol_gfx_imgui.h: fix a potential buffer overrun when the sokol_gfx.h resource pools
+  are filled up to the last slot, this was caused by off-by-one error when allocating
+  the associated pools on the sokol_gfx_imgui.h side. In general all the related
+  code with pool slot lookups is now much cleaner and robust (like new debug-mode range
+  checks via asserts).
+
+  Ticket: https://github.com/floooh/sokol/issues/1584
+  PR: https://github.com/floooh/sokol/pull/1585
+
 ### 17-Aug-2026
 
 - In sokol_gfx.h fixed broken storage image validation (this was a regression from the
