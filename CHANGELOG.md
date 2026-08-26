@@ -10,6 +10,8 @@
 
   New regression sample: https://floooh.github.io/sokol-webgpu/sparse-ub-slots-sapp.html
 
+  Many thanks to @bgourlie for the bug report!
+
 ### 18-Aug-2026
 
 - sokol_gfx_imgui.h: fix a potential buffer overrun when the sokol_gfx.h resource pools
