@@ -4810,7 +4810,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VULKAN_STAGING_CREATE_BUFFER_FAILED, "vulkan: vkCreateBuffer() failed for staging buffer") \
     _SG_LOGITEM_XMACRO(VULKAN_STAGING_ALLOCATE_MEMORY_FAILED, "vulkan: allocating device memory for staging buffer failed") \
     _SG_LOGITEM_XMACRO(VULKAN_STAGING_BIND_BUFFER_MEMORY_FAILED, "vulkan: vkBindBufferMemory() failed for staging buffer") \
-    _SG_LOGITEM_XMACRO(VULKAN_STAGING_STREAM_BUFFER_OVERFLOW, "vulkan: per-frame stream staging buffer has overflown (sg_desc.vulkan.stream_staging_buffer_size)") \
+    _SG_LOGITEM_XMACRO(VULKAN_STAGING_TRANSIENT_BUFFER_OVERFLOW, "vulkan: per-frame transient staging buffer has overflown (sg_desc.vulkan.transient_staging_buffer_size)") \
     _SG_LOGITEM_XMACRO(VULKAN_STAGING_IMAGE_ROW_PITCH_GREATER_STAGING_BUFFER, "vulkan: the row-pitch of an image update operation is greater than the staging buffer size (increase sg_desc.vulkan.copy_staging_buffer_size)") \
     _SG_LOGITEM_XMACRO(VULKAN_CREATE_SHARED_BUFFER_FAILED, "vulkan: vkCreateBuffer() failed for cpu/gpu-shared buffer") \
     _SG_LOGITEM_XMACRO(VULKAN_ALLOCATE_SHARED_BUFFER_MEMORY_FAILED, "vulkan: allocating device memory for cpu/gpu-shared buffer failed") \
@@ -5273,7 +5273,7 @@ typedef enum sg_log_item {
     .wgpu.disable_bindgroups_cache      false
     .wgpu.bindgroups_cache_size         1024
     .vulkan.copy_staging_buffer_size    4 MB
-    .vulkan.stream_staging_buffer_size  16 MB
+    .vulkan.transient_staging_buffer_size  16 MB
     .vulkan.descriptor_buffer_size      16 MB
 
     .allocator.alloc_fn     0 (in this case, malloc() will be called)
@@ -5345,13 +5345,13 @@ typedef enum sg_log_item {
             .usage.dynamic_update resources. The default is 4 MB,
             bigger resource updates are split into multiple chunks
             of the staging buffer size
-        .vulkan.stream_staging_buffer_size
-            Size of the staging buffer in bytes for updating .usage.stream_update
+        .vulkan.transient_staging_buffer_size
+            Size of the staging buffer in bytes for updating .usage.write_transient
             resources. The default is 16 MB. The size must be big enough
-            to accomodate all update into .usage.stream_update resources.
+            to accomodate all writes into .usage.write_transient resources.
             Any additional data will cause an error log message and
             incomplete rendering. Note that the actually allocated size
-            will be twice as much because the stream-staging-buffer is
+            will be twice as much because the transient-staging-buffer is
             double-buffered.
         .vulkan.descriptor_buffer_size
             Size of the descriptor-upload buffer in bytes. The default
@@ -5468,9 +5468,9 @@ typedef struct sg_wgpu_desc {
 } sg_wgpu_desc;
 
 typedef struct sg_vulkan_desc {
-    int copy_staging_buffer_size;    // size of staging buffer for immutable and dynamic resources (default: 4 MB)
-    int stream_staging_buffer_size;  // size of per-frame staging buffer for updating streaming resources (default: 16 MB)
-    int descriptor_buffer_size;      // size of per-frame descriptor buffer for updating resource bindings (default: 16 MB)
+    int copy_staging_buffer_size;       // size of staging buffer for immutable and dynamic resources (default: 4 MB)
+    int transient_staging_buffer_size;  // size of per-frame staging buffer for write-transient resources (default: 16 MB)
+    int descriptor_buffer_size;         // size of per-frame descriptor buffer for updating resource bindings (default: 16 MB)
 } sg_vulkan_desc;
 
 typedef struct sg_desc {
@@ -6620,7 +6620,7 @@ enum {
     _SG_DEFAULT_MAX_COMMIT_LISTENERS = 1024,
     _SG_DEFAULT_WGPU_BINDGROUP_CACHE_SIZE = 1024,
     _SG_DEFAULT_VK_COPY_STAGING_SIZE = (4 * 1024 * 1024),
-    _SG_DEFAULT_VK_STREAM_STAGING_SIZE = (16 * 1024 * 1024),
+    _SG_DEFAULT_VK_TRANSIENT_STAGING_SIZE = (16 * 1024 * 1024),
     _SG_DEFAULT_VK_DESCRIPTOR_BUFFER_SIZE = (16 * 1024 * 1024),
     _SG_MAX_STORAGEBUFFER_BINDINGS_PER_STAGE = SG_MAX_VIEW_BINDSLOTS,
     _SG_MAX_STORAGEIMAGE_BINDINGS_PER_STAGE = SG_MAX_VIEW_BINDSLOTS,
@@ -21084,11 +21084,11 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_im
     }
 }
 
-// staging system for non-blocking streaming updates with a max per-frame data limit
+// staging system for non-blocking streaming (aka transient) updates with a max per-frame data limit
 _SOKOL_PRIVATE void _sg_vk_staging_stream_init(void) {
-    SOKOL_ASSERT(_sg.desc.vulkan.stream_staging_buffer_size > 0);
+    SOKOL_ASSERT(_sg.desc.vulkan.transient_staging_buffer_size > 0);
     _sg_vk_shared_buffer_init(&_sg.vk.stage.stream,
-        (uint32_t)_sg.desc.vulkan.stream_staging_buffer_size,
+        (uint32_t)_sg.desc.vulkan.transient_staging_buffer_size,
         16, // NOTE: arbitrary alignment (FIXME?)
         _SG_VK_MEMTYPE_STAGING_STREAM,
         "shared-stream-buffer");
@@ -21118,7 +21118,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_buffer_data(_sg_buffer_t* buf, const s
     const uint8_t* src_ptr = (const uint8_t*)src_data->ptr + src_offset;
     const VkDeviceSize vk_stage_offset = _sg_vk_shared_buffer_memcpy(&_sg.vk.stage.stream, src_ptr, (uint32_t)copy_size);
     if (vk_stage_offset == _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
-        _SG_ERROR(VULKAN_STAGING_STREAM_BUFFER_OVERFLOW);
+        _SG_ERROR(VULKAN_STAGING_TRANSIENT_BUFFER_OVERFLOW);
         return;
     }
     VkCommandBuffer cmd_buf = _sg.vk.frame.stream_cmd_buf;
@@ -21194,7 +21194,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_miplevel_data(_sg_image_t* img,
     const size_t vk_size = (size_t)src_bytes_per_slice * (size_t)num_slices;
     const uint32_t vk_src_offset = (uint32_t)_sg_vk_shared_buffer_memcpy(&_sg.vk.stage.stream, vk_src_ptr, (uint32_t)vk_size);
     if (vk_src_offset == _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
-        _SG_ERROR(VULKAN_STAGING_STREAM_BUFFER_OVERFLOW);
+        _SG_ERROR(VULKAN_STAGING_TRANSIENT_BUFFER_OVERFLOW);
     }
     region.bufferOffset = vk_src_offset;
     vkCmdCopyBufferToImage2(cmd_buf, &copy_info);
@@ -26295,7 +26295,7 @@ _SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
     res.max_commit_listeners = _sg_def(res.max_commit_listeners, _SG_DEFAULT_MAX_COMMIT_LISTENERS);
     res.wgpu.bindgroups_cache_size = _sg_def(res.wgpu.bindgroups_cache_size, _SG_DEFAULT_WGPU_BINDGROUP_CACHE_SIZE);
     res.vulkan.copy_staging_buffer_size = _sg_def(res.vulkan.copy_staging_buffer_size, _SG_DEFAULT_VK_COPY_STAGING_SIZE);
-    res.vulkan.stream_staging_buffer_size = _sg_def(res.vulkan.stream_staging_buffer_size, _SG_DEFAULT_VK_STREAM_STAGING_SIZE);
+    res.vulkan.transient_staging_buffer_size = _sg_def(res.vulkan.transient_staging_buffer_size, _SG_DEFAULT_VK_TRANSIENT_STAGING_SIZE);
     res.vulkan.descriptor_buffer_size = _sg_def(res.vulkan.descriptor_buffer_size, _SG_DEFAULT_VK_DESCRIPTOR_BUFFER_SIZE);
     return res;
 }
