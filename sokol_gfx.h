@@ -4911,6 +4911,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITE_UNSEALED_VS_IMMUTABLE, "sg_image_desc.usage: .write_unsealed only allowed for .immutable images") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITE_UNSEALED_VS_ATTACHMENT, "sg_image_desc.usage: .write_unsealed not allowed for images with attachment usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITE_TRANSIENT_VS_ATTACHMENT, "sg_image_desc.usage: .write_transient not allowed for images with attachment usage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DYNAMIC_UPDATE_VS_ATTACHMENT, "sg_image_desc.usage: .dynamic_update not allowed for images with attachment usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_COLOR_DEPTH_STENCIL, "sg_image_desc.usage: only one of .color_attachment and .depth_stencil_attachment can be true") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMAGETYPE_2D_NUMSLICES, "sg_image_desc.num_slices must be exactly 1 for SG_IMAGETYPE_2D") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMAGETYPE_CUBE_NUMSLICES, "sg_image_desc.num_slices must be exactly 6 for SG_IMAGETYPE_CUBE") \
@@ -21195,6 +21196,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_miplevel_data(_sg_image_t* img,
     const uint32_t vk_src_offset = (uint32_t)_sg_vk_shared_buffer_memcpy(&_sg.vk.stage.stream, vk_src_ptr, (uint32_t)vk_size);
     if (vk_src_offset == _SG_VK_SHARED_BUFFER_OVERFLOW_RESULT) {
         _SG_ERROR(VULKAN_STAGING_TRANSIENT_BUFFER_OVERFLOW);
+        return;
     }
     region.bufferOffset = vk_src_offset;
     vkCmdCopyBufferToImage2(cmd_buf, &copy_info);
@@ -23903,7 +23905,7 @@ _SOKOL_PRIVATE bool _sg_validate_end(void) {
 #endif
 
 _SOKOL_PRIVATE bool _sg_one(bool b0, bool b1, bool b2) {
-    return (b0 + b1 + b2) == 1;
+    return ((int)b0 + (int)b1 + (int)b2) == 1;
 }
 
 _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
@@ -24043,6 +24045,9 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         }
         if (usg->write_transient) {
             _SG_VALIDATE(!any_attachment, VALIDATE_IMAGEDESC_WRITE_TRANSIENT_VS_ATTACHMENT);
+        }
+        if (usg->dynamic_update) {
+            _SG_VALIDATE(!any_attachment, VALIDATE_IMAGEDESC_DYNAMIC_UPDATE_VS_ATTACHMENT);
         }
         if (!any_attachment && !usg->storage_image) {
             _SG_VALIDATE(desc->sample_count == 1, VALIDATE_IMAGEDESC_MSAA_BUT_NO_ATTACHMENT);
