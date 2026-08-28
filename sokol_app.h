@@ -7345,7 +7345,7 @@ EM_JS(void, sapp_js_remove_clipboard_listener, (void), {
 })
 
 EM_JS(void, sapp_js_write_clipboard, (const char* c_str), {
-    const str = UTF8ToString(c_str);
+    const str = UTF8ToString(Number(c_str));
     const ta = document.createElement('textarea');
     ta.setAttribute('autocomplete', 'off');
     ta.setAttribute('autocorrect', 'off');
@@ -7450,9 +7450,9 @@ EM_JS(void, sapp_js_remove_dragndrop_listeners, (void), {
 
 EM_JS(void, sapp_js_init, (const char* c_str_target_selector, const char* c_str_document_title), {
     if (c_str_document_title !== 0) {
-        document.title = UTF8ToString(c_str_document_title);
+        document.title = UTF8ToString(Number(c_str_document_title));
     }
-    const target_selector_str = UTF8ToString(c_str_target_selector);
+    const target_selector_str = UTF8ToString(Number(c_str_target_selector));
     if (Module['canvas'] !== undefined) {
         if (typeof Module['canvas'] === 'object') {
             specialHTMLTargets[target_selector_str] = Module['canvas'];
