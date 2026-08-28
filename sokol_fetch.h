@@ -2183,7 +2183,8 @@ _SOKOL_PRIVATE void* _sfetch_channel_thread_func(void* arg) {
 
 #if _SFETCH_PLATFORM_EMSCRIPTEN
 EM_JS(void, sfetch_js_send_head_request, (uint32_t slot_id, const char* path_cstr), {
-    const path_str = UTF8ToString(path_cstr);
+    // NOTE: wasm64 compatibility (see: https://github.com/floooh/sokol/pull/1590)
+    const path_str = UTF8ToString(Number(path_cstr));
     fetch(path_str, { method: 'HEAD' }).then((response) => {
         if (response.ok) {
             const content_length = response.headers.get('Content-Length');
@@ -2204,7 +2205,8 @@ EM_JS(void, sfetch_js_send_head_request, (uint32_t slot_id, const char* path_cst
 
 /* if bytes_to_read != 0, a range-request will be sent, otherwise a normal request */
 EM_JS(void, sfetch_js_send_get_request, (uint32_t slot_id, const char* path_cstr, uint32_t offset, uint32_t bytes_to_read, void* buf_ptr, uint32_t buf_size), {
-    const path_str = UTF8ToString(path_cstr);
+    // NOTE: wasm64 compatibility (see: https://github.com/floooh/sokol/pull/1590)
+    const path_str = UTF8ToString(Number(path_cstr));
     const headers = new Headers();
     const range_request = bytes_to_read > 0;
     if (range_request) {

@@ -1,5 +1,13 @@
 ## Updates
 
+### 28-Aug-2026
+
+- sokol_gfx/app/fetch.h emscripten: fix a wasm64 compatibility issue of the
+  Emscripten helper function `UTF8toString()`. For details see:
+  https://github.com/floooh/sokol/pull/1590.
+
+  Many thanks to @schaten for the PR!
+
 ### 26-Aug-2026
 
 - sokol_gfx.h wgpu: small but important bug-fix in the WebGPU backend when using
