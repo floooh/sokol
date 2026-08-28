@@ -238,7 +238,8 @@ _SOKOL_PRIVATE char* _slog_itoa(uint32_t x, char* buf, size_t buf_size) {
 
 #if defined(_SLOG_EMSCRIPTEN)
 EM_JS(void, slog_js_log, (uint32_t level, const char* c_str), {
-    const str = UTF8ToString(c_str);
+    // NOTE: wasm64 compatibility (see: https://github.com/floooh/sokol/pull/1590)
+    const str = UTF8ToString(Number(c_str));
     switch (level) {
         case 0: console.error(str); break;
         case 1: console.error(str); break;
