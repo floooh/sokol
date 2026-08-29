@@ -1,5 +1,96 @@
 ## Updates
 
+### 29-Aug-2026
+sokol_gfx.h: the next implementation step of the new resource update API:
+
+The 'stream-update' mode for buffers and images has been replaced with
+a 'write-transient' mode. Write-transient resources must be written
+with CPU-side data in the same frame that data is consumed by the GPU
+(e.g. the data will not survive into the next frame).
+
+This is a breaking change for 'streaming resources', use the following
+change recipe to migrate code over to the write-transient update mode:
+
+- When creating buffers and images, change the usage flag `.usage.stream_update = true`
+to `.usage.write_transient = true`.
+- Replace `sg_update_buffer()` calls with `sg_write_buffer_transient()`,
+e.g. old:
+    ```c
+    sg_update_buffer(buf, &(sg_range){ .ptr = data_ptr, .size = data_size });
+    ```
+    New:
+    ```c
+    sg_write_buffer_transient(&(sg_write_buffer_desc){
+        .src.data = { .ptr = data_ptr, .size = data_size },
+        .dst.buffer = buf,
+    });
+    ```
+- Replace `sg_update_image()` calls with `sg_write_image_transient()`,
+e.g. old:
+    ```c
+    sg_update_image(img, &(sg_image_data){
+        .mip_level[0] = { .ptr = mip_data_ptr, .size = mip_data_size }
+    });
+    ```
+    New:
+    ```c
+    sg_write_image_transient(&(sg_write_image_desc){
+        .src.data = { .ptr = mip_data_ptr, .size = mip_data_size },
+        .dst.image = img,
+    });
+    ```
+- Note that the `sg_write_image_transient()` and `sg_write_buffer_transient()`
+functions slightly differ in behaviour:
+    - The write-transient functions can be called multiple times per frame,
+      but only before the buffer or image is first used in the same frame. If you
+      have been using an intermediate memory buffer to scatter-gather data snippets
+      in order to do a single update call per frame before, this might be a good
+      opportunity to get rid of the intermediate memory buffer and use multiple
+      write-transient calls instead, but be aware of the downsides:
+        - many small updates are still much less efficient than few bigger updates
+        - be aware of the 4-byte alignment requirement for the destination buffer
+          offset in `sg_write_buffer_transient()` (this is usually only a problem
+          for index buffers with 16-bit indices)
+    - Partial updates are possible, e.g. a buffer or image can be incrementally
+      populated with data snippets.
+- Also note that interleaving buffer updates and rendering via
+  `sg_append_buffer()` is no longer possible for write-transient resources (this
+  was never recommended because it incurred a very expensive lock-stall on some
+  backend 3D APIs). The plan to help with such interleaved update/render scenarios
+  is by introducing a new `sokol_cmdbuf.h` header (see:
+  https://github.com/floooh/sokol/issues/1557).
+
+For the full details, read the updated header documentation: search for
+`sg_write_buffer_transient` and `sg_write_image_transient` in the doc
+header of sokol_gfx.h, and read the documentation of the structs
+`sg_write_buffer_desc` and `sg_write_image_desc`.
+
+Also see the updated sokol-samples (WebGPU capable browser needed).
+
+For `sg_write_buffer_transient`:
+
+- [instancing](https://floooh.github.io/sokol-webgpu/instancing-pull-sapp-ui.html)
+- [instancing-pull](https://floooh.github.io/sokol-webgpu/instancing-pull-sapp-ui.html)
+- [ozz-storagebuffer](https://floooh.github.io/sokol-webgpu/ozz-storagebuffer-sapp.html)
+- [slug](https://floooh.github.io/sokol-webgpu/slug-sapp.html)
+- [box3d-simple](https://floooh.github.io/sokol-webgpu/box3d-simple-sapp.html)
+
+...and for `sg_write_image_transient`:
+
+- [dyntex](https://floooh.github.io/sokol-webgpu/dyntex-sapp-ui.html)
+- [dyntex3d](https://floooh.github.io/sokol-webgpu/dyntex3d-sapp.html)
+- [ozz-skin](https://floooh.github.io/sokol-webgpu/ozz-skin-sapp.html)
+- [plmpeg](https://floooh.github.io/sokol-webgpu/plmpeg-sapp.html)
+
+The following 'tier-2' headers have been updated to use `sg_write_buffer_transient`:
+
+- [sokol_imgui.h](https://github.com/floooh/sokol/blob/master/util/sokol_imgui.h)
+- [sokol_nuklear.h](https://github.com/floooh/sokol/blob/master/util/sokol_nuklear.h)
+- [sokol_gl.h](https://github.com/floooh/sokol/blob/master/util/sokol_gl.h)
+- [sokol_debugtext.h](https://github.com/floooh/sokol/blob/master/util/sokol_debugtext.h)
+- [sokol_spine.h](https://github.com/floooh/sokol/blob/master/util/sokol_spine.h)
+
+
 ### 28-Aug-2026
 
 - sokol_gfx/app/fetch.h emscripten: fix a wasm64 compatibility issue of the
