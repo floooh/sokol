@@ -6763,9 +6763,12 @@ _SOKOL_PRIVATE void _sapp_ios_mtl_init(UIWindowScene* windowScene) {
     CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(_sapp_mtl_color_space());
     _sapp.mtl.layer.colorspace = colorspace;
     CGColorSpaceRelease(colorspace);
+    #if !defined(_SAPP_TVOS)
     if (_sapp.desc.hdr) {
+        // NOTE: CAMetalLayer.wantsExtendedDynamicRangeContent not available on tvOS
         _sapp.mtl.layer.wantsExtendedDynamicRangeContent = YES;
     }
+    #endif
     // NOTE: CAMetalLayer.displaySyncEnabled doesn't exist on iOS
     _sapp.mtl.layer.frame = _sapp.ios.view.layer.frame;
 
