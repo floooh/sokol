@@ -69,7 +69,7 @@ Also see the updated sokol-samples (WebGPU capable browser needed).
 
 For `sg_write_buffer_transient`:
 
-- [instancing](https://floooh.github.io/sokol-webgpu/instancing-pull-sapp-ui.html)
+- [instancing](https://floooh.github.io/sokol-webgpu/instancing-sapp-ui.html)
 - [instancing-pull](https://floooh.github.io/sokol-webgpu/instancing-pull-sapp-ui.html)
 - [ozz-storagebuffer](https://floooh.github.io/sokol-webgpu/ozz-storagebuffer-sapp.html)
 - [slug](https://floooh.github.io/sokol-webgpu/slug-sapp.html)
