@@ -3696,7 +3696,6 @@ _SOKOL_PRIVATE void _sgimgui_draw_view_list(_sgimgui_t* ctx) {
 _SOKOL_PRIVATE void _sgimgui_draw_capture_list(_sgimgui_t* ctx) {
     _sgimgui_igbeginchild("capture_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), ImGuiChildFlags_Borders, ImGuiWindowFlags_None);
     const int num_items = _sgimgui_capture_num_read_items(ctx);
-    SOKOL_ASSERT(num_items < 64);
     uint64_t group_stack = 1;   /* bit set: group unfolded, cleared: folded */
     for (int i = 0; i < num_items; i++) {
         const _sgimgui_capture_item_t* item = _sgimgui_capture_read_item_at(ctx, i);
