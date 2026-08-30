@@ -2081,7 +2081,8 @@ UTEST(sokol_gfx, make_image_validate_rt_immutable) {
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_ATTACHMENT_EXPECT_IMMUTABLE);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_IMAGEDESC_DYNAMIC_UPDATE_VS_ATTACHMENT);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
