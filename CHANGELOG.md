@@ -1,6 +1,6 @@
 ## Updates
 
-### 29-Aug-2026
+### 30-Aug-2026
 sokol_gfx.h: the next implementation step of the new resource update API:
 
 The 'stream-update' mode for buffers and images has been replaced with
