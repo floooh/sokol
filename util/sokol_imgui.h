@@ -2660,7 +2660,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     // NOTE: since we're in C++ mode here we can't use C99 designated init
     sg_buffer_desc vb_desc;
     _simgui_clear(&vb_desc, sizeof(vb_desc));
-    vb_desc.usage.stream_update = true;
+    vb_desc.usage.write_transient = true;
     vb_desc.size = _simgui.vertices.size;
     vb_desc.label = "sokol-imgui-vertices";
     _simgui.vbuf = sg_make_buffer(&vb_desc);
@@ -2668,7 +2668,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     sg_buffer_desc ib_desc;
     _simgui_clear(&ib_desc, sizeof(ib_desc));
     ib_desc.usage.index_buffer = true;
-    ib_desc.usage.stream_update = true;
+    ib_desc.usage.write_transient = true;
     ib_desc.size = _simgui.indices.size;
     ib_desc.label = "sokol-imgui-indices";
     _simgui.ibuf = sg_make_buffer(&ib_desc);
@@ -2817,10 +2817,11 @@ SOKOL_API_IMPL void simgui_render(void) {
     }
 
     // copy vertices and indices into an intermediate buffer so that
-    // they can be updated with a single sg_update_buffer() call each
-    // (sg_append_buffer() has performance problems on some GL platforms),
-    // also keep track of valid number of command lists in case of a
-    // buffer overflow
+    // they can be updated with a single sg_write_buffer_transient() call each
+    // FIXME: check if it's feasable (WebGL2) to get rid of the intermediate
+    // vertex buffer and instead use multiple write-transient (not possible
+    // for index buffer because of 4-byte alignment restriction for dest-offset)
+    // But check WebGL2 performance!
     size_t all_vtx_size = 0;
     size_t all_idx_size = 0;
     int cmd_list_count = 0;
@@ -2857,15 +2858,19 @@ SOKOL_API_IMPL void simgui_render(void) {
 
     // update the sokol-gfx vertex- and index-buffer
     sg_push_debug_group("sokol-imgui");
+    sg_write_buffer_desc desc;
+    _simgui_clear(&desc, sizeof(desc));
     if (all_vtx_size > 0) {
-        sg_range vtx_data = _simgui.vertices;
-        vtx_data.size = all_vtx_size;
-        sg_update_buffer(_simgui.vbuf, &vtx_data);
+        desc.dst.buffer = _simgui.vbuf;
+        desc.src.data.ptr = _simgui.vertices.ptr;
+        desc.src.data.size = all_vtx_size;
+        sg_write_buffer_transient(&desc);
     }
     if (all_idx_size > 0) {
-        sg_range idx_data = _simgui.indices;
-        idx_data.size = all_idx_size;
-        sg_update_buffer(_simgui.ibuf, &idx_data);
+        desc.dst.buffer = _simgui.ibuf;
+        desc.src.data.ptr = _simgui.indices.ptr;
+        desc.src.data.size = all_idx_size;
+        sg_write_buffer_transient(&desc);
     }
 
     // render the ImGui command list

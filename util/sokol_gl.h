@@ -3024,7 +3024,7 @@ static void _sgl_init_context(sgl_context ctx_id, const sgl_context_desc_t* in_d
     _sgl_clear(&vbuf_desc, sizeof(vbuf_desc));
     vbuf_desc.size = (size_t)ctx->vertices.cap * sizeof(_sgl_vertex_t);
     vbuf_desc.usage.vertex_buffer = true;
-    vbuf_desc.usage.stream_update = true;
+    vbuf_desc.usage.write_transient = true;
     vbuf_desc.label = "sgl-vertex-buffer";
     ctx->vbuf = sg_make_buffer(&vbuf_desc);
     SOKOL_ASSERT(SG_INVALID_ID != ctx->vbuf.id);
@@ -3588,8 +3588,12 @@ static void _sgl_draw(_sgl_context_t* ctx, int layer_id) {
 
         if (ctx->update_frame_id != ctx->frame_id) {
             ctx->update_frame_id = ctx->frame_id;
-            const sg_range range = { ctx->vertices.ptr, (size_t)ctx->vertices.next * sizeof(_sgl_vertex_t) };
-            sg_update_buffer(ctx->vbuf, &range);
+            sg_write_buffer_desc write_desc;
+            _sgl_clear(&write_desc, sizeof(write_desc));
+            write_desc.src.data.ptr = ctx->vertices.ptr;
+            write_desc.src.data.size = (size_t)ctx->vertices.next * sizeof(_sgl_vertex_t);
+            write_desc.dst.buffer = ctx->vbuf;
+            sg_write_buffer_transient(&write_desc);
         }
 
         // render all successfully recorded commands (this may be less than the

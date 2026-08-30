@@ -3512,7 +3512,7 @@ static sspine_resource_state _sspine_init_context(_sspine_context_t* ctx, const 
     sg_buffer_desc vbuf_desc;
     _sspine_clear(&vbuf_desc, sizeof(vbuf_desc));
     vbuf_desc.usage.vertex_buffer = true;
-    vbuf_desc.usage.stream_update = true;
+    vbuf_desc.usage.write_transient = true;
     vbuf_desc.size = vbuf_size;
     vbuf_desc.label = "sspine-vbuf";
     ctx->vbuf = sg_make_buffer(&vbuf_desc);
@@ -3521,7 +3521,7 @@ static sspine_resource_state _sspine_init_context(_sspine_context_t* ctx, const 
     sg_buffer_desc ibuf_desc;
     _sspine_clear(&ibuf_desc, sizeof(ibuf_desc));
     ibuf_desc.usage.index_buffer = true;
-    ibuf_desc.usage.stream_update = true;
+    ibuf_desc.usage.write_transient = true;
     ibuf_desc.size = ibuf_size;
     ibuf_desc.label = "sspine-ibuf";
     ctx->ibuf = sg_make_buffer(&ibuf_desc);
@@ -4688,10 +4688,18 @@ static void _sspine_draw_layer(_sspine_context_t* ctx, int layer, const sspine_l
 
         if (ctx->update_frame_id != _sspine.frame_id) {
             ctx->update_frame_id = _sspine.frame_id;
-            const sg_range vtx_range = { ctx->vertices.ptr, (size_t)ctx->vertices.next * sizeof(_sspine_vertex_t) };
-            sg_update_buffer(ctx->vbuf, &vtx_range);
-            const sg_range idx_range = { ctx->indices.ptr, (size_t)ctx->indices.next * sizeof(uint32_t) };
-            sg_update_buffer(ctx->ibuf, &idx_range);
+            sg_write_buffer_desc vbuf_write_desc;
+            _sspine_clear(&vbuf_write_desc, sizeof(vbuf_write_desc));
+            vbuf_write_desc.src.data.ptr = ctx->vertices.ptr;
+            vbuf_write_desc.src.data.size = (size_t)ctx->vertices.next * sizeof(_sspine_vertex_t);
+            vbuf_write_desc.dst.buffer = ctx->vbuf;
+            sg_write_buffer_transient(&vbuf_write_desc);
+            sg_write_buffer_desc ibuf_write_desc;
+            _sspine_clear(&ibuf_write_desc, sizeof(ibuf_write_desc));
+            ibuf_write_desc.src.data.ptr = ctx->indices.ptr;
+            ibuf_write_desc.src.data.size = (size_t)ctx->indices.next * sizeof(uint32_t);
+            ibuf_write_desc.dst.buffer = ctx->ibuf;
+            sg_write_buffer_transient(&ibuf_write_desc);
         }
 
         _sspine_vsparams_t vsparams = _sspine_compute_vsparams(tform);

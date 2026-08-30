@@ -588,9 +588,9 @@ UTEST(sokol_gfx, query_buffer_defaults) {
     desc = sg_query_buffer_defaults(&(sg_buffer_desc){ .usage.index_buffer = true });
     T(desc.usage.index_buffer);
     T(desc.usage.immutable);
-    desc = sg_query_buffer_defaults(&(sg_buffer_desc){ .usage.stream_update = true });
+    desc = sg_query_buffer_defaults(&(sg_buffer_desc){ .usage.write_transient = true });
     T(desc.usage.vertex_buffer);
-    T(desc.usage.stream_update);
+    T(desc.usage.write_transient);
     sg_shutdown();
 }
 
@@ -791,7 +791,7 @@ UTEST(sokol_gfx, query_buffer_info) {
         .size = 256,
         .usage = {
             .vertex_buffer = true,
-            .stream_update = true,
+            .write_transient = true,
         },
     });
     T(buf.id != SG_INVALID_ID);
@@ -882,13 +882,13 @@ UTEST(sokol_gfx, query_buffer_desc) {
 
     sg_buffer b0 = sg_make_buffer(&(sg_buffer_desc){
         .size = 32,
-        .usage.stream_update = true,
+        .usage.write_transient = true,
         .label = "bla",
     });
     const sg_buffer_desc b0_desc = sg_query_buffer_desc(b0);
     T(b0_desc.size == 32);
     T(b0_desc.usage.vertex_buffer);
-    T(b0_desc.usage.stream_update);
+    T(b0_desc.usage.write_transient);
     T(b0_desc.data.ptr == 0);
     T(b0_desc.data.size == 0);
     T(b0_desc.gl_buffers[0] == 0);
@@ -896,7 +896,7 @@ UTEST(sokol_gfx, query_buffer_desc) {
     T(b0_desc.d3d11_buffer == 0);
     T(b0_desc.wgpu_buffer == 0);
     T(sg_query_buffer_size(b0) == 32);
-    T(sg_query_buffer_usage(b0).stream_update);
+    T(sg_query_buffer_usage(b0).write_transient);
 
     float vtx_data[16];
     sg_buffer b1 = sg_make_buffer(&(sg_buffer_desc){
@@ -930,15 +930,15 @@ UTEST(sokol_gfx, query_buffer_desc) {
     // invalid buffer (returns zeroed desc)
     sg_buffer b3 = sg_make_buffer(&(sg_buffer_desc){
         .size = 32,
-        .usage.stream_update = true,
+        .usage.write_transient = true,
         .label = "bla",
     });
     sg_destroy_buffer(b3);
     const sg_buffer_desc b3_desc = sg_query_buffer_desc(b3);
     T(b3_desc.size == 0);
-    T(!b3_desc.usage.stream_update);
+    T(!b3_desc.usage.write_transient);
     T(sg_query_buffer_size(b3) == 0);
-    T(!sg_query_buffer_usage(b3).stream_update);
+    T(!sg_query_buffer_usage(b3).write_transient);
     sg_shutdown();
 }
 
@@ -1231,7 +1231,7 @@ UTEST(sokol_gfx, buffer_resource_states) {
     setup(&(sg_desc){0});
     sg_buffer buf = sg_alloc_buffer();
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_ALLOC);
-    sg_init_buffer(buf, &(sg_buffer_desc){ .usage.stream_update = true, .size = 128 });
+    sg_init_buffer(buf, &(sg_buffer_desc){ .usage.write_transient = true, .size = 128 });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
     sg_uninit_buffer(buf);
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_ALLOC);
@@ -1312,7 +1312,7 @@ UTEST(sokol_gfx, view_resource_states) {
 
 UTEST(sokol_gfx, buffer_uninit_count) {
     setup(&(sg_desc){0});
-    const sg_buffer_desc desc = { .usage.stream_update = true, .size = 128 };
+    const sg_buffer_desc desc = { .usage.write_transient = true, .size = 128 };
     sg_buffer buf = sg_make_buffer(&desc);
     T(sg_query_buffer_info(buf).slot.uninit_count == 0);
     sg_uninit_buffer(buf);
@@ -1398,7 +1398,7 @@ UTEST(sokol_gfx, query_buffer_will_overflow) {
     setup(&(sg_desc){0});
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
         .size = 64,
-        .usage.stream_update = true,
+        .usage.write_transient = true,
     });
     T(!sg_query_buffer_will_overflow(buf, 32));
     T(!sg_query_buffer_will_overflow(buf, 64));
@@ -2095,7 +2095,7 @@ UTEST(sokol_gfx, make_image_validate_dynamic_no_data) {
         .data.mip_levels[0] = SG_RANGE(pixels),
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_WRITABLE_NO_DATA);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
