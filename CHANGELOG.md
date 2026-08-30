@@ -40,7 +40,7 @@ e.g. old:
     });
     ```
 - Note that the `sg_write_image_transient()` and `sg_write_buffer_transient()`
-functions slightly differ in behaviour:
+functions slightly differ in behaviour compared to the old update functions:
     - The write-transient functions can be called multiple times per frame,
       but only before the buffer or image is first used in the same frame. If you
       have been using an intermediate memory buffer to scatter-gather data snippets
