@@ -14,6 +14,7 @@
 #include "sokol_letterbox.h"
 #include "sokol_memtrack.h"
 #include "sokol_shape.h"
+#include "sokol_framebuffer.h"
 
 #if defined(_MSC_VER )
 #pragma warning(disable:4201) // nonstandard extension used: nameless struct/union
@@ -80,4 +81,5 @@ void use_all(void) {
     FONScontext* ctx = sfons_create(&(sfons_desc_t){ 0 }); (void)ctx;
     sspine_setup(&(sspine_desc){0});
     snk_setup(&(snk_desc_t){0});
+    sfb_setup(&(sfb_desc){0});
 }
