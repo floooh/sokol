@@ -97,7 +97,23 @@ enum {
 
     A command buffer handle created with scb_make_cmdbuf().
 */
-typedef struct scb_cmdbuf_s { uint32_t id; } scb_cmdbuf;
+typedef struct scb_cmdbuf { uint32_t id; } scb_cmdbuf;
+
+/*
+    scb_resource_state
+
+    The state of a command buffer object, obtainable via scb_query_cmdbuf_state().
+    Publicly visible values are only SCB_RESOURCESTATE_VALID
+    and SCB_RESOURCESTATE_FAILED.
+*/
+typedef enum scb_resource_state {
+    SCB_RESOURCESTATE_INITIAL,
+    SCB_RESOURCESTATE_ALLOC,
+    SCB_RESOURCESTATE_VALID,
+    SCB_RESOURCESTATE_FAILED,
+    SCB_RESOURCESTATE_INVALID,
+    _SCB_RESOURCESTATE_FORCE_U32 = 0x7FFFFFFF
+} scb_resource_state;
 
 /*
     scb_cmdbuf_desc
@@ -107,7 +123,7 @@ typedef struct scb_cmdbuf_s { uint32_t id; } scb_cmdbuf;
 
     TODO: information on how to estimate required size
 */
-typedef struct scb_cmdbuf_desc_s {
+typedef struct scb_cmdbuf_desc {
     size_t size;            // command buffer size in bytes (default: 256 * 1024 (256 KBytes))
     const char* label;
 } scb_cmdbuf_desc;
@@ -117,7 +133,7 @@ typedef struct scb_cmdbuf_desc_s {
 
     Result of scb_query_cmdbuf_info.
 */
-typedef struct scb_cmdbuf_info_s {
+typedef struct scb_cmdbuf_info {
     size_t size;        // overall command buffer size in bytes
     size_t cur_offset;  // current recording byte offset
     size_t remaining;   // number of remaining bytes in command buffer
@@ -137,7 +153,7 @@ typedef struct scb_cmdbuf_info_s {
     _SCB_LOGITEM_XMACRO(MALLOC_FAILED, "memory allocation failed") \
 
 #define _SCB_LOGITEM_XMACRO(item,msg) SCB_LOGITEM_##item,
-typedef enum scb_log_item_e {
+typedef enum scb_log_item {
     _SCB_LOG_ITEMS
 } scb_log_item;
 #undef _SCB_LOGITEM_XMACRO
@@ -148,7 +164,7 @@ typedef enum scb_log_item_e {
     Used in scb_desc to provide a custom logging and error reporting
     callback to sokol_cmdbuf.h
 */
-typedef struct scb_logger_s {
+typedef struct scb_logger {
     void (*func)(
         const char* tag,                // always "scb"
         uint32_t log_level,             // 0=panic, 1=error, 2=warning, 3=info
@@ -168,7 +184,7 @@ typedef struct scb_logger_s {
     alloc_fn and free_fn function must be provided (e.g. it's not valid to
     override one function but not the other).
 */
-typedef struct scb_allocator_s {
+typedef struct scb_allocator {
     void* (*alloc_fn)(size_t size, void* user_data);
     void (*free_fn)(void* ptr, void* user_data);
     void* user_data;
@@ -179,39 +195,51 @@ typedef struct scb_allocator_s {
 
     FIXME: docs
 */
-typedef struct scb_desc_s {
-    int buffer_pool_size;       // max number of command buffers that can be alive simultanously (default: 16)
+typedef struct scb_desc {
+    int cmdbuf_pool_size;       // max number of command buffers that can be alive simultanously (default: 16)
     scb_allocator allocator;    // optional memory allocation overrides (default: malloc/free)
     scb_logger logger;          // optional log override functions (default: NO LOGGING)
 } scb_desc;
 
-// initialization and shutdown
+// setup sokol-cmdbuf
 SOKOL_CMDBUF_API_DECL void scb_setup(const scb_desc* desc);
+// shutdown sokol-cmdbuf
 SOKOL_CMDBUF_API_DECL void scb_shutdown(void);
 
-// create and destroy command buffer objects
+// create a cmdbuf object
 SOKOL_CMDBUF_API_DECL scb_cmdbuf scb_make_cmdbuf(const scb_cmdbuf_desc* desc);
+// destroy cmdbuf object
 SOKOL_CMDBUF_API_DECL void scb_destroy_cmdbuf(scb_cmdbuf cb);
-
 // submit command buffer to sokol-gfx (call inside a sokol-gfx pass)
-SOKOL_CMDBUF_API_DECL void scb_submit(scb_cmdbuf cb, bool rewind);
+SOKOL_CMDBUF_API_DECL void scb_submit(scb_cmdbuf cb);
 
-// record sokol-gfx commands into command buffer
+// record apply-viewport command (integer variant)
 SOKOL_CMDBUF_API_DECL void scb_apply_viewport(scb_cmdbuf cb, int x, int y, int width, int height, bool origin_top_left);
+// record apply-viewport command (float variant)
 SOKOL_CMDBUF_API_DECL void scb_apply_viewportf(scb_cmdbuf cb, float x, float y, float width, float height, bool origin_top_left);
+// record apply-scissor-rect command (integer variant)
 SOKOL_CMDBUF_API_DECL void scb_apply_scissor_rect(scb_cmdbuf cb, int x, int y, int width, int height, bool origin_top_left);
+// record apply-scissor-rect command (float variant)
 SOKOL_CMDBUF_API_DECL void scb_apply_scissor_rectf(scb_cmdbuf cb, float x, float y, float width, float height, bool origin_top_left);
+// record apply pipeline command
 SOKOL_CMDBUF_API_DECL void scb_apply_pipeline(scb_cmdbuf cb, sg_pipeline pip);
+// record apply bindings command
 SOKOL_CMDBUF_API_DECL void scb_apply_bindings(scb_cmdbuf cb, const sg_bindings* bindings);
+// record apply uniforms command
 SOKOL_CMDBUF_API_DECL void scb_apply_uniforms(scb_cmdbuf cb, int ub_slot, const sg_range* data);
+// record draw command
 SOKOL_CMDBUF_API_DECL void scb_draw(scb_cmdbuf cb, int base_element, int num_elements, int num_instances);
+// record draw-ex command
 SOKOL_CMDBUF_API_DECL void scb_draw_ex(scb_cmdbuf cb, int base_element, int num_elements, int num_instances, int base_vertex, int base_instance);
+// record dispatch command
 SOKOL_CMDBUF_API_DECL void scb_dispatch(scb_cmdbuf cb, int num_groups_x, int num_groups_y, int num_groups_z);
 
-// getting info
-SOKOL_CMDBUF_API_DECL scb_desc scb_query_desc(void);
-SOKOL_CMDBUF_API_DECL scb_cmdbuf_desc scb_query_cmdbuf_desc(scb_cmdbuf cb);
+// query command buffer resource state (valid or failed)
+SOKOL_CMDBUF_API_DECL scb_resource_state scb_query_cmdbuf_resource_state(scb_cmdbuf cb);
+// query current command buffer properties
 SOKOL_CMDBUF_API_DECL scb_cmdbuf_info scb_query_cmdbuf_info(scb_cmdbuf cb);
+// query command buffer desc with default values patched in
+SOKOL_CMDBUF_API_DECL scb_cmdbuf_desc scb_query_cmdbuf_desc(scb_cmdbuf cb);
 
 #ifdef __cplusplus
 } // extern "C"
@@ -246,7 +274,7 @@ FIXME
 #endif
 
 #define _scb_def(val, def) (((val) == 0) ? (def) : (val))
-#define _SCB_INIT_COOKIE (0xACBAABCA)
+#define _SCB_INIT_TAG (0xACBAABCA)
 
 #define _SCB_STRING_SIZE (32)
 #define _SCB_DEFAULT_CMDBUF_POOL_SIZE (16)
@@ -259,6 +287,7 @@ FIXME
 // >>structs
 typedef struct {
     uint32_t id;
+    scb_resource_state state;
 } _scb_slot_t;
 
 typedef struct {
@@ -274,22 +303,24 @@ typedef struct {
 
 typedef struct {
     _scb_slot_t slot;
-    uint8_t* buffer;
-    size_t offset;
-    bool overflown;
-    scb_cmdbuf_desc desc;
-    scb_str_t label;
+    uint8_t* buf;
+    uint8_t* cur;
+    const uint8_t* end;
+    _scb_str_t label;
 } _scb_cmdbuf_t;
 
 typedef struct {
-    _scb_pool_t;
-    _scb_cmdbuf_t* cmdbufs;
 } _scb_cmdbuf_pool_t;
 
 typedef struct {
-    uint32_t init_cookie;
+    _scb_pool_t cmdbuf_pool;
+    _scb_cmdbuf_t* cmdbufs;
+} _scb_pools_t;
+
+typedef struct {
+    uint32_t init_tag;
     scb_desc desc;
-    _scb_cmdbuf_pool_t cmdbuf_pool;
+    _scb_pools_t pools;
 } _scb_t;
 static _scb_t _scb;
 
@@ -307,7 +338,7 @@ static const char* _scb_log_messages[] = {
 #define _SCB_WARN(code) _scb_log(SCB_LOGITEM_ ##code, 2, __LINE__)
 #define _SCB_INFO(code) _scb_log(SCB_LOGITEM_ ##code, 3, __LINE__)
 
-static void _scb_log(scb_log_item_t log_item, uint32_t log_level, uint32_t line_nr) {
+static void _scb_log(scb_log_item log_item, uint32_t log_level, uint32_t line_nr) {
     if (_scb.desc.logger.func) {
         #if defined(SOKOL_DEBUG)
             const char* filename = __FILE__;
@@ -340,7 +371,7 @@ static void* _scb_malloc(size_t size) {
         ptr = malloc(size);
     }
     if (0 == ptr) {
-        _SCB_PANIC(MALLOC_FAILED);
+        _SCB_ERROR(MALLOC_FAILED);
     }
     return ptr;
 }
@@ -359,8 +390,26 @@ static void _scb_free(void* ptr) {
     }
 }
 
+static void _scb_strcpy(_scb_str_t* dst, const char* src) {
+    SOKOL_ASSERT(dst);
+    if (src) {
+        #if defined(_MSC_VER)
+        strncpy_s(dst->buf, _SCB_STRING_SIZE, src, (_SCB_STRING_SIZE-1));
+        #else
+        strncpy(dst->buf, src, _SCB_STRING_SIZE);
+        #endif
+        dst->buf[_SCB_STRING_SIZE-1] = 0;
+    } else {
+        _scb_clear(dst->buf, _SCB_STRING_SIZE);
+    }
+}
+
+static const char* _scb_strptr(const _scb_str_t* str) {
+    return &str->buf[0];
+}
+
 // >>pool
-static void _scb(_scb_pool_t* pool, int num) {
+static void _scb_pool_init(_scb_pool_t* pool, int num) {
     SOKOL_ASSERT(pool && (num >= 1));
     // slot 0 is reserved for the 'invalid id', so bump the pool size by 1
     pool->size = num + 1;
@@ -376,7 +425,7 @@ static void _scb(_scb_pool_t* pool, int num) {
     }
 }
 
-static void _scb_discard_pool(_scb_pool_t* pool) {
+static void _scb_pool_discard(_scb_pool_t* pool) {
     SOKOL_ASSERT(pool);
     SOKOL_ASSERT(pool->free_queue);
     _scb_free(pool->free_queue);
@@ -416,20 +465,21 @@ static void _scb_pool_free_index(_scb_pool_t* pool, int slot_index) {
     SOKOL_ASSERT(pool->queue_top <= (pool->size-1));
 }
 
-static void _scb_setup_cmdbuf_pool(const scb_desc_t* desc) {
+static void _scb_setup_pools(_scb_pools_t* p, const scb_desc* desc) {
+    SOKOL_ASSERT(p);
     SOKOL_ASSERT(desc);
-    // note: the pool will have an additional item, since slot 0 is reserved
-    SOKOL_ASSERT((desc->context_pool_size > 0) && (desc->context_pool_size < _SCB_MAX_POOL_SIZE));
-    _scb_init_pool(&_scb.context_pool.pool, desc->context_pool_size);
-    size_t pool_byte_size = sizeof(_scb_context_t) * (size_t)_scb.context_pool.pool.size;
-    _scb.context_pool.contexts = (_scb_context_t*) _scb_malloc_clear(pool_byte_size);
+    // note: the pools will have an additional item, since slot 0 is reserved
+    SOKOL_ASSERT((desc->cmdbuf_pool_size > 0) && (desc->cmdbuf_pool_size < _SCB_MAX_POOL_SIZE));
+    _scb_pool_init(&p->cmdbuf_pool, desc->cmdbuf_pool_size);
+    size_t cb_pool_byte_size = sizeof(_scb_cmdbuf_t) * (size_t)p->cmdbuf_pool.size;
+    p->cmdbufs = (_scb_cmdbuf_t*)_scb_malloc_clear(cb_pool_byte_size);
 }
 
-static void _scb_discard_cmdbuf_pool(void) {
-    SOKOL_ASSERT(_scb.context_pool.contexts);
-    _scb_free(_scb.context_pool.contexts);
-    _scb.context_pool.contexts = 0;
-    _scb_discard_pool(&_scb.context_pool.pool);
+static void _scb_discard_pools(_scb_pools_t* p) {
+    SOKOL_ASSERT(p);
+    SOKOL_ASSERT(p->cmdbufs);
+    _scb_free(p->cmdbufs); p->cmdbufs = 0;
+    _scb_pool_discard(&p->cmdbuf_pool);
 }
 
 /* allocate the slot at slot_index:
@@ -446,9 +496,11 @@ static uint32_t _scb_slot_alloc(_scb_pool_t* pool, _scb_slot_t* slot, int slot_i
     */
     SOKOL_ASSERT(pool && pool->gen_ctrs);
     SOKOL_ASSERT((slot_index > _SCB_INVALID_SLOT_INDEX) && (slot_index < pool->size));
-    SOKOL_ASSERT(slot->id == SG_INVALID_ID);
+    SOKOL_ASSERT(slot->id == SCB_INVALID_ID);
+    SOKOL_ASSERT(slot->state == SCB_RESOURCESTATE_INITIAL);
     uint32_t ctr = ++pool->gen_ctrs[slot_index];
     slot->id = (ctr<<_SCB_SLOT_SHIFT)|(slot_index & _SCB_SLOT_MASK);
+    slot->state = SCB_RESOURCESTATE_ALLOC;
     return slot->id;
 }
 
@@ -461,7 +513,7 @@ static int _scb_slot_index(uint32_t id) {
 
 // get cmdbuf pointer without id-check
 static _scb_cmdbuf_t* _scb_cmdbuf_at(uint32_t cb_id) {
-    SOKOL_ASSERT(SG_INVALID_ID != cb_id);
+    SOKOL_ASSERT(SCB_INVALID_ID != cb_id);
     int slot_index = _scb_slot_index(cb_id);
     SOKOL_ASSERT((slot_index > _SCB_INVALID_SLOT_INDEX) && (slot_index < _scb.cmdbuf_pool.pool.size));
     return &_scb.cmdbuf_pool.cmdbufs[slot_index];
@@ -469,7 +521,7 @@ static _scb_cmdbuf_t* _scb_cmdbuf_at(uint32_t cb_id) {
 
 // get cmdbuf pointer with id-check, returns 0 if no match
 static _scb_cmdbuf_t* _scb_lookup_cmdbuf(uint32_t cb_id) {
-    if (SG_INVALID_ID != cb_id) {
+    if (SCB_INVALID_ID != cb_id) {
         _scb_cmdbuf_t* cb = _scb_cmdbuf_at(cb_id);
         if (cb->slot.id == cb_id) {
             return cb;
@@ -497,13 +549,107 @@ static scb_cmdbuf _scb_alloc_cmdbuf(void) {
     return cb_id;
 }
 
+static void _scb_dealloc_cmdbuf(_scb_cmdbuf_t* cb) {
+    SOKOL_ASSERT(cb && (cb->slot.state == SCB_RESOURCESTATE_ALLOC) && (cb->slot.id != SCB_INVALID_ID));
+    _scb_pool_free_index(&_scb.pools.cmdbuf_pool, _scb_slot_index(cb->slot.id));
+    _scb_clear(cb, sizeof(_scb_cmdbuf_t));
+}
+
 static scb_cmdbuf_desc _scb_cmdbuf_desc_defaults(const scb_cmdbuf_desc* desc) {
     scb_cmdbuf_desc res = *desc;
     res.size = _scb_def(res.size, _SCB_DEFAULT_CMDBUF_SIZE);
     return res;
 }
 
+static void _scb_init_cmdbuf(_scb_cmdbuf_t* cb, const scb_cmdbuf_desc* desc) {
+    SOKOL_ASSERT(cb && (cb->slot.state == SCB_RESOURCESTATE_ALLOC));
+    SOKOL_ASSERT(desc);
+    if (desc->size == 0) {
+        _SCB_ERROR(INVALID_CMDBUF_SIZE);
+        cb->slot.state = SCB_RESOURCESTATE_FAILED;
+        return;
+    }
+    cb->buf = _scb_malloc(desc->size);
+    if (0 == cb->buf) {
+        // NOTE: allocation failure already logged _scb_malloc
+        cb->slot.state = SCB_RESOURCESTATE_FAILED;
+        return;
+    }
+    cb->cur = cb->buf;
+    cb->end = cb->buf + desc->size;
+    _scb_strcpy(&cb->label, desc->label);
+    cb->slot.state = SCB_RESOURCESTATE_VALID;
+}
 
+static void _scb_uninit_cmdbuf(_scb_cmdbuf_t* cb) {
+    SOKOL_ASSERT(cb && ((cb->slot.state == SCB_RESOURCESTATE_VALID) || (cb->slot.state == SCB_RESOURCESTATE_FAILED));
+    if (cb->buf) {
+        _scb_free(cb->buf);
+        cb->buf = 0;
+        cb->cur = 0;
+        cb->end = 0;
+    }
+    cb->slot.state = SCB_RESOURCESTATE_ALLOC;
+}
 
+static void _scb_discard_all_resources(void) {
+    for (int i = 1; i < _scb.pools.cmdbuf_pool.size; i++) {
+        const scb_resource_state state = _scb.pools.cmdbufs[i].slot.statel;
+        if ((state == SCB_RESOURCESTATE_VALID) || (state == SCB_RESOURCESTATE_FAILED)) {
+            _scb_uninit_cmdbuf(&_scb.pools.cmdbufs[i]);
+        }
+    }
+}
+
+// >>public
+SOKOL_API_IMPL void scb_setup(const scb_desc* desc) {
+    SOKOL_ASSERT(desc);
+    SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
+    _scb_clear(&_scb, sizeof(_scb));
+    _scb.init_tag = _SCB_INIT_TAG;
+    _scb.desc = _scb_desc_defaults(desc);
+    _scb_setup_pools(&_scb.pools, &_scb.desc);
+}
+
+SOKOL_API_IMPL void scb_shutdown(void) {
+    SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
+    _scb_discard_all_resources();
+    _scb_discard_pools(&_scb.pools);
+    _scb_clear(&_scb, sizeof(_scb));
+}
+
+SOKOL_API_IMPL scb_cmdbuf scb_make_cmdbuf(const scb_cmdbuf_desc* desc) {
+    SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
+    SOKOL_ASSERT(desc);
+    scb_cmdbuf cb_id = _scb_alloc_cmdbuf();
+    if (cb_id.id != SCB_INVALID_ID) {
+        _scb_cmdbuf_t* cb = _scb_cmdbuf_at(cb_id.id);
+        SOKOL_ASSERT(cb && (cb->slot.state == SCB_RESOURCESTATE_ALLOC));
+        _scb_init_cmdbuf(cb, desc);
+        SOKOL_ASSERT((cb->slot.state == SCB_RESOURCESTATE_VALID) || (cb->slot.state == SCB_RESOURCESTATE_FAILED));
+    }
+    return cb_id;
+}
+
+SOKOL_API_IMPL void scb_destroy_cmdbuf(scb_cmdbuf cb_id) {
+    SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
+    _scb_cmdbuf_t* cb = _scb_lookup_cmdbuf(cb_id.id);
+    if (cb) {
+        if ((cb->slot.state == SCB_RESOURCESTATE_VALID) || (cb->slot.state == SCB_RESOURCESTATE_FAILED)) {
+            _scb_uninit_cmdbuf(cb);
+            SOKOL_ASSERT(cb->slot.state == SCB_RESOURCESTATE_ALLOC);
+        }
+        if (cb->slot.state == SCB_RESOURCESTATE_ALLOC) {
+            _scb_dealloc_cmdbuf(cb);
+            SOKOL_ASSERT(cb->slot.state == SCB_RESOURCESTATE_INITIAL);
+        }
+    }
+}
+
+SOKOL_API_IMPL void scb_query_cmdbuf_state(scb_cmdbuf cb_id) {
+    SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
+    _scb_cmdbuf_t* cb = _scb_lookup_cmdbuf(cb_id.id);
+    return cb ? cb->slot.state : SCB_RESOURCESTATE_INVALID;
+}
 
 #endif // SOKOL_CMDBUF_IMPL
