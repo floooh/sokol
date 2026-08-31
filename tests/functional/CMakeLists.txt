@@ -8,6 +8,7 @@ file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets/comsi.s3m DESTINATION ${CMAKE_BINAR
 # covered by the mock libraries yet -- skip in mock mode.
 if (NOT BACKEND_MOCK_ONLY)
     set(c_sources
+        sokol_cmdbuf_test.c
         sokol_log_test.c
         sokol_args_test.c
         sokol_audio_test.c
