@@ -4,11 +4,13 @@ file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets/comsi.s3m DESTINATION ${CMAKE_BINAR
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets/comsi.s3m DESTINATION ${CMAKE_BINARY_DIR}/Debug)
 
 set(c_sources
+    sokol_cmdbuf_test.c
     sokol_log_test.c
     sokol_args_test.c
     sokol_audio_test.c
     sokol_debugtext_test.c
     sokol_fetch_test.c
+    sokol_framebuffer_test.c
     sokol_gfx_test.c
     sokol_gl_test.c
     sokol_shape_test.c

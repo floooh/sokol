@@ -244,7 +244,10 @@ SOKOL_CMDBUF_API_DECL scb_cmdbuf_desc scb_query_cmdbuf_desc(scb_cmdbuf cb);
 #ifdef __cplusplus
 } // extern "C"
 // C++ const-ref wrappers
-FIXME
+inline void scb_setup(const scb_desc& desc) { return scb_setup(&desc); }
+inline scb_cmdbuf scb_make_cmdbuf(const scb_cmdbuf_desc& desc) { return scb_make_cmdbuf(&desc); }
+inline void scb_apply_bindings(scb_cmdbuf cb, const sg_bindings& bindings) { return scb_apply_bindings(cb, &bindings); }
+inline void scb_apply_uniforms(scb_cmdbuf cb, int ub_slot, const sg_range& data) { return scb_apply_uniforms(cb, ub_slot, &data); }
 #endif
 #endif /* SOKOL_CMDBUF_INCLUDED */
 
@@ -252,6 +255,9 @@ FIXME
 // >>implementation
 #ifdef SOKOL_CMDBUF_IMPL
 #define SOKOL_CMDBUF_IMPL_INCLUDED (1)
+
+#include <string.h> // memset, strncpy
+#include <stdlib.h> // malloc/free/abort
 
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL
@@ -404,9 +410,11 @@ static void _scb_strcpy(_scb_str_t* dst, const char* src) {
     }
 }
 
+/* FIXME
 static const char* _scb_strptr(const _scb_str_t* str) {
     return &str->buf[0];
 }
+*/
 
 // >>pool
 static void _scb_pool_init(_scb_pool_t* pool, int num) {
@@ -515,8 +523,8 @@ static int _scb_slot_index(uint32_t id) {
 static _scb_cmdbuf_t* _scb_cmdbuf_at(uint32_t cb_id) {
     SOKOL_ASSERT(SCB_INVALID_ID != cb_id);
     int slot_index = _scb_slot_index(cb_id);
-    SOKOL_ASSERT((slot_index > _SCB_INVALID_SLOT_INDEX) && (slot_index < _scb.cmdbuf_pool.pool.size));
-    return &_scb.cmdbuf_pool.cmdbufs[slot_index];
+    SOKOL_ASSERT((slot_index > _SCB_INVALID_SLOT_INDEX) && (slot_index < _scb.pools.cmdbuf_pool.size));
+    return &_scb.pools.cmdbufs[slot_index];
 }
 
 // get cmdbuf pointer with id-check, returns 0 if no match
@@ -531,7 +539,7 @@ static _scb_cmdbuf_t* _scb_lookup_cmdbuf(uint32_t cb_id) {
 }
 
 // make cmdbuf handle from raw uint32_t id
-static scb_context _scb_make_cmdbuf_id(uint32_t cb_id) {
+static scb_cmdbuf _scb_make_cmdbuf_id(uint32_t cb_id) {
     scb_cmdbuf cb;
     cb.id = cb_id;
     return cb;
@@ -539,9 +547,9 @@ static scb_context _scb_make_cmdbuf_id(uint32_t cb_id) {
 
 static scb_cmdbuf _scb_alloc_cmdbuf(void) {
     scb_cmdbuf cb_id;
-    int slot_index = _scb_pool_alloc_index(&_scb.cmdbuf_pool.pool);
+    int slot_index = _scb_pool_alloc_index(&_scb.pools.cmdbuf_pool);
     if (_SCB_INVALID_SLOT_INDEX != slot_index) {
-        cb_id = _scb_make_cmdbuf_id(_scb_slot_alloc(&_scb.cmdbuf_pool.pool, &_scb.cmdbuf_pool.cmdbufs[slot_index].slot, slot_index));
+        cb_id = _scb_make_cmdbuf_id(_scb_slot_alloc(&_scb.pools.cmdbuf_pool, &_scb.pools.cmdbufs[slot_index].slot, slot_index));
     } else {
         // pool is exhausted
         cb_id = _scb_make_cmdbuf_id(SCB_INVALID_ID);
@@ -555,20 +563,10 @@ static void _scb_dealloc_cmdbuf(_scb_cmdbuf_t* cb) {
     _scb_clear(cb, sizeof(_scb_cmdbuf_t));
 }
 
-static scb_cmdbuf_desc _scb_cmdbuf_desc_defaults(const scb_cmdbuf_desc* desc) {
-    scb_cmdbuf_desc res = *desc;
-    res.size = _scb_def(res.size, _SCB_DEFAULT_CMDBUF_SIZE);
-    return res;
-}
-
 static void _scb_init_cmdbuf(_scb_cmdbuf_t* cb, const scb_cmdbuf_desc* desc) {
     SOKOL_ASSERT(cb && (cb->slot.state == SCB_RESOURCESTATE_ALLOC));
     SOKOL_ASSERT(desc);
-    if (desc->size == 0) {
-        _SCB_ERROR(INVALID_CMDBUF_SIZE);
-        cb->slot.state = SCB_RESOURCESTATE_FAILED;
-        return;
-    }
+    SOKOL_ASSERT(desc->size > 0);
     cb->buf = _scb_malloc(desc->size);
     if (0 == cb->buf) {
         // NOTE: allocation failure already logged _scb_malloc
@@ -582,7 +580,7 @@ static void _scb_init_cmdbuf(_scb_cmdbuf_t* cb, const scb_cmdbuf_desc* desc) {
 }
 
 static void _scb_uninit_cmdbuf(_scb_cmdbuf_t* cb) {
-    SOKOL_ASSERT(cb && ((cb->slot.state == SCB_RESOURCESTATE_VALID) || (cb->slot.state == SCB_RESOURCESTATE_FAILED));
+    SOKOL_ASSERT(cb && ((cb->slot.state == SCB_RESOURCESTATE_VALID) || (cb->slot.state == SCB_RESOURCESTATE_FAILED)));
     if (cb->buf) {
         _scb_free(cb->buf);
         cb->buf = 0;
@@ -592,9 +590,22 @@ static void _scb_uninit_cmdbuf(_scb_cmdbuf_t* cb) {
     cb->slot.state = SCB_RESOURCESTATE_ALLOC;
 }
 
+static scb_desc _scb_desc_defaults(const scb_desc* desc) {
+    SOKOL_ASSERT(desc);
+    scb_desc res = *desc;
+    res.cmdbuf_pool_size = _scb_def(res.cmdbuf_pool_size, _SCB_DEFAULT_CMDBUF_POOL_SIZE);
+    return res;
+}
+
+static scb_cmdbuf_desc _scb_cmdbuf_desc_defaults(const scb_cmdbuf_desc* desc) {
+    scb_cmdbuf_desc res = *desc;
+    res.size = _scb_def(res.size, _SCB_DEFAULT_CMDBUF_SIZE);
+    return res;
+}
+
 static void _scb_discard_all_resources(void) {
     for (int i = 1; i < _scb.pools.cmdbuf_pool.size; i++) {
-        const scb_resource_state state = _scb.pools.cmdbufs[i].slot.statel;
+        const scb_resource_state state = _scb.pools.cmdbufs[i].slot.state;
         if ((state == SCB_RESOURCESTATE_VALID) || (state == SCB_RESOURCESTATE_FAILED)) {
             _scb_uninit_cmdbuf(&_scb.pools.cmdbufs[i]);
         }
@@ -621,11 +632,12 @@ SOKOL_API_IMPL void scb_shutdown(void) {
 SOKOL_API_IMPL scb_cmdbuf scb_make_cmdbuf(const scb_cmdbuf_desc* desc) {
     SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
     SOKOL_ASSERT(desc);
+    scb_cmdbuf_desc desc_def = _scb_cmdbuf_desc_defaults(desc);
     scb_cmdbuf cb_id = _scb_alloc_cmdbuf();
     if (cb_id.id != SCB_INVALID_ID) {
         _scb_cmdbuf_t* cb = _scb_cmdbuf_at(cb_id.id);
         SOKOL_ASSERT(cb && (cb->slot.state == SCB_RESOURCESTATE_ALLOC));
-        _scb_init_cmdbuf(cb, desc);
+        _scb_init_cmdbuf(cb, &desc_def);
         SOKOL_ASSERT((cb->slot.state == SCB_RESOURCESTATE_VALID) || (cb->slot.state == SCB_RESOURCESTATE_FAILED));
     }
     return cb_id;
@@ -646,7 +658,7 @@ SOKOL_API_IMPL void scb_destroy_cmdbuf(scb_cmdbuf cb_id) {
     }
 }
 
-SOKOL_API_IMPL void scb_query_cmdbuf_state(scb_cmdbuf cb_id) {
+SOKOL_API_IMPL scb_resource_state scb_query_cmdbuf_state(scb_cmdbuf cb_id) {
     SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
     _scb_cmdbuf_t* cb = _scb_lookup_cmdbuf(cb_id.id);
     return cb ? cb->slot.state : SCB_RESOURCESTATE_INVALID;
