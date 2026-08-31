@@ -4868,6 +4868,7 @@ static void _sfb_setup_pools(_sfb_pools_t* p, const sfb_desc* desc) {
 
 static void _sfb_discard_pools(_sfb_pools_t* p) {
     SOKOL_ASSERT(p);
+    SOKOL_ASSERT(p->framebuffers);
     _sfb_free(p->framebuffers); p->framebuffers = 0;
     _sfb_pool_discard(&p->framebuffer_pool);
 }
