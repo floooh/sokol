@@ -5605,8 +5605,8 @@ SOKOL_API_IMPL bool sfb_resize(sfb_framebuffer fb_id, const sfb_resize_desc* des
             retval = true;
             _sfb_destroy_offscreen_images_and_views(fb);
             fb->prescale = prescale;
-            fb->cliprect.width = desc->cliprect.width;
-            fb->cliprect.height = desc->cliprect.height;
+            fb->cliprect.width = cw;
+            fb->cliprect.height = ch;
             bool res = _sfb_create_offscreen_images_and_views(fb);
             if (!res) {
                 fb->slot.state = SFB_RESOURCESTATE_FAILED;
