@@ -28,6 +28,10 @@ static uint32_t read_le_u32(const uint8_t* p) {
          | ((uint32_t)p[3] << 24);
 }
 
+static uint64_t read_le_u64(const uint8_t* p) {
+    return (uint64_t)read_le_u32(p) | ((uint64_t)read_le_u32(p + 4) << 32);
+}
+
 static void init(void) {
     sg_setup(&(sg_desc){ .logger = { .func = slog_func }});
     scb_setup(&(scb_desc){ .logger = { .func = slog_func }});
@@ -520,6 +524,162 @@ UTEST(sokol_cmdbuf, cmdbuf_overflow_smaller_than_one_cmd) {
     T((cbptr->cur - cbptr->buf) == 0);
     T(cbptr->overflown == true);
     scb_destroy_cmdbuf(cb);
+    shutdown();
+}
+
+UTEST(sokol_cmdbuf, record_apply_bindings_empty) {
+    // empty bindings: slot_mask == 0, no per-slot payload → 1 (opcode) + 8 (mask) = 9 bytes
+    init();
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
+    _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
+    T(cbptr);
+    scb_apply_bindings(cb, &(sg_bindings){0});
+    T((cbptr->cur - cbptr->buf) == 9);
+    T(cbptr->buf[0] == (uint8_t)_SCB_CMD_APPLY_BINDINGS);
+    T(read_le_u64(&cbptr->buf[1]) == 0);
+    T(cbptr->overflown == false);
+    T(cbptr->cmd_end == 0);
+    scb_destroy_cmdbuf(cb);
+    shutdown();
+}
+
+UTEST(sokol_cmdbuf, record_apply_bindings_vertex_buffer_only) {
+    // single vertex buffer at slot 0 → mask bit 0, payload = id + offset
+    init();
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
+    _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
+    T(cbptr);
+    scb_apply_bindings(cb, &(sg_bindings){
+        .vertex_buffers[0] = { .id = 0x1111 },
+        .vertex_buffer_offsets[0] = 64,
+    });
+    // 1 opcode + 8 mask + 4 vb id + 4 vb offset = 17 bytes
+    T((cbptr->cur - cbptr->buf) == 17);
+    T(cbptr->buf[0] == (uint8_t)_SCB_CMD_APPLY_BINDINGS);
+    T(read_le_u64(&cbptr->buf[1]) == 0x1ULL);   // vb_start = 0
+    T(read_le_u32(&cbptr->buf[9]) == 0x1111);
+    T(read_le_i32(&cbptr->buf[13]) == 64);
+    scb_destroy_cmdbuf(cb);
+    shutdown();
+}
+
+UTEST(sokol_cmdbuf, record_apply_bindings_full_mix) {
+    // vb0 + vb2 + ib + view0 + view5 + sampler0
+    // slot layout: vb 0..7, ib 8, view 9..40, smp 41..52
+    init();
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
+    _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
+    T(cbptr);
+    scb_apply_bindings(cb, &(sg_bindings){
+        .vertex_buffers[0] = { .id = 0xAA },
+        .vertex_buffer_offsets[0] = 4,
+        .vertex_buffers[2] = { .id = 0xBB },
+        .vertex_buffer_offsets[2] = 8,
+        .index_buffer = { .id = 0xCC },
+        .index_buffer_offset = 12,
+        .views[0] = { .id = 0xD0 },
+        .views[5] = { .id = 0xD5 },
+        .samplers[0] = { .id = 0xE0 },
+    });
+    // sizes: opcode 1 + mask 8 + 2 vb (2 * 8) + ib 8 + 2 view (2 * 4) + 1 smp (1 * 4) = 45
+    T((cbptr->cur - cbptr->buf) == 45);
+    T(cbptr->buf[0] == (uint8_t)_SCB_CMD_APPLY_BINDINGS);
+    const uint64_t expected_mask =
+        (1ULL << 0) | (1ULL << 2) |     // vb 0, 2
+        (1ULL << 8) |                    // ib
+        (1ULL << 9) | (1ULL << 14) |     // view 0, 5 (view_start = 9)
+        (1ULL << 41);                    // smp 0 (smp_start = 41)
+    T(read_le_u64(&cbptr->buf[1]) == expected_mask);
+    // vb0 id + offset at offset 9
+    T(read_le_u32(&cbptr->buf[9]) == 0xAA);
+    T(read_le_i32(&cbptr->buf[13]) == 4);
+    // vb2 id + offset at offset 17
+    T(read_le_u32(&cbptr->buf[17]) == 0xBB);
+    T(read_le_i32(&cbptr->buf[21]) == 8);
+    // ib id + offset at offset 25
+    T(read_le_u32(&cbptr->buf[25]) == 0xCC);
+    T(read_le_i32(&cbptr->buf[29]) == 12);
+    // view 0 at offset 33, view 5 at offset 37
+    T(read_le_u32(&cbptr->buf[33]) == 0xD0);
+    T(read_le_u32(&cbptr->buf[37]) == 0xD5);
+    // sampler 0 at offset 41
+    T(read_le_u32(&cbptr->buf[41]) == 0xE0);
+    T(cbptr->overflown == false);
+    T(cbptr->cmd_end == 0);
+    scb_destroy_cmdbuf(cb);
+    shutdown();
+}
+
+UTEST(sokol_cmdbuf, record_apply_bindings_invalid_cmdbuf_noop) {
+    init();
+    scb_apply_bindings((scb_cmdbuf){ .id = SCB_INVALID_ID }, &(sg_bindings){
+        .vertex_buffers[0] = { .id = 1 },
+    });
+    T(_scb.init_tag == _SCB_INIT_TAG);
+    shutdown();
+}
+
+UTEST(sokol_cmdbuf, record_apply_uniforms) {
+    // 16-byte uniform payload
+    init();
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
+    _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
+    T(cbptr);
+    const float payload[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    scb_apply_uniforms(cb, 2, &(sg_range){ .ptr = payload, .size = sizeof(payload) });
+    // 1 opcode + 4 ub_slot + 4 size + 16 blob = 25 bytes
+    T((cbptr->cur - cbptr->buf) == 25);
+    T(cbptr->buf[0] == (uint8_t)_SCB_CMD_APPLY_UNIFORMS);
+    T(read_le_i32(&cbptr->buf[1]) == 2);
+    T(read_le_u32(&cbptr->buf[5]) == sizeof(payload));
+    T(0 == memcmp(&cbptr->buf[9], payload, sizeof(payload)));
+    T(cbptr->overflown == false);
+    T(cbptr->cmd_end == 0);
+    scb_destroy_cmdbuf(cb);
+    shutdown();
+}
+
+UTEST(sokol_cmdbuf, record_apply_uniforms_different_slot) {
+    init();
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
+    _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
+    T(cbptr);
+    const uint8_t payload[3] = { 0xAA, 0xBB, 0xCC };
+    scb_apply_uniforms(cb, 5, &(sg_range){ .ptr = payload, .size = sizeof(payload) });
+    // 1 + 4 + 4 + 3 = 12 bytes
+    T((cbptr->cur - cbptr->buf) == 12);
+    T(cbptr->buf[0] == (uint8_t)_SCB_CMD_APPLY_UNIFORMS);
+    T(read_le_i32(&cbptr->buf[1]) == 5);
+    T(read_le_u32(&cbptr->buf[5]) == 3);
+    T(cbptr->buf[9] == 0xAA);
+    T(cbptr->buf[10] == 0xBB);
+    T(cbptr->buf[11] == 0xCC);
+    scb_destroy_cmdbuf(cb);
+    shutdown();
+}
+
+UTEST(sokol_cmdbuf, record_apply_uniforms_overflow_no_partial_write) {
+    // cmdbuf too small for the payload — must set overflown, cur must not move,
+    // and the source buffer must not be partially copied
+    init();
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){ .size = 16 });
+    _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
+    T(cbptr);
+    const uint8_t payload[16] = { 0 };  // 1 + 4 + 4 + 16 = 25 > 16
+    scb_apply_uniforms(cb, 0, &(sg_range){ .ptr = payload, .size = sizeof(payload) });
+    T((cbptr->cur - cbptr->buf) == 0);
+    T(cbptr->overflown == true);
+    T(cbptr->cmd_end == 0);
+    scb_destroy_cmdbuf(cb);
+    shutdown();
+}
+
+UTEST(sokol_cmdbuf, record_apply_uniforms_invalid_cmdbuf_noop) {
+    init();
+    const float payload[4] = { 0 };
+    scb_apply_uniforms((scb_cmdbuf){ .id = SCB_INVALID_ID }, 0,
+        &(sg_range){ .ptr = payload, .size = sizeof(payload) });
+    T(_scb.init_tag == _SCB_INIT_TAG);
     shutdown();
 }
 
