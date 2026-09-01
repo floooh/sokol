@@ -254,7 +254,7 @@ inline void scb_apply_uniforms(scb_cmdbuf cb, int ub_slot, const sg_range& data)
 #ifdef SOKOL_CMDBUF_IMPL
 #define SOKOL_CMDBUF_IMPL_INCLUDED (1)
 
-#include <string.h> // memset, strncpy
+#include <string.h> // memset, memcpy, strncpy
 #include <stdlib.h> // malloc/free/abort
 
 #ifndef SOKOL_API_IMPL
@@ -625,26 +625,45 @@ static void _scb_enc_u8(_scb_cmdbuf_t* cb, uint8_t val) {
 }
 
 static void _scb_enc_bool(_scb_cmdbuf_t* cb, bool val) {
-    SOKOL_ASSERT((cb->cur + 1) <= cb->end);
+    SOKOL_ASSERT((cb->cur + sizeof(uint8_t)) <= cb->end);
     *cb->cur++ = (uint8_t)val;
 }
 
-static void _scb_enc_int(_scb_cmdbuf_t* cb, int val) {
-    SOKOL_ASSERT((cb->cur + 4) <= cb->end);
+static void _scb_enc_i32(_scb_cmdbuf_t* cb, int32_t val) {
+    SOKOL_ASSERT((cb->cur + sizeof(int32_t)) <= cb->end);
     cb->cur[0] = (uint8_t)val;
     cb->cur[1] = (uint8_t)(val >> 8);
     cb->cur[2] = (uint8_t)(val >> 16);
     cb->cur[3] = (uint8_t)(val >> 24);
-    cb->cur += 4;
+    cb->cur += sizeof(int32_t);
 }
 
 static void _scb_enc_u32(_scb_cmdbuf_t* cb, uint32_t val) {
-    SOKOL_ASSERT((cb->cur + 4) <= cb->end);
+    SOKOL_ASSERT((cb->cur + sizeof(uint32_t)) <= cb->end);
     cb->cur[0] = (uint8_t)val;
     cb->cur[1] = (uint8_t)(val >> 8);
     cb->cur[2] = (uint8_t)(val >> 16);
     cb->cur[3] = (uint8_t)(val >> 24);
-    cb->cur += 4;
+    cb->cur += sizeof(uint32_t);
+}
+
+static void _scb_enc_u64(_scb_cmdbuf_t* cb, uint64_t val) {
+    SOKOL_ASSERT((cb->cur + sizeof(uint64_t)) <= cb->end);
+    cb->cur[0] = (uint8_t)val;
+    cb->cur[1] = (uint8_t)(val >> 8);
+    cb->cur[2] = (uint8_t)(val >> 16);
+    cb->cur[3] = (uint8_t)(val >> 24);
+    cb->cur[4] = (uint8_t)(val >> 32);
+    cb->cur[5] = (uint8_t)(val >> 40);
+    cb->cur[6] = (uint8_t)(val >> 48);
+    cb->cur[7] = (uint8_t)(val >> 56);
+    cb->cur += sizeof(uint64_t);
+}
+
+static void _scb_enc_blob(_scb_cmdbuf_t* cb, const void* ptr, size_t size) {
+    SOKOL_ASSERT((cb->cur + size) <= cb->end);
+    memcpy(cb->cur, ptr, size);
+    cb->cur += size;
 }
 
 static bool _scb_enc_cmd(_scb_cmdbuf_t* cb, _scb_cmd_t cmd, size_t payload_size) {
@@ -669,24 +688,24 @@ static void _scb_enc_end(_scb_cmdbuf_t* cb) {
 }
 
 static void _scb_enc_apply_viewport(_scb_cmdbuf_t* cb, int x, int y, int width, int height, bool origin_top_left) {
-    const size_t payload_size = 4 * sizeof(int) + sizeof(uint8_t);
+    const size_t payload_size = 4 * sizeof(int32_t) + sizeof(uint8_t);
     if (_scb_enc_cmd(cb, _SCB_CMD_APPLY_VIEWPORT, payload_size)) {
-        _scb_enc_int(cb, x);
-        _scb_enc_int(cb, y);
-        _scb_enc_int(cb, width);
-        _scb_enc_int(cb, height);
+        _scb_enc_i32(cb, x);
+        _scb_enc_i32(cb, y);
+        _scb_enc_i32(cb, width);
+        _scb_enc_i32(cb, height);
         _scb_enc_bool(cb, origin_top_left);
         _scb_enc_end(cb);
     }
 }
 
 static void _scb_enc_apply_scissor_rect(_scb_cmdbuf_t* cb, int x, int y, int width, int height, bool origin_top_left) {
-    const size_t payload_size = 4 * sizeof(int) + sizeof(uint8_t);
+    const size_t payload_size = 4 * sizeof(int32_t) + sizeof(uint8_t);
     if (_scb_enc_cmd(cb, _SCB_CMD_APPLY_SCISSOR_RECT, payload_size)) {
-        _scb_enc_int(cb, x);
-        _scb_enc_int(cb, y);
-        _scb_enc_int(cb, width);
-        _scb_enc_int(cb, height);
+        _scb_enc_i32(cb, x);
+        _scb_enc_i32(cb, y);
+        _scb_enc_i32(cb, width);
+        _scb_enc_i32(cb, height);
         _scb_enc_bool(cb, origin_top_left);
         _scb_enc_end(cb);
     }
@@ -701,33 +720,108 @@ static void _scb_enc_apply_pipeline(_scb_cmdbuf_t* cb, uint32_t pip_id) {
 }
 
 static void _scb_enc_draw(_scb_cmdbuf_t* cb, int base_element, int num_elements, int num_instances) {
-    const size_t payload_size = 3 * sizeof(int);
+    const size_t payload_size = 3 * sizeof(int32_t);
     if (_scb_enc_cmd(cb, _SCB_CMD_DRAW, payload_size)) {
-        _scb_enc_int(cb, base_element);
-        _scb_enc_int(cb, num_elements);
-        _scb_enc_int(cb, num_instances);
+        _scb_enc_i32(cb, base_element);
+        _scb_enc_i32(cb, num_elements);
+        _scb_enc_i32(cb, num_instances);
         _scb_enc_end(cb);
     }
 }
 
 static void _scb_enc_draw_ex(_scb_cmdbuf_t* cb, int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
-    const size_t payload_size = 5 * sizeof(int);
+    const size_t payload_size = 5 * sizeof(int32_t);
     if (_scb_enc_cmd(cb, _SCB_CMD_DRAW_EX, payload_size)) {
-        _scb_enc_int(cb, base_element);
-        _scb_enc_int(cb, num_elements);
-        _scb_enc_int(cb, num_instances);
-        _scb_enc_int(cb, base_vertex);
-        _scb_enc_int(cb, base_instance);
+        _scb_enc_i32(cb, base_element);
+        _scb_enc_i32(cb, num_elements);
+        _scb_enc_i32(cb, num_instances);
+        _scb_enc_i32(cb, base_vertex);
+        _scb_enc_i32(cb, base_instance);
         _scb_enc_end(cb);
     }
 }
 
 static void _scb_enc_dispatch(_scb_cmdbuf_t* cb, int num_groups_x, int num_groups_y, int num_groups_z) {
-    const size_t payload_size = 3 * sizeof(int);
+    const size_t payload_size = 3 * sizeof(int32_t);
     if (_scb_enc_cmd(cb, _SCB_CMD_DISPATCH, payload_size)) {
-        _scb_enc_int(cb, num_groups_x);
-        _scb_enc_int(cb, num_groups_y);
-        _scb_enc_int(cb, num_groups_z);
+        _scb_enc_i32(cb, num_groups_x);
+        _scb_enc_i32(cb, num_groups_y);
+        _scb_enc_i32(cb, num_groups_z);
+        _scb_enc_end(cb);
+    }
+}
+
+static void _scb_enc_apply_bindings(_scb_cmdbuf_t* cb, const sg_bindings* bindings) {
+    // create an occupied slot mask and compute payload size
+    size_t payload_size = 0;
+    uint64_t slot_mask = 0;
+    const int vb_start = 0;
+    const int ib_start = vb_start + SG_MAX_VERTEXBUFFER_BINDSLOTS;
+    const int view_start = ib_start + 1;
+    const int smp_start = view_start + SG_MAX_VIEW_BINDSLOTS;
+    SOKOL_ASSERT((smp_start + SG_MAX_SAMPLER_BINDSLOTS) <= 64);
+    // vertex buffer handles and offsets
+    for (int i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
+        if (bindings->vertex_buffers[i].id != SG_INVALID_ID) {
+            slot_mask |= (1ULL << (i + vb_start));
+            payload_size += sizeof(uint32_t) + sizeof(int);
+        }
+    }
+    // index buffer handle and offset
+    if (bindings->index_buffer.id != SG_INVALID_ID) {
+        slot_mask |= (1ULL << ib_start);
+        payload_size += sizeof(uint32_t) + sizeof(int);
+    }
+    // view handles
+    for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        if (bindings->views[i].id != SG_INVALID_ID) {
+            slot_mask |= (1ULL << (view_start + i));
+            payload_size += sizeof(uint32_t);
+        }
+    }
+    // sampler handles
+    for (int i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+        if (bindings->samplers[i].id != SG_INVALID_ID) {
+            slot_mask |= (1ULL << (smp_start + i));
+            payload_size += sizeof(uint32_t);
+        }
+    }
+    // the slot_mask is part of the payload
+    payload_size += sizeof(slot_mask);
+    if (_scb_enc_cmd(cb, _SCB_CMD_APPLY_BINDINGS, payload_size)) {
+        _scb_enc_u64(cb, slot_mask);
+        for (int i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
+            if (bindings->vertex_buffers[i].id != SG_INVALID_ID) {
+                _scb_enc_u32(cb, bindings->vertex_buffers[i].id);
+                _scb_enc_i32(cb, bindings->vertex_buffer_offsets[i]);
+            }
+        }
+        if (bindings->index_buffer.id != SG_INVALID_ID) {
+            _scb_enc_u32(cb, bindings->index_buffer.id);
+            _scb_enc_i32(cb, bindings->index_buffer_offset);
+        }
+        for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+            if (bindings->views[i].id != SG_INVALID_ID) {
+                _scb_enc_u32(cb, bindings->views[i].id);
+            }
+        }
+        for (int i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+            if (bindings->samplers[i].id != SG_INVALID_ID) {
+                _scb_enc_u32(cb, bindings->samplers[i].id);
+            }
+        }
+        _scb_enc_end(cb);
+    }
+}
+
+static void _scb_enc_apply_uniforms(_scb_cmdbuf_t* cb, int ub_slot, const sg_range* data) {
+    SOKOL_ASSERT(data->size <= UINT32_MAX);
+    SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
+    const size_t payload_size = sizeof(int32_t) + sizeof(uint32_t) + data->size;
+    if (_scb_enc_cmd(cb, _SCB_CMD_APPLY_UNIFORMS, payload_size)) {
+        _scb_enc_i32(cb, ub_slot);
+        _scb_enc_u32(cb, (uint32_t)data->size);
+        _scb_enc_blob(cb, data->ptr, data->size);
         _scb_enc_end(cb);
     }
 }
@@ -837,6 +931,24 @@ SOKOL_API_IMPL void scb_apply_pipeline(scb_cmdbuf cb_id, sg_pipeline pip) {
     _scb_cmdbuf_t* cb = _scb_lookup_cmdbuf(cb_id.id);
     if (_scb_cmdbuf_valid(cb)) {
         _scb_enc_apply_pipeline(cb, pip.id);
+    }
+}
+
+SOKOL_API_IMPL void scb_apply_bindings(scb_cmdbuf cb_id, const sg_bindings* bindings) {
+    SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
+    SOKOL_ASSERT(bindings);
+    _scb_cmdbuf_t* cb = _scb_lookup_cmdbuf(cb_id.id);
+    if (_scb_cmdbuf_valid(cb)) {
+        _scb_enc_apply_bindings(cb, bindings);
+    }
+}
+
+SOKOL_API_IMPL void scb_apply_uniforms(scb_cmdbuf cb_id, int ub_slot, const sg_range* data) {
+    SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
+    SOKOL_ASSERT(data && data->ptr && (data->size > 0));
+    _scb_cmdbuf_t* cb = _scb_lookup_cmdbuf(cb_id.id);
+    if (_scb_cmdbuf_valid(cb)) {
+        _scb_enc_apply_uniforms(cb, ub_slot, data);
     }
 }
 
