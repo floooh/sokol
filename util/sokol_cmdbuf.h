@@ -151,6 +151,9 @@ typedef struct scb_cmdbuf_info {
     _SCB_LOGITEM_XMACRO(OK, "Ok") \
     _SCB_LOGITEM_XMACRO(MALLOC_FAILED, "memory allocation failed") \
     _SCB_LOGITEM_XMACRO(CMDBUF_OVERFLOW, "command buffer has overflown") \
+    _SCB_LOGITEM_XMACRO(CMDBUF_NOT_VALID, "command buffer no longer exists or invalid handle") \
+    _SCB_LOGITEM_XMACRO(SUBMIT_CMDBUF_OVERFLOWN, "scb_submit: command buffer was overflown") \
+    _SCB_LOGITEM_XMACRO(SUBMIT_INVALID_COMMAND, "scb_submit: invalid command (command buffer corrupted?)") \
 
 #define _SCB_LOGITEM_XMACRO(item,msg) SCB_LOGITEM_##item,
 typedef enum scb_log_item {
@@ -210,7 +213,7 @@ SOKOL_CMDBUF_API_DECL void scb_shutdown(void);
 SOKOL_CMDBUF_API_DECL scb_cmdbuf scb_make_cmdbuf(const scb_cmdbuf_desc* desc);
 // destroy cmdbuf object
 SOKOL_CMDBUF_API_DECL void scb_destroy_cmdbuf(scb_cmdbuf cb);
-// submit command buffer to sokol-gfx (call inside a sokol-gfx pass)
+// submit command buffer to sokol-gfx and rewind the command buffer (call inside a sokol-gfx pass)
 SOKOL_CMDBUF_API_DECL void scb_submit(scb_cmdbuf cb);
 
 // record apply-viewport command (integer variant)
@@ -620,13 +623,18 @@ static bool _scb_cmdbuf_valid(_scb_cmdbuf_t* cb) {
 }
 
 static void _scb_enc_u8(_scb_cmdbuf_t* cb, uint8_t val) {
-    SOKOL_ASSERT((cb->cur + 1) <= cb->end);
+    SOKOL_ASSERT((cb->cur + sizeof(uint8_t)) <= cb->end);
     *cb->cur++ = val;
 }
 
 static void _scb_enc_bool(_scb_cmdbuf_t* cb, bool val) {
     SOKOL_ASSERT((cb->cur + sizeof(uint8_t)) <= cb->end);
     *cb->cur++ = (uint8_t)val;
+}
+
+static const uint8_t* _scb_dec_bool(const uint8_t* ptr, bool* out_val) {
+    *out_val = (bool)(*ptr++);
+    return ptr;
 }
 
 static void _scb_enc_i32(_scb_cmdbuf_t* cb, int32_t val) {
@@ -638,6 +646,14 @@ static void _scb_enc_i32(_scb_cmdbuf_t* cb, int32_t val) {
     cb->cur += sizeof(int32_t);
 }
 
+static const uint8_t* _scb_dec_i32(const uint8_t* ptr, int32_t* out_val) {
+    *out_val = (int32_t)((uint32_t)ptr[0]
+        | ((uint32_t)ptr[1]<<8)
+        | ((uint32_t)ptr[2]<<16)
+        | ((uint32_t)ptr[3]<<24));
+    return ptr + sizeof(int32_t);
+}
+
 static void _scb_enc_u32(_scb_cmdbuf_t* cb, uint32_t val) {
     SOKOL_ASSERT((cb->cur + sizeof(uint32_t)) <= cb->end);
     cb->cur[0] = (uint8_t)val;
@@ -645,6 +661,14 @@ static void _scb_enc_u32(_scb_cmdbuf_t* cb, uint32_t val) {
     cb->cur[2] = (uint8_t)(val >> 16);
     cb->cur[3] = (uint8_t)(val >> 24);
     cb->cur += sizeof(uint32_t);
+}
+
+static const uint8_t* _scb_dec_u32(const uint8_t* ptr, uint32_t* out_val) {
+    *out_val = (uint32_t)ptr[0]
+        | ((uint32_t)ptr[1]<<8)
+        | ((uint32_t)ptr[2]<<16)
+        | ((uint32_t)ptr[3]<<24);
+    return ptr + sizeof(uint32_t);
 }
 
 static void _scb_enc_u64(_scb_cmdbuf_t* cb, uint64_t val) {
@@ -658,6 +682,18 @@ static void _scb_enc_u64(_scb_cmdbuf_t* cb, uint64_t val) {
     cb->cur[6] = (uint8_t)(val >> 48);
     cb->cur[7] = (uint8_t)(val >> 56);
     cb->cur += sizeof(uint64_t);
+}
+
+static const uint8_t* _scb_dec_u64(const uint8_t* ptr, uint64_t* out_val) {
+    *out_val = (uint64_t)ptr[0]
+        | ((uint64_t)ptr[1]<<8)
+        | ((uint64_t)ptr[2]<<16)
+        | ((uint64_t)ptr[3]<<24)
+        | ((uint64_t)ptr[4]<<32)
+        | ((uint64_t)ptr[5]<<40)
+        | ((uint64_t)ptr[6]<<48)
+        | ((uint64_t)ptr[7]<<56);
+    return ptr + sizeof(uint64_t);
 }
 
 static void _scb_enc_blob(_scb_cmdbuf_t* cb, const void* ptr, size_t size) {
@@ -682,6 +718,11 @@ static bool _scb_enc_cmd(_scb_cmdbuf_t* cb, _scb_cmd_t cmd, size_t payload_size)
     return true;
 }
 
+static const uint8_t* _scb_dec_cmd(const uint8_t* ptr, _scb_cmd_t* out_cmd) {
+    *out_cmd = (_scb_cmd_t)(*ptr++);
+    return ptr;
+}
+
 static void _scb_enc_end(_scb_cmdbuf_t* cb) {
     SOKOL_ASSERT(cb->cmd_end && (cb->cur == cb->cmd_end));
     cb->cmd_end = 0;
@@ -699,6 +740,18 @@ static void _scb_enc_apply_viewport(_scb_cmdbuf_t* cb, int x, int y, int width, 
     }
 }
 
+static const uint8_t* _scb_dec_apply_viewport(const uint8_t* ptr) {
+    int x, y, width, height;
+    bool origin_top_left;
+    ptr = _scb_dec_i32(ptr, &x);
+    ptr = _scb_dec_i32(ptr, &y);
+    ptr = _scb_dec_i32(ptr, &width);
+    ptr = _scb_dec_i32(ptr, &height);
+    ptr = _scb_dec_bool(ptr, &origin_top_left);
+    sg_apply_viewport(x, y, width, height, origin_top_left);
+    return ptr;
+}
+
 static void _scb_enc_apply_scissor_rect(_scb_cmdbuf_t* cb, int x, int y, int width, int height, bool origin_top_left) {
     const size_t payload_size = 4 * sizeof(int32_t) + sizeof(uint8_t);
     if (_scb_enc_cmd(cb, _SCB_CMD_APPLY_SCISSOR_RECT, payload_size)) {
@@ -711,12 +764,31 @@ static void _scb_enc_apply_scissor_rect(_scb_cmdbuf_t* cb, int x, int y, int wid
     }
 }
 
+static const uint8_t* _scb_dec_apply_scissor_rect(const uint8_t* ptr) {
+    int x, y, width, height;
+    bool origin_top_left;
+    ptr = _scb_dec_i32(ptr, &x);
+    ptr = _scb_dec_i32(ptr, &y);
+    ptr = _scb_dec_i32(ptr, &width);
+    ptr = _scb_dec_i32(ptr, &height);
+    ptr = _scb_dec_bool(ptr, &origin_top_left);
+    sg_apply_scissor_rect(x, y, width, height, origin_top_left);
+    return ptr;
+}
+
 static void _scb_enc_apply_pipeline(_scb_cmdbuf_t* cb, uint32_t pip_id) {
     const size_t payload_size = sizeof(uint32_t);
     if (_scb_enc_cmd(cb, _SCB_CMD_APPLY_PIPELINE, payload_size)) {
         _scb_enc_u32(cb, pip_id);
         _scb_enc_end(cb);
     }
+}
+
+static const uint8_t* _scb_dec_apply_pipeline(const uint8_t* ptr) {
+    sg_pipeline pip;
+    ptr = _scb_dec_u32(ptr, &pip.id);
+    sg_apply_pipeline(pip);
+    return ptr;
 }
 
 static void _scb_enc_draw(_scb_cmdbuf_t* cb, int base_element, int num_elements, int num_instances) {
@@ -727,6 +799,15 @@ static void _scb_enc_draw(_scb_cmdbuf_t* cb, int base_element, int num_elements,
         _scb_enc_i32(cb, num_instances);
         _scb_enc_end(cb);
     }
+}
+
+static const uint8_t* _scb_dec_draw(const uint8_t* ptr) {
+    int base_element, num_elements, num_instances;
+    ptr = _scb_dec_i32(ptr, &base_element);
+    ptr = _scb_dec_i32(ptr, &num_elements);
+    ptr = _scb_dec_i32(ptr, &num_instances);
+    sg_draw(base_element, num_elements, num_instances);
+    return ptr;
 }
 
 static void _scb_enc_draw_ex(_scb_cmdbuf_t* cb, int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
@@ -741,6 +822,17 @@ static void _scb_enc_draw_ex(_scb_cmdbuf_t* cb, int base_element, int num_elemen
     }
 }
 
+static const uint8_t* _scb_dec_draw_ex(const uint8_t* ptr) {
+    int base_element, num_elements, num_instances, base_vertex, base_instance;
+    ptr = _scb_dec_i32(ptr, &base_element);
+    ptr = _scb_dec_i32(ptr, &num_elements);
+    ptr = _scb_dec_i32(ptr, &num_instances);
+    ptr = _scb_dec_i32(ptr, &base_vertex);
+    ptr = _scb_dec_i32(ptr, &base_instance);
+    sg_draw_ex(base_element, num_elements, num_instances, base_vertex, base_instance);
+    return ptr;
+}
+
 static void _scb_enc_dispatch(_scb_cmdbuf_t* cb, int num_groups_x, int num_groups_y, int num_groups_z) {
     const size_t payload_size = 3 * sizeof(int32_t);
     if (_scb_enc_cmd(cb, _SCB_CMD_DISPATCH, payload_size)) {
@@ -749,6 +841,15 @@ static void _scb_enc_dispatch(_scb_cmdbuf_t* cb, int num_groups_x, int num_group
         _scb_enc_i32(cb, num_groups_z);
         _scb_enc_end(cb);
     }
+}
+
+static const uint8_t* _scb_dec_dispatch(const uint8_t* ptr) {
+    int num_groups_x, num_groups_y, num_groups_z;
+    ptr = _scb_dec_i32(ptr, &num_groups_x);
+    ptr = _scb_dec_i32(ptr, &num_groups_y);
+    ptr = _scb_dec_i32(ptr, &num_groups_z);
+    sg_dispatch(num_groups_x, num_groups_y, num_groups_z);
+    return ptr;
 }
 
 static void _scb_enc_apply_bindings(_scb_cmdbuf_t* cb, const sg_bindings* bindings) {
@@ -814,6 +915,39 @@ static void _scb_enc_apply_bindings(_scb_cmdbuf_t* cb, const sg_bindings* bindin
     }
 }
 
+static const uint8_t* _scb_dec_apply_bindings(const uint8_t* ptr) {
+    const int vb_start = 0;
+    const int ib_start = vb_start + SG_MAX_VERTEXBUFFER_BINDSLOTS;
+    const int view_start = ib_start + 1;
+    const int smp_start = view_start + SG_MAX_VIEW_BINDSLOTS;
+    uint64_t slot_mask;
+    ptr = _scb_dec_u64(ptr, &slot_mask);
+    sg_bindings bnd;
+    _scb_clear(&bnd, sizeof(bnd));
+    for (int i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
+        if (slot_mask & (1ULL << (i + vb_start))) {
+            ptr = _scb_dec_u32(ptr, &bnd.vertex_buffers[i].id);
+            ptr = _scb_dec_i32(ptr, &bnd.vertex_buffer_offsets[i]);
+        }
+    }
+    if (slot_mask & (1ULL << ib_start)) {
+        ptr = _scb_dec_u32(ptr, &bnd.index_buffer.id);
+        ptr = _scb_dec_i32(ptr, &bnd.index_buffer_offset);
+    }
+    for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+        if (slot_mask & (1ULL << (i + view_start))) {
+            ptr = _scb_dec_u32(ptr, &bnd.views[i].id);
+        }
+    }
+    for (int i = 0; i < SG_MAX_SAMPLER_BINDSLOTS; i++) {
+        if (slot_mask & (1ULL << (i + smp_start))) {
+            ptr = _scb_dec_u32(ptr, &bnd.samplers[i].id);
+        }
+    }
+    sg_apply_bindings(&bnd);
+    return ptr;
+}
+
 static void _scb_enc_apply_uniforms(_scb_cmdbuf_t* cb, int ub_slot, const sg_range* data) {
     SOKOL_ASSERT(data->size <= UINT32_MAX);
     SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
@@ -824,6 +958,28 @@ static void _scb_enc_apply_uniforms(_scb_cmdbuf_t* cb, int ub_slot, const sg_ran
         _scb_enc_blob(cb, data->ptr, data->size);
         _scb_enc_end(cb);
     }
+}
+
+static const uint8_t* _scb_dec_apply_uniforms(const uint8_t* ptr) {
+    int ub_slot;
+    uint32_t size_u32;
+    ptr = _scb_dec_i32(ptr, &ub_slot);
+    SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
+    ptr = _scb_dec_u32(ptr, &size_u32);
+    sg_range data;
+    _scb_clear(&data, sizeof(data));
+    data.ptr = ptr;
+    data.size = size_u32;
+    sg_apply_uniforms(ub_slot, &data);
+    return ptr + size_u32;
+}
+
+static void _scb_rewind(_scb_cmdbuf_t* cb) {
+    SOKOL_ASSERT(cb->cur);
+    SOKOL_ASSERT(cb->buf);
+    SOKOL_ASSERT(cb->cur >= cb->buf);
+    cb->cur = cb->buf;
+    cb->overflown = false;
 }
 
 // >>public
@@ -897,83 +1053,157 @@ SOKOL_API_IMPL scb_cmdbuf_info scb_query_cmdbuf_info(scb_cmdbuf cb_id) {
 SOKOL_API_IMPL void scb_apply_viewport(scb_cmdbuf cb_id, int x, int y, int width, int height, bool origin_top_left) {
     SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
     _scb_cmdbuf_t* cb = _scb_lookup_cmdbuf(cb_id.id);
-    if (_scb_cmdbuf_valid(cb)) {
-        _scb_enc_apply_viewport(cb, x, y, width, height, origin_top_left);
+    if (!_scb_cmdbuf_valid(cb)) {
+        _SCB_ERROR(CMDBUF_NOT_VALID);
+        return;
     }
+    _scb_enc_apply_viewport(cb, x, y, width, height, origin_top_left);
 }
 
 SOKOL_API_IMPL void scb_apply_viewportf(scb_cmdbuf cb_id, float x, float y, float width, float height, bool origin_top_left) {
     SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
     _scb_cmdbuf_t* cb = _scb_lookup_cmdbuf(cb_id.id);
-    if (_scb_cmdbuf_valid(cb)) {
-        _scb_enc_apply_viewport(cb, (int)x, (int)y, (int)width, (int)height, origin_top_left);
+    if (!_scb_cmdbuf_valid(cb)) {
+        _SCB_ERROR(CMDBUF_NOT_VALID);
+        return;
     }
+    _scb_enc_apply_viewport(cb, (int)x, (int)y, (int)width, (int)height, origin_top_left);
 }
 
 SOKOL_API_IMPL void scb_apply_scissor_rect(scb_cmdbuf cb_id, int x, int y, int width, int height, bool origin_top_left) {
     SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
     _scb_cmdbuf_t* cb = _scb_lookup_cmdbuf(cb_id.id);
-    if (_scb_cmdbuf_valid(cb)) {
-        _scb_enc_apply_scissor_rect(cb, x, y, width, height, origin_top_left);
+    if (!_scb_cmdbuf_valid(cb)) {
+        _SCB_ERROR(CMDBUF_NOT_VALID);
+        return;
     }
+    _scb_enc_apply_scissor_rect(cb, x, y, width, height, origin_top_left);
 }
 
 SOKOL_API_IMPL void scb_apply_scissor_rectf(scb_cmdbuf cb_id, float x, float y, float width, float height, bool origin_top_left) {
     SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
     _scb_cmdbuf_t* cb = _scb_lookup_cmdbuf(cb_id.id);
-    if (_scb_cmdbuf_valid(cb)) {
-        _scb_enc_apply_scissor_rect(cb, (int)x, (int)y, (int)width, (int)height, origin_top_left);
+    if (!_scb_cmdbuf_valid(cb)) {
+        _SCB_ERROR(CMDBUF_NOT_VALID);
+        return;
     }
+    _scb_enc_apply_scissor_rect(cb, (int)x, (int)y, (int)width, (int)height, origin_top_left);
 }
 
 SOKOL_API_IMPL void scb_apply_pipeline(scb_cmdbuf cb_id, sg_pipeline pip) {
     SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
     _scb_cmdbuf_t* cb = _scb_lookup_cmdbuf(cb_id.id);
-    if (_scb_cmdbuf_valid(cb)) {
-        _scb_enc_apply_pipeline(cb, pip.id);
+    if (!_scb_cmdbuf_valid(cb)) {
+        _SCB_ERROR(CMDBUF_NOT_VALID);
+        return;
     }
+    _scb_enc_apply_pipeline(cb, pip.id);
 }
 
 SOKOL_API_IMPL void scb_apply_bindings(scb_cmdbuf cb_id, const sg_bindings* bindings) {
     SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
     SOKOL_ASSERT(bindings);
     _scb_cmdbuf_t* cb = _scb_lookup_cmdbuf(cb_id.id);
-    if (_scb_cmdbuf_valid(cb)) {
-        _scb_enc_apply_bindings(cb, bindings);
+    if (!_scb_cmdbuf_valid(cb)) {
+        _SCB_ERROR(CMDBUF_NOT_VALID);
+        return;
     }
+    _scb_enc_apply_bindings(cb, bindings);
 }
 
 SOKOL_API_IMPL void scb_apply_uniforms(scb_cmdbuf cb_id, int ub_slot, const sg_range* data) {
     SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
     _scb_cmdbuf_t* cb = _scb_lookup_cmdbuf(cb_id.id);
-    if (_scb_cmdbuf_valid(cb)) {
-        _scb_enc_apply_uniforms(cb, ub_slot, data);
+    if (!_scb_cmdbuf_valid(cb)) {
+        _SCB_ERROR(CMDBUF_NOT_VALID);
+        return;
     }
+    _scb_enc_apply_uniforms(cb, ub_slot, data);
 }
 
 SOKOL_API_IMPL void scb_draw(scb_cmdbuf cb_id, int base_element, int num_elements, int num_instances) {
     SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
     _scb_cmdbuf_t* cb = _scb_lookup_cmdbuf(cb_id.id);
-    if (_scb_cmdbuf_valid(cb)) {
-        _scb_enc_draw(cb, base_element, num_elements, num_instances);
+    if (!_scb_cmdbuf_valid(cb)) {
+        _SCB_ERROR(CMDBUF_NOT_VALID);
+        return;
     }
+    _scb_enc_draw(cb, base_element, num_elements, num_instances);
 }
 
 SOKOL_API_IMPL void scb_draw_ex(scb_cmdbuf cb_id, int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
     SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
     _scb_cmdbuf_t* cb = _scb_lookup_cmdbuf(cb_id.id);
-    if (_scb_cmdbuf_valid(cb)) {
-        _scb_enc_draw_ex(cb, base_element, num_elements, num_instances, base_vertex, base_instance);
+    if (!_scb_cmdbuf_valid(cb)) {
+        _SCB_ERROR(CMDBUF_NOT_VALID);
+        return;
     }
+    _scb_enc_draw_ex(cb, base_element, num_elements, num_instances, base_vertex, base_instance);
 }
 
 SOKOL_API_IMPL void scb_dispatch(scb_cmdbuf cb_id, int num_groups_x, int num_groups_y, int num_groups_z) {
     SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
     _scb_cmdbuf_t* cb = _scb_lookup_cmdbuf(cb_id.id);
-    if (_scb_cmdbuf_valid(cb)) {
-        _scb_enc_dispatch(cb, num_groups_x, num_groups_y, num_groups_z);
+    if (!_scb_cmdbuf_valid(cb)) {
+        _SCB_ERROR(CMDBUF_NOT_VALID);
+        return;
     }
+    _scb_enc_dispatch(cb, num_groups_x, num_groups_y, num_groups_z);
+}
+
+SOKOL_API_IMPL void scb_submit(scb_cmdbuf cb_id) {
+    SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
+    _scb_cmdbuf_t* cb = _scb_lookup_cmdbuf(cb_id.id);
+    if (!_scb_cmdbuf_valid(cb)) {
+        _SCB_ERROR(CMDBUF_NOT_VALID);
+        return;
+    }
+    if (cb->overflown) {
+        _SCB_ERROR(SUBMIT_CMDBUF_OVERFLOWN);
+        _scb_rewind(cb);
+        return;
+    }
+    SOKOL_ASSERT(cb->buf);
+    SOKOL_ASSERT(cb->cur);
+    SOKOL_ASSERT(cb->buf <= cb->cur);
+    const uint8_t* ptr = cb->buf;
+    while (ptr < cb->cur) {
+        _scb_cmd_t cmd = _SCB_CMD_NONE;
+        ptr = _scb_dec_cmd(ptr, &cmd);
+        switch (cmd) {
+            case _SCB_CMD_APPLY_VIEWPORT:
+                ptr = _scb_dec_apply_viewport(ptr);
+                break;
+            case _SCB_CMD_APPLY_SCISSOR_RECT:
+                ptr = _scb_dec_apply_scissor_rect(ptr);
+                break;
+            case _SCB_CMD_APPLY_PIPELINE:
+                ptr = _scb_dec_apply_pipeline(ptr);
+                break;
+            case _SCB_CMD_APPLY_BINDINGS:
+                ptr = _scb_dec_apply_bindings(ptr);
+                break;
+            case _SCB_CMD_APPLY_UNIFORMS:
+                ptr = _scb_dec_apply_uniforms(ptr);
+                break;
+            case _SCB_CMD_DRAW:
+                ptr = _scb_dec_draw(ptr);
+                break;
+            case _SCB_CMD_DRAW_EX:
+                ptr = _scb_dec_draw_ex(ptr);
+                break;
+            case _SCB_CMD_DISPATCH:
+                ptr = _scb_dec_dispatch(ptr);
+                break;
+            default:
+                _SCB_ERROR(SUBMIT_INVALID_COMMAND);
+                // break loop
+                ptr = cb->cur;
+                break;
+        }
+    }
+    _scb_rewind(cb);
 }
 
 #endif // SOKOL_CMDBUF_IMPL
