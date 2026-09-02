@@ -6,6 +6,7 @@
 //------------------------------------------------------------------------------
 #include "force_dummy_backend.h"
 #define SOKOL_IMPL
+#define SOKOL_TRACE_HOOKS
 #include "sokol_gfx.h"
 #include "utest.h"
 
