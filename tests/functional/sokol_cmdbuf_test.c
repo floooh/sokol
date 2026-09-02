@@ -696,3 +696,380 @@ UTEST(sokol_cmdbuf, shutdown_destroys_remaining_cmdbufs) {
     shutdown();
     T(_scb.init_tag == 0);
 }
+
+// ============================================================================
+// scb_submit tests — use sokol-gfx trace hooks to observe the sg_* calls
+// that scb_submit produces when decoding a recorded cmdbuf.
+//
+// Trace hooks fire BEFORE the sokol-gfx validation / pass check, so the
+// captured arguments reflect exactly what scb_submit passed in, and no
+// active pass or valid resources are needed.
+// ============================================================================
+
+typedef enum {
+    TCALL_NONE = 0,
+    TCALL_APPLY_VIEWPORT,
+    TCALL_APPLY_SCISSOR_RECT,
+    TCALL_APPLY_PIPELINE,
+    TCALL_APPLY_BINDINGS,
+    TCALL_APPLY_UNIFORMS,
+    TCALL_DRAW,
+    TCALL_DRAW_EX,
+    TCALL_DISPATCH,
+} tcall_kind;
+
+#define TCALL_MAX_CALLS (32)
+#define TCALL_MAX_UNIFORM_SIZE (256)
+
+typedef struct {
+    tcall_kind kind;
+    int i0, i1, i2, i3, i4;
+    bool b0;
+    uint32_t u0;
+    sg_bindings bindings;         // deep copy at hook time (bindings ptr is stack-local)
+    int ub_slot;
+    size_t uniform_size;
+    uint8_t uniform_data[TCALL_MAX_UNIFORM_SIZE];
+} tcall_t;
+
+static tcall_t tcalls[TCALL_MAX_CALLS];
+static int num_tcalls = 0;
+
+static void tcalls_reset(void) {
+    num_tcalls = 0;
+    memset(tcalls, 0, sizeof(tcalls));
+}
+
+static tcall_t* tcalls_push(tcall_kind kind) {
+    if (num_tcalls < TCALL_MAX_CALLS) {
+        tcall_t* c = &tcalls[num_tcalls++];
+        c->kind = kind;
+        return c;
+    }
+    return 0;
+}
+
+static void hook_apply_viewport(int x, int y, int w, int h, bool otl, void* ud) {
+    (void)ud;
+    tcall_t* c = tcalls_push(TCALL_APPLY_VIEWPORT);
+    if (c) { c->i0 = x; c->i1 = y; c->i2 = w; c->i3 = h; c->b0 = otl; }
+}
+
+static void hook_apply_scissor_rect(int x, int y, int w, int h, bool otl, void* ud) {
+    (void)ud;
+    tcall_t* c = tcalls_push(TCALL_APPLY_SCISSOR_RECT);
+    if (c) { c->i0 = x; c->i1 = y; c->i2 = w; c->i3 = h; c->b0 = otl; }
+}
+
+static void hook_apply_pipeline(sg_pipeline pip, void* ud) {
+    (void)ud;
+    tcall_t* c = tcalls_push(TCALL_APPLY_PIPELINE);
+    if (c) { c->u0 = pip.id; }
+}
+
+static void hook_apply_bindings(const sg_bindings* bnd, void* ud) {
+    (void)ud;
+    tcall_t* c = tcalls_push(TCALL_APPLY_BINDINGS);
+    if (c) { c->bindings = *bnd; }
+}
+
+static void hook_apply_uniforms(int ub_slot, const sg_range* data, void* ud) {
+    (void)ud;
+    tcall_t* c = tcalls_push(TCALL_APPLY_UNIFORMS);
+    if (c) {
+        c->ub_slot = ub_slot;
+        c->uniform_size = data->size;
+        SOKOL_ASSERT(data->size <= TCALL_MAX_UNIFORM_SIZE);
+        memcpy(c->uniform_data, data->ptr, data->size);
+    }
+}
+
+static void hook_draw(int base_element, int num_elements, int num_instances, void* ud) {
+    (void)ud;
+    tcall_t* c = tcalls_push(TCALL_DRAW);
+    if (c) { c->i0 = base_element; c->i1 = num_elements; c->i2 = num_instances; }
+}
+
+static void hook_draw_ex(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance, void* ud) {
+    (void)ud;
+    tcall_t* c = tcalls_push(TCALL_DRAW_EX);
+    if (c) {
+        c->i0 = base_element; c->i1 = num_elements; c->i2 = num_instances;
+        c->i3 = base_vertex; c->i4 = base_instance;
+    }
+}
+
+static void hook_dispatch(int x, int y, int z, void* ud) {
+    (void)ud;
+    tcall_t* c = tcalls_push(TCALL_DISPATCH);
+    if (c) { c->i0 = x; c->i1 = y; c->i2 = z; }
+}
+
+static void install_capture_hooks(void) {
+    sg_install_trace_hooks(&(sg_trace_hooks){
+        .apply_viewport = hook_apply_viewport,
+        .apply_scissor_rect = hook_apply_scissor_rect,
+        .apply_pipeline = hook_apply_pipeline,
+        .apply_bindings = hook_apply_bindings,
+        .apply_uniforms = hook_apply_uniforms,
+        .draw = hook_draw,
+        .draw_ex = hook_draw_ex,
+        .dispatch = hook_dispatch,
+    });
+}
+
+// scb log item capture — for verifying error paths in scb_submit
+#define SCB_MAX_LOG_ITEMS (16)
+static scb_log_item scb_log_items[SCB_MAX_LOG_ITEMS];
+static int num_scb_log_items = 0;
+
+static void scb_test_logger(const char* tag, uint32_t log_level, uint32_t log_item_id, const char* msg, uint32_t line_nr, const char* file, void* ud) {
+    (void)tag; (void)log_level; (void)msg; (void)line_nr; (void)file; (void)ud;
+    if (num_scb_log_items < SCB_MAX_LOG_ITEMS) {
+        scb_log_items[num_scb_log_items++] = (scb_log_item)log_item_id;
+    }
+}
+
+static void submit_test_init(void) {
+    tcalls_reset();
+    num_scb_log_items = 0;
+    memset(scb_log_items, 0, sizeof(scb_log_items));
+    sg_setup(&(sg_desc){ .logger = { .func = slog_func }});
+    scb_setup(&(scb_desc){ .logger = { .func = scb_test_logger }});
+    install_capture_hooks();
+}
+
+UTEST(sokol_cmdbuf, submit_empty_cmdbuf) {
+    // submitting an empty cmdbuf must be a no-op (no sg calls fired)
+    submit_test_init();
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
+    T(cb.id != SCB_INVALID_ID);
+    _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
+    T(cbptr);
+    T(cbptr->cur == cbptr->buf);
+    scb_submit(cb);
+    T(num_tcalls == 0);
+    T(num_scb_log_items == 0);
+    T(cbptr->cur == cbptr->buf);
+    scb_destroy_cmdbuf(cb);
+    shutdown();
+}
+
+UTEST(sokol_cmdbuf, submit_all_commands_roundtrip) {
+    // encode one of every command type and verify each sg call is dispatched
+    // with the exact recorded arguments, in order
+    submit_test_init();
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
+    _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
+    T(cbptr);
+    scb_apply_viewport(cb, 10, 20, 30, 40, true);
+    scb_apply_scissor_rect(cb, 1, 2, 3, 4, false);
+    scb_apply_pipeline(cb, (sg_pipeline){ .id = 0xC0FFEE });
+    scb_apply_bindings(cb, &(sg_bindings){
+        .vertex_buffers[0] = { .id = 0x1111 },
+        .vertex_buffer_offsets[0] = 64,
+        .index_buffer = { .id = 0x2222 },
+        .index_buffer_offset = 8,
+    });
+    const float uniforms[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    scb_apply_uniforms(cb, 3, &(sg_range){ .ptr = uniforms, .size = sizeof(uniforms) });
+    scb_draw(cb, 100, 200, 300);
+    scb_draw_ex(cb, 1, 2, 3, 4, 5);
+    scb_dispatch(cb, 8, 16, 32);
+    T(cbptr->overflown == false);
+    T(cbptr->cur > cbptr->buf);
+    scb_submit(cb);
+    // rewind: cur must be back at the start of the buffer
+    T(cbptr->cur == cbptr->buf);
+    T(cbptr->overflown == false);
+    // captured trace
+    T(num_tcalls == 8);
+    T(tcalls[0].kind == TCALL_APPLY_VIEWPORT);
+    T(tcalls[0].i0 == 10 && tcalls[0].i1 == 20 && tcalls[0].i2 == 30 && tcalls[0].i3 == 40);
+    T(tcalls[0].b0 == true);
+    T(tcalls[1].kind == TCALL_APPLY_SCISSOR_RECT);
+    T(tcalls[1].i0 == 1 && tcalls[1].i1 == 2 && tcalls[1].i2 == 3 && tcalls[1].i3 == 4);
+    T(tcalls[1].b0 == false);
+    T(tcalls[2].kind == TCALL_APPLY_PIPELINE);
+    T(tcalls[2].u0 == 0xC0FFEEu);
+    T(tcalls[3].kind == TCALL_APPLY_BINDINGS);
+    T(tcalls[3].bindings.vertex_buffers[0].id == 0x1111);
+    T(tcalls[3].bindings.vertex_buffer_offsets[0] == 64);
+    T(tcalls[3].bindings.index_buffer.id == 0x2222);
+    T(tcalls[3].bindings.index_buffer_offset == 8);
+    // unused vertex-buffer slots must decode as SG_INVALID_ID
+    T(tcalls[3].bindings.vertex_buffers[1].id == SG_INVALID_ID);
+    T(tcalls[3].bindings.views[0].id == SG_INVALID_ID);
+    T(tcalls[3].bindings.samplers[0].id == SG_INVALID_ID);
+    T(tcalls[4].kind == TCALL_APPLY_UNIFORMS);
+    T(tcalls[4].ub_slot == 3);
+    T(tcalls[4].uniform_size == sizeof(uniforms));
+    T(0 == memcmp(tcalls[4].uniform_data, uniforms, sizeof(uniforms)));
+    T(tcalls[5].kind == TCALL_DRAW);
+    T(tcalls[5].i0 == 100 && tcalls[5].i1 == 200 && tcalls[5].i2 == 300);
+    T(tcalls[6].kind == TCALL_DRAW_EX);
+    T(tcalls[6].i0 == 1 && tcalls[6].i1 == 2 && tcalls[6].i2 == 3 && tcalls[6].i3 == 4 && tcalls[6].i4 == 5);
+    T(tcalls[7].kind == TCALL_DISPATCH);
+    T(tcalls[7].i0 == 8 && tcalls[7].i1 == 16 && tcalls[7].i2 == 32);
+    T(num_scb_log_items == 0);
+    scb_destroy_cmdbuf(cb);
+    shutdown();
+}
+
+UTEST(sokol_cmdbuf, submit_apply_bindings_mask_decode) {
+    // full-mix bindings — every category populated to exercise the mask-based
+    // decode paths (vb + ib + view + sampler)
+    submit_test_init();
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
+    _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
+    T(cbptr);
+    scb_apply_bindings(cb, &(sg_bindings){
+        .vertex_buffers[0] = { .id = 0xAA },
+        .vertex_buffer_offsets[0] = 4,
+        .vertex_buffers[2] = { .id = 0xBB },
+        .vertex_buffer_offsets[2] = 8,
+        .index_buffer = { .id = 0xCC },
+        .index_buffer_offset = 12,
+        .views[0] = { .id = 0xD0 },
+        .views[5] = { .id = 0xD5 },
+        .samplers[0] = { .id = 0xE0 },
+        .samplers[3] = { .id = 0xE3 },
+    });
+    scb_submit(cb);
+    T(num_tcalls == 1);
+    T(tcalls[0].kind == TCALL_APPLY_BINDINGS);
+    T(tcalls[0].bindings.vertex_buffers[0].id == 0xAA);
+    T(tcalls[0].bindings.vertex_buffer_offsets[0] == 4);
+    T(tcalls[0].bindings.vertex_buffers[1].id == SG_INVALID_ID);
+    T(tcalls[0].bindings.vertex_buffers[2].id == 0xBB);
+    T(tcalls[0].bindings.vertex_buffer_offsets[2] == 8);
+    T(tcalls[0].bindings.index_buffer.id == 0xCC);
+    T(tcalls[0].bindings.index_buffer_offset == 12);
+    T(tcalls[0].bindings.views[0].id == 0xD0);
+    T(tcalls[0].bindings.views[1].id == SG_INVALID_ID);
+    T(tcalls[0].bindings.views[5].id == 0xD5);
+    T(tcalls[0].bindings.samplers[0].id == 0xE0);
+    T(tcalls[0].bindings.samplers[1].id == SG_INVALID_ID);
+    T(tcalls[0].bindings.samplers[3].id == 0xE3);
+    T(cbptr->cur == cbptr->buf);
+    scb_destroy_cmdbuf(cb);
+    shutdown();
+}
+
+UTEST(sokol_cmdbuf, submit_apply_uniforms_preserves_payload) {
+    // uniform blob must round-trip byte-identical for arbitrary sizes
+    submit_test_init();
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
+    _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
+    T(cbptr);
+    uint8_t payload[73];
+    for (int i = 0; i < (int)sizeof(payload); i++) {
+        payload[i] = (uint8_t)(i * 7 + 3);
+    }
+    scb_apply_uniforms(cb, 5, &(sg_range){ .ptr = payload, .size = sizeof(payload) });
+    scb_submit(cb);
+    T(num_tcalls == 1);
+    T(tcalls[0].kind == TCALL_APPLY_UNIFORMS);
+    T(tcalls[0].ub_slot == 5);
+    T(tcalls[0].uniform_size == sizeof(payload));
+    T(0 == memcmp(tcalls[0].uniform_data, payload, sizeof(payload)));
+    T(cbptr->cur == cbptr->buf);
+    scb_destroy_cmdbuf(cb);
+    shutdown();
+}
+
+UTEST(sokol_cmdbuf, submit_rewinds_cmdbuf) {
+    // record + submit → rewind; a second submit must be a no-op
+    submit_test_init();
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
+    _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
+    T(cbptr);
+    scb_draw(cb, 0, 3, 1);
+    scb_draw(cb, 1, 4, 2);
+    T(cbptr->cur > cbptr->buf);
+    scb_submit(cb);
+    T(num_tcalls == 2);
+    T(cbptr->cur == cbptr->buf);
+    T(cbptr->overflown == false);
+    // second submit: cmdbuf is empty, nothing to replay
+    scb_submit(cb);
+    T(num_tcalls == 2);
+    T(cbptr->cur == cbptr->buf);
+    // after rewind we can record and submit again without losing anything
+    scb_dispatch(cb, 1, 2, 3);
+    scb_submit(cb);
+    T(num_tcalls == 3);
+    T(tcalls[2].kind == TCALL_DISPATCH);
+    T(tcalls[2].i0 == 1 && tcalls[2].i1 == 2 && tcalls[2].i2 == 3);
+    T(cbptr->cur == cbptr->buf);
+    scb_destroy_cmdbuf(cb);
+    shutdown();
+}
+
+UTEST(sokol_cmdbuf, submit_invalid_handle) {
+    // submit on invalid handle must log CMDBUF_NOT_VALID and fire no sg call
+    submit_test_init();
+    scb_submit((scb_cmdbuf){ .id = SCB_INVALID_ID });
+    T(num_tcalls == 0);
+    T(num_scb_log_items == 1);
+    T(scb_log_items[0] == SCB_LOGITEM_CMDBUF_NOT_VALID);
+    // also test with a stale handle
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
+    scb_destroy_cmdbuf(cb);
+    scb_submit(cb);
+    T(num_tcalls == 0);
+    T(num_scb_log_items == 2);
+    T(scb_log_items[1] == SCB_LOGITEM_CMDBUF_NOT_VALID);
+    shutdown();
+}
+
+UTEST(sokol_cmdbuf, submit_overflown_cmdbuf) {
+    // submit on an overflown cmdbuf must NOT replay the (partial) stream,
+    // must log SUBMIT_CMDBUF_OVERFLOWN, and must rewind the buffer
+    submit_test_init();
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){ .size = 32 });
+    _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
+    T(cbptr);
+    // one draw_ex fits (21 bytes), a second one overflows the 32-byte buffer
+    scb_draw_ex(cb, 1, 2, 3, 4, 5);
+    scb_draw_ex(cb, 6, 7, 8, 9, 10);
+    T(cbptr->overflown == true);
+    T(cbptr->cur > cbptr->buf);
+    // reset the log capture — the encoder already fired CMDBUF_OVERFLOW above,
+    // and we only want to observe what scb_submit itself produces
+    num_scb_log_items = 0;
+    scb_submit(cb);
+    // no sg calls dispatched, log item raised, cmdbuf rewound + overflown cleared
+    T(num_tcalls == 0);
+    T(num_scb_log_items == 1);
+    T(scb_log_items[0] == SCB_LOGITEM_SUBMIT_CMDBUF_OVERFLOWN);
+    T(cbptr->cur == cbptr->buf);
+    T(cbptr->overflown == false);
+    // after the rewind the cmdbuf is usable again
+    scb_draw(cb, 0, 3, 1);
+    scb_submit(cb);
+    T(num_tcalls == 1);
+    T(tcalls[0].kind == TCALL_DRAW);
+    scb_destroy_cmdbuf(cb);
+    shutdown();
+}
+
+UTEST(sokol_cmdbuf, submit_corrupt_opcode_terminates) {
+    // corrupt the opcode byte in the recorded stream — scb_submit must
+    // log SUBMIT_INVALID_COMMAND, exit the loop cleanly, and rewind
+    submit_test_init();
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
+    _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
+    T(cbptr);
+    scb_draw(cb, 0, 3, 1);
+    // poke the opcode of the recorded command with something unknown; the
+    // decoder must not walk off the end and must not deadlock
+    cbptr->buf[0] = 0xFF;
+    scb_submit(cb);
+    T(num_tcalls == 0);
+    T(num_scb_log_items == 1);
+    T(scb_log_items[0] == SCB_LOGITEM_SUBMIT_INVALID_COMMAND);
+    T(cbptr->cur == cbptr->buf);
+    scb_destroy_cmdbuf(cb);
+    shutdown();
+}
