@@ -1168,6 +1168,10 @@ SOKOL_API_IMPL void scb_submit(scb_cmdbuf cb_id) {
     SOKOL_ASSERT(cb->cur);
     SOKOL_ASSERT(cb->buf <= cb->cur);
     const uint8_t* ptr = cb->buf;
+    bool has_label = cb->label.buf[0] != 0;
+    if (has_label) {
+        sg_push_debug_group(cb->label.buf);
+    }
     while (ptr < cb->cur) {
         _scb_cmd_t cmd = _SCB_CMD_NONE;
         ptr = _scb_dec_cmd(ptr, &cmd);
@@ -1204,6 +1208,9 @@ SOKOL_API_IMPL void scb_submit(scb_cmdbuf cb_id) {
         }
     }
     _scb_rewind(cb);
+    if (has_label) {
+        sg_pop_debug_group();
+    }
 }
 
 #endif // SOKOL_CMDBUF_IMPL
