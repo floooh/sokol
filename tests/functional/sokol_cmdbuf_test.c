@@ -716,6 +716,8 @@ typedef enum {
     TCALL_DRAW,
     TCALL_DRAW_EX,
     TCALL_DISPATCH,
+    TCALL_PUSH_DEBUG_GROUP,
+    TCALL_POP_DEBUG_GROUP,
 } tcall_kind;
 
 #define TCALL_MAX_CALLS (32)
@@ -730,6 +732,7 @@ typedef struct {
     int ub_slot;
     size_t uniform_size;
     uint8_t uniform_data[TCALL_MAX_UNIFORM_SIZE];
+    char label[64];
 } tcall_t;
 
 static tcall_t tcalls[TCALL_MAX_CALLS];
@@ -805,6 +808,20 @@ static void hook_dispatch(int x, int y, int z, void* ud) {
     if (c) { c->i0 = x; c->i1 = y; c->i2 = z; }
 }
 
+static void hook_push_debug_group(const char* name, void* ud) {
+    (void)ud;
+    tcall_t* c = tcalls_push(TCALL_PUSH_DEBUG_GROUP);
+    if (c && name) {
+        strncpy(c->label, name, sizeof(c->label) - 1);
+        c->label[sizeof(c->label) - 1] = 0;
+    }
+}
+
+static void hook_pop_debug_group(void* ud) {
+    (void)ud;
+    tcalls_push(TCALL_POP_DEBUG_GROUP);
+}
+
 static void install_capture_hooks(void) {
     sg_install_trace_hooks(&(sg_trace_hooks){
         .apply_viewport = hook_apply_viewport,
@@ -815,6 +832,8 @@ static void install_capture_hooks(void) {
         .draw = hook_draw,
         .draw_ex = hook_draw_ex,
         .dispatch = hook_dispatch,
+        .push_debug_group = hook_push_debug_group,
+        .pop_debug_group = hook_pop_debug_group,
     });
 }
 
@@ -1071,5 +1090,39 @@ UTEST(sokol_cmdbuf, submit_corrupt_opcode_terminates) {
     T(scb_log_items[0] == SCB_LOGITEM_SUBMIT_INVALID_COMMAND);
     T(cbptr->cur == cbptr->buf);
     scb_destroy_cmdbuf(cb);
+    shutdown();
+}
+
+UTEST(sokol_cmdbuf, submit_wraps_in_debug_group_with_label) {
+    // a labeled cmdbuf must bracket its replayed commands with
+    // sg_push_debug_group(label) and sg_pop_debug_group()
+    submit_test_init();
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){ .label = "my_cb" });
+    T(cb.id != SCB_INVALID_ID);
+    scb_draw(cb, 0, 3, 1);
+    scb_submit(cb);
+    T(num_tcalls == 3);
+    T(tcalls[0].kind == TCALL_PUSH_DEBUG_GROUP);
+    T(0 == strcmp(tcalls[0].label, "my_cb"));
+    T(tcalls[1].kind == TCALL_DRAW);
+    T(tcalls[2].kind == TCALL_POP_DEBUG_GROUP);
+    // an unlabeled cmdbuf must NOT fire debug-group calls
+    tcalls_reset();
+    scb_cmdbuf cb2 = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
+    scb_draw(cb2, 0, 3, 1);
+    scb_submit(cb2);
+    T(num_tcalls == 1);
+    T(tcalls[0].kind == TCALL_DRAW);
+    // a labeled but empty cmdbuf must still fire push and pop
+    tcalls_reset();
+    scb_cmdbuf cb3 = scb_make_cmdbuf(&(scb_cmdbuf_desc){ .label = "empty" });
+    scb_submit(cb3);
+    T(num_tcalls == 2);
+    T(tcalls[0].kind == TCALL_PUSH_DEBUG_GROUP);
+    T(0 == strcmp(tcalls[0].label, "empty"));
+    T(tcalls[1].kind == TCALL_POP_DEBUG_GROUP);
+    scb_destroy_cmdbuf(cb);
+    scb_destroy_cmdbuf(cb2);
+    scb_destroy_cmdbuf(cb3);
     shutdown();
 }
