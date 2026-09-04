@@ -325,7 +325,7 @@ typedef struct {
     uint8_t* buf;
     uint8_t* cur;
     const uint8_t* end;
-    const uint8_t* cmd_end;
+    const uint8_t* cmd_max_end;
     bool overflown; // tried to encode cmd past end
     _scb_str_t label;
 } _scb_cmdbuf_t;
@@ -702,18 +702,36 @@ static void _scb_enc_blob(_scb_cmdbuf_t* cb, const void* ptr, size_t size) {
     cb->cur += size;
 }
 
-static bool _scb_enc_cmd(_scb_cmdbuf_t* cb, _scb_cmd_t cmd, size_t payload_size) {
-    SOKOL_ASSERT(cb->cmd_end == 0);
+static const uint8_t* _scb_ptr_align16(const uint8_t* ptr) {
+    const uintptr_t align_minus_one = (16 - 1);
+    const uintptr_t mask = ~align_minus_one;
+    return (uint8_t*)(((uintptr_t)ptr + align_minus_one) & mask);
+}
+
+static void _scb_enc_align16(_scb_cmdbuf_t* cb) {
+    uint8_t* ptr16 = (uint8_t*)_scb_ptr_align16(cb->cur);
+    SOKOL_ASSERT((ptr16 >= cb->cur) && (ptr16 < cb->end));
+    for (; cb->cur < ptr16; cb->cur++) {
+        *cb->cur = 0;
+    }
+}
+
+static const uint8_t* _scb_dec_align16(const uint8_t* ptr) {
+    return _scb_ptr_align16(ptr);
+}
+
+static bool _scb_enc_cmd(_scb_cmdbuf_t* cb, _scb_cmd_t cmd, size_t max_payload_size) {
+    SOKOL_ASSERT(cb->cmd_max_end == 0);
     if (cb->overflown) {
         return false;
     }
-    const size_t cmd_payload_size = payload_size + 1;
-    if ((cb->cur + cmd_payload_size) > cb->end) {
+    const size_t max_cmd_payload_size = max_payload_size + 1;
+    if ((cb->cur + max_cmd_payload_size) > cb->end) {
         cb->overflown = true;
         _SCB_ERROR(CMDBUF_OVERFLOW);
         return false;
     }
-    cb->cmd_end = cb->cur + cmd_payload_size;
+    cb->cmd_max_end = cb->cur + max_cmd_payload_size;
     _scb_enc_u8(cb, (uint8_t)cmd);
     return true;
 }
@@ -724,8 +742,8 @@ static const uint8_t* _scb_dec_cmd(const uint8_t* ptr, _scb_cmd_t* out_cmd) {
 }
 
 static void _scb_enc_end(_scb_cmdbuf_t* cb) {
-    SOKOL_ASSERT(cb->cmd_end && (cb->cur == cb->cmd_end));
-    cb->cmd_end = 0;
+    SOKOL_ASSERT(cb->cmd_max_end && (cb->cur <= cb->cmd_max_end));
+    cb->cmd_max_end = 0;
 }
 
 static void _scb_enc_apply_viewport(_scb_cmdbuf_t* cb, int x, int y, int width, int height, bool origin_top_left) {
@@ -951,10 +969,12 @@ static const uint8_t* _scb_dec_apply_bindings(const uint8_t* ptr) {
 static void _scb_enc_apply_uniforms(_scb_cmdbuf_t* cb, int ub_slot, const sg_range* data) {
     SOKOL_ASSERT(data->size <= UINT32_MAX);
     SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
-    const size_t payload_size = sizeof(int32_t) + sizeof(uint32_t) + data->size;
-    if (_scb_enc_cmd(cb, _SCB_CMD_APPLY_UNIFORMS, payload_size)) {
+    // NOTE: add max alignment gap of 15 bytes to max payload size
+    const size_t max_payload_size = sizeof(int32_t) + sizeof(uint32_t) + data->size + 15;
+    if (_scb_enc_cmd(cb, _SCB_CMD_APPLY_UNIFORMS, max_payload_size)) {
         _scb_enc_i32(cb, ub_slot);
         _scb_enc_u32(cb, (uint32_t)data->size);
+        _scb_enc_align16(cb);
         _scb_enc_blob(cb, data->ptr, data->size);
         _scb_enc_end(cb);
     }
@@ -966,6 +986,7 @@ static const uint8_t* _scb_dec_apply_uniforms(const uint8_t* ptr) {
     ptr = _scb_dec_i32(ptr, &ub_slot);
     SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
     ptr = _scb_dec_u32(ptr, &size_u32);
+    ptr = _scb_dec_align16(ptr);
     sg_range data;
     _scb_clear(&data, sizeof(data));
     data.ptr = ptr;
