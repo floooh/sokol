@@ -620,30 +620,29 @@ UTEST(sokol_cmdbuf, record_apply_bindings_invalid_cmdbuf_noop) {
 }
 
 UTEST(sokol_cmdbuf, record_apply_uniforms) {
-    // 16-byte uniform payload; the payload blob must be 16-byte aligned in the
+    // 16-byte uniform payload; the payload blob must be 4-byte aligned in the
     // recorded stream so replay can hand it to sg_apply_uniforms without a copy
     init();
     scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
     _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
     T(cbptr);
-    // sanity: malloc must return a 16-byte-aligned buffer for these offset
-    // assertions to hold (guaranteed on 64-bit targets)
-    T(((uintptr_t)cbptr->buf & 15) == 0);
+    // sanity: malloc returns at least 4-byte-aligned memory
+    T(((uintptr_t)cbptr->buf & 3) == 0);
     const float payload[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
     scb_apply_uniforms(cb, 2, &(sg_range){ .ptr = payload, .size = sizeof(payload) });
-    // 1 opcode + 4 ub_slot + 4 size = 9 bytes header, padded to 16 (7 pad
-    // bytes), + 16 blob = 32 bytes total
-    T((cbptr->cur - cbptr->buf) == 32);
+    // 1 opcode + 4 ub_slot + 4 size = 9 bytes header, padded to 12 (3 pad
+    // bytes), + 16 blob = 28 bytes total
+    T((cbptr->cur - cbptr->buf) == 28);
     T(cbptr->buf[0] == (uint8_t)_SCB_CMD_APPLY_UNIFORMS);
     T(read_le_i32(&cbptr->buf[1]) == 2);
     T(read_le_u32(&cbptr->buf[5]) == sizeof(payload));
     // the padding bytes are zeroed by the encoder
-    for (int i = 9; i < 16; i++) {
+    for (int i = 9; i < 12; i++) {
         T(cbptr->buf[i] == 0);
     }
-    T(0 == memcmp(&cbptr->buf[16], payload, sizeof(payload)));
-    // the payload address itself is 16-byte aligned
-    T(((uintptr_t)&cbptr->buf[16] & 15) == 0);
+    T(0 == memcmp(&cbptr->buf[12], payload, sizeof(payload)));
+    // the payload address itself is 4-byte aligned
+    T(((uintptr_t)&cbptr->buf[12] & 3) == 0);
     T(cbptr->overflown == false);
     T(cbptr->cmd_max_end == 0);
     scb_destroy_cmdbuf(cb);
@@ -655,44 +654,44 @@ UTEST(sokol_cmdbuf, record_apply_uniforms_different_slot) {
     scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
     _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
     T(cbptr);
-    T(((uintptr_t)cbptr->buf & 15) == 0);
+    T(((uintptr_t)cbptr->buf & 3) == 0);
     const uint8_t payload[3] = { 0xAA, 0xBB, 0xCC };
     scb_apply_uniforms(cb, 5, &(sg_range){ .ptr = payload, .size = sizeof(payload) });
-    // 1 + 4 + 4 = 9 bytes header, padded to 16, + 3 blob = 19 bytes
-    T((cbptr->cur - cbptr->buf) == 19);
+    // 1 + 4 + 4 = 9 bytes header, padded to 12, + 3 blob = 15 bytes
+    T((cbptr->cur - cbptr->buf) == 15);
     T(cbptr->buf[0] == (uint8_t)_SCB_CMD_APPLY_UNIFORMS);
     T(read_le_i32(&cbptr->buf[1]) == 5);
     T(read_le_u32(&cbptr->buf[5]) == 3);
     // padding zeroed
-    for (int i = 9; i < 16; i++) {
+    for (int i = 9; i < 12; i++) {
         T(cbptr->buf[i] == 0);
     }
-    T(cbptr->buf[16] == 0xAA);
-    T(cbptr->buf[17] == 0xBB);
-    T(cbptr->buf[18] == 0xCC);
-    T(((uintptr_t)&cbptr->buf[16] & 15) == 0);
+    T(cbptr->buf[12] == 0xAA);
+    T(cbptr->buf[13] == 0xBB);
+    T(cbptr->buf[14] == 0xCC);
+    T(((uintptr_t)&cbptr->buf[12] & 3) == 0);
     scb_destroy_cmdbuf(cb);
     shutdown();
 }
 
 UTEST(sokol_cmdbuf, record_apply_uniforms_alignment_after_odd_prefix) {
     // any command sequence before apply_uniforms leaves cur at an arbitrary
-    // offset; the encoder must still land the payload on a 16-byte boundary
+    // offset; the encoder must still land the payload on a 4-byte boundary
     init();
     scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
     _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
     T(cbptr);
-    T(((uintptr_t)cbptr->buf & 15) == 0);
+    T(((uintptr_t)cbptr->buf & 3) == 0);
     // a single apply_pipeline consumes 5 bytes → cur at buf+5, an odd offset
     scb_apply_pipeline(cb, (sg_pipeline){ .id = 0x42 });
     T((cbptr->cur - cbptr->buf) == 5);
     const float payload[4] = { 10.0f, 20.0f, 30.0f, 40.0f };
     const uint8_t* uniforms_start = cbptr->cur;
     scb_apply_uniforms(cb, 1, &(sg_range){ .ptr = payload, .size = sizeof(payload) });
-    // opcode written at buf+5, header ends at buf+14 → next 16-aligned is buf+16
+    // opcode written at buf+5, header ends at buf+14 → next 4-aligned is buf+16
     T(uniforms_start[0] == (uint8_t)_SCB_CMD_APPLY_UNIFORMS);
     const uint8_t* payload_ptr = cbptr->buf + 16;
-    T(((uintptr_t)payload_ptr & 15) == 0);
+    T(((uintptr_t)payload_ptr & 3) == 0);
     T(0 == memcmp(payload_ptr, payload, sizeof(payload)));
     // total = 5 (pipeline) + 1 (opcode) + 4 (slot) + 4 (size) + 2 (pad) + 16 (blob) = 32
     T((cbptr->cur - cbptr->buf) == 32);
@@ -705,23 +704,23 @@ UTEST(sokol_cmdbuf, record_apply_uniforms_alignment_after_odd_prefix) {
 
 UTEST(sokol_cmdbuf, record_apply_uniforms_alignment_across_offsets) {
     // sweep prefix sizes 0..15 and confirm every recorded payload is
-    // 16-byte aligned regardless of where the command lands
+    // 4-byte aligned regardless of where the command lands
     init();
     for (int pad_bytes = 0; pad_bytes < 16; pad_bytes++) {
         scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
         _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
         T(cbptr);
-        T(((uintptr_t)cbptr->buf & 15) == 0);
+        T(((uintptr_t)cbptr->buf & 3) == 0);
         // nudge cur by pad_bytes to simulate an arbitrary prior recording
         cbptr->cur = cbptr->buf + pad_bytes;
         const float payload[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
         scb_apply_uniforms(cb, 0, &(sg_range){ .ptr = payload, .size = sizeof(payload) });
-        // find the blob by scanning for its content — must land on 16-byte-aligned addr
+        // find the blob by scanning for its content — must land on 4-byte-aligned addr
         // header: opcode(1) + slot(4) + size(4) = 9 bytes past pad_bytes
         const size_t header_end = (size_t)pad_bytes + 9;
-        const size_t aligned = (header_end + 15) & ~(size_t)15;
+        const size_t aligned = (header_end + 3) & ~(size_t)3;
         const uint8_t* payload_ptr = cbptr->buf + aligned;
-        T(((uintptr_t)payload_ptr & 15) == 0);
+        T(((uintptr_t)payload_ptr & 3) == 0);
         T(0 == memcmp(payload_ptr, payload, sizeof(payload)));
         // header alignment pad bytes must be zero
         for (size_t i = header_end; i < aligned; i++) {
@@ -739,7 +738,7 @@ UTEST(sokol_cmdbuf, record_apply_uniforms_overflow_no_partial_write) {
     scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){ .size = 16 });
     _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
     T(cbptr);
-    // max payload budget = 1 opcode + 4 slot + 4 size + 16 blob + 16 align pad = 41 > 16
+    // max payload budget = 1 opcode + 4 slot + 4 size + 16 blob + 3 align pad = 28 > 16
     const uint8_t payload[16] = { 0 };
     scb_apply_uniforms(cb, 0, &(sg_range){ .ptr = payload, .size = sizeof(payload) });
     T((cbptr->cur - cbptr->buf) == 0);
@@ -806,7 +805,7 @@ typedef struct {
     sg_bindings bindings;         // deep copy at hook time (bindings ptr is stack-local)
     int ub_slot;
     size_t uniform_size;
-    uintptr_t uniform_ptr;        // raw ptr address to verify 16-byte alignment on submit
+    uintptr_t uniform_ptr;        // raw ptr address to verify 4-byte alignment on submit
     uint8_t uniform_data[TCALL_MAX_UNIFORM_SIZE];
     char label[64];
 } tcall_t;
@@ -1001,8 +1000,8 @@ UTEST(sokol_cmdbuf, submit_all_commands_roundtrip) {
     T(tcalls[4].ub_slot == 3);
     T(tcalls[4].uniform_size == sizeof(uniforms));
     T(0 == memcmp(tcalls[4].uniform_data, uniforms, sizeof(uniforms)));
-    // the pointer handed to sg_apply_uniforms must be 16-byte aligned
-    T((tcalls[4].uniform_ptr & 15) == 0);
+    // the pointer handed to sg_apply_uniforms must be 4-byte aligned
+    T((tcalls[4].uniform_ptr & 3) == 0);
     T(tcalls[5].kind == TCALL_DRAW);
     T(tcalls[5].i0 == 100 && tcalls[5].i1 == 200 && tcalls[5].i2 == 300);
     T(tcalls[6].kind == TCALL_DRAW_EX);
@@ -1071,8 +1070,8 @@ UTEST(sokol_cmdbuf, submit_apply_uniforms_preserves_payload) {
     T(tcalls[0].ub_slot == 5);
     T(tcalls[0].uniform_size == sizeof(payload));
     T(0 == memcmp(tcalls[0].uniform_data, payload, sizeof(payload)));
-    // sg_apply_uniforms receives a 16-byte-aligned pointer into the cmdbuf
-    T((tcalls[0].uniform_ptr & 15) == 0);
+    // sg_apply_uniforms receives a 4-byte-aligned pointer into the cmdbuf
+    T((tcalls[0].uniform_ptr & 3) == 0);
     T(cbptr->cur == cbptr->buf);
     scb_destroy_cmdbuf(cb);
     shutdown();
@@ -1080,13 +1079,13 @@ UTEST(sokol_cmdbuf, submit_apply_uniforms_preserves_payload) {
 
 UTEST(sokol_cmdbuf, submit_apply_uniforms_pointer_aligned_after_odd_prefix) {
     // regardless of preceding commands, the pointer passed to sg_apply_uniforms
-    // at replay must be 16-byte aligned
+    // at replay must be 4-byte aligned
     submit_test_init();
     scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
     _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
     T(cbptr);
     // encode a handful of variable-sized commands ahead of the uniforms to
-    // guarantee the uniforms opcode does not land on a 16-byte boundary
+    // guarantee the uniforms opcode does not land on a 4-byte boundary
     scb_apply_pipeline(cb, (sg_pipeline){ .id = 1 });       // 5 bytes
     scb_apply_viewport(cb, 0, 0, 1, 1, true);               // 18 bytes
     scb_apply_pipeline(cb, (sg_pipeline){ .id = 2 });       // 5 bytes → cur at buf+28
@@ -1100,8 +1099,8 @@ UTEST(sokol_cmdbuf, submit_apply_uniforms_pointer_aligned_after_odd_prefix) {
     int n_uniforms = 0;
     for (int i = 0; i < num_tcalls; i++) {
         if (tcalls[i].kind == TCALL_APPLY_UNIFORMS) {
-            // pointer must be 16-byte aligned
-            T((tcalls[i].uniform_ptr & 15) == 0);
+            // pointer must be 4-byte aligned
+            T((tcalls[i].uniform_ptr & 3) == 0);
             n_uniforms++;
         }
     }

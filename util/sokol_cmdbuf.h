@@ -34,7 +34,195 @@
         sokol_gfx.h
 
 
-    FIXME docs
+    OVERVIEW
+    ========
+    Allows to record sokol-gfx apply/draw/dispatch calls into command buffers
+    outside of sokol-gfx passes and then submit the recorded calls inside
+    sokol-gfx render or compute passes. This is mainly useful in two situations:
+
+    - Interleaving resource updates and draw calls (e.g. append
+      data to buffers and then immediately issue a draw/dispatch call which
+      uses this data). Such an interleaved update/consume model cannot be
+      implemented efficiently in some sokol-gfx backends and is disallowed in
+      the 'new' write-transient/persistent update model.
+    - Separating the core frame rendering code from code that's normally
+      not concerned about rendering (e.g. UI or debug rendering).
+
+    Some 'tier 2' sokol headers already use a similar record/replay
+    system internally (e.g. sokol_gl.h, sokol_debugtext.h, sokol_spine.h)
+    and will switch to using sokol_cmdbuf.h to reduce redundant code.
+
+    STEP BY STEP:
+    =============
+
+    - Initialize sokol_cmdbuf.h, provide at least a logging function
+      (for instance slog_func from sokol_log.h), otherwise you won't
+      see any logging output:
+
+        scb_setup(&(scb_desc){
+            .logger.func = slog_func,
+        });
+
+      If you need more than (the default) 16 command buffers to be alive at
+      the same time, set the .cmdbuf_pool_size:
+
+        scb_setup(&(scb_desc){
+            .cmdbuf_pool_size = 128,
+            .logger.func = slog_func,
+        });
+
+      To provide your own memory allocation functions:
+
+        void* my_alloc(size_t size, void* user_data) {
+            return malloc(size);
+        }
+
+        void my_free(void* ptr, void* user_data) {
+            free(ptr);
+        }
+
+        scb_setup(&(scb_desc){
+            .allocator = {
+                .alloc_fn = my_alloc,
+                .free_fn = my_free,
+                .user_data = ...;
+            },
+            .logger.func = slog_func,
+        });
+
+    - Next create command buffer objects, the default command buffer size
+      is 256 kbytes:
+
+        scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
+
+      It often makes sense to provide a specific size in bytes:
+
+        scb_cmdbuf cbuf = scb_make_cmdbuf(&(scb_cmdbuf_desc){
+            .size = 128 * 1024,     // 128 kbytes
+        });
+
+      For information on how to estimate the required size see the section
+      'ESTIMATING COMMAND BUFFER SIZES' below.
+
+      You can provide a label string for the command buffer:
+
+        scb_cmdbuf cbuf = scb_make_cmdbuf(&(scb_cmdbuf_desc){
+            .label = "dbg-phyiscs",
+        });
+
+      When a label string exists, sokol_cmdbuf.h will wrap submitted commands
+      with `sg_push_debug_group(label)` / `sg_pop_debug_group()`
+
+    - Record apply/draw/dispatch commands into a command buffer object
+      (note that these functions directly use sokol_gfx.h types):
+
+        scb_apply_viewport(cb, x, y, width, height, origin_top_left);
+        scb_apply_viewportf(cb, x, y, width, height, origin_top_left);
+
+        scb_apply_scissor_rect(cb, x, y, width, height, origin_top_left);
+        scb_apply_scissor_rectf(cb, x, y, width, height, origin_top_left);
+
+        scb_apply_pipeline(cb, pip);
+        scb_apply_bindings(cb, &(sg_bindings){ ... });
+        scb_apply_uniforms(cb, ub_slot, &(sg_range){ ... });
+        scb_draw(cb, base_element, num_elements, num_instances);
+        scb_draw_ex(cb, base_element, num_elements, num_instances, base_vertex, base_instance);
+        scb_dispatch(cb, num_groups_x, num_groups_y, num_groups_z);
+
+      Uniform data will be copied into the command buffer, and with the
+      required alignment.
+
+      Trying to record more data than fits into the command buffer will
+      result in a logged error message, and the command buffer to
+      go into an 'overflown' state. Submitting an overflown command buffer
+      will only rewind the command buffer but not issue the partially recorded
+      commands to sokol-gfx.
+
+    - Finally, inside a sokol-gfx render- or compute-pass, submit the
+      command buffer. This will decode the recorded commands and call
+      sokol-gfx functions:
+
+        sg_begin_pass(...);
+        // ...
+        scb_submit(cb);
+        // ...
+        sg_end_pass();
+
+      Submitting a command buffer will also automatically rewind, so that the
+      command buffer can be reused for recording new commands.
+
+    - To rewind a recorded command buffer without submitting, call:
+
+        scb_reset(cb)
+
+    - To get current information about a command buffer:
+
+        scb_cmdbuf_info info = scb_query_cmdbuf_info(cb);
+
+      The result contains:
+
+        info.size       the command buffer size in bytes
+        info.remaining  the currently remaining number of free bytes in the command buffer
+        info.overflown  true when the command buffer is currently in overflown state
+
+    - To get a command buffer's 'resource state', call:
+
+        scb_resource_state state = scb_query_cmdbuf_state(cb);
+
+      This returns one of:
+
+        SCB_RESOURCESTATE_VALID:    the command buffer is valid to use
+        SCB_RESOURCESTATE_FAILED:   command buffer allocation has failed
+                                    (can only happen when memory allocation failed)
+        SCB_RESOURCESTATE_INVALID   the handle is invalid or the command buffer
+                                    no longer exists
+
+    - To destroy a command buffer object:
+
+        scb_destroy_cmdbuf(cb);
+
+    - ...and finally to shutdown sokol_cmdbuf.h:
+
+        scb_shutdown();
+
+      ...this will also destroy all remaining command buffer objects.
+
+
+    ESTIMATING COMMAND BUFFER SIZES
+    ===============================
+
+    For most commands, the size taken up in the command buffer can be
+    estimated by adding the parameter sizes plus one byte for the
+    command, e.g.:
+
+    scb_apply_viewport takes 4 integers and one boolean:
+
+        1 byte for the command
+        + (4 * 4) bytes for the integers
+        + 1 byte for the boolean
+
+    There are two special cases:
+
+    - scb_apply_uniforms copies the actual uniform data with 4-byte
+        alignment into the command buffer, the required size is:
+
+        1 byte for the command
+        + 4 bytes for the uniform data size
+        + up to 3 bytes 'alignment gap'
+        + the actual uniform data
+
+    - scb_apply_bindings applies a simple form of compression by
+      not writing unoccupied bind slots. Instead a 64-bit bitmask identifies
+      occupied slots:
+
+        1 byte for the command
+        + 8 bytes for the 64-bit occupation bitmask
+        + 4 bytes for each valid sg_buffer, sg_view, sg_sampler
+          hande in the sg_bindings struct
+        + 4 bytes extra for the buffer offset of each occupied vertex buffer slot
+        + 4 bytes extra for the index buffer offset if the index buffer slot is occupied
+
+      ...or just assume around 256 bytes worst case for an scb_apply_bindings call
 
 
     LICENSE
@@ -150,6 +338,7 @@ typedef struct scb_cmdbuf_info {
 #define _SCB_LOG_ITEMS \
     _SCB_LOGITEM_XMACRO(OK, "Ok") \
     _SCB_LOGITEM_XMACRO(MALLOC_FAILED, "memory allocation failed") \
+    _SCB_LOGITEM_XMACRO(CMDBUF_POOL_EXHAUSTED, "command buffer pool is exhausted (hint: increase scb_desc.cmdbuf_pool_size)") \
     _SCB_LOGITEM_XMACRO(CMDBUF_OVERFLOW, "command buffer has overflown") \
     _SCB_LOGITEM_XMACRO(CMDBUF_NOT_VALID, "command buffer no longer exists or invalid handle") \
     _SCB_LOGITEM_XMACRO(SUBMIT_CMDBUF_OVERFLOWN, "scb_submit: command buffer was overflown") \
@@ -398,7 +587,9 @@ static void* _scb_malloc(size_t size) {
 
 static void* _scb_malloc_clear(size_t size) {
     void* ptr = _scb_malloc(size);
-    _scb_clear(ptr, size);
+    if (ptr) {
+        _scb_clear(ptr, size);
+    }
     return ptr;
 }
 
@@ -433,8 +624,10 @@ static void _scb_pool_init(_scb_pool_t* pool, int num) {
     // generation counters indexable by pool slot index, slot 0 is reserved
     size_t gen_ctrs_size = sizeof(uint32_t) * (size_t)pool->size;
     pool->gen_ctrs = (uint32_t*) _scb_malloc_clear(gen_ctrs_size);
+    SOKOL_ASSERT(pool->gen_ctrs);
     // it's not a bug to only reserve 'num' here
     pool->free_queue = (int*) _scb_malloc_clear(sizeof(int) * (size_t)num);
+    SOKOL_ASSERT(pool->free_queue);
     // never allocate the zero-th pool item since the invalid id is 0
     for (int i = pool->size-1; i >= 1; i--) {
         pool->free_queue[pool->queue_top++] = i;
@@ -489,6 +682,7 @@ static void _scb_setup_pools(_scb_pools_t* p, const scb_desc* desc) {
     _scb_pool_init(&p->cmdbuf_pool, desc->cmdbuf_pool_size);
     size_t cb_pool_byte_size = sizeof(_scb_cmdbuf_t) * (size_t)p->cmdbuf_pool.size;
     p->cmdbufs = (_scb_cmdbuf_t*)_scb_malloc_clear(cb_pool_byte_size);
+    SOKOL_ASSERT(p->cmdbufs);
 }
 
 static void _scb_discard_pools(_scb_pools_t* p) {
@@ -560,6 +754,7 @@ static scb_cmdbuf _scb_alloc_cmdbuf(void) {
         cb_id = _scb_make_cmdbuf_id(_scb_slot_alloc(&_scb.pools.cmdbuf_pool, &_scb.pools.cmdbufs[slot_index].slot, slot_index));
     } else {
         // pool is exhausted
+        _SCB_ERROR(CMDBUF_POOL_EXHAUSTED);
         cb_id = _scb_make_cmdbuf_id(SCB_INVALID_ID);
     }
     return cb_id;
@@ -606,6 +801,7 @@ static scb_desc _scb_desc_defaults(const scb_desc* desc) {
 }
 
 static scb_cmdbuf_desc _scb_cmdbuf_desc_defaults(const scb_cmdbuf_desc* desc) {
+    SOKOL_ASSERT(desc);
     scb_cmdbuf_desc res = *desc;
     res.size = _scb_def(res.size, _SCB_DEFAULT_CMDBUF_SIZE);
     return res;
@@ -704,22 +900,22 @@ static void _scb_enc_blob(_scb_cmdbuf_t* cb, const void* ptr, size_t size) {
     cb->cur += size;
 }
 
-static const uint8_t* _scb_ptr_align16(const uint8_t* ptr) {
-    const uintptr_t align_minus_one = (16 - 1);
+static const uint8_t* _scb_ptr_align4(const uint8_t* ptr) {
+    const uintptr_t align_minus_one = (4 - 1);
     const uintptr_t mask = ~align_minus_one;
     return (uint8_t*)(((uintptr_t)ptr + align_minus_one) & mask);
 }
 
-static void _scb_enc_align16(_scb_cmdbuf_t* cb) {
-    uint8_t* ptr16 = (uint8_t*)_scb_ptr_align16(cb->cur);
-    SOKOL_ASSERT((ptr16 >= cb->cur) && (ptr16 < cb->end));
-    for (; cb->cur < ptr16; cb->cur++) {
+static void _scb_enc_align4(_scb_cmdbuf_t* cb) {
+    uint8_t* ptr = (uint8_t*)_scb_ptr_align4(cb->cur);
+    SOKOL_ASSERT((ptr >= cb->cur) && (ptr <= cb->end));
+    for (; cb->cur < ptr; cb->cur++) {
         *cb->cur = 0;
     }
 }
 
-static const uint8_t* _scb_dec_align16(const uint8_t* ptr) {
-    return _scb_ptr_align16(ptr);
+static const uint8_t* _scb_dec_align4(const uint8_t* ptr) {
+    return _scb_ptr_align4(ptr);
 }
 
 static bool _scb_enc_cmd(_scb_cmdbuf_t* cb, _scb_cmd_t cmd, size_t max_payload_size) {
@@ -885,13 +1081,13 @@ static void _scb_enc_apply_bindings(_scb_cmdbuf_t* cb, const sg_bindings* bindin
     for (int i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
         if (bindings->vertex_buffers[i].id != SG_INVALID_ID) {
             slot_mask |= (1ULL << (i + vb_start));
-            payload_size += sizeof(uint32_t) + sizeof(int);
+            payload_size += sizeof(uint32_t) + sizeof(int32_t);
         }
     }
     // index buffer handle and offset
     if (bindings->index_buffer.id != SG_INVALID_ID) {
         slot_mask |= (1ULL << ib_start);
-        payload_size += sizeof(uint32_t) + sizeof(int);
+        payload_size += sizeof(uint32_t) + sizeof(int32_t);
     }
     // view handles
     for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
@@ -971,12 +1167,12 @@ static const uint8_t* _scb_dec_apply_bindings(const uint8_t* ptr) {
 static void _scb_enc_apply_uniforms(_scb_cmdbuf_t* cb, int ub_slot, const sg_range* data) {
     SOKOL_ASSERT(data->size <= UINT32_MAX);
     SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
-    // NOTE: add max alignment gap of 15 bytes to max payload size
-    const size_t max_payload_size = sizeof(int32_t) + sizeof(uint32_t) + data->size + 15;
+    // NOTE: add max alignment gap of 3 bytes to max payload size
+    const size_t max_payload_size = sizeof(int32_t) + sizeof(uint32_t) + data->size + 3;
     if (_scb_enc_cmd(cb, _SCB_CMD_APPLY_UNIFORMS, max_payload_size)) {
         _scb_enc_i32(cb, ub_slot);
         _scb_enc_u32(cb, (uint32_t)data->size);
-        _scb_enc_align16(cb);
+        _scb_enc_align4(cb);
         _scb_enc_blob(cb, data->ptr, data->size);
         _scb_enc_end(cb);
     }
@@ -988,7 +1184,7 @@ static const uint8_t* _scb_dec_apply_uniforms(const uint8_t* ptr) {
     ptr = _scb_dec_i32(ptr, &ub_slot);
     SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
     ptr = _scb_dec_u32(ptr, &size_u32);
-    ptr = _scb_dec_align16(ptr);
+    ptr = _scb_dec_align4(ptr);
     sg_range data;
     _scb_clear(&data, sizeof(data));
     data.ptr = ptr;
@@ -1090,6 +1286,7 @@ SOKOL_API_IMPL void scb_apply_viewportf(scb_cmdbuf cb_id, float x, float y, floa
         _SCB_ERROR(CMDBUF_NOT_VALID);
         return;
     }
+    // NOTE: truncating the floats is intended and matched sokol-gfx behaviour
     _scb_enc_apply_viewport(cb, (int)x, (int)y, (int)width, (int)height, origin_top_left);
 }
 
@@ -1110,6 +1307,7 @@ SOKOL_API_IMPL void scb_apply_scissor_rectf(scb_cmdbuf cb_id, float x, float y, 
         _SCB_ERROR(CMDBUF_NOT_VALID);
         return;
     }
+    // NOTE: truncating the floats is intended and matched sokol-gfx behaviour
     _scb_enc_apply_scissor_rect(cb, (int)x, (int)y, (int)width, (int)height, origin_top_left);
 }
 
