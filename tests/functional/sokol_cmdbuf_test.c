@@ -1240,3 +1240,88 @@ UTEST(sokol_cmdbuf, submit_wraps_in_debug_group_with_label) {
     scb_destroy_cmdbuf(cb3);
     shutdown();
 }
+
+UTEST(sokol_cmdbuf, reset_rewinds_recorded_cmdbuf) {
+    // record a few commands, reset, verify the buffer is rewound and a
+    // subsequent submit fires nothing
+    submit_test_init();
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
+    _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
+    T(cbptr);
+    scb_apply_pipeline(cb, (sg_pipeline){ .id = 42 });
+    scb_draw(cb, 0, 3, 1);
+    T(cbptr->cur > cbptr->buf);
+    T(cbptr->overflown == false);
+    scb_reset(cb);
+    T(cbptr->cur == cbptr->buf);
+    T(cbptr->overflown == false);
+    T(num_scb_log_items == 0);
+    // submit after reset must not replay the discarded commands
+    scb_submit(cb);
+    T(num_tcalls == 0);
+    // the cmdbuf is usable again after reset
+    scb_draw(cb, 5, 6, 7);
+    scb_submit(cb);
+    T(num_tcalls == 1);
+    T(tcalls[0].kind == TCALL_DRAW);
+    T(tcalls[0].i0 == 5 && tcalls[0].i1 == 6 && tcalls[0].i2 == 7);
+    scb_destroy_cmdbuf(cb);
+    shutdown();
+}
+
+UTEST(sokol_cmdbuf, reset_empty_cmdbuf) {
+    // reset on a fresh (empty) cmdbuf must be a silent no-op
+    submit_test_init();
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
+    _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
+    T(cbptr);
+    T(cbptr->cur == cbptr->buf);
+    scb_reset(cb);
+    T(cbptr->cur == cbptr->buf);
+    T(cbptr->overflown == false);
+    T(num_scb_log_items == 0);
+    scb_destroy_cmdbuf(cb);
+    shutdown();
+}
+
+UTEST(sokol_cmdbuf, reset_clears_overflown) {
+    // reset on an overflown cmdbuf must clear the overflown flag and rewind
+    submit_test_init();
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){ .size = 32 });
+    _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
+    T(cbptr);
+    scb_draw_ex(cb, 1, 2, 3, 4, 5);
+    scb_draw_ex(cb, 6, 7, 8, 9, 10);  // overflows the 32-byte buffer
+    T(cbptr->overflown == true);
+    T(cbptr->cur > cbptr->buf);
+    // encoder already fired CMDBUF_OVERFLOW; reset the log capture to observe
+    // only what scb_reset itself produces (which is nothing)
+    num_scb_log_items = 0;
+    scb_reset(cb);
+    T(cbptr->cur == cbptr->buf);
+    T(cbptr->overflown == false);
+    T(num_scb_log_items == 0);
+    // the cmdbuf is usable again after reset
+    scb_draw(cb, 0, 3, 1);
+    T(cbptr->overflown == false);
+    scb_submit(cb);
+    T(num_tcalls == 1);
+    T(tcalls[0].kind == TCALL_DRAW);
+    scb_destroy_cmdbuf(cb);
+    shutdown();
+}
+
+UTEST(sokol_cmdbuf, reset_invalid_handle) {
+    // reset on invalid / stale handles must log CMDBUF_NOT_VALID and be a no-op
+    submit_test_init();
+    scb_reset((scb_cmdbuf){ .id = SCB_INVALID_ID });
+    T(num_scb_log_items == 1);
+    T(scb_log_items[0] == SCB_LOGITEM_CMDBUF_NOT_VALID);
+    // stale handle after destroy
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
+    scb_destroy_cmdbuf(cb);
+    scb_reset(cb);
+    T(num_scb_log_items == 2);
+    T(scb_log_items[1] == SCB_LOGITEM_CMDBUF_NOT_VALID);
+    shutdown();
+}
