@@ -17,6 +17,7 @@ set(c_sources
     sokol_spine.c
     sokol_log.c
     sokol_letterbox.c
+    sokol_framebuffer.c
     sokol_main.c)
 if (NOT ANDROID)
     set(c_sources ${c_sources} sokol_fetch.c)

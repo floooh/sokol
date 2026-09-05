@@ -16,6 +16,7 @@ tasks = [
     [ '../util/sokol_shape.h',       'sshape_',   ['sg_'] ],
     [ '../util/sokol_framebuffer.h', 'sfb_',      ['sg_'] ],
     [ '../util/sokol_letterbox.h',   'slbx_',     [] ],
+    [ '../util/sokol_cmdbuf.h',      'scb_',      ['sg_'] ],
 ]
 
 # common prefix- to module-names mapping table
@@ -39,6 +40,7 @@ module_names = {
     'smemtrack_': 'memtrack',
     'sfb_':       'framebuffer',
     'slbx_':      'letterbox',
+    'scb_':       'cmdbuf',
 }
 
 # Jai
