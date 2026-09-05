@@ -215,6 +215,8 @@ SOKOL_CMDBUF_API_DECL scb_cmdbuf scb_make_cmdbuf(const scb_cmdbuf_desc* desc);
 SOKOL_CMDBUF_API_DECL void scb_destroy_cmdbuf(scb_cmdbuf cb);
 // submit command buffer to sokol-gfx and rewind the command buffer (call inside a sokol-gfx pass)
 SOKOL_CMDBUF_API_DECL void scb_submit(scb_cmdbuf cb);
+// reset a recorded command buffer, discarding its content
+SOKOL_CMDBUF_API_DECL void scb_reset(scb_cmdbuf cb);
 
 // record apply-viewport command (integer variant)
 SOKOL_CMDBUF_API_DECL void scb_apply_viewport(scb_cmdbuf cb, int x, int y, int width, int height, bool origin_top_left);
@@ -1234,4 +1236,13 @@ SOKOL_API_IMPL void scb_submit(scb_cmdbuf cb_id) {
     }
 }
 
+SOKOL_API_IMPL void scb_reset(scb_cmdbuf cb_id) {
+    SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
+    _scb_cmdbuf_t* cb = _scb_lookup_cmdbuf(cb_id.id);
+    if (!_scb_cmdbuf_valid(cb)) {
+        _SCB_ERROR(CMDBUF_NOT_VALID);
+        return;
+    }
+    _scb_rewind(cb);
+}
 #endif // SOKOL_CMDBUF_IMPL
