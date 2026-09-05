@@ -85,7 +85,7 @@
             .allocator = {
                 .alloc_fn = my_alloc,
                 .free_fn = my_free,
-                .user_data = ...;
+                .user_data = ...,
             },
             .logger.func = slog_func,
         });
@@ -97,7 +97,7 @@
 
       It often makes sense to provide a specific size in bytes:
 
-        scb_cmdbuf cbuf = scb_make_cmdbuf(&(scb_cmdbuf_desc){
+        scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){
             .size = 128 * 1024,     // 128 kbytes
         });
 
@@ -106,8 +106,8 @@
 
       You can provide a label string for the command buffer:
 
-        scb_cmdbuf cbuf = scb_make_cmdbuf(&(scb_cmdbuf_desc){
-            .label = "dbg-phyiscs",
+        scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){
+            .label = "dbg-physics",
         });
 
       When a label string exists, sokol_cmdbuf.h will wrap submitted commands
@@ -207,7 +207,8 @@
         alignment into the command buffer, the required size is:
 
         1 byte for the command
-        + 4 bytes for the uniform data size
+        + 4 bytes for ub_slot
+        + 4 bytes for the uniform data size (truncated from size_t)
         + up to 3 bytes 'alignment gap'
         + the actual uniform data
 
@@ -218,7 +219,7 @@
         1 byte for the command
         + 8 bytes for the 64-bit occupation bitmask
         + 4 bytes for each valid sg_buffer, sg_view, sg_sampler
-          hande in the sg_bindings struct
+          handle in the sg_bindings struct
         + 4 bytes extra for the buffer offset of each occupied vertex buffer slot
         + 4 bytes extra for the index buffer offset if the index buffer slot is occupied
 
@@ -291,8 +292,8 @@ typedef struct scb_cmdbuf { uint32_t id; } scb_cmdbuf;
     scb_resource_state
 
     The state of a command buffer object, obtainable via scb_query_cmdbuf_state().
-    Publicly visible values are only SCB_RESOURCESTATE_VALID
-    and SCB_RESOURCESTATE_FAILED.
+    Publicly visible values are only SCB_RESOURCESTATE_VALID,
+    SCB_RESOURCESTATE_FAILED and SCB_RESOURCESTATE_INVALID.
 */
 typedef enum scb_resource_state {
     SCB_RESOURCESTATE_INITIAL,
@@ -309,10 +310,14 @@ typedef enum scb_resource_state {
     Creation parameters of a command buffer object. Used
     in scb_make_cmdbuf().
 
-    TODO: information on how to estimate required size
+    See doc section ESTIMATING COMMAND BUFFER SIZES about
+    how command buffer size can be estimated.
+
+    When a label is set, sokol_cmdbuf.h will wrap
+    submitted commands with `sg_push/pop_debug_group()`.
 */
 typedef struct scb_cmdbuf_desc {
-    size_t size;            // command buffer size in bytes (default: 256 * 1024 (256 KBytes))
+    size_t size;        // command buffer size in bytes (default: 256 * 1024 (256 KBytes))
     const char* label;
 } scb_cmdbuf_desc;
 
@@ -385,10 +390,10 @@ typedef struct scb_allocator {
 /*
     scb_desc
 
-    FIXME: docs
+    Initialization options passed into scb_setup.
 */
 typedef struct scb_desc {
-    int cmdbuf_pool_size;       // max number of command buffers that can be alive simultanously (default: 16)
+    int cmdbuf_pool_size;       // max number of command buffers that can be alive simultaneously (default: 16)
     scb_allocator allocator;    // optional memory allocation overrides (default: malloc/free)
     scb_logger logger;          // optional log override functions (default: NO LOGGING)
 } scb_desc;
@@ -428,7 +433,7 @@ SOKOL_CMDBUF_API_DECL void scb_draw_ex(scb_cmdbuf cb, int base_element, int num_
 // record dispatch command
 SOKOL_CMDBUF_API_DECL void scb_dispatch(scb_cmdbuf cb, int num_groups_x, int num_groups_y, int num_groups_z);
 
-// query command buffer resource state (valid or failed)
+// query command buffer resource state (valid, failed, invalid)
 SOKOL_CMDBUF_API_DECL scb_resource_state scb_query_cmdbuf_state(scb_cmdbuf cb);
 // query current command buffer properties
 SOKOL_CMDBUF_API_DECL scb_cmdbuf_info scb_query_cmdbuf_info(scb_cmdbuf cb);
