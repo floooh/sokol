@@ -5,8 +5,7 @@
 
     Provides just the D3D11/DXGI enums, structs and COM-style interfaces that
     the sokol_gfx.h D3D11 backend actually references. The runtime side lives
-    in d3d11_mock.c and returns success for every Create* call so unit tests
-    can exercise the SOKOL_D3D11 code path on Linux/macOS.
+    in d3d11_mock.c.
 
     The header supports the C-style COM ABI used by sokol_gfx.h when compiled
     as C: `self->lpVtbl->Method(self, ...)`. It is not intended for the C++
