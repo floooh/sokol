@@ -25,7 +25,7 @@ if (NOT BACKEND_MOCK_ONLY)
     configure_c(sokol-test)
 endif()
 
-# D3D11 backend smoke test. Only built in mock mode with SOKOL_D3D11 selected.
+# D3D11 backend tests. Only built in mock mode with SOKOL_D3D11 selected.
 if (BACKEND_MOCK_ONLY AND SOKOL_BACKEND STREQUAL SOKOL_D3D11)
     add_subdirectory(d3d11)
 endif()

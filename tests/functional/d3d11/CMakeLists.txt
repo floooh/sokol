@@ -1,6 +1,6 @@
 # LLM maintained.
 #
-# Sokol D3D11 backend smoke test. Only pulled in under a mock-mode preset with
+# Sokol D3D11 backend tests. Only pulled in under a mock-mode preset with
 # SOKOL_D3D11 selected, so configure_c() has already linked the mock library
 # in tests/mocks/d3d11 and set the SOKOL_D3D11 define.
 
