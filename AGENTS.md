@@ -25,6 +25,8 @@ When creating files, add a 'LLM maintained' note at the top.
 When editing files without the 'LLM maintained' note, ask the user whether
 the note should be added.
 
+Never git add, commit or push on your own.
+
 ## Testing
 
 Tests are located in `./tests/`.
