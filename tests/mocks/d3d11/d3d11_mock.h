@@ -12,6 +12,7 @@
 #define D3D11_MOCK_H_INCLUDED
 
 #include "d3d11.h"
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,6 +37,13 @@ extern int d3d11_mock_live_object_count(void);
 /* Reset the mock to a clean slate. Frees every alive mock object without
    touching refcounts -- for post-test cleanup only. */
 extern void d3d11_mock_reset(void);
+
+/* Fault injection -- when the counter is > 0, the next N Create* / D3DCompile
+   calls return E_FAIL / NULL. The counter decrements per call. Set to 0 to
+   restore success mode. Used by error-path tests. */
+extern void d3d11_mock_fail_next_create(int n);
+extern void d3d11_mock_fail_next_compile(int n);
+extern void d3d11_mock_fail_d3dcompiler_dll(bool fail);
 
 #ifdef __cplusplus
 }

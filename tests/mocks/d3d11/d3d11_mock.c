@@ -63,6 +63,20 @@ typedef struct mock_obj_s {
 /* live-object accounting for leak checks */
 static int live_object_count = 0;
 
+/* fault-injection counters */
+static int fail_next_create_n = 0;
+static int fail_next_compile_n = 0;
+static bool fail_dll_load = false;
+
+/* Consume one Create* fault slot; returns true if this call should fail. */
+static bool mock_consume_create_fault(void) {
+    if (fail_next_create_n > 0) {
+        fail_next_create_n--;
+        return true;
+    }
+    return false;
+}
+
 /* keep a linked list of live objects so d3d11_mock_reset() can free them all */
 typedef struct mock_obj_node_s {
     mock_obj_t* obj;
@@ -185,6 +199,7 @@ static D3D_FEATURE_LEVEL dev_GetFeatureLevel(ID3D11Device* self) {
 
 static HRESULT dev_CreateBuffer(ID3D11Device* self, const D3D11_BUFFER_DESC* pDesc, const D3D11_SUBRESOURCE_DATA* pInit, ID3D11Buffer** ppOut) {
     (void)self; (void)pInit;
+    if (mock_consume_create_fault()) { *ppOut = NULL; return E_FAIL; }
     mock_obj_t* obj = mock_alloc(MOCK_KIND_BUFFER, &buffer_vtbl);
     obj->size_bytes = pDesc ? pDesc->ByteWidth : 0;
     *ppOut = (ID3D11Buffer*)obj;
@@ -193,6 +208,7 @@ static HRESULT dev_CreateBuffer(ID3D11Device* self, const D3D11_BUFFER_DESC* pDe
 
 static HRESULT dev_CreateTexture2D(ID3D11Device* self, const D3D11_TEXTURE2D_DESC* pDesc, const D3D11_SUBRESOURCE_DATA* pInit, ID3D11Texture2D** ppOut) {
     (void)self; (void)pInit;
+    if (mock_consume_create_fault()) { *ppOut = NULL; return E_FAIL; }
     mock_obj_t* obj = mock_alloc(MOCK_KIND_TEXTURE2D, &texture2d_vtbl);
     /* Reserve a generous per-subresource scratch: worst case width*height*16 */
     size_t w = pDesc ? pDesc->Width  : 1;
@@ -206,6 +222,7 @@ static HRESULT dev_CreateTexture2D(ID3D11Device* self, const D3D11_TEXTURE2D_DES
 
 static HRESULT dev_CreateTexture3D(ID3D11Device* self, const D3D11_TEXTURE3D_DESC* pDesc, const D3D11_SUBRESOURCE_DATA* pInit, ID3D11Texture3D** ppOut) {
     (void)self; (void)pInit;
+    if (mock_consume_create_fault()) { *ppOut = NULL; return E_FAIL; }
     mock_obj_t* obj = mock_alloc(MOCK_KIND_TEXTURE3D, &texture3d_vtbl);
     size_t w = pDesc ? pDesc->Width  : 1;
     size_t h = pDesc ? pDesc->Height : 1;
@@ -219,6 +236,7 @@ static HRESULT dev_CreateTexture3D(ID3D11Device* self, const D3D11_TEXTURE3D_DES
 
 static HRESULT dev_CreateShaderResourceView(ID3D11Device* self, ID3D11Resource* pRes, const D3D11_SHADER_RESOURCE_VIEW_DESC* pDesc, ID3D11ShaderResourceView** ppOut) {
     (void)self; (void)pDesc;
+    if (mock_consume_create_fault()) { *ppOut = NULL; return E_FAIL; }
     mock_obj_t* obj = mock_alloc(MOCK_KIND_SRV, &srv_vtbl);
     obj->view_resource = (mock_obj_t*)pRes;
     *ppOut = (ID3D11ShaderResourceView*)obj;
@@ -227,6 +245,7 @@ static HRESULT dev_CreateShaderResourceView(ID3D11Device* self, ID3D11Resource* 
 
 static HRESULT dev_CreateUnorderedAccessView(ID3D11Device* self, ID3D11Resource* pRes, const D3D11_UNORDERED_ACCESS_VIEW_DESC* pDesc, ID3D11UnorderedAccessView** ppOut) {
     (void)self; (void)pDesc;
+    if (mock_consume_create_fault()) { *ppOut = NULL; return E_FAIL; }
     mock_obj_t* obj = mock_alloc(MOCK_KIND_UAV, &uav_vtbl);
     obj->view_resource = (mock_obj_t*)pRes;
     *ppOut = (ID3D11UnorderedAccessView*)obj;
@@ -235,6 +254,7 @@ static HRESULT dev_CreateUnorderedAccessView(ID3D11Device* self, ID3D11Resource*
 
 static HRESULT dev_CreateRenderTargetView(ID3D11Device* self, ID3D11Resource* pRes, const D3D11_RENDER_TARGET_VIEW_DESC* pDesc, ID3D11RenderTargetView** ppOut) {
     (void)self; (void)pDesc;
+    if (mock_consume_create_fault()) { *ppOut = NULL; return E_FAIL; }
     mock_obj_t* obj = mock_alloc(MOCK_KIND_RTV, &rtv_vtbl);
     obj->view_resource = (mock_obj_t*)pRes;
     *ppOut = (ID3D11RenderTargetView*)obj;
@@ -243,6 +263,7 @@ static HRESULT dev_CreateRenderTargetView(ID3D11Device* self, ID3D11Resource* pR
 
 static HRESULT dev_CreateDepthStencilView(ID3D11Device* self, ID3D11Resource* pRes, const D3D11_DEPTH_STENCIL_VIEW_DESC* pDesc, ID3D11DepthStencilView** ppOut) {
     (void)self; (void)pDesc;
+    if (mock_consume_create_fault()) { *ppOut = NULL; return E_FAIL; }
     mock_obj_t* obj = mock_alloc(MOCK_KIND_DSV, &dsv_vtbl);
     obj->view_resource = (mock_obj_t*)pRes;
     *ppOut = (ID3D11DepthStencilView*)obj;
@@ -251,48 +272,56 @@ static HRESULT dev_CreateDepthStencilView(ID3D11Device* self, ID3D11Resource* pR
 
 static HRESULT dev_CreateSamplerState(ID3D11Device* self, const D3D11_SAMPLER_DESC* pDesc, ID3D11SamplerState** ppOut) {
     (void)self; (void)pDesc;
+    if (mock_consume_create_fault()) { *ppOut = NULL; return E_FAIL; }
     *ppOut = (ID3D11SamplerState*)mock_alloc(MOCK_KIND_SAMPLER, &sampler_vtbl);
     return S_OK;
 }
 
 static HRESULT dev_CreateVertexShader(ID3D11Device* self, const void* code, SIZE_T len, ID3D11ClassLinkage* link, ID3D11VertexShader** ppOut) {
     (void)self; (void)code; (void)len; (void)link;
+    if (mock_consume_create_fault()) { *ppOut = NULL; return E_FAIL; }
     *ppOut = (ID3D11VertexShader*)mock_alloc(MOCK_KIND_VERTEX_SHADER, &vs_vtbl);
     return S_OK;
 }
 
 static HRESULT dev_CreatePixelShader(ID3D11Device* self, const void* code, SIZE_T len, ID3D11ClassLinkage* link, ID3D11PixelShader** ppOut) {
     (void)self; (void)code; (void)len; (void)link;
+    if (mock_consume_create_fault()) { *ppOut = NULL; return E_FAIL; }
     *ppOut = (ID3D11PixelShader*)mock_alloc(MOCK_KIND_PIXEL_SHADER, &ps_vtbl);
     return S_OK;
 }
 
 static HRESULT dev_CreateComputeShader(ID3D11Device* self, const void* code, SIZE_T len, ID3D11ClassLinkage* link, ID3D11ComputeShader** ppOut) {
     (void)self; (void)code; (void)len; (void)link;
+    if (mock_consume_create_fault()) { *ppOut = NULL; return E_FAIL; }
     *ppOut = (ID3D11ComputeShader*)mock_alloc(MOCK_KIND_COMPUTE_SHADER, &cs_vtbl);
     return S_OK;
 }
 
 static HRESULT dev_CreateInputLayout(ID3D11Device* self, const D3D11_INPUT_ELEMENT_DESC* pElems, UINT numElems, const void* code, SIZE_T len, ID3D11InputLayout** ppOut) {
     (void)self; (void)pElems; (void)numElems; (void)code; (void)len;
+    if (mock_consume_create_fault()) { *ppOut = NULL; return E_FAIL; }
     *ppOut = (ID3D11InputLayout*)mock_alloc(MOCK_KIND_INPUT_LAYOUT, &input_layout_vtbl);
     return S_OK;
 }
 
 static HRESULT dev_CreateRasterizerState(ID3D11Device* self, const D3D11_RASTERIZER_DESC* pDesc, ID3D11RasterizerState** ppOut) {
     (void)self; (void)pDesc;
+    if (mock_consume_create_fault()) { *ppOut = NULL; return E_FAIL; }
     *ppOut = (ID3D11RasterizerState*)mock_alloc(MOCK_KIND_RASTERIZER_STATE, &rasterizer_vtbl);
     return S_OK;
 }
 
 static HRESULT dev_CreateDepthStencilState(ID3D11Device* self, const D3D11_DEPTH_STENCIL_DESC* pDesc, ID3D11DepthStencilState** ppOut) {
     (void)self; (void)pDesc;
+    if (mock_consume_create_fault()) { *ppOut = NULL; return E_FAIL; }
     *ppOut = (ID3D11DepthStencilState*)mock_alloc(MOCK_KIND_DEPTH_STENCIL_STATE, &depth_stencil_vtbl);
     return S_OK;
 }
 
 static HRESULT dev_CreateBlendState(ID3D11Device* self, const D3D11_BLEND_DESC* pDesc, ID3D11BlendState** ppOut) {
     (void)self; (void)pDesc;
+    if (mock_consume_create_fault()) { *ppOut = NULL; return E_FAIL; }
     *ppOut = (ID3D11BlendState*)mock_alloc(MOCK_KIND_BLEND_STATE, &blend_vtbl);
     return S_OK;
 }
@@ -483,12 +512,18 @@ void d3d11_mock_destroy_device(ID3D11Device* dev) {
 
 ID3D11RenderTargetView* d3d11_mock_create_rtv(ID3D11Device* dev) {
     (void)dev;
-    return (ID3D11RenderTargetView*)mock_alloc(MOCK_KIND_RTV, &rtv_vtbl);
+    mock_obj_t* tex = mock_alloc(MOCK_KIND_TEXTURE2D, &texture2d_vtbl);
+    mock_obj_t* rtv = mock_alloc(MOCK_KIND_RTV, &rtv_vtbl);
+    rtv->view_resource = tex;   // GetResource() will hand out this backing texture
+    return (ID3D11RenderTargetView*)rtv;
 }
 
 ID3D11DepthStencilView* d3d11_mock_create_dsv(ID3D11Device* dev) {
     (void)dev;
-    return (ID3D11DepthStencilView*)mock_alloc(MOCK_KIND_DSV, &dsv_vtbl);
+    mock_obj_t* tex = mock_alloc(MOCK_KIND_TEXTURE2D, &texture2d_vtbl);
+    mock_obj_t* dsv = mock_alloc(MOCK_KIND_DSV, &dsv_vtbl);
+    dsv->view_resource = tex;
+    return (ID3D11DepthStencilView*)dsv;
 }
 
 int d3d11_mock_live_object_count(void) {
@@ -506,6 +541,21 @@ void d3d11_mock_reset(void) {
     }
     live_object_count = 0;
     current_context = NULL;
+    fail_next_create_n = 0;
+    fail_next_compile_n = 0;
+    fail_dll_load = false;
+}
+
+void d3d11_mock_fail_next_create(int n) {
+    fail_next_create_n = n;
+}
+
+void d3d11_mock_fail_next_compile(int n) {
+    fail_next_compile_n = n;
+}
+
+void d3d11_mock_fail_d3dcompiler_dll(bool fail) {
+    fail_dll_load = fail;
 }
 
 /* ---- D3DCompile mock --------------------------------------------------- */
@@ -520,6 +570,20 @@ static HRESULT WINAPI mock_D3DCompile(
     (void)pSrcData; (void)SrcDataSize; (void)pSourceName;
     (void)pDefines; (void)pInclude; (void)pEntry; (void)pTarget;
     (void)Flags1; (void)Flags2;
+    if (fail_next_compile_n > 0) {
+        fail_next_compile_n--;
+        *ppCode = NULL;
+        if (ppErrorMsgs) {
+            /* Emit a small "error message" blob so sokol logs it. */
+            mock_obj_t* err = mock_alloc(MOCK_KIND_BLOB, &blob_vtbl);
+            const char* msg = "mock: forced compile failure";
+            err->blob_size = strlen(msg) + 1;
+            err->blob_data = calloc(1, err->blob_size);
+            memcpy(err->blob_data, msg, err->blob_size);
+            *ppErrorMsgs = (ID3DBlob*)err;
+        }
+        return E_FAIL;
+    }
     /* Emit a small dummy blob so downstream code paths (CreateVertexShader,
        CreateInputLayout) have a non-NULL, non-empty bytecode buffer. */
     mock_obj_t* blob = mock_alloc(MOCK_KIND_BLOB, &blob_vtbl);
@@ -536,6 +600,7 @@ static char mock_d3dcompiler_dll_handle;
 
 HMODULE WINAPI LoadLibraryA(LPCSTR name) {
     if (name && strcmp(name, "d3dcompiler_47.dll") == 0) {
+        if (fail_dll_load) { return NULL; }
         return (HMODULE)&mock_d3dcompiler_dll_handle;
     }
     return NULL;
