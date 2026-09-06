@@ -2,11 +2,6 @@
     LLM maintained.
 
     d3d11_mock.h -- public API of the mocked D3D11 runtime.
-
-    Provides just enough to bring up sokol_gfx's D3D11 backend on a non-Windows
-    host so its C code paths can be unit-tested. The mock returns success for
-    every Create/Set/Draw call and tracks reference counts so leaks are
-    observable from tests.
 */
 #ifndef D3D11_MOCK_H_INCLUDED
 #define D3D11_MOCK_H_INCLUDED
@@ -25,22 +20,19 @@ extern ID3D11DeviceContext* d3d11_mock_get_device_context(ID3D11Device* dev);
 extern void d3d11_mock_destroy_device(ID3D11Device* dev);
 
 /* Allocate a mock RTV/DSV suitable for filling sg_swapchain.d3d11.*_view.
-   Ownership stays with the caller; release via _sg_d3d11_Release() or the
-   corresponding vtbl slot. */
+   Ownership stays with the caller. */
 extern ID3D11RenderTargetView* d3d11_mock_create_rtv(ID3D11Device* dev);
 extern ID3D11DepthStencilView* d3d11_mock_create_dsv(ID3D11Device* dev);
 
-/* Diagnostics: total number of mock COM objects currently alive (refcount>0).
-   Includes the device + immediate context. Useful in tests for leak checks. */
+/* Total number of mock COM objects currently alive (refcount>0). Useful in
+   tests for leak checks. */
 extern int d3d11_mock_live_object_count(void);
 
-/* Reset the mock to a clean slate. Frees every alive mock object without
-   touching refcounts -- for post-test cleanup only. */
+/* Reset the mock to a clean slate. */
 extern void d3d11_mock_reset(void);
 
 /* Fault injection -- when the counter is > 0, the next N Create* / D3DCompile
-   calls return E_FAIL / NULL. The counter decrements per call. Set to 0 to
-   restore success mode. Used by error-path tests. */
+   calls return E_FAIL / NULL. The counter decrements per call. */
 extern void d3d11_mock_fail_next_create(int n);
 extern void d3d11_mock_fail_next_compile(int n);
 extern void d3d11_mock_fail_d3dcompiler_dll(bool fail);

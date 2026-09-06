@@ -3,10 +3,9 @@
 
     d3d11_mock.c -- runtime side of the D3D11 mock library.
 
-    Every Create/Set/Draw call succeeds. Objects are heap-allocated with a
-    refcount that starts at 1 and is decremented by Release(). Map() hands out
-    a scratch buffer sized to the resource, so sokol_gfx can round-trip data
-    without hitting UB.
+    Objects are heap-allocated with a refcount that starts at 1 and is
+    decremented by Release(). Map() hands out a scratch buffer sized to the
+    resource, so sokol_gfx can round-trip data without hitting UB.
 
     Not thread-safe -- this is intended for the sokol-gfx unit-test loop,
     which runs on a single thread.
