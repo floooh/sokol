@@ -1,3 +1,4 @@
+# LLM maintained.
 if (NOT ANDROID)
 
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets/comsi.s3m DESTINATION ${CMAKE_BINARY_DIR})
@@ -19,5 +20,13 @@ set(c_sources
 add_executable(sokol-test ${c_sources})
 target_link_libraries(sokol-test PUBLIC spine)
 configure_c(sokol-test)
+
+# Sokol-gfx D3D11 backend smoke test -- only on non-Windows hosts where the
+# tests/mocks/d3d11 stub library replaces the real Windows SDK.
+if (NOT WINDOWS)
+    add_executable(sokol-gfx-d3d11-test sokol_gfx_d3d11_test.c)
+    target_link_libraries(sokol-gfx-d3d11-test PRIVATE sokol_d3d11_mock)
+    configure_c(sokol-gfx-d3d11-test)
+endif()
 
 endif()

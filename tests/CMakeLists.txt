@@ -1,3 +1,4 @@
+# LLM maintained.
 cmake_minimum_required(VERSION 3.20)
 project(sokol-test)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
@@ -166,5 +167,11 @@ macro(configure_cxx target)
 endmacro()
 
 add_subdirectory(ext)
+# D3D11 mock library -- only useful on non-Windows hosts to let the sokol_gfx
+# D3D11 backend be compiled and unit-tested. Skip on Windows: the real SDK
+# provides d3d11.h/d3dcompiler.h there and takes precedence.
+if (NOT WINDOWS)
+    add_subdirectory(mocks)
+endif()
 add_subdirectory(compile)
 add_subdirectory(functional)
