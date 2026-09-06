@@ -1,6 +1,23 @@
 ## Updates
 
+### 06-Sep-2026
+
+Added a new header `sokol_cmdbuf.h`. This implements a simple record/replay
+mechanism for sokol_gfx.h functions that need to be issued inside a
+render or compute pass and that way allows to move those calls outside
+of passes.
+
+For more imformation see the header documentation in [util/sokol_cmdbuf.h](https://github.com/floooh/sokol/blob/master/util/sokol_cmdbuf.h),
+and for implementation details see the new sample [cmdbuf-sapp](https://floooh.github.io/sokol-html5/cmdbuf-sapp.html).
+
+Planning ticket: https://github.com/floooh/sokol/issues/1557
+
+PR: https://github.com/floooh/sokol/pull/1593
+
+The new header has also been added to all language bindings.
+
 ### 30-Aug-2026
+
 sokol_gfx.h: the next implementation step of the new resource update API:
 
 The 'stream-update' mode for buffers and images has been replaced with
