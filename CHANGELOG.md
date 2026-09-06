@@ -8,7 +8,7 @@ render or compute pass and that way allows to move those calls outside
 of passes.
 
 For more imformation see the header documentation in [util/sokol_cmdbuf.h](https://github.com/floooh/sokol/blob/master/util/sokol_cmdbuf.h),
-and for implementation details see the new sample [cmdbuf-sapp](https://floooh.github.io/sokol-html5/cmdbuf-sapp.html).
+and for a usage example the new sample [cmdbuf-sapp](https://floooh.github.io/sokol-html5/cmdbuf-sapp.html).
 
 Planning ticket: https://github.com/floooh/sokol/issues/1557
 
