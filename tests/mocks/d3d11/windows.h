@@ -1,8 +1,8 @@
 /*
     LLM maintained.
 
-    mock_windows.h -- minimal Windows type/function stubs required by the
-    D3D11 mock. Only what sokol_gfx.h references in the D3D11 backend.
+    windows.h -- minimal Windows type/function stubs required by the D3D11
+    mock. Only what sokol_gfx.h references in the D3D11 backend.
 
     On the real Windows platform, this header should not be reached because
     the real Windows SDK provides d3d11.h/d3dcompiler.h. This header is

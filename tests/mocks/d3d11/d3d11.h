@@ -15,7 +15,7 @@
 #ifndef MOCK_D3D11_H_INCLUDED
 #define MOCK_D3D11_H_INCLUDED
 
-#include "mock_windows.h"
+#include "windows.h"
 
 #ifdef __cplusplus
 extern "C" {

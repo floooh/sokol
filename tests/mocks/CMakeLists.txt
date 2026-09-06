@@ -9,7 +9,7 @@ add_library(sokol_d3d11_mock STATIC
     d3d11/d3d11_mock.h
     d3d11/d3d11.h
     d3d11/d3dcompiler.h
-    d3d11/mock_windows.h)
+    d3d11/windows.h)
 
 # Callers get the mock d3d11.h/d3dcompiler.h from this include dir. When
 # compiling sokol_gfx.h with SOKOL_D3D11, this dir must sit ahead of any
