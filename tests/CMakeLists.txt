@@ -11,6 +11,11 @@ set_property(CACHE SOKOL_BACKEND PROPERTY STRINGS SOKOL_GLCORE SOKOL_METAL SOKOL
 option(SOKOL_FORCE_EGL "Force EGL with GLCORE backend" OFF)
 option(USE_ARC "Enable/disable ARC" OFF)
 option(USE_ANALYZER "Enable/disable clang analyzer" OFF)
+# Enabled by the *_mock_* presets to route sokol backend headers through the
+# stub libraries in tests/mocks/. Only the matching sokol-<backend>-test
+# executable is built in that mode -- compile tests and sokol-test both pull
+# sokol_app.h whose backend paths are not (yet) mocked.
+option(BACKEND_MOCK_ONLY "Build only the sokol backend mock test targets" OFF)
 
 if (CMAKE_SYSTEM_NAME STREQUAL Emscripten)
     set(EMSCRIPTEN 1)
@@ -136,6 +141,11 @@ macro(configure_common target)
         target_include_directories(${target} PUBLIC $ENV{VULKAN_SDK}/Include)
         target_link_directories(${target} PUBLIC $ENV{VULKAN_SDK}/Lib)
     endif()
+    # In mock mode route the backend's SDK headers/functions through the
+    # matching mock library in tests/mocks/.
+    if (BACKEND_MOCK_ONLY AND SOKOL_BACKEND STREQUAL SOKOL_D3D11)
+        target_link_libraries(${target} PRIVATE sokol_d3d11_mock)
+    endif()
 endmacro()
 
 macro(configure_osx_properties target)
@@ -167,11 +177,13 @@ macro(configure_cxx target)
 endmacro()
 
 add_subdirectory(ext)
-# D3D11 mock library -- only useful on non-Windows hosts to let the sokol_gfx
-# D3D11 backend be compiled and unit-tested. Skip on Windows: the real SDK
-# provides d3d11.h/d3dcompiler.h there and takes precedence.
-if (NOT WINDOWS)
+# Mock libraries for backend SDK headers. Only needed in mock mode.
+if (BACKEND_MOCK_ONLY)
     add_subdirectory(mocks)
 endif()
-add_subdirectory(compile)
+# Compile tests link sokol_app.h whose backend-specific paths are not covered
+# by the mock libraries.
+if (NOT BACKEND_MOCK_ONLY)
+    add_subdirectory(compile)
+endif()
 add_subdirectory(functional)

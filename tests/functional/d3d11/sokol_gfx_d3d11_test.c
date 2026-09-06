@@ -6,7 +6,6 @@
 //  d3d11.h/d3dcompiler.h library in tests/mocks/. Only runs on non-Windows
 //  hosts; on Windows the real SDK is used and this executable is not built.
 //------------------------------------------------------------------------------
-#define SOKOL_D3D11
 #define SOKOL_IMPL
 #include "d3d11_mock.h"
 #include "sokol_gfx.h"

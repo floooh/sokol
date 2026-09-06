@@ -44,7 +44,8 @@ analyze() {
 
 runtest() {
     cfg=$1
+    binary=${2:-sokol-test}
     cd build/$cfg
-    ./sokol-test
-    cd ../../..
+    ./$binary
+    cd ../..
 }

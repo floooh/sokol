@@ -7,6 +7,26 @@
     },
     "configurePresets": [
         {
+            "name": "d3d11_mock_debug",
+            "generator": "Ninja",
+            "binaryDir": "build/d3d11_mock_debug",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_D3D11",
+                "BACKEND_MOCK_ONLY": "ON",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "d3d11_mock_release",
+            "generator": "Ninja",
+            "binaryDir": "build/d3d11_mock_release",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_D3D11",
+                "BACKEND_MOCK_ONLY": "ON",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
             "name": "macos_gl_debug",
             "generator": "Ninja",
             "binaryDir": "build/macos_gl_debug",
@@ -559,6 +579,14 @@
         }
     ],
     "buildPresets": [
+        {
+            "name": "d3d11_mock_debug",
+            "configurePreset": "d3d11_mock_debug"
+        },
+        {
+            "name": "d3d11_mock_release",
+            "configurePreset": "d3d11_mock_release"
+        },
         {
             "name": "macos_gl_debug",
             "configurePreset": "macos_gl_debug"
