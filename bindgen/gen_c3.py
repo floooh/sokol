@@ -21,6 +21,9 @@ module_names = {
     'sdtx_':    'sdtx',
     'sshape_':  'sshape',
     'sglue_':   'sglue',
+    'sfb_':     'sfb',
+    'slbx_':    'slbx',
+    'scb_':     'scb',
 }
 
 ignores = [

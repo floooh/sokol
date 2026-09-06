@@ -48,3 +48,9 @@ todo list of concrete warnings and errors.
 ## Reviewing Code
 
 When reviewing code, assume debug build mode (asserts enabled, unreachable panics, validation layers enabled).
+
+## Language bindings
+
+When working under `./bindgen/`, additional per-binding instructions apply.
+
+@bindgen/AGENTS.md
