@@ -26,6 +26,20 @@ destructive actions the user must direct.
 
 Only proceed to step 1 once every repo passes both checks.
 
+Also verify each repo's `master`/`main` branch is up to date with its
+remote before the user creates the feature branch from it -- an outdated
+base would make the eventual PR contain unrelated commits or fall behind
+upstream. From within the repo, run:
+
+```
+git fetch origin
+git rev-list --count master..origin/master   # 0 == up to date; non-zero == behind
+```
+
+(replace `master` with `main` where that's the default branch). If the
+count is non-zero, stop and tell the user which repo(s) are behind so
+they can fast-forward before branching.
+
 ## 1. Register the header with the generator
 
 Add an entry to the `tasks` list in `gen_all.py`:
