@@ -25,7 +25,6 @@
 #include "d3d11_mock.h"
 #include "sokol_gfx.h"
 #include "utest.h"
-#include <stdio.h>
 #include <string.h>
 
 #define T(b) EXPECT_TRUE(b)
@@ -43,11 +42,10 @@ static void reset_log(void) {
 }
 
 static void capture_log(const char* tag, uint32_t log_level, uint32_t log_item_id, const char* msg, uint32_t line_nr, const char* file, void* ud) {
-    (void)tag; (void)log_level; (void)line_nr; (void)file; (void)ud;
+    (void)tag; (void)log_level; (void)msg; (void)line_nr; (void)file; (void)ud;
     if (num_log_items < MAX_LOG_ITEMS) {
         log_items[num_log_items++] = (sg_log_item)log_item_id;
     }
-    if (msg) { fprintf(stderr, "[sokol] %s\n", msg); }
 }
 
 static bool logged(sg_log_item item) {
