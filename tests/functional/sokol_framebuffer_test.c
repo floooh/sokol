@@ -1,8 +1,8 @@
 //------------------------------------------------------------------------------
+//  LLM maintained.
+//
 //  sokol_framebuffer_test.c
 //  For best results, run with ASAN and UBSAN.
-//
-//  LLM generated!
 //------------------------------------------------------------------------------
 #include "sokol_gfx.h"
 #include "sokol_log.h"
