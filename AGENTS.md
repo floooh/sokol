@@ -25,6 +25,8 @@ When creating files, add a 'LLM maintained' note at the top.
 When editing files without the 'LLM maintained' note, ask the user whether
 the note should be added.
 
+Never git add, commit or push on your own.
+
 ## Testing
 
 Tests are located in `./tests/`.
@@ -46,3 +48,9 @@ todo list of concrete warnings and errors.
 ## Reviewing Code
 
 When reviewing code, assume debug build mode (asserts enabled, unreachable panics, validation layers enabled).
+
+## Language bindings
+
+When working under `./bindgen/`, additional per-binding instructions apply.
+
+@bindgen/AGENTS.md
