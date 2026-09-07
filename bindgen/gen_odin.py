@@ -424,7 +424,7 @@ def gen_c_imports(inp):
             res_str = '' if res_type == '' else f'-> {res_type}'
             if decl.get('comment'):
                 c(decl['comment'], indent="    ")
-            l(f"    {as_snake_case(decl['name'], prefix)} :: proc({args}) {res_str} ---")
+            l(f"    {as_snake_case(check_override(decl['name']), prefix)} :: proc({args}) {res_str} ---")
     l('}')
     l('')
 
