@@ -10,11 +10,11 @@ Language bindings:
   Main PR: https://github.com/floooh/sokol/pull/1596
 
 - bindings for sokol_imgui.h, sokol_gfx_imgui.h and sokol_app_imgui.h
-  have been added to all bindings which didn't have those so far
+  have been added to the language bindings which didn't have them so far
   (C3, Jai, Nim, Odin, Rust), but without the out-of-the-box
   build system integration of the Zig and D bindings. Instead the
-  user must take care of the integrating Dear ImGui into the project
-  themslelves by following new instructions in the readme.
+  user must take care of integrating Dear ImGui into the project
+  themselves by following new instructions in the readme.
 
   Main PR: https://github.com/floooh/sokol/pull/1597
 
