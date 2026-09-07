@@ -168,3 +168,51 @@ verification and commit are the user's job. See the top-level
 `bindgen/README.md` for the branch-naming convention (typically the same
 branch name as the sokol PR that added the header) when the user asks you
 to create a feature branch.
+
+## Special case -- headers with external C/C++ dependencies
+
+Some headers wrap third-party C/C++ libraries and cannot be auto-compiled
+by every binding's C build. Current examples:
+
+- `sokol_imgui.h`, `sokol_gfx_imgui.h`, `sokol_app_imgui.h` -- require
+  Dear ImGui (C++). Users are expected to vendor
+  [dcimgui](https://github.com/floooh/dcimgui) into their project.
+- `sokol_nuklear.h` -- requires nuklear.h. Currently D-only because each
+  generator needs opaque-type declarations for the foreign `nk_*` types
+  (see `gen_d.py`'s `gen_nuklear_types()`).
+
+For headers like these, the generator still emits the language binding
+module **and** the C stub (`c/sokol_<name>.c`), but the per-repo C build
+must NOT reference them -- consumers compile the stub against their own
+vendored dependency. Concretely:
+
+- sokol-zig / sokol-d: their build scripts (`build.zig`, `build.d`)
+  already have opt-in flags / configurations for imgui + nuklear; users
+  bring dcimgui / nuklear.h through those.
+- sokol-nim: `gen_nim.py` skips the `{.compile: ...}` pragma for these
+  prefixes. Users add their own compile pragma against a vendored
+  dcimgui.
+- sokol-rust: `gen_rust.py` gates these modules behind a cargo feature
+  (`imgui`), and `build.rs` intentionally omits their `.c` stubs.
+  Users enable the feature and compile the stub in their own `build.rs`.
+- sokol-jai / sokol-odin / sokol-c3: their `build_clibs_*.sh` (or
+  `sokol.c` in c3) do not compile these stubs. Users build them manually
+  and drop the archives where the module's `#library` / `foreign import`
+  block expects them.
+
+If you add another header of this shape, put its task in a helper list
+(`imgui_tasks`) so it's shared across bindings, but do NOT extend any
+build script or `sokol.c` unified include. Also add a "Dear ImGui
+integration"-style subsection to each binding's `README.md` documenting
+how to wire up the external dependency.
+
+### nuklear.h staging
+
+`sokol_nuklear.h`'s public API uses foreign `nk_*` types, so the
+generator's `clang` parse needs `nuklear.h` alongside `sokol_nuklear.h`
+in the C dir. `gen_d.prepare()` copies `../tests/ext/nuklear.h` into
+`sokol-d/src/sokol/c/nuklear.h` before generation and `gen_d.cleanup()`
+removes it after -- so `nuklear.h` is never shipped in the D repo.
+A generator that adds nuklear support should follow the same
+prepare/cleanup pattern.
+
