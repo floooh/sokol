@@ -11,6 +11,7 @@ tasks = [
     [ '../sokol_glue.h',             'sglue_',    ['sg_'] ],
     [ '../sokol_time.h',             'stm_',      [] ],
     [ '../sokol_audio.h',            'saudio_',   [] ],
+    [ '../sokol_fetch.h',            'sfetch_',   [] ],
     [ '../util/sokol_gl.h',          'sgl_',      ['sg_'] ],
     [ '../util/sokol_debugtext.h',   'sdtx_',     ['sg_'] ],
     [ '../util/sokol_shape.h',       'sshape_',   ['sg_'] ],
@@ -76,7 +77,6 @@ for task in tasks:
 # Zig
 zig_tasks = [
     *tasks,
-    [ '../sokol_fetch.h', 'sfetch_', [] ],
     [ '../util/sokol_imgui.h', 'simgui_',   ['sg_', 'sapp_'] ],
     [ '../util/sokol_gfx_imgui.h', 'sgimgui_', [] ],
     [ '../util/sokol_app_imgui.h', 'sappimgui_', ['sapp_'] ],
@@ -95,7 +95,6 @@ for task in zig_tasks:
 d_tasks = [
     *tasks,
     [ '../sokol_args.h',  'sargs_',  [] ],
-    [ '../sokol_fetch.h', 'sfetch_', [] ],
     [ '../util/sokol_memtrack.h', 'smemtrack_', [] ],
     [ '../util/sokol_imgui.h', 'simgui_',   ['sg_', 'sapp_'] ],
     [ '../util/sokol_gfx_imgui.h', 'sgimgui_',   ['sg_', 'sapp_'] ],

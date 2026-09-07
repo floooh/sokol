@@ -66,6 +66,7 @@ ignores = [
 # NOTE: syntax for function results: "func_name.RESULT"
 overrides = {
     'context':                              'ctx',  # reserved keyword
+    'sfetch_continue':                      'sfetch_continue_fetching',  # 'continue' is reserved in Odin
     'SGL_NO_ERROR':                         'SGL_ERROR_NO_ERROR',
 }
 

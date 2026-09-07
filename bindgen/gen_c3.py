@@ -17,6 +17,7 @@ module_names = {
     'sapp_':    'sapp',
     'stm_':     'stm',
     'saudio_':  'saudio',
+    'sfetch_':  'sfetch',
     'sgl_':     'sgl',
     'sdtx_':    'sdtx',
     'sshape_':  'sshape',
@@ -36,6 +37,7 @@ ignores = [
 overrides = {
     # `any` is treated specially in C3.
     'any': '_any',
+    'sfetch_continue':                      'sfetch_continue_fetching',  # 'continue' is reserved in C3
     # Constants must be uppercase - lowercase `x` is not allowed.
     'SG_PIXELFORMAT_ASTC_4x4_RGBA': 'SG_PIXELFORMAT_ASTC_4X4_RGBA',
     'SG_PIXELFORMAT_ASTC_4x4_SRGBA': 'SG_PIXELFORMAT_ASTC_4X4_SRGBA',
