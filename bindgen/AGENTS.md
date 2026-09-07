@@ -115,13 +115,14 @@ module in each block, mirroring the existing pattern. Files to touch:
 Unified compilation unit `sokol/c/sokol.c` (used by the macOS dylib and the
 Windows DLL builds): add `#include "sokol_newmodule.h"`.
 
-### sokol-odin -- 4 build scripts + unified `sokol.c`
+### sokol-odin -- 5 build scripts + unified `sokol.c`
 
 Same shape as sokol-jai. Files to touch:
 
 - `sokol/build_clibs_macos.sh`  -- 8 lines
 - `sokol/build_clibs_linux.sh`  -- 2 lines
 - `sokol/build_clibs_wasm.sh`   -- add `"newmodule"` to the bash `libs=(…)` array
+- `sokol/build_clibs_wasm.cmd`  -- add `newmodule` to `set sources=…` (kept in sync with `wasm.sh` even though it may be stale for prior modules)
 - `sokol/build_clibs_windows.cmd` -- add `newmodule` to `set sources=…`
 - `sokol/build_clibs_macos_dylib.sh` -- **no per-module change**
 - `sokol/c/sokol.c` -- add `#include "sokol_newmodule.h"`

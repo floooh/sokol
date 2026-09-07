@@ -45,7 +45,7 @@ overrides = {
     'sshape_element_range_t.num_elements':  'uint32_t',
     'sdtx_font.font_index':                 'uint32_t',
     'SGL_NO_ERROR':                         'SGL_ERROR_NO_ERROR',
-    'sfetch_continue':                      'continue_fetching',
+    'sfetch_continue':                      'sfetch_continue_fetching',
     'struct nk_context':                    'NkContext',
     'nk_handle':                            'NkHandle',
     'nk_flags':                             'NkFlags',
