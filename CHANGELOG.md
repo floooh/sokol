@@ -2,10 +2,21 @@
 
 ### 07-Sep-2026
 
-Language bindings: sokol_fetch.h has now been added to all bindings which missed
-the header so far (C3, Jai, Nim, Odin, Rust).
+Language bindings:
 
-Main PR: https://github.com/floooh/sokol/pull/1596
+- sokol_fetch.h has now been added to all bindings which missed
+  the header so far (C3, Jai, Nim, Odin, Rust).
+
+  Main PR: https://github.com/floooh/sokol/pull/1596
+
+- bindings for sokol_imgui.h, sokol_gfx_imgui.h and sokol_app_imgui.h
+  have been added to all bindings which didn't have those so far
+  (C3, Jai, Nim, Odin, Rust), but without the out-of-the-box
+  build system integration of the Zig and D bindings. Instead the
+  user must take care of the integrating Dear ImGui into the project
+  themslelves by following new instructions in the readme.
+
+  Main PR: https://github.com/floooh/sokol/pull/1597
 
 ### 06-Sep-2026
 
