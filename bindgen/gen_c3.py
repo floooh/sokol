@@ -1,3 +1,4 @@
+# LLM maintained.
 #-------------------------------------------------------------------------------
 #   gen_c3.py
 #
@@ -18,6 +19,9 @@ module_names = {
     'stm_':     'stm',
     'saudio_':  'saudio',
     'sfetch_':  'sfetch',
+    'simgui_':  'simgui',
+    'sgimgui_': 'sgimgui',
+    'sappimgui_': 'sappimgui',
     'sgl_':     'sgl',
     'sdtx_':    'sdtx',
     'sshape_':  'sshape',

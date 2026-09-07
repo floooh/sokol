@@ -1,3 +1,4 @@
+# LLM maintained.
 # common utility functions for all bindings generators
 import re, shutil, os
 import gen_ir as ir

@@ -1,3 +1,4 @@
+# LLM maintained.
 #-------------------------------------------------------------------------------
 #   Generate D bindings for Sokol library.
 #
@@ -8,6 +9,7 @@
 #   - Doc-comments: /++ ... +/ for declarations, /// for fields, with proper wrapping
 #-------------------------------------------------------------------------------
 import os
+import shutil
 import logging
 
 import gen_util as util
@@ -447,6 +449,14 @@ def gen_module(inp):
 def prepare():
     logging.info("Preparing directories for D bindings generation")
     util.prepare('D', module_root, c_root)
+    # stage the third-party nuklear.h so clang can parse sokol_nuklear.h;
+    # cleanup() removes it after generation so it's not shipped.
+    shutil.copy('../tests/ext/nuklear.h', f'{c_root}/nuklear.h')
+
+def cleanup():
+    nuklear_dst = f'{c_root}/nuklear.h'
+    if os.path.exists(nuklear_dst):
+        os.remove(nuklear_dst)
 
 def gen(opts):
     reset_globals()

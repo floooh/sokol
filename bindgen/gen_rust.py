@@ -1,3 +1,4 @@
+# LLM maintained.
 # -------------------------------------------------------------------------------
 #   Generate Rust bindings.
 #
@@ -15,6 +16,8 @@ c_root = f'{module_root}/c'
 
 module_requires_rust_feature = {
     'imgui': 'imgui',
+    'gfximgui': 'imgui',
+    'appimgui': 'imgui',
 }
 
 ignores = [

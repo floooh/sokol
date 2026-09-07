@@ -1,4 +1,5 @@
-import os, argparse, gen_nim, gen_zig, gen_odin, gen_rust, gen_d, gen_jai, gen_c3, shutil
+# LLM maintained.
+import argparse, gen_nim, gen_zig, gen_odin, gen_rust, gen_d, gen_jai, gen_c3
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--zig-tiger-style", action="store_true", help="Enable zig tiger style mode.")
@@ -18,6 +19,17 @@ tasks = [
     [ '../util/sokol_framebuffer.h', 'sfb_',      ['sg_'] ],
     [ '../util/sokol_letterbox.h',   'slbx_',     [] ],
     [ '../util/sokol_cmdbuf.h',      'scb_',      ['sg_'] ],
+]
+
+# imgui bindings: shipped by every binding. sokol-zig and sokol-d wire
+# the C stub into their build (user brings dcimgui); jai/odin/nim/rust/c3
+# ship the stub only - consumers compile it against their own dcimgui.
+# gfx_imgui has empty deps because it doesn't reference any sg/sapp
+# identifiers; listing them emits unused imports in zig/d/etc.
+imgui_tasks = [
+    [ '../util/sokol_imgui.h',       'simgui_',    ['sg_', 'sapp_'] ],
+    [ '../util/sokol_gfx_imgui.h',   'sgimgui_',   [] ],
+    [ '../util/sokol_app_imgui.h',   'sappimgui_', ['sapp_'] ],
 ]
 
 # common prefix- to module-names mapping table
@@ -44,9 +56,12 @@ module_names = {
     'scb_':       'cmdbuf',
 }
 
+# common to every binding
+common_tasks = tasks + imgui_tasks
+
 # Jai
 gen_jai.prepare()
-for task in tasks:
+for task in common_tasks:
     gen_jai.gen({
         'c_header_path': task[0],
         'c_prefix': task[1],
@@ -56,7 +71,7 @@ for task in tasks:
 
 # Odin
 gen_odin.prepare()
-for task in tasks:
+for task in common_tasks:
     gen_odin.gen({
         'c_header_path': task[0],
         'c_prefix': task[1],
@@ -66,7 +81,7 @@ for task in tasks:
 
 # Nim
 gen_nim.prepare()
-for task in tasks:
+for task in common_tasks:
     gen_nim.gen({
         'c_header_path': task[0],
         'c_prefix': task[1],
@@ -75,14 +90,8 @@ for task in tasks:
     })
 
 # Zig
-zig_tasks = [
-    *tasks,
-    [ '../util/sokol_imgui.h', 'simgui_',   ['sg_', 'sapp_'] ],
-    [ '../util/sokol_gfx_imgui.h', 'sgimgui_', [] ],
-    [ '../util/sokol_app_imgui.h', 'sappimgui_', ['sapp_'] ],
-]
 gen_zig.prepare()
-for task in zig_tasks:
+for task in common_tasks:
     gen_zig.gen({
         'c_header_path': task[0],
         'c_prefix': task[1],
@@ -92,19 +101,17 @@ for task in zig_tasks:
     })
 
 # D
+# nuklear is D-only: sokol_nuklear.h's public API uses foreign nk_* types
+# so each generator needs opaque-type declarations (see gen_d.py's
+# gen_nuklear_types()). gen_d.prepare() stages tests/ext/nuklear.h into
+# sokol-d/src/sokol/c so clang can parse it; gen_d.cleanup() removes it
+# after generation so it's not shipped.
 d_tasks = [
-    *tasks,
-    [ '../sokol_args.h',  'sargs_',  [] ],
+    *common_tasks,
+    [ '../util/sokol_nuklear.h',  'snk_',       ['sg_', 'sapp_'] ],
+    [ '../sokol_args.h',          'sargs_',     [] ],
     [ '../util/sokol_memtrack.h', 'smemtrack_', [] ],
-    [ '../util/sokol_imgui.h', 'simgui_',   ['sg_', 'sapp_'] ],
-    [ '../util/sokol_gfx_imgui.h', 'sgimgui_',   ['sg_', 'sapp_'] ],
-    [ '../util/sokol_app_imgui.h', 'sappimgui_', ['sapp_'] ],
 ]
-# check if nuklear.h is available and copy it
-if os.path.exists('../tests/ext/nuklear.h'):
-    d_tasks.append([ '../util/sokol_nuklear.h', 'snk_',   ['sg_', 'sapp_'] ])
-    if os.path.exists('sokol-d'):
-        shutil.copy('../tests/ext/nuklear.h', 'sokol-d/src/sokol/c/nuklear.h')
 gen_d.prepare()
 for task in d_tasks:
     gen_d.gen({
@@ -113,13 +120,11 @@ for task in d_tasks:
         'dep_c_prefixes': task[2],
         'module_names': module_names,
     })
-# drop nuklear.h if copied (after generated D files)
-if os.path.exists('sokol-d/src/sokol/c/nuklear.h'):
-    os.remove('sokol-d/src/sokol/c/nuklear.h')
+gen_d.cleanup()
 
 # Rust
 gen_rust.prepare()
-for task in tasks:
+for task in common_tasks:
     gen_rust.gen({
         'c_header_path': task[0],
         'c_prefix': task[1],
@@ -129,7 +134,7 @@ for task in tasks:
 
 # C3
 gen_c3.prepare()
-for task in tasks:
+for task in common_tasks:
     gen_c3.gen({
         'c_header_path': task[0],
         'c_prefix': task[1],

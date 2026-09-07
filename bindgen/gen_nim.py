@@ -1,3 +1,4 @@
+# LLM maintained.
 #-------------------------------------------------------------------------------
 #   Generate Nim bindings
 #
@@ -15,6 +16,16 @@ module_names = {}
 
 c_callbacks = [
     'slog_func',
+]
+
+# prefixes of headers that depend on external C/C++ libraries the user
+# must supply themselves; the generator skips the auto-compile pragma
+# for these so consumers can point their build at their own vendored
+# dependency (see the README's "Dear ImGui integration" section).
+prefixes_with_external_deps = [
+    'simgui_',
+    'sgimgui_',
+    'sappimgui_',
 ]
 
 ignores = [
@@ -574,8 +585,11 @@ def gen_extra(inp):
     l('{.passC:"-DIMPL".}')
     l('when defined(release):')
     l('  {.passC:"-DNDEBUG".}')
-    rel_c_source_path = f'{os.path.relpath(inp['c_source_path'], module_root)}'
-    l(f'{{.compile:"{rel_c_source_path}".}}')
+    # skip auto-compile for headers whose .c stub needs an external
+    # dependency the user has to supply (see prefixes_with_external_deps).
+    if inp['prefix'] not in prefixes_with_external_deps:
+        rel_c_source_path = f'{os.path.relpath(inp['c_source_path'], module_root)}'
+        l(f'{{.compile:"{rel_c_source_path}".}}')
 
 def gen_module(inp):
     # the lenientconverters are used for the converters of arrays, which are now kinda deprecated in nimony
