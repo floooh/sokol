@@ -1,5 +1,12 @@
 ## Updates
 
+### 07-Sep-2026
+
+Language bindings: sokol_fetch.h has now been added to all bindings which missed
+the header so far (C3, Jai, Nim, Odin, Rust).
+
+Main PR: https://github.com/floooh/sokol/pull/1596
+
 ### 06-Sep-2026
 
 Added a new header `sokol_cmdbuf.h`. This implements a simple record/replay
