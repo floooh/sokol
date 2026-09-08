@@ -86,6 +86,7 @@ useful details for integrating the Sokol headers into your own project with your
 - [**sokol\_spine.h**](https://github.com/floooh/sokol/blob/master/util/sokol_spine.h): a sokol-style wrapper around the Spine C runtime (http://en.esotericsoftware.com/spine-in-depth)
 - [**sokol\_letterbox.h**](https://github.com/floooh/sokol/blob/master/util/sokol_letterbox.h): compute viewport params for rendering fixed-aspect-ratio content in a variable-aspect-ratio canvas
 - [**sokol\_framebuffer.h**](https://github.com/floooh/sokol/blob/master/util/sokol_framebuffer.h): provides CPU-framebuffers rendered via sokol_gfx.h
+- [**sokol\_cmdbuf.h**](https://github.com/floooh/sokol/blob/master/util/sokol_cmdbuf.h) record/replay for sokol_gfx.h apply/draw/dispatch
 
 ## 'Official' Language Bindings
 
