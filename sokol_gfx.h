@@ -19964,6 +19964,25 @@ _SOKOL_PRIVATE void _sg_wgpu_write_image_unsealed(_sg_image_t* img, const sg_wri
 // >>vk
 #elif defined(SOKOL_VULKAN)
 
+_SOKOL_PRIVATE _sg_vk_access_t _sg_vk_default_buffer_access_mask(const _sg_buffer_t* buf) {
+    _sg_vk_access_t res = 0;
+    if (buf->cmn.usage.vertex_buffer) {
+        res |= _SG_VK_ACCESS_VERTEXBUFFER;
+    }
+    if (buf->cmn.usage.index_buffer) {
+        res |= _SG_VK_ACCESS_INDEXBUFFER;
+    }
+    if (buf->cmn.usage.storage_buffer) {
+        res |= _SG_VK_ACCESS_STORAGEBUFFER_RO;
+    }
+    return res;
+}
+
+_SOKOL_PRIVATE _sg_vk_access_t _sg_vk_default_image_access_mask(const _sg_image_t* img) {
+    (void)img;
+    return _SG_VK_ACCESS_TEXTURE;
+}
+
 _SOKOL_PRIVATE void _sg_vk_set_object_label(VkObjectType obj_type, uint64_t obj_handle, const char* label) {
     #if defined(SOKOL_DEBUG)
         SOKOL_ASSERT(_sg.vk.dev);
@@ -20356,12 +20375,16 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_apply_bindings(VkCommandBuffer cmd_buf, co
     } else {
         // no transitions allowed in render passes, but check if resources are in
         // correct access state
+        // NOTE: the write-transient check is necessary because of
+        //  https://github.com/floooh/sokol/issues/1598
+        //
+        // Technically this check should go into the validation layer!
         for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
-            if (bnd->vbs[i]) {
+            if (bnd->vbs[i] && !bnd->vbs[i]->cmn.usage.write_transient) {
                 SOKOL_ASSERT(0 != (bnd->vbs[i]->vk.cur_access & _SG_VK_ACCESS_VERTEXBUFFER));
             }
         }
-        if (bnd->ib) {
+        if (bnd->ib && !bnd->ib->cmn.usage.write_transient) {
             SOKOL_ASSERT(0 != (bnd->ib->vk.cur_access & _SG_VK_ACCESS_INDEXBUFFER));
         }
         for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
@@ -20371,12 +20394,14 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_apply_bindings(VkCommandBuffer cmd_buf, co
             }
             else if (view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
                 const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
-                _SOKOL_UNUSED(buf);
-                SOKOL_ASSERT(0 != (buf->vk.cur_access & _SG_VK_ACCESS_STORAGEBUFFER_RO));
+                if (!buf->cmn.usage.write_transient) {
+                    SOKOL_ASSERT(0 != (buf->vk.cur_access & _SG_VK_ACCESS_STORAGEBUFFER_RO));
+                }
             } else if (view->cmn.type == SG_VIEWTYPE_TEXTURE) {
                 const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
-                _SOKOL_UNUSED(img);
-                SOKOL_ASSERT(0 != (img->vk.cur_access & _SG_VK_ACCESS_TEXTURE));
+                if (!img->cmn.usage.write_transient) {
+                    SOKOL_ASSERT(0 != (img->vk.cur_access & _SG_VK_ACCESS_TEXTURE));
+                }
             } else {
                 SOKOL_UNREACHABLE;
             }
@@ -20388,23 +20413,21 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_end_pass(VkCommandBuffer cmd_buf, const _s
     SOKOL_ASSERT(cmd_buf);
     if (is_compute_pass) {
         // transition all tracked buffers into vertex+index+sbuf-ro access
-        const _sg_vk_access_t new_buf_access = _SG_VK_ACCESS_VERTEXBUFFER|_SG_VK_ACCESS_INDEXBUFFER|_SG_VK_ACCESS_STORAGEBUFFER_RO;
         for (int i = 0; i < _sg.vk.track.buffers.cur_slot; i++) {
             const uint32_t buf_id = _sg.vk.track.buffers.slots[i];
             _sg_buffer_t* buf = _sg_lookup_buffer(buf_id);
             if (buf) {
-                _sg_vk_buffer_barrier(cmd_buf, buf, new_buf_access);
+                _sg_vk_buffer_barrier(cmd_buf, buf, _sg_vk_default_buffer_access_mask(buf));
             }
         }
         _sg_track_reset(&_sg.vk.track.buffers);
 
         // transition all tracked images into texture access
-        const _sg_vk_access_t new_img_access = _SG_VK_ACCESS_TEXTURE;
         for (int i = 0; i < _sg.vk.track.images.cur_slot; i++) {
             const uint32_t img_id = _sg.vk.track.images.slots[i];
             _sg_image_t* img = _sg_lookup_image(img_id);
             if (img) {
-                _sg_vk_image_barrier(cmd_buf, img, new_img_access);
+                _sg_vk_image_barrier(cmd_buf, img, _sg_vk_default_image_access_mask(img));
             }
         }
         _sg_track_reset(&_sg.vk.track.images);
@@ -20421,17 +20444,17 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_end_pass(VkCommandBuffer cmd_buf, const _s
                 if (_sg.cur_pass.action.colors[i].store_action == SG_STOREACTION_STORE) {
                     SOKOL_ASSERT(atts->color_views[i]);
                     _sg_image_t* img = _sg_image_ref_ptr(&atts->color_views[i]->cmn.img.ref);
-                    _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
+                    _sg_vk_image_barrier(cmd_buf, img, _sg_vk_default_image_access_mask(img));
                 }
                 if (atts->resolve_views[i]) {
                     _sg_image_t* img = _sg_image_ref_ptr(&atts->resolve_views[i]->cmn.img.ref);
-                    _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
+                    _sg_vk_image_barrier(cmd_buf, img, _sg_vk_default_image_access_mask(img));
                 }
             }
             if (atts->ds_view) {
                 _sg_image_t* img = _sg_image_ref_ptr(&atts->ds_view->cmn.img.ref);
                 if (_sg.cur_pass.action.depth.store_action == SG_STOREACTION_STORE) {
-                    _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
+                    _sg_vk_image_barrier(cmd_buf, img, _sg_vk_default_image_access_mask(img));
                 }
             }
         }
@@ -20923,7 +20946,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_buffer_data(_sg_buffer_t* buf, const sg_
         src_ptr += bytes_to_copy;
         region.dstOffset += bytes_to_copy;
     }
-    buf->vk.cur_access = _SG_VK_ACCESS_VERTEXBUFFER | _SG_VK_ACCESS_INDEXBUFFER | _SG_VK_ACCESS_STORAGEBUFFER_RO;
+    buf->vk.cur_access = _sg_vk_default_buffer_access_mask(buf);
 }
 
 _SOKOL_PRIVATE void _sg_vk_init_vk_image_staging_structs(const _sg_image_t* img, VkBuffer vk_buf, VkBufferImageCopy2* region, VkCopyBufferToImageInfo2* copy_info) {
@@ -21042,7 +21065,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_miplevel_data(_sg_image_t* img,
             region.imageExtent.height = (uint32_t)_sg_min(height, rows_to_copy * block_dim);
             vkCmdCopyBufferToImage2(cmd_buf, &copy_info);
             _sg_stats_inc(vk.num_cmd_copy_buffer_to_image);
-            _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
+            _sg_vk_image_barrier(cmd_buf, img, _sg_vk_default_image_access_mask(img));
             _sg_vk_staging_copy_end(cmd_buf, _sg.vk.queue);
             cur_row += rows_to_copy;
         }
@@ -21127,7 +21150,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_buffer_data(_sg_buffer_t* buf, const s
     // FIXME: not great to issue a barrier right here,
     // rethink buffer barrier strategy? => a single memory barrier
     // at the end of the stream command buffer should be sufficient?
-    _sg_vk_buffer_barrier(cmd_buf, buf, _SG_VK_ACCESS_VERTEXBUFFER|_SG_VK_ACCESS_INDEXBUFFER|_SG_VK_ACCESS_STORAGEBUFFER_RO);
+    _sg_vk_buffer_barrier(cmd_buf, buf, _sg_vk_default_buffer_access_mask(buf));
 }
 
 _SOKOL_PRIVATE void _sg_vk_staging_stream_miplevel_data(_sg_image_t* img,
@@ -23202,7 +23225,7 @@ _SOKOL_PRIVATE void _sg_vk_write_image_transient(_sg_image_t* img, const sg_writ
         desc->size.width,
         desc->size.height,
         desc->size.num_slices);
-    _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_TEXTURE);
+    _sg_vk_image_barrier(cmd_buf, img, _sg_vk_default_image_access_mask(img));
 }
 
 _SOKOL_PRIVATE void _sg_vk_write_buffer_unsealed(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
