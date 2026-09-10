@@ -410,9 +410,9 @@
         forwarded for further handling to the operating system, call
         sapp_consume_event() from inside the event handler (NOTE that
         this behaviour is currently only implemented for some HTML5
-        events, support for other platforms and event types will
-        be added as needed, please open a GitHub ticket and/or provide
-        a PR if needed).
+        events and for tvOS key events (to allow menu button passthrough).
+        Support for other platforms and event types will be added as needed,
+        please open a GitHub ticket and/or provide a PR if needed).
 
         NOTE: Do *not* call any 3D API rendering functions in the event
         callback function, since the 3D API context may not be active when the
@@ -6905,7 +6905,9 @@ _SOKOL_PRIVATE void _sapp_ios_app_event(sapp_event_type type) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_tvos_press_event(sapp_event_type type, NSSet<UIPress *>* presses) {
+/* tvOS requires that the menu button goes to home screen when app navigation reaches its root */
+_SOKOL_PRIVATE bool _sapp_tvos_press_event(sapp_event_type type, NSSet<UIPress *>* presses) {
+    bool consume_event = false;
     if (_sapp_events_enabled()) {
         for (UIPress *press in presses) {
             sapp_keycode key = SAPP_KEYCODE_INVALID;
@@ -6924,10 +6926,11 @@ _SOKOL_PRIVATE void _sapp_tvos_press_event(sapp_event_type type, NSSet<UIPress *
                 _sapp.event.key_code = key;
                 _sapp.event.key_repeat = false;
                 _sapp.event.modifiers = 0;
-                _sapp_call_event(&_sapp.event);
+                consume_event |= _sapp_call_event(&_sapp.event);
             }
         }
     }
+    return consume_event;
 }
 
 _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>* touches, UIEvent* event) {
@@ -7177,15 +7180,21 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 #endif
 
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
-    _sapp_tvos_press_event(SAPP_EVENTTYPE_KEY_DOWN, presses);
+    if (!_sapp_tvos_press_event(SAPP_EVENTTYPE_KEY_DOWN, presses)) {
+        [super pressesBegan:presses withEvent:event];
+    }
 }
 - (void)pressesChanged:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
 }
 - (void)pressesEnded:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
-    _sapp_tvos_press_event(SAPP_EVENTTYPE_KEY_UP, presses);
+    if (!_sapp_tvos_press_event(SAPP_EVENTTYPE_KEY_UP, presses)) {
+        [super pressesEnded:presses withEvent:event];
+    }
 }
 - (void)pressesCancelled:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
-    _sapp_tvos_press_event(SAPP_EVENTTYPE_KEY_UP, presses);
+    if (!_sapp_tvos_press_event(SAPP_EVENTTYPE_KEY_UP, presses)) {
+        [super pressesCancelled:presses withEvent:event];
+    }
 }
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent*)event {
     _sapp_ios_touch_event(SAPP_EVENTTYPE_TOUCHES_BEGAN, touches, event);
