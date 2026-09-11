@@ -1,5 +1,8 @@
 //------------------------------------------------------------------------------
 //  sokol-gfx-test.c
+//
+//  LLM maintained.
+//
 //  NOTE: this is not only testing the public API behaviour, but also
 //  accesses private functions and data. It may make sense to split
 //  these into two separate tests.
@@ -2731,6 +2734,195 @@ UTEST(sokol_gfx, max_pass_attachments) {
     sg_begin_pass(&pass);
     T(log_items[0] == SG_LOGITEM_BEGINPASS_TOO_MANY_COLOR_ATTACHMENTS);
     T(log_items[1] == SG_LOGITEM_BEGINPASS_TOO_MANY_RESOLVE_ATTACHMENTS);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// write-transient deferred-validation tests
+
+static sg_pipeline create_write_transient_test_pipeline(void) {
+    return sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = sg_make_shader(&(sg_shader_desc){0}),
+        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3,
+    });
+}
+
+static sg_buffer create_write_transient_test_buffer(void) {
+    return sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .vertex_buffer = true, .write_transient = true },
+        .size = 128,
+    });
+}
+
+// pipeline + shader with one write_transient texture view for the image tests
+typedef struct {
+    sg_pipeline pip;
+    sg_buffer vbuf;
+    sg_image img;
+    sg_view view;
+    sg_sampler smp;
+} write_transient_image_setup_t;
+
+static write_transient_image_setup_t create_write_transient_image_setup(void) {
+    write_transient_image_setup_t s = {0};
+    // non-transient vertex buffer to keep the buffer-side check silent
+    const float verts[8] = {0};
+    s.vbuf = sg_make_buffer(&(sg_buffer_desc){
+        .usage.vertex_buffer = true,
+        .data = SG_RANGE(verts),
+    });
+    s.img = sg_make_image(&(sg_image_desc){
+        .usage.write_transient = true,
+        .width = 8,
+        .height = 8,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+    });
+    s.view = sg_make_view(&(sg_view_desc){ .texture.image = s.img });
+    s.smp = sg_make_sampler(&(sg_sampler_desc){0});
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .views[0].texture = {
+            .stage = SG_SHADERSTAGE_FRAGMENT,
+            .image_type = SG_IMAGETYPE_2D,
+            .sample_type = SG_IMAGESAMPLETYPE_FLOAT,
+        },
+        .samplers[0] = {
+            .stage = SG_SHADERSTAGE_FRAGMENT,
+            .sampler_type = SG_SAMPLERTYPE_FILTERING,
+        },
+        .texture_sampler_pairs[0] = {
+            .stage = SG_SHADERSTAGE_FRAGMENT,
+            .view_slot = 0,
+            .sampler_slot = 0,
+        },
+    });
+    s.pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
+        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3,
+    });
+    return s;
+}
+
+#define WRITE_TRANSIENT_TEST_PASS &(sg_pass){ \
+    .swapchain = { \
+        .width = 64, \
+        .height = 64, \
+        .sample_count = 1, \
+        .color_format = SG_PIXELFORMAT_RGBA8, \
+    } \
+}
+
+// missing sg_write_buffer_transient() must be reported at sg_draw() time,
+// not at sg_apply_bindings() time
+UTEST(sokol_gfx, draw_write_buffer_transient_missing) {
+    setup(&(sg_desc){0});
+    sg_buffer buf = create_write_transient_test_buffer();
+    sg_pipeline pip = create_write_transient_test_pipeline();
+    sg_begin_pass(WRITE_TRANSIENT_TEST_PASS);
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = buf });
+    reset_log_items();
+    sg_draw(0, 3, 1);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DRAW_WRITE_BUFFER_TRANSIENT_MISSING);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// write -> bind -> draw is the correct sequence and must not error
+UTEST(sokol_gfx, draw_write_buffer_transient_ok) {
+    setup(&(sg_desc){0});
+    sg_buffer buf = create_write_transient_test_buffer();
+    sg_pipeline pip = create_write_transient_test_pipeline();
+    sg_begin_pass(WRITE_TRANSIENT_TEST_PASS);
+    const float data[8] = {0};
+    sg_write_buffer_transient(&(sg_write_buffer_desc){
+        .src.data = SG_RANGE(data),
+        .dst.buffer = buf,
+        .size = sizeof(data),
+    });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = buf });
+    reset_log_items();
+    sg_draw(0, 3, 1);
+    T(num_log_called == 0);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// regression test: sg_apply_pipeline() must reset the write_transient_missing
+// flags so an apply_pipeline -> draw sequence (bindings skipped) only reports
+// the real REQUIRED_BINDINGS_OR_UNIFORMS_MISSING error and doesn't leak a
+// stale flag from an earlier sg_apply_bindings()
+UTEST(sokol_gfx, apply_pipeline_resets_write_transient_flag) {
+    setup(&(sg_desc){0});
+    sg_buffer buf = create_write_transient_test_buffer();
+    sg_pipeline pip = create_write_transient_test_pipeline();
+    sg_begin_pass(WRITE_TRANSIENT_TEST_PASS);
+    // set the stale flag by binding an unwritten write_transient buffer
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = buf });
+    // fresh apply_pipeline must clear the flag
+    sg_apply_pipeline(pip);
+    reset_log_items();
+    sg_draw(0, 3, 1);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DRAW_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// missing sg_write_image_transient() must be reported at sg_draw() time,
+// not at sg_apply_bindings() time
+UTEST(sokol_gfx, draw_write_image_transient_missing) {
+    setup(&(sg_desc){0});
+    write_transient_image_setup_t s = create_write_transient_image_setup();
+    sg_begin_pass(WRITE_TRANSIENT_TEST_PASS);
+    sg_apply_pipeline(s.pip);
+    sg_apply_bindings(&(sg_bindings){
+        .vertex_buffers[0] = s.vbuf,
+        .views[0] = s.view,
+        .samplers[0] = s.smp,
+    });
+    reset_log_items();
+    sg_draw(0, 3, 1);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DRAW_WRITE_IMAGE_TRANSIENT_MISSING);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// write -> bind -> draw for a write_transient image must not error
+UTEST(sokol_gfx, draw_write_image_transient_ok) {
+    setup(&(sg_desc){0});
+    write_transient_image_setup_t s = create_write_transient_image_setup();
+    sg_begin_pass(WRITE_TRANSIENT_TEST_PASS);
+    const uint32_t pixels[8*8] = {0};
+    sg_write_image_transient(&(sg_write_image_desc){
+        .src = {
+            .data = SG_RANGE(pixels),
+            .bytes_per_row = 8 * 4,
+            .bytes_per_slice = 8 * 8 * 4,
+        },
+        .dst.image = s.img,
+        .size = { .width = 8, .height = 8, .num_slices = 1 },
+    });
+    sg_apply_pipeline(s.pip);
+    sg_apply_bindings(&(sg_bindings){
+        .vertex_buffers[0] = s.vbuf,
+        .views[0] = s.view,
+        .samplers[0] = s.smp,
+    });
+    reset_log_items();
+    sg_draw(0, 3, 1);
+    T(num_log_called == 0);
     sg_end_pass();
     sg_commit();
     sg_shutdown();
