@@ -3189,6 +3189,7 @@ typedef struct {
     Cursor custom_cursors[_SAPP_MOUSECURSOR_NUM];
     int window_state;
     float dpi;
+    bool requested_mouse_lock;
     unsigned char error_code;
     Atom UTF8_STRING;
     Atom CLIPBOARD;
@@ -3806,13 +3807,13 @@ _SOKOL_PRIVATE void _sapp_setup_default_icon(void) {
         const int dim = icon_sizes[i];
         SOKOL_ASSERT((dim % 8) == 0);
         const int scale = dim / 8;
-        for (int ty = 0, y = 0; ty < 8; ty++) {
+        for (int ty = 0; ty < 8; ty++) {
             const uint32_t color = colors[ty];
-            for (int sy = 0; sy < scale; sy++, y++) {
+            for (int sy = 0; sy < scale; sy++) {
                 uint8_t bits = tile[ty];
-                for (int tx = 0, x = 0; tx < 8; tx++, bits<<=1) {
+                for (int tx = 0; tx < 8; tx++, bits<<=1) {
                     uint32_t pixel = (0 == (bits & 0x80)) ? blank : color;
-                    for (int sx = 0; sx < scale; sx++, x++) {
+                    for (int sx = 0; sx < scale; sx++) {
                         SOKOL_ASSERT(dst < dst_end);
                         *dst++ = pixel;
                     }
@@ -13161,47 +13162,6 @@ _SOKOL_PRIVATE void _sapp_x11_update_cursor(sapp_mouse_cursor cursor, bool shown
     XFlush(_sapp.x11.display);
 }
 
-_SOKOL_PRIVATE void _sapp_x11_lock_mouse(bool lock) {
-    if (lock == _sapp.mouse.locked) {
-        return;
-    }
-    _sapp.mouse.dx = 0.0f;
-    _sapp.mouse.dy = 0.0f;
-    _sapp.mouse.locked = lock;
-    if (_sapp.mouse.locked) {
-        if (_sapp.x11.xi.available) {
-            XIEventMask em;
-            unsigned char mask[XIMaskLen(XI_RawMotion)] = { 0 }; // XIMaskLen is a macro
-            em.deviceid = XIAllMasterDevices;
-            em.mask_len = sizeof(mask);
-            em.mask = mask;
-            XISetMask(mask, XI_RawMotion);
-            XISelectEvents(_sapp.x11.display, _sapp.x11.root, &em, 1);
-        }
-        XGrabPointer(_sapp.x11.display, // display
-            _sapp.x11.window,           // grab_window
-            True,                       // owner_events
-            ButtonPressMask | ButtonReleaseMask | PointerMotionMask,    // event_mask
-            GrabModeAsync,              // pointer_mode
-            GrabModeAsync,              // keyboard_mode
-            _sapp.x11.window,           // confine_to
-            _sapp.x11.hidden_cursor,    // cursor
-            CurrentTime);               // time
-    } else {
-        if (_sapp.x11.xi.available) {
-            XIEventMask em;
-            unsigned char mask[] = { 0 };
-            em.deviceid = XIAllMasterDevices;
-            em.mask_len = sizeof(mask);
-            em.mask = mask;
-            XISelectEvents(_sapp.x11.display, _sapp.x11.root, &em, 1);
-        }
-        XWarpPointer(_sapp.x11.display, None, _sapp.x11.window, 0, 0, 0, 0, (int) _sapp.mouse.x, _sapp.mouse.y);
-        XUngrabPointer(_sapp.x11.display, CurrentTime);
-    }
-    XFlush(_sapp.x11.display);
-}
-
 _SOKOL_PRIVATE void _sapp_x11_set_clipboard_string(const char* str) {
     SOKOL_ASSERT(_sapp.clipboard.enabled && _sapp.clipboard.buffer);
     _sapp.clipboard.buffer[0] = 0;
@@ -13451,6 +13411,78 @@ _SOKOL_PRIVATE int _sapp_x11_get_window_state(void) {
         XFree(state);
     }
     return result;
+}
+
+_SOKOL_PRIVATE void _sapp_x11_lock_mouse(bool lock) {
+    _sapp.x11.requested_mouse_lock = lock;
+}
+
+_SOKOL_PRIVATE void _sapp_x11_do_lock_mouse(void) {
+    if(!_sapp_x11_window_visible()) {
+        return;
+    }
+
+    int result = XGrabPointer(
+        _sapp.x11.display,          // display
+        _sapp.x11.window,           // grab_window
+        True,                       // owner_events
+        ButtonPressMask | ButtonReleaseMask | PointerMotionMask,    // event_mask
+        GrabModeAsync,              // pointer_mode
+        GrabModeAsync,              // keyboard_mode
+        _sapp.x11.window,           // confine_to
+        _sapp.x11.hidden_cursor,    // cursor
+        CurrentTime);               // time
+    if(result == GrabSuccess) {
+        _sapp.mouse.locked = true;
+        _sapp.mouse.dx = 0.0f;
+        _sapp.mouse.dy = 0.0f;
+        if (_sapp.x11.xi.available) {
+            XIEventMask em;
+            unsigned char mask[XIMaskLen(XI_RawMotion)] = { 0 }; // XIMaskLen is a macro
+            em.deviceid = XIAllMasterDevices;
+            em.mask_len = sizeof(mask);
+            em.mask = mask;
+            XISetMask(mask, XI_RawMotion);
+            XISelectEvents(_sapp.x11.display, _sapp.x11.root, &em, 1);
+         }
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_x11_do_unlock_mouse(void) {
+    if(!_sapp_x11_window_visible()) {
+        return;
+    }
+
+    if (_sapp.x11.xi.available) {
+        XIEventMask em;
+        unsigned char mask[] = { 0 };
+        em.deviceid = XIAllMasterDevices;
+        em.mask_len = sizeof(mask);
+        em.mask = mask;
+        XISelectEvents(_sapp.x11.display, _sapp.x11.root, &em, 1);
+    }
+
+    _sapp.mouse.dx = 0.0f;
+    _sapp.mouse.dy = 0.0f;
+    _sapp.mouse.locked = false;
+
+    XWarpPointer(_sapp.x11.display, None, _sapp.x11.window, 0, 0, 0, 0, (int) _sapp.mouse.x, _sapp.mouse.y);
+    XUngrabPointer(_sapp.x11.display, CurrentTime);
+}
+
+_SOKOL_PRIVATE void _sapp_x11_update_mouse_lock(void) {
+    // nothing to do if requested lock state matches current lock state
+    const bool lock = _sapp.x11.requested_mouse_lock;
+    if (lock == _sapp.mouse.locked) {
+        return;
+    }
+
+    // otherwise change into desired state
+    if (lock) {
+        _sapp_x11_do_lock_mouse();
+    } else {
+        _sapp_x11_do_unlock_mouse();
+    }
 }
 
 _SOKOL_PRIVATE uint32_t _sapp_x11_key_modifier_bit(sapp_keycode key) {
@@ -13743,7 +13775,7 @@ _SOKOL_PRIVATE void _sapp_x11_on_focusin(XEvent* event) {
 _SOKOL_PRIVATE void _sapp_x11_on_focusout(XEvent* event) {
     // if focus is lost for any reason, and we're in mouse locked mode, disable mouse lock
     if (_sapp.mouse.locked) {
-        _sapp_x11_lock_mouse(false);
+        _sapp_x11_do_unlock_mouse();
     }
     // NOTE: ignoring NotifyGrab and NotifyUngrab is same behaviour as GLFW
     if ((event->xfocus.mode != NotifyGrab) && (event->xfocus.mode != NotifyUngrab)) {
@@ -14304,6 +14336,7 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
         }
         _sapp_linux_frame();
         XFlush(_sapp.x11.display);
+        _sapp_x11_update_mouse_lock();
         // handle quit-requested, either from window or from sapp_request_quit()
         if (_sapp.quit_requested && !_sapp.quit_ordered) {
             // give user code a chance to intervene
