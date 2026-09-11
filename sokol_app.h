@@ -3807,13 +3807,13 @@ _SOKOL_PRIVATE void _sapp_setup_default_icon(void) {
         const int dim = icon_sizes[i];
         SOKOL_ASSERT((dim % 8) == 0);
         const int scale = dim / 8;
-        for (int ty = 0; ty < 8; ty++) {
+        for (int ty = 0, y = 0; ty < 8; ty++) {
             const uint32_t color = colors[ty];
-            for (int sy = 0; sy < scale; sy++) {
+            for (int sy = 0; sy < scale; sy++, y++) {
                 uint8_t bits = tile[ty];
-                for (int tx = 0; tx < 8; tx++, bits<<=1) {
+                for (int tx = 0, x = 0; tx < 8; tx++, bits<<=1) {
                     uint32_t pixel = (0 == (bits & 0x80)) ? blank : color;
-                    for (int sx = 0; sx < scale; sx++) {
+                    for (int sx = 0; sx < scale; sx++, x++) {
                         SOKOL_ASSERT(dst < dst_end);
                         *dst++ = pixel;
                     }
@@ -13418,7 +13418,7 @@ _SOKOL_PRIVATE void _sapp_x11_lock_mouse(bool lock) {
 }
 
 _SOKOL_PRIVATE void _sapp_x11_do_lock_mouse(void) {
-    if(!_sapp_x11_window_visible()) {
+    if (!_sapp_x11_window_visible()) {
         return;
     }
 
@@ -13432,7 +13432,7 @@ _SOKOL_PRIVATE void _sapp_x11_do_lock_mouse(void) {
         _sapp.x11.window,           // confine_to
         _sapp.x11.hidden_cursor,    // cursor
         CurrentTime);               // time
-    if(result == GrabSuccess) {
+    if (result == GrabSuccess) {
         _sapp.mouse.locked = true;
         _sapp.mouse.dx = 0.0f;
         _sapp.mouse.dy = 0.0f;
@@ -13449,7 +13449,7 @@ _SOKOL_PRIVATE void _sapp_x11_do_lock_mouse(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_x11_do_unlock_mouse(void) {
-    if(!_sapp_x11_window_visible()) {
+    if (!_sapp_x11_window_visible()) {
         return;
     }
 
@@ -13483,6 +13483,7 @@ _SOKOL_PRIVATE void _sapp_x11_update_mouse_lock(void) {
     } else {
         _sapp_x11_do_unlock_mouse();
     }
+    // XFlush will be called right after this function
 }
 
 _SOKOL_PRIVATE uint32_t _sapp_x11_key_modifier_bit(sapp_keycode key) {
@@ -14335,8 +14336,8 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
             _sapp_x11_process_event(&event);
         }
         _sapp_linux_frame();
-        XFlush(_sapp.x11.display);
         _sapp_x11_update_mouse_lock();
+        XFlush(_sapp.x11.display);
         // handle quit-requested, either from window or from sapp_request_quit()
         if (_sapp.quit_requested && !_sapp.quit_ordered) {
             // give user code a chance to intervene
