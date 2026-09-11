@@ -1,5 +1,18 @@
 ## Updates
 
+### 11-Sep-2026
+
+- sokol_gfx.h: the validation layer checks which make sure that
+  `sg_write_*_transient()` has been called at least once for a write-transient
+  resource in the same frame have been moved from `sg_apply_bindings()` into
+  `sg_draw/draw_ex/dispatch()`. This fixes a catch-22 when a per-frame update into a
+  write-transient buffer would drop down to zero bytes. Additionally some minor
+  cleanup code in the Vulkan backend around resource access flags.
+
+  See ticket https://github.com/floooh/sokol/issues/1598 for details.
+
+  PR: https://github.com/floooh/sokol/pull/1599
+
 ### 07-Sep-2026
 
 Language bindings:
@@ -25,7 +38,7 @@ mechanism for sokol_gfx.h functions that need to be issued inside a
 render or compute pass and that way allows to move those calls outside
 of passes.
 
-For more imformation see the header documentation in [util/sokol_cmdbuf.h](https://github.com/floooh/sokol/blob/master/util/sokol_cmdbuf.h),
+For more information see the header documentation in [util/sokol_cmdbuf.h](https://github.com/floooh/sokol/blob/master/util/sokol_cmdbuf.h),
 and for a usage example the new sample [cmdbuf-sapp](https://floooh.github.io/sokol-html5/cmdbuf-sapp.html).
 
 Planning ticket: https://github.com/floooh/sokol/issues/1557
