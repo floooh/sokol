@@ -17,6 +17,17 @@
   a minor tvOS specific event handling behaviour change in sokol_app.h's
   iOS backend: https://github.com/floooh/sokol/pull/1600
 
+- sokol_imgui.h: No longer 'scatter-gathers' the Dear ImGui command list
+  vertices and indices into heap-allocated memory chunks before writing
+  the data into sokol-gfx buffers. Instead, vertex- and index-chunks
+  are now written via multiple `sg_write_buffer_transient()` calls.
+
+  This is also a minor breaking change: since sokol_imgui.h no longer
+  heap-allocates, the allocator interface in `simgui_desc` has been removed.
+
+  Ticket: https://github.com/floooh/sokol/issues/1604
+  PR: https://github.com/floooh/sokol/pull/1605
+
 ### 11-Sep-2026
 
 - sokol_gfx.h: the validation layer checks which make sure that
