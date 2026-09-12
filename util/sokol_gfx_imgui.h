@@ -3701,7 +3701,6 @@ _SOKOL_PRIVATE void _sgimgui_draw_capture_list(_sgimgui_t* ctx) {
         const _sgimgui_capture_item_t* item = _sgimgui_capture_read_item_at(ctx, i);
         _sgimgui_str_t item_string = _sgimgui_capture_item_string(ctx, i, item);
         _sgimgui_igpushstylecolor(ImGuiCol_Text, item->color);
-        _sgimgui_igpushidint(i);
         if (item->cmd == _SGIMGUI_CMD_PUSH_DEBUG_GROUP) {
             if (group_stack & 1) {
                 group_stack <<= 1;
@@ -3725,7 +3724,6 @@ _SOKOL_PRIVATE void _sgimgui_draw_capture_list(_sgimgui_t* ctx) {
                 _sgimgui_igsettooltip("%s", item_string.buf);
             }
         }
-        _sgimgui_igpopid();
         _sgimgui_igpopstylecolor();
     }
     _sgimgui_igendchild();
