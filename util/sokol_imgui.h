@@ -2778,8 +2778,8 @@ SOKOL_API_IMPL void simgui_render(void) {
     for (int cl_index = 0; cl_index < cmd_list_count; cl_index++) {
         ImDrawList* cl = _simgui_imdrawlist_at(draw_data, cl_index);
 
-        bind.vertex_buffer_offsets[0] = vb_offset;
-        bind.index_buffer_offset = ib_offset;
+        bind.vertex_buffer_offsets[0] = (int)vb_offset;
+        bind.index_buffer_offset = (int)ib_offset;
         if (tex_id != 0) {
             sg_apply_bindings(&bind);
         }
@@ -2809,7 +2809,7 @@ SOKOL_API_IMPL void simgui_render(void) {
                     sg_pipeline pip = _simgui_bind_texture_sampler(&bind, tex_id);
                     sg_apply_pipeline(pip);
                     sg_apply_uniforms(0, SG_RANGE_REF(vs_params));
-                    bind.vertex_buffer_offsets[0] = vb_offset + pcmd->VtxOffset * sizeof(ImDrawVert);
+                    bind.vertex_buffer_offsets[0] = (int)(vb_offset + pcmd->VtxOffset * sizeof(ImDrawVert));
                     sg_apply_bindings(&bind);
                 }
                 const int scissor_x = (int) (pcmd->ClipRect.x * draw_data->FramebufferScale.x);
